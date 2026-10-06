@@ -25,8 +25,7 @@ func Append(spool string, ev Event) error {
 		return err
 	}
 	if _, err := f.Write(append(b, '\n')); err != nil {
-		f.Close()
-		return err
+		return errors.Join(err, f.Close())
 	}
 	return f.Close()
 }
