@@ -1,4 +1,4 @@
-package ui
+package app
 
 import (
 	"fmt"
@@ -7,14 +7,14 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/advice"
-	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 type wtRow struct {
 	repo string
-	wt   gitscan.Worktree
+	wt   proto.Worktree
 	main bool
 }
 
@@ -35,10 +35,10 @@ func (m Model) worktreeRows() []wtRow {
 	return rows
 }
 
-func (m Model) selectedWorktree() (gitscan.Worktree, bool) {
+func (m Model) selectedWorktree() (proto.Worktree, bool) {
 	rows := m.worktreeRows()
 	if len(rows) == 0 {
-		return gitscan.Worktree{}, false
+		return proto.Worktree{}, false
 	}
 	return rows[min(m.gitSel, len(rows)-1)].wt, true
 }

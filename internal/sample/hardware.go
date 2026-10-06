@@ -38,15 +38,15 @@ func NvidiaSMI() ([]byte, error) {
 	if _, err := exec.LookPath("nvidia-smi"); err != nil {
 		return nil, nil
 	}
-	return exec.Command("nvidia-smi", "--query-gpu=index,utilization.gpu,temperature.gpu,memory.used,memory.total",
-		"--format=csv,noheader,nounits").Output()
+	return output("nvidia-smi", "--query-gpu=index,utilization.gpu,temperature.gpu,memory.used,memory.total",
+		"--format=csv,noheader,nounits")
 }
 
 func DockerPS() ([]byte, error) {
 	if _, err := exec.LookPath("docker"); err != nil {
 		return nil, nil
 	}
-	return exec.Command("docker", "ps", "--no-trunc", "--format", "{{.ID}}\t{{.Names}}").Output()
+	return output("docker", "ps", "--no-trunc", "--format", "{{.ID}}\t{{.Names}}")
 }
 
 func parseGPUs(b []byte) []GPU {

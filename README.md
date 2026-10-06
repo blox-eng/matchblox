@@ -15,8 +15,8 @@ One terminal console for every AI coding agent you run. It shows which agent
 waits for you, what loads the machine, the state of every git checkout, and the
 one safe action that resolves each thing.
 
-> **Status: pre-release.** The console runs today on the host. The service,
-> the "waiting for you" queue, remote mode and the stoker are in progress. The
+> **Status: pre-release.** The service and the console run today on the host.
+> The "waiting for you" queue, remote mode and the stoker are in progress. The
 > plan is in [design/0002-v0.1-plan.md](design/0002-v0.1-plan.md).
 
 ## What it shows
@@ -39,8 +39,9 @@ one safe action that resolves each thing.
 - Read-only by default.
 - Every action shows its exact command before it runs.
 - A destructive action needs `x` and then a typed `y`.
-- Each step checks its facts again just before it runs: the same process, a
-  worktree still clean and unused, a session still idle.
+- Each step runs on the host, and checks its facts again just before it runs:
+  the same process, a worktree still clean and unused, a session still idle.
+- Two consoles that confirm the same action run it once.
 
 ## Install
 
@@ -51,8 +52,13 @@ go install github.com/blox-eng/matchblox/cmd/matchblox@latest
 tmux new-window -n matchblox matchblox
 ```
 
-`matchblox status --text` prints the same state as a short summary, for scripts
-and agents. Thresholds live in `~/.config/matchblox/config.toml`; see
+`matchblox` connects to the service on the host, or starts it in the
+background. The service samples the machine once for every console that
+watches, and keeps history and the state file when no console is open.
+`matchblox serve` runs it in the foreground.
+
+`matchblox status --text` prints the service's state as a short summary, for
+scripts and agents. Thresholds live in `~/.config/matchblox/config.toml`; see
 [config.example.toml](config.example.toml).
 
 ## Design

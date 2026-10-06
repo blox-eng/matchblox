@@ -15,11 +15,15 @@ linters:
     errcheck:
       # Closing a file we only read, or removing a temp file on an error path,
       # has no failure to act on. A file we write closes explicitly and returns
-      # the error (history.Logger.Log).
+      # the error (history.Logger.Log). The same holds for a connection or a
+      # listener we are leaving.
       exclude-functions:
         - (*os.File).Close
         - os.Remove
         - syscall.Close
+        - (net.Conn).Close
+        - (net.Listener).Close
+        - (github.com/blox-eng/matchblox/internal/transport.Conn).Close
     gosec:
       excludes:
         - G204 # every subprocess is an argv list by design; review enforces no shell strings

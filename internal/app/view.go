@@ -1,4 +1,4 @@
-package ui
+package app
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -66,8 +67,15 @@ func (m Model) render() string {
 	w := max(m.width, 60)
 	var out []string
 	out = append(out, m.header(w), m.tabs(w), m.st.hair.Render(strings.Repeat("─", w)))
+	if m.mismatch {
+		return strings.Join(append(out, "", m.mismatchText(w)), "\n")
+	}
 	if !m.have {
-		return strings.Join(append(out, "", m.st.faint.Render(" sampling…")), "\n")
+		why := " waiting for the service…"
+		if m.flash != "" {
+			why = " " + m.flash
+		}
+		return strings.Join(append(out, "", m.st.faint.Render(why)), "\n")
 	}
 	var body []string
 	switch m.tab {
@@ -390,4 +398,25 @@ func size(b float64) string {
 		return fmt.Sprintf("%.0fK", b/(1<<10))
 	}
 	return fmt.Sprintf("%.0fB", b)
+}
+
+// mismatchText names both versions and the command for the older side
+// (design §6).
+func (m Model) mismatchText(w int) string {
+	host := m.host.Host
+	if host == "" {
+		host = "the host"
+	}
+	side := "update the console"
+	if m.host.Version < proto.Version {
+		side = "update " + host
+	}
+	lines := []string{
+		fit(" "+m.st.text.Render(fmt.Sprintf("the console is version %d, the host is version %d", proto.Version, m.host.Version)), w),
+		"",
+		fit(" "+m.st.label.Render(side+": ")+m.st.text.Render(installCmd), w),
+		"",
+		fit(" "+m.st.muted.Render("q quit"), w),
+	}
+	return strings.Join(lines, "\n")
 }
