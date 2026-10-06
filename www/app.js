@@ -167,26 +167,47 @@ onReady(() => {
   }).catch(() => { /* the still frame stays */ });
 });
 
-// Copy: the command goes to the clipboard; if the browser refuses, the text
-// is selected so the person can copy it by hand.
+// Install: a tab picks the method, Copy takes the command. If the browser
+// refuses the clipboard, the command is selected to copy by hand.
 onReady(() => {
+  const tabs = [...document.querySelectorAll('.install [role="tab"]')];
+  const cmd = document.getElementById("cmdtext");
+  const note = document.getElementById("note");
+  const read = document.getElementById("readit");
+  const copy = document.getElementById("copy");
   const status = document.querySelector(".copied");
-  document.querySelectorAll(".copy").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const code = document.getElementById(btn.dataset.copy);
-      if (!code) return;
-      const text = code.textContent.trim();
-      try {
-        await navigator.clipboard.writeText(text);
-        btn.textContent = "Copied";
-        btn.dataset.done = "";
-        if (status) status.textContent = "Copied: " + text;
-        setTimeout(() => { btn.textContent = "Copy"; delete btn.dataset.done; }, 1600);
-      } catch {
-        getSelection().selectAllChildren(code);
-        if (status) status.textContent = "Selected. Press Ctrl+C or ⌘C to copy.";
-      }
+  if (!cmd || !copy) return;
+  const pick = (tab, focus) => {
+    tabs.forEach((t) => {
+      const on = t === tab;
+      t.setAttribute("aria-selected", String(on));
+      t.tabIndex = on ? 0 : -1;
     });
+    cmd.textContent = tab.dataset.cmd;
+    note.textContent = tab.dataset.note;
+    read.hidden = !tab.dataset.read;
+    document.getElementById("cmdline").setAttribute("aria-labelledby", tab.id);
+    if (focus) tab.focus();
+  };
+  tabs.forEach((t, i) => {
+    t.addEventListener("click", () => pick(t));
+    t.addEventListener("keydown", (e) => {
+      const n = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      if (n) { e.preventDefault(); pick(tabs[(i + n + tabs.length) % tabs.length], true); }
+    });
+  });
+  copy.addEventListener("click", async () => {
+    const text = cmd.textContent.trim();
+    try {
+      await navigator.clipboard.writeText(text);
+      copy.textContent = "Copied";
+      copy.dataset.done = "";
+      status.textContent = "Copied: " + text;
+      setTimeout(() => { copy.textContent = "Copy"; delete copy.dataset.done; }, 1600);
+    } catch {
+      getSelection().selectAllChildren(cmd);
+      status.textContent = "Selected. Press Ctrl+C or ⌘C to copy.";
+    }
   });
 });
 

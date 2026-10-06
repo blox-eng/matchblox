@@ -1,6 +1,15 @@
-// matchblox.com: static assets only, served from www/ (honours www/_headers).
+// matchblox.com: the static site in www/ (honours www/_headers).
+// matchblox.sh: worker/index.js gives curl the install script and sends a
+// browser to matchblox.com. It runs first on every request so it can read
+// the host; on matchblox.com it hands the request to the assets unchanged.
 {
   "name": "matchblox",
+  "main": "worker/index.js",
   "compatibility_date": "2026-10-01",
-  "assets": { "directory": "./www", "not_found_handling": "404-page" }
+  "assets": {
+    "directory": "./www",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": true
+  }
 }

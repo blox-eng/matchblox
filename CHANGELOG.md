@@ -8,6 +8,10 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Added
 
+- `curl -fsSL https://matchblox.sh | sh` installs matchblox and starts it.
+  It verifies the checksum (and the build provenance, with `gh`) of a
+  release binary; until v0.1.0 it builds from source with Go.
+
 - The console from builder-tui: sessions by tmux pane with context use and
   burn, machine load and health, detached busy loops, git checkouts and merged
   worktrees, ranked recommendations with guarded actions, and 24 h history.
@@ -20,3 +24,8 @@ All notable changes to matchblox are in this file. The format follows
   less than 600 ms. Any key skips it; `--no-motion` or `NO_MOTION=1` shows
   the last frame.
 - The header names the host: `▰ matchblox · <host>`.
+
+### Fixed
+
+- `go install github.com/blox-eng/matchblox/cmd/matchblox@latest` failed:
+  test fixture names with ":" broke the module zip.
