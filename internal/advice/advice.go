@@ -38,7 +38,8 @@ type Guard struct {
 
 type Rec struct {
 	// ID names the rec across samples, so a console can ask the service to
-	// act on it: a hash of the title and the first step.
+	// act on it: a hash of the title and every step of both actions, so an
+	// act never runs a step the person was not shown.
 	ID       string  `json:"id"`
 	Level    string  `json:"level"` // crit | warn | info
 	Title    string  `json:"title"`
@@ -243,10 +244,13 @@ func recID(r Rec) string {
 	h := sha256.New()
 	h.Write([]byte(r.Title))
 	for _, a := range []*Action{r.Primary, r.Second} {
-		if a != nil && len(a.Steps) > 0 {
+		h.Write([]byte{1})
+		if a == nil {
+			continue
+		}
+		for _, step := range a.Steps {
 			h.Write([]byte{0})
-			h.Write([]byte(strings.Join(a.Steps[0], "\x00")))
-			break
+			h.Write([]byte(strings.Join(step, "\x00")))
 		}
 	}
 	return hex.EncodeToString(h.Sum(nil))[:12]

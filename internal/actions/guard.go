@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"fmt"
+	"os"
 	"runtime"
 	"time"
 
@@ -29,12 +30,17 @@ func CheckGuard(g advice.Guard) error {
 }
 
 // ProcessCwds is where every process of ours sits, so a worktree someone
-// still works in is never offered for removal.
+// still works in is never offered for removal. matchblox itself is left
+// out: its own directory is not work.
 func ProcessCwds() []string {
 	fs := NewHost()
 	procs, _ := fs.Procs()
+	self := os.Getpid()
 	out := make([]string, 0, len(procs))
 	for pid := range procs {
+		if pid == self {
+			continue
+		}
 		if cwd := fs.Cwd(pid); cwd != "" {
 			out = append(out, cwd)
 		}

@@ -149,3 +149,97 @@ func TestServeStdioRelaysToService(t *testing.T) {
 		t.Fatalf("hello over stdio %+v", h)
 	}
 }
+
+func TestServiceStartsOutsideAnyWorktree(t *testing.T) {
+	isolate(t)
+	link := filepath.Join(t.TempDir(), "matchblox")
+	if err := os.Symlink(os.Args[0], link); err != nil {
+		t.Fatal(err)
+	}
+	defer func(a string) { os.Args[0] = a }(os.Args[0])
+	os.Args[0] = link
+	c, closeLog, err := serviceCmd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeLog()
+	if c.Dir != "/" {
+		t.Fatalf("the service would keep the console's cwd %q, which pins that worktree as in use", c.Dir)
+	}
+	if c.SysProcAttr == nil {
+		t.Fatal("the service is not detached")
+	}
+	if c.Args[1] != "serve" {
+		t.Fatalf("argv %v", c.Args)
+	}
+	if c.Path != link {
+		t.Fatalf("the service starts as %q, not the invoked link %q: it would watch a file an upgrade never changes", c.Path, link)
+	}
+}
+
+func TestInvokedPathKeepsTheLink(t *testing.T) {
+	dir := t.TempDir()
+	target, link := filepath.Join(dir, "matchblox-0.1.0"), filepath.Join(dir, "matchblox")
+	if err := os.WriteFile(target, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if got := invokedPath(link); got != link {
+		t.Fatalf("by path: got %q, want the link %q", got, link)
+	}
+	t.Setenv("PATH", dir)
+	if got := invokedPath("matchblox"); got != link {
+		t.Fatalf("by name: got %q, want the link %q", got, link)
+	}
+}
+
+// fakeService answers every console with hello and one snapshot taken at.
+func fakeService(t *testing.T, path string, at time.Time) {
+	t.Helper()
+	l, err := transport.Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close() })
+	go func() {
+		for {
+			nc, err := l.Accept()
+			if err != nil {
+				return
+			}
+			c := transport.NewConn(nc)
+			_ = c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version})
+			st := proto.State{}
+			st.At = at
+			_ = c.Send(proto.KindSnapshot, "", st)
+		}
+	}()
+}
+
+func TestStatusRefusesAStuckService(t *testing.T) {
+	path := isolate(t)
+	fakeService(t, path, time.Now().Add(-time.Hour))
+	if _, ok := fromService(path, staleAfter); ok {
+		t.Fatal("an hour-old snapshot from a stuck sample loop was taken as current")
+	}
+	path2 := filepath.Join(filepath.Dir(path), "fresh.sock")
+	fakeService(t, path2, time.Now())
+	if _, ok := fromService(path2, staleAfter); !ok {
+		t.Fatal("a fresh snapshot was refused")
+	}
+}
+
+// A fixture tree is not this machine: its recs name panes and pids that
+// exist here too, so a fixture service must run nothing.
+func TestFixtureServiceRunsNothing(t *testing.T) {
+	s := newService(config.Default(), fixtures(t))
+	marker := filepath.Join(t.TempDir(), "ran")
+	if err := s.Actions.Run([]string{"touch", marker}); err == nil {
+		t.Fatal("a fixture step reported success")
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("a fixture step ran on the live machine")
+	}
+}

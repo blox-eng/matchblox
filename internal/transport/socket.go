@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -36,6 +37,9 @@ func Listen(path string) (net.Listener, error) {
 	if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // a directory needs x to be entered; 0700 is owner only
 		return nil, err
 	}
+	if err := checkDir(dir); err != nil {
+		return nil, err
+	}
 	// Only the holder of the lock may remove a stale socket; without it two
 	// services that start together can each remove the other's socket.
 	lk, err := lock(path + ".lock")
@@ -63,7 +67,22 @@ func Listen(path string) (net.Listener, error) {
 		release()
 		return nil, err
 	}
+	if lk != nil {
+		// The pid lets a console name the service when it does not answer.
+		_ = lk.Truncate(0)
+		_, _ = lk.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
+	}
 	return &locked{Listener: l, release: release}, nil
+}
+
+// Owner is the pid of the service that holds the socket, or 0.
+func Owner(path string) int {
+	b, err := os.ReadFile(path + ".lock")
+	if err != nil {
+		return 0
+	}
+	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
+	return pid
 }
 
 // locked holds the lock for as long as the listener lives.
@@ -78,7 +97,11 @@ func (l *locked) Close() error {
 	return err
 }
 
+// Dial connects only through a directory that checkDir accepts.
 func Dial(path string, timeout time.Duration) (Conn, error) {
+	if err := checkDir(filepath.Dir(path)); err != nil {
+		return nil, err
+	}
 	c, err := net.DialTimeout("unix", path, timeout)
 	if err != nil {
 		return nil, err

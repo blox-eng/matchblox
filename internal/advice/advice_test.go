@@ -164,3 +164,18 @@ func TestOnlyGoToActionsAreNav(t *testing.T) {
 		t.Fatal("no go-to action in the fixture")
 	}
 }
+
+// The id binds every step the person saw: a rec whose later steps change
+// is a different rec, so an act cannot run steps that were never shown.
+func TestRecIDBindsEveryStep(t *testing.T) {
+	a := Rec{Title: "Remove 2 merged worktrees", Second: &Action{Steps: [][]string{{"git", "worktree", "remove", "/w/a"}, {"git", "worktree", "remove", "/w/b"}}}}
+	b := Rec{Title: "Remove 2 merged worktrees", Second: &Action{Steps: [][]string{{"git", "worktree", "remove", "/w/a"}, {"git", "worktree", "remove", "/w/c"}}}}
+	c := Rec{Title: "t", Primary: &Action{Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}}, Second: &Action{Steps: [][]string{{"kill", "1"}}}}
+	d := Rec{Title: "t", Primary: &Action{Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}}, Second: &Action{Steps: [][]string{{"kill", "2"}}}}
+	if recID(a) == recID(b) {
+		t.Fatal("a changed later step kept the id")
+	}
+	if recID(c) == recID(d) {
+		t.Fatal("a changed secondary action kept the id")
+	}
+}

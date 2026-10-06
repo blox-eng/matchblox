@@ -21,6 +21,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/pprof"
+	"strings"
 	"syscall"
 	"time"
 
@@ -131,6 +132,8 @@ func console(path string, cfg config.Config, root string) error {
 		}
 		opt.Conn = c
 		opt.Redial = func() (transport.Conn, error) { return ensureService(path) }
+		opt.Local = true
+		opt.Owner = func() int { return transport.Owner(path) }
 	}
 	defer opt.Conn.Close()
 	// The screen changes on a state or a key press, so 15 frames a second
@@ -147,11 +150,13 @@ func newService(cfg config.Config, root string) *service.Service {
 		git = gitSource(cfg)
 	}
 	s := service.New(cfg, newSampler(cfg, root), git)
-	s.Actions.Run = func(argv []string) error { return actions.Exec(context.Background(), argv) }
 	s.Binary = version
 	if root != "" {
+		// The fixture's panes and pids exist on this machine too.
+		s.Actions.Run = func([]string) error { return errors.New("fixtures: nothing runs on this machine") }
 		return s
 	}
+	s.Actions.Run = func(argv []string) error { return actions.Exec(context.Background(), argv) }
 	s.StatePath = state.Path()
 	s.AlertHook = cfg.Hooks.Alert
 	s.HistorySources = []string{cfg.History.Source}
@@ -162,10 +167,26 @@ func newService(cfg config.Config, root string) *service.Service {
 	default:
 		s.HistoryLog = cfg.History.Log
 	}
-	if exe, err := os.Executable(); err == nil {
-		s.Exe = exe
-	}
+	s.Exe = invokedPath(os.Args[0])
 	return s
+}
+
+// invokedPath is the path matchblox was started by, links kept: Homebrew
+// and nix upgrade by repointing a link, and the resolved file never changes.
+func invokedPath(arg0 string) string {
+	p := arg0
+	if !strings.ContainsRune(arg0, filepath.Separator) {
+		found, err := exec.LookPath(arg0)
+		if err != nil {
+			return ""
+		}
+		p = found
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return ""
+	}
+	return abs
 }
 
 // serve runs the service on the socket until a signal, or until the binary
@@ -173,7 +194,7 @@ func newService(cfg config.Config, root string) *service.Service {
 func serve(path string, s *service.Service) error {
 	l, err := transport.Listen(path)
 	if errors.Is(err, transport.ErrInUse) {
-		fmt.Fprintln(os.Stderr, "matchblox: the service already runs on", path)
+		fmt.Fprintf(os.Stderr, "matchblox: the service already runs on %s (pid %d)\n", path, transport.Owner(path))
 		return nil
 	}
 	if err != nil {
@@ -182,7 +203,7 @@ func serve(path string, s *service.Service) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	err = s.Serve(ctx, l)
-	if errors.Is(err, service.ErrReplaced) || errors.Is(err, context.Canceled) {
+	if errors.Is(err, service.ErrReplaced) || errors.Is(err, service.ErrSocketGone) || errors.Is(err, context.Canceled) {
 		return nil
 	}
 	return err
@@ -219,30 +240,48 @@ func ensureService(path string) (transport.Conn, error) {
 }
 
 // spawnService starts `matchblox serve` in its own session, so it keeps
-// running when the console and its terminal close. Its output goes to
-// serve.log next to the state file.
+// running when the console and its terminal close.
 var spawnService = func() error {
-	exe, err := os.Executable()
+	c, closeLog, err := serviceCmd()
 	if err != nil {
 		return err
+	}
+	defer closeLog()
+	if err := c.Start(); err != nil {
+		return err
+	}
+	return c.Process.Release()
+}
+
+// serviceCmd is the detached `matchblox serve`. It runs from / so that it
+// never holds a worktree open, and writes to serve.log next to the state
+// file.
+func serviceCmd() (*exec.Cmd, func(), error) {
+	// Start it by the path we were started by, so that it watches the link
+	// an upgrade repoints.
+	exe := invokedPath(os.Args[0])
+	if exe == "" {
+		var err error
+		if exe, err = os.Executable(); err != nil {
+			return nil, nil, err
+		}
 	}
 	args := []string{"serve"}
 	if configArg != "" {
 		args = append(args, "--config", configArg)
 	}
 	c := exec.Command(exe, args...) //nolint:gosec // our own binary
+	c.Dir = "/"
+	closeLog := func() {}
 	logPath := filepath.Join(filepath.Dir(state.Path()), "serve.log")
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err == nil {
 		if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil { //nolint:gosec // our own state dir
-			defer f.Close()
 			c.Stdout, c.Stderr = f, f
+			closeLog = func() { f.Close() }
 		}
 	}
 	detach(c)
-	if err := c.Start(); err != nil {
-		return err
-	}
-	return c.Process.Release()
+	return c, closeLog, nil
 }
 
 // staleAfter is the age at which status treats the state file as left by
@@ -296,11 +335,12 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 // rates are real, and one git scan.
 func status(w io.Writer, path string, cfg config.Config, root string, text bool) error {
 	doc, ok := state.Doc{}, false
+	maxAge := max(staleAfter, 3*cfg.Interval.Duration)
 	if root == "" {
-		doc, ok = fromService(path)
+		doc, ok = fromService(path, maxAge)
 	}
 	if !ok && root == "" {
-		if d, err := state.Read(state.Path()); err == nil && time.Since(d.At) <= max(staleAfter, 3*cfg.Interval.Duration) {
+		if d, err := state.Read(state.Path()); err == nil && time.Since(d.At) <= maxAge {
 			doc, ok = d, true
 		}
 	}
@@ -329,8 +369,9 @@ func status(w io.Writer, path string, cfg config.Config, root string, text bool)
 	return enc.Encode(doc)
 }
 
-// fromService reads the first snapshot from a running service.
-func fromService(path string) (state.Doc, bool) {
+// fromService reads the first snapshot from a running service. A snapshot
+// older than maxAge means its sample loop is stuck: not current.
+func fromService(path string, maxAge time.Duration) (state.Doc, bool) {
 	c, err := transport.Dial(path, 200*time.Millisecond)
 	if err != nil {
 		return state.Doc{}, false
@@ -354,7 +395,7 @@ func fromService(path string) (state.Doc, bool) {
 			}
 		case proto.KindSnapshot:
 			var st proto.State
-			if json.Unmarshal(env.Body, &st) != nil {
+			if json.Unmarshal(env.Body, &st) != nil || time.Since(st.At) > maxAge {
 				return state.Doc{}, false
 			}
 			return st.Doc, true

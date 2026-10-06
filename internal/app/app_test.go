@@ -333,3 +333,148 @@ func TestGitRescanAsksTheService(t *testing.T) {
 		t.Fatalf("sent %+v", acts)
 	}
 }
+
+func TestOlderLocalServiceIsReplaced(t *testing.T) {
+	for _, h := range []proto.Hello{
+		{Version: proto.Version, Binary: "v0.1.0", Host: "ws-1"}, // same wire, older build
+		{Version: proto.Version - 1, Binary: "v0.0.1", Host: "ws-1"},
+	} {
+		f := newFake()
+		m := New(Options{Conn: f, Local: true, Binary: "v0.2.0", Redial: func() (transport.Conn, error) { return newFake(), nil }})
+		next, cmd := m.Update(helloMsg(h))
+		drain(cmd)
+		if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "service:replace" {
+			t.Fatalf("%+v: sent %+v", h, acts)
+		}
+		if out := next.(Model).render(); strings.Contains(out, "curl") {
+			t.Fatalf("%+v: a local console must not ask the person to update what it can replace:\n%s", h, out)
+		}
+		// The old service goes away; the console connects again.
+		if _, cmd := next.Update(lostMsg{err: io.EOF, conn: f}); cmd == nil {
+			t.Fatalf("%+v: no redial after the replace", h)
+		}
+	}
+}
+
+func TestReplaceAtMostOnce(t *testing.T) {
+	f := newFake()
+	g := newFake()
+	m := New(Options{Conn: f, Local: true, Binary: "v0.2.0", Redial: func() (transport.Conn, error) { return g, nil }})
+	next, cmd := m.Update(helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.1.0"}))
+	drain(cmd)
+	if len(f.acts()) != 1 {
+		t.Fatal("the first hello did not replace")
+	}
+	next, _ = next.Update(connMsg{conn: g})
+	_, cmd = next.Update(helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.1.0"}))
+	drain(cmd)
+	if acts := g.acts(); len(acts) != 0 {
+		t.Fatalf("two consoles of two versions would replace each other forever: %+v", acts)
+	}
+}
+
+func TestRemoteHostIsNeverReplaced(t *testing.T) {
+	f := newFake()
+	m := New(Options{Conn: f, Binary: "v0.2.0"})
+	next, _ := m.Update(helloMsg(proto.Hello{Version: proto.Version - 1, Binary: "v0.0.1", Host: "ws-1"}))
+	if acts := f.acts(); len(acts) != 0 {
+		t.Fatalf("sent %+v", acts)
+	}
+	if out := next.(Model).render(); !strings.Contains(out, "update ws-1") {
+		t.Fatalf("a remote host shows the fix:\n%s", out)
+	}
+}
+
+func TestTwoLostEventsRedialOnce(t *testing.T) {
+	x := newFake()
+	dials := 0
+	m := New(Options{Conn: x, Redial: func() (transport.Conn, error) { dials++; return newFake(), nil }})
+	next, cmd := m.Update(lostMsg{err: io.EOF, conn: x})
+	if cmd == nil {
+		t.Fatal("no redial scheduled")
+	}
+	if !x.closed {
+		t.Fatal("the lost connection was not closed")
+	}
+	// The send and the recv of the same connection both report the loss.
+	if _, cmd := next.Update(lostMsg{err: io.EOF, conn: x}); cmd != nil {
+		t.Fatal("a second loss of the same connection scheduled a second redial")
+	}
+}
+
+func TestMessagesFromAnOldConnAreIgnored(t *testing.T) {
+	x, y := newFake(), newFake()
+	m := New(Options{Conn: x, Redial: func() (transport.Conn, error) { return y, nil }})
+	next, _ := m.Update(lostMsg{err: io.EOF, conn: x})
+	next, _ = next.Update(connMsg{conn: y})
+	next, cmd := next.Update(fromConn{conn: x, msg: stateMsg(fixtureState())})
+	if cmd != nil || next.(Model).have {
+		t.Fatal("a message from the old connection was handled; it would start a second reader on the new one")
+	}
+}
+
+// drain runs cmd and every command it batches, skipping any that block
+// (a recv on an empty connection).
+func drain(cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	out := make(chan tea.Msg, 1)
+	go func() { out <- cmd() }()
+	select {
+	case msg := <-out:
+		if b, ok := msg.(tea.BatchMsg); ok {
+			for _, c := range b {
+				drain(c)
+			}
+		}
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+// A service that accepts but never answers (stopped, wedged) must not
+// leave an empty screen.
+func TestSilentServiceShowsFix(t *testing.T) {
+	f := newFake()
+	m := New(Options{Conn: f, Owner: func() int { return 4321 }})
+	next, _ := m.Update(silentMsg{conn: f})
+	out := next.(Model).render()
+	if !strings.Contains(out, "does not answer") || !strings.Contains(out, "kill 4321") {
+		t.Fatalf("view lacks the fix:\n%s", out)
+	}
+	// Once the state arrives, a late timer changes nothing.
+	m2, _ := loadedWith(t, 100, fixtureState())
+	next, _ = m2.Update(silentMsg{conn: m2.conn})
+	if strings.Contains(next.(Model).render(), "does not answer") {
+		t.Fatal("a late timer claimed a live service is silent")
+	}
+}
+
+func TestSilentAfterReconnectShowsFix(t *testing.T) {
+	m, _ := loadedWith(t, 100, fixtureState())
+	m.opt.Owner = func() int { return 77 }
+	y := newFake()
+	next, _ := m.Update(connMsg{conn: y})
+	next, _ = next.Update(silentMsg{conn: y})
+	if !strings.Contains(next.(Model).render(), "kill 77") {
+		t.Fatalf("a silent service after a reconnect went unnoticed:\n%s", next.(Model).render())
+	}
+}
+
+// Nav steps run here without a typed y, so only tmux moves may run, even
+// if a service sends something else.
+func TestNavRunsOnlyTmuxMoves(t *testing.T) {
+	st := fixtureState()
+	st.Recommendations = []advice.Rec{{ID: "r1", Title: "x", Primary: &advice.Action{Nav: true, Steps: [][]string{{"rm", "-rf", "/tmp/x"}}}}}
+	m, _ := loadedWith(t, 100, st)
+	m.opt.Run = func(argv []string) error { t.Fatalf("ran %v", argv); return nil }
+	m.tab = tabRecs
+	next, _ := key(m, "enter")
+	next, cmd := key(next, "enter")
+	if cmd != nil {
+		next, _ = next.Update(cmd())
+	}
+	if !strings.Contains(next.(Model).render(), "refused") {
+		t.Fatalf("no refusal shown:\n%s", next.(Model).render())
+	}
+}

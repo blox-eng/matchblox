@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -58,10 +59,16 @@ func connect(t *testing.T, ctx context.Context, s *Service) (transport.Conn, pro
 	go s.Handle(ctx, transport.NewConn(b))
 	c := transport.NewConn(a)
 	t.Cleanup(func() { c.Close() })
-	go c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version})
+	// net.Pipe has no buffer: send the hello while reading the service's,
+	// and finish it before anything else goes out.
+	sent := make(chan error, 1)
+	go func() { sent <- c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version}) }()
 	env, err := c.Recv()
 	if err != nil || env.Kind != proto.KindHello {
 		t.Fatalf("first message %+v, %v", env, err)
+	}
+	if err := <-sent; err != nil {
+		t.Fatal(err)
 	}
 	var h proto.Hello
 	_ = json.Unmarshal(env.Body, &h)
@@ -332,4 +339,163 @@ func TestRescanGitRunsTheScanNow(t *testing.T) {
 	if n := scans.Load(); n != 2 {
 		t.Fatalf("%d scans, want 2 (the first, then the rescan)", n)
 	}
+}
+
+// An expired done entry for K must not let a second confirm of K run while
+// the first still runs, even when another act finishes in between.
+func TestRunOnceSurvivesTheSweep(t *testing.T) {
+	s := newTest(t, time.Hour)
+	var calls atomic.Int32
+	release := make(chan struct{})
+	s.Actions.Run = func([]string) error {
+		if calls.Add(1) == 1 {
+			<-release
+		}
+		return nil
+	}
+	ctx := run(t, s)
+	c1, _ := connect(t, ctx, s)
+	c2, _ := connect(t, ctx, s)
+	k := recID(t, snapshot(t, c1), "Kill")
+	snapshot(t, c2)
+	// K ran once, long enough ago that its done entry expired.
+	defer func(d time.Duration) { doneFor = d }(doneFor)
+	doneFor = 20 * time.Millisecond
+	close(release)
+	if r := act(t, c1, "k0", proto.Act{RecID: k, Which: "secondary", Confirm: "y"}); len(r.Ran) != 1 {
+		t.Fatalf("first K: %+v", r)
+	}
+	time.Sleep(30 * time.Millisecond)
+	release = make(chan struct{})
+	calls.Store(0)
+	s.Actions.Run = func([]string) error {
+		if calls.Add(1) == 1 {
+			<-release
+		}
+		return nil
+	}
+
+	first := make(chan proto.Result, 1)
+	go func() { first <- act(t, c1, "k1", proto.Act{RecID: k, Which: "secondary", Confirm: "y"}) }()
+	for calls.Load() < 1 {
+		time.Sleep(time.Millisecond)
+	}
+	// Another act finishes and sweeps expired entries.
+	if r := act(t, c2, "j", proto.Act{RecID: "orphan:42", Which: "secondary", Confirm: "y"}); len(r.Ran) != 1 {
+		t.Fatalf("act J: %+v", r)
+	}
+	second := make(chan proto.Result, 1)
+	go func() { second <- act(t, c2, "k2", proto.Act{RecID: k, Which: "secondary", Confirm: "y"}) }()
+	time.Sleep(30 * time.Millisecond)
+	close(release)
+	<-first
+	r := <-second
+	if n := calls.Load(); n != 2 {
+		t.Fatalf("%d runs, want 2 (K once, J once)", n)
+	}
+	if len(r.Skipped) != 1 || r.Skipped[0] != "already done" {
+		t.Fatalf("second K: %+v", r)
+	}
+}
+
+func TestActsForgetKeysThatNeverRan(t *testing.T) {
+	s := newTest(t, time.Hour)
+	ctx := run(t, s)
+	c, _ := connect(t, ctx, s)
+	snapshot(t, c)
+	for i := range 50 {
+		act(t, c, "u", proto.Act{RecID: "nope" + strconv.Itoa(i), Which: "primary"})
+	}
+	s.acts.mu.Lock()
+	n := len(s.acts.inflight)
+	s.acts.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("%d keys kept after their acts ended", n)
+	}
+}
+
+func serveForTest(t *testing.T, s *Service) (string, chan error) {
+	t.Helper()
+	dir, _ := os.MkdirTemp("", "mb")
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	path := filepath.Join(dir, "s.sock")
+	l, err := transport.Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- s.Serve(context.Background(), l) }()
+	return path, done
+}
+
+func waitServe(t *testing.T, done chan error, want error) {
+	t.Helper()
+	select {
+	case err := <-done:
+		if !errors.Is(err, want) {
+			t.Fatalf("Serve returned %v, want %v", err, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve kept running")
+	}
+}
+
+// Homebrew and nix upgrade by repointing a link; the old file never changes.
+func TestServeStopsWhenSymlinkRepointed(t *testing.T) {
+	s := newTest(t, time.Hour)
+	dir := t.TempDir()
+	v1, v2, link := filepath.Join(dir, "v1"), filepath.Join(dir, "v2"), filepath.Join(dir, "matchblox")
+	for _, p := range []string{v1, v2} {
+		if err := os.WriteFile(p, []byte("same"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	at := time.Now().Add(-time.Hour)
+	_ = os.Chtimes(v1, at, at)
+	_ = os.Chtimes(v2, at, at)
+	if err := os.Symlink(v1, link); err != nil {
+		t.Fatal(err)
+	}
+	s.Exe, s.ExeEvery = link, 10*time.Millisecond
+	_, done := serveForTest(t, s)
+	time.Sleep(30 * time.Millisecond)
+	tmp := link + ".new"
+	if err := os.Symlink(v2, tmp); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, link); err != nil {
+		t.Fatal(err)
+	}
+	waitServe(t, done, ErrReplaced)
+}
+
+// A login manager can remove the runtime directory under a live service;
+// the next console starts a new one, so this one must go.
+func TestServeStopsWhenSocketRemoved(t *testing.T) {
+	s := newTest(t, time.Hour)
+	s.ExeEvery = 10 * time.Millisecond
+	path, done := serveForTest(t, s)
+	time.Sleep(30 * time.Millisecond)
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	waitServe(t, done, ErrSocketGone)
+}
+
+func TestReplaceActStopsServe(t *testing.T) {
+	s := newTest(t, time.Hour)
+	path, done := serveForTest(t, s)
+	c, err := transport.Dial(path, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if err := c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version}); err != nil {
+		t.Fatal(err)
+	}
+	next(t, c, proto.KindHello)
+	if r := act(t, c, "r", proto.Act{RecID: "service:replace"}); r.Err != "" {
+		t.Fatalf("result %+v", r)
+	}
+	waitServe(t, done, ErrReplaced)
 }

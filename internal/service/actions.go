@@ -13,62 +13,71 @@ import (
 
 // doneFor is how long an act that ran answers "already done" to the same
 // request: long enough for the next git scan to drop the rec.
-const doneFor = 10 * time.Minute
+var doneFor = 10 * time.Minute
 
-// acts serialises the acts on each action and remembers which ran, so two
-// consoles that confirm the same step run it once.
+// acts lets one act on each action run at a time and remembers which ran,
+// so two consoles that confirm the same step run it once. A second confirm
+// waits for the first, then answers "already done".
 type acts struct {
-	mu    sync.Mutex
-	locks map[string]*sync.Mutex
-	done  map[string]time.Time
+	mu       sync.Mutex
+	inflight map[string]chan struct{}
+	done     map[string]time.Time
 }
 
-func (a *acts) lock(key string) *sync.Mutex {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.locks == nil {
-		a.locks, a.done = map[string]*sync.Mutex{}, map[string]time.Time{}
+// begin waits until no act on key runs. It reports false when key ran
+// within doneFor; otherwise the caller owns key until end.
+func (a *acts) begin(key string) bool {
+	for {
+		a.mu.Lock()
+		if a.inflight == nil {
+			a.inflight, a.done = map[string]chan struct{}{}, map[string]time.Time{}
+		}
+		if at, ok := a.done[key]; ok && time.Since(at) < doneFor {
+			a.mu.Unlock()
+			return false
+		}
+		wait, busy := a.inflight[key]
+		if !busy {
+			a.inflight[key] = make(chan struct{})
+			a.mu.Unlock()
+			return true
+		}
+		a.mu.Unlock()
+		<-wait
 	}
-	l, ok := a.locks[key]
-	if !ok {
-		l = &sync.Mutex{}
-		a.locks[key] = l
-	}
-	return l
 }
 
-func (a *acts) recent(key string) bool {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	at, ok := a.done[key]
-	return ok && time.Since(at) < doneFor
-}
-
-func (a *acts) markDone(key string) {
+func (a *acts) end(key string, ran bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	now := time.Now()
 	for k, at := range a.done {
 		if now.Sub(at) >= doneFor {
 			delete(a.done, k)
-			delete(a.locks, k)
 		}
 	}
-	a.done[key] = now
+	if ran {
+		a.done[key] = now
+	}
+	close(a.inflight[key])
+	delete(a.inflight, key)
 }
 
 func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
-	if a.RecID == "rescan:git" {
+	switch a.RecID {
+	case "rescan:git":
 		s.rescanGit()
+		return proto.Result{}
+	case "service:replace":
+		s.replace()
 		return proto.Result{}
 	}
 	key := a.RecID + "\x00" + a.Which
-	l := s.acts.lock(key)
-	l.Lock()
-	defer l.Unlock()
-	if s.acts.recent(key) {
+	if !s.acts.begin(key) {
 		return proto.Result{Skipped: []string{"already done"}}
 	}
+	ran := false
+	defer func() { s.acts.end(key, ran) }()
 	action, ok := s.resolve(a.RecID, a.Which)
 	if !ok {
 		return proto.Result{Err: "unknown action"}
@@ -77,9 +86,7 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		return proto.Result{Err: "runs in the console"}
 	}
 	res := s.Actions.Do(ctx, action, a.Confirm)
-	if len(res.Ran) > 0 {
-		s.acts.markDone(key)
-	}
+	ran = len(res.Ran) > 0
 	return res
 }
 

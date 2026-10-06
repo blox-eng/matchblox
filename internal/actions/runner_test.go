@@ -65,3 +65,17 @@ func TestExecNeverPrompts(t *testing.T) {
 		t.Fatalf("step ran with prompts allowed: %v", err)
 	}
 }
+
+// matchblox's own directory must never mark a worktree as in use.
+func TestProcessCwdsSkipsSelf(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("reads /proc")
+	}
+	dir := t.TempDir()
+	t.Chdir(dir)
+	for _, cwd := range ProcessCwds() {
+		if cwd == dir {
+			t.Fatalf("ProcessCwds lists our own cwd %s", dir)
+		}
+	}
+}

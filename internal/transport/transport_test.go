@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -207,4 +208,60 @@ func TestConcurrentListenOneWins(t *testing.T) {
 		t.Fatalf("the winner's socket was removed: %v", err)
 	}
 	c.Close()
+}
+
+func TestListenRecordsOwnerPID(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no lock file")
+	}
+	path := filepath.Join(shortDir(t), "s.sock")
+	l, err := Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	if pid := Owner(path); pid != os.Getpid() {
+		t.Fatalf("owner %d, want %d", pid, os.Getpid())
+	}
+}
+
+// On a shared /tmp another user can make the directory first; a console
+// must not talk to a service it does not own.
+func TestDialRefusesAnUnsafeDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix modes")
+	}
+	base := shortDir(t)
+	open := filepath.Join(base, "open")
+	if err := os.Mkdir(open, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	l, err := net.Listen("unix", filepath.Join(open, "s.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	if err := os.Chmod(open, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := Dial(filepath.Join(open, "s.sock"), time.Second); err == nil {
+		c.Close()
+		t.Fatal("dialed a socket in a directory others can enter")
+	}
+	link := filepath.Join(base, "link")
+	if err := os.Chmod(open, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(open, link); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := Dial(filepath.Join(link, "s.sock"), time.Second); err == nil {
+		c.Close()
+		t.Fatal("dialed through a symlinked directory")
+	}
+	if c, err := Dial(filepath.Join(open, "s.sock"), time.Second); err != nil {
+		t.Fatalf("a safe directory was refused: %v", err)
+	} else {
+		c.Close()
+	}
 }

@@ -35,13 +35,33 @@ type Options struct {
 	CompactAt float64
 	// Run executes one step that moves this terminal (Nav). Nil means exec.
 	Run func(argv []string) error
+	// Local: the service runs on this machine from the same install, so an
+	// older one is replaced instead of asking the person to update it.
+	Local bool
+	// Owner is the pid of the local service, to name it when it does not
+	// answer. Nil or 0: unknown.
+	Owner func() int
 }
 
 type helloMsg proto.Hello
 type stateMsg proto.State
 type resultMsg proto.Result
-type lostMsg struct{ err error }
+type lostMsg struct {
+	err  error
+	conn transport.Conn
+}
+
+// fromConn tags a message with the connection it came from: after a
+// reconnect, messages from the old one are dropped.
+type fromConn struct {
+	conn transport.Conn
+	msg  tea.Msg
+}
 type redialMsg struct{}
+
+// silentMsg fires when a connection gave no state in silentAfter.
+type silentMsg struct{ conn transport.Conn }
+type redialFailed struct{ err error }
 type connMsg struct{ conn transport.Conn }
 type ranMsg struct {
 	cmd string
@@ -102,6 +122,9 @@ type Model struct {
 	mismatch  bool
 	lost      bool
 	backoff   time.Duration
+	redialing bool
+	answered  bool // a state came on the current connection
+	replaced  bool
 	acts      int
 }
 
@@ -126,8 +149,17 @@ func run(argv []string) error {
 	return exec.CommandContext(ctx, argv[0], argv[1:]...).Run() //nolint:gosec // argv from the service's advice, never a shell string
 }
 
+// silentAfter is how long a connected service may stay silent before the
+// console says so and how to fix it.
+const silentAfter = 3 * time.Second
+
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv())
+	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence())
+}
+
+func (m Model) watchSilence() tea.Cmd {
+	c := m.conn
+	return tea.Tick(silentAfter, func(time.Time) tea.Msg { return silentMsg{c} })
 }
 
 func (m Model) hello() tea.Cmd {
@@ -137,7 +169,7 @@ func (m Model) hello() tea.Cmd {
 	}
 	return func() tea.Msg {
 		if err := c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version, Binary: bin}); err != nil {
-			return lostMsg{err}
+			return lostMsg{err, c}
 		}
 		return nil
 	}
@@ -154,23 +186,23 @@ func (m Model) recv() tea.Cmd {
 		for {
 			env, err := c.Recv()
 			if err != nil {
-				return lostMsg{err}
+				return lostMsg{err, c}
 			}
 			switch env.Kind {
 			case proto.KindHello:
 				var h proto.Hello
 				if json.Unmarshal(env.Body, &h) == nil {
-					return helloMsg(h)
+					return fromConn{c, helloMsg(h)}
 				}
 			case proto.KindSnapshot:
 				var st proto.State
 				if json.Unmarshal(env.Body, &st) == nil {
-					return stateMsg(st)
+					return fromConn{c, stateMsg(st)}
 				}
 			case proto.KindResult:
 				var r proto.Result
 				if json.Unmarshal(env.Body, &r) == nil {
-					return resultMsg(r)
+					return fromConn{c, resultMsg(r)}
 				}
 			}
 		}
@@ -183,7 +215,7 @@ func (m *Model) send(a proto.Act) tea.Cmd {
 	id := "a" + strconv.Itoa(m.acts)
 	return func() tea.Msg {
 		if err := c.Send(proto.KindAct, id, a); err != nil {
-			return lostMsg{err}
+			return lostMsg{err, c}
 		}
 		return nil
 	}
@@ -195,8 +227,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.st = newStyles(msg.IsDark())
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+	case fromConn:
+		if msg.conn != m.conn {
+			return m, nil
+		}
+		return m.Update(msg.msg)
 	case helloMsg:
 		m.host = proto.Hello(msg)
+		if m.olderLocal() {
+			// The old service exits; the redial starts this binary.
+			m.replaced = true
+			m.flash = fmt.Sprintf("replacing the service %s with %s…", m.host.Binary, m.opt.Binary)
+			return m, tea.Batch(m.send(proto.Act{RecID: "service:replace"}), m.recv())
+		}
 		m.mismatch = m.host.Version != proto.Version
 		if m.mismatch {
 			return m, nil
@@ -205,7 +248,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stateMsg:
 		first := !m.have
 		st := proto.State(msg)
-		m.snap, m.git, m.recs, m.have = st.Snapshot, st.Git, st.Recommendations, true
+		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
 		if m.lost {
 			m.lost, m.backoff, m.flash = false, 0, ""
 		}
@@ -224,14 +267,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.recv()
 	case lostMsg:
-		if m.mismatch || m.quitting {
+		if m.mismatch || m.quitting || m.redialing || (msg.conn != nil && msg.conn != m.conn) {
 			return m, nil
+		}
+		if m.conn != nil {
+			_ = m.conn.Close()
 		}
 		m.lost = true
 		m.flash = "connection lost: " + msg.err.Error()
 		if m.opt.Redial == nil {
 			return m, nil
 		}
+		m.redialing = true
 		m.backoff = min(max(m.backoff*2, 250*time.Millisecond), 10*time.Second)
 		m.flash += "; trying again in " + m.backoff.String()
 		return m, tea.Tick(m.backoff, func(time.Time) tea.Msg { return redialMsg{} })
@@ -240,14 +287,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, func() tea.Msg {
 			c, err := redial()
 			if err != nil {
-				return lostMsg{err}
+				return redialFailed{err}
 			}
 			return connMsg{c}
 		}
+	case silentMsg:
+		if msg.conn != m.conn || m.answered || m.mismatch {
+			return m, nil
+		}
+		pid := 0
+		if m.opt.Owner != nil {
+			pid = m.opt.Owner()
+		}
+		if pid > 0 {
+			m.flash = fmt.Sprintf("the service (pid %d) does not answer: kill %d, then start matchblox again", pid, pid)
+		} else {
+			m.flash = "the service does not answer: stop `matchblox serve`, then start matchblox again"
+		}
+		return m, nil
+	case redialFailed:
+		m.redialing = false
+		return m.Update(lostMsg{err: msg.err})
 	case connMsg:
-		m.conn = msg.conn
+		m.conn, m.redialing, m.answered = msg.conn, false, false
 		m.flash = "connected again"
-		return m, tea.Batch(m.hello(), m.recv())
+		return m, tea.Batch(m.hello(), m.recv(), m.watchSilence())
 	case ranMsg:
 		if msg.err != nil {
 			m.flash = "failed: " + msg.cmd + ": " + msg.err.Error()
@@ -258,6 +322,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.key(msg.String())
 	}
 	return m, nil
+}
+
+// olderLocal tells if the local service should give way to this console:
+// an older wire, or another build. Once only, so two consoles of two
+// versions do not replace each other forever.
+func (m Model) olderLocal() bool {
+	if !m.opt.Local || m.replaced || m.opt.Redial == nil {
+		return false
+	}
+	return m.host.Version < proto.Version || (m.opt.Binary != "dev" && m.host.Binary != m.opt.Binary)
 }
 
 func describe(r proto.Result) string {
@@ -332,7 +406,18 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// navAllowed is what a Nav step may be: it runs here on one key, so a
+// service can never make the console run anything but a tmux move.
+func navAllowed(argv []string) bool {
+	return len(argv) >= 2 && argv[0] == "tmux" && (argv[1] == "switch-client" || argv[1] == "new-window")
+}
+
 func runNav(a action, run func([]string) error) ranMsg {
+	for _, step := range a.steps {
+		if !navAllowed(step) {
+			return ranMsg{strings.Join(step, " "), fmt.Errorf("refused: only tmux switch-client and new-window run in the console")}
+		}
+	}
 	for _, step := range a.steps {
 		if err := run(step); err != nil {
 			return ranMsg{strings.Join(step, " "), err}

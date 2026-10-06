@@ -29,7 +29,11 @@ type GitSource func(sessionCwds []string) gitscan.Report
 
 // ErrReplaced means the binary on disk changed. The service stops so that
 // the next console starts the new one.
-var ErrReplaced = errors.New("service: the binary on disk changed")
+var ErrReplaced = errors.New("service: replaced by a newer binary")
+
+// ErrSocketGone means the socket file was removed or replaced. A console
+// that cannot find this service starts another, so this one stops.
+var ErrSocketGone = errors.New("service: the socket file is gone")
 
 type Service struct {
 	// Actions runs confirmed steps. New sets Check and Idle.
@@ -44,7 +48,8 @@ type Service struct {
 	AlertHook []string
 	// Binary is the version in the hello.
 	Binary string
-	// Exe is checked every ExeEvery; Serve stops when it changes. Empty: never.
+	// Exe is the path matchblox was started by, checked every ExeEvery with
+	// the socket file; Serve stops when either changes. Empty Exe: no check.
 	Exe      string
 	ExeEvery time.Duration
 
@@ -59,6 +64,7 @@ type Service struct {
 	hist    history.Series
 	clients map[*client]struct{}
 	gitKick chan struct{}
+	stop    context.CancelCauseFunc
 
 	acts acts
 }
@@ -98,10 +104,15 @@ func (s *Service) State() proto.State {
 func (s *Service) Serve(ctx context.Context, l net.Listener) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
+	s.mu.Lock()
+	s.stop = cancel
+	s.mu.Unlock()
 	go s.Run(ctx)
-	if s.Exe != "" {
-		go s.watchExe(ctx, cancel)
+	sock := ""
+	if a, ok := l.Addr().(*net.UnixAddr); ok {
+		sock = a.Name
 	}
+	go s.watch(ctx, cancel, sock)
 	go func() {
 		for {
 			nc, err := l.Accept()
@@ -114,17 +125,31 @@ func (s *Service) Serve(ctx context.Context, l net.Listener) error {
 	}()
 	<-ctx.Done()
 	l.Close()
-	if err := context.Cause(ctx); errors.Is(err, ErrReplaced) {
-		return ErrReplaced
+	if err := context.Cause(ctx); errors.Is(err, ErrReplaced) || errors.Is(err, ErrSocketGone) {
+		return err
 	}
 	return ctx.Err()
 }
 
-func (s *Service) watchExe(ctx context.Context, stop context.CancelCauseFunc) {
-	first, err := os.Stat(s.Exe)
-	if err != nil {
-		return
+// watch stops the service when the binary it was started by changes (an
+// install over it, or a link repointed to a new version) or when its
+// socket file is removed or replaced.
+func (s *Service) watch(ctx context.Context, stop context.CancelCauseFunc, sock string) {
+	stat := func(p string) os.FileInfo {
+		if p == "" {
+			return nil
+		}
+		fi, _ := os.Stat(p)
+		return fi
 	}
+	changed := func(was os.FileInfo, p string) bool {
+		if was == nil {
+			return false
+		}
+		now := stat(p)
+		return now == nil || !os.SameFile(was, now) || now.Size() != was.Size() || !now.ModTime().Equal(was.ModTime())
+	}
+	exe, socket := stat(s.Exe), stat(sock)
 	t := time.NewTicker(s.ExeEvery)
 	defer t.Stop()
 	for {
@@ -132,12 +157,26 @@ func (s *Service) watchExe(ctx context.Context, stop context.CancelCauseFunc) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			fi, err := os.Stat(s.Exe)
-			if err != nil || fi.Size() != first.Size() || !fi.ModTime().Equal(first.ModTime()) {
+			switch {
+			case changed(exe, s.Exe):
 				stop(ErrReplaced)
+				return
+			case changed(socket, sock):
+				stop(ErrSocketGone)
 				return
 			}
 		}
+	}
+}
+
+// replace stops Serve so that the console that asked starts its own,
+// newer binary. The result goes out first.
+func (s *Service) replace() {
+	s.mu.Lock()
+	stop := s.stop
+	s.mu.Unlock()
+	if stop != nil {
+		time.AfterFunc(100*time.Millisecond, func() { stop(ErrReplaced) })
 	}
 }
 

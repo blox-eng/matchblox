@@ -26,7 +26,7 @@ func TmuxPanes() ([]byte, error) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		return nil, nil
 	}
-	out, err := exec.Command("tmux", "list-panes", "-a", "-F", PaneFormat).Output()
+	out, err := output("tmux", "list-panes", "-a", "-F", PaneFormat)
 	if err != nil {
 		if ee := (*exec.ExitError)(nil); errors.As(err, &ee) {
 			return nil, nil
