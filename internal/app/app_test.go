@@ -527,7 +527,7 @@ func TestHeaderShowsHost(t *testing.T) {
 func TestFooterUsesClock(t *testing.T) {
 	st := fixtureState()
 	f := newFake()
-	m := New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return st.Snapshot.At.Add(5 * time.Second) }})
+	m := New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return st.At.Add(5 * time.Second) }})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	next, _ = next.Update(stateMsg(st))
 	lines := strings.Split(ansi.Strip(next.(Model).render()), "\n")

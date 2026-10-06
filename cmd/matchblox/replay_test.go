@@ -342,7 +342,7 @@ func TestReplay(t *testing.T) {
 	}
 	// Warm up before the console starts: the replay opens on a machine at work.
 	stopWarm := run()
-	if _, err := waitFor(func() string { return fmt.Sprint(len(s.State().Snapshot.Orphans)) }, func(n string) bool { return n == "1" }, "warm up", stepTimeout); err != nil {
+	if _, err := waitFor(func() string { return fmt.Sprint(len(s.State().Orphans)) }, func(n string) bool { return n == "1" }, "warm up", stepTimeout); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(500 * time.Millisecond) // 20 s more of the demo clock: full sparklines

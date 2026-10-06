@@ -31,12 +31,6 @@ func iso(x, y, z float64) (float64, float64) {
 	return isoOX + (x-y)*cos30*isoS, isoOY + (x+y)*0.5*isoS - z*isoS
 }
 
-func (r *raster) set(x, y int, c color.Color) {
-	if x >= 0 && x < markW && y >= 0 && y < markH {
-		r[y][x] = c
-	}
-}
-
 // fill paints every pixel whose centre in tells is inside.
 func (r *raster) fill(c color.Color, in func(px, py float64) bool) {
 	for y := 0; y < markH; y++ {
