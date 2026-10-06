@@ -14,6 +14,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/procfs"
@@ -241,7 +242,7 @@ func TestVersionMismatchShowsFix(t *testing.T) {
 	out := next.(Model).render()
 	for _, want := range []string{
 		"the console is version 1, the host is version 2",
-		"curl -fsSL https://matchblox.com/install.sh | sh",
+		"curl -fsSL https://matchblox.sh | sh",
 		"update the console",
 	} {
 		if !strings.Contains(out, want) {
@@ -511,5 +512,26 @@ func TestNavAllowlistIsExact(t *testing.T) {
 		if navAllowed(a) {
 			t.Errorf("allowed %v", a)
 		}
+	}
+}
+
+func TestHeaderShowsHost(t *testing.T) {
+	m := loaded(t, 100)
+	next, _ := m.Update(helloMsg{Version: proto.Version, Host: "ws-1"})
+	first := strings.Split(ansi.Strip(next.(Model).render()), "\n")[0]
+	if !strings.HasPrefix(first, " ▰ matchblox · ws-1") {
+		t.Fatalf("header %q, want it to start with the mark, the name and the host", first)
+	}
+}
+
+func TestFooterUsesClock(t *testing.T) {
+	st := fixtureState()
+	f := newFake()
+	m := New(Options{Conn: f, Now: func() time.Time { return st.Snapshot.At.Add(5 * time.Second) }})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	next, _ = next.Update(stateMsg(st))
+	lines := strings.Split(ansi.Strip(next.(Model).render()), "\n")
+	if last := strings.TrimRight(lines[len(lines)-1], " "); !strings.HasSuffix(last, "sampled 5s ago") {
+		t.Fatalf("footer %q, want it to end with sampled 5s ago", last)
 	}
 }

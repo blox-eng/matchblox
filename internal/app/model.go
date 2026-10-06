@@ -24,7 +24,7 @@ import (
 )
 
 // installCmd updates matchblox on the side that is older.
-const installCmd = "curl -fsSL https://matchblox.com/install.sh | sh"
+const installCmd = "curl -fsSL https://matchblox.sh | sh"
 
 type Options struct {
 	Conn transport.Conn
@@ -42,6 +42,11 @@ type Options struct {
 	// Owner is the pid of the local service, to name it when it does not
 	// answer. Nil or 0: unknown.
 	Owner func() int
+	// Now is the clock for ages on the screen. Nil: time.Now. The replay
+	// sets a fixed clock.
+	Now func() time.Time
+	// NoMotion makes every motion an instant change.
+	NoMotion bool
 }
 
 type helloMsg proto.Hello

@@ -115,7 +115,7 @@ func (m Model) gitPanel(w int) []string {
 		out = append(out, fit(" "+st.neg.Render("! ")+st.muted.Render(e), w))
 	}
 	out = append(out, "", fit(" "+st.faint.Render(fmt.Sprintf("scanned %s ago in %s · r rescans",
-		sample.Human(time.Since(m.git.At)), m.git.Took.Round(time.Millisecond))), w))
+		sample.Human(m.now().Sub(m.git.At)), m.git.Took.Round(time.Millisecond))), w))
 	if wt, ok := m.selectedWorktree(); ok {
 		out = append(out, fit(" "+st.label.Render("⏎ ")+st.muted.Render("tmux new-window -c "+wt.Path), w))
 		if wt.Safe {

@@ -77,6 +77,7 @@ func run(args []string) error {
 	root := fl.String("fixtures", "", "read proc/, sys/, home/ and tmux-panes.txt from this directory instead of the live machine")
 	text := fl.Bool("text", false, "status: print a summary instead of JSON")
 	stdio := fl.Bool("stdio", false, "serve: speak on stdin and stdout, joined to the local service")
+	noMotion := fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)")
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
@@ -111,11 +112,11 @@ func run(args []string) error {
 	case "status":
 		return status(os.Stdout, path, cfg, *root, *text)
 	}
-	return console(path, cfg, *root)
+	return console(path, cfg, *root, *noMotion)
 }
 
-func console(path string, cfg config.Config, root string) error {
-	opt := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt}
+func console(path string, cfg config.Config, root string, noMotion bool) error {
+	opt := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, NoMotion: noMotion}
 	if root != "" {
 		// Fixtures: a service in this process, for demos and tests.
 		ctx, cancel := context.WithCancel(context.Background())
@@ -152,6 +153,7 @@ func newService(cfg config.Config, root string) *service.Service {
 	s := service.New(cfg, newSampler(cfg, root), git)
 	s.Binary = version
 	if root != "" {
+		s.Host = fixtureHost(root)
 		// The fixture's panes and pids exist on this machine too.
 		s.Actions.Run = func([]string) error { return errors.New("fixtures: nothing runs on this machine") }
 		return s
@@ -169,6 +171,16 @@ func newService(cfg config.Config, root string) *service.Service {
 	}
 	s.Exe = invokedPath(os.Args[0])
 	return s
+}
+
+// fixtureHost is the host name a fixture tree carries, so a demo or a test
+// never shows the name of the machine it runs on.
+func fixtureHost(root string) string {
+	b, err := os.ReadFile(filepath.Join(root, "proc", "sys", "kernel", "hostname"))
+	if h := strings.TrimSpace(string(b)); err == nil && h != "" {
+		return h
+	}
+	return "fixtures"
 }
 
 // invokedPath is the path matchblox was started by, links kept: Homebrew
