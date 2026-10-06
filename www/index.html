@@ -34,9 +34,14 @@
     </button>
   </header>
   <main>
-    <span class="micro lead">In the making · Open source</span>
-    <h1>A tool for modern software builders.</h1>
-    <p class="sub">One terminal console for every AI coding agent you run. See who is waiting for you, what loads the machine, and the one action that resolves it. On the host, over SSH from any terminal, or from your laptop.</p>
+    <section class="hero">
+      <div class="hero-text">
+      <span class="micro lead">In the making · Open source</span>
+      <h1>A tool for modern software builders.</h1>
+      <p class="sub">One terminal console for every AI coding agent you run. See who is waiting for you, what loads the machine, and the one action that resolves it. On the host, over SSH from any terminal, or from your laptop.</p>
+      </div>
+      <canvas class="strike" id="scene" role="img" aria-label="Blocks fall into a matchbox, the drawer opens, and a match strikes on its side"></canvas>
+    </section>
     <section class="stage" aria-label="The matchblox console on a demo machine">
 <!-- replay:still -->
 <pre class="replay" aria-hidden="true"> <span class="fg-accent">▰</span> <span class="fg-fg">matchblox</span><span class="fg-faint"> · </span><span class="fg-muted">ws-1</span><span class="fg-hair">  │  </span><span class="fg-faint">cpu</span> <span class="fg-fg"> 41%</span> <span class="fg-faint">▄▄▅▄▄▄▄▄</span><span class="fg-hair">  │  </span><span class="fg-faint">mem</span> <span class="fg-fg">26G/64G</span> <span class="fg-faint">▄▄▄▄▄▄▄▄</span><span class="fg-hair">  │  </span><span class="fg-faint">load</span> <span class="fg-fg">6.2</span> <span class="fg-faint">████████</span>            
@@ -71,15 +76,47 @@
  <span class="fg-faint">RUN </span><span class="fg-fg">kill 4242</span>   <span class="fg-neg">y</span><span class="fg-muted"> run  any other key cancels</span>                                                       </pre>
 <!-- /replay:still -->
     </section>
-    <a class="go" href="https://github.com/blox-eng/matchblox"><b>Follow it on GitHub</b> <span aria-hidden="true">→</span></a>
+    <section class="install" aria-labelledby="install-h">
+      <h2 class="micro" id="install-h">Install</h2>
+      <div class="cmd">
+        <span class="micro">go</span>
+        <code id="cmd-go">go install github.com/blox-eng/matchblox/cmd/matchblox@latest</code>
+        <button class="copy" type="button" data-copy="cmd-go">Copy</button>
+      </div>
+      <div class="cmd">
+        <span class="micro">curl</span>
+        <code id="cmd-curl">curl -fsSL https://matchblox.sh | sh</code>
+        <span class="soon">from v0.1.0</span>
+        <button class="copy" type="button" data-copy="cmd-curl">Copy</button>
+      </div>
+      <p class="copied" role="status" aria-live="polite"></p>
+    </section>
+    <section class="blocks" aria-label="What it does">
+      <div>
+        <h3>Waiting for you <span class="soon">in v0.1</span></h3>
+        <p>Each agent that stopped, asks a question or asks for permission, oldest first. One key takes you to its pane.</p>
+      </div>
+      <div>
+        <h3>Machine health, guarded actions</h3>
+        <p>CPU, load, pressure, memory, temperature, and the busy loops nobody stopped. Each fix shows its exact command, and a destructive one waits for a typed y.</p>
+      </div>
+      <div>
+        <h3>Any terminal, even a phone</h3>
+        <p>On the host, or over SSH from any terminal app. Every key is on a phone's key bar.</p>
+      </div>
+    </section>
     <p class="motto">Light the match. Keep it burning.</p>
+    <nav class="links" aria-label="Project">
+      <a class="go" href="https://github.com/blox-eng/matchblox"><b>GitHub</b> <span aria-hidden="true">→</span></a>
+      <a class="go" href="https://discord.gg/tYxBUpGfX3"><b>Discord</b> <span aria-hidden="true">→</span></a>
+    </nav>
   </main>
   <footer>
     <span>From <a href="https://bloxng.com">Blox Engineering</a> · MIT</span>
-    <nav aria-label="More tools for builders">
-      <a href="https://openblox.sh">openblox.sh</a>
-      <a href="https://goifc.org">goifc.org</a>
+    <nav aria-label="Elsewhere">
       <a href="https://github.com/blox-eng/matchblox">GitHub</a>
+      <a href="https://discord.gg/tYxBUpGfX3">Discord</a>
+      <a href="https://bloxng.com">bloxng.com</a>
     </nav>
   </footer>
 </div>
