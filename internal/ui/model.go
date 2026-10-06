@@ -139,10 +139,6 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m Model) doc() state.Doc {
-	return state.Doc{Snapshot: m.snap, Git: m.git, Recommendations: m.recs}
-}
-
 func (m Model) sampleCmd() tea.Cmd {
 	src, on, git := m.opt.Source, m.opt.OnSnapshot, m.git
 	return func() tea.Msg {

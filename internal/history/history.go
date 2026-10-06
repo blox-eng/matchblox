@@ -5,6 +5,7 @@ package history
 import (
 	"bufio"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -100,9 +101,9 @@ func (l *Logger) Log(p Point) error {
 	defer f.Close()
 	w := csv.NewWriter(f)
 	if st, err := f.Stat(); err == nil && st.Size() == 0 {
-		w.Write(Columns)
+		_ = w.Write(Columns) // a write error surfaces in w.Error()
 	}
-	w.Write(p.row())
+	_ = w.Write(p.row())
 	w.Flush()
 	return w.Error()
 }
@@ -151,7 +152,7 @@ func readCSV(path string, since time.Time) ([]Point, error) {
 	var out []Point
 	for {
 		rec, err := r.Read()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

@@ -124,12 +124,13 @@ func (m Model) procs(w int) []string {
 	}
 	sel := m.orphanIndex()
 	for i, o := range m.snap.Orphans {
-		pane := "pane gone"
-		if o.Pane == "" {
+		var pane string
+		switch {
+		case o.Pane == "":
 			pane = "no pane"
-		} else if o.PaneAlive {
+		case o.PaneAlive:
 			pane = o.Pane + " " + o.Target
-		} else {
+		default:
 			pane = o.Pane + " (gone)"
 		}
 		line := " " + st.neg.Render("! ") + st.text.Render(pad(fmt.Sprintf("%d %s", o.PID, o.Comm), 16)) +

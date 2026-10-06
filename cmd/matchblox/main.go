@@ -37,7 +37,7 @@ func main() {
 	// MATCHBLOX_CPUPROFILE=file profiles the console itself, to keep its
 	// own cost honest.
 	if path := os.Getenv("MATCHBLOX_CPUPROFILE"); path != "" {
-		if f, err := os.Create(path); err == nil {
+		if f, err := os.Create(path); err == nil { //nolint:gosec // the person names their own profile file
 			_ = pprof.StartCPUProfile(f)
 			defer pprof.StopCPUProfile()
 		}
@@ -98,9 +98,10 @@ func run(args []string) error {
 	}
 	if !fixtures {
 		logPath := cfg.History.Log
-		if logPath == "" {
+		switch logPath {
+		case "":
 			logPath = history.DefaultLog()
-		} else if logPath == "-" {
+		case "-":
 			logPath = ""
 		}
 		opt.OnSnapshot = recorder(state.Path(), logPath, cfg.Hooks.Alert)
@@ -138,7 +139,7 @@ func recorder(statePath, logPath string, hook []string) func(state.Doc) {
 			if !firing[a.Key] && len(hook) > 0 {
 				c := exec.Command(hook[0], append(hook[1:], a.Title, a.Evidence)...)
 				if c.Start() == nil {
-					go c.Wait()
+					go func() { _ = c.Wait() }()
 				}
 			}
 		}

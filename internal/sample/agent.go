@@ -120,7 +120,7 @@ func (r *agentReader) transcript(sessionID, cwd string) string {
 func projectDir(cwd string) string {
 	b := []byte(cwd)
 	for i, c := range b {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9') {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
 			b[i] = '-'
 		}
 	}

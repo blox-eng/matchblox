@@ -1,0 +1,42 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard   # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose
+    - errorlint
+    - gosec
+    - misspell
+    - revive
+  settings:
+    errcheck:
+      # Closing a file we only read, or removing a temp file on an error path,
+      # has no failure to act on.
+      exclude-functions:
+        - (*os.File).Close
+        - os.Remove
+        - syscall.Close
+    gosec:
+      excludes:
+        - G204 # every subprocess is an argv list by design; review enforces no shell strings
+        - G304 # paths come from our own config, home and /proc, never from a pane or a model
+        - G115 # pid, tick and byte conversions stay far inside int32/int64
+        - G104 # errcheck owns unchecked errors, with its own exclusions above
+    revive:
+      rules:
+        # Every package is internal; a comment that restates a name is noise.
+        - name: exported
+          disabled: true
+  exclusions:
+    rules:
+      # Test code may ignore errors and use weak randomness freely.
+      - path: _test\.go
+        linters: [errcheck, gosec]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
