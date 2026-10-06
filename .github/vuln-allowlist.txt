@@ -1,0 +1,9 @@
+# Vulnerabilities govulncheck reports as reachable that we cannot currently fix.
+#
+# One ID per line. Blank lines and #-comments are ignored. Anything reachable and
+# NOT listed here fails CI — so this file is the complete, reviewable record of
+# what we are knowingly carrying.
+#
+# Every entry must say WHY it is here and what would remove it. An entry with no
+# route out is a decision to stop caring, which is not the same as an exception.
+
