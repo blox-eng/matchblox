@@ -1,5 +1,6 @@
 <picture>
-  <img alt="matchblox" src="www/assets/matchblox-mark.svg" width="64">
+  <source media="(prefers-color-scheme: dark)" srcset="www/assets/matchblox-mark-dark.svg">
+  <img alt="matchblox" src="www/assets/matchblox-mark-light.svg" width="84">
 </picture>
 
 # matchblox

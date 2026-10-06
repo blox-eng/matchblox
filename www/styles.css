@@ -8,15 +8,18 @@
   --bg: #0F0D0A; --fg: #EBE6DC; --muted: #A69D8D; --faint: #918770;
   --hair: rgba(232,214,176,.085); --hair-soft: rgba(232,214,176,.045); --hair-strong: rgba(232,214,176,.16);
   --primary: #C3A56A; --striker: #5A4128;
+  --box-top: #3A3328; --box-left: #1C1914; --box-right: #2A251D; --box-edge: rgba(232,214,176,.3); --tray: #15120E; --stick: #C9A877;
   --sans: "Plex Sans", "Helvetica Neue", Arial, sans-serif;
   --mono: "Plex Mono", ui-monospace, Menlo, monospace;
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) { color-scheme: light; --bg: #F5F1E7; --fg: #1C1813; --muted: #5F5A4C; --faint: #6C6352;
-    --hair: rgba(120,96,44,.12); --hair-soft: rgba(120,96,44,.055); --hair-strong: rgba(120,96,44,.22); --primary: #9A7B3F; --striker: #8C6A43; }
+    --hair: rgba(120,96,44,.12); --hair-soft: rgba(120,96,44,.055); --hair-strong: rgba(120,96,44,.22); --primary: #9A7B3F; --striker: #8C6A43;
+    --box-top: #EFE9DC; --box-left: #CFC6AF; --box-right: #DED6C3; --box-edge: rgba(120,96,44,.4); --tray: #C4BAA2; --stick: #B8925B; }
 }
 :root[data-theme="light"] { color-scheme: light; --bg: #F5F1E7; --fg: #1C1813; --muted: #5F5A4C; --faint: #6C6352;
-  --hair: rgba(120,96,44,.12); --hair-soft: rgba(120,96,44,.055); --hair-strong: rgba(120,96,44,.22); --primary: #9A7B3F; --striker: #8C6A43; }
+  --hair: rgba(120,96,44,.12); --hair-soft: rgba(120,96,44,.055); --hair-strong: rgba(120,96,44,.22); --primary: #9A7B3F; --striker: #8C6A43;
+  --box-top: #EFE9DC; --box-left: #CFC6AF; --box-right: #DED6C3; --box-edge: rgba(120,96,44,.4); --tray: #C4BAA2; --stick: #B8925B; }
 body { transition: background-color 240ms ease-out, color 240ms ease-out; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 400 14px/20px var(--sans); -webkit-font-smoothing: antialiased; }
@@ -24,7 +27,11 @@ body { margin: 0; background: var(--bg); color: var(--fg); font: 400 14px/20px v
 @media (max-width: 640px) { .wrap { padding-inline: 16px; } }
 header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-block: 20px; border-bottom: 1px solid var(--hair-soft); }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--fg); text-decoration: none; }
-.brand img { width: 22px; height: 22px; }
+.brand .mark { width: 30px; height: auto; }
+.mark .top { fill: var(--box-top); } .mark .left { fill: var(--box-left); } .mark .right { fill: var(--box-right); }
+.mark .tray { fill: var(--tray); } .mark .strike { fill: var(--striker); stroke: none; }
+.mark path { stroke: var(--box-edge); stroke-width: .6; stroke-linejoin: round; transition: fill 240ms ease-out; }
+.mark .stick { stroke: var(--stick); stroke-width: 1.4; stroke-linecap: round; } .mark .head { fill: var(--primary); }
 .brand b { font-weight: 600; letter-spacing: -.01em; }
 
 /* The matchbox switch */
