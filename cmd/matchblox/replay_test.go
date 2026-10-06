@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -203,6 +205,60 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 	return last, fmt.Errorf("step %q: the screen never showed what it waits for; last screen:\n%s", step, ansi.Strip(last))
 }
 
+var (
+	figure = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
+	sparks = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
+	spaces = regexp.MustCompile(`\s+`)
+)
+
+// skeleton is a screen without what changes from run to run: figures,
+// sparklines and the space around them. A change in the console's words,
+// tabs or layout still shows.
+func skeleton(lines []string) string {
+	var b strings.Builder
+	for _, l := range lines {
+		l = sparks.ReplaceAllString(figure.ReplaceAllString(l, "0"), "")
+		b.WriteString(strings.TrimSpace(spaces.ReplaceAllString(l, " ")))
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// screens decodes frames.json into the text of each frame.
+func screens(js []byte) ([][]string, error) {
+	var doc struct {
+		Rows   int `json:"rows"`
+		Frames []struct {
+			Lines []json.RawMessage `json:"lines"`
+		} `json:"frames"`
+	}
+	if err := json.Unmarshal(js, &doc); err != nil {
+		return nil, err
+	}
+	cur := make([]string, doc.Rows)
+	var out [][]string
+	for _, f := range doc.Frames {
+		for i, raw := range f.Lines {
+			if string(raw) == "null" || i >= len(cur) {
+				continue
+			}
+			var spans [][]any
+			if err := json.Unmarshal(raw, &spans); err != nil {
+				return nil, err
+			}
+			var b strings.Builder
+			for _, sp := range spans {
+				if t, ok := sp[0].(string); ok {
+					b.WriteString(t)
+				}
+			}
+			cur[i] = b.String()
+		}
+		out = append(out, append([]string{}, cur...))
+	}
+	return out, nil
+}
+
 func TestReplayWaitsOnScreen(t *testing.T) {
 	_, err := waitFor(func() string { return "nothing here" }, func(string) bool { return false }, "the kill", 100*time.Millisecond)
 	if err == nil || !strings.Contains(err.Error(), "the kill") || !strings.Contains(err.Error(), "nothing here") {
@@ -333,8 +389,13 @@ func TestReplay(t *testing.T) {
 		frames = append(frames, replay.Frame{At: at, Lines: lines})
 	}
 
-	// The start screen, frame by frame on the replay clock.
-	for ms := 0; ms <= 560; ms += 70 {
+	// The start screen, frame by frame on the replay clock, once the first
+	// state is in (the clock stands still, so the start screen waits). The
+	// last frame is the match burning, 1 ms before the console, and it holds.
+	if _, err := waitFor(capture, func(s string) bool { return !strings.Contains(s, "waiting for the service") }, "the first state", stepTimeout); err != nil {
+		t.Fatal(err)
+	}
+	for _, ms := range []int{0, 70, 140, 210, 280, 350, 420, 490, 559} {
 		clk.Set(warm.Add(time.Duration(ms) * time.Millisecond))
 		keep(time.Duration(ms)*time.Millisecond, capture())
 	}
@@ -343,7 +404,7 @@ func TestReplay(t *testing.T) {
 	time.Sleep(600 * time.Millisecond) // a dozen samples reach the console: the sparklines fill
 
 	steps := []step{
-		{"the sessions", 1000 * time.Millisecond, "", has("ws-1", "web-checkout", "! compact")},
+		{"the sessions", 1300 * time.Millisecond, "", has("ws-1", "web-checkout", "! compact")},
 		{"machine health", 3500 * time.Millisecond, "2", has("CPU")},
 		{"the recommendations", 6 * time.Second, "5", has("Kill detached busy loop 4242")},
 		{"a guarded action", 7500 * time.Millisecond, "x", has("kill 4242", "y run")},
@@ -367,6 +428,20 @@ func TestReplay(t *testing.T) {
 	p.Quit()
 	<-done
 
+	lit := false
+	for _, f := range frames {
+		for _, l := range f.Lines {
+			for _, sp := range l {
+				lit = lit || sp.FG == "flame" || sp.BG == "flame"
+				if strings.Contains(sp.Text, "waiting for the service") {
+					t.Fatalf("frame at %v shows a slow service: the start screen must be recorded after the first state", f.At)
+				}
+			}
+		}
+	}
+	if !lit {
+		t.Fatal("the replay never shows the struck, burning match")
+	}
 	if real, _ := os.Hostname(); real != "" && real != "ws-1" {
 		for _, f := range frames {
 			for _, l := range f.Lines {
@@ -408,6 +483,29 @@ func TestReplay(t *testing.T) {
 		t.Fatalf("%s needs %s and %s around the still frame", index, open, closing)
 	}
 	if !*update {
+		// The committed replay must still show this console: compare the
+		// skeleton of each step's screen.
+		old, err := os.ReadFile("../../www/demo/frames.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		was, err := screens(old)
+		if err != nil {
+			t.Fatal(err)
+		}
+		now, err := screens(js)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(was) != len(now) {
+			t.Fatalf("www/demo/frames.json has %d frames, the console now makes %d: run go test ./cmd/matchblox -run TestReplay -update", len(was), len(now))
+		}
+		for k := len(now) - len(steps); k < len(now); k++ {
+			if skeleton(was[k]) != skeleton(now[k]) {
+				t.Fatalf("www/demo/frames.json is out of date at step %q: run go test ./cmd/matchblox -run TestReplay -update\nwas:\n%s\nnow:\n%s",
+					steps[k-len(now)+len(steps)].name, skeleton(was[k]), skeleton(now[k]))
+			}
+		}
 		return
 	}
 	newPage := append(append(append([]byte{}, page[:i+len(open)]...), "\n"+replay.Still(still)+"\n"...), page[j:]...)
@@ -418,5 +516,18 @@ func TestReplay(t *testing.T) {
 		if err := os.WriteFile(path, b, 0o644); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestSkeletonCatchesAChangedScreen(t *testing.T) {
+	a := []string{" ▰ matchblox · ws-1  │  cpu  47% ▅▄▄▄  │  mem 26G/64G ▄▄", " 1 SESSIONS   2 MACHINE", " web-checkout  idle  4m   88%"}
+	b := []string{" ▰ matchblox · ws-1  │  cpu  52% ▄▅  │  mem 27G/64G ▄▄▄▄▄", " 1 SESSIONS   2 MACHINE", " web-checkout  idle  5m   88%"}
+	if skeleton(a) != skeleton(b) {
+		t.Fatalf("figures and sparklines change between runs; the skeletons must match:\n%q\n%q", skeleton(a), skeleton(b))
+	}
+	c := append([]string{}, b...)
+	c[1] = " 1 PANES   2 MACHINE"
+	if skeleton(a) == skeleton(c) {
+		t.Fatal("a renamed tab must change the skeleton")
 	}
 }

@@ -75,7 +75,9 @@ func (m Model) render() string {
 	}
 	if !m.have {
 		why := m.waitingWhy()
-		out = append(append(out, ""), m.markLines(w)...)
+		if len(out)+markH/2+3 <= m.height {
+			out = append(append(out, ""), m.markLines(w)...)
+		}
 		return strings.Join(append(out, "", strings.Repeat(" ", max((w-lipgloss.Width(why))/2, 0))+m.st.faint.Render(why)), "\n")
 	}
 	var body []string

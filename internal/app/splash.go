@@ -46,9 +46,18 @@ func (m Model) markLines(w int) []string {
 // splashView is the start screen alone: the mark in the middle of the
 // screen and, under it, why the console waits.
 func (m Model) splashView(w int) string {
-	lines := m.markLines(w)
-	if why := m.waitingWhy(); why != "" && !m.have {
-		lines = append(lines, "", strings.Repeat(" ", max((w-lipgloss.Width(why))/2, 0))+m.st.faint.Render(why))
+	var lines []string
+	why := ""
+	if !m.have {
+		why = strings.Repeat(" ", max((w-lipgloss.Width(m.waitingWhy()))/2, 0)) + m.st.faint.Render(m.waitingWhy())
+	}
+	// The reason, with its fix, must stay on screen: the mark gives way in a
+	// short pane.
+	if m.height >= markH/2+2 || why == "" {
+		lines = m.markLines(w)
+	}
+	if why != "" {
+		lines = append(lines, "", why)
 	}
 	top := max((m.height-len(lines))/2, 0)
 	return strings.Repeat("\n", top) + strings.Join(lines, "\n")

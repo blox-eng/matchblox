@@ -1,6 +1,13 @@
 // The theme switch is the matchbox: dark mode is a lit match, light mode is a
 // match put back in its box. Loaded in <head> so the stored theme applies
 // before the first paint (the CSP allows no inline script).
+// onReady runs fn once the DOM is parsed, also when the script loads after
+// that (an embedding page can add it late).
+function onReady(fn) {
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fn, { once: true });
+  else fn();
+}
+
 (() => {
   const root = document.documentElement;
   const KEY = "matchblox-theme";
@@ -16,7 +23,7 @@
 
   root.dataset.theme = current();
 
-  document.addEventListener("DOMContentLoaded", () => {
+  onReady(() => {
     const btn = document.getElementById("match");
     if (!btn) return;
     const svg = btn.querySelector("svg");
@@ -117,7 +124,7 @@
 // The replay: frames of the real console (www/demo/frames.json, recorded
 // by TestReplay), drawn as text in the page's theme. With reduced motion,
 // or without script, the still frame in the page stays.
-document.addEventListener("DOMContentLoaded", () => {
+onReady(() => {
   const pre = document.querySelector(".stage .replay");
   if (!pre || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const HOLD = 3000;

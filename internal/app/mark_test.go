@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -127,5 +128,22 @@ func TestSplashWhileWaiting(t *testing.T) {
 	out := ansi.Strip(m.render())
 	if !strings.ContainsAny(out, "▀▄") || !strings.Contains(out, "waiting for the service…") {
 		t.Fatalf("before the first state: the mark and why:\n%s", out)
+	}
+}
+
+func TestWaitingViewFitsShortPane(t *testing.T) {
+	t0 := time.Now()
+	for _, past := range []time.Duration{100 * time.Millisecond, time.Second} {
+		now := t0.Add(past)
+		m := splashModel(t0, &now)
+		m.flash = "the service (pid 42) does not answer: kill 42, then start matchblox again"
+		next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 12})
+		lines := strings.Split(ansi.Strip(next.(Model).render()), "\n")
+		if len(lines) > 12 {
+			t.Fatalf("at %v the waiting view is %d lines in a 12-line pane", past, len(lines))
+		}
+		if !strings.Contains(strings.Join(lines, "\n"), "kill 42, then start matchblox again") {
+			t.Fatalf("at %v the fix fell off a short pane:\n%s", past, strings.Join(lines, "\n"))
+		}
 	}
 }
