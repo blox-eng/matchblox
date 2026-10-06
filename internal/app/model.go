@@ -407,9 +407,25 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 }
 
 // navAllowed is what a Nav step may be: it runs here on one key, so a
-// service can never make the console run anything but a tmux move.
+// service can never make the console run anything but the two tmux moves
+// advice builds, in exactly that shape. tmux runs a trailing argument of
+// new-window as a shell command and splits commands on ";", so the shape is
+// four arguments and the target has no ";" and is not a flag.
 func navAllowed(argv []string) bool {
-	return len(argv) >= 2 && argv[0] == "tmux" && (argv[1] == "switch-client" || argv[1] == "new-window")
+	if len(argv) != 4 || argv[0] != "tmux" {
+		return false
+	}
+	target := argv[3]
+	if target == "" || strings.HasPrefix(target, "-") || strings.Contains(target, ";") {
+		return false
+	}
+	switch argv[1] {
+	case "switch-client":
+		return argv[2] == "-t"
+	case "new-window":
+		return argv[2] == "-c"
+	}
+	return false
 }
 
 func runNav(a action, run func([]string) error) ranMsg {

@@ -478,3 +478,32 @@ func TestNavRunsOnlyTmuxMoves(t *testing.T) {
 		t.Fatalf("no refusal shown:\n%s", next.(Model).render())
 	}
 }
+
+// tmux runs a trailing shell command for new-window and splits commands on
+// a ";" argument: a Nav step must have exactly the shape advice builds.
+func TestNavAllowlistIsExact(t *testing.T) {
+	ok := [][]string{
+		{"tmux", "switch-client", "-t", "%1"},
+		{"tmux", "new-window", "-c", "/w/app"},
+	}
+	bad := [][]string{
+		{"tmux", "new-window", "-c", "/w", "rm -rf ~"},
+		{"tmux", "switch-client", "-t", "%1", ";", "run-shell", "rm -rf ~"},
+		{"tmux", "new-window", "-c", "/w", ";", "run-shell", "x"},
+		{"tmux", "switch-client", "-t", "%1;run-shell x"},
+		{"tmux", "switch-client", "-E", "-t", "%1"},
+		{"tmux", "new-window", "-c", "-e"},
+		{"tmux", "switch-client"},
+		{"tmux", "run-shell", "x"},
+	}
+	for _, a := range ok {
+		if !navAllowed(a) {
+			t.Errorf("refused %v", a)
+		}
+	}
+	for _, a := range bad {
+		if navAllowed(a) {
+			t.Errorf("allowed %v", a)
+		}
+	}
+}
