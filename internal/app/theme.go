@@ -61,3 +61,20 @@ func newStyles(dark bool) styles {
 		tabActive: fg(t.Accent).Underline(true),
 	}
 }
+
+// The matchbox of the start screen, in the colours of the site's mark.
+type markColours struct {
+	Top, Left, Right, Tray, Striker, Stick, Flame, Core color.Color
+}
+
+var darkMark = markColours{
+	Top: lipgloss.Color("#3A3328"), Left: lipgloss.Color("#1C1914"), Right: lipgloss.Color("#2A251D"),
+	Tray: lipgloss.Color("#15120E"), Striker: lipgloss.Color("#5A4128"), Stick: lipgloss.Color("#C9A877"),
+	Flame: lipgloss.Color("#E8822E"), Core: lipgloss.Color("#FFD27A"),
+}
+
+var lightMark = markColours{
+	Top: lipgloss.Color("#EFE9DC"), Left: lipgloss.Color("#CFC6AF"), Right: lipgloss.Color("#DED6C3"),
+	Tray: lipgloss.Color("#C4BAA2"), Striker: lipgloss.Color("#8C6A43"), Stick: lipgloss.Color("#B8925B"),
+	Flame: lipgloss.Color("#E8822E"), Core: lipgloss.Color("#FFD27A"),
+}

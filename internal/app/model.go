@@ -105,33 +105,36 @@ func fromAdvice(r advice.Rec, which string) *action {
 }
 
 type Model struct {
-	opt       Options
-	conn      transport.Conn
-	st        styles
-	width     int
-	height    int
-	snap      sample.Snapshot
-	have      bool
-	git       *proto.GitReport
-	recs      []advice.Rec
-	hist      history.Series
-	selPID    int
-	orphanPID int
-	recSel    int
-	gitSel    int
-	tab       int
-	pending   *action
-	flash     string
-	history   *series
-	quitting  bool
-	host      proto.Hello
-	mismatch  bool
-	lost      bool
-	backoff   time.Duration
-	redialing bool
-	answered  bool // a state came on the current connection
-	replaced  bool
-	acts      int
+	opt        Options
+	conn       transport.Conn
+	st         styles
+	width      int
+	height     int
+	snap       sample.Snapshot
+	have       bool
+	git        *proto.GitReport
+	recs       []advice.Rec
+	hist       history.Series
+	selPID     int
+	orphanPID  int
+	recSel     int
+	gitSel     int
+	tab        int
+	pending    *action
+	flash      string
+	history    *series
+	quitting   bool
+	host       proto.Hello
+	mismatch   bool
+	lost       bool
+	backoff    time.Duration
+	redialing  bool
+	answered   bool // a state came on the current connection
+	replaced   bool
+	acts       int
+	dark       bool
+	splashAt   time.Time
+	splashDone bool
 }
 
 func New(opt Options) Model {
@@ -144,7 +147,9 @@ func New(opt Options) Model {
 	if opt.Binary == "" {
 		opt.Binary = "dev"
 	}
-	return Model{opt: opt, conn: opt.Conn, st: newStyles(true), width: 100, height: 30, history: newSeries(60)}
+	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60)}
+	m.splashAt = m.now()
+	return m
 }
 
 // run executes a Nav step: it only moves this terminal, so a short bound
@@ -160,7 +165,7 @@ func run(argv []string) error {
 const silentAfter = 3 * time.Second
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence())
+	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd())
 }
 
 func (m Model) watchSilence() tea.Cmd {
@@ -230,7 +235,12 @@ func (m *Model) send(a proto.Act) tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.BackgroundColorMsg:
-		m.st = newStyles(msg.IsDark())
+		m.dark = msg.IsDark()
+		m.st = newStyles(m.dark)
+	case splashMsg:
+		if m.splashing() {
+			return m, m.splashCmd()
+		}
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 	case fromConn:
@@ -325,6 +335,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.flash = "ran: " + msg.cmd
 		}
 	case tea.KeyPressMsg:
+		if m.splashing() {
+			m.splashDone = true // any key stops the start screen, and does nothing else
+			return m, nil
+		}
 		return m.key(msg.String())
 	}
 	return m, nil

@@ -65,17 +65,18 @@ func (m Model) render() string {
 		return ""
 	}
 	w := max(m.width, 60)
+	if m.splashing() {
+		return m.splashView(w)
+	}
 	var out []string
 	out = append(out, m.header(w), m.tabs(w), m.st.hair.Render(strings.Repeat("─", w)))
 	if m.mismatch {
 		return strings.Join(append(out, "", m.mismatchText(w)), "\n")
 	}
 	if !m.have {
-		why := " waiting for the service…"
-		if m.flash != "" {
-			why = " " + m.flash
-		}
-		return strings.Join(append(out, "", m.st.faint.Render(why)), "\n")
+		why := m.waitingWhy()
+		out = append(append(out, ""), m.markLines(w)...)
+		return strings.Join(append(out, "", strings.Repeat(" ", max((w-lipgloss.Width(why))/2, 0))+m.st.faint.Render(why)), "\n")
 	}
 	var body []string
 	switch m.tab {
