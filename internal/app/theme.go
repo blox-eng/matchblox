@@ -78,3 +78,18 @@ var lightMark = markColours{
 	Tray: lipgloss.Color("#C4BAA2"), Striker: lipgloss.Color("#8C6A43"), Stick: lipgloss.Color("#B8925B"),
 	Flame: lipgloss.Color("#E8822E"), Core: lipgloss.Color("#FFD27A"),
 }
+
+// Tokens are the colours the console draws with, by name. The replay maps
+// each colour of a frame to its token, so the site can draw it in its theme.
+func Tokens(dark bool) map[string]color.Color {
+	t, mk, bg := lightTheme, lightMark, lipgloss.Color("#F5F1E7")
+	if dark {
+		t, mk, bg = darkTheme, darkMark, lipgloss.Color("#0F0D0A")
+	}
+	return map[string]color.Color{
+		"bg": bg, "fg": t.Text, "muted": t.Muted, "faint": t.Faint, "hair": t.Hair,
+		"accent": t.Accent, "wash": t.AccentWash, "warn": t.Warn, "neg": t.Neg,
+		"mark-top": mk.Top, "mark-left": mk.Left, "mark-right": mk.Right, "mark-tray": mk.Tray,
+		"mark-striker": mk.Striker, "mark-stick": mk.Stick, "flame": mk.Flame, "flame-core": mk.Core,
+	}
+}

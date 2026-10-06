@@ -1,0 +1,2 @@
+{"type":"assistant","isSidechain":false,"timestamp":"2026-10-01T08:49:00Z","message":{"model":"sonnet","usage":{"input_tokens":10,"cache_read_input_tokens":62000,"cache_creation_input_tokens":0,"output_tokens":0}}}
+{"type":"assistant","isSidechain":false,"timestamp":"2026-10-01T08:59:00Z","message":{"model":"sonnet","usage":{"input_tokens":10,"cache_read_input_tokens":123990,"cache_creation_input_tokens":0,"output_tokens":0}}}
