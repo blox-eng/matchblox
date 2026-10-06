@@ -1,0 +1,4 @@
+%1	work:1.1	api	1200	claude	/work/api
+%2	work:2.1	web	1300	claude	/work/web
+%3	work:3.1	docs	1400	claude	/work/docs
+%4	lab:1.1	shell	1500	zsh	/work/lab

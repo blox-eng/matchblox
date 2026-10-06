@@ -14,6 +14,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/procfs"
@@ -93,7 +94,7 @@ func (f *fakeConn) acts() []proto.Act {
 func loadedWith(t *testing.T, width int, st proto.State) (Model, *fakeConn) {
 	t.Helper()
 	f := newFake()
-	m := New(Options{Conn: f})
+	m := New(Options{NoMotion: true, Conn: f})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 	next, _ = next.Update(stateMsg(st))
 	return next.(Model), f
@@ -212,7 +213,7 @@ func TestSmoke(t *testing.T) {
 	f := newFake()
 	f.in <- envelope(proto.KindHello, "", proto.Hello{Version: proto.Version, Host: "ws-1"})
 	f.in <- envelope(proto.KindSnapshot, "", fixtureState())
-	p := tea.NewProgram(New(Options{Conn: f}), tea.WithContext(ctx), tea.WithInput(nil), tea.WithOutput(&out), tea.WithWindowSize(100, 30))
+	p := tea.NewProgram(New(Options{NoMotion: true, Conn: f}), tea.WithContext(ctx), tea.WithInput(nil), tea.WithOutput(&out), tea.WithWindowSize(100, 30))
 	done := make(chan error, 1)
 	go func() { _, err := p.Run(); done <- err }()
 
@@ -235,13 +236,13 @@ func TestSmoke(t *testing.T) {
 }
 
 func TestVersionMismatchShowsFix(t *testing.T) {
-	m := New(Options{Conn: newFake()})
+	m := New(Options{NoMotion: true, Conn: newFake()})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	next, _ = next.Update(helloMsg(proto.Hello{Version: 2, Binary: "v0.9.0", Host: "ws-1"}))
 	out := next.(Model).render()
 	for _, want := range []string{
 		"the console is version 1, the host is version 2",
-		"curl -fsSL https://matchblox.com/install.sh | sh",
+		"curl -fsSL https://matchblox.sh | sh",
 		"update the console",
 	} {
 		if !strings.Contains(out, want) {
@@ -255,7 +256,7 @@ func TestVersionMismatchShowsFix(t *testing.T) {
 }
 
 func TestBeforeTheFirstStateTheViewSaysWhy(t *testing.T) {
-	m := New(Options{Conn: newFake()})
+	m := New(Options{NoMotion: true, Conn: newFake()})
 	if out := m.render(); !strings.Contains(out, "waiting for the service") {
 		t.Fatalf("an empty screen is a dead end:\n%s", out)
 	}
@@ -303,7 +304,7 @@ func TestResultShowsInTheFooter(t *testing.T) {
 
 func TestConnectionLostKeepsStateAndRedials(t *testing.T) {
 	again := newFake()
-	m := New(Options{Conn: newFake(), Redial: func() (transport.Conn, error) { return again, nil }})
+	m := New(Options{NoMotion: true, Conn: newFake(), Redial: func() (transport.Conn, error) { return again, nil }})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	next, _ = next.Update(stateMsg(fixtureState()))
 	next, cmd := next.Update(lostMsg{err: io.EOF})
@@ -340,7 +341,7 @@ func TestOlderLocalServiceIsReplaced(t *testing.T) {
 		{Version: proto.Version - 1, Binary: "v0.0.1", Host: "ws-1"},
 	} {
 		f := newFake()
-		m := New(Options{Conn: f, Local: true, Binary: "v0.2.0", Redial: func() (transport.Conn, error) { return newFake(), nil }})
+		m := New(Options{NoMotion: true, Conn: f, Local: true, Binary: "v0.2.0", Redial: func() (transport.Conn, error) { return newFake(), nil }})
 		next, cmd := m.Update(helloMsg(h))
 		drain(cmd)
 		if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "service:replace" {
@@ -359,7 +360,7 @@ func TestOlderLocalServiceIsReplaced(t *testing.T) {
 func TestReplaceAtMostOnce(t *testing.T) {
 	f := newFake()
 	g := newFake()
-	m := New(Options{Conn: f, Local: true, Binary: "v0.2.0", Redial: func() (transport.Conn, error) { return g, nil }})
+	m := New(Options{NoMotion: true, Conn: f, Local: true, Binary: "v0.2.0", Redial: func() (transport.Conn, error) { return g, nil }})
 	next, cmd := m.Update(helloMsg(proto.Hello{Version: proto.Version, Binary: "v0.1.0"}))
 	drain(cmd)
 	if len(f.acts()) != 1 {
@@ -375,7 +376,7 @@ func TestReplaceAtMostOnce(t *testing.T) {
 
 func TestRemoteHostIsNeverReplaced(t *testing.T) {
 	f := newFake()
-	m := New(Options{Conn: f, Binary: "v0.2.0"})
+	m := New(Options{NoMotion: true, Conn: f, Binary: "v0.2.0"})
 	next, _ := m.Update(helloMsg(proto.Hello{Version: proto.Version - 1, Binary: "v0.0.1", Host: "ws-1"}))
 	if acts := f.acts(); len(acts) != 0 {
 		t.Fatalf("sent %+v", acts)
@@ -388,7 +389,7 @@ func TestRemoteHostIsNeverReplaced(t *testing.T) {
 func TestTwoLostEventsRedialOnce(t *testing.T) {
 	x := newFake()
 	dials := 0
-	m := New(Options{Conn: x, Redial: func() (transport.Conn, error) { dials++; return newFake(), nil }})
+	m := New(Options{NoMotion: true, Conn: x, Redial: func() (transport.Conn, error) { dials++; return newFake(), nil }})
 	next, cmd := m.Update(lostMsg{err: io.EOF, conn: x})
 	if cmd == nil {
 		t.Fatal("no redial scheduled")
@@ -404,7 +405,7 @@ func TestTwoLostEventsRedialOnce(t *testing.T) {
 
 func TestMessagesFromAnOldConnAreIgnored(t *testing.T) {
 	x, y := newFake(), newFake()
-	m := New(Options{Conn: x, Redial: func() (transport.Conn, error) { return y, nil }})
+	m := New(Options{NoMotion: true, Conn: x, Redial: func() (transport.Conn, error) { return y, nil }})
 	next, _ := m.Update(lostMsg{err: io.EOF, conn: x})
 	next, _ = next.Update(connMsg{conn: y})
 	next, cmd := next.Update(fromConn{conn: x, msg: stateMsg(fixtureState())})
@@ -436,7 +437,7 @@ func drain(cmd tea.Cmd) {
 // leave an empty screen.
 func TestSilentServiceShowsFix(t *testing.T) {
 	f := newFake()
-	m := New(Options{Conn: f, Owner: func() int { return 4321 }})
+	m := New(Options{NoMotion: true, Conn: f, Owner: func() int { return 4321 }})
 	next, _ := m.Update(silentMsg{conn: f})
 	out := next.(Model).render()
 	if !strings.Contains(out, "does not answer") || !strings.Contains(out, "kill 4321") {
@@ -511,5 +512,26 @@ func TestNavAllowlistIsExact(t *testing.T) {
 		if navAllowed(a) {
 			t.Errorf("allowed %v", a)
 		}
+	}
+}
+
+func TestHeaderShowsHost(t *testing.T) {
+	m := loaded(t, 100)
+	next, _ := m.Update(helloMsg{Version: proto.Version, Host: "ws-1"})
+	first := strings.Split(ansi.Strip(next.(Model).render()), "\n")[0]
+	if !strings.HasPrefix(first, " ▰ matchblox · ws-1") {
+		t.Fatalf("header %q, want it to start with the mark, the name and the host", first)
+	}
+}
+
+func TestFooterUsesClock(t *testing.T) {
+	st := fixtureState()
+	f := newFake()
+	m := New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return st.At.Add(5 * time.Second) }})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	next, _ = next.Update(stateMsg(st))
+	lines := strings.Split(ansi.Strip(next.(Model).render()), "\n")
+	if last := strings.TrimRight(lines[len(lines)-1], " "); !strings.HasSuffix(last, "sampled 5s ago") {
+		t.Fatalf("footer %q, want it to end with sampled 5s ago", last)
 	}
 }

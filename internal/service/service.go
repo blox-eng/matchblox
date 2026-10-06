@@ -48,6 +48,8 @@ type Service struct {
 	AlertHook []string
 	// Binary is the version in the hello.
 	Binary string
+	// Host is the host name in the hello. Empty: os.Hostname().
+	Host string
 	// Exe is the path matchblox was started by, checked every ExeEvery with
 	// the socket file; Serve stops when either changes. Empty Exe: no check.
 	Exe      string
@@ -318,7 +320,10 @@ func (s *Service) Handle(ctx context.Context, c transport.Conn) error {
 	stop := context.AfterFunc(ctx, func() { c.Close() })
 	defer stop()
 
-	host, _ := os.Hostname()
+	host := s.Host
+	if host == "" {
+		host, _ = os.Hostname()
+	}
 	if err := c.Send(proto.KindHello, "", proto.Hello{
 		Version: proto.Version, Binary: s.Binary, Host: host, OS: runtime.GOOS, Arch: runtime.GOARCH,
 	}); err != nil {

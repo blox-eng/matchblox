@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -241,5 +242,38 @@ func TestFixtureServiceRunsNothing(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatal("a fixture step ran on the live machine")
+	}
+}
+
+// fixtureHello serves one console from a fixture service and returns its hello.
+func fixtureHello(t *testing.T, root string) proto.Hello {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	s := newService(config.Default(), root)
+	a, b := net.Pipe()
+	go s.Handle(ctx, transport.NewConn(b)) //nolint:errcheck // ends with the test
+	c := transport.NewConn(a)
+	t.Cleanup(func() { c.Close() })
+	sent := make(chan error, 1)
+	go func() { sent <- c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version}) }()
+	env, err := c.Recv()
+	if err != nil || env.Kind != proto.KindHello {
+		t.Fatalf("first message %+v, %v", env, err)
+	}
+	if err := <-sent; err != nil {
+		t.Fatal(err)
+	}
+	var h proto.Hello
+	_ = json.Unmarshal(env.Body, &h)
+	return h
+}
+
+func TestFixtureHostName(t *testing.T) {
+	if h := fixtureHello(t, fixtures(t)); h.Host != "ws-1" {
+		t.Fatalf("host %q, want ws-1 from the fixture", h.Host)
+	}
+	if h := fixtureHello(t, t.TempDir()); h.Host != "fixtures" {
+		t.Fatalf("host %q, want fixtures when the fixture has no hostname file", h.Host)
 	}
 }

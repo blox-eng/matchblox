@@ -65,17 +65,20 @@ func (m Model) render() string {
 		return ""
 	}
 	w := max(m.width, 60)
+	if m.splashing() {
+		return m.splashView(w)
+	}
 	var out []string
 	out = append(out, m.header(w), m.tabs(w), m.st.hair.Render(strings.Repeat("─", w)))
 	if m.mismatch {
 		return strings.Join(append(out, "", m.mismatchText(w)), "\n")
 	}
 	if !m.have {
-		why := " waiting for the service…"
-		if m.flash != "" {
-			why = " " + m.flash
+		why := m.waitingWhy()
+		if len(out)+markH/2+3 <= m.height {
+			out = append(append(out, ""), m.markLines(w)...)
 		}
-		return strings.Join(append(out, "", m.st.faint.Render(why)), "\n")
+		return strings.Join(append(out, "", strings.Repeat(" ", max((w-lipgloss.Width(why))/2, 0))+m.st.faint.Render(why)), "\n")
 	}
 	var body []string
 	switch m.tab {
@@ -122,7 +125,7 @@ func (m Model) header(w int) string {
 		ms = append(ms, metric{"lat", fmt.Sprintf("%dms", mc.Latency.Milliseconds()), spark(h.lat, 8, 0)})
 	}
 	build := func(n int, trends bool) string {
-		parts := []string{st.accent.Render("matchblox")}
+		parts := []string{m.brand()}
 		for _, x := range ms[:n] {
 			p := st.label.Render(x.label) + " " + st.text.Render(x.value)
 			if trends && x.trend != "" {
@@ -200,7 +203,7 @@ func (m Model) footer(w int) string {
 	if m.flash != "" {
 		left = " " + st.text.Render(m.flash)
 	}
-	right := st.faint.Render("sampled " + sample.Human(time.Since(m.snap.At)) + " ago ")
+	right := st.faint.Render("sampled " + sample.Human(m.now().Sub(m.snap.At)) + " ago ")
 	return left + strings.Repeat(" ", max(w-lipgloss.Width(left)-lipgloss.Width(right), 1)) + right
 }
 
@@ -321,7 +324,7 @@ func (m Model) detail(w int) []string {
 		facts = append(facts, "pane "+s.Pane)
 	}
 	if !s.Started.IsZero() {
-		facts = append(facts, "started "+sample.Human(time.Since(s.Started))+" ago")
+		facts = append(facts, "started "+sample.Human(m.now().Sub(s.Started))+" ago")
 	}
 	if s.Model != "" {
 		facts = append(facts, s.Model)
@@ -398,6 +401,23 @@ func size(b float64) string {
 		return fmt.Sprintf("%.0fK", b/(1<<10))
 	}
 	return fmt.Sprintf("%.0fB", b)
+}
+
+// brand is the mark, the name and the host the console shows.
+func (m Model) brand() string {
+	b := m.st.accent.Render("▰") + " " + m.st.text.Render("matchblox")
+	if m.host.Host != "" {
+		b += m.st.faint.Render(" · ") + m.st.muted.Render(m.host.Host)
+	}
+	return b
+}
+
+// now is the console's clock.
+func (m Model) now() time.Time {
+	if m.opt.Now != nil {
+		return m.opt.Now()
+	}
+	return time.Now()
 }
 
 // mismatchText names both versions and the command for the older side

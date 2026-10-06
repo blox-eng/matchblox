@@ -16,3 +16,7 @@ All notable changes to matchblox are in this file. The format follows
   in the background; any number of consoles share one sample loop.
 - `matchblox status` reads from the running service.
 - `matchblox serve --stdio`, for consoles that reach the host over SSH.
+- The start screen: the matchbox builds itself and the match strikes, in
+  less than 600 ms. Any key skips it; `--no-motion` or `NO_MOTION=1` shows
+  the last frame.
+- The header names the host: `▰ matchblox · <host>`.

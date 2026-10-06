@@ -1,6 +1,13 @@
 // The theme switch is the matchbox: dark mode is a lit match, light mode is a
 // match put back in its box. Loaded in <head> so the stored theme applies
 // before the first paint (the CSP allows no inline script).
+// onReady runs fn once the DOM is parsed, also when the script loads after
+// that (an embedding page can add it late).
+function onReady(fn) {
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fn, { once: true });
+  else fn();
+}
+
 (() => {
   const root = document.documentElement;
   const KEY = "matchblox-theme";
@@ -16,7 +23,7 @@
 
   root.dataset.theme = current();
 
-  document.addEventListener("DOMContentLoaded", () => {
+  onReady(() => {
     const btn = document.getElementById("match");
     if (!btn) return;
     const svg = btn.querySelector("svg");
@@ -113,3 +120,49 @@
     });
   });
 })();
+
+// The replay: frames of the real console (www/demo/frames.json, recorded
+// by TestReplay), drawn as text in the page's theme. With reduced motion,
+// or without script, the still frame in the page stays.
+onReady(() => {
+  const pre = document.querySelector(".stage .replay");
+  if (!pre || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const HOLD = 3000;
+  const FLAGS = ["", "b", "u", "b u"];
+
+  const line = (spans) => {
+    const out = document.createDocumentFragment();
+    for (const [text, fg, bg, flags] of spans || []) {
+      const cls = [fg && "fg-" + fg, bg && "bg-" + bg, FLAGS[flags]].filter(Boolean).join(" ");
+      if (!cls) { out.append(text); continue; }
+      const s = document.createElement("span");
+      s.className = cls;
+      s.textContent = text;
+      out.append(s);
+    }
+    return out;
+  };
+
+  fetch("demo/frames.json").then((r) => (r.ok ? r.json() : Promise.reject(r.status))).then((doc) => {
+    const rows = [];
+    pre.textContent = "";
+    for (let i = 0; i < doc.rows; i++) {
+      const el = document.createElement("span");
+      rows.push(el);
+      pre.append(el, i + 1 < doc.rows ? "\n" : "");
+    }
+    let timer = 0;
+    const show = (k) => {
+      const f = doc.frames[k];
+      f.lines.forEach((spans, i) => { if (spans !== null && rows[i]) rows[i].replaceChildren(line(spans)); });
+      const next = k + 1 < doc.frames.length ? doc.frames[k + 1].at - f.at : HOLD;
+      timer = setTimeout(() => show((k + 1) % doc.frames.length), next);
+    };
+    // Frame 0 has every line; a loop starts there again.
+    show(0);
+    document.addEventListener("visibilitychange", () => {
+      clearTimeout(timer);
+      if (!document.hidden) show(0);
+    });
+  }).catch(() => { /* the still frame stays */ });
+});
