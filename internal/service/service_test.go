@@ -16,7 +16,9 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitscan"
+	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
@@ -509,5 +511,68 @@ func TestServiceHostOverrides(t *testing.T) {
 	ctx := run(t, s)
 	if _, h := connect(t, ctx, s); h.Host != "ws-1" {
 		t.Fatalf("host %q, want ws-1", h.Host)
+	}
+}
+
+// hook sends one hook event the way `matchblox hook` does: read the
+// service hello, send the event, leave.
+func hook(t *testing.T, ctx context.Context, s *Service, ev hooks.Event) {
+	t.Helper()
+	a, b := net.Pipe()
+	done := make(chan struct{})
+	go func() { s.Handle(ctx, transport.NewConn(b)); close(done) }()
+	c := transport.NewConn(a)
+	if env, err := c.Recv(); err != nil || env.Kind != proto.KindHello {
+		t.Fatalf("hello %+v %v", env, err)
+	}
+	if err := c.Send(proto.KindHook, "", ev); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	c.Close()
+}
+
+func waitQueue(t *testing.T, c transport.Conn, ok func([]queue.Item) bool) []queue.Item {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if st := snapshot(t, c); ok(st.Queue) {
+			return st.Queue
+		}
+	}
+	t.Fatal("the queue never matched")
+	return nil
+}
+
+func TestHookEventReachesQueue(t *testing.T) {
+	s := newTest(t, time.Hour)
+	ctx := run(t, s)
+	c, _ := connect(t, ctx, s)
+	estimated := waitQueue(t, c, func(q []queue.Item) bool { return len(q) == 1 })
+	if !estimated[0].Estimated {
+		t.Fatalf("before any hook the idle session is a guess: %+v", estimated)
+	}
+	hook(t, ctx, s, hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "s9", Pane: "%1",
+		Message: "Claude needs your permission to use Bash", At: time.Now()})
+	q := waitQueue(t, c, func(q []queue.Item) bool { return len(q) == 1 && !q[0].Estimated })
+	if q[0].State != queue.StatePermission || q[0].Name != "app" || q[0].LastLine != "Claude needs your permission to use Bash" {
+		t.Fatalf("%+v", q[0])
+	}
+}
+
+func TestServiceReplaysSpool(t *testing.T) {
+	s := newTest(t, time.Hour)
+	s.Spool = filepath.Join(t.TempDir(), "spool.jsonl")
+	if err := hooks.Append(s.Spool, hooks.Event{Name: "Stop", SessionID: "s9", Pane: "%1", Message: "Done.", At: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := run(t, s)
+	c, _ := connect(t, ctx, s)
+	q := waitQueue(t, c, func(q []queue.Item) bool { return len(q) == 1 && !q[0].Estimated })
+	if q[0].State != queue.StateFinished || q[0].LastLine != "Done." {
+		t.Fatalf("%+v", q[0])
+	}
+	if _, err := os.Stat(s.Spool); !os.IsNotExist(err) {
+		t.Fatalf("spool still there: %v", err)
 	}
 }

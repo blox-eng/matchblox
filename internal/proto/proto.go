@@ -32,6 +32,9 @@ const (
 	KindResult   Kind = "result"
 	KindStoker   Kind = "stoker"
 	KindError    Kind = "error"
+	// KindHook is the first and only message of `matchblox hook`: one
+	// hooks.Event, sent after the service hello, with no hello back.
+	KindHook Kind = "hook"
 )
 
 type Envelope struct {

@@ -1,6 +1,8 @@
 package transport
 
 import (
+	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -9,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/blox-eng/matchblox/internal/proto"
 )
 
 // ErrInUse means a live service already listens on the socket.
@@ -103,4 +107,32 @@ func Dial(path string, timeout time.Duration) (Conn, error) {
 		return nil, err
 	}
 	return NewConn(c), nil
+}
+
+// Notify sends one message to the service and leaves, all within timeout:
+// it reads the service hello first, so the service has written it before
+// the message arrives. It never waits longer, so a hook never holds the
+// agent that runs it.
+func Notify(path string, timeout time.Duration, kind proto.Kind, body any) error {
+	deadline := time.Now().Add(timeout)
+	if err := checkDir(filepath.Dir(path)); err != nil {
+		return err
+	}
+	nc, err := net.DialTimeout("unix", path, timeout)
+	if err != nil {
+		return err
+	}
+	defer nc.Close()
+	if err := nc.SetDeadline(deadline); err != nil {
+		return err
+	}
+	env, err := proto.Decode(bufio.NewReader(nc))
+	if err != nil {
+		return err
+	}
+	var h proto.Hello
+	if env.Kind != proto.KindHello || json.Unmarshal(env.Body, &h) != nil || h.Version != proto.Version {
+		return errors.New("transport: the service speaks another protocol")
+	}
+	return proto.Encode(nc, kind, "", body)
 }

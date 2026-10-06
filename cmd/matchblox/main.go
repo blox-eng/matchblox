@@ -33,6 +33,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
+	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -64,6 +65,9 @@ func main() {
 var configArg string
 
 func run(args []string) error {
+	if len(args) > 0 && args[0] == "hook" {
+		return hook(args[1:], os.Stdin, transport.SocketPath(), spoolPath())
+	}
 	cmd := "console"
 	if len(args) > 0 {
 		switch args[0] {
@@ -115,6 +119,30 @@ func run(args []string) error {
 	return console(path, cfg, *root, *noMotion)
 }
 
+// hookTimeout bounds the whole delivery, so `matchblox hook` stops in
+// less than 50 ms with the service up, down or stuck.
+const hookTimeout = 30 * time.Millisecond
+
+// hook delivers one agent hook event to the service, or to the spool when
+// no service answers. It returns nil on every path: a hook that fails must
+// not disturb the agent.
+func hook(args []string, stdin io.Reader, sock, spool string) error {
+	name := ""
+	if len(args) > 0 {
+		name = args[0]
+	}
+	ev, err := hooks.Parse(stdin, name, os.Getenv)
+	if err != nil {
+		return nil
+	}
+	if transport.Notify(sock, hookTimeout, proto.KindHook, ev) != nil {
+		_ = hooks.Append(spool, ev)
+	}
+	return nil
+}
+
+func spoolPath() string { return filepath.Join(filepath.Dir(state.Path()), "spool.jsonl") }
+
 func console(path string, cfg config.Config, root string, noMotion bool) error {
 	opt := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, NoMotion: noMotion}
 	if root != "" {
@@ -160,6 +188,7 @@ func newService(cfg config.Config, root string) *service.Service {
 	}
 	s.Actions.Run = func(argv []string) error { return actions.Exec(context.Background(), argv) }
 	s.StatePath = state.Path()
+	s.Spool = spoolPath()
 	s.AlertHook = cfg.Hooks.Alert
 	s.HistorySources = []string{cfg.History.Source}
 	switch cfg.History.Log {

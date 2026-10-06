@@ -9,6 +9,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/gitscan"
+	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -17,6 +18,7 @@ type Doc struct {
 	sample.Snapshot
 	Git             *gitscan.Report `json:"git,omitempty"`
 	Recommendations []advice.Rec    `json:"recommendations"`
+	Queue           []queue.Item    `json:"queue"`
 }
 
 // Path is $XDG_STATE_HOME/matchblox/state.json, defaulting to ~/.local/state.

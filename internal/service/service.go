@@ -18,7 +18,9 @@ import (
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
+	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
@@ -50,6 +52,9 @@ type Service struct {
 	Binary string
 	// Host is the host name in the hello. Empty: os.Hostname().
 	Host string
+	// Spool holds the hook events sent while no service ran; Run reads and
+	// empties it at start. Empty: none.
+	Spool string
 	// Exe is the path matchblox was started by, checked every ExeEvery with
 	// the socket file; Serve stops when either changes. Empty Exe: no check.
 	Exe      string
@@ -64,6 +69,7 @@ type Service struct {
 	cur     state.Doc
 	have    bool
 	hist    history.Series
+	queue   *queue.Queue
 	clients map[*client]struct{}
 	gitKick chan struct{}
 	stop    context.CancelCauseFunc
@@ -80,6 +86,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		git:      git,
 		clients:  map[*client]struct{}{},
 		gitKick:  make(chan struct{}, 1),
+		queue:    queue.New(),
 	}
 	if s.interval <= 0 {
 		s.interval = 2 * time.Second
@@ -188,6 +195,11 @@ func (s *Service) Run(ctx context.Context) {
 	rec := s.recorder()
 	go s.gitLoop(ctx)
 	s.loadHistory()
+	if s.Spool != "" {
+		s.mu.Lock()
+		_ = hooks.Replay(s.Spool, s.queue.Apply) // a spool we cannot read loses old waits, not the service
+		s.mu.Unlock()
+	}
 	t := time.NewTicker(s.interval)
 	defer t.Stop()
 	for first := true; ; first = false {
@@ -210,10 +222,33 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	}
 	s.cur.Snapshot, s.have = snap, true
 	s.cur.Recommendations = advice.Build(snap, s.cur.Git)
+	s.mergeQueue()
 	doc := s.cur
 	s.mu.Unlock()
 	rec(doc)
 	s.broadcast()
+}
+
+// Hook takes one event from an agent hook and updates the queue at once,
+// without waiting for the next sample.
+func (s *Service) Hook(ev hooks.Event) {
+	s.mu.Lock()
+	s.queue.Apply(ev)
+	if s.have {
+		s.mergeQueue()
+	}
+	s.mu.Unlock()
+	s.broadcast()
+}
+
+// mergeQueue joins the queue with the current sessions. Hold s.mu.
+func (s *Service) mergeQueue() {
+	now := s.cur.At
+	if now.IsZero() {
+		now = time.Now()
+	}
+	s.queue.Merge(s.cur.Sessions, now)
+	s.cur.Queue = s.queue.Items()
 }
 
 // rescanGit asks the git loop for a scan now; a scan already asked for
@@ -332,6 +367,13 @@ func (s *Service) Handle(ctx context.Context, c transport.Conn) error {
 	env, err := c.Recv()
 	if err != nil {
 		return err
+	}
+	if env.Kind == proto.KindHook {
+		var ev hooks.Event
+		if json.Unmarshal(env.Body, &ev) == nil {
+			s.Hook(ev)
+		}
+		return nil
 	}
 	var h proto.Hello
 	if env.Kind != proto.KindHello || json.Unmarshal(env.Body, &h) != nil {
