@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -409,23 +410,34 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 // navAllowed is what a Nav step may be: it runs here on one key, so a
 // service can never make the console run anything but the two tmux moves
 // advice builds, in exactly that shape. tmux runs a trailing argument of
-// new-window as a shell command and splits commands on ";", so the shape is
-// four arguments and the target has no ";" and is not a flag.
+// new-window as a shell command, splits commands on ";", and format-expands
+// a start directory (#() runs a shell command). So: four arguments, a pane
+// id for switch-client, and an absolute directory without "#" or ";".
 func navAllowed(argv []string) bool {
 	if len(argv) != 4 || argv[0] != "tmux" {
 		return false
 	}
 	target := argv[3]
-	if target == "" || strings.HasPrefix(target, "-") || strings.Contains(target, ";") {
-		return false
-	}
 	switch argv[1] {
 	case "switch-client":
-		return argv[2] == "-t"
+		return argv[2] == "-t" && paneID(target)
 	case "new-window":
-		return argv[2] == "-c"
+		return argv[2] == "-c" && filepath.IsAbs(target) && !strings.ContainsAny(target, "#;")
 	}
 	return false
+}
+
+// paneID is a tmux pane id such as %12.
+func paneID(s string) bool {
+	if len(s) < 2 || s[0] != '%' {
+		return false
+	}
+	for _, r := range s[1:] {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func runNav(a action, run func([]string) error) ranMsg {

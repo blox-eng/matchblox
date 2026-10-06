@@ -495,6 +495,12 @@ func TestNavAllowlistIsExact(t *testing.T) {
 		{"tmux", "new-window", "-c", "-e"},
 		{"tmux", "switch-client"},
 		{"tmux", "run-shell", "x"},
+		// tmux format-expands these: #() runs a shell command.
+		{"tmux", "new-window", "-c", "#(rm -rf ~)"},
+		{"tmux", "new-window", "-c", "/w/#(id)"},
+		{"tmux", "switch-client", "-t", "#(id)"},
+		{"tmux", "switch-client", "-t", "work:1"},
+		{"tmux", "new-window", "-c", "relative/dir"},
 	}
 	for _, a := range ok {
 		if !navAllowed(a) {
