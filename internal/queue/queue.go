@@ -29,15 +29,20 @@ type Item struct {
 	Estimated bool      `json:"estimated,omitempty"`
 }
 
+// UnseenGrace is how long a hooked session the sampler does not see yet
+// keeps its events: the sampler can lag behind a hook.
+const UnseenGrace = 30 * time.Second
+
 // Queue is not safe for concurrent use; the service holds its lock.
 type Queue struct {
 	hooked  map[string]hooks.Event // session id -> last event, for each session that sent one
 	waiting map[string]Item        // session id -> item, from hooks
+	seen    map[string]time.Time   // session id -> last time a hook or the sampler showed it
 	items   []Item
 }
 
 func New() *Queue {
-	return &Queue{hooked: map[string]hooks.Event{}, waiting: map[string]Item{}}
+	return &Queue{hooked: map[string]hooks.Event{}, waiting: map[string]Item{}, seen: map[string]time.Time{}}
 }
 
 // Apply takes one hook event. Call Merge after it to update Items.
@@ -45,10 +50,17 @@ func (q *Queue) Apply(ev hooks.Event) {
 	if ev.SessionID == "" {
 		return
 	}
+	prev, known := q.hooked[ev.SessionID]
+	if known && ev.At.Before(prev.At) {
+		return // a spooled event older than what the queue knows
+	}
 	if ev.Pane == "" {
-		ev.Pane = q.hooked[ev.SessionID].Pane
+		ev.Pane = prev.Pane
 	}
 	q.hooked[ev.SessionID] = ev
+	if ev.At.After(q.seen[ev.SessionID]) {
+		q.seen[ev.SessionID] = ev.At
+	}
 	it, was := q.waiting[ev.SessionID]
 	set := func(state, line string) {
 		if !was {
@@ -77,6 +89,11 @@ func (q *Queue) Apply(ev hooks.Event) {
 		}
 	case "Stop":
 		set(StateFinished, ev.Message)
+	case "PostToolUse":
+		// A tool ran: the person allowed it in the pane.
+		if was && it.State == StatePermission {
+			delete(q.waiting, ev.SessionID)
+		}
 	case "UserPromptSubmit", "SessionStart", "SessionEnd":
 		// An ended session stays hooked until the sampler stops seeing it,
 		// so it is never guessed back into the queue.
@@ -103,6 +120,7 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 		}
 		if id != "" {
 			seen[id] = true
+			q.seen[id] = now
 			if it, ok := q.waiting[id]; ok {
 				it.Pane, it.Target, it.Name = s.Pane, s.Target, s.Name
 				q.waiting[id] = it
@@ -118,9 +136,10 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 		}
 	}
 	for id := range q.hooked {
-		if !seen[id] {
+		if !seen[id] && now.Sub(q.seen[id]) > UnseenGrace {
 			delete(q.hooked, id)
 			delete(q.waiting, id)
+			delete(q.seen, id)
 		}
 	}
 	sort.SliceStable(items, func(i, j int) bool {

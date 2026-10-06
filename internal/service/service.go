@@ -97,7 +97,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 	if smp != nil {
 		s.sample = smp.Sample
 	}
-	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle}
+	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Answerable: s.answerable}
 	return s
 }
 
@@ -195,14 +195,10 @@ func (s *Service) Run(ctx context.Context) {
 	rec := s.recorder()
 	go s.gitLoop(ctx)
 	s.loadHistory()
-	if s.Spool != "" {
-		s.mu.Lock()
-		_ = hooks.Replay(s.Spool, s.queue.Apply) // a spool we cannot read loses old waits, not the service
-		s.mu.Unlock()
-	}
 	t := time.NewTicker(s.interval)
 	defer t.Stop()
 	for first := true; ; first = false {
+		s.readSpool()
 		s.publish(s.sample(), rec)
 		if first {
 			s.rescanGit()
@@ -227,6 +223,18 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	s.mu.Unlock()
 	rec(doc)
 	s.broadcast()
+}
+
+// readSpool applies the hook events that missed the service: at start, and
+// on each tick for a hook that timed out under load. The queue drops an
+// event older than what it knows.
+func (s *Service) readSpool() {
+	if s.Spool == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = hooks.Replay(s.Spool, s.queue.Apply) // a spool we cannot read loses old waits, not the service
 }
 
 // Hook takes one event from an agent hook and updates the queue at once,
@@ -303,16 +311,12 @@ func (s *Service) loadHistory() {
 	s.mu.Unlock()
 }
 
-// idle is the guard for a step that types into a pane: the agent there
-// waits for the person (in the queue), or reports itself idle.
+// idle is the guard of /compact and /clear: the agent reports itself
+// idle. A session in the queue can sit at a permission prompt, where the
+// Enter of the step would answer it, so the queue does not count.
 func (s *Service) idle(pane string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, it := range s.cur.Queue {
-		if it.Pane == pane {
-			return true
-		}
-	}
 	for _, ss := range s.cur.Sessions {
 		if ss.Pane == pane {
 			return ss.Status == "idle"

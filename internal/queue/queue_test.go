@@ -136,3 +136,53 @@ func TestQueueMatchesByPaneWithoutSessionID(t *testing.T) {
 		t.Fatalf("items %+v", items)
 	}
 }
+
+// Review 5: a spooled event older than what the queue already knows is stale.
+func TestQueueIgnoresOlderEvent(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "UserPromptSubmit", SessionID: "s1", Pane: "%1", At: at(20)})
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", At: at(10)})
+	q.Merge([]sample.Session{session("s1", "%1", "api", "idle", time.Second)}, at(30))
+	if items := q.Items(); len(items) != 0 {
+		t.Fatalf("a stale Stop came back: %+v", items)
+	}
+}
+
+// Review 6: the person approved in the pane; a tool ran.
+func TestPostToolUseClearsPermission(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "s1", Pane: "%1", At: at(0)})
+	q.Apply(hooks.Event{Name: "PostToolUse", SessionID: "s1", Pane: "%1", At: at(5)})
+	q.Merge([]sample.Session{session("s1", "%1", "api", "busy", 0)}, at(6))
+	if items := q.Items(); len(items) != 0 {
+		t.Fatalf("items %+v", items)
+	}
+}
+
+// PostToolUse does not clear a session that finished its turn.
+func TestPostToolUseKeepsFinished(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", At: at(0)})
+	q.Apply(hooks.Event{Name: "PostToolUse", SessionID: "s1", Pane: "%1", At: at(1)})
+	q.Merge([]sample.Session{session("s1", "%1", "api", "idle", 0)}, at(2))
+	if items := q.Items(); len(items) != 1 {
+		t.Fatalf("items %+v", items)
+	}
+}
+
+// Review 8: the sampler can lag behind a hook (a new session id after
+// /clear); the event waits a grace period instead of being dropped.
+func TestQueueKeepsUnseenForAGrace(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "new", Pane: "%9", At: at(0)})
+	q.Merge(nil, at(1))
+	q.Merge([]sample.Session{session("new", "%9", "api", "idle", 0)}, at(10))
+	if items := q.Items(); len(items) != 1 || items[0].Estimated {
+		t.Fatalf("the event was dropped before the sampler saw the session: %+v", items)
+	}
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "gone", Pane: "%8", At: at(10)})
+	q.Merge(nil, at(10+int(UnseenGrace/time.Second)+1))
+	if _, ok := q.hooked["gone"]; ok {
+		t.Fatal("an unseen session is kept forever")
+	}
+}

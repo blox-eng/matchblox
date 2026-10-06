@@ -585,7 +585,7 @@ func answerTest(t *testing.T) (*Service, context.Context, *[][]string) {
 	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
 	ctx := run(t, s)
 	c, _ := connect(t, ctx, s)
-	hook(t, ctx, s, hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "s9", Pane: "%1", At: time.Now()})
+	hook(t, ctx, s, hooks.Event{Name: "Stop", SessionID: "s9", Pane: "%1", At: time.Now()})
 	waitQueue(t, c, func(q []queue.Item) bool { return len(q) == 1 && !q[0].Estimated })
 	return s, ctx, &ran
 }
@@ -622,4 +622,72 @@ func TestAnswerRefusesPaneNotWaiting(t *testing.T) {
 	if len(*ran) != 0 {
 		t.Fatalf("ran %q", *ran)
 	}
+}
+
+// Review 1: Enter at a permission prompt approves it, so an answer never
+// goes to a session that asks for permission.
+func TestAnswerRefusesPermission(t *testing.T) {
+	s, ctx, ran := answerTest(t)
+	hook(t, ctx, s, hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "s9", Pane: "%1", At: time.Now()})
+	res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "no, stop"})
+	if res.Err == "" || len(*ran) != 0 {
+		t.Fatalf("answered a permission prompt: %+v ran %q", res, *ran)
+	}
+}
+
+// Review 3: the Enter step is guarded too.
+func TestAnswerGuardsEveryStep(t *testing.T) {
+	a := answerAction("%1", "yes")
+	if len(a.Guards) != len(a.Steps) {
+		t.Fatalf("%d guards for %d steps", len(a.Guards), len(a.Steps))
+	}
+	for _, g := range a.Guards {
+		if g.AnswerPane != "%1" {
+			t.Fatalf("guard %+v", g)
+		}
+	}
+}
+
+// Review 2: the idle guard (compact, clear, night mode) reads the sampler
+// only; a queued session at a permission prompt is not idle.
+func TestIdleGuardIgnoresQueue(t *testing.T) {
+	s := newTest(t, time.Hour)
+	s.sample = func() sample.Snapshot {
+		return sample.Snapshot{At: time.Now(), Sessions: []sample.Session{{Pane: "%1", Name: "app", Status: "busy", Busy: true}}}
+	}
+	ctx := run(t, s)
+	c, _ := connect(t, ctx, s)
+	hook(t, ctx, s, hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "s9", Pane: "%1", At: time.Now()})
+	waitQueue(t, c, func(q []queue.Item) bool { return len(q) == 1 })
+	if s.idle("%1") {
+		t.Fatal("a session at a permission prompt passes the idle guard")
+	}
+}
+
+// Review 4: the same answer to a new question is not "already done".
+func TestAnswerAgainToANewQuestion(t *testing.T) {
+	s, ctx, ran := answerTest(t)
+	if res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "y"}); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	hook(t, ctx, s, hooks.Event{Name: "UserPromptSubmit", SessionID: "s9", Pane: "%1", At: time.Now()})
+	hook(t, ctx, s, hooks.Event{Name: "Stop", SessionID: "s9", Pane: "%1", At: time.Now().Add(time.Millisecond)})
+	res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "y"})
+	if res.Err != "" || len(res.Skipped) != 0 || len(*ran) != 4 {
+		t.Fatalf("second answer: %+v ran %q", res, *ran)
+	}
+}
+
+// Review 5: a hook that missed the service waits in the spool for the next
+// tick, not for the next restart.
+func TestServiceReadsSpoolEveryTick(t *testing.T) {
+	s := newTest(t, 20*time.Millisecond)
+	s.Spool = filepath.Join(t.TempDir(), "spool.jsonl")
+	ctx := run(t, s)
+	c, _ := connect(t, ctx, s)
+	snapshot(t, c)
+	if err := hooks.Append(s.Spool, hooks.Event{Name: "Stop", SessionID: "s9", Pane: "%1", At: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	waitQueue(t, c, func(q []queue.Item) bool { return len(q) == 1 && !q[0].Estimated })
 }

@@ -91,6 +91,7 @@ func TestEnterOutsideTmuxAttaches(t *testing.T) {
 
 func TestAnswerNeedsConfirm(t *testing.T) {
 	m, f := loadedWith(t, 100, queueState())
+	m, _ = func() (Model, tea.Cmd) { n, c := key(m, "down"); return n.(Model), c }() // app-review finished its turn
 	next, _ := key(m, "a")
 	next = typeText(next, "yes, open it")
 	out := ansi.Strip(next.(Model).render())
@@ -99,7 +100,7 @@ func TestAnswerNeedsConfirm(t *testing.T) {
 	}
 	next, _ = key(next, "enter")
 	p := next.(Model).pending
-	if p == nil || !p.destructive || p.rec != "answer:%1" || p.text != "yes, open it" {
+	if p == nil || !p.destructive || p.rec != "answer:%2" || p.text != "yes, open it" {
 		t.Fatalf("pending %+v", p)
 	}
 	if _, cmd := key(next, "enter"); cmd != nil || len(f.acts()) != 0 {
@@ -114,13 +115,46 @@ func TestAnswerNeedsConfirm(t *testing.T) {
 	}
 	cmd()
 	acts := f.acts()
-	if len(acts) != 1 || acts[0] != (proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "yes"}) {
+	if len(acts) != 1 || acts[0] != (proto.Act{RecID: "answer:%2", Which: "secondary", Confirm: "y", Text: "yes"}) {
 		t.Fatalf("acts %+v", acts)
 	}
 }
 
+// Review 1: Enter at a permission prompt approves it; a typed answer never
+// goes there. The console sends the person to the pane instead.
+func TestAnswerOnPermissionGoesToPane(t *testing.T) {
+	m, _ := loadedWith(t, 100, queueState()) // app-feature asks for permission
+	next, _ := key(m, "a")
+	nm := next.(Model)
+	if nm.input != nil || !strings.Contains(nm.flash, "Enter goes there") {
+		t.Fatalf("input %+v flash %q", nm.input, nm.flash)
+	}
+}
+
+// The Sessions tab answers only a session that waits for an answer.
+func TestAnswerFromSessionsNeedsAWait(t *testing.T) {
+	m, _ := loadedWith(t, 100, queueState())
+	m.tab = tabSessions // the first session, app-feature, is in the queue at a permission prompt
+	if next, _ := key(m, "a"); next.(Model).input != nil {
+		t.Fatal("a opened an answer for a permission prompt")
+	}
+}
+
+// Review 7: at 80 columns all eight tabs and the alert marker fit.
+func TestTabsFit80WithAlert(t *testing.T) {
+	st := queueState()
+	st.Alerts = []sample.Alert{{Key: "load", Level: "warn", Title: "load"}}
+	m, _ := loadedWith(t, 80, st)
+	line := ansi.Strip(m.tabs(80))
+	if !strings.Contains(line, "8 ") || !strings.Contains(line, "▲ 1 alert") || strings.Contains(line, "…") {
+		t.Fatalf("tab line %q", line)
+	}
+}
+
 func TestAnswerEscCancels(t *testing.T) {
-	m, f := loadedWith(t, 100, queueState())
+	m0, f := loadedWith(t, 100, queueState())
+	down, _ := key(m0, "down") // app-review finished its turn
+	m := down.(Model)
 	next, _ := key(m, "a")
 	next = typeText(next, "no")
 	next, _ = key(next, "esc")

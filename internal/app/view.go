@@ -162,9 +162,38 @@ const (
 
 var tabNames = []string{"queue", "sessions", "machine", "procs", "git", "recs", "history", "panes"}
 
+// tabShort names the tabs when the full names do not fit.
+var tabShort = []string{"queue", "sess", "mach", "procs", "git", "recs", "hist", "panes"}
+
+// tabs tries the full names, then a narrower gap, then the short names,
+// so every tab and the alert marker stay on the line.
 func (m Model) tabs(w int) string {
+	alert := ""
+	if n := len(m.snap.Alerts); n > 0 {
+		alert = m.st.warn.Render(fmt.Sprintf("▲ %d alert", n))
+		if n > 1 {
+			alert += m.st.warn.Render("s")
+		}
+	}
+	var line string
+	for _, try := range []struct {
+		names []string
+		gap   string
+	}{{tabNames, "   "}, {tabNames, "  "}, {tabShort, "  "}} {
+		line = m.tabLine(try.names, try.gap)
+		if lipgloss.Width(line)+lipgloss.Width(alert)+2 <= w {
+			break
+		}
+	}
+	if alert != "" {
+		line += strings.Repeat(" ", max(w-lipgloss.Width(line)-lipgloss.Width(alert)-1, 2)) + alert
+	}
+	return fit(line, w)
+}
+
+func (m Model) tabLine(names []string, gap string) string {
 	var parts []string
-	for i, name := range tabNames {
+	for i, name := range names {
 		label := fmt.Sprintf("%d %s", i+1, strings.ToUpper(name))
 		switch {
 		case i == m.tab:
@@ -179,15 +208,7 @@ func (m Model) tabs(w int) string {
 			parts = append(parts, m.st.faint.Render(label))
 		}
 	}
-	line := " " + strings.Join(parts, "   ")
-	if n := len(m.snap.Alerts); n > 0 {
-		alert := m.st.warn.Render(fmt.Sprintf("▲ %d alert", n))
-		if n > 1 {
-			alert += m.st.warn.Render("s")
-		}
-		line += strings.Repeat(" ", max(w-lipgloss.Width(line)-lipgloss.Width(alert)-1, 2)) + alert
-	}
-	return fit(line, w)
+	return " " + strings.Join(parts, gap)
 }
 
 func (m Model) footer(w int) string {

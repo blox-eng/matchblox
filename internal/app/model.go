@@ -431,8 +431,10 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case "x":
 		m.pending = m.secondary()
 	case "a":
-		if pane, ok := m.answerTarget(); ok {
+		if pane, why := m.answerTarget(); pane != "" {
 			m.input = &answerInput{pane: pane}
+		} else {
+			m.flash = why
 		}
 	case "r":
 		if m.tab == tabGit && m.conn != nil && !m.lost {

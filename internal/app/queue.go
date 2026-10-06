@@ -178,18 +178,33 @@ func answerSteps(pane, text string) [][]string {
 	}
 }
 
-func (m Model) answerTarget() (string, bool) {
+// answerTarget is the pane `a` types into: a session in the queue that
+// waits for an answer. At a permission prompt the Enter of an answer would
+// approve it, so the person goes to the pane instead (why says so).
+func (m Model) answerTarget() (pane, why string) {
 	switch m.tab {
 	case tabQueue:
-		if it, ok := m.selectedQueue(); ok && it.Pane != "" {
-			return it.Pane, true
+		if it, ok := m.selectedQueue(); ok {
+			pane = it.Pane
 		}
 	case tabSessions:
-		if s, ok := m.selected(); ok && s.Pane != "" {
-			return s.Pane, true
+		if s, ok := m.selected(); ok {
+			pane = s.Pane
 		}
 	}
-	return "", false
+	if pane == "" {
+		return "", ""
+	}
+	for _, it := range m.queue {
+		if it.Pane != pane {
+			continue
+		}
+		if it.State == queue.StatePermission {
+			return "", "a permission prompt is answered in its pane: Enter goes there"
+		}
+		return pane, ""
+	}
+	return "", "the session in " + pane + " does not wait for an answer"
 }
 
 func trimLast(s string) string {
