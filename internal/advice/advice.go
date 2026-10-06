@@ -4,6 +4,8 @@
 package advice
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -32,6 +34,9 @@ type Guard struct {
 }
 
 type Rec struct {
+	// ID names the rec across samples, so a console can ask the service to
+	// act on it: a hash of the title and the first step.
+	ID       string  `json:"id"`
 	Level    string  `json:"level"` // crit | warn | info
 	Title    string  `json:"title"`
 	Evidence string  `json:"evidence"`
@@ -105,6 +110,9 @@ func Build(snap sample.Snapshot, git *gitscan.Report) []Rec {
 	out = append(out, alertRecs(snap)...)
 	out = append(out, gitRecs(snap, git)...)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].score > out[j].score })
+	for i := range out {
+		out[i].ID = recID(out[i])
+	}
 	return out
 }
 
@@ -226,4 +234,17 @@ func capital(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+func recID(r Rec) string {
+	h := sha256.New()
+	h.Write([]byte(r.Title))
+	for _, a := range []*Action{r.Primary, r.Second} {
+		if a != nil && len(a.Steps) > 0 {
+			h.Write([]byte{0})
+			h.Write([]byte(strings.Join(a.Steps[0], "\x00")))
+			break
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil))[:12]
 }

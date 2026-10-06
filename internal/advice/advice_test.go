@@ -109,3 +109,24 @@ func TestAlertRecs(t *testing.T) {
 		t.Fatalf("got %+v", recs)
 	}
 }
+
+func TestRecIDIsStableAndDistinct(t *testing.T) {
+	snap := sample.Snapshot{Sessions: []sample.Session{
+		{Pane: "%1", Name: "a", Busy: true, Do: "compact", ContextPct: 90, Why: "context 90%"},
+		{Pane: "%2", Name: "b", Busy: true, Do: "compact", ContextPct: 91, Why: "context 91%"},
+	}}
+	first, again := Build(snap, nil), Build(snap, nil)
+	if len(first) < 2 {
+		t.Fatalf("want 2 recs, got %d", len(first))
+	}
+	seen := map[string]bool{}
+	for i, r := range first {
+		if r.ID == "" || r.ID != again[i].ID {
+			t.Fatalf("rec %q: id %q is not stable (%q)", r.Title, r.ID, again[i].ID)
+		}
+		if seen[r.ID] {
+			t.Fatalf("id %q repeats", r.ID)
+		}
+		seen[r.ID] = true
+	}
+}
