@@ -20,7 +20,7 @@ func BenchmarkLiveRender(b *testing.B) {
 	home, _ := os.UserHomeDir()
 	s := &sample.Sampler{FS: procfs.FS{Root: "/proc"}, Sys: procfs.Sys{Root: "/sys"}, Home: home}
 	s.Sample()
-	m := New(Options{})
+	m := New(Options{NoMotion: true})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 200, Height: 50})
 	next, _ = next.Update(stateMsg(proto.State{Doc: state.Doc{Snapshot: s.Sample()}}))
 	b.ResetTimer()

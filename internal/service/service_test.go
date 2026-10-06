@@ -46,8 +46,11 @@ func newTest(t *testing.T, interval time.Duration) *Service {
 func run(t *testing.T, s *Service) context.Context {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	go s.Run(ctx)
+	done := make(chan struct{})
+	go func() { s.Run(ctx); close(done) }()
+	// Wait for the loops to end: a state write after cancel races the
+	// removal of the test's temp dir.
+	t.Cleanup(func() { cancel(); <-done })
 	return ctx
 }
 
@@ -498,4 +501,13 @@ func TestReplaceActStopsServe(t *testing.T) {
 		t.Fatalf("result %+v", r)
 	}
 	waitServe(t, done, ErrReplaced)
+}
+
+func TestServiceHostOverrides(t *testing.T) {
+	s := newTest(t, time.Hour)
+	s.Host = "ws-1"
+	ctx := run(t, s)
+	if _, h := connect(t, ctx, s); h.Host != "ws-1" {
+		t.Fatalf("host %q, want ws-1", h.Host)
+	}
 }

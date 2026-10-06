@@ -61,3 +61,35 @@ func newStyles(dark bool) styles {
 		tabActive: fg(t.Accent).Underline(true),
 	}
 }
+
+// The matchbox of the start screen, in the colours of the site's mark.
+type markColours struct {
+	Top, Left, Right, Tray, Striker, Stick, Flame, Core color.Color
+}
+
+var darkMark = markColours{
+	Top: lipgloss.Color("#3A3328"), Left: lipgloss.Color("#1C1914"), Right: lipgloss.Color("#2A251D"),
+	Tray: lipgloss.Color("#15120E"), Striker: lipgloss.Color("#5A4128"), Stick: lipgloss.Color("#C9A877"),
+	Flame: lipgloss.Color("#E8822E"), Core: lipgloss.Color("#FFD27A"),
+}
+
+var lightMark = markColours{
+	Top: lipgloss.Color("#EFE9DC"), Left: lipgloss.Color("#CFC6AF"), Right: lipgloss.Color("#DED6C3"),
+	Tray: lipgloss.Color("#C4BAA2"), Striker: lipgloss.Color("#8C6A43"), Stick: lipgloss.Color("#B8925B"),
+	Flame: lipgloss.Color("#E8822E"), Core: lipgloss.Color("#FFD27A"),
+}
+
+// Tokens are the colours the console draws with, by name. The replay maps
+// each colour of a frame to its token, so the site can draw it in its theme.
+func Tokens(dark bool) map[string]color.Color {
+	t, mk, bg := lightTheme, lightMark, lipgloss.Color("#F5F1E7")
+	if dark {
+		t, mk, bg = darkTheme, darkMark, lipgloss.Color("#0F0D0A")
+	}
+	return map[string]color.Color{
+		"bg": bg, "fg": t.Text, "muted": t.Muted, "faint": t.Faint, "hair": t.Hair,
+		"accent": t.Accent, "wash": t.AccentWash, "warn": t.Warn, "neg": t.Neg,
+		"mark-top": mk.Top, "mark-left": mk.Left, "mark-right": mk.Right, "mark-tray": mk.Tray,
+		"mark-striker": mk.Striker, "mark-stick": mk.Stick, "flame": mk.Flame, "flame-core": mk.Core,
+	}
+}
