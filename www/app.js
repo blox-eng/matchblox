@@ -136,7 +136,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return out;
   };
 
-  fetch("/demo/frames.json").then((r) => (r.ok ? r.json() : Promise.reject(r.status))).then((doc) => {
+  fetch("demo/frames.json").then((r) => (r.ok ? r.json() : Promise.reject(r.status))).then((doc) => {
     const rows = [];
     pre.textContent = "";
     for (let i = 0; i < doc.rows; i++) {
