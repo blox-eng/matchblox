@@ -20,6 +20,9 @@ type Action struct {
 	Label       string     `json:"label"`
 	Steps       [][]string `json:"steps"` // run in order
 	Destructive bool       `json:"destructive"`
+	// Nav moves the person's own terminal to a pane or a directory. The
+	// console runs it; every other step runs on the service host.
+	Nav bool `json:"nav,omitempty"`
 	// Guards[i], when present, must still hold right before Steps[i] runs:
 	// the evidence can be minutes old. A step whose guard fails is skipped.
 	Guards []Guard `json:"guards,omitempty"`
@@ -75,7 +78,7 @@ func Build(snap sample.Snapshot, git *gitscan.Report) []Rec {
 				Guards: []Guard{{PID: o.PID, StartTicks: o.Start}}},
 		}
 		if o.PaneAlive {
-			r.Primary = &Action{Label: "jump to its pane", Steps: one("tmux", "switch-client", "-t", o.Pane)}
+			r.Primary = &Action{Label: "jump to its pane", Nav: true, Steps: one("tmux", "switch-client", "-t", o.Pane)}
 		}
 		out = append(out, r)
 	}
@@ -88,7 +91,7 @@ func Build(snap sample.Snapshot, git *gitscan.Report) []Rec {
 			Level:    "warn",
 			Title:    fmt.Sprintf("%s %s (%s)", capital(s.Do), s.Name, s.Pane),
 			Evidence: s.Why,
-			Primary:  &Action{Label: "jump to the session", Steps: one("tmux", "switch-client", "-t", s.Pane)},
+			Primary:  &Action{Label: "jump to the session", Nav: true, Steps: one("tmux", "switch-client", "-t", s.Pane)},
 			score:    500 + s.ContextPct,
 		}
 		if s.Do == "clear" {
@@ -153,7 +156,7 @@ func alertRecs(snap sample.Snapshot) []Rec {
 				Level: "warn", score: 450 + top.CPU/10,
 				Title:    fmt.Sprintf("Look at %s in pane %s", top.Comm, pane),
 				Evidence: fmt.Sprintf("%s; the biggest CPU user is %s (pid %d) at %.0f%%", a.Evidence, top.Comm, top.PID, top.CPU),
-				Primary:  &Action{Label: "jump to its pane", Steps: one("tmux", "switch-client", "-t", pane)},
+				Primary:  &Action{Label: "jump to its pane", Nav: true, Steps: one("tmux", "switch-client", "-t", pane)},
 			})
 		}
 	}
@@ -225,7 +228,7 @@ func pollingRec(checkout string, cores float64, dirty, sessions int) Rec {
 		Level: "warn", score: 400 + 100*cores + float64(dirty)/100,
 		Title:    "Clean up " + checkout,
 		Evidence: ev + ". Every agent's git status walks the whole dirty tree.",
-		Primary:  &Action{Label: "open a shell there", Steps: one("tmux", "new-window", "-c", checkout)},
+		Primary:  &Action{Label: "open a shell there", Nav: true, Steps: one("tmux", "new-window", "-c", checkout)},
 	}
 }
 

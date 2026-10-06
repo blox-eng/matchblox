@@ -14,17 +14,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"runtime/pprof"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/blox-eng/matchblox/internal/actions"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
-	"github.com/blox-eng/matchblox/internal/host"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -89,7 +88,7 @@ func run(args []string) error {
 	}
 
 	opt := ui.Options{
-		Check:     checkGuard,
+		Check:     actions.CheckGuard,
 		Source:    smp.Sample,
 		Interval:  cfg.Interval.Duration,
 		Git:       scanGit,
@@ -154,51 +153,13 @@ func gitSource(cfg config.Config) ui.GitSource {
 		defer cancel()
 		in := gitscan.Input{
 			SessionCwds: sessionCwds,
-			ProcessCwds: processCwds(),
+			ProcessCwds: actions.ProcessCwds(),
 			Extra:       cfg.Git.Repos,
 			Main:        cfg.Git.Main,
 			Remote:      cfg.Git.Remote,
 		}
 		return scanner.Scan(ctx, in)
 	}
-}
-
-// checkGuard re-verifies, right before a step runs, what its evidence said.
-func checkGuard(g advice.Guard) error {
-	if g.PID > 0 {
-		p, ok := newHost().Proc(g.PID)
-		if !ok || p.StartTime != g.StartTicks {
-			return fmt.Errorf("pid %d is no longer the process that was flagged", g.PID)
-		}
-	}
-	if g.Worktree != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		return gitscan.VerifyRemovable(ctx, gitscan.Git, g.Worktree, processCwds())
-	}
-	return nil
-}
-
-// processCwds is where every process of ours sits, so a worktree someone
-// still works in is never offered for removal.
-func processCwds() []string {
-	fs := newHost()
-	procs, _ := fs.Procs()
-	out := make([]string, 0, len(procs))
-	for pid := range procs {
-		if cwd := fs.Cwd(pid); cwd != "" {
-			out = append(out, cwd)
-		}
-	}
-	return out
-}
-
-// newHost reads /proc on Linux and the system's own APIs elsewhere.
-func newHost() procfs.Host {
-	if runtime.GOOS == "linux" {
-		return procfs.FS{Root: "/proc"}
-	}
-	return host.Host{}
 }
 
 // stateEvery is how often the state file is rewritten; status treats a file
@@ -227,7 +188,7 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 		smp.Tmux = func() ([]byte, error) { return os.ReadFile(filepath.Join(root, "tmux-panes.txt")) }
 		return smp
 	}
-	smp.FS, smp.Sys = newHost(), procfs.Sys{Root: "/sys"}
+	smp.FS, smp.Sys = actions.NewHost(), procfs.Sys{Root: "/sys"}
 	smp.Home, _ = os.UserHomeDir()
 	smp.GPU, smp.Docker = sample.NvidiaSMI, sample.DockerPS
 	smp.LatencyTarget = cfg.LatencyTarget
