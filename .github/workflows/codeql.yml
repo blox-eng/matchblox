@@ -2,9 +2,8 @@ name: CodeQL
 
 # Static analysis on every push and PR, plus weekly.
 #
-# A library whose whole purpose is containing hostile code has no business
-# holding itself to a lower analysis bar than the code it contains. govulncheck
-# covers known vulnerabilities in dependencies; this covers the code we write.
+# matchblox runs commands on the machine, so its own code gets the same bar as
+# its dependencies: govulncheck covers those, this covers the code we write.
 
 on:
   push:

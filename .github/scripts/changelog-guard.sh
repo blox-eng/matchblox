@@ -2,10 +2,8 @@
 # Fails if the newest released tag has no section in CHANGELOG.md.
 #
 # Releases are cut automatically from Conventional Commits, but the changelog is
-# written by hand, so nothing ties the two together: four releases once shipped
-# while their entries still sat under [Unreleased], and the file told readers
-# that released work was unreleased. This gate catches that on the first release
-# it happens to, rather than the fourth.
+# written by hand, so nothing else ties the two together. This gate fails the
+# first pull request after a release whose entries are still under [Unreleased].
 #
 # It is deliberately fail-closed. A missing tag means the checkout has no tags
 # (`fetch-depth: 1` without `fetch-tags`), not that there is nothing to check —
@@ -21,12 +19,13 @@ tag="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n 1)"
 if [ -z "$tag" ]; then
   # No local tag: either nothing is released yet, or the checkout has no tags.
   # Ask the remote, so a shallow checkout still fails closed.
-  if git ls-remote --exit-code --tags origin 'v[0-9]*' >/dev/null 2>&1; then
-    echo "FAIL: the remote has version tags but the checkout has none (fetch-tags: true)" >&2
-    exit 1
-  fi
-  echo "OK: nothing released yet"
-  exit 0
+  rc=0
+  git ls-remote --exit-code --tags origin 'v[0-9]*' >/dev/null 2>&1 || rc=$?
+  case "$rc" in
+    0) echo "FAIL: the remote has version tags but the checkout has none (fetch-tags: true)" >&2; exit 1 ;;
+    2) echo "OK: nothing released yet"; exit 0 ;;
+    *) echo "FAIL: cannot read tags from origin (git ls-remote exit $rc)" >&2; exit 1 ;;
+  esac
 fi
 
 version="${tag#v}"

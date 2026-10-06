@@ -4,6 +4,8 @@
 package host
 
 import (
+	"errors"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -26,6 +28,17 @@ var _ procfs.Host = Host{}
 
 const tick = float64(procfs.ClockTicks)
 
+var errPID = errors.New("pid out of range")
+
+// newProcess refuses a pid that does not fit int32, so it cannot wrap around
+// to some other process.
+func newProcess(pid int) (*process.Process, error) {
+	if pid <= 0 || pid > math.MaxInt32 {
+		return nil, errPID
+	}
+	return process.NewProcess(int32(pid))
+}
+
 func (Host) Procs() (map[int]procfs.Proc, error) {
 	ps, err := process.Processes()
 	if err != nil {
@@ -41,7 +54,7 @@ func (Host) Procs() (map[int]procfs.Proc, error) {
 }
 
 func (Host) Proc(pid int) (procfs.Proc, bool) {
-	p, err := process.NewProcess(int32(pid))
+	p, err := newProcess(pid)
 	if err != nil {
 		return procfs.Proc{}, false
 	}
@@ -80,7 +93,7 @@ func read(p *process.Process) (procfs.Proc, bool) {
 }
 
 func (Host) Environ(pid int, key string) (string, bool) {
-	p, err := process.NewProcess(int32(pid))
+	p, err := newProcess(pid)
 	if err != nil {
 		return "", false
 	}
@@ -97,7 +110,7 @@ func (Host) Environ(pid int, key string) (string, bool) {
 }
 
 func (Host) Cwd(pid int) string {
-	if p, err := process.NewProcess(int32(pid)); err == nil {
+	if p, err := newProcess(pid); err == nil {
 		s, _ := p.Cwd()
 		return s
 	}
@@ -105,7 +118,7 @@ func (Host) Cwd(pid int) string {
 }
 
 func (Host) Cmdline(pid int) string {
-	if p, err := process.NewProcess(int32(pid)); err == nil {
+	if p, err := newProcess(pid); err == nil {
 		s, _ := p.Cmdline()
 		return s
 	}
@@ -116,7 +129,7 @@ func (Host) Cmdline(pid int) string {
 func (Host) Cgroup(int) string { return "" }
 
 func (Host) UID(pid int) (int, bool) {
-	p, err := process.NewProcess(int32(pid))
+	p, err := newProcess(pid)
 	if err != nil {
 		return 0, false
 	}

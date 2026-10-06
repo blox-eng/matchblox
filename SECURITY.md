@@ -16,21 +16,27 @@ In scope:
 - A guard that does not stop a step when its fact no longer holds.
 - A shell string built from data, or text from a pane or a model that becomes a
   command.
-- Secrets that reach a model provider, a log or the audit file.
-- The install script or a release asset that does not match its checksum or
-  provenance.
+- Secrets that reach a log, or (from v0.1) a model provider or the audit file.
+- (From v0.1) the install script, or a release asset that does not match its
+  checksum or provenance.
 
 ## Supported versions
 
 matchblox is pre-1.0. Only the latest release receives fixes.
 
-## The model
+## The model today
 
-- The service runs as you, at the lowest CPU priority, and listens only on a
-  Unix socket in a 0700 directory. Remote mode uses your own SSH. It opens no
-  port.
-- The console draws state. It never reads the machine and never runs a step
-  itself. Every step is an argv list, shown before it runs.
-- The stoker is off by default. In auto mode it runs only safe steps that are on
-  your allowlist. Pane text goes to a provider only for panes you opt in, after
-  secrets are removed. Each decision is in the audit log.
+- matchblox runs as you, at the lowest CPU priority, and opens no port.
+- Every step is an argv list, never a shell string, and is shown before it runs.
+- A destructive step needs `x` and then a typed `y`. Its guard (the same
+  process and start time, a worktree still clean and unused, a session still
+  idle) is checked again just before it runs.
+- Steps run with a time limit, no terminal prompts, and SSH in batch mode.
+
+## What v0.1 adds
+
+The design ([design/0001-v0.1.md](design/0001-v0.1.md) §4, §8, §9) adds a
+service on a Unix socket in a 0700 directory, remote mode over your own SSH, and
+the stoker: off by default, safe allowlisted steps only in auto mode, pane text
+only for panes you opt in after secrets are removed, and an audit log. This
+section moves up as each part ships.

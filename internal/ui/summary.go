@@ -2,11 +2,9 @@ package ui
 
 import (
 	"fmt"
-
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/advice"
-
 	"github.com/blox-eng/matchblox/internal/state"
 )
 

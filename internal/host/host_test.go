@@ -53,3 +53,16 @@ func TestAgreesWithProc(t *testing.T) {
 		t.Fatalf("Procs misses self (%d processes, %v)", len(procs), err)
 	}
 }
+
+// A pid outside int32 must not wrap around to some other process.
+func TestOutOfRangePIDFindsNothing(t *testing.T) {
+	h := Host{}
+	for _, pid := range []int{0, -1, 1<<32 + os.Getpid()} {
+		if _, ok := h.Proc(pid); ok {
+			t.Errorf("Proc(%d) found a process", pid)
+		}
+		if h.Cwd(pid) != "" || h.Cmdline(pid) != "" {
+			t.Errorf("pid %d returned data", pid)
+		}
+	}
+}

@@ -14,7 +14,8 @@ linters:
   settings:
     errcheck:
       # Closing a file we only read, or removing a temp file on an error path,
-      # has no failure to act on.
+      # has no failure to act on. A file we write closes explicitly and returns
+      # the error (history.Logger.Log).
       exclude-functions:
         - (*os.File).Close
         - os.Remove

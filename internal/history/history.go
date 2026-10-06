@@ -98,14 +98,17 @@ func (l *Logger) Log(p Point) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 	w := csv.NewWriter(f)
 	if st, err := f.Stat(); err == nil && st.Size() == 0 {
 		_ = w.Write(Columns) // a write error surfaces in w.Error()
 	}
 	_ = w.Write(p.row())
 	w.Flush()
-	return w.Error()
+	if err := w.Error(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close() // an appended row is only safe once the close succeeds
 }
 
 // Load reads the last Keep of every file, matching columns by name. Missing

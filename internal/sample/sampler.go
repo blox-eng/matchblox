@@ -288,8 +288,8 @@ func (s *Sampler) sampleLatency() {
 		s.lat, s.latErr = 0, err.Error()
 		return
 	}
-	s.lat, s.latErr = time.Since(start), ""
 	_ = c.Close()
+	s.lat, s.latErr = time.Since(start), ""
 }
 
 func busyPct(prev, cur procfs.CPUTimes) float64 {

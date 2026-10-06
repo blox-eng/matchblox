@@ -14,8 +14,8 @@ Other tools do those well (design/0001-v0.1.md §15).
 
 ## Rules
 
-- The console never reads the machine. The service never imports the console.
-  `internal/arch_test.go` checks this.
+- From v0.1, the console never reads the machine and the service never
+  imports the console (design §4.2). A test will check this.
 - Steps are argv lists. Never build a shell string from data.
 - A destructive step needs a typed confirm and a guard that is checked again
   just before it runs.

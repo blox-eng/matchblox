@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# The checks CI runs, in the same order, for a run before you push.
+# Most of the checks CI runs, for a run before you push. CI also runs the race
+# detector, the shell lint, the changelog guard and govulncheck.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

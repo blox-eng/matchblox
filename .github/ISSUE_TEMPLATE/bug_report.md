@@ -13,7 +13,7 @@ labels: bug
 **Environment**
 - matchblox version (`matchblox version`):
 - OS and CPU (`uname -sm`):
-- Where it ran: on the host / over SSH / remote mode (`matchblox <host>`)
+- Where it ran: on the host, or over SSH
 - Terminal app and size (columns × rows):
 - tmux version (`tmux -V`):
 
