@@ -43,7 +43,6 @@ func listPackages(t *testing.T) map[string]pkg {
 // TestArchBoundaries holds design §4.2: the console draws only what the
 // service sends, and the service does not depend on the console.
 func TestArchBoundaries(t *testing.T) {
-	t.Skip("until 2.3")
 	pkgs := listPackages(t)
 	app, ok := pkgs["app"]
 	if !ok {

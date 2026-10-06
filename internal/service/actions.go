@@ -58,6 +58,10 @@ func (a *acts) markDone(key string) {
 }
 
 func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
+	if a.RecID == "rescan:git" {
+		s.rescanGit()
+		return proto.Result{}
+	}
 	key := a.RecID + "\x00" + a.Which
 	l := s.acts.lock(key)
 	l.Lock()

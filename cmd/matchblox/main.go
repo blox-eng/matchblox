@@ -1,40 +1,50 @@
 // Command matchblox is a terminal console for a machine that runs many AI
 // coding agents: sessions by tmux pane, machine load, git, and what to do.
 //
-//	matchblox                 open the console
-//	matchblox status          print what it knows as JSON (for agents)
+//	matchblox                 open the console (starts the service if needed)
+//	matchblox serve           run the service; --stdio speaks on stdin/stdout
+//	matchblox status          print what the service knows as JSON (for agents)
 //	matchblox status --text   the same, as a short summary
+//	matchblox version         print the version
 package main
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime/pprof"
+	"syscall"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/actions"
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/app"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/procfs"
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/state"
-	"github.com/blox-eng/matchblox/internal/ui"
+	"github.com/blox-eng/matchblox/internal/transport"
 )
 
 var version = "dev"
 
 func main() {
-	// MATCHBLOX_CPUPROFILE=file profiles the console itself, to keep its
-	// own cost honest.
+	// MATCHBLOX_CPUPROFILE=file profiles this process, to keep its own cost
+	// honest.
 	if path := os.Getenv("MATCHBLOX_CPUPROFILE"); path != "" {
 		if f, err := os.Create(path); err == nil { //nolint:gosec // the person names their own profile file
 			_ = pprof.StartCPUProfile(f)
@@ -48,16 +58,24 @@ func main() {
 	}
 }
 
+// configArg is the --config the person gave, passed on to a service the
+// console starts.
+var configArg string
+
 func run(args []string) error {
-	cmd := "tui"
-	if len(args) > 0 && (args[0] == "status" || args[0] == "version") {
-		cmd, args = args[0], args[1:]
+	cmd := "console"
+	if len(args) > 0 {
+		switch args[0] {
+		case "serve", "status", "version":
+			cmd, args = args[0], args[1:]
+		}
 	}
 	fl := flag.NewFlagSet("matchblox", flag.ContinueOnError)
 	cfgPath := fl.String("config", config.Path(), "machine goals (TOML); a missing file means defaults")
 	interval := fl.Duration("interval", 0, "sampling interval (default from config, else 2s)")
 	root := fl.String("fixtures", "", "read proc/, sys/, home/ and tmux-panes.txt from this directory instead of the live machine")
 	text := fl.Bool("text", false, "status: print a summary instead of JSON")
+	stdio := fl.Bool("stdio", false, "serve: speak on stdin and stdout, joined to the local service")
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
@@ -65,6 +83,11 @@ func run(args []string) error {
 		fmt.Println(version)
 		return nil
 	}
+	fl.Visit(func(f *flag.Flag) {
+		if f.Name == "config" {
+			configArg = f.Value.String()
+		}
+	})
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		return fmt.Errorf("%s: %w", *cfgPath, err)
@@ -73,80 +96,160 @@ func run(args []string) error {
 		cfg.Interval.Duration = *interval
 	}
 
-	// The console must not add load: lowest CPU priority for us and every
+	// matchblox must not add load: lowest CPU priority for us and every
 	// command we start.
 	lowestPriority()
 
-	fixtures := *root != ""
-	smp := newSampler(cfg, *root)
-	var scanGit ui.GitSource
-	if !fixtures {
-		scanGit = gitSource(cfg)
+	path := transport.SocketPath()
+	switch cmd {
+	case "serve":
+		if *stdio {
+			return serveStdio(path, os.Stdin, os.Stdout)
+		}
+		return serve(path, newService(cfg, *root))
+	case "status":
+		return status(os.Stdout, path, cfg, *root, *text)
 	}
-	if cmd == "status" {
-		return status(smp, scanGit, cfg.Interval.Duration, fixtures, *text)
-	}
+	return console(path, cfg, *root)
+}
 
-	opt := ui.Options{
-		Check:     actions.CheckGuard,
-		Source:    smp.Sample,
-		Interval:  cfg.Interval.Duration,
-		Git:       scanGit,
-		GitEvery:  cfg.Git.Interval.Duration,
-		CompactAt: cfg.Sessions.CompactAt,
-	}
-	if !fixtures {
-		logPath := cfg.History.Log
-		switch logPath {
-		case "":
-			logPath = history.DefaultLog()
-		case "-":
-			logPath = ""
+func console(path string, cfg config.Config, root string) error {
+	opt := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt}
+	if root != "" {
+		// Fixtures: a service in this process, for demos and tests.
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		s := newService(cfg, root)
+		a, b := net.Pipe()
+		go s.Run(ctx)
+		go s.Handle(ctx, transport.NewConn(b)) //nolint:errcheck // ends with the console
+		opt.Conn = transport.NewConn(a)
+	} else {
+		c, err := ensureService(path)
+		if err != nil {
+			return err
 		}
-		opt.OnSnapshot = recorder(state.Path(), logPath, cfg.Hooks.Alert)
-		opt.History = func() history.Series {
-			s, _ := history.Load(time.Now(), cfg.History.Source, logPath)
-			return s
-		}
+		opt.Conn = c
+		opt.Redial = func() (transport.Conn, error) { return ensureService(path) }
 	}
-	// The screen changes on a sample or a key press, so 15 frames a second
+	defer opt.Conn.Close()
+	// The screen changes on a state or a key press, so 15 frames a second
 	// is still instant to the eye and wakes the process 4x less than 60.
-	_, err = tea.NewProgram(ui.New(opt), tea.WithFPS(15)).Run()
+	_, err := tea.NewProgram(app.New(opt), tea.WithFPS(15)).Run()
 	return err
 }
 
-// recorder persists each sample: the state file for `status`, one history
-// row every 30 s, and the alert hook for alerts that were not firing before.
-func recorder(statePath, logPath string, hook []string) func(state.Doc) {
-	logger := &history.Logger{Path: logPath}
-	firing := map[string]bool{}
-	first := true
-	var wrote time.Time
-	return func(d state.Doc) {
-		// The file is for agents asking now and then; every few seconds is fresh.
-		if d.At.Sub(wrote) >= stateEvery {
-			_ = state.Write(statePath, d)
-			wrote = d.At
-		}
-		if !first { // the first sample has no rates yet
-			_ = logger.Log(history.FromSnapshot(d.Snapshot))
-		}
-		first = false
-		now := map[string]bool{}
-		for _, a := range d.Alerts {
-			now[a.Key] = true
-			if !firing[a.Key] && len(hook) > 0 {
-				c := exec.Command(hook[0], append(hook[1:], a.Title, a.Evidence)...)
-				if c.Start() == nil {
-					go func() { _ = c.Wait() }()
-				}
-			}
-		}
-		firing = now
+// newService builds the service for this machine, or for a fixture tree
+// (no git, nothing written).
+func newService(cfg config.Config, root string) *service.Service {
+	var git service.GitSource
+	if root == "" {
+		git = gitSource(cfg)
 	}
+	s := service.New(cfg, newSampler(cfg, root), git)
+	s.Actions.Run = func(argv []string) error { return actions.Exec(context.Background(), argv) }
+	s.Binary = version
+	if root != "" {
+		return s
+	}
+	s.StatePath = state.Path()
+	s.AlertHook = cfg.Hooks.Alert
+	s.HistorySources = []string{cfg.History.Source}
+	switch cfg.History.Log {
+	case "":
+		s.HistoryLog = history.DefaultLog()
+	case "-":
+	default:
+		s.HistoryLog = cfg.History.Log
+	}
+	if exe, err := os.Executable(); err == nil {
+		s.Exe = exe
+	}
+	return s
 }
 
-func gitSource(cfg config.Config) ui.GitSource {
+// serve runs the service on the socket until a signal, or until the binary
+// on disk is replaced (the next console starts the new one).
+func serve(path string, s *service.Service) error {
+	l, err := transport.Listen(path)
+	if errors.Is(err, transport.ErrInUse) {
+		fmt.Fprintln(os.Stderr, "matchblox: the service already runs on", path)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	err = s.Serve(ctx, l)
+	if errors.Is(err, service.ErrReplaced) || errors.Is(err, context.Canceled) {
+		return nil
+	}
+	return err
+}
+
+// serveStdio joins stdin and stdout to the local service, starting it if
+// needed. Remote mode runs it over SSH.
+func serveStdio(path string, in io.Reader, out io.Writer) error {
+	c, err := ensureService(path)
+	if err != nil {
+		return err
+	}
+	transport.Pipe(transport.Stdio(in, out), c)
+	return nil
+}
+
+// ensureService connects to the local service, or starts it detached and
+// connects within 2 s.
+func ensureService(path string) (transport.Conn, error) {
+	if c, err := transport.Dial(path, 200*time.Millisecond); err == nil {
+		return c, nil
+	}
+	if err := spawnService(); err != nil {
+		return nil, fmt.Errorf("start the service: %w", err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if c, err := transport.Dial(path, 200*time.Millisecond); err == nil {
+			return c, nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return nil, fmt.Errorf("the service did not start on %s; run `matchblox serve` to see why", path)
+}
+
+// spawnService starts `matchblox serve` in its own session, so it keeps
+// running when the console and its terminal close. Its output goes to
+// serve.log next to the state file.
+var spawnService = func() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	args := []string{"serve"}
+	if configArg != "" {
+		args = append(args, "--config", configArg)
+	}
+	c := exec.Command(exe, args...) //nolint:gosec // our own binary
+	logPath := filepath.Join(filepath.Dir(state.Path()), "serve.log")
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err == nil {
+		if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil { //nolint:gosec // our own state dir
+			defer f.Close()
+			c.Stdout, c.Stderr = f, f
+		}
+	}
+	detach(c)
+	if err := c.Start(); err != nil {
+		return err
+	}
+	return c.Process.Release()
+}
+
+// staleAfter is the age at which status treats the state file as left by
+// a service that no longer runs.
+const staleAfter = 15 * time.Second
+
+func gitSource(cfg config.Config) service.GitSource {
 	scanner := &gitscan.Scanner{Git: gitscan.Git, Merged: gitscan.GHMerged, RecheckIdle: 2 * time.Hour}
 	return func(sessionCwds []string) gitscan.Report {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -161,14 +264,6 @@ func gitSource(cfg config.Config) ui.GitSource {
 		return scanner.Scan(ctx, in)
 	}
 }
-
-// stateEvery is how often the state file is rewritten; status treats a file
-// older than staleAfter as no console running.
-const (
-	stateEvery = 5 * time.Second
-	staleAfter = 15 * time.Second
-)
-
 func newSampler(cfg config.Config, root string) *sample.Sampler {
 	smp := &sample.Sampler{
 		Cfg:    cfg,
@@ -196,31 +291,73 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 	return smp
 }
 
-// status prints the running console's state when it is fresh. Otherwise it
-// samples on its own: two samples a second apart so rates are real, and one
-// git scan.
-func status(smp *sample.Sampler, scanGit ui.GitSource, interval time.Duration, fixtures, text bool) error {
-	doc, err := state.Read(state.Path())
-	if fixtures || err != nil || time.Since(doc.At) > max(staleAfter, 3*interval) {
+// status prints the service's state. Without a service it uses a fresh
+// state file, and else samples on its own: two samples a second apart so
+// rates are real, and one git scan.
+func status(w io.Writer, path string, cfg config.Config, root string, text bool) error {
+	doc, ok := state.Doc{}, false
+	if root == "" {
+		doc, ok = fromService(path)
+	}
+	if !ok && root == "" {
+		if d, err := state.Read(state.Path()); err == nil && time.Since(d.At) <= max(staleAfter, 3*cfg.Interval.Duration) {
+			doc, ok = d, true
+		}
+	}
+	if !ok {
+		smp := newSampler(cfg, root)
 		smp.ProcEvery = 0
 		smp.Sample()
 		time.Sleep(time.Second)
 		doc = state.Doc{Snapshot: smp.Sample()}
-		if scanGit != nil {
+		if root == "" {
 			var cwds []string
 			for _, s := range doc.Sessions {
 				cwds = append(cwds, s.Cwd)
 			}
-			r := scanGit(cwds)
+			r := gitSource(cfg)(cwds)
 			doc.Git = &r
 		}
 		doc.Recommendations = advice.Build(doc.Snapshot, doc.Git)
 	}
 	if text {
-		fmt.Print(ui.Summary(doc))
-		return nil
+		_, err := fmt.Fprint(w, app.Summary(doc))
+		return err
 	}
-	enc := json.NewEncoder(os.Stdout)
+	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(doc)
+}
+
+// fromService reads the first snapshot from a running service.
+func fromService(path string) (state.Doc, bool) {
+	c, err := transport.Dial(path, 200*time.Millisecond)
+	if err != nil {
+		return state.Doc{}, false
+	}
+	defer c.Close()
+	timer := time.AfterFunc(3*time.Second, func() { c.Close() })
+	defer timer.Stop()
+	if c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version, Binary: version}) != nil {
+		return state.Doc{}, false
+	}
+	for {
+		env, err := c.Recv()
+		if err != nil {
+			return state.Doc{}, false
+		}
+		switch env.Kind {
+		case proto.KindHello:
+			var h proto.Hello
+			if json.Unmarshal(env.Body, &h) != nil || h.Version != proto.Version {
+				return state.Doc{}, false
+			}
+		case proto.KindSnapshot:
+			var st proto.State
+			if json.Unmarshal(env.Body, &st) != nil {
+				return state.Doc{}, false
+			}
+			return st.Doc, true
+		}
+	}
 }

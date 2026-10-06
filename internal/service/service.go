@@ -58,6 +58,7 @@ type Service struct {
 	have    bool
 	hist    history.Series
 	clients map[*client]struct{}
+	gitKick chan struct{}
 
 	acts acts
 }
@@ -70,6 +71,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		gitEvery: cfg.Git.Interval.Duration,
 		git:      git,
 		clients:  map[*client]struct{}{},
+		gitKick:  make(chan struct{}, 1),
 	}
 	if s.interval <= 0 {
 		s.interval = 2 * time.Second
@@ -143,15 +145,14 @@ func (s *Service) watchExe(ctx context.Context, stop context.CancelCauseFunc) {
 // Call it once: it is the only sample loop of the service.
 func (s *Service) Run(ctx context.Context) {
 	rec := s.recorder()
-	gitKick := make(chan struct{}, 1)
-	go s.gitLoop(ctx, gitKick)
+	go s.gitLoop(ctx)
 	s.loadHistory()
 	t := time.NewTicker(s.interval)
 	defer t.Stop()
 	for first := true; ; first = false {
 		s.publish(s.sample(), rec)
 		if first {
-			gitKick <- struct{}{}
+			s.rescanGit()
 		}
 		select {
 		case <-ctx.Done():
@@ -174,14 +175,23 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	s.broadcast()
 }
 
-func (s *Service) gitLoop(ctx context.Context, kick <-chan struct{}) {
+// rescanGit asks the git loop for a scan now; a scan already asked for
+// absorbs it.
+func (s *Service) rescanGit() {
+	select {
+	case s.gitKick <- struct{}{}:
+	default:
+	}
+}
+
+func (s *Service) gitLoop(ctx context.Context) {
 	if s.git == nil {
 		return
 	}
 	select {
 	case <-ctx.Done():
 		return
-	case <-kick:
+	case <-s.gitKick:
 	}
 	t := time.NewTicker(s.gitEvery)
 	defer t.Stop()
@@ -202,6 +212,7 @@ func (s *Service) gitLoop(ctx context.Context, kick <-chan struct{}) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+		case <-s.gitKick:
 		}
 	}
 }

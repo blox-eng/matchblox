@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/state"
 )
@@ -120,3 +121,9 @@ func Decode(r *bufio.Reader) (Envelope, error) {
 	}
 	return env, nil
 }
+
+// The console draws git data without importing the scanner.
+type (
+	GitReport = gitscan.Report
+	Worktree  = gitscan.Worktree
+)

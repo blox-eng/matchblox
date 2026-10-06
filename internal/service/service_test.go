@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -303,10 +304,32 @@ func TestServeStopsWhenBinaryReplaced(t *testing.T) {
 	}
 	select {
 	case err := <-done:
-		if err != ErrReplaced {
+		if !errors.Is(err, ErrReplaced) {
 			t.Fatalf("Serve returned %v, want ErrReplaced", err)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Serve kept running on a replaced binary")
+	}
+}
+
+func TestRescanGitRunsTheScanNow(t *testing.T) {
+	s := newTest(t, time.Hour)
+	var scans atomic.Int32
+	s.git = func([]string) gitscan.Report { scans.Add(1); return gitReport }
+	ctx := run(t, s)
+	c, _ := connect(t, ctx, s)
+	snapshot(t, c)
+	deadline := time.Now().Add(time.Second)
+	for scans.Load() < 1 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if r := act(t, c, "g", proto.Act{RecID: "rescan:git", Which: "primary"}); r.Err != "" {
+		t.Fatalf("result %+v", r)
+	}
+	for scans.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if n := scans.Load(); n != 2 {
+		t.Fatalf("%d scans, want 2 (the first, then the rescan)", n)
 	}
 }

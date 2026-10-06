@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"errors"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -52,5 +53,15 @@ func TestFailedStepStops(t *testing.T) {
 	res := r.Do(context.Background(), advice.Action{Steps: [][]string{{"a"}, {"b"}}}, "")
 	if n != 1 || !strings.Contains(res.Err, "a: exit 1") {
 		t.Fatalf("n=%d err=%q", n, res.Err)
+	}
+}
+
+// A step must never stop to ask for credentials.
+func TestExecNeverPrompts(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh")
+	}
+	if err := Exec(context.Background(), []string{"sh", "-c", `test "$GIT_TERMINAL_PROMPT" = 0 && test -n "$GIT_SSH_COMMAND"`}); err != nil {
+		t.Fatalf("step ran with prompts allowed: %v", err)
 	}
 }

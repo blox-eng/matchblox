@@ -33,7 +33,7 @@ func Listen(path string) (net.Listener, error) {
 	}
 	// MkdirAll keeps the mode of a directory that exists; other users must
 	// not reach the socket, so set it each time.
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // a directory needs x to be entered; 0700 is owner only
 		return nil, err
 	}
 	// Only the holder of the lock may remove a stale socket; without it two
