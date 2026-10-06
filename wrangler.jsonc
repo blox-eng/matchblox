@@ -1,0 +1,6 @@
+// matchblox.com: static assets only, served from www/ (honours www/_headers).
+{
+  "name": "matchblox",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "./www", "not_found_handling": "404-page" }
+}
