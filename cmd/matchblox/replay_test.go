@@ -25,6 +25,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/app"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/replay"
 	"github.com/blox-eng/matchblox/internal/service"
@@ -339,6 +340,9 @@ func TestReplay(t *testing.T) {
 	if _, err := waitFor(func() string { return fmt.Sprint(len(s.State().Orphans)) }, func(n string) bool { return n == "1" }, "warm up", stepTimeout); err != nil {
 		t.Fatal(err)
 	}
+	// billing asks for permission, through its hook.
+	s.Hook(hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "22222222-bbbb-4000-8000-000000000004",
+		Pane: "%5", Message: "Claude needs your permission to use Bash", At: clk.Now().Add(-90 * time.Second)})
 	time.Sleep(500 * time.Millisecond) // ten more samples: full sparklines
 	// The console reads its own clock: it stands still for the start screen,
 	// then follows the demo clock.
@@ -400,12 +404,13 @@ func TestReplay(t *testing.T) {
 	time.Sleep(600 * time.Millisecond) // a dozen samples reach the console: the sparklines fill
 
 	steps := []step{
-		{"the sessions", 1300 * time.Millisecond, "", has("ws-1", "web-checkout", "! compact", "PROCS !")},
-		{"machine health", 3500 * time.Millisecond, "2", has("CPU")},
-		{"the recommendations", 6 * time.Second, "5", has("Kill detached busy loop 4242")},
-		{"a guarded action", 7500 * time.Millisecond, "x", has("kill 4242", "y run")},
-		{"the loop is gone", 9 * time.Second, "y", func(s string) bool { return !strings.Contains(s, "Kill detached busy loop") }},
-		{"back to the sessions", 11 * time.Second, "1", has("web-checkout")},
+		{"the queue", 1300 * time.Millisecond, "", has("ws-1", "WAITING FOR YOU", "billing", "asks", "permission to use Bash", "PROCS !")},
+		{"the sessions", 3500 * time.Millisecond, "2", has("api-auth", "web-checkout", "! compact")},
+		{"machine health", 6 * time.Second, "3", has("CPU")},
+		{"the recommendations", 8500 * time.Millisecond, "6", has("Kill detached busy loop 4242")},
+		{"a guarded action", 10 * time.Second, "x", has("kill 4242", "y run")},
+		{"the loop is gone", 11500 * time.Millisecond, "y", func(s string) bool { return !strings.Contains(s, "Kill detached busy loop") }},
+		{"back to the queue", 13500 * time.Millisecond, "1", has("billing")},
 	}
 	var still replay.Frame
 	for _, st := range steps {
@@ -437,6 +442,22 @@ func TestReplay(t *testing.T) {
 	}
 	if !lit {
 		t.Fatal("the replay never shows the struck, burning match")
+	}
+	// The sessions frame shows the three matches: lit, unlit and burnt.
+	matches := map[string]bool{}
+	for _, f := range frames {
+		for _, l := range f.Lines {
+			for _, sp := range l {
+				if strings.Contains(sp.Text, "●") || strings.Contains(sp.Text, "◌") {
+					matches[strings.TrimSpace(sp.Text)+" "+sp.FG] = true
+				}
+			}
+		}
+	}
+	for _, want := range []string{"● flame", "● accent", "◌ faint"} {
+		if !matches[want] {
+			t.Fatalf("the replay lacks the match %q; has %v", want, matches)
+		}
 	}
 	if real, _ := os.Hostname(); real != "" && real != "ws-1" {
 		for _, f := range frames {

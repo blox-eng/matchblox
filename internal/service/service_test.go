@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -574,5 +575,51 @@ func TestServiceReplaysSpool(t *testing.T) {
 	}
 	if _, err := os.Stat(s.Spool); !os.IsNotExist(err) {
 		t.Fatalf("spool still there: %v", err)
+	}
+}
+
+func answerTest(t *testing.T) (*Service, context.Context, *[][]string) {
+	t.Helper()
+	s := newTest(t, time.Hour)
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	ctx := run(t, s)
+	c, _ := connect(t, ctx, s)
+	hook(t, ctx, s, hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "s9", Pane: "%1", At: time.Now()})
+	waitQueue(t, c, func(q []queue.Item) bool { return len(q) == 1 && !q[0].Estimated })
+	return s, ctx, &ran
+}
+
+func TestAnswerTypesLiteral(t *testing.T) {
+	s, ctx, ran := answerTest(t)
+	res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "; rm -rf /"})
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	want := [][]string{{"tmux", "send-keys", "-t", "%1", "-l", "--", "; rm -rf /"}, {"tmux", "send-keys", "-t", "%1", "Enter"}}
+	if fmt.Sprint(*ran) != fmt.Sprint(want) {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+func TestAnswerNeedsTypedY(t *testing.T) {
+	s, ctx, ran := answerTest(t)
+	if res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Text: "yes"}); len(*ran) != 0 || res.Err == "" {
+		t.Fatalf("ran %q res %+v", *ran, res)
+	}
+}
+
+func TestAnswerRefusesPaneNotWaiting(t *testing.T) {
+	s, ctx, ran := answerTest(t)
+	for _, a := range []proto.Act{
+		{RecID: "answer:%2", Which: "secondary", Confirm: "y", Text: "yes"},
+		{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "two\nlines"},
+	} {
+		if res := s.act(ctx, a); res.Err == "" {
+			t.Fatalf("%+v ran: %+v", a, res)
+		}
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
 	}
 }

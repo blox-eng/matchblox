@@ -303,9 +303,16 @@ func (s *Service) loadHistory() {
 	s.mu.Unlock()
 }
 
+// idle is the guard for a step that types into a pane: the agent there
+// waits for the person (in the queue), or reports itself idle.
 func (s *Service) idle(pane string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for _, it := range s.cur.Queue {
+		if it.Pane == pane {
+			return true
+		}
+	}
 	for _, ss := range s.cur.Sessions {
 		if ss.Pane == pane {
 			return ss.Status == "idle"

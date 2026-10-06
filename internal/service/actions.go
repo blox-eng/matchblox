@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 )
 
@@ -72,12 +73,24 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		s.replace()
 		return proto.Result{}
 	}
-	key := a.RecID + "\x00" + a.Which
+	key := a.RecID + "\x00" + a.Which + "\x00" + a.Text
 	if !s.acts.begin(key) {
 		return proto.Result{Skipped: []string{"already done"}}
 	}
 	ran := false
 	defer func() { s.acts.end(key, ran) }()
+	if pane, ok := strings.CutPrefix(a.RecID, "answer:"); ok {
+		if err := panes.CheckAnswer(a.Text); err != nil {
+			return proto.Result{Err: err.Error()}
+		}
+		if !s.waiting(pane) {
+			return proto.Result{Err: "the session in " + pane + " no longer waits"}
+		}
+		res := s.Actions.Do(ctx, advice.Action{Label: "answer", Steps: panes.Send(pane, a.Text), Destructive: true,
+			Guards: []advice.Guard{{IdlePane: pane}}}, a.Confirm)
+		ran = len(res.Ran) > 0
+		return res
+	}
 	action, ok := s.resolve(a.RecID, a.Which)
 	if !ok {
 		return proto.Result{Err: "unknown action"}
@@ -131,4 +144,17 @@ func (s *Service) resolve(id, which string) (advice.Action, bool) {
 		}
 	}
 	return advice.Action{}, false
+}
+
+// waiting tells if a session in the pane is in the queue: it waits for the
+// person. Hold no lock.
+func (s *Service) waiting(pane string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, it := range s.cur.Queue {
+		if it.Pane == pane {
+			return true
+		}
+	}
+	return false
 }

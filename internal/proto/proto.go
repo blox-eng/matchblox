@@ -71,6 +71,8 @@ type Act struct {
 	RecID   string `json:"rec_id"`
 	Which   string `json:"which"`             // "primary" | "secondary"
 	Confirm string `json:"confirm,omitempty"` // "y" for a destructive action
+	// Text is what the person typed for an "answer:<pane>" act.
+	Text string `json:"text,omitempty"`
 }
 
 type Result struct {

@@ -144,7 +144,8 @@ func hook(args []string, stdin io.Reader, sock, spool string) error {
 func spoolPath() string { return filepath.Join(filepath.Dir(state.Path()), "spool.jsonl") }
 
 func console(path string, cfg config.Config, root string, noMotion bool) error {
-	opt := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, NoMotion: noMotion}
+	opt := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, NoMotion: noMotion,
+		OutsideTmux: os.Getenv("TMUX") == ""}
 	if root != "" {
 		// Fixtures: a service in this process, for demos and tests.
 		ctx, cancel := context.WithCancel(context.Background())

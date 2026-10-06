@@ -19,6 +19,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -47,6 +48,9 @@ type Options struct {
 	Now func() time.Time
 	// NoMotion makes every motion an instant change.
 	NoMotion bool
+	// OutsideTmux: the console does not run in tmux, so going to a pane
+	// attaches to it, and the console comes back when tmux detaches.
+	OutsideTmux bool
 }
 
 type helloMsg proto.Hello
@@ -81,8 +85,10 @@ type action struct {
 	steps       [][]string
 	destructive bool
 	nav         bool
+	attach      bool   // the last step takes the terminal until it exits
 	rec         string // the service's name for it
 	which       string // primary | secondary
+	text        string // what an answer types
 }
 
 func (a action) String() string {
@@ -114,6 +120,10 @@ type Model struct {
 	have       bool
 	git        *proto.GitReport
 	recs       []advice.Rec
+	queue      []queue.Item
+	queuePane  string
+	paneSel    int
+	input      *answerInput
 	hist       history.Series
 	selPID     int
 	orphanPID  int
@@ -265,6 +275,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		first := !m.have
 		st := proto.State(msg)
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
+		m.queue = st.Queue
 		if m.lost {
 			m.lost, m.backoff, m.flash = false, 0, ""
 		}
@@ -339,6 +350,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.splashDone = true // any key stops the start screen, and does nothing else
 			return m, nil
 		}
+		if m.input != nil {
+			return m.typing(msg)
+		}
 		return m.key(msg.String())
 	}
 	return m, nil
@@ -378,6 +392,9 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		m.pending = nil
 		// A destructive action needs a typed y; Enter alone is not consent.
 		if k == "y" || (k == "enter" && !a.destructive) {
+			if a.attach {
+				return m, m.attach(a)
+			}
 			if a.nav {
 				run := m.opt.Run
 				return m, func() tea.Msg { return runNav(a, run) }
@@ -391,7 +408,7 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 				confirm = "y"
 			}
 			m.flash = "sent: " + a.String()
-			return m, m.send(proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm})
+			return m, m.send(proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
 		}
 		m.flash = "cancelled: " + a.String()
 		return m, nil
@@ -413,6 +430,10 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		m.pending = m.primary()
 	case "x":
 		m.pending = m.secondary()
+	case "a":
+		if pane, ok := m.answerTarget(); ok {
+			m.input = &answerInput{pane: pane}
+		}
 	case "r":
 		if m.tab == tabGit && m.conn != nil && !m.lost {
 			m.flash = "scanning git…"
@@ -438,7 +459,7 @@ func navAllowed(argv []string) bool {
 	}
 	target := argv[3]
 	switch argv[1] {
-	case "switch-client":
+	case "switch-client", "select-window", "select-pane", "attach-session":
 		return argv[2] == "-t" && paneID(target)
 	case "new-window":
 		return argv[2] == "-c" && filepath.IsAbs(target) && !strings.ContainsAny(target, "#;")
@@ -473,20 +494,85 @@ func runNav(a action, run func([]string) error) ranMsg {
 	return ranMsg{a.String(), nil}
 }
 
-func jump(pane string) *action {
+// jump goes to a pane: inside tmux the client switches to it; outside, the
+// console gives the terminal to `tmux attach` and comes back after it.
+func (m Model) jump(pane string) *action {
+	if m.opt.OutsideTmux {
+		return &action{label: "attach", nav: true, attach: true, steps: [][]string{
+			{"tmux", "select-window", "-t", pane},
+			{"tmux", "select-pane", "-t", pane},
+			{"tmux", "attach-session", "-t", pane},
+		}}
+	}
 	return &action{label: "jump", nav: true, steps: [][]string{{"tmux", "switch-client", "-t", pane}}}
+}
+
+// attach runs the moves, then gives the terminal to the last step.
+func (m Model) attach(a action) tea.Cmd {
+	for _, step := range a.steps {
+		if !navAllowed(step) {
+			return func() tea.Msg {
+				return ranMsg{strings.Join(step, " "), fmt.Errorf("refused: only tmux moves run in the console")}
+			}
+		}
+	}
+	moves, last := a.steps[:len(a.steps)-1], a.steps[len(a.steps)-1]
+	if r := runNav(action{steps: moves}, m.opt.Run); r.err != nil {
+		return func() tea.Msg { return r }
+	}
+	return tea.ExecProcess(exec.Command(last[0], last[1:]...), func(err error) tea.Msg { //nolint:gosec // argv checked by navAllowed
+		return ranMsg{strings.Join(last, " "), err}
+	})
+}
+
+// typing edits the answer line. Every printable key is text, q too.
+func (m Model) typing(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	in := *m.input
+	switch k.String() {
+	case "esc":
+		m.input, m.flash = nil, "cancelled: answer"
+		return m, nil
+	case "ctrl+c":
+		m.quitting = true
+		return m, tea.Quit
+	case "enter":
+		m.input = nil
+		if strings.TrimSpace(in.text) == "" {
+			m.flash = "cancelled: the answer is empty"
+			return m, nil
+		}
+		m.pending = &action{label: "answer", steps: answerSteps(in.pane, in.text), destructive: true,
+			rec: "answer:" + in.pane, which: "secondary", text: in.text}
+		return m, nil
+	case "backspace":
+		in.text = trimLast(in.text)
+	default:
+		if k.Text != "" && len([]rune(in.text)) < 500 {
+			in.text += k.Text
+		}
+	}
+	m.input = &in
+	return m, nil
 }
 
 // primary is what Enter does on the current panel: never destructive.
 func (m Model) primary() *action {
 	switch m.tab {
+	case tabQueue:
+		if it, ok := m.selectedQueue(); ok && it.Pane != "" {
+			return m.jump(it.Pane)
+		}
 	case tabSessions:
 		if s, ok := m.selected(); ok && s.Pane != "" {
-			return jump(s.Pane)
+			return m.jump(s.Pane)
 		}
 	case tabProcs:
 		if o, ok := m.selectedOrphan(); ok && o.PaneAlive {
-			return jump(o.Pane)
+			return m.jump(o.Pane)
+		}
+	case tabPanes:
+		if p, ok := m.selectedPane(); ok && p.id != "" {
+			return m.jump(p.id)
 		}
 	case tabGit:
 		if wt, ok := m.selectedWorktree(); ok {
@@ -526,6 +612,12 @@ func clampMove(i, d, n int) int { return min(max(i+d, 0), max(n-1, 0)) }
 
 func (m *Model) move(d int) {
 	switch m.tab {
+	case tabQueue:
+		if q := m.queue; len(q) > 0 {
+			m.queuePane = q[clampMove(m.queueSelIndex(), d, len(q))].Pane
+		}
+	case tabPanes:
+		m.paneSel = clampMove(m.paneSel, d, len(m.paneRows()))
 	case tabProcs:
 		if o := m.snap.Orphans; len(o) > 0 {
 			m.orphanPID = o[clampMove(m.orphanIndex(), d, len(o))].PID

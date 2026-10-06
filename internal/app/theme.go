@@ -39,6 +39,7 @@ type styles struct {
 	theme                                 Theme
 	text, muted, faint, hair, accent      lipgloss.Style
 	label, selected, warn, neg, tabActive lipgloss.Style
+	flame                                 lipgloss.Style
 }
 
 func newStyles(dark bool) styles {
@@ -59,6 +60,7 @@ func newStyles(dark bool) styles {
 		warn:      fg(t.Warn),
 		neg:       fg(t.Neg),
 		tabActive: fg(t.Accent).Underline(true),
+		flame:     fg(darkMark.Flame),
 	}
 }
 
