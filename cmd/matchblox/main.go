@@ -277,7 +277,13 @@ func serviceCmd() (*exec.Cmd, func(), error) {
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err == nil {
 		if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil { //nolint:gosec // our own state dir
 			c.Stdout, c.Stderr = f, f
-			closeLog = func() { f.Close() }
+			// The child holds its own descriptor; a failed close of ours
+			// loses nothing it writes, but say so.
+			closeLog = func() {
+				if err := f.Close(); err != nil {
+					fmt.Fprintln(os.Stderr, "matchblox: serve.log:", err)
+				}
+			}
 		}
 	}
 	detach(c)

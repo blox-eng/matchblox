@@ -46,26 +46,24 @@ func Listen(path string) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	release := func() {
-		if lk != nil {
-			lk.Close()
+	release := func() error {
+		if lk == nil {
+			return nil
 		}
+		return lk.Close()
 	}
 	if _, err := os.Lstat(path); err == nil {
 		if c, err := net.DialTimeout("unix", path, time.Second); err == nil {
 			c.Close()
-			release()
-			return nil, ErrInUse
+			return nil, errors.Join(ErrInUse, release())
 		}
 		if err := os.Remove(path); err != nil {
-			release()
-			return nil, fmt.Errorf("remove stale socket: %w", err)
+			return nil, errors.Join(fmt.Errorf("remove stale socket: %w", err), release())
 		}
 	}
 	l, err := net.Listen("unix", path)
 	if err != nil {
-		release()
-		return nil, err
+		return nil, errors.Join(err, release())
 	}
 	if lk != nil {
 		// The pid lets a console name the service when it does not answer.
@@ -88,13 +86,11 @@ func Owner(path string) int {
 // locked holds the lock for as long as the listener lives.
 type locked struct {
 	net.Listener
-	release func()
+	release func() error
 }
 
 func (l *locked) Close() error {
-	err := l.Listener.Close()
-	l.release()
-	return err
+	return errors.Join(l.Listener.Close(), l.release())
 }
 
 // Dial connects only through a directory that checkDir accepts.

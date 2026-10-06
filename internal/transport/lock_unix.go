@@ -16,11 +16,10 @@ func lock(path string) (*os.File, error) {
 		return nil, err
 	}
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil { //nolint:gosec // fd fits int
-		f.Close()
 		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return nil, ErrInUse
+			err = ErrInUse
 		}
-		return nil, err
+		return nil, errors.Join(err, f.Close())
 	}
 	return f, nil
 }
