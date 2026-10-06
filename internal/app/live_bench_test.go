@@ -1,4 +1,4 @@
-package ui
+package app
 
 import (
 	"os"
@@ -7,7 +7,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/procfs"
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // BenchmarkLiveRender renders this machine's snapshot. Opt-in: LIVE=1.
@@ -18,9 +20,9 @@ func BenchmarkLiveRender(b *testing.B) {
 	home, _ := os.UserHomeDir()
 	s := &sample.Sampler{FS: procfs.FS{Root: "/proc"}, Sys: procfs.Sys{Root: "/sys"}, Home: home}
 	s.Sample()
-	m := New(Options{Source: s.Sample})
+	m := New(Options{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 200, Height: 50})
-	next, _ = next.Update(snapMsg(s.Sample()))
+	next, _ = next.Update(stateMsg(proto.State{Doc: state.Doc{Snapshot: s.Sample()}}))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = next.(Model).render()

@@ -4,6 +4,8 @@
 package advice
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -18,6 +20,9 @@ type Action struct {
 	Label       string     `json:"label"`
 	Steps       [][]string `json:"steps"` // run in order
 	Destructive bool       `json:"destructive"`
+	// Nav moves the person's own terminal to a pane or a directory. The
+	// console runs it; every other step runs on the service host.
+	Nav bool `json:"nav,omitempty"`
 	// Guards[i], when present, must still hold right before Steps[i] runs:
 	// the evidence can be minutes old. A step whose guard fails is skipped.
 	Guards []Guard `json:"guards,omitempty"`
@@ -32,6 +37,10 @@ type Guard struct {
 }
 
 type Rec struct {
+	// ID names the rec across samples, so a console can ask the service to
+	// act on it: a hash of the title and every step of both actions, so an
+	// act never runs a step the person was not shown.
+	ID       string  `json:"id"`
 	Level    string  `json:"level"` // crit | warn | info
 	Title    string  `json:"title"`
 	Evidence string  `json:"evidence"`
@@ -70,7 +79,7 @@ func Build(snap sample.Snapshot, git *gitscan.Report) []Rec {
 				Guards: []Guard{{PID: o.PID, StartTicks: o.Start}}},
 		}
 		if o.PaneAlive {
-			r.Primary = &Action{Label: "jump to its pane", Steps: one("tmux", "switch-client", "-t", o.Pane)}
+			r.Primary = &Action{Label: "jump to its pane", Nav: true, Steps: one("tmux", "switch-client", "-t", o.Pane)}
 		}
 		out = append(out, r)
 	}
@@ -83,7 +92,7 @@ func Build(snap sample.Snapshot, git *gitscan.Report) []Rec {
 			Level:    "warn",
 			Title:    fmt.Sprintf("%s %s (%s)", capital(s.Do), s.Name, s.Pane),
 			Evidence: s.Why,
-			Primary:  &Action{Label: "jump to the session", Steps: one("tmux", "switch-client", "-t", s.Pane)},
+			Primary:  &Action{Label: "jump to the session", Nav: true, Steps: one("tmux", "switch-client", "-t", s.Pane)},
 			score:    500 + s.ContextPct,
 		}
 		if s.Do == "clear" {
@@ -105,6 +114,9 @@ func Build(snap sample.Snapshot, git *gitscan.Report) []Rec {
 	out = append(out, alertRecs(snap)...)
 	out = append(out, gitRecs(snap, git)...)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].score > out[j].score })
+	for i := range out {
+		out[i].ID = recID(out[i])
+	}
 	return out
 }
 
@@ -145,7 +157,7 @@ func alertRecs(snap sample.Snapshot) []Rec {
 				Level: "warn", score: 450 + top.CPU/10,
 				Title:    fmt.Sprintf("Look at %s in pane %s", top.Comm, pane),
 				Evidence: fmt.Sprintf("%s; the biggest CPU user is %s (pid %d) at %.0f%%", a.Evidence, top.Comm, top.PID, top.CPU),
-				Primary:  &Action{Label: "jump to its pane", Steps: one("tmux", "switch-client", "-t", pane)},
+				Primary:  &Action{Label: "jump to its pane", Nav: true, Steps: one("tmux", "switch-client", "-t", pane)},
 			})
 		}
 	}
@@ -217,7 +229,7 @@ func pollingRec(checkout string, cores float64, dirty, sessions int) Rec {
 		Level: "warn", score: 400 + 100*cores + float64(dirty)/100,
 		Title:    "Clean up " + checkout,
 		Evidence: ev + ". Every agent's git status walks the whole dirty tree.",
-		Primary:  &Action{Label: "open a shell there", Steps: one("tmux", "new-window", "-c", checkout)},
+		Primary:  &Action{Label: "open a shell there", Nav: true, Steps: one("tmux", "new-window", "-c", checkout)},
 	}
 }
 
@@ -226,4 +238,20 @@ func capital(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+func recID(r Rec) string {
+	h := sha256.New()
+	h.Write([]byte(r.Title))
+	for _, a := range []*Action{r.Primary, r.Second} {
+		h.Write([]byte{1})
+		if a == nil {
+			continue
+		}
+		for _, step := range a.Steps {
+			h.Write([]byte{0})
+			h.Write([]byte(strings.Join(step, "\x00")))
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil))[:12]
 }

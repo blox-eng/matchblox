@@ -109,3 +109,73 @@ func TestAlertRecs(t *testing.T) {
 		t.Fatalf("got %+v", recs)
 	}
 }
+
+func TestRecIDIsStableAndDistinct(t *testing.T) {
+	snap := sample.Snapshot{Sessions: []sample.Session{
+		{Pane: "%1", Name: "a", Busy: true, Do: "compact", ContextPct: 90, Why: "context 90%"},
+		{Pane: "%2", Name: "b", Busy: true, Do: "compact", ContextPct: 91, Why: "context 91%"},
+	}}
+	first, again := Build(snap, nil), Build(snap, nil)
+	if len(first) < 2 {
+		t.Fatalf("want 2 recs, got %d", len(first))
+	}
+	seen := map[string]bool{}
+	for i, r := range first {
+		if r.ID == "" || r.ID != again[i].ID {
+			t.Fatalf("rec %q: id %q is not stable (%q)", r.Title, r.ID, again[i].ID)
+		}
+		if seen[r.ID] {
+			t.Fatalf("id %q repeats", r.ID)
+		}
+		seen[r.ID] = true
+	}
+}
+
+// A step that moves the person's own terminal runs in the console; every
+// other step runs on the service host.
+func TestOnlyGoToActionsAreNav(t *testing.T) {
+	snap := sample.Snapshot{
+		Orphans: []sample.Orphan{{PID: 42, Comm: "bash", CPU: 99, HotFor: time.Hour, Parent: "init",
+			Pane: "%3", PaneAlive: true, Target: "w:1.1", Kill: []string{"kill", "42"}}},
+		Sessions: []sample.Session{
+			{Pane: "%1", Name: "busy-one", Busy: true, Do: "compact", ContextPct: 90, Why: "context 90%"},
+			{Pane: "%2", Name: "idle-one", Status: "idle", Do: "clear", ContextPct: 40, Why: "idle 2h"},
+		},
+		GitPolling: []sample.GitPolling{{Checkout: "/w/app", Cores: 2}},
+	}
+	git := &gitscan.Report{Repos: []gitscan.Repo{{Path: "/w/app", Main: "main", Behind: 3,
+		Worktrees: []gitscan.Worktree{{Path: "/w/wt/a", Safe: true, Remove: []string{"git", "worktree", "remove", "/w/wt/a"}}}}}}
+	n := 0
+	for _, r := range Build(snap, git) {
+		for _, a := range []*Action{r.Primary, r.Second} {
+			if a == nil {
+				continue
+			}
+			goTo := a.Steps[0][0] == "tmux" && (a.Steps[0][1] == "switch-client" || a.Steps[0][1] == "new-window")
+			if a.Nav != goTo {
+				t.Errorf("%q: Nav=%v for %v", r.Title, a.Nav, a.Steps)
+			}
+			if goTo {
+				n++
+			}
+		}
+	}
+	if n == 0 {
+		t.Fatal("no go-to action in the fixture")
+	}
+}
+
+// The id binds every step the person saw: a rec whose later steps change
+// is a different rec, so an act cannot run steps that were never shown.
+func TestRecIDBindsEveryStep(t *testing.T) {
+	a := Rec{Title: "Remove 2 merged worktrees", Second: &Action{Steps: [][]string{{"git", "worktree", "remove", "/w/a"}, {"git", "worktree", "remove", "/w/b"}}}}
+	b := Rec{Title: "Remove 2 merged worktrees", Second: &Action{Steps: [][]string{{"git", "worktree", "remove", "/w/a"}, {"git", "worktree", "remove", "/w/c"}}}}
+	c := Rec{Title: "t", Primary: &Action{Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}}, Second: &Action{Steps: [][]string{{"kill", "1"}}}}
+	d := Rec{Title: "t", Primary: &Action{Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}}, Second: &Action{Steps: [][]string{{"kill", "2"}}}}
+	if recID(a) == recID(b) {
+		t.Fatal("a changed later step kept the id")
+	}
+	if recID(c) == recID(d) {
+		t.Fatal("a changed secondary action kept the id")
+	}
+}
