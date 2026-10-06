@@ -45,11 +45,21 @@ var demoBase = time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
 // clock is the replay's clock: the recorder sets it, and both the service
 // and the console read it.
 type clock struct {
-	mu sync.Mutex
-	t  time.Time
+	mu     sync.Mutex
+	t      time.Time
+	follow *clock // set: this clock reads that one
 }
 
-func (c *clock) Now() time.Time      { c.mu.Lock(); defer c.mu.Unlock(); return c.t }
+func (c *clock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.follow != nil {
+		return c.follow.Now()
+	}
+	return c.t
+}
+
+func (c *clock) Follow(o *clock)     { c.mu.Lock(); c.follow = o; c.mu.Unlock() }
 func (c *clock) Set(t time.Time)     { c.mu.Lock(); c.t = t; c.mu.Unlock() }
 func (c *clock) Add(d time.Duration) { c.mu.Lock(); c.t = c.t.Add(d); c.mu.Unlock() }
 
@@ -67,12 +77,17 @@ type demoHost struct {
 	coreBusy    []uint64
 }
 
-// now is the sampler's Now: it notes the time, and every counter of this
-// sample follows it. A counter read on the running clock would drift from
-// the sampler's dt under load, and the busy loop would drop under the
-// orphan rule's threshold for one sample.
+// sampleEvery is how far the demo clock moves for each sample.
+const sampleEvery = 2 * time.Second
+
+// now is the sampler's Now. Each sample moves the demo clock by exactly
+// sampleEvery, and every counter of the sample follows that time. A clock
+// that ran on its own could give two samples the same time on a slow
+// machine (dt 0), and the busy loop would drop under the orphan rule's
+// threshold.
 func (h *demoHost) now(clk *clock) func() time.Time {
 	return func() time.Time {
+		clk.Add(sampleEvery)
 		t := clk.Now()
 		h.mu.Lock()
 		h.sampled = t
@@ -320,40 +335,21 @@ func TestReplay(t *testing.T) {
 	defer cancel()
 	go s.Run(ctx)
 
-	// The clock runs 40 times faster than the wall while the machine works,
-	// so the service sees the busy loop burn for longer than the orphan
-	// rule needs, and the sparklines fill.
-	run := func() (stop func()) {
-		quit, ended := make(chan struct{}), make(chan struct{})
-		go func() {
-			defer close(ended)
-			tk := time.NewTicker(25 * time.Millisecond)
-			defer tk.Stop()
-			for {
-				select {
-				case <-quit:
-					return
-				case <-tk.C:
-					clk.Add(time.Second)
-				}
-			}
-		}()
-		return func() { close(quit); <-ended }
-	}
 	// Warm up before the console starts: the replay opens on a machine at work.
-	stopWarm := run()
 	if _, err := waitFor(func() string { return fmt.Sprint(len(s.State().Orphans)) }, func(n string) bool { return n == "1" }, "warm up", stepTimeout); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(500 * time.Millisecond) // 20 s more of the demo clock: full sparklines
-	stopWarm()
-	warm := clk.Now()
+	time.Sleep(500 * time.Millisecond) // ten more samples: full sparklines
+	// The console reads its own clock: it stands still for the start screen,
+	// then follows the demo clock.
+	view := &clock{t: clk.Now()}
+	warm := view.Now()
 
 	a, b := net.Pipe()
 	go s.Handle(ctx, transport.NewConn(b)) //nolint:errcheck // ends with the test
 
 	m := app.New(app.Options{
-		Conn: transport.NewConn(a), Binary: version, CompactAt: cfg.Sessions.CompactAt, Now: clk.Now,
+		Conn: transport.NewConn(a), Binary: version, CompactAt: cfg.Sessions.CompactAt, Now: view.Now,
 		Run: func(argv []string) error { return fmt.Errorf("the demo moves no terminal: %v", argv) },
 	})
 	p := tea.NewProgram(recorder{m}, tea.WithContext(ctx), tea.WithInput(nil), tea.WithOutput(&bytes.Buffer{}),
@@ -396,15 +392,15 @@ func TestReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, ms := range []int{0, 70, 140, 210, 280, 350, 420, 490, 559} {
-		clk.Set(warm.Add(time.Duration(ms) * time.Millisecond))
+		view.Set(warm.Add(time.Duration(ms) * time.Millisecond))
 		keep(time.Duration(ms)*time.Millisecond, capture())
 	}
 
-	defer run()()
+	view.Follow(clk)
 	time.Sleep(600 * time.Millisecond) // a dozen samples reach the console: the sparklines fill
 
 	steps := []step{
-		{"the sessions", 1300 * time.Millisecond, "", has("ws-1", "web-checkout", "! compact")},
+		{"the sessions", 1300 * time.Millisecond, "", has("ws-1", "web-checkout", "! compact", "PROCS !")},
 		{"machine health", 3500 * time.Millisecond, "2", has("CPU")},
 		{"the recommendations", 6 * time.Second, "5", has("Kill detached busy loop 4242")},
 		{"a guarded action", 7500 * time.Millisecond, "x", has("kill 4242", "y run")},

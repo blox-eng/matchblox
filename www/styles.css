@@ -60,7 +60,7 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 .match .spark { opacity: 0; transform-box: fill-box; transform-origin: center; stroke: #FFD27A; stroke-width: 1.6; stroke-linecap: round; }
 .match .smoke { opacity: 0; fill: none; stroke: var(--faint); stroke-width: 1.5; stroke-linecap: round; transform-box: fill-box; }
 .match:hover .sleeve { stroke: var(--primary); }
-main { flex: 1; display: grid; align-content: center; gap: 20px; padding-block: 64px; max-width: 980px; }
+main { flex: 1; display: grid; align-content: center; gap: 28px; padding-block: 56px 64px; min-width: 0; }
 .micro { font: 500 11px/16px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
 .micro.lead { color: var(--primary); }
 h1 { margin: 0; font-size: clamp(40px, 6vw, 66px); line-height: 1.05; font-weight: 600; letter-spacing: -.035em; text-wrap: balance; }
@@ -92,9 +92,9 @@ footer a { color: var(--muted); }
 :root[data-theme="light"] { --stage: #FBF8F0;
   --t-bg: #F5F1E7; --t-fg: #1C1813; --t-muted: #5F5A4C; --t-faint: #8A8170; --t-hair: #DDD5C3; --t-accent: #9A7B3F; --t-wash: #ECE3CF; --t-warn: #8A6420; --t-neg: #9E4A34;
   --t-mark-top: #EFE9DC; --t-mark-left: #CFC6AF; --t-mark-right: #DED6C3; --t-mark-tray: #C4BAA2; --t-mark-striker: #8C6A43; --t-mark-stick: #B8925B; }
-.stage { background: var(--stage); border-radius: 8px; box-shadow: 0 0 0 1px var(--hair-strong); padding: 14px 16px; overflow: hidden; }
+.stage { background: var(--stage); border-radius: 8px; box-shadow: 0 0 0 1px var(--hair-strong); padding: 18px 16px; overflow: hidden; display: grid; justify-content: center; }
 @media (max-width: 640px) { .stage { padding: 10px 8px; border-radius: 6px; } }
-.replay { margin: 0; color: var(--t-fg); font: 400 min(13px, calc((100vw - 50px) / 60.5))/1.18 var(--mono); white-space: pre; transition: color 240ms ease-out; }
+.replay { margin: 0; color: var(--t-fg); font: 400 min(15px, calc((min(100vw, 1180px) - 82px) / 60.5))/1.18 var(--mono); white-space: pre; transition: color 240ms ease-out; }
 .replay .b { font-weight: 500; } .replay .u { text-decoration: underline; text-underline-offset: .2em; }
 .fg-fg { color: var(--t-fg); } .fg-muted { color: var(--t-muted); } .fg-faint { color: var(--t-faint); } .fg-hair { color: var(--t-hair); }
 .fg-accent { color: var(--t-accent); } .fg-warn { color: var(--t-warn); } .fg-neg { color: var(--t-neg); } .fg-bg { color: var(--t-bg); }
@@ -105,3 +105,33 @@ footer a { color: var(--muted); }
 .bg-mark-top { background: var(--t-mark-top); } .bg-mark-left { background: var(--t-mark-left); } .bg-mark-right { background: var(--t-mark-right); }
 .bg-mark-tray { background: var(--t-mark-tray); } .bg-mark-striker { background: var(--t-mark-striker); } .bg-mark-stick { background: var(--t-mark-stick); }
 .bg-flame { background: #E8822E; } .bg-flame-core { background: #FFD27A; } .bg-accent { background: var(--t-accent); }
+
+/* The hero: the line and the strike, side by side on a wide screen. */
+.hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; align-items: center; }
+.hero-text { display: grid; gap: 20px; min-width: 0; }
+.strike { display: block; width: 100%; height: 300px; }
+@media (max-width: 860px) { .hero { grid-template-columns: minmax(0, 1fr); } .strike { height: 220px; order: -1; } }
+
+/* Install: one row for each command, each with its copy button. */
+.install { display: grid; gap: 10px; max-width: 760px; }
+.install h2 { margin: 0; }
+.cmd { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 6px; box-shadow: 0 0 0 1px var(--hair-strong); background: var(--stage); min-width: 0; }
+.cmd .micro { width: 34px; flex: none; }
+.cmd code { flex: 1; min-width: 0; font: 400 14px/20px var(--mono); overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+.soon { flex: none; font: 500 10px/14px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); padding: 2px 6px; border-radius: 3px; box-shadow: 0 0 0 1px var(--hair-strong); vertical-align: 2px; }
+.copy { flex: none; height: 30px; padding: 0 12px; border: 0; border-radius: 4px; background: none; box-shadow: 0 0 0 1px var(--hair-strong); color: var(--fg); font: 500 12px/1 var(--sans); cursor: pointer; transition: box-shadow 180ms ease-out, color 180ms ease-out; }
+.copy:hover { box-shadow: 0 0 0 1px var(--primary); }
+.copy:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.copy[data-done] { color: var(--primary); }
+.copied { margin: 0; min-height: 16px; color: var(--muted); font-size: 12px; }
+@media (max-width: 640px) { .cmd { flex-wrap: wrap; } .cmd code { flex-basis: 100%; order: 3; font-size: 12px; white-space: normal; overflow-wrap: anywhere; } }
+
+/* Three blocks: what it does today, and what comes in v0.1. */
+.blocks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
+.blocks > div { padding: 2px 20px; min-width: 0; }
+.blocks > div:first-child { padding-left: 0; }
+.blocks > div + div { border-left: 1px solid var(--hair); }
+.blocks h3 { margin: 0 0 6px; font-size: 15px; line-height: 22px; font-weight: 600; }
+.blocks p { margin: 0; color: var(--muted); }
+@media (max-width: 760px) { .blocks { grid-template-columns: minmax(0, 1fr); row-gap: 18px; } .blocks > div { padding: 0; border-left: 0 !important; } }
+.links { display: flex; flex-wrap: wrap; gap: 12px 28px; }
