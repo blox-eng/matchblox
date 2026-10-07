@@ -4,60 +4,9 @@ import (
 	"fmt"
 	"sort"
 
-	"charm.land/lipgloss/v2"
-
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
-
-// A match for each session (spec 0003 §4.5): lit while the agent works,
-// unlit while it waits for the person, burnt at the compact limit. Burnt
-// comes first. The state word always stays next to it.
-type matchKind int
-
-const (
-	matchLit matchKind = iota
-	matchUnlit
-	matchBurnt
-)
-
-var matchGlyph = map[matchKind]string{matchLit: "●", matchUnlit: "●", matchBurnt: "◌"}
-
-func (m Model) matchStyle(k matchKind) lipgloss.Style {
-	switch k {
-	case matchLit:
-		return m.st.flame
-	case matchUnlit:
-		return m.st.accent
-	}
-	return m.st.faint
-}
-
-func (m Model) burnt(s sample.Session) bool {
-	return s.Context == "known" && m.compactAt() > 0 && s.ContextPct >= m.compactAt()
-}
-
-func (m Model) matchOf(s sample.Session) matchKind {
-	switch {
-	case m.burnt(s):
-		return matchBurnt
-	case s.Busy:
-		return matchLit
-	}
-	return matchUnlit
-}
-
-// queueMatch is unlit (the session waits), or burnt when its context is full.
-func (m Model) queueMatch(it queue.Item) matchKind {
-	for _, s := range m.snap.Sessions {
-		if s.Pane == it.Pane && m.burnt(s) {
-			return matchBurnt
-		}
-	}
-	return matchUnlit
-}
-
-func (m Model) match(k matchKind) string { return m.matchStyle(k).Render(matchGlyph[k]) + " " }
 
 var queueWord = map[string]string{
 	queue.StatePermission: "asks",
@@ -103,7 +52,7 @@ func (m Model) queuePanel(w int) []string {
 		if it.Estimated {
 			tail = st.faint.Render("estimated")
 		}
-		line := " " + m.match(m.queueMatch(it)) + word +
+		line := " " + m.queueCell(it) + word +
 			st.muted.Render(pad(sample.Human(m.now().Sub(it.Since)), colIdle)) +
 			st.text.Render(pad(it.Name, colName)) + st.muted.Render(pad(where, colPane)) + tail
 		if i == sel {

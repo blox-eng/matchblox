@@ -124,6 +124,8 @@ type Model struct {
 	queuePane  string
 	paneSel    int
 	input      *answerInput
+	changes    map[string]change // pane -> a match change that plays once
+	animating  bool
 	hist       history.Series
 	selPID     int
 	orphanPID  int
@@ -274,6 +276,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stateMsg:
 		first := !m.have
 		st := proto.State(msg)
+		m.queue = st.Queue
+		m.noteChanges(st.Sessions)
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
 		m.queue = st.Queue
 		if m.lost {
@@ -287,7 +291,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.hist.Append(history.FromSnapshot(m.snap))
 		}
 		m.keepSelection()
-		return m, m.recv()
+		return m, tea.Batch(m.recv(), m.animate())
+	case animMsg:
+		m.animating = false
+		return m, m.animate()
 	case resultMsg:
 		if text := describe(proto.Result(msg)); text != "" {
 			m.flash = text

@@ -291,9 +291,9 @@ func (m Model) sessions(w, h int) []string {
 
 func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
 	st := m.st
-	state, idle := m.match(m.matchOf(s))+st.text.Render(pad("busy", colSt-2)), pad("", colIdle)
+	state, idle := m.matchCell(s)+st.text.Render(pad("busy", colSt-2)), pad("", colIdle)
 	if !s.Busy {
-		state = m.match(m.matchOf(s)) + st.faint.Render(pad("idle", colSt-2))
+		state = m.matchCell(s) + st.faint.Render(pad("idle", colSt-2))
 		idle = st.muted.Render(pad(sample.Human(s.Idle), colIdle))
 	}
 	ctx := st.faint.Render(pad(s.Context, colBar+1+colPct))

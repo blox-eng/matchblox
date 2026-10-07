@@ -234,6 +234,7 @@ func skeleton(lines []string) string {
 	var b strings.Builder
 	for _, l := range lines {
 		l = sparks.ReplaceAllString(figure.ReplaceAllString(l, "0"), "")
+		l = strings.ReplaceAll(l, "✧", "✦") // a burning match flickers between the two
 		b.WriteString(strings.TrimSpace(spaces.ReplaceAllString(l, " ")))
 		b.WriteByte('\n')
 	}
@@ -443,20 +444,25 @@ func TestReplay(t *testing.T) {
 	if !lit {
 		t.Fatal("the replay never shows the struck, burning match")
 	}
-	// The sessions frame shows the three matches: lit, unlit and burnt.
+	// The replay shows the three matches: burning, at rest and spent.
 	matches := map[string]bool{}
 	for _, f := range frames {
 		for _, l := range f.Lines {
 			for _, sp := range l {
-				if strings.Contains(sp.Text, "●") || strings.Contains(sp.Text, "◌") {
-					matches[strings.TrimSpace(sp.Text)+" "+sp.FG] = true
+				switch text := strings.TrimSpace(sp.Text); {
+				case (text == "✦" || text == "✧") && strings.HasPrefix(sp.FG, "flame"):
+					matches["burning"] = true
+				case text == "╿" && strings.HasPrefix(sp.FG, "match-"):
+					matches["rest"] = true
+				case text == "│" && sp.FG == "faint":
+					matches["spent"] = true
 				}
 			}
 		}
 	}
-	for _, want := range []string{"● flame", "● accent", "◌ faint"} {
+	for _, want := range []string{"burning", "rest", "spent"} {
 		if !matches[want] {
-			t.Fatalf("the replay lacks the match %q; has %v", want, matches)
+			t.Fatalf("the replay lacks a %s match; has %v", want, matches)
 		}
 	}
 	if real, _ := os.Hostname(); real != "" && real != "ws-1" {
