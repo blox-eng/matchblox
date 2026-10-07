@@ -13,6 +13,7 @@ import (
 const (
 	cellW    = 8.4
 	cellH    = 17.0
+	margin   = 12
 	fontSize = 14
 	hold     = 3.0 // seconds the last frame stays before the loop starts again
 )
@@ -27,7 +28,10 @@ func SVG(cols, rows int, frames []Frame, tokens map[bool]map[string]color.Color)
 		period += frames[n-1].At.Seconds()
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %.0f %.0f" width="%.0f" height="%.0f" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="%d" role="img" aria-label="The matchblox console">`, w, h, w, h, fontSize)
+	// A margin round the screen, so a glyph in the first or last column is
+	// never cut where the SVG is shown edge to edge (the README).
+	vw, vh := w+2*margin, h+2*margin
+	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-%d -%d %.0f %.0f" width="%.0f" height="%.0f" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="%d" role="img" aria-label="The matchblox console">`, margin, margin, vw, vh, vw, vh, fontSize)
 	b.WriteString("<style>")
 	b.WriteString(palette(tokens[true]))
 	b.WriteString("@media (prefers-color-scheme: light){" + palette(tokens[false]) + "}")
@@ -43,7 +47,7 @@ func SVG(cols, rows int, frames []Frame, tokens map[bool]map[string]color.Color)
 	}
 	fmt.Fprintf(&b, "@media (prefers-reduced-motion: reduce){g{animation:none!important}.f%d{opacity:1}}", len(frames)-1)
 	b.WriteString("</style>")
-	fmt.Fprintf(&b, `<rect class="c-bg" width="%.0f" height="%.0f"/>`, w, h)
+	fmt.Fprintf(&b, `<rect class="c-bg" x="-%d" y="-%d" width="%.0f" height="%.0f"/>`, margin, margin, vw, vh)
 	for i, f := range frames {
 		fmt.Fprintf(&b, `<g class="f%d">`, i)
 		for y, l := range f.Lines {
