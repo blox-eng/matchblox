@@ -185,11 +185,18 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 
 ## 8. The site
 
-- **The first screen:** the header; the hero, with the line ("A tool for
-  modern software builders."), one sentence and the install block on the
-  left and the strike canvas on the right; and at the bottom centre the
-  invite to scroll: a match that strikes once and burns, over "See it run".
+- **The story:** once, everyone carried a matchbox to light a fire wherever
+  they went. matchblox is the one you carry to every terminal: the fire is
+  an idea, and keeping it burning is to keep building it. **One fire for
+  each view:** only the hero's match burns; other motifs are the box, the
+  drawer and the striker.
+- **The first screen:** the header; the hero, with the news line ("New ·
+  <what is new> · Changelog →", to `CHANGELOG.md`), the line ("Light an
+  idea. Keep it burning."), one sentence and the install block on the left
+  and the strike canvas on the right; and at the bottom centre the invite
+  to scroll: a closed matchbox whose drawer slides out, over "Open the box".
   On a phone the canvas comes first and the invite follows the install.
+- **Tags:** a feature that is not released yet has the tag "Soon".
 - **Then:** the replay of the real console, which starts when it scrolls
   into view; three short blocks; the motto "Light the match. Keep it
   burning."; the links; the footer (From Blox Engineering · GitHub ·
