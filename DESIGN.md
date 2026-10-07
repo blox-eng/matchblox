@@ -56,8 +56,8 @@ The match and the mark (§3, §4):
 | Token | Dark | Light | Use |
 |---|---|---|---|
 | `flame` | `#E8822E` | `#E8822E` | the flame |
-| `flame-amber` | `#F5A54A` | `#EE9A3A` | the flame, between its orange and its core |
-| `flame-core` | `#FFD27A` | `#FFD27A` | the core of the flame, the flash of a strike |
+| `flame-amber` | `#F5A54A` | `#DF8E2C` | the flame, between its orange and its core |
+| `flame-core` | `#FFD27A` | `#D69A2A` | the core of the flame, the flash of a strike |
 | `match-head` | `#C2452D` | `#B23A24` | the head of a match at rest |
 | `match-breath-1..3` | `#9E3A26` `#7A2F1F` `#572318` | `#BF5F4B` `#CD8372` `#DAA899` | the head as it breathes, toward the ground |
 | `match-ember` | `#9C5A46` | `#9E5E4A` | a flame that dies, a head that burns away |

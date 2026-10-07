@@ -83,8 +83,9 @@ var darkMark = markColours{
 var lightMark = markColours{
 	Top: lipgloss.Color("#EFE9DC"), Left: lipgloss.Color("#CFC6AF"), Right: lipgloss.Color("#DED6C3"),
 	Tray: lipgloss.Color("#C4BAA2"), Striker: lipgloss.Color("#8C6A43"), Stick: lipgloss.Color("#B8925B"),
-	Flame: lipgloss.Color("#E8822E"), Core: lipgloss.Color("#FFD27A"),
-	Head: lipgloss.Color("#B23A24"), Ember: lipgloss.Color("#9E5E4A"), Amber: lipgloss.Color("#EE9A3A"),
+	// In daylight the pale core vanishes on the cream ground: a deeper one.
+	Flame: lipgloss.Color("#E8822E"), Core: lipgloss.Color("#D69A2A"),
+	Head: lipgloss.Color("#B23A24"), Ember: lipgloss.Color("#9E5E4A"), Amber: lipgloss.Color("#DF8E2C"),
 	Breath: [3]color.Color{lipgloss.Color("#BF5F4B"), lipgloss.Color("#CD8372"), lipgloss.Color("#DAA899")},
 }
 
