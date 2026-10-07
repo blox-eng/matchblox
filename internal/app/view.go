@@ -82,6 +82,10 @@ func (m Model) render() string {
 	}
 	var body []string
 	switch m.tab {
+	case tabQueue:
+		body = m.queuePanel(w)
+	case tabPanes:
+		body = m.panesPanel(w)
 	case tabSessions:
 		body = m.sessions(w, m.height-len(out)-2)
 	case tabMachine:
@@ -146,40 +150,65 @@ func (m Model) header(w int) string {
 }
 
 const (
-	tabSessions = iota
+	tabQueue = iota
+	tabSessions
 	tabMachine
 	tabProcs
 	tabGit
 	tabRecs
 	tabHistory
+	tabPanes
 )
 
-var tabNames = []string{"sessions", "machine", "procs", "git", "recs", "history"}
+var tabNames = []string{"queue", "sessions", "machine", "procs", "git", "recs", "history", "panes"}
 
+// tabShort names the tabs when the full names do not fit.
+var tabShort = []string{"queue", "sess", "mach", "procs", "git", "recs", "hist", "panes"}
+
+// tabs tries the full names, then a narrower gap, then the short names,
+// so every tab and the alert marker stay on the line.
 func (m Model) tabs(w int) string {
+	alert := ""
+	if n := len(m.snap.Alerts); n > 0 {
+		alert = m.st.warn.Render(fmt.Sprintf("▲ %d alert", n))
+		if n > 1 {
+			alert += m.st.warn.Render("s")
+		}
+	}
+	var line string
+	for _, try := range []struct {
+		names []string
+		gap   string
+	}{{tabNames, "   "}, {tabNames, "  "}, {tabShort, "  "}} {
+		line = m.tabLine(try.names, try.gap)
+		if lipgloss.Width(line)+lipgloss.Width(alert)+2 <= w {
+			break
+		}
+	}
+	if alert != "" {
+		line += strings.Repeat(" ", max(w-lipgloss.Width(line)-lipgloss.Width(alert)-1, 2)) + alert
+	}
+	return fit(line, w)
+}
+
+func (m Model) tabLine(names []string, gap string) string {
 	var parts []string
-	for i, name := range tabNames {
+	for i, name := range names {
 		label := fmt.Sprintf("%d %s", i+1, strings.ToUpper(name))
 		switch {
 		case i == m.tab:
 			parts = append(parts, m.st.tabActive.Render(label))
 		case i == tabProcs && len(m.snap.Orphans) > 0:
 			parts = append(parts, m.st.neg.Render(label+" !"))
+		case i == tabQueue && len(m.queue) > 0 && m.tab != tabQueue:
+			parts = append(parts, m.st.accent.Render(fmt.Sprintf("%s %d", label, len(m.queue))))
 		case i == tabRecs && len(m.recs) > 0:
 			parts = append(parts, m.st.muted.Render(fmt.Sprintf("%s %d", label, len(m.recs))))
 		default:
 			parts = append(parts, m.st.faint.Render(label))
 		}
 	}
-	line := " " + strings.Join(parts, "   ")
-	if n := len(m.snap.Alerts); n > 0 {
-		alert := m.st.warn.Render(fmt.Sprintf("▲ %d alert", n))
-		if n > 1 {
-			alert += m.st.warn.Render("s")
-		}
-		line += strings.Repeat(" ", max(w-lipgloss.Width(line)-lipgloss.Width(alert)-1, 2)) + alert
-	}
-	return fit(line, w)
+	return " " + strings.Join(parts, gap)
 }
 
 func (m Model) footer(w int) string {
@@ -192,13 +221,15 @@ func (m Model) footer(w int) string {
 		return fit(" "+st.label.Render("RUN ")+st.text.Render(m.pending.String())+"   "+st.muted.Render(confirm), w)
 	}
 	keys := map[int]string{
-		tabSessions: "↑↓ select  ⏎ jump",
+		tabQueue:    "↑↓ select  ⏎ go  a answer",
+		tabPanes:    "↑↓ select  ⏎ go",
+		tabSessions: "↑↓ select  ⏎ jump  a answer",
 		tabMachine:  "",
 		tabProcs:    "↑↓ select  ⏎ jump  x kill",
 		tabGit:      "↑↓ select  ⏎ shell  x remove  r rescan",
 		tabRecs:     "↑↓ select  ⏎ do  x the other action",
 		tabHistory:  "",
-	}[m.tab] + "  1-6 panel  q quit"
+	}[m.tab] + "  1-8 panel  q quit"
 	left := " " + st.muted.Render(keys)
 	if m.flash != "" {
 		left = " " + st.text.Render(m.flash)
@@ -211,8 +242,8 @@ const (
 	colPane = 11 // session:window.pane; widened to show the tab name when there is room
 	colTab  = 12
 	colName = 18
-	colSt   = 6
-	colIdle = 7
+	colSt   = 7 // the match, a space, the word
+	colIdle = 6
 	colBar  = 10
 	colPct  = 9
 	colCPU  = 6
@@ -260,9 +291,9 @@ func (m Model) sessions(w, h int) []string {
 
 func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
 	st := m.st
-	state, idle := st.text.Render(pad("busy", colSt)), pad("", colIdle)
+	state, idle := m.matchCell(s)+st.text.Render(pad("busy", colSt-2)), pad("", colIdle)
 	if !s.Busy {
-		state = st.faint.Render(pad("idle", colSt))
+		state = m.matchCell(s) + st.faint.Render(pad("idle", colSt-2))
 		idle = st.muted.Render(pad(sample.Human(s.Idle), colIdle))
 	}
 	ctx := st.faint.Render(pad(s.Context, colBar+1+colPct))

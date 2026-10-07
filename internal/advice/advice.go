@@ -34,6 +34,7 @@ type Guard struct {
 	StartTicks uint64 `json:"start_ticks,omitempty"` // that started at this time
 	Worktree   string `json:"worktree,omitempty"`    // has no changes and no process inside
 	IdlePane   string `json:"idle_pane,omitempty"`   // the agent in this pane is still idle
+	AnswerPane string `json:"answer_pane,omitempty"` // the agent here still waits, and not at a permission prompt
 }
 
 type Rec struct {

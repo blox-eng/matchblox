@@ -32,6 +32,9 @@ const (
 	KindResult   Kind = "result"
 	KindStoker   Kind = "stoker"
 	KindError    Kind = "error"
+	// KindHook is the first and only message of `matchblox hook`: one
+	// hooks.Event, sent after the service hello, with no hello back.
+	KindHook Kind = "hook"
 )
 
 type Envelope struct {
@@ -68,6 +71,8 @@ type Act struct {
 	RecID   string `json:"rec_id"`
 	Which   string `json:"which"`             // "primary" | "secondary"
 	Confirm string `json:"confirm,omitempty"` // "y" for a destructive action
+	// Text is what the person typed for an "answer:<pane>" act.
+	Text string `json:"text,omitempty"`
 }
 
 type Result struct {

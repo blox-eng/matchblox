@@ -19,6 +19,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
@@ -34,7 +35,9 @@ func fixtureState() proto.State {
 		Rules: sample.DefaultRules,
 	}
 	snap := s.Sample()
-	return proto.State{Doc: state.Doc{Snapshot: snap, Recommendations: advice.Build(snap, nil)}}
+	q := queue.New()
+	q.Merge(snap.Sessions, snap.At)
+	return proto.State{Doc: state.Doc{Snapshot: snap, Recommendations: advice.Build(snap, nil), Queue: q.Items()}}
 }
 
 // fakeConn is a service that answers with what the test puts in.
@@ -100,9 +103,11 @@ func loadedWith(t *testing.T, width int, st proto.State) (Model, *fakeConn) {
 	return next.(Model), f
 }
 
+// loaded is the console on the fixture machine, on the sessions tab.
 func loaded(t *testing.T, width int) Model {
 	t.Helper()
 	m, _ := loadedWith(t, width, fixtureState())
+	m.tab = tabSessions
 	return m
 }
 
@@ -218,14 +223,14 @@ func TestSmoke(t *testing.T) {
 	go func() { _, err := p.Run(); done <- err }()
 
 	deadline := time.Now().Add(5 * time.Second)
-	for !strings.Contains(out.String(), "app-feature") && time.Now().Before(deadline) {
+	for !strings.Contains(out.String(), "app-review") && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	p.Quit()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "app-feature") {
+	if !strings.Contains(out.String(), "app-review") {
 		t.Fatalf("rendered output lacks the fixture session:\n%q", out.String())
 	}
 	f.mu.Lock()
@@ -309,7 +314,7 @@ func TestConnectionLostKeepsStateAndRedials(t *testing.T) {
 	next, _ = next.Update(stateMsg(fixtureState()))
 	next, cmd := next.Update(lostMsg{err: io.EOF})
 	out := next.(Model).render()
-	if !strings.Contains(out, "connection lost") || !strings.Contains(out, "app-feature") {
+	if !strings.Contains(out, "connection lost") || !strings.Contains(out, "app-review") {
 		t.Fatalf("lost connection must keep the last state and say so:\n%s", out)
 	}
 	if cmd == nil {
