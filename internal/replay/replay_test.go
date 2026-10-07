@@ -98,3 +98,16 @@ func TestStillEscapesAndUsesTokenClasses(t *testing.T) {
 		t.Fatal("the CSP forbids inline style")
 	}
 }
+
+// The README shows the SVG edge to edge: the last column and the first need
+// a margin, or a glyph that reaches the edge is cut.
+func TestSVGHasMargin(t *testing.T) {
+	tok := map[bool]map[string]color.Color{true: {"bg": color.Black}, false: {"bg": color.White}}
+	svg := string(SVG(10, 2, nil, tok))
+	if !strings.Contains(svg, `viewBox="-12 -12 108 58"`) {
+		t.Fatalf("no margin: %.120s", svg)
+	}
+	if !strings.Contains(svg, `<rect class="c-bg" x="-12" y="-12" width="108" height="58"/>`) {
+		t.Fatalf("the ground does not cover the margin: %.400s", svg)
+	}
+}
