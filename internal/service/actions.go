@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/queue"
 )
 
 // doneFor is how long an act that ran answers "already done" to the same
@@ -73,11 +75,32 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		return proto.Result{}
 	}
 	key := a.RecID + "\x00" + a.Which
+	pane, answer := strings.CutPrefix(a.RecID, "answer:")
+	if answer {
+		// The same text to a new question is a new answer: the key holds
+		// the time the session started to wait.
+		it, _ := s.queued(pane)
+		key += "\x00" + a.Text + "\x00" + it.Since.String()
+	}
 	if !s.acts.begin(key) {
 		return proto.Result{Skipped: []string{"already done"}}
 	}
 	ran := false
 	defer func() { s.acts.end(key, ran) }()
+	if answer {
+		if err := panes.CheckAnswer(a.Text); err != nil {
+			return proto.Result{Err: err.Error()}
+		}
+		switch it, ok := s.queued(pane); {
+		case !ok:
+			return proto.Result{Err: "the session in " + pane + " no longer waits"}
+		case it.State == queue.StatePermission:
+			return proto.Result{Err: "a permission prompt is answered in its pane: Enter goes there"}
+		}
+		res := s.Actions.Do(ctx, answerAction(pane, a.Text), a.Confirm)
+		ran = len(res.Ran) > 0
+		return res
+	}
 	action, ok := s.resolve(a.RecID, a.Which)
 	if !ok {
 		return proto.Result{Err: "unknown action"}
@@ -131,4 +154,29 @@ func (s *Service) resolve(id, which string) (advice.Action, bool) {
 		}
 	}
 	return advice.Action{}, false
+}
+
+// answerAction types one line and Enter. Both steps are guarded: a bare
+// Enter at a permission prompt would approve it.
+func answerAction(pane, text string) advice.Action {
+	g := advice.Guard{AnswerPane: pane}
+	return advice.Action{Label: "answer", Steps: panes.Send(pane, text), Destructive: true, Guards: []advice.Guard{g, g}}
+}
+
+// queued finds the queue item of a pane. Hold no lock.
+func (s *Service) queued(pane string) (queue.Item, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, it := range s.cur.Queue {
+		if it.Pane == pane {
+			return it, true
+		}
+	}
+	return queue.Item{}, false
+}
+
+// answerable is the guard of an answer, checked right before each step.
+func (s *Service) answerable(pane string) bool {
+	it, ok := s.queued(pane)
+	return ok && it.State != queue.StatePermission
 }

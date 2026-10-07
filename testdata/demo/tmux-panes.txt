@@ -2,3 +2,4 @@
 %2	work:2.1	web	1300	claude	/work/web
 %3	work:3.1	docs	1400	claude	/work/docs
 %4	lab:1.1	shell	1500	zsh	/work/lab
+%5	work:4.1	billing	1600	claude	/work/billing

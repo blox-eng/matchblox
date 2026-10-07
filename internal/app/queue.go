@@ -1,0 +1,165 @@
+package app
+
+import (
+	"fmt"
+	"sort"
+
+	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/sample"
+)
+
+var queueWord = map[string]string{
+	queue.StatePermission: "asks",
+	queue.StateQuestion:   "waits",
+	queue.StateFinished:   "done",
+}
+
+func (m Model) queueSelIndex() int {
+	for i, it := range m.queue {
+		if it.Pane == m.queuePane {
+			return i
+		}
+	}
+	return 0
+}
+
+func (m Model) selectedQueue() (queue.Item, bool) {
+	if len(m.queue) == 0 {
+		return queue.Item{}, false
+	}
+	return m.queue[m.queueSelIndex()], true
+}
+
+const colWord = 6
+
+func (m Model) queuePanel(w int) []string {
+	st := m.st
+	lines := []string{"", st.label.Render(fmt.Sprintf(" %d WAITING FOR YOU", len(m.queue)))}
+	if len(m.queue) == 0 {
+		return append(lines, st.faint.Render(" nothing waits for you"))
+	}
+	sel := m.queueSelIndex()
+	for i, it := range m.queue {
+		word := st.text.Render(pad(queueWord[it.State], colWord))
+		if it.State == queue.StatePermission {
+			word = st.accent.Render(pad(queueWord[it.State], colWord))
+		}
+		where := place(it.Target, it.Pane)
+		if i == sel {
+			where = "▌" + where
+		}
+		tail := st.muted.Render(it.LastLine)
+		if it.Estimated {
+			tail = st.faint.Render("estimated")
+		}
+		line := " " + m.queueCell(it) + word +
+			st.muted.Render(pad(sample.Human(m.now().Sub(it.Since)), colIdle)) +
+			st.text.Render(pad(it.Name, colName)) + st.muted.Render(pad(where, colPane)) + tail
+		if i == sel {
+			line = st.selected.Render(fit(line, w))
+		}
+		lines = append(lines, fit(line, w))
+	}
+	if m.input != nil {
+		lines = append(lines, "", fit(" "+st.label.Render("ANSWER ")+st.muted.Render(m.input.pane+" ")+
+			st.text.Render(m.input.text)+st.accent.Render("▏"), w),
+			st.faint.Render(" ⏎ review  esc cancel"))
+	}
+	return lines
+}
+
+// paneRow is one tmux pane, with an agent or not.
+type paneRow struct {
+	id, target, what, path string
+}
+
+func (m Model) paneRows() []paneRow {
+	var rows []paneRow
+	for _, s := range m.snap.Sessions {
+		rows = append(rows, paneRow{s.Pane, s.Target, s.Name, s.Cwd})
+	}
+	for _, p := range m.snap.IdlePanes {
+		rows = append(rows, paneRow{p.Pane, p.Target, p.Command, p.Path})
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].target < rows[j].target })
+	return rows
+}
+
+func (m Model) panesPanel(w int) []string {
+	st := m.st
+	rows := m.paneRows()
+	lines := []string{"", st.label.Render(fmt.Sprintf(" %d PANES", len(rows))),
+		st.label.Render(fit(" "+pad("TMUX", colPane)+pad("RUNS", colName)+"PATH", w))}
+	sel := min(m.paneSel, max(len(rows)-1, 0))
+	for i, r := range rows {
+		where := place(r.target, r.id)
+		if i == sel {
+			where = "▌" + where
+		}
+		line := " " + st.muted.Render(pad(where, colPane)) + st.text.Render(pad(r.what, colName)) + st.muted.Render(tilde(r.path))
+		if i == sel {
+			line = st.selected.Render(fit(line, w))
+		}
+		lines = append(lines, fit(line, w))
+	}
+	return lines
+}
+
+func (m Model) selectedPane() (paneRow, bool) {
+	rows := m.paneRows()
+	if len(rows) == 0 {
+		return paneRow{}, false
+	}
+	return rows[min(m.paneSel, len(rows)-1)], true
+}
+
+// answerInput is the one line the person types for `a`.
+type answerInput struct {
+	pane, text string
+}
+
+// answerSteps is what the person confirms; the service builds the same
+// steps with panes.Send and runs its own.
+func answerSteps(pane, text string) [][]string {
+	return [][]string{
+		{"tmux", "send-keys", "-t", pane, "-l", "--", text},
+		{"tmux", "send-keys", "-t", pane, "Enter"},
+	}
+}
+
+// answerTarget is the pane `a` types into: a session in the queue that
+// waits for an answer. At a permission prompt the Enter of an answer would
+// approve it, so the person goes to the pane instead (why says so).
+func (m Model) answerTarget() (pane, why string) {
+	switch m.tab {
+	case tabQueue:
+		if it, ok := m.selectedQueue(); ok {
+			pane = it.Pane
+		}
+	case tabSessions:
+		if s, ok := m.selected(); ok {
+			pane = s.Pane
+		}
+	}
+	if pane == "" {
+		return "", ""
+	}
+	for _, it := range m.queue {
+		if it.Pane != pane {
+			continue
+		}
+		if it.State == queue.StatePermission {
+			return "", "a permission prompt is answered in its pane: Enter goes there"
+		}
+		return pane, ""
+	}
+	return "", "the session in " + pane + " does not wait for an answer"
+}
+
+func trimLast(s string) string {
+	r := []rune(s)
+	if len(r) == 0 {
+		return s
+	}
+	return string(r[:len(r)-1])
+}
