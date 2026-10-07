@@ -8,6 +8,17 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Added
 
+- The queue, tab 1: each agent that asks for permission, waits for input or
+  finished its turn, oldest first, with its last line. Claude Code hooks
+  call `matchblox hook <event>`; without hooks the queue is estimated.
+- Each session is a match: `✦` burning while it works, `╿` at rest while it
+  waits (it breathes when it asks), `│` spent at the compact limit. It
+  strikes when work starts. `--no-motion` keeps it still.
+- Enter goes to the pane (it attaches outside tmux), and `a` answers in one
+  line after a typed `y`. A permission prompt is answered in its pane.
+- The Panes tab lists every tmux pane.
+- `DESIGN.md`: colour, the mark, the match, motion, layout, copy, the site.
+
 - `curl -fsSL https://matchblox.sh | sh` installs matchblox and starts it.
   It verifies the checksum (and the build provenance, with `gh`) of a
   release binary; until v0.1.0 it builds from source with Go.
