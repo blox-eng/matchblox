@@ -152,20 +152,27 @@ footer a { color: var(--muted); }
 @media (max-width: 760px) { .blocks { grid-template-columns: minmax(0, 1fr); row-gap: 18px; } .blocks > div { padding: 0; border-left: 0 !important; } }
 .links { display: flex; flex-wrap: wrap; gap: 12px 28px; }
 
-/* The invite to scroll: a match that strikes once, then burns. */
-.scroll-invite { justify-self: center; display: grid; justify-items: center; gap: 8px; padding: 6px 12px 22px; color: var(--muted); text-decoration: none; font: 500 11px/16px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+/* The invite to scroll: a closed matchbox whose drawer slides out, as if
+   to open it. One fire on the page, the hero's: this one does not burn. */
+.scroll-invite { justify-self: center; display: grid; justify-items: center; gap: 10px; padding: 6px 12px 22px; color: var(--muted); text-decoration: none; font: 500 11px/16px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
 .scroll-invite:hover { color: var(--fg); }
 .scroll-invite:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; border-radius: 4px; }
-.scroll-invite svg { display: block; overflow: visible; animation: bob 2.4s ease-in-out 2.2s infinite; }
-.scroll-invite .stick { fill: var(--stick); }
-.scroll-invite .head { fill: var(--t-match-head); animation: flash 300ms ease-out 1.1s 1 both; }
-.scroll-invite .fire { fill: #E8822E; }
-.scroll-invite .core { fill: var(--t-flame-core); }
-.scroll-invite .flame { transform-origin: 12px 19px; transform: scale(0); animation: catch 500ms ease-out 1.2s 1 forwards, flicker 1.6s ease-in-out 1.7s infinite; }
-@keyframes flash { 0% { fill: var(--t-match-head); } 40% { fill: var(--t-flame-core); } 100% { fill: var(--t-match-head); } }
-@keyframes catch { 0% { transform: scale(0); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
-@keyframes flicker { 0%, 100% { transform: scale(1, 1); } 25% { transform: scale(.94, 1.08); } 50% { transform: scale(1.04, .95); } 75% { transform: scale(.97, 1.04); } }
-@keyframes bob { 0%, 100% { translate: 0 0; } 50% { translate: 0 5px; } }
+.scroll-invite svg { display: block; overflow: visible; }
+.scroll-invite .sleeve { fill: var(--box-top); stroke: var(--box-edge); stroke-width: 1; }
+.scroll-invite .band { fill: var(--striker); }
+.scroll-invite .tray { fill: var(--tray); stroke: var(--box-edge); stroke-width: 1; }
+.scroll-invite .tip { fill: var(--t-match-head); }
+.scroll-invite .drawer { animation: open-box 3.2s cubic-bezier(.45,.05,.3,1) 1.2s infinite; }
+.scroll-invite:hover .drawer { animation-duration: 1.6s; }
+@keyframes open-box { 0%, 18% { translate: 0 0; } 45%, 70% { translate: 0 14px; } 100% { translate: 0 0; } }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
-@media (prefers-reduced-motion: reduce) { .scroll-invite svg, .scroll-invite .head { animation: none; } .scroll-invite .flame { animation: none; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .scroll-invite .drawer { animation: none; translate: 0 8px; } }
 @media (max-width: 860px) { .scroll-invite { padding-top: 0; } }
+
+/* The news line over the hero: what is new, and the way to the changelog. */
+.news { justify-self: start; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; max-width: 100%; padding: 6px 12px 6px 6px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--hair-strong); color: var(--muted); text-decoration: none; font: 400 13px/18px var(--sans); transition: box-shadow 130ms ease, color 130ms ease; }
+.news:hover { color: var(--fg); box-shadow: inset 0 0 0 1px var(--primary); }
+.news:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.news .tag { font: 500 10px/14px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bg); background: var(--primary); padding: 2px 7px; border-radius: 999px; }
+.news .go { color: var(--primary); font: 500 12px/18px var(--mono); }
+@media (max-width: 640px) { .news { border-radius: 12px; font-size: 12px; padding: 6px 10px 6px 6px; gap: 4px 8px; } }
