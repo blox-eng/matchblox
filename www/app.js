@@ -122,7 +122,8 @@ function onReady(fn) {
 })();
 
 // The replay: frames of the real console (www/demo/frames.json, recorded
-// by TestReplay), drawn as text in the page's theme. With reduced motion,
+// by TestReplay), drawn as text in the page's theme. It starts when it
+// scrolls into view. With reduced motion,
 // or without script, the still frame in the page stays.
 onReady(() => {
   const pre = document.querySelector(".stage .replay");
@@ -158,12 +159,12 @@ onReady(() => {
       const next = k + 1 < doc.frames.length ? doc.frames[k + 1].at - f.at : HOLD;
       timer = setTimeout(() => show((k + 1) % doc.frames.length), next);
     };
-    // Frame 0 has every line; a loop starts there again.
-    show(0);
-    document.addEventListener("visibilitychange", () => {
-      clearTimeout(timer);
-      if (!document.hidden) show(0);
-    });
+    // It plays from frame 0 (which has every line) each time it scrolls
+    // into view, and rests while it is out of view or the tab is hidden.
+    let seen = false;
+    const run = () => { clearTimeout(timer); if (seen && !document.hidden) show(0); };
+    new IntersectionObserver(([e]) => { seen = e.isIntersecting; run(); }, { threshold: 0.35 }).observe(pre);
+    document.addEventListener("visibilitychange", run);
   }).catch(() => { /* the still frame stays */ });
 });
 

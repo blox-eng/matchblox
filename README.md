@@ -11,16 +11,24 @@
 [![Go 1.26](https://img.shields.io/badge/go-1.26-00ADD8.svg)](https://go.dev/dl/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 
+<img src="www/demo/replay.svg" width="100%" alt="The matchblox console on a demo machine: the queue of agents that wait, each session with its match, machine health, and a guarded kill of a detached busy loop">
+
 One terminal console for every AI coding agent you run. It shows which agent
 waits for you, what loads the machine, the state of every git checkout, and the
 one safe action that resolves each thing.
 
-> **Status: pre-release.** The service and the console run today on the host.
-> The "waiting for you" queue, remote mode and the stoker are in progress. The
-> plan is in [design/0002-v0.1-plan.md](design/0002-v0.1-plan.md).
+> **Status: pre-release.** The service, the console and the queue of agents
+> that wait for you run today on the host. The control pane for a phone, remote
+> mode, night mode and setup are in progress. The plan is in
+> [design/0004-v0.1-plan.md](design/0004-v0.1-plan.md).
 
 ## What it shows
 
+- **The queue**: each agent that asks for permission, waits for input or
+  finished its turn, oldest first, with its last line. `Enter` goes to its
+  pane; `a` answers in one line.
+- **A match for each session**: `✦` burning while it works, `╿` at rest while
+  it waits, `│` spent when its context is full.
 - **Sessions** by tmux pane: busy or idle, context use against the model's
   window, 30-minute token burn, CPU of the whole process tree, and when to
   compact or clear.
@@ -45,11 +53,16 @@ one safe action that resolves each thing.
 
 ## Install
 
-From source, until the first release:
+```bash
+curl -fsSL https://matchblox.sh | sh
+```
+
+The script verifies the release binary and starts matchblox; read it first at
+[matchblox.sh](https://matchblox.sh/install.sh). Until v0.1.0 it builds from
+source, the same as:
 
 ```bash
 go install github.com/blox-eng/matchblox/cmd/matchblox@latest
-tmux new-window -n matchblox matchblox
 ```
 
 `matchblox` connects to the service on the host, or starts it in the
@@ -63,7 +76,8 @@ scripts and agents. Thresholds live in `~/.config/matchblox/config.toml`; see
 
 ## Design
 
-[design/0001-v0.1.md](design/0001-v0.1.md) is the contract.
+[DESIGN.md](DESIGN.md) is how matchblox looks, moves and speaks: the match,
+colour, motion, layout and copy. [design/](design/) holds the specs and plans.
 [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) ·
 [CHANGELOG.md](CHANGELOG.md)
 

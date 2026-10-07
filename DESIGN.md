@@ -185,11 +185,16 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 
 ## 8. The site
 
-- **Order:** the line ("A tool for modern software builders."), one
-  sentence, the strike canvas; then the replay of the real console; then
-  install; then three short blocks; the motto "Light the match. Keep it
+- **The first screen:** the header; the hero, with the line ("A tool for
+  modern software builders."), one sentence and the install block on the
+  left and the strike canvas on the right; and at the bottom centre the
+  invite to scroll: a match that strikes once and burns, over "See it run".
+  On a phone the canvas comes first and the invite follows the install.
+- **Then:** the replay of the real console, which starts when it scrolls
+  into view; three short blocks; the motto "Light the match. Keep it
   burning."; the links; the footer (From Blox Engineering · GitHub ·
   Discord · bloxng.com).
+- **README:** the same recording, as `www/demo/replay.svg`.
 - **Type:** IBM Plex Sans (variable) for text, IBM Plex Mono 400 and 500 for
   commands, labels and the replay. Both are served from the site.
 - **Install block:** one framed block with tabs (Script, Go), a `$` prompt,
