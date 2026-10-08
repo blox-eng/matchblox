@@ -456,6 +456,10 @@ func (m Model) detail(w int) []string {
 	facts = append(facts, fmt.Sprintf("%d processes", s.Procs))
 	lines = append(lines, fit(" "+st.text.Render(strings.Join(facts, st.faint.Render("  ·  "))), w))
 	lines = append(lines, fit(" "+st.muted.Render(s.Cwd), w))
+	// The ACCOUNT column needs room; without it the detail names it.
+	if _, acct, _ := m.sessWidths(w); acct == 0 && accountCell(s) != "" {
+		lines = append(lines, fit(" "+st.label.Render("ACCOUNT ")+st.text.Render(accountCell(s)), w))
+	}
 	if pr := m.prOf(s.Cwd); pr != nil {
 		what := "#" + strconv.Itoa(pr.Number) + " " + pr.Title
 		if pr.Draft {

@@ -87,8 +87,10 @@ func TestSessionsShowEachAccountWithItsProviderMark(t *testing.T) {
 func TestTheAccountColumnIsDroppedFirst(t *testing.T) {
 	for _, w := range []int{100, 50} {
 		out := demoSessions(t, w).render()
-		if strings.Contains(out, "ACCOUNT") || strings.Contains(out, "dev@example.com") {
-			t.Errorf("width %d shows the account", w)
+		for _, l := range strings.Split(ansi.Strip(out), "\n") {
+			if (strings.Contains(l, "TMUX") || strings.Contains(l, " api-auth ")) && (strings.Contains(l, "ACCOUNT") || strings.Contains(l, "dev@example.com")) {
+				t.Errorf("width %d has an account column: %q", w, l)
+			}
 		}
 		for i, line := range strings.Split(out, "\n") {
 			if lw := lipgloss.Width(line); lw > w {
@@ -185,5 +187,19 @@ func TestADetailWithoutAWindowShowsNoFigureForIt(t *testing.T) {
 	out := ansi.Strip(m.render())
 	if strings.Contains(out, "/ 0 tokens") || !strings.Contains(out, "63k tokens · no window known: add the model to [sessions.windows]") {
 		t.Fatalf("detail:\n%s", out)
+	}
+}
+
+// TestTheDetailShowsTheAccount: below the width of the ACCOUNT column the
+// selected session's detail still names it.
+func TestTheDetailShowsTheAccount(t *testing.T) {
+	m := demoSessions(t, 100)
+	for _, s := range m.snap.Sessions {
+		if s.Agent == "codex" {
+			m.selPID = s.PID
+		}
+	}
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "❋ dev@example.com · Plus") {
+		t.Fatalf("detail lacks the account:\n%s", out)
 	}
 }

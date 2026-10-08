@@ -140,7 +140,7 @@ func claudeProvider(e agentEnv) string {
 // claudeAccount reads only the login's email and plan from .claude.json.
 // The file holds other secrets; they are not decoded. A cloud has no login.
 func (a *accounts) claudeAccount(e agentEnv) string {
-	if e.cloud != "" {
+	if e.cloud != "" || e.claudeJSON == "" {
 		return ""
 	}
 	v := readCached(a.labels, e.claudeJSON, func(b []byte) string {
@@ -167,6 +167,9 @@ var codexPlans = map[string]string{"free": "Free", "go": "Go", "plus": "Plus", "
 // from the claims of its id token (decoded, never verified or kept); an API
 // key shows "API key". No token or key leaves this function.
 func (a *accounts) codexAccount(e agentEnv) string {
+	if e.codexHome == "" { // another home: its auth.json decides, not its environment
+		return ""
+	}
 	v := readCached(a.labels, joinIn(e.codexHome, "auth.json"), func(b []byte) string {
 		var f struct {
 			Mode   string          `json:"auth_mode"`

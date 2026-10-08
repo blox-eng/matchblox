@@ -51,11 +51,11 @@ func newOpencodeReader() *opencodeReader {
 	}
 }
 
-// session returns the session a process started at startMs (Unix ms) in
-// cwd shows.
-func (r *opencodeReader) session(data, cwd string, startMs int64) (opencodeSession, bool) {
+// session returns the root session in cwd that was updated after the
+// process started at startMs (Unix ms), and how many there are: more than
+// one (a finished `opencode run`, a /new) cannot be told apart.
+func (r *opencodeReader) session(data, cwd string, startMs int64) (best opencodeSession, n int) {
 	files, _ := filepath.Glob(filepath.Join(data, "storage", "session", "*", "ses_*.json"))
-	var best opencodeSession
 	seen := make(map[string]bool, len(files))
 	for _, f := range files {
 		seen[f] = true
@@ -67,16 +67,19 @@ func (r *opencodeReader) session(data, cwd string, startMs int64) (opencodeSessi
 		if s.ID == "" || s.ParentID != "" || s.Directory != cwd || s.Time.Updated < startMs {
 			continue
 		}
+		n++
 		if s.Time.Updated > best.Time.Updated {
 			best = s
 		}
 	}
+	// Prune only this data directory: another process can use another one.
+	prefix := filepath.Join(data, "storage", "session") + string(filepath.Separator)
 	for f := range r.sessions {
-		if !seen[f] {
+		if !seen[f] && strings.HasPrefix(f, prefix) {
 			delete(r.sessions, f)
 		}
 	}
-	return best, best.ID != ""
+	return best, n
 }
 
 // opencodeLook bounds how many of the newest messages are read to find the

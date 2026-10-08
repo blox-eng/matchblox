@@ -169,6 +169,7 @@ type Sampler struct {
 	lat        time.Duration
 	latErr     string
 	burn       map[string][]tokenPoint
+	burnLive   map[string]bool  // burn keys measured in this scan
 	bigSession map[string]bool  // sessions seen past 200k tokens, so 1M windows
 	longCtx    map[procKey]bool // processes started with a 1M model setting
 	envs       map[procKey]agentEnv
@@ -210,6 +211,7 @@ func (s *Sampler) init() {
 		s.panes = map[procKey]string{}
 		s.names = map[procKey]agentRef{}
 		s.burn = map[string][]tokenPoint{}
+		s.burnLive = map[string]bool{}
 		s.bigSession = map[string]bool{}
 		s.longCtx = map[procKey]bool{}
 		s.owners = map[procKey]string{}
@@ -388,8 +390,12 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	// directory cannot be told apart.
 	opencodeIn := map[string]int{}
 	for pid, p := range procs {
-		if s.agentName(pid, p) == "opencode" && p.State != 'Z' && p.State != 'X' && !s.underAgent(p, procs) {
-			opencodeIn[s.FS.Cwd(pid)]++
+		// An `opencode run` that another agent started counts too: it
+		// writes a session in the same directory.
+		if s.agentName(pid, p) == "opencode" && p.State != 'Z' && p.State != 'X' {
+			if pp, ok := procs[p.PPID]; !ok || s.agentName(p.PPID, pp) != "opencode" {
+				opencodeIn[s.FS.Cwd(pid)]++
+			}
 		}
 	}
 	for pid, p := range procs {
@@ -435,8 +441,11 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 				sess.Context = "fresh"
 			}
 			if path != "" {
-				if u, ok := s.agents.codexUsage(path); ok {
+				switch u, found := s.agents.codexUsage(path); found {
+				case codexMeasured:
 					s.measured(&sess, u, "codex:"+path, now)
+				case codexNotInTail:
+					sess.Context = "unmeasured"
 				}
 			}
 		case "opencode":
@@ -449,7 +458,10 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			if env.dataHome == "" {
 				break
 			}
-			if oc, ok := s.opencode.session(data, sess.Cwd, started.UnixMilli()); ok {
+			switch oc, n := s.opencode.session(data, sess.Cwd, started.UnixMilli()); n {
+			case 0:
+				sess.Context = "fresh" // its first session is written at the first prompt
+			case 1:
 				sess.Context = "fresh"
 				if u, provider, ok := s.opencode.usage(data, env.cacheHome, oc.ID); ok {
 					sess.Account, sess.Provider = s.accounts.opencodeAccount(env, provider), label(provider)
@@ -494,10 +506,11 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		seen[x.SessionID] = true
 	}
 	for id := range s.burn {
-		if !seen[id] {
+		if !s.burnLive[id] {
 			delete(s.burn, id)
 		}
 	}
+	clear(s.burnLive)
 	for id := range s.bigSession {
 		if !seen[id] {
 			delete(s.bigSession, id)
@@ -713,10 +726,11 @@ func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procK
 // one the agent reports; without a window it is not measured, never a
 // guess.
 func (s *Sampler) measured(sess *Session, u Usage, burnKey string, now time.Time) {
-	sess.Model, sess.Tokens, sess.Window = u.Model, u.Tokens, u.Window
+	sess.Model, sess.Tokens, sess.Window = label(u.Model), u.Tokens, u.Window
+	best := -1
 	for prefix, w := range s.Rules.Windows {
-		if strings.HasPrefix(u.Model, prefix) {
-			sess.Window = w
+		if strings.HasPrefix(u.Model, prefix) && len(prefix) > best {
+			sess.Window, best = w, len(prefix)
 		}
 	}
 	if sess.Window <= 0 {
@@ -726,6 +740,7 @@ func (s *Sampler) measured(sess *Session, u Usage, burnKey string, now time.Time
 	sess.Context = "known"
 	sess.ContextPct = 100 * float64(u.Tokens) / float64(sess.Window)
 	sess.Burn30m = s.trackBurn(burnKey, now, u.Tokens)
+	s.burnLive[burnKey] = true
 }
 
 // claudeWindow is the context size of a Claude Code session: a session

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The made-up credentials of the fixtures. None of them may reach a
@@ -350,5 +351,171 @@ func TestAProcessOfAnotherHomeGetsNoLabelOfOurs(t *testing.T) {
 	// Positive control: our own processes still get their label.
 	if s := got["%1"]; s.Account == "" {
 		t.Fatal("our own session lost its label")
+	}
+}
+
+// TestCodexBurnIsMeasured: the 30-minute burn of a Codex session follows
+// its rollout; it is never a stale 0.
+func TestCodexBurnIsMeasured(t *testing.T) {
+	root := copyFixture(t)
+	rollout := filepath.Join(root, "home", ".codex", "sessions", "rollout-2026-09-21T10-00-00-burn.jsonl")
+	writeFile(t, rollout, codexRollout("gpt-made-up", 10_000, 258400))
+	addProc(t, root, 900, 1, "codex", []string{"codex"}, "%20")
+	addPane(t, root, "%20\tapi:1.1\tw\t900\tcodex\t/work/api")
+	symlink(t, rollout, filepath.Join(root, "proc", "900", "fd", "21"))
+	now := fixtureNow
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	smp.Now = func() time.Time { return now }
+	smp.Sample()
+	now = now.Add(5 * time.Minute)
+	writeFile(t, rollout, codexRollout("gpt-made-up", 90_000, 258400)+"\n")
+	if s := byPane(smp.Sample())["%20"]; s.Burn30m != 80_000 {
+		t.Fatalf("burn %d, want 80000", s.Burn30m)
+	}
+}
+
+// TestCodexWithoutAWindowIsNotMeasuredUnlessConfigured: a model Codex has
+// no window for writes null; the config can give one.
+func TestCodexWithoutAWindowIsNotMeasuredUnlessConfigured(t *testing.T) {
+	root := copyFixture(t)
+	rollout := filepath.Join(root, "home", ".codex", "sessions", "rollout-2026-09-21T10-00-00-oss.jsonl")
+	writeFile(t, rollout, strings.Replace(codexRollout("local-oss", 42_000, 1), `"model_context_window":1`, `"model_context_window":null`, 1))
+	addProc(t, root, 900, 1, "codex", []string{"codex"}, "%20")
+	addPane(t, root, "%20\tapi:1.1\tw\t900\tcodex\t/work/api")
+	symlink(t, rollout, filepath.Join(root, "proc", "900", "fd", "21"))
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	if s := byPane(smp.Sample())["%20"]; s.Context != "unmeasured" || s.Tokens != 42_000 || s.Model != "local-oss" {
+		t.Fatalf("no window: %+v", s)
+	}
+	smp = newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	smp.Rules.Windows = map[string]int{"local": 64_000, "local-oss": 128_000}
+	if s := byPane(smp.Sample())["%20"]; s.Context != "known" || s.Window != 128_000 {
+		t.Fatalf("the longest configured prefix wins: %+v", s)
+	}
+}
+
+// TestACodexRolloutWithoutUsageInItsTailIsNotMeasured: a session whose
+// last 512 KB holds no token_count is not fresh: it is not measured.
+func TestACodexRolloutWithoutUsageInItsTailIsNotMeasured(t *testing.T) {
+	root := copyFixture(t)
+	rollout := filepath.Join(root, "home", ".codex", "sessions", "rollout-2026-09-21T10-00-00-long.jsonl")
+	long := strings.Repeat(`{"type":"response_item","payload":{"type":"function_call_output","output":"`+strings.Repeat("x", 1000)+`"}}`+"\n", 600)
+	writeFile(t, rollout, codexRollout("gpt-made-up", 51680, 258400)+long)
+	addProc(t, root, 900, 1, "codex", []string{"codex"}, "%20")
+	addPane(t, root, "%20\tapi:1.1\tw\t900\tcodex\t/work/api")
+	symlink(t, rollout, filepath.Join(root, "proc", "900", "fd", "21"))
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	if s := byPane(smp.Sample())["%20"]; s.Context != "unmeasured" {
+		t.Fatalf("context %q, want unmeasured", s.Context)
+	}
+}
+
+// TestACodexProcessWithTwoRolloutsShowsTheNewest: the rollout written last
+// is the session on screen, whatever the fd numbers.
+func TestACodexProcessWithTwoRolloutsShowsTheNewest(t *testing.T) {
+	root := copyFixture(t)
+	dir := filepath.Join(root, "home", ".codex", "sessions")
+	old, cur := filepath.Join(dir, "rollout-a-old.jsonl"), filepath.Join(dir, "rollout-b-new.jsonl")
+	writeFile(t, old, codexRollout("gpt-made-up", 200_000, 258400))
+	writeFile(t, cur, codexRollout("gpt-made-up", 25_840, 258400))
+	past := fixtureNow.Add(-time.Hour)
+	if err := os.Chtimes(old, past, past); err != nil {
+		t.Fatal(err)
+	}
+	addProc(t, root, 900, 1, "codex", []string{"codex"}, "%20")
+	addPane(t, root, "%20\tapi:1.1\tw\t900\tcodex\t/work/api")
+	symlink(t, old, filepath.Join(root, "proc", "900", "fd", "21"))
+	symlink(t, cur, filepath.Join(root, "proc", "900", "fd", "3"))
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	if s := byPane(smp.Sample())["%20"]; s.Tokens != 25_840 {
+		t.Fatalf("tokens %d, want the newest rollout's 25840", s.Tokens)
+	}
+}
+
+// TestOpenCodeWithTwoSessionsSinceItStartedIsNotMeasured: a finished
+// `opencode run` in the same directory, or an `opencode run` that another
+// agent started there, makes the TUI's session ambiguous: not measured.
+// With no session since it started, the TUI is fresh.
+func TestOpenCodeWithTwoSessionsSinceItStartedIsNotMeasured(t *testing.T) {
+	root := copyFixture(t)
+	data := filepath.Join(root, "home", ".local", "share", "opencode")
+	opencodeStore(t, data, "ses_tui", "/work/web", fixtureNow.UnixMilli()-60_000, "")
+	opencodeStore(t, data, "ses_run", "/work/web", fixtureNow.UnixMilli()-30_000, "")
+	writeFile(t, filepath.Join(root, "home", ".cache", "opencode", "models.json"), `{"zen":{"models":{"model-made-up":{"limit":{"context":200000}}}}}`)
+	addProc(t, root, 930, 1, "opencode", []string{"opencode"}, "%23")
+	symlink(t, "/work/web", filepath.Join(root, "proc", "930", "cwd"))
+	addPane(t, root, "%23\tweb:1.1\tw\t930\topencode\t/work/web")
+	// A TUI in a directory with no session yet.
+	addProc(t, root, 931, 1, "opencode", []string{"opencode"}, "%24")
+	symlink(t, "/work/new", filepath.Join(root, "proc", "931", "cwd"))
+	addPane(t, root, "%24\tnew:1.1\tw\t931\topencode\t/work/new")
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "opencode"}
+	got := byPane(smp.Sample())
+	if s := got["%23"]; s.Context != "unmeasured" || s.Tokens != 0 {
+		t.Errorf("two sessions: %+v", s)
+	}
+	if s := got["%24"]; s.Context != "fresh" {
+		t.Errorf("no session yet: context %q, want fresh", s.Context)
+	}
+}
+
+// TestAnOpencodeRunUnderAnotherAgentCountsAsATwin: an `opencode run` a
+// Claude session started in /work/web shares the TUI's directory.
+func TestAnOpencodeRunUnderAnotherAgentCountsAsATwin(t *testing.T) {
+	root := copyFixture(t)
+	data := filepath.Join(root, "home", ".local", "share", "opencode")
+	opencodeStore(t, data, "ses_tui", "/work/web", fixtureNow.UnixMilli()-60_000, "")
+	writeFile(t, filepath.Join(root, "home", ".cache", "opencode", "models.json"), `{"zen":{"models":{"model-made-up":{"limit":{"context":200000}}}}}`)
+	addProc(t, root, 930, 1, "opencode", []string{"opencode"}, "%23")
+	symlink(t, "/work/web", filepath.Join(root, "proc", "930", "cwd"))
+	addPane(t, root, "%23\tweb:1.1\tw\t930\topencode\t/work/web")
+	addProc(t, root, 932, 200, "opencode", []string{"opencode", "run", "fix it"}, "")
+	symlink(t, "/work/web", filepath.Join(root, "proc", "932", "cwd"))
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "opencode"}
+	if s := byPane(smp.Sample())["%23"]; s.Context != "unmeasured" {
+		t.Fatalf("context %q, want unmeasured", s.Context)
+	}
+}
+
+// TestAModelNameCarriesNoControlKeys: the model comes from the agent's
+// files and goes on screen.
+func TestAModelNameCarriesNoControlKeys(t *testing.T) {
+	root := copyFixture(t)
+	rollout := filepath.Join(root, "home", ".codex", "sessions", "rollout-2026-09-21T10-00-00-esc.jsonl")
+	writeFile(t, rollout, codexRollout(`gpt\u001b]0;pwned\u0007`, 1000, 258400))
+	addProc(t, root, 900, 1, "codex", []string{"codex"}, "%20")
+	addPane(t, root, "%20\tapi:1.1\tw\t900\tcodex\t/work/api")
+	symlink(t, rollout, filepath.Join(root, "proc", "900", "fd", "21"))
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	if s := byPane(smp.Sample())["%20"]; s.Model == "" || strings.ContainsAny(s.Model, "\x1b\x07") {
+		t.Fatalf("model %q", s.Model)
+	}
+}
+
+// TestAnotherHomeWithAKeyInItsEnvironmentShowsNoAPIKey: whether such an
+// agent uses its key or its login lives in its own home: no label.
+func TestAnotherHomeWithAKeyInItsEnvironmentShowsNoAPIKey(t *testing.T) {
+	root := copyFixture(t)
+	addProc(t, root, 990, 1, "claude", []string{"claude"}, "%60")
+	setEnv(t, root, 990, "TMUX_PANE=%60", "HOME=/home/other", "ANTHROPIC_API_KEY="+secretAPIKey)
+	addPane(t, root, "%60\tother:1.1\tw\t990\tclaude\t/work/app")
+	addProc(t, root, 991, 1, "codex", []string{"codex"}, "%61")
+	setEnv(t, root, 991, "TMUX_PANE=%61", "HOME=/home/other", "OPENAI_API_KEY="+secretAPIKey)
+	addPane(t, root, "%61\tother:2.1\tw\t991\tcodex\t/work/app")
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	got := byPane(smp.Sample())
+	for _, pane := range []string{"%60", "%61"} {
+		if s := got[pane]; s.Account != "" {
+			t.Errorf("%s: account %q, want none", pane, s.Account)
+		}
 	}
 }

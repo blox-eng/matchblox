@@ -90,8 +90,9 @@ tmux new -s docs aider
 Claude Code, Codex and OpenCode show their context use. matchblox reads it
 from the agent's own files (the transcript, the rollout, the session storage)
 and never guesses: before the first turn a session is "fresh", and an agent
-it cannot read shows "not measured". The window comes from the model that the
-agent reports. Set `[sessions.windows]` in the config to change it.
+it cannot read shows "not measured". Codex context use needs Linux: matchblox
+finds its session through the files the process holds open. The window comes
+from the model that the agent reports. Set `[sessions.windows]` in the config to change it.
 
 On a wide screen, Sessions shows the account each session runs under: the
 provider's mark (`✻` Anthropic, `❋` OpenAI, `▣` OpenCode), then the email and

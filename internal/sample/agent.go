@@ -49,6 +49,7 @@ type agentReader struct {
 	transcripts map[string]string    // sessionId -> path
 	missing     map[string]time.Time // sessionId -> when the last search found nothing
 	usage       map[string]cached[Usage]
+	codex       map[string]cached[codexRead] // by rollout path
 }
 
 type cached[T any] struct {
@@ -62,6 +63,7 @@ func newAgentReader() *agentReader {
 		transcripts: map[string]string{},
 		missing:     map[string]time.Time{},
 		usage:       map[string]cached[Usage]{},
+		codex:       map[string]cached[codexRead]{},
 	}
 }
 
