@@ -17,9 +17,9 @@ One terminal console for every AI coding agent you run. It shows which agent
 waits for you, what loads the machine, the state of every git checkout, and the
 one safe action that resolves each thing.
 
-> **Status: pre-release.** The service, the console and the queue of agents
-> that wait for you run today on the host. The control pane for a phone, remote
-> mode, night mode and setup are in progress. The plan is in
+> **Status: pre-release.** The service, the console, the queue of agents that
+> wait for you, the control pane for a phone and setup run today on the host.
+> Remote mode and night mode are in progress. The plan is in
 > [design/0004-v0.1-plan.md](design/0004-v0.1-plan.md).
 
 ## What it shows
