@@ -48,6 +48,9 @@ type Sessions struct {
 	ClearMinPct float64        `toml:"clear_min_pct"`
 	ClearStale  Duration       `toml:"clear_stale"`
 	Windows     map[string]int `toml:"windows"` // model prefix -> context tokens
+	// ProgressPrompt asks each new agent session for a progress bar at the
+	// end of each reply, which the console shows.
+	ProgressPrompt bool `toml:"progress_prompt"`
 }
 
 // Alerts: a zero threshold is off. "For" durations make an alert wait until
@@ -101,10 +104,11 @@ func Default() Config {
 		Interval: Duration{2 * time.Second},
 		Agents:   []string{"claude"},
 		Sessions: Sessions{
-			CompactAt:   85,
-			ClearIdle:   Duration{30 * time.Minute},
-			ClearMinPct: 20,
-			ClearStale:  Duration{24 * time.Hour},
+			CompactAt:      85,
+			ClearIdle:      Duration{30 * time.Minute},
+			ClearMinPct:    20,
+			ClearStale:     Duration{24 * time.Hour},
+			ProgressPrompt: true,
 		},
 		Alerts: Alerts{
 			TempOverC: 95,

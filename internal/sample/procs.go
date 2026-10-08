@@ -56,7 +56,14 @@ func (s *Sampler) sampleProcs(snap *Snapshot, procs map[int]procfs.Proc, panes [
 	for pid := range procs {
 		pids = append(pids, pid)
 	}
-	sort.Slice(pids, func(i, j int) bool { return cpu[pids[i]] > cpu[pids[j]] })
+	// Ties by pid: the map has no order, and the list must not reshuffle on
+	// every sample.
+	sort.Slice(pids, func(i, j int) bool {
+		if a, b := cpu[pids[i]], cpu[pids[j]]; a != b {
+			return a > b
+		}
+		return pids[i] < pids[j]
+	})
 	for _, pid := range pids[:min(topN, len(pids))] {
 		p := procs[pid]
 		snap.Top = append(snap.Top, ProcRow{

@@ -90,3 +90,8 @@ func lastLine(s string) string {
 	}
 	return line
 }
+
+// ProgressPrompt is what the SessionStart hook adds to a new session: the
+// console reads the bar from the agent's last reply.
+const ProgressPrompt = "matchblox shows your progress. At the end of each reply, write one line: " +
+	"Progress [████░░░░] <the step you do now>. Fill the bar for the part of the task that is done."

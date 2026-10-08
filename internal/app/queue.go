@@ -2,7 +2,8 @@ package app
 
 import (
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -23,22 +24,37 @@ func (m Model) queueSelIndex() int {
 	return 0
 }
 
-func (m Model) selectedQueue() (queue.Item, bool) {
-	if len(m.queue) == 0 {
-		return queue.Item{}, false
+// queueIndex is the selected row of the Queue tab: the queue items, then
+// the recommendations under them.
+func (m Model) queueIndex() int {
+	if m.recPick != "" || len(m.queue) == 0 {
+		for i, r := range m.recs {
+			if r.ID == m.recPick || m.recPick == "" {
+				return len(m.queue) + i
+			}
+		}
 	}
-	return m.queue[m.queueSelIndex()], true
+	return m.queueSelIndex()
+}
+
+func (m Model) selectedQueue() (queue.Item, bool) {
+	if i := m.queueIndex(); i < len(m.queue) {
+		return m.queue[i], true
+	}
+	return queue.Item{}, false
 }
 
 const colWord = 6
 
-func (m Model) queuePanel(w int) []string {
+func (m Model) queuePanel(w int) body {
 	st := m.st
-	lines := []string{"", st.label.Render(fmt.Sprintf(" %d WAITING FOR YOU", len(m.queue)))}
+	var b body
+	b.add(-1, "", st.label.Render(fmt.Sprintf(" %d WAITING FOR YOU", len(m.queue))))
 	if len(m.queue) == 0 {
-		return append(lines, st.faint.Render(" nothing waits for you"))
+		b.add(-1, st.faint.Render(m.nothing(" nothing waits for you")))
 	}
-	sel := m.queueSelIndex()
+	sel := m.queueIndex()
+	narrow := layout(w) == Narrow
 	for i, it := range m.queue {
 		word := st.text.Render(pad(queueWord[it.State], colWord))
 		if it.State == queue.StatePermission {
@@ -52,20 +68,21 @@ func (m Model) queuePanel(w int) []string {
 		if it.Estimated {
 			tail = st.faint.Render("estimated")
 		}
-		line := " " + m.queueCell(it) + word +
-			st.muted.Render(pad(sample.Human(m.now().Sub(it.Since)), colIdle)) +
-			st.text.Render(pad(it.Name, colName)) + st.muted.Render(pad(where, colPane)) + tail
-		if i == sel {
-			line = st.selected.Render(fit(line, w))
+		if s, ok := m.sessionIn(it.Pane); ok && s.Progress != nil {
+			tail = m.progressCell(s.Progress, 5) + "  " + tail
 		}
-		lines = append(lines, fit(line, w))
+		idle := st.muted.Render(pad(sample.Human(m.now().Sub(it.Since)), colIdle))
+		lines := []string{" " + m.queueCell(it) + word + idle + st.text.Render(pad(it.Name, colName)) + st.muted.Render(pad(where, colPane)) + tail}
+		if narrow {
+			// A phone: who waits on the first line; where, and what it
+			// said last, on the second.
+			lines = []string{" " + m.queueCell(it) + word + idle + st.text.Render(it.Name),
+				"   " + st.muted.Render(where) + "  " + tail}
+		}
+		b.addRow(i, i == sel, w, st, lines...)
 	}
-	if m.input != nil {
-		lines = append(lines, "", fit(" "+st.label.Render("ANSWER ")+st.muted.Render(m.input.pane+" ")+
-			st.text.Render(m.input.text)+st.accent.Render("▏"), w),
-			st.faint.Render(" ⏎ review  esc cancel"))
-	}
-	return lines
+	m.recsSection(&b, w)
+	return b
 }
 
 // paneRow is one tmux pane, with an agent or not.
@@ -81,28 +98,42 @@ func (m Model) paneRows() []paneRow {
 	for _, p := range m.snap.IdlePanes {
 		rows = append(rows, paneRow{p.Pane, p.Target, p.Command, p.Path})
 	}
-	sort.SliceStable(rows, func(i, j int) bool { return rows[i].target < rows[j].target })
+	q := strings.ToLower(m.filter)
+	if m.tab == tabPanes && q != "" {
+		rows = slices.DeleteFunc(rows, func(r paneRow) bool {
+			return !strings.Contains(strings.ToLower(r.target+" "+r.id+" "+r.what+" "+r.path), q)
+		})
+	}
+	slices.SortStableFunc(rows, m.paneSort.panes)
 	return rows
 }
 
-func (m Model) panesPanel(w int) []string {
+func (m Model) panesPanel(w int) body {
 	st := m.st
 	rows := m.paneRows()
-	lines := []string{"", st.label.Render(fmt.Sprintf(" %d PANES", len(rows))),
-		st.label.Render(fit(" "+pad("TMUX", colPane)+pad("RUNS", colName)+"PATH", w))}
+	var b body
+	b.add(-1, "", st.label.Render(fmt.Sprintf(" %d PANES", len(rows))+m.sortNote(w, m.paneSort, paneCols)))
+	narrow := layout(w) == Narrow
+	if !narrow {
+		head, _ := m.paneHeader()
+		b.add(headerRow, st.label.Render(fit(head, w)))
+	}
+	if len(rows) == 0 {
+		b.add(-1, st.faint.Render(m.nothing(" no tmux panes")))
+	}
 	sel := min(m.paneSel, max(len(rows)-1, 0))
 	for i, r := range rows {
 		where := place(r.target, r.id)
 		if i == sel {
 			where = "▌" + where
 		}
-		line := " " + st.muted.Render(pad(where, colPane)) + st.text.Render(pad(r.what, colName)) + st.muted.Render(tilde(r.path))
-		if i == sel {
-			line = st.selected.Render(fit(line, w))
+		lines := []string{" " + st.muted.Render(pad(where, colPane)) + st.text.Render(pad(r.what, colName)) + st.muted.Render(tilde(r.path))}
+		if narrow {
+			lines = []string{" " + st.muted.Render(pad(where, colPane)) + st.text.Render(r.what), "   " + st.muted.Render(tilde(r.path))}
 		}
-		lines = append(lines, fit(line, w))
+		b.addRow(i, i == sel, w, st, lines...)
 	}
-	return lines
+	return b
 }
 
 func (m Model) selectedPane() (paneRow, bool) {

@@ -64,7 +64,7 @@ func (m Model) render() string {
 	if m.quitting {
 		return ""
 	}
-	w := max(m.width, 60)
+	w := max(m.width, minWidth)
 	if m.splashing() {
 		return m.splashView(w)
 	}
@@ -80,33 +80,13 @@ func (m Model) render() string {
 		}
 		return strings.Join(append(out, "", strings.Repeat(" ", max((w-lipgloss.Width(why))/2, 0))+m.st.faint.Render(why)), "\n")
 	}
-	var body []string
-	switch m.tab {
-	case tabQueue:
-		body = m.queuePanel(w)
-	case tabPanes:
-		body = m.panesPanel(w)
-	case tabSessions:
-		body = m.sessions(w, m.height-len(out)-2)
-	case tabMachine:
-		body = m.machine(w)
-	case tabProcs:
-		body = m.procs(w)
-	case tabGit:
-		body = m.gitPanel(w)
-	case tabRecs:
-		body = m.recsPanel(w)
-	case tabHistory:
-		body = m.historyPanel(w)
-	}
-	if len(body) > m.height-len(out)-1 {
-		body = body[:max(m.height-len(out)-1, 0)]
-	}
-	out = append(out, body...)
-	for len(out) < m.height-1 {
+	// The line the person acts on sits under the tabs: on a phone the
+	// keyboard covers the bottom of the screen.
+	out = append(out[:2], m.footer(w), out[2])
+	out = append(out, m.visible(w).lines...)
+	for len(out) < m.height {
 		out = append(out, "")
 	}
-	out = append(out, m.footer(w))
 	return strings.Join(out, "\n")
 }
 
@@ -155,64 +135,98 @@ const (
 	tabMachine
 	tabProcs
 	tabGit
-	tabRecs
 	tabHistory
 	tabPanes
 )
 
-var tabNames = []string{"queue", "sessions", "machine", "procs", "git", "recs", "history", "panes"}
+var tabNames = []string{"queue", "sessions", "machine", "procs", "git", "history", "panes"}
 
 // tabShort names the tabs when the full names do not fit.
-var tabShort = []string{"queue", "sess", "mach", "procs", "git", "recs", "hist", "panes"}
+var tabShort = []string{"queue", "sess", "mach", "procs", "git", "hist", "panes"}
 
 // tabs tries the full names, then a narrower gap, then the short names,
-// so every tab and the alert marker stay on the line.
+// then digits only (a phone), so every tab and the alert marker stay on the
+// line.
 func (m Model) tabs(w int) string {
-	alert := ""
-	if n := len(m.snap.Alerts); n > 0 {
-		alert = m.st.warn.Render(fmt.Sprintf("▲ %d alert", n))
-		if n > 1 {
-			alert += m.st.warn.Render("s")
-		}
-	}
-	var line string
-	for _, try := range []struct {
-		names []string
-		gap   string
-	}{{tabNames, "   "}, {tabNames, "  "}, {tabShort, "  "}} {
-		line = m.tabLine(try.names, try.gap)
-		if lipgloss.Width(line)+lipgloss.Width(alert)+2 <= w {
-			break
-		}
-	}
+	alert := m.alert()
+	line := m.tabLine(m.tabTier(w))
 	if alert != "" {
 		line += strings.Repeat(" ", max(w-lipgloss.Width(line)-lipgloss.Width(alert)-1, 2)) + alert
 	}
 	return fit(line, w)
 }
 
-func (m Model) tabLine(names []string, gap string) string {
+func (m Model) alert() string {
+	n := len(m.snap.Alerts)
+	if n == 0 {
+		return ""
+	}
+	if layout(m.width) == Narrow {
+		return m.st.warn.Render(fmt.Sprintf("▲ %d", n))
+	}
+	alert := m.st.warn.Render(fmt.Sprintf("▲ %d alert", n))
+	if n > 1 {
+		alert += m.st.warn.Render("s")
+	}
+	return alert
+}
+
+type tabTier struct {
+	names []string // nil: the open tab by its short name, the others by digit
+	gap   string
+}
+
+func (m Model) tabTier(w int) tabTier {
+	alert := lipgloss.Width(m.alert())
+	tiers := []tabTier{{tabNames, "   "}, {tabNames, "  "}, {tabShort, "  "}, {nil, "  "}}
+	for _, t := range tiers {
+		if lipgloss.Width(m.tabLine(t))+alert+2 <= w {
+			return t
+		}
+	}
+	return tiers[len(tiers)-1]
+}
+
+func (m Model) tabLine(t tabTier) string {
+	return " " + strings.Join(m.tabParts(t), t.gap)
+}
+
+// tabParts are the tab labels; a tap finds its tab by their widths.
+func (m Model) tabParts(t tabTier) []string {
 	var parts []string
-	for i, name := range names {
-		label := fmt.Sprintf("%d %s", i+1, strings.ToUpper(name))
+	for i := range tabNames {
+		label := fmt.Sprint(i + 1)
+		switch {
+		case t.names != nil:
+			label += " " + strings.ToUpper(t.names[i])
+		case i == m.tab:
+			label += " " + strings.ToUpper(tabShort[i])
+		}
 		switch {
 		case i == m.tab:
 			parts = append(parts, m.st.tabActive.Render(label))
 		case i == tabProcs && len(m.snap.Orphans) > 0:
 			parts = append(parts, m.st.neg.Render(label+" !"))
+		case i == tabQueue && len(m.queue) > 0 && m.tab != tabQueue && t.names == nil:
+			parts = append(parts, m.st.accent.Render(fmt.Sprintf("%s·%d", label, len(m.queue))))
 		case i == tabQueue && len(m.queue) > 0 && m.tab != tabQueue:
 			parts = append(parts, m.st.accent.Render(fmt.Sprintf("%s %d", label, len(m.queue))))
-		case i == tabRecs && len(m.recs) > 0:
-			parts = append(parts, m.st.muted.Render(fmt.Sprintf("%s %d", label, len(m.recs))))
 		default:
 			parts = append(parts, m.st.faint.Render(label))
 		}
 	}
-	return " " + strings.Join(parts, gap)
+	return parts
 }
 
 func (m Model) footer(w int) string {
 	st := m.st
+	if m.input != nil {
+		return fit(" "+st.label.Render("ANSWER ")+st.muted.Render(m.input.pane+" ")+
+			st.text.Render(m.input.text)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ review  esc cancel"), w)
+	}
+	if m.searching {
+		return fit(" "+st.label.Render("/ ")+st.text.Render(m.filter)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ keep  esc clear"), w)
+	}
 	if m.pending != nil {
 		confirm := "⏎ run  esc cancel"
 		if m.pending.destructive {
@@ -220,22 +234,34 @@ func (m Model) footer(w int) string {
 		}
 		return fit(" "+st.label.Render("RUN ")+st.text.Render(m.pending.String())+"   "+st.muted.Render(confirm), w)
 	}
-	keys := map[int]string{
+	tabKeys := map[int]string{
 		tabQueue:    "↑↓ select  ⏎ go  a answer",
-		tabPanes:    "↑↓ select  ⏎ go",
-		tabSessions: "↑↓ select  ⏎ jump  a answer",
+		tabPanes:    "↑↓ select  ⏎ go  s sort",
+		tabSessions: "↑↓ select  ⏎ jump  a answer  s sort",
 		tabMachine:  "",
 		tabProcs:    "↑↓ select  ⏎ jump  x kill",
-		tabGit:      "↑↓ select  ⏎ shell  x remove  r rescan",
-		tabRecs:     "↑↓ select  ⏎ do  x the other action",
+		tabGit:      "↑↓ select  ⏎ shell  space mark  X all safe  x remove  r rescan",
 		tabHistory:  "",
-	}[m.tab] + "  1-8 panel  q quit"
+	}[m.tab]
+	if _, ok := m.selectedRec(); ok {
+		tabKeys = "↑↓ select  ⏎ do  x the other action"
+	}
+	keys := tabKeys + "  / find  1-7 panel  q quit"
+	if m.filter != "" {
+		keys = "/ " + m.filter + " · esc clears  " + tabKeys
+	}
+	if layout(w) == Narrow {
+		keys = strings.NewReplacer("↑↓ select  ", "↑↓ ", "1-7 panel", "1-7", "the other action", "other", "space mark  X all safe  ", "␣ X ", "  r rescan", "").Replace(keys)
+	}
 	left := " " + st.muted.Render(keys)
 	if m.flash != "" {
 		left = " " + st.text.Render(m.flash)
 	}
 	right := st.faint.Render("sampled " + sample.Human(m.now().Sub(m.snap.At)) + " ago ")
-	return left + strings.Repeat(" ", max(w-lipgloss.Width(left)-lipgloss.Width(right), 1)) + right
+	if lipgloss.Width(left)+lipgloss.Width(right)+1 > w {
+		return fit(left, w) // the keys matter more than the age
+	}
+	return left + strings.Repeat(" ", w-lipgloss.Width(left)-lipgloss.Width(right)) + right
 }
 
 const (
@@ -250,7 +276,7 @@ const (
 	colDo   = 10
 )
 
-func (m Model) sessions(w, h int) []string {
+func (m Model) sessions(w, h int) body {
 	st := m.st
 	ss := m.snap.Sessions
 	busy := 0
@@ -259,34 +285,43 @@ func (m Model) sessions(w, h int) []string {
 			busy++
 		}
 	}
-	region := fmt.Sprintf(" %d AGENTS  ·  BUSY %d  ·  IDLE %d", len(ss), busy, len(ss)-busy)
-	lines := []string{"", st.label.Render(region)}
+	region := fmt.Sprintf(" %d AGENTS  ·  BUSY %d  ·  IDLE %d", len(ss), busy, len(ss)-busy) + m.sortNote(w, m.sessSort, sessCols)
+	var b body
+	b.add(-1, "", st.label.Render(region))
+	if layout(w) == Narrow {
+		// A phone: two lines for each session, no columns, no detail.
+		sel := m.selIndex()
+		for i, s := range ss {
+			b.addRow(i, i == sel, w, st, m.narrowRow(s, i == sel)...)
+		}
+		return b
+	}
 
 	tab := 0
 	if w >= 100 {
 		tab = colTab
 	}
 	tree := min(max(w-(1+colPane+tab+colName+colSt+colIdle+colBar+1+colPct+colCPU+colDo+1), 12), 48)
-	head := " " + pad("TMUX", colPane+tab) + pad("NAME", colName) + pad("STATE", colSt) + pad("IDLE", colIdle) +
-		pad("CONTEXT", colBar+1+colPct) + pad("CPU", colCPU) + pad("DO", colDo+1) + "WORKTREE"
-	lines = append(lines, st.label.Render(fit(head, w)))
+	head, _ := m.sessHeader(tab)
+	b.add(headerRow, st.label.Render(fit(head, w)))
 
 	detail := m.detail(w)
-	room := max(h-len(lines)-len(detail)-2, 3)
+	room := max(h-len(b.lines)-len(detail)-2, 3)
 	sel := m.selIndex()
 	first := max(min(sel-room/2, len(ss)-room), 0)
 	for i := first; i < len(ss) && i < first+room; i++ {
-		lines = append(lines, m.row(ss[i], i == sel, w, tab, tree))
+		b.add(i, m.row(ss[i], i == sel, w, tab, tree))
 	}
 	if n := len(m.snap.IdlePanes); n > 0 {
 		var ids []string
 		for _, p := range m.snap.IdlePanes {
 			ids = append(ids, place(p.Target, p.Pane)+" "+p.Command)
 		}
-		lines = append(lines, st.faint.Render(fit(fmt.Sprintf(" %d without an agent: %s", n, strings.Join(ids, ", ")), w)))
+		b.add(-1, st.faint.Render(fit(fmt.Sprintf(" %d without an agent: %s", n, strings.Join(ids, ", ")), w)))
 	}
-	lines = append(lines, "", st.hair.Render(strings.Repeat("─", w)))
-	return append(lines, detail...)
+	b.add(-1, "", st.hair.Render(strings.Repeat("─", w)))
+	b.add(-1, detail...)
+	return b
 }
 
 func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
@@ -316,6 +351,9 @@ func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
 		cpu = st.text.Render(pad(fmt.Sprintf("%3.0f%%", s.CPU), colCPU))
 	}
 	do := pad("", colDo+1)
+	if s.Progress != nil {
+		do = pad(m.progressCell(s.Progress, 5), colDo+1)
+	}
 	switch s.Do {
 	case "compact":
 		do = st.neg.Render(pad("! compact", colDo+1))
@@ -347,7 +385,7 @@ func (m Model) detail(w int) []string {
 	st := m.st
 	s, ok := m.selected()
 	if !ok {
-		return []string{st.faint.Render(" no agent sessions found in tmux")}
+		return []string{st.faint.Render(m.nothing(" no agent sessions found in tmux"))}
 	}
 	lines := []string{st.label.Render(" " + strings.ToUpper(place(s.Target, s.Pane)+" "+s.Tab+"  "+s.Name))}
 	facts := []string{fmt.Sprintf("pid %d", s.PID)}
@@ -366,6 +404,9 @@ func (m Model) detail(w int) []string {
 	facts = append(facts, fmt.Sprintf("%d processes", s.Procs))
 	lines = append(lines, fit(" "+st.text.Render(strings.Join(facts, st.faint.Render("  ·  "))), w))
 	lines = append(lines, fit(" "+st.muted.Render(s.Cwd), w))
+	if p := s.Progress; p != nil {
+		lines = append(lines, fit(" "+st.label.Render("PROGRESS ")+m.progressCell(p, 10)+"  "+st.text.Render(p.Step), w))
+	}
 	if s.Why != "" {
 		lines = append(lines, fit(" "+st.label.Render("WHY ")+st.text.Render(s.Do+": "+s.Why), w))
 	}

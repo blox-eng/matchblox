@@ -37,6 +37,8 @@ type Session struct {
 	Procs      int           `json:"procs"`
 	Do         string        `json:"do,omitempty"` // compact | clear
 	Why        string        `json:"why,omitempty"`
+	// Progress is the bar the agent drew in its last reply with text.
+	Progress *Progress `json:"progress,omitempty"`
 }
 
 // IdlePane is a pane that hosts no agent.
@@ -356,7 +358,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			sess.Context = "fresh"
 			if u, ok := s.agents.usageOf(e.SessionID, e.Cwd); ok {
 				sess.Context = "known"
-				sess.Model, sess.Tokens = u.Model, u.Tokens
+				sess.Model, sess.Tokens, sess.Progress = u.Model, u.Tokens, u.Progress
 				long, ok := s.longCtx[key]
 				if !ok {
 					env := func(k string) (string, bool) { return s.FS.Environ(pid, k) }

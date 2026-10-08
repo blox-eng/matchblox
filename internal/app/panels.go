@@ -116,11 +116,11 @@ func (m Model) machine(w int) []string {
 	return out
 }
 
-func (m Model) procs(w int) []string {
+func (m Model) procs(w int) body {
 	st := m.st
-	out := m.region("detached busy loops", w)
+	b := plain(m.region("detached busy loops", w))
 	if len(m.snap.Orphans) == 0 {
-		out = append(out, st.faint.Render(" none"))
+		b.add(-1, st.faint.Render(" none"))
 	}
 	sel := m.orphanIndex()
 	for i, o := range m.snap.Orphans {
@@ -136,16 +136,14 @@ func (m Model) procs(w int) []string {
 		line := " " + st.neg.Render("! ") + st.text.Render(pad(fmt.Sprintf("%d %s", o.PID, o.Comm), 16)) +
 			st.text.Render(pad(fmt.Sprintf("%3.0f%%", o.CPU), 7)) + st.muted.Render(pad("for "+sample.Human(o.HotFor), 12)) +
 			st.muted.Render(pad(pane, 22)) + st.faint.Render(o.Cmdline)
-		if i == sel {
-			line = st.selected.Render(fit(line, w))
-		}
-		out = append(out, fit(line, w))
+		b.addRow(i, i == sel, w, st, line)
 	}
 	if o, ok := m.selectedOrphan(); ok {
-		out = append(out, "", fit(" "+st.muted.Render(fmt.Sprintf("parent %s · age %s · cwd %s", o.Parent, sample.Human(o.Age), o.Cwd)), w))
-		out = append(out, fit(" "+st.label.Render("x ")+st.muted.Render(strings.Join(o.Kill, " ")), w))
+		b.add(-1, "", fit(" "+st.muted.Render(fmt.Sprintf("parent %s · age %s · cwd %s", o.Parent, sample.Human(o.Age), o.Cwd)), w))
+		b.add(-1, fit(" "+st.label.Render("x ")+st.muted.Render(strings.Join(o.Kill, " ")), w))
 	}
 
+	var out []string
 	out = append(out, m.region("top processes", w)...)
 	out = append(out, st.label.Render(fit(" "+pad("PID", 9)+pad("COMMAND", 18)+pad("CPU", 7)+pad("MEM", 8)+"OWNER", w)))
 	names := map[string]string{}
@@ -160,7 +158,8 @@ func (m Model) procs(w int) []string {
 		out = append(out, fit(" "+st.muted.Render(pad(fmt.Sprint(p.PID), 9))+st.text.Render(pad(p.Comm, 18))+
 			st.text.Render(pad(fmt.Sprintf("%3.0f%%", p.CPU), 7))+st.muted.Render(pad(size(float64(p.RSS)), 8))+st.muted.Render(owner), w))
 	}
-	return out
+	b.add(-1, out...)
+	return b
 }
 
 func (m Model) orphanIndex() int {

@@ -107,6 +107,9 @@ func TestSessionsMapToPanes(t *testing.T) {
 	if feature.Tokens != 180000 || feature.ContextPct != 90 || feature.Do != "compact" {
 		t.Fatalf("%%1 context = %d %.1f %q", feature.Tokens, feature.ContextPct, feature.Do)
 	}
+	if feature.Progress == nil || feature.Progress.Pct != 75 || feature.Progress.Step != "wiring the console" {
+		t.Fatalf("%%1 progress = %+v", feature.Progress)
+	}
 
 	review := got["%2"]
 	if review.PID != 310 || review.Busy || review.Idle != time.Hour+10*time.Second || review.Do != "clear" {

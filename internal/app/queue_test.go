@@ -37,7 +37,7 @@ func typeText(m tea.Model, s string) tea.Model {
 func TestQueueIsDefaultTab(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
 	out := ansi.Strip(m.render())
-	for _, want := range []string{"1 QUEUE", "2 WAITING FOR YOU", "asks", "app-feature", "Claude needs your permission to use Bash", "estimated", "8 PANES"} {
+	for _, want := range []string{"1 QUEUE", "2 WAITING FOR YOU", "asks", "app-feature", "Claude needs your permission to use Bash", "estimated", "7 PANES"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("view lacks %q:\n%s", want, out)
 		}
@@ -141,13 +141,13 @@ func TestAnswerFromSessionsNeedsAWait(t *testing.T) {
 	}
 }
 
-// Review 7: at 80 columns all eight tabs and the alert marker fit.
+// Review 7: at 80 columns all seven tabs and the alert marker fit.
 func TestTabsFit80WithAlert(t *testing.T) {
 	st := queueState()
 	st.Alerts = []sample.Alert{{Key: "load", Level: "warn", Title: "load"}}
 	m, _ := loadedWith(t, 80, st)
 	line := ansi.Strip(m.tabs(80))
-	if !strings.Contains(line, "8 ") || !strings.Contains(line, "▲ 1 alert") || strings.Contains(line, "…") {
+	if !strings.Contains(line, "7 ") || !strings.Contains(line, "▲ 1 alert") || strings.Contains(line, "…") {
 		t.Fatalf("tab line %q", line)
 	}
 }
@@ -369,7 +369,7 @@ func TestQueueRowMatch(t *testing.T) {
 
 func TestPanesTabListsEveryPane(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
-	next, _ := key(m, "8")
+	next, _ := key(m, "7")
 	out := ansi.Strip(next.(Model).render())
 	for _, want := range []string{"work:1.1", "notes:1.1", "zsh", "/work/notes"} {
 		if !strings.Contains(out, want) {

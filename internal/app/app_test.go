@@ -273,7 +273,7 @@ func TestConfirmedRecActIsSentNotRun(t *testing.T) {
 		Label: "kill", Steps: [][]string{{"kill", "42"}}, Destructive: true}}}
 	m, f := loadedWith(t, 100, st)
 	m.opt.Run = func([]string) error { t.Fatal("a service step ran in the console"); return nil }
-	m.tab = tabRecs
+	m.tab, m.recPick = tabQueue, "r9"
 	next, _ := key(m, "x")
 	next, cmd := key(next, "y")
 	if cmd == nil {
@@ -474,7 +474,7 @@ func TestNavRunsOnlyTmuxMoves(t *testing.T) {
 	st.Recommendations = []advice.Rec{{ID: "r1", Title: "x", Primary: &advice.Action{Nav: true, Steps: [][]string{{"rm", "-rf", "/tmp/x"}}}}}
 	m, _ := loadedWith(t, 100, st)
 	m.opt.Run = func(argv []string) error { t.Fatalf("ran %v", argv); return nil }
-	m.tab = tabRecs
+	m.tab, m.recPick = tabQueue, "r1"
 	next, _ := key(m, "enter")
 	next, cmd := key(next, "enter")
 	if cmd != nil {
@@ -536,7 +536,7 @@ func TestFooterUsesClock(t *testing.T) {
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	next, _ = next.Update(stateMsg(st))
 	lines := strings.Split(ansi.Strip(next.(Model).render()), "\n")
-	if last := strings.TrimRight(lines[len(lines)-1], " "); !strings.HasSuffix(last, "sampled 5s ago") {
-		t.Fatalf("footer %q, want it to end with sampled 5s ago", last)
+	if last := strings.TrimRight(lines[2], " "); !strings.HasSuffix(last, "sampled 5s ago") {
+		t.Fatalf("action line %q, want it to end with sampled 5s ago", last)
 	}
 }

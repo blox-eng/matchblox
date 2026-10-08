@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -34,7 +35,7 @@ func TestHookWithoutServiceSpools(t *testing.T) {
 	sock := isolate(t)
 	spool := filepath.Join(t.TempDir(), "spool.jsonl")
 	start := time.Now()
-	if err := hook([]string{"Stop"}, bytes.NewReader(stopJSON(t)), sock, spool); err != nil {
+	if err := hook([]string{"Stop"}, bytes.NewReader(stopJSON(t)), io.Discard, sock, spool, false); err != nil {
 		t.Fatal(err)
 	}
 	if d := time.Since(start); d > 50*time.Millisecond {
@@ -58,7 +59,7 @@ func TestHookStaleSocket(t *testing.T) {
 	l.Close() // the file stays, nobody listens
 	spool := filepath.Join(t.TempDir(), "spool.jsonl")
 	start := time.Now()
-	if err := hook([]string{"Stop"}, bytes.NewReader(stopJSON(t)), sock, spool); err != nil {
+	if err := hook([]string{"Stop"}, bytes.NewReader(stopJSON(t)), io.Discard, sock, spool, false); err != nil {
 		t.Fatal(err)
 	}
 	if d := time.Since(start); d > 50*time.Millisecond {
@@ -91,7 +92,7 @@ func TestHookSilentListener(t *testing.T) {
 	}()
 	spool := filepath.Join(t.TempDir(), "spool.jsonl")
 	start := time.Now()
-	if err := hook([]string{"Stop"}, bytes.NewReader(stopJSON(t)), sock, spool); err != nil {
+	if err := hook([]string{"Stop"}, bytes.NewReader(stopJSON(t)), io.Discard, sock, spool, false); err != nil {
 		t.Fatal(err)
 	}
 	if d := time.Since(start); d > 50*time.Millisecond {
@@ -113,7 +114,7 @@ func TestHookReachesService(t *testing.T) {
 	ev := `{"session_id":"s9","cwd":"/work/app","hook_event_name":"Notification","message":"Claude needs your permission to use Bash","notification_type":"permission_prompt"}`
 	t.Setenv("TMUX_PANE", "%1")
 	spool := filepath.Join(t.TempDir(), "spool.jsonl")
-	if err := hook([]string{"Notification"}, strings.NewReader(ev), sock, spool); err != nil {
+	if err := hook([]string{"Notification"}, strings.NewReader(ev), io.Discard, sock, spool, false); err != nil {
 		t.Fatal(err)
 	}
 	for time.Now().Before(deadline) {
@@ -133,7 +134,7 @@ func TestHookReachesService(t *testing.T) {
 // The agent never sees a failing hook: bad input is dropped, exit 0.
 func TestHookIgnoresBadInput(t *testing.T) {
 	sock := isolate(t)
-	if err := hook([]string{"Stop"}, strings.NewReader("not json"), sock, filepath.Join(t.TempDir(), "s")); err != nil {
+	if err := hook([]string{"Stop"}, strings.NewReader("not json"), io.Discard, sock, filepath.Join(t.TempDir(), "s"), false); err != nil {
 		t.Fatal(err)
 	}
 }
