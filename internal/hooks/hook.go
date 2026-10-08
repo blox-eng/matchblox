@@ -58,7 +58,7 @@ func Parse(stdin io.Reader, name string, env func(string) string) (Event, error)
 	ev := Event{Name: name, SessionID: in.SessionID, Cwd: in.Cwd, At: time.Now().UTC(), Pane: env("TMUX_PANE")}
 	switch name {
 	case "Notification":
-		ev.Message = in.Message
+		ev.Message = cut(strings.ReplaceAll(said.Clean(in.Message), "\n", " "))
 		ev.Kind = notificationKind(in.NotificationType, in.Message)
 	case "Stop":
 		line, asks := said.Reply(in.LastAssistant)

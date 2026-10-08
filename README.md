@@ -65,7 +65,7 @@ tmux new -s app claude
 tmux new -s api codex
 ```
 ```
-╿ waits  1m    codex      api:1.1   from the pane: Would you like to run the following command?
+╿ asks   1m    codex      api:1.1   from the pane: Would you like to run the following command?
 ```
 
 **OpenCode**
@@ -83,13 +83,14 @@ tmux new -s web opencode
 tmux new -s docs aider
 ```
 ```
-╿ idle   4m    aider      docs:1.1  not measured
+╿ done   4m    aider      docs:1.1  not measured
 ```
 
 Claude Code tells its waits through hooks and shows its context use. Every
 other agent is read from its pane: it is busy while the pane moves, and it
 waits for you when it is idle and its last lines ask. That can come later
-than a hook. Its context use shows "not measured". The first run writes the
+than a hook. An approval menu (Codex, OpenCode) shows as `asks`: you answer
+it in its pane, where `Enter` takes the selected choice. Its context use shows "not measured". The first run writes the
 agents it finds to `agents` in `~/.config/matchblox/config.toml`. Add any
 other agent there by its command.
 

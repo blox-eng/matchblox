@@ -376,6 +376,14 @@ func TestAnOpenPullRequestShowsWhereItsAgentShows(t *testing.T) {
 			t.Fatalf("Sessions lacks %q:\n%s", want, out)
 		}
 	}
+	for _, w := range []int{80, 100} {
+		m.width = w
+		for _, l := range strings.Split(ansi.Strip(m.render()), "\n") {
+			if strings.Contains(l, "cache-work") && !strings.Contains(l, "PR #") && !strings.Contains(l, "#4312") {
+				t.Fatalf("the row at %d columns lacks the PR: %q", w, l)
+			}
+		}
+	}
 	m.width = 50 // a phone
 	if out := ansi.Strip(m.render()); !strings.Contains(out, "#4312") {
 		t.Fatalf("the phone row lacks the PR:\n%s", out)

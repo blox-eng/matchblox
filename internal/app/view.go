@@ -361,6 +361,12 @@ func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
 		do = st.warn.Render(pad("▲ clear", colDo+1))
 	}
 	name := st.text.Render(pad(s.Name, colName))
+	if pr := m.prOf(s.Cwd); pr != nil {
+		// The PR keeps its place in the name cell: the worktree column is
+		// the first one a narrow terminal cuts.
+		num := "#" + strconv.Itoa(pr.Number) + " "
+		name = st.text.Render(pad(s.Name, colName-len(num))) + st.accent.Render(num)
+	}
 	where := place(s.Target, s.Pane)
 	if selected {
 		where = "▌" + where
@@ -372,11 +378,7 @@ func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
 	if tab > 0 {
 		pane += st.muted.Render(pad(s.Tab, tab))
 	}
-	wt := worktree(s.Cwd)
-	if pr := m.prOf(s.Cwd); pr != nil {
-		wt += " #" + strconv.Itoa(pr.Number)
-	}
-	line := " " + pane + name + state + idle + ctx + cpu + do + st.muted.Render(pad(wt, tree))
+	line := " " + pane + name + state + idle + ctx + cpu + do + st.muted.Render(pad(worktree(s.Cwd), tree))
 	if selected {
 		return st.selected.Render(fit(line, w))
 	}
@@ -447,8 +449,6 @@ func bar(pct float64, w int) string {
 	return strings.Repeat("█", full) + strings.Repeat("░", w-full)
 }
 
-// worktree shortens a cwd to what tells sessions apart: the checkout name,
-// or the worktree name for paths under a */worktrees/* directory.
 // prOf is the open pull request of the worktree a directory is in: the
 // worktree with the longest path that holds it.
 func (m Model) prOf(cwd string) *proto.PR {
@@ -467,6 +467,8 @@ func (m Model) prOf(cwd string) *proto.PR {
 	return pr
 }
 
+// worktree shortens a cwd to what tells sessions apart: the checkout name,
+// or the worktree name for paths under a */worktrees/* directory.
 func worktree(cwd string) string {
 	if cwd == "" {
 		return "?"

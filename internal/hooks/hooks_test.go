@@ -128,3 +128,13 @@ func TestStopThatAsksIsAQuestion(t *testing.T) {
 		t.Fatalf("event %+v", ev)
 	}
 }
+
+// TestNotificationTextIsClean: a notification message is shown in the
+// console; a control key in it would drive the person's terminal.
+func TestNotificationTextIsClean(t *testing.T) {
+	in := `{"session_id":"s1","hook_event_name":"Notification","notification_type":"permission_prompt","message":"Claude needs\u001b]52;c;eA==\u0007 your permission"}`
+	ev, err := Parse(strings.NewReader(in), "Notification", func(string) string { return "" })
+	if err != nil || ev.Message != "Claude needs]52;c;eA== your permission" {
+		t.Fatalf("message %q, %v", ev.Message, err)
+	}
+}

@@ -777,7 +777,7 @@ func (m Model) nextAfter(pane string) Model {
 		}
 		for _, want := range []func(sample.Session) bool{
 			func(s sample.Session) bool { return waits[s.Pane] },
-			func(s sample.Session) bool { return !s.Busy },
+			func(s sample.Session) bool { return s.Age() == "idle" },
 		} {
 			for k := 1; k < len(ss); k++ {
 				if s := ss[(at+k)%len(ss)]; want(s) {

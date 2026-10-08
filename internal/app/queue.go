@@ -19,7 +19,7 @@ var queueWord = map[string]string{
 // queueWordOf is the word of a queue row: a turn that ended under 100%
 // progress, with no question, stopped before its task was done: paused.
 func (m Model) queueWordOf(it queue.Item) string {
-	if it.State == queue.StateFinished {
+	if it.State == queue.StateFinished && it.Pane != "" {
 		if s, ok := m.sessionIn(it.Pane); ok && s.Progress != nil && s.Progress.Pct < 100 {
 			return "paused"
 		}
@@ -34,7 +34,7 @@ func (m Model) stateWord(s sample.Session) string {
 		return age
 	}
 	for _, it := range m.queue {
-		if it.Pane == s.Pane {
+		if s.Pane != "" && it.Pane == s.Pane {
 			return m.queueWordOf(it)
 		}
 	}

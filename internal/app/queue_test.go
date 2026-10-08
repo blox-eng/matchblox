@@ -502,3 +502,17 @@ func TestAJumpMovesTheCursorToTheNextThatWaits(t *testing.T) {
 		t.Fatalf("Sessions selects %s, which does not wait", s.Name)
 	}
 }
+
+// TestTwoSessionsOutsideTmuxKeepTheirOwnWords: a session with no pane does
+// not take the queue word of another session with no pane.
+func TestTwoSessionsOutsideTmuxKeepTheirOwnWords(t *testing.T) {
+	st := fixtureState()
+	st.Sessions = append(st.Sessions, sample.Session{PID: 960, Name: "loose", Status: "idle", Idle: time.Minute, Context: "fresh"})
+	st.Queue = []queue.Item{{SessionID: "x", Name: "other", State: queue.StateQuestion, Since: st.At}}
+	m, _ := loadedWith(t, 100, st)
+	for _, s := range m.snap.Sessions {
+		if s.PID == 960 && m.stateWord(s) != "idle" {
+			t.Fatalf("a session with no pane took %q", m.stateWord(s))
+		}
+	}
+}

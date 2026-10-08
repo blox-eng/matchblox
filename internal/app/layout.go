@@ -158,6 +158,9 @@ func (m Model) progressCell(p *sample.Progress, n int) string {
 
 // sessionIn is the agent session of a pane.
 func (m Model) sessionIn(pane string) (sample.Session, bool) {
+	if pane == "" {
+		return sample.Session{}, false // outside tmux: no pane tells sessions apart
+	}
 	for _, s := range m.all.sessions {
 		if s.Pane == pane {
 			return s, true

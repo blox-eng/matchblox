@@ -97,10 +97,11 @@ func Reply(text string) (string, bool) {
 	return ls[len(ls)-1].text, false
 }
 
-// lines keeps the lines with words, without the frame around them.
-func lines(s string) []line {
-	// The text is not trusted: a control key would drive the terminal.
-	s = strings.Map(func(r rune) rune {
+// Clean makes untrusted text safe to show: a tab is a space, and every
+// other control key, which would drive the terminal, is dropped. New lines
+// stay.
+func Clean(s string) string {
+	return strings.Map(func(r rune) rune {
 		switch {
 		case r == '\t':
 			return ' '
@@ -109,6 +110,11 @@ func lines(s string) []line {
 		}
 		return r
 	}, s)
+}
+
+// lines keeps the lines with words, without the frame around them.
+func lines(s string) []line {
+	s = Clean(s)
 	var out []line
 	for _, raw := range strings.Split(s, "\n") {
 		t := strings.TrimFunc(raw, frame)
