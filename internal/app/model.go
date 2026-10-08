@@ -85,10 +85,11 @@ type action struct {
 	steps       [][]string
 	destructive bool
 	nav         bool
-	attach      bool   // the last step takes the terminal until it exits
-	rec         string // the service's name for it
-	which       string // primary | secondary
-	text        string // what an answer types
+	attach      bool     // the last step takes the terminal until it exits
+	rec         string   // the service's name for it
+	which       string   // primary | secondary
+	text        string   // what an answer types
+	batch       []string // worktrees: one guarded act each
 }
 
 func (a action) String() string {
@@ -129,7 +130,7 @@ type Model struct {
 	hist       history.Series
 	selPID     int
 	orphanPID  int
-	recSel     int
+	recPick    string // the selected recommendation, under the queue
 	gitSel     int
 	tab        int
 	pending    *action
@@ -147,6 +148,14 @@ type Model struct {
 	dark       bool
 	splashAt   time.Time
 	splashDone bool
+	armed      string // the step a second tap runs: what the first tap showed
+	all        lists  // what the service sent; queue, recs and snap hold the drawn copies
+	filter     string // the search of the open tab
+	searching  bool   // the search line takes the keys
+	sessSort   sortBy
+	paneSort   sortBy
+	picked     map[string]bool // worktrees x removes
+	batch      *batch
 }
 
 func New(opt Options) Model {
@@ -279,7 +288,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.queue = st.Queue
 		m.noteChanges(st.Sessions)
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
-		m.queue = st.Queue
+		m.all = lists{queue: st.Queue, recs: st.Recommendations, sessions: st.Sessions, orphans: st.Orphans}
+		m.refresh()
 		if m.lost {
 			m.lost, m.backoff, m.flash = false, 0, ""
 		}
@@ -296,6 +306,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.animating = false
 		return m, m.animate()
 	case resultMsg:
+		if m.tally(proto.Result(msg)) {
+			return m, m.recv()
+		}
 		if text := describe(proto.Result(msg)); text != "" {
 			m.flash = text
 		}
@@ -309,6 +322,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.lost = true
 		m.flash = "connection lost: " + msg.err.Error()
+		if m.batch != nil {
+			// Their results went with the connection.
+			m.flash += fmt.Sprintf("; %d removals have no answer, r on Git rescans", len(m.batch.ids))
+			m.batch = nil
+		}
 		if m.opt.Redial == nil {
 			return m, nil
 		}
@@ -352,13 +370,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.flash = "ran: " + msg.cmd
 		}
+	case tea.MouseClickMsg:
+		return m.tap(msg.Mouse())
+	case tea.MouseWheelMsg:
+		return m.wheel(msg.Mouse())
 	case tea.KeyPressMsg:
 		if m.splashing() {
 			m.splashDone = true // any key stops the start screen, and does nothing else
 			return m, nil
 		}
+		m.armed = "" // a key between two taps: the next tap shows again
 		if m.input != nil {
 			return m.typing(msg)
+		}
+		if m.searching {
+			return m.search(msg)
 		}
 		return m.key(msg.String())
 	}
@@ -399,23 +425,7 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		m.pending = nil
 		// A destructive action needs a typed y; Enter alone is not consent.
 		if k == "y" || (k == "enter" && !a.destructive) {
-			if a.attach {
-				return m, m.attach(a)
-			}
-			if a.nav {
-				run := m.opt.Run
-				return m, func() tea.Msg { return runNav(a, run) }
-			}
-			if m.conn == nil || m.lost {
-				m.flash = "not sent, no connection: " + a.String()
-				return m, nil
-			}
-			confirm := ""
-			if a.destructive {
-				confirm = "y"
-			}
-			m.flash = "sent: " + a.String()
-			return m, m.send(proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
+			return m.confirm(a)
 		}
 		m.flash = "cancelled: " + a.String()
 		return m, nil
@@ -426,9 +436,34 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 	case "tab":
-		m.tab = (m.tab + 1) % len(tabNames)
+		m.setTab((m.tab + 1) % len(tabNames))
 	case "shift+tab":
-		m.tab = (m.tab + len(tabNames) - 1) % len(tabNames)
+		m.setTab((m.tab + len(tabNames) - 1) % len(tabNames))
+	case "/":
+		m.searching, m.filter = true, ""
+		m.refresh()
+	case "esc":
+		if m.filter != "" {
+			m.filter = ""
+			m.refresh()
+		}
+	case "s":
+		if s, _ := m.sortable(); s != nil {
+			_, names := m.sortable()
+			m.sortOn((s.col + 1) % len(names))
+		}
+	case "S", "shift+s":
+		if s, _ := m.sortable(); s != nil {
+			m.sortOn(s.col)
+		}
+	case "space", " ":
+		if m.tab == tabGit {
+			m.mark()
+		}
+	case "X", "shift+x":
+		if m.tab == tabGit {
+			m.markAllSafe()
+		}
 	case "up", "k":
 		m.move(-1)
 	case "down", "j":
@@ -450,10 +485,39 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		}
 	default:
 		if len(k) == 1 && k[0] >= '1' && int(k[0]-'1') < len(tabNames) {
-			m.tab = int(k[0] - '1')
+			m.setTab(int(k[0] - '1'))
 		}
 	}
 	return m, nil
+}
+
+// confirm runs an action the person consented to: a Nav step here, any
+// other on the service.
+func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
+	if len(a.batch) > 0 {
+		if m.conn == nil || m.lost {
+			m.flash = "not sent, no connection: " + a.String()
+			return m, nil
+		}
+		return m.sendBatch(a)
+	}
+	if a.attach {
+		return m, m.attach(a)
+	}
+	if a.nav {
+		run := m.opt.Run
+		return m, func() tea.Msg { return runNav(a, run) }
+	}
+	if m.conn == nil || m.lost {
+		m.flash = "not sent, no connection: " + a.String()
+		return m, nil
+	}
+	confirm := ""
+	if a.destructive {
+		confirm = "y"
+	}
+	m.flash = "sent: " + a.String()
+	return m, m.send(proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
 }
 
 // navAllowed is what a Nav step may be: it runs here on one key, so a
@@ -571,6 +635,9 @@ func (m Model) primary() *action {
 		if it, ok := m.selectedQueue(); ok && it.Pane != "" {
 			return m.jump(it.Pane)
 		}
+		if r, ok := m.selectedRec(); ok {
+			return fromAdvice(r, "primary")
+		}
 	case tabSessions:
 		if s, ok := m.selected(); ok && s.Pane != "" {
 			return m.jump(s.Pane)
@@ -587,10 +654,6 @@ func (m Model) primary() *action {
 		if wt, ok := m.selectedWorktree(); ok {
 			return &action{label: "shell", nav: true, steps: [][]string{{"tmux", "new-window", "-c", wt.Path}}}
 		}
-	case tabRecs:
-		if r, ok := m.selectedRec(); ok {
-			return fromAdvice(r, "primary")
-		}
 	}
 	return nil
 }
@@ -605,11 +668,14 @@ func (m Model) secondary() *action {
 				rec: "orphan:" + strconv.Itoa(o.PID), which: "secondary"}
 		}
 	case tabGit:
+		if a := m.removeMarked(); a != nil {
+			return a
+		}
 		if wt, ok := m.selectedWorktree(); ok && wt.Safe {
 			return &action{label: "remove", steps: [][]string{wt.Remove}, destructive: true,
 				rec: "worktree:" + wt.Path, which: "secondary"}
 		}
-	case tabRecs:
+	case tabQueue:
 		if r, ok := m.selectedRec(); ok {
 			return fromAdvice(r, "secondary")
 		}
@@ -620,25 +686,8 @@ func (m Model) secondary() *action {
 func clampMove(i, d, n int) int { return min(max(i+d, 0), max(n-1, 0)) }
 
 func (m *Model) move(d int) {
-	switch m.tab {
-	case tabQueue:
-		if q := m.queue; len(q) > 0 {
-			m.queuePane = q[clampMove(m.queueSelIndex(), d, len(q))].Pane
-		}
-	case tabPanes:
-		m.paneSel = clampMove(m.paneSel, d, len(m.paneRows()))
-	case tabProcs:
-		if o := m.snap.Orphans; len(o) > 0 {
-			m.orphanPID = o[clampMove(m.orphanIndex(), d, len(o))].PID
-		}
-	case tabGit:
-		m.gitSel = clampMove(m.gitSel, d, len(m.worktreeRows()))
-	case tabRecs:
-		m.recSel = clampMove(m.recSel, d, len(m.recs))
-	case tabSessions:
-		if ss := m.snap.Sessions; len(ss) > 0 {
-			m.selPID = ss[clampMove(m.selIndex(), d, len(ss))].PID
-		}
+	if n := m.rowCount(); n > 0 {
+		m.selectRow(clampMove(m.rowIndex(), d, n))
 	}
 }
 
@@ -658,11 +707,16 @@ func (m Model) selected() (sample.Session, bool) {
 	return m.snap.Sessions[m.selIndex()], true
 }
 
+// selectedRec is the recommendation selected under the queue.
 func (m Model) selectedRec() (advice.Rec, bool) {
-	if len(m.recs) == 0 {
+	if m.tab != tabQueue {
 		return advice.Rec{}, false
 	}
-	return m.recs[min(m.recSel, len(m.recs)-1)], true
+	i := m.queueIndex() - len(m.queue)
+	if i < 0 || i >= len(m.recs) {
+		return advice.Rec{}, false
+	}
+	return m.recs[i], true
 }
 
 // keepSelection follows the selected session by PID across re-sorts.
@@ -675,5 +729,6 @@ func (m *Model) keepSelection() {
 func (m Model) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion // a tap on a phone selects and acts
 	return v
 }

@@ -70,7 +70,7 @@ func TestExampleLoads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d := Default(); c.Interval != d.Interval || c.Sessions.CompactAt != d.Sessions.CompactAt || c.Orphans.CPUOver != d.Orphans.CPUOver {
+	if d := Default(); c.Interval != d.Interval || c.Sessions.CompactAt != d.Sessions.CompactAt || c.Sessions.ProgressPrompt != d.Sessions.ProgressPrompt || c.Orphans.CPUOver != d.Orphans.CPUOver {
 		t.Fatalf("the example must state the defaults: %+v", c)
 	}
 }

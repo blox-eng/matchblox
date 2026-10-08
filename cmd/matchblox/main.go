@@ -9,6 +9,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,6 +22,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/pprof"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -34,6 +36,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -56,8 +59,19 @@ func main() {
 	if err := run(os.Args[1:]); err != nil {
 		pprof.StopCPUProfile()
 		fmt.Fprintln(os.Stderr, "matchblox:", err)
+		holdOnError(err, os.Getenv, os.Stdin, os.Stderr)
 		os.Exit(1)
 	}
+}
+
+// holdOnError keeps an error on the screen in the home session: the console
+// is its only command, so the pane would close before the person reads it.
+func holdOnError(err error, env func(string) string, in io.Reader, out io.Writer) {
+	if err == nil || env(panes.HomeEnv) != "1" {
+		return
+	}
+	_, _ = fmt.Fprintln(out, "press Enter to close")
+	_, _ = bufio.NewReader(in).ReadString('\n')
 }
 
 // configArg is the --config the person gave, passed on to a service the
@@ -66,7 +80,7 @@ var configArg string
 
 func run(args []string) error {
 	if len(args) > 0 && args[0] == "hook" {
-		return hook(args[1:], os.Stdin, transport.SocketPath(), spoolPath())
+		return hook(args[1:], os.Stdin, os.Stdout, transport.SocketPath(), spoolPath(), progressPrompt(args[1:]))
 	}
 	cmd := "console"
 	if len(args) > 0 {
@@ -102,6 +116,16 @@ func run(args []string) error {
 		cfg.Interval.Duration = *interval
 	}
 
+	if cmd == "console" && *root == "" {
+		// A phone that connects lands in the console's own tmux session, and
+		// every pane has a way back to it. Fixtures (demos, the replay) run
+		// in place. Before the nice below: a tmux server started here must
+		// not run every agent at nice 19.
+		if err := goHome(); err != nil {
+			return err
+		}
+	}
+
 	// matchblox must not add load: lowest CPU priority for us and every
 	// command we start.
 	lowestPriority()
@@ -119,6 +143,21 @@ func run(args []string) error {
 	return console(path, cfg, *root, *noMotion)
 }
 
+// goHome replaces this process with `tmux new-session -A -s matchblox
+// matchblox …` outside tmux. It returns only when the console runs in place.
+func goHome() error {
+	tmux, err := exec.LookPath("tmux")
+	self := invokedPath(os.Args[0])
+	if self == "" {
+		return nil
+	}
+	argv := panes.HomeArgv(os.Getenv("TMUX") != "", err == nil, append([]string{self}, os.Args[1:]...))
+	if argv == nil {
+		return nil
+	}
+	return execve(tmux, argv, os.Environ())
+}
+
 // hookTimeout bounds the whole delivery, so `matchblox hook` stops in
 // less than 50 ms with the service up, down or stuck.
 const hookTimeout = 30 * time.Millisecond
@@ -126,7 +165,7 @@ const hookTimeout = 30 * time.Millisecond
 // hook delivers one agent hook event to the service, or to the spool when
 // no service answers. It returns nil on every path: a hook that fails must
 // not disturb the agent.
-func hook(args []string, stdin io.Reader, sock, spool string) error {
+func hook(args []string, stdin io.Reader, out io.Writer, sock, spool string, progress bool) error {
 	name := ""
 	if len(args) > 0 {
 		name = args[0]
@@ -138,7 +177,22 @@ func hook(args []string, stdin io.Reader, sock, spool string) error {
 	if transport.Notify(sock, hookTimeout, proto.KindHook, ev) != nil {
 		_ = hooks.Append(spool, ev)
 	}
+	if progress && ev.Name == "SessionStart" && ev.Pane != "" { // a session in tmux: what the console watches
+		// Claude Code adds what a SessionStart hook prints to the session's
+		// context; the console reads the bar back from the transcript.
+		_, _ = fmt.Fprintln(out, hooks.ProgressPrompt)
+	}
 	return nil
+}
+
+// progressPrompt reads the config only for SessionStart, the one event that
+// prints: the other hooks stay as fast as they were.
+func progressPrompt(args []string) bool {
+	if len(args) == 0 || args[0] != "SessionStart" {
+		return false
+	}
+	cfg, err := config.Load(config.Path())
+	return err == nil && cfg.Sessions.ProgressPrompt
 }
 
 func spoolPath() string { return filepath.Join(filepath.Dir(state.Path()), "spool.jsonl") }
@@ -314,6 +368,11 @@ func serviceCmd() (*exec.Cmd, func(), error) {
 	}
 	c := exec.Command(exe, args...) //nolint:gosec // our own binary
 	c.Dir = "/"
+	// The service outlives this console: it watches the default tmux server,
+	// not the one this console happens to run in.
+	c.Env = slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		return strings.HasPrefix(kv, "TMUX=") || strings.HasPrefix(kv, "TMUX_PANE=")
+	})
 	closeLog := func() {}
 	logPath := filepath.Join(filepath.Dir(state.Path()), "serve.log")
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err == nil {
