@@ -14,9 +14,18 @@ import (
 	"github.com/blox-eng/matchblox/internal/procfs"
 )
 
+// Exited is an agent process that exited and waits for its parent to
+// reap it.
+type Exited struct {
+	PID        int    `json:"pid"`
+	Parent     int    `json:"parent"`
+	ParentComm string `json:"parent_comm"`
+}
+
 // Session is one agent process and the pane that owns it.
 type Session struct {
 	PID        int           `json:"pid"`
+	Start      uint64        `json:"start_ticks"` // /proc/<pid>/stat field 22: tells a reused pid apart
 	Pane       string        `json:"pane"`
 	Target     string        `json:"target"`
 	Tab        string        `json:"tab"` // tmux window name
@@ -69,12 +78,15 @@ type Machine struct {
 }
 
 type Snapshot struct {
-	At         time.Time    `json:"at"`
-	Machine    Machine      `json:"machine"`
-	Sessions   []Session    `json:"sessions"`
-	IdlePanes  []IdlePane   `json:"idle_panes"`
-	Orphans    []Orphan     `json:"orphans"`
-	Top        []ProcRow    `json:"top"`
+	At        time.Time  `json:"at"`
+	Machine   Machine    `json:"machine"`
+	Sessions  []Session  `json:"sessions"`
+	IdlePanes []IdlePane `json:"idle_panes"`
+	Orphans   []Orphan   `json:"orphans"`
+	Top       []ProcRow  `json:"top"`
+	// Exited are agents that exited and that their parent has not reaped
+	// (zombies): not sessions, listed so the person sees why they stay.
+	Exited     []Exited     `json:"exited,omitempty"`
 	Containers []Container  `json:"containers"`
 	Groups     []GroupShare `json:"groups"`
 	GitPolling []GitPolling `json:"git_polling"`
@@ -109,6 +121,10 @@ type Sampler struct {
 	Agents        []string // process names that are agent sessions
 	Rules         Rules
 	LatencyTarget string // host:port, empty disables
+	// OwnEntries compares each ~/.claude/sessions/<pid>.json with its
+	// process's start time (see ownEntry). On the live machine only: a
+	// fixture tree has fixed uptimes and a real clock.
+	OwnEntries bool
 	// ProcEvery is how often the process table, tmux and sessions are
 	// re-read. Reading every /proc/<pid>/stat is most of a sample's cost, so
 	// it runs slower than the cheap machine counters. Zero: every sample.
@@ -197,7 +213,7 @@ func (s *Sampler) Sample() Snapshot {
 		s.scan(now)
 	}
 	l := s.last
-	snap.Sessions, snap.IdlePanes, snap.Orphans, snap.Top = l.Sessions, l.IdlePanes, l.Orphans, l.Top
+	snap.Sessions, snap.IdlePanes, snap.Orphans, snap.Top, snap.Exited = l.Sessions, l.IdlePanes, l.Orphans, l.Top, l.Exited
 	snap.Containers, snap.Groups, snap.GitPolling = l.Containers, l.Groups, l.GitPolling
 	snap.Errors = append(snap.Errors, l.Errors...)
 	s.alerts(&snap, now)
@@ -322,8 +338,13 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 
 	hosting := map[string]bool{}
 	alive := map[procKey]bool{}
+	uptime := s.FS.Uptime()
 	for pid, p := range procs {
 		if !s.isAgent(p.Comm) {
+			continue
+		}
+		if p.State == 'Z' || p.State == 'X' {
+			snap.Exited = append(snap.Exited, Exited{PID: pid, Parent: p.PPID, ParentComm: procs[p.PPID].Comm})
 			continue
 		}
 		// An agent started anywhere below another agent (helpers, a nested
@@ -343,10 +364,10 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 
 		cpu, n := s.treeCPU(pid, procs, children, dt)
 		sess := Session{
-			PID: pid, Pane: paneID, Target: pane.Target, Tab: pane.Window, Cwd: s.FS.Cwd(pid),
+			PID: pid, Start: p.StartTime, Pane: paneID, Target: pane.Target, Tab: pane.Window, Cwd: s.FS.Cwd(pid),
 			CPU: cpu, Procs: n, Window: 200_000, Context: "unknown",
 		}
-		if e, ok := s.agents.entry(pid); ok {
+		if e, ok := s.agents.entry(pid); ok && s.ownEntry(e, p, uptime, now) {
 			sess.Name, sess.SessionID = e.Name, e.SessionID
 			sess.Busy, sess.Status = e.Status == "busy", e.Status
 			if e.StartedAt > 0 {
@@ -405,6 +426,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			snap.IdlePanes = append(snap.IdlePanes, IdlePane{p.ID, p.Target, p.Command, p.Path})
 		}
 	}
+	sort.Slice(snap.Exited, func(i, j int) bool { return snap.Exited[i].PID < snap.Exited[j].PID })
 	sort.Slice(snap.Sessions, func(i, j int) bool {
 		a, b := snap.Sessions[i], snap.Sessions[j]
 		if a.ContextPct != b.ContextPct {
@@ -552,4 +574,41 @@ func Human(d time.Duration) string {
 		return strconv.Itoa(int(d/time.Minute)) + "m"
 	}
 	return strconv.Itoa(int(d/time.Second)) + "s"
+}
+
+// registrySlack is how much earlier than its process an agent may say it
+// started: the agent writes its file after the process starts, and clocks
+// round.
+const registrySlack = 30 * time.Second
+
+// ownEntry tells if a registry file belongs to this process. An agent that
+// died without removing ~/.claude/sessions/<pid>.json leaves its status
+// there, and a new process with the same pid must not take it: the console
+// would show a fresh agent as stale and offer to end it.
+func (s *Sampler) ownEntry(e registryEntry, p procfs.Proc, uptime float64, now time.Time) bool {
+	if !s.OwnEntries || e.StartedAt == 0 || uptime == 0 {
+		return true // nothing to compare: the file is the only evidence
+	}
+	started := now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
+	return !time.UnixMilli(e.StartedAt).Before(started.Add(-registrySlack))
+}
+
+// How long a session sits idle before its state word ages.
+const (
+	ColdAfter  = 24 * time.Hour
+	StaleAfter = 7 * 24 * time.Hour
+)
+
+// Age is the state word of a session: busy, or idle, cold and stale as
+// its idle time grows.
+func (s Session) Age() string {
+	switch {
+	case s.Busy:
+		return "busy"
+	case s.Idle >= StaleAfter:
+		return "stale"
+	case s.Idle >= ColdAfter:
+		return "cold"
+	}
+	return "idle"
 }

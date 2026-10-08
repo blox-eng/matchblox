@@ -86,7 +86,11 @@ func (m *Model) refresh() {
 			return !keep(strconv.Itoa(o.PID), o.Comm, o.Cmdline, o.Cwd, o.Target)
 		})
 	}
-	slices.SortStableFunc(sessions, func(a, b sample.Session) int { return m.sessSort.compare(a, b) })
+	waits := map[string]bool{}
+	for _, it := range m.all.queue {
+		waits[it.Pane] = true
+	}
+	slices.SortStableFunc(sessions, func(a, b sample.Session) int { return m.sessSort.compare(a, b, waits) })
 	m.snap.Sessions = sessions
 	if m.git != nil {
 		for p := range m.picked {
@@ -97,7 +101,8 @@ func (m *Model) refresh() {
 	}
 }
 
-func (s sortBy) compare(a, b sample.Session) int {
+// compare orders two sessions. waits holds the panes in the queue.
+func (s sortBy) compare(a, b sample.Session, waits map[string]bool) int {
 	if s.rev {
 		a, b = b, a
 	}
@@ -105,9 +110,12 @@ func (s sortBy) compare(a, b sample.Session) int {
 	c := 0
 	switch s.col {
 	case sortState:
-		c = boolFirst(a.Busy, b.Busy)
+		// Who works, then who waits for the person, then the newest idle:
+		// the oldest sink to the bottom. Age outranks waiting: a session
+		// that waits since yesterday is cold, not waiting.
+		c = rank(a, waits) - rank(b, waits)
 		if c == 0 {
-			c = desc(float64(a.Idle), float64(b.Idle))
+			c = cmpF(float64(a.Idle), float64(b.Idle))
 		}
 	case sortIdle:
 		c = desc(float64(a.Idle), float64(b.Idle))
@@ -129,21 +137,26 @@ func (s sortBy) compare(a, b sample.Session) int {
 	return c
 }
 
+// rank is the group of a session in the default order.
+func rank(s sample.Session, waits map[string]bool) int {
+	switch age := s.Age(); {
+	case age == "busy":
+		return 0
+	case age == "idle" && waits[s.Pane]:
+		return 1
+	case age == "idle":
+		return 2
+	case age == "cold":
+		return 3
+	}
+	return 4
+}
+
 func cmpF(x, y float64) int {
 	switch {
 	case x < y:
 		return -1
 	case x > y:
-		return 1
-	}
-	return 0
-}
-
-func boolFirst(x, y bool) int {
-	switch {
-	case x && !y:
-		return -1
-	case y && !x:
 		return 1
 	}
 	return 0

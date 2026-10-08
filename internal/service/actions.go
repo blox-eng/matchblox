@@ -114,7 +114,8 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 }
 
 // resolve finds the action in the service's own state: a rec by its id, or
-// the x action of a panel row ("orphan:<pid>", "worktree:<path>").
+// the x action of a panel row ("orphan:<pid>", "worktree:<path>",
+// "session:<pid>" for a stale session).
 func (s *Service) resolve(id, which string) (advice.Action, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -140,6 +141,16 @@ func (s *Service) resolve(id, which string) (advice.Action, bool) {
 			if o.PID == pid && pid > 0 && len(o.Kill) > 0 {
 				return advice.Action{Label: "kill", Steps: [][]string{o.Kill}, Destructive: true,
 					Guards: []advice.Guard{{PID: o.PID, StartTicks: o.Start}}}, true
+			}
+		}
+	}
+	if v, ok := strings.CutPrefix(id, "session:"); ok {
+		// Only an agent idle a week or more, as this service sampled it.
+		pid, _ := strconv.Atoi(v)
+		for _, x := range s.cur.Sessions {
+			if x.PID == pid && pid > 0 && x.Age() == "stale" {
+				return advice.Action{Label: "end", Steps: [][]string{{"kill", strconv.Itoa(pid)}}, Destructive: true,
+					Guards: []advice.Guard{{PID: pid, StartTicks: x.Start, IdlePane: x.Pane}}}, true
 			}
 		}
 	}

@@ -103,10 +103,11 @@ func order(m tea.Model) string {
 	return strings.Join(names, " ")
 }
 
-// TestSessionsBusyFirst: who works is on top, then who waits longest.
+// TestSessionsBusyFirst: who works is on top, then the newest idle; the
+// oldest are at the bottom (owner, 2026-10-08).
 func TestSessionsBusyFirst(t *testing.T) {
 	m, _ := loadedWith(t, 100, sortFixture())
-	if got := order(m); got != "bravo charlie alpha" {
+	if got := order(m); got != "bravo alpha charlie" {
 		t.Fatalf("order %q", got)
 	}
 }
