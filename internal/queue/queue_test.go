@@ -208,3 +208,14 @@ func TestAPaneThatAsksWaitsForYou(t *testing.T) {
 		t.Fatalf("opencode %+v", it)
 	}
 }
+
+// TestAStopThatAsksWaits: a turn that ended on a question waits for the
+// person; it is not done.
+func TestAStopThatAsksWaits(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "s1", At: at(0), Message: "Shall I open the PR?", Asks: true})
+	q.Merge([]sample.Session{session("s1", "%3", "api", "idle", 0)}, at(5))
+	if it := q.Items()[0]; it.State != StateQuestion || it.LastLine != "Shall I open the PR?" {
+		t.Fatalf("%+v", it)
+	}
+}

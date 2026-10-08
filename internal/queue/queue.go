@@ -91,7 +91,11 @@ func (q *Queue) Apply(ev hooks.Event) {
 			set(StateQuestion, line)
 		}
 	case "Stop":
-		set(StateFinished, ev.Message)
+		if ev.Asks {
+			set(StateQuestion, ev.Message)
+		} else {
+			set(StateFinished, ev.Message)
+		}
 	case "PostToolUse":
 		// A tool ran: the person allowed it in the pane.
 		if was && it.State == StatePermission {

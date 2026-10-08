@@ -13,6 +13,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/procfs"
+	"github.com/blox-eng/matchblox/internal/said"
 )
 
 // Exited is an agent process that exited and waits for its parent to
@@ -403,6 +404,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			if u, ok := s.agents.usageOf(e.SessionID, e.Cwd); ok {
 				sess.Context = "known"
 				sess.Model, sess.Tokens, sess.Progress = u.Model, u.Tokens, u.Progress
+				sess.LastLine, sess.Asks = u.LastLine, u.Asks
 				long, ok := s.longCtx[key]
 				if !ok {
 					env := func(k string) (string, bool) { return s.FS.Environ(pid, k) }
@@ -556,7 +558,7 @@ func (s *Sampler) readPanes(sessions []Session, idx []int, now time.Time) {
 			sess.Status, sess.Idle = "idle", now.Sub(prev.changed).Truncate(time.Second)
 		}
 		sess.FromPane = true
-		sess.LastLine, sess.Asks = paneLine(t)
+		sess.LastLine, sess.Asks = said.Screen(t)
 	}
 }
 

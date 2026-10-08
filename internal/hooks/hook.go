@@ -9,6 +9,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/blox-eng/matchblox/internal/said"
 )
 
 // Notification kinds the queue reads. Other kinds pass through as they are.
@@ -23,6 +25,7 @@ type Event struct {
 	SessionID string    `json:"session_id"`
 	Cwd       string    `json:"cwd,omitempty"`
 	Message   string    `json:"message,omitempty"`
+	Asks      bool      `json:"asks,omitempty"` // Stop: the reply ends on a question
 	At        time.Time `json:"at"`
 	Pane      string    `json:"pane,omitempty"` // $TMUX_PANE
 }
@@ -58,7 +61,8 @@ func Parse(stdin io.Reader, name string, env func(string) string) (Event, error)
 		ev.Message = in.Message
 		ev.Kind = notificationKind(in.NotificationType, in.Message)
 	case "Stop":
-		ev.Message = lastLine(in.LastAssistant)
+		line, asks := said.Reply(in.LastAssistant)
+		ev.Message, ev.Asks = cut(line), asks
 	}
 	return ev, nil
 }
@@ -82,9 +86,7 @@ func notificationKind(typ, msg string) string {
 	return ""
 }
 
-func lastLine(s string) string {
-	lines := strings.Split(strings.TrimSpace(s), "\n")
-	line := strings.TrimSpace(lines[len(lines)-1])
+func cut(line string) string {
 	if r := []rune(line); len(r) > 200 {
 		line = string(r[:199]) + "…"
 	}
