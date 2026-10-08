@@ -187,6 +187,17 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   for their parent (zombies) are one faint line under the sessions
   ("137 exited agents · e shows them"); `e` lists them with the parent that
   keeps them and the command that clears them. They never count as sessions.
+- **Layers** (#23, as in k9s): Hosts sits above the console of one host.
+  Hosts is `HOSTS · N`, one row each: `this machine`, each added host,
+  `+ add a host`; the header says `▰ matchblox · hosts`. `Enter` opens a row.
+  In a console, `esc` with nothing to cancel or clear goes back to Hosts.
+  `+ add a host` lists the hosts of `~/.ssh/config` and `type a host…`; the
+  pick shows `matchblox connect <host>` and runs it after a typed `y`. The
+  first run asks "Where do your agents run?" (`this machine`, `another
+  machine`) once. A console of a host shows the host in the header, `stale`
+  in `warn` while the connection is lost, and before its first state only
+  the name, never zero figures. A host the console cannot reach says why and
+  shows the connect (design/0005-remote-mode.md §3.5).
 - **Doors** (#25): the setup steps sit above the queue under `SET UP · N`,
   one row each: the title, then why in `muted` (a door that cannot open shows
   the fix in `warn`). On a phone only the selected door shows why. `Enter`

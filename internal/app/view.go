@@ -73,12 +73,20 @@ func (m Model) render() string {
 	if m.mismatch {
 		return strings.Join(append(out, "", m.mismatchText(w)), "\n")
 	}
+	if m.blocked != nil {
+		return strings.Join(append(out, "", m.blockedText(w)), "\n")
+	}
 	if !m.have {
 		why := m.waitingWhy()
 		if len(out)+markH/2+3 <= m.height {
 			out = append(append(out, ""), m.markLines(w)...)
 		}
-		return strings.Join(append(out, "", strings.Repeat(" ", max((w-lipgloss.Width(why))/2, 0))+m.st.faint.Render(why)), "\n")
+		out = append(out, "", strings.Repeat(" ", max((w-lipgloss.Width(why))/2, 0))+m.st.faint.Render(why))
+		if m.opt.Layered {
+			keys := "esc hosts  q quit"
+			out = append(out, "", strings.Repeat(" ", max((w-len(keys))/2, 0))+m.st.muted.Render(keys))
+		}
+		return strings.Join(out, "\n")
 	}
 	// The line the person acts on sits under the tabs: on a phone the
 	// keyboard covers the bottom of the screen.
@@ -93,6 +101,9 @@ func (m Model) render() string {
 // header shows every metric with its trend when the terminal is wide, drops
 // the trends when it is not, then drops metrics from the right.
 func (m Model) header(w int) string {
+	if !m.have {
+		return fit(" "+m.brand(), w) // no numbers before the first state
+	}
 	mc, h, st := m.snap.Machine, m.history, m.st
 	sep := st.hair.Render("  │  ")
 	type metric struct{ label, value, trend string }
@@ -466,8 +477,18 @@ func size(b float64) string {
 // brand is the mark, the name and the host the console shows.
 func (m Model) brand() string {
 	b := m.st.accent.Render("▰") + " " + m.st.text.Render("matchblox")
-	if m.host.Host != "" {
-		b += m.st.faint.Render(" · ") + m.st.muted.Render(m.host.Host)
+	// A host shows by the name the builder typed: its own hostname may be
+	// another.
+	host := m.opt.Host
+	if host == "" {
+		host = m.host.Host
+	}
+	if host != "" {
+		b += m.st.faint.Render(" · ") + m.st.muted.Render(host)
+	}
+	if m.lost && m.have {
+		// What shows is the last state the host sent.
+		b += m.st.faint.Render(" · ") + m.st.warn.Render("stale")
 	}
 	return b
 }
@@ -491,12 +512,16 @@ func (m Model) mismatchText(w int) string {
 	if m.host.Version < proto.Version {
 		side = "update " + host
 	}
+	cmd := installCmd
+	if a := m.connectAction(); a != nil && m.host.Version < proto.Version {
+		cmd = shellLine(a.steps[0])
+	}
 	lines := []string{
 		fit(" "+m.st.text.Render(fmt.Sprintf("the console is version %d, the host is version %d", proto.Version, m.host.Version)), w),
 		"",
-		fit(" "+m.st.label.Render(side+": ")+m.st.text.Render(installCmd), w),
+		fit(" "+m.st.label.Render(side+": ")+m.st.text.Render(cmd), w),
 		"",
-		fit(" "+m.st.muted.Render("q quit"), w),
+		m.connectKeys(w),
 	}
 	return strings.Join(lines, "\n")
 }

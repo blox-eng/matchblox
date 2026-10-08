@@ -17,6 +17,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -341,5 +342,73 @@ func TestFirstRunWritesTheConfig(t *testing.T) {
 	cfg, err := config.Load(p)
 	if err != nil || cfg.Alerts.Load1Over != 16 {
 		t.Fatalf("config %+v, %v", cfg.Alerts, err)
+	}
+}
+
+func TestFirstArgThatIsNoCommandIsAHost(t *testing.T) {
+	for _, c := range []struct {
+		args      []string
+		cmd, host string
+		rest      []string
+		wantErr   bool
+	}{
+		{nil, "console", "", nil, false},
+		{[]string{"--no-motion"}, "console", "", []string{"--no-motion"}, false},
+		{[]string{"serve", "--stdio"}, "serve", "", []string{"--stdio"}, false},
+		{[]string{"ws-1"}, "console", "ws-1", nil, false},
+		{[]string{"ws-1", "--no-motion"}, "console", "ws-1", []string{"--no-motion"}, false},
+		{[]string{"me@build.example.com"}, "console", "me@build.example.com", nil, false},
+		{[]string{"ws;1"}, "", "", nil, true},
+	} {
+		cmd, host, rest, err := parseCommand(c.args)
+		if (err != nil) != c.wantErr || cmd != c.cmd || host != c.host || strings.Join(rest, " ") != strings.Join(c.rest, " ") {
+			t.Errorf("parseCommand(%q) = %q %q %q %v", c.args, cmd, host, rest, err)
+		}
+	}
+}
+
+// fakeRemote puts an ssh on PATH whose far side is this test binary, as
+// `matchblox serve --stdio` on an isolated host.
+func fakeRemote(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	far := filepath.Join(dir, "far")
+	if err := os.Mkdir(far, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ssh := "#!/bin/sh\nwhile [ $# -gt 0 ]; do case \"$1\" in -o|-i) shift 2;; --) shift; break;; -*) shift;; *) break;; esac; done\nshift\nexec sh -c \"$*\"\n"
+	mb := "#!/bin/sh\nMATCHBLOX_TEST_ARGS=\"$(printf '%s\\037%s' \"$1\" \"$2\")\" exec " + os.Args[0] + "\n"
+	for name, body := range map[string]string{filepath.Join(dir, "ssh"): ssh, filepath.Join(far, "matchblox"): mb} {
+		if err := os.WriteFile(name, []byte(body), 0o700); err != nil { //nolint:gosec // a test script
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir+":"+far+":"+os.Getenv("PATH"))
+}
+
+func TestRemoteReachesTheHostService(t *testing.T) {
+	path := isolate(t)
+	serveInProcess(t, path)
+	fakeRemote(t)
+	key := filepath.Join(t.TempDir(), remote.KeyName)
+	if err := os.WriteFile(key, []byte("key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := remote.Connect(context.Background(), remote.Target{Host: "ws-1", Key: key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if h := hello(t, c); h.Version != proto.Version {
+		t.Fatalf("hello over ssh %+v", h)
+	}
+	for {
+		env, err := c.Recv()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if env.Kind == proto.KindSnapshot {
+			return
+		}
 	}
 }

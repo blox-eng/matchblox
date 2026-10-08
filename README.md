@@ -50,6 +50,8 @@ one safe action that resolves each thing.
 - Each step runs on the host, and checks its facts again just before it runs:
   the same process, a worktree still clean and unused, a session still idle.
 - Two consoles that confirm the same action run it once.
+- A remote host's stream uses its own key, which can start only the stream
+  there, with a strict host-key check and nothing forwarded.
 
 ## Install
 
@@ -69,6 +71,22 @@ go install github.com/blox-eng/matchblox/cmd/matchblox@latest
 background. The service samples the machine once for every console that
 watches, and keeps history and the state file when no console is open.
 `matchblox serve` runs it in the foreground.
+
+### Agents on another machine
+
+The first run asks where your agents run. Pick "another machine", then a
+host from `~/.ssh/config`, or type one. matchblox connects it once:
+
+```bash
+matchblox connect ws-1
+```
+
+This uses your own ssh login one time. It installs the verified matchblox on
+`ws-1`, and adds a key that can start only the console's stream there (no
+shell, no forwarding). After that, `matchblox ws-1` opens the console of
+`ws-1`, and `esc` goes back to the list of hosts. A jump to a pane uses your
+own ssh login. The stream can answer your agents, as the console does: keep
+`~/.ssh/matchblox_ed25519` as private as any ssh key.
 
 `matchblox status --text` prints the service's state as a short summary, for
 scripts and agents. Thresholds live in `~/.config/matchblox/config.toml`; see

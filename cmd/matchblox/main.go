@@ -2,6 +2,8 @@
 // coding agents: sessions by tmux pane, machine load, git, and what to do.
 //
 //	matchblox                 open the console (starts the service if needed)
+//	matchblox <host>          open the console of a host in ~/.ssh/config
+//	matchblox connect <host>  let this console reach a host (once; again to update it)
 //	matchblox serve           run the service; --stdio speaks on stdin/stdout
 //	matchblox status          print what the service knows as JSON (for agents)
 //	matchblox status --text   the same, as a short summary
@@ -37,9 +39,11 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -59,6 +63,9 @@ func main() {
 	}
 	if err := run(os.Args[1:]); err != nil {
 		pprof.StopCPUProfile()
+		if errors.Is(err, errShown) {
+			os.Exit(1)
+		}
 		fmt.Fprintln(os.Stderr, "matchblox:", err)
 		holdOnError(err, os.Getenv, os.Stdin, os.Stderr)
 		os.Exit(1)
@@ -80,15 +87,22 @@ func holdOnError(err error, env func(string) string, in io.Reader, out io.Writer
 var configArg string
 
 func run(args []string) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "gate":
+			return gateMain()
+		case "authorize":
+			return authorize(args[1:])
+		case "connect":
+			return liveConnect(args[1:])
+		}
+	}
 	if len(args) > 0 && args[0] == "hook" {
 		return hook(args[1:], os.Stdin, os.Stdout, transport.SocketPath(), spoolPath(), progressPrompt(args[1:]))
 	}
-	cmd := "console"
-	if len(args) > 0 {
-		switch args[0] {
-		case "serve", "status", "version", "setup":
-			cmd, args = args[0], args[1:]
-		}
+	cmd, host, args, err := parseCommand(args)
+	if err != nil {
+		return err
 	}
 	fl := flag.NewFlagSet("matchblox", flag.ContinueOnError)
 	cfgPath := fl.String("config", config.Path(), "machine goals (TOML); a missing file means defaults")
@@ -124,7 +138,10 @@ func run(args []string) error {
 		cfg.Interval.Duration = *interval
 	}
 
-	if cmd == "console" && *root == "" {
+	if host != "" && *root != "" {
+		return errors.New("a host and --fixtures do not go together")
+	}
+	if cmd == "console" && *root == "" && host == "" {
 		// A phone that connects lands in the console's own tmux session, and
 		// every pane has a way back to it. Fixtures (demos, the replay) run
 		// in place. Before the nice below: a tmux server started here must
@@ -148,7 +165,23 @@ func run(args []string) error {
 	case "status":
 		return status(os.Stdout, path, cfg, *root, *text)
 	}
-	return console(path, cfg, *root, *noMotion)
+	return console(path, cfg, *root, *noMotion, host)
+}
+
+// parseCommand splits the command from its flags. A first argument that is
+// not a command or a flag is a host: `matchblox ws-1` opens its console.
+func parseCommand(args []string) (cmd, host string, rest []string, err error) {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return "console", "", args, nil
+	}
+	switch args[0] {
+	case "serve", "status", "version", "setup", "connect", "authorize", "gate":
+		return args[0], "", args[1:], nil
+	}
+	if !remote.ValidHost(args[0]) {
+		return "", "", nil, fmt.Errorf("%q is not a command or a host; the commands are connect, serve, status, setup, version", args[0])
+	}
+	return "console", args[0], args[1:], nil
 }
 
 // goHome replaces this process with `tmux new-session -A -s matchblox
@@ -205,9 +238,11 @@ func progressPrompt(args []string) bool {
 
 func spoolPath() string { return filepath.Join(filepath.Dir(state.Path()), "spool.jsonl") }
 
-func console(path string, cfg config.Config, root string, noMotion bool) error {
-	opt := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, NoMotion: noMotion,
-		OutsideTmux: os.Getenv("TMUX") == ""}
+func console(path string, cfg config.Config, root string, noMotion bool, host string) error {
+	base := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, NoMotion: noMotion,
+		OutsideTmux: os.Getenv("TMUX") == "", Self: invokedPath(os.Args[0])}
+	// The screen changes on a state or a key press, so 15 frames a second
+	// is still instant to the eye and wakes the process 4x less than 60.
 	if root != "" {
 		// Fixtures: a service in this process, for demos and tests.
 		ctx, cancel := context.WithCancel(context.Background())
@@ -216,23 +251,49 @@ func console(path string, cfg config.Config, root string, noMotion bool) error {
 		a, b := net.Pipe()
 		go s.Run(ctx)
 		go s.Handle(ctx, transport.NewConn(b)) //nolint:errcheck // ends with the console
-		opt.Conn = transport.NewConn(a)
-	} else {
-		c, err := ensureService(path)
-		if err != nil {
-			return err
-		}
-		opt.Conn = c
-		opt.Redial = func() (transport.Conn, error) { return ensureService(path) }
-		opt.Local = true
-		opt.Owner = func() int { return transport.Owner(path) }
+		base.Conn = transport.NewConn(a)
+		defer base.Conn.Close()
+		_, err := tea.NewProgram(app.New(base), tea.WithFPS(15)).Run()
+		return err
 	}
-	defer opt.Conn.Close()
-	// The screen changes on a state or a key press, so 15 frames a second
-	// is still instant to the eye and wakes the process 4x less than 60.
-	_, err := tea.NewProgram(app.New(opt), tea.WithFPS(15)).Run()
+	home, _ := os.UserHomeDir()
+	list := hosts.Path()
+	asked := filepath.Join(filepath.Dir(state.Path()), "asked-where")
+	sh := app.NewShell(app.ShellOptions{
+		Base:     base,
+		Hosts:    func() []string { return hosts.Read(list) },
+		SSHHosts: func() []string { return hosts.SSHHosts(home) },
+		Open:     func(h string) app.Options { return openHost(path, home, h, base.OutsideTmux) },
+		Remove:   func(h string) error { return hosts.Remove(list, h) },
+		Start:    host,
+		FirstRun: !fileExists(asked) && !fileExists(list),
+		Answered: func() { _ = os.MkdirAll(filepath.Dir(asked), 0o700); _ = os.WriteFile(asked, nil, 0o600) },
+	})
+	final, err := tea.NewProgram(sh, tea.WithFPS(15)).Run()
+	if s, ok := final.(app.Shell); ok {
+		s.Close()
+	}
 	return err
 }
+
+// openHost dials a host for the shell: "" is this machine's service,
+// started when needed; another host goes over ssh with the matchblox key.
+// A host that cannot be reached yet still opens: the console says why and
+// offers the fix.
+func openHost(path, home, host string, outsideTmux bool) app.Options {
+	if host == "" {
+		c, err := ensureService(path)
+		return app.Options{Conn: c, DialErr: err, Local: true, OutsideTmux: outsideTmux,
+			Redial: func() (transport.Conn, error) { return ensureService(path) },
+			Owner:  func() int { return transport.Owner(path) }}
+	}
+	t := remote.Target{Host: host, Key: remote.KeyPath(home)}
+	dial := func() (transport.Conn, error) { return remote.Connect(context.Background(), t) }
+	c, err := dial()
+	return app.Options{Conn: c, DialErr: err, Redial: dial, Host: host}
+}
+
+func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
 
 // newService builds the service for this machine, or for a fixture tree
 // (no git, nothing written).
