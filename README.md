@@ -13,149 +13,93 @@
 
 <img src="www/demo/replay.svg" width="100%" alt="The matchblox console on a demo machine: the queue of agents that wait, each session with its match, machine health, and a guarded kill of a detached busy loop">
 
-One terminal console for every AI coding agent you run. It shows which agent
-waits for you, what loads the machine, the state of every git checkout, and the
-one safe action that resolves each thing.
+One terminal console for every AI coding agent you run in tmux. It shows
+which agent waits for you, what loads the machine, the state of every git
+checkout, and the one safe action that resolves each thing. It works on the
+host, over SSH, and from a phone.
 
 Works with Claude Code, Codex, OpenCode, and any agent in tmux.
 
-> **Status: pre-release.** The service, the console, the queue of agents that
-> wait for you, the control pane for a phone and setup run today on the host.
-> Remote mode and night mode are in progress. The plan is in
-> [design/0004-v0.1-plan.md](design/0004-v0.1-plan.md).
+**Docs: [docs.matchblox.com](https://docs.matchblox.com)**
+
+> **Status: pre-release.** Everything below works today. There is no release
+> binary yet: the install script builds from source. Night mode comes next
+> ([limits](https://docs.matchblox.com/limits/)).
+
+## Quick start
+
+1. Install:
+
+   ```sh
+   curl -fsSL https://matchblox.sh | sh
+   ```
+
+   Read the script first at [matchblox.sh](https://matchblox.sh/install.sh).
+   Until the first release it builds from source and needs Go, the same as
+   `go install github.com/blox-eng/matchblox/cmd/matchblox@latest`.
+
+2. Run `matchblox`. Answer "Where do your agents run?", then open the setup
+   steps in the queue: tmux, the queue hooks, the way back.
+
+3. Start your agents in tmux, for example `tmux new -s app claude`. When an
+   agent waits for you, it comes to the top of the queue. `Enter` jumps to
+   it, and `prefix m` comes back.
+
+The full walk is [Get started](https://docs.matchblox.com/start/).
 
 ## What it shows
 
-- **The queue**: each agent that asks for permission, waits for input,
-  paused its task or finished its turn, oldest first, with its last line and
-  its open pull request. `Enter` goes to its
-  pane; `a` answers in one line.
+- **The queue**: each agent that asks, waits, paused or finished its turn,
+  oldest first, with its last line and its open pull request.
 - **A match for each session**: `✦` burning while it works, `╿` at rest while
   it waits, `│` spent when its context is full.
-- **Sessions** by tmux pane: busy or idle, context use against the model's
-  window (Claude Code, Codex and OpenCode), the account each one runs under,
-  30-minute token burn, CPU of the whole process tree, and when to compact or
-  clear.
-- **Machine health**: CPU per core, load, pressure, memory and swap,
-  temperature, CPU power limits, GPUs, and the CPU share of the container groups
-  you name.
-- **Detached busy loops**: shells that keep burning CPU after their pane is
-  gone, named to the pane that started them.
-- **Git**: dirty paths, the default branch behind its remote, worktrees that
-  are merged and safe to remove, and what agents spend on git.
-- **Recommendations**, ranked, each with its evidence and its exact command.
-- **History**: 24 hours of CPU, load, pressure, temperature, memory and swap.
+- **Sessions**: context use (Claude Code, Codex, OpenCode), the account
+  (`✻` Anthropic, `❋` OpenAI, `▣` OpenCode), token burn, CPU, and when to
+  compact or clear.
+- **Machine health**, **detached busy loops**, **git** worktrees that are
+  safe to remove, **recommendations** with their exact command, and 24 hours
+  of **history**.
 
-## Every agent in tmux
+More in [The console](https://docs.matchblox.com/console/).
 
-Start each agent in a tmux session. matchblox finds it, `Enter` jumps to it,
-and `a` answers it. Each command gives the console row under it.
+## Keys
 
-**Claude Code**
+| Key | What it does |
+|---|---|
+| `↑` or `k`, `↓` or `j` | Selects a row. |
+| `Enter` | The safe action: go to the agent's pane. |
+| `a` | Answers the selected agent in one line. |
+| `x` | The destructive action. It runs only after a typed `y`. |
+| `1-7` | Opens a tab. |
+| `/` | Searches the open tab. |
+| `q` | Quits. The service keeps running. |
 
-```sh
-tmux new -s app claude
-```
-```
-✦ busy         app        app:1.1   ██████░░░░  62%
-```
+Every key: [Keys](https://docs.matchblox.com/keys/).
 
-**Codex**
+## From a phone
 
-```sh
-tmux new -s api codex
-```
-```
-╿ asks   1m    codex      api:1.1   █████░░░░░  55%   ❋ you@example.com · Plus
-```
-
-**OpenCode**
-
-```sh
-tmux new -s web opencode
-```
-```
-✦ busy         opencode   web:1.1   ███░░░░░░░  32%   ▣ API key
-```
-
-**Any other agent**, for example aider
-
-```sh
-tmux new -s docs aider
-```
-```
-╿ done   4m    aider      docs:1.1  not measured
-```
-
-Claude Code, Codex and OpenCode show their context use. matchblox reads it
-from the agent's own files (the transcript, the rollout, the session storage)
-and never guesses: before the first turn a session is "fresh", and an agent
-it cannot read shows "not measured". Codex context use needs Linux: matchblox
-finds its session through the files the process holds open. The window comes
-from the model that the agent reports. Set `[sessions.windows]` in the config to change it.
-
-On a wide screen, Sessions shows the account each session runs under: the
-provider's mark (`✻` Anthropic, `❋` OpenAI, `▣` OpenCode), then the email and
-plan, or "API key". matchblox reads only those fields from the agents' auth
-files. A token never reaches the console.
-
-Claude Code tells its waits through hooks. Every other agent is read from its
-pane: it is busy while the pane moves, and it waits for you when it is idle
-and its last lines ask. That can come later than a hook. An approval menu
-(Codex, OpenCode) shows as `asks`: you answer it in its pane, where `Enter`
-takes the selected choice. The first run writes the agents it finds to
-`agents` in `~/.config/matchblox/config.toml`. Add any other agent there by
-its command.
+Set the startup snippet of your SSH app (Termius, for example) to
+`matchblox`, or run `ssh -t ws-1 matchblox`. The console is the first
+screen. Tap a row twice to go to its pane; tap `◂ matchblox` in the tmux
+status line to come back. See [The phone](https://docs.matchblox.com/phone/).
 
 ## Safety
 
-- Read-only by default.
-- Every action shows its exact command before it runs.
-- A destructive action needs `x` and then a typed `y`.
-- Each step runs on the host, and checks its facts again just before it runs:
-  the same process, a worktree still clean and unused, a session still idle.
-- Two consoles that confirm the same action run it once.
-- A remote host's stream uses its own key, which can start only the stream
-  there, with a strict host-key check and nothing forwarded.
+Read-only by default. Every action shows its exact command before it runs.
+A destructive action needs `x` and then a typed `y`, and checks its facts
+again just before it runs. See [Safety](https://docs.matchblox.com/safety/)
+and [SECURITY.md](SECURITY.md).
 
-## Install
+## Built on tmux
 
-```bash
-curl -fsSL https://matchblox.sh | sh
-```
+matchblox stands on [tmux](https://github.com/tmux/tmux), and takes its
+model from it: a server that keeps running, and clients that attach from
+any terminal. See [tmux, the engine](https://docs.matchblox.com/tmux/).
 
-The script verifies the release binary and starts matchblox; read it first at
-[matchblox.sh](https://matchblox.sh/install.sh). Until v0.1.0 it builds from
-source, the same as:
+## Help
 
-```bash
-go install github.com/blox-eng/matchblox/cmd/matchblox@latest
-```
-
-`matchblox` connects to the service on the host, or starts it in the
-background. The service samples the machine once for every console that
-watches, and keeps history and the state file when no console is open.
-`matchblox serve` runs it in the foreground.
-
-### Agents on another machine
-
-The first run asks where your agents run. Pick "another machine", then a
-host from `~/.ssh/config`, or type one. matchblox connects it once:
-
-```bash
-matchblox connect ws-1
-```
-
-This uses your own ssh login one time. It installs the verified matchblox on
-`ws-1`, and adds a key that can start only the console's stream there (no
-shell, no forwarding). After that, `matchblox ws-1` opens the console of
-`ws-1`, and `esc` goes back to the list of hosts. A jump to a pane uses your
-own ssh login. The stream can answer your agents, as the console does: keep
-`~/.ssh/matchblox_ed25519` as private as any ssh key.
-
-`matchblox status --text` prints the service's state as a short summary, for
-scripts and agents. Thresholds live in `~/.config/matchblox/config.toml`; see
-[config.example.toml](config.example.toml).
+Questions: [Discord](https://discord.gg/tYxBUpGfX3). Bugs and ideas:
+[GitHub issues](https://github.com/blox-eng/matchblox/issues).
 
 ## Design
 
