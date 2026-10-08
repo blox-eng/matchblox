@@ -123,15 +123,17 @@ func (m Model) gitPanel(w int) body {
 	return b
 }
 
-func (m Model) recsPanel(w int) body {
+// recsSection is what to do next, under the queue: its rows follow the
+// queue's, and the selected one shows its evidence and its steps.
+func (m Model) recsSection(b *body, w int) {
 	st := m.st
-	b := plain(m.alertLines(w))
 	b.add(-1, m.region(fmt.Sprintf("%d recommendations", len(m.recs)), w)...)
 	if len(m.recs) == 0 {
 		b.add(-1, st.faint.Render(" nothing to do"))
-		return b
+		return
 	}
-	sel := min(m.recSel, len(m.recs)-1)
+	n := len(m.queue)
+	sel := m.queueIndex() - n
 	for i, r := range m.recs {
 		mark := st.faint.Render("○ ")
 		switch r.Level {
@@ -141,7 +143,10 @@ func (m Model) recsPanel(w int) body {
 			mark = st.warn.Render("▲ ")
 		}
 		line := " " + mark + st.text.Render(tilde(r.Title))
-		b.addRow(i, i == sel, w, st, line)
+		b.addRow(n+i, i == sel, w, st, line)
+	}
+	if sel < 0 {
+		return // a queue row is selected: the detail is for a recommendation
 	}
 	r := m.recs[sel]
 	b.add(-1, "", st.hair.Render(strings.Repeat("─", w)), fit(" "+st.text.Render(tilde(r.Title)), w))
@@ -163,7 +168,6 @@ func (m Model) recsPanel(w int) body {
 		}
 		b.add(-1, fit(" "+st.label.Render(a.key+" ")+st.text.Render(label+": ")+st.muted.Render(cmd), w))
 	}
-	return b
 }
 
 func wrap(s string, w int, render func(...string) string) []string {

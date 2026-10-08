@@ -129,7 +129,7 @@ type Model struct {
 	hist       history.Series
 	selPID     int
 	orphanPID  int
-	recSel     int
+	recPick    string // the selected recommendation, under the queue
 	gitSel     int
 	tab        int
 	pending    *action
@@ -583,6 +583,9 @@ func (m Model) primary() *action {
 		if it, ok := m.selectedQueue(); ok && it.Pane != "" {
 			return m.jump(it.Pane)
 		}
+		if r, ok := m.selectedRec(); ok {
+			return fromAdvice(r, "primary")
+		}
 	case tabSessions:
 		if s, ok := m.selected(); ok && s.Pane != "" {
 			return m.jump(s.Pane)
@@ -598,10 +601,6 @@ func (m Model) primary() *action {
 	case tabGit:
 		if wt, ok := m.selectedWorktree(); ok {
 			return &action{label: "shell", nav: true, steps: [][]string{{"tmux", "new-window", "-c", wt.Path}}}
-		}
-	case tabRecs:
-		if r, ok := m.selectedRec(); ok {
-			return fromAdvice(r, "primary")
 		}
 	}
 	return nil
@@ -621,7 +620,7 @@ func (m Model) secondary() *action {
 			return &action{label: "remove", steps: [][]string{wt.Remove}, destructive: true,
 				rec: "worktree:" + wt.Path, which: "secondary"}
 		}
-	case tabRecs:
+	case tabQueue:
 		if r, ok := m.selectedRec(); ok {
 			return fromAdvice(r, "secondary")
 		}
@@ -653,11 +652,16 @@ func (m Model) selected() (sample.Session, bool) {
 	return m.snap.Sessions[m.selIndex()], true
 }
 
+// selectedRec is the recommendation selected under the queue.
 func (m Model) selectedRec() (advice.Rec, bool) {
-	if len(m.recs) == 0 {
+	if m.tab != tabQueue {
 		return advice.Rec{}, false
 	}
-	return m.recs[min(m.recSel, len(m.recs)-1)], true
+	i := m.queueIndex() - len(m.queue)
+	if i < 0 || i >= len(m.recs) {
+		return advice.Rec{}, false
+	}
+	return m.recs[i], true
 }
 
 // keepSelection follows the selected session by PID across re-sorts.

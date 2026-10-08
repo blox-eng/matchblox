@@ -135,15 +135,14 @@ const (
 	tabMachine
 	tabProcs
 	tabGit
-	tabRecs
 	tabHistory
 	tabPanes
 )
 
-var tabNames = []string{"queue", "sessions", "machine", "procs", "git", "recs", "history", "panes"}
+var tabNames = []string{"queue", "sessions", "machine", "procs", "git", "history", "panes"}
 
 // tabShort names the tabs when the full names do not fit.
-var tabShort = []string{"queue", "sess", "mach", "procs", "git", "recs", "hist", "panes"}
+var tabShort = []string{"queue", "sess", "mach", "procs", "git", "hist", "panes"}
 
 // tabs tries the full names, then a narrower gap, then the short names,
 // then digits only (a phone), so every tab and the alert marker stay on the
@@ -212,8 +211,6 @@ func (m Model) tabParts(t tabTier) []string {
 			parts = append(parts, m.st.accent.Render(fmt.Sprintf("%s·%d", label, len(m.queue))))
 		case i == tabQueue && len(m.queue) > 0 && m.tab != tabQueue:
 			parts = append(parts, m.st.accent.Render(fmt.Sprintf("%s %d", label, len(m.queue))))
-		case i == tabRecs && len(m.recs) > 0 && t.names != nil:
-			parts = append(parts, m.st.muted.Render(fmt.Sprintf("%s %d", label, len(m.recs))))
 		default:
 			parts = append(parts, m.st.faint.Render(label))
 		}
@@ -234,18 +231,21 @@ func (m Model) footer(w int) string {
 		}
 		return fit(" "+st.label.Render("RUN ")+st.text.Render(m.pending.String())+"   "+st.muted.Render(confirm), w)
 	}
-	keys := map[int]string{
+	tabKeys := map[int]string{
 		tabQueue:    "↑↓ select  ⏎ go  a answer",
 		tabPanes:    "↑↓ select  ⏎ go",
 		tabSessions: "↑↓ select  ⏎ jump  a answer",
 		tabMachine:  "",
 		tabProcs:    "↑↓ select  ⏎ jump  x kill",
 		tabGit:      "↑↓ select  ⏎ shell  x remove  r rescan",
-		tabRecs:     "↑↓ select  ⏎ do  x the other action",
 		tabHistory:  "",
-	}[m.tab] + "  1-8 panel  q quit"
+	}[m.tab]
+	if _, ok := m.selectedRec(); ok {
+		tabKeys = "↑↓ select  ⏎ do  x the other action"
+	}
+	keys := tabKeys + "  1-7 panel  q quit"
 	if layout(w) == Narrow {
-		keys = strings.NewReplacer("↑↓ select  ", "↑↓ ", "1-8 panel", "1-8", "the other action", "other").Replace(keys)
+		keys = strings.NewReplacer("↑↓ select  ", "↑↓ ", "1-7 panel", "1-7", "the other action", "other").Replace(keys)
 	}
 	left := " " + st.muted.Render(keys)
 	if m.flash != "" {

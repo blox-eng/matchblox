@@ -151,7 +151,8 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 
 - **Header:** the mark, the name and the host, then each metric with its
   trend. A narrow terminal drops the trends, then metrics from the right.
-- **Tabs:** one row, `1 QUEUE` to `8 PANES`. The active tab has an accent
+- **Tabs:** one row, `1 QUEUE` to `7 PANES`. The Queue tab holds who waits
+  and, under it, the recommendations (owner, 2026-10-08). The active tab has an accent
   rule under it. A tab that needs the person shows it (`4 PROCS !` in `neg`,
   `1 QUEUE 3` in the accent). At 80 columns the names shorten so all eight
   tabs and the alert marker fit.

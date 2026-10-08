@@ -73,7 +73,7 @@ func TestNarrowLayoutQueueFirst(t *testing.T) {
 	if i := lineOf(t, m, "app-feature"); !strings.Contains(ansi.Strip(strings.Split(m.render(), "\n")[i+1]), "work:1.1") {
 		t.Fatalf("a session row is not on two lines:\n%s", ansi.Strip(m.render()))
 	}
-	for _, tab := range []int{tabMachine, tabProcs, tabGit, tabRecs, tabHistory, tabPanes} {
+	for _, tab := range []int{tabMachine, tabProcs, tabGit, tabHistory, tabPanes} {
 		m.tab = tab
 		fitsWidth(t, m, 50)
 	}
@@ -125,9 +125,9 @@ func TestTapOnATabOpensIt(t *testing.T) {
 	for _, w := range []int{50, 100} {
 		m, _ := loadedWith(t, w, queueState())
 		line := ansi.Strip(strings.Split(m.render(), "\n")[1])
-		x := strings.Index(line, "8 ")
+		x := strings.Index(line, "7 ")
 		if x < 0 {
-			t.Fatalf("width %d: no tab 8 in %q", w, line)
+			t.Fatalf("width %d: no tab 7 in %q", w, line)
 		}
 		next, _ := tap(m, len([]rune(line[:x])), 1)
 		if got := next.(Model).tab; got != tabPanes {

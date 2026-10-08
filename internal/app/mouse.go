@@ -86,7 +86,7 @@ func (m Model) tabAt(w, x int) (int, bool) {
 func (m Model) rowIndex() int {
 	switch m.tab {
 	case tabQueue:
-		return m.queueSelIndex()
+		return m.queueIndex()
 	case tabPanes:
 		return min(m.paneSel, max(len(m.paneRows())-1, 0))
 	case tabSessions:
@@ -95,8 +95,6 @@ func (m Model) rowIndex() int {
 		return m.orphanIndex()
 	case tabGit:
 		return min(m.gitSel, max(len(m.worktreeRows())-1, 0))
-	case tabRecs:
-		return min(m.recSel, max(len(m.recs)-1, 0))
 	}
 	return 0
 }
@@ -104,7 +102,7 @@ func (m Model) rowIndex() int {
 func (m Model) rowCount() int {
 	switch m.tab {
 	case tabQueue:
-		return len(m.queue)
+		return len(m.queue) + len(m.recs)
 	case tabPanes:
 		return len(m.paneRows())
 	case tabSessions:
@@ -113,8 +111,6 @@ func (m Model) rowCount() int {
 		return len(m.snap.Orphans)
 	case tabGit:
 		return len(m.worktreeRows())
-	case tabRecs:
-		return len(m.recs)
 	}
 	return 0
 }
@@ -125,7 +121,11 @@ func (m *Model) selectRow(i int) {
 	}
 	switch m.tab {
 	case tabQueue:
-		m.queuePane = m.queue[i].Pane
+		if i < len(m.queue) {
+			m.queuePane, m.recPick = m.queue[i].Pane, ""
+		} else {
+			m.recPick = m.recs[i-len(m.queue)].ID
+		}
 	case tabPanes:
 		m.paneSel = i
 	case tabSessions:
@@ -134,7 +134,5 @@ func (m *Model) selectRow(i int) {
 		m.orphanPID = m.snap.Orphans[i].PID
 	case tabGit:
 		m.gitSel = i
-	case tabRecs:
-		m.recSel = i
 	}
 }

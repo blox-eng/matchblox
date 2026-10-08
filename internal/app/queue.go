@@ -23,11 +23,24 @@ func (m Model) queueSelIndex() int {
 	return 0
 }
 
-func (m Model) selectedQueue() (queue.Item, bool) {
-	if len(m.queue) == 0 {
-		return queue.Item{}, false
+// queueIndex is the selected row of the Queue tab: the queue items, then
+// the recommendations under them.
+func (m Model) queueIndex() int {
+	if m.recPick != "" || len(m.queue) == 0 {
+		for i, r := range m.recs {
+			if r.ID == m.recPick || m.recPick == "" {
+				return len(m.queue) + i
+			}
+		}
 	}
-	return m.queue[m.queueSelIndex()], true
+	return m.queueSelIndex()
+}
+
+func (m Model) selectedQueue() (queue.Item, bool) {
+	if i := m.queueIndex(); i < len(m.queue) {
+		return m.queue[i], true
+	}
+	return queue.Item{}, false
 }
 
 const colWord = 6
@@ -38,9 +51,8 @@ func (m Model) queuePanel(w int) body {
 	b.add(-1, "", st.label.Render(fmt.Sprintf(" %d WAITING FOR YOU", len(m.queue))))
 	if len(m.queue) == 0 {
 		b.add(-1, st.faint.Render(" nothing waits for you"))
-		return b
 	}
-	sel := m.queueSelIndex()
+	sel := m.queueIndex()
 	narrow := layout(w) == Narrow
 	for i, it := range m.queue {
 		word := st.text.Render(pad(queueWord[it.State], colWord))
@@ -65,6 +77,7 @@ func (m Model) queuePanel(w int) body {
 		}
 		b.addRow(i, i == sel, w, st, lines...)
 	}
+	m.recsSection(&b, w)
 	return b
 }
 

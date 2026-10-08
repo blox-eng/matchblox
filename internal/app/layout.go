@@ -82,8 +82,6 @@ func (m Model) body(w int) body {
 		return m.procs(w)
 	case tabGit:
 		return m.gitPanel(w)
-	case tabRecs:
-		return m.recsPanel(w)
 	case tabHistory:
 		return plain(m.historyPanel(w))
 	}
