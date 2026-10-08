@@ -62,7 +62,7 @@ func firstRun(path string, cores int, memTotal uint64) {
 
 // agentDirs are where agents install themselves outside a usual PATH: the
 // service can be the first to run, with the small PATH of its manager.
-var agentDirs = []string{"~/.local/bin", "~/.opencode/bin", "~/.bun/bin", "~/.npm-global/bin",
+var agentDirs = []string{"~/.local/bin", "~/.claude/local", "~/.opencode/bin", "~/.bun/bin", "~/.npm-global/bin",
 	"/home/linuxbrew/.linuxbrew/bin", "/opt/homebrew/bin", "/usr/local/bin"}
 
 // agentLookPath finds a command on PATH, then in agentDirs.

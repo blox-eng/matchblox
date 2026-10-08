@@ -67,19 +67,18 @@ mem_available_under_gb = %.0f
 
 // KnownAgents are the coding agents the first run looks for, by the
 // command that starts each one.
-var KnownAgents = []string{"claude", "codex", "opencode", "gemini", "cursor-agent", "aider", "goose", "crush", "amp", "qwen"}
+// goose and amp are left out: other common tools share those names.
+var KnownAgents = []string{"claude", "codex", "opencode", "gemini", "cursor-agent", "aider", "crush", "qwen"}
 
 // FindAgents lists the known agents that are installed (lookPath is
-// exec.LookPath). With none, it is Claude Code, the default.
+// exec.LookPath). Claude Code is always in it: it is the agent with hooks,
+// and an install reached by a shell alias is not on any path.
 func FindAgents(lookPath func(string) (string, error)) []string {
-	var found []string
-	for _, name := range KnownAgents {
+	found := []string{"claude"}
+	for _, name := range KnownAgents[1:] {
 		if _, err := lookPath(name); err == nil {
 			found = append(found, name)
 		}
-	}
-	if len(found) == 0 {
-		return []string{"claude"}
 	}
 	return found
 }

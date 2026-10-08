@@ -525,3 +525,17 @@ func TestFindAgentsFindsWhatIsInstalled(t *testing.T) {
 		t.Fatalf("with none installed: %q, want claude", got)
 	}
 }
+
+// TestFindAgentsAlwaysKeepsClaudeCode: Claude Code can be reached by an
+// alias only (~/.claude/local); it is the agent with hooks and stays.
+func TestFindAgentsAlwaysKeepsClaudeCode(t *testing.T) {
+	look := func(name string) (string, error) {
+		if name == "codex" {
+			return "/usr/bin/codex", nil
+		}
+		return "", errors.New("not found")
+	}
+	if got := strings.Join(FindAgents(look), ","); got != "claude,codex" {
+		t.Fatalf("found %q", got)
+	}
+}

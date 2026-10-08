@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -72,5 +73,21 @@ func TestExampleLoads(t *testing.T) {
 	}
 	if d := Default(); c.Interval != d.Interval || c.Sessions.CompactAt != d.Sessions.CompactAt || c.Sessions.ProgressPrompt != d.Sessions.ProgressPrompt || c.Orphans.CPUOver != d.Orphans.CPUOver {
 		t.Fatalf("the example must state the defaults: %+v", c)
+	}
+}
+
+// TestAgentsSetTellsAConfigWithoutAgents: a config written before agents
+// were found has no agents key; the console then finds them at start.
+func TestAgentsSetTellsAConfigWithoutAgents(t *testing.T) {
+	dir := t.TempDir()
+	old := filepath.Join(dir, "old.toml")
+	os.WriteFile(old, []byte("[alerts]\nload1_over = 8\n"), 0o600)
+	if c, err := Load(old); err != nil || c.AgentsSet {
+		t.Fatalf("old config: set %v, %v", c.AgentsSet, err)
+	}
+	set := filepath.Join(dir, "set.toml")
+	os.WriteFile(set, []byte("agents = [\"codex\"]\n"), 0o600)
+	if c, _ := Load(set); !c.AgentsSet || strings.Join(c.Agents, ",") != "codex" {
+		t.Fatalf("set config: %+v", c.Agents)
 	}
 }

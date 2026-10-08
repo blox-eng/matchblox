@@ -46,6 +46,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
+	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -133,6 +134,10 @@ func run(args []string) error {
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		return fmt.Errorf("%s: %w", *cfgPath, err)
+	}
+	if !cfg.AgentsSet && *root == "" {
+		// A config from before the first run found the agents.
+		cfg.Agents = setup.FindAgents(agentLookPath(home()))
 	}
 	if *interval > 0 {
 		cfg.Interval.Duration = *interval

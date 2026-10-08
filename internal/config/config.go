@@ -25,6 +25,9 @@ func (d *Duration) UnmarshalText(b []byte) error {
 type Config struct {
 	Interval      Duration `toml:"interval"`
 	Agents        []string `toml:"agents"`
+	// AgentsSet: the file has an agents key. A config written before the
+	// first run found the agents has none; the console finds them then.
+	AgentsSet bool `toml:"-"`
 	LatencyTarget string   `toml:"latency_target"`
 	Sessions      Sessions `toml:"sessions"`
 	Alerts        Alerts   `toml:"alerts"`
@@ -138,9 +141,11 @@ func Path() string {
 // Load overlays the file on the defaults. A missing file is not an error.
 func Load(path string) (Config, error) {
 	c := Default()
-	if _, err := toml.DecodeFile(path, &c); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	md, err := toml.DecodeFile(path, &c)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return c, err
 	}
+	c.AgentsSet = md.IsDefined("agents")
 	for i := range c.Groups {
 		re, err := regexp.Compile(c.Groups[i].Container)
 		if err != nil {
