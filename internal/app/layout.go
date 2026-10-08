@@ -99,6 +99,9 @@ func (m Model) narrowRow(s sample.Session, selected bool) []string {
 		where = "▌" + where
 	}
 	second := "   " + st.muted.Render(where) + "  " + st.muted.Render(worktree(s.Cwd))
+	if pr := m.prOf(s.Cwd); pr != nil {
+		second += " " + st.accent.Render("#"+strconv.Itoa(pr.Number))
+	}
 	if s.Progress != nil {
 		second += "  " + m.progressCell(s.Progress, 5)
 	}

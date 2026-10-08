@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -111,6 +112,11 @@ func (m Model) queuePanel(w int) body {
 			tail = st.faint.Render("from the pane: ") + tail // first: a long line is cut at the end
 		case it.Estimated:
 			tail = st.faint.Render("estimated")
+		}
+		if s, ok := m.sessionIn(it.Pane); ok {
+			if pr := m.prOf(s.Cwd); pr != nil {
+				tail = st.accent.Render("#"+strconv.Itoa(pr.Number)) + "  " + tail
+			}
 		}
 		if s, ok := m.sessionIn(it.Pane); ok && s.Progress != nil {
 			tail = m.progressCell(s.Progress, 5) + "  " + tail

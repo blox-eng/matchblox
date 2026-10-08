@@ -466,7 +466,7 @@ func serviceCmd() (*exec.Cmd, func(), error) {
 const staleAfter = 15 * time.Second
 
 func gitSource(cfg config.Config) service.GitSource {
-	scanner := &gitscan.Scanner{Git: gitscan.Git, Merged: gitscan.GHMerged, RecheckIdle: 2 * time.Hour}
+	scanner := &gitscan.Scanner{Git: gitscan.Git, Merged: gitscan.GHMerged, Open: gitscan.GHOpen, RecheckIdle: 2 * time.Hour}
 	return func(sessionCwds []string) gitscan.Report {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()

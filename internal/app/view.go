@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -371,7 +372,11 @@ func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
 	if tab > 0 {
 		pane += st.muted.Render(pad(s.Tab, tab))
 	}
-	line := " " + pane + name + state + idle + ctx + cpu + do + st.muted.Render(pad(worktree(s.Cwd), tree))
+	wt := worktree(s.Cwd)
+	if pr := m.prOf(s.Cwd); pr != nil {
+		wt += " #" + strconv.Itoa(pr.Number)
+	}
+	line := " " + pane + name + state + idle + ctx + cpu + do + st.muted.Render(pad(wt, tree))
 	if selected {
 		return st.selected.Render(fit(line, w))
 	}
@@ -403,6 +408,13 @@ func (m Model) detail(w int) []string {
 	facts = append(facts, fmt.Sprintf("%d processes", s.Procs))
 	lines = append(lines, fit(" "+st.text.Render(strings.Join(facts, st.faint.Render("  ·  "))), w))
 	lines = append(lines, fit(" "+st.muted.Render(s.Cwd), w))
+	if pr := m.prOf(s.Cwd); pr != nil {
+		what := "#" + strconv.Itoa(pr.Number) + " " + pr.Title
+		if pr.Draft {
+			what = "#" + strconv.Itoa(pr.Number) + " draft " + pr.Title
+		}
+		lines = append(lines, fit(" "+st.label.Render("PR ")+st.text.Render(what)+"  "+st.muted.Render(pr.URL), w))
+	}
 	if s.LastLine != "" {
 		lines = append(lines, fit(" "+st.label.Render("LAST ")+st.text.Render(s.LastLine), w))
 	}
@@ -437,6 +449,24 @@ func bar(pct float64, w int) string {
 
 // worktree shortens a cwd to what tells sessions apart: the checkout name,
 // or the worktree name for paths under a */worktrees/* directory.
+// prOf is the open pull request of the worktree a directory is in: the
+// worktree with the longest path that holds it.
+func (m Model) prOf(cwd string) *proto.PR {
+	if m.git == nil || cwd == "" {
+		return nil
+	}
+	var pr *proto.PR
+	best := 0
+	for _, r := range m.git.Repos {
+		for _, wt := range r.Worktrees {
+			if (cwd == wt.Path || strings.HasPrefix(cwd, wt.Path+"/")) && len(wt.Path) > best {
+				pr, best = wt.PR, len(wt.Path)
+			}
+		}
+	}
+	return pr
+}
+
 func worktree(cwd string) string {
 	if cwd == "" {
 		return "?"

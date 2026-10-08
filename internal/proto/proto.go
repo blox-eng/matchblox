@@ -131,4 +131,5 @@ func Decode(r *bufio.Reader) (Envelope, error) {
 type (
 	GitReport = gitscan.Report
 	Worktree  = gitscan.Worktree
+	PR        = gitscan.PR
 )

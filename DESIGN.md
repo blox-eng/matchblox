@@ -161,6 +161,11 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 - **Rows:** the match and the state word first, then the wait, the name, the
   tmux place and the last line. Figures are aligned; units are faint. The
   selected row has a `▌` and the `wash` background.
+- **Pull requests** (owner, 2026-10-08): an agent whose worktree has an
+  open pull request shows `#N` in the accent on its queue row, after its
+  worktree in Sessions, and `PR #N <title>  <url>` in the detail. The git
+  scan asks `gh` for the open ones of each repository; a fork's pull
+  request never marks a branch of ours.
 - **Action line** (owner, 2026-10-08): under the tabs, above the hairline,
   never at the bottom: on a phone the keyboard covers the bottom of the
   screen. The keys of the tab on the left, "sampled N ago" on the right. It
