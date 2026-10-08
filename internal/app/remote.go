@@ -117,7 +117,8 @@ func (m Model) connected(msg connectedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.lost, m.redialing = true, true
-	return m, func() tea.Msg { return redialMsg{} }
+	gen := m.opt.Gen
+	return m, func() tea.Msg { return redialMsg{gen} }
 }
 
 // blockedText is the screen of a host the console cannot reach: why, and

@@ -59,6 +59,7 @@ type Shell struct {
 	height  int
 	dark    bool
 	st      styles
+	gen     int // the generation of the last console opened
 }
 
 // layerMsg asks the shell to go back to Hosts.
@@ -101,7 +102,8 @@ func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
 	if o.Exec == nil {
 		o.Exec = s.opt.Exec
 	}
-	o.Layered = true
+	s.gen++
+	o.Layered, o.Gen = true, s.gen
 	m := New(o)
 	m.width, m.height, m.dark, m.st = s.width, s.height, s.dark, s.st
 	m.splashDone = !first
@@ -139,6 +141,8 @@ func (s Shell) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return s, cmd
 	}
 	switch msg := msg.(type) {
+	case connMsg:
+		_ = msg.conn.Close() // a closed console's late connection
 	case tea.KeyPressMsg:
 		return s.key(msg)
 	case tea.MouseClickMsg:

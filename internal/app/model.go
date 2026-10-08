@@ -59,6 +59,9 @@ type Options struct {
 	DialErr error
 	// Self is this binary, which connects a host (`matchblox connect`).
 	Self string
+	// Gen tells this console's redial messages from those of a console the
+	// shell closed.
+	Gen int
 	// Layered: the console sits under the hosts layer, and esc with
 	// nothing to cancel or clear goes back to it.
 	Layered bool
@@ -80,12 +83,20 @@ type fromConn struct {
 	conn transport.Conn
 	msg  tea.Msg
 }
-type redialMsg struct{}
+// The redial messages carry the generation of the console that asked:
+// after the shell opens another console, a late one is dropped.
+type redialMsg struct{ gen int }
 
 // silentMsg fires when a connection gave no state in silentAfter.
 type silentMsg struct{ conn transport.Conn }
-type redialFailed struct{ err error }
-type connMsg struct{ conn transport.Conn }
+type redialFailed struct {
+	err error
+	gen int
+}
+type connMsg struct {
+	conn transport.Conn
+	gen  int
+}
 type ranMsg struct {
 	cmd string
 	err error
@@ -371,18 +382,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.redialing = true
 		m.backoff = min(max(m.backoff*2, 250*time.Millisecond), 10*time.Second)
 		m.flash += "; trying again in " + m.backoff.String()
-		return m, tea.Tick(m.backoff, func(time.Time) tea.Msg { return redialMsg{} })
+		gen := m.opt.Gen
+		return m, tea.Tick(m.backoff, func(time.Time) tea.Msg { return redialMsg{gen} })
 	case redialMsg:
-		if !m.redialing || m.quitting {
+		if msg.gen != m.opt.Gen || !m.redialing || m.quitting {
 			return m, nil // a tick from a console that was closed
 		}
-		redial := m.opt.Redial
+		redial, gen := m.opt.Redial, m.opt.Gen
 		return m, func() tea.Msg {
 			c, err := redial()
 			if err != nil {
-				return redialFailed{err}
+				return redialFailed{err, gen}
 			}
-			return connMsg{c}
+			return connMsg{c, gen}
 		}
 	case silentMsg:
 		if msg.conn != m.conn || m.answered || m.mismatch {
@@ -403,11 +415,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case redialFailed:
+		if msg.gen != m.opt.Gen {
+			return m, nil
+		}
 		m.redialing = false
 		return m.Update(lostMsg{err: msg.err})
 	case connectedMsg:
 		return m.connected(msg)
 	case connMsg:
+		if msg.gen != m.opt.Gen || m.quitting {
+			_ = msg.conn.Close() // the console that dialed it is gone
+			return m, nil
+		}
 		m.conn, m.redialing, m.answered = msg.conn, false, false
 		m.flash = "connected again"
 		return m, tea.Batch(m.hello(), m.recv(), m.watchSilence())

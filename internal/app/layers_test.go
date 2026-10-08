@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
@@ -272,4 +273,34 @@ func (r *shellRig) curHostIs(t *testing.T) string {
 		t.Fatal("no console open")
 	}
 	return r.sh.curHost
+}
+
+// A console that was redialing when the builder left it must not hand its
+// late connection, or its failure, to the console opened next.
+func TestALateRedialOfAClosedConsoleIsDropped(t *testing.T) {
+	r := newShell(t, []string{"ws-1"}, nil, "ws-1", false)
+	gen := r.sh.cur.opt.Gen
+	r.key(t, "esc")
+	late := newFake()
+	next, _ := r.sh.Update(connMsg{conn: late, gen: gen}) // on Hosts
+	r.sh = next.(Shell)
+	if !late.closed {
+		t.Fatal("a late connection that reached Hosts was left open")
+	}
+	r.key(t, "enter") // ws-1, still selected: a new console
+	if r.sh.layer != layerConsole || r.sh.cur.opt.Gen == gen {
+		t.Fatalf("no new console: layer %v, gen %d", r.sh.layer, r.sh.cur.opt.Gen)
+	}
+	cur := r.sh.cur.conn
+	late = newFake()
+	next, _ = r.sh.Update(connMsg{conn: late, gen: gen})
+	r.sh = next.(Shell)
+	if r.sh.cur.conn != cur || !late.closed {
+		t.Fatalf("the old console's connection replaced the new one's (closed %v)", late.closed)
+	}
+	next, _ = r.sh.Update(redialFailed{err: remote.ErrNotConnected, gen: gen})
+	r.sh = next.(Shell)
+	if r.sh.cur.blocked != nil || r.sh.cur.lost {
+		t.Fatal("the old console's failure reached the new one")
+	}
 }
