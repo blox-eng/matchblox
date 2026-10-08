@@ -34,6 +34,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -102,6 +103,16 @@ func run(args []string) error {
 		cfg.Interval.Duration = *interval
 	}
 
+	if cmd == "console" && *root == "" {
+		// A phone that connects lands in the console's own tmux session, and
+		// every pane has a way back to it. Fixtures (demos, the replay) run
+		// in place. Before the nice below: a tmux server started here must
+		// not run every agent at nice 19.
+		if err := goHome(); err != nil {
+			return err
+		}
+	}
+
 	// matchblox must not add load: lowest CPU priority for us and every
 	// command we start.
 	lowestPriority()
@@ -117,6 +128,21 @@ func run(args []string) error {
 		return status(os.Stdout, path, cfg, *root, *text)
 	}
 	return console(path, cfg, *root, *noMotion)
+}
+
+// goHome replaces this process with `tmux new-session -A -s matchblox
+// matchblox …` outside tmux. It returns only when the console runs in place.
+func goHome() error {
+	tmux, err := exec.LookPath("tmux")
+	self := invokedPath(os.Args[0])
+	if self == "" {
+		return nil
+	}
+	argv := panes.HomeArgv(os.Getenv("TMUX") != "", err == nil, append([]string{self}, os.Args[1:]...))
+	if argv == nil {
+		return nil
+	}
+	return execve(tmux, argv, os.Environ())
 }
 
 // hookTimeout bounds the whole delivery, so `matchblox hook` stops in

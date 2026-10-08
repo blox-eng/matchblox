@@ -32,13 +32,16 @@ func (m Model) selectedQueue() (queue.Item, bool) {
 
 const colWord = 6
 
-func (m Model) queuePanel(w int) []string {
+func (m Model) queuePanel(w int) body {
 	st := m.st
-	lines := []string{"", st.label.Render(fmt.Sprintf(" %d WAITING FOR YOU", len(m.queue)))}
+	var b body
+	b.add(-1, "", st.label.Render(fmt.Sprintf(" %d WAITING FOR YOU", len(m.queue))))
 	if len(m.queue) == 0 {
-		return append(lines, st.faint.Render(" nothing waits for you"))
+		b.add(-1, st.faint.Render(" nothing waits for you"))
+		return b
 	}
 	sel := m.queueSelIndex()
+	narrow := layout(w) == Narrow
 	for i, it := range m.queue {
 		word := st.text.Render(pad(queueWord[it.State], colWord))
 		if it.State == queue.StatePermission {
@@ -52,20 +55,22 @@ func (m Model) queuePanel(w int) []string {
 		if it.Estimated {
 			tail = st.faint.Render("estimated")
 		}
-		line := " " + m.queueCell(it) + word +
-			st.muted.Render(pad(sample.Human(m.now().Sub(it.Since)), colIdle)) +
-			st.text.Render(pad(it.Name, colName)) + st.muted.Render(pad(where, colPane)) + tail
-		if i == sel {
-			line = st.selected.Render(fit(line, w))
+		idle := st.muted.Render(pad(sample.Human(m.now().Sub(it.Since)), colIdle))
+		lines := []string{" " + m.queueCell(it) + word + idle + st.text.Render(pad(it.Name, colName)) + st.muted.Render(pad(where, colPane)) + tail}
+		if narrow {
+			// A phone: who waits on the first line; where, and what it
+			// said last, on the second.
+			lines = []string{" " + m.queueCell(it) + word + idle + st.text.Render(it.Name),
+				"   " + st.muted.Render(where) + "  " + tail}
 		}
-		lines = append(lines, fit(line, w))
+		b.addRow(i, i == sel, w, st, lines...)
 	}
 	if m.input != nil {
-		lines = append(lines, "", fit(" "+st.label.Render("ANSWER ")+st.muted.Render(m.input.pane+" ")+
+		b.add(-1, "", fit(" "+st.label.Render("ANSWER ")+st.muted.Render(m.input.pane+" ")+
 			st.text.Render(m.input.text)+st.accent.Render("▏"), w),
 			st.faint.Render(" ⏎ review  esc cancel"))
 	}
-	return lines
+	return b
 }
 
 // paneRow is one tmux pane, with an agent or not.
@@ -85,24 +90,28 @@ func (m Model) paneRows() []paneRow {
 	return rows
 }
 
-func (m Model) panesPanel(w int) []string {
+func (m Model) panesPanel(w int) body {
 	st := m.st
 	rows := m.paneRows()
-	lines := []string{"", st.label.Render(fmt.Sprintf(" %d PANES", len(rows))),
-		st.label.Render(fit(" "+pad("TMUX", colPane)+pad("RUNS", colName)+"PATH", w))}
+	var b body
+	b.add(-1, "", st.label.Render(fmt.Sprintf(" %d PANES", len(rows))))
+	narrow := layout(w) == Narrow
+	if !narrow {
+		b.add(-1, st.label.Render(fit(" "+pad("TMUX", colPane)+pad("RUNS", colName)+"PATH", w)))
+	}
 	sel := min(m.paneSel, max(len(rows)-1, 0))
 	for i, r := range rows {
 		where := place(r.target, r.id)
 		if i == sel {
 			where = "▌" + where
 		}
-		line := " " + st.muted.Render(pad(where, colPane)) + st.text.Render(pad(r.what, colName)) + st.muted.Render(tilde(r.path))
-		if i == sel {
-			line = st.selected.Render(fit(line, w))
+		lines := []string{" " + st.muted.Render(pad(where, colPane)) + st.text.Render(pad(r.what, colName)) + st.muted.Render(tilde(r.path))}
+		if narrow {
+			lines = []string{" " + st.muted.Render(pad(where, colPane)) + st.text.Render(r.what), "   " + st.muted.Render(tilde(r.path))}
 		}
-		lines = append(lines, fit(line, w))
+		b.addRow(i, i == sel, w, st, lines...)
 	}
-	return lines
+	return b
 }
 
 func (m Model) selectedPane() (paneRow, bool) {

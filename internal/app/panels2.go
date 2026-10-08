@@ -43,21 +43,22 @@ func (m Model) selectedWorktree() (proto.Worktree, bool) {
 	return rows[min(m.gitSel, len(rows)-1)].wt, true
 }
 
-func (m Model) gitPanel(w int) []string {
+func (m Model) gitPanel(w int) body {
 	st := m.st
-	var out []string
+	var b body
 	if len(m.snap.GitPolling) > 0 {
-		out = append(out, m.region("git run by agents, last 10 min", w)...)
+		b.add(-1, m.region("git run by agents, last 10 min", w)...)
 		for _, p := range m.snap.GitPolling[:min(5, len(m.snap.GitPolling))] {
 			style := st.muted
 			if p.Cores >= 0.5 {
 				style = st.warn
 			}
-			out = append(out, fit(" "+style.Render(pad(fmt.Sprintf("%.2f cores", p.Cores), 12))+st.muted.Render(tilde(p.Checkout)), w))
+			b.add(-1, fit(" "+style.Render(pad(fmt.Sprintf("%.2f cores", p.Cores), 12))+st.muted.Render(tilde(p.Checkout)), w))
 		}
 	}
 	if m.git == nil {
-		return append(out, "", st.faint.Render(" scanning repositories…"))
+		b.add(-1, "", st.faint.Render(" scanning repositories…"))
+		return b
 	}
 	rows := m.worktreeRows()
 	sel := min(m.gitSel, max(len(rows)-1, 0))
@@ -73,11 +74,11 @@ func (m Model) gitPanel(w int) []string {
 		if safe > 0 {
 			rest += fmt.Sprintf("  ·  %d safe to remove", safe)
 		}
-		out = append(out, m.regionPath(r.Path, rest, w)...)
+		b.add(-1, m.regionPath(r.Path, rest, w)...)
 		if r.Behind > 0 {
-			out = append(out, fit(" "+st.warn.Render("▲ ")+st.text.Render(fmt.Sprintf("%s is %d commits behind its remote", r.Main, r.Behind)), w))
+			b.add(-1, fit(" "+st.warn.Render("▲ ")+st.text.Render(fmt.Sprintf("%s is %d commits behind its remote", r.Main, r.Behind)), w))
 		}
-		out = append(out, st.label.Render(fit(" "+pad("WORKTREE", 36)+pad("BRANCH", 28)+pad("AGENTS", 8)+pad("DIRTY", 8)+"STATE", w)))
+		b.add(-1, st.label.Render(fit(" "+pad("WORKTREE", 36)+pad("BRANCH", 28)+pad("AGENTS", 8)+pad("DIRTY", 8)+"STATE", w)))
 		for ; i < len(rows) && rows[i].repo == r.Path; i++ {
 			wt := rows[i].wt
 			name := filepath.Base(wt.Path)
@@ -105,32 +106,30 @@ func (m Model) gitPanel(w int) []string {
 				agents = fmt.Sprint(wt.Sessions)
 			}
 			line := " " + st.text.Render(pad(name, 36)) + st.muted.Render(pad(wt.Branch, 28)) + st.text.Render(pad(agents, 8)) + dirty + state
-			if i == sel {
-				line = st.selected.Render(fit(line, w))
-			}
-			out = append(out, fit(line, w))
+			b.addRow(i, i == sel, w, st, line)
 		}
 	}
 	for _, e := range m.git.Errors {
-		out = append(out, fit(" "+st.neg.Render("! ")+st.muted.Render(e), w))
+		b.add(-1, fit(" "+st.neg.Render("! ")+st.muted.Render(e), w))
 	}
-	out = append(out, "", fit(" "+st.faint.Render(fmt.Sprintf("scanned %s ago in %s · r rescans",
+	b.add(-1, "", fit(" "+st.faint.Render(fmt.Sprintf("scanned %s ago in %s · r rescans",
 		sample.Human(m.now().Sub(m.git.At)), m.git.Took.Round(time.Millisecond))), w))
 	if wt, ok := m.selectedWorktree(); ok {
-		out = append(out, fit(" "+st.label.Render("⏎ ")+st.muted.Render("tmux new-window -c "+wt.Path), w))
+		b.add(-1, fit(" "+st.label.Render("⏎ ")+st.muted.Render("tmux new-window -c "+wt.Path), w))
 		if wt.Safe {
-			out = append(out, fit(" "+st.label.Render("x ")+st.muted.Render(strings.Join(wt.Remove, " ")), w))
+			b.add(-1, fit(" "+st.label.Render("x ")+st.muted.Render(strings.Join(wt.Remove, " ")), w))
 		}
 	}
-	return out
+	return b
 }
 
-func (m Model) recsPanel(w int) []string {
+func (m Model) recsPanel(w int) body {
 	st := m.st
-	out := m.alertLines(w)
-	out = append(out, m.region(fmt.Sprintf("%d recommendations", len(m.recs)), w)...)
+	b := plain(m.alertLines(w))
+	b.add(-1, m.region(fmt.Sprintf("%d recommendations", len(m.recs)), w)...)
 	if len(m.recs) == 0 {
-		return append(out, st.faint.Render(" nothing to do"))
+		b.add(-1, st.faint.Render(" nothing to do"))
+		return b
 	}
 	sel := min(m.recSel, len(m.recs)-1)
 	for i, r := range m.recs {
@@ -142,14 +141,11 @@ func (m Model) recsPanel(w int) []string {
 			mark = st.warn.Render("▲ ")
 		}
 		line := " " + mark + st.text.Render(tilde(r.Title))
-		if i == sel {
-			line = st.selected.Render(fit(line, w))
-		}
-		out = append(out, fit(line, w))
+		b.addRow(i, i == sel, w, st, line)
 	}
 	r := m.recs[sel]
-	out = append(out, "", st.hair.Render(strings.Repeat("─", w)), fit(" "+st.text.Render(tilde(r.Title)), w))
-	out = append(out, wrap(" "+tilde(r.Evidence), w, st.muted.Render)...)
+	b.add(-1, "", st.hair.Render(strings.Repeat("─", w)), fit(" "+st.text.Render(tilde(r.Title)), w))
+	b.add(-1, wrap(" "+tilde(r.Evidence), w, st.muted.Render)...)
 	for _, a := range []struct {
 		key string
 		act *advice.Action
@@ -165,9 +161,9 @@ func (m Model) recsPanel(w int) []string {
 		if a.act.Destructive {
 			label += ", asks y"
 		}
-		out = append(out, fit(" "+st.label.Render(a.key+" ")+st.text.Render(label+": ")+st.muted.Render(cmd), w))
+		b.add(-1, fit(" "+st.label.Render(a.key+" ")+st.text.Render(label+": ")+st.muted.Render(cmd), w))
 	}
-	return out
+	return b
 }
 
 func wrap(s string, w int, render func(...string) string) []string {

@@ -352,6 +352,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.flash = "ran: " + msg.cmd
 		}
+	case tea.MouseClickMsg:
+		return m.tap(msg.Mouse())
 	case tea.KeyPressMsg:
 		if m.splashing() {
 			m.splashDone = true // any key stops the start screen, and does nothing else
@@ -399,23 +401,7 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		m.pending = nil
 		// A destructive action needs a typed y; Enter alone is not consent.
 		if k == "y" || (k == "enter" && !a.destructive) {
-			if a.attach {
-				return m, m.attach(a)
-			}
-			if a.nav {
-				run := m.opt.Run
-				return m, func() tea.Msg { return runNav(a, run) }
-			}
-			if m.conn == nil || m.lost {
-				m.flash = "not sent, no connection: " + a.String()
-				return m, nil
-			}
-			confirm := ""
-			if a.destructive {
-				confirm = "y"
-			}
-			m.flash = "sent: " + a.String()
-			return m, m.send(proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
+			return m.confirm(a)
 		}
 		m.flash = "cancelled: " + a.String()
 		return m, nil
@@ -454,6 +440,28 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// confirm runs an action the person consented to: a Nav step here, any
+// other on the service.
+func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
+	if a.attach {
+		return m, m.attach(a)
+	}
+	if a.nav {
+		run := m.opt.Run
+		return m, func() tea.Msg { return runNav(a, run) }
+	}
+	if m.conn == nil || m.lost {
+		m.flash = "not sent, no connection: " + a.String()
+		return m, nil
+	}
+	confirm := ""
+	if a.destructive {
+		confirm = "y"
+	}
+	m.flash = "sent: " + a.String()
+	return m, m.send(proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
 }
 
 // navAllowed is what a Nav step may be: it runs here on one key, so a
@@ -620,25 +628,8 @@ func (m Model) secondary() *action {
 func clampMove(i, d, n int) int { return min(max(i+d, 0), max(n-1, 0)) }
 
 func (m *Model) move(d int) {
-	switch m.tab {
-	case tabQueue:
-		if q := m.queue; len(q) > 0 {
-			m.queuePane = q[clampMove(m.queueSelIndex(), d, len(q))].Pane
-		}
-	case tabPanes:
-		m.paneSel = clampMove(m.paneSel, d, len(m.paneRows()))
-	case tabProcs:
-		if o := m.snap.Orphans; len(o) > 0 {
-			m.orphanPID = o[clampMove(m.orphanIndex(), d, len(o))].PID
-		}
-	case tabGit:
-		m.gitSel = clampMove(m.gitSel, d, len(m.worktreeRows()))
-	case tabRecs:
-		m.recSel = clampMove(m.recSel, d, len(m.recs))
-	case tabSessions:
-		if ss := m.snap.Sessions; len(ss) > 0 {
-			m.selPID = ss[clampMove(m.selIndex(), d, len(ss))].PID
-		}
+	if n := m.rowCount(); n > 0 {
+		m.selectRow(clampMove(m.rowIndex(), d, n))
 	}
 }
 
@@ -675,5 +666,6 @@ func (m *Model) keepSelection() {
 func (m Model) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion // a tap on a phone selects and acts
 	return v
 }
