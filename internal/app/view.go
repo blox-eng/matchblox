@@ -271,6 +271,7 @@ func (m Model) sessions(w, h int) body {
 		for i, s := range ss {
 			b.addRow(i, i == sel, w, st, m.narrowRow(s, i == sel)...)
 		}
+		b.add(-1, m.exitedLines(w)...)
 		return b
 	}
 
@@ -296,6 +297,7 @@ func (m Model) sessions(w, h int) body {
 		}
 		b.add(-1, st.faint.Render(fit(fmt.Sprintf(" %d without an agent: %s", n, strings.Join(ids, ", ")), w)))
 	}
+	b.add(-1, m.exitedLines(w)...)
 	b.add(-1, "", st.hair.Render(strings.Repeat("─", w)))
 	b.add(-1, detail...)
 	return b

@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -160,4 +161,42 @@ func (m Model) sessionIn(pane string) (sample.Session, bool) {
 		}
 	}
 	return sample.Session{}, false
+}
+
+// exitedLines are the agents that exited and wait for their parent: one
+// faint line, or, after e, each parent with the fix and the pids.
+func (m Model) exitedLines(w int) []string {
+	ex := m.snap.Exited
+	if len(ex) == 0 {
+		return nil
+	}
+	st := m.st
+	if !m.showExited {
+		return []string{"", st.faint.Render(fit(fmt.Sprintf(" %d exited agents · e shows them", len(ex)), w))}
+	}
+	lines := []string{"", st.label.Render(fmt.Sprintf(" %d EXITED AGENTS", len(ex))) + st.faint.Render("  · e hides them")}
+	type parent struct {
+		pid  int
+		comm string
+	}
+	var order []parent
+	pids := map[parent][]string{}
+	for _, e := range ex {
+		p := parent{e.Parent, e.ParentComm}
+		if _, ok := pids[p]; !ok {
+			order = append(order, p)
+		}
+		pids[p] = append(pids[p], strconv.Itoa(e.PID))
+	}
+	for _, p := range order {
+		fix := "they go when it waits for them or exits"
+		if p.comm == "systemd" {
+			fix = "systemctl --user daemon-reexec reaps them"
+		}
+		lines = append(lines,
+			fit(" "+st.text.Render(fmt.Sprintf("%s (pid %d) has not reaped them", p.comm, p.pid)), w),
+			fit("   "+st.muted.Render(fix), w),
+			fit("   "+st.faint.Render("pids "+strings.Join(pids[p], ", ")), w))
+	}
+	return lines
 }

@@ -15,6 +15,14 @@ import (
 )
 
 // Session is one agent process and the pane that owns it.
+// Exited is an agent process that exited and waits for its parent to
+// reap it.
+type Exited struct {
+	PID        int    `json:"pid"`
+	Parent     int    `json:"parent"`
+	ParentComm string `json:"parent_comm"`
+}
+
 type Session struct {
 	PID        int           `json:"pid"`
 	Pane       string        `json:"pane"`
@@ -69,12 +77,15 @@ type Machine struct {
 }
 
 type Snapshot struct {
-	At         time.Time    `json:"at"`
-	Machine    Machine      `json:"machine"`
-	Sessions   []Session    `json:"sessions"`
-	IdlePanes  []IdlePane   `json:"idle_panes"`
-	Orphans    []Orphan     `json:"orphans"`
-	Top        []ProcRow    `json:"top"`
+	At        time.Time  `json:"at"`
+	Machine   Machine    `json:"machine"`
+	Sessions  []Session  `json:"sessions"`
+	IdlePanes []IdlePane `json:"idle_panes"`
+	Orphans   []Orphan   `json:"orphans"`
+	Top       []ProcRow  `json:"top"`
+	// Exited are agents that exited and that their parent has not reaped
+	// (zombies): not sessions, listed so the person sees why they stay.
+	Exited     []Exited     `json:"exited,omitempty"`
 	Containers []Container  `json:"containers"`
 	Groups     []GroupShare `json:"groups"`
 	GitPolling []GitPolling `json:"git_polling"`
@@ -197,7 +208,7 @@ func (s *Sampler) Sample() Snapshot {
 		s.scan(now)
 	}
 	l := s.last
-	snap.Sessions, snap.IdlePanes, snap.Orphans, snap.Top = l.Sessions, l.IdlePanes, l.Orphans, l.Top
+	snap.Sessions, snap.IdlePanes, snap.Orphans, snap.Top, snap.Exited = l.Sessions, l.IdlePanes, l.Orphans, l.Top, l.Exited
 	snap.Containers, snap.Groups, snap.GitPolling = l.Containers, l.Groups, l.GitPolling
 	snap.Errors = append(snap.Errors, l.Errors...)
 	s.alerts(&snap, now)
@@ -326,6 +337,10 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		if !s.isAgent(p.Comm) {
 			continue
 		}
+		if p.State == 'Z' || p.State == 'X' {
+			snap.Exited = append(snap.Exited, Exited{PID: pid, Parent: p.PPID, ParentComm: procs[p.PPID].Comm})
+			continue
+		}
 		// An agent started anywhere below another agent (helpers, a nested
 		// `claude -p` in its shell) inherits its pane: count only the top one.
 		if s.underAgent(p, procs) {
@@ -405,6 +420,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			snap.IdlePanes = append(snap.IdlePanes, IdlePane{p.ID, p.Target, p.Command, p.Path})
 		}
 	}
+	sort.Slice(snap.Exited, func(i, j int) bool { return snap.Exited[i].PID < snap.Exited[j].PID })
 	sort.Slice(snap.Sessions, func(i, j int) bool {
 		a, b := snap.Sessions[i], snap.Sessions[j]
 		if a.ContextPct != b.ContextPct {

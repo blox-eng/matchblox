@@ -445,3 +445,27 @@ func TestPaneFromSessionFile(t *testing.T) {
 	}
 	t.Fatal("session 200 not found")
 }
+
+// TestExitedAgentsAreNotSessions: an agent that exited and that its parent
+// has not reaped (a zombie) is listed apart, with that parent, and counts
+// for nothing else.
+func TestExitedAgentsAreNotSessions(t *testing.T) {
+	root := copyFixture(t)
+	for _, pid := range []string{"700", "701"} {
+		dir := filepath.Join(root, "proc", pid)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		stat := pid + " (claude) Z 1 " + pid + " " + pid + " 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 1000 0 0"
+		if err := os.WriteFile(filepath.Join(dir, "stat"), []byte(stat), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	snap := newFixtureSampler(root).Sample()
+	if len(snap.Sessions) != 3 {
+		t.Fatalf("want the 3 live sessions, got %d", len(snap.Sessions))
+	}
+	if len(snap.Exited) != 2 || snap.Exited[0].PID != 700 || snap.Exited[0].Parent != 1 || snap.Exited[0].ParentComm != "systemd" {
+		t.Fatalf("exited = %+v", snap.Exited)
+	}
+}

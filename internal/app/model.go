@@ -156,6 +156,7 @@ type Model struct {
 	paneSort   sortBy
 	picked     map[string]bool // worktrees x removes
 	batch      *batch
+	showExited bool // e: the exited agents, one by one
 }
 
 func New(opt Options) Model {
@@ -459,6 +460,10 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case "space", " ":
 		if m.tab == tabGit {
 			m.mark()
+		}
+	case "e":
+		if m.tab == tabSessions {
+			m.showExited = !m.showExited
 		}
 	case "X", "shift+x":
 		if m.tab == tabGit {
