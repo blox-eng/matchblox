@@ -323,7 +323,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.recv()
 		}
 		if text := describe(proto.Result(msg)); text != "" {
-			m.flash = text
+			m.flash = tilde(text)
 		}
 		return m, m.recv()
 	case lostMsg:

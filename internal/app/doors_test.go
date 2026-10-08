@@ -98,8 +98,11 @@ func TestGuideNeedsConfirm(t *testing.T) {
 		t.Fatal("Enter started the guide")
 	}
 	out := ansi.Strip(next.(Model).render())
-	if !strings.Contains(out, "RUN tmux new-window -n guide claude") || !strings.Contains(out, "uses your tokens") {
-		t.Fatalf("no guide confirm:\n%s", out)
+	for _, want := range []string{"RUN Open a guide session: in a new tmux window", "y run", "uses your tokens",
+		"tmux new-window -n guide claude 'Help me set up matchblox."} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("no %q:\n%s", want, out)
+		}
 	}
 	if _, cmd := key(next, "y"); cmd == nil {
 		t.Fatal("y did not start the guide")
@@ -113,7 +116,7 @@ func TestGuideOutsideTmuxTakesTheTerminal(t *testing.T) {
 	m, _ := loadedWith(t, 100, doorState(guideDoor))
 	m.opt.OutsideTmux = true
 	next, _ := key(m, "enter")
-	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "RUN claude ") {
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "in this terminal") || !strings.Contains(out, " claude 'Help me") {
 		t.Fatalf("no plain claude:\n%s", out)
 	}
 }
@@ -195,5 +198,55 @@ func TestTheQueueKeepsItsRowsUnderDoors(t *testing.T) {
 	next.Update(cmd())
 	if strings.Join(ran, " ") != "tmux switch-client -t %1" {
 		t.Fatalf("ran %v", ran)
+	}
+}
+
+func TestTheWhyIsReadInFull(t *testing.T) {
+	m, _ := loadedWith(t, 100, doorState(hooksDoor, guideDoor))
+	long := guideDoor
+	long.Why = "Claude Code walks you through matchblox in a new window. This starts Claude Code and uses your tokens."
+	next, _ := m.Update(stateMsg(doorState(hooksDoor, long)))
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "uses your tokens.") {
+		t.Fatalf("the why is cut:\n%s", out)
+	}
+}
+
+func TestOneBlankLineUnderTheDoors(t *testing.T) {
+	m, _ := loadedWith(t, 100, doorState(hooksDoor))
+	lines := strings.Split(ansi.Strip(m.render()), "\n")
+	for i := lineOf(t, m, "SET UP"); i < lineOf(t, m, "WAITING FOR YOU"); i++ {
+		if strings.TrimSpace(lines[i]) == "" && strings.TrimSpace(lines[i+1]) == "" {
+			t.Fatalf("two blank lines at %d:\n%s", i, strings.Join(lines, "\n"))
+		}
+	}
+}
+
+func TestThePreviewShortensHome(t *testing.T) {
+	d := hooksDoor
+	d.Preview = `+      {"command": "` + home + `/go/bin/matchblox hook Stop"}`
+	m, _ := loadedWith(t, 100, doorState(d))
+	next, _ := key(m, "enter")
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, `"~/go/bin/matchblox hook Stop"`) {
+		t.Fatalf("no ~ in the preview:\n%s", out)
+	}
+}
+
+func TestTheResultShortensHome(t *testing.T) {
+	m, _ := loadedWith(t, 100, doorState(hooksDoor))
+	next, _ := m.Update(resultMsg(proto.Result{Ran: [][]string{{"write", home + "/.claude/settings.json"}}}))
+	if got := next.(Model).flash; got != "ran: write ~/.claude/settings.json" {
+		t.Fatalf("flash %q", got)
+	}
+}
+
+func TestAPhoneShowsOnlyTheSelectedWhy(t *testing.T) {
+	m, _ := loadedWith(t, 40, doorState(hooksDoor, wayBack, guideDoor))
+	out := ansi.Strip(m.render())
+	if !strings.Contains(out, "Claude Code tells") || strings.Contains(out, "prefix m comes back") || strings.Contains(out, "uses your tokens") {
+		t.Fatalf("a phone shows each why:\n%s", out)
+	}
+	next, _ := key(m, "down")
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "prefix m comes back") || strings.Contains(out, "Claude Code tells") {
+		t.Fatalf("the why does not follow the selection:\n%s", out)
 	}
 }
