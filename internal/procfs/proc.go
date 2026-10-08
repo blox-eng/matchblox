@@ -133,6 +133,16 @@ func (fs FS) Cmdline(pid int) string {
 	return strings.TrimSpace(string(bytes.ReplaceAll(b, []byte{0}, []byte{' '})))
 }
 
+// Argv returns /proc/<pid>/cmdline split on its NUL bytes.
+func (fs FS) Argv(pid int) []string {
+	b, _ := os.ReadFile(fs.path(strconv.Itoa(pid), "cmdline"))
+	b = bytes.TrimRight(b, "\x00")
+	if len(b) == 0 {
+		return nil
+	}
+	return strings.Split(string(b), "\x00")
+}
+
 // CPUTimes is the aggregate "cpu" line of /proc/stat.
 type CPUTimes struct{ Busy, Total uint64 }
 

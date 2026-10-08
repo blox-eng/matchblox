@@ -125,6 +125,14 @@ func (Host) Cmdline(pid int) string {
 	return ""
 }
 
+func (Host) Argv(pid int) []string {
+	if p, err := newProcess(pid); err == nil {
+		argv, _ := p.CmdlineSlice()
+		return argv
+	}
+	return nil
+}
+
 // Cgroup is Linux only: containers run inside a VM on other systems.
 func (Host) Cgroup(int) string { return "" }
 

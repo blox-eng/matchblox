@@ -17,6 +17,8 @@ One terminal console for every AI coding agent you run. It shows which agent
 waits for you, what loads the machine, the state of every git checkout, and the
 one safe action that resolves each thing.
 
+Works with Claude Code, Codex, OpenCode, and any agent in tmux.
+
 > **Status: pre-release.** The service, the console, the queue of agents that
 > wait for you, the control pane for a phone and setup run today on the host.
 > Remote mode and night mode are in progress. The plan is in
@@ -24,8 +26,9 @@ one safe action that resolves each thing.
 
 ## What it shows
 
-- **The queue**: each agent that asks for permission, waits for input or
-  finished its turn, oldest first, with its last line. `Enter` goes to its
+- **The queue**: each agent that asks for permission, waits for input,
+  paused its task or finished its turn, oldest first, with its last line and
+  its open pull request. `Enter` goes to its
   pane; `a` answers in one line.
 - **A match for each session**: `✦` burning while it works, `╿` at rest while
   it waits, `│` spent when its context is full.
@@ -41,6 +44,55 @@ one safe action that resolves each thing.
   are merged and safe to remove, and what agents spend on git.
 - **Recommendations**, ranked, each with its evidence and its exact command.
 - **History**: 24 hours of CPU, load, pressure, temperature, memory and swap.
+
+## Every agent in tmux
+
+Start each agent in a tmux session. matchblox finds it, `Enter` jumps to it,
+and `a` answers it. Each command gives the console row under it.
+
+**Claude Code**
+
+```sh
+tmux new -s app claude
+```
+```
+✦ busy         app        app:1.1   ██████░░░░  62%
+```
+
+**Codex**
+
+```sh
+tmux new -s api codex
+```
+```
+╿ asks   1m    codex      api:1.1   from the pane: Would you like to run the following command?
+```
+
+**OpenCode**
+
+```sh
+tmux new -s web opencode
+```
+```
+✦ busy         opencode   web:1.1   not measured
+```
+
+**Any other agent**, for example aider
+
+```sh
+tmux new -s docs aider
+```
+```
+╿ done   4m    aider      docs:1.1  not measured
+```
+
+Claude Code tells its waits through hooks and shows its context use. Every
+other agent is read from its pane: it is busy while the pane moves, and it
+waits for you when it is idle and its last lines ask. That can come later
+than a hook. An approval menu (Codex, OpenCode) shows as `asks`: you answer
+it in its pane, where `Enter` takes the selected choice. Its context use shows "not measured". The first run writes the
+agents it finds to `agents` in `~/.config/matchblox/config.toml`. Add any
+other agent there by its command.
 
 ## Safety
 

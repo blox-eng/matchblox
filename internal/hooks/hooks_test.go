@@ -114,3 +114,27 @@ func TestReplaySkipsABrokenLine(t *testing.T) {
 		t.Fatalf("n=%d err=%v", n, err)
 	}
 }
+
+// TestStopThatAsksIsAQuestion: a reply ends with the progress line, so the
+// question above it is what the Stop event carries.
+func TestStopThatAsksIsAQuestion(t *testing.T) {
+	in := `{"session_id":"s1","hook_event_name":"Stop","last_assistant_message":"I fixed the parser.\n\nShall I open the PR?\n\nProgress [██████░░] review"}`
+	ev, err := Parse(strings.NewReader(in), "Stop", func(string) string { return "" })
+	if err != nil || !ev.Asks || ev.Message != "Shall I open the PR?" {
+		t.Fatalf("event %+v, %v", ev, err)
+	}
+	in = `{"session_id":"s1","hook_event_name":"Stop","last_assistant_message":"All tests pass.\n\nProgress [████████] done"}`
+	if ev, _ := Parse(strings.NewReader(in), "Stop", func(string) string { return "" }); ev.Asks || ev.Message != "All tests pass." {
+		t.Fatalf("event %+v", ev)
+	}
+}
+
+// TestNotificationTextIsClean: a notification message is shown in the
+// console; a control key in it would drive the person's terminal.
+func TestNotificationTextIsClean(t *testing.T) {
+	in := `{"session_id":"s1","hook_event_name":"Notification","notification_type":"permission_prompt","message":"Claude needs\u001b]52;c;eA==\u0007 your permission"}`
+	ev, err := Parse(strings.NewReader(in), "Notification", func(string) string { return "" })
+	if err != nil || ev.Message != "Claude needs]52;c;eA== your permission" {
+		t.Fatalf("message %q, %v", ev.Message, err)
+	}
+}

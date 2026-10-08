@@ -7,6 +7,8 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/blox-eng/matchblox/internal/config"
 )
@@ -24,17 +26,28 @@ func Thresholds(cores int, memTotal uint64) config.Alerts {
 
 // WriteConfig writes the config file with the machine's thresholds, only
 // when there is none. It reports whether it wrote it.
-func WriteConfig(path string, cores int, memTotal uint64) (bool, error) {
+func WriteConfig(path string, cores int, memTotal uint64, agents []string) (bool, error) {
 	a := Thresholds(cores, memTotal)
+	if len(agents) == 0 {
+		agents = []string{"claude"}
+	}
+	quoted := make([]string, len(agents))
+	for i, name := range agents {
+		quoted[i] = strconv.Quote(name)
+	}
 	body := fmt.Sprintf(`# matchblox: the goals of this machine. Change them here.
 # Made from this machine: %d cores, %.0f GB of memory.
+
+# The coding agents found on this machine. A process with one of these
+# command names in a tmux pane is a session. Add any other agent by name.
+agents = [%s]
 
 [alerts]
 # The load average over this for 2 minutes: work waits for a CPU.
 load1_over = %.0f
 # Less free memory than this, in GB.
 mem_available_under_gb = %.0f
-`, cores, float64(memTotal)/(1<<30), a.Load1Over, a.MemAvailableUnderGB)
+`, cores, float64(memTotal)/(1<<30), strings.Join(quoted, ", "), a.Load1Over, a.MemAvailableUnderGB)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return false, err
 	}
@@ -50,4 +63,22 @@ mem_available_under_gb = %.0f
 		return false, err
 	}
 	return true, f.Close()
+}
+
+// KnownAgents are the coding agents the first run looks for, by the
+// command that starts each one.
+// goose and amp are left out: other common tools share those names.
+var KnownAgents = []string{"claude", "codex", "opencode", "gemini", "cursor-agent", "aider", "crush", "qwen"}
+
+// FindAgents lists the known agents that are installed (lookPath is
+// exec.LookPath). Claude Code is always in it: it is the agent with hooks,
+// and an install reached by a shell alias is not on any path.
+func FindAgents(lookPath func(string) (string, error)) []string {
+	found := []string{"claude"}
+	for _, name := range KnownAgents[1:] {
+		if _, err := lookPath(name); err == nil {
+			found = append(found, name)
+		}
+	}
+	return found
 }

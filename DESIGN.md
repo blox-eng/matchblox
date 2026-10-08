@@ -161,6 +161,11 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 - **Rows:** the match and the state word first, then the wait, the name, the
   tmux place and the last line. Figures are aligned; units are faint. The
   selected row has a `▌` and the `wash` background.
+- **Pull requests** (owner, 2026-10-08): an agent whose worktree has an
+  open pull request shows `#N` in the accent on its queue row, after its
+  worktree in Sessions, and `PR #N <title>  <url>` in the detail. The git
+  scan asks `gh` for the open ones of each repository; a fork's pull
+  request never marks a branch of ours.
 - **Action line** (owner, 2026-10-08): under the tabs, above the hairline,
   never at the bottom: on a phone the keyboard covers the bottom of the
   screen. The keys of the tab on the left, "sampled N ago" on the right. It
@@ -180,7 +185,11 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   SessionStart hook asks each new session for that line
   (`progress_prompt`, on by default). The console never types it into a pane.
 - **Age** (owner, 2026-10-08): an idle session is `idle`, then `cold` from
-  one day, then `stale` from seven days. Sessions sort busy first, then the
+  one day, then `stale` from seven days. Under a day, a session that waits
+  shows the word of its queue row in Sessions too: `asks`, `waits`, `done`,
+  or `paused` when its turn ended with its progress bar under 100% and no
+  question (owner, 2026-10-08). A turn that ends on a question waits; it is
+  never `done`. Sessions sort busy first, then the
   ones that wait for the person, then idle with the newest first: the oldest
   sink to the bottom. On a stale session `x` and a typed `y` end the agent;
   on another session `x` says when it works. Agents that exited and wait
@@ -218,6 +227,10 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   safe to remove (or says why not), `X` marks every safe one, and `x` with a
   typed `y` removes the marked ones: one guarded act each, then one summary
   ("removed 11, skipped 1: it has changes").
+- **After a jump** (owner, 2026-10-08): when `Enter` takes the person to an
+  agent, the console selects the next one that waits (the next queue row;
+  in Sessions the next session in the queue, else the next idle one), so
+  the way back lands on it.
 
 ## 7. Copy
 

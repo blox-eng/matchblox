@@ -30,10 +30,11 @@ const fixture = "../../testdata/machine"
 
 func fixtureState() proto.State {
 	s := &sample.Sampler{
-		FS:    procfs.FS{Root: filepath.Join(fixture, "proc")},
-		Home:  filepath.Join(fixture, "home"),
-		Tmux:  func() ([]byte, error) { return os.ReadFile(filepath.Join(fixture, "tmux-panes.txt")) },
-		Rules: sample.DefaultRules,
+		FS:      procfs.FS{Root: filepath.Join(fixture, "proc")},
+		Home:    filepath.Join(fixture, "home"),
+		Tmux:    func() ([]byte, error) { return os.ReadFile(filepath.Join(fixture, "tmux-panes.txt")) },
+		Capture: sample.CaptureDir(filepath.Join(fixture, "panes")),
+		Rules:   sample.DefaultRules,
 	}
 	snap := s.Sample()
 	q := queue.New()

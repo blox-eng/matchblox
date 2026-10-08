@@ -162,3 +162,61 @@ func TestScanFindsTheRemotesDefaultBranch(t *testing.T) {
 		t.Fatalf("a branch merged into trunk must count as merged: %+v", wt)
 	}
 }
+
+// TestAnOpenPullRequestIsOnItsWorktree: the open PR of a branch shows on
+// the worktree that has the branch checked out; the main checkout never
+// takes one.
+func TestAnOpenPullRequestIsOnItsWorktree(t *testing.T) {
+	root, repo := newRepo(t)
+	s := &Scanner{Git: Git, Open: func(context.Context, string) map[string]PR {
+		return map[string]PR{"open": {Number: 42, Title: "Add the cache", URL: "https://example.com/pr/42"}, "main": {Number: 7}}
+	}}
+	rep := s.Scan(context.Background(), Input{SessionCwds: []string{filepath.Join(root, "wt", "open"), repo}})
+	for _, wt := range rep.Repos[0].Worktrees {
+		switch filepath.Base(wt.Path) {
+		case "open":
+			if wt.PR == nil || wt.PR.Number != 42 || wt.PR.Title != "Add the cache" {
+				t.Errorf("open: PR %+v", wt.PR)
+			}
+		default:
+			if wt.PR != nil {
+				t.Errorf("%s: PR %+v, want none", filepath.Base(wt.Path), wt.PR)
+			}
+		}
+	}
+}
+
+// TestParseOpenSkipsForksAndControlKeys: a fork's branch can share a name
+// with ours, and a title is not trusted.
+func TestParseOpenSkipsForksAndControlKeys(t *testing.T) {
+	out := `[{"number":42,"title":"Add\u001b]52;c;eA==\u0007 cache","url":"u","isDraft":true,"headRefName":"feat","isCrossRepository":false},
+	{"number":9,"title":"x","url":"v","isDraft":false,"headRefName":"main","isCrossRepository":true}]`
+	got := parseOpen([]byte(out))
+	if len(got) != 1 || got["feat"].Number != 42 || !got["feat"].Draft || got["feat"].Title != "Add]52;c;eA== cache" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+// TestThePrimaryCheckoutOnABranchShowsItsPR: many builders never use
+// worktrees; an agent in the main checkout on a feature branch has a PR
+// too. The PR list is asked for once per repository per mergedEvery, and
+// not at all when every checkout is on the default branch.
+func TestThePrimaryCheckoutOnABranchShowsItsPR(t *testing.T) {
+	root, repo := newRepo(t)
+	run(t, repo, "checkout", "-q", "-b", "feat")
+	asked := 0
+	s := &Scanner{Git: Git, Open: func(context.Context, string) map[string]PR {
+		asked++
+		return map[string]PR{"feat": {Number: 42}}
+	}}
+	in := Input{SessionCwds: []string{repo}}
+	rep := s.Scan(context.Background(), in)
+	if wt := rep.Repos[0].Worktrees[0]; wt.PR == nil || wt.PR.Number != 42 {
+		t.Fatalf("main checkout on feat: PR %+v", wt.PR)
+	}
+	s.Scan(context.Background(), in)
+	if asked != 1 {
+		t.Fatalf("the PR list was asked for %d times in two scans, want 1", asked)
+	}
+	_ = root
+}

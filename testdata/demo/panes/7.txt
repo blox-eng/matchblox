@@ -1,0 +1,7 @@
+┃  Move the settings screen to the new layout
+
+  I am moving the settings screen to the new layout.
+
+  ⠙ Working
+                                     ctrl+t variants  tab agents  ctrl+p commands
+  /work/mobile:main                                                          1.1.48

@@ -88,3 +88,19 @@ func TestTheNewestReplyDecides(t *testing.T) {
 		t.Fatalf("an older bar won: %+v", u.Progress)
 	}
 }
+
+// TestTheNewestReplyTellsIfItAsks: without hooks, a Claude Code turn that
+// ended on a question waits for the person.
+func TestTheNewestReplyTellsIfItAsks(t *testing.T) {
+	lines := []string{
+		`{"type":"assistant","message":{"model":"m","content":[{"type":"text","text":"Fixed.\n\nShall I open the PR?\n\nProgress [██████░░] review"}],"usage":{"input_tokens":1,"output_tokens":1}}}`,
+	}
+	path := filepath.Join(t.TempDir(), "s.jsonl")
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := os.Stat(path)
+	if u, _ := lastUsage(path, st.Size()); !u.Asks || u.LastLine != "Shall I open the PR?" {
+		t.Fatalf("usage %+v", u)
+	}
+}

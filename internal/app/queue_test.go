@@ -385,3 +385,134 @@ func TestAnswerPreviewIsWhatRuns(t *testing.T) {
 		t.Fatalf("console %q, service %q", got, want)
 	}
 }
+
+// TestAnAgentWithoutHooksIsReadFromThePane: a Codex session waits with the
+// question from its pane, says where that came from, shows "not measured"
+// for context use, and takes an answer like any other.
+func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
+	st := fixtureState()
+	q := "Would you like to run the following command?"
+	st.Sessions = append(st.Sessions, sample.Session{PID: 900, Pane: "%9", Target: "api:1.1", Tab: "api", Name: "codex",
+		Status: "idle", Idle: time.Minute, Context: "unmeasured", FromPane: true, Permits: true, LastLine: q, Procs: 1})
+	st.Queue = []queue.Item{{Pane: "%9", Target: "api:1.1", Name: "codex", State: queue.StatePermission,
+		Since: st.At.Add(-time.Minute), LastLine: q, Estimated: true, FromPane: true}}
+	for _, w := range []int{100, 50} {
+		m, _ := loadedWith(t, w, st)
+		out := ansi.Strip(m.render())
+		for _, want := range []string{"codex", "asks", "Would you like to run", "from the pane"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("width %d: the queue lacks %q:\n%s", w, want, out)
+			}
+		}
+	}
+	// An approval menu is answered in its pane: Enter there takes the
+	// selected choice, so the console never types a line into it.
+	m, f := loadedWith(t, 100, st)
+	next, _ := key(m, "a")
+	if nm := next.(Model); nm.input != nil || !strings.Contains(nm.flash, "Enter goes there") || len(f.acts()) != 0 {
+		t.Fatalf("a on an approval menu: input %+v flash %q acts %+v", nm.input, nm.flash, f.acts())
+	}
+	m.tab, m.selPID = tabSessions, 900
+	out := ansi.Strip(m.render())
+	for _, want := range []string{"not measured", q, "busy and idle are read from the pane"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("Sessions lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+// TestSessionsSayWhatTheQueueSays: a session that waits shows the queue's
+// word in Sessions, not idle; a turn that ended under 100% progress, with
+// no question, is paused on both tabs.
+func TestSessionsSayWhatTheQueueSays(t *testing.T) {
+	st := fixtureState()
+	st.Sessions = append(st.Sessions,
+		sample.Session{PID: 901, Pane: "%8", Target: "app:1.1", Name: "slice-one", Status: "idle", Idle: time.Minute, Context: "fresh",
+			Progress: &sample.Progress{Pct: 60, Step: "wiring"}},
+		sample.Session{PID: 902, Pane: "%9", Target: "app:2.1", Name: "slice-two", Status: "idle", Idle: time.Minute, Context: "fresh"})
+	st.Queue = []queue.Item{
+		{Pane: "%8", Target: "app:1.1", Name: "slice-one", State: queue.StateFinished, Since: st.At.Add(-time.Minute)},
+		{Pane: "%9", Target: "app:2.1", Name: "slice-two", State: queue.StateQuestion, Since: st.At.Add(-time.Minute), LastLine: "Shall I open the PR?"},
+	}
+	m, _ := loadedWith(t, 100, st)
+	rowOf := func(out, name string) string {
+		for _, l := range strings.Split(out, "\n") {
+			if strings.Contains(l, name) {
+				return l
+			}
+		}
+		t.Fatalf("no row for %s:\n%s", name, out)
+		return ""
+	}
+	q := ansi.Strip(m.render())
+	if r := rowOf(q, "slice-one"); !strings.Contains(r, "paused") {
+		t.Fatalf("queue row %q", r)
+	}
+	m.tab = tabSessions
+	for _, w := range []int{100, 50} {
+		m.width = w
+		out := ansi.Strip(m.render())
+		for name, word := range map[string]string{"slice-one": "paused", "slice-two": "waits"} {
+			if r := rowOf(out, name); !strings.Contains(r, word) || strings.Contains(r, "idle") {
+				t.Fatalf("width %d: %s row %q, want %q", w, name, r, word)
+			}
+		}
+	}
+}
+
+// TestAJumpMovesTheCursorToTheNextThatWaits: after Enter goes to an agent,
+// the console selects the next one that waits, so the way back lands on it.
+func TestAJumpMovesTheCursorToTheNextThatWaits(t *testing.T) {
+	m, _ := loadedWith(t, 100, queueState())
+	m.opt.Run = func([]string) error { return nil }
+	next, cmd := key(m, "enter")
+	if it, _ := m.selectedQueue(); it.Pane != "%1" {
+		t.Fatalf("starts on %s", it.Pane)
+	}
+	if cmd == nil {
+		next, cmd = key(next, "enter")
+	}
+	next, _ = next.Update(cmd())
+	if it, _ := next.(Model).selectedQueue(); it.Pane != "%2" {
+		t.Fatalf("after the jump to %%1 the queue selects %s, want %%2", it.Pane)
+	}
+
+	st := queueState()
+	m, _ = loadedWith(t, 100, st)
+	m.opt.Run = func([]string) error { return nil }
+	m.tab = tabSessions
+	from, _ := m.selected()
+	armed, cmd := key(m, "enter")
+	if cmd == nil {
+		armed, cmd = key(armed, "enter")
+	}
+	if cmd == nil {
+		t.Fatal("no jump")
+	}
+	nm, _ := armed.Update(cmd())
+	s, _ := nm.(Model).selected()
+	if s.PID == from.PID || s.Busy {
+		t.Fatalf("after the jump to %s Sessions selects %s (busy %v)", from.Name, s.Name, s.Busy)
+	}
+	waits := false
+	for _, it := range nm.(Model).queue {
+		waits = waits || it.Pane == s.Pane
+	}
+	if !waits {
+		t.Fatalf("Sessions selects %s, which does not wait", s.Name)
+	}
+}
+
+// TestTwoSessionsOutsideTmuxKeepTheirOwnWords: a session with no pane does
+// not take the queue word of another session with no pane.
+func TestTwoSessionsOutsideTmuxKeepTheirOwnWords(t *testing.T) {
+	st := fixtureState()
+	st.Sessions = append(st.Sessions, sample.Session{PID: 960, Name: "loose", Status: "idle", Idle: time.Minute, Context: "fresh"})
+	st.Queue = []queue.Item{{SessionID: "x", Name: "other", State: queue.StateQuestion, Since: st.At}}
+	m, _ := loadedWith(t, 100, st)
+	for _, s := range m.snap.Sessions {
+		if s.PID == 960 && m.stateWord(s) != "idle" {
+			t.Fatalf("a session with no pane took %q", m.stateWord(s))
+		}
+	}
+}
