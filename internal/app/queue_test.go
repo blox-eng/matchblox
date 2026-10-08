@@ -12,6 +12,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -75,7 +76,7 @@ func TestEnterOutsideTmuxAttaches(t *testing.T) {
 		t.Fatalf("pending %+v", p)
 	}
 	for _, step := range want {
-		if !navAllowed(step) {
+		if !remote.NavAllowed(step) {
 			t.Fatalf("nav refuses %q", step)
 		}
 	}

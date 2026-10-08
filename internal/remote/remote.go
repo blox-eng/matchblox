@@ -1,6 +1,7 @@
 // Package remote reaches the service of another host over SSH: the console
 // there speaks the same wire as a local one, on the stdin and stdout of
-// `matchblox serve --stdio`.
+// `matchblox serve --stdio`. It uses its own key, which the host lets start
+// only `matchblox gate` (design/0005-remote-mode.md §3).
 package remote
 
 import (
@@ -8,8 +9,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,43 +22,56 @@ import (
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
-// ErrNotInstalled: the host has no matchblox on its PATH.
-var ErrNotInstalled = errors.New("matchblox is not installed there")
+// Why a host cannot be reached; each one has its own fix.
+var (
+	ErrNotConnected   = errors.New("not connected")
+	ErrNotInstalled   = errors.New("matchblox is not installed there")
+	ErrHostKeyUnknown = errors.New("the host key is not known")
+	ErrHostKeyChanged = errors.New("the host key changed")
+)
 
-// ServeCommand is what ssh runs on the host. ssh starts a non-login shell,
-// which does not have the install script's ~/.local/bin on its PATH.
-const ServeCommand = `PATH="$HOME/.local/bin:$PATH" exec matchblox serve --stdio`
+// ServeCommand is what the console asks the host's gate to run.
+const ServeCommand = "matchblox serve --stdio"
 
 // install is the one install command, with no data in it. MATCHBLOX_NO_START
 // keeps the script from starting a console inside this one.
 const install = "curl -fsSL https://matchblox.sh | MATCHBLOX_NO_START=1 sh"
+
+// KeyName is the matchblox key in ~/.ssh.
+const KeyName = "matchblox_ed25519"
+
+// KeyPath is the matchblox key of a home directory.
+func KeyPath(home string) string { return filepath.Join(home, ".ssh", KeyName) }
 
 var hostRE = regexp.MustCompile(`^[A-Za-z0-9_.@:%\[\]-]+$`)
 
 // ValidHost is a name ssh reads as a host and never as an option.
 func ValidHost(h string) bool { return hostRE.MatchString(h) && !strings.HasPrefix(h, "-") }
 
-// Argv is the ssh command that joins this console to the host's service.
-// BatchMode: no password prompt inside the console. ServerAlive: a dropped
-// network ends the connection in 15 s instead of never, and a host that is
-// down fails in 10 s.
-func Argv(host string) []string {
-	return []string{"ssh", "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3",
-		"--", host, ServeCommand}
+// Target is a host and the key that reaches its gate.
+type Target struct{ Host, Key string }
+
+// ssh is the locked-down ssh of the console: its own key and no other, no
+// password prompt, a known host key only, nothing forwarded. ServerAlive: a
+// dropped network ends the connection in 15 s instead of never.
+func (t Target) ssh(tty string, cmd string) []string {
+	return []string{"ssh", tty, "-i", t.Key,
+		"-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none", "-o", "BatchMode=yes",
+		"-o", "StrictHostKeyChecking=yes", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes",
+		"-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3",
+		"--", t.Host, cmd}
 }
 
-// InstallArgv installs matchblox on the host, in this terminal.
-func InstallArgv(host string) []string { return []string{"ssh", "-t", "--", host, install} }
+// Argv joins this console to the host's service.
+func (t Target) Argv() []string { return t.ssh("-T", ServeCommand) }
 
 // TermArgv runs a command on the host in this terminal. ssh hands the far
-// side one shell string, so each word is quoted.
-func TermArgv(host string, argv []string) []string {
-	return []string{"ssh", "-t", "--", host, Quote(argv)}
-}
+// side one string, which the gate splits back into argv.
+func (t Target) TermArgv(argv []string) []string { return t.ssh("-t", Quote(argv)) }
 
 // NavArgv turns the console's tmux moves into one command that attaches to
 // the host's tmux: there is no tmux client of the host to switch.
-func NavArgv(host string, steps [][]string) []string {
+func (t Target) NavArgv(steps [][]string) []string {
 	cmd := []string{"tmux"}
 	attach := []string{"attach-session"}
 	for _, s := range steps {
@@ -71,7 +88,78 @@ func NavArgv(host string, steps [][]string) []string {
 			cmd = append(append(cmd, args...), ";")
 		}
 	}
-	return TermArgv(host, append(cmd, attach...))
+	return t.TermArgv(append(cmd, attach...))
+}
+
+// NavAllowed is what a tmux move may be: the console runs it on one key and
+// the gate runs it for the matchblox key, so neither runs anything but the
+// moves advice builds, in exactly that shape. tmux runs a trailing argument
+// of new-window as a shell command, splits commands on ";", and
+// format-expands a start directory (#() runs a shell command). So: four
+// arguments, a pane id as the target, and an absolute directory without "#"
+// or ";".
+func NavAllowed(argv []string) bool {
+	if len(argv) != 4 || argv[0] != "tmux" {
+		return false
+	}
+	target := argv[3]
+	switch argv[1] {
+	case "switch-client", "select-window", "select-pane", "attach-session":
+		return argv[2] == "-t" && PaneID(target)
+	case "new-window":
+		return argv[2] == "-c" && filepath.IsAbs(target) && !strings.ContainsAny(target, "#;")
+	}
+	return false
+}
+
+// PaneID is a tmux pane id such as %12.
+func PaneID(s string) bool {
+	if len(s) < 2 || s[0] != '%' {
+		return false
+	}
+	for _, r := range s[1:] {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+var pubKeyRE = regexp.MustCompile(`^ssh-ed25519 [A-Za-z0-9+/]+={0,2}( [A-Za-z0-9@._-]+)?$`)
+
+// ValidPubKey is one ed25519 public key line, and nothing a shell reads.
+func ValidPubKey(k string) bool { return pubKeyRE.MatchString(k) }
+
+// Bootstrap is the command that connects a host, run with the builder's own
+// ssh login: it installs matchblox when it is missing (or always, for an
+// update), then lets the matchblox key start the gate.
+func Bootstrap(pubKey string, update bool) (string, error) {
+	if !ValidPubKey(pubKey) {
+		return "", errors.New("not an ed25519 public key")
+	}
+	s := `PATH="$HOME/.local/bin:$PATH"; export PATH; `
+	if update {
+		s += install + " || exit 1; "
+	} else {
+		s += "command -v matchblox >/dev/null || " + install + " || exit 1; "
+	}
+	return s + "matchblox authorize '" + pubKey + "'", nil
+}
+
+// Classify names why ssh ended, from its exit and its stderr; nil when no
+// known cause fits.
+func Classify(stderr string, exit int) error {
+	switch {
+	case strings.Contains(stderr, "REMOTE HOST IDENTIFICATION HAS CHANGED"):
+		return ErrHostKeyChanged
+	case strings.Contains(stderr, "Host key verification failed"):
+		return ErrHostKeyUnknown
+	case strings.Contains(stderr, "Permission denied"):
+		return ErrNotConnected
+	case exit == 127 || strings.Contains(stderr, "matchblox: command not found") || strings.Contains(stderr, "matchblox: not found"):
+		return ErrNotInstalled
+	}
+	return nil
 }
 
 // Quote is argv as a shell reads it: a word with a space, a quote or a
@@ -80,7 +168,7 @@ func Quote(argv []string) string {
 	q := make([]string, len(argv))
 	for i, a := range argv {
 		q[i] = a
-		if a == "" || strings.ContainsAny(a, " \t\n'\"\\$`;&|<>()*?#~{}[]!=") {
+		if a == "" || strings.ContainsAny(a, unsafe+"'\\") {
 			q[i] = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
 		}
 	}
@@ -96,28 +184,79 @@ func Line(argv []string) string {
 		return Quote(argv)
 	}
 	last := argv[n]
+	head := Quote(argv[:n])
+	if len(argv) > 5 && argv[2] == "-i" && slices.Contains(argv, "IdentitiesOnly=yes") {
+		// The console's own ssh: its key and fixed options (Target.ssh)
+		// fold to "…".
+		head = "ssh … " + Quote([]string{argv[n-1]})
+	}
 	if Quote([]string{last}) != last && !strings.ContainsAny(last, "\"$`\\!") {
 		last = `"` + last + `"`
 	} else {
 		last = Quote([]string{last})
 	}
-	return Quote(argv[:n]) + " " + last
+	return head + " " + last
 }
 
-// NeedsInstall reads ssh's exit: 127 is the far shell's "not found".
-func NeedsInstall(stderr string, exit int) bool {
-	return exit == 127 || strings.Contains(stderr, "matchblox: command not found") ||
-		strings.Contains(stderr, "matchblox: not found")
+// Split reads back a line that Quote wrote: plain words and single-quoted
+// words, one space between them. Anything a shell would expand or join is
+// an error, never a guess: the gate runs only what it can read exactly.
+func Split(line string) ([]string, error) {
+	var out []string
+	for i := 0; i < len(line); {
+		var w strings.Builder
+		quoted := false
+		for i < len(line) && line[i] != ' ' {
+			switch c := line[i]; {
+			case c == '\'':
+				j := strings.IndexByte(line[i+1:], '\'')
+				if j < 0 {
+					return nil, errors.New("an unclosed quote")
+				}
+				w.WriteString(line[i+1 : i+1+j])
+				i, quoted = i+j+2, true
+			case c == '\\':
+				if strings.HasPrefix(line[i:], `\''`) {
+					w.WriteByte('\'')
+					i += 2
+					continue
+				}
+				return nil, errors.New("a backslash outside quotes")
+			case strings.IndexByte(unsafe, c) >= 0:
+				return nil, fmt.Errorf("%q outside quotes", c)
+			default:
+				w.WriteByte(c)
+				i++
+			}
+		}
+		if w.Len() == 0 && !quoted {
+			return nil, errors.New("two spaces")
+		}
+		out = append(out, w.String())
+		if i < len(line) {
+			i++ // the space
+			if i == len(line) {
+				return nil, errors.New("a trailing space")
+			}
+		}
+	}
+	return out, nil
 }
+
+// unsafe are the bytes Quote never leaves outside quotes.
+const unsafe = " \t\n\"$`;&|<>()*?#~{}[]!="
 
 // Connect starts ssh and speaks on its stdin and stdout. It returns once ssh
 // runs; a host that cannot be reached shows on the first Recv, with the
-// cause ssh gave.
-func Connect(ctx context.Context, host string) (transport.Conn, error) {
-	if !ValidHost(host) {
-		return nil, fmt.Errorf("%q is not a host name", host)
+// cause ssh gave. Without the matchblox key the host is not connected.
+func Connect(ctx context.Context, t Target) (transport.Conn, error) {
+	if !ValidHost(t.Host) {
+		return nil, fmt.Errorf("%q is not a host name", t.Host)
 	}
-	argv := Argv(host)
+	if _, err := os.Stat(t.Key); err != nil {
+		return nil, ErrNotConnected
+	}
+	argv := t.Argv()
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // argv, the host checked by ValidHost
 	in, err := cmd.StdinPipe()
 	if err != nil {
@@ -179,9 +318,9 @@ func (c *conn) exit(readErr error) error {
 			// note) is not why it ended; ssh's own failures exit 255.
 			stderr = ""
 		}
-		switch {
-		case NeedsInstall(stderr, code):
-			c.err = ErrNotInstalled
+		switch err := Classify(stderr, code); {
+		case err != nil:
+			c.err = err
 		case stderr != "":
 			c.err = errors.New(lastLine(stderr))
 		case code > 0:

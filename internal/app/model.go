@@ -7,10 +7,8 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -55,8 +53,12 @@ type Options struct {
 	// attaches to it, and the console comes back when tmux detaches.
 	OutsideTmux bool
 	// Host is the host this console reaches over SSH; "" is this machine.
-	// Its tmux moves and door commands run there.
-	Host string
+	// Its tmux moves and door commands run there, with the key Key.
+	Host, Key string
+	// DialErr is why the first dial failed; the console starts with it.
+	DialErr error
+	// Self is this binary, which connects a host (`matchblox connect`).
+	Self string
 	// Exec gives this terminal to argv until it exits. Nil: tea.ExecProcess.
 	Exec func(argv []string, done func(error) tea.Msg) tea.Cmd
 }
@@ -103,7 +105,7 @@ type action struct {
 	door        string   // the door it opens or closes
 	picks       []string // the hosts a door writes
 	remote      bool     // steps[0] is the ssh argv that runs it on the host, checked
-	install     bool     // it installs matchblox on the host
+	connect     bool     // it connects the host: install, update or authorize
 }
 
 func (a action) String() string {
@@ -162,7 +164,7 @@ type Model struct {
 	quitting   bool
 	host       proto.Hello
 	mismatch   bool
-	missing    bool // the host has no matchblox
+	blocked    error // why the host cannot be reached, until the builder acts
 	lost       bool
 	backoff    time.Duration
 	redialing  bool
@@ -211,6 +213,9 @@ func run(argv []string) error {
 const silentAfter = 3 * time.Second
 
 func (m Model) Init() tea.Cmd {
+	if err := m.opt.DialErr; err != nil && m.conn == nil {
+		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd())
+	}
 	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd())
 }
 
@@ -349,10 +354,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = m.conn.Close()
 		}
 		m.lost = true
-		if errors.Is(msg.err, remote.ErrNotInstalled) {
-			// Trying again cannot help: the install can.
-			m.missing = true
-			m.flash = ""
+		if blocking(msg.err) {
+			// Trying again cannot help: connecting the host can.
+			m.blocked, m.flash = msg.err, ""
 			return m, nil
 		}
 		m.flash = "connection lost: " + msg.err.Error()
@@ -398,8 +402,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case redialFailed:
 		m.redialing = false
 		return m.Update(lostMsg{err: msg.err})
-	case installedMsg:
-		return m.installed(msg)
+	case connectedMsg:
+		return m.connected(msg)
 	case connMsg:
 		m.conn, m.redialing, m.answered = msg.conn, false, false
 		m.flash = "connected again"
@@ -465,8 +469,8 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 			return mm, nil
 		}
 	}
-	if m.pending == nil && k == "enter" && (m.mismatch || m.missing) {
-		m.pending = m.installAction()
+	if m.pending == nil && k == "enter" && (m.mismatch || m.blocked != nil) {
+		m.pending = m.connectAction()
 		return m, nil
 	}
 	if m.pending != nil {
@@ -588,42 +592,9 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 	return m, m.send(proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text, Picks: a.picks})
 }
 
-// navAllowed is what a Nav step may be: it runs here on one key, so a
-// service can never make the console run anything but the two tmux moves
-// advice builds, in exactly that shape. tmux runs a trailing argument of
-// new-window as a shell command, splits commands on ";", and format-expands
-// a start directory (#() runs a shell command). So: four arguments, a pane
-// id for switch-client, and an absolute directory without "#" or ";".
-func navAllowed(argv []string) bool {
-	if len(argv) != 4 || argv[0] != "tmux" {
-		return false
-	}
-	target := argv[3]
-	switch argv[1] {
-	case "switch-client", "select-window", "select-pane", "attach-session":
-		return argv[2] == "-t" && paneID(target)
-	case "new-window":
-		return argv[2] == "-c" && filepath.IsAbs(target) && !strings.ContainsAny(target, "#;")
-	}
-	return false
-}
-
-// paneID is a tmux pane id such as %12.
-func paneID(s string) bool {
-	if len(s) < 2 || s[0] != '%' {
-		return false
-	}
-	for _, r := range s[1:] {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
-}
-
 func runNav(a action, run func([]string) error) ranMsg {
 	for _, step := range a.steps {
-		if !navAllowed(step) {
+		if !remote.NavAllowed(step) {
 			return ranMsg{strings.Join(step, " "), fmt.Errorf("refused: only tmux switch-client and new-window run in the console")}
 		}
 	}
@@ -651,7 +622,7 @@ func (m Model) jump(pane string) *action {
 // attach runs the moves, then gives the terminal to the last step.
 func (m Model) attach(a action) tea.Cmd {
 	for _, step := range a.steps {
-		if !navAllowed(step) {
+		if !remote.NavAllowed(step) {
 			return func() tea.Msg {
 				return ranMsg{strings.Join(step, " "), fmt.Errorf("refused: only tmux moves run in the console")}
 			}
@@ -661,7 +632,7 @@ func (m Model) attach(a action) tea.Cmd {
 	if r := runNav(action{steps: moves}, m.opt.Run); r.err != nil {
 		return func() tea.Msg { return r }
 	}
-	return tea.ExecProcess(exec.Command(last[0], last[1:]...), func(err error) tea.Msg { //nolint:gosec // argv checked by navAllowed
+	return tea.ExecProcess(exec.Command(last[0], last[1:]...), func(err error) tea.Msg { //nolint:gosec // argv checked by remote.NavAllowed
 		return ranMsg{strings.Join(last, " "), err}
 	})
 }

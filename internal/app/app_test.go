@@ -20,6 +20,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -510,12 +511,12 @@ func TestNavAllowlistIsExact(t *testing.T) {
 		{"tmux", "new-window", "-c", "relative/dir"},
 	}
 	for _, a := range ok {
-		if !navAllowed(a) {
+		if !remote.NavAllowed(a) {
 			t.Errorf("refused %v", a)
 		}
 	}
 	for _, a := range bad {
-		if navAllowed(a) {
+		if remote.NavAllowed(a) {
 			t.Errorf("allowed %v", a)
 		}
 	}

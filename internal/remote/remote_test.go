@@ -22,7 +22,7 @@ func fakeSSH(t *testing.T, matchblox string) {
 	ssh := `#!/bin/sh
 while [ $# -gt 0 ]; do
   case "$1" in
-    -o) shift 2 ;;
+    -o|-i) shift 2 ;;
     --) shift; break ;;
     -*) shift ;;
     *) break ;;
@@ -61,7 +61,7 @@ cat
 
 func TestRemoteHelloOverFakeSSH(t *testing.T) {
 	fakeSSH(t, echoHello)
-	c, err := Connect(context.Background(), "ws-1")
+	c, err := Connect(context.Background(), target(t, "ws-1"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,9 +81,17 @@ func TestRemoteHelloOverFakeSSH(t *testing.T) {
 	}
 }
 
+// target is a host reached with a key that exists.
+func target(t *testing.T, host string) Target {
+	t.Helper()
+	key := filepath.Join(t.TempDir(), "matchblox_ed25519")
+	write(t, key, "key")
+	return Target{Host: host, Key: key}
+}
+
 func TestMissingBinaryIsNotInstalled(t *testing.T) {
 	fakeSSH(t, "")
-	c, err := Connect(context.Background(), "ws-1")
+	c, err := Connect(context.Background(), target(t, "ws-1"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +104,7 @@ func TestMissingBinaryIsNotInstalled(t *testing.T) {
 
 func TestSSHErrorNamesTheCause(t *testing.T) {
 	fakeSSH(t, "#!/bin/sh\necho 'ssh: Could not resolve hostname ws-9: Name or service not known' >&2\nexit 255\n")
-	c, err := Connect(context.Background(), "ws-9")
+	c, err := Connect(context.Background(), target(t, "ws-9"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +117,7 @@ func TestSSHErrorNamesTheCause(t *testing.T) {
 
 func TestCloseEndsSSH(t *testing.T) {
 	fakeSSH(t, echoHello)
-	c, err := Connect(context.Background(), "ws-1")
+	c, err := Connect(context.Background(), target(t, "ws-1"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,32 +137,57 @@ func TestCloseEndsSSH(t *testing.T) {
 	}
 }
 
-func TestNeedsInstall(t *testing.T) {
+func TestNoKeyIsNotConnected(t *testing.T) {
+	fakeSSH(t, echoHello)
+	_, err := Connect(context.Background(), Target{Host: "ws-1", Key: filepath.Join(t.TempDir(), "none")})
+	if !errors.Is(err, ErrNotConnected) {
+		t.Fatalf("err = %v, want ErrNotConnected", err)
+	}
+}
+
+func TestClassify(t *testing.T) {
 	for _, c := range []struct {
 		stderr string
 		exit   int
-		want   bool
+		want   error
 	}{
-		{"", 127, true},
-		{"sh: 1: exec: matchblox: not found", 127, true},
-		{"bash: line 1: matchblox: command not found", 1, true},
-		{"ssh: connect to host ws-1 port 22: Connection refused", 255, false},
-		{"", 0, false},
+		{"", 127, ErrNotInstalled},
+		{"sh: 1: exec: matchblox: not found", 127, ErrNotInstalled},
+		{"bash: line 1: /home/b/.local/bin/matchblox: No such file or directory", 127, ErrNotInstalled},
+		{"builder@ws-1: Permission denied (publickey).", 255, ErrNotConnected},
+		{"Host key verification failed.", 255, ErrHostKeyUnknown},
+		{"@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@\nHost key verification failed.", 255, ErrHostKeyChanged},
+		{"ssh: connect to host ws-1 port 22: Connection refused", 255, nil},
 	} {
-		if got := NeedsInstall(c.stderr, c.exit); got != c.want {
-			t.Errorf("NeedsInstall(%q, %d) = %v", c.stderr, c.exit, got)
+		got := Classify(c.stderr, c.exit)
+		if c.want == nil {
+			if got != nil {
+				t.Errorf("Classify(%q) = %v, want nil", c.stderr, got)
+			}
+			continue
+		}
+		if !errors.Is(got, c.want) {
+			t.Errorf("Classify(%q, %d) = %v, want %v", c.stderr, c.exit, got, c.want)
 		}
 	}
 }
 
-func TestArgvIsBatchAndEndsOptions(t *testing.T) {
-	a := Argv("ws-1")
-	if a[0] != "ssh" || !slices.Contains(a, "BatchMode=yes") || !slices.Contains(a, "-T") {
-		t.Fatalf("argv %q: want ssh -T with BatchMode=yes", a)
+func TestArgvIsLockedDown(t *testing.T) {
+	tg := Target{Host: "ws-1", Key: "/h/.ssh/matchblox_ed25519"}
+	a := tg.Argv()
+	for _, want := range []string{"-T", "-i", "/h/.ssh/matchblox_ed25519", "IdentitiesOnly=yes", "IdentityAgent=none", "BatchMode=yes",
+		"StrictHostKeyChecking=yes", "ForwardAgent=no", "ClearAllForwardings=yes", "ConnectTimeout=10"} {
+		if !slices.Contains(a, want) {
+			t.Errorf("argv %q lacks %q", a, want)
+		}
 	}
 	i := slices.Index(a, "--")
 	if i < 0 || a[i+1] != "ws-1" || a[i+2] != ServeCommand || len(a) != i+3 {
 		t.Fatalf("argv %q: want -- ws-1 %q at the end", a, ServeCommand)
+	}
+	term := tg.TermArgv([]string{"claude"})
+	if term[1] != "-t" || !slices.Contains(term, "IdentitiesOnly=yes") || term[len(term)-1] != "claude" {
+		t.Fatalf("term argv %q", term)
 	}
 }
 
@@ -169,46 +202,88 @@ func TestValidHost(t *testing.T) {
 	}
 }
 
-func TestInstallArgv(t *testing.T) {
-	want := []string{"ssh", "-t", "--", "ws-1", "curl -fsSL https://matchblox.sh | MATCHBLOX_NO_START=1 sh"}
-	if got := InstallArgv("ws-1"); !slices.Equal(got, want) {
-		t.Fatalf("InstallArgv = %q, want %q", got, want)
-	}
-}
-
-func TestTermArgvQuotesEachWord(t *testing.T) {
-	got := TermArgv("ws-1", []string{"claude", "Help me; read it's docs"})
-	want := []string{"ssh", "-t", "--", "ws-1", `claude 'Help me; read it'\''s docs'`}
-	if !slices.Equal(got, want) {
-		t.Fatalf("TermArgv = %q, want %q", got, want)
-	}
-}
-
 func TestNavArgvAttachesOnTheHost(t *testing.T) {
-	jump := NavArgv("ws-1", [][]string{{"tmux", "switch-client", "-t", "%12"}})
-	want := []string{"ssh", "-t", "--", "ws-1",
-		`tmux select-window -t %12 ';' select-pane -t %12 ';' attach-session -t %12`}
-	if !slices.Equal(jump, want) {
-		t.Fatalf("jump = %q\nwant %q", jump, want)
+	tg := Target{Host: "ws-1", Key: "/k"}
+	jump := tg.NavArgv([][]string{{"tmux", "switch-client", "-t", "%12"}})
+	if got, want := jump[len(jump)-1], `tmux select-window -t %12 ';' select-pane -t %12 ';' attach-session -t %12`; got != want {
+		t.Fatalf("jump %s\nwant %s", got, want)
 	}
-	shell := NavArgv("ws-1", [][]string{{"tmux", "new-window", "-c", "/w/a"}})
-	want = []string{"ssh", "-t", "--", "ws-1", `tmux new-window -c /w/a ';' attach-session`}
-	if !slices.Equal(shell, want) {
-		t.Fatalf("shell = %q\nwant %q", shell, want)
+	shell := tg.NavArgv([][]string{{"tmux", "new-window", "-c", "/w/a"}})
+	if got, want := shell[len(shell)-1], `tmux new-window -c /w/a ';' attach-session`; got != want {
+		t.Fatalf("shell %s\nwant %s", got, want)
 	}
 }
 
-// The line is what a person can paste: the remote command stays one word,
-// so its pipe runs on the host.
+// The gate reads back only what Quote writes: plain words and single
+// quotes. Anything a shell would expand is refused, not guessed.
+func TestSplitIsTheInverseOfQuote(t *testing.T) {
+	for _, argv := range [][]string{
+		{"tmux", "select-window", "-t", "%12", ";", "attach-session", "-t", "%12"},
+		{"claude", "Help me; read it's docs"},
+		{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"},
+		{"a", ""},
+	} {
+		got, err := Split(Quote(argv))
+		if err != nil || !slices.Equal(got, argv) {
+			t.Errorf("Split(Quote(%q)) = %q, %v", argv, got, err)
+		}
+	}
+	for _, bad := range []string{`echo "x"`, "echo $HOME", "a\\ b", "x `id`", "a 'b", "a; b", "a | b", "a\nb", "$(id)", "a > b"} {
+		if got, err := Split(bad); err == nil {
+			t.Errorf("Split(%q) = %q, want an error", bad, got)
+		}
+	}
+}
+
+func TestNavAllowedIsExact(t *testing.T) {
+	for _, c := range []struct {
+		argv []string
+		ok   bool
+	}{
+		{[]string{"tmux", "switch-client", "-t", "%1"}, true},
+		{[]string{"tmux", "attach-session", "-t", "%1"}, true},
+		{[]string{"tmux", "new-window", "-c", "/w/a"}, true},
+		{[]string{"tmux", "new-window", "-c", "/w/#(id)"}, false},
+		{[]string{"tmux", "new-window", "rm -rf /"}, false},
+		{[]string{"tmux", "switch-client", "-t", "%1;x"}, false},
+		{[]string{"sh", "-c", "x"}, false},
+	} {
+		if got := NavAllowed(c.argv); got != c.ok {
+			t.Errorf("NavAllowed(%q) = %v", c.argv, got)
+		}
+	}
+}
+
+func TestBootstrap(t *testing.T) {
+	const pub = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeFakeFakeFakeFakeFakeFakeFakeFakeFakeFake matchblox"
+	s, err := Bootstrap(pub, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"command -v matchblox", "curl -fsSL https://matchblox.sh | MATCHBLOX_NO_START=1 sh", "matchblox authorize '" + pub + "'"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("bootstrap lacks %q:\n%s", want, s)
+		}
+	}
+	up, _ := Bootstrap(pub, true)
+	if strings.Contains(up, "command -v matchblox") {
+		t.Errorf("an update must always install:\n%s", up)
+	}
+	for _, bad := range []string{"ssh-rsa AAAA x", "ssh-ed25519 AAAA'; rm -rf ~; echo '", "ssh-ed25519 AAAA x\nssh-ed25519 BBBB y", ""} {
+		if _, err := Bootstrap(bad, false); err == nil {
+			t.Errorf("Bootstrap(%q) took a key that is not one ed25519 key", bad)
+		}
+	}
+}
+
 func TestLineShowsTheRemoteCommandAsTyped(t *testing.T) {
 	for _, c := range []struct {
 		argv []string
 		want string
 	}{
-		{TermArgv("ws-1", []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}), `ssh -t -- ws-1 "sudo sh -c 'apt-get update && apt-get install -y tmux'"`},
-		{InstallArgv("ws-1"), `ssh -t -- ws-1 "curl -fsSL https://matchblox.sh | MATCHBLOX_NO_START=1 sh"`},
-		{TermArgv("ws-1", []string{"echo", `a"b`}), `ssh -t -- ws-1 'echo '\''a"b'\'''`},
-		{TermArgv("ws-1", []string{"claude"}), `ssh -t -- ws-1 claude`},
+		{[]string{"ssh", "-t", "--", "ws-1", "sudo sh -c 'apt-get update && apt-get install -y tmux'"}, `ssh -t -- ws-1 "sudo sh -c 'apt-get update && apt-get install -y tmux'"`},
+		{[]string{"ssh", "-t", "--", "ws-1", "echo 'a\"b'"}, `ssh -t -- ws-1 'echo '\''a"b'\'''`},
+		{[]string{"ssh", "-t", "--", "ws-1", "claude"}, `ssh -t -- ws-1 claude`},
 	} {
 		if got := Line(c.argv); got != c.want {
 			t.Errorf("Line = %s\nwant   %s", got, c.want)
@@ -216,24 +291,9 @@ func TestLineShowsTheRemoteCommandAsTyped(t *testing.T) {
 	}
 }
 
-// What the far side wrote before it spoke is not why it ended later.
-func TestLossAfterHelloIgnoresStartupStderr(t *testing.T) {
-	fakeSSH(t, `#!/bin/sh
-echo "matchblox: wrote config.toml" >&2
-printf '%s\n' '{"kind":"hello","body":{"version":1}}'
-sleep 0.2
-exit 1
-`)
-	c, err := Connect(context.Background(), "ws-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Close()
-	if _, err := c.Recv(); err != nil {
-		t.Fatal(err)
-	}
-	_, err = c.Recv()
-	if err == nil || strings.Contains(err.Error(), "wrote config") || !strings.Contains(err.Error(), "exited 1") {
-		t.Fatalf("err = %v, want the exit, not the startup line", err)
+func TestLineFoldsTheConsoleOptions(t *testing.T) {
+	tg := Target{Host: "ws-1", Key: "/h/.ssh/matchblox_ed25519"}
+	if got, want := Line(tg.TermArgv([]string{"claude"})), "ssh … ws-1 claude"; got != want {
+		t.Fatalf("Line = %s\nwant   %s", got, want)
 	}
 }

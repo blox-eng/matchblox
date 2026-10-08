@@ -376,7 +376,7 @@ func fakeRemote(t *testing.T) {
 	if err := os.Mkdir(far, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	ssh := "#!/bin/sh\nwhile [ $# -gt 0 ]; do case \"$1\" in -o) shift 2;; --) shift; break;; -*) shift;; *) break;; esac; done\nshift\nexec sh -c \"$*\"\n"
+	ssh := "#!/bin/sh\nwhile [ $# -gt 0 ]; do case \"$1\" in -o|-i) shift 2;; --) shift; break;; -*) shift;; *) break;; esac; done\nshift\nexec sh -c \"$*\"\n"
 	mb := "#!/bin/sh\nMATCHBLOX_TEST_ARGS=\"$(printf '%s\\037%s' \"$1\" \"$2\")\" exec " + os.Args[0] + "\n"
 	for name, body := range map[string]string{filepath.Join(dir, "ssh"): ssh, filepath.Join(far, "matchblox"): mb} {
 		if err := os.WriteFile(name, []byte(body), 0o700); err != nil { //nolint:gosec // a test script
@@ -390,7 +390,11 @@ func TestRemoteReachesTheHostService(t *testing.T) {
 	path := isolate(t)
 	serveInProcess(t, path)
 	fakeRemote(t)
-	c, err := remote.Connect(context.Background(), "ws-1")
+	key := filepath.Join(t.TempDir(), remote.KeyName)
+	if err := os.WriteFile(key, []byte("key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := remote.Connect(context.Background(), remote.Target{Host: "ws-1", Key: key})
 	if err != nil {
 		t.Fatal(err)
 	}

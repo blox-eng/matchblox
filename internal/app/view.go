@@ -74,8 +74,8 @@ func (m Model) render() string {
 	if m.mismatch {
 		return strings.Join(append(out, "", m.mismatchText(w)), "\n")
 	}
-	if m.missing {
-		return strings.Join(append(out, "", m.missingText(w)), "\n")
+	if m.blocked != nil {
+		return strings.Join(append(out, "", m.blockedText(w)), "\n")
 	}
 	if !m.have {
 		why := m.waitingWhy()
@@ -509,7 +509,7 @@ func (m Model) mismatchText(w int) string {
 		side = "update " + host
 	}
 	cmd := installCmd
-	if a := m.installAction(); a != nil && m.host.Version < proto.Version {
+	if a := m.connectAction(); a != nil && m.host.Version < proto.Version {
 		cmd = shellLine(a.steps[0])
 	}
 	lines := []string{
@@ -517,7 +517,7 @@ func (m Model) mismatchText(w int) string {
 		"",
 		fit(" "+m.st.label.Render(side+": ")+m.st.text.Render(cmd), w),
 		"",
-		m.installKeys(w),
+		m.connectKeys(w),
 	}
 	return strings.Join(lines, "\n")
 }

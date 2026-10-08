@@ -3,6 +3,7 @@
 //
 //	matchblox                 open the console (starts the service if needed)
 //	matchblox <host>          open the console of a host in ~/.ssh/config
+//	matchblox connect <host>  let this console reach a host (once; --update updates it)
 //	matchblox serve           run the service; --stdio speaks on stdin/stdout
 //	matchblox status          print what the service knows as JSON (for agents)
 //	matchblox status --text   the same, as a short summary
@@ -82,6 +83,16 @@ func holdOnError(err error, env func(string) string, in io.Reader, out io.Writer
 var configArg string
 
 func run(args []string) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "gate":
+			return gateMain()
+		case "authorize":
+			return authorize(args[1:])
+		case "connect":
+			return liveConnect(args[1:])
+		}
+	}
 	if len(args) > 0 && args[0] == "hook" {
 		return hook(args[1:], os.Stdin, os.Stdout, transport.SocketPath(), spoolPath(), progressPrompt(args[1:]))
 	}
@@ -160,11 +171,11 @@ func parseCommand(args []string) (cmd, host string, rest []string, err error) {
 		return "console", "", args, nil
 	}
 	switch args[0] {
-	case "serve", "status", "version", "setup":
+	case "serve", "status", "version", "setup", "connect", "authorize", "gate":
 		return args[0], "", args[1:], nil
 	}
 	if !remote.ValidHost(args[0]) {
-		return "", "", nil, fmt.Errorf("%q is not a command or a host; the commands are serve, status, setup, version", args[0])
+		return "", "", nil, fmt.Errorf("%q is not a command or a host; the commands are connect, serve, status, setup, version", args[0])
 	}
 	return "console", args[0], args[1:], nil
 }
@@ -230,12 +241,13 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 	case host != "":
 		// The host's service, over SSH: every action runs and is guarded
 		// there.
-		dial := func() (transport.Conn, error) { return remote.Connect(context.Background(), host) }
-		c, err := dial()
-		if err != nil {
-			return err
-		}
-		opt.Conn, opt.Redial, opt.Host = c, dial, host
+		home, _ := os.UserHomeDir()
+		t := remote.Target{Host: host, Key: remote.KeyPath(home)}
+		dial := func() (transport.Conn, error) { return remote.Connect(context.Background(), t) }
+		// A host that cannot be reached yet still opens: the console says
+		// why and offers the fix.
+		opt.Conn, opt.DialErr = dial()
+		opt.Redial, opt.Host, opt.Key, opt.Self = dial, host, t.Key, invokedPath(os.Args[0])
 	case root != "":
 		// Fixtures: a service in this process, for demos and tests.
 		ctx, cancel := context.WithCancel(context.Background())
@@ -255,7 +267,9 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		opt.Local = true
 		opt.Owner = func() int { return transport.Owner(path) }
 	}
-	defer opt.Conn.Close()
+	if opt.Conn != nil {
+		defer opt.Conn.Close()
+	}
 	// The screen changes on a state or a key press, so 15 frames a second
 	// is still instant to the eye and wakes the process 4x less than 60.
 	_, err := tea.NewProgram(app.New(opt), tea.WithFPS(15)).Run()
