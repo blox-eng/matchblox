@@ -16,8 +16,6 @@ import (
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
-var wsTarget = remote.Target{Host: "ws-1", Key: "/h/.ssh/matchblox_ed25519"}
-
 // onHost is the console of ws-1, reached over SSH; execs records what it
 // gives the terminal to.
 func onHost(t *testing.T, st proto.State) (Model, *[][]string) {
@@ -37,7 +35,7 @@ func TestRemoteJumpAttachesOverSSH(t *testing.T) {
 	m, ran := onHost(t, fixtureState())
 	m.tab = tabSessions
 	next, _ := key(m, "enter")
-	want := wsTarget.NavArgv([][]string{{"tmux", "switch-client", "-t", "%1"}})
+	want := remote.NavArgv("ws-1", [][]string{{"tmux", "switch-client", "-t", "%1"}})
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, shellLine(want)) {
 		t.Fatalf("the confirm must show the exact ssh argv %q:\n%s", shellLine(want), out)
 	}
@@ -70,7 +68,7 @@ func TestRemoteDoorRunsOnTheHost(t *testing.T) {
 	tmux := doors.Door{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}}
 	m, ran := onHost(t, doorState(tmux))
 	next, _ := key(m, "enter")
-	want := wsTarget.TermArgv(tmux.Term)
+	want := remote.TermArgv("ws-1", tmux.Term)
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, shellLine(want)) {
 		t.Fatalf("the preview must show the exact ssh argv:\n%s", out)
 	}
@@ -104,7 +102,7 @@ func TestRemoteGuideRunsInThisTerminal(t *testing.T) {
 	m, _ := onHost(t, doorState(guide))
 	m.opt.OutsideTmux = false
 	next, _ := key(m, "enter")
-	if a := next.(Model).pending; a == nil || strings.Join(a.steps[0], " ") != strings.Join(wsTarget.TermArgv(doors.GuideArgv(false)), " ") {
+	if a := next.(Model).pending; a == nil || strings.Join(a.steps[0], " ") != strings.Join(remote.TermArgv("ws-1", doors.GuideArgv(false)), " ") {
 		t.Fatalf("pending %+v", a)
 	}
 }
@@ -161,7 +159,7 @@ func TestOlderHostOffersTheUpdate(t *testing.T) {
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	next, _ = next.Update(helloMsg(proto.Hello{Version: 0, Host: "ws-1"}))
 	out := ansi.Strip(next.(Model).render())
-	if !strings.Contains(out, "update ws-1") || !strings.Contains(out, "/bin/matchblox connect ws-1 --update") {
+	if !strings.Contains(out, "update ws-1") || !strings.Contains(out, "/bin/matchblox connect ws-1") {
 		t.Fatalf("an older host must show its update:\n%s", out)
 	}
 }

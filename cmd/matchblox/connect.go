@@ -30,10 +30,10 @@ type connectEnv struct {
 }
 
 // connectHost connects a host (design/0005-remote-mode.md §3): it makes the
-// matchblox key once, then, with the builder's own ssh login, installs
-// matchblox there when it is missing (always for an update) and lets the
-// key start only the gate. It prints each command before it runs it.
-func connectHost(e connectEnv, host string, update bool) error {
+// matchblox key once, then, with the builder's own ssh login, installs the
+// verified matchblox there (it also updates an older one) and lets the key
+// start only the gate. It prints each command before it runs it.
+func connectHost(e connectEnv, host string) error {
 	if !remote.ValidHost(host) {
 		return fmt.Errorf("%q is not a host name", host)
 	}
@@ -53,7 +53,7 @@ func connectHost(e connectEnv, host string, update bool) error {
 	if err != nil {
 		return err
 	}
-	script, err := remote.Bootstrap(strings.TrimSpace(string(pub)), update)
+	script, err := remote.Bootstrap(strings.TrimSpace(string(pub)))
 	if err != nil {
 		return fmt.Errorf("%s.pub: %w", key, err)
 	}
@@ -98,7 +98,7 @@ func verifyHost(t remote.Target) (string, error) {
 				return "", err
 			}
 			if h.Version != proto.Version {
-				return "", errors.New("it speaks another wire: matchblox connect " + t.Host + " --update")
+				return "", errors.New("it speaks another wire: matchblox connect " + t.Host + " updates it")
 			}
 			return h.Binary, nil
 		}
@@ -107,26 +107,15 @@ func verifyHost(t remote.Target) (string, error) {
 
 // liveConnect is `matchblox connect` on this machine.
 func liveConnect(args []string) error {
-	update := false
-	var host string
-	for _, a := range args {
-		switch {
-		case a == "--update":
-			update = true
-		case host == "":
-			host = a
-		default:
-			return errors.New("usage: matchblox connect <host> [--update]")
-		}
+	if len(args) != 1 {
+		return errors.New("usage: matchblox connect <host>")
 	}
-	if host == "" {
-		return errors.New("usage: matchblox connect <host> [--update]")
-	}
+	host := args[0]
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
-	err = connectHost(connectEnv{Home: home, Hosts: hosts.Path(), Run: runInTerminal, Out: os.Stdout, Verify: verifyHost}, host, update)
+	err = connectHost(connectEnv{Home: home, Hosts: hosts.Path(), Run: runInTerminal, Out: os.Stdout, Verify: verifyHost}, host)
 	fi, _ := os.Stdin.Stat()
 	return holdFailure(err, fi != nil && fi.Mode()&os.ModeCharDevice != 0, os.Stdin, os.Stderr)
 }

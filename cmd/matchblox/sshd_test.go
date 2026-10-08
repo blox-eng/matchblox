@@ -37,7 +37,7 @@ func startSSHD(t *testing.T) realHost {
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	h := realHost{dir: dir, laptop: filepath.Join(dir, "laptop"), far: filepath.Join(dir, "far"), bin: filepath.Join(dir, "bin")}
-	for _, d := range []string{h.laptop, filepath.Join(h.far, ".ssh"), h.bin, filepath.Join(dir, "run"), filepath.Join(dir, "lrun")} {
+	for _, d := range []string{h.laptop, filepath.Join(h.far, ".ssh"), filepath.Join(h.far, ".local", "bin"), h.bin, filepath.Join(dir, "run"), filepath.Join(dir, "lrun")} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -73,15 +73,18 @@ UsePAM no
 StrictModes no
 PermitUserRC no
 AllowUsers %[3]s
-SetEnv HOME=%[2]s/far XDG_RUNTIME_DIR=%[2]s/run XDG_STATE_HOME=%[2]s/far/state XDG_CONFIG_HOME=%[2]s/far/config TMUX_TMPDIR=%[2]s/run PATH=%[2]s/bin:/usr/bin:/bin
+SetEnv HOME=%[2]s/far XDG_RUNTIME_DIR=%[2]s/run XDG_STATE_HOME=%[2]s/far/state XDG_CONFIG_HOME=%[2]s/far/config TMUX_TMPDIR=%[2]s/run
 `, port, dir, u.Username),
 		"ssh_config":               fmt.Sprintf("Host ws-1\n  HostName 127.0.0.1\n  Port %d\n  User %s\n  IdentityFile %s/builder\n  UserKnownHostsFile %s/known_hosts\n", port, u.Username, dir, dir),
 		"known_hosts":              fmt.Sprintf("[127.0.0.1]:%d %s\n", port, strings.Join(strings.Fields(string(hostPub))[:2], " ")),
 		"far/.ssh/authorized_keys": string(pub),
 		"bin/ssh":                  "#!/bin/sh\nexec " + mustLook(t, "ssh") + " -F " + dir + "/ssh_config \"$@\"\n",
-		// The test binary as matchblox, under the wrapper's own name: the
-		// gate line that authorize writes names the binary by its argv[0].
-		"bin/matchblox": "#!/bin/bash\nIFS=$'\\x1f'; MATCHBLOX_TEST_ARGS=\"$*\" exec -a \"$0\" " + os.Args[0] + "\n",
+		// The far side has the test binary as matchblox, under the wrapper's
+		// own name (the gate line names the binary by its argv[0]), and a
+		// curl whose install does nothing: no network in a test. Both sit in
+		// ~/.local/bin, which ssh's own PATH does not have.
+		"far/.local/bin/curl": "#!/bin/sh\necho true\n",
+		"far/.local/bin/matchblox": "#!/bin/bash\nIFS=$'\\x1f'; MATCHBLOX_TEST_ARGS=\"$*\" exec -a \"$0\" " + os.Args[0] + "\n",
 	}
 	for name, body := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o700); err != nil { //nolint:gosec // test files
@@ -138,7 +141,7 @@ func TestConnectAndGateOnARealSSHD(t *testing.T) {
 	}
 	var out bytes.Buffer
 	list := filepath.Join(h.laptop, "hosts")
-	if err := connectHost(connectEnv{Home: h.laptop, Hosts: list, Run: run, Out: &out, Verify: verifyHost}, "ws-1", false); err != nil {
+	if err := connectHost(connectEnv{Home: h.laptop, Hosts: list, Run: run, Out: &out, Verify: verifyHost}, "ws-1"); err != nil {
 		t.Fatalf("connect: %v\n%s", err, out.String())
 	}
 	if got := hosts.Read(list); len(got) != 1 || got[0] != "ws-1" {
@@ -146,18 +149,16 @@ func TestConnectAndGateOnARealSSHD(t *testing.T) {
 	}
 	key := remote.KeyPath(h.laptop)
 	tg := remote.Target{Host: "ws-1", Key: key}
-	for _, cmd := range []string{"", "id", "sh -c 'id'", "tmux attach-session ';' run-shell id", "matchblox serve --stdio; id"} {
-		argv := tg.TermArgv(nil)
+	for _, cmd := range []string{"", "id", "sh -c 'id'", "tmux attach-session", "tmux new-window -c / ';' attach-session",
+		"claude", "matchblox serve --stdio; id"} {
+		argv := tg.Argv()
 		argv[len(argv)-1] = cmd
 		c := exec.Command(argv[0], argv[1:]...) //nolint:gosec // test
 		c.Stdin = strings.NewReader("")
 		b, err := c.CombinedOutput()
 		var ee *exec.ExitError
-		if !strings.Contains(string(b), "refused") && (cmd != "" || err == nil) {
+		if !strings.Contains(string(b), "refused") || !errors.As(err, &ee) || ee.ExitCode() != 126 {
 			t.Errorf("%q with the matchblox key: %v\n%s", cmd, err, b)
-		}
-		if cmd != "" && (!errors.As(err, &ee) || ee.ExitCode() != 126) {
-			t.Errorf("%q: exit %v, want 126", cmd, err)
 		}
 	}
 }

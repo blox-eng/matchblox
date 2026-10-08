@@ -3,7 +3,7 @@
 //
 //	matchblox                 open the console (starts the service if needed)
 //	matchblox <host>          open the console of a host in ~/.ssh/config
-//	matchblox connect <host>  let this console reach a host (once; --update updates it)
+//	matchblox connect <host>  let this console reach a host (once; again to update it)
 //	matchblox serve           run the service; --stdio speaks on stdin/stdout
 //	matchblox status          print what the service knows as JSON (for agents)
 //	matchblox status --text   the same, as a short summary

@@ -35,7 +35,7 @@ func TestConnectMakesTheKeyThenBootstraps(t *testing.T) {
 	var ran [][]string
 	var out bytes.Buffer
 	err := connectHost(connectEnv{Home: home, Hosts: list, Run: keygen(t, &ran, nil), Out: &out,
-		Verify: func(remote.Target) (string, error) { return "v0.1.0", nil }}, "ws-1", false)
+		Verify: func(remote.Target) (string, error) { return "v0.1.0", nil }}, "ws-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestConnectMakesTheKeyThenBootstraps(t *testing.T) {
 	if len(ran) != 2 || !slices.Equal(ran[0], []string{"ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "matchblox", "-f", key}) {
 		t.Fatalf("ran %q", ran)
 	}
-	script, _ := remote.Bootstrap(testPub, false)
+	script, _ := remote.Bootstrap(testPub)
 	want := []string{"ssh", "-t", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "--", "ws-1", script}
 	if !slices.Equal(ran[1], want) {
 		t.Fatalf("bootstrap %q\nwant %q", ran[1], want)
@@ -61,7 +61,7 @@ func TestConnectMakesTheKeyThenBootstraps(t *testing.T) {
 	}
 }
 
-func TestConnectKeepsAnExistingKeyAndUpdates(t *testing.T) {
+func TestConnectKeepsAnExistingKey(t *testing.T) {
 	home := t.TempDir()
 	key := remote.KeyPath(home)
 	if err := os.MkdirAll(filepath.Dir(key), 0o700); err != nil {
@@ -71,11 +71,11 @@ func TestConnectKeepsAnExistingKeyAndUpdates(t *testing.T) {
 	_ = os.WriteFile(key+".pub", []byte(testPub+"\n"), 0o600)
 	var ran [][]string
 	err := connectHost(connectEnv{Home: home, Hosts: filepath.Join(home, "hosts"), Run: keygen(t, &ran, nil), Out: &bytes.Buffer{},
-		Verify: func(remote.Target) (string, error) { return "v0.1.0", nil }}, "ws-1", true)
+		Verify: func(remote.Target) (string, error) { return "v0.1.0", nil }}, "ws-1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	up, _ := remote.Bootstrap(testPub, true)
+	up, _ := remote.Bootstrap(testPub)
 	if len(ran) != 1 || ran[0][len(ran[0])-1] != up {
 		t.Fatalf("ran %q", ran)
 	}
@@ -85,7 +85,7 @@ func TestConnectFailureAddsNoHost(t *testing.T) {
 	home, list := t.TempDir(), filepath.Join(t.TempDir(), "hosts")
 	var ran [][]string
 	err := connectHost(connectEnv{Home: home, Hosts: list, Run: keygen(t, &ran, errors.New("exit status 255")), Out: &bytes.Buffer{},
-		Verify: func(remote.Target) (string, error) { t.Fatal("verified after a failed ssh"); return "", nil }}, "ws-1", false)
+		Verify: func(remote.Target) (string, error) { t.Fatal("verified after a failed ssh"); return "", nil }}, "ws-1")
 	if err == nil {
 		t.Fatal("no error")
 	}
@@ -96,7 +96,7 @@ func TestConnectFailureAddsNoHost(t *testing.T) {
 
 func TestConnectRefusesAnOptionAsHost(t *testing.T) {
 	var ran [][]string
-	err := connectHost(connectEnv{Home: t.TempDir(), Run: keygen(t, &ran, nil), Out: &bytes.Buffer{}}, "-oProxyCommand=x", false)
+	err := connectHost(connectEnv{Home: t.TempDir(), Run: keygen(t, &ran, nil), Out: &bytes.Buffer{}}, "-oProxyCommand=x")
 	if err == nil || len(ran) != 0 {
 		t.Fatalf("err %v, ran %q", err, ran)
 	}

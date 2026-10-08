@@ -1,44 +1,34 @@
 package main
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/remote"
 )
 
-func TestGateRunsOnlyMatchbloxCommands(t *testing.T) {
-	tg := remote.Target{Host: "ws-1", Key: "/k"}
+// The matchblox key starts the service stream and nothing else: jumps and
+// door commands use the builder's own login, so a tmux client (which can
+// open a shell) or an agent is never one of its commands.
+func TestGateRunsOnlyTheServiceStream(t *testing.T) {
+	if err := gateDecision(remote.ServeCommand); err != nil {
+		t.Fatalf("the stream: %v", err)
+	}
 	last := func(a []string) string { return a[len(a)-1] }
-	for _, c := range []struct {
-		orig string
-		kind string
-		argv []string
-	}{
-		{remote.ServeCommand, "serve", nil},
-		{last(tg.NavArgv([][]string{{"tmux", "switch-client", "-t", "%12"}})), "exec",
-			[]string{"tmux", "select-window", "-t", "%12", ";", "select-pane", "-t", "%12", ";", "attach-session", "-t", "%12"}},
-		{last(tg.NavArgv([][]string{{"tmux", "new-window", "-c", "/w/a"}})), "exec",
-			[]string{"tmux", "new-window", "-c", "/w/a", ";", "attach-session"}},
-		{last(tg.TermArgv(doors.GuideArgv(false))), "exec", doors.GuideArgv(false)},
-		{last(tg.TermArgv([]string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"})), "exec",
-			[]string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}},
-		// Refused: a shell, a shell string, a tmux command that runs one,
-		// an empty command (an interactive login), anything quoted otherwise.
-		{"", "", nil},
-		{"sh", "", nil},
-		{"bash -c id", "", nil},
-		{"tmux new-window 'rm -rf ~'", "", nil},
-		{"tmux attach-session ';' run-shell id", "", nil},
-		{"tmux select-window -t %1 ';' new-window -c '/w/#(id)'", "", nil},
-		{"matchblox serve --stdio; id", "", nil},
-		{`sudo sh -c "apt-get update && apt-get install -y tmux"`, "", nil},
-		{"tmux", "", nil},
+	for _, orig := range []string{
+		"", "sh", "bash -c id", "id",
+		"tmux attach-session",
+		"tmux select-window -t %12 ';' select-pane -t %12 ';' attach-session -t %12",
+		"tmux new-window -c / ';' attach-session",
+		last(remote.NavArgv("ws-1", [][]string{{"tmux", "switch-client", "-t", "%12"}})),
+		last(remote.TermArgv("ws-1", doors.GuideArgv(false))),
+		remote.Quote(doors.GuideArgv(false)),
+		"matchblox serve --stdio; id",
+		"matchblox serve --stdio ",
+		"matchblox serve",
 	} {
-		kind, argv, err := gateDecision(c.orig)
-		if kind != c.kind || !slices.Equal(argv, c.argv) || (c.kind == "") != (err != nil) {
-			t.Errorf("gateDecision(%q) = %q %q %v; want %q %q", c.orig, kind, argv, err, c.kind, c.argv)
+		if err := gateDecision(orig); err == nil {
+			t.Errorf("gateDecision(%q) let it run", orig)
 		}
 	}
 }

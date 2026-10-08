@@ -14,16 +14,16 @@ import (
 
 func (m Model) target() remote.Target { return remote.Target{Host: m.opt.Host, Key: m.opt.Key} }
 
-// forHost runs the console's own steps on the host it reaches: a tmux move
-// attaches to the host's tmux, a door's command runs there. The inner argv
-// is checked here, before ssh wraps it, and again by the host's gate; a
-// step that fails the check stays as it was, and the local check refuses
-// it on confirm.
+// forHost runs the console's own steps on the host it reaches, with the
+// builder's own ssh login: a tmux move attaches to the host's tmux, a
+// door's command runs there. The inner argv is checked here, before ssh
+// wraps it; a step that fails the check stays as it was, and the local
+// check refuses it on confirm.
 func (m Model) forHost(a *action) *action {
 	if a == nil || m.opt.Host == "" || a.remote {
 		return a
 	}
-	t := m.target()
+	host := m.opt.Host
 	b := *a
 	switch {
 	case a.nav:
@@ -32,7 +32,7 @@ func (m Model) forHost(a *action) *action {
 				return a
 			}
 		}
-		b.steps = [][]string{t.NavArgv(a.steps)}
+		b.steps = [][]string{remote.NavArgv(host, a.steps)}
 		b.say = shellLine(b.steps[0])
 	case a.term:
 		argv := a.steps[0]
@@ -42,7 +42,7 @@ func (m Model) forHost(a *action) *action {
 		if !doors.TermAllowed(argv) {
 			return a
 		}
-		b.steps = [][]string{t.TermArgv(argv)}
+		b.steps = [][]string{remote.TermArgv(host, argv)}
 		b.say = a.label + ": on " + m.opt.Host + ", in this terminal"
 	default:
 		return a
@@ -74,10 +74,7 @@ func (m Model) connectAction() *action {
 	if self == "" {
 		self = "matchblox"
 	}
-	argv := []string{self, "connect", host}
-	if older {
-		argv = append(argv, "--update")
-	}
+	argv := []string{self, "connect", host} // it also updates an older one
 	return &action{label: "connect", say: shellLine(argv), steps: [][]string{argv}, destructive: true, remote: true, connect: true}
 }
 

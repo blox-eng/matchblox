@@ -59,19 +59,37 @@ func (t Target) ssh(tty string, cmd string) []string {
 		"-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none", "-o", "BatchMode=yes",
 		"-o", "StrictHostKeyChecking=yes", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes",
 		"-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3",
+		// Never share a connection with the builder's own ssh: a master
+		// opened with their key would bypass the gate, and one opened with
+		// this key would refuse their shell.
+		"-o", "ControlMaster=no", "-o", "ControlPath=none",
 		"--", t.Host, cmd}
 }
 
 // Argv joins this console to the host's service.
 func (t Target) Argv() []string { return t.ssh("-T", ServeCommand) }
 
-// TermArgv runs a command on the host in this terminal. ssh hands the far
-// side one string, which the gate splits back into argv.
-func (t Target) TermArgv(argv []string) []string { return t.ssh("-t", Quote(argv)) }
+// HostPath is where a host keeps tmux, claude and matchblox when ssh's
+// own PATH does not have them (a non-login shell; Homebrew on macOS).
+const HostPath = "$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin"
+
+// onHost is the shell line that runs argv on the host as argv: one
+// /bin/sh, which every login shell can start (fish and csh too), with
+// HostPath in front.
+func onHost(argv ...string) string {
+	return Quote(append([]string{"/bin/sh", "-c", `PATH="` + HostPath + `:$PATH"; export PATH; exec "$@"`, "sh"}, argv...))
+}
+
+// TermArgv runs a command on the host in this terminal with the builder's
+// own ssh login: a jump or a door's command is interactive, and the
+// matchblox key never gets a terminal there.
+func TermArgv(host string, argv []string) []string {
+	return []string{"ssh", "-t", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "--", host, onHost(argv...)}
+}
 
 // NavArgv turns the console's tmux moves into one command that attaches to
 // the host's tmux: there is no tmux client of the host to switch.
-func (t Target) NavArgv(steps [][]string) []string {
+func NavArgv(host string, steps [][]string) []string {
 	cmd := []string{"tmux"}
 	attach := []string{"attach-session"}
 	for _, s := range steps {
@@ -88,7 +106,7 @@ func (t Target) NavArgv(steps [][]string) []string {
 			cmd = append(append(cmd, args...), ";")
 		}
 	}
-	return t.TermArgv(append(cmd, attach...))
+	return TermArgv(host, append(cmd, attach...))
 }
 
 // NavAllowed is what a tmux move may be: the console runs it on one key and
@@ -131,19 +149,16 @@ var pubKeyRE = regexp.MustCompile(`^ssh-ed25519 [A-Za-z0-9+/]+={0,2}( [A-Za-z0-9
 func ValidPubKey(k string) bool { return pubKeyRE.MatchString(k) }
 
 // Bootstrap is the command that connects a host, run with the builder's own
-// ssh login: it installs matchblox when it is missing (or always, for an
-// update), then lets the matchblox key start the gate.
-func Bootstrap(pubKey string, update bool) (string, error) {
+// ssh login: the verified install (always: an older matchblox does not know
+// authorize, and would start its console instead), then authorize, which
+// lets the matchblox key start the gate. The key is an argument, never part
+// of the script.
+func Bootstrap(pubKey string) (string, error) {
 	if !ValidPubKey(pubKey) {
 		return "", errors.New("not an ed25519 public key")
 	}
-	s := `PATH="$HOME/.local/bin:$PATH"; export PATH; `
-	if update {
-		s += install + " || exit 1; "
-	} else {
-		s += "command -v matchblox >/dev/null || " + install + " || exit 1; "
-	}
-	return s + "matchblox authorize '" + pubKey + "'", nil
+	script := `PATH="` + HostPath + `:$PATH"; export PATH; ` + install + ` || exit 1; matchblox authorize "$1"`
+	return Quote([]string{"/bin/sh", "-c", script, "sh", pubKey}), nil
 }
 
 // Classify names why ssh ended, from its exit and its stderr; nil when no
@@ -188,7 +203,12 @@ func Line(argv []string) string {
 	if len(argv) > 5 && argv[2] == "-i" && slices.Contains(argv, "IdentitiesOnly=yes") {
 		// The console's own ssh: its key and fixed options (Target.ssh)
 		// fold to "…".
-		head = "ssh … " + Quote([]string{argv[n-1]})
+		return "ssh … " + Quote([]string{argv[n-1]}) + " " + last
+	}
+	if w, err := Split(last); err == nil && len(w) > 4 && last == onHost(w[4:]...) {
+		// A command on the host (TermArgv): the options and the /bin/sh
+		// around it fold to "…".
+		return "ssh … " + Quote([]string{argv[n-1]}) + " " + Quote(w[4:])
 	}
 	if Quote([]string{last}) != last && !strings.ContainsAny(last, "\"$`\\!") {
 		last = `"` + last + `"`

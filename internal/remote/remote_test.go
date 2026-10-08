@@ -176,7 +176,8 @@ func TestArgvIsLockedDown(t *testing.T) {
 	tg := Target{Host: "ws-1", Key: "/h/.ssh/matchblox_ed25519"}
 	a := tg.Argv()
 	for _, want := range []string{"-T", "-i", "/h/.ssh/matchblox_ed25519", "IdentitiesOnly=yes", "IdentityAgent=none", "BatchMode=yes",
-		"StrictHostKeyChecking=yes", "ForwardAgent=no", "ClearAllForwardings=yes", "ConnectTimeout=10"} {
+		"StrictHostKeyChecking=yes", "ForwardAgent=no", "ClearAllForwardings=yes", "ConnectTimeout=10",
+		"ControlMaster=no", "ControlPath=none"} {
 		if !slices.Contains(a, want) {
 			t.Errorf("argv %q lacks %q", a, want)
 		}
@@ -185,9 +186,25 @@ func TestArgvIsLockedDown(t *testing.T) {
 	if i < 0 || a[i+1] != "ws-1" || a[i+2] != ServeCommand || len(a) != i+3 {
 		t.Fatalf("argv %q: want -- ws-1 %q at the end", a, ServeCommand)
 	}
-	term := tg.TermArgv([]string{"claude"})
-	if term[1] != "-t" || !slices.Contains(term, "IdentitiesOnly=yes") || term[len(term)-1] != "claude" {
+}
+
+// Jumps and door commands run with the builder's own login: the matchblox
+// key never gets a terminal on the host.
+func TestTermArgvIsTheBuildersOwnLogin(t *testing.T) {
+	term := TermArgv("ws-1", []string{"claude", "it's"})
+	if term[1] != "-t" || slices.Contains(term, "-i") || slices.Contains(term, "IdentitiesOnly=yes") ||
+		!slices.Contains(term, "ForwardAgent=no") || !slices.Contains(term, "ClearAllForwardings=yes") {
 		t.Fatalf("term argv %q", term)
+	}
+	words, err := Split(term[len(term)-1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	// One shell that every login shell can start (fish, csh too), which
+	// finds tmux and claude in the usual places, then runs argv as argv.
+	if words[0] != "/bin/sh" || words[1] != "-c" || !strings.Contains(words[2], "/opt/homebrew/bin") ||
+		!strings.Contains(words[2], `exec "$@"`) || !slices.Equal(words[3:], []string{"sh", "claude", "it's"}) {
+		t.Fatalf("remote words %q", words)
 	}
 }
 
@@ -203,13 +220,12 @@ func TestValidHost(t *testing.T) {
 }
 
 func TestNavArgvAttachesOnTheHost(t *testing.T) {
-	tg := Target{Host: "ws-1", Key: "/k"}
-	jump := tg.NavArgv([][]string{{"tmux", "switch-client", "-t", "%12"}})
-	if got, want := jump[len(jump)-1], `tmux select-window -t %12 ';' select-pane -t %12 ';' attach-session -t %12`; got != want {
+	jump := NavArgv("ws-1", [][]string{{"tmux", "switch-client", "-t", "%12"}})
+	if got, want := Line(jump), `ssh … ws-1 tmux select-window -t %12 ';' select-pane -t %12 ';' attach-session -t %12`; got != want {
 		t.Fatalf("jump %s\nwant %s", got, want)
 	}
-	shell := tg.NavArgv([][]string{{"tmux", "new-window", "-c", "/w/a"}})
-	if got, want := shell[len(shell)-1], `tmux new-window -c /w/a ';' attach-session`; got != want {
+	shell := NavArgv("ws-1", [][]string{{"tmux", "new-window", "-c", "/w/a"}})
+	if got, want := Line(shell), `ssh … ws-1 tmux new-window -c /w/a ';' attach-session`; got != want {
 		t.Fatalf("shell %s\nwant %s", got, want)
 	}
 }
@@ -256,21 +272,30 @@ func TestNavAllowedIsExact(t *testing.T) {
 
 func TestBootstrap(t *testing.T) {
 	const pub = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeFakeFakeFakeFakeFakeFakeFakeFakeFakeFake matchblox"
-	s, err := Bootstrap(pub, false)
+	s, err := Bootstrap(pub)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"command -v matchblox", "curl -fsSL https://matchblox.sh | MATCHBLOX_NO_START=1 sh", "matchblox authorize '" + pub + "'"} {
-		if !strings.Contains(s, want) {
-			t.Errorf("bootstrap lacks %q:\n%s", want, s)
+	words, err := Split(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Always the verified install: an older matchblox on the host does not
+	// know authorize and would start its console instead. The key is an
+	// argument, never part of the script.
+	if words[0] != "/bin/sh" || words[1] != "-c" || words[3] != "sh" || words[4] != pub || len(words) != 5 {
+		t.Fatalf("words %q", words)
+	}
+	for _, want := range []string{"curl -fsSL https://matchblox.sh | MATCHBLOX_NO_START=1 sh || exit 1", `matchblox authorize "$1"`} {
+		if !strings.Contains(words[2], want) {
+			t.Errorf("script lacks %q:\n%s", want, words[2])
 		}
 	}
-	up, _ := Bootstrap(pub, true)
-	if strings.Contains(up, "command -v matchblox") {
-		t.Errorf("an update must always install:\n%s", up)
+	if strings.Contains(words[2], "command -v") {
+		t.Errorf("the install must not be skipped:\n%s", words[2])
 	}
 	for _, bad := range []string{"ssh-rsa AAAA x", "ssh-ed25519 AAAA'; rm -rf ~; echo '", "ssh-ed25519 AAAA x\nssh-ed25519 BBBB y", ""} {
-		if _, err := Bootstrap(bad, false); err == nil {
+		if _, err := Bootstrap(bad); err == nil {
 			t.Errorf("Bootstrap(%q) took a key that is not one ed25519 key", bad)
 		}
 	}
@@ -293,7 +318,7 @@ func TestLineShowsTheRemoteCommandAsTyped(t *testing.T) {
 
 func TestLineFoldsTheConsoleOptions(t *testing.T) {
 	tg := Target{Host: "ws-1", Key: "/h/.ssh/matchblox_ed25519"}
-	if got, want := Line(tg.TermArgv([]string{"claude"})), "ssh … ws-1 claude"; got != want {
+	if got, want := Line(tg.Argv()), "ssh … ws-1 matchblox serve --stdio"; got != want {
 		t.Fatalf("Line = %s\nwant   %s", got, want)
 	}
 }
