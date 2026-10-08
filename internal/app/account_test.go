@@ -170,9 +170,9 @@ func TestNoCredentialReachesTheScreen(t *testing.T) {
 // (a model OpenCode's cache does not know) never print "/ 0".
 func TestADetailWithoutAWindowShowsNoFigureForIt(t *testing.T) {
 	st := demoState(t)
-	for i, s := range st.Snapshot.Sessions {
+	for i, s := range st.Sessions {
 		if s.Agent == "opencode" {
-			st.Snapshot.Sessions[i].Context, st.Snapshot.Sessions[i].Window, st.Snapshot.Sessions[i].ContextPct = "unmeasured", 0, 0
+			st.Sessions[i].Context, st.Sessions[i].Window, st.Sessions[i].ContextPct = "unmeasured", 0, 0
 		}
 	}
 	m, _ := loadedWith(t, 120, st)
