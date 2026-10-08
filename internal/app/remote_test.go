@@ -115,7 +115,6 @@ func TestBlockedHostOffersTheConnect(t *testing.T) {
 		{remote.ErrNotConnected, "ws-1 is not connected to this console"},
 		{fmt.Errorf("ssh: %w", remote.ErrNotInstalled), "matchblox is not installed on ws-1"},
 		{remote.ErrHostKeyUnknown, "ws-1's host key is not known yet"},
-		{remote.ErrHostKeyChanged, "ssh-keygen -R ws-1"},
 	} {
 		m := New(Options{NoMotion: true, Host: "ws-1", Self: "/bin/matchblox", DialErr: c.err,
 			Redial: func() (transport.Conn, error) { return newFake(), nil }})
@@ -212,5 +211,30 @@ func TestBeforeTheFirstStateNoZeroMetrics(t *testing.T) {
 	m.opt.DialErr, m.blocked = remote.ErrNotConnected, remote.ErrNotConnected
 	if out := ansi.Strip(m.render()); !strings.Contains(out, "esc hosts") {
 		t.Fatalf("no way back from a blocked host:\n%s", out)
+	}
+}
+
+// A changed host key can be an attack: the console offers no connect, only
+// what to check, and Enter tries again once the builder removed the old key.
+func TestChangedHostKeyOffersNoConnect(t *testing.T) {
+	dials := 0
+	m := New(Options{NoMotion: true, Host: "ws-1", Self: "/bin/matchblox", DialErr: remote.ErrHostKeyChanged,
+		Redial: func() (transport.Conn, error) { dials++; return newFake(), nil }})
+	m.opt.Exec = func(argv []string, done func(error) tea.Msg) tea.Cmd { t.Fatalf("ran %q", argv); return nil }
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	next, _ = next.Update(lostMsg{err: remote.ErrHostKeyChanged})
+	out := ansi.Strip(next.(Model).render())
+	if strings.Contains(out, "matchblox connect") || !strings.Contains(out, "ssh-keygen -R ws-1") || !strings.Contains(out, "⏎ try again") {
+		t.Fatalf("view:\n%s", out)
+	}
+	next, cmd := key(next, "enter")
+	if cmd == nil || next.(Model).blocked != nil {
+		t.Fatal("enter did not try again")
+	}
+	if _, dial := next.Update(cmd()); dial != nil {
+		dial()
+	}
+	if dials != 1 {
+		t.Fatalf("dials %d", dials)
 	}
 }

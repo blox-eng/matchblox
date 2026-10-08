@@ -67,8 +67,8 @@ func blocking(err error) bool {
 func (m Model) connectAction() *action {
 	host := m.opt.Host
 	older := m.mismatch && m.host.Version < proto.Version
-	if host == "" || (m.blocked == nil && !older) {
-		return nil
+	if host == "" || (m.blocked == nil && !older) || errors.Is(m.blocked, remote.ErrHostKeyChanged) {
+		return nil // a changed host key is the builder's call, never a connect
 	}
 	self := m.opt.Self
 	if self == "" {
@@ -100,6 +100,17 @@ func (m Model) exec(argv []string, done func(error) tea.Msg) tea.Cmd {
 		return m.opt.Exec(argv, done)
 	}
 	return tea.ExecProcess(exec.Command(argv[0], argv[1:]...), done) //nolint:gosec // argv built here or by package remote after the inner check
+}
+
+// tryAgain dials again, after the builder fixed what the console showed.
+func (m Model) tryAgain() (tea.Model, tea.Cmd) {
+	m.blocked, m.flash = nil, "trying "+m.opt.Host+" again…"
+	if m.opt.Redial == nil {
+		return m, nil
+	}
+	m.lost, m.redialing = true, true
+	gen := m.opt.Gen
+	return m, func() tea.Msg { return redialMsg{gen} }
 }
 
 // connected dials again after `matchblox connect`.
@@ -137,9 +148,10 @@ func (m Model) blockedText(w int) string {
 		why = host + "'s host key changed: this can be an attack"
 		note = "Check the new key with the owner of " + host + ". Only if you trust it: ssh-keygen -R " + host + ", then ⏎."
 	}
-	a := m.connectAction()
 	lines := []string{fit(" "+m.st.text.Render(why), w), ""}
-	lines = append(lines, fit(" "+m.st.label.Render("connect it: ")+m.st.text.Render(a.say), w))
+	if a := m.connectAction(); a != nil {
+		lines = append(lines, fit(" "+m.st.label.Render("connect it: ")+m.st.text.Render(a.say), w))
+	}
 	for _, l := range wrap(note, w-2, m.st.muted.Render) {
 		lines = append(lines, " "+l)
 	}
@@ -160,8 +172,11 @@ func (m Model) connectKeys(w int) string {
 	if m.opt.Layered {
 		keys = "esc hosts  " + keys
 	}
-	if m.connectAction() != nil {
+	switch {
+	case m.connectAction() != nil:
 		keys = "⏎ connect  " + keys
+	case m.blocked != nil:
+		keys = "⏎ try again  " + keys
 	}
 	return fit(" "+st.muted.Render(keys), w)
 }

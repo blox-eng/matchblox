@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -302,5 +303,30 @@ func TestALateRedialOfAClosedConsoleIsDropped(t *testing.T) {
 	r.sh = next.(Shell)
 	if r.sh.cur.blocked != nil || r.sh.cur.lost {
 		t.Fatal("the old console's failure reached the new one")
+	}
+}
+
+// A long ~/.ssh/config fills more rows than the screen has: the list
+// follows the selection, so the last row is reachable.
+func TestALongHostListScrolls(t *testing.T) {
+	var many []string
+	for i := range 40 {
+		many = append(many, fmt.Sprintf("ws-%02d", i))
+	}
+	r := newShell(t, nil, many, "", true)
+	next, _ := r.sh.Update(tea.WindowSizeMsg{Width: 100, Height: 12})
+	r.sh = next.(Shell)
+	r.key(t, "down")
+	r.key(t, "enter") // another machine
+	for range 40 {
+		r.key(t, "down")
+	}
+	out := r.view()
+	if !strings.Contains(out, "▌ type a host…") || len(strings.Split(out, "\n")) > 12 {
+		t.Fatalf("the last row is off the screen:\n%s", out)
+	}
+	r.key(t, "enter")
+	if r.sh.input == nil {
+		t.Fatal("enter on the last row did not start typing")
 	}
 }

@@ -6,6 +6,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -490,6 +491,9 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		if mm, ok := m.scrollPreview(k); ok {
 			return mm, nil
 		}
+	}
+	if m.pending == nil && k == "enter" && errors.Is(m.blocked, remote.ErrHostKeyChanged) {
+		return m.tryAgain()
 	}
 	if m.pending == nil && k == "enter" && (m.mismatch || m.blocked != nil) {
 		m.pending = m.connectAction()

@@ -327,8 +327,8 @@ func (s Shell) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if ms.Button != tea.MouseLeft || s.pending != nil || s.input != nil {
 		return s, nil
 	}
-	i := ms.Y - hostsTop
 	rs := s.rows()
+	i := ms.Y - hostsTop + s.scrollTop(len(rs))
 	if i < 0 || i >= len(rs) {
 		return s, nil
 	}
@@ -337,6 +337,19 @@ func (s Shell) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return s, nil
 	}
 	return s.enter(rs[i])
+}
+
+// rowRoom is how many rows fit under the label, with the hint line.
+func (s Shell) rowRoom() int { return max(3, s.height-hostsTop-2) }
+
+// scrollTop is the first row on the screen: the list follows the
+// selection, so every row is reachable.
+func (s Shell) scrollTop(n int) int {
+	room := s.rowRoom()
+	if n <= room || s.sel < room {
+		return 0
+	}
+	return min(s.sel-room+1, n-room)
 }
 
 // hostsTop is the first row's line: the header, the action line, a
@@ -372,7 +385,10 @@ func (s Shell) render() string {
 	}
 	out = append(out, st.label.Render(fit(label, w)))
 	var b body
-	for i, r := range s.rows() {
+	rs := s.rows()
+	top := s.scrollTop(len(rs))
+	for i, r := range rs[top:min(len(rs), top+s.rowRoom())] {
+		i += top
 		mark := "  "
 		if i == s.sel {
 			mark = "▌ "
