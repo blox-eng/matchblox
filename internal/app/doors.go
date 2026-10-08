@@ -141,11 +141,63 @@ func (m Model) doorsSection(b *body, w int) {
 			b.addRow(i, i == sel, w, st, lead+style.Render(strings.TrimPrefix(l, " ")))
 		}
 	}
-	if m.pending != nil && m.pending.door != "" && m.pending.which != "secondary" {
-		if d, ok := m.selectedDoor(); ok && d.ID == m.pending.door {
-			m.preview(b, d, w)
-		}
+	if d, ok := m.previewDoor(); ok {
+		m.preview(b, d, w)
 	}
+}
+
+// previewDoor is the door whose diff waits for a y.
+func (m Model) previewDoor() (doors.Door, bool) {
+	if m.pending == nil || m.pending.door == "" || m.pending.which == "secondary" {
+		return doors.Door{}, false
+	}
+	if d, ok := m.selectedDoor(); ok && d.ID == m.pending.door {
+		return d, true
+	}
+	return doors.Door{}, false
+}
+
+func (m Model) previewLines(d doors.Door) []string {
+	if d.Term != nil && m.pending != nil {
+		return []string{shellLine(m.pending.steps[0])} // the exact argv this console runs
+	}
+	return strings.Split(d.Preview, "\n")
+}
+
+// previewRoom is how many lines of the diff fit under the doors.
+func (m Model) previewRoom() int {
+	var rows body
+	mm := m
+	mm.pending = nil
+	mm.doorsSection(&rows, mm.width)
+	return max(3, m.height-chrome-len(rows.lines)-3)
+}
+
+// previewSeen: the last line of the diff was on the screen. A door opens
+// only on what the person saw, so y waits until then.
+func (m Model) previewSeen() bool {
+	d, ok := m.previewDoor()
+	return !ok || m.previewTop+m.previewRoom() >= len(m.previewLines(d))
+}
+
+// scrollPreview moves a long diff with ↑↓; other keys go on to the confirm.
+func (m Model) scrollPreview(k string) (Model, bool) {
+	d, ok := m.previewDoor()
+	if !ok {
+		return m, false
+	}
+	last := max(0, len(m.previewLines(d))-m.previewRoom())
+	switch k {
+	case "down", "j":
+		m.previewTop = min(m.previewTop+1, last)
+	case "up", "k":
+		m.previewTop = max(m.previewTop-1, 0)
+	case "y":
+		return m, !m.previewSeen() // y waits for the end of the diff
+	default:
+		return m, false
+	}
+	return m, true
 }
 
 // colDoor is the title column of a door row.
@@ -158,15 +210,11 @@ func (m Model) preview(b *body, d doors.Door, w int) {
 	if d.Path != "" {
 		b.add(-1, fit(" "+st.muted.Render(tilde(d.Path)), w))
 	}
-	lines := strings.Split(d.Preview, "\n")
-	if d.Term != nil && m.pending != nil {
-		lines = []string{shellLine(m.pending.steps[0])} // the exact argv this console runs
-	}
-	room := max(4, m.height-chrome-len(b.lines)-8)
-	cut := 0
-	if len(lines) > room {
-		lines, cut = lines[:room-1], len(lines)-room+1
-	}
+	lines := m.previewLines(d)
+	top := min(m.previewTop, max(0, len(lines)-1))
+	end := min(top+m.previewRoom(), len(lines))
+	cut := len(lines) - end
+	lines = lines[top:end]
 	for _, l := range lines {
 		style := st.faint
 		switch {
@@ -180,7 +228,7 @@ func (m Model) preview(b *body, d doors.Door, w int) {
 		b.add(-1, fit(" "+style.Render(tilde(l)), w))
 	}
 	if cut > 0 {
-		b.add(-1, fit(" "+st.faint.Render(fmt.Sprintf("… %d more lines: matchblox setup shows them all", cut)), w))
+		b.add(-1, fit(" "+st.faint.Render(fmt.Sprintf("… %d more lines: ↓ the rest of the diff, then y", cut)), w))
 	}
 }
 

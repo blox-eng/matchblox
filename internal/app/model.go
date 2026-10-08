@@ -132,6 +132,8 @@ type Model struct {
 	queuePane  string
 	doors      []doors.Door // the open doors, above the queue
 	doorPick   string       // the selected door
+	doorAt     int          // its row, for the door after it when it folds
+	previewTop int          // the first line of a door's diff on screen
 	paneSel    int
 	input      *answerInput
 	changes    map[string]change // pane -> a match change that plays once
@@ -433,6 +435,11 @@ func describe(r proto.Result) string {
 }
 
 func (m Model) key(k string) (tea.Model, tea.Cmd) {
+	if m.pending != nil && m.pending.door != "" && m.pending.which != "secondary" {
+		if mm, ok := m.scrollPreview(k); ok {
+			return mm, nil
+		}
+	}
 	if m.pending != nil {
 		a := *m.pending
 		m.pending = nil
@@ -486,7 +493,7 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.move(1)
 	case "enter":
-		m.pending = m.primary()
+		m.pending, m.previewTop = m.primary(), 0
 	case "x":
 		m.pending = m.secondary()
 		if m.pending == nil && m.tab == tabSessions {

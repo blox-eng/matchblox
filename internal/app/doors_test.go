@@ -1,9 +1,11 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/doors"
@@ -18,14 +20,21 @@ var (
 	brokenDoor = doors.Door{ID: doors.Hooks, Title: "Add the queue hooks", Problem: "~/.claude/settings.json is not valid JSON: fix it, then this door opens"}
 )
 
+// doorState is a first run: doors, nobody waits yet.
 func doorState(ds ...doors.Door) proto.State {
+	st := queueState()
+	st.Queue, st.Doors = nil, ds
+	return st
+}
+
+func doorsAndQueue(ds ...doors.Door) proto.State {
 	st := queueState()
 	st.Doors = ds
 	return st
 }
 
 func TestDoorsAboveTheQueue(t *testing.T) {
-	m, _ := loadedWith(t, 100, doorState(tmuxDone, hooksDoor, wayBack))
+	m, _ := loadedWith(t, 100, doorsAndQueue(tmuxDone, hooksDoor, wayBack))
 	out := ansi.Strip(m.render())
 	if set, waits := lineOf(t, m, "SET UP"), lineOf(t, m, "WAITING FOR YOU"); set > waits {
 		t.Fatalf("doors are not above the queue (%d, %d):\n%s", set, waits, out)
@@ -33,7 +42,7 @@ func TestDoorsAboveTheQueue(t *testing.T) {
 	if !strings.Contains(out, "Add the queue hooks") || strings.Contains(out, "Install tmux") {
 		t.Fatalf("open doors drawn, done ones folded:\n%s", out)
 	}
-	if !strings.Contains(out, "⏎ open  x close") {
+	if next, _ := key(m, "up"); !strings.Contains(ansi.Strip(next.(Model).render()), "⏎ open  x close") {
 		t.Fatalf("no door keys:\n%s", out)
 	}
 }
@@ -181,16 +190,14 @@ func TestDoorsOnAPhone(t *testing.T) {
 	}
 }
 
-func TestTheQueueKeepsItsRowsUnderDoors(t *testing.T) {
-	m, _ := loadedWith(t, 100, doorState(hooksDoor))
-	next, _ := key(m, "down")
-	if it, ok := next.(Model).selectedQueue(); !ok || it.Pane != "%1" {
-		t.Fatalf("down from the door selects %+v, %v", it, ok)
-	}
+func TestTheQueueComesFirstWhenSomeoneWaits(t *testing.T) {
+	m, _ := loadedWith(t, 100, doorsAndQueue(hooksDoor))
 	var ran []string
-	mm := next.(Model)
-	mm.opt.Run = func(argv []string) error { ran = argv; return nil }
-	next, _ = key(mm, "enter")
+	m.opt.Run = func(argv []string) error { ran = argv; return nil }
+	if it, ok := m.selectedQueue(); !ok || it.Pane != "%1" {
+		t.Fatalf("selected %+v, %v: an agent that waits comes before a door", it, ok)
+	}
+	next, _ := key(m, "enter")
 	next, cmd := key(next, "enter")
 	if cmd == nil {
 		t.Fatal("no jump")
@@ -198,6 +205,72 @@ func TestTheQueueKeepsItsRowsUnderDoors(t *testing.T) {
 	next.Update(cmd())
 	if strings.Join(ran, " ") != "tmux switch-client -t %1" {
 		t.Fatalf("ran %v", ran)
+	}
+	if up, _ := key(next, "up"); up.(Model).queueIndex() != 0 {
+		t.Fatal("up from the queue does not reach the door")
+	}
+}
+
+func TestAFoldedDoorPassesToTheNext(t *testing.T) {
+	m, _ := loadedWith(t, 100, doorState(hooksDoor, wayBack, guideDoor))
+	next, _ := key(m, "down")
+	done := wayBack
+	done.Done = true
+	next, _ = next.Update(stateMsg(doorState(hooksDoor, done, guideDoor)))
+	if d, ok := next.(Model).selectedDoor(); !ok || d.ID != doors.Guide {
+		t.Fatalf("selected %+v, want the guide after the way back folded", d)
+	}
+}
+
+func longDoor() doors.Door {
+	d := hooksDoor
+	var b strings.Builder
+	for i := range 40 {
+		fmt.Fprintf(&b, "+line %d\n", i)
+	}
+	d.Preview = strings.TrimSuffix(b.String(), "\n")
+	return d
+}
+
+func TestALongDiffIsReadToTheEndBeforeY(t *testing.T) {
+	f := newFake()
+	m := New(Options{NoMotion: true, Conn: f})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	next, _ = next.Update(stateMsg(doorState(longDoor(), wayBack, guideDoor)))
+	next, _ = key(next, "enter")
+	next, _ = key(next, "y")
+	if len(f.acts()) != 0 || next.(Model).pending == nil {
+		t.Fatal("y wrote a diff the person did not see to its end")
+	}
+	out := ansi.Strip(next.(Model).render())
+	if !strings.Contains(out, "↓ the rest of the diff") || strings.Contains(out, "+line 39") {
+		t.Fatalf("no hint, or the end shows already:\n%s", out)
+	}
+	for range 40 {
+		next, _ = key(next, "down")
+	}
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "+line 39") || !strings.Contains(out, "y run") {
+		t.Fatalf("scrolled to the end, no y:\n%s", out)
+	}
+	next, cmd := key(next, "y")
+	if cmd != nil {
+		next.Update(cmd())
+	}
+	if len(f.acts()) != 1 {
+		t.Fatalf("acts %+v", f.acts())
+	}
+}
+
+func TestTildeShortensOnlyAWholePath(t *testing.T) {
+	for in, want := range map[string]string{
+		home + "/x":             "~/x",
+		home:                    "~",
+		home + "ice/x":          home + "ice/x",
+		`"` + home + `/go/bin"`: `"~/go/bin"`,
+	} {
+		if got := tilde(in); got != want {
+			t.Errorf("tilde(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 

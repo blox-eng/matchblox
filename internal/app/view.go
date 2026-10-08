@@ -217,6 +217,9 @@ func (m Model) footer(w int) string {
 		if m.pending.destructive {
 			confirm = st.neg.Render("y") + st.muted.Render(" run  any other key cancels")
 		}
+		if !m.previewSeen() {
+			confirm = st.muted.Render("↓ the rest, then ") + st.neg.Render("y")
+		}
 		return fit(" "+st.label.Render("RUN ")+st.text.Render(m.pending.String())+"   "+st.muted.Render(confirm), w)
 	}
 	tabKeys := m.view().keys

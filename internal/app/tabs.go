@@ -35,7 +35,7 @@ var views = [...]tabView{
 			nd := len(m.doors)
 			switch {
 			case i < nd:
-				m.doorPick, m.queuePane, m.recPick = m.doors[i].ID, "", ""
+				m.doorPick, m.doorAt, m.queuePane, m.recPick = m.doors[i].ID, i, "", ""
 			case i < nd+len(m.queue):
 				m.doorPick, m.queuePane, m.recPick = "", m.queue[i-nd].Pane, ""
 			default:

@@ -26,7 +26,8 @@ func (m Model) queueSelIndex() int {
 
 // queueIndex is the selected row of the Queue tab: the open doors, the
 // queue items, then the recommendations under them. A door that folds
-// passes the selection to the next door.
+// passes the selection to the next door. Nothing picked: the first agent
+// that waits, else the first door.
 func (m Model) queueIndex() int {
 	nd := len(m.doors)
 	for i, d := range m.doors {
@@ -34,7 +35,10 @@ func (m Model) queueIndex() int {
 			return i
 		}
 	}
-	if nd > 0 && (m.doorPick != "" || (m.queuePane == "" && m.recPick == "")) {
+	if nd > 0 && m.doorPick != "" {
+		return min(m.doorAt, nd-1)
+	}
+	if nd > 0 && m.queuePane == "" && m.recPick == "" && len(m.queue) == 0 {
 		return 0
 	}
 	if m.recPick != "" || len(m.queue) == 0 {
