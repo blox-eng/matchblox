@@ -242,7 +242,11 @@ func (m Model) historyPanel(w int) []string {
 		for i, x := range xs {
 			shifted[i] = x - floor
 		}
-		lines := m.chart(shifted, len(shifted), 2, hi-floor)
+		top := hi - floor
+		if top <= 0 {
+			top = 1 // a flat series: a zero range would divide by zero
+		}
+		lines := m.chart(shifted, len(shifted), 2, top)
 		out = append(out, "")
 		label := []string{
 			st.label.Render(pad(strings.ToUpper(c.name), 24)),

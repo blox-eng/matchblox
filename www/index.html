@@ -73,26 +73,26 @@
     <section class="stage" id="console" aria-label="The matchblox console on a demo machine">
 <!-- replay:still -->
 <pre class="replay" aria-hidden="true"> <span class="fg-accent">▰</span> <span class="fg-fg">matchblox</span><span class="fg-faint"> · </span><span class="fg-muted">ws-1</span><span class="fg-hair">  │  </span><span class="fg-faint">cpu</span> <span class="fg-fg"> 41%</span> <span class="fg-faint">▄▄▅▄▄▄▄▄</span><span class="fg-hair">  │  </span><span class="fg-faint">mem</span> <span class="fg-fg">26G/64G</span> <span class="fg-faint">▄▄▄▄▄▄▄▄</span><span class="fg-hair">  │  </span><span class="fg-faint">load</span> <span class="fg-fg">6.2</span> <span class="fg-faint">████████</span>            
- <span class="fg-accent">1 QUEUE 3</span>   <span class="fg-faint">2 SESSIONS</span>   <span class="fg-faint">3 MACHINE</span>   <span class="fg-neg">4 PROCS !</span>   <span class="fg-faint">5 GIT</span>   <span class="fg-accent u">6 RECS</span>   <span class="fg-faint">7 HISTORY</span>   <span class="fg-faint">8 PANES</span>              
+ <span class="fg-accent">1 QUEUE 3</span>   <span class="fg-faint">2 SESSIONS</span>   <span class="fg-faint">3 MACHINE</span>   <span class="fg-accent u">4 PROCS</span>   <span class="fg-faint">5 GIT</span>   <span class="fg-faint">6 HISTORY</span>   <span class="fg-faint">7 PANES</span>                         
  <span class="fg-faint">RUN </span><span class="fg-fg">kill 4242</span>   <span class="fg-neg">y</span><span class="fg-muted"> run  any other key cancels</span>                                                       
 <span class="fg-hair">────────────────────────────────────────────────────────────────────────────────────────────────────</span>
 
-<span class="fg-faint"> 3 RECOMMENDATIONS                                                                                  </span>
-<span class="fg-fg bg-wash"> </span><span class="fg-neg bg-wash">! </span><span class="fg-fg">Kill detached busy loop 4242 (bash)</span>                                                              
- <span class="fg-warn">▲ </span><span class="fg-fg">Compact web-checkout (%2)</span>                                                                        
- <span class="fg-faint">○ </span><span class="fg-fg">Clear docs-guide (%3)</span>                                                                            
+<span class="fg-faint"> DETACHED BUSY LOOPS                                                                                </span>
+<span class="fg-fg bg-wash"> </span><span class="fg-neg bg-wash">! </span><span class="fg-fg">4242 bash       100%   </span><span class="fg-muted">for 1m      %9 (gone)             </span><span class="fg-faint">bash -c while :; do go test ./...; done</span> 
 
-<span class="fg-hair">────────────────────────────────────────────────────────────────────────────────────────────────────</span>
- <span class="fg-fg">Kill detached busy loop 4242 (bash)</span>                                                                
-<span class="fg-muted"> 100% CPU for 1m, parent init, from pane %9, now closed: bash -c while :; do go test ./...; done</span>
- <span class="fg-faint">x </span><span class="fg-fg">kill, asks y: </span><span class="fg-muted">kill 4242</span>                                                                          
+ <span class="fg-muted">parent init · age 11h7m · cwd /work/web</span>                                                            
+ <span class="fg-faint">x </span><span class="fg-muted">kill 4242</span>                                                                                        
 
-
-
-
-
-
-
+<span class="fg-faint"> TOP PROCESSES                                                                                      </span>
+<span class="fg-faint"> PID      COMMAND           CPU    MEM     OWNER                                                    </span>
+ <span class="fg-muted">4242     </span><span class="fg-fg">bash              100%   </span><span class="fg-muted">9.8M    pane %9</span>                                                  
+ <span class="fg-muted">1200     </span><span class="fg-fg">claude             35%   </span><span class="fg-muted">9.8M    pane %1 · api-auth</span>                                       
+ <span class="fg-muted">1        </span><span class="fg-fg">systemd             0%   </span><span class="fg-muted">9.8M    system</span>                                                   
+ <span class="fg-muted">1300     </span><span class="fg-fg">zsh                 0%   </span><span class="fg-muted">9.8M    pane %2 · web-checkout</span>                                   
+ <span class="fg-muted">1310     </span><span class="fg-fg">claude              0%   </span><span class="fg-muted">9.8M    pane %2 · web-checkout</span>                                   
+ <span class="fg-muted">1400     </span><span class="fg-fg">claude              0%   </span><span class="fg-muted">9.8M    pane %3 · docs-guide</span>                                     
+ <span class="fg-muted">1500     </span><span class="fg-fg">zsh                 0%   </span><span class="fg-muted">9.8M    pane %4</span>                                                  
+ <span class="fg-muted">1600     </span><span class="fg-fg">claude              0%   </span><span class="fg-muted">9.8M    pane %5 · billing</span>                                        
 
 
 

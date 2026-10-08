@@ -408,9 +408,10 @@ func TestReplay(t *testing.T) {
 		{"the queue", 1300 * time.Millisecond, "", has("ws-1", "WAITING FOR YOU", "billing", "asks", "permission to use Bash", "PROCS !")},
 		{"the sessions", 3500 * time.Millisecond, "2", has("api-auth", "web-checkout", "! compact")},
 		{"machine health", 6 * time.Second, "3", has("CPU")},
-		{"the recommendations", 8500 * time.Millisecond, "6", has("Kill detached busy loop 4242")},
-		{"a guarded action", 10 * time.Second, "x", has("kill 4242", "y run")},
-		{"the loop is gone", 11500 * time.Millisecond, "y", func(s string) bool { return !strings.Contains(s, "Kill detached busy loop") }},
+		{"what to do, under the queue", 8 * time.Second, "1", has("RECOMMENDATIONS", "Kill detached busy loop 4242")},
+		{"the busy loop", 9500 * time.Millisecond, "4", has("4242")},
+		{"a guarded action", 10500 * time.Millisecond, "x", has("kill 4242", "y run")},
+		{"the loop is gone", 12 * time.Second, "y", func(s string) bool { return !strings.Contains(s, "PROCS !") }},
 		{"back to the queue", 13500 * time.Millisecond, "1", has("billing")},
 	}
 	var still replay.Frame
