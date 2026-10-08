@@ -497,6 +497,7 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 		smp.Sys = procfs.Sys{Root: filepath.Join(root, "sys")}
 		smp.Home = filepath.Join(root, "home")
 		smp.Tmux = func() ([]byte, error) { return os.ReadFile(filepath.Join(root, "tmux-panes.txt")) }
+		smp.Capture = sample.CaptureDir(filepath.Join(root, "panes"))
 		return smp
 	}
 	smp.FS, smp.Sys = actions.NewHost(), procfs.Sys{Root: "/sys"}

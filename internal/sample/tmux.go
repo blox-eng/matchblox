@@ -2,7 +2,9 @@ package sample
 
 import (
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -47,4 +49,30 @@ func ParsePanes(b []byte) []Pane {
 		panes = append(panes, Pane{ID: f[0], Target: f[1], Window: f[2], PID: pid, Command: f[4], Path: f[5]})
 	}
 	return panes
+}
+
+// CapturePanes reads the visible text of each pane; a pane that is gone is
+// left out.
+func CapturePanes(panes []string) map[string]string {
+	out := map[string]string{}
+	for _, id := range panes {
+		if b, err := output("tmux", "capture-pane", "-p", "-t", id); err == nil {
+			out[id] = string(b)
+		}
+	}
+	return out
+}
+
+// CaptureDir reads pane text from <dir>/<id>.txt (id without its %): the
+// panes of a fixture machine.
+func CaptureDir(dir string) func([]string) map[string]string {
+	return func(panes []string) map[string]string {
+		out := map[string]string{}
+		for _, id := range panes {
+			if b, err := os.ReadFile(filepath.Join(dir, strings.TrimPrefix(id, "%")+".txt")); err == nil {
+				out[id] = string(b)
+			}
+		}
+		return out
+	}
 }

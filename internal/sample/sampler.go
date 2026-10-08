@@ -49,6 +49,10 @@ type Session struct {
 	Why        string        `json:"why,omitempty"`
 	// Progress is the bar the agent drew in its last reply with text.
 	Progress *Progress `json:"progress,omitempty"`
+	// LastLine and Asks are read from the pane of an agent without an
+	// adapter: what it said last, and whether that asks the person.
+	LastLine string `json:"last_line,omitempty"`
+	Asks     bool   `json:"asks,omitempty"`
 }
 
 // IdlePane is a pane that hosts no agent.
@@ -112,10 +116,13 @@ var DefaultRules = Rules{
 }
 
 type Sampler struct {
-	FS            procfs.Host
-	Sys           procfs.Sys
-	Home          string
-	Tmux          func() ([]byte, error)
+	FS   procfs.Host
+	Sys  procfs.Sys
+	Home string
+	Tmux func() ([]byte, error)
+	// Capture returns the visible text of each pane, by pane id. It reads
+	// only the panes of agents without an adapter.
+	Capture       func(panes []string) map[string]string
 	GPU           func() ([]byte, error) // nil: no GPUs
 	Docker        func() ([]byte, error) // nil: no containers
 	Cfg           config.Config
@@ -135,6 +142,7 @@ type Sampler struct {
 	agents     *agentReader
 	panes      map[procKey]string // environ is read once per process
 	names      map[procKey]agentRef
+	screens    map[procKey]screen // last pane text of agents without an adapter
 	prevAt     time.Time
 	procAt     time.Time
 	prevProc   map[int]procfs.Proc
@@ -198,6 +206,10 @@ func (s *Sampler) init() {
 		if s.Tmux == nil {
 			s.Tmux = TmuxPanes
 		}
+		if s.Capture == nil {
+			s.Capture = CapturePanes
+		}
+		s.screens = map[procKey]screen{}
 		if len(s.Agents) == 0 {
 			s.Agents = []string{"claude"}
 		}
@@ -346,6 +358,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 
 	hosting := map[string]bool{}
 	alive := map[procKey]bool{}
+	var fromPane []int // sessions without an adapter: read from their pane
 	uptime := s.FS.Uptime()
 	for pid, p := range procs {
 		agent := s.agentName(pid, p)
@@ -403,9 +416,18 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		if sess.Name == "" {
 			sess.Name = agent
 		}
+		if sess.SessionID == "" {
+			if agent != "claude" {
+				sess.Context = "unmeasured"
+			}
+			if paneID != "" {
+				fromPane = append(fromPane, len(snap.Sessions))
+			}
+		}
 		sess.Do, sess.Why = s.Rules.suggest(sess)
 		snap.Sessions = append(snap.Sessions, sess)
 	}
+	s.readPanes(snap.Sessions, fromPane, now)
 	for key := range s.panes {
 		if !alive[key] {
 			delete(s.panes, key)
@@ -414,6 +436,11 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	for key := range s.longCtx {
 		if !alive[key] {
 			delete(s.longCtx, key)
+		}
+	}
+	for key := range s.screens {
+		if !alive[key] {
+			delete(s.screens, key)
 		}
 	}
 	seen := map[string]bool{}
@@ -489,6 +516,46 @@ func interpreter(cmd string) bool {
 		return true
 	}
 	return strings.HasPrefix(cmd, "python")
+}
+
+// screen is what an agent's pane showed, and since when.
+type screen struct {
+	text    string
+	changed time.Time
+}
+
+// readPanes fills the sessions that have no adapter from their panes: busy
+// while the pane changes (every agent animates while it works), idle since
+// the last change, and what the agent said last. A pane seen for the first
+// time has no state yet.
+func (s *Sampler) readPanes(sessions []Session, idx []int, now time.Time) {
+	if len(idx) == 0 {
+		return
+	}
+	ids := make([]string, len(idx))
+	for i, j := range idx {
+		ids[i] = sessions[j].Pane
+	}
+	text := s.Capture(ids)
+	for _, j := range idx {
+		sess := &sessions[j]
+		t, ok := text[sess.Pane]
+		if !ok {
+			continue
+		}
+		key := procKey{sess.PID, sess.Start}
+		prev, seen := s.screens[key]
+		switch {
+		case !seen:
+			s.screens[key] = screen{t, now}
+		case t != prev.text:
+			s.screens[key] = screen{t, now}
+			sess.Busy, sess.Status = true, "busy"
+		default:
+			sess.Status, sess.Idle = "idle", now.Sub(prev.changed).Truncate(time.Second)
+		}
+		sess.LastLine, sess.Asks = paneLine(t)
+	}
 }
 
 func (s *Sampler) isAgent(name string) bool {
