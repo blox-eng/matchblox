@@ -25,6 +25,7 @@ type Env struct {
 	// Exe is the matchblox the hooks run. Empty: "matchblox" on the PATH.
 	Exe      string
 	StateDir string // where closed doors are kept
+	Root     bool   // a root shell installs packages without sudo
 	Getenv   func(string) string
 	LookPath func(string) (string, error)
 	// Source loads a tmux config into the running server. ErrNoServer: no
@@ -114,6 +115,12 @@ func read(path string) (target string, b []byte, mode fs.FileMode, err error) {
 	target, mode = path, 0o600
 	if t, err := filepath.EvalSymlinks(path); err == nil {
 		target = t
+	} else if link, lerr := os.Readlink(path); lerr == nil {
+		// A dotfiles link to a file not made yet: write where it points.
+		if !filepath.IsAbs(link) {
+			link = filepath.Join(filepath.Dir(path), link)
+		}
+		target = link
 	}
 	b, err = os.ReadFile(target) //nolint:gosec // the person's own config file
 	if errors.Is(err, fs.ErrNotExist) {
@@ -141,8 +148,7 @@ func edit(path, seen string, change func(old []byte) ([]byte, error)) (backup st
 		return "", err
 	}
 	if old != nil {
-		backup = target + ".matchblox-" + time.Now().Format("20060102-150405") + ".bak"
-		if err := os.WriteFile(backup, old, mode); err != nil {
+		if backup, err = keep(target, old, mode); err != nil {
 			return "", fmt.Errorf("backup: %w", err)
 		}
 	}
@@ -150,6 +156,29 @@ func edit(path, seen string, change func(old []byte) ([]byte, error)) (backup st
 		return backup, err
 	}
 	return backup, replace(target, next, mode)
+}
+
+// keep writes a backup next to path under a name no other backup has.
+func keep(path string, b []byte, mode fs.FileMode) (string, error) {
+	stamp := path + ".matchblox-" + time.Now().Format("20060102-150405")
+	for n := 0; ; n++ {
+		name := stamp + ".bak"
+		if n > 0 {
+			name = fmt.Sprintf("%s-%d.bak", stamp, n)
+		}
+		f, err := os.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode) //nolint:gosec // next to the person's own file
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if _, err := f.Write(b); err != nil {
+			_ = f.Close()
+			return "", err
+		}
+		return name, f.Close()
+	}
 }
 
 // replace writes a file in one rename, so a reader never sees half of it.
@@ -186,6 +215,11 @@ func tmuxDoor(e Env, have bool) doors.Door {
 	d.Term = doors.TmuxInstall(e.GOOS, e.OSRelease, e.LookPath)
 	if d.Term == nil {
 		d.Problem = "install tmux with your package manager: https://github.com/tmux/tmux/wiki/Installing"
+		return d
+	}
+	if d.Term[0] != "sudo" && d.Term[0] != "brew" && !e.Root {
+		d.Problem = "install tmux as root: " + shellJoin(d.Term)
+		d.Term = nil
 		return d
 	}
 	d.Preview = shellJoin(d.Term)

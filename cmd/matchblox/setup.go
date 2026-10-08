@@ -26,6 +26,7 @@ func liveSetup() *setup.Env {
 		GOOS: runtime.GOOS, OSRelease: string(release), Home: home,
 		Exe:      invokedPath(os.Args[0]),
 		StateDir: filepath.Dir(state.Path()),
+		Root:     os.Geteuid() == 0,
 		Getenv:   os.Getenv, LookPath: exec.LookPath, Source: tmuxSource,
 	}
 }

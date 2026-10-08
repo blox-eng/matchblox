@@ -252,7 +252,27 @@ func (s *Service) door(id string, a proto.Act) proto.Result {
 func (s *Service) refreshDoors() {
 	ds := s.doors()
 	s.mu.Lock()
-	s.cur.Doors = ds
+	s.cur.Doors, s.gen = ds, s.gen+1
 	s.mu.Unlock()
 	s.broadcast()
+}
+
+func (s *Service) doorsGen() uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.gen
+}
+
+// storeDoors keeps doors read at gen, unless a door was written since.
+func (s *Service) storeDoors(gen uint64, ds []doors.Door) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.setDoors(gen, ds)
+}
+
+// setDoors is storeDoors with s.mu held.
+func (s *Service) setDoors(gen uint64, ds []doors.Door) {
+	if s.gen == gen {
+		s.cur.Doors = ds
+	}
 }

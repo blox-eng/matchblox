@@ -135,3 +135,23 @@ func TestATerminalDoorRunsInTheConsole(t *testing.T) {
 		t.Fatalf("result %+v", r)
 	}
 }
+
+func TestAnOlderSampleNeverBringsAFoldedDoorBack(t *testing.T) {
+	s, _ := doorsTest(t)
+	gen := s.doorsGen()
+	stale := s.doors() // a sample reads the doors…
+	i := slices.IndexFunc(stale, func(d doors.Door) bool { return d.ID == doors.Hooks })
+	folded := slices.Clone(stale)
+	folded[i].Done = true
+	s.mu.Lock() // …an act folds one meanwhile…
+	s.cur.Doors, s.gen = folded, s.gen+1
+	s.mu.Unlock()
+	s.storeDoors(gen, stale) // …and the sample must not undo it
+	if !s.State().Doors[i].Done {
+		t.Fatal("the older sample showed the folded door again")
+	}
+	s.storeDoors(s.doorsGen(), stale)
+	if s.State().Doors[i].Done {
+		t.Fatal("a current sample was dropped")
+	}
+}

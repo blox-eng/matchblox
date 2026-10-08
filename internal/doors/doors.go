@@ -41,14 +41,16 @@ type Door struct {
 func (d Door) Open() bool { return !d.Done && !d.Closed }
 
 // managers maps an os-release ID to the command that installs tmux.
+// A fresh Debian image has no package lists, so apt updates them first.
 var managers = []struct {
 	ids  []string
+	bin  string
 	argv []string
 }{
-	{[]string{"debian", "ubuntu"}, []string{"apt-get", "install", "-y", "tmux"}},
-	{[]string{"fedora", "rhel", "centos"}, []string{"dnf", "install", "-y", "tmux"}},
-	{[]string{"arch"}, []string{"pacman", "-S", "--noconfirm", "tmux"}},
-	{[]string{"alpine"}, []string{"apk", "add", "tmux"}},
+	{[]string{"debian", "ubuntu"}, "apt-get", []string{"sh", "-c", "apt-get update && apt-get install -y tmux"}},
+	{[]string{"fedora", "rhel", "centos"}, "dnf", []string{"dnf", "install", "-y", "tmux"}},
+	{[]string{"arch"}, "pacman", []string{"pacman", "-S", "--noconfirm", "tmux"}},
+	{[]string{"alpine"}, "apk", []string{"apk", "add", "tmux"}},
 }
 
 var brew = []string{"brew", "install", "tmux"}
@@ -70,7 +72,7 @@ func TmuxInstall(goos, osRelease string, look func(string) (string, error)) []st
 	}
 	for _, id := range releaseIDs(osRelease) {
 		for _, m := range managers {
-			if !slices.Contains(m.ids, id) || !found(m.argv[0]) {
+			if !slices.Contains(m.ids, id) || !found(m.bin) {
 				continue
 			}
 			if found("sudo") {

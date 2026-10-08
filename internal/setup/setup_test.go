@@ -64,7 +64,7 @@ func TestDoorsFirstRun(t *testing.T) {
 	if want := []string{doors.Tmux, doors.Hooks, doors.WayBack, doors.Guide}; !slices.Equal(got, want) {
 		t.Fatalf("doors = %v, want %v", got, want)
 	}
-	if d := door(t, e, doors.Tmux); !slices.Equal(d.Term, []string{"sudo", "apt-get", "install", "-y", "tmux"}) {
+	if d := door(t, e, doors.Tmux); !slices.Equal(d.Term, []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}) {
 		t.Fatalf("tmux door Term = %q", d.Term)
 	}
 }
@@ -403,5 +403,101 @@ func TestWriteConfigOnce(t *testing.T) {
 	}
 	if wrote, _ := WriteConfig(p, 8, 8<<30); wrote {
 		t.Fatal("WriteConfig overwrote a config")
+	}
+}
+
+func TestAddHooksWithASpacedPathFolds(t *testing.T) {
+	e := env(t)
+	e.Exe = "/home/u/My Tools/matchblox"
+	p := settings(t, e, others)
+	open(t, e, doors.Hooks)
+	if d := door(t, e, doors.Hooks); !d.Done {
+		t.Fatalf("door still open after one open:\n%s", d.Preview)
+	}
+	if got := commands(t, p)["Stop"]; len(got) != 2 || got[1] != "'/home/u/My Tools/matchblox' hook Stop" {
+		t.Fatalf("Stop = %q", got)
+	}
+}
+
+func TestADuplicateHooksKeyEditsTheOneClaudeReads(t *testing.T) {
+	e := env(t)
+	p := settings(t, e, `{"hooks": {}, "hooks": {"Stop": []}}`)
+	open(t, e, doors.Hooks)
+	b, _ := os.ReadFile(p)
+	var s struct {
+		Hooks map[string]json.RawMessage `json:"hooks"` // the last key wins, as in JSON.parse
+	}
+	if err := json.Unmarshal(b, &s); err != nil || len(s.Hooks) != len(Events) {
+		t.Fatalf("the last hooks has %d events, %v:\n%s", len(s.Hooks), err, b)
+	}
+}
+
+func TestNullHooksIsAnEmptyObject(t *testing.T) {
+	e := env(t)
+	settings(t, e, `{"hooks": null}`)
+	if d := door(t, e, doors.Hooks); d.Problem != "" || d.Sum == "" {
+		t.Fatalf("door = %+v", d)
+	}
+}
+
+func TestADanglingLinkStaysALink(t *testing.T) {
+	e := env(t)
+	target := filepath.Join(t.TempDir(), "dotfiles", "settings.json")
+	p := filepath.Join(e.Home, ".claude", "settings.json")
+	_ = os.MkdirAll(filepath.Dir(p), 0o700)
+	if err := os.Symlink(target, p); err != nil {
+		t.Fatal(err)
+	}
+	open(t, e, doors.Hooks)
+	if fi, err := os.Lstat(p); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("the link was replaced by a file")
+	}
+	if got := commands(t, target); len(got) != len(Events) {
+		t.Fatalf("target = %v", got)
+	}
+}
+
+func TestBackupsNeverOverwriteEachOther(t *testing.T) {
+	e := env(t)
+	p := settings(t, e, others)
+	b1, err := AddHooks(p, exe, Sum([]byte(others)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cur, _ := os.ReadFile(p)
+	b2, err := AddHooks(p, "/other/matchblox", Sum(cur)) // no change: no backup
+	if err != nil || b2 != "" {
+		t.Fatalf("unchanged write made backup %q, %v", b2, err)
+	}
+	_ = os.WriteFile(p, []byte(others), 0o600)
+	b3, err := AddHooks(p, exe, Sum([]byte(others)))
+	if err != nil || b3 == b1 {
+		t.Fatalf("second backup %q = first %q, %v", b3, b1, err)
+	}
+}
+
+func TestTmuxOnAFreshDebianUpdatesFirst(t *testing.T) {
+	d := door(t, env(t), doors.Tmux)
+	want := []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}
+	if !slices.Equal(d.Term, want) || !doors.TermAllowed(d.Term) {
+		t.Fatalf("Term = %q", d.Term)
+	}
+}
+
+func TestTmuxWithoutSudoOrRootSaysHow(t *testing.T) {
+	e := env(t)
+	e.LookPath = func(name string) (string, error) {
+		if name == "apt-get" {
+			return "/usr/bin/apt-get", nil
+		}
+		return "", errors.New("not found")
+	}
+	d := door(t, e, doors.Tmux)
+	if d.Term != nil || !strings.Contains(d.Problem, "as root") {
+		t.Fatalf("door = %+v", d)
+	}
+	e.Root = true
+	if d := door(t, e, doors.Tmux); d.Term == nil {
+		t.Fatalf("root: %+v", d)
 	}
 }

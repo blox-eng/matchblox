@@ -78,6 +78,7 @@ type Service struct {
 	stop    context.CancelCauseFunc
 
 	acts acts
+	gen  uint64 // counts door writes, so an older sample keeps its hands off
 }
 
 func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
@@ -215,9 +216,10 @@ func (s *Service) Run(ctx context.Context) {
 }
 
 func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
+	gen := s.doorsGen()
 	ds := s.doors()
 	s.mu.Lock()
-	s.cur.Doors = ds
+	s.setDoors(gen, ds)
 	if s.have { // the first sample has no rates yet
 		s.hist.Append(history.FromSnapshot(snap))
 	}

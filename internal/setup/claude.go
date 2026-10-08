@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/doors"
@@ -77,7 +76,11 @@ func withHooks(old []byte, exe string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	i := slices.IndexFunc(top, func(m member) bool { return m.key == "hooks" })
+	// Claude Code reads the last of two equal keys, as JSON.parse does.
+	i := lastIndex(top, "hooks")
+	if i >= 0 && string(bytes.TrimSpace(top[i].val)) == "null" {
+		top[i].val = json.RawMessage("{}")
+	}
 	if i < 0 {
 		top = append(top, member{key: "hooks", val: json.RawMessage("{}")})
 		i = len(top) - 1
@@ -88,7 +91,7 @@ func withHooks(old []byte, exe string) ([]byte, error) {
 	}
 	changed := false
 	for _, ev := range Events {
-		j := slices.IndexFunc(events, func(m member) bool { return m.key == ev })
+		j := lastIndex(events, ev)
 		var entries []json.RawMessage
 		if j >= 0 {
 			if err := json.Unmarshal(events[j].val, &entries); err != nil {
@@ -112,6 +115,15 @@ func withHooks(old []byte, exe string) ([]byte, error) {
 	}
 	top[i].val = object(events, 1)
 	return append(object(top, 0), '\n'), nil
+}
+
+func lastIndex(ms []member, key string) int {
+	for i := len(ms) - 1; i >= 0; i-- {
+		if ms[i].key == key {
+			return i
+		}
+	}
+	return -1
 }
 
 // members reads a JSON object; an empty file is an empty object.
@@ -206,13 +218,48 @@ func runsMatchblox(entries []json.RawMessage, ev string) bool {
 			continue
 		}
 		for _, h := range g.Hooks {
-			f := strings.Fields(h.Command)
-			if len(f) >= 3 && filepath.Base(strings.Trim(f[0], `'"`)) == "matchblox" && f[1] == "hook" && f[2] == ev {
+			f := shellWords(h.Command)
+			if len(f) >= 3 && filepath.Base(f[0]) == "matchblox" && f[1] == "hook" && f[2] == ev {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// shellWords splits a command as sh does for plain words and quotes; it is
+// enough to read back what hookCommand writes.
+func shellWords(s string) []string {
+	var words []string
+	var w strings.Builder
+	quote, any := byte(0), false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case quote != 0 && c == quote:
+			quote = 0
+		case quote != 0:
+			w.WriteByte(c)
+		case c == '\'' || c == '"':
+			quote, any = c, true
+		case c == '\\' && i+1 < len(s):
+			i++
+			w.WriteByte(s[i])
+			any = true
+		case c == ' ' || c == '\t':
+			if any || w.Len() > 0 {
+				words = append(words, w.String())
+			}
+			w.Reset()
+			any = false
+		default:
+			w.WriteByte(c)
+		}
+	}
+	if any || w.Len() > 0 {
+		words = append(words, w.String())
+	}
+	return words
 }
 
 func quote(s string) string {
