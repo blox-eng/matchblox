@@ -33,8 +33,9 @@ Works with Claude Code, Codex, OpenCode, and any agent in tmux.
 - **A match for each session**: `✦` burning while it works, `╿` at rest while
   it waits, `│` spent when its context is full.
 - **Sessions** by tmux pane: busy or idle, context use against the model's
-  window, 30-minute token burn, CPU of the whole process tree, and when to
-  compact or clear.
+  window (Claude Code, Codex and OpenCode), the account each one runs under,
+  30-minute token burn, CPU of the whole process tree, and when to compact or
+  clear.
 - **Machine health**: CPU per core, load, pressure, memory and swap,
   temperature, CPU power limits, GPUs, and the CPU share of the container groups
   you name.
@@ -65,7 +66,7 @@ tmux new -s app claude
 tmux new -s api codex
 ```
 ```
-╿ asks   1m    codex      api:1.1   from the pane: Would you like to run the following command?
+╿ asks   1m    codex      api:1.1   █████░░░░░  55%   ❋ you@example.com · Plus
 ```
 
 **OpenCode**
@@ -74,7 +75,7 @@ tmux new -s api codex
 tmux new -s web opencode
 ```
 ```
-✦ busy         opencode   web:1.1   not measured
+✦ busy         opencode   web:1.1   ███░░░░░░░  32%   ▣ API key
 ```
 
 **Any other agent**, for example aider
@@ -86,13 +87,24 @@ tmux new -s docs aider
 ╿ done   4m    aider      docs:1.1  not measured
 ```
 
-Claude Code tells its waits through hooks and shows its context use. Every
-other agent is read from its pane: it is busy while the pane moves, and it
-waits for you when it is idle and its last lines ask. That can come later
-than a hook. An approval menu (Codex, OpenCode) shows as `asks`: you answer
-it in its pane, where `Enter` takes the selected choice. Its context use shows "not measured". The first run writes the
-agents it finds to `agents` in `~/.config/matchblox/config.toml`. Add any
-other agent there by its command.
+Claude Code, Codex and OpenCode show their context use. matchblox reads it
+from the agent's own files (the transcript, the rollout, the session storage)
+and never guesses: before the first turn a session is "fresh", and an agent
+it cannot read shows "not measured". The window comes from the model that the
+agent reports. Set `[sessions.windows]` in the config to change it.
+
+On a wide screen, Sessions shows the account each session runs under: the
+provider's mark (`✻` Anthropic, `❋` OpenAI, `▣` OpenCode), then the email and
+plan, or "API key". matchblox reads only those fields from the agents' auth
+files. A token never reaches the console.
+
+Claude Code tells its waits through hooks. Every other agent is read from its
+pane: it is busy while the pane moves, and it waits for you when it is idle
+and its last lines ask. That can come later than a hook. An approval menu
+(Codex, OpenCode) shows as `asks`: you answer it in its pane, where `Enter`
+takes the selected choice. The first run writes the agents it finds to
+`agents` in `~/.config/matchblox/config.toml`. Add any other agent there by
+its command.
 
 ## Safety
 
