@@ -117,6 +117,22 @@ func (Host) Cwd(pid int) string {
 	return ""
 }
 
+func (Host) OpenFiles(pid int) ([]string, bool) {
+	p, err := newProcess(pid)
+	if err != nil {
+		return nil, false
+	}
+	files, err := p.OpenFiles()
+	if err != nil {
+		return nil, false
+	}
+	paths := make([]string, 0, len(files))
+	for _, f := range files {
+		paths = append(paths, f.Path)
+	}
+	return paths, true
+}
+
 func (Host) Cmdline(pid int) string {
 	if p, err := newProcess(pid); err == nil {
 		s, _ := p.Cmdline()

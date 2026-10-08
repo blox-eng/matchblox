@@ -1,6 +1,11 @@
 package procfs
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"testing"
+)
 
 const fixture = "../../testdata/machine/proc"
 
@@ -101,5 +106,30 @@ func TestContainerCgroup(t *testing.T) {
 	}
 	if s.ContainerCgroup("missing") != "" {
 		t.Fatal("missing container found")
+	}
+}
+
+// TestOpenFiles: absolute targets as /proc gives them, a relative one (a
+// fixture tree that moves with the repository) resolved against the fd
+// directory as a symlink is, and sockets and pipes left out.
+func TestOpenFiles(t *testing.T) {
+	root := t.TempDir()
+	fd := filepath.Join(root, "7", "fd")
+	if err := os.MkdirAll(fd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, target := range map[string]string{"0": "/dev/pts/1", "3": "socket:[4242]", "4": "pipe:[17]", "5": "../../home/log.jsonl"} {
+		if err := os.Symlink(target, filepath.Join(fd, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, ok := FS{Root: root}.OpenFiles(7)
+	slices.Sort(got)
+	want := []string{"/dev/pts/1", filepath.Join(root, "home", "log.jsonl")}
+	if !ok || !slices.Equal(got, want) {
+		t.Fatalf("got %q %v, want %q", got, ok, want)
+	}
+	if _, ok := (FS{Root: root}).OpenFiles(8); ok {
+		t.Fatal("a process without fd/ cannot be read")
 	}
 }
