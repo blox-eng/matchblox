@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -59,5 +60,31 @@ func TestSessionStartAsksForProgress(t *testing.T) {
 	out.Reset()
 	if err := hook([]string{"Stop"}, strings.NewReader(`{"session_id":"s1","hook_event_name":"Stop"}`), &out, filepath.Join(t.TempDir(), "none.sock"), spool, true); err != nil || out.Len() != 0 {
 		t.Fatalf("Stop printed %q", out.String())
+	}
+}
+
+// TestServiceWatchesTheDefaultTmux: the service outlives the console that
+// started it, so it must not keep that console's tmux server: a console in
+// another server (a nested or private one) would bind every later console
+// to panes it cannot see.
+func TestServiceWatchesTheDefaultTmux(t *testing.T) {
+	isolate(t)
+	t.Setenv("TMUX", "/tmp/tmux-1000/private,1,0")
+	t.Setenv("TMUX_PANE", "%9")
+	c, closeLog, err := serviceCmd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeLog()
+	if c.Env == nil {
+		t.Fatal("the service takes the console's whole environment")
+	}
+	for _, kv := range c.Env {
+		if strings.HasPrefix(kv, "TMUX=") || strings.HasPrefix(kv, "TMUX_PANE=") {
+			t.Fatalf("the service keeps %s", kv)
+		}
+	}
+	if !slices.ContainsFunc(c.Env, func(kv string) bool { return strings.HasPrefix(kv, "HOME=") }) {
+		t.Fatal("the service lost the rest of the environment")
 	}
 }

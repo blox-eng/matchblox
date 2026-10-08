@@ -22,6 +22,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/pprof"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -367,6 +368,11 @@ func serviceCmd() (*exec.Cmd, func(), error) {
 	}
 	c := exec.Command(exe, args...) //nolint:gosec // our own binary
 	c.Dir = "/"
+	// The service outlives this console: it watches the default tmux server,
+	// not the one this console happens to run in.
+	c.Env = slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		return strings.HasPrefix(kv, "TMUX=") || strings.HasPrefix(kv, "TMUX_PANE=")
+	})
 	closeLog := func() {}
 	logPath := filepath.Join(filepath.Dir(state.Path()), "serve.log")
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err == nil {
