@@ -464,3 +464,46 @@ func TestSessionsSayWhatTheQueueSays(t *testing.T) {
 		}
 	}
 }
+
+// TestAJumpMovesTheCursorToTheNextThatWaits: after Enter goes to an agent,
+// the console selects the next one that waits, so the way back lands on it.
+func TestAJumpMovesTheCursorToTheNextThatWaits(t *testing.T) {
+	m, _ := loadedWith(t, 100, queueState())
+	m.opt.Run = func([]string) error { return nil }
+	next, cmd := key(m, "enter")
+	if it, _ := m.selectedQueue(); it.Pane != "%1" {
+		t.Fatalf("starts on %s", it.Pane)
+	}
+	if cmd == nil {
+		next, cmd = key(next, "enter")
+	}
+	next, _ = next.Update(cmd())
+	if it, _ := next.(Model).selectedQueue(); it.Pane != "%2" {
+		t.Fatalf("after the jump to %%1 the queue selects %s, want %%2", it.Pane)
+	}
+
+	st := queueState()
+	m, _ = loadedWith(t, 100, st)
+	m.opt.Run = func([]string) error { return nil }
+	m.tab = tabSessions
+	from, _ := m.selected()
+	armed, cmd := key(m, "enter")
+	if cmd == nil {
+		armed, cmd = key(armed, "enter")
+	}
+	if cmd == nil {
+		t.Fatal("no jump")
+	}
+	nm, _ := armed.Update(cmd())
+	s, _ := nm.(Model).selected()
+	if s.PID == from.PID || s.Busy {
+		t.Fatalf("after the jump to %s Sessions selects %s (busy %v)", from.Name, s.Name, s.Busy)
+	}
+	waits := false
+	for _, it := range nm.(Model).queue {
+		waits = waits || it.Pane == s.Pane
+	}
+	if !waits {
+		t.Fatalf("Sessions selects %s, which does not wait", s.Name)
+	}
+}
