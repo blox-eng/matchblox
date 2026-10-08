@@ -272,6 +272,9 @@ const (
 	colPct  = 9
 	colCPU  = 6
 	colDo   = 10
+	// colAcctMax bounds the account column: a long email is cut, the
+	// rest of the row stays.
+	colAcctMax = 34
 )
 
 func (m Model) sessions(w, h int) body {
@@ -296,12 +299,8 @@ func (m Model) sessions(w, h int) body {
 		return b
 	}
 
-	tab := 0
-	if w >= 100 {
-		tab = colTab
-	}
-	tree := min(max(w-(1+colPane+tab+colName+colSt+colIdle+colBar+1+colPct+colCPU+colDo+1), 12), 48)
-	head, _ := m.sessHeader(tab)
+	tab, acct, tree := m.sessWidths(w)
+	head, _ := m.sessHeader(tab, acct)
 	b.add(headerRow, st.label.Render(fit(head, w)))
 
 	detail := m.detail(w)
@@ -309,7 +308,7 @@ func (m Model) sessions(w, h int) body {
 	sel := m.selIndex()
 	first := max(min(sel-room/2, len(ss)-room), 0)
 	for i := first; i < len(ss) && i < first+room; i++ {
-		b.add(i, m.row(ss[i], i == sel, w, tab, tree))
+		b.add(i, m.row(ss[i], i == sel, w, tab, acct, tree))
 	}
 	if n := len(m.snap.IdlePanes); n > 0 {
 		var ids []string
@@ -324,7 +323,47 @@ func (m Model) sessions(w, h int) body {
 	return b
 }
 
-func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
+// sessWidths gives the optional columns of Sessions their width: the tab
+// name from 100 columns, the account when the rest still fits (it is the
+// first to go), and the worktree what is left.
+func (m Model) sessWidths(w int) (tab, acct, tree int) {
+	if w >= 100 {
+		tab = colTab
+	}
+	rest := w - (1 + colPane + tab + colName + colSt + colIdle + colBar + 1 + colPct + colCPU + colDo + 1)
+	for _, s := range m.snap.Sessions {
+		acct = max(acct, lipgloss.Width(accountCell(s))+2)
+	}
+	acct = min(acct, colAcctMax)
+	if rest-acct < 12 {
+		acct = 0
+	}
+	return tab, acct, min(max(rest-acct, 12), 48)
+}
+
+// providerMarks stand for the logos a terminal cannot draw: one cell each,
+// none an emoji.
+var providerMarks = map[string]string{"anthropic": "✻", "openai": "❋", "opencode": "▣"}
+
+// accountCell is the provider's mark and the account label: "✻ a@b.c · Max".
+// A provider without a mark keeps its name.
+func accountCell(s sample.Session) string {
+	p := providerMarks[s.Provider]
+	if p == "" {
+		p = s.Provider
+	}
+	switch {
+	case p == "":
+		return s.Account
+	case s.Account == "":
+		return p
+	case providerMarks[s.Provider] != "":
+		return p + " " + s.Account
+	}
+	return p + " · " + s.Account
+}
+
+func (m Model) row(s sample.Session, selected bool, w, tab, acct, tree int) string {
 	st := m.st
 	state, idle := m.matchCell(s)+st.text.Render(pad("busy", colSt-2)), pad("", colIdle)
 	if !s.Busy {
@@ -378,7 +417,11 @@ func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
 	if tab > 0 {
 		pane += st.muted.Render(pad(s.Tab, tab))
 	}
-	line := " " + pane + name + state + idle + ctx + cpu + do + st.muted.Render(pad(worktree(s.Cwd), tree))
+	account := ""
+	if acct > 0 {
+		account = st.muted.Render(pad(accountCell(s), acct))
+	}
+	line := " " + pane + name + state + idle + ctx + cpu + do + account + st.muted.Render(pad(worktree(s.Cwd), tree))
 	if selected {
 		return st.selected.Render(fit(line, w))
 	}
@@ -404,8 +447,11 @@ func (m Model) detail(w int) []string {
 	if s.Model != "" {
 		facts = append(facts, s.Model)
 	}
-	if s.Tokens > 0 {
+	switch {
+	case s.Tokens > 0 && s.Window > 0:
 		facts = append(facts, fmt.Sprintf("%s / %s tokens", kTok(s.Tokens), kTok(s.Window)), "+"+kTok(s.Burn30m)+" in 30 min")
+	case s.Tokens > 0:
+		facts = append(facts, kTok(s.Tokens)+" tokens · no window known: add the model to [sessions.windows]")
 	}
 	facts = append(facts, fmt.Sprintf("%d processes", s.Procs))
 	lines = append(lines, fit(" "+st.text.Render(strings.Join(facts, st.faint.Render("  ·  "))), w))

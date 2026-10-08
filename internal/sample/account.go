@@ -19,7 +19,7 @@ type agentEnv struct {
 	codexHome  string // CODEX_HOME, else ~/.codex
 	dataHome   string // XDG_DATA_HOME, else ~/.local/share
 	cacheHome  string // XDG_CACHE_HOME, else ~/.cache
-	cloud      string // Bedrock or Vertex: Claude Code signs in through the cloud
+	cloud      string // bedrock or vertex: Claude Code signs in through the cloud
 	apiKey     bool   // an API key is set in the environment (its value is never kept)
 }
 
@@ -49,9 +49,9 @@ func (s *Sampler) envOf(pid int, key procKey) agentEnv {
 	}
 	switch {
 	case truthy(get("CLAUDE_CODE_USE_BEDROCK")):
-		e.cloud = "Bedrock"
+		e.cloud = "bedrock"
 	case truthy(get("CLAUDE_CODE_USE_VERTEX")):
-		e.cloud = "Vertex"
+		e.cloud = "vertex"
 	}
 	for _, k := range []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "CODEX_API_KEY"} {
 		if get(k) != "" {
@@ -106,11 +106,19 @@ func readCached[T any](m map[string]cached[T], path string, parse func([]byte) T
 
 var claudePlans = map[string]string{"claude_max": "Max", "claude_pro": "Pro", "claude_team": "Team", "claude_enterprise": "Enterprise"}
 
-// claudeAccount reads only the login's email and plan from .claude.json.
-// The file holds other secrets; they are not decoded.
-func (a *accounts) claudeAccount(e agentEnv) string {
+// claudeProvider serves a Claude Code session: a cloud, else Anthropic.
+func claudeProvider(e agentEnv) string {
 	if e.cloud != "" {
 		return e.cloud
+	}
+	return "anthropic"
+}
+
+// claudeAccount reads only the login's email and plan from .claude.json.
+// The file holds other secrets; they are not decoded. A cloud has no login.
+func (a *accounts) claudeAccount(e agentEnv) string {
+	if e.cloud != "" {
+		return ""
 	}
 	v := readCached(a.labels, e.claudeJSON, func(b []byte) string {
 		var f struct {
@@ -187,8 +195,8 @@ func idClaims(jwt string) (email, plan string) {
 
 var opencodeAuth = map[string]string{"api": "API key", "oauth": "login", "wellknown": "login"}
 
-// opencodeAccount names the provider of the session's model and how
-// OpenCode signs in to it: only the type of its auth.json entry is read.
+// opencodeAccount tells how OpenCode signs in to the provider of the
+// session's model: only the type of its auth.json entry is read.
 func (a *accounts) opencodeAccount(e agentEnv, provider string) string {
 	if provider == "" {
 		return ""
@@ -206,5 +214,5 @@ func (a *accounts) opencodeAccount(e agentEnv, provider string) string {
 		}
 		return m
 	})
-	return label(provider, opencodeAuth[types[provider]])
+	return opencodeAuth[types[provider]]
 }

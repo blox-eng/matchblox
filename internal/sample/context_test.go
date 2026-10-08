@@ -112,8 +112,8 @@ func TestCodexContextUseComesFromTheRolloutItHoldsOpen(t *testing.T) {
 	if s.ContextPct < 19.9 || s.ContextPct > 20.1 {
 		t.Errorf("context %.1f%%, want 20%%", s.ContextPct)
 	}
-	if s.Account != "builder@example.org · Plus" {
-		t.Errorf("account %q", s.Account)
+	if s.Account != "builder@example.org · Plus" || s.Provider != "openai" {
+		t.Errorf("account %q provider %q", s.Account, s.Provider)
 	}
 	if f := got["%21"]; f.Context != "fresh" || f.Tokens != 0 {
 		t.Errorf("before its first turn: %+v", f)
@@ -188,8 +188,8 @@ func TestOpenCodeContextUseIsCountedTheWayOpenCodeCountsIt(t *testing.T) {
 	if s.Agent != "opencode" || s.Context != "known" || s.Tokens != want || s.Window != 200000 || s.Model != "model-made-up" {
 		t.Fatalf("opencode session: %+v (want %d tokens)", s, want)
 	}
-	if s.Account != "zen · API key" {
-		t.Errorf("account %q", s.Account)
+	if s.Account != "API key" || s.Provider != "zen" {
+		t.Errorf("account %q provider %q", s.Account, s.Provider)
 	}
 }
 
@@ -248,14 +248,21 @@ func TestEachClaudeSessionShowsTheAccountOfItsConfigDirectory(t *testing.T) {
 
 	smp := newFixtureSampler(root)
 	got := byPane(smp.Sample())
-	if s := got["%1"]; s.Agent != "claude" || s.Account != "builder@example.com · Max" {
-		t.Errorf("default config: agent %q account %q", s.Agent, s.Account)
+	if s := got["%1"]; s.Agent != "claude" || s.Account != "builder@example.com · Max" || s.Provider != "anthropic" {
+		t.Errorf("default config: agent %q account %q provider %q", s.Agent, s.Account, s.Provider)
 	}
 	if s := got["%40"]; s.Account != "work@example.net · Team" || s.SessionID == "" {
 		t.Errorf("CLAUDE_CONFIG_DIR: account %q session %q", s.Account, s.SessionID)
 	}
 	if s := got["%41"]; s.Account != "API key" {
 		t.Errorf("API key session: %q", s.Account)
+	}
+	// Claude Code through a cloud: the cloud is the provider, no login.
+	addProc(t, root, 970, 1, "claude", []string{"claude"}, "%42")
+	setEnv(t, root, 970, "TMUX_PANE=%42", "CLAUDE_CODE_USE_BEDROCK=1")
+	addPane(t, root, "%42\tcloud:1.1\tw\t970\tclaude\t/work/app")
+	if s := byPane(newFixtureSampler(root).Sample())["%42"]; s.Provider != "bedrock" || s.Account != "" {
+		t.Errorf("bedrock session: provider %q account %q", s.Provider, s.Account)
 	}
 }
 

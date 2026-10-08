@@ -152,8 +152,13 @@ func (fs FS) OpenFiles(pid int) (paths []string, ok bool) {
 		return nil, false
 	}
 	for _, e := range ents {
-		if t, err := os.Readlink(filepath.Join(dir, e.Name())); err == nil && strings.HasPrefix(t, "/") {
+		t, err := os.Readlink(filepath.Join(dir, e.Name()))
+		switch {
+		case err != nil:
+		case filepath.IsAbs(t):
 			paths = append(paths, t)
+		case !strings.Contains(t, ":"): // not socket:[…], pipe:[…], anon_inode:…; only in a fixture tree
+			paths = append(paths, filepath.Join(dir, t))
 		}
 	}
 	return paths, true

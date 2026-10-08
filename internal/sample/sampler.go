@@ -35,7 +35,10 @@ type Session struct {
 	Agent  string `json:"agent"` // the command it was found by: claude, codex, opencode, ...
 	// Account is a short label of the login it runs under ("a@b.c · Max",
 	// "API key"), never a credential.
-	Account    string        `json:"account,omitempty"`
+	Account string `json:"account,omitempty"`
+	// Provider serves the model: anthropic, openai, bedrock, vertex, or an
+	// OpenCode provider id. The console shows it as a mark.
+	Provider   string        `json:"provider,omitempty"`
 	SessionID  string        `json:"session_id"`
 	Cwd        string        `json:"cwd"`
 	Busy       bool          `json:"busy"`
@@ -419,10 +422,10 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		switch agent {
 		case "claude":
 			sess.Window = 200_000
-			sess.Account = s.accounts.claudeAccount(env)
+			sess.Account, sess.Provider = s.accounts.claudeAccount(env), claudeProvider(env)
 			s.claudeSession(&sess, pid, p, key, env, uptime, now)
 		case "codex":
-			sess.Account = s.accounts.codexAccount(env)
+			sess.Account, sess.Provider = s.accounts.codexAccount(env), "openai"
 			path, read := s.codexRollout(pid, children)
 			sess.Context = "unmeasured"
 			if read {
@@ -443,7 +446,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			if oc, ok := s.opencode.session(data, sess.Cwd, started.UnixMilli()); ok {
 				sess.Context = "fresh"
 				if u, provider, ok := s.opencode.usage(data, env.cacheHome, oc.ID); ok {
-					sess.Account = s.accounts.opencodeAccount(env, provider)
+					sess.Account, sess.Provider = s.accounts.opencodeAccount(env, provider), label(provider)
 					s.measured(&sess, u, "opencode:"+oc.ID, now)
 				}
 			}
