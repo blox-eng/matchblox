@@ -173,6 +173,16 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 - **Keys:** each key is on a phone SSH key bar: digits, arrows, `Enter`,
   `Esc` and letters. No `Ctrl` combinations. `Enter` never runs a
   destructive step; that needs `x` and then a typed `y`.
+- **Lists** (owner, 2026-10-08): `/` searches the open tab (every key is
+  text until `⏎` keeps it or `esc` clears it; a tab change ends it); an empty
+  result says "nothing matches <text>". `s` sorts Sessions and Panes by the
+  next column and `S` turns it around; a tap on a column header does both.
+  Sessions start busy first, then the longest wait. The header marks the
+  column (`CONTEXT▾`, `▴` when turned around); a phone names it in the
+  region line (`by context ▾`). On Git, `space` marks a worktree that is
+  safe to remove (or says why not), `X` marks every safe one, and `x` with a
+  typed `y` removes the marked ones: one guarded act each, then one summary
+  ("removed 11, skipped 1: it has changes").
 
 ## 7. Copy
 

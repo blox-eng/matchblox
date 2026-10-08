@@ -2,7 +2,8 @@ package app
 
 import (
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -50,7 +51,7 @@ func (m Model) queuePanel(w int) body {
 	var b body
 	b.add(-1, "", st.label.Render(fmt.Sprintf(" %d WAITING FOR YOU", len(m.queue))))
 	if len(m.queue) == 0 {
-		b.add(-1, st.faint.Render(" nothing waits for you"))
+		b.add(-1, st.faint.Render(m.nothing(" nothing waits for you")))
 	}
 	sel := m.queueIndex()
 	narrow := layout(w) == Narrow
@@ -94,7 +95,13 @@ func (m Model) paneRows() []paneRow {
 	for _, p := range m.snap.IdlePanes {
 		rows = append(rows, paneRow{p.Pane, p.Target, p.Command, p.Path})
 	}
-	sort.SliceStable(rows, func(i, j int) bool { return rows[i].target < rows[j].target })
+	q := strings.ToLower(m.filter)
+	if m.tab == tabPanes && q != "" {
+		rows = slices.DeleteFunc(rows, func(r paneRow) bool {
+			return !strings.Contains(strings.ToLower(r.target+" "+r.id+" "+r.what+" "+r.path), q)
+		})
+	}
+	slices.SortStableFunc(rows, m.paneSort.panes)
 	return rows
 }
 
@@ -102,10 +109,14 @@ func (m Model) panesPanel(w int) body {
 	st := m.st
 	rows := m.paneRows()
 	var b body
-	b.add(-1, "", st.label.Render(fmt.Sprintf(" %d PANES", len(rows))))
+	b.add(-1, "", st.label.Render(fmt.Sprintf(" %d PANES", len(rows))+m.sortNote(w, m.paneSort, paneCols)))
 	narrow := layout(w) == Narrow
 	if !narrow {
-		b.add(-1, st.label.Render(fit(" "+pad("TMUX", colPane)+pad("RUNS", colName)+"PATH", w)))
+		head, _ := m.paneHeader()
+		b.add(headerRow, st.label.Render(fit(head, w)))
+	}
+	if len(rows) == 0 {
+		b.add(-1, st.faint.Render(m.nothing(" no tmux panes")))
 	}
 	sel := min(m.paneSel, max(len(rows)-1, 0))
 	for i, r := range rows {

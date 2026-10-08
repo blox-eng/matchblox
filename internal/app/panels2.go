@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -31,6 +32,11 @@ func (m Model) worktreeRows() []wtRow {
 				rows = append(rows, wtRow{r.Path, wt, i == 0})
 			}
 		}
+	}
+	if q := strings.ToLower(m.filter); m.tab == tabGit && q != "" {
+		rows = slices.DeleteFunc(rows, func(r wtRow) bool {
+			return !strings.Contains(strings.ToLower(r.wt.Path+" "+r.wt.Branch), q)
+		})
 	}
 	return rows
 }
@@ -105,7 +111,11 @@ func (m Model) gitPanel(w int) body {
 			if wt.Sessions > 0 {
 				agents = fmt.Sprint(wt.Sessions)
 			}
-			line := " " + st.text.Render(pad(name, 36)) + st.muted.Render(pad(wt.Branch, 28)) + st.text.Render(pad(agents, 8)) + dirty + state
+			mark := " "
+			if m.picked[wt.Path] {
+				mark = st.accent.Render("●")
+			}
+			line := mark + st.text.Render(pad(name, 36)) + st.muted.Render(pad(wt.Branch, 28)) + st.text.Render(pad(agents, 8)) + dirty + state
 			b.addRow(i, i == sel, w, st, line)
 		}
 	}
@@ -129,7 +139,7 @@ func (m Model) recsSection(b *body, w int) {
 	st := m.st
 	b.add(-1, m.region(fmt.Sprintf("%d recommendations", len(m.recs)), w)...)
 	if len(m.recs) == 0 {
-		b.add(-1, st.faint.Render(" nothing to do"))
+		b.add(-1, st.faint.Render(m.nothing(" nothing to do")))
 		return
 	}
 	n := len(m.queue)

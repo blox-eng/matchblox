@@ -411,7 +411,11 @@ func TestReplay(t *testing.T) {
 		{"what to do, under the queue", 8 * time.Second, "1", has("RECOMMENDATIONS", "Kill detached busy loop 4242")},
 		{"the busy loop", 9500 * time.Millisecond, "4", has("4242")},
 		{"a guarded action", 10500 * time.Millisecond, "x", has("kill 4242", "y run")},
-		{"the loop is gone", 12 * time.Second, "y", func(s string) bool { return !strings.Contains(s, "PROCS !") }},
+		// The result as well as the state: a late result would still show in
+		// the next step.
+		{"the loop is gone", 12 * time.Second, "y", func(s string) bool {
+			return !strings.Contains(s, "while :; do go test") && strings.Contains(s, "ran: kill 4242")
+		}},
 		{"back to the queue", 13500 * time.Millisecond, "1", has("billing")},
 	}
 	var still replay.Frame

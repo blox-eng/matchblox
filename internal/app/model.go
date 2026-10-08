@@ -85,10 +85,11 @@ type action struct {
 	steps       [][]string
 	destructive bool
 	nav         bool
-	attach      bool   // the last step takes the terminal until it exits
-	rec         string // the service's name for it
-	which       string // primary | secondary
-	text        string // what an answer types
+	attach      bool     // the last step takes the terminal until it exits
+	rec         string   // the service's name for it
+	which       string   // primary | secondary
+	text        string   // what an answer types
+	batch       []string // worktrees: one guarded act each
 }
 
 func (a action) String() string {
@@ -148,6 +149,13 @@ type Model struct {
 	splashAt   time.Time
 	splashDone bool
 	armed      string // the step a second tap runs: what the first tap showed
+	all        lists  // what the service sent; queue, recs and snap hold the drawn copies
+	filter     string // the search of the open tab
+	searching  bool   // the search line takes the keys
+	sessSort   sortBy
+	paneSort   sortBy
+	picked     map[string]bool // worktrees x removes
+	batch      *batch
 }
 
 func New(opt Options) Model {
@@ -280,7 +288,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.queue = st.Queue
 		m.noteChanges(st.Sessions)
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
-		m.queue = st.Queue
+		m.all = lists{queue: st.Queue, recs: st.Recommendations, sessions: st.Sessions, orphans: st.Orphans}
+		m.refresh()
 		if m.lost {
 			m.lost, m.backoff, m.flash = false, 0, ""
 		}
@@ -297,6 +306,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.animating = false
 		return m, m.animate()
 	case resultMsg:
+		if m.tally(proto.Result(msg)) {
+			return m, m.recv()
+		}
 		if text := describe(proto.Result(msg)); text != "" {
 			m.flash = text
 		}
@@ -366,6 +378,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.input != nil {
 			return m.typing(msg)
 		}
+		if m.searching {
+			return m.search(msg)
+		}
 		return m.key(msg.String())
 	}
 	return m, nil
@@ -416,9 +431,34 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 	case "tab":
-		m.tab = (m.tab + 1) % len(tabNames)
+		m.setTab((m.tab + 1) % len(tabNames))
 	case "shift+tab":
-		m.tab = (m.tab + len(tabNames) - 1) % len(tabNames)
+		m.setTab((m.tab + len(tabNames) - 1) % len(tabNames))
+	case "/":
+		m.searching, m.filter = true, ""
+		m.refresh()
+	case "esc":
+		if m.filter != "" {
+			m.filter = ""
+			m.refresh()
+		}
+	case "s":
+		if s, _ := m.sortable(); s != nil {
+			_, names := m.sortable()
+			m.sortOn((s.col + 1) % len(names))
+		}
+	case "S", "shift+s":
+		if s, _ := m.sortable(); s != nil {
+			m.sortOn(s.col)
+		}
+	case "space", " ":
+		if m.tab == tabGit {
+			m.mark()
+		}
+	case "X", "shift+x":
+		if m.tab == tabGit {
+			m.markAllSafe()
+		}
 	case "up", "k":
 		m.move(-1)
 	case "down", "j":
@@ -440,7 +480,7 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		}
 	default:
 		if len(k) == 1 && k[0] >= '1' && int(k[0]-'1') < len(tabNames) {
-			m.tab = int(k[0] - '1')
+			m.setTab(int(k[0] - '1'))
 		}
 	}
 	return m, nil
@@ -449,6 +489,9 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 // confirm runs an action the person consented to: a Nav step here, any
 // other on the service.
 func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
+	if len(a.batch) > 0 {
+		return m.sendBatch(a)
+	}
 	if a.attach {
 		return m, m.attach(a)
 	}
@@ -616,6 +659,9 @@ func (m Model) secondary() *action {
 				rec: "orphan:" + strconv.Itoa(o.PID), which: "secondary"}
 		}
 	case tabGit:
+		if a := m.removeMarked(); a != nil {
+			return a
+		}
 		if wt, ok := m.selectedWorktree(); ok && wt.Safe {
 			return &action{label: "remove", steps: [][]string{wt.Remove}, destructive: true,
 				rec: "worktree:" + wt.Path, which: "secondary"}

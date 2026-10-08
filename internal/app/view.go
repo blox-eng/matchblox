@@ -224,6 +224,9 @@ func (m Model) footer(w int) string {
 		return fit(" "+st.label.Render("ANSWER ")+st.muted.Render(m.input.pane+" ")+
 			st.text.Render(m.input.text)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ review  esc cancel"), w)
 	}
+	if m.searching {
+		return fit(" "+st.label.Render("/ ")+st.text.Render(m.filter)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ keep  esc clear"), w)
+	}
 	if m.pending != nil {
 		confirm := "⏎ run  esc cancel"
 		if m.pending.destructive {
@@ -233,19 +236,22 @@ func (m Model) footer(w int) string {
 	}
 	tabKeys := map[int]string{
 		tabQueue:    "↑↓ select  ⏎ go  a answer",
-		tabPanes:    "↑↓ select  ⏎ go",
-		tabSessions: "↑↓ select  ⏎ jump  a answer",
+		tabPanes:    "↑↓ select  ⏎ go  s sort",
+		tabSessions: "↑↓ select  ⏎ jump  a answer  s sort",
 		tabMachine:  "",
 		tabProcs:    "↑↓ select  ⏎ jump  x kill",
-		tabGit:      "↑↓ select  ⏎ shell  x remove  r rescan",
+		tabGit:      "↑↓ select  ⏎ shell  space mark  X all safe  x remove  r rescan",
 		tabHistory:  "",
 	}[m.tab]
 	if _, ok := m.selectedRec(); ok {
 		tabKeys = "↑↓ select  ⏎ do  x the other action"
 	}
-	keys := tabKeys + "  1-7 panel  q quit"
+	keys := tabKeys + "  / find  1-7 panel  q quit"
+	if m.filter != "" {
+		keys = "/ " + m.filter + " · esc clears  " + tabKeys
+	}
 	if layout(w) == Narrow {
-		keys = strings.NewReplacer("↑↓ select  ", "↑↓ ", "1-7 panel", "1-7", "the other action", "other").Replace(keys)
+		keys = strings.NewReplacer("↑↓ select  ", "↑↓ ", "1-7 panel", "1-7", "the other action", "other", "space mark  X all safe  ", "␣ X ", "  r rescan", "").Replace(keys)
 	}
 	left := " " + st.muted.Render(keys)
 	if m.flash != "" {
@@ -279,7 +285,7 @@ func (m Model) sessions(w, h int) body {
 			busy++
 		}
 	}
-	region := fmt.Sprintf(" %d AGENTS  ·  BUSY %d  ·  IDLE %d", len(ss), busy, len(ss)-busy)
+	region := fmt.Sprintf(" %d AGENTS  ·  BUSY %d  ·  IDLE %d", len(ss), busy, len(ss)-busy) + m.sortNote(w, m.sessSort, sessCols)
 	var b body
 	b.add(-1, "", st.label.Render(region))
 	if layout(w) == Narrow {
@@ -296,9 +302,8 @@ func (m Model) sessions(w, h int) body {
 		tab = colTab
 	}
 	tree := min(max(w-(1+colPane+tab+colName+colSt+colIdle+colBar+1+colPct+colCPU+colDo+1), 12), 48)
-	head := " " + pad("TMUX", colPane+tab) + pad("NAME", colName) + pad("STATE", colSt) + pad("IDLE", colIdle) +
-		pad("CONTEXT", colBar+1+colPct) + pad("CPU", colCPU) + pad("DO", colDo+1) + "WORKTREE"
-	b.add(-1, st.label.Render(fit(head, w)))
+	head, _ := m.sessHeader(tab)
+	b.add(headerRow, st.label.Render(fit(head, w)))
 
 	detail := m.detail(w)
 	room := max(h-len(b.lines)-len(detail)-2, 3)
@@ -377,7 +382,7 @@ func (m Model) detail(w int) []string {
 	st := m.st
 	s, ok := m.selected()
 	if !ok {
-		return []string{st.faint.Render(" no agent sessions found in tmux")}
+		return []string{st.faint.Render(m.nothing(" no agent sessions found in tmux"))}
 	}
 	lines := []string{st.label.Render(" " + strings.ToUpper(place(s.Target, s.Pane)+" "+s.Tab+"  "+s.Name))}
 	facts := []string{fmt.Sprintf("pid %d", s.PID)}
