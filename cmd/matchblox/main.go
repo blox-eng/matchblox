@@ -9,6 +9,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -57,8 +58,19 @@ func main() {
 	if err := run(os.Args[1:]); err != nil {
 		pprof.StopCPUProfile()
 		fmt.Fprintln(os.Stderr, "matchblox:", err)
+		holdOnError(err, os.Getenv, os.Stdin, os.Stderr)
 		os.Exit(1)
 	}
+}
+
+// holdOnError keeps an error on the screen in the home session: the console
+// is its only command, so the pane would close before the person reads it.
+func holdOnError(err error, env func(string) string, in io.Reader, out io.Writer) {
+	if err == nil || env(panes.HomeEnv) != "1" {
+		return
+	}
+	_, _ = fmt.Fprintln(out, "press Enter to close")
+	_, _ = bufio.NewReader(in).ReadString('\n')
 }
 
 // configArg is the --config the person gave, passed on to a service the

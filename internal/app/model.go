@@ -147,6 +147,7 @@ type Model struct {
 	dark       bool
 	splashAt   time.Time
 	splashDone bool
+	armed      string // the step a second tap runs: what the first tap showed
 }
 
 func New(opt Options) Model {
@@ -354,11 +355,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.MouseClickMsg:
 		return m.tap(msg.Mouse())
+	case tea.MouseWheelMsg:
+		return m.wheel(msg.Mouse())
 	case tea.KeyPressMsg:
 		if m.splashing() {
 			m.splashDone = true // any key stops the start screen, and does nothing else
 			return m, nil
 		}
+		m.armed = "" // a key between two taps: the next tap shows again
 		if m.input != nil {
 			return m.typing(msg)
 		}

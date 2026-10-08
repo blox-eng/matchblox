@@ -120,3 +120,41 @@ func (m Model) narrowRow(s sample.Session, selected bool) []string {
 	}
 	return []string{first, "   " + st.muted.Render(where) + "  " + st.muted.Render(worktree(s.Cwd))}
 }
+
+// visible is the part of the body that fits under the chrome: the lines
+// above the first row stay, and the rows scroll so the selected one is on
+// the screen. A tap reads the same lines the screen shows.
+func (m Model) visible(w int) body {
+	b := m.body(w)
+	room := max(m.height-chrome-1, 0)
+	if len(b.lines) <= room {
+		return b
+	}
+	head := 0
+	for head < len(b.rows) && b.rows[head] < 0 {
+		head++
+	}
+	if head >= len(b.rows) || head > room/2 {
+		return body{lines: b.lines[:room], rows: b.rows[:room]}
+	}
+	first, last := -1, -1
+	sel := m.rowIndex()
+	for i, r := range b.rows {
+		if r == sel {
+			if first < 0 {
+				first = i
+			}
+			last = i
+		}
+	}
+	space := room - head
+	start := head
+	if first >= 0 {
+		start = min(max(first-space/2, head), len(b.lines)-space)
+		start = max(min(start, first), last-space+1, head)
+	}
+	return body{
+		lines: append(append([]string{}, b.lines[:head]...), b.lines[start:start+space]...),
+		rows:  append(append([]int{}, b.rows[:head]...), b.rows[start:start+space]...),
+	}
+}

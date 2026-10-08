@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -212,5 +214,75 @@ func TestMouseIsOn(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
 	if m.View().MouseMode != tea.MouseModeCellMotion {
 		t.Fatal("the console does not take taps")
+	}
+}
+
+func manySessions(n int) proto.State {
+	st := fixtureState()
+	base := st.Sessions[0]
+	st.Sessions = nil
+	for i := range n {
+		s := base
+		s.PID, s.Name, s.Pane, s.Target = 9000+i, fmt.Sprintf("agent-%02d", i), fmt.Sprintf("%%%d", 100+i), fmt.Sprintf("work:%d.1", i)
+		st.Sessions = append(st.Sessions, s)
+	}
+	st.Queue = nil
+	return st
+}
+
+// TestNarrowScrollsToTheSelection: on a phone, two lines a row fill the
+// screen fast; the selected row stays on it.
+func TestNarrowScrollsToTheSelection(t *testing.T) {
+	m, _ := loadedWith(t, 50, manySessions(30))
+	var next tea.Model = m
+	next, _ = key(next, "2")
+	for range 25 {
+		next, _ = key(next, "down")
+	}
+	got := next.(Model)
+	if !strings.Contains(ansi.Strip(got.render()), "agent-25") {
+		t.Fatalf("the selected agent-25 is off the screen:\n%s", ansi.Strip(got.render()))
+	}
+	if got := len(strings.Split(got.render(), "\n")); got != 30 {
+		t.Fatalf("%d lines on a 30-line screen", got)
+	}
+	// A tap on the row it shows selects that row.
+	y := lineOf(t, next, "agent-24")
+	next, _ = tap(next, 5, y)
+	if s, _ := next.(Model).selected(); s.Name != "agent-24" {
+		t.Fatalf("the tap selected %s", s.Name)
+	}
+}
+
+// TestFirstTapOnTheSelectedRowOnlyShows: the default selection is not a
+// tap; the step shows before a tap runs it, and a key in between disarms.
+func TestFirstTapOnTheSelectedRowOnlyShows(t *testing.T) {
+	m, _ := loadedWith(t, 50, queueState())
+	var ran []string
+	m.opt.Run = func(argv []string) error { ran = argv; return nil }
+	y := lineOf(t, m, "app-feature")
+	next, cmd := tap(m, 5, y)
+	if cmd != nil || ran != nil {
+		t.Fatal("one tap on the preselected row ran a step")
+	}
+	if !strings.Contains(next.(Model).flash, "tap again: tmux switch-client -t %1") {
+		t.Fatalf("flash %q", next.(Model).flash)
+	}
+	next, _ = key(next, "down")
+	next, _ = key(next, "up")
+	if _, cmd = tap(next, 5, y); cmd != nil {
+		t.Fatal("a tap after a key ran the step")
+	}
+}
+
+func TestWheelMovesTheSelection(t *testing.T) {
+	m, _ := loadedWith(t, 50, queueState())
+	next, _ := m.Update(tea.MouseWheelMsg{X: 5, Y: 6, Button: tea.MouseWheelDown})
+	if it, _ := next.(Model).selectedQueue(); it.Pane != "%2" {
+		t.Fatalf("wheel down selected %s", it.Pane)
+	}
+	next, _ = next.Update(tea.MouseWheelMsg{X: 5, Y: 6, Button: tea.MouseWheelUp})
+	if it, _ := next.(Model).selectedQueue(); it.Pane != "%1" {
+		t.Fatalf("wheel up selected %s", it.Pane)
 	}
 }

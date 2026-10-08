@@ -80,10 +80,7 @@ func (m Model) render() string {
 		}
 		return strings.Join(append(out, "", strings.Repeat(" ", max((w-lipgloss.Width(why))/2, 0))+m.st.faint.Render(why)), "\n")
 	}
-	body := m.body(w).lines
-	if len(body) > m.height-len(out)-1 {
-		body = body[:max(m.height-len(out)-1, 0)]
-	}
+	body := m.visible(w).lines
 	out = append(out, body...)
 	for len(out) < m.height-1 {
 		out = append(out, "")

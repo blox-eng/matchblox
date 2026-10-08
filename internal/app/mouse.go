@@ -27,32 +27,44 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	w := max(m.width, minWidth)
 	if ms.Y == 1 {
 		if tab, ok := m.tabAt(w, ms.X); ok {
-			m.tab, m.flash = tab, ""
+			m.tab, m.flash, m.armed = tab, "", ""
 		}
 		return m, nil
 	}
-	b := m.body(w)
+	b := m.visible(w)
 	i := ms.Y - chrome
-	if i < 0 || i >= len(b.rows) || i >= m.height-chrome-1 || b.rows[i] < 0 {
+	if i < 0 || i >= len(b.rows) || b.rows[i] < 0 {
 		return m, nil
 	}
-	row := b.rows[i]
-	if row == m.rowIndex() {
-		a := m.primary()
-		if a == nil {
-			return m, nil
-		}
-		if a.nav && !a.destructive {
-			return m.confirm(*a)
-		}
-		m.pending = a
+	m.selectRow(b.rows[i])
+	a := m.primary()
+	if a == nil {
+		m.armed, m.flash = "", "nothing to do here"
 		return m, nil
 	}
-	m.selectRow(row)
-	m.flash = ""
-	if a := m.primary(); a != nil {
-		m.flash = "tap again: " + a.String()
+	// The second tap runs what the first one showed, and only that: a row
+	// that moved under the finger shows its own step first.
+	if m.armed != a.String() {
+		m.armed, m.flash = a.String(), "tap again: "+a.String()
+		return m, nil
 	}
+	m.armed = ""
+	if a.nav && !a.destructive {
+		return m.confirm(*a)
+	}
+	m.pending = a
+	return m, nil
+}
+
+// wheel is a swipe on a phone: it moves the selection, as ↑ and ↓ do.
+func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
+	switch ms.Button {
+	case tea.MouseWheelUp:
+		m.move(-1)
+	case tea.MouseWheelDown:
+		m.move(1)
+	}
+	m.armed = ""
 	return m, nil
 }
 

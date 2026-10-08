@@ -13,7 +13,7 @@ import (
 
 func TestHomeArgvOutsideTmux(t *testing.T) {
 	got := HomeArgv(false, true, []string{"/usr/local/bin/matchblox", "--no-motion"})
-	want := []string{"tmux", "new-session", "-A", "-s", "matchblox", "/usr/local/bin/matchblox", "--no-motion"}
+	want := []string{"tmux", "new-session", "-A", "-s", "matchblox", "-e", "MATCHBLOX_HOME=1", "/usr/local/bin/matchblox", "--no-motion"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -60,6 +60,7 @@ func TestWayBackParses(t *testing.T) {
 	sock := fmt.Sprintf("matchblox-test-%d", os.Getpid())
 	cmd := exec.Command("tmux", "-L", sock, "-f", os.DevNull, "new-session", "-d", "-s", "work", //nolint:gosec // test argv
 		";", "source-file", conf,
+		";", "source-file", conf, // people source their conf again after an edit
 		";", "list-keys", "-T", "prefix", "m",
 		";", "list-keys", "-T", "root", "MouseDown1Status",
 		";", "show-options", "-g", "status-left",
@@ -72,13 +73,16 @@ func TestWayBackParses(t *testing.T) {
 		t.Fatalf("tmux: %v\n%s", err, stderr.String())
 	}
 	for _, want := range []string{
-		"bind-key -T prefix m switch-client -t matchblox",
-		`"switch-client -t matchblox"`,
+		"bind-key -T prefix m switch-client -t =matchblox",
+		`"switch-client -t =matchblox"`,
 		"#[range=user|matchblox] ◂ matchblox #[norange]",
 		"status-left-length 40",
 	} {
 		if !strings.Contains(string(out), want) {
 			t.Fatalf("tmux lacks %q:\n%s", want, out)
 		}
+	}
+	if n := strings.Count(string(out), "◂ matchblox"); n != 1 {
+		t.Fatalf("sourced twice, the status line has %d labels:\n%s", n, out)
 	}
 }
