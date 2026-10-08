@@ -54,7 +54,9 @@ type Session struct {
 	// adapter: what it said last, and whether that asks the person.
 	LastLine string `json:"last_line,omitempty"`
 	Asks     bool   `json:"asks,omitempty"`
-	FromPane bool   `json:"from_pane,omitempty"` // busy and idle were read from the pane
+	// Permits: an approval menu, where Enter takes the selected choice.
+	Permits  bool `json:"permits,omitempty"`
+	FromPane bool `json:"from_pane,omitempty"` // busy and idle were read from the pane
 }
 
 // IdlePane is a pane that hosts no agent.
@@ -562,7 +564,9 @@ func (s *Sampler) readPanes(sessions []Session, idx []int, now time.Time) {
 			sess.Status, sess.Idle = "idle", now.Sub(prev.changed).Truncate(time.Second)
 		}
 		sess.FromPane = true
-		sess.LastLine, sess.Asks = said.Screen(t)
+		var kind said.Kind
+		sess.LastLine, kind = said.Screen(t)
+		sess.Asks, sess.Permits = kind == said.Asks, kind == said.Permits
 	}
 }
 

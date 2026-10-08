@@ -137,7 +137,10 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 		}
 		if s.Status == "idle" && !s.Busy {
 			state := StateFinished
-			if s.Asks {
+			switch {
+			case s.Permits:
+				state = StatePermission // answered in its pane: a typed line would approve it
+			case s.Asks:
 				state = StateQuestion
 			}
 			items = append(items, Item{

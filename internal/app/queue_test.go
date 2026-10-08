@@ -393,29 +393,24 @@ func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
 	st := fixtureState()
 	q := "Would you like to run the following command?"
 	st.Sessions = append(st.Sessions, sample.Session{PID: 900, Pane: "%9", Target: "api:1.1", Tab: "api", Name: "codex",
-		Status: "idle", Idle: time.Minute, Context: "unmeasured", FromPane: true, Asks: true, LastLine: q, Procs: 1})
-	st.Queue = []queue.Item{{Pane: "%9", Target: "api:1.1", Name: "codex", State: queue.StateQuestion,
+		Status: "idle", Idle: time.Minute, Context: "unmeasured", FromPane: true, Permits: true, LastLine: q, Procs: 1})
+	st.Queue = []queue.Item{{Pane: "%9", Target: "api:1.1", Name: "codex", State: queue.StatePermission,
 		Since: st.At.Add(-time.Minute), LastLine: q, Estimated: true, FromPane: true}}
 	for _, w := range []int{100, 50} {
 		m, _ := loadedWith(t, w, st)
 		out := ansi.Strip(m.render())
-		for _, want := range []string{"codex", "waits", "Would you like to run", "from the pane"} {
+		for _, want := range []string{"codex", "asks", "Would you like to run", "from the pane"} {
 			if !strings.Contains(out, want) {
 				t.Fatalf("width %d: the queue lacks %q:\n%s", w, want, out)
 			}
 		}
 	}
+	// An approval menu is answered in its pane: Enter there takes the
+	// selected choice, so the console never types a line into it.
 	m, f := loadedWith(t, 100, st)
 	next, _ := key(m, "a")
-	next = typeText(next, "y")
-	next, _ = key(next, "enter")
-	if _, cmd := key(next, "y"); cmd == nil {
-		t.Fatal("no answer")
-	} else {
-		cmd()
-	}
-	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "answer:%9" {
-		t.Fatalf("acts %+v", acts)
+	if nm := next.(Model); nm.input != nil || !strings.Contains(nm.flash, "Enter goes there") || len(f.acts()) != 0 {
+		t.Fatalf("a on an approval menu: input %+v flash %q acts %+v", nm.input, nm.flash, f.acts())
 	}
 	m.tab, m.selPID = tabSessions, 900
 	out := ansi.Strip(m.render())

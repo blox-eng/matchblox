@@ -191,7 +191,7 @@ func TestQueueKeepsUnseenForAGrace(t *testing.T) {
 // when its pane is idle and asks; the item says it was read from the pane.
 func TestAPaneThatAsksWaitsForYou(t *testing.T) {
 	asks := session("", "%4", "codex", "idle", time.Minute)
-	asks.FromPane, asks.Asks, asks.LastLine = true, true, "Would you like to run the following command?"
+	asks.FromPane, asks.Asks, asks.LastLine = true, true, "Should I also update the docs?"
 	done := session("", "%5", "opencode", "idle", 2*time.Minute)
 	done.FromPane, done.LastLine = true, "Done. All 42 tests pass."
 	q := New()
@@ -203,6 +203,13 @@ func TestAPaneThatAsksWaitsForYou(t *testing.T) {
 	byName := map[string]Item{items[0].Name: items[0], items[1].Name: items[1]}
 	if it := byName["codex"]; it.State != StateQuestion || !it.FromPane || !it.Estimated || it.LastLine != asks.LastLine {
 		t.Fatalf("codex %+v", it)
+	}
+	// An approval menu is a permission: a typed line and Enter would approve.
+	menu := session("", "%6", "codex", "idle", time.Minute)
+	menu.FromPane, menu.Permits, menu.LastLine = true, true, "Would you like to run the following command?"
+	q.Merge([]sample.Session{menu}, at(600))
+	if it := q.Items()[0]; it.State != StatePermission {
+		t.Fatalf("an approval menu is %q, want permission", it.State)
 	}
 	if it := byName["opencode"]; it.State != StateFinished || !it.FromPane || it.LastLine != done.LastLine {
 		t.Fatalf("opencode %+v", it)

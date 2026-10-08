@@ -8,53 +8,87 @@ import (
 	"unicode"
 )
 
-// within is how many lines with words, from the end, a question may sit
-// above: an approval prompt lists its choices and a key hint under the
-// question, and a reply its progress line. A question further up was
-// answered.
-const within = 8
+// Kind is what a screen asks of the person.
+type Kind int
+
+const (
+	None Kind = iota
+	// Asks is a question: the person can answer it with a line of text.
+	Asks
+	// Permits is an approval prompt: a menu where Enter takes the selected
+	// choice. It is answered in its pane, never by typing a line into it.
+	Permits
+)
+
+func (k Kind) String() string { return [...]string{"none", "asks", "permits"}[k] }
+
+const (
+	// screenWithin is how many lines with words, from the bottom of a pane,
+	// a prompt may sit above: an approval prompt lists its choices and a key
+	// hint under the question. A question further up was answered.
+	screenWithin = 8
+	// replyWithin is the end of a reply: a question further up in a reply
+	// is one the agent answered itself.
+	replyWithin = 3
+)
 
 var (
-	// asksRe is a prompt that asks without ending in a question mark:
-	// aider's (Y)es/(N)o, a [y/n], OpenCode's permission box, or a question
-	// with a sentence after it.
-	asksRe = regexp.MustCompile(`(?i)\(y\)es/\(n\)o|[\[(]y/n[\])]|^permission required\b|\pL\?\s+\pL`)
+	// permitsRe is an approval prompt, in the agents' own words: OpenCode's
+	// permission box and its choices, aider's (Y)es/(N)o, a [y/n], Codex's
+	// confirm hint, a numbered Yes choice (Claude Code, Codex).
+	permitsRe = regexp.MustCompile(`(?i)^permission required\b|^allow once\b|\(y\)es/\(n\)o|[\[(]y/n[\])]|press enter to confirm|^\d\.\s+yes\b`)
+	// midRe is a question with a sentence after it.
+	midRe = regexp.MustCompile(`\pL\?\s+\pL`)
 	// hintRe is a line of key hints or a footer, never what the agent said.
 	hintRe = regexp.MustCompile(`(?i)\b(ctrl|shift|alt|esc|enter)\b|^\? for shortcuts|^[~/]\S*`)
 	wordRe = regexp.MustCompile(`\pL\pL`)
 )
 
 type line struct {
-	text  string
-	boxed bool // inside a box: an input field, a prompt, a quote
+	text    string
+	boxed   bool // inside a box: an input field, a prompt, a quote
+	person  bool // the person's own turn or draft: › or > or ❯ in front
+	heading bool // a Markdown heading
 }
 
-// Screen reads an agent's pane. When it asks, the line is the question;
-// else it is the last line with words outside the input box and the key
-// hints.
-func Screen(screen string) (string, bool) {
+// Screen reads an agent's pane. When it asks or wants an approval, the line
+// is the question; else it is the last line with words outside the input
+// box and the key hints.
+func Screen(screen string) (string, Kind) {
 	ls := lines(screen)
-	if q, ok := question(ls); ok {
-		return q, true
-	}
-	for i := len(ls) - 1; i >= 0; i-- {
-		if !ls[i].boxed && !hintRe.MatchString(ls[i].text) {
-			return ls[i].text, false
+	win := ls[max(len(ls)-screenWithin, 0):]
+	for _, l := range win {
+		if permitsRe.MatchString(l.text) {
+			for i := len(win) - 1; i >= 0; i-- {
+				if strings.HasSuffix(win[i].text, "?") && !strings.HasPrefix(win[i].text, "?") {
+					return win[i].text, Permits
+				}
+			}
+			return l.text, Permits
 		}
 	}
-	return "", false
+	if q, ok := question(win); ok {
+		return q, Asks
+	}
+	for i := len(ls) - 1; i >= 0; i-- {
+		if !ls[i].boxed && !ls[i].person && !hintRe.MatchString(ls[i].text) {
+			return ls[i].text, None
+		}
+	}
+	return "", None
 }
 
 // Reply reads an agent's last reply (Markdown). The progress line that
-// ends each reply (hooks.ProgressPrompt) is never what it said.
+// ends each reply (hooks.ProgressPrompt) and headings are never what it
+// said.
 func Reply(text string) (string, bool) {
 	var ls []line
 	for _, l := range lines(text) {
-		if !strings.HasPrefix(l.text, "Progress [") {
+		if !l.heading && !strings.HasPrefix(l.text, "Progress [") {
 			ls = append(ls, l)
 		}
 	}
-	if q, ok := question(ls); ok {
+	if q, ok := question(ls[max(len(ls)-replyWithin, 0):]); ok {
 		return q, true
 	}
 	if len(ls) == 0 {
@@ -65,30 +99,43 @@ func Reply(text string) (string, bool) {
 
 // lines keeps the lines with words, without the frame around them.
 func lines(s string) []line {
-	var out []line
 	// The text is not trusted: a control key would drive the terminal.
 	s = strings.Map(func(r rune) rune {
-		if r != '\n' && unicode.IsControl(r) {
+		switch {
+		case r == '\t':
+			return ' '
+		case r != '\n' && unicode.IsControl(r):
 			return -1
 		}
 		return r
 	}, s)
+	var out []line
 	for _, raw := range strings.Split(s, "\n") {
 		t := strings.TrimFunc(raw, frame)
-		if len(wordRe.FindAllString(t, 2)) < 2 && !strings.HasSuffix(t, "?") {
+		if len(wordRe.FindAllString(t, 2)) < 2 && !strings.HasSuffix(t, "?") && !permitsRe.MatchString(t) {
 			continue
 		}
 		in := strings.TrimLeft(raw, " ")
-		out = append(out, line{t, strings.HasPrefix(in, "│") || strings.HasPrefix(in, "┃")})
+		out = append(out, line{
+			text:    t,
+			boxed:   strings.HasPrefix(in, "│") || strings.HasPrefix(in, "┃"),
+			person:  strings.HasPrefix(in, "›") || strings.HasPrefix(in, ">") || strings.HasPrefix(in, "❯"),
+			heading: strings.HasPrefix(in, "#"),
+		})
 	}
 	return out
 }
 
+// question is the last line, of the person's own lines and the input box
+// left out, that asks.
 func question(ls []line) (string, bool) {
-	for i := len(ls) - 1; i >= 0 && i >= len(ls)-within; i-- {
-		t := ls[i].text
-		if (strings.HasSuffix(t, "?") && !strings.HasPrefix(t, "?")) || asksRe.MatchString(t) {
-			return t, true
+	for i := len(ls) - 1; i >= 0; i-- {
+		l := ls[i]
+		if l.boxed || l.person {
+			continue
+		}
+		if (strings.HasSuffix(l.text, "?") && !strings.HasPrefix(l.text, "?")) || midRe.MatchString(l.text) {
+			return l.text, true
 		}
 	}
 	return "", false
