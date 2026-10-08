@@ -140,10 +140,10 @@ type Model struct {
 	recs       []advice.Rec
 	queue      []queue.Item
 	queuePane  string
-	doors      []doors.Door // the open doors, above the queue
-	doorPick   string       // the selected door
-	doorAt     int          // its row, for the door after it when it folds
-	previewTop int          // the first line of a door's diff on screen
+	doors      []doors.Door    // the open doors, above the queue
+	doorPick   string          // the selected door
+	doorAt     int             // its row, for the door after it when it folds
+	previewTop int             // the first line of a door's diff on screen
 	hostAt     int             // the host under the cursor of the hosts door
 	hostPicks  map[string]bool // the hosts the builder picked
 	paneSel    int
