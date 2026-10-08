@@ -11,7 +11,7 @@ shows the keys of the open tab.
 | `↑` or `k` | Selects the row above. |
 | `↓` or `j` | Selects the row below. |
 | `Enter` | Shows the safe action of the row: go to the agent's pane (Queue, Sessions, Procs, Panes), open a shell in the worktree (Git), do a recommendation, or show a setup step. |
-| `x` | Shows the other action of the row: end a stale session (Sessions), kill a detached busy loop (Procs), remove a worktree (Git), close a setup step (Queue). |
+| `x` | Shows the other action of the row: the second action of a recommendation or close a setup step (Queue), end a stale session (Sessions), kill a detached busy loop (Procs), remove the marked worktrees (Git). |
 | `a` | Answers the selected agent in one line. A permission prompt is answered in its pane. |
 | `1-7` | Opens a tab: Queue, Sessions, Machine, Procs, Git, History, Panes. |
 | `Tab` or `Shift+Tab` | Opens the next or the previous tab. |
@@ -52,10 +52,13 @@ The action line shows `RUN` and the exact command.
 | `Enter` | Opens the console of the host, or adds a host. |
 | `x` | Removes a host from the list. matchblox stays on that host. |
 | `y` | Confirms the remove or the connect. |
-| `q` | Quits. |
+| `Esc` | Leaves the list of hosts to add. |
+| `q` or `Ctrl+C` | Quits. |
 
 ## A phone
 
-A tap selects a row. A second tap on the same row runs its safe action: the
-action line says `tap again: <command>` between the two taps. A tap on a
+A tap selects a row, and the action line says `tap again: <command>`. A
+second tap on the same row goes to the agent's pane. Any other action (a
+recommendation, a setup step, a destructive step) then shows `RUN` and
+waits for `Enter` or a typed `y`, as from the keys. A tap on a
 tab opens it. A tap on a column header sorts by it.

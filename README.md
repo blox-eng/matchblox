@@ -38,10 +38,12 @@ Works with Claude Code, Codex, OpenCode, and any agent in tmux.
    Until the first release it builds from source and needs Go, the same as
    `go install github.com/blox-eng/matchblox/cmd/matchblox@latest`.
 
-2. Run `matchblox`. Answer "Where do your agents run?", then open the setup
-   steps in the queue: tmux, the queue hooks, the way back.
+2. Run `matchblox` outside tmux (the script starts it for you). Answer
+   "Where do your agents run?", then open the setup steps in the queue:
+   tmux, the queue hooks, the way back.
 
-3. Start your agents in tmux, for example `tmux new -s app claude`. When an
+3. In another terminal, start your agents in tmux, for example
+   `tmux new -s app claude`. When an
    agent waits for you, it comes to the top of the queue. `Enter` jumps to
    it, and `prefix m` comes back.
 
@@ -81,7 +83,8 @@ Every key: [Keys](https://docs.matchblox.com/keys/).
 Set the startup snippet of your SSH app (Termius, for example) to
 `matchblox`, or run `ssh -t ws-1 matchblox`. The console is the first
 screen. Tap a row twice to go to its pane; tap `◂ matchblox` in the tmux
-status line to come back. See [The phone](https://docs.matchblox.com/phone/).
+status line (with `set -g mouse on`) to come back, or press `prefix m`. See
+[The phone](https://docs.matchblox.com/phone/).
 
 ## Safety
 
@@ -89,6 +92,13 @@ Read-only by default. Every action shows its exact command before it runs.
 A destructive action needs `x` and then a typed `y`, and checks its facts
 again just before it runs. See [Safety](https://docs.matchblox.com/safety/)
 and [SECURITY.md](SECURITY.md).
+
+## Config
+
+matchblox works without a config. The first run writes
+`~/.config/matchblox/config.toml` with goals for this machine and the agents
+it finds. Every key is in [config.example.toml](config.example.toml) and on
+[Config](https://docs.matchblox.com/config/).
 
 ## Built on tmux
 

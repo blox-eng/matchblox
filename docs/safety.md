@@ -3,7 +3,9 @@
 matchblox runs commands on your machine for you. These rules hold for every
 command.
 
-- It reads, and does nothing by itself. Every action starts from a key.
+- It reads, and does nothing to your agents, processes or checkouts by
+  itself. Every action starts from a key. The one exception is yours:
+  `[hooks] alert` in the config runs the command you name on each alert.
 - Every action shows its exact command before it runs.
 - `Enter` never runs a destructive action. That needs `x`, then a typed
   `y`.

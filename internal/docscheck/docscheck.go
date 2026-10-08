@@ -10,11 +10,14 @@ import (
 	"strings"
 )
 
-// Ref is one key or command and where the docs name it.
+// Ref is one key or command and where the docs name it: the file, the
+// line, the heading it is under, and if it is in a Key table.
 type Ref struct {
-	File string
-	Line int
-	Text string
+	File    string
+	Line    int
+	Text    string
+	Section string
+	Table   bool
 }
 
 // Files lists the Markdown a builder reads: README.md, CONTRIBUTING.md and
@@ -35,24 +38,46 @@ func Files(root string) ([]string, error) {
 
 var codeSpan = regexp.MustCompile("`([^`]+)`")
 
+// keyWords are the keys prose names by a word, not a character.
+var keyWords = map[string]bool{
+	"enter": true, "esc": true, "space": true, "tab": true, "shift+tab": true,
+	"backspace": true, "ctrl+c": true, "↑": true, "↓": true,
+}
+
 // Keys returns each key in the first column of a Markdown table whose first
-// header cell is "Key". A cell can name more than one key: `↑` or `k`.
+// header cell is "Key" (a cell can name more than one: `↑` or `k`), and
+// each key in prose: a code span of one ASCII character or a key word.
 func Keys(files []string) ([]Ref, error) {
 	var refs []Ref
-	err := eachLine(files, func(file string, n int, line string, _ bool, st *state) {
+	err := eachLine(files, func(file string, n int, line string, fenced bool, st *state) {
+		if fenced {
+			return
+		}
 		cells := tableCells(line)
+		prose := line
 		switch {
 		case cells == nil:
 			st.keyTable = false
 		case strings.EqualFold(strings.TrimSpace(cells[0]), "key"):
 			st.keyTable = true
+			return
 		case st.keyTable && !strings.HasPrefix(strings.TrimSpace(cells[0]), "-"):
 			for _, m := range codeSpan.FindAllStringSubmatch(cells[0], -1) {
-				refs = append(refs, Ref{file, n, m[1]})
+				refs = append(refs, Ref{File: file, Line: n, Text: m[1], Section: st.section, Table: true})
+			}
+			prose = strings.Join(cells[1:], "|")
+		}
+		for _, m := range codeSpan.FindAllStringSubmatch(prose, -1) {
+			if isKey(m[1]) {
+				refs = append(refs, Ref{File: file, Line: n, Text: m[1], Section: st.section})
 			}
 		}
 	})
 	return refs, err
+}
+
+func isKey(s string) bool {
+	return (len(s) == 1 && s[0] > ' ' && s[0] < 0x7f) || keyWords[strings.ToLower(s)]
 }
 
 // Commands returns each matchblox command line the docs show: a code span
@@ -60,7 +85,7 @@ func Keys(files []string) ([]Ref, error) {
 // prompt). The text starts at matchblox and ends at the span or the line.
 func Commands(files []string) ([]Ref, error) {
 	var refs []Ref
-	err := eachLine(files, func(file string, n int, line string, fenced bool, _ *state) {
+	err := eachLine(files, func(file string, n int, line string, fenced bool, st *state) {
 		var cands []string
 		if fenced {
 			cands = []string{line}
@@ -72,14 +97,17 @@ func Commands(files []string) ([]Ref, error) {
 		for _, c := range cands {
 			c = strings.TrimPrefix(strings.TrimSpace(c), "$ ")
 			if c == "matchblox" || strings.HasPrefix(c, "matchblox ") {
-				refs = append(refs, Ref{file, n, c})
+				refs = append(refs, Ref{File: file, Line: n, Text: c, Section: st.section})
 			}
 		}
 	})
 	return refs, err
 }
 
-type state struct{ keyTable bool }
+type state struct {
+	keyTable bool
+	section  string
+}
 
 func eachLine(files []string, f func(file string, n int, line string, fenced bool, st *state)) error {
 	for _, file := range files {
@@ -92,9 +120,12 @@ func eachLine(files []string, f func(file string, n int, line string, fenced boo
 		for sc.Scan() {
 			n++
 			line := sc.Text()
-			if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			if t := strings.TrimSpace(line); strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
 				fenced = !fenced
 				continue
+			}
+			if !fenced && strings.HasPrefix(line, "#") {
+				st.section = strings.TrimSpace(strings.TrimLeft(line, "#"))
 			}
 			f(file, n, line, fenced, st)
 		}

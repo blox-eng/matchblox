@@ -14,12 +14,16 @@ on:
       - "requirements-docs.txt"
       - "config.example.toml"
       - "www/demo/replay.svg"
+      - "www/assets/fonts/**"
+      - "www/assets/matchblox-mark-dark.svg"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
+# A deploy that runs is never cancelled; a newer push to a pull request
+# cancels the older build.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -53,7 +57,7 @@ jobs:
           if [ "$EVENT" != pull_request ]; then
             case "$REF" in
               refs/tags/v*) deploy=true ;;
-              *) [ -z "$(git tag -l 'v*')" ] && deploy=true ;;
+              refs/heads/main) [ -z "$(git tag -l 'v*')" ] && deploy=true ;;
             esac
           fi
           echo "deploy=$deploy" >> "$GITHUB_OUTPUT"

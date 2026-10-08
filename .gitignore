@@ -2,3 +2,4 @@
 # wrangler dev cache
 .wrangler/
 site/
+.venv/

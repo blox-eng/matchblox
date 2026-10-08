@@ -12,8 +12,9 @@ host from `~/.ssh/config`, or type one. Or connect it yourself:
 matchblox connect ws-1
 ```
 
-This uses your own ssh login one time. It installs the verified matchblox
-on `ws-1`. It adds a key that can start only the console's stream there: no
+This uses your own ssh login one time. It runs the install script on
+`ws-1`. Until the first release, that script builds from source, so `ws-1`
+needs Go. It adds a key that can start only the console's stream there: no
 shell, no forwarding.
 
 ## Open the console of a host

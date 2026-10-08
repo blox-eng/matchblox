@@ -17,8 +17,8 @@ tmux, matchblox has nothing to show.
   service keeps sampling the machine when no console is open, and every
   console is a client of it.
 - **Attach from any terminal.** A tmux session follows you from the desk to
-  a laptop to a phone. The console does too: it lives in the tmux session
-  `matchblox`, and every connection attaches to it.
+  a laptop to a phone. The console does too: run outside tmux, it lives in the tmux
+  session `matchblox`, and every connection attaches to it.
 - **One reference.** tmux has one manual page. matchblox has these docs,
   and a test holds every key and command in them to the binary.
 - **A small example config.** tmux ships `example_tmux.conf`. matchblox

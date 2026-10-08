@@ -21,8 +21,8 @@ matchblox
 ssh -t ws-1 matchblox
 ```
 
-If ssh does not find matchblox, use its full path, for example
-`~/go/bin/matchblox`.
+If ssh does not find matchblox, use its full path: `~/.local/bin/matchblox`,
+or `~/go/bin/matchblox` after `go install`.
 
 Outside tmux, `matchblox` attaches to the tmux session `matchblox`, or
 starts it. A second phone or laptop attaches to the same session.
@@ -32,7 +32,11 @@ starts it. A second phone or laptop attaches to the same session.
 1. Tap an agent in the queue. The action line says `tap again: <command>`.
 2. Tap it again. You are in the agent's pane.
 3. To come back, tap `◂ matchblox` at the left of the tmux status line, or
-   press the tmux prefix and then `m`.
+   press `prefix m` (the tmux prefix, then m).
+
+The tap on `◂ matchblox` needs the tmux mouse: add `set -g mouse on` to your
+tmux config. Without it, tmux gives the tap to the pane, and only
+`prefix m` comes back.
 
 The console then selects the next agent that waits.
 

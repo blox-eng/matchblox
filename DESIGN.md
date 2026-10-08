@@ -262,8 +262,9 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 - **Tags:** a feature that is not released yet has the tag "Soon".
 - **Then:** the replay of the real console, which starts when it scrolls
   into view; three short blocks; the motto "Light the match. Keep it
-  burning."; the links; the footer (From Blox Engineering · GitHub ·
-  Discord · bloxng.com).
+  burning."; the links; the footer (From Blox Engineering · Docs · GitHub ·
+  Discord · Changelog · bloxng.com). The docs (docs.matchblox.com) use the
+  same tokens and type, and load nothing from another site.
 - **README:** the same recording, as `www/demo/replay.svg`.
 - **Type:** IBM Plex Sans (variable) for text, IBM Plex Mono 400 and 500 for
   commands, labels and the replay. Both are served from the site.
