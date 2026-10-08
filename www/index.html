@@ -39,6 +39,7 @@
       <a class="news" href="https://github.com/blox-eng/matchblox/blob/main/CHANGELOG.md"><span class="tag">New</span> <span>The queue, and a match for each agent</span> <span class="go">Changelog →</span></a>
       <h1>Light an idea. Keep it burning.</h1>
       <p class="sub">Once, everyone carried a matchbox to light a fire wherever they went. matchblox is the one you carry to every terminal. It shows which coding agent works, which one waits for you, and what the machine needs, so the build never goes out.</p>
+      <p class="works">Works with Claude Code, Codex, OpenCode, and any agent in tmux.</p>
             <section class="install" aria-labelledby="install-h">
         <h2 class="visually-hidden" id="install-h">Install</h2>
         <div class="tabs" role="tablist" aria-label="How to install">
@@ -73,7 +74,7 @@
     <section class="stage" id="console" aria-label="The matchblox console on a demo machine">
 <!-- replay:still -->
 <pre class="replay" aria-hidden="true"> <span class="fg-accent">▰</span> <span class="fg-fg">matchblox</span><span class="fg-faint"> · </span><span class="fg-muted">ws-1</span><span class="fg-hair">  │  </span><span class="fg-faint">cpu</span> <span class="fg-fg"> 52%</span> <span class="fg-faint">▄▅▄▄▄▄▄▅</span><span class="fg-hair">  │  </span><span class="fg-faint">mem</span> <span class="fg-fg">26G/64G</span> <span class="fg-faint">▄▄▄▄▄▄▄▄</span><span class="fg-hair">  │  </span><span class="fg-faint">load</span> <span class="fg-fg">6.2</span> <span class="fg-faint">████████</span>            
- <span class="fg-accent">1 QUEUE 3</span>   <span class="fg-faint">2 SESSIONS</span>   <span class="fg-faint">3 MACHINE</span>   <span class="fg-accent u">4 PROCS</span>   <span class="fg-faint">5 GIT</span>   <span class="fg-faint">6 HISTORY</span>   <span class="fg-faint">7 PANES</span>                         
+ <span class="fg-accent">1 QUEUE 4</span>   <span class="fg-faint">2 SESSIONS</span>   <span class="fg-faint">3 MACHINE</span>   <span class="fg-accent u">4 PROCS</span>   <span class="fg-faint">5 GIT</span>   <span class="fg-faint">6 HISTORY</span>   <span class="fg-faint">7 PANES</span>                         
  <span class="fg-faint">RUN </span><span class="fg-fg">kill 4242</span>   <span class="fg-neg">y</span><span class="fg-muted"> run  any other key cancels</span>                                                       
 <span class="fg-hair">────────────────────────────────────────────────────────────────────────────────────────────────────</span>
 
@@ -93,8 +94,8 @@
  <span class="fg-muted">1400     </span><span class="fg-fg">claude              0%   </span><span class="fg-muted">9.8M    pane %3 · docs-guide</span>                                     
  <span class="fg-muted">1500     </span><span class="fg-fg">zsh                 0%   </span><span class="fg-muted">9.8M    pane %4</span>                                                  
  <span class="fg-muted">1600     </span><span class="fg-fg">claude              0%   </span><span class="fg-muted">9.8M    pane %5 · billing</span>                                        
-
-
+ <span class="fg-muted">1700     </span><span class="fg-fg">codex               0%   </span><span class="fg-muted">9.8M    pane %6 · codex</span>                                          
+ <span class="fg-muted">1800     </span><span class="fg-fg">MainThread          0%   </span><span class="fg-muted">9.8M    pane %7 · opencode</span>                                       
 
 
 
@@ -103,6 +104,33 @@
 
 </pre>
 <!-- /replay:still -->
+    </section>
+    <section class="agents" aria-labelledby="agents-h">
+      <h2 id="agents-h">Every agent in tmux</h2>
+      <p class="lede">Start each agent in a tmux session. matchblox finds it, jumps to it with Enter, and answers it with a.</p>
+      <div class="runs">
+        <figure class="run">
+          <figcaption>Claude Code</figcaption>
+          <code><span class="p" aria-hidden="true">$</span> tmux new -s app claude</code>
+          <div class="row"><span class="fg-flame-amber">✦</span> <span class="w">busy</span> <span class="i fg-muted"></span> <span class="n">app</span> <span class="fg-muted">app:1.1</span> <span class="t fg-muted">██████░░░░ 62%</span></div>
+        </figure>
+        <figure class="run">
+          <figcaption>Codex</figcaption>
+          <code><span class="p" aria-hidden="true">$</span> tmux new -s api codex</code>
+          <div class="row"><span class="fg-match-head">╿</span> <span class="w">waits</span> <span class="i fg-muted">1m</span> <span class="n">codex</span> <span class="fg-muted">api:1.1</span> <span class="t fg-muted"><span class="fg-faint">from the pane:</span> Would you like to run the following command?</span></div>
+        </figure>
+        <figure class="run">
+          <figcaption>OpenCode</figcaption>
+          <code><span class="p" aria-hidden="true">$</span> tmux new -s web opencode</code>
+          <div class="row"><span class="fg-flame-amber">✦</span> <span class="w">busy</span> <span class="i fg-muted"></span> <span class="n">opencode</span> <span class="fg-muted">web:1.1</span> <span class="t fg-faint">not measured</span></div>
+        </figure>
+        <figure class="run">
+          <figcaption>Any other agent</figcaption>
+          <code><span class="p" aria-hidden="true">$</span> tmux new -s docs aider</code>
+          <div class="row"><span class="fg-match-ember">╿</span> <span class="w">idle</span> <span class="i fg-muted">4m</span> <span class="n">aider</span> <span class="fg-muted">docs:1.1</span> <span class="t fg-faint">not measured</span></div>
+        </figure>
+      </div>
+      <p class="note">Claude Code tells its waits through hooks and shows its context use. Every other agent is read from its pane: busy while the pane moves, waiting when it is idle and asks. Its context shows “not measured”. The first run lists the agents it finds in <code>agents</code> in <code>~/.config/matchblox/config.toml</code>; add any other by its command.</p>
     </section>
     <section class="blocks" aria-label="What it does">
       <div>
