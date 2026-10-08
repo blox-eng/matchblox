@@ -305,3 +305,50 @@ func TestNoCredentialReachesTheSnapshot(t *testing.T) {
 		t.Fatal("positive control: the codex account label is missing, so the check above proves nothing")
 	}
 }
+
+// TestAProcessOfAnotherHomeGetsNoLabelOfOurs: an agent started with
+// another HOME keeps its files there. Without its own config directory in
+// its environment, matchblox shows no account and no OpenCode figure for
+// it, never those of the service's home.
+func TestAProcessOfAnotherHomeGetsNoLabelOfOurs(t *testing.T) {
+	root := copyFixture(t)
+	home := filepath.Join(root, "home")
+	writeFile(t, filepath.Join(home, ".claude.json"), `{"oauthAccount":{"emailAddress":"builder@example.com","organizationType":"claude_max"}}`)
+	writeFile(t, filepath.Join(root, "other-claude", ".claude.json"), `{"oauthAccount":{"emailAddress":"builder@example.com","organizationType":"claude_max"}}`)
+	writeFile(t, filepath.Join(home, ".codex", "auth.json"), codexAuth(root))
+	data := filepath.Join(home, ".local", "share", "opencode")
+	opencodeStore(t, data, "ses_main", "/work/web", fixtureNow.UnixMilli()-60_000, "")
+	writeFile(t, filepath.Join(home, ".cache", "opencode", "models.json"), `{"zen":{"models":{"model-made-up":{"limit":{"context":200000}}}}}`)
+
+	for i, p := range []struct {
+		pid  int
+		comm string
+		env  []string
+	}{
+		{980, "claude", []string{"HOME=/home/other"}},
+		{981, "codex", []string{"HOME=/home/other"}},
+		{982, "opencode", []string{"HOME=/home/other"}},
+		{983, "claude", []string{"HOME=/home/other", "CLAUDE_CONFIG_DIR=" + filepath.Join(root, "other-claude")}},
+	} {
+		pane := "%" + strconv.Itoa(50+i)
+		addProc(t, root, p.pid, 1, p.comm, []string{p.comm}, pane)
+		setEnv(t, root, p.pid, append([]string{"TMUX_PANE=" + pane}, p.env...)...)
+		symlink(t, "/work/web", filepath.Join(root, "proc", strconv.Itoa(p.pid), "cwd"))
+		addPane(t, root, pane+"\tother:"+strconv.Itoa(i)+".1\tw\t"+strconv.Itoa(p.pid)+"\t"+p.comm+"\t/work/web")
+	}
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex", "opencode"}
+	got := byPane(smp.Sample())
+	for _, pane := range []string{"%50", "%51", "%52"} {
+		if s := got[pane]; s.Account != "" || s.Context == "known" {
+			t.Errorf("%s (%s, another HOME): account %q context %q", pane, s.Agent, s.Account, s.Context)
+		}
+	}
+	if s := got["%53"]; s.Account != "builder@example.com · Max" {
+		t.Errorf("its own CLAUDE_CONFIG_DIR: account %q", s.Account)
+	}
+	// Positive control: our own processes still get their label.
+	if s := got["%1"]; s.Account == "" {
+		t.Fatal("our own session lost its label")
+	}
+}

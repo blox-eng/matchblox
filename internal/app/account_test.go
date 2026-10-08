@@ -26,7 +26,7 @@ const demo = "../../testdata/demo"
 func demoState(t *testing.T) proto.State {
 	t.Helper()
 	s := &sample.Sampler{
-		FS: procfs.FS{Root: filepath.Join(demo, "proc")}, Home: filepath.Join(demo, "home"),
+		FS: procfs.FS{Root: filepath.Join(demo, "proc")}, Home: filepath.Join(demo, "home"), HomeAs: "/home/user",
 		Tmux:    func() ([]byte, error) { return os.ReadFile(filepath.Join(demo, "tmux-panes.txt")) },
 		Capture: sample.CaptureDir(filepath.Join(demo, "panes")), Rules: sample.DefaultRules,
 		Agents: []string{"claude", "codex", "opencode"},

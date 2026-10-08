@@ -12,7 +12,9 @@ import (
 
 // agentEnv is where one agent process keeps its files, and how it signs in,
 // read once from its environment. Each process can use another config
-// directory, so two sessions can run under two accounts.
+// directory, so two sessions can run under two accounts. A process with
+// another HOME keeps its files there: unless its environment names a
+// directory, that directory is "" and nothing is read for it.
 type agentEnv struct {
 	claudeDir  string // CLAUDE_CONFIG_DIR, else ~/.claude
 	claudeJSON string // .claude.json next to it: in CLAUDE_CONFIG_DIR, else in the home
@@ -31,6 +33,16 @@ func (s *Sampler) envOf(pid int, key procKey) agentEnv {
 		v, _ := s.FS.Environ(pid, k)
 		return v
 	}
+	home := s.Home
+	if h := get("HOME"); h != "" && filepath.Clean(h) != filepath.Clean(s.homeAs()) {
+		home = ""
+	}
+	under := func(parts ...string) string {
+		if home == "" {
+			return ""
+		}
+		return filepath.Join(append([]string{home}, parts...)...)
+	}
 	abs := func(v, def string) string {
 		if filepath.IsAbs(v) {
 			return filepath.Clean(v)
@@ -38,11 +50,11 @@ func (s *Sampler) envOf(pid int, key procKey) agentEnv {
 		return def
 	}
 	e := agentEnv{
-		claudeDir:  filepath.Join(s.Home, ".claude"),
-		claudeJSON: filepath.Join(s.Home, ".claude.json"),
-		codexHome:  abs(get("CODEX_HOME"), filepath.Join(s.Home, ".codex")),
-		dataHome:   abs(get("XDG_DATA_HOME"), filepath.Join(s.Home, ".local", "share")),
-		cacheHome:  abs(get("XDG_CACHE_HOME"), filepath.Join(s.Home, ".cache")),
+		claudeDir:  under(".claude"),
+		claudeJSON: under(".claude.json"),
+		codexHome:  abs(get("CODEX_HOME"), under(".codex")),
+		dataHome:   abs(get("XDG_DATA_HOME"), under(".local", "share")),
+		cacheHome:  abs(get("XDG_CACHE_HOME"), under(".cache")),
 	}
 	if d := abs(get("CLAUDE_CONFIG_DIR"), ""); d != "" {
 		e.claudeDir, e.claudeJSON = d, filepath.Join(d, ".claude.json")
@@ -60,6 +72,14 @@ func (s *Sampler) envOf(pid int, key procKey) agentEnv {
 	}
 	s.envs[key] = e
 	return e
+}
+
+// joinIn joins under dir, and stays "" when dir is not known.
+func joinIn(dir string, parts ...string) string {
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(append([]string{dir}, parts...)...)
 }
 
 func truthy(v string) bool { return v == "1" || strings.EqualFold(v, "true") }
@@ -88,6 +108,9 @@ func newAccounts() *accounts {
 
 func readCached[T any](m map[string]cached[T], path string, parse func([]byte) T) T {
 	var zero T
+	if path == "" { // a directory that is not known
+		return zero
+	}
 	key, ok := statKey(path)
 	if !ok {
 		return zero
@@ -144,7 +167,7 @@ var codexPlans = map[string]string{"free": "Free", "go": "Go", "plus": "Plus", "
 // from the claims of its id token (decoded, never verified or kept); an API
 // key shows "API key". No token or key leaves this function.
 func (a *accounts) codexAccount(e agentEnv) string {
-	v := readCached(a.labels, filepath.Join(e.codexHome, "auth.json"), func(b []byte) string {
+	v := readCached(a.labels, joinIn(e.codexHome, "auth.json"), func(b []byte) string {
 		var f struct {
 			Mode   string          `json:"auth_mode"`
 			Key    json.RawMessage `json:"OPENAI_API_KEY"`
@@ -201,7 +224,7 @@ func (a *accounts) opencodeAccount(e agentEnv, provider string) string {
 	if provider == "" {
 		return ""
 	}
-	types := readCached(a.types, filepath.Join(e.dataHome, "opencode", "auth.json"), func(b []byte) map[string]string {
+	types := readCached(a.types, joinIn(e.dataHome, "opencode", "auth.json"), func(b []byte) map[string]string {
 		var f map[string]struct {
 			Type string `json:"type"`
 		}

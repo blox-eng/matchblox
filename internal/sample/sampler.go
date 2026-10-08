@@ -130,7 +130,10 @@ type Sampler struct {
 	FS   procfs.Host
 	Sys  procfs.Sys
 	Home string
-	Tmux func() ([]byte, error)
+	// HomeAs is Home as the processes name it in their HOME; empty: Home.
+	// A fixture tree sets it: its processes name a made-up path.
+	HomeAs string
+	Tmux   func() ([]byte, error)
 	// Capture returns the visible text of each pane, by pane id. It reads
 	// only the panes of agents without an adapter.
 	Capture       func(panes []string) map[string]string
@@ -443,6 +446,9 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			}
 			started := now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
 			data := filepath.Join(env.dataHome, "opencode")
+			if env.dataHome == "" {
+				break
+			}
 			if oc, ok := s.opencode.session(data, sess.Cwd, started.UnixMilli()); ok {
 				sess.Context = "fresh"
 				if u, provider, ok := s.opencode.usage(data, env.cacheHome, oc.ID); ok {
@@ -623,9 +629,11 @@ func (s *Sampler) ownerPane(pid int, key procKey, procs map[int]procfs.Proc, byP
 		spid, _, _ := strings.Cut(rest, ",")
 		ours = sock == server.Socket && (server.Server == "" || spid == server.Server)
 	}
-	if e, ok := s.agents.entry(s.envOf(pid, key).claudeDir, pid); ok && e.Tmux != "" && ours {
-		if i := strings.LastIndexByte(e.Tmux, '.'); i >= 0 && strings.HasPrefix(e.Tmux[i+1:], "%") {
-			return e.Tmux[i+1:]
+	if dir := s.envOf(pid, key).claudeDir; dir != "" && ours {
+		if e, ok := s.agents.entry(dir, pid); ok && e.Tmux != "" {
+			if i := strings.LastIndexByte(e.Tmux, '.'); i >= 0 && strings.HasPrefix(e.Tmux[i+1:], "%") {
+				return e.Tmux[i+1:]
+			}
 		}
 	}
 	if v, ok := s.FS.Environ(pid, "TMUX_PANE"); ok && ours {
@@ -660,9 +668,19 @@ func (s *Sampler) treeCPU(root int, procs map[int]procfs.Proc, children map[int]
 	return 100 * float64(ticks) / procfs.ClockTicks / dt, n
 }
 
+func (s *Sampler) homeAs() string {
+	if s.HomeAs != "" {
+		return s.HomeAs
+	}
+	return s.Home
+}
+
 // claudeSession reads the session file Claude Code keeps for the process
 // and the end of its transcript, in the process's config directory.
 func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procKey, env agentEnv, uptime float64, now time.Time) {
+	if env.claudeDir == "" {
+		return
+	}
 	e, ok := s.agents.entry(env.claudeDir, pid)
 	if !ok || !s.ownEntry(e, p, uptime, now) {
 		return

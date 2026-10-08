@@ -22,6 +22,7 @@ func newFixtureSampler(root string) *Sampler {
 	return &Sampler{
 		FS:      procfs.FS{Root: filepath.Join(root, "proc")},
 		Home:    filepath.Join(root, "home"),
+		HomeAs:  "/home/user", // as the fixture processes name it
 		Tmux:    func() ([]byte, error) { return os.ReadFile(filepath.Join(root, "tmux-panes.txt")) },
 		Capture: CaptureDir(filepath.Join(root, "panes")),
 		Rules:   DefaultRules,

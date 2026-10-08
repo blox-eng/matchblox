@@ -501,6 +501,7 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 		smp.FS = procfs.FS{Root: filepath.Join(root, "proc")}
 		smp.Sys = procfs.Sys{Root: filepath.Join(root, "sys")}
 		smp.Home = filepath.Join(root, "home")
+		smp.HomeAs = "/home/user" // the HOME of every fixture process
 		smp.Tmux = func() ([]byte, error) { return os.ReadFile(filepath.Join(root, "tmux-panes.txt")) }
 		smp.Capture = sample.CaptureDir(filepath.Join(root, "panes"))
 		return smp
