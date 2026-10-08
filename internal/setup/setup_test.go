@@ -222,7 +222,8 @@ func TestAddHooksWritesBackup(t *testing.T) {
 	if err != nil || string(b) != others {
 		t.Fatalf("backup %s = %q, %v", backup, b, err)
 	}
-	if filepath.Dir(backup) != filepath.Dir(p) {
+	dir, _ := filepath.EvalSymlinks(filepath.Dir(p)) // macOS: /var is a link to /private/var
+	if filepath.Dir(backup) != dir {
 		t.Fatalf("backup %s is not next to %s", backup, p)
 	}
 	if fi, _ := os.Stat(p); fi.Mode().Perm() != 0o600 {
