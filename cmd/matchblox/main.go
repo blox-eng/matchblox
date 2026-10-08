@@ -2,6 +2,7 @@
 // coding agents: sessions by tmux pane, machine load, git, and what to do.
 //
 //	matchblox                 open the console (starts the service if needed)
+//	matchblox <host>          open the console of a host in ~/.ssh/config
 //	matchblox serve           run the service; --stdio speaks on stdin/stdout
 //	matchblox status          print what the service knows as JSON (for agents)
 //	matchblox status --text   the same, as a short summary
@@ -40,6 +41,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -83,12 +85,9 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "hook" {
 		return hook(args[1:], os.Stdin, os.Stdout, transport.SocketPath(), spoolPath(), progressPrompt(args[1:]))
 	}
-	cmd := "console"
-	if len(args) > 0 {
-		switch args[0] {
-		case "serve", "status", "version", "setup":
-			cmd, args = args[0], args[1:]
-		}
+	cmd, host, args, err := parseCommand(args)
+	if err != nil {
+		return err
 	}
 	fl := flag.NewFlagSet("matchblox", flag.ContinueOnError)
 	cfgPath := fl.String("config", config.Path(), "machine goals (TOML); a missing file means defaults")
@@ -124,7 +123,10 @@ func run(args []string) error {
 		cfg.Interval.Duration = *interval
 	}
 
-	if cmd == "console" && *root == "" {
+	if host != "" && *root != "" {
+		return errors.New("a host and --fixtures do not go together")
+	}
+	if cmd == "console" && *root == "" && host == "" {
 		// A phone that connects lands in the console's own tmux session, and
 		// every pane has a way back to it. Fixtures (demos, the replay) run
 		// in place. Before the nice below: a tmux server started here must
@@ -148,7 +150,23 @@ func run(args []string) error {
 	case "status":
 		return status(os.Stdout, path, cfg, *root, *text)
 	}
-	return console(path, cfg, *root, *noMotion)
+	return console(path, cfg, *root, *noMotion, host)
+}
+
+// parseCommand splits the command from its flags. A first argument that is
+// not a command or a flag is a host: `matchblox ws-1` opens its console.
+func parseCommand(args []string) (cmd, host string, rest []string, err error) {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return "console", "", args, nil
+	}
+	switch args[0] {
+	case "serve", "status", "version", "setup":
+		return args[0], "", args[1:], nil
+	}
+	if !remote.ValidHost(args[0]) {
+		return "", "", nil, fmt.Errorf("%q is not a command or a host; the commands are serve, status, setup, version", args[0])
+	}
+	return "console", args[0], args[1:], nil
 }
 
 // goHome replaces this process with `tmux new-session -A -s matchblox
@@ -205,10 +223,20 @@ func progressPrompt(args []string) bool {
 
 func spoolPath() string { return filepath.Join(filepath.Dir(state.Path()), "spool.jsonl") }
 
-func console(path string, cfg config.Config, root string, noMotion bool) error {
+func console(path string, cfg config.Config, root string, noMotion bool, host string) error {
 	opt := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, NoMotion: noMotion,
 		OutsideTmux: os.Getenv("TMUX") == ""}
-	if root != "" {
+	switch {
+	case host != "":
+		// The host's service, over SSH: every action runs and is guarded
+		// there.
+		dial := func() (transport.Conn, error) { return remote.Connect(context.Background(), host) }
+		c, err := dial()
+		if err != nil {
+			return err
+		}
+		opt.Conn, opt.Redial, opt.Host = c, dial, host
+	case root != "":
 		// Fixtures: a service in this process, for demos and tests.
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -217,7 +245,7 @@ func console(path string, cfg config.Config, root string, noMotion bool) error {
 		go s.Run(ctx)
 		go s.Handle(ctx, transport.NewConn(b)) //nolint:errcheck // ends with the console
 		opt.Conn = transport.NewConn(a)
-	} else {
+	default:
 		c, err := ensureService(path)
 		if err != nil {
 			return err

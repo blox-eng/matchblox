@@ -7,6 +7,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -52,6 +54,11 @@ type Options struct {
 	// OutsideTmux: the console does not run in tmux, so going to a pane
 	// attaches to it, and the console comes back when tmux detaches.
 	OutsideTmux bool
+	// Host is the host this console reaches over SSH; "" is this machine.
+	// Its tmux moves and door commands run there.
+	Host string
+	// Exec gives this terminal to argv until it exits. Nil: tea.ExecProcess.
+	Exec func(argv []string, done func(error) tea.Msg) tea.Cmd
 }
 
 type helloMsg proto.Hello
@@ -94,6 +101,8 @@ type action struct {
 	say         string   // what the confirm shows, when not the first step
 	term        bool     // the step takes this terminal (a door's command)
 	door        string   // the door it opens or closes
+	remote      bool     // steps[0] is the ssh argv that runs it on the host, checked
+	install     bool     // it installs matchblox on the host
 }
 
 func (a action) String() string {
@@ -150,6 +159,7 @@ type Model struct {
 	quitting   bool
 	host       proto.Hello
 	mismatch   bool
+	missing    bool // the host has no matchblox
 	lost       bool
 	backoff    time.Duration
 	redialing  bool
@@ -336,6 +346,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = m.conn.Close()
 		}
 		m.lost = true
+		if errors.Is(msg.err, remote.ErrNotInstalled) {
+			// Trying again cannot help: the install can.
+			m.missing = true
+			m.flash = ""
+			return m, nil
+		}
 		m.flash = "connection lost: " + msg.err.Error()
 		if m.batch != nil {
 			// Their results went with the connection.
@@ -362,6 +378,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.conn != m.conn || m.answered || m.mismatch {
 			return m, nil
 		}
+		if m.opt.Host != "" {
+			m.flash = m.opt.Host + " does not answer: run ssh " + m.opt.Host + " matchblox status to see why"
+			return m, nil
+		}
 		pid := 0
 		if m.opt.Owner != nil {
 			pid = m.opt.Owner()
@@ -375,6 +395,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case redialFailed:
 		m.redialing = false
 		return m.Update(lostMsg{err: msg.err})
+	case installedMsg:
+		return m.installed(msg)
 	case connMsg:
 		m.conn, m.redialing, m.answered = msg.conn, false, false
 		m.flash = "connected again"
@@ -439,6 +461,10 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		if mm, ok := m.scrollPreview(k); ok {
 			return mm, nil
 		}
+	}
+	if m.pending == nil && k == "enter" && (m.mismatch || m.missing) {
+		m.pending = m.installAction()
+		return m, nil
 	}
 	if m.pending != nil {
 		a := *m.pending
@@ -521,6 +547,9 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 // confirm runs an action the person consented to: a Nav step here, any
 // other on the service.
 func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
+	if a.remote {
+		return m.onHost(a)
+	}
 	if len(a.batch) > 0 {
 		if m.conn == nil || m.lost {
 			m.flash = "not sent, no connection: " + a.String()

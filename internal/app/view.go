@@ -73,6 +73,9 @@ func (m Model) render() string {
 	if m.mismatch {
 		return strings.Join(append(out, "", m.mismatchText(w)), "\n")
 	}
+	if m.missing {
+		return strings.Join(append(out, "", m.missingText(w)), "\n")
+	}
 	if !m.have {
 		why := m.waitingWhy()
 		if len(out)+markH/2+3 <= m.height {
@@ -466,8 +469,16 @@ func size(b float64) string {
 // brand is the mark, the name and the host the console shows.
 func (m Model) brand() string {
 	b := m.st.accent.Render("▰") + " " + m.st.text.Render("matchblox")
-	if m.host.Host != "" {
-		b += m.st.faint.Render(" · ") + m.st.muted.Render(m.host.Host)
+	host := m.host.Host
+	if host == "" {
+		host = m.opt.Host
+	}
+	if host != "" {
+		b += m.st.faint.Render(" · ") + m.st.muted.Render(host)
+	}
+	if m.lost && m.have {
+		// What shows is the last state the host sent.
+		b += m.st.faint.Render(" · ") + m.st.warn.Render("stale")
 	}
 	return b
 }
@@ -491,12 +502,16 @@ func (m Model) mismatchText(w int) string {
 	if m.host.Version < proto.Version {
 		side = "update " + host
 	}
+	cmd := installCmd
+	if a := m.installAction(); a != nil && m.host.Version < proto.Version {
+		cmd = shellLine(a.steps[0])
+	}
 	lines := []string{
 		fit(" "+m.st.text.Render(fmt.Sprintf("the console is version %d, the host is version %d", proto.Version, m.host.Version)), w),
 		"",
-		fit(" "+m.st.label.Render(side+": ")+m.st.text.Render(installCmd), w),
+		fit(" "+m.st.label.Render(side+": ")+m.st.text.Render(cmd), w),
 		"",
-		fit(" "+m.st.muted.Render("q quit"), w),
+		m.installKeys(w),
 	}
 	return strings.Join(lines, "\n")
 }
