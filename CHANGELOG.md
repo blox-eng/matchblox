@@ -9,8 +9,8 @@ All notable changes to matchblox are in this file. The format follows
 ### Added
 
 - Remote mode: the first run asks where your agents run. `matchblox connect
-  <host>` connects a host once (it installs matchblox there when missing and
-  adds a key that can start only matchblox), and `matchblox <host>` opens its
+  <host>` connects a host once (it installs the verified matchblox there and
+  adds a key that can start only the console's stream), and `matchblox <host>` opens its
   console. Hosts sit above the console as a layer: `esc` goes back, `+ add a
   host` adds one. A lost host stays on the screen as stale and connects again.
 - The queue, tab 1: each agent that asks for permission, waits for input or

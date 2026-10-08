@@ -50,7 +50,7 @@ one safe action that resolves each thing.
 - Each step runs on the host, and checks its facts again just before it runs:
   the same process, a worktree still clean and unused, a session still idle.
 - Two consoles that confirm the same action run it once.
-- A remote host is reached with its own key, which can only start matchblox
+- A remote host's stream uses its own key, which can start only the stream
   there, with a strict host-key check and nothing forwarded.
 
 ## Install
@@ -81,10 +81,12 @@ host from `~/.ssh/config`, or type one. matchblox connects it once:
 matchblox connect ws-1
 ```
 
-This uses your own ssh login one time. It installs matchblox on `ws-1` when
-it is missing, and adds a key that can start only matchblox there (no shell,
-no forwarding). After that, `matchblox ws-1` opens the console of `ws-1`, and
-`esc` goes back to the list of hosts.
+This uses your own ssh login one time. It installs the verified matchblox on
+`ws-1`, and adds a key that can start only the console's stream there (no
+shell, no forwarding). After that, `matchblox ws-1` opens the console of
+`ws-1`, and `esc` goes back to the list of hosts. A jump to a pane uses your
+own ssh login. The stream can answer your agents, as the console does: keep
+`~/.ssh/matchblox_ed25519` as private as any ssh key.
 
 `matchblox status --text` prints the service's state as a short summary, for
 scripts and agents. Thresholds live in `~/.config/matchblox/config.toml`; see
