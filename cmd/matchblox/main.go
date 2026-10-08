@@ -105,16 +105,11 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	fl := flag.NewFlagSet("matchblox", flag.ContinueOnError)
-	cfgPath := fl.String("config", config.Path(), "machine goals (TOML); a missing file means defaults")
-	interval := fl.Duration("interval", 0, "sampling interval (default from config, else 2s)")
-	root := fl.String("fixtures", "", "read proc/, sys/, home/ and tmux-panes.txt from this directory instead of the live machine")
-	text := fl.Bool("text", false, "status: print a summary instead of JSON")
-	stdio := fl.Bool("stdio", false, "serve: speak on stdin and stdout, joined to the local service")
-	noMotion := fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)")
+	fl, o := newFlags()
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
+	cfgPath, interval, root, text, stdio, noMotion := o.cfgPath, o.interval, o.root, o.text, o.stdio, o.noMotion
 	switch cmd {
 	case "version":
 		fmt.Println(version)
@@ -173,18 +168,39 @@ func run(args []string) error {
 	return console(path, cfg, *root, *noMotion, host)
 }
 
+// commands are the commands a builder types. hook, authorize and gate run
+// from a hook, an ssh forced command and a connect.
+var commands = []string{"connect", "serve", "status", "setup", "version"}
+
+type flags struct {
+	cfgPath, root         *string
+	interval              *time.Duration
+	text, stdio, noMotion *bool
+}
+
+func newFlags() (*flag.FlagSet, flags) {
+	fl := flag.NewFlagSet("matchblox", flag.ContinueOnError)
+	return fl, flags{
+		cfgPath:  fl.String("config", config.Path(), "machine goals (TOML); a missing file means defaults"),
+		interval: fl.Duration("interval", 0, "sampling interval (default from config, else 2s)"),
+		root:     fl.String("fixtures", "", "read proc/, sys/, home/ and tmux-panes.txt from this directory instead of the live machine"),
+		text:     fl.Bool("text", false, "status: print a summary instead of JSON"),
+		stdio:    fl.Bool("stdio", false, "serve: speak on stdin and stdout, joined to the local service"),
+		noMotion: fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),
+	}
+}
+
 // parseCommand splits the command from its flags. A first argument that is
 // not a command or a flag is a host: `matchblox ws-1` opens its console.
 func parseCommand(args []string) (cmd, host string, rest []string, err error) {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		return "console", "", args, nil
 	}
-	switch args[0] {
-	case "serve", "status", "version", "setup", "connect", "authorize", "gate":
+	if slices.Contains(commands, args[0]) || args[0] == "authorize" || args[0] == "gate" {
 		return args[0], "", args[1:], nil
 	}
 	if !remote.ValidHost(args[0]) {
-		return "", "", nil, fmt.Errorf("%q is not a command or a host; the commands are connect, serve, status, setup, version", args[0])
+		return "", "", nil, fmt.Errorf("%q is not a command or a host; the commands are %s", args[0], strings.Join(commands, ", "))
 	}
 	return "console", args[0], args[1:], nil
 }
