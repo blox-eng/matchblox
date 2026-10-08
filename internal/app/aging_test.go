@@ -99,3 +99,16 @@ func TestXEndsAStaleSession(t *testing.T) {
 		t.Fatalf("sent %+v", acts)
 	}
 }
+
+// TestOldSessionsSinkEvenWhenQueued: a queue item a day old does not lift a
+// cold session over a fresh one: age outranks waiting (found live: without
+// hooks the queue holds a "done" item for nearly every idle session).
+func TestOldSessionsSinkEvenWhenQueued(t *testing.T) {
+	st := agingState()
+	st.Queue = append(st.Queue, queue.Item{Pane: "%delta", Name: "delta", State: queue.StateFinished, Since: st.At.Add(-30 * time.Hour)})
+	m, _ := loadedWith(t, 120, st)
+	next, _ := key(m, "2")
+	if got := order(next); got != "bravo charlie alpha delta echo" {
+		t.Fatalf("order %q", got)
+	}
+}

@@ -111,11 +111,9 @@ func (s sortBy) compare(a, b sample.Session, waits map[string]bool) int {
 	switch s.col {
 	case sortState:
 		// Who works, then who waits for the person, then the newest idle:
-		// the oldest sink to the bottom.
-		c = boolFirst(a.Busy, b.Busy)
-		if c == 0 {
-			c = boolFirst(waits[a.Pane], waits[b.Pane])
-		}
+		// the oldest sink to the bottom. Age outranks waiting: a session
+		// that waits since yesterday is cold, not waiting.
+		c = rank(a, waits) - rank(b, waits)
 		if c == 0 {
 			c = cmpF(float64(a.Idle), float64(b.Idle))
 		}
@@ -139,21 +137,26 @@ func (s sortBy) compare(a, b sample.Session, waits map[string]bool) int {
 	return c
 }
 
+// rank is the group of a session in the default order.
+func rank(s sample.Session, waits map[string]bool) int {
+	switch age := s.Age(); {
+	case age == "busy":
+		return 0
+	case age == "idle" && waits[s.Pane]:
+		return 1
+	case age == "idle":
+		return 2
+	case age == "cold":
+		return 3
+	}
+	return 4
+}
+
 func cmpF(x, y float64) int {
 	switch {
 	case x < y:
 		return -1
 	case x > y:
-		return 1
-	}
-	return 0
-}
-
-func boolFirst(x, y bool) int {
-	switch {
-	case x && !y:
-		return -1
-	case y && !x:
 		return 1
 	}
 	return 0
