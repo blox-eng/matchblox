@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -32,17 +33,31 @@ func parseProgress(text string) (Progress, bool) {
 			full := utf8.RuneCountInString(lines[i][m[2]:m[3]])
 			empty := lines[i][m[4]:m[5]]
 			total := full + utf8.RuneCountInString(empty)
-			if total == 0 || (full == 0 && !strings.ContainsAny(empty, "░▱□")) {
+			// Only the asked line: "Progress [...]". A bracket of = or # alone
+			// is too common in code and logs.
+			if total == 0 || (full == 0 && !strings.ContainsAny(empty, "░▱□")) ||
+				!strings.Contains(strings.ToLower(lines[i][:m[0]]), "progress") {
 				continue
 			}
 			step := strings.TrimSpace(pctWord.ReplaceAllString(strings.TrimSpace(lines[i][m[1]:]), ""))
 			if step == "" {
 				step = runningLine(lines)
 			}
-			return Progress{Pct: (100*full + total/2) / total, Step: step}, true
+			return Progress{Pct: (100*full + total/2) / total, Step: clean(step)}, true
 		}
 	}
 	return Progress{}, false
+}
+
+// clean drops control keys: the step comes from an agent's reply, and an
+// escape sequence there must not reach the terminal.
+func clean(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 func runningLine(lines []string) string {

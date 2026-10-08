@@ -352,7 +352,7 @@ func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
 	}
 	do := pad("", colDo+1)
 	if s.Progress != nil {
-		do = m.progressCell(s.Progress, 5) + "  "
+		do = pad(m.progressCell(s.Progress, 5), colDo+1)
 	}
 	switch s.Do {
 	case "compact":

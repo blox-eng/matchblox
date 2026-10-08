@@ -1,11 +1,13 @@
 package app
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
@@ -257,4 +259,94 @@ func collect(cmd tea.Cmd) []tea.Msg {
 		return nil
 	}
 	return []tea.Msg{msg}
+}
+
+// Review 2, #1: without a connection a bulk removal is not sent, the marks
+// stay, and a batch cut by a lost connection says what was pending.
+func TestBatchWithoutAConnectionIsNotSent(t *testing.T) {
+	m, f := loadedWith(t, 100, gitState())
+	var next tea.Model = m
+	next, _ = key(next, "5")
+	next, _ = key(next, "X")
+	got := next.(Model)
+	got.lost = true
+	next, _ = key(got, "x")
+	next, cmd := key(next, "y")
+	if cmd != nil {
+		for _, msg := range collect(cmd) {
+			next, _ = next.Update(msg)
+		}
+	}
+	if len(f.acts()) != 0 || !strings.Contains(actionLine(next), "not sent, no connection") {
+		t.Fatalf("sent %v, line %q", f.acts(), actionLine(next))
+	}
+	if n := strings.Count(screen(next), "●"); n != 2 {
+		t.Fatalf("the marks went: %d", n)
+	}
+
+	got = next.(Model)
+	got.lost = false
+	got.batch = &batch{ids: map[string]bool{"a1": true, "a2": true}, removed: 1}
+	next, _ = got.Update(lostMsg{err: errors.New("broken pipe"), conn: got.conn})
+	if next.(Model).batch != nil || !strings.Contains(next.(Model).flash, "2 removals have no answer") {
+		t.Fatalf("a lost batch: %+v %q", next.(Model).batch, next.(Model).flash)
+	}
+}
+
+// Review 2, #2: a search on the Git tab hides rows, not marks.
+func TestSearchKeepsTheMarks(t *testing.T) {
+	m, _ := loadedWith(t, 100, gitState())
+	var next tea.Model = m
+	next, _ = key(next, "5")
+	next, _ = key(next, "down")
+	next, _ = key(next, " ")
+	next, _ = key(next, "/")
+	next = typeText(next, "done-2")
+	next, _ = key(next, "enter")
+	next, _ = key(next, " ")
+	if p := next.(Model).picked; !p["/w/wt/done-1"] || !p["/w/wt/done-2"] {
+		t.Fatalf("marks %v", p)
+	}
+	next, _ = key(next, "x")
+	if line := actionLine(next); !strings.Contains(line, "(+1 more)") {
+		t.Fatalf("the hidden mark does not count: %q", line)
+	}
+	got := next.(Model)
+	got.git = nil
+	got.refresh()
+	if len(got.picked) != 2 {
+		t.Fatal("a state without git dropped the marks")
+	}
+}
+
+// Review 2, #5: the progress cell holds its column at any percent.
+func TestProgressHoldsItsColumn(t *testing.T) {
+	st := sortFixture()
+	st.Sessions[0].Progress = &sample.Progress{Pct: 5}
+	st.Sessions[1].Progress = &sample.Progress{Pct: 100}
+	m, _ := loadedWith(t, 120, st)
+	next, _ := key(m, "2")
+	lines := strings.Split(screen(next), "\n")
+	a, b := lines[lineOf(t, next, "alpha")], lines[lineOf(t, next, "bravo")]
+	wt := worktree(st.Sessions[0].Cwd)
+	at := func(line string) int { return lipgloss.Width(line[:max(strings.LastIndex(line, wt), 0)]) }
+	if ia, ib := at(a), at(b); !strings.Contains(a, wt) || ia != ib {
+		t.Fatalf("the worktree column moved (%d, %d):\n%s\n%s", ia, ib, a, b)
+	}
+}
+
+// Review 2, #9: a tap ends the typing of a search, so a confirm it asks
+// for is on the screen.
+func TestTapEndsTheTypingOfASearch(t *testing.T) {
+	m, _ := loadedWith(t, 100, queueState())
+	next, _ := key(m, "/")
+	next = typeText(next, "app")
+	y := lineOf(t, next, "app-review")
+	next, _ = tap(next, 5, y)
+	if next.(Model).searching || next.(Model).filter != "app" {
+		t.Fatalf("searching %v filter %q", next.(Model).searching, next.(Model).filter)
+	}
+	if !strings.Contains(actionLine(next), "tap again") {
+		t.Fatalf("line %q", actionLine(next))
+	}
 }

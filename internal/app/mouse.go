@@ -24,6 +24,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.input != nil || !m.have || m.mismatch {
 		return m, nil
 	}
+	m.searching = false // keep the search; what the tap asks for shows on the action line
 	w := max(m.width, minWidth)
 	if ms.Y == 1 {
 		if tab, ok := m.tabAt(w, ms.X); ok {

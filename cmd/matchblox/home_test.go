@@ -44,6 +44,13 @@ func TestSessionStartAsksForProgress(t *testing.T) {
 	ev := `{"session_id":"s1","hook_event_name":"SessionStart","cwd":"/w"}`
 	spool := filepath.Join(t.TempDir(), "spool.jsonl")
 	var out bytes.Buffer
+	// Review 2, #4: outside tmux (a script, claude -p) nothing is asked:
+	// the console watches tmux panes only.
+	t.Setenv("TMUX_PANE", "")
+	if err := hook([]string{"SessionStart"}, strings.NewReader(ev), &out, filepath.Join(t.TempDir(), "none.sock"), spool, true); err != nil || out.Len() != 0 {
+		t.Fatalf("outside tmux it printed %q", out.String())
+	}
+	t.Setenv("TMUX_PANE", "%3")
 	if err := hook([]string{"SessionStart"}, strings.NewReader(ev), &out, filepath.Join(t.TempDir(), "none.sock"), spool, true); err != nil {
 		t.Fatal(err)
 	}

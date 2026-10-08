@@ -21,7 +21,7 @@ func TestParseProgress(t *testing.T) {
 			"   review 9-11    ░░░░░░",
 			"  Progress  [███████████████░░░░░]",
 		}, "\n"), 75, "11-lite running (Fable): manual pass", true},
-		{"hashes and dashes", "build [#####-----] 50%", 50, "", true},
+		{"hashes and dashes", "Progress [#####-----] 50%", 50, "", true},
 		{"the last bar wins", "Progress [██░░] a\nProgress [████] b", 100, "b", true},
 		{"no bar", "all done, nothing to report", 0, "", false},
 		{"a bar of one kind only is not a bar", "[----]", 0, "", false},
@@ -55,5 +55,36 @@ func TestProgressFromTheLastReply(t *testing.T) {
 	}
 	if u.Progress == nil || u.Progress.Pct != 75 || u.Progress.Step != "wiring" {
 		t.Fatalf("progress %+v", u.Progress)
+	}
+}
+
+// Review 2, #3 and #8: a bar needs the word Progress before it, and the
+// step loses control keys: transcript text is not trusted.
+func TestProgressIsAskedForAndClean(t *testing.T) {
+	for _, text := range []string{"[#]", "pip [=====]", "regexp `[█▓▰■#=]`", "build [#####-----] 50%"} {
+		if p, ok := parseProgress(text); ok {
+			t.Errorf("%q read as %+v", text, p)
+		}
+	}
+	p, ok := parseProgress("Progress [██░░] a\x1b]52;c;eHg=\x07b")
+	if !ok || strings.ContainsAny(p.Step, "\x1b\x07") || p.Step != "a]52;c;eHg=b" {
+		t.Fatalf("step %q", p.Step)
+	}
+}
+
+// Review 2, #7: the newest reply with text decides, also when the lines
+// carry no usage.
+func TestTheNewestReplyDecides(t *testing.T) {
+	lines := []string{
+		`{"type":"assistant","message":{"model":"m","content":[{"type":"text","text":"Progress [██░░] old"}]}}`,
+		`{"type":"assistant","message":{"model":"m","content":[{"type":"text","text":"no bar this time"}]}}`,
+	}
+	path := filepath.Join(t.TempDir(), "s.jsonl")
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := os.Stat(path)
+	if u, _ := lastUsage(path, st.Size()); u.Progress != nil {
+		t.Fatalf("an older bar won: %+v", u.Progress)
 	}
 }

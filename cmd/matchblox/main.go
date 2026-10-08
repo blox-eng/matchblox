@@ -177,7 +177,7 @@ func hook(args []string, stdin io.Reader, out io.Writer, sock, spool string, pro
 	if transport.Notify(sock, hookTimeout, proto.KindHook, ev) != nil {
 		_ = hooks.Append(spool, ev)
 	}
-	if progress && ev.Name == "SessionStart" {
+	if progress && ev.Name == "SessionStart" && ev.Pane != "" { // a session in tmux: what the console watches
 		// Claude Code adds what a SessionStart hook prints to the session's
 		// context; the console reads the bar back from the transcript.
 		_, _ = fmt.Fprintln(out, hooks.ProgressPrompt)

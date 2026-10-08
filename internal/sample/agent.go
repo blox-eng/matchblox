@@ -182,10 +182,14 @@ func lastUsage(path string, size int64) (Usage, bool) {
 	}
 	lines := bytes.Split(buf, []byte{'\n'})
 	var u Usage
-	found := false
-	for i := len(lines) - 1; i >= 0; i-- {
+	found, decided := false, false
+	for i := len(lines) - 1; i >= 0 && (!found || !decided); i-- {
 		l := lines[i]
-		if !bytes.Contains(l, []byte(`"assistant"`)) {
+		// Decode only a line that can still tell something: a busy turn has
+		// many large tool calls between two replies with text.
+		needUsage := !found && bytes.Contains(l, []byte(`"usage"`))
+		needText := !decided && bytes.Contains(l, []byte(`"type":"text"`))
+		if !bytes.Contains(l, []byte(`"assistant"`)) || (!needUsage && !needText) {
 			continue
 		}
 		var t transcriptLine
@@ -193,20 +197,17 @@ func lastUsage(path string, size int64) (Usage, bool) {
 		if json.Unmarshal(l, &t) != nil || t.Type != "assistant" || t.IsSidechain || t.Message.Model == "<synthetic>" {
 			continue
 		}
-		if !found && t.Message.Usage != nil {
+		if needUsage && t.Message.Usage != nil {
 			n := t.Message.Usage
 			u.Model, u.Tokens, u.At = t.Message.Model, n.Input+n.CacheRead+n.CacheCreation+n.Output, t.Timestamp
 			found = true
 		}
-		// The last reply with text tells the progress; later tool calls
-		// have no text.
-		if text := replyText(t.Message.Content); text != "" {
+		// The newest reply with text tells the progress, bar or no bar.
+		if text := replyText(t.Message.Content); needText && text != "" {
 			if p, ok := parseProgress(text); ok {
 				u.Progress = &p
 			}
-			if found {
-				break
-			}
+			decided = true
 		}
 	}
 	return u, found

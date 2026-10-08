@@ -22,6 +22,16 @@ type wtRow struct {
 // worktreeRows are the worktrees worth a line: the main checkout, the ones
 // sessions work in, and merged ones. The rest are counted, not listed.
 func (m Model) worktreeRows() []wtRow {
+	rows := m.allWorktreeRows()
+	if q := strings.ToLower(m.filter); m.tab == tabGit && q != "" {
+		rows = slices.DeleteFunc(rows, func(r wtRow) bool {
+			return !strings.Contains(strings.ToLower(r.wt.Path+" "+r.wt.Branch), q)
+		})
+	}
+	return rows
+}
+
+func (m Model) allWorktreeRows() []wtRow {
 	if m.git == nil {
 		return nil
 	}
@@ -32,11 +42,6 @@ func (m Model) worktreeRows() []wtRow {
 				rows = append(rows, wtRow{r.Path, wt, i == 0})
 			}
 		}
-	}
-	if q := strings.ToLower(m.filter); m.tab == tabGit && q != "" {
-		rows = slices.DeleteFunc(rows, func(r wtRow) bool {
-			return !strings.Contains(strings.ToLower(r.wt.Path+" "+r.wt.Branch), q)
-		})
 	}
 	return rows
 }

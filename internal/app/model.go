@@ -322,6 +322,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.lost = true
 		m.flash = "connection lost: " + msg.err.Error()
+		if m.batch != nil {
+			// Their results went with the connection.
+			m.flash += fmt.Sprintf("; %d removals have no answer, r on Git rescans", len(m.batch.ids))
+			m.batch = nil
+		}
 		if m.opt.Redial == nil {
 			return m, nil
 		}
@@ -490,6 +495,10 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 // other on the service.
 func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 	if len(a.batch) > 0 {
+		if m.conn == nil || m.lost {
+			m.flash = "not sent, no connection: " + a.String()
+			return m, nil
+		}
 		return m.sendBatch(a)
 	}
 	if a.attach {

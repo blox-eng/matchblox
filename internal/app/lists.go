@@ -88,9 +88,11 @@ func (m *Model) refresh() {
 	}
 	slices.SortStableFunc(sessions, func(a, b sample.Session) int { return m.sessSort.compare(a, b) })
 	m.snap.Sessions = sessions
-	for p := range m.picked {
-		if !m.safeWorktree(p) {
-			delete(m.picked, p)
+	if m.git != nil {
+		for p := range m.picked {
+			if !m.safeWorktree(p) {
+				delete(m.picked, p)
+			}
 		}
 	}
 }
@@ -302,8 +304,10 @@ func (m Model) nothing(text string) string {
 	return text
 }
 
+// safeWorktree reads every worktree, not the found ones: a search hides
+// rows, not marks.
 func (m Model) safeWorktree(path string) bool {
-	for _, r := range m.worktreeRows() {
+	for _, r := range m.allWorktreeRows() {
 		if r.wt.Path == path {
 			return r.wt.Safe && len(r.wt.Remove) > 0
 		}
@@ -368,7 +372,7 @@ func (m *Model) markAllSafe() {
 func (m Model) removeMarked() *action {
 	var steps [][]string
 	var paths []string
-	for _, r := range m.worktreeRows() {
+	for _, r := range m.allWorktreeRows() {
 		if m.picked[r.wt.Path] {
 			steps, paths = append(steps, r.wt.Remove), append(paths, r.wt.Path)
 		}
