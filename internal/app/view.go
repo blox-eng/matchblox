@@ -9,7 +9,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -220,9 +219,6 @@ func (m Model) footer(w int) string {
 		confirm := "⏎ run  esc cancel"
 		if m.pending.destructive {
 			confirm = st.neg.Render("y") + st.muted.Render(" run  any other key cancels")
-		}
-		if m.pending.door == doors.Hosts && m.pending.which != "secondary" {
-			confirm = st.muted.Render("↑↓ space picks  ") + st.neg.Render("y") + st.muted.Render(" writes the + lines")
 		}
 		if !m.previewSeen() {
 			confirm = st.muted.Render("↓ the rest, then ") + st.neg.Render("y")

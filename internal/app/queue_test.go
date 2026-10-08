@@ -12,8 +12,8 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
-	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -117,7 +117,7 @@ func TestAnswerNeedsConfirm(t *testing.T) {
 	}
 	cmd()
 	acts := f.acts()
-	if len(acts) != 1 || !reflect.DeepEqual(acts[0], proto.Act{RecID: "answer:%2", Which: "secondary", Confirm: "y", Text: "yes"}) {
+	if len(acts) != 1 || acts[0] != (proto.Act{RecID: "answer:%2", Which: "secondary", Confirm: "y", Text: "yes"}) {
 		t.Fatalf("acts %+v", acts)
 	}
 }

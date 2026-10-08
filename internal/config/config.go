@@ -33,12 +33,6 @@ type Config struct {
 	Git           Git      `toml:"git"`
 	History       History  `toml:"history"`
 	Hooks         Hooks    `toml:"hooks"`
-	Remote        Remote   `toml:"remote"`
-}
-
-// Remote is remote mode: the hosts this console opens with `matchblox <host>`.
-type Remote struct {
-	Hosts []string `toml:"hosts"`
 }
 
 // Hooks run a command when something happens. The command is an argv list,

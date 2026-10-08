@@ -118,7 +118,7 @@ func settings(t *testing.T, e Env, body string) string {
 
 func open(t *testing.T, e Env, id string) string {
 	t.Helper()
-	backup, err := Open(e, id, door(t, e, id).Sum, nil)
+	backup, err := Open(e, id, door(t, e, id).Sum)
 	if err != nil {
 		t.Fatalf("Open(%s): %v", id, err)
 	}
@@ -280,7 +280,7 @@ func TestDoorRefusesChangedFile(t *testing.T) {
 	if err := os.WriteFile(p, []byte(changed), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Open(e, doors.Hooks, seen, nil); !errors.Is(err, ErrChanged) {
+	if _, err := Open(e, doors.Hooks, seen); !errors.Is(err, ErrChanged) {
 		t.Fatalf("Open after a change: %v, want ErrChanged", err)
 	}
 	if b, _ := os.ReadFile(p); string(b) != changed {
@@ -372,7 +372,7 @@ func TestGuideIsATermDoor(t *testing.T) {
 	if !slices.Equal(d.Term, doors.GuideArgv(false)) || !strings.Contains(d.Why, "uses your tokens") {
 		t.Fatalf("guide = %+v", d)
 	}
-	if _, err := Open(env(t), doors.Guide, "", nil); err == nil {
+	if _, err := Open(env(t), doors.Guide, ""); err == nil {
 		t.Fatal("the service opened a terminal door")
 	}
 }

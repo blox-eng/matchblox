@@ -155,25 +155,3 @@ func TestAnOlderSampleNeverBringsAFoldedDoorBack(t *testing.T) {
 		t.Fatal("a current sample was dropped")
 	}
 }
-
-func TestHostsDoorActWritesThePicks(t *testing.T) {
-	s, _ := doorsTest(t)
-	home := s.Setup.Home
-	s.Setup.Config = filepath.Join(home, ".config", "matchblox", "config.toml")
-	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(home, ".ssh", "config"), []byte("Host ws-1 ws-2\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	ctx := run(t, s)
-	c, _ := connect(t, ctx, s)
-	d := findDoor(t, snapshot(t, c), doors.Hosts)
-	if r := act(t, c, "1", proto.Act{RecID: "door:hosts", Which: "primary", Confirm: "y", Text: d.Sum, Picks: []string{"ws-2"}}); r.Err != "" {
-		t.Fatalf("result %+v", r)
-	}
-	b, err := os.ReadFile(s.Setup.Config)
-	if err != nil || !strings.Contains(string(b), `"ws-2"`) || strings.Contains(string(b), `"ws-1"`) {
-		t.Fatalf("config.toml (%v):\n%s", err, b)
-	}
-}

@@ -61,3 +61,41 @@ func TestReadSkipsWhatIsNotAHost(t *testing.T) {
 		t.Fatal("added an option as a host")
 	}
 }
+
+func writeFile(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSSHHostsSkipsPatternsAndFollowsInclude(t *testing.T) {
+	home := t.TempDir()
+	writeFile(t, filepath.Join(home, ".ssh", "config"), `# my hosts
+Include config.d/*
+Host ws-1 ws-2
+  HostName 10.0.0.2
+host *.internal
+Host !bad ws-3
+Host *
+  ServerAliveInterval 30
+Match host ws-9
+  User x
+HOST ws-1
+`)
+	writeFile(t, filepath.Join(home, ".ssh", "config.d", "work"), "Host build-1\n")
+	if got, want := SSHHosts(home), []string{"build-1", "ws-1", "ws-2", "ws-3"}; !slices.Equal(got, want) {
+		t.Fatalf("SSHHosts = %q, want %q", got, want)
+	}
+}
+
+func TestSSHHostsIncludeCannotLoop(t *testing.T) {
+	home := t.TempDir()
+	writeFile(t, filepath.Join(home, ".ssh", "config"), "Include config\nHost ws-1\n")
+	if got := SSHHosts(home); !slices.Equal(got, []string{"ws-1"}) {
+		t.Fatalf("SSHHosts = %q", got)
+	}
+}

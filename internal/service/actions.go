@@ -234,7 +234,7 @@ func (s *Service) door(id string, a proto.Act) proto.Result {
 			path = d.Path
 		}
 	}
-	backup, err := setup.Open(*s.Setup, id, a.Text, a.Picks)
+	backup, err := setup.Open(*s.Setup, id, a.Text)
 	ran := [][]string{{"write", path}}
 	if backup != "" {
 		ran = append(ran, []string{"backup", backup})

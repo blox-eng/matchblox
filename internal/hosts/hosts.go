@@ -5,9 +5,12 @@
 package hosts
 
 import (
+	"bufio"
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/config"
@@ -98,4 +101,53 @@ func write(path, s string) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
+}
+
+// SSHHosts are the hosts ~/.ssh/config names, in their order: each name of
+// a Host line that is not a pattern, and the hosts of the files it
+// includes.
+func SSHHosts(home string) []string {
+	var hosts []string
+	seen := map[string]bool{}
+	sshHosts(filepath.Join(home, ".ssh"), filepath.Join(home, ".ssh", "config"), seen, &hosts)
+	return hosts
+}
+
+func sshHosts(dir, path string, read map[string]bool, hosts *[]string) {
+	if read[path] {
+		return // an Include of itself
+	}
+	read[path] = true
+	b, err := os.ReadFile(path) //nolint:gosec // the person's own ssh config
+	if err != nil {
+		return
+	}
+	sc := bufio.NewScanner(bytes.NewReader(b))
+	for sc.Scan() {
+		f := strings.Fields(strings.ReplaceAll(sc.Text(), "=", " "))
+		if len(f) < 2 {
+			continue
+		}
+		switch strings.ToLower(f[0]) {
+		case "include":
+			for _, pat := range f[1:] {
+				if strings.HasPrefix(pat, "~/") {
+					pat = filepath.Join(filepath.Dir(dir), pat[2:])
+				} else if !filepath.IsAbs(pat) {
+					pat = filepath.Join(dir, pat)
+				}
+				files, _ := filepath.Glob(pat)
+				for _, inc := range files {
+					sshHosts(dir, inc, read, hosts)
+				}
+			}
+		case "host":
+			for _, h := range f[1:] {
+				if strings.ContainsAny(h, "*?!") || !remote.ValidHost(h) || slices.Contains(*hosts, h) {
+					continue
+				}
+				*hosts = append(*hosts, h)
+			}
+		}
+	}
 }

@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -20,8 +19,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
-	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
@@ -283,7 +282,7 @@ func TestConfirmedRecActIsSentNotRun(t *testing.T) {
 	}
 	next.Update(cmd())
 	acts := f.acts()
-	if len(acts) != 1 || !reflect.DeepEqual(acts[0], proto.Act{RecID: "r9", Which: "secondary", Confirm: "y"}) {
+	if len(acts) != 1 || acts[0] != (proto.Act{RecID: "r9", Which: "secondary", Confirm: "y"}) {
 		t.Fatalf("sent %+v", acts)
 	}
 }

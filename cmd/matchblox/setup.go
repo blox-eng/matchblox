@@ -14,8 +14,6 @@ import (
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/actions"
-	"github.com/blox-eng/matchblox/internal/config"
-	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/state"
 )
@@ -28,19 +26,9 @@ func liveSetup() *setup.Env {
 		GOOS: runtime.GOOS, OSRelease: string(release), Home: home,
 		Exe:      invokedPath(os.Args[0]),
 		StateDir: filepath.Dir(state.Path()),
-		Config:   configPath(),
 		Root:     os.Geteuid() == 0,
 		Getenv:   os.Getenv, LookPath: exec.LookPath, Source: tmuxSource,
 	}
-}
-
-// configPath is the config the person named with --config, else the
-// default one.
-func configPath() string {
-	if configArg != "" {
-		return configArg
-	}
-	return config.Path()
 }
 
 // tmuxSource loads a config into the default tmux server, the one the
@@ -100,20 +88,6 @@ func setupDoors(e setup.Env, in io.Reader, out io.Writer, run func(argv []string
 		if d.Path != "" {
 			say("\n  %s\n", d.Path)
 		}
-		if len(d.Choices) > 0 {
-			say("\n  %s\n\nthe ones to add, a space between them (Enter skips): ", strings.Join(d.Choices, "  "))
-			line, err := answers.ReadString('\n')
-			picks := strings.Fields(line)
-			if len(picks) == 0 {
-				say("skipped\n")
-				if err != nil {
-					break
-				}
-				continue
-			}
-			report(say, d, picks, e)
-			continue
-		}
 		for _, l := range strings.Split(d.Preview, "\n") {
 			say("  %s\n", l)
 		}
@@ -132,21 +106,16 @@ func setupDoors(e setup.Env, in io.Reader, out io.Writer, run func(argv []string
 			}
 			continue
 		}
-		report(say, d, nil, e)
+		switch backup, err := setup.Open(e, d.ID, d.Sum); {
+		case err != nil:
+			say("not written: %v\n", err)
+		case backup != "":
+			say("wrote %s; backup %s\n", d.Path, backup)
+		default:
+			say("wrote %s\n", d.Path)
+		}
 	}
 	return werr
-}
-
-// report opens a door that writes a file, and says what it wrote.
-func report(say func(string, ...any), d doors.Door, picks []string, e setup.Env) {
-	switch backup, err := setup.Open(e, d.ID, d.Sum, picks); {
-	case err != nil:
-		say("not written: %v\n", err)
-	case backup != "":
-		say("wrote %s; backup %s\n", d.Path, backup)
-	default:
-		say("wrote %s\n", d.Path)
-	}
 }
 
 // runInTerminal gives a door's command this terminal.

@@ -14,7 +14,6 @@ const (
 	Tmux    = "tmux"
 	Hooks   = "hooks"
 	WayBack = "wayback"
-	Hosts   = "hosts"
 	Guide   = "guide"
 )
 
@@ -31,9 +30,6 @@ type Door struct {
 	Sum string `json:"sum,omitempty"`
 	// Term runs in the builder's terminal (a password prompt, an agent).
 	Term []string `json:"term,omitempty"`
-	// Choices are what the builder picks from before the door opens (the
-	// hosts of ~/.ssh/config); the act sends the picked ones back.
-	Choices []string `json:"choices,omitempty"`
 	// Problem is why the door cannot open now, and the fix.
 	Problem string `json:"problem,omitempty"`
 	Done    bool   `json:"done,omitempty"`
@@ -136,16 +132,4 @@ func TermAllowed(argv []string) bool {
 		}
 	}
 	return false
-}
-
-// HostsBlock is what the hosts door appends to config.toml: a new table, so
-// the lines the builder wrote keep their bytes.
-func HostsBlock(hosts []string) string {
-	var b strings.Builder
-	b.WriteString("[remote]\n# The hosts of `matchblox <host>`. Change them here.\nhosts = [\n")
-	for _, h := range hosts {
-		b.WriteString("  \"" + h + "\",\n")
-	}
-	b.WriteString("]\n")
-	return b.String()
 }
