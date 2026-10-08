@@ -81,7 +81,10 @@ func (m Model) queuePanel(w int) body {
 			where = "▌" + where
 		}
 		tail := st.muted.Render(it.LastLine)
-		if it.Estimated {
+		switch {
+		case it.FromPane:
+			tail = st.faint.Render("from the pane: ") + tail // first: a long line is cut at the end
+		case it.Estimated:
 			tail = st.faint.Render("estimated")
 		}
 		if s, ok := m.sessionIn(it.Pane); ok && s.Progress != nil {

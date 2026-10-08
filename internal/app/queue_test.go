@@ -385,3 +385,43 @@ func TestAnswerPreviewIsWhatRuns(t *testing.T) {
 		t.Fatalf("console %q, service %q", got, want)
 	}
 }
+
+// TestAnAgentWithoutHooksIsReadFromThePane: a Codex session waits with the
+// question from its pane, says where that came from, shows "not measured"
+// for context use, and takes an answer like any other.
+func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
+	st := fixtureState()
+	q := "Would you like to run the following command?"
+	st.Sessions = append(st.Sessions, sample.Session{PID: 900, Pane: "%9", Target: "api:1.1", Tab: "api", Name: "codex",
+		Status: "idle", Idle: time.Minute, Context: "unmeasured", FromPane: true, Asks: true, LastLine: q, Procs: 1})
+	st.Queue = []queue.Item{{Pane: "%9", Target: "api:1.1", Name: "codex", State: queue.StateQuestion,
+		Since: st.At.Add(-time.Minute), LastLine: q, Estimated: true, FromPane: true}}
+	for _, w := range []int{100, 50} {
+		m, _ := loadedWith(t, w, st)
+		out := ansi.Strip(m.render())
+		for _, want := range []string{"codex", "waits", "Would you like to run", "from the pane"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("width %d: the queue lacks %q:\n%s", w, want, out)
+			}
+		}
+	}
+	m, f := loadedWith(t, 100, st)
+	next, _ := key(m, "a")
+	next = typeText(next, "y")
+	next, _ = key(next, "enter")
+	if _, cmd := key(next, "y"); cmd == nil {
+		t.Fatal("no answer")
+	} else {
+		cmd()
+	}
+	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "answer:%9" {
+		t.Fatalf("acts %+v", acts)
+	}
+	m.tab, m.selPID = tabSessions, 900
+	out := ansi.Strip(m.render())
+	for _, want := range []string{"not measured", q, "busy and idle are read from the pane"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("Sessions lacks %q:\n%s", want, out)
+		}
+	}
+}

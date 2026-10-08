@@ -186,3 +186,25 @@ func TestQueueKeepsUnseenForAGrace(t *testing.T) {
 		t.Fatal("an unseen session is kept forever")
 	}
 }
+
+// TestAPaneThatAsksWaitsForYou: an agent without hooks waits for the person
+// when its pane is idle and asks; the item says it was read from the pane.
+func TestAPaneThatAsksWaitsForYou(t *testing.T) {
+	asks := session("", "%4", "codex", "idle", time.Minute)
+	asks.FromPane, asks.Asks, asks.LastLine = true, true, "Would you like to run the following command?"
+	done := session("", "%5", "opencode", "idle", 2*time.Minute)
+	done.FromPane, done.LastLine = true, "Done. All 42 tests pass."
+	q := New()
+	q.Merge([]sample.Session{asks, done}, at(600))
+	items := q.Items()
+	if len(items) != 2 {
+		t.Fatalf("items %+v", items)
+	}
+	byName := map[string]Item{items[0].Name: items[0], items[1].Name: items[1]}
+	if it := byName["codex"]; it.State != StateQuestion || !it.FromPane || !it.Estimated || it.LastLine != asks.LastLine {
+		t.Fatalf("codex %+v", it)
+	}
+	if it := byName["opencode"]; it.State != StateFinished || !it.FromPane || it.LastLine != done.LastLine {
+		t.Fatalf("opencode %+v", it)
+	}
+}

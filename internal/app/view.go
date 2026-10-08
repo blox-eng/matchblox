@@ -330,7 +330,7 @@ func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
 		state = m.matchCell(s) + st.faint.Render(pad(s.Age(), colSt-2))
 		idle = st.muted.Render(pad(sample.Human(s.Idle), colIdle))
 	}
-	ctx := st.faint.Render(pad(s.Context, colBar+1+colPct))
+	ctx := st.faint.Render(pad(contextWord(s.Context), colBar+1+colPct))
 	if s.Context == "known" {
 		pctStyle := st.text
 		switch {
@@ -403,6 +403,12 @@ func (m Model) detail(w int) []string {
 	facts = append(facts, fmt.Sprintf("%d processes", s.Procs))
 	lines = append(lines, fit(" "+st.text.Render(strings.Join(facts, st.faint.Render("  ·  "))), w))
 	lines = append(lines, fit(" "+st.muted.Render(s.Cwd), w))
+	if s.LastLine != "" {
+		lines = append(lines, fit(" "+st.label.Render("LAST ")+st.text.Render(s.LastLine), w))
+	}
+	if s.FromPane {
+		lines = append(lines, fit(" "+st.faint.Render("no hooks for "+s.Name+": busy and idle are read from the pane"), w))
+	}
 	if p := s.Progress; p != nil {
 		lines = append(lines, fit(" "+st.label.Render("PROGRESS ")+m.progressCell(p, 10)+"  "+st.text.Render(p.Step), w))
 	}
@@ -413,6 +419,15 @@ func (m Model) detail(w int) []string {
 		lines = append(lines, fit(" "+st.label.Render("⏎ ")+st.muted.Render("tmux switch-client -t "+s.Pane), w))
 	}
 	return lines
+}
+
+// contextWord names a context use that has no figure: "fresh" before the
+// first turn, "not measured" for an agent without an adapter.
+func contextWord(c string) string {
+	if c == "unmeasured" {
+		return "not measured"
+	}
+	return c
 }
 
 func bar(pct float64, w int) string {

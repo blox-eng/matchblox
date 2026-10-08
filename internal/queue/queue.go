@@ -27,6 +27,9 @@ type Item struct {
 	Since     time.Time `json:"since"`
 	LastLine  string    `json:"last_line,omitempty"`
 	Estimated bool      `json:"estimated,omitempty"`
+	// FromPane: an agent without hooks, read from its pane. It waits when
+	// it is idle and its last lines ask; that can be later than a hook.
+	FromPane bool `json:"from_pane,omitempty"`
 }
 
 // UnseenGrace is how long a hooked session the sampler does not see yet
@@ -129,9 +132,13 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 			continue
 		}
 		if s.Status == "idle" && !s.Busy {
+			state := StateFinished
+			if s.Asks {
+				state = StateQuestion
+			}
 			items = append(items, Item{
 				SessionID: s.SessionID, Pane: s.Pane, Target: s.Target, Name: s.Name,
-				State: StateFinished, Since: now.Add(-s.Idle), Estimated: true,
+				State: state, Since: now.Add(-s.Idle), LastLine: s.LastLine, Estimated: true, FromPane: s.FromPane,
 			})
 		}
 	}

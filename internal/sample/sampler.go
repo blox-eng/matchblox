@@ -53,6 +53,7 @@ type Session struct {
 	// adapter: what it said last, and whether that asks the person.
 	LastLine string `json:"last_line,omitempty"`
 	Asks     bool   `json:"asks,omitempty"`
+	FromPane bool   `json:"from_pane,omitempty"` // busy and idle were read from the pane
 }
 
 // IdlePane is a pane that hosts no agent.
@@ -554,6 +555,7 @@ func (s *Sampler) readPanes(sessions []Session, idx []int, now time.Time) {
 		default:
 			sess.Status, sess.Idle = "idle", now.Sub(prev.changed).Truncate(time.Second)
 		}
+		sess.FromPane = true
 		sess.LastLine, sess.Asks = paneLine(t)
 	}
 }
