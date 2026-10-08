@@ -191,6 +191,33 @@ type Scanner struct {
 	Now         func() time.Time
 	dirty       map[string]dirtyAt
 	merged      map[string]mergedAt
+	open        map[string]openAt
+}
+
+type openAt struct {
+	set map[string]PR
+	at  time.Time
+}
+
+// openPRs asks for the open pull requests of a repository at most every
+// mergedEvery, and only when a checkout is on a branch other than def.
+func (s *Scanner) openPRs(ctx context.Context, path, def string, wts []Worktree) map[string]PR {
+	if s.Open == nil {
+		return nil
+	}
+	branch := false
+	for _, wt := range wts {
+		branch = branch || (wt.Branch != "" && wt.Branch != def)
+	}
+	if !branch {
+		return nil
+	}
+	if c, ok := s.open[path]; ok && s.Now().Sub(c.at) < mergedEvery {
+		return c.set
+	}
+	set := s.Open(ctx, path)
+	s.open[path] = openAt{set, s.Now()}
+	return set
 }
 
 // mergedEvery bounds how often merged-branch data is fetched per repository.
@@ -213,7 +240,7 @@ func Scan(ctx context.Context, in Input, git Runner, merged Merged) Report {
 
 func (s *Scanner) Scan(ctx context.Context, in Input) Report {
 	if s.dirty == nil {
-		s.dirty, s.merged = map[string]dirtyAt{}, map[string]mergedAt{}
+		s.dirty, s.merged, s.open = map[string]dirtyAt{}, map[string]mergedAt{}, map[string]openAt{}
 	}
 	if s.Now == nil {
 		s.Now = time.Now
@@ -269,10 +296,7 @@ func (s *Scanner) scanRepo(ctx context.Context, path string, in Input, sessionsI
 		return r, err
 	}
 	r.Worktrees = parseWorktrees(out)
-	var open map[string]PR
-	if s.Open != nil {
-		open = s.Open(ctx, path)
-	}
+	open := s.openPRs(ctx, path, def, r.Worktrees)
 
 	var mergedSet map[string]bool
 	if c, ok := s.merged[path]; ok && s.Now().Sub(c.at) < mergedEvery {
@@ -302,7 +326,7 @@ func (s *Scanner) scanRepo(ctx context.Context, path string, in Input, sessionsI
 		}
 		main := i == 0
 		wt.Merged = !main && wt.Branch != "" && wt.Branch != def && mergedSet[wt.Branch]
-		if pr, ok := open[wt.Branch]; ok && !main && wt.Branch != def {
+		if pr, ok := open[wt.Branch]; ok && wt.Branch != def {
 			wt.PR = &pr
 		}
 		switch {

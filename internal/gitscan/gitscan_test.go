@@ -196,3 +196,27 @@ func TestParseOpenSkipsForksAndControlKeys(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+// TestThePrimaryCheckoutOnABranchShowsItsPR: many builders never use
+// worktrees; an agent in the main checkout on a feature branch has a PR
+// too. The PR list is asked for once per repository per mergedEvery, and
+// not at all when every checkout is on the default branch.
+func TestThePrimaryCheckoutOnABranchShowsItsPR(t *testing.T) {
+	root, repo := newRepo(t)
+	run(t, repo, "checkout", "-q", "-b", "feat")
+	asked := 0
+	s := &Scanner{Git: Git, Open: func(context.Context, string) map[string]PR {
+		asked++
+		return map[string]PR{"feat": {Number: 42}}
+	}}
+	in := Input{SessionCwds: []string{repo}}
+	rep := s.Scan(context.Background(), in)
+	if wt := rep.Repos[0].Worktrees[0]; wt.PR == nil || wt.PR.Number != 42 {
+		t.Fatalf("main checkout on feat: PR %+v", wt.PR)
+	}
+	s.Scan(context.Background(), in)
+	if asked != 1 {
+		t.Fatalf("the PR list was asked for %d times in two scans, want 1", asked)
+	}
+	_ = root
+}
