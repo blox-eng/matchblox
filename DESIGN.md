@@ -180,7 +180,11 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   SessionStart hook asks each new session for that line
   (`progress_prompt`, on by default). The console never types it into a pane.
 - **Age** (owner, 2026-10-08): an idle session is `idle`, then `cold` from
-  one day, then `stale` from seven days. Sessions sort busy first, then the
+  one day, then `stale` from seven days. Under a day, a session that waits
+  shows the word of its queue row in Sessions too: `asks`, `waits`, `done`,
+  or `paused` when its turn ended with its progress bar under 100% and no
+  question (owner, 2026-10-08). A turn that ends on a question waits; it is
+  never `done`. Sessions sort busy first, then the
   ones that wait for the person, then idle with the newest first: the oldest
   sink to the bottom. On a stale session `x` and a typed `y` end the agent;
   on another session `x` says when it works. Agents that exited and wait

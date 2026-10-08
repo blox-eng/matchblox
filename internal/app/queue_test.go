@@ -425,3 +425,42 @@ func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
 		}
 	}
 }
+
+// TestSessionsSayWhatTheQueueSays: a session that waits shows the queue's
+// word in Sessions, not idle; a turn that ended under 100% progress, with
+// no question, is paused on both tabs.
+func TestSessionsSayWhatTheQueueSays(t *testing.T) {
+	st := fixtureState()
+	st.Sessions = append(st.Sessions,
+		sample.Session{PID: 901, Pane: "%8", Target: "app:1.1", Name: "slice-one", Status: "idle", Idle: time.Minute, Context: "fresh",
+			Progress: &sample.Progress{Pct: 60, Step: "wiring"}},
+		sample.Session{PID: 902, Pane: "%9", Target: "app:2.1", Name: "slice-two", Status: "idle", Idle: time.Minute, Context: "fresh"})
+	st.Queue = []queue.Item{
+		{Pane: "%8", Target: "app:1.1", Name: "slice-one", State: queue.StateFinished, Since: st.At.Add(-time.Minute)},
+		{Pane: "%9", Target: "app:2.1", Name: "slice-two", State: queue.StateQuestion, Since: st.At.Add(-time.Minute), LastLine: "Shall I open the PR?"},
+	}
+	m, _ := loadedWith(t, 100, st)
+	rowOf := func(out, name string) string {
+		for _, l := range strings.Split(out, "\n") {
+			if strings.Contains(l, name) {
+				return l
+			}
+		}
+		t.Fatalf("no row for %s:\n%s", name, out)
+		return ""
+	}
+	q := ansi.Strip(m.render())
+	if r := rowOf(q, "slice-one"); !strings.Contains(r, "paused") {
+		t.Fatalf("queue row %q", r)
+	}
+	m.tab = tabSessions
+	for _, w := range []int{100, 50} {
+		m.width = w
+		out := ansi.Strip(m.render())
+		for name, word := range map[string]string{"slice-one": "paused", "slice-two": "waits"} {
+			if r := rowOf(out, name); !strings.Contains(r, word) || strings.Contains(r, "idle") {
+				t.Fatalf("width %d: %s row %q, want %q", w, name, r, word)
+			}
+		}
+	}
+}
