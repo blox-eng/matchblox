@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -281,7 +282,7 @@ func TestConfirmedRecActIsSentNotRun(t *testing.T) {
 	}
 	next.Update(cmd())
 	acts := f.acts()
-	if len(acts) != 1 || acts[0] != (proto.Act{RecID: "r9", Which: "secondary", Confirm: "y"}) {
+	if len(acts) != 1 || !reflect.DeepEqual(acts[0], proto.Act{RecID: "r9", Which: "secondary", Confirm: "y"}) {
 		t.Fatalf("sent %+v", acts)
 	}
 }

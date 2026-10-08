@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -207,7 +208,7 @@ func TestRemoveEverySafeWorktree(t *testing.T) {
 		next, _ = next.Update(msg)
 	}
 	acts := f.acts()
-	if len(acts) != 2 || acts[0] != (proto.Act{RecID: "worktree:/w/wt/done-1", Which: "secondary", Confirm: "y"}) ||
+	if len(acts) != 2 || !reflect.DeepEqual(acts[0], proto.Act{RecID: "worktree:/w/wt/done-1", Which: "secondary", Confirm: "y"}) ||
 		acts[1].RecID != "worktree:/w/wt/done-2" {
 		t.Fatalf("sent %+v", acts)
 	}

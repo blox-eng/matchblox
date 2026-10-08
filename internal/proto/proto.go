@@ -73,6 +73,8 @@ type Act struct {
 	Confirm string `json:"confirm,omitempty"` // "y" for a destructive action
 	// Text is what the person typed for an "answer:<pane>" act.
 	Text string `json:"text,omitempty"`
+	// Picks are the choices of a door the person picked (its hosts).
+	Picks []string `json:"picks,omitempty"`
 }
 
 type Result struct {

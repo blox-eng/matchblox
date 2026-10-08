@@ -101,6 +101,7 @@ type action struct {
 	say         string   // what the confirm shows, when not the first step
 	term        bool     // the step takes this terminal (a door's command)
 	door        string   // the door it opens or closes
+	picks       []string // the hosts a door writes
 	remote      bool     // steps[0] is the ssh argv that runs it on the host, checked
 	install     bool     // it installs matchblox on the host
 }
@@ -143,6 +144,8 @@ type Model struct {
 	doorPick   string       // the selected door
 	doorAt     int          // its row, for the door after it when it folds
 	previewTop int          // the first line of a door's diff on screen
+	hostAt     int             // the host under the cursor of the hosts door
+	hostPicks  map[string]bool // the hosts the builder picked
 	paneSel    int
 	input      *answerInput
 	changes    map[string]change // pane -> a match change that plays once
@@ -308,7 +311,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		first := !m.have
 		st := proto.State(msg)
 		m.queue = st.Queue
-		m.doors = openDoors(st.Doors)
+		m.doors = openDoors(st.Doors, m.opt.Host != "")
 		m.noteChanges(st.Sessions)
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
 		m.all = lists{queue: st.Queue, recs: st.Recommendations, sessions: st.Sessions, orphans: st.Orphans}
@@ -469,6 +472,12 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	if m.pending != nil {
 		a := *m.pending
 		m.pending = nil
+		if k == "y" && a.door == doors.Hosts && a.which != "secondary" {
+			if a.picks = m.pickedHosts(); len(a.picks) == 0 {
+				m.pending, m.flash = &a, "space picks a host first"
+				return m, nil
+			}
+		}
 		// A destructive action needs a typed y; Enter alone is not consent.
 		if k == "y" || (k == "enter" && !a.destructive) {
 			return m.confirm(a)
@@ -519,7 +528,7 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.move(1)
 	case "enter":
-		m.pending, m.previewTop = m.primary(), 0
+		m.pending, m.previewTop, m.hostAt = m.primary(), 0, 0
 	case "x":
 		m.pending = m.secondary()
 		if m.pending == nil && m.tab == tabSessions {
@@ -576,7 +585,7 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 		confirm = "y"
 	}
 	m.flash = "sent: " + a.String()
-	return m, m.send(proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
+	return m, m.send(proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text, Picks: a.picks})
 }
 
 // navAllowed is what a Nav step may be: it runs here on one key, so a

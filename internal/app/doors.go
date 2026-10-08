@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"maps"
 	"os/exec"
 	"strings"
 
@@ -12,11 +13,13 @@ import (
 	"github.com/blox-eng/matchblox/internal/remote"
 )
 
-// openDoors are the doors the console shows: done and closed ones fold.
-func openDoors(ds []doors.Door) []doors.Door {
+// openDoors are the doors the console shows: done and closed ones fold. A
+// console of another host shows no hosts door: hosts are picked on the
+// machine the builder connects from.
+func openDoors(ds []doors.Door, remote bool) []doors.Door {
 	var out []doors.Door
 	for _, d := range ds {
-		if d.Open() {
+		if d.Open() && !(remote && d.ID == doors.Hosts) {
 			out = append(out, d)
 		}
 	}
@@ -159,6 +162,9 @@ func (m Model) previewDoor() (doors.Door, bool) {
 }
 
 func (m Model) previewLines(d doors.Door) []string {
+	if d.ID == doors.Hosts {
+		return m.hostLines(d)
+	}
 	if d.Term != nil && m.pending != nil {
 		return []string{shellLine(m.pending.steps[0])} // the exact argv this console runs
 	}
@@ -188,6 +194,9 @@ func (m Model) scrollPreview(k string) (Model, bool) {
 		return m, false
 	}
 	last := max(0, len(m.previewLines(d))-m.previewRoom())
+	if d.ID == doors.Hosts {
+		return m.pickHost(d, k, last)
+	}
 	switch k {
 	case "down", "j":
 		m.previewTop = min(m.previewTop+1, last)
@@ -216,7 +225,11 @@ func (m Model) preview(b *body, d doors.Door, w int) {
 	end := min(top+m.previewRoom(), len(lines))
 	cut := len(lines) - end
 	lines = lines[top:end]
-	for _, l := range lines {
+	for i, l := range lines {
+		lead := " "
+		if d.ID == doors.Hosts && top+i == hostsHead+m.hostAt {
+			lead = st.accent.Render("▌")
+		}
 		style := st.faint
 		switch {
 		case strings.HasPrefix(l, "+"):
@@ -226,7 +239,7 @@ func (m Model) preview(b *body, d doors.Door, w int) {
 		case d.Path == "":
 			style = st.text // a command
 		}
-		b.add(-1, fit(" "+style.Render(tilde(l)), w))
+		b.add(-1, fit(lead+style.Render(tilde(l)), w))
 	}
 	if cut > 0 {
 		b.add(-1, fit(" "+st.faint.Render(fmt.Sprintf("… %d more lines: ↓ the rest of the diff, then y", cut)), w))
@@ -237,3 +250,71 @@ func plainText(s ...string) string { return strings.Join(s, "") }
 
 // shellLine is argv as the person would type it.
 func shellLine(argv []string) string { return remote.Line(argv) }
+
+// hostsHead is how many lines of the hosts block come before the first host.
+const hostsHead = 3
+
+// hostLines is the block the hosts door appends, with every host of
+// ~/.ssh/config in it: a picked one is a new line ("+"), the others are
+// not written.
+func (m Model) hostLines(d doors.Door) []string {
+	block := strings.Split(strings.TrimSuffix(doors.HostsBlock(d.Choices), "\n"), "\n")
+	out := make([]string, 0, len(block))
+	for i, l := range block {
+		h := i - hostsHead
+		if h >= 0 && h < len(d.Choices) && !m.hostPicks[d.Choices[h]] {
+			out = append(out, " "+l)
+			continue
+		}
+		out = append(out, "+"+l)
+	}
+	return out
+}
+
+// pickHost moves the cursor of the hosts door and picks with space. The
+// list scrolls with the cursor; y waits for its last line, as for a diff.
+func (m Model) pickHost(d doors.Door, k string, last int) (Model, bool) {
+	switch k {
+	case "down", "j":
+		m.hostAt = min(m.hostAt+1, len(d.Choices)-1)
+	case "up", "k":
+		m.hostAt = max(m.hostAt-1, 0)
+	case "space", " ":
+		h := d.Choices[m.hostAt]
+		picks := maps.Clone(m.hostPicks)
+		if picks == nil {
+			picks = map[string]bool{}
+		}
+		picks[h] = !picks[h]
+		m.hostPicks = picks
+		return m, true
+	case "y":
+		return m, !m.previewSeen()
+	default:
+		return m, false
+	}
+	// Keep the cursor on the screen; past the last host, show the end.
+	line, room := hostsHead+m.hostAt, m.previewRoom()
+	switch {
+	case m.hostAt == len(d.Choices)-1:
+		m.previewTop = last
+	case line < m.previewTop:
+		m.previewTop = line
+	case line >= m.previewTop+room:
+		m.previewTop = line - room + 1
+	}
+	return m, true
+}
+
+// pickedHosts are the picked hosts of the selected hosts door, in its order.
+func (m Model) pickedHosts() []string {
+	var out []string
+	if d, ok := m.selectedDoor(); ok && d.ID == doors.Hosts {
+		for _, h := range d.Choices {
+			if m.hostPicks[h] {
+				out = append(out, h)
+			}
+		}
+	}
+	return out
+}

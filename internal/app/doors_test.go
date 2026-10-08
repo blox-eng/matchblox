@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -80,7 +81,7 @@ func TestYOpensTheDoorItShowed(t *testing.T) {
 		next.Update(cmd())
 	}
 	acts := f.acts()
-	if len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:wayback", Which: "primary", Confirm: "y", Text: "s2"}) {
+	if len(acts) != 1 || !reflect.DeepEqual(acts[0], proto.Act{RecID: "door:wayback", Which: "primary", Confirm: "y", Text: "s2"}) {
 		t.Fatalf("acts %+v", acts)
 	}
 }
@@ -95,7 +96,7 @@ func TestXClosesADoor(t *testing.T) {
 	if cmd != nil {
 		next.Update(cmd())
 	}
-	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:guide", Which: "secondary", Confirm: "y"}) {
+	if acts := f.acts(); len(acts) != 1 || !reflect.DeepEqual(acts[0], proto.Act{RecID: "door:guide", Which: "secondary", Confirm: "y"}) {
 		t.Fatalf("acts %+v", acts)
 	}
 }
@@ -150,7 +151,7 @@ func TestTheGuideClosesAfterItRan(t *testing.T) {
 		t.Fatal("nothing sent")
 	}
 	cmd()
-	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:guide", Which: "secondary", Confirm: "y"}) {
+	if acts := f.acts(); len(acts) != 1 || !reflect.DeepEqual(acts[0], proto.Act{RecID: "door:guide", Which: "secondary", Confirm: "y"}) {
 		t.Fatalf("acts %+v", acts)
 	}
 }
@@ -321,5 +322,61 @@ func TestAPhoneShowsOnlyTheSelectedWhy(t *testing.T) {
 	next, _ := key(m, "down")
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "prefix m comes back") || strings.Contains(out, "Claude Code tells") {
 		t.Fatalf("the why does not follow the selection:\n%s", out)
+	}
+}
+
+var hostsDoor = doors.Door{ID: doors.Hosts, Title: "Pick your hosts", Why: "matchblox <host> opens the console of a host.",
+	Path: home + "/.config/matchblox/config.toml", Sum: "s3", Choices: []string{"ws-1", "ws-2"}}
+
+func TestHostsDoorPicksWithSpace(t *testing.T) {
+	m, f := loadedWith(t, 100, doorState(hostsDoor))
+	next, _ := key(m, "enter")
+	out := ansi.Strip(next.(Model).render())
+	for _, want := range []string{"+[remote]", `"ws-1",`, `"ws-2",`, "space picks"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("view lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, `+  "ws-1"`) {
+		t.Fatalf("a host is picked before the builder picks it:\n%s", out)
+	}
+	next, _ = key(next, "down")
+	next, _ = key(next, " ")
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, `+  "ws-2",`) || strings.Contains(out, `+  "ws-1"`) {
+		t.Fatalf("space must pick the host under the cursor:\n%s", out)
+	}
+	next, cmd := key(next, "y")
+	if cmd == nil {
+		t.Fatal("y sent nothing")
+	}
+	next.Update(cmd())
+	want := proto.Act{RecID: "door:hosts", Which: "primary", Confirm: "y", Text: "s3", Picks: []string{"ws-2"}}
+	if acts := f.acts(); len(acts) != 1 || !reflect.DeepEqual(acts[0], want) {
+		t.Fatalf("acts %+v, want %+v", acts, want)
+	}
+}
+
+func TestHostsDoorNeedsAPick(t *testing.T) {
+	m, f := loadedWith(t, 100, doorState(hostsDoor))
+	next, _ := key(m, "enter")
+	next, cmd := key(next, "y")
+	if cmd != nil {
+		next.Update(cmd())
+	}
+	if len(f.acts()) != 0 {
+		t.Fatal("y with no host picked wrote the file")
+	}
+	if !strings.Contains(next.(Model).flash, "space picks") || next.(Model).pending == nil {
+		t.Fatalf("flash %q, pending %v: want the hint and the picker still open", next.(Model).flash, next.(Model).pending)
+	}
+}
+
+// Hosts are picked on the machine the builder connects from, not on a host.
+func TestRemoteHidesTheHostsDoor(t *testing.T) {
+	f := newFake()
+	m := New(Options{NoMotion: true, Conn: f, Host: "ws-1"})
+	next, _ := m.Update(stateMsg(doorState(hostsDoor, wayBack)))
+	if ds := next.(Model).doors; len(ds) != 1 || ds[0].ID != doors.WayBack {
+		t.Fatalf("doors %+v", ds)
 	}
 }

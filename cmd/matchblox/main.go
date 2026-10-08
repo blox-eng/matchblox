@@ -99,6 +99,11 @@ func run(args []string) error {
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
+	fl.Visit(func(f *flag.Flag) {
+		if f.Name == "config" {
+			configArg = f.Value.String()
+		}
+	})
 	switch cmd {
 	case "version":
 		fmt.Println(version)
@@ -106,11 +111,6 @@ func run(args []string) error {
 	case "setup":
 		return setupDoors(*liveSetup(), os.Stdin, os.Stdout, runInTerminal)
 	}
-	fl.Visit(func(f *flag.Flag) {
-		if f.Name == "config" {
-			configArg = f.Value.String()
-		}
-	})
 	if (cmd == "console" || cmd == "serve") && *root == "" {
 		cores, mem := machineSize()
 		firstRun(*cfgPath, cores, mem)

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -95,7 +96,7 @@ func TestXEndsAStaleSession(t *testing.T) {
 		t.Fatal("y sent nothing")
 	}
 	cmd()
-	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "session:5", Which: "secondary", Confirm: "y"}) {
+	if acts := f.acts(); len(acts) != 1 || !reflect.DeepEqual(acts[0], proto.Act{RecID: "session:5", Which: "secondary", Confirm: "y"}) {
 		t.Fatalf("sent %+v", acts)
 	}
 }

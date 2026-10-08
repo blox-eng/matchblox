@@ -116,7 +116,7 @@ func TestAnswerNeedsConfirm(t *testing.T) {
 	}
 	cmd()
 	acts := f.acts()
-	if len(acts) != 1 || acts[0] != (proto.Act{RecID: "answer:%2", Which: "secondary", Confirm: "y", Text: "yes"}) {
+	if len(acts) != 1 || !reflect.DeepEqual(acts[0], proto.Act{RecID: "answer:%2", Which: "secondary", Confirm: "y", Text: "yes"}) {
 		t.Fatalf("acts %+v", acts)
 	}
 }

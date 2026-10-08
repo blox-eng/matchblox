@@ -25,6 +25,7 @@ type Env struct {
 	// Exe is the matchblox the hooks run. Empty: "matchblox" on the PATH.
 	Exe      string
 	StateDir string // where closed doors are kept
+	Config   string // config.toml, where the hosts door writes
 	Root     bool   // a root shell installs packages without sudo
 	Getenv   func(string) string
 	LookPath func(string) (string, error)
@@ -48,6 +49,9 @@ func Doors(e Env) []doors.Door {
 		ds = append(ds, hooksDoor(e))
 	}
 	ds = append(ds, wayBackDoor(e))
+	if hosts := SSHHosts(e.Home); len(hosts) > 0 && e.Config != "" {
+		ds = append(ds, hostsDoor(e, hosts))
+	}
 	if usesClaude(e) {
 		ds = append(ds, guideDoor())
 	}
@@ -58,9 +62,12 @@ func Doors(e Env) []doors.Door {
 }
 
 // Open runs a door that changes a file. seen is the Sum of the preview the
-// person confirmed. It returns the backup, "" when there was no file.
-func Open(e Env, id, seen string) (backup string, err error) {
+// person confirmed; picks are the choices they picked. It returns the
+// backup, "" when there was no file.
+func Open(e Env, id, seen string, picks []string) (backup string, err error) {
 	switch id {
+	case doors.Hosts:
+		return AddHosts(e, seen, picks)
 	case doors.Hooks:
 		return AddHooks(settingsPath(e), e.Exe, seen)
 	case doors.WayBack:
@@ -71,7 +78,7 @@ func Open(e Env, id, seen string) (backup string, err error) {
 	return "", fmt.Errorf("no door %q", id)
 }
 
-var known = []string{doors.Tmux, doors.Hooks, doors.WayBack, doors.Guide}
+var known = []string{doors.Tmux, doors.Hooks, doors.WayBack, doors.Hosts, doors.Guide}
 
 // Close hides a door from the console; `matchblox setup` shows it again.
 func Close(e Env, id string) error {
