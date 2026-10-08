@@ -21,12 +21,28 @@ func (m Model) regionPath(path, rest string, w int) []string {
 
 var home, _ = os.UserHomeDir()
 
-// tilde shortens the home directory to ~ for display.
+// tilde shortens the home directory to ~ for display: only a whole path,
+// so /home/al never eats the start of /home/alice.
 func tilde(s string) string {
 	if home == "" || home == "/" {
 		return s
 	}
-	return strings.ReplaceAll(s, home, "~")
+	var b strings.Builder
+	for {
+		i := strings.Index(s, home)
+		if i < 0 {
+			b.WriteString(s)
+			return b.String()
+		}
+		rest := s[i+len(home):]
+		b.WriteString(s[:i])
+		if rest == "" || !strings.ContainsAny(rest[:1], "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") {
+			b.WriteString("~")
+		} else {
+			b.WriteString(home)
+		}
+		s = rest
+	}
 }
 
 // alertLines puts what needs attention first; nothing renders when all is well.

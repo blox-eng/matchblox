@@ -187,6 +187,16 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   for their parent (zombies) are one faint line under the sessions
   ("137 exited agents · e shows them"); `e` lists them with the parent that
   keeps them and the command that clears them. They never count as sessions.
+- **Doors** (#25): the setup steps sit above the queue under `SET UP · N`,
+  one row each: the title, then why in `muted` (a door that cannot open shows
+  the fix in `warn`). On a phone only the selected door shows why. `Enter`
+  shows the exact diff (`+` in the accent, `-` in `neg`) or the exact argv
+  under the doors, and the action line names the door. A diff longer than
+  the screen scrolls with `↑↓`, and `y` works only after its last line was
+  on the screen. A typed `y` opens it,
+  `x` and `y` close it. A door that is done folds away at once. `matchblox
+  setup` shows every door, done and closed ones too. An agent that waits is
+  selected before a door; with nobody waiting, the first door is.
 - **Lists** (owner, 2026-10-08): `/` searches the open tab (every key is
   text until `⏎` keeps it or `esc` clears it; a tab change ends it); an empty
   result says "nothing matches <text>". `s` sorts Sessions and Panes by the

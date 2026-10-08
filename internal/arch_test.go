@@ -50,7 +50,7 @@ func TestArchBoundaries(t *testing.T) {
 	}
 	for _, imp := range app.Imports {
 		switch strings.TrimPrefix(imp, mod) {
-		case "procfs", "host", "gitscan", "actions", "panes", "hooks", "stoker", "service":
+		case "procfs", "host", "gitscan", "actions", "panes", "hooks", "setup", "stoker", "service":
 			t.Errorf("internal/app imports %s: the console must not read the machine", imp)
 		}
 	}

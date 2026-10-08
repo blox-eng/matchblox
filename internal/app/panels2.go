@@ -147,7 +147,7 @@ func (m Model) recsSection(b *body, w int) {
 		b.add(-1, st.faint.Render(m.nothing(" nothing to do")))
 		return
 	}
-	n := len(m.queue)
+	n := len(m.doors) + len(m.queue)
 	sel := m.queueIndex() - n
 	for i, r := range m.recs {
 		mark := st.faint.Render("○ ")

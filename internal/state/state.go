@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -19,6 +20,8 @@ type Doc struct {
 	Git             *gitscan.Report `json:"git,omitempty"`
 	Recommendations []advice.Rec    `json:"recommendations"`
 	Queue           []queue.Item    `json:"queue"`
+	// Doors are the setup steps of the machine; the console shows the open ones.
+	Doors []doors.Door `json:"doors,omitempty"`
 }
 
 // Path is $XDG_STATE_HOME/matchblox/state.json, defaulting to ~/.local/state.
