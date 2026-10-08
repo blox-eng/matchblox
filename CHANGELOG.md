@@ -19,6 +19,8 @@ All notable changes to matchblox are in this file. The format follows
   OpenCode counts it. The window comes from the model the agent reports;
   `[sessions.windows]` overrides it. A session is "fresh" before its first
   turn and "not measured" when its files cannot be read, never a guess.
+  Codex context use needs Linux (its session is found by the files the
+  process holds open).
 - An ACCOUNT column in Sessions on wide screens: the provider's mark (`✻`
   Anthropic, `❋` OpenAI, `▣` OpenCode), then the email and plan or "API
   key". Each Claude Code process reads its own config directory
