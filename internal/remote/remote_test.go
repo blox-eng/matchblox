@@ -198,11 +198,21 @@ func TestNavArgvAttachesOnTheHost(t *testing.T) {
 	}
 }
 
+// The line is what a person can paste: the remote command stays one word,
+// so its pipe runs on the host.
 func TestLineShowsTheRemoteCommandAsTyped(t *testing.T) {
-	got := Line(TermArgv("ws-1", []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}))
-	want := `ssh -t -- ws-1 sudo sh -c 'apt-get update && apt-get install -y tmux'`
-	if got != want {
-		t.Fatalf("Line = %s\nwant   %s", got, want)
+	for _, c := range []struct {
+		argv []string
+		want string
+	}{
+		{TermArgv("ws-1", []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}), `ssh -t -- ws-1 "sudo sh -c 'apt-get update && apt-get install -y tmux'"`},
+		{InstallArgv("ws-1"), `ssh -t -- ws-1 "curl -fsSL https://matchblox.sh | MATCHBLOX_NO_START=1 sh"`},
+		{TermArgv("ws-1", []string{"echo", `a"b`}), `ssh -t -- ws-1 'echo '\''a"b'\'''`},
+		{TermArgv("ws-1", []string{"claude"}), `ssh -t -- ws-1 claude`},
+	} {
+		if got := Line(c.argv); got != c.want {
+			t.Errorf("Line = %s\nwant   %s", got, c.want)
+		}
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/transport"
@@ -86,13 +87,21 @@ func Quote(argv []string) string {
 	return strings.Join(q, " ")
 }
 
-// Line is argv as the person would type it. ssh joins the words after the
-// host into one shell line, so that line shows as it is.
+// Line is argv as the person would type it, and can paste: the command an
+// ssh argv runs on the host stays one word, in double quotes when nothing
+// in it would expand there.
 func Line(argv []string) string {
-	if len(argv) > 1 && argv[0] == "ssh" {
-		return Quote(argv[:len(argv)-1]) + " " + argv[len(argv)-1]
+	n := len(argv) - 1
+	if n < 1 || argv[0] != "ssh" {
+		return Quote(argv)
 	}
-	return Quote(argv)
+	last := argv[n]
+	if Quote([]string{last}) != last && !strings.ContainsAny(last, "\"$`\\!") {
+		last = `"` + last + `"`
+	} else {
+		last = Quote([]string{last})
+	}
+	return Quote(argv[:n]) + " " + last
 }
 
 // NeedsInstall reads ssh's exit: 127 is the far shell's "not found".
@@ -133,7 +142,7 @@ type conn struct {
 	stderr lockedBuffer
 	once   sync.Once
 	err    error
-	spoke  bool
+	spoke  atomic.Bool // the far side sent a message
 }
 
 // Recv names why ssh ended instead of a bare EOF.
@@ -142,12 +151,7 @@ func (c *conn) Recv() (proto.Envelope, error) {
 	if err != nil {
 		return env, c.exit(err)
 	}
-	if !c.spoke {
-		// What the far side wrote before it spoke (a first run's note) is
-		// not why it ends later.
-		c.spoke = true
-		c.stderr.Reset()
-	}
+	c.spoke.Store(true)
 	return env, nil
 }
 
@@ -170,6 +174,11 @@ func (c *conn) exit(readErr error) error {
 			code = ee.ExitCode()
 		}
 		stderr := strings.TrimSpace(c.stderr.String())
+		if c.spoke.Load() && code != 255 {
+			// Once the far side spoke, what it wrote first (a first run's
+			// note) is not why it ended; ssh's own failures exit 255.
+			stderr = ""
+		}
 		switch {
 		case NeedsInstall(stderr, code):
 			c.err = ErrNotInstalled
@@ -208,12 +217,6 @@ func (l *lockedBuffer) Write(p []byte) (int, error) {
 		l.b.Reset() // only the last lines matter
 	}
 	return l.b.Write(p)
-}
-
-func (l *lockedBuffer) Reset() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.b.Reset()
 }
 
 func (l *lockedBuffer) String() string {
