@@ -109,7 +109,11 @@ func (m Model) queuePanel(w int) body {
 		tail := st.muted.Render(it.LastLine)
 		switch {
 		case it.FromPane:
-			tail = st.faint.Render("from the pane: ") + tail // first: a long line is cut at the end
+			if it.LastLine == "" {
+				tail = st.faint.Render("from the pane")
+			} else {
+				tail = st.faint.Render("from the pane: ") + tail // first: a long line is cut at the end
+			}
 		case it.Estimated:
 			tail = st.faint.Render("estimated")
 		}

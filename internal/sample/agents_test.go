@@ -86,3 +86,48 @@ func TestEveryAgentInAPaneIsASession(t *testing.T) {
 		t.Errorf("%d sessions, want 9", n)
 	}
 }
+
+// TestAnAgentOfAnotherTmuxServerTakesNoPaneOfOurs: pane ids repeat across
+// tmux servers. An agent started under another server (its TMUX names
+// another socket) never takes the pane with its TMUX_PANE in our list.
+func TestAnAgentOfAnotherTmuxServerTakesNoPaneOfOurs(t *testing.T) {
+	root := copyFixture(t)
+	addProc(t, root, 880, 1, "codex", []string{"codex"}, "")
+	env := "TMUX=/tmp/tmux-1000/other,4242,0\x00TMUX_PANE=%1\x00"
+	if err := os.WriteFile(filepath.Join(root, "proc", "880", "environ"), []byte(env), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(root, "tmux-panes.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lines []string
+	for _, l := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+		lines = append(lines, l+"\t/tmp/tmux-1000/default")
+	}
+	if err := os.WriteFile(filepath.Join(root, "tmux-panes.txt"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	for _, s := range smp.Sample().Sessions {
+		if s.PID == 880 && s.Pane != "" {
+			t.Fatalf("the agent of another server took pane %s", s.Pane)
+		}
+		if s.Pane == "%1" && s.PID != 200 {
+			t.Fatalf("pane %%1 belongs to pid 200, got %d", s.PID)
+		}
+	}
+	// The same agent under our server keeps its pane.
+	env = "TMUX=/tmp/tmux-1000/default,4242,0\x00TMUX_PANE=%3\x00"
+	if err := os.WriteFile(filepath.Join(root, "proc", "880", "environ"), []byte(env), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	smp = newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	for _, s := range smp.Sample().Sessions {
+		if s.PID == 880 && s.Pane != "%3" {
+			t.Fatalf("the agent of our server lost its pane: %q", s.Pane)
+		}
+	}
+}
