@@ -223,6 +223,9 @@ func (m Model) footer(w int) string {
 	if _, ok := m.selectedRec(); ok {
 		tabKeys = "↑↓ select  ⏎ do  x the other action"
 	}
+	if s, ok := m.selected(); ok && m.tab == tabSessions && s.Age() == "stale" {
+		tabKeys += "  x end"
+	}
 	keys := tabKeys + "  / find  1-7 panel  q quit"
 	if m.filter != "" {
 		keys = "/ " + m.filter + " · esc clears  " + tabKeys

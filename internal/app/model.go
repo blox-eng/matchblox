@@ -477,6 +477,9 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		m.pending = m.primary()
 	case "x":
 		m.pending = m.secondary()
+		if m.pending == nil && m.tab == tabSessions {
+			m.flash = "x ends a stale session: one idle 7 days or more"
+		}
 	case "a":
 		if pane, why := m.answerTarget(); pane != "" {
 			m.input = &answerInput{pane: pane}

@@ -66,6 +66,13 @@ var views = [...]tabView{
 			}
 			return nil
 		},
+		secondary: func(m Model) *action {
+			if s, ok := m.selected(); ok && s.Age() == "stale" {
+				return &action{label: "end", steps: [][]string{{"kill", strconv.Itoa(s.PID)}}, destructive: true,
+					rec: "session:" + strconv.Itoa(s.PID), which: "secondary"}
+			}
+			return nil
+		},
 		body: func(m Model, w int) body { return m.sessions(w, m.height-chrome-1) },
 	},
 	tabMachine: {

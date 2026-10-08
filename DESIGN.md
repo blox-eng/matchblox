@@ -179,6 +179,14 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   line of a row on a phone, and with its step in the detail. The
   SessionStart hook asks each new session for that line
   (`progress_prompt`, on by default). The console never types it into a pane.
+- **Age** (owner, 2026-10-08): an idle session is `idle`, then `cold` from
+  one day, then `stale` from seven days. Sessions sort busy first, then the
+  ones that wait for the person, then idle with the newest first: the oldest
+  sink to the bottom. On a stale session `x` and a typed `y` end the agent;
+  on another session `x` says when it works. Agents that exited and wait
+  for their parent (zombies) are one faint line under the sessions
+  ("137 exited agents · e shows them"); `e` lists them with the parent that
+  keeps them and the command that clears them. They never count as sessions.
 - **Lists** (owner, 2026-10-08): `/` searches the open tab (every key is
   text until `⏎` keeps it or `esc` clears it; a tab change ends it); an empty
   result says "nothing matches <text>". `s` sorts Sessions and Panes by the

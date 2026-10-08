@@ -69,3 +69,33 @@ func TestIdleSessionsAge(t *testing.T) {
 		}
 	}
 }
+
+// TestXEndsAStaleSession: x on a stale session ends its agent after a
+// typed y; on any other session it says when x works.
+func TestXEndsAStaleSession(t *testing.T) {
+	m, f := loadedWith(t, 120, agingState())
+	var next tea.Model = m
+	next, _ = key(next, "2")
+	next, _ = key(next, "x") // bravo: busy
+	if next.(Model).pending != nil || !strings.Contains(actionLine(next), "x ends a stale session") {
+		t.Fatalf("x on a busy session: %q", actionLine(next))
+	}
+	for range 4 {
+		next, _ = key(next, "down")
+	}
+	if !strings.Contains(actionLine(next), "x end") {
+		t.Fatalf("the keys of a stale session lack x: %q", actionLine(next))
+	}
+	next, _ = key(next, "x")
+	if line := actionLine(next); !strings.Contains(line, "RUN kill 5") || !strings.Contains(line, "y run") {
+		t.Fatalf("x on the stale session: %q", line)
+	}
+	_, cmd := key(next, "y")
+	if cmd == nil {
+		t.Fatal("y sent nothing")
+	}
+	cmd()
+	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "session:5", Which: "secondary", Confirm: "y"}) {
+		t.Fatalf("sent %+v", acts)
+	}
+}

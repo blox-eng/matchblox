@@ -25,6 +25,7 @@ type Exited struct {
 
 type Session struct {
 	PID        int           `json:"pid"`
+	Start      uint64        `json:"start_ticks"` // /proc/<pid>/stat field 22: tells a reused pid apart
 	Pane       string        `json:"pane"`
 	Target     string        `json:"target"`
 	Tab        string        `json:"tab"` // tmux window name
@@ -358,7 +359,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 
 		cpu, n := s.treeCPU(pid, procs, children, dt)
 		sess := Session{
-			PID: pid, Pane: paneID, Target: pane.Target, Tab: pane.Window, Cwd: s.FS.Cwd(pid),
+			PID: pid, Start: p.StartTime, Pane: paneID, Target: pane.Target, Tab: pane.Window, Cwd: s.FS.Cwd(pid),
 			CPU: cpu, Procs: n, Window: 200_000, Context: "unknown",
 		}
 		if e, ok := s.agents.entry(pid); ok {
