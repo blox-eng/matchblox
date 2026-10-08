@@ -190,8 +190,8 @@ func TestTheQueueKeepsItsRowsUnderDoors(t *testing.T) {
 	var ran []string
 	mm := next.(Model)
 	mm.opt.Run = func(argv []string) error { ran = argv; return nil }
-	next, cmd := key(mm, "enter")
-	next, cmd = key(next, "enter")
+	next, _ = key(mm, "enter")
+	next, cmd := key(next, "enter")
 	if cmd == nil {
 		t.Fatal("no jump")
 	}

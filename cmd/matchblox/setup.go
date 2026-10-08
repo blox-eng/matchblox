@@ -67,49 +67,54 @@ func machineSize() (int, uint64) {
 // setupDoors is `matchblox setup`: every door at once, done ones too. For
 // each open door it shows the diff or the command, and opens it on y.
 func setupDoors(e setup.Env, in io.Reader, out io.Writer, run func(argv []string) error) error {
+	var werr error // the first failed write to out: the person sees nothing more
+	say := func(format string, a ...any) {
+		if werr == nil {
+			_, werr = fmt.Fprintf(out, format, a...)
+		}
+	}
 	answers := bufio.NewReader(in)
 	for _, d := range setup.Doors(e) {
 		if d.Done {
-			fmt.Fprintf(out, "✓ %s\n", d.Title)
+			say("✓ %s\n", d.Title)
 			continue
 		}
-		fmt.Fprintf(out, "\n%s\n  %s\n", d.Title, d.Why)
+		say("\n%s\n  %s\n", d.Title, d.Why)
 		if d.Problem != "" {
-			fmt.Fprintf(out, "  %s\n", d.Problem)
+			say("  %s\n", d.Problem)
 			continue
 		}
 		if d.Path != "" {
-			fmt.Fprintf(out, "\n  %s\n", d.Path)
+			say("\n  %s\n", d.Path)
 		}
 		for _, l := range strings.Split(d.Preview, "\n") {
-			fmt.Fprintf(out, "  %s\n", l)
+			say("  %s\n", l)
 		}
-		fmt.Fprint(out, "\ny opens it, Enter skips: ")
+		say("\ny opens it, Enter skips: ")
 		line, err := answers.ReadString('\n')
 		if strings.TrimSpace(line) != "y" {
-			fmt.Fprintln(out, "skipped")
+			say("skipped\n")
 			if err != nil {
-				return nil // no more answers: the rest stay closed
+				break // no more answers: the rest stay as they are
 			}
 			continue
 		}
 		if d.Term != nil {
 			if err := run(d.Term); err != nil {
-				fmt.Fprintf(out, "failed: %v\n", err)
+				say("failed: %v\n", err)
 			}
 			continue
 		}
-		backup, err := setup.Open(e, d.ID, d.Sum)
-		switch {
+		switch backup, err := setup.Open(e, d.ID, d.Sum); {
 		case err != nil:
-			fmt.Fprintf(out, "not written: %v\n", err)
+			say("not written: %v\n", err)
 		case backup != "":
-			fmt.Fprintf(out, "wrote %s; backup %s\n", d.Path, backup)
+			say("wrote %s; backup %s\n", d.Path, backup)
 		default:
-			fmt.Fprintf(out, "wrote %s\n", d.Path)
+			say("wrote %s\n", d.Path)
 		}
 	}
-	return nil
+	return werr
 }
 
 // runInTerminal gives a door's command this terminal.
