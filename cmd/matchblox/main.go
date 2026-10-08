@@ -39,6 +39,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -235,20 +236,11 @@ func progressPrompt(args []string) bool {
 func spoolPath() string { return filepath.Join(filepath.Dir(state.Path()), "spool.jsonl") }
 
 func console(path string, cfg config.Config, root string, noMotion bool, host string) error {
-	opt := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, NoMotion: noMotion,
-		OutsideTmux: os.Getenv("TMUX") == ""}
-	switch {
-	case host != "":
-		// The host's service, over SSH: every action runs and is guarded
-		// there.
-		home, _ := os.UserHomeDir()
-		t := remote.Target{Host: host, Key: remote.KeyPath(home)}
-		dial := func() (transport.Conn, error) { return remote.Connect(context.Background(), t) }
-		// A host that cannot be reached yet still opens: the console says
-		// why and offers the fix.
-		opt.Conn, opt.DialErr = dial()
-		opt.Redial, opt.Host, opt.Key, opt.Self = dial, host, t.Key, invokedPath(os.Args[0])
-	case root != "":
+	base := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, NoMotion: noMotion,
+		OutsideTmux: os.Getenv("TMUX") == "", Self: invokedPath(os.Args[0])}
+	// The screen changes on a state or a key press, so 15 frames a second
+	// is still instant to the eye and wakes the process 4x less than 60.
+	if root != "" {
 		// Fixtures: a service in this process, for demos and tests.
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -256,25 +248,49 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		a, b := net.Pipe()
 		go s.Run(ctx)
 		go s.Handle(ctx, transport.NewConn(b)) //nolint:errcheck // ends with the console
-		opt.Conn = transport.NewConn(a)
-	default:
-		c, err := ensureService(path)
-		if err != nil {
-			return err
-		}
-		opt.Conn = c
-		opt.Redial = func() (transport.Conn, error) { return ensureService(path) }
-		opt.Local = true
-		opt.Owner = func() int { return transport.Owner(path) }
+		base.Conn = transport.NewConn(a)
+		defer base.Conn.Close()
+		_, err := tea.NewProgram(app.New(base), tea.WithFPS(15)).Run()
+		return err
 	}
-	if opt.Conn != nil {
-		defer opt.Conn.Close()
+	home, _ := os.UserHomeDir()
+	list := hosts.Path()
+	asked := filepath.Join(filepath.Dir(state.Path()), "asked-where")
+	sh := app.NewShell(app.ShellOptions{
+		Base:     base,
+		Hosts:    func() []string { return hosts.Read(list) },
+		SSHHosts: func() []string { return hosts.SSHHosts(home) },
+		Open:     func(h string) app.Options { return openHost(path, home, h, base.OutsideTmux) },
+		Remove:   func(h string) error { return hosts.Remove(list, h) },
+		Start:    host,
+		FirstRun: !fileExists(asked) && !fileExists(list),
+		Answered: func() { _ = os.MkdirAll(filepath.Dir(asked), 0o700); _ = os.WriteFile(asked, nil, 0o600) },
+	})
+	final, err := tea.NewProgram(sh, tea.WithFPS(15)).Run()
+	if s, ok := final.(app.Shell); ok {
+		s.Close()
 	}
-	// The screen changes on a state or a key press, so 15 frames a second
-	// is still instant to the eye and wakes the process 4x less than 60.
-	_, err := tea.NewProgram(app.New(opt), tea.WithFPS(15)).Run()
 	return err
 }
+
+// openHost dials a host for the shell: "" is this machine's service,
+// started when needed; another host goes over ssh with the matchblox key.
+// A host that cannot be reached yet still opens: the console says why and
+// offers the fix.
+func openHost(path, home, host string, outsideTmux bool) app.Options {
+	if host == "" {
+		c, err := ensureService(path)
+		return app.Options{Conn: c, DialErr: err, Local: true, OutsideTmux: outsideTmux,
+			Redial: func() (transport.Conn, error) { return ensureService(path) },
+			Owner:  func() int { return transport.Owner(path) }}
+	}
+	t := remote.Target{Host: host, Key: remote.KeyPath(home)}
+	dial := func() (transport.Conn, error) { return remote.Connect(context.Background(), t) }
+	c, err := dial()
+	return app.Options{Conn: c, DialErr: err, Redial: dial, Host: host, Key: t.Key}
+}
+
+func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
 
 // newService builds the service for this machine, or for a fixture tree
 // (no git, nothing written).

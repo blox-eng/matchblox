@@ -59,6 +59,9 @@ type Options struct {
 	DialErr error
 	// Self is this binary, which connects a host (`matchblox connect`).
 	Self string
+	// Layered: the console sits under the hosts layer, and esc with
+	// nothing to cancel or clear goes back to it.
+	Layered bool
 	// Exec gives this terminal to argv until it exits. Nil: tea.ExecProcess.
 	Exec func(argv []string, done func(error) tea.Msg) tea.Cmd
 }
@@ -370,6 +373,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.flash += "; trying again in " + m.backoff.String()
 		return m, tea.Tick(m.backoff, func(time.Time) tea.Msg { return redialMsg{} })
 	case redialMsg:
+		if !m.redialing || m.quitting {
+			return m, nil // a tick from a console that was closed
+		}
 		redial := m.opt.Redial
 		return m, func() tea.Msg {
 			c, err := redial()
@@ -496,6 +502,8 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		if m.filter != "" {
 			m.filter = ""
 			m.refresh()
+		} else if m.opt.Layered {
+			return m, func() tea.Msg { return layerMsg{} }
 		}
 	case "s":
 		if s, _ := m.sortable(); s != nil {
