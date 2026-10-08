@@ -412,3 +412,24 @@ func TestRemoteReachesTheHostService(t *testing.T) {
 		}
 	}
 }
+
+// TestAgentLookPathFindsTheAgentsOwnDirs: the service can be the first to
+// run, with a small PATH; the agents' own install dirs are searched too.
+func TestAgentLookPathFindsTheAgentsOwnDirs(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".opencode", "bin")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "opencode"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", t.TempDir())
+	look := agentLookPath(home)
+	if p, err := look("opencode"); err != nil || p != filepath.Join(dir, "opencode") {
+		t.Fatalf("opencode: %q, %v", p, err)
+	}
+	if _, err := look("no-such-agent-x7"); err == nil {
+		t.Fatal("found an agent that is not there")
+	}
+}

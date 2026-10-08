@@ -101,8 +101,9 @@ type connMsg struct {
 	gen  int
 }
 type ranMsg struct {
-	cmd string
-	err error
+	cmd    string
+	err    error
+	jumped string // the pane a jump went to
 }
 
 // action waits for the person's confirm. A Nav action runs here; any other
@@ -122,6 +123,7 @@ type action struct {
 	door        string   // the door it opens or closes
 	remote      bool     // steps[0] is the ssh argv that runs it on the host, checked
 	connect     bool     // it connects the host: install, update or authorize
+	pane        string   // a jump: the pane it goes to
 }
 
 func (a action) String() string {
@@ -438,6 +440,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.flash = "failed: " + msg.cmd + ": " + msg.err.Error()
 		} else {
 			m.flash = "ran: " + msg.cmd
+			if msg.jumped != "" {
+				m = m.nextAfter(msg.jumped)
+			}
 		}
 	case tea.MouseClickMsg:
 		return m.tap(msg.Mouse())
@@ -619,28 +624,28 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 func runNav(a action, run func([]string) error) ranMsg {
 	for _, step := range a.steps {
 		if !remote.NavAllowed(step) {
-			return ranMsg{strings.Join(step, " "), fmt.Errorf("refused: only tmux switch-client and new-window run in the console")}
+			return ranMsg{cmd: strings.Join(step, " "), err: fmt.Errorf("refused: only tmux switch-client and new-window run in the console")}
 		}
 	}
 	for _, step := range a.steps {
 		if err := run(step); err != nil {
-			return ranMsg{strings.Join(step, " "), err}
+			return ranMsg{cmd: strings.Join(step, " "), err: err}
 		}
 	}
-	return ranMsg{a.String(), nil}
+	return ranMsg{cmd: a.String(), jumped: a.pane}
 }
 
 // jump goes to a pane: inside tmux the client switches to it; outside, the
 // console gives the terminal to `tmux attach` and comes back after it.
 func (m Model) jump(pane string) *action {
 	if m.opt.OutsideTmux {
-		return &action{label: "attach", nav: true, attach: true, steps: [][]string{
+		return &action{label: "attach", nav: true, attach: true, pane: pane, steps: [][]string{
 			{"tmux", "select-window", "-t", pane},
 			{"tmux", "select-pane", "-t", pane},
 			{"tmux", "attach-session", "-t", pane},
 		}}
 	}
-	return &action{label: "jump", nav: true, steps: [][]string{{"tmux", "switch-client", "-t", pane}}}
+	return &action{label: "jump", nav: true, pane: pane, steps: [][]string{{"tmux", "switch-client", "-t", pane}}}
 }
 
 // attach runs the moves, then gives the terminal to the last step.
@@ -648,7 +653,7 @@ func (m Model) attach(a action) tea.Cmd {
 	for _, step := range a.steps {
 		if !remote.NavAllowed(step) {
 			return func() tea.Msg {
-				return ranMsg{strings.Join(step, " "), fmt.Errorf("refused: only tmux moves run in the console")}
+				return ranMsg{cmd: strings.Join(step, " "), err: fmt.Errorf("refused: only tmux moves run in the console")}
 			}
 		}
 	}
@@ -657,7 +662,7 @@ func (m Model) attach(a action) tea.Cmd {
 		return func() tea.Msg { return r }
 	}
 	return tea.ExecProcess(exec.Command(last[0], last[1:]...), func(err error) tea.Msg { //nolint:gosec // argv checked by remote.NavAllowed
-		return ranMsg{strings.Join(last, " "), err}
+		return ranMsg{cmd: strings.Join(last, " "), err: err, jumped: a.pane}
 	})
 }
 
@@ -739,4 +744,48 @@ func (m Model) View() tea.View {
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion // a tap on a phone selects and acts
 	return v
+}
+
+// nextAfter selects, after a jump to pane, the next agent that waits: the
+// next queue row, or in Sessions the next session in the queue, else the
+// next idle one. The way back to the console lands on it.
+func (m Model) nextAfter(pane string) Model {
+	switch m.tab {
+	case tabQueue:
+		if it, ok := m.selectedQueue(); !ok || it.Pane != pane {
+			return m
+		}
+		for i, it := range m.queue {
+			if it.Pane == pane && len(m.queue) > 1 {
+				m.queuePane = m.queue[(i+1)%len(m.queue)].Pane
+			}
+		}
+	case tabSessions:
+		ss := m.snap.Sessions
+		at := -1
+		for i, s := range ss {
+			if s.Pane == pane {
+				at = i
+			}
+		}
+		if at < 0 {
+			return m
+		}
+		waits := map[string]bool{}
+		for _, it := range m.queue {
+			waits[it.Pane] = true
+		}
+		for _, want := range []func(sample.Session) bool{
+			func(s sample.Session) bool { return waits[s.Pane] },
+			func(s sample.Session) bool { return s.Age() == "idle" },
+		} {
+			for k := 1; k < len(ss); k++ {
+				if s := ss[(at+k)%len(ss)]; want(s) {
+					m.selPID = s.PID
+					return m
+				}
+			}
+		}
+	}
+	return m
 }

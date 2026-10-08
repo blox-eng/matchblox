@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -264,8 +265,8 @@ func (m Model) footer(w int) string {
 const (
 	colPane = 11 // session:window.pane; widened to show the tab name when there is room
 	colTab  = 12
-	colName = 18
-	colSt   = 8 // the match, a space, the word (stale is five letters)
+	colName = 17
+	colSt   = 9 // the match, a space, the word (paused is six letters), a space
 	colIdle = 6
 	colBar  = 10
 	colPct  = 9
@@ -327,10 +328,10 @@ func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
 	st := m.st
 	state, idle := m.matchCell(s)+st.text.Render(pad("busy", colSt-2)), pad("", colIdle)
 	if !s.Busy {
-		state = m.matchCell(s) + st.faint.Render(pad(s.Age(), colSt-2))
+		state = m.matchCell(s) + st.faint.Render(pad(m.stateWord(s), colSt-2))
 		idle = st.muted.Render(pad(sample.Human(s.Idle), colIdle))
 	}
-	ctx := st.faint.Render(pad(s.Context, colBar+1+colPct))
+	ctx := st.faint.Render(pad(contextWord(s.Context), colBar+1+colPct))
 	if s.Context == "known" {
 		pctStyle := st.text
 		switch {
@@ -360,6 +361,12 @@ func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
 		do = st.warn.Render(pad("▲ clear", colDo+1))
 	}
 	name := st.text.Render(pad(s.Name, colName))
+	if pr := m.prOf(s.Cwd); pr != nil {
+		// The PR keeps its place in the name cell: the worktree column is
+		// the first one a narrow terminal cuts.
+		num := "#" + strconv.Itoa(pr.Number) + " "
+		name = st.text.Render(pad(s.Name, colName-len(num))) + st.accent.Render(num)
+	}
 	where := place(s.Target, s.Pane)
 	if selected {
 		where = "▌" + where
@@ -403,6 +410,19 @@ func (m Model) detail(w int) []string {
 	facts = append(facts, fmt.Sprintf("%d processes", s.Procs))
 	lines = append(lines, fit(" "+st.text.Render(strings.Join(facts, st.faint.Render("  ·  "))), w))
 	lines = append(lines, fit(" "+st.muted.Render(s.Cwd), w))
+	if pr := m.prOf(s.Cwd); pr != nil {
+		what := "#" + strconv.Itoa(pr.Number) + " " + pr.Title
+		if pr.Draft {
+			what = "#" + strconv.Itoa(pr.Number) + " draft " + pr.Title
+		}
+		lines = append(lines, fit(" "+st.label.Render("PR ")+st.text.Render(what)+"  "+st.muted.Render(pr.URL), w))
+	}
+	if s.LastLine != "" {
+		lines = append(lines, fit(" "+st.label.Render("LAST ")+st.text.Render(s.LastLine), w))
+	}
+	if s.FromPane {
+		lines = append(lines, fit(" "+st.faint.Render("no hooks for "+s.Name+": busy and idle are read from the pane"), w))
+	}
 	if p := s.Progress; p != nil {
 		lines = append(lines, fit(" "+st.label.Render("PROGRESS ")+m.progressCell(p, 10)+"  "+st.text.Render(p.Step), w))
 	}
@@ -415,9 +435,36 @@ func (m Model) detail(w int) []string {
 	return lines
 }
 
+// contextWord names a context use that has no figure: "fresh" before the
+// first turn, "not measured" for an agent without an adapter.
+func contextWord(c string) string {
+	if c == "unmeasured" {
+		return "not measured"
+	}
+	return c
+}
+
 func bar(pct float64, w int) string {
 	full := min(int(pct/100*float64(w)+0.5), w)
 	return strings.Repeat("█", full) + strings.Repeat("░", w-full)
+}
+
+// prOf is the open pull request of the worktree a directory is in: the
+// worktree with the longest path that holds it.
+func (m Model) prOf(cwd string) *proto.PR {
+	if m.git == nil || cwd == "" {
+		return nil
+	}
+	var pr *proto.PR
+	best := 0
+	for _, r := range m.git.Repos {
+		for _, wt := range r.Worktrees {
+			if (cwd == wt.Path || strings.HasPrefix(cwd, wt.Path+"/")) && len(wt.Path) > best {
+				pr, best = wt.PR, len(wt.Path)
+			}
+		}
+	}
+	return pr
 }
 
 // worktree shortens a cwd to what tells sessions apart: the checkout name,

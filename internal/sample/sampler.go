@@ -5,6 +5,7 @@ package sample
 
 import (
 	"net"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/procfs"
+	"github.com/blox-eng/matchblox/internal/said"
 )
 
 // Exited is an agent process that exited and waits for its parent to
@@ -48,6 +50,13 @@ type Session struct {
 	Why        string        `json:"why,omitempty"`
 	// Progress is the bar the agent drew in its last reply with text.
 	Progress *Progress `json:"progress,omitempty"`
+	// LastLine and Asks are read from the pane of an agent without an
+	// adapter: what it said last, and whether that asks the person.
+	LastLine string `json:"last_line,omitempty"`
+	Asks     bool   `json:"asks,omitempty"`
+	// Permits: an approval menu, where Enter takes the selected choice.
+	Permits  bool `json:"permits,omitempty"`
+	FromPane bool `json:"from_pane,omitempty"` // busy and idle were read from the pane
 }
 
 // IdlePane is a pane that hosts no agent.
@@ -111,10 +120,13 @@ var DefaultRules = Rules{
 }
 
 type Sampler struct {
-	FS            procfs.Host
-	Sys           procfs.Sys
-	Home          string
-	Tmux          func() ([]byte, error)
+	FS   procfs.Host
+	Sys  procfs.Sys
+	Home string
+	Tmux func() ([]byte, error)
+	// Capture returns the visible text of each pane, by pane id. It reads
+	// only the panes of agents without an adapter.
+	Capture       func(panes []string) map[string]string
 	GPU           func() ([]byte, error) // nil: no GPUs
 	Docker        func() ([]byte, error) // nil: no containers
 	Cfg           config.Config
@@ -133,6 +145,8 @@ type Sampler struct {
 
 	agents     *agentReader
 	panes      map[procKey]string // environ is read once per process
+	names      map[procKey]agentRef
+	screens    map[procKey]screen // last pane text of agents without an adapter
 	prevAt     time.Time
 	procAt     time.Time
 	prevProc   map[int]procfs.Proc
@@ -178,6 +192,7 @@ func (s *Sampler) init() {
 	if s.agents == nil {
 		s.agents = newAgentReader(s.Home)
 		s.panes = map[procKey]string{}
+		s.names = map[procKey]agentRef{}
 		s.burn = map[string][]tokenPoint{}
 		s.bigSession = map[string]bool{}
 		s.longCtx = map[procKey]bool{}
@@ -195,6 +210,10 @@ func (s *Sampler) init() {
 		if s.Tmux == nil {
 			s.Tmux = TmuxPanes
 		}
+		if s.Capture == nil {
+			s.Capture = CapturePanes
+		}
+		s.screens = map[procKey]screen{}
 		if len(s.Agents) == 0 {
 			s.Agents = []string{"claude"}
 		}
@@ -242,6 +261,11 @@ func (s *Sampler) scan(now time.Time) {
 	for key := range s.owners {
 		if p, ok := procs[key.pid]; !ok || p.StartTime != key.start {
 			delete(s.owners, key)
+		}
+	}
+	for key := range s.names {
+		if p, ok := procs[key.pid]; !ok || p.StartTime != key.start {
+			delete(s.names, key)
 		}
 	}
 	s.procAt, s.prevProc, s.last = now, procs, l
@@ -338,9 +362,15 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 
 	hosting := map[string]bool{}
 	alive := map[procKey]bool{}
+	var fromPane []int // sessions without an adapter: read from their pane
+	var server Pane    // the socket and pid of the tmux server listed
+	if len(panes) > 0 {
+		server = panes[0]
+	}
 	uptime := s.FS.Uptime()
 	for pid, p := range procs {
-		if !s.isAgent(p.Comm) {
+		agent := s.agentName(pid, p)
+		if agent == "" {
 			continue
 		}
 		if p.State == 'Z' || p.State == 'X' {
@@ -356,7 +386,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		alive[key] = true
 		paneID, ok := s.panes[key]
 		if !ok {
-			paneID = s.ownerPane(pid, procs, byPID)
+			paneID = s.ownerPane(pid, procs, byPID, server)
 			s.panes[key] = paneID
 		}
 		pane := byID[paneID]
@@ -380,6 +410,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			if u, ok := s.agents.usageOf(e.SessionID, e.Cwd); ok {
 				sess.Context = "known"
 				sess.Model, sess.Tokens, sess.Progress = u.Model, u.Tokens, u.Progress
+				sess.LastLine, sess.Asks = u.LastLine, u.Asks
 				long, ok := s.longCtx[key]
 				if !ok {
 					env := func(k string) (string, bool) { return s.FS.Environ(pid, k) }
@@ -392,11 +423,20 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			}
 		}
 		if sess.Name == "" {
-			sess.Name = p.Comm
+			sess.Name = agent
+		}
+		if sess.SessionID == "" {
+			if agent != "claude" {
+				sess.Context = "unmeasured"
+			}
+			if paneID != "" {
+				fromPane = append(fromPane, len(snap.Sessions))
+			}
 		}
 		sess.Do, sess.Why = s.Rules.suggest(sess)
 		snap.Sessions = append(snap.Sessions, sess)
 	}
+	s.readPanes(snap.Sessions, fromPane, now)
 	for key := range s.panes {
 		if !alive[key] {
 			delete(s.panes, key)
@@ -405,6 +445,11 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	for key := range s.longCtx {
 		if !alive[key] {
 			delete(s.longCtx, key)
+		}
+	}
+	for key := range s.screens {
+		if !alive[key] {
+			delete(s.screens, key)
 		}
 	}
 	seen := map[string]bool{}
@@ -436,9 +481,98 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	})
 }
 
-func (s *Sampler) isAgent(comm string) bool {
+// agentName is the configured agent a process runs, or "". An agent looks
+// different in /proc depending on how it was installed: a native binary or
+// a Python entry point has the agent's process name; a node agent started
+// by a wrapper keeps the name in argv[0] while its process name is node's
+// "MainThread"; an npm script runs as `node <path>/<agent>`. The argv half
+// is read once per process and kept while its process name stays the same.
+func (s *Sampler) agentName(pid int, p procfs.Proc) string {
+	if s.isAgent(p.Comm) {
+		return p.Comm
+	}
+	key := procKey{pid, p.StartTime}
+	if c, ok := s.names[key]; ok && c.comm == p.Comm {
+		return c.name
+	}
+	name := ""
+	if argv := s.FS.Argv(pid); len(argv) > 0 {
+		cmd := filepath.Base(argv[0])
+		if interpreter(cmd) {
+			cmd = ""
+			for _, a := range argv[1:] {
+				if !strings.HasPrefix(a, "-") {
+					cmd = filepath.Base(a)
+					break
+				}
+			}
+		}
+		if s.isAgent(cmd) {
+			name = cmd
+		}
+	}
+	s.names[key] = agentRef{p.Comm, name}
+	return name
+}
+
+type agentRef struct{ comm, name string }
+
+// interpreter tells a program that runs an agent's script: its argv[0] is
+// the interpreter and the agent is the first argument that is not a flag.
+func interpreter(cmd string) bool {
+	switch cmd {
+	case "node", "nodejs", "bun", "deno", "ruby", "perl":
+		return true
+	}
+	return strings.HasPrefix(cmd, "python")
+}
+
+// screen is what an agent's pane showed, and since when.
+type screen struct {
+	text    string
+	changed time.Time
+}
+
+// readPanes fills the sessions that have no adapter from their panes: busy
+// while the pane changes (every agent animates while it works), idle since
+// the last change, and what the agent said last. A pane seen for the first
+// time has no state yet.
+func (s *Sampler) readPanes(sessions []Session, idx []int, now time.Time) {
+	if len(idx) == 0 {
+		return
+	}
+	ids := make([]string, len(idx))
+	for i, j := range idx {
+		ids[i] = sessions[j].Pane
+	}
+	text := s.Capture(ids)
+	for _, j := range idx {
+		sess := &sessions[j]
+		t, ok := text[sess.Pane]
+		if !ok {
+			continue
+		}
+		key := procKey{sess.PID, sess.Start}
+		prev, seen := s.screens[key]
+		switch {
+		case !seen:
+			s.screens[key] = screen{t, now}
+		case t != prev.text:
+			s.screens[key] = screen{t, now}
+			sess.Busy, sess.Status = true, "busy"
+		default:
+			sess.Status, sess.Idle = "idle", now.Sub(prev.changed).Truncate(time.Second)
+		}
+		sess.FromPane = true
+		var kind said.Kind
+		sess.LastLine, kind = said.Screen(t)
+		sess.Asks, sess.Permits = kind == said.Asks, kind == said.Permits
+	}
+}
+
+func (s *Sampler) isAgent(name string) bool {
 	for _, a := range s.Agents {
-		if comm == a {
+		if name == a {
 			return true
 		}
 	}
@@ -447,14 +581,23 @@ func (s *Sampler) isAgent(comm string) bool {
 
 // ownerPane prefers the pane the agent recorded in its session file, then
 // TMUX_PANE from its environment (both survive re-parenting), and falls back
-// to walking up to a pane's shell.
-func (s *Sampler) ownerPane(pid int, procs map[int]procfs.Proc, byPID map[int]Pane) string {
-	if e, ok := s.agents.entry(pid); ok && e.Tmux != "" {
+// to walking up to a pane's shell. Pane ids repeat across tmux servers: an
+// agent whose TMUX names another server takes only a pane it descends from.
+func (s *Sampler) ownerPane(pid int, procs map[int]procfs.Proc, byPID map[int]Pane, server Pane) string {
+	ours := true
+	// TMUX is "<socket>,<server pid>,<session>": an agent can outlive its
+	// server, and a new server can take the same socket path.
+	if v, ok := s.FS.Environ(pid, "TMUX"); ok && server.Socket != "" {
+		sock, rest, _ := strings.Cut(v, ",")
+		spid, _, _ := strings.Cut(rest, ",")
+		ours = sock == server.Socket && (server.Server == "" || spid == server.Server)
+	}
+	if e, ok := s.agents.entry(pid); ok && e.Tmux != "" && ours {
 		if i := strings.LastIndexByte(e.Tmux, '.'); i >= 0 && strings.HasPrefix(e.Tmux[i+1:], "%") {
 			return e.Tmux[i+1:]
 		}
 	}
-	if v, ok := s.FS.Environ(pid, "TMUX_PANE"); ok {
+	if v, ok := s.FS.Environ(pid, "TMUX_PANE"); ok && ours {
 		return v
 	}
 	for cur, hops := pid, 0; cur > 1 && hops < 64; hops++ {
@@ -511,7 +654,7 @@ func (s *Sampler) underAgent(p procfs.Proc, procs map[int]procfs.Proc) bool {
 		if !ok {
 			return false
 		}
-		if s.isAgent(pp.Comm) {
+		if s.agentName(cur, pp) != "" {
 			return true
 		}
 		cur = pp.PPID

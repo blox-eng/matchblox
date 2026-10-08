@@ -75,7 +75,7 @@ func (m Model) narrowRow(s sample.Session, selected bool) []string {
 	st := m.st
 	first := " " + m.matchCell(s) + st.text.Render(pad("busy", colSt-2)) + pad("", colIdle)
 	if !s.Busy {
-		first = " " + m.matchCell(s) + st.faint.Render(pad(s.Age(), colSt-2)) + st.muted.Render(pad(sample.Human(s.Idle), colIdle))
+		first = " " + m.matchCell(s) + st.faint.Render(pad(m.stateWord(s), colSt-2)) + st.muted.Render(pad(sample.Human(s.Idle), colIdle))
 	}
 	first += st.text.Render(s.Name)
 	if s.Context == "known" {
@@ -99,6 +99,9 @@ func (m Model) narrowRow(s sample.Session, selected bool) []string {
 		where = "▌" + where
 	}
 	second := "   " + st.muted.Render(where) + "  " + st.muted.Render(worktree(s.Cwd))
+	if pr := m.prOf(s.Cwd); pr != nil {
+		second += " " + st.accent.Render("#"+strconv.Itoa(pr.Number))
+	}
 	if s.Progress != nil {
 		second += "  " + m.progressCell(s.Progress, 5)
 	}
@@ -155,6 +158,9 @@ func (m Model) progressCell(p *sample.Progress, n int) string {
 
 // sessionIn is the agent session of a pane.
 func (m Model) sessionIn(pane string) (sample.Session, bool) {
+	if pane == "" {
+		return sample.Session{}, false // outside tmux: no pane tells sessions apart
+	}
 	for _, s := range m.all.sessions {
 		if s.Pane == pane {
 			return s, true

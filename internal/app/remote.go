@@ -89,7 +89,7 @@ func (m Model) onHost(a action) (tea.Model, tea.Cmd) {
 		case a.door != "":
 			return doorRanMsg{door: a.door, cmd: shellLine(argv), err: err}
 		}
-		return ranMsg{shellLine(argv), err}
+		return ranMsg{cmd: shellLine(argv), err: err}
 	})
 }
 

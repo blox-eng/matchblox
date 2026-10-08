@@ -176,3 +176,20 @@ footer a { color: var(--muted); }
 .news .tag { font: 500 10px/14px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bg); background: var(--primary); padding: 2px 7px; border-radius: 999px; }
 .news .go { color: var(--primary); font: 500 12px/18px var(--mono); }
 @media (max-width: 640px) { .news { border-radius: 12px; font-size: 12px; padding: 6px 10px 6px 6px; gap: 4px 8px; } }
+
+/* The agents: one line on the first screen, then a command and the console
+   row it gives for each agent. */
+.works { margin: 0; font: 400 13px/1.5 var(--mono); color: var(--muted); }
+.agents { display: grid; gap: 14px; min-width: 0; }
+.agents h2 { margin: 0; font-size: 22px; line-height: 28px; font-weight: 600; letter-spacing: -.02em; }
+.agents .lede, .agents .note { margin: 0; color: var(--muted); max-width: 72ch; }
+.agents .note code { font: 400 12.5px/1 var(--mono); color: var(--fg); }
+.runs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 760px) { .runs { grid-template-columns: minmax(0, 1fr); } }
+.run { margin: 0; display: grid; gap: 8px; align-content: start; min-width: 0; padding: 14px 16px; background: var(--stage); box-shadow: 0 0 0 1px var(--hair-strong); border-radius: 6px; }
+.run figcaption { font: 500 11px/16px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+.run code { font: 400 14px/1.5 var(--mono); color: var(--fg); overflow-wrap: anywhere; }
+.run code .p { color: var(--faint); user-select: none; }
+.run .row { display: flex; flex-wrap: wrap; gap: 0 8px; padding-top: 8px; border-top: 1px solid var(--hair); font: 400 13px/1.6 var(--mono); color: var(--t-fg); }
+.run .row > span { white-space: nowrap; }
+.run .row .t { white-space: normal; flex-basis: 100%; }

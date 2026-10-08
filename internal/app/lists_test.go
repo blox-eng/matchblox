@@ -12,6 +12,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -349,5 +350,42 @@ func TestTapEndsTheTypingOfASearch(t *testing.T) {
 	}
 	if !strings.Contains(actionLine(next), "tap again") {
 		t.Fatalf("line %q", actionLine(next))
+	}
+}
+
+// TestAnOpenPullRequestShowsWhereItsAgentShows: the PR of the worktree an
+// agent works in is on its Sessions row, its queue row and in the detail.
+func TestAnOpenPullRequestShowsWhereItsAgentShows(t *testing.T) {
+	st := fixtureState()
+	st.Sessions = append(st.Sessions, sample.Session{PID: 950, Pane: "%9", Target: "api:1.1", Name: "cache-work",
+		Status: "idle", Idle: time.Minute, Cwd: "/w/app-cache/internal", Context: "fresh"})
+	st.Queue = []queue.Item{{Pane: "%9", Target: "api:1.1", Name: "cache-work", State: queue.StateQuestion,
+		Since: st.At.Add(-time.Minute), LastLine: "Shall I merge it?"}}
+	st.Git = &proto.GitReport{At: st.At, Repos: []gitscan.Repo{{Path: "/w/app", Main: "main", Worktrees: []gitscan.Worktree{
+		{Path: "/w/app", Branch: "main"},
+		{Path: "/w/app-cache", Branch: "cache", Sessions: 1, PR: &gitscan.PR{Number: 4312, Title: "Add the cache", URL: "https://example.com/pr/4312"}},
+	}}}}
+	m, _ := loadedWith(t, 120, st)
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "#4312") {
+		t.Fatalf("the queue row lacks the PR:\n%s", out)
+	}
+	m.tab, m.selPID = tabSessions, 950
+	out := ansi.Strip(m.render())
+	for _, want := range []string{"#4312", "PR #4312 Add the cache", "https://example.com/pr/4312"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("Sessions lacks %q:\n%s", want, out)
+		}
+	}
+	for _, w := range []int{80, 100} {
+		m.width = w
+		for _, l := range strings.Split(ansi.Strip(m.render()), "\n") {
+			if strings.Contains(l, "cache-work") && !strings.Contains(l, "PR #") && !strings.Contains(l, "#4312") {
+				t.Fatalf("the row at %d columns lacks the PR: %q", w, l)
+			}
+		}
+	}
+	m.width = 50 // a phone
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "#4312") {
+		t.Fatalf("the phone row lacks the PR:\n%s", out)
 	}
 }

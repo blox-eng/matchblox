@@ -9,6 +9,8 @@ type Host interface {
 	Environ(pid int, key string) (string, bool)
 	Cwd(pid int) string
 	Cmdline(pid int) string
+	// Argv is the process's arguments, argv[0] first.
+	Argv(pid int) []string
 	Cgroup(pid int) string
 	UID(pid int) (int, bool)
 	// Uptime is in seconds on the same clock as Proc.StartTime, so

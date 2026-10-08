@@ -46,6 +46,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
+	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -133,6 +134,10 @@ func run(args []string) error {
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		return fmt.Errorf("%s: %w", *cfgPath, err)
+	}
+	if !cfg.AgentsSet && *root == "" {
+		// A config from before the first run found the agents.
+		cfg.Agents = setup.FindAgents(agentLookPath(home()))
 	}
 	if *interval > 0 {
 		cfg.Interval.Duration = *interval
@@ -466,7 +471,7 @@ func serviceCmd() (*exec.Cmd, func(), error) {
 const staleAfter = 15 * time.Second
 
 func gitSource(cfg config.Config) service.GitSource {
-	scanner := &gitscan.Scanner{Git: gitscan.Git, Merged: gitscan.GHMerged, RecheckIdle: 2 * time.Hour}
+	scanner := &gitscan.Scanner{Git: gitscan.Git, Merged: gitscan.GHMerged, Open: gitscan.GHOpen, RecheckIdle: 2 * time.Hour}
 	return func(sessionCwds []string) gitscan.Report {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
@@ -497,6 +502,7 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 		smp.Sys = procfs.Sys{Root: filepath.Join(root, "sys")}
 		smp.Home = filepath.Join(root, "home")
 		smp.Tmux = func() ([]byte, error) { return os.ReadFile(filepath.Join(root, "tmux-panes.txt")) }
+		smp.Capture = sample.CaptureDir(filepath.Join(root, "panes"))
 		return smp
 	}
 	smp.FS, smp.Sys = actions.NewHost(), procfs.Sys{Root: "/sys"}

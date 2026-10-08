@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -13,6 +14,31 @@ var queueWord = map[string]string{
 	queue.StatePermission: "asks",
 	queue.StateQuestion:   "waits",
 	queue.StateFinished:   "done",
+}
+
+// queueWordOf is the word of a queue row: a turn that ended under 100%
+// progress, with no question, stopped before its task was done: paused.
+func (m Model) queueWordOf(it queue.Item) string {
+	if it.State == queue.StateFinished && it.Pane != "" {
+		if s, ok := m.sessionIn(it.Pane); ok && s.Progress != nil && s.Progress.Pct < 100 {
+			return "paused"
+		}
+	}
+	return queueWord[it.State]
+}
+
+// stateWord is a session's state in Sessions: busy; for a session that
+// waits for the person, the word of its queue row; else its age.
+func (m Model) stateWord(s sample.Session) string {
+	if age := s.Age(); age != "idle" {
+		return age
+	}
+	for _, it := range m.queue {
+		if s.Pane != "" && it.Pane == s.Pane {
+			return m.queueWordOf(it)
+		}
+	}
+	return "idle"
 }
 
 func (m Model) queueSelIndex() int {
@@ -58,7 +84,7 @@ func (m Model) selectedQueue() (queue.Item, bool) {
 	return queue.Item{}, false
 }
 
-const colWord = 6
+const colWord = 7
 
 func (m Model) queuePanel(w int) body {
 	st := m.st
@@ -72,7 +98,7 @@ func (m Model) queuePanel(w int) body {
 	sel := m.queueIndex() - nd
 	narrow := layout(w) == Narrow
 	for i, it := range m.queue {
-		word := st.text.Render(pad(queueWord[it.State], colWord))
+		word := st.text.Render(pad(m.queueWordOf(it), colWord))
 		if it.State == queue.StatePermission {
 			word = st.accent.Render(pad(queueWord[it.State], colWord))
 		}
@@ -81,8 +107,20 @@ func (m Model) queuePanel(w int) body {
 			where = "▌" + where
 		}
 		tail := st.muted.Render(it.LastLine)
-		if it.Estimated {
+		switch {
+		case it.FromPane:
+			if it.LastLine == "" {
+				tail = st.faint.Render("from the pane")
+			} else {
+				tail = st.faint.Render("from the pane: ") + tail // first: a long line is cut at the end
+			}
+		case it.Estimated:
 			tail = st.faint.Render("estimated")
+		}
+		if s, ok := m.sessionIn(it.Pane); ok {
+			if pr := m.prOf(s.Cwd); pr != nil {
+				tail = st.accent.Render("#"+strconv.Itoa(pr.Number)) + "  " + tail
+			}
 		}
 		if s, ok := m.sessionIn(it.Pane); ok && s.Progress != nil {
 			tail = m.progressCell(s.Progress, 5) + "  " + tail

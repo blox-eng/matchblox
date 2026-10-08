@@ -314,7 +314,19 @@ func TestReplay(t *testing.T) {
 	clk := &clock{t: demoBase}
 	cfg := config.Default()
 	cfg.Interval.Duration = 50 * time.Millisecond
+	cfg.Agents = []string{"claude", "codex", "opencode"}
 	smp := newSampler(cfg, root)
+	// OpenCode works: its spinner turns on each read of its pane.
+	panes, turn := smp.Capture, 0
+	smp.Capture = func(ids []string) map[string]string {
+		out := panes(ids)
+		if text, ok := out["%7"]; ok {
+			spin := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+			turn++
+			out["%7"] = strings.Replace(text, "⠙", string(spin[turn%len(spin)]), 1)
+		}
+		return out
+	}
 	host := &demoHost{FS: smp.FS.(procfs.FS)}
 	smp.FS, smp.Now = host, host.now(clk)
 
@@ -405,8 +417,8 @@ func TestReplay(t *testing.T) {
 	time.Sleep(600 * time.Millisecond) // a dozen samples reach the console: the sparklines fill
 
 	steps := []step{
-		{"the queue", 1300 * time.Millisecond, "", has("ws-1", "WAITING FOR YOU", "billing", "asks", "permission to use Bash", "PROCS !")},
-		{"the sessions", 3500 * time.Millisecond, "2", has("api-auth", "web-checkout", "! compact")},
+		{"the queue", 1300 * time.Millisecond, "", has("ws-1", "WAITING FOR YOU", "billing", "asks", "permission to use Bash", "codex", "Would you like to run", "PROCS !")},
+		{"the sessions", 3500 * time.Millisecond, "2", has("api-auth", "web-checkout", "! compact", "codex", "opencode", "not measured")},
 		{"machine health", 6 * time.Second, "3", has("CPU")},
 		{"what to do, under the queue", 8 * time.Second, "1", has("RECOMMENDATIONS", "Kill detached busy loop 4242")},
 		{"the busy loop", 9500 * time.Millisecond, "4", has("4242")},

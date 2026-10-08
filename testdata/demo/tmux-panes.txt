@@ -3,3 +3,5 @@
 %3	work:3.1	docs	1400	claude	/work/docs
 %4	lab:1.1	shell	1500	zsh	/work/lab
 %5	work:4.1	billing	1600	claude	/work/billing
+%6	work:5.1	search	1700	codex	/work/search
+%7	work:6.1	mobile	1800	node	/work/mobile

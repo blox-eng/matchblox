@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/blox-eng/matchblox/internal/said"
 )
 
 // registryEntry is the per-process file Claude Code keeps at
@@ -29,6 +31,9 @@ type Usage struct {
 	Tokens   int       `json:"tokens"`
 	At       time.Time `json:"at"`
 	Progress *Progress `json:"progress,omitempty"`
+	// LastLine and Asks are read from the newest reply with text.
+	LastLine string `json:"last_line,omitempty"`
+	Asks     bool   `json:"asks,omitempty"`
 }
 
 type fileKey struct {
@@ -207,6 +212,7 @@ func lastUsage(path string, size int64) (Usage, bool) {
 			if p, ok := parseProgress(text); ok {
 				u.Progress = &p
 			}
+			u.LastLine, u.Asks = said.Reply(text)
 			decided = true
 		}
 	}

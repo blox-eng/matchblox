@@ -6,7 +6,25 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A turn that ends on a question waits for you; it no longer shows as done
+  because the progress line came after the question. Control keys in an
+  agent's reply never reach the console.
+
 ### Added
+
+- Every agent in tmux: Codex, OpenCode, Gemini CLI, aider, cursor-agent or
+  any command named in `agents` is a session, found by its process name,
+  argv[0] or the script after node or python. Without hooks it is busy while
+  its pane moves and waits when it is idle and its last lines ask
+  ("from the pane:" on its queue row); context use shows "not measured". The
+  first run writes the agents it finds to `agents`.
+- An agent's open pull request shows as `#N` on its queue and Sessions rows,
+  and with its title and link in the detail.
+- Sessions shows the queue's word (`asks`, `waits`, `done`) instead of
+  `idle`, and `paused` for a turn that stopped with its progress bar under
+  100%.
 
 - Remote mode: the first run asks where your agents run. `matchblox connect
   <host>` connects a host once (it installs the verified matchblox there and
