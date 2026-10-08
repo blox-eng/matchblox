@@ -227,6 +227,10 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   safe to remove (or says why not), `X` marks every safe one, and `x` with a
   typed `y` removes the marked ones: one guarded act each, then one summary
   ("removed 11, skipped 1: it has changes").
+- **After a jump** (owner, 2026-10-08): when `Enter` takes the person to an
+  agent, the console selects the next one that waits (the next queue row;
+  in Sessions the next session in the queue, else the next idle one), so
+  the way back lands on it.
 
 ## 7. Copy
 
