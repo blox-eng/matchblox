@@ -132,7 +132,7 @@ func TestConnectAndGateOnARealSSHD(t *testing.T) {
 		c := exec.Command(argv[0], argv[1:]...) //nolint:gosec // test
 		out, err := c.CombinedOutput()
 		if err != nil {
-			return fmt.Errorf("%v: %s", err, out)
+			return fmt.Errorf("%w: %s", err, out)
 		}
 		return nil
 	}
@@ -153,7 +153,7 @@ func TestConnectAndGateOnARealSSHD(t *testing.T) {
 		c.Stdin = strings.NewReader("")
 		b, err := c.CombinedOutput()
 		var ee *exec.ExitError
-		if !strings.Contains(string(b), "refused") && !(cmd == "" && err != nil) {
+		if !strings.Contains(string(b), "refused") && (cmd != "" || err == nil) {
 			t.Errorf("%q with the matchblox key: %v\n%s", cmd, err, b)
 		}
 		if cmd != "" && (!errors.As(err, &ee) || ee.ExitCode() != 126) {

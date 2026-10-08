@@ -80,7 +80,8 @@ func tmuxChain(args []string) bool {
 	}
 	steps = append(steps, cur)
 	last := steps[len(steps)-1]
-	if !slices.Equal(last, []string{"tmux", "attach-session"}) && !(remote.NavAllowed(last) && last[1] == "attach-session") {
+	attach := slices.Equal(last, []string{"tmux", "attach-session"}) || (remote.NavAllowed(last) && last[1] == "attach-session")
+	if !attach {
 		return false
 	}
 	for _, s := range steps[:len(steps)-1] {
