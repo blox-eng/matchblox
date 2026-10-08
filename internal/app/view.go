@@ -245,7 +245,7 @@ const (
 	colPane = 11 // session:window.pane; widened to show the tab name when there is room
 	colTab  = 12
 	colName = 18
-	colSt   = 7 // the match, a space, the word
+	colSt   = 8 // the match, a space, the word (stale is five letters)
 	colIdle = 6
 	colBar  = 10
 	colPct  = 9
@@ -307,7 +307,7 @@ func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
 	st := m.st
 	state, idle := m.matchCell(s)+st.text.Render(pad("busy", colSt-2)), pad("", colIdle)
 	if !s.Busy {
-		state = m.matchCell(s) + st.faint.Render(pad("idle", colSt-2))
+		state = m.matchCell(s) + st.faint.Render(pad(s.Age(), colSt-2))
 		idle = st.muted.Render(pad(sample.Human(s.Idle), colIdle))
 	}
 	ctx := st.faint.Render(pad(s.Context, colBar+1+colPct))

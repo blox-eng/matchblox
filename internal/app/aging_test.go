@@ -3,9 +3,12 @@ package app
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -35,6 +38,34 @@ func TestExitedAgentsStayQuiet(t *testing.T) {
 		next, _ = key(next, "e")
 		if strings.Contains(screen(next), "7000") {
 			t.Fatal("e did not fold them again")
+		}
+	}
+}
+
+func agingState() proto.State {
+	st := sortFixture()
+	st.Sessions = append(st.Sessions, st.Sessions[0], st.Sessions[0])
+	st.Sessions[3].PID, st.Sessions[3].Name, st.Sessions[3].Pane, st.Sessions[3].Idle = 4, "delta", "%delta", 30*time.Hour
+	st.Sessions[4].PID, st.Sessions[4].Name, st.Sessions[4].Pane, st.Sessions[4].Idle = 5, "echo", "%echo", 8*24*time.Hour
+	// charlie (idle 1h) waits for the person: it goes above alpha (10 min).
+	st.Queue = []queue.Item{{Pane: "%charlie", Name: "charlie", State: queue.StateQuestion, Since: st.At.Add(-time.Hour)}}
+	return st
+}
+
+// TestIdleSessionsAge: busy, then who waits for the person, then idle by
+// the newest; a day makes a session cold, a week makes it stale.
+func TestIdleSessionsAge(t *testing.T) {
+	for _, w := range []int{50, 120} {
+		m, _ := loadedWith(t, w, agingState())
+		next, _ := key(m, "2")
+		if got := order(next); got != "bravo charlie alpha delta echo" {
+			t.Fatalf("width %d: order %q", w, got)
+		}
+		lines := strings.Split(screen(next), "\n")
+		for name, word := range map[string]string{"alpha": "idle", "delta": "cold", "echo": "stale"} {
+			if l := lines[lineOf(t, next, name)]; !strings.Contains(l, word) {
+				t.Fatalf("width %d: %s is not %s: %q", w, name, word, l)
+			}
 		}
 	}
 }

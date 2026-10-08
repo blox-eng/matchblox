@@ -569,3 +569,23 @@ func Human(d time.Duration) string {
 	}
 	return strconv.Itoa(int(d/time.Second)) + "s"
 }
+
+// How long a session sits idle before its state word ages.
+const (
+	ColdAfter  = 24 * time.Hour
+	StaleAfter = 7 * 24 * time.Hour
+)
+
+// Age is the state word of a session: busy, or idle, cold and stale as
+// its idle time grows.
+func (s Session) Age() string {
+	switch {
+	case s.Busy:
+		return "busy"
+	case s.Idle >= StaleAfter:
+		return "stale"
+	case s.Idle >= ColdAfter:
+		return "cold"
+	}
+	return "idle"
+}
