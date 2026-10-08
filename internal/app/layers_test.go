@@ -208,7 +208,7 @@ func TestATypedHostMustBeAHostName(t *testing.T) {
 func TestFirstRunAsksWhereTheAgentsRun(t *testing.T) {
 	r := newShell(t, nil, nil, "", true)
 	out := r.view()
-	for _, want := range []string{"Where do your agents run?", "this machine", "another machine"} {
+	for _, want := range []string{"WHERE DO YOUR AGENTS RUN?", "this machine", "another machine"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("view lacks %q:\n%s", want, out)
 		}
@@ -220,7 +220,7 @@ func TestFirstRunAsksWhereTheAgentsRun(t *testing.T) {
 		t.Fatalf("this machine: layer %v, opened %q, answered %v", r.sh.layer, r.opened, answered)
 	}
 	r.key(t, "esc")
-	if out := r.view(); strings.Contains(out, "Where do your agents run?") || !strings.Contains(out, "+ add a host") {
+	if out := r.view(); strings.Contains(out, "WHERE DO YOUR AGENTS RUN?") || !strings.Contains(out, "+ add a host") {
 		t.Fatalf("after the answer, Hosts is the plain list:\n%s", out)
 	}
 }

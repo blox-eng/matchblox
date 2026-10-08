@@ -381,7 +381,7 @@ func (s Shell) render() string {
 	}
 	out = append(out, b.lines...)
 	if s.firstRun() && !s.adding {
-		out = append(out, "", fit(" "+st.faint.Render("Where do your agents run? You can add a host later: esc in a console comes back here."), w))
+		out = append(out, "", fit(" "+st.faint.Render("You can add a host later: esc in a console comes back here."), w))
 	}
 	for len(out) < s.height {
 		out = append(out, "")
