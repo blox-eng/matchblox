@@ -160,8 +160,12 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 - **Rows:** the match and the state word first, then the wait, the name, the
   tmux place and the last line. Figures are aligned; units are faint. The
   selected row has a `▌` and the `wash` background.
-- **Footer:** the keys of the tab on the left, "sampled N ago" on the right.
-  A pending action replaces the keys with `RUN <command>` and its confirm.
+- **Action line** (owner, 2026-10-08): under the tabs, above the hairline,
+  never at the bottom: on a phone the keyboard covers the bottom of the
+  screen. The keys of the tab on the left, "sampled N ago" on the right. It
+  is also where the person acts: a tap shows `tap again: <command>`, a
+  pending action shows `RUN <command>` and its confirm, and `a` types the
+  answer here.
 - **Widths:** 100 columns or more: all columns. 60 to 99: fewer columns, the
   detail under the list. Less than 60 (phone): one column, the queue first,
   each row on two lines.

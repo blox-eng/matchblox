@@ -536,7 +536,7 @@ func TestFooterUsesClock(t *testing.T) {
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	next, _ = next.Update(stateMsg(st))
 	lines := strings.Split(ansi.Strip(next.(Model).render()), "\n")
-	if last := strings.TrimRight(lines[len(lines)-1], " "); !strings.HasSuffix(last, "sampled 5s ago") {
-		t.Fatalf("footer %q, want it to end with sampled 5s ago", last)
+	if last := strings.TrimRight(lines[2], " "); !strings.HasSuffix(last, "sampled 5s ago") {
+		t.Fatalf("action line %q, want it to end with sampled 5s ago", last)
 	}
 }

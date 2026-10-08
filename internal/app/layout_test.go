@@ -56,7 +56,7 @@ func TestNarrowLayoutQueueFirst(t *testing.T) {
 			rowAt = i
 		}
 	}
-	if queueAt < 0 || queueAt > 4 {
+	if queueAt < 0 || queueAt > 5 {
 		t.Fatalf("the queue is not the first region:\n%s", strings.Join(out, "\n"))
 	}
 	// Two lines for each row: what and who on the first, where and the
@@ -284,5 +284,35 @@ func TestWheelMovesTheSelection(t *testing.T) {
 	next, _ = next.Update(tea.MouseWheelMsg{X: 5, Y: 6, Button: tea.MouseWheelUp})
 	if it, _ := next.(Model).selectedQueue(); it.Pane != "%1" {
 		t.Fatalf("wheel up selected %s", it.Pane)
+	}
+}
+
+// TestTheActionLineIsAtTheTop: on a phone the keyboard covers the bottom,
+// so what the person types or confirms sits under the tabs.
+func TestTheActionLineIsAtTheTop(t *testing.T) {
+	for _, w := range []int{50, 100} {
+		m, _ := loadedWith(t, w, queueState())
+		line := func(m tea.Model, i int) string { return ansi.Strip(strings.Split(m.(Model).render(), "\n")[i]) }
+		if !strings.Contains(line(m, 2), "q quit") {
+			t.Fatalf("width %d: the keys are not under the tabs: %q", w, line(m, 2))
+		}
+		next, _ := tap(m, 5, lineOf(t, m, "app-review"))
+		if !strings.Contains(line(next, 2), "tap again: tmux switch-client -t %2") {
+			t.Fatalf("width %d: the tap step is not at the top: %q", w, line(next, 2))
+		}
+		next, _ = key(next, "enter")
+		if !strings.Contains(line(next, 2), "RUN tmux switch-client -t %2") {
+			t.Fatalf("width %d: the confirm is not at the top: %q", w, line(next, 2))
+		}
+		next, _ = key(next, "esc")
+		next, _ = key(next, "a")
+		next = typeText(next, "yes")
+		if !strings.Contains(line(next, 2), "ANSWER %2 yes") {
+			t.Fatalf("width %d: the answer is not typed at the top: %q", w, line(next, 2))
+		}
+		out := strings.Split(ansi.Strip(next.(Model).render()), "\n")
+		if strings.Contains(out[len(out)-1], "q quit") || strings.Count(strings.Join(out, "\n"), "ANSWER") != 1 {
+			t.Fatalf("width %d: the action line is still at the bottom:\n%s", w, strings.Join(out, "\n"))
+		}
 	}
 }

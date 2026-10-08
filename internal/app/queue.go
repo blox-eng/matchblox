@@ -65,11 +65,6 @@ func (m Model) queuePanel(w int) body {
 		}
 		b.addRow(i, i == sel, w, st, lines...)
 	}
-	if m.input != nil {
-		b.add(-1, "", fit(" "+st.label.Render("ANSWER ")+st.muted.Render(m.input.pane+" ")+
-			st.text.Render(m.input.text)+st.accent.Render("▏"), w),
-			st.faint.Render(" ⏎ review  esc cancel"))
-	}
 	return b
 }
 

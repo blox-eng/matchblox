@@ -63,8 +63,9 @@ func plain(lines []string) body {
 // minWidth is the narrowest console drawn; a narrower terminal cuts it.
 const minWidth = 30
 
-// chrome is the lines above the body: the header, the tabs and a hairline.
-const chrome = 3
+// chrome is the lines above the body: the header, the tabs, the action
+// line and a hairline.
+const chrome = 4
 
 // body is the panel of the open tab.
 func (m Model) body(w int) body {
@@ -74,7 +75,7 @@ func (m Model) body(w int) body {
 	case tabPanes:
 		return m.panesPanel(w)
 	case tabSessions:
-		return m.sessions(w, m.height-chrome-2)
+		return m.sessions(w, m.height-chrome-1)
 	case tabMachine:
 		return plain(m.machine(w))
 	case tabProcs:
@@ -126,7 +127,7 @@ func (m Model) narrowRow(s sample.Session, selected bool) []string {
 // the screen. A tap reads the same lines the screen shows.
 func (m Model) visible(w int) body {
 	b := m.body(w)
-	room := max(m.height-chrome-1, 0)
+	room := max(m.height-chrome, 0)
 	if len(b.lines) <= room {
 		return b
 	}

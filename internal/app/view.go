@@ -80,12 +80,13 @@ func (m Model) render() string {
 		}
 		return strings.Join(append(out, "", strings.Repeat(" ", max((w-lipgloss.Width(why))/2, 0))+m.st.faint.Render(why)), "\n")
 	}
-	body := m.visible(w).lines
-	out = append(out, body...)
-	for len(out) < m.height-1 {
+	// The line the person acts on sits under the tabs: on a phone the
+	// keyboard covers the bottom of the screen.
+	out = append(out[:2], m.footer(w), out[2])
+	out = append(out, m.visible(w).lines...)
+	for len(out) < m.height {
 		out = append(out, "")
 	}
-	out = append(out, m.footer(w))
 	return strings.Join(out, "\n")
 }
 
@@ -222,6 +223,10 @@ func (m Model) tabParts(t tabTier) []string {
 
 func (m Model) footer(w int) string {
 	st := m.st
+	if m.input != nil {
+		return fit(" "+st.label.Render("ANSWER ")+st.muted.Render(m.input.pane+" ")+
+			st.text.Render(m.input.text)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ review  esc cancel"), w)
+	}
 	if m.pending != nil {
 		confirm := "⏎ run  esc cancel"
 		if m.pending.destructive {
