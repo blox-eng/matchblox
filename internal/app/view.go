@@ -129,21 +129,6 @@ func (m Model) header(w int) string {
 	return fit(build(1, false), w)
 }
 
-const (
-	tabQueue = iota
-	tabSessions
-	tabMachine
-	tabProcs
-	tabGit
-	tabHistory
-	tabPanes
-)
-
-var tabNames = []string{"queue", "sessions", "machine", "procs", "git", "history", "panes"}
-
-// tabShort names the tabs when the full names do not fit.
-var tabShort = []string{"queue", "sess", "mach", "procs", "git", "hist", "panes"}
-
 // tabs tries the full names, then a narrower gap, then the short names,
 // then digits only (a phone), so every tab and the alert marker stay on the
 // line.
@@ -234,17 +219,12 @@ func (m Model) footer(w int) string {
 		}
 		return fit(" "+st.label.Render("RUN ")+st.text.Render(m.pending.String())+"   "+st.muted.Render(confirm), w)
 	}
-	tabKeys := map[int]string{
-		tabQueue:    "↑↓ select  ⏎ go  a answer",
-		tabPanes:    "↑↓ select  ⏎ go  s sort",
-		tabSessions: "↑↓ select  ⏎ jump  a answer  s sort",
-		tabMachine:  "",
-		tabProcs:    "↑↓ select  ⏎ jump  x kill",
-		tabGit:      "↑↓ select  ⏎ shell  space mark  X all safe  x remove  r rescan",
-		tabHistory:  "",
-	}[m.tab]
+	tabKeys := m.view().keys
 	if _, ok := m.selectedRec(); ok {
 		tabKeys = "↑↓ select  ⏎ do  x the other action"
+	}
+	if s, ok := m.selected(); ok && m.tab == tabSessions && s.Age() == "stale" {
+		tabKeys += "  x end"
 	}
 	keys := tabKeys + "  / find  1-7 panel  q quit"
 	if m.filter != "" {
@@ -268,7 +248,7 @@ const (
 	colPane = 11 // session:window.pane; widened to show the tab name when there is room
 	colTab  = 12
 	colName = 18
-	colSt   = 7 // the match, a space, the word
+	colSt   = 8 // the match, a space, the word (stale is five letters)
 	colIdle = 6
 	colBar  = 10
 	colPct  = 9
@@ -294,6 +274,7 @@ func (m Model) sessions(w, h int) body {
 		for i, s := range ss {
 			b.addRow(i, i == sel, w, st, m.narrowRow(s, i == sel)...)
 		}
+		b.add(-1, m.exitedLines(w)...)
 		return b
 	}
 
@@ -319,6 +300,7 @@ func (m Model) sessions(w, h int) body {
 		}
 		b.add(-1, st.faint.Render(fit(fmt.Sprintf(" %d without an agent: %s", n, strings.Join(ids, ", ")), w)))
 	}
+	b.add(-1, m.exitedLines(w)...)
 	b.add(-1, "", st.hair.Render(strings.Repeat("─", w)))
 	b.add(-1, detail...)
 	return b
@@ -328,7 +310,7 @@ func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
 	st := m.st
 	state, idle := m.matchCell(s)+st.text.Render(pad("busy", colSt-2)), pad("", colIdle)
 	if !s.Busy {
-		state = m.matchCell(s) + st.faint.Render(pad("idle", colSt-2))
+		state = m.matchCell(s) + st.faint.Render(pad(s.Age(), colSt-2))
 		idle = st.muted.Render(pad(sample.Human(s.Idle), colIdle))
 	}
 	ctx := st.faint.Render(pad(s.Context, colBar+1+colPct))

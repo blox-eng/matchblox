@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
@@ -690,4 +691,40 @@ func TestServiceReadsSpoolEveryTick(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitQueue(t, c, func(q []queue.Item) bool { return len(q) == 1 && !q[0].Estimated })
+}
+
+// TestOnlyAStaleSessionCanBeEnded: x on a session ends its agent only when
+// the service's own state has it idle a week or more, and the guard pins
+// the process by its start time.
+func TestOnlyAStaleSessionCanBeEnded(t *testing.T) {
+	s := newTest(t, time.Hour)
+	s.sample = func() sample.Snapshot {
+		return sample.Snapshot{At: time.Now(), Sessions: []sample.Session{
+			{PID: 51, Start: 9, Pane: "%5", Name: "old", Status: "idle", Idle: sample.StaleAfter + time.Hour},
+			{PID: 52, Start: 9, Pane: "%6", Name: "today", Status: "idle", Idle: time.Hour},
+		}}
+	}
+	var ran []string
+	s.Actions.Run = func(argv []string) error { ran = append(ran, strings.Join(argv, " ")); return nil }
+	ctx := run(t, s)
+	c, _ := connect(t, ctx, s)
+	snapshot(t, c)
+	if r := act(t, c, "a", proto.Act{RecID: "session:52", Which: "secondary", Confirm: "y"}); r.Err != "unknown action" {
+		t.Fatalf("a session idle an hour was ended: %+v", r)
+	}
+	if r := act(t, c, "b", proto.Act{RecID: "session:51", Which: "secondary"}); len(r.Ran) != 0 {
+		t.Fatalf("ended without a typed y: %+v", r)
+	}
+	if r := act(t, c, "c", proto.Act{RecID: "session:51", Which: "secondary", Confirm: "y"}); len(r.Ran) != 1 {
+		t.Fatalf("the stale session was not ended: %+v", r)
+	}
+	if got := strings.Join(ran, ","); got != "kill 51" {
+		t.Fatalf("ran %q", got)
+	}
+	a, ok := s.resolve("session:51", "secondary")
+	// The pid and its start pin the process; the idle-pane guard checks at
+	// run time that the agent did not start to work since the sample.
+	if !ok || len(a.Guards) != 1 || a.Guards[0] != (advice.Guard{PID: 51, StartTicks: 9, IdlePane: "%5"}) || !a.Destructive {
+		t.Fatalf("action %+v", a)
+	}
 }

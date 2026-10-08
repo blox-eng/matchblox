@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/blox-eng/matchblox/internal/config"
 )
 
 // TestErrorInTheHomeSessionWaits: the console is the only command of the
@@ -93,5 +95,16 @@ func TestServiceWatchesTheDefaultTmux(t *testing.T) {
 	}
 	if !slices.ContainsFunc(c.Env, func(kv string) bool { return strings.HasPrefix(kv, "HOME=") }) {
 		t.Fatal("the service lost the rest of the environment")
+	}
+}
+
+// TestTheLiveSamplerChecksRegistryFiles: the guard against a reused pid is
+// on for the live machine and off for a fixture tree.
+func TestTheLiveSamplerChecksRegistryFiles(t *testing.T) {
+	if !newSampler(config.Default(), "").OwnEntries {
+		t.Fatal("the live sampler takes any registry file")
+	}
+	if newSampler(config.Default(), t.TempDir()).OwnEntries {
+		t.Fatal("a fixture tree is checked against the real clock")
 	}
 }
