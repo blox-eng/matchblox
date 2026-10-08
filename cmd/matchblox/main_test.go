@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -14,7 +15,9 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
@@ -275,5 +278,68 @@ func TestFixtureHostName(t *testing.T) {
 	}
 	if h := fixtureHello(t, t.TempDir()); h.Host != "fixtures" {
 		t.Fatalf("host %q, want fixtures when the fixture has no hostname file", h.Host)
+	}
+}
+
+func setupEnv(t *testing.T) setup.Env {
+	t.Helper()
+	home := t.TempDir()
+	return setup.Env{GOOS: "linux", Home: home, Exe: "/bin/matchblox", StateDir: filepath.Join(home, "state"),
+		Getenv: func(string) string { return "" },
+		LookPath: func(name string) (string, error) {
+			if name == "claude" || name == "tmux" {
+				return "/usr/bin/" + name, nil
+			}
+			return "", errors.New("not found")
+		},
+		Source: func(string) error { return nil }}
+}
+
+func TestSetupCommandOpensWhatTheBuilderTypes(t *testing.T) {
+	e := setupEnv(t)
+	var out strings.Builder
+	var ran [][]string
+	err := setupDoors(e, strings.NewReader("y\n\nn\n"), &out, func(argv []string) error { ran = append(ran, argv); return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	for _, want := range []string{"✓ Install tmux", "Add the queue hooks", "+    \"Stop\": [", "wrote " + filepath.Join(e.Home, ".claude", "settings.json"), "Add the way back", "Open a guide session", "uses your tokens"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in:\n%s", want, got)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(e.Home, ".claude", "settings.json")); !strings.Contains(string(b), "/bin/matchblox hook Stop") {
+		t.Errorf("hooks not written:\n%s", b)
+	}
+	if _, err := os.Stat(filepath.Join(e.Home, ".tmux.conf")); err == nil {
+		t.Error("Enter wrote the way back")
+	}
+	if ran != nil {
+		t.Errorf("ran %q on n", ran)
+	}
+}
+
+func TestSetupCommandShowsClosedDoors(t *testing.T) {
+	e := setupEnv(t)
+	if err := setup.Close(e, doors.Guide); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	var ran [][]string
+	if err := setupDoors(e, strings.NewReader("\n\ny\n"), &out, func(argv []string) error { ran = append(ran, argv); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if len(ran) != 1 || ran[0][0] != "claude" {
+		t.Fatalf("ran %q:\n%s", ran, out.String())
+	}
+}
+
+func TestFirstRunWritesTheConfig(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "matchblox", "config.toml")
+	firstRun(p, 16, 64<<30)
+	cfg, err := config.Load(p)
+	if err != nil || cfg.Alerts.Load1Over != 16 {
+		t.Fatalf("config %+v, %v", cfg.Alerts, err)
 	}
 }
