@@ -14,7 +14,7 @@ import (
 )
 
 // registryEntry is the per-process file Claude Code keeps at
-// ~/.claude/sessions/<pid>.json. Only the fields the console reads.
+// <config dir>/sessions/<pid>.json. Only the fields the console reads.
 type registryEntry struct {
 	SessionID       string `json:"sessionId"`
 	Name            string `json:"name"`
@@ -29,6 +29,7 @@ type registryEntry struct {
 type Usage struct {
 	Model    string    `json:"model"`
 	Tokens   int       `json:"tokens"`
+	Window   int       `json:"window,omitempty"` // as the agent reports it; 0: not reported
 	At       time.Time `json:"at"`
 	Progress *Progress `json:"progress,omitempty"`
 	// LastLine and Asks are read from the newest reply with text.
@@ -44,7 +45,6 @@ type fileKey struct {
 // agentReader caches everything keyed on file size and mtime, so an idle
 // session costs one stat per tick and no reads.
 type agentReader struct {
-	home        string
 	registry    map[string]cached[registryEntry]
 	transcripts map[string]string    // sessionId -> path
 	missing     map[string]time.Time // sessionId -> when the last search found nothing
@@ -56,9 +56,8 @@ type cached[T any] struct {
 	val T
 }
 
-func newAgentReader(home string) *agentReader {
+func newAgentReader() *agentReader {
 	return &agentReader{
-		home:        home,
 		registry:    map[string]cached[registryEntry]{},
 		transcripts: map[string]string{},
 		missing:     map[string]time.Time{},
@@ -74,8 +73,8 @@ func statKey(path string) (fileKey, bool) {
 	return fileKey{st.Size(), st.ModTime()}, true
 }
 
-func (r *agentReader) entry(pid int) (registryEntry, bool) {
-	path := filepath.Join(r.home, ".claude", "sessions", strconv.Itoa(pid)+".json")
+func (r *agentReader) entry(dir string, pid int) (registryEntry, bool) {
+	path := filepath.Join(dir, "sessions", strconv.Itoa(pid)+".json")
 	key, ok := statKey(path)
 	if !ok {
 		return registryEntry{}, false
@@ -99,11 +98,11 @@ func (r *agentReader) entry(pid int) (registryEntry, bool) {
 // working directory, then by searching every project. A session that has not
 // written one yet is searched again at most every 30 s, because the search
 // lists every transcript on the machine.
-func (r *agentReader) transcript(sessionID, cwd string) string {
+func (r *agentReader) transcript(dir, sessionID, cwd string) string {
 	if p, ok := r.transcripts[sessionID]; ok {
 		return p
 	}
-	direct := filepath.Join(r.home, ".claude", "projects", projectDir(cwd), sessionID+".jsonl")
+	direct := filepath.Join(dir, "projects", projectDir(cwd), sessionID+".jsonl")
 	if _, err := os.Stat(direct); err == nil {
 		r.transcripts[sessionID] = direct
 		return direct
@@ -111,7 +110,7 @@ func (r *agentReader) transcript(sessionID, cwd string) string {
 	if at, ok := r.missing[sessionID]; ok && time.Since(at) < 30*time.Second {
 		return ""
 	}
-	matches, _ := filepath.Glob(filepath.Join(r.home, ".claude", "projects", "*", sessionID+".jsonl"))
+	matches, _ := filepath.Glob(filepath.Join(dir, "projects", "*", sessionID+".jsonl"))
 	if len(matches) == 0 {
 		r.missing[sessionID] = time.Now()
 		return ""
@@ -133,8 +132,8 @@ func projectDir(cwd string) string {
 	return string(b)
 }
 
-func (r *agentReader) usageOf(sessionID, cwd string) (Usage, bool) {
-	path := r.transcript(sessionID, cwd)
+func (r *agentReader) usageOf(dir, sessionID, cwd string) (Usage, bool) {
+	path := r.transcript(dir, sessionID, cwd)
 	if path == "" {
 		return Usage{}, false
 	}
@@ -221,9 +220,9 @@ func lastUsage(path string, size int64) (Usage, bool) {
 
 // modelSetting is the model a Claude Code process was started with, in the
 // order Claude Code resolves it: the --model flag, ANTHROPIC_MODEL, then the
-// project's local and shared settings and the user's settings. A change made
-// with /model inside the session is not visible here.
-func modelSetting(cmdline string, env func(string) (string, bool), cwd, home string) string {
+// project's local and shared settings and the user's settings in its config
+// directory. A change made with /model inside the session is not visible here.
+func modelSetting(cmdline string, env func(string) (string, bool), cwd, dir string) string {
 	args := strings.Fields(cmdline)
 	for i, a := range args {
 		if v, ok := strings.CutPrefix(a, "--model="); ok {
@@ -239,7 +238,7 @@ func modelSetting(cmdline string, env func(string) (string, bool), cwd, home str
 	for _, f := range []string{
 		filepath.Join(cwd, ".claude", "settings.local.json"),
 		filepath.Join(cwd, ".claude", "settings.json"),
-		filepath.Join(home, ".claude", "settings.json"),
+		filepath.Join(dir, "settings.json"),
 	} {
 		var s struct {
 			Model string `json:"model"`

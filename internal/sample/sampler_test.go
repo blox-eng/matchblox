@@ -187,21 +187,23 @@ func TestSuggest(t *testing.T) {
 func TestWindowIsPerSession(t *testing.T) {
 	s := &Sampler{}
 	s.init()
-	if w := s.window("a", "model-a", 150_000, false); w != 200_000 {
+	if w := s.claudeWindow("a", 150_000, false); w != 200_000 {
 		t.Fatalf("got %d", w)
 	}
-	s.window("a", "model-a", 250_000, false)
-	if w := s.window("a", "model-a", 150_000, false); w != 1_000_000 {
+	s.claudeWindow("a", 250_000, false)
+	if w := s.claudeWindow("a", 150_000, false); w != 1_000_000 {
 		t.Fatalf("a session past 200k once must stay 1M, got %d", w)
 	}
-	if w := s.window("b", "model-a", 150_000, false); w != 200_000 {
+	if w := s.claudeWindow("b", 150_000, false); w != 200_000 {
 		t.Fatalf("another session of the same model is not 1M: %d", w)
 	}
 	s.Rules.Windows = map[string]int{"model-b": 500_000}
-	if w := s.window("c", "model-b-large", 10, false); w != 500_000 {
-		t.Fatalf("configured window ignored: %d", w)
+	var c Session
+	s.measured(&c, Usage{Model: "model-b-large", Tokens: 10, Window: s.claudeWindow("c", 10, false)}, "c", fixtureNow)
+	if c.Window != 500_000 {
+		t.Fatalf("configured window ignored: %d", c.Window)
 	}
-	if w := s.window("d", "model-a", 150_000, true); w != 1_000_000 {
+	if w := s.claudeWindow("d", 150_000, true); w != 1_000_000 {
 		t.Fatalf("a 1M model setting must give a 1M window below 200k: %d", w)
 	}
 }
@@ -218,23 +220,23 @@ func TestModelSetting(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if m := modelSetting("claude", noEnv, cwd, home); m != "" {
+	if m := modelSetting("claude", noEnv, cwd, filepath.Join(home, ".claude")); m != "" {
 		t.Fatalf("no setting anywhere: %q", m)
 	}
 	write(home, "settings.json", `{"model":"big[1m]"}`)
-	if m := modelSetting("claude --resume x", noEnv, cwd, home); !longContext(m) {
+	if m := modelSetting("claude --resume x", noEnv, cwd, filepath.Join(home, ".claude")); !longContext(m) {
 		t.Fatalf("user settings ignored: %q", m)
 	}
 	write(cwd, "settings.local.json", `{"model":"small"}`)
-	if m := modelSetting("claude", noEnv, cwd, home); m != "small" {
+	if m := modelSetting("claude", noEnv, cwd, filepath.Join(home, ".claude")); m != "small" {
 		t.Fatalf("project local settings must win over user settings: %q", m)
 	}
 	env := func(k string) (string, bool) { return "env[1M]", k == "ANTHROPIC_MODEL" }
-	if m := modelSetting("claude", env, cwd, home); !longContext(m) {
+	if m := modelSetting("claude", env, cwd, filepath.Join(home, ".claude")); !longContext(m) {
 		t.Fatalf("ANTHROPIC_MODEL must win over settings: %q", m)
 	}
 	for _, cmd := range []string{"claude --model flag[1m]", "claude --model=flag[1m]"} {
-		if m := modelSetting(cmd, env, cwd, home); m != "flag[1m]" {
+		if m := modelSetting(cmd, env, cwd, filepath.Join(home, ".claude")); m != "flag[1m]" {
 			t.Fatalf("%s: the flag must win: %q", cmd, m)
 		}
 	}

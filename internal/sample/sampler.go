@@ -26,12 +26,16 @@ type Exited struct {
 
 // Session is one agent process and the pane that owns it.
 type Session struct {
-	PID        int           `json:"pid"`
-	Start      uint64        `json:"start_ticks"` // /proc/<pid>/stat field 22: tells a reused pid apart
-	Pane       string        `json:"pane"`
-	Target     string        `json:"target"`
-	Tab        string        `json:"tab"` // tmux window name
-	Name       string        `json:"name"`
+	PID    int    `json:"pid"`
+	Start  uint64 `json:"start_ticks"` // /proc/<pid>/stat field 22: tells a reused pid apart
+	Pane   string `json:"pane"`
+	Target string `json:"target"`
+	Tab    string `json:"tab"` // tmux window name
+	Name   string `json:"name"`
+	Agent  string `json:"agent"` // the command it was found by: claude, codex, opencode, ...
+	// Account is a short label of the login it runs under ("a@b.c · Max",
+	// "API key"), never a credential.
+	Account    string        `json:"account,omitempty"`
 	SessionID  string        `json:"session_id"`
 	Cwd        string        `json:"cwd"`
 	Busy       bool          `json:"busy"`
@@ -161,6 +165,9 @@ type Sampler struct {
 	burn       map[string][]tokenPoint
 	bigSession map[string]bool  // sessions seen past 200k tokens, so 1M windows
 	longCtx    map[procKey]bool // processes started with a 1M model setting
+	envs       map[procKey]agentEnv
+	accounts   *accounts
+	opencode   *opencodeReader
 
 	owners     map[procKey]string
 	hotSince   map[procKey]time.Time
@@ -190,7 +197,10 @@ type tokenPoint struct {
 
 func (s *Sampler) init() {
 	if s.agents == nil {
-		s.agents = newAgentReader(s.Home)
+		s.agents = newAgentReader()
+		s.envs = map[procKey]agentEnv{}
+		s.accounts = newAccounts()
+		s.opencode = newOpencodeReader()
 		s.panes = map[procKey]string{}
 		s.names = map[procKey]agentRef{}
 		s.burn = map[string][]tokenPoint{}
@@ -368,6 +378,14 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		server = panes[0]
 	}
 	uptime := s.FS.Uptime()
+	// OpenCode does not say which session a process shows: two in one
+	// directory cannot be told apart.
+	opencodeIn := map[string]int{}
+	for pid, p := range procs {
+		if s.agentName(pid, p) == "opencode" && p.State != 'Z' && p.State != 'X' && !s.underAgent(p, procs) {
+			opencodeIn[s.FS.Cwd(pid)]++
+		}
+	}
 	for pid, p := range procs {
 		agent := s.agentName(pid, p)
 		if agent == "" {
@@ -386,7 +404,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		alive[key] = true
 		paneID, ok := s.panes[key]
 		if !ok {
-			paneID = s.ownerPane(pid, procs, byPID, server)
+			paneID = s.ownerPane(pid, key, procs, byPID, server)
 			s.panes[key] = paneID
 		}
 		pane := byID[paneID]
@@ -395,48 +413,58 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		cpu, n := s.treeCPU(pid, procs, children, dt)
 		sess := Session{
 			PID: pid, Start: p.StartTime, Pane: paneID, Target: pane.Target, Tab: pane.Window, Cwd: s.FS.Cwd(pid),
-			CPU: cpu, Procs: n, Window: 200_000, Context: "unknown",
+			Agent: agent, CPU: cpu, Procs: n, Context: "unknown",
 		}
-		if e, ok := s.agents.entry(pid); ok && s.ownEntry(e, p, uptime, now) {
-			sess.Name, sess.SessionID = e.Name, e.SessionID
-			sess.Busy, sess.Status = e.Status == "busy", e.Status
-			if e.StartedAt > 0 {
-				sess.Started = time.UnixMilli(e.StartedAt)
+		env := s.envOf(pid, key)
+		switch agent {
+		case "claude":
+			sess.Window = 200_000
+			sess.Account = s.accounts.claudeAccount(env)
+			s.claudeSession(&sess, pid, p, key, env, uptime, now)
+		case "codex":
+			sess.Account = s.accounts.codexAccount(env)
+			path, read := s.codexRollout(pid, children)
+			sess.Context = "unmeasured"
+			if read {
+				sess.Context = "fresh"
 			}
-			if !sess.Busy && e.StatusUpdatedAt > 0 {
-				sess.Idle = now.Sub(time.UnixMilli(e.StatusUpdatedAt)).Truncate(time.Second)
-			}
-			sess.Context = "fresh"
-			if u, ok := s.agents.usageOf(e.SessionID, e.Cwd); ok {
-				sess.Context = "known"
-				sess.Model, sess.Tokens, sess.Progress = u.Model, u.Tokens, u.Progress
-				sess.LastLine, sess.Asks = u.LastLine, u.Asks
-				long, ok := s.longCtx[key]
-				if !ok {
-					env := func(k string) (string, bool) { return s.FS.Environ(pid, k) }
-					long = longContext(modelSetting(s.FS.Cmdline(pid), env, e.Cwd, s.Home))
-					s.longCtx[key] = long
+			if path != "" {
+				if u, ok := s.agents.codexUsage(path); ok {
+					s.measured(&sess, u, "codex:"+path, now)
 				}
-				sess.Window = s.window(e.SessionID, u.Model, u.Tokens, long)
-				sess.ContextPct = 100 * float64(u.Tokens) / float64(sess.Window)
-				sess.Burn30m = s.trackBurn(e.SessionID, now, u.Tokens)
 			}
+		case "opencode":
+			sess.Context = "unmeasured"
+			if opencodeIn[sess.Cwd] != 1 {
+				break
+			}
+			started := now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
+			data := filepath.Join(env.dataHome, "opencode")
+			if oc, ok := s.opencode.session(data, sess.Cwd, started.UnixMilli()); ok {
+				sess.Context = "fresh"
+				if u, provider, ok := s.opencode.usage(data, env.cacheHome, oc.ID); ok {
+					sess.Account = s.accounts.opencodeAccount(env, provider)
+					s.measured(&sess, u, "opencode:"+oc.ID, now)
+				}
+			}
+		default:
+			sess.Context = "unmeasured"
 		}
 		if sess.Name == "" {
 			sess.Name = agent
 		}
-		if sess.SessionID == "" {
-			if agent != "claude" {
-				sess.Context = "unmeasured"
-			}
-			if paneID != "" {
-				fromPane = append(fromPane, len(snap.Sessions))
-			}
+		if sess.SessionID == "" && paneID != "" {
+			fromPane = append(fromPane, len(snap.Sessions))
 		}
 		sess.Do, sess.Why = s.Rules.suggest(sess)
 		snap.Sessions = append(snap.Sessions, sess)
 	}
 	s.readPanes(snap.Sessions, fromPane, now)
+	for key := range s.envs {
+		if !alive[key] {
+			delete(s.envs, key)
+		}
+	}
 	for key := range s.panes {
 		if !alive[key] {
 			delete(s.panes, key)
@@ -583,7 +611,7 @@ func (s *Sampler) isAgent(name string) bool {
 // TMUX_PANE from its environment (both survive re-parenting), and falls back
 // to walking up to a pane's shell. Pane ids repeat across tmux servers: an
 // agent whose TMUX names another server takes only a pane it descends from.
-func (s *Sampler) ownerPane(pid int, procs map[int]procfs.Proc, byPID map[int]Pane, server Pane) string {
+func (s *Sampler) ownerPane(pid int, key procKey, procs map[int]procfs.Proc, byPID map[int]Pane, server Pane) string {
 	ours := true
 	// TMUX is "<socket>,<server pid>,<session>": an agent can outlive its
 	// server, and a new server can take the same socket path.
@@ -592,7 +620,7 @@ func (s *Sampler) ownerPane(pid int, procs map[int]procfs.Proc, byPID map[int]Pa
 		spid, _, _ := strings.Cut(rest, ",")
 		ours = sock == server.Socket && (server.Server == "" || spid == server.Server)
 	}
-	if e, ok := s.agents.entry(pid); ok && e.Tmux != "" && ours {
+	if e, ok := s.agents.entry(s.envOf(pid, key).claudeDir, pid); ok && e.Tmux != "" && ours {
 		if i := strings.LastIndexByte(e.Tmux, '.'); i >= 0 && strings.HasPrefix(e.Tmux[i+1:], "%") {
 			return e.Tmux[i+1:]
 		}
@@ -629,16 +657,60 @@ func (s *Sampler) treeCPU(root int, procs map[int]procfs.Proc, children map[int]
 	return 100 * float64(ticks) / procfs.ClockTicks / dt, n
 }
 
-// window is the session's context size. A configured value for its model
-// wins; otherwise a session started with a 1M model setting, or seen past
-// 200k, has a 1M window. Sessions of one model can differ, so this is decided
-// per session.
-func (s *Sampler) window(sessionID, model string, tokens int, long bool) int {
+// claudeSession reads the session file Claude Code keeps for the process
+// and the end of its transcript, in the process's config directory.
+func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procKey, env agentEnv, uptime float64, now time.Time) {
+	e, ok := s.agents.entry(env.claudeDir, pid)
+	if !ok || !s.ownEntry(e, p, uptime, now) {
+		return
+	}
+	sess.Name, sess.SessionID = e.Name, e.SessionID
+	sess.Busy, sess.Status = e.Status == "busy", e.Status
+	if e.StartedAt > 0 {
+		sess.Started = time.UnixMilli(e.StartedAt)
+	}
+	if !sess.Busy && e.StatusUpdatedAt > 0 {
+		sess.Idle = now.Sub(time.UnixMilli(e.StatusUpdatedAt)).Truncate(time.Second)
+	}
+	sess.Context = "fresh"
+	u, ok := s.agents.usageOf(env.claudeDir, e.SessionID, e.Cwd)
+	if !ok {
+		return
+	}
+	sess.Progress, sess.LastLine, sess.Asks = u.Progress, u.LastLine, u.Asks
+	long, ok := s.longCtx[key]
+	if !ok {
+		get := func(k string) (string, bool) { return s.FS.Environ(pid, k) }
+		long = longContext(modelSetting(s.FS.Cmdline(pid), get, e.Cwd, env.claudeDir))
+		s.longCtx[key] = long
+	}
+	u.Window = s.claudeWindow(e.SessionID, u.Tokens, long)
+	s.measured(sess, u, e.SessionID, now)
+}
+
+// measured sets the context use. A window from the config wins over the
+// one the agent reports; without a window it is not measured, never a
+// guess.
+func (s *Sampler) measured(sess *Session, u Usage, burnKey string, now time.Time) {
+	sess.Model, sess.Tokens, sess.Window = u.Model, u.Tokens, u.Window
 	for prefix, w := range s.Rules.Windows {
-		if strings.HasPrefix(model, prefix) {
-			return w
+		if strings.HasPrefix(u.Model, prefix) {
+			sess.Window = w
 		}
 	}
+	if sess.Window <= 0 {
+		sess.Context = "unmeasured"
+		return
+	}
+	sess.Context = "known"
+	sess.ContextPct = 100 * float64(u.Tokens) / float64(sess.Window)
+	sess.Burn30m = s.trackBurn(burnKey, now, u.Tokens)
+}
+
+// claudeWindow is the context size of a Claude Code session: a session
+// started with a 1M model setting, or seen past 200k, has a 1M window.
+// Sessions of one model can differ, so this is decided per session.
+func (s *Sampler) claudeWindow(sessionID string, tokens int, long bool) int {
 	if long || tokens > 200_000 {
 		s.bigSession[sessionID] = true
 	}

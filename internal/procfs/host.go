@@ -11,6 +11,9 @@ type Host interface {
 	Cmdline(pid int) string
 	// Argv is the process's arguments, argv[0] first.
 	Argv(pid int) []string
+	// OpenFiles is the paths of the files the process holds open; ok is
+	// false when they cannot be read.
+	OpenFiles(pid int) (paths []string, ok bool)
 	Cgroup(pid int) string
 	UID(pid int) (int, bool)
 	// Uptime is in seconds on the same clock as Proc.StartTime, so
