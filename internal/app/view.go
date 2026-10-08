@@ -129,21 +129,6 @@ func (m Model) header(w int) string {
 	return fit(build(1, false), w)
 }
 
-const (
-	tabQueue = iota
-	tabSessions
-	tabMachine
-	tabProcs
-	tabGit
-	tabHistory
-	tabPanes
-)
-
-var tabNames = []string{"queue", "sessions", "machine", "procs", "git", "history", "panes"}
-
-// tabShort names the tabs when the full names do not fit.
-var tabShort = []string{"queue", "sess", "mach", "procs", "git", "hist", "panes"}
-
 // tabs tries the full names, then a narrower gap, then the short names,
 // then digits only (a phone), so every tab and the alert marker stay on the
 // line.
@@ -234,15 +219,7 @@ func (m Model) footer(w int) string {
 		}
 		return fit(" "+st.label.Render("RUN ")+st.text.Render(m.pending.String())+"   "+st.muted.Render(confirm), w)
 	}
-	tabKeys := map[int]string{
-		tabQueue:    "↑↓ select  ⏎ go  a answer",
-		tabPanes:    "↑↓ select  ⏎ go  s sort",
-		tabSessions: "↑↓ select  ⏎ jump  a answer  s sort",
-		tabMachine:  "",
-		tabProcs:    "↑↓ select  ⏎ jump  x kill",
-		tabGit:      "↑↓ select  ⏎ shell  space mark  X all safe  x remove  r rescan",
-		tabHistory:  "",
-	}[m.tab]
+	tabKeys := m.view().keys
 	if _, ok := m.selectedRec(); ok {
 		tabKeys = "↑↓ select  ⏎ do  x the other action"
 	}

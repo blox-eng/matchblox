@@ -68,27 +68,6 @@ const minWidth = 30
 // line and a hairline.
 const chrome = 4
 
-// body is the panel of the open tab.
-func (m Model) body(w int) body {
-	switch m.tab {
-	case tabQueue:
-		return m.queuePanel(w)
-	case tabPanes:
-		return m.panesPanel(w)
-	case tabSessions:
-		return m.sessions(w, m.height-chrome-1)
-	case tabMachine:
-		return plain(m.machine(w))
-	case tabProcs:
-		return m.procs(w)
-	case tabGit:
-		return m.gitPanel(w)
-	case tabHistory:
-		return plain(m.historyPanel(w))
-	}
-	return body{}
-}
-
 // narrowRow is a session on a phone: the match, the state, the name and
 // the context on the first line; where it runs on the second.
 func (m Model) narrowRow(s sample.Session, selected bool) []string {

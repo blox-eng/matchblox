@@ -628,61 +628,6 @@ func (m Model) typing(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// primary is what Enter does on the current panel: never destructive.
-func (m Model) primary() *action {
-	switch m.tab {
-	case tabQueue:
-		if it, ok := m.selectedQueue(); ok && it.Pane != "" {
-			return m.jump(it.Pane)
-		}
-		if r, ok := m.selectedRec(); ok {
-			return fromAdvice(r, "primary")
-		}
-	case tabSessions:
-		if s, ok := m.selected(); ok && s.Pane != "" {
-			return m.jump(s.Pane)
-		}
-	case tabProcs:
-		if o, ok := m.selectedOrphan(); ok && o.PaneAlive {
-			return m.jump(o.Pane)
-		}
-	case tabPanes:
-		if p, ok := m.selectedPane(); ok && p.id != "" {
-			return m.jump(p.id)
-		}
-	case tabGit:
-		if wt, ok := m.selectedWorktree(); ok {
-			return &action{label: "shell", nav: true, steps: [][]string{{"tmux", "new-window", "-c", wt.Path}}}
-		}
-	}
-	return nil
-}
-
-// secondary is what x does: the destructive action, behind a typed y. The
-// service builds and guards it again from its own state.
-func (m Model) secondary() *action {
-	switch m.tab {
-	case tabProcs:
-		if o, ok := m.selectedOrphan(); ok {
-			return &action{label: "kill", steps: [][]string{o.Kill}, destructive: true,
-				rec: "orphan:" + strconv.Itoa(o.PID), which: "secondary"}
-		}
-	case tabGit:
-		if a := m.removeMarked(); a != nil {
-			return a
-		}
-		if wt, ok := m.selectedWorktree(); ok && wt.Safe {
-			return &action{label: "remove", steps: [][]string{wt.Remove}, destructive: true,
-				rec: "worktree:" + wt.Path, which: "secondary"}
-		}
-	case tabQueue:
-		if r, ok := m.selectedRec(); ok {
-			return fromAdvice(r, "secondary")
-		}
-	}
-	return nil
-}
-
 func clampMove(i, d, n int) int { return min(max(i+d, 0), max(n-1, 0)) }
 
 func (m *Model) move(d int) {
