@@ -23,11 +23,11 @@ func (d *Duration) UnmarshalText(b []byte) error {
 }
 
 type Config struct {
-	Interval      Duration `toml:"interval"`
-	Agents        []string `toml:"agents"`
+	Interval Duration `toml:"interval"`
+	Agents   []string `toml:"agents"`
 	// AgentsSet: the file has an agents key. A config written before the
 	// first run found the agents has none; the console finds them then.
-	AgentsSet bool `toml:"-"`
+	AgentsSet     bool     `toml:"-"`
 	LatencyTarget string   `toml:"latency_target"`
 	Sessions      Sessions `toml:"sessions"`
 	Alerts        Alerts   `toml:"alerts"`
