@@ -179,7 +179,12 @@ footer a { color: var(--muted); }
 
 /* The agents: one line on the first screen, then a command and the console
    row it gives for each agent. */
-.works { margin: 0; font: 400 13px/1.5 var(--mono); color: var(--muted); }
+.works { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; font: 400 13px/1.5 var(--mono); color: var(--muted); }
+.works li { display: inline-flex; align-items: center; gap: 7px; color: var(--fg); }
+.works li.any { color: var(--muted); }
+.logo { width: 18px; height: 18px; flex: none; fill: currentColor; }
+.logo .dim { opacity: .45; }
+.run figcaption .logo { width: 14px; height: 14px; color: var(--fg); }
 .agents { display: grid; gap: 14px; min-width: 0; }
 .agents h2 { margin: 0; font-size: 22px; line-height: 28px; font-weight: 600; letter-spacing: -.02em; }
 .agents .lede, .agents .note { margin: 0; color: var(--muted); max-width: 72ch; }
@@ -187,7 +192,7 @@ footer a { color: var(--muted); }
 .runs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 760px) { .runs { grid-template-columns: minmax(0, 1fr); } }
 .run { margin: 0; display: grid; gap: 8px; align-content: start; min-width: 0; padding: 14px 16px; background: var(--stage); box-shadow: 0 0 0 1px var(--hair-strong); border-radius: 6px; }
-.run figcaption { font: 500 11px/16px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+.run figcaption { display: flex; align-items: center; gap: 8px; font: 500 11px/16px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
 .run code { font: 400 14px/1.5 var(--mono); color: var(--fg); overflow-wrap: anywhere; }
 .run code .p { color: var(--faint); user-select: none; }
 .run .row { display: flex; flex-wrap: wrap; gap: 0 8px; padding-top: 8px; border-top: 1px solid var(--hair); font: 400 13px/1.6 var(--mono); color: var(--t-fg); }

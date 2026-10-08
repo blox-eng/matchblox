@@ -37,9 +37,10 @@ const (
 	sortCPU
 	sortName
 	sortPlace
+	sortAccount
 )
 
-var sessCols = []string{"state", "idle", "context", "cpu", "name", "tmux"}
+var sessCols = []string{"state", "idle", "context", "cpu", "name", "tmux", "account"}
 
 const (
 	paneByPlace = iota
@@ -127,6 +128,8 @@ func (s sortBy) compare(a, b sample.Session, waits map[string]bool) int {
 		c = strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
 	case sortPlace:
 		c = strings.Compare(a.Target, b.Target)
+	case sortAccount:
+		c = strings.Compare(accountCell(a), accountCell(b))
 	}
 	if c == 0 {
 		c = strings.Compare(a.Name, b.Name)
@@ -215,7 +218,7 @@ func (m Model) sortNote(w int, s sortBy, names []string) string {
 
 // sessHeader is the column header of the Sessions tab, with the sort, and
 // where each sortable column starts and ends.
-func (m Model) sessHeader(tab int) (string, []colSpan) {
+func (m Model) sessHeader(tab, acct int) (string, []colSpan) {
 	cols := []struct {
 		label string
 		w     int
@@ -224,6 +227,13 @@ func (m Model) sessHeader(tab int) (string, []colSpan) {
 		{"TMUX", colPane + tab, sortPlace}, {"NAME", colName, sortName}, {"STATE", colSt, sortState},
 		{"IDLE", colIdle, sortIdle}, {"CONTEXT", colBar + 1 + colPct, sortContext}, {"CPU", colCPU, sortCPU},
 		{"DO", colDo + 1, -1},
+	}
+	if acct > 0 {
+		cols = append(cols, struct {
+			label string
+			w     int
+			col   int
+		}{"ACCOUNT", acct, sortAccount})
 	}
 	return header(cols, m.sessSort, " WORKTREE")
 }
@@ -266,11 +276,8 @@ func (m Model) tapHeader(w, x int) (tea.Model, tea.Cmd) {
 	var spans []colSpan
 	switch m.tab {
 	case tabSessions:
-		tab := 0
-		if w >= 100 {
-			tab = colTab
-		}
-		_, spans = m.sessHeader(tab)
+		tab, acct, _ := m.sessWidths(w)
+		_, spans = m.sessHeader(tab, acct)
 	case tabPanes:
 		_, spans = m.paneHeader()
 	}

@@ -418,7 +418,7 @@ func TestReplay(t *testing.T) {
 
 	steps := []step{
 		{"the queue", 1300 * time.Millisecond, "", has("ws-1", "WAITING FOR YOU", "billing", "asks", "permission to use Bash", "codex", "Would you like to run", "PROCS !")},
-		{"the sessions", 3500 * time.Millisecond, "2", has("api-auth", "web-checkout", "! compact", "codex", "opencode", "not measured")},
+		{"the sessions", 3500 * time.Millisecond, "2", has("api-auth", "web-checkout", "! compact", "codex", "55%", "opencode", "32%")},
 		{"machine health", 6 * time.Second, "3", has("CPU")},
 		{"what to do, under the queue", 8 * time.Second, "1", has("RECOMMENDATIONS", "Kill detached busy loop 4242")},
 		{"the busy loop", 9500 * time.Millisecond, "4", has("4242")},

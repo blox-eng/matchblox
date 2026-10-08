@@ -143,6 +143,27 @@ func (fs FS) Argv(pid int) []string {
 	return strings.Split(string(b), "\x00")
 }
 
+// OpenFiles returns the targets of /proc/<pid>/fd: the paths of the files
+// the process holds open. ok is false when they cannot be read.
+func (fs FS) OpenFiles(pid int) (paths []string, ok bool) {
+	dir := fs.path(strconv.Itoa(pid), "fd")
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, false
+	}
+	for _, e := range ents {
+		t, err := os.Readlink(filepath.Join(dir, e.Name()))
+		switch {
+		case err != nil:
+		case filepath.IsAbs(t):
+			paths = append(paths, t)
+		case !strings.Contains(t, ":"): // not socket:[…], pipe:[…], anon_inode:…; only in a fixture tree
+			paths = append(paths, filepath.Join(dir, t))
+		}
+	}
+	return paths, true
+}
+
 // CPUTimes is the aggregate "cpu" line of /proc/stat.
 type CPUTimes struct{ Busy, Total uint64 }
 

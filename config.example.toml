@@ -11,8 +11,9 @@ clear_idle = "30m"       # idle this long while holding clear_min_pct context: c
 clear_min_pct = 20
 clear_stale = "24h"      # idle this long: clear whatever it holds
 progress_prompt = true   # ask each new agent session for a progress bar; the console shows it
-# [sessions.windows]     # context window by model-name prefix; default 200k, or
-# "some-model" = 1000000 # 1M when the session's model setting ends in [1m] or it passed 200k
+# [sessions.windows]     # context window by model-name prefix; it wins over the window the
+# "some-model" = 1000000 # agent reports (Codex, OpenCode). Claude Code: 200k, or 1M when the
+                         # model setting ends in [1m] or the session passed 200k
 
 [alerts]                 # a zero threshold is off
 temp_over_c = 95

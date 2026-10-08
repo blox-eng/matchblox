@@ -193,7 +193,7 @@ func TestSessionMatchGlyphs(t *testing.T) {
 		if got := m.matchOf(s); got != tc.want {
 			t.Errorf("busy=%v %v%%: %v, want %v", tc.busy, tc.pct, got, tc.want)
 		}
-		plain := ansi.Strip(m.row(s, false, 120, 0, 20))
+		plain := ansi.Strip(m.row(s, false, 120, 0, 0, 20))
 		if !strings.Contains(plain, tc.ch+" ") || !strings.Contains(plain, tc.word) {
 			t.Errorf("busy=%v %v%%: row %q lacks %q or the word %q", tc.busy, tc.pct, plain, tc.ch, tc.word)
 		}
