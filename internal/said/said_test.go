@@ -81,13 +81,12 @@ Add main.go to the chat? (Y)es/(N)o/(D)on't ask again [Yes]:
 	}
 }
 
-
 // TestReply: Claude Code ends each reply with the progress line, so the
 // question sits above it. A reply that asks waits for the person.
 func TestReply(t *testing.T) {
 	for _, c := range []struct {
 		name, text, line string
-		asks               bool
+		asks             bool
 	}{
 		{"asks above the progress line", "I fixed the parser.\n\n**Shall I open the PR?**\n\nProgress [██████░░] review", "Shall I open the PR?", true},
 		{"asks mid-line", "Both are ready. Want me to merge? I can also tag it.\n\nProgress [████████] done", "Both are ready. Want me to merge? I can also tag it.", true},
