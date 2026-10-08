@@ -103,7 +103,7 @@ func TestAnAgentOfAnotherTmuxServerTakesNoPaneOfOurs(t *testing.T) {
 	}
 	var lines []string
 	for _, l := range strings.Split(strings.TrimSpace(string(b)), "\n") {
-		lines = append(lines, l+"\t/tmp/tmux-1000/default")
+		lines = append(lines, l+"\t/tmp/tmux-1000/default\t4242")
 	}
 	if err := os.WriteFile(filepath.Join(root, "tmux-panes.txt"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -116,6 +116,19 @@ func TestAnAgentOfAnotherTmuxServerTakesNoPaneOfOurs(t *testing.T) {
 		}
 		if s.Pane == "%1" && s.PID != 200 {
 			t.Fatalf("pane %%1 belongs to pid 200, got %d", s.PID)
+		}
+	}
+	// An agent of an earlier server at the same socket path (it outlived
+	// that server) takes no pane either.
+	env = "TMUX=/tmp/tmux-1000/default,1717,0\x00TMUX_PANE=%1\x00"
+	if err := os.WriteFile(filepath.Join(root, "proc", "880", "environ"), []byte(env), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	smp = newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	for _, s := range smp.Sample().Sessions {
+		if s.PID == 880 && s.Pane != "" {
+			t.Fatalf("the agent of an earlier server took pane %s", s.Pane)
 		}
 	}
 	// The same agent under our server keeps its pane.

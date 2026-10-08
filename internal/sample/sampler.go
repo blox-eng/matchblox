@@ -363,9 +363,9 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	hosting := map[string]bool{}
 	alive := map[procKey]bool{}
 	var fromPane []int // sessions without an adapter: read from their pane
-	socket := ""
+	var server Pane    // the socket and pid of the tmux server listed
 	if len(panes) > 0 {
-		socket = panes[0].Socket
+		server = panes[0]
 	}
 	uptime := s.FS.Uptime()
 	for pid, p := range procs {
@@ -386,7 +386,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		alive[key] = true
 		paneID, ok := s.panes[key]
 		if !ok {
-			paneID = s.ownerPane(pid, procs, byPID, socket)
+			paneID = s.ownerPane(pid, procs, byPID, server)
 			s.panes[key] = paneID
 		}
 		pane := byID[paneID]
@@ -582,13 +582,15 @@ func (s *Sampler) isAgent(name string) bool {
 // ownerPane prefers the pane the agent recorded in its session file, then
 // TMUX_PANE from its environment (both survive re-parenting), and falls back
 // to walking up to a pane's shell. Pane ids repeat across tmux servers: an
-// agent whose TMUX names another server's socket takes only a pane it
-// descends from.
-func (s *Sampler) ownerPane(pid int, procs map[int]procfs.Proc, byPID map[int]Pane, socket string) string {
+// agent whose TMUX names another server takes only a pane it descends from.
+func (s *Sampler) ownerPane(pid int, procs map[int]procfs.Proc, byPID map[int]Pane, server Pane) string {
 	ours := true
-	if v, ok := s.FS.Environ(pid, "TMUX"); ok && socket != "" {
-		sock, _, _ := strings.Cut(v, ",")
-		ours = sock == socket
+	// TMUX is "<socket>,<server pid>,<session>": an agent can outlive its
+	// server, and a new server can take the same socket path.
+	if v, ok := s.FS.Environ(pid, "TMUX"); ok && server.Socket != "" {
+		sock, rest, _ := strings.Cut(v, ",")
+		spid, _, _ := strings.Cut(rest, ",")
+		ours = sock == server.Socket && (server.Server == "" || spid == server.Server)
 	}
 	if e, ok := s.agents.entry(pid); ok && e.Tmux != "" && ours {
 		if i := strings.LastIndexByte(e.Tmux, '.'); i >= 0 && strings.HasPrefix(e.Tmux[i+1:], "%") {

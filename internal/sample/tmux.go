@@ -18,10 +18,11 @@ type Pane struct {
 	Command string `json:"command"`
 	Path    string `json:"path"`
 	Socket  string `json:"socket,omitempty"` // the tmux server's socket
+	Server  string `json:"server,omitempty"` // the tmux server's pid
 }
 
 // PaneFormat is the -F format ParsePanes expects; fields are tab separated.
-const PaneFormat = "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}\t#{window_name}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}\t#{socket_path}"
+const PaneFormat = "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}\t#{window_name}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}\t#{socket_path}\t#{pid}"
 
 // TmuxPanes lists every pane on the default tmux server. No server is not an
 // error: the console still shows the machine.
@@ -50,6 +51,9 @@ func ParsePanes(b []byte) []Pane {
 		p := Pane{ID: f[0], Target: f[1], Window: f[2], PID: pid, Command: f[4], Path: f[5]}
 		if len(f) > 6 {
 			p.Socket = f[6]
+		}
+		if len(f) > 7 {
+			p.Server = f[7]
 		}
 		panes = append(panes, p)
 	}
