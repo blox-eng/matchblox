@@ -17,6 +17,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -88,11 +89,17 @@ type action struct {
 	attach      bool     // the last step takes the terminal until it exits
 	rec         string   // the service's name for it
 	which       string   // primary | secondary
-	text        string   // what an answer types
+	text        string   // what an answer types; a door's preview Sum
 	batch       []string // worktrees: one guarded act each
+	say         string   // what the confirm shows, when not the first step
+	term        bool     // the step takes this terminal (a door's command)
+	door        string   // the door it opens or closes
 }
 
 func (a action) String() string {
+	if a.say != "" {
+		return a.say
+	}
 	s := strings.Join(a.steps[0], " ")
 	if n := len(a.steps); n > 1 {
 		s += fmt.Sprintf("  (+%d more)", n-1)
@@ -123,6 +130,8 @@ type Model struct {
 	recs       []advice.Rec
 	queue      []queue.Item
 	queuePane  string
+	doors      []doors.Door // the open doors, above the queue
+	doorPick   string       // the selected door
 	paneSel    int
 	input      *answerInput
 	changes    map[string]change // pane -> a match change that plays once
@@ -287,6 +296,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		first := !m.have
 		st := proto.State(msg)
 		m.queue = st.Queue
+		m.doors = openDoors(st.Doors)
 		m.noteChanges(st.Sessions)
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
 		m.all = lists{queue: st.Queue, recs: st.Recommendations, sessions: st.Sessions, orphans: st.Orphans}
@@ -303,6 +313,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.keepSelection()
 		return m, tea.Batch(m.recv(), m.animate())
+	case doorRanMsg:
+		return m.doorRan(msg)
 	case animMsg:
 		m.animating = false
 		return m, m.animate()
@@ -512,6 +524,9 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 	if a.attach {
 		return m, m.attach(a)
 	}
+	if a.term {
+		return m.runDoor(a)
+	}
 	if a.nav {
 		run := m.opt.Run
 		return m, func() tea.Msg { return runNav(a, run) }
@@ -665,7 +680,7 @@ func (m Model) selectedRec() (advice.Rec, bool) {
 	if m.tab != tabQueue {
 		return advice.Rec{}, false
 	}
-	i := m.queueIndex() - len(m.queue)
+	i := m.queueIndex() - len(m.doors) - len(m.queue)
 	if i < 0 || i >= len(m.recs) {
 		return advice.Rec{}, false
 	}

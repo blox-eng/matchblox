@@ -5,6 +5,7 @@
 //	matchblox serve           run the service; --stdio speaks on stdin/stdout
 //	matchblox status          print what the service knows as JSON (for agents)
 //	matchblox status --text   the same, as a short summary
+//	matchblox setup           every setup door at once: tmux, the hooks, the way back
 //	matchblox version         print the version
 package main
 
@@ -85,7 +86,7 @@ func run(args []string) error {
 	cmd := "console"
 	if len(args) > 0 {
 		switch args[0] {
-		case "serve", "status", "version":
+		case "serve", "status", "version", "setup":
 			cmd, args = args[0], args[1:]
 		}
 	}
@@ -99,15 +100,22 @@ func run(args []string) error {
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
-	if cmd == "version" {
+	switch cmd {
+	case "version":
 		fmt.Println(version)
 		return nil
+	case "setup":
+		return setupDoors(*liveSetup(), os.Stdin, os.Stdout, runInTerminal)
 	}
 	fl.Visit(func(f *flag.Flag) {
 		if f.Name == "config" {
 			configArg = f.Value.String()
 		}
 	})
+	if (cmd == "console" || cmd == "serve") && *root == "" {
+		cores, mem := machineSize()
+		firstRun(*cfgPath, cores, mem)
+	}
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		return fmt.Errorf("%s: %w", *cfgPath, err)
@@ -254,6 +262,7 @@ func newService(cfg config.Config, root string) *service.Service {
 		s.HistoryLog = cfg.History.Log
 	}
 	s.Exe = invokedPath(os.Args[0])
+	s.Setup = liveSetup()
 	return s
 }
 

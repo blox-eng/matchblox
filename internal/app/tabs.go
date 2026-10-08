@@ -29,16 +29,23 @@ const (
 var views = [...]tabView{
 	tabQueue: {
 		name: "queue", short: "queue", keys: "↑↓ select  ⏎ go  a answer",
-		count: func(m Model) int { return len(m.queue) + len(m.recs) },
+		count: func(m Model) int { return len(m.doors) + len(m.queue) + len(m.recs) },
 		index: Model.queueIndex,
 		pick: func(m *Model, i int) {
-			if i < len(m.queue) {
-				m.queuePane, m.recPick = m.queue[i].Pane, ""
-			} else {
-				m.recPick = m.recs[i-len(m.queue)].ID
+			nd := len(m.doors)
+			switch {
+			case i < nd:
+				m.doorPick, m.queuePane, m.recPick = m.doors[i].ID, "", ""
+			case i < nd+len(m.queue):
+				m.doorPick, m.queuePane, m.recPick = "", m.queue[i-nd].Pane, ""
+			default:
+				m.doorPick, m.recPick = "", m.recs[i-nd-len(m.queue)].ID
 			}
 		},
 		primary: func(m Model) *action {
+			if d, ok := m.selectedDoor(); ok {
+				return m.doorAction(d)
+			}
 			if it, ok := m.selectedQueue(); ok && it.Pane != "" {
 				return m.jump(it.Pane)
 			}
@@ -48,6 +55,9 @@ var views = [...]tabView{
 			return nil
 		},
 		secondary: func(m Model) *action {
+			if d, ok := m.selectedDoor(); ok {
+				return closeDoor(d)
+			}
 			if r, ok := m.selectedRec(); ok {
 				return fromAdvice(r, "secondary")
 			}

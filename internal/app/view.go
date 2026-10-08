@@ -223,6 +223,9 @@ func (m Model) footer(w int) string {
 	if _, ok := m.selectedRec(); ok {
 		tabKeys = "↑↓ select  ⏎ do  x the other action"
 	}
+	if _, ok := m.selectedDoor(); ok {
+		tabKeys = "↑↓ select  ⏎ open  x close"
+	}
 	if s, ok := m.selected(); ok && m.tab == tabSessions && s.Age() == "stale" {
 		tabKeys += "  x end"
 	}

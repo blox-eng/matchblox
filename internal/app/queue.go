@@ -24,21 +24,31 @@ func (m Model) queueSelIndex() int {
 	return 0
 }
 
-// queueIndex is the selected row of the Queue tab: the queue items, then
-// the recommendations under them.
+// queueIndex is the selected row of the Queue tab: the open doors, the
+// queue items, then the recommendations under them. A door that folds
+// passes the selection to the next door.
 func (m Model) queueIndex() int {
+	nd := len(m.doors)
+	for i, d := range m.doors {
+		if d.ID == m.doorPick {
+			return i
+		}
+	}
+	if nd > 0 && (m.doorPick != "" || (m.queuePane == "" && m.recPick == "")) {
+		return 0
+	}
 	if m.recPick != "" || len(m.queue) == 0 {
 		for i, r := range m.recs {
 			if r.ID == m.recPick || m.recPick == "" {
-				return len(m.queue) + i
+				return nd + len(m.queue) + i
 			}
 		}
 	}
-	return m.queueSelIndex()
+	return nd + m.queueSelIndex()
 }
 
 func (m Model) selectedQueue() (queue.Item, bool) {
-	if i := m.queueIndex(); i < len(m.queue) {
+	if i := m.queueIndex() - len(m.doors); i >= 0 && i < len(m.queue) {
 		return m.queue[i], true
 	}
 	return queue.Item{}, false
@@ -49,11 +59,13 @@ const colWord = 6
 func (m Model) queuePanel(w int) body {
 	st := m.st
 	var b body
+	m.doorsSection(&b, w)
 	b.add(-1, "", st.label.Render(fmt.Sprintf(" %d WAITING FOR YOU", len(m.queue))))
 	if len(m.queue) == 0 {
 		b.add(-1, st.faint.Render(m.nothing(" nothing waits for you")))
 	}
-	sel := m.queueIndex()
+	nd := len(m.doors)
+	sel := m.queueIndex() - nd
 	narrow := layout(w) == Narrow
 	for i, it := range m.queue {
 		word := st.text.Render(pad(queueWord[it.State], colWord))
@@ -79,7 +91,7 @@ func (m Model) queuePanel(w int) body {
 			lines = []string{" " + m.queueCell(it) + word + idle + st.text.Render(it.Name),
 				"   " + st.muted.Render(where) + "  " + tail}
 		}
-		b.addRow(i, i == sel, w, st, lines...)
+		b.addRow(nd+i, i == sel, w, st, lines...)
 	}
 	m.recsSection(&b, w)
 	return b
