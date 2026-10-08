@@ -21,7 +21,7 @@ func TestAuthorizeAddsTheGateLine(t *testing.T) {
 		t.Fatal("no backup of authorized_keys")
 	}
 	b, _ := os.ReadFile(filepath.Join(home, ".ssh", "authorized_keys"))
-	want := `restrict,pty,command="/opt/mb/matchblox gate" ` + pub + "\n"
+	want := `restrict,pty,command="'/opt/mb/matchblox' gate" ` + pub + "\n"
 	if string(b) != own+want {
 		t.Fatalf("authorized_keys:\n%s\nwant:\n%s", b, own+want)
 	}
@@ -41,7 +41,7 @@ func TestAuthorizeTwiceKeepsOneLineAndMovesThePath(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(filepath.Join(home, ".ssh", "authorized_keys"))
-	if strings.Count(string(b), "AAAAC3Nza") != 1 || !strings.Contains(string(b), `command="/new/matchblox gate"`) {
+	if strings.Count(string(b), "AAAAC3Nza") != 1 || !strings.Contains(string(b), `command="'/new/matchblox' gate"`) {
 		t.Fatalf("authorized_keys:\n%s", b)
 	}
 }
@@ -64,7 +64,8 @@ func TestAuthorizeRefusesWhatIsNotOneKey(t *testing.T) {
 			t.Errorf("Authorize(%q) wrote it", bad)
 		}
 	}
-	for _, exe := range []string{"relative/matchblox", `/opt/mb"x/matchblox`, "/opt/mb x/matchblox"} {
+	for _, exe := range []string{"relative/matchblox", `/opt/mb"x/matchblox`, "/opt/mb'x/matchblox", "/opt/$HOME/matchblox",
+		"/opt/`id`/matchblox", "/opt/a;b/matchblox", "/opt/a\nb/matchblox", `/opt/a\b/matchblox`} {
 		if _, err := Authorize(home, exe, pub); err == nil {
 			t.Errorf("Authorize with exe %q wrote it", exe)
 		}
@@ -78,5 +79,18 @@ func writeFile(t *testing.T, path, body string) {
 	}
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A home with a space (/Users/John Smith on macOS) is common: the path is
+// quoted for the shell sshd runs the command with.
+func TestAuthorizeQuotesAPathWithASpace(t *testing.T) {
+	home := t.TempDir()
+	if _, err := Authorize(home, "/Users/John Smith/.local/bin/matchblox", pub); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(home, ".ssh", "authorized_keys"))
+	if want := `command="'/Users/John Smith/.local/bin/matchblox' gate"`; !strings.Contains(string(b), want) {
+		t.Fatalf("authorized_keys:\n%s\nwant %s", b, want)
 	}
 }
