@@ -5,6 +5,7 @@ package sample
 
 import (
 	"net"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -133,6 +134,7 @@ type Sampler struct {
 
 	agents     *agentReader
 	panes      map[procKey]string // environ is read once per process
+	names      map[procKey]agentRef
 	prevAt     time.Time
 	procAt     time.Time
 	prevProc   map[int]procfs.Proc
@@ -178,6 +180,7 @@ func (s *Sampler) init() {
 	if s.agents == nil {
 		s.agents = newAgentReader(s.Home)
 		s.panes = map[procKey]string{}
+		s.names = map[procKey]agentRef{}
 		s.burn = map[string][]tokenPoint{}
 		s.bigSession = map[string]bool{}
 		s.longCtx = map[procKey]bool{}
@@ -242,6 +245,11 @@ func (s *Sampler) scan(now time.Time) {
 	for key := range s.owners {
 		if p, ok := procs[key.pid]; !ok || p.StartTime != key.start {
 			delete(s.owners, key)
+		}
+	}
+	for key := range s.names {
+		if p, ok := procs[key.pid]; !ok || p.StartTime != key.start {
+			delete(s.names, key)
 		}
 	}
 	s.procAt, s.prevProc, s.last = now, procs, l
@@ -340,7 +348,8 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	alive := map[procKey]bool{}
 	uptime := s.FS.Uptime()
 	for pid, p := range procs {
-		if !s.isAgent(p.Comm) {
+		agent := s.agentName(pid, p)
+		if agent == "" {
 			continue
 		}
 		if p.State == 'Z' || p.State == 'X' {
@@ -392,7 +401,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			}
 		}
 		if sess.Name == "" {
-			sess.Name = p.Comm
+			sess.Name = agent
 		}
 		sess.Do, sess.Why = s.Rules.suggest(sess)
 		snap.Sessions = append(snap.Sessions, sess)
@@ -436,9 +445,55 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	})
 }
 
-func (s *Sampler) isAgent(comm string) bool {
+// agentName is the configured agent a process runs, or "". An agent looks
+// different in /proc depending on how it was installed: a native binary or
+// a Python entry point has the agent's process name; a node agent started
+// by a wrapper keeps the name in argv[0] while its process name is node's
+// "MainThread"; an npm script runs as `node <path>/<agent>`. The argv half
+// is read once per process and kept while its process name stays the same.
+func (s *Sampler) agentName(pid int, p procfs.Proc) string {
+	if s.isAgent(p.Comm) {
+		return p.Comm
+	}
+	key := procKey{pid, p.StartTime}
+	if c, ok := s.names[key]; ok && c.comm == p.Comm {
+		return c.name
+	}
+	name := ""
+	if argv := s.FS.Argv(pid); len(argv) > 0 {
+		cmd := filepath.Base(argv[0])
+		if interpreter(cmd) {
+			cmd = ""
+			for _, a := range argv[1:] {
+				if !strings.HasPrefix(a, "-") {
+					cmd = filepath.Base(a)
+					break
+				}
+			}
+		}
+		if s.isAgent(cmd) {
+			name = cmd
+		}
+	}
+	s.names[key] = agentRef{p.Comm, name}
+	return name
+}
+
+type agentRef struct{ comm, name string }
+
+// interpreter tells a program that runs an agent's script: its argv[0] is
+// the interpreter and the agent is the first argument that is not a flag.
+func interpreter(cmd string) bool {
+	switch cmd {
+	case "node", "nodejs", "bun", "deno", "ruby", "perl":
+		return true
+	}
+	return strings.HasPrefix(cmd, "python")
+}
+
+func (s *Sampler) isAgent(name string) bool {
 	for _, a := range s.Agents {
-		if comm == a {
+		if name == a {
 			return true
 		}
 	}
@@ -511,7 +566,7 @@ func (s *Sampler) underAgent(p procfs.Proc, procs map[int]procfs.Proc) bool {
 		if !ok {
 			return false
 		}
-		if s.isAgent(pp.Comm) {
+		if s.agentName(cur, pp) != "" {
 			return true
 		}
 		cur = pp.PPID
