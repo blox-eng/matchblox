@@ -185,14 +185,14 @@ func (m *Model) selectRow(i int) {
 
 func (m Model) primary() *action {
 	if v := m.view(); v.primary != nil {
-		return v.primary(m)
+		return m.forHost(v.primary(m))
 	}
 	return nil
 }
 
 func (m Model) secondary() *action {
 	if v := m.view(); v.secondary != nil {
-		return v.secondary(m)
+		return m.forHost(v.secondary(m))
 	}
 	return nil
 }

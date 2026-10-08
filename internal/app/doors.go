@@ -9,6 +9,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/remote"
 )
 
 // openDoors are the doors the console shows: done and closed ones fold.
@@ -234,15 +235,5 @@ func (m Model) preview(b *body, d doors.Door, w int) {
 
 func plainText(s ...string) string { return strings.Join(s, "") }
 
-// shellLine is argv as a shell would read it: a word with a space or a
-// quote gets single quotes.
-func shellLine(argv []string) string {
-	q := make([]string, len(argv))
-	for i, a := range argv {
-		q[i] = a
-		if a == "" || strings.ContainsAny(a, " \t'\"\\$`;&|<>()*?#~") {
-			q[i] = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
-		}
-	}
-	return strings.Join(q, " ")
-}
+// shellLine is argv as the person would type it.
+func shellLine(argv []string) string { return remote.Line(argv) }

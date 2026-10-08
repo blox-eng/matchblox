@@ -7,9 +7,9 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +21,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -52,6 +53,22 @@ type Options struct {
 	// OutsideTmux: the console does not run in tmux, so going to a pane
 	// attaches to it, and the console comes back when tmux detaches.
 	OutsideTmux bool
+	// Host is the host this console reaches over SSH; "" is this machine.
+	// Its tmux moves and door commands run there, with the builder's own
+	// ssh login.
+	Host string
+	// DialErr is why the first dial failed; the console starts with it.
+	DialErr error
+	// Self is this binary, which connects a host (`matchblox connect`).
+	Self string
+	// Gen tells this console's redial messages from those of a console the
+	// shell closed.
+	Gen int
+	// Layered: the console sits under the hosts layer, and esc with
+	// nothing to cancel or clear goes back to it.
+	Layered bool
+	// Exec gives this terminal to argv until it exits. Nil: tea.ExecProcess.
+	Exec func(argv []string, done func(error) tea.Msg) tea.Cmd
 }
 
 type helloMsg proto.Hello
@@ -68,12 +85,21 @@ type fromConn struct {
 	conn transport.Conn
 	msg  tea.Msg
 }
-type redialMsg struct{}
+
+// The redial messages carry the generation of the console that asked:
+// after the shell opens another console, a late one is dropped.
+type redialMsg struct{ gen int }
 
 // silentMsg fires when a connection gave no state in silentAfter.
 type silentMsg struct{ conn transport.Conn }
-type redialFailed struct{ err error }
-type connMsg struct{ conn transport.Conn }
+type redialFailed struct {
+	err error
+	gen int
+}
+type connMsg struct {
+	conn transport.Conn
+	gen  int
+}
 type ranMsg struct {
 	cmd string
 	err error
@@ -94,6 +120,8 @@ type action struct {
 	say         string   // what the confirm shows, when not the first step
 	term        bool     // the step takes this terminal (a door's command)
 	door        string   // the door it opens or closes
+	remote      bool     // steps[0] is the ssh argv that runs it on the host, checked
+	connect     bool     // it connects the host: install, update or authorize
 }
 
 func (a action) String() string {
@@ -150,6 +178,7 @@ type Model struct {
 	quitting   bool
 	host       proto.Hello
 	mismatch   bool
+	blocked    error // why the host cannot be reached, until the builder acts
 	lost       bool
 	backoff    time.Duration
 	redialing  bool
@@ -198,6 +227,9 @@ func run(argv []string) error {
 const silentAfter = 3 * time.Second
 
 func (m Model) Init() tea.Cmd {
+	if err := m.opt.DialErr; err != nil && m.conn == nil {
+		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd())
+	}
 	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd())
 }
 
@@ -336,6 +368,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = m.conn.Close()
 		}
 		m.lost = true
+		if blocking(msg.err) {
+			// Trying again cannot help: connecting the host can.
+			m.blocked, m.flash = msg.err, ""
+			return m, nil
+		}
 		m.flash = "connection lost: " + msg.err.Error()
 		if m.batch != nil {
 			// Their results went with the connection.
@@ -348,18 +385,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.redialing = true
 		m.backoff = min(max(m.backoff*2, 250*time.Millisecond), 10*time.Second)
 		m.flash += "; trying again in " + m.backoff.String()
-		return m, tea.Tick(m.backoff, func(time.Time) tea.Msg { return redialMsg{} })
+		gen := m.opt.Gen
+		return m, tea.Tick(m.backoff, func(time.Time) tea.Msg { return redialMsg{gen} })
 	case redialMsg:
-		redial := m.opt.Redial
+		if msg.gen != m.opt.Gen || !m.redialing || m.quitting {
+			return m, nil // a tick from a console that was closed
+		}
+		redial, gen := m.opt.Redial, m.opt.Gen
 		return m, func() tea.Msg {
 			c, err := redial()
 			if err != nil {
-				return redialFailed{err}
+				return redialFailed{err, gen}
 			}
-			return connMsg{c}
+			return connMsg{c, gen}
 		}
 	case silentMsg:
 		if msg.conn != m.conn || m.answered || m.mismatch {
+			return m, nil
+		}
+		if m.opt.Host != "" {
+			m.flash = m.opt.Host + " does not answer: run ssh " + m.opt.Host + " matchblox status to see why"
 			return m, nil
 		}
 		pid := 0
@@ -373,9 +418,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case redialFailed:
+		if msg.gen != m.opt.Gen {
+			return m, nil
+		}
 		m.redialing = false
 		return m.Update(lostMsg{err: msg.err})
+	case connectedMsg:
+		return m.connected(msg)
 	case connMsg:
+		if msg.gen != m.opt.Gen || m.quitting {
+			_ = msg.conn.Close() // the console that dialed it is gone
+			return m, nil
+		}
 		m.conn, m.redialing, m.answered = msg.conn, false, false
 		m.flash = "connected again"
 		return m, tea.Batch(m.hello(), m.recv(), m.watchSilence())
@@ -440,6 +494,13 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 			return mm, nil
 		}
 	}
+	if m.pending == nil && k == "enter" && errors.Is(m.blocked, remote.ErrHostKeyChanged) {
+		return m.tryAgain()
+	}
+	if m.pending == nil && k == "enter" && (m.mismatch || m.blocked != nil) {
+		m.pending = m.connectAction()
+		return m, nil
+	}
 	if m.pending != nil {
 		a := *m.pending
 		m.pending = nil
@@ -466,6 +527,8 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		if m.filter != "" {
 			m.filter = ""
 			m.refresh()
+		} else if m.opt.Layered {
+			return m, func() tea.Msg { return layerMsg{} }
 		}
 	case "s":
 		if s, _ := m.sortable(); s != nil {
@@ -521,6 +584,9 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 // confirm runs an action the person consented to: a Nav step here, any
 // other on the service.
 func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
+	if a.remote {
+		return m.onHost(a)
+	}
 	if len(a.batch) > 0 {
 		if m.conn == nil || m.lost {
 			m.flash = "not sent, no connection: " + a.String()
@@ -550,42 +616,9 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 	return m, m.send(proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
 }
 
-// navAllowed is what a Nav step may be: it runs here on one key, so a
-// service can never make the console run anything but the two tmux moves
-// advice builds, in exactly that shape. tmux runs a trailing argument of
-// new-window as a shell command, splits commands on ";", and format-expands
-// a start directory (#() runs a shell command). So: four arguments, a pane
-// id for switch-client, and an absolute directory without "#" or ";".
-func navAllowed(argv []string) bool {
-	if len(argv) != 4 || argv[0] != "tmux" {
-		return false
-	}
-	target := argv[3]
-	switch argv[1] {
-	case "switch-client", "select-window", "select-pane", "attach-session":
-		return argv[2] == "-t" && paneID(target)
-	case "new-window":
-		return argv[2] == "-c" && filepath.IsAbs(target) && !strings.ContainsAny(target, "#;")
-	}
-	return false
-}
-
-// paneID is a tmux pane id such as %12.
-func paneID(s string) bool {
-	if len(s) < 2 || s[0] != '%' {
-		return false
-	}
-	for _, r := range s[1:] {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
-}
-
 func runNav(a action, run func([]string) error) ranMsg {
 	for _, step := range a.steps {
-		if !navAllowed(step) {
+		if !remote.NavAllowed(step) {
 			return ranMsg{strings.Join(step, " "), fmt.Errorf("refused: only tmux switch-client and new-window run in the console")}
 		}
 	}
@@ -613,7 +646,7 @@ func (m Model) jump(pane string) *action {
 // attach runs the moves, then gives the terminal to the last step.
 func (m Model) attach(a action) tea.Cmd {
 	for _, step := range a.steps {
-		if !navAllowed(step) {
+		if !remote.NavAllowed(step) {
 			return func() tea.Msg {
 				return ranMsg{strings.Join(step, " "), fmt.Errorf("refused: only tmux moves run in the console")}
 			}
@@ -623,7 +656,7 @@ func (m Model) attach(a action) tea.Cmd {
 	if r := runNav(action{steps: moves}, m.opt.Run); r.err != nil {
 		return func() tea.Msg { return r }
 	}
-	return tea.ExecProcess(exec.Command(last[0], last[1:]...), func(err error) tea.Msg { //nolint:gosec // argv checked by navAllowed
+	return tea.ExecProcess(exec.Command(last[0], last[1:]...), func(err error) tea.Msg { //nolint:gosec // argv checked by remote.NavAllowed
 		return ranMsg{strings.Join(last, " "), err}
 	})
 }
