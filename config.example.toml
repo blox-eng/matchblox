@@ -2,7 +2,7 @@
 # Every key is optional; the values below are the defaults unless noted.
 
 interval = "2s"          # cheap counters; processes every 3x, git every git.interval
-agents = ["claude"]      # process names that are agent sessions
+agents = ["claude", "codex", "opencode"]  # agent commands; the first run writes the ones it finds. Add any other by name
 latency_target = ""      # host:port to time a TCP connect against every 10 s, e.g. "example.com:443"
 
 [sessions]

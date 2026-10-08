@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/panes"
 )
@@ -389,7 +390,7 @@ func TestThresholdsFromMachine(t *testing.T) {
 
 func TestWriteConfigOnce(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "matchblox", "config.toml")
-	wrote, err := WriteConfig(p, 16, 64<<30)
+	wrote, err := WriteConfig(p, 16, 64<<30, []string{"claude", "codex", "opencode"})
 	if err != nil || !wrote {
 		t.Fatalf("WriteConfig = %v, %v", wrote, err)
 	}
@@ -399,10 +400,13 @@ func TestWriteConfigOnce(t *testing.T) {
 			t.Errorf("config.toml has no %q:\n%s", want, b)
 		}
 	}
+	if c, err := config.Load(p); err != nil || strings.Join(c.Agents, ",") != "claude,codex,opencode" || c.Alerts.Load1Over != 16 {
+		t.Errorf("config.toml reads back as agents %q load %v (%v):\n%s", c.Agents, c.Alerts.Load1Over, err, b)
+	}
 	if err := os.WriteFile(p, []byte("# mine\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if wrote, _ := WriteConfig(p, 8, 8<<30); wrote {
+	if wrote, _ := WriteConfig(p, 8, 8<<30, nil); wrote {
 		t.Fatal("WriteConfig overwrote a config")
 	}
 }
@@ -500,5 +504,24 @@ func TestTmuxWithoutSudoOrRootSaysHow(t *testing.T) {
 	e.Root = true
 	if d := door(t, e, doors.Tmux); d.Term == nil {
 		t.Fatalf("root: %+v", d)
+	}
+}
+
+// TestFindAgentsFindsWhatIsInstalled: the first run lists the agents on
+// PATH, in the order of KnownAgents; with none, Claude Code.
+func TestFindAgentsFindsWhatIsInstalled(t *testing.T) {
+	on := map[string]bool{"codex": true, "claude": true, "aider": true}
+	look := func(name string) (string, error) {
+		if on[name] {
+			return "/usr/bin/" + name, nil
+		}
+		return "", errors.New("not found")
+	}
+	if got := strings.Join(FindAgents(look), ","); got != "claude,codex,aider" {
+		t.Fatalf("found %q", got)
+	}
+	none := func(string) (string, error) { return "", errors.New("not found") }
+	if got := strings.Join(FindAgents(none), ","); got != "claude" {
+		t.Fatalf("with none installed: %q, want claude", got)
 	}
 }

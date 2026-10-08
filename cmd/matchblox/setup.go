@@ -53,11 +53,40 @@ func tmuxSource(conf string) error {
 // firstRun writes the config with this machine's thresholds when there is
 // none; a config that cannot be written still leaves the defaults.
 func firstRun(path string, cores int, memTotal uint64) {
-	if wrote, err := setup.WriteConfig(path, cores, memTotal); err != nil {
+	if wrote, err := setup.WriteConfig(path, cores, memTotal, setup.FindAgents(agentLookPath(home()))); err != nil {
 		fmt.Fprintln(os.Stderr, "matchblox: write", path+":", err)
 	} else if wrote {
 		fmt.Fprintln(os.Stderr, "matchblox: wrote", path, "with the goals of this machine")
 	}
+}
+
+// agentDirs are where agents install themselves outside a usual PATH: the
+// service can be the first to run, with the small PATH of its manager.
+var agentDirs = []string{"~/.local/bin", "~/.opencode/bin", "~/.bun/bin", "~/.npm-global/bin",
+	"/home/linuxbrew/.linuxbrew/bin", "/opt/homebrew/bin", "/usr/local/bin"}
+
+// agentLookPath finds a command on PATH, then in agentDirs.
+func agentLookPath(home string) func(string) (string, error) {
+	return func(name string) (string, error) {
+		if p, err := exec.LookPath(name); err == nil {
+			return p, nil
+		}
+		for _, d := range agentDirs {
+			if rest, ok := strings.CutPrefix(d, "~/"); ok {
+				d = filepath.Join(home, rest)
+			}
+			p := filepath.Join(d, name)
+			if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() && st.Mode()&0o111 != 0 {
+				return p, nil
+			}
+		}
+		return "", exec.ErrNotFound
+	}
+}
+
+func home() string {
+	h, _ := os.UserHomeDir()
+	return h
 }
 
 func machineSize() (int, uint64) {
