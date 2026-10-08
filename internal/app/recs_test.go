@@ -61,3 +61,41 @@ func TestHistoryWithAFlatSeries(t *testing.T) {
 		t.Fatalf("no swap chart:\n%s", out)
 	}
 }
+
+// TestProgressShowsWhereThePersonLooks: the bar an agent reported shows on
+// its row in the sessions and the queue, and its step in the detail.
+func TestProgressShowsWhereThePersonLooks(t *testing.T) {
+	for _, w := range []int{50, 100} {
+		m, _ := loadedWith(t, w, queueState())
+		if out := screen(m); !strings.Contains(out, "▰▰▰▰▱ 75%") {
+			t.Fatalf("width %d: the queue row has no progress:\n%s", w, out)
+		}
+		next, _ := key(m, "2")
+		out := screen(next)
+		// On a wide row an action that is due (! compact) holds the DO
+		// column; the bar shows there when nothing is due.
+		if w >= 60 && (!strings.Contains(out, "! compact") || strings.Contains(out, "▰▰▰▰▱ 75%")) {
+			t.Fatalf("width %d: the due action did not win the DO column:\n%s", w, out)
+		}
+		if w < 60 && !strings.Contains(out, "▰▰▰▰▱ 75%") {
+			t.Fatalf("width %d: the session row has no progress:\n%s", w, out)
+		}
+		if w >= 60 {
+			for s, ok := next.(Model).selected(); ok && s.Pane != "%1"; s, ok = next.(Model).selected() {
+				next, _ = key(next, "down")
+			}
+			if !strings.Contains(screen(next), "PROGRESS ▰▰▰▰▰▰▰▰▱▱ 75%  wiring the console") {
+				t.Fatalf("the detail has no progress:\n%s", screen(next))
+			}
+			st := queueState()
+			for i := range st.Sessions {
+				st.Sessions[i].Do = ""
+			}
+			idle, _ := loadedWith(t, w, st)
+			again, _ := key(idle, "2")
+			if !strings.Contains(screen(again), "▰▰▰▰▱ 75%") {
+				t.Fatalf("width %d: with nothing due the row has no progress:\n%s", w, screen(again))
+			}
+		}
+	}
+}

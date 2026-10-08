@@ -173,6 +173,12 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 - **Keys:** each key is on a phone SSH key bar: digits, arrows, `Enter`,
   `Esc` and letters. No `Ctrl` combinations. `Enter` never runs a
   destructive step; that needs `x` and then a typed `y`.
+- **Progress** (owner, 2026-10-08): the bar an agent draws in its last reply
+  with text (`Progress [████░░░░] <step>`) shows as `▰▰▰▱▱ 75%`: on the queue
+  row, in the DO column of a session when no action is due, on the second
+  line of a row on a phone, and with its step in the detail. The
+  SessionStart hook asks each new session for that line
+  (`progress_prompt`, on by default). The console never types it into a pane.
 - **Lists** (owner, 2026-10-08): `/` searches the open tab (every key is
   text until `⏎` keeps it or `esc` clears it; a tab change ends it); an empty
   result says "nothing matches <text>". `s` sorts Sessions and Panes by the

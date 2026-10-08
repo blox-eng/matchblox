@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -31,5 +33,31 @@ func TestErrorInTheHomeSessionWaits(t *testing.T) {
 	holdOnError(errors.New("x"), func(string) string { return "" }, in, &out)
 	if in.Len() == 0 || out.Len() != 0 {
 		t.Fatal("outside the home session it waited")
+	}
+}
+
+// TestSessionStartAsksForProgress: the SessionStart hook prints one line
+// that Claude Code adds to the session's context, so the agent reports its
+// progress and the console reads it from the transcript.
+func TestSessionStartAsksForProgress(t *testing.T) {
+	ev := `{"session_id":"s1","hook_event_name":"SessionStart","cwd":"/w"}`
+	spool := filepath.Join(t.TempDir(), "spool.jsonl")
+	var out bytes.Buffer
+	if err := hook([]string{"SessionStart"}, strings.NewReader(ev), &out, filepath.Join(t.TempDir(), "none.sock"), spool, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Progress [████░░░░]") {
+		t.Fatalf("printed %q", out.String())
+	}
+	if b, _ := os.ReadFile(spool); !strings.Contains(string(b), "SessionStart") {
+		t.Fatal("the event was not kept")
+	}
+	out.Reset()
+	if err := hook([]string{"SessionStart"}, strings.NewReader(ev), &out, filepath.Join(t.TempDir(), "none.sock"), spool, false); err != nil || out.Len() != 0 {
+		t.Fatalf("progress_prompt = false still printed %q", out.String())
+	}
+	out.Reset()
+	if err := hook([]string{"Stop"}, strings.NewReader(`{"session_id":"s1","hook_event_name":"Stop"}`), &out, filepath.Join(t.TempDir(), "none.sock"), spool, true); err != nil || out.Len() != 0 {
+		t.Fatalf("Stop printed %q", out.String())
 	}
 }

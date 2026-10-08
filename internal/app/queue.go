@@ -68,6 +68,9 @@ func (m Model) queuePanel(w int) body {
 		if it.Estimated {
 			tail = st.faint.Render("estimated")
 		}
+		if s, ok := m.sessionIn(it.Pane); ok && s.Progress != nil {
+			tail = m.progressCell(s.Progress, 5) + "  " + tail
+		}
 		idle := st.muted.Render(pad(sample.Human(m.now().Sub(it.Since)), colIdle))
 		lines := []string{" " + m.queueCell(it) + word + idle + st.text.Render(pad(it.Name, colName)) + st.muted.Render(pad(where, colPane)) + tail}
 		if narrow {

@@ -351,6 +351,9 @@ func (m Model) row(s sample.Session, selected bool, w, tab, tree int) string {
 		cpu = st.text.Render(pad(fmt.Sprintf("%3.0f%%", s.CPU), colCPU))
 	}
 	do := pad("", colDo+1)
+	if s.Progress != nil {
+		do = m.progressCell(s.Progress, 5) + "  "
+	}
 	switch s.Do {
 	case "compact":
 		do = st.neg.Render(pad("! compact", colDo+1))
@@ -401,6 +404,9 @@ func (m Model) detail(w int) []string {
 	facts = append(facts, fmt.Sprintf("%d processes", s.Procs))
 	lines = append(lines, fit(" "+st.text.Render(strings.Join(facts, st.faint.Render("  ·  "))), w))
 	lines = append(lines, fit(" "+st.muted.Render(s.Cwd), w))
+	if p := s.Progress; p != nil {
+		lines = append(lines, fit(" "+st.label.Render("PROGRESS ")+m.progressCell(p, 10)+"  "+st.text.Render(p.Step), w))
+	}
 	if s.Why != "" {
 		lines = append(lines, fit(" "+st.label.Render("WHY ")+st.text.Render(s.Do+": "+s.Why), w))
 	}

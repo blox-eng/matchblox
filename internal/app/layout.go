@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -117,7 +118,11 @@ func (m Model) narrowRow(s sample.Session, selected bool) []string {
 	if selected {
 		where = "▌" + where
 	}
-	return []string{first, "   " + st.muted.Render(where) + "  " + st.muted.Render(worktree(s.Cwd))}
+	second := "   " + st.muted.Render(where) + "  " + st.muted.Render(worktree(s.Cwd))
+	if s.Progress != nil {
+		second += "  " + m.progressCell(s.Progress, 5)
+	}
+	return []string{first, second}
 }
 
 // visible is the part of the body that fits under the chrome: the lines
@@ -156,4 +161,24 @@ func (m Model) visible(w int) body {
 		lines: append(append([]string{}, b.lines[:head]...), b.lines[start:start+space]...),
 		rows:  append(append([]int{}, b.rows[:head]...), b.rows[start:start+space]...),
 	}
+}
+
+// progressCell is the bar an agent reported, in n cells and its percent.
+func (m Model) progressCell(p *sample.Progress, n int) string {
+	if p == nil {
+		return ""
+	}
+	full := min(max((p.Pct*n+50)/100, 0), n)
+	return m.st.text.Render(strings.Repeat("▰", full)) + m.st.faint.Render(strings.Repeat("▱", n-full)) +
+		" " + m.st.muted.Render(fmt.Sprintf("%d%%", p.Pct))
+}
+
+// sessionIn is the agent session of a pane.
+func (m Model) sessionIn(pane string) (sample.Session, bool) {
+	for _, s := range m.all.sessions {
+		if s.Pane == pane {
+			return s, true
+		}
+	}
+	return sample.Session{}, false
 }

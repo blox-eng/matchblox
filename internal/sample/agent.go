@@ -25,9 +25,10 @@ type registryEntry struct {
 
 // Usage is the context state read from the end of a transcript.
 type Usage struct {
-	Model  string    `json:"model"`
-	Tokens int       `json:"tokens"`
-	At     time.Time `json:"at"`
+	Model    string    `json:"model"`
+	Tokens   int       `json:"tokens"`
+	At       time.Time `json:"at"`
+	Progress *Progress `json:"progress,omitempty"`
 }
 
 type fileKey struct {
@@ -157,8 +158,9 @@ type transcriptLine struct {
 	IsSidechain bool      `json:"isSidechain"`
 	Timestamp   time.Time `json:"timestamp"`
 	Message     struct {
-		Model string `json:"model"`
-		Usage *struct {
+		Model   string          `json:"model"`
+		Content json.RawMessage `json:"content"`
+		Usage   *struct {
 			Input         int `json:"input_tokens"`
 			CacheRead     int `json:"cache_read_input_tokens"`
 			CacheCreation int `json:"cache_creation_input_tokens"`
@@ -179,24 +181,35 @@ func lastUsage(path string, size int64) (Usage, bool) {
 		return Usage{}, false
 	}
 	lines := bytes.Split(buf, []byte{'\n'})
+	var u Usage
+	found := false
 	for i := len(lines) - 1; i >= 0; i-- {
 		l := lines[i]
-		if !bytes.Contains(l, []byte(`"usage"`)) || !bytes.Contains(l, []byte(`"assistant"`)) {
+		if !bytes.Contains(l, []byte(`"assistant"`)) {
 			continue
 		}
 		var t transcriptLine
 		// <synthetic> turns are local messages that report zero usage.
-		if json.Unmarshal(l, &t) != nil || t.Type != "assistant" || t.IsSidechain || t.Message.Usage == nil || t.Message.Model == "<synthetic>" {
+		if json.Unmarshal(l, &t) != nil || t.Type != "assistant" || t.IsSidechain || t.Message.Model == "<synthetic>" {
 			continue
 		}
-		u := t.Message.Usage
-		return Usage{
-			Model:  t.Message.Model,
-			Tokens: u.Input + u.CacheRead + u.CacheCreation + u.Output,
-			At:     t.Timestamp,
-		}, true
+		if !found && t.Message.Usage != nil {
+			n := t.Message.Usage
+			u.Model, u.Tokens, u.At = t.Message.Model, n.Input+n.CacheRead+n.CacheCreation+n.Output, t.Timestamp
+			found = true
+		}
+		// The last reply with text tells the progress; later tool calls
+		// have no text.
+		if text := replyText(t.Message.Content); text != "" {
+			if p, ok := parseProgress(text); ok {
+				u.Progress = &p
+			}
+			if found {
+				break
+			}
+		}
 	}
-	return Usage{}, false
+	return u, found
 }
 
 // modelSetting is the model a Claude Code process was started with, in the

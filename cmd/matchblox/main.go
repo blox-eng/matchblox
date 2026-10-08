@@ -79,7 +79,7 @@ var configArg string
 
 func run(args []string) error {
 	if len(args) > 0 && args[0] == "hook" {
-		return hook(args[1:], os.Stdin, transport.SocketPath(), spoolPath())
+		return hook(args[1:], os.Stdin, os.Stdout, transport.SocketPath(), spoolPath(), progressPrompt(args[1:]))
 	}
 	cmd := "console"
 	if len(args) > 0 {
@@ -164,7 +164,7 @@ const hookTimeout = 30 * time.Millisecond
 // hook delivers one agent hook event to the service, or to the spool when
 // no service answers. It returns nil on every path: a hook that fails must
 // not disturb the agent.
-func hook(args []string, stdin io.Reader, sock, spool string) error {
+func hook(args []string, stdin io.Reader, out io.Writer, sock, spool string, progress bool) error {
 	name := ""
 	if len(args) > 0 {
 		name = args[0]
@@ -176,7 +176,22 @@ func hook(args []string, stdin io.Reader, sock, spool string) error {
 	if transport.Notify(sock, hookTimeout, proto.KindHook, ev) != nil {
 		_ = hooks.Append(spool, ev)
 	}
+	if progress && ev.Name == "SessionStart" {
+		// Claude Code adds what a SessionStart hook prints to the session's
+		// context; the console reads the bar back from the transcript.
+		_, _ = fmt.Fprintln(out, hooks.ProgressPrompt)
+	}
 	return nil
+}
+
+// progressPrompt reads the config only for SessionStart, the one event that
+// prints: the other hooks stay as fast as they were.
+func progressPrompt(args []string) bool {
+	if len(args) == 0 || args[0] != "SessionStart" {
+		return false
+	}
+	cfg, err := config.Load(config.Path())
+	return err == nil && cfg.Sessions.ProgressPrompt
 }
 
 func spoolPath() string { return filepath.Join(filepath.Dir(state.Path()), "spool.jsonl") }
