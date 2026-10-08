@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/setup"
 )
 
 // doneFor is how long an act that ran answers "already done" to the same
@@ -75,6 +77,10 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		return proto.Result{}
 	}
 	key := a.RecID + "\x00" + a.Which
+	id, door := strings.CutPrefix(a.RecID, "door:")
+	if door {
+		key += "\x00" + a.Text
+	}
 	pane, answer := strings.CutPrefix(a.RecID, "answer:")
 	if answer {
 		// The same text to a new question is a new answer: the key holds
@@ -87,6 +93,11 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	}
 	ran := false
 	defer func() { s.acts.end(key, ran) }()
+	if door {
+		res := s.door(id, a)
+		ran = res.Err == ""
+		return res
+	}
 	if answer {
 		if err := panes.CheckAnswer(a.Text); err != nil {
 			return proto.Result{Err: err.Error()}
@@ -190,4 +201,58 @@ func (s *Service) queued(pane string) (queue.Item, bool) {
 func (s *Service) answerable(pane string) bool {
 	it, ok := s.queued(pane)
 	return ok && it.State != queue.StatePermission
+}
+
+// doors reads the machine's doors: a few small files, cheap on each sample.
+func (s *Service) doors() []doors.Door {
+	if s.Setup == nil {
+		return nil
+	}
+	return setup.Doors(*s.Setup)
+}
+
+// door opens a door ("primary", Text = the Sum of the preview the person
+// saw) or closes it ("secondary"). Both need a typed y: they change the
+// person's own files.
+func (s *Service) door(id string, a proto.Act) proto.Result {
+	if s.Setup == nil {
+		return proto.Result{Err: "no doors on this machine"}
+	}
+	if a.Confirm != "y" {
+		return proto.Result{Err: "needs a typed y"}
+	}
+	defer s.refreshDoors()
+	if a.Which == "secondary" {
+		if err := setup.Close(*s.Setup, id); err != nil {
+			return proto.Result{Err: err.Error()}
+		}
+		return proto.Result{Ran: [][]string{{"close", id}}}
+	}
+	path := ""
+	for _, d := range s.doors() {
+		if d.ID == id {
+			path = d.Path
+		}
+	}
+	backup, err := setup.Open(*s.Setup, id, a.Text)
+	ran := [][]string{{"write", path}}
+	if backup != "" {
+		ran = append(ran, []string{"backup", backup})
+	}
+	if err != nil {
+		if backup == "" {
+			ran = nil
+		}
+		return proto.Result{Ran: ran, Err: err.Error()}
+	}
+	return proto.Result{Ran: ran}
+}
+
+// refreshDoors sends the doors at once, so a door folds when it is done.
+func (s *Service) refreshDoors() {
+	ds := s.doors()
+	s.mu.Lock()
+	s.cur.Doors = ds
+	s.mu.Unlock()
+	s.broadcast()
 }

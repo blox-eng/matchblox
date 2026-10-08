@@ -22,6 +22,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -59,6 +60,8 @@ type Service struct {
 	// the socket file; Serve stops when either changes. Empty Exe: no check.
 	Exe      string
 	ExeEvery time.Duration
+	// Setup is the machine the doors are for. Nil: no doors (fixtures).
+	Setup *setup.Env
 
 	interval time.Duration
 	gitEvery time.Duration
@@ -212,7 +215,9 @@ func (s *Service) Run(ctx context.Context) {
 }
 
 func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
+	ds := s.doors()
 	s.mu.Lock()
+	s.cur.Doors = ds
 	if s.have { // the first sample has no rates yet
 		s.hist.Append(history.FromSnapshot(snap))
 	}
