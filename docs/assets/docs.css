@@ -1,0 +1,46 @@
+/* The colour tokens of DESIGN.md §2 and the type of §8, on Material. */
+@font-face { font-family: "Plex Sans"; src: url(fonts/plex-sans-var.woff2) format("woff2"); font-weight: 100 700; font-display: swap; }
+@font-face { font-family: "Plex Mono"; src: url(fonts/plex-mono-400.woff2) format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Plex Mono"; src: url(fonts/plex-mono-500.woff2) format("woff2"); font-weight: 500; font-display: swap; }
+
+:root {
+  --md-text-font: "Plex Sans";
+  --md-code-font: "Plex Mono";
+}
+
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #0F0D0A;
+  --md-default-fg-color: #EBE6DC;
+  --md-default-fg-color--light: #A69D8D;
+  --md-default-fg-color--lighter: #776F60;
+  --md-default-fg-color--lightest: #2E2921;
+  --md-primary-fg-color: #0F0D0A;
+  --md-primary-bg-color: #EBE6DC;
+  --md-accent-fg-color: #C3A56A;
+  --md-typeset-a-color: #C3A56A;
+  --md-code-bg-color: #221D14;
+  --md-code-fg-color: #EBE6DC;
+  --md-footer-bg-color: #0F0D0A;
+  --md-footer-bg-color--dark: #0F0D0A;
+}
+
+[data-md-color-scheme="default"] {
+  --md-default-bg-color: #F5F1E7;
+  --md-default-fg-color: #1C1813;
+  --md-default-fg-color--light: #5F5A4C;
+  --md-default-fg-color--lighter: #8A8170;
+  --md-default-fg-color--lightest: #DDD5C3;
+  --md-primary-fg-color: #F5F1E7;
+  --md-primary-bg-color: #1C1813;
+  --md-accent-fg-color: #9A7B3F;
+  --md-typeset-a-color: #9A7B3F;
+  --md-code-bg-color: #ECE3CF;
+  --md-code-fg-color: #1C1813;
+  --md-footer-bg-color: #F5F1E7;
+  --md-footer-bg-color--dark: #F5F1E7;
+  --md-footer-fg-color: #1C1813;
+  --md-footer-fg-color--light: #5F5A4C;
+}
+
+.md-header, .md-tabs { border-bottom: 1px solid var(--md-default-fg-color--lightest); box-shadow: none; }
+.md-typeset table:not([class]) { font-size: .75rem; }

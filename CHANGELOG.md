@@ -14,6 +14,10 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Added
 
+- The docs at docs.matchblox.com: get started, the console, every key, the
+  phone, agents, remote hosts, config, safety, limits, and tmux, the engine
+  under matchblox. A test holds every key and command in the README and the
+  docs to the binary.
 - Context use for Codex and OpenCode, read from each agent's own files: the
   rollout Codex holds open, and OpenCode's session storage counted the way
   OpenCode counts it. The window comes from the model the agent reports;

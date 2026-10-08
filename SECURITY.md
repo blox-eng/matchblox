@@ -16,9 +16,10 @@ In scope:
 - A guard that does not stop a step when its fact no longer holds.
 - A shell string built from data, or text from a pane or a model that becomes a
   command.
-- Secrets that reach a log, or (from v0.1) a model provider or the audit file.
-- (From v0.1) the install script, or a release asset that does not match its
-  checksum or provenance.
+- Secrets that reach a log or the console.
+- The service socket, the hook command (`matchblox hook`), the ssh forced
+  command, and the install script.
+- A release asset that does not match its checksum or provenance.
 
 ## Supported versions
 
@@ -32,11 +33,11 @@ matchblox is pre-1.0. Only the latest release receives fixes.
   process and start time, a worktree still clean and unused, a session still
   idle) is checked again just before it runs.
 - Steps run with a time limit, no terminal prompts, and SSH in batch mode.
-
-## What v0.1 adds
-
-The design ([design/0001-v0.1.md](design/0001-v0.1.md) §4, §8, §9) adds a
-service on a Unix socket in a 0700 directory, remote mode over your own SSH, and
-the stoker: off by default, safe allowlisted steps only in auto mode, pane text
-only for panes you opt in after secrets are removed, and an audit log. This
-section moves up as each part ships.
+- The service listens on a Unix socket in a directory that only you can
+  open. The console draws only what the service sends.
+- Setup edits `~/.claude/settings.json` and the tmux config only after it
+  shows the exact change, and keeps a backup.
+- Remote mode uses your own SSH. A connected host gets a key that can start
+  only the console's stream: no shell, no forwarding, a strict host-key
+  check.
+- matchblox sends no pane text to a model.

@@ -1,0 +1,60 @@
+site_name: matchblox
+site_url: https://docs.matchblox.com/
+site_description: One terminal console for every AI coding agent you run in tmux.
+copyright: From Blox Engineering · MIT
+
+theme:
+  name: material
+  # No Google Fonts: the docs load nothing from another site.
+  font: false
+  logo: assets/mark.svg
+  favicon: assets/mark.svg
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle: {icon: material/weather-sunny, name: Light}
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle: {icon: material/weather-night, name: Dark}
+  features: [navigation.instant, content.code.copy, search.highlight]
+
+extra_css: [assets/docs.css]
+
+# A plain link: repo_url makes every page call the GitHub API.
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/blox-eng/matchblox
+      name: matchblox on GitHub
+    - icon: fontawesome/brands/discord
+      link: https://discord.gg/tYxBUpGfX3
+      name: matchblox on Discord
+
+nav:
+  - Home: index.md
+  - Get started: start.md
+  - The console: console.md
+  - Keys: keys.md
+  - The phone: phone.md
+  - Agents: agents.md
+  - Remote hosts: remote.md
+  - Config: config.md
+  - Safety: safety.md
+  - Limits: limits.md
+  - tmux: tmux.md
+
+markdown_extensions:
+  - tables
+  - toc: {permalink: true}
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+
+validation:
+  links: {absolute_links: warn, unrecognized_links: warn}
