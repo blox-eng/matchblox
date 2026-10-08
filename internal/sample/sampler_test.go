@@ -469,3 +469,21 @@ func TestExitedAgentsAreNotSessions(t *testing.T) {
 		t.Fatalf("exited = %+v", snap.Exited)
 	}
 }
+
+// TestARegistryFileOfAnEarlierProcessIsIgnored: an agent that died without
+// removing its ~/.claude/sessions/<pid>.json leaves its idle status there;
+// a new process that gets the same pid must not inherit it, or the console
+// would offer to end a fresh agent as stale.
+func TestARegistryFileOfAnEarlierProcessIsIgnored(t *testing.T) {
+	root := copyFixture(t)
+	old := `{"pid":200,"sessionId":"old","cwd":"/work/app","name":"gone","status":"idle","startedAt":1789000000000,"statusUpdatedAt":1789000100000}`
+	if err := os.WriteFile(filepath.Join(root, "home", ".claude", "sessions", "200.json"), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	smp := newFixtureSampler(root)
+	smp.OwnEntries = true // the fixture's clock is fixed, as a live one is real
+	s := byPane(smp.Sample())["%1"]
+	if s.Name == "gone" || s.Idle != 0 || s.Age() == "stale" {
+		t.Fatalf("the new process took the old file: %+v", s)
+	}
+}

@@ -150,7 +150,7 @@ func (s *Service) resolve(id, which string) (advice.Action, bool) {
 		for _, x := range s.cur.Sessions {
 			if x.PID == pid && pid > 0 && x.Age() == "stale" {
 				return advice.Action{Label: "end", Steps: [][]string{{"kill", strconv.Itoa(pid)}}, Destructive: true,
-					Guards: []advice.Guard{{PID: pid, StartTicks: x.Start}}}, true
+					Guards: []advice.Guard{{PID: pid, StartTicks: x.Start, IdlePane: x.Pane}}}, true
 			}
 		}
 	}

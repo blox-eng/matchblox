@@ -172,7 +172,11 @@ func (m Model) exitedLines(w int) []string {
 	}
 	st := m.st
 	if !m.showExited {
-		return []string{"", st.faint.Render(fit(fmt.Sprintf(" %d exited agents · e shows them", len(ex)), w))}
+		line := fmt.Sprintf(" %d exited agents · e shows them", len(ex))
+		if len(ex) == 1 {
+			line = " 1 exited agent · e shows it"
+		}
+		return []string{"", st.faint.Render(fit(line, w))}
 	}
 	lines := []string{"", st.label.Render(fmt.Sprintf(" %d EXITED AGENTS", len(ex))) + st.faint.Render("  · e hides them")}
 	type parent struct {
@@ -190,7 +194,10 @@ func (m Model) exitedLines(w int) []string {
 	}
 	for _, p := range order {
 		fix := "they go when it waits for them or exits"
-		if p.comm == "systemd" {
+		switch {
+		case p.comm == "systemd" && p.pid == 1:
+			fix = "sudo systemctl daemon-reexec reaps them" // the system manager
+		case p.comm == "systemd":
 			fix = "systemctl --user daemon-reexec reaps them"
 		}
 		lines = append(lines,

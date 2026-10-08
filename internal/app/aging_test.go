@@ -112,3 +112,20 @@ func TestOldSessionsSinkEvenWhenQueued(t *testing.T) {
 		t.Fatalf("order %q", got)
 	}
 }
+
+// TestTheFixFitsTheParent: zombies of PID 1 need the system manager, not
+// the user one; one agent is "agent".
+func TestTheFixFitsTheParent(t *testing.T) {
+	st := fixtureState()
+	st.Exited = []sample.Exited{{PID: 9001, Parent: 1, ParentComm: "systemd"}}
+	m, _ := loadedWith(t, 120, st)
+	next, _ := key(m, "2")
+	if out := screen(next); !strings.Contains(out, "1 exited agent · e shows it") {
+		t.Fatalf("singular:\n%s", out)
+	}
+	next, _ = key(next, "e")
+	out := screen(next)
+	if !strings.Contains(out, "sudo systemctl daemon-reexec reaps them") || strings.Contains(out, "--user") {
+		t.Fatalf("pid 1 fix:\n%s", out)
+	}
+}

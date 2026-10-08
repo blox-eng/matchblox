@@ -700,8 +700,8 @@ func TestOnlyAStaleSessionCanBeEnded(t *testing.T) {
 	s := newTest(t, time.Hour)
 	s.sample = func() sample.Snapshot {
 		return sample.Snapshot{At: time.Now(), Sessions: []sample.Session{
-			{PID: 51, Start: 9, Pane: "%5", Name: "old", Idle: sample.StaleAfter + time.Hour},
-			{PID: 52, Start: 9, Pane: "%6", Name: "today", Idle: time.Hour},
+			{PID: 51, Start: 9, Pane: "%5", Name: "old", Status: "idle", Idle: sample.StaleAfter + time.Hour},
+			{PID: 52, Start: 9, Pane: "%6", Name: "today", Status: "idle", Idle: time.Hour},
 		}}
 	}
 	var ran []string
@@ -722,7 +722,9 @@ func TestOnlyAStaleSessionCanBeEnded(t *testing.T) {
 		t.Fatalf("ran %q", got)
 	}
 	a, ok := s.resolve("session:51", "secondary")
-	if !ok || len(a.Guards) != 1 || a.Guards[0] != (advice.Guard{PID: 51, StartTicks: 9}) || !a.Destructive {
+	// The pid and its start pin the process; the idle-pane guard checks at
+	// run time that the agent did not start to work since the sample.
+	if !ok || len(a.Guards) != 1 || a.Guards[0] != (advice.Guard{PID: 51, StartTicks: 9, IdlePane: "%5"}) || !a.Destructive {
 		t.Fatalf("action %+v", a)
 	}
 }

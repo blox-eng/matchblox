@@ -14,7 +14,6 @@ import (
 	"github.com/blox-eng/matchblox/internal/procfs"
 )
 
-// Session is one agent process and the pane that owns it.
 // Exited is an agent process that exited and waits for its parent to
 // reap it.
 type Exited struct {
@@ -23,6 +22,7 @@ type Exited struct {
 	ParentComm string `json:"parent_comm"`
 }
 
+// Session is one agent process and the pane that owns it.
 type Session struct {
 	PID        int           `json:"pid"`
 	Start      uint64        `json:"start_ticks"` // /proc/<pid>/stat field 22: tells a reused pid apart
@@ -121,6 +121,10 @@ type Sampler struct {
 	Agents        []string // process names that are agent sessions
 	Rules         Rules
 	LatencyTarget string // host:port, empty disables
+	// OwnEntries compares each ~/.claude/sessions/<pid>.json with its
+	// process's start time (see ownEntry). On the live machine only: a
+	// fixture tree has fixed uptimes and a real clock.
+	OwnEntries bool
 	// ProcEvery is how often the process table, tmux and sessions are
 	// re-read. Reading every /proc/<pid>/stat is most of a sample's cost, so
 	// it runs slower than the cheap machine counters. Zero: every sample.
@@ -334,6 +338,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 
 	hosting := map[string]bool{}
 	alive := map[procKey]bool{}
+	uptime := s.FS.Uptime()
 	for pid, p := range procs {
 		if !s.isAgent(p.Comm) {
 			continue
@@ -362,7 +367,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			PID: pid, Start: p.StartTime, Pane: paneID, Target: pane.Target, Tab: pane.Window, Cwd: s.FS.Cwd(pid),
 			CPU: cpu, Procs: n, Window: 200_000, Context: "unknown",
 		}
-		if e, ok := s.agents.entry(pid); ok {
+		if e, ok := s.agents.entry(pid); ok && s.ownEntry(e, p, uptime, now) {
 			sess.Name, sess.SessionID = e.Name, e.SessionID
 			sess.Busy, sess.Status = e.Status == "busy", e.Status
 			if e.StartedAt > 0 {
@@ -569,6 +574,23 @@ func Human(d time.Duration) string {
 		return strconv.Itoa(int(d/time.Minute)) + "m"
 	}
 	return strconv.Itoa(int(d/time.Second)) + "s"
+}
+
+// registrySlack is how much earlier than its process an agent may say it
+// started: the agent writes its file after the process starts, and clocks
+// round.
+const registrySlack = 30 * time.Second
+
+// ownEntry tells if a registry file belongs to this process. An agent that
+// died without removing ~/.claude/sessions/<pid>.json leaves its status
+// there, and a new process with the same pid must not take it: the console
+// would show a fresh agent as stale and offer to end it.
+func (s *Sampler) ownEntry(e registryEntry, p procfs.Proc, uptime float64, now time.Time) bool {
+	if !s.OwnEntries || e.StartedAt == 0 || uptime == 0 {
+		return true // nothing to compare: the file is the only evidence
+	}
+	started := now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
+	return !time.UnixMilli(e.StartedAt).Before(started.Add(-registrySlack))
 }
 
 // How long a session sits idle before its state word ages.

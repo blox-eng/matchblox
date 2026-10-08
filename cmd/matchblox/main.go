@@ -434,6 +434,7 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 	smp.GPU, smp.Docker = sample.NvidiaSMI, sample.DockerPS
 	smp.LatencyTarget = cfg.LatencyTarget
 	smp.ProcEvery = 5 * cfg.Interval.Duration
+	smp.OwnEntries = true
 	return smp
 }
 
