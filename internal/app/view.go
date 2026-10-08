@@ -81,7 +81,12 @@ func (m Model) render() string {
 		if len(out)+markH/2+3 <= m.height {
 			out = append(append(out, ""), m.markLines(w)...)
 		}
-		return strings.Join(append(out, "", strings.Repeat(" ", max((w-lipgloss.Width(why))/2, 0))+m.st.faint.Render(why)), "\n")
+		out = append(out, "", strings.Repeat(" ", max((w-lipgloss.Width(why))/2, 0))+m.st.faint.Render(why))
+		if m.opt.Layered {
+			keys := "esc hosts  q quit"
+			out = append(out, "", strings.Repeat(" ", max((w-len(keys))/2, 0))+m.st.muted.Render(keys))
+		}
+		return strings.Join(out, "\n")
 	}
 	// The line the person acts on sits under the tabs: on a phone the
 	// keyboard covers the bottom of the screen.
@@ -96,6 +101,9 @@ func (m Model) render() string {
 // header shows every metric with its trend when the terminal is wide, drops
 // the trends when it is not, then drops metrics from the right.
 func (m Model) header(w int) string {
+	if !m.have {
+		return fit(" "+m.brand(), w) // no numbers before the first state
+	}
 	mc, h, st := m.snap.Machine, m.history, m.st
 	sep := st.hair.Render("  │  ")
 	type metric struct{ label, value, trend string }

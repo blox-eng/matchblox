@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -125,7 +126,23 @@ func liveConnect(args []string) error {
 	if err != nil {
 		return err
 	}
-	return connectHost(connectEnv{Home: home, Hosts: hosts.Path(), Run: runInTerminal, Out: os.Stdout, Verify: verifyHost}, host, update)
+	err = connectHost(connectEnv{Home: home, Hosts: hosts.Path(), Run: runInTerminal, Out: os.Stdout, Verify: verifyHost}, host, update)
+	fi, _ := os.Stdin.Stat()
+	return holdFailure(err, fi != nil && fi.Mode()&os.ModeCharDevice != 0, os.Stdin, os.Stderr)
+}
+
+// errShown: the error is on the screen already.
+var errShown = errors.New("connect failed")
+
+// holdFailure keeps a failed connect on a terminal until Enter: the console
+// that ran it takes the screen back as soon as it ends.
+func holdFailure(err error, tty bool, in io.Reader, out io.Writer) error {
+	if err == nil || !tty {
+		return err
+	}
+	_, _ = fmt.Fprintf(out, "\nmatchblox: %v\npress Enter to go back\n", err)
+	_, _ = bufio.NewReader(in).ReadString('\n')
+	return errShown
 }
 
 // authorize is `matchblox authorize <public key>`, run by connect on the

@@ -197,3 +197,22 @@ func TestHeaderNamesTheHostAsTyped(t *testing.T) {
 		t.Fatalf("header %q, want the ssh name ws-1", first)
 	}
 }
+
+// Before the first state there are no numbers to show, only the host and
+// the way back.
+func TestBeforeTheFirstStateNoZeroMetrics(t *testing.T) {
+	m := New(Options{NoMotion: true, Conn: newFake(), Host: "ws-3", Layered: true})
+	m.splashDone = true
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	out := ansi.Strip(next.(Model).render())
+	if first := strings.Split(out, "\n")[0]; strings.Contains(first, "cpu") || !strings.Contains(first, "ws-3") {
+		t.Fatalf("header %q", first)
+	}
+	if !strings.Contains(out, "esc hosts") {
+		t.Fatalf("no way back:\n%s", out)
+	}
+	m.opt.DialErr, m.blocked = remote.ErrNotConnected, remote.ErrNotConnected
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "esc hosts") {
+		t.Fatalf("no way back from a blocked host:\n%s", out)
+	}
+}

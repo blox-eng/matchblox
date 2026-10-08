@@ -101,3 +101,23 @@ func TestConnectRefusesAnOptionAsHost(t *testing.T) {
 		t.Fatalf("err %v, ran %q", err, ran)
 	}
 }
+
+// A failed connect keeps its reason on the screen until Enter: the console
+// takes the terminal back as soon as it ends.
+func TestAFailedConnectWaitsForEnter(t *testing.T) {
+	var out bytes.Buffer
+	err := holdFailure(errors.New("ssh ws-1: exit status 255"), true, strings.NewReader("\n"), &out)
+	if err == nil || !errors.Is(err, errShown) {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.Contains(out.String(), "ssh ws-1: exit status 255") || !strings.Contains(out.String(), "press Enter") {
+		t.Fatalf("out:\n%s", out.String())
+	}
+	if err := holdFailure(nil, true, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := holdFailure(errors.New("x"), false, strings.NewReader(""), &out); err == nil || errors.Is(err, errShown) || out.Len() != 0 {
+		t.Fatalf("no terminal: the error goes back as it is: %v %q", err, out.String())
+	}
+}

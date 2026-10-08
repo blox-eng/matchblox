@@ -157,8 +157,13 @@ func (m Model) connectKeys(w int) string {
 		return fit(" "+st.neg.Render("y")+st.muted.Render(" runs it  any other key cancels"), w)
 	case m.flash != "":
 		return fit(" "+st.text.Render(m.flash), w)
-	case m.connectAction() != nil:
-		return fit(" "+st.muted.Render("⏎ connect  q quit"), w)
 	}
-	return fit(" "+st.muted.Render("q quit"), w)
+	keys := "q quit"
+	if m.opt.Layered {
+		keys = "esc hosts  " + keys
+	}
+	if m.connectAction() != nil {
+		keys = "⏎ connect  " + keys
+	}
+	return fit(" "+st.muted.Render(keys), w)
 }

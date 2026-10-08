@@ -63,6 +63,9 @@ func main() {
 	}
 	if err := run(os.Args[1:]); err != nil {
 		pprof.StopCPUProfile()
+		if errors.Is(err, errShown) {
+			os.Exit(1)
+		}
 		fmt.Fprintln(os.Stderr, "matchblox:", err)
 		holdOnError(err, os.Getenv, os.Stdin, os.Stderr)
 		os.Exit(1)
