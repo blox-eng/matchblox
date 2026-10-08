@@ -12,8 +12,6 @@ import (
 	"github.com/blox-eng/matchblox/internal/remote"
 )
 
-func (m Model) target() remote.Target { return remote.Target{Host: m.opt.Host, Key: m.opt.Key} }
-
 // forHost runs the console's own steps on the host it reaches, with the
 // builder's own ssh login: a tmux move attaches to the host's tmux, a
 // door's command runs there. The inner argv is checked here, before ssh

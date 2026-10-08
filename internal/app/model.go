@@ -6,8 +6,8 @@ package app
 
 import (
 	"context"
-	"errors"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -54,8 +54,9 @@ type Options struct {
 	// attaches to it, and the console comes back when tmux detaches.
 	OutsideTmux bool
 	// Host is the host this console reaches over SSH; "" is this machine.
-	// Its tmux moves and door commands run there, with the key Key.
-	Host, Key string
+	// Its tmux moves and door commands run there, with the builder's own
+	// ssh login.
+	Host string
 	// DialErr is why the first dial failed; the console starts with it.
 	DialErr error
 	// Self is this binary, which connects a host (`matchblox connect`).
@@ -84,6 +85,7 @@ type fromConn struct {
 	conn transport.Conn
 	msg  tea.Msg
 }
+
 // The redial messages carry the generation of the console that asked:
 // after the shell opens another console, a late one is dropped.
 type redialMsg struct{ gen int }

@@ -21,7 +21,7 @@ import (
 func onHost(t *testing.T, st proto.State) (Model, *[][]string) {
 	t.Helper()
 	m, _ := loadedWith(t, 100, st)
-	m.opt.Host, m.opt.Key = "ws-1", "/h/.ssh/matchblox_ed25519"
+	m.opt.Host = "ws-1"
 	var ran [][]string
 	m.opt.Exec = func(argv []string, done func(error) tea.Msg) tea.Cmd {
 		ran = append(ran, argv)

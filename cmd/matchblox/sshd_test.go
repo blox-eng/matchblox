@@ -83,7 +83,7 @@ SetEnv HOME=%[2]s/far XDG_RUNTIME_DIR=%[2]s/run XDG_STATE_HOME=%[2]s/far/state X
 		// own name (the gate line names the binary by its argv[0]), and a
 		// curl whose install does nothing: no network in a test. Both sit in
 		// ~/.local/bin, which ssh's own PATH does not have.
-		"far/.local/bin/curl": "#!/bin/sh\necho true\n",
+		"far/.local/bin/curl":      "#!/bin/sh\necho true\n",
 		"far/.local/bin/matchblox": "#!/bin/bash\nIFS=$'\\x1f'; MATCHBLOX_TEST_ARGS=\"$*\" exec -a \"$0\" " + os.Args[0] + "\n",
 	}
 	for name, body := range files {

@@ -290,7 +290,7 @@ func openHost(path, home, host string, outsideTmux bool) app.Options {
 	t := remote.Target{Host: host, Key: remote.KeyPath(home)}
 	dial := func() (transport.Conn, error) { return remote.Connect(context.Background(), t) }
 	c, err := dial()
-	return app.Options{Conn: c, DialErr: err, Redial: dial, Host: host, Key: t.Key}
+	return app.Options{Conn: c, DialErr: err, Redial: dial, Host: host}
 }
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
