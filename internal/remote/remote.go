@@ -133,6 +133,7 @@ type conn struct {
 	stderr lockedBuffer
 	once   sync.Once
 	err    error
+	spoke  bool
 }
 
 // Recv names why ssh ended instead of a bare EOF.
@@ -140,6 +141,12 @@ func (c *conn) Recv() (proto.Envelope, error) {
 	env, err := c.Conn.Recv()
 	if err != nil {
 		return env, c.exit(err)
+	}
+	if !c.spoke {
+		// What the far side wrote before it spoke (a first run's note) is
+		// not why it ends later.
+		c.spoke = true
+		c.stderr.Reset()
 	}
 	return env, nil
 }
@@ -168,8 +175,10 @@ func (c *conn) exit(readErr error) error {
 			c.err = ErrNotInstalled
 		case stderr != "":
 			c.err = errors.New(lastLine(stderr))
-		case code != 0:
+		case code > 0:
 			c.err = fmt.Errorf("ssh exited %d", code)
+		case werr != nil:
+			c.err = werr
 		case readErr != nil:
 			c.err = readErr
 		default:
@@ -199,6 +208,12 @@ func (l *lockedBuffer) Write(p []byte) (int, error) {
 		l.b.Reset() // only the last lines matter
 	}
 	return l.b.Write(p)
+}
+
+func (l *lockedBuffer) Reset() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.b.Reset()
 }
 
 func (l *lockedBuffer) String() string {

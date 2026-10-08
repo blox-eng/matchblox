@@ -473,9 +473,11 @@ func size(b float64) string {
 // brand is the mark, the name and the host the console shows.
 func (m Model) brand() string {
 	b := m.st.accent.Render("▰") + " " + m.st.text.Render("matchblox")
-	host := m.host.Host
+	// A host shows by the name the builder typed: its own hostname may be
+	// another.
+	host := m.opt.Host
 	if host == "" {
-		host = m.opt.Host
+		host = m.host.Host
 	}
 	if host != "" {
 		b += m.st.faint.Render(" · ") + m.st.muted.Render(host)

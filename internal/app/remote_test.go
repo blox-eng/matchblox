@@ -183,3 +183,11 @@ func TestSilentHostNamesTheHost(t *testing.T) {
 		t.Fatalf("flash %q", out)
 	}
 }
+
+func TestHeaderNamesTheHostAsTyped(t *testing.T) {
+	m, _ := onHost(t, fixtureState())
+	next, _ := m.Update(helloMsg{Version: proto.Version, Host: "build-box-7"})
+	if first := strings.Split(ansi.Strip(next.(Model).render()), "\n")[0]; !strings.HasPrefix(first, " ▰ matchblox · ws-1 ") {
+		t.Fatalf("header %q, want the ssh name ws-1", first)
+	}
+}

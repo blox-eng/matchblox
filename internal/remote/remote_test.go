@@ -205,3 +205,25 @@ func TestLineShowsTheRemoteCommandAsTyped(t *testing.T) {
 		t.Fatalf("Line = %s\nwant   %s", got, want)
 	}
 }
+
+// What the far side wrote before it spoke is not why it ended later.
+func TestLossAfterHelloIgnoresStartupStderr(t *testing.T) {
+	fakeSSH(t, `#!/bin/sh
+echo "matchblox: wrote config.toml" >&2
+printf '%s\n' '{"kind":"hello","body":{"version":1}}'
+sleep 0.2
+exit 1
+`)
+	c, err := Connect(context.Background(), "ws-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if _, err := c.Recv(); err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.Recv()
+	if err == nil || strings.Contains(err.Error(), "wrote config") || !strings.Contains(err.Error(), "exited 1") {
+		t.Fatalf("err = %v, want the exit, not the startup line", err)
+	}
+}
