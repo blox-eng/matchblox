@@ -1,6 +1,7 @@
 # The console
 
-The header shows the host and the machine: CPU, load, pressure, memory and
+The header shows the host, `stoker` or `night → 07:00` while [the
+stoker](stoker.md) runs, and the machine: CPU, load, pressure, memory and
 temperature, each with its trend. Under it are seven tabs, `1 QUEUE` to
 `7 PANES`. A tab that needs you shows it: `1 QUEUE 3` has three agents that
 wait, and `4 PROCS !` has a problem.

@@ -10,7 +10,7 @@ shows the keys of the open tab.
 |---|---|
 | `↑` or `k` | Selects the row above. |
 | `↓` or `j` | Selects the row below. |
-| `Enter` | Shows the safe action of the row: go to the agent's pane (Queue, Sessions, Procs, Panes), open a shell in the worktree (Git), do a recommendation, or show a setup step. |
+| `Enter` | Shows the safe action of the row: go to the agent's pane (Queue, Sessions, Procs, Panes), open a shell in the worktree (Git), do a recommendation, show a setup step, or fold the stoker's steps (STOKED). |
 | `x` | Shows the other action of the row: the second action of a recommendation or close a setup step (Queue), end a stale session (Sessions), kill a detached busy loop (Procs), remove the marked worktrees (Git). |
 | `a` | Answers the selected agent in one line. A permission prompt is answered in its pane. |
 | `1-7` | Opens a tab: Queue, Sessions, Machine, Procs, Git, History, Panes. |
@@ -21,6 +21,8 @@ shows the keys of the open tab.
 | `Space` | Marks a worktree that is safe to remove (Git). |
 | `X` | Marks every worktree that is safe to remove (Git). |
 | `r` | Scans the git checkouts again (Git). |
+| `f` | Turns [the stoker](stoker.md) on or off: it compacts full idle sessions while you are away. |
+| `n` | Starts a night: the stoker runs until the morning, then turns itself off. `n` again ends it. |
 | `e` | Shows or hides the agents that exited and wait for their parent (Sessions). |
 | `Esc` | Clears the search. With nothing to clear, goes back to Hosts. |
 | `q` or `Ctrl+C` | Quits the console. The service keeps running. |

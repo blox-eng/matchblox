@@ -15,6 +15,7 @@ const (
 	Hooks   = "hooks"
 	WayBack = "wayback"
 	Guide   = "guide"
+	Night   = "night"
 )
 
 type Door struct {

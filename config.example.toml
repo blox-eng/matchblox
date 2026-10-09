@@ -47,6 +47,9 @@ repos = []               # checkouts to watch besides the ones sessions use
 log = ""                 # default ~/.local/share/matchblox/history.csv; "-" disables
 source = ""              # another CSV with a ts column to chart alongside
 
+[stoker]                 # f and n: compact full idle sessions while you are away
+night_ends = "07:00"     # n runs the stoker until this time, then turns it off
+
 [hooks]
 alert = []               # argv run on each new alert, title and evidence appended,
                          # e.g. ["notify-send", "matchblox"]

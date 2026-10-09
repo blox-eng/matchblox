@@ -56,6 +56,9 @@ func (m Model) queueSelIndex() int {
 // that waits, else the first door.
 func (m Model) queueIndex() int {
 	nd := len(m.doors)
+	if nd > 0 && m.doors[0].ID == stokedRow && m.doorPick == "" && m.queuePane == "" && m.recPick == "" {
+		return 0 // the night's steps come first in the morning
+	}
 	for i, d := range m.doors {
 		if d.ID == m.doorPick {
 			return i

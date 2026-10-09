@@ -23,7 +23,7 @@ Works with Claude Code, Codex, OpenCode, and any agent in tmux.
 **Docs: [docs.matchblox.com](https://docs.matchblox.com)**
 
 > **Status: pre-release.** Everything below works today. There is no release
-> binary yet: the install script builds from source. Night mode comes next
+> binary yet: the install script builds from source
 > ([limits](https://docs.matchblox.com/limits/)).
 
 ## Quick start
@@ -58,6 +58,9 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
 - **Sessions**: context use (Claude Code, Codex, OpenCode), the account
   (`✻` Anthropic, `❋` OpenAI, `▣` OpenCode), token burn, CPU, and when to
   compact or clear.
+- **The stoker**: while you are away, `f` (or `n` until the morning)
+  compacts each full idle Claude Code session and asks it for a RESUME
+  line. When you are back, STOKED lists each step, then the queue.
 - **Machine health**, **detached busy loops**, **git** worktrees that are
   safe to remove, **recommendations** with their exact command, and 24 hours
   of **history**.
@@ -74,6 +77,7 @@ More in [The console](https://docs.matchblox.com/console/).
 | `x` | The destructive action. It runs only after a typed `y`. |
 | `1-7` | Opens a tab. |
 | `/` | Searches the open tab. |
+| `f`, `n` | The stoker on or off; a night that ends in the morning. |
 | `q` | Quits. The service keeps running. |
 
 Every key: [Keys](https://docs.matchblox.com/keys/).

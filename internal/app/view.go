@@ -238,8 +238,11 @@ func (m Model) footer(w int) string {
 	if _, ok := m.selectedRec(); ok {
 		tabKeys = "↑↓ select  ⏎ do  x the other action"
 	}
-	if _, ok := m.selectedDoor(); ok {
+	if d, ok := m.selectedDoor(); ok {
 		tabKeys = "↑↓ select  ⏎ open  x close"
+		if d.ID == stokedRow {
+			tabKeys = "↑↓ select  ⏎ fold"
+		}
 	}
 	if s, ok := m.selected(); ok && m.tab == tabSessions && s.Age() == "stale" {
 		tabKeys += "  x end"
@@ -582,6 +585,9 @@ func (m Model) brand() string {
 	}
 	if host != "" {
 		b += m.st.faint.Render(" · ") + m.st.muted.Render(host)
+	}
+	if w := m.stokerWord(); w != "" {
+		b += m.st.faint.Render(" · ") + m.st.accent.Render(w)
 	}
 	if m.lost && m.have {
 		// What shows is the last state the host sent.

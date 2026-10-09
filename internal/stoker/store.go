@@ -34,19 +34,27 @@ func (s *Store) Dir() string { return s.dir }
 func (s *Store) modePath() string { return filepath.Join(s.dir, "stoker.json") }
 func (s *Store) logPath() string  { return filepath.Join(s.dir, "stoker.jsonl") }
 
+// ReadMode reads stoker.json alone: cheap enough for every sample. A
+// missing file is the stoker that never ran.
+func ReadMode(dir string) (Mode, error) {
+	var m Mode
+	b, err := os.ReadFile(filepath.Join(dir, "stoker.json")) //nolint:gosec // our own state dir
+	if errors.Is(err, fs.ErrNotExist) {
+		return m, nil
+	}
+	if err != nil {
+		return m, err
+	}
+	return m, json.Unmarshal(b, &m)
+}
+
 // Open reads the files in dir. Missing files are an empty store.
 func Open(dir string) (*Store, error) {
-	s := &Store{dir: dir}
-	b, err := os.ReadFile(s.modePath())
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-	case err != nil:
+	m, err := ReadMode(dir)
+	if err != nil {
 		return nil, err
-	default:
-		if err := json.Unmarshal(b, &s.mode); err != nil {
-			return nil, err
-		}
 	}
+	s := &Store{dir: dir, mode: m}
 	f, err := os.Open(s.logPath())
 	if errors.Is(err, fs.ErrNotExist) {
 		return s, nil
