@@ -151,11 +151,8 @@ func (s *Store) Append(e Entry) error {
 	if err != nil {
 		return err
 	}
-	if _, err := f.Write(append(b, '\n')); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
+	_, werr := f.Write(append(b, '\n'))
+	if err := errors.Join(werr, f.Close()); err != nil {
 		return err
 	}
 	s.merge(e)
