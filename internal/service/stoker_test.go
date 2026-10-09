@@ -4,12 +4,14 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -39,9 +41,24 @@ func stokerTest(t *testing.T) (*Service, *[][]string, string) {
 		Agent: "claude", Pane: "%1", SessionID: "s1", Name: "work", Status: "idle",
 		Idle: 5 * time.Minute, Tokens: 176000, ContextPct: 88, Transcript: tr,
 	}}}, func(state.Doc) {})
+	// The pane shows the empty prompt, then the text the step typed.
 	var mu sync.Mutex
 	var ran [][]string
-	s.Actions.Run = func(argv []string) error { mu.Lock(); ran = append(ran, argv); mu.Unlock(); return nil }
+	screen := idleScreen
+	s.Capture = func([]string) map[string]string {
+		mu.Lock()
+		defer mu.Unlock()
+		return map[string]string{"%1": screen}
+	}
+	s.Actions.Run = func(argv []string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		ran = append(ran, argv)
+		if i := slices.Index(argv, "-l"); i >= 0 {
+			screen = strings.Replace(idleScreen, "> \n", "> "+argv[len(argv)-1]+"\n", 1)
+		}
+		return nil
+	}
 	return s, &ran, tr
 }
 
@@ -75,7 +92,7 @@ func TestStokerSkipsBusySession(t *testing.T) {
 		t.Fatalf("ran %q", *ran)
 	}
 	es := s.Stoker.Entries()
-	if len(es) != 1 || es[0].Result != stoker.Skipped || !strings.Contains(es[0].Guard, "no longer idle") {
+	if len(es) != 1 || !strings.HasPrefix(es[0].Result, stoker.Skipped+": ") || !strings.Contains(es[0].Guard, "no longer idle") {
 		t.Fatalf("entries %+v", es)
 	}
 }
@@ -164,4 +181,71 @@ func writeTranscript(t *testing.T, path string, at time.Time, resume string) {
 func storeDir(t *testing.T, s *Service) string {
 	t.Helper()
 	return s.Stoker.Dir()
+}
+
+// idleScreen is Claude Code waiting at an empty prompt.
+const idleScreen = "⏺ Done. The migration is written.\n\n────────────────────\n> \n────────────────────\n  ? for shortcuts\n"
+
+// Claude Code sends idle_prompt about a minute after any turn ends: it is
+// a reminder, not a question, and must not keep a full session from its
+// compact all night.
+func TestStokerCompactsAfterTheIdleReminder(t *testing.T) {
+	s, ran, _ := stokerTest(t)
+	s.Hook(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", At: night0.Add(-2 * time.Minute)})
+	s.Hook(hooks.Event{Name: "Notification", Kind: hooks.KindIdlePrompt, SessionID: "s1", Pane: "%1", Message: "Claude is waiting for your input", At: night0.Add(-time.Minute)})
+	s.stoke(context.Background(), night0)
+	if len(*ran) != 2 {
+		t.Fatalf("a finished turn with its idle reminder got %q", *ran)
+	}
+}
+
+func TestStokerLeavesARealQuestion(t *testing.T) {
+	s, ran, _ := stokerTest(t)
+	s.Hook(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", Asks: true, Message: "Drop the old table?", At: night0.Add(-2 * time.Minute)})
+	s.Hook(hooks.Event{Name: "Notification", Kind: hooks.KindIdlePrompt, SessionID: "s1", Pane: "%1", At: night0.Add(-time.Minute)})
+	s.stoke(context.Background(), night0)
+	if len(*ran) != 0 {
+		t.Fatalf("a question got %q", *ran)
+	}
+}
+
+// The guard reads the pane on the host right before each step: a menu, a
+// question or a draft there stops the step, whatever the sample said.
+func TestStokerReadsThePaneBeforeTheSend(t *testing.T) {
+	for name, screen := range map[string]string{
+		"permission": "Bash command\n  rm -rf build\nDo you want to proceed?\n❯ 1. Yes\n  2. No, and tell Claude what to do differently\n",
+		"question":   "⏺ Should I drop the old table?\n\n> \n",
+		"draft":      "⏺ Done.\n────────\n> half a prompt the builder left\n────────\n",
+		"unreadable": "",
+	} {
+		s, ran, _ := stokerTest(t)
+		if screen == "" {
+			s.Capture = func([]string) map[string]string { return map[string]string{} }
+		} else {
+			s.Capture = func([]string) map[string]string { return map[string]string{"%1": screen} }
+		}
+		s.stoke(context.Background(), night0)
+		es := s.Stoker.Entries()
+		if len(*ran) != 0 || len(es) != 1 || !strings.HasPrefix(es[0].Result, stoker.Skipped+": ") {
+			t.Fatalf("%s: ran %q, entries %+v", name, *ran, es)
+		}
+	}
+}
+
+// A wait the hooks report between the text and its Enter stops the Enter.
+func TestStokerChecksAgainBeforeTheEnter(t *testing.T) {
+	s, ran, _ := stokerTest(t)
+	run := s.Actions.Run
+	s.Actions.Run = func(argv []string) error {
+		err := run(argv)
+		s.Hook(hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "s1", Pane: "%1", At: night0})
+		return err
+	}
+	s.stoke(context.Background(), night0)
+	if len(*ran) != 1 {
+		t.Fatalf("ran %q", *ran)
+	}
+	if es := s.Stoker.Entries(); len(es) != 1 || es[0].Result == stoker.Sent {
+		t.Fatalf("entries %+v", es)
+	}
 }

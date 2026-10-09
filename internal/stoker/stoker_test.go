@@ -1,8 +1,12 @@
 package stoker
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,8 +44,9 @@ func TestStokerCompactsIdleAtLimit(t *testing.T) {
 	if !reflect.DeepEqual(s.Action.Steps, want) {
 		t.Fatalf("argv %q", s.Action.Steps)
 	}
-	g := advice.Guard{IdlePane: "%1"}
-	if !reflect.DeepEqual(s.Action.Guards, []advice.Guard{g, g}) || s.Session != "s%1" || s.Tokens != 176000 {
+	g := advice.Guard{IdlePane: "%1", StokePane: "%1"}
+	typed := advice.Guard{IdlePane: "%1", StokePane: "%1", Typed: true}
+	if !reflect.DeepEqual(s.Action.Guards, []advice.Guard{g, typed}) || s.Session != "s%1" || s.Tokens != 176000 {
 		t.Fatalf("step %+v", s)
 	}
 }
@@ -182,5 +187,51 @@ func TestViewShowsTheRunUntilAcked(t *testing.T) {
 	_ = s.Append(Entry{ID: "b", At: t0.Add(3 * time.Minute), Result: Sent})
 	if !s.View().Unseen {
 		t.Fatal("a step after the ack is not unseen")
+	}
+}
+
+// A result read back is final: no more reads, and it shows again when it
+// came after the builder folded the run.
+func TestReadBackIsFinalAndShowsAfterAnAck(t *testing.T) {
+	s, _ := Open(t.TempDir())
+	_ = s.Set(on())
+	_ = s.Append(Entry{ID: "a", At: t0.Add(time.Minute), Result: Sent})
+	_ = s.Set(s.Mode().Ack(t0.Add(2 * time.Minute)))
+	if s.View().Unseen || len(s.Pending(t0.Add(3*time.Minute))) != 1 {
+		t.Fatal("before the read back")
+	}
+	_ = s.Append(Entry{ID: "a", Back: t0.Add(4 * time.Minute)}) // a boundary with no counts
+	if len(s.Pending(t0.Add(5*time.Minute))) != 0 {
+		t.Fatal("a read-back step is read again")
+	}
+	if !s.View().Unseen {
+		t.Fatal("a result after the ack does not show")
+	}
+}
+
+// A broken file never turns the stoker off: a bad stoker.json is moved
+// aside, and a bad or huge line of stoker.jsonl is skipped.
+func TestABrokenStoreStillOpens(t *testing.T) {
+	dir := t.TempDir()
+	good, _ := json.Marshal(Entry{ID: "a", At: time.Now(), Result: Sent})
+	huge := `{"id":"h","resume":"` + strings.Repeat("x", 2<<20) + `"}`
+	if err := os.WriteFile(filepath.Join(dir, "stoker.json"), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "stoker.jsonl"), []byte("garbage\n"+huge+"\n"+string(good)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if es := s.Entries(); len(es) != 1 || es[0].ID != "a" {
+		t.Fatalf("entries %+v", es)
+	}
+	if bad, _ := filepath.Glob(filepath.Join(dir, "stoker.json.bad-*")); len(bad) != 1 {
+		t.Fatalf("the bad file was not kept aside: %v", bad)
+	}
+	if err := s.Set(on()); err != nil {
+		t.Fatal(err)
 	}
 }

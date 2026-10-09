@@ -11,6 +11,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/panes"
+	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -32,8 +33,15 @@ const (
 // Results of a step.
 const (
 	Sent    = "sent"
-	Skipped = "skipped: session busy"
+	Skipped = "skipped" // + ": " and what the host said
 )
+
+// Waits tells if a queue item waits for the builder: a permission prompt
+// or a question. Claude Code's idle reminder after a finished turn asks
+// nothing.
+func Waits(it queue.Item) bool {
+	return it.State == queue.StatePermission || it.State == queue.StateQuestion && !it.Reminder
+}
 
 // Mode is what stoker.json keeps.
 type Mode struct {
@@ -100,6 +108,9 @@ type Entry struct {
 	Before  int        `json:"before,omitempty"` // context tokens
 	After   int        `json:"after,omitempty"`
 	Resume  string     `json:"resume,omitempty"`
+	// Back: the compact's result was read back from the transcript, with or
+	// without counts and a RESUME line. It is not read again.
+	Back time.Time `json:"back,omitzero"`
 }
 
 // Step is one planned compact.
@@ -143,12 +154,14 @@ func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, compactAt 
 			stepped && now.Sub(at) < PerSession:
 			continue
 		}
-		g := advice.Guard{IdlePane: s.Pane}
+		g := advice.Guard{IdlePane: s.Pane, StokePane: s.Pane}
+		typed := g
+		typed.Typed = true
 		out = append(out, Step{
 			Session: s.SessionID, Name: s.Name, Pane: s.Pane, Transcript: s.Transcript, Tokens: s.Tokens,
 			Action: advice.Action{
 				Label: RuleCompact, Steps: panes.Send(s.Pane, "/compact "+Instruction),
-				Destructive: true, Guards: []advice.Guard{g, g},
+				Destructive: true, Guards: []advice.Guard{g, typed},
 			},
 		})
 	}

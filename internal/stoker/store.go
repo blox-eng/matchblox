@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -48,10 +49,24 @@ func ReadMode(dir string) (Mode, error) {
 	return m, json.Unmarshal(b, &m)
 }
 
-// Open reads the files in dir. Missing files are an empty store.
+// maxLine bounds one line of stoker.jsonl; a longer line is not ours.
+const maxLine = 1 << 20
+
+// Open reads the files in dir. Missing files are an empty store. A
+// stoker.json that does not parse is moved aside, and a log line that does
+// not parse is skipped: a broken file never turns the stoker off.
 func Open(dir string) (*Store, error) {
 	m, err := ReadMode(dir)
-	if err != nil {
+	var syntax *json.SyntaxError
+	var typ *json.UnmarshalTypeError
+	switch {
+	case errors.As(err, &syntax), errors.As(err, &typ):
+		bad := filepath.Join(dir, "stoker.json.bad-"+time.Now().UTC().Format("20060102T150405"))
+		if err := os.Rename(filepath.Join(dir, "stoker.json"), bad); err != nil {
+			return nil, err
+		}
+		m = Mode{}
+	case err != nil:
 		return nil, err
 	}
 	s := &Store{dir: dir, mode: m}
@@ -63,16 +78,22 @@ func Open(dir string) (*Store, error) {
 		return nil, err
 	}
 	defer f.Close()
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 64<<10), 1<<20)
-	for sc.Scan() {
+	r := bufio.NewReader(f)
+	for {
+		line, err := r.ReadBytes('\n')
 		var e Entry
-		if json.Unmarshal(sc.Bytes(), &e) == nil && e.ID != "" {
+		if len(line) <= maxLine && json.Unmarshal(line, &e) == nil && e.ID != "" {
 			s.merge(e)
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	s.prune()
-	return s, sc.Err()
+	return s, nil
 }
 
 func (s *Store) Mode() Mode {
@@ -157,6 +178,9 @@ func (s *Store) merge(e Entry) {
 		if e.Resume != "" {
 			x.Resume = e.Resume
 		}
+		if !e.Back.IsZero() {
+			x.Back = e.Back
+		}
 		return
 	}
 	if !e.At.IsZero() {
@@ -193,7 +217,7 @@ func (s *Store) Pending(now time.Time) []Entry {
 	defer s.mu.Unlock()
 	var out []Entry
 	for _, e := range s.entries {
-		if e.Result == Sent && e.After == 0 && now.Sub(e.At) < ResumeWait {
+		if e.Result == Sent && e.Back.IsZero() && now.Sub(e.At) < ResumeWait {
 			out = append(out, e)
 		}
 	}
@@ -212,7 +236,7 @@ func (s *Store) View() View {
 			continue
 		}
 		v.Run = append(v.Run, e)
-		if e.At.After(s.mode.Acked) {
+		if e.At.After(s.mode.Acked) || e.Back.After(s.mode.Acked) {
 			v.Unseen = true
 		}
 	}

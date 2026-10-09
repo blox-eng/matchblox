@@ -196,7 +196,7 @@ func lastUsage(path string, size int64) (Usage, bool) {
 		l := lines[i]
 		if !found && compacted == nil && bytes.Contains(l, []byte(`"compact_boundary"`)) {
 			var b boundaryLine
-			if json.Unmarshal(l, &b) == nil && b.Subtype == "compact_boundary" && b.Meta.Post > 0 {
+			if json.Unmarshal(l, &b) == nil && b.Subtype == "compact_boundary" {
 				compacted = &b
 			}
 			continue

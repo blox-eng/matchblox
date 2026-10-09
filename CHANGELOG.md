@@ -21,12 +21,15 @@ All notable changes to matchblox are in this file. The format follows
   Each Claude Code session that is idle and full gets `/compact` with an
   instruction to keep the task, the branch, the changed files, what to read
   first, the open decisions and the next step, and to end with a RESUME
-  line. The host is checked right before each send. The stoker never answers
+  line. Right before it types, and again before the Enter, it reads the pane:
+  a permission prompt, a question or text you typed stops the step. The
+  stoker never answers
   a question or a permission prompt, never sends "continue", leaves a cold
   session alone, and sends at most one step per session per 30 minutes and
   30 per run. When you are back, STOKED above the queue lists each step with
   the context before and after and its RESUME line; `Enter` folds it. Every
-  step goes to `~/.local/state/matchblox/stoker.jsonl`. The mode survives a
+  step goes to `stoker.jsonl` in `$XDG_STATE_HOME/matchblox`
+  (`~/.local/state/matchblox` by default). The mode survives a
   restart of the console and of the service. A "Try a night" step in the
   setup shows it once.
 - The docs at docs.matchblox.com: get started, the console, every key, the

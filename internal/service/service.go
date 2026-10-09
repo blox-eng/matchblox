@@ -67,6 +67,8 @@ type Service struct {
 	Stoker *stoker.Store
 	// NightEnds is when a night turns the stoker off ("07:00").
 	NightEnds string
+	// Capture reads the text of panes on the host, for the stoker's guard.
+	Capture func(panes []string) map[string]string
 
 	interval  time.Duration
 	gitEvery  time.Duration
@@ -110,7 +112,8 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 	if smp != nil {
 		s.sample = smp.Sample
 	}
-	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Answerable: s.answerable}
+	s.Capture = sample.CapturePanes
+	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Answerable: s.answerable, Stokable: s.stokable}
 	return s
 }
 

@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/blox-eng/matchblox/internal/said"
 )
 
 // Compact is what a /compact left in a Claude Code transcript.
@@ -58,16 +60,23 @@ func Compacted(path string, after time.Time) (Compact, bool) {
 	return c, found
 }
 
+// MaxResume bounds the RESUME line the console shows.
+const MaxResume = 300
+
 // ResumeLine is the text after "RESUME:" on the last line that starts with
-// it, without the markdown a model wraps it in.
+// it, without the markdown a model wraps it in. It is the model's text, so
+// control keys are dropped and it is cut at MaxResume runes.
 func ResumeLine(text string) string {
 	const mark = "RESUME:"
 	out := ""
-	for _, line := range strings.Split(text, "\n") {
+	for _, line := range strings.Split(said.Clean(text), "\n") {
 		l := strings.TrimLeft(strings.TrimSpace(line), "*_-> ")
 		if rest, ok := strings.CutPrefix(l, mark); ok {
 			out = strings.Trim(strings.TrimSpace(rest), "*_ ")
 		}
+	}
+	if r := []rune(out); len(r) > MaxResume {
+		out = string(r[:MaxResume-1]) + "…"
 	}
 	return out
 }

@@ -2,6 +2,7 @@ package sample
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -53,5 +54,28 @@ func TestUsageAfterACompactIsWhatTheBoundaryLeaves(t *testing.T) {
 	u, ok := lastUsage(path, int64(len(claudeCompacted)))
 	if !ok || u.Tokens != 9400 || u.Model != "claude-opus-5-5" {
 		t.Fatalf("usage %+v ok=%v", u, ok)
+	}
+}
+
+// A boundary that reports no count leaves the context unmeasured, never
+// the full count of the turn before it.
+func TestUsageAfterACompactWithoutACountIsNotTheOldOne(t *testing.T) {
+	body := strings.Replace(claudeCompacted, `,"postTokens":9400`, ``, 1)
+	path := filepath.Join(t.TempDir(), "s.jsonl")
+	writeFile(t, path, body)
+	if u, _ := lastUsage(path, int64(len(body))); u.Tokens != 0 {
+		t.Fatalf("usage %+v", u)
+	}
+}
+
+// The RESUME line is the model's text: no control key reaches the screen,
+// and it stays one short line.
+func TestResumeLineIsSafeToShow(t *testing.T) {
+	got := ResumeLine("RESUME: go\x1b]52;c;bad\x07 on\x1b[2J " + strings.Repeat("x", 1000))
+	if strings.ContainsFunc(got, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+		t.Fatalf("control key in %q", got)
+	}
+	if n := len([]rune(got)); n > MaxResume {
+		t.Fatalf("%d runes", n)
 	}
 }

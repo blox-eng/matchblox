@@ -2,11 +2,12 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/proto"
-	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/stoker"
 )
@@ -58,9 +59,7 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 	sessions := s.cur.Sessions
 	waiting := map[string]bool{}
 	for _, it := range s.cur.Queue {
-		// A finished turn waits for nothing; a question or a permission
-		// prompt waits for the builder, and a compact would answer it.
-		if it.State != queue.StateFinished {
+		if stoker.Waits(it) {
 			waiting[it.Pane] = true
 		}
 	}
@@ -74,7 +73,7 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 			}
 		}
 		if c, ok := sample.Compacted(path, e.At); ok && path != "" {
-			_ = s.Stoker.Append(stoker.Entry{ID: e.ID, Before: c.Before, After: c.After, Resume: c.Resume})
+			_ = s.Stoker.Append(stoker.Entry{ID: e.ID, Before: c.Before, After: c.After, Resume: c.Resume, Back: now})
 			changed = true
 		}
 	}
@@ -90,8 +89,13 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 		switch {
 		case res.Err != "":
 			e.Result = "error: " + res.Err
+		case len(res.Ran) == 0:
+			e.Guard = why(st, res.Skipped)
+			e.Result = stoker.Skipped + ": " + e.Guard
 		case len(res.Ran) < len(st.Action.Steps):
-			e.Guard, e.Result = strings.Join(res.Skipped, "; "), stoker.Skipped
+			// The text is in the field, without its Enter: the builder sees it.
+			e.Guard = why(st, res.Skipped)
+			e.Result = "typed, not sent: " + e.Guard
 		}
 		_ = s.Stoker.Append(e)
 		changed = true
@@ -108,4 +112,50 @@ func (s *Service) refreshStoker() {
 	s.cur.Stoker = &v
 	s.mu.Unlock()
 	s.broadcast()
+}
+
+// why is the reason the runner gave for the first step it skipped, without
+// the step's own argv in front of it.
+func why(st stoker.Step, skipped []string) string {
+	if len(skipped) == 0 {
+		return ""
+	}
+	for _, step := range st.Action.Steps {
+		if r, ok := strings.CutPrefix(skipped[0], strings.Join(step, " ")+": "); ok {
+			return r
+		}
+	}
+	return skipped[0]
+}
+
+// stokable is the guard of each stoker step, read right before it: the
+// session is idle, nothing in the queue waits there (a hook can arrive at
+// any time), and the pane, captured now, shows no menu, no question and
+// no draft of the builder's. Before the Enter the draft must be the
+// step's own text.
+func (s *Service) stokable(pane string, typed bool) error {
+	if !s.idle(pane) {
+		return fmt.Errorf("the session in %s is busy", pane)
+	}
+	if it, ok := s.queued(pane); ok && stoker.Waits(it) {
+		return fmt.Errorf("the session in %s waits for you", pane)
+	}
+	screen, ok := s.Capture([]string{pane})[pane]
+	if !ok {
+		return fmt.Errorf("the pane %s cannot be read", pane)
+	}
+	switch _, kind := said.Screen(screen); kind {
+	case said.Permits:
+		return fmt.Errorf("the pane %s shows a permission prompt", pane)
+	case said.Asks:
+		return fmt.Errorf("the pane %s asks a question", pane)
+	}
+	draft := said.Draft(screen)
+	if !typed && draft != "" {
+		return fmt.Errorf("the pane %s has text you typed", pane)
+	}
+	if typed && !strings.HasPrefix(draft, "/compact") {
+		return fmt.Errorf("the pane %s does not show the compact", pane)
+	}
+	return nil
 }

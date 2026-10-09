@@ -7,7 +7,7 @@ line that says how to continue. When you are back, the console shows what
 the stoker did, then the queue.
 
 The stoker uses no model of its own and answers nothing. It sends one
-command, and only when the host says the session is idle.
+command, and only when the pane, read right before, shows an empty prompt.
 
 ## Turn it on
 
@@ -31,17 +31,22 @@ A session gets a compact when all of these are true:
 - It is idle, and it was idle for less than 24 hours. A cold session gets
   nothing: nobody comes back to it, so a compact would only spend tokens.
 - Its context is at or above `compact_at` (85% by default).
-- It does not wait for you: no question and no permission prompt.
+- It does not wait for you: no question and no permission prompt. Claude
+  Code's reminder "Claude is waiting for your input" after a finished turn
+  is not a question.
 - The stoker did not send it a step in the last 30 minutes.
 
-Right before the send, the service checks again that the pane is idle. Then
-it types this into the pane, with `Enter`:
+Right before it types, the service reads the pane on the host again. It
+sends nothing when the session is busy, when the queue says the session
+waits for you, or when the pane shows a permission prompt, a question or
+text you typed and did not send. Then it types this into the pane:
 
 ```text
 /compact Keep the task, the branch and last commit, the files you changed, what to read first, every open decision and the next step. End with one line that starts with RESUME: and says how to continue.
 ```
 
-A run sends at most 30 steps.
+Before the `Enter`, it reads the pane once more: the prompt must hold this
+text, and nothing may ask. A run sends at most 30 steps.
 
 ## What it never does
 
@@ -57,19 +62,23 @@ The console shows **STOKED** above the queue, with the time of the run:
 
 ```text
  STOKED 23:10 → 07:00 · 2
- ▌ 01:33  app-feature      %1         176k → 9k
+ ▌ 01:33  ╿ app-feature      %1         176k → 9k
        RESUME: run the migration test, then open the PR
-   03:02  app-review       %2         skipped: session busy
+   03:02  ╿ app-review       %2         skipped: the pane %2 has text you typed
 ```
 
-Each row is one step: the time, the session, its pane, and the result. A
-compact shows the context before and after it, then the RESUME line the
-agent wrote. "skipped: session busy" means the session started to work
-right before the send, so the stoker sent nothing.
+Each row is one step: the time, the session's match, its name, its pane,
+and the result. A compact shows the context before and after it, then the
+RESUME line the agent wrote ("compacted" when the agent's file gives no
+count). "skipped: …" says what the pane or the queue showed right before
+the send, so the stoker sent nothing. "typed, not sent: …" means the text
+is in the prompt without its `Enter`: send it or clear it yourself.
 
-`Enter` on STOKED folds it. The next run shows again.
+`Enter` on STOKED folds it. A result that comes in after you fold it, and
+the next run, show again.
 
-Each step also goes to `~/.local/state/matchblox/stoker.jsonl`: the time,
+Each step also goes to `stoker.jsonl` in `$XDG_STATE_HOME/matchblox`
+(`~/.local/state/matchblox` by default): the time,
 the session, the rule, the exact command, what the host said before the
 send, the result, and the RESUME line.
 

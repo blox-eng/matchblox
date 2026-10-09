@@ -102,6 +102,8 @@ func (m Model) stokedSection(b *body, w int, row int, sel bool) {
 			switch {
 			case e.After > 0:
 				result = st.text.Render(kTok(e.Before) + " → " + kTok(e.After))
+			case !e.Back.IsZero():
+				result = st.text.Render(kTok(e.Before) + " → compacted")
 			case m.now().Sub(e.At) < proto.StokerReadBack:
 				result = st.muted.Render(kTok(e.Before) + " → compacting…")
 			default:
@@ -115,7 +117,7 @@ func (m Model) stokedSection(b *body, w int, row int, sel bool) {
 		} else {
 			lines = append(lines, lead+clock+cell+st.text.Render(pad(e.Name, colName))+st.muted.Render(pad(e.Pane, colPane))+result)
 		}
-		if e.Result != "sent" || e.After == 0 {
+		if e.Result != "sent" || e.Back.IsZero() {
 			continue
 		}
 		resume := "no RESUME line"

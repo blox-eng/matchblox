@@ -26,7 +26,7 @@ func stokedRun(at time.Time) proto.StokerView {
 		Mode: proto.StokerMode{Since: since, Ended: at.Add(-time.Hour)},
 		Run: []proto.StokerEntry{
 			{ID: "1", At: since.Add(31 * time.Minute), Session: "a", Name: "app-feature", Pane: "%1", Rule: "compact",
-				Result: "sent", Guard: "idle", Before: 176000, After: 9400, Resume: "run the migration test, then open the PR"},
+				Result: "sent", Guard: "idle", Before: 176000, After: 9400, Resume: "run the migration test, then open the PR", Back: since.Add(33 * time.Minute)},
 			{ID: "2", At: since.Add(2 * time.Hour), Session: "b", Name: "app-review", Pane: "%2", Rule: "compact",
 				Result: "skipped: session busy", Guard: "the session in %2 is no longer idle", Before: 180000},
 		},
@@ -142,5 +142,17 @@ func TestNightFitsAPhoneWithALongHostName(t *testing.T) {
 	h := ansi.Strip(m.header(40))
 	if !strings.Contains(h, "· night") || strings.Contains(h, "…") {
 		t.Fatalf("phone header %q", h)
+	}
+}
+
+func TestStokedShowsAReadBackWithoutCounts(t *testing.T) {
+	at := fixtureState().At
+	v := stokedRun(at)
+	v.Run = v.Run[:1]
+	v.Run[0].After, v.Run[0].Back = 0, at.Add(-time.Hour)
+	m, _ := loadedWith(t, 100, stokerState(v))
+	out := ansi.Strip(m.render())
+	if !strings.Contains(out, "176k → compacted") || !strings.Contains(out, "RESUME: run the migration test") {
+		t.Fatalf("no read back:\n%s", out)
 	}
 }
