@@ -22,7 +22,9 @@ Other tools do those well (design/0001-v0.1.md §15).
 - The service must stay under 1% of one core when the machine is idle.
 - Tests and examples use the generic demo machine in `testdata/`. Never put a
   real machine name, person or company in the repository.
-- Write docs and copy in short, plain sentences (ASD-STE100).
+- Write docs and copy in short, plain sentences (ASD-STE100). Lead with
+  what the reader gets and what to do; the why goes in design/
+  (DESIGN.md §7).
 
 ## The dev loop
 

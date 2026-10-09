@@ -30,6 +30,9 @@ type Item struct {
 	// FromPane: an agent without hooks, read from its pane. It waits when
 	// it is idle and its last lines ask; that can be later than a hook.
 	FromPane bool `json:"from_pane,omitempty"`
+	// Reminder: the question is Claude Code's idle_prompt after a turn that
+	// asked nothing. It waits for the person, but nothing asks.
+	Reminder bool `json:"reminder,omitempty"`
 }
 
 // UnseenGrace is how long a hooked session the sampler does not see yet
@@ -69,7 +72,7 @@ func (q *Queue) Apply(ev hooks.Event) {
 		if !was {
 			it = Item{SessionID: ev.SessionID, Since: ev.At}
 		}
-		it.State, it.Pane = state, ev.Pane
+		it.State, it.Pane, it.Reminder = state, ev.Pane, false
 		if line != "" {
 			it.LastLine = line
 		}
@@ -88,7 +91,10 @@ func (q *Queue) Apply(ev hooks.Event) {
 			if !was || it.LastLine == "" {
 				line = ev.Message
 			}
+			asked := was && (it.State == StatePermission || it.State == StateQuestion && !it.Reminder)
 			set(StateQuestion, line)
+			it.Reminder = !asked
+			q.waiting[ev.SessionID] = it
 		}
 	case "Stop":
 		if ev.Asks {

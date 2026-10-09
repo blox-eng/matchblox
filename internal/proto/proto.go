@@ -12,6 +12,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/state"
+	"github.com/blox-eng/matchblox/internal/stoker"
 )
 
 // Version changes only when an older peer cannot read the messages.
@@ -127,9 +128,16 @@ func Decode(r *bufio.Reader) (Envelope, error) {
 	return env, nil
 }
 
-// The console draws git data without importing the scanner.
+// StokerReadBack is how long the service reads back the result of a compact.
+const StokerReadBack = stoker.ResumeWait
+
+// The console draws git data without importing the scanner, and the
+// stoker's steps without importing the stoker.
 type (
-	GitReport = gitscan.Report
-	Worktree  = gitscan.Worktree
-	PR        = gitscan.PR
+	GitReport   = gitscan.Report
+	Worktree    = gitscan.Worktree
+	PR          = gitscan.PR
+	StokerView  = stoker.View
+	StokerMode  = stoker.Mode
+	StokerEntry = stoker.Entry
 )

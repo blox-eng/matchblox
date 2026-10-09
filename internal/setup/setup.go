@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/stoker"
 )
 
 // Env is the machine the doors are for.
@@ -49,7 +50,7 @@ func Doors(e Env) []doors.Door {
 	}
 	ds = append(ds, wayBackDoor(e))
 	if usesClaude(e) {
-		ds = append(ds, guideDoor())
+		ds = append(ds, guideDoor(), nightDoor(e))
 	}
 	for i := range ds {
 		ds[i].Closed = slices.Contains(closed, ds[i].ID)
@@ -71,7 +72,7 @@ func Open(e Env, id, seen string) (backup string, err error) {
 	return "", fmt.Errorf("no door %q", id)
 }
 
-var known = []string{doors.Tmux, doors.Hooks, doors.WayBack, doors.Guide}
+var known = []string{doors.Tmux, doors.Hooks, doors.WayBack, doors.Guide, doors.Night}
 
 // Close hides a door from the console; `matchblox setup` shows it again.
 func Close(e Env, id string) error {
@@ -223,6 +224,17 @@ func tmuxDoor(e Env, have bool) doors.Door {
 		return d
 	}
 	d.Preview = shellJoin(d.Term)
+	return d
+}
+
+// nightDoor leads to the stoker. It is done once the stoker has run, and
+// the console sends the stoker act itself: nothing here writes a file.
+func nightDoor(e Env) doors.Door {
+	d := doors.Door{ID: doors.Night, Title: "Try a night",
+		Why: "Going to sleep? n keeps your sessions lit until morning: each full one compacts and leaves a RESUME line."}
+	if m, err := stoker.ReadMode(e.StateDir); err == nil && !m.Since.IsZero() {
+		d.Done = true
+	}
 	return d
 }
 

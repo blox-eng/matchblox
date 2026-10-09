@@ -161,9 +161,10 @@ type Model struct {
 	queue      []queue.Item
 	queuePane  string
 	doors      []doors.Door // the open doors, above the queue
-	doorPick   string       // the selected door
-	doorAt     int          // its row, for the door after it when it folds
-	previewTop int          // the first line of a door's diff on screen
+	stoker     *proto.StokerView
+	doorPick   string // the selected door
+	doorAt     int    // its row, for the door after it when it folds
+	previewTop int    // the first line of a door's diff on screen
 	paneSel    int
 	input      *answerInput
 	changes    map[string]change // pane -> a match change that plays once
@@ -332,7 +333,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		first := !m.have
 		st := proto.State(msg)
 		m.queue = st.Queue
+		m.stoker = st.Stoker
 		m.doors = openDoors(st.Doors)
+		if m.stokedShows() {
+			m.doors = append([]doors.Door{{ID: stokedRow}}, m.doors...)
+		}
 		m.noteChanges(st.Sessions)
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
 		m.all = lists{queue: st.Queue, recs: st.Recommendations, sessions: st.Sessions, orphans: st.Orphans}
@@ -561,6 +566,9 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.move(1)
 	case "enter":
+		if d, ok := m.selectedDoor(); ok && d.ID == stokedRow {
+			return m.ackStoked()
+		}
 		m.pending, m.previewTop = m.primary(), 0
 	case "x":
 		m.pending = m.secondary()
@@ -573,6 +581,10 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		} else {
 			m.flash = why
 		}
+	case "f":
+		return m.stokerKey(false)
+	case "n":
+		return m.stokerKey(true)
 	case "r":
 		if m.tab == tabGit && m.conn != nil && !m.lost {
 			m.flash = "scanning git…"

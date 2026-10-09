@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/actions"
+	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/state"
 )
@@ -112,6 +113,10 @@ func setupDoors(e setup.Env, in io.Reader, out io.Writer, run func(argv []string
 		say("\n%s\n  %s\n", d.Title, d.Why)
 		if d.Problem != "" {
 			say("  %s\n", d.Problem)
+			continue
+		}
+		if d.ID == doors.Night {
+			say("  press n in the console to start one\n")
 			continue
 		}
 		if d.Path != "" {

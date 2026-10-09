@@ -124,8 +124,8 @@ Rules:
 5. With `--no-motion` or `NO_MOTION=1`: `✦` in `flame`, `╿` in
    `match-head`, `│` in `faint`, no change plays.
 6. Every place that shows an agent uses this match: the queue, the sessions,
-   the replay, the site, and later the tmux status line, the overnight view
-   (night mode) and the docs. A new place uses the same glyphs and motions.
+   the replay, the site, STOKED (the stoker's run), the docs, and later the
+   tmux status line. A new place uses the same glyphs and motions.
    A new state is a change to this section first.
 
 ## 5. Motion
@@ -217,6 +217,15 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   `x` and `y` close it. A door that is done folds away at once. `matchblox
   setup` shows every door, done and closed ones too. An agent that waits is
   selected before a door; with nobody waiting, the first door is.
+- **The stoker** (#24, owner 2026-10-09): `f` turns it on or off, `n`
+  starts a night that ends at `night_ends`. The header shows `stoker` or
+  `night → 07:00` in `accent` after the host. While a run has steps the
+  builder has not seen, `STOKED <since> → <end> · N` is the first row of
+  the Queue tab, above the doors: one line for each step (time, the
+  session's match, name, pane, then `before → after` or the skip reason),
+  the `RESUME:` line under each compact, two lines for each step on a
+  phone. It is selected first; `Enter` folds it. The night door ("Try a
+  night") sits with the doors and folds after the first run.
 - **Lists** (owner, 2026-10-08): `/` searches the open tab (every key is
   text until `⏎` keeps it or `esc` clears it; a tab change ends it); an empty
   result says "nothing matches <text>". `s` sorts Sessions and Panes by the
@@ -236,6 +245,10 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 
 - Plans, specs, docs and on-screen text use ASD-STE100: short sentences,
   one instruction each, active voice.
+- Docs, the README and the site lead with what the reader gets and what to
+  do. They never explain why matchblox is built the way it is, defend a
+  choice ("never a guess", "so that…") or praise matchblox. The why lives in
+  design/ and the ledger.
 - A status is a glyph and a word: `✦ busy`, `╿ asks`, `! compact`,
   `▲ 92 °C`.
 - An empty state is one sentence (and the action, when there is one):
