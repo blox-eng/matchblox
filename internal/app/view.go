@@ -103,7 +103,7 @@ func (m Model) render() string {
 // the trends when it is not, then drops metrics from the right.
 func (m Model) header(w int) string {
 	if !m.have {
-		return fit(" "+m.brand(), w) // no numbers before the first state
+		return fit(" "+m.brandFit(w), w) // no numbers before the first state
 	}
 	mc, h, st := m.snap.Machine, m.history, m.st
 	sep := st.hair.Render("  │  ")
@@ -121,7 +121,7 @@ func (m Model) header(w int) string {
 		ms = append(ms, metric{"lat", fmt.Sprintf("%dms", mc.Latency.Milliseconds()), spark(h.lat, 8, 0)})
 	}
 	build := func(n int, trends bool) string {
-		parts := []string{m.brand()}
+		parts := []string{m.brandFit(w)}
 		for _, x := range ms[:n] {
 			p := st.label.Render(x.label) + " " + st.text.Render(x.value)
 			if trends && x.trend != "" {
@@ -138,7 +138,7 @@ func (m Model) header(w int) string {
 			}
 		}
 	}
-	return fit(build(1, false), w)
+	return fit(" "+m.brandFit(w), w) // no metric fits: the brand alone, never a cut number
 }
 
 // tabs tries the full names, then a narrower gap, then the short names,
@@ -575,7 +575,18 @@ func size(b float64) string {
 }
 
 // brand is the mark, the name and the host the console shows.
-func (m Model) brand() string {
+func (m Model) brand() string { return m.brandWith(m.stokerWord()) }
+
+// brandFit is the brand in w columns: on a phone with a long host name the
+// stoker word drops its time rather than being cut.
+func (m Model) brandFit(w int) string {
+	if b := m.brand(); lipgloss.Width(b)+1 <= w {
+		return b
+	}
+	return m.brandWith(m.stokerShort())
+}
+
+func (m Model) brandWith(word string) string {
 	b := m.st.accent.Render("▰") + " " + m.st.text.Render("matchblox")
 	// A host shows by the name the builder typed: its own hostname may be
 	// another.
@@ -586,8 +597,8 @@ func (m Model) brand() string {
 	if host != "" {
 		b += m.st.faint.Render(" · ") + m.st.muted.Render(host)
 	}
-	if w := m.stokerWord(); w != "" {
-		b += m.st.faint.Render(" · ") + m.st.accent.Render(w)
+	if word != "" {
+		b += m.st.faint.Render(" · ") + m.st.accent.Render(word)
 	}
 	if m.lost && m.have {
 		// What shows is the last state the host sent.

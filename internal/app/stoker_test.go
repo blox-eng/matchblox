@@ -132,3 +132,15 @@ func sendKey(m tea.Model, k string) tea.Model {
 	}
 	return next
 }
+
+// On a phone a long host name leaves no room for the time: the word stays
+// whole, never cut.
+func TestNightFitsAPhoneWithALongHostName(t *testing.T) {
+	until := time.Date(2026, 10, 10, 7, 0, 0, 0, time.Local)
+	m, _ := loadedWith(t, 40, stokerState(proto.StokerView{Mode: proto.StokerMode{On: true, Until: until}}))
+	m.opt.Host = "build-workstation"
+	h := ansi.Strip(m.header(40))
+	if !strings.Contains(h, "· night") || strings.Contains(h, "…") {
+		t.Fatalf("phone header %q", h)
+	}
+}

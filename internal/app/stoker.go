@@ -29,12 +29,12 @@ func (m Model) stokerKey(night bool) (tea.Model, tea.Cmd) {
 		m.flash = "this service keeps no stoker"
 		return m, nil
 	}
-	verb, say := "on", "the stoker is on: a full idle session compacts and leaves a RESUME line"
+	verb, say := "on", "the stoker is on: full sessions compact"
 	switch {
 	case night && m.stoker.On && !m.stoker.Until.IsZero(), !night && m.stoker.On:
 		verb, say = "off", "the stoker is off"
 	case night:
-		verb, say = "night", "night: the stoker runs until morning, then turns itself off"
+		verb, say = "night", "night: the stoker runs until morning"
 	}
 	m.flash = say
 	return m, m.send(proto.Act{RecID: "stoker:" + verb, Which: "primary"})
@@ -58,6 +58,14 @@ func (m Model) stokerWord() string {
 		return "night → " + m.stoker.Until.Local().Format("15:04")
 	}
 	return "stoker"
+}
+
+// stokerShort is the word without the time, for a narrow header.
+func (m Model) stokerShort() string {
+	if w := m.stokerWord(); strings.HasPrefix(w, "night") {
+		return "night"
+	}
+	return m.stokerWord()
 }
 
 func nightDoorAction(d doors.Door) *action {
