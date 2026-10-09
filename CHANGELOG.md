@@ -8,12 +8,27 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- A session you compacted shows the context the compact left, not the full
+  context of its last turn before it.
 - A turn that ends on a question waits for you; it no longer shows as done
   because the progress line came after the question. Control keys in an
   agent's reply never reach the console.
 
 ### Added
 
+- The stoker keeps your sessions lit while you are away. `f` turns it on or
+  off, and `n` runs it until the morning (`[stoker] night_ends`, 07:00).
+  Each Claude Code session that is idle and full gets `/compact` with an
+  instruction to keep the task, the branch, the changed files, what to read
+  first, the open decisions and the next step, and to end with a RESUME
+  line. The host is checked right before each send. The stoker never answers
+  a question or a permission prompt, never sends "continue", leaves a cold
+  session alone, and sends at most one step per session per 30 minutes and
+  30 per run. When you are back, STOKED above the queue lists each step with
+  the context before and after and its RESUME line; `Enter` folds it. Every
+  step goes to `~/.local/state/matchblox/stoker.jsonl`. The mode survives a
+  restart of the console and of the service. A "Try a night" step in the
+  setup shows it once.
 - The docs at docs.matchblox.com: get started, the console, every key, the
   phone, agents, remote hosts, config, safety, limits, and tmux, the engine
   under matchblox. A test holds every key and command in the README and the
