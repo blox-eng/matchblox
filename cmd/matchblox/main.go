@@ -48,6 +48,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/state"
+	"github.com/blox-eng/matchblox/internal/stoker"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
@@ -345,6 +346,11 @@ func newService(cfg config.Config, root string) *service.Service {
 	}
 	s.Exe = invokedPath(os.Args[0])
 	s.Setup = liveSetup()
+	if st, err := stoker.Open(filepath.Dir(s.StatePath)); err == nil {
+		s.Stoker = st
+	} else {
+		fmt.Fprintln(os.Stderr, "matchblox: the stoker is off:", err)
+	}
 	return s
 }
 

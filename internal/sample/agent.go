@@ -189,8 +189,18 @@ func lastUsage(path string, size int64) (Usage, bool) {
 	lines := bytes.Split(buf, []byte{'\n'})
 	var u Usage
 	found, decided := false, false
+	// A compact after the last turn leaves its own count: the next turn
+	// has not run, and the turn before it holds the old, full context.
+	var compacted *boundaryLine
 	for i := len(lines) - 1; i >= 0 && (!found || !decided); i-- {
 		l := lines[i]
+		if !found && compacted == nil && bytes.Contains(l, []byte(`"compact_boundary"`)) {
+			var b boundaryLine
+			if json.Unmarshal(l, &b) == nil && b.Subtype == "compact_boundary" {
+				compacted = &b
+			}
+			continue
+		}
 		// Decode only a line that can still tell something: a busy turn has
 		// many large tool calls between two replies with text.
 		needUsage := !found && bytes.Contains(l, []byte(`"usage"`))
@@ -206,6 +216,9 @@ func lastUsage(path string, size int64) (Usage, bool) {
 		if needUsage && t.Message.Usage != nil {
 			n := t.Message.Usage
 			u.Model, u.Tokens, u.At = t.Message.Model, n.Input+n.CacheRead+n.CacheCreation+n.Output, t.Timestamp
+			if compacted != nil {
+				u.Tokens, u.At = compacted.Meta.Post, compacted.Timestamp
+			}
 			found = true
 		}
 		// The newest reply with text tells the progress, bar or no bar.

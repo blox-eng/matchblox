@@ -39,6 +39,9 @@ func (m Model) doorAction(d doors.Door) *action {
 	if d.Problem != "" {
 		return nil
 	}
+	if d.ID == doors.Night {
+		return nightDoorAction(d)
+	}
 	if d.Term != nil {
 		argv, where := d.Term, "in this terminal"
 		if d.ID == doors.Guide && !m.opt.OutsideTmux {
@@ -103,10 +106,20 @@ func (m Model) doorsSection(b *body, w int) {
 		return
 	}
 	st := m.st
-	b.add(-1, st.label.Render(fit(fmt.Sprintf(" SET UP · %d", len(m.doors)), w)))
 	sel := m.queueIndex()
+	ds := m.doors
+	if ds[0].ID == stokedRow {
+		m.stokedSection(b, w, 0, sel == 0)
+		ds = ds[1:]
+	}
+	if len(ds) > 0 {
+		b.add(-1, st.label.Render(fit(fmt.Sprintf(" SET UP · %d", len(ds)), w)))
+	}
 	narrow := layout(w) == Narrow
 	for i, d := range m.doors {
+		if d.ID == stokedRow {
+			continue
+		}
 		mark := "  "
 		if i == sel {
 			mark = "▌ "

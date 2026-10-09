@@ -44,10 +44,10 @@ The first run writes the agents it finds to `agents` in the
 
 ## Context use
 
-Claude Code, Codex and OpenCode show their context use. matchblox reads it
-from the agent's own files: the transcript, the rollout, the session
-storage. It never guesses. Before the first turn a session is "fresh". An
-agent that it cannot read shows "not measured".
+Claude Code, Codex and OpenCode show their context use, read from the
+agent's own files: the transcript, the rollout, the session storage.
+Before the first turn a session is "fresh". An agent without readable files
+shows "not measured".
 
 The window comes from the model that the agent reports. To change it, set
 `[sessions.windows]` in the config.
@@ -55,16 +55,14 @@ The window comes from the model that the agent reports. To change it, set
 ## The account
 
 On a wide screen, Sessions shows the account of each session: the
-provider's mark, then the email and plan, or "API key". matchblox reads
-only those fields from the agent's auth files. A token never reaches the
-console.
+provider's mark, then the email and plan, or "API key". Only those two
+fields are read from the agent's auth files; no token reaches the console.
 
 ## How an agent tells that it waits
 
 Claude Code tells its waits through hooks: the setup step "Add the queue
-hooks" adds them. matchblox reads every other agent from its pane: it is
-busy while the pane changes, and it waits for you when it is idle and its
-last lines ask. That can come later than a hook.
+hooks" adds them. Every other agent is read from its pane: busy while the
+pane changes, waiting when it is idle and its last lines ask.
 
 An approval menu (Codex, OpenCode) shows as `asks`. Answer it in its pane,
 where `Enter` takes the selected choice.

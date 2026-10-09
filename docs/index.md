@@ -16,6 +16,7 @@ host, over SSH, and from a phone.
 
 Then, when you need them:
 
+- [The stoker](stoker.md): sessions that compact themselves while you sleep.
 - [Agents](agents.md): Claude Code, Codex, OpenCode and any other agent.
 - [Remote hosts](remote.md): agents on another machine.
 - [Config](config.md): thresholds and agents.

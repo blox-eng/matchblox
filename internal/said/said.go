@@ -78,6 +78,28 @@ func Screen(screen string) (string, Kind) {
 	return "", None
 }
 
+// Draft is what the person typed into an agent's input field and did not
+// send: the text after the prompt marker on the lowest prompt line of the
+// screen. "" when the field is empty or shows its placeholder.
+func Draft(screen string) string {
+	raw := strings.Split(strings.TrimRight(Clean(screen), "\n"), "\n")
+	for i := len(raw) - 1; i >= max(len(raw)-2*screenWithin, 0); i-- {
+		in := strings.TrimLeft(raw[i], " │┃")
+		for _, mark := range []string{">", "›", "❯"} {
+			rest, ok := strings.CutPrefix(in, mark)
+			if !ok {
+				continue
+			}
+			t := strings.TrimFunc(rest, frame)
+			if strings.HasPrefix(t, `Try "`) {
+				return "" // Claude Code's placeholder in an empty field
+			}
+			return t
+		}
+	}
+	return ""
+}
+
 // Reply reads an agent's last reply (Markdown). The progress line that
 // ends each reply (hooks.ProgressPrompt) and headings are never what it
 // said.

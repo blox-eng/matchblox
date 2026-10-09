@@ -35,6 +35,11 @@ type Guard struct {
 	Worktree   string `json:"worktree,omitempty"`    // has no changes and no process inside
 	IdlePane   string `json:"idle_pane,omitempty"`   // the agent in this pane is still idle
 	AnswerPane string `json:"answer_pane,omitempty"` // the agent here still waits, and not at a permission prompt
+	// StokePane: the pane, read again, shows no menu, no question and no
+	// draft, and nothing in the queue waits there. Typed: the draft is the
+	// step's own text.
+	StokePane string `json:"stoke_pane,omitempty"`
+	Typed     bool   `json:"typed,omitempty"`
 }
 
 type Rec struct {

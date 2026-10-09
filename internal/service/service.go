@@ -24,6 +24,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/state"
+	"github.com/blox-eng/matchblox/internal/stoker"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
@@ -62,11 +63,18 @@ type Service struct {
 	ExeEvery time.Duration
 	// Setup is the machine the doors are for. Nil: no doors (fixtures).
 	Setup *setup.Env
+	// Stoker keeps the stoker mode and its steps. Nil: no stoker.
+	Stoker *stoker.Store
+	// NightEnds is when a night turns the stoker off ("07:00").
+	NightEnds string
+	// Capture reads the text of panes on the host, for the stoker's guard.
+	Capture func(panes []string) map[string]string
 
-	interval time.Duration
-	gitEvery time.Duration
-	sample   func() sample.Snapshot
-	git      GitSource
+	interval  time.Duration
+	gitEvery  time.Duration
+	compactAt float64
+	sample    func() sample.Snapshot
+	git       GitSource
 
 	mu      sync.Mutex
 	cur     state.Doc
@@ -91,6 +99,9 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		clients:  map[*client]struct{}{},
 		gitKick:  make(chan struct{}, 1),
 		queue:    queue.New(),
+
+		NightEnds: cfg.Stoker.NightEnds,
+		compactAt: cfg.Sessions.CompactAt,
 	}
 	if s.interval <= 0 {
 		s.interval = 2 * time.Second
@@ -101,7 +112,8 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 	if smp != nil {
 		s.sample = smp.Sample
 	}
-	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Answerable: s.answerable}
+	s.Capture = sample.CapturePanes
+	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Answerable: s.answerable, Stokable: s.stokable}
 	return s
 }
 
@@ -204,6 +216,7 @@ func (s *Service) Run(ctx context.Context) {
 	for first := true; ; first = false {
 		s.readSpool()
 		s.publish(s.sample(), rec)
+		s.stoke(ctx, time.Now())
 		if first {
 			s.rescanGit()
 		}
@@ -224,6 +237,10 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		s.hist.Append(history.FromSnapshot(snap))
 	}
 	s.cur.Snapshot, s.have = snap, true
+	if s.Stoker != nil {
+		v := s.Stoker.View()
+		s.cur.Stoker = &v
+	}
 	s.cur.Recommendations = advice.Build(snap, s.cur.Git)
 	s.mergeQueue()
 	doc := s.cur

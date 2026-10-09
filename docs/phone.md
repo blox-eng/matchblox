@@ -34,16 +34,15 @@ starts it. A second phone or laptop attaches to the same session.
 3. To come back, tap `◂ matchblox` at the left of the tmux status line, or
    press `prefix m` (the tmux prefix, then m).
 
-The tap on `◂ matchblox` needs the tmux mouse: add `set -g mouse on` to your
-tmux config. Without it, tmux gives the tap to the pane, and only
-`prefix m` comes back.
+The tap on `◂ matchblox` needs `set -g mouse on` in your tmux config.
+Without it, use `prefix m`.
 
 The console then selects the next agent that waits.
 
 ## The phone layout
 
 Under 60 columns, the console has one column. The queue comes first, and
-each row has two lines. Only the selected setup step shows why it helps.
+each row has two lines. Only the selected setup step shows its detail.
 The action line is at the top, above the keyboard.
 
 Every key is on the key bar of an SSH app: letters, digits, arrows, `Enter`

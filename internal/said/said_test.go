@@ -129,3 +129,19 @@ func TestControlKeysNeverReachTheConsole(t *testing.T) {
 		}
 	}
 }
+
+func TestDraft(t *testing.T) {
+	for _, c := range []struct{ screen, want string }{
+		{"⏺ Done.\n────\n> \n────\n  ? for shortcuts\n", ""},
+		{"⏺ Done.\n╭────╮\n│ >  │\n╰────╯\n", ""},
+		{"⏺ Done.\n────\n> half a prompt\n────\n  ? for shortcuts\n", "half a prompt"},
+		{"╭────────╮\n│ > fix the test │\n╰────────╯\n", "fix the test"},
+		{"> an old turn\n⏺ Done.\n❯ go on\n", "go on"},
+		{"────\n> Try \"refactor the parser\"\n────\n", ""},
+		{"no prompt here\n", ""},
+	} {
+		if got := Draft(c.screen); got != c.want {
+			t.Errorf("Draft(%q) = %q, want %q", c.screen, got, c.want)
+		}
+	}
+}

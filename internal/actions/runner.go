@@ -29,6 +29,9 @@ type Runner struct {
 	// Answerable tells if the agent in a pane still waits for a typed
 	// answer (not at a permission prompt). Nil means never.
 	Answerable func(pane string) bool
+	// Stokable reads a pane again for a stoker step: nil when it may be
+	// typed into. Nil means never.
+	Stokable func(pane string, typed bool) error
 }
 
 // Do runs each step whose guard still holds and records why it skipped the
@@ -64,6 +67,14 @@ func (r Runner) guard(g advice.Guard) error {
 	}
 	if g.AnswerPane != "" && (r.Answerable == nil || !r.Answerable(g.AnswerPane)) {
 		return fmt.Errorf("the session in %s no longer waits for an answer", g.AnswerPane)
+	}
+	if g.StokePane != "" {
+		if r.Stokable == nil {
+			return fmt.Errorf("the pane %s cannot be read", g.StokePane)
+		}
+		if err := r.Stokable(g.StokePane, g.Typed); err != nil {
+			return err
+		}
 	}
 	if r.Check != nil {
 		return r.Check(g)

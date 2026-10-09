@@ -12,6 +12,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/stoker"
 )
 
 // Doc is everything the console knows at one moment.
@@ -22,6 +23,9 @@ type Doc struct {
 	Queue           []queue.Item    `json:"queue"`
 	// Doors are the setup steps of the machine; the console shows the open ones.
 	Doors []doors.Door `json:"doors,omitempty"`
+	// Stoker is the stoker mode and the steps of its last run. Nil: the
+	// service keeps no stoker.
+	Stoker *stoker.View `json:"stoker,omitempty"`
 }
 
 // Path is $XDG_STATE_HOME/matchblox/state.json, defaulting to ~/.local/state.

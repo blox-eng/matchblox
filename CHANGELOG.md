@@ -8,34 +8,36 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
-- A turn that ends on a question waits for you; it no longer shows as done
-  because the progress line came after the question. Control keys in an
+- A session you compacted shows the context it has left.
+- A turn that ends on a question shows as waiting for you, even with a
+  progress line after the question. Control keys in an
   agent's reply never reach the console.
 
 ### Added
 
+- The stoker: press `n` before you sleep (or `f` for a lunch or a meeting).
+  Each Claude Code session that fills its context compacts itself and
+  leaves one RESUME line on how to continue. In the morning, STOKED above
+  the queue shows each compact, its context before and after and its RESUME
+  line. A session that waits for you, or has a line you started to type, is
+  left as it is. The night ends at `[stoker] night_ends` (07:00).
 - The docs at docs.matchblox.com: get started, the console, every key, the
   phone, agents, remote hosts, config, safety, limits, and tmux, the engine
   under matchblox. A test holds every key and command in the README and the
   docs to the binary.
-- Context use for Codex and OpenCode, read from each agent's own files: the
-  rollout Codex holds open, and OpenCode's session storage counted the way
-  OpenCode counts it. The window comes from the model the agent reports;
-  `[sessions.windows]` overrides it. A session is "fresh" before its first
-  turn and "not measured" when its files cannot be read, never a guess.
-  Codex context use needs Linux (its session is found by the files the
-  process holds open).
+- Context use for Codex and OpenCode, the same figure the agent shows
+  itself. `[sessions.windows]` sets the window for a model. A session is
+  "fresh" before its first turn and "not measured" when its files cannot be
+  read. Codex context use needs Linux.
 - An ACCOUNT column in Sessions on wide screens: the provider's mark (`✻`
   Anthropic, `❋` OpenAI, `▣` OpenCode), then the email and plan or "API
   key". Each Claude Code process reads its own config directory
   (`CLAUDE_CONFIG_DIR`), so two logins show two labels. Only those fields are
   read from the auth files; no token reaches the snapshot or the screen.
 - Every agent in tmux: Codex, OpenCode, Gemini CLI, aider, cursor-agent or
-  any command named in `agents` is a session, found by its process name,
-  argv[0] or the script after node or python. Without hooks it is busy while
-  its pane moves and waits when it is idle and its last lines ask
-  ("from the pane:" on its queue row); context use shows "not measured". The
-  first run writes the agents it finds to `agents`.
+  any command named in `agents`. Without hooks, its waits come from its pane
+  ("from the pane:" on its queue row). The first run writes the agents it
+  finds to `agents`.
 - An agent's open pull request shows as `#N` on its queue and Sessions rows,
   and with its title and link in the detail.
 - Sessions shows the queue's word (`asks`, `waits`, `done`) instead of

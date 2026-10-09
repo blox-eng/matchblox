@@ -64,6 +64,9 @@ type Session struct {
 	// Permits: an approval menu, where Enter takes the selected choice.
 	Permits  bool `json:"permits,omitempty"`
 	FromPane bool `json:"from_pane,omitempty"` // busy and idle were read from the pane
+	// Transcript is the Claude Code session file, read back by the service
+	// after a step; it never leaves the host.
+	Transcript string `json:"-"`
 }
 
 // IdlePane is a pane that hosts no agent.
@@ -712,6 +715,7 @@ func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procK
 		return
 	}
 	sess.Progress, sess.LastLine, sess.Asks = u.Progress, u.LastLine, u.Asks
+	sess.Transcript = s.agents.transcript(env.claudeDir, e.SessionID, e.Cwd)
 	long, ok := s.longCtx[key]
 	if !ok {
 		get := func(k string) (string, bool) { return s.FS.Environ(pid, k) }

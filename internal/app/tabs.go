@@ -55,7 +55,7 @@ var views = [...]tabView{
 			return nil
 		},
 		secondary: func(m Model) *action {
-			if d, ok := m.selectedDoor(); ok {
+			if d, ok := m.selectedDoor(); ok && d.ID != stokedRow {
 				return closeDoor(d)
 			}
 			if r, ok := m.selectedRec(); ok {

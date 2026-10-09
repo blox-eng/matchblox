@@ -8,10 +8,12 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/panes"
+	"github.com/blox-eng/matchblox/internal/stoker"
 )
 
 const exe = "/opt/mb/matchblox"
@@ -62,7 +64,7 @@ func door(t *testing.T, e Env, id string) doors.Door {
 func TestDoorsFirstRun(t *testing.T) {
 	e := env(t)
 	got := ids(Doors(e))
-	if want := []string{doors.Tmux, doors.Hooks, doors.WayBack, doors.Guide}; !slices.Equal(got, want) {
+	if want := []string{doors.Tmux, doors.Hooks, doors.WayBack, doors.Guide, doors.Night}; !slices.Equal(got, want) {
 		t.Fatalf("doors = %v, want %v", got, want)
 	}
 	if d := door(t, e, doors.Tmux); !slices.Equal(d.Term, []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}) {
@@ -349,8 +351,8 @@ func TestDoneDoorFolds(t *testing.T) {
 	e.LookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
 	open(t, e, doors.Hooks)
 	open(t, e, doors.WayBack)
-	if got := ids(Doors(e)); !slices.Equal(got, []string{doors.Guide}) {
-		t.Fatalf("open doors = %v, want [guide]", got)
+	if got := ids(Doors(e)); !slices.Equal(got, []string{doors.Guide, doors.Night}) {
+		t.Fatalf("open doors = %v, want [guide night]", got)
 	}
 }
 
@@ -537,5 +539,29 @@ func TestFindAgentsAlwaysKeepsClaudeCode(t *testing.T) {
 	}
 	if got := strings.Join(FindAgents(look), ","); got != "claude,codex" {
 		t.Fatalf("found %q", got)
+	}
+}
+
+// The night door leads to the stoker, which compacts Claude Code only. It
+// folds after the first run and can be closed like any door.
+func TestNightDoorFoldsAfterTheFirstRun(t *testing.T) {
+	e := env(t)
+	d := door(t, e, doors.Night)
+	if !d.Open() || !strings.Contains(d.Why, "n keeps your sessions lit") {
+		t.Fatalf("night = %+v", d)
+	}
+	st, err := stoker.Open(e.StateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Set(stoker.Mode{}.TurnOn(time.Now())); err != nil {
+		t.Fatal(err)
+	}
+	if d := door(t, e, doors.Night); !d.Done {
+		t.Fatalf("night after a run = %+v", d)
+	}
+	e = env(t)
+	if err := Close(e, doors.Night); err != nil || !door(t, e, doors.Night).Closed {
+		t.Fatalf("close night: %v", err)
 	}
 }

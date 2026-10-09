@@ -1,13 +1,14 @@
 # The console
 
-The header shows the host and the machine: CPU, load, pressure, memory and
+The header shows the host, `stoker` or `night → 07:00` while [the
+stoker](stoker.md) runs, and the machine: CPU, load, pressure, memory and
 temperature, each with its trend. Under it are seven tabs, `1 QUEUE` to
 `7 PANES`. A tab that needs you shows it: `1 QUEUE 3` has three agents that
 wait, and `4 PROCS !` has a problem.
 
 The action line under the tabs shows the keys of the open tab, and how old
-the sample is. On a phone the keyboard covers the bottom of the screen, so
-the action line is at the top. See [Keys](keys.md).
+the sample is. It sits at the top, above a phone's keyboard. See
+[Keys](keys.md).
 
 ## The match
 
@@ -30,8 +31,7 @@ The agents that wait for you, the oldest wait first:
 
 Each row shows the agent's last line and its open pull request (`#N`), if
 its worktree has one. `Enter` jumps to the pane. `a` answers in one line.
-After a jump, the console selects the next agent that waits, so the way
-back lands on it.
+Come back from a jump and the next agent that waits is already selected.
 
 Under the agents are the recommendations, ranked. Each one shows its
 evidence and its exact command. The setup steps (`SET UP`) come first while
@@ -44,8 +44,8 @@ name and tmux place, its context use against the model's window, its
 account (on a wide screen), its token burn over 30 minutes, the CPU of its
 process tree, and when to compact (`! compact`) or clear (`▲ clear`).
 
-- Context use comes from the agent's own files. An agent that matchblox
-  cannot read shows "not measured". See [Agents](agents.md).
+- Context use is read from the agent's own files, or shows "not measured".
+  See [Agents](agents.md).
 - The account is the provider's mark, then the email and plan, or
   "API key": `✻` Anthropic, `❋` OpenAI, `▣` OpenCode.
 - An agent can draw a progress bar in its last reply:

@@ -433,3 +433,18 @@ func TestAgentLookPathFindsTheAgentsOwnDirs(t *testing.T) {
 		t.Fatal("found an agent that is not there")
 	}
 }
+
+// The night door is a key in the console, not a file: setup points to it
+// and asks nothing.
+func TestSetupCommandPointsTheNightToTheConsole(t *testing.T) {
+	e := setupEnv(t)
+	var out strings.Builder
+	if err := setupDoors(e, strings.NewReader("\n\n\ny\n"), &out, func([]string) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	night := got[strings.Index(got, "Try a night"):]
+	if strings.Contains(got, "no door") || strings.Contains(night, "y opens it") || !strings.Contains(night, "press n in the console") {
+		t.Fatalf("setup:\n%s", got)
+	}
+}

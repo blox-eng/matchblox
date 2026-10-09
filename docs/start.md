@@ -27,16 +27,13 @@ Run matchblox outside tmux:
 matchblox
 ```
 
-Outside tmux, `matchblox` opens the console in its own tmux session, named
-`matchblox`. A second terminal that runs `matchblox` joins the same session.
-The way back to the console (step 4) finds it in that session. Inside tmux,
-the console runs in the pane where you start it, and the way back does not
-reach it.
+Outside tmux, the console opens in its own tmux session, `matchblox`. Every
+terminal that runs `matchblox` joins it, and `prefix m` brings you back to
+it from any pane. Inside tmux, it opens in the current pane.
 
-The console starts the service in the background if it does not run. The
-service samples the machine once for every console that watches. It keeps
-the history when no console is open. `matchblox serve` runs the service
-in the foreground, for a log or a service manager.
+The service starts with the console and keeps running after it closes: the
+history and the stoker go on. `matchblox serve` runs it in the foreground,
+for a log or a service manager.
 
 ## 3. Answer the first run
 
@@ -53,14 +50,14 @@ this machine, and the agents it finds on `PATH`.
 
 The queue shows the setup steps above everything else, under `SET UP`.
 The queue hooks and the guide show only when Claude Code is on this machine. Each
-step says why it helps. `Enter` shows the exact change before it runs. A
+step says what it gives you. `Enter` shows the exact change before it runs. A
 typed `y` makes the change. `x` closes a step that you do not want.
 
 | Step | What it does |
 |---|---|
 | Install tmux | Installs tmux with your package manager, when it is not there. |
 | Add the queue hooks | Adds the matchblox hooks to `~/.claude/settings.json`, and keeps a backup. Claude Code then tells the queue when it waits. |
-| Add the way back | Adds `prefix m` and a tap target `◂ matchblox` to your tmux config (`~/.tmux.conf`), and keeps a backup. From any pane, one key or one tap comes back to the console. `prefix m` was the tmux key that marks a pane. The tap needs `set -g mouse on` in your tmux config. |
+| Add the way back | Adds `prefix m` and a tap target `◂ matchblox` to your tmux config (`~/.tmux.conf`), and keeps a backup. From any pane, one key or one tap brings you back to the console. It takes over `prefix m`, the tmux key that marks a pane. The tap needs `set -g mouse on`. |
 | Open a guide session | Starts Claude Code with a prompt that reads this page and walks you through it. It uses your tokens. |
 
 A step that is done folds away. `matchblox setup` shows every step again,
