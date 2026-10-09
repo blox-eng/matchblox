@@ -245,6 +245,10 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 
 - Plans, specs, docs and on-screen text use ASD-STE100: short sentences,
   one instruction each, active voice.
+- Docs, the README and the site lead with what the reader gets and what to
+  do. They never explain why matchblox is built the way it is, defend a
+  choice ("never a guess", "so that…") or praise matchblox. The why lives in
+  design/ and the ledger.
 - A status is a glyph and a word: `✦ busy`, `╿ asks`, `! compact`,
   `▲ 92 °C`.
 - An empty state is one sentence (and the action, when there is one):

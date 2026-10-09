@@ -58,9 +58,8 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
 - **Sessions**: context use (Claude Code, Codex, OpenCode), the account
   (`✻` Anthropic, `❋` OpenAI, `▣` OpenCode), token burn, CPU, and when to
   compact or clear.
-- **The stoker**: while you are away, `f` (or `n` until the morning)
-  compacts each full idle Claude Code session and asks it for a RESUME
-  line. When you are back, STOKED lists each step, then the queue.
+- **The stoker**: press `n` before you sleep. Each session that fills its
+  context compacts itself and leaves one line on how to continue.
 - **Machine health**, **detached busy loops**, **git** worktrees that are
   safe to remove, **recommendations** with their exact command, and 24 hours
   of **history**.

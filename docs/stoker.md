@@ -1,64 +1,45 @@
 # The stoker
 
-You leave your agents at work: for the night, for lunch, for a meeting.
-While you are away, some sessions fill their context and stop. The stoker
-keeps them lit. It compacts each full session and asks the agent for one
-line that says how to continue. When you are back, the console shows what
-the stoker did, then the queue.
-
-The stoker uses no model of its own and answers nothing. It sends one
-command, and only when the pane, read right before, shows an empty prompt.
+Go to sleep with ten agents at work and wake up to ten sessions ready to
+go on. While you are away, the stoker compacts each session that fills its
+context and has it write one line: how to continue. In the morning you read
+that line and pick up where the agent left off.
 
 ## Turn it on
 
 | Key | What it does | The header shows |
 |---|---|---|
-| `f` | Turns the stoker on, until you turn it off. `f` again turns it off. | `stoker` |
-| `n` | Starts a night: the stoker runs until `night_ends` (07:00 by default), then turns itself off. `n` again ends the night now. | `night → 07:00` |
+| `n` | A night: the stoker runs until `night_ends` (07:00 by default), then stops. `n` again stops it now. | `night → 07:00` |
+| `f` | The stoker on, for lunch or a meeting, until `f` again. | `stoker` |
 
-The stoker runs in the service, not in the console. Close the console and
-the stoker keeps working. It also keeps its state when the service restarts.
+It runs in the service: close the console, restart the service, and it
+keeps going. The first time, **Try a night** under SET UP starts one.
 
-The first time, the queue shows **Try a night** under SET UP. `Enter`
-there starts a night. The step folds after the first run.
+## Which sessions it compacts
 
-## What it does
+A Claude Code session in tmux that is:
 
-While the stoker is on, the service checks each session after each sample.
-A session gets a compact when all of these are true:
+- idle, at or above `compact_at` (85% by default),
+- not waiting for you: no question, no permission prompt,
+- not left for a day or more (`cold`),
+- not compacted by the stoker in the last 30 minutes.
 
-- It is a Claude Code session in a tmux pane.
-- It is idle, and it was idle for less than 24 hours. A cold session gets
-  nothing: nobody comes back to it, so a compact would only spend tokens.
-- Its context is at or above `compact_at` (85% by default).
-- It does not wait for you: no question and no permission prompt. Claude
-  Code's reminder "Claude is waiting for your input" after a finished turn
-  is not a question.
-- The stoker did not send it a step in the last 30 minutes.
+Right before it types, and again before the `Enter`, it reads the pane. A
+permission prompt, a question or a line you started to type stops the step.
+A night sends 30 steps at most.
 
-Right before it types, the service reads the pane on the host again. It
-sends nothing when the session is busy, when the queue says the session
-waits for you, or when the pane shows a permission prompt, a question or
-text you typed and did not send. Then it types this into the pane:
+It types this:
 
 ```text
 /compact Keep the task, the branch and last commit, the files you changed, what to read first, every open decision and the next step. End with one line that starts with RESUME: and says how to continue.
 ```
 
-Before the `Enter`, it reads the pane once more: the prompt must hold this
-text, and nothing may ask. A run sends at most 30 steps.
+It never answers a question or a permission prompt, never sends
+"continue", and never ends, kills or removes anything.
 
-## What it never does
+## In the morning
 
-- It never answers a question or a permission prompt. A session that waits
-  stays in the queue for you.
-- It never sends "continue". The session stays where the compact left it.
-- It never ends, kills or removes anything. Those wait for you, as in the
-  day.
-
-## When you are back
-
-The console shows **STOKED** above the queue, with the time of the run:
+**STOKED** is the first thing in the queue:
 
 ```text
  STOKED 23:10 → 07:00 · 2
@@ -67,38 +48,20 @@ The console shows **STOKED** above the queue, with the time of the run:
    03:02  ╿ app-review       %2         skipped: the pane %2 has text you typed
 ```
 
-Each row is one step: the time, the session's match, its name, its pane,
-and the result. A compact shows the context before and after it, then the
-RESUME line the agent wrote ("compacted" when the agent's file gives no
-count). "skipped: …" says what the pane or the queue showed right before
-the send, so the stoker sent nothing. "typed, not sent: …" means the text
-is in the prompt without its `Enter`: send it or clear it yourself.
+- `176k → 9k`: the context before and after the compact.
+- `RESUME:` the agent's own line on how to continue. Paste it, or just
+  say "go on".
+- `skipped: …`: what stopped the step. The session is as you left it.
+- `typed, not sent: …`: the compact is in the prompt without its `Enter`.
+  Send it or clear it.
 
-`Enter` on STOKED folds it. A result that comes in after you fold it, and
-the next run, show again.
+`Enter` folds STOKED. Every step is also in `stoker.jsonl`, in
+`$XDG_STATE_HOME/matchblox` (`~/.local/state/matchblox` by default): the
+exact command, what the pane showed, the result and the RESUME line.
 
-Each step also goes to `stoker.jsonl` in `$XDG_STATE_HOME/matchblox`
-(`~/.local/state/matchblox` by default): the time,
-the session, the rule, the exact command, what the host said before the
-send, the result, and the RESUME line.
-
-## What it costs
-
-The stoker itself costs nothing: it reads files and tmux on your machine.
-Each compact costs what a `/compact` you type costs: the agent's model
-reads the context once and writes a summary. A session that you continue
-in the morning compacts at its limit anyway, so the stoker only does it
-earlier. Cold sessions are left alone for this reason.
-
-## Set the end of a night
+## End the night earlier or later
 
 ```toml
 [stoker]
-night_ends = "07:00"   # n runs the stoker until this time
+night_ends = "06:30"
 ```
-
-## Agents
-
-The stoker compacts Claude Code only. Codex and OpenCode have a `/compact`,
-but it takes no instruction, so it cannot ask for the RESUME line. Their
-sessions stay as they are and show in the queue as usual.

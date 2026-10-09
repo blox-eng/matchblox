@@ -8,52 +8,36 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
-- A session you compacted shows the context the compact left, not the full
-  context of its last turn before it.
-- A turn that ends on a question waits for you; it no longer shows as done
-  because the progress line came after the question. Control keys in an
+- A session you compacted shows the context it has left.
+- A turn that ends on a question shows as waiting for you, even with a
+  progress line after the question. Control keys in an
   agent's reply never reach the console.
 
 ### Added
 
-- The stoker keeps your sessions lit while you are away. `f` turns it on or
-  off, and `n` runs it until the morning (`[stoker] night_ends`, 07:00).
-  Each Claude Code session that is idle and full gets `/compact` with an
-  instruction to keep the task, the branch, the changed files, what to read
-  first, the open decisions and the next step, and to end with a RESUME
-  line. Right before it types, and again before the Enter, it reads the pane:
-  a permission prompt, a question or text you typed stops the step. The
-  stoker never answers
-  a question or a permission prompt, never sends "continue", leaves a cold
-  session alone, and sends at most one step per session per 30 minutes and
-  30 per run. When you are back, STOKED above the queue lists each step with
-  the context before and after and its RESUME line; `Enter` folds it. Every
-  step goes to `stoker.jsonl` in `$XDG_STATE_HOME/matchblox`
-  (`~/.local/state/matchblox` by default). The mode survives a
-  restart of the console and of the service. A "Try a night" step in the
-  setup shows it once.
+- The stoker: press `n` before you sleep (or `f` for a lunch or a meeting).
+  Each Claude Code session that fills its context compacts itself and
+  leaves one RESUME line on how to continue. In the morning, STOKED above
+  the queue shows each compact, its context before and after and its RESUME
+  line. A session that waits for you, or has a line you started to type, is
+  left as it is. The night ends at `[stoker] night_ends` (07:00).
 - The docs at docs.matchblox.com: get started, the console, every key, the
   phone, agents, remote hosts, config, safety, limits, and tmux, the engine
   under matchblox. A test holds every key and command in the README and the
   docs to the binary.
-- Context use for Codex and OpenCode, read from each agent's own files: the
-  rollout Codex holds open, and OpenCode's session storage counted the way
-  OpenCode counts it. The window comes from the model the agent reports;
-  `[sessions.windows]` overrides it. A session is "fresh" before its first
-  turn and "not measured" when its files cannot be read, never a guess.
-  Codex context use needs Linux (its session is found by the files the
-  process holds open).
+- Context use for Codex and OpenCode, the same figure the agent shows
+  itself. `[sessions.windows]` sets the window for a model. A session is
+  "fresh" before its first turn and "not measured" when its files cannot be
+  read. Codex context use needs Linux.
 - An ACCOUNT column in Sessions on wide screens: the provider's mark (`✻`
   Anthropic, `❋` OpenAI, `▣` OpenCode), then the email and plan or "API
   key". Each Claude Code process reads its own config directory
   (`CLAUDE_CONFIG_DIR`), so two logins show two labels. Only those fields are
   read from the auth files; no token reaches the snapshot or the screen.
 - Every agent in tmux: Codex, OpenCode, Gemini CLI, aider, cursor-agent or
-  any command named in `agents` is a session, found by its process name,
-  argv[0] or the script after node or python. Without hooks it is busy while
-  its pane moves and waits when it is idle and its last lines ask
-  ("from the pane:" on its queue row); context use shows "not measured". The
-  first run writes the agents it finds to `agents`.
+  any command named in `agents`. Without hooks, its waits come from its pane
+  ("from the pane:" on its queue row). The first run writes the agents it
+  finds to `agents`.
 - An agent's open pull request shows as `#N` on its queue and Sessions rows,
   and with its title and link in the detail.
 - Sessions shows the queue's word (`asks`, `waits`, `done`) instead of

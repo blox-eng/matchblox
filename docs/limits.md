@@ -1,18 +1,18 @@
 # Limits
 
-matchblox says what it does not do yet. Each limit has its issue.
+What does not work yet, and what to do until it does.
 
-| Limit | Why, and what to do |
+| Limit | What to do |
 |---|---|
-| No release binary yet | The install script builds from source, and needs Go, on this machine and on each host you connect. The first release comes with [#27](https://github.com/blox-eng/matchblox/issues/27). |
-| The way back needs the console's own session | Run `matchblox` outside tmux. Inside tmux the console runs in place, and `prefix m` does not reach it. The tap on `◂ matchblox` also needs `set -g mouse on`. |
-| The stoker compacts Claude Code only | The `/compact` of Codex and OpenCode takes no instruction, so it cannot ask for the RESUME line. Their sessions stay as they are. See [the stoker](stoker.md). |
-| Codex context use needs Linux | matchblox finds a Codex session through the files that the process holds open. macOS cannot list them, so Codex shows "not measured" there. |
-| Other agents show "not measured" | Context use needs an adapter for the agent's files. Claude Code, Codex and OpenCode have one. Every agent in tmux still shows in the queue and in Sessions. |
-| Waits of agents other than Claude Code can come late | They are read from the pane, not told through hooks. An agent is in the queue when its pane is idle and its last lines ask. |
-| tmux only | matchblox finds agents in tmux panes. Other multiplexers are not supported. |
+| No release binary yet | Install Go: the install script builds from source, here and on each host you connect. The first release: [#27](https://github.com/blox-eng/matchblox/issues/27). |
+| The way back needs the console's own session | Run `matchblox` outside tmux. The tap on `◂ matchblox` also needs `set -g mouse on`. |
+| The stoker compacts Claude Code only | Compact Codex and OpenCode sessions yourself: Sessions marks them `! compact`. |
+| Codex context use needs Linux | On macOS, Codex shows "not measured". |
+| Context use for Claude Code, Codex and OpenCode only | Other agents show "not measured", and still show in the queue and in Sessions. |
+| Waits of agents other than Claude Code come from their pane | They reach the queue once their pane is idle and its last lines ask. |
+| tmux only | Run your agents in tmux. |
 | No native Windows | Use Linux or macOS. |
-| One host on a screen | The console shows one host at a time. `esc` goes back to Hosts. |
+| One host on a screen | `esc` goes back to Hosts. |
 
 ## Soon
 
