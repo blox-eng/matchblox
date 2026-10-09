@@ -76,6 +76,9 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		s.replace()
 		return proto.Result{}
 	}
+	if verb, ok := strings.CutPrefix(a.RecID, "stoker:"); ok {
+		return s.stokerAct(verb, time.Now())
+	}
 	key := a.RecID + "\x00" + a.Which
 	id, door := strings.CutPrefix(a.RecID, "door:")
 	if door {

@@ -36,6 +36,12 @@ type Config struct {
 	Git           Git      `toml:"git"`
 	History       History  `toml:"history"`
 	Hooks         Hooks    `toml:"hooks"`
+	Stoker        Stoker   `toml:"stoker"`
+}
+
+// Stoker compacts full sessions while the builder is away.
+type Stoker struct {
+	NightEnds string `toml:"night_ends"` // "07:00": n runs the stoker until then
 }
 
 // Hooks run a command when something happens. The command is an argv list,
@@ -124,7 +130,8 @@ func Default() Config {
 			MinAge:   Duration{2 * time.Minute},
 			Commands: []string{"sh", "bash", "zsh", "dash", "fish"},
 		},
-		Git: Git{Interval: Duration{5 * time.Minute}, Remote: "origin"},
+		Git:    Git{Interval: Duration{5 * time.Minute}, Remote: "origin"},
+		Stoker: Stoker{NightEnds: "07:00"},
 	}
 }
 
