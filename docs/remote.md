@@ -15,9 +15,6 @@ matchblox connect ws-1
 This uses your own ssh login one time. It runs the install script on
 `ws-1`, and adds a key that can start only the console's stream there: no
 shell, no forwarding.
-<!-- until-release -->
-Until the first release, that script builds from source, so `ws-1` needs Go.
-<!-- /until-release -->
 
 ## Open the console of a host
 

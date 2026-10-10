@@ -11,16 +11,10 @@ curl -fsSL https://matchblox.sh | sh
 Read the script first at [matchblox.sh](https://matchblox.sh/install.sh).
 It installs matchblox to `/usr/local/bin`, or to `~/.local/bin`, and starts
 it.
-<!-- until-release -->
-Until the first release, the script builds matchblox from source, and
-that needs Go. The same build with Go:
-<!-- /until-release -->
-<!-- after-release
 You get the release binary for your machine. The script checks its
 checksum and, with `gh` logged in, that CI built it from this repository,
 and installs nothing that fails a check. With Go, the same version builds
 from source:
-after-release -->
 
 ```sh
 go install github.com/blox-eng/matchblox/cmd/matchblox@latest
