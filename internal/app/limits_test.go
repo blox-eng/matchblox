@@ -69,6 +69,16 @@ func TestEachAccountHasALimitsLine(t *testing.T) {
 	if next.(Model).tab == tabQueue {
 		t.Fatalf("a tap on the tab row did not switch:\n%s", screen(next))
 	}
+	// A tap on a body row under three limits lines selects that row.
+	for i, l := range strings.Split(screen(m), "\n") {
+		if strings.Contains(l, "app-review") {
+			tapped, _ := m.Update(tea.MouseClickMsg{X: 10, Y: i, Button: tea.MouseLeft})
+			if it, ok := tapped.(Model).selectedQueue(); !ok || it.Name != "app-review" {
+				t.Fatalf("a tap on line %d selected %+v", i, it)
+			}
+			break
+		}
+	}
 	// No account: no line, the tabs stay where they were.
 	none := queueState()
 	none.Limits = nil
@@ -118,6 +128,14 @@ func TestARecommendationShowsItsResult(t *testing.T) {
 	next, _ = next.Update(resultMsg(proto.Result{ActID: f.lastAct(t), Err: "the pane is gone"}))
 	if out := screen(next); !strings.Contains(out, "✗ failed: the pane is gone · x tries again") {
 		t.Fatalf("a failure does not say so on the row:\n%s", out)
+	}
+	// The rec goes, and comes back later: it shows its title, not an old result.
+	gone := st
+	gone.Recommendations = nil
+	next, _ = next.Update(stateMsg(gone))
+	next, _ = next.Update(stateMsg(st))
+	if out := screen(next); strings.Contains(out, "✗ failed") || !strings.Contains(out, "▲ The week runs out Wed ~19:00") {
+		t.Fatalf("an old result came back with the rec:\n%s", out)
 	}
 }
 

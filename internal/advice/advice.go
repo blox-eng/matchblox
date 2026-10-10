@@ -151,18 +151,20 @@ func limitRecs(snap sample.Snapshot) []Rec {
 		if hot == nil {
 			continue
 		}
-		left := "the week is spent"
-		if a.Sparks != nil && *a.Sparks > 0 {
-			left = fmt.Sprintf("%d sparks left", *a.Sparks)
+		// A spent week waits for its reset: a compact saves nothing.
+		if a.Sparks != nil && *a.Sparks == 0 {
+			continue
 		}
+		left := ""
+		if a.Sparks != nil {
+			left = fmt.Sprintf(": %d sparks left", *a.Sparks)
+		}
+		// The forecast moves each sample; the title, and so the id, does not.
 		r := Rec{
 			Level: "warn", score: 650,
-			Title:    fmt.Sprintf("The week runs out %s: compact %s", limits.When(a.Forecast.Out, snap.At, "~"), hot.Name),
-			Evidence: fmt.Sprintf("%s: %s · %s", a.Account, left, cost(*hot)),
+			Title:    "The week runs short: compact " + hot.Name,
+			Evidence: fmt.Sprintf("out %s · %s%s · %s", limits.When(a.Forecast.Out, snap.At, "~"), a.Account, left, cost(*hot)),
 			Primary:  &Action{Label: "jump to the session", Nav: true, Steps: one("tmux", "switch-client", "-t", hot.Pane)},
-		}
-		if a.Sparks != nil && *a.Sparks == 0 {
-			r.Level = "crit"
 		}
 		// Type only into an idle session, as the compact rec does.
 		if hot.Status == "idle" {

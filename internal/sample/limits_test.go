@@ -77,7 +77,8 @@ func TestEachAccountShowsItsLimits(t *testing.T) {
 		t.Fatalf("the tapped account: %+v", max)
 	}
 	team := got["anthropic work@example.net · Team"]
-	if team.State != limits.Unmeasured || !strings.Contains(team.Fix, "Show your limits") {
+	// Its config directory is not the door's: the fix opens the door there.
+	if team.State != limits.Unmeasured || team.Fix != "run CLAUDE_CONFIG_DIR="+work+" matchblox setup" {
 		t.Fatalf("the account without a tap: %+v", team)
 	}
 	plus := got["openai builder@example.org · Plus"]

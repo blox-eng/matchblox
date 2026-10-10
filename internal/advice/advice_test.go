@@ -212,7 +212,7 @@ func TestAWeekThatRunsShortRecommendsItsHottestSession(t *testing.T) {
 		t.Fatalf("recs: %+v", got)
 	}
 	r := got[0]
-	if r.Title != "The week runs out Wed ~19:00: compact api-auth" || r.Level != "warn" {
+	if r.Title != "The week runs short: compact api-auth" || r.Level != "warn" || !strings.HasPrefix(r.Evidence, "out Wed ~19:00 · ") {
 		t.Fatalf("title %q level %q", r.Title, r.Level)
 	}
 	if !strings.Contains(r.Evidence, "a@example.com · Max: 3 sparks left") || !strings.Contains(r.Evidence, "api-auth burns 42k tokens in 30 min") {
@@ -224,6 +224,27 @@ func TestAWeekThatRunsShortRecommendsItsHottestSession(t *testing.T) {
 	if r.Second == nil || !r.Second.Destructive || r.Second.Guards[0].IdlePane != "%2" || strings.Join(r.Second.Steps[0], " ") != "tmux send-keys -t %2 /compact Enter" {
 		t.Fatalf("secondary %+v", r.Second)
 	}
+	// The forecast moves every sample: the rec keeps its id, so an act
+	// confirmed meanwhile still finds it.
+	id := r.ID
+	acct.Forecast.Out = out.Add(time.Hour)
+	snap.Limits[0] = acct
+	for _, x := range Build(snap, nil) {
+		if strings.Contains(x.Title, "week") && x.ID != id {
+			t.Fatalf("the id moved with the forecast: %s → %s", id, x.ID)
+		}
+	}
+	// A spent week: a compact saves nothing, no rec.
+	zero := 0
+	spent := acct
+	spent.Sparks = &zero
+	snap.Limits[0] = spent
+	for _, x := range Build(snap, nil) {
+		if strings.Contains(x.Title, "week") {
+			t.Fatalf("a rec for a spent week: %+v", x)
+		}
+	}
+	snap.Limits[0] = acct
 	// A busy session gets the jump, never a typed command.
 	snap.Sessions[1].Status = "busy"
 	for _, r := range Build(snap, nil) {

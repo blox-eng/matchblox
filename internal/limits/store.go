@@ -23,25 +23,25 @@ type Sample struct {
 	Reading
 }
 
-// Store keeps the readings of every account in a local file, one line for
-// each new reading, for the usage patterns to read. It prunes once, at the
-// first append of a service.
+// Store keeps the readings of every account in a local file, one line each
+// time an account's figures change, for the usage patterns to read. It
+// prunes at the first append of a service, then once a day.
 type Store struct {
 	Path string
 
-	pruned bool
-	last   map[string]time.Time // account -> its newest stored reading
+	prunedAt time.Time
+	last     map[string]Reading // account -> its newest stored reading
 }
 
 func key(provider, account string) string { return provider + "\x00" + account }
 
 // Append stores the measured readings that are newer than the stored ones.
 func (s *Store) Append(accts []Account, now time.Time) error {
-	if !s.pruned {
+	if s.prunedAt.IsZero() || now.Sub(s.prunedAt) >= 24*time.Hour {
 		if err := s.prune(now); err != nil {
 			return err
 		}
-		s.pruned = true
+		s.prunedAt = now
 	}
 	var buf bytes.Buffer
 	for _, a := range accts {
@@ -49,7 +49,7 @@ func (s *Store) Append(accts []Account, now time.Time) error {
 			continue
 		}
 		k := key(a.Provider, a.Account)
-		if !a.At.After(s.last[k]) {
+		if last, ok := s.last[k]; ok && (!a.At.After(last.At) || sameWindows(last.Windows, a.Windows)) {
 			continue
 		}
 		b, err := json.Marshal(Sample{a.Provider, a.Account, Reading{At: a.At, Windows: a.Windows}})
@@ -57,7 +57,7 @@ func (s *Store) Append(accts []Account, now time.Time) error {
 			return err
 		}
 		buf.Write(append(b, '\n'))
-		s.last[k] = a.At
+		s.last[k] = Reading{At: a.At, Windows: a.Windows}
 	}
 	if buf.Len() == 0 {
 		return nil
@@ -75,7 +75,7 @@ func (s *Store) Append(accts []Account, now time.Time) error {
 // prune drops the lines older than Keep and learns the newest reading of
 // each account.
 func (s *Store) prune(now time.Time) error {
-	s.last = map[string]time.Time{}
+	s.last = map[string]Reading{}
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0o700); err != nil {
 		return err
 	}
@@ -97,9 +97,12 @@ func (s *Store) prune(now time.Time) error {
 			continue
 		}
 		keep.Write(append(sc.Bytes(), '\n'))
-		if k := key(x.Provider, x.Account); x.At.After(s.last[k]) {
-			s.last[k] = x.At
+		if k := key(x.Provider, x.Account); x.At.After(s.last[k].At) {
+			s.last[k] = x.Reading
 		}
+	}
+	if err := sc.Err(); err != nil {
+		return err // never rewrite from half a file
 	}
 	if !dropped {
 		return nil
@@ -123,6 +126,18 @@ func writeFile(path string, b []byte) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
+}
+
+func sameWindows(a, b []Window) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].UsedPct != b[i].UsedPct || a[i].Minutes != b[i].Minutes || !a[i].ResetsAt.Equal(b[i].ResetsAt) {
+			return false
+		}
+	}
+	return true
 }
 
 // tapPath is the reading of one Claude Code config directory.
@@ -165,11 +180,22 @@ func Tap(input []byte, claudeDir, stateDir string, now time.Time) error {
 		min int
 	}{{in.RateLimits.FiveHour, BoxMinutes}, {in.RateLimits.SevenDay, WeekMinutes}} {
 		if w.cw != nil {
-			r.Windows = append(r.Windows, Window{UsedPct: w.cw.Used, Minutes: w.min, ResetsAt: time.Unix(w.cw.ResetsAt, 0)})
+			r.Windows = append(r.Windows, Window{UsedPct: w.cw.Used, Minutes: w.min, ResetsAt: unix(w.cw.ResetsAt)})
 		}
 	}
 	if len(r.Windows) == 0 {
 		return nil
+	}
+	// Each Claude Code process reports the figures of its own last answer:
+	// an idle one must not lower what a busy one saw in the same window.
+	if old, ok := ReadTap(stateDir, claudeDir); ok {
+		for i, w := range r.Windows {
+			for _, o := range old.Windows {
+				if o.Minutes == w.Minutes && o.ResetsAt.Equal(w.ResetsAt) && !w.ResetsAt.IsZero() && o.UsedPct > w.UsedPct {
+					r.Windows[i].UsedPct = o.UsedPct
+				}
+			}
+		}
 	}
 	b, err := json.Marshal(tapFile{filepath.Clean(claudeDir), r})
 	if err != nil {

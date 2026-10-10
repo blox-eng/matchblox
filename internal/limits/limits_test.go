@@ -86,6 +86,11 @@ func TestAnOldReadingSaysHowOld(t *testing.T) {
 	if *a.Matches != 5 || !a.MatchesReset.IsZero() {
 		t.Fatalf("a window past its reset: %d matches, reset %v", *a.Matches, a.MatchesReset)
 	}
+	// Every window reset since: the figures are known, not old.
+	all := &Reading{At: now.Add(-2 * time.Hour), Windows: []Window{{UsedPct: 90, Minutes: BoxMinutes, ResetsAt: now.Add(-time.Minute)}}}
+	if a := Build("anthropic", "", SourceClaude, all, now, quiet); a.State != Measured {
+		t.Fatalf("all reset since: %q", a.State)
+	}
 	r.At = now.Add(-10 * time.Minute)
 	if a := Build("anthropic", "", SourceClaude, r, now, quiet); a.State != Measured {
 		t.Fatalf("a fresh reading: %q", a.State)
@@ -209,11 +214,27 @@ func TestTheStatusLineTapKeepsOnlyTheLimits(t *testing.T) {
 	if _, ok := ReadTap(dir, "/home/other/.claude"); ok {
 		t.Fatal("another config directory read this one's limits")
 	}
+	// An idle session reports its last answer's figures: the same window
+	// keeps the higher use.
+	idle := strings.Replace(statusLine, `"seven_day":{"used_percentage":2,`, `"seven_day":{"used_percentage":1,`, 1)
+	if err := Tap([]byte(idle), "/home/dev/.claude", dir, now.Add(30*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := ReadTap(dir, "/home/dev/.claude"); r.Windows[1].UsedPct != 2 {
+		t.Fatalf("an idle session lowered the week: %+v", r.Windows[1])
+	}
+	// No resets_at is not a reset.
+	if err := Tap([]byte(`{"rate_limits":{"five_hour":{"used_percentage":50}}}`), "/home/x/.claude", dir, now); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := ReadTap(dir, "/home/x/.claude"); !r.Windows[0].ResetsAt.IsZero() {
+		t.Fatalf("resets_at 0 became a time: %v", r.Windows[0].ResetsAt)
+	}
 	// An API key session has no rate_limits: the last reading stays.
 	if err := Tap([]byte(`{"session_id":"s-2"}`), "/home/dev/.claude", dir, now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	if r, _ := ReadTap(dir, "/home/dev/.claude"); !r.At.Equal(now) {
+	if r, _ := ReadTap(dir, "/home/dev/.claude"); !r.At.Equal(now.Add(30 * time.Second)) {
 		t.Fatalf("a status line without limits replaced the reading: %+v", r)
 	}
 }
@@ -225,7 +246,8 @@ func TestTheStoreKeepsFiveWeeksOfChanges(t *testing.T) {
 	s := &Store{Path: path}
 	a := Account{Provider: "anthropic", Account: "a@example.com · Max", State: Measured, At: mon, Windows: []Window{week(10)}}
 	old := a
-	old.At = mon.Add(-40 * 24 * time.Hour)
+	old.At = mon.Add(-20 * 24 * time.Hour)
+	old.Windows = []Window{week(5)}
 	for _, x := range []Account{old, a, a} {
 		if err := s.Append([]Account{x}, x.At); err != nil {
 			t.Fatal(err)
@@ -238,20 +260,41 @@ func TestTheStoreKeepsFiveWeeksOfChanges(t *testing.T) {
 	if n := lines(t, path); n != 2 {
 		t.Fatalf("%d lines, want the old one and one for the same reading twice", n)
 	}
+	// The tap stamps every status refresh: the same figures later are not
+	// a new sample.
+	same := a
+	same.At = mon.Add(time.Minute)
+	if err := s.Append([]Account{same}, same.At); err != nil {
+		t.Fatal(err)
+	}
+	if n := lines(t, path); n != 2 {
+		t.Fatalf("%d lines: the same figures were stored again", n)
+	}
 	b := a
 	b.At = mon.Add(time.Hour)
+	b.Windows = []Window{week(12)}
 	if err := s.Append([]Account{b}, b.At.Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if n := lines(t, path); n != 3 {
 		t.Fatalf("%d lines after a new reading", n)
 	}
-	fresh := &Store{Path: path} // a new service: it prunes once
+	fresh := &Store{Path: path} // a new service learns what is stored
 	if err := fresh.Append([]Account{b}, mon.Add(2*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	if n := lines(t, path); n != 2 {
-		t.Fatalf("%d lines: the 40-day-old one is still there", n)
+	if n := lines(t, path); n != 3 {
+		t.Fatalf("%d lines: a new service stored a known reading again", n)
+	}
+	// A service that runs for weeks prunes each day.
+	late := b
+	late.At = mon.Add(40 * 24 * time.Hour)
+	late.Windows = []Window{week(1)}
+	if err := fresh.Append([]Account{late}, late.At); err != nil {
+		t.Fatal(err)
+	}
+	if n := lines(t, path); n != 1 {
+		t.Fatalf("%d lines: a long-running service did not prune", n)
 	}
 	if fi, _ := os.Stat(path); fi.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %v", fi.Mode())

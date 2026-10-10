@@ -85,7 +85,7 @@ func Build(provider, account, source string, r *Reading, now time.Time, q Quiet)
 		return a
 	}
 	a.State, a.At, a.Windows = Measured, r.At, r.Windows
-	if now.Sub(r.At) > StaleAfter {
+	if now.Sub(r.At) > StaleAfter && !allReset(r.Windows, now) {
 		a.State = Stale
 	}
 	for _, w := range r.Windows {
@@ -107,6 +107,27 @@ func Build(provider, account, source string, r *Reading, now time.Time, q Quiet)
 	}
 	return a
 }
+
+// allReset: every window reset after the reading, so its figures are known.
+func allReset(ws []Window, now time.Time) bool {
+	for _, w := range ws {
+		if w.ResetsAt.IsZero() || w.ResetsAt.After(now) {
+			return false
+		}
+	}
+	return true
+}
+
+// unix is a resets_at; 0 (none given) is no time, not 1970.
+func unix(sec int64) time.Time {
+	if sec <= 0 {
+		return time.Time{}
+	}
+	return time.Unix(sec, 0)
+}
+
+// Unix is unix for the readers of other agents.
+func Unix(sec int64) time.Time { return unix(sec) }
 
 // count is how many units are left: a part of one still counts.
 func count(leftPct, unit float64) int {

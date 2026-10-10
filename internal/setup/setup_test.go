@@ -664,4 +664,9 @@ func TestTheLimitsDoorTapsTheStatusLine(t *testing.T) {
 	if d := door(t, e, doors.Limits); !d.Done {
 		t.Fatalf("a wrapped status line is not done: %+v", d)
 	}
+	// Another build of matchblox taps it already.
+	writeFile(t, path, `{"statusLine": {"type": "command", "command": "/opt/matchblox-dev hook statusline"}}`+"\n")
+	if d := door(t, e, doors.Limits); !d.Done {
+		t.Fatalf("matchblox-dev is wrapped again: %+v", d)
+	}
 }

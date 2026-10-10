@@ -449,6 +449,11 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 					r, _ = limits.ReadTap(s.LimitsDir, s.asProcess(env.claudeDir))
 				}
 				lims.add(sess, limits.SourceClaude, r)
+				if r == nil && env.claudeDir != filepath.Join(s.Home, ".claude") {
+					// The door edits the default settings: name the one this
+					// session reads.
+					lims.fix(sess, "run CLAUDE_CONFIG_DIR="+s.asProcess(env.claudeDir)+" matchblox setup")
+				}
 			}
 		case "codex":
 			sess.Account, sess.Provider = s.accounts.codexAccount(env), "openai"
@@ -895,6 +900,13 @@ type limitSources map[[2]string]*limitSource
 type limitSource struct {
 	provider, account, source string
 	r                         *limits.Reading
+	fix                       string // replaces the source's fix while there is no reading
+}
+
+func (l limitSources) fix(s Session, fix string) {
+	if x, ok := l[[2]string{s.Provider, s.Account}]; ok && x.r == nil {
+		x.fix = fix
+	}
 }
 
 // add counts a session's account. An API key has no plan limits: no line.
@@ -905,7 +917,7 @@ func (l limitSources) add(s Session, source string, r *limits.Reading) {
 	k := [2]string{s.Provider, s.Account}
 	cur, ok := l[k]
 	if !ok {
-		l[k] = &limitSource{s.Provider, s.Account, source, r}
+		l[k] = &limitSource{provider: s.Provider, account: s.Account, source: source, r: r}
 		return
 	}
 	if r != nil && (cur.r == nil || r.At.After(cur.r.At)) {
@@ -916,7 +928,11 @@ func (l limitSources) add(s Session, source string, r *limits.Reading) {
 func (l limitSources) build(now time.Time, q limits.Quiet) []limits.Account {
 	out := make([]limits.Account, 0, len(l))
 	for _, x := range l {
-		out = append(out, limits.Build(x.provider, x.account, x.source, x.r, now, q))
+		a := limits.Build(x.provider, x.account, x.source, x.r, now, q)
+		if a.State == limits.Unmeasured && x.fix != "" && x.account != "API key" {
+			a.Fix = x.fix
+		}
+		out = append(out, a)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Provider != out[j].Provider {

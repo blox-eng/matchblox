@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
@@ -25,7 +26,7 @@ func statusLine(args []string, stdin io.Reader, out io.Writer, env func(string) 
 	_ = limits.Tap(input, dir, stateDir, now)
 	if len(args) > 1 && args[0] == "--" {
 		cmd := exec.Command(args[1], args[2:]...) //nolint:gosec // the builder's own status line, from their settings
-		cmd.Stdin, cmd.Stdout = bytes.NewReader(input), out
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = bytes.NewReader(input), out, os.Stderr
 		_ = cmd.Run()
 		return nil
 	}

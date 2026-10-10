@@ -69,7 +69,8 @@ func withStatusLine(old []byte, exe string) ([]byte, error) {
 		if err := json.Unmarshal(cur[j].val, &wrapped); err != nil {
 			return nil, fmt.Errorf("statusLine.command: %w", err)
 		}
-		if f := shellWords(wrapped); len(f) >= 3 && filepath.Base(f[0]) == "matchblox" && f[1] == "hook" && f[2] == "statusline" {
+		// Any build of matchblox (matchblox-dev too) already taps it.
+		if f := shellWords(wrapped); len(f) >= 3 && strings.HasPrefix(filepath.Base(f[0]), "matchblox") && f[1] == "hook" && f[2] == "statusline" {
 			return old, nil
 		}
 	}

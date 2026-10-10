@@ -129,7 +129,7 @@ func (r *agentReader) codexUsage(path string) (Usage, *limits.Reading, codexFoun
 			r := &limits.Reading{At: c.Timestamp}
 			for _, w := range []*codexWindow{c.Payload.RateLimits.Primary, c.Payload.RateLimits.Secondary} {
 				if w != nil && w.Minutes > 0 {
-					r.Windows = append(r.Windows, limits.Window{UsedPct: w.Used, Minutes: w.Minutes, ResetsAt: time.Unix(w.ResetsAt, 0)})
+					r.Windows = append(r.Windows, limits.Window{UsedPct: w.Used, Minutes: w.Minutes, ResetsAt: limits.Unix(w.ResetsAt)})
 				}
 			}
 			switch {

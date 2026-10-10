@@ -386,6 +386,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.noteChanges(st.Sessions)
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
+		if m.recRun.rec != "" && m.recRun.act == "" && !m.isRec(m.recRun.rec) {
+			m.recRun = recRun{} // its rec is gone: a later one with the same id starts fresh
+		}
 		m.all = lists{queue: st.Queue, recs: st.Recommendations, sessions: st.Sessions, orphans: st.Orphans}
 		m.refresh()
 		if m.lost {

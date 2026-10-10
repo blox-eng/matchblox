@@ -51,7 +51,7 @@ source = ""              # another CSV with a ts column to chart alongside
 night_ends = "07:00"     # n runs the stoker until this time, then turns it off
 
 [limits]                 # matches (the 5-hour window) and sparks (the week) of each account
-quiet_hours = "23:00-08:00"  # hours you do not usually work: the forecast counts them as a tenth
+quiet_hours = "23:00-08:00"  # hours you do not usually work, in this machine's time zone: the forecast counts them as a tenth
 quiet_days = ["Sat", "Sun"]  # days you do not usually work
 
 [hooks]
