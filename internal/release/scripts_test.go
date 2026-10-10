@@ -1,9 +1,11 @@
 package release
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -154,5 +156,40 @@ func TestFlipRefusesAnOpenMarker(t *testing.T) {
 		if out, err := script(t, "flip-release.sh", p); err == nil || read(t, p) != s {
 			t.Fatalf("%q: flipped (%s):\n%s", s, out, read(t, p))
 		}
+	}
+}
+
+// The README, docs and site flip cleanly at the release, and the site has
+// each install element once, before and after.
+func TestTheRepositoryFlips(t *testing.T) {
+	root := filepath.Join("..", "..")
+	files, _ := filepath.Glob(filepath.Join(root, "docs", "*.md"))
+	files = append(files, filepath.Join(root, "README.md"), filepath.Join(root, "www", "index.html"))
+	dir := t.TempDir()
+	var copies []string
+	for i, f := range files {
+		p := filepath.Join(dir, fmt.Sprintf("%d-%s", i, filepath.Base(f)))
+		if err := os.WriteFile(p, []byte(read(t, f)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		copies = append(copies, p)
+	}
+	if out, err := script(t, "flip-release.sh", copies...); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	for _, p := range copies {
+		if s := read(t, p); strings.Contains(s, "until-release") || strings.Contains(s, "after-release") {
+			t.Fatalf("%s keeps a marker", p)
+		}
+	}
+	site := func(s string) string { return regexp.MustCompile(`(?s)<!--.*?-->`).ReplaceAllString(s, "") }
+	before, after := site(read(t, files[len(files)-1])), site(read(t, copies[len(copies)-1]))
+	for _, id := range []string{`id="t-script"`, `id="note"`, `class="news"`} {
+		if strings.Count(before, id) != 1 || strings.Count(after, id) != 1 {
+			t.Errorf("%s: %d before, %d after the flip", id, strings.Count(before, id), strings.Count(after, id))
+		}
+	}
+	if strings.Contains(after, "until v0.1.0") || !strings.Contains(after, "checksum and provenance checked") {
+		t.Error("the flipped site still says it builds with Go")
 	}
 }

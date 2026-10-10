@@ -1,10 +1,15 @@
 # Limits
 
 What does not work yet, and what to do until it does.
+<!-- until-release -->
+
+**No release binary yet.** Install Go: the install script builds from
+source, here and on each host you connect. The first release:
+[#27](https://github.com/blox-eng/matchblox/issues/27).
+<!-- /until-release -->
 
 | Limit | What to do |
 |---|---|
-| No release binary yet | Install Go: the install script builds from source, here and on each host you connect. The first release: [#27](https://github.com/blox-eng/matchblox/issues/27). |
 | The way back needs the console's own session | Run `matchblox` outside tmux. The tap on `◂ matchblox` also needs the tmux mouse: press `m` in the way back's preview. |
 | The stoker compacts Claude Code only | Compact Codex and OpenCode sessions yourself: Sessions marks them `! compact`. |
 | Codex context use needs Linux | On macOS, Codex shows "not measured". |

@@ -22,9 +22,11 @@ Works with Claude Code, Codex, OpenCode, and any agent in tmux.
 
 **Docs: [docs.matchblox.com](https://docs.matchblox.com)**
 
+<!-- until-release -->
 > **Status: pre-release.** Everything below works today. There is no release
 > binary yet: the install script builds from source
 > ([limits](https://docs.matchblox.com/limits/)).
+<!-- /until-release -->
 
 ## Quick start
 
@@ -35,8 +37,14 @@ Works with Claude Code, Codex, OpenCode, and any agent in tmux.
    ```
 
    Read the script first at [matchblox.sh](https://matchblox.sh/install.sh).
+   <!-- until-release -->
    Until the first release it builds from source and needs Go, the same as
    `go install github.com/blox-eng/matchblox/cmd/matchblox@latest`.
+   <!-- /until-release -->
+   <!-- after-release
+   You get the release binary for your machine, its checksum checked and,
+   with `gh` logged in, proof that CI built it from this repository.
+   after-release -->
 
 2. Run `matchblox` outside tmux (the script starts it for you). Answer
    "Where do your agents run?", then open the setup steps in the queue:
