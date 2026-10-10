@@ -24,6 +24,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"runtime/pprof"
 	"slices"
 	"strings"
@@ -52,7 +53,20 @@ import (
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
-var version = "dev"
+// version is stamped into a release build (-ldflags -X main.version=vX).
+// Any other build names its module version when go install made it, and
+// stays "dev" when it was built in a checkout.
+var version = buildVersion("dev", debug.ReadBuildInfo)
+
+func buildVersion(stamp string, read func() (*debug.BuildInfo, bool)) string {
+	if stamp != "dev" {
+		return stamp
+	}
+	if info, ok := read(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return stamp
+}
 
 func main() {
 	// MATCHBLOX_CPUPROFILE=file profiles this process, to keep its own cost
