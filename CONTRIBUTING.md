@@ -57,6 +57,8 @@ python3 -m venv .venv && .venv/bin/pip install --require-hashes --no-deps -r req
 2. Add a line under `## [Unreleased]` in `CHANGELOG.md` for a user-visible change.
 3. Run `scripts/validate.sh`.
 4. Open a pull request. CI must pass. `main` takes squash merges only.
+   Its merge makes a release, and the `[Unreleased]` lines are its notes
+   ([RELEASING.md](RELEASING.md)).
 
 Questions go to [Discord](https://discord.gg/tYxBUpGfX3). Bugs and features
 go to GitHub issues.

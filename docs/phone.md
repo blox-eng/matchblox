@@ -34,8 +34,9 @@ starts it. A second phone or laptop attaches to the same session.
 3. To come back, tap `◂ matchblox` at the left of the tmux status line, or
    press `prefix m` (the tmux prefix, then m).
 
-The tap on `◂ matchblox` needs `set -g mouse on` in your tmux config.
-Without it, use `prefix m`.
+The tap on `◂ matchblox` needs the tmux mouse on. Press `m` in the preview
+of "Add the way back" to turn it on with it, or add `set -g mouse on` to your
+tmux config. Without it, use `prefix m`.
 
 The console then selects the next agent that waits.
 

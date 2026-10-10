@@ -175,7 +175,27 @@ func (m Model) previewLines(d doors.Door) []string {
 	if d.Term != nil && m.pending != nil {
 		return []string{shellLine(m.pending.steps[0])} // the exact argv this console runs
 	}
+	if m.alsoOn(d) {
+		return strings.Split(d.Also.Preview, "\n")
+	}
 	return strings.Split(d.Preview, "\n")
+}
+
+// alsoOn: the person turned the door's choice on with m.
+func (m Model) alsoOn(d doors.Door) bool {
+	return d.Also != nil && m.pending != nil && m.pending.which == "also"
+}
+
+// choiceLines is the door's choice above its diff, with its key.
+func (m Model) choiceLines(d doors.Door, w int) []string {
+	if d.Also == nil {
+		return nil
+	}
+	box := "[ ]"
+	if m.alsoOn(d) {
+		box = "[x]"
+	}
+	return wrap(box+" m "+d.Also.Label, w-2, plainText)
 }
 
 // previewRoom is how many lines of the diff fit under the doors.
@@ -184,7 +204,11 @@ func (m Model) previewRoom() int {
 	mm := m
 	mm.pending = nil
 	mm.doorsSection(&rows, mm.width)
-	return max(3, m.height-chrome-len(rows.lines)-3)
+	choice := 0
+	if d, ok := m.previewDoor(); ok {
+		choice = len(m.choiceLines(d, m.width))
+	}
+	return max(3, m.height-chrome-len(rows.lines)-3-choice)
 }
 
 // previewSeen: the last line of the diff was on the screen. A door opens
@@ -208,6 +232,16 @@ func (m Model) scrollPreview(k string) (Model, bool) {
 		m.previewTop = max(m.previewTop-1, 0)
 	case "y":
 		return m, !m.previewSeen() // y waits for the end of the diff
+	case "m":
+		if d.Also == nil {
+			return m, false
+		}
+		a := *m.pending
+		a.which, a.say = "also", d.Title+": write "+tilde(d.Path)+", mouse on"
+		if m.pending.which == "also" {
+			a.which, a.say = "primary", d.Title+": write "+tilde(d.Path)
+		}
+		m.pending, m.previewTop = &a, 0
 	default:
 		return m, false
 	}
@@ -223,6 +257,9 @@ func (m Model) preview(b *body, d doors.Door, w int) {
 	st := m.st
 	if d.Path != "" {
 		b.add(-1, fit(" "+st.muted.Render(tilde(d.Path)), w))
+	}
+	for _, l := range m.choiceLines(d, w) {
+		b.add(-1, fit(" "+st.text.Render(l), w))
 	}
 	lines := m.previewLines(d)
 	top := min(m.previewTop, max(0, len(lines)-1))

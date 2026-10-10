@@ -448,3 +448,26 @@ func TestSetupCommandPointsTheNightToTheConsole(t *testing.T) {
 		t.Fatalf("setup:\n%s", got)
 	}
 }
+
+func TestSetupCommandAsksForTheMouseAfterTheWayBack(t *testing.T) {
+	for _, c := range []struct {
+		answers string
+		on      bool
+	}{{"\ny\ny\n", true}, {"\ny\n\n", false}} {
+		e := setupEnv(t)
+		var out strings.Builder
+		if err := setupDoors(e, strings.NewReader(c.answers), &out, func([]string) error { return nil }); err != nil {
+			t.Fatal(err)
+		}
+		b, err := os.ReadFile(filepath.Join(e.Home, ".tmux.conf"))
+		if err != nil || !strings.Contains(string(b), "=matchblox") {
+			t.Fatalf("%q: way back not written (%v):\n%s", c.answers, err, out.String())
+		}
+		if on := strings.Contains(string(b), "set -g mouse on"); on != c.on {
+			t.Fatalf("%q: mouse on = %v:\n%s", c.answers, on, out.String())
+		}
+		if !strings.Contains(out.String(), "+set -g mouse on") {
+			t.Fatalf("%q: the mouse line is not shown before the question:\n%s", c.answers, out.String())
+		}
+	}
+}
