@@ -140,7 +140,17 @@ func setupDoors(e setup.Env, in io.Reader, out io.Writer, run func(argv []string
 			}
 			continue
 		}
-		switch backup, err := setup.Open(e, d.ID, d.Sum); {
+		also := false
+		if d.Also != nil {
+			say("\n  %s\n", d.Also.Label)
+			for _, l := range alsoLines(d) {
+				say("  %s\n", l)
+			}
+			say("\ny adds it, Enter leaves it off: ")
+			line, _ := answers.ReadString('\n')
+			also = strings.TrimSpace(line) == "y"
+		}
+		switch backup, err := setup.Open(e, d.ID, d.Sum, also); {
 		case err != nil:
 			say("not written: %v\n", err)
 		case backup != "":
@@ -150,6 +160,18 @@ func setupDoors(e setup.Env, in io.Reader, out io.Writer, run func(argv []string
 		}
 	}
 	return werr
+}
+
+// alsoLines are the lines a door's choice adds to its diff.
+func alsoLines(d doors.Door) []string {
+	plain := strings.Split(d.Preview, "\n")
+	var out []string
+	for _, l := range strings.Split(d.Also.Preview, "\n") {
+		if strings.HasPrefix(l, "+") && !slices.Contains(plain, l) {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // runInTerminal gives a door's command this terminal.

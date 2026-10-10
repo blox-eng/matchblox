@@ -31,3 +31,10 @@ if -F "#{m:*range=user|matchblox*,#{status-left}}" "" "set -ga status-left '#[ra
 if -F "#{<:#{status-left-length},40}" "set -g status-left-length 40"
 bind -n MouseDown1Status if -F "#{==:#{mouse_status_range},matchblox}" "switch-client -t =matchblox" "select-window -t ="
 `
+
+// Mouse turns the tmux mouse on, so a tap on "◂ matchblox" works from a
+// phone. It changes how every pane selects and scrolls, so the way back
+// adds it only when the person asks.
+const Mouse = `# matchblox: a tap on ◂ matchblox needs the mouse
+set -g mouse on
+`
