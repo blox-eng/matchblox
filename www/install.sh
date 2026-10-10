@@ -70,7 +70,9 @@ main() {
     latest=$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest") ||
       die "could not reach github.com to find the latest release. Check the network, or set MATCHBLOX_VERSION."
     case $latest in
-      */releases/tag/*) version=${latest##*/} ;;
+      "https://github.com/$REPO/releases/tag/"*) version=${latest##*/} ;;
+      "https://github.com/$REPO/releases" | "https://github.com/$REPO/releases/") ;;
+      *) die "could not reach github.com: $latest answered instead. Check the network, or set MATCHBLOX_VERSION." ;;
     esac
   fi
   if [ -n "$version" ]; then
@@ -110,7 +112,8 @@ from_release() {
   asset="matchblox-$os-$arch"
   base="https://github.com/$REPO/releases/download/$version"
   work=$(mktemp -d)
-  trap 'rm -rf "$work"' EXIT INT TERM
+  trap 'rm -rf "$work"' EXIT
+  trap 'rm -rf "$work"; exit 1' INT TERM
 
   say "matchblox $version ($os/$arch)"
 
@@ -137,12 +140,15 @@ Nothing was installed. Do not use the downloaded file."
   #    attestation proves that, and only `gh` can check it, logged in.
   if ! command -v gh >/dev/null 2>&1; then
     say "  provenance not checked (install the 'gh' CLI to verify the build attestation)"
+  elif ! gh attestation verify --help >/dev/null 2>&1; then
+    say "  provenance not checked (gh is too old to verify attestations: update gh, then run this again)"
   elif ! gh auth status >/dev/null 2>&1; then
     say "  provenance not checked (gh is not logged in: gh auth login, then run this again)"
   else
     gh attestation verify "$work/$asset" --repo "$REPO" \
-      --signer-workflow "$REPO/.github/workflows/publish.yml" >/dev/null 2>&1 ||
+      --signer-workflow "$REPO/.github/workflows/publish.yml" >"$work/attestation.log" 2>&1 ||
       die "provenance verification FAILED for $asset.
+$(cat "$work/attestation.log")
 The checksum matched, but the build attestation did not verify against $REPO.
 Nothing was installed. Please report this: https://github.com/$REPO/security"
     say "  provenance ok (built by CI in $REPO)"
@@ -160,6 +166,7 @@ Nothing was installed. Please report this: https://github.com/$REPO/issues"
     { cp "$work/$asset" "$bindir/matchblox" && chmod 0755 "$bindir/matchblox"; } ||
     die "could not write to $bindir — set MATCHBLOX_BIN_DIR, or re-run with sudo"
   say "  installed $bindir/matchblox"
+  rm -rf "$work" # the console starts with exec, which runs no EXIT trap
 }
 
 from_source() {

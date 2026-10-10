@@ -2,9 +2,9 @@ name: Publish
 
 # A v* tag gets its binaries: matchblox-{linux,darwin}-{amd64,arm64}, a
 # .sha256 for each, a CycloneDX SBOM, and build provenance and SBOM
-# attestations that `gh attestation verify` checks. Then the verify job
-# installs the release the way a builder does, on each OS and arch, and
-# fails the release when anything is missing or wrong.
+# attestations that `gh attestation verify` checks. The release stays a
+# pre-release until the install script installed it on each OS and arch;
+# then it becomes the latest release, and its docs go live.
 #
 # To publish a tag again (a failed run):
 #   gh workflow run publish.yml --ref v0.1.0
@@ -26,14 +26,12 @@ defaults:
     shell: bash
 
 jobs:
-  publish:
-    name: Publish (${{ matrix.goos }}/${{ matrix.goarch }})
+  build:
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write # upload the release assets
-      id-token: write # sign the attestations
-      attestations: write
+      contents: read
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
     strategy:
@@ -43,7 +41,7 @@ jobs:
         goos: [linux, darwin]
         goarch: [amd64, arm64]
     steps:
-      # Before checkout: a dispatch on a branch never gets to build and sign.
+      # Before checkout: a dispatch on a branch never gets to build.
       - name: Resolve and validate the tag
         id: tag
         env:
@@ -67,6 +65,7 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      # -buildvcs=false: the stamp is the only version the binary carries.
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
@@ -75,11 +74,11 @@ jobs:
         run: |
           set -euo pipefail
           bin="matchblox-${GOOS}-${GOARCH}"
-          CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${TAG}" -o "$bin" ./cmd/matchblox
+          CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=${TAG}" -o "$bin" ./cmd/matchblox
           sha256sum "$bin" > "$bin.sha256"
 
-      # The linux/amd64 leg runs here, so the stamp is checked before upload;
-      # the verify job runs every binary on its own OS and arch.
+      # The verify job runs every binary on its own OS and arch; this one runs
+      # here, before anything is signed.
       - name: The binary names its tag
         if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
         env:
@@ -90,7 +89,8 @@ jobs:
           [ "$got" = "$TAG" ] || { echo "the binary says '$got', not '$TAG'" >&2; exit 1; }
 
       # From the binary, not go.mod: the SBOM lists what was linked in. The
-      # tool is pinned through the Go checksum database.
+      # tool is pinned through the Go checksum database, and runs in a job
+      # that cannot sign.
       - name: Generate the SBOM
         env:
           GOOS: ${{ matrix.goos }}
@@ -102,16 +102,41 @@ jobs:
           env -u GOOS -u GOARCH go run github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.12.0 \
             bin -json -version "$TAG" -output "$bin.cdx.json" "$bin"
 
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: matchblox-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: matchblox-${{ matrix.goos }}-${{ matrix.goarch }}*
+          if-no-files-found: error
+          retention-days: 7
+
+  attest:
+    name: Attest and attach (${{ matrix.target }})
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # upload the release assets
+      id-token: write # sign the attestations
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux-amd64, linux-arm64, darwin-amd64, darwin-arm64]
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: matchblox-${{ matrix.target }}
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: matchblox-${{ matrix.goos }}-${{ matrix.goarch }}
+          subject-path: matchblox-${{ matrix.target }}
 
       - name: Attest the SBOM
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
-          subject-path: matchblox-${{ matrix.goos }}-${{ matrix.goarch }}
-          sbom-path: matchblox-${{ matrix.goos }}-${{ matrix.goarch }}.cdx.json
+          subject-path: matchblox-${{ matrix.target }}
+          sbom-path: matchblox-${{ matrix.target }}.cdx.json
 
       # The tag can exist a moment before its release object; wait for it
       # rather than create one that races the other legs.
@@ -119,9 +144,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ steps.tag.outputs.tag }}
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
+          TAG: ${{ needs.build.outputs.tag }}
+          TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
           for _ in $(seq 1 12); do
@@ -129,14 +153,14 @@ jobs:
             sleep 10
           done
           gh release view "$TAG" >/dev/null 2>&1 || { echo "no release for $TAG after 120 s" >&2; exit 1; }
-          bin="matchblox-${GOOS}-${GOARCH}"
+          bin="matchblox-${TARGET}"
           gh release upload "$TAG" "$bin" "$bin.sha256" "$bin.cdx.json" --clobber
 
   # The release, installed the way a builder installs it: the real
   # `curl -fsSL https://matchblox.sh | sh`, on each OS and arch.
   verify:
     name: Verify (${{ matrix.os }})
-    needs: publish
+    needs: [build, attest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     permissions:
@@ -150,17 +174,12 @@ jobs:
       - name: curl -fsSL https://matchblox.sh | sh
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ needs.publish.outputs.tag }}
+          TAG: ${{ needs.build.outputs.tag }}
         run: |
           set -euo pipefail
-          # The latest release installs with no version named; an older tag
-          # published again is named.
-          pin=""
-          [ "$(gh release view --json tagName -q .tagName)" = "$TAG" ] || pin="$TAG"
           dir="$RUNNER_TEMP/bin"
           curl -fsSL https://matchblox.sh |
-            MATCHBLOX_VERSION="$pin" MATCHBLOX_BIN_DIR="$dir" MATCHBLOX_NO_START=1 sh | tee "$RUNNER_TEMP/install.log"
+            MATCHBLOX_VERSION="$TAG" MATCHBLOX_BIN_DIR="$dir" MATCHBLOX_NO_START=1 sh | tee "$RUNNER_TEMP/install.log"
           grep -q "checksum  ok" "$RUNNER_TEMP/install.log"
           grep -q "provenance ok" "$RUNNER_TEMP/install.log"
           got="$("$dir/matchblox" version)"
@@ -171,10 +190,69 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ needs.publish.outputs.tag }}
+          TAG: ${{ needs.build.outputs.tag }}
         run: |
           set -euo pipefail
           gh attestation verify "$RUNNER_TEMP/bin/matchblox" --repo "$GH_REPO" \
             --signer-workflow "$GH_REPO/.github/workflows/publish.yml" \
             --source-ref "refs/tags/$TAG" \
             --predicate-type https://cyclonedx.org/bom
+
+  # Verified: the release becomes the latest, unless a newer one is.
+  promote:
+    name: Make it the latest release
+    needs: [build, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      latest: ${{ steps.promote.outputs.latest }}
+    steps:
+      - name: Promote
+        id: promote
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          newest="$(gh api "repos/$GH_REPO/tags" --paginate -q '.[].name' |
+            grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)"
+          if [ "$newest" = "$TAG" ]; then
+            gh release edit "$TAG" --prerelease=false --latest
+            echo "latest=true" >> "$GITHUB_OUTPUT"
+          else
+            gh release edit "$TAG" --prerelease=false --latest=false
+            echo "$TAG is published; $newest stays the latest"
+            echo "latest=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  latest:
+    name: The latest installs
+    needs: [build, promote]
+    if: needs.promote.outputs.latest == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: curl -fsSL https://matchblox.sh | sh
+        env:
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/bin"
+          curl -fsSL https://matchblox.sh | MATCHBLOX_BIN_DIR="$dir" MATCHBLOX_NO_START=1 sh
+          got="$("$dir/matchblox" version)"
+          [ "$got" = "$TAG" ] || { echo "the latest install says '$got', not '$TAG'" >&2; exit 1; }
+
+  docs:
+    name: Docs
+    needs: promote
+    if: needs.promote.outputs.latest == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/docs.yml

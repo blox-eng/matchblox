@@ -162,6 +162,7 @@ func TestFlipRefusesAnOpenMarker(t *testing.T) {
 // The README, docs and site flip cleanly at the release, and the site has
 // each install element once, before and after.
 func TestTheRepositoryFlips(t *testing.T) {
+	t.Setenv("VERSION", "v0.1.0")
 	root := filepath.Join("..", "..")
 	files, _ := filepath.Glob(filepath.Join(root, "docs", "*.md"))
 	files = append(files, filepath.Join(root, "README.md"), filepath.Join(root, "www", "index.html"))
@@ -189,7 +190,29 @@ func TestTheRepositoryFlips(t *testing.T) {
 			t.Errorf("%s: %d before, %d after the flip", id, strings.Count(before, id), strings.Count(after, id))
 		}
 	}
-	if strings.Contains(after, "until v0.1.0") || !strings.Contains(after, "checksum and provenance checked") {
+	if strings.Contains(after, "builds with Go") || !strings.Contains(after, "checksum and provenance checked") || !strings.Contains(after, "v0.1.0 is out") {
 		t.Error("the flipped site still says it builds with Go")
+	}
+}
+
+func TestFlipNamesTheVersion(t *testing.T) {
+	p := file(t, "<!-- after-release\n@VERSION@ is out\nafter-release -->\n")
+	cmd := exec.Command(filepath.Join("..", "..", ".github", "scripts", "flip-release.sh"), p)
+	cmd.Env = append(os.Environ(), "VERSION=v0.1.0")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if got := read(t, p); got != "v0.1.0 is out\n" {
+		t.Fatalf("flipped = %q", got)
+	}
+}
+
+func TestFlipWithoutAVersionLeavesTheFileAlone(t *testing.T) {
+	s := "<!-- after-release\n@VERSION@ is out\nafter-release -->\n"
+	p := file(t, s)
+	cmd := exec.Command(filepath.Join("..", "..", ".github", "scripts", "flip-release.sh"), p)
+	cmd.Env = append(os.Environ(), "VERSION=")
+	if out, err := cmd.CombinedOutput(); err == nil || read(t, p) != s || !strings.Contains(string(out), "VERSION") {
+		t.Fatalf("%v: %s\n%s", err, out, read(t, p))
 	}
 }

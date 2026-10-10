@@ -24,7 +24,8 @@ done
 echo "$url" >>"$FIX/curl.log"
 case $url in
   */releases/latest)
-    if [ -f "$FIX/latest" ]; then printf '%s' "https://github.com/blox-eng/matchblox/releases/tag/$(cat "$FIX/latest")"
+    if [ -n "${FAKE_PORTAL:-}" ]; then printf '%s' "https://portal.example.com/login"
+    elif [ -f "$FIX/latest" ]; then printf '%s' "https://github.com/blox-eng/matchblox/releases/tag/$(cat "$FIX/latest")"
     else printf '%s' "https://github.com/blox-eng/matchblox/releases"; fi ;;
   */releases/download/*)
     f="$FIX/$(echo "$url" | sed 's|.*/releases/download/||' | tr / _)"
@@ -36,9 +37,13 @@ esac
 
 const fakeGh = `#!/bin/sh
 echo "gh $*" >>"$FIX/gh.log"
+[ "$1" = attestation ] && [ -n "${FAKE_GH_OLD:-}" ] && { echo "unknown command \"attestation\" for \"gh\"" >&2; exit 1; }
+case "$1 $2 $3" in
+  "attestation verify --help") exit 0 ;;
+esac
 case "$1 $2" in
   "auth status") exit "${FAKE_GH_AUTH:-0}" ;;
-  "attestation verify") exit "${FAKE_GH_VERIFY:-0}" ;;
+  "attestation verify") [ "${FAKE_GH_VERIFY:-0}" = 0 ] || echo "sigstore: no matching attestation" >&2; exit "${FAKE_GH_VERIFY:-0}" ;;
 esac
 exit 1
 `
@@ -60,13 +65,14 @@ case $1 in -s) echo Linux ;; -m) echo x86_64 ;; esac
 type world struct {
 	t                *testing.T
 	fix, bin, target string
+	tmp              string
 	env              []string
 }
 
 func newWorld(t *testing.T, fakes ...string) *world {
 	t.Helper()
 	dir := t.TempDir()
-	w := &world{t: t, fix: filepath.Join(dir, "fix"), bin: filepath.Join(dir, "bin"), target: filepath.Join(dir, "home", "bin")}
+	w := &world{t: t, fix: filepath.Join(dir, "fix"), bin: filepath.Join(dir, "bin"), target: filepath.Join(dir, "home", "bin"), tmp: filepath.Join(dir, "tmp")}
 	for _, d := range []string{w.fix, w.bin} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
@@ -81,7 +87,10 @@ func newWorld(t *testing.T, fakes ...string) *world {
 			_ = os.Symlink(p, filepath.Join(w.bin, tool))
 		}
 	}
-	w.env = []string{"PATH=" + w.bin, "HOME=" + filepath.Join(dir, "home"), "FIX=" + w.fix,
+	if err := os.MkdirAll(w.tmp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	w.env = []string{"TMPDIR=" + w.tmp, "PATH=" + w.bin, "HOME=" + filepath.Join(dir, "home"), "FIX=" + w.fix,
 		"MATCHBLOX_BIN_DIR=" + w.target, "MATCHBLOX_NO_START=1"}
 	return w
 }
@@ -219,7 +228,7 @@ func TestInstallSaysWhenGhCannotCheck(t *testing.T) {
 			t.Fatalf("%s: %v:\n%s", c.name, err, out)
 		}
 		mustContain(t, out, "provenance not checked", c.want)
-		if strings.Contains(w.log("gh"), "attestation") {
+		if strings.Contains(w.log("gh"), "--signer-workflow") {
 			t.Fatalf("%s: verified with gh that cannot: %s", c.name, w.log("gh"))
 		}
 	}
@@ -257,4 +266,41 @@ func TestInstallOfflineInstallsNothing(t *testing.T) {
 	if w.log("go") != "" {
 		t.Fatalf("built from source while offline: %s", w.log("go"))
 	}
+}
+
+func TestInstallLeavesNoDownloadBehind(t *testing.T) {
+	w := newWorld(t)
+	w.release("v0.1.0", "v0.1.0", true)
+	if out, err := w.run(); err != nil {
+		t.Fatalf("%v:\n%s", err, out)
+	}
+	if left, _ := os.ReadDir(w.tmp); len(left) != 0 {
+		t.Fatalf("left in TMPDIR: %v", left)
+	}
+}
+
+func TestInstallSaysWhenGhIsTooOld(t *testing.T) {
+	w := newWorld(t, "gh")
+	w.release("v0.1.0", "v0.1.0", true)
+	out, err := w.run("FAKE_GH_OLD=1")
+	if err != nil || w.installed() == "" {
+		t.Fatalf("%v:\n%s", err, out)
+	}
+	mustContain(t, out, "provenance not checked", "gh is too old")
+}
+
+func TestInstallShowsWhyTheProvenanceFailed(t *testing.T) {
+	w := newWorld(t, "gh")
+	w.release("v0.1.0", "v0.1.0", true)
+	out, _ := w.run("FAKE_GH_VERIFY=1")
+	mustContain(t, out, "sigstore: no matching attestation")
+}
+
+func TestInstallBehindAPortalInstallsNothing(t *testing.T) {
+	w := newWorld(t, "go")
+	out, err := w.run("FAKE_PORTAL=1")
+	if err == nil || w.installed() != "" || w.log("go") != "" {
+		t.Fatalf("installed %q, go %q:\n%s", w.installed(), w.log("go"), out)
+	}
+	mustContain(t, out, "could not reach github.com")
 }
