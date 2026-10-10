@@ -1,12 +1,6 @@
 # Limits
 
 What does not work yet, and what to do until it does.
-<!-- until-release -->
-
-**No release binary yet.** Install Go: the install script builds from
-source, here and on each host you connect. The first release:
-[#27](https://github.com/blox-eng/matchblox/issues/27).
-<!-- /until-release -->
 
 | Limit | What to do |
 |---|---|

@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-10
+
 The first release: one console for every coding agent you run in tmux, on
 the host, over SSH and from a phone.
 
@@ -47,3 +49,6 @@ the host, over SSH and from a phone.
   build provenance checked, and starts it. `go install` builds the same
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
+
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/blox-eng/matchblox/releases/tag/v0.1.0
