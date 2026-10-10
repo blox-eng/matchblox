@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -177,5 +178,95 @@ func TestRecIDBindsEveryStep(t *testing.T) {
 	}
 	if recID(c) == recID(d) {
 		t.Fatal("a changed secondary action kept the id")
+	}
+}
+
+// TestAWeekThatRunsShortRecommendsItsHottestSession: when an account's week
+// will not last, the queue names the session of that account that burns
+// the most, with a jump to it and, while it is idle, a guarded /compact.
+func TestAWeekThatRunsShortRecommendsItsHottestSession(t *testing.T) {
+	out := time.Date(2026, 10, 14, 19, 0, 0, 0, time.UTC)
+	sparks := 3
+	acct := limits.Account{Provider: "anthropic", Account: "a@example.com · Max", State: limits.Measured,
+		Sparks: &sparks, Forecast: &limits.Outlook{Out: out}}
+	other := limits.Account{Provider: "openai", Account: "b@example.com · Plus", State: limits.Measured,
+		Sparks: &sparks, Forecast: &limits.Outlook{Lasts: true}}
+	snap := sample.Snapshot{
+		At:     time.Date(2026, 10, 13, 14, 0, 0, 0, time.UTC),
+		Limits: []limits.Account{acct, other},
+		Sessions: []sample.Session{
+			{Name: "docs", Pane: "%1", Provider: "anthropic", Account: acct.Account, Burn30m: 9000, Tokens: 40000, Status: "idle"},
+			{Name: "api-auth", Pane: "%2", Provider: "anthropic", Account: acct.Account, Burn30m: 42000, Tokens: 182000, Status: "idle"},
+			{Name: "codex", Pane: "%3", Provider: "openai", Account: other.Account, Burn30m: 90000},
+			// A session idle a day burns nothing: a compact saves no week.
+			{Name: "old", Pane: "%4", Provider: "anthropic", Account: acct.Account, Tokens: 190000, Status: "idle", Idle: 25 * time.Hour},
+		},
+	}
+	var got []Rec
+	for _, r := range Build(snap, nil) {
+		if strings.Contains(r.Title, "week") {
+			got = append(got, r)
+		}
+	}
+	if len(got) != 1 {
+		t.Fatalf("recs: %+v", got)
+	}
+	r := got[0]
+	if r.Title != "The week runs short: compact api-auth" || r.Level != "warn" || !strings.HasPrefix(r.Evidence, "out Wed ~19:00 · ") {
+		t.Fatalf("title %q level %q", r.Title, r.Level)
+	}
+	if !strings.Contains(r.Evidence, "a@example.com · Max: 3 sparks left") || !strings.Contains(r.Evidence, "api-auth burns 42k tokens in 30 min") {
+		t.Fatalf("evidence %q", r.Evidence)
+	}
+	if r.Primary == nil || !r.Primary.Nav || strings.Join(r.Primary.Steps[0], " ") != "tmux switch-client -t %2" {
+		t.Fatalf("primary %+v", r.Primary)
+	}
+	if r.Second == nil || !r.Second.Destructive || r.Second.Guards[0].IdlePane != "%2" || strings.Join(r.Second.Steps[0], " ") != "tmux send-keys -t %2 /compact Enter" {
+		t.Fatalf("secondary %+v", r.Second)
+	}
+	// The forecast moves every sample: the rec keeps its id, so an act
+	// confirmed meanwhile still finds it.
+	id := r.ID
+	acct.Forecast.Out = out.Add(time.Hour)
+	snap.Limits[0] = acct
+	for _, x := range Build(snap, nil) {
+		if strings.Contains(x.Title, "week") && x.ID != id {
+			t.Fatalf("the id moved with the forecast: %s → %s", id, x.ID)
+		}
+	}
+	// A spent week: a compact saves nothing, no rec.
+	zero := 0
+	spent := acct
+	spent.Sparks = &zero
+	snap.Limits[0] = spent
+	for _, x := range Build(snap, nil) {
+		if strings.Contains(x.Title, "week") {
+			t.Fatalf("a rec for a spent week: %+v", x)
+		}
+	}
+	snap.Limits[0] = acct
+	// A busy session gets the jump, never a typed command.
+	snap.Sessions[1].Status = "busy"
+	for _, r := range Build(snap, nil) {
+		if strings.Contains(r.Title, "week") && r.Second != nil {
+			t.Fatalf("a busy session got a /compact: %+v", r.Second)
+		}
+	}
+	// With nobody burning, the biggest context costs the most per turn.
+	for i := range snap.Sessions {
+		snap.Sessions[i].Burn30m = 0
+	}
+	for _, r := range Build(snap, nil) {
+		if strings.Contains(r.Title, "week") && (!strings.HasSuffix(r.Title, "compact api-auth") || !strings.HasSuffix(r.Evidence, "api-auth holds the biggest context, 182k")) {
+			t.Fatalf("with no burn: %q, %q", r.Title, r.Evidence)
+		}
+	}
+	// No session on the account but a cold one: nothing to act on, no rec
+	// (the header warns).
+	snap.Sessions = snap.Sessions[2:]
+	for _, r := range Build(snap, nil) {
+		if strings.Contains(r.Title, "week") {
+			t.Fatalf("a rec with no session: %+v", r)
+		}
 	}
 }

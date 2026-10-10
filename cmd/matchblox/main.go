@@ -41,6 +41,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/hosts"
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -114,6 +115,10 @@ func run(args []string) error {
 		case "connect":
 			return liveConnect(args[1:])
 		}
+	}
+	if len(args) > 1 && args[0] == "hook" && args[1] == "statusline" {
+		cfg, _ := config.Load(config.Path())
+		return statusLine(args[2:], os.Stdin, os.Stdout, os.Getenv, filepath.Dir(state.Path()), cfg, time.Now())
 	}
 	if len(args) > 0 && args[0] == "hook" {
 		return hook(args[1:], os.Stdin, os.Stdout, transport.SocketPath(), spoolPath(), progressPrompt(args[1:]))
@@ -362,6 +367,7 @@ func newService(cfg config.Config, root string) *service.Service {
 	}
 	s.Exe = invokedPath(os.Args[0])
 	s.Setup = liveSetup()
+	s.LimitsLog = &limits.Store{Path: filepath.Join(filepath.Dir(s.StatePath), "limits.jsonl")}
 	if st, err := stoker.Open(filepath.Dir(s.StatePath)); err == nil {
 		s.Stoker = st
 	} else {
@@ -542,6 +548,7 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 		smp.HomeAs = "/home/user" // the HOME of every fixture process
 		smp.Tmux = func() ([]byte, error) { return os.ReadFile(filepath.Join(root, "tmux-panes.txt")) }
 		smp.Capture = sample.CaptureDir(filepath.Join(root, "panes"))
+		smp.LimitsDir = filepath.Join(root, "state")
 		return smp
 	}
 	smp.FS, smp.Sys = actions.NewHost(), procfs.Sys{Root: "/sys"}
@@ -550,6 +557,7 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 	smp.LatencyTarget = cfg.LatencyTarget
 	smp.ProcEvery = 5 * cfg.Interval.Duration
 	smp.OwnEntries = true
+	smp.LimitsDir = filepath.Dir(state.Path())
 	return smp
 }
 

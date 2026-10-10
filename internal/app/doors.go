@@ -208,7 +208,7 @@ func (m Model) previewRoom() int {
 	if d, ok := m.previewDoor(); ok {
 		choice = len(m.choiceLines(d, m.width))
 	}
-	return max(3, m.height-chrome-len(rows.lines)-3-choice)
+	return max(3, m.height-m.chrome()-len(rows.lines)-3-choice)
 }
 
 // previewSeen: the last line of the diff was on the screen. A door opens

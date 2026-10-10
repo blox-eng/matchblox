@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -117,6 +118,7 @@ func Build(snap sample.Snapshot, git *gitscan.Report) []Rec {
 		out = append(out, r)
 	}
 
+	out = append(out, limitRecs(snap)...)
 	out = append(out, alertRecs(snap)...)
 	out = append(out, gitRecs(snap, git)...)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].score > out[j].score })
@@ -124,6 +126,62 @@ func Build(snap sample.Snapshot, git *gitscan.Report) []Rec {
 		out[i].ID = recID(out[i])
 	}
 	return out
+}
+
+// limitRecs names, for each account whose week will not last, the session
+// of that account that burns the most, else the one with the biggest
+// context: a compact makes each of its turns cheaper. Without a session
+// that is not cold there is nothing to act on, and no rec.
+func limitRecs(snap sample.Snapshot) []Rec {
+	var out []Rec
+	for _, a := range snap.Limits {
+		if a.Forecast == nil || a.Forecast.Lasts {
+			continue
+		}
+		var hot *sample.Session
+		for i, s := range snap.Sessions {
+			// A cold session burns nothing: a compact there saves no week.
+			if s.Provider != a.Provider || s.Account != a.Account || s.Pane == "" || s.Idle >= sample.ColdAfter {
+				continue
+			}
+			if hot == nil || s.Burn30m > hot.Burn30m || (s.Burn30m == hot.Burn30m && s.Tokens > hot.Tokens) {
+				hot = &snap.Sessions[i]
+			}
+		}
+		if hot == nil {
+			continue
+		}
+		// A spent week waits for its reset: a compact saves nothing.
+		if a.Sparks != nil && *a.Sparks == 0 {
+			continue
+		}
+		left := ""
+		if a.Sparks != nil {
+			left = fmt.Sprintf(": %d sparks left", *a.Sparks)
+		}
+		// The forecast moves each sample; the title, and so the id, does not.
+		r := Rec{
+			Level: "warn", score: 650,
+			Title:    "The week runs short: compact " + hot.Name,
+			Evidence: fmt.Sprintf("out %s · %s%s · %s", limits.When(a.Forecast.Out, snap.At, "~"), a.Account, left, cost(*hot)),
+			Primary:  &Action{Label: "jump to the session", Nav: true, Steps: one("tmux", "switch-client", "-t", hot.Pane)},
+		}
+		// Type only into an idle session, as the compact rec does.
+		if hot.Status == "idle" {
+			r.Second = &Action{Label: "send /compact", Steps: one("tmux", "send-keys", "-t", hot.Pane, "/compact", "Enter"),
+				Destructive: true, Guards: []Guard{{IdlePane: hot.Pane}}}
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// cost says why a session is the one to compact.
+func cost(s sample.Session) string {
+	if s.Burn30m > 0 {
+		return fmt.Sprintf("%s burns %dk tokens in 30 min, context %dk", s.Name, s.Burn30m/1000, s.Tokens/1000)
+	}
+	return fmt.Sprintf("%s holds the biggest context, %dk", s.Name, s.Tokens/1000)
 }
 
 // swapMargin is the RAM that must stay free after swap is read back in.

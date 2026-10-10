@@ -29,14 +29,19 @@ the host, over SSH and from a phone.
   RESUME line. In the morning, STOKED shows each one, its context before and
   after. A session that waits for you, or holds a line you started to type,
   is left as it is.
+- **Your limits**: one line for each account under the metrics, with the
+  matches left in this 5-hour window, the sparks left this week, and if the
+  week lasts (`out Fri ~20:00`). When it will not, the queue names the
+  session that burns the most, one key from a compact. Claude Code's come
+  from your status line, Codex reports its own.
 - **Any terminal, even a phone**: a tap selects, a second tap acts. The way
   back, `prefix m` or a tap on `◂ matchblox`, returns to the console from
   any pane; `m` in its preview turns the tmux mouse on for the tap.
 - **Remote hosts**: `matchblox connect <host>` connects a host once, with a
   key that can start only the console's stream, and `matchblox <host>`
   opens its console.
-- **Setup in the queue**: tmux, the queue hooks, the way back and a guide
-  session, each shown as the exact change before a typed `y`.
+- **Setup in the queue**: tmux, the queue hooks, your limits, the way back
+  and a guide session, each shown as the exact change before a typed `y`.
 - **Install in one line**: `curl -fsSL https://matchblox.sh | sh` installs
   the release binary for Linux or macOS, amd64 or arm64, its checksum and
   build provenance checked, and starts it. `go install` builds the same

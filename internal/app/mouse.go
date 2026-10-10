@@ -26,7 +26,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	m.searching = false // keep the search; what the tap asks for shows on the action line
 	w := max(m.width, minWidth)
-	if ms.Y == 1 {
+	if ms.Y == 1+m.limitN() {
 		if tab, ok := m.tabAt(w, ms.X); ok {
 			m.setTab(tab)
 			m.flash = ""
@@ -34,7 +34,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	b := m.visible(w)
-	i := ms.Y - chrome
+	i := ms.Y - m.chrome()
 	if i >= 0 && i < len(b.rows) && b.rows[i] == headerRow {
 		return m.tapHeader(w, ms.X)
 	}
