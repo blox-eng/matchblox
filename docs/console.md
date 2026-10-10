@@ -2,13 +2,49 @@
 
 The header shows the host, `stoker` or `night → 07:00` while [the
 stoker](stoker.md) runs, and the machine: CPU, load, pressure, memory and
-temperature, each with its trend. Under it are seven tabs, `1 QUEUE` to
+temperature, each with its trend. Under it is one line for each account
+your agents run under (see [Matches and sparks](#matches-and-sparks)).
+Then come seven tabs, `1 QUEUE` to
 `7 PANES`. A tab that needs you shows it: `1 QUEUE 3` has three agents that
 wait, and `4 PROCS !` has a problem.
 
 The action line under the tabs shows the keys of the open tab, and how old
 the sample is. It sits at the top, above a phone's keyboard. See
 [Keys](keys.md).
+
+## Matches and sparks
+
+Know how much of your plan is left before an agent stops:
+
+```
+ ✻ dev    4 matches · 4 sparks · out Fri ~20:00
+ ❋ Plus   3 matches · 9 sparks · lasts the week
+```
+
+- **Matches** are this 5-hour window: 5 when it starts, one for each 20%.
+- **Sparks** are this week: 10 when it starts, one for each 10%.
+- When one or two are left, the line says when they come back:
+  `1 match until 16:40`.
+- The last word says if the week lasts at your pace so far. Hours you
+  do not usually work count as a tenth: set them with `quiet_hours` and
+  `quiet_days` in the [config](config.md).
+- `out Fri ~20:00`: the queue names the session of that account
+  that burns the most. `Enter` jumps to it, and `x` compacts it while it is
+  idle. The row then says what happened, or what failed and that the key
+  tries again.
+
+Where the figures come from:
+
+| Agent | What to do |
+|---|---|
+| Claude Code | Open the door "Show your limits" in the queue. It adds matchblox to your status line; a status line you have keeps showing what it showed. |
+| Codex | Nothing: Codex reports its limits after each turn. A plan with a monthly limit shows `53% left this month`. |
+| OpenCode | It shows "not measured": OpenCode keeps no limits. |
+
+A line that says `as of 14:02` has not changed for an hour: the account's
+agents have not worked since. Each reading is kept for five weeks in
+`~/.local/state/matchblox/limits.jsonl`, on this machine only.
+`matchblox status` has every figure under `limits`.
 
 ## The match
 

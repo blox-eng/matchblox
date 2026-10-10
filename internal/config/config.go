@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/blox-eng/matchblox/internal/limits"
 )
 
 // Duration reads "30s", "2m", "24h" from TOML.
@@ -37,6 +39,15 @@ type Config struct {
 	History       History  `toml:"history"`
 	Hooks         Hooks    `toml:"hooks"`
 	Stoker        Stoker   `toml:"stoker"`
+	Limits        Limits   `toml:"limits"`
+}
+
+// Limits shape the forecast of each account's week.
+type Limits struct {
+	QuietHours string   `toml:"quiet_hours"` // "23:00-08:00": hours you do not usually work
+	QuietDays  []string `toml:"quiet_days"`  // ["Sat", "Sun"]
+	// Quiet is QuietHours and QuietDays, read by Load.
+	Quiet limits.Quiet `toml:"-"`
 }
 
 // Stoker compacts full sessions while the builder is away.
@@ -132,8 +143,11 @@ func Default() Config {
 		},
 		Git:    Git{Interval: Duration{5 * time.Minute}, Remote: "origin"},
 		Stoker: Stoker{NightEnds: "07:00"},
+		Limits: Limits{QuietHours: "23:00-08:00", QuietDays: []string{"Sat", "Sun"}, Quiet: defaultQuiet},
 	}
 }
+
+var defaultQuiet, _ = limits.ParseQuiet("23:00-08:00", []string{"Sat", "Sun"})
 
 // Path is $XDG_CONFIG_HOME/matchblox/config.toml, defaulting to ~/.config.
 func Path() string {
@@ -153,6 +167,9 @@ func Load(path string) (Config, error) {
 		return c, err
 	}
 	c.AgentsSet = md.IsDefined("agents")
+	if c.Limits.Quiet, err = limits.ParseQuiet(c.Limits.QuietHours, c.Limits.QuietDays); err != nil {
+		return c, errors.New("limits.quiet_hours or quiet_days: " + err.Error())
+	}
 	for i := range c.Groups {
 		re, err := regexp.Compile(c.Groups[i].Container)
 		if err != nil {

@@ -7,6 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/blox-eng/matchblox/internal/limits"
 )
 
 // codexRollout finds the rollout a Codex process writes: Codex opens
@@ -52,11 +55,16 @@ const (
 )
 
 type codexLine struct {
-	Type    string `json:"type"`
-	Payload struct {
-		Type  string `json:"type"`
-		Model string `json:"model"`
-		Info  *struct {
+	Timestamp time.Time `json:"timestamp"`
+	Type      string    `json:"type"`
+	Payload   struct {
+		Type       string `json:"type"`
+		Model      string `json:"model"`
+		RateLimits *struct {
+			Primary   *codexWindow `json:"primary"`
+			Secondary *codexWindow `json:"secondary"`
+		} `json:"rate_limits"`
+		Info *struct {
 			Last struct {
 				Total int `json:"total_tokens"`
 			} `json:"last_token_usage"`
@@ -65,35 +73,46 @@ type codexLine struct {
 	} `json:"payload"`
 }
 
+type codexWindow struct {
+	Used     float64 `json:"used_percent"`
+	Minutes  int     `json:"window_minutes"`
+	ResetsAt int64   `json:"resets_at"`
+}
+
 // codexUsage reads the end of a rollout: the newest token_count with info
 // gives the tokens of the last turn (what Codex counts as in the context
-// window) and the window; the newest turn_context gives the model.
-func (r *agentReader) codexUsage(path string) (Usage, codexFound) {
+// window) and the window; the newest turn_context gives the model; the
+// newest rate_limits gives the plan's limits (nil: none in the tail).
+func (r *agentReader) codexUsage(path string) (Usage, *limits.Reading, codexFound) {
 	key, ok := statKey(path)
 	if !ok {
-		return Usage{}, codexNone
+		return Usage{}, nil, codexNone
 	}
 	if c, ok := r.codex[path]; ok && c.key == key {
-		return c.val.u, c.val.found
+		return c.val.u, c.val.lim, c.val.found
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return Usage{}, codexNone
+		return Usage{}, nil, codexNone
 	}
 	defer f.Close()
 	off := max(key.size-tailBytes, 0)
 	buf := make([]byte, key.size-off)
 	if _, err := f.ReadAt(buf, off); err != nil && err != io.EOF {
-		return Usage{}, codexNone
+		return Usage{}, nil, codexNone
 	}
 	var u Usage
+	// lim is the newest reading with a window; empty, the newest without
+	// one (Codex also writes limits of other ids, all null).
+	var lim, empty *limits.Reading
 	found := false
 	lines := bytes.Split(buf, []byte{'\n'})
-	for i := len(lines) - 1; i >= 0 && (!found || u.Model == ""); i-- {
+	for i := len(lines) - 1; i >= 0 && (!found || u.Model == "" || lim == nil); i-- {
 		l := lines[i]
 		needUsage := !found && bytes.Contains(l, []byte(`"token_count"`)) && bytes.Contains(l, []byte(`"last_token_usage"`))
 		needModel := u.Model == "" && bytes.Contains(l, []byte(`"turn_context"`))
-		if !needUsage && !needModel {
+		needLimits := lim == nil && bytes.Contains(l, []byte(`"rate_limits"`))
+		if !needUsage && !needModel && !needLimits {
 			continue
 		}
 		var c codexLine
@@ -106,6 +125,23 @@ func (r *agentReader) codexUsage(path string) (Usage, codexFound) {
 		if needModel && c.Type == "turn_context" {
 			u.Model = c.Payload.Model
 		}
+		if needLimits && c.Payload.RateLimits != nil {
+			r := &limits.Reading{At: c.Timestamp}
+			for _, w := range []*codexWindow{c.Payload.RateLimits.Primary, c.Payload.RateLimits.Secondary} {
+				if w != nil && w.Minutes > 0 {
+					r.Windows = append(r.Windows, limits.Window{UsedPct: w.Used, Minutes: w.Minutes, ResetsAt: limits.Unix(w.ResetsAt)})
+				}
+			}
+			switch {
+			case len(r.Windows) > 0:
+				lim = r
+			case empty == nil:
+				empty = r
+			}
+		}
+	}
+	if lim == nil {
+		lim = empty
 	}
 	res := codexMeasured
 	switch {
@@ -114,11 +150,12 @@ func (r *agentReader) codexUsage(path string) (Usage, codexFound) {
 	case !found:
 		res = codexNone
 	}
-	r.codex[path] = cached[codexRead]{key, codexRead{u, res}}
-	return u, res
+	r.codex[path] = cached[codexRead]{key, codexRead{u, lim, res}}
+	return u, lim, res
 }
 
 type codexRead struct {
 	u     Usage
+	lim   *limits.Reading
 	found codexFound
 }

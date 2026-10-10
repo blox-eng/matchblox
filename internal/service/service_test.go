@@ -19,6 +19,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -726,5 +727,31 @@ func TestOnlyAStaleSessionCanBeEnded(t *testing.T) {
 	// run time that the agent did not start to work since the sample.
 	if !ok || len(a.Guards) != 1 || a.Guards[0] != (advice.Guard{PID: 51, StartTicks: 9, IdlePane: "%5"}) || !a.Destructive {
 		t.Fatalf("action %+v", a)
+	}
+}
+
+// TestLimitsAreStoredAndInTheState: each new reading of an account goes to
+// the local limits file, and the state carries the limits for `status`.
+func TestLimitsAreStoredAndInTheState(t *testing.T) {
+	s := newTest(t, 20*time.Millisecond)
+	s.LimitsLog = &limits.Store{Path: filepath.Join(t.TempDir(), "limits.jsonl")}
+	at := time.Now().Add(-time.Minute)
+	sparks := 7
+	s.sample = func() sample.Snapshot {
+		snap := orphanSnap
+		snap.At = time.Now()
+		snap.Limits = []limits.Account{{Provider: "anthropic", Account: "a@example.com · Max", State: limits.Measured, At: at,
+			Sparks: &sparks, Windows: []limits.Window{{UsedPct: 30, Minutes: limits.WeekMinutes}}}}
+		return snap
+	}
+	ctx := run(t, s)
+	c, _ := connect(t, ctx, s)
+	if st := snapshot(t, c); len(st.Limits) != 1 || *st.Limits[0].Sparks != 7 {
+		t.Fatalf("limits in the state: %+v", st.Limits)
+	}
+	snapshot(t, c)
+	b, err := os.ReadFile(s.LimitsLog.Path)
+	if err != nil || strings.Count(string(b), "\n") != 1 || !strings.Contains(string(b), `"used_pct":30`) {
+		t.Fatalf("the store: %q %v", b, err)
 	}
 }
