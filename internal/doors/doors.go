@@ -13,6 +13,7 @@ import (
 const (
 	Tmux    = "tmux"
 	Hooks   = "hooks"
+	Limits  = "limits"
 	WayBack = "wayback"
 	Guide   = "guide"
 	Night   = "night"

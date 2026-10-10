@@ -151,6 +151,16 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 
 - **Header:** the mark, the name and the host, then each metric with its
   trend. A narrow terminal drops the trends, then metrics from the right.
+- **Limits** (#38, owner 2026-10-11): under the metrics, one line for each
+  account a session runs under: the provider's mark, a short name (the
+  plan, or the email's name when a provider has two), then `4 matches · 8
+  sparks · lasts the week`. Matches are the 5-hour window (one each 20%),
+  sparks the week (one each 10%); they are words, never the match glyph
+  (§4 rule 2). A reset shows only when one match or two sparks are left
+  (`1 match until 16:40`). The forecast is `muted` when the week lasts and
+  `out Fri ~20:00` in `warn` when it will not; a reading over an hour old
+  adds `as of 14:02` in `warn`; no reading says `not measured · <the fix>`.
+  Too narrow: the resets go, then the name. The tabs sit under the lines.
 - **Tabs:** one row, `1 QUEUE` to `7 PANES`. The Queue tab holds who waits
   and, under it, the recommendations (owner, 2026-10-08). The active tab has an accent
   rule under it. A tab that needs the person shows it (`4 PROCS !` in `neg`,

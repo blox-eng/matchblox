@@ -91,3 +91,27 @@ func TestAgentsSetTellsAConfigWithoutAgents(t *testing.T) {
 		t.Fatalf("set config: %+v", c.Agents)
 	}
 }
+
+// TestQuietHoursShapeTheForecast: the forecast counts the hours the builder
+// does not usually work as quiet; the defaults are the night and the
+// weekend, and a value that does not parse is an error, not a guess.
+func TestQuietHoursShapeTheForecast(t *testing.T) {
+	c, err := Load(filepath.Join(t.TempDir(), "none.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Limits.QuietHours != "23:00-08:00" || strings.Join(c.Limits.QuietDays, ",") != "Sat,Sun" {
+		t.Fatalf("defaults: %+v", c.Limits)
+	}
+	sat := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
+	if !c.Limits.Quiet.Quiet(sat) {
+		t.Fatal("the default quiet days were not parsed")
+	}
+	c, err = Load(write(t, "[limits]\nquiet_hours = \"01:00-07:00\"\nquiet_days = []\n"))
+	if err != nil || c.Limits.Quiet.Quiet(sat) || !c.Limits.Quiet.Quiet(sat.Add(-9*time.Hour)) {
+		t.Fatalf("overlay: %+v %v", c.Limits, err)
+	}
+	if _, err := Load(write(t, "[limits]\nquiet_hours = \"late\"\n")); err == nil || !strings.Contains(err.Error(), "limits.quiet_hours") {
+		t.Fatalf("bad quiet hours: %v", err)
+	}
+}

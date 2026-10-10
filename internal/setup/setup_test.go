@@ -64,7 +64,7 @@ func door(t *testing.T, e Env, id string) doors.Door {
 func TestDoorsFirstRun(t *testing.T) {
 	e := env(t)
 	got := ids(Doors(e))
-	if want := []string{doors.Tmux, doors.Hooks, doors.WayBack, doors.Guide, doors.Night}; !slices.Equal(got, want) {
+	if want := []string{doors.Tmux, doors.Hooks, doors.Limits, doors.WayBack, doors.Guide, doors.Night}; !slices.Equal(got, want) {
 		t.Fatalf("doors = %v, want %v", got, want)
 	}
 	if d := door(t, e, doors.Tmux); !slices.Equal(d.Term, []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}) {
@@ -350,6 +350,7 @@ func TestDoneDoorFolds(t *testing.T) {
 	e := env(t)
 	e.LookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
 	open(t, e, doors.Hooks)
+	open(t, e, doors.Limits)
 	open(t, e, doors.WayBack)
 	if got := ids(Doors(e)); !slices.Equal(got, []string{doors.Guide, doors.Night}) {
 		t.Fatalf("open doors = %v, want [guide night]", got)
@@ -623,5 +624,44 @@ func TestWayBackOffersNoMouseWhenItIsOn(t *testing.T) {
 	}
 	if d := door(t, e, doors.WayBack); d.Also == nil {
 		t.Errorf("a commented or off mouse is not on: %+v", d)
+	}
+}
+
+// TestTheLimitsDoorTapsTheStatusLine: with no status line the door sets
+// `matchblox hook statusline`; a status line the builder has keeps running,
+// wrapped, and prints what it printed. A second open changes nothing.
+func TestTheLimitsDoorTapsTheStatusLine(t *testing.T) {
+	e := env(t)
+	d := door(t, e, doors.Limits)
+	if d.Title != "Show your limits" || d.Done || !strings.Contains(d.Preview, `+  "statusLine": {"type": "command", "command": "`+exe+` hook statusline"}`) {
+		t.Fatalf("a fresh door: %+v", d)
+	}
+	open(t, e, doors.Limits)
+	if d := door(t, e, doors.Limits); !d.Done {
+		t.Fatalf("not done after it opened: %+v", d)
+	}
+
+	e = env(t)
+	path := settingsPath(e)
+	writeFile(t, path, `{
+  "model": "opus",
+  "statusLine": {
+    "type": "command",
+    "command": "bash \"$HOME/.claude/statusline.sh\" | head -1"
+  }
+}
+`)
+	d = door(t, e, doors.Limits)
+	want := `+  "statusLine": {"type": "command", "command": "` + exe + ` hook statusline -- sh -c 'bash \"$HOME/.claude/statusline.sh\" | head -1'"}`
+	if !strings.Contains(d.Preview, want) || !strings.Contains(d.Preview, `-    "command": "bash \"$HOME/.claude/statusline.sh\" | head -1"`) {
+		t.Fatalf("the wrap:\n%s\nwant a line\n%s", d.Preview, want)
+	}
+	open(t, e, doors.Limits)
+	b, _ := os.ReadFile(path)
+	if !strings.Contains(string(b), `"model": "opus"`) {
+		t.Fatalf("other keys went: %s", b)
+	}
+	if d := door(t, e, doors.Limits); !d.Done {
+		t.Fatalf("a wrapped status line is not done: %+v", d)
 	}
 }

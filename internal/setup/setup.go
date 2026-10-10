@@ -46,7 +46,7 @@ func Doors(e Env) []doors.Door {
 	_, tmuxErr := e.LookPath("tmux")
 	ds := []doors.Door{tmuxDoor(e, tmuxErr == nil)}
 	if usesClaude(e) {
-		ds = append(ds, hooksDoor(e))
+		ds = append(ds, hooksDoor(e), limitsDoor(e))
 	}
 	ds = append(ds, wayBackDoor(e))
 	if usesClaude(e) {
@@ -65,6 +65,8 @@ func Open(e Env, id, seen string, also bool) (backup string, err error) {
 	switch id {
 	case doors.Hooks:
 		return AddHooks(settingsPath(e), e.Exe, seen)
+	case doors.Limits:
+		return TapStatusLine(settingsPath(e), e.Exe, seen)
 	case doors.WayBack:
 		return AddWayBack(tmuxConf(e), seen, also, e.Source)
 	case doors.Tmux, doors.Guide:
@@ -73,7 +75,7 @@ func Open(e Env, id, seen string, also bool) (backup string, err error) {
 	return "", fmt.Errorf("no door %q", id)
 }
 
-var known = []string{doors.Tmux, doors.Hooks, doors.WayBack, doors.Guide, doors.Night}
+var known = []string{doors.Tmux, doors.Hooks, doors.Limits, doors.WayBack, doors.Guide, doors.Night}
 
 // Close hides a door from the console; `matchblox setup` shows it again.
 func Close(e Env, id string) error {

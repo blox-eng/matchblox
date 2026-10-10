@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -69,8 +70,9 @@ func (m Model) render() string {
 	if m.splashing() {
 		return m.splashView(w)
 	}
-	var out []string
-	out = append(out, m.header(w), m.tabs(w), m.st.hair.Render(strings.Repeat("─", w)))
+	out := append([]string{m.header(w)}, m.limitLines(w)...)
+	top := len(out)
+	out = append(out, m.tabs(w), m.st.hair.Render(strings.Repeat("─", w)))
 	if m.mismatch {
 		return strings.Join(append(out, "", m.mismatchText(w)), "\n")
 	}
@@ -91,7 +93,7 @@ func (m Model) render() string {
 	}
 	// The line the person acts on sits under the tabs: on a phone the
 	// keyboard covers the bottom of the screen.
-	out = append(out[:2], m.footer(w), out[2])
+	out = append(out[:top+1], m.footer(w), out[top+1])
 	out = append(out, m.visible(w).lines...)
 	for len(out) < m.height {
 		out = append(out, "")
@@ -347,6 +349,67 @@ func (m Model) sessWidths(w int) (tab, acct, tree int) {
 // providerMarks stand for the logos a terminal cannot draw: one cell each,
 // none an emoji.
 var providerMarks = map[string]string{"anthropic": "✻", "openai": "❋", "opencode": "▣"}
+
+// limitLines are the limits of each account, one line each, under the
+// metrics: the mark, a short name, then what is left and whether the week
+// lasts. One account of a provider is named by its plan, two by the name
+// of their emails.
+func (m Model) limitLines(w int) []string {
+	if !m.have || len(m.snap.Limits) == 0 {
+		return nil
+	}
+	st := m.st
+	per := map[string]int{}
+	for _, a := range m.snap.Limits {
+		per[a.Provider]++
+	}
+	names := make([]string, len(m.snap.Limits))
+	nameW := 0
+	for i, a := range m.snap.Limits {
+		email, plan, _ := strings.Cut(a.Account, " · ")
+		names[i] = plan
+		if per[a.Provider] > 1 || plan == "" {
+			names[i], _, _ = strings.Cut(email, "@")
+		}
+		nameW = max(nameW, lipgloss.Width(names[i]))
+	}
+	out := make([]string, len(m.snap.Limits))
+	for i, a := range m.snap.Limits {
+		mark := providerMarks[a.Provider]
+		if mark == "" {
+			mark = "·"
+		}
+		// Too wide: the resets go first, then the name; what is left and
+		// whether the week lasts stay.
+		for try := 0; try < 3; try++ {
+			var parts []string
+			for _, p := range limits.Parts(a, m.now()) {
+				text := p.Text
+				if try > 0 {
+					text, _, _ = strings.Cut(text, " until ")
+				}
+				style := st.text
+				switch p.Tone {
+				case limits.Muted:
+					style = st.muted
+				case limits.Warn:
+					style = st.warn
+				}
+				parts = append(parts, style.Render(text))
+			}
+			name := ""
+			if try < 2 {
+				name = st.label.Render(names[i]+strings.Repeat(" ", nameW-lipgloss.Width(names[i]))) + "  "
+			}
+			out[i] = " " + st.muted.Render(mark) + " " + name + strings.Join(parts, st.faint.Render(" · "))
+			if lipgloss.Width(out[i]) <= w {
+				break
+			}
+		}
+		out[i] = fit(out[i], w)
+	}
+	return out
+}
 
 // accountCell is the provider's mark and the account label: "✻ a@b.c · Max".
 // A provider without a mark keeps its name.

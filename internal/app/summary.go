@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/state"
 )
 
@@ -23,6 +24,9 @@ func Summary(s state.Doc) string {
 		}
 	}
 	fmt.Fprintf(&b, "sessions: %d (busy %d, idle %d), %d panes without an agent\n", len(s.Sessions), busy, len(s.Sessions)-busy, len(s.IdlePanes))
+	for _, a := range s.Limits {
+		fmt.Fprintf(&b, "limits %s: %s\n", strings.TrimSpace(a.Provider+" "+a.Account), limits.Plain(limits.Parts(a, s.At)))
+	}
 	for _, a := range s.Alerts {
 		fmt.Fprintf(&b, "alert %s: %s (%s)\n", a.Level, a.Title, a.Evidence)
 	}

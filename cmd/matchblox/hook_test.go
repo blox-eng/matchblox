@@ -138,3 +138,46 @@ func TestHookIgnoresBadInput(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// statusInput is what Claude Code gives its status line (shortened).
+const statusInput = `{"session_id":"s-1","model":{"display_name":"Opus"},"rate_limits":{"five_hour":{"used_percentage":28,"resets_at":1791673800},"seven_day":{"used_percentage":12,"resets_at":1792267200}}}`
+
+// TestTheStatusLineHookTapsTheLimits: the hook keeps the limits for its
+// config directory, then prints the line of the status line it wraps, fed
+// the same input; with nothing wrapped it prints the limits. A broken input
+// or a failing wrapped command never breaks the status line.
+func TestTheStatusLineHookTapsTheLimits(t *testing.T) {
+	stateDir := t.TempDir()
+	cfgDir := filepath.Join(t.TempDir(), "claude")
+	env := func(k string) string {
+		if k == "CLAUDE_CONFIG_DIR" {
+			return cfgDir
+		}
+		return ""
+	}
+	now := time.Unix(1791667916, 0)
+	var out bytes.Buffer
+	if err := statusLine(nil, strings.NewReader(statusInput), &out, env, stateDir, config.Default(), now); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.String(); !strings.HasPrefix(got, "4 matches · 9 sparks") {
+		t.Fatalf("alone, the status line is %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "limits")); err != nil {
+		t.Fatal("no reading was kept")
+	}
+	out.Reset()
+	if err := statusLine([]string{"--", "sh", "-c", "grep -c rate_limits; echo mine"}, strings.NewReader(statusInput), &out, env, stateDir, config.Default(), now); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "1\nmine\n" {
+		t.Fatalf("the wrapped status line printed %q", out.String())
+	}
+	out.Reset()
+	if err := statusLine([]string{"--", "sh", "-c", "echo still; exit 3"}, strings.NewReader("not json"), &out, env, stateDir, config.Default(), now); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "still\n" {
+		t.Fatalf("a broken input: %q", out.String())
+	}
+}

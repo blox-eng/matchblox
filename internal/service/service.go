@@ -19,6 +19,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -69,6 +70,8 @@ type Service struct {
 	NightEnds string
 	// Capture reads the text of panes on the host, for the stoker's guard.
 	Capture func(panes []string) map[string]string
+	// LimitsLog keeps each account's limit readings. Nil: none kept.
+	LimitsLog *limits.Store
 
 	interval  time.Duration
 	gitEvery  time.Duration
@@ -229,6 +232,11 @@ func (s *Service) Run(ctx context.Context) {
 }
 
 func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
+	if s.LimitsLog != nil { // only the sample loop calls publish
+		if err := s.LimitsLog.Append(snap.Limits, snap.At); err != nil {
+			snap.Errors = append(snap.Errors, "limits: "+err.Error())
+		}
+	}
 	gen := s.doorsGen()
 	ds := s.doors()
 	s.mu.Lock()

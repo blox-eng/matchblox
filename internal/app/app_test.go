@@ -37,6 +37,9 @@ func fixtureState() proto.State {
 		Rules:   sample.DefaultRules,
 	}
 	snap := s.Sample()
+	// The limits lines move the tabs down; they have their own tests
+	// (limits_test.go), the others keep rows where they count them.
+	snap.Limits = nil
 	q := queue.New()
 	q.Merge(snap.Sessions, snap.At)
 	return proto.State{Doc: state.Doc{Snapshot: snap, Recommendations: advice.Build(snap, nil), Queue: q.Items()}}

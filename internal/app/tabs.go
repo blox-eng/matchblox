@@ -83,7 +83,7 @@ var views = [...]tabView{
 			}
 			return nil
 		},
-		body: func(m Model, w int) body { return m.sessions(w, m.height-chrome-1) },
+		body: func(m Model, w int) body { return m.sessions(w, m.height-m.chrome()-1) },
 	},
 	tabMachine: {
 		name: "machine", short: "mach",

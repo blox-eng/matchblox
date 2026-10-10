@@ -15,6 +15,7 @@ source, here and on each host you connect. The first release:
 | Codex context use needs Linux | On macOS, Codex shows "not measured". |
 | Context use for Claude Code, Codex and OpenCode only | Other agents show "not measured", and still show in the queue and in Sessions. |
 | Waits of agents other than Claude Code come from their pane | They reach the queue once their pane is idle and its last lines ask. |
+| Plan limits for Claude Code and Codex only | OpenCode's line shows "not measured". |
 | tmux only | Run your agents in tmux. |
 | No native Windows | Use Linux or macOS. |
 | One host on a screen | `esc` goes back to Hosts. |

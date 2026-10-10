@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/said"
 )
@@ -111,6 +112,8 @@ type Snapshot struct {
 	GitPolling []GitPolling `json:"git_polling"`
 	Alerts     []Alert      `json:"alerts"`
 	Errors     []string     `json:"errors,omitempty"`
+	// Limits are the plan limits of each account a session runs under.
+	Limits []limits.Account `json:"limits"`
 }
 
 // Rules decide the per-session suggestion.
@@ -155,6 +158,9 @@ type Sampler struct {
 	// it runs slower than the cheap machine counters. Zero: every sample.
 	ProcEvery time.Duration
 	Now       func() time.Time
+	// LimitsDir is where the status-line tap keeps each Claude Code config
+	// directory's limits. Empty: none are read.
+	LimitsDir string
 
 	agents     *agentReader
 	panes      map[procKey]string // environ is read once per process
@@ -254,7 +260,7 @@ func (s *Sampler) Sample() Snapshot {
 	}
 	l := s.last
 	snap.Sessions, snap.IdlePanes, snap.Orphans, snap.Top, snap.Exited = l.Sessions, l.IdlePanes, l.Orphans, l.Top, l.Exited
-	snap.Containers, snap.Groups, snap.GitPolling = l.Containers, l.Groups, l.GitPolling
+	snap.Containers, snap.Groups, snap.GitPolling, snap.Limits = l.Containers, l.Groups, l.GitPolling, l.Limits
 	snap.Errors = append(snap.Errors, l.Errors...)
 	s.alerts(&snap, now)
 	return snap
@@ -389,6 +395,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		server = panes[0]
 	}
 	uptime := s.FS.Uptime()
+	lims := limitSources{}
 	// OpenCode does not say which session a process shows: two in one
 	// directory cannot be told apart.
 	opencodeIn := map[string]int{}
@@ -436,6 +443,13 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			sess.Window = 200_000
 			sess.Account, sess.Provider = s.accounts.claudeAccount(env), claudeProvider(env)
 			s.claudeSession(&sess, pid, p, key, env, uptime, now)
+			if env.cloud == "" && env.claudeDir != "" {
+				var r *limits.Reading
+				if s.LimitsDir != "" {
+					r, _ = limits.ReadTap(s.LimitsDir, s.asProcess(env.claudeDir))
+				}
+				lims.add(sess, limits.SourceClaude, r)
+			}
 		case "codex":
 			sess.Account, sess.Provider = s.accounts.codexAccount(env), "openai"
 			path, read := s.codexRollout(pid, children)
@@ -443,14 +457,18 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			if read {
 				sess.Context = "fresh"
 			}
+			var lim *limits.Reading
 			if path != "" {
-				switch u, found := s.agents.codexUsage(path); found {
+				var u Usage
+				var found codexFound
+				switch u, lim, found = s.agents.codexUsage(path); found {
 				case codexMeasured:
 					s.measured(&sess, u, "codex:"+path, now)
 				case codexNotInTail:
 					sess.Context = "unmeasured"
 				}
 			}
+			lims.add(sess, limits.SourceCodex, lim)
 		case "opencode":
 			sess.Context = "unmeasured"
 			if opencodeIn[sess.Cwd] != 1 {
@@ -469,6 +487,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 				if u, provider, ok := s.opencode.usage(data, env.cacheHome, oc.ID); ok {
 					sess.Account, sess.Provider = s.accounts.opencodeAccount(env, provider), label(provider)
 					s.measured(&sess, u, "opencode:"+oc.ID, now)
+					lims.add(sess, limits.SourceOpenCode, nil)
 				}
 			}
 		default:
@@ -484,6 +503,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		snap.Sessions = append(snap.Sessions, sess)
 	}
 	s.readPanes(snap.Sessions, fromPane, now)
+	snap.Limits = lims.build(now, s.Cfg.Limits.Quiet)
 	for key := range s.envs {
 		if !alive[key] {
 			delete(s.envs, key)
@@ -866,4 +886,55 @@ func (s Session) Age() string {
 		return "cold"
 	}
 	return "idle"
+}
+
+// limitSources gathers the newest reading of each account the sessions run
+// under.
+type limitSources map[[2]string]*limitSource
+
+type limitSource struct {
+	provider, account, source string
+	r                         *limits.Reading
+}
+
+// add counts a session's account. An API key has no plan limits: no line.
+func (l limitSources) add(s Session, source string, r *limits.Reading) {
+	if s.Account == "API key" {
+		return
+	}
+	k := [2]string{s.Provider, s.Account}
+	cur, ok := l[k]
+	if !ok {
+		l[k] = &limitSource{s.Provider, s.Account, source, r}
+		return
+	}
+	if r != nil && (cur.r == nil || r.At.After(cur.r.At)) {
+		cur.r, cur.source = r, source
+	}
+}
+
+func (l limitSources) build(now time.Time, q limits.Quiet) []limits.Account {
+	out := make([]limits.Account, 0, len(l))
+	for _, x := range l {
+		out = append(out, limits.Build(x.provider, x.account, x.source, x.r, now, q))
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Provider != out[j].Provider {
+			return out[i].Provider < out[j].Provider
+		}
+		return out[i].Account < out[j].Account
+	})
+	return out
+}
+
+// asProcess names a path under Home as the agent processes name it: the
+// status-line tap runs inside them.
+func (s *Sampler) asProcess(path string) string {
+	if s.HomeAs == "" {
+		return path
+	}
+	if rest, ok := strings.CutPrefix(path, s.Home); ok {
+		return s.HomeAs + rest
+	}
+	return path
 }

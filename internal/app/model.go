@@ -126,6 +126,51 @@ type action struct {
 	pane        string   // a jump: the pane it goes to
 }
 
+// recRun is an act on a recommendation: the row shows its outcome.
+type recRun struct {
+	rec, act string // the rec, and the act id ("nav": run in the console)
+	key      string // the key that runs it again
+	out      string // what came of it; "" while it runs
+	failed   bool
+}
+
+func (m Model) isRec(id string) bool {
+	for _, r := range m.recs {
+		if r.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Model) startRec(a action, act string) {
+	if a.rec == "" || !m.isRec(a.rec) {
+		return
+	}
+	key := "⏎"
+	if a.which == "secondary" {
+		key = "x"
+	}
+	m.recRun = recRun{rec: a.rec, act: act, key: key}
+}
+
+// endRec turns the row of the act into its outcome.
+func (m *Model) endRec(act string, r proto.Result) {
+	if m.recRun.act != act || act == "" {
+		return
+	}
+	again := " · " + m.recRun.key + " tries again"
+	switch {
+	case r.Err != "":
+		m.recRun.out, m.recRun.failed = "failed: "+r.Err+again, true
+	case len(r.Skipped) > 0:
+		m.recRun.out, m.recRun.failed = "skipped: "+r.Skipped[len(r.Skipped)-1]+again, true
+	default:
+		m.recRun.out, m.recRun.failed = describe(r), false
+	}
+	m.recRun.act = ""
+}
+
 func (a action) String() string {
 	if a.say != "" {
 		return a.say
@@ -188,6 +233,7 @@ type Model struct {
 	answered   bool // a state came on the current connection
 	replaced   bool
 	acts       int
+	recRun     recRun // the last act on a recommendation, and what came of it
 	dark       bool
 	splashAt   time.Time
 	splashDone bool
@@ -360,6 +406,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.animating = false
 		return m, m.animate()
 	case resultMsg:
+		m.endRec(msg.ActID, proto.Result(msg))
 		if m.tally(proto.Result(msg)) {
 			return m, m.recv()
 		}
@@ -441,6 +488,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.flash = "connected again"
 		return m, tea.Batch(m.hello(), m.recv(), m.watchSilence())
 	case ranMsg:
+		if msg.err != nil {
+			m.endRec("nav", proto.Result{Err: msg.cmd + ": " + msg.err.Error()})
+		} else {
+			m.endRec("nav", proto.Result{Ran: [][]string{strings.Fields(msg.cmd)}})
+		}
 		if msg.err != nil {
 			m.flash = "failed: " + msg.cmd + ": " + msg.err.Error()
 		} else {
@@ -619,6 +671,7 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 	}
 	if a.nav {
 		run := m.opt.Run
+		m.startRec(a, "nav")
 		return m, func() tea.Msg { return runNav(a, run) }
 	}
 	if m.conn == nil || m.lost {
@@ -630,7 +683,9 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 		confirm = "y"
 	}
 	m.flash = "sent: " + a.String()
-	return m, m.send(proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
+	cmd := m.send(proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
+	m.startRec(a, "a"+strconv.Itoa(m.acts))
+	return m, cmd
 }
 
 func runNav(a action, run func([]string) error) ranMsg {
