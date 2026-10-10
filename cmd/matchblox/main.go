@@ -53,10 +53,12 @@ import (
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
-// version is stamped into a release build (-ldflags -X main.version=vX).
-// Any other build names its module version when go install made it, and
-// stays "dev" when it was built in a checkout.
-var version = buildVersion("dev", debug.ReadBuildInfo)
+// version is stamped into a release build (-ldflags -X main.version=vX),
+// which -X can do only to a constant. Any other build names the version Go
+// gave it: the module version from go install, the commit in a checkout.
+var version = "dev"
+
+func init() { version = buildVersion(version, debug.ReadBuildInfo) }
 
 func buildVersion(stamp string, read func() (*debug.BuildInfo, bool)) string {
 	if stamp != "dev" {
