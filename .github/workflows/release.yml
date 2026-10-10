@@ -1,0 +1,159 @@
+name: Release
+
+# A merge to main that CI passed becomes a release: go-semantic-release
+# picks the version from the conventional commits, and the tag starts
+# publish.yml (the binaries) and docs.yml (the docs of that version).
+#
+# Held until the owner's go: the release job runs only while the repository
+# variable RELEASE_ENABLED is "true".
+#
+# workflow_run runs with this repository's secrets. It is safe here only
+# because the job acts on a push to this repository's main that CI passed,
+# on exactly the commit CI verified, and never checks out pull request code.
+on: # zizmor: ignore[dangerous-triggers]
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    name: Create Release
+    # A pull request from a fork's main branch also fires workflow_run here;
+    # only a push to this repository's main releases.
+    if: >-
+      vars.RELEASE_ENABLED == 'true' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Read-only: the one write, the tag and the release, goes through
+    # RELEASE_TOKEN in a step of its own.
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.semrel.outputs.version }}
+      sha: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      # The tip of main may have moved on while CI ran; the newer commit's own
+      # CI run releases it.
+      - name: Release only the commit CI verified
+        id: verified
+        env:
+          VERIFIED_SHA: ${{ github.event.workflow_run.head_sha }}
+          TIP_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$VERIFIED_SHA" = "$TIP_SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "main moved on to $TIP_SHA while CI verified $VERIFIED_SHA; the newer run releases"
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.verified.outputs.current == 'true'
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Dry: the action fetches the semantic-release binary at run time, so it
+      # holds only this job's read-only token, never RELEASE_TOKEN. Without a
+      # tag, the first version is 0.1.0, and breaking changes stay in 0.x.
+      - name: Compute the next version
+        id: semrel
+        if: steps.verified.outputs.current == 'true'
+        uses: go-semantic-release/action@2e9dc4247a6004f8377781bef4cb9dad273a741f # v1.24.1
+        with:
+          dry: true
+          allow-initial-development-versions: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release notes from the changelog
+        if: steps.semrel.outputs.version != ''
+        run: .github/scripts/release-notes.sh > "$RUNNER_TEMP/notes.md"
+
+      # A tag pushed with the built-in token starts no workflow, so the tag
+      # would never reach publish.yml or docs.yml. RELEASE_TOKEN is a
+      # fine-grained token for this repository: Contents and Pull requests,
+      # read and write.
+      - name: Tag and release the verified commit
+        if: steps.semrel.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ steps.semrel.outputs.version }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "refusing version '$VERSION': not semver" >&2
+            exit 1
+          fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "RELEASE_TOKEN is not set: add it in Settings → Secrets and variables → Actions" >&2
+            exit 1
+          fi
+          gh release create "v${VERSION}" \
+            --target "$SHA" \
+            --title "v${VERSION}" \
+            --notes-file "$RUNNER_TEMP/notes.md"
+
+  # The release's changelog and the docs that name it: [Unreleased] moves
+  # under the version, and the README, docs and site flip to the released
+  # text. A pull request, because main takes no direct push; it merges
+  # itself once its checks pass. It is opened with RELEASE_TOKEN, since a
+  # pull request opened with the built-in token runs no CI and would never
+  # merge.
+  changelog:
+    name: Promote changelog
+    needs: release
+    if: needs.release.outputs.version != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # The released commit, not the tip: this branch carries that release's
+      # changelog and nothing else.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release.outputs.sha }}
+          persist-credentials: false
+
+      - name: Promote the changelog, flip the docs, open a pull request
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          .github/scripts/promote-changelog.sh "$VERSION" "$(date -u +%Y-%m-%d)"
+          .github/scripts/flip-release.sh
+          if git diff --quiet; then
+            echo "CHANGELOG.md already has v${VERSION} and the docs are flipped"
+            exit 0
+          fi
+          branch="chore/release-v${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git commit -qam "docs: v${VERSION} is released: the changelog names it and the docs install it"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" "$branch:$branch"
+          gh pr create --base main --head "$branch" \
+            --title "docs: v${VERSION} is released: the changelog names it and the docs install it" \
+            --body "Opened by the Release workflow after v${VERSION}. It moves the [Unreleased] entries under v${VERSION}, and turns the README, the docs and the site to the released install. It merges itself once its checks pass. Until it merges, Lint fails on other pull requests."
+          gh pr merge "$branch" --squash --auto ||
+            echo "::warning::Auto-merge is off: merge the v${VERSION} changelog pull request by hand."
