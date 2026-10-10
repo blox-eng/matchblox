@@ -10,13 +10,14 @@
 #   2. resolves the release (latest, or $MATCHBLOX_VERSION)
 #   3. downloads matchblox-<os>-<arch> and its .sha256
 #   4. VERIFIES THE CHECKSUM, and installs nothing if it does not match
-#   5. verifies the build provenance too, when `gh` is available
-#   6. installs to /usr/local/bin, or ~/.local/bin when that is not writable
-#   7. starts matchblox in this terminal, when there is one
+#   5. verifies the build provenance too, when `gh` is installed and logged in
+#   6. checks that the binary names the release it came from
+#   7. installs to /usr/local/bin, or ~/.local/bin when that is not writable
+#   8. starts matchblox in this terminal, when there is one
 #
-# Before the first release (v0.1.0), there is no binary to download. Then it
-# builds from source with `go install` when Go is on this machine, and tells
-# you what to do when it is not.
+# Only when the repository has no release at all does it build from source
+# with `go install`, and it says so. When GitHub cannot be reached, it
+# installs nothing.
 #
 # It writes one file. matchblox itself changes nothing outside
 # ~/.config/matchblox and ~/.local/state/matchblox without asking you first.
@@ -62,11 +63,21 @@ main() {
     bindir="$HOME/.local/bin"
   fi
 
-  # 2. Resolve the version. No release yet: build from source.
+  # 2. Resolve the version. github.com/<repo>/releases/latest redirects to
+  #    the latest release's tag, or to the release list when there is none.
   version=${MATCHBLOX_VERSION:-}
   if [ -z "$version" ]; then
-    version=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null |
-      sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1) || true
+    latest=$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest") ||
+      die "could not reach github.com to find the latest release. Check the network, or set MATCHBLOX_VERSION."
+    case $latest in
+      "https://github.com/$REPO/releases/tag/"*) version=${latest##*/} ;;
+      "https://github.com/$REPO/releases" | "https://github.com/$REPO/releases/") ;;
+      *) die "could not reach github.com: $latest answered instead. Check the network, or set MATCHBLOX_VERSION." ;;
+    esac
+  fi
+  if [ -n "$version" ]; then
+    printf '%s\n' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' ||
+      die "'$version' is not a release tag (like v0.1.0)"
   fi
   if [ -z "$version" ]; then
     from_source
@@ -79,7 +90,7 @@ main() {
     *) say ""; say "  $bindir is not on your PATH. Add it:"; say "    export PATH=\"$bindir:\$PATH\"" ;;
   esac
 
-  # 7. Start it. The script reads from the pipe, so the console gets the
+  # 8. Start it. The script reads from the pipe, so the console gets the
   #    terminal itself.
   if [ "${MATCHBLOX_NO_START:-}" != 1 ] && [ -r /dev/tty ] && [ -w /dev/tty ] && (: </dev/tty) 2>/dev/null; then
     say ""
@@ -101,7 +112,8 @@ from_release() {
   asset="matchblox-$os-$arch"
   base="https://github.com/$REPO/releases/download/$version"
   work=$(mktemp -d)
-  trap 'rm -rf "$work"' EXIT INT TERM
+  trap 'rm -rf "$work"' EXIT
+  trap 'rm -rf "$work"; exit 1' INT TERM
 
   say "matchblox $version ($os/$arch)"
 
@@ -125,30 +137,43 @@ Nothing was installed. Do not use the downloaded file."
 
   # 5. The checksum comes from the same release as the binary: it proves the
   #    bytes arrived intact, not that CI built them. The provenance
-  #    attestation proves that, and only `gh` can check it.
-  if command -v gh >/dev/null 2>&1; then
-    gh attestation verify "$work/$asset" --repo "$REPO" >/dev/null 2>&1 ||
+  #    attestation proves that, and only `gh` can check it, logged in.
+  if ! command -v gh >/dev/null 2>&1; then
+    say "  provenance not checked (install the 'gh' CLI to verify the build attestation)"
+  elif ! gh attestation verify --help >/dev/null 2>&1; then
+    say "  provenance not checked (gh is too old to verify attestations: update gh, then run this again)"
+  elif ! gh auth status >/dev/null 2>&1; then
+    say "  provenance not checked (gh is not logged in: gh auth login, then run this again)"
+  else
+    gh attestation verify "$work/$asset" --repo "$REPO" \
+      --signer-workflow "$REPO/.github/workflows/publish.yml" >"$work/attestation.log" 2>&1 ||
       die "provenance verification FAILED for $asset.
+$(cat "$work/attestation.log")
 The checksum matched, but the build attestation did not verify against $REPO.
 Nothing was installed. Please report this: https://github.com/$REPO/security"
     say "  provenance ok (built by CI in $REPO)"
-  else
-    say "  provenance not checked (install the 'gh' CLI to verify the build attestation)"
   fi
 
-  # 6. Install.
+  # 6. The binary names its release.
+  chmod 0755 "$work/$asset"
+  says=$("$work/$asset" version 2>/dev/null) || says=""
+  [ "$says" = "$version" ] || die "the $version binary says \"$says\", not $version.
+Nothing was installed. Please report this: https://github.com/$REPO/issues"
+
+  # 7. Install.
   mkdir -p "$bindir" || die "could not create $bindir"
   install -m 0755 "$work/$asset" "$bindir/matchblox" 2>/dev/null ||
     { cp "$work/$asset" "$bindir/matchblox" && chmod 0755 "$bindir/matchblox"; } ||
     die "could not write to $bindir — set MATCHBLOX_BIN_DIR, or re-run with sudo"
   say "  installed $bindir/matchblox"
+  rm -rf "$work" # the console starts with exec, which runs no EXIT trap
 }
 
 from_source() {
-  command -v go >/dev/null 2>&1 || die "matchblox has no release yet (v0.1.0 is close), so it builds from source, and that needs Go 1.26 or later:
+  command -v go >/dev/null 2>&1 || die "matchblox has no release yet, so this builds it from source, and that needs Go 1.26 or later:
   https://go.dev/dl/
 Then run this again, or: go install github.com/$REPO/cmd/matchblox@latest"
-  say "matchblox (no release yet: building from source with $(go version | cut -d' ' -f3))"
+  say "matchblox has no release yet: building from source with $(go version | cut -d' ' -f3)"
   mkdir -p "$bindir" || die "could not create $bindir"
   GOBIN=$bindir go install "github.com/$REPO/cmd/matchblox@latest" ||
     die "go install failed; the output above says why"

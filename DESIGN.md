@@ -213,7 +213,9 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   shows the exact diff (`+` in the accent, `-` in `neg`) or the exact argv
   under the doors, and the action line names the door. A diff longer than
   the screen scrolls with `↑↓`, and `y` works only after its last line was
-  on the screen. A typed `y` opens it,
+  on the screen. A door with a choice shows it above the diff, off:
+  `[ ] m <label>`; `m` turns it on and the diff shows what it adds (the
+  way back's tmux mouse, owner 2026-10-10). A typed `y` opens it,
   `x` and `y` close it. A door that is done folds away at once. `matchblox
   setup` shows every door, done and closed ones too. An agent that waits is
   selected before a door; with nobody waiting, the first door is.

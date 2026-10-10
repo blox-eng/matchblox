@@ -31,11 +31,20 @@ type Door struct {
 	Sum string `json:"sum,omitempty"`
 	// Term runs in the builder's terminal (a password prompt, an agent).
 	Term []string `json:"term,omitempty"`
+	// Also is a choice the preview offers, off until the person turns it on.
+	Also *Also `json:"also,omitempty"`
 	// Problem is why the door cannot open now, and the fix.
 	Problem string `json:"problem,omitempty"`
 	Done    bool   `json:"done,omitempty"`
 	// Closed: the builder closed it; `matchblox setup` shows it again.
 	Closed bool `json:"closed,omitempty"`
+}
+
+// Also is one more change a door can make on request: its label and the
+// whole diff with it. It opens with the same Sum.
+type Also struct {
+	Label   string `json:"label"`
+	Preview string `json:"preview"`
 }
 
 // Open is a door the console shows: not done and not closed.

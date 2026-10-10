@@ -215,8 +215,8 @@ func (s *Service) doors() []doors.Door {
 }
 
 // door opens a door ("primary", Text = the Sum of the preview the person
-// saw) or closes it ("secondary"). Both need a typed y: they change the
-// person's own files.
+// saw; "also" opens it with the choice of its preview turned on) or closes
+// it ("secondary"). All need a typed y: they change the person's own files.
 func (s *Service) door(id string, a proto.Act) proto.Result {
 	if s.Setup == nil {
 		return proto.Result{Err: "no doors on this machine"}
@@ -237,7 +237,7 @@ func (s *Service) door(id string, a proto.Act) proto.Result {
 			path = d.Path
 		}
 	}
-	backup, err := setup.Open(*s.Setup, id, a.Text)
+	backup, err := setup.Open(*s.Setup, id, a.Text, a.Which == "also")
 	ran := [][]string{{"write", path}}
 	if backup != "" {
 		ran = append(ran, []string{"backup", backup})

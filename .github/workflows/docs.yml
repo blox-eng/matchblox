@@ -1,11 +1,12 @@
 name: Docs
 
-# docs.matchblox.com shows the docs of the latest release. Until the first
-# v* tag exists, it shows main: the install script builds main until then.
+# docs.matchblox.com shows the docs of the latest release: publish.yml calls
+# this workflow on the tag once the release is verified. Until the first v*
+# tag exists, it shows main.
 on:
+  workflow_call:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
     branches: [main]
     paths:
@@ -17,12 +18,13 @@ on:
       - "www/assets/fonts/**"
       - "www/assets/matchblox-mark-dark.svg"
       - ".github/workflows/docs.yml"
+      - ".github/scripts/flip-release.sh"
   workflow_dispatch:
 
 # A deploy that runs is never cancelled; a newer push to a pull request
 # cancels the older build.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: docs-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -45,6 +47,13 @@ jobs:
           python-version: "3.12"
       - name: Install mkdocs
         run: pip install --require-hashes --no-deps -r requirements-docs.txt
+      # A tag's docs install that release, also before the release's own
+      # changelog pull request flips main.
+      - name: The released text
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: .github/scripts/flip-release.sh docs/*.md
       - name: mkdocs build --strict
         run: mkdocs build --strict
       - name: Deploy only from the latest source of truth

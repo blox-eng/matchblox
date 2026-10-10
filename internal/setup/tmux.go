@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/doors"
@@ -41,19 +42,27 @@ func wayBackDoor(e Env) doors.Door {
 		d.Problem = err.Error()
 		return d
 	}
-	next := withWayBack(old)
+	next := withWayBack(old, false)
 	if string(next) == string(old) {
 		d.Done = true
 		return d
 	}
 	d.Sum, d.Preview = Sum(old), diff(string(old), string(next))
+	if !mouseOn.Match(old) {
+		d.Also = &doors.Also{Label: "also turn the mouse on: a tap on ◂ matchblox works from a phone, and every pane selects and scrolls with the mouse",
+			Preview: diff(string(old), string(withWayBack(old, true)))}
+	}
 	return d
 }
 
-// AddWayBack appends panes.WayBack to the tmux config once, then loads it
-// into the running server.
-func AddWayBack(tmuxConf, seen string, source func(string) error) (backup string, err error) {
-	backup, err = edit(tmuxConf, seen, func(old []byte) ([]byte, error) { return withWayBack(old), nil })
+// mouseOn finds a line that turns the tmux mouse on.
+var mouseOn = regexp.MustCompile(`(?m)^[ \t]*set(-option)?([ \t]+-[a-zA-Z]+)*[ \t]+mouse[ \t]+on\b`)
+
+// AddWayBack appends panes.WayBack to the tmux config once, with
+// panes.Mouse when the person chose it, then loads it into the running
+// server.
+func AddWayBack(tmuxConf, seen string, mouse bool, source func(string) error) (backup string, err error) {
+	backup, err = edit(tmuxConf, seen, func(old []byte) ([]byte, error) { return withWayBack(old, mouse), nil })
 	if err != nil {
 		return backup, err
 	}
@@ -63,7 +72,7 @@ func AddWayBack(tmuxConf, seen string, source func(string) error) (backup string
 	return backup, nil
 }
 
-func withWayBack(old []byte) []byte {
+func withWayBack(old []byte, mouse bool) []byte {
 	s := string(old)
 	if strings.Contains(s, wayBackMark) {
 		return old
@@ -74,5 +83,9 @@ func withWayBack(old []byte) []byte {
 		}
 		s += "\n"
 	}
-	return []byte(s + panes.WayBack)
+	s += panes.WayBack
+	if mouse {
+		s += panes.Mouse
+	}
+	return []byte(s)
 }

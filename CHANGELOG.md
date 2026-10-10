@@ -6,78 +6,39 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- A session you compacted shows the context it has left.
-- A turn that ends on a question shows as waiting for you, even with a
-  progress line after the question. Control keys in an
-  agent's reply never reach the console.
+The first release: one console for every coding agent you run in tmux, on
+the host, over SSH and from a phone.
 
 ### Added
 
-- The stoker: press `n` before you sleep (or `f` for a lunch or a meeting).
-  Each Claude Code session that fills its context compacts itself and
-  leaves one RESUME line on how to continue. In the morning, STOKED above
-  the queue shows each compact, its context before and after and its RESUME
-  line. A session that waits for you, or has a line you started to type, is
-  left as it is. The night ends at `[stoker] night_ends` (07:00).
-- The docs at docs.matchblox.com: get started, the console, every key, the
-  phone, agents, remote hosts, config, safety, limits, and tmux, the engine
-  under matchblox. A test holds every key and command in the README and the
-  docs to the binary.
-- Context use for Codex and OpenCode, the same figure the agent shows
-  itself. `[sessions.windows]` sets the window for a model. A session is
-  "fresh" before its first turn and "not measured" when its files cannot be
-  read. Codex context use needs Linux.
-- An ACCOUNT column in Sessions on wide screens: the provider's mark (`✻`
-  Anthropic, `❋` OpenAI, `▣` OpenCode), then the email and plan or "API
-  key". Each Claude Code process reads its own config directory
-  (`CLAUDE_CONFIG_DIR`), so two logins show two labels. Only those fields are
-  read from the auth files; no token reaches the snapshot or the screen.
-- Every agent in tmux: Codex, OpenCode, Gemini CLI, aider, cursor-agent or
-  any command named in `agents`. Without hooks, its waits come from its pane
-  ("from the pane:" on its queue row). The first run writes the agents it
-  finds to `agents`.
-- An agent's open pull request shows as `#N` on its queue and Sessions rows,
-  and with its title and link in the detail.
-- Sessions shows the queue's word (`asks`, `waits`, `done`) instead of
-  `idle`, and `paused` for a turn that stopped with its progress bar under
-  100%.
-
-- Remote mode: the first run asks where your agents run. `matchblox connect
-  <host>` connects a host once (it installs the verified matchblox there and
-  adds a key that can start only the console's stream), and `matchblox <host>` opens its
-  console. Hosts sit above the console as a layer: `esc` goes back, `+ add a
-  host` adds one. A lost host stays on the screen as stale and connects again.
-- The queue, tab 1: each agent that asks for permission, waits for input or
-  finished its turn, oldest first, with its last line. Claude Code hooks
-  call `matchblox hook <event>`; without hooks the queue is estimated.
-- Each session is a match: `✦` burning while it works, `╿` at rest while it
-  waits (it breathes when it asks), `│` spent at the compact limit. It
-  strikes when work starts. `--no-motion` keeps it still.
-- Enter goes to the pane (it attaches outside tmux), and `a` answers in one
-  line after a typed `y`. A permission prompt is answered in its pane.
-- The Panes tab lists every tmux pane.
-- `DESIGN.md`: colour, the mark, the match, motion, layout, copy, the site.
-
-- `curl -fsSL https://matchblox.sh | sh` installs matchblox and starts it.
-  It verifies the checksum (and the build provenance, with `gh`) of a
-  release binary; until v0.1.0 it builds from source with Go.
-
-- The console from builder-tui: sessions by tmux pane with context use and
-  burn, machine load and health, detached busy loops, git checkouts and merged
-  worktrees, ranked recommendations with guarded actions, and 24 h history.
-- `matchblox serve`: one service on the host owns the sampling, the state
-  and the actions. `matchblox` connects to it on a local socket, or starts it
-  in the background; any number of consoles share one sample loop.
-- `matchblox status` reads from the running service.
-- `matchblox serve --stdio`, for consoles that reach the host over SSH.
-- The start screen: the matchbox builds itself and the match strikes, in
-  less than 600 ms. Any key skips it; `--no-motion` or `NO_MOTION=1` shows
-  the last frame.
-- The header names the host: `▰ matchblox · <host>`.
-
-### Fixed
-
-- `go install github.com/blox-eng/matchblox/cmd/matchblox@latest` failed:
-  test fixture names with ":" broke the module zip.
+- **The queue**: every agent that asks for permission, waits for input or
+  finished its turn, oldest first, with its last line. `Enter` goes to its
+  pane, and `a` answers in one line after a typed `y`. Claude Code reaches
+  the queue through its hooks; Codex, OpenCode, Gemini CLI, aider,
+  cursor-agent and any command named in `agents` reach it from their pane.
+- **Each session is a match**: `✦` burning while it works, `╿` at rest
+  while it waits, `│` spent at the compact limit.
+- **Sessions**: how full each context is (Claude Code, OpenCode, and Codex
+  on Linux), the queue's word (`asks`, `waits`, `done`, `paused`), the
+  account each one runs under, and its open pull request as `#N`.
+- **The machine**: load, memory and health, detached busy loops, git
+  checkouts and merged worktrees, recommendations with one guarded action
+  each, and 24 h of history.
+- **The stoker**: press `n` before you sleep, or `f` for a lunch. Each
+  Claude Code session that fills its context compacts itself and leaves one
+  RESUME line. In the morning, STOKED shows each one, its context before and
+  after. A session that waits for you, or holds a line you started to type,
+  is left as it is.
+- **Any terminal, even a phone**: a tap selects, a second tap acts. The way
+  back, `prefix m` or a tap on `◂ matchblox`, returns to the console from
+  any pane; `m` in its preview turns the tmux mouse on for the tap.
+- **Remote hosts**: `matchblox connect <host>` connects a host once, with a
+  key that can start only the console's stream, and `matchblox <host>`
+  opens its console.
+- **Setup in the queue**: tmux, the queue hooks, the way back and a guide
+  session, each shown as the exact change before a typed `y`.
+- **Install in one line**: `curl -fsSL https://matchblox.sh | sh` installs
+  the release binary for Linux or macOS, amd64 or arm64, its checksum and
+  build provenance checked, and starts it. `go install` builds the same
+  version, and `matchblox version` names it.
+- **Docs** at [docs.matchblox.com](https://docs.matchblox.com).

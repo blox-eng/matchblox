@@ -121,7 +121,7 @@ func settings(t *testing.T, e Env, body string) string {
 
 func open(t *testing.T, e Env, id string) string {
 	t.Helper()
-	backup, err := Open(e, id, door(t, e, id).Sum)
+	backup, err := Open(e, id, door(t, e, id).Sum, false)
 	if err != nil {
 		t.Fatalf("Open(%s): %v", id, err)
 	}
@@ -283,7 +283,7 @@ func TestDoorRefusesChangedFile(t *testing.T) {
 	if err := os.WriteFile(p, []byte(changed), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Open(e, doors.Hooks, seen); !errors.Is(err, ErrChanged) {
+	if _, err := Open(e, doors.Hooks, seen, false); !errors.Is(err, ErrChanged) {
 		t.Fatalf("Open after a change: %v, want ErrChanged", err)
 	}
 	if b, _ := os.ReadFile(p); string(b) != changed {
@@ -317,7 +317,7 @@ func TestAddWayBackOnce(t *testing.T) {
 	if d := door(t, e, doors.WayBack); !d.Done {
 		t.Fatalf("way back not done: %+v", d)
 	}
-	if _, err := AddWayBack(conf, Sum(b), e.Source); err != nil {
+	if _, err := AddWayBack(conf, Sum(b), false, e.Source); err != nil {
 		t.Fatal(err)
 	}
 	if again, _ := os.ReadFile(conf); string(again) != string(b) {
@@ -375,7 +375,7 @@ func TestGuideIsATermDoor(t *testing.T) {
 	if !slices.Equal(d.Term, doors.GuideArgv(false)) || !strings.Contains(d.Why, "uses your tokens") {
 		t.Fatalf("guide = %+v", d)
 	}
-	if _, err := Open(env(t), doors.Guide, ""); err == nil {
+	if _, err := Open(env(t), doors.Guide, "", false); err == nil {
 		t.Fatal("the service opened a terminal door")
 	}
 }
@@ -563,5 +563,65 @@ func TestNightDoorFoldsAfterTheFirstRun(t *testing.T) {
 	e = env(t)
 	if err := Close(e, doors.Night); err != nil || !door(t, e, doors.Night).Closed {
 		t.Fatalf("close night: %v", err)
+	}
+}
+
+func TestWayBackOffersTheMouseOffByDefault(t *testing.T) {
+	e := env(t)
+	e.Source = func(string) error { return nil }
+	conf := filepath.Join(e.Home, ".tmux.conf")
+	if err := os.WriteFile(conf, []byte("set -g prefix C-a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := door(t, e, doors.WayBack)
+	if d.Also == nil || !strings.Contains(d.Also.Label, "mouse") {
+		t.Fatalf("no mouse choice: %+v", d)
+	}
+	if strings.Contains(d.Preview, "mouse on") || !strings.Contains(d.Also.Preview, "+set -g mouse on") {
+		t.Fatalf("preview %q, with the mouse %q", d.Preview, d.Also.Preview)
+	}
+	open(t, e, doors.WayBack)
+	if b, _ := os.ReadFile(conf); strings.Contains(string(b), "mouse on") {
+		t.Fatalf("the mouse is on without the choice:\n%s", b)
+	}
+}
+
+func TestWayBackWithTheMouseWritesIt(t *testing.T) {
+	e := env(t)
+	e.Source = func(string) error { return nil }
+	conf := filepath.Join(e.Home, ".tmux.conf")
+	if err := os.WriteFile(conf, []byte("set -g prefix C-a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(e, doors.WayBack, door(t, e, doors.WayBack).Sum, true); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(conf)
+	if want := "set -g prefix C-a\n\n" + panes.WayBack + panes.Mouse; string(b) != want {
+		t.Fatalf("tmux.conf =\n%s\nwant\n%s", b, want)
+	}
+	if d := door(t, e, doors.WayBack); !d.Done {
+		t.Fatalf("way back not done: %+v", d)
+	}
+}
+
+func TestWayBackOffersNoMouseWhenItIsOn(t *testing.T) {
+	for _, line := range []string{"set -g mouse on", "set-option -g mouse on", "  set -gq mouse on # taps"} {
+		e := env(t)
+		conf := filepath.Join(e.Home, ".tmux.conf")
+		if err := os.WriteFile(conf, []byte(line+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if d := door(t, e, doors.WayBack); d.Also != nil {
+			t.Errorf("%q: mouse offered again: %+v", line, d.Also)
+		}
+	}
+	e := env(t)
+	conf := filepath.Join(e.Home, ".tmux.conf")
+	if err := os.WriteFile(conf, []byte("# set -g mouse on\nset -g mouse off\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if d := door(t, e, doors.WayBack); d.Also == nil {
+		t.Errorf("a commented or off mouse is not on: %+v", d)
 	}
 }

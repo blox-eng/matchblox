@@ -59,13 +59,14 @@ func Doors(e Env) []doors.Door {
 }
 
 // Open runs a door that changes a file. seen is the Sum of the preview the
-// person confirmed. It returns the backup, "" when there was no file.
-func Open(e Env, id, seen string) (backup string, err error) {
+// person confirmed; also is the door's Also, when they turned it on. It
+// returns the backup, "" when there was no file.
+func Open(e Env, id, seen string, also bool) (backup string, err error) {
 	switch id {
 	case doors.Hooks:
 		return AddHooks(settingsPath(e), e.Exe, seen)
 	case doors.WayBack:
-		return AddWayBack(tmuxConf(e), seen, e.Source)
+		return AddWayBack(tmuxConf(e), seen, also, e.Source)
 	case doors.Tmux, doors.Guide:
 		return "", fmt.Errorf("the %s door runs in your terminal", id)
 	}

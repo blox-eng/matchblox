@@ -323,3 +323,55 @@ func TestAPhoneShowsOnlyTheSelectedWhy(t *testing.T) {
 		t.Fatalf("the why does not follow the selection:\n%s", out)
 	}
 }
+
+var wayBackMouse = func() doors.Door {
+	d := wayBack
+	d.Also = &doors.Also{Label: "also turn the mouse on: a tap on ◂ matchblox works from a phone", Preview: "+bind m switch-client -t =matchblox\n+set -g mouse on"}
+	return d
+}()
+
+func TestTheWayBackMouseIsOffUntilM(t *testing.T) {
+	m, f := loadedWith(t, 100, doorState(wayBackMouse))
+	next, _ := key(m, "enter")
+	out := ansi.Strip(next.(Model).render())
+	if !strings.Contains(out, "[ ] m also turn the mouse on") || strings.Contains(out, "+set -g mouse on") {
+		t.Fatalf("the choice is not shown off:\n%s", out)
+	}
+	next, _ = key(next, "m")
+	out = ansi.Strip(next.(Model).render())
+	for _, want := range []string{"[x] m also turn the mouse on", "+set -g mouse on", "write ~/.tmux.conf, mouse on"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("no %q after m:\n%s", want, out)
+		}
+	}
+	next, cmd := key(next, "y")
+	if cmd != nil {
+		next.Update(cmd())
+	}
+	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "door:wayback", Which: "also", Confirm: "y", Text: "s2"}) {
+		t.Fatalf("acts %+v", acts)
+	}
+}
+
+func TestMTwiceLeavesTheMouseOff(t *testing.T) {
+	m, f := loadedWith(t, 100, doorState(wayBackMouse))
+	next, _ := key(m, "enter")
+	next, _ = key(next, "m")
+	next, _ = key(next, "m")
+	next, cmd := key(next, "y")
+	if cmd != nil {
+		next.Update(cmd())
+	}
+	if acts := f.acts(); len(acts) != 1 || acts[0].Which != "primary" {
+		t.Fatalf("acts %+v", acts)
+	}
+}
+
+func TestMWithoutAChoiceCancelsAsAnyKey(t *testing.T) {
+	m, f := loadedWith(t, 100, doorState(wayBack))
+	next, _ := key(m, "enter")
+	next, _ = key(next, "m")
+	if next.(Model).pending != nil || len(f.acts()) != 0 {
+		t.Fatalf("m on a door without a choice: pending %+v, acts %+v", next.(Model).pending, f.acts())
+	}
+}

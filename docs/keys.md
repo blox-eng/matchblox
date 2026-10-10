@@ -36,6 +36,7 @@ The action line shows `RUN` and the exact command.
 | `Enter` | Runs a safe action. |
 | `y` | Runs a destructive action. `Enter` never does. |
 | `↓` or `j` | Scrolls a long change. `y` works only after its last line was on the screen. |
+| `m` | Turns the choice of a setup step on or off: the tmux mouse, in "Add the way back". |
 | `Esc` | Cancels. Any other key cancels too. |
 
 ## Typing an answer or a search

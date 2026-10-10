@@ -10,8 +10,17 @@ curl -fsSL https://matchblox.sh | sh
 
 Read the script first at [matchblox.sh](https://matchblox.sh/install.sh).
 It installs matchblox to `/usr/local/bin`, or to `~/.local/bin`, and starts
-it. Until the first release, the script builds matchblox from source, and
+it.
+<!-- until-release -->
+Until the first release, the script builds matchblox from source, and
 that needs Go. The same build with Go:
+<!-- /until-release -->
+<!-- after-release
+You get the release binary for your machine. The script checks its
+checksum and, with `gh` logged in, that CI built it from this repository,
+and installs nothing that fails a check. With Go, the same version builds
+from source:
+after-release -->
 
 ```sh
 go install github.com/blox-eng/matchblox/cmd/matchblox@latest
@@ -57,7 +66,7 @@ typed `y` makes the change. `x` closes a step that you do not want.
 |---|---|
 | Install tmux | Installs tmux with your package manager, when it is not there. |
 | Add the queue hooks | Adds the matchblox hooks to `~/.claude/settings.json`, and keeps a backup. Claude Code then tells the queue when it waits. |
-| Add the way back | Adds `prefix m` and a tap target `◂ matchblox` to your tmux config (`~/.tmux.conf`), and keeps a backup. From any pane, one key or one tap brings you back to the console. It takes over `prefix m`, the tmux key that marks a pane. The tap needs `set -g mouse on`. |
+| Add the way back | Adds `prefix m` and a tap target `◂ matchblox` to your tmux config (`~/.tmux.conf`), and keeps a backup. From any pane, one key or one tap brings you back to the console. It takes over `prefix m`, the tmux key that marks a pane. The tap needs the tmux mouse: `m` in the preview turns it on too (off unless you press it). |
 | Open a guide session | Starts Claude Code with a prompt that reads this page and walks you through it. It uses your tokens. |
 
 A step that is done folds away. `matchblox setup` shows every step again,

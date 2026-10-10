@@ -155,3 +155,22 @@ func TestAnOlderSampleNeverBringsAFoldedDoorBack(t *testing.T) {
 		t.Fatal("a current sample was dropped")
 	}
 }
+
+func TestWayBackActTurnsTheMouseOnOnlyWhenChosen(t *testing.T) {
+	for _, which := range []string{"primary", "also"} {
+		s, _ := doorsTest(t)
+		ctx := run(t, s)
+		c, _ := connect(t, ctx, s)
+		d := findDoor(t, snapshot(t, c), doors.WayBack)
+		if d.Also == nil {
+			t.Fatalf("no mouse choice: %+v", d)
+		}
+		if r := act(t, c, "1", proto.Act{RecID: "door:wayback", Which: which, Confirm: "y", Text: d.Sum}); r.Err != "" {
+			t.Fatalf("%s: result %+v", which, r)
+		}
+		b, _ := os.ReadFile(d.Path)
+		if on := strings.Contains(string(b), "set -g mouse on"); on != (which == "also") {
+			t.Fatalf("%s: tmux.conf:\n%s", which, b)
+		}
+	}
+}
