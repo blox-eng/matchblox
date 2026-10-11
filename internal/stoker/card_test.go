@@ -164,3 +164,16 @@ func TestARestEndsWhenTheBuilderLeaves(t *testing.T) {
 		t.Error("off kept the rest")
 	}
 }
+
+// A run that ends before any sample still counts what its end shows: the
+// card never names a full session under "0 were full".
+func TestScoreCountsTheEnd(t *testing.T) {
+	asks := calm("%3")
+	asks.Asks = true
+	end := []sample.Session{calm("%1"), full("%2"), asks}
+	m := on().Begin([]sample.Session{calm("%1"), calm("%2"), calm("%3")})
+	c := m.Off(t0.Add(time.Minute)).Score(end, nil, 85, nil).Card
+	if c.Full != 1 || c.Waited != 1 || c.Ready != 1 {
+		t.Fatalf("card %+v", c)
+	}
+}

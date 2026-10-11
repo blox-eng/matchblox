@@ -59,6 +59,10 @@ func (m Mode) Observe(ss []sample.Session, waiting map[string]bool, compactAt fl
 	if !m.On {
 		return m, false
 	}
+	return m.observe(ss, waiting, compactAt)
+}
+
+func (m Mode) observe(ss []sample.Session, waiting map[string]bool, compactAt float64) (Mode, bool) {
 	changed := false
 	add := func(ids []string, id string) []string {
 		if slices.Contains(ids, id) {
@@ -89,6 +93,7 @@ func waits(s sample.Session, waiting map[string]bool) bool {
 // Score freezes the card of a run that ended, from the sessions as they
 // are at its end and the run's steps.
 func (m Mode) Score(ss []sample.Session, waiting map[string]bool, compactAt float64, run []Entry) Mode {
+	m, _ = m.observe(ss, waiting, compactAt) // the end counts, even between two samples
 	c := Card{
 		Night: m.Nightly, Since: m.Since, Ended: m.Ended,
 		Watched: len(m.Watched), Full: len(m.Full), Waited: len(m.Waited), Of: len(m.Start),
