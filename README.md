@@ -56,7 +56,8 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   (`✻` Anthropic, `❋` OpenAI, `▣` OpenCode), token burn, CPU, and when to
   compact or clear.
 - **The stoker**: press `n` before you sleep. Each session that fills its
-  context compacts itself and leaves one line on how to continue.
+  context compacts itself and leaves one line on how to continue. In the
+  morning a card tells you how many sessions are ready to go on.
 - **Machine health**, **detached busy loops**, **git** worktrees that are
   safe to remove, **recommendations** with their exact command, and 24 hours
   of **history**.

@@ -70,9 +70,21 @@ func (m Model) render() string {
 	if m.splashing() {
 		return m.splashView(w)
 	}
+	if m.night() {
+		m.st = nightStyles()
+		f := m.frame(w)
+		if n := strings.Count(f, "\n") + 1; n < m.height {
+			f += strings.Repeat("\n", m.height-n) // the night covers every row
+		}
+		return paint(f, m.st.ground, w)
+	}
+	return m.frame(w)
+}
+
+func (m Model) frame(w int) string {
 	out := append([]string{m.header(w)}, m.limitLines(w)...)
 	top := len(out)
-	out = append(out, m.tabs(w), m.st.hair.Render(strings.Repeat("─", w)))
+	out = append(out, m.tabs(w), m.st.rule.Render(strings.Repeat("─", w)))
 	if m.mismatch {
 		return strings.Join(append(out, "", m.mismatchText(w)), "\n")
 	}
@@ -225,6 +237,17 @@ func (m Model) footer(w int) string {
 	}
 	if m.searching {
 		return fit(" "+st.label.Render("/ ")+st.text.Render(m.filter)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ keep  esc clear"), w)
+	}
+	if m.held != nil {
+		switch {
+		case m.flash != "":
+			return fit(" "+st.text.Render("Take over? ")+st.warn.Render(m.flash), w)
+		case layout(w) == Narrow:
+			return fit(" "+st.text.Render("Stoker on. Take over? ")+st.accent.Render("y")+st.muted.Render(" rest · ")+
+				st.accent.Render("n")+st.muted.Render(" keep"), w)
+		}
+		return fit(" "+st.text.Render("The stoker is on. Take over?  ")+st.accent.Render("y")+st.muted.Render(" rests it while you work · ")+
+			st.accent.Render("n")+st.muted.Render(" keeps it on"), w)
 	}
 	if m.pending != nil {
 		confirm := "⏎ run  esc cancel"
@@ -661,7 +684,11 @@ func (m Model) brandWith(word string) string {
 		b += m.st.faint.Render(" · ") + m.st.muted.Render(host)
 	}
 	if word != "" {
-		b += m.st.faint.Render(" · ") + m.st.accent.Render(word)
+		ink := m.st.stoker
+		if m.resting() {
+			ink = m.st.muted
+		}
+		b += m.st.faint.Render(" · ") + ink.Render(word)
 	}
 	if m.lost && m.have {
 		// What shows is the last state the host sent.

@@ -70,8 +70,15 @@ type Service struct {
 	NightEnds string
 	// Capture reads the text of panes on the host, for the stoker's guard.
 	Capture func(panes []string) map[string]string
+	// Activity is the builder's last key in any tmux client: it keeps a
+	// stoker that rests resting while they work in a pane.
+	Activity func() time.Time
 	// LimitsLog keeps each account's limit readings. Nil: none kept.
 	LimitsLog *limits.Store
+
+	// alone is when the last console closed; zero while one is open. A new
+	// service starts alone.
+	alone time.Time
 
 	interval  time.Duration
 	gitEvery  time.Duration
@@ -116,6 +123,8 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		s.sample = smp.Sample
 	}
 	s.Capture = sample.CapturePanes
+	s.Activity = sample.ClientActivity
+	s.alone = time.Now()
 	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Answerable: s.answerable, Stokable: s.stokable}
 	return s
 }
@@ -365,6 +374,24 @@ type client struct {
 	histSent bool
 }
 
+func (s *Service) join(cl *client) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.clients[cl] = struct{}{}
+	s.alone = time.Time{}
+}
+
+// leave notes when the last console closed: a stoker that rests goes on
+// a little after.
+func (s *Service) leave(cl *client) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.clients, cl)
+	if len(s.clients) == 0 {
+		s.alone = time.Now()
+	}
+}
+
 func (s *Service) broadcast() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -427,14 +454,8 @@ func (s *Service) Handle(ctx context.Context, c transport.Conn) error {
 	}
 
 	cl := &client{c: c, kick: make(chan struct{}, 1)}
-	s.mu.Lock()
-	s.clients[cl] = struct{}{}
-	s.mu.Unlock()
-	defer func() {
-		s.mu.Lock()
-		delete(s.clients, cl)
-		s.mu.Unlock()
-	}()
+	s.join(cl)
+	defer s.leave(cl)
 	cl.kick <- struct{}{}
 
 	done := make(chan struct{})

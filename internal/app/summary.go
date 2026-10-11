@@ -27,6 +27,20 @@ func Summary(s state.Doc) string {
 	for _, a := range s.Limits {
 		fmt.Fprintf(&b, "limits %s: %s\n", strings.TrimSpace(a.Provider+" "+a.Account), limits.Plain(limits.Parts(a, s.At)))
 	}
+	if v := s.Stoker; v != nil && v.On {
+		fmt.Fprintf(&b, "stoker: %s\n", stokerWordOf(v.Mode))
+	} else if v != nil && v.Card != nil && v.Unseen {
+		c := *v.Card
+		run := "stoker"
+		if c.Night {
+			run = "night"
+		}
+		fmt.Fprintf(&b, "stoker: %s %s → %s · ready %d/%d · %s\n", run, c.Since.Local().Format("15:04"), c.Ended.Local().Format("15:04"),
+			c.Ready, c.Of, cardLines(c, false)[0])
+		for _, x := range c.NotReady {
+			fmt.Fprintf(&b, "  not ready: %s (%s)\n", x.Name, x.Why)
+		}
+	}
 	for _, a := range s.Alerts {
 		fmt.Fprintf(&b, "alert %s: %s (%s)\n", a.Level, a.Title, a.Evidence)
 	}

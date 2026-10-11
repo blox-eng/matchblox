@@ -15,6 +15,28 @@ that line and pick up where the agent left off.
 It runs in the service: close the console, restart the service, and it
 keeps going. The first time, **Try a night** under SET UP starts one.
 
+## While it runs
+
+The whole console goes dark blue, and only the matches keep their fire.
+One glance, at 03:00 on your phone, tells you the stoker is in charge.
+
+Look around as you like. The first time you act on a session (`Enter` on a
+row, `x`, `a`, or a second tap), the action line asks:
+
+```text
+ The stoker is on. Take over?  y rests it while you work · n keeps it on
+```
+
+- `y`: the stoker rests, the console shows the day, and the header says
+  `stoker rests`. What you pressed runs. Work anywhere in tmux, in the
+  console or in an agent's pane: the stoker goes on by itself 15 minutes
+  after your last key, or a couple of minutes after you close the last
+  console. `f` turns it back on now.
+- `n`: the stoker stays on, and what you pressed runs.
+
+It asks once a run. A step already sent finishes, and it shows in the
+morning.
+
 ## Which sessions it compacts
 
 A Claude Code session in tmux that is:
@@ -39,15 +61,22 @@ It never answers a question or a permission prompt, never sends
 
 ## In the morning
 
-**STOKED** is the first thing in the queue:
+The night's card is the first thing in the queue, even after a night with
+nothing to do:
 
 ```text
- STOKED 23:10 → 07:00 · 2
- ▌ 01:33  ╿ app-feature      %1         176k → 9k
+ NIGHT 23:10 → 07:00 · ready 6/7
+ ▌ 7 watched · 1 was full · 1 compacted · 1 waited · 167k tokens given back
+   api-gw           waits for you
+   01:33  ╿ app-feature      %1         176k → 9k
        RESUME: run the migration test, then open the PR
    03:02  ╿ app-review       %2         skipped: the pane %2 has text you typed
 ```
 
+- `ready 6/7`: of the sessions at work when the night began, how many can
+  go on now: still there, not waiting for you, and under `compact_at`.
+  Each one that is not ready is named, with what it needs. One that waits
+  for you is in the queue below; `Enter` there takes you to it.
 - `176k → 9k`: the context before and after the compact.
 - `RESUME:` the agent's own line on how to continue. Paste it, or just
   say "go on".
@@ -55,9 +84,17 @@ It never answers a question or a permission prompt, never sends
 - `typed, not sent: …`: the compact is in the prompt without its `Enter`.
   Send it or clear it.
 
-`Enter` folds STOKED. Every step is also in `stoker.jsonl`, in
-`$XDG_STATE_HOME/matchblox` (`~/.local/state/matchblox` by default): the
-exact command, what the pane showed, the result and the RESUME line.
+A stoker run during the day ends with the same card, headed `STOKED`.
+`Enter` folds it. Until then, `matchblox status` shows it too:
+
+```text
+stoker: night 23:10 → 07:00 · ready 6/7 · 7 watched · 1 was full · 1 compacted · 1 waited · 167k tokens given back
+  not ready: api-gw (waits for you)
+```
+
+Every step is also in `stoker.jsonl`, in `$XDG_STATE_HOME/matchblox`
+(`~/.local/state/matchblox` by default): the exact command, what the pane
+showed, the result and the RESUME line.
 
 ## End the night earlier or later
 

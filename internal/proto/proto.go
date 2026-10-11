@@ -140,4 +140,6 @@ type (
 	StokerView  = stoker.View
 	StokerMode  = stoker.Mode
 	StokerEntry = stoker.Entry
+	StokerCard  = stoker.Card
+	StokerMiss  = stoker.Miss
 )

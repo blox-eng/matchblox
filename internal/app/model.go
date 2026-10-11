@@ -238,9 +238,13 @@ type Model struct {
 	splashAt   time.Time
 	splashDone bool
 	armed      string // the step a second tap runs: what the first tap showed
-	all        lists  // what the service sent; queue, recs and snap hold the drawn copies
-	filter     string // the search of the open tab
-	searching  bool   // the search line takes the keys
+	// held is what the builder pressed or tapped while the stoker was in
+	// charge: it runs once they answer the take-over question.
+	held       func(Model) (tea.Model, tea.Cmd)
+	touched    time.Time // the last key that kept the stoker's rest
+	all        lists     // what the service sent; queue, recs and snap hold the drawn copies
+	filter     string    // the search of the open tab
+	searching  bool      // the search line takes the keys
 	sessSort   sortBy
 	paneSort   sortBy
 	picked     map[string]bool // worktrees x removes
@@ -505,22 +509,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.MouseClickMsg:
-		return m.tap(msg.Mouse())
+		m, touch := m.touchRest()
+		next, cmd := m.tap(msg.Mouse())
+		return next, tea.Batch(touch, cmd)
 	case tea.MouseWheelMsg:
-		return m.wheel(msg.Mouse())
+		m, touch := m.touchRest()
+		next, cmd := m.wheel(msg.Mouse())
+		return next, tea.Batch(touch, cmd)
 	case tea.KeyPressMsg:
 		if m.splashing() {
 			m.splashDone = true // any key stops the start screen, and does nothing else
 			return m, nil
 		}
 		m.armed = "" // a key between two taps: the next tap shows again
-		if m.input != nil {
-			return m.typing(msg)
+		var touch tea.Cmd
+		// f and n are stoker acts themselves: a touch sent with them would
+		// race them on the service.
+		if k := msg.String(); m.input != nil || m.searching || k != "f" && k != "n" {
+			m, touch = m.touchRest()
 		}
-		if m.searching {
-			return m.search(msg)
+		var next tea.Model
+		var cmd tea.Cmd
+		switch {
+		case m.input != nil:
+			next, cmd = m.typing(msg)
+		case m.searching:
+			next, cmd = m.search(msg)
+		default:
+			next, cmd = m.key(msg.String())
 		}
-		return m.key(msg.String())
+		return next, tea.Batch(touch, cmd)
 	}
 	return m, nil
 }
@@ -554,6 +572,13 @@ func describe(r proto.Result) string {
 }
 
 func (m Model) key(k string) (tea.Model, tea.Cmd) {
+	if m.held != nil {
+		return m.answerTakeOver(k)
+	}
+	if m.asksTakeOver(k) {
+		m.held, m.flash = m.hold(k), ""
+		return m, nil
+	}
 	if m.pending != nil && m.pending.door != "" && m.pending.which != "secondary" {
 		if mm, ok := m.scrollPreview(k); ok {
 			return mm, nil
