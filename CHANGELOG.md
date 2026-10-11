@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-11
+
 ### Added
 
 - **See which sessions your plan's limit stopped, and until when.** A
@@ -105,7 +107,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/blox-eng/matchblox/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/blox-eng/matchblox/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/blox-eng/matchblox/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/blox-eng/matchblox/compare/v0.1.0...v0.1.1
