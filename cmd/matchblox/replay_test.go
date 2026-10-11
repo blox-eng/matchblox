@@ -581,7 +581,11 @@ func TestReplay(t *testing.T) {
 			t.Fatalf("the replay lacks a %s match; has %v", want, matches)
 		}
 	}
-	if err := private(frames, thisMachine()); err != nil {
+	words, err := repoWords("../../internal", "../../testdata/demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := private(frames, identifying(thisMachine(), words)); err != nil {
 		t.Fatal(err)
 	}
 	ran := world.Ran()

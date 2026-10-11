@@ -164,7 +164,7 @@ func (w *demoWorld) drawField(pane string) error {
 			lines[i] = "│ > " + w.typed[pane]
 		}
 	}
-	return os.WriteFile(w.pane(pane), []byte(strings.Join(lines, "\n")), 0o644)
+	return writeAtomic(w.pane(pane), []byte(strings.Join(lines, "\n")))
 }
 
 // submit is the Enter in a session: an answer sets it to work, a /compact
@@ -244,7 +244,17 @@ func (w *demoWorld) writeRegistry(s *demoSession, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(w.registry(s.pid), append(b, '\n'), 0o644)
+	return writeAtomic(w.registry(s.pid), append(b, '\n'))
+}
+
+// writeAtomic replaces a file in one step: the sampler reads these files
+// every 50 ms and must never see one half written.
+func writeAtomic(path string, b []byte) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // demoStarted is when the demo's Claude Code sessions started.
@@ -304,26 +314,33 @@ func TestPrivateFindsThisMachineInAFrame(t *testing.T) {
 	}
 }
 
-func TestThisMachineSkipsTheConsolesOwnWords(t *testing.T) {
-	for _, n := range thisMachine() {
-		if ownWords[n] || n == "" {
-			t.Fatalf("thisMachine has %q", n)
-		}
+// TestASessionNamedLikeAWordOfTheRepoIsNoLeak: a tmux session called
+// "work" or "docs" names nothing of the machine, since the fixture and the
+// console use those words themselves.
+func TestASessionNamedLikeAWordOfTheRepoIsNoLeak(t *testing.T) {
+	words, err := repoWords("../../internal", "../../testdata/demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := identifying([]string{"work", "web", "docs", "claude", "matchblox", "main", "dev-3", "Ledge Payments"}, words)
+	if want := []string{"dev-3", "Ledge Payments"}; !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }
 
-// ownWords are names this machine may give a session that are also words
-// of the console itself.
-var ownWords = map[string]bool{"matchblox": true, "main": true}
-
 // thisMachine is what names the machine the test runs on: its host name,
-// user and home, and the name of each tmux session and Claude Code session
-// on it.
+// user, home and git identity, and the name of each tmux session and
+// Claude Code session on it.
 func thisMachine() []string {
 	var out []string
 	add := func(n string) {
-		if n = strings.TrimSpace(n); len(n) >= 3 && !ownWords[n] {
+		if n = strings.TrimSpace(n); len(n) >= 3 {
 			out = append(out, n)
+		}
+	}
+	for _, k := range []string{"user.name", "user.email"} {
+		if b, err := exec.Command("git", "config", k).Output(); err == nil {
+			add(string(b))
 		}
 	}
 	h, _ := os.Hostname()
@@ -341,6 +358,44 @@ func thisMachine() []string {
 		var e struct{ Name string }
 		if b, err := os.ReadFile(f); err == nil && json.Unmarshal(b, &e) == nil {
 			add(e.Name)
+		}
+	}
+	return out
+}
+
+var word = regexp.MustCompile(`[\w-]+`)
+
+// repoWords are the words of every file under dirs.
+func repoWords(dirs ...string) (map[string]bool, error) {
+	words := map[string]bool{}
+	for _, d := range dirs {
+		err := filepath.WalkDir(d, func(p string, e fs.DirEntry, err error) error {
+			if err != nil || !e.Type().IsRegular() {
+				return err
+			}
+			b, err := os.ReadFile(p)
+			if err != nil {
+				return err
+			}
+			for _, w := range word.FindAll(b, -1) {
+				words[string(w)] = true
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return words, nil
+}
+
+// identifying drops the names the repository uses itself: a tmux session
+// called "work" or "docs" names nothing of the machine.
+func identifying(names []string, words map[string]bool) []string {
+	var out []string
+	for _, n := range names {
+		if !words[n] {
+			out = append(out, n)
 		}
 	}
 	return out
