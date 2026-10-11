@@ -51,6 +51,21 @@ not a token fails the replay test.
 | `warn` | `#B98F44` | `#8A6420` | a warning |
 | `neg` | `#B0563F` | `#9E4A34` | a failure, a destructive action, context at the compact limit |
 
+The night (#45, owner 2026-10-11): while the stoker is in charge the whole
+console wears the night. Every cell is painted on `night-bg` (a terminal has
+no transparency: this is the ambient light), the text takes the night inks,
+and only the fires keep their warmth: `accent`, `warn`, `neg`, the flames
+and the match heads stay as they are. It is one palette in both themes, and
+when the stoker rests the day comes back.
+
+| Token | Night | Use |
+|---|---|---|
+| `night-bg` | `#0C1019` | the ground under every cell |
+| `night-fg` `night-muted` `night-faint` | `#D9DCE3` `#8E96A8` `#636B7D` | text, as `fg` `muted` `faint` |
+| `night-hair` | `#1F2636` | hairlines |
+| `night-wash` | `#18202F` | the background of the selected row |
+| `night` | `#7C8BB0` | the stoker word in the header and the rule under the tabs |
+
 The match and the mark (§3, §4):
 
 | Token | Dark | Light | Use |

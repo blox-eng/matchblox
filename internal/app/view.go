@@ -70,9 +70,17 @@ func (m Model) render() string {
 	if m.splashing() {
 		return m.splashView(w)
 	}
+	if m.night() {
+		m.st = nightStyles()
+		return paint(m.frame(w), m.st.ground, w)
+	}
+	return m.frame(w)
+}
+
+func (m Model) frame(w int) string {
 	out := append([]string{m.header(w)}, m.limitLines(w)...)
 	top := len(out)
-	out = append(out, m.tabs(w), m.st.hair.Render(strings.Repeat("─", w)))
+	out = append(out, m.tabs(w), m.st.rule.Render(strings.Repeat("─", w)))
 	if m.mismatch {
 		return strings.Join(append(out, "", m.mismatchText(w)), "\n")
 	}
@@ -661,7 +669,7 @@ func (m Model) brandWith(word string) string {
 		b += m.st.faint.Render(" · ") + m.st.muted.Render(host)
 	}
 	if word != "" {
-		b += m.st.faint.Render(" · ") + m.st.accent.Render(word)
+		b += m.st.faint.Render(" · ") + m.st.stoker.Render(word)
 	}
 	if m.lost && m.have {
 		// What shows is the last state the host sent.
