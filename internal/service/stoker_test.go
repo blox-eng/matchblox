@@ -300,3 +300,80 @@ func TestTurningTheStokerOffScoresTheRun(t *testing.T) {
 		t.Fatalf("card %+v", c)
 	}
 }
+
+// console stands for one open console.
+func console(s *Service) {
+	s.mu.Lock()
+	s.clients[&client{kick: make(chan struct{}, 1)}] = struct{}{}
+	s.mu.Unlock()
+}
+
+func TestTakingOverRestsTheStoker(t *testing.T) {
+	s, ran, _ := stokerTest(t)
+	console(s)
+	if r := s.act(context.Background(), proto.Act{RecID: "stoker:rest"}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	now := time.Now()
+	s.stoke(context.Background(), now)
+	if len(*ran) != 0 {
+		t.Fatalf("a resting stoker ran %q", *ran)
+	}
+	if v := s.State().Stoker; !v.On || v.Rests.IsZero() || !v.Asked {
+		t.Fatalf("view %+v", v)
+	}
+	// A key in the console keeps the rest; 15 min without one ends it.
+	if r := s.act(context.Background(), proto.Act{RecID: "stoker:touch"}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	s.stoke(context.Background(), now.Add(stoker.RestIdle-time.Minute))
+	if len(*ran) != 0 {
+		t.Fatalf("woke while the builder works: %q", *ran)
+	}
+	s.stoke(context.Background(), now.Add(stoker.RestIdle+time.Minute))
+	if len(*ran) != 2 || !s.Stoker.Mode().Rests.IsZero() {
+		t.Fatalf("did not go on after 15 idle minutes: %q %+v", *ran, s.Stoker.Mode())
+	}
+}
+
+func TestARestEndsWhenTheLastConsoleCloses(t *testing.T) {
+	s, ran, _ := stokerTest(t)
+	if r := s.act(context.Background(), proto.Act{RecID: "stoker:rest"}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	s.stoke(context.Background(), time.Now())
+	if len(*ran) != 2 {
+		t.Fatalf("no console is open, yet the stoker still rests: %q", *ran)
+	}
+}
+
+func TestAnyActKeepsTheRest(t *testing.T) {
+	s, _, _ := stokerTest(t)
+	console(s)
+	_ = s.Stoker.Set(s.Stoker.Mode().Rest(time.Now().Add(-time.Hour)))
+	s.act(context.Background(), proto.Act{RecID: "rescan:git"})
+	if m := s.Stoker.Mode(); time.Since(m.Touched) > time.Minute {
+		t.Fatalf("an act did not touch: %+v", m)
+	}
+}
+
+func TestKeepAndWake(t *testing.T) {
+	s, _, _ := stokerTest(t)
+	if r := s.act(context.Background(), proto.Act{RecID: "stoker:keep"}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	if m := s.Stoker.Mode(); !m.On || !m.Asked || !m.Rests.IsZero() {
+		t.Fatalf("keep %+v", m)
+	}
+	s.act(context.Background(), proto.Act{RecID: "stoker:rest"})
+	if r := s.act(context.Background(), proto.Act{RecID: "stoker:wake"}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	if m := s.Stoker.Mode(); !m.On || !m.Rests.IsZero() {
+		t.Fatalf("wake %+v", m)
+	}
+	s.act(context.Background(), proto.Act{RecID: "stoker:off"})
+	if r := s.act(context.Background(), proto.Act{RecID: "stoker:rest"}); r.Err != "the stoker is off" {
+		t.Fatalf("rest while off: %+v", r)
+	}
+}

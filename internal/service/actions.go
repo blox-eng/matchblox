@@ -68,6 +68,9 @@ func (a *acts) end(key string, ran bool) {
 }
 
 func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
+	if !strings.HasPrefix(a.RecID, "stoker:") {
+		s.touchStoker(time.Now()) // the builder acts: a stoker that rests goes on resting
+	}
 	switch a.RecID {
 	case "rescan:git":
 		s.rescanGit()

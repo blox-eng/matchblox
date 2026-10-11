@@ -10,7 +10,7 @@ import (
 
 // night: the stoker is in charge, and the whole console wears the night.
 func (m Model) night() bool {
-	return m.stoker != nil && m.stoker.On
+	return m.stoker != nil && m.stoker.On && m.stoker.Rests.IsZero()
 }
 
 // paint lays bg under every cell of a frame: at the start of each line,

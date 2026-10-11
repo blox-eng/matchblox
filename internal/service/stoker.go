@@ -13,7 +13,9 @@ import (
 )
 
 // stokerAct turns the stoker on ("on"), on until the morning ("night"),
-// off, or folds the steps the builder saw ("ack"). None is destructive:
+// off, or folds the steps the builder saw ("ack"). While it runs the
+// builder takes over ("rest"), keeps it on ("keep"), turns it back on
+// ("wake"), and each key keeps the rest ("touch"). None is destructive:
 // the stoker itself never ends, kills or removes anything.
 func (s *Service) stokerAct(verb string, now time.Time) proto.Result {
 	if s.Stoker == nil {
@@ -37,6 +39,20 @@ func (s *Service) stokerAct(verb string, now time.Time) proto.Result {
 		m = m.Off(now).Score(sessions, waiting, s.compactAt, s.Stoker.View().Run)
 	case "ack":
 		m = m.Ack(now)
+	case "rest", "keep", "wake", "touch":
+		if !m.On {
+			return proto.Result{Err: "the stoker is off"}
+		}
+		switch verb {
+		case "rest":
+			m = m.Rest(now)
+		case "keep":
+			m.Asked = true
+		case "wake":
+			m = m.Wake()
+		case "touch":
+			m = m.Touch(now)
+		}
 	default:
 		return proto.Result{Err: "unknown stoker act"}
 	}
@@ -62,6 +78,13 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 	sessions, waiting := s.seen()
 	if m, seen := s.Stoker.Mode().Observe(sessions, waiting, s.compactAt); seen {
 		_ = s.Stoker.Set(m) // a write that fails is tried again at the next sample
+		changed = true
+	}
+	s.mu.Lock()
+	consoles := len(s.clients)
+	s.mu.Unlock()
+	if m, woke := s.Stoker.Mode().Awake(now, consoles); woke {
+		_ = s.Stoker.Set(m)
 		changed = true
 	}
 	if m, ended := s.Stoker.Mode().Expire(now); ended {
@@ -106,6 +129,16 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 	}
 	if changed {
 		s.refreshStoker()
+	}
+}
+
+// touchStoker keeps a rest while the builder acts from a console.
+func (s *Service) touchStoker(now time.Time) {
+	if s.Stoker == nil {
+		return
+	}
+	if m := s.Stoker.Mode(); !m.Rests.IsZero() {
+		_ = s.Stoker.Set(m.Touch(now))
 	}
 }
 

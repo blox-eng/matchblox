@@ -65,6 +65,42 @@ type Mode struct {
 	Card *Card `json:"card,omitempty"`
 	// Asked: the builder was asked to take over in this run.
 	Asked bool `json:"asked,omitempty"`
+	// Rests: the builder took over here, and the stoker sends nothing
+	// until they leave. Touched is their last key in a console.
+	Rests   time.Time `json:"rests,omitzero"`
+	Touched time.Time `json:"touched,omitzero"`
+}
+
+// RestIdle is how long the consoles stay without a key before a stoker
+// that rests goes on.
+const RestIdle = 15 * time.Minute
+
+// Rest hands the sessions to the builder.
+func (m Mode) Rest(now time.Time) Mode {
+	m.Asked, m.Rests, m.Touched = true, now, now
+	return m
+}
+
+func (m Mode) Wake() Mode {
+	m.Rests, m.Touched = time.Time{}, time.Time{}
+	return m
+}
+
+// Touch is a key of the builder's while the stoker rests.
+func (m Mode) Touch(now time.Time) Mode {
+	if !m.Rests.IsZero() && now.After(m.Touched) {
+		m.Touched = now
+	}
+	return m
+}
+
+// Awake ends a rest when the builder left: no console is open, or none has
+// had a key for RestIdle.
+func (m Mode) Awake(now time.Time, consoles int) (Mode, bool) {
+	if m.Rests.IsZero() || consoles > 0 && now.Sub(m.Touched) < RestIdle {
+		return m, false
+	}
+	return m.Wake(), true
 }
 
 // TurnOn starts a run, or keeps the one that runs.
@@ -92,7 +128,7 @@ func (m Mode) Night(now time.Time, ends string) (Mode, error) {
 
 func (m Mode) Off(now time.Time) Mode {
 	m.On, m.Until, m.Ended = false, time.Time{}, now
-	return m
+	return m.Wake()
 }
 
 // Ack folds what the builder saw: the steps up to now, and the card.
@@ -139,12 +175,12 @@ type Step struct {
 	Action                          advice.Action
 }
 
-// Plan picks the sessions to compact now: Claude Code, idle and not cold,
+// Plan picks the sessions to compact now, unless the stoker rests: Claude Code, idle and not cold,
 // at or above compactAt, not waiting for the builder, not stepped on in
 // the last PerSession, while the run has steps left. The fullest go first.
 // waiting holds the panes the queue lists.
 func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, compactAt float64, recent []Entry, now time.Time) []Step {
-	if !m.On {
+	if !m.On || !m.Rests.IsZero() {
 		return nil
 	}
 	left := MaxSteps

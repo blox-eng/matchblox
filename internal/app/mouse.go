@@ -54,11 +54,18 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.armed = ""
-	if a.nav && !a.destructive {
-		return m.confirm(*a)
+	run := func(m Model) (tea.Model, tea.Cmd) {
+		if a.nav && !a.destructive {
+			return m.confirm(*a)
+		}
+		m.pending = a
+		return m, nil
 	}
-	m.pending = a
-	return m, nil
+	if m.night() && !m.stoker.Asked {
+		m.held, m.flash = run, ""
+		return m, nil
+	}
+	return run(m)
 }
 
 // wheel is a swipe on a phone: it moves the selection, as ↑ and ↓ do.

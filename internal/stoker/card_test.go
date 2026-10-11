@@ -122,3 +122,45 @@ func TestTurnOnStartsAFreshRun(t *testing.T) {
 		t.Fatalf("the new run kept the old one: %+v", n)
 	}
 }
+
+func TestARestingStokerPlansNothing(t *testing.T) {
+	m := on().Rest(t0)
+	if !m.Asked || m.Rests.IsZero() {
+		t.Fatalf("rest %+v", m)
+	}
+	if got := Plan(m, []sample.Session{full("%1")}, nil, 85, nil, t0); len(got) != 0 {
+		t.Fatalf("a resting stoker planned %+v", got)
+	}
+	if got := Plan(m.Wake(), []sample.Session{full("%1")}, nil, 85, nil, t0); len(got) != 1 {
+		t.Fatalf("woken, it planned %+v", got)
+	}
+}
+
+func TestARestEndsWhenTheBuilderLeaves(t *testing.T) {
+	m := on().Rest(t0)
+	for _, c := range []struct {
+		name     string
+		at       time.Time
+		consoles int
+		wakes    bool
+	}{
+		{"a console open, 14 min idle", t0.Add(14 * time.Minute), 1, false},
+		{"15 min with no key", t0.Add(RestIdle), 1, true},
+		{"no console open", t0.Add(time.Minute), 0, true},
+	} {
+		got, woke := m.Awake(c.at, c.consoles)
+		if woke != c.wakes || got.Rests.IsZero() != c.wakes {
+			t.Errorf("%s: woke %v, %+v", c.name, woke, got)
+		}
+	}
+	touched := m.Touch(t0.Add(10 * time.Minute))
+	if _, woke := touched.Awake(t0.Add(20*time.Minute), 1); woke {
+		t.Error("a key 10 min ago: woke after 20")
+	}
+	if _, woke := on().Awake(t0.Add(time.Hour), 0); woke {
+		t.Error("a stoker that does not rest woke")
+	}
+	if off := m.Off(t0.Add(time.Minute)); !off.Rests.IsZero() {
+		t.Error("off kept the rest")
+	}
+}

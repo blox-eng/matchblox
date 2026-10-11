@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -39,6 +40,8 @@ func (m Model) stokerKey(night bool) (tea.Model, tea.Cmd) {
 	}
 	verb, say := "on", "the stoker is on: full sessions compact"
 	switch {
+	case !night && m.resting():
+		verb, say = "wake", "the stoker is back on"
 	case night && m.stoker.On && !m.stoker.Until.IsZero(), !night && m.stoker.On:
 		verb, say = "off", "the stoker is off"
 	case night:
@@ -66,6 +69,9 @@ func (m Model) stokerWord() string {
 }
 
 func stokerWordOf(md proto.StokerMode) string {
+	if !md.Rests.IsZero() {
+		return "stoker rests"
+	}
 	if !md.Until.IsZero() {
 		return "night → " + md.Until.Local().Format("15:04")
 	}
@@ -74,10 +80,81 @@ func stokerWordOf(md proto.StokerMode) string {
 
 // stokerShort is the word without the time, for a narrow header.
 func (m Model) stokerShort() string {
-	if w := m.stokerWord(); strings.HasPrefix(w, "night") {
+	switch w := m.stokerWord(); {
+	case strings.HasPrefix(w, "night"):
 		return "night"
+	case w == "stoker rests":
+		return "rests"
 	}
 	return m.stokerWord()
+}
+
+// resting: the builder took over and the stoker waits for them to leave.
+func (m Model) resting() bool {
+	return m.stoker != nil && m.stoker.On && !m.stoker.Rests.IsZero()
+}
+
+// asksTakeOver: k acts on a session while the stoker is in charge, and the
+// builder has not been asked in this run. Looking around never asks.
+func (m Model) asksTakeOver(k string) bool {
+	if !m.night() || m.stoker.Asked || m.pending != nil {
+		return false
+	}
+	if _, ok := m.selectedDoor(); ok {
+		return false
+	}
+	switch k {
+	case "enter":
+		return m.primary() != nil
+	case "x":
+		return m.secondary() != nil
+	case "a":
+		pane, _ := m.answerTarget()
+		return pane != ""
+	}
+	return false
+}
+
+// answerTakeOver is the builder's answer: y rests the stoker, n keeps it
+// on; either way what they pressed runs. Any other key drops the question
+// and what was held.
+func (m Model) answerTakeOver(k string) (tea.Model, tea.Cmd) {
+	if k != "y" && k != "n" {
+		m.held, m.flash = nil, ""
+		return m, nil
+	}
+	if m.conn == nil || m.lost {
+		m.flash = "not sent, no connection · " + k + " tries again"
+		return m, nil
+	}
+	held := m.held
+	m.held = nil
+	v := *m.stoker
+	v.Asked = true
+	verb, say := "keep", "the stoker stays on"
+	if k == "y" {
+		verb, say = "rest", "stoker rests · f turns it back on"
+		v.Rests, v.Touched = m.now(), m.now()
+		m.touched = m.now()
+	}
+	m.stoker = &v
+	send := m.send(proto.Act{RecID: "stoker:" + verb, Which: "primary"})
+	next, run := held(m)
+	if nm, ok := next.(Model); ok && nm.flash == "" {
+		nm.flash = say
+		next = nm
+	}
+	return next, tea.Batch(send, run)
+}
+
+// touchRest tells the service, at most once a minute, that the builder is
+// still at the console, so the stoker goes on resting.
+func (m Model) touchRest() (Model, tea.Cmd) {
+	if !m.resting() || m.conn == nil || m.lost || m.now().Sub(m.touched) < time.Minute {
+		return m, nil
+	}
+	m.touched = m.now()
+	return m, m.send(proto.Act{RecID: "stoker:touch", Which: "primary"})
 }
 
 func nightDoorAction(d doors.Door) *action {
