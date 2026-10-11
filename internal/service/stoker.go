@@ -38,7 +38,7 @@ func (s *Service) stokerAct(verb string, now time.Time) proto.Result {
 			if !was {
 				return m, false
 			}
-			m = m.Off(now).Score(sessions, waiting, s.compactAt, s.Stoker.View().Run)
+			m = m.Off(now).Score(sessions, waiting, s.full, s.Stoker.View().Run)
 		case "ack":
 			m = m.Ack(now)
 		case "rest", "keep", "wake", "touch":
@@ -95,12 +95,12 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 	// One update for all three, so an act in between is never undone (a
 	// write that fails is tried again at the next sample).
 	_, _ = s.Stoker.Update(func(m stoker.Mode) (stoker.Mode, bool) {
-		m, seen := m.Observe(sessions, waiting, s.compactAt)
+		m, seen := m.Observe(sessions, waiting, s.full, now)
 		m = m.Touch(typed)
 		m, woke := m.Awake(now, alone)
 		m, ended := m.Expire(now)
 		if ended {
-			m = m.Score(sessions, waiting, s.compactAt, s.Stoker.View().Run)
+			m = m.Score(sessions, waiting, s.full, s.Stoker.View().Run)
 		}
 		changed = seen || woke || ended
 		return m, changed
@@ -119,7 +119,7 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 		}
 	}
 
-	for _, st := range stoker.Plan(s.Stoker.Mode(), sessions, waiting, s.compactAt, s.Stoker.Entries(), now) {
+	for _, st := range stoker.Plan(s.Stoker.Mode(), sessions, waiting, s.full, s.Stoker.Entries(), now) {
 		if m := s.Stoker.Mode(); !m.On || !m.Rests.IsZero() {
 			break // the builder took over or turned it off since the plan
 		}

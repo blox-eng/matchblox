@@ -149,10 +149,12 @@ func rank(s sample.Session, waits map[string]bool) int {
 		return 1
 	case age == "idle":
 		return 2
-	case age == "cold":
+	case age == "out":
 		return 3
+	case age == "cold":
+		return 4
 	}
-	return 4
+	return 5
 }
 
 func cmpF(x, y float64) int {

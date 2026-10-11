@@ -35,6 +35,8 @@ type Usage struct {
 	// LastLine and Asks are read from the newest reply with text.
 	LastLine string `json:"last_line,omitempty"`
 	Asks     bool   `json:"asks,omitempty"`
+	// Out: the newest turn was refused by the plan's limit, which resets here.
+	Out time.Time `json:"out,omitzero"`
 }
 
 type fileKey struct {
@@ -160,10 +162,16 @@ func (r *agentReader) usageOf(dir, sessionID, cwd string) (Usage, bool) {
 const tailBytes = 512 << 10
 
 type transcriptLine struct {
-	Type        string    `json:"type"`
-	IsSidechain bool      `json:"isSidechain"`
-	Timestamp   time.Time `json:"timestamp"`
-	Message     struct {
+	Type           string    `json:"type"`
+	IsSidechain    bool      `json:"isSidechain"`
+	Timestamp      time.Time `json:"timestamp"`
+	APIError       string    `json:"apiError"`
+	APIErrorParams struct {
+		RateLimit struct {
+			ResetsAt int64 `json:"resetsAt"`
+		} `json:"rate_limit_info"`
+	} `json:"apiErrorParams"`
+	Message struct {
 		Model   string          `json:"model"`
 		Content json.RawMessage `json:"content"`
 		Usage   *struct {
@@ -192,6 +200,7 @@ func lastUsage(path string, size int64) (Usage, bool) {
 	// A compact after the last turn leaves its own count: the next turn
 	// has not run, and the turn before it holds the old, full context.
 	var compacted *boundaryLine
+	newer := false // an assistant line newer than the one read was seen
 	for i := len(lines) - 1; i >= 0 && (!found || !decided); i-- {
 		l := lines[i]
 		if !found && compacted == nil && bytes.Contains(l, []byte(`"compact_boundary"`)) {
@@ -209,10 +218,20 @@ func lastUsage(path string, size int64) (Usage, bool) {
 			continue
 		}
 		var t transcriptLine
-		// <synthetic> turns are local messages that report zero usage.
-		if json.Unmarshal(l, &t) != nil || t.Type != "assistant" || t.IsSidechain || t.Message.Model == "<synthetic>" {
+		if json.Unmarshal(l, &t) != nil || t.Type != "assistant" || t.IsSidechain {
 			continue
 		}
+		// <synthetic> turns are local messages that report zero usage. The
+		// newest one may be the limit refusing the turn: until a real turn
+		// follows, the session is out until its reset.
+		if t.Message.Model == "<synthetic>" {
+			if !newer && t.APIError == "usage_limit_reached" && t.APIErrorParams.RateLimit.ResetsAt > 0 {
+				u.Out = time.Unix(t.APIErrorParams.RateLimit.ResetsAt, 0)
+			}
+			newer = true
+			continue
+		}
+		newer = true
 		if needUsage && t.Message.Usage != nil {
 			n := t.Message.Usage
 			u.Model, u.Tokens, u.At = t.Message.Model, n.Input+n.CacheRead+n.CacheCreation+n.Output, t.Timestamp

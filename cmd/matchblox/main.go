@@ -282,7 +282,7 @@ func progressPrompt(args []string) bool {
 func spoolPath() string { return filepath.Join(filepath.Dir(state.Path()), "spool.jsonl") }
 
 func console(path string, cfg config.Config, root string, noMotion bool, host string) error {
-	base := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, NoMotion: noMotion,
+	base := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, CompactTokens: cfg.Sessions.CompactTokens, NoMotion: noMotion,
 		OutsideTmux: os.Getenv("TMUX") == "", Self: invokedPath(os.Args[0])}
 	// The screen changes on a state or a key press, so 15 frames a second
 	// is still instant to the eye and wakes the process 4x less than 60.
@@ -534,11 +534,12 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 		Cfg:    cfg,
 		Agents: cfg.Agents,
 		Rules: sample.Rules{
-			CompactAt:   cfg.Sessions.CompactAt,
-			ClearIdle:   cfg.Sessions.ClearIdle.Duration,
-			ClearMinPct: cfg.Sessions.ClearMinPct,
-			ClearStale:  cfg.Sessions.ClearStale.Duration,
-			Windows:     cfg.Sessions.Windows,
+			CompactAt:     cfg.Sessions.CompactAt,
+			CompactTokens: cfg.Sessions.CompactTokens,
+			ClearIdle:     cfg.Sessions.ClearIdle.Duration,
+			ClearMinPct:   cfg.Sessions.ClearMinPct,
+			ClearStale:    cfg.Sessions.ClearStale.Duration,
+			Windows:       cfg.Sessions.Windows,
 		},
 	}
 	if root != "" {

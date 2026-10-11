@@ -8,7 +8,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // stokedRow is the first row of the Queue tab while the stoker has steps
@@ -215,9 +217,16 @@ func (m Model) stokedSection(b *body, w int, row int, sel bool) {
 		if c.Night {
 			head = " NIGHT" + strings.TrimPrefix(head, " STOKED")
 		}
-		for i, l := range cardLines(*c, narrow) {
+		for i, l := range lapseLines(*c) {
 			lead := "   "
 			if i == 0 {
+				lead = " " + st.accent.Render(mark)
+			}
+			lines = append(lines, lead+st.warn.Render(l))
+		}
+		for _, l := range cardLines(*c, narrow) {
+			lead := "   "
+			if len(lines) == 0 {
 				lead = " " + st.accent.Render(mark)
 			}
 			lines = append(lines, lead+st.text.Render(l))
@@ -236,13 +245,13 @@ func (m Model) stokedSection(b *body, w int, row int, sel bool) {
 		if e.Result == "sent" {
 			switch {
 			case e.After > 0:
-				result = st.text.Render(kTok(e.Before) + " → " + kTok(e.After))
+				result = st.text.Render(sample.Kilo(e.Before) + " → " + sample.Kilo(e.After))
 			case !e.Back.IsZero():
-				result = st.text.Render(kTok(e.Before) + " → compacted")
+				result = st.text.Render(sample.Kilo(e.Before) + " → compacted")
 			case m.now().Sub(e.At) < proto.StokerReadBack:
-				result = st.muted.Render(kTok(e.Before) + " → compacting…")
+				result = st.muted.Render(sample.Kilo(e.Before) + " → compacting…")
 			default:
-				result = st.warn.Render(kTok(e.Before) + " → not read back")
+				result = st.warn.Render(sample.Kilo(e.Before) + " → not read back")
 			}
 		}
 		clock := st.muted.Render(e.At.Local().Format("15:04") + "  ")
@@ -267,6 +276,16 @@ func (m Model) stokedSection(b *body, w int, row int, sel bool) {
 	b.addRow(row, sel, w, st, lines...)
 }
 
+// lapseLines say when the plan's limit stopped sessions during the run,
+// and when it came back: the first thing a run the limit stopped tells.
+func lapseLines(c proto.StokerCard) []string {
+	var out []string
+	for _, l := range c.Lapses {
+		out = append(out, "limit out "+limits.When(l.From, c.Since, "")+" → "+limits.Until(l.Until, l.From))
+	}
+	return out
+}
+
 // cardLines are the counts of a card: one line, or two on a phone.
 func cardLines(c proto.StokerCard, narrow bool) []string {
 	full := fmt.Sprintf("%d were full", c.Full)
@@ -275,11 +294,11 @@ func cardLines(c proto.StokerCard, narrow bool) []string {
 	}
 	given := ""
 	if c.Given > 0 {
-		given = " · " + kTok(c.Given) + " tokens given back"
+		given = " · " + sample.Kilo(c.Given) + " tokens given back"
 	}
 	if narrow {
 		if given != "" {
-			given = " · " + kTok(c.Given) + " given back"
+			given = " · " + sample.Kilo(c.Given) + " given back"
 		}
 		return []string{
 			fmt.Sprintf("%d watched · %d full · %d compacted", c.Watched, c.Full, c.Compacted),

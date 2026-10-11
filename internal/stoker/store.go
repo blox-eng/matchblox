@@ -38,6 +38,7 @@ func (s *Store) Dir() string { return s.dir }
 
 func (s *Store) modePath() string { return filepath.Join(s.dir, "stoker.json") }
 func (s *Store) logPath() string  { return filepath.Join(s.dir, "stoker.jsonl") }
+func (s *Store) runsPath() string { return filepath.Join(s.dir, "stoker-runs.jsonl") }
 
 // ReadMode reads stoker.json alone: cheap enough for every sample. A
 // missing file is the stoker that never ran.
@@ -119,11 +120,56 @@ func (s *Store) Set(m Mode) error {
 func (s *Store) Update(fn func(Mode) (Mode, bool)) (Mode, error) {
 	s.wmu.Lock()
 	defer s.wmu.Unlock()
-	m, ok := fn(s.Mode())
+	was := s.Mode()
+	m, ok := fn(was)
 	if !ok {
-		return s.Mode(), nil
+		return was, nil
 	}
-	return m, s.set(m)
+	if err := s.set(m); err != nil {
+		return m, err
+	}
+	if m.Card != nil && (was.Card == nil || !was.Card.Ended.Equal(m.Card.Ended) || !was.Card.Since.Equal(m.Card.Since)) {
+		return m, s.keep(*m.Card)
+	}
+	return m, nil
+}
+
+// keep adds a run's card to stoker-runs.jsonl, so a new run never erases
+// the one before it.
+func (s *Store) keep(c Card) error {
+	b, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(s.runsPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	_, werr := f.Write(append(b, '\n'))
+	return errors.Join(werr, f.Close())
+}
+
+// Runs are the cards of every run that ended, oldest first. A line that
+// does not parse is skipped.
+func (s *Store) Runs() ([]Card, error) {
+	f, err := os.Open(s.runsPath())
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var out []Card
+	sc := bufio.NewScanner(f)
+	sc.Buffer(nil, maxLine)
+	for sc.Scan() {
+		var c Card
+		if json.Unmarshal(sc.Bytes(), &c) == nil && !c.Since.IsZero() {
+			out = append(out, c)
+		}
+	}
+	return out, sc.Err()
 }
 
 func (s *Store) set(m Mode) error {

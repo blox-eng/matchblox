@@ -65,6 +65,9 @@ type Session struct {
 	// Permits: an approval menu, where Enter takes the selected choice.
 	Permits  bool `json:"permits,omitempty"`
 	FromPane bool `json:"from_pane,omitempty"` // busy and idle were read from the pane
+	// Out: the plan's limit stops the session until here (its turn was
+	// refused, or its account's window is spent); zero when it can work.
+	Out time.Time `json:"out,omitzero"`
 	// Transcript is the Claude Code session file, read back by the service
 	// after a step; it never leaves the host.
 	Transcript string `json:"-"`
@@ -116,20 +119,53 @@ type Snapshot struct {
 	Limits []limits.Account `json:"limits"`
 }
 
-// Rules decide the per-session suggestion.
-type Rules struct {
-	CompactAt   float64       // context percent at which a busy session should compact
-	ClearIdle   time.Duration // idle this long with ClearMinPct context: clear
-	ClearMinPct float64
-	ClearStale  time.Duration // idle this long: clear regardless of context
-	Windows     map[string]int
+// Full is when a session's context should compact: at Pct of its window,
+// or at Tokens, whichever comes first. A 1M window rarely reaches a
+// percentage; zero Tokens is the percentage alone.
+type Full struct {
+	Pct    float64
+	Tokens int
 }
 
+func (f Full) Reached(s Session) bool {
+	return s.Tokens > 0 && (f.Pct > 0 && s.ContextPct >= f.Pct || f.Tokens > 0 && s.Tokens >= f.Tokens)
+}
+
+// String is the threshold as the console writes it: "85% or 350k".
+func (f Full) String() string {
+	if f.Tokens <= 0 {
+		return pct(f.Pct)
+	}
+	return pct(f.Pct) + " or " + Kilo(f.Tokens)
+}
+
+// Kilo writes a token count in thousands: 350k, 1.2M.
+func Kilo(n int) string {
+	if n >= 1_000_000 {
+		return strconv.FormatFloat(float64(n)/1e6, 'f', 1, 64) + "M"
+	}
+	return strconv.Itoa((n+500)/1000) + "k"
+}
+
+// Rules decide the per-session suggestion.
+type Rules struct {
+	CompactAt     float64       // context percent at which a busy session should compact
+	CompactTokens int           // or this many context tokens, whichever comes first; 0: the percentage alone
+	ClearIdle     time.Duration // idle this long with ClearMinPct context: clear
+	ClearMinPct   float64
+	ClearStale    time.Duration // idle this long: clear regardless of context
+	Windows       map[string]int
+}
+
+// Full is the rules' compact threshold.
+func (r Rules) Full() Full { return Full{r.CompactAt, r.CompactTokens} }
+
 var DefaultRules = Rules{
-	CompactAt:   85,
-	ClearIdle:   30 * time.Minute,
-	ClearMinPct: 20,
-	ClearStale:  24 * time.Hour,
+	CompactAt:     85,
+	CompactTokens: 350_000,
+	ClearIdle:     30 * time.Minute,
+	ClearMinPct:   20,
+	ClearStale:    24 * time.Hour,
 }
 
 type Sampler struct {
@@ -449,6 +485,9 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 					r, _ = limits.ReadTap(s.LimitsDir, s.asProcess(env.claudeDir))
 				}
 				lims.add(sess, limits.SourceClaude, r)
+				if out := r.Out(now); out.After(sess.Out) {
+					sess.Out = out
+				}
 				if r == nil && env.claudeDir != filepath.Join(s.Home, ".claude") {
 					// The door edits the default settings: name the one this
 					// session reads.
@@ -740,6 +779,9 @@ func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procK
 		return
 	}
 	sess.Progress, sess.LastLine, sess.Asks = u.Progress, u.LastLine, u.Asks
+	if u.Out.After(now) {
+		sess.Out = u.Out
+	}
 	sess.Transcript = s.agents.transcript(env.claudeDir, e.SessionID, e.Cwd)
 	long, ok := s.longCtx[key]
 	if !ok {
@@ -816,7 +858,8 @@ func (s *Sampler) trackBurn(id string, now time.Time, tokens int) int {
 }
 
 // suggest: a session left idle while holding context should be cleared;
-// one near its window should compact before its next turn hits the limit.
+// one near its window should compact before its next turn hits the limit,
+// unless the plan's limit stops it (a compact needs the model).
 func (r Rules) suggest(s Session) (do, why string) {
 	switch {
 	case s.Tokens == 0:
@@ -825,8 +868,8 @@ func (r Rules) suggest(s Session) (do, why string) {
 		return "clear", "idle " + Human(s.Idle) + " (clear after " + Human(r.ClearStale) + ")"
 	case !s.Busy && s.Idle >= r.ClearIdle && s.ContextPct >= r.ClearMinPct:
 		return "clear", "idle " + Human(s.Idle) + " holding " + pct(s.ContextPct) + " context"
-	case s.ContextPct >= r.CompactAt:
-		return "compact", "context " + pct(s.ContextPct) + " (compact at " + pct(r.CompactAt) + ")"
+	case r.Full().Reached(s) && s.Out.IsZero():
+		return "compact", "context " + Kilo(s.Tokens) + " · " + pct(s.ContextPct) + " (compact at " + r.Full().String() + ")"
 	}
 	return "", ""
 }
@@ -879,12 +922,14 @@ const (
 	StaleAfter = 7 * 24 * time.Hour
 )
 
-// Age is the state word of a session: busy, or idle, cold and stale as
-// its idle time grows.
+// Age is the state word of a session: busy; out while the plan's limit
+// stops it; else idle, cold and stale as its idle time grows.
 func (s Session) Age() string {
 	switch {
 	case s.Busy:
 		return "busy"
+	case !s.Out.IsZero():
+		return "out"
 	case s.Idle >= StaleAfter:
 		return "stale"
 	case s.Idle >= ColdAfter:

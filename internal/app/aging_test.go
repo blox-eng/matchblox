@@ -1,11 +1,13 @@
 package app
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -127,5 +129,40 @@ func TestTheFixFitsTheParent(t *testing.T) {
 	out := screen(next)
 	if !strings.Contains(out, "sudo systemctl daemon-reexec reaps them") || strings.Contains(out, "--user") {
 		t.Fatalf("pid 1 fix:\n%s", out)
+	}
+}
+
+// A session the plan's limit stops says until when, and sorts under the
+// idle ones: nothing to do there before its reset.
+func TestAnOutSessionSaysUntilWhen(t *testing.T) {
+	st := fixtureState()
+	back := st.At.Add(2 * time.Hour)
+	for i := range st.Sessions {
+		if !st.Sessions[i].Busy {
+			st.Sessions[i].Out = back
+			break
+		}
+	}
+	m, _ := loadedWith(t, 120, st)
+	m.tab = tabSessions
+	at := back.Local().Format("15:04")
+	if out := ansi.Strip(m.render()); !regexp.MustCompile(`out +` + at).MatchString(out) {
+		t.Fatalf("no out %s in\n%s", at, out)
+	}
+	if r := rank(sample.Session{Out: back}, nil); r <= rank(sample.Session{}, nil) || r >= rank(sample.Session{Idle: sample.ColdAfter}, nil) {
+		t.Fatalf("out ranks %d", r)
+	}
+}
+
+func TestStatusCountsTheOutSessions(t *testing.T) {
+	st := fixtureState()
+	n := 0
+	for i := range st.Sessions {
+		if !st.Sessions[i].Busy && n == 0 {
+			st.Sessions[i].Out, n = st.At.Add(time.Hour), 1
+		}
+	}
+	if out := Summary(st.Doc); !strings.Contains(out, ", out 1)") {
+		t.Fatalf("%s", out)
 	}
 }

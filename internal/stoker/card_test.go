@@ -36,21 +36,21 @@ func TestBeginSeatsTheSessionsAtWork(t *testing.T) {
 
 func TestObserveCountsEachSessionOnce(t *testing.T) {
 	m := on().Begin([]sample.Session{calm("%1")})
-	m, changed := m.Observe([]sample.Session{calm("%1"), full("%2")}, nil, 85)
+	m, changed := m.Observe([]sample.Session{calm("%1"), full("%2")}, nil, at85, t0)
 	if !changed {
 		t.Fatal("a new session and a full one changed nothing")
 	}
 	asks := calm("%3")
 	asks.Asks = true
-	m, _ = m.Observe([]sample.Session{calm("%1"), full("%2"), asks, calm("%4")}, map[string]bool{"%4": true}, 85)
-	if _, changed = m.Observe([]sample.Session{calm("%1"), full("%2")}, nil, 85); changed {
+	m, _ = m.Observe([]sample.Session{calm("%1"), full("%2"), asks, calm("%4")}, map[string]bool{"%4": true}, at85, t0)
+	if _, changed = m.Observe([]sample.Session{calm("%1"), full("%2")}, nil, at85, t0); changed {
 		t.Fatal("the same sessions again changed the mode")
 	}
 	if !reflect.DeepEqual(m.Watched, []string{"s%1", "s%2", "s%3", "s%4"}) ||
 		!reflect.DeepEqual(m.Full, []string{"s%2"}) || !reflect.DeepEqual(m.Waited, []string{"s%3", "s%4"}) {
 		t.Fatalf("watched %v full %v waited %v", m.Watched, m.Full, m.Waited)
 	}
-	if _, changed := (Mode{}).Observe([]sample.Session{full("%1")}, nil, 85); changed {
+	if _, changed := (Mode{}).Observe([]sample.Session{full("%1")}, nil, at85, t0); changed {
 		t.Fatal("a stoker that is off observed")
 	}
 }
@@ -81,7 +81,7 @@ func TestScore(t *testing.T) {
 		{"a session in the queue is not ready", []sample.Session{calm("%1"), calm("%2"), calm("%3")}, map[string]bool{"%1": true}, nil,
 			Card{Watched: 3, Waited: 1, Ready: 2, Of: 3, NotReady: []Miss{{"work%1", "waits for you"}}}},
 		{"a full session is not ready", []sample.Session{calm("%1"), full("%2"), calm("%3")}, nil, nil,
-			Card{Watched: 3, Full: 1, Ready: 2, Of: 3, NotReady: []Miss{{"work%2", "full · 88%"}}}},
+			Card{Watched: 3, Full: 1, Ready: 2, Of: 3, NotReady: []Miss{{"work%2", "full · 176k"}}}},
 		{"compacts read back count, with the tokens they gave back", []sample.Session{calm("%1"), calm("%2"), calm("%3")}, nil,
 			[]Entry{compacted, noCounts, unread, skipped},
 			Card{Watched: 3, Compacted: 2, Given: 166600, Ready: 3, Of: 3}},
@@ -90,8 +90,8 @@ func TestScore(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			m := on().Begin([]sample.Session{calm("%1"), calm("%2"), calm("%3")})
-			m, _ = m.Observe(c.end, c.waiting, 85)
-			m = m.Off(end).Score(c.end, c.waiting, 85, c.run)
+			m, _ = m.Observe(c.end, c.waiting, at85, t0)
+			m = m.Off(end).Score(c.end, c.waiting, at85, c.run)
 			want := c.want
 			want.Since, want.Ended = t0, end
 			if m.Card == nil || !reflect.DeepEqual(*m.Card, want) {
@@ -107,18 +107,18 @@ func TestANightCardSaysItWasANight(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, _ = m.Expire(m.Until)
-	if c := m.Score(nil, nil, 85, nil).Card; c == nil || !c.Night {
+	if c := m.Score(nil, nil, at85, nil).Card; c == nil || !c.Night {
 		t.Fatalf("card %+v", c)
 	}
-	if c := on().Off(t0.Add(time.Hour)).Score(nil, nil, 85, nil).Card; c == nil || c.Night {
+	if c := on().Off(t0.Add(time.Hour)).Score(nil, nil, at85, nil).Card; c == nil || c.Night {
 		t.Fatalf("a run of the day: %+v", c)
 	}
 }
 
 func TestTurnOnStartsAFreshRun(t *testing.T) {
 	m := on().Begin([]sample.Session{full("%1")})
-	m, _ = m.Observe([]sample.Session{full("%1")}, nil, 85)
-	m = m.Off(t0.Add(time.Hour)).Score(nil, nil, 85, nil)
+	m, _ = m.Observe([]sample.Session{full("%1")}, nil, at85, t0)
+	m = m.Off(t0.Add(time.Hour)).Score(nil, nil, at85, nil)
 	m.Asked = true
 	n := m.TurnOn(t0.Add(2 * time.Hour))
 	if n.Card != nil || n.Start != nil || n.Watched != nil || n.Full != nil || n.Asked {
@@ -131,10 +131,10 @@ func TestARestingStokerPlansNothing(t *testing.T) {
 	if !m.Asked || m.Rests.IsZero() {
 		t.Fatalf("rest %+v", m)
 	}
-	if got := Plan(m, []sample.Session{full("%1")}, nil, 85, nil, t0); len(got) != 0 {
+	if got := Plan(m, []sample.Session{full("%1")}, nil, at85, nil, t0); len(got) != 0 {
 		t.Fatalf("a resting stoker planned %+v", got)
 	}
-	if got := Plan(m.Wake(), []sample.Session{full("%1")}, nil, 85, nil, t0); len(got) != 1 {
+	if got := Plan(m.Wake(), []sample.Session{full("%1")}, nil, at85, nil, t0); len(got) != 1 {
 		t.Fatalf("woken, it planned %+v", got)
 	}
 }
@@ -176,7 +176,7 @@ func TestScoreCountsTheEnd(t *testing.T) {
 	asks.Asks = true
 	end := []sample.Session{calm("%1"), full("%2"), asks}
 	m := on().Begin([]sample.Session{calm("%1"), calm("%2"), calm("%3")})
-	c := m.Off(t0.Add(time.Minute)).Score(end, nil, 85, nil).Card
+	c := m.Off(t0.Add(time.Minute)).Score(end, nil, at85, nil).Card
 	if c.Full != 1 || c.Waited != 1 || c.Ready != 1 {
 		t.Fatalf("card %+v", c)
 	}
@@ -210,8 +210,48 @@ func TestUpdateNeverLosesAWrite(t *testing.T) {
 
 // A run the previous build started has no start: the first sample seats it.
 func TestObserveSeatsARunWithoutAStart(t *testing.T) {
-	m, changed := on().Observe([]sample.Session{calm("%1")}, nil, 85)
+	m, changed := on().Observe([]sample.Session{calm("%1")}, nil, at85, t0)
 	if !changed || len(m.Start) != 1 {
 		t.Fatalf("start %+v", m.Start)
+	}
+}
+
+// A session the plan's limit stops is not ready, and says until when; a
+// limit that ran out during the run is on the card with when it comes back.
+func TestTheCardCountsTheLimit(t *testing.T) {
+	back := t0.Add(3 * time.Hour)
+	out := func(s sample.Session) sample.Session { s.Out = back; return s }
+	m := on().Begin([]sample.Session{calm("%1"), calm("%2")})
+	m, changed := m.Observe([]sample.Session{out(calm("%1")), out(calm("%2"))}, nil, at85, t0.Add(41*time.Minute))
+	if !changed {
+		t.Fatal("a limit running out changed nothing")
+	}
+	// Later samples of the same lapse keep its start.
+	m, _ = m.Observe([]sample.Session{out(calm("%1")), out(calm("%2"))}, nil, at85, t0.Add(2*time.Hour))
+	end := t0.Add(2 * time.Hour)
+	m = m.Off(end).Score([]sample.Session{out(calm("%1")), out(calm("%2"))}, nil, at85, nil)
+	c := m.Card
+	if c.Ready != 0 || c.Of != 2 {
+		t.Fatalf("ready %d/%d", c.Ready, c.Of)
+	}
+	why := "out until " + back.Format("15:04")
+	if !reflect.DeepEqual(c.NotReady, []Miss{{"work%1", why}, {"work%2", why}}) {
+		t.Fatalf("not ready %+v", c.NotReady)
+	}
+	if !reflect.DeepEqual(c.Lapses, []Lapse{{From: t0.Add(41 * time.Minute), Until: back}}) {
+		t.Fatalf("lapses %+v", c.Lapses)
+	}
+}
+
+// The token count fills a 1M window long before its percentage.
+func TestAFullSessionByTokens(t *testing.T) {
+	big := calm("%1")
+	big.Tokens, big.ContextPct = 445000, 44.5
+	f := sample.Full{Pct: 85, Tokens: 350_000}
+	m := on().Begin([]sample.Session{big})
+	m, _ = m.Observe([]sample.Session{big}, nil, f, t0)
+	m = m.Off(t0.Add(time.Hour)).Score([]sample.Session{big}, nil, f, nil)
+	if m.Card.Full != 1 || !reflect.DeepEqual(m.Card.NotReady, []Miss{{"work%1", "full · 445k"}}) {
+		t.Fatalf("card %+v", m.Card)
 	}
 }

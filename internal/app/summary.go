@@ -17,13 +17,20 @@ func Summary(s state.Doc) string {
 	fmt.Fprintf(&b, "at %s\n", s.At.Format("2006-01-02 15:04:05"))
 	fmt.Fprintf(&b, "machine: cpu %.0f%%  load %.1f  mem %s/%s  swap %s  psi cpu %.0f io %.0f mem %.0f\n",
 		mc.CPU, mc.Load[0], gib(mc.MemTotal-mc.MemAvail), gib(mc.MemTotal), gib(mc.SwapUsed), mc.PSI.CPU, mc.PSI.IO, mc.PSI.Memory)
-	busy := 0
+	busy, out := 0, 0
 	for _, x := range s.Sessions {
-		if x.Busy {
+		switch x.Age() {
+		case "busy":
 			busy++
+		case "out":
+			out++
 		}
 	}
-	fmt.Fprintf(&b, "sessions: %d (busy %d, idle %d), %d panes without an agent\n", len(s.Sessions), busy, len(s.Sessions)-busy, len(s.IdlePanes))
+	stopped := ""
+	if out > 0 {
+		stopped = fmt.Sprintf(", out %d", out)
+	}
+	fmt.Fprintf(&b, "sessions: %d (busy %d, idle %d%s), %d panes without an agent\n", len(s.Sessions), busy, len(s.Sessions)-busy-out, stopped, len(s.IdlePanes))
 	for _, a := range s.Limits {
 		fmt.Fprintf(&b, "limits %s: %s\n", strings.TrimSpace(a.Provider+" "+a.Account), limits.Plain(limits.Parts(a, s.At)))
 	}
@@ -37,6 +44,9 @@ func Summary(s state.Doc) string {
 		}
 		fmt.Fprintf(&b, "stoker: %s %s → %s · ready %d/%d · %s\n", run, c.Since.Local().Format("15:04"), c.Ended.Local().Format("15:04"),
 			c.Ready, c.Of, cardLines(c, false)[0])
+		for _, l := range lapseLines(c) {
+			fmt.Fprintf(&b, "  %s\n", l)
+		}
 		for _, x := range c.NotReady {
 			fmt.Fprintf(&b, "  not ready: %s (%s)\n", x.Name, x.Why)
 		}

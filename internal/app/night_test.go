@@ -258,3 +258,30 @@ func TestStatusShowsTheCardUntilItIsFolded(t *testing.T) {
 		t.Fatalf("a folded card:\n%s", out)
 	}
 }
+
+// A run the limit stopped says so first, with when it came back; each
+// session it stopped is named with until when.
+func TestTheCardSaysTheLimitRanOut(t *testing.T) {
+	v := quietNight()
+	c := *v.Card
+	from := time.Date(2026, 10, 11, 1, 51, 0, 0, time.Local)
+	back := time.Date(2026, 10, 11, 4, 50, 0, 0, time.Local)
+	c.Ready = 0
+	c.NotReady = []proto.StokerMiss{{Name: "billing", Why: "out until 04:50"}}
+	c.Lapses = []proto.StokerLapse{{From: from, Until: back}}
+	v.Card = &c
+	for _, w := range []int{40, 120} {
+		m, _ := loadedWith(t, w, stokerState(v))
+		lines := strings.Split(ansi.Strip(m.render()), "\n")
+		at := lineOf(t, m, "NIGHT 01:08")
+		if !strings.Contains(lines[at+1], "limit out 01:51 → 04:50") {
+			t.Fatalf("w=%d: the lapse is not the card's first line:\n%s", w, strings.Join(lines[at:at+4], "\n"))
+		}
+	}
+	out := Summary(stokerState(v).Doc)
+	for _, want := range []string{"  limit out 01:51 → 04:50\n", "  not ready: billing (out until 04:50)\n"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("no %q in\n%s", want, out)
+		}
+	}
+}

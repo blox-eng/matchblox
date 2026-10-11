@@ -20,7 +20,11 @@ var queueWord = map[string]string{
 // progress, with no question, stopped before its task was done: paused.
 func (m Model) queueWordOf(it queue.Item) string {
 	if it.State == queue.StateFinished && it.Pane != "" {
-		if s, ok := m.sessionIn(it.Pane); ok && s.Progress != nil && s.Progress.Pct < 100 {
+		s, ok := m.sessionIn(it.Pane)
+		switch {
+		case ok && !s.Out.IsZero():
+			return "out" // nothing to answer before the plan's limit resets
+		case ok && s.Progress != nil && s.Progress.Pct < 100:
 			return "paused"
 		}
 	}

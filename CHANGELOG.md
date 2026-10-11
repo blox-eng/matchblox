@@ -6,6 +6,21 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **See which sessions your plan's limit stopped, and until when.** A
+  session whose turn the limit refused, or whose account spent its window,
+  says `out` with the time it can work again, in Sessions and in
+  `matchblox status`.
+- **The stoker's card tells the truth about the limit.** A run the limit
+  stopped says so on its first line (`limit out 11:51 → 14:50`), and a
+  session that is out is not counted as ready.
+- **A 1M window can fill.** `compact_tokens` (350k by default) fills a
+  session before `compact_at`'s percentage does, so the stoker and the
+  `! compact` mark act on large windows too.
+- **Every stoker card is kept** in `stoker-runs.jsonl`: a new run never
+  erases the one before it.
+
 ## [0.3.0] - 2026-10-11
 
 ### Added
