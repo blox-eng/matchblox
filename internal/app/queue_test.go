@@ -516,3 +516,15 @@ func TestTwoSessionsOutsideTmuxKeepTheirOwnWords(t *testing.T) {
 		}
 	}
 }
+
+// TestAnEstimatedRowShowsWhatTheAgentAsked: a session without hooks that
+// waits on a question shows the question, so `a` answers what it reads.
+func TestAnEstimatedRowShowsWhatTheAgentAsked(t *testing.T) {
+	st := queueState()
+	q := "Should a refresh also rotate the token?"
+	st.Queue[1].State, st.Queue[1].LastLine = queue.StateQuestion, q
+	m, _ := loadedWith(t, 100, st)
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "estimated: "+q) {
+		t.Fatalf("the row lacks the question:\n%s", out)
+	}
+}
