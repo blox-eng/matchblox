@@ -221,9 +221,10 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 }
 
 var (
-	figure = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
-	sparks = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
-	spaces = regexp.MustCompile(`\s+`)
+	burning = regexp.MustCompile(`flint-auth\s+[✦✧] busy`)
+	figure  = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
+	sparks  = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
+	spaces  = regexp.MustCompile(`\s+`)
 )
 
 // skeleton is a screen without what changes from run to run: figures,
@@ -456,10 +457,13 @@ func TestReplay(t *testing.T) {
 	steps = append(steps, []step{
 		{name: "the answer, before it runs", at: 5200 * time.Millisecond, key: "enter", ok: has("RUN tmux send-keys -t %2 -l -- rotate it", "y run")},
 		{name: "the answer goes", at: 6400 * time.Millisecond, key: "y", ok: func(s string) bool {
-			return !strings.Contains(s, "flint-auth") && strings.Contains(s, "3 WAITING FOR YOU")
+			return !strings.Contains(s, "flint-auth") && strings.Contains(s, "3 WAITING FOR YOU") && strings.Contains(s, "ran: tmux send-keys -t %2")
 		}},
-		{name: "the sessions", at: 8 * time.Second, key: "2", ok: has("hearth-api", "flint-auth", "spark-docs", "! compact", "88%",
-			"kindle-web", "ember-bill", "cinder-ci", "wick-mobile", "codex", "opencode")},
+		// flint-auth burns: its strike has played, so every run draws the same frame.
+		{name: "the sessions", at: 8 * time.Second, key: "2", ok: func(s string) bool {
+			return has("hearth-api", "spark-docs", "! compact", "88%", "kindle-web", "ember-bill", "cinder-ci", "wick-mobile", "codex", "opencode")(s) &&
+				burning.MatchString(s)
+		}},
 		{name: "the limits and what to do", at: 11 * time.Second, key: "1", ok: has("Max", "1 match", "2 sparks", "RECOMMENDATIONS",
 			"The week runs short: compact spark-docs")},
 	}...)
@@ -480,7 +484,11 @@ func TestReplay(t *testing.T) {
 	steps = append(steps, step{name: "the rec selected", at: 12500 * time.Millisecond, do: seek(weekRec), ok: weekRec})
 	steps = append(steps, []step{
 		{name: "the compact, guarded", at: 14 * time.Second, key: "x", ok: has("tmux send-keys -t %3 /compact Enter", "y run")},
-		{name: "the compact ran", at: 15 * time.Second, key: "y", ok: has("ran: tmux send-keys -t %3 /compact Enter")},
+		{name: "the compact ran", at: 15 * time.Second, key: "y", ok: func(s string) bool {
+			// Settled: spark-docs compacted, so the week's rec names the next session.
+			return strings.Contains(s, "ran: tmux send-keys -t %3 /compact Enter") && !strings.Contains(s, "Compact spark-docs (%3)") &&
+				strings.Contains(s, "The week runs short: compact hearth-api")
+		}},
 		{name: "git", at: 17 * time.Second, key: "5", ok: has("9 WORKTREES", "1 SAFE TO REMOVE", "kindle-cart-v1", "✓ safe to remove")},
 		{name: "a worktree marked", at: 18300 * time.Millisecond, key: "X", ok: has("●kindle-cart-v1")},
 		{name: "the remove, guarded", at: 19300 * time.Millisecond, key: "x", ok: has("worktree remove /work/kindle-cart-v1", "y run")},
