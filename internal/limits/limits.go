@@ -336,6 +336,16 @@ func When(t, now time.Time, approx string) string {
 	return t.Format("Mon") + " " + approx + t.Format("15:04")
 }
 
+// Until is "00:47" within a day of now, else "Mon 09:00": when a reset a
+// few hours on comes back, even past midnight.
+func Until(t, now time.Time) string {
+	t = t.In(now.Location())
+	if t.Sub(now) < 24*time.Hour {
+		return t.Format("15:04")
+	}
+	return t.Format("Mon 15:04")
+}
+
 // Plain joins the parts as text.
 func Plain(ps []Part) string {
 	s := make([]string, len(ps))
@@ -343,4 +353,19 @@ func Plain(ps []Part) string {
 		s[i] = p.Text
 	}
 	return strings.Join(s, " · ")
+}
+
+// Out is when an account whose window is spent can work again: the latest
+// reset of a window at 100%, or zero when none is spent.
+func (r *Reading) Out(now time.Time) time.Time {
+	var out time.Time
+	if r == nil {
+		return out
+	}
+	for _, w := range r.Windows {
+		if w.UsedPct >= 100 && w.ResetsAt.After(now) && w.ResetsAt.After(out) {
+			out = w.ResetsAt
+		}
+	}
+	return out
 }

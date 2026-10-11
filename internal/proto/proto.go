@@ -142,4 +142,5 @@ type (
 	StokerEntry = stoker.Entry
 	StokerCard  = stoker.Card
 	StokerMiss  = stoker.Miss
+	StokerLapse = stoker.Lapse
 )

@@ -457,13 +457,13 @@ func (m Model) row(s sample.Session, selected bool, w, tab, acct, tree int) stri
 	state, idle := m.matchCell(s)+st.text.Render(pad("busy", colSt-2)), pad("", colIdle)
 	if !s.Busy {
 		state = m.matchCell(s) + st.faint.Render(pad(m.stateWord(s), colSt-2))
-		idle = st.muted.Render(pad(sample.Human(s.Idle), colIdle))
+		idle = st.muted.Render(pad(m.idleCell(s), colIdle))
 	}
 	ctx := st.faint.Render(pad(contextWord(s.Context), colBar+1+colPct))
 	if s.Context == "known" {
 		pctStyle := st.text
 		switch {
-		case s.ContextPct >= m.compactAt():
+		case m.full().Reached(s):
 			pctStyle = st.neg
 		case s.ContextPct >= 70:
 			pctStyle = st.warn
@@ -517,7 +517,21 @@ func (m Model) row(s sample.Session, selected bool, w, tab, acct, tree int) stri
 	return fit(line, w)
 }
 
-func (m Model) compactAt() float64 { return m.opt.CompactAt }
+// idleCell is how long a session sat idle, or, while the plan's limit stops
+// it, when it can work again: 19:50 within a day, else the weekday.
+func (m Model) idleCell(s sample.Session) string {
+	switch {
+	case !s.Stopped():
+		return sample.Human(s.Idle)
+	case s.Out.Sub(m.now()) < 24*time.Hour:
+		return s.Out.Local().Format("15:04")
+	}
+	return s.Out.Local().Format("Mon")
+}
+
+func (m Model) full() sample.Full {
+	return sample.Full{Pct: m.opt.CompactAt, Tokens: m.opt.CompactTokens}
+}
 
 func (m Model) detail(w int) []string {
 	st := m.st
@@ -538,9 +552,9 @@ func (m Model) detail(w int) []string {
 	}
 	switch {
 	case s.Tokens > 0 && s.Window > 0:
-		facts = append(facts, fmt.Sprintf("%s / %s tokens", kTok(s.Tokens), kTok(s.Window)), "+"+kTok(s.Burn30m)+" in 30 min")
+		facts = append(facts, fmt.Sprintf("%s / %s tokens", sample.Kilo(s.Tokens), sample.Kilo(s.Window)), "+"+sample.Kilo(s.Burn30m)+" in 30 min")
 	case s.Tokens > 0:
-		facts = append(facts, kTok(s.Tokens)+" tokens · no window known: add the model to [sessions.windows]")
+		facts = append(facts, sample.Kilo(s.Tokens)+" tokens · no window known: add the model to [sessions.windows]")
 	}
 	if s.Procs == 1 {
 		facts = append(facts, "1 process")
@@ -643,13 +657,6 @@ func fit(s string, w int) string {
 }
 
 func gib(b uint64) string { return fmt.Sprintf("%.0fG", float64(b)/(1<<30)) }
-
-func kTok(n int) string {
-	if n >= 1_000_000 {
-		return fmt.Sprintf("%.1fM", float64(n)/1e6)
-	}
-	return fmt.Sprintf("%dk", (n+500)/1000)
-}
 
 // size renders bytes or bytes per second compactly: 512B, 12K, 3.4M, 1.2G.
 func size(b float64) string {

@@ -32,6 +32,8 @@ func limitsState() proto.State {
 // accounts of one provider are told apart by name; the same line fits a
 // phone, and the tabs move down under them.
 func TestEachAccountHasALimitsLine(t *testing.T) {
+	// The week runs out 26 hours on, on a weekday of the builder's zone.
+	out := limitsState().At.Add(26 * time.Hour).Local().Format("Mon")
 	for _, c := range []struct {
 		w    int
 		want []string
@@ -43,7 +45,7 @@ func TestEachAccountHasALimitsLine(t *testing.T) {
 		}},
 		{40, []string{
 			" ✻ 4 matches · 8 sparks · lasts the week",
-			" ❋ 5 matches · 2 sparks · out Mon",
+			" ❋ 5 matches · 2 sparks · out " + out,
 		}},
 	} {
 		m, _ := loadedWith(t, c.w, limitsState())

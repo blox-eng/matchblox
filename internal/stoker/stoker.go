@@ -61,6 +61,8 @@ type Mode struct {
 	Watched []string `json:"watched,omitempty"`
 	Full    []string `json:"full,omitempty"`
 	Waited  []string `json:"waited,omitempty"`
+	// Lapses are the stretches the plan's limit stopped sessions.
+	Lapses []Lapse `json:"lapses,omitempty"`
 	// Card is the run's score, kept from its end until the next run.
 	Card *Card `json:"card,omitempty"`
 	// Asked: the builder was asked to take over in this run.
@@ -182,10 +184,10 @@ type Step struct {
 }
 
 // Plan picks the sessions to compact now, unless the stoker rests: Claude Code, idle and not cold,
-// at or above compactAt, not waiting for the builder, not stepped on in
+// full, not stopped by the plan's limit, not waiting for the builder, not stepped on in
 // the last PerSession, while the run has steps left. The fullest go first.
 // waiting holds the panes the queue lists.
-func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, compactAt float64, recent []Entry, now time.Time) []Step {
+func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, full sample.Full, recent []Entry, now time.Time) []Step {
 	if !m.On || !m.Rests.IsZero() {
 		return nil
 	}
@@ -209,8 +211,8 @@ func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, compactAt 
 		at, stepped := last[s.SessionID]
 		switch {
 		case s.Agent != "claude", s.Pane == "", s.SessionID == "",
-			s.Busy, s.Status != "idle", s.Age() != "idle",
-			s.Tokens == 0, s.ContextPct < compactAt,
+			s.Busy, s.Status != "idle", s.Age() != "idle", !s.Out.IsZero(),
+			!full.Reached(s),
 			waiting[s.Pane], s.Asks, s.Permits,
 			stepped && now.Sub(at) < PerSession:
 			continue
