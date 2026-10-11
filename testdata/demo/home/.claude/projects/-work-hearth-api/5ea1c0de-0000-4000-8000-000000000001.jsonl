@@ -1,0 +1,2 @@
+{"type":"assistant","isSidechain":false,"timestamp":"2026-10-01T22:10:00Z","message":{"model":"sonnet","usage":{"input_tokens":10,"cache_read_input_tokens":119990,"cache_creation_input_tokens":0,"output_tokens":0}}}
+{"type":"assistant","isSidechain":false,"timestamp":"2026-10-01T22:49:00Z","message":{"model":"sonnet","usage":{"input_tokens":10,"cache_read_input_tokens":157990,"cache_creation_input_tokens":0,"output_tokens":0},"content":[{"type":"text","text":"Progress [██████░░░░] rate limits on the public API"}]}}

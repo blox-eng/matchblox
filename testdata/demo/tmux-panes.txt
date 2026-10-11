@@ -1,7 +1,8 @@
-%1	work:1.1	api	1200	claude	/work/api
-%2	work:2.1	web	1300	claude	/work/web
-%3	work:3.1	docs	1400	claude	/work/docs
-%4	lab:1.1	shell	1500	zsh	/work/lab
-%5	work:4.1	billing	1600	claude	/work/billing
-%6	work:5.1	search	1700	codex	/work/search
-%7	work:6.1	mobile	1800	node	/work/mobile
+%1	hearth:1.1	api	1200	claude	/work/hearth-api
+%2	hearth:2.1	auth	1300	claude	/work/flint-auth
+%3	hearth:3.1	docs	1400	claude	/work/spark-docs
+%4	shell:1.1	shell	1500	zsh	/work/hearth
+%5	hearth:4.1	web	1600	claude	/work/kindle-web
+%6	hearth:5.1	cinder-ci	1700	codex	/work/cinder-ci
+%7	hearth:6.1	wick-mobile	1800	node	/work/wick-mobile
+%8	hearth:7.1	billing	1900	claude	/work/ember-billing

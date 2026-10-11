@@ -5,7 +5,7 @@ which agent waits for you, what loads the machine, the state of every git
 checkout, and the one safe action that resolves each thing. It works on the
 host, over SSH, and from a phone.
 
-![The matchblox console on a demo machine](assets/replay.svg)
+![The matchblox console on a demo machine: who waits for you, every session with its match, a compact and a kill you confirm, then a night the stoker keeps burning and its score in the morning](assets/replay.svg)
 
 ## Learn it in five minutes
 

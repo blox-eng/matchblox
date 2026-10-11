@@ -11,7 +11,7 @@
 [![Go 1.26](https://img.shields.io/badge/go-1.26-00ADD8.svg)](https://go.dev/dl/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 
-<img src="www/demo/replay.svg" width="100%" alt="The matchblox console on a demo machine: the queue of agents that wait, each session with its match, machine health, and a guarded kill of a detached busy loop">
+<img src="www/demo/replay.svg" width="100%" alt="The matchblox console on a demo machine: who waits for you, an answer in one line, every session with its match and context, a compact and a worktree removal you confirm, a guarded kill of a busy loop, then a night the stoker keeps burning and its score in the morning">
 
 One terminal console for every AI coding agent you run in tmux. It shows
 which agent waits for you, what loads the machine, the state of every git

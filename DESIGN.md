@@ -299,7 +299,10 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   4242, then start matchblox again".
 - Every command the console runs is shown before it runs, as the exact argv.
 - Public text names no real machine, person or company. The demo host is
-  `ws-1`.
+  `ws-1`. Its sessions build an invented app, Hearth: `hearth-api`,
+  `flint-auth`, `spark-docs`, `kindle-web`, `ember-billing`, Codex in
+  `cinder-ci` and OpenCode in `wick-mobile`, on `example.com` accounts
+  (#51, owner 2026-10-11).
 
 ## 8. The site
 
@@ -327,7 +330,12 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   the command, and Copy joined to it; under it the platform and "read the
   script first ↗". On a phone the command wraps; it is never cut.
 - **Replay:** recorded frames of the real console (`TestReplay`), drawn in
-  the site's tokens, so it follows light and dark. A still frame is in the
+  the site's tokens, so it follows light and dark. It walks one evening
+  into the morning: the queue, an answer typed with `a`, the sessions, the
+  limits and a compact from the week's recommendation, a merged worktree
+  removed, a busy loop killed, then `n`, "Take over?", the stoker's compact
+  at 23:40 and the night's card at 07:00 (#51). The demo service runs on
+  the demo clock, so the night and its card are real. A still frame is in the
   HTML for no script and for reduced motion.
 - **Rules:** everything loads from the site itself: `script-src 'self'`,
   `connect-src 'self'`, no inline script or style, no third-party resource.

@@ -1,0 +1,2 @@
+{"type":"assistant","isSidechain":false,"timestamp":"2026-10-01T22:20:00Z","message":{"model":"sonnet","usage":{"input_tokens":10,"cache_read_input_tokens":95990,"cache_creation_input_tokens":0,"output_tokens":0}}}
+{"type":"assistant","isSidechain":false,"timestamp":"2026-10-01T22:48:00Z","message":{"model":"sonnet","usage":{"input_tokens":10,"cache_read_input_tokens":111990,"cache_creation_input_tokens":0,"output_tokens":0},"content":[{"type":"text","text":"Next I run the checkout tests.\n\nProgress [███████░░░] one-tap checkout"}]}}
