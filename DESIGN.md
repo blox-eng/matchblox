@@ -253,6 +253,19 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   the `RESUME:` line under each compact, two lines for each step on a
   phone. It is selected first; `Enter` folds it. The night door ("Try a
   night") sits with the doors and folds after the first run.
+  While a run is in charge the whole console wears the night (§2.1) and the
+  word takes the `night` token. The first key or second tap that acts on a
+  session (an act's `Enter`, `x`, `a`) asks on the action line `The stoker
+  is on. Take over?  y rests it while you work · n keeps it on`, once a run
+  (#45, owner 2026-10-11). What was pressed is held and runs after the
+  answer; any other key drops both. `y` rests the stoker: the day look,
+  `stoker rests` in `muted`, `f` wakes it; it wakes itself after 15 minutes
+  with no key in any console, or with none open. Every run that ends leaves
+  a card, 0 steps included: `NIGHT|STOKED <since> → <end> · ready N/M`, then
+  `N watched · N were full · N compacted · N waited · Nk tokens given back`
+  (two lines on a phone), then each session of the start that is not ready
+  with why in `warn`, then the steps. Ready: alive, not waiting, under
+  `compact_at`.
 - **Lists** (owner, 2026-10-08): `/` searches the open tab (every key is
   text until `⏎` keeps it or `esc` clears it; a tab change ends it); an empty
   result says "nothing matches <text>". `s` sorts Sessions and Panes by the
