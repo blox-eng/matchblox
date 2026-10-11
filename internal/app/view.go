@@ -72,7 +72,11 @@ func (m Model) render() string {
 	}
 	if m.night() {
 		m.st = nightStyles()
-		return paint(m.frame(w), m.st.ground, w)
+		f := m.frame(w)
+		if n := strings.Count(f, "\n") + 1; n < m.height {
+			f += strings.Repeat("\n", m.height-n) // the night covers every row
+		}
+		return paint(f, m.st.ground, w)
 	}
 	return m.frame(w)
 }

@@ -142,7 +142,8 @@ func TestAStokerThatRestsLooksLikeTheDay(t *testing.T) {
 func TestFWakesAStokerThatRests(t *testing.T) {
 	m, f := loadedWith(t, 120, restingState())
 	sendKey(m, "f")
-	if got := recIDs(f.acts()); len(got) != 2 || got[0] != "stoker:touch" || got[1] != "stoker:wake" {
+	// f is itself a stoker act: no touch goes with it, to race the wake.
+	if got := recIDs(f.acts()); len(got) != 1 || got[0] != "stoker:wake" {
 		t.Fatalf("acts %v", got)
 	}
 }
@@ -176,5 +177,82 @@ func TestASecondTapAsksAndYRunsIt(t *testing.T) {
 	}
 	if got := recIDs(f.acts()); len(got) != 1 || got[0] != "stoker:rest" || ran == nil {
 		t.Fatalf("acts %v, ran %q", got, ran)
+	}
+}
+
+func TestTheHeldKeyActsOnWhatWasSelected(t *testing.T) {
+	m, _ := loadedWith(t, 120, nightState())
+	want := m.primary().String()
+	next := sendKey(m, "enter")
+	mm := next.(Model)
+	mm.move(1) // the selection moves before the answer
+	if mm.primary().String() == want {
+		t.Fatal("the fixture has one row: the test proves nothing")
+	}
+	got := sendKey(mm, "y").(Model)
+	if got.pending == nil || got.pending.String() != want {
+		t.Fatalf("ran %v, want %q", got.pending, want)
+	}
+}
+
+func TestASwipeOrATapDropsTheQuestion(t *testing.T) {
+	m, f := loadedWith(t, 120, nightState())
+	next := sendKey(m, "enter")
+	next, _ = next.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+	if next.(Model).held != nil {
+		t.Fatal("a swipe kept the question")
+	}
+	next = sendKey(m, "enter")
+	next, _ = tap(next, 5, 1)
+	if next.(Model).held != nil {
+		t.Fatal("a tap kept the question")
+	}
+	if len(f.acts()) != 0 {
+		t.Fatalf("sent %+v", f.acts())
+	}
+}
+
+func TestATapOnADoorNeverAsks(t *testing.T) {
+	st := doorsAndQueue(hooksDoor)
+	n := nightState()
+	st.Stoker = n.Stoker
+	m, _ := loadedWith(t, 120, st)
+	y := lineOf(t, m, "Add the queue hooks")
+	next, _ := tap(m, 5, y)
+	next, _ = tap(next, 5, y)
+	if next.(Model).held != nil {
+		t.Fatal("a tap on a door asked to take over")
+	}
+}
+
+func TestAQuestionOutlivedByItsRunJustRuns(t *testing.T) {
+	m, f := loadedWith(t, 120, nightState())
+	next := sendKey(m, "enter")
+	next, _ = next.Update(stateMsg(stokerState(proto.StokerView{}))) // the night ended meanwhile
+	got := sendKey(next, "y").(Model)
+	if len(f.acts()) != 0 || got.pending == nil || got.held != nil {
+		t.Fatalf("acts %v, pending %v", recIDs(f.acts()), got.pending)
+	}
+}
+
+func TestTapsAndTypingKeepTheRest(t *testing.T) {
+	m, f := loadedWith(t, 120, restingState())
+	next, cmd := m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+	if cmd != nil {
+		next.Update(cmd())
+	}
+	if got := recIDs(f.acts()); len(got) != 1 || got[0] != "stoker:touch" {
+		t.Fatalf("a swipe: acts %v", got)
+	}
+
+	m, f = loadedWith(t, 120, restingState())
+	searching := sendKey(m, "/").(Model)
+	f.mu.Lock()
+	f.sent = nil // the / itself touched
+	f.mu.Unlock()
+	searching.touched = time.Time{}
+	sendKey(searching, "x")
+	if got := recIDs(f.acts()); len(got) != 1 || got[0] != "stoker:touch" {
+		t.Fatalf("typing a search: acts %v", got)
 	}
 }

@@ -33,6 +33,7 @@ func stokerTest(t *testing.T) (*Service, *[][]string, string) {
 		t.Fatal(err)
 	}
 	s.Stoker = st
+	s.Activity = func() time.Time { return time.Time{} } // no tmux client of this machine
 	if err := st.Set(stoker.Mode{}.TurnOn(night0)); err != nil {
 		t.Fatal(err)
 	}
@@ -302,10 +303,10 @@ func TestTurningTheStokerOffScoresTheRun(t *testing.T) {
 }
 
 // console stands for one open console.
-func console(s *Service) {
-	s.mu.Lock()
-	s.clients[&client{kick: make(chan struct{}, 1)}] = struct{}{}
-	s.mu.Unlock()
+func console(s *Service) *client {
+	cl := &client{kick: make(chan struct{}, 1)}
+	s.join(cl)
+	return cl
 }
 
 func TestTakingOverRestsTheStoker(t *testing.T) {
@@ -341,9 +342,49 @@ func TestARestEndsWhenTheLastConsoleCloses(t *testing.T) {
 	if r := s.act(context.Background(), proto.Act{RecID: "stoker:rest"}); r.Err != "" {
 		t.Fatal(r.Err)
 	}
-	s.stoke(context.Background(), time.Now())
+	s.leave(console(s)) // the last console closes
+	now := time.Now()
+	s.stoke(context.Background(), now.Add(time.Minute))
+	if len(*ran) != 0 {
+		t.Fatalf("woke a minute after the console closed: %q", *ran)
+	}
+	s.stoke(context.Background(), now.Add(stoker.LeaveGrace))
 	if len(*ran) != 2 {
-		t.Fatalf("no console is open, yet the stoker still rests: %q", *ran)
+		t.Fatalf("no console for %v, yet the stoker still rests: %q", stoker.LeaveGrace, *ran)
+	}
+}
+
+// A new service starts alone: the consoles reconnect, the rest goes on.
+func TestARestOutlivesARestart(t *testing.T) {
+	s, ran, _ := stokerTest(t)
+	if r := s.act(context.Background(), proto.Act{RecID: "stoker:rest"}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	again := New(config.Default(), nil, nil)
+	again.Stoker, again.Actions, again.Capture, again.Activity = s.Stoker, s.Actions, s.Capture, s.Activity
+	again.cur = s.cur
+	again.stoke(context.Background(), time.Now())
+	if len(*ran) != 0 || again.Stoker.Mode().Rests.IsZero() {
+		t.Fatalf("a restart ended the rest: %q", *ran)
+	}
+}
+
+// A key in any tmux client, in the agent's own pane too, keeps the rest.
+func TestTmuxActivityKeepsTheRest(t *testing.T) {
+	s, ran, _ := stokerTest(t)
+	console(s)
+	if r := s.act(context.Background(), proto.Act{RecID: "stoker:rest"}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	now := time.Now()
+	s.Activity = func() time.Time { return now.Add(14 * time.Minute) }
+	s.stoke(context.Background(), now.Add(20*time.Minute))
+	if len(*ran) != 0 {
+		t.Fatalf("woke while the builder types in a pane: %q", *ran)
+	}
+	s.stoke(context.Background(), now.Add(14*time.Minute+stoker.RestIdle))
+	if len(*ran) != 2 {
+		t.Fatalf("did not go on 15 min after the last key: %q", *ran)
 	}
 }
 

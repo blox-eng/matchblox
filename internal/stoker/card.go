@@ -59,6 +59,12 @@ func (m Mode) Observe(ss []sample.Session, waiting map[string]bool, compactAt fl
 	if !m.On {
 		return m, false
 	}
+	if m.Start == nil && m.Watched == nil {
+		// A run an older build started: the first sample seats it.
+		if m = m.Begin(ss); m.Start != nil {
+			return m, true
+		}
+	}
 	return m.observe(ss, waiting, compactAt)
 }
 

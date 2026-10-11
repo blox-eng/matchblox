@@ -29,7 +29,7 @@ func Summary(s state.Doc) string {
 	}
 	if v := s.Stoker; v != nil && v.On {
 		fmt.Fprintf(&b, "stoker: %s\n", stokerWordOf(v.Mode))
-	} else if v != nil && v.Card != nil {
+	} else if v != nil && v.Card != nil && v.Unseen {
 		c := *v.Card
 		run := "stoker"
 		if c.Night {

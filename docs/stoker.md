@@ -28,9 +28,10 @@ row, `x`, `a`, or a second tap), the action line asks:
 ```
 
 - `y`: the stoker rests, the console shows the day, and the header says
-  `stoker rests`. What you pressed runs. The stoker goes on by itself
-  once no console has had a key for 15 minutes, or when you close the
-  last one. `f` turns it back on now.
+  `stoker rests`. What you pressed runs. Work anywhere in tmux, in the
+  console or in an agent's pane: the stoker goes on by itself 15 minutes
+  after your last key, or a couple of minutes after you close the last
+  console. `f` turns it back on now.
 - `n`: the stoker stays on, and what you pressed runs.
 
 It asks once a run. A step already sent finishes, and it shows in the
@@ -74,8 +75,8 @@ nothing to do:
 
 - `ready 6/7`: of the sessions at work when the night began, how many can
   go on now: still there, not waiting for you, and under `compact_at`.
-  Each one that is not ready is named, with what it needs. Its row in the
-  queue below takes you there.
+  Each one that is not ready is named, with what it needs. One that waits
+  for you is in the queue below; `Enter` there takes you to it.
 - `176k → 9k`: the context before and after the compact.
 - `RESUME:` the agent's own line on how to continue. Paste it, or just
   say "go on".
@@ -84,7 +85,7 @@ nothing to do:
   Send it or clear it.
 
 A stoker run during the day ends with the same card, headed `STOKED`.
-`Enter` folds it. `matchblox status` shows it too:
+`Enter` folds it. Until then, `matchblox status` shows it too:
 
 ```text
 stoker: night 23:10 → 07:00 · ready 6/7 · 7 watched · 1 was full · 1 compacted · 1 waited · 167k tokens given back

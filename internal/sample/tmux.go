@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Pane is one tmux pane.
@@ -84,4 +85,20 @@ func CaptureDir(dir string) func([]string) map[string]string {
 		}
 		return out
 	}
+}
+
+// ClientActivity is the last key of the builder in any tmux client: in a
+// console or in an agent's pane. Zero when no client is attached.
+func ClientActivity() time.Time {
+	b, err := output("tmux", "list-clients", "-F", "#{client_activity}")
+	if err != nil {
+		return time.Time{}
+	}
+	var last time.Time
+	for _, f := range strings.Fields(string(b)) {
+		if sec, err := strconv.ParseInt(f, 10, 64); err == nil && time.Unix(sec, 0).After(last) {
+			last = time.Unix(sec, 0)
+		}
+	}
+	return last
 }

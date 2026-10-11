@@ -13,6 +13,10 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if ms.Button != tea.MouseLeft {
 		return m, nil
 	}
+	if m.held != nil { // a tap is another key: it drops the question
+		m.held, m.flash = nil, ""
+		return m, nil
+	}
 	if m.splashing() {
 		m.splashDone = true
 		return m, nil
@@ -61,7 +65,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		m.pending = a
 		return m, nil
 	}
-	if m.night() && !m.stoker.Asked {
+	if _, door := m.selectedDoor(); !door && m.night() && !m.stoker.Asked {
 		m.held, m.flash = run, ""
 		return m, nil
 	}
@@ -70,6 +74,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 
 // wheel is a swipe on a phone: it moves the selection, as ↑ and ↓ do.
 func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
+	m.held = nil // a swipe is another key: it drops the question
 	switch ms.Button {
 	case tea.MouseWheelUp:
 		m.move(-1)

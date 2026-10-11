@@ -1,7 +1,10 @@
 package stoker
 
 import (
+	"fmt"
 	"reflect"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -139,25 +142,26 @@ func TestARestingStokerPlansNothing(t *testing.T) {
 func TestARestEndsWhenTheBuilderLeaves(t *testing.T) {
 	m := on().Rest(t0)
 	for _, c := range []struct {
-		name     string
-		at       time.Time
-		consoles int
-		wakes    bool
+		name  string
+		at    time.Time
+		alone time.Time // zero: a console is open
+		wakes bool
 	}{
-		{"a console open, 14 min idle", t0.Add(14 * time.Minute), 1, false},
-		{"15 min with no key", t0.Add(RestIdle), 1, true},
-		{"no console open", t0.Add(time.Minute), 0, true},
+		{"a console open, 14 min idle", t0.Add(14 * time.Minute), time.Time{}, false},
+		{"15 min with no key", t0.Add(RestIdle), time.Time{}, true},
+		{"the last console closed a moment ago", t0.Add(time.Minute), t0.Add(30 * time.Second), false},
+		{"the last console closed minutes ago", t0.Add(5 * time.Minute), t0.Add(time.Minute), true},
 	} {
-		got, woke := m.Awake(c.at, c.consoles)
+		got, woke := m.Awake(c.at, c.alone)
 		if woke != c.wakes || got.Rests.IsZero() != c.wakes {
 			t.Errorf("%s: woke %v, %+v", c.name, woke, got)
 		}
 	}
 	touched := m.Touch(t0.Add(10 * time.Minute))
-	if _, woke := touched.Awake(t0.Add(20*time.Minute), 1); woke {
+	if _, woke := touched.Awake(t0.Add(20*time.Minute), time.Time{}); woke {
 		t.Error("a key 10 min ago: woke after 20")
 	}
-	if _, woke := on().Awake(t0.Add(time.Hour), 0); woke {
+	if _, woke := on().Awake(t0.Add(time.Hour), t0); woke {
 		t.Error("a stoker that does not rest woke")
 	}
 	if off := m.Off(t0.Add(time.Minute)); !off.Rests.IsZero() {
@@ -175,5 +179,39 @@ func TestScoreCountsTheEnd(t *testing.T) {
 	c := m.Off(t0.Add(time.Minute)).Score(end, nil, 85, nil).Card
 	if c.Full != 1 || c.Waited != 1 || c.Ready != 1 {
 		t.Fatalf("card %+v", c)
+	}
+}
+
+// Two writers at once: each change lands, none undoes another.
+func TestUpdateNeverLosesAWrite(t *testing.T) {
+	st, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Set(on()); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for i := range 40 {
+		wg.Go(func() {
+			if _, err := st.Update(func(m Mode) (Mode, bool) {
+				m.Watched = append(slices.Clip(m.Watched), fmt.Sprint(i))
+				return m, true
+			}); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	if n := len(st.Mode().Watched); n != 40 {
+		t.Fatalf("%d of 40 writes kept", n)
+	}
+}
+
+// A run the previous build started has no start: the first sample seats it.
+func TestObserveSeatsARunWithoutAStart(t *testing.T) {
+	m, changed := on().Observe([]sample.Session{calm("%1")}, nil, 85)
+	if !changed || len(m.Start) != 1 {
+		t.Fatalf("start %+v", m.Start)
 	}
 }

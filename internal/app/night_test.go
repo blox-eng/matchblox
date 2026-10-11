@@ -242,3 +242,19 @@ func TestTheCardStandsApartFromSetUp(t *testing.T) {
 		}
 	}
 }
+
+func TestTheNightCoversEveryScreen(t *testing.T) {
+	m, _ := loadedWith(t, 120, nightState())
+	m.mismatch = true
+	if n := len(parsed(t, m.render())); n != 30 {
+		t.Fatalf("%d lines painted, the screen has 30", n)
+	}
+}
+
+func TestStatusShowsTheCardUntilItIsFolded(t *testing.T) {
+	v := quietNight()
+	v.Unseen = false
+	if out := Summary(stokerState(v).Doc); strings.Contains(out, "stoker:") {
+		t.Fatalf("a folded card:\n%s", out)
+	}
+}

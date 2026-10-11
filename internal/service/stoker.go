@@ -21,45 +21,54 @@ func (s *Service) stokerAct(verb string, now time.Time) proto.Result {
 	if s.Stoker == nil {
 		return proto.Result{Err: "this service keeps no stoker"}
 	}
-	m := s.Stoker.Mode()
-	was := m.On
 	sessions, waiting := s.seen()
-	switch verb {
-	case "on":
-		m = m.TurnOn(now)
-	case "night":
-		var err error
-		if m, err = m.Night(now, s.NightEnds); err != nil {
-			return proto.Result{Err: err.Error()}
-		}
-	case "off":
-		if !was {
-			break
-		}
-		m = m.Off(now).Score(sessions, waiting, s.compactAt, s.Stoker.View().Run)
-	case "ack":
-		m = m.Ack(now)
-	case "rest", "keep", "wake", "touch":
-		if !m.On {
-			return proto.Result{Err: "the stoker is off"}
-		}
+	var refused string
+	_, err := s.Stoker.Update(func(m stoker.Mode) (stoker.Mode, bool) {
+		was := m.On
 		switch verb {
-		case "rest":
-			m = m.Rest(now)
-		case "keep":
-			m.Asked = true
-		case "wake":
-			m = m.Wake()
-		case "touch":
-			m = m.Touch(now)
+		case "on":
+			m = m.TurnOn(now)
+		case "night":
+			var err error
+			if m, err = m.Night(now, s.NightEnds); err != nil {
+				refused = err.Error()
+				return m, false
+			}
+		case "off":
+			if !was {
+				return m, false
+			}
+			m = m.Off(now).Score(sessions, waiting, s.compactAt, s.Stoker.View().Run)
+		case "ack":
+			m = m.Ack(now)
+		case "rest", "keep", "wake", "touch":
+			if !m.On {
+				refused = "the stoker is off"
+				return m, false
+			}
+			switch verb {
+			case "rest":
+				m = m.Rest(now)
+			case "keep":
+				m.Asked = true
+			case "wake":
+				m = m.Wake()
+			case "touch":
+				m = m.Touch(now)
+			}
+		default:
+			refused = "unknown stoker act"
+			return m, false
 		}
-	default:
-		return proto.Result{Err: "unknown stoker act"}
+		if m.On && !was {
+			m = m.Begin(sessions)
+		}
+		return m, true
+	})
+	if refused != "" {
+		return proto.Result{Err: refused}
 	}
-	if m.On && !was {
-		m = m.Begin(sessions)
-	}
-	if err := s.Stoker.Set(m); err != nil {
+	if err != nil {
 		return proto.Result{Err: err.Error()}
 	}
 	s.refreshStoker()
@@ -76,21 +85,26 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 	}
 	changed := false
 	sessions, waiting := s.seen()
-	if m, seen := s.Stoker.Mode().Observe(sessions, waiting, s.compactAt); seen {
-		_ = s.Stoker.Set(m) // a write that fails is tried again at the next sample
-		changed = true
-	}
 	s.mu.Lock()
-	consoles := len(s.clients)
+	alone := s.alone
 	s.mu.Unlock()
-	if m, woke := s.Stoker.Mode().Awake(now, consoles); woke {
-		_ = s.Stoker.Set(m)
-		changed = true
+	var typed time.Time // the builder's last key in tmux, read only during a rest
+	if !s.Stoker.Mode().Rests.IsZero() && s.Activity != nil {
+		typed = s.Activity()
 	}
-	if m, ended := s.Stoker.Mode().Expire(now); ended {
-		_ = s.Stoker.Set(m.Score(sessions, waiting, s.compactAt, s.Stoker.View().Run))
-		changed = true
-	}
+	// One update for all three, so an act in between is never undone (a
+	// write that fails is tried again at the next sample).
+	_, _ = s.Stoker.Update(func(m stoker.Mode) (stoker.Mode, bool) {
+		m, seen := m.Observe(sessions, waiting, s.compactAt)
+		m = m.Touch(typed)
+		m, woke := m.Awake(now, alone)
+		m, ended := m.Expire(now)
+		if ended {
+			m = m.Score(sessions, waiting, s.compactAt, s.Stoker.View().Run)
+		}
+		changed = seen || woke || ended
+		return m, changed
+	})
 
 	for _, e := range s.Stoker.Pending(now) {
 		path := ""
@@ -106,6 +120,9 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 	}
 
 	for _, st := range stoker.Plan(s.Stoker.Mode(), sessions, waiting, s.compactAt, s.Stoker.Entries(), now) {
+		if m := s.Stoker.Mode(); !m.On || !m.Rests.IsZero() {
+			break // the builder took over or turned it off since the plan
+		}
 		// The builder confirmed when they turned the stoker on.
 		res := s.Actions.Do(ctx, st.Action, "y")
 		e := stoker.Entry{
@@ -137,9 +154,9 @@ func (s *Service) touchStoker(now time.Time) {
 	if s.Stoker == nil {
 		return
 	}
-	if m := s.Stoker.Mode(); !m.Rests.IsZero() {
-		_ = s.Stoker.Set(m.Touch(now))
-	}
+	_, _ = s.Stoker.Update(func(m stoker.Mode) (stoker.Mode, bool) {
+		return m.Touch(now), !m.Rests.IsZero()
+	})
 }
 
 // seen are the sessions of the last sample and the panes the queue lists

@@ -259,8 +259,10 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   is on. Take over?  y rests it while you work · n keeps it on`, once a run
   (#45, owner 2026-10-11). What was pressed is held and runs after the
   answer; any other key drops both. `y` rests the stoker: the day look,
-  `stoker rests` in `muted`, `f` wakes it; it wakes itself after 15 minutes
-  with no key in any console, or with none open. Every run that ends leaves
+  `stoker rests` in `muted`, `f` wakes it; it wakes itself 15 minutes after
+  the builder's last key in tmux (any client, any pane) or a console, or 2
+  minutes after the last console closed (a dropped link or a restart of the
+  service is not leaving). Every run that ends leaves
   a card, 0 steps included: `NIGHT|STOKED <since> → <end> · ready N/M`, then
   `N watched · N were full · N compacted · N waited · Nk tokens given back`
   (two lines on a phone), then each session of the start that is not ready

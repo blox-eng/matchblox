@@ -71,9 +71,14 @@ type Mode struct {
 	Touched time.Time `json:"touched,omitzero"`
 }
 
-// RestIdle is how long the consoles stay without a key before a stoker
-// that rests goes on.
-const RestIdle = 15 * time.Minute
+const (
+	// RestIdle is how long the builder stays without a key before a stoker
+	// that rests goes on.
+	RestIdle = 15 * time.Minute
+	// LeaveGrace is how long no console is open before a stoker that rests
+	// goes on: a dropped link or a restart of the service is not leaving.
+	LeaveGrace = 2 * time.Minute
+)
 
 // Rest hands the sessions to the builder.
 func (m Mode) Rest(now time.Time) Mode {
@@ -94,10 +99,11 @@ func (m Mode) Touch(now time.Time) Mode {
 	return m
 }
 
-// Awake ends a rest when the builder left: no console is open, or none has
-// had a key for RestIdle.
-func (m Mode) Awake(now time.Time, consoles int) (Mode, bool) {
-	if m.Rests.IsZero() || consoles > 0 && now.Sub(m.Touched) < RestIdle {
+// Awake ends a rest when the builder left: no key for RestIdle, or no
+// console open since alone (zero: one is open) for LeaveGrace.
+func (m Mode) Awake(now, alone time.Time) (Mode, bool) {
+	left := !alone.IsZero() && now.Sub(alone) >= LeaveGrace
+	if m.Rests.IsZero() || !left && now.Sub(m.Touched) < RestIdle {
 		return m, false
 	}
 	return m.Wake(), true

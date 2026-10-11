@@ -115,6 +115,30 @@ func (m Model) asksTakeOver(k string) bool {
 	return false
 }
 
+// hold is what k does, fixed at the moment it was pressed: the answer
+// runs it on the row it was pressed on, wherever the selection is by then.
+func (m Model) hold(k string) func(Model) (tea.Model, tea.Cmd) {
+	switch k {
+	case "a":
+		pane, _ := m.answerTarget()
+		return func(m Model) (tea.Model, tea.Cmd) {
+			m.input = &answerInput{pane: pane}
+			return m, nil
+		}
+	case "x":
+		a := m.secondary()
+		return func(m Model) (tea.Model, tea.Cmd) {
+			m.pending = a
+			return m, nil
+		}
+	}
+	a := m.primary()
+	return func(m Model) (tea.Model, tea.Cmd) {
+		m.pending, m.previewTop = a, 0
+		return m, nil
+	}
+}
+
 // answerTakeOver is the builder's answer: y rests the stoker, n keeps it
 // on; either way what they pressed runs. Any other key drops the question
 // and what was held.
@@ -122,6 +146,11 @@ func (m Model) answerTakeOver(k string) (tea.Model, tea.Cmd) {
 	if k != "y" && k != "n" {
 		m.held, m.flash = nil, ""
 		return m, nil
+	}
+	if !m.night() { // the run ended or rests since the question: nothing to take over
+		held := m.held
+		m.held = nil
+		return held(m)
 	}
 	if m.conn == nil || m.lost {
 		m.flash = "not sent, no connection · " + k + " tries again"
