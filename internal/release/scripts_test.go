@@ -216,3 +216,25 @@ func TestFlipWithoutAVersionLeavesTheFileAlone(t *testing.T) {
 		t.Fatalf("%v: %s\n%s", err, out, read(t, p))
 	}
 }
+
+// TestDocsDeployFromOneSourceOfTruth: a tag deploys its docs; main deploys
+// only before any release while releases are off. Pages keeps the first
+// deployment of a commit, so main must never deploy the commit a release
+// tags next (the first release's tag deploy was dropped that way).
+func TestDocsDeployFromOneSourceOfTruth(t *testing.T) {
+	for _, c := range []struct {
+		event, ref, releases, tag, want string
+	}{
+		{"push", "refs/tags/v0.1.1", "true", "v0.1.0", "true"},
+		{"push", "refs/heads/main", "", "", "true"},      // no releases yet, none on: main is the truth
+		{"push", "refs/heads/main", "true", "", "false"}, // releases on: the tag of this commit deploys
+		{"push", "refs/heads/main", "false", "v0.1.0", "false"},
+		{"pull_request", "refs/tags/v0.1.1", "true", "", "false"},
+		{"push", "refs/heads/feature", "", "", "false"},
+	} {
+		out, err := script(t, "docs-deploy.sh", c.event, c.ref, c.releases, c.tag)
+		if err != nil || strings.TrimSpace(out) != c.want {
+			t.Errorf("%+v: %q %v", c, out, err)
+		}
+	}
+}

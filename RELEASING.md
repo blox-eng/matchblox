@@ -50,5 +50,6 @@ expired, the Create Release job fails and says so. To replace it:
 | The changelog pull request did not merge itself | Update it with `main` (`gh pr update-branch <branch>`), then merge it once its checks pass |
 | No changelog pull request after a release | Run `.github/scripts/promote-changelog.sh X.Y.Z <date>` and `VERSION=vX.Y.Z .github/scripts/flip-release.sh`, and open the pull request yourself |
 | The docs of a tag | Publish the tag again: the docs deploy after its verify job |
+| The docs site shows an older build of the release's commit | Merge the next fix: its tag deploys the docs. GitHub Pages keeps the first deployment of a commit, so publishing the same tag again does not replace it |
 
 Tags are immutable: a bad release is followed by a fixed one, never moved.
