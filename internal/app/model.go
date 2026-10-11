@@ -35,8 +35,9 @@ type Options struct {
 	Redial func() (transport.Conn, error)
 	// Binary is the version in the console's hello.
 	Binary string
-	// CompactAt colours context at the compact threshold.
-	CompactAt float64
+	// CompactAt and CompactTokens colour context at the compact threshold.
+	CompactAt     float64
+	CompactTokens int
 	// Run executes one step that moves this terminal (Nav). Nil means exec.
 	Run func(argv []string) error
 	// Local: the service runs on this machine from the same install, so an
@@ -254,7 +255,7 @@ type Model struct {
 
 func New(opt Options) Model {
 	if opt.CompactAt <= 0 {
-		opt.CompactAt = sample.DefaultRules.CompactAt
+		opt.CompactAt, opt.CompactTokens = sample.DefaultRules.CompactAt, sample.DefaultRules.CompactTokens
 	}
 	if opt.Run == nil {
 		opt.Run = run

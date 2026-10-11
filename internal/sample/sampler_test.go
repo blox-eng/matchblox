@@ -180,6 +180,10 @@ func TestSuggest(t *testing.T) {
 		{"idle but small", Session{Tokens: 1, Idle: 2 * time.Hour, ContextPct: 10}, ""},
 		{"stale", Session{Tokens: 1, Idle: 25 * time.Hour, ContextPct: 1}, "clear"},
 		{"busy and fine", Session{Tokens: 1, Busy: true, ContextPct: 50}, ""},
+		{"a 1M window past the token count", Session{Tokens: 400_000, Idle: 5 * time.Minute, ContextPct: 40}, "compact"},
+		// A compact needs the model; a clear does not.
+		{"out: no compact", Session{Tokens: 400_000, Idle: 5 * time.Minute, ContextPct: 40, Out: fixtureNow}, ""},
+		{"out: a clear still runs", Session{Tokens: 1, Idle: 31 * time.Minute, ContextPct: 25, Out: fixtureNow}, "clear"},
 	}
 	for _, c := range cases {
 		if got, _ := r.suggest(c.s); got != c.want {

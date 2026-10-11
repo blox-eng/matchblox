@@ -7,6 +7,7 @@ latency_target = ""      # host:port to time a TCP connect against every 10 s, e
 
 [sessions]
 compact_at = 85          # context % at which a session should compact
+compact_tokens = 350000  # or this many context tokens, whichever comes first (a 1M window rarely reaches 85%); 0: off
 clear_idle = "30m"       # idle this long while holding clear_min_pct context: clear
 clear_min_pct = 20
 clear_stale = "24h"      # idle this long: clear whatever it holds

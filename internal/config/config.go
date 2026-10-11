@@ -63,11 +63,14 @@ type Hooks struct {
 }
 
 type Sessions struct {
-	CompactAt   float64        `toml:"compact_at"`
-	ClearIdle   Duration       `toml:"clear_idle"`
-	ClearMinPct float64        `toml:"clear_min_pct"`
-	ClearStale  Duration       `toml:"clear_stale"`
-	Windows     map[string]int `toml:"windows"` // model prefix -> context tokens
+	CompactAt float64 `toml:"compact_at"`
+	// CompactTokens fills a session at this many context tokens, whichever
+	// comes first with CompactAt: a 1M window rarely reaches 85%. 0: off.
+	CompactTokens int            `toml:"compact_tokens"`
+	ClearIdle     Duration       `toml:"clear_idle"`
+	ClearMinPct   float64        `toml:"clear_min_pct"`
+	ClearStale    Duration       `toml:"clear_stale"`
+	Windows       map[string]int `toml:"windows"` // model prefix -> context tokens
 	// ProgressPrompt asks each new agent session for a progress bar at the
 	// end of each reply, which the console shows.
 	ProgressPrompt bool `toml:"progress_prompt"`
@@ -125,6 +128,7 @@ func Default() Config {
 		Agents:   []string{"claude"},
 		Sessions: Sessions{
 			CompactAt:      85,
+			CompactTokens:  350_000,
 			ClearIdle:      Duration{30 * time.Minute},
 			ClearMinPct:    20,
 			ClearStale:     Duration{24 * time.Hour},

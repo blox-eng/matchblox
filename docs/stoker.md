@@ -41,7 +41,9 @@ morning.
 
 A Claude Code session in tmux that is:
 
-- idle, at or above `compact_at` (85% by default),
+- idle and full: at `compact_tokens` (350k by default) or `compact_at`
+  (85% of its window), whichever comes first,
+- not stopped by its plan's limit (`out`): a compact needs the model too,
 - not waiting for you: no question, no permission prompt,
 - not left for a day or more (`cold`),
 - not compacted by the stoker in the last 30 minutes.
@@ -65,19 +67,27 @@ The night's card is the first thing in the queue, even after a night with
 nothing to do:
 
 ```text
- NIGHT 23:10 → 07:00 · ready 6/7
- ▌ 7 watched · 1 was full · 1 compacted · 1 waited · 167k tokens given back
+ NIGHT 23:10 → 07:00 · ready 5/7
+ ▌ limit out 04:12 → 06:40
+   7 watched · 1 was full · 1 compacted · 1 waited · 386k tokens given back
    api-gw           waits for you
-   01:33  ╿ app-feature      %1         176k → 9k
+   app-docs         out until 09:10
+   01:33  ╿ app-feature      %1         395k → 9k
        RESUME: run the migration test, then open the PR
    03:02  ╿ app-review       %2         skipped: the pane %2 has text you typed
 ```
 
-- `ready 6/7`: of the sessions at work when the night began, how many can
-  go on now: still there, not waiting for you, and under `compact_at`.
-  Each one that is not ready is named, with what it needs. One that waits
-  for you is in the queue below; `Enter` there takes you to it.
-- `176k → 9k`: the context before and after the compact.
+- `limit out 04:12 → 06:40`: your plan's limit stopped the sessions, from
+  then until its reset. It comes first, because nothing worked in between.
+- `ready 5/7`: of the sessions at work when the night began, how many can
+  go on now: still there, not stopped by the limit, not waiting for you,
+  and not full. Each one that is not ready is named, with what it needs.
+  One that waits for you is in the queue below; `Enter` there takes you
+  to it. One that is `out until 09:10` can work after its reset: a turn
+  the limit cut off, Claude Code continues by itself; one you left idle
+  waits for your next prompt. `out until 09:10 · full 395k` also needs a
+  compact after the reset.
+- `395k → 9k`: the context before and after the compact.
 - `RESUME:` the agent's own line on how to continue. Paste it, or just
   say "go on".
 - `skipped: …`: what stopped the step. The session is as you left it.
@@ -88,13 +98,27 @@ A stoker run during the day ends with the same card, headed `STOKED`.
 `Enter` folds it. Until then, `matchblox status` shows it too:
 
 ```text
-stoker: night 23:10 → 07:00 · ready 6/7 · 7 watched · 1 was full · 1 compacted · 1 waited · 167k tokens given back
+stoker: night 23:10 → 07:00 · ready 5/7 · 7 watched · 1 was full · 1 compacted · 1 waited · 386k tokens given back
+  limit out 04:12 → 06:40
   not ready: api-gw (waits for you)
+  not ready: app-docs (out until 09:10)
 ```
 
 Every step is also in `stoker.jsonl`, in `$XDG_STATE_HOME/matchblox`
 (`~/.local/state/matchblox` by default): the exact command, what the pane
-showed, the result and the RESUME line.
+showed, the result and the RESUME line. Every card is kept beside it in
+`stoker-runs.jsonl`, so the next run never erases the last one.
+
+## Compact sooner or later
+
+A session is full at `compact_tokens` or at `compact_at` of its window,
+whichever comes first. On a 1M window, 85% is 850k tokens, which a session
+rarely reaches, so the token count decides:
+
+```toml
+[sessions]
+compact_tokens = 250000
+```
 
 ## End the night earlier or later
 

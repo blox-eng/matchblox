@@ -114,9 +114,11 @@ state. The code is `internal/app/match.go`.
 | burning | `✦` | `flame`, `flame-amber`, `flame-core` | flickers: a new colour each 200 ms; `✧` for one step in six | the agent works |
 | at rest, asks | `╿` | `match-head` → `match-breath-1..3` | breathes: one slow breath each 2.4 s | the agent waits for an answer or a permission |
 | at rest | `╿` | `match-head` | still | the agent finished its turn and waits |
-| spent | `│` | `faint` | still | the context is at or above the compact limit (`sessions.compact_at`, default 85 %) |
+| spent | `│` | `faint` | still | the context is at or above the compact limit (`sessions.compact_tokens`, default 350k, or `sessions.compact_at`, default 85 %, whichever comes first) |
 
 Order: spent comes first. A session that works with a full context is spent.
+A session the plan's limit stops (`out`) keeps the at-rest glyph, or spent
+when full; its word is `out` and the idle column holds its reset.
 
 A change of state plays once:
 
@@ -266,8 +268,11 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   a card, 0 steps included: `NIGHT|STOKED <since> → <end> · ready N/M`, then
   `N watched · N were full · N compacted · N waited · Nk tokens given back`
   (two lines on a phone), then each session of the start that is not ready
-  with why in `warn`, then the steps. Ready: alive, not waiting, under
-  `compact_at`.
+  with why in `warn`, then the steps. Ready: alive, not stopped by the
+  plan's limit, not waiting, not full. A limit that stopped sessions during
+  the run is the card's first line, in `warn`: `limit out <from> → <reset>`;
+  a session it stops is named `out until <reset>`. Every card is kept in
+  `stoker-runs.jsonl`.
 - **Lists** (owner, 2026-10-08): `/` searches the open tab (every key is
   text until `⏎` keeps it or `esc` clears it; a tab change ends it); an empty
   result says "nothing matches <text>". `s` sorts Sessions and Panes by the

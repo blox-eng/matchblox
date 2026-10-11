@@ -83,13 +83,13 @@ func (m Model) narrowRow(s sample.Session, selected bool) []string {
 	st := m.st
 	first := " " + m.matchCell(s) + st.text.Render(pad("busy", colSt-2)) + pad("", colIdle)
 	if !s.Busy {
-		first = " " + m.matchCell(s) + st.faint.Render(pad(m.stateWord(s), colSt-2)) + st.muted.Render(pad(sample.Human(s.Idle), colIdle))
+		first = " " + m.matchCell(s) + st.faint.Render(pad(m.stateWord(s), colSt-2)) + st.muted.Render(pad(m.idleCell(s), colIdle))
 	}
 	first += st.text.Render(s.Name)
 	if s.Context == "known" {
 		style := st.muted
 		switch {
-		case s.ContextPct >= m.compactAt():
+		case m.full().Reached(s):
 			style = st.neg
 		case s.ContextPct >= 70:
 			style = st.warn

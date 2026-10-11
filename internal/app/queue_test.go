@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -186,7 +187,7 @@ func TestSessionMatchGlyphs(t *testing.T) {
 		{true, 90, matchBurnt, "│", "busy"},
 		{false, 90, matchBurnt, "│", "idle"},
 	} {
-		s := sample.Session{Pane: "%9", Target: "lab:1.9", Name: "api", Busy: tc.busy, Context: "known", ContextPct: tc.pct}
+		s := sample.Session{Pane: "%9", Target: "lab:1.9", Name: "api", Busy: tc.busy, Context: "known", ContextPct: tc.pct, Tokens: int(tc.pct * 2000)}
 		if !tc.busy {
 			s.Status = "idle"
 		}
@@ -530,4 +531,23 @@ func TestAnEstimatedRowShowsWhatTheAgentAsked(t *testing.T) {
 	if out := ansi.Strip(m.render()); !strings.Contains(out, "estimated: "+q) {
 		t.Fatalf("the row lacks the question:\n%s", out)
 	}
+}
+
+// A finished turn of a session the plan's limit stops says out on its
+// queue row: there is nothing to answer before the reset.
+func TestAQueueRowOfAnOutSessionSaysOut(t *testing.T) {
+	st := fixtureState()
+	st.Sessions = append(st.Sessions, sample.Session{PID: 901, Pane: "%8", Target: "app:1.1", Name: "slice-x",
+		Status: "idle", Idle: time.Minute, Context: "fresh", Out: st.At.Add(time.Hour)})
+	st.Queue = []queue.Item{{Pane: "%8", Target: "app:1.1", Name: "slice-x", State: queue.StateFinished, Since: st.At.Add(-time.Minute)}}
+	m, _ := loadedWith(t, 100, st)
+	for _, l := range strings.Split(ansi.Strip(m.render()), "\n") {
+		if strings.Contains(l, "slice-x") {
+			if !regexp.MustCompile(`\bout\b`).MatchString(l) || strings.Contains(l, "done") {
+				t.Fatalf("queue row %q", l)
+			}
+			return
+		}
+	}
+	t.Fatal("no queue row")
 }

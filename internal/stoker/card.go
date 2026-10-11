@@ -1,10 +1,11 @@
 package stoker
 
 import (
-	"fmt"
 	"slices"
+	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -28,12 +29,23 @@ type Card struct {
 	Ready     int       `json:"ready"`
 	Of        int       `json:"of"`
 	NotReady  []Miss    `json:"not_ready,omitempty"`
+	Lapses    []Lapse   `json:"lapses,omitempty"`
 }
 
-// Miss is a session of the start that is not ready, and why.
+// Lapse is a stretch of the run the plan's limit stopped sessions: from
+// the first sample that saw it to the reset.
+type Lapse struct {
+	From  time.Time `json:"from"`
+	Until time.Time `json:"until"`
+}
+
+// Miss is a session of the start that is not ready, and why. Out is the
+// reset of a session the plan's limit stops; the console writes Why's
+// "out until" with it in its own zone.
 type Miss struct {
-	Name string `json:"name"`
-	Why  string `json:"why"`
+	Name string    `json:"name"`
+	Why  string    `json:"why"`
+	Out  time.Time `json:"out,omitzero"`
 }
 
 // atWork is a session the score follows: an agent with a session, not cold.
@@ -55,9 +67,9 @@ func (m Mode) Begin(ss []sample.Session) Mode {
 
 // Observe adds what a sample shows to the run; changed tells if the mode
 // needs writing. waiting holds the panes the queue lists as waiting.
-func (m Mode) Observe(ss []sample.Session, waiting map[string]bool, compactAt float64) (Mode, bool) {
-	if !m.On {
-		return m, false
+func (m Mode) Observe(ss []sample.Session, waiting map[string]bool, full sample.Full, now time.Time) (Mode, bool) {
+	if !m.On || !m.Until.IsZero() && now.After(m.Until) {
+		return m, false // a sample after the night's end (a host that slept) is not the night's
 	}
 	if m.Start == nil && m.Watched == nil {
 		// A run an older build started: the first sample seats it.
@@ -65,10 +77,10 @@ func (m Mode) Observe(ss []sample.Session, waiting map[string]bool, compactAt fl
 			return m, true
 		}
 	}
-	return m.observe(ss, waiting, compactAt)
+	return m.observe(ss, waiting, full, now)
 }
 
-func (m Mode) observe(ss []sample.Session, waiting map[string]bool, compactAt float64) (Mode, bool) {
+func (m Mode) observe(ss []sample.Session, waiting map[string]bool, full sample.Full, now time.Time) (Mode, bool) {
 	changed := false
 	add := func(ids []string, id string) []string {
 		if slices.Contains(ids, id) {
@@ -82,11 +94,15 @@ func (m Mode) observe(ss []sample.Session, waiting map[string]bool, compactAt fl
 			continue
 		}
 		m.Watched = add(m.Watched, s.SessionID)
-		if s.ContextPct >= compactAt {
+		if full.Reached(s) {
 			m.Full = add(m.Full, s.SessionID)
 		}
 		if waits(s, waiting) {
 			m.Waited = add(m.Waited, s.SessionID)
+		}
+		if !s.Out.IsZero() && !s.Busy && !slices.ContainsFunc(m.Lapses, func(l Lapse) bool { return l.Until.Sub(s.Out).Abs() < time.Minute }) {
+			m.Lapses = append(slices.Clip(m.Lapses), Lapse{From: now, Until: s.Out})
+			changed = true
 		}
 	}
 	return m, changed
@@ -98,11 +114,12 @@ func waits(s sample.Session, waiting map[string]bool) bool {
 
 // Score freezes the card of a run that ended, from the sessions as they
 // are at its end and the run's steps.
-func (m Mode) Score(ss []sample.Session, waiting map[string]bool, compactAt float64, run []Entry) Mode {
-	m, _ = m.observe(ss, waiting, compactAt) // the end counts, even between two samples
+func (m Mode) Score(ss []sample.Session, waiting map[string]bool, full sample.Full, run []Entry) Mode {
+	m, _ = m.observe(ss, waiting, full, m.Ended) // the end counts, even between two samples
 	c := Card{
 		Night: m.Nightly, Since: m.Since, Ended: m.Ended,
 		Watched: len(m.Watched), Full: len(m.Full), Waited: len(m.Waited), Of: len(m.Start),
+		Lapses: m.Lapses,
 	}
 	for _, e := range run {
 		if e.Result != Sent || e.Back.IsZero() {
@@ -121,20 +138,26 @@ func (m Mode) Score(ss []sample.Session, waiting map[string]bool, compactAt floa
 	}
 	for _, seat := range m.Start {
 		s, alive := now[seat.Session]
-		why := ""
+		var why []string
+		var out time.Time
 		switch {
 		case !alive:
-			why = "gone"
+			why = append(why, "gone")
 		case waits(s, waiting):
-			why = "waits for you"
-		case s.ContextPct >= compactAt:
-			why = fmt.Sprintf("full · %.0f%%", s.ContextPct)
+			why = append(why, "waits for you")
+		case !s.Out.IsZero() && !s.Busy:
+			out = s.Out
+			why = append(why, "out until "+limits.Until(s.Out, m.Ended))
 		}
-		if why == "" {
+		// After its reset a full session still needs a compact.
+		if alive && full.Reached(s) {
+			why = append(why, "full · "+sample.Kilo(s.Tokens))
+		}
+		if len(why) == 0 {
 			c.Ready++
 			continue
 		}
-		c.NotReady = append(c.NotReady, Miss{seat.Name, why})
+		c.NotReady = append(c.NotReady, Miss{Name: seat.Name, Why: strings.Join(why, " · "), Out: out})
 	}
 	m.Card = &c
 	return m

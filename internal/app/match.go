@@ -58,7 +58,7 @@ func (m Model) marks() markColours {
 }
 
 func (m Model) burnt(s sample.Session) bool {
-	return s.Context == "known" && m.compactAt() > 0 && s.ContextPct >= m.compactAt()
+	return s.Context == "known" && m.full().Reached(s)
 }
 
 func (m Model) matchOf(s sample.Session) matchKind {

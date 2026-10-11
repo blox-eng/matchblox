@@ -348,3 +348,19 @@ func TestTheLineSaysWhatIsLeftAndWhetherItLasts(t *testing.T) {
 		}
 	}
 }
+
+func TestUntil(t *testing.T) {
+	now := time.Date(2026, 10, 11, 22, 55, 0, 0, time.UTC)
+	for _, c := range []struct {
+		t    time.Time
+		want string
+	}{
+		{now.Add(2 * time.Hour), "00:55"},
+		{now.Add(23 * time.Hour), "21:55"},
+		{now.Add(30 * time.Hour), "Tue 04:55"},
+	} {
+		if got := Until(c.t, now); got != c.want {
+			t.Errorf("Until(+%v) = %q, want %q", c.t.Sub(now), got, c.want)
+		}
+	}
+}

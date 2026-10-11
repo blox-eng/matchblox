@@ -82,11 +82,11 @@ type Service struct {
 	// service starts alone.
 	alone time.Time
 
-	interval  time.Duration
-	gitEvery  time.Duration
-	compactAt float64
-	sample    func() sample.Snapshot
-	git       GitSource
+	interval time.Duration
+	gitEvery time.Duration
+	full     sample.Full
+	sample   func() sample.Snapshot
+	git      GitSource
 
 	mu      sync.Mutex
 	cur     state.Doc
@@ -113,7 +113,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		queue:    queue.New(),
 
 		NightEnds: cfg.Stoker.NightEnds,
-		compactAt: cfg.Sessions.CompactAt,
+		full:      sample.Full{Pct: cfg.Sessions.CompactAt, Tokens: cfg.Sessions.CompactTokens},
 	}
 	if s.interval <= 0 {
 		s.interval = 2 * time.Second
