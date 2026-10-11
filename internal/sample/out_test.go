@@ -44,9 +44,9 @@ func TestATurnAfterTheRefusalIsBack(t *testing.T) {
 func TestOnlyAnIdleSessionIsStopped(t *testing.T) {
 	out := fixtureNow.Add(time.Hour)
 	for _, c := range []struct {
-		s           Session
-		age         string
-		stopped     bool
+		s       Session
+		age     string
+		stopped bool
 	}{
 		{Session{Out: out, Idle: 2 * time.Hour}, "idle", true},
 		{Session{Out: out, Busy: true}, "busy", false},

@@ -67,7 +67,7 @@ type Session struct {
 	FromPane bool `json:"from_pane,omitempty"` // busy and idle were read from the pane
 	// Out: the plan's limit stops the session until here (its turn was
 	// refused, or its account's window is spent); zero when it can work.
-	Out time.Time `json:"out,omitzero"`
+	Out    time.Time `json:"out,omitzero"`
 	turnAt time.Time // the newest real turn of the transcript
 	// Transcript is the Claude Code session file, read back by the service
 	// after a step; it never leaves the host.
