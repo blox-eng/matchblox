@@ -414,7 +414,10 @@ func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
 	}
 	m.tab, m.selPID = tabSessions, 900
 	out := ansi.Strip(m.render())
-	for _, want := range []string{"not measured", q, "busy and idle are read from the pane"} {
+	if strings.Contains(out, "1 processes") {
+		t.Fatalf("one process in the plural:\n%s", out)
+	}
+	for _, want := range []string{"not measured", q, "busy and idle are read from the pane", "1 process"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("Sessions lacks %q:\n%s", want, out)
 		}

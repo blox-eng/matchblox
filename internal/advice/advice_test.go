@@ -270,3 +270,18 @@ func TestAWeekThatRunsShortRecommendsItsHottestSession(t *testing.T) {
 		}
 	}
 }
+
+func TestOneMergedWorktreeIsNamedInTheSingular(t *testing.T) {
+	git := &gitscan.Report{Repos: []gitscan.Repo{{Path: "/w/app", Main: "main", Worktrees: []gitscan.Worktree{
+		{Path: "/w/a", Safe: true, Remove: []string{"git", "worktree", "remove", "/w/a"}},
+	}}}}
+	for _, r := range Build(sample.Snapshot{}, git) {
+		if strings.HasPrefix(r.Title, "Remove") {
+			if r.Title != "Remove 1 merged worktree of app" {
+				t.Fatalf("title %q", r.Title)
+			}
+			return
+		}
+	}
+	t.Fatal("no remove rec")
+}

@@ -270,9 +270,13 @@ func gitRecs(snap sample.Snapshot, git *gitscan.Report) []Rec {
 			for i, wt := range safe {
 				steps[i], guards[i] = wt.Remove, Guard{Worktree: wt.Path}
 			}
+			noun := "worktrees"
+			if len(safe) == 1 {
+				noun = "worktree"
+			}
 			out = append(out, Rec{
 				Level: "info", score: 150 + float64(len(safe)),
-				Title:    fmt.Sprintf("Remove %d merged worktrees of %s", len(safe), filepath.Base(repo.Path)),
+				Title:    fmt.Sprintf("Remove %d merged %s of %s", len(safe), noun, filepath.Base(repo.Path)),
 				Evidence: fmt.Sprintf("their branches merged, they have no tracked or untracked changes and no process works inside (each is checked again right before its removal); ignored files such as build output go with them; branches and commits stay; %d worktrees in total", len(repo.Worktrees)),
 				Second:   &Action{Label: "remove " + strconv.Itoa(len(safe)), Steps: steps, Destructive: true, Guards: guards},
 			})
