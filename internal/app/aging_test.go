@@ -139,7 +139,7 @@ func TestAnOutSessionSaysUntilWhen(t *testing.T) {
 	back := st.At.Add(2 * time.Hour)
 	for i := range st.Sessions {
 		if !st.Sessions[i].Busy {
-			st.Sessions[i].Out = back
+			st.Sessions[i].Out, st.Sessions[i].Idle = back, 10*time.Minute
 			break
 		}
 	}
@@ -159,7 +159,7 @@ func TestStatusCountsTheOutSessions(t *testing.T) {
 	n := 0
 	for i := range st.Sessions {
 		if !st.Sessions[i].Busy && n == 0 {
-			st.Sessions[i].Out, n = st.At.Add(time.Hour), 1
+			st.Sessions[i].Out, st.Sessions[i].Idle, n = st.At.Add(time.Hour), 10*time.Minute, 1
 		}
 	}
 	if out := Summary(st.Doc); !strings.Contains(out, ", out 1)") {

@@ -204,11 +204,12 @@ func lastUsage(path string, size int64) (Usage, bool) {
 	for i := len(lines) - 1; i >= 0 && (!found || !decided); i-- {
 		l := lines[i]
 		if !found && compacted == nil && bytes.Contains(l, []byte(`"compact_boundary"`)) {
+			// A reply that only mentions the word is not a boundary.
 			var b boundaryLine
 			if json.Unmarshal(l, &b) == nil && b.Subtype == "compact_boundary" {
-				compacted = &b
+				compacted, newer = &b, true // a compact ran: the model answered after any refusal
+				continue
 			}
-			continue
 		}
 		// Decode only a line that can still tell something: a busy turn has
 		// many large tool calls between two replies with text.
@@ -225,10 +226,12 @@ func lastUsage(path string, size int64) (Usage, bool) {
 		// newest one may be the limit refusing the turn: until a real turn
 		// follows, the session is out until its reset.
 		if t.Message.Model == "<synthetic>" {
+			// Other local lines (a 529, "No response requested.") say
+			// nothing about the limit: only a real turn or a compact ends it.
 			if !newer && t.APIError == "usage_limit_reached" && t.APIErrorParams.RateLimit.ResetsAt > 0 {
 				u.Out = time.Unix(t.APIErrorParams.RateLimit.ResetsAt, 0)
+				newer = true
 			}
-			newer = true
 			continue
 		}
 		newer = true

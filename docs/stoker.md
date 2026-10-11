@@ -83,7 +83,10 @@ nothing to do:
   go on now: still there, not stopped by the limit, not waiting for you,
   and not full. Each one that is not ready is named, with what it needs.
   One that waits for you is in the queue below; `Enter` there takes you
-  to it. One that is `out until 09:10` goes on by itself after its reset.
+  to it. One that is `out until 09:10` can work after its reset: a turn
+  the limit cut off, Claude Code continues by itself; one you left idle
+  waits for your next prompt. `out until 09:10 · full 395k` also needs a
+  compact after the reset.
 - `395k → 9k`: the context before and after the compact.
 - `RESUME:` the agent's own line on how to continue. Paste it, or just
   say "go on".

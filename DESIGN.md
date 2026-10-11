@@ -117,6 +117,8 @@ state. The code is `internal/app/match.go`.
 | spent | `│` | `faint` | still | the context is at or above the compact limit (`sessions.compact_tokens`, default 350k, or `sessions.compact_at`, default 85 %, whichever comes first) |
 
 Order: spent comes first. A session that works with a full context is spent.
+A session the plan's limit stops (`out`) keeps the at-rest glyph, or spent
+when full; its word is `out` and the idle column holds its reset.
 
 A change of state plays once:
 

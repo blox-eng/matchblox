@@ -22,7 +22,7 @@ func (m Model) queueWordOf(it queue.Item) string {
 	if it.State == queue.StateFinished && it.Pane != "" {
 		s, ok := m.sessionIn(it.Pane)
 		switch {
-		case ok && !s.Out.IsZero():
+		case ok && s.Stopped():
 			return "out" // nothing to answer before the plan's limit resets
 		case ok && s.Progress != nil && s.Progress.Pct < 100:
 			return "paused"
@@ -36,6 +36,9 @@ func (m Model) queueWordOf(it queue.Item) string {
 func (m Model) stateWord(s sample.Session) string {
 	if age := s.Age(); age != "idle" {
 		return age
+	}
+	if s.Stopped() {
+		return "out"
 	}
 	for _, it := range m.queue {
 		if s.Pane != "" && it.Pane == s.Pane {

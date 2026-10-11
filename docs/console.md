@@ -55,7 +55,7 @@ Each agent row starts with a match:
 | `✦` | busy | The agent works. The match burns. |
 | `╿` | asks, waits, done, paused | The agent waits for you. The match is at rest. |
 | `│` | its state | The context is full (at `compact_tokens`, 350k by default, or `compact_at`, 85% of its window). The match is spent, and Sessions says `! compact`. |
-| `╿` | out | The plan's limit stops the session. The next column says when it can work again: `19:50`, or the weekday when that is more than a day away. |
+| `╿` or `│` | out | The plan's limit stops an idle session (`│` when it is also full). The next column says when it can work again: `19:50`, or the weekday when that is more than a day away. A session left a day or more keeps its word: `cold`, `stale`. |
 
 ## 1 Queue
 

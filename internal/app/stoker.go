@@ -232,7 +232,7 @@ func (m Model) stokedSection(b *body, w int, row int, sel bool) {
 			lines = append(lines, lead+st.text.Render(l))
 		}
 		for _, x := range c.NotReady {
-			lines = append(lines, "   "+st.text.Render(pad(x.Name, colName))+st.warn.Render(x.Why))
+			lines = append(lines, "   "+st.text.Render(pad(x.Name, colName))+st.warn.Render(missWhy(x, c.Ended)))
 		}
 	}
 	b.add(-1, st.label.Render(fit(head, w)))
@@ -276,12 +276,23 @@ func (m Model) stokedSection(b *body, w int, row int, sel bool) {
 	b.addRow(row, sel, w, st, lines...)
 }
 
+// missWhy is why a session is not ready, with its reset in the console's
+// zone (the service wrote Why in the host's).
+func missWhy(x proto.StokerMiss, ended time.Time) string {
+	if x.Out.IsZero() {
+		return x.Why
+	}
+	host := "out until " + limits.Until(x.Out, ended)
+	return strings.Replace(x.Why, host, "out until "+limits.Until(x.Out.Local(), ended.Local()), 1)
+}
+
 // lapseLines say when the plan's limit stopped sessions during the run,
 // and when it came back: the first thing a run the limit stopped tells.
 func lapseLines(c proto.StokerCard) []string {
 	var out []string
 	for _, l := range c.Lapses {
-		out = append(out, "limit out "+limits.When(l.From, c.Since, "")+" → "+limits.Until(l.Until, l.From))
+		from := l.From.Local()
+		out = append(out, "limit out "+limits.Until(from, c.Since.Local())+" → "+limits.Until(l.Until.Local(), from))
 	}
 	return out
 }

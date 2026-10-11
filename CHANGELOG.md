@@ -17,7 +17,8 @@ All notable changes to matchblox are in this file. The format follows
   session that is out is not counted as ready.
 - **A 1M window can fill.** `compact_tokens` (350k by default) fills a
   session before `compact_at`'s percentage does, so the stoker and the
-  `! compact` mark act on large windows too.
+  `! compact` mark act on large windows too. To keep the percentage alone,
+  set `compact_tokens = 0`.
 - **Every stoker card is kept** in `stoker-runs.jsonl`: a new run never
   erases the one before it.
 

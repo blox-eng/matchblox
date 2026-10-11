@@ -39,14 +39,65 @@ func TestATurnAfterTheRefusalIsBack(t *testing.T) {
 	}
 }
 
-func TestAnOutSessionIsOut(t *testing.T) {
-	s := Session{Out: fixtureNow.Add(time.Hour), Idle: 2 * time.Hour}
-	if s.Age() != "out" {
-		t.Fatalf("age %q", s.Age())
+// Out is a state of a session the builder would pick up: an idle one. A
+// cold or stale session keeps its age (and its x end), a busy one works.
+func TestOnlyAnIdleSessionIsStopped(t *testing.T) {
+	out := fixtureNow.Add(time.Hour)
+	for _, c := range []struct {
+		s           Session
+		age         string
+		stopped     bool
+	}{
+		{Session{Out: out, Idle: 2 * time.Hour}, "idle", true},
+		{Session{Out: out, Busy: true}, "busy", false},
+		{Session{Out: out, Idle: ColdAfter}, "cold", false},
+		{Session{Out: out, Idle: StaleAfter}, "stale", false},
+		{Session{Idle: time.Hour}, "idle", false},
+	} {
+		if c.s.Age() != c.age || c.s.Stopped() != c.stopped {
+			t.Errorf("%+v: age %q stopped %v", c.s, c.s.Age(), c.s.Stopped())
+		}
 	}
-	s.Busy = true
-	if s.Age() != "busy" {
-		t.Fatalf("a busy session is busy, got %q", s.Age())
+}
+
+// Lines newer than the refusal: only a real turn or a compact ends it; a
+// reply that names the boundary, or another local line, does not.
+func TestWhatEndsARefusal(t *testing.T) {
+	real := `{"type":"assistant","isSidechain":false,"timestamp":"2026-10-11T12:40:00Z","message":{"model":"claude-opus-5-5","content":[{"type":"text","text":"Look for \"compact_boundary\" in the file."}],"usage":{"input_tokens":10,"cache_read_input_tokens":400000,"cache_creation_input_tokens":0,"output_tokens":90}}}` + "\n"
+	local := `{"type":"assistant","isSidechain":false,"timestamp":"2026-10-11T14:40:00Z","message":{"model":"<synthetic>","content":[{"type":"text","text":"No response requested."}],"usage":{"input_tokens":0,"output_tokens":0}}}` + "\n"
+	boundary := `{"type":"system","subtype":"compact_boundary","isSidechain":false,"timestamp":"2026-10-11T14:41:00Z","compactMetadata":{"trigger":"manual","preTokens":438100,"postTokens":9400}}` + "\n"
+	for _, c := range []struct {
+		name string
+		body string
+		out  bool
+	}{
+		{"a local line after it", claudeOut + local, true},
+		{"a reply naming the boundary before it", real + claudeOut, true},
+		{"a compact after it", claudeOut + boundary, false},
+	} {
+		path := filepath.Join(t.TempDir(), "s.jsonl")
+		writeFile(t, path, c.body)
+		if u, _ := lastUsage(path, int64(len(c.body))); u.Out.IsZero() == c.out {
+			t.Errorf("%s: out %v", c.name, u.Out)
+		}
+	}
+}
+
+// A turn after the tap's reading says the session still works (extra
+// usage, a reading the reset has not reached): the tap does not stop it.
+func TestATurnAfterTheReadingVetoesTheTap(t *testing.T) {
+	root := copyFixture(t)
+	stateDir := filepath.Join(root, "state")
+	tap := `{"rate_limits":{"five_hour":{"used_percentage":100,"resets_at":` + itoa(fixtureNow.Add(2*time.Hour).Unix()) + `}}}`
+	if err := limits.Tap([]byte(tap), "/home/user/.claude", stateDir, time.Unix(0, 0)); err != nil {
+		t.Fatal(err)
+	}
+	smp := newFixtureSampler(root)
+	smp.LimitsDir = stateDir
+	for _, s := range smp.Sample().Sessions {
+		if s.Agent == "claude" && s.Context == "known" && !s.Out.IsZero() {
+			t.Errorf("%s with a turn after the reading is out until %v", s.Name, s.Out)
+		}
 	}
 }
 
@@ -58,7 +109,8 @@ func TestASpentAccountPutsItsSessionsOut(t *testing.T) {
 	resets := fixtureNow.Add(2 * time.Hour).Truncate(time.Second)
 	tap := `{"rate_limits":{"five_hour":{"used_percentage":100,"resets_at":` + itoa(resets.Unix()) +
 		`},"seven_day":{"used_percentage":40,"resets_at":` + itoa(fixtureNow.Add(4*24*time.Hour).Unix()) + `}}}`
-	if err := limits.Tap([]byte(tap), "/home/user/.claude", stateDir, fixtureNow.Add(-time.Minute)); err != nil {
+	// Read after every turn of the fixture (its transcripts end past fixtureNow).
+	if err := limits.Tap([]byte(tap), "/home/user/.claude", stateDir, fixtureNow.Add(24*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	smp := newFixtureSampler(root)

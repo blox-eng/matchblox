@@ -211,7 +211,7 @@ func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, full sampl
 		at, stepped := last[s.SessionID]
 		switch {
 		case s.Agent != "claude", s.Pane == "", s.SessionID == "",
-			s.Busy, s.Status != "idle", s.Age() != "idle",
+			s.Busy, s.Status != "idle", s.Age() != "idle", !s.Out.IsZero(),
 			!full.Reached(s),
 			waiting[s.Pane], s.Asks, s.Permits,
 			stepped && now.Sub(at) < PerSession:

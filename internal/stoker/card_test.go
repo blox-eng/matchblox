@@ -75,13 +75,13 @@ func TestScore(t *testing.T) {
 		{"a quiet night: all ready, nothing done", []sample.Session{calm("%1"), calm("%2"), calm("%3")}, nil, nil,
 			Card{Watched: 3, Ready: 3, Of: 3}},
 		{"a gone session is not ready", []sample.Session{calm("%1"), calm("%2"), gone}, nil, nil,
-			Card{Watched: 3, Ready: 2, Of: 3, NotReady: []Miss{{"work%3", "gone"}}}},
+			Card{Watched: 3, Ready: 2, Of: 3, NotReady: []Miss{{Name: "work%3", Why: "gone"}}}},
 		{"a session that asks is not ready", []sample.Session{calm("%1"), calm("%2"), asks}, nil, nil,
-			Card{Watched: 3, Waited: 1, Ready: 2, Of: 3, NotReady: []Miss{{"work%3", "waits for you"}}}},
+			Card{Watched: 3, Waited: 1, Ready: 2, Of: 3, NotReady: []Miss{{Name: "work%3", Why: "waits for you"}}}},
 		{"a session in the queue is not ready", []sample.Session{calm("%1"), calm("%2"), calm("%3")}, map[string]bool{"%1": true}, nil,
-			Card{Watched: 3, Waited: 1, Ready: 2, Of: 3, NotReady: []Miss{{"work%1", "waits for you"}}}},
+			Card{Watched: 3, Waited: 1, Ready: 2, Of: 3, NotReady: []Miss{{Name: "work%1", Why: "waits for you"}}}},
 		{"a full session is not ready", []sample.Session{calm("%1"), full("%2"), calm("%3")}, nil, nil,
-			Card{Watched: 3, Full: 1, Ready: 2, Of: 3, NotReady: []Miss{{"work%2", "full · 176k"}}}},
+			Card{Watched: 3, Full: 1, Ready: 2, Of: 3, NotReady: []Miss{{Name: "work%2", Why: "full · 176k"}}}},
 		{"compacts read back count, with the tokens they gave back", []sample.Session{calm("%1"), calm("%2"), calm("%3")}, nil,
 			[]Entry{compacted, noCounts, unread, skipped},
 			Card{Watched: 3, Compacted: 2, Given: 166600, Ready: 3, Of: 3}},
@@ -235,7 +235,7 @@ func TestTheCardCountsTheLimit(t *testing.T) {
 		t.Fatalf("ready %d/%d", c.Ready, c.Of)
 	}
 	why := "out until " + back.Format("15:04")
-	if !reflect.DeepEqual(c.NotReady, []Miss{{"work%1", why}, {"work%2", why}}) {
+	if !reflect.DeepEqual(c.NotReady, []Miss{{Name: "work%1", Why: why, Out: back}, {Name: "work%2", Why: why, Out: back}}) {
 		t.Fatalf("not ready %+v", c.NotReady)
 	}
 	if !reflect.DeepEqual(c.Lapses, []Lapse{{From: t0.Add(41 * time.Minute), Until: back}}) {
@@ -251,7 +251,62 @@ func TestAFullSessionByTokens(t *testing.T) {
 	m := on().Begin([]sample.Session{big})
 	m, _ = m.Observe([]sample.Session{big}, nil, f, t0)
 	m = m.Off(t0.Add(time.Hour)).Score([]sample.Session{big}, nil, f, nil)
-	if m.Card.Full != 1 || !reflect.DeepEqual(m.Card.NotReady, []Miss{{"work%1", "full · 445k"}}) {
+	if m.Card.Full != 1 || !reflect.DeepEqual(m.Card.NotReady, []Miss{{Name: "work%1", Why: "full · 445k"}}) {
 		t.Fatalf("card %+v", m.Card)
+	}
+}
+
+// A session out and full needs both after its reset; one that waits says
+// that first; a busy one works, whatever the tap says.
+func TestWhyASessionIsNotReady(t *testing.T) {
+	back := t0.Add(3 * time.Hour)
+	outFull := full("%1")
+	outFull.Out = back
+	waitsOut := calm("%2")
+	waitsOut.Asks, waitsOut.Out = true, back
+	busyOut := calm("%3")
+	busyOut.Busy, busyOut.Status, busyOut.Out = true, "busy", back
+	ss := []sample.Session{outFull, waitsOut, busyOut}
+	m := on().Begin(ss)
+	m = m.Off(t0.Add(time.Hour)).Score(ss, nil, at85, nil)
+	want := []Miss{
+		{Name: "work%1", Why: "out until " + back.Format("15:04") + " · full · 176k", Out: back},
+		{Name: "work%2", Why: "waits for you"},
+	}
+	if !reflect.DeepEqual(m.Card.NotReady, want) || m.Card.Ready != 1 {
+		t.Fatalf("not ready %+v ready %d", m.Card.NotReady, m.Card.Ready)
+	}
+}
+
+// A sample after the night's end (a host that slept past it) adds nothing
+// to the night.
+func TestASampleAfterTheNightIsNotTheNights(t *testing.T) {
+	m, _ := on().Night(t0, "07:00")
+	m = m.Begin([]sample.Session{calm("%1")})
+	late := full("%1")
+	late.Out = m.Until.Add(5 * time.Hour)
+	if m2, changed := m.Observe([]sample.Session{late}, nil, at85, m.Until.Add(2*time.Hour)); changed || len(m2.Full) != 0 || len(m2.Lapses) != 0 {
+		t.Fatalf("a late sample changed the night: %+v", m2)
+	}
+}
+
+// Two readings of one reset a second apart are one lapse.
+func TestOneResetIsOneLapse(t *testing.T) {
+	back := t0.Add(3 * time.Hour)
+	a, b := calm("%1"), calm("%2")
+	a.Out, b.Out = back, back.Add(time.Second)
+	m := on().Begin([]sample.Session{a, b})
+	m, _ = m.Observe([]sample.Session{a, b}, nil, at85, t0)
+	if len(m.Lapses) != 1 {
+		t.Fatalf("lapses %+v", m.Lapses)
+	}
+}
+
+// A stale session the limit stops is still stale: the run does not seat it.
+func TestAStaleOutSessionIsNotSeated(t *testing.T) {
+	s := calm("%1")
+	s.Idle, s.Out = sample.StaleAfter, t0.Add(time.Hour)
+	if m := on().Begin([]sample.Session{s}); len(m.Start) != 0 {
+		t.Fatalf("seated %+v", m.Start)
 	}
 }

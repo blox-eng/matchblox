@@ -285,3 +285,13 @@ func TestTheCardSaysTheLimitRanOut(t *testing.T) {
 		}
 	}
 }
+
+// A night across midnight writes the lapse with times alone.
+func TestALapseAfterMidnightHasNoWeekday(t *testing.T) {
+	since := time.Date(2026, 10, 10, 23, 10, 0, 0, time.Local)
+	c := proto.StokerCard{Night: true, Since: since, Ended: since.Add(8 * time.Hour),
+		Lapses: []proto.StokerLapse{{From: since.Add(5 * time.Hour), Until: since.Add(7*time.Hour + 30*time.Minute)}}}
+	if got := lapseLines(c); len(got) != 1 || got[0] != "limit out 04:10 → 06:40" {
+		t.Fatalf("%q", got)
+	}
+}

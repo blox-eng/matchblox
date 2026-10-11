@@ -521,7 +521,7 @@ func (m Model) row(s sample.Session, selected bool, w, tab, acct, tree int) stri
 // it, when it can work again: 19:50 within a day, else the weekday.
 func (m Model) idleCell(s sample.Session) string {
 	switch {
-	case s.Out.IsZero():
+	case !s.Stopped():
 		return sample.Human(s.Idle)
 	case s.Out.Sub(m.now()) < 24*time.Hour:
 		return s.Out.Local().Format("15:04")

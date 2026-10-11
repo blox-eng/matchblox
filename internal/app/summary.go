@@ -19,10 +19,10 @@ func Summary(s state.Doc) string {
 		mc.CPU, mc.Load[0], gib(mc.MemTotal-mc.MemAvail), gib(mc.MemTotal), gib(mc.SwapUsed), mc.PSI.CPU, mc.PSI.IO, mc.PSI.Memory)
 	busy, out := 0, 0
 	for _, x := range s.Sessions {
-		switch x.Age() {
-		case "busy":
+		switch {
+		case x.Busy:
 			busy++
-		case "out":
+		case x.Stopped():
 			out++
 		}
 	}
@@ -48,7 +48,7 @@ func Summary(s state.Doc) string {
 			fmt.Fprintf(&b, "  %s\n", l)
 		}
 		for _, x := range c.NotReady {
-			fmt.Fprintf(&b, "  not ready: %s (%s)\n", x.Name, x.Why)
+			fmt.Fprintf(&b, "  not ready: %s (%s)\n", x.Name, missWhy(x, c.Ended))
 		}
 	}
 	for _, a := range s.Alerts {

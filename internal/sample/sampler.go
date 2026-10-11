@@ -68,6 +68,7 @@ type Session struct {
 	// Out: the plan's limit stops the session until here (its turn was
 	// refused, or its account's window is spent); zero when it can work.
 	Out time.Time `json:"out,omitzero"`
+	turnAt time.Time // the newest real turn of the transcript
 	// Transcript is the Claude Code session file, read back by the service
 	// after a step; it never leaves the host.
 	Transcript string `json:"-"`
@@ -118,6 +119,10 @@ type Snapshot struct {
 	// Limits are the plan limits of each account a session runs under.
 	Limits []limits.Account `json:"limits"`
 }
+
+// Stopped tells if the plan's limit stops a session the builder would pick
+// up now: idle (not cold or stale) and out.
+func (s Session) Stopped() bool { return !s.Out.IsZero() && s.Age() == "idle" }
 
 // Full is when a session's context should compact: at Pct of its window,
 // or at Tokens, whichever comes first. A 1M window rarely reaches a
@@ -485,7 +490,9 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 					r, _ = limits.ReadTap(s.LimitsDir, s.asProcess(env.claudeDir))
 				}
 				lims.add(sess, limits.SourceClaude, r)
-				if out := r.Out(now); out.After(sess.Out) {
+				// A turn after the reading says this session still works:
+				// extra usage, or a reading the reset has not reached.
+				if out := r.Out(now); out.After(sess.Out) && !sess.turnAt.After(r.At) {
 					sess.Out = out
 				}
 				if r == nil && env.claudeDir != filepath.Join(s.Home, ".claude") {
@@ -778,7 +785,7 @@ func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procK
 	if !ok {
 		return
 	}
-	sess.Progress, sess.LastLine, sess.Asks = u.Progress, u.LastLine, u.Asks
+	sess.Progress, sess.LastLine, sess.Asks, sess.turnAt = u.Progress, u.LastLine, u.Asks, u.At
 	if u.Out.After(now) {
 		sess.Out = u.Out
 	}
@@ -922,14 +929,12 @@ const (
 	StaleAfter = 7 * 24 * time.Hour
 )
 
-// Age is the state word of a session: busy; out while the plan's limit
-// stops it; else idle, cold and stale as its idle time grows.
+// Age is the state word of a session: busy, or idle, cold and stale as
+// its idle time grows.
 func (s Session) Age() string {
 	switch {
 	case s.Busy:
 		return "busy"
-	case !s.Out.IsZero():
-		return "out"
 	case s.Idle >= StaleAfter:
 		return "stale"
 	case s.Idle >= ColdAfter:
