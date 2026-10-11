@@ -127,6 +127,9 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	}
 	res := s.Actions.Do(ctx, action, a.Confirm)
 	ran = len(res.Ran) > 0
+	if ran && len(action.Steps) > 0 && action.Steps[0][0] == "git" {
+		s.rescanGit() // a removed worktree leaves the list now, not at the next scan
+	}
 	return res
 }
 
