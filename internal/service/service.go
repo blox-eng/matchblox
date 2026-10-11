@@ -229,6 +229,11 @@ func (s *Service) replace() {
 // Run samples every interval and scans git every gitEvery until ctx ends.
 // Call it once: it is the only sample loop of the service.
 func (s *Service) Run(ctx context.Context) {
+	s.mu.Lock()
+	if len(s.clients) == 0 {
+		s.alone = s.now() // Now is set by now
+	}
+	s.mu.Unlock()
 	rec := s.recorder()
 	go s.gitLoop(ctx)
 	s.loadHistory()

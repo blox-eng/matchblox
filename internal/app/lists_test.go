@@ -389,3 +389,17 @@ func TestAnOpenPullRequestShowsWhereItsAgentShows(t *testing.T) {
 		t.Fatalf("the phone row lacks the PR:\n%s", out)
 	}
 }
+
+func TestRemovingOneWorktreeSaysWorktree(t *testing.T) {
+	st := gitState()
+	wts := st.Git.Repos[0].Worktrees
+	st.Git.Repos[0].Worktrees = append(wts[:2:2], wts[3])
+	m, _ := loadedWith(t, 100, st)
+	var next tea.Model = m
+	for _, k := range []string{"5", "X", "x", "y"} {
+		next, _ = key(next, k)
+	}
+	if line := actionLine(next); !strings.Contains(line, "removing 1 worktree…") {
+		t.Fatalf("action line %q", line)
+	}
+}

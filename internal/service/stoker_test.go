@@ -446,3 +446,21 @@ func TestTheServiceClockRunsTheNight(t *testing.T) {
 		t.Fatalf("the sample loop did not end the night on the service clock: %+v", m)
 	}
 }
+
+func TestAServiceStartsAloneOnItsOwnClock(t *testing.T) {
+	s := newTest(t, time.Hour)
+	at := time.Date(2026, 10, 1, 22, 50, 0, 0, time.UTC)
+	s.Now = func() time.Time { return at }
+	run(t, s)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		s.mu.Lock()
+		alone := s.alone
+		s.mu.Unlock()
+		if alone.Equal(at) {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("alone stayed on the wall clock")
+}

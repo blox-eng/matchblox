@@ -277,8 +277,8 @@ func TestOneMergedWorktreeIsNamedInTheSingular(t *testing.T) {
 	}}}}
 	for _, r := range Build(sample.Snapshot{}, git) {
 		if strings.HasPrefix(r.Title, "Remove") {
-			if r.Title != "Remove 1 merged worktree of app" {
-				t.Fatalf("title %q", r.Title)
+			if r.Title != "Remove 1 merged worktree of app" || !strings.HasPrefix(r.Evidence, "its branch merged, it has no tracked") {
+				t.Fatalf("title %q, evidence %q", r.Title, r.Evidence)
 			}
 			return
 		}
