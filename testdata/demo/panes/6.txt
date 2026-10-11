@@ -1,13 +1,7 @@
-› Add a cache to the search index
+› Make the CI cache the Go build between runs
 
-• I added an LRU cache in front of the index and wrote three tests.
+• I am moving the cache key to the go.sum hash.
 
-  Would you like to run the following command?
+⠙ Working (42s • esc to interrupt)
 
-  $ go test ./search/...
-
-› 1. Yes, proceed (y)
-  2. Yes, and don't ask again for this command (a)
-  3. No, and tell Codex what to do differently (esc)
-
-  Press enter to confirm or esc to cancel
+› 

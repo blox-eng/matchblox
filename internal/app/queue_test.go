@@ -414,7 +414,10 @@ func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
 	}
 	m.tab, m.selPID = tabSessions, 900
 	out := ansi.Strip(m.render())
-	for _, want := range []string{"not measured", q, "busy and idle are read from the pane"} {
+	if strings.Contains(out, "1 processes") {
+		t.Fatalf("one process in the plural:\n%s", out)
+	}
+	for _, want := range []string{"not measured", q, "busy and idle are read from the pane", "1 process"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("Sessions lacks %q:\n%s", want, out)
 		}
@@ -514,5 +517,17 @@ func TestTwoSessionsOutsideTmuxKeepTheirOwnWords(t *testing.T) {
 		if s.PID == 960 && m.stateWord(s) != "idle" {
 			t.Fatalf("a session with no pane took %q", m.stateWord(s))
 		}
+	}
+}
+
+// TestAnEstimatedRowShowsWhatTheAgentAsked: a session without hooks that
+// waits on a question shows the question, so `a` answers what it reads.
+func TestAnEstimatedRowShowsWhatTheAgentAsked(t *testing.T) {
+	st := queueState()
+	q := "Should a refresh also rotate the token?"
+	st.Queue[1].State, st.Queue[1].LastLine = queue.StateQuestion, q
+	m, _ := loadedWith(t, 100, st)
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "estimated: "+q) {
+		t.Fatalf("the row lacks the question:\n%s", out)
 	}
 }

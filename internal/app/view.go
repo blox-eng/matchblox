@@ -542,7 +542,11 @@ func (m Model) detail(w int) []string {
 	case s.Tokens > 0:
 		facts = append(facts, kTok(s.Tokens)+" tokens · no window known: add the model to [sessions.windows]")
 	}
-	facts = append(facts, fmt.Sprintf("%d processes", s.Procs))
+	if s.Procs == 1 {
+		facts = append(facts, "1 process")
+	} else {
+		facts = append(facts, fmt.Sprintf("%d processes", s.Procs))
+	}
 	lines = append(lines, fit(" "+st.text.Render(strings.Join(facts, st.faint.Render("  ·  "))), w))
 	lines = append(lines, fit(" "+st.muted.Render(s.Cwd), w))
 	// The ACCOUNT column needs room; without it the detail names it.

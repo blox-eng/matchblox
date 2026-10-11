@@ -62,9 +62,9 @@ func TestSessionsShowEachAccountWithItsProviderMark(t *testing.T) {
 		t.Fatalf("no ACCOUNT column at 160:\n%s", ansi.Strip(out))
 	}
 	for name, want := range map[string]string{
-		"api-auth": "✻ dev@example.com · Max",
-		"codex":    "❋ dev@example.com · Plus",
-		"opencode": "✻ login",
+		"hearth-api": "✻ team@example.com · Max",
+		"codex":      "❋ team@example.com · Plus",
+		"opencode":   "google · login",
 	} {
 		l := rowOf(out, name)
 		if !strings.Contains(l, want) {
@@ -75,7 +75,7 @@ func TestSessionsShowEachAccountWithItsProviderMark(t *testing.T) {
 		}
 	}
 	// Context use for every agent.
-	for name, want := range map[string]string{"codex": "55%", "opencode": "32%"} {
+	for name, want := range map[string]string{"codex": "55%", "opencode": "6%"} {
 		if l := rowOf(out, name); !strings.Contains(l, want) {
 			t.Errorf("%s: %q lacks %s", name, l, want)
 		}
@@ -88,7 +88,7 @@ func TestTheAccountColumnIsDroppedFirst(t *testing.T) {
 	for _, w := range []int{100, 50} {
 		out := demoSessions(t, w).render()
 		for _, l := range strings.Split(ansi.Strip(out), "\n") {
-			if (strings.Contains(l, "TMUX") || strings.Contains(l, " api-auth ")) && (strings.Contains(l, "ACCOUNT") || strings.Contains(l, "dev@example.com")) {
+			if (strings.Contains(l, "TMUX") || strings.Contains(l, " hearth-api ")) && (strings.Contains(l, "ACCOUNT") || strings.Contains(l, "team@example.com")) {
 				t.Errorf("width %d has an account column: %q", w, l)
 			}
 		}
@@ -155,7 +155,7 @@ func TestNoCredentialReachesTheScreen(t *testing.T) {
 		for tab := range 7 {
 			m.tab = tab
 			out := ansi.Strip(m.render())
-			shown = shown || strings.Contains(out, "dev@example.com")
+			shown = shown || strings.Contains(out, "team@example.com")
 			for _, s := range secrets {
 				if strings.Contains(out, s) {
 					t.Fatalf("width %d tab %d shows %q", w, tab, s)
@@ -199,7 +199,7 @@ func TestTheDetailShowsTheAccount(t *testing.T) {
 			m.selPID = s.PID
 		}
 	}
-	if out := ansi.Strip(m.render()); !strings.Contains(out, "❋ dev@example.com · Plus") {
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "❋ team@example.com · Plus") {
 		t.Fatalf("detail lacks the account:\n%s", out)
 	}
 }

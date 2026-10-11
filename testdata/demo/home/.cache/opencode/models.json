@@ -1,1 +1,1 @@
-{"anthropic": {"models": {"claude-sonnet-4-5": {"limit": {"context": 200000, "output": 64000}}}}}
+{"google":{"models":{"gemini-2.5-pro":{"limit":{"context":1048576,"output":65536}}}}}

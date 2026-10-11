@@ -6,6 +6,21 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **See all of matchblox before you install it.** The replay on
+  matchblox.com and in the README walks one evening into the morning: an
+  answer typed in one line, a compact and a worktree removal you confirm,
+  a busy loop killed, then a night the stoker keeps burning and its score
+  at 07:00.
+
+### Fixed
+
+- **A session without hooks shows what it asked** on its queue row, so `a`
+  answers a question you can read.
+- **A removed worktree leaves the Git tab at once**, not at the next scan.
+- One merged worktree and one process are named in the singular.
+
 ## [0.2.0] - 2026-10-11
 
 ### Added

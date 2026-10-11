@@ -755,3 +755,33 @@ func TestLimitsAreStoredAndInTheState(t *testing.T) {
 		t.Fatalf("the store: %q %v", b, err)
 	}
 }
+
+func TestARemovedWorktreeLeavesTheGitList(t *testing.T) {
+	s := newTest(t, time.Hour)
+	removed := false
+	var mu sync.Mutex
+	s.git = func([]string) gitscan.Report {
+		mu.Lock()
+		defer mu.Unlock()
+		if removed {
+			return gitscan.Report{Repos: []gitscan.Repo{{Path: "/w/app", Main: "main"}}}
+		}
+		return gitReport
+	}
+	s.Actions.Run = func([]string) error { mu.Lock(); removed = true; mu.Unlock(); return nil }
+	ctx := run(t, s)
+	c, _ := connect(t, ctx, s)
+	snapshot(t, c)
+	time.Sleep(20 * time.Millisecond) // the first git scan
+	if r := act(t, c, "x", proto.Act{RecID: "worktree:/w/wt/a", Which: "secondary", Confirm: "y"}); r.Err != "" || len(r.Ran) != 1 {
+		t.Fatalf("%+v", r)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if g := s.State().Git; g != nil && len(g.Repos) == 1 && len(g.Repos[0].Worktrees) == 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("the removed worktree is still listed: %+v", s.State().Git)
+}

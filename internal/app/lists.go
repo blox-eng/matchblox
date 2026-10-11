@@ -421,6 +421,9 @@ func (m Model) sendBatch(a action) (tea.Model, tea.Cmd) {
 	}
 	m.batch, m.picked = b, nil
 	m.flash = fmt.Sprintf("removing %d worktrees…", len(a.batch))
+	if len(a.batch) == 1 {
+		m.flash = "removing 1 worktree…"
+	}
 	return m, tea.Batch(cmds...)
 }
 

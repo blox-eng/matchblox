@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"image/color"
@@ -42,7 +41,7 @@ const (
 )
 
 // demoBase is the demo machine's clock at the start of the replay.
-var demoBase = time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+var demoBase = time.Date(2026, 10, 1, 22, 50, 0, 0, time.UTC)
 
 // clock is the replay's clock: the recorder sets it, and both the service
 // and the console read it.
@@ -72,7 +71,7 @@ type demoHost struct {
 	procfs.FS
 
 	mu          sync.Mutex
-	sampled     time.Time // the sampler's clock at the start of this sample
+	samples     int // so far: the counters follow them, not the demo clock, which jumps to the night and the morning
 	killed      map[int]bool
 	calls       int
 	busy, total uint64
@@ -83,25 +82,24 @@ type demoHost struct {
 const sampleEvery = 2 * time.Second
 
 // now is the sampler's Now. Each sample moves the demo clock by exactly
-// sampleEvery, and every counter of the sample follows that time. A clock
-// that ran on its own could give two samples the same time on a slow
-// machine (dt 0), and the busy loop would drop under the orphan rule's
-// threshold.
+// sampleEvery, and every counter of the sample follows the samples. A
+// clock that ran on its own could give two samples the same time on a
+// slow machine (dt 0), and the busy loop would drop under the orphan
+// rule's threshold.
 func (h *demoHost) now(clk *clock) func() time.Time {
 	return func() time.Time {
 		clk.Add(sampleEvery)
-		t := clk.Now()
 		h.mu.Lock()
-		h.sampled = t
+		h.samples++
 		h.mu.Unlock()
-		return t
+		return clk.Now()
 	}
 }
 
 func (h *demoHost) elapsed() float64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.sampled.Sub(demoBase).Seconds()
+	return (time.Duration(h.samples) * sampleEvery).Seconds()
 }
 
 func (h *demoHost) kill(pid int) {
@@ -223,9 +221,10 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 }
 
 var (
-	figure = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
-	sparks = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
-	spaces = regexp.MustCompile(`\s+`)
+	burning = regexp.MustCompile(`flint-auth\s+[✦✧] busy`)
+	figure  = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
+	sparks  = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
+	spaces  = regexp.MustCompile(`\s+`)
 )
 
 // skeleton is a screen without what changes from run to run: figures,
@@ -284,9 +283,13 @@ func TestReplayWaitsOnScreen(t *testing.T) {
 	}
 }
 
+// step presses its keys, then key, after do; ok says what the screen must
+// show before the frame is kept.
 type step struct {
 	name string
 	at   time.Duration
+	do   func()
+	keys []string
 	key  string
 	ok   func(screen string) bool
 }
@@ -303,49 +306,50 @@ func has(s ...string) func(string) bool {
 }
 
 func keyMsg(k string) tea.KeyPressMsg {
+	switch k {
+	case "enter":
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "esc":
+		return tea.KeyPressMsg{Code: tea.KeyEscape}
+	}
 	return tea.KeyPressMsg{Text: k, Code: []rune(k)[0]}
 }
 
 func TestReplay(t *testing.T) {
 	isolate(t)
-	root, err := filepath.Abs("../../testdata/demo")
+	src, err := filepath.Abs("../../testdata/demo")
 	if err != nil {
 		t.Fatal(err)
 	}
 	clk := &clock{t: demoBase}
+	var host *demoHost
+	world := newWorld(t, src, clk, func(pid int) { host.kill(pid) })
+	root := world.root
 	cfg := config.Default()
 	cfg.Interval.Duration = 50 * time.Millisecond
 	cfg.Agents = []string{"claude", "codex", "opencode"}
 	smp := newSampler(cfg, root)
-	// OpenCode works: its spinner turns on each read of its pane.
+	// Codex and OpenCode work: their spinners turn on each read of the pane.
 	panes, turn := smp.Capture, 0
 	smp.Capture = func(ids []string) map[string]string {
 		out := panes(ids)
-		if text, ok := out["%7"]; ok {
-			spin := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
-			turn++
-			out["%7"] = strings.Replace(text, "⠙", string(spin[turn%len(spin)]), 1)
+		spin := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+		turn++
+		for _, p := range []string{"%6", "%7"} {
+			if text, ok := out[p]; ok {
+				out[p] = strings.Replace(text, "⠙", string(spin[turn%len(spin)]), 1)
+			}
 		}
 		return out
 	}
-	host := &demoHost{FS: smp.FS.(procfs.FS)}
+	host = &demoHost{FS: smp.FS.(procfs.FS)}
 	smp.FS, smp.Now = host, host.now(clk)
 
-	var mu sync.Mutex
-	var ran [][]string
-	s := service.New(cfg, smp, nil)
-	s.Binary, s.Host = version, fixtureHost(root)
+	s := service.New(cfg, smp, world.Git)
+	s.Binary, s.Host, s.Now = version, fixtureHost(root), clk.Now
+	s.Capture, s.Activity = smp.Capture, nil                  // the demo's panes, never this machine's tmux
 	s.Actions.Check = func(advice.Guard) error { return nil } // the demo's pids are not this machine's
-	s.Actions.Run = func(argv []string) error {
-		mu.Lock()
-		ran = append(ran, argv)
-		mu.Unlock()
-		if len(argv) == 2 && argv[0] == "kill" && argv[1] == fmt.Sprint(demoPID) {
-			host.kill(demoPID)
-			return nil
-		}
-		return errors.New("the demo runs only the kill")
-	}
+	s.Actions.Run = world.Run
 	st, err := stoker.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -359,16 +363,8 @@ func TestReplay(t *testing.T) {
 	if _, err := waitFor(func() string { return fmt.Sprint(len(s.State().Orphans)) }, func(n string) bool { return n == "1" }, "warm up", stepTimeout); err != nil {
 		t.Fatal(err)
 	}
-	// The demo's night only shows: each session was stepped on just before
-	// it, so the stoker leaves them all for 30 minutes, whenever a sample
-	// lands.
-	for _, ss := range s.State().Sessions {
-		if err := st.Append(stoker.Entry{ID: ss.SessionID + "@demo", At: time.Now(), Session: ss.SessionID, Rule: stoker.RuleCompact, Result: stoker.Skipped + ": the demo"}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// billing asks for permission, through its hook.
-	s.Hook(hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "22222222-bbbb-4000-8000-000000000004",
+	// kindle-web asks for permission, through its hook.
+	s.Hook(hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "5ea1c0de-0000-4000-8000-000000000004",
 		Pane: "%5", Message: "Claude needs your permission to use Bash", At: clk.Now().Add(-90 * time.Second)})
 	time.Sleep(500 * time.Millisecond) // ten more samples: full sparklines
 	// The console reads its own clock: it stands still for the start screen,
@@ -379,9 +375,16 @@ func TestReplay(t *testing.T) {
 	a, b := net.Pipe()
 	go s.Handle(ctx, transport.NewConn(b)) //nolint:errcheck // ends with the test
 
+	var mu sync.Mutex
+	var jumps [][]string
 	m := app.New(app.Options{
 		Conn: transport.NewConn(a), Binary: version, CompactAt: cfg.Sessions.CompactAt, Now: view.Now,
-		Run: func(argv []string) error { return fmt.Errorf("the demo moves no terminal: %v", argv) },
+		Run: func(argv []string) error { // a jump: the demo moves no terminal
+			mu.Lock()
+			jumps = append(jumps, argv)
+			mu.Unlock()
+			return nil
+		},
 	})
 	p := tea.NewProgram(recorder{m}, tea.WithContext(ctx), tea.WithInput(nil), tea.WithOutput(&bytes.Buffer{}),
 		tea.WithWindowSize(replayCols, replayRows))
@@ -401,8 +404,12 @@ func TestReplay(t *testing.T) {
 
 	tokens := app.Tokens(true)
 	var frames []replay.Frame
-	keep := func(at time.Duration, view string) {
+	var names []string // the step of each frame
+	keep := func(name string, at time.Duration, view string) {
 		t.Helper()
+		if len(frames) > 0 && at <= frames[len(frames)-1].At {
+			t.Fatalf("step %q at %v does not come after the frame at %v", name, at, frames[len(frames)-1].At)
+		}
 		lines, err := replay.Parse(view, tokens)
 		if err != nil {
 			t.Fatalf("frame at %v: %v", at, err)
@@ -414,6 +421,7 @@ func TestReplay(t *testing.T) {
 			lines = append(lines, nil)
 		}
 		frames = append(frames, replay.Frame{At: at, Lines: lines})
+		names = append(names, name)
 	}
 
 	// The start screen, frame by frame on the replay clock, once the first
@@ -424,38 +432,114 @@ func TestReplay(t *testing.T) {
 	}
 	for _, ms := range []int{0, 70, 140, 210, 280, 350, 420, 490, 559} {
 		view.Set(warm.Add(time.Duration(ms) * time.Millisecond))
-		keep(time.Duration(ms)*time.Millisecond, capture())
+		keep("the start screen", time.Duration(ms)*time.Millisecond, capture())
 	}
 
 	view.Follow(clk)
 	time.Sleep(600 * time.Millisecond) // a dozen samples reach the console: the sparklines fill
 
+	night := time.Date(2026, 10, 1, 23, 10, 0, 0, time.UTC)
+	full := time.Date(2026, 10, 1, 23, 40, 0, 0, time.UTC)
+	morning := time.Date(2026, 10, 2, 6, 59, 50, 0, time.UTC)
 	steps := []step{
-		{"the queue", 1300 * time.Millisecond, "", has("ws-1", "WAITING FOR YOU", "billing", "asks", "permission to use Bash", "codex", "Would you like to run", "PROCS !")},
-		{"the sessions", 3500 * time.Millisecond, "2", has("api-auth", "web-checkout", "! compact", "codex", "55%", "opencode", "32%")},
-		{"machine health", 6 * time.Second, "3", has("CPU")},
-		{"what to do, under the queue", 8 * time.Second, "1", has("RECOMMENDATIONS", "Kill detached busy loop 4242")},
-		{"the busy loop", 9500 * time.Millisecond, "4", has("4242")},
-		{"a guarded action", 10500 * time.Millisecond, "x", has("kill 4242", "y run")},
-		// The result as well as the state: a late result would still show in
-		// the next step.
-		{"the loop is gone", 12 * time.Second, "y", func(s string) bool {
+		{name: "the queue", at: 1300 * time.Millisecond, ok: has("ws-1", "WAITING FOR YOU", "flint-auth", "waits",
+			"kindle-web", "needs your permission", "#212", "ember-billing", "done", "1 match", "2 sparks")},
+		{name: "a: the answer field", at: 3800 * time.Millisecond, key: "a", ok: has("flint-auth")},
+	}
+	at := 3800 * time.Millisecond
+	answer := "rotate it, keep the old one valid for a minute"
+	for typed := 0; typed < len(answer); {
+		next := min(typed+4, len(answer))
+		at += 70 * time.Millisecond
+		steps = append(steps, step{name: "the answer types itself", at: at, keys: strings.Split(answer[typed:next], ""), ok: has(answer[:next])})
+		typed = next
+	}
+	steps = append(steps, []step{
+		{name: "the answer, before it runs", at: 5200 * time.Millisecond, key: "enter", ok: has("RUN tmux send-keys -t %2 -l -- rotate it", "y run")},
+		{name: "the answer goes", at: 6400 * time.Millisecond, key: "y", ok: func(s string) bool {
+			return !strings.Contains(s, "flint-auth") && strings.Contains(s, "3 WAITING FOR YOU") && strings.Contains(s, "ran: tmux send-keys -t %2")
+		}},
+		// flint-auth burns: its strike has played, so every run draws the same frame.
+		{name: "the sessions", at: 8 * time.Second, key: "2", ok: func(s string) bool {
+			return has("hearth-api", "spark-docs", "! compact", "88%", "kindle-web", "ember-bill", "cinder-ci", "wick-mobile", "codex", "opencode")(s) &&
+				burning.MatchString(s)
+		}},
+		{name: "the limits and what to do", at: 11 * time.Second, key: "1", ok: has("Max", "1 match", "2 sparks", "RECOMMENDATIONS",
+			"The week runs short: compact spark-docs")},
+	}...)
+	// seek presses j until the screen shows what ok wants: where the
+	// selection starts depends on the steps before.
+	seek := func(ok func(string) bool) func() {
+		return func() {
+			for range 12 {
+				if ok(ansi.Strip(capture())) {
+					return
+				}
+				p.Send(keyMsg("j"))
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+	}
+	weekRec := has("The week runs short: compact spark-docs", "sparks left", "x send /compact, asks y")
+	steps = append(steps, step{name: "the rec selected", at: 12500 * time.Millisecond, do: seek(weekRec), ok: weekRec})
+	steps = append(steps, []step{
+		{name: "the compact, guarded", at: 14 * time.Second, key: "x", ok: has("tmux send-keys -t %3 /compact Enter", "y run")},
+		{name: "the compact ran", at: 15 * time.Second, key: "y", ok: func(s string) bool {
+			// Settled: spark-docs compacted, so the week's rec names the next session.
+			return strings.Contains(s, "ran: tmux send-keys -t %3 /compact Enter") && !strings.Contains(s, "Compact spark-docs (%3)") &&
+				strings.Contains(s, "The week runs short: compact hearth-api")
+		}},
+		{name: "git", at: 17 * time.Second, key: "5", ok: has("9 WORKTREES", "1 SAFE TO REMOVE", "kindle-cart-v1", "✓ safe to remove")},
+		{name: "a worktree marked", at: 18300 * time.Millisecond, key: "X", ok: has("●kindle-cart-v1")},
+		{name: "the remove, guarded", at: 19300 * time.Millisecond, key: "x", ok: has("worktree remove /work/kindle-cart-v1", "y run")},
+		{name: "removed", at: 20300 * time.Millisecond, key: "y", ok: has("8 WORKTREES", "removed 1")},
+	}...)
+	steps = append(steps, []step{
+		{name: "machine health", at: 22300 * time.Millisecond, key: "3", ok: has("CPU")},
+		{name: "the busy loop", at: 23800 * time.Millisecond, key: "4", ok: has("4242", "DETACHED BUSY LOOPS")},
+		{name: "a guarded kill", at: 24800 * time.Millisecond, key: "x", ok: has("kill 4242", "y run")},
+		// The result as well as the state: a late result would still show
+		// in the next step.
+		{name: "the loop is gone", at: 26 * time.Second, key: "y", ok: func(s string) bool {
 			return !strings.Contains(s, "while :; do go test") && strings.Contains(s, "ran: kill 4242")
 		}},
-		{"back to the queue", 13500 * time.Millisecond, "1", has("billing")},
-		{"a night", 15 * time.Second, "n", has("night → 07:00")},
-	}
+		{name: "back to the queue", at: 27500 * time.Millisecond, key: "1", ok: has("kindle-web")},
+		{name: "a night", at: 29 * time.Second, do: func() { clk.Set(night) }, key: "n", ok: has("night → 07:00")},
+		{name: "take over?", at: 31 * time.Second, key: "enter", ok: has("The stoker is on. Take over?")},
+		{name: "kept on", at: 33 * time.Second, key: "n", ok: func(s string) bool {
+			return strings.Contains(s, "night → 07:00") && !strings.Contains(s, "Take over?") && strings.Contains(s, "RUN tmux switch-client -t %5")
+		}},
+		{name: "back to the night", at: 34200 * time.Millisecond, key: "esc", ok: func(s string) bool {
+			return strings.Contains(s, "night → 07:00") && !strings.Contains(s, "RUN tmux switch-client")
+		}},
+		{name: "the stoker compacts", at: 35500 * time.Millisecond, do: func() {
+			clk.Set(full)
+			if err := world.Finish("%1", 176000, "Rate limits are in, with tests.\n\nProgress [██████████] rate limits on the public API"); err != nil {
+				t.Fatal(err)
+			}
+		}, ok: has("STOKED", "hearth-api", "176k → 9k", "RESUME", "rate-limit headers")},
+		{name: "the morning card", at: 39500 * time.Millisecond, do: func() { clk.Set(morning) },
+			ok: has("NIGHT 23:10 → 07:00", "ready 4/5", "1 compacted", "167k tokens given back", "kindle-web       waits for you", "176k → 9k", "RESUME")},
+		{name: "folded", at: 44 * time.Second, keys: []string{"k", "k", "k", "k", "k", "k"}, key: "enter", ok: func(s string) bool {
+			return !strings.Contains(s, "NIGHT 23:10") && strings.Contains(s, "WAITING FOR YOU")
+		}},
+	}...)
 	var still replay.Frame
 	for _, st := range steps {
-		if st.key != "" {
-			p.Send(keyMsg(st.key))
+		if st.do != nil {
+			st.do()
+		}
+		for _, k := range append(st.keys, st.key) {
+			if k != "" {
+				p.Send(keyMsg(k))
+			}
 		}
 		view, err := waitFor(capture, st.ok, st.name, stepTimeout)
 		if err != nil {
 			t.Fatal(err)
 		}
-		keep(st.at, view)
-		if st.name == "a guarded action" {
+		keep(st.name, st.at, view)
+		if st.name == "the sessions" {
 			still = frames[len(frames)-1]
 		}
 	}
@@ -497,22 +581,24 @@ func TestReplay(t *testing.T) {
 			t.Fatalf("the replay lacks a %s match; has %v", want, matches)
 		}
 	}
-	if real, _ := os.Hostname(); real != "" && real != "ws-1" {
-		for _, f := range frames {
-			for _, l := range f.Lines {
-				for _, sp := range l {
-					if strings.Contains(sp.Text, real) {
-						t.Fatalf("a frame shows the real host name %q", real)
-					}
-				}
-			}
-		}
+	words, err := repoWords("../../internal", "../../testdata/demo")
+	if err != nil {
+		t.Fatal(err)
 	}
-	mu.Lock()
-	if want := [][]string{{"kill", fmt.Sprint(demoPID)}}; !reflect.DeepEqual(ran, want) {
-		t.Fatalf("the service ran %v, want only %v", ran, want)
+	if err := private(frames, identifying(thisMachine(), words)); err != nil {
+		t.Fatal(err)
 	}
-	mu.Unlock()
+	ran := world.Ran()
+	want := [][]string{
+		{"tmux", "send-keys", "-t", "%2", "-l", "--", answer}, {"tmux", "send-keys", "-t", "%2", "Enter"},
+		{"tmux", "send-keys", "-t", "%3", "/compact", "Enter"},
+		{"git", "-C", "/work/hearth", "worktree", "remove", "/work/kindle-cart-v1"},
+		{"kill", fmt.Sprint(demoPID)},
+	}
+	if len(ran) != len(want)+2 || !reflect.DeepEqual(ran[:len(want)], want) || ran[len(want)][0] != "tmux" ||
+		!strings.HasPrefix(ran[len(want)][6], "/compact ") || !reflect.DeepEqual(ran[len(want)+1], []string{"tmux", "send-keys", "-t", "%1", "Enter"}) {
+		t.Fatalf("the service ran %q, want %q and then the stoker's compact of %%1", ran, want)
+	}
 
 	js, err := replay.JSON(replayCols, replayRows, frames)
 	if err != nil {
@@ -539,7 +625,7 @@ func TestReplay(t *testing.T) {
 	}
 	if !*update {
 		// The committed replay must still show this console: compare the
-		// skeleton of each step's screen.
+		// skeleton of each frame's screen.
 		old, err := os.ReadFile("../../www/demo/frames.json")
 		if err != nil {
 			t.Fatal(err)
@@ -555,10 +641,10 @@ func TestReplay(t *testing.T) {
 		if len(was) != len(now) {
 			t.Fatalf("www/demo/frames.json has %d frames, the console now makes %d: run go test ./cmd/matchblox -run TestReplay -update", len(was), len(now))
 		}
-		for k := len(now) - len(steps); k < len(now); k++ {
+		for k := range now {
 			if skeleton(was[k]) != skeleton(now[k]) {
 				t.Fatalf("www/demo/frames.json is out of date at step %q: run go test ./cmd/matchblox -run TestReplay -update\nwas:\n%s\nnow:\n%s",
-					steps[k-len(now)+len(steps)].name, skeleton(was[k]), skeleton(now[k]))
+					names[k], skeleton(was[k]), skeleton(now[k]))
 			}
 		}
 		return
