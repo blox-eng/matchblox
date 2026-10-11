@@ -6,6 +6,19 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **You can see the night.** While the stoker or a night runs, the whole
+  console goes dark blue and only the matches keep their fire.
+- **Take over with one key.** The first time you act on a session during a
+  run, the console asks `Take over?`. `y` rests the stoker while you work,
+  and it goes on by itself once you leave. `n` keeps it on.
+- **Wake up to the night's score.** Every night and every stoker run ends
+  with a card in the queue, even when there was nothing to do: what it
+  watched and compacted, the tokens it gave back, and `ready 6/7`, how
+  many sessions can go on, with what each of the others needs.
+  `matchblox status` shows it too.
+
 ## [0.1.1] - 2026-10-11
 
 ### Fixed

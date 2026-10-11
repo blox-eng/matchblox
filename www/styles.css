@@ -113,6 +113,9 @@ footer a { color: var(--muted); }
 .bg-mark-top { background: var(--t-mark-top); } .bg-mark-left { background: var(--t-mark-left); } .bg-mark-right { background: var(--t-mark-right); }
 .bg-mark-tray { background: var(--t-mark-tray); } .bg-mark-striker { background: var(--t-mark-striker); } .bg-mark-stick { background: var(--t-mark-stick); }
 .bg-flame { background: #E8822E; } .bg-flame-core { background: var(--t-flame-core); } .bg-accent { background: var(--t-accent); }
+/* The night (DESIGN §2.1): one palette in both themes. */
+.fg-night-fg { color: #D9DCE3; } .fg-night-muted { color: #8E96A8; } .fg-night-faint { color: #636B7D; } .fg-night-hair { color: #1F2636; } .fg-night { color: #7C8BB0; }
+.bg-night-bg { background: #0C1019; } .bg-night-wash { background: #18202F; }
 
 /* The hero: the line and the strike, side by side on a wide screen. */
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr); gap: clamp(24px, 4vw, 64px); align-items: center; padding-block: clamp(24px, 6vh, 64px); }

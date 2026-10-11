@@ -15,7 +15,10 @@ import (
 // Store keeps the mode in stoker.json and every step in stoker.jsonl, so
 // both survive a restart of the console and of the service.
 type Store struct {
-	dir     string
+	dir string
+	// wmu is held from read to write of the mode, so two writers never
+	// undo each other; mu guards the fields.
+	wmu     sync.Mutex
 	mu      sync.Mutex
 	mode    Mode
 	entries []Entry
@@ -25,7 +28,8 @@ type Store struct {
 type View struct {
 	Mode
 	Run []Entry `json:"run,omitempty"`
-	// Unseen: the run has a step the builder has not acked.
+	// Unseen: the run has a step, or the card of its end, the builder
+	// has not acked.
 	Unseen bool `json:"unseen,omitempty"`
 }
 
@@ -104,6 +108,25 @@ func (s *Store) Mode() Mode {
 
 // Set writes the mode atomically.
 func (s *Store) Set(m Mode) error {
+	s.wmu.Lock()
+	defer s.wmu.Unlock()
+	return s.set(m)
+}
+
+// Update changes the mode from what it is now: fn sees the mode and
+// returns the new one, or false to leave it. No other write lands between
+// the read and the write.
+func (s *Store) Update(fn func(Mode) (Mode, bool)) (Mode, error) {
+	s.wmu.Lock()
+	defer s.wmu.Unlock()
+	m, ok := fn(s.Mode())
+	if !ok {
+		return s.Mode(), nil
+	}
+	return m, s.set(m)
+}
+
+func (s *Store) set(m Mode) error {
 	b, err := json.Marshal(m)
 	if err != nil {
 		return err
@@ -228,6 +251,8 @@ func (s *Store) View() View {
 	if s.mode.Since.IsZero() {
 		return v
 	}
+	// A card is news until it is folded, even with no step.
+	v.Unseen = !s.mode.On && s.mode.Card != nil && s.mode.Acked.Before(s.mode.Ended)
 	for _, e := range s.entries {
 		if e.At.Before(s.mode.Since) {
 			continue

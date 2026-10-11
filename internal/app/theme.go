@@ -35,10 +35,34 @@ var lightTheme = Theme{
 	Neg:        lipgloss.Color("#9E4A34"),
 }
 
+// nightTheme is the console while the stoker is in charge: the room goes
+// dark blue, one palette whatever the terminal, and only the fires (accent,
+// warn, neg and the matches) keep their warmth.
+var nightTheme = Theme{
+	Text:       lipgloss.Color("#D9DCE3"),
+	Muted:      lipgloss.Color("#8E96A8"),
+	Faint:      lipgloss.Color("#636B7D"),
+	Hair:       lipgloss.Color("#1F2636"),
+	Accent:     darkTheme.Accent,
+	AccentWash: lipgloss.Color("#18202F"),
+	Warn:       darkTheme.Warn,
+	Neg:        darkTheme.Neg,
+}
+
+var (
+	nightGround = lipgloss.Color("#0C1019")
+	nightInk    = lipgloss.Color("#7C8BB0") // the stoker word and the tab rule
+)
+
 type styles struct {
 	theme                                 Theme
 	text, muted, faint, hair, accent      lipgloss.Style
 	label, selected, warn, neg, tabActive lipgloss.Style
+	// stoker is the stoker's word in the header, rule the line under the
+	// tabs: the night token at night.
+	stoker, rule lipgloss.Style
+	// ground is painted under every cell; nil leaves the terminal's own.
+	ground color.Color
 }
 
 func newStyles(dark bool) styles {
@@ -46,6 +70,19 @@ func newStyles(dark bool) styles {
 	if dark {
 		t = darkTheme
 	}
+	st := themed(t)
+	st.stoker, st.rule = st.accent, st.hair
+	return st
+}
+
+func nightStyles() styles {
+	st := themed(nightTheme)
+	st.stoker = lipgloss.NewStyle().Foreground(nightInk)
+	st.rule, st.ground = st.stoker, nightGround
+	return st
+}
+
+func themed(t Theme) styles {
 	fg := func(c color.Color) lipgloss.Style { return lipgloss.NewStyle().Foreground(c) }
 	return styles{
 		theme:     t,
@@ -103,5 +140,8 @@ func Tokens(dark bool) map[string]color.Color {
 		"mark-striker": mk.Striker, "mark-stick": mk.Stick, "flame": mk.Flame, "flame-core": mk.Core,
 		"flame-amber": mk.Amber, "match-head": mk.Head, "match-ember": mk.Ember,
 		"match-breath-1": mk.Breath[0], "match-breath-2": mk.Breath[1], "match-breath-3": mk.Breath[2],
+		"night-bg": nightGround, "night-fg": nightTheme.Text, "night-muted": nightTheme.Muted,
+		"night-faint": nightTheme.Faint, "night-hair": nightTheme.Hair, "night-wash": nightTheme.AccentWash,
+		"night": nightInk,
 	}
 }

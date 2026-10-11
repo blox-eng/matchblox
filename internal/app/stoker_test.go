@@ -124,12 +124,22 @@ func TestNightDoorStartsTheNight(t *testing.T) {
 	}
 }
 
-// sendKey presses k and runs the command it returns.
+// sendKey presses k and runs the command it returns, each of a batch.
 func sendKey(m tea.Model, k string) tea.Model {
 	next, cmd := key(m, k)
-	if cmd != nil {
-		next.Update(cmd())
+	if cmd == nil {
+		return next
 	}
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c != nil {
+				next.Update(c())
+			}
+		}
+		return next
+	}
+	next.Update(msg)
 	return next
 }
 

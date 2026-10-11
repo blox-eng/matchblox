@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -16,7 +17,15 @@ import (
 const stokedRow = "stoked"
 
 func (m Model) stokedShows() bool {
-	return m.stoker != nil && m.stoker.Unseen && len(m.stoker.Run) > 0
+	return m.stoker != nil && m.stoker.Unseen && (len(m.stoker.Run) > 0 || m.card() != nil)
+}
+
+// card is the score of the run that ended, while no run is on.
+func (m Model) card() *proto.StokerCard {
+	if m.stoker == nil || m.stoker.On {
+		return nil
+	}
+	return m.stoker.Card
 }
 
 // stokerKey is f (the stoker on or off) and n (a night, or off).
@@ -31,6 +40,8 @@ func (m Model) stokerKey(night bool) (tea.Model, tea.Cmd) {
 	}
 	verb, say := "on", "the stoker is on: full sessions compact"
 	switch {
+	case !night && m.resting():
+		verb, say = "wake", "the stoker is back on"
 	case night && m.stoker.On && !m.stoker.Until.IsZero(), !night && m.stoker.On:
 		verb, say = "off", "the stoker is off"
 	case night:
@@ -54,18 +65,125 @@ func (m Model) stokerWord() string {
 	if m.stoker == nil || !m.stoker.On {
 		return ""
 	}
-	if !m.stoker.Until.IsZero() {
-		return "night → " + m.stoker.Until.Local().Format("15:04")
+	return stokerWordOf(m.stoker.Mode)
+}
+
+func stokerWordOf(md proto.StokerMode) string {
+	if !md.Rests.IsZero() {
+		return "stoker rests"
+	}
+	if !md.Until.IsZero() {
+		return "night → " + md.Until.Local().Format("15:04")
 	}
 	return "stoker"
 }
 
 // stokerShort is the word without the time, for a narrow header.
 func (m Model) stokerShort() string {
-	if w := m.stokerWord(); strings.HasPrefix(w, "night") {
+	switch w := m.stokerWord(); {
+	case strings.HasPrefix(w, "night"):
 		return "night"
+	case w == "stoker rests":
+		return "rests"
 	}
 	return m.stokerWord()
+}
+
+// resting: the builder took over and the stoker waits for them to leave.
+func (m Model) resting() bool {
+	return m.stoker != nil && m.stoker.On && !m.stoker.Rests.IsZero()
+}
+
+// asksTakeOver: k acts on a session while the stoker is in charge, and the
+// builder has not been asked in this run. Looking around never asks.
+func (m Model) asksTakeOver(k string) bool {
+	if !m.night() || m.stoker.Asked || m.pending != nil {
+		return false
+	}
+	if _, ok := m.selectedDoor(); ok {
+		return false
+	}
+	switch k {
+	case "enter":
+		return m.primary() != nil
+	case "x":
+		return m.secondary() != nil
+	case "a":
+		pane, _ := m.answerTarget()
+		return pane != ""
+	}
+	return false
+}
+
+// hold is what k does, fixed at the moment it was pressed: the answer
+// runs it on the row it was pressed on, wherever the selection is by then.
+func (m Model) hold(k string) func(Model) (tea.Model, tea.Cmd) {
+	switch k {
+	case "a":
+		pane, _ := m.answerTarget()
+		return func(m Model) (tea.Model, tea.Cmd) {
+			m.input = &answerInput{pane: pane}
+			return m, nil
+		}
+	case "x":
+		a := m.secondary()
+		return func(m Model) (tea.Model, tea.Cmd) {
+			m.pending = a
+			return m, nil
+		}
+	}
+	a := m.primary()
+	return func(m Model) (tea.Model, tea.Cmd) {
+		m.pending, m.previewTop = a, 0
+		return m, nil
+	}
+}
+
+// answerTakeOver is the builder's answer: y rests the stoker, n keeps it
+// on; either way what they pressed runs. Any other key drops the question
+// and what was held.
+func (m Model) answerTakeOver(k string) (tea.Model, tea.Cmd) {
+	if k != "y" && k != "n" {
+		m.held, m.flash = nil, ""
+		return m, nil
+	}
+	if !m.night() { // the run ended or rests since the question: nothing to take over
+		held := m.held
+		m.held = nil
+		return held(m)
+	}
+	if m.conn == nil || m.lost {
+		m.flash = "not sent, no connection · " + k + " tries again"
+		return m, nil
+	}
+	held := m.held
+	m.held = nil
+	v := *m.stoker
+	v.Asked = true
+	verb, say := "keep", "the stoker stays on"
+	if k == "y" {
+		verb, say = "rest", "stoker rests · f turns it back on"
+		v.Rests, v.Touched = m.now(), m.now()
+		m.touched = m.now()
+	}
+	m.stoker = &v
+	send := m.send(proto.Act{RecID: "stoker:" + verb, Which: "primary"})
+	next, run := held(m)
+	if nm, ok := next.(Model); ok && nm.flash == "" {
+		nm.flash = say
+		next = nm
+	}
+	return next, tea.Batch(send, run)
+}
+
+// touchRest tells the service, at most once a minute, that the builder is
+// still at the console, so the stoker goes on resting.
+func (m Model) touchRest() (Model, tea.Cmd) {
+	if !m.resting() || m.conn == nil || m.lost || m.now().Sub(m.touched) < time.Minute {
+		return m, nil
+	}
+	m.touched = m.now()
+	return m, m.send(proto.Act{RecID: "stoker:touch", Which: "primary"})
 }
 
 func nightDoorAction(d doors.Door) *action {
@@ -85,16 +203,33 @@ func (m Model) stokedSection(b *body, w int, row int, sel bool) {
 	default:
 		when += v.Ended.Local().Format("15:04")
 	}
-	b.add(-1, st.label.Render(fit(fmt.Sprintf(" STOKED %s · %d", when, len(v.Run)), w)))
 	narrow := layout(w) == Narrow
 	mark := "  "
 	if sel {
 		mark = "▌ "
 	}
 	var lines []string
+	head := fmt.Sprintf(" STOKED %s · %d", when, len(v.Run))
+	if c := m.card(); c != nil {
+		head = fmt.Sprintf(" STOKED %s → %s · ready %d/%d", c.Since.Local().Format("15:04"), c.Ended.Local().Format("15:04"), c.Ready, c.Of)
+		if c.Night {
+			head = " NIGHT" + strings.TrimPrefix(head, " STOKED")
+		}
+		for i, l := range cardLines(*c, narrow) {
+			lead := "   "
+			if i == 0 {
+				lead = " " + st.accent.Render(mark)
+			}
+			lines = append(lines, lead+st.text.Render(l))
+		}
+		for _, x := range c.NotReady {
+			lines = append(lines, "   "+st.text.Render(pad(x.Name, colName))+st.warn.Render(x.Why))
+		}
+	}
+	b.add(-1, st.label.Render(fit(head, w)))
 	for i, e := range v.Run {
 		lead := " " + st.accent.Render(mark)
-		if i > 0 {
+		if i > 0 || len(lines) > 0 {
 			lead = "   "
 		}
 		result := st.muted.Render(e.Result)
@@ -130,6 +265,28 @@ func (m Model) stokedSection(b *body, w int, row int, sel bool) {
 		}
 	}
 	b.addRow(row, sel, w, st, lines...)
+}
+
+// cardLines are the counts of a card: one line, or two on a phone.
+func cardLines(c proto.StokerCard, narrow bool) []string {
+	full := fmt.Sprintf("%d were full", c.Full)
+	if c.Full == 1 {
+		full = "1 was full"
+	}
+	given := ""
+	if c.Given > 0 {
+		given = " · " + kTok(c.Given) + " tokens given back"
+	}
+	if narrow {
+		if given != "" {
+			given = " · " + kTok(c.Given) + " given back"
+		}
+		return []string{
+			fmt.Sprintf("%d watched · %d full · %d compacted", c.Watched, c.Full, c.Compacted),
+			fmt.Sprintf("%d waited", c.Waited) + given,
+		}
+	}
+	return []string{fmt.Sprintf("%d watched · %s · %d compacted · %d waited", c.Watched, full, c.Compacted, c.Waited) + given}
 }
 
 // stepCell is the match of the session a step went to, as it is now; a

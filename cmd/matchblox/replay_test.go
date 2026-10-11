@@ -29,6 +29,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/replay"
 	"github.com/blox-eng/matchblox/internal/service"
+	"github.com/blox-eng/matchblox/internal/stoker"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
@@ -345,6 +346,11 @@ func TestReplay(t *testing.T) {
 		}
 		return errors.New("the demo runs only the kill")
 	}
+	st, err := stoker.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Stoker = st
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go s.Run(ctx)
@@ -352,6 +358,14 @@ func TestReplay(t *testing.T) {
 	// Warm up before the console starts: the replay opens on a machine at work.
 	if _, err := waitFor(func() string { return fmt.Sprint(len(s.State().Orphans)) }, func(n string) bool { return n == "1" }, "warm up", stepTimeout); err != nil {
 		t.Fatal(err)
+	}
+	// The demo's night only shows: each session was stepped on just before
+	// it, so the stoker leaves them all for 30 minutes, whenever a sample
+	// lands.
+	for _, ss := range s.State().Sessions {
+		if err := st.Append(stoker.Entry{ID: ss.SessionID + "@demo", At: time.Now(), Session: ss.SessionID, Rule: stoker.RuleCompact, Result: stoker.Skipped + ": the demo"}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	// billing asks for permission, through its hook.
 	s.Hook(hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "22222222-bbbb-4000-8000-000000000004",
@@ -429,6 +443,7 @@ func TestReplay(t *testing.T) {
 			return !strings.Contains(s, "while :; do go test") && strings.Contains(s, "ran: kill 4242")
 		}},
 		{"back to the queue", 13500 * time.Millisecond, "1", has("billing")},
+		{"a night", 15 * time.Second, "n", has("night → 07:00")},
 	}
 	var still replay.Frame
 	for _, st := range steps {

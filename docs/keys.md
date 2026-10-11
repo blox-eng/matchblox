@@ -21,7 +21,7 @@ shows the keys of the open tab.
 | `Space` | Marks a worktree that is safe to remove (Git). |
 | `X` | Marks every worktree that is safe to remove (Git). |
 | `r` | Scans the git checkouts again (Git). |
-| `f` | Turns [the stoker](stoker.md) on or off: it compacts full idle sessions while you are away. |
+| `f` | Turns [the stoker](stoker.md) on or off: it compacts full idle sessions while you are away. While it rests, `f` turns it back on. |
 | `n` | Starts a night: the stoker runs until the morning, then turns itself off. `n` again ends it. |
 | `e` | Shows or hides the agents that exited and wait for their parent (Sessions). |
 | `Esc` | Clears the search. With nothing to clear, goes back to Hosts. |
@@ -35,6 +35,7 @@ The action line shows `RUN` and the exact command.
 |---|---|
 | `Enter` | Runs a safe action. |
 | `y` | Runs a destructive action. `Enter` never does. |
+| `y`, `n` | Answer "Take over?" while the stoker runs: `y` rests it while you work, `n` keeps it on. |
 | `↓` or `j` | Scrolls a long change. `y` works only after its last line was on the screen. |
 | `m` | Turns the choice of a setup step on or off: the tmux mouse, in "Add the way back". |
 | `Esc` | Cancels. Any other key cancels too. |

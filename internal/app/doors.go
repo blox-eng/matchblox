@@ -113,6 +113,9 @@ func (m Model) doorsSection(b *body, w int) {
 		ds = ds[1:]
 	}
 	if len(ds) > 0 {
+		if len(ds) < len(m.doors) {
+			b.add(-1, "") // the stoker's row above stands apart
+		}
 		b.add(-1, st.label.Render(fit(fmt.Sprintf(" SET UP · %d", len(ds)), w)))
 	}
 	narrow := layout(w) == Narrow

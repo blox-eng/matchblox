@@ -50,6 +50,63 @@ type Mode struct {
 	Until time.Time `json:"until,omitzero"` // a night ends itself here; zero: when turned off
 	Ended time.Time `json:"ended,omitzero"`
 	Acked time.Time `json:"acked,omitzero"` // the builder saw the steps up to here
+	// Nightly: the run is a night; kept after it ends, for its card.
+	Nightly bool `json:"night,omitempty"`
+
+	// Start are the sessions at work when the run began; the score counts
+	// how many of them are ready to go on at its end.
+	Start []Seat `json:"start,omitempty"`
+	// Watched, Full and Waited are the sessions seen during the run, those
+	// that reached compact_at, and those that waited for the builder.
+	Watched []string `json:"watched,omitempty"`
+	Full    []string `json:"full,omitempty"`
+	Waited  []string `json:"waited,omitempty"`
+	// Card is the run's score, kept from its end until the next run.
+	Card *Card `json:"card,omitempty"`
+	// Asked: the builder was asked to take over in this run.
+	Asked bool `json:"asked,omitempty"`
+	// Rests: the builder took over here, and the stoker sends nothing
+	// until they leave. Touched is their last key in a console.
+	Rests   time.Time `json:"rests,omitzero"`
+	Touched time.Time `json:"touched,omitzero"`
+}
+
+const (
+	// RestIdle is how long the builder stays without a key before a stoker
+	// that rests goes on.
+	RestIdle = 15 * time.Minute
+	// LeaveGrace is how long no console is open before a stoker that rests
+	// goes on: a dropped link or a restart of the service is not leaving.
+	LeaveGrace = 2 * time.Minute
+)
+
+// Rest hands the sessions to the builder.
+func (m Mode) Rest(now time.Time) Mode {
+	m.Asked, m.Rests, m.Touched = true, now, now
+	return m
+}
+
+func (m Mode) Wake() Mode {
+	m.Rests, m.Touched = time.Time{}, time.Time{}
+	return m
+}
+
+// Touch is a key of the builder's while the stoker rests.
+func (m Mode) Touch(now time.Time) Mode {
+	if !m.Rests.IsZero() && now.After(m.Touched) {
+		m.Touched = now
+	}
+	return m
+}
+
+// Awake ends a rest when the builder left: no key for RestIdle, or no
+// console open since alone (zero: one is open) for LeaveGrace.
+func (m Mode) Awake(now, alone time.Time) (Mode, bool) {
+	left := !alone.IsZero() && now.Sub(alone) >= LeaveGrace
+	if m.Rests.IsZero() || !left && now.Sub(m.Touched) < RestIdle {
+		return m, false
+	}
+	return m.Wake(), true
 }
 
 // TurnOn starts a run, or keeps the one that runs.
@@ -71,17 +128,21 @@ func (m Mode) Night(now time.Time, ends string) (Mode, error) {
 		until = until.AddDate(0, 0, 1)
 	}
 	m = m.TurnOn(now)
-	m.Until = until
+	m.Until, m.Nightly = until, true
 	return m, nil
 }
 
 func (m Mode) Off(now time.Time) Mode {
 	m.On, m.Until, m.Ended = false, time.Time{}, now
-	return m
+	return m.Wake()
 }
 
+// Ack folds what the builder saw: the steps up to now, and the card.
 func (m Mode) Ack(now time.Time) Mode {
 	m.Acked = now
+	if m.Card != nil && m.Acked.Before(m.Ended) {
+		m.Acked = m.Ended
+	}
 	return m
 }
 
@@ -120,12 +181,12 @@ type Step struct {
 	Action                          advice.Action
 }
 
-// Plan picks the sessions to compact now: Claude Code, idle and not cold,
+// Plan picks the sessions to compact now, unless the stoker rests: Claude Code, idle and not cold,
 // at or above compactAt, not waiting for the builder, not stepped on in
 // the last PerSession, while the run has steps left. The fullest go first.
 // waiting holds the panes the queue lists.
 func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, compactAt float64, recent []Entry, now time.Time) []Step {
-	if !m.On {
+	if !m.On || !m.Rests.IsZero() {
 		return nil
 	}
 	left := MaxSteps
