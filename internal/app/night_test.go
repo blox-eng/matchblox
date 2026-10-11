@@ -229,3 +229,16 @@ func TestSummaryCarriesTheCard(t *testing.T) {
 		t.Fatalf("a running night:\n%s", out)
 	}
 }
+
+func TestTheCardStandsApartFromSetUp(t *testing.T) {
+	st := doorsAndQueue(hooksDoor)
+	v := quietNight()
+	st.Stoker = &v
+	m, _ := loadedWith(t, 120, st)
+	lines := strings.Split(ansi.Strip(m.render()), "\n")
+	for i, l := range lines {
+		if strings.HasPrefix(l, " SET UP") && strings.TrimSpace(lines[i-1]) != "" {
+			t.Fatalf("SET UP sits on the card: %q", lines[i-1])
+		}
+	}
+}
