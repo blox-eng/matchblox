@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/replay"
@@ -141,5 +142,90 @@ func TestClearsBGReadsColoursWhole(t *testing.T) {
 		if got := clearsBG(params); got != want {
 			t.Errorf("clearsBG(%q) = %v", params, got)
 		}
+	}
+}
+
+// quietNight ended at 07:00 with nothing to do: no step, all ready.
+func quietNight() proto.StokerView {
+	end := time.Date(2026, 10, 11, 7, 0, 0, 0, time.Local)
+	since := time.Date(2026, 10, 11, 1, 8, 0, 0, time.Local)
+	return proto.StokerView{
+		Mode: proto.StokerMode{Since: since, Ended: end, Nightly: true,
+			Card: &proto.StokerCard{Night: true, Since: since, Ended: end, Watched: 7, Ready: 7, Of: 7}},
+		Unseen: true,
+	}
+}
+
+func TestAQuietNightShowsItsCard(t *testing.T) {
+	for _, w := range []int{40, 120} {
+		m, _ := loadedWith(t, w, stokerState(quietNight()))
+		out := ansi.Strip(m.render())
+		for _, want := range []string{"NIGHT 01:08 → 07:00 · ready 7/7", "7 watched", "0 compacted"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("w=%d: no %q in\n%s", w, want, out)
+			}
+		}
+		if d, ok := m.selectedDoor(); !ok || d.ID != stokedRow {
+			t.Fatalf("w=%d: the card is not selected first", w)
+		}
+	}
+}
+
+func TestTheCardNamesWhatIsNotReady(t *testing.T) {
+	v := quietNight()
+	c := *v.Card
+	c.Ready, c.Full, c.Compacted, c.Waited, c.Given = 5, 2, 1, 1, 166600
+	c.NotReady = []proto.StokerMiss{{Name: "api-gw", Why: "waits for you"}, {Name: "billing", Why: "full · 91%"}}
+	v.Card = &c
+	m, _ := loadedWith(t, 120, stokerState(v))
+	out := ansi.Strip(m.render())
+	for _, want := range []string{"ready 5/7", "2 were full", "1 compacted", "1 waited", "167k tokens given back", "api-gw", "waits for you", "billing", "full · 91%"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("no %q in\n%s", want, out)
+		}
+	}
+}
+
+func TestADayRunCardIsStoked(t *testing.T) {
+	v := quietNight()
+	v.Nightly, v.Card.Night = false, false
+	m, _ := loadedWith(t, 120, stokerState(v))
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "STOKED 01:08 → 07:00 · ready 7/7") {
+		t.Fatalf("%s", out)
+	}
+}
+
+func TestEnterFoldsTheCard(t *testing.T) {
+	m, f := loadedWith(t, 120, stokerState(quietNight()))
+	sendKey(m, "enter")
+	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:ack" {
+		t.Fatalf("acts %+v", a)
+	}
+	v := quietNight()
+	v.Unseen = false
+	m, _ = loadedWith(t, 120, stokerState(v))
+	if out := ansi.Strip(m.render()); strings.Contains(out, "NIGHT 01:08") {
+		t.Fatalf("a folded card shows:\n%s", out)
+	}
+}
+
+func TestSummaryCarriesTheCard(t *testing.T) {
+	v := quietNight()
+	c := *v.Card
+	c.Ready, c.Compacted, c.Given = 6, 1, 166600
+	c.NotReady = []proto.StokerMiss{{Name: "api-gw", Why: "waits for you"}}
+	v.Card = &c
+	out := Summary(stokerState(v).Doc)
+	for _, want := range []string{
+		"stoker: night 01:08 → 07:00 · ready 6/7 · 7 watched · 0 were full · 1 compacted · 0 waited · 167k tokens given back\n",
+		"  not ready: api-gw (waits for you)\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("no %q in\n%s", want, out)
+		}
+	}
+	on := stokerState(proto.StokerView{Mode: proto.StokerMode{On: true, Until: time.Date(2026, 10, 12, 7, 0, 0, 0, time.Local)}})
+	if out := Summary(on.Doc); !strings.Contains(out, "stoker: night → 07:00\n") {
+		t.Fatalf("a running night:\n%s", out)
 	}
 }

@@ -25,7 +25,8 @@ type Store struct {
 type View struct {
 	Mode
 	Run []Entry `json:"run,omitempty"`
-	// Unseen: the run has a step the builder has not acked.
+	// Unseen: the run has a step, or the card of its end, the builder
+	// has not acked.
 	Unseen bool `json:"unseen,omitempty"`
 }
 
@@ -228,6 +229,8 @@ func (s *Store) View() View {
 	if s.mode.Since.IsZero() {
 		return v
 	}
+	// A card is news until it is folded, even with no step.
+	v.Unseen = !s.mode.On && s.mode.Card != nil && s.mode.Acked.Before(s.mode.Ended)
 	for _, e := range s.entries {
 		if e.At.Before(s.mode.Since) {
 			continue

@@ -249,3 +249,54 @@ func TestStokerChecksAgainBeforeTheEnter(t *testing.T) {
 		t.Fatalf("entries %+v", es)
 	}
 }
+
+func TestAQuietNightEndsWithACard(t *testing.T) {
+	s, _, _ := stokerTest(t)
+	_ = s.Stoker.Set(stoker.Mode{})
+	s.NightEnds = "07:00"
+	// One session at 40 %: the night has nothing to do.
+	s.publish(sample.Snapshot{At: night0, Sessions: []sample.Session{{
+		Agent: "claude", Pane: "%2", SessionID: "s2", Name: "calm", Status: "idle", Idle: time.Minute, Tokens: 80000, ContextPct: 40,
+	}}}, func(state.Doc) {})
+	if r := s.act(context.Background(), proto.Act{RecID: "stoker:night"}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	if st := s.Stoker.Mode().Start; len(st) != 1 || st[0].Session != "s2" {
+		t.Fatalf("start %+v", st)
+	}
+	until := s.Stoker.Mode().Until
+	s.stoke(context.Background(), until.Add(-time.Hour))
+	s.stoke(context.Background(), until)
+	v := s.State().Stoker
+	if v == nil || v.On || v.Card == nil {
+		t.Fatalf("view %+v", v)
+	}
+	if c := *v.Card; !c.Night || c.Watched != 1 || c.Ready != 1 || c.Of != 1 || c.Compacted != 0 || !c.Ended.Equal(until) {
+		t.Fatalf("card %+v", c)
+	}
+	if len(v.Run) != 0 || !v.Unseen {
+		t.Fatalf("a card with no steps is unseen until folded: %+v", v)
+	}
+	if r := s.act(context.Background(), proto.Act{RecID: "stoker:ack"}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	if v := s.State().Stoker; v.Unseen || v.Card == nil {
+		t.Fatalf("after ack %+v", v)
+	}
+}
+
+func TestTurningTheStokerOffScoresTheRun(t *testing.T) {
+	s, _, _ := stokerTest(t)
+	_ = s.Stoker.Set(stoker.Mode{})
+	if r := s.act(context.Background(), proto.Act{RecID: "stoker:on"}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	s.stoke(context.Background(), time.Now()) // the full session is compacted
+	if r := s.act(context.Background(), proto.Act{RecID: "stoker:off"}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	c := s.State().Stoker.Card
+	if c == nil || c.Night || c.Of != 1 || c.Full != 1 || c.Ready != 0 || len(c.NotReady) != 1 || c.NotReady[0].Why != "full · 88%" {
+		t.Fatalf("card %+v", c)
+	}
+}

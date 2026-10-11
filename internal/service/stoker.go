@@ -20,6 +20,8 @@ func (s *Service) stokerAct(verb string, now time.Time) proto.Result {
 		return proto.Result{Err: "this service keeps no stoker"}
 	}
 	m := s.Stoker.Mode()
+	was := m.On
+	sessions, waiting := s.seen()
 	switch verb {
 	case "on":
 		m = m.TurnOn(now)
@@ -29,11 +31,17 @@ func (s *Service) stokerAct(verb string, now time.Time) proto.Result {
 			return proto.Result{Err: err.Error()}
 		}
 	case "off":
-		m = m.Off(now)
+		if !was {
+			break
+		}
+		m = m.Off(now).Score(sessions, waiting, s.compactAt, s.Stoker.View().Run)
 	case "ack":
 		m = m.Ack(now)
 	default:
 		return proto.Result{Err: "unknown stoker act"}
+	}
+	if m.On && !was {
+		m = m.Begin(sessions)
 	}
 	if err := s.Stoker.Set(m); err != nil {
 		return proto.Result{Err: err.Error()}
@@ -51,19 +59,15 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 		return
 	}
 	changed := false
-	if m, ended := s.Stoker.Mode().Expire(now); ended {
+	sessions, waiting := s.seen()
+	if m, seen := s.Stoker.Mode().Observe(sessions, waiting, s.compactAt); seen {
 		_ = s.Stoker.Set(m) // a write that fails is tried again at the next sample
 		changed = true
 	}
-	s.mu.Lock()
-	sessions := s.cur.Sessions
-	waiting := map[string]bool{}
-	for _, it := range s.cur.Queue {
-		if stoker.Waits(it) {
-			waiting[it.Pane] = true
-		}
+	if m, ended := s.Stoker.Mode().Expire(now); ended {
+		_ = s.Stoker.Set(m.Score(sessions, waiting, s.compactAt, s.Stoker.View().Run))
+		changed = true
 	}
-	s.mu.Unlock()
 
 	for _, e := range s.Stoker.Pending(now) {
 		path := ""
@@ -103,6 +107,20 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 	if changed {
 		s.refreshStoker()
 	}
+}
+
+// seen are the sessions of the last sample and the panes the queue lists
+// as waiting for the builder.
+func (s *Service) seen() ([]sample.Session, map[string]bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	waiting := map[string]bool{}
+	for _, it := range s.cur.Queue {
+		if stoker.Waits(it) {
+			waiting[it.Pane] = true
+		}
+	}
+	return s.cur.Sessions, waiting
 }
 
 // refreshStoker sends the stoker view at once.

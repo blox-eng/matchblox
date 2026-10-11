@@ -50,6 +50,21 @@ type Mode struct {
 	Until time.Time `json:"until,omitzero"` // a night ends itself here; zero: when turned off
 	Ended time.Time `json:"ended,omitzero"`
 	Acked time.Time `json:"acked,omitzero"` // the builder saw the steps up to here
+	// Nightly: the run is a night; kept after it ends, for its card.
+	Nightly bool `json:"night,omitempty"`
+
+	// Start are the sessions at work when the run began; the score counts
+	// how many of them are ready to go on at its end.
+	Start []Seat `json:"start,omitempty"`
+	// Watched, Full and Waited are the sessions seen during the run, those
+	// that reached compact_at, and those that waited for the builder.
+	Watched []string `json:"watched,omitempty"`
+	Full    []string `json:"full,omitempty"`
+	Waited  []string `json:"waited,omitempty"`
+	// Card is the run's score, kept from its end until the next run.
+	Card *Card `json:"card,omitempty"`
+	// Asked: the builder was asked to take over in this run.
+	Asked bool `json:"asked,omitempty"`
 }
 
 // TurnOn starts a run, or keeps the one that runs.
@@ -71,7 +86,7 @@ func (m Mode) Night(now time.Time, ends string) (Mode, error) {
 		until = until.AddDate(0, 0, 1)
 	}
 	m = m.TurnOn(now)
-	m.Until = until
+	m.Until, m.Nightly = until, true
 	return m, nil
 }
 
@@ -80,8 +95,12 @@ func (m Mode) Off(now time.Time) Mode {
 	return m
 }
 
+// Ack folds what the builder saw: the steps up to now, and the card.
 func (m Mode) Ack(now time.Time) Mode {
 	m.Acked = now
+	if m.Card != nil && m.Acked.Before(m.Ended) {
+		m.Acked = m.Ended
+	}
 	return m
 }
 
