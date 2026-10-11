@@ -117,8 +117,10 @@ func (m Model) queuePanel(w int) body {
 			} else {
 				tail = st.faint.Render("from the pane: ") + tail // first: a long line is cut at the end
 			}
-		case it.Estimated:
+		case it.Estimated && it.LastLine == "":
 			tail = st.faint.Render("estimated")
+		case it.Estimated:
+			tail = st.faint.Render("estimated: ") + tail
 		}
 		if s, ok := m.sessionIn(it.Pane); ok {
 			if pr := m.prOf(s.Cwd); pr != nil {

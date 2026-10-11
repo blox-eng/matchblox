@@ -75,6 +75,8 @@ type Service struct {
 	Activity func() time.Time
 	// LimitsLog keeps each account's limit readings. Nil: none kept.
 	LimitsLog *limits.Store
+	// Now is the service's clock for the stoker and the queue. Nil: time.Now.
+	Now func() time.Time
 
 	// alone is when the last console closed; zero while one is open. A new
 	// service starts alone.
@@ -124,9 +126,16 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 	}
 	s.Capture = sample.CapturePanes
 	s.Activity = sample.ClientActivity
-	s.alone = time.Now()
+	s.alone = s.now()
 	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Answerable: s.answerable, Stokable: s.stokable}
 	return s
+}
+
+func (s *Service) now() time.Time {
+	if s.Now != nil {
+		return s.Now()
+	}
+	return time.Now()
 }
 
 // State is the latest state, without history.
@@ -220,6 +229,11 @@ func (s *Service) replace() {
 // Run samples every interval and scans git every gitEvery until ctx ends.
 // Call it once: it is the only sample loop of the service.
 func (s *Service) Run(ctx context.Context) {
+	s.mu.Lock()
+	if len(s.clients) == 0 {
+		s.alone = s.now() // Now is set by now
+	}
+	s.mu.Unlock()
 	rec := s.recorder()
 	go s.gitLoop(ctx)
 	s.loadHistory()
@@ -228,7 +242,7 @@ func (s *Service) Run(ctx context.Context) {
 	for first := true; ; first = false {
 		s.readSpool()
 		s.publish(s.sample(), rec)
-		s.stoke(ctx, time.Now())
+		s.stoke(ctx, s.now())
 		if first {
 			s.rescanGit()
 		}
@@ -294,7 +308,7 @@ func (s *Service) Hook(ev hooks.Event) {
 func (s *Service) mergeQueue() {
 	now := s.cur.At
 	if now.IsZero() {
-		now = time.Now()
+		now = s.now()
 	}
 	s.queue.Merge(s.cur.Sessions, now)
 	s.cur.Queue = s.queue.Items()
@@ -388,7 +402,7 @@ func (s *Service) leave(cl *client) {
 	defer s.mu.Unlock()
 	delete(s.clients, cl)
 	if len(s.clients) == 0 {
-		s.alone = time.Now()
+		s.alone = s.now()
 	}
 }
 

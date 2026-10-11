@@ -270,10 +270,20 @@ func gitRecs(snap sample.Snapshot, git *gitscan.Report) []Rec {
 			for i, wt := range safe {
 				steps[i], guards[i] = wt.Remove, Guard{Worktree: wt.Path}
 			}
+			title := fmt.Sprintf("Remove %d merged worktrees of %s", len(safe), filepath.Base(repo.Path))
+			ev := "their branches merged, they have no tracked or untracked changes and no process works inside (each is checked again right before its removal); ignored files such as build output go with them"
+			if len(safe) == 1 {
+				title = "Remove 1 merged worktree of " + filepath.Base(repo.Path)
+				ev = "its branch merged, it has no tracked or untracked changes and no process works inside (it is checked again right before its removal); ignored files such as build output go with it"
+			}
+			total := fmt.Sprintf("%d worktrees in total", len(repo.Worktrees))
+			if len(repo.Worktrees) == 1 {
+				total = "1 worktree in total"
+			}
 			out = append(out, Rec{
 				Level: "info", score: 150 + float64(len(safe)),
-				Title:    fmt.Sprintf("Remove %d merged worktrees of %s", len(safe), filepath.Base(repo.Path)),
-				Evidence: fmt.Sprintf("their branches merged, they have no tracked or untracked changes and no process works inside (each is checked again right before its removal); ignored files such as build output go with them; branches and commits stay; %d worktrees in total", len(repo.Worktrees)),
+				Title:    title,
+				Evidence: ev + "; branches and commits stay; " + total,
 				Second:   &Action{Label: "remove " + strconv.Itoa(len(safe)), Steps: steps, Destructive: true, Guards: guards},
 			})
 		}

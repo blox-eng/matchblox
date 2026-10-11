@@ -4,4 +4,4 @@
 
   ⠙ Working
                                      ctrl+t variants  tab agents  ctrl+p commands
-  /work/mobile:main                                                          1.1.48
+  /work/wick-mobile:main                                                     1.1.48

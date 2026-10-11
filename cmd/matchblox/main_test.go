@@ -30,6 +30,8 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(0)
 	}
+	// The replay draws the demo clock's times, never this machine's zone.
+	time.Local = time.UTC
 	os.Exit(m.Run())
 }
 

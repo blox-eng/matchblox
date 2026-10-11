@@ -36,7 +36,8 @@ Other tools do those well (design/0001-v0.1.md §15).
 - When the console's look changes, record the replay again:
   `go test ./cmd/matchblox -run TestReplay -update`. It writes
   `www/demo/frames.json`, `www/demo/replay.svg` and the still frame in
-  `www/index.html`.
+  `www/index.html`. The test fails when a frame names this machine (its
+  host, user, home, or a tmux or Claude Code session on it).
 
 ## The docs
 
