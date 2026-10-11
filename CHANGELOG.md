@@ -6,6 +6,11 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **docs.matchblox.com shows the docs of the latest release**, with the
+  release install. It showed the text from before the first release.
+
 ## [0.1.0] - 2026-10-10
 
 The first release: one console for every coding agent you run in tmux, on
