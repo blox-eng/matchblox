@@ -69,7 +69,7 @@ func (a *acts) end(key string, ran bool) {
 
 func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	if !strings.HasPrefix(a.RecID, "stoker:") {
-		s.touchStoker(time.Now()) // the builder acts: a stoker that rests goes on resting
+		s.touchStoker(s.now()) // the builder acts: a stoker that rests goes on resting
 	}
 	switch a.RecID {
 	case "rescan:git":
@@ -80,7 +80,7 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		return proto.Result{}
 	}
 	if verb, ok := strings.CutPrefix(a.RecID, "stoker:"); ok {
-		return s.stokerAct(verb, time.Now())
+		return s.stokerAct(verb, s.now())
 	}
 	key := a.RecID + "\x00" + a.Which
 	id, door := strings.CutPrefix(a.RecID, "door:")

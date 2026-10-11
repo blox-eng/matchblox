@@ -418,3 +418,31 @@ func TestKeepAndWake(t *testing.T) {
 		t.Fatalf("rest while off: %+v", r)
 	}
 }
+
+func TestTheServiceClockRunsTheNight(t *testing.T) {
+	s, _, _ := stokerTest(t)
+	_ = s.Stoker.Set(stoker.Mode{})
+	s.NightEnds = "07:00"
+	var mu sync.Mutex
+	clock := time.Date(2026, 10, 1, 23, 10, 0, 0, time.UTC)
+	s.Now = func() time.Time { mu.Lock(); defer mu.Unlock(); return clock }
+	if r := s.act(context.Background(), proto.Act{RecID: "stoker:night"}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	morning := time.Date(2026, 10, 2, 7, 0, 0, 0, time.UTC)
+	if m := s.Stoker.Mode(); !m.Since.Equal(clock) || !m.Until.Equal(morning) {
+		t.Fatalf("night %v → %v, want 23:10 → 07:00 on the service clock", m.Since, m.Until)
+	}
+	mu.Lock()
+	clock = morning.Add(time.Second)
+	mu.Unlock()
+	s.interval = time.Millisecond
+	run(t, s)
+	deadline := time.Now().Add(5 * time.Second)
+	for s.Stoker.Mode().On && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if m := s.Stoker.Mode(); m.On || m.Card == nil || !m.Card.Ended.Equal(morning) {
+		t.Fatalf("the sample loop did not end the night on the service clock: %+v", m)
+	}
+}
