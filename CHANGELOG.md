@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-11
+
 ### Fixed
 
 - **docs.matchblox.com shows the docs of the latest release**, with the
@@ -55,5 +57,6 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/blox-eng/matchblox/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/blox-eng/matchblox/releases/tag/v0.1.0
