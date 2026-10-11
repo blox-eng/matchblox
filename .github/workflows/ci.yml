@@ -7,6 +7,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    # edited: a renamed title is checked again before the squash takes it.
+    types: [opened, synchronize, reopened, edited]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -29,6 +31,17 @@ jobs:
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           allowed-commit-types: "feat,fix,chore,test,docs,refactor,ci,perf,build,revert"
+      # The squash merge takes the pull request's title as the commit on main,
+      # and a title semantic-release cannot read releases nothing (#54).
+      - name: Pull request title
+        if: github.event_name == 'pull_request'
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if ! grep -Eq '^(feat|fix|chore|test|docs|refactor|ci|perf|build|revert)(\([^)]+\))?!?: .+' <<<"$TITLE"; then
+            echo "::error::The title becomes the squash commit on main: start it with a conventional type, as in 'fix: …'. Got: $TITLE"
+            exit 1
+          fi
 
   lint:
     name: Lint
