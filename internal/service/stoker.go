@@ -127,7 +127,7 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 		res := s.Actions.Do(ctx, st.Action, "y")
 		e := stoker.Entry{
 			ID: st.Session + "@" + now.UTC().Format(time.RFC3339Nano), At: now,
-			Session: st.Session, Name: st.Name, Pane: st.Pane, Rule: stoker.RuleCompact,
+			Session: st.Session, Name: st.Name, Pane: st.Pane, Rule: stoker.RuleCompact, Why: st.Why,
 			Argv: st.Action.Steps, Before: st.Tokens, Guard: "idle", Result: stoker.Sent,
 		}
 		switch {
