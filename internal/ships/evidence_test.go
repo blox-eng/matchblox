@@ -114,9 +114,24 @@ EOF
 		{"a PR URL as the selector names its repository",
 			[]string{toolUse("t1", "/w", "main", "gh pr view https://github.com/o/r/pull/7 --comments")},
 			[]found{{Kind: Acted, Repo: "o/r", Number: 7, At: at}}},
-		{"a PR URL in any command",
-			[]string{toolUse("t1", "/w", "main", "curl -s https://github.com/o/r/pull/9.diff | head")},
-			[]found{{Kind: Acted, Repo: "o/r", Number: 9, At: at}}},
+		{"a PR URL outside a gh pr verb is a mention",
+			[]string{toolUse("t1", "/w", "main", "curl -s https://github.com/o/r/pull/9.diff | head; echo https://github.com/o/r/pull/10; "+
+				"gh api repos/o/r/pulls/11 && gh pr comment 12 --body https://github.com/o/r/pull/13 && open 'https://x.io/?u=https://github.com/o/r/pull/14'")},
+			[]found{{Kind: Acted, Dir: "/w", Number: 12, At: at}}},
+		{"a number past 32 bits is no PR",
+			[]string{toolUse("t1", "/w", "main", "gh pr view 3000000000; gh pr view https://github.com/o/r/pull/3000000000")},
+			nil},
+		{"an odd quote in a heredoc in a quoted body (review of #68, finding 6)",
+			[]string{toolUse("t1", "/w", "fix/x", "gh pr create --title \"x\" --body \"$(cat <<'EOF'\n## Summary\nThe \"quoted word fixes it. Follows https://github.com/o/r/pull/12\nEOF\n)\"\ngh pr view 15"),
+				toolResult("t1", "/w", url+"\n", nil)},
+			[]found{{Kind: Acted, Dir: "/w", Number: 15, At: at}, {Kind: Created, Repo: "blox-eng/blox", Number: 3479, At: at}}},
+		{"an apostrophe in a heredoc in a quoted body",
+			[]string{toolUse("t1", "/w", "fix/x", "gh pr create --title x --body \"$(cat <<'EOF'\nFollows https://github.com/o/r/pull/12 and it's done\nEOF\n)\""),
+				toolResult("t1", "/w", "a pull request for branch already exists", nil)},
+			nil},
+		{"a push after a commit whose message holds a quote",
+			[]string{toolUse("t1", "/w", "fix/pipe", "git commit -m \"$(cat <<'EOF'\nfix: the 5\" pipe, see https://github.com/o/r/pull/77\nEOF\n)\" && git push")},
+			[]found{{Kind: Pushed, Dir: "/w", Branch: "fix/pipe", At: at}}},
 		{"a branch selector is not guessed",
 			[]string{toolUse("t1", "/w", "main", "gh pr view feat/x")},
 			nil},
@@ -158,11 +173,13 @@ EOF
 
 func TestCommands(t *testing.T) {
 	cases := map[string][][]string{
-		`cd a && git push || echo "no; way"`:       {{"cd", "a"}, {"git", "push"}, {"echo", "no; way"}},
-		"a \\\n b # c\nd 'e f'":                    {{"a", "b"}, {"d", "e f"}},
-		`X=$(gh pr view 1 --json url) ; y "$X"`:    {{"X=$(gh pr view 1 --json url)"}, {"y", "$X"}},
-		"cat <<-EOF > f\n\tgit push x y\n\tEOF\nz": {{"cat", ">", "f"}, {"z"}},
-		`(cd w && make) | tee log &`:               {{"cd", "w"}, {"make"}, {"tee", "log"}},
+		`cd a && git push || echo "no; way"`:        {{"cd", "a"}, {"git", "push"}, {"echo", "no; way"}},
+		"a \\\n b # c\nd 'e f'":                     {{"a", "b"}, {"d", "e f"}},
+		`X=$(gh pr view 1 --json url) ; y "$X"`:     {{"X=$(gh pr view 1 --json url)"}, {"y", "$X"}},
+		"cat <<-EOF > f\n\tgit push x y\n\tEOF\nz":  {{"cat", ">", "f"}, {"z"}},
+		`(cd w && make) | tee log &`:                {{"cd", "w"}, {"make"}, {"tee", "log"}},
+		"a \"$(cat <<'E'\nit's (\"odd\nE\n)\" && b": {{"a", "$(cat <<'E'\nit's (\"odd\nE\n)"}, {"b"}},
+		`a "x $(echo ")") y" c`:                     {{"a", `x $(echo ")") y`, "c"}},
 	}
 	for in, want := range cases {
 		if got := commands(in); !reflect.DeepEqual(got, want) {

@@ -15,7 +15,7 @@ import (
 const (
 	Created = "created" // its gh pr create printed the PR's URL
 	Pushed  = "pushed"  // it pushed the branch an open PR has as head
-	Acted   = "acted"   // it ran gh pr <verb> on the PR, or a command with its URL
+	Acted   = "acted"   // it ran gh pr <verb> on the PR, by number or URL
 	Branch  = "branch"  // it works in a worktree on the PR's head branch
 )
 
@@ -145,9 +145,8 @@ func resultEvidence(p pending, content, raw json.RawMessage, at time.Time) []fou
 		if pr := r.GitOperation.PR; pr != nil && pr.Action == "created" {
 			text = pr.URL
 		}
-		if m := pullURL.FindStringSubmatch(text); m != nil {
-			n, _ := strconv.Atoi(m[3])
-			out = append(out, found{Kind: Created, Repo: m[1] + "/" + m[2], Number: n, At: at})
+		if m := pullURL.FindStringSubmatch(text); m != nil && prNumber(m[3]) > 0 {
+			out = append(out, found{Kind: Created, Repo: m[1] + "/" + m[2], Number: prNumber(m[3]), At: at})
 		}
 	}
 	if push := r.GitOperation.Push; push != nil && push.Branch != "" {
@@ -174,7 +173,10 @@ func resultText(content json.RawMessage) string {
 	return b.String()
 }
 
-var pullURL = regexp.MustCompile(`https?://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/([0-9]+)`)
+// pullURL is a pull request's URL where a word starts: at the start, or
+// after a space, a quote or a bracket. A URL inside another (a redirect's
+// query) is not one.
+var pullURL = regexp.MustCompile(`(?:^|[\s"'(<\[])https?://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/([0-9]+)\b`)
 
 // prVerbs act on a pull request that already exists.
 var prVerbs = map[string]bool{"merge": true, "checks": true, "view": true, "edit": true, "ready": true, "comment": true}
@@ -185,10 +187,6 @@ var ghValues = set("-R", "--repo", "-b", "--body", "-F", "--body-file", "-t", "-
 	"-B", "--base", "-H", "--head", "--json", "-q", "--jq", "-T", "--template", "-i", "--interval",
 	"-A", "--author-email", "--match-head-commit", "--milestone", "--add-label", "--remove-label",
 	"--add-reviewer", "--remove-reviewer", "--add-assignee", "--remove-assignee", "--add-project", "--remove-project")
-
-// prose are the flags whose value is text a person reads: a URL there is a
-// mention, not a command acting on it.
-var prose = set("-m", "--message", "-b", "--body", "-t", "--title", "--subject")
 
 var pushValues = set("-o", "--push-option", "--repo", "--receive-pack", "--exec")
 
@@ -201,7 +199,9 @@ func set(s ...string) map[string]bool {
 }
 
 // commandEvidence reads one Bash call: each simple command in it, with the
-// directory a cd before it moved to.
+// directory a cd before it moved to. A PR counts only as the selector of a
+// gh pr verb (by number or URL) or the URL a gh pr create printed: a URL
+// anywhere else (curl, echo, a body, gh api) is a mention.
 func commandEvidence(script, cwd, branch, id string, at time.Time, pend map[string]pending) []found {
 	var out []found
 	dir := cwd
@@ -209,15 +209,6 @@ func commandEvidence(script, cwd, branch, id string, at time.Time, pend map[stri
 		w = unwrap(w)
 		if len(w) == 0 {
 			continue
-		}
-		for i, word := range w {
-			if i > 0 && prose[w[i-1]] {
-				continue
-			}
-			for _, m := range pullURL.FindAllStringSubmatch(word, -1) {
-				n, _ := strconv.Atoi(m[3])
-				out = append(out, found{Kind: Acted, Repo: m[1] + "/" + m[2], Number: n, At: at})
-			}
 		}
 		switch w[0] {
 		case "cd":
@@ -249,8 +240,13 @@ func commandEvidence(script, cwd, branch, id string, at time.Time, pend map[stri
 			switch {
 			case w[2] == "create":
 				addPending(pend, id, pending{Dir: dir, Repo: repo, Create: true})
-			case prVerbs[w[2]] && !pullURL.MatchString(sel): // a URL was read above, with its repository
-				if n := prNumber(sel); n > 0 {
+			case !prVerbs[w[2]]:
+			case pullURL.MatchString(sel):
+				if m := pullURL.FindStringSubmatch(sel); prNumber(m[3]) > 0 {
+					out = append(out, found{Kind: Acted, Repo: m[1] + "/" + m[2], Number: prNumber(m[3]), At: at})
+				}
+			default:
+				if n := prNumber(strings.TrimPrefix(sel, "#")); n > 0 {
 					out = append(out, found{Kind: Acted, Repo: repo, Dir: dir, Number: n, At: at})
 				}
 			}
@@ -394,14 +390,15 @@ func ghArgs(args []string) (repo, sel string) {
 	return repo, sel
 }
 
-// prNumber is the number a selector names: 123 or #123. A branch name is
-// not read: gh resolves it, we would guess.
-func prNumber(sel string) int {
-	n, err := strconv.Atoi(strings.TrimPrefix(sel, "#"))
+// prNumber reads a pull request's number; 0 when it is none. GitHub's
+// numbers are 32-bit: a larger one would fail its whole repository's query.
+// A branch name is not read: gh resolves it, we would guess.
+func prNumber(s string) int {
+	n, err := strconv.ParseInt(s, 10, 32)
 	if err != nil || n <= 0 {
 		return 0
 	}
-	return n
+	return int(n)
 }
 
 var ownerName = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
@@ -468,16 +465,27 @@ func commands(script string) [][]string {
 			inWord = true
 			i += j + 1
 		case c == '"':
-			i++
-			for ; i < len(s) && s[i] != '"'; i++ {
-				if s[i] == '\\' && i+1 < len(s) {
-					i++
+			j, end := quoteEnd(s, i), len(s)
+			if s[j-1] == '"' && j-1 > i {
+				end = j - 1
+			}
+			for k := i + 1; k < end; k++ {
+				switch {
+				case s[k] == '\\' && k+1 < len(s):
+					k++
+					cur.WriteByte(s[k])
+				case s[k] == '$' && k+1 < len(s) && s[k+1] == '(':
+					e := substEnd(s, k)
+					cur.WriteString(s[k:e])
+					k = e - 1
+				default:
+					cur.WriteByte(s[k])
 				}
-				cur.WriteByte(s[i])
 			}
 			inWord = true
+			i = j - 1
 		case c == '$' && i+1 < len(s) && s[i+1] == '(':
-			j := closeParen(s, i+1)
+			j := substEnd(s, i)
 			cur.WriteString(s[i:j])
 			inWord = true
 			i = j - 1
@@ -503,19 +511,7 @@ func commands(script string) [][]string {
 			i = k - 1
 		case c == '\n':
 			endCmd()
-			for _, delim := range heredocs {
-				for i+1 < len(s) {
-					end := strings.IndexByte(s[i+1:], '\n')
-					if end < 0 {
-						end = len(s) - i - 1
-					}
-					line := strings.TrimLeft(s[i+1:i+1+end], "\t")
-					i += end + 1
-					if line == delim {
-						break
-					}
-				}
-			}
+			i = skipHeredocs(s, i, heredocs)
 			heredocs = nil
 		case strings.IndexByte(";&|()", c) >= 0:
 			endCmd()
@@ -530,20 +526,87 @@ func commands(script string) [][]string {
 	return out
 }
 
-// closeParen returns the index just past the parenthesis that closes the
-// one at open.
-func closeParen(s string, open int) int {
+// quoteEnd returns the index just past the double quote that closes the
+// one at open: a command substitution inside is skipped whole, with its
+// own quotes and heredocs.
+func quoteEnd(s string, open int) int {
+	for i := open + 1; i < len(s); i++ {
+		switch {
+		case s[i] == '\\':
+			i++
+		case s[i] == '"':
+			return i + 1
+		case s[i] == '$' && i+1 < len(s) && s[i+1] == '(':
+			i = substEnd(s, i) - 1
+		}
+	}
+	return len(s)
+}
+
+// substEnd returns the index just past the parenthesis that closes the
+// command substitution $( at open, read the way sh reads it: quotes,
+// nested substitutions and heredoc bodies hold no parenthesis that counts.
+func substEnd(s string, open int) int {
 	depth := 0
-	for i := open; i < len(s); i++ {
-		switch s[i] {
-		case '(':
+	var heredocs []string
+	for i := open + 1; i < len(s); i++ {
+		switch c := s[i]; {
+		case c == '\\':
+			i++
+		case c == '\'':
+			j := strings.IndexByte(s[i+1:], '\'')
+			if j < 0 {
+				return len(s)
+			}
+			i += j + 1
+		case c == '"':
+			i = quoteEnd(s, i) - 1
+		case c == '$' && i+1 < len(s) && s[i+1] == '(':
+			i = substEnd(s, i) - 1
+		case c == '(':
 			depth++
-		case ')':
+		case c == ')':
 			depth--
 			if depth == 0 {
 				return i + 1
 			}
+		case c == '<' && strings.HasPrefix(s[i:], "<<") && !strings.HasPrefix(s[i:], "<<<"):
+			j := i + 2
+			if j < len(s) && s[j] == '-' {
+				j++
+			}
+			for j < len(s) && (s[j] == ' ' || s[j] == '\t') {
+				j++
+			}
+			k := j
+			for k < len(s) && !strings.ContainsRune(" \t\n;&|()<>", rune(s[k])) {
+				k++
+			}
+			heredocs = append(heredocs, strings.Trim(s[j:k], `'"`))
+			i = k - 1
+		case c == '\n' && len(heredocs) > 0:
+			i = skipHeredocs(s, i, heredocs)
+			heredocs = nil
 		}
 	}
 	return len(s)
+}
+
+// skipHeredocs returns the index of the new line that ends the last body
+// of delims, read from the new line at i.
+func skipHeredocs(s string, i int, delims []string) int {
+	for _, delim := range delims {
+		for i+1 < len(s) {
+			end := strings.IndexByte(s[i+1:], '\n')
+			if end < 0 {
+				end = len(s) - i - 1
+			}
+			line := strings.TrimLeft(s[i+1:i+1+end], "\t")
+			i += end + 1
+			if line == delim {
+				break
+			}
+		}
+	}
+	return i
 }

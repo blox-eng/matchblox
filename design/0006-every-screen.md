@@ -192,10 +192,11 @@ transcript shows it, strongest first:
 
 1. it created it: a `gh pr create` result with the PR's URL;
 2. it pushed its branch (`git push … <branch>`) and an open PR has that head;
-3. it acted on it by number (`gh pr merge|checks|view|edit <n>` or a PR URL
-   in a command it ran).
+3. it acted on it: `gh pr merge|checks|view|edit|ready|comment` with the
+   PR as its selector, by number or URL.
 
-Mentions in prose do not count. One PR belongs to the session with the
+Mentions in prose do not count, nor does a PR URL anywhere else in a
+command (`curl`, `echo`, `gh api`, a commit message or a PR body). One PR belongs to the session with the
 strongest and then the newest evidence. The repository comes from the URL or
 the command's directory. Today's link through the worktree's branch (§6
 Pull requests) stays as a fourth source. The transcript is read the way the

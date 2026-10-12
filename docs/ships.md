@@ -11,10 +11,12 @@ strongest first:
 
 1. it created it (`gh pr create` and the PR's URL);
 2. it pushed its branch, and an open PR has that branch as its head;
-3. it acted on it by number (`gh pr merge`, `checks`, `view` or `edit`, or
-   the PR's URL in a command it ran).
+3. it acted on it with `gh pr merge`, `checks`, `view`, `edit`, `ready` or
+   `comment`, naming it by number or by URL.
 
-A PR named only in what an agent wrote does not count. One PR belongs to
+A PR named only in what an agent wrote does not count, and neither does a
+PR's URL anywhere else in a command: in `curl`, `echo`, `gh api`, a
+commit message or a PR's body it is a mention. One PR belongs to
 the session with the strongest, then the newest evidence. The open PR of a
 session's worktree counts too. Each transcript is read whole once, then
 only what it adds.
