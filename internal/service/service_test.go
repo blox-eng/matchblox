@@ -793,7 +793,7 @@ func TestARemovedWorktreeLeavesTheGitList(t *testing.T) {
 func TestShipsReachTheConsole(t *testing.T) {
 	s := newTest(t, time.Hour)
 	got := make(chan []sample.Session, 1)
-	s.Ships = func(ss []sample.Session, _ *gitscan.Report) ships.Report {
+	s.Ships = func(_ context.Context, ss []sample.Session, _ *gitscan.Report) ships.Report {
 		select {
 		case got <- ss:
 		default:
@@ -1002,4 +1002,31 @@ func TestKeysToOnePaneNeverInterleave(t *testing.T) {
 	if most != 1 {
 		t.Fatalf("the keys of two picks overlapped (%d at once)", most)
 	}
+}
+
+// A ships scan in flight stops when the service does: the source gets the
+// service's context, not one of its own.
+func TestAShipsScanStopsWithTheService(t *testing.T) {
+	s := newTest(t, 10*time.Millisecond)
+	started, stopped := make(chan struct{}), make(chan struct{})
+	s.Ships = func(ctx context.Context, _ []sample.Session, _ *gitscan.Report) ships.Report {
+		close(started)
+		select {
+		case <-ctx.Done():
+			close(stopped)
+		case <-time.After(10 * time.Second):
+		}
+		return ships.Report{}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { s.Run(ctx); close(done) }()
+	<-started
+	cancel()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the scan did not see the service stop")
+	}
+	<-done
 }

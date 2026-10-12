@@ -34,8 +34,9 @@ import (
 type GitSource func(sessionCwds []string) gitscan.Report
 
 // ShipsSource reads the pull requests the sessions drive: their
-// transcripts' new bytes, and GitHub when a poll is due.
-type ShipsSource func(sessions []sample.Session, git *gitscan.Report) ships.Report
+// transcripts' new bytes, and GitHub when a poll is due. ctx ends with the
+// service: a scan in flight stops with it.
+type ShipsSource func(ctx context.Context, sessions []sample.Session, git *gitscan.Report) ships.Report
 
 // shipsEvery is how often the transcripts are read for new evidence; the
 // source reads GitHub at its own, slower cadence.
@@ -391,7 +392,7 @@ func (s *Service) shipsLoop(ctx context.Context) {
 		s.mu.Lock()
 		sessions, git := append([]sample.Session(nil), s.cur.Sessions...), s.cur.Git
 		s.mu.Unlock()
-		r := s.Ships(sessions, git)
+		r := s.Ships(ctx, sessions, git)
 		s.mu.Lock()
 		s.cur.Ships = &r
 		s.mu.Unlock()

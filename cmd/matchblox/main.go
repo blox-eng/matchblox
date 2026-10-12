@@ -534,8 +534,8 @@ func gitSource(cfg config.Config) service.GitSource {
 }
 func shipsSource(cfg config.Config, dir string) service.ShipsSource {
 	t := &ships.Tracker{Dir: dir, GH: ships.GH, Git: gitscan.Git, Remote: cfg.Git.Remote, Deploy: cfg.Ships.Deploy}
-	return func(sessions []sample.Session, git *gitscan.Report) ships.Report {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	return func(ctx context.Context, sessions []sample.Session, git *gitscan.Report) ships.Report {
+		ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
 		return t.Scan(ctx, ships.Input{Sessions: sessions, Git: git})
 	}
