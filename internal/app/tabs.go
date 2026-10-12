@@ -75,8 +75,17 @@ var views = [...]tabView{
 	},
 	tabShips: {
 		name: "ships",
-		keys: func(Model) []hint { return []hint{{"1", "sessions", "1"}, {"f", "stoker", "f"}} },
-		body: Model.shipsPanel,
+		keys: func(m Model) []hint {
+			if sh, ok := m.selectedShip(); ok {
+				return append(m.shipKeys(sh), hint{"f", "stoker", "f"})
+			}
+			return []hint{{"1", "sessions", "1"}, {"f", "stoker", "f"}}
+		},
+		count:     func(m Model) int { return len(m.ships()) },
+		index:     func(m Model) int { return min(m.shipSel, max(len(m.ships())-1, 0)) },
+		pick:      func(m *Model, i int) { m.shipSel = i },
+		secondary: Model.mergeShip,
+		body:      Model.shipsPanel,
 	},
 	tabMachine: {
 		name: "machine",

@@ -269,12 +269,13 @@ func (m Model) sessionRow(s sample.Session, sel bool, w int) []string {
 		case s.Progress != nil:
 			plan = padTo(m.progressCell(s.Progress, 5), 13)
 		}
-		pr := pad("", 7)
-		if p := m.prOf(s.Cwd); p != nil {
-			pr = st.accent.Render(pad("#"+strconv.Itoa(p.Number), 7))
+		// The ship's track takes the room of the place when ships are read:
+		// the detail names the place.
+		where := padTo(m.shipRowCell(s), 7) + st.muted.Render(place(s.Target, s.Pane))
+		if len(m.ships()) > 0 {
+			where = m.shipRowCell(s)
 		}
-		line := mark + m.matchCell(s) + name + padTo(word, 8) + padLeft(wait, 4) + padLeft(ctx, 6) + "  " + plan + pr +
-			st.muted.Render(place(s.Target, s.Pane))
+		line := mark + m.matchCell(s) + name + padTo(word, 8) + padLeft(wait, 4) + padLeft(ctx, 6) + "  " + plan + where
 		return []string{fit(line, w)}
 	}
 	wordW := 8
@@ -302,12 +303,8 @@ func (m Model) opened(s sample.Session, w int) []string {
 			out = append(out, "   "+st.muted.Render(l))
 		}
 	}
-	if p := m.prOf(s.Cwd); p != nil {
-		title := p.Title
-		if p.Draft {
-			title = "draft " + title
-		}
-		out = append(out, "   "+st.accent.Render("#"+strconv.Itoa(p.Number))+" "+st.muted.Render(title))
+	if l := m.shipOpened(s, w); l != "" {
+		out = append(out, l)
 	}
 	left := "  "
 	if p := s.Progress; p != nil {
@@ -387,6 +384,9 @@ func (m Model) longWord(s sample.Session) string {
 // the selected session, recommendation or door.
 func (m Model) detailPane(w int) []string {
 	st := m.st
+	if m.tab == tabShips {
+		return m.shipDetail(w)
+	}
 	if d, ok := m.selectedDoor(); ok {
 		if d.ID == stokedRow {
 			return []string{"", " " + st.accent.Render("The stoker's steps"), "", " " + st.accent.Render("⏎") + st.muted.Render(" folds them")}
@@ -454,16 +454,7 @@ func (m Model) sessionDetail(s sample.Session, w int) []string {
 	if p := s.Progress; p != nil {
 		field("plan", m.progressCell(p, 10)+"  "+st.text.Render(p.Step))
 	}
-	if p := m.prOf(s.Cwd); p != nil {
-		title := p.Title
-		if p.Draft {
-			title = "draft " + title
-		}
-		field("ship", st.accent.Render("#"+strconv.Itoa(p.Number))+" "+st.text.Render(title))
-		if p.URL != "" {
-			out = append(out, fit(" "+pad("", 9)+st.faint.Render(p.URL), w))
-		}
-	}
+	out = append(out, m.shipField(s, w)...)
 	if s.Agents > 0 {
 		field("agents", st.text.Render(plural(s.Agents, "subagent")+" running"))
 	}

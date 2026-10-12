@@ -1,0 +1,32 @@
+ ▰ matchblox                                                                                                       ● 6 wait for you
+ SESSIONS 7    ships 3    machine    git    history    panes
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ RECOMMENDATIONS · 7                                                          │
+ ▲ The week runs short: compact spark-docs                                    │ flint-auth
+ ○ Clear spark-docs (%3)                                                      │ ╿ asks you · 2m · hearth:2.1 · /work/flint-auth
+ ○ Clear kindle-web (%5)                                                      │
+ ○ Clear codex (%6)                                                           │ CLAUDE SAID
+ ○ Clear flint-auth (%2)                                                      │ Should a refresh also rotate the token, or keep it
+ ○ Clear ember-billing (%8)        ╭─ flint-auth asks · 1 of 2 ─────────────────────────────────╮
+ ○ Clear opencode (%7)             │ The refresh endpoint is in and its tests pass. One choice  │
+                                   │ is yours before I wire the rotation: what should a refresh │▱▱ 41%
+ WAITS FOR YOU · 6                 │ do with the token it was given?                            │✕┄○┄○┄○  conflicts with main
+ │ spark-docs               done   │                                                            │tokens that rotate
+ ╿ ember-billing            done   │ Should a refresh also rotate the token?                    │github.com/hearth/flint-auth/pull/…
+▌╿ flint-auth               asks   │ › 1 Rotate it  the old one stops at once                   │dle 12m (clear after 0s)
+ ╿ kindle-web               asks   │   2 Rotate, keep the old one a minute                      │0k tokens · +0k in 30 min · ✻
+ ╿ codex                    done   │   3 Keep the token                                         │· Max · pid 1310 · 1 process ·
+ ╿ opencode                 done   │   4 Type an answer…                                        │
+ WORKING · 1                       ╰─ ⏎ question 2 ─ ⇥ next (5) ─ esc ──────────────────────────╯
+ ✦ hearth-api               busy           79%  ▰▰▰▱▱ 60%    #4551 ●━◉┄○┄○┄○  │ a answer   ⏎ open it
+                                                                              │
+ 1 without an agent: shell:1.1 zsh                                            │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ USAGE                                                                        │ MACHINE                                    16 cores
+ ✻ Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                                      │ cpu  ▁ 0%   load 6.2
+          wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · out Fri ~21:00                     │ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
+ · login  not measured · OpenCode keeps no limits                             │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
+ ❋ Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                                          │ runs 5 claude · 1 codex · 1 opencode
+          wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week                     │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ↑↓ move  ⏎ open  a answer  p ships  f stoker  / find  q quit                                                        sampled 0s ago

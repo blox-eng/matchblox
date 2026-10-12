@@ -45,14 +45,14 @@ func handledKeys(t *testing.T) map[string]*keyLayer {
 	t.Helper()
 	fset := token.NewFileSet()
 	layers := map[string]*keyLayer{"Model": {all: map[string]bool{}}, "Shell": {all: map[string]bool{}}}
-	for _, file := range []string{"model.go", "layers.go", "lists.go", "doors.go"} {
+	for _, file := range []string{"model.go", "layers.go", "lists.go", "doors.go", "peek.go"} {
 		f, err := parser.ParseFile(fset, file, nil, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, d := range f.Decls {
 			fn, ok := d.(*ast.FuncDecl)
-			if !ok || fn.Recv == nil || !slices.Contains([]string{"key", "typing", "scrollPreview", "search"}, fn.Name.Name) {
+			if !ok || fn.Recv == nil || !slices.Contains([]string{"key", "peekKey", "scrollPreview", "search"}, fn.Name.Name) {
 				continue
 			}
 			l := layers[recvName(fn)]

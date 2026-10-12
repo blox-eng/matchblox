@@ -213,7 +213,7 @@ func (m Model) machineLines(w int, full bool, toggle string) []string {
 		" " + st.label.Render("cpu  ") + st.accent.Render(spark(m.history.cpu, sp, 100)) +
 			st.text.Render(pad(fmt.Sprintf(" %.0f%%", mc.CPU), 6)) + st.label.Render("load ") + st.text.Render(fmt.Sprintf("%.1f", mc.Load[0])),
 		" " + st.label.Render("mem  ") + m.meter(memPct, 8, st.muted) + st.text.Render(fmt.Sprintf(" %.0f of %.0f GB", gb(used), gb(mc.MemTotal))),
-		" " + st.label.Render("disk ") + st.text.Render("r "+size(mc.DiskRead)+"/s · w "+size(mc.DiskWrite)+"/s"),
+		" " + st.label.Render("disk ") + m.diskCell(),
 		" " + st.label.Render("runs ") + st.text.Render(m.runs()),
 	}
 	for i := range out {
@@ -223,6 +223,29 @@ func (m Model) machineLines(w int, full bool, toggle string) []string {
 }
 
 func gb(b uint64) float64 { return float64(b) / (1 << 30) }
+
+// diskCell is the use of the home's file system, "▰▰▰▰▰▱▱▱ 71% of 1 TB",
+// and of / when it is another; the disk's traffic when none was read.
+func (m Model) diskCell() string {
+	st, mc := m.st, m.snap.Machine
+	if len(mc.Disks) == 0 {
+		return st.text.Render("r " + size(mc.DiskRead) + "/s · w " + size(mc.DiskWrite) + "/s")
+	}
+	d := mc.Disks[0]
+	cell := m.meter(d.Pct(), 8, m.useStyle(d.Pct())) + st.text.Render(fmt.Sprintf(" %.0f%% of %s", d.Pct(), bytesWord(d.Total)))
+	for _, o := range mc.Disks[1:] {
+		cell += st.faint.Render(" · "+o.Path+" ") + m.useStyle(o.Pct()).Render(fmt.Sprintf("%.0f%%", o.Pct()))
+	}
+	return cell
+}
+
+// bytesWord is a size as a disk is named: 931 GB, 2 TB.
+func bytesWord(b uint64) string {
+	if tb := float64(b) / (1 << 40); tb >= 1 {
+		return strings.TrimSuffix(fmt.Sprintf("%.1f", tb), ".0") + " TB"
+	}
+	return fmt.Sprintf("%.0f GB", gb(b))
+}
 
 // runs counts the agents by their command: "13 claude · 1 codex".
 func (m Model) runs() string {
@@ -264,11 +287,4 @@ func (m Model) machinePanel(w int) body {
 	p := m.procs(w)
 	b.lines, b.rows = append(b.lines, p.lines...), append(b.rows, p.rows...)
 	return b
-}
-
-// shipsPanel is the Ships tab: the pull requests the sessions drive
-// (design/0006 §8).
-// TODO(#67): read the ships; until then the tab says it has none.
-func (m Model) shipsPanel(w int) body {
-	return plain([]string{"", fit(" "+m.st.faint.Render("No ships yet."), w)})
 }

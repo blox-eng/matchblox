@@ -1,0 +1,31 @@
+ ▰ matchblox               ● 6 wait for you
+ sessions 7  SHIPS 3  machine  git  5  6
+────────────────────────────────────────────
+ open → ci → green → merged → live
+▌#4551 Rate limits on the public API     4m
+   ●━◉┄○┄○┄○  CI · 6 of 9 jobs
+   by hearth-api                  ⏎ session
+
+ #4552 Invoice export as CSV and PDF     6m
+   ●━●━◉┄○┄○  green · waits for your merge
+
+ #4545 Refresh tokens that rotate       40m
+   ●━✕┄○┄○┄○  conflicts with main
+
+ #4540 The 1.0 docs                      2h
+   ●━●━●━●━●  live
+
+
+
+
+
+
+
+────────────────────────────────────────────
+ USAGE                            machine ›
+ ✻ Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20
+          wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · …
+ · login  not measured · OpenCode keeps no …
+ ❋ Plus   5h ▰▱▱ 40% · wk 12%
+────────────────────────────────────────────
+ ⏎ session  f stoker         sampled 0s ago

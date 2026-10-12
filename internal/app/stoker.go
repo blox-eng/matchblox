@@ -105,7 +105,7 @@ func (m Model) hold(k string) func(Model) (tea.Model, tea.Cmd) {
 	case "a":
 		pane, _ := m.answerTarget()
 		return func(m Model) (tea.Model, tea.Cmd) {
-			m.input = &answerInput{pane: pane}
+			m.openPeek(pane)
 			return m, nil
 		}
 	case "x":

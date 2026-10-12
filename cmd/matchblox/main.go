@@ -562,11 +562,13 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 		smp.Tmux = func() ([]byte, error) { return os.ReadFile(filepath.Join(root, "tmux-panes.txt")) }
 		smp.Capture = sample.CaptureDir(filepath.Join(root, "panes"))
 		smp.LimitsDir = filepath.Join(root, "state")
+		smp.Disks = sample.DiskFile(filepath.Join(root, "disks.txt"))
 		return smp
 	}
 	smp.FS, smp.Sys = actions.NewHost(), procfs.Sys{Root: "/sys"}
 	smp.Home, _ = os.UserHomeDir()
 	smp.GPU, smp.Docker = sample.NvidiaSMI, sample.DockerPS
+	smp.Disks = sample.Disks(smp.Home, "/")
 	smp.LatencyTarget = cfg.LatencyTarget
 	smp.ProcEvery = 5 * cfg.Interval.Duration
 	smp.OwnEntries = true

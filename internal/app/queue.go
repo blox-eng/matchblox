@@ -39,7 +39,9 @@ func (m Model) stateWord(s sample.Session) string {
 	if s.Stopped() {
 		return "out"
 	}
-	if it, ok := m.waitOf(s); ok {
+	if it, ok := m.waitOf(s); ok && s.Ask != nil {
+		return "asks" // the question tool's menu: its hook calls it a permission
+	} else if ok {
 		return m.queueWordOf(it)
 	}
 	return "idle"
@@ -102,42 +104,6 @@ func (m Model) selectedPane() (paneRow, bool) {
 		return paneRow{}, false
 	}
 	return rows[min(m.paneSel, len(rows)-1)], true
-}
-
-// answerInput is the one line the person types for `a`.
-type answerInput struct {
-	pane, text string
-}
-
-// answerSteps is what the person confirms; the service builds the same
-// steps with panes.Send and runs its own.
-func answerSteps(pane, text string) [][]string {
-	return [][]string{
-		{"tmux", "send-keys", "-t", pane, "-l", "--", text},
-		{"tmux", "send-keys", "-t", pane, "Enter"},
-	}
-}
-
-// answerTarget is the pane `a` types into: a session in the queue that
-// waits for an answer. At a permission prompt the Enter of an answer would
-// approve it, so the person goes to the pane instead (why says so).
-func (m Model) answerTarget() (pane, why string) {
-	if s, ok := m.selectedSession(); ok {
-		pane = s.Pane
-	}
-	if pane == "" {
-		return "", ""
-	}
-	for _, it := range m.queue {
-		if it.Pane != pane {
-			continue
-		}
-		if it.State == queue.StatePermission {
-			return "", "a permission prompt is answered in its pane: Enter goes there"
-		}
-		return pane, ""
-	}
-	return "", "the session in " + pane + " does not wait for an answer"
 }
 
 func trimLast(s string) string {

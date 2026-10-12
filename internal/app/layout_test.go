@@ -70,8 +70,8 @@ func TestAPhoneRowOpensInPlace(t *testing.T) {
 	if !strings.Contains(out[at+1], "“Claude needs your permission to use Bash”") {
 		t.Fatalf("no last words under the row:\n%s", strings.Join(out, "\n"))
 	}
-	if !strings.Contains(out[at+2], "plan 75%") || !strings.Contains(out[at+2], "⏎ open") || strings.Contains(out[at+2], "a answer") {
-		t.Fatalf("no plan and keys, or a for a permission prompt: %q", out[at+2])
+	if !strings.Contains(out[at+2], "plan 75%") || !strings.Contains(out[at+2], "a answer  ⏎ open") {
+		t.Fatalf("no plan and keys: %q", out[at+2])
 	}
 	if sessLine(t, m, "app-review") != at+3 || strings.Contains(out[at+4], "“") {
 		t.Fatalf("the rows that are not selected open too:\n%s", strings.Join(out, "\n"))
@@ -128,15 +128,15 @@ func TestTapSelectsThenActs(t *testing.T) {
 			t.Fatalf("width %d: a tap sent %v to the service", w, f.acts())
 		}
 
-		// A session that waits for an answer: the second tap opens the
-		// answer.
+		// A session that waits: the first tap selects it, a tap on it
+		// selected opens the answer peek.
 		next, _ = tap(m, 5, sessLine(t, m, "app-review"))
-		if !strings.Contains(next.(Model).flash, "tap again: answer app-review") {
-			t.Fatalf("width %d: flash %q", w, next.(Model).flash)
+		if p := next.(Model).peek; p != nil {
+			t.Fatalf("width %d: the first tap opened the peek", w)
 		}
 		next, _ = tap(next, 5, sessLine(t, next, "app-review"))
-		if in := next.(Model).input; in == nil || in.pane != "%2" {
-			t.Fatalf("width %d: the second tap did not open the answer: %+v", w, in)
+		if p := next.(Model).peek; p == nil || p.pane != "%2" {
+			t.Fatalf("width %d: the second tap did not open the peek: %+v", w, p)
 		}
 	}
 }
@@ -218,11 +218,11 @@ func TestNoCtrlKeysNeeded(t *testing.T) {
 		m.tab = tabSessions
 		next, _ := key(m, "down") // the second row waits for an answer
 		next, _ = key(next, "a")
-		if next.(Model).input == nil {
+		if next.(Model).peek == nil {
 			t.Fatal("a does not start an answer")
 		}
 		next, _ = key(next, "esc")
-		if next.(Model).input != nil {
+		if next.(Model).peek != nil {
 			t.Fatal("esc does not leave the answer")
 		}
 		if next, cmd := key(m, "q"); cmd == nil || !next.(Model).quitting {
@@ -283,15 +283,20 @@ func TestFirstTapOnTheSelectedRowOnlyShows(t *testing.T) {
 	m.opt.Run = func(argv []string) error { ran = argv; return nil }
 	y := sessLine(t, m, "app-feature")
 	next, cmd := tap(m, 5, y)
-	if cmd != nil || ran != nil {
-		t.Fatal("one tap on the preselected row ran a step")
+	if cmd != nil || ran != nil || next.(Model).peek != nil {
+		t.Fatal("one tap on the preselected row acted")
 	}
-	if !strings.Contains(next.(Model).flash, "tap again: tmux switch-client -t %1") {
+	if next, _ := tap(next, 5, y); next.(Model).peek == nil {
+		t.Fatal("a tap on the row it selected does not open the peek")
+	}
+	y = sessLine(t, m, "tools")
+	next, _ = tap(m, 5, y)
+	if !strings.Contains(next.(Model).flash, "tap again: tmux switch-client -t %3") {
 		t.Fatalf("flash %q", next.(Model).flash)
 	}
 	next, _ = key(next, "down")
 	next, _ = key(next, "up")
-	if _, cmd = tap(next, 5, y); cmd != nil {
+	if _, cmd = tap(next, 5, sessLine(t, next, "tools")); cmd != nil {
 		t.Fatal("a tap after a key ran the step")
 	}
 }
@@ -339,8 +344,12 @@ func TestTheKeyLineIsAtTheBottom(t *testing.T) {
 		next = selectPane(t, next, "%2")
 		next, _ = key(next, "a")
 		next = typeText(next, "yes")
-		if !strings.Contains(last(next), "ANSWER %2 yes") || strings.Count(ansi.Strip(next.(Model).render()), "ANSWER") != 1 {
-			t.Fatalf("width %d: the answer is not typed at the bottom: %q", w, last(next))
+		out := strings.Split(ansi.Strip(next.(Model).render()), "\n")
+		if w < 60 && (!strings.Contains(out[len(out)-3], "⏎ send") || !strings.Contains(out[len(out)-4], "› yes▏")) {
+			t.Fatalf("width %d: the peek does not sit on the key line:\n%s", w, strings.Join(out, "\n"))
+		}
+		if !strings.Contains(strings.Join(out, "\n"), "› yes▏") {
+			t.Fatalf("width %d: the answer is not typed in the peek:\n%s", w, strings.Join(out, "\n"))
 		}
 	}
 }
@@ -422,5 +431,20 @@ func TestAToastSaysWhatRan(t *testing.T) {
 	failed, _ := m.Update(resultMsg(proto.Result{Err: "the pane is gone"}))
 	if !strings.Contains(actionLine(failed), "failed: the pane is gone") || failed.(Model).toast != "" {
 		t.Fatalf("a failure: key line %q, toast %q", actionLine(failed), failed.(Model).toast)
+	}
+}
+
+// TestTheDockSaysTheDisk: the home's file system as a bar, its percent and
+// its size, and / beside it when it is another.
+func TestTheDockSaysTheDisk(t *testing.T) {
+	st := queueState()
+	st.Machine.Disks = []sample.Disk{{Path: "/home/user", Total: 1 << 40, Used: 710 << 30, Avail: 290 << 30}, {Path: "/", Total: 100 << 30, Used: 90 << 30, Avail: 10 << 30}}
+	m, _ := loadedWith(t, 100, st)
+	out := ansi.Strip(strings.Join(m.machineLines(60, false, ""), "\n"))
+	if !strings.Contains(out, "disk ▰▰▰▰▰▰▱▱ 71% of 1 TB · / 90%") {
+		t.Fatalf("the machine lacks the disk:\n%s", out)
+	}
+	if got := bytesWord(931 << 30); got != "931 GB" {
+		t.Fatalf("bytesWord %q", got)
 	}
 }

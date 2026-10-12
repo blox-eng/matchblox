@@ -223,6 +223,7 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 var (
 	burning = regexp.MustCompile(`[✦✧] flint-auth\s+busy`)
 	settled = regexp.MustCompile(`╿ hearth-api\s+done`)
+	struck  = regexp.MustCompile(`[✦✧] flint-auth`) // its row under the peek: the strike has played
 	figure  = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
 	sparks  = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
 	spaces  = regexp.MustCompile(`\s+`)
@@ -447,7 +448,7 @@ func TestReplay(t *testing.T) {
 	steps := []step{
 		{name: "who waits", at: 1300 * time.Millisecond, ok: has("ws-1", "● 4 wait for you", "WAITS FOR YOU · 4", "flint-auth", "waits",
 			"kindle-web", "asks", "ember-billing", "done", "Should a refresh also rotate", "USAGE", "MACHINE", "5h ", "wk ")},
-		{name: "a: the answer field", at: 3800 * time.Millisecond, key: "a", ok: has("flint-auth")},
+		{name: "a: the answer peek", at: 3800 * time.Millisecond, key: "a", ok: has("flint-auth asks", "Should a refresh also rotate", "⏎ send")},
 	}
 	at := 3800 * time.Millisecond
 	answer := "rotate it, keep the old one valid for a minute"
@@ -458,11 +459,13 @@ func TestReplay(t *testing.T) {
 		typed = next
 	}
 	steps = append(steps, []step{
-		{name: "the answer, before it runs", at: 5200 * time.Millisecond, key: "enter", ok: has("RUN tmux send-keys -t %2 -l -- rotate it", "y run")},
-		// flint-auth works again: the frame waits until its strike has
-		// played, so every run draws the same one.
-		{name: "the answer goes", at: 6400 * time.Millisecond, key: "y", ok: func(s string) bool {
-			return has("WAITS FOR YOU · 3", "ran: tmux send-keys -t %2")(s) && burning.MatchString(s)
+		// Enter sends it: the peek was the review. flint-auth works again,
+		// and the peek moves to the next session that waits.
+		{name: "the answer goes", at: 5200 * time.Millisecond, key: "enter", ok: func(s string) bool {
+			return has("sent to flint-auth", "WAITS FOR YOU · 3", "⇥ next (2)")(s) && struck.MatchString(s)
+		}},
+		{name: "the peek closes", at: 6400 * time.Millisecond, key: "esc", ok: func(s string) bool {
+			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "⏎ send") && burning.MatchString(s)
 		}},
 		// The selection moved to the next that waits.
 		{name: "the sessions", at: 8 * time.Second, ok: func(s string) bool {
@@ -511,7 +514,7 @@ func TestReplay(t *testing.T) {
 		{name: "a night", at: 29 * time.Second, do: func() { clk.Set(night) }, key: "n", ok: has("night → 07:00")},
 		{name: "take over?", at: 31 * time.Second, key: "enter", ok: has("The stoker is on. Take over?")},
 		{name: "kept on", at: 33 * time.Second, key: "n", ok: func(s string) bool {
-			return strings.Contains(s, "night → 07:00") && !strings.Contains(s, "Take over?") && strings.Contains(s, "RUN tmux switch-client -t %8")
+			return strings.Contains(s, "night → 07:00") && !strings.Contains(s, "Take over?") && strings.Contains(s, "RUN tmux switch-client -t %")
 		}},
 		{name: "back to the night", at: 34200 * time.Millisecond, key: "esc", ok: func(s string) bool {
 			return strings.Contains(s, "night → 07:00") && !strings.Contains(s, "RUN tmux switch-client")

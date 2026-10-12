@@ -211,7 +211,8 @@ type Model struct {
 	doorAt     int    // its row, for the door after it when it folds
 	previewTop int    // the first line of a door's diff on screen
 	paneSel    int
-	input      *answerInput
+	peek       *peek             // the answer peek, over the screen
+	peekSent   string            // the act of the peek's last send: its result says only a failure
 	changes    map[string]change // pane -> a match change that plays once
 	animating  bool
 	hist       history.Series
@@ -220,6 +221,8 @@ type Model struct {
 	recPick    string // the selected recommendation, above the sessions
 	chose      bool   // a session was picked; before, the first that waits is
 	gitSel     int
+	shipReport *proto.Ships
+	shipSel    int
 	tab        int
 	pending    *action
 	flash      string
@@ -396,6 +399,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.noteChanges(st.Sessions)
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
+		m.shipReport = st.Ships
 		if m.recRun.rec != "" && m.recRun.act == "" && !m.isRec(m.recRun.rec) {
 			m.recRun = recRun{} // its rec is gone: a later one with the same id starts fresh
 		}
@@ -424,6 +428,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case resultMsg:
 		m.endRec(msg.ActID, proto.Result(msg))
+		if r := proto.Result(msg); r.ActID == m.peekSent && r.ActID != "" {
+			// The toast said where the answer went; only a failure says more.
+			if r.Err != "" || len(r.Skipped) > 0 {
+				m.flash = tilde(describe(r))
+			}
+			return m, m.recv()
+		}
 		if m.tally(proto.Result(msg)) {
 			return m, m.recv()
 		}
@@ -540,14 +551,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var touch tea.Cmd
 		// f and n are stoker acts themselves: a touch sent with them would
 		// race them on the service.
-		if k := msg.String(); m.input != nil || m.searching || k != "f" && k != "n" {
+		if k := msg.String(); m.peek != nil || m.searching || k != "f" && k != "n" {
 			m, touch = m.touchRest()
 		}
 		var next tea.Model
 		var cmd tea.Cmd
 		switch {
-		case m.input != nil:
-			next, cmd = m.typing(msg)
+		case m.peek != nil:
+			next, cmd = m.peekKey(msg)
 		case m.searching:
 			next, cmd = m.search(msg)
 		default:
@@ -664,6 +675,9 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		if d, ok := m.selectedDoor(); ok && d.ID == stokedRow {
 			return m.ackStoked()
 		}
+		if m.tab == tabShips {
+			return m.toDriver(), nil
+		}
 		m.pending, m.previewTop = m.primary(), 0
 	case "x":
 		m.pending = m.secondary()
@@ -671,8 +685,11 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 			m.flash = "x ends a stale session: one idle 7 days or more"
 		}
 	case "a":
+		if m.tab == tabShips {
+			return m.shipAnswer(), nil
+		}
 		if pane, why := m.answerTarget(); pane != "" {
-			m.input = &answerInput{pane: pane}
+			m.openPeek(pane)
 		} else {
 			m.flash = why
 		}
@@ -778,36 +795,6 @@ func (m Model) attach(a action) tea.Cmd {
 	return tea.ExecProcess(exec.Command(last[0], last[1:]...), func(err error) tea.Msg { //nolint:gosec // argv checked by remote.NavAllowed
 		return ranMsg{cmd: strings.Join(last, " "), err: err, jumped: a.pane}
 	})
-}
-
-// typing edits the answer line. Every printable key is text, q too.
-func (m Model) typing(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	in := *m.input
-	switch k.String() {
-	case "esc":
-		m.input, m.flash = nil, "cancelled: answer"
-		return m, nil
-	case "ctrl+c":
-		m.quitting = true
-		return m, tea.Quit
-	case "enter":
-		m.input = nil
-		if strings.TrimSpace(in.text) == "" {
-			m.flash = "cancelled: the answer is empty"
-			return m, nil
-		}
-		m.pending = &action{label: "answer", steps: answerSteps(in.pane, in.text), destructive: true,
-			rec: "answer:" + in.pane, which: "secondary", text: in.text}
-		return m, nil
-	case "backspace":
-		in.text = trimLast(in.text)
-	default:
-		if k.Text != "" && len([]rune(in.text)) < 500 {
-			in.text += k.Text
-		}
-	}
-	m.input = &in
-	return m, nil
 }
 
 func clampMove(i, d, n int) int { return min(max(i+d, 0), max(n-1, 0)) }

@@ -27,12 +27,15 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		m.flash, m.pending = "cancelled: "+m.pending.String(), nil
 		return m, nil
 	}
-	if m.input != nil || !m.have || m.mismatch {
+	if !m.have || m.mismatch {
 		return m, nil
 	}
 	m.searching = false // keep the search; what the tap asks for shows on the key line
 	w := max(m.width, minWidth)
 	sc := m.draw(w)
+	if m.peek != nil {
+		return m.tapPeek(ms, sc)
+	}
 	switch {
 	case ms.Y == 0:
 		if s, ok := spanAt([]span{sc.waits}, ms.X); ok && s.press != "" {
@@ -71,7 +74,30 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if sc.rows[i] < 0 {
 		return m, nil
 	}
+	picked := m.view().index != nil && m.rowIndex() == sc.rows[i] && (m.tab != tabSessions || m.chose)
 	m.selectRow(sc.rows[i])
+	if m.tab == tabShips {
+		// A tap on the selected ship goes to its session, as Enter does.
+		m.armed, m.flash = "", ""
+		if picked {
+			return m.toDriver(), nil
+		}
+		return m, nil
+	}
+	if pane, _ := m.answerTarget(); pane != "" {
+		// A session that waits opens in place with its keys; a tap on it
+		// once it is selected opens the answer peek.
+		m.armed, m.flash = "", ""
+		if !picked {
+			return m, nil // the default selection is not a tap
+		}
+		open := func(m Model) (tea.Model, tea.Cmd) { m.openPeek(pane); return m, nil }
+		if m.night() && !m.stoker.Asked {
+			m.held = open
+			return m, nil
+		}
+		return open(m)
+	}
 	say, run := m.tapAct()
 	if run == nil {
 		m.armed, m.flash = "", "nothing to do here"
@@ -92,16 +118,8 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 }
 
 // tapAct is what a second tap on the selected row does, and what the
-// first one shows: a session that waits for an answer gets the answer
-// line, any other row its Enter.
+// first one shows: the row's Enter.
 func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd)) {
-	if pane, _ := m.answerTarget(); pane != "" {
-		s, _ := m.selectedSession()
-		return "answer " + s.Name, func(m Model) (tea.Model, tea.Cmd) {
-			m.input = &answerInput{pane: pane}
-			return m, nil
-		}
-	}
 	a := m.primary()
 	if a == nil {
 		return "", nil

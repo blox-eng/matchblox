@@ -142,6 +142,7 @@ type (
 	Ships       = ships.Report
 	Ship        = ships.Ship
 	ShipStage   = ships.Stage
+	ShipSession = ships.SessionRef
 	StokerView  = stoker.View
 	StokerMode  = stoker.Mode
 	StokerEntry = stoker.Entry

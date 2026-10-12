@@ -1,0 +1,30 @@
+ ▰ matchblox                                                         ● 6 wait for you
+ SESSIONS 7    ships 3    machine    git    history    panes
+──────────────────────────────────────────────────────────────────────────────────────
+ RECOMMENDATIONS · 7                      │
+ ▲ The week runs short: compact spark-docs│ flint-auth
+ ○ Clear spark-docs (%3)                  │ ╿ asks you · 2m · hearth:2.1 · /work/flin…
+ ○ Clear kindle-web (%5)                  │
+ ○ Clear codex (%6)                       │ CLAUDE SAID
+ ○ Clear fli╭─ flint-auth asks · 1 of 2 ─────────────────────────────────╮he token,
+ ○ Clear emb│ The refresh endpoint is in and its tests pass. One choice  │
+ ○ Clear ope│ is yours before I wire the rotation: what should a refresh │
+            │ do with the token it was given?                            │
+ WAITS FOR Y│                                                            │licts with …
+ │ spark-doc│ Should a refresh also rotate the token?                    │otate
+ ╿ ember-bil│ › 1 Rotate it  the old one stops at once                   │arth/flint-…
+▌╿ flint-aut│   2 Rotate, keep the old one a minute                      │r after 0s)
+ ╿ kindle-we│   3 Keep the token                                         │0k in 30
+ ╿ codex    │   4 Type an answer…                                        │ · pid 1310
+ ╿ opencode ╰─ ⏎ question 2 ─ ⇥ next (5) ─ esc ──────────────────────────╯o
+ WORKING · 1                              │
+ ✦ hearth-api           busy          79% │ a answer   ⏎ open it
+                                          │
+ 1 without an agent: shell:1.1 zsh        │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+──────────────────────────────────────────────────────────────────────────────────────
+ ⏎ open  a answer  p ships  f stoker                                   sampled 0s ago

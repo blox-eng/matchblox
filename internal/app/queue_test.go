@@ -11,10 +11,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/remote"
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -107,54 +107,100 @@ func TestEnterOutsideTmuxAttaches(t *testing.T) {
 	}
 }
 
-func TestAnswerNeedsConfirm(t *testing.T) {
+// TestThePeekSendsOnEnter: a shows what the session said and a typing
+// line; Enter sends the line to the pane named in the title with no
+// second confirm, the toast says where it went, and the peek moves to the
+// next session that waits.
+func TestThePeekSendsOnEnter(t *testing.T) {
 	m, f := loadedWith(t, 100, queueState())
 	m, _ = func() (Model, tea.Cmd) { n, c := key(m, "down"); return n.(Model), c }() // app-review finished its turn
 	next, _ := key(m, "a")
 	next = typeText(next, "yes, open it")
 	out := ansi.Strip(next.(Model).render())
-	if !strings.Contains(out, "yes, open it") {
-		t.Fatalf("the input is not shown:\n%s", out)
+	for _, want := range []string{"app-review said", "› yes, open it▏", "⏎ send", "⇥ next (1)", "esc"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("the peek lacks %q:\n%s", want, out)
+		}
 	}
-	next, _ = key(next, "enter")
-	p := next.(Model).pending
-	if p == nil || !p.destructive || p.rec != "answer:%2" || p.text != "yes, open it" {
-		t.Fatalf("pending %+v", p)
-	}
-	if _, cmd := key(next, "enter"); cmd != nil || len(f.acts()) != 0 {
-		t.Fatal("enter alone sent the answer")
-	}
-	next, _ = key(m, "a")
-	next = typeText(next, "yes")
-	next, _ = key(next, "enter")
-	_, cmd := key(next, "y")
+	next, cmd := key(next, "enter")
 	if cmd == nil {
-		t.Fatal("no command")
+		t.Fatal("enter sent nothing")
 	}
-	cmd()
+	drain(cmd)
 	acts := f.acts()
-	if len(acts) != 1 || acts[0] != (proto.Act{RecID: "answer:%2", Which: "secondary", Confirm: "y", Text: "yes"}) {
+	if len(acts) != 1 || acts[0] != (proto.Act{RecID: "answer:%2", Which: "secondary", Confirm: "y", Text: "yes, open it"}) {
 		t.Fatalf("acts %+v", acts)
+	}
+	nm := next.(Model)
+	if nm.toast != "sent to app-review" || nm.peek == nil || nm.peek.pane != "%1" {
+		t.Fatalf("toast %q peek %+v: the peek moves to app-feature", nm.toast, nm.peek)
 	}
 }
 
 // Review 1: Enter at a permission prompt approves it; a typed answer never
-// goes there. The console sends the person to the pane instead.
+// goes there. Its peek shows the prompt and opens the pane.
 func TestAnswerOnPermissionGoesToPane(t *testing.T) {
-	m, _ := loadedWith(t, 100, queueState()) // app-feature asks for permission
+	m, f := loadedWith(t, 100, queueState()) // app-feature asks for permission
+	var ran []string
+	m.opt.Run = func(argv []string) error { ran = argv; return nil }
 	next, _ := key(m, "a")
-	nm := next.(Model)
-	if nm.input != nil || !strings.Contains(nm.flash, "Enter goes there") {
-		t.Fatalf("input %+v flash %q", nm.input, nm.flash)
+	out := ansi.Strip(next.(Model).render())
+	if !strings.Contains(out, "app-feature asks") || !strings.Contains(out, "Claude needs your permission") ||
+		!strings.Contains(out, "⏎ open") || strings.Contains(out, "▏") {
+		t.Fatalf("the peek of a permission prompt:\n%s", out)
+	}
+	next = typeText(next, "yes")
+	next, cmd := key(next, "enter")
+	if cmd == nil {
+		t.Fatal("enter did not open the pane")
+	}
+	next.Update(cmd())
+	if strings.Join(ran, " ") != "tmux switch-client -t %1" || len(f.acts()) != 0 {
+		t.Fatalf("ran %q acts %+v", ran, f.acts())
 	}
 }
 
-// The Sessions tab answers only a session that waits for an answer.
-func TestAnswerFromSessionsNeedsAWait(t *testing.T) {
-	m, _ := loadedWith(t, 100, queueState())
-	m.tab = tabSessions // the first session, app-feature, is in the queue at a permission prompt
-	if next, _ := key(m, "a"); next.(Model).input != nil {
-		t.Fatal("a opened an answer for a permission prompt")
+// TestThePeekAnswersTheQuestionTool: the options of the question tool's
+// call, numbered with the typing option last; a digit picks, several
+// questions go one at a time, several choices tick with space and go on
+// Enter, and the answers go to the service as one pick.
+func TestThePeekAnswersTheQuestionTool(t *testing.T) {
+	st := queueState()
+	for i := range st.Sessions {
+		if st.Sessions[i].Pane == "%2" {
+			st.Sessions[i].Said = "Task 10 is done. Two ways on from here."
+			st.Sessions[i].Ask = &said.Ask{ID: "toolu_1", Questions: []said.Question{
+				{Question: "Which next?", Options: []said.Option{{Label: "Start task 11"}, {Label: "Fix the flake"}}},
+				{Question: "Which checks?", Multi: true, Options: []said.Option{{Label: "unit"}, {Label: "e2e"}, {Label: "lint"}}},
+			}}
+		}
+	}
+	for _, w := range []int{44, 86} {
+		m, f := loadedWith(t, w, st)
+		m, _ = func() (Model, tea.Cmd) { n, c := key(m, "down"); return n.(Model), c }()
+		next, _ := key(m, "a")
+		out := ansi.Strip(next.(Model).render())
+		for _, want := range []string{"app-review asks · 1 of 2", "Task 10 is done", "Which next?", "› 1 Start task 11", "2 Fix the flake", "3 Type an answer…"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("width %d: the peek lacks %q:\n%s", w, want, out)
+			}
+		}
+		next, _ = key(next, "2")
+		next, _ = key(next, " ") // the cursor's option: unit
+		next, _ = key(next, "3")
+		out = ansi.Strip(next.(Model).render())
+		for _, want := range []string{"2 of 2", "Which checks?", "[✔] unit", "[ ] e2e", "[✔] lint", "␣ tick"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("width %d: the second question lacks %q:\n%s", w, want, out)
+			}
+		}
+		_, cmd := key(next, "enter")
+		drain(cmd)
+		acts := f.acts()
+		want := `{"id":"toolu_1","choices":[{"picks":[2]},{"picks":[1,3]}]}`
+		if len(acts) != 1 || acts[0].RecID != "pick:%2" || acts[0].Confirm != "y" || acts[0].Text != want {
+			t.Fatalf("width %d: acts %+v", w, acts)
+		}
 	}
 }
 
@@ -179,10 +225,10 @@ func TestAnswerEscCancels(t *testing.T) {
 	next, _ := key(m, "a")
 	next = typeText(next, "no")
 	next, _ = key(next, "esc")
-	if next.(Model).input != nil || next.(Model).pending != nil || len(f.acts()) != 0 {
+	if next.(Model).peek != nil || next.(Model).pending != nil || len(f.acts()) != 0 {
 		t.Fatal("esc did not cancel")
 	}
-	// q inside the input is text, not quit.
+	// q inside the peek is text, not quit.
 	next, _ = key(m, "a")
 	next, cmd := key(next, "q")
 	if cmd != nil || next.(Model).quitting {
@@ -403,13 +449,6 @@ func TestPanesTabListsEveryPane(t *testing.T) {
 	}
 }
 
-// The person confirms the steps the service runs.
-func TestAnswerPreviewIsWhatRuns(t *testing.T) {
-	if got, want := answerSteps("%3", "-y; ls"), panes.Send("%3", "-y; ls"); !reflect.DeepEqual(got, want) {
-		t.Fatalf("console %q, service %q", got, want)
-	}
-}
-
 // TestAnAgentWithoutHooksIsReadFromThePane: a Codex session waits with the
 // question from its pane, says where that came from, shows "not measured"
 // for context use, and takes an answer like any other.
@@ -432,9 +471,11 @@ func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
 	// An approval menu is answered in its pane: Enter there takes the
 	// selected choice, so the console never types a line into it.
 	m, f := loadedWith(t, 100, st)
+	m.selPID, m.chose = 900, true
 	next, _ := key(m, "a")
-	if nm := next.(Model); nm.input != nil || !strings.Contains(nm.flash, "Enter goes there") || len(f.acts()) != 0 {
-		t.Fatalf("a on an approval menu: input %+v flash %q acts %+v", nm.input, nm.flash, f.acts())
+	next = typeText(next, "y")
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "⏎ open") || strings.Contains(out, "› y") || len(f.acts()) != 0 {
+		t.Fatalf("a on an approval menu: acts %+v\n%s", f.acts(), out)
 	}
 	m.tab, m.selPID, m.width = tabSessions, 900, 132
 	out := ansi.Strip(m.render())
@@ -576,4 +617,32 @@ func TestAQueueRowOfAnOutSessionSaysOut(t *testing.T) {
 		}
 	}
 	t.Fatal("no queue row")
+}
+
+// A tap on an option of the peek picks it, even while the typing line has
+// the cursor: it never types the digit.
+func TestATapOnAnOptionPicksIt(t *testing.T) {
+	st := screensState(t)
+	m, f := loadedWith(t, 44, st)
+	for _, s := range m.snap.Sessions {
+		if s.Name == "flint-auth" {
+			m.chose, m.selPID = true, s.PID
+		}
+	}
+	next, _ := key(m, "a")
+	next = typeText(next, "x")
+	out := strings.Split(ansi.Strip(next.(Model).render()), "\n")
+	y := -1
+	for i, l := range out {
+		if strings.Contains(l, "2 Rotate, keep") {
+			y = i
+		}
+	}
+	if y < 0 {
+		t.Fatalf("no option 2:\n%s", strings.Join(out, "\n"))
+	}
+	next, _ = tap(next, 10, y)
+	if p := next.(Model).peek; p == nil || p.q != 1 || len(p.choices) != 1 || p.choices[0].Picks[0] != 2 || len(f.acts()) != 0 {
+		t.Fatalf("peek %+v", next.(Model).peek)
+	}
 }

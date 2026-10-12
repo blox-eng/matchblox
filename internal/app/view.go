@@ -109,6 +109,11 @@ type drawn struct {
 	dockAt  int   // the dock's first line; -1 when it is folded
 	keysAt  int   // the key line; -1 when there is none
 	keys    []span
+	// The answer peek: its first line and column, its width, the key a tap
+	// on each of its lines presses, and the keys of its footer.
+	peekAt, peekX, peekW int
+	peekRows             []string
+	peekKeys             []span
 }
 
 // draw lays out the screen, top to bottom: the header, the tabs, a
@@ -179,6 +184,9 @@ func (m Model) draw(w int) drawn {
 	keys, keySpans := m.keyLine(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
 	sc.lines = append(sc.lines, m.st.hair.Render(strings.Repeat("─", w)), keys)
+	if _, _, ok := m.peekNow(); ok {
+		m.overlayPeek(&sc, w)
+	}
 	return sc
 }
 
@@ -187,7 +195,7 @@ func (m Model) draw(w int) drawn {
 // tabs have one column, and so has a door's diff while it waits for its
 // y: it shows whole.
 func (m Model) panes(w int) (list, detail int) {
-	if _, preview := m.previewDoor(); m.tab != tabSessions || layout(w) == Narrow || preview {
+	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || layout(w) == Narrow || preview {
 		return w, 0
 	}
 	return splitAt(w), w - splitAt(w) - 1
@@ -359,6 +367,10 @@ func (m Model) tabLabel(i int, named bool) string {
 	switch i {
 	case tabSessions:
 		count = strconv.Itoa(len(m.all.sessions))
+	case tabShips:
+		if m.shipReport != nil && m.shipReport.InFlight > 0 {
+			count = strconv.Itoa(m.shipReport.InFlight)
+		}
 	case tabMachine:
 		if len(m.all.orphans) > 0 {
 			count = "!" // a detached busy loop burns
@@ -400,10 +412,6 @@ func (m Model) alert() string {
 // question, a pending step and its confirm, or what the last key said.
 func (m Model) keyLine(w int) (string, []span) {
 	st := m.st
-	if m.input != nil {
-		return fit(" "+st.label.Render("ANSWER ")+st.muted.Render(m.input.pane+" ")+
-			st.text.Render(m.input.text)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ review  esc cancel"), w), nil
-	}
 	if m.searching {
 		return fit(" "+st.label.Render("/ ")+st.text.Render(m.filter)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ keep  esc clear"), w), nil
 	}
