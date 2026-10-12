@@ -30,8 +30,7 @@ starts it. A second phone or laptop attaches to the same session.
 ## Go to an agent and back
 
 1. Tap an agent in Sessions. The key line says `tap again: <command>`.
-2. Tap it again. You are in the agent's pane. An agent that waits for an
-   answer opens the answer line instead: type it there.
+2. Tap it again. You are in the agent's pane.
 3. To come back, tap `◂ matchblox` at the left of the tmux status line, or
    press `prefix m` (the tmux prefix, then m).
 
@@ -41,11 +40,20 @@ tmux config. Without it, use `prefix m`.
 
 The console then selects the next agent that waits.
 
+## Answer without leaving the console
+
+Tap an agent that waits, then tap it again: the answer peek rises from the
+bottom, over the dimmed list, with what the agent said last. Tap an option,
+or type a line and press `Enter`; it goes to that agent's pane at once,
+and the peek moves to the next agent that waits. `Tab` skips one, `Esc` or a
+tap outside the peek closes it. See [the answer
+peek](console.md#the-answer-peek).
+
 ## The phone layout
 
 Under 60 columns, the console has one column. Each agent is one line,
 grouped by what it needs from you: who waits first. The selected one opens
-in place: what it said last, its pull request, its plan and its keys. Only
+in place: what it said last, its ship, its plan and its keys. Only
 the selected setup step shows its detail.
 
 Under the list, when there is room, the dock shows usage or the machine:

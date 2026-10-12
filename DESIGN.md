@@ -174,11 +174,12 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   you` in the accent (a tap selects the first one) and the stoker word:
   `stoker off` in `faint`, `stoker` and `☾ night → 07:00` in the stoker's
   token, `stoker rests` in `muted`. For 2.5 s after an action a toast
-  takes the right side (`ran: kill 4242`).
+  takes the right side (`ran: kill 4242`, `sent to flint-auth`).
 - **Tabs:** one row, every tab named: `SESSIONS 14  ships  machine  git
   history  panes`. The open tab is uppercase in the accent with its rule,
-  the others lowercase in `faint`; Sessions carries its count, and Machine
-  `!` in `neg` while a detached busy loop burns. When the names do not fit,
+  the others lowercase in `faint`; Sessions carries its count, Ships the
+  ships in flight, and Machine `!` in `neg` while a detached busy loop
+  burns. When the names do not fit,
   the tabs far from the open one shorten to their digit, the nearest last.
   The digits follow the order: `1` Sessions to `6` Panes; `p` opens Ships.
   The console opens on Sessions.
@@ -192,9 +193,11 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 - **Rows:** the selection mark `▌`, the match, the name, then the state
   word (accent for who waits), the wait and the context (`warn` from 70%,
   `neg` past the line). A desk row adds the plan (or `! compact`, `▲
-  clear` when one is due), the pull request and the tmux place. On a phone
-  the selected row opens in place, on the wash: what the agent said last in
-  quotes (two lines at most), its pull request, then its plan and its keys.
+  clear` when one is due) and the ship with its track (`#4551 ●━◉┄○┄○`);
+  with no ships read, the worktree's pull request and the tmux place. On a
+  phone the selected row opens in place, on the wash: what the agent said
+  last in quotes (two lines at most), its ship with its note, then its plan
+  and its keys.
   The list scrolls so the opened row is on the screen.
 - **Detail:** on an opened phone (60–99 columns, split at the middle) and
   a desk (100 and over, the list in ≈78 columns) the selected row's detail
@@ -211,7 +214,10 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   (`lasts the week` in `muted`, `out Fri ~20:00` in `warn`) and `as of
   14:02` in `warn` for a reading over an hour old; no reading says `not
   measured · <the fix>`. The machine is cpu with its last minute and the
-  load, memory, disk, and the agents that run. A phone shows one panel;
+  load, memory, the disk (`▰▰▰▰▰▰▱▱ 71% of 1 TB`: the file system of the
+  home, and `/ 40%` when it is another), and the agents that run. Claude
+  Code's status line has no week per model, so there is no `opus` line
+  (checked 2026-10-12, Claude Code 2.1.296). A phone shows one panel;
   `u` or a tap on `machine ›` switches. Matches and sparks (#38) are gone
   (owner, 2026-10-12).
 - **Machine tab:** usage first, then the machine, then the detached busy
@@ -220,16 +226,51 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   Panels have no boxes.
 - **Pull requests** (owner, 2026-10-08): the open pull request of an
   agent's worktree shows as `#N` on its desk row, under its opened row on
-  a phone, and with its title and URL in the detail. The git scan asks
-  `gh` for the open ones of each repository; a fork's pull request never
-  marks a branch of ours.
+  a phone, and with its title and URL in the detail, while no ship of the
+  session is read (a ship wins). The git scan asks `gh` for the open ones
+  of each repository; a fork's pull request never marks a branch of ours.
+- **Ships** (design/0006 §8): tab `2`, or `p`. A strip on top says plainly
+  why ships may be behind: `paused · GitHub's rate limit is low, ships read
+  again at 14:33`, `GitHub cannot be read: <why>`, `not read: <repo>:
+  <why>`, in `warn`. Under the faint label `open → ci → green → merged →
+  live`, each ship is two lines and a blank one: `▌#4551 <title>` with its
+  age on the right, then the track `●━●━◉┄○┄○` and the note. Done stages
+  `●` and `━` in `muted`; the current one `◉` in `warn` while it runs, in
+  the accent when it waits for you, `✕` in `neg` when stuck, and `●` in
+  the accent once live; the rest `○` and `┄` in `faint`. The note takes
+  the colour of the current stage. On a phone the selected ship adds `by
+  <session>` and its keys; wider, the detail shows `#N by <session> ·
+  <repo>`, the title, `TRACK` with the five stages down (their times, the
+  note on the current one, `┃` between done stages, `┆` after), the URL and
+  the keys. `⏎` selects the driving session in Sessions; `x` on a ship
+  that waits for your merge shows `RUN gh pr merge <n> --<method> -R
+  <repo>` and runs it after a typed `y`; `a` on a stuck ship opens the
+  answer peek on its session.
+- **Answer peek** (design/0006 §6, owner 2026-10-12): `a` on a session
+  that waits, or a tap on the selected one, opens a panel over the screen,
+  everything else redrawn in `faint`. On a phone it is full width, its
+  foot on the line above the key line's hairline; from 60 columns it is a
+  box in the middle, 62 columns at most. A rounded `hair` frame; the title
+  in it, `<name> asks` (the question tool, a question, a permission) or
+  `<name> said`, in the accent and `muted`, with `· 1 of 2` in `faint` for
+  several questions. Inside: the last message whole up to 8 lines on a
+  phone and 9 wider, cut with `…`; then the question tool's question in
+  `text` and its options, `› 1 <label>  <description>` (the cursor's on the
+  wash, `[✔]` ticks for several choices), the last always `Type an
+  answer…`; then, when typing, a `├─┤` rule and `› <text>▏`. The foot is
+  the keys: `⏎ send` (`⏎ question 2` before the last question, `⏎ open` at
+  a permission prompt) `─ ␣ tick ─ ⇥ next (N) ─ esc`. `⏎` sends with no
+  second confirm (the peek is the review); options go to Claude Code's
+  menu as its keys (digits, `Down`, `Enter`, `1` on the review page),
+  never as typed text. After a send the toast says `sent to <name>` and the
+  peek moves to the next that waits, or closes.
 - **Key line** (owner, 2026-10-12, reversing 2026-10-08): the last line,
   under a hairline. The keys of the open tab and the selected row, each a
   tap target (`⏎ open  a answer  p ships  f stoker`); a desk adds `↑↓
   move`, `/ find` and `q quit`, and "sampled N ago" on the right. It is
   also where the person acts: a tap shows `tap again: <command>`, a pending
-  action shows `RUN <command>` and its confirm, `a` types the answer, `/`
-  the search, and the stoker asks to take over here. A phone app that
+  action shows `RUN <command>` and its confirm, `/` the search, and the
+  stoker asks to take over here. A phone app that
   shrinks the terminal for its keyboard keeps the bottom row above it.
 - **Widths:** under 60 columns (phone): one column, the selected row opens
   in place, one dock panel. 60 to 99: the list and the detail split at the

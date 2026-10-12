@@ -10,7 +10,8 @@ What does not work yet, and what to do until it does.
 | Context use for Claude Code, Codex and OpenCode only | Other agents show "not measured", and still show in Sessions. |
 | Waits of agents other than Claude Code come from their pane | They wait for you in Sessions once their pane is idle and its last lines ask. |
 | Plan limits for Claude Code and Codex only | OpenCode's usage shows "not measured". |
-| Ships is empty | The pull requests your sessions drive come in a later release. |
+| Ships reads GitHub only | A pull request on another forge does not show. |
+| No week of Opus or Sonnet in usage | Claude Code's status line gives the 5-hour window and the week only. |
 | tmux only | Run your agents in tmux. |
 | No native Windows | Use Linux or macOS. |
 | One host on a screen | `esc` goes back to Hosts. |

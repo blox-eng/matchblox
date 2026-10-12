@@ -6,6 +6,40 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The console fits the screen it is on.** A closed phone shows one line
+  a session, grouped by what each needs from you (waits for you, working,
+  quiet), and the selected one opens in place with what it said and its
+  keys. From 60 columns the selected session's detail sits beside the
+  list.
+- **Answer from a peek.** `a`, or a tap on a selected session that waits,
+  opens a panel with what the agent said last and your answer. When Claude
+  Code asks with its question tool, its options are there, numbered: a digit
+  or a tap picks one, several questions come one at a time, and a question
+  of several choices ticks with `Space`. `Enter` sends, and the peek moves
+  to the next session that waits.
+- **Ships.** Every pull request a session drives, on one track from open to
+  live: CI, a conflict, a review, the merge and the deploy, said in words.
+  `x` merges a ship that waits for you, after a typed `y`. Name the
+  workflows that deploy a repository under the new `[ships.deploy]` config
+  key; by default every run on the merge commit counts.
+- **Usage and the machine in the rows the list leaves free.** Each
+  account's windows as `/usage` says them, and the machine: cpu, memory,
+  the disk your home is on, and the agents that run.
+
+### Changed
+
+- The tabs are Sessions, Ships, Machine, Git, History and Panes, each
+  named, and the digits `1-6` follow that order. The Queue is the top of
+  Sessions, the processes are on Machine, and `p` opens Ships.
+- Usage speaks in `/usage` percentages and keeps its forecast; the matches
+  and sparks of the header are gone.
+- An answer goes on `Enter`: the peek shows what goes where, so there is no
+  typed `y` for it any more.
+- The keys are at the bottom of the screen, each a tap target, where a
+  phone app keeps them above its keyboard.
+
 ## [0.5.1] - 2026-10-12
 
 ### Fixed

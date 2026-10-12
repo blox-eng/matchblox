@@ -13,8 +13,8 @@ opened by the digits `1-6`. The open one is uppercase. A narrow screen shortens 
 tabs far from the open one to their digit. `machine !` has a problem.
 
 The key line at the bottom shows the keys of the open tab, and how old the
-sample is. A tap on a key presses it. It is also where you confirm a step,
-type an answer or a search. See [Keys](keys.md).
+sample is. A tap on a key presses it. It is also where you confirm a step
+or type a search. See [Keys](keys.md).
 
 ## Usage and the machine
 
@@ -25,7 +25,7 @@ plan your agents have used, and the machine:
  USAGE                                    │ MACHINE        ws-1 · 16 cores
  ✻ Max    5h   ▰▰▰▰▰▱▱▱ 62%  · 16:00      │ cpu  ▃▄▅▄▃▅▆▅ 38%   load 4.2
           wk   ▰▰▰▱▱▱▱▱ 41%  · Thu 09:00  │ mem  ▰▰▰▰▰▱▱▱ 41 of 64 GB
- ❋ Plus   5h   ▰▱▱▱▱▱▱▱ 12%  · 18:40      │ disk r 3.0M/s · w 5.0M/s
+ ❋ Plus   5h   ▰▱▱▱▱▱▱▱ 12%  · 18:40      │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
           wk   ▰▰▱▱▱▱▱▱ 30%  · Sat 11:00  │ runs 13 claude · 1 codex
 ```
 
@@ -41,6 +41,10 @@ plan your agents have used, and the machine:
   tries again.
 - On a phone the dock shows one of the two. `u`, or a tap on `machine ›`,
   switches.
+- `disk` is the file system that holds your home directory, and `/` beside
+  it when that is another one.
+- Claude Code's status line gives the 5-hour window and the week only, so
+  there is no `opus` or `sonnet` line.
 - When the screen is short (a phone with its keyboard up), the dock folds
   away. The Machine tab has all of it.
 
@@ -76,7 +80,8 @@ the setup steps (`SET UP`) and the recommendations, each with its evidence
 and its exact command. Then every agent, by what it needs from you:
 
 - **WAITS FOR YOU**, the oldest wait first:
-  - **asks**: the agent asks for a permission.
+  - **asks**: the agent asks for a permission, or asks with its question
+    tool.
   - **waits**: the agent asked a question, or waits for input.
   - **paused**: the turn ended with its progress bar under 100%.
   - **done**: the turn ended.
@@ -87,15 +92,48 @@ and its exact command. Then every agent, by what it needs from you:
   agent.
 
 A row shows the match, the name, the state, how long it waits and its
-context use (`warn` from 70%). A wide screen adds the plan, the open pull
-request of its worktree (`#N`) and its tmux place.
+context use (`warn` from 70%). A wide screen adds the plan and the ship the
+session drives with its track (`#4551 ●━◉┄○┄○`, see [Ships](ships.md)); with
+no ships read, the open pull request of its worktree (`#N`) and its tmux
+place.
 
-On a phone the selected row opens: what the agent said last, its pull
-request, its plan and its keys. Wider, the same shows in a detail beside
-the list, with the account, the tokens and the background work.
+On a phone the selected row opens: what the agent said last, its ship, its
+plan and its keys. Wider, the same shows in a detail beside the list, with
+the account, the tokens and the background work.
 
-`Enter` jumps to the pane. `a` answers in one line. Come back from a jump
-and the next agent that waits is already selected.
+`Enter` jumps to the pane. Come back from a jump and the next agent that
+waits is already selected.
+
+### The answer peek
+
+`a` on an agent that waits opens a panel over the dimmed screen: on a
+phone along the bottom, wider a box in the middle.
+
+```
+╭─ flint-auth asks · 1 of 2 ─────────────────────────────────╮
+│ The refresh endpoint is in and its tests pass. One choice  │
+│ is yours before I wire the rotation: what should a refresh │
+│ do with the token it was given?                            │
+│                                                            │
+│ Should a refresh also rotate the token?                    │
+│ › 1 Rotate it  the old one stops at once                   │
+│   2 Rotate, keep the old one a minute                      │
+│   3 Keep the token                                         │
+│   4 Type an answer…                                        │
+╰─ ⏎ question 2 ─ ⇥ next (5) ─ esc ──────────────────────────╯
+```
+
+It shows what the agent said last, whole up to nine lines. When Claude Code
+asks with its question tool, its options are numbered and the last one
+types an answer; several questions come one at a time, and a question of
+several choices ticks with `Space`. Otherwise you type one line.
+
+`Enter` sends it to the pane named in the title: the peek is the review,
+so there is no second confirm. The options go to Claude Code's own menu
+with the keys it takes, never as typed text. The header says `sent to
+flint-auth`, and the peek moves to the next agent that waits, or closes.
+`Tab` skips one, `Esc` closes. A permission prompt is answered in its
+pane: its peek shows the prompt, and `Enter` goes there.
 
 - Context use is read from the agent's own files, or shows "not measured".
   See [Agents](agents.md).
@@ -110,7 +148,8 @@ and the next agent that waits is already selected.
 
 ## 2 Ships
 
-The pull requests your sessions drive. `p` opens it. It is still empty.
+The pull requests your sessions drive, each on its track from open to
+live. `p` opens it. See [Ships](ships.md).
 
 ## 3 Machine
 
