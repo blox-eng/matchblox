@@ -18,13 +18,10 @@ func TestTheDetailShowsTheBackgroundWork(t *testing.T) {
 			st.Sessions[i].Shells = []sample.Shell{{PID: 2240632, Started: st.At.Add(-37 * time.Hour), Command: `while pgrep -f "node walk.mjs" >/dev/null; do sleep 15; done`}}
 		}
 	}
-	m, _ := loadedWith(t, 120, st)
-	next, _ := key(m, "2")
-	for s, ok := next.(Model).selected(); ok && s.Pane != "%1"; s, ok = next.(Model).selected() {
-		next, _ = key(next, "down")
-	}
+	m, _ := loadedWith(t, 160, st)
+	next := selectPane(t, m, "%1")
 	out := screen(next)
-	for _, want := range []string{"BACKGROUND 1 agent · 1 shell · oldest 1d13h", "2240632", "node walk.mjs"} {
+	for _, want := range []string{"agents   1 subagent running", "shells   1 shell · oldest 1d13h", "2240632", "node walk.mjs"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("no %q in\n%s", want, out)
 		}
@@ -43,7 +40,7 @@ func TestASessionWorkingThroughSubagentsSaysAgents(t *testing.T) {
 			}
 		}
 		m, _ := loadedWith(t, w, st)
-		next, _ := key(m, "2")
+		next, _ := key(m, "1")
 		out := screen(next)
 		var row string
 		for _, l := range strings.Split(out, "\n") {

@@ -138,17 +138,27 @@ func (m Model) gitPanel(w int) body {
 	return b
 }
 
-// recsSection is what to do next, under the queue: its rows follow the
-// queue's, and the selected one shows its evidence and its steps.
+// recsSection is what to do next, under the sessions: its rows follow
+// theirs. On a phone the selected one shows its evidence and its steps
+// under the list; wider, the detail pane does. h folds the section to its
+// label; d dismisses the selected one until its evidence changes.
 func (m Model) recsSection(b *body, w int) {
-	st := m.st
-	b.add(-1, m.region(fmt.Sprintf("%d recommendations", len(m.recs)), w)...)
 	if len(m.recs) == 0 {
-		b.add(-1, st.faint.Render(m.nothing(" nothing to do")))
 		return
 	}
-	n := len(m.doors) + len(m.queue)
-	sel := m.queueIndex() - n
+	st := m.st
+	if len(b.lines) > 0 {
+		b.add(-1, "")
+	}
+	if m.recPrefs.Folded {
+		b.add(recsLabelRow, st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d hidden", len(m.recs)))+st.faint.Render(" · ")+
+			st.accent.Render("h")+st.faint.Render(" shows"))
+		return
+	}
+	b.add(recsLabelRow, st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d", len(m.recs)))+st.faint.Render(" · ")+
+		st.accent.Render("h")+st.faint.Render(" hides"))
+	n := len(m.doors) + len(m.snap.Sessions)
+	sel := m.sessIndex() - n
 	for i, r := range m.recs {
 		mark := st.faint.Render("○ ")
 		switch r.Level {
@@ -157,21 +167,34 @@ func (m Model) recsSection(b *body, w int) {
 		case "warn":
 			mark = st.warn.Render("▲ ")
 		}
-		line := " " + mark + st.text.Render(tilde(r.Title))
+		lead := " "
+		if i == sel {
+			lead = st.accent.Render("▌")
+		}
+		line := lead + mark + st.ink(i == sel).Render(tilde(r.Title))
 		if run := m.recRun; run.rec == r.ID && run.out != "" {
 			line = " " + st.accent.Render("✓ ") + st.text.Render(tilde(run.out))
 			if run.failed {
 				line = " " + st.neg.Render("✗ ") + st.text.Render(tilde(run.out))
 			}
 		}
+		if i == sel {
+			line = spread(line, dismissMark(st)+" ", w)
+		}
 		b.addRow(n+i, i == sel, w, st, line)
 	}
-	if sel < 0 {
-		return // a queue row is selected: the detail is for a recommendation
+	if sel < 0 || sel >= len(m.recs) || m.layoutAt(m.width) != Narrow {
+		return
 	}
 	r := m.recs[sel]
-	b.add(-1, "", st.hair.Render(strings.Repeat("─", w)), fit(" "+st.text.Render(tilde(r.Title)), w))
 	b.add(-1, wrap(" "+tilde(r.Evidence), w, st.muted.Render)...)
+	b.add(-1, m.recActions(r, w)...)
+}
+
+// recActions are the two steps of a recommendation with their keys.
+func (m Model) recActions(r advice.Rec, w int) []string {
+	st := m.st
+	var out []string
 	for _, a := range []struct {
 		key string
 		act *advice.Action
@@ -187,8 +210,9 @@ func (m Model) recsSection(b *body, w int) {
 		if a.act.Destructive {
 			label += ", asks y"
 		}
-		b.add(-1, fit(" "+st.label.Render(a.key+" ")+st.text.Render(label+": ")+st.muted.Render(cmd), w))
+		out = append(out, fit(" "+st.accent.Render(a.key+" ")+st.text.Render(label+": ")+st.muted.Render(cmd), w))
 	}
+	return out
 }
 
 func wrap(s string, w int, render func(...string) string) []string {
@@ -280,3 +304,9 @@ func (m Model) historyPanel(w int) []string {
 	}
 	return out
 }
+
+// dismissMark is the selected recommendation's tap target for d.
+func dismissMark(st styles) string { return st.accent.Render("d") + st.muted.Render(" dismiss") }
+
+// dismissWidth is the width of the dismiss mark and the space after it.
+const dismissWidth = len("d dismiss") + 1

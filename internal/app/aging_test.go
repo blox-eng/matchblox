@@ -24,7 +24,7 @@ func TestExitedAgentsStayQuiet(t *testing.T) {
 		}
 		m, _ := loadedWith(t, w, st)
 		var next tea.Model = m
-		next, _ = key(next, "2")
+		next, _ = key(next, "1")
 		out := screen(next)
 		if !strings.Contains(out, "137 exited agents · e shows them") || strings.Contains(out, "7000") {
 			t.Fatalf("width %d: the exited agents are not one quiet line:\n%s", w, out)
@@ -54,13 +54,13 @@ func agingState() proto.State {
 	return st
 }
 
-// TestIdleSessionsAge: busy, then who waits for the person, then idle by
-// the newest; a day makes a session cold, a week makes it stale.
+// TestIdleSessionsAge: who waits for the person, then who works, then idle
+// by the newest; a day makes a session cold, a week makes it stale.
 func TestIdleSessionsAge(t *testing.T) {
 	for _, w := range []int{50, 120} {
 		m, _ := loadedWith(t, w, agingState())
-		next, _ := key(m, "2")
-		if got := order(next); got != "bravo charlie alpha delta echo" {
+		next, _ := key(m, "1")
+		if got := order(next); got != "charlie bravo alpha delta echo" {
 			t.Fatalf("width %d: order %q", w, got)
 		}
 		lines := strings.Split(screen(next), "\n")
@@ -77,10 +77,10 @@ func TestIdleSessionsAge(t *testing.T) {
 func TestXEndsAStaleSession(t *testing.T) {
 	m, f := loadedWith(t, 120, agingState())
 	var next tea.Model = m
-	next, _ = key(next, "2")
-	next, _ = key(next, "x") // bravo: busy
+	next, _ = key(next, "1")
+	next, _ = key(next, "x") // charlie: it waits
 	if next.(Model).pending != nil || !strings.Contains(actionLine(next), "x ends a stale session") {
-		t.Fatalf("x on a busy session: %q", actionLine(next))
+		t.Fatalf("x on a session that waits: %q", actionLine(next))
 	}
 	for range 4 {
 		next, _ = key(next, "down")
@@ -109,8 +109,8 @@ func TestOldSessionsSinkEvenWhenQueued(t *testing.T) {
 	st := agingState()
 	st.Queue = append(st.Queue, queue.Item{Pane: "%delta", Name: "delta", State: queue.StateFinished, Since: st.At.Add(-30 * time.Hour)})
 	m, _ := loadedWith(t, 120, st)
-	next, _ := key(m, "2")
-	if got := order(next); got != "bravo charlie alpha delta echo" {
+	next, _ := key(m, "1")
+	if got := order(next); got != "charlie bravo alpha delta echo" {
 		t.Fatalf("order %q", got)
 	}
 }
@@ -121,7 +121,7 @@ func TestTheFixFitsTheParent(t *testing.T) {
 	st := fixtureState()
 	st.Exited = []sample.Exited{{PID: 9001, Parent: 1, ParentComm: "systemd"}}
 	m, _ := loadedWith(t, 120, st)
-	next, _ := key(m, "2")
+	next, _ := key(m, "1")
 	if out := screen(next); !strings.Contains(out, "1 exited agent · e shows it") {
 		t.Fatalf("singular:\n%s", out)
 	}
@@ -132,8 +132,8 @@ func TestTheFixFitsTheParent(t *testing.T) {
 	}
 }
 
-// A session the plan's limit stops says until when, and sorts under the
-// idle ones: nothing to do there before its reset.
+// A session the plan's limit stops says until when, and is quiet: nothing
+// to do there before its reset.
 func TestAnOutSessionSaysUntilWhen(t *testing.T) {
 	st := fixtureState()
 	back := st.At.Add(2 * time.Hour)
@@ -149,8 +149,8 @@ func TestAnOutSessionSaysUntilWhen(t *testing.T) {
 	if out := ansi.Strip(m.render()); !regexp.MustCompile(`out +` + at).MatchString(out) {
 		t.Fatalf("no out %s in\n%s", at, out)
 	}
-	if r := rank(sample.Session{Out: back}, nil); r <= rank(sample.Session{}, nil) || r >= rank(sample.Session{Idle: sample.ColdAfter}, nil) {
-		t.Fatalf("out ranks %d", r)
+	if g := m.groupOf(sample.Session{Out: back}); g != groupQuiet {
+		t.Fatalf("an out session is in group %d", g)
 	}
 }
 

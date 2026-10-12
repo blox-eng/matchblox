@@ -49,6 +49,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/setup"
+	"github.com/blox-eng/matchblox/internal/ships"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
 	"github.com/blox-eng/matchblox/internal/transport"
@@ -284,7 +285,7 @@ func spoolPath() string { return filepath.Join(filepath.Dir(state.Path()), "spoo
 
 func console(path string, cfg config.Config, root string, noMotion bool, host string) error {
 	base := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, CompactTokens: cfg.Sessions.CompactTokens, NoMotion: noMotion,
-		OutsideTmux: os.Getenv("TMUX") == "", Self: invokedPath(os.Args[0])}
+		OutsideTmux: os.Getenv("TMUX") == "", Self: invokedPath(os.Args[0]), StateDir: filepath.Dir(state.Path())}
 	// The screen changes on a state or a key press, so 15 frames a second
 	// is still instant to the eye and wakes the process 4x less than 60.
 	if root != "" {
@@ -374,6 +375,7 @@ func newService(cfg config.Config, root string) *service.Service {
 	} else {
 		fmt.Fprintln(os.Stderr, "matchblox: the stoker is off:", err)
 	}
+	s.Ships = shipsSource(cfg, filepath.Dir(s.StatePath))
 	return s
 }
 
@@ -530,6 +532,15 @@ func gitSource(cfg config.Config) service.GitSource {
 		return scanner.Scan(ctx, in)
 	}
 }
+func shipsSource(cfg config.Config, dir string) service.ShipsSource {
+	t := &ships.Tracker{Dir: dir, GH: ships.GH, Git: gitscan.Git, Remote: cfg.Git.Remote, Deploy: cfg.Ships.Deploy}
+	return func(ctx context.Context, sessions []sample.Session, git *gitscan.Report) ships.Report {
+		ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		return t.Scan(ctx, ships.Input{Sessions: sessions, Git: git})
+	}
+}
+
 func newSampler(cfg config.Config, root string) *sample.Sampler {
 	smp := &sample.Sampler{
 		Cfg:    cfg,
@@ -544,18 +555,20 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 		},
 	}
 	if root != "" {
-		smp.FS = procfs.FS{Root: filepath.Join(root, "proc")}
+		smp.FS = procfs.FS{Root: filepath.Join(root, "proc"), PageSize: procfs.FixturePage}
 		smp.Sys = procfs.Sys{Root: filepath.Join(root, "sys")}
 		smp.Home = filepath.Join(root, "home")
 		smp.HomeAs = "/home/user" // the HOME of every fixture process
 		smp.Tmux = func() ([]byte, error) { return os.ReadFile(filepath.Join(root, "tmux-panes.txt")) }
 		smp.Capture = sample.CaptureDir(filepath.Join(root, "panes"))
 		smp.LimitsDir = filepath.Join(root, "state")
+		smp.Disks = sample.DiskFile(filepath.Join(root, "disks.txt"))
 		return smp
 	}
 	smp.FS, smp.Sys = actions.NewHost(), procfs.Sys{Root: "/sys"}
 	smp.Home, _ = os.UserHomeDir()
 	smp.GPU, smp.Docker = sample.NvidiaSMI, sample.DockerPS
+	smp.Disks = sample.Disks(smp.Home, "/")
 	smp.LatencyTarget = cfg.LatencyTarget
 	smp.ProcEvery = 5 * cfg.Interval.Duration
 	smp.OwnEntries = true

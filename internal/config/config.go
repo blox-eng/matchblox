@@ -40,6 +40,14 @@ type Config struct {
 	Hooks         Hooks    `toml:"hooks"`
 	Stoker        Stoker   `toml:"stoker"`
 	Limits        Limits   `toml:"limits"`
+	Ships         Ships    `toml:"ships"`
+}
+
+// Ships follows the pull requests sessions drive through CI to live.
+type Ships struct {
+	// Deploy names the workflows that deploy a repository, by "owner/name".
+	// A repository not named is live when every run on its merge commit is.
+	Deploy map[string][]string `toml:"deploy"`
 }
 
 // Limits shape the forecast of each account's week.

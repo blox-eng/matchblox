@@ -8,13 +8,20 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/said"
 )
 
 // Events are the Claude Code hooks the queue reads.
-var Events = []string{"Notification", "Stop", "UserPromptSubmit", "SessionStart", "SessionEnd", "PostToolUse"}
+var Events = []string{"Notification", "Stop", "UserPromptSubmit", "SessionStart", "SessionEnd", "PostToolUse", "PreToolUse"}
+
+// matchers narrow an event to the tools it is for. PreToolUse is only for
+// the question tool: it is the one sign of a waiting menu that Claude Code
+// sends before the menu draws, in every permission mode.
+var matchers = map[string]string{"PreToolUse": said.AskTool}
 
 // settingsPath is Claude Code's user settings: $CLAUDE_CONFIG_DIR, else
 // ~/.claude.
@@ -195,7 +202,11 @@ func array(vs []json.RawMessage, depth int) json.RawMessage {
 
 // entry is one hook group on one line, so the diff stays short.
 func entry(exe, ev string) json.RawMessage {
-	return json.RawMessage(`{"hooks": [{"type": "command", "command": ` + quote(hookCommand(exe, ev)) + `}]}`)
+	match := ""
+	if m, ok := matchers[ev]; ok {
+		match = `"matcher": ` + quote(m) + `, `
+	}
+	return json.RawMessage(`{` + match + `"hooks": [{"type": "command", "command": ` + quote(hookCommand(exe, ev)) + `}]}`)
 }
 
 func hookCommand(exe, ev string) string {
@@ -206,15 +217,19 @@ func hookCommand(exe, ev string) string {
 }
 
 // runsMatchblox: an entry of the event already runs `matchblox hook <ev>`,
-// from any path.
+// from any path, for the tool the event is narrowed to.
 func runsMatchblox(entries []json.RawMessage, ev string) bool {
 	for _, raw := range entries {
 		var g struct {
-			Hooks []struct {
+			Matcher string `json:"matcher"`
+			Hooks   []struct {
 				Command string `json:"command"`
 			} `json:"hooks"`
 		}
 		if json.Unmarshal(raw, &g) != nil {
+			continue
+		}
+		if tool, ok := matchers[ev]; ok && !matches(g.Matcher, tool) {
 			continue
 		}
 		for _, h := range g.Hooks {
@@ -225,6 +240,16 @@ func runsMatchblox(entries []json.RawMessage, ev string) bool {
 		}
 	}
 	return false
+}
+
+// matches reads a hook matcher as Claude Code does: empty or "*" is every
+// tool, else a pattern the whole tool name matches.
+func matches(matcher, tool string) bool {
+	if matcher == "" || matcher == "*" {
+		return true
+	}
+	re, err := regexp.Compile(`^(?:` + matcher + `)$`)
+	return err == nil && re.MatchString(tool)
 }
 
 // shellWords splits a command as sh does for plain words and quotes; it is

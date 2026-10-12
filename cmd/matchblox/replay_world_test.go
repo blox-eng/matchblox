@@ -133,6 +133,8 @@ func (w *demoWorld) Run(argv []string) error {
 	case len(argv) == 7 && argv[1] == "send-keys" && argv[4] == "-l":
 		w.typed[argv[3]] = argv[6]
 		return w.drawField(argv[3])
+	case len(argv) == 5 && argv[1] == "send-keys" && len(argv[4]) == 1 && argv[4][0] >= '1' && argv[4][0] <= '9':
+		return w.pick(argv[3], argv[4])
 	case len(argv) == 5 && argv[1] == "send-keys" && argv[4] == "Enter":
 		text := w.typed[argv[3]]
 		delete(w.typed, argv[3])
@@ -147,6 +149,28 @@ func (w *demoWorld) Run(argv []string) error {
 		return nil
 	}
 	return fmt.Errorf("the demo does not run %q", argv)
+}
+
+// pick is a digit in the question tool's menu: the call gets its result,
+// the agent works on the answer, and the menu leaves the pane. Hold w.mu.
+func (w *demoWorld) pick(pane, digit string) error {
+	s, ok := w.sessions[pane]
+	if !ok {
+		return fmt.Errorf("no session in %s", pane)
+	}
+	now := w.clk.Now()
+	s.status, s.tokens = "busy", s.tokens+4000
+	if err := w.appendTranscript(s,
+		map[string]any{"type": "user", "isSidechain": false, "timestamp": now,
+			"message": map[string]any{"content": []map[string]string{{"type": "tool_result", "tool_use_id": "toolu_01DEMO", "content": "The user picked option " + digit}}}},
+		turnLine(now, s.tokens, "I rotate the token on each refresh and keep the old one for a minute."),
+	); err != nil {
+		return err
+	}
+	if err := writeAtomic(w.pane(pane), []byte("● I rotate the token on each refresh and keep the old one for a minute.\n\n╭──────────────────────────────────────────────╮\n│ > \n╰──────────────────────────────────────────────╯\n")); err != nil {
+		return err
+	}
+	return w.writeRegistry(s, now)
 }
 
 // drawField shows the draft in the pane's input field. Hold w.mu.

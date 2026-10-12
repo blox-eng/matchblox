@@ -41,7 +41,7 @@ var codeSpan = regexp.MustCompile("`([^`]+)`")
 // keyWords are the keys prose names by a word, not a character.
 var keyWords = map[string]bool{
 	"enter": true, "esc": true, "space": true, "tab": true, "shift+tab": true,
-	"backspace": true, "ctrl+c": true, "↑": true, "↓": true,
+	"backspace": true, "ctrl+c": true, "↑": true, "↓": true, "←": true, "→": true,
 }
 
 // Keys returns each key in the first column of a Markdown table whose first

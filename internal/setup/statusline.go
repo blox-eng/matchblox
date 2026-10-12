@@ -13,7 +13,7 @@ import (
 func limitsDoor(e Env) doors.Door {
 	path := settingsPath(e)
 	d := doors.Door{ID: doors.Limits, Title: "Show your limits", Path: path,
-		Why: "See the matches left in this 5-hour window and the sparks left this week, for each account. Your status line stays as it is."}
+		Why: "See how much of this 5-hour window and this week each account has used. Your status line stays as it is."}
 	_, old, _, err := read(path)
 	if err != nil {
 		d.Problem = err.Error()

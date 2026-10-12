@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -70,28 +71,28 @@ func (m *Model) refresh() {
 		}
 		return strings.Contains(strings.ToLower(strings.Join(fields, " ")), q)
 	}
-	m.queue, m.recs, m.snap.Orphans = m.all.queue, m.all.recs, m.all.orphans
+	m.queue, m.snap.Orphans = m.all.queue, m.all.orphans
+	m.recs = slices.DeleteFunc(slices.Clone(m.all.recs), m.recPrefs.dismissed)
 	sessions := slices.Clone(m.all.sessions)
 	switch m.tab {
-	case tabQueue:
-		m.queue = slices.DeleteFunc(slices.Clone(m.all.queue), func(it queue.Item) bool {
-			return !keep(it.Name, it.Target, it.Pane, it.LastLine, queueWord[it.State])
-		})
-		m.recs = slices.DeleteFunc(slices.Clone(m.all.recs), func(r advice.Rec) bool { return !keep(r.Title, r.Evidence) })
 	case tabSessions:
+		m.recs = slices.DeleteFunc(m.recs, func(r advice.Rec) bool { return !keep(r.Title, r.Evidence) })
 		sessions = slices.DeleteFunc(sessions, func(s sample.Session) bool {
-			return !keep(s.Name, s.Target, s.Pane, s.Tab, s.Cwd, s.Model)
+			return !keep(s.Name, s.Target, s.Pane, s.Tab, s.Cwd, s.Model, m.lastWords(s), m.wordOf(s))
 		})
-	case tabProcs:
+	case tabMachine:
 		m.snap.Orphans = slices.DeleteFunc(slices.Clone(m.all.orphans), func(o sample.Orphan) bool {
 			return !keep(strconv.Itoa(o.PID), o.Comm, o.Cmdline, o.Cwd, o.Target)
 		})
 	}
-	waits := map[string]bool{}
-	for _, it := range m.all.queue {
-		waits[it.Pane] = true
+	group, since := map[int]int{}, map[int]time.Time{}
+	for _, s := range sessions {
+		group[s.PID] = m.groupOf(s)
+		if it, ok := m.waitOf(s); ok {
+			since[s.PID] = it.Since
+		}
 	}
-	slices.SortStableFunc(sessions, func(a, b sample.Session) int { return m.sessSort.compare(a, b, waits) })
+	slices.SortStableFunc(sessions, func(a, b sample.Session) int { return m.sessSort.compare(a, b, group, since) })
 	m.snap.Sessions = sessions
 	if m.git != nil {
 		for p := range m.picked {
@@ -102,8 +103,9 @@ func (m *Model) refresh() {
 	}
 }
 
-// compare orders two sessions. waits holds the panes in the queue.
-func (s sortBy) compare(a, b sample.Session, waits map[string]bool) int {
+// compare orders two sessions. group holds the group of each pid, since
+// when it waits.
+func (s sortBy) compare(a, b sample.Session, group map[int]int, since map[int]time.Time) int {
 	if s.rev {
 		a, b = b, a
 	}
@@ -111,11 +113,14 @@ func (s sortBy) compare(a, b sample.Session, waits map[string]bool) int {
 	c := 0
 	switch s.col {
 	case sortState:
-		// Who works, then who waits for the person, then the newest idle:
-		// the oldest sink to the bottom. Age outranks waiting: a session
-		// that waits since yesterday is cold, not waiting.
-		c = rank(a, waits) - rank(b, waits)
-		if c == 0 {
+		// Who waits for the person, the oldest wait first; who works; then
+		// the quiet ones, the newest first: the oldest sink to the bottom.
+		c = group[a.PID] - group[b.PID]
+		switch {
+		case c != 0:
+		case group[a.PID] == groupWaits:
+			c = since[a.PID].Compare(since[b.PID])
+		case group[a.PID] == groupQuiet:
 			c = cmpF(float64(a.Idle), float64(b.Idle))
 		}
 	case sortIdle:
@@ -138,23 +143,6 @@ func (s sortBy) compare(a, b sample.Session, waits map[string]bool) int {
 		c = a.PID - b.PID
 	}
 	return c
-}
-
-// rank is the group of a session in the default order.
-func rank(s sample.Session, waits map[string]bool) int {
-	switch age := s.Age(); {
-	case age == "busy":
-		return 0
-	case s.Stopped():
-		return 3
-	case age == "idle" && waits[s.Pane]:
-		return 1
-	case age == "idle":
-		return 2
-	case age == "cold":
-		return 4
-	}
-	return 5
 }
 
 func cmpF(x, y float64) int {
@@ -212,32 +200,10 @@ func (m *Model) sortOn(col int) {
 
 // sortNote names the sort where no header shows it (a phone).
 func (m Model) sortNote(w int, s sortBy, names []string) string {
-	if layout(w) != Narrow {
+	if m.layoutAt(w) != Narrow {
 		return ""
 	}
 	return "  ·  by " + names[s.col] + " " + s.arrow()
-}
-
-// sessHeader is the column header of the Sessions tab, with the sort, and
-// where each sortable column starts and ends.
-func (m Model) sessHeader(tab, acct int) (string, []colSpan) {
-	cols := []struct {
-		label string
-		w     int
-		col   int
-	}{
-		{"TMUX", colPane + tab, sortPlace}, {"NAME", colName, sortName}, {"STATE", colSt, sortState},
-		{"IDLE", colIdle, sortIdle}, {"CONTEXT", colBar + 1 + colPct, sortContext}, {"CPU", colCPU, sortCPU},
-		{"DO", colDo + 1, -1},
-	}
-	if acct > 0 {
-		cols = append(cols, struct {
-			label string
-			w     int
-			col   int
-		}{"ACCOUNT", acct, sortAccount})
-	}
-	return header(cols, m.sessSort, " WORKTREE")
 }
 
 func (m Model) paneHeader() (string, []colSpan) {
@@ -273,16 +239,9 @@ func header(cols []struct {
 	return strings.TrimRight(b.String(), " ") + tail, spans
 }
 
-// tapHeader sorts by the column under x.
-func (m Model) tapHeader(w, x int) (tea.Model, tea.Cmd) {
-	var spans []colSpan
-	switch m.tab {
-	case tabSessions:
-		tab, acct, _ := m.sessWidths(w)
-		_, spans = m.sessHeader(tab, acct)
-	case tabPanes:
-		_, spans = m.paneHeader()
-	}
+// tapHeader sorts Panes by the column under x.
+func (m Model) tapHeader(x int) (tea.Model, tea.Cmd) {
+	_, spans := m.paneHeader()
 	for _, s := range spans {
 		if x >= s.x0 && x < s.x1 {
 			m.sortOn(s.col)

@@ -20,7 +20,7 @@ var fixtureNow = time.UnixMilli(1790003600000 + 10_000)
 
 func newFixtureSampler(root string) *Sampler {
 	return &Sampler{
-		FS:      procfs.FS{Root: filepath.Join(root, "proc")},
+		FS:      procfs.FS{Root: filepath.Join(root, "proc"), PageSize: procfs.FixturePage},
 		Home:    filepath.Join(root, "home"),
 		HomeAs:  "/home/user", // as the fixture processes name it
 		Tmux:    func() ([]byte, error) { return os.ReadFile(filepath.Join(root, "tmux-panes.txt")) },

@@ -29,7 +29,7 @@ starts it. A second phone or laptop attaches to the same session.
 
 ## Go to an agent and back
 
-1. Tap an agent in the queue. The action line says `tap again: <command>`.
+1. Tap an agent in Sessions. The key line says `tap again: <command>`.
 2. Tap it again. You are in the agent's pane.
 3. To come back, tap `◂ matchblox` at the left of the tmux status line, or
    press `prefix m` (the tmux prefix, then m).
@@ -40,11 +40,41 @@ tmux config. Without it, use `prefix m`.
 
 The console then selects the next agent that waits.
 
+## Answer without leaving the console
+
+Tap an agent, then tap it again: on a one-column phone the peek rises from
+the bottom, over the dimmed list, with what the agent said last; held
+upright with a small font, the drawer on the right becomes the
+conversation and the list stays beside it. Tap an option, or type a line
+and press `Enter`; it goes to that agent's pane at once. An agent that
+works gets it as a message, which Claude Code queues. After an answer the
+peek moves to the next agent that waits. A swipe left or right, or a tap
+on `← prev` or `next →`, moves it along the list; `Esc` or a tap outside
+the peek closes it. See [the answer
+peek](console.md#the-answer-peek).
+
 ## The phone layout
 
-Under 60 columns, the console has one column. The queue comes first, and
-each row has two lines. Only the selected setup step shows its detail.
-The action line is at the top, above the keyboard.
+A phone held upright is read by its shape, so the keyboard coming and
+going does not change the layout. With a small font that makes it 90
+columns or more, the list sits on the left and the selected agent's detail
+in a drawer on the right, and the dock shows two panels side by side. On its side it
+goes by its width. Under 60 columns, the console has one column. Each agent is one line,
+grouped by what it needs from you: who waits first. The selected one opens
+in place: what it said last, its ship, its plan and its keys. Only
+the selected setup step shows its detail.
+
+Under the list, when there is room, the dock shows usage, the machine or
+the stoker: `u`, or a tap on the word at its right, goes to the next. While
+the stoker runs, its panel shows by itself until you switch; a tap on it
+opens its whole card on the Machine tab. With the keyboard up the dock
+folds away; the Machine tab has it.
+
+The key line is at the bottom: an SSH app that shrinks the terminal for
+its keyboard keeps it above the keys. A tap on a key presses it.
+
+Turn the phone on its side, at 60 columns or more, and the list and the
+detail of the selected agent sit side by side.
 
 Every key is on the key bar of an SSH app: letters, digits, arrows, `Enter`
 and `Esc`. See [Keys](keys.md).

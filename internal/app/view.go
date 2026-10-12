@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -10,12 +9,12 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// series keeps the last n machine samples for the header sparklines.
+// series keeps the last n machine samples for the dock's sparkline and the
+// Machine tab's chart.
 type series struct {
 	n                            int
 	cpu, mem, net, io, lat, load []float64
@@ -81,90 +80,345 @@ func (m Model) render() string {
 	return m.frame(w)
 }
 
-func (m Model) frame(w int) string {
-	out := append([]string{m.header(w)}, m.limitLines(w)...)
-	top := len(out)
-	out = append(out, m.tabs(w), m.st.rule.Render(strings.Repeat("─", w)))
-	if m.mismatch {
-		return strings.Join(append(out, "", m.mismatchText(w)), "\n")
-	}
-	if m.blocked != nil {
-		return strings.Join(append(out, "", m.blockedText(w)), "\n")
-	}
-	if !m.have {
-		why := m.waitingWhy()
-		if len(out)+markH/2+3 <= m.height {
-			out = append(append(out, ""), m.markLines(w)...)
+func (m Model) frame(w int) string { return strings.Join(m.draw(w).lines, "\n") }
+
+// span is a tap target on a line: columns x0 to x1, and the key it presses.
+type span struct {
+	x0, x1 int
+	press  string
+}
+
+func spanAt(spans []span, x int) (span, bool) {
+	for _, s := range spans {
+		if x >= s.x0 && x < s.x1 {
+			return s, true
 		}
-		out = append(out, "", strings.Repeat(" ", max((w-lipgloss.Width(why))/2, 0))+m.st.faint.Render(why))
+	}
+	return span{}, false
+}
+
+// drawn is a frame and where its parts are, so a tap finds what it
+// hit: the header, the tabs, the body rows, the dock and the key line.
+type drawn struct {
+	lines   []string
+	waits   span // the header's "● N wait for you"
+	tabs    []span
+	bodyTop int   // the line of the first body row
+	rows    []int // the row each body line shows; -1 none, headerRow
+	listW   int   // the list's columns; the detail pane is right of them
+	dockAt  int   // the dock's first line; -1 when it is folded
+	keysAt  int   // the key line; -1 when there is none
+	keys    []span
+	// The answer peek: its first line and column, its width, the key a tap
+	// on each of its lines presses, and the keys of its footer.
+	peekAt, peekX, peekW int
+	peekRows             []string
+	peekKeys             []span
+	peekInline           bool // the peek is the detail pane, the list beside it live
+	// The dock: its height and the columns of the stoker's panel. full:
+	// the dock shows all it has; paneFull: so does the right pane.
+	dockH, stx0, stx1 int
+	full, paneFull    bool
+}
+
+// draw lays out the screen, top to bottom: the header, the tabs, a
+// hairline, the body (on an opened phone and a desk the list and the
+// detail side by side), the dock when it fits, then a hairline and the
+// key line (design/0006 §4.1).
+func (m Model) draw(w int) drawn {
+	head, waits := m.header(w)
+	tabs, tabSpans := m.tabsLine(w)
+	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, tabs: tabSpans,
+		bodyTop: 3, listW: w, dockAt: -1, keysAt: -1}
+	switch {
+	case m.mismatch:
+		sc.lines = append(sc.lines, "", m.mismatchText(w))
+		return sc
+	case m.blocked != nil:
+		sc.lines = append(sc.lines, "", m.blockedText(w))
+		return sc
+	case !m.have:
+		why := m.waitingWhy()
+		if len(sc.lines)+markH/2+3 <= m.height {
+			sc.lines = append(append(sc.lines, ""), m.markLines(w)...)
+		}
+		sc.lines = append(sc.lines, "", strings.Repeat(" ", max((w-lipgloss.Width(why))/2, 0))+m.st.faint.Render(why))
 		if m.opt.Layered {
 			keys := "esc hosts  q quit"
-			out = append(out, "", strings.Repeat(" ", max((w-len(keys))/2, 0))+m.st.muted.Render(keys))
+			sc.lines = append(sc.lines, "", strings.Repeat(" ", max((w-len(keys))/2, 0))+m.st.muted.Render(keys))
 		}
-		return strings.Join(out, "\n")
+		return sc
 	}
-	// The line the person acts on sits under the tabs: on a phone the
-	// keyboard covers the bottom of the screen.
-	out = append(out[:top+1], m.footer(w), out[top+1])
-	out = append(out, m.visible(w).lines...)
-	for len(out) < m.height {
-		out = append(out, "")
+	full := max(m.height-5, 1)
+	listW, detailW := m.panes(w)
+	sc.listW = listW
+	b := m.body(listW)
+	_, _, peeking := m.peekNow()
+	inline := peeking && detailW > 0    // the peek takes the detail pane
+	card := m.stokerOpen && detailW > 0 // the stoker's card takes the detail pane
+	paneFull := true
+	paneLines := func(rows int) []string {
+		switch {
+		case detailW == 0 || inline:
+			return nil
+		case card:
+			return m.stokerCard(detailW)
+		}
+		lines, all := m.detailPane(detailW, rows)
+		paneFull = all
+		return lines
 	}
-	return strings.Join(out, "\n")
+	detail := paneLines(0)
+	var d docked
+	if m.tab != tabMachine {
+		d = m.dock(w, -1)
+	}
+	room := full
+	if len(d.lines) > 0 && max(len(b.lines), len(detail))+len(d.lines)+1 <= full {
+		// The dock fits; it grows into the rows the body leaves free.
+		d = m.dock(w, full-max(len(b.lines), len(detail))-1)
+		room -= len(d.lines) + 1
+	} else {
+		d = docked{}
+	}
+	sc.full = d.full || m.tab == tabMachine
+	detail = paneLines(room)
+	sc.paneFull = paneFull && len(detail) <= room
+	if inline {
+		var press []string
+		var spans []span
+		detail, press, spans = m.peekBox(detailW, room, false, true)
+		sc.peekAt, sc.peekX, sc.peekW, sc.peekRows, sc.peekKeys, sc.peekInline = sc.bodyTop, listW+1, detailW, press, spans, true
+	}
+	vis := windowed(b, room, m.rowIndex())
+	for i := range room {
+		line, row := "", -1
+		if i < len(vis.lines) {
+			line, row = vis.lines[i], vis.rows[i]
+		}
+		if detailW > 0 {
+			right := ""
+			if i < len(detail) {
+				right = detail[i]
+			}
+			line = fit(line, listW) + m.st.hair.Render("│") + fit(right, detailW)
+		}
+		sc.lines, sc.rows = append(sc.lines, line), append(sc.rows, row)
+	}
+	if len(d.lines) > 0 {
+		sc.dockAt, sc.dockH, sc.stx0, sc.stx1 = len(sc.lines)+1, len(d.lines), d.stx0, d.stx1
+		sc.lines = append(append(sc.lines, m.st.hair.Render(strings.Repeat("─", w))), d.lines...)
+	}
+	keys, keySpans := m.keyLine(w)
+	sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
+	sc.lines = append(sc.lines, m.st.hair.Render(strings.Repeat("─", w)), keys)
+	if peeking && !inline {
+		m.overlayPeek(&sc, w)
+	}
+	return sc
 }
 
-// header shows every metric with its trend when the terminal is wide, drops
-// the trends when it is not, then drops metrics from the right.
-func (m Model) header(w int) string {
+// panes splits Sessions into the list and the detail: at the middle on an
+// opened phone, the list's ≈78 columns on a desk. A phone and the other
+// tabs have one column, and so has a door's diff while it waits for its
+// y: it shows whole.
+func (m Model) panes(w int) (list, detail int) {
+	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || m.layoutAt(w) == Narrow || preview {
+		return w, 0
+	}
+	at := splitAt(w, m.layoutAt(w))
+	return at, w - at - 1
+}
+
+// splitAt is the column the list and the detail split at, and the dock's
+// usage and machine under them.
+func splitAt(w int, l Layout) int {
+	if l == Medium {
+		return (w - 1) / 2
+	}
+	return min(78, w-41)
+}
+
+// windowed is the part of a body that fits in room lines: it scrolls so
+// every line of the selected row is on the screen, with a line to spare.
+func windowed(b body, room, sel int) body {
+	if len(b.lines) <= room {
+		return b
+	}
+	first, last := -1, -1
+	for i, r := range b.rows {
+		if r == sel && r >= 0 {
+			if first < 0 {
+				first = i
+			}
+			last = i
+		}
+	}
+	start := 0
+	if last >= room {
+		start = min(last-room+2, len(b.lines)-room)
+	}
+	if first >= 0 && first < start {
+		start = max(first-1, 0)
+	}
+	return body{lines: b.lines[start : start+room], rows: b.rows[start : start+room]}
+}
+
+// header is one line: the mark, the name and the host on the left; who
+// waits and the stoker on the right, or a toast after an action.
+func (m Model) header(w int) (string, span) {
+	st := m.st
+	left := " " + st.accent.Render("▰") + " " + st.text.Render("matchblox")
+	host := m.opt.Host
+	if host == "" {
+		host = m.host.Host
+	}
+	lost := ""
+	if m.lost && m.have {
+		// What shows is the last state the host sent.
+		lost = st.faint.Render(" · ") + st.warn.Render("stale")
+	}
 	if !m.have {
-		return fit(" "+m.brandFit(w), w) // no numbers before the first state
-	}
-	mc, h, st := m.snap.Machine, m.history, m.st
-	sep := st.hair.Render("  │  ")
-	type metric struct{ label, value, trend string }
-	ms := []metric{
-		{"cpu", fmt.Sprintf("%3.0f%%", mc.CPU), spark(h.cpu, 8, 100)},
-		{"mem", fmt.Sprintf("%s/%s", gib(mc.MemTotal-mc.MemAvail), gib(mc.MemTotal)), spark(h.mem, 8, float64(mc.MemTotal))},
-		{"load", fmt.Sprintf("%.1f", mc.Load[0]), spark(h.load, 8, 0)},
-		{"net", "↓" + size(mc.NetRx) + " ↑" + size(mc.NetTx), spark(h.net, 8, 0)},
-		{"io", "r " + size(mc.DiskRead) + " w " + size(mc.DiskWrite), spark(h.io, 8, 0)},
-	}
-	if mc.LatencyErr != "" {
-		ms = append(ms, metric{"lat", st.neg.Render("! down"), ""})
-	} else if mc.Latency > 0 {
-		ms = append(ms, metric{"lat", fmt.Sprintf("%dms", mc.Latency.Milliseconds()), spark(h.lat, 8, 0)})
-	}
-	build := func(n int, trends bool) string {
-		parts := []string{m.brandFit(w)}
-		for _, x := range ms[:n] {
-			p := st.label.Render(x.label) + " " + st.text.Render(x.value)
-			if trends && x.trend != "" {
-				p += " " + st.faint.Render(x.trend)
-			}
-			parts = append(parts, p)
+		if host != "" {
+			left += st.faint.Render(" · ") + st.muted.Render(host)
 		}
-		return " " + strings.Join(parts, sep)
+		return fit(left, w), span{}
 	}
-	for _, trends := range []bool{true, false} {
-		for n := len(ms); n > 0; n-- {
-			if line := build(n, trends); lipgloss.Width(line) <= w {
-				return fit(line, w)
-			}
+	if m.toast != "" {
+		// A long toast is cut, never the name; the host stays when the
+		// toast still has room.
+		if host != "" && w-lipgloss.Width(left+lost)-len(host)-6 >= 20 {
+			left += st.faint.Render(" · ") + st.muted.Render(host)
+		}
+		room := max(w-lipgloss.Width(left+lost)-3, 1)
+		return spread(left+lost, st.accent.Render(ansi.Truncate(m.toast, room, "…"))+" ", w), span{}
+	}
+	n := 0
+	for _, s := range m.all.sessions {
+		if m.groupOf(s) == groupWaits {
+			n++
 		}
 	}
-	return fit(" "+m.brandFit(w), w) // no metric fits: the brand alone, never a cut number
+	stoker := m.stokerBadge(m.layoutAt(w) == Narrow)
+	// Short of room the host goes first (a phone), then the words of who
+	// waits; the count stays.
+	waits := []string{""}
+	if n > 0 {
+		waits = []string{fmt.Sprintf("● %d wait for you", n), fmt.Sprintf("● %d", n)}
+	}
+	lefts := []string{left}
+	if host != "" {
+		lefts = []string{left + st.faint.Render(" · ") + st.muted.Render(host), left}
+	}
+	var right string
+	for _, word := range waits {
+		right = stoker + " "
+		switch {
+		case word != "" && stoker != "":
+			right = st.accent.Render(word) + "  " + right
+		case word != "":
+			right = st.accent.Render(word) + " "
+		}
+		hit := span{}
+		if word != "" {
+			hit = span{w - lipgloss.Width(right), w - lipgloss.Width(right) + lipgloss.Width(word), "waits"}
+		}
+		for _, l := range lefts {
+			if lipgloss.Width(l+lost)+lipgloss.Width(right)+1 <= w {
+				return spread(l+lost, right, w), hit
+			}
+		}
+	}
+	return spread(left+lost, right, w), span{}
 }
 
-// tabs tries the full names, then a narrower gap, then the short names,
-// then digits only (a phone), so every tab and the alert marker stay on the
-// line.
-func (m Model) tabs(w int) string {
-	alert := m.alert()
-	line := m.tabLine(m.tabTier(w))
-	if alert != "" {
-		line += strings.Repeat(" ", max(w-lipgloss.Width(line)-lipgloss.Width(alert)-1, 2)) + alert
+// stokerBadge is the stoker's word: off in faint, on and the night in the
+// stoker's token, resting in muted. A phone drops the night's end.
+func (m Model) stokerBadge(short bool) string {
+	st := m.st
+	switch {
+	case m.stoker == nil:
+		return ""
+	case !m.stoker.On:
+		return st.faint.Render("stoker off")
+	case m.resting():
+		return st.muted.Render("stoker rests")
+	case !m.stoker.Until.IsZero() && short:
+		return st.stoker.Render("☾ night")
+	case !m.stoker.Until.IsZero():
+		return st.stoker.Render("☾ " + stokerWordOf(m.stoker.Mode))
 	}
-	return fit(line, w)
+	return st.stoker.Render("stoker")
+}
+
+// tabsLine names every tab: the open one uppercase in the accent with its
+// rule, the others lowercase in faint, a count after a name when it means
+// something. When the names do not fit, the tabs far from the open one
+// shorten to their digit, the nearest last.
+func (m Model) tabsLine(w int) (string, []span) {
+	alert := m.alert()
+	aw := lipgloss.Width(alert)
+	try := func(near int, gap string) (string, []span) {
+		line, x := " ", 1
+		var spans []span
+		for i := range views {
+			if i > 0 {
+				line += gap
+				x += len(gap)
+			}
+			label := m.tabLabel(i, i-m.tab <= near && m.tab-i <= near)
+			spans = append(spans, span{x, x + lipgloss.Width(label), strconv.Itoa(i + 1)})
+			line += label
+			x += lipgloss.Width(label)
+		}
+		return line, spans
+	}
+	var line string
+	var spans []span
+	for _, t := range []struct {
+		near int
+		gap  string
+	}{{len(views), "    "}, {len(views), "   "}, {len(views), "  "}, {2, "  "}, {1, "  "}, {0, "  "}, {-1, "  "}} {
+		if line, spans = try(t.near, t.gap); lipgloss.Width(line)+aw+2 <= w {
+			break
+		}
+	}
+	if alert != "" {
+		line += strings.Repeat(" ", max(w-lipgloss.Width(line)-aw-1, 2)) + alert
+	}
+	return fit(line, w), spans
+}
+
+// tabLabel is a tab's name and count, or its digit when it is shortened.
+func (m Model) tabLabel(i int, named bool) string {
+	st := m.st
+	name, count := views[i].name, ""
+	switch i {
+	case tabSessions:
+		count = strconv.Itoa(len(m.all.sessions))
+	case tabShips:
+		if m.shipReport != nil && m.shipReport.InFlight > 0 {
+			count = strconv.Itoa(m.shipReport.InFlight)
+		}
+	case tabMachine:
+		if len(m.all.orphans) > 0 {
+			count = "!" // a detached busy loop burns
+		}
+	}
+	if !named {
+		name = strconv.Itoa(i + 1)
+	}
+	switch {
+	case i == m.tab && count == "":
+		return st.tabActive.Render(strings.ToUpper(name))
+	case i == m.tab:
+		return st.tabActive.Render(strings.ToUpper(name)) + st.accent.Render(" "+count)
+	case count == "!":
+		return st.faint.Render(name) + st.neg.Render(" !")
+	case count != "" && named:
+		return st.faint.Render(name + " " + count)
+	}
+	return st.faint.Render(name)
 }
 
 func (m Model) alert() string {
@@ -172,7 +426,7 @@ func (m Model) alert() string {
 	if n == 0 {
 		return ""
 	}
-	if layout(m.width) == Narrow {
+	if m.layoutAt(m.width) == Narrow {
 		return m.st.warn.Render(fmt.Sprintf("▲ %d", n))
 	}
 	alert := m.st.warn.Render(fmt.Sprintf("▲ %d alert", n))
@@ -182,72 +436,24 @@ func (m Model) alert() string {
 	return alert
 }
 
-type tabTier struct {
-	names []string // nil: the open tab by its short name, the others by digit
-	gap   string
-}
-
-func (m Model) tabTier(w int) tabTier {
-	alert := lipgloss.Width(m.alert())
-	tiers := []tabTier{{tabNames, "   "}, {tabNames, "  "}, {tabShort, "  "}, {nil, "  "}}
-	for _, t := range tiers {
-		if lipgloss.Width(m.tabLine(t))+alert+2 <= w {
-			return t
-		}
-	}
-	return tiers[len(tiers)-1]
-}
-
-func (m Model) tabLine(t tabTier) string {
-	return " " + strings.Join(m.tabParts(t), t.gap)
-}
-
-// tabParts are the tab labels; a tap finds its tab by their widths.
-func (m Model) tabParts(t tabTier) []string {
-	var parts []string
-	for i := range tabNames {
-		label := fmt.Sprint(i + 1)
-		switch {
-		case t.names != nil:
-			label += " " + strings.ToUpper(t.names[i])
-		case i == m.tab:
-			label += " " + strings.ToUpper(tabShort[i])
-		}
-		switch {
-		case i == m.tab:
-			parts = append(parts, m.st.tabActive.Render(label))
-		case i == tabProcs && len(m.snap.Orphans) > 0:
-			parts = append(parts, m.st.neg.Render(label+" !"))
-		case i == tabQueue && len(m.queue) > 0 && m.tab != tabQueue && t.names == nil:
-			parts = append(parts, m.st.accent.Render(fmt.Sprintf("%s·%d", label, len(m.queue))))
-		case i == tabQueue && len(m.queue) > 0 && m.tab != tabQueue:
-			parts = append(parts, m.st.accent.Render(fmt.Sprintf("%s %d", label, len(m.queue))))
-		default:
-			parts = append(parts, m.st.faint.Render(label))
-		}
-	}
-	return parts
-}
-
-func (m Model) footer(w int) string {
+// keyLine is the bottom line: the keys of the open tab, each a tap target,
+// or what the person acts on now: an answer, a search, the take-over
+// question, a pending step and its confirm, or what the last key said.
+func (m Model) keyLine(w int) (string, []span) {
 	st := m.st
-	if m.input != nil {
-		return fit(" "+st.label.Render("ANSWER ")+st.muted.Render(m.input.pane+" ")+
-			st.text.Render(m.input.text)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ review  esc cancel"), w)
-	}
 	if m.searching {
-		return fit(" "+st.label.Render("/ ")+st.text.Render(m.filter)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ keep  esc clear"), w)
+		return fit(" "+st.label.Render("/ ")+st.text.Render(m.filter)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ keep  esc clear"), w), nil
 	}
 	if m.held != nil {
 		switch {
 		case m.flash != "":
-			return fit(" "+st.text.Render("Take over? ")+st.warn.Render(m.flash), w)
-		case layout(w) == Narrow:
+			return fit(" "+st.text.Render("Take over? ")+st.warn.Render(m.flash), w), nil
+		case m.layoutAt(w) == Narrow:
 			return fit(" "+st.text.Render("Stoker on. Take over? ")+st.accent.Render("y")+st.muted.Render(" rest · ")+
-				st.accent.Render("n")+st.muted.Render(" keep"), w)
+				st.accent.Render("n")+st.muted.Render(" keep"), w), nil
 		}
 		return fit(" "+st.text.Render("The stoker is on. Take over?  ")+st.accent.Render("y")+st.muted.Render(" rests it while you work · ")+
-			st.accent.Render("n")+st.muted.Render(" keeps it on"), w)
+			st.accent.Render("n")+st.muted.Render(" keeps it on"), w), nil
 	}
 	if m.pending != nil {
 		confirm := "⏎ run  esc cancel"
@@ -257,181 +463,40 @@ func (m Model) footer(w int) string {
 		if !m.previewSeen() {
 			confirm = st.muted.Render("↓ the rest, then ") + st.neg.Render("y")
 		}
-		return fit(" "+st.label.Render("RUN ")+st.text.Render(m.pending.String())+"   "+st.muted.Render(confirm), w)
+		return fit(" "+st.label.Render("RUN ")+st.text.Render(m.pending.String())+"   "+st.muted.Render(confirm), w), nil
 	}
-	tabKeys := m.view().keys
-	if _, ok := m.selectedRec(); ok {
-		tabKeys = "↑↓ select  ⏎ do  x the other action"
-	}
-	if d, ok := m.selectedDoor(); ok {
-		tabKeys = "↑↓ select  ⏎ open  x close"
-		if d.ID == stokedRow {
-			tabKeys = "↑↓ select  ⏎ fold"
-		}
-	}
-	if s, ok := m.selected(); ok && m.tab == tabSessions && s.Age() == "stale" {
-		tabKeys += "  x end"
-	}
-	keys := tabKeys + "  / find  1-7 panel  q quit"
-	if m.filter != "" {
-		keys = "/ " + m.filter + " · esc clears  " + tabKeys
-	}
-	if layout(w) == Narrow {
-		keys = strings.NewReplacer("↑↓ select  ", "↑↓ ", "1-7 panel", "1-7", "the other action", "other", "space mark  X all safe  ", "␣ X ", "  r rescan", "").Replace(keys)
-	}
-	left := " " + st.muted.Render(keys)
 	if m.flash != "" {
-		left = " " + st.text.Render(m.flash)
+		return fit(" "+st.text.Render(m.flash), w), nil
+	}
+	hints := m.view().keys(m)
+	if m.layoutAt(w) == Wide {
+		hints = append([]hint{{"↑↓", "move", ""}}, hints...)
+		hints = append(hints, hint{"/", "find", "/"}, hint{"q", "quit", ""})
+	}
+	line, x := " ", 1
+	if m.filter != "" {
+		lead := "/ " + m.filter + " · esc clears  "
+		line += st.muted.Render(lead)
+		x += lipgloss.Width(lead)
+	}
+	var spans []span
+	for i, h := range hints {
+		if i > 0 {
+			line += "  "
+			x += 2
+		}
+		part := st.accent.Render(h.key) + st.muted.Render(" "+h.label)
+		if h.press != "" {
+			spans = append(spans, span{x, x + lipgloss.Width(part), h.press})
+		}
+		line += part
+		x += lipgloss.Width(part)
 	}
 	right := st.faint.Render("sampled " + sample.Human(m.now().Sub(m.snap.At)) + " ago ")
-	if lipgloss.Width(left)+lipgloss.Width(right)+1 > w {
-		return fit(left, w) // the keys matter more than the age
+	if lipgloss.Width(line)+lipgloss.Width(right)+1 > w {
+		return fit(line, w), spans // the keys matter more than the age
 	}
-	return left + strings.Repeat(" ", w-lipgloss.Width(left)-lipgloss.Width(right)) + right
-}
-
-const (
-	colPane = 11 // session:window.pane; widened to show the tab name when there is room
-	colTab  = 12
-	colName = 17
-	colSt   = 9 // the match, a space, the word (paused is six letters), a space
-	colIdle = 6
-	colBar  = 10
-	colPct  = 9
-	colCPU  = 6
-	colDo   = 10
-	// colAcctMax bounds the account column: a long email is cut, the
-	// rest of the row stays.
-	colAcctMax = 34
-)
-
-func (m Model) sessions(w, h int) body {
-	st := m.st
-	ss := m.snap.Sessions
-	busy := 0
-	for _, s := range ss {
-		if s.Busy {
-			busy++
-		}
-	}
-	region := fmt.Sprintf(" %d AGENTS  ·  BUSY %d  ·  IDLE %d", len(ss), busy, len(ss)-busy) + m.sortNote(w, m.sessSort, sessCols)
-	var b body
-	b.add(-1, "", st.label.Render(region))
-	if layout(w) == Narrow {
-		// A phone: two lines for each session, no columns, no detail.
-		sel := m.selIndex()
-		for i, s := range ss {
-			b.addRow(i, i == sel, w, st, m.narrowRow(s, i == sel)...)
-		}
-		b.add(-1, m.exitedLines(w)...)
-		return b
-	}
-
-	tab, acct, tree := m.sessWidths(w)
-	head, _ := m.sessHeader(tab, acct)
-	b.add(headerRow, st.label.Render(fit(head, w)))
-
-	detail := m.detail(w)
-	room := max(h-len(b.lines)-len(detail)-2, 3)
-	sel := m.selIndex()
-	first := max(min(sel-room/2, len(ss)-room), 0)
-	for i := first; i < len(ss) && i < first+room; i++ {
-		b.add(i, m.row(ss[i], i == sel, w, tab, acct, tree))
-	}
-	if n := len(m.snap.IdlePanes); n > 0 {
-		var ids []string
-		for _, p := range m.snap.IdlePanes {
-			ids = append(ids, place(p.Target, p.Pane)+" "+p.Command)
-		}
-		b.add(-1, st.faint.Render(fit(fmt.Sprintf(" %d without an agent: %s", n, strings.Join(ids, ", ")), w)))
-	}
-	b.add(-1, m.exitedLines(w)...)
-	b.add(-1, "", st.hair.Render(strings.Repeat("─", w)))
-	b.add(-1, detail...)
-	return b
-}
-
-// sessWidths gives the optional columns of Sessions their width: the tab
-// name from 100 columns, the account when the rest still fits (it is the
-// first to go), and the worktree what is left.
-func (m Model) sessWidths(w int) (tab, acct, tree int) {
-	if w >= 100 {
-		tab = colTab
-	}
-	rest := w - (1 + colPane + tab + colName + colSt + colIdle + colBar + 1 + colPct + colCPU + colDo + 1)
-	for _, s := range m.snap.Sessions {
-		acct = max(acct, lipgloss.Width(accountCell(s))+2)
-	}
-	acct = min(acct, colAcctMax)
-	if rest-acct < 12 {
-		acct = 0
-	}
-	return tab, acct, min(max(rest-acct, 12), 48)
-}
-
-// providerMarks stand for the logos a terminal cannot draw: one cell each,
-// none an emoji.
-var providerMarks = map[string]string{"anthropic": "✻", "openai": "❋", "opencode": "▣"}
-
-// limitLines are the limits of each account, one line each, under the
-// metrics: the mark, a short name, then what is left and whether the week
-// lasts. One account of a provider is named by its plan, two by the name
-// of their emails.
-func (m Model) limitLines(w int) []string {
-	if !m.have || len(m.snap.Limits) == 0 {
-		return nil
-	}
-	st := m.st
-	per := map[string]int{}
-	for _, a := range m.snap.Limits {
-		per[a.Provider]++
-	}
-	names := make([]string, len(m.snap.Limits))
-	nameW := 0
-	for i, a := range m.snap.Limits {
-		email, plan, _ := strings.Cut(a.Account, " · ")
-		names[i] = plan
-		if per[a.Provider] > 1 || plan == "" {
-			names[i], _, _ = strings.Cut(email, "@")
-		}
-		nameW = max(nameW, lipgloss.Width(names[i]))
-	}
-	out := make([]string, len(m.snap.Limits))
-	for i, a := range m.snap.Limits {
-		mark := providerMarks[a.Provider]
-		if mark == "" {
-			mark = "·"
-		}
-		// Too wide: the resets go first, then the name; what is left and
-		// whether the week lasts stay.
-		for try := 0; try < 3; try++ {
-			var parts []string
-			for _, p := range limits.Parts(a, m.now()) {
-				text := p.Text
-				if try > 0 {
-					text, _, _ = strings.Cut(text, " until ")
-				}
-				style := st.text
-				switch p.Tone {
-				case limits.Muted:
-					style = st.muted
-				case limits.Warn:
-					style = st.warn
-				}
-				parts = append(parts, style.Render(text))
-			}
-			name := ""
-			if try < 2 {
-				name = st.label.Render(names[i]+strings.Repeat(" ", nameW-lipgloss.Width(names[i]))) + "  "
-			}
-			out[i] = " " + st.muted.Render(mark) + " " + name + strings.Join(parts, st.faint.Render(" · "))
-			if lipgloss.Width(out[i]) <= w {
-				break
-			}
-		}
-		out[i] = fit(out[i], w)
-	}
-	return out
+	return line + strings.Repeat(" ", w-lipgloss.Width(line)-lipgloss.Width(right)) + right, spans
 }
 
 // accountCell is the provider's mark and the account label: "✻ a@b.c · Max".
@@ -452,71 +517,6 @@ func accountCell(s sample.Session) string {
 	return p + " · " + s.Account
 }
 
-func (m Model) row(s sample.Session, selected bool, w, tab, acct, tree int) string {
-	st := m.st
-	state, idle := m.matchCell(s)+st.text.Render(pad(busyWord(s), colSt-2)), pad("", colIdle)
-	if !s.Busy {
-		state = m.matchCell(s) + st.faint.Render(pad(m.stateWord(s), colSt-2))
-		idle = st.muted.Render(pad(m.idleCell(s), colIdle))
-	}
-	ctx := st.faint.Render(pad(contextWord(s.Context), colBar+1+colPct))
-	if s.Context == "known" {
-		pctStyle := st.text
-		switch {
-		case m.full().Reached(s):
-			pctStyle = st.neg
-		case s.ContextPct >= 70:
-			pctStyle = st.warn
-		}
-		win := ""
-		if s.Window >= 1_000_000 {
-			win = " 1M"
-		}
-		ctx = st.muted.Render(bar(s.ContextPct, colBar)) + " " + pctStyle.Render(pad(fmt.Sprintf("%3.0f%%%s", s.ContextPct, win), colPct))
-	}
-	cpu := st.faint.Render(pad(fmt.Sprintf("%3.0f%%", s.CPU), colCPU))
-	if s.CPU >= 5 {
-		cpu = st.text.Render(pad(fmt.Sprintf("%3.0f%%", s.CPU), colCPU))
-	}
-	do := pad("", colDo+1)
-	if s.Progress != nil {
-		do = pad(m.progressCell(s.Progress, 5), colDo+1)
-	}
-	switch s.Do {
-	case "compact":
-		do = st.neg.Render(pad("! compact", colDo+1))
-	case "clear":
-		do = st.warn.Render(pad("▲ clear", colDo+1))
-	}
-	name := st.text.Render(pad(s.Name, colName))
-	if pr := m.prOf(s.Cwd); pr != nil {
-		// The PR keeps its place in the name cell: the worktree column is
-		// the first one a narrow terminal cuts.
-		num := "#" + strconv.Itoa(pr.Number) + " "
-		name = st.text.Render(pad(s.Name, colName-len(num))) + st.accent.Render(num)
-	}
-	where := place(s.Target, s.Pane)
-	if selected {
-		where = "▌" + where
-	}
-	pane := st.muted.Render(pad(where, colPane))
-	if selected {
-		pane = st.accent.Render(pad(where, colPane))
-	}
-	if tab > 0 {
-		pane += st.muted.Render(pad(s.Tab, tab))
-	}
-	account := ""
-	if acct > 0 {
-		account = st.muted.Render(pad(accountCell(s), acct))
-	}
-	line := " " + pane + name + state + idle + ctx + cpu + do + account + st.muted.Render(pad(worktree(s.Cwd), tree))
-	if selected {
-		return st.selected.Render(fit(line, w))
-	}
-	return fit(line, w)
-}
-
 // idleCell is how long a session sat idle, or, while the plan's limit stops
 // it, when it can work again: 19:50 within a day, else the weekday.
 func (m Model) idleCell(s sample.Session) string {
@@ -533,85 +533,13 @@ func (m Model) full() sample.Full {
 	return sample.Full{Pct: m.opt.CompactAt, Tokens: m.opt.CompactTokens}
 }
 
-func (m Model) detail(w int) []string {
-	st := m.st
-	s, ok := m.selected()
-	if !ok {
-		return []string{st.faint.Render(m.nothing(" no agent sessions found in tmux"))}
-	}
-	lines := []string{st.label.Render(" " + strings.ToUpper(place(s.Target, s.Pane)+" "+s.Tab+"  "+s.Name))}
-	facts := []string{fmt.Sprintf("pid %d", s.PID)}
-	if s.Pane != "" {
-		facts = append(facts, "pane "+s.Pane)
-	}
-	if !s.Started.IsZero() {
-		facts = append(facts, "started "+sample.Human(m.now().Sub(s.Started))+" ago")
-	}
-	if s.Model != "" {
-		facts = append(facts, s.Model)
-	}
-	switch {
-	case s.Tokens > 0 && s.Window > 0:
-		facts = append(facts, fmt.Sprintf("%s / %s tokens", sample.Kilo(s.Tokens), sample.Kilo(s.Window)), "+"+sample.Kilo(s.Burn30m)+" in 30 min")
-	case s.Tokens > 0:
-		facts = append(facts, sample.Kilo(s.Tokens)+" tokens · no window known: add the model to [sessions.windows]")
-	}
-	if s.Procs == 1 {
-		facts = append(facts, "1 process")
-	} else {
-		facts = append(facts, fmt.Sprintf("%d processes", s.Procs))
-	}
-	lines = append(lines, fit(" "+st.text.Render(strings.Join(facts, st.faint.Render("  ·  "))), w))
-	lines = append(lines, fit(" "+st.muted.Render(s.Cwd), w))
-	// The ACCOUNT column needs room; without it the detail names it.
-	if _, acct, _ := m.sessWidths(w); acct == 0 && accountCell(s) != "" {
-		lines = append(lines, fit(" "+st.label.Render("ACCOUNT ")+st.text.Render(accountCell(s)), w))
-	}
-	if pr := m.prOf(s.Cwd); pr != nil {
-		what := "#" + strconv.Itoa(pr.Number) + " " + pr.Title
-		if pr.Draft {
-			what = "#" + strconv.Itoa(pr.Number) + " draft " + pr.Title
-		}
-		lines = append(lines, fit(" "+st.label.Render("PR ")+st.text.Render(what)+"  "+st.muted.Render(pr.URL), w))
-	}
-	if s.LastLine != "" {
-		lines = append(lines, fit(" "+st.label.Render("LAST ")+st.text.Render(s.LastLine), w))
-	}
-	if s.FromPane {
-		lines = append(lines, fit(" "+st.faint.Render("no hooks for "+s.Name+": busy and idle are read from the pane"), w))
-	}
-	if p := s.Progress; p != nil {
-		lines = append(lines, fit(" "+st.label.Render("PROGRESS ")+m.progressCell(p, 10)+"  "+st.text.Render(p.Step), w))
-	}
-	if s.Agents > 0 || len(s.Shells) > 0 {
-		var parts []string
-		if s.Agents > 0 {
-			parts = append(parts, plural(s.Agents, "agent"))
-		}
-		if len(s.Shells) > 0 {
-			parts = append(parts, plural(len(s.Shells), "shell"))
-			if old := s.Shells[0].Started; !old.IsZero() {
-				parts = append(parts, "oldest "+sample.Human(m.now().Sub(old)))
-			}
-		}
-		lines = append(lines, fit(" "+st.label.Render("BACKGROUND ")+st.text.Render(strings.Join(parts, " · ")), w))
-		for _, sh := range s.Shells {
-			lines = append(lines, fit("   "+st.muted.Render(strconv.Itoa(sh.PID)+"  "+sh.Command), w))
-		}
-	}
-	if s.Why != "" {
-		lines = append(lines, fit(" "+st.label.Render("WHY ")+st.text.Render(s.Do+": "+s.Why), w))
-	}
-	if s.Pane != "" {
-		lines = append(lines, fit(" "+st.label.Render("⏎ ")+st.muted.Render("tmux switch-client -t "+s.Pane), w))
-	}
-	return lines
-}
-
 // plural is "1 shell", "2 shells".
 func plural(n int, noun string) string {
 	if n == 1 {
 		return "1 " + noun
+	}
+	if strings.HasSuffix(noun, "s") {
+		return strconv.Itoa(n) + " " + noun + "es"
 	}
 	return strconv.Itoa(n) + " " + noun + "s"
 }
@@ -623,11 +551,6 @@ func contextWord(c string) string {
 		return "not measured"
 	}
 	return c
-}
-
-func bar(pct float64, w int) string {
-	full := min(int(pct/100*float64(w)+0.5), w)
-	return strings.Repeat("█", full) + strings.Repeat("░", w-full)
 }
 
 // prOf is the open pull request of the worktree a directory is in: the
@@ -646,19 +569,6 @@ func (m Model) prOf(cwd string) *proto.PR {
 		}
 	}
 	return pr
-}
-
-// worktree shortens a cwd to what tells sessions apart: the checkout name,
-// or the worktree name for paths under a */worktrees/* directory.
-func worktree(cwd string) string {
-	if cwd == "" {
-		return "?"
-	}
-	dir, base := filepath.Split(filepath.Clean(cwd))
-	if strings.Contains(filepath.Base(dir), "worktrees") {
-		return "wt/" + base
-	}
-	return base
 }
 
 // place names a pane the way the tmux status bar does (session:window.pane),
@@ -693,43 +603,6 @@ func size(b float64) string {
 		return fmt.Sprintf("%.0fK", b/(1<<10))
 	}
 	return fmt.Sprintf("%.0fB", b)
-}
-
-// brand is the mark, the name and the host the console shows.
-func (m Model) brand() string { return m.brandWith(m.stokerWord()) }
-
-// brandFit is the brand in w columns: on a phone with a long host name the
-// stoker word drops its time rather than being cut.
-func (m Model) brandFit(w int) string {
-	if b := m.brand(); lipgloss.Width(b)+1 <= w {
-		return b
-	}
-	return m.brandWith(m.stokerShort())
-}
-
-func (m Model) brandWith(word string) string {
-	b := m.st.accent.Render("▰") + " " + m.st.text.Render("matchblox")
-	// A host shows by the name the builder typed: its own hostname may be
-	// another.
-	host := m.opt.Host
-	if host == "" {
-		host = m.host.Host
-	}
-	if host != "" {
-		b += m.st.faint.Render(" · ") + m.st.muted.Render(host)
-	}
-	if word != "" {
-		ink := m.st.stoker
-		if m.resting() {
-			ink = m.st.muted
-		}
-		b += m.st.faint.Render(" · ") + ink.Render(word)
-	}
-	if m.lost && m.have {
-		// What shows is the last state the host sent.
-		b += m.st.faint.Render(" · ") + m.st.warn.Render("stale")
-	}
-	return b
 }
 
 // now is the console's clock.

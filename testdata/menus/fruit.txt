@@ -1,0 +1,50 @@
+
+ ▐▛███▛█   Claude Code v2.1.296
+▝▜██████▀  Haiku 5.5 · Claude Max
+ ▝▝   ▝▝   ~/work
+
+  ⎿  SessionStart:startup says: ○○○ Semgrep Guardian (blox-engineering): this session is protected, files are scanned as
+     they are written
+
+❯ Say "Shape A ready." then call AskUserQuestion once: one single-choice question "Which fruit do you want?" header
+  Fruit, options Apple, Banana, Cherry (each with a short description). No other tools.
+  ⎿  Async hook SessionStart completed
+
+● Shape A ready.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Fruit
+
+Which fruit do you want?
+
+❯ 1. Apple
+     Crisp and sweet, a common everyday choice.
+  2. Banana
+     Soft and easy to eat, rich in potassium.
+  3. Cherry
+     Small and tart-sweet, great fresh or in desserts.
+  4. Type something.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

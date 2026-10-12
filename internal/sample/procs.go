@@ -67,7 +67,7 @@ func (s *Sampler) sampleProcs(snap *Snapshot, procs map[int]procfs.Proc, panes [
 	for _, pid := range pids[:min(topN, len(pids))] {
 		p := procs[pid]
 		snap.Top = append(snap.Top, ProcRow{
-			PID: pid, Comm: p.Comm, CPU: cpu[pid], RSS: uint64(p.RSSPages) * uint64(os.Getpagesize()),
+			PID: pid, Comm: p.Comm, CPU: cpu[pid], RSS: p.RSS,
 			Owner: s.owner(p),
 		})
 	}

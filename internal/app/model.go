@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -68,6 +69,9 @@ type Options struct {
 	// Layered: the console sits under the hosts layer, and esc with
 	// nothing to cancel or clear goes back to it.
 	Layered bool
+	// StateDir keeps what the person did to the recommendations (dismissed,
+	// folded). "": kept for this run only.
+	StateDir string
 	// Exec gives this terminal to argv until it exits. Nil: tea.ExecProcess.
 	Exec func(argv []string, done func(error) tea.Msg) tea.Cmd
 }
@@ -195,6 +199,7 @@ func fromAdvice(r advice.Rec, which string) *action {
 }
 
 type Model struct {
+	recPrefs   recPrefs // dismissed recommendations and the fold
 	opt        Options
 	conn       transport.Conn
 	st         styles
@@ -205,21 +210,25 @@ type Model struct {
 	git        *proto.GitReport
 	recs       []advice.Rec
 	queue      []queue.Item
-	queuePane  string
-	doors      []doors.Door // the open doors, above the queue
+	doors      []doors.Door // the open doors, above the sessions
 	stoker     *proto.StokerView
 	doorPick   string // the selected door
 	doorAt     int    // its row, for the door after it when it folds
 	previewTop int    // the first line of a door's diff on screen
 	paneSel    int
-	input      *answerInput
+	peek       *peek             // the answer peek, over the screen
+	peekSent   map[string]string // the peek's sends in flight: act id -> the session's name
+	peekQuiet  time.Time         // the peek takes no key until then: it just moved
 	changes    map[string]change // pane -> a match change that plays once
 	animating  bool
 	hist       history.Series
 	selPID     int
 	orphanPID  int
-	recPick    string // the selected recommendation, under the queue
+	recPick    string // the selected recommendation, above the sessions
+	chose      bool   // a session was picked; before, the first that waits is
 	gitSel     int
+	shipReport *proto.Ships
+	shipSel    int
 	tab        int
 	pending    *action
 	flash      string
@@ -251,6 +260,16 @@ type Model struct {
 	picked     map[string]bool // worktrees x removes
 	batch      *batch
 	showExited bool // e: the exited agents, one by one
+	// dockPanel is the panel a phone's dock shows (usage, the machine, the
+	// stoker), u cycling it; dockSwitched: u was pressed while the stoker
+	// claimed the dock, so it no longer takes it by itself.
+	dockPanel    int
+	dockSwitched bool
+	// stokerOpen: the stoker's full card is open, in the right pane or on
+	// a phone's Machine tab.
+	stokerOpen bool
+	toast      string // what an action did, on the header's right
+	toasts     int    // counts the toasts: a later one outlives the timer of an earlier one
 }
 
 func New(opt Options) Model {
@@ -263,7 +282,8 @@ func New(opt Options) Model {
 	if opt.Binary == "" {
 		opt.Binary = "dev"
 	}
-	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60)}
+	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60),
+		recPrefs: loadRecPrefs(opt.StateDir)}
 	m.splashAt = m.now()
 	return m
 }
@@ -384,13 +404,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		first := !m.have
 		st := proto.State(msg)
 		m.queue = st.Queue
+		toast := m.stokerNews(st.Stoker)
 		m.stoker = st.Stoker
-		m.doors = openDoors(st.Doors)
-		if m.stokedShows() {
-			m.doors = append([]doors.Door{{ID: stokedRow}}, m.doors...)
+		if !m.stokerClaims() {
+			m.dockSwitched = false
 		}
+		m.doors = openDoors(st.Doors)
 		m.noteChanges(st.Sessions)
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
+		m.shipReport = st.Ships
 		if m.recRun.rec != "" && m.recRun.act == "" && !m.isRec(m.recRun.rec) {
 			m.recRun = recRun{} // its rec is gone: a later one with the same id starts fresh
 		}
@@ -407,18 +429,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.hist.Append(history.FromSnapshot(m.snap))
 		}
 		m.keepSelection()
-		return m, tea.Batch(m.recv(), m.animate())
+		var news tea.Cmd
+		if toast != "" && !first {
+			news = m.say(toast)
+		}
+		return m, tea.Batch(m.recv(), m.animate(), news)
 	case doorRanMsg:
 		return m.doorRan(msg)
 	case animMsg:
 		m.animating = false
 		return m, m.animate()
+	case toastMsg:
+		if msg.n == m.toasts {
+			m.toast = ""
+		}
 	case resultMsg:
 		m.endRec(msg.ActID, proto.Result(msg))
+		if r := proto.Result(msg); m.peekSent[r.ActID] != "" {
+			name := m.peekSent[r.ActID]
+			m.peekSent = maps.Clone(m.peekSent)
+			delete(m.peekSent, r.ActID)
+			why := r.Err
+			if n := len(r.Skipped); n > 0 && why == "" {
+				why = r.Skipped[n-1]
+			}
+			if why != "" {
+				m.toast, m.flash = "", tilde("not sent to "+name+": "+why)
+				return m, m.recv()
+			}
+			return m, tea.Batch(m.recv(), m.say("sent to "+name))
+		}
 		if m.tally(proto.Result(msg)) {
 			return m, m.recv()
 		}
-		if text := describe(proto.Result(msg)); text != "" {
+		r := proto.Result(msg)
+		if text := describe(r); text != "" && r.Err == "" && len(r.Skipped) == 0 {
+			toast := m.say(tilde(text))
+			return m, tea.Batch(m.recv(), toast)
+		} else if text != "" {
 			m.flash = tilde(text)
 		}
 		return m, m.recv()
@@ -503,12 +551,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.flash = "failed: " + msg.cmd + ": " + msg.err.Error()
-		} else {
-			m.flash = "ran: " + msg.cmd
-			if msg.jumped != "" {
-				m = m.nextAfter(msg.jumped)
-			}
+			return m, nil
 		}
+		if msg.jumped != "" {
+			m = m.nextAfter(msg.jumped)
+		}
+		toast := m.say("ran: " + msg.cmd)
+		return m, toast
 	case tea.MouseClickMsg:
 		m, touch := m.touchRest()
 		next, cmd := m.tap(msg.Mouse())
@@ -526,14 +575,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var touch tea.Cmd
 		// f and n are stoker acts themselves: a touch sent with them would
 		// race them on the service.
-		if k := msg.String(); m.input != nil || m.searching || k != "f" && k != "n" {
+		if k := msg.String(); m.peek != nil || m.searching || k != "f" && k != "n" {
 			m, touch = m.touchRest()
 		}
 		var next tea.Model
 		var cmd tea.Cmd
 		switch {
-		case m.input != nil:
-			next, cmd = m.typing(msg)
+		case m.peek != nil:
+			next, cmd = m.peekKey(msg)
 		case m.searching:
 			next, cmd = m.search(msg)
 		default:
@@ -603,7 +652,15 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.flash = ""
+	if m.stokerOpen {
+		m.stokerOpen = false
+		if k == "enter" || k == "esc" {
+			return m.ackStoked() // seen: the card folds
+		}
+	}
 	switch k {
+	case "c":
+		return m.openStoker(), nil
 	case "q", "ctrl+c":
 		m.quitting = true
 		return m, tea.Quit
@@ -647,8 +704,8 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.move(1)
 	case "enter":
-		if d, ok := m.selectedDoor(); ok && d.ID == stokedRow {
-			return m.ackStoked()
+		if m.tab == tabShips {
+			return m.toDriver(), nil
 		}
 		m.pending, m.previewTop = m.primary(), 0
 	case "x":
@@ -657,11 +714,26 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 			m.flash = "x ends a stale session: one idle 7 days or more"
 		}
 	case "a":
-		if pane, why := m.answerTarget(); pane != "" {
-			m.input = &answerInput{pane: pane}
+		if m.tab == tabShips {
+			return m.shipAnswer(), nil
+		}
+		if pane, why := m.peekTarget(); pane != "" {
+			m.openPeek(pane)
 		} else {
 			m.flash = why
 		}
+	case "d":
+		if m.tab == tabSessions {
+			m.dismissRec()
+		}
+	case "h":
+		if m.tab == tabSessions {
+			m.foldRecs()
+		}
+	case "p":
+		m.setTab(tabShips)
+	case "u":
+		m.cycleDock()
 	case "f":
 		return m.stokerKey(false)
 	case "n":
@@ -762,36 +834,6 @@ func (m Model) attach(a action) tea.Cmd {
 	})
 }
 
-// typing edits the answer line. Every printable key is text, q too.
-func (m Model) typing(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	in := *m.input
-	switch k.String() {
-	case "esc":
-		m.input, m.flash = nil, "cancelled: answer"
-		return m, nil
-	case "ctrl+c":
-		m.quitting = true
-		return m, tea.Quit
-	case "enter":
-		m.input = nil
-		if strings.TrimSpace(in.text) == "" {
-			m.flash = "cancelled: the answer is empty"
-			return m, nil
-		}
-		m.pending = &action{label: "answer", steps: answerSteps(in.pane, in.text), destructive: true,
-			rec: "answer:" + in.pane, which: "secondary", text: in.text}
-		return m, nil
-	case "backspace":
-		in.text = trimLast(in.text)
-	default:
-		if k.Text != "" && len([]rune(in.text)) < 500 {
-			in.text += k.Text
-		}
-	}
-	m.input = &in
-	return m, nil
-}
-
 func clampMove(i, d, n int) int { return min(max(i+d, 0), max(n-1, 0)) }
 
 func (m *Model) move(d int) {
@@ -800,7 +842,14 @@ func (m *Model) move(d int) {
 	}
 }
 
+// selIndex is the selected session: the one picked, followed by its PID
+// across re-sorts; before one is picked, the first that waits.
 func (m Model) selIndex() int {
+	if !m.chose {
+		if i := m.firstWaiting(); i >= 0 {
+			return i
+		}
+	}
 	for i, s := range m.snap.Sessions {
 		if s.PID == m.selPID {
 			return i
@@ -816,23 +865,25 @@ func (m Model) selected() (sample.Session, bool) {
 	return m.snap.Sessions[m.selIndex()], true
 }
 
-// selectedRec is the recommendation selected under the queue.
-func (m Model) selectedRec() (advice.Rec, bool) {
-	if m.tab != tabQueue {
-		return advice.Rec{}, false
-	}
-	i := m.queueIndex() - len(m.doors) - len(m.queue)
-	if i < 0 || i >= len(m.recs) {
-		return advice.Rec{}, false
-	}
-	return m.recs[i], true
-}
-
 // keepSelection follows the selected session by PID across re-sorts.
 func (m *Model) keepSelection() {
 	if _, ok := m.selected(); ok {
 		m.selPID = m.snap.Sessions[m.selIndex()].PID
 	}
+}
+
+// toastMsg ends the toast it counts.
+type toastMsg struct{ n int }
+
+// toastFor is how long a toast stays on the header.
+const toastFor = 2500 * time.Millisecond
+
+// say shows what an action did on the header's right, for toastFor.
+func (m *Model) say(text string) tea.Cmd {
+	m.toasts++
+	m.toast = text
+	n := m.toasts
+	return tea.Tick(toastFor, func(time.Time) tea.Msg { return toastMsg{n} })
 }
 
 func (m Model) View() tea.View {
@@ -842,44 +893,23 @@ func (m Model) View() tea.View {
 	return v
 }
 
-// nextAfter selects, after a jump to pane, the next agent that waits: the
-// next queue row, or in Sessions the next session in the queue, else the
-// next idle one. The way back to the console lands on it.
+// nextAfter selects, after a jump to the selected session's pane, the
+// next session that waits, else the next idle one. The way back to the
+// console lands on it.
 func (m Model) nextAfter(pane string) Model {
-	switch m.tab {
-	case tabQueue:
-		if it, ok := m.selectedQueue(); !ok || it.Pane != pane {
-			return m
-		}
-		for i, it := range m.queue {
-			if it.Pane == pane && len(m.queue) > 1 {
-				m.queuePane = m.queue[(i+1)%len(m.queue)].Pane
-			}
-		}
-	case tabSessions:
-		ss := m.snap.Sessions
-		at := -1
-		for i, s := range ss {
-			if s.Pane == pane {
-				at = i
-			}
-		}
-		if at < 0 {
-			return m
-		}
-		waits := map[string]bool{}
-		for _, it := range m.queue {
-			waits[it.Pane] = true
-		}
-		for _, want := range []func(sample.Session) bool{
-			func(s sample.Session) bool { return waits[s.Pane] },
-			func(s sample.Session) bool { return s.Age() == "idle" },
-		} {
-			for k := 1; k < len(ss); k++ {
-				if s := ss[(at+k)%len(ss)]; want(s) {
-					m.selPID = s.PID
-					return m
-				}
+	if s, ok := m.selectedSession(); !ok || s.Pane != pane {
+		return m
+	}
+	ss := m.snap.Sessions
+	at := m.selIndex()
+	for _, want := range []func(sample.Session) bool{
+		func(s sample.Session) bool { return m.groupOf(s) == groupWaits },
+		func(s sample.Session) bool { return s.Age() == "idle" },
+	} {
+		for k := 1; k < len(ss); k++ {
+			if s := ss[(at+k)%len(ss)]; want(s) {
+				m.chose, m.selPID = true, s.PID
+				return m
 			}
 		}
 	}
