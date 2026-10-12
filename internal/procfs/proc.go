@@ -26,6 +26,7 @@ func (fs FS) path(parts ...string) string {
 type Proc struct {
 	PID       int
 	PPID      int
+	PGRP      int // the process group
 	Comm      string
 	State     byte
 	Ticks     uint64 // utime + stime
@@ -96,12 +97,13 @@ func parseStat(pid int, b []byte) (Proc, bool) {
 		return Proc{}, false
 	}
 	ppid, _ := strconv.Atoi(f[1])
+	pgrp, _ := strconv.Atoi(f[2])
 	ut, _ := strconv.ParseUint(f[11], 10, 64)
 	st, _ := strconv.ParseUint(f[12], 10, 64)
 	start, _ := strconv.ParseUint(f[19], 10, 64)
 	rss, _ := strconv.ParseInt(f[21], 10, 64)
 	return Proc{
-		PID: pid, PPID: ppid, Comm: string(b[open+1 : end]), State: f[0][0],
+		PID: pid, PPID: ppid, PGRP: pgrp, Comm: string(b[open+1 : end]), State: f[0][0],
 		Ticks: ut + st, StartTime: start, RSSPages: rss,
 	}, true
 }

@@ -82,8 +82,11 @@ type Session struct {
 
 // Shell is a shell an agent's Bash tool runs in the background.
 type Shell struct {
-	PID     int       `json:"pid"`
-	Start   uint64    `json:"start_ticks"` // tells a reused pid apart
+	PID   int    `json:"pid"`
+	Start uint64 `json:"start_ticks"` // tells a reused pid apart
+	// Group: the shell leads its own process group, so ending the group ends
+	// the command it runs too.
+	Group   bool      `json:"group,omitempty"`
 	Started time.Time `json:"started"`
 	Command string    `json:"command"` // as the agent wrote it
 }
@@ -788,7 +791,7 @@ func (s *Sampler) backgroundShells(pid int, procs map[int]procfs.Proc, children 
 		if !strings.Contains(cmd, "/shell-snapshots/snapshot-") {
 			continue
 		}
-		sh := Shell{PID: c, Start: procs[c].StartTime, Command: shellCommand(cmd)}
+		sh := Shell{PID: c, Start: procs[c].StartTime, Group: procs[c].PGRP == c, Command: shellCommand(cmd)}
 		if uptime > 0 {
 			sh.Started = now.Add(-time.Duration((uptime - float64(procs[c].StartTime)/procfs.ClockTicks) * float64(time.Second)))
 		}
@@ -805,8 +808,11 @@ func shellCommand(cmdline string) string {
 	if !ok {
 		return cmdline
 	}
-	if i := strings.LastIndex(body, "' < /dev/null"); i >= 0 {
-		body = body[:i]
+	for _, tail := range []string{"' < /dev/null", "' && pwd -P"} {
+		if i := strings.LastIndex(body, tail); i >= 0 {
+			body = body[:i]
+			break
+		}
 	}
 	return strings.ReplaceAll(body, `'"'"'`, "'")
 }
@@ -835,14 +841,13 @@ func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procK
 		return
 	}
 	sess.Progress, sess.LastLine, sess.Asks, sess.turnAt = u.Progress, u.LastLine, u.Asks, u.At
-	if !u.Ended.IsZero() {
+	if !u.Ended.IsZero() && sess.Busy {
 		// Claude Code's registry says busy while background work runs; the
-		// transcript says whether a turn does.
+		// transcript says whether a turn does. An idle registry says no
+		// work runs, whatever the turn's end counted then.
 		sess.Agents = u.Background
-		if sess.Busy {
-			sess.Busy, sess.Status = false, "idle"
-			sess.Idle = now.Sub(u.Ended).Truncate(time.Second)
-		}
+		sess.Busy, sess.Status = false, "idle"
+		sess.Idle = now.Sub(u.Ended).Truncate(time.Second)
 	}
 	if u.Out.After(now) {
 		sess.Out = u.Out

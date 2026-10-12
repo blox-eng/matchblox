@@ -68,9 +68,12 @@ pace: only the line counts.
 
 Claude Code's own auto-compact is the net under the stoker: it is the only
 thing that compacts inside a turn. The door "Keep a net under every
-session" turns it on at the same line (`autoCompactEnabled` and
+session" turns it on at `compact_at` (`autoCompactEnabled` and
 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` in `~/.claude/settings.json`); a
-percentage you set there yourself stays.
+percentage you set there yourself stays. Claude Code takes only a
+percentage, so with `compact_tokens` set the stoker's line can sit below
+the net: on a 1M window the default 350k is 35%, the net 85%. Set
+`compact_tokens = 0` to make them one line.
 
 Right before it types, and again before the `Enter`, it reads the pane. A
 permission prompt, a question or a line you started to type stops the step.

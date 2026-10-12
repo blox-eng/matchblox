@@ -94,3 +94,34 @@ func TestAnEndedTurnIsIdleWhileItsBackgroundWorks(t *testing.T) {
 		t.Fatalf("shell %+v (age %v)", sh, fixtureNow.Sub(sh.Started))
 	}
 }
+
+// The command shown is the one inside the Bash tool's wrapper, with or
+// without its stdin redirect.
+func TestTheShellCommandIsTheAgentsOwn(t *testing.T) {
+	for in, want := range map[string]string{
+		"zsh -c source /h/.claude/shell-snapshots/snapshot-zsh-1.sh && eval 'npm run dev' < /dev/null && pwd -P >| /tmp/c":      "npm run dev",
+		"zsh -c source /h/.claude/shell-snapshots/snapshot-zsh-1.sh && eval 'python3 -c \"save(1)\"' && pwd -P >| /tmp/c":       `python3 -c "save(1)"`,
+		"zsh -c source /h/.claude/shell-snapshots/snapshot-zsh-1.sh && eval 'echo '\"'\"'a'\"'\"'' < /dev/null && pwd -P >| /x": "echo 'a'",
+	} {
+		if got := shellCommand(in); got != want {
+			t.Errorf("%q: got %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A registry that says idle says no background work runs: the count the
+// turn's end wrote is not shown.
+func TestAnIdleRegistryShowsNoStaleAgents(t *testing.T) {
+	root := copyFixture(t)
+	transcript := filepath.Join(root, "home", ".claude", "projects", "-work-app", "11111111-aaaa-4000-8000-000000000002.jsonl")
+	b, err := os.ReadFile(transcript)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, transcript, string(b)+`{"type":"system","subtype":"turn_duration","isSidechain":false,"pendingBackgroundAgentCount":2,"timestamp":"2026-09-21T13:00:00Z"}`+"\n")
+	for _, s := range newFixtureSampler(root).Sample().Sessions {
+		if s.PID == 310 && s.Agents != 0 {
+			t.Fatalf("agents %d on an idle registry", s.Agents)
+		}
+	}
+}

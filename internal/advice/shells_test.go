@@ -16,7 +16,7 @@ func TestALongBackgroundShellCanBeEnded(t *testing.T) {
 	snap := sample.Snapshot{At: now, Sessions: []sample.Session{{
 		Pane: "%5", Name: "Billed", Status: "idle", Agent: "claude",
 		Shells: []sample.Shell{
-			{PID: 2240632, Start: 99, Started: now.Add(-37 * time.Hour), Command: `while pgrep -f "node walk.mjs" >/dev/null; do sleep 15; done`},
+			{PID: 2240632, Start: 99, Group: true, Started: now.Add(-37 * time.Hour), Command: `while pgrep -f "node walk.mjs" >/dev/null; do sleep 15; done`},
 			{PID: 194234, Start: 98, Started: now.Add(-20 * time.Minute), Command: "npm run build"},
 		},
 	}}}
@@ -34,8 +34,23 @@ func TestALongBackgroundShellCanBeEnded(t *testing.T) {
 		t.Fatalf("rec %q · %q", r.Title, r.Evidence)
 	}
 	if r.Primary == nil || !r.Primary.Nav || r.Second == nil || !r.Second.Destructive ||
-		len(r.Second.Steps) != 1 || strings.Join(r.Second.Steps[0], " ") != "kill 2240632" ||
+		len(r.Second.Steps) != 1 || strings.Join(r.Second.Steps[0], " ") != "kill -- -2240632" ||
 		len(r.Second.Guards) != 1 || r.Second.Guards[0] != (Guard{PID: 2240632, StartTicks: 99}) {
 		t.Fatalf("actions %+v %+v", r.Primary, r.Second)
+	}
+}
+
+// A shell that shares its process group cannot be ended without its
+// command: the rec names it and jumps to its session, and offers no kill.
+func TestAShellInASharedGroupIsNotKilled(t *testing.T) {
+	now := time.Date(2026, 10, 12, 7, 45, 0, 0, time.UTC)
+	snap := sample.Snapshot{At: now, Sessions: []sample.Session{{
+		Pane: "%5", Name: "Billed", Status: "idle", Agent: "claude",
+		Shells: []sample.Shell{{PID: 7, Start: 1, Started: now.Add(-2 * time.Hour), Command: "npm run dev"}},
+	}}}
+	for _, r := range Build(snap, nil) {
+		if strings.Contains(r.Title, "background shell") && (r.Second != nil || r.Primary == nil || !strings.Contains(r.Evidence, "shares a process group")) {
+			t.Fatalf("rec %+v", r)
+		}
 	}
 }
