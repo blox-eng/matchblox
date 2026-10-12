@@ -20,6 +20,12 @@ All notable changes to matchblox are in this file. The format follows
   auto-compact on at the stoker's line, the only thing that compacts inside
   a turn.
 
+### Fixed
+
+- **The site's news line names the latest release.** Each release writes it
+  from the first headline of its changelog section, and links to the
+  release.
+
 ## [0.4.0] - 2026-10-11
 
 ### Added

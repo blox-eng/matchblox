@@ -129,8 +129,8 @@ jobs:
             { echo "gh release create failed: RELEASE_TOKEN may have expired (RELEASING.md)" >&2; exit 1; }
 
   # The release's changelog and the docs that name it: [Unreleased] moves
-  # under the version, and the README, docs and site flip to the released
-  # text. A pull request, because main takes no direct push; it merges
+  # under the version, the README, docs and site flip to the released text,
+  # and the site's news line names the release. A pull request, because main takes no direct push; it merges
   # itself once its checks pass. RELEASE_TOKEN opens it, since a pull request
   # opened with the built-in token runs no CI and would never merge.
   changelog:
@@ -157,6 +157,8 @@ jobs:
           set -euo pipefail
           .github/scripts/promote-changelog.sh "$VERSION" "$(date -u +%Y-%m-%d)"
           VERSION="v${VERSION}" .github/scripts/flip-release.sh
+          .github/scripts/announce-release.sh "$VERSION" ||
+            echo "::warning::the site's news line still names the last release: the line above says why"
           if git diff --quiet; then
             echo "CHANGELOG.md already has v${VERSION} and the docs are flipped"
             exit 0
