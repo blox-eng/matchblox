@@ -190,7 +190,7 @@ func TestTheRepositoryFlips(t *testing.T) {
 			t.Errorf("%s: %d before, %d after the flip", id, strings.Count(before, id), strings.Count(after, id))
 		}
 	}
-	if strings.Contains(after, "builds with Go") || !strings.Contains(after, "checksum and provenance checked") || !strings.Contains(after, "v0.1.0 is out") {
+	if strings.Contains(after, "builds with Go") || !strings.Contains(after, "checksum and provenance checked") || !strings.Contains(after, `<span class="tag">New</span>`) {
 		t.Error("the flipped site still says it builds with Go")
 	}
 }
