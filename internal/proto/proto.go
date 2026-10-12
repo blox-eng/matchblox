@@ -11,6 +11,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
+	"github.com/blox-eng/matchblox/internal/ships"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
 )
@@ -131,12 +132,16 @@ func Decode(r *bufio.Reader) (Envelope, error) {
 // StokerReadBack is how long the service reads back the result of a compact.
 const StokerReadBack = stoker.ResumeWait
 
-// The console draws git data without importing the scanner, and the
-// stoker's steps without importing the stoker.
+// The console draws git data without importing the scanner, the ships
+// without importing their tracker, and the stoker's steps without
+// importing the stoker.
 type (
 	GitReport   = gitscan.Report
 	Worktree    = gitscan.Worktree
 	PR          = gitscan.PR
+	Ships       = ships.Report
+	Ship        = ships.Ship
+	ShipStage   = ships.Stage
 	StokerView  = stoker.View
 	StokerMode  = stoker.Mode
 	StokerEntry = stoker.Entry

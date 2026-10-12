@@ -23,6 +23,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/ships"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -783,4 +784,37 @@ func TestARemovedWorktreeLeavesTheGitList(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("the removed worktree is still listed: %+v", s.State().Git)
+}
+
+// TestShipsReachTheConsole: the service reads the ships with the sessions
+// of its first sample and the git scan, and every console gets them.
+func TestShipsReachTheConsole(t *testing.T) {
+	s := newTest(t, time.Hour)
+	got := make(chan []sample.Session, 1)
+	s.Ships = func(ss []sample.Session, _ *gitscan.Report) ships.Report {
+		select {
+		case got <- ss:
+		default:
+		}
+		return ships.Report{InFlight: 1, Ships: []ships.Ship{{Repo: "o/r", Number: 7, Kind: ships.WaitsForYou,
+			Note: "green · waits for your merge", Merge: []string{"gh", "pr", "merge", "7", "--squash", "-R", "o/r"}}}}
+	}
+	ctx := run(t, s)
+	c, _ := connect(t, ctx, s)
+	if ss := <-got; len(ss) != 1 || ss[0].Pane != "%1" {
+		t.Fatalf("the source got sessions %+v", ss)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		st := snapshot(t, c)
+		if st.Ships != nil {
+			if st.Ships.InFlight != 1 || st.Ships.Ships[0].Number != 7 || len(st.Ships.Ships[0].Merge) != 7 {
+				t.Fatalf("ships %+v", st.Ships)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no ships in the state")
+		}
+	}
 }

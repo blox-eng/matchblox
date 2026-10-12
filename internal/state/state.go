@@ -12,6 +12,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/ships"
 	"github.com/blox-eng/matchblox/internal/stoker"
 )
 
@@ -26,6 +27,9 @@ type Doc struct {
 	// Stoker is the stoker mode and the steps of its last run. Nil: the
 	// service keeps no stoker.
 	Stoker *stoker.View `json:"stoker,omitempty"`
+	// Ships are the pull requests sessions drive. Nil: the service reads
+	// none (no git, or a fixture).
+	Ships *ships.Report `json:"ships,omitempty"`
 }
 
 // Path is $XDG_STATE_HOME/matchblox/state.json, defaulting to ~/.local/state.
