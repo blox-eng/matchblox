@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/limits"
@@ -65,6 +66,44 @@ const (
 
 func one(argv ...string) [][]string { return [][]string{argv} }
 
+// LongShell is how long a background shell of an idle session runs before
+// it is worth a look: a wait loop that matches itself never ends.
+const LongShell = time.Hour
+
+// shellRecs name the background shells an idle session left running for
+// LongShell or more, and offer to end each one.
+func shellRecs(snap sample.Snapshot) []Rec {
+	var out []Rec
+	for _, s := range snap.Sessions {
+		if s.Busy || s.Pane == "" {
+			continue
+		}
+		for _, sh := range s.Shells {
+			ran := snap.At.Sub(sh.Started)
+			if sh.Started.IsZero() || ran < LongShell {
+				continue
+			}
+			r := Rec{
+				Level: "warn", score: 400 + ran.Hours(),
+				Title:    fmt.Sprintf("End a background shell of %s (%s) that has run %s", s.Name, s.Pane, sample.Human(ran)),
+				Evidence: fmt.Sprintf("pid %d, started %s, its session idle: %s", sh.PID, sh.Started.Local().Format("Jan 2 15:04"), sh.Command),
+				Primary:  &Action{Label: "jump to the session", Nav: true, Steps: one("tmux", "switch-client", "-t", s.Pane)},
+			}
+			// The command runs under the shell: only ending the shell's own
+			// process group ends it too. A shell that shares a group is ended
+			// from its session.
+			if sh.Group {
+				r.Second = &Action{Label: "end it", Steps: one("kill", "--", "-"+strconv.Itoa(sh.PID)), Destructive: true,
+					Guards: []Guard{{PID: sh.PID, StartTicks: sh.Start}}}
+			} else {
+				r.Evidence += " (it shares a process group: end it from its session)"
+			}
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 func Build(snap sample.Snapshot, git *gitscan.Report) []Rec {
 	var out []Rec
 
@@ -118,6 +157,7 @@ func Build(snap sample.Snapshot, git *gitscan.Report) []Rec {
 		out = append(out, r)
 	}
 
+	out = append(out, shellRecs(snap)...)
 	out = append(out, limitRecs(snap)...)
 	out = append(out, alertRecs(snap)...)
 	out = append(out, gitRecs(snap, git)...)

@@ -25,7 +25,7 @@ func stokedRun(at time.Time) proto.StokerView {
 	return proto.StokerView{
 		Mode: proto.StokerMode{Since: since, Ended: at.Add(-time.Hour)},
 		Run: []proto.StokerEntry{
-			{ID: "1", At: since.Add(31 * time.Minute), Session: "a", Name: "app-feature", Pane: "%1", Rule: "compact",
+			{ID: "1", At: since.Add(31 * time.Minute), Session: "a", Name: "app-feature", Pane: "%1", Rule: "compact", Why: "would pass 80% within the next step",
 				Result: "sent", Guard: "idle", Before: 176000, After: 9400, Resume: "run the migration test, then open the PR", Back: since.Add(33 * time.Minute)},
 			{ID: "2", At: since.Add(2 * time.Hour), Session: "b", Name: "app-review", Pane: "%2", Rule: "compact",
 				Result: "skipped: session busy", Guard: "the session in %2 is no longer idle", Before: 180000},
@@ -76,7 +76,7 @@ func TestStokedListsRunsWithResume(t *testing.T) {
 		st := stokerState(stokedRun(fixtureState().At))
 		m, _ := loadedWith(t, w, st)
 		out := ansi.Strip(m.render())
-		for _, want := range []string{"STOKED", "app-feature", "176k → 9k", "RESUME: run the migration test", "app-review", "skipped: session busy"} {
+		for _, want := range []string{"STOKED", "app-feature", "176k → 9k", "would pass 80%", "RESUME: run the migration test", "app-review", "skipped: session busy"} {
 			if !strings.Contains(out, want) {
 				t.Fatalf("width %d: no %q:\n%s", w, want, out)
 			}

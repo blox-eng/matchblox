@@ -37,6 +37,10 @@ type Usage struct {
 	Asks     bool   `json:"asks,omitempty"`
 	// Out: the newest turn was refused by the plan's limit, which resets here.
 	Out time.Time `json:"out,omitzero"`
+	// Ended: the newest turn ended here and no line of a next one followed;
+	// zero while a turn runs. Background is the work it left running.
+	Ended      time.Time `json:"ended,omitzero"`
+	Background int       `json:"background,omitempty"`
 }
 
 type fileKey struct {
@@ -201,8 +205,12 @@ func lastUsage(path string, size int64) (Usage, bool) {
 	// has not run, and the turn before it holds the old, full context.
 	var compacted *boundaryLine
 	newer := false // an assistant line newer than the one read was seen
-	for i := len(lines) - 1; i >= 0 && (!found || !decided); i-- {
+	turnKnown := false
+	for i := len(lines) - 1; i >= 0 && (!found || !decided || !turnKnown); i-- {
 		l := lines[i]
+		if !turnKnown {
+			turnKnown = turnEnd(l, &u)
+		}
 		if !found && compacted == nil && bytes.Contains(l, []byte(`"compact_boundary"`)) {
 			// A reply that only mentions the word is not a boundary.
 			var b boundaryLine
@@ -253,6 +261,49 @@ func lastUsage(path string, size int64) (Usage, bool) {
 		}
 	}
 	return u, found
+}
+
+// turnEnd reads one line, newest first, until it tells whether the turn
+// ended: Claude Code closes a turn with a turn_duration line, and a prompt or
+// a reply of the main thread is a turn at work. It reports whether the line
+// decided.
+func turnEnd(l []byte, u *Usage) bool {
+	if !bytes.Contains(l, []byte(`"turn_duration"`)) && !bytes.Contains(l, []byte(`"user"`)) && !bytes.Contains(l, []byte(`"assistant"`)) {
+		return false
+	}
+	var t struct {
+		Type        string    `json:"type"`
+		Subtype     string    `json:"subtype"`
+		IsSidechain bool      `json:"isSidechain"`
+		Timestamp   time.Time `json:"timestamp"`
+		Background  int       `json:"pendingBackgroundAgentCount"`
+		Message     struct {
+			Content json.RawMessage `json:"content"`
+		} `json:"message"`
+	}
+	if json.Unmarshal(l, &t) != nil || t.IsSidechain {
+		return false
+	}
+	switch {
+	case t.Type == "system" && t.Subtype == "turn_duration":
+		u.Ended, u.Background = t.Timestamp, t.Background
+		return true
+	case t.Type == "user" && localOutput(t.Message.Content):
+		// A local command (/compact, /model) writes no turn_duration: its
+		// output is its end.
+		u.Ended = t.Timestamp
+		return true
+	case t.Type == "user" || t.Type == "assistant":
+		return true
+	}
+	return false
+}
+
+// localOutput is the content of the line a local command writes when it is
+// done.
+func localOutput(content json.RawMessage) bool {
+	var text string
+	return json.Unmarshal(content, &text) == nil && strings.HasPrefix(text, "<local-command-stdout>")
 }
 
 // modelSetting is the model a Claude Code process was started with, in the

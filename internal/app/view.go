@@ -583,6 +583,22 @@ func (m Model) detail(w int) []string {
 	if p := s.Progress; p != nil {
 		lines = append(lines, fit(" "+st.label.Render("PROGRESS ")+m.progressCell(p, 10)+"  "+st.text.Render(p.Step), w))
 	}
+	if s.Agents > 0 || len(s.Shells) > 0 {
+		var parts []string
+		if s.Agents > 0 {
+			parts = append(parts, plural(s.Agents, "agent"))
+		}
+		if len(s.Shells) > 0 {
+			parts = append(parts, plural(len(s.Shells), "shell"))
+			if old := s.Shells[0].Started; !old.IsZero() {
+				parts = append(parts, "oldest "+sample.Human(m.now().Sub(old)))
+			}
+		}
+		lines = append(lines, fit(" "+st.label.Render("BACKGROUND ")+st.text.Render(strings.Join(parts, " · ")), w))
+		for _, sh := range s.Shells {
+			lines = append(lines, fit("   "+st.muted.Render(strconv.Itoa(sh.PID)+"  "+sh.Command), w))
+		}
+	}
 	if s.Why != "" {
 		lines = append(lines, fit(" "+st.label.Render("WHY ")+st.text.Render(s.Do+": "+s.Why), w))
 	}
@@ -590,6 +606,14 @@ func (m Model) detail(w int) []string {
 		lines = append(lines, fit(" "+st.label.Render("⏎ ")+st.muted.Render("tmux switch-client -t "+s.Pane), w))
 	}
 	return lines
+}
+
+// plural is "1 shell", "2 shells".
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return strconv.Itoa(n) + " " + noun + "s"
 }
 
 // contextWord names a context use that has no figure: "fresh" before the

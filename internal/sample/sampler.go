@@ -6,6 +6,7 @@ package sample
 import (
 	"net"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -67,11 +68,27 @@ type Session struct {
 	FromPane bool `json:"from_pane,omitempty"` // busy and idle were read from the pane
 	// Out: the plan's limit stops the session until here (its turn was
 	// refused, or its account's window is spent); zero when it can work.
-	Out    time.Time `json:"out,omitzero"`
+	Out time.Time `json:"out,omitzero"`
+	// Agents and Shells are the background work an idle session left
+	// running: the subagents Claude Code counted at the turn's end, and the
+	// shells its Bash tool still runs.
+	Agents int       `json:"agents,omitempty"`
+	Shells []Shell   `json:"shells,omitempty"`
 	turnAt time.Time // the newest real turn of the transcript
 	// Transcript is the Claude Code session file, read back by the service
 	// after a step; it never leaves the host.
 	Transcript string `json:"-"`
+}
+
+// Shell is a shell an agent's Bash tool runs in the background.
+type Shell struct {
+	PID   int    `json:"pid"`
+	Start uint64 `json:"start_ticks"` // tells a reused pid apart
+	// Group: the shell leads its own process group, so ending the group ends
+	// the command it runs too.
+	Group   bool      `json:"group,omitempty"`
+	Started time.Time `json:"started"`
+	Command string    `json:"command"` // as the agent wrote it
 }
 
 // IdlePane is a pane that hosts no agent.
@@ -484,6 +501,9 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			sess.Window = 200_000
 			sess.Account, sess.Provider = s.accounts.claudeAccount(env), claudeProvider(env)
 			s.claudeSession(&sess, pid, p, key, env, uptime, now)
+			if !sess.Busy {
+				sess.Shells = s.backgroundShells(pid, procs, children, uptime, now)
+			}
 			if env.cloud == "" && env.claudeDir != "" {
 				var r *limits.Reading
 				if s.LimitsDir != "" {
@@ -762,6 +782,41 @@ func (s *Sampler) homeAs() string {
 	return s.Home
 }
 
+// backgroundShells are the shells Claude Code's Bash tool started under the
+// agent and still runs: its children that source a shell snapshot.
+func (s *Sampler) backgroundShells(pid int, procs map[int]procfs.Proc, children map[int][]int, uptime float64, now time.Time) []Shell {
+	var out []Shell
+	for _, c := range children[pid] {
+		cmd := s.FS.Cmdline(c)
+		if !strings.Contains(cmd, "/shell-snapshots/snapshot-") {
+			continue
+		}
+		sh := Shell{PID: c, Start: procs[c].StartTime, Group: procs[c].PGRP == c, Command: shellCommand(cmd)}
+		if uptime > 0 {
+			sh.Started = now.Add(-time.Duration((uptime - float64(procs[c].StartTime)/procfs.ClockTicks) * float64(time.Second)))
+		}
+		out = append(out, sh)
+	}
+	slices.SortFunc(out, func(a, b Shell) int { return a.Started.Compare(b.Started) })
+	return out
+}
+
+// shellCommand is the command inside the Bash tool's wrapper:
+// `source <snapshot> ... && eval '<command>' < /dev/null && pwd -P >| <file>`.
+func shellCommand(cmdline string) string {
+	_, body, ok := strings.Cut(cmdline, "eval '")
+	if !ok {
+		return cmdline
+	}
+	for _, tail := range []string{"' < /dev/null", "' && pwd -P"} {
+		if i := strings.LastIndex(body, tail); i >= 0 {
+			body = body[:i]
+			break
+		}
+	}
+	return strings.ReplaceAll(body, `'"'"'`, "'")
+}
+
 // claudeSession reads the session file Claude Code keeps for the process
 // and the end of its transcript, in the process's config directory.
 func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procKey, env agentEnv, uptime float64, now time.Time) {
@@ -786,6 +841,14 @@ func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procK
 		return
 	}
 	sess.Progress, sess.LastLine, sess.Asks, sess.turnAt = u.Progress, u.LastLine, u.Asks, u.At
+	if !u.Ended.IsZero() && sess.Busy {
+		// Claude Code's registry says busy while background work runs; the
+		// transcript says whether a turn does. An idle registry says no
+		// work runs, whatever the turn's end counted then.
+		sess.Agents = u.Background
+		sess.Busy, sess.Status = false, "idle"
+		sess.Idle = now.Sub(u.Ended).Truncate(time.Second)
+	}
 	if u.Out.After(now) {
 		sess.Out = u.Out
 	}
