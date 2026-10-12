@@ -129,8 +129,8 @@ jobs:
             { echo "gh release create failed: RELEASE_TOKEN may have expired (RELEASING.md)" >&2; exit 1; }
 
   # The release's changelog and the docs that name it: [Unreleased] moves
-  # under the version, and the README, docs and site flip to the released
-  # text. A pull request, because main takes no direct push; it merges
+  # under the version, the README, docs and site flip to the released text,
+  # and the site's news line names the release. A pull request, because main takes no direct push; it merges
   # itself once its checks pass. RELEASE_TOKEN opens it, since a pull request
   # opened with the built-in token runs no CI and would never merge.
   changelog:
@@ -157,6 +157,15 @@ jobs:
           set -euo pipefail
           .github/scripts/promote-changelog.sh "$VERSION" "$(date -u +%Y-%m-%d)"
           VERSION="v${VERSION}" .github/scripts/flip-release.sh
+          # A release without a headline still promotes its changelog: the
+          # pull request then says the line is stale, and waits for a person.
+          news="It also points the site's news line at v${VERSION}."
+          automerge=1
+          if ! .github/scripts/announce-release.sh "$VERSION"; then
+            echo "::warning::the site's news line still names the last release: the line above says why"
+            news="**The site's news line still names the last release:** v${VERSION} has no headline (a \`- **...**\` line) in CHANGELOG.md. Write the line in www/index.html by hand, or run .github/scripts/announce-release.sh ${VERSION} after adding one, then merge."
+            automerge=0
+          fi
           if git diff --quiet; then
             echo "CHANGELOG.md already has v${VERSION} and the docs are flipped"
             exit 0
@@ -171,9 +180,11 @@ jobs:
           git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" "$branch:$branch"
           gh pr view "$branch" >/dev/null 2>&1 ||
             gh pr create --base main --head "$branch" --title "$title" \
-              --body "Opened by the Release workflow after v${VERSION}. It moves the [Unreleased] entries under v${VERSION}, and turns the README, the docs and the site to the released install. It merges itself once its checks pass. Until it merges, Lint fails on other pull requests."
-          gh pr merge "$branch" --squash --auto ||
-            echo "::warning::Auto-merge is off: merge the v${VERSION} pull request by hand."
+              --body "Opened by the Release workflow after v${VERSION}. It moves the [Unreleased] entries under v${VERSION}, and turns the README, the docs and the site to the released install. ${news} It merges itself once its checks pass. Until it merges, Lint fails on other pull requests."
+          if [ "$automerge" = 1 ]; then
+            gh pr merge "$branch" --squash --auto ||
+              echo "::warning::Auto-merge is off: merge the v${VERSION} pull request by hand."
+          fi
 
       # main takes only up-to-date branches, and auto-merge never updates
       # one: a pull request that merged meanwhile would hold this one back.
