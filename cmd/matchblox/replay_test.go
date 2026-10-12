@@ -222,18 +222,21 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 
 var (
 	burning = regexp.MustCompile(`[✦✧] flint-auth\s+busy`)
+	settled = regexp.MustCompile(`╿ hearth-api\s+done`)
 	figure  = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
 	sparks  = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
 	spaces  = regexp.MustCompile(`\s+`)
+	cutWord = regexp.MustCompile(`\S*…`)
 )
 
 // skeleton is a screen without what changes from run to run: figures,
-// sparklines and the space around them. A change in the console's words,
+// sparklines, the space around them, and where a line is cut, which moves
+// with the width of a figure before it. A change in the console's words,
 // tabs or layout still shows.
 func skeleton(lines []string) string {
 	var b strings.Builder
 	for _, l := range lines {
-		l = sparks.ReplaceAllString(figure.ReplaceAllString(l, "0"), "")
+		l = sparks.ReplaceAllString(figure.ReplaceAllString(cutWord.ReplaceAllString(l, "…"), "0"), "")
 		l = strings.ReplaceAll(l, "✧", "✦") // a burning match flickers between the two
 		b.WriteString(strings.TrimSpace(spaces.ReplaceAllString(l, " ")))
 		b.WriteByte('\n')
@@ -518,7 +521,12 @@ func TestReplay(t *testing.T) {
 			if err := world.Finish("%1", 176000, "Rate limits are in, with tests.\n\nProgress [██████████] rate limits on the public API"); err != nil {
 				t.Fatal(err)
 			}
-		}, ok: has("STOKED", "hearth-api", "176k → 9k", "RESUME", "rate-limit headers")},
+		}, ok: func(s string) bool {
+			// hearth-api went out when its turn ended: the frame waits
+			// until the flame has died down (outFor of the demo clock, one
+			// sample), so every run draws the same match.
+			return has("STOKED", "176k → 9k", "RESUME", "rate-limit headers")(s) && settled.MatchString(s)
+		}},
 		{name: "the morning card", at: 39500 * time.Millisecond, do: func() { clk.Set(morning) },
 			ok: has("NIGHT 23:10 → 07:00", "ready 4/5", "1 compacted", "167k given back", "kindle-web       waits for you", "176k → 9k", "RESUME")},
 		{name: "folded", at: 44 * time.Second, keys: []string{"k", "k", "k", "k", "k", "k"}, key: "enter", ok: func(s string) bool {
@@ -666,6 +674,11 @@ func TestSkeletonCatchesAChangedScreen(t *testing.T) {
 	b := []string{" ▰ matchblox · ws-1  │  cpu  52% ▄▅  │  mem 27G/64G ▄▄▄▄▄", " 1 SESSIONS   2 MACHINE", " web-checkout  idle  5m   88%"}
 	if skeleton(a) != skeleton(b) {
 		t.Fatalf("figures and sparklines change between runs; the skeletons must match:\n%q\n%q", skeleton(a), skeleton(b))
+	}
+	// A figure one digit wider cuts the line one cell earlier.
+	cut := []string{" ╿ done, waits for you · 9m · hearth:1.…", " ╿ done, waits for you · 10m · hearth:1…"}
+	if skeleton(cut[:1]) != skeleton(cut[1:]) {
+		t.Fatalf("a cut that moves with a figure must not change the skeleton:\n%q\n%q", skeleton(cut[:1]), skeleton(cut[1:]))
 	}
 	c := append([]string{}, b...)
 	c[1] = " 1 PANES   2 MACHINE"
