@@ -183,8 +183,7 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   the tabs far from the open one shorten to their digit, the nearest last.
   The digits follow the order: `1` Sessions to `6` Panes; `p` opens Ships.
   The console opens on Sessions.
-- **Sessions** holds what the Queue tab held: the stoker's card and the
-  doors on top, then the sessions in three groups,
+- **Sessions** holds what the Queue tab held: the doors on top, then the sessions in three groups,
   each under a faint label and its count: `WAITS FOR YOU` (asks, waits,
   done, paused; the oldest wait first), `WORKING` (busy, agents, a shell:
   `tests` when it runs a test runner) and `QUIET` (idle, cold, stale, out;
@@ -211,9 +210,11 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   context and plan bars, the ship, the subagents and the background
   shells, the figures (model, tokens, account, pid) and the keys. A door's
   diff that waits for its `y` takes the full width.
-- **Dock** (design/0006 §7): usage and the machine, between the body and
-  the key line, when the body, the dock and one blank row fit; else it
-  folds away and the Machine tab has it. Usage is each account's windows
+- **Dock** (design/0006 §7): usage, the machine and the stoker, between
+  the body and the key line, when the body, the dock and one blank row fit;
+  else it folds away and the Machine tab has it. With rows to spare it
+  grows into them (forecasts and resets, the top processes, the stoker's
+  recent steps): no run of three blank rows while a panel has more to say. Usage is each account's windows
   as `/usage` says them: `5h`, `wk` (and any other window), a bar (`warn`
   from 60%, `neg` from 90%), the percent and the reset, then the forecast
   (`lasts the week` in `muted`, `out Fri ~20:00` in `warn`) and `as of
@@ -360,12 +361,16 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   selected before a door; with nobody waiting, the first door is.
 - **The stoker** (#24, owner 2026-10-09): `f` turns it on or off, `n`
   starts a night that ends at `night_ends`. The header shows `stoker` or
-  `night → 07:00` in `accent` after the host. While a run has steps the
-  builder has not seen, `STOKED <since> → <end> · N` is the first row of
-  Sessions, above the doors: one line for each step (time, the
-  session's match, name, pane, then `before → after` or the skip reason),
-  the `RESUME:` line under each compact, two lines for each step on a
-  phone. It is selected first; `Enter` folds it. The night door ("Try a
+  `night → 07:00` in `accent` after the host. The stoker lives in the
+  dock (design/0006 §7, owner 2026-10-12): its panel says its state, the
+  score and the last step, and takes the dock (or the machine's place
+  beside usage) while a run is in charge or has steps the builder has not
+  seen. `c` or a tap on it opens the card `STOKED <since> → <end> · N` in
+  the right pane, or on a phone's Machine tab: one line for each step
+  (time, the session's match, name, pane, then `before → after` or the
+  skip reason), the `RESUME:` line under each compact, two lines for each
+  step in a pane under 60 columns. `Enter` marks it seen and folds it. Its
+  events show as the header toast. The night door ("Try a
   night") sits with the doors and folds after the first run.
   While a run is in charge the whole console wears the night (§2.1) and the
   word takes the `night` token. The first key or second tap that acts on a

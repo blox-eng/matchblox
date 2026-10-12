@@ -19,8 +19,6 @@
                                                                               │ https://github.com/hearth/hearth-api/pull/4551
                                                                               │
                                                                               │ ⏎ session
-                                                                              │
-                                                                              │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  USAGE                                                                        │ MACHINE                                    16 cores
  ✻ Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                                      │ cpu  ▁ 0%   load 6.2
@@ -28,5 +26,7 @@
  · login  not measured · OpenCode keeps no limits                             │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
  ❋ Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                                          │ runs 5 claude · 1 codex · 1 opencode
           wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week                     │
+                                                                              │ PID      COMMAND           CPU    MEM     OWNER
+                                                                              │ 1        systemd             0%   9.8M    system
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ↑↓ move  ⏎ session  f stoker  / find  q quit                                                                        sampled 0s ago

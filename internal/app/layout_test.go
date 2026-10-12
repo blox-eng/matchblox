@@ -51,16 +51,16 @@ func TestLayoutBreakpoints(t *testing.T) {
 // TestAnUprightPhoneGetsTheDrawer: a phone held upright with a small font
 // (107x60 with the keyboard up, 107x101 down) splits the list and the
 // detail at the middle, the detail a drawer on the right, and no row opens
-// in place; its dock shows one panel and its peek sits at the bottom, 72
-// columns at most. Upright under 90 columns is one column.
+// in place; its dock shows two panels side by side. Upright under 90
+// columns is one column.
 func TestAnUprightPhoneGetsTheDrawer(t *testing.T) {
 	for _, h := range []int{60, 101} {
 		m, _ := loadedWith(t, 107, limitsState())
 		next, _ := m.Update(tea.WindowSizeMsg{Width: 107, Height: h})
 		m = next.(Model)
 		out := screen(m)
-		if !strings.Contains(out, "USAGE") || !strings.Contains(out, "machine ›") || strings.Contains(out, "MACHINE") {
-			t.Fatalf("107x%d: the dock is not usage alone:\n%s", h, out)
+		if at := strings.Split(out, "\n")[lineOf(t, m, "USAGE")]; !strings.Contains(at, "MACHINE") {
+			t.Fatalf("107x%d: usage and the machine are not side by side:\n%s", h, out)
 		}
 		fitsWidth(t, m, 107)
 		if list, detail := m.panes(107); list != 53 || detail != 53 {

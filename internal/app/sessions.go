@@ -115,13 +115,10 @@ func (m Model) firstWaiting() int {
 
 // sessIndex is the selected row of Sessions: the doors, the sessions,
 // then the recommendations. A door that folds passes the
-// selection to the next door. Nothing picked: the stoker's card, else the
-// first session that waits, else the first door.
+// selection to the next door. Nothing picked: the first session that
+// waits, else the first door.
 func (m Model) sessIndex() int {
 	nd, ns, nr := len(m.doors), len(m.snap.Sessions), m.recRows()
-	if nd > 0 && m.doors[0].ID == stokedRow && m.doorPick == "" && m.recPick == "" && !m.chose {
-		return 0 // the night's steps come first in the morning
-	}
 	for i, d := range m.doors {
 		if d.ID == m.doorPick {
 			return i
@@ -180,10 +177,7 @@ func (m Model) selectedRec() (advice.Rec, bool) {
 
 // sessionKeys are the keys of the selected row of Sessions.
 func (m Model) sessionKeys() []hint {
-	if d, ok := m.selectedDoor(); ok {
-		if d.ID == stokedRow {
-			return []hint{{"⏎", "fold", "enter"}, {"f", "stoker", "f"}}
-		}
+	if _, ok := m.selectedDoor(); ok {
 		return []hint{{"⏎", "open", "enter"}, {"x", "close", "x"}}
 	}
 	if _, ok := m.selectedRec(); ok {
@@ -441,15 +435,19 @@ func (m Model) longWord(s sample.Session) string {
 
 // detailPane is the right pane of Sessions on an opened phone and a desk:
 // the selected session, recommendation or door.
-func (m Model) detailPane(w int) []string {
+// detailPane is the right pane in w columns, grown into rows when it has
+// more to say (rows 0: its fewest lines), and whether all of it shows.
+func (m Model) detailPane(w, rows int) ([]string, bool) {
+	lines, cut := m.detailLines(w, rows)
+	return lines, !cut
+}
+
+func (m Model) detailLines(w, rows int) ([]string, bool) {
 	st := m.st
 	if m.tab == tabShips {
-		return m.shipDetail(w)
+		return m.shipDetail(w), false
 	}
 	if d, ok := m.selectedDoor(); ok {
-		if d.ID == stokedRow {
-			return []string{"", " " + st.accent.Render("The stoker's steps"), "", " " + st.accent.Render("⏎") + st.muted.Render(" folds them")}
-		}
 		out := []string{"", fit(" "+st.accent.Render(d.Title), w), ""}
 		text, style := d.Why, st.muted
 		if d.Problem != "" {
@@ -458,7 +456,7 @@ func (m Model) detailPane(w int) []string {
 		for _, l := range wrapPlain(text, w-2) {
 			out = append(out, " "+style.Render(l))
 		}
-		return append(out, "", " "+st.accent.Render("⏎")+st.muted.Render(" open   ")+st.accent.Render("x")+st.muted.Render(" close"))
+		return append(out, "", " "+st.accent.Render("⏎")+st.muted.Render(" open   ")+st.accent.Render("x")+st.muted.Render(" close")), false
 	}
 	if r, ok := m.selectedRec(); ok {
 		out := []string{""}
@@ -469,16 +467,23 @@ func (m Model) detailPane(w int) []string {
 		for _, l := range wrapPlain(tilde(r.Evidence), w-2) {
 			out = append(out, " "+st.muted.Render(l))
 		}
-		return append(append(out, ""), m.recActions(r, w)...)
+		return append(append(out, ""), m.recActions(r, w)...), false
 	}
 	s, ok := m.selectedSession()
 	if !ok {
-		return []string{"", st.faint.Render(m.nothing(" no agent sessions found in tmux"))}
+		return []string{"", st.faint.Render(m.nothing(" no agent sessions found in tmux"))}, false
 	}
-	return m.sessionDetail(s, w)
+	out, cut := m.sessionDetail(s, w, 6)
+	if extra := rows - len(out); extra > 0 && cut {
+		// Free rows: more of what it said.
+		out, cut = m.sessionDetail(s, w, 6+extra)
+	}
+	return out, cut
 }
 
-func (m Model) sessionDetail(s sample.Session, w int) []string {
+// sessionDetail is a session's detail with at most said lines of what it
+// said last, and whether that was cut.
+func (m Model) sessionDetail(s sample.Session, w, said int) ([]string, bool) {
 	st := m.st
 	out := []string{"", fit(" "+st.accent.Bold(true).Render(s.Name), w)}
 	where := []string{m.longWord(s)}
@@ -487,15 +492,17 @@ func (m Model) sessionDetail(s sample.Session, w int) []string {
 	}
 	where = append(where, place(s.Target, s.Pane), tilde(s.Cwd))
 	out = append(out, fit(" "+m.matchCell(s)+st.muted.Render(strings.Join(where, " · ")), w))
-	if said := m.lastWords(s); said != "" {
+	cut := false
+	if words := m.lastWords(s); words != "" {
 		agent := s.Agent
 		if agent == "" {
 			agent = "it"
 		}
 		out = append(out, "", " "+st.label.Render(strings.ToUpper(agent)+" SAID"))
-		lines := wrapPlain(said, w-3)
-		if len(lines) > 6 {
-			lines = append(lines[:5], ansi.Truncate(lines[5], w-4, "")+"…")
+		lines := wrapPlain(words, w-3)
+		if len(lines) > said {
+			lines = append(lines[:said-1], ansi.Truncate(lines[said-1], w-4, "")+"…")
+			cut = true
 		}
 		for _, l := range lines {
 			out = append(out, " "+st.text.Render(l))
@@ -552,7 +559,7 @@ func (m Model) sessionDetail(s sample.Session, w int) []string {
 	if s.Age() == "stale" {
 		keys += "   " + st.accent.Render("x") + st.muted.Render(" end it")
 	}
-	return append(out, "", fit(keys, w))
+	return append(out, "", fit(keys, w)), cut
 }
 
 // facts are the figures of a session the rows have no room for.

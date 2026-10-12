@@ -65,9 +65,13 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m.key(s.press)
 		}
 		return m, nil
-	case ms.Y == sc.dockAt && m.phoneDock(w):
-		if x0, x1 := m.dockToggle(w); ms.X >= x0 && ms.X < x1 {
-			m.dockMachine = !m.dockMachine
+	case sc.dockAt >= 0 && ms.Y >= sc.dockAt && ms.Y < sc.dockAt+sc.dockH:
+		if x0, x1 := m.dockToggle(w); ms.Y == sc.dockAt && m.phoneDock(w) && ms.X >= x0 && ms.X < x1 {
+			m.cycleDock()
+			return m, nil
+		}
+		if ms.X >= sc.stx0 && ms.X < sc.stx1 {
+			return m.openStoker(), nil
 		}
 		return m, nil
 	}

@@ -533,12 +533,15 @@ func TestReplay(t *testing.T) {
 			// hearth-api went out when its turn ended: the frame waits
 			// until the flame has died down (outFor of the demo clock, one
 			// sample), so every run draws the same match.
-			return has("STOKED", "176k → 9k", "RESUME", "rate-limit headers")(s) && settled.MatchString(s)
+			// The step shows in the dock's stoker panel.
+			return has("STOKER", "176k → 9k")(s) && settled.MatchString(s)
 		}},
-		{name: "the morning card", at: 39500 * time.Millisecond, do: func() { clk.Set(morning) },
-			ok: has("NIGHT 23:10 → 07:00", "ready 4/5", "1 compacted", "167k given back", "kindle-web       waits for you", "176k → 9k", "RESUME")},
-		// Up to the card from under the sessions, where the recommendations are.
-		{name: "folded", at: 44 * time.Second, keys: strings.Split(strings.Repeat("k", 16), ""), key: "enter", ok: func(s string) bool {
+		{name: "the morning", at: 39500 * time.Millisecond, do: func() { clk.Set(morning) },
+			ok: has("STOKER", "ready 4/5", "1 compacted")},
+		// c opens the whole card in the right pane.
+		{name: "the morning card", at: 41 * time.Second, key: "c",
+			ok: has("NIGHT 23:10 → 07:00", "ready 4/5", "167k given back", "kindle-web       waits for you", "176k → 9k", "RESUME")},
+		{name: "folded", at: 44 * time.Second, key: "enter", ok: func(s string) bool {
 			return !strings.Contains(s, "NIGHT 23:10") && strings.Contains(s, "WAITS FOR YOU")
 		}},
 	}...)

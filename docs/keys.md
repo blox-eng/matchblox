@@ -16,7 +16,8 @@ the keys of the open tab, and a tap on one presses it.
 | `1-6` | Opens a tab: Sessions, Ships, Machine, Git, History, Panes. |
 | `p` | Opens Ships. |
 | `Tab` or `Shift+Tab` | Opens the next or the previous tab. |
-| `u` | Switches the dock of a phone between usage and the machine. |
+| `u` | Cycles the dock of a phone: usage, the machine, the stoker. While a run is in charge, or has steps you have not seen, the stoker's panel takes the dock until you press `u`. |
+| `c` | Opens the stoker's whole card: every step with its why and RESUME line. In the right pane where there is one, on a phone on the Machine tab. `Enter` marks it seen and folds it, `Esc` closes it. |
 | `/` | Searches the open tab. |
 | `s` | Sorts Sessions and Panes by the next column. |
 | `S` | Turns the sort around. |

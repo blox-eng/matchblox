@@ -66,8 +66,8 @@ func (m Model) layoutAt(w int) Layout {
 // peek sits at the bottom, as on a phone.
 func (m Model) upright() bool { return portrait(m.width, m.height) }
 
-// phoneDock is a dock of one panel, u switching it.
-func (m Model) phoneDock(w int) bool { return m.layoutAt(w) == Narrow || m.upright() }
+// phoneDock is a dock of one panel, u cycling it: a one-column phone.
+func (m Model) phoneDock(w int) bool { return m.layoutAt(w) == Narrow }
 
 // body is a panel: its lines, and for each line the row it shows (-1 for
 // none), so a tap knows what it hit.

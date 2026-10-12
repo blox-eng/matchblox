@@ -58,15 +58,17 @@ peek](console.md#the-answer-peek).
 A phone held upright is read by its shape, so the keyboard coming and
 going does not change the layout. With a small font that makes it 90
 columns or more, the list sits on the left and the selected agent's detail
-in a drawer on the right; the dock still shows one panel. On its side it
+in a drawer on the right, and the dock shows two panels side by side. On its side it
 goes by its width. Under 60 columns, the console has one column. Each agent is one line,
 grouped by what it needs from you: who waits first. The selected one opens
 in place: what it said last, its ship, its plan and its keys. Only
 the selected setup step shows its detail.
 
-Under the list, when there is room, the dock shows usage or the machine:
-`u`, or a tap on `machine ›`, switches. With the keyboard up the dock folds
-away; the Machine tab has it.
+Under the list, when there is room, the dock shows usage, the machine or
+the stoker: `u`, or a tap on the word at its right, goes to the next. While
+the stoker runs, its panel shows by itself until you switch; a tap on it
+opens its whole card on the Machine tab. With the keyboard up the dock
+folds away; the Machine tab has it.
 
 The key line is at the bottom: an SSH app that shrinks the terminal for
 its keyboard keeps it above the keys. A tap on a key presses it.

@@ -80,7 +80,11 @@ func TestStatusShowsStokerOrNight(t *testing.T) {
 func TestStokedListsRunsWithResume(t *testing.T) {
 	for _, w := range []int{40, 100} {
 		st := stokerState(stokedRun(fixtureState().At))
-		m, _ := loadedWith(t, w, st)
+		m0, _ := loadedWith(t, w, st)
+		if out := ansi.Strip(m0.render()); strings.Contains(out, "STOKED") || !strings.Contains(out, "STOKER") {
+			t.Fatalf("width %d: the run is not in the dock alone:\n%s", w, out)
+		}
+		m := openCard(m0).(Model)
 		out := ansi.Strip(m.render())
 		for _, want := range []string{"STOKED", "app-feature", "176k → 9k", "would pass 80%", "RESUME: run the migration test", "app-review", "skipped: session busy"} {
 			if !strings.Contains(out, want) {
@@ -92,9 +96,6 @@ func TestStokedListsRunsWithResume(t *testing.T) {
 		if !strings.Contains(row, "app-feature") || !strings.ContainsAny(row, "✦╿│") {
 			t.Fatalf("width %d: no match on the step row %q", w, row)
 		}
-		if lineOf(t, m, "STOKED") > lineOf(t, m, "WAITS FOR YOU") {
-			t.Fatalf("width %d: STOKED is under the queue:\n%s", w, out)
-		}
 		for i, line := range strings.Split(m.render(), "\n") {
 			if lipgloss.Width(line) > w {
 				t.Fatalf("width %d: line %d is %d wide", w, i, lipgloss.Width(line))
@@ -105,7 +106,7 @@ func TestStokedListsRunsWithResume(t *testing.T) {
 
 func TestEnterFoldsStoked(t *testing.T) {
 	m, f := loadedWith(t, 100, stokerState(stokedRun(fixtureState().At)))
-	sendKey(m, "enter")
+	sendKey(openCard(m), "enter")
 	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "stoker:ack", Which: "primary"}) {
 		t.Fatalf("acts %+v", acts)
 	}
@@ -167,8 +168,105 @@ func TestStokedShowsAReadBackWithoutCounts(t *testing.T) {
 	v.Run = v.Run[:1]
 	v.Run[0].After, v.Run[0].Back = 0, at.Add(-time.Hour)
 	m, _ := loadedWith(t, 100, stokerState(v))
-	out := ansi.Strip(m.render())
+	out := ansi.Strip(openCard(m).(Model).render())
 	if !strings.Contains(out, "176k → compacted") || !strings.Contains(out, "RESUME: run the migration test") {
 		t.Fatalf("no read back:\n%s", out)
+	}
+}
+
+// runningNight is a night in charge with a step done.
+func runningNight(at time.Time) proto.StokerView {
+	v := stokedRun(at)
+	v.On, v.Until, v.Ended, v.Nightly = true, at.Add(4*time.Hour), time.Time{}, true
+	v.Watched = []string{"a", "b", "c"}
+	return v
+}
+
+// sized is the console on st at w by h.
+func sized(t *testing.T, w, h int, st proto.State) Model {
+	t.Helper()
+	m, _ := loadedWith(t, w, st)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	return next.(Model)
+}
+
+// TestTheStokerLivesInTheDock: while a run is in charge the stoker's panel
+// takes a phone's dock until u switches it, and the machine's place
+// beside usage on a drawer; a wide desk shows all three. A tap on the
+// panel opens the whole card: in the right pane, or on a phone's Machine
+// tab.
+func TestTheStokerLivesInTheDock(t *testing.T) {
+	st := stokerState(runningNight(fixtureState().At))
+	phone := sized(t, 44, 31, st)
+	out := screen(phone)
+	if !strings.Contains(out, "STOKER") || !strings.Contains(out, "night → ") || strings.Contains(out, "USAGE") ||
+		!strings.Contains(out, "176k → 9k") || !strings.Contains(out, "· watching 3 · 1 compacted") {
+		t.Fatalf("44x31: the stoker does not take the dock:\n%s", out)
+	}
+	if strings.Contains(out, "STOKED") {
+		t.Fatalf("44x31: the card is on top of Sessions:\n%s", out)
+	}
+	switched, _ := key(phone, "u")
+	if out := screen(switched); !strings.Contains(out, "USAGE") || strings.Contains(out, "STOKER") {
+		t.Fatalf("44x31: u does not switch away from the stoker:\n%s", out)
+	}
+	y := lineOf(t, phone, "STOKER")
+	card, _ := tap(phone, 3, y+1)
+	if cm := card.(Model); cm.tab != tabMachine || !strings.Contains(screen(card), "RESUME: run the migration test") {
+		t.Fatalf("44x31: a tap on the stoker does not open its card on Machine:\n%s", screen(card))
+	}
+
+	drawer := sized(t, 107, 101, st)
+	out = screen(drawer)
+	at := strings.Split(out, "\n")[lineOf(t, drawer, "USAGE")]
+	if !strings.Contains(at, "STOKER") || strings.Contains(out, "MACHINE") {
+		t.Fatalf("107x101: the stoker does not stand in the machine's place:\n%s", out)
+	}
+	sc := drawer.draw(107)
+	card, _ = tap(drawer, sc.stx0+3, sc.dockAt+1)
+	if cm := card.(Model); !cm.stokerOpen || cm.tab != tabSessions || !strings.Contains(screen(card), "RESUME: run the migration test") {
+		t.Fatalf("107x101: a tap on the stoker does not open its card in the pane:\n%s", screen(card))
+	}
+	if closed, _ := key(card, "esc"); closed.(Model).stokerOpen {
+		t.Fatal("esc does not close the card")
+	}
+
+	desk := sized(t, 192, 60, st)
+	at = strings.Split(screen(desk), "\n")[lineOf(t, desk, "USAGE")]
+	if !strings.Contains(at, "MACHINE") || !strings.Contains(at, "STOKER") {
+		t.Fatalf("192x60: the desk does not show all three:\n%s", screen(desk))
+	}
+
+	off := sized(t, 192, 60, stokerState(proto.StokerView{}))
+	if out := screen(off); !strings.Contains(out, "off · f starts it · n starts a night") {
+		t.Fatalf("the stoker off says nothing to do:\n%s", out)
+	}
+}
+
+// TestStokerNewsIsAToast: what the stoker did shows in the header.
+func TestStokerNewsIsAToast(t *testing.T) {
+	at := fixtureState().At
+	on := runningNight(at)
+	off := proto.StokerView{}
+	one := on
+	one.Run = on.Run[:1]
+	ended := quietNight()
+	rests := on
+	rests.Rests = at
+	for _, c := range []struct {
+		was, next proto.StokerView
+		want      string
+	}{
+		{off, on, "the stoker runs the night → "},
+		{one, on, "the stoker: app-review skipped: session busy"},
+		{on, ended, "the stoker ended · ready 7/7"},
+		{on, rests, "the stoker rests"},
+		{on, on, ""},
+	} {
+		m, _ := loadedWith(t, 100, stokerState(c.was))
+		next, _ := m.Update(stateMsg(stokerState(c.next)))
+		if got := next.(Model).toast; c.want == "" && got != "" || !strings.HasPrefix(got, c.want) {
+			t.Errorf("%q, want %q", got, c.want)
+		}
 	}
 }

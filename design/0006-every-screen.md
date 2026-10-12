@@ -102,7 +102,7 @@ the take-over question keep their place in the key line's row.
 
 ### 5.1 Grouped by need
 
-Sessions is, top to bottom: the STOKED card, the setup steps (doors),
+Sessions is, top to bottom: the setup steps (doors),
 then one list in three groups, each with a faint label and count, then
 RECOMMENDATIONS last (owner 2026-10-12: who needs you comes before what
 to do next):
@@ -196,7 +196,7 @@ pane, it does not ask with the question tool (its options path stays) and
 is not at a permission prompt; a failed guard sends nothing and says why. A permission prompt (said.Permits) is not answered here: its
 peek shows the prompt and `⏎ open` to answer it in its pane.
 
-## 7. The dock: usage and the machine
+## 7. The dock: usage, the machine and the stoker
 
 The dock sits between the body and the key line when the body leaves room
 for it and one blank row (the body's lines, or the taller of list and
@@ -215,10 +215,28 @@ Machine tab.
   Machine tab, and the header no longer has them.
 - **Machine**: cpu with a sparkline of the last minute and the load, memory
   `41 of 64 GB`, disk, and `runs 13 claude · 1 codex · 1 opencode`.
+- **Stoker** (owner 2026-10-12, the STOKED card leaves the top of
+  Sessions): `STOKER` and its state word (`off`, `on`, `night → 07:00`,
+  `rests`); for a run that is on or ended, `ready N/M` (ended) or `watching
+  N`, `N compacted · N waited · Nk back`, and the last step (time, the
+  session, before → after or why). With nothing to say: `off · f starts it ·
+  n starts a night`. `c` or a tap on the panel opens the whole card (every
+  step with its why and RESUME line, the left-alone list, the limit line)
+  in the right pane where there is one, else on the Machine tab of a phone;
+  `⏎` marks it seen and folds it, `esc` closes it. Its events (started,
+  stopped, rests, a step, a run that ended) also show as the header toast.
 - **Phone:** one panel at a time, usage first. Its label line ends with
-  `machine ›` (or `usage ›`) in the accent; `u` or a tap switches.
-- **Opened phone and desk:** usage on the left, machine on the right, split
-  as the panes above.
+  the next panel's word (`machine ›`, `stoker ›`, `usage ›`) in the accent;
+  `u` or a tap cycles. While a run is in charge or has steps not seen, the
+  stoker's panel takes the dock until the builder switches.
+- **Opened phone, upright drawer and desk:** usage on the left, machine
+  on the right (the stoker in its place while it claims the dock), split as
+  the panes above. A desk of 152 columns or more shows all three in thirds.
+- **Grows into free rows:** when the body leaves rows beyond the dock's
+  fewest, usage adds each account's forecast and resets on their own
+  lines, the machine its top processes, the stoker its recent steps; the
+  detail beside the list shows more of what the session said. No run of
+  three blank rows stays while a panel has more to say.
 - **Folded** (the keyboard is up, the list is long): the Machine tab is
   named `machine`, and shows usage first, then the machine, then its
   existing lists.
@@ -304,8 +322,8 @@ has `a`: the answer peek on its session.
   the stoker and the night (the mock's stoker picker is not built).
 - Git, History and Panes keep their bodies; they gain the bottom key line
   and the dock.
-- Doors, the STOKED card, recommendations and the take-over question keep
-  their behaviour, at the top of Sessions.
+- Doors, recommendations and the take-over question keep their behaviour;
+  the STOKED card moved into the dock's stoker panel (§7).
 - The night look, the theme tokens and the motion rules (DESIGN.md §2, §5).
 
 ## 10. Done when

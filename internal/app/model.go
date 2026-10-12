@@ -260,11 +260,16 @@ type Model struct {
 	picked     map[string]bool // worktrees x removes
 	batch      *batch
 	showExited bool // e: the exited agents, one by one
-	// dockMachine: a phone's dock shows the machine; u turns it back to
-	// usage.
-	dockMachine bool
-	toast       string // what an action did, on the header's right
-	toasts      int    // counts the toasts: a later one outlives the timer of an earlier one
+	// dockPanel is the panel a phone's dock shows (usage, the machine, the
+	// stoker), u cycling it; dockSwitched: u was pressed while the stoker
+	// claimed the dock, so it no longer takes it by itself.
+	dockPanel    int
+	dockSwitched bool
+	// stokerOpen: the stoker's full card is open, in the right pane or on
+	// a phone's Machine tab.
+	stokerOpen bool
+	toast      string // what an action did, on the header's right
+	toasts     int    // counts the toasts: a later one outlives the timer of an earlier one
 }
 
 func New(opt Options) Model {
@@ -399,11 +404,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		first := !m.have
 		st := proto.State(msg)
 		m.queue = st.Queue
+		toast := m.stokerNews(st.Stoker)
 		m.stoker = st.Stoker
-		m.doors = openDoors(st.Doors)
-		if m.stokedShows() {
-			m.doors = append([]doors.Door{{ID: stokedRow}}, m.doors...)
+		if !m.stokerClaims() {
+			m.dockSwitched = false
 		}
+		m.doors = openDoors(st.Doors)
 		m.noteChanges(st.Sessions)
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
 		m.shipReport = st.Ships
@@ -423,7 +429,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.hist.Append(history.FromSnapshot(m.snap))
 		}
 		m.keepSelection()
-		return m, tea.Batch(m.recv(), m.animate())
+		var news tea.Cmd
+		if toast != "" && !first {
+			news = m.say(toast)
+		}
+		return m, tea.Batch(m.recv(), m.animate(), news)
 	case doorRanMsg:
 		return m.doorRan(msg)
 	case animMsg:
@@ -642,7 +652,15 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.flash = ""
+	if m.stokerOpen {
+		m.stokerOpen = false
+		if k == "enter" || k == "esc" {
+			return m.ackStoked() // seen: the card folds
+		}
+	}
 	switch k {
+	case "c":
+		return m.openStoker(), nil
 	case "q", "ctrl+c":
 		m.quitting = true
 		return m, tea.Quit
@@ -686,9 +704,6 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.move(1)
 	case "enter":
-		if d, ok := m.selectedDoor(); ok && d.ID == stokedRow {
-			return m.ackStoked()
-		}
 		if m.tab == tabShips {
 			return m.toDriver(), nil
 		}
@@ -718,7 +733,7 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case "p":
 		m.setTab(tabShips)
 	case "u":
-		m.dockMachine = !m.dockMachine
+		m.cycleDock()
 	case "f":
 		return m.stokerKey(false)
 	case "n":

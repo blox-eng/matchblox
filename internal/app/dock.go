@@ -10,43 +10,141 @@ import (
 	"github.com/blox-eng/matchblox/internal/limits"
 )
 
-// The dock is usage and the machine, between the body and the key line,
-// when the body leaves room for it and one blank row (design/0006 §7). It
-// is never scrolled: when it does not fit it folds away, and the Machine
-// tab has it all.
+// The dock is usage, the machine and the stoker, between the body and the
+// key line, when the body leaves room for it and one blank row
+// (design/0006 §7). It is never scrolled: when it does not fit it folds
+// away, and the Machine tab has it all. Rows the body leaves free beyond
+// its minimum, it grows into: usage its forecasts and resets, the machine
+// its top processes, the stoker its recent steps.
 
-// dock is the dock's lines in w columns: on a phone one panel, the one
-// `u` picks; wider, usage and the machine side by side, split as the
-// panes of Sessions are.
-func (m Model) dock(w int) []string {
-	if m.phoneDock(w) {
-		if m.dockMachine {
-			return m.machineLines(w, false, "usage ›")
-		}
-		return m.usageLines(w, false, "machine ›")
+// The panels of the dock, in the order u cycles them on a phone.
+const (
+	panelUsage = iota
+	panelMachine
+	panelStoker
+	panels
+)
+
+var panelWords = [panels]string{"usage ›", "machine ›", "stoker ›"}
+
+// stokerClaims: a run is in charge, or has steps the builder has not
+// seen; the stoker's panel takes the dock until the builder switches.
+func (m Model) stokerClaims() bool {
+	return m.stoker != nil && (m.stoker.On || m.stokedShows())
+}
+
+// dockShows is the panel a phone's dock shows.
+func (m Model) dockShows() int {
+	if m.stokerClaims() && !m.dockSwitched {
+		return panelStoker
 	}
-	split := splitAt(w, m.layoutAt(w))
-	left, right := m.usageLines(split, false, ""), m.machineLines(w-split-1, false, "")
-	out := make([]string, max(len(left), len(right)))
-	for i := range out {
-		l, r := "", ""
-		if i < len(left) {
-			l = left[i]
-		}
-		if i < len(right) {
-			r = right[i]
-		}
-		out[i] = fit(l, split) + m.st.hair.Render("│") + fit(r, w-split-1)
+	return m.dockPanel
+}
+
+// cycleDock is u: the next panel of a phone's dock.
+func (m *Model) cycleDock() {
+	m.dockPanel = (m.dockShows() + 1) % panels
+	m.dockSwitched = m.stokerClaims()
+}
+
+// docked is the dock drawn: its lines, whether every panel shows all it
+// has, and the columns of the stoker's panel (a tap there opens its card;
+// x1 0: no stoker panel).
+type docked struct {
+	lines      []string
+	full       bool
+	stx0, stx1 int
+}
+
+// panel is one panel of the dock in w columns: its fewest lines, and all
+// it has to say. A cut keeps the fewest lines and never cuts usage.
+func (m Model) panel(p, w int, toggle string) (least, most []string) {
+	switch p {
+	case panelUsage:
+		return m.usageLines(w, false, toggle), m.usageLines(w, true, toggle)
+	case panelMachine:
+		least = m.machineLines(w, false, toggle)
+		return least, append(slices.Clone(least), m.topLines(w)...)
 	}
-	return out
+	return m.stokerLines(w, false, toggle), m.stokerLines(w, true, toggle)
+}
+
+// dock is the dock in w columns and at most rows lines (rows < 0: its
+// fewest). A phone shows one panel, the one u picks; an opened phone, an
+// upright drawer and a desk short of room two, usage and the machine
+// (the stoker in the machine's place while it claims the dock); a wide
+// desk all three.
+func (m Model) dock(w, rows int) docked {
+	type col struct {
+		p, w   int
+		toggle string
+	}
+	var cols []col
+	switch {
+	case m.phoneDock(w):
+		p := m.dockShows()
+		cols = []col{{p, w, panelWords[(p+1)%panels]}}
+	case w >= 152 && m.layoutAt(w) == Wide:
+		third := (w - 2) / 3
+		cols = []col{{panelUsage, third, ""}, {panelMachine, third, ""}, {panelStoker, w - 2 - 2*third, ""}}
+	default:
+		split := splitAt(w, m.layoutAt(w))
+		right := panelMachine
+		if m.stokerClaims() {
+			right = panelStoker
+		}
+		cols = []col{{panelUsage, split, ""}, {right, w - split - 1, ""}}
+	}
+	d := docked{full: true}
+	var parts [][]string
+	x := 0
+	for i, c := range cols {
+		least, most := m.panel(c.p, c.w, c.toggle)
+		lines := least
+		switch {
+		case rows < 0:
+			d.full = d.full && len(most) <= len(least)
+		case len(most) <= rows:
+			lines = most
+		case c.p != panelUsage:
+			lines = most[:max(rows, len(least))]
+			d.full = false
+		default:
+			d.full = false
+		}
+		if c.p == panelStoker {
+			d.stx0, d.stx1 = x, x+c.w
+		}
+		x += c.w
+		if i < len(cols)-1 {
+			x++
+		}
+		parts = append(parts, lines)
+	}
+	n := 0
+	for _, p := range parts {
+		n = max(n, len(p))
+	}
+	for i := range n {
+		line := ""
+		for j, c := range cols {
+			cell := ""
+			if i < len(parts[j]) {
+				cell = parts[j][i]
+			}
+			if j > 0 {
+				line += m.st.hair.Render("│")
+			}
+			line += fit(cell, c.w)
+		}
+		d.lines = append(d.lines, line)
+	}
+	return d
 }
 
 // dockToggle is where the phone dock's switch sits on its first line.
 func (m Model) dockToggle(w int) (x0, x1 int) {
-	word := "machine ›"
-	if m.dockMachine {
-		word = "usage ›"
-	}
+	word := panelWords[(m.dockShows()+1)%panels]
 	return w - lipgloss.Width(word) - 1, w - 1
 }
 
@@ -280,7 +378,12 @@ func (m Model) runs() string {
 // machinePanel is the Machine tab: usage first, then the machine, then
 // the detached busy loops and the top processes.
 func (m Model) machinePanel(w int) body {
-	b := plain(m.usageLines(w, true, ""))
+	var b body
+	if m.stokerOpen && m.layoutAt(m.width) == Narrow {
+		b.add(-1, m.stokerCard(w)...) // a phone's stoker card, over the machine
+		b.add(-1, "")
+	}
+	b.add(-1, m.usageLines(w, true, "")...)
 	b.add(-1, "")
 	b.add(-1, m.machineLines(w, true, "")...)
 	b.add(-1, m.machine(w)...)

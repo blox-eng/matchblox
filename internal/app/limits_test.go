@@ -94,11 +94,12 @@ func TestTheDockSaysUsageAndTheMachine(t *testing.T) {
 	}
 }
 
-// TestAPhoneDockShowsOnePanel: on a phone the dock is usage or the
-// machine; u, or a tap on its switch, turns it. An account other than
+// TestAPhoneDockShowsOnePanel: on a phone the dock is usage, the machine
+// or the stoker; u, or a tap on its switch, cycles it. An account other than
 // Anthropic's takes one line.
 func TestAPhoneDockShowsOnePanel(t *testing.T) {
 	m, _ := loadedWith(t, 44, limitsState())
+	m.height = len(m.body(44).lines) + len(m.dock(44, -1).lines) + 1 + 5 // no row to grow into
 	out := screen(m)
 	if !strings.Contains(out, "USAGE") || !strings.Contains(out, "machine ›") || strings.Contains(out, "MACHINE") {
 		t.Fatalf("the phone dock is not usage alone:\n%s", out)
@@ -108,14 +109,17 @@ func TestAPhoneDockShowsOnePanel(t *testing.T) {
 	}
 	fitsWidth(t, m, 44)
 	next, _ := key(m, "u")
-	if out := screen(next); !strings.Contains(out, "MACHINE") || !strings.Contains(out, "usage ›") || strings.Contains(out, "USAGE") {
+	if out := screen(next); !strings.Contains(out, "MACHINE") || !strings.Contains(out, "stoker ›") || strings.Contains(out, "USAGE") {
 		t.Fatalf("u does not show the machine:\n%s", out)
 	}
-	y := lineOf(t, next, "usage ›")
-	x := strings.Index(strings.Split(screen(next), "\n")[y], "usage ›")
-	back, _ := tap(next, len([]rune(strings.Split(screen(next), "\n")[y][:x])), y)
-	if !strings.Contains(screen(back), "USAGE") {
-		t.Fatalf("a tap on usage › does not switch back:\n%s", screen(back))
+	y := lineOf(t, next, "stoker ›")
+	x := strings.Index(strings.Split(screen(next), "\n")[y], "stoker ›")
+	st, _ := tap(next, len([]rune(strings.Split(screen(next), "\n")[y][:x])), y)
+	if out := screen(st); !strings.Contains(out, "STOKER") || !strings.Contains(out, "usage ›") || !strings.Contains(out, "f starts it") {
+		t.Fatalf("a tap on stoker › does not show the stoker:\n%s", out)
+	}
+	if back, _ := key(st, "u"); !strings.Contains(screen(back), "USAGE") {
+		t.Fatalf("u does not come back to usage:\n%s", screen(back))
 	}
 }
 
@@ -124,7 +128,7 @@ func TestAPhoneDockShowsOnePanel(t *testing.T) {
 // tab, which has usage first.
 func TestTheDockFoldsWhenItDoesNotFit(t *testing.T) {
 	m, _ := loadedWith(t, 44, limitsState())
-	need := len(m.body(44).lines) + len(m.dock(44)) + 1 + 5 // the header, the tabs, two hairlines, the key line
+	need := len(m.body(44).lines) + len(m.dock(44, -1).lines) + 1 + 5 // the header, the tabs, two hairlines, the key line
 	for h, docked := range map[int]bool{need: true, need - 1: false} {
 		m.height = h
 		if got := strings.Contains(screen(m), "USAGE"); got != docked {

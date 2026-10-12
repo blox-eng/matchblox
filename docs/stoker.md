@@ -90,8 +90,15 @@ It never answers a question or a permission prompt, never sends
 
 ## In the morning
 
-The night's card is the first thing in Sessions, even after a night with
-nothing to do:
+The stoker lives in the dock at the bottom of the screen. While a run is
+in charge, or has steps you have not seen, its panel takes the dock: its
+state, `ready 5/7` once it ended, the last step, and `1 compacted · 1
+waited · 386k back`. With room to spare it lists the recent steps too. What
+it does also shows for a moment in the header: it started, it compacted a
+session, it rests, the run ended.
+
+`c`, or a tap on the panel, opens the whole card, even after a night with
+nothing to do: in the right pane, or on a phone on the Machine tab.
 
 ```text
  NIGHT 23:10 → 07:00 · ready 5/7
@@ -127,7 +134,7 @@ nothing to do:
   Send it or clear it.
 
 A stoker run during the day ends with the same card, headed `STOKED`.
-`Enter` folds it. Until then, `matchblox status` shows it too:
+`Enter` on the card marks it seen and folds it; `Esc` closes it. Until then, `matchblox status` shows it too:
 
 ```text
 stoker: night 23:10 → 07:00 · ready 5/7 · 7 watched · 1 was full · 1 compacted · 1 waited · 386k tokens given back

@@ -97,22 +97,9 @@ func (m Model) doorsSection(b *body, w int) {
 	}
 	st := m.st
 	sel := m.sessIndex()
-	ds := m.doors
-	if ds[0].ID == stokedRow {
-		m.stokedSection(b, w, 0, sel == 0)
-		ds = ds[1:]
-	}
-	if len(ds) > 0 {
-		if len(ds) < len(m.doors) {
-			b.add(-1, "") // the stoker's row above stands apart
-		}
-		b.add(-1, st.label.Render(fit(fmt.Sprintf(" SET UP · %d", len(ds)), w)))
-	}
+	b.add(-1, st.label.Render(fit(fmt.Sprintf(" SET UP · %d", len(m.doors)), w)))
 	narrow := m.layoutAt(w) == Narrow
 	for i, d := range m.doors {
-		if d.ID == stokedRow {
-			continue
-		}
 		mark := "  "
 		if i == sel {
 			mark = "▌ "

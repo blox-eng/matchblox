@@ -13,11 +13,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// stokedRow is the first row of Sessions while the stoker has steps
-// the builder has not seen. It sits with the doors, so it is selected,
-// moved over and folded like one.
-const stokedRow = "stoked"
-
+// stokedShows: the stoker has steps, or the card of a run, the builder
+// has not seen.
 func (m Model) stokedShows() bool {
 	return m.stoker != nil && m.stoker.Unseen && (len(m.stoker.Run) > 0 || m.card() != nil)
 }
@@ -54,6 +51,9 @@ func (m Model) stokerKey(night bool) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) ackStoked() (tea.Model, tea.Cmd) {
+	if m.stoker == nil || !m.stoker.Unseen {
+		return m, nil
+	}
 	if m.conn == nil || m.lost {
 		m.flash = "not sent, no connection"
 		return m, nil
@@ -186,7 +186,7 @@ func (m Model) stokedSection(b *body, w int, row int, sel bool) {
 	default:
 		when += v.Ended.Local().Format("15:04")
 	}
-	narrow := m.layoutAt(w) == Narrow
+	narrow := w < 60
 	mark := "  "
 	if sel {
 		mark = "▌ "

@@ -16,10 +16,10 @@ The key line at the bottom shows the keys of the open tab, and how old the
 sample is. A tap on a key presses it. It is also where you confirm a step
 or type a search. See [Keys](keys.md).
 
-## Usage and the machine
+## Usage, the machine and the stoker
 
 Under the open tab, when there is room, the dock shows how much of each
-plan your agents have used, and the machine:
+plan your agents have used, the machine, and [the stoker](stoker.md):
 
 ```
  USAGE                                    │ MACHINE        ws-1 · 16 cores
@@ -39,8 +39,16 @@ plan your agents have used, and the machine:
   that burns the most. `Enter` jumps to it, and `x` compacts it while it is
   idle. The row then says what happened, or what failed and that the key
   tries again.
-- On a phone the dock shows one of the two. `u`, or a tap on `machine ›`,
-  switches.
+- On a phone the dock shows one panel at a time. `u`, or a tap on the
+  word at its right (`machine ›`), goes to the next: usage, the machine,
+  the stoker. While a run is in charge, or has steps you have not seen, the
+  stoker takes the dock until you switch.
+- Wider, two panels side by side: usage and the machine, or usage and the
+  stoker while it claims the dock. A wide desk shows all three.
+- When the body leaves rows free, the dock grows into them: each account's
+  forecast and resets, the top processes, the stoker's recent steps. The
+  detail beside the list shows more of what the agent said.
+- `c`, or a tap on the stoker's panel, opens its whole card.
 - `disk` is the file system that holds your home directory, and `/` beside
   it when that is another one.
 - Claude Code's status line gives the 5-hour window and the week only, so
@@ -75,8 +83,8 @@ Each agent row starts with a match:
 
 ## 1 Sessions
 
-The console opens here. On top, while there are some: the stoker's card
-and the setup steps (`SET UP`). Then every agent, by what it needs from
+The console opens here. On top, while there are some: the setup steps
+(`SET UP`). Then every agent, by what it needs from
 you, and last the recommendations, each with its evidence and its exact
 command. `d` dismisses the selected recommendation until its evidence
 changes; `h` folds them all to one line, and `h` again shows them. The

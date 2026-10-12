@@ -115,6 +115,10 @@ type drawn struct {
 	peekRows             []string
 	peekKeys             []span
 	peekInline           bool // the peek is the detail pane, the list beside it live
+	// The dock: its height and the columns of the stoker's panel. full:
+	// the dock shows all it has; paneFull: so does the right pane.
+	dockH, stx0, stx1 int
+	full, paneFull    bool
 }
 
 // draw lays out the screen, top to bottom: the header, the tabs, a
@@ -149,22 +153,37 @@ func (m Model) draw(w int) drawn {
 	listW, detailW := m.panes(w)
 	sc.listW = listW
 	b := m.body(listW)
-	var detail []string
 	_, _, peeking := m.peekNow()
-	inline := peeking && detailW > 0 // the peek takes the detail pane
-	if detailW > 0 && !inline {
-		detail = m.detailPane(detailW)
+	inline := peeking && detailW > 0    // the peek takes the detail pane
+	card := m.stokerOpen && detailW > 0 // the stoker's card takes the detail pane
+	paneFull := true
+	paneLines := func(rows int) []string {
+		switch {
+		case detailW == 0 || inline:
+			return nil
+		case card:
+			return m.stokerCard(detailW)
+		}
+		lines, all := m.detailPane(detailW, rows)
+		paneFull = all
+		return lines
 	}
-	var dock []string
+	detail := paneLines(0)
+	var d docked
 	if m.tab != tabMachine {
-		dock = m.dock(w)
+		d = m.dock(w, -1)
 	}
 	room := full
-	if len(dock) > 0 && max(len(b.lines), len(detail))+len(dock)+1 <= full {
-		room -= len(dock) + 1
+	if len(d.lines) > 0 && max(len(b.lines), len(detail))+len(d.lines)+1 <= full {
+		// The dock fits; it grows into the rows the body leaves free.
+		d = m.dock(w, full-max(len(b.lines), len(detail))-1)
+		room -= len(d.lines) + 1
 	} else {
-		dock = nil
+		d = docked{}
 	}
+	sc.full = d.full || m.tab == tabMachine
+	detail = paneLines(room)
+	sc.paneFull = paneFull && len(detail) <= room
 	if inline {
 		var press []string
 		var spans []span
@@ -186,9 +205,9 @@ func (m Model) draw(w int) drawn {
 		}
 		sc.lines, sc.rows = append(sc.lines, line), append(sc.rows, row)
 	}
-	if len(dock) > 0 {
-		sc.dockAt = len(sc.lines) + 1
-		sc.lines = append(append(sc.lines, m.st.hair.Render(strings.Repeat("─", w))), dock...)
+	if len(d.lines) > 0 {
+		sc.dockAt, sc.dockH, sc.stx0, sc.stx1 = len(sc.lines)+1, len(d.lines), d.stx0, d.stx1
+		sc.lines = append(append(sc.lines, m.st.hair.Render(strings.Repeat("─", w))), d.lines...)
 	}
 	keys, keySpans := m.keyLine(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, keySpans

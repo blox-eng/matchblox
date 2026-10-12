@@ -36,25 +36,25 @@
                                                      ││                                                   │
                                                      ││                                                   │
                                                      ││                                                   │
-                                                     ││                                                   │
-                                                     ││                                                   │
-                                                     ││                                                   │
-                                                     ││                                                   │
-                                                     ││                                                   │
-                                                     ││                                                   │
-                                                     ││                                                   │
-                                                     ││                                                   │
-                                                     ││                                                   │
-                                                     ││                                                   │
-                                                     ││                                                   │
-                                                     ││                                                   │
                                                      │╰─ ⏎ question 2 ─ ← prev  3/7  next → ─ esc ────────╯
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
- USAGE                                                                                           machine ›
- ✻ Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20
-          wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · out Fri ~21:00
- · login  not measured · OpenCode keeps no limits
- ❋ Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59
-          wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week
+ USAGE                                               │ MACHINE                                    16 cores
+ ✻ Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20             │ cpu  ▁ 0%   load 6.2
+          wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00             │ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
+          out Fri ~21:00                             │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
+ · login  not measured · OpenCode keeps no limits    │ runs 5 claude · 1 codex · 1 opencode
+ ❋ Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                 │
+          wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00             │ PID      COMMAND           CPU    MEM     OWNER
+          lasts the week                             │ 1        systemd             0%   9.8M    system
+                                                     │ 1200     claude              0%   9.8M    pane %1 ·…
+                                                     │ 1300     zsh                 0%   9.8M    pane %2 ·…
+                                                     │ 1310     claude              0%   9.8M    pane %2 ·…
+                                                     │ 1400     claude              0%   9.8M    pane %3 ·…
+                                                     │ 1500     zsh                 0%   9.8M    pane %4
+                                                     │ 1600     claude              0%   9.8M    pane %5 ·…
+                                                     │ 1700     codex               0%   9.8M    pane %6 ·…
+                                                     │ 1800     MainThread          0%   9.8M    pane %7 ·…
+                                                     │ 1900     claude              0%   9.8M    pane %8 ·…
+                                                     │ 4242     bash                0%   9.8M    pane %9
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
  ⏎ open  a answer  p ships  f stoker                                                        sampled 0s ago

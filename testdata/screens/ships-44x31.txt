@@ -18,14 +18,14 @@
 
 
 
-
-
-
 ────────────────────────────────────────────
  USAGE                            machine ›
  ✻ Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20
-          wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · …
+          wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00
+          out Fri ~21:00
  · login  not measured · OpenCode keeps no …
- ❋ Plus   5h ▰▱▱ 40% · wk 12%
+ ❋ Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59
+          wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00
+          lasts the week
 ────────────────────────────────────────────
  ⏎ session  f stoker         sampled 0s ago

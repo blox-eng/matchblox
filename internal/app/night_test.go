@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
@@ -156,19 +157,26 @@ func quietNight() proto.StokerView {
 	}
 }
 
+// TestAQuietNightShowsItsCard: the night's score takes the dock's stoker
+// panel until it is seen, and c opens the whole card.
 func TestAQuietNightShowsItsCard(t *testing.T) {
 	for _, w := range []int{40, 120} {
 		m, _ := loadedWith(t, w, stokerState(quietNight()))
-		out := ansi.Strip(m.render())
+		if out := ansi.Strip(m.render()); !strings.Contains(out, "STOKER") || !strings.Contains(out, "ready 7/7") || strings.Contains(out, "NIGHT 01:08") {
+			t.Fatalf("w=%d: the dock does not show the night's score:\n%s", w, out)
+		}
+		out := ansi.Strip(openCard(m).(Model).render())
 		for _, want := range []string{"NIGHT 01:08 → 07:00 · ready 7/7", "7 watched", "0 compacted"} {
 			if !strings.Contains(out, want) {
 				t.Fatalf("w=%d: no %q in\n%s", w, want, out)
 			}
 		}
-		if d, ok := m.selectedDoor(); !ok || d.ID != stokedRow {
-			t.Fatalf("w=%d: the card is not selected first", w)
-		}
 	}
+}
+
+func openCard(m tea.Model) tea.Model {
+	next, _ := key(m, "c")
+	return next
 }
 
 func TestTheCardNamesWhatIsNotReady(t *testing.T) {
@@ -178,8 +186,8 @@ func TestTheCardNamesWhatIsNotReady(t *testing.T) {
 	c.NotReady = []proto.StokerMiss{{Name: "api-gw", Why: "waits for you"}, {Name: "billing", Why: "full · 91%"}}
 	c.Left = []proto.StokerMiss{{Name: "Billed", Why: "69% · finishes ~79% · left alone"}}
 	v.Card = &c
-	m, _ := loadedWith(t, 120, stokerState(v))
-	out := ansi.Strip(m.render())
+	m, _ := loadedWith(t, 160, stokerState(v))
+	out := ansi.Strip(openCard(m).(Model).render())
 	for _, want := range []string{"ready 5/7", "2 were full", "1 compacted", "1 waited", "167k tokens given back", "api-gw", "waits for you", "billing", "full · 91%", "Billed", "69% · finishes ~79% · left alone"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("no %q in\n%s", want, out)
@@ -191,14 +199,14 @@ func TestADayRunCardIsStoked(t *testing.T) {
 	v := quietNight()
 	v.Nightly, v.Card.Night = false, false
 	m, _ := loadedWith(t, 120, stokerState(v))
-	if out := ansi.Strip(m.render()); !strings.Contains(out, "STOKED 01:08 → 07:00 · ready 7/7") {
+	if out := ansi.Strip(openCard(m).(Model).render()); !strings.Contains(out, "STOKED 01:08 → 07:00 · ready 7/7") {
 		t.Fatalf("%s", out)
 	}
 }
 
 func TestEnterFoldsTheCard(t *testing.T) {
 	m, f := loadedWith(t, 120, stokerState(quietNight()))
-	sendKey(m, "enter")
+	sendKey(openCard(m), "enter")
 	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:ack" {
 		t.Fatalf("acts %+v", a)
 	}
@@ -233,16 +241,16 @@ func TestSummaryCarriesTheCard(t *testing.T) {
 	}
 }
 
-func TestTheCardStandsApartFromSetUp(t *testing.T) {
+// TestTheCardLeavesSessions: the stoker's card is in the dock, not on top
+// of Sessions, so the setup steps open the list.
+func TestTheCardLeavesSessions(t *testing.T) {
 	st := doorsAndQueue(hooksDoor)
 	v := quietNight()
 	st.Stoker = &v
 	m, _ := loadedWith(t, 120, st)
 	lines := strings.Split(ansi.Strip(m.render()), "\n")
-	for i, l := range lines {
-		if strings.HasPrefix(l, " SET UP") && strings.TrimSpace(listOf(lines[i-1], 120)) != "" {
-			t.Fatalf("SET UP sits on the card: %q", lines[i-1])
-		}
+	if !strings.HasPrefix(lines[3], " SET UP") || strings.Contains(strings.Join(lines[:10], "\n"), "NIGHT 01:08") {
+		t.Fatalf("the card sits on top of Sessions:\n%s", strings.Join(lines, "\n"))
 	}
 }
 
@@ -274,8 +282,9 @@ func TestTheCardSaysTheLimitRanOut(t *testing.T) {
 	c.Lapses = []proto.StokerLapse{{From: from, Until: back}}
 	v.Card = &c
 	for _, w := range []int{40, 120} {
-		m, _ := loadedWith(t, w, stokerState(v))
-		lines := strings.Split(ansi.Strip(m.render()), "\n")
+		m0, _ := loadedWith(t, w, stokerState(v))
+		m := openCard(m0)
+		lines := strings.Split(ansi.Strip(m.(Model).render()), "\n")
 		at := lineOf(t, m, "NIGHT 01:08")
 		if !strings.Contains(lines[at+1], "limit out 01:51 → 04:50") {
 			t.Fatalf("w=%d: the lapse is not the card's first line:\n%s", w, strings.Join(lines[at:at+4], "\n"))

@@ -39,9 +39,12 @@ All notable changes to matchblox are in this file. The format follows
   `CI · 6 of 9 jobs · 12m`) or waited (`merged · deploy queued · 1h`). A
   failed run on the merge commit counts once a newer run of its workflow
   on the default branch passed.
-- **Usage and the machine in the rows the list leaves free.** Each
-  account's windows as `/usage` says them, and the machine: cpu, memory,
-  the disk your home is on, and the agents that run.
+- **Usage, the machine and the stoker in the rows the list leaves free.**
+  Each account's windows as `/usage` says them, the machine (cpu, memory,
+  the disk your home is on, the agents that run) and the stoker, whose
+  panel takes the dock while a run is in charge; `c` opens its whole card.
+  With rows to spare the dock grows: forecasts, the top processes, the
+  recent steps.
 - **Recommendations you can put away.** They sit under the sessions now.
   `d` dismisses one until its evidence changes, and `h` folds them all to
   one line; the console remembers both.
