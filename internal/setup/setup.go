@@ -26,9 +26,12 @@ type Env struct {
 	// Exe is the matchblox the hooks run. Empty: "matchblox" on the PATH.
 	Exe      string
 	StateDir string // where closed doors are kept
-	Root     bool   // a root shell installs packages without sudo
-	Getenv   func(string) string
-	LookPath func(string) (string, error)
+	// CompactAt is the stoker's line (compact_at), the percentage the
+	// safety net sets. 0: the default, 85.
+	CompactAt float64
+	Root      bool // a root shell installs packages without sudo
+	Getenv    func(string) string
+	LookPath  func(string) (string, error)
 	// Source loads a tmux config into the running server. ErrNoServer: no
 	// server runs, the next one reads the file.
 	Source func(conf string) error
@@ -46,7 +49,7 @@ func Doors(e Env) []doors.Door {
 	_, tmuxErr := e.LookPath("tmux")
 	ds := []doors.Door{tmuxDoor(e, tmuxErr == nil)}
 	if usesClaude(e) {
-		ds = append(ds, hooksDoor(e), limitsDoor(e))
+		ds = append(ds, hooksDoor(e), limitsDoor(e), safetyNetDoor(e))
 	}
 	ds = append(ds, wayBackDoor(e))
 	if usesClaude(e) {
@@ -67,6 +70,8 @@ func Open(e Env, id, seen string, also bool) (backup string, err error) {
 		return AddHooks(settingsPath(e), e.Exe, seen)
 	case doors.Limits:
 		return TapStatusLine(settingsPath(e), e.Exe, seen)
+	case doors.SafetyNet:
+		return TurnOnSafetyNet(settingsPath(e), e.compactAt(), seen)
 	case doors.WayBack:
 		return AddWayBack(tmuxConf(e), seen, also, e.Source)
 	case doors.Tmux, doors.Guide:
@@ -75,7 +80,7 @@ func Open(e Env, id, seen string, also bool) (backup string, err error) {
 	return "", fmt.Errorf("no door %q", id)
 }
 
-var known = []string{doors.Tmux, doors.Hooks, doors.Limits, doors.WayBack, doors.Guide, doors.Night}
+var known = []string{doors.Tmux, doors.Hooks, doors.Limits, doors.SafetyNet, doors.WayBack, doors.Guide, doors.Night}
 
 // Close hides a door from the console; `matchblox setup` shows it again.
 func Close(e Env, id string) error {

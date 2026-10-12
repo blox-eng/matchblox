@@ -234,6 +234,9 @@ func (m Model) stokedSection(b *body, w int, row int, sel bool) {
 		for _, x := range c.NotReady {
 			lines = append(lines, "   "+st.text.Render(pad(x.Name, colName))+st.warn.Render(missWhy(x, c.Ended)))
 		}
+		for _, x := range c.Left {
+			lines = append(lines, "   "+st.text.Render(pad(x.Name, colName))+st.muted.Render(x.Why))
+		}
 	}
 	b.add(-1, st.label.Render(fit(head, w)))
 	for i, e := range v.Run {
@@ -260,6 +263,9 @@ func (m Model) stokedSection(b *body, w int, row int, sel bool) {
 			lines = append(lines, lead+clock+cell+st.text.Render(e.Name), "     "+result)
 		} else {
 			lines = append(lines, lead+clock+cell+st.text.Render(pad(e.Name, colName))+st.muted.Render(pad(e.Pane, colPane))+result)
+		}
+		for _, l := range wrap(e.Why, w-7, st.muted.Render) {
+			lines = append(lines, "      "+strings.TrimPrefix(l, " "))
 		}
 		if e.Result != "sent" || e.Back.IsZero() {
 			continue

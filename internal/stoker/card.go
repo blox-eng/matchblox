@@ -29,7 +29,10 @@ type Card struct {
 	Ready     int       `json:"ready"`
 	Of        int       `json:"of"`
 	NotReady  []Miss    `json:"not_ready,omitempty"`
-	Lapses    []Lapse   `json:"lapses,omitempty"`
+	// Left are the sessions ready to go on that the stoker chose not to
+	// compact, with why: "69% · finishes ~79% · left alone".
+	Left   []Miss  `json:"left_alone,omitempty"`
+	Lapses []Lapse `json:"lapses,omitempty"`
 }
 
 // Lapse is a stretch of the run the plan's limit stopped sessions: from
@@ -74,6 +77,7 @@ func (m Mode) Observe(ss []sample.Session, waiting map[string]bool, full sample.
 	if m.Start == nil && m.Watched == nil {
 		// A run an older build started: the first sample seats it.
 		if m = m.Begin(ss); m.Start != nil {
+			m, _ = m.observe(ss, waiting, full, now)
 			return m, true
 		}
 	}
@@ -94,6 +98,9 @@ func (m Mode) observe(ss []sample.Session, waiting map[string]bool, full sample.
 			continue
 		}
 		m.Watched = add(m.Watched, s.SessionID)
+		if m.pace(s) {
+			changed = true
+		}
 		if full.Reached(s) {
 			m.Full = add(m.Full, s.SessionID)
 		}
@@ -149,12 +156,23 @@ func (m Mode) Score(ss []sample.Session, waiting map[string]bool, full sample.Fu
 			out = s.Out
 			why = append(why, "out until "+limits.Until(s.Out, m.Ended))
 		}
-		// After its reset a full session still needs a compact.
-		if alive && full.Reached(s) {
-			why = append(why, "full · "+sample.Kilo(s.Tokens))
+		var v Verdict
+		if alive {
+			var mark *Mark
+			if mk, ok := m.Pace[seat.Session]; ok {
+				mark = &mk
+			}
+			v = Decide(s, mark, full)
+		}
+		// After its reset a session past the line still needs its compact.
+		if v.Compact {
+			why = append(why, "needs a compact · "+v.Why+" · "+sample.Kilo(s.Tokens))
 		}
 		if len(why) == 0 {
 			c.Ready++
+			if v.Why != "" {
+				c.Left = append(c.Left, Miss{Name: seat.Name, Why: pct(s.Tokens, s.Window) + " · " + v.Why + " · left alone"})
+			}
 			continue
 		}
 		c.NotReady = append(c.NotReady, Miss{Name: seat.Name, Why: strings.Join(why, " · "), Out: out})

@@ -11,12 +11,13 @@ import (
 
 // The doors, in the order the console shows them.
 const (
-	Tmux    = "tmux"
-	Hooks   = "hooks"
-	Limits  = "limits"
-	WayBack = "wayback"
-	Guide   = "guide"
-	Night   = "night"
+	Tmux      = "tmux"
+	Hooks     = "hooks"
+	Limits    = "limits"
+	SafetyNet = "safetynet"
+	WayBack   = "wayback"
+	Guide     = "guide"
+	Night     = "night"
 )
 
 type Door struct {

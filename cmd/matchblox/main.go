@@ -137,7 +137,8 @@ func run(args []string) error {
 		fmt.Println(version)
 		return nil
 	case "setup":
-		return setupDoors(*liveSetup(), os.Stdin, os.Stdout, runInTerminal)
+		cfg, _ := config.Load(*cfgPath) // a broken config still opens the doors, at the default line
+		return setupDoors(*liveSetup(cfg.Sessions.CompactAt), os.Stdin, os.Stdout, runInTerminal)
 	}
 	fl.Visit(func(f *flag.Flag) {
 		if f.Name == "config" {
@@ -366,7 +367,7 @@ func newService(cfg config.Config, root string) *service.Service {
 		s.HistoryLog = cfg.History.Log
 	}
 	s.Exe = invokedPath(os.Args[0])
-	s.Setup = liveSetup()
+	s.Setup = liveSetup(cfg.Sessions.CompactAt)
 	s.LimitsLog = &limits.Store{Path: filepath.Join(filepath.Dir(s.StatePath), "limits.jsonl")}
 	if st, err := stoker.Open(filepath.Dir(s.StatePath)); err == nil {
 		s.Stoker = st

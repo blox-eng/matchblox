@@ -19,16 +19,17 @@ import (
 	"github.com/blox-eng/matchblox/internal/state"
 )
 
-// liveSetup is this machine, for the doors.
-func liveSetup() *setup.Env {
+// liveSetup is this machine, for the doors; compactAt is the stoker's line.
+func liveSetup(compactAt float64) *setup.Env {
 	home, _ := os.UserHomeDir()
 	release, _ := os.ReadFile("/etc/os-release")
 	return &setup.Env{
 		GOOS: runtime.GOOS, OSRelease: string(release), Home: home,
-		Exe:      invokedPath(os.Args[0]),
-		StateDir: filepath.Dir(state.Path()),
-		Root:     os.Geteuid() == 0,
-		Getenv:   os.Getenv, LookPath: exec.LookPath, Source: tmuxSource,
+		Exe:       invokedPath(os.Args[0]),
+		StateDir:  filepath.Dir(state.Path()),
+		Root:      os.Geteuid() == 0,
+		CompactAt: compactAt,
+		Getenv:    os.Getenv, LookPath: exec.LookPath, Source: tmuxSource,
 	}
 }
 

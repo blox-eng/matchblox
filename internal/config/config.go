@@ -65,7 +65,8 @@ type Hooks struct {
 type Sessions struct {
 	CompactAt float64 `toml:"compact_at"`
 	// CompactTokens fills a session at this many context tokens, whichever
-	// comes first with CompactAt: a 1M window rarely reaches 85%. 0: off.
+	// comes first with CompactAt, when the stoker has no pace for it (no
+	// progress bar): a 1M window rarely reaches 85%. 0: off.
 	CompactTokens int            `toml:"compact_tokens"`
 	ClearIdle     Duration       `toml:"clear_idle"`
 	ClearMinPct   float64        `toml:"clear_min_pct"`

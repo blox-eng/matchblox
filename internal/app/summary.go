@@ -50,6 +50,9 @@ func Summary(s state.Doc) string {
 		for _, x := range c.NotReady {
 			fmt.Fprintf(&b, "  not ready: %s (%s)\n", x.Name, missWhy(x, c.Ended))
 		}
+		for _, x := range c.Left {
+			fmt.Fprintf(&b, "  left alone: %s (%s)\n", x.Name, strings.TrimSuffix(x.Why, " · left alone"))
+		}
 	}
 	for _, a := range s.Alerts {
 		fmt.Fprintf(&b, "alert %s: %s (%s)\n", a.Level, a.Title, a.Evidence)

@@ -81,7 +81,7 @@ func TestScore(t *testing.T) {
 		{"a session in the queue is not ready", []sample.Session{calm("%1"), calm("%2"), calm("%3")}, map[string]bool{"%1": true}, nil,
 			Card{Watched: 3, Waited: 1, Ready: 2, Of: 3, NotReady: []Miss{{Name: "work%1", Why: "waits for you"}}}},
 		{"a full session is not ready", []sample.Session{calm("%1"), full("%2"), calm("%3")}, nil, nil,
-			Card{Watched: 3, Full: 1, Ready: 2, Of: 3, NotReady: []Miss{{Name: "work%2", Why: "full · 176k"}}}},
+			Card{Watched: 3, Full: 1, Ready: 2, Of: 3, NotReady: []Miss{{Name: "work%2", Why: "needs a compact · past 85% · 176k"}}}},
 		{"compacts read back count, with the tokens they gave back", []sample.Session{calm("%1"), calm("%2"), calm("%3")}, nil,
 			[]Entry{compacted, noCounts, unread, skipped},
 			Card{Watched: 3, Compacted: 2, Given: 166600, Ready: 3, Of: 3}},
@@ -251,7 +251,7 @@ func TestAFullSessionByTokens(t *testing.T) {
 	m := on().Begin([]sample.Session{big})
 	m, _ = m.Observe([]sample.Session{big}, nil, f, t0)
 	m = m.Off(t0.Add(time.Hour)).Score([]sample.Session{big}, nil, f, nil)
-	if m.Card.Full != 1 || !reflect.DeepEqual(m.Card.NotReady, []Miss{{Name: "work%1", Why: "full · 445k"}}) {
+	if m.Card.Full != 1 || !reflect.DeepEqual(m.Card.NotReady, []Miss{{Name: "work%1", Why: "needs a compact · past 85% or 350k · 445k"}}) {
 		t.Fatalf("card %+v", m.Card)
 	}
 }
@@ -270,7 +270,7 @@ func TestWhyASessionIsNotReady(t *testing.T) {
 	m := on().Begin(ss)
 	m = m.Off(t0.Add(time.Hour)).Score(ss, nil, at85, nil)
 	want := []Miss{
-		{Name: "work%1", Why: "out until " + back.Format("15:04") + " · full · 176k", Out: back},
+		{Name: "work%1", Why: "out until " + back.Format("15:04") + " · needs a compact · past 85% · 176k", Out: back},
 		{Name: "work%2", Why: "waits for you"},
 	}
 	if !reflect.DeepEqual(m.Card.NotReady, want) || m.Card.Ready != 1 {

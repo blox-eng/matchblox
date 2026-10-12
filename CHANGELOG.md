@@ -6,6 +6,20 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The stoker compacts each session at the moment that suits it.** It
+  follows each session's pace (tokens per point of its progress bar): one
+  that finishes under the line is left alone, one whose next step would
+  cross it is compacted at the end of this turn. The card says what it
+  decided for every session, and why.
+- **A session that ended its turn is idle, even while its background
+  works.** Its detail shows the subagents and shells it left running, and a
+  shell that has run for an hour or more can be ended with `x`.
+- **A net under every session.** A door turns Claude Code's own
+  auto-compact on at the stoker's line, the only thing that compacts inside
+  a turn.
+
 ## [0.4.0] - 2026-10-11
 
 ### Added
