@@ -36,12 +36,12 @@ func strength(kind string) int {
 // found is one piece of evidence read from a transcript line, before its
 // repository is resolved.
 type found struct {
-	Kind   string
-	Repo   string // owner/name when the command names it
-	Dir    string // where the command ran: its git remote names the repository
-	Number int    // 0 for a push
-	Branch string // a push's branch
-	At     time.Time
+	Kind   string    `json:"kind"`
+	Repo   string    `json:"repo,omitempty"`   // owner/name when the command names it
+	Dir    string    `json:"dir,omitempty"`    // where the command ran: its git remote names the repository
+	Number int       `json:"number,omitempty"` // 0 for a push
+	Branch string    `json:"branch,omitempty"` // a push's branch
+	At     time.Time `json:"at"`
 }
 
 // pending is a tool call whose evidence is in its result: the URL a

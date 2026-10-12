@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -62,6 +63,7 @@ type facts struct {
 	AutoMerge  bool      `json:"auto_merge,omitempty"`
 	Base       string    `json:"base"`
 	Head       string    `json:"head"`
+	HeadOID    string    `json:"head_oid,omitempty"` // the head commit: a merge is pinned to it
 	Created    time.Time `json:"created"`
 	Merged     time.Time `json:"merged,omitzero"`
 	MergeOID   string    `json:"merge_oid,omitempty"`
@@ -123,7 +125,7 @@ func query(owner, name string, numbers []int, history, open bool) string {
 	b.WriteString("}}")
 	b.WriteString(`fragment suite on CheckSuite{status conclusion updatedAt workflowRun{createdAt workflow{name}}}`)
 	b.WriteString(`fragment pr on PullRequest{number title url state isDraft mergeable mergeStateStatus reviewDecision ` +
-		`baseRefName headRefName createdAt mergedAt autoMergeRequest{enabledAt} ` +
+		`baseRefName headRefName headRefOid createdAt mergedAt autoMergeRequest{enabledAt} ` +
 		`mergeCommit{oid checkSuites(first:30){nodes{...suite}}} ` +
 		`commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){` +
 		`checkRunCount checkRunCountsByState{state count} statusContextCount statusContextCountsByState{state count} ` +
@@ -163,6 +165,7 @@ type prJSON struct {
 	ReviewDecision   string    `json:"reviewDecision"`
 	BaseRefName      string    `json:"baseRefName"`
 	HeadRefName      string    `json:"headRefName"`
+	HeadRefOid       string    `json:"headRefOid"`
 	CreatedAt        time.Time `json:"createdAt"`
 	MergedAt         time.Time `json:"mergedAt"`
 	AutoMergeRequest *struct{} `json:"autoMergeRequest"`
@@ -205,32 +208,73 @@ type rateJSON struct {
 
 // answer is one repository's poll, read.
 type answer struct {
-	Rate  *rateJSON
-	PRs   map[int]*facts // nil value: no such pull request
+	Rate *rateJSON
+	// PRs maps the pull requests read; a nil value is one GitHub says does
+	// not exist. One it could not read (forbidden, a timeout) is absent:
+	// it keeps what was read before.
+	PRs   map[int]*facts
 	Heads map[string]int // open PRs by head branch, when asked for
 }
 
-// parseAnswer reads a GraphQL response. A pull request the response has
-// no data for (a number that is not a PR) maps to nil.
+// badPRs is a query GitHub refused whole because of some of its pull
+// requests (a number it cannot take): the rest can be asked without them.
+type badPRs struct {
+	numbers []int
+	msg     string
+}
+
+func (e badPRs) Error() string { return e.msg }
+
+type gqlError struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+	Path    []any  `json:"path"`
+}
+
+// prOf is the pull request an error's path names ("pr123"), or 0.
+func (e gqlError) prOf() int {
+	for _, p := range e.Path {
+		if s, ok := p.(string); ok && strings.HasPrefix(s, "pr") {
+			if n, err := strconv.Atoi(s[2:]); err == nil && n > 0 {
+				return n
+			}
+		}
+	}
+	return 0
+}
+
+// parseAnswer reads a GraphQL response.
 func parseAnswer(b []byte, numbers []int, history bool, now time.Time) (answer, error) {
 	var resp struct {
 		Data *struct {
 			RateLimit  *rateJSON                  `json:"rateLimit"`
 			Repository map[string]json.RawMessage `json:"repository"`
 		} `json:"data"`
-		Errors []struct {
-			Type    string `json:"type"`
-			Message string `json:"message"`
-		} `json:"errors"`
+		Errors []gqlError `json:"errors"`
 	}
 	if err := json.Unmarshal(b, &resp); err != nil {
 		return answer{}, err
 	}
 	if resp.Data == nil {
-		if len(resp.Errors) > 0 {
+		var bad []int
+		for _, e := range resp.Errors {
+			if n := e.prOf(); n > 0 && !slices.Contains(bad, n) {
+				bad = append(bad, n)
+			}
+		}
+		switch {
+		case len(bad) > 0:
+			return answer{}, badPRs{numbers: bad, msg: resp.Errors[0].Message}
+		case len(resp.Errors) > 0:
 			return answer{}, errors.New(resp.Errors[0].Message)
 		}
 		return answer{}, errors.New("no data")
+	}
+	gone := map[int]bool{}
+	for _, e := range resp.Errors {
+		if n := e.prOf(); n > 0 && e.Type == "NOT_FOUND" {
+			gone[n] = true
+		}
 	}
 	a := answer{Rate: resp.Data.RateLimit, PRs: map[int]*facts{}}
 	repo := resp.Data.Repository
@@ -285,7 +329,9 @@ func parseAnswer(b []byte, numbers []int, history bool, now time.Time) (answer, 
 	for _, n := range numbers {
 		raw, ok := repo["pr"+strconv.Itoa(n)]
 		if !ok || string(raw) == "null" {
-			a.PRs[n] = nil
+			if gone[n] {
+				a.PRs[n] = nil
+			}
 			continue
 		}
 		var p prJSON
@@ -312,7 +358,7 @@ func factsOf(p prJSON, history []suiteJSON, asked bool, now time.Time) facts {
 	f := facts{
 		Title: clean(p.Title), URL: p.URL, State: p.State, Draft: p.IsDraft,
 		Mergeable: p.Mergeable, MergeState: p.MergeStateStatus, Review: p.ReviewDecision,
-		AutoMerge: p.AutoMergeRequest != nil, Base: p.BaseRefName, Head: p.HeadRefName,
+		AutoMerge: p.AutoMergeRequest != nil, Base: p.BaseRefName, Head: p.HeadRefName, HeadOID: p.HeadRefOid,
 		Created: p.CreatedAt, Merged: p.MergedAt, Fetched: now,
 	}
 	if n := p.Commits.Nodes; len(n) > 0 && n[0].Commit.StatusCheckRollup != nil {

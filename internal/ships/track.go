@@ -102,6 +102,12 @@ func openTrack(t *trackOut, f facts, green bool) {
 		t.Kind, t.Note = Stuck, "changes requested"
 	case f.Review == "REVIEW_REQUIRED":
 		t.Kind, t.Note = WaitsForYou, "waits for review"
+	case f.MergeState == "BLOCKED":
+		// Every check it has passed, no review holds it: a branch rule
+		// still does, most often a required check that has not reported.
+		t.Stage, t.Kind, t.Note = StageCI, Running, "waits for a required check"
+	case f.Mergeable == "UNKNOWN" || f.Mergeable == "" || f.MergeState == "UNKNOWN":
+		t.Kind, t.Note = Running, "checking mergeability"
 	case f.AutoMerge:
 		t.Kind, t.Note = Running, "auto-merge on"
 	default:

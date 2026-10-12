@@ -6,9 +6,11 @@ package ships
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -87,6 +89,18 @@ const (
 	// maxPerQuery bounds the pull requests of one query; the rest wait for
 	// the next poll.
 	maxPerQuery = 50
+	// A PR never read stops being asked for after unreadFor or maxFails
+	// failed polls: its repository is gone, or not ours to read.
+	unreadFor = 24 * time.Hour
+	maxFails  = 10
+	// A repository whose poll fails is asked again after PollEvery, then
+	// twice as long each time it fails again, up to backoffMax.
+	backoffMax = 30 * time.Minute
+	// repoRetry is how soon a directory whose remote could not be read is
+	// read again; its evidence waits, at most unresolvedTries reads.
+	repoRetry       = time.Minute
+	unresolvedTries = 10
+	maxUnresolved   = 200
 )
 
 // Tracker keeps what it found between scans and in Dir between runs.
@@ -100,13 +114,34 @@ type Tracker struct {
 	Now    func() time.Time
 
 	st         *store
-	repos      map[string]string // directory -> owner/name, "" when not on GitHub
+	repos      map[string]remote // directory -> its repository, as last read
 	polled     time.Time
 	pushPolled map[string]time.Time
-	reason     string            // why gh cannot read GitHub at all
-	failed     map[string]string // repository -> why its last poll failed
-	tried      map[string]bool   // PRs asked for at least once since start
+	reason     string             // why gh cannot read GitHub at all
+	failed     map[string]string  // repository -> why its last poll failed
+	backoff    map[string]backoff // repository -> when a failing one is asked again
+	tried      map[string]bool    // PRs asked for at least once since start
 	dirty      bool
+}
+
+// remote is a directory's repository: "" when it is not on GitHub. A read
+// that failed (ok false) is tried again after repoRetry.
+type remote struct {
+	repo string
+	ok   bool
+	at   time.Time
+}
+
+type backoff struct {
+	fails int
+	until time.Time
+}
+
+// unresolved is evidence whose directory's remote could not be read yet.
+type unresolved struct {
+	Found   found      `json:"found"`
+	Session SessionRef `json:"session"`
+	Tries   int        `json:"tries"`
 }
 
 type claim struct {
@@ -130,6 +165,10 @@ type pr struct {
 	LiveAt time.Time `json:"live_at,omitzero"`
 	// Done: never read or shown again (closed, not a PR, or dropped).
 	Done bool `json:"done,omitempty"`
+	// Asked is the first poll that asked for it; Fails counts the polls
+	// that failed while it was never read.
+	Asked time.Time `json:"asked,omitzero"`
+	Fails int       `json:"fails,omitempty"`
 }
 
 func (p *pr) inFlight() bool {
@@ -147,6 +186,7 @@ type store struct {
 	Transcripts map[string]*transcript `json:"transcripts"`
 	PRs         map[string]*pr         `json:"prs"`
 	Pushes      []push                 `json:"pushes,omitempty"`
+	Unresolved  []unresolved           `json:"unresolved,omitempty"`
 	Paused      time.Time              `json:"paused,omitzero"`
 }
 
@@ -162,11 +202,22 @@ func (t *Tracker) load() {
 	if t.st.Transcripts == nil {
 		t.st.Transcripts = map[string]*transcript{}
 	}
-	if t.st.PRs == nil {
-		t.st.PRs = map[string]*pr{}
+	// Keys are lower case: GitHub names a repository in any case. A file
+	// from before keeps one PR per key, the stronger claim.
+	prs := map[string]*pr{}
+	for _, p := range t.st.PRs {
+		p.Repo = strings.ToLower(p.Repo)
+		k := key(p.Repo, p.Number)
+		if o, ok := prs[k]; !ok || p.Claim.beats(o.Claim) {
+			prs[k] = p
+		}
 	}
-	t.repos, t.pushPolled = map[string]string{}, map[string]time.Time{}
-	t.failed, t.tried = map[string]string{}, map[string]bool{}
+	t.st.PRs = prs
+	for i := range t.st.Pushes {
+		t.st.Pushes[i].Repo = strings.ToLower(t.st.Pushes[i].Repo)
+	}
+	t.repos, t.pushPolled = map[string]remote{}, map[string]time.Time{}
+	t.failed, t.tried, t.backoff = map[string]string{}, map[string]bool{}, map[string]backoff{}
 }
 
 // save replaces ships.json atomically.
@@ -216,6 +267,7 @@ func (t *Tracker) Scan(ctx context.Context, in Input) Report {
 		t.load()
 	}
 	now := t.now()
+	t.resolve(ctx, now)
 	for _, s := range in.Sessions {
 		if s.Transcript == "" {
 			continue
@@ -261,11 +313,20 @@ func (t *Tracker) apply(ctx context.Context, f found, ref SessionRef, now time.T
 	}
 	repo := f.Repo
 	if repo == "" {
-		repo = t.repoOf(ctx, f.Dir)
+		r, known := t.repoOf(ctx, f.Dir, now)
+		if !known {
+			// The remote could not be read now: the evidence waits for it.
+			if len(t.st.Unresolved) < maxUnresolved {
+				t.st.Unresolved, t.dirty = append(t.st.Unresolved, unresolved{Found: f, Session: ref}), true
+			}
+			return
+		}
+		repo = r
 	}
 	if repo == "" {
 		return
 	}
+	repo = strings.ToLower(repo)
 	c := claim{Kind: f.Kind, At: f.At, Session: ref}
 	if f.Kind != Pushed {
 		t.claim(repo, f.Number, c)
@@ -289,9 +350,36 @@ func (t *Tracker) apply(ctx context.Context, f found, ref SessionRef, now time.T
 	t.dirty = true
 }
 
-func key(repo string, n int) string { return repo + "#" + strconv.Itoa(n) }
+// resolve applies the evidence that waits for its directory's remote, now
+// that it may be read.
+func (t *Tracker) resolve(ctx context.Context, now time.Time) {
+	if len(t.st.Unresolved) == 0 {
+		return
+	}
+	waiting := t.st.Unresolved
+	t.st.Unresolved, t.dirty = nil, true
+	for _, u := range waiting {
+		if now.Sub(u.Found.At) > evidenceFor || u.Tries >= unresolvedTries {
+			continue
+		}
+		if r, ok := t.repos[u.Found.Dir]; ok && !r.ok && now.Sub(r.at) < repoRetry {
+			t.st.Unresolved = append(t.st.Unresolved, u) // not due yet
+			continue
+		}
+		u.Tries++
+		if _, known := t.repoOf(ctx, u.Found.Dir, now); !known {
+			t.st.Unresolved = append(t.st.Unresolved, u)
+			continue
+		}
+		t.apply(ctx, u.Found, u.Session, now)
+	}
+}
+
+// key names a pull request: owner/name in lower case, as GitHub matches it.
+func key(repo string, n int) string { return strings.ToLower(repo) + "#" + strconv.Itoa(n) }
 
 func (t *Tracker) claim(repo string, n int, c claim) {
+	repo = strings.ToLower(repo)
 	k := key(repo, n)
 	p, ok := t.st.PRs[k]
 	if !ok {
@@ -331,15 +419,16 @@ func (t *Tracker) links(in Input, now time.Time) {
 	}
 }
 
-// repoOf names the GitHub repository of a directory by its remote. A
-// directory that is gone (a removed worktree) is read at the nearest
-// parent that is not.
-func (t *Tracker) repoOf(ctx context.Context, dir string) string {
+// repoOf names the GitHub repository of a directory by its remote: ""
+// when it is not on GitHub. known is false when the remote could not be
+// read: it is read again after repoRetry. A directory that is gone (a
+// removed worktree) is read at the nearest parent that is not.
+func (t *Tracker) repoOf(ctx context.Context, dir string, now time.Time) (repo string, known bool) {
 	if dir == "" || t.Git == nil {
-		return ""
+		return "", true
 	}
-	if r, ok := t.repos[dir]; ok {
-		return r
+	if r, ok := t.repos[dir]; ok && (r.ok || now.Sub(r.at) < repoRetry) {
+		return r.repo, r.ok
 	}
 	d := filepath.Clean(dir)
 	for d != "/" && d != "." {
@@ -348,16 +437,17 @@ func (t *Tracker) repoOf(ctx context.Context, dir string) string {
 		}
 		d = filepath.Dir(d)
 	}
-	remote := t.Remote
-	if remote == "" {
-		remote = "origin"
+	name := t.Remote
+	if name == "" {
+		name = "origin"
 	}
-	r := ""
-	if out, err := t.Git(ctx, d, "remote", "get-url", remote); err == nil {
-		r = repoName(string(out))
+	out, err := t.Git(ctx, d, "remote", "get-url", name)
+	r := remote{ok: err == nil, at: now}
+	if err == nil {
+		r.repo = repoName(string(out))
 	}
 	t.repos[dir] = r
-	return r
+	return r.repo, r.ok
 }
 
 func (t *Tracker) prune(now time.Time) {
@@ -413,6 +503,11 @@ func (t *Tracker) poll(ctx context.Context, now time.Time) {
 			repos[p.Repo], pushes[p.Repo] = true, true
 		}
 	}
+	for r := range repos {
+		if now.Before(t.backoff[r].until) {
+			delete(repos, r) // it failed: asked again later, each time later
+		}
+	}
 	if len(repos) == 0 {
 		return
 	}
@@ -433,6 +528,7 @@ func (t *Tracker) poll(ctx context.Context, now time.Time) {
 		err := t.pollRepo(ctx, repo, byRepo[repo], pushes[repo], now)
 		if err == nil {
 			delete(t.failed, repo)
+			delete(t.backoff, repo)
 			if now.Before(t.st.Paused) {
 				return
 			}
@@ -447,7 +543,31 @@ func (t *Tracker) poll(ctx context.Context, now time.Time) {
 			return
 		default:
 			t.failed[repo] = w
+			t.fail(repo, byRepo[repo], now)
 		}
+	}
+}
+
+// fail backs a repository off, and gives up on its PRs that were never
+// read once they failed long or often enough.
+func (t *Tracker) fail(repo string, prs []*pr, now time.Time) {
+	b := t.backoff[repo]
+	b.fails++
+	wait := backoffMax
+	if b.fails <= 6 {
+		wait = min(PollEvery<<(b.fails-1), backoffMax)
+	}
+	b.until = now.Add(wait)
+	t.backoff[repo] = b
+	for _, p := range prs {
+		if p.Facts != nil || p.Asked.IsZero() {
+			continue
+		}
+		p.Fails++
+		if p.Fails >= maxFails || now.Sub(p.Asked) >= unreadFor {
+			p.Done = true
+		}
+		t.dirty = true
 	}
 }
 
@@ -462,15 +582,39 @@ func (t *Tracker) pollRepo(ctx context.Context, repo string, prs []*pr, pushes b
 	if len(prs) > maxPerQuery {
 		prs = prs[:maxPerQuery]
 	}
-	numbers := make([]int, len(prs))
+	var numbers []int
 	history := false
-	for i, p := range prs {
-		numbers[i] = p.Number
+	for _, p := range prs {
+		if p.Asked.IsZero() {
+			p.Asked, t.dirty = now, true
+		}
+		if prNumber(strconv.Itoa(p.Number)) == 0 {
+			p.Done, t.dirty = true, true // a number GitHub cannot take
+			continue
+		}
+		numbers = append(numbers, p.Number)
 		t.tried[key(repo, p.Number)] = true
 		history = history || p.Facts != nil && p.Facts.superseded()
 	}
 	out, err := t.GH(ctx, "api", "graphql", "-f", "query="+query(owner, name, numbers, history, pushes))
 	a, perr := parseAnswer(out, numbers, history, now)
+	var bad badPRs
+	if errors.As(perr, &bad) {
+		// GitHub refused the query for some of its PRs: they are dropped,
+		// and the rest asked again without them.
+		kept := prs[:0:0]
+		for _, p := range prs {
+			if slices.Contains(bad.numbers, p.Number) {
+				p.Done, t.dirty = true, true
+				continue
+			}
+			kept = append(kept, p)
+		}
+		if len(kept) == len(prs) {
+			return perr
+		}
+		return t.pollRepo(ctx, repo, kept, pushes, now)
+	}
 	if perr != nil {
 		if err == nil {
 			err = perr
@@ -484,10 +628,10 @@ func (t *Tracker) pollRepo(ctx context.Context, repo string, prs []*pr, pushes b
 		switch {
 		case !ok:
 		case f == nil || f.State == "CLOSED":
-			p.Done = true // not a pull request of this repository, or closed
+			p.Done = true // no such pull request in this repository, or closed
 		default:
 			p.Facts = f
-			if tr := track(*f, t.Deploy[repo], now); tr.Stage == StageLive {
+			if tr := track(*f, t.deploy(repo), now); tr.Stage == StageLive {
 				p.LiveAt = tr.LiveAt
 			}
 		}
@@ -507,6 +651,17 @@ func (t *Tracker) pollRepo(ctx context.Context, repo string, prs []*pr, pushes b
 	}
 	if r := a.Rate; r != nil && r.Limit > 0 && r.Remaining*10 < r.Limit {
 		t.st.Paused = r.ResetAt
+	}
+	return nil
+}
+
+// deploy is the deploy workflows the config names for a repository, in
+// any case.
+func (t *Tracker) deploy(repo string) []string {
+	for r, ws := range t.Deploy {
+		if strings.EqualFold(r, repo) {
+			return ws
+		}
 	}
 	return nil
 }
@@ -576,18 +731,25 @@ func (t *Tracker) ship(p *pr, paused bool, now time.Time) Ship {
 		Kind: Unknown, Since: p.Claim.At,
 	}
 	if f := p.Facts; f != nil {
-		tr := track(*f, t.Deploy[p.Repo], now)
+		tr := track(*f, t.deploy(p.Repo), now)
 		s.Title, s.URL = f.Title, f.URL
+		if m := pullURL.FindStringSubmatch(f.URL); m != nil {
+			s.Repo = m[1] + "/" + m[2] // the case GitHub names it in
+		}
 		s.Stage, s.Kind, s.Note, s.Stages = tr.Stage, tr.Kind, tr.Note, tr.Stages
 		if at := tr.Stages[tr.Stage].At; !at.IsZero() {
 			s.Since = at
 		} else if !f.Created.IsZero() {
 			s.Since = f.Created
 		}
-		if tr.Note == "green · waits for your merge" {
-			s.Merge = []string{"gh", "pr", "merge", strconv.Itoa(p.Number), "--" + f.Method, "-R", p.Repo}
+		if tr.Note == "green · waits for your merge" && f.HeadOID != "" {
+			// Pinned to the head that was read green: a push since fails it.
+			s.Merge = []string{"gh", "pr", "merge", strconv.Itoa(p.Number), "--" + f.Method, "--match-head-commit", f.HeadOID, "-R", s.Repo}
 		}
 	}
+	// A merge is offered only on a fresh read: not while paused, not when
+	// the repository's last poll failed, not two polls after the last read.
+	stale := p.Facts != nil && now.Sub(p.Facts.Fetched) > 2*PollEvery
 	switch {
 	case !p.inFlight():
 	case paused:
@@ -598,6 +760,16 @@ func (t *Tracker) ship(p *pr, paused bool, now time.Time) Ship {
 		s.Note = "state unknown · " + t.failed[p.Repo]
 	case p.Facts == nil:
 		s.Note = "state unknown · not read yet"
+	case s.Kind == WaitsForYou && t.failed[p.Repo] != "":
+		s.Kind, s.Note = Unknown, "state unknown · "+t.failed[p.Repo]
+	case s.Kind == WaitsForYou && stale:
+		s.Kind, s.Note = Unknown, "state unknown · last read "+p.Facts.Fetched.In(now.Location()).Format("15:04")
+	}
+	if paused || t.failed[p.Repo] != "" || stale {
+		s.Merge = nil
+		if s.Kind == WaitsForYou {
+			s.Kind = Unknown
+		}
 	}
 	s.Stages[s.Stage].Note = s.Note
 	s.Age = now.Sub(s.Since)

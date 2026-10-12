@@ -277,10 +277,12 @@ func TestDropsAtTheEndOfTheDay(t *testing.T) {
 func TestMergeCommand(t *testing.T) {
 	tr := &Tracker{}
 	tr.load()
-	f := open(func(f *facts) { f.Method = "rebase" })
+	f := open(func(f *facts) {
+		f.Method, f.HeadOID, f.Fetched, f.URL = "rebase", "abc123", now, "https://github.com/O/R/pull/12"
+	})
 	p := &pr{Repo: "o/r", Number: 12, Facts: &f}
 	s := tr.ship(p, false, now)
-	want := []string{"gh", "pr", "merge", "12", "--rebase", "-R", "o/r"}
+	want := []string{"gh", "pr", "merge", "12", "--rebase", "--match-head-commit", "abc123", "-R", "O/R"}
 	if strings.Join(s.Merge, " ") != strings.Join(want, " ") {
 		t.Fatalf("merge %q", s.Merge)
 	}
@@ -290,6 +292,35 @@ func TestMergeCommand(t *testing.T) {
 	f.AutoMerge = true
 	if s := tr.ship(p, false, now); s.Merge != nil {
 		t.Fatalf("auto-merge on, merge %q", s.Merge)
+	}
+}
+
+// A merge is offered only on a fresh read of the head it pins: not while
+// paused, not when the repository's last poll failed, not two polls after
+// the last read, and not without the head (review of #68, finding 4).
+func TestMergeOnlyOnFreshFacts(t *testing.T) {
+	fresh := func() (*Tracker, *pr) {
+		tr := &Tracker{}
+		tr.load()
+		f := open(func(f *facts) { f.HeadOID, f.Fetched = "abc123", now.Add(-30*time.Second) })
+		return tr, &pr{Repo: "o/r", Number: 12, Facts: &f}
+	}
+	tr, p := fresh()
+	if s := tr.ship(p, false, now); s.Kind != WaitsForYou || len(s.Merge) == 0 {
+		t.Fatalf("fresh: %+v", s)
+	}
+	for name, mod := range map[string]func(*Tracker, *pr) bool{
+		"paused":  func(tr *Tracker, p *pr) bool { tr.st.Paused = now.Add(time.Hour); return true },
+		"failed":  func(tr *Tracker, p *pr) bool { tr.failed["o/r"] = "http 502"; return false },
+		"stale":   func(tr *Tracker, p *pr) bool { p.Facts.Fetched = now.Add(-2*PollEvery - time.Second); return false },
+		"no head": func(tr *Tracker, p *pr) bool { p.Facts.HeadOID = ""; return false },
+	} {
+		tr, p := fresh()
+		paused := mod(tr, p)
+		s := tr.ship(p, paused, now)
+		if s.Merge != nil || name != "no head" && s.Kind == WaitsForYou {
+			t.Errorf("%s: kind %s note %q merge %q", name, s.Kind, s.Note, s.Merge)
+		}
 	}
 }
 
@@ -322,5 +353,141 @@ func TestRepoFailure(t *testing.T) {
 	w.scan(tr, s)
 	if len(w.calls) != calls {
 		t.Fatalf("a failing repository was asked again within the minute")
+	}
+}
+
+// A repository that cannot be read is asked less and less often, and a PR
+// never read leaves the list after a day: 40 days cost a few dozen calls,
+// not one a minute (review of #68, finding 5).
+func TestAnUnreadableRepositoryGivesUp(t *testing.T) {
+	clock := now
+	calls := 0
+	tr := &Tracker{Now: func() time.Time { return clock }, GH: func(context.Context, ...string) ([]byte, error) {
+		calls++
+		return []byte(`{"data":{"repository":null},"errors":[{"type":"NOT_FOUND","path":["repository"],"message":"Could not resolve to a Repository with the name 'x/y'."}]}`), errors.New("exit status 1")
+	}}
+	tr.load()
+	tr.claim("x/y", 5, claim{Kind: Acted, At: clock})
+	var waits []time.Duration
+	last := clock
+	for i := 0; i < 60*24*40; i++ {
+		before := calls
+		rep := tr.Scan(context.Background(), Input{})
+		if calls != before {
+			waits, last = append(waits, clock.Sub(last)), clock
+		}
+		if i == 0 && (len(rep.Ships) != 1 || rep.Ships[0].Kind != Unknown) {
+			t.Fatalf("first scan: %+v", rep.Ships)
+		}
+		clock = clock.Add(time.Minute)
+	}
+	if rep := tr.Scan(context.Background(), Input{}); len(rep.Ships) != 0 || rep.InFlight != 0 {
+		t.Fatalf("a PR never read is still listed: %+v", rep.Ships)
+	}
+	if calls > maxFails {
+		t.Fatalf("%d calls in 40 days", calls)
+	}
+	for i, want := range []time.Duration{0, time.Minute, 2 * time.Minute, 4 * time.Minute, 8 * time.Minute, 16 * time.Minute, 30 * time.Minute, 30 * time.Minute} {
+		if i < len(waits) && waits[i] != want {
+			t.Fatalf("waits between calls %v", waits)
+		}
+	}
+}
+
+// GitHub refuses a whole query for one PR it cannot take: that PR goes,
+// the rest are read in the same poll.
+func TestOneBadPRDoesNotSinkItsRepository(t *testing.T) {
+	w := newWorld(t)
+	tr := w.tracker()
+	good := tr.GH
+	tr.GH = func(ctx context.Context, args ...string) ([]byte, error) {
+		if strings.Contains(args[len(args)-1], "pr4551:") {
+			w.calls = append(w.calls, "refused")
+			return []byte(`{"errors":[{"path":["query","repository","pr4551","number"],"extensions":{"code":"argumentLiteralsIncompatible"},"message":"Argument 'number' on Field 'pr4551' has an invalid value."}]}`), errors.New("exit status 1")
+		}
+		return good(ctx, args...)
+	}
+	rep := w.scan(tr, w.session("a", "%1", toolUse("v", "/w", "", "gh pr view 4557; gh pr view 4551")))
+	if s := find(rep, 4557); s == nil || s.Kind != Stuck || len(rep.Errors) != 0 {
+		t.Fatalf("the rest were not read: %+v errors %q", rep.Ships, rep.Errors)
+	}
+	if find(rep, 4551) != nil || len(w.calls) != 2 {
+		t.Fatalf("#4551 still listed, or calls %q", w.calls)
+	}
+	// A number past 32 bits is never sent at all.
+	tr.claim("hearth/hearth", 3000000000, claim{Kind: Acted, At: now})
+	w.clock = w.clock.Add(PollEvery)
+	w.scan(tr)
+	if strings.Contains(strings.Join(w.calls, " "), "3000000000") {
+		t.Fatalf("a 33-bit number was asked for: %q", w.calls)
+	}
+}
+
+// Only NOT_FOUND means a PR is gone; a PR GitHub would not show now
+// (forbidden, a timeout) keeps the state read before.
+func TestOnlyNotFoundIsGone(t *testing.T) {
+	w := newWorld(t)
+	tr := w.tracker()
+	s := w.session("a", "%1", toolUse("v", "/w", "", "gh pr view 4557"))
+	w.scan(tr, s)
+	for _, c := range []struct {
+		typ  string
+		gone bool
+	}{{"FORBIDDEN", false}, {"", false}, {"NOT_FOUND", true}} {
+		errs := `[]`
+		if c.typ != "" {
+			errs = `[{"type":"` + c.typ + `","path":["repository","pr4557"],"message":"x"}]`
+		}
+		w.answer = []byte(`{"data":{"rateLimit":{"limit":5000,"remaining":4000},"repository":{"squashMergeAllowed":true,"pr4557":null}},"errors":` + errs + `}`)
+		w.clock = w.clock.Add(PollEvery)
+		rep := w.scan(tr, s)
+		if sh := find(rep, 4557); (sh == nil) != c.gone || !c.gone && sh.Note != "CI failed · ci-ok" {
+			t.Fatalf("%q: %+v", c.typ, sh)
+		}
+	}
+}
+
+// GitHub names a repository in any case: one PR is one ship, shown in the
+// case GitHub gives it.
+func TestRepositoriesMatchInAnyCase(t *testing.T) {
+	w := newWorld(t)
+	tr := w.tracker()
+	rep := w.scan(tr, w.session("a", "%1",
+		toolUse("v", "/w", "", "gh pr view https://github.com/Hearth/Hearth/pull/4557; gh pr checks 4557 -R hearth/HEARTH")))
+	n := 0
+	for _, sh := range rep.Ships {
+		if sh.Number == 4557 {
+			n++
+		}
+	}
+	if n != 1 || len(w.calls) != 1 {
+		t.Fatalf("%d ships for #4557, %d calls", n, len(w.calls))
+	}
+}
+
+// A directory whose remote could not be read keeps its evidence and is
+// read again a minute later.
+func TestARemoteReadAgainAfterAFailure(t *testing.T) {
+	w := newWorld(t)
+	tr := w.tracker()
+	fails := true
+	tr.Git = func(context.Context, string, ...string) ([]byte, error) {
+		if fails {
+			return nil, errors.New("index.lock: resource busy")
+		}
+		return []byte("git@github.com:hearth/hearth.git\n"), nil
+	}
+	s := w.session("a", "%1", toolUse("v", "/w", "", "gh pr view 4557"))
+	if rep := w.scan(tr, s); len(rep.Ships) != 0 {
+		t.Fatalf("a ship without a repository: %+v", rep.Ships)
+	}
+	fails = false
+	w.clock = w.clock.Add(10 * time.Second)
+	if rep := w.scan(tr, s); len(rep.Ships) != 0 {
+		t.Fatal("read again before the minute")
+	}
+	w.clock = w.clock.Add(repoRetry)
+	if rep := w.scan(tr, s); find(rep, 4557) == nil {
+		t.Fatalf("the evidence was lost: %+v", rep.Ships)
 	}
 }
