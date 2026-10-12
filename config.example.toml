@@ -51,6 +51,10 @@ source = ""              # another CSV with a ts column to chart alongside
 [stoker]                 # f and n: compact full idle sessions while you are away
 night_ends = "07:00"     # n runs the stoker until this time, then turns it off
 
+[ships]                  # pull requests sessions drive, through CI to live
+# [ships.deploy]         # the workflows that deploy a repository; a ship is live when they
+# "owner/name" = ["Release"]  # finish green. Default: every run on the merge commit
+
 [limits]                 # matches (the 5-hour window) and sparks (the week) of each account
 quiet_hours = "23:00-08:00"  # hours you do not usually work, in this machine's time zone: the forecast counts them as a tenth
 quiet_days = ["Sat", "Sun"]  # days you do not usually work

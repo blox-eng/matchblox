@@ -49,6 +49,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/setup"
+	"github.com/blox-eng/matchblox/internal/ships"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
 	"github.com/blox-eng/matchblox/internal/transport"
@@ -374,6 +375,7 @@ func newService(cfg config.Config, root string) *service.Service {
 	} else {
 		fmt.Fprintln(os.Stderr, "matchblox: the stoker is off:", err)
 	}
+	s.Ships = shipsSource(cfg, filepath.Dir(s.StatePath))
 	return s
 }
 
@@ -530,6 +532,15 @@ func gitSource(cfg config.Config) service.GitSource {
 		return scanner.Scan(ctx, in)
 	}
 }
+func shipsSource(cfg config.Config, dir string) service.ShipsSource {
+	t := &ships.Tracker{Dir: dir, GH: ships.GH, Git: gitscan.Git, Remote: cfg.Git.Remote, Deploy: cfg.Ships.Deploy}
+	return func(sessions []sample.Session, git *gitscan.Report) ships.Report {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		return t.Scan(ctx, ships.Input{Sessions: sessions, Git: git})
+	}
+}
+
 func newSampler(cfg config.Config, root string) *sample.Sampler {
 	smp := &sample.Sampler{
 		Cfg:    cfg,
