@@ -254,7 +254,8 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   in it, `<name> asks` (the question tool, a question, a permission) or
   `<name> said`, in the accent and `muted`, with `· 1 of 2` in `faint` for
   several questions. Inside: the last message whole up to 8 lines on a
-  phone and 9 wider, cut with `…`; then the question tool's question in
+  phone and 9 wider, its end kept and a leading `…`, light Markdown as
+  plain text; then the question tool's question in
   `text` and its options, `› 1 <label>  <description>` (the cursor's on the
   wash, `[✔]` ticks for several choices), the last always `Type an
   answer…`; then, when typing, a `├─┤` rule and `› <text>▏`. The foot is
@@ -262,8 +263,10 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   a permission prompt) `─ ␣ tick ─ ⇥ next (N) ─ esc`. `⏎` sends with no
   second confirm (the peek is the review); options go to Claude Code's
   menu as its keys (digits, `Down`, `Enter`, `1` on the review page),
-  never as typed text. After a send the toast says `sent to <name>` and the
-  peek moves to the next that waits, or closes.
+  never as typed text. After a send the toast says `sending to <name>…`,
+  then `sent to <name>` when the keys went, or the key line says `not sent
+  to <name>: <why>`; the peek moves to the next that waits, with nothing
+  picked and no key taken for 400 ms, or closes.
 - **Key line** (owner, 2026-10-12, reversing 2026-10-08): the last line,
   under a hairline. The keys of the open tab and the selected row, each a
   tap target (`⏎ open  a answer  p ships  f stoker`); a desk adds `↑↓

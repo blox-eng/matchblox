@@ -40,11 +40,13 @@ state in words:
 | `conflicts with main`, `behind main` | It cannot merge as it is. |
 | `draft` | It is a draft. |
 | `waits for review`, `changes requested` | A review holds it. |
+| `waits for a required check` | Its checks passed, but a branch rule still blocks the merge. |
+| `checking mergeability` | GitHub has not worked out yet whether it merges. |
 | `green · waits for your merge` | Every check passed: `x` merges it. |
 | `auto-merge on` | It merges by itself. |
 | `merged · deploying` | Merged, and the runs on the merge commit still go. |
 | `live` | Every run on the merge commit finished, and none failed. |
-| `state unknown · <why>` | GitHub could not be read. Nothing is guessed. |
+| `state unknown · <why>` | GitHub could not be read, or not lately. Nothing is guessed. |
 
 A cancelled or skipped run counts when a newer run of the same workflow on
 the default branch passed: a deploy that a newer one replaced. A ship that
@@ -63,7 +65,7 @@ To count only the workflows that deploy a repository, name them in the
 | Key | What it does |
 |---|---|
 | `Enter` | Selects the session that drives the ship, in Sessions. |
-| `x` | Merges a ship that waits for your merge: the key line shows `RUN gh pr merge <n> --squash` (the repository's merge method), and a typed `y` runs it. |
+| `x` | Merges a ship that waits for your merge: the key line shows `RUN gh pr merge <n> --squash --match-head-commit <sha>` (the repository's merge method, pinned to the commit that was read green), and a typed `y` runs it. It is offered only on a read from the last two minutes. |
 | `a` | Opens [the answer peek](console.md#the-answer-peek) on the session of a stuck ship, to tell it what to do. |
 
 On a phone the selected ship adds who drives it and its keys. Wider, the
@@ -77,6 +79,9 @@ only while a ship is in flight. It shares GitHub's rate limit with every
 agent on the machine: when less than a tenth is left it stops until the
 limit resets, and the tab says until when. Without `gh`, or with `gh` not
 signed in, the ships still list, with `state unknown · gh not signed in`.
+A repository that cannot be read is asked again after a minute, then less
+and less often, up to every 30 minutes; a PR that was never read leaves
+the list after a day.
 
 What the service found, and how far it read each transcript, is kept in
 `~/.local/state/matchblox/ships.json`, so a restart reads only what is new.

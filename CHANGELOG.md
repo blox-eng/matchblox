@@ -21,7 +21,8 @@ All notable changes to matchblox are in this file. The format follows
   to the next session that waits.
 - **Ships.** Every pull request a session drives, on one track from open to
   live: CI, a conflict, a review, the merge and the deploy, said in words.
-  `x` merges a ship that waits for you, after a typed `y`. Name the
+  `x` merges a ship that waits for you, after a typed `y`, pinned to the
+  commit that was read green. Name the
   workflows that deploy a repository under the new `[ships.deploy]` config
   key; by default every run on the merge commit counts.
 - **Usage and the machine in the rows the list leaves free.** Each

@@ -249,9 +249,10 @@ desk: the detail shows the title, `by <session>`, and the five stages
 vertically, each with its time or its note.
 
 `⏎` goes to the driving session (selects it in Sessions). `x` on a ship that
-waits for your merge shows `RUN gh pr merge <n> --squash` (the repository's
-merge method) and runs after a typed `y`, as every destructive step does. A
-ship that is stuck has `a`: the answer peek on its session.
+waits for your merge shows `RUN gh pr merge <n> --squash --match-head-commit
+<sha>` (the repository's merge method, pinned to the head read green) and
+runs after a typed `y`, as every destructive step does. A ship that is stuck
+has `a`: the answer peek on its session.
 
 ## 9. What stays
 

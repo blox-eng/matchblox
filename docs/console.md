@@ -123,16 +123,22 @@ phone along the bottom, wider a box in the middle.
 ╰─ ⏎ question 2 ─ ⇥ next (5) ─ esc ──────────────────────────╯
 ```
 
-It shows what the agent said last, whole up to nine lines. When Claude Code
-asks with its question tool, its options are numbered and the last one
-types an answer; several questions come one at a time, and a question of
-several choices ticks with `Space`. Otherwise you type one line.
+It shows what the agent said in this turn, its end up to nine lines (a
+longer reply starts with `…`), its Markdown as plain text. When Claude
+Code asks with its question tool, its options are numbered and the last
+one types an answer; several questions come one at a time, and a question
+of several choices ticks with `Space`. Otherwise you type one line.
 
 `Enter` sends it to the pane named in the title: the peek is the review,
 so there is no second confirm. The options go to Claude Code's own menu
-with the keys it takes, never as typed text. The header says `sent to
-flint-auth`, and the peek moves to the next agent that waits, or closes.
-`Tab` skips one, `Esc` closes. A permission prompt is answered in its
+with the keys it takes, never as typed text, and only while the pane shows
+the page they answer: if you answered in the pane yourself, nothing more
+is sent. The header says `sending to flint-auth…`, then `sent to
+flint-auth`; an answer that did not go says `not sent to flint-auth` and
+why on the key line. The peek moves to the next agent that waits, or
+closes. There no option is picked, and for a moment it takes no key, so a
+second `Enter` never answers a question you have not read. `Tab` skips
+one, `Esc` closes. A permission prompt is answered in its
 pane: its peek shows the prompt, and `Enter` goes there.
 
 - Context use is read from the agent's own files, or shows "not measured".
