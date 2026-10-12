@@ -90,16 +90,22 @@ type run struct {
 	Created    time.Time `json:"created"`
 	Updated    time.Time `json:"updated"`
 	// Later is a newer run of the same workflow on the default branch, for
-	// a cancelled or skipped one: success, running, empty for none, or ?
-	// before the default branch was read.
+	// a failed, cancelled or skipped one: success, running, empty for none,
+	// or ? before the default branch was read.
 	Later string `json:"later,omitempty"`
+}
+
+// unfinished: a completed run that did not pass, so a newer run of its
+// workflow on the default branch decides whether it counts.
+func (r run) unfinished() bool {
+	return r.Status == "COMPLETED" && r.Conclusion != "SUCCESS" && r.Conclusion != "NEUTRAL" && r.Conclusion != ""
 }
 
 // superseded: a run of the merge commit waits for a newer run on the
 // default branch to tell whether it counts.
 func (f *facts) superseded() bool {
 	for _, r := range f.Runs {
-		if (r.Conclusion == "CANCELLED" || r.Conclusion == "SKIPPED") && r.Later != "success" {
+		if r.unfinished() && r.Later != "success" {
 			return true
 		}
 	}
@@ -399,7 +405,7 @@ func factsOf(p prJSON, history []suiteJSON, asked bool, now time.Time) facts {
 			}
 			r := run{Workflow: s.WorkflowRun.Workflow.Name, Status: s.Status, Conclusion: s.Conclusion, Created: s.WorkflowRun.CreatedAt, Updated: s.UpdatedAt}
 			switch {
-			case r.Conclusion != "CANCELLED" && r.Conclusion != "SKIPPED":
+			case !r.unfinished():
 			case asked:
 				r.Later = later(r, history)
 			default:

@@ -35,7 +35,7 @@ state in words:
 
 | Note | It means |
 |---|---|
-| `CI · 6 of 9 jobs` | The checks run. |
+| `CI · 6 of 9 jobs · 12m` | The checks run, for 12 minutes so far. |
 | `CI failed · <job>` | A check failed. |
 | `conflicts with main`, `behind main` | It cannot merge as it is. |
 | `draft` | It is a draft. |
@@ -44,12 +44,14 @@ state in words:
 | `checking mergeability` | GitHub has not worked out yet whether it merges. |
 | `green · waits for your merge` | Every check passed: `x` merges it. |
 | `auto-merge on` | It merges by itself. |
-| `merged · deploying` | Merged, and the runs on the merge commit still go. |
+| `merged · deploying · 2h` | Merged, and a run on the merge commit has been going for 2 hours. |
+| `merged · deploy queued · 1h` | Merged, and the runs on the merge commit have waited an hour to start. |
 | `live` | Every run on the merge commit finished, and none failed. |
 | `state unknown · <why>` | GitHub could not be read, or not lately. Nothing is guessed. |
 
-A cancelled or skipped run counts when a newer run of the same workflow on
-the default branch passed: a deploy that a newer one replaced. A ship that
+A failed, cancelled or skipped run counts when a newer run of the same
+workflow on the default branch passed: the default branch is healthy, and a
+newer deploy carried the change. A ship that
 went live leaves the list at the end of that day.
 
 To count only the workflows that deploy a repository, name them in the

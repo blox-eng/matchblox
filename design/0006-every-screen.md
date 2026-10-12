@@ -235,13 +235,14 @@ state in words:
 
 | State | Note |
 |---|---|
-| Checks running | `CI · 6 of 9 jobs` |
+| Checks running | `CI · 6 of 9 jobs · 12m` (since the first check started) |
 | A check failed | `CI failed · <job>` |
 | Conflicts / behind | `conflicts with main` / `behind main` |
 | Draft | `draft` |
 | Checks green, not merged | `green · waits for your merge`, or `auto-merge on` |
 | Review requested or changes requested | `waits for review` / `changes requested` |
-| Merged, deploy running | `merged · deploying` |
+| Merged, deploy running | `merged · deploying · 2h` (since the run started) |
+| Merged, deploy queued or pending | `merged · deploy queued · 1h` (since the run was created) |
 | Merged, deploy green | `live` |
 | Unknown | `state unknown · <why>` |
 
@@ -332,9 +333,13 @@ has `a`: the answer peek on its session.
    transcript only once it is answered) or else the transcript, and sent
    as the tool's own menu takes them in the pane.
 9. **Live** is: every workflow run on the merge commit finished and none
-   failed. A cancelled or skipped run counts when a later run of the same
-   workflow on the default branch succeeded (a deploy superseded by a newer
-   one). Repositories may name their deploy workflows in config.
+   failed. A failed, cancelled or skipped run counts when a later run of
+   the same workflow on the default branch succeeded: the default branch is
+   healthy and a later deploy carries the change (owner 2026-10-12, after
+   two ships said `deploy failed · CI` for a day after main went green).
+   Such a ship goes live and leaves the list at the end of its day. A
+   running note says how long its run has run (`merged · deploying · 2h`),
+   or waited (`merged · deploy queued · 1h`), from the run's own times. Repositories may name their deploy workflows in config.
 10. **Ships survive a restart.** Found ships and each transcript's read
     offset persist in the state directory. A transcript is read whole once
     (in the background, for PR evidence only), then only its new bytes.

@@ -32,6 +32,10 @@ All notable changes to matchblox are in this file. The format follows
   commit that was read green. Name the
   workflows that deploy a repository under the new `[ships.deploy]` config
   key; by default every run on the merge commit counts.
+  A running stage says how long it has run (`merged · deploying · 2h`,
+  `CI · 6 of 9 jobs · 12m`) or waited (`merged · deploy queued · 1h`). A
+  failed run on the merge commit counts once a newer run of its workflow
+  on the default branch passed.
 - **Usage and the machine in the rows the list leaves free.** Each
   account's windows as `/usage` says them, and the machine: cpu, memory,
   the disk your home is on, and the agents that run.

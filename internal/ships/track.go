@@ -61,13 +61,13 @@ func track(f facts, deploy []string, now time.Time) trackOut {
 	case "CLOSED":
 		t.Stage, t.Kind, t.Note = StageOpen, Done, "closed"
 	default:
-		openTrack(&t, f, green)
+		openTrack(&t, f, green, now)
 	}
 	t.Stages[t.Stage].Note = t.Note
 	return t
 }
 
-func openTrack(t *trackOut, f facts, green bool) {
+func openTrack(t *trackOut, f facts, green bool, now time.Time) {
 	switch {
 	case green:
 		t.Stage = StageGreen
@@ -95,7 +95,7 @@ func openTrack(t *trackOut, f facts, green bool) {
 	case f.Draft:
 		t.Kind, t.Note = Running, "draft"
 	case t.Stage == StageCI:
-		t.Kind, t.Note = Running, fmt.Sprintf("CI · %d of %d jobs", f.Checks.Completed, f.Checks.Total)
+		t.Kind, t.Note = Running, fmt.Sprintf("CI · %d of %d jobs", f.Checks.Completed, f.Checks.Total)+since(f.Checks.Started, now)
 	case !green:
 		t.Kind, t.Note = Running, "no checks yet"
 	case f.Review == "CHANGES_REQUESTED":
@@ -116,11 +116,19 @@ func openTrack(t *trackOut, f facts, green bool) {
 }
 
 // mergedTrack is live when every run on the merge commit finished and none
-// failed. A cancelled run, or a skipped run of a named deploy workflow,
-// counts when a newer run of its workflow on the default branch succeeded.
+// failed. A failed or cancelled run, or a skipped run of a named deploy
+// workflow, counts when a newer run of its workflow on the default branch
+// succeeded: the default branch is healthy, and a later deploy carries the
+// change. A running note says how long its run has run, or waited.
 func mergedTrack(t *trackOut, f facts, deploy []string, now time.Time) {
 	t.Stage = StageMerged
 	runs, deploying, bad := 0, false, ""
+	var started, queued time.Time // the oldest run in progress, and waiting
+	oldest := func(at *time.Time, r run) {
+		if !r.Created.IsZero() && (at.IsZero() || r.Created.Before(*at)) {
+			*at = r.Created
+		}
+	}
 	for _, r := range f.Runs {
 		if len(deploy) > 0 && !slices.Contains(deploy, r.Workflow) {
 			continue
@@ -130,8 +138,12 @@ func mergedTrack(t *trackOut, f facts, deploy []string, now time.Time) {
 			t.LiveAt = r.Updated
 		}
 		switch {
+		case r.Status == "IN_PROGRESS":
+			deploying = true
+			oldest(&started, r)
 		case r.Status != "COMPLETED":
 			deploying = true
+			oldest(&queued, r)
 		case r.Conclusion == "SUCCESS" || r.Conclusion == "NEUTRAL":
 		case r.Conclusion == "SKIPPED" && len(deploy) == 0:
 			// Every run counts, and a workflow that skips on push (one
@@ -147,6 +159,9 @@ func mergedTrack(t *trackOut, f facts, deploy []string, now time.Time) {
 					bad = "deploy " + strings.ToLower(r.Conclusion) + " · " + r.Workflow
 				}
 			}
+		case r.Later == "success":
+			// Failed, and a newer run of its workflow on the default
+			// branch succeeded since.
 		default:
 			if bad == "" || !strings.HasPrefix(bad, "deploy failed") {
 				bad = "deploy failed · " + r.Workflow
@@ -157,12 +172,35 @@ func mergedTrack(t *trackOut, f facts, deploy []string, now time.Time) {
 	case bad != "":
 		t.Kind, t.Note = Stuck, bad
 	case deploying || runs == 0 && now.Sub(f.Merged) < noRunsGrace:
-		t.Kind, t.Note = Running, "merged · deploying"
+		switch {
+		case !started.IsZero():
+			t.Kind, t.Note = Running, "merged · deploying"+since(started, now)
+		case !queued.IsZero():
+			t.Kind, t.Note = Running, "merged · deploy queued"+since(queued, now)
+		default:
+			t.Kind, t.Note = Running, "merged · deploying"+since(f.Merged, now)
+		}
 	default:
 		if t.LiveAt.IsZero() {
 			t.LiveAt = f.Merged
 		}
 		t.Stage, t.Kind, t.Note = StageLive, Done, "live"
 		t.Stages[StageLive].At = t.LiveAt
+	}
+}
+
+// since is " · 2h": how long ago at was, in its first unit; nothing when
+// at is unknown.
+func since(at, now time.Time) string {
+	if at.IsZero() {
+		return ""
+	}
+	switch d := now.Sub(at); {
+	case d < time.Hour:
+		return fmt.Sprintf(" · %dm", max(int(d/time.Minute), 1))
+	case d < 48*time.Hour:
+		return fmt.Sprintf(" · %dh", int(d/time.Hour))
+	default:
+		return fmt.Sprintf(" · %dd", int(d/(24*time.Hour)))
 	}
 }

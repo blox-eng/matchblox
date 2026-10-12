@@ -38,7 +38,7 @@ func TestTrack(t *testing.T) {
 		kind   string
 		note   string
 	}{
-		{"checks running", open(func(f *facts) { f.Checks.Completed = 6 }), nil, StageCI, Running, "CI · 6 of 9 jobs"},
+		{"checks running", open(func(f *facts) { f.Checks.Completed, f.Checks.Started = 6, now.Add(-12*time.Minute) }), nil, StageCI, Running, "CI · 6 of 9 jobs · 12m"},
 		{"a check failed", open(func(f *facts) { f.Checks.Failed, f.Checks.FailedName = 1, "e2e-web" }), nil, StageCI, Stuck, "CI failed · e2e-web"},
 		{"conflicts", open(func(f *facts) { f.Mergeable, f.MergeState = "CONFLICTING", "DIRTY" }), nil, StageGreen, Stuck, "conflicts with main"},
 		{"behind", open(func(f *facts) { f.MergeState = "BEHIND" }), nil, StageGreen, Stuck, "behind main"},
@@ -52,7 +52,9 @@ func TestTrack(t *testing.T) {
 		{"green, a branch rule blocks it", open(func(f *facts) { f.MergeState = "BLOCKED" }), nil, StageCI, Running, "waits for a required check"},
 		{"green, blocked by a review", open(func(f *facts) { f.MergeState, f.Review = "BLOCKED", "REVIEW_REQUIRED" }), nil, StageGreen, WaitsForYou, "waits for review"},
 		{"green, mergeability not computed yet", open(func(f *facts) { f.Mergeable, f.MergeState = "UNKNOWN", "UNKNOWN" }), nil, StageGreen, Running, "checking mergeability"},
-		{"merged, deploy running", merged(run{Workflow: "Release", Status: "IN_PROGRESS"}), nil, StageMerged, Running, "merged · deploying"},
+		{"merged, deploy running", merged(run{Workflow: "Release", Status: "IN_PROGRESS", Created: now.Add(-2 * time.Hour)}), nil, StageMerged, Running, "merged · deploying · 2h"},
+		{"merged, deploy queued", merged(run{Workflow: "Release", Status: "QUEUED", Created: now.Add(-61 * time.Minute)}), nil, StageMerged, Running, "merged · deploy queued · 1h"},
+		{"merged, one runs and one waits", merged(run{Workflow: "Release", Status: "PENDING", Created: now.Add(-3 * time.Hour)}, run{Workflow: "CI", Status: "IN_PROGRESS", Created: now.Add(-15 * time.Minute)}), nil, StageMerged, Running, "merged · deploying · 15m"},
 		{"merged, deploy green", merged(done("Release", "SUCCESS", ""), done("CI", "SUCCESS", "")), nil, StageLive, Done, "live"},
 		{"merged, deploy failed", merged(done("Release", "FAILURE", "")), nil, StageMerged, Stuck, "deploy failed · Release"},
 		{"closed", func() facts { f := open(nil); f.State = "CLOSED"; return f }(), nil, StageOpen, Done, "closed"},
@@ -82,15 +84,18 @@ func TestLive(t *testing.T) {
 		note   string
 	}{
 		{"cancelled, superseded by a success", merged(done("Release", "CANCELLED", "success"), done("CI", "SUCCESS", "")), nil, Done, "live"},
-		{"cancelled, the newer run still runs", merged(done("Release", "CANCELLED", "running")), nil, Running, "merged · deploying"},
-		{"cancelled, the default branch not read yet", merged(done("Release", "CANCELLED", "?")), nil, Running, "merged · deploying"},
+		{"cancelled, the newer run still runs", merged(done("Release", "CANCELLED", "running")), nil, Running, "merged · deploying · 20m"},
+		{"cancelled, the default branch not read yet", merged(done("Release", "CANCELLED", "?")), nil, Running, "merged · deploying · 20m"},
+		{"failed, superseded by a success", merged(done("Release", "SUCCESS", ""), done("CI", "FAILURE", "success")), nil, Done, "live"},
+		{"failed, the newer run still runs", merged(done("CI", "FAILURE", "running")), nil, Stuck, "deploy failed · CI"},
+		{"failed, the default branch not read yet", merged(done("CI", "FAILURE", "?")), nil, Stuck, "deploy failed · CI"},
 		{"cancelled and nothing newer", merged(done("Release", "CANCELLED", "")), nil, Stuck, "deploy cancelled · Release"},
 		{"a failure outranks a cancel", merged(done("Release", "CANCELLED", ""), done("CI", "FAILURE", "")), nil, Stuck, "deploy failed · CI"},
 		{"a skipped run of every run deploys nothing", merged(done("Claude Code", "SKIPPED", ""), done("Release", "SUCCESS", "")), nil, Done, "live"},
 		{"a named deploy workflow that skipped waits", merged(done("Release", "SKIPPED", "")), []string{"Release"}, Stuck, "deploy skipped · Release"},
 		{"a named deploy workflow skipped, then superseded", merged(done("Release", "SKIPPED", "success")), []string{"Release"}, Done, "live"},
 		{"only the named workflows count", merged(done("Release", "SUCCESS", ""), done("Lint", "FAILURE", "")), []string{"Release"}, Done, "live"},
-		{"no runs yet, just merged", func() facts { f := merged(); f.Merged = now.Add(-time.Minute); return f }(), nil, Running, "merged · deploying"},
+		{"no runs yet, just merged", func() facts { f := merged(); f.Merged = now.Add(-time.Minute); return f }(), nil, Running, "merged · deploying · 1m"},
 		{"no runs at all", merged(), nil, Done, "live"},
 	}
 	for _, c := range cases {
@@ -186,6 +191,32 @@ func TestLater(t *testing.T) {
 	for i, c := range cases {
 		if got := later(r, c.history); got != c.want {
 			t.Errorf("%d: later = %q, want %q", i, got, c.want)
+		}
+	}
+}
+
+// A failed run of the merge commit asks the default branch, as a cancelled
+// or skipped one does; a passed or running one does not.
+func TestAFailedRunAsksTheDefaultBranch(t *testing.T) {
+	for _, c := range []struct {
+		r    run
+		asks bool
+	}{
+		{run{Status: "COMPLETED", Conclusion: "FAILURE"}, true},
+		{run{Status: "COMPLETED", Conclusion: "TIMED_OUT"}, true},
+		{run{Status: "COMPLETED", Conclusion: "CANCELLED"}, true},
+		{run{Status: "COMPLETED", Conclusion: "SKIPPED"}, true},
+		{run{Status: "COMPLETED", Conclusion: "SUCCESS"}, false},
+		{run{Status: "COMPLETED", Conclusion: "NEUTRAL"}, false},
+		{run{Status: "IN_PROGRESS"}, false},
+	} {
+		f := facts{Runs: []run{c.r}}
+		if got := f.superseded(); got != c.asks {
+			t.Errorf("%+v: superseded %v, want %v", c.r, got, c.asks)
+		}
+		c.r.Later = "success"
+		if f := (facts{Runs: []run{c.r}}); f.superseded() {
+			t.Errorf("%+v: still waits after a later success", c.r)
 		}
 	}
 }
