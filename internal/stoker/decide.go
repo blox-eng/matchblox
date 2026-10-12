@@ -1,6 +1,7 @@
 package stoker
 
 import (
+	"maps"
 	"strconv"
 
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -112,6 +113,9 @@ func (m *Mode) pace(s sample.Session) bool {
 	if ok && now == was {
 		return false
 	}
+	// Mode is a value the store hands out: write a copy of the map, never
+	// the one another reader holds.
+	m.Pace = maps.Clone(m.Pace)
 	if m.Pace == nil {
 		m.Pace = map[string]Mark{}
 	}
