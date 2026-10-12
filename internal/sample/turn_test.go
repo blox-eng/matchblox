@@ -3,6 +3,7 @@ package sample
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -64,10 +65,12 @@ func TestARunningTurnHasNoEnd(t *testing.T) {
 	}
 }
 
-// A session whose registry says busy because its background work runs,
-// while its transcript ended the turn, is idle: no turn runs. It shows the
-// work it left: the subagents Claude Code counted and its background shells.
-func TestAnEndedTurnIsIdleWhileItsBackgroundWorks(t *testing.T) {
+// endTurn appends a turn's end to the fixture session in %1, with the
+// subagents it left running, and a background shell of its Bash tool:
+// started 2 hours before the fixture's clock (uptime 12345.6 s, 100 ticks a
+// second).
+func endTurn(t *testing.T, agents int) Session {
+	t.Helper()
 	root := copyFixture(t)
 	transcript := filepath.Join(root, "home", ".claude", "projects", "-work-app", "11111111-aaaa-4000-8000-000000000001.jsonl")
 	b, err := os.ReadFile(transcript)
@@ -75,23 +78,41 @@ func TestAnEndedTurnIsIdleWhileItsBackgroundWorks(t *testing.T) {
 		t.Fatal(err)
 	}
 	ended := fixtureNow.Add(-20 * time.Minute).UTC()
-	line := `{"type":"system","subtype":"turn_duration","isSidechain":false,"pendingBackgroundAgentCount":1,"timestamp":"` + ended.Format(time.RFC3339Nano) + `"}` + "\n"
+	line := `{"type":"system","subtype":"turn_duration","isSidechain":false,"pendingBackgroundAgentCount":` + strconv.Itoa(agents) + `,"timestamp":"` + ended.Format(time.RFC3339Nano) + `"}` + "\n"
 	writeFile(t, transcript, string(b)+line)
-	// A background shell of its Bash tool: started 2 hours before the
-	// fixture's clock (uptime 12345.6 s, 100 ticks a second).
 	shell := filepath.Join(root, "proc", "220")
 	writeFile(t, filepath.Join(shell, "stat"), "220 (zsh) S 200 220 220 0 -1 0 0 0 0 0 1 0 0 0 20 0 1 0 514560 100000 2500")
 	writeFile(t, filepath.Join(shell, "cmdline"), "/usr/bin/zsh\x00-c\x00source /home/user/.claude/shell-snapshots/snapshot-zsh-1-x.sh 2>/dev/null || true && eval 'until ! pgrep -f ratchet >/dev/null; do sleep 5; done' < /dev/null && pwd -P >| /tmp/claude-1-cwd\x00")
+	return byPane(newFixtureSampler(root).Sample())["%1"]
+}
 
-	s := byPane(newFixtureSampler(root).Sample())["%1"]
-	if s.Busy || s.Status != "idle" || s.Idle != 20*time.Minute {
+// A session whose registry says busy because a background shell runs,
+// while its transcript ended the turn with no subagent left, is idle: no
+// turn runs and none will start by itself. It shows the shell it left.
+func TestAnEndedTurnIsIdleWhileItsShellsRun(t *testing.T) {
+	s := endTurn(t, 0)
+	if s.Busy || s.Status != "idle" || s.Idle != 20*time.Minute || !s.Resting() {
 		t.Fatalf("busy %v status %q idle %v", s.Busy, s.Status, s.Idle)
 	}
-	if s.Agents != 1 || len(s.Shells) != 1 {
+	if s.Agents != 0 || len(s.Shells) != 1 {
 		t.Fatalf("agents %d shells %+v", s.Agents, s.Shells)
 	}
 	if sh := s.Shells[0]; sh.PID != 220 || sh.Command != "until ! pgrep -f ratchet >/dev/null; do sleep 5; done" || fixtureNow.Sub(sh.Started).Round(time.Minute) != 2*time.Hour {
 		t.Fatalf("shell %+v (age %v)", sh, fixtureNow.Sub(sh.Started))
+	}
+}
+
+// A turn that ended with subagents still running is work, not a rest for
+// the person: each subagent's result starts the next turn by itself. The
+// session works through its agents, and the stoker may still act at the
+// turn's end.
+func TestAnEndedTurnWithSubagentsWorksThroughThem(t *testing.T) {
+	s := endTurn(t, 2)
+	if !s.Busy || s.Status != StatusAgents || s.Agents != 2 || s.Age() != "busy" {
+		t.Fatalf("busy %v status %q agents %d age %q", s.Busy, s.Status, s.Agents, s.Age())
+	}
+	if !s.Resting() || s.Idle != 20*time.Minute || len(s.Shells) != 1 {
+		t.Fatalf("resting %v idle %v shells %d", s.Resting(), s.Idle, len(s.Shells))
 	}
 }
 

@@ -216,7 +216,7 @@ func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, full sampl
 		at, stepped := last[s.SessionID]
 		switch {
 		case s.Agent != "claude", s.Pane == "", s.SessionID == "",
-			s.Busy, s.Status != "idle", s.Age() != "idle", !s.Out.IsZero(),
+			!s.Resting(), s.Idle >= sample.ColdAfter, !s.Out.IsZero(),
 			waiting[s.Pane], s.Asks, s.Permits,
 			stepped && now.Sub(at) < PerSession:
 			continue
@@ -231,7 +231,8 @@ func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, full sampl
 		if !v.Compact || !v.Past && mark != nil && !mark.Moved {
 			continue
 		}
-		g := advice.Guard{IdlePane: s.Pane, StokePane: s.Pane}
+		// At a rest, not idle: its subagents may still work.
+		g := advice.Guard{RestPane: s.Pane, StokePane: s.Pane}
 		typed := g
 		typed.Typed = true
 		out = append(out, Step{

@@ -36,6 +36,7 @@ type Guard struct {
 	StartTicks uint64 `json:"start_ticks,omitempty"` // that started at this time
 	Worktree   string `json:"worktree,omitempty"`    // has no changes and no process inside
 	IdlePane   string `json:"idle_pane,omitempty"`   // the agent in this pane is still idle
+	RestPane   string `json:"rest_pane,omitempty"`   // no turn runs here: idle, or only its subagents work
 	AnswerPane string `json:"answer_pane,omitempty"` // the agent here still waits, and not at a permission prompt
 	// StokePane: the pane, read again, shows no menu, no question and no
 	// draft, and nothing in the queue waits there. Typed: the draft is the
@@ -70,12 +71,12 @@ func one(argv ...string) [][]string { return [][]string{argv} }
 // it is worth a look: a wait loop that matches itself never ends.
 const LongShell = time.Hour
 
-// shellRecs name the background shells an idle session left running for
+// shellRecs name the background shells a resting session left running for
 // LongShell or more, and offer to end each one.
 func shellRecs(snap sample.Snapshot) []Rec {
 	var out []Rec
 	for _, s := range snap.Sessions {
-		if s.Busy || s.Pane == "" {
+		if !s.Resting() || s.Pane == "" {
 			continue
 		}
 		for _, sh := range s.Shells {
@@ -86,7 +87,7 @@ func shellRecs(snap sample.Snapshot) []Rec {
 			r := Rec{
 				Level: "warn", score: 400 + ran.Hours(),
 				Title:    fmt.Sprintf("End a background shell of %s (%s) that has run %s", s.Name, s.Pane, sample.Human(ran)),
-				Evidence: fmt.Sprintf("pid %d, started %s, its session idle: %s", sh.PID, sh.Started.Local().Format("Jan 2 15:04"), sh.Command),
+				Evidence: fmt.Sprintf("pid %d, started %s, no turn runs: %s", sh.PID, sh.Started.Local().Format("Jan 2 15:04"), sh.Command),
 				Primary:  &Action{Label: "jump to the session", Nav: true, Steps: one("tmux", "switch-client", "-t", s.Pane)},
 			}
 			// The command runs under the shell: only ending the shell's own
