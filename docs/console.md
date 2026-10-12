@@ -127,7 +127,9 @@ It shows what the agent said in this turn, its end up to nine lines (a
 longer reply starts with `…`), its Markdown as plain text. When Claude
 Code asks with its question tool, its options are numbered and the last
 one types an answer; several questions come one at a time, and a question
-of several choices ticks with `Space`. Otherwise you type one line.
+of several choices ticks with `Space`. In auto mode the options come from
+the queue hooks (see [Agents](agents.md#how-an-agent-tells-that-it-waits)),
+so add them again when the setup step asks. Otherwise you type one line.
 
 `Enter` sends it to the pane named in the title: the peek is the review,
 so there is no second confirm. The options go to Claude Code's own menu

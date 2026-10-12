@@ -40,6 +40,11 @@ All notable changes to matchblox are in this file. The format follows
   typed `y` for it any more.
 - The keys are at the bottom of the screen, each a tap target, where a
   phone app keeps them above its keyboard.
+- **The queue hooks include the question tool.** A `PreToolUse` hook for
+  `AskUserQuestion` tells the console what Claude Code asks before its menu
+  draws, so the answer peek shows the options in auto mode too, where the
+  question reaches the transcript only once it is answered. The step "Add
+  the queue hooks" asks to be opened again, with the one entry it adds.
 
 ## [0.5.1] - 2026-10-12
 

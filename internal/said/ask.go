@@ -74,3 +74,18 @@ func (a Ask) Check(ans Answer) error {
 	}
 	return nil
 }
+
+// Clean is the call without control characters in its text: the console
+// draws it, and a control key would drive the person's terminal.
+func (a Ask) Clean() Ask {
+	qs := make([]Question, len(a.Questions))
+	for i, q := range a.Questions {
+		opts := make([]Option, len(q.Options))
+		for j, o := range q.Options {
+			opts[j] = Option{Label: Clean(o.Label), Description: Clean(o.Description)}
+		}
+		qs[i] = Question{Question: Clean(q.Question), Header: Clean(q.Header), Options: opts, Multi: q.Multi}
+	}
+	a.Questions = qs
+	return a
+}

@@ -100,8 +100,11 @@ type Service struct {
 	sample   func() sample.Snapshot
 	git      GitSource
 
-	mu       sync.Mutex
-	cur      state.Doc
+	mu  sync.Mutex
+	cur state.Doc
+	// sampled are the sessions as the sampler read them; cur.Sessions adds
+	// the question tool's calls the hooks announced.
+	sampled  []sample.Session
 	have     bool
 	hist     history.Series
 	queue    *queue.Queue
@@ -286,7 +289,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	if s.have { // the first sample has no rates yet
 		s.hist.Append(history.FromSnapshot(snap))
 	}
-	s.cur.Snapshot, s.have = snap, true
+	s.cur.Snapshot, s.sampled, s.have = snap, snap.Sessions, true
 	if s.Stoker != nil {
 		v := s.Stoker.View()
 		s.cur.Stoker = &v
@@ -329,7 +332,8 @@ func (s *Service) mergeQueue() {
 	if now.IsZero() {
 		now = s.now()
 	}
-	s.queue.Merge(s.cur.Sessions, now)
+	s.queue.Merge(s.sampled, now)
+	s.cur.Sessions = s.queue.WithAsks(s.sampled)
 	s.cur.Queue = s.queue.Items()
 }
 

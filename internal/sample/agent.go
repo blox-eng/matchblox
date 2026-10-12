@@ -369,7 +369,7 @@ func pendingAsk(lines [][]byte) *said.Ask {
 					return nil
 				}
 			}
-			ask := c.Input
+			ask := c.Input.Clean()
 			ask.ID = c.ID
 			return &ask
 		}

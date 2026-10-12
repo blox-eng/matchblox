@@ -303,8 +303,10 @@ has `a`: the answer peek on its session.
    switch-client or attach); the mock's in-console screen stood for it.
 8. **The question tool, fully:** several questions are shown one at a time
    (`1 of 2` in the title), multi-select questions tick with `space` and
-   send with `⏎`; options are read from the pending tool call in the
-   transcript and sent as the tool's own menu takes them in the pane.
+   send with `⏎`; options are read from the pending tool call, from the
+   `PreToolUse` hook of the question tool (auto mode writes the call to the
+   transcript only once it is answered) or else the transcript, and sent
+   as the tool's own menu takes them in the pane.
 9. **Live** is: every workflow run on the merge commit finished and none
    failed. A cancelled or skipped run counts when a later run of the same
    workflow on the default branch succeeded (a deploy superseded by a newer

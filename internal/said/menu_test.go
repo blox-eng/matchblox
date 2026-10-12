@@ -1,6 +1,12 @@
 package said
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"slices"
+	"testing"
+)
 
 // The question tool's pages, as Claude Code draws them: chips for each
 // question, the question, its numbered options with descriptions, the
@@ -90,6 +96,49 @@ func TestShowsReview(t *testing.T) {
 	for _, s := range []string{page1, page2, "Submit answers when you are ready.\n"} {
 		if ShowsReview(s) {
 			t.Fatalf("read as the review page: %q", s)
+		}
+	}
+}
+
+// TestMenusFromALivePane reads screens captured from Claude Code 2.1.296
+// in a tmux pane during the live check of #68: each page is read as its
+// own question and no other, the review page as the review.
+func TestMenusFromALivePane(t *testing.T) {
+	fruit := Question{Question: "Which fruit do you want?", Options: []Option{{Label: "Apple"}, {Label: "Banana"}, {Label: "Cherry"}}}
+	toppings := Question{Question: "Which toppings do you want?", Multi: true,
+		Options: []Option{{Label: "Cheese"}, {Label: "Olives"}, {Label: "Basil"}, {Label: "Garlic"}}}
+	days := Question{Question: "Which days can you work?", Multi: true, Options: []Option{{Label: "Monday"}, {Label: "Tuesday"}, {Label: "Wednesday"}}}
+	shift := Question{Question: "Which shift do you prefer?", Options: []Option{{Label: "Morning"}, {Label: "Evening"}}}
+	colour := Question{Question: "Which colour should the door be?", Options: []Option{{Label: "Red"}, {Label: "Blue"}}}
+	twoFruit := Question{Question: "Which fruit do you want?", Options: []Option{{Label: "Apple"}, {Label: "Banana"}}}
+	all := []Question{fruit, toppings, days, shift, colour}
+	for _, c := range []struct {
+		file   string
+		shows  []Question // the questions it shows; every other one it does not
+		review bool
+	}{
+		{"fruit", []Question{fruit}, false},
+		{"toppings", []Question{toppings}, false},
+		{"days-shift-1", []Question{days}, false},
+		{"days-shift-2", []Question{shift}, false},
+		{"days-shift-review", nil, true},
+		{"colour", []Question{colour}, false},
+		{"fruit-default-mode", []Question{twoFruit}, false}, // fruit's three options are not all there
+		{"answered", nil, false},
+	} {
+		b, err := os.ReadFile(filepath.Join("..", "..", "testdata", "menus", c.file+".txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		screen := string(b)
+		for _, q := range append(all, c.shows...) {
+			want := slices.ContainsFunc(c.shows, func(s Question) bool { return reflect.DeepEqual(s, q) })
+			if got := ShowsQuestion(screen, q); got != want {
+				t.Errorf("%s: ShowsQuestion(%q, %d options) = %v, want %v", c.file, q.Question, len(q.Options), got, want)
+			}
+		}
+		if got := ShowsReview(screen); got != c.review {
+			t.Errorf("%s: ShowsReview = %v, want %v", c.file, got, c.review)
 		}
 	}
 }

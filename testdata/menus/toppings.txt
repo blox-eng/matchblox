@@ -1,0 +1,50 @@
+
+ ▐▛███▛█   Claude Code v2.1.296
+▝▜██████▀  Haiku 5.5 · Claude Max
+ ▝▝   ▝▝   ~/work
+
+  ⎿  SessionStart:startup says: ○○○ Semgrep Guardian (blox-engineering): this session is protected, files are scanned as
+     they are written
+
+❯ Say "Shape B ready." then call AskUserQuestion once: one multi-select question "Which toppings do you want?" header
+  Toppings, options Cheese, Olives, Basil, Garlic (short descriptions). No other tools.
+  ⎿  Async hook SessionStart completed
+
+● Shape B ready.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Toppings  ✔ Submit  →
+
+Which toppings do you want?
+
+❯ 1. [ ] Cheese
+         Classic melted mozzarella.
+  2. [ ] Olives
+         Sliced black or green olives.
+  3. [ ] Basil
+         Fresh basil leaves added after baking.
+  4. [ ] Garlic
+         Thinly sliced or roasted garlic.
+  5. [ ] Type something
+     Submit
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  6. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

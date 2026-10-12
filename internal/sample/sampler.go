@@ -80,6 +80,9 @@ type Session struct {
 	Agents int       `json:"agents,omitempty"`
 	Shells []Shell   `json:"shells,omitempty"`
 	turnAt time.Time // the newest real turn of the transcript
+	// TurnEnded is when the transcript's newest turn ended; zero while it
+	// runs. The service reads it, it never leaves the host.
+	TurnEnded time.Time `json:"-"`
 	// Transcript is the Claude Code session file, read back by the service
 	// after a step; it never leaves the host.
 	Transcript string `json:"-"`
@@ -861,7 +864,7 @@ func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procK
 		return
 	}
 	sess.Progress, sess.LastLine, sess.Asks, sess.turnAt = u.Progress, u.LastLine, u.Asks, u.At
-	sess.Said, sess.Ask = u.Said, u.Ask
+	sess.Said, sess.Ask, sess.TurnEnded = u.Said, u.Ask, u.Ended
 	if !u.Ended.IsZero() && sess.Busy {
 		// Claude Code's registry says busy while background work runs; the
 		// transcript says whether a turn does. A subagent still working

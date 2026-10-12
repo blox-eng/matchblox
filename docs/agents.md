@@ -61,8 +61,13 @@ fields are read from the agent's auth files; no token reaches the console.
 ## How an agent tells that it waits
 
 Claude Code tells its waits through hooks: the setup step "Add the queue
-hooks" adds them. Every other agent is read from its pane: busy while the
-pane changes, waiting when it is idle and its last lines ask.
+hooks" adds them. One of them, `PreToolUse` for the question tool
+(`AskUserQuestion`), hands the console the question and its options before
+the menu draws: in auto mode Claude Code writes the question to its
+transcript only once it is answered, so the hook is how the answer peek
+shows the options. An install from before this hook shows the step again,
+with the one entry it adds. Every other agent is read from its pane: busy
+while the pane changes, waiting when it is idle and its last lines ask.
 
 An approval menu (Codex, OpenCode) shows as `asks`. Answer it in its pane,
 where `Enter` takes the selected choice.

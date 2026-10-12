@@ -1030,3 +1030,47 @@ func TestAShipsScanStopsWithTheService(t *testing.T) {
 	}
 	<-done
 }
+
+// TestPickTakesTheHookCall: in auto mode the transcript shows no call while
+// the menu waits; the PreToolUse hook's call is answered, and its
+// PostToolUse ends it (design 0006 §11.8, review of #68).
+func TestPickTakesTheHookCall(t *testing.T) {
+	s := newTest(t, time.Hour)
+	s.sample = func() sample.Snapshot {
+		return sample.Snapshot{At: time.Now(), Sessions: []sample.Session{{SessionID: "s1", Pane: "%1", Name: "app"}}}
+	}
+	s.Capture = func([]string) map[string]string {
+		return map[string]string{"%1": "Which next?\n❯ 1. a\n  2. b\n  3. Type something.\n"}
+	}
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	ctx := run(t, s)
+	for deadline := time.Now().Add(5 * time.Second); !s.sampledOnce(); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the service never sampled")
+		}
+	}
+	answer, _ := json.Marshal(said.Answer{ID: "toolu_1", Choices: []said.Choice{{Picks: []int{2}}}})
+	pick := proto.Act{RecID: "pick:%1", Confirm: "y", Text: string(answer)}
+	if res := s.act(ctx, pick); !strings.Contains(res.Err, "no longer asks") {
+		t.Fatalf("no call yet: %+v", res)
+	}
+	ask := &said.Ask{ID: "toolu_1", Questions: []said.Question{{Question: "Which next?", Options: []said.Option{{Label: "a"}, {Label: "b"}}}}}
+	s.Hook(hooks.Event{Name: "PreToolUse", SessionID: "s1", Pane: "%1", At: time.Now(), ToolUseID: "toolu_1", Ask: ask})
+	if res := s.act(ctx, pick); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if want := [][]string{{"tmux", "send-keys", "-t", "%1", "2"}}; fmt.Sprint(ran) != fmt.Sprint(want) {
+		t.Fatalf("ran %q, want %q", ran, want)
+	}
+	s.Hook(hooks.Event{Name: "PostToolUse", SessionID: "s1", Pane: "%1", At: time.Now(), ToolUseID: "toolu_1"})
+	if _, ok := s.askIn("%1"); ok {
+		t.Fatal("the answered call still waits")
+	}
+}
+
+func (s *Service) sampledOnce() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.have
+}

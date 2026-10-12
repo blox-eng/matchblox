@@ -1,0 +1,50 @@
+
+ ▐▛███▛█   Claude Code v2.1.296
+▝▜██████▀  Haiku 5.5 · Claude Max
+ ▝▝   ▝▝   ~/work
+
+  ⎿  SessionStart:startup says: ○○○ Semgrep Guardian (blox-engineering): this session is protected, files are scanned as
+     they are written
+
+❯ Say "Shape B ready." then call AskUserQuestion once: one multi-select question "Which toppings do you want?" header
+  Toppings, options Cheese, Olives, Basil, Garlic (short descriptions). No other tools.
+  ⎿  Async hook SessionStart completed
+
+● Shape B ready.
+
+● User answered Claude's questions:
+  ⎿  · Which toppings do you want? → Olives, Garlic
+
+● You picked Olives and Garlic.
+
+  Progress [████████] Toppings question answered; nothing else pending.
+  ⎿  Stop says: ○○○ Semgrep Guardian: nothing scanned this session.
+
+✻ Brewed for 4s · done 7:15 PM
+
+❯ Say "Shape C ready." then call AskUserQuestion once with two questions: first a multi-select "Which days can you
+  work?" header Days, options Monday, Tuesday, Wednesday; second a single-choice "Which shift do you prefer?" header
+  Shift, options Morning, Evening. Short descriptions. No other tools.
+
+● Shape C ready.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Days  ☐ Shift  ✔ Submit  →
+
+Which days can you work?
+
+❯ 1. [ ] Monday
+         Available on Mondays.
+  2. [ ] Tuesday
+         Available on Tuesdays.
+  3. [ ] Wednesday
+         Available on Wednesdays.
+  4. [ ] Type something
+     Next
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel
+
+
+
+

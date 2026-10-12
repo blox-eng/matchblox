@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -236,5 +237,138 @@ func TestASessionWorkingThroughSubagentsDoesNotWait(t *testing.T) {
 	q.Merge([]sample.Session{s}, at(600))
 	if items := q.Items(); len(items) != 0 {
 		t.Fatalf("items %+v", items)
+	}
+}
+
+func hookAskOf(id string) *said.Ask {
+	return &said.Ask{ID: id, Questions: []said.Question{{Question: "Which fruit?", Options: []said.Option{{Label: "Apple"}, {Label: "Banana"}}}}}
+}
+
+// askOf is the call the session in pane waits on, after the events.
+func askOf(q *Queue, ss []sample.Session, now time.Time, pane string) *said.Ask {
+	q.Merge(ss, now)
+	for _, s := range q.WithAsks(ss) {
+		if s.Pane == pane {
+			return s.Ask
+		}
+	}
+	return nil
+}
+
+// TestHookAskLifecycle: a PreToolUse of the question tool holds its call
+// until a hook says the menu is gone (design 0006 §11.8, auto mode).
+func TestHookAskLifecycle(t *testing.T) {
+	pre := hooks.Event{Name: "PreToolUse", ToolUseID: "toolu_1", Ask: hookAskOf("toolu_1")}
+	for _, tc := range []struct {
+		name  string
+		after []hooks.Event
+		held  bool
+	}{
+		{"set", nil, true},
+		{"a notification keeps it", []hooks.Event{{Name: "Notification", Kind: hooks.KindPermission}}, true},
+		{"another tool's PostToolUse keeps it", []hooks.Event{{Name: "PostToolUse", ToolUseID: "toolu_2"}}, true},
+		{"another tool's PreToolUse keeps it", []hooks.Event{{Name: "PreToolUse", ToolUseID: "toolu_2"}}, true},
+		{"its PostToolUse clears it", []hooks.Event{{Name: "PostToolUse", ToolUseID: "toolu_1"}}, false},
+		{"a prompt clears it", []hooks.Event{{Name: "UserPromptSubmit"}}, false},
+		{"Stop clears it", []hooks.Event{{Name: "Stop"}}, false},
+		{"SessionEnd clears it", []hooks.Event{{Name: "SessionEnd"}}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q := New()
+			for i, ev := range append([]hooks.Event{pre}, tc.after...) {
+				ev.SessionID, ev.Pane, ev.At = "s1", "%1", at(i)
+				q.Apply(ev)
+			}
+			got := askOf(q, []sample.Session{session("s1", "%1", "api", "idle", time.Minute)}, at(10), "%1")
+			if tc.held != (got != nil && got.ID == "toolu_1") {
+				t.Fatalf("ask %+v, want held=%v", got, tc.held)
+			}
+		})
+	}
+}
+
+func TestHookAskExpires(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "PreToolUse", SessionID: "s1", Pane: "%1", At: t0, ToolUseID: "toolu_1", Ask: hookAskOf("toolu_1")})
+	ss := []sample.Session{session("s1", "%1", "api", "idle", time.Minute)}
+	if askOf(q, ss, t0.Add(AskLife-time.Minute), "%1") == nil {
+		t.Fatal("gone before its life")
+	}
+	if got := askOf(q, ss, t0.Add(AskLife+time.Minute), "%1"); got != nil {
+		t.Fatalf("still held after its life: %+v", got)
+	}
+}
+
+// TestHookAskOrder: the transcript's call wins when it is the same call;
+// the hook's fills an empty transcript and wins a different (older) call.
+func TestHookAskOrder(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "PreToolUse", SessionID: "s1", Pane: "%1", At: t0, ToolUseID: "toolu_1", Ask: hookAskOf("toolu_1")})
+	transcript := &said.Ask{ID: "toolu_1", Questions: []said.Question{{Question: "From the transcript", Options: []said.Option{{Label: "A"}}}}}
+	older := &said.Ask{ID: "toolu_0", Questions: transcript.Questions}
+
+	s := session("s1", "%1", "api", "idle", time.Minute)
+	if got := askOf(q, []sample.Session{s}, at(1), "%1"); got == nil || got.Questions[0].Question != "Which fruit?" {
+		t.Fatalf("an empty transcript: %+v", got)
+	}
+	s.Ask = transcript
+	if got := askOf(q, []sample.Session{s}, at(1), "%1"); got != transcript {
+		t.Fatalf("the same call: %+v, want the transcript's", got)
+	}
+	s.Ask = older
+	if got := askOf(q, []sample.Session{s}, at(1), "%1"); got == nil || got.ID != "toolu_1" {
+		t.Fatalf("another call: %+v, want the hook's", got)
+	}
+	// With no hook call the transcript's stays: it is the fallback.
+	q.Apply(hooks.Event{Name: "PostToolUse", SessionID: "s1", Pane: "%1", At: at(2), ToolUseID: "toolu_1"})
+	s.Ask = transcript
+	if got := askOf(q, []sample.Session{s}, at(3), "%1"); got != transcript {
+		t.Fatalf("no hook call: %+v", got)
+	}
+}
+
+// TestWithAsksLeavesTheSampleAlone: the sampler's list is not changed, so
+// a call the hooks clear is not left behind in it.
+func TestWithAsksLeavesTheSampleAlone(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "PreToolUse", SessionID: "s1", Pane: "%1", At: t0, ToolUseID: "toolu_1", Ask: hookAskOf("toolu_1")})
+	ss := []sample.Session{session("s1", "%1", "api", "idle", time.Minute), session("s2", "%2", "web", "idle", time.Minute)}
+	q.Merge(ss, at(1))
+	out := q.WithAsks(ss)
+	if ss[0].Ask != nil || out[0].Ask == nil || out[1].Ask != nil {
+		t.Fatalf("sample %+v, out %+v", ss, out)
+	}
+}
+
+// TestHookAskByPane: a session the sampler sees without its id (read from
+// the pane) gets the call of the hooked session in that pane.
+func TestHookAskByPane(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "PreToolUse", SessionID: "s1", Pane: "%1", At: t0, ToolUseID: "toolu_1", Ask: hookAskOf("toolu_1")})
+	if got := askOf(q, []sample.Session{session("", "%1", "api", "idle", time.Minute)}, at(1), "%1"); got == nil {
+		t.Fatal("no call by pane")
+	}
+	if got := askOf(q, []sample.Session{session("", "%2", "web", "idle", time.Minute)}, at(1), "%2"); got != nil {
+		t.Fatalf("another pane got the call: %+v", got)
+	}
+}
+
+// TestHookAskEndsWithItsTurn: Esc on the menu sends no hook, but the
+// transcript closes the turn; a turn closed before the call keeps it.
+func TestHookAskEndsWithItsTurn(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "PreToolUse", SessionID: "s1", Pane: "%1", At: at(5), ToolUseID: "toolu_1", Ask: hookAskOf("toolu_1")})
+	s := session("s1", "%1", "api", "idle", time.Minute)
+	s.TurnEnded = at(1) // the turn before the prompt that asks
+	if askOf(q, []sample.Session{s}, at(6), "%1") == nil {
+		t.Fatal("an older turn's end cleared the call")
+	}
+	s.TurnEnded = at(7)
+	if got := askOf(q, []sample.Session{s}, at(8), "%1"); got != nil {
+		t.Fatalf("the call outlived its turn: %+v", got)
+	}
+	s.TurnEnded = time.Time{}
+	if got := askOf(q, []sample.Session{s}, at(9), "%1"); got != nil {
+		t.Fatalf("the call came back: %+v", got)
 	}
 }
