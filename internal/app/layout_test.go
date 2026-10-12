@@ -146,7 +146,10 @@ func TestAPhoneRowOpensInPlace(t *testing.T) {
 	if !strings.Contains(out[at+2], "plan 75%") || !strings.Contains(out[at+2], "a answer  ⏎ open") {
 		t.Fatalf("no plan and keys: %q", out[at+2])
 	}
-	if sessLine(t, m, "app-review") != at+3 || strings.Contains(out[at+4], "“") {
+	if !strings.HasPrefix(out[at-1], "────") || !strings.HasPrefix(out[at+3], "────") {
+		t.Fatalf("the opened block is not between hairlines:\n%s", strings.Join(out, "\n"))
+	}
+	if sessLine(t, m, "app-review") != at+4 || strings.Contains(out[at+5], "“") {
 		t.Fatalf("the rows that are not selected open too:\n%s", strings.Join(out, "\n"))
 	}
 	if lineOf(t, m, "WAITS FOR YOU · 2") > lineOf(t, m, "QUIET · 1") {

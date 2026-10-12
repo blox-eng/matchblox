@@ -16,7 +16,8 @@ All notable changes to matchblox are in this file. The format follows
   (a phone with a small font) the detail is a drawer beside the list. On a
   screen held sideways, from 60 columns, the selected session's detail
   sits beside the list. Every column of a list lines up, the name taking
-  what is left.
+  what is left, and the selected row is washed across the whole pane with
+  its name in the accent, the others muted.
 - **Answer or message from a peek.** `a`, or a tap on a selected session,
   opens a panel with what the agent said last and your answer; a session
   that works gets your line as a message, which Claude Code queues. `→`

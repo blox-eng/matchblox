@@ -120,7 +120,7 @@ func (m Model) doorsSection(b *body, w int) {
 		if narrow {
 			// A phone: one line for each door, the why of the selected one,
 			// so the sessions stay on the first screen.
-			b.addRow(i, i == sel, w, st, " "+st.accent.Render(mark)+st.text.Render(d.Title))
+			b.addRow(i, i == sel, w, st, " "+st.accent.Render(mark)+st.ink(i == sel).Render(d.Title))
 			if i != sel {
 				continue
 			}
@@ -141,7 +141,7 @@ func (m Model) doorsSection(b *body, w int) {
 			text, style = d.Problem, st.warn
 		}
 		for j, l := range wrap(text, w-colDoor+1, plainText) {
-			lead := " " + st.accent.Render(mark) + st.text.Render(pad(d.Title, colDoor-3))
+			lead := " " + st.accent.Render(mark) + st.ink(i == sel).Render(pad(d.Title, colDoor-3))
 			if j > 0 {
 				lead = strings.Repeat(" ", colDoor)
 			}

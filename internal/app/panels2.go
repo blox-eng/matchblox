@@ -160,7 +160,11 @@ func (m Model) recsSection(b *body, w int) {
 		case "warn":
 			mark = st.warn.Render("▲ ")
 		}
-		line := " " + mark + st.text.Render(tilde(r.Title))
+		lead := " "
+		if i == sel {
+			lead = st.accent.Render("▌")
+		}
+		line := lead + mark + st.ink(i == sel).Render(tilde(r.Title))
 		if run := m.recRun; run.rec == r.ID && run.out != "" {
 			line = " " + st.accent.Render("✓ ") + st.text.Render(tilde(run.out))
 			if run.failed {

@@ -300,6 +300,12 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   place when the row is 70 columns or more), so each starts at the same x
   on every row; the name takes what is left, cut with `…`. A ship's number
   is padded to the widest one read, so titles and tracks line up.
+- **Selection:** the selected row is on the `wash` across its whole pane,
+  every cell of it, with `▌` and its name in the accent; every other row's
+  name is `muted`, so the cursor is the brightest thing in a list. On a
+  one-column phone the opened block (the row and what it grows by) stands
+  between two hairlines. At night the wash is `night-wash` and the accent
+  stays.
 - **Keys:** each key is on a phone SSH key bar: digits, arrows, `Enter`,
   `Esc` and letters. No `Ctrl` combinations. `Enter` never runs a
   destructive step; that needs `x` and then a typed `y`.

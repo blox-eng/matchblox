@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -82,15 +84,24 @@ func (b *body) add(row int, lines ...string) {
 }
 
 // addRow adds the lines of one row, fitted to w, on the selected wash when
-// it is the selected row.
+// it is the selected row: every cell of it, the styled ones too.
 func (b *body) addRow(row int, selected bool, w int, st styles, lines ...string) {
 	for _, l := range lines {
 		l = fit(l, w)
 		if selected {
-			l = st.selected.Render(l)
+			l = paint(st.selected.Render(l), st.theme.AccentWash, w)
 		}
 		b.add(row, l)
 	}
+}
+
+// ink is the name of a row: the accent on the selected row, muted on every
+// other, so the cursor is the brightest thing in a list.
+func (st styles) ink(selected bool) lipgloss.Style {
+	if selected {
+		return st.accent
+	}
+	return st.muted
 }
 
 func plain(lines []string) body {

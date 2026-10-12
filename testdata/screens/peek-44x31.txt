@@ -13,8 +13,8 @@
  WAITS FOR YOU · 6
  │ spark-docs            done      9m   88%
  ╿ ember-billing         done      4m   32%
+────────────────────────────────────────────
 ▌╿ flint-auth            asks      2m   41%
-   “Should a refresh also rotate the token,
 ╭─ flint-auth asks · 1 of 2 ───────────────╮
 │ The refresh endpoint is in and its tests │
 │ pass. One choice is yours before I wire  │

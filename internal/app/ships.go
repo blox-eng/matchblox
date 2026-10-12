@@ -198,7 +198,7 @@ func (m Model) shipsPanel(w int) body {
 			mark = st.accent.Render("▌")
 		}
 		lines := []string{
-			spread(mark+padTo(st.accent.Render("#"+strconv.Itoa(sh.Number)), m.numW())+" "+st.text.Render(sh.Title), cutLeft(st.faint.Render(m.shipAge(sh)), 4)+" ", w),
+			spread(mark+padTo(st.accent.Render("#"+strconv.Itoa(sh.Number)), m.numW())+" "+st.ink(on).Render(sh.Title), cutLeft(st.faint.Render(m.shipAge(sh)), 4)+" ", w),
 			"   " + m.track(sh) + "  " + m.shipStyle(sh).Render(sh.Note),
 		}
 		if on && m.layoutAt(m.width) == Narrow {

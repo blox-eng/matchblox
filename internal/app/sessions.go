@@ -244,7 +244,15 @@ func (m Model) sessionRows(b *body, w int) {
 			group = g
 			b.add(-1, st.label.Render(fit(fmt.Sprintf(" %s · %d", groupNames[g], count[g]), w)))
 		}
-		b.addRow(base+i, i == sel, w, st, m.sessionRow(s, i == sel, w)...)
+		rows := m.sessionRow(s, i == sel, w)
+		if len(rows) > 1 {
+			// The opened block of a phone stands apart between hairlines.
+			b.add(-1, st.hair.Render(strings.Repeat("─", w)))
+		}
+		b.addRow(base+i, i == sel, w, st, rows...)
+		if len(rows) > 1 {
+			b.add(-1, st.hair.Render(strings.Repeat("─", w)))
+		}
 	}
 }
 
@@ -266,13 +274,13 @@ func (m Model) sessionRow(s sample.Session, sel bool, w int) []string {
 	t := m.sessTracks(w)
 	opens := sel && m.layoutAt(m.width) == Narrow
 	if !t.wide {
-		line := spread(mark+m.matchCell(s)+st.text.Render(s.Name), padTo(word, t.word)+cutLeft(wait, t.wait)+cutLeft(ctx, t.ctx)+" ", w)
+		line := spread(mark+m.matchCell(s)+st.ink(sel).Render(s.Name), padTo(word, t.word)+cutLeft(wait, t.wait)+cutLeft(ctx, t.ctx)+" ", w)
 		if !opens {
 			return []string{line}
 		}
 		return append([]string{line}, m.opened(s, w)...)
 	}
-	line := mark + m.matchCell(s) + st.text.Render(pad(s.Name, t.name)) + padTo(word, t.word) + cutLeft(wait, t.wait) + cutLeft(ctx, t.ctx)
+	line := mark + m.matchCell(s) + st.ink(sel).Render(pad(s.Name, t.name)) + padTo(word, t.word) + cutLeft(wait, t.wait) + cutLeft(ctx, t.ctx)
 	if t.plan > 0 {
 		plan := ""
 		switch {
