@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"sync"
@@ -12,7 +13,9 @@ import (
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/setup"
+	"github.com/blox-eng/matchblox/internal/ships"
 )
 
 // doneFor is how long an act that ran answers "already done" to the same
@@ -87,6 +90,10 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	if door {
 		key += "\x00" + a.Text
 	}
+	askPane, pick := strings.CutPrefix(a.RecID, "pick:")
+	if pick {
+		key += "\x00" + a.Text
+	}
 	pane, answer := strings.CutPrefix(a.RecID, "answer:")
 	if answer {
 		// The same text to a new question is a new answer: the key holds
@@ -102,6 +109,11 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	if door {
 		res := s.door(id, a)
 		ran = res.Err == ""
+		return res
+	}
+	if pick {
+		res := s.pick(ctx, askPane, a)
+		ran = len(res.Ran) > 0
 		return res
 	}
 	if answer {
@@ -174,6 +186,14 @@ func (s *Service) resolve(id, which string) (advice.Action, bool) {
 			}
 		}
 	}
+	if v, ok := strings.CutPrefix(id, "ship:"); ok && s.cur.Ships != nil {
+		// A ship that waits for your merge, as this service read it last.
+		for _, sh := range s.cur.Ships.Ships {
+			if sh.Repo+"#"+strconv.Itoa(sh.Number) == v && sh.Kind == ships.WaitsForYou && len(sh.Merge) > 0 {
+				return advice.Action{Label: "merge", Steps: [][]string{sh.Merge}, Destructive: true}, true
+			}
+		}
+	}
 	if path, ok := strings.CutPrefix(id, "worktree:"); ok && s.cur.Git != nil {
 		for _, r := range s.cur.Git.Repos {
 			for _, wt := range r.Worktrees {
@@ -192,6 +212,53 @@ func (s *Service) resolve(id, which string) (advice.Action, bool) {
 func answerAction(pane, text string) advice.Action {
 	g := advice.Guard{AnswerPane: pane}
 	return advice.Action{Label: "answer", Steps: panes.Send(pane, text), Destructive: true, Guards: []advice.Guard{g, g}}
+}
+
+// pick answers the question tool's call a session waits on, with the
+// choices the person made in the answer peek. Act.Text is a said.Answer.
+func (s *Service) pick(ctx context.Context, pane string, a proto.Act) proto.Result {
+	var ans said.Answer
+	if err := json.Unmarshal([]byte(a.Text), &ans); err != nil {
+		return proto.Result{Err: "the answer does not read: " + err.Error()}
+	}
+	ask, ok := s.askIn(pane)
+	if !ok {
+		return proto.Result{Err: "the session in " + pane + " no longer asks"}
+	}
+	if err := ask.Check(ans); err != nil {
+		return proto.Result{Err: err.Error()}
+	}
+	for _, c := range ans.Choices {
+		if c.Text == "" {
+			continue
+		}
+		if err := panes.CheckAnswer(c.Text); err != nil {
+			return proto.Result{Err: err.Error()}
+		}
+	}
+	// Only the first key is guarded: once the menu moved, the rest of the
+	// keys must follow it.
+	g := advice.Guard{AskPane: pane, AskID: ask.ID}
+	return s.Actions.Do(ctx, advice.Action{Label: "answer", Steps: panes.Pick(pane, ask, ans), Destructive: true,
+		Guards: []advice.Guard{g}}, a.Confirm)
+}
+
+// askIn is the question tool's call the session in a pane waits on.
+func (s *Service) askIn(pane string) (said.Ask, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, x := range s.cur.Sessions {
+		if x.Pane == pane && pane != "" && x.Ask != nil {
+			return *x.Ask, true
+		}
+	}
+	return said.Ask{}, false
+}
+
+// asking is the guard of a pick, checked right before its first key.
+func (s *Service) asking(pane, id string) bool {
+	ask, ok := s.askIn(pane)
+	return ok && ask.ID == id
 }
 
 // queued finds the queue item of a pane. Hold no lock.

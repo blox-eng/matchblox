@@ -32,6 +32,9 @@ type Runner struct {
 	// Answerable tells if the agent in a pane still waits for a typed
 	// answer (not at a permission prompt). Nil means never.
 	Answerable func(pane string) bool
+	// Asking tells if the agent in a pane still waits on the question
+	// tool's call id. Nil means never.
+	Asking func(pane, id string) bool
 	// Stokable reads a pane again for a stoker step: nil when it may be
 	// typed into. Nil means never.
 	Stokable func(pane string, typed bool) error
@@ -73,6 +76,9 @@ func (r Runner) guard(g advice.Guard) error {
 	}
 	if g.AnswerPane != "" && (r.Answerable == nil || !r.Answerable(g.AnswerPane)) {
 		return fmt.Errorf("the session in %s no longer waits for an answer", g.AnswerPane)
+	}
+	if g.AskPane != "" && (r.Asking == nil || !r.Asking(g.AskPane, g.AskID)) {
+		return fmt.Errorf("the session in %s no longer waits on that question", g.AskPane)
 	}
 	if g.StokePane != "" {
 		if r.Stokable == nil {

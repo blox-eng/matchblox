@@ -32,9 +32,13 @@ type Usage struct {
 	Window   int       `json:"window,omitempty"` // as the agent reports it; 0: not reported
 	At       time.Time `json:"at"`
 	Progress *Progress `json:"progress,omitempty"`
-	// LastLine and Asks are read from the newest reply with text.
+	// LastLine and Asks are read from the newest reply with text; Said is
+	// that reply, cut at maxSaid.
 	LastLine string `json:"last_line,omitempty"`
 	Asks     bool   `json:"asks,omitempty"`
+	Said     string `json:"said,omitempty"`
+	// Ask is the question tool's call that waits for its answer.
+	Ask *said.Ask `json:"ask,omitempty"`
 	// Out: the newest turn was refused by the plan's limit, which resets here.
 	Out time.Time `json:"out,omitzero"`
 	// Ended: the newest turn ended here and no line of a next one followed;
@@ -257,10 +261,65 @@ func lastUsage(path string, size int64) (Usage, bool) {
 				u.Progress = &p
 			}
 			u.LastLine, u.Asks = said.Reply(text)
+			u.Said = cut(strings.TrimSpace(said.Clean(text)), maxSaid)
 			decided = true
 		}
 	}
+	u.Ask = pendingAsk(lines)
 	return u, found
+}
+
+// maxSaid bounds what a session said: the answer peek shows nine lines.
+const maxSaid = 2000
+
+// cut keeps the first n runes of s.
+func cut(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n]) + "…"
+	}
+	return s
+}
+
+// pendingAsk is the question tool's call when it is the newest tool call
+// of the main thread and no result answers it yet.
+func pendingAsk(lines [][]byte) *said.Ask {
+	for i := len(lines) - 1; i >= 0; i-- {
+		l := lines[i]
+		if !bytes.Contains(l, []byte(`"tool_use"`)) || !bytes.Contains(l, []byte(`"assistant"`)) {
+			continue
+		}
+		var t struct {
+			Type        string `json:"type"`
+			IsSidechain bool   `json:"isSidechain"`
+			Message     struct {
+				Content []struct {
+					Type  string   `json:"type"`
+					ID    string   `json:"id"`
+					Name  string   `json:"name"`
+					Input said.Ask `json:"input"`
+				} `json:"content"`
+			} `json:"message"`
+		}
+		if json.Unmarshal(l, &t) != nil || t.Type != "assistant" || t.IsSidechain {
+			continue
+		}
+		for _, c := range t.Message.Content {
+			if c.Type != "tool_use" || c.Name != said.AskTool || c.ID == "" || len(c.Input.Questions) == 0 {
+				continue
+			}
+			answer := []byte(`"tool_use_id":"` + c.ID + `"`)
+			for _, later := range lines[i+1:] {
+				if bytes.Contains(later, answer) {
+					return nil
+				}
+			}
+			ask := c.Input
+			ask.ID = c.ID
+			return &ask
+		}
+		return nil
+	}
+	return nil
 }
 
 // turnEnd reads one line, newest first, until it tells whether the turn

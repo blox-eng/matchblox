@@ -22,6 +22,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/ships"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -811,10 +812,65 @@ func TestShipsReachTheConsole(t *testing.T) {
 			if st.Ships.InFlight != 1 || st.Ships.Ships[0].Number != 7 || len(st.Ships.Ships[0].Merge) != 7 {
 				t.Fatalf("ships %+v", st.Ships)
 			}
-			return
+			break
 		}
 		if time.Now().After(deadline) {
 			t.Fatal("no ships in the state")
 		}
+	}
+	// x on a ship that waits for your merge: its merge, after a typed y.
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	for _, a := range []proto.Act{{RecID: "ship:o/r#7", Which: "secondary"}, {RecID: "ship:o/r#8", Which: "secondary", Confirm: "y"}} {
+		if res := s.act(ctx, a); res.Err == "" {
+			t.Fatalf("%+v ran: %+v", a, res)
+		}
+	}
+	if res := s.act(ctx, proto.Act{RecID: "ship:o/r#7", Which: "secondary", Confirm: "y"}); res.Err != "" ||
+		fmt.Sprint(ran) != "[[gh pr merge 7 --squash -R o/r]]" {
+		t.Fatalf("res %+v ran %q", res, ran)
+	}
+}
+
+// TestPickDrivesTheQuestionMenu: a pick goes to the pane as the question
+// tool's keys, after its own check of the call it answers; a pick of
+// another call, an option the call lacks, or one with no confirm runs
+// nothing.
+func TestPickDrivesTheQuestionMenu(t *testing.T) {
+	s := newTest(t, time.Hour)
+	ask := &said.Ask{ID: "toolu_1", Questions: []said.Question{{Question: "Which next?", Options: []said.Option{{Label: "a"}, {Label: "b"}}}}}
+	s.sample = func() sample.Snapshot {
+		return sample.Snapshot{At: time.Now(), Sessions: []sample.Session{{Pane: "%1", Name: "app", Ask: ask}}}
+	}
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	ctx := run(t, s)
+	for deadline := time.Now().Add(5 * time.Second); !s.asking("%1", "toolu_1"); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the service never sampled the question")
+		}
+	}
+	pick := func(id string, picks ...int) string {
+		b, _ := json.Marshal(said.Answer{ID: id, Choices: []said.Choice{{Picks: picks}}})
+		return string(b)
+	}
+	for _, a := range []proto.Act{
+		{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_0", 1)},
+		{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_1", 3)},
+		{RecID: "pick:%1", Text: pick("toolu_1", 2)},
+		{RecID: "pick:%2", Confirm: "y", Text: pick("toolu_1", 2)},
+	} {
+		if res := s.act(ctx, a); res.Err == "" {
+			t.Fatalf("%+v ran: %+v", a, res)
+		}
+	}
+	if len(ran) != 0 {
+		t.Fatalf("ran %q", ran)
+	}
+	if res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_1", 2)}); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if want := [][]string{{"tmux", "send-keys", "-t", "%1", "2"}}; fmt.Sprint(ran) != fmt.Sprint(want) {
+		t.Fatalf("ran %q, want %q", ran, want)
 	}
 }

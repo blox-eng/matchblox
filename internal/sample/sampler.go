@@ -64,8 +64,12 @@ type Session struct {
 	LastLine string `json:"last_line,omitempty"`
 	Asks     bool   `json:"asks,omitempty"`
 	// Permits: an approval menu, where Enter takes the selected choice.
-	Permits  bool `json:"permits,omitempty"`
-	FromPane bool `json:"from_pane,omitempty"` // busy and idle were read from the pane
+	Permits bool `json:"permits,omitempty"`
+	// Said is the newest reply with text, whole up to a bound; Ask is the
+	// question tool's call it waits on (Claude Code).
+	Said     string    `json:"said,omitempty"`
+	Ask      *said.Ask `json:"ask,omitempty"`
+	FromPane bool      `json:"from_pane,omitempty"` // busy and idle were read from the pane
 	// Out: the plan's limit stops the session until here (its turn was
 	// refused, or its account's window is spent); zero when it can work.
 	Out time.Time `json:"out,omitzero"`
@@ -116,6 +120,7 @@ type Machine struct {
 	TempC      float64             `json:"temp_c"`
 	Power      []procfs.PowerLimit `json:"power_limits"`
 	GPUs       []GPU               `json:"gpus"`
+	Disks      []Disk              `json:"disks,omitempty"`
 }
 
 type Snapshot struct {
@@ -212,6 +217,7 @@ type Sampler struct {
 	// only the panes of agents without an adapter.
 	Capture       func(panes []string) map[string]string
 	GPU           func() ([]byte, error) // nil: no GPUs
+	Disks         func() []Disk          // nil: no disks
 	Docker        func() ([]byte, error) // nil: no containers
 	Cfg           config.Config
 	Agents        []string // process names that are agent sessions
@@ -410,6 +416,9 @@ func (s *Sampler) sampleMachine(snap *Snapshot, dt float64) {
 	}
 	m.TempC = procfs.ReadTemp(s.sensors)
 	m.Power = s.power
+	if s.Disks != nil {
+		m.Disks = s.Disks()
+	}
 }
 
 // sampleLatency measures a TCP connect at most every 10 s: no root and no
@@ -851,6 +860,7 @@ func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procK
 		return
 	}
 	sess.Progress, sess.LastLine, sess.Asks, sess.turnAt = u.Progress, u.LastLine, u.Asks, u.At
+	sess.Said, sess.Ask = u.Said, u.Ask
 	if !u.Ended.IsZero() && sess.Busy {
 		// Claude Code's registry says busy while background work runs; the
 		// transcript says whether a turn does. A subagent still working
