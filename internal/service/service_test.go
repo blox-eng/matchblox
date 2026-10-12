@@ -20,6 +20,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/limits"
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/said"
@@ -842,6 +843,9 @@ func TestPickDrivesTheQuestionMenu(t *testing.T) {
 	s.sample = func() sample.Snapshot {
 		return sample.Snapshot{At: time.Now(), Sessions: []sample.Session{{Pane: "%1", Name: "app", Ask: ask}}}
 	}
+	s.Capture = func([]string) map[string]string {
+		return map[string]string{"%1": "Which next?\n❯ 1. a\n  2. b\n  3. Type something.\n"}
+	}
 	var ran [][]string
 	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
 	ctx := run(t, s)
@@ -872,5 +876,130 @@ func TestPickDrivesTheQuestionMenu(t *testing.T) {
 	}
 	if want := [][]string{{"tmux", "send-keys", "-t", "%1", "2"}}; fmt.Sprint(ran) != fmt.Sprint(want) {
 		t.Fatalf("ran %q, want %q", ran, want)
+	}
+}
+
+// pickTest is a service whose session in %1 asks two questions, with the
+// pane's screen in *screen and every key it ran in *ran.
+func pickTest(t *testing.T) (s *Service, ctx context.Context, screen *string, ran *[][]string, mu *sync.Mutex) {
+	t.Helper()
+	old := menuWait
+	menuWait = 200 * time.Millisecond
+	t.Cleanup(func() { menuWait = old })
+	s = newTest(t, time.Hour)
+	ask := &said.Ask{ID: "toolu_1", Questions: []said.Question{
+		{Question: "Which cache?", Options: []said.Option{{Label: "Redis"}, {Label: "Memory"}}},
+		{Question: "Which parts?", Options: []said.Option{{Label: "Sessions"}, {Label: "Tokens"}}, Multi: true},
+	}}
+	s.sample = func() sample.Snapshot {
+		return sample.Snapshot{At: time.Now(), Sessions: []sample.Session{{Pane: "%1", Name: "app", Ask: ask}}}
+	}
+	mu, ran, screen = &sync.Mutex{}, &[][]string{}, new(string)
+	*screen = pickPage1
+	s.Capture = func([]string) map[string]string {
+		mu.Lock()
+		defer mu.Unlock()
+		return map[string]string{"%1": *screen}
+	}
+	s.Actions.Run = func(argv []string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		*ran = append(*ran, argv)
+		return nil
+	}
+	ctx = run(t, s)
+	for deadline := time.Now().Add(5 * time.Second); !s.asking("%1", "toolu_1"); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the service never sampled the question")
+		}
+	}
+	return s, ctx, screen, ran, mu
+}
+
+const (
+	pickPage1  = "Which cache?\n❯ 1. Redis\n  2. Memory\n  3. Type something.\n"
+	pickPage2  = "Which parts?\n❯ 1. [ ] Sessions\n  2. [ ] Tokens\n  3. [ ] Type something\n     Next\n"
+	pickReview = "Ready to submit your answers?\n❯ 1. Submit answers\n  2. Cancel\n"
+)
+
+func twoPicks(picks ...int) string {
+	b, _ := json.Marshal(said.Answer{ID: "toolu_1", Choices: []said.Choice{{Picks: picks[:1]}, {Picks: picks[1:]}}})
+	return string(b)
+}
+
+// A person answered question 1 in the pane: the pane shows question 2, so
+// the pick sends nothing (review of #68, finding 2).
+func TestPickChecksThePaneBeforeEachPage(t *testing.T) {
+	s, ctx, screen, ran, mu := pickTest(t)
+	mu.Lock()
+	*screen = pickPage2
+	mu.Unlock()
+	res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2)})
+	if len(*ran) != 0 || len(res.Skipped) != 1 || !strings.Contains(res.Skipped[0], "does not show question 1") {
+		t.Fatalf("ran %q: %+v", *ran, res)
+	}
+}
+
+// The pane stays on question 1 after its keys (the key was lost): the pick
+// stops before question 2's keys.
+func TestPickStopsWhenThePageDoesNotMove(t *testing.T) {
+	s, ctx, _, ran, _ := pickTest(t)
+	res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2)})
+	if want := [][]string{{"tmux", "send-keys", "-t", "%1", "1"}, panes.Pause}; fmt.Sprint(*ran) != fmt.Sprint(want) {
+		t.Fatalf("ran %q, want %q", *ran, want)
+	}
+	if len(res.Skipped) != 1 || !strings.Contains(res.Skipped[0], "does not show question 2") {
+		t.Fatalf("result %+v", res)
+	}
+}
+
+// The pane moves through the pages as the keys go: every page's keys run,
+// the last one the review page's.
+func TestPickFollowsThePages(t *testing.T) {
+	s, ctx, screen, ran, mu := pickTest(t)
+	s.Actions.Run = func(argv []string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		*ran = append(*ran, argv)
+		switch k := argv[len(argv)-1]; {
+		case len(*ran) == 1 && k == "1":
+			*screen = pickPage2
+		case k == "Enter":
+			*screen = pickReview
+		}
+		return nil
+	}
+	if res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2)}); res.Err != "" || len(res.Skipped) > 0 {
+		t.Fatalf("result %+v", res)
+	}
+	if n := len(*ran); n == 0 || fmt.Sprint((*ran)[n-1]) != fmt.Sprint([]string{"tmux", "send-keys", "-t", "%1", "1"}) {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// Two consoles' picks to one pane never interleave their keys.
+func TestKeysToOnePaneNeverInterleave(t *testing.T) {
+	s, ctx, _, _, _ := pickTest(t)
+	var mu sync.Mutex
+	inside, most := 0, 0
+	s.Actions.Run = func(argv []string) error {
+		mu.Lock()
+		inside++
+		most = max(most, inside)
+		mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
+		mu.Lock()
+		inside--
+		mu.Unlock()
+		return nil
+	}
+	done := make(chan proto.Result)
+	for _, picks := range [][]int{{1, 2}, {2, 1}} {
+		go func() { done <- s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(picks...)}) }()
+	}
+	<-done
+	<-done
+	if most != 1 {
+		t.Fatalf("the keys of two picks overlapped (%d at once)", most)
 	}
 }

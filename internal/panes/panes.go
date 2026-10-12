@@ -42,8 +42,10 @@ var Pause = []string{"sleep", "0.3"}
 //     whose first row, "Submit answers", sends them all.
 //
 // Text is only typed while the menu's own field has the cursor. ans must
-// have passed ask.Check.
-func Pick(target string, ask said.Ask, ans said.Answer) [][]string {
+// have passed ask.Check. pages are the steps where each page's keys start:
+// one per question, then the review page when there is one. Each must be
+// checked on the screen before its keys go.
+func Pick(target string, ask said.Ask, ans said.Answer) (steps [][]string, pages []int) {
 	key := func(keys ...string) []string {
 		return append([]string{"tmux", "send-keys", "-t", target}, keys...)
 	}
@@ -55,8 +57,8 @@ func Pick(target string, ask said.Ask, ans said.Answer) [][]string {
 		}
 		return key(keys...)
 	}
-	var steps [][]string
 	for i, q := range ask.Questions {
+		pages = append(pages, len(steps))
 		c, n := ans.Choices[i], len(q.Options)
 		switch {
 		case !q.Multi && c.Text == "":
@@ -77,9 +79,10 @@ func Pick(target string, ask said.Ask, ans said.Answer) [][]string {
 		steps = append(steps, Pause)
 	}
 	if len(ask.Questions) == 1 && !ask.Questions[0].Multi {
-		return steps[:len(steps)-1] // the pick sends it: no review page
+		return steps[:len(steps)-1], pages // the pick sends it: no review page
 	}
-	return append(steps, key("1"))
+	pages = append(pages, len(steps))
+	return append(steps, key("1")), pages
 }
 
 // CheckAnswer refuses a text that is not one short line: a new line or a

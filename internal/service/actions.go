@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -126,7 +127,9 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		case it.State == queue.StatePermission:
 			return proto.Result{Err: "a permission prompt is answered in its pane: Enter goes there"}
 		}
+		release := s.holdPane(pane)
 		res := s.Actions.Do(ctx, answerAction(pane, a.Text), a.Confirm)
+		release()
 		ran = len(res.Ran) > 0
 		return res
 	}
@@ -236,11 +239,53 @@ func (s *Service) pick(ctx context.Context, pane string, a proto.Act) proto.Resu
 			return proto.Result{Err: err.Error()}
 		}
 	}
-	// Only the first key is guarded: once the menu moved, the rest of the
-	// keys must follow it.
-	g := advice.Guard{AskPane: pane, AskID: ask.ID}
-	return s.Actions.Do(ctx, advice.Action{Label: "answer", Steps: panes.Pick(pane, ask, ans), Destructive: true,
-		Guards: []advice.Guard{g}}, a.Confirm)
+	// Each page is guarded: the call still waits, and the pane, captured
+	// right before the page's keys, shows that page. A person who answered
+	// in the pane, or another console's pick, stops it there.
+	steps, pages := panes.Pick(pane, ask, ans)
+	guards := make([]advice.Guard, len(steps))
+	for i, at := range pages {
+		guards[at] = advice.Guard{AskPane: pane, AskID: ask.ID, Page: i + 1}
+	}
+	defer s.holdPane(pane)()
+	return s.Actions.Do(ctx, advice.Action{Label: "answer", Steps: steps, Destructive: true, Guards: guards}, a.Confirm)
+}
+
+// menuWait is how long a page's guard waits for the pane to draw the page:
+// the menu redraws a moment after the keys of the page before it.
+var menuWait = 2 * time.Second
+
+// menu is the guard of a pick's page: the pane, captured now, shows page
+// (from 1) of the call id, the question or the review page after the last.
+func (s *Service) menu(pane, id string, page int) error {
+	ask, ok := s.askIn(pane)
+	if !ok || ask.ID != id || page < 1 || page > len(ask.Questions)+1 {
+		return fmt.Errorf("the session in %s no longer waits on that question", pane)
+	}
+	for deadline := time.Now().Add(menuWait); ; time.Sleep(100 * time.Millisecond) {
+		screen, read := s.Capture([]string{pane})[pane]
+		switch {
+		case !read:
+			return fmt.Errorf("the pane %s cannot be read", pane)
+		case page <= len(ask.Questions) && said.ShowsQuestion(screen, ask.Questions[page-1]),
+			page > len(ask.Questions) && said.ShowsReview(screen):
+			return nil
+		case time.Now().After(deadline):
+			if page > len(ask.Questions) {
+				return fmt.Errorf("the pane %s does not show the answers to submit", pane)
+			}
+			return fmt.Errorf("the pane %s does not show question %d", pane, page)
+		}
+	}
+}
+
+// holdPane makes the keys of one act to a pane one sequence: two consoles
+// that answer the same pane take turns. It returns the release.
+func (s *Service) holdPane(pane string) func() {
+	v, _ := s.panes.LoadOrStore(pane, &sync.Mutex{})
+	mu := v.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
 }
 
 // askIn is the question tool's call the session in a pane waits on.
