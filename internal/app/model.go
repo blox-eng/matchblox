@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -212,7 +213,8 @@ type Model struct {
 	previewTop int    // the first line of a door's diff on screen
 	paneSel    int
 	peek       *peek             // the answer peek, over the screen
-	peekSent   string            // the act of the peek's last send: its result says only a failure
+	peekSent   map[string]string // the peek's sends in flight: act id -> the session's name
+	peekQuiet  time.Time         // the peek takes no key until then: it just moved
 	changes    map[string]change // pane -> a match change that plays once
 	animating  bool
 	hist       history.Series
@@ -428,12 +430,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case resultMsg:
 		m.endRec(msg.ActID, proto.Result(msg))
-		if r := proto.Result(msg); r.ActID == m.peekSent && r.ActID != "" {
-			// The toast said where the answer went; only a failure says more.
-			if r.Err != "" || len(r.Skipped) > 0 {
-				m.flash = tilde(describe(r))
+		if r := proto.Result(msg); m.peekSent[r.ActID] != "" {
+			name := m.peekSent[r.ActID]
+			m.peekSent = maps.Clone(m.peekSent)
+			delete(m.peekSent, r.ActID)
+			why := r.Err
+			if n := len(r.Skipped); n > 0 && why == "" {
+				why = r.Skipped[n-1]
 			}
-			return m, m.recv()
+			if why != "" {
+				m.toast, m.flash = "", tilde("not sent to "+name+": "+why)
+				return m, m.recv()
+			}
+			return m, tea.Batch(m.recv(), m.say("sent to "+name))
 		}
 		if m.tally(proto.Result(msg)) {
 			return m, m.recv()

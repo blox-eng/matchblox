@@ -3,9 +3,11 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -25,8 +27,8 @@ import (
 type peek struct {
 	pane string
 	// The question tool's call: the question on screen, the row under the
-	// cursor (the typing row after the options), the options ticked (from
-	// 1), and the answers to the questions before it.
+	// cursor (the typing row after the options; -1 none), the options
+	// ticked (from 1), and the answers to the questions before it.
 	askID   string
 	q, at   int
 	ticks   map[int]bool
@@ -58,7 +60,8 @@ func (m Model) peekNow() (peekView, peek, bool) {
 		it, _ := m.waitOf(s)
 		v.permit = it.State == queue.StatePermission
 	} else if p.askID != s.Ask.ID {
-		p = peek{pane: p.pane, askID: s.Ask.ID}
+		// A new call: nothing is picked until the person picks it.
+		p = peek{pane: p.pane, askID: s.Ask.ID, at: -1}
 	}
 	return v, p, true
 }
@@ -80,6 +83,9 @@ func (m *Model) openPeek(pane string) {
 	m.peek, m.flash = &peek{pane: pane}, ""
 	if s, ok := m.sessionIn(pane); ok {
 		m.chose, m.selPID = true, s.PID
+		if s.Ask != nil {
+			m.peek.askID = s.Ask.ID
+		}
 	}
 }
 
@@ -98,11 +104,18 @@ func (m Model) peekQueue(pane string) []sample.Session {
 	return out
 }
 
+// peekQuiet is how long the peek takes no key after it moved to another
+// session: a second Enter, a key repeat or a buffered tap meant for the
+// question before must not answer one the person has not read.
+const peekQuiet = 400 * time.Millisecond
+
 // peekNext moves the peek to the next session that waits, or closes it.
+// Nothing is picked on the next one, and keys wait a moment.
 func (m Model) peekNext(pane string) Model {
 	m.peek = nil
 	if next := m.peekQueue(pane); len(next) > 0 {
 		m.openPeek(next[0].Pane)
+		m.peek.at, m.peekQuiet = -1, time.Now().Add(peekQuiet)
 	}
 	return m
 }
@@ -123,6 +136,9 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	typing := v.ask == nil || p.at == n
 	key := k.String()
+	if time.Now().Before(m.peekQuiet) && key != "esc" && key != "ctrl+c" {
+		return m, nil
+	}
 	switch {
 	case key == "esc":
 		m.peek = nil
@@ -159,7 +175,11 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case typing:
 			c.Text = p.text
-		case !q.Multi || len(c.Picks) == 0:
+		case q.Multi && len(c.Picks) > 0:
+		case p.at < 0:
+			m.flash = "pick an option"
+			return m, nil
+		default:
 			c.Picks = []int{p.at + 1}
 		}
 		return m.peekChoose(v, p, c)
@@ -180,7 +200,7 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		default:
 			return m.peekChoose(v, p, said.Choice{Picks: []int{d}})
 		}
-	case !typing && (key == "space" || key == " ") && q.Multi:
+	case !typing && (key == "space" || key == " ") && q.Multi && p.at >= 0:
 		p.ticks = toggled(p.ticks, p.at+1)
 	case k.Text != "" && len([]rune(p.text)) < 500:
 		p.at, p.text = n, p.text+k.Text
@@ -215,16 +235,21 @@ func (m Model) peekChoose(v peekView, p peek, c said.Choice) (tea.Model, tea.Cmd
 	return m.sendPeek(v.s, "pick:"+p.pane, string(b))
 }
 
-// sendPeek sends the answer the peek shows, says so in a toast, and moves
-// the peek on.
+// sendPeek sends the answer the peek shows and moves the peek on. The
+// toast says "sent to" only when the result says every key went; a guard
+// that stopped it says why on the key line.
 func (m Model) sendPeek(s sample.Session, rec, text string) (tea.Model, tea.Cmd) {
 	if m.conn == nil || m.lost {
 		m.flash = "not sent, no connection: the answer to " + s.Name
 		return m, nil
 	}
 	cmd := m.send(proto.Act{RecID: rec, Which: "secondary", Confirm: "y", Text: text})
-	m.peekSent = "a" + strconv.Itoa(m.acts)
-	toast := m.say("sent to " + s.Name)
+	m.peekSent = maps.Clone(m.peekSent)
+	if m.peekSent == nil {
+		m.peekSent = map[string]string{}
+	}
+	m.peekSent["a"+strconv.Itoa(m.acts)] = s.Name
+	toast := m.say("sending to " + s.Name + "…")
 	return m.peekNext(s.Pane), tea.Batch(cmd, toast)
 }
 

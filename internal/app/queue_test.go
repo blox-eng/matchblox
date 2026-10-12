@@ -132,8 +132,73 @@ func TestThePeekSendsOnEnter(t *testing.T) {
 		t.Fatalf("acts %+v", acts)
 	}
 	nm := next.(Model)
-	if nm.toast != "sent to app-review" || nm.peek == nil || nm.peek.pane != "%1" {
+	if nm.toast != "sending to app-review…" || nm.peek == nil || nm.peek.pane != "%1" {
 		t.Fatalf("toast %q peek %+v: the peek moves to app-feature", nm.toast, nm.peek)
+	}
+	next, _ = next.Update(resultMsg(proto.Result{ActID: "a1", Ran: [][]string{{"tmux"}}}))
+	if nm := next.(Model); nm.toast != "sent to app-review" || nm.flash != "" {
+		t.Fatalf("after the result: toast %q flash %q", nm.toast, nm.flash)
+	}
+}
+
+// A send whose guard stopped it never toasts "sent to": the key line says
+// it was not sent, and why (review of #68, finding 1).
+func TestThePeekSaysWhenNothingWasSent(t *testing.T) {
+	m, _ := loadedWith(t, 100, queueState())
+	m, _ = func() (Model, tea.Cmd) { n, c := key(m, "down"); return n.(Model), c }()
+	next, _ := key(m, "a")
+	next = typeText(next, "yes")
+	next, _ = key(next, "enter")
+	next, _ = next.Update(resultMsg(proto.Result{ActID: "a1", Skipped: []string{"the session in %2 no longer waits for an answer"}}))
+	nm := next.(Model)
+	if strings.Contains(nm.toast, "sent to") || nm.flash != "not sent to app-review: the session in %2 no longer waits for an answer" {
+		t.Fatalf("toast %q flash %q", nm.toast, nm.flash)
+	}
+	if out := ansi.Strip(nm.render()); !strings.Contains(out, "not sent to app-review") {
+		t.Fatalf("the key line does not say it:\n%s", out)
+	}
+}
+
+// After a send the peek moves to the next session with nothing picked: a
+// second Enter (a double tap, a key repeat) answers nothing, and keys wait
+// a moment (review of #68, finding 3).
+func TestASecondEnterNeverAnswersTheNextQuestion(t *testing.T) {
+	st := queueState()
+	for i := range st.Sessions {
+		st.Sessions[i].Ask = &said.Ask{ID: "toolu_" + st.Sessions[i].Pane, Questions: []said.Question{
+			{Question: "Delete the branch?", Options: []said.Option{{Label: "Delete it"}, {Label: "Keep it"}}}}}
+	}
+	m, f := loadedWith(t, 86, st)
+	m, _ = func() (Model, tea.Cmd) { n, c := key(m, "down"); return n.(Model), c }()
+	next, _ := key(m, "a")
+	first := next.(Model).peek.pane
+	next, cmd := key(next, "1")
+	drain(cmd)
+	if len(f.acts()) != 1 || next.(Model).peek == nil || next.(Model).peek.pane == first {
+		t.Fatalf("the pick did not go or the peek did not move: %+v", f.acts())
+	}
+	for _, k := range []string{"enter", "1", "enter"} {
+		var cmd tea.Cmd
+		next, cmd = key(next, k)
+		drain(cmd)
+	}
+	if len(f.acts()) != 1 {
+		t.Fatalf("keys within the quiet moment answered the next question: %+v", f.acts())
+	}
+	nm := next.(Model)
+	nm.peekQuiet = time.Time{} // the moment passed
+	next, cmd = key(nm, "enter")
+	drain(cmd)
+	if len(f.acts()) != 1 || next.(Model).flash != "pick an option" {
+		t.Fatalf("an Enter with nothing picked sent %+v (flash %q)", f.acts(), next.(Model).flash)
+	}
+	if out := ansi.Strip(next.(Model).render()); strings.Contains(out, "› 1 Delete it") {
+		t.Fatalf("an option is picked on the next session:\n%s", out)
+	}
+	next, cmd = key(next, "2")
+	drain(cmd)
+	if len(f.acts()) != 2 {
+		t.Fatalf("a digit after the moment did not pick: %+v", f.acts())
 	}
 }
 

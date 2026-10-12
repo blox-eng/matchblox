@@ -35,13 +35,17 @@ type Runner struct {
 	// Asking tells if the agent in a pane still waits on the question
 	// tool's call id. Nil means never.
 	Asking func(pane, id string) bool
+	// Menu reads a pane again: nil when it shows page page (from 1) of the
+	// question tool's call id. Nil means never.
+	Menu func(pane, id string, page int) error
 	// Stokable reads a pane again for a stoker step: nil when it may be
 	// typed into. Nil means never.
 	Stokable func(pane string, typed bool) error
 }
 
-// Do runs each step whose guard still holds and records why it skipped the
-// others. A destructive action runs only with confirm "y".
+// Do runs the steps in order, each after its guard. A guard that fails
+// stops the action there and says why in Skipped; in an Each action it
+// skips only its own step. A destructive action runs only with confirm "y".
 func (r Runner) Do(ctx context.Context, a advice.Action, confirm string) proto.Result {
 	if a.Destructive && confirm != "y" {
 		return proto.Result{Err: "needs confirm"}
@@ -54,6 +58,10 @@ func (r Runner) Do(ctx context.Context, a advice.Action, confirm string) proto.R
 	for i, step := range a.Steps {
 		if i < len(a.Guards) {
 			if err := r.guard(a.Guards[i]); err != nil {
+				if !a.Each {
+					res.Skipped = append(res.Skipped, err.Error())
+					return res
+				}
 				res.Skipped = append(res.Skipped, strings.Join(step, " ")+": "+err.Error())
 				continue
 			}
@@ -79,6 +87,14 @@ func (r Runner) guard(g advice.Guard) error {
 	}
 	if g.AskPane != "" && (r.Asking == nil || !r.Asking(g.AskPane, g.AskID)) {
 		return fmt.Errorf("the session in %s no longer waits on that question", g.AskPane)
+	}
+	if g.AskPane != "" && g.Page > 0 {
+		if r.Menu == nil {
+			return fmt.Errorf("the pane %s cannot be read", g.AskPane)
+		}
+		if err := r.Menu(g.AskPane, g.AskID, g.Page); err != nil {
+			return err
+		}
 	}
 	if g.StokePane != "" {
 		if r.Stokable == nil {
