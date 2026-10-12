@@ -443,7 +443,7 @@ func TestReplay(t *testing.T) {
 	morning := time.Date(2026, 10, 2, 6, 59, 50, 0, time.UTC)
 	steps := []step{
 		{name: "the queue", at: 1300 * time.Millisecond, ok: has("ws-1", "WAITING FOR YOU", "flint-auth", "waits",
-			"kindle-web", "needs your permission", "#212", "ember-billing", "done", "1 match", "2 sparks")},
+			"kindle-web", "needs your permission", "#212", "ember-billing", "done", "5h ", "wk ")},
 		{name: "a: the answer field", at: 3800 * time.Millisecond, key: "a", ok: has("flint-auth")},
 	}
 	at := 3800 * time.Millisecond
@@ -464,7 +464,7 @@ func TestReplay(t *testing.T) {
 			return has("hearth-api", "spark-docs", "! compact", "88%", "kindle-web", "ember-bill", "cinder-ci", "wick-mobile", "codex", "opencode")(s) &&
 				burning.MatchString(s)
 		}},
-		{name: "the limits and what to do", at: 11 * time.Second, key: "1", ok: has("Max", "1 match", "2 sparks", "RECOMMENDATIONS",
+		{name: "the limits and what to do", at: 11 * time.Second, key: "1", ok: has("Max", "5h ", "wk ", "RECOMMENDATIONS",
 			"The week runs short: compact spark-docs")},
 	}...)
 	// seek presses j until the screen shows what ok wants: where the
@@ -480,7 +480,7 @@ func TestReplay(t *testing.T) {
 			}
 		}
 	}
-	weekRec := has("The week runs short: compact spark-docs", "sparks left", "x send /compact, asks y")
+	weekRec := has("The week runs short: compact spark-docs", "of the week used", "x send /compact, asks y")
 	steps = append(steps, step{name: "the rec selected", at: 12500 * time.Millisecond, do: seek(weekRec), ok: weekRec})
 	steps = append(steps, []step{
 		{name: "the compact, guarded", at: 14 * time.Second, key: "x", ok: has("tmux send-keys -t %3 /compact Enter", "y run")},

@@ -73,7 +73,7 @@ func TestEachAccountShowsItsLimits(t *testing.T) {
 	got := byAccount(snap)
 
 	max := got["anthropic builder@example.com · Max"]
-	if max.State != limits.Measured || max.Source != limits.SourceClaude || *max.Matches != 4 || *max.Sparks != 6 {
+	if us := max.Uses(fixtureNow); max.State != limits.Measured || max.Source != limits.SourceClaude || len(us) != 2 || us[0].Pct != 28 || us[1].Pct != 40 {
 		t.Fatalf("the tapped account: %+v", max)
 	}
 	team := got["anthropic work@example.net · Team"]
@@ -82,7 +82,7 @@ func TestEachAccountShowsItsLimits(t *testing.T) {
 		t.Fatalf("the account without a tap: %+v", team)
 	}
 	plus := got["openai builder@example.org · Plus"]
-	if plus.State != limits.Measured || *plus.Matches != 2 || *plus.Sparks != 9 || !plus.At.Equal(fixtureNow.Add(-5*time.Minute)) {
+	if us := plus.Uses(fixtureNow); plus.State != limits.Measured || len(us) != 2 || us[0].Pct != 61 || us[1].Pct != 12 || !plus.At.Equal(fixtureNow.Add(-5*time.Minute)) {
 		t.Fatalf("codex: %+v", plus)
 	}
 	for k := range got {
@@ -103,10 +103,11 @@ func TestEachAccountShowsItsLimits(t *testing.T) {
 		t.Fatalf("lines are not in a stable order: %+v", snap.Limits)
 	}
 
-	// A Go plan has a month: it shows its percent, not matches.
+	// A Go plan has a month: it shows as the month.
 	os.WriteFile(rollout, []byte(codexRollout("gpt-made-up", 51680, 258400)+
 		codexLimits(fixtureNow.Add(-time.Minute), `"primary":{"used_percent":47,"window_minutes":43200,"resets_at":`+itoa(fixtureNow.Add(9*24*time.Hour).Unix())+`},"secondary":null`)), 0o644)
-	if go_ := byAccount(smp.Sample())["openai builder@example.org · Plus"]; go_.Matches != nil || len(go_.Other) != 1 {
+	go_ := byAccount(smp.Sample())["openai builder@example.org · Plus"]
+	if us := go_.Uses(fixtureNow); len(us) != 1 || us[0].Name != "mo" || us[0].Pct != 47 {
 		t.Fatalf("a month: %+v", go_)
 	}
 }

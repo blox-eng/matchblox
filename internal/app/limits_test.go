@@ -16,12 +16,13 @@ import (
 func limitsState() proto.State {
 	st := queueState()
 	at := st.At
-	n := func(i int) *int { return &i }
 	st.Limits = []limits.Account{
-		{Provider: "anthropic", Account: "builder@example.com · Max", State: limits.Measured, At: at,
-			Matches: n(4), Sparks: n(8), Forecast: &limits.Outlook{Lasts: true}},
-		{Provider: "openai", Account: "builder@example.org · Plus", State: limits.Measured, At: at,
-			Matches: n(5), Sparks: n(2), SparksReset: at.Add(5 * 24 * time.Hour), Forecast: &limits.Outlook{Out: at.Add(26 * time.Hour)}},
+		{Provider: "anthropic", Account: "builder@example.com · Max", State: limits.Measured, At: at, Forecast: &limits.Outlook{Lasts: true},
+			Windows: []limits.Window{{UsedPct: 62, Minutes: limits.BoxMinutes, ResetsAt: at.Add(2 * time.Hour)},
+				{UsedPct: 41, Minutes: limits.WeekMinutes, ResetsAt: at.Add(3 * 24 * time.Hour)}}},
+		{Provider: "openai", Account: "builder@example.org · Plus", State: limits.Measured, At: at, Forecast: &limits.Outlook{Out: at.Add(26 * time.Hour)},
+			Windows: []limits.Window{{UsedPct: 12, Minutes: limits.BoxMinutes, ResetsAt: at.Add(4 * time.Hour)},
+				{UsedPct: 92, Minutes: limits.WeekMinutes, ResetsAt: at.Add(5 * 24 * time.Hour)}}},
 		{Provider: "anthropic", Account: "work@example.net · Team", State: limits.Unmeasured, Fix: "open the door “Show your limits”"},
 	}
 	return st
@@ -39,13 +40,13 @@ func TestEachAccountHasALimitsLine(t *testing.T) {
 		want []string
 	}{
 		{80, []string{
-			" ✻ builder  4 matches · 8 sparks · lasts the week",
+			" ✻ builder  5h 62% · wk 41% · lasts the week",
 			" ✻ work     not measured · open the door “Show your limits”",
-			" ❋ Plus     5 matches · 2 sparks until ",
+			" ❋ Plus     5h 12% · wk 92% until ",
 		}},
 		{40, []string{
-			" ✻ 4 matches · 8 sparks · lasts the week",
-			" ❋ 5 matches · 2 sparks · out " + out,
+			" ✻ 5h 62% · wk 41% · lasts the week",
+			" ❋ 5h 12% · wk 92% · out " + out,
 		}},
 	} {
 		m, _ := loadedWith(t, c.w, limitsState())
@@ -96,7 +97,7 @@ func TestEachAccountHasALimitsLine(t *testing.T) {
 func TestARecommendationShowsItsResult(t *testing.T) {
 	st := limitsState()
 	st.Recommendations = []advice.Rec{{ID: "wk", Level: "warn", Title: "The week runs out Wed ~19:00: compact app-feature",
-		Evidence: "builder@example.org · Plus: 2 sparks left",
+		Evidence: "builder@example.org · Plus: 92% of the week used",
 		Primary:  &advice.Action{Label: "jump to the session", Nav: true, Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}},
 		Second: &advice.Action{Label: "send /compact", Destructive: true, Steps: [][]string{{"tmux", "send-keys", "-t", "%1", "/compact", "Enter"}},
 			Guards: []advice.Guard{{IdlePane: "%1"}}}}}
@@ -191,7 +192,7 @@ func TestStatusTextHasTheLimits(t *testing.T) {
 	st := limitsState()
 	out := Summary(st.Doc)
 	for _, want := range []string{
-		"limits anthropic builder@example.com · Max: 4 matches · 8 sparks · lasts the week\n",
+		"limits anthropic builder@example.com · Max: 5h 62% · wk 41% · lasts the week\n",
 		"limits anthropic work@example.net · Team: not measured · open the door “Show your limits”\n",
 	} {
 		if !strings.Contains(out, want) {

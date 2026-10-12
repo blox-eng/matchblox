@@ -160,7 +160,7 @@ func TestTheStatusLineHookTapsTheLimits(t *testing.T) {
 	if err := statusLine(nil, strings.NewReader(statusInput), &out, env, stateDir, config.Default(), now); err != nil {
 		t.Fatal(err)
 	}
-	if got := out.String(); !strings.HasPrefix(got, "4 matches · 9 sparks") {
+	if got := out.String(); !strings.HasPrefix(got, "5h 28% · wk 12%") {
 		t.Fatalf("alone, the status line is %q", got)
 	}
 	if _, err := os.Stat(filepath.Join(stateDir, "limits")); err != nil {

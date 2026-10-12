@@ -192,13 +192,17 @@ func limitRecs(snap sample.Snapshot) []Rec {
 		if hot == nil {
 			continue
 		}
-		// A spent week waits for its reset: a compact saves nothing.
-		if a.Sparks != nil && *a.Sparks == 0 {
-			continue
-		}
 		left := ""
-		if a.Sparks != nil {
-			left = fmt.Sprintf(": %d sparks left", *a.Sparks)
+		for _, u := range a.Uses(snap.At) {
+			if u.Name == "wk" {
+				left = fmt.Sprintf(": %.0f%% of the week used", u.Pct)
+				if u.Pct >= 100 {
+					hot = nil // a spent week waits for its reset: a compact saves nothing
+				}
+			}
+		}
+		if hot == nil {
+			continue
 		}
 		// The forecast moves each sample; the title, and so the id, does not.
 		r := Rec{

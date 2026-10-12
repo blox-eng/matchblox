@@ -736,17 +736,16 @@ func TestLimitsAreStoredAndInTheState(t *testing.T) {
 	s := newTest(t, 20*time.Millisecond)
 	s.LimitsLog = &limits.Store{Path: filepath.Join(t.TempDir(), "limits.jsonl")}
 	at := time.Now().Add(-time.Minute)
-	sparks := 7
 	s.sample = func() sample.Snapshot {
 		snap := orphanSnap
 		snap.At = time.Now()
 		snap.Limits = []limits.Account{{Provider: "anthropic", Account: "a@example.com · Max", State: limits.Measured, At: at,
-			Sparks: &sparks, Windows: []limits.Window{{UsedPct: 30, Minutes: limits.WeekMinutes}}}}
+			Windows: []limits.Window{{UsedPct: 30, Minutes: limits.WeekMinutes}}}}
 		return snap
 	}
 	ctx := run(t, s)
 	c, _ := connect(t, ctx, s)
-	if st := snapshot(t, c); len(st.Limits) != 1 || *st.Limits[0].Sparks != 7 {
+	if st := snapshot(t, c); len(st.Limits) != 1 || st.Limits[0].Windows[0].UsedPct != 30 {
 		t.Fatalf("limits in the state: %+v", st.Limits)
 	}
 	snapshot(t, c)
