@@ -226,7 +226,9 @@ func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, full sampl
 			mark = &mk
 		}
 		v := Decide(s, mark, full)
-		if !v.Compact {
+		// Below compact_at, only the end of a step is a good moment: a turn
+		// that ended mid-step (waiting for a subagent) is not.
+		if !v.Compact || !v.Past && mark != nil && !mark.Moved {
 			continue
 		}
 		g := advice.Guard{IdlePane: s.Pane, StokePane: s.Pane}

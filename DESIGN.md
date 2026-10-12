@@ -273,9 +273,10 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   the verdict that called for it under it in `muted`. Ready: alive, not
   stopped by the plan's limit, not waiting, not past the line. The stoker
   decides each session by its pace (#59, owner 2026-10-12): tokens per point
-  of its progress bar; one that finishes under the line is left alone, one
-  whose next 10 points would cross it is compacted at the end of this turn,
-  and without a pace only the line counts. Idle is the transcript's turn
+  of its progress bar against compact_at; one that finishes under it is left
+  alone, one whose next 10 points would cross it is compacted at the end of
+  a step (a turn that moved its bar), one past it at once; without a pace
+  compact_at or compact_tokens, the first. Idle is the transcript's turn
   end, not Claude Code's busy flag (background work keeps that busy). A
   limit that stopped sessions during
   the run is the card's first line, in `warn`: `limit out <from> → <reset>`;

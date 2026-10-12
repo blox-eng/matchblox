@@ -277,6 +277,9 @@ func turnEnd(l []byte, u *Usage) bool {
 		IsSidechain bool      `json:"isSidechain"`
 		Timestamp   time.Time `json:"timestamp"`
 		Background  int       `json:"pendingBackgroundAgentCount"`
+		Message     struct {
+			Content json.RawMessage `json:"content"`
+		} `json:"message"`
 	}
 	if json.Unmarshal(l, &t) != nil || t.IsSidechain {
 		return false
@@ -285,10 +288,22 @@ func turnEnd(l []byte, u *Usage) bool {
 	case t.Type == "system" && t.Subtype == "turn_duration":
 		u.Ended, u.Background = t.Timestamp, t.Background
 		return true
+	case t.Type == "user" && localOutput(t.Message.Content):
+		// A local command (/compact, /model) writes no turn_duration: its
+		// output is its end.
+		u.Ended = t.Timestamp
+		return true
 	case t.Type == "user" || t.Type == "assistant":
 		return true
 	}
 	return false
+}
+
+// localOutput is the content of the line a local command writes when it is
+// done.
+func localOutput(content json.RawMessage) bool {
+	var text string
+	return json.Unmarshal(content, &text) == nil && strings.HasPrefix(text, "<local-command-stdout>")
 }
 
 // modelSetting is the model a Claude Code process was started with, in the

@@ -52,15 +52,15 @@ func TestThePaceStartsAgainAfterACompactOrANewPlan(t *testing.T) {
 	m := on()
 	m, _ = m.Observe([]sample.Session{building(556_000, 14)}, nil, line80, t0)
 	m, _ = m.Observe([]sample.Session{building(692_000, 64)}, nil, line80, t0)
-	if got := m.Pace["billed"]; got != (Mark{Tokens: 556_000, Pct: 14}) {
+	if got := m.Pace["billed"]; got.Tokens != 556_000 || got.Pct != 14 {
 		t.Fatalf("pace %+v, want the first sample", got)
 	}
 	m, _ = m.Observe([]sample.Session{building(80_000, 64)}, nil, line80, t0)
-	if got := m.Pace["billed"]; got != (Mark{Tokens: 80_000, Pct: 64}) {
+	if got := m.Pace["billed"]; got.Tokens != 80_000 || got.Pct != 64 {
 		t.Fatalf("after a compact %+v", got)
 	}
 	m, _ = m.Observe([]sample.Session{building(90_000, 5)}, nil, line80, t0)
-	if got := m.Pace["billed"]; got != (Mark{Tokens: 90_000, Pct: 5}) {
+	if got := m.Pace["billed"]; got.Tokens != 90_000 || got.Pct != 5 {
 		t.Fatalf("after a new plan %+v", got)
 	}
 }
@@ -95,5 +95,57 @@ func TestTheCardSaysWhatTheStokerDecided(t *testing.T) {
 	}
 	if len(c.NotReady) != 1 || c.NotReady[0].Why != "needs a compact · past 80% · 810k" {
 		t.Fatalf("not ready %+v", c.NotReady)
+	}
+}
+
+// The defaults, on a 1M window: compact_tokens (350k) is a line only for a
+// session without a pace. Billed, with a pace that finishes at 79%, stays
+// under compact_at (85%) and is left alone; the same session without a bar
+// is compacted at 350k.
+func TestTheDefaultsLeaveAPacedSessionAlone(t *testing.T) {
+	defaults := sample.Full{Pct: 85, Tokens: 350_000}
+	if v := Decide(building(692_000, 64), &Mark{Tokens: 556_000, Pct: 14}, defaults); v.Compact || v.Why != "finishes ~79%" {
+		t.Fatalf("paced: %+v", v)
+	}
+	bare := building(692_000, 64)
+	bare.Progress = nil
+	if v := Decide(bare, nil, defaults); !v.Compact || v.Why != "past 85% or 350k" {
+		t.Fatalf("no pace: %+v", v)
+	}
+	if v := Decide(building(860_000, 95), &Mark{Tokens: 556_000, Pct: 14}, defaults); !v.Compact || v.Why != "past 85%" {
+		t.Fatalf("past compact_at: %+v", v)
+	}
+}
+
+// A good moment is the end of a turn whose bar moved: a turn that ended
+// mid-step (waiting for a subagent) is not one, unless the session is past
+// compact_at, where Claude Code would compact it inside the next turn.
+func TestTheStokerWaitsForAStepToEnd(t *testing.T) {
+	fast := func(tokens, pct int, busy bool) sample.Session {
+		s := building(tokens, pct)
+		s.SessionID, s.Pane = "fast", "%6"
+		if busy {
+			s.Busy, s.Status = true, "busy"
+		}
+		return s
+	}
+	m := on()
+	m, _ = m.Observe([]sample.Session{fast(300_000, 14, false)}, nil, line80, t0)
+	m, _ = m.Observe([]sample.Session{fast(700_000, 64, true)}, nil, line80, t0)
+	m, _ = m.Observe([]sample.Session{fast(740_000, 64, false)}, nil, line80, t0)
+	if steps := Plan(m, []sample.Session{fast(740_000, 64, false)}, nil, line80, nil, t0); len(steps) != 1 {
+		t.Fatalf("the bar moved: steps %+v", steps)
+	}
+	// Another turn ends without the bar moving: mid-step.
+	m, _ = m.Observe([]sample.Session{fast(745_000, 64, true)}, nil, line80, t0)
+	m, _ = m.Observe([]sample.Session{fast(750_000, 64, false)}, nil, line80, t0)
+	if steps := Plan(m, []sample.Session{fast(750_000, 64, false)}, nil, line80, nil, t0); len(steps) != 0 {
+		t.Fatalf("mid-step: steps %+v", steps)
+	}
+	// Past compact_at the net would act inside the next turn: now beats that.
+	m, _ = m.Observe([]sample.Session{fast(810_000, 64, true)}, nil, line80, t0)
+	m, _ = m.Observe([]sample.Session{fast(810_000, 64, false)}, nil, line80, t0)
+	if steps := Plan(m, []sample.Session{fast(810_000, 64, false)}, nil, line80, nil, t0); len(steps) != 1 {
+		t.Fatalf("past the line: steps %+v", steps)
 	}
 }

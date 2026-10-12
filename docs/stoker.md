@@ -51,29 +51,28 @@ A Claude Code session in tmux that is:
 
 ## When it compacts
 
-The line is `compact_at` (85% of the window by default) or `compact_tokens`,
-whichever is lower. A session past the line is compacted at its next
-boundary. Before that, the stoker follows each session's pace: the tokens
-it spends for each point of its progress bar (`Progress [████░░░░]`), from
-the first moment the run saw it.
+The line is `compact_at` (85% of the window by default). A session past it
+is compacted at its next boundary: Claude Code's net would compact it inside
+the next turn anyway. Below it, the stoker follows each session's pace: the
+tokens it spends for each point of its progress bar (`Progress [████░░░░]`),
+from the first moment the run saw it.
 
 - It finishes under the line: left alone. Its context is worth more than
   the room a compact would give it.
-- The next 10 points of its bar would cross the line: compacted now, at the
-  end of this turn, before the next step starts.
+- The next 10 points of its bar would cross the line: compacted at the end
+  of a step, when a turn ended and its bar moved. A turn that ended
+  mid-step (waiting for a subagent) is not a good moment.
 - Otherwise it waits, and says where it will compact.
 
 A session without a bar, or whose bar has moved less than 5 points, has no
-pace: only the line counts.
+pace: it is compacted at `compact_at` or at `compact_tokens` (350k by
+default), whichever comes first.
 
 Claude Code's own auto-compact is the net under the stoker: it is the only
 thing that compacts inside a turn. The door "Keep a net under every
 session" turns it on at `compact_at` (`autoCompactEnabled` and
 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` in `~/.claude/settings.json`); a
-percentage you set there yourself stays. Claude Code takes only a
-percentage, so with `compact_tokens` set the stoker's line can sit below
-the net: on a 1M window the default 350k is 35%, the net 85%. Set
-`compact_tokens = 0` to make them one line.
+percentage you set there yourself stays.
 
 Right before it types, and again before the `Enter`, it reads the pane. A
 permission prompt, a question or a line you started to type stops the step.
@@ -144,14 +143,13 @@ showed, the result and the RESUME line. Every card is kept beside it in
 
 ## Compact sooner or later
 
-The line is the lower of `compact_at` of the window and `compact_tokens`.
-To keep one percentage for every window, and the same line as Claude
-Code's net:
+`compact_at` is the line for every session; `compact_tokens` only for a
+session without a pace. To make Claude Code's net the same line, open the
+door "Keep a net under every session" after setting it:
 
 ```toml
 [sessions]
 compact_at = 80
-compact_tokens = 0
 ```
 
 ## Background work

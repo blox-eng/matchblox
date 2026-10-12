@@ -297,7 +297,7 @@ func TestTurningTheStokerOffScoresTheRun(t *testing.T) {
 		t.Fatal(r.Err)
 	}
 	c := s.State().Stoker.Card
-	if c == nil || c.Night || c.Of != 1 || c.Full != 1 || c.Ready != 0 || len(c.NotReady) != 1 || c.NotReady[0].Why != "needs a compact · past 85% or 350k · 176k" {
+	if c == nil || c.Night || c.Of != 1 || c.Full != 1 || c.Ready != 0 || len(c.NotReady) != 1 || c.NotReady[0].Why != "needs a compact · past 85% · 176k" {
 		t.Fatalf("card %+v", c)
 	}
 }

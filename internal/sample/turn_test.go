@@ -125,3 +125,27 @@ func TestAnIdleRegistryShowsNoStaleAgents(t *testing.T) {
 		}
 	}
 }
+
+// A local command (a /compact, a /model) writes its lines as user lines and
+// no turn_duration: its output is the end. While it runs, its command line
+// is the newest, and the turn is not over.
+func TestALocalCommandEndsWhenItsOutputIsWritten(t *testing.T) {
+	running := claudeTurnEnded + `{"type":"user","isSidechain":false,"timestamp":"2026-10-12T04:55:05.555Z","message":{"role":"user","content":"/compact"}}` + "\n"
+	done := running + `{"type":"system","subtype":"compact_boundary","isSidechain":false,"timestamp":"2026-10-12T04:56:16.914Z","compactMetadata":{"trigger":"manual","preTokens":710736,"postTokens":34796}}
+{"type":"user","isSidechain":false,"isCompactSummary":true,"timestamp":"2026-10-12T04:56:15.504Z","message":{"role":"user","content":"This session is being continued from a previous conversation."}}
+{"type":"user","isSidechain":false,"isMeta":true,"timestamp":"2026-10-12T04:55:05.562Z","message":{"role":"user","content":"<local-command-caveat>The command below was run directly.</local-command-caveat>"}}
+{"type":"user","isSidechain":false,"timestamp":"2026-10-12T04:55:05.562Z","message":{"role":"user","content":"<command-name>/compact</command-name>"}}
+{"type":"user","isSidechain":false,"timestamp":"2026-10-12T04:56:17.013Z","message":{"role":"user","content":"<local-command-stdout>Compacted</local-command-stdout>"}}
+{"type":"attachment","isSidechain":false,"timestamp":"2026-10-12T04:56:17.100Z"}
+`
+	for body, want := range map[string]time.Time{
+		running: {},
+		done:    time.Date(2026, 10, 12, 4, 56, 17, 13e6, time.UTC),
+	} {
+		path := filepath.Join(t.TempDir(), "s.jsonl")
+		writeFile(t, path, body)
+		if u, _ := lastUsage(path, int64(len(body))); !u.Ended.Equal(want) {
+			t.Errorf("ended %v, want %v", u.Ended, want)
+		}
+	}
+}
