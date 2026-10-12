@@ -83,6 +83,7 @@ type Session struct {
 // Shell is a shell an agent's Bash tool runs in the background.
 type Shell struct {
 	PID     int       `json:"pid"`
+	Start   uint64    `json:"start_ticks"` // tells a reused pid apart
 	Started time.Time `json:"started"`
 	Command string    `json:"command"` // as the agent wrote it
 }
@@ -787,7 +788,7 @@ func (s *Sampler) backgroundShells(pid int, procs map[int]procfs.Proc, children 
 		if !strings.Contains(cmd, "/shell-snapshots/snapshot-") {
 			continue
 		}
-		sh := Shell{PID: c, Command: shellCommand(cmd)}
+		sh := Shell{PID: c, Start: procs[c].StartTime, Command: shellCommand(cmd)}
 		if uptime > 0 {
 			sh.Started = now.Add(-time.Duration((uptime - float64(procs[c].StartTime)/procfs.ClockTicks) * float64(time.Second)))
 		}
