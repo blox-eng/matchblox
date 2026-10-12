@@ -190,8 +190,8 @@ func TestTheRepositoryFlips(t *testing.T) {
 			t.Errorf("%s: %d before, %d after the flip", id, strings.Count(before, id), strings.Count(after, id))
 		}
 	}
-	if strings.Contains(after, "builds with Go") || !strings.Contains(after, "checksum and provenance checked") || !strings.Contains(after, "v0.1.0 is out") {
-		t.Error("the flipped site still says it builds with Go")
+	if strings.Contains(after, "builds with Go") || !strings.Contains(after, "checksum and provenance checked") || !strings.Contains(after, `<span class="tag">New</span>`) {
+		t.Error("the flipped site still says it builds with Go, or lost its news line")
 	}
 }
 
@@ -236,5 +236,81 @@ func TestDocsDeployFromOneSourceOfTruth(t *testing.T) {
 		if err != nil || strings.TrimSpace(out) != c.want {
 			t.Errorf("%+v: %q %v", c, out, err)
 		}
+	}
+}
+
+const site = `<main>
+      <a class="news" href="https://github.com/blox-eng/matchblox/blob/main/CHANGELOG.md"><span class="tag">New</span> <span>v0.1.0 is out: one line installs it, verified</span> <span class="go">Changelog →</span></a>
+</main>
+`
+
+const released = `# Changelog
+
+## [Unreleased]
+
+## [0.4.0] - 2026-10-11
+
+### Added
+
+- **See which sessions your plan's limit stopped, and until when.** A
+  session whose turn the limit refused says ` + "`out`" + `.
+- **Every stoker card is kept.**
+
+## [0.3.0] - 2026-10-11
+
+- **Older <news> & more.**
+`
+
+func TestTheNewsLineNamesTheRelease(t *testing.T) {
+	cl, page := file(t, released), file(t, site)
+	if out, err := script(t, "announce-release.sh", "0.4.0", cl, page); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	want := `      <a class="news" href="https://github.com/blox-eng/matchblox/releases/tag/v0.4.0"><span class="tag">New</span> <span>v0.4.0 · See which sessions your plan&#39;s limit stopped, and until when</span> <span class="go">Release notes →</span></a>`
+	if got := read(t, page); !strings.Contains(got, want+"\n") || !strings.HasPrefix(got, "<main>\n") || !strings.HasSuffix(got, "</main>\n") {
+		t.Fatalf("got\n%s\nwant the line\n%s", got, want)
+	}
+	// The headline is text: markup in it is escaped.
+	if out, err := script(t, "announce-release.sh", "0.3.0", cl, page); err != nil || !strings.Contains(read(t, page), "Older &lt;news&gt; &amp; more") {
+		t.Fatalf("%v: %s\n%s", err, out, read(t, page))
+	}
+}
+
+func TestTheNewsLineNeedsAHeadline(t *testing.T) {
+	page := file(t, site)
+	for _, c := range []struct{ version, changelog string }{
+		{"0.5.0", released}, // no such section
+		{"0.4.0", "## [0.4.0] - 2026-10-11\n\n- A plain line.\n"},
+	} {
+		if out, err := script(t, "announce-release.sh", c.version, file(t, c.changelog), page); err == nil || !strings.Contains(out, "announce-release:") {
+			t.Fatalf("%s: no error (%v): %s", c.version, err, out)
+		}
+		if read(t, page) != site {
+			t.Fatalf("%s: the page changed", c.version)
+		}
+	}
+	if out, err := script(t, "announce-release.sh", "0.4.0", file(t, released), file(t, "<main></main>\n")); err == nil || !strings.Contains(out, "news") {
+		t.Fatalf("a page without the news line: %v %s", err, out)
+	}
+}
+
+// A headline is its first bold run, even when it wraps or has code in it;
+// the code marks go, the words stay.
+func TestTheNewsLineTakesTheWholeHeadline(t *testing.T) {
+	for changelog, want := range map[string]string{
+		"## [0.6.0] - 2026-10-13\n\n- **A night that\n  wraps.** More.\n":               "v0.6.0 · A night that wraps<",
+		"## [0.6.0] - 2026-10-13\n\n- **Run `matchblox setup` once.** More **bold**.\n": "v0.6.0 · Run matchblox setup once<",
+	} {
+		page := file(t, site)
+		if out, err := script(t, "announce-release.sh", "0.6.0", file(t, changelog), page); err != nil || !strings.Contains(read(t, page), want) {
+			t.Fatalf("%q: %v %s\n%s", changelog, err, out, read(t, page))
+		}
+	}
+}
+
+func TestTheNewsLineRefusesWhatIsNoVersion(t *testing.T) {
+	page := file(t, site)
+	if out, err := script(t, "announce-release.sh", `0.4.0"><script>`, file(t, released), page); err == nil || read(t, page) != site {
+		t.Fatalf("took a bad version: %v %s", err, out)
 	}
 }
