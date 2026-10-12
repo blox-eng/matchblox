@@ -22,7 +22,7 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
-- **The site's news line names the latest release.** Each release writes it
+- The site's news line names the latest release: each release writes it
   from the first headline of its changelog section, and links to the
   release.
 

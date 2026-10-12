@@ -191,7 +191,7 @@ func TestTheRepositoryFlips(t *testing.T) {
 		}
 	}
 	if strings.Contains(after, "builds with Go") || !strings.Contains(after, "checksum and provenance checked") || !strings.Contains(after, `<span class="tag">New</span>`) {
-		t.Error("the flipped site still says it builds with Go")
+		t.Error("the flipped site still says it builds with Go, or lost its news line")
 	}
 }
 
@@ -266,7 +266,7 @@ func TestTheNewsLineNamesTheRelease(t *testing.T) {
 	if out, err := script(t, "announce-release.sh", "0.4.0", cl, page); err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
-	want := `      <a class="news" href="https://github.com/blox-eng/matchblox/releases/tag/v0.4.0"><span class="tag">New</span> <span>v0.4.0 · See which sessions your plan&#39;s limit stopped, and until when</span> <span class="go">Changelog →</span></a>`
+	want := `      <a class="news" href="https://github.com/blox-eng/matchblox/releases/tag/v0.4.0"><span class="tag">New</span> <span>v0.4.0 · See which sessions your plan&#39;s limit stopped, and until when</span> <span class="go">Release notes →</span></a>`
 	if got := read(t, page); !strings.Contains(got, want+"\n") || !strings.HasPrefix(got, "<main>\n") || !strings.HasSuffix(got, "</main>\n") {
 		t.Fatalf("got\n%s\nwant the line\n%s", got, want)
 	}
@@ -291,5 +291,26 @@ func TestTheNewsLineNeedsAHeadline(t *testing.T) {
 	}
 	if out, err := script(t, "announce-release.sh", "0.4.0", file(t, released), file(t, "<main></main>\n")); err == nil || !strings.Contains(out, "news") {
 		t.Fatalf("a page without the news line: %v %s", err, out)
+	}
+}
+
+// A headline is its first bold run, even when it wraps or has code in it;
+// the code marks go, the words stay.
+func TestTheNewsLineTakesTheWholeHeadline(t *testing.T) {
+	for changelog, want := range map[string]string{
+		"## [0.6.0] - 2026-10-13\n\n- **A night that\n  wraps.** More.\n":             "v0.6.0 · A night that wraps<",
+		"## [0.6.0] - 2026-10-13\n\n- **Run `matchblox setup` once.** More **bold**.\n": "v0.6.0 · Run matchblox setup once<",
+	} {
+		page := file(t, site)
+		if out, err := script(t, "announce-release.sh", "0.6.0", file(t, changelog), page); err != nil || !strings.Contains(read(t, page), want) {
+			t.Fatalf("%q: %v %s\n%s", changelog, err, out, read(t, page))
+		}
+	}
+}
+
+func TestTheNewsLineRefusesWhatIsNoVersion(t *testing.T) {
+	page := file(t, site)
+	if out, err := script(t, "announce-release.sh", `0.4.0"><script>`, file(t, released), page); err == nil || read(t, page) != site {
+		t.Fatalf("took a bad version: %v %s", err, out)
 	}
 }
