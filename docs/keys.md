@@ -1,8 +1,8 @@
 # Keys
 
 Every key works on the key bar of a phone SSH app: letters, digits, arrows,
-`Enter` and `Esc`. No key needs `Ctrl`. The action line under the tabs
-shows the keys of the open tab.
+`Enter` and `Esc`. No key needs `Ctrl`. The key line at the bottom shows
+the keys of the open tab, and a tap on one presses it.
 
 ## The console
 
@@ -10,11 +10,13 @@ shows the keys of the open tab.
 |---|---|
 | `↑` or `k` | Selects the row above. |
 | `↓` or `j` | Selects the row below. |
-| `Enter` | Shows the safe action of the row: go to the agent's pane (Queue, Sessions, Procs, Panes), open a shell in the worktree (Git), do a recommendation, show a setup step, or fold the stoker's steps (STOKED). |
-| `x` | Shows the other action of the row: the second action of a recommendation or close a setup step (Queue), end a stale session (Sessions), kill a detached busy loop (Procs), remove the marked worktrees (Git). |
+| `Enter` | Shows the safe action of the row: go to the agent's pane (Sessions, Machine, Panes), open a shell in the worktree (Git), do a recommendation, show a setup step, or fold the stoker's steps (STOKED). |
+| `x` | Shows the other action of the row: the second action of a recommendation, close a setup step or end a stale session (Sessions), kill a detached busy loop (Machine), remove the marked worktrees (Git). |
 | `a` | Answers the selected agent in one line. A permission prompt is answered in its pane. |
-| `1-7` | Opens a tab: Queue, Sessions, Machine, Procs, Git, History, Panes. |
+| `1-6` | Opens a tab: Sessions, Ships, Machine, Git, History, Panes. |
+| `p` | Opens Ships. |
 | `Tab` or `Shift+Tab` | Opens the next or the previous tab. |
+| `u` | Switches the dock of a phone between usage and the machine. |
 | `/` | Searches the open tab. |
 | `s` | Sorts Sessions and Panes by the next column. |
 | `S` | Turns the sort around. |
@@ -29,7 +31,7 @@ shows the keys of the open tab.
 
 ## An action before it runs
 
-The action line shows `RUN` and the exact command.
+The key line shows `RUN` and the exact command.
 
 | Key | What it does |
 |---|---|
@@ -61,8 +63,11 @@ The action line shows `RUN` and the exact command.
 
 ## A phone
 
-A tap selects a row, and the action line says `tap again: <command>`. A
-second tap on the same row goes to the agent's pane. Any other action (a
+A tap selects a row, and the key line says `tap again: <command>`. A
+second tap on the same row goes to the agent's pane, or, for an agent that
+waits for an answer, opens the answer. Any other action (a
 recommendation, a setup step, a destructive step) then shows `RUN` and
-waits for `Enter` or a typed `y`, as from the keys. A tap on a
-tab opens it. A tap on a column header sorts by it.
+waits for `Enter` or a typed `y`, as from the keys. A tap on a tab opens
+it, a tap on a key of the key line presses it, and a tap on `● N wait for
+you` selects the first agent that waits. A tap on `machine ›` or `usage ›`
+switches the dock. On Panes, a tap on a column header sorts by it.

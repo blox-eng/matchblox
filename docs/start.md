@@ -51,7 +51,7 @@ this machine, and the agents it finds on `PATH`.
 
 ## 4. Open the setup steps
 
-The queue shows the setup steps above everything else, under `SET UP`.
+Sessions shows the setup steps above everything else, under `SET UP`.
 The queue hooks and the guide show only when Claude Code is on this machine. Each
 step says what it gives you. `Enter` shows the exact change before it runs. A
 typed `y` makes the change. `x` closes a step that you do not want.
@@ -75,7 +75,7 @@ tmux new -s app claude
 ```
 
 matchblox finds each agent that runs in a tmux pane. When an agent waits
-for you, it comes to the top of the queue. `Enter` jumps to its pane. The
+for you, it comes to the top of Sessions. `Enter` jumps to its pane. The
 way back (`prefix m`) returns to the console.
 
 Next: [the console](console.md).

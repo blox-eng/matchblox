@@ -166,59 +166,90 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 
 ## 6. Console layout
 
-- **Header:** the mark, the name and the host, then each metric with its
-  trend. A narrow terminal drops the trends, then metrics from the right.
-- **Limits** (#38, owner 2026-10-11): under the metrics, one line for each
-  account a session runs under: the provider's mark, a short name (the
-  plan, or the email's name when a provider has two), then `4 matches · 8
-  sparks · lasts the week`. Matches are the 5-hour window (one each 20%),
-  sparks the week (one each 10%); they are words, never the match glyph
-  (§4 rule 2). A reset shows only when one match or two sparks are left
-  (`1 match until 16:40`). The forecast is `muted` when the week lasts and
-  `out Fri ~20:00` in `warn` when it will not; a reading over an hour old
-  adds `as of 14:02` in `warn`; no reading says `not measured · <the fix>`.
-  Too narrow: the resets go, then the name. The tabs sit under the lines.
-- **Tabs:** one row, `1 QUEUE` to `7 PANES`. The Queue tab holds who waits
-  and, under it, the recommendations (owner, 2026-10-08). The active tab has an accent
-  rule under it. A tab that needs the person shows it (`4 PROCS !` in `neg`,
-  `1 QUEUE 3` in the accent). At 80 columns the names shorten so all eight
-  tabs and the alert marker fit.
+- **Screen** (design/0006, owner 2026-10-12): top to bottom, the header,
+  the tabs, a hairline, the body of the open tab, the dock when it fits,
+  a hairline and the key line.
+- **Header:** one line. The mark, the name and the host on the left (a
+  phone drops the host when it does not fit); on the right `● N wait for
+  you` in the accent (a tap selects the first one) and the stoker word:
+  `stoker off` in `faint`, `stoker` and `☾ night → 07:00` in the stoker's
+  token, `stoker rests` in `muted`. For 2.5 s after an action a toast
+  takes the right side (`ran: kill 4242`).
+- **Tabs:** one row, every tab named: `SESSIONS 14  ships  machine  git
+  history  panes`. The open tab is uppercase in the accent with its rule,
+  the others lowercase in `faint`; Sessions carries its count, and Machine
+  `!` in `neg` while a detached busy loop burns. When the names do not fit,
+  the tabs far from the open one shorten to their digit, the nearest last.
+  The digits follow the order: `1` Sessions to `6` Panes; `p` opens Ships.
+  The console opens on Sessions.
+- **Sessions** holds what the Queue tab held: the stoker's card, the
+  doors and the recommendations on top, then the sessions in three groups,
+  each under a faint label and its count: `WAITS FOR YOU` (asks, waits,
+  done, paused; the oldest wait first), `WORKING` (busy, agents, a shell:
+  `tests` when it runs a test runner) and `QUIET` (idle, cold, stale, out;
+  the newest first). A sort other than the default drops the groups for
+  one flat list named by its sort (`14 SESSIONS · by context ▾`).
+- **Rows:** the selection mark `▌`, the match, the name, then the state
+  word (accent for who waits), the wait and the context (`warn` from 70%,
+  `neg` past the line). A desk row adds the plan (or `! compact`, `▲
+  clear` when one is due), the pull request and the tmux place. On a phone
+  the selected row opens in place, on the wash: what the agent said last in
+  quotes (two lines at most), its pull request, then its plan and its keys.
+  The list scrolls so the opened row is on the screen.
+- **Detail:** on an opened phone (60–99 columns, split at the middle) and
+  a desk (100 and over, the list in ≈78 columns) the selected row's detail
+  sits right of the list: the name, the state in words with the wait and
+  the place, `CLAUDE SAID` and the last message (six lines at most), the
+  context and plan bars, the ship, the subagents and the background
+  shells, the figures (model, tokens, account, pid) and the keys. A door's
+  diff that waits for its `y` takes the full width.
+- **Dock** (design/0006 §7): usage and the machine, between the body and
+  the key line, when the body, the dock and one blank row fit; else it
+  folds away and the Machine tab has it. Usage is each account's windows
+  as `/usage` says them: `5h`, `wk` (and any other window), a bar (`warn`
+  from 60%, `neg` from 90%), the percent and the reset, then the forecast
+  (`lasts the week` in `muted`, `out Fri ~20:00` in `warn`) and `as of
+  14:02` in `warn` for a reading over an hour old; no reading says `not
+  measured · <the fix>`. The machine is cpu with its last minute and the
+  load, memory, disk, and the agents that run. A phone shows one panel;
+  `u` or a tap on `machine ›` switches. Matches and sparks (#38) are gone
+  (owner, 2026-10-12).
+- **Machine tab:** usage first, then the machine, then the detached busy
+  loops (their rows, `⏎` and `x`) and the top processes.
 - **Regions:** a small uppercase label in `faint`, a hairline and space.
   Panels have no boxes.
-- **Rows:** the match and the state word first, then the wait, the name, the
-  tmux place and the last line. Figures are aligned; units are faint. The
-  selected row has a `▌` and the `wash` background.
-- **Pull requests** (owner, 2026-10-08): an agent whose worktree has an
-  open pull request shows `#N` in the accent on its queue row, after its
-  worktree in Sessions, and `PR #N <title>  <url>` in the detail. The git
-  scan asks `gh` for the open ones of each repository; a fork's pull
-  request never marks a branch of ours.
-- **Action line** (owner, 2026-10-08): under the tabs, above the hairline,
-  never at the bottom: on a phone the keyboard covers the bottom of the
-  screen. The keys of the tab on the left, "sampled N ago" on the right. It
-  is also where the person acts: a tap shows `tap again: <command>`, a
-  pending action shows `RUN <command>` and its confirm, and `a` types the
-  answer here.
-- **Widths:** 100 columns or more: all columns. 60 to 99: fewer columns, the
-  detail under the list. Less than 60 (phone): one column, the queue first,
-  each row on two lines.
+- **Pull requests** (owner, 2026-10-08): the open pull request of an
+  agent's worktree shows as `#N` on its desk row, under its opened row on
+  a phone, and with its title and URL in the detail. The git scan asks
+  `gh` for the open ones of each repository; a fork's pull request never
+  marks a branch of ours.
+- **Key line** (owner, 2026-10-12, reversing 2026-10-08): the last line,
+  under a hairline. The keys of the open tab and the selected row, each a
+  tap target (`⏎ open  a answer  p ships  f stoker`); a desk adds `↑↓
+  move`, `/ find` and `q quit`, and "sampled N ago" on the right. It is
+  also where the person acts: a tap shows `tap again: <command>`, a pending
+  action shows `RUN <command>` and its confirm, `a` types the answer, `/`
+  the search, and the stoker asks to take over here. A phone app that
+  shrinks the terminal for its keyboard keeps the bottom row above it.
+- **Widths:** under 60 columns (phone): one column, the selected row opens
+  in place, one dock panel. 60 to 99: the list and the detail split at the
+  middle, usage and the machine side by side. 100 and over: the list with
+  every column and the detail beside it.
 - **Keys:** each key is on a phone SSH key bar: digits, arrows, `Enter`,
   `Esc` and letters. No `Ctrl` combinations. `Enter` never runs a
   destructive step; that needs `x` and then a typed `y`.
 - **Progress** (owner, 2026-10-08): the bar an agent draws in its last reply
-  with text (`Progress [████░░░░] <step>`) shows as `▰▰▰▱▱ 75%`: on the queue
-  row, in the DO column of a session when no action is due, on the second
-  line of a row on a phone, and with its step in the detail. The
+  with text (`Progress [████░░░░] <step>`) shows as `▰▰▰▱▱ 75%`: on a desk
+  row when no action is due, under the opened row on a phone (`plan 75%`),
+  and with its step in the detail. The
   SessionStart hook asks each new session for that line
   (`progress_prompt`, on by default). The console never types it into a pane.
 - **Age** (owner, 2026-10-08): an idle session is `idle`, then `cold` from
   one day, then `stale` from seven days. Under a day, a session that waits
-  shows the word of its queue row in Sessions too: `asks`, `waits`, `done`,
-  or `paused` when its turn ended with its progress bar under 100% and no
-  question (owner, 2026-10-08). A turn that ends on a question waits; it is
-  never `done`. Sessions sort busy first, then the
-  ones that wait for the person, then idle with the newest first: the oldest
-  sink to the bottom. On a stale session `x` and a typed `y` end the agent;
+  shows the word of its queue row: `asks`, `waits`, `done`, or `paused`
+  when its turn ended with its progress bar under 100% and no question
+  (owner, 2026-10-08). A turn that ends on a question waits; it is never
+  `done`. The oldest sink to the bottom of `QUIET`. On a stale session `x` and a typed `y` end the agent;
   on another session `x` says when it works. Agents that exited and wait
   for their parent (zombies) are one faint line under the sessions
   ("137 exited agents · e shows them"); `e` lists them with the parent that
@@ -234,11 +265,11 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   in `warn` while the connection is lost, and before its first state only
   the name, never zero figures. A host the console cannot reach says why and
   shows the connect (design/0005-remote-mode.md §3.5).
-- **Doors** (#25): the setup steps sit above the queue under `SET UP · N`,
+- **Doors** (#25): the setup steps sit above the sessions under `SET UP · N`,
   one row each: the title, then why in `muted` (a door that cannot open shows
   the fix in `warn`). On a phone only the selected door shows why. `Enter`
   shows the exact diff (`+` in the accent, `-` in `neg`) or the exact argv
-  under the doors, and the action line names the door. A diff longer than
+  under the doors, and the key line names the door. A diff longer than
   the screen scrolls with `↑↓`, and `y` works only after its last line was
   on the screen. A door with a choice shows it above the diff, off:
   `[ ] m <label>`; `m` turns it on and the diff shows what it adds (the
@@ -250,14 +281,14 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   starts a night that ends at `night_ends`. The header shows `stoker` or
   `night → 07:00` in `accent` after the host. While a run has steps the
   builder has not seen, `STOKED <since> → <end> · N` is the first row of
-  the Queue tab, above the doors: one line for each step (time, the
+  Sessions, above the doors: one line for each step (time, the
   session's match, name, pane, then `before → after` or the skip reason),
   the `RESUME:` line under each compact, two lines for each step on a
   phone. It is selected first; `Enter` folds it. The night door ("Try a
   night") sits with the doors and folds after the first run.
   While a run is in charge the whole console wears the night (§2.1) and the
   word takes the `night` token. The first key or second tap that acts on a
-  session (an act's `Enter`, `x`, `a`) asks on the action line `The stoker
+  session (an act's `Enter`, `x`, `a`) asks on the key line `The stoker
   is on. Take over?  y rests it while you work · n keeps it on`, once a run
   (#45, owner 2026-10-11). What was pressed is held and runs after the
   answer; any other key drops both. `y` rests the stoker: the day look,
@@ -286,17 +317,15 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 - **Lists** (owner, 2026-10-08): `/` searches the open tab (every key is
   text until `⏎` keeps it or `esc` clears it; a tab change ends it); an empty
   result says "nothing matches <text>". `s` sorts Sessions and Panes by the
-  next column and `S` turns it around; a tap on a column header does both.
-  Sessions start busy first, then the longest wait. The header marks the
-  column (`CONTEXT▾`, `▴` when turned around); a phone names it in the
-  region line (`by context ▾`). On Git, `space` marks a worktree that is
+  next column and `S` turns it around; on Panes a tap on a column header
+  does both. Sessions start grouped (above); another sort names itself in
+  the list's label (`by context ▾`, `▴` when turned around). On Git, `space` marks a worktree that is
   safe to remove (or says why not), `X` marks every safe one, and `x` with a
   typed `y` removes the marked ones: one guarded act each, then one summary
   ("removed 11, skipped 1: it has changes").
 - **After a jump** (owner, 2026-10-08): when `Enter` takes the person to an
-  agent, the console selects the next one that waits (the next queue row;
-  in Sessions the next session in the queue, else the next idle one), so
-  the way back lands on it.
+  agent, the console selects the next session that waits, else the next
+  idle one, so the way back lands on it.
 
 ## 7. Copy
 
@@ -346,8 +375,8 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   script first ↗". On a phone the command wraps; it is never cut.
 - **Replay:** recorded frames of the real console (`TestReplay`), drawn in
   the site's tokens, so it follows light and dark. It walks one evening
-  into the morning: the queue, an answer typed with `a`, the sessions, the
-  limits and a compact from the week's recommendation, a merged worktree
+  into the morning: who waits, an answer typed with `a`, the sessions, the
+  usage and a compact from the week's recommendation, a merged worktree
   removed, a busy loop killed, then `n`, "Take over?", the stoker's compact
   at 23:40 and the night's card at 07:00 (#51). The demo service runs on
   the demo clock, so the night and its card are real. A still frame is in the

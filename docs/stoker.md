@@ -21,7 +21,7 @@ The whole console goes dark blue, and only the matches keep their fire.
 One glance, at 03:00 on your phone, tells you the stoker is in charge.
 
 Look around as you like. The first time you act on a session (`Enter` on a
-row, `x`, `a`, or a second tap), the action line asks:
+row, `x`, `a`, or a second tap), the key line asks:
 
 ```text
  The stoker is on. Take over?  y rests it while you work · n keeps it on
@@ -90,7 +90,7 @@ It never answers a question or a permission prompt, never sends
 
 ## In the morning
 
-The night's card is the first thing in the queue, even after a night with
+The night's card is the first thing in Sessions, even after a night with
 nothing to do:
 
 ```text
@@ -111,7 +111,7 @@ nothing to do:
 - `ready 5/7`: of the sessions at work when the night began, how many can
   go on now: still there, not stopped by the limit, not waiting for you,
   and not full. Each one that is not ready is named, with what it needs.
-  One that waits for you is in the queue below; `Enter` there takes you
+  One that waits for you is in the list below; `Enter` there takes you
   to it. One that is `out until 09:10` can work after its reset: a turn
   the limit cut off, Claude Code continues by itself; one you left idle
   waits for your next prompt. `out until 09:10 · needs a compact · past
@@ -157,10 +157,11 @@ compact_at = 80
 
 A session whose turn ended with subagents still working reads `agents` in
 Sessions: it works through them, and their results start its next turn, so
-the queue leaves it out. One whose turn ended with only shells running is
-idle. Either says what still runs in its detail: `BACKGROUND 1 agent · 2 shells · oldest 1d13h`, with each shell's
-pid and command. A background shell that has run for an hour or more is a
-recommendation in the queue: `Enter` jumps to its session, `x` and a typed
+it does not wait for you. One whose turn ended with only shells running
+reads `tests` or `shell`. Either says what still runs in its detail
+(`agents 1 subagent running`, `shells 2 shells · oldest 1d13h`), with each
+shell's pid and command. A background shell that has run for an hour or
+more is a recommendation in Sessions: `Enter` jumps to its session, `x` and a typed
 `y` end it. A wait loop such as `while pgrep -f "node walk.mjs"` finds its
 own command line and never ends.
 

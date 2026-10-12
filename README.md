@@ -36,20 +36,21 @@ Works with Claude Code, Codex, OpenCode, and any agent in tmux.
    with `gh` logged in, proof that CI built it from this repository.
 
 2. Run `matchblox` outside tmux (the script starts it for you). Answer
-   "Where do your agents run?", then open the setup steps in the queue:
+   "Where do your agents run?", then open the setup steps in Sessions:
    tmux, the queue hooks, the way back.
 
 3. In another terminal, start your agents in tmux, for example
    `tmux new -s app claude`. When an
-   agent waits for you, it comes to the top of the queue. `Enter` jumps to
+   agent waits for you, it comes to the top of Sessions. `Enter` jumps to
    it, and `prefix m` comes back.
 
 The full walk is [Get started](https://docs.matchblox.com/start/).
 
 ## What it shows
 
-- **The queue**: each agent that asks, waits, paused or finished its turn,
-  oldest first, with its last line and its open pull request.
+- **Who waits for you**: each agent that asks, waits, paused or finished its
+  turn, oldest first, then who works and who is quiet; on a phone the
+  selected one opens on what it said last and its open pull request.
 - **A match for each session**: `✦` burning while it works, `╿` at rest while
   it waits, `│` spent when its context is full.
 - **Sessions**: context use (Claude Code, Codex, OpenCode), the account
@@ -72,7 +73,7 @@ More in [The console](https://docs.matchblox.com/console/).
 | `Enter` | The safe action: go to the agent's pane. |
 | `a` | Answers the selected agent in one line. |
 | `x` | The destructive action. It runs only after a typed `y`. |
-| `1-7` | Opens a tab. |
+| `1-6` | Opens a tab. |
 | `/` | Searches the open tab. |
 | `f`, `n` | The stoker on or off; a night that ends in the morning. |
 | `q` | Quits. The service keeps running. |

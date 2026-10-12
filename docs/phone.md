@@ -29,8 +29,9 @@ starts it. A second phone or laptop attaches to the same session.
 
 ## Go to an agent and back
 
-1. Tap an agent in the queue. The action line says `tap again: <command>`.
-2. Tap it again. You are in the agent's pane.
+1. Tap an agent in Sessions. The key line says `tap again: <command>`.
+2. Tap it again. You are in the agent's pane. An agent that waits for an
+   answer opens the answer line instead: type it there.
 3. To come back, tap `◂ matchblox` at the left of the tmux status line, or
    press `prefix m` (the tmux prefix, then m).
 
@@ -42,9 +43,20 @@ The console then selects the next agent that waits.
 
 ## The phone layout
 
-Under 60 columns, the console has one column. The queue comes first, and
-each row has two lines. Only the selected setup step shows its detail.
-The action line is at the top, above the keyboard.
+Under 60 columns, the console has one column. Each agent is one line,
+grouped by what it needs from you: who waits first. The selected one opens
+in place: what it said last, its pull request, its plan and its keys. Only
+the selected setup step shows its detail.
+
+Under the list, when there is room, the dock shows usage or the machine:
+`u`, or a tap on `machine ›`, switches. With the keyboard up the dock folds
+away; the Machine tab has it.
+
+The key line is at the bottom: an SSH app that shrinks the terminal for
+its keyboard keeps it above the keys. A tap on a key presses it.
+
+Open the phone to 60 columns or more and the list and the detail of the
+selected agent sit side by side.
 
 Every key is on the key bar of an SSH app: letters, digits, arrows, `Enter`
 and `Esc`. See [Keys](keys.md).
