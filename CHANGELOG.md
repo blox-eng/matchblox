@@ -6,6 +6,14 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A session working through its subagents reads `agents`, not idle.**
+  Its turn ended, but their results start its next turn: the queue no
+  longer lists it as waiting for you, and the stoker still compacts it at
+  that turn's end when its pace calls for it. A turn that ended with only
+  background shells running stays idle.
+
 ## [0.5.0] - 2026-10-12
 
 ### Added

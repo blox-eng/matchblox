@@ -41,8 +41,9 @@ morning.
 
 A Claude Code session in tmux that is:
 
-- idle: its turn ended, even while subagents or background shells it
-  started still run (the transcript says so, not Claude Code's busy flag),
+- at rest: its turn ended, even while subagents or background shells it
+  started still run (the transcript says so, not Claude Code's busy flag).
+  Sessions shows one whose subagents still work as `agents`, not idle,
 - due, at the moment that suits it (below),
 - not stopped by its plan's limit (`out`): a compact needs the model too,
 - not waiting for you: no question, no permission prompt,
@@ -154,8 +155,10 @@ compact_at = 80
 
 ## Background work
 
-A session that ended its turn with work still running says so in its
-detail: `BACKGROUND 1 agent · 2 shells · oldest 1d13h`, with each shell's
+A session whose turn ended with subagents still working reads `agents` in
+Sessions: it works through them, and their results start its next turn, so
+the queue leaves it out. One whose turn ended with only shells running is
+idle. Either says what still runs in its detail: `BACKGROUND 1 agent · 2 shells · oldest 1d13h`, with each shell's
 pid and command. A background shell that has run for an hour or more is a
 recommendation in the queue: `Enter` jumps to its session, `x` and a typed
 `y` end it. A wait loop such as `while pgrep -f "node walk.mjs"` finds its

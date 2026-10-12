@@ -226,3 +226,15 @@ func TestAStopThatAsksWaits(t *testing.T) {
 		t.Fatalf("%+v", it)
 	}
 }
+
+// A session working through its subagents does not wait for you: their
+// results start its next turn.
+func TestASessionWorkingThroughSubagentsDoesNotWait(t *testing.T) {
+	q := New()
+	s := session("a", "%1", "api", sample.StatusAgents, 4*time.Minute)
+	s.Busy, s.Agents = true, 1
+	q.Merge([]sample.Session{s}, at(600))
+	if items := q.Items(); len(items) != 0 {
+		t.Fatalf("items %+v", items)
+	}
+}
