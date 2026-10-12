@@ -53,7 +53,7 @@ func TestRemoteNavStillRefusesUnknownSteps(t *testing.T) {
 	st := fixtureState()
 	st.Recommendations = []advice.Rec{{ID: "r1", Title: "x", Primary: &advice.Action{Nav: true, Steps: [][]string{{"tmux", "new-window", "rm -rf /"}}}}}
 	m, ran := onHost(t, st)
-	m.tab, m.recPick = tabQueue, "r1"
+	m.tab, m.recPick = tabSessions, "r1"
 	next, _ := key(m, "enter")
 	next, cmd := key(next, "enter")
 	if cmd != nil {

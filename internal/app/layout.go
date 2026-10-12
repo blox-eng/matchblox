@@ -12,11 +12,12 @@ import (
 type Layout int
 
 const (
-	// Narrow is a phone: one column, the queue first, two lines a row.
+	// Narrow is a phone: one column, the selected row opens in place.
 	Narrow Layout = iota
-	// Medium drops columns and keeps the detail under the list.
+	// Medium is a phone opened up: the list and the detail split at the
+	// middle.
 	Medium
-	// Wide shows every column.
+	// Wide is a desk: the list with every column, the detail beside it.
 	Wide
 )
 
@@ -62,97 +63,13 @@ func plain(lines []string) body {
 	return b
 }
 
+const (
+	colPane = 11 // session:window.pane
+	colName = 17
+)
+
 // minWidth is the narrowest console drawn; a narrower terminal cuts it.
 const minWidth = 30
-
-// chrome is the lines above the body: the header, the limits of each
-// account, the tabs, the action line and a hairline.
-func (m Model) chrome() int { return 4 + m.limitN() }
-
-// limitN is how many limits lines the header has; the tabs are under them.
-func (m Model) limitN() int {
-	if !m.have {
-		return 0
-	}
-	return len(m.snap.Limits)
-}
-
-// narrowRow is a session on a phone: the match, the state, the name and
-// the context on the first line; where it runs on the second.
-func (m Model) narrowRow(s sample.Session, selected bool) []string {
-	st := m.st
-	first := " " + m.matchCell(s) + st.text.Render(pad(busyWord(s), colSt-2)) + pad("", colIdle)
-	if !s.Busy {
-		first = " " + m.matchCell(s) + st.faint.Render(pad(m.stateWord(s), colSt-2)) + st.muted.Render(pad(m.idleCell(s), colIdle))
-	}
-	first += st.text.Render(s.Name)
-	if s.Context == "known" {
-		style := st.muted
-		switch {
-		case m.full().Reached(s):
-			style = st.neg
-		case s.ContextPct >= 70:
-			style = st.warn
-		}
-		first += "  " + style.Render(fmt.Sprintf("%.0f%%", s.ContextPct))
-	}
-	switch s.Do {
-	case "compact":
-		first += "  " + st.neg.Render("! compact")
-	case "clear":
-		first += "  " + st.warn.Render("▲ clear")
-	}
-	where := place(s.Target, s.Pane)
-	if selected {
-		where = "▌" + where
-	}
-	second := "   " + st.muted.Render(where) + "  " + st.muted.Render(worktree(s.Cwd))
-	if pr := m.prOf(s.Cwd); pr != nil {
-		second += " " + st.accent.Render("#"+strconv.Itoa(pr.Number))
-	}
-	if s.Progress != nil {
-		second += "  " + m.progressCell(s.Progress, 5)
-	}
-	return []string{first, second}
-}
-
-// visible is the part of the body that fits under the chrome: the lines
-// above the first row stay, and the rows scroll so the selected one is on
-// the screen. A tap reads the same lines the screen shows.
-func (m Model) visible(w int) body {
-	b := m.body(w)
-	room := max(m.height-m.chrome(), 0)
-	if len(b.lines) <= room {
-		return b
-	}
-	head := 0
-	for head < len(b.rows) && b.rows[head] < 0 {
-		head++
-	}
-	if head >= len(b.rows) || head > room/2 {
-		return body{lines: b.lines[:room], rows: b.rows[:room]}
-	}
-	first, last := -1, -1
-	sel := m.rowIndex()
-	for i, r := range b.rows {
-		if r == sel {
-			if first < 0 {
-				first = i
-			}
-			last = i
-		}
-	}
-	space := room - head
-	start := head
-	if first >= 0 {
-		start = min(max(first-space/2, head), len(b.lines)-space)
-		start = max(min(start, first), last-space+1, head)
-	}
-	return body{
-		lines: append(append([]string{}, b.lines[:head]...), b.lines[start:start+space]...),
-		rows:  append(append([]int{}, b.rows[:head]...), b.rows[start:start+space]...),
-	}
-}
 
 // progressCell is the bar an agent reported, in n cells and its percent.
 func (m Model) progressCell(p *sample.Progress, n int) string {

@@ -18,14 +18,18 @@ import (
 
 func screen(m tea.Model) string { return ansi.Strip(m.(Model).render()) }
 
-func actionLine(m tea.Model) string { return strings.Split(screen(m), "\n")[2] }
+// actionLine is the key line, at the bottom.
+func actionLine(m tea.Model) string {
+	lines := strings.Split(screen(m), "\n")
+	return lines[len(lines)-1]
+}
 
 // TestSlashSearchesTheTab: / starts a search of the open tab; while it is
 // typed every letter is text, q too; Enter keeps it, Esc clears it.
 func TestSlashSearchesTheTab(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	var next tea.Model = m
-	next, _ = key(next, "2")
+	next, _ = key(next, "1")
 	next, _ = key(next, "/")
 	next = typeText(next, "review q")
 	if next.(Model).quitting {
@@ -58,12 +62,12 @@ func TestSlashSearchesTheTab(t *testing.T) {
 func TestSearchEndsWithTheTab(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	var next tea.Model = m
-	next, _ = key(next, "2")
+	next, _ = key(next, "1")
 	next, _ = key(next, "/")
 	next = typeText(next, "review")
 	next, _ = key(next, "enter")
 	next, _ = key(next, "3")
-	next, _ = key(next, "2")
+	next, _ = key(next, "1")
 	if out := screen(next); !strings.Contains(out, "app-feature") {
 		t.Fatalf("the search stayed after a tab change:\n%s", out)
 	}
@@ -104,8 +108,8 @@ func order(m tea.Model) string {
 	return strings.Join(names, " ")
 }
 
-// TestSessionsBusyFirst: who works is on top, then the newest idle; the
-// oldest are at the bottom (owner, 2026-10-08).
+// TestSessionsBusyFirst: with nobody waiting, who works is on top, then
+// the newest idle; the oldest are at the bottom (owner, 2026-10-08).
 func TestSessionsBusyFirst(t *testing.T) {
 	m, _ := loadedWith(t, 100, sortFixture())
 	if got := order(m); got != "bravo alpha charlie" {
@@ -116,14 +120,14 @@ func TestSessionsBusyFirst(t *testing.T) {
 func TestSortCyclesAndReverses(t *testing.T) {
 	m, _ := loadedWith(t, 100, sortFixture())
 	var next tea.Model = m
-	next, _ = key(next, "2")
+	next, _ = key(next, "1")
 	next, _ = key(next, "s") // idle
 	next, _ = key(next, "s") // context
 	if got := order(next); got != "charlie bravo alpha" {
 		t.Fatalf("by context: %q", got)
 	}
-	if !strings.Contains(screen(next), "CONTEXT▾") {
-		t.Fatalf("the header does not show the sort:\n%s", screen(next))
+	if out := screen(next); !strings.Contains(out, "3 SESSIONS · by context ▾") || strings.Contains(out, "WORKING") {
+		t.Fatalf("the list does not show the sort, or keeps its groups:\n%s", out)
 	}
 	next, _ = key(next, "S")
 	if got := order(next); got != "alpha bravo charlie" {
@@ -139,7 +143,7 @@ func TestSortCyclesAndReverses(t *testing.T) {
 func TestNarrowShowsTheSort(t *testing.T) {
 	m, _ := loadedWith(t, 50, sortFixture())
 	var next tea.Model = m
-	next, _ = key(next, "2")
+	next, _ = key(next, "1")
 	next, _ = key(next, "s")
 	if !strings.Contains(screen(next), "by idle ▾") {
 		t.Fatalf("the phone does not show the sort:\n%s", screen(next))
@@ -147,25 +151,25 @@ func TestNarrowShowsTheSort(t *testing.T) {
 }
 
 func TestTapOnAHeaderSorts(t *testing.T) {
-	m, _ := loadedWith(t, 100, sortFixture())
+	m, _ := loadedWith(t, 100, queueState())
 	var next tea.Model = m
-	next, _ = key(next, "2")
-	y := lineOf(t, next, "WORKTREE")
-	x := strings.Index(strings.Split(screen(next), "\n")[y], "CPU")
+	next, _ = key(next, "6")
+	y := lineOf(t, next, "PATH")
+	x := strings.Index(strings.Split(screen(next), "\n")[y], "RUNS")
 	next, _ = tap(next, x+1, y)
-	if got := order(next); got != "bravo charlie alpha" || next.(Model).sessSort.col != sortCPU {
-		t.Fatalf("a tap on CPU: %q", got)
+	if s := next.(Model).paneSort; s.col != paneByRuns || s.rev {
+		t.Fatalf("a tap on RUNS: %+v", s)
 	}
 	next, _ = tap(next, x+1, y)
-	if got := order(next); got != "alpha charlie bravo" {
-		t.Fatalf("a second tap on CPU did not reverse: %q", got)
+	if s := next.(Model).paneSort; s.col != paneByRuns || !s.rev {
+		t.Fatalf("a second tap on RUNS did not reverse: %+v", s)
 	}
 }
 
 func TestPanesSort(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
 	var next tea.Model = m
-	next, _ = key(next, "7")
+	next, _ = key(next, "6")
 	next, _ = key(next, "s")
 	rows := next.(Model).paneRows()
 	for i := 1; i < len(rows); i++ {
@@ -191,7 +195,7 @@ func gitState() proto.State {
 func TestRemoveEverySafeWorktree(t *testing.T) {
 	m, f := loadedWith(t, 100, gitState())
 	var next tea.Model = m
-	next, _ = key(next, "5")
+	next, _ = key(next, "4")
 	next, _ = key(next, "X")
 	if n := strings.Count(screen(next), "●"); n != 2 {
 		t.Fatalf("%d marked, want the 2 safe ones:\n%s", n, screen(next))
@@ -225,7 +229,7 @@ func TestRemoveEverySafeWorktree(t *testing.T) {
 func TestSpaceMarksOnlyASafeWorktree(t *testing.T) {
 	m, _ := loadedWith(t, 100, gitState())
 	var next tea.Model = m
-	next, _ = key(next, "5")
+	next, _ = key(next, "4")
 	for range 3 {
 		next, _ = key(next, "down")
 	}
@@ -268,7 +272,7 @@ func collect(cmd tea.Cmd) []tea.Msg {
 func TestBatchWithoutAConnectionIsNotSent(t *testing.T) {
 	m, f := loadedWith(t, 100, gitState())
 	var next tea.Model = m
-	next, _ = key(next, "5")
+	next, _ = key(next, "4")
 	next, _ = key(next, "X")
 	got := next.(Model)
 	got.lost = true
@@ -299,7 +303,7 @@ func TestBatchWithoutAConnectionIsNotSent(t *testing.T) {
 func TestSearchKeepsTheMarks(t *testing.T) {
 	m, _ := loadedWith(t, 100, gitState())
 	var next tea.Model = m
-	next, _ = key(next, "5")
+	next, _ = key(next, "4")
 	next, _ = key(next, "down")
 	next, _ = key(next, " ")
 	next, _ = key(next, "/")
@@ -321,19 +325,18 @@ func TestSearchKeepsTheMarks(t *testing.T) {
 	}
 }
 
-// Review 2, #5: the progress cell holds its column at any percent.
+// Review 2, #5: the plan cell holds its column at any percent.
 func TestProgressHoldsItsColumn(t *testing.T) {
 	st := sortFixture()
 	st.Sessions[0].Progress = &sample.Progress{Pct: 5}
 	st.Sessions[1].Progress = &sample.Progress{Pct: 100}
-	m, _ := loadedWith(t, 120, st)
-	next, _ := key(m, "2")
+	m, _ := loadedWith(t, 132, st)
+	next, _ := key(m, "1")
 	lines := strings.Split(screen(next), "\n")
-	a, b := lines[lineOf(t, next, "alpha")], lines[lineOf(t, next, "bravo")]
-	wt := worktree(st.Sessions[0].Cwd)
-	at := func(line string) int { return lipgloss.Width(line[:max(strings.LastIndex(line, wt), 0)]) }
-	if ia, ib := at(a), at(b); !strings.Contains(a, wt) || ia != ib {
-		t.Fatalf("the worktree column moved (%d, %d):\n%s\n%s", ia, ib, a, b)
+	a, b := lines[sessLine(t, next, "alpha")], lines[sessLine(t, next, "bravo")]
+	at := func(line, place string) int { return lipgloss.Width(line[:max(strings.Index(line, place), 0)]) }
+	if ia, ib := at(a, "w:alpha"), at(b, "w:bravo"); !strings.Contains(a, "5%") || ia == 0 || ia != ib {
+		t.Fatalf("the place column moved (%d, %d):\n%s\n%s", ia, ib, a, b)
 	}
 }
 
@@ -354,7 +357,8 @@ func TestTapEndsTheTypingOfASearch(t *testing.T) {
 }
 
 // TestAnOpenPullRequestShowsWhereItsAgentShows: the PR of the worktree an
-// agent works in is on its Sessions row, its queue row and in the detail.
+// agent works in is on its desk row, in the detail, and under its row
+// when it opens on a phone.
 func TestAnOpenPullRequestShowsWhereItsAgentShows(t *testing.T) {
 	st := fixtureState()
 	st.Sessions = append(st.Sessions, sample.Session{PID: 950, Pane: "%9", Target: "api:1.1", Name: "cache-work",
@@ -365,28 +369,23 @@ func TestAnOpenPullRequestShowsWhereItsAgentShows(t *testing.T) {
 		{Path: "/w/app", Branch: "main"},
 		{Path: "/w/app-cache", Branch: "cache", Sessions: 1, PR: &gitscan.PR{Number: 4312, Title: "Add the cache", URL: "https://example.com/pr/4312"}},
 	}}}}
-	m, _ := loadedWith(t, 120, st)
-	if out := ansi.Strip(m.render()); !strings.Contains(out, "#4312") {
-		t.Fatalf("the queue row lacks the PR:\n%s", out)
+	m, _ := loadedWith(t, 132, st) // cache-work waits: it is selected
+	if l := rowOf(m.render(), "cache-work"); !strings.Contains(listOf(l, 132), "#4312") {
+		t.Fatalf("the desk row lacks the PR: %q", l)
 	}
-	m.tab, m.selPID = tabSessions, 950
-	out := ansi.Strip(m.render())
-	for _, want := range []string{"#4312", "PR #4312 Add the cache", "https://example.com/pr/4312"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("Sessions lacks %q:\n%s", want, out)
-		}
-	}
-	for _, w := range []int{80, 100} {
+	for _, w := range []int{86, 132} {
 		m.width = w
-		for _, l := range strings.Split(ansi.Strip(m.render()), "\n") {
-			if strings.Contains(l, "cache-work") && !strings.Contains(l, "PR #") && !strings.Contains(l, "#4312") {
-				t.Fatalf("the row at %d columns lacks the PR: %q", w, l)
+		out := ansi.Strip(m.render())
+		for _, want := range []string{"ship     #4312 Add the cache", "https://example.com/pr/4312"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("width %d: the detail lacks %q:\n%s", w, want, out)
 			}
 		}
 	}
-	m.width = 50 // a phone
-	if out := ansi.Strip(m.render()); !strings.Contains(out, "#4312") {
-		t.Fatalf("the phone row lacks the PR:\n%s", out)
+	m.width = 44 // a phone
+	out := strings.Split(ansi.Strip(m.render()), "\n")
+	if at := sessLine(t, m, "cache-work"); !strings.Contains(out[at+2], "#4312 Add the cache") {
+		t.Fatalf("the phone row does not open on its PR:\n%s", strings.Join(out, "\n"))
 	}
 }
 
@@ -396,7 +395,7 @@ func TestRemovingOneWorktreeSaysWorktree(t *testing.T) {
 	st.Git.Repos[0].Worktrees = append(wts[:2:2], wts[3])
 	m, _ := loadedWith(t, 100, st)
 	var next tea.Model = m
-	for _, k := range []string{"5", "X", "x", "y"} {
+	for _, k := range []string{"4", "X", "x", "y"} {
 		next, _ = key(next, k)
 	}
 	if line := actionLine(next); !strings.Contains(line, "removing 1 worktree…") {

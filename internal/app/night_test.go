@@ -95,7 +95,7 @@ func TestNightWordAndRuleTakeTheNightToken(t *testing.T) {
 	if !word {
 		t.Fatalf("header %+v: the word is not in the night token", lines[0])
 	}
-	rule := lines[len(m.limitLines(120))+3] // header, limits, tabs, the action line, then the rule
+	rule := lines[2] // the header, the tabs, then the rule
 	ruled := false
 	for _, s := range rule {
 		if strings.Contains(s.Text, "─") && s.FG == "night" {
@@ -240,7 +240,7 @@ func TestTheCardStandsApartFromSetUp(t *testing.T) {
 	m, _ := loadedWith(t, 120, st)
 	lines := strings.Split(ansi.Strip(m.render()), "\n")
 	for i, l := range lines {
-		if strings.HasPrefix(l, " SET UP") && strings.TrimSpace(lines[i-1]) != "" {
+		if strings.HasPrefix(l, " SET UP") && strings.TrimSpace(listOf(lines[i-1], 120)) != "" {
 			t.Fatalf("SET UP sits on the card: %q", lines[i-1])
 		}
 	}

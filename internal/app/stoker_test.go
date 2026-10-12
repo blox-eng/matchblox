@@ -55,18 +55,24 @@ func TestNKeyStartsAndEndsTheNight(t *testing.T) {
 	}
 }
 
+// The header's right says the stoker: off, on, or the night with its end;
+// a phone drops the end.
 func TestStatusShowsStokerOrNight(t *testing.T) {
 	m, _ := loadedWith(t, 100, stokerState(proto.StokerView{Mode: proto.StokerMode{On: true}}))
-	if h := ansi.Strip(m.header(100)); !strings.Contains(h, "stoker") {
+	if h := ansi.Strip(m.head(100)); !strings.HasSuffix(h, " stoker ") {
 		t.Fatalf("header %q", h)
 	}
 	until := time.Date(2026, 10, 10, 7, 0, 0, 0, time.Local)
+	m, _ = loadedWith(t, 100, stokerState(proto.StokerView{Mode: proto.StokerMode{On: true, Until: until}}))
+	if h := ansi.Strip(m.head(100)); !strings.Contains(h, "☾ night → 07:00") {
+		t.Fatalf("night header %q", h)
+	}
 	m, _ = loadedWith(t, 40, stokerState(proto.StokerView{Mode: proto.StokerMode{On: true, Until: until}}))
-	if h := ansi.Strip(m.header(40)); !strings.Contains(h, "night → 07:00") {
+	if h := ansi.Strip(m.head(40)); !strings.Contains(h, "☾ night") || strings.Contains(h, "07:00") {
 		t.Fatalf("phone header %q", h)
 	}
 	m, _ = loadedWith(t, 100, stokerState(proto.StokerView{}))
-	if h := ansi.Strip(m.header(100)); strings.Contains(h, "stoker") || strings.Contains(h, "night") {
+	if h := ansi.Strip(m.head(100)); !strings.Contains(h, "stoker off") || strings.Contains(h, "night") {
 		t.Fatalf("off header %q", h)
 	}
 }
@@ -86,7 +92,7 @@ func TestStokedListsRunsWithResume(t *testing.T) {
 		if !strings.Contains(row, "app-feature") || !strings.ContainsAny(row, "✦╿│") {
 			t.Fatalf("width %d: no match on the step row %q", w, row)
 		}
-		if lineOf(t, m, "STOKED") > lineOf(t, m, "WAITING FOR YOU") {
+		if lineOf(t, m, "STOKED") > lineOf(t, m, "WAITS FOR YOU") {
 			t.Fatalf("width %d: STOKED is under the queue:\n%s", w, out)
 		}
 		for i, line := range strings.Split(m.render(), "\n") {
@@ -143,14 +149,14 @@ func sendKey(m tea.Model, k string) tea.Model {
 	return next
 }
 
-// On a phone a long host name leaves no room for the time: the word stays
-// whole, never cut.
+// On a phone a long host name gives way: the night's word stays whole,
+// never cut.
 func TestNightFitsAPhoneWithALongHostName(t *testing.T) {
 	until := time.Date(2026, 10, 10, 7, 0, 0, 0, time.Local)
 	m, _ := loadedWith(t, 40, stokerState(proto.StokerView{Mode: proto.StokerMode{On: true, Until: until}}))
 	m.opt.Host = "build-workstation"
-	h := ansi.Strip(m.header(40))
-	if !strings.Contains(h, "· night") || strings.Contains(h, "…") {
+	h := ansi.Strip(m.head(40))
+	if !strings.Contains(h, "☾ night") || strings.Contains(h, "…") {
 		t.Fatalf("phone header %q", h)
 	}
 }

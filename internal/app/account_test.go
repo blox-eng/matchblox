@@ -45,36 +45,47 @@ func demoSessions(t *testing.T, w int) Model {
 	return m
 }
 
+// rowOf is the screen line of a session's row: its name in the list
+// column, never a recommendation that names it ("Compact x (%1)").
 func rowOf(out, name string) string {
-	for _, l := range strings.Split(ansi.Strip(out), "\n") {
-		if strings.Contains(l, " "+name+" ") {
+	lines := strings.Split(ansi.Strip(out), "\n")
+	for _, l := range lines {
+		if left := listOf(l, len([]rune(lines[0]))); strings.Contains(left, " "+name+" ") && !strings.Contains(left, "(%") {
 			return l
 		}
 	}
 	return ""
 }
 
-// TestSessionsShowEachAccountWithItsProviderMark: a wide screen has an
-// ACCOUNT column; the provider is a mark, not a name.
-func TestSessionsShowEachAccountWithItsProviderMark(t *testing.T) {
-	out := demoSessions(t, 160).render()
-	if !strings.Contains(ansi.Strip(out), "ACCOUNT") {
-		t.Fatalf("no ACCOUNT column at 160:\n%s", ansi.Strip(out))
-	}
+// choose selects the session with pid, as a pick on its row does.
+func choose(m *Model, pid int) {
+	m.chose, m.selPID, m.doorPick, m.recPick = true, pid, "", ""
+}
+
+// TestTheDetailNamesTheAccountWithItsProviderMark: the detail of a session
+// names its account; the provider is a mark, not a name.
+func TestTheDetailNamesTheAccountWithItsProviderMark(t *testing.T) {
 	for name, want := range map[string]string{
 		"hearth-api": "✻ team@example.com · Max",
 		"codex":      "❋ team@example.com · Plus",
 		"opencode":   "google · login",
 	} {
-		l := rowOf(out, name)
-		if !strings.Contains(l, want) {
-			t.Errorf("%s: %q lacks %q", name, l, want)
+		m := demoSessions(t, 160)
+		for _, s := range m.snap.Sessions {
+			if s.Name == name {
+				choose(&m, s.PID)
+			}
 		}
-		if strings.Contains(l, "anthropic") || strings.Contains(l, "openai") {
-			t.Errorf("%s: a provider name instead of its mark: %q", name, l)
+		out := ansi.Strip(m.render())
+		if !strings.Contains(out, want) {
+			t.Errorf("%s: the detail lacks %q:\n%s", name, want, out)
+		}
+		if strings.Contains(out, "anthropic") || strings.Contains(out, "openai") {
+			t.Errorf("%s: a provider name instead of its mark:\n%s", name, out)
 		}
 	}
-	// Context use for every agent.
+	// Context use for every agent, on its row.
+	out := demoSessions(t, 160).render()
 	for name, want := range map[string]string{"codex": "55%", "opencode": "6%"} {
 		if l := rowOf(out, name); !strings.Contains(l, want) {
 			t.Errorf("%s: %q lacks %s", name, l, want)
@@ -82,15 +93,13 @@ func TestSessionsShowEachAccountWithItsProviderMark(t *testing.T) {
 	}
 }
 
-// TestTheAccountColumnIsDroppedFirst: without room the column goes, and
-// every line still fits.
-func TestTheAccountColumnIsDroppedFirst(t *testing.T) {
-	for _, w := range []int{100, 50} {
+// TestRowsLeaveTheAccountToTheDetail: no row carries the account, and
+// every line fits, at every width.
+func TestRowsLeaveTheAccountToTheDetail(t *testing.T) {
+	for _, w := range []int{50, 100, 160} {
 		out := demoSessions(t, w).render()
-		for _, l := range strings.Split(ansi.Strip(out), "\n") {
-			if (strings.Contains(l, "TMUX") || strings.Contains(l, " hearth-api ")) && (strings.Contains(l, "ACCOUNT") || strings.Contains(l, "team@example.com")) {
-				t.Errorf("width %d has an account column: %q", w, l)
-			}
+		if l := rowOf(out, "hearth-api"); l == "" || strings.Contains(listOf(l, w), "team@example.com") {
+			t.Errorf("width %d: row %q", w, l)
 		}
 		for i, line := range strings.Split(out, "\n") {
 			if lw := lipgloss.Width(line); lw > w {
@@ -129,8 +138,8 @@ func TestSessionsSortByAccount(t *testing.T) {
 			t.Fatalf("not sorted by account: %q", got)
 		}
 	}
-	if !strings.Contains(ansi.Strip(m.render()), "ACCOUNT▾") {
-		t.Fatal("the header does not mark the account column")
+	if !strings.Contains(ansi.Strip(m.render()), "SESSIONS · by account ▾") {
+		t.Fatal("the list does not name the sort")
 	}
 }
 
@@ -152,7 +161,7 @@ func TestNoCredentialReachesTheScreen(t *testing.T) {
 	shown := false
 	for _, w := range []int{50, 100, 160, 220} {
 		m := demoSessions(t, w)
-		for tab := range 7 {
+		for tab := range tabNames {
 			m.tab = tab
 			out := ansi.Strip(m.render())
 			shown = shown || strings.Contains(out, "team@example.com")
@@ -177,29 +186,31 @@ func TestADetailWithoutAWindowShowsNoFigureForIt(t *testing.T) {
 			st.Sessions[i].Context, st.Sessions[i].Window, st.Sessions[i].ContextPct = "unmeasured", 0, 0
 		}
 	}
-	m, _ := loadedWith(t, 120, st)
+	m, _ := loadedWith(t, 160, st)
 	m.tab = tabSessions
 	for _, s := range m.snap.Sessions {
 		if s.Agent == "opencode" {
-			m.selPID = s.PID
+			choose(&m, s.PID)
 		}
 	}
-	out := ansi.Strip(m.render())
-	if strings.Contains(out, "/ 0 tokens") || !strings.Contains(out, "63k tokens · no window known: add the model to [sessions.windows]") {
+	s, _ := m.selectedSession()
+	facts := strings.Join(m.facts(s), " · ")
+	if out := ansi.Strip(m.render()); strings.Contains(out, "/ 0 tokens") || !strings.Contains(out, "no window known") ||
+		!strings.Contains(facts, "63k tokens · no window known: add the model to [sessions.windows]") {
 		t.Fatalf("detail:\n%s", out)
 	}
 }
 
-// TestTheDetailShowsTheAccount: below the width of the ACCOUNT column the
-// selected session's detail still names it.
+// TestTheDetailShowsTheAccount: on an opened phone the detail names the
+// selected session's account too.
 func TestTheDetailShowsTheAccount(t *testing.T) {
-	m := demoSessions(t, 100)
+	m := demoSessions(t, 86)
 	for _, s := range m.snap.Sessions {
 		if s.Agent == "codex" {
-			m.selPID = s.PID
+			choose(&m, s.PID)
 		}
 	}
-	if out := ansi.Strip(m.render()); !strings.Contains(out, "❋ team@example.com · Plus") {
-		t.Fatalf("detail lacks the account:\n%s", out)
+	if out := strings.Join(strings.Fields(ansi.Strip(m.render())), " "); !strings.Contains(out, "team@example.com") {
+		t.Fatalf("detail lacks the account:\n%s", ansi.Strip(m.render()))
 	}
 }

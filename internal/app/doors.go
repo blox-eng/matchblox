@@ -23,16 +23,6 @@ func openDoors(ds []doors.Door) []doors.Door {
 	return out
 }
 
-func (m Model) selectedDoor() (doors.Door, bool) {
-	if m.tab != tabQueue {
-		return doors.Door{}, false
-	}
-	if i := m.queueIndex(); i < len(m.doors) {
-		return m.doors[i], true
-	}
-	return doors.Door{}, false
-}
-
 // doorAction is what Enter does on a door: write its file, or run its
 // command in this terminal. Both wait for a typed y.
 func (m Model) doorAction(d doors.Door) *action {
@@ -99,14 +89,14 @@ func (m Model) doorRan(msg doorRanMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// doorsSection is the doors above the queue: one row each, and under the
-// door that waits for its y, the exact diff or command.
+// doorsSection is the doors above the sessions: one row each, and under
+// the door that waits for its y, the exact diff or command.
 func (m Model) doorsSection(b *body, w int) {
 	if len(m.doors) == 0 {
 		return
 	}
 	st := m.st
-	sel := m.queueIndex()
+	sel := m.sessIndex()
 	ds := m.doors
 	if ds[0].ID == stokedRow {
 		m.stokedSection(b, w, 0, sel == 0)
@@ -129,7 +119,7 @@ func (m Model) doorsSection(b *body, w int) {
 		}
 		if narrow {
 			// A phone: one line for each door, the why of the selected one,
-			// so the queue stays on the first screen.
+			// so the sessions stay on the first screen.
 			b.addRow(i, i == sel, w, st, " "+st.accent.Render(mark)+st.text.Render(d.Title))
 			if i != sel {
 				continue
@@ -206,12 +196,15 @@ func (m Model) previewRoom() int {
 	var rows body
 	mm := m
 	mm.pending = nil
-	mm.doorsSection(&rows, mm.width)
+	w, _ := m.panes(max(m.width, minWidth))
+	mm.doorsSection(&rows, w)
 	choice := 0
 	if d, ok := m.previewDoor(); ok {
-		choice = len(m.choiceLines(d, m.width))
+		choice = len(m.choiceLines(d, w))
 	}
-	return max(3, m.height-m.chrome()-len(rows.lines)-3-choice)
+	// The header, the tabs and a hairline above; a hairline and the key
+	// line under.
+	return max(3, m.height-5-len(rows.lines)-3-choice)
 }
 
 // previewSeen: the last line of the diff was on the screen. A door opens

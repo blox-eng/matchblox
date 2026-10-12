@@ -221,7 +221,7 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 }
 
 var (
-	burning = regexp.MustCompile(`flint-auth\s+[✦✧] busy`)
+	burning = regexp.MustCompile(`[✦✧] flint-auth\s+busy`)
 	figure  = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
 	sparks  = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
 	spaces  = regexp.MustCompile(`\s+`)
@@ -442,8 +442,8 @@ func TestReplay(t *testing.T) {
 	full := time.Date(2026, 10, 1, 23, 40, 0, 0, time.UTC)
 	morning := time.Date(2026, 10, 2, 6, 59, 50, 0, time.UTC)
 	steps := []step{
-		{name: "the queue", at: 1300 * time.Millisecond, ok: has("ws-1", "WAITING FOR YOU", "flint-auth", "waits",
-			"kindle-web", "needs your permission", "#212", "ember-billing", "done", "5h ", "wk ")},
+		{name: "who waits", at: 1300 * time.Millisecond, ok: has("ws-1", "● 4 wait for you", "WAITS FOR YOU · 4", "flint-auth", "waits",
+			"kindle-web", "asks", "ember-billing", "done", "Should a refresh also rotate", "USAGE", "MACHINE", "5h ", "wk ")},
 		{name: "a: the answer field", at: 3800 * time.Millisecond, key: "a", ok: has("flint-auth")},
 	}
 	at := 3800 * time.Millisecond
@@ -456,18 +456,20 @@ func TestReplay(t *testing.T) {
 	}
 	steps = append(steps, []step{
 		{name: "the answer, before it runs", at: 5200 * time.Millisecond, key: "enter", ok: has("RUN tmux send-keys -t %2 -l -- rotate it", "y run")},
+		// flint-auth works again: the frame waits until its strike has
+		// played, so every run draws the same one.
 		{name: "the answer goes", at: 6400 * time.Millisecond, key: "y", ok: func(s string) bool {
-			return !strings.Contains(s, "flint-auth") && strings.Contains(s, "3 WAITING FOR YOU") && strings.Contains(s, "ran: tmux send-keys -t %2")
+			return has("WAITS FOR YOU · 3", "ran: tmux send-keys -t %2")(s) && burning.MatchString(s)
 		}},
-		// flint-auth burns: its strike has played, so every run draws the same frame.
-		{name: "the sessions", at: 8 * time.Second, key: "2", ok: func(s string) bool {
-			return has("hearth-api", "spark-docs", "! compact", "88%", "kindle-web", "ember-bill", "cinder-ci", "wick-mobile", "codex", "opencode")(s) &&
+		// The selection moved to the next that waits.
+		{name: "the sessions", at: 8 * time.Second, ok: func(s string) bool {
+			return has("hearth-api", "spark-docs", "compact:", "88%", "kindle-web", "ember-billing", "codex", "opencode", "WORKING · 4")(s) &&
 				burning.MatchString(s)
 		}},
 		{name: "the limits and what to do", at: 11 * time.Second, key: "1", ok: has("Max", "5h ", "wk ", "RECOMMENDATIONS",
-			"The week runs short: compact spark-docs")},
+			"The week runs short: compact spark-docs", "out Fri")},
 	}...)
-	// seek presses j until the screen shows what ok wants: where the
+	// seek presses k until the screen shows what ok wants: where the
 	// selection starts depends on the steps before.
 	seek := func(ok func(string) bool) func() {
 		return func() {
@@ -475,12 +477,12 @@ func TestReplay(t *testing.T) {
 				if ok(ansi.Strip(capture())) {
 					return
 				}
-				p.Send(keyMsg("j"))
+				p.Send(keyMsg("k"))
 				time.Sleep(100 * time.Millisecond)
 			}
 		}
 	}
-	weekRec := has("The week runs short: compact spark-docs", "of the week used", "x send /compact, asks y")
+	weekRec := has("The week runs short: compact spark-docs", "x send /compact, asks y")
 	steps = append(steps, step{name: "the rec selected", at: 12500 * time.Millisecond, do: seek(weekRec), ok: weekRec})
 	steps = append(steps, []step{
 		{name: "the compact, guarded", at: 14 * time.Second, key: "x", ok: has("tmux send-keys -t %3 /compact Enter", "y run")},
@@ -489,25 +491,24 @@ func TestReplay(t *testing.T) {
 			return strings.Contains(s, "ran: tmux send-keys -t %3 /compact Enter") && !strings.Contains(s, "Compact spark-docs (%3)") &&
 				strings.Contains(s, "The week runs short: compact hearth-api")
 		}},
-		{name: "git", at: 17 * time.Second, key: "5", ok: has("9 WORKTREES", "1 SAFE TO REMOVE", "kindle-cart-v1", "✓ safe to remove")},
+		{name: "git", at: 17 * time.Second, key: "4", ok: has("9 WORKTREES", "1 SAFE TO REMOVE", "kindle-cart-v1", "✓ safe to remove")},
 		{name: "a worktree marked", at: 18300 * time.Millisecond, key: "X", ok: has("●kindle-cart-v1")},
 		{name: "the remove, guarded", at: 19300 * time.Millisecond, key: "x", ok: has("worktree remove /work/kindle-cart-v1", "y run")},
 		{name: "removed", at: 20300 * time.Millisecond, key: "y", ok: has("8 WORKTREES", "removed 1")},
 	}...)
 	steps = append(steps, []step{
-		{name: "machine health", at: 22300 * time.Millisecond, key: "3", ok: has("CPU")},
-		{name: "the busy loop", at: 23800 * time.Millisecond, key: "4", ok: has("4242", "DETACHED BUSY LOOPS")},
+		{name: "the busy loop", at: 23800 * time.Millisecond, key: "3", ok: has("MACHINE !", "4242", "DETACHED BUSY LOOPS")},
 		{name: "a guarded kill", at: 24800 * time.Millisecond, key: "x", ok: has("kill 4242", "y run")},
 		// The result as well as the state: a late result would still show
 		// in the next step.
 		{name: "the loop is gone", at: 26 * time.Second, key: "y", ok: func(s string) bool {
 			return !strings.Contains(s, "while :; do go test") && strings.Contains(s, "ran: kill 4242")
 		}},
-		{name: "back to the queue", at: 27500 * time.Millisecond, key: "1", ok: has("kindle-web")},
+		{name: "back to the sessions", at: 27500 * time.Millisecond, key: "1", ok: has("kindle-web", "WAITS FOR YOU")},
 		{name: "a night", at: 29 * time.Second, do: func() { clk.Set(night) }, key: "n", ok: has("night → 07:00")},
 		{name: "take over?", at: 31 * time.Second, key: "enter", ok: has("The stoker is on. Take over?")},
 		{name: "kept on", at: 33 * time.Second, key: "n", ok: func(s string) bool {
-			return strings.Contains(s, "night → 07:00") && !strings.Contains(s, "Take over?") && strings.Contains(s, "RUN tmux switch-client -t %5")
+			return strings.Contains(s, "night → 07:00") && !strings.Contains(s, "Take over?") && strings.Contains(s, "RUN tmux switch-client -t %8")
 		}},
 		{name: "back to the night", at: 34200 * time.Millisecond, key: "esc", ok: func(s string) bool {
 			return strings.Contains(s, "night → 07:00") && !strings.Contains(s, "RUN tmux switch-client")
@@ -519,9 +520,9 @@ func TestReplay(t *testing.T) {
 			}
 		}, ok: has("STOKED", "hearth-api", "176k → 9k", "RESUME", "rate-limit headers")},
 		{name: "the morning card", at: 39500 * time.Millisecond, do: func() { clk.Set(morning) },
-			ok: has("NIGHT 23:10 → 07:00", "ready 4/5", "1 compacted", "167k tokens given back", "kindle-web       waits for you", "176k → 9k", "RESUME")},
+			ok: has("NIGHT 23:10 → 07:00", "ready 4/5", "1 compacted", "167k given back", "kindle-web       waits for you", "176k → 9k", "RESUME")},
 		{name: "folded", at: 44 * time.Second, keys: []string{"k", "k", "k", "k", "k", "k"}, key: "enter", ok: func(s string) bool {
-			return !strings.Contains(s, "NIGHT 23:10") && strings.Contains(s, "WAITING FOR YOU")
+			return !strings.Contains(s, "NIGHT 23:10") && strings.Contains(s, "WAITS FOR YOU")
 		}},
 	}...)
 	var still replay.Frame

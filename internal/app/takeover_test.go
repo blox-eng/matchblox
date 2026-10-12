@@ -13,7 +13,8 @@ import (
 
 func footerOf(m tea.Model) string {
 	mm := m.(Model)
-	return ansi.Strip(mm.footer(max(mm.width, minWidth)))
+	line, _ := mm.keyLine(max(mm.width, minWidth))
+	return ansi.Strip(line)
 }
 
 func recIDs(acts []proto.Act) []string {
@@ -50,8 +51,8 @@ func TestYesRestsTheStokerAndRunsTheKey(t *testing.T) {
 	if mm.pending == nil {
 		t.Fatal("the key held for the answer did not run")
 	}
-	if mm.night() || !strings.Contains(ansi.Strip(mm.header(120)), "stoker rests") {
-		t.Fatalf("after y: night %v, header %q", mm.night(), ansi.Strip(mm.header(120)))
+	if mm.night() || !strings.Contains(ansi.Strip(mm.head(120)), "stoker rests") {
+		t.Fatalf("after y: night %v, header %q", mm.night(), ansi.Strip(mm.head(120)))
 	}
 	if !strings.Contains(mm.flash, "stoker rests · f turns it back on") {
 		t.Fatalf("flash %q", mm.flash)
@@ -131,7 +132,7 @@ func TestAStokerThatRestsLooksLikeTheDay(t *testing.T) {
 	if m.night() {
 		t.Fatal("a stoker that rests wears the night")
 	}
-	if h := ansi.Strip(m.header(120)); !strings.Contains(h, "stoker rests") {
+	if h := ansi.Strip(m.head(120)); !strings.Contains(h, "stoker rests") {
 		t.Fatalf("header %q", h)
 	}
 	if got := footerOf(sendKey(m, "enter")); strings.Contains(got, "Take over?") {

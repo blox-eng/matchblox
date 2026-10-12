@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -40,115 +39,10 @@ func (m Model) stateWord(s sample.Session) string {
 	if s.Stopped() {
 		return "out"
 	}
-	for _, it := range m.queue {
-		if s.Pane != "" && it.Pane == s.Pane {
-			return m.queueWordOf(it)
-		}
+	if it, ok := m.waitOf(s); ok {
+		return m.queueWordOf(it)
 	}
 	return "idle"
-}
-
-func (m Model) queueSelIndex() int {
-	for i, it := range m.queue {
-		if it.Pane == m.queuePane {
-			return i
-		}
-	}
-	return 0
-}
-
-// queueIndex is the selected row of the Queue tab: the open doors, the
-// queue items, then the recommendations under them. A door that folds
-// passes the selection to the next door. Nothing picked: the first agent
-// that waits, else the first door.
-func (m Model) queueIndex() int {
-	nd := len(m.doors)
-	if nd > 0 && m.doors[0].ID == stokedRow && m.doorPick == "" && m.queuePane == "" && m.recPick == "" {
-		return 0 // the night's steps come first in the morning
-	}
-	for i, d := range m.doors {
-		if d.ID == m.doorPick {
-			return i
-		}
-	}
-	if nd > 0 && m.doorPick != "" {
-		return min(m.doorAt, nd-1)
-	}
-	if nd > 0 && m.queuePane == "" && m.recPick == "" && len(m.queue) == 0 {
-		return 0
-	}
-	if m.recPick != "" || len(m.queue) == 0 {
-		for i, r := range m.recs {
-			if r.ID == m.recPick || m.recPick == "" {
-				return nd + len(m.queue) + i
-			}
-		}
-	}
-	return nd + m.queueSelIndex()
-}
-
-func (m Model) selectedQueue() (queue.Item, bool) {
-	if i := m.queueIndex() - len(m.doors); i >= 0 && i < len(m.queue) {
-		return m.queue[i], true
-	}
-	return queue.Item{}, false
-}
-
-const colWord = 7
-
-func (m Model) queuePanel(w int) body {
-	st := m.st
-	var b body
-	m.doorsSection(&b, w)
-	b.add(-1, "", st.label.Render(fmt.Sprintf(" %d WAITING FOR YOU", len(m.queue))))
-	if len(m.queue) == 0 {
-		b.add(-1, st.faint.Render(m.nothing(" nothing waits for you")))
-	}
-	nd := len(m.doors)
-	sel := m.queueIndex() - nd
-	narrow := layout(w) == Narrow
-	for i, it := range m.queue {
-		word := st.text.Render(pad(m.queueWordOf(it), colWord))
-		if it.State == queue.StatePermission {
-			word = st.accent.Render(pad(queueWord[it.State], colWord))
-		}
-		where := place(it.Target, it.Pane)
-		if i == sel {
-			where = "▌" + where
-		}
-		tail := st.muted.Render(it.LastLine)
-		switch {
-		case it.FromPane:
-			if it.LastLine == "" {
-				tail = st.faint.Render("from the pane")
-			} else {
-				tail = st.faint.Render("from the pane: ") + tail // first: a long line is cut at the end
-			}
-		case it.Estimated && it.LastLine == "":
-			tail = st.faint.Render("estimated")
-		case it.Estimated:
-			tail = st.faint.Render("estimated: ") + tail
-		}
-		if s, ok := m.sessionIn(it.Pane); ok {
-			if pr := m.prOf(s.Cwd); pr != nil {
-				tail = st.accent.Render("#"+strconv.Itoa(pr.Number)) + "  " + tail
-			}
-		}
-		if s, ok := m.sessionIn(it.Pane); ok && s.Progress != nil {
-			tail = m.progressCell(s.Progress, 5) + "  " + tail
-		}
-		idle := st.muted.Render(pad(sample.Human(m.now().Sub(it.Since)), colIdle))
-		lines := []string{" " + m.queueCell(it) + word + idle + st.text.Render(pad(it.Name, colName)) + st.muted.Render(pad(where, colPane)) + tail}
-		if narrow {
-			// A phone: who waits on the first line; where, and what it
-			// said last, on the second.
-			lines = []string{" " + m.queueCell(it) + word + idle + st.text.Render(it.Name),
-				"   " + st.muted.Render(where) + "  " + tail}
-		}
-		b.addRow(nd+i, i == sel, w, st, lines...)
-	}
-	m.recsSection(&b, w)
-	return b
 }
 
 // paneRow is one tmux pane, with an agent or not.
@@ -228,15 +122,8 @@ func answerSteps(pane, text string) [][]string {
 // waits for an answer. At a permission prompt the Enter of an answer would
 // approve it, so the person goes to the pane instead (why says so).
 func (m Model) answerTarget() (pane, why string) {
-	switch m.tab {
-	case tabQueue:
-		if it, ok := m.selectedQueue(); ok {
-			pane = it.Pane
-		}
-	case tabSessions:
-		if s, ok := m.selected(); ok {
-			pane = s.Pane
-		}
+	if s, ok := m.selectedSession(); ok {
+		pane = s.Pane
 	}
 	if pane == "" {
 		return "", ""

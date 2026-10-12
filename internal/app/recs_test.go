@@ -11,29 +11,29 @@ import (
 	"github.com/blox-eng/matchblox/internal/history"
 )
 
-// TestRecommendationsAreASectionOfTheQueue: what to do next sits under who
-// waits, on one tab; ↓ walks from the queue into the recommendations.
-func TestRecommendationsAreASectionOfTheQueue(t *testing.T) {
+// TestRecommendationsSitAboveTheSessions: what to do next sits above who
+// waits, on the Sessions tab; ↑ walks from the sessions into them.
+func TestRecommendationsSitAboveTheSessions(t *testing.T) {
 	st := queueState()
 	st.Recommendations = []advice.Rec{{ID: "r1", Level: "warn", Title: "Compact app-feature", Evidence: "context 91%",
 		Primary: &advice.Action{Label: "jump", Nav: true, Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}}}}
 	m, _ := loadedWith(t, 100, st)
 	out := ansi.Strip(m.render())
-	if strings.Contains(out, "RECS") || !strings.Contains(out, "7 PANES") {
-		t.Fatalf("the tabs still have recs, or panes is not 7:\n%s", out)
+	tabs := strings.Split(out, "\n")[1]
+	if strings.Contains(tabs, "queue") || strings.Contains(tabs, "procs") || !strings.HasPrefix(tabs, " SESSIONS") {
+		t.Fatalf("the tabs: %q", tabs)
 	}
-	wait, recs := strings.Index(out, "WAITING FOR YOU"), strings.Index(out, "1 RECOMMENDATIONS")
-	if wait < 0 || recs < wait || !strings.Contains(out, "Compact app-feature") {
-		t.Fatalf("the recommendations are not under the queue:\n%s", out)
+	recs, wait := strings.Index(out, "RECOMMENDATIONS · 1"), strings.Index(out, "WAITS FOR YOU")
+	if wait < 0 || recs < 0 || recs > wait || !strings.Contains(out, "Compact app-feature") {
+		t.Fatalf("the recommendations are not above the sessions:\n%s", out)
 	}
-	next, _ := key(m, "down")
-	next, _ = key(next, "down")
+	next, _ := key(m, "up")
 	got := next.(Model)
 	if r, ok := got.selectedRec(); !ok || r.ID != "r1" {
-		t.Fatal("↓ past the queue does not select the recommendation")
+		t.Fatal("↑ from the sessions does not select the recommendation")
 	}
-	if _, ok := got.selectedQueue(); ok {
-		t.Fatal("a queue item is still selected")
+	if _, ok := got.selectedSession(); ok {
+		t.Fatal("a session is still selected")
 	}
 	if !strings.Contains(ansi.Strip(got.render()), "context 91%") {
 		t.Fatal("the selected recommendation does not show its evidence")
@@ -62,40 +62,30 @@ func TestHistoryWithAFlatSeries(t *testing.T) {
 	}
 }
 
-// TestProgressShowsWhereThePersonLooks: the bar an agent reported shows on
-// its row in the sessions and the queue, and its step in the detail.
+// TestProgressShowsWhereThePersonLooks: the bar an agent reported shows
+// under its opened row on a phone, on its desk row, and with its step in
+// the detail.
 func TestProgressShowsWhereThePersonLooks(t *testing.T) {
-	for _, w := range []int{50, 100} {
-		m, _ := loadedWith(t, w, queueState())
-		if out := screen(m); !strings.Contains(out, "▰▰▰▰▱ 75%") {
-			t.Fatalf("width %d: the queue row has no progress:\n%s", w, out)
-		}
-		next, _ := key(m, "2")
-		out := screen(next)
-		// On a wide row an action that is due (! compact) holds the DO
-		// column; the bar shows there when nothing is due.
-		if w >= 60 && (!strings.Contains(out, "! compact") || strings.Contains(out, "▰▰▰▰▱ 75%")) {
-			t.Fatalf("width %d: the due action did not win the DO column:\n%s", w, out)
-		}
-		if w < 60 && !strings.Contains(out, "▰▰▰▰▱ 75%") {
-			t.Fatalf("width %d: the session row has no progress:\n%s", w, out)
-		}
-		if w >= 60 {
-			for s, ok := next.(Model).selected(); ok && s.Pane != "%1"; s, ok = next.(Model).selected() {
-				next, _ = key(next, "down")
-			}
-			if !strings.Contains(screen(next), "PROGRESS ▰▰▰▰▰▰▰▰▱▱ 75%  wiring the console") {
-				t.Fatalf("the detail has no progress:\n%s", screen(next))
-			}
-			st := queueState()
-			for i := range st.Sessions {
-				st.Sessions[i].Do = ""
-			}
-			idle, _ := loadedWith(t, w, st)
-			again, _ := key(idle, "2")
-			if !strings.Contains(screen(again), "▰▰▰▰▱ 75%") {
-				t.Fatalf("width %d: with nothing due the row has no progress:\n%s", w, screen(again))
-			}
-		}
+	m, _ := loadedWith(t, 50, queueState())
+	if out := screen(m); !strings.Contains(out, "▰▰▰▰▱ plan 75%") {
+		t.Fatalf("the opened row has no plan:\n%s", out)
+	}
+	m, _ = loadedWith(t, 132, queueState())
+	out := screen(m)
+	// On a desk row an action that is due (! compact) holds the plan
+	// column; the bar shows there when nothing is due.
+	if l := rowOf(m.render(), "app-feature"); !strings.Contains(l, "! compact") || strings.Contains(listOf(l, 132), "75%") {
+		t.Fatalf("the due action did not win the plan column: %q", l)
+	}
+	if !strings.Contains(out, "plan     ▰▰▰▰▰▰▰▰▱▱ 75%  wiring the console") {
+		t.Fatalf("the detail has no plan:\n%s", out)
+	}
+	st := queueState()
+	for i := range st.Sessions {
+		st.Sessions[i].Do = ""
+	}
+	idle, _ := loadedWith(t, 132, st)
+	if l := rowOf(idle.render(), "app-feature"); !strings.Contains(l, "▰▰▰▰▱ 75%") {
+		t.Fatalf("with nothing due the row has no plan: %q", l)
 	}
 }

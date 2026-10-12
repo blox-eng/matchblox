@@ -205,8 +205,7 @@ type Model struct {
 	git        *proto.GitReport
 	recs       []advice.Rec
 	queue      []queue.Item
-	queuePane  string
-	doors      []doors.Door // the open doors, above the queue
+	doors      []doors.Door // the open doors, above the sessions
 	stoker     *proto.StokerView
 	doorPick   string // the selected door
 	doorAt     int    // its row, for the door after it when it folds
@@ -218,7 +217,8 @@ type Model struct {
 	hist       history.Series
 	selPID     int
 	orphanPID  int
-	recPick    string // the selected recommendation, under the queue
+	recPick    string // the selected recommendation, above the sessions
+	chose      bool   // a session was picked; before, the first that waits is
 	gitSel     int
 	tab        int
 	pending    *action
@@ -251,6 +251,11 @@ type Model struct {
 	picked     map[string]bool // worktrees x removes
 	batch      *batch
 	showExited bool // e: the exited agents, one by one
+	// dockMachine: a phone's dock shows the machine; u turns it back to
+	// usage.
+	dockMachine bool
+	toast       string // what an action did, on the header's right
+	toasts      int    // counts the toasts: a later one outlives the timer of an earlier one
 }
 
 func New(opt Options) Model {
@@ -413,12 +418,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case animMsg:
 		m.animating = false
 		return m, m.animate()
+	case toastMsg:
+		if msg.n == m.toasts {
+			m.toast = ""
+		}
 	case resultMsg:
 		m.endRec(msg.ActID, proto.Result(msg))
 		if m.tally(proto.Result(msg)) {
 			return m, m.recv()
 		}
-		if text := describe(proto.Result(msg)); text != "" {
+		r := proto.Result(msg)
+		if text := describe(r); text != "" && r.Err == "" && len(r.Skipped) == 0 {
+			toast := m.say(tilde(text))
+			return m, tea.Batch(m.recv(), toast)
+		} else if text != "" {
 			m.flash = tilde(text)
 		}
 		return m, m.recv()
@@ -503,12 +516,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.flash = "failed: " + msg.cmd + ": " + msg.err.Error()
-		} else {
-			m.flash = "ran: " + msg.cmd
-			if msg.jumped != "" {
-				m = m.nextAfter(msg.jumped)
-			}
+			return m, nil
 		}
+		if msg.jumped != "" {
+			m = m.nextAfter(msg.jumped)
+		}
+		toast := m.say("ran: " + msg.cmd)
+		return m, toast
 	case tea.MouseClickMsg:
 		m, touch := m.touchRest()
 		next, cmd := m.tap(msg.Mouse())
@@ -662,6 +676,10 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		} else {
 			m.flash = why
 		}
+	case "p":
+		m.setTab(tabShips)
+	case "u":
+		m.dockMachine = !m.dockMachine
 	case "f":
 		return m.stokerKey(false)
 	case "n":
@@ -800,7 +818,14 @@ func (m *Model) move(d int) {
 	}
 }
 
+// selIndex is the selected session: the one picked, followed by its PID
+// across re-sorts; before one is picked, the first that waits.
 func (m Model) selIndex() int {
+	if !m.chose {
+		if i := m.firstWaiting(); i >= 0 {
+			return i
+		}
+	}
 	for i, s := range m.snap.Sessions {
 		if s.PID == m.selPID {
 			return i
@@ -816,23 +841,25 @@ func (m Model) selected() (sample.Session, bool) {
 	return m.snap.Sessions[m.selIndex()], true
 }
 
-// selectedRec is the recommendation selected under the queue.
-func (m Model) selectedRec() (advice.Rec, bool) {
-	if m.tab != tabQueue {
-		return advice.Rec{}, false
-	}
-	i := m.queueIndex() - len(m.doors) - len(m.queue)
-	if i < 0 || i >= len(m.recs) {
-		return advice.Rec{}, false
-	}
-	return m.recs[i], true
-}
-
 // keepSelection follows the selected session by PID across re-sorts.
 func (m *Model) keepSelection() {
 	if _, ok := m.selected(); ok {
 		m.selPID = m.snap.Sessions[m.selIndex()].PID
 	}
+}
+
+// toastMsg ends the toast it counts.
+type toastMsg struct{ n int }
+
+// toastFor is how long a toast stays on the header.
+const toastFor = 2500 * time.Millisecond
+
+// say shows what an action did on the header's right, for toastFor.
+func (m *Model) say(text string) tea.Cmd {
+	m.toasts++
+	m.toast = text
+	n := m.toasts
+	return tea.Tick(toastFor, func(time.Time) tea.Msg { return toastMsg{n} })
 }
 
 func (m Model) View() tea.View {
@@ -842,44 +869,23 @@ func (m Model) View() tea.View {
 	return v
 }
 
-// nextAfter selects, after a jump to pane, the next agent that waits: the
-// next queue row, or in Sessions the next session in the queue, else the
-// next idle one. The way back to the console lands on it.
+// nextAfter selects, after a jump to the selected session's pane, the
+// next session that waits, else the next idle one. The way back to the
+// console lands on it.
 func (m Model) nextAfter(pane string) Model {
-	switch m.tab {
-	case tabQueue:
-		if it, ok := m.selectedQueue(); !ok || it.Pane != pane {
-			return m
-		}
-		for i, it := range m.queue {
-			if it.Pane == pane && len(m.queue) > 1 {
-				m.queuePane = m.queue[(i+1)%len(m.queue)].Pane
-			}
-		}
-	case tabSessions:
-		ss := m.snap.Sessions
-		at := -1
-		for i, s := range ss {
-			if s.Pane == pane {
-				at = i
-			}
-		}
-		if at < 0 {
-			return m
-		}
-		waits := map[string]bool{}
-		for _, it := range m.queue {
-			waits[it.Pane] = true
-		}
-		for _, want := range []func(sample.Session) bool{
-			func(s sample.Session) bool { return waits[s.Pane] },
-			func(s sample.Session) bool { return s.Age() == "idle" },
-		} {
-			for k := 1; k < len(ss); k++ {
-				if s := ss[(at+k)%len(ss)]; want(s) {
-					m.selPID = s.PID
-					return m
-				}
+	if s, ok := m.selectedSession(); !ok || s.Pane != pane {
+		return m
+	}
+	ss := m.snap.Sessions
+	at := m.selIndex()
+	for _, want := range []func(sample.Session) bool{
+		func(s sample.Session) bool { return m.groupOf(s) == groupWaits },
+		func(s sample.Session) bool { return s.Age() == "idle" },
+	} {
+		for k := 1; k < len(ss); k++ {
+			if s := ss[(at+k)%len(ss)]; want(s) {
+				m.chose, m.selPID = true, s.PID
+				return m
 			}
 		}
 	}

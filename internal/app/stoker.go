@@ -13,7 +13,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// stokedRow is the first row of the Queue tab while the stoker has steps
+// stokedRow is the first row of Sessions while the stoker has steps
 // the builder has not seen. It sits with the doors, so it is selected,
 // moved over and folded like one.
 const stokedRow = "stoked"
@@ -62,14 +62,6 @@ func (m Model) ackStoked() (tea.Model, tea.Cmd) {
 	return m, m.send(proto.Act{RecID: "stoker:ack", Which: "primary"})
 }
 
-// stokerWord is what the header shows while the stoker runs.
-func (m Model) stokerWord() string {
-	if m.stoker == nil || !m.stoker.On {
-		return ""
-	}
-	return stokerWordOf(m.stoker.Mode)
-}
-
 func stokerWordOf(md proto.StokerMode) string {
 	if !md.Rests.IsZero() {
 		return "stoker rests"
@@ -78,17 +70,6 @@ func stokerWordOf(md proto.StokerMode) string {
 		return "night → " + md.Until.Local().Format("15:04")
 	}
 	return "stoker"
-}
-
-// stokerShort is the word without the time, for a narrow header.
-func (m Model) stokerShort() string {
-	switch w := m.stokerWord(); {
-	case strings.HasPrefix(w, "night"):
-		return "night"
-	case w == "stoker rests":
-		return "rests"
-	}
-	return m.stokerWord()
 }
 
 // resting: the builder took over and the stoker waits for them to leave.
