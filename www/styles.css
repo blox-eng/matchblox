@@ -104,12 +104,12 @@ footer a { color: var(--muted); }
    44 columns fill it, open the duo's 104 run across two of it, so it opens
    to about the same height, as the Duo does. On a narrow page the open Duo
    shrinks to fit rather than scroll. */
-.fold { --w: min(340px, calc(100vw - 92px)); --gut: 12px; --swing: 620ms cubic-bezier(.2,.7,.2,1); position: relative; perspective: 2200px; border-radius: 34px; }
+.fold { --w: min(340px, calc(100vw - 92px)); --gut: 12px; --swing: 620ms cubic-bezier(.2,.7,.2,1); position: relative; perspective: 2200px; border-radius: 34px; display: grid; align-content: center; justify-items: center; }
 .fold.open { --w: min(340px, calc((100vw - 92px) / 2)); }
 .fold[role="button"] { cursor: pointer; }
 .fold:focus-visible { outline: 2px solid var(--primary); outline-offset: 6px; }
-.fold .body { position: relative; width: calc(var(--w) + 2 * var(--gut)); background: var(--box-left); border: 1px solid var(--box-edge); border-radius: 34px; padding: 30px var(--gut) 22px; transition: width var(--swing); }
-.fold.open .body { width: calc(2 * var(--w) + 2 * var(--gut)); }
+.fold .body { position: relative; width: calc(var(--w) + 2 * var(--gut) + 2px); background: var(--box-left); border: 1px solid var(--box-edge); border-radius: 34px; padding: 30px var(--gut) 22px; transition: width var(--swing); }
+.fold.open .body { width: calc(2 * var(--w) + 2 * var(--gut) + 2px); }
 .fold .body::before { content: ""; position: absolute; top: 12px; left: calc(var(--w) / 2 + var(--gut) - 30px); width: 60px; height: 9px; border-radius: 6px; background: var(--tray); transition: left var(--swing); }
 .fold.open .body::before { left: calc(var(--w) * 1.5 + var(--gut) - 30px); }
 .fold .hinge { position: absolute; top: 0; bottom: 0; left: calc(var(--w) + var(--gut)); width: 2px; margin-left: -1px; background: linear-gradient(transparent, rgba(0,0,0,.35) 8%, rgba(0,0,0,.35) 92%, transparent); opacity: 0; transition: opacity 300ms 400ms; pointer-events: none; }
@@ -119,13 +119,14 @@ footer a { color: var(--muted); }
 .fold.swinging .leaf { opacity: 1; transition: transform var(--swing); }
 .fold.swinging.open .leaf { transform: none; }
 .fold .glass { border-radius: 20px; overflow: hidden; background: var(--t-bg); }
-.replay { --cols: 44; margin: 0; color: var(--t-fg); font: 400 calc(var(--w) / (var(--cols) * .605))/1.18 var(--mono); white-space: pre; transition: color 240ms ease-out, opacity 180ms ease-out; }
+.replay { --cols: 44; margin: 0; color: var(--t-fg); font: 400 calc(var(--w) / (var(--cols) * .605))/1.18 var(--mono); white-space: pre; text-rendering: geometricPrecision; transition: color 240ms ease-out, opacity 180ms ease-out; }
 .fold.open .replay { --cols: 52; }
 .fold.fading .replay { opacity: 0; }
 .say { margin: 0; color: var(--muted); font-size: 14px; text-align: center; }
 @media (max-width: 640px) { .fold, .fold .body { border-radius: 26px; } .fold .leaf { border-radius: 0 26px 26px 0; } .fold .body { padding-block: 24px 16px; } }
 @media (prefers-reduced-motion: reduce) { .fold .body, .fold .body::before, .fold .hinge, .fold .leaf, .replay { transition: none; } }
 .replay .cell { display: inline-block; width: 1ch; overflow: visible; text-align: center; }
+.replay .u .cell { text-decoration: underline; text-underline-offset: .2em; }
 .replay .b { font-weight: 500; } .replay .u { text-decoration: underline; text-underline-offset: .2em; }
 .fg-fg { color: var(--t-fg); } .fg-muted { color: var(--t-muted); } .fg-faint { color: var(--t-faint); } .fg-hair { color: var(--t-hair); }
 .fg-accent { color: var(--t-accent); } .fg-warn { color: var(--t-warn); } .fg-neg { color: var(--t-neg); } .fg-bg { color: var(--t-bg); }

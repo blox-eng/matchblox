@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html"
 	"image/color"
 	"net"
 	"os"
@@ -250,6 +251,28 @@ var (
 // with the width of a figure before it. A change in the console's words,
 // tabs or layout still shows.
 var spinner = regexp.MustCompile(`[\x{2800}-\x{28FF}]`)
+
+// stillSize is the recording whose still frame stands in www/index.html,
+// for no script and reduced motion: the open Duo.
+const stillSize = "duo"
+
+var tag = regexp.MustCompile(`<[^>]*>`)
+
+// stillLines is the text of the still frame's HTML, a line per row.
+func stillLines(b []byte) []string {
+	return strings.Split(strings.Trim(html.UnescapeString(tag.ReplaceAllString(string(b), "")), "\n"), "\n")
+}
+
+// frameLines is the text of a frame, a line per row.
+func frameLines(f replay.Frame) []string {
+	out := make([]string, len(f.Lines))
+	for i, l := range f.Lines {
+		for _, s := range l {
+			out[i] += s.Text
+		}
+	}
+	return out
+}
 
 func skeleton(lines []string) string {
 	var b strings.Builder
@@ -671,10 +694,18 @@ func replayAt(t *testing.T, z replaySize) {
 					framesPath, names[k], skeleton(was[k]), skeleton(now[k]))
 			}
 		}
+		if z.name == stillSize {
+			if was, now := skeleton(stillLines(page[i+len(open):j])), skeleton(frameLines(still)); was != now {
+				t.Fatalf("the still frame in %s is not the %s's: run go test ./cmd/matchblox -run TestReplay -update\nwas:\n%s\nnow:\n%s", index, z.name, was, now)
+			}
+		}
 		return
 	}
-	out := map[string][]byte{framesPath: js, svgPath: svg}
-	if z.name == "duo" { // the page's still frame, for no script and reduced motion
+	out := map[string][]byte{framesPath: js}
+	if z.name != stillSize { // the README shows the desk and the phone
+		out[svgPath] = svg
+	}
+	if z.name == stillSize { // the page's still frame, for no script and reduced motion
 		out[index] = append(append(append([]byte{}, page[:i+len(open)]...), "\n"+replay.Still(still)+"\n"...), page[j:]...)
 	}
 	for path, b := range out {

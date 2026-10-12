@@ -123,25 +123,30 @@ function onReady(fn) {
 
 // The replay: frames of the real console (www/demo/frames-<size>.json,
 // recorded by TestReplay), drawn as text in the page's theme on an iPhone
-// Duo. Folded it plays the phone; it unfolds sideways once, partway
-// through, and open it plays the duo (the console's desk layout). A tap,
-// Enter or Space folds and unfolds it after that, and the run carries on
-// from the same moment. It plays while it is in view. With reduced motion,
-// or without script, the open Duo's still frame stays and nothing moves.
+// Duo. Folded it plays the phone; open it plays the duo (the console's
+// desk layout). Where the open Duo has room to be wider than the folded
+// one, it unfolds sideways once, partway through. A tap, Enter or Space
+// folds and unfolds it, and the run carries on from the same moment. It
+// plays while it is in view. Without script the open Duo's still frame
+// stays; with reduced motion the phone's last frame stands, folded.
 onReady(() => {
   const fold = document.querySelector(".stage .fold");
   const pre = fold && fold.querySelector(".replay");
   const say = document.querySelector(".stage .say");
   if (!pre || !say) return;
+  const glass = pre.parentElement;
+  const body = fold.querySelector(".body");
   const HOLD = 3000;
   const SWING = 620;
   const UNFOLDS_AT = 12; // the frame where it opens on its own, once
   const FLAGS = ["", "b", "u", "b u"];
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const roomy = matchMedia("(min-width: 600px)"); // open, it is half as wide again
 
-  // Plex Mono has no blocks, shapes or dingbats (▰ ● ✦ ╿): the browser
-  // draws them from a wider fallback, and a line runs past its columns.
-  // Each such glyph gets a cell one column wide.
-  const ODD = /([\u2190-\u2BFF\u2700-\u27BF\u{1F300}-\u{1FAFF}])/u;
+  // Plex Mono has no arrows, boxes, blocks or dingbats (▰ ● ✦ ╿): the
+  // browser draws them from a wider fallback, and a line runs past its
+  // columns. Each gets a cell one column wide, as in replay.Still.
+  const ODD = /([←-⯿\u{1F300}-\u{1FAFF}])/u;
   const cells = (text) => {
     const out = document.createDocumentFragment();
     for (const part of text.split(ODD)) {
@@ -166,15 +171,14 @@ onReady(() => {
     }
     return out;
   };
+
   // A browser may round a cell wider than the .6em the CSS sizes for, and
-  // the line then runs past the glass: shrink the font until it fits.
-  const glass = pre.parentElement;
-  // Cells may round to whole pixels, so it looks for the largest size that
-  // fits rather than scaling once.
+  // the line then runs past the glass. Cells may round to whole pixels, so
+  // it looks for the largest size that fits rather than scaling once.
   const fit = () => {
     pre.style.fontSize = "";
     if (pre.scrollWidth <= glass.clientWidth) return;
-    let hi = parseFloat(getComputedStyle(pre).fontSize), lo = hi * 0.8;
+    let hi = parseFloat(getComputedStyle(pre).fontSize), lo = hi * 0.7;
     for (let i = 0; i < 8; i++) {
       const mid = (lo + hi) / 2;
       pre.style.fontSize = mid + "px";
@@ -182,14 +186,19 @@ onReady(() => {
     }
     pre.style.fontSize = lo + "px";
   };
-  addEventListener("resize", fit);
-  // The still frame gets its cells too, so it fits with reduced motion.
-  for (const node of [...pre.querySelectorAll("*"), pre].flatMap((el) => [...el.childNodes]).filter((n) => n.nodeType === 3 && ODD.test(n.data))) node.replaceWith(cells(node.data));
+  let frame = 0;
+  addEventListener("resize", () => {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => { fold.style.minHeight = ""; fit(); });
+  });
   document.fonts.ready.then(fit);
+  // The glass settles its width at the end of a swing: fit it then.
+  body.addEventListener("transitionend", (e) => { if (e.target === body && e.propertyName === "width") fit(); });
 
   const docs = {};
   const load = (size) => docs[size] || (docs[size] = fetch("demo/frames-" + size + ".json")
-    .then((r) => (r.ok ? r.json() : Promise.reject(r.status))));
+    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .catch((err) => { delete docs[size]; throw err; })); // the next try fetches again
 
   let timer = 0, seen = false, doc = null, rows = [], k = 0, open = true, touched = false, opened = false;
   // A frame holds only the lines that changed, and frame 0 holds them all.
@@ -205,59 +214,60 @@ onReady(() => {
     }
     for (let j = 0; j <= k; j++) draw(d.frames[j]);
     fit();
+    tick();
   };
   const tick = () => {
     clearTimeout(timer);
-    if (!doc || !seen || document.hidden) return;
+    if (still || !doc || !seen || document.hidden) return;
     const next = k + 1 < doc.frames.length ? doc.frames[k + 1].at - doc.frames[k].at : HOLD;
     timer = setTimeout(() => {
       k = (k + 1) % doc.frames.length;
       draw(doc.frames[k]);
       if (pre.scrollWidth > glass.clientWidth) fit();
-      if (k === UNFOLDS_AT && !touched && !opened) set(true);
+      if (k === UNFOLDS_AT && !touched && !opened && !open && roomy.matches) set(true);
       tick();
     }, next);
   };
-  const set = (to) => {
+  const shape = (to) => {
     open = to;
     if (to) opened = true;
-    fold.classList.add("swinging", "fading");
     fold.classList.toggle("open", to);
     fold.setAttribute("aria-pressed", String(to));
-    fold.setAttribute("aria-label", to ? "Fold the phone" : "Unfold the phone");
     say.textContent = to ? "Open: the desk, sessions, the answer and the dock at once." : "Folded: the phone, one column.";
-    const size = to ? "duo" : "phone";
-    load(size).then((d) => setTimeout(() => {
-      if (open !== to) return; // folded back while it loaded
-      lay(d);
-      fold.classList.remove("fading");
-    }, SWING / 2)).catch(() => fold.classList.remove("fading"));
-    setTimeout(() => fold.classList.remove("swinging"), SWING + 30);
   };
+  // It swings only once the new size's frames are here, and the stage
+  // keeps the tallest height it has had, so the page below never jumps.
+  const set = (to) => load(to ? "duo" : "phone").then((d) => {
+    if (open === to) return;
+    fold.style.minHeight = Math.max(fold.offsetHeight, parseFloat(fold.style.minHeight) || 0) + "px";
+    fold.classList.add("swinging", "fading");
+    shape(to);
+    setTimeout(() => { if (open === to) lay(d); fold.classList.remove("fading"); }, SWING / 2);
+    setTimeout(() => fold.classList.remove("swinging"), SWING + 30);
+  }).catch(() => { /* it stays as it is; the next tap tries again */ });
   const toggle = () => { touched = true; set(!open); };
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
   fold.setAttribute("role", "button");
+  fold.setAttribute("aria-label", "Unfold the phone");
+  fold.setAttribute("aria-pressed", "true");
   fold.tabIndex = 0;
-  fold.addEventListener("click", toggle);
+  fold.addEventListener("click", () => { if (!String(getSelection())) toggle(); });
   fold.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
     e.preventDefault();
-    toggle();
+    if (!e.repeat) toggle();
   });
-  // The glass settles its width at the end of a swing: fit it then.
-  const body = fold.querySelector(".body");
-  body.addEventListener("transitionend", (e) => { if (e.target === body && e.propertyName === "width") fit(); });
-  // It starts folded, on the phone, from the first frame, without a swing.
-  open = false;
-  body.style.transition = "none";
-  fold.classList.remove("open");
-  requestAnimationFrame(() => requestAnimationFrame(() => { body.style.transition = ""; }));
-  fold.setAttribute("aria-pressed", "false");
-  fold.setAttribute("aria-label", "Unfold the phone");
-  say.textContent = "Folded: the phone, one column.";
-  load("phone").then((d) => { lay(d); tick(); }).catch(() => { /* the still frame stays */ });
-  load("duo").catch(() => { /* it stays folded */ });
+  // It starts folded on the phone, without a swing, once its frames are
+  // here; until then, or if they never come, the open Duo's still stays.
+  load("phone").then((d) => {
+    if (still) k = d.frames.length - 1;
+    fold.style.minHeight = fold.offsetHeight + "px"; // the open Duo's, so its unfold moves nothing
+    body.style.transition = "none";
+    shape(false);
+    lay(d);
+    requestAnimationFrame(() => requestAnimationFrame(() => { body.style.transition = ""; }));
+  }).catch(() => fit());
+  if (!still) load("duo").catch(() => { /* a tap tries again */ });
   new IntersectionObserver(([e]) => { seen = e.isIntersecting; tick(); }, { threshold: 0.2 }).observe(fold);
   document.addEventListener("visibilitychange", tick);
 });

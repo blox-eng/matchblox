@@ -454,14 +454,17 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   Discord · Changelog · bloxng.com). The docs (docs.matchblox.com) use the
   same tokens and type, and load nothing from another site.
 - **Then:** the replay plays on an iPhone Duo in the middle of the stage, a
-  CSS body with a notch. Folded it plays the phone (44×31). Partway through
-  it unfolds sideways, once, and open it plays the duo (104×38, landscape,
-  the console's desk layout) at about the same height. A tap, Enter or
-  Space folds and unfolds it, and the run carries on from the same moment.
-  Each line keeps its columns: a glyph Plex Mono lacks gets a one-column
-  cell, and the font shrinks to the largest size that fits the glass. On a
-  narrow page the open Duo shrinks to fit. Without script or with reduced
-  motion the open Duo's still frame stays.
+  CSS body with a notch. Folded it plays the phone (44×31); open it plays
+  the duo (104×38, landscape, the console's desk layout) at about the same
+  height. From 600px, where the open Duo is half as wide again, it unfolds
+  sideways once, partway through; narrower, it stays folded and readable
+  unless the visitor opens it. A tap, Enter or Space folds and unfolds it,
+  and the run carries on from the same moment; the stage keeps its tallest
+  height, so the page below never jumps. Each line keeps its columns: a
+  glyph Plex Mono lacks gets a one-column cell (in the still frame too),
+  and the font shrinks to the largest size that fits the glass. Without
+  script the open Duo's still frame stays; with reduced motion the phone's
+  last frame stands, folded, and a tap shows the duo's.
 - **README:** the same recordings, as `www/demo/replay-desk.svg` and
   `www/demo/replay-phone.svg` side by side; the docs show the desk's.
 - **Type:** IBM Plex Sans (variable) for text, IBM Plex Mono 400 and 500 for
