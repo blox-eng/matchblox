@@ -164,7 +164,7 @@ func TestASecondTapAsksAndYRunsIt(t *testing.T) {
 	m, f := loadedWith(t, 100, nightState())
 	var ran []string
 	m.opt.Run = func(argv []string) error { ran = argv; return nil }
-	y := lineOf(t, m, "app-review")
+	y := lineOf(t, m, "Clear app-review")
 	next, _ := tap(m, 5, y)
 	next, cmd := tap(next, 5, y)
 	if cmd != nil || ran != nil || !strings.Contains(footerOf(next), "Take over?") {

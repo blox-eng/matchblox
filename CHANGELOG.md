@@ -19,7 +19,9 @@ All notable changes to matchblox are in this file. The format follows
   what is left, and the selected row is washed across the whole pane with
   its name in the accent, the others muted.
 - **Answer or message from a peek.** `a`, or a tap on a selected session,
-  opens a panel with what the agent said last and your answer; a session
+  opens the conversation: the detail pane itself where there is one, the
+  list staying beside it, else a panel at the bottom of a phone, with
+  what the agent said last and your answer; a session
   that works gets your line as a message, which Claude Code queues. `→`
   and `←` (a swipe on a phone), or a tap on `next →` and `← prev`, move
   the peek to the next or previous session. When Claude
@@ -40,6 +42,9 @@ All notable changes to matchblox are in this file. The format follows
 - **Usage and the machine in the rows the list leaves free.** Each
   account's windows as `/usage` says them, and the machine: cpu, memory,
   the disk your home is on, and the agents that run.
+- **Recommendations you can put away.** They sit under the sessions now.
+  `d` dismisses one until its evidence changes, and `h` folds them all to
+  one line; the console remembers both.
 
 ### Changed
 

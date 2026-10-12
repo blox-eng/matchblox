@@ -34,14 +34,21 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	w := max(m.width, minWidth)
 	sc := m.draw(w)
 	if m.peek != nil {
-		return m.tapPeek(ms, sc)
+		inside := ms.Y >= sc.peekAt && ms.Y < sc.peekAt+len(sc.peekRows) && ms.X >= sc.peekX && ms.X < sc.peekX+sc.peekW
+		if !sc.peekInline || inside {
+			return m.tapPeek(ms, sc)
+		}
+		// The list beside the pane is live: the tap closes the peek and
+		// does what it does there.
+		m.peek = nil
+		sc = m.draw(w)
 	}
 	switch {
 	case ms.Y == 0:
 		if s, ok := spanAt([]span{sc.waits}, ms.X); ok && s.press != "" {
 			m.setTab(tabSessions)
 			if i := m.firstWaiting(); i >= 0 {
-				m.selectRow(len(m.doors) + len(m.recs) + i)
+				m.selectRow(len(m.doors) + i)
 			}
 			m.flash = ""
 		}
@@ -70,6 +77,14 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	if sc.rows[i] == headerRow {
 		return m.tapHeader(ms.X)
+	}
+	if sc.rows[i] == recsLabelRow {
+		m.foldRecs()
+		return m, nil
+	}
+	if _, ok := m.selectedRec(); ok && sc.rows[i] == m.rowIndex() && ms.X >= sc.listW-dismissWidth {
+		m.dismissRec()
+		return m, nil
 	}
 	if sc.rows[i] < 0 {
 		return m, nil

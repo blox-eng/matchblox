@@ -69,6 +69,9 @@ type Options struct {
 	// Layered: the console sits under the hosts layer, and esc with
 	// nothing to cancel or clear goes back to it.
 	Layered bool
+	// StateDir keeps what the person did to the recommendations (dismissed,
+	// folded). "": kept for this run only.
+	StateDir string
 	// Exec gives this terminal to argv until it exits. Nil: tea.ExecProcess.
 	Exec func(argv []string, done func(error) tea.Msg) tea.Cmd
 }
@@ -196,6 +199,7 @@ func fromAdvice(r advice.Rec, which string) *action {
 }
 
 type Model struct {
+	recPrefs   recPrefs // dismissed recommendations and the fold
 	opt        Options
 	conn       transport.Conn
 	st         styles
@@ -273,7 +277,8 @@ func New(opt Options) Model {
 	if opt.Binary == "" {
 		opt.Binary = "dev"
 	}
-	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60)}
+	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60),
+		recPrefs: loadRecPrefs(opt.StateDir)}
 	m.splashAt = m.now()
 	return m
 }
@@ -701,6 +706,14 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 			m.openPeek(pane)
 		} else {
 			m.flash = why
+		}
+	case "d":
+		if m.tab == tabSessions {
+			m.dismissRec()
+		}
+	case "h":
+		if m.tab == tabSessions {
+			m.foldRecs()
 		}
 	case "p":
 		m.setTab(tabShips)

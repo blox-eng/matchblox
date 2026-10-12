@@ -33,17 +33,17 @@ var views = [...]tabView{
 	tabSessions: {
 		name:  "sessions",
 		keys:  Model.sessionKeys,
-		count: func(m Model) int { return len(m.doors) + len(m.recs) + len(m.snap.Sessions) },
+		count: func(m Model) int { return len(m.doors) + len(m.snap.Sessions) + m.recRows() },
 		index: Model.sessIndex,
 		pick: func(m *Model, i int) {
-			nd, nr := len(m.doors), len(m.recs)
+			nd, ns := len(m.doors), len(m.snap.Sessions)
 			switch {
 			case i < nd:
 				m.doorPick, m.doorAt, m.recPick = m.doors[i].ID, i, ""
-			case i < nd+nr:
-				m.doorPick, m.recPick = "", m.recs[i-nd].ID
+			case i < nd+ns:
+				m.doorPick, m.recPick, m.chose, m.selPID = "", "", true, m.snap.Sessions[i-nd].PID
 			default:
-				m.doorPick, m.recPick, m.chose, m.selPID = "", "", true, m.snap.Sessions[i-nd-nr].PID
+				m.doorPick, m.recPick = "", m.recs[i-nd-ns].ID
 			}
 		},
 		primary: func(m Model) *action {

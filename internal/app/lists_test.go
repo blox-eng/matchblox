@@ -346,7 +346,7 @@ func TestTapEndsTheTypingOfASearch(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
 	next, _ := key(m, "/")
 	next = typeText(next, "app")
-	y := lineOf(t, next, "app-review")
+	y := lineOf(t, next, "Clear app-review")
 	next, _ = tap(next, 5, y)
 	if next.(Model).searching || next.(Model).filter != "app" {
 		t.Fatalf("searching %v filter %q", next.(Model).searching, next.(Model).filter)

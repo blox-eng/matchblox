@@ -95,7 +95,7 @@ func (s Shell) readHosts() []string {
 func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
 	o := s.opt.Open(host)
 	b := s.opt.Base
-	o.Binary, o.CompactAt, o.CompactTokens, o.NoMotion, o.Now, o.Self = b.Binary, b.CompactAt, b.CompactTokens, b.NoMotion, b.Now, b.Self
+	o.Binary, o.CompactAt, o.CompactTokens, o.NoMotion, o.Now, o.Self, o.StateDir = b.Binary, b.CompactAt, b.CompactTokens, b.NoMotion, b.Now, b.Self, b.StateDir
 	if o.Run == nil {
 		o.Run = b.Run
 	}

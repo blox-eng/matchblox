@@ -5,15 +5,19 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/history"
+	"github.com/blox-eng/matchblox/internal/proto"
 )
 
-// TestRecommendationsSitAboveTheSessions: what to do next sits above who
-// waits, on the Sessions tab; ↑ walks from the sessions into them.
-func TestRecommendationsSitAboveTheSessions(t *testing.T) {
+// TestRecommendationsSitUnderTheSessions: what to do next sits under the
+// sessions, on the Sessions tab (owner 2026-10-12); ↓ walks from the
+// sessions into them.
+func TestRecommendationsSitUnderTheSessions(t *testing.T) {
 	st := queueState()
 	st.Recommendations = []advice.Rec{{ID: "r1", Level: "warn", Title: "Compact app-feature", Evidence: "context 91%",
 		Primary: &advice.Action{Label: "jump", Nav: true, Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}}}}
@@ -23,14 +27,17 @@ func TestRecommendationsSitAboveTheSessions(t *testing.T) {
 	if strings.Contains(tabs, "queue") || strings.Contains(tabs, "procs") || !strings.HasPrefix(tabs, " SESSIONS") {
 		t.Fatalf("the tabs: %q", tabs)
 	}
-	recs, wait := strings.Index(out, "RECOMMENDATIONS · 1"), strings.Index(out, "WAITS FOR YOU")
-	if wait < 0 || recs < 0 || recs > wait || !strings.Contains(out, "Compact app-feature") {
-		t.Fatalf("the recommendations are not above the sessions:\n%s", out)
+	recs, quiet := strings.Index(out, "RECOMMENDATIONS · 1"), strings.Index(out, "QUIET")
+	if quiet < 0 || recs < 0 || recs < quiet || !strings.Contains(out, "Compact app-feature") {
+		t.Fatalf("the recommendations are not under the sessions:\n%s", out)
 	}
-	next, _ := key(m, "up")
+	var next tea.Model = m
+	for range len(m.snap.Sessions) {
+		next, _ = key(next, "down")
+	}
 	got := next.(Model)
 	if r, ok := got.selectedRec(); !ok || r.ID != "r1" {
-		t.Fatal("↑ from the sessions does not select the recommendation")
+		t.Fatal("↓ from the sessions does not select the recommendation")
 	}
 	if _, ok := got.selectedSession(); ok {
 		t.Fatal("a session is still selected")
@@ -87,5 +94,84 @@ func TestProgressShowsWhereThePersonLooks(t *testing.T) {
 	idle, _ := loadedWith(t, 132, st)
 	if l := rowOf(idle.render(), "app-feature"); !strings.Contains(l, "▰▰▰▰▱ 75%") {
 		t.Fatalf("with nothing due the row has no plan: %q", l)
+	}
+}
+
+func twoRecs() proto.State {
+	st := queueState()
+	jump := &advice.Action{Label: "jump", Nav: true, Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}}
+	st.Recommendations = []advice.Rec{
+		{ID: "r1", Level: "warn", Title: "Compact app-feature", Evidence: "context 91%", Primary: jump},
+		{ID: "r2", Level: "info", Title: "Clear tools", Evidence: "idle 21d", Primary: jump},
+	}
+	return st
+}
+
+func loadedIn(t *testing.T, dir string, st proto.State) Model {
+	t.Helper()
+	m := New(Options{NoMotion: true, Conn: newFake(), StateDir: dir})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	next, _ = next.Update(stateMsg(st))
+	return next.(Model)
+}
+
+// TestDismissARecommendation: d hides the selected one, a tap on its
+// dismiss mark too; it stays hidden in the next console until its
+// evidence changes.
+func TestDismissARecommendation(t *testing.T) {
+	dir := t.TempDir()
+	m := loadedIn(t, dir, twoRecs())
+	next, _ := key(selectRec(t, m, "r1"), "d")
+	if out := screen(next); strings.Contains(out, "▲ Compact app-feature") || !strings.Contains(out, "RECOMMENDATIONS · 1") {
+		t.Fatalf("d did not dismiss it:\n%s", out)
+	}
+	if r, ok := next.(Model).selectedRec(); !ok || r.ID != "r2" {
+		t.Fatal("the next recommendation does not take the selection")
+	}
+	again := loadedIn(t, dir, twoRecs())
+	if strings.Contains(screen(again), "▲ Compact app-feature") {
+		t.Fatal("a dismissed recommendation came back in the next console")
+	}
+	changed := twoRecs()
+	changed.Recommendations[0].Evidence = "context 96%"
+	if !strings.Contains(screen(loadedIn(t, dir, changed)), "▲ Compact app-feature") {
+		t.Fatal("new evidence does not bring it back")
+	}
+
+	// A tap on the dismiss mark of the selected one.
+	sel := selectRec(t, loadedIn(t, t.TempDir(), twoRecs()), "r2")
+	y := lineOf(t, sel, "d dismiss")
+	line := strings.Split(screen(sel), "\n")[y]
+	x := ansi.StringWidth(line[:strings.Index(line, "d dismiss")])
+	tapped, _ := tap(sel, x, y)
+	if strings.Contains(screen(tapped), "○ Clear tools") {
+		t.Fatalf("a tap on dismiss did not dismiss:\n%s", screen(tapped))
+	}
+}
+
+// TestFoldTheRecommendations: h folds the section to one line, its rows
+// leave the selection, h unfolds it, a tap on the label does the same,
+// and the next console remembers.
+func TestFoldTheRecommendations(t *testing.T) {
+	dir := t.TempDir()
+	m := loadedIn(t, dir, twoRecs())
+	sel := selectRec(t, m, "r2")
+	folded, _ := key(sel, "h")
+	out := screen(folded)
+	if !strings.Contains(out, "RECOMMENDATIONS · 2 hidden · h shows") || strings.Contains(out, "▲ Compact app-feature") {
+		t.Fatalf("h did not fold:\n%s", out)
+	}
+	if _, ok := folded.(Model).selectedRec(); ok || folded.(Model).rowCount() != len(m.snap.Sessions) {
+		t.Fatal("a folded recommendation can still be selected")
+	}
+	if !strings.Contains(screen(loadedIn(t, dir, twoRecs())), "2 hidden") {
+		t.Fatal("the fold is not remembered")
+	}
+	open, _ := tap(folded, 3, lineOf(t, folded, "RECOMMENDATIONS"))
+	if !strings.Contains(screen(open), "▲ Compact app-feature") {
+		t.Fatalf("a tap on the label did not unfold:\n%s", screen(open))
+	}
+	if again, _ := key(open, "h"); !strings.Contains(screen(again), "2 hidden") {
+		t.Fatal("h anywhere in Sessions does not fold")
 	}
 }

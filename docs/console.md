@@ -75,9 +75,12 @@ Each agent row starts with a match:
 
 ## 1 Sessions
 
-The console opens here. On top, while there are some: the stoker's card,
-the setup steps (`SET UP`) and the recommendations, each with its evidence
-and its exact command. Then every agent, by what it needs from you:
+The console opens here. On top, while there are some: the stoker's card
+and the setup steps (`SET UP`). Then every agent, by what it needs from
+you, and last the recommendations, each with its evidence and its exact
+command. `d` dismisses the selected recommendation until its evidence
+changes; `h` folds them all to one line, and `h` again shows them. The
+console remembers both.
 
 - **WAITS FOR YOU**, the oldest wait first:
   - **asks**: the agent asks for a permission, or asks with its question
@@ -109,8 +112,10 @@ waits is already selected.
 
 ### The answer peek
 
-`a` on an agent opens a panel over the dimmed screen: on a phone along the
-bottom, wider a box in the middle. On an agent that waits it answers; on
+`a` on an agent opens the conversation with it. Where the detail sits
+beside the list, the detail pane becomes the conversation: the list stays
+lit on the left and follows the peek, and `Esc` gives the pane back. On a
+one-column phone it is a panel along the bottom, over the dimmed list. On an agent that waits it answers; on
 any other it sends a message, titled `To <name>`, which Claude Code queues
 while it works.
 

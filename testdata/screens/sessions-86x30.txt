@@ -1,26 +1,26 @@
  ▰ matchblox                                                         ● 6 wait for you
  SESSIONS 7    ships 3    machine    git    history    panes
 ──────────────────────────────────────────────────────────────────────────────────────
- RECOMMENDATIONS · 7                      │
- ▲ The week runs short: compact spark-docs│ spark-docs
- ○ Clear spark-docs (%3)                  │ │ done, waits for you · 9m · hearth:3.1 ·…
- ○ Clear kindle-web (%5)                  │
- ○ Clear codex (%6)                       │ CLAUDE SAID
- ○ Clear flint-auth (%2)                  │ I rewrote the quick start and the
- ○ Clear ember-billing (%8)               │ install page.
+ WAITS FOR YOU · 6                        │
+▌│ spark-docs         done       9m   88% │ spark-docs
+ ╿ ember-billing      done       4m   32% │ │ done, waits for you · 9m · hearth:3.1 ·…
+ ╿ flint-auth         asks       2m   41% │
+ ╿ kindle-web         asks       1m   56% │ CLAUDE SAID
+ ╿ codex              done       0s   55% │ I rewrote the quick start and the
+ ╿ opencode           done       0s    6% │ install page.
+ WORKING · 1                              │
+ ✦ hearth-api         busy            79% │ context  ▰▰▰▰▰▰▰▰▰▱ 88%
+                                          │ plan     ▰▰▰▰▰▰▰▰▰▰ 100%  docs for the 1.…
+ 1 without an agent: shell:1.1 zsh        │ ship     #4540 ●━●━●━●━●  live
+                                          │          The 1.0 docs
+ RECOMMENDATIONS · 7 · h hides            │          https://github.com/hearth/spark-…
+ ▲ The week runs short: compact spark-docs│ why      clear: idle 9m (clear after 0s)
+ ○ Clear spark-docs (%3)                  │ sonnet · 176k / 200k tokens · +0k in 30
+ ○ Clear kindle-web (%5)                  │ min · ✻ team@example.com · Max · pid 1400
+ ○ Clear codex (%6)                       │ · 1 process · started 3h20m ago
+ ○ Clear flint-auth (%2)                  │
+ ○ Clear ember-billing (%8)               │ a answer   ⏎ open it
  ○ Clear opencode (%7)                    │
-                                          │ context  ▰▰▰▰▰▰▰▰▰▱ 88%
- WAITS FOR YOU · 6                        │ plan     ▰▰▰▰▰▰▰▰▰▰ 100%  docs for the 1.…
-▌│ spark-docs         done       9m   88% │ ship     #4540 ●━●━●━●━●  live
- ╿ ember-billing      done       4m   32% │          The 1.0 docs
- ╿ flint-auth         asks       2m   41% │          https://github.com/hearth/spark-…
- ╿ kindle-web         asks       1m   56% │ why      clear: idle 9m (clear after 0s)
- ╿ codex              done       0s   55% │ sonnet · 176k / 200k tokens · +0k in 30
- ╿ opencode           done       0s    6% │ min · ✻ team@example.com · Max · pid 1400
- WORKING · 1                              │ · 1 process · started 3h20m ago
- ✦ hearth-api         busy            79% │
-                                          │ a answer   ⏎ open it
- 1 without an agent: shell:1.1 zsh        │
                                           │
                                           │
                                           │

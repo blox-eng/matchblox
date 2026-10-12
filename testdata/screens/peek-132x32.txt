@@ -1,26 +1,26 @@
  ▰ matchblox                                                                                                       ● 6 wait for you
  SESSIONS 7    ships 3    machine    git    history    panes
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- RECOMMENDATIONS · 7                                                          │
- ▲ The week runs short: compact spark-docs                                    │ flint-auth
- ○ Clear spark-docs (%3)                                                      │ ╿ asks you · 2m · hearth:2.1 · /work/flint-auth
- ○ Clear kindle-web (%5)                                                      │
- ○ Clear codex (%6)                                                           │ CLAUDE SAID
- ○ Clear flint-auth (%2)                                                      │ Should a refresh also rotate the token, or keep it
- ○ Clear ember-billing (%8)        ╭─ flint-auth asks · 1 of 2 ─────────────────────────────────╮
- ○ Clear opencode (%7)             │ The refresh endpoint is in and its tests pass. One choice  │
-                                   │ is yours before I wire the rotation: what should a refresh │▱▱ 41%
- WAITS FOR YOU · 6                 │ do with the token it was given?                            │✕┄○┄○┄○  conflicts with main
- │ spark-docs               done   │                                                            │tokens that rotate
- ╿ ember-billing            done   │ Should a refresh also rotate the token?                    │github.com/hearth/flint-auth/pull/…
-▌╿ flint-auth               asks   │ › 1 Rotate it  the old one stops at once                   │dle 12m (clear after 0s)
- ╿ kindle-web               asks   │   2 Rotate, keep the old one a minute                      │0k tokens · +0k in 30 min · ✻
- ╿ codex                    done   │   3 Keep the token                                         │· Max · pid 1310 · 1 process ·
- ╿ opencode                 done   │   4 Type an answer…                                        │
- WORKING · 1                       ╰─ ⏎ question 2 ─ ← prev  3/7  next → ─ esc ─────────────────╯
- ✦ hearth-api               busy            79%  ▰▰▰▱▱ 60%    #4551 ●━◉┄○┄○┄○ │ a answer   ⏎ open it
-                                                                              │
- 1 without an agent: shell:1.1 zsh                                            │
+ WAITS FOR YOU · 6                                                            │╭─ flint-auth asks · 1 of 2 ────────────────────────╮
+ │ spark-docs               done       9m   88%  ▲ clear      #4540 ●━●━●━●━● ││ The refresh endpoint is in and its tests pass.    │
+ ╿ ember-billing            done       4m   32%  ▲ clear      #4552 ●━●━◉┄○┄○ ││ One choice is yours before I wire the rotation:   │
+▌╿ flint-auth               asks       2m   41%  ▲ clear      #4545 ●━✕┄○┄○┄○ ││ what should a refresh do with the token it was    │
+ ╿ kindle-web               asks       1m   56%  ▲ clear                      ││ given?                                            │
+ ╿ codex                    done       0s   55%  ▲ clear                      ││                                                   │
+ ╿ opencode                 done       0s    6%  ▲ clear                      ││ Should a refresh also rotate the token?           │
+ WORKING · 1                                                                  ││ › 1 Rotate it  the old one stops at once          │
+ ✦ hearth-api               busy            79%  ▰▰▰▱▱ 60%    #4551 ●━◉┄○┄○┄○ ││   2 Rotate, keep the old one a minute             │
+                                                                              ││   3 Keep the token                                │
+ 1 without an agent: shell:1.1 zsh                                            ││   4 Type an answer…                               │
+                                                                              ││                                                   │
+ RECOMMENDATIONS · 7 · h hides                                                ││                                                   │
+ ▲ The week runs short: compact spark-docs                                    ││                                                   │
+ ○ Clear spark-docs (%3)                                                      ││                                                   │
+ ○ Clear kindle-web (%5)                                                      ││                                                   │
+ ○ Clear codex (%6)                                                           ││                                                   │
+ ○ Clear flint-auth (%2)                                                      ││                                                   │
+ ○ Clear ember-billing (%8)                                                   ││                                                   │
+ ○ Clear opencode (%7)                                                        │╰─ ⏎ question 2 ─ ← prev  3/7  next → ─ esc ────────╯
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  USAGE                                                                        │ MACHINE                                    16 cores
  ✻ Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                                      │ cpu  ▁ 0%   load 6.2

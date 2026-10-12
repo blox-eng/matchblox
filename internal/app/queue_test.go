@@ -728,7 +728,7 @@ func TestThePeekShowsTheEndOfWhatWasSaid(t *testing.T) {
 	m, _ = func() (Model, tea.Cmd) { n, c := key(m, "down"); return n.(Model), c }()
 	next, _ := key(m, "a")
 	out := ansi.Strip(next.(Model).render())
-	if !strings.Contains(out, "wire the rotation now?") || strings.Contains(out, "BEGINNING") || !strings.Contains(out, "│ …") {
+	if !strings.Contains(out, "rotation now?") || strings.Contains(out, "BEGINNING") || !strings.Contains(out, "│ …") {
 		t.Fatalf("the peek cut the end of the reply:\n%s", out)
 	}
 	for i := range st.Sessions {
@@ -902,6 +902,87 @@ func TestThePeekFooterTaps(t *testing.T) {
 		drain(cmd)
 		if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "answer:%2" || acts[0].Text != "ok" {
 			t.Fatalf("%dx%d: acts %+v", w, h, acts)
+		}
+	}
+}
+
+// TestThePeekIsTheDrawer: where there is a detail pane, a turns it into the
+// conversation; the list beside it stays lit and its selection follows the
+// peek; esc gives the pane back to the detail. Its options and its footer
+// are tap targets, and a tap on the list closes the peek and selects.
+func TestThePeekIsTheDrawer(t *testing.T) {
+	st := queueState()
+	for i := range st.Sessions {
+		if st.Sessions[i].Pane == "%2" {
+			st.Sessions[i].Ask = &said.Ask{ID: "toolu_1", Questions: []said.Question{
+				{Question: "Which next?", Options: []said.Option{{Label: "Start task 11"}, {Label: "Fix the flake"}}},
+				{Question: "Which checks?", Options: []said.Option{{Label: "unit"}, {Label: "e2e"}}},
+			}}
+		}
+	}
+	for _, size := range [][2]int{{86, 30}, {107, 60}, {132, 32}} {
+		w, h := size[0], size[1]
+		m, f := loadedWith(t, w, st)
+		next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+		open, _ := key(selectPane(t, next, "%2"), "a")
+		open = quiet(open)
+		sc := open.(Model).draw(w)
+		lw, _ := open.(Model).panes(w)
+		if !sc.peekInline || sc.peekX != lw+1 {
+			t.Fatalf("%dx%d: the peek is not the detail pane", w, h)
+		}
+		lines := parsed(t, open.(Model).render())
+		lit := false
+		for _, line := range lines {
+			for _, s := range line {
+				if strings.TrimSpace(s.Text) == "app-review" && s.FG == "accent" {
+					lit = true
+				}
+			}
+		}
+		if !lit {
+			t.Fatalf("%dx%d: the list is dimmed or does not show the selection:\n%s", w, h, screen(open))
+		}
+		// The selection follows the peek.
+		moved, _ := key(open, "right")
+		if s, _ := moved.(Model).selectedSession(); s.Pane != peekPane(moved) {
+			t.Fatalf("%dx%d: the list selects %q, the peek is on %q", w, h, s.Pane, peekPane(moved))
+		}
+		// esc: the detail is back.
+		closed, _ := key(open, "esc")
+		if closed.(Model).peek != nil || closed.(Model).draw(w).peekInline {
+			t.Fatalf("%dx%d: esc did not give the pane back", w, h)
+		}
+		// A tap on an option of the pane picks it.
+		out := strings.Split(screen(open), "\n")
+		y, x := -1, -1
+		for i, l := range out {
+			if at := strings.Index(l, "2 Fix the flake"); at >= 0 {
+				y, x = i, ansi.StringWidth(l[:at])
+			}
+		}
+		if y < 0 {
+			t.Fatalf("%dx%d: no option in the pane:\n%s", w, h, screen(open))
+		}
+		picked, _ := tap(open, x, y)
+		if p := picked.(Model).peek; p == nil || p.q != 1 || len(f.acts()) != 0 {
+			t.Fatalf("%dx%d: a tap on the option did not pick it: %+v", w, h, p)
+		}
+		// A tap on next → in the pane's footer.
+		for i, l := range out {
+			if at := strings.Index(l, "next →"); at >= 0 && strings.Contains(l, "╰─") {
+				if n, _ := tap(open, ansi.StringWidth(l[:at]), i); peekPane(n) == "%2" {
+					t.Fatalf("%dx%d: a tap on next → did not move", w, h)
+				}
+			}
+		}
+		// A tap on the list closes the peek and selects the row.
+		row, _ := tap(open, 5, sessLine(t, open, "tools"))
+		if row.(Model).peek != nil {
+			t.Fatalf("%dx%d: a tap on the list left the peek open", w, h)
+		}
+		if s, _ := row.(Model).selectedSession(); s.Pane != "%3" {
+			t.Fatalf("%dx%d: a tap on the list selected %q", w, h, s.Pane)
 		}
 	}
 }

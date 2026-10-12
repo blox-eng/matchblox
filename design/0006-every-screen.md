@@ -102,13 +102,23 @@ the take-over question keep their place in the key line's row.
 
 ### 5.1 Grouped by need
 
-Sessions is one list in three groups, each with a faint label and count:
+Sessions is, top to bottom: the STOKED card, the setup steps (doors),
+then one list in three groups, each with a faint label and count, then
+RECOMMENDATIONS last (owner 2026-10-12: who needs you comes before what
+to do next):
 
 - `WAITS FOR YOU · N`: `asks`, `waits`, `done`, `paused` (the queue's
   waiting rows), oldest wait first.
 - `WORKING · N`: `busy`, `agents` (#64), a session running a shell
   (`tests` when the shell is a test runner, else `shell`).
 - `QUIET · N`: idle, cold and stale, newest first.
+- `RECOMMENDATIONS · N · h hides`: what to do next, each with its
+  evidence. `d` (or a tap on `d dismiss` at the end of the selected one)
+  dismisses one until its evidence changes, a new id or new words; `h`
+  (anywhere in Sessions, or a tap on the label) folds the section to
+  `RECOMMENDATIONS · N hidden · h shows`, and `h` unfolds it. Both are kept
+  in the state directory (`recommendations.json`), so the next console
+  remembers.
 
 A row: the selection mark `▌`, the match glyph, the name, then on the right
 the state word, the wait (`4m`), the context (`24%`, `warn` from 70%, `neg`
@@ -139,13 +149,21 @@ opened row is on the screen.
 
 ## 6. The answer peek
 
-`a` on any session with a pane opens a panel over the list, everything
-around it dimmed (owner 2026-10-12: message any session, not only one that
-waits; Claude Code queues a message typed while it works):
+`a` on any session with a pane opens the conversation with it (owner
+2026-10-12: message any session, not only one that waits; Claude Code
+queues a message typed while it works):
 
-- **Phone:** full width up to 72 columns (centred past that), anchored to
-  the bottom, above the key line (see §11.1).
-- **Opened phone and desk:** a centered box, 62 columns at most.
+- **Where there is a detail pane** (the opened phone, the upright drawer
+  from 90 columns, the desk), the pane itself turns into the conversation
+  (owner 2026-10-12): the name and the state at the top, what was said this
+  turn (or the question and its numbered options) taking the room, the
+  typing line at the bottom of the pane over the footer. The list stays on
+  the left, lit, its selection following the peek as `←`/`→` move it;
+  `esc` gives the pane back to the detail. A tap on the list closes the
+  peek and selects the row.
+- **One-column phone:** a panel over the dimmed list, full width up to 72
+  columns (centred past that), anchored to the bottom, above the key line
+  (see §11.1).
 
 Inside, under a title `Billed asks` (`Billed said` when it waits with no
 question, `To Billed` when it does not wait):

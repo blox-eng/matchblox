@@ -1,15 +1,6 @@
  ▰ matchblox               ● 6 wait for you
  SESSIONS 7  ships 3  machine  4  5  6
 ────────────────────────────────────────────
- RECOMMENDATIONS · 7
- ▲ The week runs short: compact spark-docs
- ○ Clear spark-docs (%3)
- ○ Clear kindle-web (%5)
- ○ Clear codex (%6)
- ○ Clear flint-auth (%2)
- ○ Clear ember-billing (%8)
- ○ Clear opencode (%7)
-
  WAITS FOR YOU · 6
 ────────────────────────────────────────────
 ▌│ spark-docs            done      9m   88%
@@ -27,5 +18,14 @@
  ✦ hearth-api            busy           79%
 
  1 without an agent: shell:1.1 zsh
+
+ RECOMMENDATIONS · 7 · h hides
+ ▲ The week runs short: compact spark-docs
+ ○ Clear spark-docs (%3)
+ ○ Clear kindle-web (%5)
+ ○ Clear codex (%6)
+ ○ Clear flint-auth (%2)
+ ○ Clear ember-billing (%8)
+ ○ Clear opencode (%7)
 ────────────────────────────────────────────
  ⏎ open  a answer  p ships  f stoker

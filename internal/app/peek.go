@@ -318,8 +318,10 @@ func (m Model) sendPeek(s sample.Session, rec, text string) (tea.Model, tea.Cmd)
 
 // peekBox is the peek's lines in bw columns, and the key each line presses
 // on a tap (an option's digit; "" none). The last line is the footer, its
-// keys in spans from the box's left edge.
-func (m Model) peekBox(bw, maxH int, phone bool) ([]string, []string, []span) {
+// keys in spans from the box's left edge. fill: the peek is the detail
+// pane, maxH lines tall: its title says the state, what was said takes the
+// room, and the typing line and the footer sit at the bottom.
+func (m Model) peekBox(bw, maxH int, phone, fill bool) ([]string, []string, []span) {
 	st := m.st
 	v, p, _ := m.peekNow()
 	iw := bw - 4
@@ -330,6 +332,9 @@ func (m Model) peekBox(bw, maxH int, phone bool) ([]string, []string, []span) {
 		title = st.accent.Bold(true).Render(v.s.Name) + st.muted.Render(" asks")
 	case waits:
 		title = st.accent.Bold(true).Render(v.s.Name) + st.muted.Render(" said")
+	}
+	if fill && !waits && v.ask == nil {
+		title += st.faint.Render(" · " + m.longWord(v.s)) // asks and said say it already
 	}
 	if v.ask != nil && len(v.ask.Questions) > 1 {
 		title += st.faint.Render(fmt.Sprintf(" · %d of %d", p.q+1, len(v.ask.Questions)))
@@ -384,12 +389,39 @@ func (m Model) peekBox(bw, maxH int, phone bool) ([]string, []string, []span) {
 		}
 		typing = p.at == len(q.Options)
 	}
-	if typing {
+	switch {
+	case typing && fill:
+		// The pane is narrow and tall: the line wraps, its last four rows
+		// show, so what was typed can be read before it goes.
+		lines := wrapPlain(p.text, iw-3)
+		if len(lines) == 0 {
+			lines = []string{""}
+		}
+		if strings.HasSuffix(p.text, " ") {
+			lines[len(lines)-1] += " "
+		}
+		lines = lines[max(len(lines)-4, 0):]
+		rows := []string{"sep"}
+		for i, l := range lines {
+			lead := "  "
+			if i == 0 {
+				lead = st.accent.Render("› ")
+			}
+			if i == len(lines)-1 {
+				l += st.accent.Render("▏")
+			}
+			rows = append(rows, lead+st.text.Render(l))
+		}
+		add("", rows...)
+	case typing:
 		add("", "sep", st.accent.Render("› ")+st.text.Render(ansi.TruncateLeft(p.text, max(lipgloss.Width(p.text)-iw+3, 0), "…"))+st.accent.Render("▏"))
 	}
 	limit := 9
 	if phone {
 		limit = 8
+	}
+	if fill {
+		limit = maxH
 	}
 	limit = max(min(limit, maxH-2-len(rest)), 1)
 	var said []string
@@ -456,8 +488,21 @@ func (m Model) peekBox(bw, maxH int, phone bool) ([]string, []string, []span) {
 	for _, l := range said {
 		body(st.text.Render(l), "")
 	}
-	for i, l := range rest {
-		body(l, keys[i])
+	// The pane's room goes between what was said (or asked) and the typing
+	// line, so the typing line sits at the bottom, over the footer.
+	padAt := slices.Index(rest, "sep")
+	if padAt < 0 {
+		padAt = len(rest)
+	}
+	for i := range len(rest) + 1 {
+		if i == padAt && fill {
+			for range maxH - 2 - len(said) - len(rest) {
+				body("", "")
+			}
+		}
+		if i < len(rest) {
+			body(rest[i], keys[i])
+		}
 	}
 	line, x := hair.Render("╰─ "), 3
 	var spans []span
@@ -488,7 +533,7 @@ func (m Model) overlayPeek(sc *drawn, w int) {
 		bw = min(62, w-8)
 	}
 	bottom := len(sc.lines) - 2 // the key line's hairline
-	box, press, spans := m.peekBox(bw, bottom-1, phone)
+	box, press, spans := m.peekBox(bw, bottom-1, phone, false)
 	x, y := (w-bw)/2, bottom-len(box)
 	if !phone {
 		x, y = (w-bw)/2, max((len(sc.lines)-len(box))/2-1, 1)

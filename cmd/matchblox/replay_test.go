@@ -234,11 +234,14 @@ var (
 // sparklines, the space around them, and where a line is cut, which moves
 // with the width of a figure before it. A change in the console's words,
 // tabs or layout still shows.
+var spinner = regexp.MustCompile(`[\x{2800}-\x{28FF}]`)
+
 func skeleton(lines []string) string {
 	var b strings.Builder
 	for _, l := range lines {
 		l = sparks.ReplaceAllString(figure.ReplaceAllString(cutWord.ReplaceAllString(l, "…"), "0"), "")
-		l = strings.ReplaceAll(l, "✧", "✦") // a burning match flickers between the two
+		l = strings.ReplaceAll(l, "✧", "✦")  // a burning match flickers between the two
+		l = spinner.ReplaceAllString(l, "⠿") // a working session's spinner turns with the clock
 		b.WriteString(strings.TrimSpace(spaces.ReplaceAllString(l, " ")))
 		b.WriteByte('\n')
 	}
@@ -455,7 +458,8 @@ func TestReplay(t *testing.T) {
 	for typed := 0; typed < len(answer); {
 		next := min(typed+4, len(answer))
 		at += 70 * time.Millisecond
-		steps = append(steps, step{name: "the answer types itself", at: at, keys: strings.Split(answer[typed:next], ""), ok: has(answer[:next])})
+		// The drawer wraps the typing line: each word typed so far shows.
+		steps = append(steps, step{name: "the answer types itself", at: at, keys: strings.Split(answer[typed:next], ""), ok: has(strings.Fields(answer[:next])...)})
 		typed = next
 	}
 	steps = append(steps, []step{
@@ -475,15 +479,16 @@ func TestReplay(t *testing.T) {
 		{name: "the limits and what to do", at: 11 * time.Second, key: "1", ok: has("Max", "5h ", "wk ", "RECOMMENDATIONS",
 			"The week runs short: compact spark-docs", "out Fri")},
 	}...)
-	// seek presses k until the screen shows what ok wants: where the
-	// selection starts depends on the steps before.
+	// seek presses j until the screen shows what ok wants: where the
+	// selection starts depends on the steps before, and the
+	// recommendations sit under the sessions.
 	seek := func(ok func(string) bool) func() {
 		return func() {
 			for range 12 {
 				if ok(ansi.Strip(capture())) {
 					return
 				}
-				p.Send(keyMsg("k"))
+				p.Send(keyMsg("j"))
 				time.Sleep(100 * time.Millisecond)
 			}
 		}
@@ -532,7 +537,8 @@ func TestReplay(t *testing.T) {
 		}},
 		{name: "the morning card", at: 39500 * time.Millisecond, do: func() { clk.Set(morning) },
 			ok: has("NIGHT 23:10 → 07:00", "ready 4/5", "1 compacted", "167k given back", "kindle-web       waits for you", "176k → 9k", "RESUME")},
-		{name: "folded", at: 44 * time.Second, keys: []string{"k", "k", "k", "k", "k", "k"}, key: "enter", ok: func(s string) bool {
+		// Up to the card from under the sessions, where the recommendations are.
+		{name: "folded", at: 44 * time.Second, keys: strings.Split(strings.Repeat("k", 16), ""), key: "enter", ok: func(s string) bool {
 			return !strings.Contains(s, "NIGHT 23:10") && strings.Contains(s, "WAITS FOR YOU")
 		}},
 	}...)

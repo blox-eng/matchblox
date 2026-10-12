@@ -42,8 +42,10 @@ The console then selects the next agent that waits.
 
 ## Answer without leaving the console
 
-Tap an agent, then tap it again: the peek rises from the bottom, over the
-dimmed list, with what the agent said last. Tap an option, or type a line
+Tap an agent, then tap it again: on a one-column phone the peek rises from
+the bottom, over the dimmed list, with what the agent said last; held
+upright with a small font, the drawer on the right becomes the
+conversation and the list stays beside it. Tap an option, or type a line
 and press `Enter`; it goes to that agent's pane at once. An agent that
 works gets it as a message, which Claude Code queues. After an answer the
 peek moves to the next agent that waits. A swipe left or right, or a tap

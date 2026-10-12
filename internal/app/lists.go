@@ -71,11 +71,12 @@ func (m *Model) refresh() {
 		}
 		return strings.Contains(strings.ToLower(strings.Join(fields, " ")), q)
 	}
-	m.queue, m.recs, m.snap.Orphans = m.all.queue, m.all.recs, m.all.orphans
+	m.queue, m.snap.Orphans = m.all.queue, m.all.orphans
+	m.recs = slices.DeleteFunc(slices.Clone(m.all.recs), m.recPrefs.dismissed)
 	sessions := slices.Clone(m.all.sessions)
 	switch m.tab {
 	case tabSessions:
-		m.recs = slices.DeleteFunc(slices.Clone(m.all.recs), func(r advice.Rec) bool { return !keep(r.Title, r.Evidence) })
+		m.recs = slices.DeleteFunc(m.recs, func(r advice.Rec) bool { return !keep(r.Title, r.Evidence) })
 		sessions = slices.DeleteFunc(sessions, func(s sample.Session) bool {
 			return !keep(s.Name, s.Target, s.Pane, s.Tab, s.Cwd, s.Model, m.lastWords(s), m.wordOf(s))
 		})

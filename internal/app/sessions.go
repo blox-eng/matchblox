@@ -113,12 +113,12 @@ func (m Model) firstWaiting() int {
 	return -1
 }
 
-// sessIndex is the selected row of Sessions: the doors, the
-// recommendations, then the sessions. A door that folds passes the
+// sessIndex is the selected row of Sessions: the doors, the sessions,
+// then the recommendations. A door that folds passes the
 // selection to the next door. Nothing picked: the stoker's card, else the
 // first session that waits, else the first door.
 func (m Model) sessIndex() int {
-	nd, nr := len(m.doors), len(m.recs)
+	nd, ns, nr := len(m.doors), len(m.snap.Sessions), m.recRows()
 	if nd > 0 && m.doors[0].ID == stokedRow && m.doorPick == "" && m.recPick == "" && !m.chose {
 		return 0 // the night's steps come first in the morning
 	}
@@ -130,27 +130,27 @@ func (m Model) sessIndex() int {
 	if nd > 0 && m.doorPick != "" {
 		return min(m.doorAt, nd-1)
 	}
-	for i, r := range m.recs {
+	for i, r := range m.recs[:nr] {
 		if r.ID == m.recPick && m.recPick != "" {
-			return nd + i
+			return nd + ns + i
 		}
 	}
 	if nd > 0 && !m.chose && m.firstWaiting() < 0 {
 		return 0
 	}
-	if len(m.snap.Sessions) == 0 {
+	if ns == 0 {
 		if nr > 0 {
 			return nd
 		}
 		return 0
 	}
-	return nd + nr + m.selIndex()
+	return nd + m.selIndex()
 }
 
 // selectedSession is the session under the selection in Sessions; a door
 // or a recommendation has none.
 func (m Model) selectedSession() (sample.Session, bool) {
-	if m.tab != tabSessions || m.sessIndex() < len(m.doors)+len(m.recs) {
+	if i := m.sessIndex(); m.tab != tabSessions || i < len(m.doors) || i >= len(m.doors)+len(m.snap.Sessions) {
 		return sample.Session{}, false
 	}
 	return m.selected()
@@ -166,13 +166,13 @@ func (m Model) selectedDoor() (doors.Door, bool) {
 	return doors.Door{}, false
 }
 
-// selectedRec is the recommendation selected above the sessions.
+// selectedRec is the recommendation selected under the sessions.
 func (m Model) selectedRec() (advice.Rec, bool) {
 	if m.tab != tabSessions {
 		return advice.Rec{}, false
 	}
-	i := m.sessIndex() - len(m.doors)
-	if i < 0 || i >= len(m.recs) {
+	i := m.sessIndex() - len(m.doors) - len(m.snap.Sessions)
+	if i < 0 || i >= m.recRows() {
 		return advice.Rec{}, false
 	}
 	return m.recs[i], true
@@ -203,7 +203,6 @@ func (m Model) sessionKeys() []hint {
 func (m Model) sessionsPanel(w int) body {
 	var b body
 	m.doorsSection(&b, w)
-	m.recsSection(&b, w)
 	m.sessionRows(&b, w)
 	st := m.st
 	if n := len(m.snap.IdlePanes); n > 0 {
@@ -214,6 +213,7 @@ func (m Model) sessionsPanel(w int) body {
 		b.add(-1, "", st.faint.Render(fit(fmt.Sprintf(" %d without an agent: %s", n, strings.Join(ids, ", ")), w)))
 	}
 	b.add(-1, m.exitedLines(w)...)
+	m.recsSection(&b, w)
 	return b
 }
 
@@ -229,7 +229,7 @@ func (m Model) sessionRows(b *body, w int) {
 		b.add(-1, st.faint.Render(m.nothing(" no agent sessions found in tmux")))
 		return
 	}
-	base := len(m.doors) + len(m.recs)
+	base := len(m.doors)
 	sel := m.sessIndex() - base
 	var count [len(groupNames)]int
 	for _, s := range ss {

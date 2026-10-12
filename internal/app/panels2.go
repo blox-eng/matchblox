@@ -138,9 +138,10 @@ func (m Model) gitPanel(w int) body {
 	return b
 }
 
-// recsSection is what to do next, above the sessions: its rows follow
-// the doors'. On a phone the selected one shows its evidence and its
-// steps under the list; wider, the detail pane does.
+// recsSection is what to do next, under the sessions: its rows follow
+// theirs. On a phone the selected one shows its evidence and its steps
+// under the list; wider, the detail pane does. h folds the section to its
+// label; d dismisses the selected one until its evidence changes.
 func (m Model) recsSection(b *body, w int) {
 	if len(m.recs) == 0 {
 		return
@@ -149,8 +150,14 @@ func (m Model) recsSection(b *body, w int) {
 	if len(b.lines) > 0 {
 		b.add(-1, "")
 	}
-	b.add(-1, st.label.Render(fit(fmt.Sprintf(" RECOMMENDATIONS · %d", len(m.recs)), w)))
-	n := len(m.doors)
+	if m.recPrefs.Folded {
+		b.add(recsLabelRow, st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d hidden", len(m.recs)))+st.faint.Render(" · ")+
+			st.accent.Render("h")+st.faint.Render(" shows"))
+		return
+	}
+	b.add(recsLabelRow, st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d", len(m.recs)))+st.faint.Render(" · ")+
+		st.accent.Render("h")+st.faint.Render(" hides"))
+	n := len(m.doors) + len(m.snap.Sessions)
 	sel := m.sessIndex() - n
 	for i, r := range m.recs {
 		mark := st.faint.Render("○ ")
@@ -170,6 +177,9 @@ func (m Model) recsSection(b *body, w int) {
 			if run.failed {
 				line = " " + st.neg.Render("✗ ") + st.text.Render(tilde(run.out))
 			}
+		}
+		if i == sel {
+			line = spread(line, dismissMark(st)+" ", w)
 		}
 		b.addRow(n+i, i == sel, w, st, line)
 	}
@@ -294,3 +304,9 @@ func (m Model) historyPanel(w int) []string {
 	}
 	return out
 }
+
+// dismissMark is the selected recommendation's tap target for d.
+func dismissMark(st styles) string { return st.accent.Render("d") + st.muted.Render(" dismiss") }
+
+// dismissWidth is the width of the dismiss mark and the space after it.
+const dismissWidth = len("d dismiss") + 1

@@ -33,10 +33,13 @@ func limitsState() proto.State {
 func selectRec(t *testing.T, m tea.Model, id string) tea.Model {
 	t.Helper()
 	for range m.(Model).rowCount() {
+		m, _ = key(m, "up")
+	}
+	for range m.(Model).rowCount() {
 		if r, ok := m.(Model).selectedRec(); ok && r.ID == id {
 			return m
 		}
-		m, _ = key(m, "up")
+		m, _ = key(m, "down")
 	}
 	t.Fatalf("no recommendation %s to select", id)
 	return m

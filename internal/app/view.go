@@ -114,6 +114,7 @@ type drawn struct {
 	peekAt, peekX, peekW int
 	peekRows             []string
 	peekKeys             []span
+	peekInline           bool // the peek is the detail pane, the list beside it live
 }
 
 // draw lays out the screen, top to bottom: the header, the tabs, a
@@ -149,7 +150,9 @@ func (m Model) draw(w int) drawn {
 	sc.listW = listW
 	b := m.body(listW)
 	var detail []string
-	if detailW > 0 {
+	_, _, peeking := m.peekNow()
+	inline := peeking && detailW > 0 // the peek takes the detail pane
+	if detailW > 0 && !inline {
 		detail = m.detailPane(detailW)
 	}
 	var dock []string
@@ -161,6 +164,12 @@ func (m Model) draw(w int) drawn {
 		room -= len(dock) + 1
 	} else {
 		dock = nil
+	}
+	if inline {
+		var press []string
+		var spans []span
+		detail, press, spans = m.peekBox(detailW, room, false, true)
+		sc.peekAt, sc.peekX, sc.peekW, sc.peekRows, sc.peekKeys, sc.peekInline = sc.bodyTop, listW+1, detailW, press, spans, true
 	}
 	vis := windowed(b, room, m.rowIndex())
 	for i := range room {
@@ -184,7 +193,7 @@ func (m Model) draw(w int) drawn {
 	keys, keySpans := m.keyLine(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
 	sc.lines = append(sc.lines, m.st.hair.Render(strings.Repeat("─", w)), keys)
-	if _, _, ok := m.peekNow(); ok {
+	if peeking && !inline {
 		m.overlayPeek(&sc, w)
 	}
 	return sc

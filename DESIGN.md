@@ -183,13 +183,18 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   the tabs far from the open one shorten to their digit, the nearest last.
   The digits follow the order: `1` Sessions to `6` Panes; `p` opens Ships.
   The console opens on Sessions.
-- **Sessions** holds what the Queue tab held: the stoker's card, the
-  doors and the recommendations on top, then the sessions in three groups,
+- **Sessions** holds what the Queue tab held: the stoker's card and the
+  doors on top, then the sessions in three groups,
   each under a faint label and its count: `WAITS FOR YOU` (asks, waits,
   done, paused; the oldest wait first), `WORKING` (busy, agents, a shell:
   `tests` when it runs a test runner) and `QUIET` (idle, cold, stale, out;
   the newest first). A sort other than the default drops the groups for
-  one flat list named by its sort (`14 SESSIONS · by context ▾`).
+  one flat list named by its sort (`14 SESSIONS · by context ▾`). The
+  recommendations come last (owner 2026-10-12), under
+  `RECOMMENDATIONS · N · h hides`: `d` or a tap on `d dismiss` hides the
+  selected one until its evidence changes, `h` folds the section to
+  `RECOMMENDATIONS · N hidden · h shows`; both are kept in the state
+  directory.
 - **Rows:** the selection mark `▌`, the match, the name, then the state
   word (accent for who waits), the wait and the context (`warn` from 70%,
   `neg` past the line). A desk row adds the plan (or `! compact`, `▲
@@ -247,10 +252,15 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   <repo>` and runs it after a typed `y`; `a` on a stuck ship opens the
   answer peek on its session.
 - **Peek** (design/0006 §6, owner 2026-10-12): `a` on any session with a
-  pane, or a tap on the selected one, opens a panel over the screen,
-  everything else redrawn in `faint`: an answer to a session that waits, a
-  message to any other. On a phone it is full width up to 72 columns
-  (centred past that), its foot on the line above the key line's hairline; from 60 columns it is a
+  pane, or a tap on the selected one, opens the conversation: an answer to
+  a session that waits, a message to any other. Where there is a detail
+  pane (an opened phone, an upright drawer, a desk) it is that pane: the
+  list stays lit beside it, its selection following the peek, the title
+  says the state, the typing line and the footer sit at the pane's foot,
+  and `esc` gives the pane back to the detail. On a one-column phone it is
+  a panel over the screen, everything else redrawn in `faint`, full width
+  up to 72 columns (centred past that), its foot on the line above the key
+  line's hairline; from 60 columns it is a
   box in the middle, 62 columns at most. A rounded `hair` frame; the title
   in it, `<name> asks` (the question tool, a question, a permission),
   `<name> said` (it waits) or `To <name>` (it does not), in the accent and

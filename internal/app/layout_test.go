@@ -71,13 +71,9 @@ func TestAnUprightPhoneGetsTheDrawer(t *testing.T) {
 				t.Fatalf("107x%d: the selected row opens in place: %q", h, rows)
 			}
 		}
-		if p, _ := key(m, "a"); p.(Model).peek != nil {
-			lines := strings.Split(screen(p), "\n")
-			foot := lines[len(lines)-3]
-			at := strings.Index(foot, "╰─")
-			if at < 0 || ansi.StringWidth(foot[:at]) != (107-72)/2 || ansi.StringWidth(foot[at:strings.Index(foot, "╯")+len("╯")]) != 72 {
-				t.Fatalf("107x%d: the peek is not at the bottom, 72 wide and centred:\n%s", h, screen(p))
-			}
+		p, _ := key(m, "a")
+		if sc := p.(Model).draw(107); !sc.peekInline || sc.peekX != 54 || sc.peekW != 53 {
+			t.Fatalf("107x%d: the peek is not the drawer: inline %v at %d, %d wide", h, sc.peekInline, sc.peekX, sc.peekW)
 		}
 	}
 	m, _ := loadedWith(t, 70, limitsState())
@@ -120,8 +116,12 @@ func fitsWidth(t *testing.T, m Model, w int) {
 // spaces, never a recommendation that names it ("Compact x (%1)").
 func sessLine(t *testing.T, m tea.Model, name string) int {
 	t.Helper()
+	lw, _ := m.(Model).panes(max(m.(Model).width, minWidth))
 	for i, line := range strings.Split(ansi.Strip(m.(Model).render()), "\n") {
-		if strings.Contains(line, " "+name+" ") && !strings.Contains(line, "(%") {
+		if r := []rune(line); lw > 0 && len(r) > lw {
+			line = string(r[:lw]) // the list, not the detail beside it
+		}
+		if strings.Contains(line+" ", " "+name+" ") && !strings.Contains(line, "(%") {
 			return i
 		}
 	}

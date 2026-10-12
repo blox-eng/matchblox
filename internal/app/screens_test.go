@@ -107,7 +107,7 @@ func TestScreens(t *testing.T) {
 		{"peek", []string{"a"}},
 		{"ships", []string{"2"}},
 	}
-	sizes := [][2]int{{44, 31}, {86, 30}, {132, 32}}
+	sizes := [][2]int{{44, 31}, {86, 30}, {107, 60}, {132, 32}}
 	for _, size := range sizes {
 		for _, sh := range shots {
 			check(t, st, sh.name, size[0], size[1], sh.keys)

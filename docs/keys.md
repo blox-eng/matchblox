@@ -26,6 +26,8 @@ the keys of the open tab, and a tap on one presses it.
 | `f` | Turns [the stoker](stoker.md) on or off: it compacts full idle sessions while you are away. While it rests, `f` turns it back on. |
 | `n` | Starts a night: the stoker runs until the morning, then turns itself off. `n` again ends it. |
 | `e` | Shows or hides the agents that exited and wait for their parent (Sessions). |
+| `d` | Dismisses the selected recommendation until its evidence changes (Sessions). |
+| `h` | Folds the recommendations to one line, or shows them again (Sessions). |
 | `Esc` | Clears the search. With nothing to clear, goes back to Hosts. |
 | `q` or `Ctrl+C` | Quits the console. The service keeps running. |
 
