@@ -64,7 +64,7 @@ func door(t *testing.T, e Env, id string) doors.Door {
 func TestDoorsFirstRun(t *testing.T) {
 	e := env(t)
 	got := ids(Doors(e))
-	if want := []string{doors.Tmux, doors.Hooks, doors.Limits, doors.WayBack, doors.Guide, doors.Night}; !slices.Equal(got, want) {
+	if want := []string{doors.Tmux, doors.Hooks, doors.Limits, doors.SafetyNet, doors.WayBack, doors.Guide, doors.Night}; !slices.Equal(got, want) {
 		t.Fatalf("doors = %v, want %v", got, want)
 	}
 	if d := door(t, e, doors.Tmux); !slices.Equal(d.Term, []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}) {
@@ -351,6 +351,7 @@ func TestDoneDoorFolds(t *testing.T) {
 	e.LookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
 	open(t, e, doors.Hooks)
 	open(t, e, doors.Limits)
+	open(t, e, doors.SafetyNet)
 	open(t, e, doors.WayBack)
 	if got := ids(Doors(e)); !slices.Equal(got, []string{doors.Guide, doors.Night}) {
 		t.Fatalf("open doors = %v, want [guide night]", got)
@@ -668,5 +669,42 @@ func TestTheLimitsDoorTapsTheStatusLine(t *testing.T) {
 	writeFile(t, path, `{"statusLine": {"type": "command", "command": "/opt/matchblox-dev hook statusline"}}`+"\n")
 	if d := door(t, e, doors.Limits); !d.Done {
 		t.Fatalf("matchblox-dev is wrapped again: %+v", d)
+	}
+}
+
+// The safety net turns Claude Code's own compaction on at the stoker's line:
+// it is the only thing that compacts inside a turn, and the stoker picks a
+// boundary before it. Its diff keeps every other key and env variable.
+func TestTheSafetyNetDoorTurnsAutoCompactOnAtTheLine(t *testing.T) {
+	e := env(t)
+	e.CompactAt = 80
+	path := settingsPath(e)
+	writeFile(t, path, `{
+  "autoCompactEnabled": false,
+  "model": "opus",
+  "env": {"FOO": "1"}
+}
+`)
+	d := door(t, e, doors.SafetyNet)
+	if d.Done || !strings.Contains(d.Preview, `+  "autoCompactEnabled": true,`) || !strings.Contains(d.Preview, `"CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "80"`) || !strings.Contains(d.Why, "80%") {
+		t.Fatalf("door %+v\n%s", d, d.Preview)
+	}
+	open(t, e, doors.SafetyNet)
+	b, _ := os.ReadFile(path)
+	var s struct {
+		Auto  *bool             `json:"autoCompactEnabled"`
+		Model string            `json:"model"`
+		Env   map[string]string `json:"env"`
+	}
+	if err := json.Unmarshal(b, &s); err != nil || s.Auto == nil || !*s.Auto || s.Model != "opus" || s.Env["FOO"] != "1" || s.Env["CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"] != "80" {
+		t.Fatalf("settings %s (%v)", b, err)
+	}
+	if d := door(t, e, doors.SafetyNet); !d.Done {
+		t.Fatalf("not done after it opened: %+v", d)
+	}
+	// A builder's own line stays: the net is there, at another percentage.
+	writeFile(t, path, `{"env": {"CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "90"}}`+"\n")
+	if d := door(t, e, doors.SafetyNet); !d.Done {
+		t.Fatalf("a net at 90%% is not done: %+v", d)
 	}
 }

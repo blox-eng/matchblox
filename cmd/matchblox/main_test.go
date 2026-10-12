@@ -302,7 +302,7 @@ func TestSetupCommandOpensWhatTheBuilderTypes(t *testing.T) {
 	e := setupEnv(t)
 	var out strings.Builder
 	var ran [][]string
-	err := setupDoors(e, strings.NewReader("y\n\nn\n"), &out, func(argv []string) error { ran = append(ran, argv); return nil })
+	err := setupDoors(e, strings.NewReader("y\n\n\nn\n"), &out, func(argv []string) error { ran = append(ran, argv); return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -330,7 +330,7 @@ func TestSetupCommandShowsClosedDoors(t *testing.T) {
 	}
 	var out strings.Builder
 	var ran [][]string
-	if err := setupDoors(e, strings.NewReader("\n\n\ny\n"), &out, func(argv []string) error { ran = append(ran, argv); return nil }); err != nil {
+	if err := setupDoors(e, strings.NewReader("\n\n\n\ny\n"), &out, func(argv []string) error { ran = append(ran, argv); return nil }); err != nil {
 		t.Fatal(err)
 	}
 	if len(ran) != 1 || ran[0][0] != "claude" {
@@ -441,7 +441,7 @@ func TestAgentLookPathFindsTheAgentsOwnDirs(t *testing.T) {
 func TestSetupCommandPointsTheNightToTheConsole(t *testing.T) {
 	e := setupEnv(t)
 	var out strings.Builder
-	if err := setupDoors(e, strings.NewReader("\n\n\ny\n"), &out, func([]string) error { return nil }); err != nil {
+	if err := setupDoors(e, strings.NewReader("\n\n\n\ny\n"), &out, func([]string) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	got := out.String()
@@ -455,7 +455,7 @@ func TestSetupCommandAsksForTheMouseAfterTheWayBack(t *testing.T) {
 	for _, c := range []struct {
 		answers string
 		on      bool
-	}{{"\n\ny\ny\n", true}, {"\n\ny\n\n", false}} {
+	}{{"\n\n\ny\ny\n", true}, {"\n\n\ny\n\n", false}} {
 		e := setupEnv(t)
 		var out strings.Builder
 		if err := setupDoors(e, strings.NewReader(c.answers), &out, func([]string) error { return nil }); err != nil {

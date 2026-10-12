@@ -268,8 +268,16 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   a card, 0 steps included: `NIGHT|STOKED <since> → <end> · ready N/M`, then
   `N watched · N were full · N compacted · N waited · Nk tokens given back`
   (two lines on a phone), then each session of the start that is not ready
-  with why in `warn`, then the steps. Ready: alive, not stopped by the
-  plan's limit, not waiting, not full. A limit that stopped sessions during
+  with why in `warn`, then each one it chose not to compact with why in
+  `muted` (`69% · finishes ~79% · left alone`), then the steps, each with
+  the verdict that called for it under it in `muted`. Ready: alive, not
+  stopped by the plan's limit, not waiting, not past the line. The stoker
+  decides each session by its pace (#59, owner 2026-10-12): tokens per point
+  of its progress bar; one that finishes under the line is left alone, one
+  whose next 10 points would cross it is compacted at the end of this turn,
+  and without a pace only the line counts. Idle is the transcript's turn
+  end, not Claude Code's busy flag (background work keeps that busy). A
+  limit that stopped sessions during
   the run is the card's first line, in `warn`: `limit out <from> → <reset>`;
   a session it stops is named `out until <reset>`. Every card is kept in
   `stoker-runs.jsonl`.
