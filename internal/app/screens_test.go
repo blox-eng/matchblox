@@ -94,9 +94,9 @@ func screensState(t *testing.T) proto.State {
 // a ship of each kind, and the dock folded on a short phone. -update
 // writes them again.
 func TestScreens(t *testing.T) {
-	// Times on the screen are local: the frames are drawn in UTC.
-	defer func(l *time.Location) { time.Local = l }(time.Local)
-	time.Local = time.UTC
+	// Times on the screen are local: the frames are drawn in UTC, which
+	// TestMain sets for the whole package (writing time.Local here races
+	// the timers other tests leave running).
 	st := screensState(t)
 	type shot struct {
 		name string
