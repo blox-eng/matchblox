@@ -19,9 +19,9 @@ func TestLayoutBreakpoints(t *testing.T) {
 		cols, rows int
 		want       Layout
 	}{
-		{107, 60, Narrow},  // iPhone Pro Max upright, keyboard up
-		{107, 101, Narrow}, // keyboard down
-		{107, 96, Narrow},  // mid-animation
+		{107, 60, Medium},  // iPhone Pro Max upright, keyboard up: the drawer
+		{107, 101, Medium}, // keyboard down
+		{107, 96, Medium},  // mid-animation
 		{205, 21, Wide},    // landscape, keyboard down
 		{205, 5, Wide},     // landscape, keyboard up
 		{192, 60, Wide},    // a desk
@@ -29,7 +29,10 @@ func TestLayoutBreakpoints(t *testing.T) {
 		{86, 30, Medium},
 		{132, 32, Wide},
 		{100, 30, Wide},
-		{120, 60, Narrow}, // rows*2 == cols is portrait
+		{120, 60, Medium}, // rows*2 == cols is portrait
+		{89, 60, Narrow},  // upright under 90: one column
+		{90, 45, Medium},
+		{70, 120, Narrow},
 		{121, 60, Wide},
 		{59, 10, Narrow},
 		{60, 10, Medium},
@@ -45,30 +48,46 @@ func TestLayoutBreakpoints(t *testing.T) {
 	}
 }
 
-// TestAnUprightPhoneGetsThePhoneLayout: 107x60 is a phone held upright
-// with a small font: one column, one dock panel, the selected row opened
-// in place with the desk row's columns, and a peek of 72 columns centred.
-func TestAnUprightPhoneGetsThePhoneLayout(t *testing.T) {
-	m, _ := loadedWith(t, 107, limitsState())
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 107, Height: 60})
+// TestAnUprightPhoneGetsTheDrawer: a phone held upright with a small font
+// (107x60 with the keyboard up, 107x101 down) splits the list and the
+// detail at the middle, the detail a drawer on the right, and no row opens
+// in place; its dock shows one panel and its peek sits at the bottom, 72
+// columns at most. Upright under 90 columns is one column.
+func TestAnUprightPhoneGetsTheDrawer(t *testing.T) {
+	for _, h := range []int{60, 101} {
+		m, _ := loadedWith(t, 107, limitsState())
+		next, _ := m.Update(tea.WindowSizeMsg{Width: 107, Height: h})
+		m = next.(Model)
+		out := screen(m)
+		if !strings.Contains(out, "USAGE") || !strings.Contains(out, "machine ›") || strings.Contains(out, "MACHINE") {
+			t.Fatalf("107x%d: the dock is not usage alone:\n%s", h, out)
+		}
+		fitsWidth(t, m, 107)
+		if list, detail := m.panes(107); list != 53 || detail != 53 {
+			t.Fatalf("107x%d: panes = %d, %d, want 53, 53", h, list, detail)
+		}
+		for _, s := range m.all.sessions {
+			if rows := m.sessionRow(s, true, 53); len(rows) != 1 {
+				t.Fatalf("107x%d: the selected row opens in place: %q", h, rows)
+			}
+		}
+		if p, _ := key(m, "a"); p.(Model).peek != nil {
+			lines := strings.Split(screen(p), "\n")
+			foot := lines[len(lines)-3]
+			at := strings.Index(foot, "╰─")
+			if at < 0 || ansi.StringWidth(foot[:at]) != (107-72)/2 || ansi.StringWidth(foot[at:strings.Index(foot, "╯")+len("╯")]) != 72 {
+				t.Fatalf("107x%d: the peek is not at the bottom, 72 wide and centred:\n%s", h, screen(p))
+			}
+		}
+	}
+	m, _ := loadedWith(t, 70, limitsState())
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 70, Height: 120})
 	m = next.(Model)
-	out := screen(m)
-	if !strings.Contains(out, "USAGE") || !strings.Contains(out, "machine ›") || strings.Contains(out, "MACHINE") {
-		t.Fatalf("the upright phone dock is not usage alone:\n%s", out)
+	if list, detail := m.panes(70); list != 70 || detail != 0 {
+		t.Fatalf("70x120: panes = %d, %d, want one column", list, detail)
 	}
-	fitsWidth(t, m, 107)
-	if list, detail := m.panes(107); list != 107 || detail != 0 {
-		t.Fatalf("panes at 107x60 = %d, %d, want one column", list, detail)
-	}
-	if s := m.all.sessions; len(s) > 0 {
-		if rows := m.sessionRow(s[0], true, 107); len(rows) < 2 {
-			t.Fatalf("the selected row does not open in place at 107x60: %q", rows)
-		}
-		if rows := m.sessionRow(s[0], false, 107); len(rows) != 1 {
-			t.Fatalf("an unselected row opens at 107x60: %q", rows)
-		}
-	} else {
-		t.Fatal("no sessions in the fixture")
+	if s := m.all.sessions; len(s) == 0 || len(m.sessionRow(s[0], true, 70)) < 2 {
+		t.Fatal("70x120: the selected row does not open in place")
 	}
 	wide, _ := loadedWith(t, 107, limitsState())
 	if wide.layoutAt(107) != Wide {
@@ -448,7 +467,7 @@ func selectPane(t *testing.T, m tea.Model, pane string) tea.Model {
 func listOf(line string, w int) string {
 	lw := w
 	if byWidth(w) != Narrow {
-		lw = splitAt(w)
+		lw = splitAt(w, byWidth(w))
 	}
 	r := []rune(line)
 	return string(r[:min(lw, len(r))])
@@ -490,5 +509,37 @@ func TestTheDockSaysTheDisk(t *testing.T) {
 	}
 	if got := bytesWord(931 << 30); got != "931 GB" {
 		t.Fatalf("bytesWord %q", got)
+	}
+}
+
+// TestRowColumnsLineUp: every session row spans its pane, and its word
+// starts at the same x on every row, at every width and shape.
+func TestRowColumnsLineUp(t *testing.T) {
+	for _, size := range [][2]int{{44, 31}, {86, 30}, {107, 60}, {132, 32}, {192, 60}} {
+		w, h := size[0], size[1]
+		m := loaded(t, w)
+		next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+		m = next.(Model)
+		lw, _ := m.panes(w)
+		if lw == 0 {
+			lw = w
+		}
+		x := -1
+		for _, s := range m.all.sessions {
+			line := ansi.Strip(m.sessionRow(s, false, lw)[0])
+			if got := ansi.StringWidth(line); got != lw {
+				t.Fatalf("%dx%d: %s's row is %d wide, want %d: %q", w, h, s.Name, got, lw, line)
+			}
+			word := m.wordOf(s)
+			at := strings.LastIndex(line, " "+word+" ")
+			if at < 0 {
+				t.Fatalf("%dx%d: no word %q in %q", w, h, word, line)
+			}
+			if wx := ansi.StringWidth(line[:at]); x < 0 {
+				x = wx
+			} else if wx != x {
+				t.Fatalf("%dx%d: %s's word is at %d, the others at %d: %q", w, h, s.Name, wx, x, line)
+			}
+		}
 	}
 }

@@ -112,8 +112,8 @@ func (m Model) peekQueue(pane string) []sample.Session {
 }
 
 // peekRing is every session with a pane, in the list's order (who waits
-// first), starting after the one in pane and ending on it: the ring n and
-// p move along.
+// first), starting after the one in pane and ending on it: the ring ← and
+// → move along.
 func (m Model) peekRing(pane string) []sample.Session {
 	ss := m.snap.Sessions
 	at := slices.IndexFunc(ss, func(s sample.Session) bool { return s.Pane == pane })
@@ -203,9 +203,9 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key == "ctrl+c":
 		m.quitting = true
 		return m, tea.Quit
-	case key == "right" || key == "tab" || key == "n" && (!typing || p.text == ""):
+	case key == "right" || key == "tab":
 		return m.peekMove(p.pane, false), nil
-	case key == "left" || key == "shift+tab" || key == "p" && (!typing || p.text == ""):
+	case key == "left" || key == "shift+tab":
 		return m.peekMove(p.pane, true), nil
 	case v.permit:
 		if key == "enter" {
@@ -405,7 +405,7 @@ func (m Model) peekBox(bw, maxH int, phone bool) ([]string, []string, []span) {
 		rest, keys = rest[1:], keys[1:] // no words: the question opens the box
 	}
 	// The footer: each part a tap target (press "" none), " ─ " between
-	// them, two spaces inside the move group.
+	// them, two spaces inside the move group (← prev  3/7  next →).
 	type part struct{ text, press, sep string }
 	var foot []part
 	key := func(k, label, press string) part {
@@ -427,9 +427,9 @@ func (m Model) peekBox(bw, maxH int, phone bool) ([]string, []string, []span) {
 		foot = append(foot, key("␣", "tick", "space"))
 	}
 	if ring := m.peekRing(p.pane); len(ring) > 1 {
-		foot = append(foot, part{st.muted.Render("‹ ") + st.accent.Render("p"), "left", " ─ "})
+		foot = append(foot, part{st.accent.Render("←") + st.muted.Render(" prev"), "left", " ─ "})
 		count := part{st.faint.Render(m.peekCount(p.pane, len(ring))), "", "  "}
-		next := part{st.accent.Render("n") + st.muted.Render(" ›"), "right", "  "}
+		next := part{st.muted.Render("next ") + st.accent.Render("→"), "right", "  "}
 		width := 3 + 3 + 3 // the corners, the space and esc
 		for _, f := range append(foot, count, next) {
 			width += lipgloss.Width(f.sep + f.text)
@@ -482,7 +482,7 @@ func (m Model) peekBox(bw, maxH int, phone bool) ([]string, []string, []span) {
 // centred past that (a phone held upright with a small font); wider, a
 // centred box of 62 columns at most.
 func (m Model) overlayPeek(sc *drawn, w int) {
-	phone := m.layoutAt(w) == Narrow
+	phone := m.layoutAt(w) == Narrow || m.upright()
 	bw := min(w, 72)
 	if !phone {
 		bw = min(62, w-8)

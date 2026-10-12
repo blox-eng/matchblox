@@ -55,13 +55,18 @@ What feels wrong today, from a capture at 46×34 (the fixture machine):
 
 The screen's shape picks first, then its width (DESIGN.md §6). A cell is
 about twice as tall as it is wide, so a screen is portrait when
-rows × 2 ≥ columns: a portrait screen is a phone, whatever its width. A
-phone held upright with a small font (107×60 in Termius with the keyboard
-up, 107×101 with it down) keeps the phone layout as the keyboard comes and
-goes; its rows use the room for the plan and the ship, and the peek is 72
-columns at most, centred. A landscape screen goes by its width, on the
-breakpoints below, so a phone on its side (205×21) is a desk whose dock
-folds when it does not fit.
+rows × 2 ≥ columns. A portrait screen under 90 columns is a phone (one
+column; from 70 columns its rows use the room for the plan and the ship).
+From 90 columns (owner 2026-10-12, on a 107-wide iPhone held upright:
+107×60 in Termius with the keyboard up, 107×101 with it down) it splits
+the list and the detail at the middle, the detail a drawer on the right,
+and no row opens in place. Every portrait screen keeps one dock panel at a
+time (`u` switches) and a bottom peek of 72 columns at most, centred, and
+keeps its layout as the keyboard comes and goes. A landscape screen goes by
+its width, on the breakpoints below, so a phone on its side (205×21) is a
+desk whose dock folds when it does not fit. In every layout a row spans its
+pane and its columns are fixed tracks, the name taking what is left
+(DESIGN.md §6 Rows).
 
 | Layout | Columns | Shape |
 |---|---|---|
@@ -153,8 +158,8 @@ question, `To Billed` when it does not wait):
    picks and sends. The last option is always `Type an answer…`.
 3. A typing line `› ▏` when there are no options or the typing option is
    picked.
-4. The footer: `⏎ send ─ ‹ p  3/7  n › ─ esc` (the place in the list when
-   it fits). Each part is a tap target.
+4. The footer: `⏎ send ─ ← prev  3/7  next → ─ esc` (the place in the
+   list when it fits). Each part is a tap target.
 
 `⏎` sends: a typed line goes into the pane as today's answer does; an
 option is sent the way the question tool takes it in the pane (the builder
@@ -162,10 +167,11 @@ reads how it renders; it must never type text into a menu). The peek is the
 review: what you see is what is sent, to the pane named in the title, so no
 second confirm (today's `⏎ review` step goes, §11.2).
 After a send the toast says `sent to <name>` and the peek moves to the next
-session that waits, or closes when none does. `n` and `p` move the peek to
-the next and previous session in the Sessions order (who waits first),
-wrapping, while the typing line is empty or an option has the cursor;
-`→`/`←` (and `⇥`/Shift+Tab) at any time. Each move opens with nothing
+session that waits, or closes when none does. `→` and `←` (Termius sends
+them for a horizontal swipe), and `⇥`/Shift+Tab, move the peek to the
+next and previous session in the Sessions order (who waits first),
+wrapping. Every letter is text, `n` and `p` too (owner 2026-10-12); an
+option is picked with `↑↓` and `⏎`, a digit or a tap. Each move opens with nothing
 picked and takes no key for 400 ms. `esc` closes. A message to a session
 that does not wait has the answer's guards: the same agent is still in the
 pane, it does not ask with the question tool (its options path stays) and

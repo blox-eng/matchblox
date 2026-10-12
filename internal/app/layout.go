@@ -23,15 +23,23 @@ const (
 
 // layout picks the shape from the screen's shape and width. A cell is
 // about twice as tall as it is wide, so a screen is portrait when
-// rows*2 >= cols: a phone held upright, whatever its font, gets the phone
-// layout, and keeps it when its keyboard shrinks the screen. A landscape
-// screen goes by its width. Zero rows is an unknown height.
+// rows*2 >= cols: a phone held upright, whatever its font, keeps its
+// layout when its keyboard shrinks the screen. Upright, 90 columns and
+// more split the list and the detail at the middle; fewer are one column.
+// A landscape screen goes by its width.
 func layout(cols, rows int) Layout {
-	if rows > 0 && rows*2 >= cols {
+	if portrait(cols, rows) {
+		if cols >= 90 {
+			return Medium
+		}
 		return Narrow
 	}
 	return byWidth(cols)
 }
+
+// portrait is a screen taller than it is wide. Zero rows is an unknown
+// height: not portrait.
+func portrait(cols, rows int) bool { return rows > 0 && rows*2 >= cols }
 
 func byWidth(cols int) Layout {
 	switch {
@@ -43,14 +51,21 @@ func byWidth(cols int) Layout {
 	return Wide
 }
 
-// layoutAt is the shape a panel of w columns draws in: the phone's on a
-// portrait screen, else by the panel's own width.
+// layoutAt is the shape a panel of w columns draws in: the screen's, or
+// narrower when the panel is.
 func (m Model) layoutAt(w int) Layout {
-	if layout(m.width, m.height) == Narrow {
-		return Narrow
+	if m.width == 0 {
+		return byWidth(w)
 	}
-	return byWidth(w)
+	return min(layout(m.width, m.height), byWidth(w))
 }
+
+// upright is a portrait screen: its dock shows one panel at a time and its
+// peek sits at the bottom, as on a phone.
+func (m Model) upright() bool { return portrait(m.width, m.height) }
+
+// phoneDock is a dock of one panel, u switching it.
+func (m Model) phoneDock(w int) bool { return m.layoutAt(w) == Narrow || m.upright() }
 
 // body is a panel: its lines, and for each line the row it shows (-1 for
 // none), so a tap knows what it hit.

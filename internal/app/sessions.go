@@ -263,38 +263,81 @@ func (m Model) sessionRow(s sample.Session, sel bool, w int) []string {
 	}
 	wait := st.faint.Render(m.waitCell(s))
 	ctx := m.contextCell(s)
-	if w >= 70 {
-		name := st.text.Render(pad(s.Name, 25))
-		plan := pad("", 13)
+	t := m.sessTracks(w)
+	opens := sel && m.layoutAt(m.width) == Narrow
+	if !t.wide {
+		line := spread(mark+m.matchCell(s)+st.text.Render(s.Name), padTo(word, t.word)+cutLeft(wait, t.wait)+cutLeft(ctx, t.ctx)+" ", w)
+		if !opens {
+			return []string{line}
+		}
+		return append([]string{line}, m.opened(s, w)...)
+	}
+	line := mark + m.matchCell(s) + st.text.Render(pad(s.Name, t.name)) + padTo(word, t.word) + cutLeft(wait, t.wait) + cutLeft(ctx, t.ctx)
+	if t.plan > 0 {
+		plan := ""
 		switch {
 		case s.Do == "compact":
-			plan = st.neg.Render(pad("! compact", 13))
+			plan = st.neg.Render("! compact")
 		case s.Do == "clear":
-			plan = st.warn.Render(pad("▲ clear", 13))
+			plan = st.warn.Render("▲ clear")
 		case s.Progress != nil:
-			plan = padTo(m.progressCell(s.Progress, 5), 13)
+			plan = m.progressCell(s.Progress, 5)
 		}
+		line += "  " + padTo(plan, t.plan-2)
+	}
+	if t.where > 0 {
 		// The ship's track takes the room of the place when ships are read:
 		// the detail names the place.
 		where := padTo(m.shipRowCell(s), 7) + st.muted.Render(place(s.Target, s.Pane))
 		if len(m.ships()) > 0 {
 			where = m.shipRowCell(s)
 		}
-		line := mark + m.matchCell(s) + name + padTo(word, 8) + padLeft(wait, 4) + padLeft(ctx, 6) + "  " + plan + where
-		if !sel || m.layoutAt(w) != Narrow {
-			return []string{fit(line, w)}
+		line += padTo(where, t.where)
+	}
+	if !opens {
+		return []string{fit(line, w)}
+	}
+	return append([]string{fit(line, w)}, m.opened(s, w)...)
+}
+
+// tracks are the widths of a session row's columns, the same on every row
+// of a list w wide so each column starts at the same x: the name takes
+// what the others leave. A list under 70 columns has the name and, on the
+// right, the word, the wait and the context; wider adds the plan and the
+// ship (or the pull request and the place), dropped in that order (the
+// place first) when the name would get under 12.
+type tracks struct {
+	wide                               bool
+	name, word, wait, ctx, plan, where int
+}
+
+func (m Model) sessTracks(w int) tracks {
+	t := tracks{word: 8, wait: 5, ctx: 6}
+	if w < 70 {
+		if m.layoutAt(m.width) == Narrow {
+			t.word = 7
 		}
-		return append([]string{fit(line, w)}, m.opened(s, w)...)
+		return t
 	}
-	wordW := 8
-	if m.layoutAt(m.width) == Narrow {
-		wordW = 7
+	t.wide, t.plan = true, 15
+	t.where = 7 + 16 // the pull request and the place
+	if len(m.ships()) > 0 {
+		t.where = m.numW() + 1 + trackW
 	}
-	line := spread(mark+m.matchCell(s)+st.text.Render(s.Name), padTo(word, wordW)+padLeft(wait, 3)+padLeft(ctx, 6)+" ", w)
-	if !sel || m.layoutAt(m.width) != Narrow {
-		return []string{line}
+	fixed := 3 + t.word + t.wait + t.ctx + 1 // the mark, the match, the columns and a margin
+	if w-fixed-t.plan-t.where < 12 {
+		t.where = 0
 	}
-	return append([]string{line}, m.opened(s, w)...)
+	if w-fixed-t.plan-t.where < 12 {
+		t.plan = 0
+	}
+	t.name = w - fixed - t.plan - t.where
+	return t
+}
+
+// cutLeft right-aligns styled text in w cells, cutting it when it is wider.
+func cutLeft(s string, w int) string {
+	return padLeft(ansi.Truncate(s, w, "…"), w)
 }
 
 // opened is what a selected row on a phone grows by: what the agent said

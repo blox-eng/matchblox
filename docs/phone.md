@@ -46,16 +46,18 @@ Tap an agent, then tap it again: the peek rises from the bottom, over the
 dimmed list, with what the agent said last. Tap an option, or type a line
 and press `Enter`; it goes to that agent's pane at once. An agent that
 works gets it as a message, which Claude Code queues. After an answer the
-peek moves to the next agent that waits. `n ›` and `‹ p` (a tap, or the
-letter while the line is empty) move it along the list, `Esc` or a tap
-outside the peek closes it. See [the answer
+peek moves to the next agent that waits. A swipe left or right, or a tap
+on `← prev` or `next →`, moves it along the list; `Esc` or a tap outside
+the peek closes it. See [the answer
 peek](console.md#the-answer-peek).
 
 ## The phone layout
 
-A phone held upright gets the phone layout, even with a small font that
-makes the terminal 100 columns or more; on its side it goes by its width.
-Under 60 columns, the console has one column. Each agent is one line,
+A phone held upright is read by its shape, so the keyboard coming and
+going does not change the layout. With a small font that makes it 90
+columns or more, the list sits on the left and the selected agent's detail
+in a drawer on the right; the dock still shows one panel. On its side it
+goes by its width. Under 60 columns, the console has one column. Each agent is one line,
 grouped by what it needs from you: who waits first. The selected one opens
 in place: what it said last, its ship, its plan and its keys. Only
 the selected setup step shows its detail.

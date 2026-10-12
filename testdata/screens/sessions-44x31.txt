@@ -11,18 +11,18 @@
  ○ Clear opencode (%7)
 
  WAITS FOR YOU · 6
-▌│ spark-docs              done    9m   88%
+▌│ spark-docs            done      9m   88%
    “I rewrote the quick start and the
    install page.”
    #4540 ●━●━●━●━●  live
    ▰▰▰▰▰ plan 100%  ▲ cle… a answer  ⏎ open
- ╿ ember-billing           done    4m   32%
- ╿ flint-auth              asks    2m   41%
- ╿ kindle-web              asks    1m   56%
- ╿ codex                   done    0s   55%
- ╿ opencode                done    0s    6%
+ ╿ ember-billing         done      4m   32%
+ ╿ flint-auth            asks      2m   41%
+ ╿ kindle-web            asks      1m   56%
+ ╿ codex                 done      0s   55%
+ ╿ opencode              done      0s    6%
  WORKING · 1
- ✦ hearth-api              busy         79%
+ ✦ hearth-api            busy           79%
 
  1 without an agent: shell:1.1 zsh
 

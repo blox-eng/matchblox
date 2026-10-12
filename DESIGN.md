@@ -262,10 +262,10 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   wash, `[✔]` ticks for several choices), the last always `Type an
   answer…`; then, when typing, a `├─┤` rule and `› <text>▏`. The foot is
   the keys: `⏎ send` (`⏎ question 2` before the last question, `⏎ open` at
-  a permission prompt) `─ ␣ tick ─ ‹ p  3/7  n › ─ esc`, each a tap
-  target, the place in the list when it fits. `n`/`p` move the peek along
-  Sessions (who waits first, wrapping) while the typing line is empty or an
-  option has the cursor, `→`/`←` (and `⇥`/Shift+Tab) at any time. `⏎` sends with no
+  a permission prompt) `─ ␣ tick ─ ← prev  3/7  next → ─ esc`, each a
+  tap target, the place in the list when it fits. `←`/`→` (a phone's
+  horizontal swipe) and `⇥`/Shift+Tab move the peek along Sessions (who
+  waits first, wrapping); every letter is text, `n` and `p` too. `⏎` sends with no
   second confirm (the peek is the review); options go to Claude Code's
   menu as its keys (digits, `Down`, `Enter`, `1` on the review page),
   never as typed text. After a send the toast says `sending to <name>…`,
@@ -282,15 +282,24 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   stoker asks to take over here. A phone app that
   shrinks the terminal for its keyboard keeps the bottom row above it.
 - **Widths:** the shape picks first. A cell is about twice as tall as it
-  is wide, so a screen is portrait when rows × 2 ≥ columns, and a portrait
-  screen is a phone whatever its width: one column, the selected row opens
-  in place, one dock panel; from 70 columns its rows add the plan and the
-  ship, and its peek is 72 columns at most, centred. A phone held upright
-  with a small font (107×60, 107×101 with the keyboard down) stays a phone
-  when the keyboard comes and goes. A landscape screen goes by its width:
-  under 60 columns (phone) as above; 60 to 99, the list and the detail
-  split at the middle, usage and the machine side by side; 100 and over,
-  the list with every column and the detail beside it.
+  is wide, so a screen is portrait when rows × 2 ≥ columns. Portrait under
+  90 columns is a phone: one column, the selected row opens in place; from
+  70 columns its rows add the plan and the ship. Portrait from 90 columns
+  (a phone held upright with a small font: 107×60, 107×101 with the
+  keyboard down) splits the list and the detail at the middle, the detail
+  a drawer on the right, no row opening in place. Every portrait screen
+  has one dock panel at a time (`u` switches, the fold rule unchanged) and
+  a peek at the bottom, 72 columns at most, centred; its layout holds when
+  the keyboard comes and goes. A landscape screen goes by its width: under
+  60 columns (phone) as above; 60 to 99, the list and the detail split at
+  the middle, usage and the machine side by side; 100 and over, the list
+  with every column and the detail beside it.
+- **Rows:** each list row spans its pane, the selection wash too. Its
+  columns are fixed tracks computed once per render from the pane's width
+  (the word, the wait, the context, then the plan and the ship or the
+  place when the row is 70 columns or more), so each starts at the same x
+  on every row; the name takes what is left, cut with `…`. A ship's number
+  is padded to the widest one read, so titles and tracks line up.
 - **Keys:** each key is on a phone SSH key bar: digits, arrows, `Enter`,
   `Esc` and letters. No `Ctrl` combinations. `Enter` never runs a
   destructive step; that needs `x` and then a typed `y`.

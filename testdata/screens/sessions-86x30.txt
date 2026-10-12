@@ -11,14 +11,14 @@
  ○ Clear opencode (%7)                    │
                                           │ context  ▰▰▰▰▰▰▰▰▰▱ 88%
  WAITS FOR YOU · 6                        │ plan     ▰▰▰▰▰▰▰▰▰▰ 100%  docs for the 1.…
-▌│ spark-docs           done     9m   88% │ ship     #4540 ●━●━●━●━●  live
- ╿ ember-billing        done     4m   32% │          The 1.0 docs
- ╿ flint-auth           asks     2m   41% │          https://github.com/hearth/spark-…
- ╿ kindle-web           asks     1m   56% │ why      clear: idle 9m (clear after 0s)
- ╿ codex                done     0s   55% │ sonnet · 176k / 200k tokens · +0k in 30
- ╿ opencode             done     0s    6% │ min · ✻ team@example.com · Max · pid 1400
+▌│ spark-docs         done       9m   88% │ ship     #4540 ●━●━●━●━●  live
+ ╿ ember-billing      done       4m   32% │          The 1.0 docs
+ ╿ flint-auth         asks       2m   41% │          https://github.com/hearth/spark-…
+ ╿ kindle-web         asks       1m   56% │ why      clear: idle 9m (clear after 0s)
+ ╿ codex              done       0s   55% │ sonnet · 176k / 200k tokens · +0k in 30
+ ╿ opencode           done       0s    6% │ min · ✻ team@example.com · Max · pid 1400
  WORKING · 1                              │ · 1 process · started 3h20m ago
- ✦ hearth-api           busy          79% │
+ ✦ hearth-api         busy            79% │
                                           │ a answer   ⏎ open it
  1 without an agent: shell:1.1 zsh        │
                                           │

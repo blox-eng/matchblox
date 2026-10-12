@@ -90,6 +90,20 @@ func (m Model) shipStyle(sh proto.Ship) lipgloss.Style {
 
 // track is a ship's five stages, ●━●━◉┄○┄○: done muted, the current one in
 // its colour (✕ when stuck), the rest faint.
+// trackW is the width of a ship's track: a mark for each stage and a line
+// between two.
+var trackW = 2*len(stageNames) - 1
+
+// numW is the width of the widest ship number read, "#4551", so the tracks
+// after the numbers line up.
+func (m Model) numW() int {
+	n := 2
+	for _, sh := range m.ships() {
+		n = max(n, len("#"+strconv.Itoa(sh.Number)))
+	}
+	return n
+}
+
 func (m Model) track(sh proto.Ship) string {
 	st := m.st
 	var b strings.Builder
@@ -119,7 +133,7 @@ func (m Model) track(sh proto.Ship) string {
 
 // shipCell is "#4551 ●━◉┄○┄○", with the note when note is set.
 func (m Model) shipCell(sh proto.Ship, note bool) string {
-	cell := m.st.accent.Render("#"+strconv.Itoa(sh.Number)) + " " + m.track(sh)
+	cell := padTo(m.st.accent.Render("#"+strconv.Itoa(sh.Number)), m.numW()) + " " + m.track(sh)
 	if note {
 		cell += "  " + m.shipStyle(sh).Render(sh.Note)
 	}
@@ -184,7 +198,7 @@ func (m Model) shipsPanel(w int) body {
 			mark = st.accent.Render("▌")
 		}
 		lines := []string{
-			spread(mark+st.accent.Render("#"+strconv.Itoa(sh.Number))+" "+st.text.Render(sh.Title), st.faint.Render(m.shipAge(sh))+" ", w),
+			spread(mark+padTo(st.accent.Render("#"+strconv.Itoa(sh.Number)), m.numW())+" "+st.text.Render(sh.Title), cutLeft(st.faint.Render(m.shipAge(sh)), 4)+" ", w),
 			"   " + m.track(sh) + "  " + m.shipStyle(sh).Render(sh.Note),
 		}
 		if on && m.layoutAt(m.width) == Narrow {

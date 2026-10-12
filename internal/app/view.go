@@ -198,13 +198,14 @@ func (m Model) panes(w int) (list, detail int) {
 	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || m.layoutAt(w) == Narrow || preview {
 		return w, 0
 	}
-	return splitAt(w), w - splitAt(w) - 1
+	at := splitAt(w, m.layoutAt(w))
+	return at, w - at - 1
 }
 
 // splitAt is the column the list and the detail split at, and the dock's
 // usage and machine under them.
-func splitAt(w int) int {
-	if byWidth(w) == Medium {
+func splitAt(w int, l Layout) int {
+	if l == Medium {
 		return (w - 1) / 2
 	}
 	return min(78, w-41)

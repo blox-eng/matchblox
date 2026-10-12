@@ -462,7 +462,7 @@ func TestReplay(t *testing.T) {
 		// Enter sends it: the peek was the review. flint-auth works again,
 		// and the peek moves to the next session that waits.
 		{name: "the answer goes", at: 5200 * time.Millisecond, key: "enter", ok: func(s string) bool {
-			return has("sent to flint-auth", "WAITS FOR YOU · 3", "‹ p", "n ›")(s) && struck.MatchString(s)
+			return has("sent to flint-auth", "WAITS FOR YOU · 3", "← prev", "next →")(s) && struck.MatchString(s)
 		}},
 		{name: "the peek closes", at: 6400 * time.Millisecond, key: "esc", ok: func(s string) bool {
 			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "⏎ send") && burning.MatchString(s)

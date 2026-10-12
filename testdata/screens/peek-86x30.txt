@@ -16,9 +16,9 @@
 ▌╿ flint-aut│   2 Rotate, keep the old one a minute                      │r after 0s)
  ╿ kindle-we│   3 Keep the token                                         │0k in 30
  ╿ codex    │   4 Type an answer…                                        │ · pid 1310
- ╿ opencode ╰─ ⏎ question 2 ─ ‹ p  3/7  n › ─ esc ───────────────────────╯o
+ ╿ opencode ╰─ ⏎ question 2 ─ ← prev  3/7  next → ─ esc ─────────────────╯o
  WORKING · 1                              │
- ✦ hearth-api           busy          79% │ a answer   ⏎ open it
+ ✦ hearth-api         busy            79% │ a answer   ⏎ open it
                                           │
  1 without an agent: shell:1.1 zsh        │
                                           │

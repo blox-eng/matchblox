@@ -54,8 +54,7 @@ text on the typing line.
 | A digit | Picks an option: the question goes on at once. With several choices, ticks it. The digit after the options opens the typing line. |
 | `↑` or `↓` | Moves between the options and the typing line. |
 | `Space` | Ticks the option under the cursor, when the question takes several. |
-| `n` or `p` | Moves the peek to the next or the previous agent, in the order of Sessions (who waits first), wrapping. Only while the typing line is empty or an option has the cursor: otherwise they are text. |
-| `→` or `←` | Moves the peek too, at any time. `Tab` and `Shift+Tab` do the same. |
+| `→` or `←` | Moves the peek to the next or the previous agent, in the order of Sessions (who waits first), wrapping. A phone's horizontal swipe sends them. `Tab` and `Shift+Tab` do the same. |
 | `Backspace` | Deletes the last character. |
 | `Esc` | Closes the peek. Nothing is sent. |
 | `Ctrl+C` | Quits the console. |
@@ -83,7 +82,7 @@ text on the typing line.
 
 A tap selects a row. A tap on an agent, once it is selected, opens the
 peek; a tap on an option of the peek picks it, a tap on a key of its foot
-(`⏎ send`, `‹ p`, `n ›`, `esc`) presses it, and a tap outside it closes
+(`⏎ send`, `← prev`, `next →`, `esc`) presses it, and a tap outside it closes
 it. On any other row the key line says `tap again: <command>`, and a
 second tap on the same row runs it. On Ships, a tap on the selected ship
 selects its session in Sessions. Any other action (a

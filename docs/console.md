@@ -98,9 +98,10 @@ no ships read, the open pull request of its worktree (`#N`) and its tmux
 place.
 
 On a phone the selected row opens: what the agent said last, its ship, its
-plan and its keys. A phone held upright counts as a phone even with a
-small font: the console reads the screen's shape (rows × 2 ≥ columns) before
-its width. Wider, the same shows in a detail beside the list, with
+plan and its keys. The console reads the screen's shape (rows × 2 ≥
+columns) before its width: a phone held upright under 90 columns is a
+phone, and from 90 columns (a small font) its detail is a drawer beside
+the list. Wider, the same shows in a detail beside the list, with
 the account, the tokens and the background work.
 
 `Enter` jumps to the pane. Come back from a jump and the next agent that
@@ -124,7 +125,7 @@ while it works.
 │   2 Rotate, keep the old one a minute                      │
 │   3 Keep the token                                         │
 │   4 Type an answer…                                        │
-╰─ ⏎ question 2 ─ ‹ p  3/7  n › ─ esc ───────────────────────╯
+╰─ ⏎ question 2 ─ ← prev  3/7  next → ─ esc ─────────────────╯
 ```
 
 It shows what the agent said in this turn, its end up to nine lines (a
@@ -143,9 +144,9 @@ is sent. The header says `sending to flint-auth…`, then `sent to
 flint-auth`; an answer that did not go says `not sent to flint-auth` and
 why on the key line. The peek moves to the next agent that waits, or
 closes. There no option is picked, and for a moment it takes no key, so a
-second `Enter` never answers a question you have not read. `n` and `p`
-move the peek to the next and the previous agent (while the typing line
-is empty; `→` and `←` at any time), `Esc` closes. A permission prompt is answered in its
+second `Enter` never answers a question you have not read. `→` and `←`
+move the peek to the next and the previous agent, `Esc` closes. Every
+letter is text. A permission prompt is answered in its
 pane: its peek shows the prompt, and `Enter` goes there.
 
 - Context use is read from the agent's own files, or shows "not measured".

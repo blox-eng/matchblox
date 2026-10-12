@@ -19,13 +19,13 @@ import (
 // `u` picks; wider, usage and the machine side by side, split as the
 // panes of Sessions are.
 func (m Model) dock(w int) []string {
-	if m.layoutAt(w) == Narrow {
+	if m.phoneDock(w) {
 		if m.dockMachine {
 			return m.machineLines(w, false, "usage ›")
 		}
 		return m.usageLines(w, false, "machine ›")
 	}
-	split := splitAt(w)
+	split := splitAt(w, m.layoutAt(w))
 	left, right := m.usageLines(split, false, ""), m.machineLines(w-split-1, false, "")
 	out := make([]string, max(len(left), len(right)))
 	for i := range out {

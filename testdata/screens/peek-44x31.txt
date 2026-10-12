@@ -11,9 +11,9 @@
  ○ Clear opencode (%7)
 
  WAITS FOR YOU · 6
- │ spark-docs              done    9m   88%
- ╿ ember-billing           done    4m   32%
-▌╿ flint-auth              asks    2m   41%
+ │ spark-docs            done      9m   88%
+ ╿ ember-billing         done      4m   32%
+▌╿ flint-auth            asks      2m   41%
    “Should a refresh also rotate the token,
 ╭─ flint-auth asks · 1 of 2 ───────────────╮
 │ The refresh endpoint is in and its tests │
@@ -26,6 +26,6 @@
 │   2 Rotate, keep the old one a minute    │
 │   3 Keep the token                       │
 │   4 Type an answer…                      │
-╰─ ⏎ question 2 ─ ‹ p  3/7  n › ─ esc ─────╯
+╰─ ⏎ question 2 ─ ← prev  next → ─ esc ────╯
 ────────────────────────────────────────────
  ⏎ open  a answer  p ships  f stoker
