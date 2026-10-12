@@ -275,10 +275,16 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   action shows `RUN <command>` and its confirm, `/` the search, and the
   stoker asks to take over here. A phone app that
   shrinks the terminal for its keyboard keeps the bottom row above it.
-- **Widths:** under 60 columns (phone): one column, the selected row opens
-  in place, one dock panel. 60 to 99: the list and the detail split at the
-  middle, usage and the machine side by side. 100 and over: the list with
-  every column and the detail beside it.
+- **Widths:** the shape picks first. A cell is about twice as tall as it
+  is wide, so a screen is portrait when rows × 2 ≥ columns, and a portrait
+  screen is a phone whatever its width: one column, the selected row opens
+  in place, one dock panel; from 70 columns its rows add the plan and the
+  ship, and its peek is 72 columns at most, centred. A phone held upright
+  with a small font (107×60, 107×101 with the keyboard down) stays a phone
+  when the keyboard comes and goes. A landscape screen goes by its width:
+  under 60 columns (phone) as above; 60 to 99, the list and the detail
+  split at the middle, usage and the machine side by side; 100 and over,
+  the list with every column and the detail beside it.
 - **Keys:** each key is on a phone SSH key bar: digits, arrows, `Enter`,
   `Esc` and letters. No `Ctrl` combinations. `Enter` never runs a
   destructive step; that needs `x` and then a typed `y`.

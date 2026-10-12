@@ -186,7 +186,7 @@ func (m Model) stokedSection(b *body, w int, row int, sel bool) {
 	default:
 		when += v.Ended.Local().Format("15:04")
 	}
-	narrow := layout(w) == Narrow
+	narrow := m.layoutAt(w) == Narrow
 	mark := "  "
 	if sel {
 		mark = "▌ "

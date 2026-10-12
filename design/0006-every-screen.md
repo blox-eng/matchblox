@@ -53,7 +53,15 @@ What feels wrong today, from a capture at 46×34 (the fixture machine):
 
 ## 4. The three layouts
 
-The width picks the layout; the existing breakpoints stay (DESIGN.md §6).
+The screen's shape picks first, then its width (DESIGN.md §6). A cell is
+about twice as tall as it is wide, so a screen is portrait when
+rows × 2 ≥ columns: a portrait screen is a phone, whatever its width. A
+phone held upright with a small font (107×60 in Termius with the keyboard
+up, 107×101 with it down) keeps the phone layout as the keyboard comes and
+goes; its rows use the room for the plan and the ship, and the peek is 72
+columns at most, centred. A landscape screen goes by its width, on the
+breakpoints below, so a phone on its side (205×21) is a desk whose dock
+folds when it does not fit.
 
 | Layout | Columns | Shape |
 |---|---|---|

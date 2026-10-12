@@ -15,10 +15,64 @@ import (
 )
 
 func TestLayoutBreakpoints(t *testing.T) {
-	for w, want := range map[int]Layout{40: Narrow, 59: Narrow, 60: Medium, 99: Medium, 100: Wide, 200: Wide} {
-		if got := layout(w); got != want {
-			t.Errorf("layout(%d) = %v, want %v", w, got, want)
+	for _, c := range []struct {
+		cols, rows int
+		want       Layout
+	}{
+		{107, 60, Narrow},  // iPhone Pro Max upright, keyboard up
+		{107, 101, Narrow}, // keyboard down
+		{107, 96, Narrow},  // mid-animation
+		{205, 21, Wide},    // landscape, keyboard down
+		{205, 5, Wide},     // landscape, keyboard up
+		{192, 60, Wide},    // a desk
+		{44, 31, Narrow},
+		{86, 30, Medium},
+		{132, 32, Wide},
+		{100, 30, Wide},
+		{120, 60, Narrow}, // rows*2 == cols is portrait
+		{121, 60, Wide},
+		{59, 10, Narrow},
+		{60, 10, Medium},
+		{99, 10, Medium},
+		{0, 0, Narrow},
+		{1, 1, Narrow},
+		{80, 0, Medium}, // no height yet: by width
+		{200, 0, Wide},
+	} {
+		if got := layout(c.cols, c.rows); got != c.want {
+			t.Errorf("layout(%d, %d) = %v, want %v", c.cols, c.rows, got, c.want)
 		}
+	}
+}
+
+// TestAnUprightPhoneGetsThePhoneLayout: 107x60 is a phone held upright
+// with a small font: one column, one dock panel, the selected row opened
+// in place with the desk row's columns, and a peek of 72 columns centred.
+func TestAnUprightPhoneGetsThePhoneLayout(t *testing.T) {
+	m, _ := loadedWith(t, 107, limitsState())
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 107, Height: 60})
+	m = next.(Model)
+	out := screen(m)
+	if !strings.Contains(out, "USAGE") || !strings.Contains(out, "machine ›") || strings.Contains(out, "MACHINE") {
+		t.Fatalf("the upright phone dock is not usage alone:\n%s", out)
+	}
+	fitsWidth(t, m, 107)
+	if list, detail := m.panes(107); list != 107 || detail != 0 {
+		t.Fatalf("panes at 107x60 = %d, %d, want one column", list, detail)
+	}
+	if s := m.all.sessions; len(s) > 0 {
+		if rows := m.sessionRow(s[0], true, 107); len(rows) < 2 {
+			t.Fatalf("the selected row does not open in place at 107x60: %q", rows)
+		}
+		if rows := m.sessionRow(s[0], false, 107); len(rows) != 1 {
+			t.Fatalf("an unselected row opens at 107x60: %q", rows)
+		}
+	} else {
+		t.Fatal("no sessions in the fixture")
+	}
+	wide, _ := loadedWith(t, 107, limitsState())
+	if wide.layoutAt(107) != Wide {
+		t.Fatal("107x30 is no longer a desk")
 	}
 }
 
@@ -403,7 +457,7 @@ func selectPane(t *testing.T, m tea.Model, pane string) tea.Model {
 // width of a console w wide.
 func listOf(line string, w int) string {
 	lw := w
-	if layout(w) != Narrow {
+	if byWidth(w) != Narrow {
 		lw = splitAt(w)
 	}
 	r := []rune(line)

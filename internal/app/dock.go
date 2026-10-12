@@ -19,7 +19,7 @@ import (
 // `u` picks; wider, usage and the machine side by side, split as the
 // panes of Sessions are.
 func (m Model) dock(w int) []string {
-	if layout(w) == Narrow {
+	if m.layoutAt(w) == Narrow {
 		if m.dockMachine {
 			return m.machineLines(w, false, "usage ›")
 		}

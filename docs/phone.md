@@ -51,6 +51,8 @@ peek](console.md#the-answer-peek).
 
 ## The phone layout
 
+A phone held upright gets the phone layout, even with a small font that
+makes the terminal 100 columns or more; on its side it goes by its width.
 Under 60 columns, the console has one column. Each agent is one line,
 grouped by what it needs from you: who waits first. The selected one opens
 in place: what it said last, its ship, its plan and its keys. Only
@@ -63,8 +65,8 @@ away; the Machine tab has it.
 The key line is at the bottom: an SSH app that shrinks the terminal for
 its keyboard keeps it above the keys. A tap on a key presses it.
 
-Open the phone to 60 columns or more and the list and the detail of the
-selected agent sit side by side.
+Turn the phone on its side, at 60 columns or more, and the list and the
+detail of the selected agent sit side by side.
 
 Every key is on the key bar of an SSH app: letters, digits, arrows, `Enter`
 and `Esc`. See [Keys](keys.md).

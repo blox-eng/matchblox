@@ -58,7 +58,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m.key(s.press)
 		}
 		return m, nil
-	case ms.Y == sc.dockAt && layout(w) == Narrow:
+	case ms.Y == sc.dockAt && m.layoutAt(w) == Narrow:
 		if x0, x1 := m.dockToggle(w); ms.X >= x0 && ms.X < x1 {
 			m.dockMachine = !m.dockMachine
 		}

@@ -108,7 +108,7 @@ func (m Model) doorsSection(b *body, w int) {
 		}
 		b.add(-1, st.label.Render(fit(fmt.Sprintf(" SET UP · %d", len(ds)), w)))
 	}
-	narrow := layout(w) == Narrow
+	narrow := m.layoutAt(w) == Narrow
 	for i, d := range m.doors {
 		if d.ID == stokedRow {
 			continue

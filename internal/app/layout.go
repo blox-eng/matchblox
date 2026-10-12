@@ -8,7 +8,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// Layout is the shape of the console for a terminal width (DESIGN.md §6).
+// Layout is the shape of the console for a terminal (DESIGN.md §6).
 type Layout int
 
 const (
@@ -21,14 +21,35 @@ const (
 	Wide
 )
 
-func layout(width int) Layout {
-	switch {
-	case width < 60:
+// layout picks the shape from the screen's shape and width. A cell is
+// about twice as tall as it is wide, so a screen is portrait when
+// rows*2 >= cols: a phone held upright, whatever its font, gets the phone
+// layout, and keeps it when its keyboard shrinks the screen. A landscape
+// screen goes by its width. Zero rows is an unknown height.
+func layout(cols, rows int) Layout {
+	if rows > 0 && rows*2 >= cols {
 		return Narrow
-	case width < 100:
+	}
+	return byWidth(cols)
+}
+
+func byWidth(cols int) Layout {
+	switch {
+	case cols < 60:
+		return Narrow
+	case cols < 100:
 		return Medium
 	}
 	return Wide
+}
+
+// layoutAt is the shape a panel of w columns draws in: the phone's on a
+// portrait screen, else by the panel's own width.
+func (m Model) layoutAt(w int) Layout {
+	if layout(m.width, m.height) == Narrow {
+		return Narrow
+	}
+	return byWidth(w)
 }
 
 // body is a panel: its lines, and for each line the row it shows (-1 for

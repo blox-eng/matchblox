@@ -395,7 +395,7 @@ func (s Shell) render() string {
 			mark = "▌ "
 		}
 		line := " " + st.accent.Render(mark) + st.text.Render(pad(r.label, 24)) + st.muted.Render(r.note)
-		if layout(w) == Narrow {
+		if layout(w, s.height) == Narrow {
 			line = " " + st.accent.Render(mark) + st.text.Render(r.label)
 		}
 		b.addRow(i, i == s.sel, w, st, line)

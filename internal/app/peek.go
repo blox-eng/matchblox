@@ -392,18 +392,19 @@ func (m Model) peekBox(bw, maxH int, phone bool) ([]string, []string, []span) {
 	return out, append(press, ""), spans
 }
 
-// overlayPeek dims the screen and lays the peek over it: on a phone full
-// width, its foot on the line above the key line; wider, a centred box of
-// 62 columns at most.
+// overlayPeek dims the screen and lays the peek over it: on a phone its
+// foot on the line above the key line, full width up to 72 columns and
+// centred past that (a phone held upright with a small font); wider, a
+// centred box of 62 columns at most.
 func (m Model) overlayPeek(sc *drawn, w int) {
-	phone := layout(w) == Narrow
-	bw := w
+	phone := m.layoutAt(w) == Narrow
+	bw := min(w, 72)
 	if !phone {
 		bw = min(62, w-8)
 	}
 	bottom := len(sc.lines) - 2 // the key line's hairline
 	box, press, spans := m.peekBox(bw, bottom-1, phone)
-	x, y := 0, bottom-len(box)
+	x, y := (w-bw)/2, bottom-len(box)
 	if !phone {
 		x, y = (w-bw)/2, max((len(sc.lines)-len(box))/2-1, 1)
 	}

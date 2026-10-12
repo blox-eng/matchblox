@@ -188,7 +188,7 @@ func (m Model) shipsPanel(w int) body {
 			spread(mark+st.accent.Render("#"+strconv.Itoa(sh.Number))+" "+st.text.Render(sh.Title), st.faint.Render(m.shipAge(sh))+" ", w),
 			"   " + m.track(sh) + "  " + m.shipStyle(sh).Render(sh.Note),
 		}
-		if on && layout(m.width) == Narrow {
+		if on && m.layoutAt(m.width) == Narrow {
 			lines = append(lines, spread("   "+st.faint.Render("by ")+st.text.Render(m.driverName(sh)), m.shipKeysLine(sh)+" ", w))
 		}
 		b.addRow(i, on, w, st, lines...)

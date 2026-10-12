@@ -244,8 +244,9 @@ func (m Model) sessionRows(b *body, w int) {
 	}
 }
 
-// sessionRow is one line for a session. The desk adds the plan, the pull
-// request and the place; on a phone the selected one opens in place.
+// sessionRow is one line for a session. A row of 70 columns or more adds
+// the plan, the pull request and the place; on a phone the selected one
+// opens in place.
 func (m Model) sessionRow(s sample.Session, sel bool, w int) []string {
 	st := m.st
 	mark := " "
@@ -276,14 +277,17 @@ func (m Model) sessionRow(s sample.Session, sel bool, w int) []string {
 			where = m.shipRowCell(s)
 		}
 		line := mark + m.matchCell(s) + name + padTo(word, 8) + padLeft(wait, 4) + padLeft(ctx, 6) + "  " + plan + where
-		return []string{fit(line, w)}
+		if !sel || m.layoutAt(w) != Narrow {
+			return []string{fit(line, w)}
+		}
+		return append([]string{fit(line, w)}, m.opened(s, w)...)
 	}
 	wordW := 8
-	if layout(m.width) == Narrow {
+	if m.layoutAt(m.width) == Narrow {
 		wordW = 7
 	}
 	line := spread(mark+m.matchCell(s)+st.text.Render(s.Name), padTo(word, wordW)+padLeft(wait, 3)+padLeft(ctx, 6)+" ", w)
-	if !sel || layout(m.width) != Narrow {
+	if !sel || m.layoutAt(m.width) != Narrow {
 		return []string{line}
 	}
 	return append([]string{line}, m.opened(s, w)...)

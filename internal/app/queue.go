@@ -75,7 +75,7 @@ func (m Model) panesPanel(w int) body {
 	rows := m.paneRows()
 	var b body
 	b.add(-1, "", st.label.Render(fmt.Sprintf(" %d PANES", len(rows))+m.sortNote(w, m.paneSort, paneCols)))
-	narrow := layout(w) == Narrow
+	narrow := m.layoutAt(w) == Narrow
 	if !narrow {
 		head, _ := m.paneHeader()
 		b.add(headerRow, st.label.Render(fit(head, w)))

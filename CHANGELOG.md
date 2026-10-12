@@ -11,8 +11,9 @@ All notable changes to matchblox are in this file. The format follows
 - **The console fits the screen it is on.** A closed phone shows one line
   a session, grouped by what each needs from you (waits for you, working,
   quiet), and the selected one opens in place with what it said and its
-  keys. From 60 columns the selected session's detail sits beside the
-  list.
+  keys. A phone held upright keeps this layout whatever its font size, and
+  its keyboard does not change it. On a wider screen held sideways, from
+  60 columns, the selected session's detail sits beside the list.
 - **Answer from a peek.** `a`, or a tap on a selected session that waits,
   opens a panel with what the agent said last and your answer. When Claude
   Code asks with its question tool, its options are there, numbered: a digit

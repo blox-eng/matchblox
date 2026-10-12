@@ -199,7 +199,7 @@ func (m *Model) sortOn(col int) {
 
 // sortNote names the sort where no header shows it (a phone).
 func (m Model) sortNote(w int, s sortBy, names []string) string {
-	if layout(w) != Narrow {
+	if m.layoutAt(w) != Narrow {
 		return ""
 	}
 	return "  ·  by " + names[s.col] + " " + s.arrow()

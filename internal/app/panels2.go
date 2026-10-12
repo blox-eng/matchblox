@@ -169,7 +169,7 @@ func (m Model) recsSection(b *body, w int) {
 		}
 		b.addRow(n+i, i == sel, w, st, line)
 	}
-	if sel < 0 || sel >= len(m.recs) || layout(m.width) != Narrow {
+	if sel < 0 || sel >= len(m.recs) || m.layoutAt(m.width) != Narrow {
 		return
 	}
 	r := m.recs[sel]

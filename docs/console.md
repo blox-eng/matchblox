@@ -98,7 +98,9 @@ no ships read, the open pull request of its worktree (`#N`) and its tmux
 place.
 
 On a phone the selected row opens: what the agent said last, its ship, its
-plan and its keys. Wider, the same shows in a detail beside the list, with
+plan and its keys. A phone held upright counts as a phone even with a
+small font: the console reads the screen's shape (rows × 2 ≥ columns) before
+its width. Wider, the same shows in a detail beside the list, with
 the account, the tokens and the background work.
 
 `Enter` jumps to the pane. Come back from a jump and the next agent that

@@ -195,7 +195,7 @@ func (m Model) draw(w int) drawn {
 // tabs have one column, and so has a door's diff while it waits for its
 // y: it shows whole.
 func (m Model) panes(w int) (list, detail int) {
-	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || layout(w) == Narrow || preview {
+	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || m.layoutAt(w) == Narrow || preview {
 		return w, 0
 	}
 	return splitAt(w), w - splitAt(w) - 1
@@ -204,7 +204,7 @@ func (m Model) panes(w int) (list, detail int) {
 // splitAt is the column the list and the detail split at, and the dock's
 // usage and machine under them.
 func splitAt(w int) int {
-	if layout(w) == Medium {
+	if byWidth(w) == Medium {
 		return (w - 1) / 2
 	}
 	return min(78, w-41)
@@ -270,7 +270,7 @@ func (m Model) header(w int) (string, span) {
 			n++
 		}
 	}
-	stoker := m.stokerBadge(layout(w) == Narrow)
+	stoker := m.stokerBadge(m.layoutAt(w) == Narrow)
 	// Short of room the host goes first (a phone), then the words of who
 	// waits; the count stays.
 	waits := []string{""}
@@ -397,7 +397,7 @@ func (m Model) alert() string {
 	if n == 0 {
 		return ""
 	}
-	if layout(m.width) == Narrow {
+	if m.layoutAt(m.width) == Narrow {
 		return m.st.warn.Render(fmt.Sprintf("▲ %d", n))
 	}
 	alert := m.st.warn.Render(fmt.Sprintf("▲ %d alert", n))
@@ -419,7 +419,7 @@ func (m Model) keyLine(w int) (string, []span) {
 		switch {
 		case m.flash != "":
 			return fit(" "+st.text.Render("Take over? ")+st.warn.Render(m.flash), w), nil
-		case layout(w) == Narrow:
+		case m.layoutAt(w) == Narrow:
 			return fit(" "+st.text.Render("Stoker on. Take over? ")+st.accent.Render("y")+st.muted.Render(" rest · ")+
 				st.accent.Render("n")+st.muted.Render(" keep"), w), nil
 		}
@@ -440,7 +440,7 @@ func (m Model) keyLine(w int) (string, []span) {
 		return fit(" "+st.text.Render(m.flash), w), nil
 	}
 	hints := m.view().keys(m)
-	if layout(w) == Wide {
+	if m.layoutAt(w) == Wide {
 		hints = append([]hint{{"↑↓", "move", ""}}, hints...)
 		hints = append(hints, hint{"/", "find", "/"}, hint{"q", "quit", ""})
 	}
