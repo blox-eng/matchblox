@@ -11,7 +11,10 @@
 [![Go 1.26](https://img.shields.io/badge/go-1.26-00ADD8.svg)](https://go.dev/dl/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 
-<img src="www/demo/replay.svg" width="100%" alt="The matchblox console on a demo machine: who waits for you, an answer in one line, every session with its match and context, a compact and a worktree removal you confirm, a guarded kill of a busy loop, then a night the stoker keeps burning and its score in the morning">
+<p>
+<img src="www/demo/replay-desk.svg" width="74%" alt="The matchblox console on a desk, on a demo machine: who waits for you, an answer picked from the agent's own options, the pull requests your sessions drive, usage and the machine, then a night the stoker keeps burning and its score in the morning">
+<img src="www/demo/replay-phone.svg" width="24%" alt="The same console on a phone: one column, the selected session open in place, the answer peek at the bottom">
+</p>
 
 One terminal console for every AI coding agent you run in tmux. It shows
 which agent waits for you, what loads the machine, the state of every git
@@ -48,17 +51,22 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
 
 ## What it shows
 
-- **Who waits for you**: each agent that asks, waits, paused or finished its
-  turn, oldest first, then who works and who is quiet; on a phone the
-  selected one opens on what it said last and its open pull request.
-- **A match for each session**: `✦` burning while it works, `╿` at rest while
-  it waits, `│` spent when its context is full.
-- **Sessions**: context use (Claude Code, Codex, OpenCode), the account
-  (`✻` Anthropic, `❋` OpenAI, `▣` OpenCode), token burn, CPU, and when to
-  compact or clear.
-- **The stoker**: press `n` before you sleep. Each session that fills its
-  context compacts itself and leaves one line on how to continue. In the
-  morning a card tells you how many sessions are ready to go on.
+- **Sessions, grouped by need**: who waits for you first (asks, waits,
+  done), then who works, then who is quiet. A match for each: `✦` burning
+  while it works, `╿` at rest, `│` spent. Context use, the account, and when
+  to compact or clear.
+- **Answer without leaving**: `a` opens the conversation with the selected
+  agent, in the right pane where there is one, else a peek at the bottom of
+  a phone. When it asks with its question tool, its options are there and a
+  digit answers; an agent at work takes a message.
+- **Ships**: every pull request your sessions drive, on one track from CI
+  to live, said in words. One that waits for you merges after a typed `y`.
+- **The dock**: what `/usage` says for each account, in percentages; the
+  machine; and the stoker. Press `n` before you sleep: each session that
+  fills its context compacts itself and leaves one line on how to continue.
+- **Three layouts, read from the screen's shape**: one column on a phone,
+  the list with a detail drawer on a phone held upright with a small font,
+  and every column on a desk.
 - **Machine health**, **detached busy loops**, **git** worktrees that are
   safe to remove, **recommendations** with their exact command, and 24 hours
   of **history**.
@@ -71,9 +79,10 @@ More in [The console](https://docs.matchblox.com/console/).
 |---|---|
 | `↑` or `k`, `↓` or `j` | Selects a row. |
 | `Enter` | The safe action: go to the agent's pane. |
-| `a` | Answers the selected agent in one line. |
+| `a` | Answers the selected agent, or sends it a message. |
 | `x` | The destructive action. It runs only after a typed `y`. |
-| `1-6` | Opens a tab. |
+| `1-6` | Opens a tab: Sessions, Ships, Machine, Git, History, Panes. |
+| `u` | Cycles the dock of a phone: usage, the machine, the stoker. |
 | `/` | Searches the open tab. |
 | `f`, `n` | The stoker on or off; a night that ends in the morning. |
 | `q` | Quits. The service keeps running. |
@@ -84,7 +93,8 @@ Every key: [Keys](https://docs.matchblox.com/keys/).
 
 Set the startup snippet of your SSH app (Termius, for example) to
 `matchblox`, or run `ssh -t ws-1 matchblox`. The console is the first
-screen. Tap a row twice to go to its pane; tap `◂ matchblox` in the tmux
+screen. Tap a row twice to answer it or send it a message, `Enter` to go to
+its pane; tap `◂ matchblox` in the tmux
 status line (with `set -g mouse on`) to come back, or press `prefix m`. See
 [The phone](https://docs.matchblox.com/phone/).
 

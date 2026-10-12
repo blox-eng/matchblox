@@ -34,8 +34,9 @@ Other tools do those well (design/0001-v0.1.md §15).
 - `go run ./cmd/matchblox --fixtures testdata/demo` opens the console on the
   demo machine `ws-1`.
 - When the console's look changes, record the replay again:
-  `go test ./cmd/matchblox -run TestReplay -update`. It writes
-  `www/demo/frames.json`, `www/demo/replay.svg` and the still frame in
+  `go test ./cmd/matchblox -run TestReplay -update`. It records the site's
+  three sizes (desk, wide, phone) and writes `www/demo/frames-<size>.json`,
+  `www/demo/replay-<size>.svg` and the desk's still frame in
   `www/index.html`. The test fails when a frame names this machine (its
   host, user, home, or a tmux or Claude Code session on it).
 

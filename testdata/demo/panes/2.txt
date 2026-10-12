@@ -1,0 +1,19 @@
+● The refresh flow works and the tests pass. One choice is yours before I
+  wire the rotation.
+
+────────────────────────────────────────────────────────────────────────────
+ ☐ Refresh
+
+Should a refresh also rotate the token?
+
+❯ 1. Rotate it
+     the old one stops at once
+  2. Rotate, keep the old one a minute
+     no request fails mid-flight
+  3. Keep the token
+     it lives until it expires
+  4. Type something.
+────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

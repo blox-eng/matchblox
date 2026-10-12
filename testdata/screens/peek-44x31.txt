@@ -6,8 +6,8 @@
  ╿ ember-billing         done      4m   32%
 ────────────────────────────────────────────
 ▌╿ flint-auth            asks      2m   41%
-   “Should a refresh also rotate the token,
-   or keep it until it expires?”
+   “The refresh flow works and the tests
+   pass. One choice is yours before I wire…
    #4545 ●━✕┄○┄○┄○  conflicts with main
     ▲ clear                a answer  ⏎ open
 ────────────────────────────────────────────

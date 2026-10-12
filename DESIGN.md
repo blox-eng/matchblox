@@ -453,7 +453,12 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   burning."; the links; the footer (From Blox Engineering · Docs · GitHub ·
   Discord · Changelog · bloxng.com). The docs (docs.matchblox.com) use the
   same tokens and type, and load nothing from another site.
-- **README:** the same recording, as `www/demo/replay.svg`.
+- **Then:** above the replay, a switch: Phone (44 columns), Phone, upright
+  and wide (107×60, the drawer) and Desk (132×32). Each plays its own
+  recording; the phones sit in a CSS phone body with a notch. A narrow
+  screen starts on the phone, a wide one on the desk; the choice is kept.
+- **README:** the same recordings, as `www/demo/replay-desk.svg` and
+  `www/demo/replay-phone.svg` side by side; the docs show the desk's.
 - **Type:** IBM Plex Sans (variable) for text, IBM Plex Mono 400 and 500 for
   commands, labels and the replay. Both are served from the site.
 - **Install block:** one framed block with tabs (Script, Go), a `$` prompt,

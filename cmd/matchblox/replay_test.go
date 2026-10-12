@@ -24,21 +24,32 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/app"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/replay"
+	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
+	"github.com/blox-eng/matchblox/internal/ships"
 	"github.com/blox-eng/matchblox/internal/stoker"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
-var update = flag.Bool("update", false, "TestReplay: write www/demo/frames.json, www/demo/replay.svg and the still frame in www/index.html")
+var update = flag.Bool("update", false, "TestReplay: write www/demo/frames-<size>.json, www/demo/replay-<size>.svg and the desk's still frame in www/index.html")
 
 const (
-	replayCols, replayRows = 100, 30
-	demoPID                = 4242
-	stepTimeout            = 10 * time.Second
+	demoPID     = 4242
+	stepTimeout = 20 * time.Second
 )
+
+// replaySize is a screen the replay is recorded on: the site's device
+// switch plays each one.
+type replaySize struct {
+	name       string
+	cols, rows int
+}
+
+var replaySizes = []replaySize{{"desk", 132, 32}, {"wide", 107, 60}, {"phone", 44, 31}}
 
 // demoBase is the demo machine's clock at the start of the replay.
 var demoBase = time.Date(2026, 10, 1, 22, 50, 0, 0, time.UTC)
@@ -238,7 +249,11 @@ var spinner = regexp.MustCompile(`[\x{2800}-\x{28FF}]`)
 
 func skeleton(lines []string) string {
 	var b strings.Builder
-	for _, l := range lines {
+	for i, l := range lines {
+		if i == 0 {
+			continue // the header's toast says what just happened, at the moment of the frame
+		}
+		l = strings.Replace(l, "machine !", "machine", 1) // the busy loop's alert comes and goes with the samples
 		l = sparks.ReplaceAllString(figure.ReplaceAllString(cutWord.ReplaceAllString(l, "…"), "0"), "")
 		l = strings.ReplaceAll(l, "✧", "✦")  // a burning match flickers between the two
 		l = spinner.ReplaceAllString(l, "⠿") // a working session's spinner turns with the clock
@@ -322,8 +337,17 @@ func keyMsg(k string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Text: k, Code: []rune(k)[0]}
 }
 
+// TestReplay records the console on the demo machine at each of the
+// site's sizes: a phone, a phone upright with a small font, a desk.
 func TestReplay(t *testing.T) {
+	for _, z := range replaySizes {
+		t.Run(z.name, func(t *testing.T) { replayAt(t, z) })
+	}
+}
+
+func replayAt(t *testing.T, z replaySize) {
 	isolate(t)
+	phone := z.cols < 60
 	src, err := filepath.Abs("../../testdata/demo")
 	if err != nil {
 		t.Fatal(err)
@@ -362,6 +386,7 @@ func TestReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Stoker = st
+	s.Ships = demoShips(clk)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go s.Run(ctx)
@@ -394,7 +419,7 @@ func TestReplay(t *testing.T) {
 		},
 	})
 	p := tea.NewProgram(recorder{m}, tea.WithContext(ctx), tea.WithInput(nil), tea.WithOutput(&bytes.Buffer{}),
-		tea.WithWindowSize(replayCols, replayRows))
+		tea.WithWindowSize(z.cols, z.rows))
 	done := make(chan error, 1)
 	go func() { _, err := p.Run(); done <- err }()
 	capture := func() string {
@@ -421,10 +446,10 @@ func TestReplay(t *testing.T) {
 		if err != nil {
 			t.Fatalf("frame at %v: %v", at, err)
 		}
-		if len(lines) > replayRows {
-			t.Fatalf("frame at %v has %d lines, the screen has %d", at, len(lines), replayRows)
+		if len(lines) > z.rows {
+			t.Fatalf("frame at %v has %d lines, the screen has %d", at, len(lines), z.rows)
 		}
-		for len(lines) < replayRows {
+		for len(lines) < z.rows {
 			lines = append(lines, nil)
 		}
 		frames = append(frames, replay.Frame{At: at, Lines: lines})
@@ -448,83 +473,47 @@ func TestReplay(t *testing.T) {
 	night := time.Date(2026, 10, 1, 23, 10, 0, 0, time.UTC)
 	full := time.Date(2026, 10, 1, 23, 40, 0, 0, time.UTC)
 	morning := time.Date(2026, 10, 2, 6, 59, 50, 0, time.UTC)
+	who := []string{"● 4 wait for you", "WAITS FOR YOU · 4", "flint-auth", "asks", "kindle-web", "ember-billing", "The refresh flow works"}
+	if !phone {
+		who = append(who, "ws-1", "USAGE", "MACHINE") // a phone drops the host, and its long list folds the dock
+	}
+	sessionsTab := "WAITS FOR YOU"
+	if phone {
+		sessionsTab = "MACHINE" // c opened the card on the Machine tab
+	}
 	steps := []step{
-		{name: "who waits", at: 1300 * time.Millisecond, ok: has("ws-1", "● 4 wait for you", "WAITS FOR YOU · 4", "flint-auth", "waits",
-			"kindle-web", "asks", "ember-billing", "done", "Should a refresh also rotate", "USAGE", "MACHINE", "5h ", "wk ")},
-		{name: "a: the answer peek", at: 3800 * time.Millisecond, key: "a", ok: has("flint-auth asks", "Should a refresh also rotate", "⏎ send")},
-	}
-	at := 3800 * time.Millisecond
-	answer := "rotate it, keep the old one valid for a minute"
-	for typed := 0; typed < len(answer); {
-		next := min(typed+4, len(answer))
-		at += 70 * time.Millisecond
-		// The drawer wraps the typing line: each word typed so far shows.
-		steps = append(steps, step{name: "the answer types itself", at: at, keys: strings.Split(answer[typed:next], ""), ok: has(strings.Fields(answer[:next])...)})
-		typed = next
-	}
-	steps = append(steps, []step{
-		// Enter sends it: the peek was the review. flint-auth works again,
-		// and the peek moves to the next session that waits.
-		{name: "the answer goes", at: 5200 * time.Millisecond, key: "enter", ok: func(s string) bool {
+		{name: "who waits", at: 1300 * time.Millisecond, ok: has(who...)},
+		// The selection moves: the next one that waits shows what it said.
+		{name: "the next one", at: 2600 * time.Millisecond, key: "j", ok: has("I rewrote the quick start")},
+		{name: "back up", at: 3500 * time.Millisecond, key: "k", ok: has("The refresh flow works")},
+		// a: flint-auth asks with its question tool; the options are there.
+		{name: "a: the question", at: 4600 * time.Millisecond, key: "a", ok: has("flint-auth asks", "Rotate it", "Keep the token", "⏎ send")},
+		// 2 picks the second option: it goes to Claude Code's menu, and the
+		// peek moves to the next one that waits.
+		{name: "picked", at: 6200 * time.Millisecond, key: "2", ok: func(s string) bool {
 			return has("sent to flint-auth", "WAITS FOR YOU · 3", "← prev", "next →")(s) && struck.MatchString(s)
 		}},
-		{name: "the peek closes", at: 6400 * time.Millisecond, key: "esc", ok: func(s string) bool {
+		{name: "the peek closes", at: 7600 * time.Millisecond, key: "esc", ok: func(s string) bool {
 			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "⏎ send") && burning.MatchString(s)
 		}},
-		// The selection moved to the next that waits.
-		{name: "the sessions", at: 8 * time.Second, ok: func(s string) bool {
-			return has("hearth-api", "spark-docs", "compact:", "88%", "kindle-web", "ember-billing", "codex", "opencode", "WORKING · 4")(s) &&
-				burning.MatchString(s)
+		{name: "the sessions", at: 9 * time.Second, ok: func(s string) bool {
+			return has("hearth-api", "spark-docs", "kindle-web", "ember-billing", "WORKING")(s) && burning.MatchString(s)
 		}},
-		{name: "the limits and what to do", at: 11 * time.Second, key: "1", ok: has("Max", "5h ", "wk ", "RECOMMENDATIONS",
-			"The week runs short: compact spark-docs", "out Fri")},
-	}...)
-	// seek presses j until the screen shows what ok wants: where the
-	// selection starts depends on the steps before, and the
-	// recommendations sit under the sessions.
-	seek := func(ok func(string) bool) func() {
-		return func() {
-			for range 12 {
-				if ok(ansi.Strip(capture())) {
-					return
-				}
-				p.Send(keyMsg("j"))
-				time.Sleep(100 * time.Millisecond)
-			}
-		}
-	}
-	weekRec := has("The week runs short: compact spark-docs", "x send /compact, asks y")
-	steps = append(steps, step{name: "the rec selected", at: 12500 * time.Millisecond, do: seek(weekRec), ok: weekRec})
-	steps = append(steps, []step{
-		{name: "the compact, guarded", at: 14 * time.Second, key: "x", ok: has("tmux send-keys -t %3 /compact Enter", "y run")},
-		{name: "the compact ran", at: 15 * time.Second, key: "y", ok: func(s string) bool {
-			// Settled: spark-docs compacted, so the week's rec names the next session.
-			return strings.Contains(s, "ran: tmux send-keys -t %3 /compact Enter") && !strings.Contains(s, "Compact spark-docs (%3)") &&
-				strings.Contains(s, "The week runs short: compact hearth-api")
+		// Ships: every pull request a session drives, on its track.
+		{name: "ships", at: 11 * time.Second, key: "2", ok: has("open → ci → green → merged → live", "#4551", "CI · 6 of 9 jobs", "#4552", "waits for your merge")},
+		{name: "a ship", at: 12500 * time.Millisecond, key: "j", ok: has("x merge")},
+		{name: "back to the sessions", at: 14 * time.Second, key: "1", ok: has("WAITS FOR YOU")},
+		// h folds the recommendations to one line: the dock has room again.
+		{name: "recommendations folded", at: 15 * time.Second, key: "h", ok: has("hidden · h shows", "USAGE")},
+		{name: "a night", at: 16500 * time.Millisecond, do: func() { clk.Set(night) }, key: "n", ok: has("night", "STOKER", "c the whole run")},
+		{name: "take over?", at: 18500 * time.Millisecond, key: "enter", ok: has("Take over?")},
+		{name: "kept on", at: 20500 * time.Millisecond, key: "n", ok: func(s string) bool {
+			return strings.Contains(s, "night") && !strings.Contains(s, "Take over?") && strings.Contains(s, "RUN tmux switch-client -t %")
 		}},
-		{name: "git", at: 17 * time.Second, key: "4", ok: has("9 WORKTREES", "1 SAFE TO REMOVE", "kindle-cart-v1", "✓ safe to remove")},
-		{name: "a worktree marked", at: 18300 * time.Millisecond, key: "X", ok: has("●kindle-cart-v1")},
-		{name: "the remove, guarded", at: 19300 * time.Millisecond, key: "x", ok: has("worktree remove /work/kindle-cart-v1", "y run")},
-		{name: "removed", at: 20300 * time.Millisecond, key: "y", ok: has("8 WORKTREES", "removed 1")},
-	}...)
-	steps = append(steps, []step{
-		{name: "the busy loop", at: 23800 * time.Millisecond, key: "3", ok: has("MACHINE !", "4242", "DETACHED BUSY LOOPS")},
-		{name: "a guarded kill", at: 24800 * time.Millisecond, key: "x", ok: has("kill 4242", "y run")},
-		// The result as well as the state: a late result would still show
-		// in the next step.
-		{name: "the loop is gone", at: 26 * time.Second, key: "y", ok: func(s string) bool {
-			return !strings.Contains(s, "while :; do go test") && strings.Contains(s, "ran: kill 4242")
+		{name: "back to the night", at: 21700 * time.Millisecond, key: "esc", ok: func(s string) bool {
+			return strings.Contains(s, "night") && !strings.Contains(s, "RUN tmux switch-client")
 		}},
-		{name: "back to the sessions", at: 27500 * time.Millisecond, key: "1", ok: has("kindle-web", "WAITS FOR YOU")},
-		{name: "a night", at: 29 * time.Second, do: func() { clk.Set(night) }, key: "n", ok: has("night → 07:00")},
-		{name: "take over?", at: 31 * time.Second, key: "enter", ok: has("The stoker is on. Take over?")},
-		{name: "kept on", at: 33 * time.Second, key: "n", ok: func(s string) bool {
-			return strings.Contains(s, "night → 07:00") && !strings.Contains(s, "Take over?") && strings.Contains(s, "RUN tmux switch-client -t %")
-		}},
-		{name: "back to the night", at: 34200 * time.Millisecond, key: "esc", ok: func(s string) bool {
-			return strings.Contains(s, "night → 07:00") && !strings.Contains(s, "RUN tmux switch-client")
-		}},
-		{name: "the stoker compacts", at: 35500 * time.Millisecond, do: func() {
+		{name: "the stoker compacts", at: 23 * time.Second, do: func() {
 			clk.Set(full)
 			if err := world.Finish("%1", 176000, "Rate limits are in, with tests.\n\nProgress [██████████] rate limits on the public API"); err != nil {
 				t.Fatal(err)
@@ -532,19 +521,18 @@ func TestReplay(t *testing.T) {
 		}, ok: func(s string) bool {
 			// hearth-api went out when its turn ended: the frame waits
 			// until the flame has died down (outFor of the demo clock, one
-			// sample), so every run draws the same match.
-			// The step shows in the dock's stoker panel.
+			// sample), so every run draws the same match. The step shows in
+			// the dock's stoker panel.
 			return has("STOKER", "176k → 9k")(s) && settled.MatchString(s)
 		}},
-		{name: "the morning", at: 39500 * time.Millisecond, do: func() { clk.Set(morning) },
-			ok: has("STOKER", "ready 4/5", "1 compacted")},
-		// c opens the whole card in the right pane.
-		{name: "the morning card", at: 41 * time.Second, key: "c",
-			ok: has("NIGHT 23:10 → 07:00", "ready 4/5", "167k given back", "kindle-web       waits for you", "176k → 9k", "RESUME")},
-		{name: "folded", at: 44 * time.Second, key: "enter", ok: func(s string) bool {
-			return !strings.Contains(s, "NIGHT 23:10") && strings.Contains(s, "WAITS FOR YOU")
+		{name: "the morning", at: 26 * time.Second, do: func() { clk.Set(morning) }, ok: has("STOKER", "ready ")},
+		// c opens the whole card: in the right pane, on a phone the Machine tab.
+		{name: "the morning card", at: 27500 * time.Millisecond, key: "c",
+			ok: has("NIGHT 23:10 → 07:00", "ready ", "176k → 9k", "RESUME")},
+		{name: "folded", at: 31 * time.Second, key: "enter", ok: func(s string) bool {
+			return !strings.Contains(s, "NIGHT 23:10") && strings.Contains(s, sessionsTab)
 		}},
-	}...)
+	}
 	var still replay.Frame
 	for _, st := range steps {
 		if st.do != nil {
@@ -611,17 +599,15 @@ func TestReplay(t *testing.T) {
 	}
 	ran := world.Ran()
 	want := [][]string{
-		{"tmux", "send-keys", "-t", "%2", "-l", "--", answer}, {"tmux", "send-keys", "-t", "%2", "Enter"},
-		{"tmux", "send-keys", "-t", "%3", "/compact", "Enter"},
-		{"git", "-C", "/work/hearth", "worktree", "remove", "/work/kindle-cart-v1"},
-		{"kill", fmt.Sprint(demoPID)},
+		{"tmux", "send-keys", "-t", "%2", "2"}, // the second option, into Claude Code's menu
 	}
 	if len(ran) != len(want)+2 || !reflect.DeepEqual(ran[:len(want)], want) || ran[len(want)][0] != "tmux" ||
 		!strings.HasPrefix(ran[len(want)][6], "/compact ") || !reflect.DeepEqual(ran[len(want)+1], []string{"tmux", "send-keys", "-t", "%1", "Enter"}) {
 		t.Fatalf("the service ran %q, want %q and then the stoker's compact of %%1", ran, want)
 	}
 
-	js, err := replay.JSON(replayCols, replayRows, frames)
+	framesPath, svgPath := "../../www/demo/frames-"+z.name+".json", "../../www/demo/replay-"+z.name+".svg"
+	js, err := replay.JSON(z.cols, z.rows, frames)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -630,9 +616,9 @@ func TestReplay(t *testing.T) {
 	_, _ = zw.Write(js)
 	_ = zw.Close()
 	if gz.Len() > 150<<10 {
-		t.Fatalf("frames.json is %d KB gzipped, the budget is 150 KB", gz.Len()>>10)
+		t.Fatalf("%s is %d KB gzipped, the budget is 150 KB", framesPath, gz.Len()>>10)
 	}
-	svg := replay.SVG(replayCols, replayRows, frames, map[bool]map[string]color.Color{true: tokens, false: app.Tokens(false)})
+	svg := replay.SVG(z.cols, z.rows, frames, map[bool]map[string]color.Color{true: tokens, false: app.Tokens(false)})
 
 	index := "../../www/index.html"
 	page, err := os.ReadFile(index)
@@ -647,7 +633,7 @@ func TestReplay(t *testing.T) {
 	if !*update {
 		// The committed replay must still show this console: compare the
 		// skeleton of each frame's screen.
-		old, err := os.ReadFile("../../www/demo/frames.json")
+		old, err := os.ReadFile(framesPath)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -660,18 +646,21 @@ func TestReplay(t *testing.T) {
 			t.Fatal(err)
 		}
 		if len(was) != len(now) {
-			t.Fatalf("www/demo/frames.json has %d frames, the console now makes %d: run go test ./cmd/matchblox -run TestReplay -update", len(was), len(now))
+			t.Fatalf("%s has %d frames, the console now makes %d: run go test ./cmd/matchblox -run TestReplay -update", framesPath, len(was), len(now))
 		}
 		for k := range now {
 			if skeleton(was[k]) != skeleton(now[k]) {
-				t.Fatalf("www/demo/frames.json is out of date at step %q: run go test ./cmd/matchblox -run TestReplay -update\nwas:\n%s\nnow:\n%s",
-					names[k], skeleton(was[k]), skeleton(now[k]))
+				t.Fatalf("%s is out of date at step %q: run go test ./cmd/matchblox -run TestReplay -update\nwas:\n%s\nnow:\n%s",
+					framesPath, names[k], skeleton(was[k]), skeleton(now[k]))
 			}
 		}
 		return
 	}
-	newPage := append(append(append([]byte{}, page[:i+len(open)]...), "\n"+replay.Still(still)+"\n"...), page[j:]...)
-	for path, b := range map[string][]byte{"../../www/demo/frames.json": js, "../../www/demo/replay.svg": svg, index: newPage} {
+	out := map[string][]byte{framesPath: js, svgPath: svg}
+	if z.name == "desk" { // the page's still frame, for no script and reduced motion
+		out[index] = append(append(append([]byte{}, page[:i+len(open)]...), "\n"+replay.Still(still)+"\n"...), page[j:]...)
+	}
+	for path, b := range out {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -696,5 +685,31 @@ func TestSkeletonCatchesAChangedScreen(t *testing.T) {
 	c[1] = " 1 PANES   2 MACHINE"
 	if skeleton(a) == skeleton(c) {
 		t.Fatal("a renamed tab must change the skeleton")
+	}
+}
+
+// demoShips is the demo machine's pull requests, as GitHub would say them:
+// one in CI, one green that waits for your merge, one with a conflict,
+// one live.
+func demoShips(clk *clock) service.ShipsSource {
+	return func(context.Context, []sample.Session, *gitscan.Report) ships.Report {
+		at := clk.Now()
+		ship := func(n int, pane, name, title, kind, note string, stage int, age time.Duration) ships.Ship {
+			sh := ships.Ship{Repo: "hearth/" + name, Number: n, Title: title, URL: "https://example.com/hearth/" + name + "/pull/" + fmt.Sprint(n),
+				Session: ships.SessionRef{Pane: pane, Name: name}, Evidence: "created", Stage: stage, Kind: kind, Note: note, Since: at.Add(-age), Age: age}
+			for i := 0; i <= stage; i++ {
+				sh.Stages[i].At = at.Add(-age - time.Duration(stage-i)*25*time.Minute)
+			}
+			sh.Stages[stage].Note = note
+			return sh
+		}
+		waits := ship(4552, "%8", "ember-billing", "Invoice export as CSV and PDF", ships.WaitsForYou, "green · waits for your merge", ships.StageGreen, 6*time.Minute)
+		waits.Merge = []string{"gh", "pr", "merge", "4552", "--squash", "-R", "hearth/ember-billing"}
+		return ships.Report{At: at, InFlight: 3, Ships: []ships.Ship{
+			ship(4551, "%1", "hearth-api", "Rate limits on the public API", ships.Running, "CI · 6 of 9 jobs", ships.StageCI, 4*time.Minute),
+			waits,
+			ship(4545, "%2", "flint-auth", "Refresh tokens that rotate", ships.Stuck, "conflicts with main", ships.StageCI, 40*time.Minute),
+			ship(4540, "%3", "spark-docs", "The 1.0 docs", ships.Done, "live", ships.StageLive, 2*time.Hour),
+		}}
 	}
 }
