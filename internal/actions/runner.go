@@ -26,6 +26,9 @@ type Runner struct {
 	Check func(advice.Guard) error
 	// Idle tells if the agent in a pane is idle now. Nil means never idle.
 	Idle func(pane string) bool
+	// Resting tells if no turn runs in a pane: idle, or only its
+	// subagents work. Nil means never.
+	Resting func(pane string) bool
 	// Answerable tells if the agent in a pane still waits for a typed
 	// answer (not at a permission prompt). Nil means never.
 	Answerable func(pane string) bool
@@ -64,6 +67,9 @@ func (r Runner) Do(ctx context.Context, a advice.Action, confirm string) proto.R
 func (r Runner) guard(g advice.Guard) error {
 	if g.IdlePane != "" && (r.Idle == nil || !r.Idle(g.IdlePane)) {
 		return fmt.Errorf("the session in %s is no longer idle", g.IdlePane)
+	}
+	if g.RestPane != "" && (r.Resting == nil || !r.Resting(g.RestPane)) {
+		return fmt.Errorf("the session in %s is no longer at rest", g.RestPane)
 	}
 	if g.AnswerPane != "" && (r.Answerable == nil || !r.Answerable(g.AnswerPane)) {
 		return fmt.Errorf("the session in %s no longer waits for an answer", g.AnswerPane)

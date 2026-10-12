@@ -276,8 +276,9 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   of its progress bar against compact_at; one that finishes under it is left
   alone, one whose next 10 points would cross it is compacted at the end of
   a step (a turn that moved its bar), one past it at once; without a pace
-  compact_at or compact_tokens, the first. Idle is the transcript's turn
-  end, not Claude Code's busy flag (background work keeps that busy). A
+  compact_at or compact_tokens, the first. A rest is the transcript's turn
+  end, not Claude Code's busy flag (background work keeps that busy); a
+  session resting while its subagents work reads `agents`, not idle. A
   limit that stopped sessions during
   the run is the card's first line, in `warn`: `limit out <from> → <reset>`;
   a session it stops is named `out until <reset>`. Every card is kept in

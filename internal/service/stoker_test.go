@@ -70,7 +70,7 @@ func TestStokerCompactsAndReadsTheResumeBack(t *testing.T) {
 		t.Fatalf("ran %q", *ran)
 	}
 	es := s.Stoker.Entries()
-	if len(es) != 1 || es[0].Result != stoker.Sent || es[0].Guard != "idle" || es[0].Before != 176000 || len(es[0].Argv) != 2 {
+	if len(es) != 1 || es[0].Result != stoker.Sent || es[0].Guard != "at rest" || es[0].Before != 176000 || len(es[0].Argv) != 2 {
 		t.Fatalf("entries %+v", es)
 	}
 	writeTranscript(t, tr, night0.Add(90*time.Second), "RESUME: run the migration test, then open the PR")
@@ -87,13 +87,13 @@ func TestStokerCompactsAndReadsTheResumeBack(t *testing.T) {
 func TestStokerSkipsBusySession(t *testing.T) {
 	s, ran, _ := stokerTest(t)
 	// The sample said idle; the host says busy right before the send.
-	s.Actions.Idle = func(string) bool { return false }
+	s.Actions.Resting = func(string) bool { return false }
 	s.stoke(context.Background(), night0)
 	if len(*ran) != 0 {
 		t.Fatalf("ran %q", *ran)
 	}
 	es := s.Stoker.Entries()
-	if len(es) != 1 || !strings.HasPrefix(es[0].Result, stoker.Skipped+": ") || !strings.Contains(es[0].Guard, "no longer idle") {
+	if len(es) != 1 || !strings.HasPrefix(es[0].Result, stoker.Skipped+": ") || !strings.Contains(es[0].Guard, "no longer at rest") {
 		t.Fatalf("entries %+v", es)
 	}
 }

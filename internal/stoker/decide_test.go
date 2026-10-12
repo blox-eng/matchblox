@@ -149,3 +149,31 @@ func TestTheStokerWaitsForAStepToEnd(t *testing.T) {
 		t.Fatalf("past the line: steps %+v", steps)
 	}
 }
+
+// A turn that ended with subagents running is a rest for the stoker: the
+// session reads busy to the person, and a compact its pace calls for still
+// runs at the turn's end, guarded by the pane, not by idle.
+func TestTheStokerActsAtATurnEndWhileSubagentsWork(t *testing.T) {
+	fast := func(tokens, pct int, status string) sample.Session {
+		s := building(tokens, pct)
+		s.SessionID, s.Pane, s.Status = "fast", "%6", status
+		s.Busy = status != "idle"
+		if status == sample.StatusAgents {
+			s.Agents = 1
+		}
+		return s
+	}
+	m := on()
+	m, _ = m.Observe([]sample.Session{fast(300_000, 14, sample.StatusAgents)}, nil, line80, t0)
+	m, _ = m.Observe([]sample.Session{fast(700_000, 64, "busy")}, nil, line80, t0)
+	m, _ = m.Observe([]sample.Session{fast(740_000, 64, sample.StatusAgents)}, nil, line80, t0)
+	steps := Plan(m, []sample.Session{fast(740_000, 64, sample.StatusAgents)}, nil, line80, nil, t0)
+	if len(steps) != 1 {
+		t.Fatalf("steps %+v", steps)
+	}
+	for _, g := range steps[0].Action.Guards {
+		if g.IdlePane != "" || g.RestPane != "%6" || g.StokePane != "%6" {
+			t.Fatalf("guard %+v", g)
+		}
+	}
+}

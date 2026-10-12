@@ -127,7 +127,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 	s.Capture = sample.CapturePanes
 	s.Activity = sample.ClientActivity
 	s.alone = s.now()
-	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Answerable: s.answerable, Stokable: s.stokable}
+	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Resting: s.resting, Answerable: s.answerable, Stokable: s.stokable}
 	return s
 }
 
@@ -375,6 +375,19 @@ func (s *Service) idle(pane string) bool {
 	for _, ss := range s.cur.Sessions {
 		if ss.Pane == pane {
 			return ss.Status == "idle"
+		}
+	}
+	return false
+}
+
+// resting tells if no turn runs in the pane: idle, or only its subagents
+// work.
+func (s *Service) resting(pane string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, ss := range s.cur.Sessions {
+		if ss.Pane == pane {
+			return ss.Resting()
 		}
 	}
 	return false

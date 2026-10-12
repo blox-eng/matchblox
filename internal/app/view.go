@@ -454,7 +454,7 @@ func accountCell(s sample.Session) string {
 
 func (m Model) row(s sample.Session, selected bool, w, tab, acct, tree int) string {
 	st := m.st
-	state, idle := m.matchCell(s)+st.text.Render(pad("busy", colSt-2)), pad("", colIdle)
+	state, idle := m.matchCell(s)+st.text.Render(pad(busyWord(s), colSt-2)), pad("", colIdle)
 	if !s.Busy {
 		state = m.matchCell(s) + st.faint.Render(pad(m.stateWord(s), colSt-2))
 		idle = st.muted.Render(pad(m.idleCell(s), colIdle))

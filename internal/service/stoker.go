@@ -128,7 +128,7 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 		e := stoker.Entry{
 			ID: st.Session + "@" + now.UTC().Format(time.RFC3339Nano), At: now,
 			Session: st.Session, Name: st.Name, Pane: st.Pane, Rule: stoker.RuleCompact, Why: st.Why,
-			Argv: st.Action.Steps, Before: st.Tokens, Guard: "idle", Result: stoker.Sent,
+			Argv: st.Action.Steps, Before: st.Tokens, Guard: "at rest", Result: stoker.Sent,
 		}
 		switch {
 		case res.Err != "":
@@ -202,9 +202,6 @@ func why(st stoker.Step, skipped []string) string {
 // no draft of the builder's. Before the Enter the draft must be the
 // step's own text.
 func (s *Service) stokable(pane string, typed bool) error {
-	if !s.idle(pane) {
-		return fmt.Errorf("the session in %s is busy", pane)
-	}
 	if it, ok := s.queued(pane); ok && stoker.Waits(it) {
 		return fmt.Errorf("the session in %s waits for you", pane)
 	}

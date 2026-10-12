@@ -102,7 +102,7 @@ func (m *Mode) pace(s sample.Session) bool {
 		now = Mark{Tokens: s.Tokens, Pct: s.Progress.Pct}
 	}
 	switch {
-	case s.Busy || s.Status != "idle":
+	case !s.Resting():
 		now.Busy = true
 	case now.Busy || !now.Seen:
 		// The first idle stretch the run sees counts as a step's end: the

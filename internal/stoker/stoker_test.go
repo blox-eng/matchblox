@@ -47,8 +47,8 @@ func TestStokerCompactsIdleAtLimit(t *testing.T) {
 	if !reflect.DeepEqual(s.Action.Steps, want) {
 		t.Fatalf("argv %q", s.Action.Steps)
 	}
-	g := advice.Guard{IdlePane: "%1", StokePane: "%1"}
-	typed := advice.Guard{IdlePane: "%1", StokePane: "%1", Typed: true}
+	g := advice.Guard{RestPane: "%1", StokePane: "%1"}
+	typed := advice.Guard{RestPane: "%1", StokePane: "%1", Typed: true}
 	if !reflect.DeepEqual(s.Action.Guards, []advice.Guard{g, typed}) || s.Session != "s%1" || s.Tokens != 176000 {
 		t.Fatalf("step %+v", s)
 	}

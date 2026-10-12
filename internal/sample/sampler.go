@@ -69,8 +69,8 @@ type Session struct {
 	// Out: the plan's limit stops the session until here (its turn was
 	// refused, or its account's window is spent); zero when it can work.
 	Out time.Time `json:"out,omitzero"`
-	// Agents and Shells are the background work an idle session left
-	// running: the subagents Claude Code counted at the turn's end, and the
+	// Agents and Shells are the background work a session left running
+	// when its turn ended: the subagents Claude Code counted then, and the
 	// shells its Bash tool still runs.
 	Agents int       `json:"agents,omitempty"`
 	Shells []Shell   `json:"shells,omitempty"`
@@ -135,6 +135,16 @@ type Snapshot struct {
 	Errors     []string     `json:"errors,omitempty"`
 	// Limits are the plan limits of each account a session runs under.
 	Limits []limits.Account `json:"limits"`
+}
+
+// StatusAgents is a session whose turn ended with subagents still working:
+// busy to the person, since their results start its next turn by itself.
+const StatusAgents = "agents"
+
+// Resting tells if no turn runs: the session is idle, or works only through
+// its subagents. The stoker acts at a rest.
+func (s Session) Resting() bool {
+	return s.Status == "idle" && !s.Busy || s.Status == StatusAgents
 }
 
 // Stopped tells if the plan's limit stops a session the builder would pick
@@ -501,7 +511,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			sess.Window = 200_000
 			sess.Account, sess.Provider = s.accounts.claudeAccount(env), claudeProvider(env)
 			s.claudeSession(&sess, pid, p, key, env, uptime, now)
-			if !sess.Busy {
+			if sess.Resting() {
 				sess.Shells = s.backgroundShells(pid, procs, children, uptime, now)
 			}
 			if env.cloud == "" && env.claudeDir != "" {
@@ -843,10 +853,15 @@ func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procK
 	sess.Progress, sess.LastLine, sess.Asks, sess.turnAt = u.Progress, u.LastLine, u.Asks, u.At
 	if !u.Ended.IsZero() && sess.Busy {
 		// Claude Code's registry says busy while background work runs; the
-		// transcript says whether a turn does. An idle registry says no
-		// work runs, whatever the turn's end counted then.
+		// transcript says whether a turn does. A subagent still working
+		// starts the next turn by itself: the session works through it. A
+		// shell does not. An idle registry says no work runs, whatever the
+		// turn's end counted then.
 		sess.Agents = u.Background
-		sess.Busy, sess.Status = false, "idle"
+		sess.Status = StatusAgents
+		if u.Background == 0 {
+			sess.Busy, sess.Status = false, "idle"
+		}
 		sess.Idle = now.Sub(u.Ended).Truncate(time.Second)
 	}
 	if u.Out.After(now) {

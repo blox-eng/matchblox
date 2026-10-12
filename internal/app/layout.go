@@ -81,7 +81,7 @@ func (m Model) limitN() int {
 // the context on the first line; where it runs on the second.
 func (m Model) narrowRow(s sample.Session, selected bool) []string {
 	st := m.st
-	first := " " + m.matchCell(s) + st.text.Render(pad("busy", colSt-2)) + pad("", colIdle)
+	first := " " + m.matchCell(s) + st.text.Render(pad(busyWord(s), colSt-2)) + pad("", colIdle)
 	if !s.Busy {
 		first = " " + m.matchCell(s) + st.faint.Render(pad(m.stateWord(s), colSt-2)) + st.muted.Render(pad(m.idleCell(s), colIdle))
 	}
@@ -220,4 +220,13 @@ func (m Model) exitedLines(w int) []string {
 			fit("   "+st.faint.Render("pids "+strings.Join(pids[p], ", ")), w))
 	}
 	return lines
+}
+
+// busyWord is the state of a busy session: a turn runs, or only its
+// subagents work and their results start its next turn.
+func busyWord(s sample.Session) string {
+	if s.Status == sample.StatusAgents {
+		return "agents"
+	}
+	return "busy"
 }
