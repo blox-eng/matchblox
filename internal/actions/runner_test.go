@@ -34,6 +34,7 @@ func TestFailedGuardSkipsStep(t *testing.T) {
 		Steps:       [][]string{{"rm", "a"}, {"rm", "b"}, {"send", "1"}, {"send", "2"}},
 		Guards:      []advice.Guard{{Worktree: "/w/a"}, {Worktree: "/w/b"}, {IdlePane: "%1"}, {IdlePane: "%2"}},
 		Destructive: true,
+		Each:        true,
 	}
 	res := r.Do(context.Background(), a, "y")
 	if got := strings.Join(ran, ","); got != "rm b,send 1" {
@@ -44,6 +45,38 @@ func TestFailedGuardSkipsStep(t *testing.T) {
 	}
 	if !strings.Contains(res.Skipped[0], "/w/a has changes") || !strings.Contains(res.Skipped[1], "%2 is no longer idle") {
 		t.Fatalf("skipped %q", res.Skipped)
+	}
+}
+
+// A guard that fails mid-sequence stops the action: the keys after it
+// would land in whatever the pane shows now (review of #68, finding 1).
+func TestFailedGuardStopsTheRest(t *testing.T) {
+	var ran []string
+	asking := true
+	r := Runner{
+		Run: func(argv []string) error {
+			ran = append(ran, strings.Join(argv, " "))
+			asking = false // the menu moved on after the first page
+			return nil
+		},
+		Asking: func(string, string) bool { return asking },
+	}
+	g := advice.Guard{AskPane: "%1", AskID: "a"}
+	a := advice.Action{
+		Steps:       [][]string{{"key", "1"}, {"sleep"}, {"key", "Down"}, {"key", "Enter"}, {"key", "1"}},
+		Guards:      []advice.Guard{g, {}, g},
+		Destructive: true,
+	}
+	res := r.Do(context.Background(), a, "y")
+	if got := strings.Join(ran, ","); got != "key 1,sleep" {
+		t.Fatalf("ran %q after the guard failed", got)
+	}
+	if len(res.Skipped) != 1 || !strings.Contains(res.Skipped[0], "no longer waits on that question") || res.Err != "" {
+		t.Fatalf("result %+v", res)
+	}
+	ran, asking = nil, false
+	if res := r.Do(context.Background(), a, "y"); len(ran) != 0 || len(res.Skipped) != 1 {
+		t.Fatalf("a failing first guard ran %q: %+v", ran, res)
 	}
 }
 

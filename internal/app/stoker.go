@@ -13,11 +13,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// stokedRow is the first row of the Queue tab while the stoker has steps
-// the builder has not seen. It sits with the doors, so it is selected,
-// moved over and folded like one.
-const stokedRow = "stoked"
-
+// stokedShows: the stoker has steps, or the card of a run, the builder
+// has not seen.
 func (m Model) stokedShows() bool {
 	return m.stoker != nil && m.stoker.Unseen && (len(m.stoker.Run) > 0 || m.card() != nil)
 }
@@ -54,20 +51,15 @@ func (m Model) stokerKey(night bool) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) ackStoked() (tea.Model, tea.Cmd) {
+	if m.stoker == nil || !m.stoker.Unseen {
+		return m, nil
+	}
 	if m.conn == nil || m.lost {
 		m.flash = "not sent, no connection"
 		return m, nil
 	}
 	m.flash = "folded: the stoker's steps"
 	return m, m.send(proto.Act{RecID: "stoker:ack", Which: "primary"})
-}
-
-// stokerWord is what the header shows while the stoker runs.
-func (m Model) stokerWord() string {
-	if m.stoker == nil || !m.stoker.On {
-		return ""
-	}
-	return stokerWordOf(m.stoker.Mode)
 }
 
 func stokerWordOf(md proto.StokerMode) string {
@@ -78,17 +70,6 @@ func stokerWordOf(md proto.StokerMode) string {
 		return "night → " + md.Until.Local().Format("15:04")
 	}
 	return "stoker"
-}
-
-// stokerShort is the word without the time, for a narrow header.
-func (m Model) stokerShort() string {
-	switch w := m.stokerWord(); {
-	case strings.HasPrefix(w, "night"):
-		return "night"
-	case w == "stoker rests":
-		return "rests"
-	}
-	return m.stokerWord()
 }
 
 // resting: the builder took over and the stoker waits for them to leave.
@@ -111,7 +92,7 @@ func (m Model) asksTakeOver(k string) bool {
 	case "x":
 		return m.secondary() != nil
 	case "a":
-		pane, _ := m.answerTarget()
+		pane, _ := m.peekTarget()
 		return pane != ""
 	}
 	return false
@@ -122,9 +103,9 @@ func (m Model) asksTakeOver(k string) bool {
 func (m Model) hold(k string) func(Model) (tea.Model, tea.Cmd) {
 	switch k {
 	case "a":
-		pane, _ := m.answerTarget()
+		pane, _ := m.peekTarget()
 		return func(m Model) (tea.Model, tea.Cmd) {
-			m.input = &answerInput{pane: pane}
+			m.openPeek(pane)
 			return m, nil
 		}
 	case "x":
@@ -205,7 +186,7 @@ func (m Model) stokedSection(b *body, w int, row int, sel bool) {
 	default:
 		when += v.Ended.Local().Format("15:04")
 	}
-	narrow := layout(w) == Narrow
+	narrow := w < 60
 	mark := "  "
 	if sel {
 		mark = "▌ "

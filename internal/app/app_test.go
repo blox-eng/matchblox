@@ -30,7 +30,7 @@ const fixture = "../../testdata/machine"
 
 func fixtureState() proto.State {
 	s := &sample.Sampler{
-		FS:   procfs.FS{Root: filepath.Join(fixture, "proc")},
+		FS:   procfs.FS{Root: filepath.Join(fixture, "proc"), PageSize: procfs.FixturePage},
 		Home: filepath.Join(fixture, "home"), HomeAs: "/home/user",
 		Tmux:    func() ([]byte, error) { return os.ReadFile(filepath.Join(fixture, "tmux-panes.txt")) },
 		Capture: sample.CaptureDir(filepath.Join(fixture, "panes")),
@@ -124,7 +124,14 @@ func TestViewFitsWidth(t *testing.T) {
 				t.Fatalf("width %d: line %d is %d wide: %q", w, i, lw, line)
 			}
 		}
-		for _, want := range []string{"app-feature", "app-review", "! compact", "▲ clear", "fresh", "1 without an agent: notes:1.1 zsh"} {
+		out = ansi.Strip(out)
+		wants := []string{"app-feature", "app-review", "fresh", "1 without an agent: notes:1.1 zsh"}
+		if w >= 120 {
+			wants = append(wants, "! compact", "▲ clear") // the desk's plan column
+		} else {
+			wants = append(wants, "why      compact:") // the detail of the selected one
+		}
+		for _, want := range wants {
 			if !strings.Contains(out, want) {
 				t.Fatalf("width %d: view lacks %q:\n%s", w, want, out)
 			}
@@ -278,7 +285,7 @@ func TestConfirmedRecActIsSentNotRun(t *testing.T) {
 		Label: "kill", Steps: [][]string{{"kill", "42"}}, Destructive: true}}}
 	m, f := loadedWith(t, 100, st)
 	m.opt.Run = func([]string) error { t.Fatal("a service step ran in the console"); return nil }
-	m.tab, m.recPick = tabQueue, "r9"
+	m.tab, m.recPick = tabSessions, "r9"
 	next, _ := key(m, "x")
 	next, cmd := key(next, "y")
 	if cmd == nil {
@@ -295,7 +302,7 @@ func TestPanelKillNamesTheOrphan(t *testing.T) {
 	st := fixtureState()
 	st.Orphans = []sample.Orphan{{PID: 4242, Start: 7, Comm: "bash", Kill: []string{"kill", "4242"}}}
 	m, f := loadedWith(t, 100, st)
-	m.tab = tabProcs
+	m.tab = tabMachine
 	next, _ := key(m, "x")
 	_, cmd := key(next, "y")
 	cmd()
@@ -479,7 +486,7 @@ func TestNavRunsOnlyTmuxMoves(t *testing.T) {
 	st.Recommendations = []advice.Rec{{ID: "r1", Title: "x", Primary: &advice.Action{Nav: true, Steps: [][]string{{"rm", "-rf", "/tmp/x"}}}}}
 	m, _ := loadedWith(t, 100, st)
 	m.opt.Run = func(argv []string) error { t.Fatalf("ran %v", argv); return nil }
-	m.tab, m.recPick = tabQueue, "r1"
+	m.tab, m.recPick = tabSessions, "r1"
 	next, _ := key(m, "enter")
 	next, cmd := key(next, "enter")
 	if cmd != nil {
@@ -541,7 +548,7 @@ func TestFooterUsesClock(t *testing.T) {
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	next, _ = next.Update(stateMsg(st))
 	lines := strings.Split(ansi.Strip(next.(Model).render()), "\n")
-	if last := strings.TrimRight(lines[2], " "); !strings.HasSuffix(last, "sampled 5s ago") {
-		t.Fatalf("action line %q, want it to end with sampled 5s ago", last)
+	if last := strings.TrimRight(lines[len(lines)-1], " "); !strings.HasSuffix(last, "sampled 5s ago") {
+		t.Fatalf("key line %q, want it to end with sampled 5s ago", last)
 	}
 }

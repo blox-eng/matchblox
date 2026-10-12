@@ -1,0 +1,50 @@
+
+  ⎿  Async hook SessionStart completed
+
+● Shape B ready.
+
+● User answered Claude's questions:
+  ⎿  · Which toppings do you want? → Olives, Garlic
+
+● You picked Olives and Garlic.
+
+  Progress [████████] Toppings question answered; nothing else pending.
+  ⎿  Stop says: ○○○ Semgrep Guardian: nothing scanned this session.
+
+✻ Brewed for 4s · done 7:15 PM
+
+❯ Say "Shape C ready." then call AskUserQuestion once with two questions: first a multi-select "Which days can you
+  work?" header Days, options Monday, Tuesday, Wednesday; second a single-choice "Which shift do you prefer?" header
+  Shift, options Morning, Evening. Short descriptions. No other tools.
+
+● Shape C ready.
+
+● User answered Claude's questions:
+  ⎿  · Which days can you work? → Monday, Wednesday
+     · Which shift do you prefer? → Evening
+
+● You can work Monday and Wednesday, and you prefer the evening shift.
+
+  Progress [████████] Shape C questions answered; nothing else pending.
+  ⎿  Stop says: ○○○ Semgrep Guardian: nothing scanned this session.
+
+✻ Brewed for 3s · done 7:16 PM
+
+❯ Say "Shape D ready." then call AskUserQuestion once: one single-choice question "Which colour should the door be?"
+  header Colour, options Red, Blue (short descriptions). No other tools.
+
+● Shape D ready.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Colour
+
+Which colour should the door be?
+
+❯ 1. Red
+     A bold red front door.
+  2. Blue
+     A calm blue front door.
+  3. Type something.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

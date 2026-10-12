@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -39,16 +40,27 @@ type Item struct {
 // keeps its events: the sampler can lag behind a hook.
 const UnseenGrace = 30 * time.Second
 
+// AskLife is how long a question tool's call from a hook is kept with no
+// hook that ends it: a session that died mid-menu sends none.
+const AskLife = 24 * time.Hour
+
+// hookAsk is the question tool's call a PreToolUse hook announced.
+type hookAsk struct {
+	ask said.Ask
+	at  time.Time
+}
+
 // Queue is not safe for concurrent use; the service holds its lock.
 type Queue struct {
 	hooked  map[string]hooks.Event // session id -> last event, for each session that sent one
 	waiting map[string]Item        // session id -> item, from hooks
 	seen    map[string]time.Time   // session id -> last time a hook or the sampler showed it
+	asks    map[string]hookAsk     // session id -> the question tool's call its menu waits on
 	items   []Item
 }
 
 func New() *Queue {
-	return &Queue{hooked: map[string]hooks.Event{}, waiting: map[string]Item{}, seen: map[string]time.Time{}}
+	return &Queue{hooked: map[string]hooks.Event{}, waiting: map[string]Item{}, seen: map[string]time.Time{}, asks: map[string]hookAsk{}}
 }
 
 // Apply takes one hook event. Call Merge after it to update Items.
@@ -80,6 +92,18 @@ func (q *Queue) Apply(ev hooks.Event) {
 			it.Name = filepath.Base(ev.Cwd)
 		}
 		q.waiting[ev.SessionID] = it
+	}
+	switch ev.Name {
+	case "PreToolUse":
+		if ev.Ask != nil {
+			q.asks[ev.SessionID] = hookAsk{ask: *ev.Ask, at: ev.At}
+		}
+	case "PostToolUse":
+		if a, ok := q.asks[ev.SessionID]; ok && a.ask.ID == ev.ToolUseID {
+			delete(q.asks, ev.SessionID)
+		}
+	case "UserPromptSubmit", "Stop", "SessionStart", "SessionEnd":
+		delete(q.asks, ev.SessionID) // the menu was answered or left
 	}
 	switch ev.Name {
 	case "Notification":
@@ -134,6 +158,11 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 		if id != "" {
 			seen[id] = true
 			q.seen[id] = now
+			if a, ok := q.asks[id]; ok && s.TurnEnded.After(a.at) {
+				// A turn ends only once its menu is gone: answered, or left
+				// with Esc, which sends no hook.
+				delete(q.asks, id)
+			}
 			if it, ok := q.waiting[id]; ok {
 				it.Pane, it.Target, it.Name = s.Pane, s.Target, s.Name
 				q.waiting[id] = it
@@ -160,6 +189,12 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 			delete(q.hooked, id)
 			delete(q.waiting, id)
 			delete(q.seen, id)
+			delete(q.asks, id)
+		}
+	}
+	for id, a := range q.asks {
+		if now.Sub(a.at) > AskLife {
+			delete(q.asks, id)
 		}
 	}
 	sort.SliceStable(items, func(i, j int) bool {
@@ -172,3 +207,38 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 }
 
 func (q *Queue) Items() []Item { return append([]Item(nil), q.items...) }
+
+// WithAsks is sessions with the question tool's call each one waits on.
+// The transcript's call stays when the hooks know none or the same one. A
+// hook's call fills a session whose transcript shows none, as in auto mode,
+// where Claude Code writes the call only once it is answered; when the two
+// differ the hook's is the newer, sent before the menu draws. sessions is
+// not changed: a changed list is a copy.
+func (q *Queue) WithAsks(sessions []sample.Session) []sample.Session {
+	if len(q.asks) == 0 {
+		return sessions
+	}
+	byPane := map[string]string{} // pane -> session id with a call
+	for id := range q.asks {
+		if p := q.hooked[id].Pane; p != "" {
+			byPane[p] = id
+		}
+	}
+	out, copied := sessions, false
+	for i, s := range sessions {
+		id := s.SessionID
+		if _, ok := q.hooked[id]; !ok || id == "" {
+			id = byPane[s.Pane]
+		}
+		a, ok := q.asks[id]
+		if !ok || s.Ask != nil && s.Ask.ID == a.ask.ID {
+			continue
+		}
+		if !copied {
+			out, copied = append([]sample.Session(nil), sessions...), true
+		}
+		ask := a.ask
+		out[i].Ask = &ask
+	}
+	return out
+}

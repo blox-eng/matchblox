@@ -178,3 +178,36 @@ func frame(r rune) bool {
 	}
 	return strings.ContainsRune("❯›>•⏺·*|⎿_`#", r)
 }
+
+var (
+	headingRe = regexp.MustCompile(`^\s{0,3}#{1,6}\s+`)
+	bulletRe  = regexp.MustCompile(`^(\s*)[-*+]\s+`)
+	ruleRe    = regexp.MustCompile(`^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$`)
+	boldRe    = regexp.MustCompile(`\*\*(\S(?:.*?\S)?)\*\*|__(\S(?:.*?\S)?)__`)
+)
+
+// Plain shows a reply's light Markdown the way a person reads it: no
+// emphasis marks, backticks or heading marks, a table row's cells spaced
+// apart, a bullet as •. Lines stay lines.
+func Plain(s string) string {
+	var out []string
+	for _, l := range strings.Split(s, "\n") {
+		t := strings.TrimSpace(l)
+		switch {
+		case strings.HasPrefix(t, "```"), strings.HasPrefix(t, "|") && ruleRe.MatchString(t):
+			continue // a fence, or the rule under a table's head
+		case strings.HasPrefix(t, "|"):
+			cells := strings.Split(strings.Trim(t, "|"), "|")
+			for i, c := range cells {
+				cells[i] = strings.TrimSpace(c)
+			}
+			l = strings.Join(cells, "   ")
+		default:
+			l = headingRe.ReplaceAllString(l, "")
+			l = bulletRe.ReplaceAllString(l, "$1• ")
+		}
+		l = boldRe.ReplaceAllString(l, "$1$2")
+		out = append(out, strings.ReplaceAll(l, "`", ""))
+	}
+	return strings.Join(out, "\n")
+}

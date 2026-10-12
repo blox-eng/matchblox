@@ -145,3 +145,13 @@ func TestDraft(t *testing.T) {
 		}
 	}
 }
+
+func TestPlain(t *testing.T) {
+	in := "## Done\n\nThe **refresh** endpoint and `rotate()` are in, see __notes__.\n\n" +
+		"| Step | State |\n|---|:--:|\n| tests | pass |\n\n- one\n  * two\n```go\nx := 1\n```\nA 2*3*4 sum stays."
+	want := "Done\n\nThe refresh endpoint and rotate() are in, see notes.\n\n" +
+		"Step   State\ntests   pass\n\n• one\n  • two\nx := 1\nA 2*3*4 sum stays."
+	if got := Plain(in); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}

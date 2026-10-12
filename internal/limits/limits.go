@@ -1,18 +1,19 @@
 // Package limits reads the plan limits of each account an agent runs
-// under, counts them as matches (the 5-hour window) and sparks (the week),
-// and forecasts whether the week lasts.
+// under, says them as /usage does (the percent of each window used), and
+// forecasts whether the week lasts.
 package limits
 
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 )
 
 const (
-	BoxMinutes  = 5 * 60      // the 5-hour window: 5 matches, 1 = 20%
-	WeekMinutes = 7 * 24 * 60 // the week: 10 sparks, 1 = 10%
+	BoxMinutes  = 5 * 60      // the 5-hour window
+	WeekMinutes = 7 * 24 * 60 // the week
 
 	// StaleAfter: a reading older than this, with no reset since, is shown
 	// with its time.
@@ -46,12 +47,6 @@ type Reading struct {
 	Windows []Window  `json:"windows,omitempty"`
 }
 
-// Other is a window that is neither 5 hours nor a week (a plan's month).
-type Other struct {
-	Window
-	Text string `json:"text"` // "53% left this month"
-}
-
 // Outlook is the forecast of the week.
 type Outlook struct {
 	Lasts bool      `json:"lasts"`
@@ -67,13 +62,32 @@ type Account struct {
 	Fix      string    `json:"fix,omitempty"`
 	At       time.Time `json:"at,omitzero"`
 	Windows  []Window  `json:"windows,omitempty"`
+	Forecast *Outlook  `json:"forecast,omitempty"`
+}
 
-	Matches      *int      `json:"matches,omitempty"`
-	MatchesReset time.Time `json:"matches_reset,omitzero"`
-	Sparks       *int      `json:"sparks,omitempty"`
-	SparksReset  time.Time `json:"sparks_reset,omitzero"`
-	Other        []Other   `json:"other,omitempty"`
-	Forecast     *Outlook  `json:"forecast,omitempty"`
+// Use is one window as /usage says it: a short name (5h, wk, mo), the
+// percent used and when it resets.
+type Use struct {
+	Name   string
+	Pct    float64
+	Resets time.Time
+}
+
+// Uses are the windows of an account, the 5 hours first, then the week,
+// then any other. A window whose reset passed since the reading is empty
+// again, with no reset known.
+func (a Account) Uses(now time.Time) []Use {
+	var out []Use
+	ws := slices.Clone(a.Windows)
+	slices.SortStableFunc(ws, func(x, y Window) int { return x.Minutes - y.Minutes })
+	for _, w := range ws {
+		u := Use{Name: span(w.Minutes), Pct: math.Max(0, w.UsedPct), Resets: w.ResetsAt}
+		if !w.ResetsAt.IsZero() && !w.ResetsAt.After(now) {
+			u.Pct, u.Resets = 0, time.Time{}
+		}
+		out = append(out, u)
+	}
+	return out
 }
 
 // Build turns a reading into what the console shows. A nil reading, or one
@@ -89,20 +103,8 @@ func Build(provider, account, source string, r *Reading, now time.Time, q Quiet)
 		a.State = Stale
 	}
 	for _, w := range r.Windows {
-		if !w.ResetsAt.IsZero() && !w.ResetsAt.After(now) {
-			w = Window{Minutes: w.Minutes} // reset since the reading: full again
-		}
-		left := math.Max(0, 100-w.UsedPct)
-		switch w.Minutes {
-		case BoxMinutes:
-			n := count(left, 20)
-			a.Matches, a.MatchesReset = &n, w.ResetsAt
-		case WeekMinutes:
-			n := count(left, 10)
-			a.Sparks, a.SparksReset = &n, w.ResetsAt
+		if w.Minutes == WeekMinutes {
 			a.Forecast = Forecast(w, now, q)
-		default:
-			a.Other = append(a.Other, Other{w, fmt.Sprintf("%.0f%% left %s", left, span(w.Minutes))})
 		}
 	}
 	return a
@@ -129,19 +131,17 @@ func unix(sec int64) time.Time {
 // Unix is unix for the readers of other agents.
 func Unix(sec int64) time.Time { return unix(sec) }
 
-// count is how many units are left: a part of one still counts.
-func count(leftPct, unit float64) int {
-	return int(math.Ceil(leftPct/unit - 1e-9))
-}
-
+// span is the short name of a window: 5h, wk, mo, or its days or hours.
 func span(minutes int) string {
 	switch d := time.Duration(minutes) * time.Minute; {
+	case minutes == WeekMinutes:
+		return "wk"
 	case d >= 28*24*time.Hour:
-		return "this month"
+		return "mo"
 	case d >= 24*time.Hour:
-		return fmt.Sprintf("in %d days", int(d.Hours()/24))
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
 	default:
-		return fmt.Sprintf("in %d hours", int(d.Hours()))
+		return fmt.Sprintf("%dh", int(d.Hours()))
 	}
 }
 
@@ -286,21 +286,23 @@ type Part struct {
 	Tone string // "", Muted or Warn
 }
 
-// Parts is an account's line: the matches, the sparks, the forecast, and
-// the age of an old reading, or what to do when there is none.
+// NearPct is the use from which a window says when it resets.
+const NearPct = 80
+
+// Parts is an account's line: the percent used of each window, the
+// forecast, and the age of an old reading, or what to do when there is
+// none.
 func Parts(a Account, now time.Time) []Part {
 	if a.State == Unmeasured {
 		return []Part{{Text: "not measured · " + a.Fix, Tone: Warn}}
 	}
 	var ps []Part
-	if a.Matches != nil {
-		ps = append(ps, Part{Text: units(*a.Matches, "match", "matches", a.MatchesReset, 1, now)})
-	}
-	if a.Sparks != nil {
-		ps = append(ps, Part{Text: units(*a.Sparks, "spark", "sparks", a.SparksReset, 2, now)})
-	}
-	for _, o := range a.Other {
-		ps = append(ps, Part{Text: o.Text})
+	for _, u := range a.Uses(now) {
+		text := fmt.Sprintf("%s %.0f%%", u.Name, u.Pct)
+		if u.Pct >= NearPct && !u.Resets.IsZero() {
+			text += " until " + When(u.Resets, now, "")
+		}
+		ps = append(ps, Part{Text: text})
 	}
 	switch f := a.Forecast; {
 	case f == nil:
@@ -313,18 +315,6 @@ func Parts(a Account, now time.Time) []Part {
 		ps = append(ps, Part{Text: "as of " + When(a.At, now, ""), Tone: Warn})
 	}
 	return ps
-}
-
-// units is "4 matches", and "1 match until 16:40" when few are left.
-func units(n int, one, many string, reset time.Time, near int, now time.Time) string {
-	s := fmt.Sprintf("%d %s", n, many)
-	if n == 1 {
-		s = "1 " + one
-	}
-	if n <= near && !reset.IsZero() {
-		s += " until " + When(reset, now, "")
-	}
-	return s
 }
 
 // When is "16:40" today, else "Mon 09:00", in now's zone.

@@ -6,91 +6,95 @@ import "strconv"
 // selected row, its keys and its body. The selection itself stays in the
 // Model, so it lives across tab changes and new states.
 type tabView struct {
-	name, short string
-	keys        string
-	count       func(m Model) int
-	index       func(m Model) int
-	pick        func(m *Model, i int)
-	primary     func(m Model) *action // Enter: never destructive
-	secondary   func(m Model) *action // x: destructive, behind a typed y
-	body        func(m Model, w int) body
+	name      string
+	keys      func(m Model) []hint // the key line, for the selected row
+	count     func(m Model) int
+	index     func(m Model) int
+	pick      func(m *Model, i int)
+	primary   func(m Model) *action // Enter: never destructive
+	secondary func(m Model) *action // x: destructive, behind a typed y
+	body      func(m Model, w int) body
 }
 
+// hint is a key on the key line: the key, its word, and the key a tap on
+// it presses ("" for none).
+type hint struct{ key, label, press string }
+
 const (
-	tabQueue = iota
-	tabSessions
+	tabSessions = iota
+	tabShips
 	tabMachine
-	tabProcs
 	tabGit
 	tabHistory
 	tabPanes
 )
 
 var views = [...]tabView{
-	tabQueue: {
-		name: "queue", short: "queue", keys: "↑↓ select  ⏎ go  a answer",
-		count: func(m Model) int { return len(m.doors) + len(m.queue) + len(m.recs) },
-		index: Model.queueIndex,
+	tabSessions: {
+		name:  "sessions",
+		keys:  Model.sessionKeys,
+		count: func(m Model) int { return len(m.doors) + len(m.snap.Sessions) + m.recRows() },
+		index: Model.sessIndex,
 		pick: func(m *Model, i int) {
-			nd := len(m.doors)
+			nd, ns := len(m.doors), len(m.snap.Sessions)
 			switch {
 			case i < nd:
-				m.doorPick, m.doorAt, m.queuePane, m.recPick = m.doors[i].ID, i, "", ""
-			case i < nd+len(m.queue):
-				m.doorPick, m.queuePane, m.recPick = "", m.queue[i-nd].Pane, ""
+				m.doorPick, m.doorAt, m.recPick = m.doors[i].ID, i, ""
+			case i < nd+ns:
+				m.doorPick, m.recPick, m.chose, m.selPID = "", "", true, m.snap.Sessions[i-nd].PID
 			default:
-				m.doorPick, m.recPick = "", m.recs[i-nd-len(m.queue)].ID
+				m.doorPick, m.recPick = "", m.recs[i-nd-ns].ID
 			}
 		},
 		primary: func(m Model) *action {
 			if d, ok := m.selectedDoor(); ok {
 				return m.doorAction(d)
 			}
-			if it, ok := m.selectedQueue(); ok && it.Pane != "" {
-				return m.jump(it.Pane)
-			}
 			if r, ok := m.selectedRec(); ok {
 				return fromAdvice(r, "primary")
 			}
-			return nil
-		},
-		secondary: func(m Model) *action {
-			if d, ok := m.selectedDoor(); ok && d.ID != stokedRow {
-				return closeDoor(d)
-			}
-			if r, ok := m.selectedRec(); ok {
-				return fromAdvice(r, "secondary")
-			}
-			return nil
-		},
-		body: Model.queuePanel,
-	},
-	tabSessions: {
-		name: "sessions", short: "sess", keys: "↑↓ select  ⏎ jump  a answer  s sort",
-		count: func(m Model) int { return len(m.snap.Sessions) },
-		index: Model.selIndex,
-		pick:  func(m *Model, i int) { m.selPID = m.snap.Sessions[i].PID },
-		primary: func(m Model) *action {
-			if s, ok := m.selected(); ok && s.Pane != "" {
+			if s, ok := m.selectedSession(); ok && s.Pane != "" {
 				return m.jump(s.Pane)
 			}
 			return nil
 		},
 		secondary: func(m Model) *action {
-			if s, ok := m.selected(); ok && s.Age() == "stale" {
+			if d, ok := m.selectedDoor(); ok {
+				return closeDoor(d)
+			}
+			if r, ok := m.selectedRec(); ok {
+				return fromAdvice(r, "secondary")
+			}
+			if s, ok := m.selectedSession(); ok && s.Age() == "stale" {
 				return &action{label: "end", steps: [][]string{{"kill", strconv.Itoa(s.PID)}}, destructive: true,
 					rec: "session:" + strconv.Itoa(s.PID), which: "secondary"}
 			}
 			return nil
 		},
-		body: func(m Model, w int) body { return m.sessions(w, m.height-m.chrome()-1) },
+		body: Model.sessionsPanel,
+	},
+	tabShips: {
+		name: "ships",
+		keys: func(m Model) []hint {
+			if sh, ok := m.selectedShip(); ok {
+				return append(m.shipKeys(sh), hint{"f", "stoker", "f"})
+			}
+			return []hint{{"1", "sessions", "1"}, {"f", "stoker", "f"}}
+		},
+		count:     func(m Model) int { return len(m.ships()) },
+		index:     func(m Model) int { return min(m.shipSel, max(len(m.ships())-1, 0)) },
+		pick:      func(m *Model, i int) { m.shipSel = i },
+		secondary: Model.mergeShip,
+		body:      Model.shipsPanel,
 	},
 	tabMachine: {
-		name: "machine", short: "mach",
-		body: func(m Model, w int) body { return plain(m.machine(w)) },
-	},
-	tabProcs: {
-		name: "procs", short: "procs", keys: "↑↓ select  ⏎ jump  x kill",
+		name: "machine",
+		keys: func(m Model) []hint {
+			if len(m.snap.Orphans) == 0 {
+				return []hint{{"p", "ships", "p"}, {"f", "stoker", "f"}}
+			}
+			return []hint{{"⏎", "jump", "enter"}, {"x", "kill", "x"}, {"f", "stoker", "f"}}
+		},
 		count: func(m Model) int { return len(m.snap.Orphans) },
 		index: Model.orphanIndex,
 		pick:  func(m *Model, i int) { m.orphanPID = m.snap.Orphans[i].PID },
@@ -107,10 +111,13 @@ var views = [...]tabView{
 			}
 			return nil
 		},
-		body: Model.procs,
+		body: Model.machinePanel,
 	},
 	tabGit: {
-		name: "git", short: "git", keys: "↑↓ select  ⏎ shell  space mark  X all safe  x remove  r rescan",
+		name: "git",
+		keys: func(Model) []hint {
+			return []hint{{"⏎", "shell", "enter"}, {"␣", "mark", "space"}, {"X", "all safe", "X"}, {"x", "remove", "x"}, {"r", "rescan", "r"}}
+		},
 		count: func(m Model) int { return len(m.worktreeRows()) },
 		index: func(m Model) int { return min(m.gitSel, max(len(m.worktreeRows())-1, 0)) },
 		pick:  func(m *Model, i int) { m.gitSel = i },
@@ -133,11 +140,13 @@ var views = [...]tabView{
 		body: Model.gitPanel,
 	},
 	tabHistory: {
-		name: "history", short: "hist",
+		name: "history",
+		keys: func(Model) []hint { return []hint{{"p", "ships", "p"}, {"f", "stoker", "f"}} },
 		body: func(m Model, w int) body { return plain(m.historyPanel(w)) },
 	},
 	tabPanes: {
-		name: "panes", short: "panes", keys: "↑↓ select  ⏎ go  s sort",
+		name:  "panes",
+		keys:  func(Model) []hint { return []hint{{"⏎", "go", "enter"}, {"s", "sort", "s"}} },
 		count: func(m Model) int { return len(m.paneRows()) },
 		index: func(m Model) int { return min(m.paneSel, max(len(m.paneRows())-1, 0)) },
 		pick:  func(m *Model, i int) { m.paneSel = i },
@@ -151,13 +160,13 @@ var views = [...]tabView{
 	},
 }
 
-// tabNames and tabShort name the tabs, long and short.
-var tabNames, tabShort = func() ([]string, []string) {
-	var long, short []string
+// tabNames names the tabs, in the order of their digits.
+var tabNames = func() []string {
+	var names []string
 	for _, v := range views {
-		long, short = append(long, v.name), append(short, v.short)
+		names = append(names, v.name)
 	}
-	return long, short
+	return names
 }()
 
 func (m Model) view() tabView { return views[m.tab] }

@@ -20,7 +20,7 @@ const (
 )
 
 type Event struct {
-	Name      string    `json:"name"` // Notification | Stop | UserPromptSubmit | SessionStart | SessionEnd
+	Name      string    `json:"name"` // Notification | Stop | UserPromptSubmit | SessionStart | SessionEnd | PreToolUse | PostToolUse
 	Kind      string    `json:"kind,omitempty"`
 	SessionID string    `json:"session_id"`
 	Cwd       string    `json:"cwd,omitempty"`
@@ -28,16 +28,24 @@ type Event struct {
 	Asks      bool      `json:"asks,omitempty"` // Stop: the reply ends on a question
 	At        time.Time `json:"at"`
 	Pane      string    `json:"pane,omitempty"` // $TMUX_PANE
+	// ToolUseID is the tool call of a PreToolUse or PostToolUse.
+	ToolUseID string `json:"tool_use_id,omitempty"`
+	// Ask is the question tool's call a PreToolUse announces: its menu
+	// waits for the person once the hook returns.
+	Ask *said.Ask `json:"ask,omitempty"`
 }
 
 // input is the Claude Code hook JSON, only the fields we read.
 type input struct {
-	SessionID        string `json:"session_id"`
-	Cwd              string `json:"cwd"`
-	HookEventName    string `json:"hook_event_name"`
-	Message          string `json:"message"`
-	NotificationType string `json:"notification_type"`
-	LastAssistant    string `json:"last_assistant_message"`
+	SessionID        string          `json:"session_id"`
+	Cwd              string          `json:"cwd"`
+	HookEventName    string          `json:"hook_event_name"`
+	Message          string          `json:"message"`
+	NotificationType string          `json:"notification_type"`
+	LastAssistant    string          `json:"last_assistant_message"`
+	ToolName         string          `json:"tool_name"`
+	ToolUseID        string          `json:"tool_use_id"`
+	ToolInput        json.RawMessage `json:"tool_input"`
 }
 
 var ErrNoSession = errors.New("hooks: the event has no session_id")
@@ -63,6 +71,16 @@ func Parse(stdin io.Reader, name string, env func(string) string) (Event, error)
 	case "Stop":
 		line, asks := said.Reply(in.LastAssistant)
 		ev.Message, ev.Asks = cut(line), asks
+	case "PreToolUse", "PostToolUse":
+		ev.ToolUseID = in.ToolUseID
+		if name == "PreToolUse" && in.ToolName == said.AskTool && in.ToolUseID != "" {
+			var ask said.Ask
+			if json.Unmarshal(in.ToolInput, &ask) == nil && len(ask.Questions) > 0 {
+				ask = ask.Clean()
+				ask.ID = in.ToolUseID
+				ev.Ask = &ask
+			}
+		}
 	}
 	return ev, nil
 }

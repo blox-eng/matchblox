@@ -159,22 +159,8 @@ func (m Model) procs(w int) body {
 		b.add(-1, fit(" "+st.label.Render("x ")+st.muted.Render(strings.Join(o.Kill, " ")), w))
 	}
 
-	var out []string
-	out = append(out, m.region("top processes", w)...)
-	out = append(out, st.label.Render(fit(" "+pad("PID", 9)+pad("COMMAND", 18)+pad("CPU", 7)+pad("MEM", 8)+"OWNER", w)))
-	names := map[string]string{}
-	for _, s := range m.snap.Sessions {
-		names["pane "+s.Pane] = s.Name
-	}
-	for _, p := range m.snap.Top {
-		owner := p.Owner
-		if n, ok := names[owner]; ok {
-			owner += " · " + n
-		}
-		out = append(out, fit(" "+st.muted.Render(pad(fmt.Sprint(p.PID), 9))+st.text.Render(pad(p.Comm, 18))+
-			st.text.Render(pad(fmt.Sprintf("%3.0f%%", p.CPU), 7))+st.muted.Render(pad(size(float64(p.RSS)), 8))+st.muted.Render(owner), w))
-	}
-	b.add(-1, out...)
+	b.add(-1, m.region("top processes", w)...)
+	b.add(-1, m.topRows(w)...)
 	return b
 }
 
@@ -192,4 +178,32 @@ func (m Model) selectedOrphan() (sample.Orphan, bool) {
 		return sample.Orphan{}, false
 	}
 	return m.snap.Orphans[m.orphanIndex()], true
+}
+
+// topRows are the top processes under their header.
+func (m Model) topRows(w int) []string {
+	st := m.st
+	var out []string
+	out = append(out, st.label.Render(fit(" "+pad("PID", 9)+pad("COMMAND", 18)+pad("CPU", 7)+pad("MEM", 8)+"OWNER", w)))
+	names := map[string]string{}
+	for _, s := range m.snap.Sessions {
+		names["pane "+s.Pane] = s.Name
+	}
+	for _, p := range m.snap.Top {
+		owner := p.Owner
+		if n, ok := names[owner]; ok {
+			owner += " · " + n
+		}
+		out = append(out, fit(" "+st.muted.Render(pad(fmt.Sprint(p.PID), 9))+st.text.Render(pad(p.Comm, 18))+
+			st.text.Render(pad(fmt.Sprintf("%3.0f%%", p.CPU), 7))+st.muted.Render(pad(size(float64(p.RSS)), 8))+st.muted.Render(owner), w))
+	}
+	return out
+}
+
+// topLines are the dock's machine grown into free rows: the top processes.
+func (m Model) topLines(w int) []string {
+	if len(m.snap.Top) == 0 {
+		return nil
+	}
+	return append([]string{""}, m.topRows(w)...)
 }

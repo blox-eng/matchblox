@@ -26,8 +26,13 @@ type Action struct {
 	// console runs it; every other step runs on the service host.
 	Nav bool `json:"nav,omitempty"`
 	// Guards[i], when present, must still hold right before Steps[i] runs:
-	// the evidence can be minutes old. A step whose guard fails is skipped.
+	// the evidence can be minutes old. A guard that fails stops the action:
+	// no step after it runs, since the keys of a sequence only mean what
+	// the person read in order.
 	Guards []Guard `json:"guards,omitempty"`
+	// Each: every step stands alone (a batch of removals, each with its
+	// own guard), so a step whose guard fails is skipped and the rest run.
+	Each bool `json:"each,omitempty"`
 }
 
 // Guard is a fact a step depends on, re-checked when it runs.
@@ -38,6 +43,16 @@ type Guard struct {
 	IdlePane   string `json:"idle_pane,omitempty"`   // the agent in this pane is still idle
 	RestPane   string `json:"rest_pane,omitempty"`   // no turn runs here: idle, or only its subagents work
 	AnswerPane string `json:"answer_pane,omitempty"` // the agent here still waits, and not at a permission prompt
+	// MessagePane: agent MessagePID is still the one here, and it neither
+	// asks with the question tool nor waits at a permission prompt.
+	MessagePane string `json:"message_pane,omitempty"`
+	MessagePID  int    `json:"message_pid,omitempty"`
+	// AskPane: the agent here still waits on the question tool's call AskID.
+	AskPane string `json:"ask_pane,omitempty"`
+	AskID   string `json:"ask_id,omitempty"`
+	// Page (from 1): the pane, captured now, shows the call's menu on this
+	// page: question Page, or the review page after the last question.
+	Page int `json:"page,omitempty"`
 	// StokePane: the pane, read again, shows no menu, no question and no
 	// draft, and nothing in the queue waits there. Typed: the draft is the
 	// step's own text.
@@ -192,13 +207,17 @@ func limitRecs(snap sample.Snapshot) []Rec {
 		if hot == nil {
 			continue
 		}
-		// A spent week waits for its reset: a compact saves nothing.
-		if a.Sparks != nil && *a.Sparks == 0 {
-			continue
-		}
 		left := ""
-		if a.Sparks != nil {
-			left = fmt.Sprintf(": %d sparks left", *a.Sparks)
+		for _, u := range a.Uses(snap.At) {
+			if u.Name == "wk" {
+				left = fmt.Sprintf(": %.0f%% of the week used", u.Pct)
+				if u.Pct >= 100 {
+					hot = nil // a spent week waits for its reset: a compact saves nothing
+				}
+			}
+		}
+		if hot == nil {
+			continue
 		}
 		// The forecast moves each sample; the title, and so the id, does not.
 		r := Rec{
@@ -325,7 +344,7 @@ func gitRecs(snap sample.Snapshot, git *gitscan.Report) []Rec {
 				Level: "info", score: 150 + float64(len(safe)),
 				Title:    title,
 				Evidence: ev + "; branches and commits stay; " + total,
-				Second:   &Action{Label: "remove " + strconv.Itoa(len(safe)), Steps: steps, Destructive: true, Guards: guards},
+				Second:   &Action{Label: "remove " + strconv.Itoa(len(safe)), Steps: steps, Destructive: true, Guards: guards, Each: true},
 			})
 		}
 	}

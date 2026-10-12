@@ -6,7 +6,6 @@ package host
 import (
 	"errors"
 	"math"
-	"os"
 	"strings"
 	"time"
 
@@ -84,7 +83,7 @@ func read(p *process.Process) (procfs.Proc, bool) {
 		pr.Ticks = uint64((t.User + t.System) * tick)
 	}
 	if m, err := p.MemoryInfo(); err == nil {
-		pr.RSSPages = int64(m.RSS) / int64(os.Getpagesize())
+		pr.RSS = m.RSS
 	}
 	if st, err := p.Status(); err == nil && len(st) > 0 && st[0] == process.Running {
 		pr.State = 'R'

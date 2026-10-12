@@ -16,7 +16,23 @@ import (
 // properly needs cgo (sysconf), which would break the static binary.
 const ClockTicks = 100
 
-type FS struct{ Root string }
+type FS struct {
+	Root string
+	// PageSize turns the rss field of stat, in pages, into bytes. 0 is this
+	// machine's page size; a fixture names the page of the machine it was
+	// taken on (FixturePage), so it reads the same on every platform.
+	PageSize int
+}
+
+// FixturePage is the page of the Linux machines the fixtures come from.
+const FixturePage = 4096
+
+func (fs FS) page() uint64 {
+	if fs.PageSize > 0 {
+		return uint64(fs.PageSize)
+	}
+	return uint64(os.Getpagesize())
+}
 
 func (fs FS) path(parts ...string) string {
 	return filepath.Join(append([]string{fs.Root}, parts...)...)
@@ -31,7 +47,7 @@ type Proc struct {
 	State     byte
 	Ticks     uint64 // utime + stime
 	StartTime uint64 // clock ticks after boot
-	RSSPages  int64
+	RSS       uint64 // resident memory, in bytes
 }
 
 // Procs returns every process that can be read. Processes that exit between
@@ -59,7 +75,7 @@ func (fs FS) Procs() (map[int]Proc, error) {
 		if !ok {
 			continue
 		}
-		if p, ok := parseStat(pid, buf[:n]); ok {
+		if p, ok := parseStat(pid, buf[:n], fs.page()); ok {
 			out[pid] = p
 		}
 	}
@@ -73,7 +89,7 @@ func (fs FS) Proc(pid int) (Proc, bool) {
 	if !ok {
 		return Proc{}, false
 	}
-	return parseStat(pid, buf[:n])
+	return parseStat(pid, buf[:n], fs.page())
 }
 
 func readSmall(path string, buf []byte) (int, bool) {
@@ -86,7 +102,7 @@ func readSmall(path string, buf []byte) (int, bool) {
 	return n, err == nil && n > 0
 }
 
-func parseStat(pid int, b []byte) (Proc, bool) {
+func parseStat(pid int, b []byte, page uint64) (Proc, bool) {
 	// comm may contain spaces and parentheses, so split on the last ')'.
 	open, end := bytes.IndexByte(b, '('), bytes.LastIndexByte(b, ')')
 	if open < 0 || end < open {
@@ -101,10 +117,10 @@ func parseStat(pid int, b []byte) (Proc, bool) {
 	ut, _ := strconv.ParseUint(f[11], 10, 64)
 	st, _ := strconv.ParseUint(f[12], 10, 64)
 	start, _ := strconv.ParseUint(f[19], 10, 64)
-	rss, _ := strconv.ParseInt(f[21], 10, 64)
+	rss, _ := strconv.ParseUint(f[21], 10, 64)
 	return Proc{
 		PID: pid, PPID: ppid, PGRP: pgrp, Comm: string(b[open+1 : end]), State: f[0][0],
-		Ticks: ut + st, StartTime: start, RSSPages: rss,
+		Ticks: ut + st, StartTime: start, RSS: rss * page,
 	}, true
 }
 

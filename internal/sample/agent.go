@@ -32,9 +32,14 @@ type Usage struct {
 	Window   int       `json:"window,omitempty"` // as the agent reports it; 0: not reported
 	At       time.Time `json:"at"`
 	Progress *Progress `json:"progress,omitempty"`
-	// LastLine and Asks are read from the newest reply with text.
+	// LastLine and Asks are read from the newest reply with text; Said is
+	// that reply when it is of the current turn (after the person's last
+	// prompt), its Markdown plain and its end kept within maxSaid.
 	LastLine string `json:"last_line,omitempty"`
 	Asks     bool   `json:"asks,omitempty"`
+	Said     string `json:"said,omitempty"`
+	// Ask is the question tool's call that waits for its answer.
+	Ask *said.Ask `json:"ask,omitempty"`
 	// Out: the newest turn was refused by the plan's limit, which resets here.
 	Out time.Time `json:"out,omitzero"`
 	// Ended: the newest turn ended here and no line of a next one followed;
@@ -206,10 +211,14 @@ func lastUsage(path string, size int64) (Usage, bool) {
 	var compacted *boundaryLine
 	newer := false // an assistant line newer than the one read was seen
 	turnKnown := false
+	prompted := false // the person's last prompt was passed: older words are another turn's
 	for i := len(lines) - 1; i >= 0 && (!found || !decided || !turnKnown); i-- {
 		l := lines[i]
 		if !turnKnown {
 			turnKnown = turnEnd(l, &u)
+		}
+		if !decided && !prompted && prompt(l) {
+			prompted = true
 		}
 		if !found && compacted == nil && bytes.Contains(l, []byte(`"compact_boundary"`)) {
 			// A reply that only mentions the word is not a boundary.
@@ -257,10 +266,116 @@ func lastUsage(path string, size int64) (Usage, bool) {
 				u.Progress = &p
 			}
 			u.LastLine, u.Asks = said.Reply(text)
+			if !prompted {
+				u.Said = cut(strings.TrimSpace(said.Plain(said.Clean(text))), maxSaid)
+			}
 			decided = true
 		}
 	}
+	u.Ask = pendingAsk(lines)
 	return u, found
+}
+
+// maxSaid bounds what a session said: the answer peek shows nine lines.
+const maxSaid = 2000
+
+// cut keeps the last n runes of s: a reply ends on what it asks.
+func cut(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return "…" + string(r[len(r)-n:])
+	}
+	return s
+}
+
+// prompt reports a line of the person's own prompt in the main thread: a
+// turn starts there. A tool's result, a local command's output, a meta
+// line and an interrupt notice are not prompts.
+func prompt(l []byte) bool {
+	if !bytes.Contains(l, []byte(`"user"`)) {
+		return false
+	}
+	var t struct {
+		Type        string `json:"type"`
+		IsSidechain bool   `json:"isSidechain"`
+		IsMeta      bool   `json:"isMeta"`
+		Summary     bool   `json:"isCompactSummary"`
+		Message     struct {
+			Content json.RawMessage `json:"content"`
+		} `json:"message"`
+	}
+	if json.Unmarshal(l, &t) != nil || t.Type != "user" || t.IsSidechain || t.IsMeta || t.Summary {
+		return false
+	}
+	var text string
+	if json.Unmarshal(t.Message.Content, &text) == nil {
+		return words(text)
+	}
+	var blocks []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(t.Message.Content, &blocks) != nil {
+		return false
+	}
+	found := false
+	for _, b := range blocks {
+		switch {
+		case b.Type == "tool_result":
+			return false
+		case b.Type == "text" && words(b.Text):
+			found = true
+		}
+	}
+	return found
+}
+
+// words: a prompt's text, not a notice Claude Code writes in the person's
+// place.
+func words(text string) bool {
+	t := strings.TrimSpace(text)
+	return t != "" && !strings.HasPrefix(t, "<local-command-") && !strings.HasPrefix(t, "[Request interrupted")
+}
+
+// pendingAsk is the question tool's call when it is the newest tool call
+// of the main thread and no result answers it yet.
+func pendingAsk(lines [][]byte) *said.Ask {
+	for i := len(lines) - 1; i >= 0; i-- {
+		l := lines[i]
+		if !bytes.Contains(l, []byte(`"tool_use"`)) || !bytes.Contains(l, []byte(`"assistant"`)) {
+			continue
+		}
+		var t struct {
+			Type        string `json:"type"`
+			IsSidechain bool   `json:"isSidechain"`
+			Message     struct {
+				Content []struct {
+					Type  string   `json:"type"`
+					ID    string   `json:"id"`
+					Name  string   `json:"name"`
+					Input said.Ask `json:"input"`
+				} `json:"content"`
+			} `json:"message"`
+		}
+		if json.Unmarshal(l, &t) != nil || t.Type != "assistant" || t.IsSidechain {
+			continue
+		}
+		for _, c := range t.Message.Content {
+			if c.Type != "tool_use" || c.Name != said.AskTool || c.ID == "" || len(c.Input.Questions) == 0 {
+				continue
+			}
+			answer := []byte(`"tool_use_id":"` + c.ID + `"`)
+			for _, later := range lines[i+1:] {
+				if bytes.Contains(later, answer) {
+					return nil
+				}
+			}
+			ask := c.Input.Clean()
+			ask.ID = c.ID
+			return &ask
+		}
+		return nil
+	}
+	return nil
 }
 
 // turnEnd reads one line, newest first, until it tells whether the turn

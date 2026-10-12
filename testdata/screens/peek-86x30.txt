@@ -1,0 +1,30 @@
+ ▰ matchblox                                                         ● 6 wait for you
+ SESSIONS 7    ships 3    machine    git    history    panes
+──────────────────────────────────────────────────────────────────────────────────────
+ WAITS FOR YOU · 6                        │╭─ flint-auth asks · 1 of 2 ──────────────╮
+ │ spark-docs         done       9m   88% ││ The refresh endpoint is in and its      │
+ ╿ ember-billing      done       4m   32% ││ tests pass. One choice is yours before  │
+▌╿ flint-auth         asks       2m   41% ││ I wire the rotation: what should a      │
+ ╿ kindle-web         asks       1m   56% ││ refresh do with the token it was given? │
+ ╿ codex              done       0s   55% ││                                         │
+ ╿ opencode           done       0s    6% ││ Should a refresh also rotate the token? │
+ WORKING · 1                              ││ › 1 Rotate it  the old one stops at on… │
+ ✦ hearth-api         busy            79% ││   2 Rotate, keep the old one a minute   │
+                                          ││   3 Keep the token                      │
+ 1 without an agent: shell:1.1 zsh        ││   4 Type an answer…                     │
+                                          ││                                         │
+ RECOMMENDATIONS · 7 · h hides            ││                                         │
+ ▲ The week runs short: compact spark-docs││                                         │
+ ○ Clear spark-docs (%3)                  ││                                         │
+ ○ Clear kindle-web (%5)                  ││                                         │
+ ○ Clear codex (%6)                       ││                                         │
+ ○ Clear flint-auth (%2)                  ││                                         │
+ ○ Clear ember-billing (%8)               ││                                         │
+ ○ Clear opencode (%7)                    ││                                         │
+                                          ││                                         │
+                                          ││                                         │
+                                          ││                                         │
+                                          ││                                         │
+                                          │╰─ ⏎ question 2 ─ ← prev  next → ─ esc ───╯
+──────────────────────────────────────────────────────────────────────────────────────
+ ⏎ open  a answer  p ships  f stoker                                   sampled 0s ago

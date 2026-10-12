@@ -1,44 +1,67 @@
 # The console
 
-The header shows the host, `stoker` or `night → 07:00` while [the
-stoker](stoker.md) runs, and the machine: CPU, load, pressure, memory and
-temperature, each with its trend. Under it is one line for each account
-your agents run under (see [Matches and sparks](#matches-and-sparks)).
-Then come seven tabs, `1 QUEUE` to
-`7 PANES`. A tab that needs you shows it: `1 QUEUE 3` has three agents that
-wait, and `4 PROCS !` has a problem.
+From the top: the header, the tabs, the open tab, then usage and the
+machine, and at the bottom the key line.
 
-The action line under the tabs shows the keys of the open tab, and how old
-the sample is. It sits at the top, above a phone's keyboard. See
-[Keys](keys.md).
+The header shows the host, how many agents wait for you (`● 3 wait for
+you`; a tap selects the first) and [the stoker](stoker.md): `stoker off`,
+`stoker`, or `☾ night → 07:00`. For a moment after an action it says what
+ran instead.
 
-## Matches and sparks
+The tabs are `sessions`, `ships`, `machine`, `git`, `history` and `panes`,
+opened by the digits `1-6`. The open one is uppercase. A narrow screen shortens the
+tabs far from the open one to their digit. `machine !` has a problem.
 
-Know how much of your plan is left before an agent stops:
+The key line at the bottom shows the keys of the open tab, and how old the
+sample is. A tap on a key presses it. It is also where you confirm a step
+or type a search. See [Keys](keys.md).
+
+## Usage, the machine and the stoker
+
+Under the open tab, when there is room, the dock shows how much of each
+plan your agents have used, the machine, and [the stoker](stoker.md):
 
 ```
- ✻ dev    4 matches · 4 sparks · out Fri ~20:00
- ❋ Plus   3 matches · 9 sparks · lasts the week
+ USAGE                                    │ MACHINE        ws-1 · 16 cores
+ ✻ Max    5h   ▰▰▰▰▰▱▱▱ 62%  · 16:00      │ cpu  ▃▄▅▄▃▅▆▅ 38%   load 4.2
+          wk   ▰▰▰▱▱▱▱▱ 41%  · Thu 09:00  │ mem  ▰▰▰▰▰▱▱▱ 41 of 64 GB
+ ❋ Plus   5h   ▰▱▱▱▱▱▱▱ 12%  · 18:40      │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
+          wk   ▰▰▱▱▱▱▱▱ 30%  · Sat 11:00  │ runs 13 claude · 1 codex
 ```
 
-- **Matches** are this 5-hour window: 5 when it starts, one for each 20%.
-- **Sparks** are this week: 10 when it starts, one for each 10%.
-- When one or two are left, the line says when they come back:
-  `1 match until 16:40`.
-- The last word says if the week lasts at your pace so far. Hours you
-  do not usually work count as a tenth: set them with `quiet_hours` and
+- Each account shows its windows as `/usage` does: `5h` is this 5-hour
+  window, `wk` this week, each with the percent used and when it resets.
+  A bar turns `warn` from 60% and `neg` from 90%.
+- The week ends with whether it lasts at your pace so far. Hours you do not
+  usually work count as a tenth: set them with `quiet_hours` and
   `quiet_days` in the [config](config.md).
-- `out Fri ~20:00`: the queue names the session of that account
+- `out Fri ~20:00`: the recommendations name the session of that account
   that burns the most. `Enter` jumps to it, and `x` compacts it while it is
   idle. The row then says what happened, or what failed and that the key
   tries again.
+- On a phone the dock shows one panel at a time. `u`, or a tap on the
+  word at its right (`machine ›`), goes to the next: usage, the machine,
+  the stoker. While a run is in charge, or has steps you have not seen, the
+  stoker takes the dock until you switch.
+- Wider, two panels side by side: usage and the machine, or usage and the
+  stoker while it claims the dock. A wide desk shows all three.
+- When the body leaves rows free, the dock grows into them: each account's
+  forecast and resets, the top processes, the stoker's recent steps. The
+  detail beside the list shows more of what the agent said.
+- `c`, or a tap on the stoker's panel, opens its whole card.
+- `disk` is the file system that holds your home directory, and `/` beside
+  it when that is another one.
+- Claude Code's status line gives the 5-hour window and the week only, so
+  there is no `opus` or `sonnet` line.
+- When the screen is short (a phone with its keyboard up), the dock folds
+  away. The Machine tab has all of it.
 
 Where the figures come from:
 
 | Agent | What to do |
 |---|---|
-| Claude Code | Open the door "Show your limits" in the queue. It adds matchblox to your status line; a status line you have keeps showing what it showed. |
-| Codex | Nothing: Codex reports its limits after each turn. A plan with a monthly limit shows `53% left this month`. |
+| Claude Code | Open the door "Show your limits" in Sessions. It adds matchblox to your status line; a status line you have keeps showing what it showed. |
+| Codex | Nothing: Codex reports its limits after each turn. A plan with a monthly limit shows `mo`. |
 | OpenCode | It shows "not measured": OpenCode keeps no limits. |
 
 A line that says `as of 14:02` has not changed for an hour: the account's
@@ -58,29 +81,86 @@ Each agent row starts with a match:
 | `│` | its state | The context is full (at `compact_tokens`, 350k by default, or `compact_at`, 85% of its window). The match is spent, and Sessions says `! compact`. |
 | `╿` or `│` | out | The plan's limit stops an idle session (`│` when it is also full). The next column says when it can work again: `19:50`, or the weekday when that is more than a day away. A session left a day or more keeps its word: `cold`, `stale`. |
 
-## 1 Queue
+## 1 Sessions
 
-The agents that wait for you, the oldest wait first:
+The console opens here. On top, while there are some: the setup steps
+(`SET UP`). Then every agent, by what it needs from
+you, and last the recommendations, each with its evidence and its exact
+command. `d` dismisses the selected recommendation until its evidence
+changes; `h` folds them all to one line, and `h` again shows them. The
+console remembers both.
 
-- **asks**: the agent asks for a permission.
-- **waits**: the agent asked a question, or waits for input.
-- **paused**: the turn ended with its progress bar under 100%.
-- **done**: the turn ended.
+- **WAITS FOR YOU**, the oldest wait first:
+  - **asks**: the agent asks for a permission, or asks with its question
+    tool.
+  - **waits**: the agent asked a question, or waits for input.
+  - **paused**: the turn ended with its progress bar under 100%.
+  - **done**: the turn ended.
+- **WORKING**: `busy`, `agents` (its subagents work), `tests` or `shell`
+  (a shell it left running).
+- **QUIET**: `idle`, then `cold` after one day, then `stale` after seven
+  days, the newest first. On a stale session, `x` and a typed `y` end the
+  agent.
 
-Each row shows the agent's last line and its open pull request (`#N`), if
-its worktree has one. `Enter` jumps to the pane. `a` answers in one line.
-Come back from a jump and the next agent that waits is already selected.
+A row shows the match, the name, the state, how long it waits and its
+context use (`warn` from 70%). A wide screen adds the plan and the ship the
+session drives with its track (`#4551 ●━◉┄○┄○`, see [Ships](ships.md)); with
+no ships read, the open pull request of its worktree (`#N`) and its tmux
+place.
 
-Under the agents are the recommendations, ranked. Each one shows its
-evidence and its exact command. The setup steps (`SET UP`) come first while
-some are open. With nothing to do, the queue says "nothing waits for you".
+On a phone the selected row opens: what the agent said last, its ship, its
+plan and its keys. The console reads the screen's shape (rows × 2 ≥
+columns) before its width: a phone held upright under 90 columns is a
+phone, and from 90 columns (a small font) its detail is a drawer beside
+the list. Wider, the same shows in a detail beside the list, with
+the account, the tokens and the background work.
 
-## 2 Sessions
+`Enter` jumps to the pane. Come back from a jump and the next agent that
+waits is already selected.
 
-One row for each agent, by tmux pane: its state, how long it is idle, its
-name and tmux place, its context use against the model's window, its
-account (on a wide screen), its token burn over 30 minutes, the CPU of its
-process tree, and when to compact (`! compact`) or clear (`▲ clear`).
+### The answer peek
+
+`a` on an agent opens the conversation with it. Where the detail sits
+beside the list, the detail pane becomes the conversation: the list stays
+lit on the left and follows the peek, and `Esc` gives the pane back. On a
+one-column phone it is a panel along the bottom, over the dimmed list. On an agent that waits it answers; on
+any other it sends a message, titled `To <name>`, which Claude Code queues
+while it works.
+
+```
+╭─ flint-auth asks · 1 of 2 ─────────────────────────────────╮
+│ The refresh endpoint is in and its tests pass. One choice  │
+│ is yours before I wire the rotation: what should a refresh │
+│ do with the token it was given?                            │
+│                                                            │
+│ Should a refresh also rotate the token?                    │
+│ › 1 Rotate it  the old one stops at once                   │
+│   2 Rotate, keep the old one a minute                      │
+│   3 Keep the token                                         │
+│   4 Type an answer…                                        │
+╰─ ⏎ question 2 ─ ← prev  3/7  next → ─ esc ─────────────────╯
+```
+
+It shows what the agent said in this turn, its end up to nine lines (a
+longer reply starts with `…`), its Markdown as plain text. When Claude
+Code asks with its question tool, its options are numbered and the last
+one types an answer; several questions come one at a time, and a question
+of several choices ticks with `Space`. In auto mode the options come from
+the queue hooks (see [Agents](agents.md#how-an-agent-tells-that-it-waits)),
+so add them again when the setup step asks. Otherwise you type one line.
+
+`Enter` sends it to the pane named in the title: the peek is the review,
+so there is no second confirm. The options go to Claude Code's own menu
+with the keys it takes, never as typed text, and only while the pane shows
+the page they answer: if you answered in the pane yourself, nothing more
+is sent. The header says `sending to flint-auth…`, then `sent to
+flint-auth`; an answer that did not go says `not sent to flint-auth` and
+why on the key line. The peek moves to the next agent that waits, or
+closes. There no option is picked, and for a moment it takes no key, so a
+second `Enter` never answers a question you have not read. `→` and `←`
+move the peek to the next and the previous agent, `Esc` closes. Every
+letter is text. A permission prompt is answered in its
+pane: its peek shows the prompt, and `Enter` goes there.
 
 - Context use is read from the agent's own files, or shows "not measured".
   See [Agents](agents.md).
@@ -88,35 +168,37 @@ process tree, and when to compact (`! compact`) or clear (`▲ clear`).
   "API key": `✻` Anthropic, `❋` OpenAI, `▣` OpenCode.
 - An agent can draw a progress bar in its last reply:
   `Progress [████░░░░] <step>`. The console shows it as `▰▰▰▱▱ 75%`.
-- An idle session is `idle`, then `cold` after one day, then `stale` after
-  seven days. On a stale session, `x` and a typed `y` end the agent.
-- Sessions sort busy first, then the ones that wait, then idle with the
-  newest first.
+- `s` sorts by another column and shows one flat list; `S` turns it
+  around.
 - Agents that exited and wait for their parent are one faint line under the
   sessions. `e` lists them with the command that clears them.
 
+## 2 Ships
+
+The pull requests your sessions drive, each on its track from open to
+live. `p` opens it. See [Ships](ships.md).
+
 ## 3 Machine
 
-CPU per core, load, pressure, memory and swap, temperature, CPU power
-limits, GPUs, and the CPU share of the container groups you name in the
-[config](config.md).
+Usage first, then the machine: CPU per core, load, pressure, memory and
+swap, temperature, CPU power limits, GPUs, and the CPU share of the
+container groups you name in the [config](config.md).
 
-## 4 Procs
+Then the detached busy loops: shells that keep burning CPU after their pane
+is gone, named to the pane that started them. `x` and a typed `y` kill
+one. While one burns, the tab says `machine !`.
 
-Detached busy loops: shells that keep burning CPU after their pane is gone,
-named to the pane that started them. `x` and a typed `y` kill one.
-
-## 5 Git
+## 4 Git
 
 Every git checkout that your sessions use: dirty paths, the default branch
 behind its remote, and worktrees that are merged and safe to remove.
 `Space` marks one, `X` marks every safe one, and `x` with a typed `y`
 removes the marked ones.
 
-## 6 History
+## 5 History
 
 24 hours of CPU, load, pressure, temperature, memory and swap.
 
-## 7 Panes
+## 6 Panes
 
 Every tmux pane, with its command. `Enter` goes to it.

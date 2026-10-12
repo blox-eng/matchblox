@@ -124,7 +124,9 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 			break // the builder took over or turned it off since the plan
 		}
 		// The builder confirmed when they turned the stoker on.
+		release := s.holdPane(st.Pane)
 		res := s.Actions.Do(ctx, st.Action, "y")
+		release()
 		e := stoker.Entry{
 			ID: st.Session + "@" + now.UTC().Format(time.RFC3339Nano), At: now,
 			Session: st.Session, Name: st.Name, Pane: st.Pane, Rule: stoker.RuleCompact, Why: st.Why,

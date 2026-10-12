@@ -6,6 +6,66 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The console fits the screen it is on.** A closed phone shows one line
+  a session, grouped by what each needs from you (waits for you, working,
+  quiet), and the selected one opens in place with what it said and its
+  keys. A screen held upright is read by its shape, so its keyboard does
+  not change the layout: under 90 columns it is this one column, from 90
+  (a phone with a small font) the detail is a drawer beside the list. On a
+  screen held sideways, from 60 columns, the selected session's detail
+  sits beside the list. Every column of a list lines up, the name taking
+  what is left, and the selected row is washed across the whole pane with
+  its name in the accent, the others muted.
+- **Answer or message from a peek.** `a`, or a tap on a selected session,
+  opens the conversation: the detail pane itself where there is one, the
+  list staying beside it, else a panel at the bottom of a phone, with
+  what the agent said last and your answer; a session
+  that works gets your line as a message, which Claude Code queues. `→`
+  and `←` (a swipe on a phone), or a tap on `next →` and `← prev`, move
+  the peek to the next or previous session. When Claude
+  Code asks with its question tool, its options are there, numbered: a digit
+  or a tap picks one, several questions come one at a time, and a question
+  of several choices ticks with `Space`. `Enter` sends, and the peek moves
+  to the next session that waits.
+- **Ships.** Every pull request a session drives, on one track from open to
+  live: CI, a conflict, a review, the merge and the deploy, said in words.
+  `x` merges a ship that waits for you, after a typed `y`, pinned to the
+  commit that was read green. Name the
+  workflows that deploy a repository under the new `[ships.deploy]` config
+  key; by default every run on the merge commit counts.
+  A running stage says how long it has run (`merged · deploying · 2h`,
+  `CI · 6 of 9 jobs · 12m`) or waited (`merged · deploy queued · 1h`). A
+  failed run on the merge commit counts once a newer run of its workflow
+  on the default branch passed.
+- **Usage, the machine and the stoker in the rows the list leaves free.**
+  Each account's windows as `/usage` says them, the machine (cpu, memory,
+  the disk your home is on, the agents that run) and the stoker, whose
+  panel takes the dock while a run is in charge; `c` opens its whole card.
+  With rows to spare the dock grows: forecasts, the top processes, the
+  recent steps.
+- **Recommendations you can put away.** They sit under the sessions now.
+  `d` dismisses one until its evidence changes, and `h` folds them all to
+  one line; the console remembers both.
+
+### Changed
+
+- The tabs are Sessions, Ships, Machine, Git, History and Panes, each
+  named, and the digits `1-6` follow that order. The Queue is the top of
+  Sessions, the processes are on Machine, and `p` opens Ships.
+- Usage speaks in `/usage` percentages and keeps its forecast; the matches
+  and sparks of the header are gone.
+- An answer goes on `Enter`: the peek shows what goes where, so there is no
+  typed `y` for it any more.
+- The keys are at the bottom of the screen, each a tap target, where a
+  phone app keeps them above its keyboard.
+- **The queue hooks include the question tool.** A `PreToolUse` hook for
+  `AskUserQuestion` tells the console what Claude Code asks before its menu
+  draws, so the answer peek shows the options in auto mode too, where the
+  question reaches the transcript only once it is answered. The step "Add
+  the queue hooks" asks to be opened again, with the one entry it adds.
+
 ## [0.5.1] - 2026-10-12
 
 ### Fixed

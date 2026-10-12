@@ -11,17 +11,17 @@ const fixture = "../../testdata/machine/proc"
 
 func TestParseStatCommWithSpacesAndParens(t *testing.T) {
 	line := []byte("42 (tmux: server (1)) S 7 42 42 0 -1 0 0 0 0 0 30 12 0 0 20 0 1 0 555 1000 77")
-	p, ok := parseStat(42, line)
+	p, ok := parseStat(42, line, FixturePage)
 	if !ok {
 		t.Fatal("not parsed")
 	}
-	if p.Comm != "tmux: server (1)" || p.PPID != 7 || p.Ticks != 42 || p.StartTime != 555 || p.RSSPages != 77 || p.State != 'S' {
+	if p.Comm != "tmux: server (1)" || p.PPID != 7 || p.Ticks != 42 || p.StartTime != 555 || p.RSS != 77*FixturePage || p.State != 'S' {
 		t.Fatalf("got %+v", p)
 	}
 }
 
 func TestProcs(t *testing.T) {
-	procs, err := FS{fixture}.Procs()
+	procs, err := FS{Root: fixture, PageSize: FixturePage}.Procs()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestProcs(t *testing.T) {
 }
 
 func TestEnvironAndCwd(t *testing.T) {
-	fs := FS{fixture}
+	fs := FS{Root: fixture, PageSize: FixturePage}
 	if v, ok := fs.Environ(400, "TMUX_PANE"); !ok || v != "%3" {
 		t.Fatalf("TMUX_PANE = %q %v", v, ok)
 	}
@@ -47,7 +47,7 @@ func TestEnvironAndCwd(t *testing.T) {
 }
 
 func TestMachineFiles(t *testing.T) {
-	fs := FS{fixture}
+	fs := FS{Root: fixture, PageSize: FixturePage}
 	all, cores, err := fs.Stat()
 	if err != nil || len(cores) != 2 || all.Total != 9600 || all.Busy != 1500 {
 		t.Fatalf("stat = %+v %d %v", all, len(cores), err)
@@ -131,5 +131,20 @@ func TestOpenFiles(t *testing.T) {
 	}
 	if _, ok := (FS{Root: root}).OpenFiles(8); ok {
 		t.Fatal("a process without fd/ cannot be read")
+	}
+}
+
+// A fixture's rss is in the pages of the machine it was taken on: it reads
+// the same bytes whatever this machine's page size (16 KB on Apple silicon).
+func TestAFixtureReadsTheSameOnEveryPageSize(t *testing.T) {
+	line := []byte("42 (claude) S 7 42 42 0 -1 0 0 0 0 0 30 12 0 0 20 0 1 0 555 1000 2500")
+	for _, page := range []uint64{4096, 16384, 65536} {
+		p, _ := parseStat(42, line, page)
+		if p.RSS != 2500*page {
+			t.Fatalf("page %d: rss %d", page, p.RSS)
+		}
+	}
+	if (FS{}).page() != uint64(os.Getpagesize()) || (FS{PageSize: FixturePage}).page() != FixturePage {
+		t.Fatal("the page size is not the fixture's when it names one, and this machine's when not")
 	}
 }

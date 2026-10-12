@@ -33,17 +33,21 @@ func doorsAndQueue(ds ...doors.Door) proto.State {
 	return st
 }
 
-func TestDoorsAboveTheQueue(t *testing.T) {
+func TestDoorsAboveTheSessions(t *testing.T) {
 	m, _ := loadedWith(t, 100, doorsAndQueue(tmuxDone, hooksDoor, wayBack))
 	out := ansi.Strip(m.render())
-	if set, waits := lineOf(t, m, "SET UP"), lineOf(t, m, "WAITING FOR YOU"); set > waits {
-		t.Fatalf("doors are not above the queue (%d, %d):\n%s", set, waits, out)
+	if set, waits := lineOf(t, m, "SET UP"), lineOf(t, m, "WAITS FOR YOU"); set > waits {
+		t.Fatalf("doors are not above the sessions (%d, %d):\n%s", set, waits, out)
 	}
 	if !strings.Contains(out, "Add the queue hooks") || strings.Contains(out, "Install tmux") {
 		t.Fatalf("open doors drawn, done ones folded:\n%s", out)
 	}
-	if next, _ := key(m, "up"); !strings.Contains(ansi.Strip(next.(Model).render()), "⏎ open  x close") {
-		t.Fatalf("no door keys:\n%s", out)
+	var next tea.Model = m
+	for range len(m.recs) + 1 {
+		next, _ = key(next, "up")
+	}
+	if !strings.Contains(actionLine(next), "⏎ open  x close") {
+		t.Fatalf("no door keys:\n%s", screen(next))
 	}
 }
 
@@ -164,8 +168,8 @@ func TestDoneDoorFolds(t *testing.T) {
 	if strings.Contains(out, "Add the queue hooks") || !strings.Contains(out, "Add the way back") {
 		t.Fatalf("hooks did not fold:\n%s", out)
 	}
-	if mm := next.(Model); mm.queueIndex() != 0 {
-		t.Fatalf("selection %d, want the next door", mm.queueIndex())
+	if mm := next.(Model); mm.sessIndex() != 0 {
+		t.Fatalf("selection %d, want the next door", mm.sessIndex())
 	}
 }
 
@@ -194,7 +198,7 @@ func TestTheQueueComesFirstWhenSomeoneWaits(t *testing.T) {
 	m, _ := loadedWith(t, 100, doorsAndQueue(hooksDoor))
 	var ran []string
 	m.opt.Run = func(argv []string) error { ran = argv; return nil }
-	if it, ok := m.selectedQueue(); !ok || it.Pane != "%1" {
+	if it, ok := m.selectedSession(); !ok || it.Pane != "%1" {
 		t.Fatalf("selected %+v, %v: an agent that waits comes before a door", it, ok)
 	}
 	next, _ := key(m, "enter")
@@ -206,8 +210,12 @@ func TestTheQueueComesFirstWhenSomeoneWaits(t *testing.T) {
 	if strings.Join(ran, " ") != "tmux switch-client -t %1" {
 		t.Fatalf("ran %v", ran)
 	}
-	if up, _ := key(next, "up"); up.(Model).queueIndex() != 0 {
-		t.Fatal("up from the queue does not reach the door")
+	up := next
+	for range len(next.(Model).recs) + 1 {
+		up, _ = key(up, "up")
+	}
+	if up.(Model).sessIndex() != 0 {
+		t.Fatal("up from the sessions, over the recommendations, does not reach the door")
 	}
 }
 
@@ -279,6 +287,7 @@ func TestTheWhyIsReadInFull(t *testing.T) {
 	long := guideDoor
 	long.Why = "Claude Code walks you through matchblox in a new window. This starts Claude Code and uses your tokens."
 	next, _ := m.Update(stateMsg(doorState(hooksDoor, long)))
+	next, _ = key(next, "down")
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "uses your tokens.") {
 		t.Fatalf("the why is cut:\n%s", out)
 	}
@@ -287,7 +296,7 @@ func TestTheWhyIsReadInFull(t *testing.T) {
 func TestOneBlankLineUnderTheDoors(t *testing.T) {
 	m, _ := loadedWith(t, 100, doorState(hooksDoor))
 	lines := strings.Split(ansi.Strip(m.render()), "\n")
-	for i := lineOf(t, m, "SET UP"); i < lineOf(t, m, "WAITING FOR YOU"); i++ {
+	for i := lineOf(t, m, "SET UP"); i < lineOf(t, m, "RECOMMENDATIONS"); i++ {
 		if strings.TrimSpace(lines[i]) == "" && strings.TrimSpace(lines[i+1]) == "" {
 			t.Fatalf("two blank lines at %d:\n%s", i, strings.Join(lines, "\n"))
 		}
@@ -307,8 +316,8 @@ func TestThePreviewShortensHome(t *testing.T) {
 func TestTheResultShortensHome(t *testing.T) {
 	m, _ := loadedWith(t, 100, doorState(hooksDoor))
 	next, _ := m.Update(resultMsg(proto.Result{Ran: [][]string{{"write", home + "/.claude/settings.json"}}}))
-	if got := next.(Model).flash; got != "ran: write ~/.claude/settings.json" {
-		t.Fatalf("flash %q", got)
+	if got := next.(Model).toast; got != "ran: write ~/.claude/settings.json" {
+		t.Fatalf("toast %q", got)
 	}
 }
 

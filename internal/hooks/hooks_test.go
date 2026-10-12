@@ -3,9 +3,12 @@ package hooks
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/blox-eng/matchblox/internal/said"
 )
 
 func env(m map[string]string) func(string) string {
@@ -136,5 +139,75 @@ func TestNotificationTextIsClean(t *testing.T) {
 	ev, err := Parse(strings.NewReader(in), "Notification", func(string) string { return "" })
 	if err != nil || ev.Message != "Claude needs]52;c;eA== your permission" {
 		t.Fatalf("message %q, %v", ev.Message, err)
+	}
+}
+
+// TestParsePreToolUseAsk: the question tool's call, as Claude Code sends it
+// before the menu draws.
+func TestParsePreToolUseAsk(t *testing.T) {
+	ev := parseFile(t, "pre-tool-use-ask.json", "PreToolUse")
+	if ev.Name != "PreToolUse" || ev.ToolUseID != "toolu_01VnB3ZqK8fX2c9WmYt4Lh7R" || ev.Pane != "%4" || ev.Cwd != "/home/dev/src/api" {
+		t.Fatalf("event %+v", ev)
+	}
+	want := said.Ask{ID: "toolu_01VnB3ZqK8fX2c9WmYt4Lh7R", Questions: []said.Question{
+		{Question: "Which days can you work?", Header: "Days", Multi: true, Options: []said.Option{
+			{Label: "Monday", Description: "Available on Mondays."},
+			{Label: "Tuesday", Description: "Available on Tuesdays."},
+			{Label: "Wednesday", Description: "Available on Wednesdays."}}},
+		{Question: "Which shift do you prefer?", Header: "Shift", Options: []said.Option{
+			{Label: "Morning", Description: "Early start, finish in the afternoon."},
+			{Label: "Evening", Description: "Later start, finish in the evening."}}},
+	}}
+	if ev.Ask == nil || !reflect.DeepEqual(*ev.Ask, want) {
+		t.Fatalf("ask %+v", ev.Ask)
+	}
+}
+
+func TestParseOtherToolsCarryNoAsk(t *testing.T) {
+	if ev := parseFile(t, "pre-tool-use-bash.json", "PreToolUse"); ev.Ask != nil || ev.ToolUseID != "toolu_01Hq7DxW2nP5sKcR8vJm3TfA" {
+		t.Fatalf("event %+v", ev)
+	}
+	// The answered call: PostToolUse names it and asks nothing.
+	if ev := parseFile(t, "post-tool-use-ask.json", "PostToolUse"); ev.Ask != nil || ev.ToolUseID != "toolu_01VnB3ZqK8fX2c9WmYt4Lh7R" {
+		t.Fatalf("event %+v", ev)
+	}
+	// A call with no questions or no id is not a menu to answer.
+	for _, in := range []string{
+		`{"session_id":"s","tool_name":"AskUserQuestion","tool_use_id":"t","tool_input":{"questions":[]}}`,
+		`{"session_id":"s","tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Q?","options":[{"label":"A"}]}]}}`,
+		`{"session_id":"s","tool_name":"AskUserQuestion","tool_use_id":"t","tool_input":"broken"}`,
+	} {
+		if ev, err := Parse(strings.NewReader(in), "PreToolUse", env(nil)); err != nil || ev.Ask != nil {
+			t.Errorf("%s: %+v %v", in, ev.Ask, err)
+		}
+	}
+}
+
+// TestAskTextIsClean: the console draws the question and its options.
+func TestAskTextIsClean(t *testing.T) {
+	in := `{"session_id":"s","tool_name":"AskUserQuestion","tool_use_id":"t","tool_input":{"questions":[{"question":"Which\u001b[2J one?","options":[{"label":"A\u0007","description":"d\u001b]52;c;eA==\u0007"}]}]}}`
+	ev, err := Parse(strings.NewReader(in), "PreToolUse", env(nil))
+	if err != nil || ev.Ask == nil {
+		t.Fatalf("%+v %v", ev, err)
+	}
+	q := ev.Ask.Questions[0]
+	if q.Question != "Which[2J one?" || q.Options[0].Label != "A" || q.Options[0].Description != "d]52;c;eA==" {
+		t.Fatalf("question %+v", q)
+	}
+}
+
+// TestAskSurvivesTheSpool: a hook that missed the service keeps its call.
+func TestAskSurvivesTheSpool(t *testing.T) {
+	spool := filepath.Join(t.TempDir(), "spool.jsonl")
+	ev := parseFile(t, "pre-tool-use-ask.json", "PreToolUse")
+	if err := Append(spool, ev); err != nil {
+		t.Fatal(err)
+	}
+	var got Event
+	if err := Replay(spool, func(e Event) { got = e }); err != nil {
+		t.Fatal(err)
+	}
+	if got.Ask == nil || !reflect.DeepEqual(*got.Ask, *ev.Ask) || got.ToolUseID != ev.ToolUseID {
+		t.Fatalf("replayed %+v", got)
 	}
 }

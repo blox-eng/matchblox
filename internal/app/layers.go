@@ -95,7 +95,7 @@ func (s Shell) readHosts() []string {
 func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
 	o := s.opt.Open(host)
 	b := s.opt.Base
-	o.Binary, o.CompactAt, o.CompactTokens, o.NoMotion, o.Now, o.Self = b.Binary, b.CompactAt, b.CompactTokens, b.NoMotion, b.Now, b.Self
+	o.Binary, o.CompactAt, o.CompactTokens, o.NoMotion, o.Now, o.Self, o.StateDir = b.Binary, b.CompactAt, b.CompactTokens, b.NoMotion, b.Now, b.Self, b.StateDir
 	if o.Run == nil {
 		o.Run = b.Run
 	}
@@ -328,8 +328,9 @@ func (s Shell) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return s, nil
 	}
 	rs := s.rows()
-	i := ms.Y - hostsTop + s.scrollTop(len(rs))
-	if i < 0 || i >= len(rs) {
+	y := ms.Y - hostsTop
+	i := y + s.scrollTop(len(rs))
+	if y < 0 || y >= s.rowRoom() || i >= len(rs) {
 		return s, nil
 	}
 	if i != s.sel {
@@ -339,8 +340,9 @@ func (s Shell) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	return s.enter(rs[i])
 }
 
-// rowRoom is how many rows fit under the label, with the hint line.
-func (s Shell) rowRoom() int { return max(3, s.height-hostsTop-2) }
+// rowRoom is how many rows fit under the label, with the hint and, at the
+// bottom, a hairline and the action line.
+func (s Shell) rowRoom() int { return max(3, s.height-hostsTop-4) }
 
 // scrollTop is the first row on the screen: the list follows the
 // selection, so every row is reachable.
@@ -352,9 +354,9 @@ func (s Shell) scrollTop(n int) int {
 	return min(s.sel-room+1, n-room)
 }
 
-// hostsTop is the first row's line: the header, the action line, a
-// hairline and the region label.
-const hostsTop = 4
+// hostsTop is the first row's line: the header, a hairline and the region
+// label.
+const hostsTop = 3
 
 func (s Shell) View() tea.View {
 	if s.layer == layerConsole {
@@ -373,7 +375,6 @@ func (s Shell) render() string {
 	st, w := s.st, max(s.width, minWidth)
 	out := []string{
 		fit(" "+st.accent.Render("▰")+" "+st.text.Render("matchblox")+st.faint.Render(" · ")+st.muted.Render("hosts"), w),
-		s.actionLine(w),
 		st.hair.Render(strings.Repeat("─", w)),
 	}
 	label := fmt.Sprintf(" HOSTS · %d", len(s.hosts)+1)
@@ -394,7 +395,7 @@ func (s Shell) render() string {
 			mark = "▌ "
 		}
 		line := " " + st.accent.Render(mark) + st.text.Render(pad(r.label, 24)) + st.muted.Render(r.note)
-		if layout(w) == Narrow {
+		if layout(w, s.height) == Narrow {
 			line = " " + st.accent.Render(mark) + st.text.Render(r.label)
 		}
 		b.addRow(i, i == s.sel, w, st, line)
@@ -403,9 +404,11 @@ func (s Shell) render() string {
 	if s.firstRun() && !s.adding {
 		out = append(out, "", fit(" "+st.faint.Render("You can add a host later: esc in a console comes back here."), w))
 	}
-	for len(out) < s.height {
+	// The action line is at the bottom, as in a console (design/0006 §11.1).
+	for len(out) < s.height-2 {
 		out = append(out, "")
 	}
+	out = append(out, st.hair.Render(strings.Repeat("─", w)), s.actionLine(w))
 	return strings.Join(out, "\n")
 }
 

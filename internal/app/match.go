@@ -133,26 +133,6 @@ func (m Model) matchCell(s sample.Session) string {
 	return lipgloss.NewStyle().Foreground(c).Render(ch) + " "
 }
 
-// queueCell is the match of the session a queue row names.
-func (m Model) queueCell(it queue.Item) string {
-	for _, s := range m.snap.Sessions {
-		if s.Pane == it.Pane {
-			return m.matchCell(s)
-		}
-	}
-	return lipgloss.NewStyle().Foreground(m.marks().Head).Render("╿") + " "
-}
-
-// queueMatch is unlit (the session waits), or burnt when its context is full.
-func (m Model) queueMatch(it queue.Item) matchKind {
-	for _, s := range m.snap.Sessions {
-		if s.Pane == it.Pane && m.burnt(s) {
-			return matchBurnt
-		}
-	}
-	return matchUnlit
-}
-
 // noteChanges records the changes between the last state and the next, so
 // each plays once.
 func (m *Model) noteChanges(next []sample.Session) {

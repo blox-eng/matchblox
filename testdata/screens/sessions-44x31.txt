@@ -1,0 +1,31 @@
+ ▰ matchblox               ● 6 wait for you
+ SESSIONS 7  ships 3  machine  4  5  6
+────────────────────────────────────────────
+ WAITS FOR YOU · 6
+────────────────────────────────────────────
+▌│ spark-docs            done      9m   88%
+   “I rewrote the quick start and the
+   install page.”
+   #4540 ●━●━●━●━●  live
+   ▰▰▰▰▰ plan 100%  ▲ cle… a answer  ⏎ open
+────────────────────────────────────────────
+ ╿ ember-billing         done      4m   32%
+ ╿ flint-auth            asks      2m   41%
+ ╿ kindle-web            asks      1m   56%
+ ╿ codex                 done      0s   55%
+ ╿ opencode              done      0s    6%
+ WORKING · 1
+ ✦ hearth-api            busy           79%
+
+ 1 without an agent: shell:1.1 zsh
+
+ RECOMMENDATIONS · 7 · h hides
+ ▲ The week runs short: compact spark-docs
+ ○ Clear spark-docs (%3)
+ ○ Clear kindle-web (%5)
+ ○ Clear codex (%6)
+ ○ Clear flint-auth (%2)
+ ○ Clear ember-billing (%8)
+ ○ Clear opencode (%7)
+────────────────────────────────────────────
+ ⏎ open  a answer  p ships  f stoker

@@ -24,6 +24,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/setup"
+	"github.com/blox-eng/matchblox/internal/ships"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
 	"github.com/blox-eng/matchblox/internal/transport"
@@ -31,6 +32,15 @@ import (
 
 // GitSource scans the repositories the given session directories belong to.
 type GitSource func(sessionCwds []string) gitscan.Report
+
+// ShipsSource reads the pull requests the sessions drive: their
+// transcripts' new bytes, and GitHub when a poll is due. ctx ends with the
+// service: a scan in flight stops with it.
+type ShipsSource func(ctx context.Context, sessions []sample.Session, git *gitscan.Report) ships.Report
+
+// shipsEvery is how often the transcripts are read for new evidence; the
+// source reads GitHub at its own, slower cadence.
+const shipsEvery = 15 * time.Second
 
 // ErrReplaced means the binary on disk changed. The service stops so that
 // the next console starts the new one.
@@ -77,6 +87,8 @@ type Service struct {
 	LimitsLog *limits.Store
 	// Now is the service's clock for the stoker and the queue. Nil: time.Now.
 	Now func() time.Time
+	// Ships follows the pull requests sessions drive. Nil: no ships.
+	Ships ShipsSource
 
 	// alone is when the last console closed; zero while one is open. A new
 	// service starts alone.
@@ -88,17 +100,24 @@ type Service struct {
 	sample   func() sample.Snapshot
 	git      GitSource
 
-	mu      sync.Mutex
-	cur     state.Doc
-	have    bool
-	hist    history.Series
-	queue   *queue.Queue
-	clients map[*client]struct{}
-	gitKick chan struct{}
-	stop    context.CancelCauseFunc
+	mu  sync.Mutex
+	cur state.Doc
+	// sampled are the sessions as the sampler read them; cur.Sessions adds
+	// the question tool's calls the hooks announced.
+	sampled  []sample.Session
+	have     bool
+	hist     history.Series
+	queue    *queue.Queue
+	clients  map[*client]struct{}
+	gitKick  chan struct{}
+	shipKick chan struct{}
+	stop     context.CancelCauseFunc
 
 	acts acts
 	gen  uint64 // counts door writes, so an older sample keeps its hands off
+	// panes holds a *sync.Mutex per pane: the keys of one act to a pane
+	// never interleave with another's.
+	panes sync.Map
 }
 
 func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
@@ -110,6 +129,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		git:      git,
 		clients:  map[*client]struct{}{},
 		gitKick:  make(chan struct{}, 1),
+		shipKick: make(chan struct{}, 1),
 		queue:    queue.New(),
 
 		NightEnds: cfg.Stoker.NightEnds,
@@ -127,7 +147,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 	s.Capture = sample.CapturePanes
 	s.Activity = sample.ClientActivity
 	s.alone = s.now()
-	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Resting: s.resting, Answerable: s.answerable, Stokable: s.stokable}
+	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Resting: s.resting, Answerable: s.answerable, Messageable: s.messageable, Asking: s.asking, Menu: s.menu, Stokable: s.stokable}
 	return s
 }
 
@@ -236,6 +256,7 @@ func (s *Service) Run(ctx context.Context) {
 	s.mu.Unlock()
 	rec := s.recorder()
 	go s.gitLoop(ctx)
+	go s.shipsLoop(ctx)
 	s.loadHistory()
 	t := time.NewTicker(s.interval)
 	defer t.Stop()
@@ -245,6 +266,7 @@ func (s *Service) Run(ctx context.Context) {
 		s.stoke(ctx, s.now())
 		if first {
 			s.rescanGit()
+			s.shipKick <- struct{}{}
 		}
 		select {
 		case <-ctx.Done():
@@ -267,7 +289,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	if s.have { // the first sample has no rates yet
 		s.hist.Append(history.FromSnapshot(snap))
 	}
-	s.cur.Snapshot, s.have = snap, true
+	s.cur.Snapshot, s.sampled, s.have = snap, snap.Sessions, true
 	if s.Stoker != nil {
 		v := s.Stoker.View()
 		s.cur.Stoker = &v
@@ -310,7 +332,8 @@ func (s *Service) mergeQueue() {
 	if now.IsZero() {
 		now = s.now()
 	}
-	s.queue.Merge(s.cur.Sessions, now)
+	s.queue.Merge(s.sampled, now)
+	s.cur.Sessions = s.queue.WithAsks(s.sampled)
 	s.cur.Queue = s.queue.Items()
 }
 
@@ -352,6 +375,36 @@ func (s *Service) gitLoop(ctx context.Context) {
 			return
 		case <-t.C:
 		case <-s.gitKick:
+		}
+	}
+}
+
+// shipsLoop starts after the first sample, which finds the sessions and
+// their transcripts, and runs every shipsEvery.
+func (s *Service) shipsLoop(ctx context.Context) {
+	if s.Ships == nil {
+		return
+	}
+	select {
+	case <-ctx.Done():
+		return
+	case <-s.shipKick:
+	}
+	t := time.NewTicker(shipsEvery)
+	defer t.Stop()
+	for {
+		s.mu.Lock()
+		sessions, git := append([]sample.Session(nil), s.cur.Sessions...), s.cur.Git
+		s.mu.Unlock()
+		r := s.Ships(ctx, sessions, git)
+		s.mu.Lock()
+		s.cur.Ships = &r
+		s.mu.Unlock()
+		s.broadcast()
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
 		}
 	}
 }

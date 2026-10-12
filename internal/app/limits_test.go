@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"image/color"
 	"strings"
 	"testing"
 	"time"
@@ -16,77 +17,129 @@ import (
 func limitsState() proto.State {
 	st := queueState()
 	at := st.At
-	n := func(i int) *int { return &i }
 	st.Limits = []limits.Account{
-		{Provider: "anthropic", Account: "builder@example.com · Max", State: limits.Measured, At: at,
-			Matches: n(4), Sparks: n(8), Forecast: &limits.Outlook{Lasts: true}},
-		{Provider: "openai", Account: "builder@example.org · Plus", State: limits.Measured, At: at,
-			Matches: n(5), Sparks: n(2), SparksReset: at.Add(5 * 24 * time.Hour), Forecast: &limits.Outlook{Out: at.Add(26 * time.Hour)}},
+		{Provider: "anthropic", Account: "builder@example.com · Max", State: limits.Measured, At: at, Forecast: &limits.Outlook{Lasts: true},
+			Windows: []limits.Window{{UsedPct: 62, Minutes: limits.BoxMinutes, ResetsAt: at.Add(2 * time.Hour)},
+				{UsedPct: 41, Minutes: limits.WeekMinutes, ResetsAt: at.Add(3 * 24 * time.Hour)}}},
+		{Provider: "openai", Account: "builder@example.org · Plus", State: limits.Measured, At: at, Forecast: &limits.Outlook{Out: at.Add(26 * time.Hour)},
+			Windows: []limits.Window{{UsedPct: 12, Minutes: limits.BoxMinutes, ResetsAt: at.Add(4 * time.Hour)},
+				{UsedPct: 92, Minutes: limits.WeekMinutes, ResetsAt: at.Add(5 * 24 * time.Hour)}}},
 		{Provider: "anthropic", Account: "work@example.net · Team", State: limits.Unmeasured, Fix: "open the door “Show your limits”"},
 	}
 	return st
 }
 
-// TestEachAccountHasALimitsLine: under the metrics, one line per account:
-// its mark, a short name, the matches, the sparks and the forecast. Two
-// accounts of one provider are told apart by name; the same line fits a
-// phone, and the tabs move down under them.
-func TestEachAccountHasALimitsLine(t *testing.T) {
-	// The week runs out 26 hours on, on a weekday of the builder's zone.
-	out := limitsState().At.Add(26 * time.Hour).Local().Format("Mon")
-	for _, c := range []struct {
-		w    int
-		want []string
-	}{
-		{80, []string{
-			" ✻ builder  4 matches · 8 sparks · lasts the week",
-			" ✻ work     not measured · open the door “Show your limits”",
-			" ❋ Plus     5 matches · 2 sparks until ",
-		}},
-		{40, []string{
-			" ✻ 4 matches · 8 sparks · lasts the week",
-			" ❋ 5 matches · 2 sparks · out " + out,
-		}},
-	} {
-		m, _ := loadedWith(t, c.w, limitsState())
+// selectRec presses ↑ until the recommendation id is selected.
+func selectRec(t *testing.T, m tea.Model, id string) tea.Model {
+	t.Helper()
+	for range m.(Model).rowCount() {
+		m, _ = key(m, "up")
+	}
+	for range m.(Model).rowCount() {
+		if r, ok := m.(Model).selectedRec(); ok && r.ID == id {
+			return m
+		}
+		m, _ = key(m, "down")
+	}
+	t.Fatalf("no recommendation %s to select", id)
+	return m
+}
+
+// TestTheHeaderHasNoLimits: the header is one line and the tabs are under
+// it; the limits are in the dock (design/0006 §11.5).
+func TestTheHeaderHasNoLimits(t *testing.T) {
+	for _, w := range []int{44, 86, 132} {
+		m, _ := loadedWith(t, w, limitsState())
 		lines := strings.Split(screen(m), "\n")
-		head := strings.Join(lines[1:4], "\n")
-		for _, w := range c.want {
-			if !strings.Contains(head, w) {
-				t.Errorf("width %d: no line %q in\n%s", c.w, w, strings.Join(lines[:5], "\n"))
-			}
+		if !strings.Contains(lines[1], "SESSIONS") || strings.Contains(strings.Join(lines[:3], "\n"), "62%") {
+			t.Fatalf("width %d: the header is not one line:\n%s", w, strings.Join(lines[:4], "\n"))
 		}
-		if !strings.Contains(lines[4], "QUEUE") && !strings.Contains(lines[4], "1") {
-			t.Errorf("width %d: the tabs are not under the limits:\n%s", c.w, strings.Join(lines[:6], "\n"))
-		}
-		for i, l := range lines {
-			if w := len([]rune(l)); w > c.w {
-				t.Errorf("width %d: line %d is %d wide: %q", c.w, i, w, l)
-			}
+		if !strings.Contains(lines[0], "● 2 wait for you") {
+			t.Fatalf("width %d: the header does not say who waits: %q", w, lines[0])
 		}
 	}
-	// A tap on the tabs still switches tabs.
-	m, _ := loadedWith(t, 100, limitsState())
-	next, _ := m.Update(tea.MouseClickMsg{X: 14, Y: 4, Button: tea.MouseLeft})
-	if next.(Model).tab == tabQueue {
-		t.Fatalf("a tap on the tab row did not switch:\n%s", screen(next))
+}
+
+// TestTheDockSaysUsageAndTheMachine: under the body, each account's
+// windows as /usage says them, with the forecast on its block, and the
+// machine; side by side when there is room.
+func TestTheDockSaysUsageAndTheMachine(t *testing.T) {
+	m, _ := loadedWith(t, 132, limitsState())
+	out := screen(m)
+	at := lineOf(t, m, "USAGE")
+	if !strings.Contains(strings.Split(out, "\n")[at], "MACHINE") {
+		t.Fatalf("usage and the machine are not side by side:\n%s", out)
 	}
-	// A tap on a body row under three limits lines selects that row.
-	for i, l := range strings.Split(screen(m), "\n") {
-		if strings.Contains(l, "app-review") {
-			tapped, _ := m.Update(tea.MouseClickMsg{X: 10, Y: i, Button: tea.MouseLeft})
-			if it, ok := tapped.(Model).selectedQueue(); !ok || it.Name != "app-review" {
-				t.Fatalf("a tap on line %d selected %+v", i, it)
-			}
-			break
+	until := limitsState().At.Add(26 * time.Hour).Local().Format("Mon")
+	for _, want := range []string{
+		"✻ builder  5h   ▰▰▰▰▰▱▱▱ 62%", "wk   ▰▰▰▱▱▱▱▱ 41%", "lasts the week",
+		"✻ work     not measured · open the door “Show your limits”",
+		"❋ Plus     5h   ▰▱▱▱▱▱▱▱ 12%", "92%", "out " + until,
+		"cpu", "mem", "runs 3 claude",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the dock lacks %q:\n%s", want, out)
 		}
 	}
-	// No account: no line, the tabs stay where they were.
+	fg := func(pct float64) color.Color { return m.useStyle(pct).GetForeground() }
+	if fg(59) != m.st.theme.Muted || fg(60) != m.st.theme.Warn || fg(90) != m.st.theme.Neg {
+		t.Error("a window's bar is warn from 60% and neg from 90%")
+	}
+	// Nothing measured says so.
 	none := queueState()
 	none.Limits = nil
-	plain, _ := loadedWith(t, 100, none)
-	if l := strings.Split(screen(plain), "\n")[1]; !strings.Contains(l, "QUEUE") {
-		t.Fatalf("without limits line 1 is %q", l)
+	plain, _ := loadedWith(t, 132, none)
+	if !strings.Contains(screen(plain), "no session runs under a plan") {
+		t.Fatalf("an empty usage panel:\n%s", screen(plain))
+	}
+}
+
+// TestAPhoneDockShowsOnePanel: on a phone the dock is usage, the machine
+// or the stoker; u, or a tap on its switch, cycles it. An account other than
+// Anthropic's takes one line.
+func TestAPhoneDockShowsOnePanel(t *testing.T) {
+	m, _ := loadedWith(t, 44, limitsState())
+	m.height = len(m.body(44).lines) + len(m.dock(44, -1).lines) + 1 + 5 // no row to grow into
+	out := screen(m)
+	if !strings.Contains(out, "USAGE") || !strings.Contains(out, "machine ›") || strings.Contains(out, "MACHINE") {
+		t.Fatalf("the phone dock is not usage alone:\n%s", out)
+	}
+	if !strings.Contains(out, "❋ Plus     5h ▱▱▱ 12% · wk 92%") {
+		t.Fatalf("Codex does not fold to one line:\n%s", out)
+	}
+	fitsWidth(t, m, 44)
+	next, _ := key(m, "u")
+	if out := screen(next); !strings.Contains(out, "MACHINE") || !strings.Contains(out, "stoker ›") || strings.Contains(out, "USAGE") {
+		t.Fatalf("u does not show the machine:\n%s", out)
+	}
+	y := lineOf(t, next, "stoker ›")
+	x := strings.Index(strings.Split(screen(next), "\n")[y], "stoker ›")
+	st, _ := tap(next, len([]rune(strings.Split(screen(next), "\n")[y][:x])), y)
+	if out := screen(st); !strings.Contains(out, "STOKER") || !strings.Contains(out, "usage ›") || !strings.Contains(out, "f starts it") {
+		t.Fatalf("a tap on stoker › does not show the stoker:\n%s", out)
+	}
+	if back, _ := key(st, "u"); !strings.Contains(screen(back), "USAGE") {
+		t.Fatalf("u does not come back to usage:\n%s", screen(back))
+	}
+}
+
+// TestTheDockFoldsWhenItDoesNotFit: the dock shows when the body, the
+// dock and one blank row fit; one row less and it folds into the Machine
+// tab, which has usage first.
+func TestTheDockFoldsWhenItDoesNotFit(t *testing.T) {
+	m, _ := loadedWith(t, 44, limitsState())
+	need := len(m.body(44).lines) + len(m.dock(44, -1).lines) + 1 + 5 // the header, the tabs, two hairlines, the key line
+	for h, docked := range map[int]bool{need: true, need - 1: false} {
+		m.height = h
+		if got := strings.Contains(screen(m), "USAGE"); got != docked {
+			t.Errorf("height %d (needs %d): docked %v, want %v:\n%s", h, need, got, docked, screen(m))
+		}
+	}
+	m.height = need - 1
+	next, _ := key(m, "3")
+	lines := strings.Split(screen(next), "\n")
+	if !strings.Contains(lines[3], "USAGE") || !strings.Contains(screen(next), "MACHINE") {
+		t.Fatalf("the Machine tab does not start with usage:\n%s", screen(next))
 	}
 }
 
@@ -96,15 +149,13 @@ func TestEachAccountHasALimitsLine(t *testing.T) {
 func TestARecommendationShowsItsResult(t *testing.T) {
 	st := limitsState()
 	st.Recommendations = []advice.Rec{{ID: "wk", Level: "warn", Title: "The week runs out Wed ~19:00: compact app-feature",
-		Evidence: "builder@example.org · Plus: 2 sparks left",
+		Evidence: "builder@example.org · Plus: 92% of the week used",
 		Primary:  &advice.Action{Label: "jump to the session", Nav: true, Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}},
 		Second: &advice.Action{Label: "send /compact", Destructive: true, Steps: [][]string{{"tmux", "send-keys", "-t", "%1", "/compact", "Enter"}},
 			Guards: []advice.Guard{{IdlePane: "%1"}}}}}
 	m, f := loadedWith(t, 100, st)
 	var next tea.Model = m
-	for r, ok := next.(Model).selectedRec(); !ok || r.ID != "wk"; r, ok = next.(Model).selectedRec() {
-		next, _ = key(next, "down")
-	}
+	next = selectRec(t, next, "wk")
 	next, _ = key(next, "x")
 	if p := next.(Model).pending; p == nil || p.String() != "tmux send-keys -t %1 /compact Enter" {
 		t.Fatalf("x shows %+v", p)
@@ -170,9 +221,7 @@ func TestAJumpLaterDoesNotRewriteTheRow(t *testing.T) {
 		Primary: &advice.Action{Label: "jump to the session", Nav: true, Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}}}}
 	m, _ := loadedWith(t, 100, st)
 	var next tea.Model = m
-	for r, ok := next.(Model).selectedRec(); !ok || r.ID != "wk"; r, ok = next.(Model).selectedRec() {
-		next, _ = key(next, "down")
-	}
+	next = selectRec(t, next, "wk")
 	next, _ = key(next, "enter")
 	next, _ = key(next, "enter")
 	next, _ = next.Update(ranMsg{cmd: "tmux switch-client -t %1", jumped: "%1"})
@@ -186,12 +235,12 @@ func TestAJumpLaterDoesNotRewriteTheRow(t *testing.T) {
 }
 
 // TestStatusTextHasTheLimits: `matchblox status --text` says each
-// account's limits as the header does.
+// account's limits as the dock does.
 func TestStatusTextHasTheLimits(t *testing.T) {
 	st := limitsState()
 	out := Summary(st.Doc)
 	for _, want := range []string{
-		"limits anthropic builder@example.com · Max: 4 matches · 8 sparks · lasts the week\n",
+		"limits anthropic builder@example.com · Max: 5h 62% · wk 41% · lasts the week\n",
 		"limits anthropic work@example.net · Team: not measured · open the door “Show your limits”\n",
 	} {
 		if !strings.Contains(out, want) {

@@ -186,11 +186,11 @@ func TestRecIDBindsEveryStep(t *testing.T) {
 // the most, with a jump to it and, while it is idle, a guarded /compact.
 func TestAWeekThatRunsShortRecommendsItsHottestSession(t *testing.T) {
 	out := time.Date(2026, 10, 14, 19, 0, 0, 0, time.UTC)
-	sparks := 3
+	wk := []limits.Window{{UsedPct: 72, Minutes: limits.WeekMinutes, ResetsAt: out.Add(48 * time.Hour)}}
 	acct := limits.Account{Provider: "anthropic", Account: "a@example.com · Max", State: limits.Measured,
-		Sparks: &sparks, Forecast: &limits.Outlook{Out: out}}
+		Windows: wk, Forecast: &limits.Outlook{Out: out}}
 	other := limits.Account{Provider: "openai", Account: "b@example.com · Plus", State: limits.Measured,
-		Sparks: &sparks, Forecast: &limits.Outlook{Lasts: true}}
+		Windows: wk, Forecast: &limits.Outlook{Lasts: true}}
 	snap := sample.Snapshot{
 		At:     time.Date(2026, 10, 13, 14, 0, 0, 0, time.UTC),
 		Limits: []limits.Account{acct, other},
@@ -215,7 +215,7 @@ func TestAWeekThatRunsShortRecommendsItsHottestSession(t *testing.T) {
 	if r.Title != "The week runs short: compact api-auth" || r.Level != "warn" || !strings.HasPrefix(r.Evidence, "out Wed ~19:00 · ") {
 		t.Fatalf("title %q level %q", r.Title, r.Level)
 	}
-	if !strings.Contains(r.Evidence, "a@example.com · Max: 3 sparks left") || !strings.Contains(r.Evidence, "api-auth burns 42k tokens in 30 min") {
+	if !strings.Contains(r.Evidence, "a@example.com · Max: 72% of the week used") || !strings.Contains(r.Evidence, "api-auth burns 42k tokens in 30 min") {
 		t.Fatalf("evidence %q", r.Evidence)
 	}
 	if r.Primary == nil || !r.Primary.Nav || strings.Join(r.Primary.Steps[0], " ") != "tmux switch-client -t %2" {
@@ -235,9 +235,8 @@ func TestAWeekThatRunsShortRecommendsItsHottestSession(t *testing.T) {
 		}
 	}
 	// A spent week: a compact saves nothing, no rec.
-	zero := 0
 	spent := acct
-	spent.Sparks = &zero
+	spent.Windows = []limits.Window{{UsedPct: 100, Minutes: limits.WeekMinutes, ResetsAt: out.Add(48 * time.Hour)}}
 	snap.Limits[0] = spent
 	for _, x := range Build(snap, nil) {
 		if strings.Contains(x.Title, "week") {

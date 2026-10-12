@@ -1,0 +1,32 @@
+ ▰ matchblox                                                                                                       ● 6 wait for you
+ sessions 7    SHIPS 3    machine    git    history    panes
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ open → ci → green → merged → live                                            │
+▌#4551 Rate limits on the public API                                       4m │ #4551  by hearth-api · hearth/hearth-api
+   ●━◉┄○┄○┄○  CI · 6 of 9 jobs                                                │ Rate limits on the public API
+                                                                              │
+ #4552 Invoice export as CSV and PDF                                       6m │ TRACK
+   ●━●━◉┄○┄○  green · waits for your merge                                    │  ● open    22:21
+                                                                              │  ┃
+ #4545 Refresh tokens that rotate                                         40m │  ◉ ci      22:46 CI · 6 of 9 jobs
+   ●━✕┄○┄○┄○  conflicts with main                                             │  ┆
+                                                                              │  ○ green
+ #4540 The 1.0 docs                                                        2h │  ┆
+   ●━●━●━●━●  live                                                            │  ○ merged
+                                                                              │  ┆
+                                                                              │  ○ live
+                                                                              │
+                                                                              │ https://github.com/hearth/hearth-api/pull/4551
+                                                                              │
+                                                                              │ ⏎ session
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ USAGE                                                                        │ MACHINE                                    16 cores
+ ✻ Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                                      │ cpu  ▁ 0%   load 6.2
+          wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · out Fri ~21:00                     │ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
+ · login  not measured · OpenCode keeps no limits                             │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
+ ❋ Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                                          │ runs 5 claude · 1 codex · 1 opencode
+          wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week                     │
+                                                                              │ PID      COMMAND           CPU    MEM     OWNER
+                                                                              │ 1        systemd             0%   9.8M    system
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ↑↓ move  ⏎ session  f stoker  / find  q quit                                                                        sampled 0s ago

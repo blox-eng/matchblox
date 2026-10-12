@@ -27,47 +27,36 @@ func week(used float64) Window {
 	return Window{UsedPct: used, Minutes: WeekMinutes, ResetsAt: mon.Add(7 * 24 * time.Hour)}
 }
 
-// TestMatchesAndSparksCountWhatIsLeft: 5 matches are a 5-hour window, 10
-// sparks a week; a part of one that is left still counts as one.
-func TestMatchesAndSparksCountWhatIsLeft(t *testing.T) {
+// TestUsesSayThePercentUsed: each window is its percent used, as /usage
+// says it, the 5 hours first; a use over 100% stays what was read.
+func TestUsesSayThePercentUsed(t *testing.T) {
 	now := mon.Add(time.Hour)
-	for _, c := range []struct {
-		used          float64
-		matches, sprk int
-	}{{0, 5, 10}, {28, 4, 8}, {80, 1, 2}, {99.5, 1, 1}, {100, 0, 0}, {130, 0, 0}} {
+	for _, used := range []float64{0, 28, 80, 99.5, 100, 130} {
 		a := Build("anthropic", "a@example.com · Max", SourceClaude, &Reading{At: now, Windows: []Window{
-			{UsedPct: c.used, Minutes: BoxMinutes, ResetsAt: now.Add(2 * time.Hour)},
-			{UsedPct: c.used, Minutes: WeekMinutes, ResetsAt: mon.Add(7 * 24 * time.Hour)},
+			{UsedPct: used, Minutes: WeekMinutes, ResetsAt: mon.Add(7 * 24 * time.Hour)},
+			{UsedPct: used, Minutes: BoxMinutes, ResetsAt: now.Add(2 * time.Hour)},
 		}}, now, quiet)
-		if a.Matches == nil || *a.Matches != c.matches || a.Sparks == nil || *a.Sparks != c.sprk {
-			t.Errorf("used %v%%: matches %v sparks %v, want %d and %d", c.used, deref(a.Matches), deref(a.Sparks), c.matches, c.sprk)
+		us := a.Uses(now)
+		if len(us) != 2 || us[0].Name != "5h" || us[1].Name != "wk" || us[0].Pct != used || us[1].Pct != used {
+			t.Errorf("used %v%%: %+v", used, us)
 		}
 		if a.State != Measured {
-			t.Errorf("used %v%%: state %q", c.used, a.State)
+			t.Errorf("used %v%%: state %q", used, a.State)
 		}
 	}
-}
-
-func deref(p *int) any {
-	if p == nil {
-		return nil
-	}
-	return *p
 }
 
 // TestAWindowIsKnownByItsLength: Codex names its windows primary and
-// secondary, and a plan can have a month. The length decides: 5 hours are
-// matches, a week sparks, any other window shows its percent left.
+// secondary, and a plan can have a month. The length names it.
 func TestAWindowIsKnownByItsLength(t *testing.T) {
 	now := mon.Add(time.Hour)
 	a := Build("openai", "b@example.com · Go", SourceCodex, &Reading{At: now, Windows: []Window{
 		{UsedPct: 47, Minutes: 43200, ResetsAt: now.Add(9 * 24 * time.Hour)},
+		{UsedPct: 5, Minutes: 3 * 24 * 60},
 	}}, now, quiet)
-	if a.Matches != nil || a.Sparks != nil {
-		t.Fatalf("a month became matches or sparks: %+v", a)
-	}
-	if len(a.Other) != 1 || a.Other[0].Text != "53% left this month" {
-		t.Fatalf("other windows: %+v", a.Other)
+	us := a.Uses(now)
+	if len(us) != 2 || us[0].Name != "3d" || us[1].Name != "mo" || us[1].Pct != 47 {
+		t.Fatalf("other windows: %+v", us)
 	}
 }
 
@@ -83,8 +72,8 @@ func TestAnOldReadingSaysHowOld(t *testing.T) {
 	if a.State != Stale || !a.At.Equal(r.At) {
 		t.Fatalf("state %q at %v", a.State, a.At)
 	}
-	if *a.Matches != 5 || !a.MatchesReset.IsZero() {
-		t.Fatalf("a window past its reset: %d matches, reset %v", *a.Matches, a.MatchesReset)
+	if u := a.Uses(now)[0]; u.Pct != 0 || !u.Resets.IsZero() {
+		t.Fatalf("a window past its reset: %+v", u)
 	}
 	// Every window reset since: the figures are known, not old.
 	all := &Reading{At: now.Add(-2 * time.Hour), Windows: []Window{{UsedPct: 90, Minutes: BoxMinutes, ResetsAt: now.Add(-time.Minute)}}}
@@ -315,10 +304,10 @@ func lines(t *testing.T, path string) int {
 	return n
 }
 
-// TestTheLineSaysWhatIsLeftAndWhetherItLasts: the counts first, a reset only
-// when it is near, the forecast last; a quiet week is muted, a short one a
+// TestTheLineSaysWhatIsUsedAndWhetherItLasts: the percents first, a reset
+// only when it is near, the forecast last; a quiet week is muted, a short one a
 // warning; an old reading says its time; no source says its fix.
-func TestTheLineSaysWhatIsLeftAndWhetherItLasts(t *testing.T) {
+func TestTheLineSaysWhatIsUsedAndWhetherItLasts(t *testing.T) {
 	now := mon.Add(24*time.Hour + 5*time.Hour) // Tue 14:00
 	build := func(box, wk float64, at time.Time) Account {
 		return Build("anthropic", "", SourceClaude, &Reading{At: at, Windows: []Window{
@@ -332,12 +321,12 @@ func TestTheLineSaysWhatIsLeftAndWhetherItLasts(t *testing.T) {
 		want string
 		tone string // of the last part
 	}{
-		{"a calm week", build(28, 12, now), "4 matches · 9 sparks · lasts the week", Muted},
-		{"near the edge", build(85, 82, now), "1 match until 16:40 · 2 sparks until Mon 09:00 · out ~19:00", Warn},
-		{"a hot week", build(10, 50, now), "5 matches · 5 sparks · out Wed ~19:00", Warn},
-		{"old", build(10, 12, now.Add(-90*time.Minute)), "5 matches · 9 sparks · lasts the week · as of 12:30", Warn},
+		{"a calm week", build(28, 12, now), "5h 28% · wk 12% · lasts the week", Muted},
+		{"near the edge", build(85, 82, now), "5h 85% until 16:40 · wk 82% until Mon 09:00 · out ~19:00", Warn},
+		{"a hot week", build(10, 50, now), "5h 10% · wk 50% · out Wed ~19:00", Warn},
+		{"old", build(10, 12, now.Add(-90*time.Minute)), "5h 10% · wk 12% · lasts the week · as of 12:30", Warn},
 		{"no source", Build("anthropic", "", SourceClaude, nil, now, quiet), "not measured · open the door “Show your limits”", Warn},
-		{"a month", Build("openai", "", SourceCodex, &Reading{At: now, Windows: []Window{{UsedPct: 47, Minutes: 43200, ResetsAt: now.Add(240 * time.Hour)}}}, now, quiet), "53% left this month", ""},
+		{"a month", Build("openai", "", SourceCodex, &Reading{At: now, Windows: []Window{{UsedPct: 47, Minutes: 43200, ResetsAt: now.Add(240 * time.Hour)}}}, now, quiet), "mo 47%", ""},
 	} {
 		ps := Parts(c.a, now)
 		if got := Plain(ps); got != c.want {

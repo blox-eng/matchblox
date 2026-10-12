@@ -14,7 +14,7 @@ on:
       - "mkdocs.yml"
       - "requirements-docs.txt"
       - "config.example.toml"
-      - "www/demo/replay.svg"
+      - "www/demo/replay-desk.svg"
       - "www/assets/fonts/**"
       - "www/assets/matchblox-mark-dark.svg"
       - ".github/workflows/docs.yml"

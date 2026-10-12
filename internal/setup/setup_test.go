@@ -3,6 +3,7 @@ package setup
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -706,5 +707,75 @@ func TestTheSafetyNetDoorTurnsAutoCompactOnAtTheLine(t *testing.T) {
 	writeFile(t, path, `{"env": {"CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "90"}}`+"\n")
 	if d := door(t, e, doors.SafetyNet); !d.Done {
 		t.Fatalf("a net at 90%% is not done: %+v", d)
+	}
+}
+
+// installed is the settings an earlier matchblox wrote: every hook but the
+// question tool's, next to the person's own PreToolUse hook.
+const installed = `{
+  "hooks": {
+    "Notification": [{"hooks": [{"type": "command", "command": "/opt/mb/matchblox hook Notification"}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "/opt/mb/matchblox hook Stop"}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/opt/mb/matchblox hook UserPromptSubmit"}]}],
+    "SessionStart": [{"hooks": [{"type": "command", "command": "/opt/mb/matchblox hook SessionStart"}]}],
+    "SessionEnd": [{"hooks": [{"type": "command", "command": "/opt/mb/matchblox hook SessionEnd"}]}],
+    "PostToolUse": [{"hooks": [{"type": "command", "command": "/opt/mb/matchblox hook PostToolUse"}]}],
+    "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "guard-bash"}]}]
+  }
+}
+`
+
+// TestAnInstallGainsTheQuestionHook: the hooks door of an earlier install
+// asks to be opened again, and its diff adds only the question tool's hook.
+func TestAnInstallGainsTheQuestionHook(t *testing.T) {
+	e := env(t)
+	p := settings(t, e, installed)
+	d := door(t, e, doors.Hooks)
+	if d.Done || d.Problem != "" {
+		t.Fatalf("door = %+v, want one to open", d)
+	}
+	want := `+      {"matcher": "AskUserQuestion", "hooks": [{"type": "command", "command": "` + exe + ` hook PreToolUse"}]}`
+	if !strings.Contains(d.Preview, want) {
+		t.Fatalf("the diff has no question hook:\n%s", d.Preview)
+	}
+	for line := range strings.SplitSeq(d.Preview, "\n") {
+		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "++") && strings.Contains(line, " hook ") && !strings.Contains(line, "hook PreToolUse") {
+			t.Errorf("the diff adds another hook: %q", line)
+		}
+	}
+	open(t, e, doors.Hooks)
+	got := commands(t, p)
+	if fmt.Sprint(got["PreToolUse"]) != "[guard-bash "+exe+" hook PreToolUse]" {
+		t.Fatalf("PreToolUse = %q", got["PreToolUse"])
+	}
+	if d := door(t, e, doors.Hooks); !d.Done {
+		t.Fatalf("door not done after open: %+v", d)
+	}
+}
+
+// TestTheQuestionHookNeedsItsTool: a matchblox PreToolUse hook counts only
+// when its matcher takes the question tool.
+func TestTheQuestionHookNeedsItsTool(t *testing.T) {
+	for matcher, done := range map[string]bool{
+		"":                     true,
+		"*":                    true,
+		"AskUserQuestion":      true,
+		"Bash|AskUserQuestion": true,
+		"Ask.*":                true,
+		"Bash":                 false,
+		"AskUserQuestionX":     false,
+		"(":                    false,
+	} {
+		e := env(t)
+		body := `{"hooks": {"PreToolUse": [{"matcher": "` + matcher + `", "hooks": [{"type": "command", "command": "matchblox hook PreToolUse"}]}]}}`
+		for _, ev := range Events {
+			if ev != "PreToolUse" {
+				body = strings.Replace(body, `{"hooks": {`, `{"hooks": {"`+ev+`": [{"hooks": [{"type": "command", "command": "matchblox hook `+ev+`"}]}], `, 1)
+			}
+		}
+		settings(t, e, body)
+		if d := door(t, e, doors.Hooks); d.Done != done {
+			t.Errorf("matcher %q: done = %v, want %v", matcher, d.Done, done)
+		}
 	}
 }

@@ -20,9 +20,12 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/limits"
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/ships"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -736,17 +739,16 @@ func TestLimitsAreStoredAndInTheState(t *testing.T) {
 	s := newTest(t, 20*time.Millisecond)
 	s.LimitsLog = &limits.Store{Path: filepath.Join(t.TempDir(), "limits.jsonl")}
 	at := time.Now().Add(-time.Minute)
-	sparks := 7
 	s.sample = func() sample.Snapshot {
 		snap := orphanSnap
 		snap.At = time.Now()
 		snap.Limits = []limits.Account{{Provider: "anthropic", Account: "a@example.com · Max", State: limits.Measured, At: at,
-			Sparks: &sparks, Windows: []limits.Window{{UsedPct: 30, Minutes: limits.WeekMinutes}}}}
+			Windows: []limits.Window{{UsedPct: 30, Minutes: limits.WeekMinutes}}}}
 		return snap
 	}
 	ctx := run(t, s)
 	c, _ := connect(t, ctx, s)
-	if st := snapshot(t, c); len(st.Limits) != 1 || *st.Limits[0].Sparks != 7 {
+	if st := snapshot(t, c); len(st.Limits) != 1 || st.Limits[0].Windows[0].UsedPct != 30 {
 		t.Fatalf("limits in the state: %+v", st.Limits)
 	}
 	snapshot(t, c)
@@ -784,4 +786,373 @@ func TestARemovedWorktreeLeavesTheGitList(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("the removed worktree is still listed: %+v", s.State().Git)
+}
+
+// TestShipsReachTheConsole: the service reads the ships with the sessions
+// of its first sample and the git scan, and every console gets them.
+func TestShipsReachTheConsole(t *testing.T) {
+	s := newTest(t, time.Hour)
+	got := make(chan []sample.Session, 1)
+	s.Ships = func(_ context.Context, ss []sample.Session, _ *gitscan.Report) ships.Report {
+		select {
+		case got <- ss:
+		default:
+		}
+		return ships.Report{InFlight: 1, Ships: []ships.Ship{{Repo: "o/r", Number: 7, Kind: ships.WaitsForYou,
+			Note: "green · waits for your merge", Merge: []string{"gh", "pr", "merge", "7", "--squash", "-R", "o/r"}}}}
+	}
+	ctx := run(t, s)
+	c, _ := connect(t, ctx, s)
+	if ss := <-got; len(ss) != 1 || ss[0].Pane != "%1" {
+		t.Fatalf("the source got sessions %+v", ss)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		st := snapshot(t, c)
+		if st.Ships != nil {
+			if st.Ships.InFlight != 1 || st.Ships.Ships[0].Number != 7 || len(st.Ships.Ships[0].Merge) != 7 {
+				t.Fatalf("ships %+v", st.Ships)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no ships in the state")
+		}
+	}
+	// x on a ship that waits for your merge: its merge, after a typed y.
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	for _, a := range []proto.Act{{RecID: "ship:o/r#7", Which: "secondary"}, {RecID: "ship:o/r#8", Which: "secondary", Confirm: "y"}} {
+		if res := s.act(ctx, a); res.Err == "" {
+			t.Fatalf("%+v ran: %+v", a, res)
+		}
+	}
+	if res := s.act(ctx, proto.Act{RecID: "ship:o/r#7", Which: "secondary", Confirm: "y"}); res.Err != "" ||
+		fmt.Sprint(ran) != "[[gh pr merge 7 --squash -R o/r]]" {
+		t.Fatalf("res %+v ran %q", res, ran)
+	}
+}
+
+// TestPickDrivesTheQuestionMenu: a pick goes to the pane as the question
+// tool's keys, after its own check of the call it answers; a pick of
+// another call, an option the call lacks, or one with no confirm runs
+// nothing.
+func TestPickDrivesTheQuestionMenu(t *testing.T) {
+	s := newTest(t, time.Hour)
+	ask := &said.Ask{ID: "toolu_1", Questions: []said.Question{{Question: "Which next?", Options: []said.Option{{Label: "a"}, {Label: "b"}}}}}
+	s.sample = func() sample.Snapshot {
+		return sample.Snapshot{At: time.Now(), Sessions: []sample.Session{{Pane: "%1", Name: "app", Ask: ask}}}
+	}
+	s.Capture = func([]string) map[string]string {
+		return map[string]string{"%1": "Which next?\n❯ 1. a\n  2. b\n  3. Type something.\n"}
+	}
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	ctx := run(t, s)
+	for deadline := time.Now().Add(5 * time.Second); !s.asking("%1", "toolu_1"); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the service never sampled the question")
+		}
+	}
+	pick := func(id string, picks ...int) string {
+		b, _ := json.Marshal(said.Answer{ID: id, Choices: []said.Choice{{Picks: picks}}})
+		return string(b)
+	}
+	for _, a := range []proto.Act{
+		{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_0", 1)},
+		{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_1", 3)},
+		{RecID: "pick:%1", Text: pick("toolu_1", 2)},
+		{RecID: "pick:%2", Confirm: "y", Text: pick("toolu_1", 2)},
+	} {
+		if res := s.act(ctx, a); res.Err == "" {
+			t.Fatalf("%+v ran: %+v", a, res)
+		}
+	}
+	if len(ran) != 0 {
+		t.Fatalf("ran %q", ran)
+	}
+	if res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_1", 2)}); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if want := [][]string{{"tmux", "send-keys", "-t", "%1", "2"}}; fmt.Sprint(ran) != fmt.Sprint(want) {
+		t.Fatalf("ran %q, want %q", ran, want)
+	}
+}
+
+// pickTest is a service whose session in %1 asks two questions, with the
+// pane's screen in *screen and every key it ran in *ran.
+func pickTest(t *testing.T) (s *Service, ctx context.Context, screen *string, ran *[][]string, mu *sync.Mutex) {
+	t.Helper()
+	old := menuWait
+	menuWait = 200 * time.Millisecond
+	t.Cleanup(func() { menuWait = old })
+	s = newTest(t, time.Hour)
+	ask := &said.Ask{ID: "toolu_1", Questions: []said.Question{
+		{Question: "Which cache?", Options: []said.Option{{Label: "Redis"}, {Label: "Memory"}}},
+		{Question: "Which parts?", Options: []said.Option{{Label: "Sessions"}, {Label: "Tokens"}}, Multi: true},
+	}}
+	s.sample = func() sample.Snapshot {
+		return sample.Snapshot{At: time.Now(), Sessions: []sample.Session{{Pane: "%1", Name: "app", Ask: ask}}}
+	}
+	mu, ran, screen = &sync.Mutex{}, &[][]string{}, new(string)
+	*screen = pickPage1
+	s.Capture = func([]string) map[string]string {
+		mu.Lock()
+		defer mu.Unlock()
+		return map[string]string{"%1": *screen}
+	}
+	s.Actions.Run = func(argv []string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		*ran = append(*ran, argv)
+		return nil
+	}
+	ctx = run(t, s)
+	for deadline := time.Now().Add(5 * time.Second); !s.asking("%1", "toolu_1"); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the service never sampled the question")
+		}
+	}
+	return s, ctx, screen, ran, mu
+}
+
+const (
+	pickPage1  = "Which cache?\n❯ 1. Redis\n  2. Memory\n  3. Type something.\n"
+	pickPage2  = "Which parts?\n❯ 1. [ ] Sessions\n  2. [ ] Tokens\n  3. [ ] Type something\n     Next\n"
+	pickReview = "Ready to submit your answers?\n❯ 1. Submit answers\n  2. Cancel\n"
+)
+
+func twoPicks(picks ...int) string {
+	b, _ := json.Marshal(said.Answer{ID: "toolu_1", Choices: []said.Choice{{Picks: picks[:1]}, {Picks: picks[1:]}}})
+	return string(b)
+}
+
+// A person answered question 1 in the pane: the pane shows question 2, so
+// the pick sends nothing (review of #68, finding 2).
+func TestPickChecksThePaneBeforeEachPage(t *testing.T) {
+	s, ctx, screen, ran, mu := pickTest(t)
+	mu.Lock()
+	*screen = pickPage2
+	mu.Unlock()
+	res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2)})
+	if len(*ran) != 0 || len(res.Skipped) != 1 || !strings.Contains(res.Skipped[0], "does not show question 1") {
+		t.Fatalf("ran %q: %+v", *ran, res)
+	}
+}
+
+// The pane stays on question 1 after its keys (the key was lost): the pick
+// stops before question 2's keys.
+func TestPickStopsWhenThePageDoesNotMove(t *testing.T) {
+	s, ctx, _, ran, _ := pickTest(t)
+	res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2)})
+	if want := [][]string{{"tmux", "send-keys", "-t", "%1", "1"}, panes.Pause}; fmt.Sprint(*ran) != fmt.Sprint(want) {
+		t.Fatalf("ran %q, want %q", *ran, want)
+	}
+	if len(res.Skipped) != 1 || !strings.Contains(res.Skipped[0], "does not show question 2") {
+		t.Fatalf("result %+v", res)
+	}
+}
+
+// The pane moves through the pages as the keys go: every page's keys run,
+// the last one the review page's.
+func TestPickFollowsThePages(t *testing.T) {
+	s, ctx, screen, ran, mu := pickTest(t)
+	s.Actions.Run = func(argv []string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		*ran = append(*ran, argv)
+		switch k := argv[len(argv)-1]; {
+		case len(*ran) == 1 && k == "1":
+			*screen = pickPage2
+		case k == "Enter":
+			*screen = pickReview
+		}
+		return nil
+	}
+	if res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2)}); res.Err != "" || len(res.Skipped) > 0 {
+		t.Fatalf("result %+v", res)
+	}
+	if n := len(*ran); n == 0 || fmt.Sprint((*ran)[n-1]) != fmt.Sprint([]string{"tmux", "send-keys", "-t", "%1", "1"}) {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// Two consoles' picks to one pane never interleave their keys.
+func TestKeysToOnePaneNeverInterleave(t *testing.T) {
+	s, ctx, _, _, _ := pickTest(t)
+	var mu sync.Mutex
+	inside, most := 0, 0
+	s.Actions.Run = func(argv []string) error {
+		mu.Lock()
+		inside++
+		most = max(most, inside)
+		mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
+		mu.Lock()
+		inside--
+		mu.Unlock()
+		return nil
+	}
+	done := make(chan proto.Result)
+	for _, picks := range [][]int{{1, 2}, {2, 1}} {
+		go func() { done <- s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(picks...)}) }()
+	}
+	<-done
+	<-done
+	if most != 1 {
+		t.Fatalf("the keys of two picks overlapped (%d at once)", most)
+	}
+}
+
+// A ships scan in flight stops when the service does: the source gets the
+// service's context, not one of its own.
+func TestAShipsScanStopsWithTheService(t *testing.T) {
+	s := newTest(t, 10*time.Millisecond)
+	started, stopped := make(chan struct{}), make(chan struct{})
+	s.Ships = func(ctx context.Context, _ []sample.Session, _ *gitscan.Report) ships.Report {
+		close(started)
+		select {
+		case <-ctx.Done():
+			close(stopped)
+		case <-time.After(10 * time.Second):
+		}
+		return ships.Report{}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { s.Run(ctx); close(done) }()
+	<-started
+	cancel()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the scan did not see the service stop")
+	}
+	<-done
+}
+
+// TestPickTakesTheHookCall: in auto mode the transcript shows no call while
+// the menu waits; the PreToolUse hook's call is answered, and its
+// PostToolUse ends it (design 0006 §11.8, review of #68).
+func TestPickTakesTheHookCall(t *testing.T) {
+	s := newTest(t, time.Hour)
+	s.sample = func() sample.Snapshot {
+		return sample.Snapshot{At: time.Now(), Sessions: []sample.Session{{SessionID: "s1", Pane: "%1", Name: "app"}}}
+	}
+	s.Capture = func([]string) map[string]string {
+		return map[string]string{"%1": "Which next?\n❯ 1. a\n  2. b\n  3. Type something.\n"}
+	}
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	ctx := run(t, s)
+	for deadline := time.Now().Add(5 * time.Second); !s.sampledOnce(); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the service never sampled")
+		}
+	}
+	answer, _ := json.Marshal(said.Answer{ID: "toolu_1", Choices: []said.Choice{{Picks: []int{2}}}})
+	pick := proto.Act{RecID: "pick:%1", Confirm: "y", Text: string(answer)}
+	if res := s.act(ctx, pick); !strings.Contains(res.Err, "no longer asks") {
+		t.Fatalf("no call yet: %+v", res)
+	}
+	ask := &said.Ask{ID: "toolu_1", Questions: []said.Question{{Question: "Which next?", Options: []said.Option{{Label: "a"}, {Label: "b"}}}}}
+	s.Hook(hooks.Event{Name: "PreToolUse", SessionID: "s1", Pane: "%1", At: time.Now(), ToolUseID: "toolu_1", Ask: ask})
+	if res := s.act(ctx, pick); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if want := [][]string{{"tmux", "send-keys", "-t", "%1", "2"}}; fmt.Sprint(ran) != fmt.Sprint(want) {
+		t.Fatalf("ran %q, want %q", ran, want)
+	}
+	s.Hook(hooks.Event{Name: "PostToolUse", SessionID: "s1", Pane: "%1", At: time.Now(), ToolUseID: "toolu_1"})
+	if _, ok := s.askIn("%1"); ok {
+		t.Fatal("the answered call still waits")
+	}
+}
+
+func (s *Service) sampledOnce() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.have
+}
+
+func messageTest(t *testing.T) (*Service, context.Context, *[][]string) {
+	t.Helper()
+	s := newTest(t, time.Hour)
+	s.sample = func() sample.Snapshot {
+		return sample.Snapshot{At: time.Now(), Sessions: []sample.Session{
+			{PID: 9, Start: 3, Pane: "%1", Name: "app", Status: "busy", Busy: true},
+			{PID: 10, Pane: "%2", Name: "web", Status: "idle", Ask: &said.Ask{ID: "toolu_1"}},
+		}}
+	}
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	ctx := run(t, s)
+	c, _ := connect(t, ctx, s)
+	snapshot(t, c)
+	return s, ctx, &ran
+}
+
+// A message goes to a session that works: Claude Code queues it.
+func TestMessageTypesIntoABusySession(t *testing.T) {
+	s, ctx, ran := messageTest(t)
+	res := s.act(ctx, proto.Act{RecID: "message:%1", Which: "secondary", Confirm: "y", Text: "also run the e2e"})
+	if res.Err != "" || len(res.Skipped) != 0 {
+		t.Fatalf("%+v", res)
+	}
+	want := [][]string{{"tmux", "send-keys", "-t", "%1", "-l", "--", "also run the e2e"}, {"tmux", "send-keys", "-t", "%1", "Enter"}}
+	if fmt.Sprint(*ran) != fmt.Sprint(want) {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// A message never goes into a question menu as text, nor to a permission
+// prompt, nor to a pane without an agent; it is one line, after a y.
+func TestMessageRefuses(t *testing.T) {
+	s, ctx, ran := messageTest(t)
+	for _, a := range []proto.Act{
+		{RecID: "message:%2", Which: "secondary", Confirm: "y", Text: "go"},
+		{RecID: "message:%3", Which: "secondary", Confirm: "y", Text: "go"},
+		{RecID: "message:%1", Which: "secondary", Confirm: "y", Text: "two\nlines"},
+		{RecID: "message:%1", Which: "secondary", Text: "go"},
+	} {
+		if res := s.act(ctx, a); res.Err == "" && len(res.Skipped) == 0 {
+			t.Fatalf("%+v ran: %+v", a, res)
+		}
+	}
+	hook(t, ctx, s, hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "s9", Pane: "%1", At: time.Now()})
+	for deadline := time.Now().Add(5 * time.Second); ; {
+		if it, ok := s.queued("%1"); ok && it.State == queue.StatePermission {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the permission prompt never queued")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if res := s.act(ctx, proto.Act{RecID: "message:%1", Which: "secondary", Confirm: "y", Text: "go"}); res.Err == "" {
+		t.Fatalf("messaged a permission prompt: %+v", res)
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// Each step is guarded on the same agent: another pid in the pane stops it.
+func TestMessageGuardsEveryStep(t *testing.T) {
+	s, _, _ := messageTest(t)
+	a := messageAction("%1", sample.Session{PID: 9, Start: 3}, "go")
+	if len(a.Guards) != len(a.Steps) {
+		t.Fatalf("%d guards for %d steps", len(a.Guards), len(a.Steps))
+	}
+	for _, g := range a.Guards {
+		if g.MessagePane != "%1" || g.MessagePID != 9 || g.PID != 9 || g.StartTicks != 3 {
+			t.Fatalf("guard %+v", g)
+		}
+	}
+	if err := s.messageable("%1", 11); err == nil {
+		t.Fatal("a message goes to another agent in the pane")
+	}
+	if err := s.messageable("%1", 9); err != nil {
+		t.Fatal(err)
+	}
 }

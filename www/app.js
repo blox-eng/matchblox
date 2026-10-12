@@ -121,15 +121,22 @@ function onReady(fn) {
   });
 })();
 
-// The replay: frames of the real console (www/demo/frames.json, recorded
-// by TestReplay), drawn as text in the page's theme. It starts when it
-// scrolls into view. With reduced motion,
-// or without script, the still frame in the page stays.
+// The replay: frames of the real console (www/demo/frames-<size>.json,
+// recorded by TestReplay at three sizes), drawn as text in the page's
+// theme. The switch picks the device: a phone on a narrow screen, else the
+// desk; the choice is remembered. It plays when it scrolls into view. With
+// reduced motion, or without script, the desk's still frame stays.
 onReady(() => {
   const pre = document.querySelector(".stage .replay");
-  if (!pre || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const device = document.querySelector(".stage .device");
+  const picker = document.querySelector(".stage .devices");
+  if (!pre || !device || !picker || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const HOLD = 3000;
   const FLAGS = ["", "b", "u", "b u"];
+  const KEY = "matchblox-device";
+  const SIZES = ["phone", "wide", "desk"];
+  const stored = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
+  const keep = (v) => { try { localStorage.setItem(KEY, v); } catch { /* private window: this visit only */ } };
 
   const line = (spans) => {
     const out = document.createDocumentFragment();
@@ -144,28 +151,59 @@ onReady(() => {
     return out;
   };
 
-  fetch("demo/frames.json").then((r) => (r.ok ? r.json() : Promise.reject(r.status))).then((doc) => {
-    const rows = [];
+  const docs = {};
+  const load = (size) => docs[size] || (docs[size] = fetch("demo/frames-" + size + ".json")
+    .then((r) => (r.ok ? r.json() : Promise.reject(r.status))));
+
+  let timer = 0, seen = false, doc = null, rows = [];
+  const show = (k) => {
+    const f = doc.frames[k];
+    f.lines.forEach((spans, i) => { if (spans !== null && rows[i]) rows[i].replaceChildren(line(spans)); });
+    const next = k + 1 < doc.frames.length ? doc.frames[k + 1].at - f.at : HOLD;
+    timer = setTimeout(() => show((k + 1) % doc.frames.length), next);
+  };
+  // It plays from frame 0 (which has every line) each time it scrolls
+  // into view, and rests while it is out of view or the tab is hidden.
+  const run = () => { clearTimeout(timer); if (doc && seen && !document.hidden) show(0); };
+  const lay = (d) => {
+    clearTimeout(timer);
+    doc = d;
+    rows = [];
     pre.textContent = "";
-    for (let i = 0; i < doc.rows; i++) {
+    for (let i = 0; i < d.rows; i++) {
       const el = document.createElement("span");
       rows.push(el);
-      pre.append(el, i + 1 < doc.rows ? "\n" : "");
+      pre.append(el, i + 1 < d.rows ? "\n" : "");
     }
-    let timer = 0;
-    const show = (k) => {
-      const f = doc.frames[k];
-      f.lines.forEach((spans, i) => { if (spans !== null && rows[i]) rows[i].replaceChildren(line(spans)); });
-      const next = k + 1 < doc.frames.length ? doc.frames[k + 1].at - f.at : HOLD;
-      timer = setTimeout(() => show((k + 1) % doc.frames.length), next);
-    };
-    // It plays from frame 0 (which has every line) each time it scrolls
-    // into view, and rests while it is out of view or the tab is hidden.
-    let seen = false;
-    const run = () => { clearTimeout(timer); if (seen && !document.hidden) show(0); };
-    new IntersectionObserver(([e]) => { seen = e.isIntersecting; run(); }, { threshold: 0.35 }).observe(pre);
-    document.addEventListener("visibilitychange", run);
-  }).catch(() => { /* the still frame stays */ });
+    run();
+  };
+  const buttons = [...picker.querySelectorAll("[data-size]")];
+  const pick = (size, focus) => {
+    buttons.forEach((b) => {
+      const on = b.dataset.size === size;
+      b.setAttribute("aria-checked", String(on));
+      b.tabIndex = on ? 0 : -1;
+      if (on && focus) b.focus();
+    });
+    device.className = "device " + size;
+    load(size).then(lay).catch(() => { /* the still frame stays */ });
+  };
+  buttons.forEach((b, i) => {
+    b.addEventListener("click", () => { keep(b.dataset.size); pick(b.dataset.size); });
+    b.addEventListener("keydown", (e) => {
+      const n = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+      if (!n) return;
+      e.preventDefault();
+      const to = buttons[(i + n + buttons.length) % buttons.length].dataset.size;
+      keep(to);
+      pick(to, true);
+    });
+  });
+  const first = SIZES.includes(stored()) ? stored() : matchMedia("(max-width: 640px)").matches ? "phone" : "desk";
+  picker.hidden = false;
+  pick(first);
+  new IntersectionObserver(([e]) => { seen = e.isIntersecting; run(); }, { threshold: 0.2 }).observe(device);
+  document.addEventListener("visibilitychange", run);
 });
 
 // Install: a tab picks the method, Copy takes the command. If the browser
