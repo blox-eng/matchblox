@@ -195,7 +195,7 @@ func TestASecondEnterNeverAnswersTheNextQuestion(t *testing.T) {
 	if out := ansi.Strip(next.(Model).render()); strings.Contains(out, "› 1 Delete it") {
 		t.Fatalf("an option is picked on the next session:\n%s", out)
 	}
-	next, cmd = key(next, "2")
+	_, cmd = key(next, "2")
 	drain(cmd)
 	if len(f.acts()) != 2 {
 		t.Fatalf("a digit after the moment did not pick: %+v", f.acts())
