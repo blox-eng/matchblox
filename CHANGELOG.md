@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **matchblox.com shows the console on an iPhone Duo.** Folded it plays the
+  phone's one column; it unfolds sideways into the desk layout partway
+  through, and a tap folds it again. It replaces the Phone, Wide and Desk
+  switch, and the 107×60 recording that only the switch used.
+
 ## [0.6.0] - 2026-10-12
 
 ### Added

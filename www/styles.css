@@ -98,26 +98,34 @@ footer a { color: var(--muted); }
   --t-bg: #F5F1E7; --t-fg: #1C1813; --t-muted: #5F5A4C; --t-faint: #8A8170; --t-hair: #DDD5C3; --t-accent: #9A7B3F; --t-wash: #ECE3CF; --t-warn: #8A6420; --t-neg: #9E4A34;
   --t-mark-top: #EFE9DC; --t-mark-left: #CFC6AF; --t-mark-right: #DED6C3; --t-mark-tray: #C4BAA2; --t-mark-striker: #8C6A43; --t-mark-stick: #B8925B;
   --t-flame-amber: #DF8E2C; --t-flame-core: #D69A2A; --t-match-head: #B23A24; --t-match-ember: #9E5E4A; --t-match-breath-1: #BF5F4B; --t-match-breath-2: #CD8372; --t-match-breath-3: #DAA899; }
-.stage { background: var(--stage); border-radius: 8px; box-shadow: 0 0 0 1px var(--hair-strong); padding: 18px 16px; overflow: hidden; display: grid; justify-content: center; }
+.stage { background: var(--stage); border-radius: 8px; box-shadow: 0 0 0 1px var(--hair-strong); padding: 18px 16px; overflow: hidden; display: grid; justify-content: center; justify-items: center; gap: 14px; }
 @media (max-width: 640px) { .stage { padding: 10px 8px; border-radius: 6px; } }
-/* The replay fits its device: --cols columns of mono, about .6em each. */
-.replay { --cols: 132; margin: 0; color: var(--t-fg); font: 400 min(15px, calc((min(100vw, 1180px) - 82px) / (var(--cols) * .605)))/1.18 var(--mono); white-space: pre; min-width: calc(var(--cols) * 1ch); transition: color 240ms ease-out; }
-.stage { gap: 14px; justify-items: center; }
-/* The device switch: phone, an upright phone with a small font, a desk. */
-.devices { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
-.devices[hidden] { display: none; }
-.devices button { font: 500 13px/1 var(--sans); color: var(--muted); background: none; border: 1px solid var(--hair-strong); border-radius: 999px; padding: 9px 14px; min-height: 36px; cursor: pointer; }
-.devices button[aria-checked="true"] { color: var(--fg); border-color: var(--primary); }
-.devices button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-/* A phone is a rounded body with a notch, its screen the stage; the
-   upright and wide one is taller. The desk is the stage itself. */
-.device { position: relative; min-width: 0; }
-.device.phone, .device.wide { background: var(--box-left); border: 1px solid var(--box-edge); border-radius: 42px; padding: 34px 12px 26px; }
-.device.phone::before, .device.wide::before { content: ""; position: absolute; top: 13px; left: 50%; width: 86px; height: 10px; margin-left: -43px; border-radius: 6px; background: var(--tray); }
-.device.phone .replay { --cols: 44; font-size: min(13px, calc((100vw - 90px) / (44 * .605))); }
-.device.wide .replay { --cols: 107; font-size: min(9px, calc((100vw - 90px) / (107 * .605))); }
-.device.phone .replay, .device.wide .replay { border-radius: 22px; }
-@media (max-width: 640px) { .device.phone, .device.wide { border-radius: 30px; padding: 26px 8px 18px; } }
+/* The stage is an iPhone Duo. --w is one half's screen: folded the phone's
+   44 columns fill it, open the duo's 104 run across two of it, so it opens
+   to about the same height, as the Duo does. On a narrow page the open Duo
+   shrinks to fit rather than scroll. */
+.fold { --w: min(340px, calc(100vw - 92px)); --gut: 12px; --swing: 620ms cubic-bezier(.2,.7,.2,1); position: relative; perspective: 2200px; border-radius: 34px; }
+.fold.open { --w: min(340px, calc((100vw - 92px) / 2)); }
+.fold[role="button"] { cursor: pointer; }
+.fold:focus-visible { outline: 2px solid var(--primary); outline-offset: 6px; }
+.fold .body { position: relative; width: calc(var(--w) + 2 * var(--gut)); background: var(--box-left); border: 1px solid var(--box-edge); border-radius: 34px; padding: 30px var(--gut) 22px; transition: width var(--swing); }
+.fold.open .body { width: calc(2 * var(--w) + 2 * var(--gut)); }
+.fold .body::before { content: ""; position: absolute; top: 12px; left: calc(var(--w) / 2 + var(--gut) - 30px); width: 60px; height: 9px; border-radius: 6px; background: var(--tray); transition: left var(--swing); }
+.fold.open .body::before { left: calc(var(--w) * 1.5 + var(--gut) - 30px); }
+.fold .hinge { position: absolute; top: 0; bottom: 0; left: calc(var(--w) + var(--gut)); width: 2px; margin-left: -1px; background: linear-gradient(transparent, rgba(0,0,0,.35) 8%, rgba(0,0,0,.35) 92%, transparent); opacity: 0; transition: opacity 300ms 400ms; pointer-events: none; }
+.fold.open .hinge { opacity: 1; }
+/* The back half swings out from behind the hinge while it opens. */
+.fold .leaf { position: absolute; top: -1px; bottom: -1px; left: calc(var(--w) + 2 * var(--gut) - 1px); width: calc(var(--w) + var(--gut)); background: var(--box-left); border: 1px solid var(--box-edge); border-left: 0; border-radius: 0 34px 34px 0; transform-origin: 0 50%; transform: rotateY(-180deg); opacity: 0; pointer-events: none; }
+.fold.swinging .leaf { opacity: 1; transition: transform var(--swing); }
+.fold.swinging.open .leaf { transform: none; }
+.fold .glass { border-radius: 20px; overflow: hidden; background: var(--t-bg); }
+.replay { --cols: 44; margin: 0; color: var(--t-fg); font: 400 calc(var(--w) / (var(--cols) * .605))/1.18 var(--mono); white-space: pre; transition: color 240ms ease-out, opacity 180ms ease-out; }
+.fold.open .replay { --cols: 52; }
+.fold.fading .replay { opacity: 0; }
+.say { margin: 0; color: var(--muted); font-size: 14px; text-align: center; }
+@media (max-width: 640px) { .fold, .fold .body { border-radius: 26px; } .fold .leaf { border-radius: 0 26px 26px 0; } .fold .body { padding-block: 24px 16px; } }
+@media (prefers-reduced-motion: reduce) { .fold .body, .fold .body::before, .fold .hinge, .fold .leaf, .replay { transition: none; } }
+.replay .cell { display: inline-block; width: 1ch; overflow: visible; text-align: center; }
 .replay .b { font-weight: 500; } .replay .u { text-decoration: underline; text-underline-offset: .2em; }
 .fg-fg { color: var(--t-fg); } .fg-muted { color: var(--t-muted); } .fg-faint { color: var(--t-faint); } .fg-hair { color: var(--t-hair); }
 .fg-accent { color: var(--t-accent); } .fg-warn { color: var(--t-warn); } .fg-neg { color: var(--t-neg); } .fg-bg { color: var(--t-bg); }

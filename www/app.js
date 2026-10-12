@@ -122,51 +122,79 @@ function onReady(fn) {
 })();
 
 // The replay: frames of the real console (www/demo/frames-<size>.json,
-// recorded by TestReplay at three sizes), drawn as text in the page's
-// theme. The switch picks the device: a phone on a narrow screen, else the
-// desk; the choice is remembered. It plays when it scrolls into view. With
-// reduced motion, or without script, the desk's still frame stays.
+// recorded by TestReplay), drawn as text in the page's theme on an iPhone
+// Duo. Folded it plays the phone; it unfolds sideways once, partway
+// through, and open it plays the duo (the console's desk layout). A tap,
+// Enter or Space folds and unfolds it after that, and the run carries on
+// from the same moment. It plays while it is in view. With reduced motion,
+// or without script, the open Duo's still frame stays and nothing moves.
 onReady(() => {
-  const pre = document.querySelector(".stage .replay");
-  const device = document.querySelector(".stage .device");
-  const picker = document.querySelector(".stage .devices");
-  if (!pre || !device || !picker || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const fold = document.querySelector(".stage .fold");
+  const pre = fold && fold.querySelector(".replay");
+  const say = document.querySelector(".stage .say");
+  if (!pre || !say) return;
   const HOLD = 3000;
+  const SWING = 620;
+  const UNFOLDS_AT = 12; // the frame where it opens on its own, once
   const FLAGS = ["", "b", "u", "b u"];
-  const KEY = "matchblox-device";
-  const SIZES = ["phone", "wide", "desk"];
-  const stored = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
-  const keep = (v) => { try { localStorage.setItem(KEY, v); } catch { /* private window: this visit only */ } };
 
+  // Plex Mono has no blocks, shapes or dingbats (▰ ● ✦ ╿): the browser
+  // draws them from a wider fallback, and a line runs past its columns.
+  // Each such glyph gets a cell one column wide.
+  const ODD = /([\u2190-\u2BFF\u2700-\u27BF\u{1F300}-\u{1FAFF}])/u;
+  const cells = (text) => {
+    const out = document.createDocumentFragment();
+    for (const part of text.split(ODD)) {
+      if (!part) continue;
+      if (!ODD.test(part)) { out.append(part); continue; }
+      const c = document.createElement("span");
+      c.className = "cell";
+      c.textContent = part;
+      out.append(c);
+    }
+    return out;
+  };
   const line = (spans) => {
     const out = document.createDocumentFragment();
     for (const [text, fg, bg, flags] of spans || []) {
       const cls = [fg && "fg-" + fg, bg && "bg-" + bg, FLAGS[flags]].filter(Boolean).join(" ");
-      if (!cls) { out.append(text); continue; }
+      if (!cls) { out.append(cells(text)); continue; }
       const s = document.createElement("span");
       s.className = cls;
-      s.textContent = text;
+      s.append(cells(text));
       out.append(s);
     }
     return out;
   };
+  // A browser may round a cell wider than the .6em the CSS sizes for, and
+  // the line then runs past the glass: shrink the font until it fits.
+  const glass = pre.parentElement;
+  // Cells may round to whole pixels, so it looks for the largest size that
+  // fits rather than scaling once.
+  const fit = () => {
+    pre.style.fontSize = "";
+    if (pre.scrollWidth <= glass.clientWidth) return;
+    let hi = parseFloat(getComputedStyle(pre).fontSize), lo = hi * 0.8;
+    for (let i = 0; i < 8; i++) {
+      const mid = (lo + hi) / 2;
+      pre.style.fontSize = mid + "px";
+      if (pre.scrollWidth > glass.clientWidth) hi = mid; else lo = mid;
+    }
+    pre.style.fontSize = lo + "px";
+  };
+  addEventListener("resize", fit);
+  // The still frame gets its cells too, so it fits with reduced motion.
+  for (const node of [...pre.querySelectorAll("*"), pre].flatMap((el) => [...el.childNodes]).filter((n) => n.nodeType === 3 && ODD.test(n.data))) node.replaceWith(cells(node.data));
+  document.fonts.ready.then(fit);
 
   const docs = {};
   const load = (size) => docs[size] || (docs[size] = fetch("demo/frames-" + size + ".json")
     .then((r) => (r.ok ? r.json() : Promise.reject(r.status))));
 
-  let timer = 0, seen = false, doc = null, rows = [];
-  const show = (k) => {
-    const f = doc.frames[k];
-    f.lines.forEach((spans, i) => { if (spans !== null && rows[i]) rows[i].replaceChildren(line(spans)); });
-    const next = k + 1 < doc.frames.length ? doc.frames[k + 1].at - f.at : HOLD;
-    timer = setTimeout(() => show((k + 1) % doc.frames.length), next);
-  };
-  // It plays from frame 0 (which has every line) each time it scrolls
-  // into view, and rests while it is out of view or the tab is hidden.
-  const run = () => { clearTimeout(timer); if (doc && seen && !document.hidden) show(0); };
+  let timer = 0, seen = false, doc = null, rows = [], k = 0, open = true, touched = false, opened = false;
+  // A frame holds only the lines that changed, and frame 0 holds them all.
+  const draw = (f) => f.lines.forEach((spans, i) => { if (spans !== null && rows[i]) rows[i].replaceChildren(line(spans)); });
   const lay = (d) => {
-    clearTimeout(timer);
     doc = d;
     rows = [];
     pre.textContent = "";
@@ -175,35 +203,63 @@ onReady(() => {
       rows.push(el);
       pre.append(el, i + 1 < d.rows ? "\n" : "");
     }
-    run();
+    for (let j = 0; j <= k; j++) draw(d.frames[j]);
+    fit();
   };
-  const buttons = [...picker.querySelectorAll("[data-size]")];
-  const pick = (size, focus) => {
-    buttons.forEach((b) => {
-      const on = b.dataset.size === size;
-      b.setAttribute("aria-checked", String(on));
-      b.tabIndex = on ? 0 : -1;
-      if (on && focus) b.focus();
-    });
-    device.className = "device " + size;
-    load(size).then(lay).catch(() => { /* the still frame stays */ });
+  const tick = () => {
+    clearTimeout(timer);
+    if (!doc || !seen || document.hidden) return;
+    const next = k + 1 < doc.frames.length ? doc.frames[k + 1].at - doc.frames[k].at : HOLD;
+    timer = setTimeout(() => {
+      k = (k + 1) % doc.frames.length;
+      draw(doc.frames[k]);
+      if (pre.scrollWidth > glass.clientWidth) fit();
+      if (k === UNFOLDS_AT && !touched && !opened) set(true);
+      tick();
+    }, next);
   };
-  buttons.forEach((b, i) => {
-    b.addEventListener("click", () => { keep(b.dataset.size); pick(b.dataset.size); });
-    b.addEventListener("keydown", (e) => {
-      const n = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
-      if (!n) return;
-      e.preventDefault();
-      const to = buttons[(i + n + buttons.length) % buttons.length].dataset.size;
-      keep(to);
-      pick(to, true);
-    });
+  const set = (to) => {
+    open = to;
+    if (to) opened = true;
+    fold.classList.add("swinging", "fading");
+    fold.classList.toggle("open", to);
+    fold.setAttribute("aria-pressed", String(to));
+    fold.setAttribute("aria-label", to ? "Fold the phone" : "Unfold the phone");
+    say.textContent = to ? "Open: the desk, sessions, the answer and the dock at once." : "Folded: the phone, one column.";
+    const size = to ? "duo" : "phone";
+    load(size).then((d) => setTimeout(() => {
+      if (open !== to) return; // folded back while it loaded
+      lay(d);
+      fold.classList.remove("fading");
+    }, SWING / 2)).catch(() => fold.classList.remove("fading"));
+    setTimeout(() => fold.classList.remove("swinging"), SWING + 30);
+  };
+  const toggle = () => { touched = true; set(!open); };
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  fold.setAttribute("role", "button");
+  fold.tabIndex = 0;
+  fold.addEventListener("click", toggle);
+  fold.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    toggle();
   });
-  const first = SIZES.includes(stored()) ? stored() : matchMedia("(max-width: 640px)").matches ? "phone" : "desk";
-  picker.hidden = false;
-  pick(first);
-  new IntersectionObserver(([e]) => { seen = e.isIntersecting; run(); }, { threshold: 0.2 }).observe(device);
-  document.addEventListener("visibilitychange", run);
+  // The glass settles its width at the end of a swing: fit it then.
+  const body = fold.querySelector(".body");
+  body.addEventListener("transitionend", (e) => { if (e.target === body && e.propertyName === "width") fit(); });
+  // It starts folded, on the phone, from the first frame, without a swing.
+  open = false;
+  body.style.transition = "none";
+  fold.classList.remove("open");
+  requestAnimationFrame(() => requestAnimationFrame(() => { body.style.transition = ""; }));
+  fold.setAttribute("aria-pressed", "false");
+  fold.setAttribute("aria-label", "Unfold the phone");
+  say.textContent = "Folded: the phone, one column.";
+  load("phone").then((d) => { lay(d); tick(); }).catch(() => { /* the still frame stays */ });
+  load("duo").catch(() => { /* it stays folded */ });
+  new IntersectionObserver(([e]) => { seen = e.isIntersecting; tick(); }, { threshold: 0.2 }).observe(fold);
+  document.addEventListener("visibilitychange", tick);
 });
 
 // Install: a tab picks the method, Copy takes the command. If the browser
