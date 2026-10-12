@@ -65,8 +65,9 @@ type Session struct {
 	Asks     bool   `json:"asks,omitempty"`
 	// Permits: an approval menu, where Enter takes the selected choice.
 	Permits bool `json:"permits,omitempty"`
-	// Said is the newest reply with text, whole up to a bound; Ask is the
-	// question tool's call it waits on (Claude Code).
+	// Said is the current turn's newest reply with text, plain, its end
+	// kept up to a bound; Ask is the question tool's call it waits on
+	// (Claude Code).
 	Said     string    `json:"said,omitempty"`
 	Ask      *said.Ask `json:"ask,omitempty"`
 	FromPane bool      `json:"from_pane,omitempty"` // busy and idle were read from the pane

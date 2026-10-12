@@ -267,8 +267,10 @@ func (m Model) peekBox(bw, maxH int, phone bool) ([]string, []string, []span) {
 	if v.ask != nil && len(v.ask.Questions) > 1 {
 		title += st.faint.Render(fmt.Sprintf(" · %d of %d", p.q+1, len(v.ask.Questions)))
 	}
+	// Said is this turn's: a question tool call with no words before it
+	// shows only its question.
 	text := v.s.Said
-	if text == "" || v.permit {
+	if text == "" && v.ask == nil || v.permit {
 		text = m.lastWords(v.s)
 	}
 	var rest []string // what follows the message, each with its key
@@ -323,9 +325,17 @@ func (m Model) peekBox(bw, maxH int, phone bool) ([]string, []string, []span) {
 		limit = 8
 	}
 	limit = max(min(limit, maxH-2-len(rest)), 1)
-	said := wrapPlain(text, iw)
+	var said []string
+	for _, l := range strings.Split(text, "\n") {
+		said = append(said, wrapPlain(l, iw)...) // a bullet or a table row keeps its own line
+	}
 	if len(said) > limit {
-		said = append(said[:limit-1], ansi.Truncate(said[limit-1], iw-1, "")+"…")
+		// The end is kept: a question closes a reply.
+		said = said[len(said)-limit:]
+		said[0] = "…" + ansi.TruncateLeft(said[0], max(lipgloss.Width(said[0])-iw+1, 0), "")
+	}
+	if len(said) == 0 && len(rest) > 0 && rest[0] == "" {
+		rest, keys = rest[1:], keys[1:] // no words: the question opens the box
 	}
 	var foot []hint
 	switch {

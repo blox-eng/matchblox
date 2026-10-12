@@ -711,3 +711,41 @@ func TestATapOnAnOptionPicksIt(t *testing.T) {
 		t.Fatalf("peek %+v", next.(Model).peek)
 	}
 }
+
+// The peek keeps the end of a long reply, where its question is, and a
+// call with no words in its turn shows only its question (review of #68,
+// finding 7).
+func TestThePeekShowsTheEndOfWhatWasSaid(t *testing.T) {
+	st := queueState()
+	ask := &said.Ask{ID: "toolu_1", Questions: []said.Question{{Question: "Which next?", Options: []said.Option{{Label: "a"}, {Label: "b"}}}}}
+	for i := range st.Sessions {
+		if st.Sessions[i].Pane == "%2" {
+			st.Sessions[i].Said = "BEGINNING " + strings.Repeat("filler words ", 120) + "so: shall I wire the rotation now?"
+			st.Sessions[i].Ask = ask
+		}
+	}
+	m, _ := loadedWith(t, 86, st)
+	m, _ = func() (Model, tea.Cmd) { n, c := key(m, "down"); return n.(Model), c }()
+	next, _ := key(m, "a")
+	out := ansi.Strip(next.(Model).render())
+	if !strings.Contains(out, "wire the rotation now?") || strings.Contains(out, "BEGINNING") || !strings.Contains(out, "│ …") {
+		t.Fatalf("the peek cut the end of the reply:\n%s", out)
+	}
+	for i := range st.Sessions {
+		if st.Sessions[i].Pane == "%2" {
+			st.Sessions[i].Said = ""
+		}
+	}
+	m, _ = loadedWith(t, 86, st)
+	m, _ = func() (Model, tea.Cmd) { n, c := key(m, "down"); return n.(Model), c }()
+	next, _ = key(m, "a")
+	out = ansi.Strip(next.(Model).render())
+	lines := strings.Split(out, "\n")
+	for i, l := range lines {
+		if strings.Contains(l, "app-review asks") {
+			if i+1 >= len(lines) || !strings.Contains(lines[i+1], "Which next?") {
+				t.Fatalf("the question does not open the box:\n%s", out)
+			}
+		}
+	}
+}
