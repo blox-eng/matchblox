@@ -17,7 +17,7 @@
  ╿ kindle-web               asks   │   2 Rotate, keep the old one a minute                      │0k tokens · +0k in 30 min · ✻
  ╿ codex                    done   │   3 Keep the token                                         │· Max · pid 1310 · 1 process ·
  ╿ opencode                 done   │   4 Type an answer…                                        │
- WORKING · 1                       ╰─ ⏎ question 2 ─ ⇥ next (5) ─ esc ──────────────────────────╯
+ WORKING · 1                       ╰─ ⏎ question 2 ─ ‹ p  3/7  n › ─ esc ───────────────────────╯
  ✦ hearth-api               busy           79%  ▰▰▰▱▱ 60%    #4551 ●━◉┄○┄○┄○  │ a answer   ⏎ open it
                                                                               │
  1 without an agent: shell:1.1 zsh                                            │

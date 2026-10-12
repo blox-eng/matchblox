@@ -92,7 +92,7 @@ func (m Model) asksTakeOver(k string) bool {
 	case "x":
 		return m.secondary() != nil
 	case "a":
-		pane, _ := m.answerTarget()
+		pane, _ := m.peekTarget()
 		return pane != ""
 	}
 	return false
@@ -103,7 +103,7 @@ func (m Model) asksTakeOver(k string) bool {
 func (m Model) hold(k string) func(Model) (tea.Model, tea.Cmd) {
 	switch k {
 	case "a":
-		pane, _ := m.answerTarget()
+		pane, _ := m.peekTarget()
 		return func(m Model) (tea.Model, tea.Cmd) {
 			m.openPeek(pane)
 			return m, nil

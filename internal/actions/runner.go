@@ -32,6 +32,10 @@ type Runner struct {
 	// Answerable tells if the agent in a pane still waits for a typed
 	// answer (not at a permission prompt). Nil means never.
 	Answerable func(pane string) bool
+	// Messageable reads a pane for a message: nil when agent pid is still
+	// the one there and a typed line goes to it as a message. Nil means
+	// never.
+	Messageable func(pane string, pid int) error
 	// Asking tells if the agent in a pane still waits on the question
 	// tool's call id. Nil means never.
 	Asking func(pane, id string) bool
@@ -84,6 +88,14 @@ func (r Runner) guard(g advice.Guard) error {
 	}
 	if g.AnswerPane != "" && (r.Answerable == nil || !r.Answerable(g.AnswerPane)) {
 		return fmt.Errorf("the session in %s no longer waits for an answer", g.AnswerPane)
+	}
+	if g.MessagePane != "" {
+		if r.Messageable == nil {
+			return fmt.Errorf("the pane %s cannot be read", g.MessagePane)
+		}
+		if err := r.Messageable(g.MessagePane, g.MessagePID); err != nil {
+			return err
+		}
 	}
 	if g.AskPane != "" && (r.Asking == nil || !r.Asking(g.AskPane, g.AskID)) {
 		return fmt.Errorf("the session in %s no longer waits on that question", g.AskPane)

@@ -190,10 +190,14 @@ func (m Model) sessionKeys() []hint {
 		return []hint{{"⏎", "do", "enter"}, {"x", "other", "x"}, {"f", "stoker", "f"}}
 	}
 	keys := []hint{{"⏎", "open", "enter"}}
-	if s, ok := m.selectedSession(); ok && s.Age() == "stale" {
+	s, ok := m.selectedSession()
+	if ok && s.Age() == "stale" {
 		keys = append(keys, hint{"x", "end", "x"})
 	}
-	return append(keys, hint{"a", "answer", "a"}, hint{"p", "ships", "p"}, hint{"f", "stoker", "f"})
+	if ok && s.Pane != "" {
+		keys = append(keys, hint{"a", m.peekWord(s), "a"})
+	}
+	return append(keys, hint{"p", "ships", "p"}, hint{"f", "stoker", "f"})
 }
 
 func (m Model) sessionsPanel(w int) body {
@@ -323,8 +327,8 @@ func (m Model) opened(s sample.Session, w int) []string {
 		left += "  " + st.warn.Render("▲ clear")
 	}
 	keys := st.accent.Render("⏎") + st.muted.Render(" open") + " "
-	if pane, _ := m.answerTarget(); pane != "" {
-		keys = st.accent.Render("a") + st.muted.Render(" answer  ") + keys
+	if s.Pane != "" {
+		keys = st.accent.Render("a") + st.muted.Render(" "+m.peekWord(s)+"  ") + keys
 	}
 	return append(out, spread(left, keys, w))
 }
@@ -488,8 +492,8 @@ func (m Model) sessionDetail(s sample.Session, w int) []string {
 		}
 	}
 	keys := " "
-	if pane, _ := m.answerTarget(); pane != "" {
-		keys += st.accent.Render("a") + st.muted.Render(" answer   ")
+	if s.Pane != "" {
+		keys += st.accent.Render("a") + st.muted.Render(" "+m.peekWord(s)+"   ")
 	}
 	if s.Pane != "" {
 		keys += st.accent.Render("⏎") + st.muted.Render(" open it")

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -297,8 +296,8 @@ func (m Model) toDriver() Model {
 	return m
 }
 
-// shipAnswer is a on a stuck ship: the answer peek on its session, when it
-// waits.
+// shipAnswer is a on a stuck ship: the peek on its session, to answer it
+// when it waits and to message it when it does not.
 func (m Model) shipAnswer() Model {
 	sh, ok := m.selectedShip()
 	if !ok || sh.Kind != shipStuck {
@@ -308,10 +307,6 @@ func (m Model) shipAnswer() Model {
 	s, ok := m.driver(sh)
 	if !ok || s.Pane == "" {
 		m.flash = m.driverName(sh) + " no longer runs"
-		return m
-	}
-	if _, waits := m.waitOf(s); !waits {
-		m.flash = fmt.Sprintf("%s does not wait for you: ⏎ goes to it", s.Name)
 		return m
 	}
 	m.openPeek(s.Pane)

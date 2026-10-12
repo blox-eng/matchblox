@@ -16,7 +16,7 @@ import (
 // docKey turns a key as the docs write it into the name the console's key
 // handlers compare. Words match in any case.
 var docKey = map[string]string{
-	"enter": "enter", "⏎": "enter", "esc": "esc", "↑": "up", "↓": "down",
+	"enter": "enter", "⏎": "enter", "esc": "esc", "↑": "up", "↓": "down", "←": "left", "→": "right",
 	"tab": "tab", "shift+tab": "shift+tab", "space": "space", "ctrl+c": "ctrl+c",
 	"backspace": "backspace",
 }

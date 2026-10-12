@@ -117,7 +117,7 @@ func TestThePeekSendsOnEnter(t *testing.T) {
 	next, _ := key(m, "a")
 	next = typeText(next, "yes, open it")
 	out := ansi.Strip(next.(Model).render())
-	for _, want := range []string{"app-review said", "› yes, open it▏", "⏎ send", "⇥ next (1)", "esc"} {
+	for _, want := range []string{"app-review said", "› yes, open it▏", "⏎ send", "‹ p", "n ›", "esc"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("the peek lacks %q:\n%s", want, out)
 		}
@@ -746,6 +746,144 @@ func TestThePeekShowsTheEndOfWhatWasSaid(t *testing.T) {
 			if i+1 >= len(lines) || !strings.Contains(lines[i+1], "Which next?") {
 				t.Fatalf("the question does not open the box:\n%s", out)
 			}
+		}
+	}
+}
+
+// TestAMessagesASessionThatWorks: a opens the peek on a session that does
+// not wait, titled To <name>, its key line says a message, and Enter
+// sends the line as a message.
+func TestAMessagesASessionThatWorks(t *testing.T) {
+	m, f := loadedWith(t, 100, queueState())
+	sel := selectPane(t, m, "%3")
+	if l := footerOf(sel); !strings.Contains(l, "a message") {
+		t.Fatalf("the key line of a working session: %q", l)
+	}
+	next, _ := key(sel, "a")
+	if next.(Model).peek == nil {
+		t.Fatalf("a refused a working session: %q", next.(Model).flash)
+	}
+	next = typeText(next, "also run the e2e")
+	if out := screen(next); !strings.Contains(out, "To tools") || !strings.Contains(out, "› also run the e2e▏") {
+		t.Fatalf("the message peek:\n%s", out)
+	}
+	_, cmd := key(next, "enter")
+	if cmd == nil {
+		t.Fatal("enter sent nothing")
+	}
+	drain(cmd)
+	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "message:%3", Which: "secondary", Confirm: "y", Text: "also run the e2e"}) {
+		t.Fatalf("acts %+v", acts)
+	}
+}
+
+func quiet(m tea.Model) tea.Model {
+	nm := m.(Model)
+	nm.peekQuiet = time.Time{} // the moment passed
+	return nm
+}
+
+func peekPane(m tea.Model) string {
+	if p := m.(Model).peek; p != nil {
+		return p.pane
+	}
+	return ""
+}
+
+// TestNAndPMoveThePeek: n and p move along every session with a pane,
+// wrapping, while the typing line is empty; with text they are text, and
+// ← → move at any time. A move opens with nothing picked and waits.
+func TestNAndPMoveThePeek(t *testing.T) {
+	m, _ := loadedWith(t, 100, queueState())
+	var ring []string
+	for _, s := range m.snap.Sessions {
+		if s.Pane != "" {
+			ring = append(ring, s.Pane)
+		}
+	}
+	if len(ring) < 3 {
+		t.Fatalf("ring %v", ring)
+	}
+	next, _ := key(selectPane(t, m, ring[0]), "a")
+	for i := 1; i <= len(ring); i++ {
+		next, _ = key(quiet(next), "n")
+		if got, want := peekPane(next), ring[i%len(ring)]; got != want {
+			t.Fatalf("n %d: peek on %q, want %q", i, got, want)
+		}
+		if p := next.(Model).peek; p.at != -1 || !time.Now().Before(next.(Model).peekQuiet) {
+			t.Fatalf("n %d: a move picked %d or did not wait", i, p.at)
+		}
+	}
+	next, _ = key(quiet(next), "p")
+	if got := peekPane(next); got != ring[len(ring)-1] {
+		t.Fatalf("p wrapped to %q, want %q", got, ring[len(ring)-1])
+	}
+	at := peekPane(next)
+	if at == "%1" { // a permission prompt has no typing line
+		next, _ = key(quiet(next), "p")
+		at = peekPane(next)
+	}
+	next = typeText(quiet(next), "on")
+	if peekPane(next) != at || !strings.Contains(screen(next), "› on▏") {
+		t.Fatalf("n moved the peek while the line had text:\n%s", screen(next))
+	}
+	next, _ = key(quiet(next), "right")
+	if peekPane(next) == at {
+		t.Fatal("→ does not move the peek while the line has text")
+	}
+	next, _ = key(quiet(next), "left")
+	if peekPane(next) != at {
+		t.Fatal("← does not move back")
+	}
+	next, _ = key(next, "n") // within the moment: nothing
+	if peekPane(next) != at {
+		t.Fatal("a move right after a move went through")
+	}
+}
+
+// TestThePeekFooterTaps: ‹ p, n ›, ⏎ send and esc are each a tap target,
+// on a phone and on a phone held upright.
+func TestThePeekFooterTaps(t *testing.T) {
+	for _, size := range [][2]int{{44, 31}, {107, 60}} {
+		w, h := size[0], size[1]
+		m, f := loadedWith(t, w, queueState())
+		next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+		open, _ := key(selectPane(t, next, "%2"), "a")
+		open = quiet(typeText(open, "ok"))
+		tapOn := func(m tea.Model, label string) (tea.Model, tea.Cmd) {
+			t.Helper()
+			lines := strings.Split(screen(m), "\n")
+			for y, l := range lines {
+				if strings.Contains(l, "╰─") && strings.Contains(l, label) {
+					x := ansi.StringWidth(l[:strings.Index(l, label)])
+					return tap(m, x, y)
+				}
+			}
+			t.Fatalf("%dx%d: no %q in the peek's footer:\n%s", w, h, label, screen(m))
+			return nil, nil
+		}
+		if l := screen(open); !strings.Contains(l, "⏎ send ─ ‹ p") || !strings.Contains(l, "n › ─ esc") {
+			t.Fatalf("%dx%d: footer:\n%s", w, h, l)
+		}
+		moved, _ := tapOn(open, "n ›")
+		if peekPane(moved) == "%2" || peekPane(moved) == "" {
+			t.Fatalf("%dx%d: a tap on n › did not move: %q", w, h, peekPane(moved))
+		}
+		back, _ := tapOn(quiet(moved), "‹ p")
+		if peekPane(back) != "%2" {
+			t.Fatalf("%dx%d: a tap on ‹ p went to %q", w, h, peekPane(back))
+		}
+		closed, _ := tapOn(open, "esc")
+		if closed.(Model).peek != nil {
+			t.Fatalf("%dx%d: a tap on esc did not close the peek", w, h)
+		}
+		_, cmd := tapOn(open, "⏎ send")
+		if cmd == nil {
+			t.Fatalf("%dx%d: a tap on ⏎ send sent nothing", w, h)
+		}
+		drain(cmd)
+		if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "answer:%2" || acts[0].Text != "ok" {
+			t.Fatalf("%dx%d: acts %+v", w, h, acts)
 		}
 	}
 }

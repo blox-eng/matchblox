@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/said"
+	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/ships"
 )
@@ -22,6 +24,10 @@ import (
 // doneFor is how long an act that ran answers "already done" to the same
 // request: long enough for the next git scan to drop the rec.
 var doneFor = 10 * time.Minute
+
+// messageDoneFor is the same for a message to a session that does not
+// wait: only a double send, as the same words may well go again later.
+const messageDoneFor = 5 * time.Second
 
 // acts lets one act on each action run at a time and remembers which ran,
 // so two consoles that confirm the same step run it once. A second confirm
@@ -33,14 +39,14 @@ type acts struct {
 }
 
 // begin waits until no act on key runs. It reports false when key ran
-// within doneFor; otherwise the caller owns key until end.
-func (a *acts) begin(key string) bool {
+// within the last within; otherwise the caller owns key until end.
+func (a *acts) begin(key string, within time.Duration) bool {
 	for {
 		a.mu.Lock()
 		if a.inflight == nil {
 			a.inflight, a.done = map[string]chan struct{}{}, map[string]time.Time{}
 		}
-		if at, ok := a.done[key]; ok && time.Since(at) < doneFor {
+		if at, ok := a.done[key]; ok && time.Since(at) < within {
 			a.mu.Unlock()
 			return false
 		}
@@ -102,7 +108,13 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		it, _ := s.queued(pane)
 		key += "\x00" + a.Text + "\x00" + it.Since.String()
 	}
-	if !s.acts.begin(key) {
+	msgPane, message := strings.CutPrefix(a.RecID, "message:")
+	within := doneFor
+	if message {
+		key += "\x00" + a.Text
+		within = messageDoneFor
+	}
+	if !s.acts.begin(key, within) {
 		return proto.Result{Skipped: []string{"already done"}}
 	}
 	ran := false
@@ -130,6 +142,11 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		release := s.holdPane(pane)
 		res := s.Actions.Do(ctx, answerAction(pane, a.Text), a.Confirm)
 		release()
+		ran = len(res.Ran) > 0
+		return res
+	}
+	if message {
+		res := s.message(ctx, msgPane, a)
 		ran = len(res.Ran) > 0
 		return res
 	}
@@ -215,6 +232,64 @@ func (s *Service) resolve(id, which string) (advice.Action, bool) {
 func answerAction(pane, text string) advice.Action {
 	g := advice.Guard{AnswerPane: pane}
 	return advice.Action{Label: "answer", Steps: panes.Send(pane, text), Destructive: true, Guards: []advice.Guard{g, g}}
+}
+
+// message types a line and Enter into the pane of a session that does not
+// wait: Claude Code queues a message typed while it works. It never goes
+// into the question tool's menu as text, nor to a permission prompt, where
+// Enter approves; and the pane must still hold the same agent.
+func (s *Service) message(ctx context.Context, pane string, a proto.Act) proto.Result {
+	if err := panes.CheckAnswer(a.Text); err != nil {
+		return proto.Result{Err: strings.Replace(err.Error(), "the answer", "the message", 1)}
+	}
+	x, ok := s.sessionAt(pane)
+	if !ok {
+		return proto.Result{Err: "no agent session in " + pane + " any more"}
+	}
+	if err := s.messageable(pane, x.PID); err != nil {
+		return proto.Result{Err: err.Error()}
+	}
+	release := s.holdPane(pane)
+	defer release()
+	return s.Actions.Do(ctx, messageAction(pane, x, a.Text), a.Confirm)
+}
+
+// messageAction types one line and Enter, each step guarded: the same
+// agent is still in the pane, and it asks nothing a line would answer.
+func messageAction(pane string, x sample.Session, text string) advice.Action {
+	g := advice.Guard{MessagePane: pane, MessagePID: x.PID, PID: x.PID, StartTicks: x.Start}
+	return advice.Action{Label: "message", Steps: panes.Send(pane, text), Destructive: true, Guards: []advice.Guard{g, g}}
+}
+
+// sessionAt is the agent session in a pane, as last sampled.
+func (s *Service) sessionAt(pane string) (sample.Session, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, x := range s.cur.Sessions {
+		if x.Pane == pane && pane != "" {
+			return x, true
+		}
+	}
+	return sample.Session{}, false
+}
+
+// messageable is the guard of a message, checked right before each step:
+// nil when the agent pid is still the one in pane and it neither asks
+// with the question tool nor waits at a permission prompt.
+func (s *Service) messageable(pane string, pid int) error {
+	x, ok := s.sessionAt(pane)
+	switch {
+	case !ok:
+		return fmt.Errorf("no agent session in %s any more", pane)
+	case x.PID != pid:
+		return fmt.Errorf("another agent runs in %s now", pane)
+	case x.Ask != nil:
+		return fmt.Errorf("%s asks a question now: open it again to pick", x.Name)
+	}
+	if it, ok := s.queued(pane); ok && it.State == queue.StatePermission {
+		return errors.New("a permission prompt is answered in its pane: Enter goes there")
+	}
+	return nil
 }
 
 // pick answers the question tool's call a session waits on, with the

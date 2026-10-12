@@ -108,8 +108,10 @@ waits is already selected.
 
 ### The answer peek
 
-`a` on an agent that waits opens a panel over the dimmed screen: on a
-phone along the bottom, wider a box in the middle.
+`a` on an agent opens a panel over the dimmed screen: on a phone along the
+bottom, wider a box in the middle. On an agent that waits it answers; on
+any other it sends a message, titled `To <name>`, which Claude Code queues
+while it works.
 
 ```
 ╭─ flint-auth asks · 1 of 2 ─────────────────────────────────╮
@@ -122,7 +124,7 @@ phone along the bottom, wider a box in the middle.
 │   2 Rotate, keep the old one a minute                      │
 │   3 Keep the token                                         │
 │   4 Type an answer…                                        │
-╰─ ⏎ question 2 ─ ⇥ next (5) ─ esc ──────────────────────────╯
+╰─ ⏎ question 2 ─ ‹ p  3/7  n › ─ esc ───────────────────────╯
 ```
 
 It shows what the agent said in this turn, its end up to nine lines (a
@@ -141,8 +143,9 @@ is sent. The header says `sending to flint-auth…`, then `sent to
 flint-auth`; an answer that did not go says `not sent to flint-auth` and
 why on the key line. The peek moves to the next agent that waits, or
 closes. There no option is picked, and for a moment it takes no key, so a
-second `Enter` never answers a question you have not read. `Tab` skips
-one, `Esc` closes. A permission prompt is answered in its
+second `Enter` never answers a question you have not read. `n` and `p`
+move the peek to the next and the previous agent (while the typing line
+is empty; `→` and `←` at any time), `Esc` closes. A permission prompt is answered in its
 pane: its peek shows the prompt, and `Enter` goes there.
 
 - Context use is read from the agent's own files, or shows "not measured".

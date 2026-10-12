@@ -84,9 +84,9 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if pane, _ := m.answerTarget(); pane != "" {
-		// A session that waits opens in place with its keys; a tap on it
-		// once it is selected opens the answer peek.
+	if pane, _ := m.peekTarget(); pane != "" {
+		// A session opens in place with its keys; a tap on it once it is
+		// selected opens the peek, to answer it or to message it.
 		m.armed, m.flash = "", ""
 		if !picked {
 			return m, nil // the default selection is not a tap

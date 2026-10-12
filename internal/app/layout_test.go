@@ -155,28 +155,21 @@ func TestTapSelectsThenActs(t *testing.T) {
 		var ran []string
 		m.opt.Run = func(argv []string) error { ran = argv; return nil }
 
-		// The first tap selects and shows what a second tap runs.
-		y := sessLine(t, m, "tools")
-		next, cmd := tap(m, 5, y)
-		if cmd != nil || ran != nil {
-			t.Fatalf("width %d: the first tap ran something", w)
+		// A session that does not wait: the first tap selects it, a tap on
+		// it selected opens the peek to message it. Nothing runs.
+		next, cmd := tap(m, 5, sessLine(t, m, "tools"))
+		if cmd != nil || ran != nil || next.(Model).peek != nil {
+			t.Fatalf("width %d: the first tap acted", w)
 		}
-		got := next.(Model)
-		if it, _ := got.selectedSession(); it.Pane != "%3" {
+		if it, _ := next.(Model).selectedSession(); it.Pane != "%3" {
 			t.Fatalf("width %d: selected %q, want %%3", w, it.Pane)
 		}
-		if !strings.Contains(ansi.Strip(got.render()), "tmux switch-client -t %3") {
-			t.Fatalf("width %d: the step is not shown before it runs:\n%s", w, ansi.Strip(got.render()))
-		}
-
-		// The second tap on the same row runs the safe action.
 		next, cmd = tap(next, 5, sessLine(t, next, "tools"))
-		if cmd == nil {
-			t.Fatalf("width %d: the second tap ran nothing", w)
+		if p := next.(Model).peek; p == nil || p.pane != "%3" || cmd != nil || ran != nil {
+			t.Fatalf("width %d: the second tap did not open the peek on tools: %+v", w, p)
 		}
-		next.Update(cmd())
-		if strings.Join(ran, " ") != "tmux switch-client -t %3" {
-			t.Fatalf("width %d: ran %v", w, ran)
+		if !strings.Contains(screen(next), "To tools") {
+			t.Fatalf("width %d: the peek is not titled To tools:\n%s", w, screen(next))
 		}
 		if len(f.acts()) != 0 {
 			t.Fatalf("width %d: a tap sent %v to the service", w, f.acts())
@@ -345,13 +338,11 @@ func TestFirstTapOnTheSelectedRowOnlyShows(t *testing.T) {
 	}
 	y = sessLine(t, m, "tools")
 	next, _ = tap(m, 5, y)
-	if !strings.Contains(next.(Model).flash, "tap again: tmux switch-client -t %3") {
-		t.Fatalf("flash %q", next.(Model).flash)
+	if next.(Model).peek != nil || next.(Model).flash != "" {
+		t.Fatalf("one tap on another row acted: flash %q", next.(Model).flash)
 	}
-	next, _ = key(next, "down")
-	next, _ = key(next, "up")
-	if _, cmd = tap(next, 5, sessLine(t, next, "tools")); cmd != nil {
-		t.Fatal("a tap after a key ran the step")
+	if next, _ = tap(next, 5, sessLine(t, next, "tools")); next.(Model).peek == nil {
+		t.Fatal("a tap on a selected session that does not wait does not open the peek")
 	}
 }
 
@@ -383,14 +374,13 @@ func TestTheKeyLineIsAtTheBottom(t *testing.T) {
 		if l := last(m); !strings.Contains(l, "⏎ open") || !strings.Contains(l, "a answer") || !strings.Contains(l, "p ships") {
 			t.Fatalf("width %d: the keys are not at the bottom: %q", w, l)
 		}
+		if l := last(selectPane(t, m, "%3")); !strings.Contains(l, "a message") {
+			t.Fatalf("width %d: the keys are not at the bottom: %q", w, l)
+		}
 		if strings.Contains(ansi.Strip(strings.Split(m.render(), "\n")[2]), "open") {
 			t.Fatalf("width %d: keys under the tabs", w)
 		}
-		next, _ := tap(m, 5, sessLine(t, m, "tools"))
-		if !strings.Contains(last(next), "tap again: tmux switch-client -t %3") {
-			t.Fatalf("width %d: the tap step is not at the bottom: %q", w, last(next))
-		}
-		next, _ = key(next, "enter")
+		next, _ := key(selectPane(t, m, "%3"), "enter")
 		if !strings.Contains(last(next), "RUN tmux switch-client -t %3") {
 			t.Fatalf("width %d: the confirm is not at the bottom: %q", w, last(next))
 		}

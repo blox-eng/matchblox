@@ -26,6 +26,6 @@
 │   2 Rotate, keep the old one a minute    │
 │   3 Keep the token                       │
 │   4 Type an answer…                      │
-╰─ ⏎ question 2 ─ ⇥ next (5) ─ esc ────────╯
+╰─ ⏎ question 2 ─ ‹ p  3/7  n › ─ esc ─────╯
 ────────────────────────────────────────────
  ⏎ open  a answer  p ships  f stoker

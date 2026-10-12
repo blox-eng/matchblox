@@ -12,7 +12,7 @@ the keys of the open tab, and a tap on one presses it.
 | `↓` or `j` | Selects the row below. |
 | `Enter` | Shows the safe action of the row: go to the agent's pane (Sessions, Machine, Panes), open a shell in the worktree (Git), do a recommendation, show a setup step, or fold the stoker's steps (STOKED). On Ships, selects the session that drives the ship in Sessions. |
 | `x` | Shows the other action of the row: the second action of a recommendation, close a setup step or end a stale session (Sessions), kill a detached busy loop (Machine), remove the marked worktrees (Git), merge a ship that waits for your merge (Ships). |
-| `a` | Opens the answer peek on the selected agent that waits: what it said, and your answer. On Ships, opens it on the session of a stuck ship. |
+| `a` | Opens the peek on the selected agent: what it said, and your answer to an agent that waits or a message to any other (Claude Code queues a message typed while it works). The key line says `a answer` or `a message`. On Ships, opens it on the session of a stuck ship. |
 | `1-6` | Opens a tab: Sessions, Ships, Machine, Git, History, Panes. |
 | `p` | Opens Ships. |
 | `Tab` or `Shift+Tab` | Opens the next or the previous tab. |
@@ -54,7 +54,8 @@ text on the typing line.
 | A digit | Picks an option: the question goes on at once. With several choices, ticks it. The digit after the options opens the typing line. |
 | `↑` or `↓` | Moves between the options and the typing line. |
 | `Space` | Ticks the option under the cursor, when the question takes several. |
-| `Tab` | Skips to the next agent that waits. |
+| `n` or `p` | Moves the peek to the next or the previous agent, in the order of Sessions (who waits first), wrapping. Only while the typing line is empty or an option has the cursor: otherwise they are text. |
+| `→` or `←` | Moves the peek too, at any time. `Tab` and `Shift+Tab` do the same. |
 | `Backspace` | Deletes the last character. |
 | `Esc` | Closes the peek. Nothing is sent. |
 | `Ctrl+C` | Quits the console. |
@@ -80,11 +81,11 @@ text on the typing line.
 
 ## A phone
 
-A tap selects a row. A tap on an agent that waits, once it is selected,
-opens the answer peek; a tap on an option of the peek picks it, a tap on
-a key of its foot presses it, and a tap outside it closes it. On any
-other row the key line says `tap again: <command>`, and a second tap on
-the same row goes to the agent's pane. On Ships, a tap on the selected ship
+A tap selects a row. A tap on an agent, once it is selected, opens the
+peek; a tap on an option of the peek picks it, a tap on a key of its foot
+(`⏎ send`, `‹ p`, `n ›`, `esc`) presses it, and a tap outside it closes
+it. On any other row the key line says `tap again: <command>`, and a
+second tap on the same row runs it. On Ships, a tap on the selected ship
 selects its session in Sessions. Any other action (a
 recommendation, a setup step, a destructive step) then shows `RUN` and
 waits for `Enter` or a typed `y`, as from the keys. A tap on a tab opens

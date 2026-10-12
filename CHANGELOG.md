@@ -14,8 +14,11 @@ All notable changes to matchblox are in this file. The format follows
   keys. A phone held upright keeps this layout whatever its font size, and
   its keyboard does not change it. On a wider screen held sideways, from
   60 columns, the selected session's detail sits beside the list.
-- **Answer from a peek.** `a`, or a tap on a selected session that waits,
-  opens a panel with what the agent said last and your answer. When Claude
+- **Answer or message from a peek.** `a`, or a tap on a selected session,
+  opens a panel with what the agent said last and your answer; a session
+  that works gets your line as a message, which Claude Code queues. `n`
+  and `p` (or `→` and `←`, or a tap on `n ›` and `‹ p`) move the peek to
+  the next or previous session. When Claude
   Code asks with its question tool, its options are there, numbered: a digit
   or a tap picks one, several questions come one at a time, and a question
   of several choices ticks with `Space`. `Enter` sends, and the peek moves

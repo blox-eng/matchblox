@@ -42,11 +42,13 @@ The console then selects the next agent that waits.
 
 ## Answer without leaving the console
 
-Tap an agent that waits, then tap it again: the answer peek rises from the
-bottom, over the dimmed list, with what the agent said last. Tap an option,
-or type a line and press `Enter`; it goes to that agent's pane at once,
-and the peek moves to the next agent that waits. `Tab` skips one, `Esc` or a
-tap outside the peek closes it. See [the answer
+Tap an agent, then tap it again: the peek rises from the bottom, over the
+dimmed list, with what the agent said last. Tap an option, or type a line
+and press `Enter`; it goes to that agent's pane at once. An agent that
+works gets it as a message, which Claude Code queues. After an answer the
+peek moves to the next agent that waits. `n ›` and `‹ p` (a tap, or the
+letter while the line is empty) move it along the list, `Esc` or a tap
+outside the peek closes it. See [the answer
 peek](console.md#the-answer-peek).
 
 ## The phone layout

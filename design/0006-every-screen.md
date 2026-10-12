@@ -128,19 +128,22 @@ subagent count, the background shells, and the keys.
 ### 5.3 Moving
 
 `↑↓`/`jk` move the selection; Termius turns a vertical swipe into them. A
-tap on a row selects it; a tap on the selected row does its primary action
-(answer a session that waits, else open it). The list scrolls so the whole
+tap on a row selects it; a tap on the selected session opens the peek
+(§6), to answer it or to message it. The list scrolls so the whole
 opened row is on the screen.
 
 ## 6. The answer peek
 
-`a` on a session opens a panel over the list, everything around it dimmed:
+`a` on any session with a pane opens a panel over the list, everything
+around it dimmed (owner 2026-10-12: message any session, not only one that
+waits; Claude Code queues a message typed while it works):
 
-- **Phone:** full width, anchored to the bottom, above the key line (see
-  §11.1).
+- **Phone:** full width up to 72 columns (centred past that), anchored to
+  the bottom, above the key line (see §11.1).
 - **Opened phone and desk:** a centered box, 62 columns at most.
 
-Inside, under a title `Billed asks` (or `Billed said` when no question):
+Inside, under a title `Billed asks` (`Billed said` when it waits with no
+question, `To Billed` when it does not wait):
 
 1. Claude's last message, wrapped (from the transcript's last assistant
    text, as `said` reads it; 8 lines on a phone, 9 elsewhere, the rest cut
@@ -150,7 +153,8 @@ Inside, under a title `Billed asks` (or `Billed said` when no question):
    picks and sends. The last option is always `Type an answer…`.
 3. A typing line `› ▏` when there are no options or the typing option is
    picked.
-4. The footer: `⏎ send ─ ⇥ next (N) ─ esc`.
+4. The footer: `⏎ send ─ ‹ p  3/7  n › ─ esc` (the place in the list when
+   it fits). Each part is a tap target.
 
 `⏎` sends: a typed line goes into the pane as today's answer does; an
 option is sent the way the question tool takes it in the pane (the builder
@@ -158,8 +162,14 @@ reads how it renders; it must never type text into a menu). The peek is the
 review: what you see is what is sent, to the pane named in the title, so no
 second confirm (today's `⏎ review` step goes, §11.2).
 After a send the toast says `sent to <name>` and the peek moves to the next
-session that waits, or closes when none does. `⇥` skips to the next one.
-`esc` closes. A permission prompt (said.Permits) is not answered here: its
+session that waits, or closes when none does. `n` and `p` move the peek to
+the next and previous session in the Sessions order (who waits first),
+wrapping, while the typing line is empty or an option has the cursor;
+`→`/`←` (and `⇥`/Shift+Tab) at any time. Each move opens with nothing
+picked and takes no key for 400 ms. `esc` closes. A message to a session
+that does not wait has the answer's guards: the same agent is still in the
+pane, it does not ask with the question tool (its options path stays) and
+is not at a permission prompt; a failed guard sends nothing and says why. A permission prompt (said.Permits) is not answered here: its
 peek shows the prompt and `⏎ open` to answer it in its pane.
 
 ## 7. The dock: usage and the machine

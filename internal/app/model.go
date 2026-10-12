@@ -697,7 +697,7 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		if m.tab == tabShips {
 			return m.shipAnswer(), nil
 		}
-		if pane, why := m.answerTarget(); pane != "" {
+		if pane, why := m.peekTarget(); pane != "" {
 			m.openPeek(pane)
 		} else {
 			m.flash = why

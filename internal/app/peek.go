@@ -19,11 +19,11 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// The answer peek is a panel over the dimmed screen: what a session said
-// last and the answer to it (design/0006 §6). It is the review: what it
+// The peek is a panel over the dimmed screen: what a session said last and
+// the answer or message to it (design/0006 §6). It is the review: what it
 // shows goes to the pane named in its title on ⏎, with no second confirm.
 
-// peek is the open answer peek.
+// peek is the open peek.
 type peek struct {
 	pane string
 	// The question tool's call: the question on screen, the row under the
@@ -66,17 +66,27 @@ func (m Model) peekNow() (peekView, peek, bool) {
 	return v, p, true
 }
 
-// answerTarget is the pane `a` opens the peek on: a session that waits.
-// Why says why there is none.
-func (m Model) answerTarget() (pane, why string) {
+// peekTarget is the pane `a` opens the peek on: the selected session,
+// whatever it does, when it has a pane to type into. Why says why there is
+// none.
+func (m Model) peekTarget() (pane, why string) {
 	s, ok := m.selectedSession()
-	if !ok || s.Pane == "" {
+	switch {
+	case !ok:
 		return "", ""
+	case s.Pane == "":
+		return "", s.Name + " runs outside tmux: there is no pane to type into"
 	}
-	if _, ok := m.waitOf(s); ok {
-		return s.Pane, ""
+	return s.Pane, ""
+}
+
+// peekWord is the key line's word for `a` on a session: answer one that
+// waits, message any other.
+func (m Model) peekWord(s sample.Session) string {
+	if _, waits := m.waitOf(s); waits {
+		return "answer"
 	}
-	return "", "the session in " + s.Pane + " does not wait for you"
+	return "message"
 }
 
 func (m *Model) openPeek(pane string) {
@@ -90,14 +100,26 @@ func (m *Model) openPeek(pane string) {
 }
 
 // peekQueue is every other session that waits, in the list's order after
-// the one in pane: the ones ⇥ and a send go to.
+// the one in pane: the ones a send goes to.
 func (m Model) peekQueue(pane string) []sample.Session {
+	var out []sample.Session
+	for _, s := range m.peekRing(pane) {
+		if s.Pane != pane && m.groupOf(s) == groupWaits {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// peekRing is every session with a pane, in the list's order (who waits
+// first), starting after the one in pane and ending on it: the ring n and
+// p move along.
+func (m Model) peekRing(pane string) []sample.Session {
 	ss := m.snap.Sessions
 	at := slices.IndexFunc(ss, func(s sample.Session) bool { return s.Pane == pane })
 	var out []sample.Session
 	for k := 1; k <= len(ss); k++ {
-		s := ss[(at+k+len(ss))%len(ss)]
-		if s.Pane != "" && s.Pane != pane && m.groupOf(s) == groupWaits {
+		if s := ss[(at+k+len(ss))%len(ss)]; s.Pane != "" {
 			out = append(out, s)
 		}
 	}
@@ -110,13 +132,48 @@ func (m Model) peekQueue(pane string) []sample.Session {
 const peekQuiet = 400 * time.Millisecond
 
 // peekNext moves the peek to the next session that waits, or closes it.
-// Nothing is picked on the next one, and keys wait a moment.
 func (m Model) peekNext(pane string) Model {
 	m.peek = nil
 	if next := m.peekQueue(pane); len(next) > 0 {
-		m.openPeek(next[0].Pane)
-		m.peek.at, m.peekQuiet = -1, time.Now().Add(peekQuiet)
+		m = m.peekTo(next[0].Pane)
 	}
+	return m
+}
+
+// peekMove moves the peek along the ring, by one either way, wrapping.
+func (m Model) peekMove(pane string, back bool) Model {
+	ring := m.peekRing(pane)
+	if len(ring) < 2 {
+		return m
+	}
+	to := ring[0]
+	if back {
+		to = ring[len(ring)-2]
+	}
+	return m.peekTo(to.Pane)
+}
+
+// peekCount is where the peek is among the n sessions it moves along:
+// "3/9", in the list's order.
+func (m Model) peekCount(pane string, n int) string {
+	at := 0
+	for _, s := range m.snap.Sessions {
+		if s.Pane == "" {
+			continue
+		}
+		at++
+		if s.Pane == pane {
+			break
+		}
+	}
+	return fmt.Sprintf("%d/%d", at, n)
+}
+
+// peekTo opens the peek on another session: nothing is picked, and keys
+// wait a moment.
+func (m Model) peekTo(pane string) Model {
+	m.openPeek(pane)
+	m.peek.at, m.peekQuiet = -1, time.Now().Add(peekQuiet)
 	return m
 }
 
@@ -146,8 +203,10 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key == "ctrl+c":
 		m.quitting = true
 		return m, tea.Quit
-	case key == "tab":
-		return m.peekNext(p.pane), nil
+	case key == "right" || key == "tab" || key == "n" && (!typing || p.text == ""):
+		return m.peekMove(p.pane, false), nil
+	case key == "left" || key == "shift+tab" || key == "p" && (!typing || p.text == ""):
+		return m.peekMove(p.pane, true), nil
 	case v.permit:
 		if key == "enter" {
 			m.peek = nil
@@ -160,7 +219,11 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if strings.TrimSpace(p.text) == "" {
 			return m, nil
 		}
-		return m.sendPeek(v.s, "answer:"+p.pane, p.text)
+		rec := "message:"
+		if _, waits := m.waitOf(v.s); waits {
+			rec = "answer:"
+		}
+		return m.sendPeek(v.s, rec+p.pane, p.text)
 	case key == "enter":
 		c := said.Choice{}
 		if q.Multi {
@@ -260,9 +323,13 @@ func (m Model) peekBox(bw, maxH int, phone bool) ([]string, []string, []span) {
 	st := m.st
 	v, p, _ := m.peekNow()
 	iw := bw - 4
-	title := st.accent.Bold(true).Render(v.s.Name) + st.muted.Render(" said")
-	if it, _ := m.waitOf(v.s); v.ask != nil || v.permit || it.State == queue.StateQuestion {
+	it, waits := m.waitOf(v.s)
+	title := st.muted.Render("To ") + st.accent.Bold(true).Render(v.s.Name)
+	switch {
+	case v.ask != nil || v.permit || waits && it.State == queue.StateQuestion:
 		title = st.accent.Bold(true).Render(v.s.Name) + st.muted.Render(" asks")
+	case waits:
+		title = st.accent.Bold(true).Render(v.s.Name) + st.muted.Render(" said")
 	}
 	if v.ask != nil && len(v.ask.Questions) > 1 {
 		title += st.faint.Render(fmt.Sprintf(" · %d of %d", p.q+1, len(v.ask.Questions)))
@@ -337,22 +404,42 @@ func (m Model) peekBox(bw, maxH int, phone bool) ([]string, []string, []span) {
 	if len(said) == 0 && len(rest) > 0 && rest[0] == "" {
 		rest, keys = rest[1:], keys[1:] // no words: the question opens the box
 	}
-	var foot []hint
+	// The footer: each part a tap target (press "" none), " ─ " between
+	// them, two spaces inside the move group.
+	type part struct{ text, press, sep string }
+	var foot []part
+	key := func(k, label, press string) part {
+		t := st.accent.Render(k)
+		if label != "" {
+			t += st.muted.Render(" " + label)
+		}
+		return part{t, press, " ─ "}
+	}
 	switch {
 	case v.permit:
-		foot = append(foot, hint{"⏎", "open", "enter"})
+		foot = append(foot, key("⏎", "open", "enter"))
 	case v.ask != nil && p.q+1 < len(v.ask.Questions):
-		foot = append(foot, hint{"⏎", "question " + strconv.Itoa(p.q+2), "enter"})
+		foot = append(foot, key("⏎", "question "+strconv.Itoa(p.q+2), "enter"))
 	default:
-		foot = append(foot, hint{"⏎", "send", "enter"})
+		foot = append(foot, key("⏎", "send", "enter"))
 	}
 	if v.ask != nil && v.ask.Questions[p.q].Multi && !typing {
-		foot = append(foot, hint{"␣", "tick", "space"})
+		foot = append(foot, key("␣", "tick", "space"))
 	}
-	if n := len(m.peekQueue(p.pane)); n > 0 {
-		foot = append(foot, hint{"⇥", fmt.Sprintf("next (%d)", n), "tab"})
+	if ring := m.peekRing(p.pane); len(ring) > 1 {
+		foot = append(foot, part{st.muted.Render("‹ ") + st.accent.Render("p"), "left", " ─ "})
+		count := part{st.faint.Render(m.peekCount(p.pane, len(ring))), "", "  "}
+		next := part{st.accent.Render("n") + st.muted.Render(" ›"), "right", "  "}
+		width := 3 + 3 + 3 // the corners, the space and esc
+		for _, f := range append(foot, count, next) {
+			width += lipgloss.Width(f.sep + f.text)
+		}
+		if width <= bw {
+			foot = append(foot, count)
+		}
+		foot = append(foot, next)
 	}
-	foot = append(foot, hint{"esc", "", "esc"})
+	foot = append(foot, key("esc", "", "esc"))
 
 	hair := st.hair
 	top := hair.Render("╭─ ") + title + " "
@@ -374,18 +461,16 @@ func (m Model) peekBox(bw, maxH int, phone bool) ([]string, []string, []span) {
 	}
 	line, x := hair.Render("╰─ "), 3
 	var spans []span
-	for i, h := range foot {
+	for i, f := range foot {
 		if i > 0 {
-			line += hair.Render(" ─ ")
-			x += 3
+			line += hair.Render(f.sep)
+			x += lipgloss.Width(f.sep)
 		}
-		part := st.accent.Render(h.key)
-		if h.label != "" {
-			part += st.muted.Render(" " + h.label)
+		if f.press != "" {
+			spans = append(spans, span{x, x + lipgloss.Width(f.text), f.press})
 		}
-		spans = append(spans, span{x, x + lipgloss.Width(part), h.press})
-		line += part
-		x += lipgloss.Width(part)
+		line += f.text
+		x += lipgloss.Width(f.text)
 	}
 	line += " "
 	out = append(out, ansi.Truncate(line, bw-1, "")+hair.Render(strings.Repeat("─", max(bw-1-lipgloss.Width(line), 0))+"╯"))
@@ -459,6 +544,10 @@ func keyPress(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "tab":
 		return tea.KeyPressMsg{Code: tea.KeyTab}
+	case "left":
+		return tea.KeyPressMsg{Code: tea.KeyLeft}
+	case "right":
+		return tea.KeyPressMsg{Code: tea.KeyRight}
 	case "esc":
 		return tea.KeyPressMsg{Code: tea.KeyEsc}
 	case "space":

@@ -246,13 +246,15 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   that waits for your merge shows `RUN gh pr merge <n> --<method> -R
   <repo>` and runs it after a typed `y`; `a` on a stuck ship opens the
   answer peek on its session.
-- **Answer peek** (design/0006 §6, owner 2026-10-12): `a` on a session
-  that waits, or a tap on the selected one, opens a panel over the screen,
-  everything else redrawn in `faint`. On a phone it is full width, its
-  foot on the line above the key line's hairline; from 60 columns it is a
+- **Peek** (design/0006 §6, owner 2026-10-12): `a` on any session with a
+  pane, or a tap on the selected one, opens a panel over the screen,
+  everything else redrawn in `faint`: an answer to a session that waits, a
+  message to any other. On a phone it is full width up to 72 columns
+  (centred past that), its foot on the line above the key line's hairline; from 60 columns it is a
   box in the middle, 62 columns at most. A rounded `hair` frame; the title
-  in it, `<name> asks` (the question tool, a question, a permission) or
-  `<name> said`, in the accent and `muted`, with `· 1 of 2` in `faint` for
+  in it, `<name> asks` (the question tool, a question, a permission),
+  `<name> said` (it waits) or `To <name>` (it does not), in the accent and
+  `muted`, with `· 1 of 2` in `faint` for
   several questions. Inside: the last message whole up to 8 lines on a
   phone and 9 wider, its end kept and a leading `…`, light Markdown as
   plain text; then the question tool's question in
@@ -260,7 +262,10 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   wash, `[✔]` ticks for several choices), the last always `Type an
   answer…`; then, when typing, a `├─┤` rule and `› <text>▏`. The foot is
   the keys: `⏎ send` (`⏎ question 2` before the last question, `⏎ open` at
-  a permission prompt) `─ ␣ tick ─ ⇥ next (N) ─ esc`. `⏎` sends with no
+  a permission prompt) `─ ␣ tick ─ ‹ p  3/7  n › ─ esc`, each a tap
+  target, the place in the list when it fits. `n`/`p` move the peek along
+  Sessions (who waits first, wrapping) while the typing line is empty or an
+  option has the cursor, `→`/`←` (and `⇥`/Shift+Tab) at any time. `⏎` sends with no
   second confirm (the peek is the review); options go to Claude Code's
   menu as its keys (digits, `Down`, `Enter`, `1` on the review page),
   never as typed text. After a send the toast says `sending to <name>…`,
@@ -269,7 +274,8 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   picked and no key taken for 400 ms, or closes.
 - **Key line** (owner, 2026-10-12, reversing 2026-10-08): the last line,
   under a hairline. The keys of the open tab and the selected row, each a
-  tap target (`⏎ open  a answer  p ships  f stoker`); a desk adds `↑↓
+  tap target (`⏎ open  a answer  p ships  f stoker`, `a message` on a
+  session that does not wait); a desk adds `↑↓
   move`, `/ find` and `q quit`, and "sampled N ago" on the right. It is
   also where the person acts: a tap shows `tap again: <command>`, a pending
   action shows `RUN <command>` and its confirm, `/` the search, and the

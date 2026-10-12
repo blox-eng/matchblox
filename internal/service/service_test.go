@@ -1074,3 +1074,85 @@ func (s *Service) sampledOnce() bool {
 	defer s.mu.Unlock()
 	return s.have
 }
+
+func messageTest(t *testing.T) (*Service, context.Context, *[][]string) {
+	t.Helper()
+	s := newTest(t, time.Hour)
+	s.sample = func() sample.Snapshot {
+		return sample.Snapshot{At: time.Now(), Sessions: []sample.Session{
+			{PID: 9, Start: 3, Pane: "%1", Name: "app", Status: "busy", Busy: true},
+			{PID: 10, Pane: "%2", Name: "web", Status: "idle", Ask: &said.Ask{ID: "toolu_1"}},
+		}}
+	}
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	ctx := run(t, s)
+	c, _ := connect(t, ctx, s)
+	snapshot(t, c)
+	return s, ctx, &ran
+}
+
+// A message goes to a session that works: Claude Code queues it.
+func TestMessageTypesIntoABusySession(t *testing.T) {
+	s, ctx, ran := messageTest(t)
+	res := s.act(ctx, proto.Act{RecID: "message:%1", Which: "secondary", Confirm: "y", Text: "also run the e2e"})
+	if res.Err != "" || len(res.Skipped) != 0 {
+		t.Fatalf("%+v", res)
+	}
+	want := [][]string{{"tmux", "send-keys", "-t", "%1", "-l", "--", "also run the e2e"}, {"tmux", "send-keys", "-t", "%1", "Enter"}}
+	if fmt.Sprint(*ran) != fmt.Sprint(want) {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// A message never goes into a question menu as text, nor to a permission
+// prompt, nor to a pane without an agent; it is one line, after a y.
+func TestMessageRefuses(t *testing.T) {
+	s, ctx, ran := messageTest(t)
+	for _, a := range []proto.Act{
+		{RecID: "message:%2", Which: "secondary", Confirm: "y", Text: "go"},
+		{RecID: "message:%3", Which: "secondary", Confirm: "y", Text: "go"},
+		{RecID: "message:%1", Which: "secondary", Confirm: "y", Text: "two\nlines"},
+		{RecID: "message:%1", Which: "secondary", Text: "go"},
+	} {
+		if res := s.act(ctx, a); res.Err == "" && len(res.Skipped) == 0 {
+			t.Fatalf("%+v ran: %+v", a, res)
+		}
+	}
+	hook(t, ctx, s, hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "s9", Pane: "%1", At: time.Now()})
+	for deadline := time.Now().Add(5 * time.Second); ; {
+		if it, ok := s.queued("%1"); ok && it.State == queue.StatePermission {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the permission prompt never queued")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if res := s.act(ctx, proto.Act{RecID: "message:%1", Which: "secondary", Confirm: "y", Text: "go"}); res.Err == "" {
+		t.Fatalf("messaged a permission prompt: %+v", res)
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// Each step is guarded on the same agent: another pid in the pane stops it.
+func TestMessageGuardsEveryStep(t *testing.T) {
+	s, _, _ := messageTest(t)
+	a := messageAction("%1", sample.Session{PID: 9, Start: 3}, "go")
+	if len(a.Guards) != len(a.Steps) {
+		t.Fatalf("%d guards for %d steps", len(a.Guards), len(a.Steps))
+	}
+	for _, g := range a.Guards {
+		if g.MessagePane != "%1" || g.MessagePID != 9 || g.PID != 9 || g.StartTicks != 3 {
+			t.Fatalf("guard %+v", g)
+		}
+	}
+	if err := s.messageable("%1", 11); err == nil {
+		t.Fatal("a message goes to another agent in the pane")
+	}
+	if err := s.messageable("%1", 9); err != nil {
+		t.Fatal(err)
+	}
+}

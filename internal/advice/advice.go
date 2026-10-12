@@ -43,6 +43,10 @@ type Guard struct {
 	IdlePane   string `json:"idle_pane,omitempty"`   // the agent in this pane is still idle
 	RestPane   string `json:"rest_pane,omitempty"`   // no turn runs here: idle, or only its subagents work
 	AnswerPane string `json:"answer_pane,omitempty"` // the agent here still waits, and not at a permission prompt
+	// MessagePane: agent MessagePID is still the one here, and it neither
+	// asks with the question tool nor waits at a permission prompt.
+	MessagePane string `json:"message_pane,omitempty"`
+	MessagePID  int    `json:"message_pid,omitempty"`
 	// AskPane: the agent here still waits on the question tool's call AskID.
 	AskPane string `json:"ask_pane,omitempty"`
 	AskID   string `json:"ask_id,omitempty"`
