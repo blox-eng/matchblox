@@ -298,7 +298,7 @@ func TestTheNewsLineNeedsAHeadline(t *testing.T) {
 // the code marks go, the words stay.
 func TestTheNewsLineTakesTheWholeHeadline(t *testing.T) {
 	for changelog, want := range map[string]string{
-		"## [0.6.0] - 2026-10-13\n\n- **A night that\n  wraps.** More.\n":             "v0.6.0 · A night that wraps<",
+		"## [0.6.0] - 2026-10-13\n\n- **A night that\n  wraps.** More.\n":               "v0.6.0 · A night that wraps<",
 		"## [0.6.0] - 2026-10-13\n\n- **Run `matchblox setup` once.** More **bold**.\n": "v0.6.0 · Run matchblox setup once<",
 	} {
 		page := file(t, site)
