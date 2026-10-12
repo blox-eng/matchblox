@@ -36,7 +36,7 @@ func screensState(t *testing.T) proto.State {
 	cfg := config.Default()
 	s := &sample.Sampler{
 		Cfg: cfg, Agents: []string{"claude", "codex", "opencode"},
-		FS: procfs.FS{Root: filepath.Join(demo, "proc")}, Sys: procfs.Sys{Root: filepath.Join(demo, "sys")},
+		FS: procfs.FS{Root: filepath.Join(demo, "proc"), PageSize: procfs.FixturePage}, Sys: procfs.Sys{Root: filepath.Join(demo, "sys")},
 		Home: filepath.Join(demo, "home"), HomeAs: "/home/user",
 		Tmux:      func() ([]byte, error) { return os.ReadFile(filepath.Join(demo, "tmux-panes.txt")) },
 		Capture:   sample.CaptureDir(filepath.Join(demo, "panes")),

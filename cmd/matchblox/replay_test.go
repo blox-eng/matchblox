@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -232,13 +233,15 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 }
 
 var (
-	burning = regexp.MustCompile(`[✦✧] flint-auth\s+busy`)
-	settled = regexp.MustCompile(`╿ hearth-api\s+done`)
-	struck  = regexp.MustCompile(`[✦✧] flint-auth`) // its row under the peek: the strike has played
-	figure  = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
-	sparks  = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
-	spaces  = regexp.MustCompile(`\s+`)
-	cutWord = regexp.MustCompile(`\S*…`)
+	burning    = regexp.MustCompile(`[✦✧] flint-auth\s+busy`)
+	settled    = regexp.MustCompile(`╿ hearth-api\s+done`)
+	hearthBack = regexp.MustCompile(`hearth-api\s+\d+k → 9k`)
+	sparkBack  = regexp.MustCompile(`spark-docs\s+\d+k → 9k`)
+	struck     = regexp.MustCompile(`[✦✧] flint-auth`) // its row under the peek: the strike has played
+	figure     = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
+	sparks     = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
+	spaces     = regexp.MustCompile(`\s+`)
+	cutWord    = regexp.MustCompile(`\S*…`)
 )
 
 // skeleton is a screen without what changes from run to run: figures,
@@ -361,14 +364,15 @@ func replayAt(t *testing.T, z replaySize) {
 	cfg.Agents = []string{"claude", "codex", "opencode"}
 	smp := newSampler(cfg, root)
 	// Codex and OpenCode work: their spinners turn on each read of the pane.
-	panes, turn := smp.Capture, 0
+	// The sampler and the guards of the service read panes at once.
+	panes, turn := smp.Capture, atomic.Int64{}
 	smp.Capture = func(ids []string) map[string]string {
 		out := panes(ids)
 		spin := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
-		turn++
+		n := int(turn.Add(1))
 		for _, p := range []string{"%6", "%7"} {
 			if text, ok := out[p]; ok {
-				out[p] = strings.Replace(text, "⠙", string(spin[turn%len(spin)]), 1)
+				out[p] = strings.Replace(text, "⠙", string(spin[n%len(spin)]), 1)
 			}
 		}
 		return out
@@ -505,7 +509,11 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "back to the sessions", at: 14 * time.Second, key: "1", ok: has("WAITS FOR YOU")},
 		// h folds the recommendations to one line: the dock has room again.
 		{name: "recommendations folded", at: 15 * time.Second, key: "h", ok: has("hidden · h shows", "USAGE")},
-		{name: "a night", at: 16500 * time.Millisecond, do: func() { clk.Set(night) }, key: "n", ok: has("night", "STOKER", "c the whole run")},
+		{name: "a night", at: 16500 * time.Millisecond, do: func() { clk.Set(night) }, key: "n", ok: func(s string) bool {
+			// spark-docs is past the line: the stoker compacts it at once,
+			// and the frame waits until the compact was read back.
+			return has("night", "STOKER", "c the whole run")(s) && sparkBack.MatchString(s)
+		}},
 		{name: "take over?", at: 18500 * time.Millisecond, key: "enter", ok: has("Take over?")},
 		{name: "kept on", at: 20500 * time.Millisecond, key: "n", ok: func(s string) bool {
 			return strings.Contains(s, "night") && !strings.Contains(s, "Take over?") && strings.Contains(s, "RUN tmux switch-client -t %")
@@ -523,7 +531,7 @@ func replayAt(t *testing.T, z replaySize) {
 			// until the flame has died down (outFor of the demo clock, one
 			// sample), so every run draws the same match. The step shows in
 			// the dock's stoker panel.
-			return has("STOKER", "176k → 9k")(s) && settled.MatchString(s)
+			return has("STOKER")(s) && hearthBack.MatchString(s) && settled.MatchString(s)
 		}},
 		{name: "the morning", at: 26 * time.Second, do: func() { clk.Set(morning) }, ok: has("STOKER", "ready ")},
 		// c opens the whole card: in the right pane, on a phone the Machine tab.
@@ -601,9 +609,17 @@ func replayAt(t *testing.T, z replaySize) {
 	want := [][]string{
 		{"tmux", "send-keys", "-t", "%2", "2"}, // the second option, into Claude Code's menu
 	}
-	if len(ran) != len(want)+2 || !reflect.DeepEqual(ran[:len(want)], want) || ran[len(want)][0] != "tmux" ||
-		!strings.HasPrefix(ran[len(want)][6], "/compact ") || !reflect.DeepEqual(ran[len(want)+1], []string{"tmux", "send-keys", "-t", "%1", "Enter"}) {
-		t.Fatalf("the service ran %q, want %q and then the stoker's compact of %%1", ran, want)
+	// Then the stoker's night: spark-docs is past the line when it starts,
+	// hearth-api when its turn ends. Each compact is typed, then its Enter.
+	compacts := []string{"%3", "%1"}
+	if len(ran) != len(want)+2*len(compacts) || !reflect.DeepEqual(ran[:len(want)], want) {
+		t.Fatalf("the service ran %q, want %q and then the stoker's compacts of %v", ran, want, compacts)
+	}
+	for i, pane := range compacts {
+		typed, enter := ran[len(want)+2*i], ran[len(want)+2*i+1]
+		if len(typed) != 7 || typed[3] != pane || !strings.HasPrefix(typed[6], "/compact ") || !reflect.DeepEqual(enter, []string{"tmux", "send-keys", "-t", pane, "Enter"}) {
+			t.Fatalf("the stoker's compact %d ran %q, %q; want %s", i, typed, enter, pane)
+		}
 	}
 
 	framesPath, svgPath := "../../www/demo/frames-"+z.name+".json", "../../www/demo/replay-"+z.name+".svg"

@@ -555,7 +555,7 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 		},
 	}
 	if root != "" {
-		smp.FS = procfs.FS{Root: filepath.Join(root, "proc")}
+		smp.FS = procfs.FS{Root: filepath.Join(root, "proc"), PageSize: procfs.FixturePage}
 		smp.Sys = procfs.Sys{Root: filepath.Join(root, "sys")}
 		smp.Home = filepath.Join(root, "home")
 		smp.HomeAs = "/home/user" // the HOME of every fixture process

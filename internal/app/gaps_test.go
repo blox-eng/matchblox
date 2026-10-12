@@ -34,7 +34,7 @@ func TestNoBlankRowsWhileThereIsMore(t *testing.T) {
 				} else {
 					run = 0
 				}
-				if run >= 3 && !(sc.full && sc.paneFull) {
+				if run >= 3 && (!sc.full || !sc.paneFull) {
 					t.Fatalf("%dx%d %s: three blank rows from line %d while the dock (all %v) or the pane (all %v) has more:\n%s",
 						w, h, tabNames[tab], i-2, sc.full, sc.paneFull, ansi.Strip(strings.Join(sc.lines, "\n")))
 				}
