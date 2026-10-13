@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html"
 	"image/color"
 	"net"
 	"os"
@@ -36,21 +37,22 @@ import (
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
-var update = flag.Bool("update", false, "TestReplay: write www/demo/frames-<size>.json, www/demo/replay-<size>.svg and the desk's still frame in www/index.html")
+var update = flag.Bool("update", false, "TestReplay: write www/demo/frames-<size>.json, www/demo/replay-<size>.svg and the open Duo's still frame in www/index.html")
 
 const (
 	demoPID     = 4242
 	stepTimeout = 20 * time.Second
 )
 
-// replaySize is a screen the replay is recorded on: the site's device
-// switch plays each one.
+// replaySize is a screen the replay is recorded on. The site's foldable
+// plays the phone folded and the duo open (landscape, the Wide layout);
+// the README shows the desk and the phone.
 type replaySize struct {
 	name       string
 	cols, rows int
 }
 
-var replaySizes = []replaySize{{"desk", 132, 32}, {"wide", 107, 60}, {"phone", 44, 31}}
+var replaySizes = []replaySize{{"desk", 132, 32}, {"duo", 104, 38}, {"phone", 44, 31}}
 
 // demoBase is the demo machine's clock at the start of the replay.
 var demoBase = time.Date(2026, 10, 1, 22, 50, 0, 0, time.UTC)
@@ -250,6 +252,28 @@ var (
 // tabs or layout still shows.
 var spinner = regexp.MustCompile(`[\x{2800}-\x{28FF}]`)
 
+// stillSize is the recording whose still frame stands in www/index.html,
+// for no script and reduced motion: the open Duo.
+const stillSize = "duo"
+
+var tag = regexp.MustCompile(`<[^>]*>`)
+
+// stillLines is the text of the still frame's HTML, a line per row.
+func stillLines(b []byte) []string {
+	return strings.Split(strings.Trim(html.UnescapeString(tag.ReplaceAllString(string(b), "")), "\n"), "\n")
+}
+
+// frameLines is the text of a frame, a line per row.
+func frameLines(f replay.Frame) []string {
+	out := make([]string, len(f.Lines))
+	for i, l := range f.Lines {
+		for _, s := range l {
+			out[i] += s.Text
+		}
+	}
+	return out
+}
+
 func skeleton(lines []string) string {
 	var b strings.Builder
 	for i, l := range lines {
@@ -341,7 +365,7 @@ func keyMsg(k string) tea.KeyPressMsg {
 }
 
 // TestReplay records the console on the demo machine at each of the
-// site's sizes: a phone, a phone upright with a small font, a desk.
+// site's sizes: a phone, an iPhone Duo opened horizontally, a desk.
 func TestReplay(t *testing.T) {
 	for _, z := range replaySizes {
 		t.Run(z.name, func(t *testing.T) { replayAt(t, z) })
@@ -670,10 +694,18 @@ func replayAt(t *testing.T, z replaySize) {
 					framesPath, names[k], skeleton(was[k]), skeleton(now[k]))
 			}
 		}
+		if z.name == stillSize {
+			if was, now := skeleton(stillLines(page[i+len(open):j])), skeleton(frameLines(still)); was != now {
+				t.Fatalf("the still frame in %s is not the %s's: run go test ./cmd/matchblox -run TestReplay -update\nwas:\n%s\nnow:\n%s", index, z.name, was, now)
+			}
+		}
 		return
 	}
-	out := map[string][]byte{framesPath: js, svgPath: svg}
-	if z.name == "desk" { // the page's still frame, for no script and reduced motion
+	out := map[string][]byte{framesPath: js}
+	if z.name != stillSize { // the README shows the desk and the phone
+		out[svgPath] = svg
+	}
+	if z.name == stillSize { // the page's still frame, for no script and reduced motion
 		out[index] = append(append(append([]byte{}, page[:i+len(open)]...), "\n"+replay.Still(still)+"\n"...), page[j:]...)
 	}
 	for path, b := range out {

@@ -383,5 +383,6 @@ has `a`: the answer peek on its session.
 ## 12. Later
 
 - The landing page shows this mock with its device switch, playing a short
-  scripted run until a visitor touches it.
+  scripted run until a visitor touches it. Shipped by #71 as an iPhone Duo
+  that unfolds from the phone to the desk layout (DESIGN.md §8).
 - Starting a session from the console (#10).
