@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-13
+
 ### Changed
 
 - **matchblox.com shows the console on an iPhone Duo.** Folded it plays the
@@ -208,7 +210,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/blox-eng/matchblox/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/blox-eng/matchblox/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/blox-eng/matchblox/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/blox-eng/matchblox/compare/v0.4.0...v0.5.0
