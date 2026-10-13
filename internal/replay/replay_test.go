@@ -99,6 +99,20 @@ func TestStillEscapesAndUsesTokenClasses(t *testing.T) {
 	}
 }
 
+// Plex Mono has no blocks, shapes or dingbats: the browser draws them from
+// a wider font, so each gets a cell one column wide, or the line runs past
+// its columns. Text between them stays one run.
+func TestStillGivesGlyphsPlexLacksACell(t *testing.T) {
+	out := Still(Frame{Lines: [][]Span{{{Text: "cpu ▰▰ 43% ✦ ok", FG: "fg"}}}})
+	want := `<span class="fg-fg">cpu <span class="cell">▰</span><span class="cell">▰</span> 43% <span class="cell">✦</span> ok</span>`
+	if !strings.Contains(out, want) {
+		t.Fatalf("still %s\nwant %s", out, want)
+	}
+	if plain := Still(Frame{Lines: [][]Span{{{Text: "─ │ ok"}}}}); !strings.Contains(plain, `<span class="cell">─</span> <span class="cell">│</span> ok`) {
+		t.Fatalf("an unstyled run needs its cells too: %s", plain)
+	}
+}
+
 // The README shows the SVG edge to edge: the last column and the first need
 // a margin, or a glyph that reaches the edge is cut.
 func TestSVGHasMargin(t *testing.T) {

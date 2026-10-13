@@ -211,7 +211,7 @@ func Still(f Frame) string {
 			b.WriteByte('\n')
 		}
 		for _, s := range l {
-			t := html.EscapeString(s.Text)
+			t := cells(s.Text)
 			if c := classes(s); c != "" {
 				fmt.Fprintf(&b, `<span class="%s">%s</span>`, c, t)
 			} else {
@@ -220,5 +220,26 @@ func Still(f Frame) string {
 		}
 	}
 	b.WriteString(`</pre>`)
+	return b.String()
+}
+
+// odd is a glyph Plex Mono lacks: arrows, box drawing, blocks, shapes,
+// dingbats and emoji. The browser draws it from a wider fallback font.
+func odd(r rune) bool { return r >= 0x2190 && r <= 0x2BFF || r >= 0x1F300 && r <= 0x1FAFF }
+
+// cells escapes text and puts each odd glyph in a cell one column wide
+// (www/styles.css .cell), so a line keeps its columns. app.js does the same
+// for the frames it draws.
+func cells(text string) string {
+	var b strings.Builder
+	for _, r := range text {
+		if odd(r) {
+			b.WriteString(`<span class="cell">`)
+			b.WriteRune(r)
+			b.WriteString(`</span>`)
+			continue
+		}
+		b.WriteString(html.EscapeString(string(r)))
+	}
 	return b.String()
 }
