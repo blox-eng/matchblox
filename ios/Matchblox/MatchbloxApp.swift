@@ -31,6 +31,7 @@ struct MatchbloxApp: App {
                     ConsoleView(
                         host: host,
                         onFailure: { go(.reach(host, $0)) },
+                        onHosts: store.all().count > 1 ? { go(.hosts) } : nil,
                         onScanAgain: { go(.scan) }
                     )
                 case .hosts:
