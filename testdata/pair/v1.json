@@ -34,7 +34,9 @@
   "replies": {
     "ok": "{\"ok\":true,\"host\":\"ws-1\"}",
     "bad name": "{\"ok\":false,\"error\":\"bad name\"}",
-    "bad key": "{\"ok\":false,\"error\":\"bad key\"}"
+    "bad key": "{\"ok\":false,\"error\":\"bad key\"}",
+    "code used": "{\"ok\":false,\"error\":\"code used\"}",
+    "write failed": "{\"ok\":false,\"error\":\"write failed\"}"
   },
   "p256_openssh": "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFNcqPRX8M69Sf5wSAjjnCSQ7eAlW+J0FHl38LZZ/uI1dOc+R0B75EtirPaf7OBcEUynTj95ks6kamKOuSCb+mA=",
   "p256_x963_hex": "04535ca8f457f0cebd49fe704808e39c2490ede0255be274147977f0b659fee23574e73e47407be44b62acf69fece05c114ca74e3f7992cea46a628eb9209bfa60"

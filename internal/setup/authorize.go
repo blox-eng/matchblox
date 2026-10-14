@@ -33,6 +33,14 @@ func Authorize(home, exe, pubKey string) (backup string, err error) {
 // putKeyLine adds line to ~/.ssh/authorized_keys, after a backup, in place
 // of the lines of the same key. Every other line keeps its bytes.
 func putKeyLine(home, body, line string) (backup string, err error) {
+	err = withKeysLock(home, func() error {
+		backup, err = putKeyLineLocked(home, body, line)
+		return err
+	})
+	return backup, err
+}
+
+func putKeyLineLocked(home, body, line string) (backup string, err error) {
 	dir := filepath.Join(home, ".ssh")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err

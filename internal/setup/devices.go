@@ -101,6 +101,14 @@ func Devices(home string) ([]Device, error) {
 // RemoveDevice takes out the line of one phone, by its name or, when
 // names repeat, by its fingerprint.
 func RemoveDevice(home, name string) (backup string, err error) {
+	err = withKeysLock(home, func() error {
+		backup, err = removeDeviceLocked(home, name)
+		return err
+	})
+	return backup, err
+}
+
+func removeDeviceLocked(home, name string) (backup string, err error) {
 	target, old, mode, err := read(authorizedKeys(home))
 	if err != nil {
 		return "", err
@@ -153,15 +161,11 @@ func AddPairKey(home, exe, pubKey, id string, until time.Time) error {
 
 var pairLine = regexp.MustCompile(`^restrict,expiry-time="\d{12}Z",command="'[^"']*' gate pair ([0-9a-f]{12})" `)
 
-func pairLines(home, id string) (lines []string, hits []int, err error) {
+func pairLines(old []byte, id string) (lines []string, hits []int, err error) {
 	if !pairID.MatchString(id) {
 		return nil, nil, errors.New("the pairing id is 12 lowercase hex characters: " + id)
 	}
-	_, b, _, err := read(authorizedKeys(home))
-	if err != nil {
-		return nil, nil, err
-	}
-	lines = strings.Split(string(b), "\n")
+	lines = strings.Split(string(old), "\n")
 	for i, line := range lines {
 		if m := pairLine.FindStringSubmatch(line); m != nil && m[1] == id {
 			hits = append(hits, i)
@@ -172,26 +176,37 @@ func pairLines(home, id string) (lines []string, hits []int, err error) {
 
 // PairKeyPresent is whether the line of the one-time key is still there.
 func PairKeyPresent(home, id string) (bool, error) {
-	_, hits, err := pairLines(home, id)
-	return len(hits) > 0, err
-}
-
-// RemovePairKey takes out the line of the one-time key. Every other line
-// keeps its bytes.
-func RemovePairKey(home, id string) (removed bool, err error) {
-	lines, hits, err := pairLines(home, id)
-	if err != nil || len(hits) == 0 {
-		return false, err
-	}
-	target, _, mode, err := read(authorizedKeys(home))
+	_, old, _, err := read(authorizedKeys(home))
 	if err != nil {
 		return false, err
 	}
-	var kept []string
-	for i, line := range lines {
-		if !slices.Contains(hits, i) {
-			kept = append(kept, line)
+	_, hits, err := pairLines(old, id)
+	return len(hits) > 0, err
+}
+
+// RemovePairKey takes out the line of the one-time key; removed is true for
+// the one caller that took it. Every other line keeps its bytes.
+func RemovePairKey(home, id string) (removed bool, err error) {
+	err = withKeysLock(home, func() error {
+		target, old, mode, err := read(authorizedKeys(home))
+		if err != nil {
+			return err
 		}
-	}
-	return true, replace(target, []byte(strings.Join(kept, "\n")), mode)
+		lines, hits, err := pairLines(old, id)
+		if err != nil || len(hits) == 0 {
+			return err
+		}
+		var kept []string
+		for i, line := range lines {
+			if !slices.Contains(hits, i) {
+				kept = append(kept, line)
+			}
+		}
+		if err := replace(target, []byte(strings.Join(kept, "\n")), mode); err != nil {
+			return err
+		}
+		removed = true
+		return nil
+	})
+	return removed, err
 }

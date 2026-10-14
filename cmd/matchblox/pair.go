@@ -74,13 +74,18 @@ func pairMain(home, exe string, in io.Reader, out io.Writer, id string) error {
 	if !remote.ValidDeviceKey(req.Key) {
 		return refuse("bad key")
 	}
-	if _, err := setup.AuthorizeDevice(home, exe, req.Key, req.Name); err != nil {
-		_ = refuse(err.Error())
-		return err
+	// Claim the code before the phone is added: it works once.
+	removed, err := setup.RemovePairKey(home, id)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "matchblox gate pair:", err)
+		return refuse("write failed")
 	}
-	if _, err := setup.RemovePairKey(home, id); err != nil {
-		_ = refuse(err.Error())
-		return err
+	if !removed {
+		return refuse("code used")
+	}
+	if _, err := setup.AuthorizeDevice(home, exe, req.Key, req.Name); err != nil {
+		fmt.Fprintln(os.Stderr, "matchblox gate pair:", err)
+		return refuse("write failed")
 	}
 	return reply(pair.Reply{OK: true, Host: hostLabel()})
 }
@@ -152,6 +157,7 @@ func pairCmd(ctx context.Context, args []string, out io.Writer, now func() time.
 		case <-tick.C:
 			present, err := setup.PairKeyPresent(env.home, id)
 			if err != nil {
+				_, _ = setup.RemovePairKey(env.home, id)
 				return err
 			}
 			if present {

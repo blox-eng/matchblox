@@ -114,7 +114,9 @@ func run(args []string) error {
 		case "authorize":
 			return authorize(args[1:])
 		case "pair":
-			return pairCmd(context.Background(), args[1:], os.Stdout, time.Now)
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			return pairCmd(ctx, args[1:], os.Stdout, time.Now)
 		case "connect":
 			return liveConnect(args[1:])
 		}

@@ -174,16 +174,17 @@ func TestPairCmdPairedWhenTheLineGoes(t *testing.T) {
 	f := loadPairFixture(t)
 	home := t.TempDir()
 	hostKey := filepath.Join(t.TempDir(), "host.pub")
-	_ = os.WriteFile(hostKey, []byte(f.HostKeyPub+"\n"), 0o644)
+	if err := os.WriteFile(hostKey, []byte(f.HostKeyPub+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	old := pairSettings
 	pairSettings = pairEnv{home: home, exe: testExe, hostKeyPath: hostKey, poll: time.Millisecond, limit: 5 * time.Minute}
 	t.Cleanup(func() { pairSettings = old })
+	deadline := time.Now().Add(10 * time.Second)
 	go func() { // the phone's gate pair removes the line
-		for {
+		for time.Now().Before(deadline) {
 			b, _ := os.ReadFile(filepath.Join(home, ".ssh", "authorized_keys"))
 			if strings.Contains(string(b), "gate pair") {
-				lines := strings.Fields(string(b))
-				_ = lines
 				id := string(b[strings.Index(string(b), "gate pair ")+len("gate pair "):][:12])
 				_, _ = setup.RemovePairKey(home, id)
 				return
@@ -197,5 +198,38 @@ func TestPairCmdPairedWhenTheLineGoes(t *testing.T) {
 	}
 	if !strings.HasSuffix(out.String(), "Paired. matchblox devices lists it.\n") {
 		t.Fatalf("output:\n%s", out.String())
+	}
+}
+
+func TestPairMainWorksOnce(t *testing.T) {
+	f := loadPairFixture(t)
+	useHostLabel(t, "ws-1")
+	home, id := homeWithPairKey(t)
+	for i, want := range []string{f.Replies["ok"], f.Replies["code used"]} {
+		var out bytes.Buffer
+		if err := pairMain(home, testExe, strings.NewReader(f.RequestLine), &out, id); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.TrimSpace(out.String()); got != want {
+			t.Fatalf("call %d: reply = %s, want %s", i, got, want)
+		}
+	}
+	if devs, _ := setup.Devices(home); len(devs) != 1 {
+		t.Fatalf("Devices = %+v", devs)
+	}
+}
+
+func TestPairMainWithoutALineAddsNothing(t *testing.T) {
+	f := loadPairFixture(t)
+	home := t.TempDir()
+	var out bytes.Buffer
+	if err := pairMain(home, testExe, strings.NewReader(f.RequestLine), &out, "0123456789ab"); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(out.String()); got != f.Replies["code used"] {
+		t.Fatalf("reply = %s", got)
+	}
+	if devs, _ := setup.Devices(home); len(devs) != 0 {
+		t.Fatalf("Devices = %+v", devs)
 	}
 }
