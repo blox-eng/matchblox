@@ -15,6 +15,12 @@ func HomeArgv(inTmux, haveTmux bool, self []string) []string {
 	return append([]string{"tmux", "new-session", "-A", "-s", Home, "-e", HomeEnv + "=1"}, self...)
 }
 
+// SizeArgv makes the home window take the size of the device used last, so a
+// phone that rotates, or a laptop that attaches, resizes the shared console.
+func SizeArgv() []string {
+	return []string{"tmux", "set-option", "-w", "-t", "=" + Home + ":", "window-size", "latest"}
+}
+
 // HomeEnv is set in the home session: the console there is the session's
 // only command, so on an error it waits for the person to read it.
 const HomeEnv = "MATCHBLOX_HOME"

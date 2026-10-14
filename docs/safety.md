@@ -25,6 +25,9 @@ command.
   `~/.tmux.conf`) shows the exact change first and keeps a backup.
 - A remote host's stream uses its own key. That key can start only the
   stream, with a strict host key check and nothing forwarded.
+- A phone key can go to every agent pane, so it has your power. The Secure
+  Enclave and Face ID protect it. Remove a lost phone with
+  `matchblox devices rm`.
 
 To report a security problem, see
 [SECURITY.md](https://github.com/blox-eng/matchblox/blob/main/SECURITY.md).

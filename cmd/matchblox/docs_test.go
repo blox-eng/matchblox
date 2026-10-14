@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"slices"
 	"strings"
@@ -23,6 +24,8 @@ var docHosts = []string{"ws-1", "<host>"}
 var commandFlags = map[string][]string{
 	"console": {"config", "interval", "fixtures", "no-motion"},
 	"<host>":  {"config", "interval", "no-motion"},
+	"devices": {},
+	"pair":    {"address", "port", "name"},
 	"serve":   {"config", "interval", "fixtures", "stdio"},
 	"status":  {"config", "interval", "fixtures", "text"},
 }
@@ -30,7 +33,6 @@ var commandFlags = map[string][]string{
 // checkCommand returns the command a docs line shows ("console", "<host>"
 // or a command name) and what is wrong with it.
 func checkCommand(line string) (cmd string, problems []string) {
-	fl, _ := newFlags()
 	args := strings.Fields(line)[1:]
 	cmd = "console"
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
@@ -46,6 +48,13 @@ func checkCommand(line string) (cmd string, problems []string) {
 	}
 	if slices.Contains(internalCommands, cmd) {
 		return cmd, nil
+	}
+	fl, _ := newFlags()
+	if cmd == "pair" { // pair parses its own flags
+		fl = flag.NewFlagSet("pair", flag.ContinueOnError)
+		for _, n := range commandFlags["pair"] {
+			fl.String(n, "", "")
+		}
 	}
 	for _, a := range args {
 		if !strings.HasPrefix(a, "-") {
@@ -64,15 +73,19 @@ func checkCommand(line string) (cmd string, problems []string) {
 
 func TestCheckCommandRefusesAFlagItsCommandIgnores(t *testing.T) {
 	for line, bad := range map[string]bool{
-		"matchblox setup --stdio":         true,
-		"matchblox connect ws-1 --text":   true,
-		"matchblox status -bogus":         true,
-		"matchblox stat_us":               true,
-		"matchblox status --text":         false,
-		"matchblox --config <file>":       false,
-		"matchblox ws-1":                  false,
-		"matchblox serve -stdio":          false,
-		"matchblox hook PreToolUse --any": false,
+		"matchblox setup --stdio":          true,
+		"matchblox connect ws-1 --text":    true,
+		"matchblox status -bogus":          true,
+		"matchblox stat_us":                true,
+		"matchblox status --text":          false,
+		"matchblox --config <file>":        false,
+		"matchblox ws-1":                   false,
+		"matchblox serve -stdio":           false,
+		"matchblox hook PreToolUse --any":  false,
+		"matchblox pair --name x --port 2": false,
+		"matchblox pair --text":            true,
+		"matchblox devices --name x":       true,
+		"matchblox devices rm iPad":        false,
 	} {
 		if _, p := checkCommand(line); (len(p) > 0) != bad {
 			t.Errorf("%q: problems %v, want bad=%v", line, p, bad)
