@@ -6,6 +6,7 @@ import VisionKit
 struct ScanView: View {
     let problem: String?
     let onCode: (URL) -> Void
+    let onCancel: (() -> Void)?
 
     private enum Camera {
         case checking, ready, unsupported, denied
@@ -15,8 +16,15 @@ struct ScanView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Pair a host")
-                .font(.title3)
+            HStack {
+                Text("Pair a host")
+                    .font(.title3)
+                Spacer()
+                if let onCancel {
+                    Button("Cancel", action: onCancel)
+                        .foregroundStyle(Theme.muted)
+                }
+            }
             Text("Run matchblox pair on your host. Then point the camera at the code.")
                 .foregroundStyle(Theme.muted)
             if let problem {
