@@ -35,6 +35,10 @@ type pairEnv struct {
 	poll, limit time.Duration
 }
 
+// pairReadTimeout is how long gate pair waits for the request line; tests
+// shorten it.
+var pairReadTimeout = 30 * time.Second
+
 var pairSettings = pairEnv{hostKeyPath: defaultHostKey, poll: pairPollInterval, limit: pairWindow}
 
 var hostLabel = shortHostname
@@ -63,7 +67,22 @@ func pairMain(home, exe string, in io.Reader, out io.Writer, id string) error {
 	}
 	refuse := func(msg string) error { return reply(pair.Reply{Error: msg}) }
 
-	line, _ := bufio.NewReaderSize(io.LimitReader(in, maxPairRequest+1), maxPairRequest+1).ReadString('\n')
+	// stdin is a pipe from sshd, which has no read deadline: wait in a
+	// goroutine. A phone that holds the session open must not claim the code
+	// later, so a slow request is refused before the code is claimed.
+	lines := make(chan string, 1)
+	go func() {
+		line, _ := bufio.NewReaderSize(io.LimitReader(in, maxPairRequest+1), maxPairRequest+1).ReadString('\n')
+		lines <- line
+	}()
+	var line string
+	timer := time.NewTimer(pairReadTimeout)
+	defer timer.Stop()
+	select {
+	case line = <-lines:
+	case <-timer.C:
+		return refuse("too slow")
+	}
 	var req pair.Request
 	if len(line) > maxPairRequest || json.Unmarshal([]byte(line), &req) != nil {
 		return refuse("bad request")

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,6 +104,31 @@ func TestPairMainRefuses(t *testing.T) {
 				t.Fatalf("authorized_keys changed:\n%s", after)
 			}
 		})
+	}
+}
+
+func TestPairMainRefusesASlowPhoneAndKeepsTheCode(t *testing.T) {
+	f := loadPairFixture(t)
+	old := pairReadTimeout
+	pairReadTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { pairReadTimeout = old })
+	home, id := homeWithPairKey(t)
+	before, _ := os.ReadFile(filepath.Join(home, ".ssh", "authorized_keys"))
+
+	r, w := io.Pipe() // like the stdin of sshd: open, and silent
+	var out bytes.Buffer
+	if err := pairMain(home, testExe, r, &out, id); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(out.String()); got != f.Replies["too slow"] {
+		t.Fatalf("reply = %s, want %s", got, f.Replies["too slow"])
+	}
+	_, _ = w.Write([]byte(f.RequestLine)) // a request after the refusal claims nothing
+	_ = w.Close()
+	time.Sleep(20 * time.Millisecond)
+	after, _ := os.ReadFile(filepath.Join(home, ".ssh", "authorized_keys"))
+	if !bytes.Equal(before, after) {
+		t.Fatalf("authorized_keys changed:\n%s", after)
 	}
 }
 

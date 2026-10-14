@@ -116,7 +116,7 @@ func run(args []string) error {
 		case "authorize":
 			return authorize(args[1:])
 		case "pair":
-			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 			defer stop()
 			return pairCmd(ctx, args[1:], os.Stdout, time.Now)
 		case "devices":
