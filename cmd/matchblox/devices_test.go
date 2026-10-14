@@ -19,7 +19,7 @@ const (
 func homeWithDevices(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
-	if _, err := setup.Authorize(home, testExe, laptopKey); err != nil {
+	if _, err := setup.Authorize(home, testExe, laptopKey+" matchblox"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := setup.AuthorizeDevice(home, testExe, phoneKey1, "Martin's iPhone"); err != nil {
@@ -48,7 +48,7 @@ func TestDevicesListAndRemove(t *testing.T) {
 	}
 	want := "phone   Martin's iPhone  " + fp(t, phoneKey1) + "\n" +
 		"phone   iPad             " + fp(t, phoneKey2) + "\n" +
-		"laptop                   " + fp(t, laptopKey) + "\n"
+		"laptop  matchblox        " + fp(t, laptopKey) + "\n"
 	if out.String() != want {
 		t.Fatalf("list:\n%s\nwant:\n%s", out.String(), want)
 	}
@@ -66,12 +66,15 @@ func TestDevicesListAndRemove(t *testing.T) {
 	}
 
 	out.Reset()
-	if err := devicesCmd([]string{"rm", fp(t, laptopKey)}, home, &out); err != nil {
-		t.Fatalf("rm by fingerprint: %v", err)
+	if err := devicesCmd([]string{"rm", "matchblox"}, home, &out); err != nil {
+		t.Fatalf("rm laptop by name: %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(home, ".ssh", "authorized_keys")); strings.Contains(string(b), laptopKey) {
+		t.Fatalf("laptop still there:\n%s", b)
 	}
 
 	err := devicesCmd([]string{"rm", "nobody"}, home, &out)
-	if err == nil || err.Error() != "no device named nobody" {
+	if err == nil || err.Error() != "no device named nobody; run matchblox devices and give a name or a fingerprint from that list" {
 		t.Fatalf("rm unknown: %v", err)
 	}
 }

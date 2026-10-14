@@ -37,7 +37,8 @@ matchblox devices
 
 This prints one row for each key that opens this host: `phone` or `laptop`,
 its name and its fingerprint. Phones come first. A laptop key comes from
-`matchblox connect`. A phone key comes from `matchblox pair`.
+`matchblox connect`, and its name is the comment of the key: `matchblox`. A
+phone key comes from `matchblox pair`, and its name is the name of the phone.
 
 To remove one, give its name or its fingerprint:
 
@@ -46,8 +47,11 @@ matchblox devices rm <name>
 ```
 
 matchblox prints `Removed <name>. Backup: <path>`. The backup is the
-`authorized_keys` file as it was. If two devices have the same name,
-matchblox says so. Run the command again with the fingerprint.
+`authorized_keys` file as it was. If two devices have the same name (for
+example, two laptops that are both called `matchblox`), matchblox says so and
+removes none. Run the command again with the fingerprint. If no device has the
+name, matchblox tells you to run `matchblox devices` and to give a name or a
+fingerprint from that list.
 
 ## Keep the key private
 
