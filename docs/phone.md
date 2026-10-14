@@ -110,7 +110,7 @@ the selected setup step shows its detail.
 Under the list, when there is room, the dock shows usage, the machine or
 the stoker: `u`, or a tap on the word at its right, goes to the next. While
 the stoker runs, its panel shows by itself until you switch; a tap on it
-opens its whole card on the Machine tab. With the keyboard up the dock
+opens the Stoker tab. With the keyboard up the dock
 folds away; the Machine tab has it.
 
 The key line is at the bottom: an SSH app that shrinks the terminal for

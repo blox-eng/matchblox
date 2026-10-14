@@ -125,6 +125,17 @@ footer a { color: var(--muted); }
 .say { margin: 0; color: var(--muted); font-size: 14px; text-align: center; }
 @media (max-width: 640px) { .fold, .fold .body { border-radius: 26px; } .fold .leaf { border-radius: 0 26px 26px 0; } .fold .body { padding-block: 24px 16px; } }
 @media (prefers-reduced-motion: reduce) { .fold .body, .fold .body::before, .fold .hinge, .fold .leaf, .replay { transition: none; } }
+/* On a phone the open Duo cannot be wider than the page: folded, the phone
+   leaves room, so that opening still widens it. */
+@media (max-width: 640px) { .fold { --w: min(340px, calc(100vw - 124px)); } .fold.open { --w: calc((100vw - 92px) / 2); } }
+/* Folded · Open: the switch under a Duo, for whoever does not tap the device. */
+.foldswitch { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--hair-strong); }
+.foldswitch button { appearance: none; border: 0; background: none; display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px 0 11px; border-radius: 999px; font: 500 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); cursor: pointer; transition: color 180ms ease-out, background-color 180ms ease-out; }
+.foldswitch button:hover { color: var(--fg); }
+.foldswitch button[aria-pressed="true"] { color: var(--bg); background: var(--primary); }
+.foldswitch svg { width: 18px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; }
+.foldswitch button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.foldswitch[hidden], .steps[hidden], .keypad[hidden] { display: none; }
 .replay .cell { display: inline-block; width: 1ch; overflow: visible; text-align: center; }
 .replay .u .cell { text-decoration: underline; text-underline-offset: .2em; }
 .replay .b { font-weight: 500; } .replay .u { text-decoration: underline; text-underline-offset: .2em; }
@@ -227,3 +238,36 @@ footer a { color: var(--muted); }
 .run .row { display: flex; flex-wrap: wrap; gap: 0 8px; padding-top: 8px; border-top: 1px solid var(--hair); font: 400 13px/1.6 var(--mono); color: var(--t-fg); }
 .run .row > span { white-space: nowrap; }
 .run .row .t { white-space: normal; flex-basis: 100%; }
+
+/* The stoker takes orders (stoker.js): the same Duo, folded at first, six
+   steps over it, the switch and the Sessions keys under it. */
+.orders .stage { gap: 16px; padding-block: 20px; }
+/* Its lines run to both edges: a margin keeps the glass's corners off them. */
+.orders .glass { padding: 9px 8px; }
+.orders .replay { font-size: calc((var(--w) - 16px) / (44 * .605)); }
+.orders .fold.open .replay { font-size: calc((2 * var(--w) - 16px) / (89 * .605)); }
+.orders .replay:focus-visible { outline: none; }
+.orders .glass:focus-within { box-shadow: 0 0 0 2px var(--primary); }
+.orders .glass.night { background: #0C1019; }
+.orders .replay [data-act] { cursor: pointer; }
+.fg-dim { color: color-mix(in srgb, var(--t-fg) 28%, var(--t-bg)); }
+.steps { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.steps button { appearance: none; border: 0; background: none; display: inline-flex; align-items: center; justify-content: center; gap: 0; min-width: 40px; min-height: 36px; padding: 0 12px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--hair-strong); font: 500 12px/1 var(--mono); color: var(--muted); cursor: pointer; transition: color 180ms ease-out, box-shadow 180ms ease-out; }
+.steps .n { color: var(--faint); }
+.steps .l { margin-left: 8px; }
+.steps button:hover { color: var(--fg); }
+.steps button[aria-selected="true"] { color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); background: color-mix(in srgb, var(--primary) 11%, transparent); }
+.steps button[aria-selected="true"] .n { color: var(--primary); }
+.steps button:focus-visible, .keypad button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 16px; }
+.keypad { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.keypad button { appearance: none; border: 0; min-width: 36px; min-height: 36px; padding: 0 11px; border-radius: 8px; background: var(--bg); box-shadow: inset 0 0 0 1px var(--hair-strong); font: 500 13px/1 var(--mono); color: var(--t-accent); cursor: pointer; }
+.keypad button span { margin-left: 6px; font: 400 12px/1 var(--sans); color: var(--muted); }
+.keypad button:hover { box-shadow: inset 0 0 0 1px var(--primary); }
+.orders .say { max-width: 60ch; }
+.orders .say b { color: var(--fg); font-weight: 600; }
+/* On a phone the steps show their numbers, and the chosen one its name. */
+@media (max-width: 640px) {
+  .steps button { padding: 0 10px; }
+  .steps button:not([aria-selected="true"]) .l { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}

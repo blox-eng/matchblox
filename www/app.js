@@ -121,71 +121,76 @@ function onReady(fn) {
   });
 })();
 
+// A replay line: Plex Mono has no arrows, boxes, blocks or dingbats (▰ ● ✦
+// ╿): the browser draws them from a wider fallback, and a line runs past
+// its columns. Each gets a cell one column wide, as in replay.Still. A span
+// is [text, fg, bg, flags]: colour tokens, and 1 bold, 2 underline.
+const REPLAY_ODD = /([←-⯿\u{1F300}-\u{1FAFF}])/u;
+const REPLAY_FLAGS = ["", "b", "u", "b u"];
+function replayCells(text) {
+  const out = document.createDocumentFragment();
+  for (const part of text.split(REPLAY_ODD)) {
+    if (!part) continue;
+    if (!REPLAY_ODD.test(part)) { out.append(part); continue; }
+    const c = document.createElement("span");
+    c.className = "cell";
+    c.textContent = part;
+    out.append(c);
+  }
+  return out;
+}
+function replayLine(spans) {
+  const out = document.createDocumentFragment();
+  for (const [text, fg, bg, flags] of spans || []) {
+    const cls = [fg && "fg-" + fg, bg && "bg-" + bg, REPLAY_FLAGS[flags]].filter(Boolean).join(" ");
+    if (!cls) { out.append(replayCells(text)); continue; }
+    const s = document.createElement("span");
+    s.className = cls;
+    s.append(replayCells(text));
+    out.append(s);
+  }
+  return out;
+}
+
+// fitReplay: a browser may round a cell wider than the .6em the CSS sizes
+// for, and the line then runs past its pre. Cells may round to whole
+// pixels, so it looks for the largest size that fits rather than scaling
+// once.
+function fitReplay(pre) {
+  pre.style.fontSize = "";
+  if (pre.scrollWidth <= pre.clientWidth) return;
+  let hi = parseFloat(getComputedStyle(pre).fontSize), lo = hi * 0.7;
+  for (let i = 0; i < 8; i++) {
+    const mid = (lo + hi) / 2;
+    pre.style.fontSize = mid + "px";
+    if (pre.scrollWidth > pre.clientWidth) hi = mid; else lo = mid;
+  }
+  pre.style.fontSize = lo + "px";
+}
+
 // The replay: frames of the real console (www/demo/frames-<size>.json,
 // recorded by TestReplay), drawn as text in the page's theme on an iPhone
 // Duo. Folded it plays the phone; open it plays the duo (the console's
 // desk layout). Where the open Duo has room to be wider than the folded
-// one, it unfolds sideways once, partway through. A tap, Enter or Space
-// folds and unfolds it, and the run carries on from the same moment. It
-// plays while it is in view. Without script the open Duo's still frame
-// stays; with reduced motion the phone's last frame stands, folded.
+// one, it unfolds sideways once, partway through. A tap, Enter or Space,
+// or the Folded · Open switch under it, folds and unfolds it, and the run
+// carries on from the same moment. It plays while it is in view. Without
+// script the open Duo's still frame stays; with reduced motion the phone's
+// last frame stands, folded.
 onReady(() => {
-  const fold = document.querySelector(".stage .fold");
+  const fold = document.querySelector("#console .fold");
   const pre = fold && fold.querySelector(".replay");
-  const say = document.querySelector(".stage .say");
+  const say = document.querySelector("#console .say");
+  const sides = [...document.querySelectorAll("#console .foldswitch button")];
   if (!pre || !say) return;
-  const glass = pre.parentElement;
   const body = fold.querySelector(".body");
   const HOLD = 3000;
   const SWING = 620;
   const UNFOLDS_AT = 12; // the frame where it opens on its own, once
-  const FLAGS = ["", "b", "u", "b u"];
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const roomy = matchMedia("(min-width: 600px)"); // open, it is half as wide again
+  const fit = () => fitReplay(pre);
 
-  // Plex Mono has no arrows, boxes, blocks or dingbats (▰ ● ✦ ╿): the
-  // browser draws them from a wider fallback, and a line runs past its
-  // columns. Each gets a cell one column wide, as in replay.Still.
-  const ODD = /([←-⯿\u{1F300}-\u{1FAFF}])/u;
-  const cells = (text) => {
-    const out = document.createDocumentFragment();
-    for (const part of text.split(ODD)) {
-      if (!part) continue;
-      if (!ODD.test(part)) { out.append(part); continue; }
-      const c = document.createElement("span");
-      c.className = "cell";
-      c.textContent = part;
-      out.append(c);
-    }
-    return out;
-  };
-  const line = (spans) => {
-    const out = document.createDocumentFragment();
-    for (const [text, fg, bg, flags] of spans || []) {
-      const cls = [fg && "fg-" + fg, bg && "bg-" + bg, FLAGS[flags]].filter(Boolean).join(" ");
-      if (!cls) { out.append(cells(text)); continue; }
-      const s = document.createElement("span");
-      s.className = cls;
-      s.append(cells(text));
-      out.append(s);
-    }
-    return out;
-  };
-
-  // A browser may round a cell wider than the .6em the CSS sizes for, and
-  // the line then runs past the glass. Cells may round to whole pixels, so
-  // it looks for the largest size that fits rather than scaling once.
-  const fit = () => {
-    pre.style.fontSize = "";
-    if (pre.scrollWidth <= glass.clientWidth) return;
-    let hi = parseFloat(getComputedStyle(pre).fontSize), lo = hi * 0.7;
-    for (let i = 0; i < 8; i++) {
-      const mid = (lo + hi) / 2;
-      pre.style.fontSize = mid + "px";
-      if (pre.scrollWidth > glass.clientWidth) hi = mid; else lo = mid;
-    }
-    pre.style.fontSize = lo + "px";
-  };
   let frame = 0;
   addEventListener("resize", () => {
     cancelAnimationFrame(frame);
@@ -202,7 +207,7 @@ onReady(() => {
 
   let timer = 0, seen = false, doc = null, rows = [], k = 0, open = true, touched = false, opened = false;
   // A frame holds only the lines that changed, and frame 0 holds them all.
-  const draw = (f) => f.lines.forEach((spans, i) => { if (spans !== null && rows[i]) rows[i].replaceChildren(line(spans)); });
+  const draw = (f) => f.lines.forEach((spans, i) => { if (spans !== null && rows[i]) rows[i].replaceChildren(replayLine(spans)); });
   const lay = (d) => {
     doc = d;
     rows = [];
@@ -223,7 +228,7 @@ onReady(() => {
     timer = setTimeout(() => {
       k = (k + 1) % doc.frames.length;
       draw(doc.frames[k]);
-      if (pre.scrollWidth > glass.clientWidth) fit();
+      if (pre.scrollWidth > pre.clientWidth) fit();
       if (k === UNFOLDS_AT && !touched && !opened && !open && roomy.matches) set(true);
       tick();
     }, next);
@@ -233,6 +238,7 @@ onReady(() => {
     if (to) opened = true;
     fold.classList.toggle("open", to);
     fold.setAttribute("aria-pressed", String(to));
+    sides.forEach((b) => { b.setAttribute("aria-pressed", String((b.dataset.fold === "duo") === to)); b.parentElement.hidden = false; });
     say.textContent = to ? "Open: the desk, sessions, the answer and the dock at once." : "Folded: the phone, one column.";
   };
   // It swings only once the new size's frames are here, and the stage
@@ -257,6 +263,8 @@ onReady(() => {
     e.preventDefault();
     if (!e.repeat) toggle();
   });
+  // The switch beside it says the same, and is the same.
+  sides.forEach((b) => b.addEventListener("click", () => { touched = true; set(b.dataset.fold === "duo"); }));
   // It starts folded on the phone, without a swing, once its frames are
   // here; until then, or if they never come, the open Duo's still stays.
   load("phone").then((d) => {

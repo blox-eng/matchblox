@@ -10,6 +10,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/shirou/gopsutil/v4 v4.26.9
 	rsc.io/qr v0.2.0
+	golang.org/x/sys v0.48.0
 )
 
 require (
@@ -35,5 +36,4 @@ require (
 	github.com/xo/terminfo v1.2.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/sync v0.23.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
 )

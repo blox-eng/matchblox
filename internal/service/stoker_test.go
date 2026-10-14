@@ -111,7 +111,7 @@ func TestStokerNeverAnswers(t *testing.T) {
 
 func TestStokerOffSendsNothing(t *testing.T) {
 	s, ran, _ := stokerTest(t)
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:off"}); r.Err != "" {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:off"}); r.Err != "" {
 		t.Fatal(r.Err)
 	}
 	s.stoke(context.Background(), night0)
@@ -124,7 +124,7 @@ func TestNightSurvivesRestartAndEndsInTheMorning(t *testing.T) {
 	s, _, _ := stokerTest(t)
 	_ = s.Stoker.Set(stoker.Mode{})
 	s.NightEnds = "07:00"
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:night"}); r.Err != "" {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:night"}); r.Err != "" {
 		t.Fatal(r.Err)
 	}
 	if st := s.State().Stoker; st == nil || !st.On || st.Until.IsZero() {
@@ -144,14 +144,14 @@ func TestNightSurvivesRestartAndEndsInTheMorning(t *testing.T) {
 func TestStokerAcksAndRefusesUnknown(t *testing.T) {
 	s, _, _ := stokerTest(t)
 	s.stoke(context.Background(), night0)
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:ack"}); r.Err != "" || s.State().Stoker.Unseen {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:ack"}); r.Err != "" || s.State().Stoker.Unseen {
 		t.Fatalf("ack %+v %+v", r, s.State().Stoker)
 	}
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:fire"}); r.Err == "" {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:fire"}); r.Err == "" {
 		t.Fatal("an unknown stoker act ran")
 	}
 	s.Stoker = nil
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:on"}); r.Err == "" {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:on"}); r.Err == "" {
 		t.Fatal("no stoker, no error")
 	}
 }
@@ -259,7 +259,7 @@ func TestAQuietNightEndsWithACard(t *testing.T) {
 	s.publish(sample.Snapshot{At: night0, Sessions: []sample.Session{{
 		Agent: "claude", Pane: "%2", SessionID: "s2", Name: "calm", Status: "idle", Idle: time.Minute, Tokens: 80000, ContextPct: 40,
 	}}}, func(state.Doc) {})
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:night"}); r.Err != "" {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:night"}); r.Err != "" {
 		t.Fatal(r.Err)
 	}
 	if st := s.Stoker.Mode().Start; len(st) != 1 || st[0].Session != "s2" {
@@ -278,7 +278,7 @@ func TestAQuietNightEndsWithACard(t *testing.T) {
 	if len(v.Run) != 0 || !v.Unseen {
 		t.Fatalf("a card with no steps is unseen until folded: %+v", v)
 	}
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:ack"}); r.Err != "" {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:ack"}); r.Err != "" {
 		t.Fatal(r.Err)
 	}
 	if v := s.State().Stoker; v.Unseen || v.Card == nil {
@@ -289,11 +289,11 @@ func TestAQuietNightEndsWithACard(t *testing.T) {
 func TestTurningTheStokerOffScoresTheRun(t *testing.T) {
 	s, _, _ := stokerTest(t)
 	_ = s.Stoker.Set(stoker.Mode{})
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:on"}); r.Err != "" {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:on"}); r.Err != "" {
 		t.Fatal(r.Err)
 	}
 	s.stoke(context.Background(), time.Now()) // the full session is compacted
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:off"}); r.Err != "" {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:off"}); r.Err != "" {
 		t.Fatal(r.Err)
 	}
 	c := s.State().Stoker.Card
@@ -312,7 +312,7 @@ func console(s *Service) *client {
 func TestTakingOverRestsTheStoker(t *testing.T) {
 	s, ran, _ := stokerTest(t)
 	console(s)
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:rest"}); r.Err != "" {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:rest"}); r.Err != "" {
 		t.Fatal(r.Err)
 	}
 	now := time.Now()
@@ -324,7 +324,7 @@ func TestTakingOverRestsTheStoker(t *testing.T) {
 		t.Fatalf("view %+v", v)
 	}
 	// A key in the console keeps the rest; 15 min without one ends it.
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:touch"}); r.Err != "" {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:touch"}); r.Err != "" {
 		t.Fatal(r.Err)
 	}
 	s.stoke(context.Background(), now.Add(stoker.RestIdle-time.Minute))
@@ -339,7 +339,7 @@ func TestTakingOverRestsTheStoker(t *testing.T) {
 
 func TestARestEndsWhenTheLastConsoleCloses(t *testing.T) {
 	s, ran, _ := stokerTest(t)
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:rest"}); r.Err != "" {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:rest"}); r.Err != "" {
 		t.Fatal(r.Err)
 	}
 	s.leave(console(s)) // the last console closes
@@ -357,7 +357,7 @@ func TestARestEndsWhenTheLastConsoleCloses(t *testing.T) {
 // A new service starts alone: the consoles reconnect, the rest goes on.
 func TestARestOutlivesARestart(t *testing.T) {
 	s, ran, _ := stokerTest(t)
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:rest"}); r.Err != "" {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:rest"}); r.Err != "" {
 		t.Fatal(r.Err)
 	}
 	again := New(config.Default(), nil, nil)
@@ -373,7 +373,7 @@ func TestARestOutlivesARestart(t *testing.T) {
 func TestTmuxActivityKeepsTheRest(t *testing.T) {
 	s, ran, _ := stokerTest(t)
 	console(s)
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:rest"}); r.Err != "" {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:rest"}); r.Err != "" {
 		t.Fatal(r.Err)
 	}
 	now := time.Now()
@@ -400,21 +400,21 @@ func TestAnyActKeepsTheRest(t *testing.T) {
 
 func TestKeepAndWake(t *testing.T) {
 	s, _, _ := stokerTest(t)
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:keep"}); r.Err != "" {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:keep"}); r.Err != "" {
 		t.Fatal(r.Err)
 	}
 	if m := s.Stoker.Mode(); !m.On || !m.Asked || !m.Rests.IsZero() {
 		t.Fatalf("keep %+v", m)
 	}
-	s.act(context.Background(), proto.Act{RecID: "stoker:rest"})
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:wake"}); r.Err != "" {
+	s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:rest"})
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:wake"}); r.Err != "" {
 		t.Fatal(r.Err)
 	}
 	if m := s.Stoker.Mode(); !m.On || !m.Rests.IsZero() {
 		t.Fatalf("wake %+v", m)
 	}
-	s.act(context.Background(), proto.Act{RecID: "stoker:off"})
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:rest"}); r.Err != "the stoker is off" {
+	s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:off"})
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:rest"}); r.Err != "the stoker is off" {
 		t.Fatalf("rest while off: %+v", r)
 	}
 }
@@ -426,7 +426,7 @@ func TestTheServiceClockRunsTheNight(t *testing.T) {
 	var mu sync.Mutex
 	clock := time.Date(2026, 10, 1, 23, 10, 0, 0, time.UTC)
 	s.Now = func() time.Time { mu.Lock(); defer mu.Unlock(); return clock }
-	if r := s.act(context.Background(), proto.Act{RecID: "stoker:night"}); r.Err != "" {
+	if r := s.act(context.Background(), proto.Act{Console: true, RecID: "stoker:night"}); r.Err != "" {
 		t.Fatal(r.Err)
 	}
 	morning := time.Date(2026, 10, 2, 7, 0, 0, 0, time.UTC)

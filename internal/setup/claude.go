@@ -9,19 +9,39 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/said"
 )
 
 // Events are the Claude Code hooks the queue reads.
 var Events = []string{"Notification", "Stop", "UserPromptSubmit", "SessionStart", "SessionEnd", "PostToolUse", "PreToolUse"}
 
-// matchers narrow an event to the tools it is for. PreToolUse is only for
-// the question tool: it is the one sign of a waiting menu that Claude Code
-// sends before the menu draws, in every permission mode.
-var matchers = map[string]string{"PreToolUse": said.AskTool}
+// matchers narrow an event to the tools it is for, one entry each.
+// PreToolUse is for the question tool, the one sign of a waiting menu
+// that Claude Code sends before the menu draws, and for Bash, where the
+// merge guard stops a merge, release or deploy the stoker's order did not
+// give.
+var matchers = map[string][]string{"PreToolUse": {said.AskTool, hooks.BashTool}}
+
+// HandRules are the permission rules that let the stoker's hands run
+// without a prompt in Claude Code: the service refuses their acts from any
+// pane but the stoker's and the panes it drives, under its own guards.
+var HandRules = []string{"Bash(matchblox sessions:*)", "Bash(matchblox ships:*)", "Bash(matchblox usage:*)",
+	"Bash(matchblox send:*)", "Bash(matchblox compact:*)", "Bash(matchblox hold:*)",
+	"Bash(matchblox release:*)", "Bash(matchblox stoker:*)", "Bash(matchblox peek:*)"}
+
+// tools are the tools an event's entries are for; "" is an entry with no
+// matcher.
+func tools(ev string) []string {
+	if m, ok := matchers[ev]; ok {
+		return m
+	}
+	return []string{""}
+}
 
 // settingsPath is Claude Code's user settings: $CLAUDE_CONFIG_DIR, else
 // ~/.claude.
@@ -43,7 +63,7 @@ func usesClaude(e Env) bool {
 func hooksDoor(e Env) doors.Door {
 	path := settingsPath(e)
 	d := doors.Door{ID: doors.Hooks, Title: "Add the queue hooks", Path: path,
-		Why: "Claude Code tells matchblox when an agent waits for you. Without the hooks the queue is estimated."}
+		Why: "Claude Code tells matchblox when an agent waits for you. Without the hooks the queue is estimated, and the stoker's matchblox commands ask before they run."}
 	_, old, _, err := read(path)
 	if err != nil {
 		d.Problem = err.Error()
@@ -63,8 +83,8 @@ func hooksDoor(e Env) doors.Door {
 }
 
 // AddHooks adds a `matchblox hook <event>` command for each of Events to
-// Claude Code's settings. Other hooks and keys stay as they are, and an
-// event that already runs matchblox gets no second one.
+// Claude Code's settings, and HandRules to its allowed permissions. Other
+// hooks, rules and keys stay as they are, and nothing is added twice.
 func AddHooks(settingsPath, exe, seen string) (backup string, err error) {
 	return edit(settingsPath, seen, func(old []byte) ([]byte, error) { return withHooks(old, exe) })
 }
@@ -75,9 +95,10 @@ type member struct {
 	val json.RawMessage
 }
 
-// withHooks is the settings with every hook of Events in place. Only the
-// arrays it adds to are written again; every other value keeps its bytes,
-// so the diff shows the new lines and nothing else.
+// withHooks is the settings with every hook of Events and every rule of
+// HandRules in place. Only the arrays it adds to are written again; every
+// other value keeps its bytes, so the diff shows the new lines and nothing
+// else.
 func withHooks(old []byte, exe string) ([]byte, error) {
 	top, err := members(old)
 	if err != nil {
@@ -104,11 +125,16 @@ func withHooks(old []byte, exe string) ([]byte, error) {
 			if err := json.Unmarshal(events[j].val, &entries); err != nil {
 				return nil, fmt.Errorf("hooks.%s: %w", ev, err)
 			}
-			if runsMatchblox(entries, ev) {
-				continue
+		}
+		added := false
+		for _, tool := range tools(ev) {
+			if !runsMatchblox(entries, ev, tool) {
+				entries, added = append(entries, entry(exe, ev, tool)), true
 			}
 		}
-		entries = append(entries, entry(exe, ev))
+		if !added {
+			continue
+		}
 		val := array(entries, 2)
 		if j >= 0 {
 			events[j].val = val
@@ -117,11 +143,64 @@ func withHooks(old []byte, exe string) ([]byte, error) {
 		}
 		changed = true
 	}
-	if !changed {
+	if changed {
+		top[i].val = object(events, 1)
+	}
+	top, added, err := withRules(top, i)
+	if err != nil {
+		return nil, err
+	}
+	if !changed && !added {
 		return old, nil
 	}
-	top[i].val = object(events, 1)
 	return append(object(top, 0), '\n'), nil
+}
+
+// withRules adds the HandRules permissions.allow lacks. A settings file
+// without permissions gets them right after hooks (at).
+func withRules(top []member, at int) ([]member, bool, error) {
+	i := lastIndex(top, "permissions")
+	if i >= 0 && string(bytes.TrimSpace(top[i].val)) == "null" {
+		top[i].val = json.RawMessage("{}")
+	}
+	if i < 0 {
+		top = slices.Insert(top, at+1, member{key: "permissions", val: json.RawMessage("{}")})
+		i = at + 1
+	}
+	perms, err := members(top[i].val)
+	if err != nil {
+		return nil, false, fmt.Errorf("permissions: %w", err)
+	}
+	j := lastIndex(perms, "allow")
+	var allow []json.RawMessage
+	if j >= 0 && string(bytes.TrimSpace(perms[j].val)) != "null" {
+		if err := json.Unmarshal(perms[j].val, &allow); err != nil {
+			return nil, false, fmt.Errorf("permissions.allow: %w", err)
+		}
+	}
+	have := map[string]bool{}
+	for _, raw := range allow {
+		var r string
+		if json.Unmarshal(raw, &r) == nil {
+			have[r] = true
+		}
+	}
+	added := false
+	for _, r := range HandRules {
+		if !have[r] {
+			allow, added = append(allow, json.RawMessage(quote(r))), true
+		}
+	}
+	if !added {
+		return top, false, nil
+	}
+	if j >= 0 {
+		perms[j].val = array(allow, 2)
+	} else {
+		perms = append(perms, member{key: "allow", val: array(allow, 2)})
+	}
+	top[i].val = object(perms, 1)
+	return top, true, nil
 }
 
 func lastIndex(ms []member, key string) int {
@@ -201,10 +280,10 @@ func array(vs []json.RawMessage, depth int) json.RawMessage {
 }
 
 // entry is one hook group on one line, so the diff stays short.
-func entry(exe, ev string) json.RawMessage {
+func entry(exe, ev, tool string) json.RawMessage {
 	match := ""
-	if m, ok := matchers[ev]; ok {
-		match = `"matcher": ` + quote(m) + `, `
+	if tool != "" {
+		match = `"matcher": ` + quote(tool) + `, `
 	}
 	return json.RawMessage(`{` + match + `"hooks": [{"type": "command", "command": ` + quote(hookCommand(exe, ev)) + `}]}`)
 }
@@ -217,8 +296,8 @@ func hookCommand(exe, ev string) string {
 }
 
 // runsMatchblox: an entry of the event already runs `matchblox hook <ev>`,
-// from any path, for the tool the event is narrowed to.
-func runsMatchblox(entries []json.RawMessage, ev string) bool {
+// from any path, for the tool ("" for any).
+func runsMatchblox(entries []json.RawMessage, ev, tool string) bool {
 	for _, raw := range entries {
 		var g struct {
 			Matcher string `json:"matcher"`
@@ -229,7 +308,7 @@ func runsMatchblox(entries []json.RawMessage, ev string) bool {
 		if json.Unmarshal(raw, &g) != nil {
 			continue
 		}
-		if tool, ok := matchers[ev]; ok && !matches(g.Matcher, tool) {
+		if tool != "" && !matches(g.Matcher, tool) {
 			continue
 		}
 		for _, h := range g.Hooks {

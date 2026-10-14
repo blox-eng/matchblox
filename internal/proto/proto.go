@@ -11,6 +11,8 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
+	"github.com/blox-eng/matchblox/internal/holds"
+	"github.com/blox-eng/matchblox/internal/idle"
 	"github.com/blox-eng/matchblox/internal/ships"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
@@ -51,7 +53,16 @@ type Hello struct {
 	Host    string `json:"host"`
 	OS      string `json:"os"`
 	Arch    string `json:"arch"`
+	// Client is what says hello to the service: ClientConsole, or
+	// ClientCLI for a matchblox command. Empty: a command.
+	Client string `json:"client,omitempty"`
 }
+
+// The kinds of client in a hello. Only a console is a person at the keys.
+const (
+	ClientConsole = "console"
+	ClientCLI     = "cli"
+)
 
 // State is what the console draws. History is set only in the first
 // snapshot to each console; later snapshots leave it nil and the console
@@ -75,6 +86,13 @@ type Act struct {
 	Confirm string `json:"confirm,omitempty"` // "y" for a destructive action
 	// Text is what the person typed for an "answer:<pane>" act.
 	Text string `json:"text,omitempty"`
+	// From is the tmux pane the act was typed in ($TMUX_PANE of the CLI).
+	// Where the service knows the caller's pid, it finds the pane itself
+	// and this is ignored.
+	From string `json:"from,omitempty"`
+	// Console: the act came from a console, a person at the keys. The
+	// service sets it from the hello; it never comes over the wire.
+	Console bool `json:"-"`
 }
 
 type Result struct {
@@ -149,4 +167,13 @@ type (
 	StokerCard  = stoker.Card
 	StokerMiss  = stoker.Miss
 	StokerLapse = stoker.Lapse
+	StokerOrder = stoker.Order
+	StokerPlan  = stoker.PlanStep
+	StokerSaid  = stoker.Said
+	// StokerTrigger is a `matchblox stoker when` that has not fired.
+	StokerTrigger = stoker.Trigger
+	// StokerUnguard is a plan's session no merge guard watches.
+	StokerUnguard = stoker.Unguard
+	Hold          = holds.Hold
+	IdleReason    = idle.Reason
 )

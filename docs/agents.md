@@ -65,8 +65,20 @@ hooks" adds them. One of them, `PreToolUse` for the question tool
 (`AskUserQuestion`), hands the console the question and its options before
 the menu draws: in auto mode Claude Code writes the question to its
 transcript only once it is answered, so the hook is how the answer peek
-shows the options. An install from before this hook shows the step again,
-with the one entry it adds. Every other agent is read from its pane: busy
+shows the options. A second, `PreToolUse` for `Bash`, is the stoker's merge
+guard: in a session the stoker drove, it stops `gh pr merge`, `gh release`
+and `gh workflow run` unless the chip on the launch sheet gave the go, or
+you gave it with `y` on the STOKER tab. The same step adds permission rules
+(`Bash(matchblox sessions:*)`, `ships`, `usage`, `send`, `compact`, `hold`,
+`release`, `stoker` and `peek`), so the stoker's hands run without a
+prompt. The rules are in your user settings, so every Claude Code session
+may call these commands without a prompt. The service refuses a `send`,
+`compact`, `hold` or `release` typed in a pane that hosts an agent and is
+neither the stoker's nor one the stoker drives (`only the stoker and the
+sessions it drives act from an agent's pane: this one is neither`). Your
+own shell runs no agent, so the commands work there. `peek` and the
+other reads work from any pane. An install from before these hooks or
+rules shows the step again, with the entries it adds. Every other agent is read from its pane: busy
 while the pane changes, waiting when it is idle and its last lines ask.
 
 An approval menu (Codex, OpenCode) shows as `asks`. Answer it in its pane,

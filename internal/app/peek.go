@@ -70,6 +70,9 @@ func (m Model) peekNow() (peekView, peek, bool) {
 // whatever it does, when it has a pane to type into. Why says why there is
 // none.
 func (m Model) peekTarget() (pane, why string) {
+	if m.tab == tabStoker {
+		return m.stokerPeekTarget()
+	}
 	s, ok := m.selectedSession()
 	switch {
 	case !ok:
@@ -203,6 +206,12 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key == "ctrl+c":
 		m.quitting = true
 		return m, tea.Quit
+	case key == "ctrl+o":
+		m.peek = nil
+		if a := m.forHost(m.jump(v.s.Pane)); a != nil {
+			return m.confirm(*a)
+		}
+		return m, nil
 	case key == "right" || key == "tab":
 		return m.peekMove(p.pane, false), nil
 	case key == "left" || key == "shift+tab":
@@ -438,14 +447,13 @@ func (m Model) peekBox(bw, maxH int, phone, fill bool) ([]string, []string, []sp
 	}
 	// The footer: each part a tap target (press "" none), " ─ " between
 	// them, two spaces inside the move group (← prev  3/7  next →).
-	type part struct{ text, press, sep string }
-	var foot []part
-	key := func(k, label, press string) part {
+	var foot []footPart
+	key := func(k, label, press string) footPart {
 		t := st.accent.Render(k)
 		if label != "" {
 			t += st.muted.Render(" " + label)
 		}
-		return part{t, press, " ─ "}
+		return footPart{t, press, " ─ "}
 	}
 	switch {
 	case v.permit:
@@ -459,9 +467,9 @@ func (m Model) peekBox(bw, maxH int, phone, fill bool) ([]string, []string, []sp
 		foot = append(foot, key("␣", "tick", "space"))
 	}
 	if ring := m.peekRing(p.pane); len(ring) > 1 {
-		foot = append(foot, part{st.accent.Render("←") + st.muted.Render(" prev"), "left", " ─ "})
-		count := part{st.faint.Render(m.peekCount(p.pane, len(ring))), "", "  "}
-		next := part{st.muted.Render("next ") + st.accent.Render("→"), "right", "  "}
+		foot = append(foot, footPart{st.accent.Render("←") + st.muted.Render(" prev"), "left", " ─ "})
+		count := footPart{st.faint.Render(m.peekCount(p.pane, len(ring))), "", "  "}
+		next := footPart{st.muted.Render("next ") + st.accent.Render("→"), "right", "  "}
 		width := 3 + 3 + 3 // the corners, the space and esc
 		for _, f := range append(foot, count, next) {
 			width += lipgloss.Width(f.sep + f.text)
@@ -472,18 +480,20 @@ func (m Model) peekBox(bw, maxH int, phone, fill bool) ([]string, []string, []sp
 		foot = append(foot, next)
 	}
 	foot = append(foot, key("esc", "", "esc"))
+	// ^o goes to the pane itself, where it fits: the typing line takes
+	// every letter.
+	jump := key("^o", "jump", "ctrl+o")
+	width := 3 + 3 + lipgloss.Width(jump.sep+jump.text) // the corners and the space
+	for _, f := range foot {
+		width += lipgloss.Width(f.sep + f.text)
+	}
+	if width <= bw {
+		foot = append(foot, jump)
+	}
 
-	hair := st.hair
-	top := hair.Render("╭─ ") + title + " "
-	out := []string{top + hair.Render(strings.Repeat("─", max(bw-lipgloss.Width(top)-1, 0))+"╮")}
-	press := []string{""}
+	var lines, press []string
 	body := func(l, k string) {
-		if l == "sep" {
-			out = append(out, hair.Render("├"+strings.Repeat("─", bw-2)+"┤"))
-		} else {
-			out = append(out, hair.Render("│ ")+fit(l, iw)+hair.Render(" │"))
-		}
-		press = append(press, k)
+		lines, press = append(lines, l), append(press, k)
 	}
 	for _, l := range said {
 		body(st.text.Render(l), "")
@@ -504,6 +514,29 @@ func (m Model) peekBox(bw, maxH int, phone, fill bool) ([]string, []string, []sp
 			body(rest[i], keys[i])
 		}
 	}
+	box, spans := boxFrame(st.hair, title, lines, foot, bw)
+	return box, append([]string{""}, append(press, "")...), spans
+}
+
+// footPart is one part of a box's footer: its text, the key a tap on it
+// presses ("" none) and the separator before it.
+type footPart struct{ text, press, sep string }
+
+// boxFrame draws the rounded box the peek and the launch sheet share: the
+// title in the top edge, each body line between the sides ("sep" is a
+// divider) and the footer in the bottom edge, with the footer's keys as
+// spans from the box's left edge.
+func boxFrame(hair lipgloss.Style, title string, lines []string, foot []footPart, bw int) ([]string, []span) {
+	iw := bw - 4
+	top := hair.Render("╭─ ") + title + " "
+	out := []string{top + hair.Render(strings.Repeat("─", max(bw-lipgloss.Width(top)-1, 0))+"╮")}
+	for _, l := range lines {
+		if l == "sep" {
+			out = append(out, hair.Render("├"+strings.Repeat("─", bw-2)+"┤"))
+		} else {
+			out = append(out, hair.Render("│ ")+fit(l, iw)+hair.Render(" │"))
+		}
+	}
 	line, x := hair.Render("╰─ "), 3
 	var spans []span
 	for i, f := range foot {
@@ -519,7 +552,7 @@ func (m Model) peekBox(bw, maxH int, phone, fill bool) ([]string, []string, []sp
 	}
 	line += " "
 	out = append(out, ansi.Truncate(line, bw-1, "")+hair.Render(strings.Repeat("─", max(bw-1-lipgloss.Width(line), 0))+"╯"))
-	return out, append(press, ""), spans
+	return out, spans
 }
 
 // overlayPeek dims the screen and lays the peek over it: on a phone its
@@ -532,8 +565,14 @@ func (m Model) overlayPeek(sc *drawn, w int) {
 	if !phone {
 		bw = min(62, w-8)
 	}
+	box, press, spans := m.peekBox(bw, len(sc.lines)-3, phone, false)
+	m.overlayBox(sc, w, bw, phone, box, press, spans)
+}
+
+// overlayBox dims the screen and lays a box over it, bw columns wide: on a
+// phone with its foot on the key line's hairline, else centred.
+func (m Model) overlayBox(sc *drawn, w, bw int, phone bool, box, press []string, spans []span) {
 	bottom := len(sc.lines) - 2 // the key line's hairline
-	box, press, spans := m.peekBox(bw, bottom-1, phone, false)
 	x, y := (w-bw)/2, bottom-len(box)
 	if !phone {
 		x, y = (w-bw)/2, max((len(sc.lines)-len(box))/2-1, 1)
@@ -597,6 +636,8 @@ func keyPress(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEsc}
 	case "space":
 		return tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
+	case "ctrl+o":
+		return tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl}
 	}
 	r := []rune(k)
 	return tea.KeyPressMsg{Code: r[0], Text: k}

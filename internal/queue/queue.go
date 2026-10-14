@@ -138,6 +138,11 @@ func (q *Queue) Apply(ev hooks.Event) {
 	}
 }
 
+// Pane is the pane of a hooked session, "" when none is known.
+func (q *Queue) Pane(id string) string {
+	return q.hooked[id].Pane
+}
+
 // Merge joins the queue with the sessions the sampler sees: it fills the
 // pane and name, drops sessions that are gone, and guesses the sessions
 // that never sent a hook event.

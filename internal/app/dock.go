@@ -379,10 +379,6 @@ func (m Model) runs() string {
 // the detached busy loops and the top processes.
 func (m Model) machinePanel(w int) body {
 	var b body
-	if m.stokerOpen && m.layoutAt(m.width) == Narrow {
-		b.add(-1, m.stokerCard(w)...) // a phone's stoker card, over the machine
-		b.add(-1, "")
-	}
 	b.add(-1, m.usageLines(w, true, "")...)
 	b.add(-1, "")
 	b.add(-1, m.machineLines(w, true, "")...)

@@ -6,6 +6,57 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The stoker takes orders, in your own words.** `n` and `f` start a
+  stoker agent (Claude Code, or `[stoker] agent`) on a tmux server of
+  matchblox's own, out of your `tmux ls`; `Enter` on the STOKER tab opens
+  it in a popup, `Q` quits it. Then they open a launch sheet: say how to run tonight, turn on
+  the gos you give, and `Enter` starts the run at once. The brief carries
+  the machine as it is, so the agent needs no lookup to start, and it keeps
+  its own plan on the card, rewriting it as it goes: nobody approves it. A
+  night is sealed once it runs. By day, `o` sends a new order as one line,
+  `New order: …`, and the run goes on with its done steps. matchblox calls
+  no model. The stoker's own
+  session stays out of Sessions, and the header says when it waits for you.
+- **Your ways.** One markdown file, `ways.md`, next to the config, holds
+  your standing rules and your `# Recipe: <name>` procedures. The launch
+  sheet offers each recipe by name. The setup door **Write your ways**
+  writes a starter. See [Your ways](https://docs.matchblox.com/ways/).
+- **The stoker acts through your sessions, and matchblox wakes it** when a
+  session asks something or its turn ends (with the first line of the
+  question, or the last line it said), a pull request appears or moves, a
+  usage window passes another 10%, and before the night ends, at most once
+  a minute. Its hands are `matchblox peek`, `send`, `compact`, `hold` and
+  `release`, under the guards of the console, and `max_steps` (60) bounds
+  the messages of a run. The setup step "Add the queue hooks" lets them
+  run in Claude Code without a prompt.
+- **Triggers the service fires itself.** `matchblox stoker when` sets one
+  for the run: at a pull request's stage (`--ship 4573 --stage merged`,
+  `red` for CI failed) or at the end of a session's turn (`--rest api`),
+  matchblox sends, compacts, releases or holds as the stoker said, once,
+  under the same guards, logs it to the card and tells the stoker. The
+  stoker sets a trigger where it would otherwise poll.
+- **The STOKER tab** shows your words and the gos, the plan, what waits
+  for your go, the triggers, the standing rules and every step with its
+  outcome and the exact command it ran. `y` gives the go a step waits for,
+  and `a` opens the session of a failed step.
+- **A merge, a release or a deploy needs its go.** The gos are the chips
+  on the launch sheet (`Tab` to them, `Space` turns one on), never read
+  from your words. In a session the stoker messaged, a `PreToolUse` hook
+  stops `gh pr merge`, `gh release` and `gh workflow run` without one, and
+  matchblox puts the command on the card by itself
+  (`⏸ waits for you: api wants to run gh pr merge 4556`), where `y` lets
+  one command of that kind through, once. The session reads why it was stopped, and a
+  here-document a command reads as text (`cat > notes.md <<'EOF'`) needs
+  no go. Codex and OpenCode have no such hook, and the card says so.
+- **Sessions say why they are idle** (`#4556 waits your merge`, `CI red`,
+  `stuck: …`, `back 14:20`). `z` parks a session so nothing types into it,
+  and `g` groups the list by need, state, repo or not at all.
+- **`matchblox sessions`, `ships` and `usage`** print one line a row, or
+  JSON with `--json`, for a script or an agent.
+
+
 ## [0.8.0] - 2026-10-14
 
 ### Added

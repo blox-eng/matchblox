@@ -3,6 +3,7 @@ package sample
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -143,4 +144,47 @@ func TestAnAgentOfAnotherTmuxServerTakesNoPaneOfOurs(t *testing.T) {
 			t.Fatalf("the agent of our server lost its pane: %q", s.Pane)
 		}
 	}
+}
+
+// TestTheStokersServerIsListedWithItsPanesNamed: matchblox keeps the
+// stoker agent on a tmux server of its own, and pane ids repeat across
+// servers. The private server's panes are listed too, each id carrying
+// its server, so its %1 is never the builder's %1.
+func TestTheStokersServerIsListedWithItsPanesNamed(t *testing.T) {
+	root := copyFixture(t)
+	addProc(t, root, 880, 1, "codex", []string{"codex"}, "")
+	env := "TMUX=/tmp/tmux-1000/matchblox-test,5151,0\x00TMUX_PANE=%1\x00"
+	if err := os.WriteFile(filepath.Join(root, "proc", "880", "environ"), []byte(env), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	smp.Stoker = "matchblox-test"
+	smp.StokerTmux = func() ([]byte, error) {
+		return []byte("%1\tstoker:0.0\tcodex\t880\tcodex\t/home/user\t/tmp/tmux-1000/matchblox-test\t5151\n"), nil
+	}
+	snap := smp.Sample()
+	got := byPane(snap)
+	if s, ok := got["%1@matchblox-test"]; !ok || s.PID != 880 || s.Target != "stoker:0.0" || s.Server() != "matchblox-test" {
+		t.Fatalf("the stoker's agent: got %+v (sessions %v)", s, paneIDs(snap))
+	}
+	if s := got["%1"]; s.PID != 200 || s.Server() != "" {
+		t.Fatalf("the builder's %%1 belongs to pid 200, got %+v", s)
+	}
+	for _, p := range snap.IdlePanes {
+		if strings.Contains(p.Pane, "@") {
+			t.Fatalf("a pane of the stoker's server is no idle pane of the builder's: %+v", p)
+		}
+	}
+	if !slices.ContainsFunc(snap.Panes, func(p Pane) bool { return p.ID == "%1@matchblox-test" && p.PID == 880 }) {
+		t.Fatalf("the service needs the stoker's panes to tell a caller's pane: %+v", snap.Panes)
+	}
+}
+
+func paneIDs(snap Snapshot) []string {
+	var out []string
+	for _, s := range snap.Sessions {
+		out = append(out, s.Pane)
+	}
+	return out
 }
