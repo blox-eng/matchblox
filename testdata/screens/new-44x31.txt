@@ -1,0 +1,31 @@
+ ▰ matchblox               ● 6 wait for you
+ SESSIONS 7  ships 3  machine  4  5  6  7
+────────────────────────────────────────────
+ WAITS FOR YOU · 6
+────────────────────────────────────────────
+▌│ spark-docs            done      9m   88%
+   “I rewrote the quick start and the
+   install page.”
+   #4540 ●━●━●━●━●  live
+   ▰▰▰▰▰ plan 100%  ▲ cle… a answer  ⏎ open
+────────────────────────────────────────────
+ ╿ ember-billing         done      4m   32%
+ ╿ flint-auth            asks      2m   41%
+ ╿ kindle-web            asks      1m   56%
+ ╿ codex                 done      0s   55%
+ ╿ opencode              done      0s    6%
+ WORKING · 1
+ ✦ hearth-api            busy           79%
+
+ 1 without an agent: shell:1.1 zsh
+
+ RECOMMENDATIONS · 7 · h hides
+╭─ New session ────────────────────────────╮
+│ where    /work/spark-docs                │
+│ branch   feat/88-rate-limits             │
+│ name     spark-docs-feat-88-rate-limits  │
+│ agent    ● claude  ○ codex  ○ opencode   │
+│ first  › fix the flaky ships test▏       │
+╰─ ⏎ start ─ tab next ─ esc ───────────────╯
+────────────────────────────────────────────
+ ⏎ open  a answer  x kill  r rename  N new

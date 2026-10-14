@@ -25,10 +25,14 @@ What does not work yet, and what to do until it does.
 | Ships reads GitHub only | A pull request on another forge does not show. |
 | No week of Opus or Sonnet in usage | Claude Code's status line gives the 5-hour window and the week only. |
 | tmux only | Run your agents in tmux. |
+| New session starts Claude Code, Codex and OpenCode only | Start another agent in tmux yourself: Sessions shows it all the same. |
+| New session finds an agent on the service's `PATH` | An agent that is a shell alias, or on a `PATH` only your shell sets, is not offered. Put it on the `PATH` the service runs with, or start it yourself. |
+| Rename names a Codex or OpenCode agent in tmux only | They keep no name of their own. Claude Code takes `/rename` at rest, so a busy session is renamed when it rests. |
 | No native Windows | Use Linux or macOS. |
 | One host on a screen | `esc` goes back to Hosts. |
 
 ## Soon
 
-- **Start agents from the console**
-  ([#10](https://github.com/blox-eng/matchblox/issues/10)).
+- **Start a session in a container**
+  ([#10](https://github.com/blox-eng/matchblox/issues/10)), and **on the
+  account with room** ([#55](https://github.com/blox-eng/matchblox/issues/55)).

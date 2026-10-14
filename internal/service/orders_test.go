@@ -132,7 +132,7 @@ func TestOrderStartsTheRunAtOnce(t *testing.T) {
 		t.Fatalf("the file holds\n%s\nwant\n%s", b, want)
 	}
 	if !strings.Contains(string(b), "> merge them on green") || !strings.Contains(string(b), "Run "+m.Order.ID+" starts now") ||
-		!strings.Contains(string(b), "This run gives merges and releases: deploys ask the builder.") ||
+		!strings.Contains(string(b), "This run gives merges and releases: deploys and kills ask the builder.") ||
 		!strings.Contains(string(b), "- work (%1): idle · out of work · context 0%") || strings.Contains(string(b), "- stoker (%9@mbtest)") {
 		t.Fatalf("brief:\n%s", b)
 	}
@@ -141,7 +141,7 @@ func TestOrderStartsTheRunAtOnce(t *testing.T) {
 func TestOrderTakesOnlyTheChips(t *testing.T) {
 	s, ran := orderTest(t)
 	for _, g := range []string{"push", "merge:#4", "merge:@work"} {
-		if res := s.act(t.Context(), orderAct(t, "x", false, g)); res.Err != fmt.Sprintf("%q is no go: merge, release or deploy", g) {
+		if res := s.act(t.Context(), orderAct(t, "x", false, g)); res.Err != fmt.Sprintf("%q is no go: merge, release, deploy or kill", g) {
 			t.Errorf("chip %s: %q", g, res.Err)
 		}
 	}

@@ -66,9 +66,8 @@ var views = [...]tabView{
 			if r, ok := m.selectedRec(); ok {
 				return fromAdvice(r, "secondary")
 			}
-			if s, ok := m.selectedSession(); ok && s.Age() == "stale" {
-				return &action{label: "end", steps: [][]string{{"kill", strconv.Itoa(s.PID)}}, destructive: true,
-					rec: "session:" + strconv.Itoa(s.PID), which: "secondary"}
+			if s, ok := m.selectedSession(); ok {
+				return m.killAction(s)
 			}
 			return nil
 		},

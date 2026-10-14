@@ -86,7 +86,7 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	// A session the stoker drove speaks for the stoker: what it sends
 	// counts and drives, and it gives no go.
 	agent := s.agentsPane(a)
-	if !agent && !a.Console && paneOf(a.RecID) != "" {
+	if !agent && !a.Console && (paneOf(a.RecID) != "" || a.RecID == NewSessionID) {
 		if _, ok := s.sessionAt(a.From); ok {
 			return proto.Result{Err: notTheBuilders}
 		}
@@ -147,6 +147,15 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	}
 	if pane, ok := strings.CutPrefix(a.RecID, "park:"); ok {
 		return s.park(pane)
+	}
+	if pane, ok := strings.CutPrefix(a.RecID, "kill:"); ok {
+		return s.kill(ctx, pane, a)
+	}
+	if pane, ok := strings.CutPrefix(a.RecID, "rename:"); ok {
+		return s.rename(ctx, pane, a)
+	}
+	if a.RecID == NewSessionID {
+		return s.newSession(ctx, a)
 	}
 	key := a.RecID + "\x00" + a.Which
 	id, door := strings.CutPrefix(a.RecID, "door:")
@@ -238,7 +247,7 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 
 // resolve finds the action in the service's own state: a rec by its id, or
 // the x action of a panel row ("orphan:<pid>", "worktree:<path>",
-// "session:<pid>" for a stale session).
+// "ship:<repo>#<n>"). A session's x is kill:<pane>.
 func (s *Service) resolve(id, which string) (advice.Action, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -264,16 +273,6 @@ func (s *Service) resolve(id, which string) (advice.Action, bool) {
 			if o.PID == pid && pid > 0 && len(o.Kill) > 0 {
 				return advice.Action{Label: "kill", Steps: [][]string{o.Kill}, Destructive: true,
 					Guards: []advice.Guard{{PID: o.PID, StartTicks: o.Start}}}, true
-			}
-		}
-	}
-	if v, ok := strings.CutPrefix(id, "session:"); ok {
-		// Only an agent idle a week or more, as this service sampled it.
-		pid, _ := strconv.Atoi(v)
-		for _, x := range s.cur.Sessions {
-			if x.PID == pid && pid > 0 && x.Age() == "stale" {
-				return advice.Action{Label: "end", Steps: [][]string{{"kill", strconv.Itoa(pid)}}, Destructive: true,
-					Guards: []advice.Guard{{PID: pid, StartTicks: x.Start, IdlePane: x.Pane}}}, true
 			}
 		}
 	}

@@ -177,3 +177,16 @@ type (
 	Hold          = holds.Hold
 	IdleReason    = idle.Reason
 )
+
+// NewSession is the Text of a "new:session" act: start an agent in a tmux
+// session of its own on the builder's server. Branch, when set, first
+// adds a worktree for it next to the repository in Where. Name is the
+// tmux session's, its window's and the agent's; empty, it is the
+// directory's. First is the agent's first message.
+type NewSession struct {
+	Where  string `json:"where"`
+	Branch string `json:"branch,omitempty"`
+	Name   string `json:"name,omitempty"`
+	Agent  string `json:"agent"`
+	First  string `json:"first,omitempty"`
+}

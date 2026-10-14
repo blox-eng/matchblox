@@ -28,4 +28,4 @@
 │   4 Type an answer…                      │
 ╰─ ⏎ question 2 ─ ← prev  next → ─ esc ────╯
 ────────────────────────────────────────────
- ⏎ open  a answer  z park  p ships  f stoker
+ ⏎ open  a answer  x kill  r rename  N new

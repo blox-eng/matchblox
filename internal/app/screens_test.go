@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -123,6 +124,16 @@ func TestScreens(t *testing.T) {
 		check(t, tabMorning(st), "stokermorning", size[0], size[1], []string{"c"})
 	}
 	check(t, sheetScreen(st, true), "sheetday", 104, 38, []string{"o"})
+	life := st
+	life.Agents = []string{"claude", "codex", "opencode"}
+	newKeys := append([]string{"N", "tab"}, strings.Split("feat/88-rate-limits", "")...)
+	newKeys = append(newKeys, "tab", "tab", "tab")
+	newKeys = append(newKeys, strings.Split("fix the flaky ships test", "")...)
+	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
+		check(t, life, "new", size[0], size[1], newKeys)
+		check(t, life, "rename", size[0], size[1], append(append([]string{"r"}, slices.Repeat([]string{"backspace"}, len("spark-docs"))...), strings.Split("docs-1-0", "")...))
+		check(t, life, "kill", size[0], size[1], []string{"x"})
+	}
 }
 
 // sheetScreen is the demo machine with a stoker agent, and the launch

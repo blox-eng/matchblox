@@ -6,6 +6,25 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Start, rename and kill a session from matchblox.** `N` opens New
+  session: where (a path, or the Git tab's repositories and worktrees), an
+  optional branch for a new worktree beside the repository, a name, the
+  agent (the installed Claude Code, Codex or OpenCode) and a first message.
+  It starts in a tmux session of its own, and the tmux session, its window
+  and Claude Code's own name are that one name. `r` renames a session the
+  same way, all alike; a busy Claude Code session takes its name when it
+  rests. `x` kills any session, not only a stale one: its exact commands
+  on the RUN line, a typed `y`, and a second `y` for one that works or
+  waits for you. Its worktree and transcript stay. All three are on the
+  key line, a tap away on a phone, which drops the spare keys first. The
+  same as commands: `matchblox new`, `matchblox rename`, `matchblox kill`.
+- **The stoker's hands start, rename and kill sessions.** `matchblox new`
+  works only in a run and only on your tmux server, and the guard watches
+  the session it starts. `matchblox kill` ends only a session at rest you
+  did not park, with the new `kills` go chip or your `y` on the card.
+
 ## [0.9.0] - 2026-10-14
 
 ### Added

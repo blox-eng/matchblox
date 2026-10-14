@@ -13,7 +13,7 @@ import (
 )
 
 // paneActs are the acts that name a pane after the colon.
-var paneActs = []string{"message:", "pick:", "answer:", "compact:", "hold:", "release:", "park:"}
+var paneActs = []string{"message:", "pick:", "answer:", "compact:", "hold:", "release:", "park:", "kill:", "rename:"}
 
 // typedPane is the pane a message, an answer or a pick types into.
 func typedPane(recID string) string {
@@ -68,7 +68,8 @@ func (s *Service) orderable(a proto.Act) error {
 		return errors.New("the stoker does not park: z is yours")
 	}
 	pane := paneOf(a.RecID)
-	if pane != "" && (s.Stoker == nil || !s.Stoker.Mode().On) {
+	counts := pane != "" || a.RecID == NewSessionID // what makes a step of the run
+	if counts && (s.Stoker == nil || !s.Stoker.Mode().On) {
 		return errors.New("the stoker is off: no run")
 	}
 	if s.Stoker == nil {
@@ -78,16 +79,16 @@ func (s *Service) orderable(a proto.Act) error {
 	if m.On && !m.Rests.IsZero() {
 		return errors.New("the stoker rests: a person works")
 	}
-	if pane == "" {
+	if !counts {
 		return nil
 	}
-	if pane == a.From {
+	if pane != "" && pane == a.From {
 		return errors.New("the stoker does not act on itself")
 	}
 	// A session the stoker drives must not type into the stoker's panes:
 	// a line there would read as the builder's new order. A pane whose
 	// session cannot be told is refused too.
-	if s.fromStoker(proto.Act{From: pane}) {
+	if pane != "" && s.fromStoker(proto.Act{From: pane}) {
 		return errors.New("no agent acts on the stoker's own session")
 	}
 	n := 0
@@ -116,7 +117,9 @@ func (s *Service) recordOrder(a proto.Act, res proto.Result) {
 		Session: x.SessionID, Name: x.Name, Pane: pane, Rule: stoker.RuleOrder,
 		Argv: res.Ran, Result: stoker.Sent,
 	})
-	s.drive(pane)
+	if !strings.HasPrefix(a.RecID, "kill:") { // a pane it killed is gone
+		s.drive(pane)
+	}
 	s.refreshStoker()
 }
 

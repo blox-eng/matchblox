@@ -107,7 +107,7 @@ func TestATapTogglesAGoChip(t *testing.T) {
 	m, _ := loadedWith(t, 100, sheetState(proto.StokerView{PaneUp: true}, "matchblox"))
 	next := sendKey(m, "n").(Model)
 	sc := next.draw(max(next.width, minWidth))
-	if len(sc.sheetGoes) != 3 {
+	if len(sc.sheetGoes) != 4 {
 		t.Fatalf("chip spans %+v", sc.sheetGoes)
 	}
 	at := sc.sheetGoes[2] // deploys
@@ -196,7 +196,7 @@ func TestTheCardNamesTheGoes(t *testing.T) {
 	v := proto.StokerView{Mode: proto.StokerMode{On: true, Order: &o}}
 	m, _ := loadedWith(t, 100, sheetState(v, "matchblox"))
 	s := screen(sendKey(m, "c"))
-	for _, want := range []string{"✓ releases", "! merges and deploys still ask you", "! no merge guard watches cx: its merges and deploys go unchecked"} {
+	for _, want := range []string{"✓ releases", "! merges, deploys and kills still ask you", "! no merge guard watches cx: its merges and deploys go unchecked"} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q:\n%s", want, s)
 		}
@@ -244,7 +244,7 @@ func TestSpaceOnAWaysChipPutsItIn(t *testing.T) {
 	m, _ := loadedWith(t, 100, sheetState(v, "matchblox"))
 	var next = sendKey(m, "n")
 	next = typed(next, "run")
-	for _, k := range []string{"tab", "right", "right", "right", "space", "right", "space"} {
+	for _, k := range []string{"tab", "right", "right", "right", "right", "space", "right", "space"} {
 		next, _ = next.Update(keyPress(k))
 	}
 	if got := next.(Model).sheet; got.text != "run merge-order priority" || len(got.goes) != 0 {

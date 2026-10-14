@@ -72,32 +72,45 @@ func TestIdleSessionsAge(t *testing.T) {
 	}
 }
 
-// TestXEndsAStaleSession: x on a stale session ends its agent after a
-// typed y; on any other session it says when x works.
-func TestXEndsAStaleSession(t *testing.T) {
-	m, f := loadedWith(t, 120, agingState())
+// TestXKillsASession: x on any session kills it after a typed y, with
+// the exact commands on the RUN line; one that waits for you asks for a
+// second y and says why.
+func TestXKillsASession(t *testing.T) {
+	st := agingState()
+	st.Sessions[4].Status = "idle" // echo rests: one y kills it
+	m, f := loadedWith(t, 160, st)
 	var next tea.Model = m
 	next, _ = key(next, "1")
 	next, _ = key(next, "x") // charlie: it waits
-	if next.(Model).pending != nil || !strings.Contains(actionLine(next), "x ends a stale session") {
-		t.Fatalf("x on a session that waits: %q", actionLine(next))
+	if line := actionLine(next); !strings.Contains(line, "RUN kill charlie: tmux kill-pane -t %charlie") {
+		t.Fatalf("x on charlie: %q", line)
 	}
-	for range 4 {
-		next, _ = key(next, "down")
+	next, cmd := key(next, "y")
+	if cmd != nil {
+		cmd()
 	}
-	if !strings.Contains(actionLine(next), "x end") {
-		t.Fatalf("the keys of a stale session lack x: %q", actionLine(next))
+	if line := actionLine(next); len(f.acts()) != 0 || !strings.Contains(line, "charlie waits for you: y again kills it all the same") {
+		t.Fatalf("one y killed a session that waits: %q %+v", line, f.acts())
 	}
-	next, _ = key(next, "x")
-	if line := actionLine(next); !strings.Contains(line, "RUN kill 5") || !strings.Contains(line, "y run") {
-		t.Fatalf("x on the stale session: %q", line)
-	}
-	_, cmd := key(next, "y")
+	_, cmd = key(next, "y")
 	if cmd == nil {
 		t.Fatal("y sent nothing")
 	}
 	cmd()
-	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "session:5", Which: "secondary", Confirm: "y"}) {
+	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "kill:%charlie", Which: "secondary", Confirm: "y", Text: "anyway"}) {
+		t.Fatalf("sent %+v", acts)
+	}
+	next = selectPane(t, next, "%echo")
+	if !strings.Contains(actionLine(next), "x kill") {
+		t.Fatalf("the keys of a session lack x: %q", actionLine(next))
+	}
+	next, _ = key(next, "x")
+	if line := actionLine(next); !strings.Contains(line, "RUN kill echo: tmux kill-pane -t %echo, then kill -TERM 5") {
+		t.Fatalf("x on echo: %q", line)
+	}
+	_, cmd = key(next, "y")
+	cmd()
+	if acts := f.acts(); len(acts) != 2 || acts[1] != (proto.Act{RecID: "kill:%echo", Which: "secondary", Confirm: "y"}) {
 		t.Fatalf("sent %+v", acts)
 	}
 }

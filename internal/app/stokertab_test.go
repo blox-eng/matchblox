@@ -117,7 +117,7 @@ func TestStokerTabShowsWordsPlanAndRules(t *testing.T) {
 	}
 	out := screen(m) + screen(end)
 	for _, want := range []string{
-		"NIGHT · 19:50 → 02:50", "sealed", "“merge them on green", "✓ merges", "! releases and deploys still ask you", "PLAN 3 of 5",
+		"NIGHT · 19:50 → 02:50", "sealed", "“merge them on green", "✓ merges", "! releases, deploys and kills still ask you", "PLAN 3 of 5",
 		"✓", "◐", "⏸", "spark-docs", "hold: not priority", "told 02:05, CI 6 of 9 jobs",
 		"YOUR GO", "waits for you: kindle-web wants to run gh release create v1.4", "y gives the go, once",
 		"STANDING RULES", "opened #4570", "TODAY", "RESUME: run the migration test",

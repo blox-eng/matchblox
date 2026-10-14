@@ -1,11 +1,11 @@
  ▰ matchblox      ● 6 wait for you  ☾ night
  1  2  3  4  history  panes  STOKER 1
 ────────────────────────────────────────────
-
   “merge them on green, and a new PR gets
   a compact and /review”
   ✓ merges
-  ! releases and deploys still ask you
+  ! releases, deploys and kills still ask
+    you
 
  PLAN 3 of 5
   ✓ 19:51 spark-docs hold: not priority
@@ -28,4 +28,4 @@
           y gives the go, once
 
 ────────────────────────────────────────────
- y give the go  ⏎ command  1 sessions  p sh…
+ y give the go  ⏎ command  1 sessions  n st…

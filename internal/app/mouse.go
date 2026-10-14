@@ -36,6 +36,9 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.sheet != nil {
 		return m.tapSheet(ms, sc)
 	}
+	if m.form != nil {
+		return m.tapForm(ms, sc)
+	}
 	if m.peek != nil {
 		inside := ms.Y >= sc.peekAt && ms.Y < sc.peekAt+len(sc.peekRows) && ms.X >= sc.peekX && ms.X < sc.peekX+sc.peekW
 		if !sc.peekInline || inside {

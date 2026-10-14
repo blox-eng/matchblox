@@ -6,7 +6,7 @@
 
   “merge them on green, and a new PR gets a compact and /review”
   ✓ merges
-  ! releases and deploys still ask you
+  ! releases, deploys and kills still ask you
 
  PLAN 3 of 5
   ✓ 19:51 spark-docs hold: not priority

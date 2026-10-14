@@ -76,14 +76,16 @@ opens it again to give a new order.
 2. Under the order are the go chips:
 
    ```text
-   gos ✓ merges  ○ releases  ○ deploys
+   gos ✓ merges  ○ releases  ○ deploys  ○ kills
    ```
 
    Each is off (`○`, it asks you) until you turn it on: `Tab` takes the
    cursor to the chips, `←` `→` move between them, `Space` turns one on
    or off, and `Tab` or `Esc` goes back to the order. A tap on a chip
    does the same. These, and only these, are the run's goes: the stoker
-   never reads a go from your words.
+   never reads a go from your words. `kills` lets the stoker end a session
+   at rest with `matchblox kill`; while it is off, each kill waits on the
+   card for your `y`. On a phone the chips have no `gos` label.
 3. `Enter` sends the order, and the run starts at once. matchblox writes a
    brief to `stoker-brief.md` in the state directory and types one line
    into the stoker pane: `Read <path> and follow it.` The brief holds the
@@ -119,12 +121,24 @@ guard stops it if it tries to merge, release or deploy. It works
 with these commands, which go through the same checks as the console (see
 [Act on a session from a script or an agent](console.md#act-on-a-session-from-a-script-or-an-agent)):
 `matchblox sessions`, `ships`, `usage`, `peek`, `send`, `compact`, `hold`,
-`release`, `stoker plan` and `stoker step` for the card, and `stoker when`
-for a trigger. Each field of
+`release`, `new`, `rename` and `kill`, `stoker plan` and `stoker step` for
+the card, and `stoker when` for a trigger. Each field of
 `matchblox sessions --json` is in
 [Read it from a script or an agent](console.md#read-it-from-a-script-or-an-agent):
 the stoker reads `word`, not `status`, which is the agent's own word
 (Claude Code's `shell` is a session at rest with a background shell).
+
+`matchblox new --where <path> --agent claude "<first message>"` starts a
+session in a tmux session of its own on your tmux server, never on
+matchblox's own, in a new worktree when it names `--branch`. It counts as
+one of the run's messages, and the session it starts is one the stoker
+drives from its first second, so the guard watches it.
+`matchblox rename <session> <name>` names a session, its tmux session and
+its agent alike. `matchblox kill <session>` ends a session at rest that you
+did not park: with the `kills` go it runs at once; without it, the card
+shows `⏸ waits for you: stoker wants to kill api-gw`, `y` gives the go
+for that one kill, and the stoker runs it again. It never kills a session
+that works or waits for you.
 
 `matchblox hold` queues one message, `finish this step, then stop and
 wait`, and marks the session held. It never sends `Esc` or `Ctrl+C`: a
@@ -367,8 +381,14 @@ The guard has limits:
 - It sends `max_steps` messages in one run (60 by default). A hold, a
   release, a pick and a compact it asked for count. At the limit, matchblox
   refuses the next with `the run sent its 60 messages: max_steps`.
-- It never ends, kills or interrupts anything. A hold waits for the end of
-  the session's turn.
+- It never interrupts anything: a hold waits for the end of the session's
+  turn. It ends a session only with `matchblox kill`, only one at rest that
+  you did not park, and only with the `kills` go or your `y` (`the kill
+  waits for the builder's go: it is on the card, y gives it`). A session
+  that works or waits for you is refused (`api-gw works: the stoker kills
+  only a session at rest`).
+- It starts sessions only in a run, only on your tmux server, and only
+  Claude Code, Codex or OpenCode.
 - It never answers a permission prompt: matchblox refuses a `send` to a
   session that waits at one, by its hooks or by the last sample of its
   pane (`a permission prompt is answered in its pane`).
