@@ -113,6 +113,8 @@ func run(args []string) error {
 			return gateMain(args[1:])
 		case "authorize":
 			return authorize(args[1:])
+		case "pair":
+			return pairCmd(context.Background(), args[1:], os.Stdout, time.Now)
 		case "connect":
 			return liveConnect(args[1:])
 		}
@@ -197,7 +199,7 @@ func run(args []string) error {
 
 // commands are the commands a builder types. hook, authorize and gate run
 // from a hook, an ssh forced command and a connect.
-var commands = []string{"connect", "serve", "status", "setup", "version"}
+var commands = []string{"connect", "serve", "status", "setup", "pair", "version"}
 
 type flags struct {
 	cfgPath, root         *string

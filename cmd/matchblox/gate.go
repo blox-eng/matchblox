@@ -13,6 +13,9 @@ import (
 // stream; a phone key (`gate phone`) also starts the console. Anything else
 // exits 126.
 func gateMain(args []string) error {
+	if len(args) == 2 && args[0] == "pair" {
+		return gatePair(args[1])
+	}
 	mode := ""
 	switch {
 	case len(args) == 0:
@@ -61,4 +64,22 @@ func gateDecision(mode, orig string) (argv []string, err error) {
 		return nil, errors.New("this key starts only the matchblox stream; run matchblox pair to add a phone")
 	}
 	return nil, errors.New("this key starts only the matchblox stream and console")
+}
+
+// gatePair runs the forced command of a one-time key. The mode comes from the
+// key line alone; SSH_ORIGINAL_COMMAND is not read.
+func gatePair(id string) error {
+	if !validPairID(id) {
+		fmt.Fprintln(os.Stderr, "matchblox gate: refused: this key line has a bad pairing id; run matchblox pair again")
+		os.Exit(126)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	exe := invokedPath(os.Args[0])
+	if exe == "" {
+		return errors.New("cannot find this matchblox on the PATH")
+	}
+	return pairMain(home, exe, os.Stdin, os.Stdout, id)
 }

@@ -23,6 +23,7 @@ var docHosts = []string{"ws-1", "<host>"}
 var commandFlags = map[string][]string{
 	"console": {"config", "interval", "fixtures", "no-motion"},
 	"<host>":  {"config", "interval", "no-motion"},
+	"pair":    {"address", "port", "name"},
 	"serve":   {"config", "interval", "fixtures", "stdio"},
 	"status":  {"config", "interval", "fixtures", "text"},
 }
