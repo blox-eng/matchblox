@@ -22,7 +22,10 @@ let package = Package(
         ),
         .testTarget(
             name: "MatchbloxKitTests",
-            dependencies: ["MatchbloxKit"]
+            dependencies: [
+                "MatchbloxKit",
+                .product(name: "NIOSSH", package: "swift-nio-ssh"),
+            ]
         ),
     ]
 )
