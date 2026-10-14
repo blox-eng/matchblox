@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/blox-eng/matchblox/internal/remote"
+	"github.com/blox-eng/matchblox/internal/setup"
 )
 
 // gateMain is the forced command of the matchblox key on a host
@@ -69,7 +70,7 @@ func gateDecision(mode, orig string) (argv []string, err error) {
 // gatePair runs the forced command of a one-time key. The mode comes from the
 // key line alone; SSH_ORIGINAL_COMMAND is not read.
 func gatePair(id string) error {
-	if !validPairID(id) {
+	if !setup.ValidPairID(id) {
 		fmt.Fprintln(os.Stderr, "matchblox gate: refused: this key line has a bad pairing id; run matchblox pair again")
 		os.Exit(126)
 	}

@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
-	"regexp"
 	"strings"
 	"time"
 
@@ -42,10 +41,6 @@ var pairReadTimeout = 30 * time.Second
 var pairSettings = pairEnv{hostKeyPath: defaultHostKey, poll: pairPollInterval, limit: pairWindow}
 
 var hostLabel = shortHostname
-
-var pairIDRe = regexp.MustCompile(`^[0-9a-f]{12}$`)
-
-func validPairID(id string) bool { return pairIDRe.MatchString(id) }
 
 func shortHostname() string {
 	h, err := os.Hostname()
@@ -93,16 +88,14 @@ func pairMain(home, exe string, in io.Reader, out io.Writer, id string) error {
 	if !remote.ValidDeviceKey(req.Key) {
 		return refuse("bad key")
 	}
-	// Claim the code before the phone is added: it works once.
-	removed, err := setup.RemovePairKey(home, id)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "matchblox gate pair:", err)
-		return refuse("write failed")
-	}
-	if !removed {
+	// One write claims the code and adds the phone: it works once.
+	_, err := setup.ClaimPairKey(home, exe, id, req.Key, req.Name)
+	switch {
+	case errors.Is(err, setup.ErrCodeUsed):
 		return refuse("code used")
-	}
-	if _, err := setup.AuthorizeDevice(home, exe, req.Key, req.Name); err != nil {
+	case errors.Is(err, setup.ErrKeyInUse):
+		return refuse("key in use")
+	case err != nil:
 		fmt.Fprintln(os.Stderr, "matchblox gate pair:", err)
 		return refuse("write failed")
 	}
@@ -182,7 +175,7 @@ func pairCmd(ctx context.Context, args []string, out io.Writer, now func() time.
 			if present {
 				continue
 			}
-			_, _ = fmt.Fprintln(out, "Paired. matchblox devices lists it.")
+			_, _ = fmt.Fprintln(out, pairedLine(env.home, id))
 			return nil
 		}
 		removed, err := setup.RemovePairKey(env.home, id)
@@ -190,12 +183,26 @@ func pairCmd(ctx context.Context, args []string, out io.Writer, now func() time.
 			return err
 		}
 		if !removed { // the phone took it in the last moment
-			_, _ = fmt.Fprintln(out, "Paired. matchblox devices lists it.")
+			_, _ = fmt.Fprintln(out, pairedLine(env.home, id))
+			return nil
+		}
+		if ctx.Err() != nil {
+			_, _ = fmt.Fprintln(out, "Stopped. The code no longer works.")
 			return nil
 		}
 		_, _ = fmt.Fprintln(out, "The code expired. Run matchblox pair again.")
 		return nil
 	}
+}
+
+// pairedLine names the phone that used the one-time key id, so a phone
+// that is not yours is seen at once. With no claim, the line went some
+// other way.
+func pairedLine(home, id string) string {
+	if d, ok := setup.TakeClaim(home, id); ok {
+		return fmt.Sprintf("Paired %s (%s). Not your phone? Run matchblox devices rm %s.", d.Name, d.Fingerprint, d.Fingerprint)
+	}
+	return "The code is gone, but no phone used it. Run matchblox pair again."
 }
 
 func hostKeyFingerprint(path string) (string, error) {

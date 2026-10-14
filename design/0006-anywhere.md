@@ -150,7 +150,9 @@ Pairing uses the sshd of the host. matchblox opens no port. (My call.)
 4. The app connects with the one-time key and sends its public key, its
    name and its push tokens. `gate pair` adds the phone key with
    `restrict,pty,command="<exe> gate phone"` (0005 §3.3) and removes the one-time
-   key. A one-time key works once.
+   key, in one locked write. A one-time key works once. A key that already
+   opens a login of its own is refused (`key in use`). The host prints the
+   name and fingerprint of the phone that paired.
 5. The gate today lets through only `matchblox serve --stdio`
    (cmd/matchblox/gate.go). It must let through exactly these commands and
    nothing else. A laptop key (`gate`) keeps the stream alone; only a phone
@@ -208,8 +210,7 @@ Pairing uses the sshd of the host. matchblox opens no port. (My call.)
 ### 6.6 The match on the lock screen
 
 Mockup (approved by the owner, 2026-10-14):
-[0006-live-match.html](0006-live-match.html), a copy of
-https://claude.ai/artifact/JTGFApfmENRLdrhNG6i3HD
+[0006-live-match.html](0006-live-match.html).
 
 1. The Live Activity is always on. It shows one match: the session that is
    most important now. A session that waits comes before a session that

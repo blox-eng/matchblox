@@ -33,6 +33,10 @@ sshd does not listen on port 22.
 If the app says "This code was used or expired", run `matchblox pair` on
 the host again.
 
+When the phone pairs, `matchblox pair` prints the name and fingerprint of
+that phone. If it is not your phone, remove it at once with
+`matchblox devices rm <fingerprint>`.
+
 To remove a phone, run `matchblox devices` on the host. It lists each phone
 and laptop that opens the host. Then run:
 

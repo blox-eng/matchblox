@@ -2,10 +2,13 @@ package setup
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -400,5 +403,259 @@ func TestRemovePairKeyKeepsBytesWithoutFinalNewline(t *testing.T) {
 	}
 	if _, err := RemovePairKey(home, "nothex"); err == nil {
 		t.Fatal("bad id: no error")
+	}
+}
+
+func TestDevicesReadsCRLFLines(t *testing.T) {
+	home := t.TempDir()
+	if _, err := AuthorizeDevice(home, "/opt/mb/matchblox", phoneKey, "iPhone"); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(home, ".ssh", "authorized_keys")
+	if err := os.WriteFile(path, []byte(strings.ReplaceAll(authKeys(home), "\n", "\r\n")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Devices(home); err != nil || len(got) != 1 || got[0].Name != "iPhone" {
+		t.Fatalf("devices: %+v, %v", got, err)
+	}
+	if _, err := RemoveDevice(home, "iPhone"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(authKeys(home), phoneKey) {
+		t.Fatalf("the phone is still there:\n%s", authKeys(home))
+	}
+}
+
+func TestRemoveDeviceRefusesAnEmptyName(t *testing.T) {
+	home := t.TempDir()
+	f := loadPairFixture(t)
+	if _, err := Authorize(home, "/opt/mb/matchblox", f.HostkeyPub); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RemoveDevice(home, ""); err == nil {
+		t.Fatal("an empty name removed a device")
+	}
+	if !strings.Contains(authKeys(home), f.HostkeyPub) {
+		t.Fatalf("the laptop is gone:\n%s", authKeys(home))
+	}
+}
+
+func TestClaimPairKeyWorksOnceUnderRace(t *testing.T) {
+	home := t.TempDir()
+	if err := AddPairKey(home, "/opt/mb/matchblox", pairPub, "0123456789ab", time.Now().Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	var wins atomic.Int32
+	var wg sync.WaitGroup
+	for _, key := range []string{phoneKey, phoneKey2, phoneKey, phoneKey2, phoneKey, phoneKey2, phoneKey, phoneKey2} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := ClaimPairKey(home, "/opt/mb/matchblox", "0123456789ab", key, "iPhone")
+			switch {
+			case err == nil:
+				wins.Add(1)
+			case !errors.Is(err, ErrCodeUsed):
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	if wins.Load() != 1 {
+		t.Fatalf("winners = %d, want 1", wins.Load())
+	}
+	if got, _ := Devices(home); len(got) != 1 || strings.Contains(authKeys(home), "gate pair") {
+		t.Fatalf("devices %+v, file:\n%s", got, authKeys(home))
+	}
+}
+
+func TestClaimPairKeyRefusesAKeyThatOpensALoginAndKeepsTheCode(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, ".ssh", "authorized_keys")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(phoneKey+" me@laptop\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := AddPairKey(home, "/opt/mb/matchblox", pairPub, "0123456789ab", time.Now().Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ClaimPairKey(home, "/opt/mb/matchblox", "0123456789ab", phoneKey, "iPhone"); !errors.Is(err, ErrKeyInUse) {
+		t.Fatalf("err = %v, want ErrKeyInUse", err)
+	}
+	if _, err := AuthorizeDevice(home, "/opt/mb/matchblox", phoneKey, "iPhone"); !errors.Is(err, ErrKeyInUse) {
+		t.Fatalf("AuthorizeDevice err = %v, want ErrKeyInUse", err)
+	}
+	if got := authKeys(home); !strings.HasPrefix(got, phoneKey+" me@laptop\n") || !strings.Contains(got, "gate pair") {
+		t.Fatalf("file:\n%s", got)
+	}
+}
+
+func TestPairingKeepsOneBackup(t *testing.T) {
+	home := t.TempDir()
+	if _, err := AuthorizeDevice(home, "/opt/mb/matchblox", phoneKey2, "iPad"); err != nil {
+		t.Fatal(err)
+	}
+	baks := func() int {
+		m, _ := filepath.Glob(filepath.Join(home, ".ssh", "authorized_keys.matchblox-*.bak"))
+		return len(m)
+	}
+	n := baks()
+	if err := AddPairKey(home, "/opt/mb/matchblox", pairPub, "0123456789ab", time.Now().Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ClaimPairKey(home, "/opt/mb/matchblox", "0123456789ab", phoneKey, "iPhone"); err != nil {
+		t.Fatal(err)
+	}
+	if got := baks() - n; got != 1 {
+		t.Fatalf("a pairing made %d backups, want 1", got)
+	}
+}
+
+func TestRemoveDeviceNeverTakesAPairLine(t *testing.T) {
+	home := t.TempDir()
+	if err := AddPairKey(home, "/opt/mb/matchblox", pairPub, "0123456789ab", time.Now().Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	fp, _ := Fingerprint(pairPub)
+	for _, name := range []string{"matchblox:pair", "pair", fp} {
+		if _, err := RemoveDevice(home, name); err == nil {
+			t.Errorf("RemoveDevice(%q) took the pair line", name)
+		}
+	}
+	if !strings.Contains(authKeys(home), "gate pair") {
+		t.Fatal("the pair line is gone")
+	}
+}
+
+func TestRewriteKeysKeepsALineAnotherProgramAdds(t *testing.T) {
+	home := t.TempDir()
+	if _, err := AuthorizeDevice(home, "/opt/mb/matchblox", phoneKey2, "iPad"); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(home, ".ssh", "authorized_keys")
+	const other = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM4bfwfUcmyCX2tnMZ4mHkeEjSRJnkf0ehLEuB8iWLHU copied@id\n"
+	once := sync.Once{}
+	old := beforeReplace
+	beforeReplace = func() { // ssh-copy-id appends while matchblox writes
+		once.Do(func() {
+			f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			_, _ = f.WriteString(other)
+			_ = f.Close()
+		})
+	}
+	t.Cleanup(func() { beforeReplace = old })
+	if _, err := AuthorizeDevice(home, "/opt/mb/matchblox", phoneKey, "iPhone"); err != nil {
+		t.Fatal(err)
+	}
+	got := authKeys(home)
+	if !strings.Contains(got, other) || !strings.Contains(got, phoneKey) || !strings.Contains(got, phoneKey2) {
+		t.Fatalf("a line went:\n%s", got)
+	}
+}
+
+func TestPhoneKeyInUse(t *testing.T) {
+	body := strings.Fields(phoneKey)[1]
+	for name, c := range map[string]struct {
+		line  string
+		inUse bool
+	}{
+		"login":            {phoneKey + " me@laptop\n", true},
+		"login, tab":       {phoneKey + "\tme@laptop\n", true},
+		"login, CRLF":      {phoneKey + " me\r\n", true},
+		"login, no note":   {phoneKey + "\n", true},
+		"login, options":   {`from="10.0.0.1" ` + phoneKey + " me\n", true},
+		"laptop gate line": {`restrict,pty,command="'/opt/mb/matchblox' gate" ` + phoneKey + " matchblox\n", true},
+		"commented out":    {"# " + phoneKey + " old\n", false},
+		"same phone":       {`restrict,pty,command="'/opt/mb/matchblox' gate phone" ` + phoneKey + " matchblox:phone:iPhone\n", false},
+		"other key":        {phoneKey2 + " me\n", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			next, err := withPhone([]byte(c.line), "/opt/mb/matchblox", phoneKey, "iPhone")
+			if c.inUse {
+				if !errors.Is(err, ErrKeyInUse) {
+					t.Fatalf("err = %v, want ErrKeyInUse", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n := strings.Count(string(next), body); n != 1 {
+				t.Fatalf("the key is in %d lines:\n%s", n, next)
+			}
+		})
+	}
+}
+
+func TestRewriteKeysGivesUpOnAFileThatKeepsChanging(t *testing.T) {
+	home := t.TempDir()
+	if _, err := AuthorizeDevice(home, "/opt/mb/matchblox", phoneKey2, "iPad"); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(home, ".ssh", "authorized_keys")
+	old := beforeReplace
+	beforeReplace = func() {
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+		if err == nil {
+			_, _ = f.WriteString("# another program\n")
+			_ = f.Close()
+		}
+	}
+	t.Cleanup(func() { beforeReplace = old })
+	if _, err := AuthorizeDevice(home, "/opt/mb/matchblox", phoneKey, "iPhone"); err == nil {
+		t.Fatal("no error for a file that keeps changing")
+	}
+	if got := authKeys(home); strings.Contains(got, phoneKey) || strings.Count(got, "# another program") != 3 {
+		t.Fatalf("file:\n%s", got)
+	}
+}
+
+func TestTakeClaimNamesThePhoneOfTheIDOnce(t *testing.T) {
+	home := t.TempDir()
+	for id, key := range map[string]string{"0123456789ab": pairPub, "ba9876543210": loadPairFixture(t).HostkeyPub} {
+		if err := AddPairKey(home, "/opt/mb/matchblox", key, id, time.Now().Add(time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := ClaimPairKey(home, "/opt/mb/matchblox", "0123456789ab", phoneKey, "iPhone"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := TakeClaim(home, "ba9876543210"); ok {
+		t.Fatal("a claim for an id that no phone used")
+	}
+	fp, _ := Fingerprint(phoneKey)
+	if d, ok := TakeClaim(home, "0123456789ab"); !ok || d != (Device{"phone", "iPhone", fp}) {
+		t.Fatalf("claim = %+v, %v", d, ok)
+	}
+	if _, ok := TakeClaim(home, "0123456789ab"); ok {
+		t.Fatal("the claim note is still there")
+	}
+}
+
+func TestAFailedClaimKeepsTheNoteOfTheClaimThatWorked(t *testing.T) {
+	home := t.TempDir()
+	if err := AddPairKey(home, "/opt/mb/matchblox", pairPub, "0123456789ab", time.Now().Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ClaimPairKey(home, "/opt/mb/matchblox", "0123456789ab", phoneKey, "Stranger"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ClaimPairKey(home, "/opt/mb/matchblox", "0123456789ab", phoneKey2, "iPhone"); !errors.Is(err, ErrCodeUsed) {
+		t.Fatalf("second claim: %v, want ErrCodeUsed", err)
+	}
+	if d, ok := TakeClaim(home, "0123456789ab"); !ok || d.Name != "Stranger" {
+		t.Fatalf("claim = %+v, %v; want the phone that paired", d, ok)
+	}
+}
+
+func TestClaimPairKeyRefusesABadID(t *testing.T) {
+	if _, err := ClaimPairKey(t.TempDir(), "/opt/mb/matchblox", "x/../../a", phoneKey, "iPhone"); err == nil {
+		t.Fatal("a bad id was accepted")
 	}
 }

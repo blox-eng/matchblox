@@ -36,6 +36,7 @@
     "bad name": "{\"ok\":false,\"error\":\"bad name\"}",
     "bad key": "{\"ok\":false,\"error\":\"bad key\"}",
     "code used": "{\"ok\":false,\"error\":\"code used\"}",
+    "key in use": "{\"ok\":false,\"error\":\"key in use\"}",
     "write failed": "{\"ok\":false,\"error\":\"write failed\"}",
     "too slow": "{\"ok\":false,\"error\":\"too slow\"}"
   },

@@ -324,6 +324,7 @@ Part B needs macOS with Xcode 16 or later. This plan does not assume a Mac at ha
 - Produces (app):
   - The `matchblox://pair` URL (from the Camera) and `ScanView` (VisionKit `DataScannerViewController`, QR only) both open `PairView`.
   - `PairView` shows the host name, an address field, a phone name field (default `UIDevice.current.name`), and `Pair`.
+  - The reply words are those of `testdata/pair/v1.json` `replies`: `bad name`, `bad key`, `code used`, `key in use`, `write failed`, `too slow`. The login shell of the host can print text (a `.bashrc` echo) before the reply, so the reader skips each line that is not a JSON object and takes the first one that is.
   - `Pair` runs `DeviceKey.loadOrCreate` (Face ID), opens `SSHSession` with the one-time key and no pty, writes `requestLine`, and reads one reply line. On `ok`, it calls `HostStore.upsert` and opens the window (B6). On an error, it shows `Pairing.message` in place, with `Scan again`.
 
 - [ ] **Step 1: Write the failing tests:**
@@ -332,6 +333,7 @@ Part B needs macOS with Xcode 16 or later. This plan does not assume a Mac at ha
   - `testRequestLineMatchesTheFixture`
   - `testRepliesFromTheFixture`
   - `testUsedCodeMessage` (`.refused`, host "ws-1" → the exact text)
+  - `testReplySkipsShellNoise` (`"welcome\n{\"ok\":true,\"host\":\"ws-1\"}\n"` → ok)
   - `testHostStoreKeysByFingerprint` (upsert twice with a new address gives one host with the new address)
 - [ ] **Step 2:** Push and watch. Expected: FAIL.
 - [ ] **Step 3:** Implement.

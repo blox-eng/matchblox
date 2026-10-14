@@ -16,6 +16,9 @@ All notable changes to matchblox are in this file. The format follows
 - **`matchblox pair` shows a one-time QR code for the coming iPhone app**
   (#88). The code holds a key that works once and that sshd refuses after
   5 minutes. Stop the command, or close the terminal, and the key is gone.
+  When a phone pairs, the host prints its name and fingerprint, so a phone
+  that is not yours is seen at once. A key that already opens a login on
+  the host cannot pair, so a pairing never changes your own ssh login.
 - **A phone key opens the console.** The new key kind (`gate phone`) starts
   the stream and the console. A laptop key from `matchblox connect` keeps
   the stream alone.
