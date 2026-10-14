@@ -81,6 +81,16 @@ final class HostStoreTests: XCTestCase {
         XCTAssertEqual(store.all().map(\.fingerprint), ["SHA256:a", "SHA256:b", "SHA256:c"])
     }
 
+    func testAnotherPortIsNotStale() throws {
+        let store = HostStore(file: directory.appendingPathComponent("hosts.json"))
+        let first = Host(label: "raspberrypi", address: "203.0.113.7", port: 2201, user: "pi", fingerprint: "SHA256:a")
+        let second = Host(label: "raspberrypi", address: "203.0.113.7", port: 2202, user: "pi", fingerprint: "SHA256:b")
+        try store.upsert(first)
+
+        XCTAssertEqual(try store.upsert(second), [])
+        XCTAssertEqual(store.all(), [first, second])
+    }
+
     func testPairingTheSameHostAgainIsNotStale() throws {
         let store = HostStore(file: directory.appendingPathComponent("hosts.json"))
         try store.upsert(host("SHA256:a", address: "ws-1.local"))

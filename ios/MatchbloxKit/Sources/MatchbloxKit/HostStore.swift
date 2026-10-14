@@ -36,12 +36,13 @@ public final class HostStore: Sendable {
         return (try? JSONDecoder().decode([Host].self, from: data)) ?? []
     }
 
-    /// Adds the host, or updates the entry with its fingerprint. An entry with the same label, address and user but another fingerprint is the host before its host key changed: the host replaces it. Returns those stale entries, so their keys can go too.
+    /// Adds the host, or updates the entry with its fingerprint. An entry with the same label, address, port and user but another fingerprint is the host before its host key changed: the host replaces it. Returns those stale entries, so their keys can go too.
     @discardableResult
     public func upsert(_ host: Host) throws -> [Host] {
         var hosts = all()
         let stale = hosts.filter {
-            $0.fingerprint != host.fingerprint && $0.label == host.label && $0.address == host.address && $0.user == host.user
+            $0.fingerprint != host.fingerprint && $0.label == host.label && $0.address == host.address
+                && $0.port == host.port && $0.user == host.user
         }
         let replaces = { (entry: Host) in entry.fingerprint == host.fingerprint || stale.contains(entry) }
         let index = hosts.firstIndex(where: replaces)
