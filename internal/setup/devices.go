@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -126,3 +128,70 @@ func RemoveDevice(home, name string) (backup string, err error) {
 }
 
 func authorizedKeys(home string) string { return filepath.Join(home, ".ssh", "authorized_keys") }
+
+var pairID = regexp.MustCompile(`^[0-9a-f]{12}$`)
+
+func pairCommand(exe, id string) string { return `command="'` + exe + `' gate pair ` + id + `"` }
+
+// AddPairKey lets a one-time key run only `matchblox gate pair <id>`, and
+// tells sshd to refuse it after until.
+func AddPairKey(home, exe, pubKey, id string, until time.Time) error {
+	if !remote.ValidPubKey(pubKey) {
+		return errors.New("not one ed25519 public key")
+	}
+	if !pairID.MatchString(id) {
+		return errors.New("the pairing id is 12 lowercase hex characters: " + id)
+	}
+	if !exePath.MatchString(exe) {
+		return errors.New("the matchblox path has a character the gate line cannot hold (only letters, digits, space and ._+@/- ): " + exe +
+			"; install matchblox in a plain directory, such as /usr/local/bin")
+	}
+	f := strings.Fields(pubKey)
+	_, err := putKeyLine(home, f[1], `restrict,expiry-time="`+until.UTC().Format("200601021504")+`Z",`+pairCommand(exe, id)+" "+f[0]+" "+f[1]+" matchblox:pair")
+	return err
+}
+
+var pairLine = regexp.MustCompile(`^restrict,expiry-time="\d{12}Z",command="'[^"']*' gate pair ([0-9a-f]{12})" `)
+
+func pairLines(home, id string) (lines []string, hits []int, err error) {
+	if !pairID.MatchString(id) {
+		return nil, nil, errors.New("the pairing id is 12 lowercase hex characters: " + id)
+	}
+	_, b, _, err := read(authorizedKeys(home))
+	if err != nil {
+		return nil, nil, err
+	}
+	lines = strings.Split(string(b), "\n")
+	for i, line := range lines {
+		if m := pairLine.FindStringSubmatch(line); m != nil && m[1] == id {
+			hits = append(hits, i)
+		}
+	}
+	return lines, hits, nil
+}
+
+// PairKeyPresent is whether the line of the one-time key is still there.
+func PairKeyPresent(home, id string) (bool, error) {
+	_, hits, err := pairLines(home, id)
+	return len(hits) > 0, err
+}
+
+// RemovePairKey takes out the line of the one-time key. Every other line
+// keeps its bytes.
+func RemovePairKey(home, id string) (removed bool, err error) {
+	lines, hits, err := pairLines(home, id)
+	if err != nil || len(hits) == 0 {
+		return false, err
+	}
+	target, _, mode, err := read(authorizedKeys(home))
+	if err != nil {
+		return false, err
+	}
+	var kept []string
+	for i, line := range lines {
+		if !slices.Contains(hits, i) {
+			kept = append(kept, line)
+		}
+	}
+	return true, replace(target, []byte(strings.Join(kept, "\n")), mode)
+}

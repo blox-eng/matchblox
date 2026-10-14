@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -216,5 +217,101 @@ func TestFingerprintMatchesSSHKeygen(t *testing.T) {
 		if _, err := Fingerprint(bad); err == nil {
 			t.Errorf("Fingerprint(%q): no error", bad)
 		}
+	}
+}
+
+const pairPub = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJuq8ePD+piatVSqgsicCgoOmr96M/08H8oC9fvzMWs9"
+
+func TestAddPairKeyLine(t *testing.T) {
+	home := t.TempDir()
+	until := time.Date(2026, 10, 14, 16, 37, 0, 0, time.FixedZone("EEST", 3*3600)).In(time.FixedZone("EEST", 3*3600))
+	if err := AddPairKey(home, "/usr/local/bin/matchblox", pairPub, "0123456789ab", until); err != nil {
+		t.Fatal(err)
+	}
+	want := `restrict,expiry-time="202610141337Z",command="'/usr/local/bin/matchblox' gate pair 0123456789ab" ` + pairPub + " matchblox:pair\n"
+	if got := authKeys(home); got != want {
+		t.Fatalf("line:\n%s\nwant:\n%s", got, want)
+	}
+	if ok, err := PairKeyPresent(home, "0123456789ab"); err != nil || !ok {
+		t.Fatalf("present = %v, %v", ok, err)
+	}
+	if ok, _ := PairKeyPresent(home, "ba9876543210"); ok {
+		t.Fatal("another id present")
+	}
+	if got, _ := Devices(home); len(got) != 0 {
+		t.Fatalf("pair line listed as device: %+v", got)
+	}
+}
+
+func TestAddPairKeyRefuses(t *testing.T) {
+	home := t.TempDir()
+	until := time.Now()
+	for name, c := range map[string]struct{ exe, key, id string }{
+		"short id":    {"/opt/mb/matchblox", pairPub, "0123"},
+		"upper id":    {"/opt/mb/matchblox", pairPub, "0123456789AB"},
+		"injected id": {"/opt/mb/matchblox", pairPub, `0123456789a" `},
+		"quote exe":   {`/opt/mb/m"x`, pairPub, "0123456789ab"},
+		"quote exe 2": {`/opt/mb/m'x`, pairPub, "0123456789ab"},
+		"relative":    {"matchblox", pairPub, "0123456789ab"},
+		"p256 key":    {"/opt/mb/matchblox", phoneKey, "0123456789ab"},
+	} {
+		if err := AddPairKey(home, c.exe, c.key, c.id, until); err == nil {
+			t.Errorf("%s: no error", name)
+		}
+	}
+	if got := authKeys(home); got != "" {
+		t.Fatalf("file written:\n%s", got)
+	}
+}
+
+func TestRemovePairKey(t *testing.T) {
+	home := t.TempDir()
+	until := time.Date(2026, 10, 14, 14, 37, 0, 0, time.UTC)
+	other := "ssh-rsa AAAAB3NzaC1yc2E other@host"
+	keep2 := `restrict,expiry-time="202610141437Z",command="'/opt/mb/matchblox' gate pair ba9876543210" ` + "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOtherOtherOtherOtherOtherOtherOtherOtherOth matchblox:pair"
+	dir := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "authorized_keys"), []byte(other+"\n"+keep2), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := AddPairKey(home, "/usr/local/bin/matchblox", pairPub, "0123456789ab", until); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := RemovePairKey(home, "0123456789ab")
+	if err != nil || !removed {
+		t.Fatalf("remove = %v, %v", removed, err)
+	}
+	if got := authKeys(home); got != other+"\n"+keep2+"\n" {
+		t.Fatalf("after remove:\n%q", got)
+	}
+	if removed, err = RemovePairKey(home, "0123456789ab"); err != nil || removed {
+		t.Fatalf("second remove = %v, %v", removed, err)
+	}
+	if got := authKeys(home); got != other+"\n"+keep2+"\n" {
+		t.Fatalf("after second remove:\n%q", got)
+	}
+}
+
+func TestRemovePairKeyKeepsBytesWithoutFinalNewline(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	pair := `restrict,expiry-time="202610141437Z",command="'/opt/mb/matchblox' gate pair 0123456789ab" ` + pairPub + " matchblox:pair"
+	in := "ssh-rsa AAAA a\n" + pair + "\nssh-rsa BBBB b"
+	if err := os.WriteFile(filepath.Join(dir, "authorized_keys"), []byte(in), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if removed, err := RemovePairKey(home, "0123456789ab"); err != nil || !removed {
+		t.Fatalf("remove = %v, %v", removed, err)
+	}
+	if got := authKeys(home); got != "ssh-rsa AAAA a\nssh-rsa BBBB b" {
+		t.Fatalf("got %q", got)
+	}
+	if _, err := RemovePairKey(home, "nothex"); err == nil {
+		t.Fatal("bad id: no error")
 	}
 }
