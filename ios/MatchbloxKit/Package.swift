@@ -8,7 +8,7 @@ let package = Package(
         .library(name: "MatchbloxKit", targets: ["MatchbloxKit"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.83.0"),
+        .package(url: "https://github.com/apple/swift-nio.git", exact: "2.103.0"),
         .package(url: "https://github.com/apple/swift-nio-ssh", from: "0.15.0"),
         .package(url: "https://github.com/apple/swift-nio-transport-services", from: "1.28.0"),
     ],

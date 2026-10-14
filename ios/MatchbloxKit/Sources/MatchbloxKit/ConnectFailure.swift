@@ -18,6 +18,8 @@ public enum ConnectFailure: Error, Equatable {
             return failure
         case is HostKeyMismatch:
             return .hostKeyChanged
+        case is SilentHost:
+            return .unreachable
         case is AuthRefused:
             return .refused
         case let channel as ChannelError:
@@ -38,3 +40,5 @@ struct HostKeyMismatch: Error {
 }
 
 struct AuthRefused: Error {}
+
+struct SilentHost: Error {}

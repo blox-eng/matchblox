@@ -3,7 +3,7 @@
 | Package | Version | License | Used by |
 | --- | --- | --- | --- |
 | [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) | 1.20.0 | MIT | app (terminal view) |
-| [swift-nio](https://github.com/apple/swift-nio) | 2.83.0 or later | Apache-2.0 | MatchbloxKit (network core) |
+| [swift-nio](https://github.com/apple/swift-nio) | 2.103.0 | Apache-2.0 | MatchbloxKit (network core) |
 | [swift-nio-ssh](https://github.com/apple/swift-nio-ssh) | 0.15.0 | Apache-2.0 | MatchbloxKit (SSH) |
 | [swift-nio-transport-services](https://github.com/apple/swift-nio-transport-services) | 1.28.0 | Apache-2.0 | MatchbloxKit (network) |
 
