@@ -22,7 +22,7 @@ func homeWithDevices(t *testing.T) string {
 	if _, err := setup.Authorize(home, testExe, laptopKey+" matchblox"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := setup.AuthorizeDevice(home, testExe, phoneKey1, "Martin's iPhone"); err != nil {
+	if _, err := setup.AuthorizeDevice(home, testExe, phoneKey1, "Jordan's iPhone"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := setup.AuthorizeDevice(home, testExe, phoneKey2, "iPad"); err != nil {
@@ -46,22 +46,26 @@ func TestDevicesListAndRemove(t *testing.T) {
 	if err := devicesCmd(nil, home, &out); err != nil {
 		t.Fatal(err)
 	}
-	want := "phone   Martin's iPhone  " + fp(t, phoneKey1) + "\n" +
+	want := "phone   Jordan's iPhone  " + fp(t, phoneKey1) + "\n" +
 		"phone   iPad             " + fp(t, phoneKey2) + "\n" +
 		"laptop  matchblox        " + fp(t, laptopKey) + "\n"
 	if out.String() != want {
 		t.Fatalf("list:\n%s\nwant:\n%s", out.String(), want)
 	}
 
+	realHome, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
 	out.Reset()
 	if err := devicesCmd([]string{"rm", "iPad"}, home, &out); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(out.String(), "Removed iPad. Backup: "+filepath.Join(home, ".ssh")) {
+	if !strings.HasPrefix(out.String(), "Removed iPad. Backup: "+filepath.Join(realHome, ".ssh")) {
 		t.Fatalf("rm printed %q", out.String())
 	}
 	b, _ := os.ReadFile(filepath.Join(home, ".ssh", "authorized_keys"))
-	if strings.Contains(string(b), "matchblox:phone:iPad") || !strings.Contains(string(b), "Martin's iPhone") {
+	if strings.Contains(string(b), "matchblox:phone:iPad") || !strings.Contains(string(b), "Jordan's iPhone") {
 		t.Fatalf("authorized_keys after rm:\n%s", b)
 	}
 
@@ -73,7 +77,7 @@ func TestDevicesListAndRemove(t *testing.T) {
 		t.Fatalf("laptop still there:\n%s", b)
 	}
 
-	err := devicesCmd([]string{"rm", "nobody"}, home, &out)
+	err = devicesCmd([]string{"rm", "nobody"}, home, &out)
 	if err == nil || err.Error() != "no device named nobody; run matchblox devices and give a name or a fingerprint from that list" {
 		t.Fatalf("rm unknown: %v", err)
 	}

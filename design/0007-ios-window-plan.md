@@ -76,16 +76,16 @@ git commit -m "docs: matchblox anywhere: the design and the plan of the iOS wind
 func TestValidDeviceKey(t *testing.T)            // a key from `ssh-keygen -t ecdsa -b 256` passes; ssh-ed25519, ecdsa-sha2-nistp384, a cut blob, "x y" fail
 func TestValidDeviceName(t *testing.T)           // read the cases from testdata/pair/v1.json "names": {"good": [...], "bad": [...]}
 func TestAuthorizeDeviceWritesTheGateLine(t *testing.T)
-// want line: `restrict,pty,command="'/usr/local/bin/matchblox' gate phone" ecdsa-sha2-nistp256 AAAA… matchblox:phone:Martin’s iPhone`
+// want line: `restrict,pty,command="'/usr/local/bin/matchblox' gate phone" ecdsa-sha2-nistp256 AAAA… matchblox:phone:Jordan’s iPhone`
 func TestAuthorizeDeviceKeepsOtherLines(t *testing.T)
 // old file: "ssh-rsa AAAA other@box" with no final newline, plus a laptop gate line; both keep their bytes; a backup is made
 func TestDevicesAndRemoveDevice(t *testing.T)
-// a laptop line and two phones; Devices returns 3 in file order with kinds; RemoveDevice("Martin’s iPhone") leaves 2; an unknown name errors
+// a laptop line and two phones; Devices returns 3 in file order with kinds; RemoveDevice("Jordan’s iPhone") leaves 2; an unknown name errors
 func TestFingerprintMatchesSSHKeygen(t *testing.T) // setup.Fingerprint(fixture.hostkey_pub) == fixture.hostkey_fp
 ```
 
 - [ ] **Step 2:** Run `go test ./internal/setup/ ./internal/remote/ -run 'Device'`. Expected: FAIL (undefined).
-- [ ] **Step 3:** Implement the interfaces above. Reuse `read`, `keep` and `replace` from `setup.go`. Write the `names`, `hostkey_pub` and `hostkey_fp` blocks of `testdata/pair/v1.json` now (the fingerprint from `ssh-keygen -lf`) (good: `iPhone`, `Martin’s iPhone`, `Desk-2`; bad: empty, 41 runes, `a"b`, `a\nb`, `🔥`, ` lead`).
+- [ ] **Step 3:** Implement the interfaces above. Reuse `read`, `keep` and `replace` from `setup.go`. Write the `names`, `hostkey_pub` and `hostkey_fp` blocks of `testdata/pair/v1.json` now (the fingerprint from `ssh-keygen -lf`) (good: `iPhone`, `Jordan’s iPhone`, `Desk-2`; bad: empty, 41 runes, `a"b`, `a\nb`, `🔥`, ` lead`).
 - [ ] **Step 4:** Run the same command. Expected: PASS.
 - [ ] **Step 5: Commit** `feat(setup): authorize a phone key for the gate, and list and remove devices`
 

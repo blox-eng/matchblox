@@ -38,17 +38,17 @@ func listDevices(home string, out io.Writer) error {
 		return err
 	}
 	slices.SortStableFunc(devices, func(a, b setup.Device) int {
-		switch {
-		case a.Kind == b.Kind:
+		if a.Kind == b.Kind {
 			return 0
-		case a.Kind == "phone":
+		}
+		if a.Kind == "phone" {
 			return -1
 		}
 		return 1
 	})
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	for _, d := range devices {
-		fmt.Fprintf(w, "%s\t%s\t%s\n", d.Kind, d.Name, d.Fingerprint)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", d.Kind, d.Name, d.Fingerprint)
 	}
 	return w.Flush()
 }

@@ -2,7 +2,7 @@
   "names": {
     "good": [
       "iPhone",
-      "Martin’s iPhone",
+      "Jordan’s iPhone",
       "Desk-2"
     ],
     "bad": [
@@ -27,10 +27,10 @@
   },
   "url": "matchblox://pair?p=eyJ2IjoxLCJob3N0Ijoid3MtMS50YWlsMTIzNC50cy5uZXQiLCJwb3J0IjoyMiwidXNlciI6ImJ1aWxkZXIiLCJuYW1lIjoid3MtMSIsImhvc3RrZXkiOiJTSEEyNTY6SFRBSHJ4NlhZZTZtajdrQ1Zid1BmSTZGVmZ5Z3A1MkNxQk15UG5YQTBPVSIsImtleSI6IkFBRUNBd1FGQmdjSUNRb0xEQTBPRHhBUkVoTVVGUllYR0JrYUd4d2RIaDg9In0",
   "request": {
-    "name": "Martin’s iPhone",
+    "name": "Jordan’s iPhone",
     "key": "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFNcqPRX8M69Sf5wSAjjnCSQ7eAlW+J0FHl38LZZ/uI1dOc+R0B75EtirPaf7OBcEUynTj95ks6kamKOuSCb+mA="
   },
-  "request_line": "{\"name\":\"Martin’s iPhone\",\"key\":\"ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFNcqPRX8M69Sf5wSAjjnCSQ7eAlW+J0FHl38LZZ/uI1dOc+R0B75EtirPaf7OBcEUynTj95ks6kamKOuSCb+mA=\"}\n",
+  "request_line": "{\"name\":\"Jordan’s iPhone\",\"key\":\"ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFNcqPRX8M69Sf5wSAjjnCSQ7eAlW+J0FHl38LZZ/uI1dOc+R0B75EtirPaf7OBcEUynTj95ks6kamKOuSCb+mA=\"}\n",
   "replies": {
     "ok": "{\"ok\":true,\"host\":\"ws-1\"}",
     "bad name": "{\"ok\":false,\"error\":\"bad name\"}",

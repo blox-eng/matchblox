@@ -60,10 +60,10 @@ func TestValidDeviceName(t *testing.T) {
 
 func TestAuthorizeDeviceWritesTheGateLine(t *testing.T) {
 	home := t.TempDir()
-	if _, err := AuthorizeDevice(home, "/usr/local/bin/matchblox", phoneKey, "Martin’s iPhone"); err != nil {
+	if _, err := AuthorizeDevice(home, "/usr/local/bin/matchblox", phoneKey, "Jordan’s iPhone"); err != nil {
 		t.Fatal(err)
 	}
-	want := `restrict,pty,command="'/usr/local/bin/matchblox' gate phone" ` + phoneKey + " matchblox:phone:Martin’s iPhone\n"
+	want := `restrict,pty,command="'/usr/local/bin/matchblox' gate phone" ` + phoneKey + " matchblox:phone:Jordan’s iPhone\n"
 	if got := authKeys(home); got != want {
 		t.Fatalf("authorized_keys:\n%s\nwant:\n%s", got, want)
 	}
@@ -149,7 +149,7 @@ func TestDevicesAndRemoveDevice(t *testing.T) {
 	other := "ssh-rsa AAAAother other@box"
 	pair := `restrict,expiry-time="202610141200Z",command="'/opt/mb/matchblox' gate pair abc" ` + pub + " matchblox:pair"
 	writeFile(t, filepath.Join(home, ".ssh", "authorized_keys"), other+"\n"+laptop+"\n"+pair+"\n")
-	for name, key := range map[string]string{"Martin’s iPhone": phoneKey, "Desk-2": phoneKey2} {
+	for name, key := range map[string]string{"Jordan’s iPhone": phoneKey, "Desk-2": phoneKey2} {
 		if _, err := AuthorizeDevice(home, "/opt/mb/matchblox", key, name); err != nil {
 			t.Fatal(err)
 		}
@@ -162,7 +162,7 @@ func TestDevicesAndRemoveDevice(t *testing.T) {
 		t.Fatalf("devices: %+v", got)
 	}
 	names := []string{got[1].Name, got[2].Name}
-	if !slices.Contains(names, "Martin’s iPhone") || !slices.Contains(names, "Desk-2") {
+	if !slices.Contains(names, "Jordan’s iPhone") || !slices.Contains(names, "Desk-2") {
 		t.Fatalf("phone names: %v", names)
 	}
 	fp, err := Fingerprint(laptopKey)
@@ -170,7 +170,7 @@ func TestDevicesAndRemoveDevice(t *testing.T) {
 		t.Fatalf("laptop fingerprint %q, want %q (%v)", got[0].Fingerprint, fp, err)
 	}
 
-	backup, err := RemoveDevice(home, "Martin’s iPhone")
+	backup, err := RemoveDevice(home, "Jordan’s iPhone")
 	if err != nil || backup == "" {
 		t.Fatalf("remove: backup %q, err %v", backup, err)
 	}

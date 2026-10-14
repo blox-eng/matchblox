@@ -69,7 +69,7 @@ func TestPairMainAuthorizesAndRemovesTheCode(t *testing.T) {
 		t.Fatalf("reply = %s, want %s", got, f.Replies["ok"])
 	}
 	devs, err := setup.Devices(home)
-	if err != nil || len(devs) != 1 || devs[0].Name != "Martin’s iPhone" {
+	if err != nil || len(devs) != 1 || devs[0].Name != "Jordan’s iPhone" {
 		t.Fatalf("Devices = %+v, %v", devs, err)
 	}
 	if present, _ := setup.PairKeyPresent(home, id); present {
@@ -82,7 +82,7 @@ func TestPairMainRefuses(t *testing.T) {
 	useHostLabel(t, "ws-1")
 	good := f.RequestLine
 	for name, c := range map[string]struct{ in, reply string }{
-		"bad name":     {strings.Replace(good, "Martin’s iPhone", `a\"b`, 1), f.Replies["bad name"]},
+		"bad name":     {strings.Replace(good, "Jordan’s iPhone", `a\"b`, 1), f.Replies["bad name"]},
 		"bad key":      {`{"name":"iPhone","key":"ssh-ed25519 AAAA"}` + "\n", f.Replies["bad key"]},
 		"not json":     {"hello\n", `{"ok":false,"error":"bad request"}`},
 		"empty":        {"", `{"ok":false,"error":"bad request"}`},

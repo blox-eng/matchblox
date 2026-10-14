@@ -161,9 +161,9 @@ func pairCmd(ctx context.Context, args []string, out io.Writer, now func() time.
 		_, _ = setup.RemovePairKey(env.home, id)
 		return err
 	}
-	fmt.Fprintln(out, strings.Join(qr, "\n"))
-	fmt.Fprintln(out, url)
-	fmt.Fprintf(out, "Scan with the iPhone camera. The code works once, until %s.\n", until.Local().Format("15:04"))
+	_, _ = fmt.Fprintln(out, strings.Join(qr, "\n"))
+	_, _ = fmt.Fprintln(out, url)
+	_, _ = fmt.Fprintf(out, "Scan with the iPhone camera. The code works once, until %s.\n", until.Local().Format("15:04"))
 
 	tick := time.NewTicker(env.poll)
 	defer tick.Stop()
@@ -182,7 +182,7 @@ func pairCmd(ctx context.Context, args []string, out io.Writer, now func() time.
 			if present {
 				continue
 			}
-			fmt.Fprintln(out, "Paired. matchblox devices lists it.")
+			_, _ = fmt.Fprintln(out, "Paired. matchblox devices lists it.")
 			return nil
 		}
 		removed, err := setup.RemovePairKey(env.home, id)
