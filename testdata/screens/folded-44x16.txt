@@ -13,4 +13,4 @@
  ╿ flint-auth            asks      2m   41%
  ╿ kindle-web            asks      1m   56%
 ────────────────────────────────────────────
- ⏎ open  a answer  z park  p ships  f stoker
+ ⏎ open  a answer  x kill  r rename  N new

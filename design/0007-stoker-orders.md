@@ -36,7 +36,7 @@ Those flows are Martin's own. The product must not hard-code them. What matchblo
 
 ### 2. The stoker is an agent you choose, in a pane you start
 
-- (Revised 2026-10-14, see the end: matchblox now starts the stoker on its own tmux server.) matchblox does not start agents (design/0001 §1). You start your stoker the way you start any session: `tmux new -s stoker claude` (or `codex`, or `opencode`). The config names it: `[stoker] pane = "stoker"` (a tmux session name). Claude Code is what the docs show.
+- (Revised 2026-10-14, see the end: matchblox now starts the stoker on its own tmux server. Since #74 the stoker can also start, rename and kill sessions; see docs/stoker.md.) matchblox does not start agents (design/0001 §1). You start your stoker the way you start any session: `tmux new -s stoker claude` (or `codex`, or `opencode`). The config names it: `[stoker] pane = "stoker"` (a tmux session name). Claude Code is what the docs show.
 - Without one, the stoker works exactly as today (compacts only). The launch sheet then shows the door: `Start a stoker agent: tmux new -s stoker claude`, with the copyable command.
 - The stoker pane is a session like any other in Sessions (marked `stoker`), and its context gets compacted like any other. Everything that matters lives in matchblox's run log, not in its context.
 - **The agent's hands are matchblox commands**, the same for every agent. Each one goes through the service and its guards:

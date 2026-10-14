@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -123,7 +124,11 @@ type drawn struct {
 	// one presses.
 	sheetGoesAt int
 	sheetGoes   []span
-	stokerAt    span // the header's stoker word
+	// The New session form's agent chips: their line, and the agent a tap
+	// on each picks.
+	formAgentsAt int
+	formAgents   []span
+	stokerAt     span // the header's stoker word
 }
 
 // draw lays out the screen, top to bottom: the header, the tabs, a
@@ -217,6 +222,8 @@ func (m Model) draw(w int) drawn {
 	switch {
 	case m.sheet != nil:
 		m.overlaySheet(&sc, w)
+	case m.form != nil:
+		m.overlayForm(&sc, w)
 	case peeking && !inline:
 		m.overlayPeek(&sc, w)
 	}
@@ -502,6 +509,13 @@ func (m Model) keyLine(w int) (string, []span) {
 		line += st.muted.Render(lead)
 		x += lipgloss.Width(lead)
 	}
+	// The age goes before a spare key does; a spare key goes before a key
+	// of the row.
+	if fit := fitHints(hints, w-x-lipgloss.Width("sampled 59m ago ")); hintsWidth(fit) <= w-x-lipgloss.Width("sampled 59m ago ") {
+		hints = fit
+	} else {
+		hints = fitHints(hints, w-x)
+	}
 	var spans []span
 	for i, h := range hints {
 		if i > 0 {
@@ -520,6 +534,33 @@ func (m Model) keyLine(w int) (string, []span) {
 		return fit(line, w), spans // the keys matter more than the age
 	}
 	return line + strings.Repeat(" ", w-lipgloss.Width(line)-lipgloss.Width(right)) + right, spans
+}
+
+// spareKeys are the keys a short key line drops first, in that order:
+// each one is reached another way (a tab tap, the dock, the docs).
+var spareKeys = []string{"↑↓", "q", "/", "p", "z", "f"}
+
+// fitHints drops spare keys until the hints fit in room columns. The
+// row's own keys always stay: a line that is still too long is cut.
+func fitHints(hints []hint, room int) []hint {
+	for _, k := range spareKeys {
+		if hintsWidth(hints) <= room {
+			break
+		}
+		hints = slices.DeleteFunc(slices.Clone(hints), func(h hint) bool { return h.key == k })
+	}
+	return hints
+}
+
+func hintsWidth(hs []hint) int {
+	n := 0
+	for i, h := range hs {
+		if i > 0 {
+			n += 2
+		}
+		n += lipgloss.Width(h.key) + 1 + lipgloss.Width(h.label)
+	}
+	return n
 }
 
 // accountCell is the provider's mark and the account label: "✻ a@b.c · Max".

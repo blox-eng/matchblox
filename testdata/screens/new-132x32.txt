@@ -1,0 +1,32 @@
+ ▰ matchblox                                                                                                       ● 6 wait for you
+ SESSIONS 7    ships 3    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ WAITS FOR YOU · 6                                                            │
+▌│ spark-docs               done       9m   88%  ▲ clear      #4540 ●━●━●━●━● │ spark-docs
+ ╿ ember-billing            done       4m   32%  ▲ clear      #4552 ●━●━◉┄○┄○ │ │ done, waits for you · 9m · hearth:3.1 · /work/spa…
+ ╿ flint-auth               asks       2m   41%  ▲ clear      #4545 ●━✕┄○┄○┄○ │
+ ╿ kindle-web               asks       1m   56%  ▲ clear                      │ CLAUDE SAID
+ ╿ codex                    done       0s   55%  ▲ clear                      │ I rewrote the quick start and the install page.
+ ╿ opencode                 done       0s    6%  ▲ clear                      │
+ WORKING · 1                                                                  │ context  ▰▰▰▰▰▰▰▰▰▱ 88%
+ ✦ hearth-api               busy   ╭─ New session ──────────────────────────────────────────────╮▰▰ 100%  docs for the 1.0 release
+                                   │ where    /work/spark-docs                                  │●━●━●━●  live
+ 1 without an agent: shell:1.1 zsh │ branch   feat/88-rate-limits                               │docs
+                                   │ name     spark-docs-feat-88-rate-limits                    │github.com/hearth/spark-docs/pull/…
+ RECOMMENDATIONS · 7 · h hides     │ agent    ● claude  ○ codex  ○ opencode                     │dle 9m (clear after 0s)
+ ▲ The week runs short: compact spa│ first  › fix the flaky ships test▏                         │00k tokens · +0k in 30 min · ✻
+ ○ Clear spark-docs (%3)           ╰─ ⏎ start ─ tab next ─ esc ─────────────────────────────────╯· Max · pid 1400 · 1 process ·
+ ○ Clear kindle-web (%5)                                                      │ started 3h20m ago
+ ○ Clear codex (%6)                                                           │
+ ○ Clear flint-auth (%2)                                                      │ a answer   ⏎ open it
+ ○ Clear ember-billing (%8)                                                   │
+ ○ Clear opencode (%7)                                                        │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ USAGE                                                                        │ MACHINE                                    16 cores
+ ✻ Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                                      │ cpu  ▁ 0%   load 6.2
+          wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · out Fri ~21:00                     │ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
+ · login  not measured · OpenCode keeps no limits                             │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
+ ❋ Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                                          │ runs 5 claude · 1 codex · 1 opencode
+          wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week                     │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ↑↓ move  ⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit                       sampled 0s ago

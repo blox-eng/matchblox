@@ -129,6 +129,7 @@ type action struct {
 	remote      bool     // steps[0] is the ssh argv that runs it on the host, checked
 	connect     bool     // it connects the host: install, update or authorize
 	pane        string   // a jump: the pane it goes to
+	again       string   // a kill of a session that works or waits: what the second y's confirm says
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -259,6 +260,10 @@ type Model struct {
 	sessGroup  int // what Sessions is grouped by: groupNeed .. groupNone
 	holds      []proto.Hold
 	reasons    map[string]proto.IdleReason
+	agents     []string          // the agents a new session can start on the host
+	renames    map[string]string // the names sessions take at their next rest, by pane
+	form       *form             // the open New session or Rename form; nil none
+	lastAgent  string            // the agent this console last started
 	paneSort   sortBy
 	picked     map[string]bool // worktrees x removes
 	batch      *batch
@@ -421,6 +426,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
 		m.shipReport = st.Ships
 		m.holds, m.reasons = st.Holds, st.Reasons
+		m.agents, m.renames = st.Agents, st.Renames
 		if m.recRun.rec != "" && m.recRun.act == "" && !m.isRec(m.recRun.rec) {
 			m.recRun = recRun{} // its rec is gone: a later one with the same id starts fresh
 		}
@@ -456,6 +462,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case resultMsg:
 		m.endRec(msg.ActID, proto.Result(msg))
+		if mm, ok := m.formResult(proto.Result(msg)); ok {
+			return mm, mm.recv()
+		}
 		if mm, ok := m.sheetResult(proto.Result(msg)); ok {
 			if r := proto.Result(msg); r.Err == "" && mm.sheet == nil {
 				toast := mm.say("the order is on")
@@ -593,7 +602,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var touch tea.Cmd
 		// f and n are stoker acts themselves: a touch sent with them would
 		// race them on the service.
-		if k := msg.String(); m.peek != nil || m.sheet != nil || m.searching || k != "f" && k != "n" {
+		if k := msg.String(); m.peek != nil || m.sheet != nil || m.form != nil || m.searching || k != "f" && k != "n" {
 			m, touch = m.touchRest()
 		}
 		var next tea.Model
@@ -601,6 +610,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case m.sheet != nil:
 			next, cmd = m.sheetKey(msg)
+		case m.form != nil:
+			next, cmd = m.formKey(msg)
 		case m.peek != nil:
 			next, cmd = m.peekKey(msg)
 		case m.searching:
@@ -674,6 +685,12 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	if m.pending != nil {
 		a := *m.pending
 		m.pending = nil
+		if k == "y" && a.again != "" {
+			// It works or waits for you: one more y, said plainly.
+			a.say, a.again, a.text = a.again, "", killAnyway
+			m.pending = &a
+			return m, nil
+		}
 		// A destructive action needs a typed y; Enter alone is not consent.
 		if k == "y" || (k == "enter" && !a.destructive) {
 			return m.confirm(a)
@@ -759,9 +776,8 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		m.pending, m.previewTop = m.primary(), 0
 	case "x":
 		m.pending = m.secondary()
-		if m.pending == nil && m.tab == tabSessions {
-			m.flash = "x ends a stale session: one idle 7 days or more"
-		}
+	case "N", "shift+n":
+		return m.openNew()
 	case "y":
 		if m.tab == tabStoker {
 			return m.grantStep()
@@ -794,6 +810,9 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case "o":
 		return m.orderKey()
 	case "r":
+		if m.tab == tabSessions {
+			return m.openRename()
+		}
 		if m.tab == tabGit && m.conn != nil && !m.lost {
 			m.flash = "scanning git…"
 			return m, m.send(proto.Act{RecID: "rescan:git", Which: "primary"})

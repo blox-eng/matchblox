@@ -24,8 +24,8 @@
 │                                          │
 │ › merge them on green▏                   │
 │                                          │
-│ gos ✓ merges  ○ releases  ○ deploys      │
+│ ✓ merges  ○ releases  ○ deploys  ○ kills │
 │ ways merge-order  priority  +2           │
 ╰─ ⏎ send ─ tab chips ─ esc ───────────────╯
 ────────────────────────────────────────────
- ⏎ open  a answer  z park  p ships  f stoker
+ ⏎ open  a answer  x kill  r rename  N new

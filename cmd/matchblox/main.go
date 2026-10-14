@@ -162,6 +162,18 @@ func run(args []string) error {
 			return err
 		}
 		return cliHand(cmd, words, *o.pick, *o.why, os.Stdout, transport.SocketPath())
+	case "kill", "rename":
+		words, err := positionals(fl, args)
+		if err != nil {
+			return err
+		}
+		return cliLife(cmd, words, *o.anyway, os.Stdout, transport.SocketPath())
+	case "new":
+		words, err := positionals(fl, args)
+		if err != nil {
+			return err
+		}
+		return cliNew(words, newOpts{where: *o.where, agent: *o.agent, branch: *o.branch, name: *o.name}, os.Stdout, transport.SocketPath())
 	case "stoker":
 		words, err := positionals(fl, args) // all of them: a -- before the first word holds too
 		if err != nil {
@@ -231,7 +243,7 @@ func run(args []string) error {
 
 // commands are the commands a builder types. hook, authorize and gate run
 // from a hook, an ssh forced command and a connect.
-var commands = []string{"connect", "serve", "sessions", "ships", "status", "setup", "pair", "devices", "usage", "version", "send", "compact", "hold", "release", "stoker", "peek"}
+var commands = []string{"connect", "serve", "sessions", "ships", "status", "setup", "pair", "devices", "usage", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill"}
 
 type flags struct {
 	cfgPath, root         *string
@@ -244,6 +256,9 @@ type flags struct {
 	ship                  *int
 	stage, rest, drop     *string
 	list                  *bool
+	anyway                *bool
+	where, agent, branch  *string
+	name                  *string
 }
 
 // usageText heads --help: every command, one line each, then the flags.
@@ -267,6 +282,9 @@ Commands:
   matchblox compact <who>          compact a Claude Code session at rest
   matchblox hold <who> --why "…"   finish this step, then stop and wait
   matchblox release <who>          let a held session carry on
+  matchblox new ["<first message>"]  start an agent in a tmux session of its own (--where, --agent, --branch, --name)
+  matchblox rename <who> <name>    name a session, its tmux session and its agent alike
+  matchblox kill <who>             end a session: its agent and its pane (--anyway while it works)
   matchblox stoker plan|step       the stoker agent's plan and steps, for its card
   matchblox stoker when …          a trigger matchblox fires itself (--ship n --stage s, or --rest who)
   matchblox stoker quit            end the stoker agent and its own tmux session
@@ -300,6 +318,11 @@ func newFlags() (*flag.FlagSet, flags) {
 		rest:     fl.String("rest", "", "stoker when: the session whose turn's end fires the trigger"),
 		drop:     fl.String("drop", "", "stoker when: drop the trigger with this id"),
 		list:     fl.Bool("list", false, "stoker when: print the run's triggers"),
+		anyway:   fl.Bool("anyway", false, "kill: kill a session that works or waits for you"),
+		where:    fl.String("where", "", "new: the directory, or the repository of --branch (default: here)"),
+		agent:    fl.String("agent", "claude", "new: the agent to start: claude, codex or opencode"),
+		branch:   fl.String("branch", "", "new: first add a worktree for this new branch, beside the repository"),
+		name:     fl.String("name", "", "new: the name of the session, its tmux session and its agent (default: the directory's)"),
 		noMotion: fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),
 	}
 }

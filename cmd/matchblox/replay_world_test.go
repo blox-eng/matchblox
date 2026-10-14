@@ -10,12 +10,14 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
+	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/replay"
 )
 
@@ -42,6 +44,9 @@ type demoWorld struct {
 	typed    map[string]string       // the draft in each pane's field
 	removed  map[string]bool         // worktree paths
 	ran      [][]string
+	// uptime is the demo host's, for the start time of a session the demo
+	// starts.
+	uptime func() float64
 }
 
 func newWorld(t *testing.T, src string, clk *clock, kill func(int)) *demoWorld {
@@ -147,8 +152,89 @@ func (w *demoWorld) Run(argv []string) error {
 	case len(argv) == 6 && argv[0] == "git" && argv[3] == "worktree" && argv[4] == "remove":
 		w.removed[argv[5]] = true
 		return nil
+	case len(argv) == 4 && argv[0] == "tmux" && argv[1] == "kill-pane":
+		return w.closePane(argv[3])
+	case len(argv) == 3 && argv[0] == "kill" && argv[1] == "-TERM":
+		return nil // the agent went with its pane
+	case argv[0] == "env" && slices.Contains(argv, "new-session"):
+		return w.start(argv[slices.Index(argv, "tmux"):])
 	}
 	return fmt.Errorf("the demo does not run %q", argv)
+}
+
+// closePane is tmux kill-pane: the pane leaves tmux's list, and its
+// process ends. Hold w.mu.
+func (w *demoWorld) closePane(pane string) error {
+	path := filepath.Join(w.root, "tmux-panes.txt")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var keep []string
+	for _, l := range strings.Split(strings.TrimRight(string(b), "\n"), "\n") {
+		f := strings.Split(l, "\t")
+		if f[0] != pane {
+			keep = append(keep, l)
+			continue
+		}
+		pid, err := strconv.Atoi(f[3])
+		if err != nil {
+			return err
+		}
+		w.kill(pid)
+	}
+	delete(w.sessions, pane)
+	return writeAtomic(path, []byte(strings.Join(keep, "\n")+"\n"))
+}
+
+// newPID and newPane are the first session the demo starts.
+const (
+	newPID  = 2000
+	newPane = "%9"
+)
+
+// start is tmux new-session -d -s <name> -n <name> -c <dir> <agent>…: a
+// Claude Code process in a new pane, at work on its first message, with
+// its session file. Hold w.mu.
+func (w *demoWorld) start(argv []string) error {
+	name, dir := argv[slices.Index(argv, "-s")+1], argv[slices.Index(argv, "-c")+1]
+	agent := argv[slices.Index(argv, "-c")+2:]
+	proc := filepath.Join(w.root, "proc", strconv.Itoa(newPID))
+	if err := os.MkdirAll(proc, 0o755); err != nil {
+		return err
+	}
+	ticks := int(w.uptime() * procfs.ClockTicks)
+	files := map[string]string{
+		"cmdline": strings.Join(agent, "\x00") + "\x00",
+		"environ": "HOME=/home/user\x00TMUX_PANE=" + newPane + "\x00TERM=tmux-256color\x00",
+		"stat":    fmt.Sprintf("%d (%s) S 1 %d %d 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 %d 100000 2500", newPID, agent[0], newPID, newPID, ticks),
+	}
+	for f, body := range files {
+		if err := os.WriteFile(filepath.Join(proc, f), []byte(body), 0o644); err != nil {
+			return err
+		}
+	}
+	if err := os.Symlink(dir, filepath.Join(proc, "cwd")); err != nil {
+		return err
+	}
+	s := &demoSession{pid: newPID, name: name, id: "5ea1c0de-0000-4000-8000-000000000009", status: "busy"}
+	w.sessions[newPane] = s
+	now := w.clk.Now().UnixMilli()
+	reg, err := json.Marshal(map[string]any{"pid": s.pid, "sessionId": s.id, "cwd": dir, "name": name,
+		"status": s.status, "startedAt": now, "statusUpdatedAt": now})
+	if err != nil {
+		return err
+	}
+	if err := writeAtomic(w.registry(s.pid), append(reg, '\n')); err != nil {
+		return err
+	}
+	path := filepath.Join(w.root, "tmux-panes.txt")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	line := strings.Join([]string{newPane, name + ":1.1", name, strconv.Itoa(newPID), agent[0], dir}, "\t")
+	return writeAtomic(path, append(b, []byte(line+"\n")...))
 }
 
 // pick is a digit in the question tool's menu: the call gets its result,
