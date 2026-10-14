@@ -55,6 +55,15 @@ All notable changes to matchblox are in this file. The format follows
   and `g` groups the list by need, state, repo or not at all.
 - **`matchblox sessions`, `ships` and `usage`** print one line a row, or
   JSON with `--json`, for a script or an agent.
+- **The matchblox iPhone app opens your console** (#88). Scan the code of
+  `matchblox pair` once, and the app opens the console of the host. Face ID
+  or the passcode unlocks the key each time the app opens. The key stays in
+  the Secure Enclave, and each host gets its own key. The app trusts only
+  the host key from the code, so a host with a new host key does not open
+  until you pair again. With two or more hosts, the app lists them, and a
+  swipe removes one. When the app can't reach a host, it asks for a new
+  address and keeps the pairing. Build the app from `ios/` until it is on
+  TestFlight.
 
 
 ## [0.8.0] - 2026-10-14
@@ -66,21 +75,12 @@ All notable changes to matchblox are in this file. The format follows
   key and keeps a backup of `authorized_keys`. A laptop shows the comment
   of its key as its name, which is `matchblox` for a key from
   `matchblox connect`.
-- **`matchblox pair` shows a one-time QR code for the iPhone app**
+- **`matchblox pair` shows a one-time QR code for the coming iPhone app**
   (#88). The code holds a key that works once and that sshd refuses after
   5 minutes. Stop the command, or close the terminal, and the key is gone.
   When a phone pairs, the host prints its name and fingerprint, so a phone
   that is not yours is seen at once. A key that already opens a login on
   the host cannot pair, so a pairing never changes your own ssh login.
-- **The matchblox iPhone app opens your console** (#88). Scan the code of
-  `matchblox pair` once, and the app opens the console of the host. Face ID
-  or the passcode unlocks the key each time the app opens. The key stays in
-  the Secure Enclave, and each host gets its own key. The app trusts only
-  the host key from the code, so a host with a new host key does not open
-  until you pair again. With two or more hosts, the app lists them, and a
-  swipe removes one. When the app can't reach a host, it asks for a new
-  address and keeps the pairing. Build the app from `ios/` until it is on
-  TestFlight.
 - **A phone key opens the console.** The new key kind (`gate phone`) starts
   the stream and the console. A laptop key from `matchblox connect` keeps
   the stream alone.
