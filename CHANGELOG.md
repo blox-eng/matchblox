@@ -6,8 +6,6 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-10-14
-
 ### Added
 
 - **Start, rename and kill a session from matchblox.** `N` opens New
@@ -26,6 +24,10 @@ All notable changes to matchblox are in this file. The format follows
   works only in a run and only on your tmux server, and the guard watches
   the session it starts. `matchblox kill` ends only a session at rest you
   did not park, with the new `kills` go chip or your `y` on the card.
+
+## [0.9.0] - 2026-10-14
+
+### Added
 
 - **The stoker takes orders, in your own words.** `n` and `f` start a
   stoker agent (Claude Code, or `[stoker] agent`) on a tmux server of
