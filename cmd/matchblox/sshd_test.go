@@ -273,7 +273,10 @@ func TestPairOnARealSSHD(t *testing.T) {
 		if v, _ := exec.Command("ssh", "-V").CombinedOutput(); !sshHasExpiryTime(string(v)) {
 			t.Skipf("OpenSSH older than 7.7 does not read expiry-time without Z in the system zone, and rejects the line: %s", v)
 		}
-		expired := pairKey("expired", time.Now().Add(-2*time.Minute))
+		// OpenSSH 9.6 reads the time as standard time even while DST is on, so
+		// a key can live an hour longer than written; two hours is expired
+		// either way. matchblox pair removes the line itself when its time is up.
+		expired := pairKey("expired", time.Now().Add(-2*time.Hour))
 		out, err := ssh(expired, request, "ignored").CombinedOutput()
 		if err == nil || strings.Contains(string(out), `"ok"`) {
 			t.Errorf("an expired one-time key worked: %v\n%s", err, out)
