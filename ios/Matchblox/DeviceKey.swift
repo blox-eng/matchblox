@@ -22,18 +22,47 @@ extension DeviceKeyError: LocalizedError {
         case .locked:
             "The iPhone is locked. Unlock the iPhone, then try again."
         case .keychain(let status):
-            "The Keychain refused the phone key (error \(status)). Restart the iPhone, then try again."
+            "The Keychain refused the key of this iPhone (error \(status)). Restart the iPhone, then try again."
         }
     }
 }
 
+/// One Secure Enclave key for each paired host. The Keychain item of a host has its host key fingerprint as the account.
 enum DeviceKey {
     private static let service = "com.blox.matchblox.device"
 
-    static func loadOrCreate(context: LAContext? = nil) throws -> SecureEnclave.P256.Signing.PrivateKey {
-        if let stored = try storedRepresentation() {
-            return try load(stored, context: context)
+    /// The public key that pairing sends to the host. It makes the key of the host when there is none.
+    static func openSSH(for host: String) throws -> String {
+        let key = try loadOrCreate(host: host)
+        return SSHKeys.openSSH(p256X963: key.publicKey.x963Representation, comment: "")
+    }
+
+    static func load(host: String, context: LAContext) throws -> SecureEnclave.P256.Signing.PrivateKey {
+        guard let stored = try storedRepresentation(host: host) else { throw DeviceKeyError.keyUnavailable }
+        return try open(stored, context: context)
+    }
+
+    static func remove(host: String) throws {
+        let status = SecItemDelete(identity(host: host) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw keychainError(status) }
+    }
+
+    static func nioKey(_ key: SecureEnclave.P256.Signing.PrivateKey) -> NIOSSHPrivateKey {
+        NIOSSHPrivateKey(secureEnclaveP256Key: key)
+    }
+
+    /// A stored key that no longer opens belongs to an old pairing of this host, so a new key replaces it. A key that cannot be made is not retried.
+    private static func loadOrCreate(host: String) throws -> SecureEnclave.P256.Signing.PrivateKey {
+        guard let stored = try storedRepresentation(host: host) else { return try create(host: host) }
+        do {
+            return try open(stored, context: nil)
+        } catch DeviceKeyError.keyUnavailable {
+            try remove(host: host)
+            return try create(host: host)
         }
+    }
+
+    private static func create(host: String) throws -> SecureEnclave.P256.Signing.PrivateKey {
         var probeError: NSError?
         guard LAContext().canEvaluatePolicy(.deviceOwnerAuthentication, error: &probeError) else {
             throw DeviceKeyError.noPasscode
@@ -47,36 +76,19 @@ enum DeviceKey {
         ) else { throw DeviceKeyError.keyUnavailable }
         let key: SecureEnclave.P256.Signing.PrivateKey
         do {
-            key = try SecureEnclave.P256.Signing.PrivateKey(
-                accessControl: access,
-                authenticationContext: context
-            )
+            key = try SecureEnclave.P256.Signing.PrivateKey(accessControl: access)
         } catch {
             throw DeviceKeyError.keyUnavailable
         }
-        let status = add(key.dataRepresentation)
-        if status == errSecDuplicateItem, let stored = try storedRepresentation() {
-            return try load(stored, context: context)
+        let status = add(key.dataRepresentation, host: host)
+        if status == errSecDuplicateItem, let stored = try storedRepresentation(host: host) {
+            return try open(stored, context: nil)
         }
         guard status == errSecSuccess else { throw keychainError(status) }
         return key
     }
 
-    static func openSSH() throws -> String {
-        let key = try loadOrCreate()
-        return SSHKeys.openSSH(p256X963: key.publicKey.x963Representation, comment: "")
-    }
-
-    static func reset() throws {
-        let status = SecItemDelete(identity as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else { throw keychainError(status) }
-    }
-
-    static func nioKey(_ key: SecureEnclave.P256.Signing.PrivateKey) -> NIOSSHPrivateKey {
-        NIOSSHPrivateKey(secureEnclaveP256Key: key)
-    }
-
-    private static func load(
+    private static func open(
         _ representation: Data,
         context: LAContext?
     ) throws -> SecureEnclave.P256.Signing.PrivateKey {
@@ -94,12 +106,12 @@ enum DeviceKey {
         status == errSecInteractionNotAllowed ? .locked : .keychain(status)
     }
 
-    private static var identity: [CFString: Any] {
-        [kSecClass: kSecClassGenericPassword, kSecAttrService: service]
+    private static func identity(host: String) -> [CFString: Any] {
+        [kSecClass: kSecClassGenericPassword, kSecAttrService: service, kSecAttrAccount: host]
     }
 
-    private static func storedRepresentation() throws -> Data? {
-        var query = identity
+    private static func storedRepresentation(host: String) throws -> Data? {
+        var query = identity(host: host)
         query[kSecReturnData] = true
         var item: CFTypeRef?
         switch SecItemCopyMatching(query as CFDictionary, &item) {
@@ -109,8 +121,8 @@ enum DeviceKey {
         }
     }
 
-    private static func add(_ representation: Data) -> OSStatus {
-        var item = identity
+    private static func add(_ representation: Data, host: String) -> OSStatus {
+        var item = identity(host: host)
         item[kSecValueData] = representation
         item[kSecAttrAccessible] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         return SecItemAdd(item as CFDictionary, nil)

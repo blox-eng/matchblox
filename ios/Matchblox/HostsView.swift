@@ -53,10 +53,18 @@ struct HostsView: View {
         let gone = offsets.map { hosts[$0] }
         do {
             for host in gone {
+                try DeviceKey.remove(host: host.fingerprint)
+            }
+        } catch {
+            problem = error.localizedDescription
+            return
+        }
+        do {
+            for host in gone {
                 try store.remove(fingerprint: host.fingerprint)
             }
         } catch {
-            problem = "The phone could not save the list. Free some space on the phone, then try again."
+            problem = "The iPhone could not save the list. Free some space on the iPhone, then try again."
             return
         }
         problem = nil

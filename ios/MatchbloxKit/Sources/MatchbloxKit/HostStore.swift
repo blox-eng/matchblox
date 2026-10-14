@@ -28,20 +28,27 @@ public final class HostStore: Sendable {
         self.file = file
     }
 
-    /// A missing or damaged file gives no hosts; the next write replaces it.
+    private var damagedFile: URL { file.appendingPathExtension("damaged") }
+
+    /// A missing or damaged file gives no hosts. The next write moves a damaged file aside to `hosts.json.damaged`.
     public func all() -> [Host] {
         guard let data = try? Data(contentsOf: file) else { return [] }
         return (try? JSONDecoder().decode([Host].self, from: data)) ?? []
     }
 
-    public func upsert(_ host: Host) throws {
+    /// Adds the host, or updates the entry with its fingerprint. An entry with the same label, address and user but another fingerprint is the host before its host key changed: the host replaces it. Returns those stale entries, so their keys can go too.
+    @discardableResult
+    public func upsert(_ host: Host) throws -> [Host] {
         var hosts = all()
-        if let index = hosts.firstIndex(where: { $0.fingerprint == host.fingerprint }) {
-            hosts[index] = host
-        } else {
-            hosts.append(host)
+        let stale = hosts.filter {
+            $0.fingerprint != host.fingerprint && $0.label == host.label && $0.address == host.address && $0.user == host.user
         }
+        let replaces = { (entry: Host) in entry.fingerprint == host.fingerprint || stale.contains(entry) }
+        let index = hosts.firstIndex(where: replaces)
+        hosts.removeAll(where: replaces)
+        hosts.insert(host, at: index ?? hosts.count)
         try save(hosts)
+        return stale
     }
 
     public func updateAddress(fingerprint: String, address: String) throws {
@@ -57,8 +64,17 @@ public final class HostStore: Sendable {
 
     private func save(_ hosts: [Host]) throws {
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try moveAsideIfDamaged()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(hosts).write(to: file, options: .atomic)
+    }
+
+    private func moveAsideIfDamaged() throws {
+        guard let data = try? Data(contentsOf: file),
+              (try? JSONDecoder().decode([Host].self, from: data)) == nil
+        else { return }
+        try? FileManager.default.removeItem(at: damagedFile)
+        try FileManager.default.moveItem(at: file, to: damagedFile)
     }
 }
