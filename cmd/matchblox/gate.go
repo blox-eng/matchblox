@@ -9,11 +9,16 @@ import (
 )
 
 // gateMain is the forced command of the matchblox key on a host
-// (design/0005-remote-mode.md §3.3). The key starts the service stream and
-// nothing else; anything else exits 126.
-func gateMain() error {
+// (design/0005-remote-mode.md §3.3). The key starts the service stream or
+// the console and nothing else; anything else exits 126.
+func gateMain(args []string) error {
+	if len(args) > 0 {
+		fmt.Fprintf(os.Stderr, "matchblox gate: refused: this key takes no arguments\n")
+		os.Exit(126)
+	}
 	orig := os.Getenv("SSH_ORIGINAL_COMMAND")
-	if err := gateDecision(orig); err != nil {
+	argv, err := gateDecision(orig)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "matchblox gate: refused %q: %v\n", orig, err)
 		os.Exit(126)
 	}
@@ -21,16 +26,25 @@ func gateMain() error {
 	// not have tmux: the service it starts lists the panes with it.
 	_ = os.Setenv("PATH", os.ExpandEnv(remote.HostPath)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	_ = os.Unsetenv("SSH_ORIGINAL_COMMAND")
-	return run([]string{"serve", "--stdio"})
+	// The console re-runs itself in the home session with these arguments:
+	// without "gate" it is the builder's own `matchblox`.
+	os.Args = os.Args[:1]
+	return run(argv)
 }
 
-// gateDecision lets the stream through: exactly the console's command.
-func gateDecision(orig string) error {
-	if orig == remote.ServeCommand {
-		return nil
+// gateDecision maps exactly two requested commands to what runs: the
+// service stream and the console. A tmux client is never one of them: it can
+// open a shell, and jumps and door commands use the builder's own login. The
+// console command attaches the shared home session, where goHome already
+// decides tmux or in place.
+func gateDecision(orig string) (argv []string, err error) {
+	switch orig {
+	case remote.ServeCommand:
+		return []string{"serve", "--stdio"}, nil
+	case remote.ConsoleCommand:
+		return []string{}, nil
+	case "":
+		return nil, errors.New("no shell for this key")
 	}
-	if orig == "" {
-		return errors.New("no shell for this key")
-	}
-	return errors.New("this key starts only the matchblox stream")
+	return nil, errors.New("this key starts only the matchblox stream and console")
 }

@@ -110,7 +110,7 @@ func run(args []string) error {
 	if len(args) > 0 {
 		switch args[0] {
 		case "gate":
-			return gateMain()
+			return gateMain(args[1:])
 		case "authorize":
 			return authorize(args[1:])
 		case "connect":
@@ -172,6 +172,9 @@ func run(args []string) error {
 		// not run every agent at nice 19.
 		if err := goHome(); err != nil {
 			return err
+		}
+		if os.Getenv(panes.HomeEnv) == "1" {
+			_ = exec.Command(panes.SizeArgv()[0], panes.SizeArgv()[1:]...).Run()
 		}
 	}
 

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -84,5 +85,12 @@ func TestWayBackParses(t *testing.T) {
 	}
 	if n := strings.Count(string(out), "◂ matchblox"); n != 1 {
 		t.Fatalf("sourced twice, the status line has %d labels:\n%s", n, out)
+	}
+}
+
+func TestSizeArgv(t *testing.T) {
+	want := []string{"tmux", "set-option", "-w", "-t", "=matchblox:", "window-size", "latest"}
+	if got := SizeArgv(); !slices.Equal(got, want) {
+		t.Errorf("SizeArgv() = %q, want %q", got, want)
 	}
 }

@@ -1,18 +1,25 @@
 package main
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/remote"
 )
 
-// The matchblox key starts the service stream and nothing else: jumps and
+// The matchblox key starts the service stream or the console and nothing else: jumps and
 // door commands use the builder's own login, so a tmux client (which can
 // open a shell) or an agent is never one of its commands.
-func TestGateRunsOnlyTheServiceStream(t *testing.T) {
-	if err := gateDecision(remote.ServeCommand); err != nil {
-		t.Fatalf("the stream: %v", err)
+func TestGateRunsOnlyItsCommands(t *testing.T) {
+	for orig, want := range map[string][]string{
+		remote.ServeCommand:   {"serve", "--stdio"},
+		remote.ConsoleCommand: {},
+	} {
+		got, err := gateDecision(orig)
+		if err != nil || !slices.Equal(got, want) || got == nil {
+			t.Fatalf("gateDecision(%q) = %q, %v; want %q", orig, got, err, want)
+		}
 	}
 	last := func(a []string) string { return a[len(a)-1] }
 	for _, orig := range []string{
@@ -26,8 +33,12 @@ func TestGateRunsOnlyTheServiceStream(t *testing.T) {
 		"matchblox serve --stdio; id",
 		"matchblox serve --stdio ",
 		"matchblox serve",
+		"matchblox console; id",
+		"matchblox console ",
+		"matchblox  console",
+		"matchblox gate pair 0123456789ab",
 	} {
-		if err := gateDecision(orig); err == nil {
+		if argv, err := gateDecision(orig); err == nil || argv != nil {
 			t.Errorf("gateDecision(%q) let it run", orig)
 		}
 	}
