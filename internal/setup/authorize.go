@@ -27,6 +27,12 @@ func Authorize(home, exe, pubKey string) (backup string, err error) {
 		return "", errors.New("the matchblox path has a character the gate line cannot hold (only letters, digits, space and ._+@/- ): " + exe +
 			"; install matchblox in a plain directory, such as /usr/local/bin")
 	}
+	return putKeyLine(home, strings.Fields(pubKey)[1], `restrict,pty,command="'`+exe+`' gate" `+pubKey)
+}
+
+// putKeyLine adds line to ~/.ssh/authorized_keys, after a backup, in place
+// of the lines of the same key. Every other line keeps its bytes.
+func putKeyLine(home, body, line string) (backup string, err error) {
 	dir := filepath.Join(home, ".ssh")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
@@ -36,14 +42,13 @@ func Authorize(home, exe, pubKey string) (backup string, err error) {
 	if err != nil {
 		return "", err
 	}
-	body := strings.Fields(pubKey)[1]
 	var lines []string
-	for line := range strings.SplitSeq(strings.TrimSuffix(string(old), "\n"), "\n") {
-		if line != "" && !strings.Contains(line, " "+body) {
-			lines = append(lines, line)
+	for l := range strings.SplitSeq(strings.TrimSuffix(string(old), "\n"), "\n") {
+		if l != "" && !strings.Contains(l, " "+body) {
+			lines = append(lines, l)
 		}
 	}
-	lines = append(lines, `restrict,pty,command="'`+exe+`' gate" `+pubKey)
+	lines = append(lines, line)
 	next := strings.Join(lines, "\n") + "\n"
 	if next == string(old) {
 		return "", nil

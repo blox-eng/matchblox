@@ -7,6 +7,8 @@ package remote
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -32,6 +34,9 @@ var (
 
 // ServeCommand is what the console asks the host's gate to run.
 const ServeCommand = "matchblox serve --stdio"
+
+// ConsoleCommand is what a phone asks the host's gate to run.
+const ConsoleCommand = "matchblox console"
 
 // install is the one install command, with no data in it. MATCHBLOX_NO_START
 // keeps the script from starting a console inside this one.
@@ -147,6 +152,34 @@ var pubKeyRE = regexp.MustCompile(`^ssh-ed25519 [A-Za-z0-9+/]+={0,2}( [A-Za-z0-9
 
 // ValidPubKey is one ed25519 public key line, and nothing a shell reads.
 func ValidPubKey(k string) bool { return pubKeyRE.MatchString(k) }
+
+var deviceKeyRE = regexp.MustCompile(`^ecdsa-sha2-nistp256 ([A-Za-z0-9+/]+={0,2})( [A-Za-z0-9@._-]+)?$`)
+
+// ValidDeviceKey is one P-256 public key line of a phone (its Secure
+// Enclave key), and nothing a shell reads.
+func ValidDeviceKey(k string) bool {
+	m := deviceKeyRE.FindStringSubmatch(k)
+	if m == nil {
+		return false
+	}
+	blob, err := base64.StdEncoding.DecodeString(m[1])
+	if err != nil {
+		return false
+	}
+	var fields [3][]byte
+	for i := range fields {
+		if len(blob) < 4 {
+			return false
+		}
+		n := int(binary.BigEndian.Uint32(blob))
+		if n > len(blob)-4 {
+			return false
+		}
+		fields[i], blob = blob[4:4+n], blob[4+n:]
+	}
+	return len(blob) == 0 && string(fields[0]) == "ecdsa-sha2-nistp256" &&
+		string(fields[1]) == "nistp256" && len(fields[2]) == 65 && fields[2][0] == 0x04
+}
 
 // Bootstrap is the command that connects a host, run with the builder's own
 // ssh login: the verified install (always: an older matchblox does not know

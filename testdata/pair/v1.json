@@ -1,0 +1,8 @@
+{
+  "names": {
+    "good": ["iPhone", "Martin’s iPhone", "Desk-2"],
+    "bad": ["", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "a\"b", "a\nb", "🔥", " lead"]
+  },
+  "hostkey_pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM4bfwfUcmyCX2tnMZ4mHkeEjSRJnkf0ehLEuB8iWLHU",
+  "hostkey_fp": "SHA256:HTAHrx6XYe6mj7kCVbwPfI6FVfygp52CqBMyPnXA0OU"
+}
