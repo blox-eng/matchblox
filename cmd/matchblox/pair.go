@@ -190,10 +190,10 @@ func pairCmd(ctx context.Context, args []string, out io.Writer, now func() time.
 			return err
 		}
 		if !removed { // the phone took it in the last moment
-			fmt.Fprintln(out, "Paired. matchblox devices lists it.")
+			_, _ = fmt.Fprintln(out, "Paired. matchblox devices lists it.")
 			return nil
 		}
-		fmt.Fprintln(out, "The code expired. Run matchblox pair again.")
+		_, _ = fmt.Fprintln(out, "The code expired. Run matchblox pair again.")
 		return nil
 	}
 }
