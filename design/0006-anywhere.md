@@ -208,6 +208,7 @@ Pairing uses the sshd of the host. matchblox opens no port. (My call.)
 ### 6.6 The match on the lock screen
 
 Mockup (approved by the owner, 2026-10-14):
+[0006-live-match.html](0006-live-match.html), a copy of
 https://claude.ai/artifact/JTGFApfmENRLdrhNG6i3HD
 
 1. The Live Activity is always on. It shows one match: the session that is

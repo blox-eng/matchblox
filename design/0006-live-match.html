@@ -1,0 +1,407 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Live Match</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a proposal sheet around one live lock screen; the matchblox console palette, dark first. */
+:root {
+  --bg: #0F0D0A; --fg: #EBE6DC; --muted: #A69D8D; --faint: #776F60;
+  --hair: #2E2921; --accent: #C3A56A; --wash: #221D14; --warn: #B98F44;
+  /* device colours: the lock screen is the same in both themes */
+  --dev-ink: #F4F2EE; --dev-ink-2: rgba(244,242,238,.62); --dev-panel: rgba(22,19,15,.78);
+  --dev-frame: #050505; --dev-wall-1: #0C1019; --dev-wall-2: #1A2234; --dev-accent: #C3A56A;
+  --sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ios: -apple-system, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #F5F1E7; --fg: #1C1813; --muted: #5F5A4C; --faint: #8A8170;
+  --hair: #DDD5C3; --accent: #9A7B3F; --wash: #ECE3CF; --warn: #8A6420; color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #F5F1E7; --fg: #1C1813; --muted: #5F5A4C; --faint: #8A8170;
+  --hair: #DDD5C3; --accent: #9A7B3F; --wash: #ECE3CF; --warn: #8A6420; color-scheme: light; }
+
+body { background: var(--bg); color: var(--fg); font: 400 16px/1.55 var(--sans); }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 40px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 56px; }
+h1, h2 { font-weight: 600; letter-spacing: -.01em; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.05; }
+h2 { font-size: 1.35rem; }
+p { margin: 0; max-width: 64ch; }
+.eyebrow { font: 500 .75rem/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.eyebrow b { color: var(--accent); font-weight: 500; }
+.lede { color: var(--muted); font-size: 1.1rem; }
+header { display: grid; gap: 14px; }
+section { display: grid; gap: 18px; }
+.hair { border: 0; border-top: 1px solid var(--hair); margin: 0; }
+code, .mono { font-family: var(--mono); font-size: .9em; }
+
+/* hero */
+.hero { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 48px; align-items: start; }
+@media (max-width: 820px) { .hero { grid-template-columns: minmax(0, 1fr); justify-items: center; } }
+
+.phone { width: 100%; max-width: 360px; aspect-ratio: 360 / 740; border-radius: 52px; padding: 12px;
+  background: var(--dev-frame); box-shadow: 0 0 0 1px #2a2620, 0 30px 80px rgba(0,0,0,.45); }
+.screen { position: relative; height: 100%; border-radius: 42px; overflow: hidden; color: var(--dev-ink);
+  background: radial-gradient(120% 70% at 30% 10%, var(--dev-wall-2), var(--dev-wall-1) 70%); font-family: var(--ios); }
+.island { position: absolute; top: 11px; left: 50%; transform: translateX(-50%); height: 34px; border-radius: 20px;
+  background: #000; display: flex; align-items: center; justify-content: space-between; padding: 0 12px 0 8px; gap: 10px; width: 64%; }
+.island canvas { width: 46px; height: 24px; display: block; }
+.island .tr { font: 500 12px/1 var(--ios); color: var(--dev-ink); white-space: nowrap; }
+.island .tr.ask { color: var(--dev-accent); }
+.clock { position: absolute; top: 74px; width: 100%; text-align: center; }
+.clock .d { font-size: 15px; font-weight: 500; color: var(--dev-ink-2); }
+.clock .t { font-size: 76px; font-weight: 600; line-height: 1; letter-spacing: -.02em; }
+.la { position: absolute; left: 12px; right: 12px; bottom: 88px; border-radius: 24px; padding: 14px 16px 14px;
+  background: var(--dev-panel); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); display: grid; gap: 6px; }
+.la .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.la .host { font: 500 13px/1 var(--mono); }
+.la .host i { font-style: normal; color: var(--dev-accent); }
+.la .counts { font: 500 13px/1 var(--mono); color: var(--dev-ink-2); display: flex; gap: 10px; }
+.la .counts .f { color: #F5A54A; } .la .counts .a { color: var(--dev-accent); }
+.la canvas { width: 100%; height: 52px; display: block; }
+.la .who { font-size: 15px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.la .who span { font-weight: 400; color: var(--dev-ink-2); }
+.la .word { font: 500 13px/1 var(--mono); white-space: nowrap; color: var(--dev-ink-2); }
+.la .word.ask { color: var(--dev-accent); } .la .word.out { color: #B98F44; } .la .word.burn { color: #F5A54A; }
+.hint { position: absolute; bottom: 26px; width: 100%; text-align: center; font-size: 12px; color: var(--dev-ink-2); }
+
+.panel { display: grid; gap: 22px; }
+.ctl { display: grid; gap: 8px; }
+.ctl label, .ctl .lab { font: 500 .75rem/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button { font: 500 .9rem/1 var(--mono); color: var(--muted); background: transparent; border: 1px solid var(--hair);
+  border-radius: 8px; padding: 9px 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { color: var(--fg); background: var(--wash); border-color: var(--accent); }
+.seg button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type=range] { width: 100%; max-width: 360px; accent-color: var(--accent); }
+.states { display: grid; gap: 0; border-top: 1px solid var(--hair); }
+.states div { display: grid; grid-template-columns: 2.2rem 7rem minmax(0,1fr); gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--hair); font-size: .95rem; }
+.states .g { font-family: var(--mono); text-align: center; }
+.states .n { font-family: var(--mono); color: var(--muted); }
+.g.fl { color: #E8822E; } .g.hd { color: #C2452D; } .g.ft { color: var(--faint); }
+
+/* island set */
+.isles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; align-items: end; }
+.isle { display: grid; gap: 10px; justify-items: center; }
+.isle .cap { font: 500 .75rem/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.pill { background: #000; color: var(--dev-ink); border-radius: 22px; font-family: var(--ios); }
+.pill.min { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; }
+.pill.min canvas { width: 30px; height: 30px; }
+.pill.exp { width: 100%; max-width: 340px; border-radius: 36px; padding: 16px 20px 18px; display: grid; gap: 6px; }
+.pill.exp canvas { width: 100%; height: 46px; display: block; }
+.pill.exp .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 14px; }
+.pill.exp .btn { font: 600 13px/1 var(--ios); color: #000; background: var(--dev-accent); border-radius: 14px; padding: 8px 14px; }
+.pill.cmp { width: 230px; height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px 0 8px; }
+.pill.cmp canvas { width: 46px; height: 24px; }
+
+/* directions */
+.dirs { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+.dir { display: grid; gap: 12px; align-content: start; }
+.dir .card { background: radial-gradient(120% 120% at 20% 0%, var(--dev-wall-2), var(--dev-wall-1)); border-radius: 22px; padding: 14px; }
+.dir .card .la { position: static; }
+.dir h3 { margin: 0; font-size: 1.05rem; font-weight: 600; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.tag { font: 500 .7rem/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; padding: 4px 6px; }
+.dir p { color: var(--muted); font-size: .95rem; }
+.box canvas { height: 128px !important; }
+
+/* lists */
+.cuts { display: grid; gap: 0; border-top: 1px solid var(--hair); }
+.cuts div { display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--hair); }
+.cuts b { font-weight: 600; }
+.cuts span { color: var(--muted); }
+@media (max-width: 640px) { .cuts div { grid-template-columns: minmax(0,1fr); gap: 4px; } }
+.decide { display: grid; gap: 14px; counter-reset: q; }
+.decide div { display: grid; grid-template-columns: 2rem minmax(0,1fr); gap: 8px; padding: 16px; background: var(--wash); border-radius: 12px; }
+.decide div::before { counter-increment: q; content: counter(q); font: 500 1rem/1.5 var(--mono); color: var(--accent); }
+.decide p { color: var(--muted); }
+.decide p b { color: var(--fg); font-weight: 600; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow"><b>▰</b> matchblox · iOS Live Activity · proposal 2026-10-14</div>
+    <h1>One match on your lock screen</h1>
+    <p class="lede">The match burns while your most important session works. The wood is the progress bar. When the session waits for you, the flame goes out and the match smokes. When nothing burns and nothing waits, the box stays closed. It is the same match as in the console, with the same meaning.</p>
+  </header>
+
+  <div class="hero">
+    <div class="phone" aria-label="iPhone lock screen with the matchblox Live Activity">
+      <div class="screen">
+        <div class="island"><canvas id="cIsle"></canvas><span class="tr" id="isleTr">api</span></div>
+        <div class="clock"><div class="d">Wednesday 14 October</div><div class="t">14:32</div></div>
+        <div class="la" id="laHero">
+          <div class="row"><span class="host"><i>▰</i> ws-1</span><span class="counts" id="counts"></span></div>
+          <canvas id="cHero"></canvas>
+          <div class="row"><span class="who" id="who"></span><span class="word" id="word"></span></div>
+        </div>
+        <div class="hint">swipe up to open</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="ctl">
+        <span class="lab" id="stateLab">State of the session</span>
+        <div class="seg" role="group" aria-labelledby="stateLab" id="seg">
+          <button type="button" data-s="burn" aria-pressed="true">✦ burns</button>
+          <button type="button" data-s="wait" aria-pressed="false">╿ waits</button>
+          <button type="button" data-s="done" aria-pressed="false">╿ done</button>
+          <button type="button" data-s="out" aria-pressed="false">out</button>
+          <button type="button" data-s="quiet" aria-pressed="false">quiet</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <label for="prog">Progress of the session: <span id="pv">62</span>%</label>
+        <input type="range" id="prog" min="0" max="100" value="62">
+      </div>
+      <div class="states" aria-label="What each state means">
+        <div><span class="g fl">✦</span><span class="n">burns</span><span>The agent works. The flame sits where its own <code>Progress [████░░░░]</code> line is.</span></div>
+        <div><span class="g hd">╿</span><span class="n">waits</span><span>It asks you. The flame goes out, the ember breathes once every 2.4 s like the head in the console, and the match smokes.</span></div>
+        <div><span class="g hd">╿</span><span class="n">done</span><span>It finished its turn. The match is burnt to the end and cold.</span></div>
+        <div><span class="g ft">│</span><span class="n">out</span><span>The plan's limit stopped it. Cold, no smoke, and the time when the limit resets.</span></div>
+        <div><span class="g ft">▰</span><span class="n">quiet</span><span>Nothing burns, nothing waits. The box is closed, with the heads ready.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <div class="eyebrow">Dynamic Island</div>
+    <h2>The same match, three sizes</h2>
+    <div class="isles">
+      <div class="isle"><div class="pill min"><canvas id="cMin"></canvas></div><span class="cap">minimal</span></div>
+      <div class="isle"><div class="pill cmp"><canvas id="cCmp"></canvas><span class="tr" id="cmpTr" style="font:500 12px/1 var(--ios)">api</span></div><span class="cap">compact</span></div>
+      <div class="isle"><div class="pill exp">
+        <div class="row"><span class="mono" style="font-size:13px"><span style="color:var(--dev-accent)">▰</span> ws-1</span><span class="mono" id="expCounts" style="font-size:13px;color:var(--dev-ink-2)"></span></div>
+        <canvas id="cExp"></canvas>
+        <div class="row"><span id="expWho" style="font-weight:600"></span><span class="btn" id="expBtn">Answer</span></div>
+      </div><span class="cap">expanded, on a long press</span></div>
+    </div>
+  </section>
+
+  <hr class="hair">
+
+  <section>
+    <div class="eyebrow">Two ways to hold the fire</div>
+    <h2>One match, or the box</h2>
+    <div class="dirs">
+      <div class="dir">
+        <div class="card"><div class="la">
+          <div class="row"><span class="host"><i>▰</i> ws-1</span><span class="counts"><span class="f">✦ 5</span><span class="a">╿ 2</span></span></div>
+          <canvas id="cA"></canvas>
+          <div class="row"><span class="who">web <span>· waits for you</span></span><span class="word ask">╿ waits</span></div>
+        </div></div>
+        <h3>A · One match <span class="tag">recommended</span></h3>
+        <p>Only the session that matters most right now. A session that waits beats one that burns. Among waiting ones, the oldest wait wins. Among burning ones, the one you prompted last wins.</p>
+      </div>
+      <div class="dir box">
+        <div class="card"><div class="la">
+          <div class="row"><span class="host"><i>▰</i> ws-1</span><span class="counts"><span class="f">✦ 2</span><span class="a">╿ 1</span></span></div>
+          <canvas id="cB"></canvas>
+        </div></div>
+        <h3>B · The box</h3>
+        <p>Up to four matches, one for each session, the most important on top. Richer, but four flames compete, and at lock-screen size the names and the burn of each one get hard to read.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">The Jobs pass</div>
+    <h2>What we took away, and why</h2>
+    <div class="cuts">
+      <div><b>No percentage on the lock screen.</b><span>The match is the number. A figure next to it says the drawing failed. The expanded island can show it, because a long press asks for detail.</span></div>
+      <div><b>One match, not five.</b><span>You can act on one thing at a time. The counts in the corner tell you the rest exists.</span></div>
+      <div><b>Only you make it move.</b><span>Fire means work, smoke means you. Nothing else animates. That is DESIGN.md rule 1, on a lock screen.</span></div>
+      <div><b>No question text on the lock screen.</b><span>Apple can't decrypt a Live Activity on the phone, so the relay would see it. The question goes in the encrypted alert. The activity only says who waits.</span></div>
+      <div><b>The tap opens the answer.</b><span>The <code>Answer</code> button and a tap on the activity both open the answer peek of that session. There is no home screen in between.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Apple's rules we design around</div>
+    <h2>"All the time" has fine print</h2>
+    <div class="cuts">
+      <div><b>An activity lives 8 hours.</b><span>Then it stays on the lock screen for up to 4 more hours, frozen. Your host starts a new one with push-to-start (iOS 17.2 or later) before the old one ends, so it looks permanent.</span></div>
+      <div><b>Updates have a budget.</b><span>Burn moves in steps of 5 % and at most every few minutes. A new wait goes out at once, with high priority. Done and out go out at once too.</span></div>
+      <div><b>The payload is visible to the relay.</b><span>It carries a session number, the state and the progress. The phone turns the number into <code>api</code> from its own list, saved at the last connect. No names or text leave your host in the clear.</span></div>
+      <div><b>A session with no Progress line.</b><span>The flame stays near the head and the wood stays whole. It still burns, so you know it works.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Yours to decide</div>
+    <h2>Three calls before I write it into 0006</h2>
+    <div class="decide">
+      <div><p><b>What does the wood measure?</b> I propose task progress, as you asked. In the console a burnt match means a full context (<code>│ spent</code>). On the phone that is the stoker's job, and the work of the system is silent, so the phone does not show it.</p></div>
+      <div><p><b>One match or the box?</b> I recommend the one match. The box can come later, behind a long press.</p></div>
+      <div><p><b>Which Apple Developer team?</b> We need it for the first TestFlight build and for the push key. Probably the team of the blox app.</p></div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const C = { flame: "#E8822E", amber: "#F5A54A", core: "#FFD27A", head: "#C2452D", ember: "#9C5A46",
+    stick: "#C9A877", stickHi: "#E2C597", stickLo: "#9E7F52", char: "#1E1915", charHi: "#352D26",
+    top: "#3A3328", left: "#1C1914", right: "#2A251D", striker: "#5A4128" };
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const S = { state: "burn", p: 0.62 };
+
+  function setup(cv) {
+    const dpr = Math.min(devicePixelRatio || 1, 3), w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return null;
+    if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+    return { ctx, w, h };
+  }
+
+  function flame(ctx, x, y, size, t, seed) {
+    const H = size * (1 + 0.09 * Math.sin(t * 13 + seed) + 0.05 * Math.sin(t * 23.7 + seed * 2));
+    const sway = size * (0.16 * Math.sin(t * 3.1 + seed) + 0.05 * Math.sin(t * 9.3));
+    const w = size * 0.34;
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    const g = ctx.createRadialGradient(x, y - H * 0.4, 0, x, y - H * 0.4, H * 1.5);
+    g.addColorStop(0, "rgba(232,130,46,.28)"); g.addColorStop(1, "rgba(232,130,46,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y - H * 0.4, H * 1.5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    [[1, C.flame, .92], [.7, C.amber, .95], [.4, C.core, 1]].forEach(([k, col, a]) => {
+      const hh = H * k, ww = w * k, sx = sway * k;
+      ctx.globalAlpha = a; ctx.fillStyle = col; ctx.beginPath();
+      ctx.moveTo(x - ww, y);
+      ctx.bezierCurveTo(x - ww, y - hh * .5, x + sx * .5 - ww * .3, y - hh * .72, x + sx, y - hh);
+      ctx.bezierCurveTo(x + sx * .5 + ww * .3, y - hh * .72, x + ww, y - hh * .5, x + ww, y);
+      ctx.quadraticCurveTo(x, y + ww * .95, x - ww, y); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  function smoke(ctx, parts, x, y, scale, dt, rate, t) {
+    if (rate > 0) { parts.acc = (parts.acc || 0) + dt * rate;
+      while (parts.acc >= 1) { parts.acc -= 1; parts.push({ x, y, life: 0, L: 2.2 + Math.random() * 1.2, seed: Math.random() * 6.28, vy: (12 + Math.random() * 8) * scale }); } }
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const q = parts[i]; q.life += dt; if (q.life > q.L) { parts.splice(i, 1); continue; }
+      q.y -= q.vy * dt; q.x += Math.sin(q.life * 2.3 + q.seed) * 7 * scale * dt + 2 * scale * dt;
+      const k = q.life / q.L, r = (1.5 + 7 * k) * scale, a = 0.3 * (1 - k) * Math.min(1, q.life * 4);
+      const g = ctx.createRadialGradient(q.x, q.y, 0, q.x, q.y, r);
+      g.addColorStop(0, `rgba(205,200,190,${a})`); g.addColorStop(1, "rgba(205,200,190,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); }
+
+  // one horizontal match: head on the left, the flame walks right as the wood burns
+  function match(ctx, o, t, dt) {
+    const { x, y, len, th, p, state, parts } = o;
+    const headW = th * 2.1, wood0 = x + headW * 0.6, front = wood0 + Math.max(0.03, p) * (len - headW * 0.6);
+    // unburnt wood
+    if (front < x + len) { const g = ctx.createLinearGradient(0, y - th / 2, 0, y + th / 2);
+      g.addColorStop(0, C.stickHi); g.addColorStop(.45, C.stick); g.addColorStop(1, C.stickLo);
+      ctx.fillStyle = g; roundRect(ctx, front, y - th / 2, x + len - front, th, th * .25); ctx.fill(); }
+    // burnt wood, thinner and cracked
+    const bt = th * .78; ctx.fillStyle = C.char; roundRect(ctx, wood0, y - bt / 2, front - wood0, bt, bt * .3); ctx.fill();
+    ctx.fillStyle = C.charHi; ctx.fillRect(wood0, y - bt / 2, front - wood0, Math.max(1, bt * .18));
+    ctx.strokeStyle = "rgba(0,0,0,.55)"; ctx.lineWidth = 1;
+    for (let c = wood0 + th * 1.4; c < front - th; c += th * 1.9) { ctx.beginPath(); ctx.moveTo(c, y - bt / 2); ctx.lineTo(c + th * .3, y + bt / 2); ctx.stroke(); }
+    // the burnt head
+    ctx.fillStyle = "#2A211B"; ctx.beginPath(); ctx.ellipse(x + headW / 2, y, headW / 2, th * .78, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.06)"; ctx.beginPath(); ctx.ellipse(x + headW * .45, y - th * .3, headW * .3, th * .22, 0, 0, Math.PI * 2); ctx.fill();
+    // the ember at the front
+    const breath = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 / 2.4);
+    const glow = state === "burn" ? 1 : state === "wait" ? 0.3 + 0.55 * breath : 0;
+    if (glow > 0) { const eg = ctx.createLinearGradient(front - th * 3, 0, front, 0);
+      eg.addColorStop(0, "rgba(156,90,70,0)"); eg.addColorStop(.6, `rgba(156,90,70,${.9 * glow})`); eg.addColorStop(1, `rgba(245,165,74,${glow})`);
+      ctx.fillStyle = eg; roundRect(ctx, front - th * 3, y - bt / 2, th * 3, bt, bt * .3); ctx.fill(); }
+    if (state === "burn") flame(ctx, front, y, th * 3.1, t, o.seed || 0);
+    smoke(ctx, parts, front, y - th * .4, th / 6, dt, state === "wait" ? 16 : state === "done" ? 3 : 0, t);
+  }
+
+  function closedBox(ctx, w, h) {
+    const bw = Math.min(150, w * .5), bh = h * .46, x = (w - bw) / 2, y = h * .38, d = bh * .35;
+    ctx.fillStyle = C.top; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + d, y - d * .6); ctx.lineTo(x + bw + d, y - d * .6); ctx.lineTo(x + bw, y); ctx.fill();
+    ctx.fillStyle = C.right; ctx.beginPath(); ctx.moveTo(x + bw, y); ctx.lineTo(x + bw + d, y - d * .6); ctx.lineTo(x + bw + d, y + bh - d * .6); ctx.lineTo(x + bw, y + bh); ctx.fill();
+    ctx.fillStyle = C.left; ctx.fillRect(x, y, bw, bh);
+    ctx.fillStyle = C.striker; ctx.fillRect(x, y + bh * .62, bw, bh * .22);
+    for (let i = 0; i < 5; i++) { ctx.fillStyle = C.head; ctx.beginPath(); ctx.ellipse(x + d * .5 + 14 + i * (bw - 24) / 5, y - d * .3, 5, 3.4, 0, 0, Math.PI * 2); ctx.fill(); }
+  }
+
+  const parts = {};
+  const views = [];
+  function view(id, draw) { const cv = document.getElementById(id); if (cv) views.push({ cv, draw, parts: (parts[id] = []) }); }
+
+  const single = (thk, lenK) => (c, t, dt, v) => {
+    if (S.state === "quiet") { closedBox(c.ctx, c.w, c.h); v.parts.length = 0; return; }
+    const th = thk(c), p = S.state === "done" ? 1 : S.p;
+    match(c.ctx, { x: th * .6, y: c.h * .7, len: c.w * lenK - th * 1.2, th, p, state: S.state === "out" ? "out" : S.state, parts: v.parts, seed: 1 }, t, dt);
+  };
+  view("cHero", single(c => Math.max(7, c.h * .17), 1));
+  view("cExp", single(c => Math.max(6, c.h * .16), 1));
+  view("cIsle", single(() => 3.6, 1));
+  view("cCmp", single(() => 3.6, 1));
+  view("cMin", (c, t, dt, v) => {
+    if (S.state === "quiet") { c.ctx.fillStyle = C.head; c.ctx.beginPath(); c.ctx.ellipse(c.w / 2, c.h / 2, 5, 3.6, 0, 0, 7); c.ctx.fill(); return; }
+    const th = 3.4; match(c.ctx, { x: 3, y: c.h * .74, len: c.w - 6, th, p: S.state === "done" ? 1 : .55, state: S.state, parts: v.parts, seed: 2 }, t, dt);
+  });
+  view("cA", (c, t, dt, v) => { const th = Math.max(7, c.h * .17); match(c.ctx, { x: th * .6, y: c.h * .7, len: c.w - th * 1.2, th, p: .4, state: "wait", parts: v.parts, seed: 3 }, t, dt); });
+  const boxRows = [{ n: "web", s: "wait", p: .4 }, { n: "api", s: "burn", p: .62 }, { n: "docs", s: "burn", p: .85 }, { n: "infra", s: "done", p: 1 }];
+  view("cB", (c, t, dt, v) => {
+    const th = 5.2, gap = c.h / (boxRows.length + .3), lw = 44;
+    v.parts.rows = v.parts.rows || boxRows.map(() => []);
+    boxRows.forEach((r, i) => {
+      const y = gap * (i + .9);
+      c.ctx.globalAlpha = i === 0 ? 1 : .72;
+      match(c.ctx, { x: 4, y, len: c.w - lw - 12, th, p: r.p, state: r.s, parts: v.parts.rows[i], seed: i * 1.7 }, t, dt);
+      c.ctx.globalAlpha = 1; c.ctx.fillStyle = i === 0 ? "#C3A56A" : "rgba(244,242,238,.62)";
+      c.ctx.font = "500 11px 'IBM Plex Mono', monospace"; c.ctx.textBaseline = "middle"; c.ctx.fillText(r.n, c.w - lw, y);
+    });
+  });
+
+  const copy = {
+    burn: { who: "api <span>· run the migration</span>", word: ["✦ burns", "burn"], isle: ["api", ""], btn: "Open" },
+    wait: { who: "api <span>· waits for you</span>", word: ["╿ waits", "ask"], isle: ["╿ waits", "ask"], btn: "Answer" },
+    done: { who: "api <span>· finished its turn</span>", word: ["╿ done", ""], isle: ["╿ done", ""], btn: "Open" },
+    out: { who: "api <span>· the limit stopped it</span>", word: ["out until 16:40", "out"], isle: ["out 16:40", ""], btn: "Open" },
+    quiet: { who: "All quiet <span>· 7 sessions rest</span>", word: ["", ""], isle: ["quiet", ""], btn: "Open" },
+  };
+  const counts = { burn: [5, 0], wait: [4, 2], done: [4, 0], out: [3, 0], quiet: [0, 0] };
+  function render() {
+    const k = copy[S.state], [f, a] = counts[S.state];
+    const cs = (f ? `<span class="f">✦ ${f}</span>` : "") + (a ? `<span class="a">╿ ${a}</span>` : "");
+    document.getElementById("counts").innerHTML = cs;
+    document.getElementById("expCounts").textContent = [f ? `✦ ${f}` : "", a ? `╿ ${a}` : ""].join("  ").trim();
+    document.getElementById("who").innerHTML = k.who;
+    const wd = document.getElementById("word"); wd.textContent = k.word[0]; wd.className = "word " + k.word[1];
+    const it = document.getElementById("isleTr"); it.textContent = k.isle[0]; it.className = "tr " + k.isle[1];
+    document.getElementById("cmpTr").textContent = k.isle[0];
+    document.getElementById("expWho").innerHTML = S.state === "burn" ? `api <span style="font-weight:400;color:rgba(244,242,238,.62)">· ${Math.round(S.p * 100)}%</span>` : k.who.replace(/<span>/, '<span style="font-weight:400;color:rgba(244,242,238,.62)">');
+    document.getElementById("expBtn").textContent = k.btn;
+    document.getElementById("prog").disabled = S.state !== "burn" && S.state !== "wait";
+    if (reduce) still();
+  }
+
+  document.getElementById("seg").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    S.state = b.dataset.s;
+    document.querySelectorAll("#seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    render();
+  });
+  document.getElementById("prog").addEventListener("input", e => { S.p = e.target.value / 100; document.getElementById("pv").textContent = e.target.value; render(); });
+
+  let last = performance.now(), t0 = last;
+  function frame(now, dtOverride) {
+    const dt = dtOverride ?? Math.min(.05, (now - last) / 1000); last = now;
+    const t = (now - t0) / 1000;
+    views.forEach(v => { const c = setup(v.cv); if (c) v.draw(c, t, dt, v); });
+  }
+  function still() { // reduced motion: let the smoke rise for two seconds, then hold that frame
+    views.forEach(v => { v.parts.length = 0; if (v.parts.rows) v.parts.rows.forEach(r => (r.length = 0)); });
+    for (let i = 0; i < 60; i++) frame(1000 + i * 33, 1 / 30);
+  }
+  render();
+  if (reduce) { still(); addEventListener("resize", still); }
+  else { const loop = now => { frame(now); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
+})();
+</script>
+
+</body></html>
