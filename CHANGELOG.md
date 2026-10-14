@@ -10,8 +10,21 @@ All notable changes to matchblox are in this file. The format follows
 
 - **`matchblox devices` lists the phones and laptops that open this host,
   and removes one.** `matchblox devices rm <name|fingerprint>` removes a
-  key and keeps a backup of `authorized_keys`. The docs now show
-  `matchblox pair` and the phone app that is coming.
+  key and keeps a backup of `authorized_keys`. A laptop shows the comment
+  of its key as its name, which is `matchblox` for a key from
+  `matchblox connect`.
+- **`matchblox pair` shows a one-time QR code for the coming iPhone app**
+  (#88). The code holds a key that works once and that sshd refuses after
+  5 minutes. Stop the command, or close the terminal, and the key is gone.
+- **A phone key opens the console.** The new key kind (`gate phone`) starts
+  the stream and the console. A laptop key from `matchblox connect` keeps
+  the stream alone.
+
+### Changed
+
+- **The home session uses `window-size latest`.** Its size now follows the
+  device you used last, so a phone and a laptop on one session do not
+  keep the size of the smaller one.
 
 ## [0.7.0] - 2026-10-13
 
