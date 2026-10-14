@@ -1,5 +1,6 @@
 import XCTest
 @testable import MatchbloxKit
+import struct MatchbloxKit.Host
 
 final class OpeningTests: XCTestCase {
     private func host(_ label: String) -> Host {
