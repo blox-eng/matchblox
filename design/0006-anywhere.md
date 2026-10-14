@@ -139,7 +139,10 @@ Pairing uses the sshd of the host. matchblox opens no port. (My call.)
 
 1. On the host, `matchblox pair` makes a one-time ed25519 key. It adds the
    public key to `authorized_keys` with
-   `restrict,expiry-time="<now + 5 min>",command="<exe> gate pair"`.
+   `restrict,expiry-time="<system-zone YYYYMMDDHHMM>",command="<exe> gate pair"`.
+   The time is 5 minutes from now, rounded up to the next whole minute, in
+   the system zone with no `Z`. sshd reads that from OpenSSH 7.7. A `Z` (UTC)
+   needs OpenSSH 9.1, and older sshd rejects the whole line.
 2. The console shows a QR code. It holds the host address, the host key
    fingerprint, the name of the host and the one-time private key.
 3. The app scans it. The app makes a P-256 key in the Secure Enclave. Face

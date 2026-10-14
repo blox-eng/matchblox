@@ -17,7 +17,7 @@
 - The console is the only UI. The app draws no screen that the console already has (0006 anti-goal 1).
 - The gate lets through exactly: `matchblox serve --stdio`, `matchblox console`, and `gate pair` for a one-time key. Everything else exits 126. (`matchblox open` and `matchblox devices token` come with #89, not here.)
 - Device key line: `restrict,pty,command="'<exe>' gate phone" <key> matchblox:phone:<name>`. A laptop key (`'<exe>' gate`) keeps the stream alone: only `gate phone` also opens the console.
-- One-time key line: `restrict,expiry-time="<UTC YYYYMMDDHHMM>Z",command="'<exe>' gate pair <id>" <key> matchblox:pair`. It expires 5 minutes after `matchblox pair` starts. It works once.
+- One-time key line: `restrict,expiry-time="<system-zone YYYYMMDDHHMM>",command="'<exe>' gate pair <id>" <key> matchblox:pair`. It expires 5 minutes after `matchblox pair` starts (rounded up to the next whole minute). The time is in the system zone, read from `/etc/localtime`, with no `Z`: sshd reads it so from OpenSSH 7.7, and a `Z` (UTC) needs OpenSSH 9.1, where older sshd rejects the whole line. It works once.
 - Pairing URL: `matchblox://pair?p=<base64url, no padding, of the payload JSON>`.
 - iOS deployment target 17.2 (the Live Activity of #90 needs it). Swift 5.10, `SWIFT_STRICT_CONCURRENCY: complete`, iPhone only, as in the blox app (`~/dev/blox/ios/project.yml`).
 - Bundle id `com.blox.matchblox`. The team is not set in `project.yml`; each builder sets it in Xcode until the owner names the team.

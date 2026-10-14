@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -98,7 +99,8 @@ func Devices(home string) ([]Device, error) {
 	return out, nil
 }
 
-// RemoveDevice takes out the line of one phone, by its name or, when
+// RemoveDevice takes out the line of one phone or laptop, by its name (a
+// laptop's name is its key comment) or, when
 // names repeat, by its fingerprint.
 func RemoveDevice(home, name string) (backup string, err error) {
 	err = withKeysLock(home, func() error {
@@ -117,14 +119,14 @@ func removeDeviceLocked(home, name string) (backup string, err error) {
 	hit := -1
 	n := 0
 	for i, line := range lines {
-		if d, ok := parseDevice(line); ok && (d.Fingerprint == name || (d.Kind == "phone" && d.Name == name)) {
+		if d, ok := parseDevice(line); ok && (d.Fingerprint == name || d.Name == name) {
 			hit = i
 			n++
 		}
 	}
 	switch {
 	case n == 0:
-		return "", errors.New("no device named " + name)
+		return "", errors.New("no device named " + name + "; run matchblox devices and give a name or a fingerprint from that list")
 	case n > 1:
 		return "", fmt.Errorf("%d devices named %s; give the fingerprint", n, name)
 	}
@@ -141,6 +143,38 @@ var pairID = regexp.MustCompile(`^[0-9a-f]{12}$`)
 
 func pairCommand(exe, id string) string { return `command="'` + exe + `' gate pair ` + id + `"` }
 
+// zoneFile is the system time zone, which sshd reads expiry-time in.
+var zoneFile = "/etc/localtime"
+
+// expiryZone is the zone of the expiry-time; tests replace it.
+var expiryZone = systemZone
+
+// systemZone is the zone of /etc/localtime, not time.Local: the TZ variable of
+// this process may differ from the one of sshd. If the file cannot be read,
+// UTC is the fallback: it is right on the many hosts whose clock is UTC, and a
+// wrong zone only moves the expiry, it never lets the key work after use.
+func systemZone() *time.Location {
+	b, err := os.ReadFile(zoneFile)
+	if err == nil {
+		if loc, err := time.LoadLocationFromTZData("", b); err == nil {
+			return loc
+		}
+	}
+	return time.UTC
+}
+
+// expiryTime is until, rounded up to the next whole minute so that the key
+// never expires early, as YYYYMMDDHHMM in zone. The form has no Z suffix: sshd
+// reads it in the system zone from OpenSSH 7.7, and a Z needs OpenSSH 9.1,
+// where older sshd rejects the whole line.
+func expiryTime(until time.Time, zone *time.Location) string {
+	t := until.Truncate(time.Minute)
+	if t.Before(until) {
+		t = t.Add(time.Minute)
+	}
+	return t.In(zone).Format("200601021504")
+}
+
 // AddPairKey lets a one-time key run only `matchblox gate pair <id>`, and
 // tells sshd to refuse it after until.
 func AddPairKey(home, exe, pubKey, id string, until time.Time) error {
@@ -155,11 +189,11 @@ func AddPairKey(home, exe, pubKey, id string, until time.Time) error {
 			"; install matchblox in a plain directory, such as /usr/local/bin")
 	}
 	f := strings.Fields(pubKey)
-	_, err := putKeyLine(home, f[1], `restrict,expiry-time="`+until.UTC().Format("200601021504")+`Z",`+pairCommand(exe, id)+" "+f[0]+" "+f[1]+" matchblox:pair")
+	_, err := putKeyLine(home, f[1], `restrict,expiry-time="`+expiryTime(until, expiryZone())+`",`+pairCommand(exe, id)+" "+f[0]+" "+f[1]+" matchblox:pair")
 	return err
 }
 
-var pairLine = regexp.MustCompile(`^restrict,expiry-time="\d{12}Z",command="'[^"']*' gate pair ([0-9a-f]{12})" `)
+var pairLine = regexp.MustCompile(`^restrict,expiry-time="\d{12}Z?",command="'[^"']*' gate pair ([0-9a-f]{12})" `)
 
 func pairLines(old []byte, id string) (lines []string, hits []int, err error) {
 	if !pairID.MatchString(id) {

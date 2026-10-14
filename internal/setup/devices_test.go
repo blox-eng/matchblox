@@ -145,7 +145,7 @@ func TestAuthorizeDeviceThroughASymlink(t *testing.T) {
 func TestDevicesAndRemoveDevice(t *testing.T) {
 	home := t.TempDir()
 	laptopKey := loadPairFixture(t).HostkeyPub
-	laptop := `restrict,pty,command="'/opt/mb/matchblox' gate" ` + laptopKey
+	laptop := `restrict,pty,command="'/opt/mb/matchblox' gate" ` + laptopKey + " matchblox"
 	other := "ssh-rsa AAAAother other@box"
 	pair := `restrict,expiry-time="202610141200Z",command="'/opt/mb/matchblox' gate pair abc" ` + pub + " matchblox:pair"
 	writeFile(t, filepath.Join(home, ".ssh", "authorized_keys"), other+"\n"+laptop+"\n"+pair+"\n")
@@ -180,8 +180,41 @@ func TestDevicesAndRemoveDevice(t *testing.T) {
 	if got, _ = Devices(home); len(got) != 2 {
 		t.Fatalf("devices after remove: %+v", got)
 	}
-	if _, err := RemoveDevice(home, "Nobody"); err == nil || err.Error() != "no device named Nobody" {
+	if _, err := RemoveDevice(home, "Nobody"); err == nil || err.Error() != "no device named Nobody; run matchblox devices and give a name or a fingerprint from that list" {
 		t.Fatalf("unknown name: %v", err)
+	}
+}
+
+func TestRemoveDeviceByLaptopName(t *testing.T) {
+	home := t.TempDir()
+	f := loadPairFixture(t)
+	if _, err := Authorize(home, "/opt/mb/matchblox", f.HostkeyPub+" matchblox"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AuthorizeDevice(home, "/opt/mb/matchblox", phoneKey, "iPhone"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := Devices(home); len(got) != 2 || got[0].Name != "matchblox" || got[0].Kind != "laptop" {
+		t.Fatalf("devices: %+v", got)
+	}
+	if _, err := RemoveDevice(home, "matchblox"); err != nil {
+		t.Fatal(err)
+	}
+	if got := authKeys(home); strings.Contains(got, f.HostkeyPub) || !strings.Contains(got, phoneKey) {
+		t.Fatalf("authorized_keys:\n%s", got)
+	}
+}
+
+func TestRemoveDeviceLaptopsWithTheSameNameNeedTheFingerprint(t *testing.T) {
+	home := t.TempDir()
+	if _, err := Authorize(home, "/opt/mb/matchblox", loadPairFixture(t).HostkeyPub+" matchblox"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Authorize(home, "/opt/mb/matchblox", pairPub+" matchblox"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RemoveDevice(home, "matchblox"); err == nil || err.Error() != "2 devices named matchblox; give the fingerprint" {
+		t.Fatalf("repeated laptop name: %v", err)
 	}
 }
 
@@ -222,13 +255,67 @@ func TestFingerprintMatchesSSHKeygen(t *testing.T) {
 
 const pairPub = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJuq8ePD+piatVSqgsicCgoOmr96M/08H8oC9fvzMWs9"
 
+func useZone(t *testing.T, loc *time.Location) {
+	t.Helper()
+	old := expiryZone
+	expiryZone = func() *time.Location { return loc }
+	t.Cleanup(func() { expiryZone = old })
+}
+
+func TestExpiryTimeRoundsUpToTheMinute(t *testing.T) {
+	sofia, err := time.LoadLocation("Europe/Sofia")
+	if err != nil {
+		t.Skip("no tzdata:", err)
+	}
+	for _, c := range []struct {
+		until time.Time
+		want  string
+	}{
+		{time.Date(2026, 10, 14, 13, 37, 0, 0, time.UTC), "202610141637"},
+		{time.Date(2026, 10, 14, 13, 37, 1, 0, time.UTC), "202610141638"},
+		{time.Date(2026, 10, 14, 13, 37, 59, 999, time.UTC), "202610141638"},
+		{time.Date(2026, 10, 14, 23, 59, 30, 0, time.UTC), "202610150300"},
+	} {
+		if got := expiryTime(c.until, sofia); got != c.want {
+			t.Errorf("expiryTime(%v) = %s, want %s", c.until, got, c.want)
+		}
+	}
+}
+
+func TestSystemZoneReadsTheZoneFile(t *testing.T) {
+	src := "/usr/share/zoneinfo/Europe/Sofia"
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Skip("no tzdata:", err)
+	}
+	old := zoneFile
+	t.Cleanup(func() { zoneFile = old })
+	t.Setenv("TZ", "America/New_York")
+
+	zoneFile = filepath.Join(t.TempDir(), "localtime")
+	writeFile(t, zoneFile, string(data))
+	if got := expiryTime(time.Date(2026, 1, 14, 12, 0, 0, 0, time.UTC), systemZone()); got != "202601141400" {
+		t.Errorf("winter in the file zone: %s", got)
+	}
+	zoneFile = filepath.Join(t.TempDir(), "missing")
+	if got := expiryTime(time.Date(2026, 1, 14, 12, 0, 0, 0, time.UTC), systemZone()); got != "202601141200" {
+		t.Errorf("no file, want UTC: %s", got)
+	}
+	zoneFile = filepath.Join(t.TempDir(), "junk")
+	writeFile(t, zoneFile, "not a zone")
+	if got := systemZone(); got != time.UTC {
+		t.Errorf("bad file, want UTC: %v", got)
+	}
+}
+
 func TestAddPairKeyLine(t *testing.T) {
 	home := t.TempDir()
-	until := time.Date(2026, 10, 14, 16, 37, 0, 0, time.FixedZone("EEST", 3*3600)).In(time.FixedZone("EEST", 3*3600))
+	useZone(t, time.FixedZone("EEST", 3*3600))
+	until := time.Date(2026, 10, 14, 16, 37, 20, 0, time.FixedZone("EEST", 3*3600))
 	if err := AddPairKey(home, "/usr/local/bin/matchblox", pairPub, "0123456789ab", until); err != nil {
 		t.Fatal(err)
 	}
-	want := `restrict,expiry-time="202610141337Z",command="'/usr/local/bin/matchblox' gate pair 0123456789ab" ` + pairPub + " matchblox:pair\n"
+	want := `restrict,expiry-time="202610141638",command="'/usr/local/bin/matchblox' gate pair 0123456789ab" ` + pairPub + " matchblox:pair\n"
 	if got := authKeys(home); got != want {
 		t.Fatalf("line:\n%s\nwant:\n%s", got, want)
 	}

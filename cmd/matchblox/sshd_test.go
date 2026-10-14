@@ -271,9 +271,9 @@ func TestPairOnARealSSHD(t *testing.T) {
 
 	t.Run("expired", func(t *testing.T) {
 		if v, _ := exec.Command("ssh", "-V").CombinedOutput(); !sshHasExpiryTime(string(v)) {
-			t.Skipf("OpenSSH older than 8.2 ignores expiry-time: %s", v)
+			t.Skipf("OpenSSH older than 7.7 does not read expiry-time without Z in the system zone, and rejects the line: %s", v)
 		}
-		expired := pairKey("expired", time.Now().Add(-time.Minute))
+		expired := pairKey("expired", time.Now().Add(-2*time.Minute))
 		out, err := ssh(expired, request, "ignored").CombinedOutput()
 		if err == nil || strings.Contains(string(out), `"ok"`) {
 			t.Errorf("an expired one-time key worked: %v\n%s", err, out)
@@ -281,6 +281,9 @@ func TestPairOnARealSSHD(t *testing.T) {
 	})
 }
 
+// sshHasExpiryTime is whether this OpenSSH reads expiry-time="YYYYMMDDHHMM" in
+// the system zone: from 7.7 (the Z suffix needs 9.1). Older sshd refuses the
+// whole line as a bad option.
 func sshHasExpiryTime(version string) bool {
 	var major, minor int
 	i := strings.Index(version, "OpenSSH_")
@@ -290,5 +293,5 @@ func sshHasExpiryTime(version string) bool {
 	if _, err := fmt.Sscanf(version[i:], "OpenSSH_%d.%d", &major, &minor); err != nil {
 		return false
 	}
-	return major > 8 || (major == 8 && minor >= 2)
+	return major > 7 || (major == 7 && minor >= 7)
 }
