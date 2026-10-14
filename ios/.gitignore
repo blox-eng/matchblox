@@ -1,0 +1,4 @@
+*.xcodeproj
+build/
+Matchblox/Info.plist
+.build/

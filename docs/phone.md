@@ -6,9 +6,10 @@ into a pane and back without tmux keys.
 
 ## The matchblox app
 
-The matchblox iPhone app is coming. It is not in the App Store yet. Follow
-[issue #88](https://github.com/blox-eng/matchblox/issues/88). Until it
-ships, use [Without the app](#without-the-app).
+The matchblox iPhone app is not in the App Store or on TestFlight yet. To
+get it now, build it on a Mac with Xcode: see
+[ios/README.md](https://github.com/blox-eng/matchblox/blob/main/ios/README.md).
+Without a Mac, use [Without the app](#without-the-app).
 
 The app pairs with one scan. It needs no account and no password.
 
@@ -36,6 +37,28 @@ the host again.
 When the phone pairs, `matchblox pair` prints the name and fingerprint of
 that phone. If it is not your phone, remove it at once with
 `matchblox devices rm <fingerprint>`.
+
+### Use the app
+
+- Each time the app opens, Face ID or the passcode unlocks the key. The key
+  stays in the Secure Enclave of the iPhone. Each host has its own key.
+- With one host, the app opens straight into its console. With two or
+  more, it lists the hosts. Tap a host to open its console. Tap
+  `+ Pair a host` to add one.
+- If the app says `Can't reach <host>.` and `New address?`, type the
+  address that the iPhone can reach, then tap `Try again`. The pairing
+  stays.
+- If the app says that the host has a new host key, the app does not
+  connect. Check that the change is yours, then run `matchblox pair` on the
+  host and scan the new code.
+- When you quit the console, the app says that the console ended. Tap
+  `Open again` to open it. With two or more hosts, tap `Hosts` to go to
+  the list.
+- A swipe on a host in the list removes the host and its key from the
+  iPhone. It does not remove the key on the host. Run
+  `matchblox devices rm <name>` on the host for that.
+
+### Remove a phone
 
 To remove a phone, run `matchblox devices` on the host. It lists each phone
 and laptop that opens the host. Then run:

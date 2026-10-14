@@ -55,6 +55,15 @@ All notable changes to matchblox are in this file. The format follows
   and `g` groups the list by need, state, repo or not at all.
 - **`matchblox sessions`, `ships` and `usage`** print one line a row, or
   JSON with `--json`, for a script or an agent.
+- **The matchblox iPhone app opens your console** (#88). Scan the code of
+  `matchblox pair` once, and the app opens the console of the host. Face ID
+  or the passcode unlocks the key each time the app opens. The key stays in
+  the Secure Enclave, and each host gets its own key. The app trusts only
+  the host key from the code, so a host with a new host key does not open
+  until you pair again. With two or more hosts, the app lists them, and a
+  swipe removes one. When the app can't reach a host, it asks for a new
+  address and keeps the pairing. Build the app from `ios/` until it is on
+  TestFlight.
 
 
 ## [0.8.0] - 2026-10-14

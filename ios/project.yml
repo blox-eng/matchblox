@@ -1,0 +1,69 @@
+name: Matchblox
+options:
+  bundleIdPrefix: com.blox
+  deploymentTarget:
+    iOS: "17.2"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+packages:
+  MatchbloxKit:
+    path: MatchbloxKit
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    exactVersion: "1.20.0"
+  swift-nio-ssh:
+    url: https://github.com/apple/swift-nio-ssh
+    from: "0.15.0"
+
+targets:
+  Matchblox:
+    type: application
+    platform: iOS
+    sources:
+      - path: Matchblox
+    info:
+      path: Matchblox/Info.plist
+      properties:
+        CFBundleDisplayName: matchblox
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UIRequiredDeviceCapabilities: [arm64]
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSCameraUsageDescription: matchblox uses the camera to scan the pairing code of your host.
+        NSFaceIDUsageDescription: Face ID unlocks the key that opens your console.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.blox.matchblox.pair
+            CFBundleURLSchemes: [matchblox]
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.2"
+        TARGETED_DEVICE_FAMILY: "1"
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        SWIFT_STRICT_CONCURRENCY: complete
+        PRODUCT_BUNDLE_IDENTIFIER: com.blox.matchblox
+        CODE_SIGN_ENTITLEMENTS: Matchblox/Matchblox.entitlements
+    dependencies:
+      - package: MatchbloxKit
+        product: MatchbloxKit
+      - package: SwiftTerm
+        product: SwiftTerm
+      - package: swift-nio-ssh
+        product: NIOSSH
+
+schemes:
+  Matchblox:
+    build:
+      targets:
+        Matchblox: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    archive:
+      config: Release
