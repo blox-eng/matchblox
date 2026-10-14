@@ -18,7 +18,7 @@ extension DeviceKeyError: LocalizedError {
         case .noPasscode:
             "This iPhone has no passcode. Set a passcode in Settings, then try again."
         case .keyUnavailable:
-            "The phone key cannot be used. Unlock the iPhone and try again. If it still fails, remove the app and install it again."
+            "This iPhone can't open its key. Run matchblox pair on your host, then scan the code again."
         case .locked:
             "The iPhone is locked. Unlock the iPhone, then try again."
         case .keychain(let status):
@@ -44,7 +44,7 @@ enum DeviceKey {
             kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
             [.privateKeyUsage, .biometryAny, .or, .devicePasscode],
             &error
-        ) else { throw DeviceKeyError.noPasscode }
+        ) else { throw DeviceKeyError.keyUnavailable }
         let key: SecureEnclave.P256.Signing.PrivateKey
         do {
             key = try SecureEnclave.P256.Signing.PrivateKey(
@@ -52,7 +52,7 @@ enum DeviceKey {
                 authenticationContext: context
             )
         } catch {
-            throw DeviceKeyError.noPasscode
+            throw DeviceKeyError.keyUnavailable
         }
         let status = add(key.dataRepresentation)
         if status == errSecDuplicateItem, let stored = try storedRepresentation() {
@@ -65,6 +65,11 @@ enum DeviceKey {
     static func openSSH() throws -> String {
         let key = try loadOrCreate()
         return SSHKeys.openSSH(p256X963: key.publicKey.x963Representation, comment: "")
+    }
+
+    static func reset() throws {
+        let status = SecItemDelete(identity as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw keychainError(status) }
     }
 
     static func nioKey(_ key: SecureEnclave.P256.Signing.PrivateKey) -> NIOSSHPrivateKey {
