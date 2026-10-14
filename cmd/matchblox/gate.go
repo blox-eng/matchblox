@@ -9,15 +9,21 @@ import (
 )
 
 // gateMain is the forced command of the matchblox key on a host
-// (design/0005-remote-mode.md §3.3). The key starts the service stream or
-// the console and nothing else; anything else exits 126.
+// (design/0005-remote-mode.md §3.3). A laptop key (`gate`) starts the service
+// stream; a phone key (`gate phone`) also starts the console. Anything else
+// exits 126.
 func gateMain(args []string) error {
-	if len(args) > 0 {
-		fmt.Fprintf(os.Stderr, "matchblox gate: refused: this key takes no arguments\n")
+	mode := ""
+	switch {
+	case len(args) == 0:
+	case len(args) == 1 && args[0] == phoneMode:
+		mode = phoneMode
+	default:
+		fmt.Fprintln(os.Stderr, "matchblox gate: refused: this key line has an unknown gate mode; run matchblox connect or matchblox pair again")
 		os.Exit(126)
 	}
 	orig := os.Getenv("SSH_ORIGINAL_COMMAND")
-	argv, err := gateDecision(orig)
+	argv, err := gateDecision(mode, orig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "matchblox gate: refused %q: %v\n", orig, err)
 		os.Exit(126)
@@ -32,19 +38,27 @@ func gateMain(args []string) error {
 	return run(argv)
 }
 
-// gateDecision maps exactly two requested commands to what runs: the
-// service stream and the console. A tmux client is never one of them: it can
-// open a shell, and jumps and door commands use the builder's own login. The
-// console command attaches the shared home session, where goHome already
-// decides tmux or in place.
-func gateDecision(orig string) (argv []string, err error) {
-	switch orig {
-	case remote.ServeCommand:
+const phoneMode = "phone"
+
+// gateDecision maps the requested command to what runs. The requested
+// command is never a tmux command: only a phone key reaches tmux, through
+// the console and goHome's fixed argv. A laptop key (mode "") gets the
+// service stream alone; the phone mode also gets the console, which attaches
+// the shared home session, where goHome already decides tmux or in place. An
+// unknown mode gets nothing.
+func gateDecision(mode, orig string) (argv []string, err error) {
+	if mode != "" && mode != phoneMode {
+		return nil, errors.New("this key line has an unknown gate mode; run matchblox connect or matchblox pair again")
+	}
+	switch {
+	case orig == remote.ServeCommand:
 		return []string{"serve", "--stdio"}, nil
-	case remote.ConsoleCommand:
+	case orig == remote.ConsoleCommand && mode == phoneMode:
 		return []string{}, nil
-	case "":
+	case orig == "":
 		return nil, errors.New("no shell for this key")
+	case orig == remote.ConsoleCommand:
+		return nil, errors.New("this key starts only the matchblox stream; run matchblox pair to add a phone")
 	}
 	return nil, errors.New("this key starts only the matchblox stream and console")
 }

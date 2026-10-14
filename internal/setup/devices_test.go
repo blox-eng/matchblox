@@ -63,7 +63,7 @@ func TestAuthorizeDeviceWritesTheGateLine(t *testing.T) {
 	if _, err := AuthorizeDevice(home, "/usr/local/bin/matchblox", phoneKey, "Martin’s iPhone"); err != nil {
 		t.Fatal(err)
 	}
-	want := `restrict,pty,command="'/usr/local/bin/matchblox' gate" ` + phoneKey + " matchblox:phone:Martin’s iPhone\n"
+	want := `restrict,pty,command="'/usr/local/bin/matchblox' gate phone" ` + phoneKey + " matchblox:phone:Martin’s iPhone\n"
 	if got := authKeys(home); got != want {
 		t.Fatalf("authorized_keys:\n%s\nwant:\n%s", got, want)
 	}
@@ -98,7 +98,7 @@ func TestAuthorizeDeviceKeepsOtherLines(t *testing.T) {
 	if b, _ := os.ReadFile(backup); string(b) != old {
 		t.Fatalf("backup %q: %q", backup, b)
 	}
-	want := old + "\n" + `restrict,pty,command="'/opt/mb/matchblox' gate" ` + phoneKey + " matchblox:phone:iPhone\n"
+	want := old + "\n" + `restrict,pty,command="'/opt/mb/matchblox' gate phone" ` + phoneKey + " matchblox:phone:iPhone\n"
 	if got := authKeys(home); got != want {
 		t.Fatalf("authorized_keys:\n%s\nwant:\n%s", got, want)
 	}
@@ -111,7 +111,7 @@ func TestAuthorizeDeviceSameKeyReplacesItsLine(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	want := `restrict,pty,command="'/new/matchblox' gate" ` + phoneKey + " matchblox:phone:Desk-2\n"
+	want := `restrict,pty,command="'/new/matchblox' gate phone" ` + phoneKey + " matchblox:phone:Desk-2\n"
 	if got := authKeys(home); got != want {
 		t.Fatalf("authorized_keys:\n%s\nwant:\n%s", got, want)
 	}

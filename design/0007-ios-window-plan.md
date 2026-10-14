@@ -16,7 +16,7 @@
 - No account, no password, no login screen (0006 anti-goal 3).
 - The console is the only UI. The app draws no screen that the console already has (0006 anti-goal 1).
 - The gate lets through exactly: `matchblox serve --stdio`, `matchblox console`, and `gate pair` for a one-time key. Everything else exits 126. (`matchblox open` and `matchblox devices token` come with #89, not here.)
-- Device key line: `restrict,pty,command="'<exe>' gate" <key> matchblox:phone:<name>`.
+- Device key line: `restrict,pty,command="'<exe>' gate phone" <key> matchblox:phone:<name>`. A laptop key (`'<exe>' gate`) keeps the stream alone: only `gate phone` also opens the console.
 - One-time key line: `restrict,expiry-time="<UTC YYYYMMDDHHMM>Z",command="'<exe>' gate pair <id>" <key> matchblox:pair`. It expires 5 minutes after `matchblox pair` starts. It works once.
 - Pairing URL: `matchblox://pair?p=<base64url, no padding, of the payload JSON>`.
 - iOS deployment target 17.2 (the Live Activity of #90 needs it). Swift 5.10, `SWIFT_STRICT_CONCURRENCY: complete`, iPhone only, as in the blox app (`~/dev/blox/ios/project.yml`).
@@ -67,7 +67,7 @@ git commit -m "docs: matchblox anywhere: the design and the plan of the iOS wind
   - `setup.AuthorizeDevice(home, exe, pubKey, name string) (backup string, err error)`: same rules as `Authorize` (exePath, backup, a line with the same key body is replaced), and writes the device key line of Global Constraints. The comment is `matchblox:phone:<name>`.
   - `type Device struct { Kind, Name, Fingerprint string }`. Kind is `phone` for a `matchblox:phone:` comment, else `laptop`. Fingerprint from `setup.Fingerprint`.
   - `setup.Fingerprint(authorizedKey string) (string, error)`: `SHA256:` + unpadded standard base64 of the SHA-256 of the key blob, the same as `ssh-keygen -lf`.
-  - `setup.Devices(home string) ([]Device, error)`: every line whose command is `'<any>' gate`, in file order.
+  - `setup.Devices(home string) ([]Device, error)`: every line whose command is `'<any>' gate` (laptop) or `'<any>' gate phone`, in file order; never a `gate pair <id>` line.
   - `setup.RemoveDevice(home, name string) (backup string, err error)`: removes the one line of that phone name, or the line whose fingerprint is `name`. Error `no device named <name>` or `<n> devices named <name>; give the fingerprint`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -76,7 +76,7 @@ git commit -m "docs: matchblox anywhere: the design and the plan of the iOS wind
 func TestValidDeviceKey(t *testing.T)            // a key from `ssh-keygen -t ecdsa -b 256` passes; ssh-ed25519, ecdsa-sha2-nistp384, a cut blob, "x y" fail
 func TestValidDeviceName(t *testing.T)           // read the cases from testdata/pair/v1.json "names": {"good": [...], "bad": [...]}
 func TestAuthorizeDeviceWritesTheGateLine(t *testing.T)
-// want line: `restrict,pty,command="'/usr/local/bin/matchblox' gate" ecdsa-sha2-nistp256 AAAA… matchblox:phone:Martin’s iPhone`
+// want line: `restrict,pty,command="'/usr/local/bin/matchblox' gate phone" ecdsa-sha2-nistp256 AAAA… matchblox:phone:Martin’s iPhone`
 func TestAuthorizeDeviceKeepsOtherLines(t *testing.T)
 // old file: "ssh-rsa AAAA other@box" with no final newline, plus a laptop gate line; both keep their bytes; a backup is made
 func TestDevicesAndRemoveDevice(t *testing.T)
@@ -121,8 +121,8 @@ func TestRemovePairKey(t *testing.T) // present → removed=true and gone; a sec
 **Interfaces:**
 - Consumes: `remote.ConsoleCommand` (A1).
 - Produces:
-  - `gateDecision(orig string) (argv []string, err error)`: `remote.ServeCommand` → `["serve", "--stdio"]`; `remote.ConsoleCommand` → `[]string{}` (the console); else the errors of today.
-  - `gateMain(args []string) error`: `args == ["pair", <id>]` → `pairMain` (Task A5); else the decision on `SSH_ORIGINAL_COMMAND`.
+  - `gateDecision(mode, orig string) (argv []string, err error)`: mode "" (laptop key) allows `remote.ServeCommand` → `["serve", "--stdio"]` only; mode `phone` also allows `remote.ConsoleCommand` → `[]string{}` (the console); an unknown mode allows nothing.
+  - `gateMain(args []string) error`: `args == ["pair", <id>]` → `pairMain` (Task A5); `[]` → mode ""; `["phone"]` → mode `phone`; other args exit 126; else the decision on `SSH_ORIGINAL_COMMAND`.
   - `panes.SizeArgv() []string` = `["tmux", "set-option", "-w", "-t", "=matchblox:", "window-size", "latest"]`. The console runs it once at start when `MATCHBLOX_HOME=1`, and ignores its error.
 
 - [ ] **Step 1: Write the failing tests.** Rename `TestGateRunsOnlyTheServiceStream` to `TestGateRunsOnlyItsCommands`. Add `remote.ConsoleCommand` to the allowed list (want argv `[]string{}`). Add to the refused list: `"matchblox console; id"`, `"matchblox console "`, `"matchblox  console"`, `"matchblox gate pair 0123456789ab"` (pair comes only from the forced command, never from the requested command). Add `TestSizeArgv` in `internal/panes/home_test.go`, asserting the exact argv above.

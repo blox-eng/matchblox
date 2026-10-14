@@ -12,13 +12,26 @@ import (
 // door commands use the builder's own login, so a tmux client (which can
 // open a shell) or an agent is never one of its commands.
 func TestGateRunsOnlyItsCommands(t *testing.T) {
-	for orig, want := range map[string][]string{
-		remote.ServeCommand:   {"serve", "--stdio"},
-		remote.ConsoleCommand: {},
+	for _, c := range []struct {
+		mode, orig string
+		want       []string
+	}{
+		{"", remote.ServeCommand, []string{"serve", "--stdio"}},
+		{"phone", remote.ServeCommand, []string{"serve", "--stdio"}},
+		{"phone", remote.ConsoleCommand, []string{}},
 	} {
-		got, err := gateDecision(orig)
-		if err != nil || !slices.Equal(got, want) || got == nil {
-			t.Fatalf("gateDecision(%q) = %q, %v; want %q", orig, got, err, want)
+		got, err := gateDecision(c.mode, c.orig)
+		if err != nil || !slices.Equal(got, c.want) || got == nil {
+			t.Fatalf("gateDecision(%q, %q) = %q, %v; want %q", c.mode, c.orig, got, err, c.want)
+		}
+	}
+	// A laptop key never gets the console, and an unknown mode gets nothing.
+	if argv, err := gateDecision("", remote.ConsoleCommand); err == nil || argv != nil {
+		t.Errorf("a laptop key opened the console: %q", argv)
+	}
+	for _, orig := range []string{remote.ServeCommand, remote.ConsoleCommand, ""} {
+		if argv, err := gateDecision("pair", orig); err == nil || argv != nil {
+			t.Errorf("unknown mode ran %q", orig)
 		}
 	}
 	last := func(a []string) string { return a[len(a)-1] }
@@ -38,8 +51,10 @@ func TestGateRunsOnlyItsCommands(t *testing.T) {
 		"matchblox  console",
 		"matchblox gate pair 0123456789ab",
 	} {
-		if argv, err := gateDecision(orig); err == nil || argv != nil {
-			t.Errorf("gateDecision(%q) let it run", orig)
+		for _, mode := range []string{"", "phone"} {
+			if argv, err := gateDecision(mode, orig); err == nil || argv != nil {
+				t.Errorf("gateDecision(%q, %q) let it run", mode, orig)
+			}
 		}
 	}
 }

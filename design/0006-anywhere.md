@@ -146,13 +146,15 @@ Pairing uses the sshd of the host. matchblox opens no port. (My call.)
    ID or the device passcode opens the key.
 4. The app connects with the one-time key and sends its public key, its
    name and its push tokens. `gate pair` adds the phone key with
-   `restrict,pty,command="<exe> gate"` (0005 §3.3) and removes the one-time
+   `restrict,pty,command="<exe> gate phone"` (0005 §3.3) and removes the one-time
    key. A one-time key works once.
 5. The gate today lets through only `matchblox serve --stdio`
    (cmd/matchblox/gate.go). It must let through exactly these commands and
-   nothing else:
-   - `matchblox serve --stdio` (the laptop console, as today);
-   - the console, attached to the shared session (the app);
+   nothing else. A laptop key (`gate`) keeps the stream alone; only a phone
+   key (`gate phone`) gets the console, because the console is a tmux client
+   and can open a shell:
+   - `matchblox serve --stdio` (the laptop console, as today; every key);
+   - the console, attached to the shared session (the app; a phone key only);
    - `matchblox open <target>` (a tap on an alert opens the answer peek of
      that session: the service tells the console);
    - `matchblox devices token` (the app sends fresh push tokens on each

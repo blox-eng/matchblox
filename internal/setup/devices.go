@@ -32,8 +32,8 @@ func ValidDeviceName(s string) bool {
 	return true
 }
 
-// AuthorizeDevice lets a phone key start only `matchblox gate`, which then
-// runs the console. Rules as for Authorize; the comment names the phone.
+// AuthorizeDevice lets a phone key start only `matchblox gate phone`, which then
+// runs the stream or the console. Rules as for Authorize; the comment names the phone.
 func AuthorizeDevice(home, exe, pubKey, name string) (backup string, err error) {
 	if !remote.ValidDeviceKey(pubKey) {
 		return "", errors.New("not one P-256 public key")
@@ -46,7 +46,7 @@ func AuthorizeDevice(home, exe, pubKey, name string) (backup string, err error) 
 			"; install matchblox in a plain directory, such as /usr/local/bin")
 	}
 	f := strings.Fields(pubKey)
-	return putKeyLine(home, f[1], `restrict,pty,command="'`+exe+`' gate" `+f[0]+" "+f[1]+" matchblox:phone:"+name)
+	return putKeyLine(home, f[1], `restrict,pty,command="'`+exe+`' gate phone" `+f[0]+" "+f[1]+" matchblox:phone:"+name)
 }
 
 // Fingerprint is the SHA256 fingerprint of a key line, as ssh-keygen -lf
@@ -64,7 +64,7 @@ func Fingerprint(authorizedKey string) (string, error) {
 	return "SHA256:" + base64.RawStdEncoding.EncodeToString(sum[:]), nil
 }
 
-var gateLine = regexp.MustCompile(`^[a-z,-]*command="'[^"]*' gate" (\S+ \S+)(?: (.*))?$`)
+var gateLine = regexp.MustCompile(`^[a-z,-]*command="'[^"]*' gate(?: phone)?" (\S+ \S+)(?: (.*))?$`)
 
 const phoneComment = "matchblox:phone:"
 
