@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`matchblox devices` lists the phones and laptops that open this host,
+  and removes one.** `matchblox devices rm <name|fingerprint>` removes a
+  key and keeps a backup of `authorized_keys`. The docs now show
+  `matchblox pair` and the phone app that is coming.
+
 ## [0.7.0] - 2026-10-13
 
 ### Changed

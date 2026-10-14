@@ -7,6 +7,8 @@
 //	matchblox serve           run the service; --stdio speaks on stdin/stdout
 //	matchblox status          print what the service knows as JSON (for agents)
 //	matchblox status --text   the same, as a short summary
+//	matchblox pair            show a code that pairs the iPhone app
+//	matchblox devices         list the phones and laptops that open this host; devices rm <name> removes one
 //	matchblox setup           every setup door at once: tmux, the hooks, the way back
 //	matchblox version         print the version
 package main
@@ -117,6 +119,8 @@ func run(args []string) error {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 			return pairCmd(ctx, args[1:], os.Stdout, time.Now)
+		case "devices":
+			return devicesCmd(args[1:], home(), os.Stdout)
 		case "connect":
 			return liveConnect(args[1:])
 		}
@@ -201,7 +205,7 @@ func run(args []string) error {
 
 // commands are the commands a builder types. hook, authorize and gate run
 // from a hook, an ssh forced command and a connect.
-var commands = []string{"connect", "serve", "status", "setup", "pair", "version"}
+var commands = []string{"connect", "serve", "status", "setup", "pair", "devices", "version"}
 
 type flags struct {
 	cfgPath, root         *string

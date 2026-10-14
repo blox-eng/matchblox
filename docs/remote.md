@@ -29,6 +29,26 @@ matchblox ws-1
 - A host that the console cannot reach says why, and shows the connect.
 - A jump to a pane uses your own ssh login.
 
+## See and remove the devices of a host
+
+```sh
+matchblox devices
+```
+
+This prints one row for each key that opens this host: `phone` or `laptop`,
+its name and its fingerprint. Phones come first. A laptop key comes from
+`matchblox connect`. A phone key comes from `matchblox pair`.
+
+To remove one, give its name or its fingerprint:
+
+```sh
+matchblox devices rm <name>
+```
+
+matchblox prints `Removed <name>. Backup: <path>`. The backup is the
+`authorized_keys` file as it was. If two devices have the same name,
+matchblox says so. Run the command again with the fingerprint.
+
 ## Keep the key private
 
 The stream can answer your agents, as the console does. Keep

@@ -4,7 +4,46 @@ On a phone, the console is the control pane: you connect to it, not to
 tmux. You see who waits, the context of each session and the load. You go
 into a pane and back without tmux keys.
 
-## Open the console when you connect
+## The matchblox app
+
+The matchblox iPhone app is coming. It is not in the App Store yet. Follow
+[issue #88](https://github.com/blox-eng/matchblox/issues/88). Until it
+ships, use [Without the app](#without-the-app).
+
+The app pairs with one scan. It needs no account and no password.
+
+1. On the host, run:
+
+   ```sh
+   matchblox pair
+   ```
+
+   matchblox shows a QR code. The code works once. It expires after 5
+   minutes.
+2. In the app, scan the code with the iPhone camera.
+3. Type a name for the phone. The name has 1 to 40 letters, digits,
+   spaces and `. _ - '`.
+4. The app opens the console of the host.
+
+A host can have a name that the phone cannot reach, such as its name on
+your home network. Change the address on the pairing screen before the
+app connects. Or run `matchblox pair --address <host>`. Add `--port` if
+sshd does not listen on port 22.
+
+If the app says "This code was used or expired", run `matchblox pair` on
+the host again.
+
+To remove a phone, run `matchblox devices` on the host. It lists each phone
+and laptop that opens the host. Then run:
+
+```sh
+matchblox devices rm <name>
+```
+
+You can give the fingerprint instead of the name. See
+[Remote hosts](remote.md#see-and-remove-the-devices-of-a-host).
+
+## Without the app
 
 matchblox must be on the host, and the setup step "Add the way back" must
 be done.
