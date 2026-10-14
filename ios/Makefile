@@ -18,6 +18,7 @@ build: gen ## Compile the app for the simulator, without code signing
 		-scheme $(SCHEME) \
 		-destination '$(DESTINATION)' \
 		-derivedDataPath $(DERIVED) \
+		-skipPackagePluginValidation \
 		CODE_SIGNING_ALLOWED=NO \
 		build
 
