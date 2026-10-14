@@ -39,6 +39,11 @@ type Doc struct {
 	// StokerServer is the tmux server (-L) matchblox keeps the stoker
 	// agent on: a session whose pane is on it is the stoker's. Empty: none.
 	StokerServer string `json:"stoker_server,omitempty"`
+	// Agents are the agents a new session can start on this host: the
+	// installed ones of claude, codex and opencode.
+	Agents []string `json:"agents,omitempty"`
+	// Renames are the names sessions take at their next rest, by pane.
+	Renames map[string]string `json:"renames,omitempty"`
 }
 
 // Path is $XDG_STATE_HOME/matchblox/state.json, defaulting to ~/.local/state.

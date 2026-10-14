@@ -62,7 +62,7 @@ func (s *Service) order(ctx context.Context, text string) error {
 	var grants []string
 	for _, g := range ask.Grants {
 		if !slices.Contains(stoker.Goes, g) {
-			return fmt.Errorf("%q is no go: merge, release or deploy", g)
+			return fmt.Errorf("%q is no go: merge, release, deploy or kill", g)
 		}
 		if !slices.Contains(grants, g) {
 			grants = append(grants, g)

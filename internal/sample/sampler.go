@@ -168,6 +168,11 @@ func (s Session) Resting() bool {
 	return s.Status == "idle" && !s.Busy || s.Status == StatusAgents
 }
 
+// Works tells if a turn runs, or its subagents do: what a kill confirms
+// twice. Unlike Resting, it holds for an agent with no status of its own
+// (Codex, OpenCode), whose Busy comes from its pane.
+func (s Session) Works() bool { return s.Busy || s.Status == StatusAgents }
+
 // Stopped tells if the plan's limit stops a session the builder would pick
 // up now: idle (not cold or stale) and out.
 func (s Session) Stopped() bool { return !s.Out.IsZero() && s.Age() == "idle" }

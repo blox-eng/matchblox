@@ -27,4 +27,4 @@
                                           ││                                         │
                                           │╰─ ⏎ question 2 ─ ← prev  next → ─ esc ───╯
 ──────────────────────────────────────────────────────────────────────────────────────
- ⏎ open  a answer  z park  p ships  f stoker                           sampled 0s ago
+ ⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  sampled 0s ago

@@ -83,7 +83,7 @@ type Unguard struct {
 
 // Goes are the kinds of go the guard asks for, and the chips of the
 // launch sheet.
-var Goes = []string{"merge", "release", "deploy"}
+var Goes = []string{"merge", "release", "deploy", "kill"}
 
 // PlanText is what `matchblox stoker plan` sends. Goes it names (an older
 // CLI's "grants") are not read: the goes are the builder's.
@@ -110,7 +110,8 @@ func CheckGrant(g string) error {
 func Unguarded(plan []PlanStep, grants []string, agentOf func(session string) string) []Unguard {
 	var missing []string
 	for _, g := range Goes {
-		if !slices.Contains(grants, g) {
+		// matchblox itself asks for a kill, whatever the agent: no hook is needed.
+		if g != "kill" && !slices.Contains(grants, g) {
 			missing = append(missing, g)
 		}
 	}

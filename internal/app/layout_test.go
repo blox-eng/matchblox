@@ -393,7 +393,8 @@ func TestTheKeyLineIsAtTheBottom(t *testing.T) {
 			}
 			return out[len(out)-1]
 		}
-		if l := last(m); !strings.Contains(l, "⏎ open") || !strings.Contains(l, "a answer") || !strings.Contains(l, "p ships") {
+		// A phone drops the spare keys first: p ships is a tab tap away.
+		if l := last(m); !strings.Contains(l, "⏎ open") || !strings.Contains(l, "a answer") || !strings.Contains(l, "x kill") || !strings.Contains(l, "N new") || w > 60 && !strings.Contains(l, "p ships") {
 			t.Fatalf("width %d: the keys are not at the bottom: %q", w, l)
 		}
 		if l := last(selectPane(t, m, "%3")); !strings.Contains(l, "a message") {
@@ -422,12 +423,18 @@ func TestTheKeyLineIsAtTheBottom(t *testing.T) {
 
 // TestATapOnAKeyPressesIt: each key of the key line is a tap target.
 func TestATapOnAKeyPressesIt(t *testing.T) {
-	m, _ := loadedWith(t, 50, queueState())
+	st := queueState()
+	st.Agents = []string{"claude"}
+	m, _ := loadedWith(t, 50, st)
 	out := strings.Split(ansi.Strip(m.render()), "\n")
 	y, line := len(out)-1, out[len(out)-1]
-	next, _ := tap(m, len([]rune(line[:strings.Index(line, "p ships")])), y)
-	if next.(Model).tab != tabShips {
-		t.Fatalf("a tap on p ships opened tab %d", next.(Model).tab)
+	next, _ := tap(m, len([]rune(line[:strings.Index(line, "N new")])), y)
+	if f := next.(Model).form; f == nil || f.rename {
+		t.Fatalf("a tap on N new opened %+v", f)
+	}
+	next, _ = tap(m, len([]rune(line[:strings.Index(line, "x kill")])), y)
+	if p := next.(Model).pending; p == nil || p.rec != "kill:%1" {
+		t.Fatalf("a tap on x kill: pending %+v", p)
 	}
 	next, _ = tap(m, len([]rune(line[:strings.Index(line, "⏎ open")])), y)
 	if p := next.(Model).pending; p == nil || p.String() != "tmux switch-client -t %1" {

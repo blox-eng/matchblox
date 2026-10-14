@@ -27,7 +27,7 @@ type sheet struct {
 	text           string
 	onChips        bool
 	at             int
-	goes           []string // the go chips that are on: merge, release, deploy
+	goes           []string // the go chips that are on: merge, release, deploy, kill
 
 	act string // the act in flight ("" none): the sheet closes when it goes through
 	err string // why the last act did not go
@@ -41,6 +41,7 @@ var goChips = []struct{ go_, word string }{
 	{"merge", "merges"},
 	{"release", "releases"},
 	{"deploy", "deploys"},
+	{"kill", "kills"},
 }
 
 const maxOrder = 500
@@ -326,6 +327,13 @@ func (m Model) sheetBox(bw int) (box, press []string, spans []span, goesAt int, 
 func (m Model) goLine(iw int) (string, []span) {
 	st, s := m.st, m.sheet
 	line, x := st.faint.Render("gos "), 4
+	need := x
+	for i, c := range goChips {
+		need += 2*min(i, 1) + lipgloss.Width("○ "+c.word)
+	}
+	if need > iw {
+		line, x = "", 0 // a phone: the chips alone, ✓ and ○ say what they are
+	}
 	var spans []span
 	for i, c := range goChips {
 		if i > 0 {

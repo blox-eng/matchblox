@@ -286,8 +286,9 @@ func firstOf(text string) string {
 var readCommands = []string{"sessions", "ships", "usage", "peek"}
 
 // handCommands act on a session: `send <who> "<text>"`, `send <who> --pick
-// <n>`, `compact <who>`, `hold <who> --why "<text>"`, `release <who>`.
-var handCommands = []string{"send", "compact", "hold", "release"}
+// <n>`, `compact <who>`, `hold <who> --why "<text>"`, `release <who>`, and
+// a session's life (#74): `new`, `rename <who> <name>`, `kill <who>`.
+var handCommands = []string{"send", "compact", "hold", "release", "new", "rename", "kill"}
 
 // stokerCommands are the stoker agent's own: `stoker plan` reads its plan
 // on stdin, `stoker step <n> --state <s> "<text>"` logs a step to the card,

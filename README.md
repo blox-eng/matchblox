@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 
 <p>
-<img src="www/demo/replay-desk.svg" width="74%" alt="The matchblox console on a desk, on a demo machine: who waits for you, an answer picked from the agent's own options, the pull requests your sessions drive, usage and the machine, then a night the stoker keeps burning and its score in the morning">
+<img src="www/demo/replay-desk.svg" width="74%" alt="The matchblox console on a desk, on a demo machine: who waits for you, an answer picked from the agent's own options, the pull requests your sessions drive, usage and the machine, then a night the stoker keeps burning, its score in the morning, a new session started with its first message and a finished one killed">
 <img src="www/demo/replay-phone.svg" width="24%" alt="The same console on a phone: one column, the selected session open in place, the answer peek at the bottom">
 </p>
 

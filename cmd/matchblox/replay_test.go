@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -280,7 +282,9 @@ func skeleton(lines []string) string {
 		if i == 0 {
 			continue // the header's toast says what just happened, at the moment of the frame
 		}
-		l = strings.Replace(l, "machine !", "machine", 1) // the busy loop's alert comes and goes with the samples
+		// The busy loop's alert comes and goes with the samples; on a phone
+		// it squeezes the tab to its digit.
+		l = strings.Replace(strings.Replace(l, "machine !", "machine", 1), " 3 !", " machine", 1)
 		l = sparks.ReplaceAllString(figure.ReplaceAllString(cutWord.ReplaceAllString(l, "…"), "0"), "")
 		l = strings.ReplaceAll(l, "✧", "✦")  // a burning match flickers between the two
 		l = spinner.ReplaceAllString(l, "⠿") // a working session's spinner turns with the clock
@@ -403,12 +407,15 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	host = &demoHost{FS: smp.FS.(procfs.FS)}
 	smp.FS, smp.Now = host, host.now(clk)
+	world.uptime = host.Uptime
 
 	s := service.New(cfg, smp, world.Git)
 	s.Binary, s.Host, s.Now = version, fixtureHost(root), clk.Now
 	s.Capture, s.Activity = smp.Capture, nil                  // the demo's panes, never this machine's tmux
 	s.Actions.Check = func(advice.Guard) error { return nil } // the demo's pids are not this machine's
 	s.Actions.Run = world.Run
+	s.LookPath = func(cmd string) (string, error) { return "/usr/bin/" + cmd, nil } // the demo's agents, not this machine's
+	s.IsDir = func(path string) bool { return strings.HasPrefix(path, "/work/") }
 	st, err := stoker.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -506,6 +513,7 @@ func replayAt(t *testing.T, z replaySize) {
 		who = append(who, "ws-1", "USAGE", "MACHINE") // a phone drops the host, and its long list folds the dock
 	}
 	sessionsTab := "WAITS FOR YOU"
+	var sessionsNow int // the sessions before N starts one
 	steps := []step{
 		{name: "who waits", at: 1300 * time.Millisecond, ok: has(who...)},
 		// The selection moves: the next one that waits shows what it said.
@@ -530,7 +538,7 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "back to the sessions", at: 14 * time.Second, key: "1", ok: has("WAITS FOR YOU")},
 		// h folds the recommendations to one line: the dock has room again.
 		{name: "recommendations folded", at: 15 * time.Second, key: "h", ok: has("hidden · h shows", "USAGE")},
-		{name: "the launch sheet", at: 16 * time.Second, do: func() { clk.Set(night) }, key: "n", ok: has("How should I run tonight?", "gos ○ merges")},
+		{name: "the launch sheet", at: 16 * time.Second, do: func() { clk.Set(night) }, key: "n", ok: has("How should I run tonight?", "○ merges")},
 		{name: "a night", at: 17 * time.Second, key: "enter", ok: func(s string) bool {
 			// spark-docs is past the line: the stoker compacts it at once,
 			// and the frame waits until the compact was read back.
@@ -562,6 +570,23 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "back to sessions", at: 31 * time.Second, key: "1", ok: func(s string) bool {
 			// the ack c sent has come back: the dock no longer offers the run
 			return !strings.Contains(s, "NIGHT · 23:10") && strings.Contains(s, sessionsTab) && !strings.Contains(s, "c the whole run")
+		}},
+		// N: one more session, named, with its first message.
+		{name: "a new session", at: 32500 * time.Millisecond, do: func() { sessionsNow = len(s.State().Sessions) }, keys: slices.Concat([]string{"N", "tab", "tab"}, strings.Split("rate-docs", ""),
+			[]string{"tab", "tab"}, strings.Split("write the rate limit docs", "")), ok: has("New session", "rate-docs", "write the rate limit docs", "● claude")},
+		{name: "it starts", at: 35 * time.Second, key: "enter", ok: func(s string) bool {
+			return strings.Contains(s, "started rate-docs") && strings.Contains(s, "SESSIONS "+strconv.Itoa(sessionsNow+1))
+		}},
+		// x: a session that is done goes, after a typed y.
+		{name: "kill", at: 37 * time.Second, keys: slices.Concat([]string{"/"}, strings.Split("spark", ""), []string{"enter", "x"}),
+			ok: has("RUN kill spark-docs: tmux kill-pane -t %3")},
+		// The pane and its agent are both gone: a sample between the two
+		// would list the pane without an agent.
+		{name: "killed", at: 39 * time.Second, key: "y", ok: func(s string) bool {
+			return strings.Contains(s, "SESSIONS "+strconv.Itoa(sessionsNow)) && !strings.Contains(s, "hearth:3.1")
+		}},
+		{name: "the sessions again", at: 40500 * time.Millisecond, key: "esc", ok: func(s string) bool {
+			return strings.Contains(s, sessionsTab) && strings.Contains(s, "rate-docs") && !strings.Contains(s, "/ spark")
 		}},
 	}
 	var still replay.Frame
@@ -635,8 +660,18 @@ func replayAt(t *testing.T, z replaySize) {
 	// Then the stoker's night: spark-docs is past the line when it starts,
 	// hearth-api when its turn ends. Each compact is typed, then its Enter.
 	compacts := []string{"%3", "%1"}
-	if len(ran) != len(want)+2*len(compacts) || !reflect.DeepEqual(ran[:len(want)], want) {
-		t.Fatalf("the service ran %q, want %q and then the stoker's compacts of %v", ran, want, compacts)
+	// Then by day: N starts rate-docs in a tmux session of its own,
+	// and x kills spark-docs, its pane and then its agent.
+	byDay := [][]string{
+		{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", "MATCHBLOX_HOME", "tmux", "new-session", "-d", "-s", "rate-docs", "-n", "rate-docs", "-c", "/work/spark-docs", "claude", "--name", "rate-docs", "write the rate limit docs"},
+		{"tmux", "kill-pane", "-t", "%3"},
+		{"kill", "-TERM", "1400"},
+	}
+	if len(ran) != len(want)+2*len(compacts)+len(byDay) || !reflect.DeepEqual(ran[:len(want)], want) {
+		t.Fatalf("the service ran %q, want %q, the stoker's compacts of %v, then %q", ran, want, compacts, byDay)
+	}
+	if got := ran[len(ran)-len(byDay):]; !reflect.DeepEqual(got, byDay) {
+		t.Fatalf("by day it ran %q, want %q", got, byDay)
 	}
 	for i, pane := range compacts {
 		typed, enter := ran[len(want)+2*i], ran[len(want)+2*i+1]

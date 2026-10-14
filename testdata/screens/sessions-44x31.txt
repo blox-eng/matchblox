@@ -28,4 +28,4 @@
  ○ Clear ember-billing (%8)
  ○ Clear opencode (%7)
 ────────────────────────────────────────────
- ⏎ open  a answer  z park  p ships  f stoker
+ ⏎ open  a answer  x kill  r rename  N new

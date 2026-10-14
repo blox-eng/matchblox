@@ -23,6 +23,9 @@ const Hands = "- `matchblox sessions --json`: every session: its `word` (asks, b
 	"- `matchblox compact <session>`: compacts a Claude Code session at rest.\n" +
 	"- `matchblox hold <session> --why \"<text>\"`: queues \"finish this step, then stop and wait\" and holds the session.\n" +
 	"- `matchblox release <session>`: lets a held session go with \"carry on\".\n" +
+	"- `matchblox new --where <path> --agent claude|codex|opencode [--branch <b>] [--name <name>] [\"<first message>\"]`: starts a session in a tmux session of its own, in a new worktree for the branch when given. It counts as a message, and the session is one you drive.\n" +
+	"- `matchblox rename <session> <name>`: names the session, its tmux session and its agent alike.\n" +
+	"- `matchblox kill <session>`: ends a session at rest that the builder did not park: its agent and its pane. Its worktree and transcript stay. Without the kills go, the kill waits on the card for the builder's y: run it again once the go is given.\n" +
 	"- `matchblox stoker plan`: reads your plan on stdin, one step a line, `<n>. <session>: <text>`, and puts it on the card in place of the plan before it. Nobody approves it: write it again whenever it changes, and keep the number of a step you keep. Write it as a here-document, `matchblox stoker plan <<'EOF'`, one line each, then `EOF`: an `echo` of a step that names a merge is read as a merge and denied. `asks:` and `grant:` lines are read and ignored: the gos are the builder's.\n" +
 	"- `matchblox stoker step <n> --state doing|done|failed|waits \"<text>\"`: logs step n of the plan to the card. `matchblox stoker step 0 --rule \"<rule>\" --state done \"<text>\"` logs what a standing rule did.\n" +
 	"- `matchblox stoker when --ship <n> --stage ci|green|merged|live|red <hand>` or `matchblox stoker when --rest <session> <hand>`: a trigger matchblox fires itself, once, when the pull request reaches that stage (red: CI failed) or the session's turn ends with nothing waiting there. The hand is one of `send <session> \"<text>\"`, `compact <session>`, `release <session>`, `hold <session> --why \"<text>\"`, run under the same guards as yours. Each fire is logged to the card and told to you at your next wake. `--list` prints the run's triggers, `--drop <id>` drops one. When you would wait for something, set a trigger instead of polling.\n"
@@ -36,7 +39,7 @@ func Brief(o Order, ways, cmds string, board Board) string {
 	fmt.Fprintf(&b, "# The stoker's brief, run %s\n\n", o.ID)
 	b.WriteString("You are the stoker. You keep the builder's sessions moving while they are away. " +
 		"You act only through the sessions, by messaging the session that owns the work, and only with the matchblox commands below. " +
-		"You never merge, push, release, deploy or edit code yourself, and you never end, kill or interrupt anything.\n\n")
+		"You never merge, push, release, deploy or edit code yourself, you never interrupt anything, and you end a session only with `matchblox kill`.\n\n")
 
 	b.WriteString("## The order\n\n")
 	quote(&b, o.Words)
@@ -87,9 +90,9 @@ func GoesLine(grants []string) string {
 	}
 	switch {
 	case len(asks) == 0:
-		return "This run gives merges, releases and deploys"
+		return "This run gives " + JoinList(gives)
 	case len(gives) == 0:
-		return "This run gives no go: merges, releases and deploys ask the builder"
+		return "This run gives no go: " + JoinList(asks) + " ask the builder"
 	}
 	return "This run gives " + JoinList(gives) + ": " + JoinList(asks) + " ask the builder"
 }

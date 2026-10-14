@@ -102,6 +102,11 @@ type Service struct {
 	// with its styles: the guard tells Claude Code's grey suggestion from a
 	// draft a person typed.
 	Capture func(panes []string) map[string]string
+	// TmuxOut runs a tmux command and returns what it prints: the pane of
+	// a session matchblox started. Nil: exec.
+	TmuxOut func(argv []string) (string, error)
+	// IsDir tells if a new session's directory is there. Nil: os.Stat.
+	IsDir func(path string) bool
 	// Activity is the builder's last key in any tmux client: it keeps a
 	// stoker that rests resting while they work in a pane.
 	Activity func() time.Time
@@ -150,6 +155,8 @@ type Service struct {
 	// grantMu makes each y one check and one go: two consoles pressing it
 	// at once on one step give one go.
 	grantMu sync.Mutex
+	// renames are the renames that wait for their session's rest, by pane.
+	renames renameState
 }
 
 func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
@@ -299,6 +306,7 @@ func (s *Service) Run(ctx context.Context) {
 	for first := true; ; first = false {
 		s.readSpool()
 		s.publish(s.sample(), rec)
+		s.renameAtRest(ctx)
 		s.stoke(ctx, s.now())
 		if first {
 			s.rescanGit()
@@ -330,6 +338,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		s.hist.Append(history.FromSnapshot(snap))
 	}
 	s.cur.Snapshot, s.sampled, s.have = snap, snap.Sessions, true
+	s.cur.Agents, s.cur.Renames = s.startable(), s.renames.names()
 	if s.Stoker != nil {
 		s.cur.Stoker = view
 	}

@@ -17,7 +17,7 @@
  ▲ The week runs shor│                                                            │le 9m (clear after 0…
  ○ Clear spark-docs (│ › merge them on green▏                                     │0k tokens · +0k in
  ○ Clear kindle-web (│                                                            │ample.com · Max ·
- ○ Clear codex (%6)  │ gos ✓ merges  ○ releases  ○ deploys  off asks you          │ss · started 3h20m
+ ○ Clear codex (%6)  │ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │ss · started 3h20m
  ○ Clear flint-auth (│ ways merge-order  priority  release-train  triage          │
  ○ Clear ember-billin╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
  ○ Clear opencode (%7)                                         │ a answer   ⏎ open it
@@ -35,4 +35,4 @@
                                                                │ 1310     claude              0%   9.8M…
                                                                │ 1400     claude              0%   9.8M…
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  ⏎ open  a answer  z park  p ships  f stoker  / find  q quit                    sampled 0s ago
+ ⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit    sampled 0s ago
