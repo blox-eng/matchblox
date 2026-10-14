@@ -21,7 +21,7 @@ final class OpeningTests: XCTestCase {
         )
         XCTAssertEqual(
             Opening.message(for: .refused, host: "ws-1"),
-            "This phone's key no longer opens ws-1. Run matchblox pair on ws-1, then scan the new code."
+            "The key of this iPhone no longer opens ws-1. Run matchblox pair on ws-1, then scan the new code."
         )
         XCTAssertEqual(
             Opening.message(for: .closed("x"), host: "ws-1"),
@@ -32,7 +32,11 @@ final class OpeningTests: XCTestCase {
     func testReconnectMessagesAreDistinct() {
         let failures: [ConnectFailure] = [.unreachable, .hostKeyChanged, .refused, .closed("x")]
         let messages = failures.map { Opening.message(for: $0, host: "ws-1") }
-        XCTAssertEqual(Set(messages).count, failures.count)
+            + [Opening.removedNotice("ws-1"), Opening.endedMessage(host: "ws-1"), Opening.stopsAtOnceMessage(host: "ws-1")]
+        XCTAssertEqual(Set(messages).count, messages.count)
+        for message in messages {
+            XCTAssertFalse(message.replacingOccurrences(of: "iPhone", with: "").lowercased().contains("phone"), message)
+        }
     }
 
     func testRemovedNoticeNamesTheFix() {
@@ -47,13 +51,13 @@ final class OpeningTests: XCTestCase {
         let message = Opening.message(for: .closed(debug), host: "ws-1")
         XCTAssertFalse(message.contains(debug))
         XCTAssertTrue(message.hasSuffix("."))
-        XCTAssertNotEqual(message, Pairing.message(for: .closed(debug), host: "ws-1"))
+        XCTAssertNotEqual(message, Pairing.message(for: .closed(debug), host: "ws-1", address: "ws-1.local"))
     }
 
     func testReconnectRefusedIsNotCodeUsed() {
         XCTAssertNotEqual(
             Opening.message(for: .refused, host: "ws-1"),
-            Pairing.message(for: .refused, host: "ws-1")
+            Pairing.message(for: .refused, host: "ws-1", address: "ws-1.local")
         )
     }
 }

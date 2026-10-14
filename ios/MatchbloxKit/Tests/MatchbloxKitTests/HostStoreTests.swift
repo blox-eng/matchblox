@@ -54,5 +54,36 @@ final class HostStoreTests: XCTestCase {
         XCTAssertEqual(store.all(), [])
         try store.upsert(host("SHA256:a", address: "a.example.com"))
         XCTAssertEqual(store.all(), [host("SHA256:a", address: "a.example.com")])
+        let aside = directory.appendingPathComponent("hosts.json.damaged")
+        XCTAssertEqual(try Data(contentsOf: aside), Data("not json".utf8))
+    }
+
+    func testPairingAgainReplacesAStaleEntry() throws {
+        let store = HostStore(file: directory.appendingPathComponent("hosts.json"))
+        try store.upsert(host("SHA256:old", address: "ws-1.local"))
+        try store.upsert(host("SHA256:b", address: "b.example.com"))
+
+        let stale = try store.upsert(host("SHA256:new", address: "ws-1.local"))
+
+        XCTAssertEqual(stale, [host("SHA256:old", address: "ws-1.local")])
+        XCTAssertEqual(store.all(), [host("SHA256:new", address: "ws-1.local"), host("SHA256:b", address: "b.example.com")])
+    }
+
+    func testAnotherUserOrAddressIsNotStale() throws {
+        let store = HostStore(file: directory.appendingPathComponent("hosts.json"))
+        let otherUser = Host(label: "ws-1", address: "ws-1.local", port: 22, user: "root", fingerprint: "SHA256:a")
+        try store.upsert(otherUser)
+        try store.upsert(host("SHA256:b", address: "10.0.0.2"))
+
+        let stale = try store.upsert(host("SHA256:c", address: "ws-1.local"))
+
+        XCTAssertEqual(stale, [])
+        XCTAssertEqual(store.all().map(\.fingerprint), ["SHA256:a", "SHA256:b", "SHA256:c"])
+    }
+
+    func testPairingTheSameHostAgainIsNotStale() throws {
+        let store = HostStore(file: directory.appendingPathComponent("hosts.json"))
+        try store.upsert(host("SHA256:a", address: "ws-1.local"))
+        XCTAssertEqual(try store.upsert(host("SHA256:a", address: "ws-1.local")), [])
     }
 }

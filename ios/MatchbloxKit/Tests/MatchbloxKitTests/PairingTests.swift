@@ -73,17 +73,26 @@ final class PairingTests: XCTestCase {
     }
 
     func testUsedCodeMessage() {
+        let used = "This code was used or expired. Run matchblox pair on ws-1 again."
+        XCTAssertEqual(Pairing.message(for: .refused, host: "ws-1", address: "ws-1.local"), used)
+        XCTAssertEqual(Pairing.message(for: .codeUsed, host: "ws-1"), used, "one meaning, one text")
         XCTAssertEqual(
-            Pairing.message(for: .refused, host: "ws-1"),
-            "This code was used or expired. Run matchblox pair on ws-1 again."
+            Pairing.message(for: .unreachable, host: "ws-1", address: "ws-1.local"),
+            "Can't reach ws-1. Check the address, or that the iPhone is on your network."
         )
+    }
+
+    func testHostKeyChangedWhilePairingNamesTheAddress() {
         XCTAssertEqual(
-            Pairing.message(for: .unreachable, host: "ws-1"),
-            "Can't reach ws-1. Check the address, or that the phone is on your network."
+            Pairing.message(for: .hostKeyChanged, host: "ws-1", address: "192.168.1.20"),
+            "192.168.1.20 is not ws-1. Check the address, then tap Pair."
         )
+    }
+
+    func testNoReplyCoversTheNetwork() {
         XCTAssertEqual(
-            Pairing.message(for: .hostKeyChanged, host: "ws-1"),
-            "ws-1 has a new host key. Run matchblox pair on ws-1 again."
+            Pairing.message(for: .noReply, host: "ws-1"),
+            "ws-1 did not answer. Check the network, or update matchblox on ws-1, then run matchblox pair again."
         )
     }
 
@@ -91,14 +100,15 @@ final class PairingTests: XCTestCase {
         let debug = "NWError: POSIX 54 secret-detail"
         var messages: [String] = []
         messages += [ConnectFailure.unreachable, .hostKeyChanged, .refused, .closed(debug)]
-            .map { Pairing.message(for: $0, host: "ws-1") }
-        messages += PairRefusal.allCases.map { Pairing.message(for: $0, host: "ws-1") }
+            .map { Pairing.message(for: $0, host: "ws-1", address: "ws-1.local") }
+        messages += PairRefusal.allCases.filter { $0 != .codeUsed }.map { Pairing.message(for: $0, host: "ws-1") }
         messages += PairReplyError.allCases.map { Pairing.message(for: $0, host: "ws-1") }
         messages += [PairError.notMatchblox, .version(2), .malformed].map { Pairing.message(for: $0) }
         for message in messages {
             XCTAssertFalse(message.isEmpty)
             XCTAssertFalse(message.contains(debug), message)
             XCTAssertTrue(message.hasSuffix("."), message)
+            XCTAssertFalse(message.replacingOccurrences(of: "iPhone", with: "").lowercased().contains("phone"), message)
         }
         XCTAssertEqual(Set(messages).count, messages.count, "each failure has its own text")
     }
