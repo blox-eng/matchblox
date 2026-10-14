@@ -59,7 +59,7 @@ typed `y` makes the change. `x` closes a step that you do not want.
 | Step | What it does |
 |---|---|
 | Install tmux | Installs tmux with your package manager, when it is not there. |
-| Add the queue hooks | Adds the matchblox hooks to `~/.claude/settings.json`, and keeps a backup. Claude Code then tells the queue when it waits, and the answer peek what its question tool asks. Your own hooks stay. After an update that adds a hook, the step shows again with the entry it adds. |
+| Add the queue hooks | Adds the matchblox hooks to `~/.claude/settings.json`, and keeps a backup. Claude Code then tells the queue when it waits, and the answer peek what its question tool asks. It also allows the stoker's `matchblox` commands without a prompt. Your own hooks and rules stay. After an update that adds a hook or a rule, the step shows again with the entry it adds. |
 | Add the way back | Adds `prefix m` and a tap target `◂ matchblox` to your tmux config (`~/.tmux.conf`), and keeps a backup. From any pane, one key or one tap brings you back to the console. It takes over `prefix m`, the tmux key that marks a pane. The tap needs the tmux mouse: `m` in the preview turns it on too (off unless you press it). |
 | Open a guide session | Starts Claude Code with a prompt that reads this page and walks you through it. It uses your tokens. |
 

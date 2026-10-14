@@ -256,6 +256,9 @@ type Model struct {
 	filter     string    // the search of the open tab
 	searching  bool      // the search line takes the keys
 	sessSort   sortBy
+	sessGroup  int // what Sessions is grouped by: groupNeed .. groupNone
+	holds      []proto.Hold
+	reasons    map[string]proto.IdleReason
 	paneSort   sortBy
 	picked     map[string]bool // worktrees x removes
 	batch      *batch
@@ -265,11 +268,15 @@ type Model struct {
 	// claimed the dock, so it no longer takes it by itself.
 	dockPanel    int
 	dockSwitched bool
-	// stokerOpen: the stoker's full card is open, in the right pane or on
-	// a phone's Machine tab.
-	stokerOpen bool
-	toast      string // what an action did, on the header's right
-	toasts     int    // counts the toasts: a later one outlives the timer of an earlier one
+	// stokerSel is the selected row of the STOKER tab, stokerShown the row
+	// whose command it shows, ackSent when the steps were last marked seen.
+	stokerSel    int
+	stokerShown  string
+	ackSent      time.Time
+	sheet        *sheet // the launch sheet, while it is open
+	stokerServer string // the tmux server (-L) the stoker agent runs on; "" none
+	toast        string // what an action did, on the header's right
+	toasts       int    // counts the toasts: a later one outlives the timer of an earlier one
 }
 
 func New(opt Options) Model {
@@ -318,7 +325,7 @@ func (m Model) hello() tea.Cmd {
 		return nil
 	}
 	return func() tea.Msg {
-		if err := c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version, Binary: bin}); err != nil {
+		if err := c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version, Binary: bin, Client: proto.ClientConsole}); err != nil {
 			return lostMsg{err, c}
 		}
 		return nil
@@ -405,7 +412,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		st := proto.State(msg)
 		m.queue = st.Queue
 		toast := m.stokerNews(st.Stoker)
-		m.stoker = st.Stoker
+		m.stoker, m.stokerServer = st.Stoker, st.StokerServer
 		if !m.stokerClaims() {
 			m.dockSwitched = false
 		}
@@ -413,6 +420,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.noteChanges(st.Sessions)
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
 		m.shipReport = st.Ships
+		m.holds, m.reasons = st.Holds, st.Reasons
 		if m.recRun.rec != "" && m.recRun.act == "" && !m.isRec(m.recRun.rec) {
 			m.recRun = recRun{} // its rec is gone: a later one with the same id starts fresh
 		}
@@ -429,11 +437,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.hist.Append(history.FromSnapshot(m.snap))
 		}
 		m.keepSelection()
-		var news tea.Cmd
+		var news, order tea.Cmd
 		if toast != "" && !first {
 			news = m.say(toast)
 		}
-		return m, tea.Batch(m.recv(), m.animate(), news)
+		if m.sheet != nil && m.sheet.queued && m.sheet.act == "" && m.stoker != nil && m.stoker.Ready {
+			m, order = m.sendOrder() // the stoker rests now: the order that waited for it goes
+		}
+		return m, tea.Batch(m.recv(), m.animate(), news, order)
 	case doorRanMsg:
 		return m.doorRan(msg)
 	case animMsg:
@@ -445,6 +456,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case resultMsg:
 		m.endRec(msg.ActID, proto.Result(msg))
+		if mm, ok := m.sheetResult(proto.Result(msg)); ok {
+			if r := proto.Result(msg); r.Err == "" && mm.sheet == nil {
+				toast := mm.say("the order is on")
+				return mm, tea.Batch(mm.recv(), toast)
+			}
+			return mm, mm.recv()
+		}
 		if r := proto.Result(msg); m.peekSent[r.ActID] != "" {
 			name := m.peekSent[r.ActID]
 			m.peekSent = maps.Clone(m.peekSent)
@@ -575,18 +593,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var touch tea.Cmd
 		// f and n are stoker acts themselves: a touch sent with them would
 		// race them on the service.
-		if k := msg.String(); m.peek != nil || m.searching || k != "f" && k != "n" {
+		if k := msg.String(); m.peek != nil || m.sheet != nil || m.searching || k != "f" && k != "n" {
 			m, touch = m.touchRest()
 		}
 		var next tea.Model
 		var cmd tea.Cmd
 		switch {
+		case m.sheet != nil:
+			next, cmd = m.sheetKey(msg)
 		case m.peek != nil:
 			next, cmd = m.peekKey(msg)
 		case m.searching:
 			next, cmd = m.search(msg)
 		default:
-			next, cmd = m.key(msg.String())
+			next, cmd = m.keyed(msg.String())
 		}
 		return next, tea.Batch(touch, cmd)
 	}
@@ -621,6 +641,16 @@ func describe(r proto.Result) string {
 	return strings.Join(parts, "; ")
 }
 
+// keyed is a key pressed, and the stoker's steps seen when the tab shows them.
+func (m Model) keyed(k string) (tea.Model, tea.Cmd) {
+	next, cmd := m.key(k)
+	if nm, ok := next.(Model); ok {
+		nm, ack := nm.seeStoker()
+		return nm, tea.Batch(cmd, ack)
+	}
+	return next, cmd
+}
+
 func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	if m.held != nil {
 		return m.answerTakeOver(k)
@@ -652,12 +682,6 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.flash = ""
-	if m.stokerOpen {
-		m.stokerOpen = false
-		if k == "enter" || k == "esc" {
-			return m.ackStoked() // seen: the card folds
-		}
-	}
 	switch k {
 	case "c":
 		return m.openStoker(), nil
@@ -687,6 +711,20 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		if s, _ := m.sortable(); s != nil {
 			m.sortOn(s.col)
 		}
+	case "g":
+		if m.tab == tabSessions {
+			m.sessGroup = (m.sessGroup + 1) % len(groupModes)
+			m.flash = "group: " + groupModes[m.sessGroup]
+			m.refresh()
+		}
+	case "z":
+		if s, ok := m.selectedSession(); ok {
+			if s.Pane == "" {
+				m.flash = s.Name + " is outside tmux: nothing to park"
+				break
+			}
+			return m, m.send(proto.Act{RecID: "park:" + s.Pane})
+		}
 	case "space", " ":
 		if m.tab == tabGit {
 			m.mark()
@@ -699,19 +737,34 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		if m.tab == tabGit {
 			m.markAllSafe()
 		}
+	case "Q", "shift+q":
+		if m.tab == tabStoker {
+			return m.quitAgent()
+		}
 	case "up", "k":
 		m.move(-1)
 	case "down", "j":
 		m.move(1)
 	case "enter":
-		if m.tab == tabShips {
+		switch m.tab {
+		case tabShips:
 			return m.toDriver(), nil
+		case tabStoker:
+			if r, ok := m.stokerSelected(); ok && r.kind == rowAgent {
+				return m.openAgent()
+			}
+			m.showCommand()
+			return m, nil
 		}
 		m.pending, m.previewTop = m.primary(), 0
 	case "x":
 		m.pending = m.secondary()
 		if m.pending == nil && m.tab == tabSessions {
 			m.flash = "x ends a stale session: one idle 7 days or more"
+		}
+	case "y":
+		if m.tab == tabStoker {
+			return m.grantStep()
 		}
 	case "a":
 		if m.tab == tabShips {
@@ -738,6 +791,8 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		return m.stokerKey(false)
 	case "n":
 		return m.stokerKey(true)
+	case "o":
+		return m.orderKey()
 	case "r":
 		if m.tab == tabGit && m.conn != nil && !m.lost {
 			m.flash = "scanning git…"
@@ -791,8 +846,8 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 
 func runNav(a action, run func([]string) error) ranMsg {
 	for _, step := range a.steps {
-		if !remote.NavAllowed(step) {
-			return ranMsg{cmd: strings.Join(step, " "), err: fmt.Errorf("refused: only tmux switch-client and new-window run in the console")}
+		if !remote.NavAllowed(step) && !remote.PopupAllowed(step) {
+			return ranMsg{cmd: strings.Join(step, " "), err: fmt.Errorf("refused: only tmux switch-client, new-window and the stoker's popup run in the console")}
 		}
 	}
 	for _, step := range a.steps {

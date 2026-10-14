@@ -6,6 +6,10 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -61,8 +65,14 @@ func TestSessionsGroupByNeed(t *testing.T) {
 		t.Fatalf("header %q", h)
 	}
 	next, _ := key(m, "s")
-	if out := screen(next); strings.Contains(out, "WORKING") || !strings.Contains(out, "9 SESSIONS · by idle ▾") {
-		t.Fatalf("another sort keeps the groups:\n%s", out)
+	if out := screen(next); !strings.Contains(out, "WORKING · 4") || !strings.Contains(out, "WAITS FOR YOU · 2  ·  by newest ▾") {
+		t.Fatalf("another sort drops the groups:\n%s", out)
+	}
+	for range 3 {
+		next, _ = key(next, "g")
+	}
+	if out := screen(next); strings.Contains(out, "WORKING") || !strings.Contains(out, "9 SESSIONS · by newest ▾") {
+		t.Fatalf("no groups, one flat list:\n%s", out)
 	}
 }
 
@@ -70,7 +80,7 @@ func TestSessionsGroupByNeed(t *testing.T) {
 // the digits in that order; p opens Ships, Tab and Shift+Tab cycle. Short
 // of room the tabs far from the open one shorten to their digit.
 func TestTabsAndTheirDigits(t *testing.T) {
-	if want := []string{"sessions", "ships", "machine", "git", "history", "panes"}; !reflect.DeepEqual(tabNames, want) {
+	if want := []string{"sessions", "ships", "machine", "git", "history", "panes", "stoker"}; !reflect.DeepEqual(tabNames, want) {
 		t.Fatalf("tabs %q, want %q", tabNames, want)
 	}
 	m, _ := loadedWith(t, 100, queueState())
@@ -86,13 +96,13 @@ func TestTabsAndTheirDigits(t *testing.T) {
 	if next, _ := m.key("tab"); next.(Model).tab != tabShips {
 		t.Fatal("Tab does not open the next tab")
 	}
-	if next, _ := m.key("shift+tab"); next.(Model).tab != tabPanes {
+	if next, _ := m.key("shift+tab"); next.(Model).tab != tabStoker {
 		t.Fatal("Shift+Tab does not open the previous tab")
 	}
 	phone, _ := loadedWith(t, 44, queueState())
 	for tab, want := range map[int]string{
 		tabSessions: " SESSIONS 3  ships  machine  4  5  6",
-		tabHistory:  " 1  2  machine  git  HISTORY  panes",
+		tabHistory:  " 1  2  3  git  HISTORY  panes  7",
 	} {
 		phone.tab = tab
 		if line, _ := phone.tabsLine(44); !strings.HasPrefix(stripped(line), want) {
@@ -105,5 +115,123 @@ func TestTabsAndTheirDigits(t *testing.T) {
 	loops, _ := loadedWith(t, 100, st)
 	if line, _ := loops.tabsLine(100); !strings.Contains(stripped(line), "machine !") {
 		t.Fatalf("no alert on the Machine tab: %q", stripped(line))
+	}
+}
+
+// reasonFixture is three sessions at rest, one of them in pane %3.
+func reasonFixture() proto.State {
+	st := sortFixture()
+	for i := range st.Sessions {
+		st.Sessions[i].SessionID = "sid-" + st.Sessions[i].Name
+	}
+	st.Sessions[2].Pane = "%3"
+	st.Reasons = map[string]proto.IdleReason{"%alpha": {Word: "#4556 waits your merge", Tone: "accent"}}
+	return st
+}
+
+func TestIdleReasonInRow(t *testing.T) {
+	for _, w := range []int{44, 86, 132} {
+		m, _ := loadedWith(t, w, reasonFixture())
+		out := screen(m)
+		if !strings.Contains(out, "#4556 waits your merge") {
+			t.Fatalf("width %d: the reason is not in the row in full:\n%s", w, out)
+		}
+		if row := rowOf(m.render(), "alpha"); strings.Contains(row, " idle ") {
+			t.Fatalf("width %d: the row keeps the idle word: %q", w, row)
+		}
+	}
+}
+
+func TestZParksAndHeldIsLast(t *testing.T) {
+	st := reasonFixture()
+	m, f := loadedWith(t, 100, st)
+	m.selPID, m.chose = st.Sessions[2].PID, true
+	_, cmd := key(m, "z")
+	drain(cmd)
+	acts := f.acts()
+	if len(acts) != 1 || acts[0].RecID != "park:%3" {
+		t.Fatalf("z sent %+v", acts)
+	}
+	st.Holds = []proto.Hold{{SessionID: "sid-charlie", Pane: "%3", Name: "charlie", By: "you"}}
+	next, _ := m.Update(stateMsg(st))
+	out := screen(next)
+	if !strings.Contains(out, "HELD · 1") || !strings.Contains(out, "⏸ parked by you") {
+		t.Fatalf("the parked session is not in HELD:\n%s", out)
+	}
+	if lineOf(t, next, "HELD · 1") < lineOf(t, next, "QUIET · 1") {
+		t.Fatalf("HELD is not the last group:\n%s", out)
+	}
+	if got := order(next); got != "bravo alpha charlie" {
+		t.Fatalf("order %q", got)
+	}
+}
+
+func TestGCyclesGrouping(t *testing.T) {
+	m, _ := loadedWith(t, 120, sortFixture())
+	var next tea.Model = m
+	next, _ = key(next, "1")
+	for _, want := range []struct{ mode, label string }{
+		{"status", "BUSY · 1"}, {"repo", "· 3"}, {"none", "3 SESSIONS"}, {"need", "WORKING · 1"},
+	} {
+		next, _ = key(next, "g")
+		if got := next.(Model).flash; got != "group: "+want.mode {
+			t.Fatalf("flash %q, want group: %s", got, want.mode)
+		}
+		if out := screen(next); !strings.Contains(out, want.label) {
+			t.Fatalf("group %s lacks %q:\n%s", want.mode, want.label, out)
+		}
+	}
+	// The sort works inside each group: by name, reversed.
+	next, _ = key(next, "g") // status
+	next, _ = key(next, "g") // repo: one repo holds all three
+	for range 4 {
+		next, _ = key(next, "s")
+	}
+	if got := order(next); got != "alpha bravo charlie" {
+		t.Fatalf("by name inside the group: %q", got)
+	}
+	next, _ = key(next, "S")
+	if got := order(next); got != "charlie bravo alpha" {
+		t.Fatalf("by name, reversed: %q", got)
+	}
+}
+
+func TestSortSaysNewest(t *testing.T) {
+	m, _ := loadedWith(t, 100, sortFixture())
+	var next tea.Model = m
+	next, _ = key(next, "1")
+	next, _ = key(next, "s")
+	if got := next.(Model).flash; got != "sort: newest" {
+		t.Fatalf("flash %q", got)
+	}
+	next, _ = key(next, "S")
+	if got := next.(Model).flash; got != "sort: newest, reversed" {
+		t.Fatalf("flash %q", got)
+	}
+}
+
+// TestTheStokersSessionStaysOutOfSessions: #81, the stoker's own agent is
+// not a lane. It leaves the list and its counts, and the header says when
+// it waits for you, so a wait is never hidden.
+func TestTheStokersSessionStaysOutOfSessions(t *testing.T) {
+	for _, w := range []int{44, 132} {
+		st := reasonFixture()
+		st.StokerServer = "mbtest"
+		st.Sessions[0].Pane, st.Sessions[0].Target = st.Sessions[0].Pane+"@mbtest", "stoker:1.0"
+		m, _ := loadedWith(t, w, st)
+		if rowOf(m.render(), "alpha") != "" {
+			t.Fatalf("width %d: the stoker's session is a row of Sessions", w)
+		}
+		for _, s := range m.snap.Sessions {
+			if s.Server() == "mbtest" {
+				t.Fatalf("width %d: the stoker's session is in the list", w)
+			}
+		}
+		st.Sessions[0].Asks = true
+		st.Stoker = &proto.StokerView{Mode: proto.StokerMode{On: true}}
+		m, _ = loadedWith(t, w, st)
+		if h := ansi.Strip(m.head(w)); !strings.Contains(h, "stoker waits") {
+			t.Fatalf("width %d: the stoker waits for you and the header does not say so: %q", w, h)
+		}
 	}
 }

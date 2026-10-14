@@ -114,6 +114,35 @@ func TestScreens(t *testing.T) {
 		}
 	}
 	check(t, st, "folded", 44, 16, nil)
+	night := append([]string{"n"}, strings.Split("merge them on green", "")...)
+	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
+		check(t, sheetScreen(st, false), "sheet", size[0], size[1], append(night, "tab", "space", "tab"))
+	}
+	for _, size := range [][2]int{{44, 31}, {104, 38}, {132, 32}} {
+		check(t, tabNight(st), "stoker", size[0], size[1], []string{"c"})
+		check(t, tabMorning(st), "stokermorning", size[0], size[1], []string{"c"})
+	}
+	check(t, sheetScreen(st, true), "sheetday", 104, 38, []string{"o"})
+}
+
+// sheetScreen is the demo machine with a stoker agent, and the launch
+// sheet: a night's with its order typed and merges on (n, the text, tab,
+// space, tab), or by day the sheet o opens on a running order, its chips as
+// the run's goes.
+func sheetScreen(st proto.State, day bool) proto.State {
+	st.StokerServer = "matchblox"
+	v := proto.StokerView{Recipes: []string{"merge-order", "priority", "release-train", "triage"}, Agent: "claude", PaneUp: true, Ready: true}
+	if day {
+		o := proto.StokerOrder{
+			ID: "r0", Words: "pause what waits on review", At: demoAt.Add(-4 * time.Hour), State: "running",
+			Plan:   []proto.StokerPlan{{N: 1, Session: "hearth-api", Text: "hold: not priority (ways: priority)"}},
+			Grants: []string{"merge"},
+		}
+		v.On, v.Since = true, demoAt.Add(-4*time.Hour)
+		v.Order = &o
+	}
+	st.Stoker = &v
+	return st
 }
 
 func check(t *testing.T, st proto.State, name string, w, h int, keys []string) {

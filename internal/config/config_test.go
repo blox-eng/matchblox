@@ -74,6 +74,22 @@ func TestExampleLoads(t *testing.T) {
 	if d := Default(); c.Interval != d.Interval || c.Sessions.CompactAt != d.Sessions.CompactAt || c.Sessions.ProgressPrompt != d.Sessions.ProgressPrompt || c.Orphans.CPUOver != d.Orphans.CPUOver {
 		t.Fatalf("the example must state the defaults: %+v", c)
 	}
+	if d := Default(); c.Stoker != d.Stoker || d.Stoker.Agent != "claude" || d.Stoker.MaxSteps != 60 {
+		t.Fatalf("the example must state the stoker defaults: %+v", c.Stoker)
+	}
+}
+
+// TestTheStokersPaneKeyIsGone: matchblox starts the stoker agent
+// itself, so [stoker] pane is no longer read. A config that still has it
+// loads, says so (status warns), and starts the default agent.
+func TestTheStokersPaneKeyIsGone(t *testing.T) {
+	c, err := Load(write(t, "[stoker]\npane = \"stoker\"\n"))
+	if err != nil || !c.Stoker.PaneSet || c.Stoker.Agent != "claude" {
+		t.Fatalf("pane set %v, agent %q, %v", c.Stoker.PaneSet, c.Stoker.Agent, err)
+	}
+	if c, err := Load(write(t, "[stoker]\nagent = \"codex\"\n")); err != nil || c.Stoker.PaneSet || c.Stoker.Agent != "codex" {
+		t.Fatalf("pane set %v, agent %q, %v", c.Stoker.PaneSet, c.Stoker.Agent, err)
+	}
 }
 
 // TestAgentsSetTellsAConfigWithoutAgents: a config written before agents

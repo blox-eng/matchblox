@@ -55,7 +55,7 @@ func TestDoorsInTheSnapshot(t *testing.T) {
 	s, _ := doorsTest(t)
 	ctx := run(t, s)
 	c, _ := connect(t, ctx, s)
-	if got := openDoors(snapshot(t, c)); !slices.Equal(got, []string{doors.Hooks, doors.Limits, doors.SafetyNet, doors.WayBack, doors.Guide, doors.Night}) {
+	if got := openDoors(snapshot(t, c)); !slices.Equal(got, []string{doors.Hooks, doors.Limits, doors.SafetyNet, doors.WayBack, doors.Guide, doors.Night, doors.Ways}) {
 		t.Fatalf("open doors = %v", got)
 	}
 }
@@ -88,11 +88,16 @@ func TestDoorActWritesAfterATypedY(t *testing.T) {
 	if !strings.Contains(string(b), "/bin/matchblox hook Stop") {
 		t.Fatalf("settings.json:\n%s", b)
 	}
-	// The door folds at once, not on the next sample an hour later.
-	for {
-		if st := snapshot(t, c); findDoor(t, st, doors.Hooks).Done {
-			break
-		}
+	// The door folds at once, not on the next sample an hour later. The
+	// result arrives after the fold, and the snapshot it kicked may come
+	// before the result (act skips it), so read the state the next
+	// snapshots carry.
+	var now proto.State
+	s.mu.Lock()
+	now.Doors = s.cur.Doors
+	s.mu.Unlock()
+	if !findDoor(t, now, doors.Hooks).Done {
+		t.Fatal("the door did not fold at once")
 	}
 }
 
@@ -119,10 +124,14 @@ func TestDoorCloseAct(t *testing.T) {
 	if r := act(t, c, "1", proto.Act{RecID: "door:guide", Which: "secondary", Confirm: "y"}); r.Err != "" {
 		t.Fatalf("result %+v", r)
 	}
-	for {
-		if st := snapshot(t, c); findDoor(t, st, doors.Guide).Closed {
-			break
-		}
+	// The snapshot the close kicked may come before the result, and act
+	// skips it: read the state the next snapshots carry.
+	var now proto.State
+	s.mu.Lock()
+	now.Doors = s.cur.Doors
+	s.mu.Unlock()
+	if !findDoor(t, now, doors.Guide).Closed {
+		t.Fatal("the door did not close at once")
 	}
 }
 

@@ -46,7 +46,9 @@ type Ship struct {
 	Stage    int        `json:"stage"`    // StageOpen … StageLive
 	Kind     string     `json:"kind"`     // running | waits-for-you | stuck | done | unknown
 	Note     string     `json:"note"`
-	Stages   [5]Stage   `json:"stages"`
+	// Failed is the name of the check that failed, when one did.
+	Failed string   `json:"failed,omitempty"`
+	Stages [5]Stage `json:"stages"`
 	// Since is when the current stage began; Age is how long ago that was.
 	Since time.Time     `json:"since"`
 	Age   time.Duration `json:"age_ns"`
@@ -736,13 +738,13 @@ func (t *Tracker) ship(p *pr, paused bool, now time.Time) Ship {
 		if m := pullURL.FindStringSubmatch(f.URL); m != nil {
 			s.Repo = m[1] + "/" + m[2] // the case GitHub names it in
 		}
-		s.Stage, s.Kind, s.Note, s.Stages = tr.Stage, tr.Kind, tr.Note, tr.Stages
+		s.Stage, s.Kind, s.Note, s.Failed, s.Stages = tr.Stage, tr.Kind, tr.Note, tr.Failed, tr.Stages
 		if at := tr.Stages[tr.Stage].At; !at.IsZero() {
 			s.Since = at
 		} else if !f.Created.IsZero() {
 			s.Since = f.Created
 		}
-		if tr.Note == "green · waits for your merge" && f.HeadOID != "" {
+		if tr.Note == NoteWaitsForMerge && f.HeadOID != "" {
 			// Pinned to the head that was read green: a push since fails it.
 			s.Merge = []string{"gh", "pr", "merge", strconv.Itoa(p.Number), "--" + f.Method, "--match-head-commit", f.HeadOID, "-R", s.Repo}
 		}

@@ -119,7 +119,7 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 		}
 	}
 
-	for _, st := range stoker.Plan(s.Stoker.Mode(), sessions, waiting, s.full, s.Stoker.Entries(), now) {
+	for _, st := range stoker.Plan(s.Stoker.Mode(), sessions, waiting, s.full, s.Stoker.Entries(), now, s.heldSessions()) {
 		if m := s.Stoker.Mode(); !m.On || !m.Rests.IsZero() {
 			break // the builder took over or turned it off since the plan
 		}
@@ -146,9 +146,15 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 		_ = s.Stoker.Append(e)
 		changed = true
 	}
+	if s.fire(ctx, now) {
+		changed = true
+	}
 	if changed {
 		s.refreshStoker()
+	} else {
+		s.syncDriven() // a lost driven.json comes back
 	}
+	s.wake(ctx, now)
 }
 
 // touchStoker keeps a rest while the builder acts from a console.
@@ -177,9 +183,11 @@ func (s *Service) seen() ([]sample.Session, map[string]bool) {
 
 // refreshStoker sends the stoker view at once.
 func (s *Service) refreshStoker() {
-	v := s.Stoker.View()
+	sessions, _ := s.seen()
+	v := s.stokerView(sessions)
+	s.syncDriven()
 	s.mu.Lock()
-	s.cur.Stoker = &v
+	s.cur.Stoker = v
 	s.mu.Unlock()
 	s.broadcast()
 }

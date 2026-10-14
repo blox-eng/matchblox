@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -41,7 +42,7 @@ const (
 	sortAccount
 )
 
-var sessCols = []string{"state", "idle", "context", "cpu", "name", "tmux", "account"}
+var sessCols = []string{"state", "newest", "context", "cpu", "name", "tmux", "account"}
 
 const (
 	paneByPlace = iota
@@ -73,7 +74,8 @@ func (m *Model) refresh() {
 	}
 	m.queue, m.snap.Orphans = m.all.queue, m.all.orphans
 	m.recs = slices.DeleteFunc(slices.Clone(m.all.recs), m.recPrefs.dismissed)
-	sessions := slices.Clone(m.all.sessions)
+	// The stoker's own agent is not a lane: its waits show in the header.
+	sessions := slices.DeleteFunc(slices.Clone(m.all.sessions), m.isStoker)
 	switch m.tab {
 	case tabSessions:
 		m.recs = slices.DeleteFunc(m.recs, func(r advice.Rec) bool { return !keep(r.Title, r.Evidence) })
@@ -85,14 +87,20 @@ func (m *Model) refresh() {
 			return !keep(strconv.Itoa(o.PID), o.Comm, o.Cmdline, o.Cwd, o.Target)
 		})
 	}
-	group, since := map[int]int{}, map[int]time.Time{}
+	need, since := map[int]int{}, map[int]time.Time{}
 	for _, s := range sessions {
-		group[s.PID] = m.groupOf(s)
+		need[s.PID] = m.groupOf(s)
 		if it, ok := m.waitOf(s); ok {
 			since[s.PID] = it.Since
 		}
 	}
-	slices.SortStableFunc(sessions, func(a, b sample.Session) int { return m.sessSort.compare(a, b, group, since) })
+	rank := m.groupRanks(sessions, need)
+	slices.SortStableFunc(sessions, func(a, b sample.Session) int {
+		if c := rank[a.PID] - rank[b.PID]; c != 0 {
+			return c // the groups keep their order; the sort works inside them
+		}
+		return m.sessSort.compare(a, b, need, since)
+	})
 	m.snap.Sessions = sessions
 	if m.git != nil {
 		for p := range m.picked {
@@ -103,8 +111,32 @@ func (m *Model) refresh() {
 	}
 }
 
-// compare orders two sessions. group holds the group of each pid, since
-// when it waits.
+// groupRanks is the place of each session's group in the list: by need
+// the groups' own order, by state the needier first, by repo the names
+// A to Z.
+func (m Model) groupRanks(sessions []sample.Session, need map[int]int) map[int]int {
+	first := map[string]int{}
+	for _, s := range sessions {
+		l := m.groupLabel(s)
+		if n, ok := first[l]; !ok || need[s.PID] < n {
+			first[l] = need[s.PID]
+		}
+	}
+	labels := slices.SortedFunc(maps.Keys(first), func(a, b string) int {
+		if c := first[a] - first[b]; c != 0 && m.sessGroup != groupRepo {
+			return c
+		}
+		return strings.Compare(a, b)
+	})
+	rank := map[int]int{}
+	for _, s := range sessions {
+		rank[s.PID] = slices.Index(labels, m.groupLabel(s))
+	}
+	return rank
+}
+
+// compare orders two sessions inside a group. group holds the need of
+// each pid, since when it waits.
 func (s sortBy) compare(a, b sample.Session, group map[int]int, since map[int]time.Time) int {
 	if s.rev {
 		a, b = b, a
@@ -120,11 +152,11 @@ func (s sortBy) compare(a, b sample.Session, group map[int]int, since map[int]ti
 		case c != 0:
 		case group[a.PID] == groupWaits:
 			c = since[a.PID].Compare(since[b.PID])
-		case group[a.PID] == groupQuiet:
+		case group[a.PID] == groupQuiet, group[a.PID] == groupHeld:
 			c = cmpF(float64(a.Idle), float64(b.Idle))
 		}
 	case sortIdle:
-		c = desc(float64(a.Idle), float64(b.Idle))
+		c = cmpF(float64(a.Idle), float64(b.Idle))
 	case sortContext:
 		c = desc(a.ContextPct, b.ContextPct)
 	case sortCPU:
@@ -194,7 +226,10 @@ func (m *Model) sortOn(col int) {
 	} else {
 		*s = sortBy{col: col}
 	}
-	m.flash = "sort: " + names[s.col] + " " + s.arrow()
+	m.flash = "sort: " + names[s.col]
+	if s.rev {
+		m.flash += ", reversed"
+	}
 	m.refresh()
 }
 
@@ -274,6 +309,9 @@ func (m Model) search(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // setTab opens a tab; a search belongs to the tab it was typed on.
 func (m *Model) setTab(t int) {
 	m.tab, m.filter, m.searching, m.armed = t, "", false, ""
+	if t == tabStoker {
+		m.stokerSel = m.firstNeed() // its one action leads the key bar
+	}
 	m.refresh()
 }
 

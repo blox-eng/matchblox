@@ -4,13 +4,79 @@ import (
 	"fmt"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// The stoker's panel of the dock and its full card (design/0006 §7): the
-// state in a word, and for a run that is on or ended its score and its
-// last step; ⏎ or c, or a tap on the panel, opens the card.
+// The stoker's panel of the dock (design/0006 §7): the state in a word, and
+// for a run that is on or ended its score and its last step; c, or a tap
+// on the panel, opens the STOKER tab.
+
+// hasAgent: the service runs the stoker agent on a tmux server of its own.
+func (m Model) hasAgent() bool {
+	return m.stoker != nil && m.stokerServer != "" && m.stoker.Agent != ""
+}
+
+// stokerAttach is the command that attaches to the stoker agent's session
+// on its own server.
+func (m Model) stokerAttach() string {
+	return "tmux -L " + m.stokerServer + " attach -t stoker"
+}
+
+// openAgent is ⏎ on the STOKER tab's agent row, or a tap on the header's
+// stoker word: inside tmux a popup on the stoker's session, which
+// detaching (prefix d) closes, its command shown first as every jump's;
+// elsewhere the exact command to run. The builder answers the stoker's
+// own prompts there.
+func (m Model) openAgent() (tea.Model, tea.Cmd) {
+	switch {
+	case !m.hasAgent():
+		m.flash = "this service starts no stoker agent"
+	case !m.stoker.PaneUp && !m.stoker.Starting:
+		m.flash = "the stoker is not running: f or n starts it"
+	case m.opt.Host != "":
+		m.flash = "on " + m.opt.Host + ", run: " + m.stokerAttach()
+	case m.opt.OutsideTmux:
+		m.flash = "outside tmux: run " + m.stokerAttach() + " (prefix d comes back)"
+	default:
+		m.pending, m.previewTop = &action{label: "open the stoker", nav: true, steps: [][]string{remote.StokerPopup(m.stokerServer)}}, 0
+	}
+	return m, nil
+}
+
+// quitAgent is Q on the STOKER tab: ending the stoker agent and its
+// session waits for a typed y.
+func (m Model) quitAgent() (tea.Model, tea.Cmd) {
+	switch {
+	case !m.hasAgent():
+		m.flash = "this service starts no stoker agent"
+	case !m.stoker.PaneUp && !m.stoker.Starting:
+		m.flash = "the stoker is not running"
+	default:
+		m.pending = &action{label: "quit the stoker agent", destructive: true, rec: "stoker:quit", which: "primary",
+			steps: [][]string{{"tmux", "-L", m.stokerServer, "kill-session", "-t", "=stoker"}}}
+	}
+	return m, nil
+}
+
+// isStoker tells a session of the stoker's own tmux server.
+func (m Model) isStoker(s sample.Session) bool {
+	return m.stokerServer != "" && s.Server() == m.stokerServer
+}
+
+// stokerAsks tells if the stoker's own agent waits for you: a question or
+// an approval in its pane.
+func (m Model) stokerAsks() bool {
+	for _, s := range m.all.sessions {
+		if m.isStoker(s) && (m.asks(s.Pane) || s.Asks || s.Permits) {
+			return true
+		}
+	}
+	return false
+}
 
 // stokerWord is the stoker's state in a word: off, on, night → 07:00,
 // rests.
@@ -99,40 +165,15 @@ func (m Model) stokerLines(w int, full bool, toggle string) []string {
 	return out
 }
 
-// openStoker is c, or a tap on the stoker's panel: its full card, in the
-// right pane where there is one, else as the body of the Machine tab.
+// openStoker is c, or a tap on the stoker's panel: its tab.
 func (m Model) openStoker() Model {
 	if m.stoker == nil {
 		m.flash = "this service keeps no stoker"
 		return m
 	}
-	m.stokerOpen, m.peek = true, nil
-	switch {
-	case m.layoutAt(m.width) == Narrow:
-		m.setTab(tabMachine)
-	case m.tab != tabSessions && m.tab != tabShips:
-		m.setTab(tabSessions)
-	}
+	m.peek = nil
+	m.setTab(tabStoker)
 	return m
-}
-
-// stokerCard is the full card in w columns: every step with its why and
-// RESUME line, the sessions left alone and not ready, the limit's lapses.
-func (m Model) stokerCard(w int) []string {
-	st := m.st
-	v := m.stoker
-	if v == nil {
-		return nil
-	}
-	var b body
-	b.add(-1, "")
-	if len(v.Run) == 0 && m.card() == nil {
-		b.add(-1, m.stokerLines(w, true, "")...)
-	} else {
-		m.stokedSection(&b, w, -1, false)
-	}
-	keys := " " + st.accent.Render("⏎") + st.muted.Render(" seen, folds it   ") + st.accent.Render("esc") + st.muted.Render(" closes")
-	return append(b.lines, "", fit(keys, w))
 }
 
 // stokerNews is the header's toast for what the stoker did since the last

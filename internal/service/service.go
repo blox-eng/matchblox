@@ -18,7 +18,9 @@ import (
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
+	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/idle"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -76,9 +78,29 @@ type Service struct {
 	Setup *setup.Env
 	// Stoker keeps the stoker mode and its steps. Nil: no stoker.
 	Stoker *stoker.Store
+	// Holds are the parked and stoker-held sessions. Nil: none kept.
+	Holds *holds.Store
 	// NightEnds is when a night turns the stoker off ("07:00").
 	NightEnds string
-	// Capture reads the text of panes on the host, for the stoker's guard.
+	// StokerServer is the tmux server (-L) matchblox keeps the stoker agent
+	// on, in the session sample.StokerSession: an act sent from one of its
+	// panes is the stoker's. Empty: no stoker agent (fixtures).
+	StokerServer string
+	// StokerAgent is the command the stoker agent runs ([stoker] agent).
+	StokerAgent string
+	// LookPath finds a command on PATH. Nil: exec.LookPath.
+	LookPath func(string) (string, error)
+	// Ways is the builder's ways file: every brief names it, and its
+	// recipes are the launch sheet's chips. Empty: none.
+	Ways string
+	// OrderSteps is how many messages the stoker agent may send in a run.
+	OrderSteps int
+	// PeerPane is the tmux pane a CLI that connected runs in, by its pid
+	// ("" outside every pane). An act's From is ignored where it is known.
+	PeerPane func(pid int) string
+	// Capture reads the text of panes on the host, for the stoker's guard,
+	// with its styles: the guard tells Claude Code's grey suggestion from a
+	// draft a person typed.
 	Capture func(panes []string) map[string]string
 	// Activity is the builder's last key in any tmux client: it keeps a
 	// stoker that rests resting while they work in a pane.
@@ -102,6 +124,9 @@ type Service struct {
 
 	mu  sync.Mutex
 	cur state.Doc
+	// startedAt is when matchblox started the stoker agent; zero once it
+	// is ready, or gave up on it.
+	startedAt time.Time
 	// sampled are the sessions as the sampler read them; cur.Sessions adds
 	// the question tool's calls the hooks announced.
 	sampled  []sample.Session
@@ -113,11 +138,18 @@ type Service struct {
 	shipKick chan struct{}
 	stop     context.CancelCauseFunc
 
-	acts acts
-	gen  uint64 // counts door writes, so an older sample keeps its hands off
+	acts  acts
+	ways  waysCache
+	wakes wakeState
+	// driven are the panes the stoker drove, for the merge guard.
+	driven drivenState
+	gen    uint64 // counts door writes, so an older sample keeps its hands off
 	// panes holds a *sync.Mutex per pane: the keys of one act to a pane
 	// never interleave with another's.
 	panes sync.Map
+	// grantMu makes each y one check and one go: two consoles pressing it
+	// at once on one step give one go.
+	grantMu sync.Mutex
 }
 
 func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
@@ -132,8 +164,10 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		shipKick: make(chan struct{}, 1),
 		queue:    queue.New(),
 
-		NightEnds: cfg.Stoker.NightEnds,
-		full:      sample.Full{Pct: cfg.Sessions.CompactAt, Tokens: cfg.Sessions.CompactTokens},
+		NightEnds:   cfg.Stoker.NightEnds,
+		StokerAgent: cfg.Stoker.Agent,
+		OrderSteps:  cfg.Stoker.MaxSteps,
+		full:        sample.Full{Pct: cfg.Sessions.CompactAt, Tokens: cfg.Sessions.CompactTokens},
 	}
 	if s.interval <= 0 {
 		s.interval = 2 * time.Second
@@ -144,7 +178,8 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 	if smp != nil {
 		s.sample = smp.Sample
 	}
-	s.Capture = sample.CapturePanes
+	s.Capture = sample.CapturePanesStyled
+	s.PeerPane = s.paneOfPeer
 	s.Activity = sample.ClientActivity
 	s.alone = s.now()
 	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Resting: s.resting, Answerable: s.answerable, Messageable: s.messageable, Asking: s.asking, Menu: s.menu, Stokable: s.stokable}
@@ -186,7 +221,8 @@ func (s *Service) Serve(ctx context.Context, l net.Listener) error {
 				cancel(err)
 				return
 			}
-			go s.Handle(ctx, transport.NewConn(nc)) //nolint:errcheck // a console that leaves is not an error
+			pid, _ := transport.PeerPID(nc)
+			go s.HandlePeer(ctx, transport.NewConn(nc), pid) //nolint:errcheck // a console that leaves is not an error
 		}
 	}()
 	<-ctx.Done()
@@ -284,6 +320,10 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	}
 	gen := s.doorsGen()
 	ds := s.doors()
+	var view *stoker.View
+	if s.Stoker != nil {
+		view = s.stokerView(snap.Sessions)
+	}
 	s.mu.Lock()
 	s.setDoors(gen, ds)
 	if s.have { // the first sample has no rates yet
@@ -291,8 +331,17 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	}
 	s.cur.Snapshot, s.sampled, s.have = snap, snap.Sessions, true
 	if s.Stoker != nil {
-		v := s.Stoker.View()
-		s.cur.Stoker = &v
+		s.cur.Stoker = view
+	}
+	if s.Holds != nil {
+		present := make(map[string]bool, len(snap.Sessions))
+		for _, x := range snap.Sessions {
+			present[x.SessionID] = true
+		}
+		if err := s.Holds.Prune(present, s.now()); err != nil {
+			s.cur.Errors = append(s.cur.Errors, "holds: "+err.Error())
+		}
+		s.cur.Holds = s.Holds.List()
 	}
 	s.cur.Recommendations = advice.Build(snap, s.cur.Git)
 	s.mergeQueue()
@@ -309,14 +358,28 @@ func (s *Service) readSpool() {
 	if s.Spool == "" {
 		return
 	}
+	var evs []hooks.Event
+	sock := s.stokerSocket()
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	_ = hooks.Replay(s.Spool, s.queue.Apply) // a spool we cannot read loses old waits, not the service
+	_ = hooks.Replay(s.Spool, func(ev hooks.Event) { // a spool we cannot read loses old waits, not the service
+		ev = s.onServer(ev, sock)
+		s.queue.Apply(ev)
+		evs = append(evs, ev)
+	})
+	s.mu.Unlock()
+	// A step's go that a spooled call used is used: as if the hook had
+	// reached the service.
+	for _, ev := range evs {
+		s.useGrants(ev)
+		s.askGo(ev)
+	}
 }
 
 // Hook takes one event from an agent hook and updates the queue at once,
 // without waiting for the next sample.
 func (s *Service) Hook(ev hooks.Event) {
+	s.useGrants(ev)
+	s.askGo(ev)
 	s.mu.Lock()
 	s.queue.Apply(ev)
 	if s.have {
@@ -335,6 +398,51 @@ func (s *Service) mergeQueue() {
 	s.queue.Merge(s.sampled, now)
 	s.cur.Sessions = s.queue.WithAsks(s.sampled)
 	s.cur.Queue = s.queue.Items()
+	s.cur.StokerServer = s.StokerServer
+	s.setReasons()
+}
+
+// setReasons says why each session at rest is idle. The ship of a session is
+// the one the console finds: by pane, then by session id. Hold s.mu.
+func (s *Service) setReasons() {
+	now := s.cur.At
+	if now.IsZero() {
+		now = s.now()
+	}
+	var reasons map[string]idle.Reason
+	for _, sess := range s.cur.Sessions {
+		if sess.Pane == "" {
+			continue
+		}
+		asking := false
+		for _, it := range s.cur.Queue {
+			if it.Pane == sess.Pane && (it.State == queue.StatePermission || it.State == queue.StateQuestion && !it.Reminder) {
+				asking = true
+			}
+		}
+		r := idle.Of(sess, asking, s.shipOf(sess), s.cur.Limits, now)
+		if r == (idle.Reason{}) {
+			continue
+		}
+		if reasons == nil {
+			reasons = map[string]idle.Reason{}
+		}
+		reasons[sess.Pane] = r
+	}
+	s.cur.Reasons = reasons
+}
+
+// shipOf is the ship a session drives, as the console finds it. Hold s.mu.
+func (s *Service) shipOf(sess sample.Session) *ships.Ship {
+	if s.cur.Ships == nil {
+		return nil
+	}
+	for i, sh := range s.cur.Ships.Ships {
+		if sh.Session.Pane != "" && sh.Session.Pane == sess.Pane || sh.Session.ID != "" && sh.Session.ID == sess.SessionID {
+			return &s.cur.Ships.Ships[i]
+		}
+	}
+	return nil
 }
 
 // rescanGit asks the git loop for a scan now; a scan already asked for
@@ -399,7 +507,9 @@ func (s *Service) shipsLoop(ctx context.Context) {
 		r := s.Ships(ctx, sessions, git)
 		s.mu.Lock()
 		s.cur.Ships = &r
+		s.setReasons()
 		s.mu.Unlock()
+		s.syncDriven() // a merge:@<session> go covers the PRs the poll found
 		s.broadcast()
 		select {
 		case <-ctx.Done():
@@ -501,6 +611,13 @@ func (s *Service) stateFor(cl *client) (proto.State, bool) {
 
 // Handle serves one console until it leaves or ctx ends.
 func (s *Service) Handle(ctx context.Context, c transport.Conn) error {
+	return s.HandlePeer(ctx, c, 0)
+}
+
+// HandlePeer serves one console or command whose process is pid (0: not
+// known). With pid known, the pane of each act is the one pid runs in,
+// whatever the act says.
+func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) error {
 	defer c.Close()
 	stop := context.AfterFunc(ctx, func() { c.Close() })
 	defer stop()
@@ -521,7 +638,9 @@ func (s *Service) Handle(ctx context.Context, c transport.Conn) error {
 	if env.Kind == proto.KindHook {
 		var ev hooks.Event
 		if json.Unmarshal(env.Body, &ev) == nil {
-			s.Hook(ev)
+			if ev = s.onServer(ev, s.stokerSocket()); pid <= 0 || s.hookFrom(pid, ev) {
+				s.Hook(ev)
+			}
 		}
 		return nil
 	}
@@ -533,10 +652,13 @@ func (s *Service) Handle(ctx context.Context, c transport.Conn) error {
 		return nil // the console has our hello and shows the fix
 	}
 
+	// The first wake-up goes in before the console joins: a broadcast
+	// after the join fills kick, and a send then would wait for a reader
+	// that starts below.
 	cl := &client{c: c, kick: make(chan struct{}, 1)}
+	cl.kick <- struct{}{}
 	s.join(cl)
 	defer s.leave(cl)
-	cl.kick <- struct{}{}
 
 	done := make(chan struct{})
 	defer close(done)
@@ -569,7 +691,13 @@ func (s *Service) Handle(ctx context.Context, c transport.Conn) error {
 			_ = c.Send(proto.KindResult, env.ID, proto.Result{ActID: env.ID, Err: "bad act"})
 			continue
 		}
+		if pid > 0 {
+			a.From = s.PeerPane(pid)
+		}
 		go func(id string) {
+			// A console in a pane the stoker drove, or in the stoker's own,
+			// is an agent that says it is one.
+			a.Console = h.Client == proto.ClientConsole && (pid <= 0 || !s.agentsPane(a))
 			res := s.act(ctx, a)
 			res.ActID = id
 			_ = c.Send(proto.KindResult, id, res)

@@ -986,3 +986,24 @@ func TestThePeekIsTheDrawer(t *testing.T) {
 		}
 	}
 }
+
+// TestCtrlOJumpsFromThePeek: in the peek, ctrl+o goes to the session's
+// pane at once, without esc first; what was typed stays out of it.
+func TestCtrlOJumpsFromThePeek(t *testing.T) {
+	m, _ := loadedWith(t, 132, queueState())
+	var ran [][]string
+	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	next, _ := key(selectPane(t, m, "%3"), "a")
+	next = typeText(quiet(next), "half a line")
+	if out := screen(next); !strings.Contains(out, "^o jump") {
+		t.Fatalf("the peek does not offer the jump:\n%s", out)
+	}
+	next, cmd := next.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
+	if next.(Model).peek != nil {
+		t.Fatal("the peek stayed open")
+	}
+	drain(cmd)
+	if len(ran) != 1 || strings.Join(ran[0], " ") != "tmux switch-client -t %3" {
+		t.Fatalf("ran %v", ran)
+	}
+}

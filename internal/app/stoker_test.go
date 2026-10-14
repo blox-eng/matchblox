@@ -34,23 +34,27 @@ func stokedRun(at time.Time) proto.StokerView {
 	}
 }
 
-func TestFKeyTogglesTheStoker(t *testing.T) {
+func TestFKeyTurnsTheStokerOffOrOpensTheSheet(t *testing.T) {
 	m, f := loadedWith(t, 100, stokerState(proto.StokerView{}))
-	sendKey(m, "f")
+	if next := sendKey(m, "f").(Model); next.sheet == nil || next.sheet.night {
+		t.Fatalf("f with the stoker off: %+v", next.sheet)
+	}
 	m, g := loadedWith(t, 100, stokerState(proto.StokerView{Mode: proto.StokerMode{On: true}}))
 	sendKey(m, "f")
-	if a, b := f.acts(), g.acts(); len(a) != 1 || a[0].RecID != "stoker:on" || len(b) != 1 || b[0].RecID != "stoker:off" {
+	if a, b := f.acts(), g.acts(); len(a) != 0 || len(b) != 1 || b[0].RecID != "stoker:off" {
 		t.Fatalf("acts %+v, %+v", a, b)
 	}
 }
 
-func TestNKeyStartsAndEndsTheNight(t *testing.T) {
+func TestNKeyOpensTheNightSheetOrEndsTheNight(t *testing.T) {
 	m, f := loadedWith(t, 100, stokerState(proto.StokerView{Mode: proto.StokerMode{On: true}}))
-	sendKey(m, "n")
+	if next := sendKey(m, "n").(Model); next.sheet == nil || !next.sheet.night {
+		t.Fatalf("n by day: %+v", next.sheet)
+	}
 	night := proto.StokerMode{On: true, Until: time.Date(2026, 10, 10, 7, 0, 0, 0, time.Local)}
 	m, g := loadedWith(t, 100, stokerState(proto.StokerView{Mode: night}))
 	sendKey(m, "n")
-	if a, b := f.acts(), g.acts(); len(a) != 1 || a[0].RecID != "stoker:night" || len(b) != 1 || b[0].RecID != "stoker:off" {
+	if a, b := f.acts(), g.acts(); len(a) != 0 || len(b) != 1 || b[0].RecID != "stoker:off" {
 		t.Fatalf("acts %+v, %+v", a, b)
 	}
 }
@@ -81,18 +85,18 @@ func TestStokedListsRunsWithResume(t *testing.T) {
 	for _, w := range []int{40, 100} {
 		st := stokerState(stokedRun(fixtureState().At))
 		m0, _ := loadedWith(t, w, st)
-		if out := ansi.Strip(m0.render()); strings.Contains(out, "STOKED") || !strings.Contains(out, "STOKER") {
+		if out := ansi.Strip(m0.render()); strings.Contains(out, "TODAY") || !strings.Contains(out, "STOKER") {
 			t.Fatalf("width %d: the run is not in the dock alone:\n%s", w, out)
 		}
 		m := openCard(m0).(Model)
 		out := ansi.Strip(m.render())
-		for _, want := range []string{"STOKED", "app-feature", "176k → 9k", "would pass 80%", "RESUME: run the migration test", "app-review", "skipped: session busy"} {
+		for _, want := range []string{"TODAY", "app-feature", "176k → 9k", "would pass 80%", "RESUME: run the migration test", "app-review", "skipped: session busy"} {
 			if !strings.Contains(out, want) {
 				t.Fatalf("width %d: no %q:\n%s", w, want, out)
 			}
 		}
 		// The session keeps its match, as everywhere an agent shows.
-		row := strings.Split(out, "\n")[lineOf(t, m, "STOKED")+1]
+		row := strings.Split(out, "\n")[lineOf(t, m, "TODAY")+1]
 		if !strings.Contains(row, "app-feature") || !strings.ContainsAny(row, "✦╿│") {
 			t.Fatalf("width %d: no match on the step row %q", w, row)
 		}
@@ -104,16 +108,16 @@ func TestStokedListsRunsWithResume(t *testing.T) {
 	}
 }
 
-func TestEnterFoldsStoked(t *testing.T) {
+func TestOpeningTheTabFoldsStoked(t *testing.T) {
 	m, f := loadedWith(t, 100, stokerState(stokedRun(fixtureState().At)))
-	sendKey(openCard(m), "enter")
+	sendKey(m, "c")
 	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "stoker:ack", Which: "primary"}) {
 		t.Fatalf("acts %+v", acts)
 	}
 	seen := stokedRun(fixtureState().At)
 	seen.Unseen = false
 	m, _ = loadedWith(t, 100, stokerState(seen))
-	if out := ansi.Strip(m.render()); strings.Contains(out, "STOKED") {
+	if out := ansi.Strip(m.render()); strings.Contains(out, "TODAY") {
 		t.Fatalf("a seen run still shows:\n%s", out)
 	}
 }
@@ -193,8 +197,7 @@ func sized(t *testing.T, w, h int, st proto.State) Model {
 // TestTheStokerLivesInTheDock: while a run is in charge the stoker's panel
 // takes a phone's dock until u switches it, and the machine's place
 // beside usage on a drawer; a wide desk shows all three. A tap on the
-// panel opens the whole card: in the right pane, or on a phone's Machine
-// tab.
+// panel opens the STOKER tab.
 func TestTheStokerLivesInTheDock(t *testing.T) {
 	st := stokerState(runningNight(fixtureState().At))
 	phone := sized(t, 44, 31, st)
@@ -203,7 +206,7 @@ func TestTheStokerLivesInTheDock(t *testing.T) {
 		!strings.Contains(out, "176k → 9k") || !strings.Contains(out, "· watching 3 · 1 compacted") {
 		t.Fatalf("44x31: the stoker does not take the dock:\n%s", out)
 	}
-	if strings.Contains(out, "STOKED") {
+	if strings.Contains(out, "TODAY") {
 		t.Fatalf("44x31: the card is on top of Sessions:\n%s", out)
 	}
 	switched, _ := key(phone, "u")
@@ -212,8 +215,8 @@ func TestTheStokerLivesInTheDock(t *testing.T) {
 	}
 	y := lineOf(t, phone, "STOKER")
 	card, _ := tap(phone, 3, y+1)
-	if cm := card.(Model); cm.tab != tabMachine || !strings.Contains(screen(card), "RESUME: run the migration test") {
-		t.Fatalf("44x31: a tap on the stoker does not open its card on Machine:\n%s", screen(card))
+	if cm := card.(Model); cm.tab != tabStoker || !strings.Contains(screen(card), "RESUME: run the migration test") {
+		t.Fatalf("44x31: a tap on the stoker does not open its tab:\n%s", screen(card))
 	}
 
 	drawer := sized(t, 107, 101, st)
@@ -224,11 +227,8 @@ func TestTheStokerLivesInTheDock(t *testing.T) {
 	}
 	sc := drawer.draw(107)
 	card, _ = tap(drawer, sc.stx0+3, sc.dockAt+1)
-	if cm := card.(Model); !cm.stokerOpen || cm.tab != tabSessions || !strings.Contains(screen(card), "RESUME: run the migration test") {
-		t.Fatalf("107x101: a tap on the stoker does not open its card in the pane:\n%s", screen(card))
-	}
-	if closed, _ := key(card, "esc"); closed.(Model).stokerOpen {
-		t.Fatal("esc does not close the card")
+	if cm := card.(Model); cm.tab != tabStoker || !strings.Contains(screen(card), "RESUME: run the migration test") {
+		t.Fatalf("107x101: a tap on the stoker does not open its tab:\n%s", screen(card))
 	}
 
 	desk := sized(t, 192, 60, st)

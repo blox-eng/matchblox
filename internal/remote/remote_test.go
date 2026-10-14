@@ -251,6 +251,30 @@ func TestSplitIsTheInverseOfQuote(t *testing.T) {
 	}
 }
 
+// TestPopupAllowedIsExact: the console opens one popup, on the stoker's
+// session, and its shell line holds no word but a server name.
+func TestPopupAllowedIsExact(t *testing.T) {
+	if got := StokerPopup("matchblox"); !slices.Equal(got, []string{"tmux", "display-popup", "-E", "-w", "90%", "-h", "90%", "tmux -L matchblox attach -t stoker"}) {
+		t.Fatalf("popup %q", got)
+	}
+	for _, c := range []struct {
+		argv []string
+		ok   bool
+	}{
+		{StokerPopup("matchblox"), true},
+		{StokerPopup("matchblox-test-1"), true},
+		{StokerPopup("x; rm -rf ~"), false},
+		{StokerPopup("$(id)"), false},
+		{[]string{"tmux", "display-popup", "-E", "-w", "90%", "-h", "90%", "tmux -L matchblox attach -t work"}, false},
+		{[]string{"tmux", "display-popup", "-E", "sh"}, false},
+		{[]string{"tmux", "switch-client", "-t", "%1"}, false},
+	} {
+		if got := PopupAllowed(c.argv); got != c.ok {
+			t.Errorf("%q: %v, want %v", c.argv, got, c.ok)
+		}
+	}
+}
+
 func TestNavAllowedIsExact(t *testing.T) {
 	for _, c := range []struct {
 		argv []string

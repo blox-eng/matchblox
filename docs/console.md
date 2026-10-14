@@ -8,8 +8,8 @@ you`; a tap selects the first) and [the stoker](stoker.md): `stoker off`,
 `stoker`, or `☾ night → 07:00`. For a moment after an action it says what
 ran instead.
 
-The tabs are `sessions`, `ships`, `machine`, `git`, `history` and `panes`,
-opened by the digits `1-6`. The open one is uppercase. A narrow screen shortens the
+The tabs are `sessions`, `ships`, `machine`, `git`, `history`, `panes` and `stoker`,
+opened by the digits `1-7`. The open one is uppercase. A narrow screen shortens the
 tabs far from the open one to their digit. `machine !` has a problem.
 
 The key line at the bottom shows the keys of the open tab, and how old the
@@ -48,7 +48,7 @@ plan your agents have used, the machine, and [the stoker](stoker.md):
 - When the body leaves rows free, the dock grows into them: each account's
   forecast and resets, the top processes, the stoker's recent steps. The
   detail beside the list shows more of what the agent said.
-- `c`, or a tap on the stoker's panel, opens its whole card.
+- `c`, or a tap on the stoker's panel, opens the STOKER tab: your words, its plan with each step's outcome, its standing rules and today's steps.
 - `disk` is the file system that holds your home directory, and `/` beside
   it when that is another one.
 - Claude Code's status line gives the 5-hour window and the week only, so
@@ -68,6 +68,82 @@ A line that says `as of 14:02` has not changed for an hour: the account's
 agents have not worked since. Each reading is kept for five weeks in
 `~/.local/state/matchblox/limits.jsonl`, on this machine only.
 `matchblox status` has every figure under `limits`.
+
+## Read it from a script or an agent
+
+`matchblox sessions`, `matchblox ships` and `matchblox usage` print one line
+a row; with `--json` they print JSON. `matchblox ships --json` and
+`matchblox usage --json` print the ships and the accounts' limits. They need
+`matchblox serve` running (or a console), and else say so. Each row of
+`matchblox sessions --json` has:
+
+| Field | It is |
+|---|---|
+| `name` | The session's name (Claude Code's, or the agent's). |
+| `pane`, `target` | Its tmux pane (`%3`) and target (`app:1.1`). Any of `name`, `pane` and `target` names it to a hand command. |
+| `word` | What it does, in one word: `asks` (it waits for an answer or an approval), `busy` (a turn runs), `idle` (at rest), `background` (at rest, and a shell it started in the background still runs), or `agents` (its subagents still work). Read this one. |
+| `status` | The status word the agent itself reports, as it reports it. Claude Code says `busy`, `idle` or `shell`; `shell` is a session at rest with a background shell, not a pane without an agent. |
+| `reason` | Why a session at rest is idle (`#4556 waits your merge`, `CI red · …`, `stuck: …`, `out of work`, `idle`); empty while it works or asks. |
+| `held` | Nothing types into it: you parked it, or the stoker held it. |
+| `stoker` | It is the stoker agent, on matchblox's own tmux server. Sessions leaves it out. |
+| `context_pct` | How full its context is, in percent. |
+| `plan_pct` | The progress bar it drew in its last reply, or null. |
+| `account` | The account its plan runs on. |
+| `ship` | The pull request it drives (`repo`, `number`, `stage`, `kind`, `note`), or null. |
+
+`matchblox peek api` prints what the session said last and what it asks,
+if anything: the question with its numbered options, or an approval that
+waits in its pane. It is what the console's peek shows, and it acts on
+nothing. `--lines 40` keeps the last 40 lines of what it said (20 by
+default, 0 for all); `--json` prints `name`, `pane`, `target`, `said`,
+`asks` (the first line of the question), `questions` (each with its
+`options`) and `approval`.
+
+## Act on a session from a script or an agent
+
+`<who>` is a pane (`%3`), a target (`app:1.1`) or a name; a name two sessions
+share is refused, never guessed. Each command asks the running service, which
+checks what the console checks, and prints the exact keys it sent; `send`
+starts with `send api: typed`. A refusal is printed on stderr, with exit
+code 1, and names the command and why (`send api: refused: …`). A send
+whose text went in and whose `Enter` a guard or tmux stopped (a permission
+prompt came up between the two) says `send api: typed, not sent (Enter not
+pressed): …`: the text waits in the prompt, so do not send it again. When the
+service did not answer, the command says whether the act went: `send api:
+not typed: …` when it never reached the service, and `send api: not known
+whether it was typed: peek api before you send again` when the service
+took it and the answer never came.
+
+| Command | It does |
+|---|---|
+| `matchblox send api "run the tests"` | Types the line and Enter into the session. It queues if the session works, and is refused at a question or a permission prompt. |
+| `matchblox send api --pick 2` | Answers the question the session asks with its second option. |
+| `matchblox compact api` | Types `/compact` into a Claude Code session at rest that waits for nothing and was not compacted in the last 30 minutes. |
+| `matchblox hold api --why "not the priority"` | Queues "finish this step, then stop and wait" and holds the session: nothing else types into it. |
+| `matchblox release api` | Lets a session the stoker held go, and tells it "carry on". A session you parked stays parked: only `z` at a console lets it go (`parked by you: only z lets it go`). |
+
+An act typed in a pane of the stoker's tmux session is the stoker's, and so
+is an act from a session the stoker messaged in the run: what that session
+sends counts toward the run's messages, and the session it sends to is the
+stoker's from then on. Such an act is refused when no run is on (`the
+stoker is off: no run`), while the stoker rests (`the stoker rests: a person
+works`), on its own pane, and after `max_steps` messages in one run (60 by
+default).
+
+The launch sheet's and the STOKER tab's verbs, and `z`, are yours at a
+console only. A command or an agent that sends them is refused (`only you
+do this, at the console`).
+
+The stoker agent keeps its plan, logs its steps and sets its triggers
+with commands of its own. matchblox takes them only from the stoker's
+pane.
+
+| Command | It does |
+|---|---|
+| `matchblox stoker plan` | Reads the plan on stdin (a here-document, `matchblox stoker plan <<'EOF'`), one step a line (`1. api: merge #4556 on green`), and puts it on the card in place of the plan before it. Nobody approves it. An `asks:` or `grant:` line, which older briefs asked for, is read and ignored: the gos are your chips. |
+| `matchblox stoker step 1 --state doing "told api to rebase"` | Logs a step of the plan to the card: `doing`, `done`, `failed` or `waits`, and prints `step 1 logged: doing`. `--needs merge:#4556` asks you for a go the step needs: the stoker only asks, and only your `y` gives it; a guarded command the guard denies lands on the card by itself. |
+| `matchblox stoker step 0 --rule "compact on PR" --state done "compacted api"` | Logs what a standing rule of your ways did. |
+| `matchblox stoker when --ship 4573 --stage merged send api "rebase on main"` | Sets a trigger matchblox fires itself, once: at a pull request's stage (`ci`, `green`, `merged`, `live`, `red`) or, with `--rest <who>`, at the end of a session's turn. The hand is `send`, `compact`, `release` or `hold <who> --why "…"`. `--list` prints the run's triggers, `--drop <id>` drops one. |
 
 ## The match
 
@@ -101,6 +177,12 @@ console remembers both.
 - **QUIET**: `idle`, then `cold` after one day, then `stale` after seven
   days, the newest first. On a stale session, `x` and a typed `y` end the
   agent.
+- **HELD**, last: sessions you parked with `z` (`⏸ parked by you`) or the
+  stoker holds (`⏸ held by stoker · why`). Nothing types into them.
+
+A session at rest that does not ask you says why where its state word
+would be, in a few words: `#4556 waits your merge`, `CI red · lint`,
+`stuck: …`, `back 14:20`. It replaces `done`, `paused` and `idle`.
 
 A row shows the match, the name, the state, how long it waits and its
 context use (`warn` from 70%). A wide screen adds the plan and the ship the
@@ -168,8 +250,10 @@ pane: its peek shows the prompt, and `Enter` goes there.
   "API key": `✻` Anthropic, `❋` OpenAI, `▣` OpenCode.
 - An agent can draw a progress bar in its last reply:
   `Progress [████░░░░] <step>`. The console shows it as `▰▰▰▱▱ 75%`.
-- `s` sorts by another column and shows one flat list; `S` turns it
-  around.
+- `s` sorts by another column (`newest` is the one with the least idle
+  time first) inside each group; `S` turns it around.
+- `g` groups the list by need (the groups above), by state word, by repo or
+  not at all (one flat list). `z` parks the selected session, or lets it go.
 - Agents that exited and wait for their parent are one faint line under the
   sessions. `e` lists them with the command that clears them.
 

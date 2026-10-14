@@ -27,3 +27,15 @@ To use another file, give `matchblox --config <file>`.
 ```toml
 --8<-- "config.example.toml"
 ```
+
+## The stoker's agent
+
+`[stoker] agent` is the command of the stoker agent. matchblox starts it
+itself, on a tmux server of its own (`tmux -L matchblox`, session
+`stoker`), the first time you press `f` or `n`. It is `claude` by default.
+`codex` and `opencode` work too. The command must be on the service's
+`PATH`.
+
+`[stoker] pane` is gone: you no longer start the stoker in a pane of your
+own. `matchblox status` warns while the config still names it, and nothing
+reads it. Remove the line. See [the stoker](stoker.md#the-stoker-agent).

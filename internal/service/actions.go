@@ -12,6 +12,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -77,10 +78,50 @@ func (a *acts) end(key string, ran bool) {
 	delete(a.inflight, key)
 }
 
+// notTheBuilders refuses a pane act typed in another agent's pane. The
+// hand rules are user-wide, so any session may call the CLI unprompted.
+const notTheBuilders = "only the stoker and the sessions it drives act from an agent's pane: this one is neither"
+
 func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
-	if !strings.HasPrefix(a.RecID, "stoker:") {
+	// A session the stoker drove speaks for the stoker: what it sends
+	// counts and drives, and it gives no go.
+	agent := s.agentsPane(a)
+	if !agent && !a.Console && paneOf(a.RecID) != "" {
+		if _, ok := s.sessionAt(a.From); ok {
+			return proto.Result{Err: notTheBuilders}
+		}
+	}
+	if !agent && !strings.HasPrefix(a.RecID, "stoker:") {
 		s.touchStoker(s.now()) // the builder acts: a stoker that rests goes on resting
 	}
+	if agent {
+		if err := s.orderable(a); err != nil {
+			return proto.Result{Err: err.Error()}
+		}
+	} else if yours(a.RecID) && !a.Console {
+		return proto.Result{Err: "only you do this, at the console"}
+	}
+	res := s.dispatch(ctx, a)
+	if agent {
+		s.recordOrder(a, res)
+	} else if pane := typedPane(a.RecID); a.Console && pane != "" && res.Err == "" && len(res.Ran) > 0 {
+		s.undrive(pane) // the pane's last input is the person's at a console
+	}
+	return res
+}
+
+// yours are the acts only the person at a console sends: the launch
+// sheet's and the stoker tab's verbs, and z. The stoker's own plan and
+// steps come from its CLI.
+func yours(recID string) bool {
+	if verb, ok := strings.CutPrefix(recID, "stoker:"); ok {
+		// matchblox stoker quit is the builder's in a shell too.
+		return verb != "plan" && verb != "step" && verb != "when" && verb != "quit"
+	}
+	return strings.HasPrefix(recID, "park:")
+}
+
+func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	switch a.RecID {
 	case "rescan:git":
 		s.rescanGit()
@@ -90,7 +131,22 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		return proto.Result{}
 	}
 	if verb, ok := strings.CutPrefix(a.RecID, "stoker:"); ok {
+		switch verb {
+		case "order":
+			return s.orderAct(ctx, a)
+		case "plan", "step", "when":
+			return s.planAct(verb, a)
+		case "grant":
+			return s.grantAct(a)
+		case "start":
+			return s.startAct(ctx)
+		case "quit":
+			return s.quitAct(ctx, a)
+		}
 		return s.stokerAct(verb, s.now())
+	}
+	if pane, ok := strings.CutPrefix(a.RecID, "park:"); ok {
+		return s.park(pane)
 	}
 	key := a.RecID + "\x00" + a.Which
 	id, door := strings.CutPrefix(a.RecID, "door:")
@@ -136,7 +192,7 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		switch it, ok := s.queued(pane); {
 		case !ok:
 			return proto.Result{Err: "the session in " + pane + " no longer waits"}
-		case it.State == queue.StatePermission:
+		case it.State == queue.StatePermission || s.permits(pane):
 			return proto.Result{Err: "a permission prompt is answered in its pane: Enter goes there"}
 		}
 		release := s.holdPane(pane)
@@ -147,6 +203,21 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	}
 	if message {
 		res := s.message(ctx, msgPane, a)
+		ran = len(res.Ran) > 0
+		return res
+	}
+	if cPane, ok := strings.CutPrefix(a.RecID, "compact:"); ok {
+		res := s.compact(ctx, cPane, a)
+		ran = len(res.Ran) > 0
+		return res
+	}
+	if holdPane, ok := strings.CutPrefix(a.RecID, "hold:"); ok {
+		res := s.hold(ctx, holdPane, a)
+		ran = len(res.Ran) > 0
+		return res
+	}
+	if relPane, ok := strings.CutPrefix(a.RecID, "release:"); ok {
+		res := s.release(ctx, relPane, a)
 		ran = len(res.Ran) > 0
 		return res
 	}
@@ -285,6 +356,14 @@ func (s *Service) messageable(pane string, pid int) error {
 		return fmt.Errorf("another agent runs in %s now", pane)
 	case x.Ask != nil:
 		return fmt.Errorf("%s asks a question now: open it again to pick", x.Name)
+	case x.Permits:
+		return errors.New("a permission prompt is answered in its pane: Enter goes there")
+	}
+	if h, held := s.heldOf(x.SessionID); held {
+		if h.By == holds.ByStoker {
+			return fmt.Errorf("%s is held by the stoker: z lets it go", x.Name)
+		}
+		return fmt.Errorf("%s is parked: z lets it go", x.Name)
 	}
 	if it, ok := s.queued(pane); ok && it.State == queue.StatePermission {
 		return errors.New("a permission prompt is answered in its pane: Enter goes there")
@@ -396,7 +475,14 @@ func (s *Service) queued(pane string) (queue.Item, bool) {
 // answerable is the guard of an answer, checked right before each step.
 func (s *Service) answerable(pane string) bool {
 	it, ok := s.queued(pane)
-	return ok && it.State != queue.StatePermission
+	return ok && it.State != queue.StatePermission && !s.permits(pane)
+}
+
+// permits tells if the last sample shows the approval menu in pane: a
+// typed line would approve the call, whatever the hooks said.
+func (s *Service) permits(pane string) bool {
+	x, ok := s.sessionAt(pane)
+	return ok && x.Permits
 }
 
 // doors reads the machine's doors: a few small files, cheap on each sample.

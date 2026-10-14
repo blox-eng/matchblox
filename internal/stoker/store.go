@@ -31,6 +31,21 @@ type View struct {
 	// Unseen: the run has a step, or the card of its end, the builder
 	// has not acked.
 	Unseen bool `json:"unseen,omitempty"`
+	// Recipes are the `# Recipe:` names of the ways file, for the launch
+	// sheet's chips.
+	Recipes []string `json:"recipes,omitempty"`
+	// Agent is the stoker agent's command, and Start the exact tmux
+	// command matchblox starts it with on its own server. Empty: no
+	// stoker agent. Missing says why it cannot start (its command is not
+	// on PATH).
+	Agent   string `json:"agent,omitempty"`
+	Start   string `json:"start,omitempty"`
+	Missing string `json:"missing,omitempty"`
+	// PaneUp: the stoker agent runs. Starting: matchblox started it, and
+	// it is not ready yet. Ready: it rests, and an order may be typed.
+	PaneUp   bool `json:"pane_up,omitempty"`
+	Starting bool `json:"starting,omitempty"`
+	Ready    bool `json:"ready,omitempty"`
 }
 
 // Dir holds stoker.json and stoker.jsonl.
@@ -283,7 +298,7 @@ func (s *Store) Pending(now time.Time) []Entry {
 	defer s.mu.Unlock()
 	var out []Entry
 	for _, e := range s.entries {
-		if e.Result == Sent && e.Back.IsZero() && now.Sub(e.At) < ResumeWait {
+		if e.Rule != RuleOrder && !e.Logged() && e.Result == Sent && e.Back.IsZero() && now.Sub(e.At) < ResumeWait {
 			out = append(out, e)
 		}
 	}

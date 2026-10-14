@@ -27,7 +27,8 @@ func (m Model) card() *proto.StokerCard {
 	return m.stoker.Card
 }
 
-// stokerKey is f (the stoker on or off) and n (a night, or off).
+// stokerKey is f (the stoker off, or the launch sheet) and n (a night's
+// launch sheet, or the night off).
 func (m Model) stokerKey(night bool) (tea.Model, tea.Cmd) {
 	if m.conn == nil || m.lost {
 		m.flash = "not sent, no connection"
@@ -37,28 +38,28 @@ func (m Model) stokerKey(night bool) (tea.Model, tea.Cmd) {
 		m.flash = "this service keeps no stoker"
 		return m, nil
 	}
-	verb, say := "on", "the stoker is on: full sessions compact"
+	var verb, say string
 	switch {
 	case !night && m.resting():
 		verb, say = "wake", "the stoker is back on"
 	case night && m.stoker.On && !m.stoker.Until.IsZero(), !night && m.stoker.On:
 		verb, say = "off", "the stoker is off"
-	case night:
-		verb, say = "night", "night: the stoker runs until morning"
+	default:
+		return m.openSheet(night, false)
 	}
 	m.flash = say
 	return m, m.send(proto.Act{RecID: "stoker:" + verb, Which: "primary"})
 }
 
-func (m Model) ackStoked() (tea.Model, tea.Cmd) {
-	if m.stoker == nil || !m.stoker.Unseen {
+// seeStoker marks the stoker's steps seen while the STOKER tab is open: to
+// look at them is to see them. At most once in ten seconds, because the
+// service's answer comes later.
+func (m Model) seeStoker() (Model, tea.Cmd) {
+	if m.tab != tabStoker || m.stoker == nil || !m.stoker.Unseen || m.conn == nil || m.lost ||
+		m.now().Sub(m.ackSent) < 10*time.Second {
 		return m, nil
 	}
-	if m.conn == nil || m.lost {
-		m.flash = "not sent, no connection"
-		return m, nil
-	}
-	m.flash = "folded: the stoker's steps"
+	m.ackSent = m.now()
 	return m, m.send(proto.Act{RecID: "stoker:ack", Which: "primary"})
 }
 
@@ -171,96 +172,6 @@ func (m Model) touchRest() (Model, tea.Cmd) {
 
 func nightDoorAction(d doors.Door) *action {
 	return &action{label: d.Title, say: "start the night: the stoker runs until morning", rec: "stoker:night", which: "primary"}
-}
-
-// stokedSection is the run the builder has not seen: each step, the
-// context before and after a compact, and its RESUME line.
-func (m Model) stokedSection(b *body, w int, row int, sel bool) {
-	st, v := m.st, m.stoker
-	when := v.Since.Local().Format("15:04") + " → "
-	switch {
-	case v.On && !v.Until.IsZero():
-		when += v.Until.Local().Format("15:04")
-	case v.On:
-		when += "now"
-	default:
-		when += v.Ended.Local().Format("15:04")
-	}
-	narrow := w < 60
-	mark := "  "
-	if sel {
-		mark = "▌ "
-	}
-	var lines []string
-	head := fmt.Sprintf(" STOKED %s · %d", when, len(v.Run))
-	if c := m.card(); c != nil {
-		head = fmt.Sprintf(" STOKED %s → %s · ready %d/%d", c.Since.Local().Format("15:04"), c.Ended.Local().Format("15:04"), c.Ready, c.Of)
-		if c.Night {
-			head = " NIGHT" + strings.TrimPrefix(head, " STOKED")
-		}
-		for i, l := range lapseLines(*c) {
-			lead := "   "
-			if i == 0 {
-				lead = " " + st.accent.Render(mark)
-			}
-			lines = append(lines, lead+st.warn.Render(l))
-		}
-		for _, l := range cardLines(*c, narrow) {
-			lead := "   "
-			if len(lines) == 0 {
-				lead = " " + st.accent.Render(mark)
-			}
-			lines = append(lines, lead+st.text.Render(l))
-		}
-		for _, x := range c.NotReady {
-			lines = append(lines, "   "+st.text.Render(pad(x.Name, colName))+st.warn.Render(missWhy(x, c.Ended)))
-		}
-		for _, x := range c.Left {
-			lines = append(lines, "   "+st.text.Render(pad(x.Name, colName))+st.muted.Render(x.Why))
-		}
-	}
-	b.add(-1, st.label.Render(fit(head, w)))
-	for i, e := range v.Run {
-		lead := " " + st.accent.Render(mark)
-		if i > 0 || len(lines) > 0 {
-			lead = "   "
-		}
-		result := st.muted.Render(e.Result)
-		if e.Result == "sent" {
-			switch {
-			case e.After > 0:
-				result = st.text.Render(sample.Kilo(e.Before) + " → " + sample.Kilo(e.After))
-			case !e.Back.IsZero():
-				result = st.text.Render(sample.Kilo(e.Before) + " → compacted")
-			case m.now().Sub(e.At) < proto.StokerReadBack:
-				result = st.muted.Render(sample.Kilo(e.Before) + " → compacting…")
-			default:
-				result = st.warn.Render(sample.Kilo(e.Before) + " → not read back")
-			}
-		}
-		clock := st.muted.Render(e.At.Local().Format("15:04") + "  ")
-		cell := m.stepCell(e)
-		if narrow {
-			lines = append(lines, lead+clock+cell+st.text.Render(e.Name), "     "+result)
-		} else {
-			lines = append(lines, lead+clock+cell+st.text.Render(pad(e.Name, colName))+st.muted.Render(pad(e.Pane, colPane))+result)
-		}
-		for _, l := range wrap(e.Why, w-7, st.muted.Render) {
-			lines = append(lines, "      "+strings.TrimPrefix(l, " "))
-		}
-		if e.Result != "sent" || e.Back.IsZero() {
-			continue
-		}
-		resume := "no RESUME line"
-		style := st.warn.Render
-		if e.Resume != "" {
-			resume, style = "RESUME: "+e.Resume, st.muted.Render
-		}
-		for _, l := range wrap(resume, w-7, style) {
-			lines = append(lines, "      "+strings.TrimPrefix(l, " "))
-		}
-	}
-	b.addRow(row, sel, w, st, lines...)
 }
 
 // missWhy is why a session is not ready, with its reset in the console's

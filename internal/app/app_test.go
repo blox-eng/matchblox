@@ -149,6 +149,8 @@ func key(m tea.Model, k string) (tea.Model, tea.Cmd) {
 		msg = tea.KeyPressMsg{Code: tea.KeyDown}
 	case "esc":
 		msg = tea.KeyPressMsg{Code: tea.KeyEsc}
+	case "tab", "space":
+		msg = keyPress(k)
 	}
 	return m.Update(msg)
 }
