@@ -93,6 +93,17 @@ enum DeviceKey {
         [kSecClass: kSecClassGenericPassword, kSecAttrService: service]
     }
 
+    private static func storedRepresentation() throws -> Data? {
+        var query = identity
+        query[kSecReturnData] = true
+        var item: CFTypeRef?
+        switch SecItemCopyMatching(query as CFDictionary, &item) {
+        case errSecSuccess: return item as? Data
+        case errSecItemNotFound: return nil
+        case let status: throw keychainError(status)
+        }
+    }
+
     private static func add(_ representation: Data) -> OSStatus {
         var item = identity
         item[kSecValueData] = representation
