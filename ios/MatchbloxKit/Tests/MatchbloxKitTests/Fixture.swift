@@ -1,19 +1,10 @@
 import Foundation
+@testable import MatchbloxKit
 
 struct Fixture: Codable {
     struct Names: Codable {
         let good: [String]
         let bad: [String]
-    }
-
-    struct Payload: Codable {
-        let v: Int
-        let host: String
-        let port: Int
-        let user: String
-        let name: String
-        let hostkey: String
-        let key: String
     }
 
     struct Request: Codable {
@@ -24,7 +15,7 @@ struct Fixture: Codable {
     let names: Names
     let hostkeyPub: String
     let hostkeyFp: String
-    let payload: Payload
+    let payload: PairPayload
     let url: String
     let request: Request
     let requestLine: String
