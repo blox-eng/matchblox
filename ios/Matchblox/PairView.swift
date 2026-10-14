@@ -136,7 +136,7 @@ enum PairFlow {
         do {
             output = try await session.open(command: "matchblox gate pair", pty: nil)
         } catch {
-            return .failed(Pairing.message(for: error as? ConnectFailure ?? .closed(""), host: label))
+            return .failed(Pairing.message(for: error, host: label))
         }
 
         let request = Pairing.requestLine(name: Pairing.cleanName(draft.phoneName), key: phoneKey)
@@ -145,7 +145,7 @@ enum PairFlow {
             reply = try await exchange(request, over: session, output: output)
         } catch {
             await session.close()
-            return .failed(Pairing.message(for: error as? PairReplyError ?? .noReply, host: label))
+            return .failed(Pairing.message(for: error, host: label))
         }
         await session.close()
 

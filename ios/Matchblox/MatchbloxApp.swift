@@ -42,7 +42,7 @@ struct MatchbloxApp: App {
             let payload = try PairPayload(url: url)
             route = .pair(PairDraft(payload: payload, phoneName: Pairing.cleanName(UIDevice.current.name)))
         } catch {
-            route = .scan(problem: Pairing.message(for: error as? PairError ?? .malformed))
+            route = .scan(problem: Pairing.message(for: error))
         }
     }
 }

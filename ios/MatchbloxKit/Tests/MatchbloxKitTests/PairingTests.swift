@@ -124,7 +124,7 @@ final class PairingTests: XCTestCase {
             _ = try await Pairing.readReply(from: stream(["welcome\n", "bye\n"], finish: true))
             XCTFail("expected no reply")
         } catch {
-            XCTAssertEqual(error as? PairReplyError, .noReply)
+            XCTAssertEqual(error, .noReply)
         }
     }
 
