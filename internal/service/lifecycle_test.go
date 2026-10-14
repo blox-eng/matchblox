@@ -234,8 +234,13 @@ func TestNewNamesItAfterItsDirectory(t *testing.T) {
 
 func TestNewAddsAWorktreeForABranch(t *testing.T) {
 	s, ran := lifeTest(t)
-	repo := filepath.Join(t.TempDir(), "blox-api")
-	for _, c := range [][]string{{"init", "-q", repo}, {"-C", repo, "commit", "-q", "--allow-empty", "-m", "x"}} {
+	// git names the repository by its real path: macOS's temp dir is a link.
+	tmp, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(tmp, "blox-api")
+	for _, c := range [][]string{{"init", "-q", repo}, {"-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x"}} {
 		if out, err := exec.Command("git", c...).CombinedOutput(); err != nil {
 			t.Fatalf("%s: %s", err, out)
 		}
