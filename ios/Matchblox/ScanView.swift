@@ -5,6 +5,7 @@ import VisionKit
 
 struct ScanView: View {
     let problem: String?
+    let notice: String?
     let onCode: (URL) -> Void
     let onCancel: (() -> Void)?
 
@@ -27,6 +28,10 @@ struct ScanView: View {
             }
             Text("Run matchblox pair on your host. Then point the camera at the code.")
                 .foregroundStyle(Theme.muted)
+            if let notice {
+                Text(notice)
+                    .foregroundStyle(Theme.muted)
+            }
             if let problem {
                 Text(problem)
                     .foregroundStyle(Theme.neg)

@@ -6,6 +6,7 @@ struct MatchbloxApp: App {
     private let store = HostStore.standard
     @State private var route = Opening.first(hosts: HostStore.standard.all())
     @State private var scanProblem: String?
+    @State private var scanNotice: String?
 
     var body: some Scene {
         WindowGroup {
@@ -15,6 +16,7 @@ struct MatchbloxApp: App {
                 case .scan:
                     ScanView(
                         problem: scanProblem,
+                        notice: scanNotice,
                         onCode: open,
                         onCancel: store.all().isEmpty ? nil : { go(Opening.first(hosts: store.all())) }
                     )
@@ -36,7 +38,10 @@ struct MatchbloxApp: App {
                         store: store,
                         onOpen: { go(.console($0)) },
                         onPair: { go(.scan) },
-                        onNoHosts: { go(.scan) }
+                        onNoHosts: { notice in
+                            go(.scan)
+                            scanNotice = notice
+                        }
                     )
                 case .reach(let host, let failure):
                     ReachView(
@@ -58,6 +63,7 @@ struct MatchbloxApp: App {
 
     private func go(_ next: Route) {
         scanProblem = nil
+        scanNotice = nil
         route = next
     }
 

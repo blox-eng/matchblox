@@ -5,7 +5,7 @@ struct HostsView: View {
     let store: HostStore
     let onOpen: (Host) -> Void
     let onPair: () -> Void
-    let onNoHosts: () -> Void
+    let onNoHosts: (String) -> Void
 
     @State private var hosts: [Host] = []
     @State private var removed: String?
@@ -16,7 +16,7 @@ struct HostsView: View {
             Text("Hosts")
                 .font(.title3)
             if let removed {
-                Text("\(removed) is removed. Remove its key on the host with matchblox devices rm.")
+                Text(Opening.removedNotice(removed))
                     .foregroundStyle(Theme.muted)
             }
             if let problem {
@@ -60,8 +60,9 @@ struct HostsView: View {
             return
         }
         problem = nil
-        removed = gone.map(\.label).joined(separator: ", ")
+        let labels = gone.map(\.label).joined(separator: ", ")
+        removed = labels
         hosts = store.all()
-        if hosts.isEmpty { onNoHosts() }
+        if hosts.isEmpty { onNoHosts(Opening.removedNotice(labels)) }
     }
 }

@@ -28,7 +28,7 @@ struct ReachView: View {
             switch failure {
             case .unreachable:
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Can't reach \(host.label).")
+                    Text(Opening.message(for: failure, host: host.label))
                         .font(.title3)
                     Text("New address?")
                         .foregroundStyle(Theme.muted)

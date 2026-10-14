@@ -14,17 +14,31 @@ final class OpeningTests: XCTestCase {
     }
 
     func testReconnectMessages() {
+        XCTAssertEqual(Opening.message(for: .unreachable, host: "ws-1"), "Can't reach ws-1.")
+        XCTAssertEqual(
+            Opening.message(for: .hostKeyChanged, host: "ws-1"),
+            "ws-1 has a new host key. Run matchblox pair on ws-1 again."
+        )
         XCTAssertEqual(
             Opening.message(for: .refused, host: "ws-1"),
             "This phone's key no longer opens ws-1. Run matchblox pair on ws-1, then scan the new code."
         )
         XCTAssertEqual(
-            Opening.message(for: .hostKeyChanged, host: "ws-1"),
-            Pairing.message(for: .hostKeyChanged, host: "ws-1")
+            Opening.message(for: .closed("x"), host: "ws-1"),
+            "The connection to ws-1 closed. Tap Try again, or scan again."
         )
+    }
+
+    func testReconnectMessagesAreDistinct() {
+        let failures: [ConnectFailure] = [.unreachable, .hostKeyChanged, .refused, .closed("x")]
+        let messages = failures.map { Opening.message(for: $0, host: "ws-1") }
+        XCTAssertEqual(Set(messages).count, failures.count)
+    }
+
+    func testRemovedNoticeNamesTheFix() {
         XCTAssertEqual(
-            Opening.message(for: .unreachable, host: "ws-1"),
-            Pairing.message(for: .unreachable, host: "ws-1")
+            Opening.removedNotice("ws-1"),
+            "ws-1 is removed. Remove its key on the host with matchblox devices rm."
         )
     }
 

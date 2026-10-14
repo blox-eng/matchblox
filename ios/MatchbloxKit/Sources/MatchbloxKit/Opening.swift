@@ -21,12 +21,18 @@ public enum Opening {
     /// The texts for a host that was paired before. Pairing.message keeps the texts for the pairing itself.
     public static func message(for failure: ConnectFailure, host: String) -> String {
         switch failure {
+        case .unreachable:
+            "Can't reach \(host)."
+        case .hostKeyChanged:
+            "\(host) has a new host key. Run matchblox pair on \(host) again."
         case .refused:
             "This phone's key no longer opens \(host). Run matchblox pair on \(host), then scan the new code."
         case .closed:
             "The connection to \(host) closed. Tap Try again, or scan again."
-        case .unreachable, .hostKeyChanged:
-            Pairing.message(for: failure, host: host)
         }
+    }
+
+    public static func removedNotice(_ labels: String) -> String {
+        "\(labels) is removed. Remove its key on the host with matchblox devices rm."
     }
 }
