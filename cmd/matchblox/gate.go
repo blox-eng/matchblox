@@ -58,12 +58,12 @@ func gateDecision(mode, orig string) (argv []string, err error) {
 		return []string{"serve", "--stdio"}, nil
 	case orig == remote.ConsoleCommand && mode == phoneMode:
 		return []string{}, nil
-	case orig == "":
-		return nil, errors.New("no shell for this key")
 	case orig == remote.ConsoleCommand:
 		return nil, errors.New("this key starts only the matchblox stream; run matchblox pair to add a phone")
+	case mode == phoneMode:
+		return nil, errors.New("this key starts only the matchblox stream and console; use your own ssh login for a shell")
 	}
-	return nil, errors.New("this key starts only the matchblox stream and console")
+	return nil, errors.New("this key starts only the matchblox stream; use your own ssh login for a shell")
 }
 
 // gatePair runs the forced command of a one-time key. The mode comes from the

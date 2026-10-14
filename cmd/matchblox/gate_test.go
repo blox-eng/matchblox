@@ -58,3 +58,17 @@ func TestGateRunsOnlyItsCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestGateRefusalNamesTheFixOfItsMode(t *testing.T) {
+	for _, c := range []struct{ mode, orig, want string }{
+		{"", "", "this key starts only the matchblox stream; use your own ssh login for a shell"},
+		{"", "sh", "this key starts only the matchblox stream; use your own ssh login for a shell"},
+		{"phone", "", "this key starts only the matchblox stream and console; use your own ssh login for a shell"},
+		{"phone", "sh", "this key starts only the matchblox stream and console; use your own ssh login for a shell"},
+		{"", remote.ConsoleCommand, "this key starts only the matchblox stream; run matchblox pair to add a phone"},
+	} {
+		if _, err := gateDecision(c.mode, c.orig); err == nil || err.Error() != c.want {
+			t.Errorf("gateDecision(%q, %q) error = %v, want %q", c.mode, c.orig, err, c.want)
+		}
+	}
+}
