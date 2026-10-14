@@ -131,10 +131,10 @@ func TestARestingStokerPlansNothing(t *testing.T) {
 	if !m.Asked || m.Rests.IsZero() {
 		t.Fatalf("rest %+v", m)
 	}
-	if got := Plan(m, []sample.Session{full("%1")}, nil, at85, nil, t0); len(got) != 0 {
+	if got := Plan(m, []sample.Session{full("%1")}, nil, at85, nil, t0, nil); len(got) != 0 {
 		t.Fatalf("a resting stoker planned %+v", got)
 	}
-	if got := Plan(m.Wake(), []sample.Session{full("%1")}, nil, at85, nil, t0); len(got) != 1 {
+	if got := Plan(m.Wake(), []sample.Session{full("%1")}, nil, at85, nil, t0, nil); len(got) != 1 {
 		t.Fatalf("woken, it planned %+v", got)
 	}
 }

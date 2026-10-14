@@ -211,7 +211,7 @@ func TestTapSelectsThenActs(t *testing.T) {
 }
 
 func TestTapOnATabOpensIt(t *testing.T) {
-	for _, w := range []int{50, 100} {
+	for _, w := range []int{58, 100} {
 		m, _ := loadedWith(t, w, queueState())
 		line := ansi.Strip(strings.Split(m.render(), "\n")[1])
 		x := strings.Index(line, "panes")
@@ -444,7 +444,7 @@ func TestATapOnAKeyPressesIt(t *testing.T) {
 
 // head is the header line, without its tap target.
 func (m Model) head(w int) string {
-	h, _ := m.header(w)
+	h, _, _ := m.header(w)
 	return h
 }
 

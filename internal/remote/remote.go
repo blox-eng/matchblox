@@ -135,6 +135,27 @@ func NavAllowed(argv []string) bool {
 	return false
 }
 
+// StokerPopup opens the stoker's own tmux session (on the server server,
+// tmux -L) in a popup over the console: the builder answers the stoker's
+// prompts there, and detaching (prefix d) closes it.
+func StokerPopup(server string) []string {
+	return []string{"tmux", "display-popup", "-E", "-w", "90%", "-h", "90%", "tmux -L " + server + " attach -t stoker"}
+}
+
+var serverRE = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// PopupAllowed is what the console's popup may be: exactly StokerPopup of
+// a server name a shell reads as one word. display-popup runs its last
+// argument through a shell.
+func PopupAllowed(argv []string) bool {
+	if len(argv) != 8 {
+		return false
+	}
+	rest, ok := strings.CutPrefix(argv[7], "tmux -L ")
+	server, ok2 := strings.CutSuffix(rest, " attach -t stoker")
+	return ok && ok2 && serverRE.MatchString(server) && slices.Equal(argv, StokerPopup(server))
+}
+
 // PaneID is a tmux pane id such as %12.
 func PaneID(s string) bool {
 	if len(s) < 2 || s[0] != '%' {

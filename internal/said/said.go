@@ -4,6 +4,7 @@ package said
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -80,15 +81,25 @@ func Screen(screen string) (string, Kind) {
 
 // Draft is what the person typed into an agent's input field and did not
 // send: the text after the prompt marker on the lowest prompt line of the
-// screen. "" when the field is empty or shows its placeholder.
+// screen. "" when the field is empty or shows its placeholder. On a screen
+// captured with its styles (capture-pane -e), text drawn grey or dim is
+// Claude Code's suggestion, not typed: the draft ends where it starts.
 func Draft(screen string) string {
-	raw := strings.Split(strings.TrimRight(Clean(screen), "\n"), "\n")
+	raw := strings.Split(strings.TrimRight(screen, "\n"), "\n")
 	for i := len(raw) - 1; i >= max(len(raw)-2*screenWithin, 0); i-- {
-		in := strings.TrimLeft(raw[i], " │┃")
+		text, faint := styled(raw[i])
+		in := strings.TrimLeft(text, " │┃")
 		for _, mark := range []string{">", "›", "❯"} {
 			rest, ok := strings.CutPrefix(in, mark)
 			if !ok {
 				continue
+			}
+			at := len(text) - len(rest)
+			for j := range rest {
+				if faint[at+j] {
+					rest = rest[:j]
+					break
+				}
 			}
 			t := strings.TrimFunc(rest, frame)
 			if strings.HasPrefix(t, `Try "`) {
@@ -98,6 +109,86 @@ func Draft(screen string) string {
 		}
 	}
 	return ""
+}
+
+// styled is a captured line without its escape sequences, as Clean reads
+// it, and for each byte of it whether it is drawn grey or dim.
+func styled(line string) (string, []bool) {
+	var b strings.Builder
+	var faint []bool
+	dim, grey := false, false
+	rs := []rune(line)
+	for i := 0; i < len(rs); i++ {
+		r := rs[i]
+		switch {
+		case r == 0x1b && i+1 < len(rs) && rs[i+1] == '[':
+			j := i + 2
+			for j < len(rs) && (rs[j] < 0x40 || rs[j] > 0x7e) {
+				j++
+			}
+			if j < len(rs) && rs[j] == 'm' {
+				dim, grey = sgr(string(rs[i+2:j]), dim, grey)
+			}
+			i = j
+			continue
+		case r == 0x1b && i+1 < len(rs) && rs[i+1] == ']':
+			j := i + 2
+			for j < len(rs) && rs[j] != 0x07 && (rs[j] != 0x1b || j+1 >= len(rs) || rs[j+1] != '\\') {
+				j++
+			}
+			if j < len(rs) && rs[j] == 0x1b {
+				j++
+			}
+			i = j
+			continue
+		case r == '\t':
+			r = ' '
+		case unicode.IsControl(r):
+			continue
+		}
+		n := b.Len()
+		b.WriteRune(r)
+		for range b.Len() - n {
+			faint = append(faint, dim || grey)
+		}
+	}
+	return b.String(), faint
+}
+
+// sgr applies one Select Graphic Rendition sequence to the dim and grey
+// state of the text after it.
+func sgr(params string, dim, grey bool) (bool, bool) {
+	ps := strings.Split(params, ";")
+	for i := 0; i < len(ps); i++ {
+		switch p := ps[i]; p {
+		case "", "0":
+			dim, grey = false, false
+		case "2":
+			dim = true
+		case "22":
+			dim = false
+		case "90":
+			grey = true
+		case "38":
+			switch {
+			case i+2 < len(ps) && ps[i+1] == "5":
+				n, _ := strconv.Atoi(ps[i+2])
+				grey = n == 8 || n >= 239 && n <= 250
+				i += 2
+			case i+4 < len(ps) && ps[i+1] == "2":
+				r, _ := strconv.Atoi(ps[i+2])
+				g, _ := strconv.Atoi(ps[i+3])
+				bl, _ := strconv.Atoi(ps[i+4])
+				grey = max(r, g, bl)-min(r, g, bl) <= 16 && r >= 90 && r <= 180
+				i += 4
+			}
+		default:
+			if n, err := strconv.Atoi(p); err == nil && (n >= 30 && n <= 37 || n == 39 || n >= 91 && n <= 97) {
+				grey = false
+			}
+		}
+	}
+	return dim, grey
 }
 
 // Reply reads an agent's last reply (Markdown). The progress line that
@@ -119,19 +210,16 @@ func Reply(text string) (string, bool) {
 	return ls[len(ls)-1].text, false
 }
 
-// Clean makes untrusted text safe to show: a tab is a space, and every
-// other control key, which would drive the terminal, is dropped. New lines
+// Clean makes untrusted text safe to show: a tab is a space, every escape
+// sequence (a colour, a title, a clipboard write) is dropped whole, and so
+// is every other control key, which would drive the terminal. New lines
 // stay.
 func Clean(s string) string {
-	return strings.Map(func(r rune) rune {
-		switch {
-		case r == '\t':
-			return ' '
-		case r != '\n' && unicode.IsControl(r):
-			return -1
-		}
-		return r
-	}, s)
+	ls := strings.Split(s, "\n")
+	for i, l := range ls {
+		ls[i], _ = styled(l)
+	}
+	return strings.Join(ls, "\n")
 }
 
 // lines keeps the lines with words, without the frame around them.

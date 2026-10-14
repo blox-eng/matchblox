@@ -220,3 +220,18 @@ func TestAFailedRunAsksTheDefaultBranch(t *testing.T) {
 		}
 	}
 }
+
+func TestShipFailedName(t *testing.T) {
+	red := track(open(func(f *facts) { f.Checks.Failed, f.Checks.FailedName = 1, "e2e-web" }), nil, now)
+	if red.Failed != "e2e-web" {
+		t.Errorf("failed %q", red.Failed)
+	}
+	for name, f := range map[string]facts{
+		"conflicts": open(func(f *facts) { f.Mergeable = "CONFLICTING" }),
+		"green":     open(nil),
+	} {
+		if got := track(f, nil, now).Failed; got != "" {
+			t.Errorf("%s: failed %q", name, got)
+		}
+	}
+}

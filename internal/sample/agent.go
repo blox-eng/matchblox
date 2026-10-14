@@ -46,6 +46,9 @@ type Usage struct {
 	// zero while a turn runs. Background is the work it left running.
 	Ended      time.Time `json:"ended,omitzero"`
 	Background int       `json:"background,omitempty"`
+	// Failed: the newest turn ended on an API error or a failed tool call and
+	// the model said nothing after it; the error's first line.
+	Failed string `json:"failed,omitempty"`
 }
 
 type fileKey struct {
@@ -273,7 +276,70 @@ func lastUsage(path string, size int64) (Usage, bool) {
 		}
 	}
 	u.Ask = pendingAsk(lines)
+	u.Failed = failedTurn(lines)
 	return u, found
+}
+
+// maxFailed bounds the error a failed turn shows: one row of the console.
+const maxFailed = 40
+
+// failedTurn is the error the newest line of the main thread carries, when
+// that line is an API error (the limit's refusal is Out, not a failure) or a
+// tool_result that failed. A reply of the model after it, or a prompt, ends
+// the failure.
+func failedTurn(lines [][]byte) string {
+	for i := len(lines) - 1; i >= 0; i-- {
+		l := lines[i]
+		if !bytes.Contains(l, []byte(`"user"`)) && !bytes.Contains(l, []byte(`"assistant"`)) {
+			continue
+		}
+		var t struct {
+			Type        string `json:"type"`
+			IsSidechain bool   `json:"isSidechain"`
+			APIError    string `json:"apiError"`
+			IsAPIError  bool   `json:"isApiErrorMessage"`
+			Message     struct {
+				Content json.RawMessage `json:"content"`
+			} `json:"message"`
+		}
+		if json.Unmarshal(l, &t) != nil || t.IsSidechain || t.Type != "user" && t.Type != "assistant" {
+			continue
+		}
+		if t.Type == "assistant" {
+			if (t.IsAPIError || t.APIError != "") && t.APIError != "usage_limit_reached" {
+				return firstLine(replyText(t.Message.Content))
+			}
+			return ""
+		}
+		var blocks []struct {
+			Type    string          `json:"type"`
+			IsError bool            `json:"is_error"`
+			Content json.RawMessage `json:"content"`
+		}
+		if json.Unmarshal(t.Message.Content, &blocks) != nil {
+			return "" // the person's prompt
+		}
+		for _, b := range blocks {
+			if b.Type == "tool_result" && b.IsError {
+				return firstLine(replyText(b.Content))
+			}
+		}
+		return ""
+	}
+	return ""
+}
+
+// firstLine is the first line with text, cut to what the console shows.
+func firstLine(s string) string {
+	for _, l := range strings.Split(s, "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			if r := []rune(l); len(r) > maxFailed {
+				return string(r[:maxFailed])
+			}
+			return l
+		}
+	}
+	return ""
 }
 
 // maxSaid bounds what a session said: the answer peek shows nine lines.

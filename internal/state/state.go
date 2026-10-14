@@ -10,6 +10,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/gitscan"
+	"github.com/blox-eng/matchblox/internal/holds"
+	"github.com/blox-eng/matchblox/internal/idle"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/ships"
@@ -30,6 +32,13 @@ type Doc struct {
 	// Ships are the pull requests sessions drive. Nil: the service reads
 	// none (no git, or a fixture).
 	Ships *ships.Report `json:"ships,omitempty"`
+	// Holds are the sessions nothing types into: parked, or held by the stoker.
+	Holds []holds.Hold `json:"holds,omitempty"`
+	// Reasons say why each quiet session is idle, by its pane.
+	Reasons map[string]idle.Reason `json:"reasons,omitempty"`
+	// StokerServer is the tmux server (-L) matchblox keeps the stoker
+	// agent on: a session whose pane is on it is the stoker's. Empty: none.
+	StokerServer string `json:"stoker_server,omitempty"`
 }
 
 // Path is $XDG_STATE_HOME/matchblox/state.json, defaulting to ~/.local/state.

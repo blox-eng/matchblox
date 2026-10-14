@@ -1,5 +1,5 @@
  ▰ matchblox                                                         ● 6 wait for you
- SESSIONS 7    ships 3    machine    git    history    panes
+ SESSIONS 7    ships 3    machine    git    history    panes    stoker
 ──────────────────────────────────────────────────────────────────────────────────────
  WAITS FOR YOU · 6                        │╭─ flint-auth asks · 1 of 2 ──────────────╮
  │ spark-docs         done       9m   88% ││ The refresh endpoint is in and its      │
@@ -27,4 +27,4 @@
                                           ││                                         │
                                           │╰─ ⏎ question 2 ─ ← prev  next → ─ esc ───╯
 ──────────────────────────────────────────────────────────────────────────────────────
- ⏎ open  a answer  p ships  f stoker                                   sampled 0s ago
+ ⏎ open  a answer  z park  p ships  f stoker                           sampled 0s ago

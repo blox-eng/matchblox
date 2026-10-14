@@ -1,0 +1,38 @@
+ ▰ matchblox                                                                   ● 6 wait for you  stoker
+ SESSIONS 7    ships 3    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ WAITS FOR YOU · 6                                             │
+▌│ spark-docs                              done       9m   88% │ spark-docs
+ ╿ ember-billing                           done       4m   32% │ │ done, waits for you · 9m · hearth:3.…
+ ╿ flint-auth                              asks       2m   41% │
+ ╿ kindle-web                              asks       1m   56% │ CLAUDE SAID
+ ╿ codex                                   done       0s   55% │ I rewrote the quick start and the
+ ╿ opencode                                done       0s    6% │ install page.
+ WORKING · 1                                                   │
+ ✦ hearth-api                              busy            79% │ context  ▰▰▰▰▰▰▰▰▰▱ 88%
+                                                               │ plan     ▰▰▰▰▰▰▰▰▰▰ 100%  docs for the…
+ 1 without an agent: shell:1.1 zsh                             │ ship     #4540 ●━●━●━●━●  live
+                     ╭─ New order ────────────────────────────────────────────────╮ocs
+ RECOMMENDATIONS · 7 │ How should I run?                                          │ithub.com/hearth/spa…
+ ▲ The week runs shor│                                                            │le 9m (clear after 0…
+ ○ Clear spark-docs (│ › ▏                                                        │0k tokens · +0k in
+ ○ Clear kindle-web (│                                                            │ample.com · Max ·
+ ○ Clear codex (%6)  │ gos ✓ merges  ○ releases  ○ deploys  off asks you          │ss · started 3h20m
+ ○ Clear flint-auth (│ ways merge-order  priority  release-train  triage          │
+ ○ Clear ember-billin╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
+ ○ Clear opencode (%7)                                         │ a answer   ⏎ open it
+                                                               │
+                                                               │
+                                                               │
+                                                               │
+                                                               │
+                                                               │
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ USAGE                                                         │ STOKER                              on
+ ✻ Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                       │ watching 0 · 0 compacted · 0 waited · …
+          wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · out Fri ~21:00      │ no session full yet
+ · login  not measured · OpenCode keeps no limits              │
+ ❋ Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                           │
+          wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week      │
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ↑↓ move  ⏎ open  a answer  z park  p ships  f stoker  / find  q quit                    sampled 0s ago

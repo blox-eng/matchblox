@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -26,6 +28,9 @@ import (
 func TestMain(m *testing.M) {
 	if args := os.Getenv("MATCHBLOX_TEST_ARGS"); args != "" {
 		if err := run(strings.Split(args, "\x1f")); err != nil {
+			if !errors.Is(err, errShown) {
+				fmt.Fprintln(os.Stderr, "matchblox:", err) // as main says it
+			}
 			os.Exit(1)
 		}
 		os.Exit(0)
@@ -141,6 +146,26 @@ func TestStatusReadsService(t *testing.T) {
 	// Only the fixture machine has this session; the live machine does not.
 	if !strings.Contains(out.String(), "app-feature") {
 		t.Fatalf("status did not read the service:\n%s", out.String())
+	}
+}
+
+// TestStatusWarnsOfTheStokersPaneKey: matchblox starts the stoker agent
+// itself, and a config that still names [stoker] pane is told so.
+func TestStatusWarnsOfTheStokersPaneKey(t *testing.T) {
+	path := isolate(t)
+	serveInProcess(t, path)
+	cfg := config.Default()
+	cfg.Stoker.PaneSet = true
+	var out bytes.Buffer
+	if err := status(&out, path, cfg, "", true); err != nil {
+		t.Fatal(err)
+	}
+	if first, _, _ := strings.Cut(out.String(), "\n"); first != stokerPaneGone {
+		t.Fatalf("status said:\n%s", out.String())
+	}
+	out.Reset()
+	if err := status(&out, path, config.Default(), "", true); err != nil || strings.Contains(out.String(), stokerPaneGone) {
+		t.Fatalf("a config without the key was warned: %v\n%s", err, out.String())
 	}
 }
 
@@ -445,7 +470,7 @@ func TestSetupCommandPointsTheNightToTheConsole(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := out.String()
-	night := got[strings.Index(got, "Try a night"):]
+	night := got[strings.Index(got, "Try a night"):strings.Index(got, "Write your ways")]
 	if strings.Contains(got, "no door") || strings.Contains(night, "y opens it") || !strings.Contains(night, "press n in the console") {
 		t.Fatalf("setup:\n%s", got)
 	}
@@ -471,5 +496,29 @@ func TestSetupCommandAsksForTheMouseAfterTheWayBack(t *testing.T) {
 		if !strings.Contains(out.String(), "+set -g mouse on") {
 			t.Fatalf("%q: the mouse line is not shown before the question:\n%s", c.answers, out.String())
 		}
+	}
+}
+
+// TestHelpListsTheCommands: F10, --help names every command a builder or
+// an agent types, one line each, before the flags.
+func TestHelpListsTheCommands(t *testing.T) {
+	fl, _ := newFlags()
+	var buf strings.Builder
+	fl.SetOutput(&buf)
+	if err := fl.Parse([]string{"--help"}); !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("--help: %v", err)
+	}
+	out := buf.String()
+	cmds, flags := strings.Index(out, "Commands:"), strings.Index(out, "Flags:")
+	if cmds < 0 || flags < cmds {
+		t.Fatalf("help:\n%s", out)
+	}
+	for _, c := range commands {
+		if !strings.Contains(out[cmds:flags], "\n  matchblox "+c+" ") {
+			t.Errorf("help does not list %s:\n%s", c, out)
+		}
+	}
+	if !strings.Contains(out[flags:], "-json") {
+		t.Errorf("help lost its flags:\n%s", out)
 	}
 }

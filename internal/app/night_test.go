@@ -162,11 +162,11 @@ func quietNight() proto.StokerView {
 func TestAQuietNightShowsItsCard(t *testing.T) {
 	for _, w := range []int{40, 120} {
 		m, _ := loadedWith(t, w, stokerState(quietNight()))
-		if out := ansi.Strip(m.render()); !strings.Contains(out, "STOKER") || !strings.Contains(out, "ready 7/7") || strings.Contains(out, "NIGHT 01:08") {
+		if out := ansi.Strip(m.render()); !strings.Contains(out, "STOKER") || !strings.Contains(out, "ready 7/7") || strings.Contains(out, "NIGHT · 01:08") {
 			t.Fatalf("w=%d: the dock does not show the night's score:\n%s", w, out)
 		}
 		out := ansi.Strip(openCard(m).(Model).render())
-		for _, want := range []string{"NIGHT 01:08 → 07:00 · ready 7/7", "7 watched", "0 compacted"} {
+		for _, want := range []string{"NIGHT · 01:08 → 07:00", "ready 7/7", "7 watched", "0 compacted"} {
 			if !strings.Contains(out, want) {
 				t.Fatalf("w=%d: no %q in\n%s", w, want, out)
 			}
@@ -199,21 +199,21 @@ func TestADayRunCardIsStoked(t *testing.T) {
 	v := quietNight()
 	v.Nightly, v.Card.Night = false, false
 	m, _ := loadedWith(t, 120, stokerState(v))
-	if out := ansi.Strip(openCard(m).(Model).render()); !strings.Contains(out, "STOKED 01:08 → 07:00 · ready 7/7") {
+	if out := ansi.Strip(openCard(m).(Model).render()); !strings.Contains(out, "STOKER · 01:08 → 07:00") {
 		t.Fatalf("%s", out)
 	}
 }
 
-func TestEnterFoldsTheCard(t *testing.T) {
+func TestOpeningTheTabMarksTheStepsSeen(t *testing.T) {
 	m, f := loadedWith(t, 120, stokerState(quietNight()))
-	sendKey(openCard(m), "enter")
+	sendKey(m, "c")
 	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:ack" {
 		t.Fatalf("acts %+v", a)
 	}
 	v := quietNight()
 	v.Unseen = false
 	m, _ = loadedWith(t, 120, stokerState(v))
-	if out := ansi.Strip(m.render()); strings.Contains(out, "NIGHT 01:08") {
+	if out := ansi.Strip(m.render()); strings.Contains(out, "NIGHT · 01:08") {
 		t.Fatalf("a folded card shows:\n%s", out)
 	}
 }
@@ -285,7 +285,7 @@ func TestTheCardSaysTheLimitRanOut(t *testing.T) {
 		m0, _ := loadedWith(t, w, stokerState(v))
 		m := openCard(m0)
 		lines := strings.Split(ansi.Strip(m.(Model).render()), "\n")
-		at := lineOf(t, m, "NIGHT 01:08")
+		at := lineOf(t, m, "NIGHT · 01:08")
 		if !strings.Contains(lines[at+1], "limit out 01:51 → 04:50") {
 			t.Fatalf("w=%d: the lapse is not the card's first line:\n%s", w, strings.Join(lines[at:at+4], "\n"))
 		}

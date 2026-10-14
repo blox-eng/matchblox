@@ -127,6 +127,7 @@ func TestAProviderWithoutAMarkKeepsItsName(t *testing.T) {
 // login sit together.
 func TestSessionsSortByAccount(t *testing.T) {
 	m := demoSessions(t, 160)
+	m.sessGroup = groupNone
 	m.sortOn(sortAccount)
 	m.refresh()
 	var got []string

@@ -74,7 +74,7 @@ func TestThePlanFollowsThePace(t *testing.T) {
 	m, _ = m.Observe([]sample.Session{building(556_000, 14), early}, nil, line80, t0)
 	late := building(740_000, 64)
 	late.SessionID, late.Pane = "fast", "%6"
-	steps := Plan(m, []sample.Session{building(692_000, 64), late}, nil, line80, nil, t0)
+	steps := Plan(m, []sample.Session{building(692_000, 64), late}, nil, line80, nil, t0, nil)
 	if len(steps) != 1 || steps[0].Session != "fast" {
 		t.Fatalf("steps %+v, want only the fast one", steps)
 	}
@@ -133,19 +133,19 @@ func TestTheStokerWaitsForAStepToEnd(t *testing.T) {
 	m, _ = m.Observe([]sample.Session{fast(300_000, 14, false)}, nil, line80, t0)
 	m, _ = m.Observe([]sample.Session{fast(700_000, 64, true)}, nil, line80, t0)
 	m, _ = m.Observe([]sample.Session{fast(740_000, 64, false)}, nil, line80, t0)
-	if steps := Plan(m, []sample.Session{fast(740_000, 64, false)}, nil, line80, nil, t0); len(steps) != 1 {
+	if steps := Plan(m, []sample.Session{fast(740_000, 64, false)}, nil, line80, nil, t0, nil); len(steps) != 1 {
 		t.Fatalf("the bar moved: steps %+v", steps)
 	}
 	// Another turn ends without the bar moving: mid-step.
 	m, _ = m.Observe([]sample.Session{fast(745_000, 64, true)}, nil, line80, t0)
 	m, _ = m.Observe([]sample.Session{fast(750_000, 64, false)}, nil, line80, t0)
-	if steps := Plan(m, []sample.Session{fast(750_000, 64, false)}, nil, line80, nil, t0); len(steps) != 0 {
+	if steps := Plan(m, []sample.Session{fast(750_000, 64, false)}, nil, line80, nil, t0, nil); len(steps) != 0 {
 		t.Fatalf("mid-step: steps %+v", steps)
 	}
 	// Past compact_at the net would act inside the next turn: now beats that.
 	m, _ = m.Observe([]sample.Session{fast(810_000, 64, true)}, nil, line80, t0)
 	m, _ = m.Observe([]sample.Session{fast(810_000, 64, false)}, nil, line80, t0)
-	if steps := Plan(m, []sample.Session{fast(810_000, 64, false)}, nil, line80, nil, t0); len(steps) != 1 {
+	if steps := Plan(m, []sample.Session{fast(810_000, 64, false)}, nil, line80, nil, t0, nil); len(steps) != 1 {
 		t.Fatalf("past the line: steps %+v", steps)
 	}
 }
@@ -167,7 +167,7 @@ func TestTheStokerActsAtATurnEndWhileSubagentsWork(t *testing.T) {
 	m, _ = m.Observe([]sample.Session{fast(300_000, 14, sample.StatusAgents)}, nil, line80, t0)
 	m, _ = m.Observe([]sample.Session{fast(700_000, 64, "busy")}, nil, line80, t0)
 	m, _ = m.Observe([]sample.Session{fast(740_000, 64, sample.StatusAgents)}, nil, line80, t0)
-	steps := Plan(m, []sample.Session{fast(740_000, 64, sample.StatusAgents)}, nil, line80, nil, t0)
+	steps := Plan(m, []sample.Session{fast(740_000, 64, sample.StatusAgents)}, nil, line80, nil, t0, nil)
 	if len(steps) != 1 {
 		t.Fatalf("steps %+v", steps)
 	}

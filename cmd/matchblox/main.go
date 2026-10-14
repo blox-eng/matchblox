@@ -41,6 +41,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
+	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/limits"
@@ -137,7 +138,9 @@ func run(args []string) error {
 		return err
 	}
 	fl, o := newFlags()
-	if err := fl.Parse(args); err != nil {
+	if err := fl.Parse(args); errors.Is(err, flag.ErrHelp) {
+		return nil // the help is the answer
+	} else if err != nil {
 		return err
 	}
 	cfgPath, interval, root, text, stdio, noMotion := o.cfgPath, o.interval, o.root, o.text, o.stdio, o.noMotion
@@ -145,6 +148,29 @@ func run(args []string) error {
 	case "version":
 		fmt.Println(version)
 		return nil
+	case "sessions", "ships", "usage":
+		return cliRead(cmd, os.Stdout, transport.SocketPath(), *o.json)
+	case "peek":
+		words, err := positionals(fl, args)
+		if err != nil {
+			return err
+		}
+		return cliPeek(words, *o.lines, os.Stdout, transport.SocketPath(), *o.json)
+	case "send", "compact", "hold", "release":
+		words, err := positionals(fl, args) // all of them: a -- before the first word holds too
+		if err != nil {
+			return err
+		}
+		return cliHand(cmd, words, *o.pick, *o.why, os.Stdout, transport.SocketPath())
+	case "stoker":
+		words, err := positionals(fl, args) // all of them: a -- before the first word holds too
+		if err != nil {
+			return err
+		}
+		if len(words) > 0 && words[0] == "when" {
+			return cliWhen(words, whenOpts{ship: *o.ship, stage: *o.stage, rest: *o.rest, why: *o.why, drop: *o.drop, list: *o.list}, os.Stdout, transport.SocketPath())
+		}
+		return cliStoker(words, *o.state, *o.needs, *o.rule, os.Stdin, os.Stdout, transport.SocketPath())
 	case "setup":
 		cfg, _ := config.Load(*cfgPath) // a broken config still opens the doors, at the default line
 		return setupDoors(*liveSetup(cfg.Sessions.CompactAt), os.Stdin, os.Stdout, runInTerminal)
@@ -205,22 +231,75 @@ func run(args []string) error {
 
 // commands are the commands a builder types. hook, authorize and gate run
 // from a hook, an ssh forced command and a connect.
-var commands = []string{"connect", "serve", "status", "setup", "pair", "devices", "version"}
+var commands = []string{"connect", "serve", "sessions", "ships", "status", "setup", "pair", "devices", "usage", "version", "send", "compact", "hold", "release", "stoker", "peek"}
 
 type flags struct {
 	cfgPath, root         *string
 	interval              *time.Duration
 	text, stdio, noMotion *bool
+	json                  *bool
+	pick, lines           *int
+	why                   *string
+	state, needs, rule    *string
+	ship                  *int
+	stage, rest, drop     *string
+	list                  *bool
 }
+
+// usageText heads --help: every command, one line each, then the flags.
+const usageText = `Usage: matchblox [command] [flags]
+
+Commands:
+  matchblox                        open the console (starts the service if needed)
+  matchblox <host>                 open the console of a host in ~/.ssh/config
+  matchblox connect <host>         let this console reach a host
+  matchblox serve                  run the service
+  matchblox status                 what the service knows, as JSON (--text: a summary)
+  matchblox setup                  every setup door at once: tmux, the hooks, the way back
+  matchblox pair                   a one-time QR code that pairs the iPhone app
+  matchblox devices [rm <name>]    the phones and laptops that open this host
+  matchblox version                print the version
+  matchblox sessions               every session, one line a row (--json)
+  matchblox ships                  the pull requests the sessions drive (--json)
+  matchblox usage                  each account's plan windows (--json)
+  matchblox peek <who>             what a session said last and what it asks (--lines, --json)
+  matchblox send <who> "<text>"    type a line and Enter into a session (--pick n answers its question)
+  matchblox compact <who>          compact a Claude Code session at rest
+  matchblox hold <who> --why "…"   finish this step, then stop and wait
+  matchblox release <who>          let a held session carry on
+  matchblox stoker plan|step       the stoker agent's plan and steps, for its card
+  matchblox stoker when …          a trigger matchblox fires itself (--ship n --stage s, or --rest who)
+  matchblox stoker quit            end the stoker agent and its own tmux session
+
+<who> is a pane (%3), a target (app:1.1) or a name.
+
+Flags:
+`
 
 func newFlags() (*flag.FlagSet, flags) {
 	fl := flag.NewFlagSet("matchblox", flag.ContinueOnError)
+	fl.Usage = func() {
+		_, _ = io.WriteString(fl.Output(), usageText)
+		fl.PrintDefaults()
+	}
 	return fl, flags{
 		cfgPath:  fl.String("config", config.Path(), "machine goals (TOML); a missing file means defaults"),
 		interval: fl.Duration("interval", 0, "sampling interval (default from config, else 2s)"),
 		root:     fl.String("fixtures", "", "read proc/, sys/, home/ and tmux-panes.txt from this directory instead of the live machine"),
 		text:     fl.Bool("text", false, "status: print a summary instead of JSON"),
 		stdio:    fl.Bool("stdio", false, "serve: speak on stdin and stdout, joined to the local service"),
+		json:     fl.Bool("json", false, "sessions, ships, usage, peek: print JSON instead of text"),
+		pick:     fl.Int("pick", 0, "send: answer the question the session asks with this option (from 1)"),
+		lines:    fl.Int("lines", 20, "peek: the last lines of what the session said (0: all)"),
+		why:      fl.String("why", "", "hold, stoker when … hold: why the session is held"),
+		state:    fl.String("state", "", "stoker step: doing, done, failed or waits"),
+		needs:    fl.String("needs", "", "stoker step: the go a waiting step needs from you (merge:#<n>, release, deploy); none for a step that waits on an event"),
+		rule:     fl.String("rule", "", "stoker step 0: the standing rule the step is for"),
+		ship:     fl.Int("ship", 0, "stoker when: the pull request whose stage fires the trigger"),
+		stage:    fl.String("stage", "", "stoker when --ship: ci, green, merged, live or red (CI failed)"),
+		rest:     fl.String("rest", "", "stoker when: the session whose turn's end fires the trigger"),
+		drop:     fl.String("drop", "", "stoker when: drop the trigger with this id"),
+		list:     fl.Bool("list", false, "stoker when: print the run's triggers"),
 		noMotion: fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),
 	}
 }
@@ -259,6 +338,14 @@ func goHome() error {
 // less than 50 ms with the service up, down or stuck.
 const hookTimeout = 30 * time.Millisecond
 
+// hookDeny is Claude Code's PreToolUse answer that refuses the tool call,
+// with why: one of the stoker's Deny reasons.
+func hookDeny(reason string) map[string]any {
+	return map[string]any{"hookSpecificOutput": map[string]string{
+		"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason,
+	}}
+}
+
 // hook delivers one agent hook event to the service, or to the spool when
 // no service answers. It returns nil on every path: a hook that fails must
 // not disturb the agent.
@@ -270,6 +357,19 @@ func hook(args []string, stdin io.Reader, out io.Writer, sock, spool string, pro
 	ev, err := hooks.Parse(stdin, name, os.Getenv)
 	if err != nil {
 		return nil
+	}
+	if ev.Name == "PreToolUse" && ev.Ask == nil {
+		// The guard reads the line the shell runs: the scrubbed one is for
+		// the spool and the service only.
+		ev.Guards = stoker.Guards(ev.Raw)
+		if len(ev.Guards) == 0 {
+			return nil // a tool call the service has no use for
+		}
+		// The spool lives in the state dir, beside driven.json.
+		if why := stoker.Deny(filepath.Dir(spool), ev.Socket, ev.Pane, ev.Guards); why != "" {
+			ev.Denied = true
+			_ = json.NewEncoder(out).Encode(hookDeny(why))
+		}
 	}
 	if transport.Notify(sock, hookTimeout, proto.KindHook, ev) != nil {
 		_ = hooks.Append(spool, ev)
@@ -367,6 +467,7 @@ func newService(cfg config.Config, root string) *service.Service {
 		return s
 	}
 	s.Actions.Run = func(argv []string) error { return actions.Exec(context.Background(), argv) }
+	s.StokerServer = sample.StokerServer
 	s.StatePath = state.Path()
 	s.Spool = spoolPath()
 	s.AlertHook = cfg.Hooks.Alert
@@ -380,11 +481,17 @@ func newService(cfg config.Config, root string) *service.Service {
 	}
 	s.Exe = invokedPath(os.Args[0])
 	s.Setup = liveSetup(cfg.Sessions.CompactAt)
+	s.Ways = config.WaysPath()
 	s.LimitsLog = &limits.Store{Path: filepath.Join(filepath.Dir(s.StatePath), "limits.jsonl")}
 	if st, err := stoker.Open(filepath.Dir(s.StatePath)); err == nil {
 		s.Stoker = st
 	} else {
 		fmt.Fprintln(os.Stderr, "matchblox: the stoker is off:", err)
+	}
+	if h, err := holds.Open(filepath.Dir(s.StatePath)); err == nil {
+		s.Holds = h
+	} else {
+		fmt.Fprintln(os.Stderr, "matchblox: parking is off:", err)
 	}
 	s.Ships = shipsSource(cfg, filepath.Dir(s.StatePath))
 	return s
@@ -577,6 +684,7 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 		return smp
 	}
 	smp.FS, smp.Sys = actions.NewHost(), procfs.Sys{Root: "/sys"}
+	smp.Stoker = sample.StokerServer
 	smp.Home, _ = os.UserHomeDir()
 	smp.GPU, smp.Docker = sample.NvidiaSMI, sample.DockerPS
 	smp.Disks = sample.Disks(smp.Home, "/")
@@ -587,10 +695,20 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 	return smp
 }
 
+// stokerPaneGone warns of a config that still names the stoker's pane.
+const stokerPaneGone = "config: [stoker] pane is ignored: matchblox starts the stoker agent itself, on its own tmux server ([stoker] agent, default claude). Remove the line."
+
 // status prints the service's state. Without a service it uses a fresh
 // state file, and else samples on its own: two samples a second apart so
 // rates are real, and one git scan.
 func status(w io.Writer, path string, cfg config.Config, root string, text bool) error {
+	if cfg.Stoker.PaneSet {
+		warn := io.Writer(os.Stderr) // JSON on stdout stays JSON
+		if text {
+			warn = w
+		}
+		_, _ = fmt.Fprintln(warn, stokerPaneGone)
+	}
 	doc, ok := state.Doc{}, false
 	maxAge := max(staleAfter, 3*cfg.Interval.Duration)
 	if root == "" {

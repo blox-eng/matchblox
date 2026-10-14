@@ -36,9 +36,14 @@ type trackOut struct {
 	Stage  int
 	Kind   string
 	Note   string
+	Failed string // the failed check's name
 	Stages [5]Stage
 	LiveAt time.Time
 }
+
+// NoteWaitsForMerge is the note of a ship that is green and only waits for
+// the person's merge.
+const NoteWaitsForMerge = "green · waits for your merge"
 
 // noRunsGrace is how long after a merge a commit with no workflow run is
 // still waiting for its first one. Past it, nothing deploys: it is live.
@@ -89,6 +94,7 @@ func openTrack(t *trackOut, f facts, green bool, now time.Time) {
 		t.Kind, t.Note = Stuck, "CI failed"
 		if f.Checks.FailedName != "" {
 			t.Note += " · " + f.Checks.FailedName
+			t.Failed = f.Checks.FailedName
 		}
 	case f.MergeState == "BEHIND":
 		t.Kind, t.Note = Stuck, "behind "+base
@@ -111,7 +117,7 @@ func openTrack(t *trackOut, f facts, green bool, now time.Time) {
 	case f.AutoMerge:
 		t.Kind, t.Note = Running, "auto-merge on"
 	default:
-		t.Kind, t.Note = WaitsForYou, "green · waits for your merge"
+		t.Kind, t.Note = WaitsForYou, NoteWaitsForMerge
 	}
 }
 

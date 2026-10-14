@@ -58,7 +58,14 @@ func run(t *testing.T, s *Service) context.Context {
 	go func() { s.Run(ctx); close(done) }()
 	// Wait for the loops to end: a state write after cancel races the
 	// removal of the test's temp dir.
-	t.Cleanup(func() { cancel(); <-done })
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(waitLimit):
+			t.Errorf("the service did not stop in %v", waitLimit)
+		}
+	})
 	return ctx
 }
 
@@ -74,11 +81,11 @@ func connect(t *testing.T, ctx context.Context, s *Service) (transport.Conn, pro
 	// and finish it before anything else goes out.
 	sent := make(chan error, 1)
 	go func() { sent <- c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version}) }()
-	env, err := c.Recv()
+	env, err := recv(t, c, "hello")
 	if err != nil || env.Kind != proto.KindHello {
 		t.Fatalf("first message %+v, %v", env, err)
 	}
-	if err := <-sent; err != nil {
+	if err := within(t, sent, "sent hello"); err != nil {
 		t.Fatal(err)
 	}
 	var h proto.Hello
@@ -86,10 +93,49 @@ func connect(t *testing.T, ctx context.Context, s *Service) (transport.Conn, pro
 	return c, h
 }
 
+// waitLimit bounds every wait of a test: a service that never answers
+// fails the test with what it waited for, never hangs the run.
+const waitLimit = 10 * time.Second
+
+// within waits for one value of ch, at most waitLimit.
+func within[T any](t *testing.T, ch <-chan T, what string) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(waitLimit):
+		t.Fatalf("no %s in %v", what, waitLimit)
+		var zero T
+		return zero
+	}
+}
+
+// recv reads one message, at most waitLimit; on timeout it closes c.
+func recv(t *testing.T, c transport.Conn, what string) (proto.Envelope, error) {
+	t.Helper()
+	type got struct {
+		env proto.Envelope
+		err error
+	}
+	ch := make(chan got, 1)
+	go func() {
+		env, err := c.Recv()
+		ch <- got{env, err}
+	}()
+	select {
+	case g := <-ch:
+		return g.env, g.err
+	case <-time.After(waitLimit):
+		c.Close()
+		t.Fatalf("no %s in %v", what, waitLimit)
+		return proto.Envelope{}, nil
+	}
+}
+
 func next(t *testing.T, c transport.Conn, kind proto.Kind) proto.Envelope {
 	t.Helper()
 	for {
-		env, err := c.Recv()
+		env, err := recv(t, c, string(kind))
 		if err != nil {
 			t.Fatalf("waiting for %s: %v", kind, err)
 		}
@@ -281,7 +327,7 @@ func TestIdleGuardReadsServiceState(t *testing.T) {
 	ctx := run(t, s)
 	c, _ := connect(t, ctx, s)
 	snapshot(t, c)
-	if !s.idle("%1") || s.idle("%9") {
+	if !s.idle("%1") || s.idle("%9@mbtest") {
 		t.Fatal("idle must follow the latest sample")
 	}
 }
@@ -528,13 +574,13 @@ func hook(t *testing.T, ctx context.Context, s *Service, ev hooks.Event) {
 	done := make(chan struct{})
 	go func() { s.Handle(ctx, transport.NewConn(b)); close(done) }()
 	c := transport.NewConn(a)
-	if env, err := c.Recv(); err != nil || env.Kind != proto.KindHello {
+	if env, err := recv(t, c, "hello"); err != nil || env.Kind != proto.KindHello {
 		t.Fatalf("hello %+v %v", env, err)
 	}
 	if err := c.Send(proto.KindHook, "", ev); err != nil {
 		t.Fatal(err)
 	}
-	<-done
+	within(t, done, "end of the hook's connection")
 	c.Close()
 }
 
@@ -997,8 +1043,8 @@ func TestKeysToOnePaneNeverInterleave(t *testing.T) {
 	for _, picks := range [][]int{{1, 2}, {2, 1}} {
 		go func() { done <- s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(picks...)}) }()
 	}
-	<-done
-	<-done
+	within(t, done, "first pick")
+	within(t, done, "second pick")
 	if most != 1 {
 		t.Fatalf("the keys of two picks overlapped (%d at once)", most)
 	}
@@ -1021,14 +1067,14 @@ func TestAShipsScanStopsWithTheService(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { s.Run(ctx); close(done) }()
-	<-started
+	within(t, started, "ships scan")
 	cancel()
 	select {
 	case <-stopped:
 	case <-time.After(5 * time.Second):
 		t.Fatal("the scan did not see the service stop")
 	}
-	<-done
+	within(t, done, "end of the service")
 }
 
 // TestPickTakesTheHookCall: in auto mode the transcript shows no call while
@@ -1154,5 +1200,30 @@ func TestMessageGuardsEveryStep(t *testing.T) {
 	}
 	if err := s.messageable("%1", 9); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestAConsoleThatJoinsDuringABroadcastGetsItsSnapshot: a broadcast that
+// lands between a console's join and its first wake-up must not leave the
+// console without a snapshot (TestIdleGuardIgnoresQueue once hung there).
+func TestAConsoleThatJoinsDuringABroadcastGetsItsSnapshot(t *testing.T) {
+	s := newTest(t, time.Hour)
+	s.publish(s.sample(), func(state.Doc) {})
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				s.broadcast()
+			}
+		}
+	}()
+	for range 300 {
+		c, _ := connect(t, t.Context(), s)
+		snapshot(t, c)
+		c.Close()
 	}
 }

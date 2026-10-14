@@ -27,6 +27,7 @@ const (
 	tabGit
 	tabHistory
 	tabPanes
+	tabStoker
 )
 
 var views = [...]tabView{
@@ -157,6 +158,14 @@ var views = [...]tabView{
 			return nil
 		},
 		body: Model.panesPanel,
+	},
+	tabStoker: {
+		name:  "stoker",
+		keys:  Model.stokerKeys,
+		count: func(m Model) int { return len(m.stokerRows()) },
+		index: func(m Model) int { return min(m.stokerSel, max(len(m.stokerRows())-1, 0)) },
+		pick:  func(m *Model, i int) { m.stokerSel = i },
+		body:  Model.stokerBody,
 	},
 }
 

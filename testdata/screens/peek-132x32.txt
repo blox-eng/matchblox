@@ -1,5 +1,5 @@
  ▰ matchblox                                                                                                       ● 6 wait for you
- SESSIONS 7    ships 3    machine    git    history    panes
+ SESSIONS 7    ships 3    machine    git    history    panes    stoker
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  WAITS FOR YOU · 6                                                            │╭─ flint-auth asks · 1 of 2 ────────────────────────╮
  │ spark-docs               done       9m   88%  ▲ clear      #4540 ●━●━●━●━● ││ The refresh endpoint is in and its tests pass.    │
@@ -29,4 +29,4 @@
  ❋ Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                                          │ runs 5 claude · 1 codex · 1 opencode
           wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week                     │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  ⏎ open  a answer  p ships  f stoker  / find  q quit                                                        sampled 0s ago
+ ↑↓ move  ⏎ open  a answer  z park  p ships  f stoker  / find  q quit                                                sampled 0s ago

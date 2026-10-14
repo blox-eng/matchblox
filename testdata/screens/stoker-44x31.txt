@@ -1,0 +1,31 @@
+ ▰ matchblox      ● 6 wait for you  ☾ night
+ 1  2  3  4  history  panes  STOKER 1
+────────────────────────────────────────────
+
+  “merge them on green, and a new PR gets
+  a compact and /review”
+  ✓ merges
+  ! releases and deploys still ask you
+
+ PLAN 3 of 5
+  ✓ 19:51 spark-docs hold: not priority
+          held
+  ✓ 21:10 hearth-api merge #4551 when green
+          merged #4551
+  ✓ 21:00 ember-billing merge #4552 when
+          green, then the next
+          merged #4552, CI green
+  ◐ 21:25 flint-auth rebase on main, then
+          merge #4545 on green
+          told 02:05, CI 6 of 9 jobs
+  ⏸ 21:30 kindle-web release the build
+          the build is green, waits for the
+          release
+
+ YOUR GO
+ ▌⏸ 21:31 waits for you: kindle-web wants
+          to run gh release create v1.4
+          y gives the go, once
+
+────────────────────────────────────────────
+ y give the go  ⏎ command  1 sessions  p sh…

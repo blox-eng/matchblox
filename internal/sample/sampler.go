@@ -74,6 +74,9 @@ type Session struct {
 	// Out: the plan's limit stops the session until here (its turn was
 	// refused, or its account's window is spent); zero when it can work.
 	Out time.Time `json:"out,omitzero"`
+	// Failed: the last turn ended on an API error or a failed tool call,
+	// and the model said nothing after it; the error's first line.
+	Failed string `json:"failed,omitempty"`
 	// Agents and Shells are the background work a session left running
 	// when its turn ended: the subagents Claude Code counted then, and the
 	// shells its Bash tool still runs.
@@ -144,11 +147,20 @@ type Snapshot struct {
 	Errors     []string     `json:"errors,omitempty"`
 	// Limits are the plan limits of each account a session runs under.
 	Limits []limits.Account `json:"limits"`
+	// Panes are every tmux pane, with the pid tmux started in it: the
+	// service tells by them which pane a process runs in. Not sent.
+	Panes []Pane `json:"-"`
 }
 
 // StatusAgents is a session whose turn ended with subagents still working:
 // busy to the person, since their results start its next turn by itself.
 const StatusAgents = "agents"
+
+// TmuxSession is the name of the tmux session the pane belongs to.
+func (s Session) TmuxSession() string {
+	name, _, _ := strings.Cut(s.Target, ":")
+	return name
+}
 
 // Resting tells if no turn runs: the session is idle, or works only through
 // its subagents. The stoker acts at a rest.
@@ -217,6 +229,11 @@ type Sampler struct {
 	// A fixture tree sets it: its processes name a made-up path.
 	HomeAs string
 	Tmux   func() ([]byte, error)
+	// Stoker is the tmux server matchblox keeps the stoker agent on: its
+	// panes are listed too, each id carrying the server (OnServer), and
+	// StokerTmux lists them (nil: TmuxPanesOn(Stoker)). Empty: none.
+	Stoker     string
+	StokerTmux func() ([]byte, error)
 	// Capture returns the visible text of each pane, by pane id. It reads
 	// only the panes of agents without an adapter.
 	Capture       func(panes []string) map[string]string
@@ -315,6 +332,9 @@ func (s *Sampler) init() {
 		if s.Tmux == nil {
 			s.Tmux = TmuxPanes
 		}
+		if s.StokerTmux == nil && s.Stoker != "" {
+			s.StokerTmux = func() ([]byte, error) { return TmuxPanesOn(s.Stoker) }
+		}
 		if s.Capture == nil {
 			s.Capture = CapturePanes
 		}
@@ -338,7 +358,7 @@ func (s *Sampler) Sample() Snapshot {
 	}
 	l := s.last
 	snap.Sessions, snap.IdlePanes, snap.Orphans, snap.Top, snap.Exited = l.Sessions, l.IdlePanes, l.Orphans, l.Top, l.Exited
-	snap.Containers, snap.Groups, snap.GitPolling, snap.Limits = l.Containers, l.Groups, l.GitPolling, l.Limits
+	snap.Containers, snap.Groups, snap.GitPolling, snap.Limits, snap.Panes = l.Containers, l.Groups, l.GitPolling, l.Limits, l.Panes
 	snap.Errors = append(snap.Errors, l.Errors...)
 	s.alerts(&snap, now)
 	return snap
@@ -359,7 +379,19 @@ func (s *Sampler) scan(now time.Time) {
 		l.Errors = append(l.Errors, "tmux: "+err.Error())
 	}
 	panes := ParsePanes(out)
-	s.sampleSessions(&l, panes, procs, dt, now)
+	all := panes
+	if s.Stoker != "" {
+		// No server is no error: matchblox starts it when the builder
+		// launches the stoker.
+		b, _ := s.StokerTmux()
+		own := ParsePanes(b)
+		for i := range own {
+			own[i].ID = OnServer(own[i].ID, s.Stoker)
+		}
+		all = append(slices.Clip(panes), own...)
+	}
+	l.Panes = all
+	s.sampleSessions(&l, all, procs, dt, now)
 	l.Containers, l.Groups = s.sampleContainers(now, dt, len(s.prevCore))
 	s.sampleProcs(&l, procs, panes, dt, now)
 	l.GitPolling = s.samplePolling(procs, now)
@@ -471,9 +503,19 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	hosting := map[string]bool{}
 	alive := map[procKey]bool{}
 	var fromPane []int // sessions without an adapter: read from their pane
-	var server Pane    // the socket and pid of the tmux server listed
-	if len(panes) > 0 {
-		server = panes[0]
+	// The socket and pid of the builder's tmux server and of the
+	// stoker's, as listed: an agent's TMUX names one of them.
+	var server, stokers Pane
+	for _, p := range panes {
+		switch sv, _ := SplitPane(p.ID); {
+		case sv == "" && server.ID == "":
+			server = p
+		case sv != "" && stokers.ID == "":
+			stokers = p
+		}
+	}
+	if stokers.Socket == "" && s.Stoker != "" {
+		stokers.Socket = SocketPath(s.Stoker)
 	}
 	uptime := s.FS.Uptime()
 	lims := limitSources{}
@@ -507,8 +549,10 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		alive[key] = true
 		paneID, ok := s.panes[key]
 		if !ok {
-			paneID = s.ownerPane(pid, key, procs, byPID, server)
-			s.panes[key] = paneID
+			paneID = s.ownerPane(pid, key, procs, byPID, server, stokers)
+			if paneID != "" { // a server listed late still finds it
+				s.panes[key] = paneID
+			}
 		}
 		pane := byID[paneID]
 		hosting[paneID] = true
@@ -634,7 +678,9 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		}
 	}
 	for _, p := range panes {
-		if !hosting[p.ID] {
+		// The stoker's server is matchblox's own: none of its panes is
+		// the builder's to use.
+		if sv, _ := SplitPane(p.ID); !hosting[p.ID] && sv == "" {
 			snap.IdlePanes = append(snap.IdlePanes, IdlePane{p.ID, p.Target, p.Command, p.Path})
 		}
 	}
@@ -749,25 +795,33 @@ func (s *Sampler) isAgent(name string) bool {
 // ownerPane prefers the pane the agent recorded in its session file, then
 // TMUX_PANE from its environment (both survive re-parenting), and falls back
 // to walking up to a pane's shell. Pane ids repeat across tmux servers: an
-// agent whose TMUX names another server takes only a pane it descends from.
-func (s *Sampler) ownerPane(pid int, key procKey, procs map[int]procfs.Proc, byPID map[int]Pane, server Pane) string {
-	ours := true
+// agent whose TMUX names another server takes only a pane it descends from,
+// and one of the stoker's server (stokers) takes its pane there, with the
+// server in its id.
+func (s *Sampler) ownerPane(pid int, key procKey, procs map[int]procfs.Proc, byPID map[int]Pane, server, stokers Pane) string {
+	ours, on := true, ""
 	// TMUX is "<socket>,<server pid>,<session>": an agent can outlive its
 	// server, and a new server can take the same socket path.
-	if v, ok := s.FS.Environ(pid, "TMUX"); ok && server.Socket != "" {
+	if v, ok := s.FS.Environ(pid, "TMUX"); ok {
 		sock, rest, _ := strings.Cut(v, ",")
 		spid, _, _ := strings.Cut(rest, ",")
-		ours = sock == server.Socket && (server.Server == "" || spid == server.Server)
+		switch {
+		case stokers.Socket != "" && sock == stokers.Socket:
+			ours = stokers.Server == "" || spid == stokers.Server
+			on = s.Stoker
+		case server.Socket != "":
+			ours = sock == server.Socket && (server.Server == "" || spid == server.Server)
+		}
 	}
 	if dir := s.envOf(pid, key).claudeDir; dir != "" && ours {
 		if e, ok := s.agents.entry(dir, pid); ok && e.Tmux != "" {
 			if i := strings.LastIndexByte(e.Tmux, '.'); i >= 0 && strings.HasPrefix(e.Tmux[i+1:], "%") {
-				return e.Tmux[i+1:]
+				return OnServer(e.Tmux[i+1:], on)
 			}
 		}
 	}
 	if v, ok := s.FS.Environ(pid, "TMUX_PANE"); ok && ours {
-		return v
+		return OnServer(v, on)
 	}
 	for cur, hops := pid, 0; cur > 1 && hops < 64; hops++ {
 		if p, ok := byPID[cur]; ok {
@@ -864,7 +918,7 @@ func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procK
 		return
 	}
 	sess.Progress, sess.LastLine, sess.Asks, sess.turnAt = u.Progress, u.LastLine, u.Asks, u.At
-	sess.Said, sess.Ask, sess.TurnEnded = u.Said, u.Ask, u.Ended
+	sess.Said, sess.Ask, sess.TurnEnded, sess.Failed = u.Said, u.Ask, u.Ended, u.Failed
 	if !u.Ended.IsZero() && sess.Busy {
 		// Claude Code's registry says busy while background work runs; the
 		// transcript says whether a turn does. A subagent still working

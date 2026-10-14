@@ -1,0 +1,31 @@
+ ▰ matchblox   ● 6 wait for you  stoker off
+ 1  2  3  4  history  panes  STOKER 2
+────────────────────────────────────────────
+
+ NIGHT · 19:50 → 22:50          ended 22:50
+
+  “merge them on green, and a new PR gets
+  a compact and /review”
+  ✓ merges
+  ! releases and deploys still ask you
+
+ DONE 4 of 5 · 1 WAITS FOR YOU
+  ✓ 19:51 spark-docs hold: not priority
+          held
+  ✓ 21:10 hearth-api merge #4551 when green
+          merged #4551
+  ✓ 21:00 ember-billing merge #4552 when
+          green, then the next
+          merged #4552, CI green
+  ✓ 21:25 flint-auth rebase on main, then
+          merge #4545 on green
+          merged #4545
+ ▌✕ 21:30 kindle-web release the build
+          the release asks which tag to cut
+          its session ended · f starts the
+          stoker with a new order
+
+ YOUR GO
+  ✕ 21:31 the run ended before your go: gh
+────────────────────────────────────────────
+ ⏎ command  1 sessions  p ships  f stoker

@@ -1,6 +1,8 @@
 package hooks
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -37,7 +39,7 @@ func TestParseNotificationPermission(t *testing.T) {
 		Message: "Claude needs your permission to use Bash", Pane: "%4",
 	}
 	ev.At = time.Time{}
-	if ev != want {
+	if !reflect.DeepEqual(ev, want) {
 		t.Fatalf("got %+v\nwant %+v", ev, want)
 	}
 }
@@ -89,7 +91,7 @@ func TestReplayThenTruncate(t *testing.T) {
 	if err := Replay(spool, func(ev Event) { got = append(got, ev) }); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0] != a || got[1] != b {
+	if len(got) != 2 || !reflect.DeepEqual(got[0], a) || !reflect.DeepEqual(got[1], b) {
 		t.Fatalf("got %+v", got)
 	}
 	got = nil
@@ -137,7 +139,7 @@ func TestStopThatAsksIsAQuestion(t *testing.T) {
 func TestNotificationTextIsClean(t *testing.T) {
 	in := `{"session_id":"s1","hook_event_name":"Notification","notification_type":"permission_prompt","message":"Claude needs\u001b]52;c;eA==\u0007 your permission"}`
 	ev, err := Parse(strings.NewReader(in), "Notification", func(string) string { return "" })
-	if err != nil || ev.Message != "Claude needs]52;c;eA== your permission" {
+	if err != nil || ev.Message != "Claude needs your permission" {
 		t.Fatalf("message %q, %v", ev.Message, err)
 	}
 }
@@ -164,7 +166,7 @@ func TestParsePreToolUseAsk(t *testing.T) {
 }
 
 func TestParseOtherToolsCarryNoAsk(t *testing.T) {
-	if ev := parseFile(t, "pre-tool-use-bash.json", "PreToolUse"); ev.Ask != nil || ev.ToolUseID != "toolu_01Hq7DxW2nP5sKcR8vJm3TfA" {
+	if ev := parseFile(t, "pre-tool-use-bash.json", "PreToolUse"); ev.Ask != nil || ev.ToolUseID != "toolu_01Hq7DxW2nP5sKcR8vJm3TfA" || ev.Command != "go test ./..." {
 		t.Fatalf("event %+v", ev)
 	}
 	// The answered call: PostToolUse names it and asks nothing.
@@ -191,7 +193,7 @@ func TestAskTextIsClean(t *testing.T) {
 		t.Fatalf("%+v %v", ev, err)
 	}
 	q := ev.Ask.Questions[0]
-	if q.Question != "Which[2J one?" || q.Options[0].Label != "A" || q.Options[0].Description != "d]52;c;eA==" {
+	if q.Question != "Which one?" || q.Options[0].Label != "A" || q.Options[0].Description != "d" {
 		t.Fatalf("question %+v", q)
 	}
 }
@@ -209,5 +211,37 @@ func TestAskSurvivesTheSpool(t *testing.T) {
 	}
 	if got.Ask == nil || !reflect.DeepEqual(*got.Ask, *ev.Ask) || got.ToolUseID != ev.ToolUseID {
 		t.Fatalf("replayed %+v", got)
+	}
+}
+
+func TestScrubHidesTheValuesALineSets(t *testing.T) {
+	for in, want := range map[string]string{
+		"GH_TOKEN=abc123 gh pr merge 5":                         "GH_TOKEN=… gh pr merge 5",
+		"export API_KEY='a b c' && gh pr merge 5":               "export API_KEY=… && gh pr merge 5",
+		`FOO="x y" BAR=1 gh pr merge 5`:                         "FOO=… BAR=… gh pr merge 5",
+		"cd api;TOKEN=xyz make release":                         "cd api;TOKEN=… make release",
+		`X="$(gh pr merge 5)"`:                                  `X="$(gh pr merge 5)"`,
+		"X=$(gh pr merge 5)":                                    "X=$(gh pr merge 5)",
+		"gh pr merge 5 --body=done":                             "gh pr merge 5 --body=done",
+		"go test ./...":                                         "go test ./...",
+		"gh api -f merge_method=squash repos/o/r/pulls/5/merge": "gh api -f merge_method=… repos/o/r/pulls/5/merge",
+	} {
+		if got := Scrub(in); got != want {
+			t.Errorf("Scrub(%q) = %q, want %q", in, got, want)
+		}
+	}
+	b := []byte(`{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"GH_TOKEN=abc123 gh pr merge 5"}}`)
+	ev, err := Parse(bytes.NewReader(b), "PreToolUse", func(string) string { return "" })
+	if err != nil || ev.Command != "GH_TOKEN=… gh pr merge 5" {
+		t.Fatalf("parsed %q %v", ev.Command, err)
+	}
+	// The guard reads the line as the shell runs it; the raw line never
+	// leaves the process.
+	if ev.Raw != "GH_TOKEN=abc123 gh pr merge 5" {
+		t.Fatalf("raw %q", ev.Raw)
+	}
+	out, err := json.Marshal(ev)
+	if err != nil || bytes.Contains(out, []byte("abc123")) {
+		t.Fatalf("the raw line went out: %s %v", out, err)
 	}
 }

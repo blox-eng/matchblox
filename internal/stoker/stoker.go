@@ -23,8 +23,16 @@ const (
 	RuleCompact = "compact"
 	// PerSession is the least time between two steps on one session.
 	PerSession = 30 * time.Minute
-	// MaxSteps bounds one run.
-	MaxSteps = 30
+	// RuleOrder marks what the stoker agent sent through the CLI.
+	RuleOrder = "order"
+	// RuleGo marks a step matchblox put on the card itself: a guarded
+	// command it denied in a pane the stoker drives, which waits for the
+	// builder's y.
+	RuleGo = "go"
+	// WhyOrder marks a compact the stoker agent asked for, not the plan.
+	WhyOrder = "order"
+	// MaxCompacts bounds the compacts the plan sends in one run.
+	MaxCompacts = 30
 	// ResumeWait is how long the service reads a transcript back for the
 	// result of a compact.
 	ResumeWait = 30 * time.Minute
@@ -41,6 +49,12 @@ const (
 // nothing.
 func Waits(it queue.Item) bool {
 	return it.State == queue.StatePermission || it.State == queue.StateQuestion && !it.Reminder
+}
+
+// Ordered tells if the stoker agent sent this step through the CLI, a
+// compact it asked for included.
+func (e Entry) Ordered() bool {
+	return !e.Logged() && (e.Rule == RuleOrder || e.Why == WhyOrder)
 }
 
 // Mode is what stoker.json keeps.
@@ -74,6 +88,13 @@ type Mode struct {
 	// until they leave. Touched is their last key in a console.
 	Rests   time.Time `json:"rests,omitzero"`
 	Touched time.Time `json:"touched,omitzero"`
+	// Order is the builder's order and the stoker agent's plan for it.
+	Order *Order `json:"order,omitempty"`
+	// Triggers are the stoker's `when`s that have not fired yet; they
+	// end with the run.
+	Triggers []Trigger `json:"triggers,omitempty"`
+	// NextTrigger numbers the run's triggers.
+	NextTrigger int `json:"next_trigger,omitempty"`
 }
 
 const (
@@ -138,7 +159,12 @@ func (m Mode) Night(now time.Time, ends string) (Mode, error) {
 }
 
 func (m Mode) Off(now time.Time) Mode {
-	m.On, m.Until, m.Ended = false, time.Time{}, now
+	m.On, m.Until, m.Ended, m.Triggers = false, time.Time{}, now, nil
+	if m.Order != nil {
+		o := *m.Order
+		o.State = OrderDone
+		m.Order = &o
+	}
 	return m.Wake()
 }
 
@@ -178,6 +204,17 @@ type Entry struct {
 	// Back: the compact's result was read back from the transcript, with or
 	// without counts and a RESUME line. It is not read again.
 	Back time.Time `json:"back,omitzero"`
+	// Step, State, Needs and Text are a step the stoker agent logged
+	// (`matchblox stoker step`): its number in the plan (0: a standing
+	// rule, named by Rule), doing|done|failed|waits, the go it waits for
+	// (merge:#4556) and what it says.
+	Step  int    `json:"step,omitempty"`
+	State string `json:"state,omitempty"`
+	Needs string `json:"needs,omitempty"`
+	Text  string `json:"text,omitempty"`
+	// Want is the command a go step (RuleGo) waits to run, as the hook
+	// read it with its values scrubbed.
+	Want string `json:"want,omitempty"`
 }
 
 // Step is one planned compact.
@@ -191,14 +228,17 @@ type Step struct {
 // Plan picks the sessions to compact now, unless the stoker rests: Claude Code, idle and not cold,
 // due by Decide, not stopped by the plan's limit, not waiting for the builder, not stepped on in
 // the last PerSession, while the run has steps left. The fullest go first.
-// waiting holds the panes the queue lists.
-func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, full sample.Full, recent []Entry, now time.Time) []Step {
+// waiting holds the panes the queue lists; held, the session ids parked or held.
+func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, full sample.Full, recent []Entry, now time.Time, held map[string]bool) []Step {
 	if !m.On || !m.Rests.IsZero() {
 		return nil
 	}
-	left := MaxSteps
+	left := MaxCompacts
 	last := map[string]time.Time{}
 	for _, e := range recent {
+		if e.Rule == RuleOrder || e.Logged() {
+			continue // a message the stoker agent sent, or a step it logged, is not a compact
+		}
 		if !e.At.Before(m.Since) {
 			left--
 		}
@@ -217,7 +257,7 @@ func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, full sampl
 		switch {
 		case s.Agent != "claude", s.Pane == "", s.SessionID == "",
 			!s.Resting(), s.Idle >= sample.ColdAfter, !s.Out.IsZero(),
-			waiting[s.Pane], s.Asks, s.Permits,
+			waiting[s.Pane], held[s.SessionID], s.Asks, s.Permits,
 			stepped && now.Sub(at) < PerSession:
 			continue
 		}
@@ -232,16 +272,24 @@ func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, full sampl
 			continue
 		}
 		// At a rest, not idle: its subagents may still work.
-		g := advice.Guard{RestPane: s.Pane, StokePane: s.Pane}
-		typed := g
-		typed.Typed = true
 		out = append(out, Step{
 			Session: s.SessionID, Name: s.Name, Pane: s.Pane, Transcript: s.Transcript, Tokens: s.Tokens, Why: v.Why,
-			Action: advice.Action{
-				Label: RuleCompact, Steps: panes.Send(s.Pane, "/compact "+Instruction),
-				Destructive: true, Guards: []advice.Guard{g, typed},
-			},
+			Action: CompactAction(s.Pane),
 		})
 	}
 	return out
+}
+
+// CompactAction types the compact and its Enter into a pane. Both steps
+// are guarded: the session is at rest, and the pane, read again, shows no
+// menu, no question and no draft of the builder's (before the Enter, the
+// compact itself).
+func CompactAction(pane string) advice.Action {
+	g := advice.Guard{RestPane: pane, StokePane: pane}
+	typed := g
+	typed.Typed = true
+	return advice.Action{
+		Label: RuleCompact, Steps: panes.Send(pane, "/compact "+Instruction),
+		Destructive: true, Guards: []advice.Guard{g, typed},
+	}
 }

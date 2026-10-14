@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/blox-eng/matchblox/internal/tmuxtest"
 )
 
 func TestHomeArgvOutsideTmux(t *testing.T) {
@@ -58,7 +60,7 @@ func TestWayBackParses(t *testing.T) {
 	if err := os.WriteFile(conf, []byte(WayBack), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	sock := fmt.Sprintf("matchblox-test-%d", os.Getpid())
+	sock := tmuxtest.Server(t)
 	cmd := exec.Command("tmux", "-L", sock, "-f", os.DevNull, "new-session", "-d", "-s", "work", //nolint:gosec // test argv
 		";", "source-file", conf,
 		";", "source-file", conf, // people source their conf again after an edit

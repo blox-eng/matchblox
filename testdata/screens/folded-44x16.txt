@@ -1,5 +1,5 @@
  ▰ matchblox               ● 6 wait for you
- SESSIONS 7  ships 3  machine  4  5  6
+ SESSIONS 7  ships 3  machine  4  5  6  7
 ────────────────────────────────────────────
  WAITS FOR YOU · 6
 ────────────────────────────────────────────
@@ -13,4 +13,4 @@
  ╿ flint-auth            asks      2m   41%
  ╿ kindle-web            asks      1m   56%
 ────────────────────────────────────────────
- ⏎ open  a answer  p ships  f stoker
+ ⏎ open  a answer  z park  p ships  f stoker

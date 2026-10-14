@@ -65,7 +65,7 @@ func door(t *testing.T, e Env, id string) doors.Door {
 func TestDoorsFirstRun(t *testing.T) {
 	e := env(t)
 	got := ids(Doors(e))
-	if want := []string{doors.Tmux, doors.Hooks, doors.Limits, doors.SafetyNet, doors.WayBack, doors.Guide, doors.Night}; !slices.Equal(got, want) {
+	if want := []string{doors.Tmux, doors.Hooks, doors.Limits, doors.SafetyNet, doors.WayBack, doors.Guide, doors.Night, doors.Ways}; !slices.Equal(got, want) {
 		t.Fatalf("doors = %v, want %v", got, want)
 	}
 	if d := door(t, e, doors.Tmux); !slices.Equal(d.Term, []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}) {
@@ -76,7 +76,7 @@ func TestDoorsFirstRun(t *testing.T) {
 func TestNoClaudeNoHooksOrGuide(t *testing.T) {
 	e := env(t)
 	e.LookPath = func(string) (string, error) { return "", errors.New("not found") }
-	if got := ids(Doors(e)); !slices.Equal(got, []string{doors.Tmux, doors.WayBack}) {
+	if got := ids(Doors(e)); !slices.Equal(got, []string{doors.Tmux, doors.WayBack, doors.Ways}) {
 		t.Fatalf("doors = %v", got)
 	}
 }
@@ -354,8 +354,8 @@ func TestDoneDoorFolds(t *testing.T) {
 	open(t, e, doors.Limits)
 	open(t, e, doors.SafetyNet)
 	open(t, e, doors.WayBack)
-	if got := ids(Doors(e)); !slices.Equal(got, []string{doors.Guide, doors.Night}) {
-		t.Fatalf("open doors = %v, want [guide night]", got)
+	if got := ids(Doors(e)); !slices.Equal(got, []string{doors.Guide, doors.Night, doors.Ways}) {
+		t.Fatalf("open doors = %v, want [guide night ways]", got)
 	}
 }
 
@@ -726,7 +726,8 @@ const installed = `{
 `
 
 // TestAnInstallGainsTheQuestionHook: the hooks door of an earlier install
-// asks to be opened again, and its diff adds only the question tool's hook.
+// asks to be opened again, and its diff adds only the PreToolUse hooks of
+// the question tool and of Bash, beside the person's own.
 func TestAnInstallGainsTheQuestionHook(t *testing.T) {
 	e := env(t)
 	p := settings(t, e, installed)
@@ -735,8 +736,8 @@ func TestAnInstallGainsTheQuestionHook(t *testing.T) {
 		t.Fatalf("door = %+v, want one to open", d)
 	}
 	want := `+      {"matcher": "AskUserQuestion", "hooks": [{"type": "command", "command": "` + exe + ` hook PreToolUse"}]}`
-	if !strings.Contains(d.Preview, want) {
-		t.Fatalf("the diff has no question hook:\n%s", d.Preview)
+	if !strings.Contains(d.Preview, want) || !strings.Contains(d.Preview, strings.Replace(want, "AskUserQuestion", "Bash", 1)) {
+		t.Fatalf("the diff has no question or Bash hook:\n%s", d.Preview)
 	}
 	for line := range strings.SplitSeq(d.Preview, "\n") {
 		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "++") && strings.Contains(line, " hook ") && !strings.Contains(line, "hook PreToolUse") {
@@ -745,7 +746,7 @@ func TestAnInstallGainsTheQuestionHook(t *testing.T) {
 	}
 	open(t, e, doors.Hooks)
 	got := commands(t, p)
-	if fmt.Sprint(got["PreToolUse"]) != "[guard-bash "+exe+" hook PreToolUse]" {
+	if fmt.Sprint(got["PreToolUse"]) != "[guard-bash "+exe+" hook PreToolUse "+exe+" hook PreToolUse]" {
 		t.Fatalf("PreToolUse = %q", got["PreToolUse"])
 	}
 	if d := door(t, e, doors.Hooks); !d.Done {
@@ -754,14 +755,14 @@ func TestAnInstallGainsTheQuestionHook(t *testing.T) {
 }
 
 // TestTheQuestionHookNeedsItsTool: a matchblox PreToolUse hook counts only
-// when its matcher takes the question tool.
+// for the tools its matcher takes: the question tool and Bash.
 func TestTheQuestionHookNeedsItsTool(t *testing.T) {
 	for matcher, done := range map[string]bool{
 		"":                     true,
 		"*":                    true,
-		"AskUserQuestion":      true,
+		"AskUserQuestion":      false,
 		"Bash|AskUserQuestion": true,
-		"Ask.*":                true,
+		"Ask.*|Bash":           true,
 		"Bash":                 false,
 		"AskUserQuestionX":     false,
 		"(":                    false,
@@ -773,7 +774,7 @@ func TestTheQuestionHookNeedsItsTool(t *testing.T) {
 				body = strings.Replace(body, `{"hooks": {`, `{"hooks": {"`+ev+`": [{"hooks": [{"type": "command", "command": "matchblox hook `+ev+`"}]}], `, 1)
 			}
 		}
-		settings(t, e, body)
+		settings(t, e, allowingHands(body))
 		if d := door(t, e, doors.Hooks); d.Done != done {
 			t.Errorf("matcher %q: done = %v, want %v", matcher, d.Done, done)
 		}

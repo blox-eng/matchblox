@@ -124,7 +124,7 @@ func TestControlKeysNeverReachTheConsole(t *testing.T) {
 	screen := func(s string) (string, bool) { l, k := Screen(s); return l, k != None }
 	for _, read := range []func(string) (string, bool){Reply, screen} {
 		line, _ := read("Shall I \x1b]52;c;eHg=\x07open\tit?")
-		if strings.ContainsFunc(line, func(r rune) bool { return r < 0x20 || r == 0x7f }) || line != "Shall I ]52;c;eHg=open it?" {
+		if strings.ContainsFunc(line, func(r rune) bool { return r < 0x20 || r == 0x7f }) || line != "Shall I open it?" {
 			t.Fatalf("line %q", line)
 		}
 	}
@@ -153,5 +153,26 @@ func TestPlain(t *testing.T) {
 		"Step   State\ntests   pass\n\n• one\n  • two\nx := 1\nA 2*3*4 sum stays."
 	if got := Plain(in); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+// TestDraftLeavesOutClaudeCodesSuggestion: #82, Claude Code draws its
+// prompt suggestion in grey in an empty field. It is no draft: a compact or
+// a send may replace it. What a person typed is drawn in the default
+// colour, and a grey completion after it is not part of it.
+func TestDraftLeavesOutClaudeCodesSuggestion(t *testing.T) {
+	frame := "\x1b[2m────────────────────\x1b[22m\n"
+	for in, want := range map[string]string{
+		frame + "\x1b[39m❯ \x1b[2madd the ci label to 4611\x1b[22m\n" + frame:                             "",
+		frame + "\x1b[38;5;246m❯ \x1b[38;5;244mcheck why #4602 prod deploy was skipped\x1b[39m\n" + frame: "",
+		frame + "\x1b[39m❯ \x1b[90mrun the tests\x1b[39m\n" + frame:                                       "",
+		frame + "\x1b[39m❯ \x1b[38;2;128;128;128mrun the tests\x1b[39m\n" + frame:                         "",
+		frame + "\x1b[39m❯ add the ci label\x1b[0m\n" + frame:                                             "add the ci label",
+		frame + "\x1b[39m❯ add the\x1b[2m ci label to 4611\x1b[22m\n" + frame:                             "add the",
+		frame + "\x1b[39m❯ \x1b[1mbold is typed\x1b[0m\n" + frame:                                         "bold is typed",
+	} {
+		if got := Draft(in); got != want {
+			t.Errorf("Draft(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

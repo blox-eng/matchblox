@@ -110,7 +110,7 @@ func TestOwnership(t *testing.T) {
 			t.Errorf("#%d belongs to %s by %s, want %s by %s", n, s.Session.Pane, s.Evidence, want.pane, want.evidence)
 		}
 	}
-	if s := find(rep, 4557); s.Kind != Stuck || s.Note != "CI failed · ci-ok" || s.Title == "" || s.Session.Name != "agent a" {
+	if s := find(rep, 4557); s.Kind != Stuck || s.Note != "CI failed · ci-ok" || s.Failed != "ci-ok" || s.Title == "" || s.Session.Name != "agent a" {
 		t.Errorf("#4557: %+v", s)
 	}
 	if len(w.calls) != 1 || !strings.Contains(w.calls[0], "pr4557:pullRequest(number:4557)") {

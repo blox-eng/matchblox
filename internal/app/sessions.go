@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -23,9 +25,23 @@ const (
 	groupWaits = iota
 	groupWorking
 	groupQuiet
+	groupHeld
 )
 
-var groupNames = [...]string{"WAITS FOR YOU", "WORKING", "QUIET"}
+var groupNames = [...]string{"WAITS FOR YOU", "WORKING", "QUIET", "HELD"}
+
+// What the list is grouped by: g cycles them.
+const (
+	groupNeed = iota
+	groupStatus
+	groupRepo
+	groupNone
+)
+
+// holdByYou is the hold of the builder; the stoker's are the others.
+const holdByYou = "you"
+
+var groupModes = [...]string{"need", "status", "repo", "none"}
 
 // waitOf is the queue row of a session that waits: by its pane, or by its
 // id outside tmux, where no pane tells sessions apart.
@@ -41,6 +57,9 @@ func (m Model) waitOf(s sample.Session) (queue.Item, bool) {
 // groupOf is the group of a session. One that waits since yesterday is
 // cold, not waiting; one the plan's limit stops can do nothing now.
 func (m Model) groupOf(s sample.Session) int {
+	if _, held := m.holdOf(s); held {
+		return groupHeld
+	}
 	switch _, waits := m.waitOf(s); {
 	case s.Busy:
 		return groupWorking
@@ -54,9 +73,104 @@ func (m Model) groupOf(s sample.Session) int {
 	return groupQuiet
 }
 
-// grouped: the default sort is on, so the list shows its groups. Any
-// other sort is one flat list.
-func (m Model) grouped() bool { return m.sessSort == sortBy{} }
+// parkWord is what z does to a session: park it, or let it go.
+func (m Model) parkWord(s sample.Session) string {
+	if _, held := m.holdOf(s); held {
+		return "free"
+	}
+	return "park"
+}
+
+// holdOf is the hold on a session: by its id, or by its pane outside
+// tmux's reach of ids.
+func (m Model) holdOf(s sample.Session) (proto.Hold, bool) {
+	for _, h := range m.holds {
+		if s.SessionID != "" && h.SessionID == s.SessionID || s.SessionID == "" && s.Pane != "" && h.Pane == s.Pane {
+			return h, true
+		}
+	}
+	return proto.Hold{}, false
+}
+
+// groupLabel is the group a session is listed under: its need, its state
+// word, its repo; a held one is HELD whatever else is true of it.
+func (m Model) groupLabel(s sample.Session) string {
+	switch m.sessGroup {
+	case groupStatus:
+		if _, held := m.holdOf(s); held {
+			return groupNames[groupHeld]
+		}
+		return strings.ToUpper(m.wordOf(s))
+	case groupRepo:
+		return m.repoOf(s)
+	case groupNone:
+		return ""
+	}
+	return groupNames[m.groupOf(s)]
+}
+
+// repoOf is the repository a session works in: the checkout its directory
+// is in, else the directory's own name.
+func (m Model) repoOf(s sample.Session) string {
+	if m.git != nil {
+		best, name := 0, ""
+		within := func(dir, repo string) {
+			if (s.Cwd == dir || strings.HasPrefix(s.Cwd, dir+"/")) && len(dir) > best {
+				best, name = len(dir), filepath.Base(repo)
+			}
+		}
+		for _, r := range m.git.Repos {
+			within(r.Path, r.Path)
+			for _, wt := range r.Worktrees {
+				within(wt.Path, r.Path)
+			}
+		}
+		if name != "" {
+			return name
+		}
+	}
+	if s.Cwd == "" {
+		return "no directory"
+	}
+	return filepath.Base(s.Cwd)
+}
+
+// rowWord is the state cell of a session row. merged: the cell is a hold
+// or a reason, long enough to take the wait column's cells too.
+func (m Model) rowWord(s sample.Session) (word string, merged bool) {
+	st := m.st
+	if h, ok := m.holdOf(s); ok {
+		if h.By == holdByYou {
+			return st.muted.Render("⏸ parked by you"), true
+		}
+		why := "held by stoker"
+		if h.Why != "" {
+			why += " · " + h.Why
+		}
+		return st.muted.Render("⏸ " + why), true
+	}
+	plain := m.wordOf(s)
+	if r, ok := m.reasons[s.Pane]; ok && r.Word != "" && s.Pane != "" && plain != "asks" && plain != "waits" {
+		return m.tone(r.Tone).Render(r.Word), true
+	}
+	if m.groupOf(s) == groupWaits {
+		return st.accent.Render(plain), false
+	}
+	return st.muted.Render(plain), false
+}
+
+// tone is the style a reason is drawn in; ok has no colour of its own.
+func (m Model) tone(t string) lipgloss.Style {
+	switch t {
+	case "warn":
+		return m.st.warn
+	case "neg":
+		return m.st.neg
+	case "faint":
+		return m.st.faint
+	}
+	return m.st.accent
+}
 
 var testRunner = regexp.MustCompile(`\b(go test|pytest|jest|vitest|playwright|mocha|rspec|cargo test|(npm|pnpm|yarn|bun)( run)? (test|e2e)|make (test|e2e|check))\b`)
 
@@ -189,7 +303,7 @@ func (m Model) sessionKeys() []hint {
 		keys = append(keys, hint{"x", "end", "x"})
 	}
 	if ok && s.Pane != "" {
-		keys = append(keys, hint{"a", m.peekWord(s), "a"})
+		keys = append(keys, hint{"a", m.peekWord(s), "a"}, hint{"z", m.parkWord(s), "z"})
 	}
 	return append(keys, hint{"p", "ships", "p"}, hint{"f", "stoker", "f"})
 }
@@ -225,18 +339,23 @@ func (m Model) sessionRows(b *body, w int) {
 	}
 	base := len(m.doors)
 	sel := m.sessIndex() - base
-	var count [len(groupNames)]int
+	count := map[string]int{}
 	for _, s := range ss {
-		count[m.groupOf(s)]++
+		count[m.groupLabel(s)]++
 	}
-	if !m.grouped() {
+	by := ""
+	if m.sessSort != (sortBy{}) {
+		by = "  ·  by " + sessCols[m.sessSort.col] + " " + m.sessSort.arrow()
+	}
+	if m.sessGroup == groupNone {
 		b.add(-1, st.label.Render(fit(fmt.Sprintf(" %d SESSIONS · by %s %s", len(ss), sessCols[m.sessSort.col], m.sessSort.arrow()), w)))
 	}
-	group := -1
+	group := ""
 	for i, s := range ss {
-		if g := m.groupOf(s); m.grouped() && g != group {
+		if g := m.groupLabel(s); m.sessGroup != groupNone && (g != group || i == 0) {
 			group = g
-			b.add(-1, st.label.Render(fit(fmt.Sprintf(" %s · %d", groupNames[g], count[g]), w)))
+			b.add(-1, st.label.Render(fit(fmt.Sprintf(" %s · %d", g, count[g])+by, w)))
+			by = ""
 		}
 		rows := m.sessionRow(s, i == sel, w)
 		if len(rows) > 1 {
@@ -259,22 +378,23 @@ func (m Model) sessionRow(s sample.Session, sel bool, w int) []string {
 	if sel {
 		mark = st.accent.Render("▌")
 	}
-	word := st.muted.Render(m.wordOf(s))
-	if m.groupOf(s) == groupWaits {
-		word = st.accent.Render(m.wordOf(s))
-	}
+	word, merged := m.rowWord(s)
 	wait := st.faint.Render(m.waitCell(s))
 	ctx := m.contextCell(s)
 	t := m.sessTracks(w)
 	opens := sel && m.layoutAt(m.width) == Narrow
+	state := padTo(word, t.word) + cutLeft(wait, t.wait)
+	if merged {
+		state = padTo(word, t.word+t.wait) // the wait column's cells are the word's too
+	}
 	if !t.wide {
-		line := spread(mark+m.matchCell(s)+st.ink(sel).Render(s.Name), padTo(word, t.word)+cutLeft(wait, t.wait)+cutLeft(ctx, t.ctx)+" ", w)
+		line := spread(mark+m.matchCell(s)+st.ink(sel).Render(s.Name), state+cutLeft(ctx, t.ctx)+" ", w)
 		if !opens {
 			return []string{line}
 		}
 		return append([]string{line}, m.opened(s, w)...)
 	}
-	line := mark + m.matchCell(s) + st.ink(sel).Render(pad(s.Name, t.name)) + padTo(word, t.word) + cutLeft(wait, t.wait) + cutLeft(ctx, t.ctx)
+	line := mark + m.matchCell(s) + st.ink(sel).Render(pad(s.Name, t.name)) + state + cutLeft(ctx, t.ctx)
 	if t.plan > 0 {
 		plan := ""
 		switch {
@@ -315,10 +435,19 @@ type tracks struct {
 
 func (m Model) sessTracks(w int) tracks {
 	t := tracks{word: 8, wait: 5, ctx: 6}
-	if w < 70 {
-		if m.layoutAt(m.width) == Narrow {
-			t.word = 7
+	if m.layoutAt(m.width) == Narrow && w < 70 {
+		t.word = 7
+	}
+	// A hold or a reason spans the word and the wait; the wait column
+	// grows to fit the longest, so every row's columns stay in line.
+	longest := 0
+	for _, s := range m.snap.Sessions {
+		if word, merged := m.rowWord(s); merged {
+			longest = max(longest, lipgloss.Width(word))
 		}
+	}
+	t.wait += max(min(longest, min(w*55/100, 32))-t.word-t.wait, 0)
+	if w < 70 {
 		return t
 	}
 	t.wide, t.plan = true, 15

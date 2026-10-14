@@ -5,13 +5,15 @@ command.
 
 - It reads, and does nothing to your agents, processes or checkouts by
   itself. Every action starts from a key. Two run on their own once you
-  start them: [the stoker](stoker.md)'s compacts (`n`, `f`), each logged
-  with its command, and `[hooks] alert`, which runs the command you name on
-  each alert.
+  start them: [the stoker](stoker.md)'s compacts and the messages of a
+  stoker agent you started (`n`, `f`), each logged with its command, and
+  `[hooks] alert`, which runs the command you name on each alert.
 - Every action shows its exact command before it runs.
 - `Enter` never runs a destructive action. That needs `x`, then a typed
-  `y`. The stoker's compact is the one step that runs without it: `n` or
-  `f` is your yes.
+  `y`. The stoker's compact and the messages of its agent are the steps that
+  run without it: `n` or `f`, and the order you send with `Enter`, are your
+  yes. A merge, a release or a deploy in a session the stoker messaged
+  needs its chip on the launch sheet, or your `y` on the STOKER tab.
 - Each step checks its facts again just before it runs: the same process
   and start time, a worktree still clean and unused, a session still idle,
   a pane with no prompt, question or draft.

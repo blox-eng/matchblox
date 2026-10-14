@@ -18,6 +18,7 @@ const (
 	WayBack   = "wayback"
 	Guide     = "guide"
 	Night     = "night"
+	Ways      = "ways"
 )
 
 type Door struct {

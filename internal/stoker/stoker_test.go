@@ -29,13 +29,13 @@ func on() Mode { return Mode{On: true, Since: t0} }
 var at85 = sample.Full{Pct: 85}
 
 func TestStokerOffPlansNothing(t *testing.T) {
-	if got := Plan(Mode{}, []sample.Session{full("%1")}, nil, at85, nil, t0); len(got) != 0 {
+	if got := Plan(Mode{}, []sample.Session{full("%1")}, nil, at85, nil, t0, nil); len(got) != 0 {
 		t.Fatalf("off planned %+v", got)
 	}
 }
 
 func TestStokerCompactsIdleAtLimit(t *testing.T) {
-	got := Plan(on(), []sample.Session{full("%1")}, nil, at85, nil, t0)
+	got := Plan(on(), []sample.Session{full("%1")}, nil, at85, nil, t0, nil)
 	if len(got) != 1 {
 		t.Fatalf("want one step, got %+v", got)
 	}
@@ -69,7 +69,7 @@ func TestStokerLeavesWhatItMustNotTouch(t *testing.T) {
 	permits.Permits = true
 	queued := full("%7")
 	nopane := full("")
-	got := Plan(on(), []sample.Session{below, busy, cold, codex, asks, permits, queued, nopane}, map[string]bool{"%7": true}, at85, nil, t0)
+	got := Plan(on(), []sample.Session{below, busy, cold, codex, asks, permits, queued, nopane}, map[string]bool{"%7": true}, at85, nil, t0, nil)
 	if len(got) != 0 {
 		t.Fatalf("planned %+v", got)
 	}
@@ -77,18 +77,18 @@ func TestStokerLeavesWhatItMustNotTouch(t *testing.T) {
 
 func TestStokerRateLimits(t *testing.T) {
 	recent := []Entry{{Session: "s%1", At: t0.Add(-29 * time.Minute), Result: Sent}}
-	if got := Plan(on(), []sample.Session{full("%1")}, nil, at85, recent, t0); len(got) != 0 {
+	if got := Plan(on(), []sample.Session{full("%1")}, nil, at85, recent, t0, nil); len(got) != 0 {
 		t.Fatalf("compacted twice within 30 min: %+v", got)
 	}
 	recent[0].At = t0.Add(-31 * time.Minute)
-	if got := Plan(on(), []sample.Session{full("%1")}, nil, at85, recent, t0); len(got) != 1 {
+	if got := Plan(on(), []sample.Session{full("%1")}, nil, at85, recent, t0, nil); len(got) != 1 {
 		t.Fatalf("after 30 min: %+v", got)
 	}
 	var many []sample.Session
 	for i := range 31 {
 		many = append(many, full(fmt.Sprintf("%%%d", i)))
 	}
-	if got := Plan(on(), many, nil, at85, nil, t0); len(got) != MaxSteps {
+	if got := Plan(on(), many, nil, at85, nil, t0, nil); len(got) != MaxCompacts {
 		t.Fatalf("31 sessions planned %d steps", len(got))
 	}
 	// Steps of this run count; a step from before the run does not.
@@ -97,7 +97,7 @@ func TestStokerRateLimits(t *testing.T) {
 		run = append(run, Entry{Session: fmt.Sprint("old", i), At: t0.Add(time.Minute), Result: Sent})
 	}
 	run = append(run, Entry{Session: "before", At: t0.Add(-time.Minute), Result: Sent})
-	if got := Plan(on(), many, nil, at85, run, t0.Add(2*time.Minute)); len(got) != 1 {
+	if got := Plan(on(), many, nil, at85, run, t0.Add(2*time.Minute), nil); len(got) != 1 {
 		t.Fatalf("29 steps in the run left %d", len(got))
 	}
 }
@@ -242,7 +242,7 @@ func TestABrokenStoreStillOpens(t *testing.T) {
 func TestTheStokerLeavesAnOutSessionAlone(t *testing.T) {
 	s := full("%1")
 	s.Out = t0.Add(time.Hour)
-	if got := Plan(on(), []sample.Session{s}, nil, at85, nil, t0); len(got) != 0 {
+	if got := Plan(on(), []sample.Session{s}, nil, at85, nil, t0, nil); len(got) != 0 {
 		t.Fatalf("planned %+v for a session the limit stops", got)
 	}
 }
@@ -250,10 +250,10 @@ func TestTheStokerLeavesAnOutSessionAlone(t *testing.T) {
 func TestTheStokerCompactsBySessionTokens(t *testing.T) {
 	s := full("%1")
 	s.Tokens, s.ContextPct = 445000, 44.5
-	if got := Plan(on(), []sample.Session{s}, nil, at85, nil, t0); len(got) != 0 {
+	if got := Plan(on(), []sample.Session{s}, nil, at85, nil, t0, nil); len(got) != 0 {
 		t.Fatalf("44%% planned %+v at 85%% alone", got)
 	}
-	if got := Plan(on(), []sample.Session{s}, nil, sample.Full{Pct: 85, Tokens: 350_000}, nil, t0); len(got) != 1 {
+	if got := Plan(on(), []sample.Session{s}, nil, sample.Full{Pct: 85, Tokens: 350_000}, nil, t0, nil); len(got) != 1 {
 		t.Fatalf("445k planned %+v at 350k", got)
 	}
 }
@@ -281,5 +281,15 @@ func TestEveryCardIsKept(t *testing.T) {
 	again, _ := Open(s.Dir())
 	if cards, _ := again.Runs(); len(cards) != 2 {
 		t.Fatalf("after a reopen: %d runs", len(cards))
+	}
+}
+
+func TestPlanSkipsHeld(t *testing.T) {
+	ss := []sample.Session{full("%1")}
+	if got := Plan(on(), ss, nil, at85, nil, t0, nil); len(got) != 1 {
+		t.Fatalf("control: %d steps", len(got))
+	}
+	if got := Plan(on(), ss, nil, at85, nil, t0, map[string]bool{ss[0].SessionID: true}); len(got) != 0 {
+		t.Fatalf("a held session was stepped on: %+v", got)
 	}
 }

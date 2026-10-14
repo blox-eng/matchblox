@@ -18,6 +18,25 @@ func TestTmuxSendIsLiteral(t *testing.T) {
 	}
 }
 
+// TestKeysToTheStokersServerGoThere: a pane of matchblox's own server is
+// typed into on that server, by the id it knows it by; never the
+// builder's pane of the same id.
+func TestKeysToTheStokersServerGoThere(t *testing.T) {
+	got := Send("%0@matchblox-test", "carry on")
+	want := [][]string{
+		{"tmux", "-L", "matchblox-test", "send-keys", "-t", "%0", "-l", "--", "carry on"},
+		{"tmux", "-L", "matchblox-test", "send-keys", "-t", "%0", "Enter"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %q", got)
+	}
+	ask := said.Ask{Questions: []said.Question{{Question: "Go?", Options: []said.Option{{Label: "yes"}, {Label: "no"}}}}}
+	steps, _ := Pick("%0@matchblox-test", ask, said.Answer{Choices: []said.Choice{{Picks: []int{1}}}})
+	if want := []string{"tmux", "-L", "matchblox-test", "send-keys", "-t", "%0", "1"}; !reflect.DeepEqual(steps[0], want) {
+		t.Fatalf("pick: got %q", steps)
+	}
+}
+
 // A text that starts with a dash is text, not a tmux flag.
 func TestTmuxSendDashText(t *testing.T) {
 	if got := Send("%4", "-y"); got[0][5] != "--" || got[0][6] != "-y" {

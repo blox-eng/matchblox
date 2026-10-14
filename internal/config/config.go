@@ -61,6 +61,14 @@ type Limits struct {
 // Stoker compacts full sessions while the builder is away.
 type Stoker struct {
 	NightEnds string `toml:"night_ends"` // "07:00": n runs the stoker until then
+	// Agent is the command matchblox starts the stoker agent with, on its
+	// own tmux server: claude, codex or opencode.
+	Agent string `toml:"agent"`
+	// PaneSet: the file still has the pane key of before matchblox started
+	// the agent itself. It is ignored, and status says so.
+	PaneSet bool `toml:"-"`
+	// MaxSteps is how many messages the stoker agent may send in one run.
+	MaxSteps int `toml:"max_steps"`
 }
 
 // Hooks run a command when something happens. The command is an argv list,
@@ -155,7 +163,7 @@ func Default() Config {
 			Commands: []string{"sh", "bash", "zsh", "dash", "fish"},
 		},
 		Git:    Git{Interval: Duration{5 * time.Minute}, Remote: "origin"},
-		Stoker: Stoker{NightEnds: "07:00"},
+		Stoker: Stoker{NightEnds: "07:00", MaxSteps: 60, Agent: "claude"},
 		Limits: Limits{QuietHours: "23:00-08:00", QuietDays: []string{"Sat", "Sun"}, Quiet: defaultQuiet},
 	}
 }
@@ -172,6 +180,9 @@ func Path() string {
 	return filepath.Join(dir, "matchblox", "config.toml")
 }
 
+// WaysPath is the builder's ways file, next to config.toml.
+func WaysPath() string { return filepath.Join(filepath.Dir(Path()), "ways.md") }
+
 // Load overlays the file on the defaults. A missing file is not an error.
 func Load(path string) (Config, error) {
 	c := Default()
@@ -180,6 +191,7 @@ func Load(path string) (Config, error) {
 		return c, err
 	}
 	c.AgentsSet = md.IsDefined("agents")
+	c.Stoker.PaneSet = md.IsDefined("stoker", "pane")
 	if c.Limits.Quiet, err = limits.ParseQuiet(c.Limits.QuietHours, c.Limits.QuietDays); err != nil {
 		return c, errors.New("limits.quiet_hours or quiet_days: " + err.Error())
 	}

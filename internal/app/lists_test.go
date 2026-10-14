@@ -121,7 +121,10 @@ func TestSortCyclesAndReverses(t *testing.T) {
 	m, _ := loadedWith(t, 100, sortFixture())
 	var next tea.Model = m
 	next, _ = key(next, "1")
-	next, _ = key(next, "s") // idle
+	for range 3 {
+		next, _ = key(next, "g") // one flat list
+	}
+	next, _ = key(next, "s") // newest
 	next, _ = key(next, "s") // context
 	if got := order(next); got != "charlie bravo alpha" {
 		t.Fatalf("by context: %q", got)
@@ -145,7 +148,7 @@ func TestNarrowShowsTheSort(t *testing.T) {
 	var next tea.Model = m
 	next, _ = key(next, "1")
 	next, _ = key(next, "s")
-	if !strings.Contains(screen(next), "by idle ▾") {
+	if !strings.Contains(screen(next), "by newest ▾") {
 		t.Fatalf("the phone does not show the sort:\n%s", screen(next))
 	}
 }

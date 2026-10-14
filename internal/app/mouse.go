@@ -33,6 +33,9 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	m.searching = false // keep the search; what the tap asks for shows on the key line
 	w := max(m.width, minWidth)
 	sc := m.draw(w)
+	if m.sheet != nil {
+		return m.tapSheet(ms, sc)
+	}
 	if m.peek != nil {
 		inside := ms.Y >= sc.peekAt && ms.Y < sc.peekAt+len(sc.peekRows) && ms.X >= sc.peekX && ms.X < sc.peekX+sc.peekW
 		if !sc.peekInline || inside {
@@ -45,6 +48,9 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	switch {
 	case ms.Y == 0:
+		if s, ok := spanAt([]span{sc.stokerAt}, ms.X); ok && s.press != "" {
+			return m.openAgent()
+		}
 		if s, ok := spanAt([]span{sc.waits}, ms.X); ok && s.press != "" {
 			m.setTab(tabSessions)
 			if i := m.firstWaiting(); i >= 0 {
@@ -57,12 +63,13 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		if s, ok := spanAt(sc.tabs, ms.X); ok {
 			m.setTab(int(s.press[0] - '1'))
 			m.flash = ""
+			return m.seeStoker()
 		}
 		return m, nil
 	case ms.Y == sc.keysAt:
 		if s, ok := spanAt(sc.keys, ms.X); ok {
 			m.armed = ""
-			return m.key(s.press)
+			return m.keyed(s.press)
 		}
 		return m, nil
 	case sc.dockAt >= 0 && ms.Y >= sc.dockAt && ms.Y < sc.dockAt+sc.dockH:
@@ -71,7 +78,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if ms.X >= sc.stx0 && ms.X < sc.stx1 {
-			return m.openStoker(), nil
+			return m.openStoker().seeStoker()
 		}
 		return m, nil
 	}

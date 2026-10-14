@@ -1,5 +1,5 @@
  ▰ matchblox                                                                              ● 6 wait for you
- SESSIONS 7    ships 3    machine    git    history    panes
+ SESSIONS 7    ships 3    machine    git    history    panes    stoker
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
  WAITS FOR YOU · 6                                   │
 ▌│ spark-docs                    done       9m   88% │ spark-docs
@@ -57,4 +57,4 @@
                                                      │ 1900     claude              0%   9.8M    pane %8 ·…
                                                      │ 4242     bash                0%   9.8M    pane %9
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ open  a answer  p ships  f stoker                                                        sampled 0s ago
+ ⏎ open  a answer  z park  p ships  f stoker                                                sampled 0s ago
