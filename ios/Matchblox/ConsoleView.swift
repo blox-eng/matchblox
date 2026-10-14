@@ -51,11 +51,11 @@ struct ConsoleView: View {
                 Text("Connecting to \(host.label)")
                     .foregroundStyle(Theme.muted)
                 hostsButton
-            case .failed(let error):
-                Text(error.localizedDescription)
+            case .failed(let message, let scanAgain):
+                Text(message)
                     .foregroundStyle(Theme.neg)
                 HStack(spacing: 24) {
-                    if error == .keyUnavailable {
+                    if scanAgain {
                         Button("Scan again", action: onScanAgain)
                             .buttonStyle(.borderedProminent)
                             .foregroundStyle(Theme.bg)
@@ -110,7 +110,7 @@ final class ConsoleConnection {
     enum Phase: Equatable {
         case connecting
         case live
-        case failed(DeviceKeyError)
+        case failed(String, scanAgain: Bool)
     }
 
     private enum Outgoing: Sendable {
@@ -118,11 +118,22 @@ final class ConsoleConnection {
         case resize(cols: Int, rows: Int)
     }
 
+    private enum Ending {
+        case failed(ConnectFailure)
+        case ended(sawOutput: Bool)
+    }
+
+    private struct UnlockFailed: Error {
+        let message: String
+    }
+
     private(set) var phase = Phase.connecting
 
     @ObservationIgnored weak var terminal: TerminalView?
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var outgoing: AsyncStream<Outgoing>.Continuation?
+    /// One unlock serves every reconnect until the app goes to the background.
+    @ObservationIgnored private var unlocked: LAContext?
     private let host: Host
     private let onFailure: (ConnectFailure) -> Void
 
@@ -138,16 +149,22 @@ final class ConsoleConnection {
     }
 
     func stop() {
+        cancel()
+        unlocked?.invalidate()
+        unlocked = nil
+    }
+
+    func retry() {
+        cancel()
+        start()
+    }
+
+    private func cancel() {
         task?.cancel()
         task = nil
         outgoing?.finish()
         outgoing = nil
         phase = .connecting
-    }
-
-    func retry() {
-        stop()
-        start()
     }
 
     private func run() async {
@@ -156,10 +173,15 @@ final class ConsoleConnection {
             phase = .connecting
             let key: NIOSSHPrivateKey
             do {
-                key = try await Task.detached { try ConsoleConnection.unlockKey() }.value
+                key = try await unlockKey()
+            } catch let failure as UnlockFailed {
+                guard !Task.isCancelled else { return }
+                phase = .failed(failure.message, scanAgain: false)
+                return
             } catch {
                 guard !Task.isCancelled else { return }
-                phase = .failed(error as? DeviceKeyError ?? .keyUnavailable)
+                let keyError = error as? DeviceKeyError ?? .keyUnavailable
+                phase = .failed(keyError.localizedDescription, scanAgain: keyError == .keyUnavailable)
                 return
             }
             guard !Task.isCancelled else { return }
@@ -172,32 +194,38 @@ final class ConsoleConnection {
                 hostKeyFingerprint: host.fingerprint
             )
             let opened = ContinuousClock.now
-            let failure = await withTaskCancellationHandler {
+            let ending = await withTaskCancellationHandler {
                 await serve(session)
             } onCancel: {
                 Task { await session.close() }
             }
             await session.close()
             guard !Task.isCancelled else { return }
-            if let failure {
+            switch ending {
+            case .failed(let failure):
                 onFailure(failure)
                 return
+            case .ended(let sawOutput):
+                guard let wait = delay.next(after: ContinuousClock.now - opened, sawOutput: sawOutput) else {
+                    phase = .failed(Opening.stopsAtOnceMessage(host: host.label), scanAgain: false)
+                    return
+                }
+                phase = .connecting
+                try? await Task.sleep(for: wait)
             }
-            phase = .connecting
-            try? await Task.sleep(for: delay.next(after: ContinuousClock.now - opened))
         }
     }
 
-    /// Runs one session until its stream ends. Returns the failure when the session does not open.
-    private func serve(_ session: SSHSession) async -> ConnectFailure? {
+    /// Runs one session until its stream ends.
+    private func serve(_ session: SSHSession) async -> Ending {
         let size = terminalSize
         let output: AsyncStream<Data>
         do {
             output = try await session.open(command: "matchblox console", pty: size)
         } catch {
-            return error
+            return .failed(error)
         }
-        guard !Task.isCancelled else { return nil }
+        guard !Task.isCancelled else { return .ended(sawOutput: false) }
 
         let (input, sink) = AsyncStream<Outgoing>.makeStream()
         outgoing = sink
@@ -222,10 +250,12 @@ final class ConsoleConnection {
         if now != size {
             sink.yield(.resize(cols: now.cols, rows: now.rows))
         }
+        var sawOutput = false
         for await chunk in output {
+            sawOutput = true
             terminal?.feed(byteArray: ArraySlice(chunk))
         }
-        return nil
+        return .ended(sawOutput: sawOutput)
     }
 
     private var terminalSize: (cols: Int, rows: Int) {
@@ -233,11 +263,41 @@ final class ConsoleConnection {
         return (terminal.cols, terminal.rows)
     }
 
-    /// The context keeps one Face ID for a quick reconnect.
-    private nonisolated static func unlockKey() throws -> NIOSSHPrivateKey {
-        let context = LAContext()
-        context.touchIDAuthenticationAllowableReuseDuration = 10
+    /// Face ID (or the passcode) runs here, before SSHSession starts its deadline. The unlocked context then lets the key sign with no second prompt.
+    private func unlockKey() async throws -> NIOSSHPrivateKey {
+        let context: LAContext
+        if let unlocked {
+            context = unlocked
+        } else {
+            context = LAContext()
+            context.touchIDAuthenticationAllowableReuseDuration = 10
+            try await Self.evaluate(context, reason: "Open the console of \(host.label).")
+            unlocked = context
+        }
         return DeviceKey.nioKey(try DeviceKey.loadOrCreate(context: context))
+    }
+
+    private static func evaluate(_ context: LAContext, reason: String) async throws {
+        try await withCheckedThrowingContinuation { (done: CheckedContinuation<Void, Error>) in
+            context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { @Sendable success, error in
+                if success {
+                    done.resume()
+                } else {
+                    done.resume(throwing: UnlockFailed(message: unlockMessage(for: error)))
+                }
+            }
+        }
+    }
+
+    private nonisolated static func unlockMessage(for error: Error?) -> String {
+        switch (error as? LAError)?.code {
+        case .userCancel, .systemCancel, .appCancel:
+            "Face ID did not unlock the key. Tap Try again."
+        case .passcodeNotSet:
+            DeviceKeyError.noPasscode.localizedDescription
+        default:
+            "The iPhone could not check Face ID or the passcode. Tap Try again."
+        }
     }
 }
 

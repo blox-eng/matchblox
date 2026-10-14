@@ -32,6 +32,10 @@ public enum Opening {
         }
     }
 
+    public static func stopsAtOnceMessage(host: String) -> String {
+        "matchblox console on \(host) stops at once. Run matchblox console on the host to see why, then tap Try again."
+    }
+
     public static func removedNotice(_ labels: String) -> String {
         "\(labels) is removed. Remove its key on the host with matchblox devices rm."
     }
