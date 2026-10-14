@@ -66,6 +66,15 @@ struct ConsoleView: View {
                     }
                     hostsButton
                 }
+            case .ended:
+                Text(Opening.endedMessage(host: host.label))
+                    .foregroundStyle(Theme.muted)
+                HStack(spacing: 24) {
+                    Button("Open again") { connection.retry() }
+                        .buttonStyle(.borderedProminent)
+                        .foregroundStyle(Theme.bg)
+                    hostsButton
+                }
             }
             Spacer()
         }
@@ -103,13 +112,14 @@ private struct TerminalRepresentable: UIViewRepresentable {
     func updateUIView(_ terminal: TerminalView, context: Context) {}
 }
 
-/// Owns one SSHSession for each connect. When a session ends, it opens a new one; it stops when the view goes away or the app goes to the background.
+/// Owns one SSHSession for each connect. A session that ends at once opens again; a good session that ends waits for a tap. It stops when the view goes away or the app goes to the background.
 @MainActor
 @Observable
 final class ConsoleConnection {
     enum Phase: Equatable {
         case connecting
         case live
+        case ended
         case failed(String, scanAgain: Bool)
     }
 
@@ -206,12 +216,17 @@ final class ConsoleConnection {
                 onFailure(failure)
                 return
             case .ended(let sawOutput):
-                guard let wait = delay.next(after: ContinuousClock.now - opened, sawOutput: sawOutput) else {
+                switch delay.next(after: ContinuousClock.now - opened, sawOutput: sawOutput) {
+                case .reconnect(let wait):
+                    phase = .connecting
+                    try? await Task.sleep(for: wait)
+                case .ended:
+                    phase = .ended
+                    return
+                case .stop:
                     phase = .failed(Opening.stopsAtOnceMessage(host: host.label), scanAgain: false)
                     return
                 }
-                phase = .connecting
-                try? await Task.sleep(for: wait)
             }
         }
     }
@@ -272,9 +287,13 @@ final class ConsoleConnection {
             context = LAContext()
             context.touchIDAuthenticationAllowableReuseDuration = 10
             try await Self.evaluate(context, reason: "Open the console of \(host.label).")
+            guard !Task.isCancelled else {
+                context.invalidate()
+                throw CancellationError()
+            }
             unlocked = context
         }
-        return DeviceKey.nioKey(try DeviceKey.loadOrCreate(context: context))
+        return DeviceKey.nioKey(try DeviceKey.load(host: host.fingerprint, context: context))
     }
 
     private static func evaluate(_ context: LAContext, reason: String) async throws {
@@ -292,7 +311,7 @@ final class ConsoleConnection {
     private nonisolated static func unlockMessage(for error: Error?) -> String {
         switch (error as? LAError)?.code {
         case .userCancel, .systemCancel, .appCancel:
-            "Face ID did not unlock the key. Tap Try again."
+            "The key is still locked. Tap Try again, then use Face ID or the passcode."
         case .passcodeNotSet:
             DeviceKeyError.noPasscode.localizedDescription
         default:
