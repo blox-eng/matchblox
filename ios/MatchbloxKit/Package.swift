@@ -8,6 +8,7 @@ let package = Package(
         .library(name: "MatchbloxKit", targets: ["MatchbloxKit"]),
     ],
     dependencies: [
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.83.0"),
         .package(url: "https://github.com/apple/swift-nio-ssh", from: "0.15.0"),
         .package(url: "https://github.com/apple/swift-nio-transport-services", from: "1.28.0"),
     ],
@@ -15,6 +16,7 @@ let package = Package(
         .target(
             name: "MatchbloxKit",
             dependencies: [
+                .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOSSH", package: "swift-nio-ssh"),
                 .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
             ],
@@ -24,7 +26,9 @@ let package = Package(
             name: "MatchbloxKitTests",
             dependencies: [
                 "MatchbloxKit",
+                .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOSSH", package: "swift-nio-ssh"),
+                .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
             ]
         ),
     ]
