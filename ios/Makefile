@@ -14,7 +14,7 @@ gen: ## Generate Matchblox.xcodeproj from project.yml
 
 .PHONY: build
 build: gen ## Compile the app for the simulator, without code signing
-	set -o pipefail; xcodebuild \
+	xcodebuild \
 		-scheme $(SCHEME) \
 		-destination '$(DESTINATION)' \
 		-derivedDataPath $(DERIVED) \

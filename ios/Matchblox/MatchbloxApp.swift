@@ -27,6 +27,7 @@ struct MatchbloxApp: App {
                         onPaired: { go(.console($0)) },
                         onScanAgain: { go(.scan) }
                     )
+                    .id(draft.payload.key)
                 case .console(let host):
                     ConsoleView(
                         host: host,
@@ -68,7 +69,9 @@ struct MatchbloxApp: App {
         route = next
     }
 
+    /// An open console gives way only to a new pairing code.
     private func open(_ url: URL) {
+        if case .console = route, url.host?.lowercased() != "pair" { return }
         do {
             let payload = try PairPayload(url: url)
             go(.pair(PairDraft(payload: payload, phoneName: Pairing.cleanName(UIDevice.current.name))))

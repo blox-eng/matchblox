@@ -12,6 +12,9 @@ packages:
   SwiftTerm:
     url: https://github.com/migueldeicaza/SwiftTerm
     exactVersion: "1.20.0"
+  swift-nio-ssh:
+    url: https://github.com/apple/swift-nio-ssh
+    from: "0.15.0"
 
 targets:
   Matchblox:
@@ -50,6 +53,8 @@ targets:
         product: MatchbloxKit
       - package: SwiftTerm
         product: SwiftTerm
+      - package: swift-nio-ssh
+        product: NIOSSH
 
 schemes:
   Matchblox:

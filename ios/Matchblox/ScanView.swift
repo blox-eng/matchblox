@@ -14,6 +14,7 @@ struct ScanView: View {
     }
 
     @State private var camera = Camera.checking
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -61,6 +62,10 @@ struct ScanView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(24)
         .task { camera = await Self.cameraState() }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, camera == .denied else { return }
+            Task { camera = await Self.cameraState() }
+        }
     }
 
     @MainActor

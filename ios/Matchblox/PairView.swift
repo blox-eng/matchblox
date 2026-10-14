@@ -15,6 +15,7 @@ struct PairView: View {
     }
 
     @State private var phase = Phase.ready
+    @State private var flow: Task<Void, Never>?
     @State private var pulse = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -31,17 +32,15 @@ struct PairView: View {
                 Text("as \(draft.payload.user)")
                     .foregroundStyle(Theme.muted)
             }
-            field("Address", text: $draft.address, hint: "Change it if the phone can't reach this name.")
+            field("Address", text: $draft.address, hint: "Change it if the iPhone can't reach this name.")
                 .keyboardType(.URL)
-            field("Phone name", text: $draft.phoneName, hint: "\(draft.payload.name) shows this name.")
+            field("iPhone name", text: $draft.phoneName, hint: "\(draft.payload.name) shows this name.")
             if case .failed(let message) = phase {
                 Text(message)
                     .foregroundStyle(Theme.neg)
             }
             HStack(spacing: 24) {
-                Button {
-                    Task { await pair() }
-                } label: {
+                Button(action: startPairing) {
                     Text(pairing ? "Pairing…" : "Pair")
                         .opacity(pairing && pulse ? 0.4 : 1)
                 }
@@ -58,6 +57,10 @@ struct PairView: View {
         .padding(24)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
+        .onDisappear {
+            flow?.cancel()
+            flow = nil
+        }
         .onChange(of: pairing) { _, now in
             guard now, !reduceMotion else {
                 pulse = false
@@ -86,9 +89,18 @@ struct PairView: View {
         }
     }
 
-    private func pair() async {
+    private func startPairing() {
+        guard flow == nil, canPair else { return }
         phase = .pairing
-        switch await PairFlow.run(draft, store: store) {
+        flow = Task { await pair() }
+    }
+
+    /// A new code or a new screen cancels the flow, so an old pairing never opens a console.
+    private func pair() async {
+        let outcome = await PairFlow.run(draft, store: store)
+        guard !Task.isCancelled else { return }
+        flow = nil
+        switch outcome {
         case .paired(let host):
             onPaired(host)
         case .failed(let message):
@@ -113,7 +125,7 @@ enum PairFlow {
 
         let phoneKey: String
         do {
-            phoneKey = try await Task.detached { try openPhoneKey() }.value
+            phoneKey = try await Task.detached { try DeviceKey.openSSH(for: payload.hostkey) }.value
         } catch {
             return .failed(error.localizedDescription)
         }
@@ -136,7 +148,7 @@ enum PairFlow {
         do {
             output = try await session.open(command: "matchblox gate pair", pty: nil)
         } catch {
-            return .failed(Pairing.message(for: error, host: label))
+            return .failed(Pairing.message(for: error, host: label, address: address))
         }
 
         let request = Pairing.requestLine(name: Pairing.cleanName(draft.phoneName), key: phoneKey)
@@ -158,24 +170,18 @@ enum PairFlow {
                 user: payload.user,
                 fingerprint: payload.hostkey
             )
+            let stale: [Host]
             do {
-                try store.upsert(host)
+                stale = try store.upsert(host)
             } catch {
                 return .failed("This iPhone could not save \(label). Free some space on the iPhone, then run matchblox pair on \(label) again.")
+            }
+            for old in stale {
+                try? DeviceKey.remove(host: old.fingerprint)
             }
             return .paired(host)
         case .failed(let refusal):
             return .failed(Pairing.message(for: refusal, host: label))
-        }
-    }
-
-    /// A stored key that no longer opens belongs to an old pairing. A new key replaces it, so every host must pair again.
-    private static func openPhoneKey() throws -> String {
-        do {
-            return try DeviceKey.openSSH()
-        } catch DeviceKeyError.keyUnavailable {
-            try DeviceKey.reset()
-            return try DeviceKey.openSSH()
         }
     }
 

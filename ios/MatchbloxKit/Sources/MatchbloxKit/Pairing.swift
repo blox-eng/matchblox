@@ -81,14 +81,15 @@ public enum Pairing {
         return try reply(output)
     }
 
-    public static func message(for failure: ConnectFailure, host: String) -> String {
+    /// The host key comes fresh from the code, so a host key that does not match means the address reaches another machine.
+    public static func message(for failure: ConnectFailure, host: String, address: String) -> String {
         switch failure {
         case .refused:
-            "This code was used or expired. Run matchblox pair on \(host) again."
+            codeUsedMessage(host: host)
         case .unreachable:
-            "Can't reach \(host). Check the address, or that the phone is on your network."
+            "Can't reach \(host). Check the address, or that the iPhone is on your network."
         case .hostKeyChanged:
-            "\(host) has a new host key. Run matchblox pair on \(host) again."
+            "\(address) is not \(host). Check the address, then tap Pair."
         case .closed:
             "The connection to \(host) closed before pairing was done. Run matchblox pair on \(host) again."
         }
@@ -97,24 +98,24 @@ public enum Pairing {
     public static func message(for refusal: PairRefusal, host: String) -> String {
         switch refusal {
         case .badName:
-            "\(host) refused the phone name. Use only letters, digits and spaces, then tap Pair again."
+            "\(host) refused the iPhone name. Use only letters, digits and spaces, then tap Pair again."
         case .badKey:
-            "\(host) refused the phone key. Update matchblox on \(host), then run matchblox pair again."
+            "\(host) refused the key of this iPhone. Update matchblox on \(host), then run matchblox pair again."
         case .codeUsed:
-            "This code is used or expired. Run matchblox pair on \(host) again, then scan the new code."
+            codeUsedMessage(host: host)
         case .keyInUse:
-            "This phone key already opens a login on \(host). Remove its line from ~/.ssh/authorized_keys on \(host), then run matchblox pair again."
+            "The key of this iPhone already opens a login on \(host). Remove its line from ~/.ssh/authorized_keys on \(host), then run matchblox pair again."
         case .writeFailed:
-            "\(host) could not save the phone key. Check that ~/.ssh on \(host) is writable, then tap Pair again."
+            "\(host) could not save the key of this iPhone. Check that ~/.ssh on \(host) is writable, then tap Pair again."
         case .tooSlow:
-            "\(host) did not get the phone key in time. Tap Pair again."
+            "\(host) did not get the key of this iPhone in time. Tap Pair again."
         }
     }
 
     public static func message(for error: PairReplyError, host: String) -> String {
         switch error {
         case .noReply:
-            "\(host) did not answer the pairing request. Update matchblox on \(host), then run matchblox pair again."
+            "\(host) did not answer. Check the network, or update matchblox on \(host), then run matchblox pair again."
         case .unknownAnswer:
             "\(host) gave an answer that this app does not know. Update matchblox on \(host) and update this app, then try again."
         }
@@ -129,6 +130,10 @@ public enum Pairing {
         case .malformed:
             "This code is damaged. Run matchblox pair on your host again, then scan the new code."
         }
+    }
+
+    private static func codeUsedMessage(host: String) -> String {
+        "This code was used or expired. Run matchblox pair on \(host) again."
     }
 
     private static func isNameScalar(_ scalar: Unicode.Scalar) -> Bool {
