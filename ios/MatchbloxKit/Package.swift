@@ -18,12 +18,11 @@ let package = Package(
                 .product(name: "NIOSSH", package: "swift-nio-ssh"),
                 .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
             ],
-            swiftSettings: [.swiftLanguageVersion(.v5), .enableUpcomingFeature("StrictConcurrency")]
+            swiftSettings: [.enableUpcomingFeature("StrictConcurrency")]
         ),
         .testTarget(
             name: "MatchbloxKitTests",
-            dependencies: ["MatchbloxKit"],
-            swiftSettings: [.swiftLanguageVersion(.v5)]
+            dependencies: ["MatchbloxKit"]
         ),
     ]
 )
