@@ -322,3 +322,23 @@ func TestLineFoldsTheConsoleOptions(t *testing.T) {
 		t.Fatalf("Line = %s\nwant   %s", got, want)
 	}
 }
+
+func TestValidDeviceKey(t *testing.T) {
+	const good = "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBH7iriHk4uoQ5QFqWYraWlOwFNM2wikZzsWVilC6boso/FQAq1zahWnKxRjYJ2Z/EOtOHrgqLqjFZsrrjAmjJQA="
+	if !ValidDeviceKey(good) || !ValidDeviceKey(good+" iphone@home") {
+		t.Fatal("a P-256 key from ssh-keygen was refused")
+	}
+	for name, k := range map[string]string{
+		"ed25519":     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM4bfwfUcmyCX2tnMZ4mHkeEjSRJnkf0ehLEuB8iWLHU",
+		"nistp384":    "ecdsa-sha2-nistp384 AAAAE2VjZHNhLXNoYTItbmlzdHAzODQAAAAIbmlzdHAzODQAAABhBHm7/4305pCOcNUw2lMsS2Hur/bludwPenHsorMahHh/qJRnbGl5IazFSRCLpPU0so0xljdgFTnkpRt6LbSroPx9T/b+cmcgRzTZ1d2YsjVNJhyBiP9FxgKvpF3QOblRrA==",
+		"cut blob":    good[:len(good)-24],
+		"two words":   "x y",
+		"empty":       "",
+		"bad comment": good + ` x"y`,
+		"newline":     good + "\nssh-rsa AAAA",
+	} {
+		if ValidDeviceKey(k) {
+			t.Errorf("%s accepted", name)
+		}
+	}
+}

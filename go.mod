@@ -9,6 +9,7 @@ require (
 	github.com/NimbleMarkets/ntcharts/v2 v2.7.0
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/shirou/gopsutil/v4 v4.26.9
+	rsc.io/qr v0.2.0
 )
 
 require (

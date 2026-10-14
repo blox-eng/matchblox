@@ -7,6 +7,8 @@
 //	matchblox serve           run the service; --stdio speaks on stdin/stdout
 //	matchblox status          print what the service knows as JSON (for agents)
 //	matchblox status --text   the same, as a short summary
+//	matchblox pair            show a code that pairs the iPhone app
+//	matchblox devices         list the phones and laptops that open this host; devices rm <name> removes one
 //	matchblox setup           every setup door at once: tmux, the hooks, the way back
 //	matchblox version         print the version
 package main
@@ -110,9 +112,15 @@ func run(args []string) error {
 	if len(args) > 0 {
 		switch args[0] {
 		case "gate":
-			return gateMain()
+			return gateMain(args[1:])
 		case "authorize":
 			return authorize(args[1:])
+		case "pair":
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+			defer stop()
+			return pairCmd(ctx, args[1:], os.Stdout, time.Now)
+		case "devices":
+			return devicesCmd(args[1:], home(), os.Stdout)
 		case "connect":
 			return liveConnect(args[1:])
 		}
@@ -173,6 +181,9 @@ func run(args []string) error {
 		if err := goHome(); err != nil {
 			return err
 		}
+		if os.Getenv(panes.HomeEnv) == "1" {
+			_ = exec.Command(panes.SizeArgv()[0], panes.SizeArgv()[1:]...).Run()
+		}
 	}
 
 	// matchblox must not add load: lowest CPU priority for us and every
@@ -194,7 +205,7 @@ func run(args []string) error {
 
 // commands are the commands a builder types. hook, authorize and gate run
 // from a hook, an ssh forced command and a connect.
-var commands = []string{"connect", "serve", "status", "setup", "version"}
+var commands = []string{"connect", "serve", "status", "setup", "pair", "devices", "version"}
 
 type flags struct {
 	cfgPath, root         *string

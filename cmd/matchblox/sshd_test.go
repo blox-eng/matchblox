@@ -2,6 +2,10 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -14,7 +18,10 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/hosts"
+	"github.com/blox-eng/matchblox/internal/pair"
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
+	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
@@ -161,4 +168,133 @@ func TestConnectAndGateOnARealSSHD(t *testing.T) {
 			t.Errorf("%q with the matchblox key: %v\n%s", cmd, err, b)
 		}
 	}
+}
+
+// TestPairOnARealSSHD pairs a phone key through a one-time key, then checks
+// what the phone key, a laptop key and an expired one-time key can do.
+func TestPairOnARealSSHD(t *testing.T) {
+	h := startSSHD(t)
+	exe := filepath.Join(h.far, ".local", "bin", "matchblox")
+	keygen := func(name, typ string) (priv, pub string) {
+		priv = filepath.Join(h.dir, "key-"+name)
+		args := []string{"-q", "-t", typ, "-N", "", "-C", name, "-f", priv}
+		if typ == "ecdsa" {
+			args = append(args, "-b", "256")
+		}
+		if out, err := exec.Command("ssh-keygen", args...).CombinedOutput(); err != nil { //nolint:gosec // test
+			t.Fatalf("ssh-keygen %s: %v %s", name, err, out)
+		}
+		b, err := os.ReadFile(priv + ".pub")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return priv, strings.Join(strings.Fields(string(b))[:2], " ")
+	}
+	pairKey := func(name string, until time.Time) (priv string) {
+		priv, pub := keygen(name, "ed25519")
+		blob, err := base64.StdEncoding.DecodeString(strings.Fields(pub)[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(blob)
+		if err := setup.AddPairKey(h.far, exe, pub, hex.EncodeToString(sum[:])[:12], until); err != nil {
+			t.Fatal(err)
+		}
+		return priv
+	}
+	ssh := func(key string, stdin string, cmd ...string) *exec.Cmd {
+		args := append([]string{"-T", "-i", key, "-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none", "-o", "BatchMode=yes",
+			"-o", "ControlMaster=no", "-o", "ControlPath=none", "--", "ws-1"}, cmd...)
+		c := exec.Command("ssh", args...) //nolint:gosec // test
+		c.Stdin = strings.NewReader(stdin)
+		return c
+	}
+	exitCode := func(err error) int {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return ee.ExitCode()
+		}
+		return -1
+	}
+
+	phoneKey, phonePub := keygen("phone", "ecdsa")
+	req, err := json.Marshal(pair.Request{Name: "iPhone", Key: phonePub})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := string(req) + "\n"
+
+	oneTime := pairKey("onetime", time.Now().Add(5*time.Minute))
+	out, err := ssh(oneTime, request, "ignored").Output()
+	if err != nil || !strings.Contains(string(out), `"ok":true`) {
+		t.Fatalf("pairing with the one-time key: %v\n%s", err, out)
+	}
+
+	out, err = ssh(oneTime, request, "ignored").CombinedOutput()
+	if err == nil || strings.Contains(string(out), `"ok":true`) {
+		t.Fatalf("the one-time key worked twice: %v\n%s", err, out)
+	}
+
+	out, err = ssh(phoneKey, "", "id").CombinedOutput()
+	if exitCode(err) != 126 || !strings.Contains(string(out), "refused") {
+		t.Errorf("phone key running id: %v\n%s", err, out)
+	}
+
+	svc := ssh(phoneKey, "", remote.ServeCommand)
+	svc.Stdin = nil
+	in, err := svc.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	outp, err := svc.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Start(); err != nil {
+		t.Fatal(err)
+	}
+	c := transport.Stdio(outp, in)
+	if got := hello(t, c); got.Version != proto.Version {
+		t.Errorf("hello over the phone key %+v", got)
+	}
+	c.Close()
+	_ = svc.Wait()
+
+	laptopKey, laptopPub := keygen("laptop", "ed25519")
+	if _, err := setup.Authorize(h.far, exe, laptopPub); err != nil {
+		t.Fatal(err)
+	}
+	out, err = ssh(laptopKey, "", remote.ConsoleCommand).CombinedOutput()
+	if exitCode(err) != 126 || !strings.Contains(string(out), "refused") {
+		t.Errorf("laptop key asking for the console: %v\n%s", err, out)
+	}
+
+	t.Run("expired", func(t *testing.T) {
+		if v, _ := exec.Command("ssh", "-V").CombinedOutput(); !sshHasExpiryTime(string(v)) {
+			t.Skipf("OpenSSH older than 7.7 does not read expiry-time without Z in the system zone, and rejects the line: %s", v)
+		}
+		// OpenSSH 9.6 reads the time as standard time even while DST is on, so
+		// a key can live an hour longer than written; two hours is expired
+		// either way. matchblox pair removes the line itself when its time is up.
+		expired := pairKey("expired", time.Now().Add(-2*time.Hour))
+		out, err := ssh(expired, request, "ignored").CombinedOutput()
+		if err == nil || strings.Contains(string(out), `"ok"`) {
+			t.Errorf("an expired one-time key worked: %v\n%s", err, out)
+		}
+	})
+}
+
+// sshHasExpiryTime is whether this OpenSSH reads expiry-time="YYYYMMDDHHMM" in
+// the system zone: from 7.7 (the Z suffix needs 9.1). Older sshd refuses the
+// whole line as a bad option.
+func sshHasExpiryTime(version string) bool {
+	var major, minor int
+	i := strings.Index(version, "OpenSSH_")
+	if i < 0 {
+		return false
+	}
+	if _, err := fmt.Sscanf(version[i:], "OpenSSH_%d.%d", &major, &minor); err != nil {
+		return false
+	}
+	return major > 7 || (major == 7 && minor >= 7)
 }

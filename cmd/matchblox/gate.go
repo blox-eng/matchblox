@@ -6,14 +6,29 @@ import (
 	"os"
 
 	"github.com/blox-eng/matchblox/internal/remote"
+	"github.com/blox-eng/matchblox/internal/setup"
 )
 
 // gateMain is the forced command of the matchblox key on a host
-// (design/0005-remote-mode.md §3.3). The key starts the service stream and
-// nothing else; anything else exits 126.
-func gateMain() error {
+// (design/0005-remote-mode.md §3.3). A laptop key (`gate`) starts the service
+// stream; a phone key (`gate phone`) also starts the console. Anything else
+// exits 126.
+func gateMain(args []string) error {
+	if len(args) == 2 && args[0] == "pair" {
+		return gatePair(args[1])
+	}
+	mode := ""
+	switch {
+	case len(args) == 0:
+	case len(args) == 1 && args[0] == phoneMode:
+		mode = phoneMode
+	default:
+		fmt.Fprintln(os.Stderr, "matchblox gate: refused: this key line has an unknown gate mode; run matchblox connect or matchblox pair again")
+		os.Exit(126)
+	}
 	orig := os.Getenv("SSH_ORIGINAL_COMMAND")
-	if err := gateDecision(orig); err != nil {
+	argv, err := gateDecision(mode, orig)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "matchblox gate: refused %q: %v\n", orig, err)
 		os.Exit(126)
 	}
@@ -21,16 +36,51 @@ func gateMain() error {
 	// not have tmux: the service it starts lists the panes with it.
 	_ = os.Setenv("PATH", os.ExpandEnv(remote.HostPath)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	_ = os.Unsetenv("SSH_ORIGINAL_COMMAND")
-	return run([]string{"serve", "--stdio"})
+	// The console re-runs itself in the home session with these arguments:
+	// without "gate" it is the builder's own `matchblox`.
+	os.Args = os.Args[:1]
+	return run(argv)
 }
 
-// gateDecision lets the stream through: exactly the console's command.
-func gateDecision(orig string) error {
-	if orig == remote.ServeCommand {
-		return nil
+const phoneMode = "phone"
+
+// gateDecision maps the requested command to what runs. The requested
+// command is never a tmux command: only a phone key reaches tmux, through
+// the console and goHome's fixed argv. A laptop key (mode "") gets the
+// service stream alone; the phone mode also gets the console, which attaches
+// the shared home session, where goHome already decides tmux or in place. An
+// unknown mode gets nothing.
+func gateDecision(mode, orig string) (argv []string, err error) {
+	if mode != "" && mode != phoneMode {
+		return nil, errors.New("this key line has an unknown gate mode; run matchblox connect or matchblox pair again")
 	}
-	if orig == "" {
-		return errors.New("no shell for this key")
+	switch {
+	case orig == remote.ServeCommand:
+		return []string{"serve", "--stdio"}, nil
+	case orig == remote.ConsoleCommand && mode == phoneMode:
+		return []string{}, nil
+	case orig == remote.ConsoleCommand:
+		return nil, errors.New("this key starts only the matchblox stream; run matchblox pair to add a phone")
+	case mode == phoneMode:
+		return nil, errors.New("this key starts only the matchblox stream and console; use your own ssh login for a shell")
 	}
-	return errors.New("this key starts only the matchblox stream")
+	return nil, errors.New("this key starts only the matchblox stream; use your own ssh login for a shell")
+}
+
+// gatePair runs the forced command of a one-time key. The mode comes from the
+// key line alone; SSH_ORIGINAL_COMMAND is not read.
+func gatePair(id string) error {
+	if !setup.ValidPairID(id) {
+		fmt.Fprintln(os.Stderr, "matchblox gate: refused: this key line has a bad pairing id; run matchblox pair again")
+		os.Exit(126)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	exe := invokedPath(os.Args[0])
+	if exe == "" {
+		return errors.New("cannot find this matchblox on the PATH")
+	}
+	return pairMain(home, exe, os.Stdin, os.Stdout, id)
 }
