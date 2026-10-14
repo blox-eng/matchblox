@@ -37,7 +37,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
-var update = flag.Bool("update", false, "TestReplay: write www/demo/frames-<size>.json, www/demo/replay-<size>.svg and the open Duo's still frame in www/index.html")
+var update = flag.Bool("update", false, "TestReplay: write www/demo/frames-<size>.json, www/demo/replay-<size>.svg and the open Duo's still frame in www/index.html; TestStokerSVG: write www/demo/stoker.svg and the stoker's still frame")
 
 const (
 	demoPID     = 4242
@@ -236,7 +236,7 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 
 var (
 	burning    = regexp.MustCompile(`[✦✧] flint-auth\s+busy`)
-	settled    = regexp.MustCompile(`╿ hearth-api\s+done`)
+	settled    = regexp.MustCompile(`╿ hearth-api\s+(done|out of work)`)
 	hearthBack = regexp.MustCompile(`hearth-api\s+\d+k → 9k`)
 	sparkBack  = regexp.MustCompile(`spark-docs\s+\d+k → 9k`)
 	struck     = regexp.MustCompile(`[✦✧] flint-auth`) // its row under the peek: the strike has played
@@ -501,14 +501,11 @@ func replayAt(t *testing.T, z replaySize) {
 	night := time.Date(2026, 10, 1, 23, 10, 0, 0, time.UTC)
 	full := time.Date(2026, 10, 1, 23, 40, 0, 0, time.UTC)
 	morning := time.Date(2026, 10, 2, 6, 59, 50, 0, time.UTC)
-	who := []string{"● 4 wait for you", "WAITS FOR YOU · 4", "flint-auth", "asks", "kindle-web", "ember-billing", "The refresh flow works"}
+	who := []string{"● 4 wait for you", "WAITS FOR YOU · 4", "flint-auth", "asks", "kindle-web", "ember-bill", "The refresh flow works"}
 	if !phone {
 		who = append(who, "ws-1", "USAGE", "MACHINE") // a phone drops the host, and its long list folds the dock
 	}
 	sessionsTab := "WAITS FOR YOU"
-	if phone {
-		sessionsTab = "MACHINE" // c opened the card on the Machine tab
-	}
 	steps := []step{
 		{name: "who waits", at: 1300 * time.Millisecond, ok: has(who...)},
 		// The selection moves: the next one that waits shows what it said.
@@ -525,7 +522,7 @@ func replayAt(t *testing.T, z replaySize) {
 			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "⏎ send") && burning.MatchString(s)
 		}},
 		{name: "the sessions", at: 9 * time.Second, ok: func(s string) bool {
-			return has("hearth-api", "spark-docs", "kindle-web", "ember-billing", "WORKING")(s) && burning.MatchString(s)
+			return has("hearth-api", "spark-docs", "kindle-web", "ember-bill", "WORKING")(s) && burning.MatchString(s)
 		}},
 		// Ships: every pull request a session drives, on its track.
 		{name: "ships", at: 11 * time.Second, key: "2", ok: has("open → ci → green → merged → live", "#4551", "CI · 6 of 9 jobs", "#4552", "waits for your merge")},
@@ -533,7 +530,8 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "back to the sessions", at: 14 * time.Second, key: "1", ok: has("WAITS FOR YOU")},
 		// h folds the recommendations to one line: the dock has room again.
 		{name: "recommendations folded", at: 15 * time.Second, key: "h", ok: has("hidden · h shows", "USAGE")},
-		{name: "a night", at: 16500 * time.Millisecond, do: func() { clk.Set(night) }, key: "n", ok: func(s string) bool {
+		{name: "the launch sheet", at: 16 * time.Second, do: func() { clk.Set(night) }, key: "n", ok: has("How should I run tonight?", "gos ○ merges")},
+		{name: "a night", at: 17 * time.Second, key: "enter", ok: func(s string) bool {
 			// spark-docs is past the line: the stoker compacts it at once,
 			// and the frame waits until the compact was read back.
 			return has("night", "STOKER", "c the whole run")(s) && sparkBack.MatchString(s)
@@ -558,11 +556,12 @@ func replayAt(t *testing.T, z replaySize) {
 			return has("STOKER")(s) && hearthBack.MatchString(s) && settled.MatchString(s)
 		}},
 		{name: "the morning", at: 26 * time.Second, do: func() { clk.Set(morning) }, ok: has("STOKER", "ready ")},
-		// c opens the whole card: in the right pane, on a phone the Machine tab.
+		// c opens the STOKER tab; 1 goes back to Sessions.
 		{name: "the morning card", at: 27500 * time.Millisecond, key: "c",
-			ok: has("NIGHT 23:10 → 07:00", "ready ", "176k → 9k", "RESUME")},
-		{name: "folded", at: 31 * time.Second, key: "enter", ok: func(s string) bool {
-			return !strings.Contains(s, "NIGHT 23:10") && strings.Contains(s, sessionsTab)
+			ok: has("NIGHT · 23:10 → 07:00", "ready ", "176k → 9k", "RESUME")},
+		{name: "back to sessions", at: 31 * time.Second, key: "1", ok: func(s string) bool {
+			// the ack c sent has come back: the dock no longer offers the run
+			return !strings.Contains(s, "NIGHT · 23:10") && strings.Contains(s, sessionsTab) && !strings.Contains(s, "c the whole run")
 		}},
 	}
 	var still replay.Frame

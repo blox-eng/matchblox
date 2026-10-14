@@ -4,12 +4,14 @@ package panes
 
 import (
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/blox-eng/matchblox/internal/said"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // MaxAnswer bounds an answer: a short reply, not a document.
@@ -17,12 +19,18 @@ const MaxAnswer = 500
 
 // Send types text into the pane as literal keys, then presses Enter as a
 // key of its own. "--" ends the flags, so a text that starts with a dash
-// stays text.
+// stays text. A pane of matchblox's own server is typed into there.
 func Send(target, text string) [][]string {
 	return [][]string{
-		{"tmux", "send-keys", "-t", target, "-l", "--", text},
-		{"tmux", "send-keys", "-t", target, "Enter"},
+		keys(target, "-l", "--", text),
+		keys(target, "Enter"),
 	}
+}
+
+// keys is the send-keys step to target, on the tmux server it is on.
+func keys(target string, args ...string) []string {
+	tmux, id := sample.Tmux(target)
+	return slices.Concat(tmux, []string{"send-keys", "-t", id}, args)
 }
 
 // Pause is a step between two keys that change the question tool's page:
@@ -46,9 +54,7 @@ var Pause = []string{"sleep", "0.3"}
 // one per question, then the review page when there is one. Each must be
 // checked on the screen before its keys go.
 func Pick(target string, ask said.Ask, ans said.Answer) (steps [][]string, pages []int) {
-	key := func(keys ...string) []string {
-		return append([]string{"tmux", "send-keys", "-t", target}, keys...)
-	}
+	key := func(k ...string) []string { return keys(target, k...) }
 	text := func(t string) []string { return key("-l", "--", t) }
 	down := func(n int) []string {
 		keys := make([]string, n)

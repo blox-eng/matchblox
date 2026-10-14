@@ -82,6 +82,20 @@ const (
 
 func one(argv ...string) [][]string { return [][]string{argv} }
 
+// sendKeys types keys into pane, on the tmux server the pane is on.
+func sendKeys(pane string, keys ...string) []string {
+	tmux, id := sample.Tmux(pane)
+	return append(append(tmux, "send-keys", "-t", id), keys...)
+}
+
+// lane is whether pane is one of the builder's lanes. The stoker's own
+// server is not: the console refuses a jump there, and the header carries
+// the stoker's waits.
+func lane(pane string) bool {
+	server, _ := sample.SplitPane(pane)
+	return pane != "" && server == ""
+}
+
 // LongShell is how long a background shell of an idle session runs before
 // it is worth a look: a wait loop that matches itself never ends.
 const LongShell = time.Hour
@@ -91,7 +105,7 @@ const LongShell = time.Hour
 func shellRecs(snap sample.Snapshot) []Rec {
 	var out []Rec
 	for _, s := range snap.Sessions {
-		if !s.Resting() || s.Pane == "" {
+		if !s.Resting() || !lane(s.Pane) {
 			continue
 		}
 		for _, sh := range s.Shells {
@@ -140,14 +154,14 @@ func Build(snap sample.Snapshot, git *gitscan.Report) []Rec {
 			Second: &Action{Label: "kill", Steps: one(o.Kill...), Destructive: true,
 				Guards: []Guard{{PID: o.PID, StartTicks: o.Start}}},
 		}
-		if o.PaneAlive {
+		if o.PaneAlive && lane(o.Pane) {
 			r.Primary = &Action{Label: "jump to its pane", Nav: true, Steps: one("tmux", "switch-client", "-t", o.Pane)}
 		}
 		out = append(out, r)
 	}
 
 	for _, s := range snap.Sessions {
-		if s.Do == "" || s.Pane == "" {
+		if s.Do == "" || !lane(s.Pane) {
 			continue
 		}
 		r := Rec{
@@ -165,7 +179,7 @@ func Build(snap sample.Snapshot, git *gitscan.Report) []Rec {
 		if s.Status == "idle" {
 			r.Second = &Action{
 				Label:       "send /" + s.Do,
-				Steps:       one("tmux", "send-keys", "-t", s.Pane, "/"+s.Do, "Enter"),
+				Steps:       one(sendKeys(s.Pane, "/"+s.Do, "Enter")...),
 				Destructive: true,
 				Guards:      []Guard{{IdlePane: s.Pane}},
 			}
@@ -197,7 +211,7 @@ func limitRecs(snap sample.Snapshot) []Rec {
 		var hot *sample.Session
 		for i, s := range snap.Sessions {
 			// A cold session burns nothing: a compact there saves no week.
-			if s.Provider != a.Provider || s.Account != a.Account || s.Pane == "" || s.Idle >= sample.ColdAfter {
+			if s.Provider != a.Provider || s.Account != a.Account || !lane(s.Pane) || s.Idle >= sample.ColdAfter {
 				continue
 			}
 			if hot == nil || s.Burn30m > hot.Burn30m || (s.Burn30m == hot.Burn30m && s.Tokens > hot.Tokens) {
@@ -228,7 +242,7 @@ func limitRecs(snap sample.Snapshot) []Rec {
 		}
 		// Type only into an idle session, as the compact rec does.
 		if hot.Status == "idle" {
-			r.Second = &Action{Label: "send /compact", Steps: one("tmux", "send-keys", "-t", hot.Pane, "/compact", "Enter"),
+			r.Second = &Action{Label: "send /compact", Steps: one(sendKeys(hot.Pane, "/compact", "Enter")...),
 				Destructive: true, Guards: []Guard{{IdlePane: hot.Pane}}}
 		}
 		out = append(out, r)
@@ -274,7 +288,7 @@ func alertRecs(snap sample.Snapshot) []Rec {
 			}
 			top := snap.Top[0]
 			pane, ok := strings.CutPrefix(top.Owner, "pane ")
-			if !ok {
+			if !ok || !lane(pane) {
 				continue
 			}
 			out = append(out, Rec{

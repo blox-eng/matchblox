@@ -119,6 +119,11 @@ type drawn struct {
 	// the dock shows all it has; paneFull: so does the right pane.
 	dockH, stx0, stx1 int
 	full, paneFull    bool
+	// The launch sheet's go chips: their line, and the key a tap on each
+	// one presses.
+	sheetGoesAt int
+	sheetGoes   []span
+	stokerAt    span // the header's stoker word
 }
 
 // draw lays out the screen, top to bottom: the header, the tabs, a
@@ -126,9 +131,9 @@ type drawn struct {
 // detail side by side), the dock when it fits, then a hairline and the
 // key line (design/0006 §4.1).
 func (m Model) draw(w int) drawn {
-	head, waits := m.header(w)
+	head, waits, stokerAt := m.header(w)
 	tabs, tabSpans := m.tabsLine(w)
-	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, tabs: tabSpans,
+	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
 		bodyTop: 3, listW: w, dockAt: -1, keysAt: -1}
 	switch {
 	case m.mismatch:
@@ -154,15 +159,12 @@ func (m Model) draw(w int) drawn {
 	sc.listW = listW
 	b := m.body(listW)
 	_, _, peeking := m.peekNow()
-	inline := peeking && detailW > 0    // the peek takes the detail pane
-	card := m.stokerOpen && detailW > 0 // the stoker's card takes the detail pane
+	inline := peeking && detailW > 0 // the peek takes the detail pane
 	paneFull := true
 	paneLines := func(rows int) []string {
 		switch {
 		case detailW == 0 || inline:
 			return nil
-		case card:
-			return m.stokerCard(detailW)
 		}
 		lines, all := m.detailPane(detailW, rows)
 		paneFull = all
@@ -170,7 +172,7 @@ func (m Model) draw(w int) drawn {
 	}
 	detail := paneLines(0)
 	var d docked
-	if m.tab != tabMachine {
+	if m.tab != tabMachine && m.tab != tabStoker {
 		d = m.dock(w, -1)
 	}
 	room := full
@@ -181,7 +183,7 @@ func (m Model) draw(w int) drawn {
 	} else {
 		d = docked{}
 	}
-	sc.full = d.full || m.tab == tabMachine
+	sc.full = d.full || m.tab == tabMachine || m.tab == tabStoker
 	detail = paneLines(room)
 	sc.paneFull = paneFull && len(detail) <= room
 	if inline {
@@ -212,7 +214,10 @@ func (m Model) draw(w int) drawn {
 	keys, keySpans := m.keyLine(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
 	sc.lines = append(sc.lines, m.st.hair.Render(strings.Repeat("─", w)), keys)
-	if peeking && !inline {
+	switch {
+	case m.sheet != nil:
+		m.overlaySheet(&sc, w)
+	case peeking && !inline:
 		m.overlayPeek(&sc, w)
 	}
 	return sc
@@ -265,8 +270,9 @@ func windowed(b body, room, sel int) body {
 }
 
 // header is one line: the mark, the name and the host on the left; who
-// waits and the stoker on the right, or a toast after an action.
-func (m Model) header(w int) (string, span) {
+// waits and the stoker on the right, or a toast after an action. The
+// spans are what a tap on who waits, and on the stoker's word, presses.
+func (m Model) header(w int) (string, span, span) {
 	st := m.st
 	left := " " + st.accent.Render("▰") + " " + st.text.Render("matchblox")
 	host := m.opt.Host
@@ -282,7 +288,7 @@ func (m Model) header(w int) (string, span) {
 		if host != "" {
 			left += st.faint.Render(" · ") + st.muted.Render(host)
 		}
-		return fit(left, w), span{}
+		return fit(left, w), span{}, span{}
 	}
 	if m.toast != "" {
 		// A long toast is cut, never the name; the host stays when the
@@ -291,7 +297,7 @@ func (m Model) header(w int) (string, span) {
 			left += st.faint.Render(" · ") + st.muted.Render(host)
 		}
 		room := max(w-lipgloss.Width(left+lost)-3, 1)
-		return spread(left+lost, st.accent.Render(ansi.Truncate(m.toast, room, "…"))+" ", w), span{}
+		return spread(left+lost, st.accent.Render(ansi.Truncate(m.toast, room, "…"))+" ", w), span{}, span{}
 	}
 	n := 0
 	for _, s := range m.all.sessions {
@@ -325,11 +331,20 @@ func (m Model) header(w int) (string, span) {
 		}
 		for _, l := range lefts {
 			if lipgloss.Width(l+lost)+lipgloss.Width(right)+1 <= w {
-				return spread(l+lost, right, w), hit
+				return spread(l+lost, right, w), hit, m.stokerHit(stoker, w)
 			}
 		}
 	}
-	return spread(left+lost, right, w), span{}
+	return spread(left+lost, right, w), span{}, m.stokerHit(stoker, w)
+}
+
+// stokerHit is where the header's stoker word is, the line's last word:
+// a tap opens the stoker agent.
+func (m Model) stokerHit(word string, w int) span {
+	if !m.hasAgent() || word == "" {
+		return span{}
+	}
+	return span{w - 1 - lipgloss.Width(word), w - 1, "stoker"}
 }
 
 // stokerBadge is the stoker's word: off in faint, on and the night in the
@@ -339,6 +354,10 @@ func (m Model) stokerBadge(short bool) string {
 	switch {
 	case m.stoker == nil:
 		return ""
+	case m.stokerAsks() && short:
+		return st.accent.Render("stoker waits")
+	case m.stokerAsks():
+		return st.accent.Render("stoker waits for you")
 	case !m.stoker.On:
 		return st.faint.Render("stoker off")
 	case m.resting():
@@ -403,6 +422,10 @@ func (m Model) tabLabel(i int, named bool) string {
 	case tabMachine:
 		if len(m.all.orphans) > 0 {
 			count = "!" // a detached busy loop burns
+		}
+	case tabStoker:
+		if n := m.stokerNeeds(); n > 0 {
+			count = strconv.Itoa(n)
 		}
 	}
 	if !named {

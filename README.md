@@ -16,6 +16,10 @@
 <img src="www/demo/replay-phone.svg" width="24%" alt="The same console on a phone: one column, the selected session open in place, the answer peek at the bottom">
 </p>
 
+<p>
+<img src="www/demo/stoker.svg" width="32%" alt="The stoker takes orders, on a phone on a demo machine: every quiet session says why, n asks how to run tonight with the gos you give, at 03:12 it works its own plan with a release waiting for your y and a trigger fired, the card in the morning, a new order by day, and the ways file">
+</p>
+
 One terminal console for every AI coding agent you run in tmux. It shows
 which agent waits for you, what loads the machine, the state of every git
 checkout, and the one safe action that resolves each thing. It works on the
@@ -64,6 +68,13 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
 - **The dock**: what `/usage` says for each account, in percentages; the
   machine; and the stoker. Press `n` before you sleep: each session that
   fills its context compacts itself and leaves one line on how to continue.
+- **Orders for the stoker**: matchblox starts the stoker agent you choose
+  out of sight, on a tmux server of its own. Say in your own words how to
+  run the night ("merge them on green") and turn on the gos
+  you give. It starts at once, keeps its own plan, follows [your ways
+  file](https://docs.matchblox.com/ways/) and logs every step on a card.
+  A merge, release or deploy you did not give waits on the card for your
+  `y`, and what the stoker would wait for, matchblox fires itself.
 - **Three layouts, read from the screen's shape**: one column on a phone,
   the list with a detail drawer on a phone held upright with a small font,
   and every column on a desk.
@@ -81,7 +92,7 @@ More in [The console](https://docs.matchblox.com/console/).
 | `Enter` | The safe action: go to the agent's pane. |
 | `a` | Answers the selected agent, or sends it a message. |
 | `x` | The destructive action. It runs only after a typed `y`. |
-| `1-6` | Opens a tab: Sessions, Ships, Machine, Git, History, Panes. |
+| `1-7` | Opens a tab: Sessions, Ships, Machine, Git, History, Panes, Stoker. |
 | `u` | Cycles the dock of a phone: usage, the machine, the stoker. |
 | `/` | Searches the open tab. |
 | `f`, `n` | The stoker on or off; a night that ends in the morning. |

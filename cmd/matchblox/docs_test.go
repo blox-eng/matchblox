@@ -22,12 +22,21 @@ var docHosts = []string{"ws-1", "<host>"}
 // commandFlags are the flags each command reads; a flag the binary parses
 // and the command ignores is a doc that misleads.
 var commandFlags = map[string][]string{
-	"console": {"config", "interval", "fixtures", "no-motion"},
-	"<host>":  {"config", "interval", "no-motion"},
-	"devices": {},
-	"pair":    {"address", "port", "name"},
-	"serve":   {"config", "interval", "fixtures", "stdio"},
-	"status":  {"config", "interval", "fixtures", "text"},
+	"console":  {"config", "interval", "fixtures", "no-motion"},
+	"<host>":   {"config", "interval", "no-motion"},
+	"devices":  {},
+	"pair":     {"address", "port", "name"},
+	"serve":    {"config", "interval", "fixtures", "stdio"},
+	"status":   {"config", "interval", "fixtures", "text"},
+	"sessions": {"json"},
+	"ships":    {"json"},
+	"usage":    {"json"},
+	"send":     {"pick"},
+	"compact":  {},
+	"hold":     {"why"},
+	"release":  {},
+	"stoker":   {"state", "needs", "rule", "ship", "stage", "rest", "why", "drop", "list"},
+	"peek":     {"lines", "json"},
 }
 
 // checkCommand returns the command a docs line shows ("console", "<host>"
