@@ -1,6 +1,7 @@
 import Foundation
 import XCTest
 @testable import MatchbloxKit
+import struct MatchbloxKit.Host
 
 final class HostStoreTests: XCTestCase {
     private var directory: URL!
