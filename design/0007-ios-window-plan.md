@@ -235,14 +235,14 @@ Part B needs macOS with Xcode 16 or later. This plan does not assume a Mac at ha
 ### Task B0: Skeleton, licenses and CI
 
 **Files:**
-- Create: `ios/project.yml`, `ios/Makefile` (from `~/dev/blox/ios/Makefile`: `install`, `gen`, `build`, `test`), `ios/README.md`, `ios/.gitignore` (`*.xcodeproj`, `build/`), `ios/Matchblox/MatchbloxApp.swift`, `ios/Matchblox/Info.plist`, `ios/Matchblox/Matchblox.entitlements` (empty for now), `ios/MatchbloxKit/Package.swift`, `ios/MatchbloxKit/Sources/MatchbloxKit/Fixture.swift`, `ios/MatchbloxKit/Tests/MatchbloxKitTests/FixtureTests.swift`, `.github/workflows/ios.yml`, `ios/THIRD_PARTY.md`
+- Create: `ios/project.yml`, `ios/Makefile` (from `~/dev/blox/ios/Makefile`: `install`, `gen`, `build`, `test`), `ios/README.md`, `ios/.gitignore` (`*.xcodeproj`, `build/`), `ios/Matchblox/MatchbloxApp.swift`, `ios/Matchblox/Info.plist`, `ios/Matchblox/Matchblox.entitlements` (empty for now), `ios/MatchbloxKit/Package.swift`, `ios/MatchbloxKit/Tests/MatchbloxKitTests/Fixture.swift` (test support stays out of the app), `ios/MatchbloxKit/Tests/MatchbloxKitTests/FixtureTests.swift`, `.github/workflows/ios.yml`, `ios/THIRD_PARTY.md`
 
 **Interfaces:**
-- Produces: the targets `Matchblox` (app), `MatchbloxKit` (a package: iOS 17.2, macOS 14, so `swift test` runs on the macOS runner), and the package dependencies SwiftTerm and swift-nio-ssh, pinned with `from:` to the latest release that is at least two weeks old. Info.plist: `CFBundleURLTypes` with the scheme `matchblox`, `NSCameraUsageDescription` = "matchblox uses the camera to scan the pairing code of your host.", `NSFaceIDUsageDescription` = "Face ID unlocks the key that opens your console.", portrait and landscape.
+- Produces: the targets `Matchblox` (app), `MatchbloxKit` (a package: iOS 17.2, macOS 14, so `swift test` runs on the macOS runner), and the package dependencies SwiftTerm, swift-nio, swift-nio-ssh and swift-nio-transport-services. SwiftTerm (`exactVersion: "1.20.0"`) and swift-nio (`exact: "2.103.0"`) are pinned exactly to the latest release that is at least two weeks old, because `from:` floats to a newer release. The app target declares NIOSSH, because it imports it. Info.plist: `CFBundleURLTypes` with the scheme `matchblox`, `NSCameraUsageDescription` = "matchblox uses the camera to scan the pairing code of your host.", `NSFaceIDUsageDescription` = "Face ID unlocks the key that opens your console.", portrait and landscape.
 - `ios.yml`: on `push` and `pull_request` with paths `ios/**`, `testdata/pair/**`. Steps: `swift test --package-path ios/MatchbloxKit`, `brew install xcodegen`, `make -C ios build`.
 
-- [ ] **Step 1:** Verify the two licenses in their repositories (SwiftTerm: MIT; swift-nio-ssh: Apache-2.0) and record them in `ios/THIRD_PARTY.md`. If one is not as stated, stop and report.
-- [ ] **Step 2: Write the failing test** `FixtureTests.testFixtureLoads`: it reads `../../../testdata/pair/v1.json` from `#filePath` and asserts that `payload.name == "ws-1"`.
+- [ ] **Step 1:** Verify the licenses in their repositories (SwiftTerm: MIT; the swift-nio packages: Apache-2.0) and record them in `ios/THIRD_PARTY.md`, with each package of the resolved set that ships. If one is not as stated, stop and report.
+- [ ] **Step 2: Write the failing test** `FixtureTests.testFixtureLoads`: it reads `testdata/pair/v1.json` four levels up from `#filePath` and asserts that `payload.name == "ws-1"`.
 - [ ] **Step 3:** Push the branch `feat/88-ios-app`. Run `gh run watch`. Expected: the test job FAILS (no `Fixture` type).
 - [ ] **Step 4:** Implement `Fixture.load() throws -> Fixture` (a Codable mirror of the JSON, test support only).
 - [ ] **Step 5:** Push and watch. Expected: PASS for both `swift test` and `make build`.
@@ -273,7 +273,12 @@ Part B needs macOS with Xcode 16 or later. This plan does not assume a Mac at ha
   - `SSHKeys.fingerprint(openSSH: String) throws -> String` (as `setup.Fingerprint`)
   - `SSHKeys.fingerprint(hostKey: NIOSSHPublicKey) -> String`
   - `SSHKeys.oneTimeKey(seedBase64: String) throws -> NIOSSHPrivateKey`
-- Produces (app): `DeviceKey.loadOrCreate() throws -> SecureEnclave.P256.Signing.PrivateKey`. Access control is `.privateKeyUsage` and `.biometryAny`, with the device passcode as fallback. The `dataRepresentation` is kept in the Keychain (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`, service `com.blox.matchblox.device`). It also gives `DeviceKey.openSSH(name:) -> String` and `DeviceKey.nioKey(_:) -> NIOSSHPrivateKey` (`NIOSSHPrivateKey(secureEnclaveP256Key:)`).
+- Produces (app): `DeviceKey`, one Secure Enclave key for each host (spec §6.1.4). Access control is `.privateKeyUsage` and `.biometryAny`, with the device passcode as fallback. The `dataRepresentation` is kept in the Keychain (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`, service `com.blox.matchblox.device`, account = the host key fingerprint). It gives:
+  - `DeviceKey.openSSH(for host: String) throws -> String`: the public key line with no comment (the request JSON carries the name, and the host writes the comment). It makes the key of the host when there is none. A stored key that no longer opens is replaced; a key that cannot be made is not retried.
+  - `DeviceKey.load(host: String, context: LAContext) throws -> SecureEnclave.P256.Signing.PrivateKey`, for the console.
+  - `DeviceKey.remove(host: String) throws`, when a host is removed or replaced.
+  - `DeviceKey.nioKey(_:) -> NIOSSHPrivateKey` (`NIOSSHPrivateKey(secureEnclaveP256Key:)`).
+  - Each `DeviceKeyError` text names its fix. `.keyUnavailable` says to run matchblox pair and scan again.
 
 - [ ] **Step 1: Write the failing tests:** `testOpenSSHMatchesTheFixture` (from `p256_x963_hex` it gives `p256_openssh`, without its comment) and `testFingerprintMatchesSSHKeygen` (`hostkey_pub` gives `hostkey_fp`).
 - [ ] **Step 2:** Push and watch. Expected: FAIL.
@@ -296,6 +301,7 @@ Part B needs macOS with Xcode 16 or later. This plan does not assume a Mac at ha
   - The host key delegate accepts only a key with `SSHKeys.fingerprint(hostKey:) == hostKeyFingerprint`.
   - A pty asks for `xterm-256color`.
   - The exec request carries `command` (the gate ignores it for a one-time key).
+  - One 10 s deadline covers connect, handshake, auth and session open; its expiry gives `.unreachable`. `open` runs once for each actor: a second call throws `.closed`, and a reconnect makes a new `SSHSession`.
   - `public enum ConnectFailure: Error, Equatable { case unreachable, hostKeyChanged, refused, closed(String) }`, and `ConnectFailure.classify(_ error: Error) -> ConnectFailure`: DNS failures, connection refused and timeouts map to `.unreachable`; a fingerprint mismatch maps to `.hostKeyChanged`; an auth failure maps to `.refused`.
 
 - [ ] **Step 1: Write the failing test** `testClassify`. Build the NIO and POSIX errors directly: `ECONNREFUSED`, `ETIMEDOUT` and a resolver failure each give `.unreachable`; the delegate's mismatch error gives `.hostKeyChanged`; `NIOSSHError` for auth gives `.refused`.
@@ -314,18 +320,19 @@ Part B needs macOS with Xcode 16 or later. This plan does not assume a Mac at ha
   - `public struct PairDraft { payload, address: String, port: Int, phoneName: String }`. Its `init(payload:)` sets `address = payload.host`, and the builder can change it.
   - `Pairing.cleanName(_ s: String) -> String` drops every rune that `setup.ValidDeviceName` refuses, trims, cuts to 40, and gives "iPhone" when the result is empty. Its test cases come from `fixture.names`.
   - `Pairing.requestLine(name: String, key: String) -> Data` (equals `fixture.request_line`).
-  - `Pairing.reply(_ line: Data) throws -> PairReply`.
-  - `Pairing.message(for: ConnectFailure, host: String) -> String`:
-    - `.refused` → "This code was used or expired. Run matchblox pair on \(host) again."
-    - `.unreachable` → "Can't reach \(host). Check the address, or that the phone is on your network."
-    - `.hostKeyChanged` → "\(host) has a new host key. Run matchblox pair on \(host) again."
+  - `Pairing.reply(_ line: Data) throws(PairReplyError) -> PairReply`, with `enum PairReply { case ok(host: String); case failed(PairRefusal) }` and one `PairRefusal` case for each reply word of the fixture.
+  - `Pairing.message(for: ConnectFailure, host: String, address: String) -> String`:
+    - `.refused` → "This code was used or expired. Run matchblox pair on \(host) again." The reply `code used` gives the same text.
+    - `.unreachable` → "Can't reach \(host). Check the address, or that the iPhone is on your network."
+    - `.hostKeyChanged` → "\(address) is not \(host). Check the address, then tap Pair." The host key comes fresh from the code, so the address reaches another machine.
+  - `Pairing.message` also covers `.closed`, each reply word and each reply error. Each text names its fix. A missing reply says "\(host) did not answer. Check the network, or update matchblox on \(host), then run matchblox pair again."
   - `public struct Host: Codable, Equatable, Identifiable { label, address, port, user, fingerprint; id = fingerprint }`.
-  - `public final class HostStore` (a JSON file in Application Support) has `all() -> [Host]`, `upsert(_ h: Host)`, `updateAddress(fingerprint: String, address: String)` and `remove(fingerprint: String)`.
+  - `public final class HostStore` (a JSON file in Application Support) has `all() -> [Host]`, `upsert(_ h: Host) -> [Host]`, `updateAddress(fingerprint: String, address: String)` and `remove(fingerprint: String)`. `upsert` replaces an entry with the same label, address and user but another fingerprint (the host before a host key change) and returns it, so its key goes too. A damaged file reads as no hosts and moves to `hosts.json.damaged` before the next write.
 - Produces (app):
   - The `matchblox://pair` URL (from the Camera) and `ScanView` (VisionKit `DataScannerViewController`, QR only) both open `PairView`.
-  - `PairView` shows the host name, an address field, a phone name field (default `UIDevice.current.name`), and `Pair`.
+  - `PairView` shows the host name, an address field, an iPhone name field (default `UIDevice.current.name`), and `Pair`. A new code gives a new `PairView`. `Pair` runs once for each tap, and a flow that is cancelled by a new screen never opens a console.
   - The reply words are those of `testdata/pair/v1.json` `replies`: `bad name`, `bad key`, `code used`, `key in use`, `write failed`, `too slow`. The login shell of the host can print text (a `.bashrc` echo) before the reply, so the reader skips each line that is not a JSON object and takes the first one that is.
-  - `Pair` runs `DeviceKey.loadOrCreate` (Face ID), opens `SSHSession` with the one-time key and no pty, writes `requestLine`, and reads one reply line. On `ok`, it calls `HostStore.upsert` and opens the window (B6). On an error, it shows `Pairing.message` in place, with `Scan again`.
+  - `Pair` runs `DeviceKey.openSSH(for: payload.hostkey)` (no Face ID: it makes the key, and only the one-time key signs), opens `SSHSession` with the one-time key and no pty, writes `requestLine`, and reads one reply line. On `ok`, it calls `HostStore.upsert` and opens the window (B6). On an error, it shows `Pairing.message` in place, with `Scan again`.
 
 - [ ] **Step 1: Write the failing tests:**
   - `testDraftAddressOverride`
@@ -346,12 +353,12 @@ Part B needs macOS with Xcode 16 or later. This plan does not assume a Mac at ha
 - Create: `ios/MatchbloxKit/Sources/MatchbloxKit/Opening.swift`, `Tests/MatchbloxKitTests/OpeningTests.swift`, `ios/Matchblox/HostsView.swift`, `ios/Matchblox/ReachView.swift`
 
 **Interfaces:**
-- Produces (Kit): `Opening.first(hosts: [Host]) -> Route` with `enum Route { case scan, console(Host), hosts }`:
+- Produces (Kit): `Opening.first(hosts: [Host]) -> Route` with `enum Route { case scan, pair(PairDraft), console(Host), hosts, reach(Host, ConnectFailure) }`. `first` gives:
   - no host → `.scan`;
   - one host → `.console(host)` (the app opens straight into the console);
   - more → `.hosts`.
 - Produces (app):
-  - `HostsView` lists each host's label and address, has `+ Pair a host`, and swipe to remove (it removes the host from the phone and says "Remove its key on the host with matchblox devices rm").
+  - `HostsView` lists each host's label and address, has `+ Pair a host`, and swipe to remove (it removes the host and its key from the iPhone and says "Remove its key on the host with matchblox devices rm").
   - `ReachView` appears on `.unreachable` with the title `Can't reach ws-1.` and the subtitle `New address?`. It has an address field filled with the last address, `Try again` (which calls `HostStore.updateAddress`, then reconnects; the pairing stays), and `Scan again`.
   - On `.hostKeyChanged`, it shows `ws-1 has a new host key.` with only `Scan again`. It never connects.
 
@@ -372,13 +379,15 @@ Part B needs macOS with Xcode 16 or later. This plan does not assume a Mac at ha
   - `ConsoleView(host: Host)`. It opens `SSHSession.open(command: "matchblox console", pty: terminal size)`, feeds the stream to the terminal and sends the terminal's input with `write`.
   - On a size change (rotation, keyboard) it calls `resize`. It uses SwiftTerm's accessory key row (Esc, Ctrl, Tab, arrows).
   - Background `#0F0D0A` (DESIGN.md `bg`), the system monospaced font, no other chrome.
-  - Face ID runs once for each connect: an `LAContext` with `touchIDAuthenticationAllowableReuseDuration = 10`.
-  - When the stream ends, it reconnects through B5.
+  - Face ID (or the passcode) runs before `SSHSession.open`, so the deadline measures only the network: `evaluatePolicy(.deviceOwnerAuthentication)` on an `LAContext` with `touchIDAuthenticationAllowableReuseDuration = 10`, then `DeviceKey.load(host: host.fingerprint, context:)`. One unlocked context serves each reconnect until the app goes to the background. A cancelled unlock shows its own text with `Try again`.
+  - A failed connect goes to B5. When a good session (5 s or more, with output) ends, the console shows "matchblox console on <label> ended." with `Open again`, and `Hosts` with 2+ hosts. It does not open again by itself.
+  - A short session opens again after 1 s, then 2 s. After 3 in a row it stops: "matchblox console on <label> stops at once. Run matchblox console on the host to see why, then tap Try again."
+  - A return from the background opens the console again.
 
 - [ ] **Step 1:** Implement (UI with no unit test).
 - [ ] **Step 2:** Push and watch. Expected: `make build` PASS.
-- [ ] **Step 3: Manual check on a device** (the owner, or anyone with the team set in Xcode). Each item must pass:
-  1. On the host, run `matchblox pair`, then scan with the Camera → `PairView` → `Pair` → Face ID → the console. The host prints `Paired.`
+- [ ] **Step 3: Manual check on a device** (the owner, or anyone with the team set in Xcode). Each item must pass. The full list is in `ios/README.md`, "Check on a device":
+  1. On the host, run `matchblox pair`, then scan with the Camera → `PairView` → `Pair` → the console (Face ID). The host prints `Paired <name> (<fingerprint>)`.
   2. `matchblox devices` on the host lists the phone.
   3. Rotate the phone → the console takes the landscape layout. Open the keyboard → the console fits above it.
   4. Attach a laptop to the same session at the same time → the size follows the device you used last.
