@@ -1,0 +1,34 @@
+name: ios
+
+on:
+  push:
+    paths:
+      - "ios/**"
+      - "testdata/pair/**"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - "testdata/pair/**"
+      - ".github/workflows/ios.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest Xcode 16
+        run: |
+          xcode=$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)
+          sudo xcode-select -s "$xcode"
+          swift --version
+      - name: Test MatchbloxKit
+        run: swift test --package-path ios/MatchbloxKit
+      - name: Build the app
+        run: |
+          brew install xcodegen
+          make -C ios build
