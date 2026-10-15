@@ -101,9 +101,12 @@ jobs:
       # would never reach publish.yml. RELEASE_TOKEN is a fine-grained token
       # for this repository: Contents and Pull requests, read and write.
       #
-      # A pre-release until publish.yml verified its binaries: until then the
-      # latest release stays the last good one, and the install script keeps
-      # installing it.
+      # A draft until publish.yml attached its binaries: the repository's
+      # releases are immutable once published, so a published release takes
+      # no assets. A draft makes no tag, so this step pushes the tag itself,
+      # and the tag starts publish.yml. publish.yml then publishes it as a
+      # pre-release and, once verified, the latest; until then the install
+      # script keeps installing the last good one.
       - name: Tag the verified commit
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
@@ -122,11 +125,17 @@ jobs:
           fi
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
             echo "v${VERSION} exists"
-            exit 0
+          else
+            gh release create "v${VERSION}" --target "$SHA" --title "v${VERSION}" \
+              --notes-file "$RUNNER_TEMP/notes.md" --prerelease --draft ||
+              { echo "gh release create failed: RELEASE_TOKEN may have expired (RELEASING.md)" >&2; exit 1; }
           fi
-          gh release create "v${VERSION}" --target "$SHA" --title "v${VERSION}" \
-            --notes-file "$RUNNER_TEMP/notes.md" --prerelease ||
-            { echo "gh release create failed: RELEASE_TOKEN may have expired (RELEASING.md)" >&2; exit 1; }
+          if gh api "repos/$GH_REPO/git/ref/tags/v${VERSION}" >/dev/null 2>&1; then
+            echo "tag v${VERSION} exists"
+          else
+            gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/v${VERSION}" -f sha="$SHA" >/dev/null ||
+              { echo "pushing tag v${VERSION} failed: RELEASE_TOKEN may have expired (RELEASING.md)" >&2; exit 1; }
+          fi
 
   # The release's changelog and the docs that name it: [Unreleased] moves
   # under the version, the README, docs and site flip to the released text,

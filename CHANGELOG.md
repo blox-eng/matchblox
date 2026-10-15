@@ -6,6 +6,15 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Releases carry their binaries again.** v0.8.0, v0.9.0 and v0.10.0 were
+  published with none: the repository's releases are immutable, and a
+  published release takes no assets. A release now stays a draft until its
+  binaries, checksums and SBOMs are attached, and the install script
+  kept installing v0.7.0 meanwhile. This release is the first to
+  carry what v0.8.0 to v0.10.0 added.
+
 ## [0.10.0] - 2026-10-14
 
 ### Added
