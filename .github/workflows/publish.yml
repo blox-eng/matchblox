@@ -2,8 +2,8 @@ name: Publish
 
 # A v* tag gets its binaries: matchblox-{linux,darwin}-{amd64,arm64}, a
 # .sha256 for each, a CycloneDX SBOM, and build provenance and SBOM
-# attestations that `gh attestation verify` checks. The release stays a
-# pre-release until the install script installed it on each OS and arch;
+# attestations that `gh attestation verify` checks. The release is a draft
+# until they are attached, then a pre-release until the install script installed it on each OS and arch;
 # then it becomes the latest release, and its docs go live.
 #
 # To publish a tag again (a failed run):
@@ -154,13 +154,45 @@ jobs:
           done
           gh release view "$TAG" >/dev/null 2>&1 || { echo "no release for $TAG after 120 s" >&2; exit 1; }
           bin="matchblox-${TARGET}"
+          if [ "$(gh release view "$TAG" --json isDraft -q .isDraft)" != true ]; then
+            # Published releases are immutable: a re-run finds its assets there.
+            have="$(gh release view "$TAG" --json assets -q '.assets[].name')"
+            for f in "$bin" "$bin.sha256" "$bin.cdx.json"; do
+              grep -qxF "$f" <<<"$have" || { echo "$TAG is published without $f: publish a new version (RELEASING.md)" >&2; exit 1; }
+            done
+            echo "$TAG is published with $bin"
+            exit 0
+          fi
           gh release upload "$TAG" "$bin" "$bin.sha256" "$bin.cdx.json" --clobber
+
+  # Every binary attached: the draft becomes a pre-release, the moment the
+  # release turns immutable. The install script can fetch it from here on.
+  publish:
+    name: Publish the pre-release
+    needs: [build, attest]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          n="$(gh release view "$TAG" --json assets -q '.assets | length')"
+          [ "$n" = 12 ] || { echo "$TAG has $n assets, not 12" >&2; exit 1; }
+          if [ "$(gh release view "$TAG" --json isDraft -q .isDraft)" = true ]; then
+            gh release edit "$TAG" --draft=false --prerelease
+          fi
 
   # The release, installed the way a builder installs it: the real
   # `curl -fsSL https://matchblox.sh | sh`, on each OS and arch.
   verify:
     name: Verify (${{ matrix.os }})
-    needs: [build, attest]
+    needs: [build, publish]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     permissions:
