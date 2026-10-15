@@ -4,12 +4,14 @@ A merge to `main` that CI passed makes a release. Nobody tags by hand.
 
 1. **Release** (`release.yml`) picks the next version from the conventional
    commits (`feat` → minor, `fix` → patch; before 1.0 a breaking change is a
-   minor), and makes the pre-release `vX.Y.Z` on the commit CI verified. Its
-   notes are the `## [Unreleased]` section of `CHANGELOG.md`, so write that
-   section in the pull request.
+   minor), makes the draft release `vX.Y.Z` and pushes its tag on the
+   commit CI verified. Its notes are the `## [Unreleased]` section of
+   `CHANGELOG.md`, so write that section in the pull request.
 2. **Publish** (`publish.yml`) builds `matchblox-{linux,darwin}-{amd64,arm64}`
    with a `.sha256`, a CycloneDX SBOM and provenance and SBOM attestations,
-   then installs the release with `curl -fsSL https://matchblox.sh | sh` on
+   attaches all twelve files to the draft and publishes it as a pre-release.
+   The repository's releases are immutable: once published, a release takes
+   no more assets, so the draft is what lets them in. Then it installs the release with `curl -fsSL https://matchblox.sh | sh` on
    Linux and macOS, amd64 and arm64, and checks `matchblox version`. Then it
    makes it the latest release, checks the install with no version named,
    and publishes its docs to docs.matchblox.com. Until then the install
@@ -46,6 +48,7 @@ expired, the Create Release job fails and says so. To replace it:
 | What failed | What to do |
 |---|---|
 | Publish, from a runner or network hiccup | Publish the tag again: `gh workflow run publish.yml --ref vX.Y.Z` |
+| Publish says the release is published without a file | It went out before its binaries and cannot take them now. Merge a fix: the next release carries them |
 | Publish, from a bug in the code or the workflow | Merge the fix: the next release is published and becomes the latest. The broken one stays a pre-release |
 | The changelog pull request did not merge itself | Update it with `main` (`gh pr update-branch <branch>`), then merge it once its checks pass |
 | No changelog pull request after a release | Run `.github/scripts/promote-changelog.sh X.Y.Z <date>`, `VERSION=vX.Y.Z .github/scripts/flip-release.sh` and `.github/scripts/announce-release.sh X.Y.Z`, and open the pull request yourself |
