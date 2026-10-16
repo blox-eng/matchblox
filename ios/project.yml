@@ -26,8 +26,9 @@ targets:
       path: Matchblox/Info.plist
       properties:
         CFBundleDisplayName: matchblox
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UIRequiredDeviceCapabilities: [arm64]
         UISupportedInterfaceOrientations:
@@ -41,6 +42,10 @@ targets:
             CFBundleURLSchemes: [matchblox]
     settings:
       base:
+        DEVELOPMENT_TEAM: 492HMQ9R29
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.0"
         IPHONEOS_DEPLOYMENT_TARGET: "17.2"
         TARGETED_DEVICE_FAMILY: "1"
