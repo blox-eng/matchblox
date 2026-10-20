@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -406,5 +407,32 @@ func TestKillOfACodexAtRestTakesOneY(t *testing.T) {
 	s, ran := lifeTest(t)
 	if res := s.act(t.Context(), consoleAct("kill:%3", "")); res.Err != "" || len(*ran) != 2 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+}
+
+// TestANewSessionIsSampledAtOnce: the service knows it made a pane, so it
+// samples now instead of at the next tick.
+func TestANewSessionIsSampledAtOnce(t *testing.T) {
+	s, _ := lifeTest(t) // a tick of an hour
+	var samples atomic.Int32
+	s.sample = func() sample.Snapshot {
+		samples.Add(1)
+		snap := lifeSnap(false)
+		snap.At = time.Now()
+		return snap
+	}
+	ctx := run(t, s)
+	c, _ := connect(t, ctx, s)
+	snapshot(t, c)
+	before := samples.Load()
+	if r := act(t, c, "n", newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "fresh"})); r.Err != "" {
+		t.Fatalf("%+v", r)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for samples.Load() == before {
+		if time.Now().After(deadline) {
+			t.Fatal("no sample after the new session: it waits for the tick")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }

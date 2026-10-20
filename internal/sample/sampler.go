@@ -262,28 +262,27 @@ type Sampler struct {
 	// directory's limits. Empty: none are read.
 	LimitsDir string
 
-	agents     *agentReader
-	panes      map[procKey]string // environ is read once per process
-	names      map[procKey]agentRef
-	screens    map[procKey]screen // last pane text of agents without an adapter
-	prevAt     time.Time
-	procAt     time.Time
-	prevProc   map[int]procfs.Proc
-	last       Snapshot // sessions and panes from the last process scan
-	prevCPU    procfs.CPUTimes
-	prevCore   []procfs.CPUTimes
-	prevNet    [2]uint64
-	prevDisk   [2]uint64
-	latAt      time.Time
-	lat        time.Duration
-	latErr     string
-	burn       map[string][]tokenPoint
-	burnLive   map[string]bool  // burn keys measured in this scan
-	bigSession map[string]bool  // sessions seen past 200k tokens, so 1M windows
-	longCtx    map[procKey]bool // processes started with a 1M model setting
-	envs       map[procKey]agentEnv
-	accounts   *accounts
-	opencode   *opencodeReader
+	agents   *agentReader
+	panes    map[procKey]string // environ is read once per process
+	names    map[procKey]agentRef
+	screens  map[procKey]screen // last pane text of agents without an adapter
+	prevAt   time.Time
+	procAt   time.Time
+	prevProc map[int]procfs.Proc
+	last     Snapshot // sessions and panes from the last process scan
+	prevCPU  procfs.CPUTimes
+	prevCore []procfs.CPUTimes
+	prevNet  [2]uint64
+	prevDisk [2]uint64
+	latAt    time.Time
+	lat      time.Duration
+	latErr   string
+	burn     map[string][]tokenPoint
+	burnLive map[string]bool  // burn keys measured in this scan
+	longCtx  map[procKey]bool // processes started with a 1M model setting
+	envs     map[procKey]agentEnv
+	accounts *accounts
+	opencode *opencodeReader
 
 	owners     map[procKey]string
 	hotSince   map[procKey]time.Time
@@ -321,7 +320,6 @@ func (s *Sampler) init() {
 		s.names = map[procKey]agentRef{}
 		s.burn = map[string][]tokenPoint{}
 		s.burnLive = map[string]bool{}
-		s.bigSession = map[string]bool{}
 		s.longCtx = map[procKey]bool{}
 		s.owners = map[procKey]string{}
 		s.toplevel = map[string]string{}
@@ -358,7 +356,7 @@ func (s *Sampler) Sample() Snapshot {
 	snap.Machine.GPUs = s.sampleGPUs(now)
 	s.prevAt = now
 
-	if s.procAt.IsZero() || now.Sub(s.procAt) >= s.ProcEvery {
+	if s.procAt.IsZero() || now.Sub(s.procAt) >= s.ProcEvery || s.panesChanged() {
 		s.scan(now)
 	}
 	l := s.last
@@ -369,8 +367,28 @@ func (s *Sampler) Sample() Snapshot {
 	return snap
 }
 
+// panesChanged lists tmux, which is cheap, between two scans: a pane the
+// last scan did not see, or a pane that now runs an agent, needs a scan at
+// once. A new session then shows within a sample, not within ProcEvery.
+func (s *Sampler) panesChanged() bool {
+	out, err := s.Tmux()
+	if err != nil {
+		return false
+	}
+	seen := make(map[string]string, len(s.last.Panes))
+	for _, p := range s.last.Panes {
+		seen[p.ID] = p.Command
+	}
+	for _, p := range ParsePanes(out) {
+		if cmd, ok := seen[p.ID]; !ok || cmd != p.Command && s.isAgent(p.Command) {
+			return true
+		}
+	}
+	return false
+}
+
 // scan reads the process table, tmux and containers: the expensive half of a
-// sample, run every ProcEvery.
+// sample, run every ProcEvery and when the panes change.
 func (s *Sampler) scan(now time.Time) {
 	dt := seconds(s.procAt, now)
 	var l Snapshot
@@ -570,7 +588,6 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		env := s.envOf(pid, key)
 		switch agent {
 		case "claude":
-			sess.Window = 200_000
 			sess.Account, sess.Provider = s.accounts.claudeAccount(env), claudeProvider(env)
 			s.claudeSession(&sess, pid, p, key, env, uptime, now)
 			if sess.Resting() {
@@ -677,11 +694,6 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		}
 	}
 	clear(s.burnLive)
-	for id := range s.bigSession {
-		if !seen[id] {
-			delete(s.bigSession, id)
-		}
-	}
 	for _, p := range panes {
 		// The stoker's server is matchblox's own: none of its panes is
 		// the builder's to use.
@@ -941,27 +953,27 @@ func (s *Sampler) claudeSession(sess *Session, pid int, p procfs.Proc, key procK
 		sess.Out = u.Out
 	}
 	sess.Transcript = s.agents.transcript(env.claudeDir, e.SessionID, e.Cwd)
-	long, ok := s.longCtx[key]
-	if !ok {
-		get := func(k string) (string, bool) { return s.FS.Environ(pid, k) }
-		long = longContext(modelSetting(s.FS.Cmdline(pid), get, e.Cwd, env.claudeDir))
-		s.longCtx[key] = long
+	if s.LimitsDir != "" {
+		u.Window = limits.SessionWindow(s.LimitsDir, e.SessionID)
 	}
-	u.Window = s.claudeWindow(e.SessionID, u.Tokens, long)
+	if u.Window == 0 {
+		long, ok := s.longCtx[key]
+		if !ok {
+			get := func(k string) (string, bool) { return s.FS.Environ(pid, k) }
+			long = longContext(modelSetting(s.FS.Cmdline(pid), get, e.Cwd, env.claudeDir))
+			s.longCtx[key] = long
+		}
+		if long {
+			u.Window = 1_000_000
+		}
+	}
 	s.measured(sess, u, e.SessionID, now)
 }
 
-// measured sets the context use. A window from the config wins over the
-// one the agent reports; without a window it is not measured, never a
-// guess.
+// measured sets the context use against the window of the session (see
+// window). Without a window it is not measured, never a guess.
 func (s *Sampler) measured(sess *Session, u Usage, burnKey string, now time.Time) {
-	sess.Model, sess.Tokens, sess.Window = label(u.Model), u.Tokens, u.Window
-	best := -1
-	for prefix, w := range s.Rules.Windows {
-		if strings.HasPrefix(u.Model, prefix) && len(prefix) > best {
-			sess.Window, best = w, len(prefix)
-		}
-	}
+	sess.Model, sess.Tokens, sess.Window = label(u.Model), u.Tokens, s.window(u)
 	if sess.Window <= 0 {
 		sess.Context = "unmeasured"
 		return
@@ -970,19 +982,6 @@ func (s *Sampler) measured(sess *Session, u Usage, burnKey string, now time.Time
 	sess.ContextPct = 100 * float64(u.Tokens) / float64(sess.Window)
 	sess.Burn30m = s.trackBurn(burnKey, now, u.Tokens)
 	s.burnLive[burnKey] = true
-}
-
-// claudeWindow is the context size of a Claude Code session: a session
-// started with a 1M model setting, or seen past 200k, has a 1M window.
-// Sessions of one model can differ, so this is decided per session.
-func (s *Sampler) claudeWindow(sessionID string, tokens int, long bool) int {
-	if long || tokens > 200_000 {
-		s.bigSession[sessionID] = true
-	}
-	if s.bigSession[sessionID] {
-		return 1_000_000
-	}
-	return 200_000
 }
 
 func (s *Sampler) underAgent(p procfs.Proc, procs map[int]procfs.Proc) bool {

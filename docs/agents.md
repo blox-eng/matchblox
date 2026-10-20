@@ -36,7 +36,7 @@ tmux new -s web opencode
 tmux new -s docs aider
 ```
 ```
-╿ done   4m    aider      docs:1.1  not measured
+╿ done   4m    aider      docs:1.1        —
 ```
 
 The first run writes the agents it finds to `agents` in the
@@ -46,11 +46,22 @@ The first run writes the agents it finds to `agents` in the
 
 Claude Code, Codex and OpenCode show their context use, read from the
 agent's own files: the transcript, the rollout, the session storage.
-Before the first turn a session is "fresh". An agent without readable files
-shows "not measured".
+Before the first turn a session is "fresh".
 
-The window comes from the model that the agent reports. To change it, set
-`[sessions.windows]` in the config.
+The context use is a share of the session's window. matchblox uses the
+first window it finds, in this order:
+
+1. The window the agent reports for the session. Codex and OpenCode report
+   it in their files. Claude Code gives it to its status line: open the
+   door "Show your limits" in Sessions, or run `matchblox setup`, and each
+   session reports its window from its first turn.
+2. `[sessions.windows]` in the [config](config.md), by model-name prefix.
+3. The window of a Claude model that matchblox knows, such as 1M for
+   `claude-opus-5-5`. A model setting that ends in `[1m]` gives 1M.
+
+When none of them gives a window, matchblox does not guess one. The row
+shows `—` and the detail says "not measured", with what to do. The stoker
+then compacts the session at `compact_tokens` only, never at a percentage.
 
 ## The account
 

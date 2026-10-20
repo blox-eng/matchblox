@@ -247,8 +247,11 @@ move the peek to the next and the previous agent, `Esc` closes. Every
 letter is text. A permission prompt is answered in its
 pane: its peek shows the prompt, and `Enter` goes there.
 
-- Context use is read from the agent's own files, or shows "not measured".
-  See [Agents](agents.md).
+- Context use is read from the agent's own files, as a share of the
+  session's window. Without a window the row shows `—`. See
+  [Agents](agents.md).
+- A new session shows in Sessions at the next sample, about 2 seconds
+  after it starts. A session from `N` or `matchblox new` shows at once.
 - The account is the provider's mark, then the email and plan, or
   "API key": `✻` Anthropic, `❋` OpenAI, `▣` OpenCode.
 - An agent can draw a progress bar in its last reply:

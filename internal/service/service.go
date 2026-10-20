@@ -141,7 +141,10 @@ type Service struct {
 	clients  map[*client]struct{}
 	gitKick  chan struct{}
 	shipKick chan struct{}
-	stop     context.CancelCauseFunc
+	// sampleKick asks the sample loop for a sample now: a session started
+	// here shows without waiting for the tick.
+	sampleKick chan struct{}
+	stop       context.CancelCauseFunc
 
 	acts  acts
 	ways  waysCache
@@ -169,7 +172,9 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		clients:  map[*client]struct{}{},
 		gitKick:  make(chan struct{}, 1),
 		shipKick: make(chan struct{}, 1),
-		queue:    queue.New(),
+
+		sampleKick: make(chan struct{}, 1),
+		queue:      queue.New(),
 
 		NightEnds:   cfg.Stoker.NightEnds,
 		StokerAgent: cfg.Stoker.Agent,
@@ -316,6 +321,7 @@ func (s *Service) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+		case <-s.sampleKick:
 		}
 	}
 }

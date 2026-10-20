@@ -20,6 +20,7 @@ What does not work yet, and what to do until it does.
 | Triggers need the stoker agent running | A trigger's hand runs as an act from the stoker's own pane. With no stoker agent in it, each trigger that fires logs `failed` and does nothing. Keep the stoker pane's agent running while triggers wait. |
 | Codex context use needs Linux | On macOS, Codex shows "not measured". |
 | Context use for Claude Code, Codex and OpenCode only | Other agents show "not measured", and still show in Sessions. |
+| A Claude model that matchblox does not know has no window | Without the status line, a new model shows "not measured" until matchblox knows it. Open the door "Show your limits" in Sessions: the status line then gives each session its window. Or set the model in `[sessions.windows]`. |
 | Waits of agents other than Claude Code come from their pane | They wait for you in Sessions once their pane is idle and its last lines ask. |
 | Plan limits for Claude Code and Codex only | OpenCode's usage shows "not measured". |
 | Ships reads GitHub only | A pull request on another forge does not show. |

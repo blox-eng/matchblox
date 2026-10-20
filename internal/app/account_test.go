@@ -29,8 +29,9 @@ func demoState(t *testing.T) proto.State {
 		FS: procfs.FS{Root: filepath.Join(demo, "proc"), PageSize: procfs.FixturePage}, Home: filepath.Join(demo, "home"), HomeAs: "/home/user",
 		Tmux:    func() ([]byte, error) { return os.ReadFile(filepath.Join(demo, "tmux-panes.txt")) },
 		Capture: sample.CaptureDir(filepath.Join(demo, "panes")), Rules: sample.DefaultRules,
-		Agents: []string{"claude", "codex", "opencode"},
-		Now:    func() time.Time { return time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC) },
+		LimitsDir: filepath.Join(demo, "state"),
+		Agents:    []string{"claude", "codex", "opencode"},
+		Now:       func() time.Time { return time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC) },
 	}
 	snap := s.Sample()
 	q := queue.New()
@@ -213,5 +214,29 @@ func TestTheDetailShowsTheAccount(t *testing.T) {
 	}
 	if out := strings.Join(strings.Fields(ansi.Strip(m.render())), " "); !strings.Contains(out, "team@example.com") {
 		t.Fatalf("detail lacks the account:\n%s", ansi.Strip(m.render()))
+	}
+}
+
+// TestAClaudeSessionWithoutAWindowNamesTheStatusLine: for Claude Code the
+// status line gives the window, so the fix names the setup that taps it.
+// The row says the context is not measured instead of leaving it blank.
+func TestAClaudeSessionWithoutAWindowNamesTheStatusLine(t *testing.T) {
+	st := demoState(t)
+	var pid int
+	for i, s := range st.Sessions {
+		if s.Name == "hearth-api" {
+			st.Sessions[i].Context, st.Sessions[i].Window, st.Sessions[i].ContextPct = "unmeasured", 0, 0
+			pid = s.PID
+		}
+	}
+	m, _ := loadedWith(t, 160, st)
+	m.tab = tabSessions
+	choose(&m, pid)
+	s, _ := m.selectedSession()
+	if facts := strings.Join(m.facts(s), " · "); !strings.Contains(facts, "158k tokens · no window known: run matchblox setup, or add the model to [sessions.windows]") {
+		t.Fatalf("facts: %s", facts)
+	}
+	if c := ansi.Strip(m.contextCell(s)); c != "—" {
+		t.Fatalf("an unmeasured row shows %q", c)
 	}
 }

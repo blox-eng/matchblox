@@ -32,9 +32,10 @@ func fixtureState() proto.State {
 	s := &sample.Sampler{
 		FS:   procfs.FS{Root: filepath.Join(fixture, "proc"), PageSize: procfs.FixturePage},
 		Home: filepath.Join(fixture, "home"), HomeAs: "/home/user",
-		Tmux:    func() ([]byte, error) { return os.ReadFile(filepath.Join(fixture, "tmux-panes.txt")) },
-		Capture: sample.CaptureDir(filepath.Join(fixture, "panes")),
-		Rules:   sample.DefaultRules,
+		Tmux:      func() ([]byte, error) { return os.ReadFile(filepath.Join(fixture, "tmux-panes.txt")) },
+		Capture:   sample.CaptureDir(filepath.Join(fixture, "panes")),
+		Rules:     sample.DefaultRules,
+		LimitsDir: filepath.Join(fixture, "state"),
 	}
 	snap := s.Sample()
 	// The limits lines move the tabs down; they have their own tests

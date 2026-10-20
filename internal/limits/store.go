@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -147,6 +148,10 @@ func tapPath(stateDir, claudeDir string) string {
 }
 
 type statusInput struct {
+	SessionID     string `json:"session_id"`
+	ContextWindow *struct {
+		Size int `json:"context_window_size"`
+	} `json:"context_window"`
 	RateLimits *struct {
 		FiveHour *claudeWindow `json:"five_hour"`
 		SevenDay *claudeWindow `json:"seven_day"`
@@ -164,13 +169,22 @@ type tapFile struct {
 }
 
 // Tap stores the limits Claude Code gave its status line, for the config
-// directory the status line runs under. Input without limits (an API key)
+// directory the status line runs under, and the context window of the
+// session. Input without limits (an API key)
 // leaves the last reading.
 func Tap(input []byte, claudeDir, stateDir string, now time.Time) error {
 	var in statusInput
 	if err := json.Unmarshal(input, &in); err != nil {
 		return err
 	}
+	var window error
+	if in.ContextWindow != nil {
+		window = tapWindow(stateDir, in.SessionID, in.ContextWindow.Size, now)
+	}
+	return errors.Join(window, tapLimits(in, claudeDir, stateDir, now))
+}
+
+func tapLimits(in statusInput, claudeDir, stateDir string, now time.Time) error {
 	if in.RateLimits == nil {
 		return nil
 	}
@@ -222,4 +236,73 @@ func ReadTap(stateDir, claudeDir string) (*Reading, bool) {
 		return nil, false
 	}
 	return &f.Reading, true
+}
+
+// windowPath is the file of a session's context window. A session id that
+// is not a plain name gets no file.
+func windowPath(stateDir, sessionID string) (string, bool) {
+	if sessionID == "" || len(sessionID) > 128 {
+		return "", false
+	}
+	if strings.ContainsFunc(sessionID, func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != '_'
+	}) {
+		return "", false
+	}
+	return filepath.Join(stateDir, "windows", sessionID+".json"), true
+}
+
+type windowFile struct {
+	Window int `json:"window"`
+}
+
+// tapWindow keeps the context window Claude Code measures a session
+// against. It writes only a change. A new session removes the files of
+// sessions that have not written for Keep.
+func tapWindow(stateDir, sessionID string, window int, now time.Time) error {
+	path, ok := windowPath(stateDir, sessionID)
+	if !ok || window <= 0 {
+		return nil
+	}
+	if SessionWindow(stateDir, sessionID) == window {
+		return nil
+	}
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+		pruneWindows(filepath.Dir(path), now)
+	}
+	b, err := json.Marshal(windowFile{window})
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	return writeFile(path, b)
+}
+
+func pruneWindows(dir string, now time.Time) {
+	es, _ := os.ReadDir(dir)
+	for _, e := range es {
+		if fi, err := e.Info(); err == nil && now.Sub(fi.ModTime()) > Keep {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+}
+
+// SessionWindow is the context window the status line last reported for a
+// session, or 0 when it reported none.
+func SessionWindow(stateDir, sessionID string) int {
+	path, ok := windowPath(stateDir, sessionID)
+	if !ok {
+		return 0
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	var f windowFile
+	if json.Unmarshal(b, &f) != nil {
+		return 0
+	}
+	return f.Window
 }

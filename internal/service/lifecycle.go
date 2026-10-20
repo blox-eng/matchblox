@@ -378,6 +378,10 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 		out, _ := s.tmuxOut(slices.Concat(sample.TmuxOn(""), []string{"display-message", "-p", "-t", "=" + name + ":", "#{pane_id}"}))
 		s.recordNew(strings.TrimSpace(out), name, res.Ran)
 	}
+	select {
+	case s.sampleKick <- struct{}{}:
+	default: // a sample is asked for already
+	}
 	return res
 }
 

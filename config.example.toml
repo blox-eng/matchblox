@@ -1,7 +1,7 @@
 # matchblox — copy to ~/.config/matchblox/config.toml and keep it local.
 # Every key is optional; the values below are the defaults unless noted.
 
-interval = "2s"          # cheap counters; processes every 3x, git every git.interval
+interval = "2s"          # cheap counters and tmux panes; processes every 5x and at once for a new pane; git every git.interval
 agents = ["claude"]      # agent commands (default ["claude"]); the first run writes the ones it finds, e.g. ["claude", "codex", "opencode"]. Add any other by name
 latency_target = ""      # host:port to time a TCP connect against every 10 s, e.g. "example.com:443"
 
@@ -12,9 +12,8 @@ clear_idle = "30m"       # idle this long while holding clear_min_pct context: c
 clear_min_pct = 20
 clear_stale = "24h"      # idle this long: clear whatever it holds
 progress_prompt = true   # ask each new agent session for a progress bar; the console shows it
-# [sessions.windows]     # context window by model-name prefix; it wins over the window the
-# "some-model" = 1000000 # agent reports (Codex, OpenCode). Claude Code: 200k, or 1M when the
-                         # model setting ends in [1m] or the session passed 200k
+# [sessions.windows]     # context window by model-name prefix, for a session whose agent
+# "some-model" = 1000000 # reports no window. It wins over the known Claude models. See docs/agents.md
 
 [alerts]                 # a zero threshold is off
 temp_over_c = 95
