@@ -124,9 +124,9 @@ func TestCodexContextUseComesFromTheRolloutItHoldsOpen(t *testing.T) {
 	}
 }
 
-// TestTheConfiguredWindowWinsForEveryAgent: [sessions.windows] overrides the
-// window that the agent reports.
-func TestTheConfiguredWindowWinsForEveryAgent(t *testing.T) {
+// TestTheAgentsWindowWinsOverTheConfig: the window the agent reports is a
+// measurement of the session; the config is a rule for a model.
+func TestTheAgentsWindowWinsOverTheConfig(t *testing.T) {
 	root := copyFixture(t)
 	home := filepath.Join(root, "home")
 	rollout := filepath.Join(home, ".codex", "sessions", "2026", "rollout-2026-09-21T10-00-00-made-up.jsonl")
@@ -138,8 +138,8 @@ func TestTheConfiguredWindowWinsForEveryAgent(t *testing.T) {
 	smp := newFixtureSampler(root)
 	smp.Agents = []string{"claude", "codex"}
 	smp.Rules.Windows = map[string]int{"gpt-made": 100_000}
-	if s := byPane(smp.Sample())["%20"]; s.Window != 100_000 {
-		t.Fatalf("window %d, want the configured 100000", s.Window)
+	if s := byPane(smp.Sample())["%20"]; s.Window != 258400 {
+		t.Fatalf("window %d, want the 258400 codex reports", s.Window)
 	}
 }
 

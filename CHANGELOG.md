@@ -6,6 +6,24 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Context use is a share of the session's real window.** A session of a
+  1M model, such as Opus 5.5 without `[1m]` in the model setting, showed
+  its context against 200k: 99% while it had room for 800k more, then 20%
+  past 200k. The stoker could compact it at about 170k. The window now
+  comes from the agent first: Claude Code's status line gives it for each
+  session. Then from `[sessions.windows]`, then from the Claude models that
+  matchblox knows. Without a window the session is "not measured" and the
+  row shows `—`; matchblox no longer guesses 200k. `[sessions.windows]`
+  no longer wins over a window that the agent reports.
+  ([#118](https://github.com/blox-eng/matchblox/issues/118))
+- **A new session shows in Sessions within a second.** It took up to 10
+  seconds: the processes were read every fifth sample. tmux is now listed
+  at every sample, and a new pane, or a pane that starts an agent, has its
+  processes read at once. A session from `N` or `matchblox new` shows at
+  once. ([#119](https://github.com/blox-eng/matchblox/issues/119))
+
 ## [0.10.1] - 2026-10-15
 
 ### Fixed

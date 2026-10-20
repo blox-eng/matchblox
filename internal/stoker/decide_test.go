@@ -177,3 +177,18 @@ func TestTheStokerActsAtATurnEndWhileSubagentsWork(t *testing.T) {
 		}
 	}
 }
+
+// TestAnUnmeasuredSessionCompactsOnlyOnItsTokenCount: without a window the
+// percentage line never fires; compact_tokens still counts real tokens.
+func TestAnUnmeasuredSessionCompactsOnlyOnItsTokenCount(t *testing.T) {
+	line := sample.Full{Pct: 85, Tokens: 350_000}
+	s := building(170_000, 0)
+	s.Progress, s.Window, s.ContextPct = nil, 0, 0
+	if v := Decide(s, nil, line); v.Compact {
+		t.Fatalf("170k with no window: %+v", v)
+	}
+	s.Tokens = 360_000
+	if v := Decide(s, nil, line); !v.Compact || v.Why != "past 85% or 350k" {
+		t.Fatalf("360k with no window: %+v", v)
+	}
+}
