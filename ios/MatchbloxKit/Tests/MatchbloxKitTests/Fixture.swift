@@ -33,13 +33,17 @@ struct Fixture: Codable {
     }
 
     static func load() throws -> Fixture {
-        let root = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let file = root.appendingPathComponent("testdata/pair/v1.json")
-        return try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: file))
+        try JSONDecoder().decode(Fixture.self, from: testdata("pair/v1.json"))
     }
+}
+
+/// A file in the repository's testdata/, which the Go tests read too.
+func testdata(_ path: String) throws -> Data {
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    return try Data(contentsOf: root.appendingPathComponent("testdata").appendingPathComponent(path))
 }
