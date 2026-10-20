@@ -27,7 +27,9 @@ func newFixtureSampler(root string) *Sampler {
 		Capture: CaptureDir(filepath.Join(root, "panes")),
 		Rules:   DefaultRules,
 		Cfg:     config.Default(),
-		Now:     func() time.Time { return fixtureNow },
+		// The status line of every fixture session reported a 200k window.
+		LimitsDir: filepath.Join(root, "state"),
+		Now:       func() time.Time { return fixtureNow },
 	}
 }
 
@@ -192,27 +194,62 @@ func TestSuggest(t *testing.T) {
 	}
 }
 
-func TestWindowIsPerSession(t *testing.T) {
-	s := &Sampler{}
-	s.init()
-	if w := s.claudeWindow("a", 150_000, false); w != 200_000 {
-		t.Fatalf("got %d", w)
+// TestTheWindowComesFromTheAgentThenTheConfigThenTheTable: what the agent
+// reports is a measurement of this session; the config and the table are
+// rules for a model. Without one of them the context is not measured.
+func TestTheWindowComesFromTheAgentThenTheConfigThenTheTable(t *testing.T) {
+	s := &Sampler{Rules: Rules{Windows: map[string]int{"claude-opus-5": 500_000, "model-b": 300_000}}}
+	for _, c := range []struct {
+		name     string
+		model    string
+		reported int
+		tokens   int
+		want     int
+	}{
+		{"the agent wins over the config", "claude-opus-5-5", 1_000_000, 10, 1_000_000},
+		{"the config when the agent says nothing", "claude-opus-5-5", 0, 10, 500_000},
+		{"the longest config prefix", "model-b-large", 0, 10, 300_000},
+		{"the table: a 1M model with no [1m]", "claude-sonnet-5-5", 0, 112_848, 1_000_000},
+		{"the table: a 200k model", "claude-haiku-4-5", 0, 72_694, 200_000},
+		{"the table: a cloud model id", "anthropic.claude-fable-5-1", 0, 10, 1_000_000},
+		{"a session past its table window is not measured", "claude-haiku-4-5", 0, 250_000, 0},
+		{"a model nobody knows is not measured", "model-made-up", 0, 10, 0},
+		{"no model is not measured", "", 0, 10, 0},
+	} {
+		if got := s.window(Usage{Model: c.model, Window: c.reported, Tokens: c.tokens}); got != c.want {
+			t.Errorf("%s: window %d, want %d", c.name, got, c.want)
+		}
 	}
-	s.claudeWindow("a", 250_000, false)
-	if w := s.claudeWindow("a", 150_000, false); w != 1_000_000 {
-		t.Fatalf("a session past 200k once must stay 1M, got %d", w)
+	var sess Session
+	s.measured(&sess, Usage{Model: "model-made-up", Tokens: 10}, "x", fixtureNow)
+	if sess.Context != "unmeasured" || sess.Window != 0 || sess.ContextPct != 0 {
+		t.Fatalf("an unknown window must not be guessed: %+v", sess)
 	}
-	if w := s.claudeWindow("b", 150_000, false); w != 200_000 {
-		t.Fatalf("another session of the same model is not 1M: %d", w)
+}
+
+// TestAClaudeSessionIsMeasuredOnItsRealWindowFromTheFirstSample: the
+// status line's window wins; a 1M model is 1M before it passes 200k; a 1M
+// model setting is 1M; an unknown model is not measured.
+func TestAClaudeSessionIsMeasuredOnItsRealWindowFromTheFirstSample(t *testing.T) {
+	root := copyFixture(t)
+	smp := newFixtureSampler(root)
+	if s := byPane(smp.Sample())["%1"]; s.Window != 200_000 || s.ContextPct != 90 {
+		t.Fatalf("the status line's 200k: %d %.1f", s.Window, s.ContextPct)
 	}
-	s.Rules.Windows = map[string]int{"model-b": 500_000}
-	var c Session
-	s.measured(&c, Usage{Model: "model-b-large", Tokens: 10, Window: s.claudeWindow("c", 10, false)}, "c", fixtureNow)
-	if c.Window != 500_000 {
-		t.Fatalf("configured window ignored: %d", c.Window)
+	writeFile(t, filepath.Join(root, "state", "windows", "11111111-aaaa-4000-8000-000000000001.json"), `{"window":1000000}`)
+	if s := byPane(newFixtureSampler(root).Sample())["%1"]; s.Window != 1_000_000 || s.ContextPct != 18 || s.Context != "known" {
+		t.Fatalf("the status line's 1M: %d %.1f %s", s.Window, s.ContextPct, s.Context)
 	}
-	if w := s.claudeWindow("d", 150_000, true); w != 1_000_000 {
-		t.Fatalf("a 1M model setting must give a 1M window below 200k: %d", w)
+
+	_ = os.RemoveAll(filepath.Join(root, "state", "windows"))
+	if s := byPane(newFixtureSampler(root).Sample())["%1"]; s.Context != "unmeasured" || s.Window != 0 || s.ContextPct != 0 {
+		t.Fatalf("model-a with no window: %s %d %.1f", s.Context, s.Window, s.ContextPct)
+	}
+	tr := filepath.Join(root, "home", ".claude", "projects", "-work-app", "11111111-aaaa-4000-8000-000000000001.jsonl")
+	b, _ := os.ReadFile(tr)
+	_ = os.WriteFile(tr, []byte(strings.ReplaceAll(string(b), `"model":"model-a"`, `"model":"claude-opus-5-5"`)), 0o644)
+	if s := byPane(newFixtureSampler(root).Sample())["%1"]; s.Window != 1_000_000 || s.ContextPct != 18 {
+		t.Fatalf("claude-opus-5-5 at 180k: %d %.1f", s.Window, s.ContextPct)
 	}
 }
 

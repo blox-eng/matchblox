@@ -514,12 +514,14 @@ func (m Model) lastWords(s sample.Session) string {
 }
 
 // contextCell is a session's context use: warn from 70%, neg past the
-// line; fresh before the first turn, nothing when it is not measured.
+// line; fresh before the first turn, a dash when it is not measured.
 func (m Model) contextCell(s sample.Session) string {
 	switch s.Context {
 	case "known":
 	case "fresh":
 		return m.st.faint.Render("fresh")
+	case "unmeasured":
+		return m.st.faint.Render("—")
 	default:
 		return ""
 	}
@@ -697,6 +699,8 @@ func (m Model) facts(s sample.Session) []string {
 	switch {
 	case s.Tokens > 0 && s.Window > 0:
 		facts = append(facts, fmt.Sprintf("%s / %s tokens", sample.Kilo(s.Tokens), sample.Kilo(s.Window)), "+"+sample.Kilo(s.Burn30m)+" in 30 min")
+	case s.Tokens > 0 && s.Agent == "claude":
+		facts = append(facts, sample.Kilo(s.Tokens)+" tokens · no window known: run matchblox setup, or add the model to [sessions.windows]")
 	case s.Tokens > 0:
 		facts = append(facts, sample.Kilo(s.Tokens)+" tokens · no window known: add the model to [sessions.windows]")
 	}

@@ -353,3 +353,70 @@ func TestUntil(t *testing.T) {
 		}
 	}
 }
+
+// TestTheStatusLineTapKeepsEachSessionsWindow: the window Claude Code gives
+// its status line is kept per session, also for a session without limits,
+// and nothing else of the input.
+func TestTheStatusLineTapKeepsEachSessionsWindow(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Unix(1791667916, 0)
+	in := `{"session_id":"5ea1c0de-0000-4000-8000-000000000001","cwd":"/home/dev/app","model":{"id":"claude-opus-5-5"},` +
+		`"context_window":{"total_input_tokens":112848,"context_window_size":1000000,"used_percentage":11}}`
+	if err := Tap([]byte(in), "/home/dev/.claude", dir, now); err != nil {
+		t.Fatal(err)
+	}
+	if w := SessionWindow(dir, "5ea1c0de-0000-4000-8000-000000000001"); w != 1_000_000 {
+		t.Fatalf("window %d, want 1000000", w)
+	}
+	if w := SessionWindow(dir, "another-session"); w != 0 {
+		t.Fatalf("a session the status line never saw has window %d", w)
+	}
+	files, _ := filepath.Glob(filepath.Join(dir, "windows", "*"))
+	if len(files) != 1 {
+		t.Fatalf("files: %v", files)
+	}
+	b, _ := os.ReadFile(files[0])
+	for _, leak := range []string{"/home/dev/app", "claude-opus", "112848"} {
+		if strings.Contains(string(b), leak) {
+			t.Fatalf("the tap kept %q: %s", leak, b)
+		}
+	}
+	// A session id is a file name only when it is one: no path gets out.
+	for _, id := range []string{"../escape", "a/b", "", ".."} {
+		bad := strings.Replace(in, "5ea1c0de-0000-4000-8000-000000000001", id, 1)
+		if err := Tap([]byte(bad), "/home/dev/.claude", dir, now); err != nil {
+			t.Fatal(err)
+		}
+		if w := SessionWindow(dir, id); w != 0 {
+			t.Fatalf("session id %q gave window %d", id, w)
+		}
+	}
+	if files, _ := filepath.Glob(filepath.Join(dir, "windows", "*")); len(files) != 1 {
+		t.Fatalf("a bad session id wrote a file: %v", files)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "escape.json")); err == nil {
+		t.Fatal("a session id wrote outside the windows directory")
+	}
+}
+
+// TestANewSessionClearsWindowsOlderThanTheStoreKeeps: one file a session
+// would grow without end; a new session removes the stale ones.
+func TestANewSessionClearsWindowsOlderThanTheStoreKeeps(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Unix(1791667916, 0)
+	tap := func(id string) {
+		t.Helper()
+		in := `{"session_id":"` + id + `","context_window":{"context_window_size":200000}}`
+		if err := Tap([]byte(in), "/home/dev/.claude", dir, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tap("old")
+	tap("recent")
+	stale := now.Add(-Keep - time.Hour)
+	_ = os.Chtimes(filepath.Join(dir, "windows", "old.json"), stale, stale)
+	tap("new")
+	if SessionWindow(dir, "old") != 0 || SessionWindow(dir, "recent") != 200_000 || SessionWindow(dir, "new") != 200_000 {
+		t.Fatalf("old %d recent %d new %d", SessionWindow(dir, "old"), SessionWindow(dir, "recent"), SessionWindow(dir, "new"))
+	}
+}
