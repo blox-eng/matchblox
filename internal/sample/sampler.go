@@ -356,7 +356,7 @@ func (s *Sampler) Sample() Snapshot {
 	snap.Machine.GPUs = s.sampleGPUs(now)
 	s.prevAt = now
 
-	if s.procAt.IsZero() || now.Sub(s.procAt) >= s.ProcEvery {
+	if s.procAt.IsZero() || now.Sub(s.procAt) >= s.ProcEvery || s.panesChanged() {
 		s.scan(now)
 	}
 	l := s.last
@@ -367,8 +367,28 @@ func (s *Sampler) Sample() Snapshot {
 	return snap
 }
 
+// panesChanged lists tmux, which is cheap, between two scans: a pane the
+// last scan did not see, or a pane that now runs an agent, needs a scan at
+// once. A new session then shows within a sample, not within ProcEvery.
+func (s *Sampler) panesChanged() bool {
+	out, err := s.Tmux()
+	if err != nil {
+		return false
+	}
+	seen := make(map[string]string, len(s.last.Panes))
+	for _, p := range s.last.Panes {
+		seen[p.ID] = p.Command
+	}
+	for _, p := range ParsePanes(out) {
+		if cmd, ok := seen[p.ID]; !ok || cmd != p.Command && s.isAgent(p.Command) {
+			return true
+		}
+	}
+	return false
+}
+
 // scan reads the process table, tmux and containers: the expensive half of a
-// sample, run every ProcEvery.
+// sample, run every ProcEvery and when the panes change.
 func (s *Sampler) scan(now time.Time) {
 	dt := seconds(s.procAt, now)
 	var l Snapshot
