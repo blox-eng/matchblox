@@ -16,7 +16,8 @@ import (
 )
 
 // A session's life from the console (#74): N opens New session, r opens
-// Rename, x kills (the secondary action of a session's row).
+// Rename, A opens Switch agent, x kills (the secondary action of a
+// session's row).
 
 // killAnyway is the Text of a kill confirmed a second time (the service's
 // KillAnyway).
@@ -33,10 +34,13 @@ const (
 
 var formLabels = [...]string{"where", "branch", "name", "agent", "first"}
 
-// form is the open New session or Rename form. Rename has the name only.
+// form is the open New session, Rename or Switch agent form. Rename has
+// the name only; Switch agent the agent and the handoff (in first).
 type form struct {
 	rename    bool
-	pane, who string // Rename: the session's pane and its name now
+	swap      bool   // Switch agent
+	pane, who string // Rename, Switch agent: the session's pane and its name now
+	from      string // Switch agent: the session's agent now (where: its directory)
 	at        int    // the field the cursor is on
 	where     string
 	branch    string
@@ -106,6 +110,57 @@ func (m Model) openRename() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// openSwitch is A on a session: Switch agent, the first other agent
+// picked and the default handoff to edit or clear.
+func (m Model) openSwitch() (tea.Model, tea.Cmd) {
+	s, ok := m.selectedSession()
+	switch {
+	case !ok:
+		return m, nil
+	case s.Pane == "":
+		m.flash = s.Name + " is outside tmux: nothing to switch"
+		return m, nil
+	case m.conn == nil || m.lost:
+		m.flash = "not sent, no connection"
+		return m, nil
+	}
+	f := &form{swap: true, pane: s.Pane, who: s.Name, from: s.Agent, where: s.Cwd, at: fieldAgent, first: proto.DefaultHandoff}
+	for _, a := range m.agents {
+		if a != s.Agent {
+			f.agent = a
+			break
+		}
+	}
+	if f.agent == "" {
+		m.flash = "no other agent to switch to here"
+		return m, nil
+	}
+	m.form, m.pending, m.peek = f, nil, nil
+	return m, nil
+}
+
+// switchAction is the plan of a Switch agent form: it waits for a typed y,
+// and a second one for a session that works or waits.
+func (m Model) switchAction(f form) *action {
+	sw := proto.SwitchAgent{Agent: f.agent, Handoff: strings.TrimSpace(f.first)}
+	b, _ := json.Marshal(sw)
+	sw.Anyway = true
+	again, _ := json.Marshal(sw)
+	say := fmt.Sprintf("switch %s: %s → %s in %s, %s, then jump there", f.who, f.from, f.agent, f.pane, f.where)
+	a := &action{label: "switch", destructive: true, rec: "switch:" + f.pane, text: string(b), againText: string(again), say: say, done: "switched " + f.who + " to " + f.agent}
+	i := slices.IndexFunc(m.snap.Sessions, func(s sample.Session) bool { return s.Pane == f.pane })
+	if i < 0 {
+		return a
+	}
+	switch s := m.snap.Sessions[i]; {
+	case s.Ask != nil || s.Permits || m.waitsFor(s.Pane):
+		a.again = s.Name + " waits for you: y again switches it all the same"
+	case s.Works():
+		a.again = s.Name + " works: y again switches it mid-turn"
+	}
+	return a
+}
+
 // gitPaths are the repositories and worktrees of the Git tab, ←→ on where.
 func (m Model) gitPaths() []string {
 	var out []string
@@ -119,8 +174,11 @@ func (m Model) gitPaths() []string {
 
 // fields are the form's fields, in Tab's order.
 func (f *form) fields() []int {
-	if f.rename {
+	switch {
+	case f.rename:
 		return []int{fieldName}
+	case f.swap:
+		return []int{fieldAgent, fieldFirst}
 	}
 	return []int{fieldWhere, fieldBranch, fieldName, fieldAgent, fieldFirst}
 }
@@ -179,12 +237,13 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	f.err = ""
 	if f.at == fieldAgent {
-		i := slices.Index(m.agents, f.agent)
+		agents := m.formAgents()
+		i := slices.Index(agents, f.agent)
 		switch key {
 		case "left":
-			f.agent = m.agents[(i+len(m.agents)-1)%len(m.agents)]
+			f.agent = agents[(i+len(agents)-1)%len(agents)]
 		case "right", "space":
-			f.agent = m.agents[(i+1)%len(m.agents)]
+			f.agent = agents[(i+1)%len(agents)]
 		}
 		return m, nil
 	}
@@ -229,6 +288,21 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// formAgents are the agents the form picks from: Switch agent leaves out
+// the one the session runs.
+func (m Model) formAgents() []string {
+	if !m.form.swap {
+		return m.agents
+	}
+	var out []string
+	for _, a := range m.agents {
+		if a != m.form.from {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
 // formEnter sends the form: a refusal stays in it, where it can be fixed.
 func (m Model) formEnter() (tea.Model, tea.Cmd) {
 	f := *m.form
@@ -236,6 +310,9 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 	if m.conn == nil || m.lost {
 		f.err = "not sent, no connection"
 		return m, nil
+	}
+	if f.swap {
+		return m.swapEnter(f)
 	}
 	name := strings.TrimSpace(f.name)
 	if f.rename || f.named {
@@ -262,6 +339,21 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 	}
 	f.act, f.err = fmt.Sprintf("a%d", m.acts), ""
 	return m, cmd
+}
+
+// swapEnter turns the Switch agent form into its plan, checked as the
+// service checks it.
+func (m Model) swapEnter(f form) (tea.Model, tea.Cmd) {
+	if f.agent == "" {
+		m.form.err, m.form.at = "which agent? ←→ picks one", fieldAgent
+		return m, nil
+	}
+	if err := proto.CheckHandoff(f.first); err != nil {
+		m.form.err, m.form.at = err.Error(), fieldFirst
+		return m, nil
+	}
+	m.form, m.pending = nil, m.switchAction(f)
+	return m, nil
 }
 
 // formResult takes the result of the form's act: it closes when the act
@@ -311,6 +403,9 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 	}
 	field := func(id int, value, placeholder string) {
 		label := fmt.Sprintf("%-7s", formLabels[id])
+		if f.swap && id == fieldFirst {
+			label = "handoff"
+		}
 		lead := st.faint.Render(label) + "  "
 		if f.at == id {
 			lead = st.muted.Render(label) + st.accent.Render("› ")
@@ -330,11 +425,19 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 		add(fmt.Sprintf("field:%d", id), lead+body)
 	}
 	title := st.accent.Bold(true).Render("New session")
-	if f.rename {
+	switch {
+	case f.swap:
+		title = st.accent.Bold(true).Render("Switch agent of " + f.who)
+		agentsAt = len(press)
+		line, chips := m.agentChips(iw)
+		add(fmt.Sprintf("field:%d", fieldAgent), line)
+		agents = chips
+		field(fieldFirst, f.first, "blank: it waits for you")
+	case f.rename:
 		title = st.accent.Bold(true).Render("Rename " + f.who)
 		field(fieldName, f.name, "")
 		add("", "", st.faint.Render(fit("tmux and the agent take this name", iw)))
-	} else {
+	default:
 		hint := "a path"
 		if len(m.gitPaths()) > 0 {
 			hint = "a path, or ←→ for the Git tab's"
@@ -377,7 +480,7 @@ func (m Model) agentChips(iw int) (string, []span) {
 	}
 	x := 9
 	var spans []span
-	for i, a := range m.agents {
+	for i, a := range m.formAgents() {
 		if i > 0 {
 			line += "  "
 			x += 2
@@ -405,8 +508,11 @@ func (m Model) formFoot() []footPart {
 		}
 		return footPart{t, press, " ─ "}
 	}
-	if m.form.rename {
+	switch {
+	case m.form.rename:
 		return []footPart{key("⏎", "rename", "enter"), key("esc", "", "esc")}
+	case m.form.swap:
+		return []footPart{key("⏎", "plan", "enter"), key("tab", "next", "tab"), key("esc", "", "esc")}
 	}
 	return []footPart{key("⏎", "start", "enter"), key("tab", "next", "tab"), key("esc", "", "esc")}
 }

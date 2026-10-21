@@ -136,3 +136,121 @@ func TestATapPicksAnAgentAndAField(t *testing.T) {
 		t.Fatalf("the tap left the cursor on %d", fm.at)
 	}
 }
+
+// switchState is lifeState with nothing waiting, on app-feature (claude in
+// %1): one y switches it.
+func switchState(t *testing.T, st proto.State) (tea.Model, *fakeConn) {
+	t.Helper()
+	st.Queue = nil
+	m, f := loadedWith(t, 100, st)
+	return selectPane(t, m, "%1"), f
+}
+
+func TestAOpensSwitchAgentAndJumpsAfter(t *testing.T) {
+	next, f := switchState(t, lifeState())
+	var ran [][]string
+	m := next.(Model)
+	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	next, _ = key(m, "A")
+	fm := next.(Model).form
+	if fm == nil || !fm.swap || fm.agent != "codex" || fm.first != proto.DefaultHandoff {
+		t.Fatalf("form %+v", fm)
+	}
+	if s := screen(next); !strings.Contains(s, "Switch agent") || !strings.Contains(s, "handoff") {
+		t.Fatalf("the form:\n%s", s)
+	}
+	if next, _ = key(next, "left"); next.(Model).form.agent != "codex" {
+		t.Fatalf("← left codex for %q", next.(Model).form.agent)
+	}
+	next, _ = key(next, "enter")
+	nm := next.(Model)
+	if nm.form != nil || nm.pending == nil || nm.pending.rec != "switch:%1" || !strings.Contains(nm.pending.say, "claude → codex") || len(f.acts()) != 0 {
+		t.Fatalf("form %+v pending %+v acts %+v", nm.form, nm.pending, f.acts())
+	}
+	next, cmd := key(next, "y")
+	cmd()
+	acts := f.acts()
+	if len(acts) != 1 || acts[0].RecID != "switch:%1" || acts[0].Confirm != "y" {
+		t.Fatalf("sent %+v", acts)
+	}
+	var sw proto.SwitchAgent
+	if err := json.Unmarshal([]byte(acts[0].Text), &sw); err != nil || sw != (proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff}) {
+		t.Fatalf("%+v %v", sw, err)
+	}
+	// A refusal jumps nowhere and says why.
+	act := next.(Model).jumpAfter.act
+	failed, _ := next.Update(resultMsg(proto.Result{ActID: act, Err: "codex is not installed here"}))
+	if fm := failed.(Model); fm.jumpAfter.act != "" || !strings.Contains(fm.flash, "codex is not installed here") {
+		t.Fatalf("jump %+v flash %q", fm.jumpAfter, fm.flash)
+	}
+	// A switch that ran jumps to the pane.
+	done, cmd := next.Update(resultMsg(proto.Result{ActID: act, Ran: [][]string{{"tmux"}}}))
+	c := cmd().(tea.BatchMsg)
+	c[len(c)-1]()
+	if len(ran) != 1 || strings.Join(ran[0], " ") != "tmux switch-client -t %1" || done.(Model).flash != "switched app-feature to codex" {
+		t.Fatalf("ran %v flash %q", ran, done.(Model).flash)
+	}
+}
+
+func TestSwitchOfABusySessionTakesASecondY(t *testing.T) {
+	st := lifeState()
+	st.Sessions[0].Busy = true
+	next, f := switchState(t, st)
+	next, _ = key(next, "A")
+	next, _ = key(next, "enter")
+	next, cmd := key(next, "y")
+	if cmd != nil {
+		cmd()
+	}
+	if line := actionLine(next); len(f.acts()) != 0 || !strings.Contains(line, "app-feature works: y again switches it mid-turn") {
+		t.Fatalf("one y switched a session that works: %q %+v", line, f.acts())
+	}
+	_, cmd = key(next, "y")
+	cmd()
+	if acts := f.acts(); len(acts) != 1 || !strings.Contains(acts[0].Text, `"anyway":true`) || !strings.Contains(acts[0].Text, `"agent":"codex"`) {
+		t.Fatalf("sent %+v", acts)
+	}
+}
+
+func TestSwitchRefusesOutsideTmuxAndOneAgent(t *testing.T) {
+	st := lifeState()
+	for i := range st.Sessions {
+		st.Sessions[i].Pane = ""
+	}
+	m, _ := loadedWith(t, 100, st)
+	s, _ := m.selectedSession()
+	next, _ := key(m, "A")
+	if nm := next.(Model); nm.form != nil || nm.flash != s.Name+" is outside tmux: nothing to switch" {
+		t.Fatalf("form %+v flash %q", nm.form, nm.flash)
+	}
+	st = lifeState()
+	st.Agents = []string{"claude"}
+	next, _ = switchState(t, st)
+	next, _ = key(next, "A")
+	if nm := next.(Model); nm.form != nil || nm.flash != "no other agent to switch to here" {
+		t.Fatalf("form %+v flash %q", nm.form, nm.flash)
+	}
+}
+
+func TestSwitchRefusesABadHandoffInTheForm(t *testing.T) {
+	next, f := switchState(t, lifeState())
+	next, _ = key(next, "A")
+	next, _ = key(next, "tab")
+	for range len(proto.DefaultHandoff) {
+		next, _ = key(next, "backspace")
+	}
+	next = typeText(next, "--yolo")
+	next, _ = key(next, "enter")
+	if nm := next.(Model); nm.form == nil || nm.form.err != "the handoff does not start with -" || nm.pending != nil || len(f.acts()) != 0 {
+		t.Fatalf("form %+v pending %+v", nm.form, nm.pending)
+	}
+}
+
+func TestSwitchEscSendsNothing(t *testing.T) {
+	next, f := switchState(t, lifeState())
+	next, _ = key(next, "A")
+	next, _ = key(next, "esc")
+	if nm := next.(Model); nm.form != nil || nm.pending != nil || len(f.acts()) != 0 {
+		t.Fatal("esc sent or kept the form")
+	}
+}

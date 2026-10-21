@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -30,6 +31,23 @@ func CheckName(name string) error {
 		return errors.New("a name is 40 characters at most")
 	case !nameRe.MatchString(name):
 		return errors.New("a name is letters, digits, - and _, and starts with a letter or a digit")
+	}
+	return nil
+}
+
+// CheckHandoff refuses a handoff the service would: one short line, as
+// an answer, that does not start with - (the agent would read a flag).
+// Empty is no first message, and passes.
+func CheckHandoff(text string) error {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
+	if err := panes.CheckAnswer(text); err != nil {
+		return errors.New(strings.Replace(err.Error(), "the answer", "the handoff", 1))
+	}
+	if strings.HasPrefix(text, "-") {
+		return errors.New("the handoff does not start with -")
 	}
 	return nil
 }

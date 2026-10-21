@@ -12,7 +12,7 @@ All notable changes to matchblox are in this file. The format follows
 
 - **`matchblox switch <who> --agent <name>` runs another agent in a session's
   pane:** same name, directory, park and ship, with a handoff line to start
-  from.
+  from. Switch it from the CLI, or `A` in Sessions.
 - **Cursor sessions show their context, model and account.** A new setup
   step, "Show Cursor's context", taps Cursor's status line: each Cursor
   session then shows its context use and window from its first turn, as

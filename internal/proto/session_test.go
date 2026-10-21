@@ -18,6 +18,23 @@ func TestCheckName(t *testing.T) {
 	}
 }
 
+func TestCheckHandoffRefusesWhatTheServiceWould(t *testing.T) {
+	for _, ok := range []string{"", "  ", DefaultHandoff, "fix it - then test"} {
+		if err := CheckHandoff(ok); err != nil {
+			t.Errorf("%q: %v", ok, err)
+		}
+	}
+	for text, want := range map[string]string{
+		"--yolo":                 "the handoff does not start with -",
+		"a\nb":                   "the handoff must be one line, without control keys",
+		strings.Repeat("a", 501): "the handoff is longer than 500 characters",
+	} {
+		if err := CheckHandoff(text); err == nil || err.Error() != want {
+			t.Errorf("%q: %v", text, err)
+		}
+	}
+}
+
 func TestNameOf(t *testing.T) {
 	for in, want := range map[string]string{
 		"feat/88-x":              "feat-88-x",
