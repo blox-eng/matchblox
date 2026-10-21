@@ -49,6 +49,13 @@ public enum Pairing {
             && scalars.allSatisfy(isNameScalar)
     }
 
+    /// The first `matchblox://pair?p=…` token of pasted text. The token ends at the first character that base64url does not use.
+    public static func firstLink(in text: String) -> URL? {
+        guard let start = text.range(of: "matchblox://pair?p=", options: .caseInsensitive) else { return nil }
+        let payload = text[start.upperBound...].prefix { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
+        return URL(string: String(text[start.lowerBound..<start.upperBound]) + payload)
+    }
+
     public static func cleanName(_ name: String) -> String {
         var scalars = String.UnicodeScalarView(name.unicodeScalars.filter(isNameScalar))
         scalars = String.UnicodeScalarView(scalars.drop { $0 == " " }.prefix(maxNameLength))

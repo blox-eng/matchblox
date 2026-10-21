@@ -148,4 +148,14 @@ final class PairingTests: XCTestCase {
         }
         return stream
     }
+
+    func testFirstLinkInText() {
+        let a = "matchblox://pair?p=AAAA"
+        let b = "matchblox://pair?p=BBBB"
+        XCTAssertEqual(Pairing.firstLink(in: "Open \(a) on the phone"), URL(string: a))
+        XCTAssertEqual(Pairing.firstLink(in: "Scan this: \(a)."), URL(string: a))
+        XCTAssertEqual(Pairing.firstLink(in: "\(a)\n"), URL(string: a))
+        XCTAssertNil(Pairing.firstLink(in: "no link here, https://example.com/?p=1"))
+        XCTAssertEqual(Pairing.firstLink(in: "\(a) and \(b)"), URL(string: a))
+    }
 }
