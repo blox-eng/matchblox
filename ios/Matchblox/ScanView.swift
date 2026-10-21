@@ -84,7 +84,7 @@ struct ScanView: View {
                 Text("Run matchblox pair on your host, or open Pair a device in its console.")
                     .foregroundStyle(Theme.muted)
             case .unsupported:
-                Text("This iPhone can't scan codes in matchblox. Open the Camera app and point it at the code. The Camera opens matchblox.")
+                Text("This device can't scan codes in matchblox. Open the Camera app and point it at the code. The Camera opens matchblox.")
             case .denied:
                 Text("matchblox can't use the camera. Allow the camera in Settings, or scan the code with the Camera app.")
                 Button("Open Settings") {
