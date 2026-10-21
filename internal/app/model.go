@@ -893,7 +893,7 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 	m.flash = "sent: " + a.String()
 	cmd := m.send(proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
 	m.startRec(a, "a"+strconv.Itoa(m.acts))
-	return m, cmd
+	return m.pairActed(a), cmd
 }
 
 func runNav(a action, run func([]string) error) ranMsg {

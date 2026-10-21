@@ -34,13 +34,26 @@ func lastClientTTY(out string) string {
 // tmuxLastClient asks tmux which client of the home session was active
 // last. A tmux error or no session gives "": the guard is not a wall.
 func tmuxLastClient() (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "tmux", "list-clients", "-t", "=matchblox", "-F", "#{client_activity} #{client_tty}").Output()
 	if err != nil {
 		return "", nil
 	}
 	return lastClientTTY(string(out)), nil
+}
+
+// lastClient is the tty of the client that was active last, "" on any doubt.
+func (m Model) lastClient() string {
+	last := m.opt.LastClient
+	if last == nil {
+		last = tmuxLastClient
+	}
+	tty, err := last()
+	if err != nil {
+		return ""
+	}
+	return tty
 }
 
 // fromDevice: the client that was active last is a device. The phone and
@@ -50,12 +63,8 @@ func (m Model) fromDevice() bool {
 	if m.opt.Pair == nil || m.opt.Pair.DeviceTTYs == nil {
 		return false
 	}
-	last := m.opt.LastClient
-	if last == nil {
-		last = tmuxLastClient
-	}
-	tty, err := last()
-	if err != nil || tty == "" {
+	tty := m.lastClient()
+	if tty == "" {
 		return false
 	}
 	_, ok := m.opt.Pair.DeviceTTYs()[tty]

@@ -212,6 +212,7 @@ func consolePair(home, exe, hostKeyPath string, address func() string) *app.Pair
 		},
 		RemoveDevice: func(name string) (string, error) { return setup.RemoveDevice(home, name) },
 		DeviceTTYs:   func() map[string]string { return setup.DeviceTTYs(home) },
+		DeviceIn:     func(id string) (time.Time, string, bool) { return setup.DeviceIn(home, id) },
 	}
 }
 

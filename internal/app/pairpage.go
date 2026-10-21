@@ -19,6 +19,8 @@ import (
 const (
 	pairWindow    = 5 * time.Minute
 	pairPollEvery = 100 * time.Millisecond
+	pairInWait    = 60 * time.Second        // beat 3 comes within this, or the page folds
+	pairActFold   = 1500 * time.Millisecond // the page folds this long after beat 4
 )
 
 const (
@@ -52,6 +54,8 @@ type PairHost struct {
 	RemoveDevice func(nameOrFingerprint string) (backup string, err error)
 	// DeviceTTYs maps each terminal a device is in on to that device's id.
 	DeviceTTYs func() map[string]string
+	// DeviceIn is when and where a device's own console started.
+	DeviceIn func(id string) (at time.Time, tty string, ok bool)
 }
 
 type pairPage struct {
@@ -62,7 +66,9 @@ type pairPage struct {
 	seenName   string
 	device     PairDevice // after the claim
 	standalone bool       // matchblox pair: stops after the opening
-	beat       int        // 1 shut, 2 opened, 3 in, 4 first act (Task 9)
+	beat       int        // 1 shut, 2 opened, 3 in, 4 first act
+	claimedAt  time.Time  // when the device took the code
+	foldAt     time.Time  // beat 4: when the page folds
 	line       string     // the line under the box
 	failed     bool       // line is an offer error: it shows wrapped, and Enter retries
 	offer      *pairOffer // the offer that writes the key
@@ -275,6 +281,9 @@ func (m Model) pairPolled() (Model, tea.Cmd) {
 		m.pairPolling = false
 		return m, nil
 	}
+	if m.pair.beat >= 2 {
+		return m.pairWatched()
+	}
 	if !m.pair.live() {
 		return m, pairPoll()
 	}
@@ -283,7 +292,7 @@ func (m Model) pairPolled() (Model, tea.Cmd) {
 	claim := func() bool {
 		d, ok := h.Claim(p.id)
 		if ok {
-			p.device, p.beat, p.line = d, 2, pairedLine(d)
+			p.device, p.beat, p.line, p.claimedAt = d, 2, pairedLine(d), now
 			p.to(boxOpen, now)
 		}
 		return ok
@@ -317,6 +326,65 @@ func (m Model) pairPolled() (Model, tea.Cmd) {
 		return m, tea.Batch(pairPoll(), pairFrame())
 	}
 	return m, pairPoll()
+}
+
+// pairWatched is the poll after the claim: beat 3 is the device's own
+// console, and the page folds without it after a minute, and after beat 4.
+func (m Model) pairWatched() (Model, tea.Cmd) {
+	p := *m.pair
+	h, now := m.opt.Pair, m.now()
+	switch {
+	case p.standalone || h == nil || h.DeviceIn == nil:
+	case p.beat == 4:
+		if !now.Before(p.foldAt) {
+			return m.closePairPage(""), nil
+		}
+	case p.beat == 2:
+		if at, _, ok := h.DeviceIn(p.device.ID); ok && at.After(p.claimedAt) {
+			p.beat, p.line = 3, p.device.Name+" is in. Answer an agent from it, or esc to go back."
+		} else if now.Sub(p.claimedAt) >= pairInWait {
+			return m.closePairPage(pairedLine(p.device)), nil
+		}
+	}
+	m.pair = &p
+	return m, pairPoll()
+}
+
+// pairActed tells the page of an act the console sent. At beat 3, an act
+// from the new device's own terminal is its first one: the page names it
+// and folds soon.
+func (m Model) pairActed(a action) Model {
+	p, h := m.pair, m.opt.Pair
+	if p == nil || p.standalone || p.beat != 3 || h == nil || h.DeviceIn == nil {
+		return m
+	}
+	_, tty, ok := h.DeviceIn(p.device.ID)
+	if !ok || tty == "" || m.lastClient() != tty {
+		return m
+	}
+	verb, pane := "acted in", a.rec
+	if i := strings.IndexByte(a.rec, ':'); i >= 0 {
+		pane = a.rec[i+1:]
+		switch a.rec[:i] {
+		case "answer":
+			verb = "answered"
+		case "pick":
+			verb = "picked in"
+		case "message":
+			verb = "wrote to"
+		case "compact":
+			verb = "compacted"
+		}
+	}
+	who := pane
+	if s, ok := m.sessionIn(pane); ok {
+		who = s.Name
+	}
+	next := *p
+	next.beat, next.line = 4, fmt.Sprintf("%s %s %s", p.device.Name, verb, who)
+	next.foldAt = m.now().Add(pairActFold)
+	m.pair = &next
+	return m
 }
 
 // pairKey is a key while the page shows: c copies, esc closes, Enter

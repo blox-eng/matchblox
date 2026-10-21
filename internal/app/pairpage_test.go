@@ -79,6 +79,7 @@ func testPairHost(home, exe, hostKey string) *PairHost {
 		},
 		RemoveDevice: func(name string) (string, error) { return setup.RemoveDevice(home, name) },
 		DeviceTTYs:   func() map[string]string { return setup.DeviceTTYs(home) },
+		DeviceIn:     func(id string) (time.Time, string, bool) { return setup.DeviceIn(home, id) },
 	}
 }
 
@@ -484,5 +485,149 @@ func TestPairPageWithoutTheBinaryWritesNoKey(t *testing.T) {
 	}
 	if !strings.Contains(pageText(m), "cannot find this matchblox on the PATH") {
 		t.Fatal("the page does not say why")
+	}
+}
+
+// claimedPage is a page whose code a device took: beat 2, with the device's
+// own console not in yet. The last client is the builder's terminal.
+func claimedPage(t *testing.T) (*pairRig, Model, *string) {
+	t.Helper()
+	r, m := openedPage(t)
+	if _, err := setup.ClaimPairKey(r.home, pairExe, m.pair.id, pairPhoneKey, "iPad"); err != nil {
+		t.Fatal(err)
+	}
+	m = poll(t, m)
+	if m.pair.beat != 2 || m.pair.device.ID == "" {
+		t.Fatalf("beat %d, device %+v", m.pair.beat, m.pair.device)
+	}
+	for i := range m.all.sessions {
+		if m.all.sessions[i].Pane == "%2" {
+			m.all.sessions[i].Name = "api"
+		}
+	}
+	tty := "/dev/ttys001"
+	m.opt.LastClient = func() (string, error) { return tty, nil }
+	return r, m, &tty
+}
+
+const phoneTTY = "/dev/ttys009"
+
+func deviceIn(t *testing.T, r *pairRig, id string, at time.Time) {
+	t.Helper()
+	if err := setup.MarkDeviceIn(r.home, id, phoneTTY, at); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBeatThreeOnTheDevicesNote(t *testing.T) {
+	r, m, _ := claimedPage(t)
+	deviceIn(t, r, "ba9876543210", r.now.Add(time.Second)) // another device
+	r.now = r.now.Add(2 * time.Second)
+	m = poll(t, m)
+	if m.pair.beat != 2 {
+		t.Fatalf("a note for another id moved the page to beat %d", m.pair.beat)
+	}
+	deviceIn(t, r, m.pair.device.ID, r.now.Add(-time.Hour)) // from before the claim
+	m = poll(t, m)
+	if m.pair.beat != 2 {
+		t.Fatalf("an old note moved the page to beat %d", m.pair.beat)
+	}
+	deviceIn(t, r, m.pair.device.ID, r.now.Add(time.Second))
+	m = poll(t, m)
+	if want := "iPad is in. Answer an agent from it, or esc to go back."; m.pair.beat != 3 || m.pair.line != want {
+		t.Fatalf("beat %d, line %q", m.pair.beat, m.pair.line)
+	}
+}
+
+func inPage(t *testing.T) (*pairRig, Model, *string) {
+	t.Helper()
+	r, m, tty := claimedPage(t)
+	deviceIn(t, r, m.pair.device.ID, r.now.Add(time.Second))
+	m = poll(t, m)
+	if m.pair.beat != 3 {
+		t.Fatalf("beat %d", m.pair.beat)
+	}
+	return r, m, tty
+}
+
+func TestBeatFourNamesTheAct(t *testing.T) {
+	r, m, tty := inPage(t)
+	*tty = phoneTTY
+	m = m.pairActed(action{rec: "answer:%2"})
+	if m.pair.beat != 4 || m.pair.line != "iPad answered api" {
+		t.Fatalf("beat %d, line %q", m.pair.beat, m.pair.line)
+	}
+	m = m.pairActed(action{rec: "pick:%2"})
+	if m.pair.line != "iPad answered api" {
+		t.Fatalf("a second act changed the line: %q", m.pair.line)
+	}
+	r.now = r.now.Add(1400 * time.Millisecond)
+	if m = poll(t, m); m.pair == nil {
+		t.Fatal("the page folded before 1.5 s")
+	}
+	r.now = r.now.Add(200 * time.Millisecond)
+	if m = poll(t, m); m.pair != nil {
+		t.Fatal("the page did not fold after 1.5 s")
+	}
+}
+
+func TestBeatFourVerbs(t *testing.T) {
+	for rec, want := range map[string]string{
+		"pick:%2": "iPad picked in api", "message:%2": "iPad wrote to api",
+		"compact:%2": "iPad compacted api", "kill:%2": "iPad acted in api",
+	} {
+		_, m, tty := inPage(t)
+		*tty = phoneTTY
+		if m = m.pairActed(action{rec: rec}); m.pair.line != want {
+			t.Errorf("%s: line %q, want %q", rec, m.pair.line, want)
+		}
+	}
+}
+
+func TestBeatFourIgnoresTheBuilder(t *testing.T) {
+	_, m, _ := inPage(t)
+	m = m.pairActed(action{rec: "answer:%2"})
+	if m.pair.beat != 3 || strings.Contains(m.pair.line, "answered") {
+		t.Fatalf("the builder's act moved the page: beat %d, line %q", m.pair.beat, m.pair.line)
+	}
+}
+
+func TestBeatFourNeedsBeatThree(t *testing.T) {
+	_, m, tty := claimedPage(t)
+	*tty = phoneTTY
+	if m = m.pairActed(action{rec: "answer:%2"}); m.pair.beat != 2 {
+		t.Fatalf("beat %d", m.pair.beat)
+	}
+}
+
+func TestFoldsWithoutBeatThree(t *testing.T) {
+	r, m, _ := claimedPage(t)
+	r.now = r.now.Add(59 * time.Second)
+	if m = poll(t, m); m.pair == nil {
+		t.Fatal("the page folded before 60 s")
+	}
+	r.now = r.now.Add(time.Second)
+	m = poll(t, m)
+	if m.pair != nil || !strings.HasPrefix(m.flash, "Paired iPad (SHA256:") {
+		t.Fatalf("page %v, flash %q", m.pair, m.flash)
+	}
+}
+
+func TestStandaloneNeverWaitsForBeats(t *testing.T) {
+	r, m, _ := claimedPage(t)
+	p := *m.pair
+	p.standalone = true
+	m.pair = &p
+	r.now = r.now.Add(10 * time.Minute)
+	if m = poll(t, m); m.pair == nil || m.pair.beat != 2 {
+		t.Fatalf("standalone page: %+v", m.pair)
+	}
+}
+
+func TestEscFoldsAtBeatThree(t *testing.T) {
+	_, m, _ := inPage(t)
+	next, _ := key(m, "esc")
+	if next.(Model).pair != nil {
+		t.Fatal("esc did not fold the page")
 	}
 }
