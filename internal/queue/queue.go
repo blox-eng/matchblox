@@ -40,6 +40,18 @@ type Item struct {
 // keeps its events: the sampler can lag behind a hook.
 const UnseenGrace = 30 * time.Second
 
+// BusyAfter is how long after a wait starts a sample that says busy is
+// news: a hook is merged at once with the last sample, read while its turn
+// ran, and a turn's end takes a moment to reach the transcript.
+const BusyAfter = 5 * time.Second
+
+// working tells if a session works after its wait started (since; zero for
+// a wait already hidden for work): its own turn, or the subagents it left.
+// A pane that changes (a status line's clock) is no proof of work.
+func working(s sample.Session, since, now time.Time) bool {
+	return s.Busy && !s.FromPane && (since.IsZero() || now.Sub(since) >= BusyAfter)
+}
+
 // AskLife is how long a question tool's call from a hook is kept with no
 // hook that ends it: a session that died mid-menu sends none.
 const AskLife = 24 * time.Hour
@@ -83,6 +95,9 @@ func (q *Queue) Apply(ev hooks.Event) {
 	set := func(state, line string) {
 		if !was {
 			it = Item{SessionID: ev.SessionID, Since: ev.At}
+		}
+		if it.Since.IsZero() {
+			it.Since = ev.At // the wait was hidden while the session worked
 		}
 		it.State, it.Pane, it.Reminder = state, ev.Pane, false
 		if line != "" {
@@ -170,6 +185,18 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 			}
 			if it, ok := q.waiting[id]; ok {
 				it.Pane, it.Target, it.Name = s.Pane, s.Target, s.Name
+				if working(s, it.Since, now) && (it.State == StateFinished || it.Reminder) {
+					// A turn that ended asking nothing does not wait while the
+					// session works: its subagents, or the turn their results
+					// start with no prompt. It is back once the work ends,
+					// waiting since then.
+					it.Since = time.Time{}
+					q.waiting[id] = it
+					continue
+				}
+				if it.Since.IsZero() {
+					it.Since = now
+				}
 				q.waiting[id] = it
 				items = append(items, it)
 			}

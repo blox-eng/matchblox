@@ -32,6 +32,8 @@ func TestPeekReadsWhatTheConsolesPeekShows(t *testing.T) {
 		{"an approval", sample.Session{Pane: "%4", Name: "api", Said: "Running the tests."},
 			[]queue.Item{{Pane: "%4", State: queue.StatePermission, LastLine: "Claude needs your permission to use Bash"}},
 			Peek{Name: "api", Pane: "%4", Said: "Claude needs your permission to use Bash", Asks: "Claude needs your permission to use Bash", Approval: true}},
+		{"a question above the progress line", sample.Session{Pane: "%6", Name: "lexroom-dev", Said: "All reviewed.\n\nKeep the line, or cut it?\n\nProgress [████████] Waiting for your answer", Asks: true}, nil,
+			Peek{Name: "lexroom-dev", Pane: "%6", Said: "All reviewed.\n\nKeep the line, or cut it?\n\nProgress [████████] Waiting for your answer", Asks: "Keep the line, or cut it?"}},
 		{"a pane read", sample.Session{Pane: "%5", Name: "cx", LastLine: "Proceed? (y/n)", Asks: true}, nil,
 			Peek{Name: "cx", Pane: "%5", Said: "Proceed? (y/n)", Asks: "Proceed? (y/n)"}},
 	} {
