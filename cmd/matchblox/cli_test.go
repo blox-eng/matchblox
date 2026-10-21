@@ -602,3 +602,21 @@ func TestWhenListPrintsTheRunsTriggers(t *testing.T) {
 		t.Fatalf("%q, want %q", b.String(), want)
 	}
 }
+
+func TestSessionsLineMarksOutsideTmux(t *testing.T) {
+	d := cliDoc()
+	d.Sessions = []sample.Session{{Name: "loose", Status: "idle"}}
+	var text, js bytes.Buffer
+	if err := writeSessions(&text, d, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text.String(), "outside tmux") {
+		t.Fatalf("line %q", text.String())
+	}
+	if err := writeSessions(&js, d, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(js.String(), `"target": ""`) {
+		t.Fatalf("json %s", js.String())
+	}
+}

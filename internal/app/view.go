@@ -647,6 +647,9 @@ func place(target, id string) string {
 	if target != "" {
 		return target
 	}
+	if id == "" {
+		return "outside tmux"
+	}
 	return id
 }
 

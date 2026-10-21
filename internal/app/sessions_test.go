@@ -235,3 +235,24 @@ func TestTheStokersSessionStaysOutOfSessions(t *testing.T) {
 		}
 	}
 }
+
+func TestASessionOutsideTmuxSaysSo(t *testing.T) {
+	st := lifeState()
+	st.Sessions = []sample.Session{{Name: "loose", Cwd: "/work/app", Status: "idle"}}
+	m, f := loadedWith(t, 100, st)
+	if s := screen(m); !strings.Contains(s, "outside tmux") {
+		t.Fatalf("the row names no place:\n%s", s)
+	}
+	for _, k := range []string{"A", "r", "z", "x"} {
+		next, cmd := key(m, k)
+		if cmd != nil {
+			cmd()
+		}
+		if nm := next.(Model); nm.form != nil || nm.pending != nil {
+			t.Fatalf("%s opened %+v %+v", k, nm.form, nm.pending)
+		}
+	}
+	if acts := f.acts(); len(acts) != 0 {
+		t.Fatalf("sent %+v", acts)
+	}
+}

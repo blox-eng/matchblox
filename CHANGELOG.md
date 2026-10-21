@@ -13,6 +13,8 @@ All notable changes to matchblox are in this file. The format follows
 - **`matchblox switch <who> --agent <name>` runs another agent in a session's
   pane:** same name, directory, park and ship, with a handoff line to start
   from. Switch it from the CLI, or `A` in Sessions.
+- **Sessions says `outside tmux` for an agent with no pane.** The row and
+  `matchblox sessions` name the place, instead of leaving it blank.
 - **Cursor sessions show their context, model and account.** A new setup
   step, "Show Cursor's context", taps Cursor's status line: each Cursor
   session then shows its context use and window from its first turn, as
