@@ -495,3 +495,61 @@ func TestAHookedCursorSessionThatPermitsWaitsForPermission(t *testing.T) {
 		t.Errorf("items %+v, want one permission wait of %%7", items)
 	}
 }
+
+// TestACursorReplyFillsItsFinishedTurn: Cursor's reply comes after its
+// stop, in afterAgentResponse. It fills the finished turn's line, and a
+// reply that asks makes it a question; with no finished turn it is nothing.
+func TestACursorReplyFillsItsFinishedTurn(t *testing.T) {
+	cursor := session("", "%6", "app", "idle", time.Minute)
+	cursor.Agent = sample.CursorAgent
+	stop := hooks.Event{Name: "Stop", Agent: hooks.CursorAgent, SessionID: "chat1", Pane: "%6", Turn: "g1"}
+	reply := hooks.Event{Name: hooks.Reply, Agent: hooks.CursorAgent, SessionID: "chat1", Pane: "%6", Turn: "g1", Message: "Shall I also push it?", Asks: true}
+	// Cursor runs both hooks at once: they come in either order, each
+	// stamped when its own process read it.
+	for name, evs := range map[string][]hooks.Event{
+		"stop, then reply":              {at0(stop, 0), at0(reply, 1)},
+		"reply, then stop":              {at0(reply, 1), at0(stop, 0)},
+		"reply stamped before the stop": {at0(stop, 1), at0(reply, 0)},
+	} {
+		q := New()
+		for _, ev := range evs {
+			q.Apply(ev)
+		}
+		q.Merge([]sample.Session{cursor}, at(10))
+		if items := q.Items(); len(items) != 1 || items[0].State != StateQuestion || items[0].LastLine != "Shall I also push it?" {
+			t.Errorf("%s: items %+v, want one question", name, items)
+		}
+	}
+	other := reply
+	other.Turn = "g0"
+	q := New()
+	q.Apply(at0(other, 0))
+	q.Apply(at0(stop, 1))
+	q.Merge([]sample.Session{cursor}, at(10))
+	if items := q.Items(); len(items) != 1 || items[0].State != StateFinished || items[0].LastLine != "" {
+		t.Errorf("a reply of another turn: %+v, want finished with no line", items)
+	}
+	q = New()
+	q.Apply(hooks.Event{Name: "UserPromptSubmit", Agent: hooks.CursorAgent, SessionID: "chat1", Pane: "%6", At: at(0)})
+	q.Apply(hooks.Event{Name: hooks.Reply, Agent: hooks.CursorAgent, SessionID: "chat1", Pane: "%6", At: at(1), Message: "partial"})
+	q.Merge([]sample.Session{cursor}, at(10))
+	if items := q.Items(); len(items) != 0 {
+		t.Errorf("a reply with no finished turn: %+v, want none", items)
+	}
+}
+
+func at0(ev hooks.Event, s int) hooks.Event {
+	ev.At = at(s)
+	return ev
+}
+
+// TestAnUnpairedReplyIsDropped: a Reply whose session never stops (an
+// `agent -p` the sampler never sees) is not kept for ever.
+func TestAnUnpairedReplyIsDropped(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: hooks.Reply, Agent: hooks.CursorAgent, SessionID: "stray", Turn: "g1", At: at(0)})
+	q.Merge(nil, at(0).Add(UnseenGrace+time.Second))
+	if len(q.replies) != 0 {
+		t.Errorf("replies %+v, want none", q.replies)
+	}
+}

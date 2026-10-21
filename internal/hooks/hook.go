@@ -27,7 +27,10 @@ type Event struct {
 	Name string `json:"name"` // Notification | Stop | UserPromptSubmit | SessionStart | SessionEnd | PreToolUse | PostToolUse
 	// Agent is the agent of an event of another agent's hooks (CursorAgent);
 	// "" is Claude Code's.
-	Agent     string    `json:"agent,omitempty"`
+	Agent string `json:"agent,omitempty"`
+	// Turn is the turn of a Cursor event (its generation_id): its Stop and
+	// its Reply come in either order.
+	Turn      string    `json:"turn,omitempty"`
 	Kind      string    `json:"kind,omitempty"`
 	SessionID string    `json:"session_id"`
 	Cwd       string    `json:"cwd,omitempty"`

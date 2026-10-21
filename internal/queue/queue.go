@@ -68,16 +68,28 @@ type Queue struct {
 	waiting map[string]Item        // session id -> item, from hooks
 	seen    map[string]time.Time   // session id -> last time a hook or the sampler showed it
 	asks    map[string]hookAsk     // session id -> the question tool's call its menu waits on
+	// Cursor's Stop and Reply of a turn come in either order: the last
+	// Reply, and the turn of the last Stop, of each session.
+	replies map[string]hooks.Event
+	stopped map[string]string
 	items   []Item
 }
 
 func New() *Queue {
-	return &Queue{hooked: map[string]hooks.Event{}, waiting: map[string]Item{}, seen: map[string]time.Time{}, asks: map[string]hookAsk{}}
+	return &Queue{hooked: map[string]hooks.Event{}, waiting: map[string]Item{}, seen: map[string]time.Time{}, asks: map[string]hookAsk{},
+		replies: map[string]hooks.Event{}, stopped: map[string]string{}}
 }
 
 // Apply takes one hook event. Call Merge after it to update Items.
 func (q *Queue) Apply(ev hooks.Event) {
 	if ev.SessionID == "" {
+		return
+	}
+	if ev.Name == hooks.Reply {
+		// Never stale: it is stamped by its own process, at the same time
+		// as its Stop.
+		q.replies[ev.SessionID] = ev
+		q.reply(ev.SessionID)
 		return
 	}
 	prev, known := q.hooked[ev.SessionID]
@@ -141,6 +153,10 @@ func (q *Queue) Apply(ev hooks.Event) {
 		} else {
 			set(StateFinished, ev.Message)
 		}
+		if ev.Turn != "" {
+			q.stopped[ev.SessionID] = ev.Turn
+			q.reply(ev.SessionID)
+		}
 	case "PostToolUse":
 		// A tool ran: the person allowed it in the pane.
 		if was && it.State == StatePermission {
@@ -151,6 +167,23 @@ func (q *Queue) Apply(ev hooks.Event) {
 		// so it is never guessed back into the queue.
 		delete(q.waiting, ev.SessionID)
 	}
+}
+
+// reply fills a finished wait with its turn's Reply, once both are in.
+func (q *Queue) reply(id string) {
+	r, ok := q.replies[id]
+	it, was := q.waiting[id]
+	if !ok || !was || it.State != StateFinished || r.Turn == "" || q.stopped[id] != r.Turn {
+		return
+	}
+	if r.Asks {
+		it.State = StateQuestion
+	}
+	if r.Message != "" {
+		it.LastLine = r.Message
+	}
+	q.waiting[id] = it
+	delete(q.replies, id)
 }
 
 // Pane is the pane of a hooked session, "" when none is known.
@@ -226,6 +259,13 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 			delete(q.waiting, id)
 			delete(q.seen, id)
 			delete(q.asks, id)
+			delete(q.replies, id)
+			delete(q.stopped, id)
+		}
+	}
+	for id, r := range q.replies {
+		if _, ok := q.hooked[id]; !ok && now.Sub(r.At) > UnseenGrace {
+			delete(q.replies, id)
 		}
 	}
 	for id, a := range q.asks {

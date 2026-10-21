@@ -263,14 +263,14 @@ func TestNewRefuses(t *testing.T) {
 	s, ran := lifeTest(t)
 	dir := t.TempDir()
 	for why, n := range map[string]proto.NewSession{
-		"a tmux session is named dev already: choose another name":          {Where: dir, Agent: "claude", Name: "dev"},
-		"opencode is not installed here":                                    {Where: dir, Agent: "opencode", Name: "x"},
+		"a tmux session is named dev already: choose another name":                        {Where: dir, Agent: "claude", Name: "dev"},
+		"opencode is not installed here":                                                  {Where: dir, Agent: "opencode", Name: "x"},
 		"aider is not an agent matchblox starts: claude, codex, opencode or cursor-agent": {Where: dir, Agent: "aider", Name: "x"},
-		"no directory " + dir + "/nope":                                     {Where: dir + "/nope", Agent: "claude", Name: "x"},
-		"a new session starts in a full path":                               {Where: "rel/dir", Agent: "claude", Name: "x"},
-		"a new worktree needs a git repository: " + dir + " is none":        {Where: dir, Branch: "b", Agent: "claude"},
-		"a first message does not start with -":                             {Where: dir, Agent: "claude", Name: "x", First: "--dangerously-skip-permissions"},
-		"the first message must be one line, without control keys":          {Where: dir, Agent: "claude", Name: "x", First: "a\nb"},
+		"no directory " + dir + "/nope":                                                   {Where: dir + "/nope", Agent: "claude", Name: "x"},
+		"a new session starts in a full path":                                             {Where: "rel/dir", Agent: "claude", Name: "x"},
+		"a new worktree needs a git repository: " + dir + " is none":                      {Where: dir, Branch: "b", Agent: "claude"},
+		"a first message does not start with -":                                           {Where: dir, Agent: "claude", Name: "x", First: "--dangerously-skip-permissions"},
+		"the first message must be one line, without control keys":                        {Where: dir, Agent: "claude", Name: "x", First: "a\nb"},
 	} {
 		if res := s.act(t.Context(), newAct(t, n)); res.Err != why {
 			t.Errorf("want %q, got %q", why, res.Err)

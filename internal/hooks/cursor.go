@@ -1,13 +1,10 @@
 package hooks
 
 import (
-	"bufio"
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
@@ -21,7 +18,12 @@ const CursorAgent = "cursor-agent"
 // CursorEvents are the Cursor hooks the queue reads, the ones the setup door
 // writes to ~/.cursor/hooks.json. Cursor ignores the whole file, without a
 // word, when one event in it is one it does not take: notification is not.
-var CursorEvents = []string{"sessionStart", "sessionEnd", "beforeSubmitPrompt", "stop", "postToolUse"}
+var CursorEvents = []string{"sessionStart", "sessionEnd", "beforeSubmitPrompt", "stop", "afterAgentResponse", "postToolUse"}
+
+// Reply is a turn's reply, apart from its Stop: Cursor writes the reply
+// nowhere before its stop hook runs, and sends it in afterAgentResponse, a
+// hook it runs at the same time. It fills the line of its turn's wait.
+const Reply = "Reply"
 
 var ErrCursor = errors.New("hooks: a Cursor payload on Claude Code's hook")
 
@@ -29,9 +31,10 @@ var ErrCursor = errors.New("hooks: a Cursor payload on Claude Code's hook")
 type cursorInput struct {
 	SessionID      string   `json:"session_id"`
 	ConversationID string   `json:"conversation_id"`
+	GenerationID   string   `json:"generation_id"`
 	HookEventName  string   `json:"hook_event_name"`
 	Status         string   `json:"status"`
-	TranscriptPath string   `json:"transcript_path"`
+	Text           string   `json:"text"`
 	WorkspaceRoots []string `json:"workspace_roots"`
 	ToolUseID      string   `json:"tool_use_id"`
 }
@@ -42,13 +45,14 @@ var cursorNames = map[string]string{
 	"sessionEnd":         "SessionEnd",
 	"beforeSubmitPrompt": "UserPromptSubmit",
 	"stop":               "Stop",
+	"afterAgentResponse": Reply,
 	"postToolUse":        "PostToolUse",
 }
 
 // ParseCursor reads one Cursor hook event, in the queue's names. Only a turn
 // that completed is a Stop: one the person stopped (Esc, "aborted") or quit
 // (Ctrl-C, "error") waits for nothing, so it clears the wait as a prompt
-// does.
+// does. A Stop has no line: the Reply after it brings it.
 func ParseCursor(stdin io.Reader, env func(string) string) (Event, error) {
 	var in cursorInput
 	if err := json.NewDecoder(io.LimitReader(stdin, 1<<20)).Decode(&in); err != nil {
@@ -65,7 +69,7 @@ func ParseCursor(stdin io.Reader, env func(string) string) (Event, error) {
 		return Event{}, fmt.Errorf("hooks: Cursor's %q is not an event the queue reads", in.HookEventName)
 	}
 	sock, _, _ := strings.Cut(env("TMUX"), ",")
-	ev := Event{Name: name, Agent: CursorAgent, SessionID: in.SessionID, At: time.Now().UTC(), Pane: env("TMUX_PANE"), Socket: sock}
+	ev := Event{Name: name, Agent: CursorAgent, SessionID: in.SessionID, Turn: in.GenerationID, At: time.Now().UTC(), Pane: env("TMUX_PANE"), Socket: sock}
 	if len(in.WorkspaceRoots) > 0 {
 		ev.Cwd = in.WorkspaceRoots[0]
 	}
@@ -74,63 +78,9 @@ func ParseCursor(stdin io.Reader, env func(string) string) (Event, error) {
 		ev.ToolUseID = in.ToolUseID
 	case name == "Stop" && in.Status != "completed":
 		ev.Name = "UserPromptSubmit"
-	case name == "Stop":
-		line, asks := said.Reply(lastReply(in.TranscriptPath))
+	case name == Reply:
+		line, asks := said.Reply(in.Text)
 		ev.Message, ev.Asks = cut(line), asks
 	}
 	return ev, nil
-}
-
-// transcriptTail is how much of a transcript's end lastReply reads: the
-// hook runs in the agent's turn and must stay fast whatever its length.
-const transcriptTail = 64 << 10
-
-// lastReply is the text of the last assistant line of a Cursor transcript,
-// "" when there is none to read.
-func lastReply(path string) string {
-	if path == "" {
-		return ""
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-	if st, err := f.Stat(); err == nil && st.Size() > transcriptTail {
-		if _, err := f.Seek(-transcriptTail, io.SeekEnd); err != nil {
-			return ""
-		}
-	}
-	b, err := io.ReadAll(f)
-	if err != nil {
-		return ""
-	}
-	reply := ""
-	sc := bufio.NewScanner(bytes.NewReader(b))
-	sc.Buffer(make([]byte, 0, 64<<10), transcriptTail)
-	for sc.Scan() {
-		var l struct {
-			Role    string `json:"role"`
-			Message struct {
-				Content []struct {
-					Type string `json:"type"`
-					Text string `json:"text"`
-				} `json:"content"`
-			} `json:"message"`
-		}
-		// The first line of a tail is cut and does not parse.
-		if json.Unmarshal(sc.Bytes(), &l) != nil || l.Role != "assistant" {
-			continue
-		}
-		var text []string
-		for _, c := range l.Message.Content {
-			if c.Type == "text" {
-				text = append(text, c.Text)
-			}
-		}
-		if len(text) > 0 {
-			reply = strings.Join(text, "\n")
-		}
-	}
-	return reply
 }
