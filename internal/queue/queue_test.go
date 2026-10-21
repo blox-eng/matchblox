@@ -570,3 +570,30 @@ func TestTwoChatsInOnePaneJoinTheNewer(t *testing.T) {
 		}
 	}
 }
+
+// TestAForgottenPaneShowsNoneOfItsOldAgentsWaits: after a switch the old
+// agent's late hooks do not speak for the new one in the pane.
+func TestAForgottenPaneShowsNoneOfItsOldAgentsWaits(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "old", Pane: "%1", At: at(0)})
+	q.Merge([]sample.Session{{SessionID: "old", Pane: "%1", Status: "idle"}}, at(1))
+	if items := q.Items(); len(items) != 1 || items[0].SessionID != "old" {
+		t.Fatalf("the old agent does not wait: %+v", items)
+	}
+	q.Forget("%1")
+	next := sample.Session{Pane: "%1", Agent: "codex", Status: "busy", Busy: true}
+	q.Merge([]sample.Session{next}, at(2))
+	if items := q.Items(); len(items) != 0 {
+		t.Fatalf("the forgotten agent still waits: %+v", items)
+	}
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "old", Pane: "%1", At: at(3)})
+	q.Merge([]sample.Session{next}, at(4))
+	if items := q.Items(); len(items) != 0 {
+		t.Fatalf("a late hook of the old agent makes the new one wait: %+v", items)
+	}
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "new", Pane: "%1", At: at(5)})
+	q.Merge([]sample.Session{{SessionID: "new", Pane: "%1", Agent: "codex", Status: "idle"}}, at(6))
+	if items := q.Items(); len(items) != 1 || items[0].SessionID != "new" {
+		t.Fatalf("the pane is deaf to its new agent: %+v", items)
+	}
+}
