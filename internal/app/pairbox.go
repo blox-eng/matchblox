@@ -333,13 +333,13 @@ func drawBox(s boxState, dark bool, g geom, size int, light func(x, y int) bool)
 	if hxi >= clip {
 		c.put(hxi, hyi, "●", head, nil)
 	}
-	if stand < 0 && struck {
+	if dark && stand < 0 && struck {
 		c.put(hxi+1, hyi, "▸", mk.Core, nil)
 	}
 
-	// The flame grows as the match stands, in a dark terminal only.
-	if dark && stand >= 0 {
-		c.flame(hxi, hyi, easeOut(frac(stand, standFor)), mk)
+	// The flame grows once the match stands past 45°, in a dark terminal only.
+	if k := easeOut(frac(stand, standFor)); dark && stand >= 0 && k > 0.5 {
+		c.flame(hxi, hyi, (k-0.5)*2, mk)
 	}
 	return c
 }

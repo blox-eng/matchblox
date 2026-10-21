@@ -185,6 +185,44 @@ func TestPairBoxLightIsUnlit(t *testing.T) {
 	}
 }
 
+// flameCells counts the cells drawn in a flame colour, and the flash.
+func flameCells(t *testing.T, lines []string, dark bool) (flame, flash int) {
+	t.Helper()
+	for _, row := range tokCells(t, lines, dark) {
+		for _, c := range row {
+			if strings.HasPrefix(c.fg, "flame") || strings.HasPrefix(c.bg, "flame") {
+				flame++
+			}
+			if c.ch == "▸" {
+				flash++
+			}
+		}
+	}
+	return flame, flash
+}
+
+func TestPairBoxFlashOnlyInTheDark(t *testing.T) {
+	link := boxLink(t)
+	s := boxState{phase: boxOpen, since: openFor + boxOutFor + boxStrikeFor - flashFor/2, link: link, name: "iPad"}
+	lines, _ := pairBox(s, false, false, 100, 40)
+	if flame, flash := flameCells(t, lines, false); flame != 0 || flash != 0 {
+		t.Fatalf("at the strike in a light terminal: %d flame cells, %d flashes", flame, flash)
+	}
+	lines, _ = pairBox(s, true, false, 100, 40)
+	if _, flash := flameCells(t, lines, true); flash != 1 {
+		t.Fatalf("at the strike in a dark terminal: %d flashes, want 1", flash)
+	}
+}
+
+func TestPairBoxFlameWaitsForTheMatchToStand(t *testing.T) {
+	link := boxLink(t)
+	s := boxState{phase: boxOpen, since: openFor + boxOutFor + boxStrikeFor + 20*time.Millisecond, link: link, name: "iPad"}
+	lines, _ := pairBox(s, true, false, 100, 40)
+	if flame, _ := flameCells(t, lines, true); flame != 0 {
+		t.Fatalf("the match still lies on the striker, yet %d flame cells show", flame)
+	}
+}
+
 func TestPairBoxOpenedLabelNamesTheDevice(t *testing.T) {
 	link := boxLink(t)
 	for _, dark := range []bool{true, false} {
