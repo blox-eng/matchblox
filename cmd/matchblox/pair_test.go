@@ -437,3 +437,10 @@ func TestPairMainNamesTheSeenNote(t *testing.T) {
 		t.Fatalf("PairSeen = %v, %q", seen, name)
 	}
 }
+
+func TestConsolePairOfferErrorSaysPressEnter(t *testing.T) {
+	_, _, err := consolePair(t.TempDir(), testExe, filepath.Join(t.TempDir(), "none.pub"), func() string { return "ws-1" }).Offer(time.Now().Add(time.Minute))
+	if err == nil || !strings.HasSuffix(err.Error(), "sudo ssh-keygen -A, then press Enter") {
+		t.Fatalf("err = %v", err)
+	}
+}

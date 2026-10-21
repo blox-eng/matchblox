@@ -57,6 +57,7 @@ type pairPage struct {
 	standalone bool       // matchblox pair: stops after the opening
 	beat       int        // 1 shut, 2 opened, 3 in, 4 first act (Task 9)
 	line       string     // the line under the box
+	failed     bool       // line is an offer error: it shows wrapped, and Enter retries
 	offer      *pairOffer // the offer that writes the key
 }
 
@@ -93,9 +94,12 @@ func (m Model) clip(text string) {
 type pairOffer struct {
 	mu        sync.Mutex
 	cancelled bool
-	id        string        // the key it wrote, once written
-	done      chan struct{} // closed when the Offer returned
+	id        string // the key it wrote, once written
 }
+
+// pairWaits counts the offers that still run, those of closed pages too:
+// the end of the program waits for all of them.
+type pairWaits struct{ wg sync.WaitGroup }
 
 // cancel stops the offer; the key it wrote already goes now.
 func (o *pairOffer) cancel(h *PairHost) {
@@ -130,11 +134,16 @@ func (m Model) openPairPage() (Model, tea.Cmd) {
 		return m, nil
 	}
 	p.until = now.Add(pairWindow)
-	o := &pairOffer{done: make(chan struct{})}
-	p.offer, m.pairOffer = o, o
+	o := &pairOffer{}
+	p.offer = o
+	if m.pairOffers == nil {
+		m.pairOffers = &pairWaits{}
+	}
+	waits := m.pairOffers
+	waits.wg.Add(1)
 	until := p.until
 	return m, func() tea.Msg {
-		defer close(o.done)
+		defer waits.wg.Done()
 		id, link, err := h.Offer(until)
 		if err == nil {
 			o.mu.Lock()
@@ -157,7 +166,7 @@ func (m Model) offered(msg pairOfferMsg) (Model, tea.Cmd) {
 	p := *m.pair
 	m.pair = &p
 	if msg.err != nil {
-		p.line = msg.err.Error()
+		p.line, p.failed = msg.err.Error(), true
 		return m, nil
 	}
 	p.id, p.link, p.line = msg.id, msg.link, pairScanLine
@@ -200,9 +209,11 @@ func (m Model) closePairPage(why string) Model {
 // waited for, so that it removes its key before the process exits.
 func (m Model) ClosePair() {
 	_ = m.closePairPage("")
-	if o := m.pairOffer; o != nil {
+	if w := m.pairOffers; w != nil {
+		done := make(chan struct{})
+		go func() { w.wg.Wait(); close(done) }()
 		select {
-		case <-o.done:
+		case <-done:
 		case <-time.After(10 * time.Second):
 		}
 	}
@@ -320,7 +331,7 @@ func (m Model) pairKey(k string) (tea.Model, tea.Cmd) {
 		}
 		return m.closePairPage(why), nil
 	case "enter":
-		if p.phase == boxExpired {
+		if p.phase == boxExpired || p.failed {
 			return m.closePairPage("").openPairPage()
 		}
 	case "ctrl+c":
@@ -351,6 +362,13 @@ func (m Model) pairView(w int) string {
 		keys = append(keys, m.st.text.Render(m.flash))
 	}
 	text := []string{"", centre(line), centre(strings.Join(keys, "   "))}
+	if p.failed { // an error says how to fix it: wrapped, never cut
+		text = []string{""}
+		for _, l := range strings.Split(ansi.Wordwrap(p.line, max(w-2, 1), ""), "\n") {
+			text = append(text, centre(m.st.muted.Render(l)))
+		}
+		text = append(text, centre(strings.Join(keys, "   ")))
+	}
 
 	var lines []string
 	if p.link != "" || p.waiting() {

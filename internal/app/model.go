@@ -130,6 +130,7 @@ type action struct {
 	batch       []string // worktrees: one guarded act each
 	say         string   // what the confirm shows, when not the first step
 	term        bool     // the step takes this terminal (a door's command)
+	pair        bool     // the pair door: it opens the pair page, never a pending step
 	door        string   // the door it opens or closes
 	remote      bool     // steps[0] is the ssh argv that runs it on the host, checked
 	connect     bool     // it connects the host: install, update or authorize
@@ -289,7 +290,7 @@ type Model struct {
 	toasts       int        // counts the toasts: a later one outlives the timer of an earlier one
 	pair         *pairPage  // the pair page, while it shows
 	pairPolling  bool       // a poll of the pair page is on its way
-	pairOffer    *pairOffer // the last offer of a key: the end of the program waits for it
+	pairOffers   *pairWaits // the offers of a key that still run: the end of the program waits for them
 }
 
 func New(opt Options) Model {
@@ -429,7 +430,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.stokerClaims() {
 			m.dockSwitched = false
 		}
-		m.doors = openDoors(st.Doors)
+		m.doors = m.shownDoors(st.Doors)
 		m.noteChanges(st.Sessions)
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
 		m.shipReport = st.Ships
@@ -789,6 +790,9 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 			}
 			m.showCommand()
 			return m, nil
+		}
+		if a := m.primary(); a != nil && a.pair {
+			return m.openPairDoor()
 		}
 		m.pending, m.previewTop = m.primary(), 0
 	case "x":

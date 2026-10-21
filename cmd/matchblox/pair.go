@@ -186,7 +186,11 @@ func consolePair(home, exe, hostKeyPath string, address func() string) *app.Pair
 			case home == "":
 				return "", "", errors.New("cannot find your home directory")
 			}
-			return setup.NewPairOffer(home, exe, address(), 22, setup.HostLabel(), hostKeyPath, until)
+			id, link, err := setup.NewPairOffer(home, exe, address(), 22, setup.HostLabel(), hostKeyPath, until)
+			if err != nil { // the page retries on Enter, not on a new command
+				err = errors.New(strings.Replace(err.Error(), "then matchblox pair again", "then press Enter", 1))
+			}
+			return id, link, err
 		},
 		Seen:    func(id string) (bool, string) { return setup.PairSeen(home, id) },
 		Present: func(id string) (bool, error) { return setup.PairKeyPresent(home, id) },
