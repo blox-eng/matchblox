@@ -6,6 +6,16 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Cursor's CLI is an agent like the others.** Sessions shows it, started
+  as `agent` or `cursor-agent`. The setup step "Add the Cursor hooks" puts
+  matchblox in `~/.cursor/hooks.json`, so a finished turn waits for you as
+  `done` and a reply that asks as `asks`; its approval menu is read from
+  its pane. `matchblox new --agent cursor-agent` and `[stoker] agent =
+  "agent"` start it. It shows no context use or account yet, and no merge
+  guard watches it.
+
 ## [0.11.0] - 2026-10-21
 
 ### Added
