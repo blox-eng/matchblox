@@ -345,6 +345,7 @@ func (m Model) pairStripEsc(k string) bool {
 
 // pairWatched is the poll after the claim: beat 3 is the device's own
 // console, and the page folds without it after a minute, and after beat 4.
+// A fold ends the poll, so the next page starts one.
 func (m Model) pairWatched() (Model, tea.Cmd) {
 	p := *m.pair
 	h, now := m.opt.Pair, m.now()
@@ -352,12 +353,14 @@ func (m Model) pairWatched() (Model, tea.Cmd) {
 	case p.standalone || h == nil || h.DeviceIn == nil:
 	case p.beat == 4:
 		if !now.Before(p.foldAt) {
+			m.pairPolling = false
 			return m.closePairPage(""), nil
 		}
 	case p.beat == 2:
 		if at, _, ok := h.DeviceIn(p.device.ID); ok && at.After(p.claimedAt) {
 			p.beat, p.line = 3, p.device.Name+" is in. Answer an agent from it, or esc to go back."
 		} else if now.Sub(p.claimedAt) >= pairInWait {
+			m.pairPolling = false
 			return m.closePairPage(pairedLine(p.device)), nil
 		}
 	}

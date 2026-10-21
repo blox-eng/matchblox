@@ -730,3 +730,97 @@ func TestTheStripHandsTheConsoleBack(t *testing.T) {
 		t.Fatal("esc did not dismiss the strip")
 	}
 }
+
+// pump runs cmd as the program would and gives its pair messages to m: the
+// real ticks, not hand-fed polls. It gives the Cmds that m returned.
+func pump(t *testing.T, m Model, cmd tea.Cmd) (Model, tea.Cmd) {
+	t.Helper()
+	var msgs []tea.Msg
+	var run func(tea.Cmd)
+	run = func(c tea.Cmd) {
+		if c == nil {
+			return
+		}
+		switch msg := c().(type) {
+		case tea.BatchMsg:
+			for _, c := range msg {
+				run(c)
+			}
+		case pairOfferMsg, pairPollMsg:
+			msgs = append(msgs, msg)
+		}
+	}
+	run(cmd)
+	var next []tea.Cmd
+	for _, msg := range msgs {
+		got, c := m.Update(msg)
+		m = got.(Model)
+		next = append(next, c)
+	}
+	return m, tea.Batch(next...)
+}
+
+// TestPairPageOpensAgainAfterAFold: offer, polls, the fold, the next page.
+// The next page polls too: it knocks and expires.
+func TestPairPageOpensAgainAfterAFold(t *testing.T) {
+	folds := map[string]func(t *testing.T, r *pairRig, m Model, cmd tea.Cmd) (Model, tea.Cmd){
+		"beat 4": func(t *testing.T, r *pairRig, m Model, cmd tea.Cmd) (Model, tea.Cmd) {
+			deviceIn(t, r, m.pair.device.ID, r.now.Add(time.Second))
+			r.now = r.now.Add(2 * time.Second)
+			if m, cmd = pump(t, m, cmd); m.pair == nil || m.pair.beat != 3 {
+				t.Fatalf("no beat 3: %+v", m.pair)
+			}
+			m.opt.LastClient = func() (string, error) { return phoneTTY, nil }
+			m = m.pairActed(action{rec: "answer:%2"})
+			r.now = r.now.Add(pairActFold)
+			return pump(t, m, cmd)
+		},
+		"60 s": func(t *testing.T, r *pairRig, m Model, cmd tea.Cmd) (Model, tea.Cmd) {
+			r.now = r.now.Add(pairInWait)
+			return pump(t, m, cmd)
+		},
+	}
+	for name, fold := range folds {
+		t.Run(name, func(t *testing.T) {
+			r, m := newPairRig(t)
+			for i := range m.all.sessions {
+				if m.all.sessions[i].Pane == "%2" {
+					m.all.sessions[i].Name = "api"
+				}
+			}
+			m.opt.LastClient = func() (string, error) { return "/dev/ttys001", nil }
+			m, cmd := m.openPairPage()
+			m, cmd = pump(t, m, cmd) // the offer
+			if m.pair == nil || m.pair.link == "" || cmd == nil {
+				t.Fatalf("the first page does not poll: %+v", m.pair)
+			}
+			if _, err := setup.ClaimPairKey(r.home, pairExe, m.pair.id, pairPhoneKey, "iPad"); err != nil {
+				t.Fatal(err)
+			}
+			if m, cmd = pump(t, m, cmd); m.pair == nil || m.pair.beat != 2 {
+				t.Fatalf("no claim: %+v", m.pair)
+			}
+			if m, cmd = fold(t, r, m, cmd); m.pair != nil {
+				t.Fatalf("the page did not fold: %+v", m.pair)
+			}
+			m, _ = pump(t, m, cmd) // what the fold left runs out
+
+			m.opt.LastClient = func() (string, error) { return "/dev/ttys001", nil }
+			m, cmd = m.openPairPage()
+			m, cmd = pump(t, m, cmd)
+			if m.pair == nil || m.pair.link == "" || cmd == nil {
+				t.Fatalf("the second page does not poll: %+v", m.pair)
+			}
+			if err := setup.MarkPairSeen(r.home, m.pair.id, "iPhone"); err != nil {
+				t.Fatal(err)
+			}
+			if m, cmd = pump(t, m, cmd); m.pair.phase != boxKnock {
+				t.Fatalf("the second page did not knock: %v", m.pair.phase)
+			}
+			r.now = r.now.Add(pairWindow)
+			if m, _ = pump(t, m, cmd); m.pair.phase != boxExpired || r.pairLines(t) != 0 {
+				t.Fatalf("the second page did not expire: %v, %d lines", m.pair.phase, r.pairLines(t))
+			}
+		})
+	}
+}
