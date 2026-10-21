@@ -211,6 +211,7 @@ func (m Model) closePairPage(why string) Model {
 	removed, err := m.opt.Pair.Remove(p.id)
 	if err == nil && !removed && p.live() {
 		if d, ok := m.opt.Pair.Claim(p.id); ok {
+			p.device = d // the page that ended names it, for matchblox pair
 			m.flash = pairedLine(d)
 		}
 	}
@@ -421,6 +422,9 @@ func (m Model) pairKey(k string) (tea.Model, tea.Cmd) {
 		}
 		return m.closePairPage(why), nil
 	case "enter":
+		if p.standalone { // matchblox pair makes a new code on the next run
+			return m, nil
+		}
 		if p.phase == boxExpired || p.failed {
 			if m.fromDevice() {
 				m.flash = pairFromDeviceLine

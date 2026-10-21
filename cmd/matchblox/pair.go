@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/term"
+
 	"github.com/blox-eng/matchblox/internal/app"
 	"github.com/blox-eng/matchblox/internal/pair"
 	"github.com/blox-eng/matchblox/internal/remote"
@@ -22,7 +24,7 @@ const (
 	pairWindow       = 5 * time.Minute
 	maxPairRequest   = 4096
 	defaultHostKey   = setup.DefaultHostKey
-	pairPollInterval = time.Second
+	pairPollInterval = 100 * time.Millisecond
 )
 
 // pairEnv is what pairCmd reads from the machine; tests replace it.
@@ -103,11 +105,12 @@ func pairCmd(ctx context.Context, args []string, out io.Writer, now func() time.
 	address := fl.String("address", "", "host name the phone connects to (default: the Tailscale name, else the host name)")
 	port := fl.Int("port", 22, "ssh port on this host")
 	name := fl.String("name", setup.HostLabel(), "label of this host on the phone")
+	noMotion := fl.Bool("no-motion", false, "show the last frame of each motion")
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
 	if fl.NArg() != 0 || *port < 1 || *port > 65535 {
-		return errors.New("usage: matchblox pair [--address host] [--port 22] [--name label]")
+		return errors.New("usage: matchblox pair [--address host] [--port 22] [--name label] [--no-motion]")
 	}
 	if *address == "" {
 		*address = setup.PairAddress()
@@ -123,6 +126,19 @@ func pairCmd(ctx context.Context, args []string, out io.Writer, now func() time.
 		if env.exe = invokedPath(os.Args[0]); env.exe == "" {
 			return errors.New("cannot find this matchblox on the PATH")
 		}
+	}
+	if isTerminal(out) {
+		host := pairHost(env.home, env.exe, env.hostKeyPath, func() string { return *address }, *port, *name, false)
+		line, err := app.RunPairPage(app.PairOptions{
+			Host:     host,
+			NoMotion: *noMotion || os.Getenv("NO_MOTION") == "1",
+			Now:      now,
+			Paired:   func(d app.PairDevice) string { return pairedText(d.Name, d.Fingerprint) },
+		})
+		if line != "" {
+			_, _ = fmt.Fprintln(out, line)
+		}
+		return err
 	}
 	until := now().Add(env.limit)
 	id, url, err := setup.NewPairOffer(env.home, env.exe, *address, *port, *name, env.hostKeyPath, until)
@@ -175,9 +191,22 @@ func pairCmd(ctx context.Context, args []string, out io.Writer, now func() time.
 	}
 }
 
+// isTerminal tells if out and stdin are a terminal: only then the pair page
+// can run.
+func isTerminal(out io.Writer) bool {
+	f, ok := out.(*os.File)
+	return ok && term.IsTerminal(f.Fd()) && term.IsTerminal(os.Stdin.Fd())
+}
+
 // consolePair is the console's pair page on this machine: the key line in
 // home's authorized_keys, and the notes of gate pair.
 func consolePair(home, exe, hostKeyPath string, address func() string) *app.PairHost {
+	return pairHost(home, exe, hostKeyPath, address, 22, setup.HostLabel(), true)
+}
+
+// pairHost is the pair page's side of this machine. In the console, an
+// offer error says to press Enter; in matchblox pair it ends the command.
+func pairHost(home, exe, hostKeyPath string, address func() string, port int, name string, console bool) *app.PairHost {
 	return &app.PairHost{
 		Offer: func(until time.Time) (string, string, error) {
 			switch {
@@ -186,8 +215,8 @@ func consolePair(home, exe, hostKeyPath string, address func() string) *app.Pair
 			case home == "":
 				return "", "", errors.New("cannot find your home directory")
 			}
-			id, link, err := setup.NewPairOffer(home, exe, address(), 22, setup.HostLabel(), hostKeyPath, until)
-			if err != nil { // the page retries on Enter, not on a new command
+			id, link, err := setup.NewPairOffer(home, exe, address(), port, name, hostKeyPath, until)
+			if err != nil && console { // the page retries on Enter, not on a new command
 				err = errors.New(strings.Replace(err.Error(), "then matchblox pair again", "then press Enter", 1))
 			}
 			return id, link, err
@@ -221,7 +250,11 @@ func consolePair(home, exe, hostKeyPath string, address func() string) *app.Pair
 // other way.
 func pairedLine(home, id string) string {
 	if d, ok := setup.TakeClaim(home, id); ok {
-		return fmt.Sprintf("Paired %s (%s). Not your phone? Run matchblox devices rm %s.", d.Name, d.Fingerprint, d.Fingerprint)
+		return pairedText(d.Name, d.Fingerprint)
 	}
 	return "The code is gone, but no phone used it. Run matchblox pair again."
+}
+
+func pairedText(name, fingerprint string) string {
+	return fmt.Sprintf("Paired %s (%s). Not your phone? Run matchblox devices rm %s.", name, fingerprint, fingerprint)
 }
