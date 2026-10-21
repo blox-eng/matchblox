@@ -198,24 +198,40 @@ builder sees the new device work on the host's own screen (owner,
   says the device is paired. A device that pairs but opens later is not an
   error.
 - `esc` folds the page at any beat. The device stays paired.
-- To know that a console start or an act is the new device's, `gate phone`
-  must know which key started it. Today the phone line's forced command is
-  the same for every phone. New phone lines carry an id in the forced
-  command (as `gate pair <id>` does), and the console passes it to the
-  service. Old lines keep working without beats 3 and 4.
+- A device does not get a console of its own. `gate phone` attaches it to
+  the tmux session `matchblox`, so the builder and every device see one
+  console process (`internal/panes/home.go`, `new-session -A`). So:
+  - New phone lines carry the device's id in the forced command: `gate
+    phone <id>`, with the same 12-hex id as `gate pair <id>`. `gateMain`
+    and `parseDevice` accept both forms, so old lines keep working, without
+    beats 3 and 4.
+  - `gate phone <id>` writes the note `~/.ssh/.matchblox-device-<id>`
+    (the time and the ssh tty) before it attaches. Beat 3 is a note for the
+    new device's id with a time after the claim.
+  - Beat 4 is the first act the console sends while the client that tmux
+    saw last (`tmux list-clients -t =matchblox -F '#{client_activity}
+    #{client_tty}'`) has the new device's tty.
 - Standalone `matchblox pair` stops at beat 2, as before: it has no service
   to watch.
 
 ### 4.5 What a device's console may do
 
-A console that a device started (`gate phone`) runs on the host as the
-builder's user. It can see `DEVICES`, but it cannot change them (owner,
-2026-10-21):
+A device sees `DEVICES`, but it cannot change them (owner, 2026-10-21):
 
-- No door "Pair a device", and no `+ pair a device` row.
-- `x` on a device says `Remove devices from the host's own terminal.`
-- `gate` tells the console its mode (for example in an environment value
-  set by `gateMain`). A console without that value is the builder's own.
+- `Enter` on the door or on `+ pair a device` from a device says `Pair from
+  the host's own terminal.`
+- `x` on a device from a device says `Remove devices from the host's own
+  terminal.`
+- The console is shared (§4.4), so it cannot know from its environment who
+  pressed a key. Before it opens the pair page or removes a device, it asks
+  tmux for the client that was active last (as in §4.4). If that client's
+  tty is in a device note, it refuses with the line above.
+- The door and the `+` row show for everyone, because the screen is shared.
+  The refusal comes on `Enter`: `Pair from the host's own terminal.`
+- This is a guard against a mistake, not a security wall. A device can
+  already tell an agent to run any command, so a device holder who wants to
+  add a key can do it that way. That is true today as well (owner,
+  2026-10-21).
 
 ### 4.6 A console of another host
 
@@ -370,8 +386,8 @@ device, the device shows the host.
   - the door's done check
   - `DEVICES` remove, with its typed `y`
   - `matchblox pair` without a terminal prints the plain output
-  - a device's console (`gate phone`) shows no door, no `+` row, and refuses
-    `x` on a device
+  - a key from a device's tmux client (the last active client has a device
+    tty) gets the refusals of §4.5 for the pair page and for `x`
   - beats 3 and 4: a console start and a first act from the new device's
     key move the page, another key's don't, and an old phone line still
     opens the console
