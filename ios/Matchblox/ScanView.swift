@@ -49,6 +49,7 @@ struct ScanView: View {
                             .foregroundStyle(Theme.muted)
                     }
                 }
+                .modifier(OverCamera(on: camera == .ready))
                 Spacer()
                 bottom
             }
@@ -57,6 +58,10 @@ struct ScanView: View {
         }
         .onAppear { Haptics.prepare() }
         .onDisappear { locking?.cancel() }
+        // The scanner arms. The lock haptic is then ready to play on time.
+        .onChange(of: camera == .ready && lock == nil) { _, armed in
+            if armed { Haptics.prepare() }
+        }
         .task { camera = await Self.cameraState() }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, camera == .denied else { return }
@@ -98,10 +103,8 @@ struct ScanView: View {
                     .foregroundStyle(Theme.neg)
             }
         }
-        .padding(camera == .ready ? 16 : 0)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // The text stays legible over the camera.
-        .background(Theme.bg.opacity(camera == .ready ? 0.8 : 0), in: RoundedRectangle(cornerRadius: 12))
+        .modifier(OverCamera(on: camera == .ready))
     }
 
     /// A pasted link has no lock to show: it goes straight to the box.
@@ -145,6 +148,17 @@ enum PairStage {
         let width = max(min(size.width - 48, size.height * 0.45 * MatchBox.aspectRatio, 440), 1)
         let height = width / MatchBox.aspectRatio
         return CGRect(x: (size.width - width) / 2, y: (size.height - height) / 2, width: width, height: height)
+    }
+}
+
+/// A `bg` backing at 0.8, so that text stays legible over a bright camera.
+private struct OverCamera: ViewModifier {
+    let on: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .padding(on ? 16 : 0)
+            .background(Theme.bg.opacity(on ? 0.8 : 0), in: RoundedRectangle(cornerRadius: 12))
     }
 }
 

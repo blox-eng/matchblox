@@ -12,13 +12,20 @@ struct PairingView: View {
     private enum Phase: Equatable {
         case pairing
         case paired(Date)
-        /// `address` is true when the host did not answer at the address, so another address can help.
-        case failed(String, address: Bool)
+        /// `retry` is true when another address can help.
+        case failed(String, retry: Bool)
     }
+
+    /// The burning match stays this long before the console comes: one flame, in seconds.
+    private static let hold = 0.24
+    private static let actions = "actions"
 
     @State private var phase = Phase.pairing
     @State private var attempt = 0
     @State private var pulse = false
+    /// The full screen. The box takes its place from it, so the keyboard does not move the box.
+    @State private var screen = CGSize.zero
+    @FocusState private var editing: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var pose: BoxPose {
@@ -30,20 +37,18 @@ struct PairingView: View {
     }
 
     var body: some View {
-        GeometryReader { geo in
-            let box = PairStage.boxFrame(in: geo.size)
-            ZStack(alignment: .topLeading) {
-                MatchBox(pose: pose, label: AnyView(label))
-                    .frame(width: box.width, height: box.height)
-                    .position(x: box.midX, y: box.midY)
-                if case .failed(let message, let address) = phase {
-                    failure(message, address: address)
-                        .padding(.top, box.maxY + 24)
-                        .padding(.horizontal, 24)
-                }
+        let box = PairStage.boxFrame(in: screen)
+        ZStack {
+            MatchBox(pose: pose, label: AnyView(label))
+                .frame(width: box.width, height: box.height)
+                .position(x: box.midX, y: box.midY)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onGeometryChange(for: CGSize.self, of: \.size) { screen = $0 }
+                .ignoresSafeArea()
+            if case .failed(let message, let retry) = phase {
+                failure(message, retry: retry, under: box)
             }
         }
-        .ignoresSafeArea(.container)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .task(id: attempt) { await pair() }
@@ -79,35 +84,60 @@ struct PairingView: View {
         return false
     }
 
-    private func failure(_ message: String, address: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text(message)
-                .foregroundStyle(Theme.neg)
-            if address {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Address")
-                        .font(.footnote)
-                        .foregroundStyle(Theme.faint)
-                    TextField("Address", text: $draft.address)
-                        .keyboardType(.URL)
-                        .padding(.vertical, 8)
-                        .overlay(alignment: .bottom) {
-                            Rectangle().fill(Theme.hair).frame(height: 1)
+    /// The failure starts under the box, as wide as the box. It scrolls, so the keyboard never hides the field or Try again.
+    private func failure(_ message: String, retry: Bool, under box: CGRect) -> some View {
+        GeometryReader { view in
+            let top = view.frame(in: .global).minY
+            ScrollViewReader { scroll in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text(message)
+                            .foregroundStyle(Theme.neg)
+                        if retry {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Address")
+                                    .font(.footnote)
+                                    .foregroundStyle(Theme.faint)
+                                TextField("Address", text: $draft.address)
+                                    .keyboardType(.URL)
+                                    .focused($editing)
+                                    .padding(.vertical, 8)
+                                    .overlay(alignment: .bottom) {
+                                        Rectangle().fill(Theme.hair).frame(height: 1)
+                                    }
+                            }
                         }
+                        HStack(spacing: 24) {
+                            if retry {
+                                Button("Try again") {
+                                    editing = false
+                                    attempt += 1
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .foregroundStyle(Theme.bg)
+                                .disabled(draft.address.trimmingCharacters(in: .whitespaces).isEmpty)
+                            }
+                            Button("Scan again", action: onScanAgain)
+                                .foregroundStyle(Theme.muted)
+                        }
+                        .id(Self.actions)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 12)
+                    // The block can scroll over the box. It stays legible there.
+                    .background(Theme.bg)
+                    .frame(width: box.width)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, max(box.maxY + 12 - top, 0))
                 }
-            }
-            HStack(spacing: 24) {
-                if address {
-                    Button("Try again") { attempt += 1 }
-                        .buttonStyle(.borderedProminent)
-                        .foregroundStyle(Theme.bg)
-                        .disabled(draft.address.trimmingCharacters(in: .whitespaces).isEmpty)
+                .scrollDismissesKeyboard(.interactively)
+                // The keyboard makes the view shorter. Try again then scrolls up above it.
+                .onChange(of: view.size.height) {
+                    guard editing else { return }
+                    withAnimation { scroll.scrollTo(Self.actions, anchor: .bottom) }
                 }
-                Button("Scan again", action: onScanAgain)
-                    .foregroundStyle(Theme.muted)
             }
         }
-        .frame(maxWidth: 480, alignment: .leading)
     }
 
     /// A new code or a new screen cancels the task, so an old pairing never opens a console.
@@ -116,6 +146,8 @@ struct PairingView: View {
         phase = .pairing
         let outcome = await PairFlow.run(draft, store: store)
         guard !Task.isCancelled else { return }
+        // The flow can take many seconds, and the generators go idle in that time.
+        Haptics.prepare()
         switch outcome {
         case .paired(let host):
             let clock = ContinuousClock()
@@ -126,28 +158,22 @@ struct PairingView: View {
                 Haptics.strike()
                 try await clock.sleep(until: start + .seconds(MatchBox.stoodAt))
                 Haptics.stood()
+                try await clock.sleep(until: start + .seconds(MatchBox.stoodAt + Self.hold))
             } catch {
                 return
             }
             onPaired(host)
-        case .failed(let message):
-            phase = .failed(message, address: isConnectionFailure(message))
+        case .failed(let message, let retry):
+            phase = .failed(message, retry: retry)
             Haptics.failed()
-        }
-    }
-
-    /// PairFlow gives only the message, so the message tells the connection failures from the others.
-    private func isConnectionFailure(_ message: String) -> Bool {
-        let address = draft.address.trimmingCharacters(in: .whitespacesAndNewlines)
-        return [ConnectFailure.unreachable, .hostKeyChanged].contains {
-            Pairing.message(for: $0, host: draft.payload.name, address: address) == message
         }
     }
 }
 
 enum PairOutcome: Sendable {
     case paired(Host)
-    case failed(String)
+    /// `retry` is true when the host did not answer at the address, or another machine answered: another address can help.
+    case failed(String, retry: Bool = false)
 }
 
 enum PairFlow {
@@ -184,7 +210,10 @@ enum PairFlow {
         do {
             output = try await session.open(command: "matchblox gate pair", pty: nil)
         } catch {
-            return .failed(Pairing.message(for: error, host: label, address: address))
+            return .failed(
+                Pairing.message(for: error, host: label, address: address),
+                retry: error == .unreachable || error == .hostKeyChanged
+            )
         }
 
         let request = Pairing.requestLine(name: Pairing.cleanName(draft.phoneName), key: phoneKey)
