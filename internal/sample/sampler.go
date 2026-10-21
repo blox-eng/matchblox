@@ -261,6 +261,9 @@ type Sampler struct {
 	// LimitsDir is where the status-line tap keeps each Claude Code config
 	// directory's limits. Empty: none are read.
 	LimitsDir string
+	// CursorUsage reads Cursor's plan usage from its API ([limits]
+	// cursor_usage); nil: not read.
+	CursorUsage *limits.CursorUsage
 
 	agents   *agentReader
 	panes    map[procKey]string // environ is read once per process
@@ -645,7 +648,14 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 					sess.Model = label(r.Model)
 				}
 			}
-			lims.add(sess, limits.SourceCursor, nil)
+			var usage *limits.Reading
+			if s.CursorUsage != nil {
+				usage = s.CursorUsage.Reading(now)
+			}
+			lims.add(sess, limits.SourceCursor, usage)
+			if s.CursorUsage != nil {
+				lims.fix(sess, "Cursor's API has not answered yet")
+			}
 		case "opencode":
 			sess.Context = "unmeasured"
 			if opencodeIn[sess.Cwd] != 1 {

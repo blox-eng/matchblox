@@ -13,7 +13,11 @@ All notable changes to matchblox are in this file. The format follows
   session then shows its context use and window from its first turn, as
   Claude Code's do, and Cursor's bar still shows. The account is the email
   and team in `~/.cursor/cli-config.json`, marked `⬢`, and USAGE lists it.
-  Cursor's plan usage is not read yet.
+- **Cursor's plan usage in USAGE, when you turn it on.** With
+  `cursor_usage = true` under `[limits]`, matchblox asks Cursor's API every
+  5 minutes for the share of the month's included usage, as Cursor's
+  `/usage` shows it, and when it resets. It reads the login token Cursor's
+  CLI keeps in the macOS Keychain for each call, and never keeps it.
 - **The box opens: pair a device in one gesture.** The door "Pair a
   device" and `DEVICES` on the Machine tab open the pair page in the
   console. It shows the matchbox with the code on its label. When the app

@@ -1,9 +1,11 @@
 package sample
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,5 +81,36 @@ func TestCursorWithoutItsStatusLineIsNotMeasured(t *testing.T) {
 		if s.Context != "unmeasured" || s.Tokens != 0 {
 			t.Errorf("%s: context %q tokens %d, want unmeasured", name, s.Context, s.Tokens)
 		}
+	}
+}
+
+func cursorLimits(snap Snapshot) *limits.Account {
+	for i, a := range snap.Limits {
+		if a.Provider == "cursor" {
+			return &snap.Limits[i]
+		}
+	}
+	return nil
+}
+
+// TestCursorUsageFillsItsLine: with Cursor's usage read, its account's line
+// in USAGE is the month of its plan; without, it says how to read it.
+func TestCursorUsageFillsItsLine(t *testing.T) {
+	smp, _ := cursorFixture(t, fixtureNow.Add(-time.Minute))
+	if a := cursorLimits(smp.Sample()); a == nil || a.State != limits.Unmeasured || !strings.Contains(a.Fix, "cursor_usage") {
+		t.Errorf("off: %+v, want not measured with how to turn it on", a)
+	}
+	smp.CursorUsage = &limits.CursorUsage{
+		Every: time.Hour,
+		Token: func(context.Context) (string, error) { return "tok", nil },
+		Fetch: func(context.Context, string) ([]byte, error) {
+			return []byte(`{"billingCycleStart":"1790000000000","billingCycleEnd":"1792678400000","planUsage":{"totalPercentUsed":25}}`), nil
+		},
+	}
+	smp.Sample()
+	smp.CursorUsage.Wait()
+	a := cursorLimits(smp.Sample())
+	if a == nil || a.Account != "you@example.com · Acme" || len(a.Windows) != 1 || a.Windows[0].UsedPct != 25 {
+		t.Errorf("on: %+v, want the month's 25%%", a)
 	}
 }

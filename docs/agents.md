@@ -85,8 +85,11 @@ On a wide screen, Sessions shows the account of each session: the
 provider's mark, then the email and plan, or "API key". Only those two
 fields are read from the agent's auth files; no token reaches the console.
 Cursor's is the email and team its CLI keeps in `~/.cursor/cli-config.json`
-(`⬢ you@example.com · Acme`), and USAGE lists the account; its plan usage
-is not read yet.
+(`⬢ you@example.com · Acme`), and USAGE lists the account. Its plan usage,
+the share of the month's included usage as Cursor's `/usage` shows it,
+needs `cursor_usage = true` under `[limits]`: matchblox then asks Cursor's
+API with the login token Cursor's CLI keeps in the macOS Keychain (see
+[Safety](safety.md)).
 
 ## How an agent tells that it waits
 
