@@ -230,6 +230,43 @@ func TestPairPageClosePairWaitsForTheOffer(t *testing.T) {
 	}
 }
 
+// The end of the program waits for the offer of an earlier console too:
+// the page opened, the builder went back to Hosts and opened a console again.
+func TestShellCloseWaitsForTheOfferOfAnEarlierConsole(t *testing.T) {
+	r, m := newPairRig(t)
+	release := make(chan struct{})
+	slow := *m.opt.Pair
+	offer := slow.Offer
+	slow.Offer = func(until time.Time) (string, string, error) {
+		<-release
+		return offer(until)
+	}
+	s := NewShell(ShellOptions{
+		Base: Options{NoMotion: true, Pair: &slow},
+		Open: func(string) Options { return Options{Conn: newFake()} },
+	})
+	if s.layer != layerConsole || s.cur.opt.Pair == nil {
+		t.Fatal("the shell did not open this machine's console")
+	}
+	var cmd tea.Cmd
+	s.cur, cmd = s.cur.openPairPage()
+	go func() { _, _ = findOffer(cmd) }() // the program's goroutine
+	s = s.back()
+	s, _ = s.open("", false)
+	closed := make(chan struct{})
+	go func() { s.Close(); close(closed) }() // main, after Run
+	select {
+	case <-closed:
+		t.Fatal("Close did not wait for the offer of the earlier console")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	<-closed
+	if r.pairLines(t) != 0 {
+		t.Fatal("the program ended before the offer removed its key")
+	}
+}
+
 func poll(t *testing.T, m Model) Model {
 	t.Helper()
 	next, _ := m.Update(pairPollMsg{})
