@@ -70,6 +70,9 @@ func checkDevice(exe, pubKey, name string) error {
 // refusal that a key opens this host; the code stays theirs anyway. A phone
 // with an id gets `gate phone <id>`; the gate keeps notes by that id.
 func withPhone(old []byte, exe, pubKey, name, id string) ([]byte, error) {
+	if id != "" && !ValidPairID(id) {
+		return nil, errors.New("the pairing id is 12 lowercase hex characters: " + id)
+	}
 	f := strings.Fields(pubKey)
 	for line := range strings.SplitSeq(string(old), "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "#") || !hasKey(line, f[1]) {
@@ -221,17 +224,18 @@ func Devices(home string) ([]Device, error) {
 
 // RemoveDevice takes out the line of one phone or laptop, by its name (a
 // laptop's name is its key comment) or, when names repeat, by its
-// fingerprint.
+// fingerprint. A device with an id also loses its note of MarkDeviceIn.
 func RemoveDevice(home, name string) (backup string, err error) {
 	if name == "" {
 		return "", errors.New("give a name or a fingerprint from matchblox devices")
 	}
+	var gone string
 	return rewriteKeys(home, true, func(old []byte) ([]byte, error) {
 		lines := strings.Split(string(old), "\n")
 		hit, n := -1, 0
 		for i, line := range lines {
 			if d, ok := parseDevice(line); ok && (d.Fingerprint == name || d.Name == name) {
-				hit = i
+				hit, gone = i, d.ID
 				n++
 			}
 		}
@@ -242,7 +246,11 @@ func RemoveDevice(home, name string) (backup string, err error) {
 			return nil, fmt.Errorf("%d devices named %s; give the fingerprint", n, name)
 		}
 		return []byte(strings.Join(append(lines[:hit:hit], lines[hit+1:]...), "\n")), nil
-	}, nil)
+	}, func() {
+		if gone != "" {
+			_ = os.Remove(deviceNote(home, gone))
+		}
+	})
 }
 
 func authorizedKeys(home string) string { return filepath.Join(home, ".ssh", "authorized_keys") }
@@ -439,14 +447,16 @@ func DeviceIn(home, id string) (at time.Time, tty string, ok bool) {
 	return n.At, n.TTY, true
 }
 
-// DeviceTTYs maps each terminal to the id of the device that is in on it.
+// DeviceTTYs maps each terminal to the id of the device that is in on it. A
+// terminal that two notes name goes to the note with the later time.
 func DeviceTTYs(home string) map[string]string {
 	out := map[string]string{}
+	when := map[string]time.Time{}
 	files, _ := filepath.Glob(deviceNote(home, "*"))
 	for _, f := range files {
 		id := strings.TrimPrefix(filepath.Base(f), ".matchblox-device-")
-		if _, tty, ok := DeviceIn(home, id); ok && tty != "" {
-			out[tty] = id
+		if at, tty, ok := DeviceIn(home, id); ok && tty != "" && (out[tty] == "" || at.After(when[tty])) {
+			out[tty], when[tty] = id, at
 		}
 	}
 	return out

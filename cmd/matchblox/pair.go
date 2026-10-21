@@ -62,6 +62,9 @@ func pairMain(home, exe string, in io.Reader, out io.Writer, id string) error {
 	}
 	refuse := func(msg string) error { return reply(pair.Reply{Error: msg}) }
 
+	// The console learns that a phone opened the page before it sends anything.
+	_ = setup.MarkPairSeen(home, id, "")
+
 	// stdin is a pipe from sshd, which has no read deadline: wait in a
 	// goroutine. A phone that holds the session open must not claim the code
 	// later, so a slow request is refused before the code is claimed.
@@ -88,6 +91,7 @@ func pairMain(home, exe string, in io.Reader, out io.Writer, id string) error {
 	if !remote.ValidDeviceKey(req.Key) {
 		return refuse("bad key")
 	}
+	_ = setup.MarkPairSeen(home, id, req.Name)
 	// One write claims the code and adds the phone: it works once.
 	_, err := setup.ClaimPairKey(home, exe, id, req.Key, req.Name)
 	switch {

@@ -370,3 +370,37 @@ func TestPairMainWithoutALineAddsNothing(t *testing.T) {
 		t.Fatalf("Devices = %+v", devs)
 	}
 }
+
+func TestPairMainMarksSeenBeforeItReads(t *testing.T) {
+	old := pairReadTimeout
+	pairReadTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { pairReadTimeout = old })
+	home, id := homeWithPairKey(t)
+	r, w := io.Pipe() // open, and silent
+	t.Cleanup(func() { _ = w.Close() })
+	done := make(chan error, 1)
+	go func() { done <- pairMain(home, testExe, r, io.Discard, id) }()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if seen, _ := setup.PairSeen(home, id); seen {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if seen, name := setup.PairSeen(home, id); !seen || name != "" {
+		t.Fatalf("PairSeen = %v, %q; want true and no name", seen, name)
+	}
+	<-done
+}
+
+func TestPairMainNamesTheSeenNote(t *testing.T) {
+	f := loadPairFixture(t)
+	useHostLabel(t, "ws-1")
+	home, id := homeWithPairKey(t)
+	if err := pairMain(home, testExe, strings.NewReader(f.RequestLine), io.Discard, id); err != nil {
+		t.Fatal(err)
+	}
+	if seen, name := setup.PairSeen(home, id); !seen || name != "Jordan’s iPhone" {
+		t.Fatalf("PairSeen = %v, %q", seen, name)
+	}
+}
