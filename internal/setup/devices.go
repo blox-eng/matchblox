@@ -305,7 +305,9 @@ func expiryTime(until time.Time, zone *time.Location) string {
 }
 
 // AddPairKey lets a one-time key run only `matchblox gate pair <id>`, and
-// tells sshd to refuse it after until.
+// tells sshd to refuse it after until. In the same write it takes out the
+// pair lines whose expiry-time has passed, which a console that crashed
+// left, and then their seen notes.
 func AddPairKey(home, exe, pubKey, id string, until time.Time) error {
 	if !remote.ValidPubKey(pubKey) {
 		return errors.New("not one ed25519 public key")
@@ -317,11 +319,44 @@ func AddPairKey(home, exe, pubKey, id string, until time.Time) error {
 		return err
 	}
 	f := strings.Fields(pubKey)
-	_, err := putKeyLine(home, f[1], `restrict,expiry-time="`+expiryTime(until, expiryZone())+`",`+pairCommand(exe, id)+" "+f[0]+" "+f[1]+" matchblox:pair", false)
+	zone := expiryZone()
+	line := `restrict,expiry-time="` + expiryTime(until, zone) + `",` + pairCommand(exe, id) + " " + f[0] + " " + f[1] + " matchblox:pair"
+	var swept []string
+	_, err := rewriteKeys(home, false, func(old []byte) ([]byte, error) {
+		var kept []byte
+		kept, swept = withoutExpiredPairLines(old, time.Now(), zone)
+		return withLine(kept, f[1], line), nil
+	}, func() {
+		for _, gone := range swept {
+			RemovePairSeen(home, gone)
+		}
+	})
 	return err
 }
 
-var pairLine = regexp.MustCompile(`^restrict,expiry-time="\d{12}Z?",command="'[^"']*' gate pair ([0-9a-f]{12})" `)
+var pairLine = regexp.MustCompile(`^restrict,expiry-time="(\d{12})(Z?)",command="'[^"']*' gate pair ([0-9a-f]{12})" `)
+
+// withoutExpiredPairLines is old without the pair lines whose expiry-time is
+// not after now, and the ids of those lines. A time without Z is in zone.
+func withoutExpiredPairLines(old []byte, now time.Time, zone *time.Location) (kept []byte, ids []string) {
+	lines := slices.DeleteFunc(strings.Split(string(old), "\n"), func(line string) bool {
+		m := pairLine.FindStringSubmatch(line)
+		if m == nil {
+			return false
+		}
+		loc := zone
+		if m[2] == "Z" {
+			loc = time.UTC
+		}
+		t, err := time.ParseInLocation("200601021504", m[1], loc)
+		if err != nil || now.Before(t) {
+			return false
+		}
+		ids = append(ids, m[3])
+		return true
+	})
+	return []byte(strings.Join(lines, "\n")), ids
+}
 
 // withoutPairLine is old without the line of the one-time key id; n is how
 // many lines went.
@@ -333,7 +368,7 @@ func withoutPairLine(old []byte, id string) (kept []byte, n int, err error) {
 	all := len(lines)
 	lines = slices.DeleteFunc(lines, func(line string) bool {
 		m := pairLine.FindStringSubmatch(line)
-		return m != nil && m[1] == id
+		return m != nil && m[3] == id
 	})
 	return []byte(strings.Join(lines, "\n")), all - len(lines), nil
 }
