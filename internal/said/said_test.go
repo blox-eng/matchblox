@@ -48,6 +48,16 @@ func TestScreen(t *testing.T) {
   Auto · 5.7%
   /work/app · main
 `, "Done. second.txt was created.", None},
+		{"cursor before its first turn", `
+  Cursor Agent
+  v2026.10.19-6bbf2c4
+  Tip: Use /plan to plan execution and reach the right outcome faster.
+ ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  → Plan, search, build anything
+ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  Auto
+  /work/app · main
+`, "Tip: Use /plan to plan execution and reach the right outcome faster.", None},
 		{"opencode permission", `
 ┃  Permission required
 ┃  $ rm -rf build

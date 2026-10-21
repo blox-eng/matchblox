@@ -41,9 +41,8 @@ var (
 	permitsRe = regexp.MustCompile(`(?i)^permission required\b|^allow once\b|\(y\)es/\(n\)o|[\[(]y/n[\])]|press enter to confirm|^\d\.\s+yes\b|\brun \(once\) \(y\)`)
 	// midRe is a question with a sentence after it.
 	midRe = regexp.MustCompile(`\pL\?\s+\pL`)
-	// hintRe is a line of key hints or a footer, never what the agent said:
-	// Cursor's ends on its model and context use, "Auto · 5.7%".
-	hintRe = regexp.MustCompile(`(?i)\b(ctrl|shift|alt|esc|enter)\b|^\? for shortcuts|^[~/]\S*|\s·\s\d+(\.\d+)?%$`)
+	// hintRe is a line of key hints or a footer, never what the agent said.
+	hintRe = regexp.MustCompile(`(?i)\b(ctrl|shift|alt|esc|enter)\b|^\? for shortcuts|^[~/]\S*`)
 	wordRe = regexp.MustCompile(`\pL\pL`)
 )
 
@@ -228,7 +227,14 @@ func Clean(s string) string {
 func lines(s string) []line {
 	s = Clean(s)
 	var out []line
+	footer := false
 	for _, raw := range strings.Split(s, "\n") {
+		// Cursor draws its input box between rows of half blocks; what is
+		// under the box is its status: the model, context use, the path.
+		if b := strings.TrimSpace(raw); len([]rune(b)) >= 20 && strings.Trim(b, "▀") == "" {
+			footer = true
+			continue
+		}
 		t := strings.TrimFunc(raw, frame)
 		if len(wordRe.FindAllString(t, 2)) < 2 && !strings.HasSuffix(t, "?") && !permitsRe.MatchString(t) {
 			continue
@@ -236,7 +242,7 @@ func lines(s string) []line {
 		in := strings.TrimLeft(raw, " ")
 		out = append(out, line{
 			text:    t,
-			boxed:   strings.HasPrefix(in, "│") || strings.HasPrefix(in, "┃"),
+			boxed:   footer || strings.HasPrefix(in, "│") || strings.HasPrefix(in, "┃"),
 			person:  strings.HasPrefix(in, "›") || strings.HasPrefix(in, ">") || strings.HasPrefix(in, "❯") || strings.HasPrefix(in, "→"),
 			heading: strings.HasPrefix(in, "#"),
 		})
