@@ -437,6 +437,23 @@ func TestANewSessionIsSampledAtOnce(t *testing.T) {
 	}
 }
 
+func TestLaunchArgvOfEachAgent(t *testing.T) {
+	for _, c := range []struct {
+		bin, agent, first string
+		want              []string
+	}{
+		{"claude", "claude", "go", []string{"claude", "--name", "work", "go"}},
+		{"codex", "codex", "", []string{"codex"}},
+		{"opencode", "opencode", "go", []string{"opencode", "--prompt", "go"}},
+		{"agent", sample.CursorAgent, "go", []string{"agent", "--trust", "go"}},
+		{"cursor-agent", sample.CursorAgent, "", []string{"cursor-agent", "--trust"}},
+	} {
+		if got := launchArgv(c.bin, c.agent, "work", c.first); !slices.Equal(got, c.want) {
+			t.Errorf("%s %q: got %q, want %q", c.agent, c.first, got, c.want)
+		}
+	}
+}
+
 func TestNewStartsCursor(t *testing.T) {
 	for _, agent := range []string{"cursor-agent", "cursor"} {
 		s, ran := lifeTest(t)

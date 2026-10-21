@@ -59,6 +59,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Changed
 
+- **A Cursor session matchblox starts trusts its directory (`--trust`).**
+  Its first turn no longer waits on the trust prompt.
 - **Build the app again with this release.** An older app cannot read the
   v2 link and says "This code is damaged…". The new app reads v1 and v2.
 
