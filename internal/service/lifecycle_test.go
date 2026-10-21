@@ -25,16 +25,17 @@ import (
 
 // lifeSessions are the builder's: work at rest in %1 (tmux session app,
 // its only window), busy in %2 (session dev, one of two windows), a Codex
-// one in %3.
+// one in %3. Each window carries its agent's name, as `new` and `r` name
+// it.
 func lifeSnap(busy bool) sample.Snapshot {
 	return sample.Snapshot{At: night0, Sessions: []sample.Session{
 		{Agent: "claude", PID: 101, Start: 7, Pane: "%1", Target: "app:1.1", Cwd: "/work/app", SessionID: "s1", Name: "work", Status: "idle", Idle: 5 * time.Minute, Busy: busy},
 		{Agent: "claude", PID: 102, Start: 7, Pane: "%2", Target: "dev:1.1", Cwd: "/work/app", SessionID: "s2", Name: "busy", Status: "busy", Busy: true},
 		{Agent: "codex", PID: 103, Start: 7, Pane: "%3", Target: "cx:1.1", SessionID: "s3", Name: "cx", Status: "idle", Idle: time.Hour},
 	}, Panes: []sample.Pane{
-		{ID: "%1", Target: "app:1.1"},
-		{ID: "%2", Target: "dev:1.1"}, {ID: "%4", Target: "dev:2.1"},
-		{ID: "%3", Target: "cx:1.1"},
+		{ID: "%1", Target: "app:1.1", Window: "work", Command: "claude"},
+		{ID: "%2", Target: "dev:1.1", Window: "busy", Command: "claude"}, {ID: "%4", Target: "dev:2.1"},
+		{ID: "%3", Target: "cx:1.1", Window: "cx", Command: "codex"},
 		{ID: "%9@mbtest", Target: "stoker:1.1"},
 	}}
 }
@@ -591,6 +592,49 @@ func TestSwitchToClaudeKeepsTheName(t *testing.T) {
 	}
 	if got := strings.Join((*ran)[0], " "); !strings.HasSuffix(got, " claude --name cx") {
 		t.Fatalf("ran %q", got)
+	}
+}
+
+// TestTheSeatKeepsItsNameThroughSwitches: the sampler names an agent that
+// keeps no name of its own as its tmux window (see
+// TestAnAgentWithoutANameIsCalledAsItsTmuxWindow). A seat whose window tmux names after its command is named for the switch,
+// so Codex there reads as the seat, and a switch back starts Claude with
+// the seat's name.
+func TestTheSeatKeepsItsNameThroughSwitches(t *testing.T) {
+	for _, c := range []struct {
+		window string
+		rename bool
+	}{
+		{"work", false},  // new and r name the window as the seat
+		{"claude", true}, // tmux names it after the command it runs
+	} {
+		s, ran := switchTest(t)
+		snap := lifeSnap(false)
+		snap.Panes[0].Window = c.window
+		s.publish(snap, func(state.Doc) {})
+		if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); res.Err != "" {
+			t.Fatalf("%s: %+v", c.window, res)
+		}
+		steps := 1
+		if c.rename {
+			steps = 2
+		}
+		named := slices.Equal((*ran)[0], []string{"tmux", "rename-window", "-t", "%1", "work"})
+		if named != c.rename || len(*ran) != steps {
+			t.Fatalf("%s: ran %q", c.window, *ran)
+		}
+		// Codex runs in the seat, named as its window, which says work now.
+		snap = lifeSnap(false)
+		snap.Sessions[0] = sample.Session{Agent: "codex", PID: 201, Start: 9, Pane: "%1", Target: "app:1.1", Cwd: "/work/app", Name: "work", Status: "idle"}
+		snap.Panes[0].Command = "codex"
+		s.publish(snap, func(state.Doc) {})
+		*ran = nil
+		if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "claude"})); res.Err != "" || len(*ran) != 1 {
+			t.Fatalf("%s: back to claude: %+v ran %q", c.window, res, *ran)
+		}
+		if got := strings.Join((*ran)[0], " "); !strings.HasSuffix(got, " claude --name work") {
+			t.Fatalf("%s: back to claude ran %q", c.window, got)
+		}
 	}
 }
 

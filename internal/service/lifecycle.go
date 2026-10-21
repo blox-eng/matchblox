@@ -258,7 +258,8 @@ func (s *Service) askKill(from, pane string, x sample.Session) {
 // switchAgent starts another agent in the session's place, its name, cwd
 // and pane: one respawn-pane -k ends the agent there and starts the new
 // one in the same pane, guarded by the old agent's pid and start time. It
-// never closes the pane. A hold on the seat waits for the new agent's
+// never closes the pane, and the new agent is named as the old one was
+// (seatWindow, and Claude's --name). A hold on the seat waits for the new agent's
 // session id and moves to it (Rebind); a guard that stops the switch, or
 // a respawn that fails, puts it back as it was. The builder takes the seat
 // back from the stoker, which drives it no more, and the old agent's
@@ -317,10 +318,11 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 		}
 	}
 	release := s.holdPane(pane)
-	res := s.Actions.Do(ctx, SwitchAction(pane, x, launchArgv(s.agentBin(n.Agent), n.Agent, x.Name, n.Handoff)), "y")
+	act := SwitchAction(pane, x, s.seatWindow(pane, x), launchArgv(s.agentBin(n.Agent), n.Agent, x.Name, n.Handoff))
+	res := s.Actions.Do(ctx, act, "y")
 	release()
-	if res.Err != "" || len(res.Ran) == 0 {
-		if res.Err != "" {
+	if res.Err != "" || len(res.Ran) < len(act.Steps) {
+		if res.Err != "" && len(res.Ran) == len(act.Steps)-1 {
 			res.Err += ": the pane may have no agent now"
 		}
 		if held {
@@ -343,17 +345,43 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	return res
 }
 
-// SwitchAction is what switchAgent runs: one respawn-pane, guarded by the
-// old agent's pid and start time.
-func SwitchAction(pane string, x sample.Session, argv []string) advice.Action {
-	server, bare := sample.SplitPane(pane)
-	step := slices.Concat(sample.TmuxOn(server),
-		[]string{"respawn-pane", "-k", "-t", bare, "-c", x.Cwd, "env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
-		argv)
-	return advice.Action{
-		Label: "switch", Destructive: true, Steps: [][]string{step},
-		Guards: []advice.Guard{{PID: x.PID, StartTicks: x.Start}},
+// seatWindow is the name the seat's window takes before a switch, so the
+// new agent is named as the old one was: "" when tmux names the new agent
+// so already. A window tmux names after its command gives way to the tmux
+// session's name, and a window someone named keeps its name.
+func (s *Service) seatWindow(pane string, x sample.Session) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, p := range s.cur.Panes {
+		if p.ID != pane {
+			continue
+		}
+		session, _, _ := strings.Cut(p.Target, ":")
+		if x.Name == "" || x.Name == session || sample.WindowNamed(p, x.Agent) {
+			return ""
+		}
+		return x.Name
 	}
+	return ""
+}
+
+// SwitchAction is what switchAgent runs: one respawn-pane, after naming
+// the window when window is set, each guarded by the old agent's pid and
+// start time.
+func SwitchAction(pane string, x sample.Session, window string, argv []string) advice.Action {
+	server, bare := sample.SplitPane(pane)
+	tmux := sample.TmuxOn(server)
+	guard := advice.Guard{PID: x.PID, StartTicks: x.Start}
+	a := advice.Action{Label: "switch", Destructive: true}
+	if window != "" {
+		a.Steps = append(a.Steps, slices.Concat(tmux, []string{"rename-window", "-t", bare, window}))
+		a.Guards = append(a.Guards, guard)
+	}
+	a.Steps = append(a.Steps, slices.Concat(tmux,
+		[]string{"respawn-pane", "-k", "-t", bare, "-c", x.Cwd, "env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
+		argv))
+	a.Guards = append(a.Guards, guard)
+	return a
 }
 
 // renameState keeps the renames that wait for their session's rest.

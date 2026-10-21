@@ -244,3 +244,4 @@ Revised during the build:
 - **The Sessions key line shows `A switch`.** It is dropped first on narrow lines, before `z`.
 - **A ship with no driver** says "its driver no longer runs", not "outside tmux".
 - **Cursor always starts with `--trust`** (the spec's call). #151 put it in `launchArgv` on main for `new`, and switch starts Cursor through the same `launchArgv`, so this branch adds only its docs line and `TestLaunchArgvOfEachAgent`. That trusts the session's directory without asking; a builder may narrow it later if the trade-off bites.
+- **The seat's name for an agent that keeps none.** The sampler names Codex, OpenCode and Cursor as their tmux window (#151), and `new` and `r` name the window as the seat, so a switch keeps it. When tmux names the window after its command, switch first renames the window to the seat's name; a window someone named otherwise keeps its name.
