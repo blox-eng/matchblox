@@ -70,6 +70,9 @@ func (m Model) render() string {
 	if m.splashing() {
 		return m.splashView(w)
 	}
+	if m.pair != nil {
+		return m.pairView(w)
+	}
 	if m.night() {
 		m.st = nightStyles()
 		f := m.frame(w)

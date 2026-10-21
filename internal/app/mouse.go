@@ -12,7 +12,7 @@ import (
 // it only moves this terminal, or asks to confirm it. A tap is never
 // consent to a destructive step, and it cancels a pending one.
 func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
-	if ms.Button != tea.MouseLeft {
+	if ms.Button != tea.MouseLeft || m.pair != nil { // the pair page takes keys only
 		return m, nil
 	}
 	if m.held != nil { // a tap is another key: it drops the question

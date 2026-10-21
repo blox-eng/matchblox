@@ -164,8 +164,7 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := k.String()
 	switch key {
 	case "ctrl+c":
-		m.quitting = true
-		return m, tea.Quit
+		return m.quit()
 	case "esc":
 		m.form = nil // nothing is sent
 		return m, nil

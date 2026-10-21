@@ -3,18 +3,16 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"os/user"
 	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/app"
 	"github.com/blox-eng/matchblox/internal/pair"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/setup"
@@ -23,7 +21,7 @@ import (
 const (
 	pairWindow       = 5 * time.Minute
 	maxPairRequest   = 4096
-	defaultHostKey   = "/etc/ssh/ssh_host_ed25519_key.pub"
+	defaultHostKey   = setup.DefaultHostKey
 	pairPollInterval = time.Second
 )
 
@@ -40,16 +38,7 @@ var pairReadTimeout = 30 * time.Second
 
 var pairSettings = pairEnv{hostKeyPath: defaultHostKey, poll: pairPollInterval, limit: pairWindow}
 
-var hostLabel = shortHostname
-
-func shortHostname() string {
-	h, err := os.Hostname()
-	if err != nil || h == "" {
-		return "host"
-	}
-	short, _, _ := strings.Cut(h, ".")
-	return short
-}
+var hostLabel = setup.HostLabel
 
 // pairMain is `gate pair <id>`: the one-time key's forced command. It reads
 // one bounded request line from the phone, adds the phone's key and removes
@@ -113,7 +102,7 @@ func pairCmd(ctx context.Context, args []string, out io.Writer, now func() time.
 	fl := flag.NewFlagSet("pair", flag.ContinueOnError)
 	address := fl.String("address", "", "host name the phone connects to (default: the Tailscale name, else the host name)")
 	port := fl.Int("port", 22, "ssh port on this host")
-	name := fl.String("name", shortHostname(), "label of this host on the phone")
+	name := fl.String("name", setup.HostLabel(), "label of this host on the phone")
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
@@ -121,7 +110,7 @@ func pairCmd(ctx context.Context, args []string, out io.Writer, now func() time.
 		return errors.New("usage: matchblox pair [--address host] [--port 22] [--name label]")
 	}
 	if *address == "" {
-		*address = defaultAddress()
+		*address = setup.PairAddress()
 	}
 	if env.home == "" {
 		home, err := os.UserHomeDir()
@@ -135,24 +124,11 @@ func pairCmd(ctx context.Context, args []string, out io.Writer, now func() time.
 			return errors.New("cannot find this matchblox on the PATH")
 		}
 	}
-	hostKey, err := hostKeyFingerprint(env.hostKeyPath)
-	if err != nil {
-		return err
-	}
-	u, err := user.Current()
-	if err != nil {
-		return err
-	}
-	seed, authorized, id, err := pair.NewKey()
-	if err != nil {
-		return err
-	}
 	until := now().Add(env.limit)
-	if err := setup.AddPairKey(env.home, env.exe, authorized, id, until); err != nil {
+	id, url, err := setup.NewPairOffer(env.home, env.exe, *address, *port, *name, env.hostKeyPath, until)
+	if err != nil {
 		return err
 	}
-	p := pair.Payload{V: 2, Host: *address, Port: *port, User: u.Username, Name: *name, HostKey: hostKey, Key: base64.StdEncoding.EncodeToString(seed)}
-	url := p.URL()
 	qr, err := pair.QR(url)
 	if err != nil {
 		_, _ = setup.RemovePairKey(env.home, id)
@@ -199,6 +175,32 @@ func pairCmd(ctx context.Context, args []string, out io.Writer, now func() time.
 	}
 }
 
+// consolePair is the console's pair page on this machine: the key line in
+// home's authorized_keys, and the notes of gate pair.
+func consolePair(home, exe, hostKeyPath string, address func() string) *app.PairHost {
+	return &app.PairHost{
+		Offer: func(until time.Time) (string, string, error) {
+			switch {
+			case exe == "":
+				return "", "", errors.New("cannot find this matchblox on the PATH")
+			case home == "":
+				return "", "", errors.New("cannot find your home directory")
+			}
+			return setup.NewPairOffer(home, exe, address(), 22, setup.HostLabel(), hostKeyPath, until)
+		},
+		Seen:    func(id string) (bool, string) { return setup.PairSeen(home, id) },
+		Present: func(id string) (bool, error) { return setup.PairKeyPresent(home, id) },
+		Remove: func(id string) (bool, error) {
+			setup.RemovePairSeen(home, id)
+			return setup.RemovePairKey(home, id)
+		},
+		Claim: func(id string) (app.PairDevice, bool) {
+			d, ok := setup.TakeClaim(home, id)
+			return app.PairDevice(d), ok
+		},
+	}
+}
+
 // pairedLine names the phone that used the one-time key id, so a phone
 // that is not yours is seen at once. With no claim, the line went some
 // other way.
@@ -207,39 +209,4 @@ func pairedLine(home, id string) string {
 		return fmt.Sprintf("Paired %s (%s). Not your phone? Run matchblox devices rm %s.", d.Name, d.Fingerprint, d.Fingerprint)
 	}
 	return "The code is gone, but no phone used it. Run matchblox pair again."
-}
-
-func hostKeyFingerprint(path string) (string, error) {
-	b, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return "", fmt.Errorf("sshd has no ed25519 host key (%s is missing); run sudo ssh-keygen -A, then matchblox pair again", path)
-	}
-	if err != nil {
-		return "", err
-	}
-	fp, err := setup.Fingerprint(string(b))
-	if err != nil {
-		return "", fmt.Errorf("%s is not a public key; run sudo ssh-keygen -A", path)
-	}
-	return fp, nil
-}
-
-// defaultAddress is the Tailscale name of this host when there is one.
-func defaultAddress() string {
-	if path, err := exec.LookPath("tailscale"); err == nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if b, err := exec.CommandContext(ctx, path, "status", "--json").Output(); err == nil {
-			var st struct{ Self struct{ DNSName string } }
-			if json.Unmarshal(b, &st) == nil {
-				if n := strings.TrimSuffix(st.Self.DNSName, "."); n != "" {
-					return n
-				}
-			}
-		}
-	}
-	if h, err := os.Hostname(); err == nil && h != "" {
-		return h
-	}
-	return "localhost"
 }

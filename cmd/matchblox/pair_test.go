@@ -153,6 +153,39 @@ func TestPairIDIsTwelveLowercaseHex(t *testing.T) {
 	}
 }
 
+func TestConsolePairWritesAndRemovesTheKey(t *testing.T) {
+	f := loadPairFixture(t)
+	home := t.TempDir()
+	hostKey := filepath.Join(t.TempDir(), "host.pub")
+	if err := os.WriteFile(hostKey, []byte(f.HostKeyPub+" root@ws-1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := consolePair(home, testExe, hostKey, func() string { return "ws-1.tail1234.ts.net" })
+	id, link, err := h.Offer(time.Now().Add(time.Minute))
+	if err != nil || !strings.HasPrefix(link, "matchblox://pair?p=") {
+		t.Fatalf("offer: %q %v", link, err)
+	}
+	if err := setup.MarkPairSeen(home, id, "iPad"); err != nil {
+		t.Fatal(err)
+	}
+	if seen, name := h.Seen(id); !seen || name != "iPad" {
+		t.Fatalf("seen = %v %q", seen, name)
+	}
+	if removed, err := h.Remove(id); !removed || err != nil {
+		t.Fatalf("remove = %v %v", removed, err)
+	}
+	if present, _ := h.Present(id); present {
+		t.Fatal("the key line stayed")
+	}
+	if seen, _ := h.Seen(id); seen {
+		t.Fatal("the seen note stayed")
+	}
+	_, _, err = consolePair(home, "", hostKey, func() string { return "ws-1" }).Offer(time.Now().Add(time.Minute))
+	if err == nil || err.Error() != "cannot find this matchblox on the PATH" {
+		t.Fatalf("no binary: %v", err)
+	}
+}
+
 func TestPairCmdStopsOnCtrlC(t *testing.T) {
 	f := loadPairFixture(t)
 	home := t.TempDir()

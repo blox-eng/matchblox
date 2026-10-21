@@ -204,8 +204,7 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.peek = nil
 		return m, nil
 	case key == "ctrl+c":
-		m.quitting = true
-		return m, tea.Quit
+		return m.quit()
 	case key == "ctrl+o":
 		m.peek = nil
 		if a := m.forHost(m.jump(v.s.Pane)); a != nil {

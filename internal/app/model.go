@@ -74,6 +74,11 @@ type Options struct {
 	StateDir string
 	// Exec gives this terminal to argv until it exits. Nil: tea.ExecProcess.
 	Exec func(argv []string, done func(error) tea.Msg) tea.Cmd
+	// Pair writes and reads the pair page's one-time key on this machine.
+	// Nil: this console cannot pair.
+	Pair *PairHost
+	// Clip copies text to the builder's clipboard. Nil: OSC 52 on stdout.
+	Clip func(text string)
 }
 
 type helloMsg proto.Hello
@@ -278,10 +283,12 @@ type Model struct {
 	stokerSel    int
 	stokerShown  string
 	ackSent      time.Time
-	sheet        *sheet // the launch sheet, while it is open
-	stokerServer string // the tmux server (-L) the stoker agent runs on; "" none
-	toast        string // what an action did, on the header's right
-	toasts       int    // counts the toasts: a later one outlives the timer of an earlier one
+	sheet        *sheet    // the launch sheet, while it is open
+	stokerServer string    // the tmux server (-L) the stoker agent runs on; "" none
+	toast        string    // what an action did, on the header's right
+	toasts       int       // counts the toasts: a later one outlives the timer of an earlier one
+	pair         *pairPage // the pair page, while it shows
+	pairPolling  bool      // a poll of the pair page is on its way
 }
 
 func New(opt Options) Model {
@@ -453,6 +460,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.recv(), m.animate(), news, order)
 	case doorRanMsg:
 		return m.doorRan(msg)
+	case pairPollMsg:
+		return m.pairPolled()
+	case pairFrameMsg:
+		if m.pairMoving() {
+			return m, pairFrame()
+		}
 	case animMsg:
 		m.animating = false
 		return m, m.animate()
@@ -602,12 +615,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var touch tea.Cmd
 		// f and n are stoker acts themselves: a touch sent with them would
 		// race them on the service.
-		if k := msg.String(); m.peek != nil || m.sheet != nil || m.form != nil || m.searching || k != "f" && k != "n" {
+		if k := msg.String(); m.pair != nil || m.peek != nil || m.sheet != nil || m.form != nil || m.searching || k != "f" && k != "n" {
 			m, touch = m.touchRest()
 		}
 		var next tea.Model
 		var cmd tea.Cmd
 		switch {
+		case m.pair != nil:
+			next, cmd = m.pairKey(msg.String())
 		case m.sheet != nil:
 			next, cmd = m.sheetKey(msg)
 		case m.form != nil:
@@ -703,8 +718,7 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	case "c":
 		return m.openStoker(), nil
 	case "q", "ctrl+c":
-		m.quitting = true
-		return m, tea.Quit
+		return m.quit()
 	case "tab":
 		m.setTab((m.tab + 1) % len(tabNames))
 	case "shift+tab":
