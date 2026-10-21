@@ -674,3 +674,59 @@ func TestBeatFourOnAPeekAnswer(t *testing.T) {
 		t.Fatal("a door act counted")
 	}
 }
+
+// TestTheStripHandsTheConsoleBack: from beat 3 the page is one line on the
+// key line. The device's keys work the console, its answer is beat 4, and
+// esc dismisses the strip when the console has nothing to cancel.
+func TestTheStripHandsTheConsoleBack(t *testing.T) {
+	st := queueState()
+	for i := range st.Sessions {
+		if st.Sessions[i].Pane == "%2" {
+			st.Sessions[i].Name = "api"
+		}
+	}
+	m, f := loadedWith(t, 100, st)
+	now := time.Date(2026, 10, 21, 14, 32, 0, 0, time.UTC)
+	m.opt.Now = func() time.Time { return now }
+	m.opt.LastClient = func() (string, error) { return phoneTTY, nil }
+	m.opt.Pair = &PairHost{DeviceIn: func(id string) (time.Time, string, bool) { return now, phoneTTY, id == "iPad-id" }}
+	m.pair = &pairPage{beat: 3, line: "iPad is in. Answer an agent from it, or esc to go back.", device: PairDevice{Name: "iPad", ID: "iPad-id"}}
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "iPad is in. Answer an agent from it, or esc to go back.") || !strings.Contains(out, "SESSIONS") && !strings.Contains(out, "api") {
+		t.Fatalf("the console does not show with the strip:\n%s", out)
+	}
+
+	next, _ := key(m, "down")
+	next, _ = key(next, "a")
+	if next.(Model).peek == nil {
+		t.Fatal("a key did not reach the console at beat 3")
+	}
+	next, _ = key(next, "esc") // closes the peek, not the strip
+	if got := next.(Model); got.peek != nil || got.pair == nil {
+		t.Fatalf("esc: peek %v, page %v", got.peek, got.pair)
+	}
+	next, _ = key(next, "a")
+	next = typeText(next, "ok")
+	next, cmd := key(next, "enter")
+	drain(cmd)
+	got := next.(Model)
+	if got.pair == nil || got.pair.beat != 4 || got.pair.line != "iPad answered api" {
+		t.Fatalf("page %+v", got.pair)
+	}
+	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "answer:%2" {
+		t.Fatalf("acts %+v", acts)
+	}
+	if out := ansi.Strip(got.render()); !strings.Contains(out, "iPad answered api") {
+		t.Fatalf("the strip does not say the act:\n%s", out)
+	}
+	now = now.Add(1600 * time.Millisecond)
+	after, _ := got.Update(pairPollMsg{})
+	if after.(Model).pair != nil {
+		t.Fatal("the strip stayed after 1.5 s")
+	}
+
+	// esc with nothing to cancel dismisses the strip at beat 3.
+	next, _ = key(m, "esc")
+	if next.(Model).pair != nil {
+		t.Fatal("esc did not dismiss the strip")
+	}
+}

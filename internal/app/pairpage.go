@@ -328,6 +328,20 @@ func (m Model) pairPolled() (Model, tea.Cmd) {
 	return m, pairPoll()
 }
 
+// owns is a page that takes the screen and the keys. From beat 3 the device
+// works in the console, so the page is a strip on the key line instead.
+func (p *pairPage) owns() bool { return p != nil && p.beat < 3 }
+
+// strips is a page at beat 3 or 4: one line on the key line.
+func (p *pairPage) strips() bool { return p != nil && p.beat >= 3 }
+
+// pairStripEsc is esc that dismisses the strip: the console has nothing
+// else of its own for it to cancel.
+func (m Model) pairStripEsc(k string) bool {
+	return k == "esc" && m.pair.strips() && m.peek == nil && m.form == nil && m.sheet == nil &&
+		m.pending == nil && m.held == nil && !m.searching && m.filter == ""
+}
+
 // pairWatched is the poll after the claim: beat 3 is the device's own
 // console, and the page folds without it after a minute, and after beat 4.
 func (m Model) pairWatched() (Model, tea.Cmd) {

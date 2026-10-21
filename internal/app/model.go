@@ -632,8 +632,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var next tea.Model
 		var cmd tea.Cmd
 		switch {
-		case m.pair != nil:
+		case m.pair.owns():
 			next, cmd = m.pairKey(msg.String())
+		case m.pairStripEsc(msg.String()):
+			next, cmd = m.closePairPage(""), nil
 		case m.sheet != nil:
 			next, cmd = m.sheetKey(msg)
 		case m.form != nil:
