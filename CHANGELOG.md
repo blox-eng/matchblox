@@ -13,6 +13,13 @@ All notable changes to matchblox are in this file. The format follows
 - **The app has an icon: the matchblox mark.** It was blank on the home
   screen. `make icon` makes it from `ios/AppIcon.svg`.
 
+### Fixed
+
+- **The phone shows the console's glyphs, not `_`.** The app's ssh session
+  sends no locale, so tmux took the phone for an ASCII terminal and drew
+  each match, bar, `▰`, `●` and `◂ matchblox` as `_`. The console now
+  starts tmux with `-u`, so its client is UTF-8 whatever the locale.
+
 ## [0.10.2] - 2026-10-21
 
 ### Fixed
