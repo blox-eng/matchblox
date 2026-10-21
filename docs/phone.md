@@ -36,8 +36,9 @@ If the camera cannot read the code, copy the link with `c` on the host, and
 tap `Paste` in the app. The Camera app also opens the link.
 
 A host can have a name that the phone cannot reach, such as its name on
-your home network. Run `matchblox pair --address <host>`. Add `--port` if
-sshd does not listen on port 22. If the app says `Can't reach <host>.`,
+your home network. Run `matchblox pair --address <host>`. The console pairs
+on port 22. If sshd listens on another port, run `matchblox pair --port <n>`.
+If the app says `Can't reach <host>.`,
 type the address that the device can reach, then tap `Try again`.
 
 If the app says "This code was used or expired", open Pair a device on the

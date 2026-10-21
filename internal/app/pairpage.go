@@ -25,6 +25,7 @@ const (
 	pairScanLine      = "Scan with the matchblox app, or paste the link."
 	pairKeyLine       = "c copies the link · esc stops"
 	pairFailedKeyLine = "Enter tries again · esc goes back"
+	pairPortLine      = "Port 22. For another port, run matchblox pair --port <n>."
 	pairStoppedLine   = "Stopped. The code no longer works."
 	pairSmallLine     = "Make this terminal 61 × 33 or larger to show the code, or press c to copy the link."
 )
@@ -484,6 +485,9 @@ func (m Model) pairView(w int) string {
 		lines = box
 	}
 	lines = append(lines, text...)
+	if p.live() && !p.standalone && len(lines) < m.height { // matchblox pair has --port
+		lines = append(lines, centre(m.st.muted.Render(pairPortLine)))
+	}
 	top := max((m.height-len(lines))/2, 0)
 	return strings.Repeat("\n", top) + strings.Join(lines, "\n")
 }

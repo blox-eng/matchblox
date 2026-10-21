@@ -493,6 +493,27 @@ func TestPairPageWithoutTheBinaryWritesNoKey(t *testing.T) {
 	}
 }
 
+// The console pairs on port 22; matchblox pair --port is the way for
+// another. The line shows only when the page has a row for it.
+func TestTheConsolePageNamesItsPort(t *testing.T) {
+	_, m := openedPage(t)
+	if !strings.Contains(pageText(m), pairPortLine) {
+		t.Fatalf("no port line:\n%s", pageText(m))
+	}
+	p := *m.pair
+	p.standalone = true
+	alone := m
+	alone.pair = &p
+	if strings.Contains(pageText(alone), pairPortLine) {
+		t.Fatal("matchblox pair, which has --port, shows the port line")
+	}
+	small := m
+	small.height = len(strings.Split(strings.TrimLeft(pageText(m), "\n"), "\n")) - 1 // all rows but the port line
+	if text := pageText(small); strings.Contains(text, pairPortLine) || !strings.Contains(text, pairKeyLine) {
+		t.Fatalf("the port line took a row the page needs:\n%s", text)
+	}
+}
+
 // Every failed offer says the two ways on: Enter and esc.
 func TestAFailedOfferSaysTheKeys(t *testing.T) {
 	r, m := newPairRig(t)

@@ -491,7 +491,8 @@ Reduce Motion.
     <session>`, `The code expired. Enter pairs again.` and `The code
     expired. Run matchblox pair again.`, `Stopped. The code no longer
     works.`, and under an offer that failed, `Enter tries again · esc goes
-    back`.
+    back`. In the console, under the key line when a row is free: `Port 22.
+    For another port, run matchblox pair --port <n>.`
   - Guard: `Pair from the host's own terminal.` and `Remove devices from the
     host's own terminal.`
   - Door: `Pair a device`, `answer your agents from your phone`.
