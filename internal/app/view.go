@@ -544,7 +544,7 @@ func (m Model) keyLine(w int) (string, []span) {
 
 // spareKeys are the keys a short key line drops first, in that order:
 // each one is reached another way (a tab tap, the dock, the docs).
-var spareKeys = []string{"↑↓", "q", "/", "p", "A", "z", "f"}
+var spareKeys = []string{"A", "↑↓", "q", "/", "p", "z", "f"}
 
 // fitHints drops spare keys until the hints fit in room columns. The
 // row's own keys always stay: a line that is still too long is cut.
