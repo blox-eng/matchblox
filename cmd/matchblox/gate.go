@@ -20,7 +20,8 @@ func gateMain(args []string) error {
 	mode := ""
 	switch {
 	case len(args) == 0:
-	case len(args) == 1 && args[0] == phoneMode:
+	case len(args) == 1 && args[0] == phoneMode,
+		len(args) == 2 && args[0] == phoneMode && setup.ValidPairID(args[1]):
 		mode = phoneMode
 	default:
 		fmt.Fprintln(os.Stderr, "matchblox gate: refused: this key line has an unknown gate mode; run matchblox connect or matchblox pair again")
