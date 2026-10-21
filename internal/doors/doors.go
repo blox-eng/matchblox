@@ -15,12 +15,14 @@ const (
 	Hooks = "hooks"
 	// CursorHooks adds matchblox to Cursor's hooks.
 	CursorHooks = "cursorhooks"
-	Limits      = "limits"
-	SafetyNet   = "safetynet"
-	WayBack     = "wayback"
-	Guide       = "guide"
-	Night       = "night"
-	Ways        = "ways"
+	// CursorLimits taps Cursor's status line for each session's context.
+	CursorLimits = "cursorlimits"
+	Limits       = "limits"
+	SafetyNet    = "safetynet"
+	WayBack      = "wayback"
+	Guide        = "guide"
+	Night        = "night"
+	Ways         = "ways"
 )
 
 type Door struct {

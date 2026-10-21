@@ -6,6 +6,15 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Cursor sessions show their context, model and account.** A new setup
+  step, "Show Cursor's context", taps Cursor's status line: each Cursor
+  session then shows its context use and window from its first turn, as
+  Claude Code's do, and Cursor's bar still shows. The account is the email
+  and team in `~/.cursor/cli-config.json`, marked `⬢`, and USAGE lists it.
+  Cursor's plan usage is not read yet.
+
 ## [0.12.0] - 2026-10-21
 
 ### Added
