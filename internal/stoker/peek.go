@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -71,7 +72,12 @@ func PeekOf(s sample.Session, items []queue.Item) Peek {
 			p.Asks = "an approval"
 		}
 	case s.Asks || it.State == queue.StateQuestion && !it.Reminder:
-		p.Asks = lastLine(p.Said)
+		// The question, not the progress line that ends the reply.
+		if q, ok := said.Reply(p.Said); ok {
+			p.Asks = cutLine(q)
+		} else {
+			p.Asks = lastLine(p.Said)
+		}
 	}
 	return p
 }
