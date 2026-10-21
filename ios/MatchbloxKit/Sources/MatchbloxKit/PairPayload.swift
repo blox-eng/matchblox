@@ -18,7 +18,7 @@ public struct PairPayload: Codable, Equatable, Sendable {
     public init(url: URL) throws(PairError) {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               components.scheme?.lowercased() == "matchblox",
-              components.host == "pair"
+              components.host?.lowercased() == "pair"
         else { throw .notMatchblox }
 
         guard let encoded = components.queryItems?.first(where: { $0.name == "p" })?.value,

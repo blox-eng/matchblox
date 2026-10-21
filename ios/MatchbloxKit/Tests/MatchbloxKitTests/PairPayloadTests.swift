@@ -71,6 +71,16 @@ final class PairPayloadTests: XCTestCase {
         XCTAssertEqual(try PairPayload(url: URL(string: v2.url)!), v2.payload)
     }
 
+    /// firstLink finds the link in any case, so the payload reads it in any case too.
+    func testSchemeAndHostInAnyCase() throws {
+        let v2 = try FixtureV2.load()
+        let token = v2.url.dropFirst("matchblox://pair?p=".count)
+        for head in ["MATCHBLOX://PAIR?p=", "Matchblox://Pair?p="] {
+            let pasted = try XCTUnwrap(Pairing.firstLink(in: "Open \(head)\(token) now"), head)
+            XCTAssertEqual(try PairPayload(url: pasted), v2.payload, head)
+        }
+    }
+
     func testV2Refusals() throws {
         let v2 = try FixtureV2.load()
         let good = Data(base64URL: String(v2.url.dropFirst("matchblox://pair?p=".count)))!

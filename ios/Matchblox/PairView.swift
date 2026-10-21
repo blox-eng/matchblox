@@ -2,109 +2,145 @@ import MatchbloxKit
 import NIOSSH
 import SwiftUI
 
-struct PairView: View {
+/// The box takes the link and pairs, with no form: the scan is the consent (design/0009 §6.2, §6.5).
+struct PairingView: View {
     @State var draft: PairDraft
     let store: HostStore
     let onPaired: (Host) -> Void
     let onScanAgain: () -> Void
 
     private enum Phase: Equatable {
-        case ready
         case pairing
-        case failed(String)
+        case paired(Date)
+        /// `address` is true when the host did not answer at the address, so another address can help.
+        case failed(String, address: Bool)
     }
 
-    @State private var phase = Phase.ready
-    @State private var flow: Task<Void, Never>?
+    @State private var phase = Phase.pairing
+    @State private var attempt = 0
     @State private var pulse = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var pairing: Bool { phase == .pairing }
-    private var canPair: Bool {
-        !pairing && !draft.address.trimmingCharacters(in: .whitespaces).isEmpty
+    private var pose: BoxPose {
+        switch phase {
+        case .pairing: .shut
+        case .paired(let start): .open(start)
+        case .failed: .failed
+        }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Pair with \(draft.payload.name)")
-                    .font(.title3)
-                Text("as \(draft.payload.user)")
-                    .foregroundStyle(Theme.muted)
-            }
-            field("Address", text: $draft.address, hint: "Change it if the iPhone can't reach this name.")
-                .keyboardType(.URL)
-            field("iPhone name", text: $draft.phoneName, hint: "\(draft.payload.name) shows this name.")
-            if case .failed(let message) = phase {
-                Text(message)
-                    .foregroundStyle(Theme.neg)
-            }
-            HStack(spacing: 24) {
-                Button(action: startPairing) {
-                    Text(pairing ? "Pairing…" : "Pair")
-                        .opacity(pairing && pulse ? 0.4 : 1)
+        GeometryReader { geo in
+            let box = PairStage.boxFrame(in: geo.size)
+            ZStack(alignment: .topLeading) {
+                MatchBox(pose: pose, label: AnyView(label))
+                    .frame(width: box.width, height: box.height)
+                    .position(x: box.midX, y: box.midY)
+                if case .failed(let message, let address) = phase {
+                    failure(message, address: address)
+                        .padding(.top, box.maxY + 24)
+                        .padding(.horizontal, 24)
                 }
-                .buttonStyle(.borderedProminent)
-                .foregroundStyle(Theme.bg)
-                .disabled(!canPair)
-                Button("Scan again", action: onScanAgain)
-                    .foregroundStyle(Theme.muted)
-                    .disabled(pairing)
             }
-            Spacer()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(24)
+        .ignoresSafeArea(.container)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
-        .onDisappear {
-            flow?.cancel()
-            flow = nil
-        }
-        .onChange(of: pairing) { _, now in
-            guard now, !reduceMotion else {
+        .task(id: attempt) { await pair() }
+        .onChange(of: phase == .pairing, initial: true) { _, pairing in
+            guard pairing, !reduceMotion else {
                 pulse = false
                 return
             }
+            pulse = false
             withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
                 pulse = true
             }
         }
     }
 
-    private func field(_ label: String, text: Binding<String>, hint: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(.footnote)
-                .foregroundStyle(Theme.faint)
-            TextField(label, text: text)
-                .disabled(pairing)
-                .padding(.vertical, 8)
-                .overlay(alignment: .bottom) {
-                    Rectangle().fill(Theme.hair).frame(height: 1)
-                }
-            Text(hint)
-                .font(.footnote)
-                .foregroundStyle(Theme.faint)
+    /// The host's name on the label. It pulses while the app connects: a value that is not known yet.
+    private var label: some View {
+        ZStack {
+            Theme.fg
+            Text(draft.payload.name)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .lineLimit(3)
+                .minimumScaleFactor(0.4)
+                .padding(6)
+                .foregroundStyle(phase == .pairing || isPaired ? Theme.bg : Theme.faint)
+                .opacity(phase == .pairing && pulse ? 0.4 : 1)
         }
     }
 
-    private func startPairing() {
-        guard flow == nil, canPair else { return }
-        phase = .pairing
-        flow = Task { await pair() }
+    private var isPaired: Bool {
+        if case .paired = phase { return true }
+        return false
     }
 
-    /// A new code or a new screen cancels the flow, so an old pairing never opens a console.
+    private func failure(_ message: String, address: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text(message)
+                .foregroundStyle(Theme.neg)
+            if address {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Address")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.faint)
+                    TextField("Address", text: $draft.address)
+                        .keyboardType(.URL)
+                        .padding(.vertical, 8)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(Theme.hair).frame(height: 1)
+                        }
+                }
+            }
+            HStack(spacing: 24) {
+                if address {
+                    Button("Try again") { attempt += 1 }
+                        .buttonStyle(.borderedProminent)
+                        .foregroundStyle(Theme.bg)
+                        .disabled(draft.address.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                Button("Scan again", action: onScanAgain)
+                    .foregroundStyle(Theme.muted)
+            }
+        }
+        .frame(maxWidth: 480, alignment: .leading)
+    }
+
+    /// A new code or a new screen cancels the task, so an old pairing never opens a console.
     private func pair() async {
+        Haptics.prepare()
+        phase = .pairing
         let outcome = await PairFlow.run(draft, store: store)
         guard !Task.isCancelled else { return }
-        flow = nil
         switch outcome {
         case .paired(let host):
+            let clock = ContinuousClock()
+            let start = clock.now
+            phase = .paired(Date())
+            do {
+                try await clock.sleep(until: start + .seconds(MatchBox.strikeAt))
+                Haptics.strike()
+                try await clock.sleep(until: start + .seconds(MatchBox.stoodAt))
+                Haptics.stood()
+            } catch {
+                return
+            }
             onPaired(host)
         case .failed(let message):
-            phase = .failed(message)
+            phase = .failed(message, address: isConnectionFailure(message))
+            Haptics.failed()
+        }
+    }
+
+    /// PairFlow gives only the message, so the message tells the connection failures from the others.
+    private func isConnectionFailure(_ message: String) -> Bool {
+        let address = draft.address.trimmingCharacters(in: .whitespacesAndNewlines)
+        return [ConnectFailure.unreachable, .hostKeyChanged].contains {
+            Pairing.message(for: $0, host: draft.payload.name, address: address) == message
         }
     }
 }
