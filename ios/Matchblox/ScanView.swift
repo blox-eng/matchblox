@@ -151,13 +151,13 @@ enum PairStage {
     }
 }
 
-/// A `bg` backing at 0.8, so that text stays legible over a bright camera.
+/// A `bg` backing at 0.8, so that text stays legible over a bright camera. The padding is always there, so the text does not move when the camera turns ready.
 private struct OverCamera: ViewModifier {
     let on: Bool
 
     func body(content: Content) -> some View {
         content
-            .padding(on ? 16 : 0)
+            .padding(16)
             .background(Theme.bg.opacity(on ? 0.8 : 0), in: RoundedRectangle(cornerRadius: 12))
     }
 }

@@ -40,6 +40,7 @@ struct PairingView: View {
         let box = PairStage.boxFrame(in: screen)
         ZStack {
             MatchBox(pose: pose, label: AnyView(label))
+                .opacity(screen == .zero ? 0 : 1) // no 1 × 1 box before the size is known
                 .frame(width: box.width, height: box.height)
                 .position(x: box.midX, y: box.midY)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
