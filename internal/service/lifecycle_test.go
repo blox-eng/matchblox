@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,7 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/holds"
+	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -24,8 +28,8 @@ import (
 // one in %3.
 func lifeSnap(busy bool) sample.Snapshot {
 	return sample.Snapshot{At: night0, Sessions: []sample.Session{
-		{Agent: "claude", PID: 101, Start: 7, Pane: "%1", Target: "app:1.1", SessionID: "s1", Name: "work", Status: "idle", Idle: 5 * time.Minute, Busy: busy},
-		{Agent: "claude", PID: 102, Start: 7, Pane: "%2", Target: "dev:1.1", SessionID: "s2", Name: "busy", Status: "busy", Busy: true},
+		{Agent: "claude", PID: 101, Start: 7, Pane: "%1", Target: "app:1.1", Cwd: "/work/app", SessionID: "s1", Name: "work", Status: "idle", Idle: 5 * time.Minute, Busy: busy},
+		{Agent: "claude", PID: 102, Start: 7, Pane: "%2", Target: "dev:1.1", Cwd: "/work/app", SessionID: "s2", Name: "busy", Status: "busy", Busy: true},
 		{Agent: "codex", PID: 103, Start: 7, Pane: "%3", Target: "cx:1.1", SessionID: "s3", Name: "cx", Status: "idle", Idle: time.Hour},
 	}, Panes: []sample.Pane{
 		{ID: "%1", Target: "app:1.1"},
@@ -537,5 +541,219 @@ func TestAnotherAgentIsNotCursor(t *testing.T) {
 	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "cursor-agent", Name: "fresh"}))
 	if res.Err != "cursor-agent is not installed here" || len(*ran) != 0 {
 		t.Errorf("err %q ran %q, want it not installed", res.Err, *ran)
+	}
+}
+
+// switchTest is lifeTest with holds kept and /work/app there.
+func switchTest(t *testing.T) (*Service, *[][]string) {
+	t.Helper()
+	s, ran := lifeTest(t)
+	s.IsDir = func(path string) bool { return path == "/work/app" }
+	hs, err := holds.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Holds = hs
+	return s, ran
+}
+
+func switchAct(t *testing.T, pane string, n proto.SwitchAgent) proto.Act {
+	t.Helper()
+	b, err := json.Marshal(n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return consoleAct("switch:"+pane, string(b))
+}
+
+func TestSwitchRespawnsTheAgentInItsPane(t *testing.T) {
+	s, ran := switchTest(t)
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff}))
+	want := [][]string{{"tmux", "respawn-pane", "-k", "-t", "%1", "-c", "/work/app",
+		"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv, "codex", proto.DefaultHandoff}}
+	if res.Err != "" || !slices.EqualFunc(*ran, want, slices.Equal) {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	for _, step := range *ran {
+		if slices.Contains(step, "kill-pane") || slices.Contains(step, "new-session") {
+			t.Fatalf("a switch closed or opened a pane: %q", *ran)
+		}
+	}
+}
+
+func TestSwitchToClaudeKeepsTheName(t *testing.T) {
+	s, ran := switchTest(t)
+	snap := lifeSnap(false)
+	snap.Sessions[2].Cwd = "/work/app"
+	s.publish(snap, func(state.Doc) {})
+	if res := s.act(t.Context(), switchAct(t, "%3", proto.SwitchAgent{Agent: "claude"})); res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	if got := strings.Join((*ran)[0], " "); !strings.HasSuffix(got, " claude --name cx") {
+		t.Fatalf("ran %q", got)
+	}
+}
+
+func TestSwitchToCursorTrusts(t *testing.T) {
+	s, ran := switchTest(t)
+	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "cursor", Handoff: "go on"})); res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	if got := strings.Join((*ran)[0], " "); !strings.HasSuffix(got, " cursor-agent --trust go on") {
+		t.Fatalf("ran %q", got)
+	}
+}
+
+func TestSwitchAsksAgainWhileItWorks(t *testing.T) {
+	s, ran := switchTest(t)
+	res := s.act(t.Context(), switchAct(t, "%2", proto.SwitchAgent{Agent: "codex"}))
+	if res.Err != "busy works: y again switches it mid-turn" || len(*ran) != 0 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	if res := s.act(t.Context(), switchAct(t, "%2", proto.SwitchAgent{Agent: "codex", Anyway: true})); res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+}
+
+func TestSwitchRefuses(t *testing.T) {
+	s, ran := switchTest(t)
+	snap := lifeSnap(false)
+	snap.Sessions = append(snap.Sessions, sample.Session{Agent: "claude", PID: 109, Pane: "%9@mbtest", Name: "stoker", Status: "idle", Cwd: "/work/app"})
+	s.publish(snap, func(state.Doc) {})
+	unconfirmed := switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})
+	unconfirmed.Confirm = ""
+	for _, c := range []struct {
+		a   proto.Act
+		why string
+	}{
+		{unconfirmed, "needs confirm"},
+		{switchAct(t, "%1", proto.SwitchAgent{Agent: "claude"}), "work runs claude already"},
+		{switchAct(t, "%1", proto.SwitchAgent{Agent: "gpt"}), "gpt is not an agent matchblox starts: claude, codex, opencode or cursor-agent"},
+		{switchAct(t, "%1", proto.SwitchAgent{Agent: "opencode"}), "opencode is not installed here"},
+		{switchAct(t, "%77", proto.SwitchAgent{Agent: "codex"}), "no agent session in %77 any more"},
+		{switchAct(t, "%9@mbtest", proto.SwitchAgent{Agent: "codex"}), "the stoker's session keeps its agent"},
+		{switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: "--yolo"}), "the handoff does not start with -"},
+		{switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: "a\x1bb"}), "the handoff must be one line, without control keys"},
+	} {
+		if res := s.act(t.Context(), c.a); res.Err != c.why {
+			t.Errorf("%s %s: want %q, got %q", c.a.RecID, c.a.Text, c.why, res.Err)
+		}
+	}
+	s.IsDir = func(string) bool { return false }
+	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); res.Err != "no directory /work/app" {
+		t.Errorf("want no directory, got %q", res.Err)
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+
+	// A session the stoker drives does not switch another's agent.
+	h, hran := handsLife(t)
+	h.drive("%4")
+	b, _ := json.Marshal(proto.SwitchAgent{Agent: "codex"})
+	res := h.act(t.Context(), proto.Act{RecID: "switch:%1", Confirm: "y", Text: string(b), From: "%4"})
+	if res.Err != "the stoker does not switch agents: the builder does" || len(*hran) != 0 {
+		t.Fatalf("err %q ran %q", res.Err, *hran)
+	}
+}
+
+// lifeStoker turns a stoker run on in a lifeTest service.
+func lifeStoker(t *testing.T, s *Service) {
+	t.Helper()
+	st, err := stoker.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Stoker = st
+	s.Activity = func() time.Time { return time.Time{} }
+	if err := st.Set(stoker.Mode{}.TurnOn(night0)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSwitchTakesTheSeatFromTheStoker(t *testing.T) {
+	s, _ := switchTest(t)
+	lifeStoker(t, s)
+	s.drive("%1")
+	if !s.agentsPane(proto.Act{From: "%1"}) {
+		t.Fatal("the stoker does not drive %1")
+	}
+	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); res.Err != "" || len(res.Ran) != 1 {
+		t.Fatalf("%+v", res)
+	}
+	if s.agentsPane(proto.Act{From: "%1"}) {
+		t.Fatal("the stoker still drives the switched seat")
+	}
+}
+
+func TestSwitchKeepsTheParkOnTheSeat(t *testing.T) {
+	s, _ := switchTest(t)
+	if res := s.act(t.Context(), consoleAct("park:%1", "")); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); res.Err != "" || len(res.Ran) != 1 {
+		t.Fatalf("%+v", res)
+	}
+	if h, ok := s.holdAt("%1"); !ok || h.By != holds.ByYou {
+		t.Fatalf("the park left the seat: %+v %v", h, ok)
+	}
+	// The new agent has no session id yet: the seat is still parked.
+	snap := lifeSnap(false)
+	snap.Sessions[0] = sample.Session{Agent: "codex", PID: 201, Start: 9, Pane: "%1", Target: "app:1.1", Cwd: "/work/app", Name: "work", Status: "idle"}
+	s.publish(snap, func(state.Doc) {})
+	if err := s.messageable("%1", 201); err == nil || err.Error() != "work is parked: z lets it go" {
+		t.Fatalf("messageable %v", err)
+	}
+	if h, ok := s.holdAt("%1"); !ok || h.By != holds.ByYou {
+		t.Fatalf("no hold at the seat before its id: %+v %v", h, ok)
+	}
+	if !s.heldSessions()["s1"] {
+		t.Fatalf("held %v", s.heldSessions())
+	}
+	// Its id shows: the park follows it.
+	snap.Sessions[0].SessionID = "s9"
+	s.publish(snap, func(state.Doc) {})
+	if _, ok := s.Holds.Of("s9"); !ok {
+		t.Fatalf("the park did not follow the new agent: %+v", s.Holds.List())
+	}
+	if _, ok := s.Holds.Of("s1"); ok {
+		t.Fatalf("the old session is still parked: %+v", s.Holds.List())
+	}
+}
+
+func TestASwitchTheGuardStopsLeavesTheHoldAsItWas(t *testing.T) {
+	s, ran := switchTest(t)
+	if res := s.act(t.Context(), consoleAct("park:%1", "")); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	s.Actions.Check = func(advice.Guard) error { return errors.New("another process has pid 101 now") }
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"}))
+	if len(res.Ran) != 0 || len(*ran) != 0 {
+		t.Fatalf("%+v ran %q", res, *ran)
+	}
+	if _, pending := s.Holds.Pending("%1"); pending {
+		t.Fatal("a stopped switch left the hold waiting for a new agent")
+	}
+	if h, ok := s.Holds.Of("s1"); !ok || h.Rebind {
+		t.Fatalf("the park is not as it was: %+v %v", h, ok)
+	}
+}
+
+func TestASwitchForgetsTheOldTurn(t *testing.T) {
+	s, _ := switchTest(t)
+	s.Hook(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", At: night0})
+	if _, ok := s.queued("%1"); !ok {
+		t.Fatal("the turn does not wait")
+	}
+	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); res.Err != "" || len(res.Ran) != 1 {
+		t.Fatalf("%+v", res)
+	}
+	snap := lifeSnap(false)
+	snap.Sessions[0] = sample.Session{Agent: "codex", PID: 201, Start: 9, Pane: "%1", Target: "app:1.1", Cwd: "/work/app", Name: "work", Status: "idle"}
+	s.publish(snap, func(state.Doc) {})
+	// The new agent at rest with no hook yet is guessed to wait, as any is;
+	// the old agent's hooked turn is gone.
+	if it, ok := s.queued("%1"); ok && !it.Estimated {
+		t.Fatalf("the old turn still waits: %+v", it)
 	}
 }
