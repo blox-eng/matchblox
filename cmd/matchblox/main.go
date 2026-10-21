@@ -323,7 +323,7 @@ func newFlags() (*flag.FlagSet, flags) {
 		list:     fl.Bool("list", false, "stoker when: print the run's triggers"),
 		anyway:   fl.Bool("anyway", false, "kill: kill a session that works or waits for you"),
 		where:    fl.String("where", "", "new: the directory, or the repository of --branch (default: here)"),
-		agent:    fl.String("agent", "claude", "new: the agent to start: claude, codex or opencode"),
+		agent:    fl.String("agent", "claude", "new: the agent to start: claude, codex, opencode or cursor-agent"),
 		branch:   fl.String("branch", "", "new: first add a worktree for this new branch, beside the repository"),
 		name:     fl.String("name", "", "new: the name of the session, its tmux session and its agent (default: the directory's)"),
 		noMotion: fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),

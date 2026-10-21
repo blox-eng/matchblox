@@ -265,7 +265,7 @@ func TestNewRefuses(t *testing.T) {
 	for why, n := range map[string]proto.NewSession{
 		"a tmux session is named dev already: choose another name":          {Where: dir, Agent: "claude", Name: "dev"},
 		"opencode is not installed here":                                    {Where: dir, Agent: "opencode", Name: "x"},
-		"aider is not an agent matchblox starts: claude, codex or opencode": {Where: dir, Agent: "aider", Name: "x"},
+		"aider is not an agent matchblox starts: claude, codex, opencode or cursor-agent": {Where: dir, Agent: "aider", Name: "x"},
 		"no directory " + dir + "/nope":                                     {Where: dir + "/nope", Agent: "claude", Name: "x"},
 		"a new session starts in a full path":                               {Where: "rel/dir", Agent: "claude", Name: "x"},
 		"a new worktree needs a git repository: " + dir + " is none":        {Where: dir, Branch: "b", Agent: "claude"},
@@ -434,5 +434,41 @@ func TestANewSessionIsSampledAtOnce(t *testing.T) {
 			t.Fatal("no sample after the new session: it waits for the tick")
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestNewStartsCursor(t *testing.T) {
+	for _, agent := range []string{"cursor-agent", "cursor"} {
+		s, ran := lifeTest(t)
+		dir := t.TempDir()
+		res := s.act(t.Context(), newAct(t, proto.NewSession{Where: dir, Agent: agent, Name: "fresh", First: "fix the build"}))
+		if res.Err != "" || len(*ran) != 1 {
+			t.Fatalf("%s: err %q ran %q", agent, res.Err, *ran)
+		}
+		if got := strings.Join((*ran)[0], " "); !strings.HasSuffix(got, "-c "+dir+" cursor-agent fix the build") {
+			t.Errorf("%s: ran %q", agent, got)
+		}
+	}
+}
+
+// TestNewStartsCursorByAgentWhenOnlyThatIsInstalled: Cursor's installer
+// adds both commands, a hand install may add only `agent`.
+func TestNewStartsCursorByAgentWhenOnlyThatIsInstalled(t *testing.T) {
+	s, ran := lifeTest(t)
+	s.LookPath = func(cmd string) (string, error) {
+		if cmd == "cursor-agent" {
+			return "", exec.ErrNotFound
+		}
+		return "/usr/bin/" + cmd, nil
+	}
+	dir := t.TempDir()
+	if res := s.act(t.Context(), newAct(t, proto.NewSession{Where: dir, Agent: "cursor-agent", Name: "fresh", First: "fix the build"})); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if got := strings.Join((*ran)[0], " "); !strings.HasSuffix(got, "-c "+dir+" agent fix the build") {
+		t.Errorf("ran %q", got)
+	}
+	if !slices.Contains(s.startable(), "cursor-agent") {
+		t.Errorf("startable %q, want cursor-agent", s.startable())
 	}
 }
