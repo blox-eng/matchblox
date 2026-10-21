@@ -191,14 +191,23 @@ func (q *Queue) reply(id string) {
 	delete(q.replies, id)
 }
 
-// Forget drops every hooked session whose last event names pane, and the
-// events it sends from now on: a switch's old agent is gone from the pane,
-// and its late hooks must not speak for the new one.
-func (q *Queue) Forget(pane string, now time.Time) {
+// HookedIn is the ids of the hooked sessions whose last event names pane.
+func (q *Queue) HookedIn(pane string) []string {
+	var ids []string
 	for id, ev := range q.hooked {
-		if ev.Pane != pane {
-			continue
+		if ev.Pane == pane {
+			ids = append(ids, id)
 		}
+	}
+	return ids
+}
+
+// Forget drops the hooked sessions ids, and the events they send from now
+// on: a switch's old agent is gone from its pane, and its late hooks must
+// not speak for the new one. The ids are taken (HookedIn) before the
+// switch, so a new agent that hooks in at once is not forgotten with them.
+func (q *Queue) Forget(ids []string, now time.Time) {
+	for _, id := range ids {
 		delete(q.hooked, id)
 		delete(q.waiting, id)
 		delete(q.seen, id)

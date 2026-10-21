@@ -319,10 +319,19 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	}
 	release := s.holdPane(pane)
 	act := SwitchAction(pane, x, s.seatWindow(pane, x), launchArgv(s.agentBin(n.Agent), n.Agent, x.Name, n.Handoff))
+	s.mu.Lock()
+	old := s.queue.HookedIn(pane)
+	s.mu.Unlock()
 	res := s.Actions.Do(ctx, act, "y")
 	release()
 	if res.Err != "" || len(res.Ran) < len(act.Steps) {
-		if res.Err != "" && len(res.Ran) == len(act.Steps)-1 {
+		switch {
+		case res.Err == "":
+			// A guard stopped a step, maybe after the rename ran: the old
+			// agent still runs, and the switch did not happen.
+			res.Err = strings.Join(res.Skipped, "; ")
+			res.Skipped = nil
+		case len(res.Ran) == len(act.Steps)-1:
 			res.Err += ": the pane may have no agent now"
 		}
 		if held {
@@ -335,7 +344,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	s.undrive(pane)
 	s.renames.drop(pane)
 	s.mu.Lock()
-	s.queue.Forget(pane, s.now())
+	s.queue.Forget(old, s.now())
 	s.cur.Queue = s.queue.Items()
 	s.mu.Unlock()
 	select {
@@ -348,21 +357,39 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 // seatWindow is the name the seat's window takes before a switch, so the
 // new agent is named as the old one was: "" when tmux names the new agent
 // so already. A window tmux names after its command gives way to the tmux
-// session's name, and a window someone named keeps its name.
+// session's name, and a window someone named keeps its name, as does one
+// the seat shares with another pane.
 func (s *Service) seatWindow(pane string, x sample.Session) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, p := range s.cur.Panes {
-		if p.ID != pane {
+	i := slices.IndexFunc(s.cur.Panes, func(p sample.Pane) bool { return p.ID == pane })
+	if i < 0 {
+		return ""
+	}
+	p := s.cur.Panes[i]
+	session, _, _ := strings.Cut(p.Target, ":")
+	if x.Name == "" || x.Name == session || sample.WindowNamed(p, x.Agent) {
+		return ""
+	}
+	server, _ := sample.SplitPane(pane)
+	window := windowOf(p.Target)
+	for _, o := range s.cur.Panes {
+		if o.ID == pane {
 			continue
 		}
-		session, _, _ := strings.Cut(p.Target, ":")
-		if x.Name == "" || x.Name == session || sample.WindowNamed(p, x.Agent) {
+		if srv, _ := sample.SplitPane(o.ID); srv == server && windowOf(o.Target) == window {
 			return ""
 		}
-		return x.Name
 	}
-	return ""
+	return x.Name
+}
+
+// windowOf is the session:window of a pane's session:window.pane target.
+func windowOf(target string) string {
+	if i := strings.LastIndex(target, "."); i >= 0 {
+		return target[:i]
+	}
+	return target
 }
 
 // SwitchAction is what switchAgent runs: one respawn-pane, after naming

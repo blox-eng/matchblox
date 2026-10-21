@@ -580,7 +580,7 @@ func TestAForgottenPaneShowsNoneOfItsOldAgentsWaits(t *testing.T) {
 	if items := q.Items(); len(items) != 1 || items[0].SessionID != "old" {
 		t.Fatalf("the old agent does not wait: %+v", items)
 	}
-	q.Forget("%1", at(1))
+	q.Forget(q.HookedIn("%1"), at(1))
 	next := sample.Session{Pane: "%1", Agent: "codex", Status: "busy", Busy: true}
 	q.Merge([]sample.Session{next}, at(2))
 	if items := q.Items(); len(items) != 0 {
@@ -598,12 +598,29 @@ func TestAForgottenPaneShowsNoneOfItsOldAgentsWaits(t *testing.T) {
 	}
 }
 
+// TestForgetLeavesAnIDThatHookedInAfter: the ids are taken before the
+// switch; a new agent that hooks into the pane before Forget is heard.
+func TestForgetLeavesAnIDThatHookedInAfter(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "old", Pane: "%1", At: at(0)})
+	old := q.HookedIn("%1")
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "new", Pane: "%1", At: at(1)})
+	q.Forget(old, at(2))
+	if q.Pane("old") != "" || q.Pane("new") != "%1" {
+		t.Fatalf("old %q new %q, want only old forgotten", q.Pane("old"), q.Pane("new"))
+	}
+	q.Merge([]sample.Session{{SessionID: "new", Pane: "%1", Agent: "codex", Status: "idle"}}, at(3))
+	if items := q.Items(); len(items) != 1 || items[0].SessionID != "new" || items[0].Estimated {
+		t.Fatalf("the new agent's hook was forgotten: %+v", items)
+	}
+}
+
 // TestAForgottenSessionIsHeardAgainAfterTheGrace: the forgotten id's late
 // hooks are dropped for UnseenGrace, then the queue lets go of it.
 func TestAForgottenSessionIsHeardAgainAfterTheGrace(t *testing.T) {
 	q := New()
 	q.Apply(hooks.Event{Name: "Stop", SessionID: "old", Pane: "%1", At: at(0)})
-	q.Forget("%1", at(1))
+	q.Forget(q.HookedIn("%1"), at(1))
 	late := int(UnseenGrace / time.Second)
 	q.Apply(hooks.Event{Name: "Stop", SessionID: "old", Pane: "%1", At: at(2)})
 	q.Merge([]sample.Session{{SessionID: "old", Pane: "%1", Status: "idle"}}, at(1+late))

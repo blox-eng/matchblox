@@ -801,3 +801,87 @@ func TestASwitchForgetsTheOldTurn(t *testing.T) {
 		t.Fatalf("the old turn still waits: %+v", it)
 	}
 }
+
+// TestASwitchTheGuardStopsAfterTheRenameFails: the window was named, then
+// the guard stopped the respawn. The old agent still runs, so the switch
+// says it did not happen and the hold is as it was.
+func TestASwitchTheGuardStopsAfterTheRenameFails(t *testing.T) {
+	s, ran := switchTest(t)
+	snap := lifeSnap(false)
+	snap.Panes[0].Window = "claude"
+	s.publish(snap, func(state.Doc) {})
+	if res := s.act(t.Context(), consoleAct("park:%1", "")); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	checks := 0
+	s.Actions.Check = func(advice.Guard) error {
+		if checks++; checks == 2 {
+			return errors.New("another process has pid 101 now")
+		}
+		return nil
+	}
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"}))
+	if res.Err != "another process has pid 101 now" || len(res.Skipped) != 0 || len(*ran) != 1 {
+		t.Fatalf("%+v ran %q", res, *ran)
+	}
+	if _, pending := s.Holds.Pending("%1"); pending {
+		t.Fatal("a stopped switch left the hold waiting for a new agent")
+	}
+	if h, ok := s.Holds.Of("s1"); !ok || h.Rebind {
+		t.Fatalf("the park is not as it was: %+v %v", h, ok)
+	}
+}
+
+// TestASharedWindowKeepsItsName: a window tmux named after its command
+// that holds another pane too is not the seat's to rename. A pane of the
+// same name on another server does not share it.
+func TestASharedWindowKeepsItsName(t *testing.T) {
+	for _, c := range []struct {
+		other  string
+		rename bool
+	}{
+		{"%5", false},
+		{"%5@other", true},
+	} {
+		s, ran := switchTest(t)
+		snap := lifeSnap(false)
+		snap.Panes[0].Window = "claude"
+		snap.Panes = append(snap.Panes, sample.Pane{ID: c.other, Target: "app:1.2", Window: "claude", Command: "zsh"})
+		s.publish(snap, func(state.Doc) {})
+		if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); res.Err != "" {
+			t.Fatalf("%s: %+v", c.other, res)
+		}
+		named := slices.Contains((*ran)[0], "rename-window")
+		if named != c.rename {
+			t.Fatalf("%s: ran %q", c.other, *ran)
+		}
+	}
+}
+
+// TestASwitchHearsTheNewAgentThatHooksInAtOnce: the new agent's first hook
+// can land before the switch returns. Only the old agent's ids are
+// forgotten, so the new one is heard.
+func TestASwitchHearsTheNewAgentThatHooksInAtOnce(t *testing.T) {
+	s, _ := switchTest(t)
+	s.Hook(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", At: night0})
+	run := s.Actions.Run
+	s.Actions.Run = func(argv []string) error {
+		if err := run(argv); err != nil {
+			return err
+		}
+		if slices.Contains(argv, "respawn-pane") {
+			s.Hook(hooks.Event{Name: "Stop", SessionID: "s9", Pane: "%1", At: night0.Add(time.Second)})
+		}
+		return nil
+	}
+	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); res.Err != "" {
+		t.Fatalf("%+v", res)
+	}
+	snap := lifeSnap(false)
+	snap.At = night0.Add(2 * time.Second)
+	snap.Sessions[0] = sample.Session{Agent: "codex", PID: 201, Start: 9, Pane: "%1", Target: "app:1.1", Cwd: "/work/app", Name: "work", SessionID: "s9", Status: "idle"}
+	s.publish(snap, func(state.Doc) {})
+	if it, ok := s.queued("%1"); !ok || it.Estimated || it.SessionID != "s9" {
+		t.Fatalf("the new agent's hook was forgotten: %+v %v", it, ok)
+	}
+}
