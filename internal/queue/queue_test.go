@@ -274,8 +274,55 @@ func TestAHookedSessionWorkingThroughSubagentsDoesNotWait(t *testing.T) {
 	q.Apply(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", At: at(0)})
 	q.Merge([]sample.Session{agents}, at(60))
 	q.Merge([]sample.Session{session("s1", "%1", "api", "idle", 0)}, at(120))
-	if items := q.Items(); len(items) != 1 || items[0].State != StateFinished {
-		t.Fatalf("items %+v, want one finished", items)
+	if items := q.Items(); len(items) != 1 || items[0].State != StateFinished || !items[0].Since.Equal(at(120)) {
+		t.Fatalf("items %+v, want one finished since the work ended", items)
+	}
+	// The tools that turn runs send hooks of their own: none of them brings
+	// the wait back while the session works.
+	q = New()
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", At: at(0)})
+	q.Merge([]sample.Session{agents}, at(60))
+	q.Apply(hooks.Event{Name: "PreToolUse", SessionID: "s1", Pane: "%1", At: at(119)})
+	q.Merge([]sample.Session{busy}, at(120))
+	if items := q.Items(); len(items) != 0 {
+		t.Fatalf("items %+v, want none while the results run", items)
+	}
+	// The turn their results ran ends with a Stop: the wait starts there,
+	// not at the turn that dispatched them.
+	q = New()
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", At: at(0)})
+	q.Merge([]sample.Session{agents}, at(60))
+	q.Apply(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", At: at(600)})
+	q.Merge([]sample.Session{session("s1", "%1", "api", "idle", 0)}, at(610))
+	if items := q.Items(); len(items) != 1 || !items[0].Since.Equal(at(600)) {
+		t.Fatalf("items %+v, want one since the last Stop", items)
+	}
+}
+
+// A Stop is merged at once with the last sample, read while its turn still
+// ran: that busy is the past, and the wait shows from the Stop. So does a
+// pane read whose text changes (a status line's clock), which is no work.
+func TestAStopWaitsDespiteAStaleOrPaneBusy(t *testing.T) {
+	busy := session("s1", "%1", "api", "busy", 0)
+	pane := busy
+	pane.FromPane = true
+	for _, tc := range []struct {
+		name string
+		s    sample.Session
+		now  time.Time
+	}{
+		{"a sample from before the Stop", busy, at(9)},
+		{"a sample just after the Stop", busy, at(10).Add(BusyAfter - time.Second)},
+		{"a pane that redraws", pane, at(60)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q := New()
+			q.Apply(hooks.Event{Name: "Stop", SessionID: "s1", Pane: "%1", At: at(10)})
+			q.Merge([]sample.Session{tc.s}, tc.now)
+			if items := q.Items(); len(items) != 1 || !items[0].Since.Equal(at(10)) {
+				t.Fatalf("items %+v, want one since the Stop", items)
+			}
+		})
 	}
 }
 

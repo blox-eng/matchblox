@@ -28,8 +28,9 @@ All notable changes to matchblox are in this file. The format follows
   put the session in "waits for you" while the subagents worked, and while
   the turn their results start ran. Subagent-driven development showed as
   waiting most of the time. A turn that ended asking nothing now stays out
-  of the queue while the session works, and comes back when the work ends.
-  A question or an approval still waits.
+  of the queue while the session works, and comes back when the work ends,
+  waiting since then, not since the turn that dispatched the subagents. A
+  question or an approval still waits.
 - **A peek shows the question, not the progress line under it.** `asks` in
   `matchblox peek` and in the stoker's wakes was the reply's last line,
   often the `Progress [...]` line that ends each reply.
