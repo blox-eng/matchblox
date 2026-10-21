@@ -46,9 +46,10 @@ It starts when you change `ios/`, `testdata/pair/` or the workflow.
 CI has no Secure Enclave, no camera and no Face ID. Do these checks on an
 iPhone before a release. `ws-1` is the host.
 
-1. On the host, run `matchblox pair`. Scan the code with the Camera, then
-   tap Pair. The app opens the console. The host prints
-   `Paired <name> (<fingerprint>)`.
+1. On the host, run `matchblox pair`, or open Pair a device in its console.
+   Scan the code with the app. There is no Pair button: the scan is the
+   consent. The box opens on both screens, then the app opens the console.
+   The host prints `Paired <name> (<fingerprint>)`.
 2. `matchblox devices` on the host lists the iPhone.
 3. Turn the iPhone on its side. The console takes the landscape layout.
    Open the keyboard. The console and the key row fit above it.

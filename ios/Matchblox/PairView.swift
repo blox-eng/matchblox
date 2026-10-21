@@ -239,7 +239,7 @@ enum PairFlow {
             do {
                 stale = try store.upsert(host)
             } catch {
-                return .failed("This iPhone could not save \(label). Free some space on the iPhone, then run matchblox pair on \(label) again.")
+                return .failed("This device could not save \(label). Free some space on this device, then run matchblox pair on \(label) again.")
             }
             for old in stale {
                 try? DeviceKey.remove(host: old.fingerprint)
