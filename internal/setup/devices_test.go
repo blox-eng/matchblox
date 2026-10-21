@@ -781,6 +781,7 @@ func TestSeenAndDeviceNotes(t *testing.T) {
 	}
 
 	at := time.Date(2026, 10, 21, 9, 30, 0, 0, time.UTC)
+	phoneLines(t, home, id, "ba9876543210")
 	if _, _, ok := DeviceIn(home, id); ok {
 		t.Fatal("in before it was marked")
 	}
