@@ -24,7 +24,10 @@ const (
 const BashTool = "Bash"
 
 type Event struct {
-	Name      string    `json:"name"` // Notification | Stop | UserPromptSubmit | SessionStart | SessionEnd | PreToolUse | PostToolUse
+	Name string `json:"name"` // Notification | Stop | UserPromptSubmit | SessionStart | SessionEnd | PreToolUse | PostToolUse
+	// Agent is the agent of an event of another agent's hooks (CursorAgent);
+	// "" is Claude Code's.
+	Agent     string    `json:"agent,omitempty"`
 	Kind      string    `json:"kind,omitempty"`
 	SessionID string    `json:"session_id"`
 	Cwd       string    `json:"cwd,omitempty"`
@@ -72,6 +75,9 @@ type input struct {
 	ToolName         string          `json:"tool_name"`
 	ToolUseID        string          `json:"tool_use_id"`
 	ToolInput        json.RawMessage `json:"tool_input"`
+	// CursorVersion is in every Cursor payload: Cursor can run Claude Code's
+	// hooks too.
+	CursorVersion string `json:"cursor_version"`
 }
 
 var ErrNoSession = errors.New("hooks: the event has no session_id")
@@ -82,6 +88,9 @@ func Parse(stdin io.Reader, name string, env func(string) string) (Event, error)
 	var in input
 	if err := json.NewDecoder(io.LimitReader(stdin, 1<<20)).Decode(&in); err != nil {
 		return Event{}, err
+	}
+	if in.CursorVersion != "" {
+		return Event{}, ErrCursor
 	}
 	if in.SessionID == "" {
 		return Event{}, ErrNoSession

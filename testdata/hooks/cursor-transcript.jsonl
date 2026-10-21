@@ -1,0 +1,3 @@
+{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nCommit the fix\n</user_query>"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"Committed as `fix: the build`.\n\nShall I also push it?"}]}}
+{"type":"turn_ended","status":"success"}
