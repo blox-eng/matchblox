@@ -36,19 +36,21 @@ const (
 var (
 	// permitsRe is an approval prompt, in the agents' own words: OpenCode's
 	// permission box and its choices, aider's (Y)es/(N)o, a [y/n], Codex's
-	// confirm hint, a numbered Yes choice (Claude Code, Codex).
-	permitsRe = regexp.MustCompile(`(?i)^permission required\b|^allow once\b|\(y\)es/\(n\)o|[\[(]y/n[\])]|press enter to confirm|^\d\.\s+yes\b`)
+	// confirm hint, a numbered Yes choice (Claude Code, Codex), Cursor's
+	// Run (once) (y).
+	permitsRe = regexp.MustCompile(`(?i)^permission required\b|^allow once\b|\(y\)es/\(n\)o|[\[(]y/n[\])]|press enter to confirm|^\d\.\s+yes\b|\brun \(once\) \(y\)`)
 	// midRe is a question with a sentence after it.
 	midRe = regexp.MustCompile(`\pL\?\s+\pL`)
-	// hintRe is a line of key hints or a footer, never what the agent said.
-	hintRe = regexp.MustCompile(`(?i)\b(ctrl|shift|alt|esc|enter)\b|^\? for shortcuts|^[~/]\S*`)
+	// hintRe is a line of key hints or a footer, never what the agent said:
+	// Cursor's ends on its model and context use, "Auto · 5.7%".
+	hintRe = regexp.MustCompile(`(?i)\b(ctrl|shift|alt|esc|enter)\b|^\? for shortcuts|^[~/]\S*|\s·\s\d+(\.\d+)?%$`)
 	wordRe = regexp.MustCompile(`\pL\pL`)
 )
 
 type line struct {
 	text    string
 	boxed   bool // inside a box: an input field, a prompt, a quote
-	person  bool // the person's own turn or draft: › or > or ❯ in front
+	person  bool // the person's own turn or draft: › or > or ❯ or Cursor's → in front
 	heading bool // a Markdown heading
 }
 
@@ -235,7 +237,7 @@ func lines(s string) []line {
 		out = append(out, line{
 			text:    t,
 			boxed:   strings.HasPrefix(in, "│") || strings.HasPrefix(in, "┃"),
-			person:  strings.HasPrefix(in, "›") || strings.HasPrefix(in, ">") || strings.HasPrefix(in, "❯"),
+			person:  strings.HasPrefix(in, "›") || strings.HasPrefix(in, ">") || strings.HasPrefix(in, "❯") || strings.HasPrefix(in, "→"),
 			heading: strings.HasPrefix(in, "#"),
 		})
 	}
