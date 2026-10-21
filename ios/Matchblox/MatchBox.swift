@@ -151,7 +151,7 @@ struct MatchBox: View {
         stick.move(to: .zero)
         stick.addLine(to: CGPoint(x: 35, y: 0))
         m.stroke(stick, with: .color(Theme.markStick), style: StrokeStyle(lineWidth: 3, lineCap: .round))
-        m.fill(Path(ellipseIn: CGRect(x: 38 - 3.6, y: -3.6, width: 7.2, height: 7.2)), with: .color(frame.struck ? Theme.accent : Theme.matchHead))
+        m.fill(Path(ellipseIn: CGRect(x: 38 - 3.6, y: -3.6, width: 7.2, height: 7.2)), with: .color(Theme.matchHead))
         guard frame.flame > 0 else { return }
         // The flame grows from its root, the left end of the fire.
         m.translateBy(x: 40.5, y: 0)
@@ -256,7 +256,6 @@ private struct Frame {
     var flame: CGFloat = 0
     var halo: CGFloat = 0
     var lit: Double = 0 // ms since the strike, for the flicker
-    var struck = false // the head has run along the striker
 
     init(at t: Double, still: Bool = false) {
         let openEnd = Step.open, outEnd = openEnd + Step.out, strikeEnd = outEnd + Step.strike, standEnd = strikeEnd + Step.stand
@@ -283,7 +282,6 @@ private struct Frame {
             match = (Geom.upright, 1)
         }
         guard t >= strikeEnd else { return }
-        struck = true
         if still {
             // Reduce Motion: the settled flame, with no spark and no flicker.
             flame = 1
