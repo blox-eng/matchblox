@@ -1,25 +1,38 @@
 import UIKit
 
 /// The haptics of the pair screens (design/0009 §6.2, §6.5). They play also
-/// with Reduce Motion.
+/// with Reduce Motion. One generator of each kind stays, so a prepared one
+/// plays on time.
+@MainActor
 enum Haptics {
+    private static let light = UIImpactFeedbackGenerator(style: .light)
+    private static let rigid = UIImpactFeedbackGenerator(style: .rigid)
+    private static let notice = UINotificationFeedbackGenerator()
+
+    /// Wakes the generators. Call it when pairing starts.
+    static func prepare() {
+        light.prepare()
+        rigid.prepare()
+        notice.prepare()
+    }
+
     /// The scanner found a pair code.
-    @MainActor static func lock() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    static func lock() {
+        light.impactOccurred()
     }
 
     /// The match head reaches the end of the striker.
-    @MainActor static func strike() {
-        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+    static func strike() {
+        rigid.impactOccurred()
     }
 
     /// The match stands and burns: the device is paired.
-    @MainActor static func stood() {
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    static func stood() {
+        notice.notificationOccurred(.success)
     }
 
     /// The pairing failed.
-    @MainActor static func failed() {
-        UINotificationFeedbackGenerator().notificationOccurred(.error)
+    static func failed() {
+        notice.notificationOccurred(.error)
     }
 }

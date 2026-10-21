@@ -151,7 +151,7 @@ struct MatchBox: View {
         stick.move(to: .zero)
         stick.addLine(to: CGPoint(x: 35, y: 0))
         m.stroke(stick, with: .color(Theme.markStick), style: StrokeStyle(lineWidth: 3, lineCap: .round))
-        m.fill(Path(ellipseIn: CGRect(x: 38 - 3.6, y: -3.6, width: 7.2, height: 7.2)), with: .color(Theme.matchHead))
+        m.fill(Path(ellipseIn: CGRect(x: 38 - 3.6, y: -3.6, width: 7.2, height: 7.2)), with: .color(frame.struck ? Theme.accent : Theme.matchHead))
         guard frame.flame > 0 else { return }
         // The flame grows from its root, the left end of the fire.
         m.translateBy(x: 40.5, y: 0)
@@ -256,33 +256,41 @@ private struct Frame {
     var flame: CGFloat = 0
     var halo: CGFloat = 0
     var lit: Double = 0 // ms since the strike, for the flicker
+    var struck = false // the head has run along the striker
 
     init(at t: Double, still: Bool = false) {
-        let out = Step.open, strike = out + Step.out, stand = strike + Step.strike, end = stand + Step.stand
+        let openEnd = Step.open, outEnd = openEnd + Step.out, strikeEnd = outEnd + Step.strike, standEnd = strikeEnd + Step.stand
         switch t {
-        case ..<out:
+        case ..<openEnd:
             drawer = ease(t / Step.open)
-        case ..<stand:
+        case ..<strikeEnd:
             drawer = 1
         default:
-            drawer = 1 - ease((t - stand) / Step.shut)
+            drawer = 1 - ease((t - strikeEnd) / Step.shut)
         }
         switch t {
-        case ..<out:
+        case ..<openEnd:
             break
-        case ..<strike:
+        case ..<outEnd:
             // The match shows in the drawer in the first 20%, then goes to the striker.
-            let p = ease((t - out) / Step.out)
+            let p = ease((t - openEnd) / Step.out)
             match = p < 0.2 ? (Geom.boxed, p / 0.2) : (Geom.boxed.lerp(Geom.strikeFrom, (p - 0.2) / 0.8), 1)
-        case ..<stand:
-            match = (Geom.strikeFrom.lerp(Geom.strikeTo, easeIn((t - strike) / Step.strike)), 1)
-        case ..<end:
-            match = (Geom.strikeTo.lerp(Geom.upright, ease((t - stand) / Step.stand)), 1)
+        case ..<strikeEnd:
+            match = (Geom.strikeFrom.lerp(Geom.strikeTo, easeIn((t - outEnd) / Step.strike)), 1)
+        case ..<standEnd:
+            match = (Geom.strikeTo.lerp(Geom.upright, ease((t - strikeEnd) / Step.stand)), 1)
         default:
             match = (Geom.upright, 1)
         }
-        guard t >= stand else { return }
-        lit = still ? 0 : t - stand
+        guard t >= strikeEnd else { return }
+        struck = true
+        if still {
+            // Reduce Motion: the settled flame, with no spark and no flicker.
+            flame = 1
+            halo = 1
+            return
+        }
+        lit = t - strikeEnd
         let u = lit / Step.spark
         if u < 1 {
             spark = u < 0.3 ? (u / 0.3, 0.4 + 0.8 * u / 0.3) : (1 - (u - 0.3) / 0.7, 1.2 + 0.4 * (u - 0.3) / 0.7)
