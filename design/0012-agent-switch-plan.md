@@ -188,6 +188,7 @@
     - no agent → `switch needs an agent: --agent claude, codex, opencode or cursor-agent`
     - two words → `switch takes one session: matchblox switch <who> --agent <name>`
     - an unknown session → `no session named nope`
+    - a session with no pane (add one to `cliDoc()` if none) → `<who> is outside tmux: nothing to switch`
   - `TestSwitchJumpsOnlyAfterItRan`: drive `cliSwitch` against the fake service the CLI tests use (the `doAct` path in `cli_test.go`). With a result that has `Ran` set, it prints `switched api to codex`, and `jump` gets `[tmux switch-client -t %3]`. With `Err`, `jump` is not called and the error reads `switch api: refused: …`. With `jump == nil` it still prints.
 - [ ] **Step 2: Run** `go test ./cmd/matchblox -run 'TestSwitch' -v`. Expected: FAIL to compile.
 - [ ] **Step 3: Implement.** `cliSwitch` reads the doc and builds the act. It calls `doAct`, and maps errors through `handOutcome(w, "switch", who, res, err)` when anything went wrong. On success it prints `switched <who> to <agent>`, then calls `jump(slices.Concat(sample.TmuxOn(server), []string{"switch-client", "-t", bare}))` when `jump != nil`. A jump error is printed as `switched, but not jumped: <err>` and does not fail the command. Usage line: `matchblox switch <who> --agent <name>  run another agent in the session's pane (--handoff, --anyway)`.
