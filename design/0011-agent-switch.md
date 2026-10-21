@@ -239,9 +239,10 @@ The plan (`design/0012-agent-switch-plan.md`) ruled on these points:
 
 Revised during the build:
 
-- **`queue.Forget` takes the caller's clock:** `Forget(pane, now)`.
+- **`queue.Forget` takes ids and the caller's clock:** `Forget(ids, now)`. The switch takes `HookedIn(pane)` before the respawn and forgets exactly those ids after it, so a new agent whose first hook lands before the switch returns is not forgotten with the old one.
 - **One first-message check.** `proto.CheckFirst` / `proto.ErrDash` serve `new`, the switch service and the console form alike.
-- **The Sessions key line shows `A switch`.** It is dropped first on narrow lines, before `z`.
+- **The Sessions key line shows `A switch`.** It is the first key a short line drops, before `↑↓` and `q`, so the line keeps what it showed before at every width that had no room for it.
 - **A ship with no driver** says "its driver no longer runs", not "outside tmux".
 - **Cursor always starts with `--trust`** (the spec's call). #151 put it in `launchArgv` on main for `new`, and switch starts Cursor through the same `launchArgv`, so this branch adds only its docs line and `TestLaunchArgvOfEachAgent`. That trusts the session's directory without asking; a builder may narrow it later if the trade-off bites.
-- **The seat's name for an agent that keeps none.** The sampler names Codex, OpenCode and Cursor as their tmux window (#151), and `new` and `r` name the window as the seat, so a switch keeps it. When tmux names the window after its command, switch first renames the window to the seat's name; a window someone named otherwise keeps its name.
+- **The seat's name for an agent that keeps none.** The sampler names Codex, OpenCode and Cursor as their tmux window (#151), and `new` and `r` name the window as the seat, so a switch keeps it. When tmux names the window after its command, switch first renames the window to the seat's name; a window someone named otherwise keeps its name, and so does a window the seat shares with another pane. A guard that stops the respawn after the rename ran is reported as a switch that did not happen.
+- **The console plan reads who → what → where,** not argv: `switch <name>: <from> → <to> in <pane>, <cwd>, then jump there`. That line reads clearer than the respawn argv, and neither the console nor the CLI asks the builder to read argv to decide; the service builds and guards the steps.
