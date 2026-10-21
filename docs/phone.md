@@ -6,8 +6,8 @@ into a pane and back without tmux keys.
 
 ## The matchblox app
 
-The matchblox iPhone app is not in the App Store or on TestFlight yet. To
-get it now, build it on a Mac with Xcode: see
+The matchblox app for iPhone and iPad is not in the App Store or on
+TestFlight yet. To get it now, build it on a Mac with Xcode: see
 [ios/README.md](https://github.com/blox-eng/matchblox/blob/main/ios/README.md).
 Without a Mac, use [Without the app](#without-the-app).
 

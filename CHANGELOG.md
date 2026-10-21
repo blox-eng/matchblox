@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The app runs on the iPad.** It was an iPhone app, so an iPad showed it
+  in a small phone window. It now fills the screen and turns to each side.
+- **The app has an icon: the matchblox mark.** It was blank on the home
+  screen. `make icon` makes it from `ios/AppIcon.svg`.
+
 ### Fixed
 
 - **Context use is a share of the session's real window.** A session of a
