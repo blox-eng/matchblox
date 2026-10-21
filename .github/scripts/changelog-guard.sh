@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Fails if the newest released tag has no section in CHANGELOG.md.
+# Fails if the newest released tag has no section in CHANGELOG.md, or if the
+# site's news line does not name it (news-guard.sh).
 #
 # Releases are cut automatically from Conventional Commits, but the changelog is
 # written by hand, so nothing else ties the two together. This gate fails the
@@ -42,3 +43,6 @@ if ! grep -qF "[$version]: https://" "$CHANGELOG"; then
 fi
 
 echo "OK: $tag is documented in $CHANGELOG"
+
+# The site's news line names the same release, as its changelog says it.
+.github/scripts/news-guard.sh "$version"
