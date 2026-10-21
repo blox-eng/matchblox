@@ -314,3 +314,37 @@ func TestTheNewsLineRefusesWhatIsNoVersion(t *testing.T) {
 		t.Fatalf("took a bad version: %v %s", err, out)
 	}
 }
+
+// The news line on the page is what announce-release.sh writes for the
+// release: a hand edit, a reworded headline or a missed announce fails.
+func TestTheNewsGuardKeepsTheLineWithTheChangelog(t *testing.T) {
+	cl, page := file(t, released), file(t, site)
+	if out, err := script(t, "news-guard.sh", "0.4.0", cl, page); err == nil || !strings.Contains(out, "news-guard:") {
+		t.Fatalf("a stale line passed: %v %s", err, out)
+	}
+	if read(t, page) != site {
+		t.Fatal("the guard changed the page")
+	}
+	if out, err := script(t, "announce-release.sh", "0.4.0", cl, page); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if out, err := script(t, "news-guard.sh", "0.4.0", cl, page); err != nil {
+		t.Fatalf("an announced line failed: %v %s", err, out)
+	}
+	if out, err := script(t, "news-guard.sh", "0.4.0", file(t, "## [0.4.0] - 2026-10-11\n\n- A plain line.\n"), page); err == nil {
+		t.Fatalf("a release without a headline passed: %s", out)
+	}
+}
+
+// The site names the newest release in CHANGELOG.md, as announce-release.sh
+// writes it.
+func TestTheSiteNamesTheNewestRelease(t *testing.T) {
+	root := filepath.Join("..", "..")
+	m := regexp.MustCompile(`(?m)^## \[(\d+\.\d+\.\d+[^\]]*)\] - `).FindStringSubmatch(read(t, filepath.Join(root, "CHANGELOG.md")))
+	if m == nil {
+		t.Skip("nothing released yet")
+	}
+	if out, err := script(t, "news-guard.sh", m[1]); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+}
