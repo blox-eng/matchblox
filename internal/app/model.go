@@ -81,7 +81,7 @@ type Options struct {
 	// active last in the home session. Nil: ask tmux. "" or an error: the
 	// builder's.
 	LastClient func() (tty string, created time.Time, err error)
-	// Clip copies text to the builder's clipboard. Nil: OSC 52 on stdout.
+	// Clip copies text to the builder's clipboard. Nil: OSC 52 with the output.
 	Clip func(text string)
 }
 

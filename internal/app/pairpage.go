@@ -1,9 +1,7 @@
 package app
 
 import (
-	"encoding/base64"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -87,18 +85,14 @@ func pairFrame() tea.Cmd {
 	return tea.Tick(splashTick, func(time.Time) tea.Msg { return pairFrameMsg{} })
 }
 
-// osc52 asks the terminal to put text on the clipboard. It works over SSH,
-// and it does not move the cursor.
-func osc52(text string) string {
-	return "\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte(text)) + "\x07"
-}
-
-func (m Model) clip(text string) {
+// clip puts text on the clipboard. Without a Clip, the program writes OSC 52
+// with its output, between frames: it works over SSH and through tmux.
+func (m Model) clip(text string) tea.Cmd {
 	if m.opt.Clip != nil {
 		m.opt.Clip(text)
-		return
+		return nil
 	}
-	_, _ = os.Stdout.WriteString(osc52(text))
+	return tea.SetClipboard(text)
 }
 
 // pairOffer is an Offer that runs off the Update goroutine: it can take
@@ -415,8 +409,8 @@ func (m Model) pairKey(k string) (tea.Model, tea.Cmd) {
 	switch k {
 	case "c":
 		if p.live() {
-			m.clip(p.link)
 			m.flash = "link copied"
+			return m, m.clip(p.link)
 		}
 	case "esc":
 		why := ""

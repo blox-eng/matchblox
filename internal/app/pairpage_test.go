@@ -385,8 +385,13 @@ func TestPairPageCopiesTheLink(t *testing.T) {
 	if m.flash != "link copied" || !strings.Contains(pageText(m), "link copied") {
 		t.Fatalf("flash = %q", m.flash)
 	}
-	if got := osc52("x"); got != "\x1b]52;c;eA==\x07" {
-		t.Fatalf("osc52 = %q", got)
+
+	// Without a Clip, the program writes OSC 52 with its own output, between
+	// frames: Update writes nothing.
+	m.opt.Clip = nil
+	next, cmd := key(m, "c")
+	if cmd == nil || cmd() != tea.SetClipboard(m.pair.link)() || next.(Model).flash != "link copied" {
+		t.Fatal("c does not ask the program to set the clipboard")
 	}
 }
 
