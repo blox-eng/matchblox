@@ -1,0 +1,5 @@
+# Fake /proc fixtures under testdata/*/proc/*/cwd symlink to / (and other
+# absolute paths). Cursor's indexer follows them with rg --follow and walks
+# the whole disk — sessions hang on "Working". Keep the fixtures for tests;
+# just do not index or @-mention them.
+testdata/
