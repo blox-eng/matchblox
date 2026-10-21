@@ -194,8 +194,7 @@ func (q *Queue) reply(id string) {
 // Forget drops every hooked session whose last event names pane, and the
 // events it sends from now on: a switch's old agent is gone from the pane,
 // and its late hooks must not speak for the new one.
-func (q *Queue) Forget(pane string) {
-	now := time.Now()
+func (q *Queue) Forget(pane string, now time.Time) {
 	for id, ev := range q.hooked {
 		if ev.Pane != pane {
 			continue
