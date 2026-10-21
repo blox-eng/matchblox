@@ -8,6 +8,10 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- **The phone shows the console's glyphs, not `_`.** The app's ssh session
+  sends no locale, so tmux took the phone for an ASCII terminal and drew
+  each match, bar, `▰`, `●` and `◂ matchblox` as `_`. The console now
+  starts tmux with `-u`, so its client is UTF-8 whatever the locale.
 - **Context use is a share of the session's real window.** A session of a
   1M model, such as Opus 5.5 without `[1m]` in the model setting, showed
   its context against 200k: 99% while it had room for 800k more, then 20%
