@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -75,6 +76,8 @@ func TestWayBackParses(t *testing.T) {
 	if err != nil || stderr.Len() > 0 {
 		t.Fatalf("tmux: %v\n%s", err, stderr.String())
 	}
+	// tmux 3.8 pads list-keys with a column of its own: "bind-key  -T".
+	out = regexp.MustCompile(` {2,}`).ReplaceAll(out, []byte(" "))
 	for _, want := range []string{
 		"bind-key -T prefix m switch-client -t =matchblox",
 		`"switch-client -t =matchblox"`,
