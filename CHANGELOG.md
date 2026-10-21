@@ -39,6 +39,12 @@ All notable changes to matchblox are in this file. The format follows
 - **Build the app again with this release.** An older app cannot read the
   v2 link and says "This code is damaged…". The new app reads v1 and v2.
 
+### Security
+
+- **Built with Go 1.26.10.** It fixes ten advisories in Go's own `net/http`,
+  `net/textproto`, `crypto/tls` and `crypto/x509` (GO-2026-6603 to 6617 and
+  GO-2026-6809), which Cursor's usage call makes reachable.
+
 ## [0.12.0] - 2026-10-21
 
 ### Added
