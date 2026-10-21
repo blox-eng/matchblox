@@ -493,6 +493,28 @@ func TestPairPageWithoutTheBinaryWritesNoKey(t *testing.T) {
 	}
 }
 
+// Every failed offer says the two ways on: Enter and esc.
+func TestAFailedOfferSaysTheKeys(t *testing.T) {
+	r, m := newPairRig(t)
+	m.opt.Pair = testPairHost(r.home, "", filepath.Join(t.TempDir(), "host.pub"))
+	m, cmd := m.openPairPage()
+	m = offered(t, m, cmd)
+	if !strings.Contains(pageText(m), "Enter tries again · esc goes back") {
+		t.Fatalf("no key line:\n%s", pageText(m))
+	}
+	m.opt.Pair = testPairHost(r.home, pairExe, filepath.Join(t.TempDir(), "host.pub"))
+	next, cmd := key(m, "enter")
+	if m = offered(t, next.(Model), cmd); m.pair == nil || !m.pair.failed {
+		t.Fatalf("Enter did not try again: %+v", m.pair)
+	}
+	if !strings.Contains(pageText(m), "Enter tries again · esc goes back") {
+		t.Fatalf("no key line after the retry:\n%s", pageText(m))
+	}
+	if next, _ = key(m, "esc"); next.(Model).pair != nil {
+		t.Fatal("esc did not go back")
+	}
+}
+
 // claimedPage is a page whose code a device took: beat 2, with the device's
 // own console not in yet. The last client is the builder's terminal.
 func claimedPage(t *testing.T) (*pairRig, Model, *string) {

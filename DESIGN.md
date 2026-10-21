@@ -490,7 +490,8 @@ Reduce Motion.
     is in. Answer an agent from it, or esc to go back.`, `<name> <verb>
     <session>`, `The code expired. Enter pairs again.` and `The code
     expired. Run matchblox pair again.`, `Stopped. The code no longer
-    works.`
+    works.`, and under an offer that failed, `Enter tries again · esc goes
+    back`.
   - Guard: `Pair from the host's own terminal.` and `Remove devices from the
     host's own terminal.`
   - Door: `Pair a device`, `answer your agents from your phone`.

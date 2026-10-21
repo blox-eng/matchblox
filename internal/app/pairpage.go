@@ -22,10 +22,11 @@ const (
 )
 
 const (
-	pairScanLine    = "Scan with the matchblox app, or paste the link."
-	pairKeyLine     = "c copies the link · esc stops"
-	pairStoppedLine = "Stopped. The code no longer works."
-	pairSmallLine   = "Make this terminal 61 × 33 or larger to show the code, or press c to copy the link."
+	pairScanLine      = "Scan with the matchblox app, or paste the link."
+	pairKeyLine       = "c copies the link · esc stops"
+	pairFailedKeyLine = "Enter tries again · esc goes back"
+	pairStoppedLine   = "Stopped. The code no longer works."
+	pairSmallLine     = "Make this terminal 61 × 33 or larger to show the code, or press c to copy the link."
 )
 
 // PairDevice is a device that claimed a pair code, as setup.Device.
@@ -450,8 +451,11 @@ func (m Model) pairView(w int) string {
 		line += "   " + m.st.muted.Render(fmt.Sprintf("%d:%02d", int(left.Minutes()), int(left.Seconds())%60))
 	}
 	var keys []string
-	if p.live() {
+	switch {
+	case p.live():
 		keys = append(keys, m.st.muted.Render(pairKeyLine))
+	case p.failed && !p.standalone:
+		keys = append(keys, m.st.muted.Render(pairFailedKeyLine))
 	}
 	if m.flash != "" {
 		keys = append(keys, m.st.text.Render(m.flash))
