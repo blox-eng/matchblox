@@ -17,7 +17,7 @@ import (
 
 func TestHomeArgvOutsideTmux(t *testing.T) {
 	got := HomeArgv(false, true, []string{"/usr/local/bin/matchblox", "--no-motion"})
-	want := []string{"tmux", "new-session", "-A", "-s", "matchblox", "-e", "MATCHBLOX_HOME=1", "/usr/local/bin/matchblox", "--no-motion"}
+	want := []string{"tmux", "-u", "new-session", "-A", "-s", "matchblox", "-e", "MATCHBLOX_HOME=1", "/usr/local/bin/matchblox", "--no-motion"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
