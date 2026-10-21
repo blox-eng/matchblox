@@ -110,6 +110,64 @@ not limited to Codex-style pane guessing.
 - **Login.** `agent status` prints "✓ Logged in as …" and the team. No auth
   file was found under `~/.cursor`.
 
+## Live run (2026-10-21, interactive `agent --trust` in a tmux pane, project `.cursor/hooks.json`)
+
+- **Process.** The interactive session's argv is
+  `/Users/<u>/.local/bin/agent --use-system-ca …/cursor-agent/versions/<ver>/index.js --trust`.
+  argv[0] is the launcher path (`agent` or `cursor-agent`) and the comm is
+  `node`. Its child is `…/versions/<ver>/node …/index.js worker-server`.
+  The child also runs `npm exec typescript-language-server`. `underAgent`
+  already drops nested agents, but the worker must not match on its own
+  either: after `agent -p` exits it outlives its parent.
+- **Hooks fire with `TMUX_PANE` and `TMUX` set**, from the pane's server.
+- **Order of one turn with an approval:**
+  1. `beforeSubmitPrompt`
+  2. `preToolUse` (`tool_name: "Shell"`, `tool_input.command`,
+     `tool_use_id`)
+  3. `beforeShellExecution`
+  4. the menu draws and waits; no hook fires
+  5. `y`
+  6. `postToolUse`
+  7. `stop` (`status: "completed"`, token counts)
+  8. `afterAgentResponse` (`text`), which comes **after** `stop`
+- **Interrupting and quitting.** Esc mid-turn gives `stop` with
+  `status: "aborted"`. Ctrl-C twice gives `stop` with `status: "error"`,
+  then `sessionEnd` with `reason`, `final_status`, and `duration_ms`.
+- **Ids.** Every payload has `session_id` equal to `conversation_id`. It
+  is the chat id, the same as the `agent-transcripts/<id>/` directory.
+  `transcript_path` is null on `sessionStart` and `beforeSubmitPrompt`,
+  and set from the first tool call on.
+- **An invalid key disables everything.** A `hooks.json` that listed
+  `notification` ran no hook at all, and nothing was logged. Without
+  `notification`, every listed hook fired.
+- **No Claude-format hooks by default.** The bundle has paths for
+  `~/.claude/settings.json` and project `.claude/settings.json`, but a
+  project `.claude/settings.json` hook did not fire with default
+  settings. matchblox's Claude hooks therefore don't double up with
+  Cursor's today.
+  - **Risk to handle:** if a user turns on Cursor's Claude-hooks
+    compatibility, Cursor would also call `matchblox hook <ClaudeEvent>`
+    with Cursor payloads.
+  - The Claude parser should drop a payload that has `cursor_version`, so
+    Cursor's own hook is the one source.
+- **Approval menu in the pane** (the `said` patterns come from this):
+  ```
+  $ touch second.txt && date Waiting for approval...
+   $  touch second.txt && date in .
+   Run this command?
+   Not in allowlist: date, touch
+    → Run (once) (y)
+      Add Shell(touch), Shell(date) to allowlist? (tab)
+      Run Everything (shift+tab)
+      Skip & tell the agent what to do instead (esc or n)
+  ```
+  - At rest the prompt line reads `→ Add a follow-up` (`→ Plan, search,
+    build anything` before the first prompt).
+  - While working, the line shows `ctrl+c to stop` on the right.
+- **Context in the status bar.** The status bar shows `Auto · 5.7%`,
+  which is the model plus context use. That is a cheap source for the
+  later context pass.
+
 ## How it fits matchblox today
 
 - No agent interface exists. Agents are names in `setup.KnownAgents`,
@@ -150,8 +208,16 @@ not limited to Codex-style pane guessing.
     interrupted it on purpose.
   - `sessionStart` → SessionStart
   - `sessionEnd` → SessionEnd
-  - `notification` → Notification
+  - `stop` with `status: "error"` → treated like aborted. It fires when
+    Ctrl-C quits an idle session, just before `sessionEnd`.
   - `postToolUse` → PostToolUse, which clears a permission wait.
+
+  `notification` is **never written to `hooks.json`**. Cursor accepts the
+  name in its bundle, but a file that lists it is silently ignored as a
+  whole (verified live). The door writes only the five events above:
+  `sessionStart`, `sessionEnd`, `beforeSubmitPrompt`, `stop`, and
+  `postToolUse`. A test pins that list, because one invalid key turns
+  every hook off.
 
   `preToolUse` is **not installed** in this pass. The Cursor path never
   runs the merge guard and never prints Claude's `hookSpecificOutput`. It
@@ -168,12 +234,15 @@ not limited to Codex-style pane guessing.
     Cursor session and is dropped.
   - A `-p` run inside a pane that already runs interactive Cursor is
     still possible, but rare. That is accepted for now.
-- **Permits on hooked Cursor sessions still come from the pane.**
+- **Permits on hooked Cursor sessions come from the pane.** The live run
+  showed that no hook fires when Cursor starts waiting for approval
+  (`preToolUse` and `beforeShellExecution` fire just before the menu
+  draws, and for allowlisted commands too). So the pane is the only
+  source.
   `Queue.Merge` takes a hooked session's state from hooks only. For
   sessions whose agent is `cursor-agent`, it also takes `s.Permits` /
   `s.Asks` from the pane while the last hook event is not a Stop. Claude's
-  path does not change. If a live run shows that Cursor's `notification`
-  fires on permission prompts, the pane check stays as a backstop.
+  path does not change.
 - **SessionStart's progress prompt.** For Claude, the SessionStart hook
   injects the progress prompt. It is added for Cursor only if Cursor's
   `sessionStart` supports `additional_context`. Otherwise it is skipped.
@@ -188,12 +257,8 @@ not limited to Codex-style pane guessing.
 
 ## Left to the builder
 
-- Exact regexes for Cursor's permission and approval prompts in the pane
-  (`said`). Start a real interactive `agent` in tmux and capture them.
-- Whether `notification` fires on a permission prompt in the CLI. Verify
-  with a live run. The pane check above covers permits either way.
-- Confirm that `$TMUX_PANE` and `$TMUX` reach Cursor's hook process. If
-  they do not, join by `workspace_roots` and chat id instead, and say so
-  in the plan.
+- The exact `said` regexes. Build them from the captured screens below.
+- Whether `sessionStart` can return `additional_context` for the progress
+  prompt. Test it live, and drop the prompt for Cursor if it can't.
 - Test structure, fixture names, and how much of the demo or golden
   screens to touch.
