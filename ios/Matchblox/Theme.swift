@@ -9,6 +9,18 @@ enum Theme {
     static let hair = Color(hex: 0x2E2921)
     static let accent = Color(hex: 0xC3A56A)
     static let neg = Color(hex: 0xB0563F)
+
+    // The match and the mark.
+    static let flame = Color(hex: 0xE8822E)
+    static let flameAmber = Color(hex: 0xF5A54A)
+    static let flameCore = Color(hex: 0xFFD27A)
+    static let matchHead = Color(hex: 0xC2452D)
+    static let markTop = Color(hex: 0x3A3328)
+    static let markLeft = Color(hex: 0x1C1914)
+    static let markRight = Color(hex: 0x2A251D)
+    static let markTray = Color(hex: 0x15120E)
+    static let markStriker = Color(hex: 0x5A4128)
+    static let markStick = Color(hex: 0xC9A877)
 }
 
 private extension Color {
