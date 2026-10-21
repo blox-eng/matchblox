@@ -1,6 +1,6 @@
 # Switch agent on a session: design
 
-Date: 2026-10-21. Status: draft. Issue: #143.
+Date: 2026-10-21. Status: built. Issue: #143.
 Depends on: Cursor as a first-class agent (`design/0009-cursor-agent.md`, #142).
 
 ## Intent
@@ -225,3 +225,22 @@ switch work: claude → cursor-agent
 - Full transcript import across harnesses.
 - Non-tmux switch (#86).
 - Changing squash-only merge policy or release process.
+
+## Revised while building
+
+The plan (`design/0012-agent-switch-plan.md`) ruled on these points:
+
+- **Key `A`, not `S`.** `S` already reverses the sort (`internal/app/model.go:755`). `A` is free and stands for "agent".
+- **Claude's own name** comes from `--name <name>` in `launchArgv` at respawn. No `/rename` step is needed.
+- **Cursor account usage: #148 shipped the account, plan usage stays deferred.** Since #148, Sessions and USAGE show Cursor's account (email and team, from `~/.cursor/cli-config.json`, marked `⬢`), and its context comes from Cursor's status line. Plan *usage* figures still have no cheap source. A spike on 2026-10-21 (CLI 2026.10.19-6bbf2c4) found `agent status` saying "Logged in (unable to fetch user details)", `agent about` saying "Subscription Tier Unknown", and no figures in `~/.cursor/*.json`. As the spec allows, this plan adds nothing for usage and shows no fake figures.
+- **The stoker never switches.** An act from the stoker's server, or from a pane it drives, is refused. The spec only says the stoker's own session cannot be switched.
+- **The CLI jumps** with `tmux switch-client -t <pane>` when `TMUX` is set (the spec's default).
+- **The CLI refusal keeps kill's shape** (`work works: y again switches it mid-turn`; docs name `--anyway`). It does not print the plan.
+
+Revised during the build:
+
+- **`queue.Forget` takes the caller's clock:** `Forget(pane, now)`.
+- **One first-message check.** `proto.CheckFirst` / `proto.ErrDash` serve `new`, the switch service and the console form alike.
+- **The Sessions key line shows `A switch`.** It is dropped first on narrow lines, before `z`.
+- **A ship with no driver** says "its driver no longer runs", not "outside tmux".
+- **Cursor always starts with `--trust`** (the spec's call). That trusts the session's directory without asking; a builder may narrow it later if the trade-off bites.
