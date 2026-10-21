@@ -114,3 +114,26 @@ func TestCursorUsageFillsItsLine(t *testing.T) {
 		t.Errorf("on: %+v, want the month's 25%%", a)
 	}
 }
+
+// TestAnAgentWithoutANameIsCalledAsItsTmuxWindow: an agent that keeps no
+// name of its own (Cursor, Codex) is named as its window, which a rename
+// sets; a window tmux named after the command gives way to the session.
+func TestAnAgentWithoutANameIsCalledAsItsTmuxWindow(t *testing.T) {
+	root := copyFixture(t)
+	for i, p := range []struct{ target, window string }{
+		{"pintelektdev:1.1", "pintelektdev"}, // renamed by matchblox, or tmux
+		{"web:1.1", "node"},                  // tmux's automatic name
+	} {
+		pid, pane := 950+i, "%"+strconv.Itoa(40+i)
+		addProc(t, root, pid, 1, "node", []string{"/home/user/.local/bin/agent", "--use-system-ca", cursorJS}, pane)
+		addPane(t, root, pane+"\t"+p.target+"\t"+p.window+"\t"+strconv.Itoa(pid)+"\tnode\t/work")
+	}
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", CursorAgent}
+	got := byPane(smp.Sample())
+	for pane, want := range map[string]string{"%40": "pintelektdev", "%41": "web"} {
+		if got[pane].Name != want {
+			t.Errorf("pane %s: name %q, want %q", pane, got[pane].Name, want)
+		}
+	}
+}

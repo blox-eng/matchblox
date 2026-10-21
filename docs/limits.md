@@ -28,7 +28,7 @@ What does not work yet, and what to do until it does.
 | tmux only | Run your agents in tmux. |
 | New session starts Claude Code, Codex, OpenCode and Cursor only | Start another agent in tmux yourself: Sessions shows it all the same. |
 | New session finds an agent on the service's `PATH` | An agent that is a shell alias, or on a `PATH` only your shell sets, is not offered. Put it on the `PATH` the service runs with, or start it yourself. |
-| Rename names a Codex, OpenCode or Cursor agent in tmux only | They keep no name of their own. Claude Code takes `/rename` at rest, so a busy session is renamed when it rests. |
+| Rename names a Codex, OpenCode or Cursor agent in tmux only | They keep no name of their own: Sessions shows them by their tmux window. Claude Code takes `/rename` at rest, so a busy session is renamed when it rests. |
 | No native Windows | Use Linux or macOS. |
 | One host on a screen | `esc` goes back to Hosts. |
 

@@ -39,6 +39,14 @@ All notable changes to matchblox are in this file. The format follows
 - **Build the app again with this release.** An older app cannot read the
   v2 link and says "This code is damaged…". The new app reads v1 and v2.
 
+### Fixed
+
+- **A renamed Cursor, Codex or OpenCode session shows its new name.** An
+  agent that keeps no name of its own is named as its tmux window (which
+  `r` renames), or its tmux session, no longer as its command.
+- **`matchblox new` starts Cursor trusting the folder you chose**
+  (`--trust`), so it does not stop at Cursor's trust prompt.
+
 ### Security
 
 - **Built with Go 1.26.10.** It fixes ten advisories in Go's own `net/http`,

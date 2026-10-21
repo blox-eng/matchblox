@@ -681,7 +681,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			sess.Context = "unmeasured"
 		}
 		if sess.Name == "" {
-			sess.Name = agent
+			sess.Name = tmuxName(pane, agent)
 		}
 		if sess.SessionID == "" && paneID != "" {
 			fromPane = append(fromPane, len(snap.Sessions))
@@ -781,6 +781,19 @@ func (s *Sampler) agentName(pid int, p procfs.Proc) string {
 }
 
 type agentRef struct{ comm, name string }
+
+// tmuxName names an agent that keeps no name of its own as its tmux window,
+// which a rename sets; a window tmux named after the command it runs gives
+// way to the session's name, and no pane to the agent's.
+func tmuxName(p Pane, agent string) string {
+	if w := p.Window; w != "" && w != p.Command && w != filepath.Base(p.Command) && w != agent {
+		return w
+	}
+	if session, _, ok := strings.Cut(p.Target, ":"); ok && session != "" {
+		return session
+	}
+	return agent
+}
 
 // CursorAgent is Cursor's CLI, by the command its installer adds beside
 // `agent`.
