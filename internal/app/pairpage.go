@@ -377,7 +377,7 @@ func (m Model) pairActed(a action) Model {
 		return m
 	}
 	_, tty, found := h.DeviceIn(p.device.ID)
-	if !found || tty == "" || m.lastClient() != tty {
+	if last, _ := m.lastClient(); !found || tty == "" || last != tty {
 		return m
 	}
 	verb, pane := "acted in", a.rec

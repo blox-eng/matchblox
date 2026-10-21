@@ -506,7 +506,7 @@ func claimedPage(t *testing.T) (*pairRig, Model, *string) {
 		}
 	}
 	tty := "/dev/ttys001"
-	m.opt.LastClient = func() (string, error) { return tty, nil }
+	m.opt.LastClient = func() (string, time.Time, error) { return tty, time.Time{}, nil }
 	return r, m, &tty
 }
 
@@ -642,7 +642,7 @@ func TestBeatFourOnAPeekAnswer(t *testing.T) {
 		}
 	}
 	m, f := loadedWith(t, 100, st)
-	m.opt.LastClient = func() (string, error) { return phoneTTY, nil }
+	m.opt.LastClient = func() (string, time.Time, error) { return phoneTTY, time.Time{}, nil }
 	m.opt.Pair = &PairHost{DeviceIn: func(id string) (time.Time, string, bool) { return time.Now(), phoneTTY, id == "iPad-id" }}
 	next, _ := key(m, "down") // app-review finished its turn
 	next, _ = key(next, "a")
@@ -665,11 +665,11 @@ func TestBeatFourOnAPeekAnswer(t *testing.T) {
 	}
 
 	// An act the builder sent, and an act that names no session, do not count.
-	m.opt.LastClient = func() (string, error) { return "/dev/ttys001", nil }
+	m.opt.LastClient = func() (string, time.Time, error) { return "/dev/ttys001", time.Time{}, nil }
 	if got := m.pairActed(action{rec: "answer:%2"}); got.pair.beat != 3 {
 		t.Fatal("the builder's act counted")
 	}
-	m.opt.LastClient = func() (string, error) { return phoneTTY, nil }
+	m.opt.LastClient = func() (string, time.Time, error) { return phoneTTY, time.Time{}, nil }
 	if got := m.pairActed(action{rec: "door:guide"}); got.pair.beat != 3 {
 		t.Fatal("a door act counted")
 	}
@@ -688,7 +688,7 @@ func TestTheStripHandsTheConsoleBack(t *testing.T) {
 	m, f := loadedWith(t, 100, st)
 	now := time.Date(2026, 10, 21, 14, 32, 0, 0, time.UTC)
 	m.opt.Now = func() time.Time { return now }
-	m.opt.LastClient = func() (string, error) { return phoneTTY, nil }
+	m.opt.LastClient = func() (string, time.Time, error) { return phoneTTY, time.Time{}, nil }
 	m.opt.Pair = &PairHost{DeviceIn: func(id string) (time.Time, string, bool) { return now, phoneTTY, id == "iPad-id" }}
 	m.pair = &pairPage{beat: 3, line: "iPad is in. Answer an agent from it, or esc to go back.", device: PairDevice{Name: "iPad", ID: "iPad-id"}}
 	if out := ansi.Strip(m.render()); !strings.Contains(out, "iPad is in. Answer an agent from it, or esc to go back.") || !strings.Contains(out, "SESSIONS") && !strings.Contains(out, "api") {
@@ -770,7 +770,7 @@ func TestPairPageOpensAgainAfterAFold(t *testing.T) {
 			if m, cmd = pump(t, m, cmd); m.pair == nil || m.pair.beat != 3 {
 				t.Fatalf("no beat 3: %+v", m.pair)
 			}
-			m.opt.LastClient = func() (string, error) { return phoneTTY, nil }
+			m.opt.LastClient = func() (string, time.Time, error) { return phoneTTY, time.Time{}, nil }
 			m = m.pairActed(action{rec: "answer:%2"})
 			r.now = r.now.Add(pairActFold)
 			return pump(t, m, cmd)
@@ -788,7 +788,7 @@ func TestPairPageOpensAgainAfterAFold(t *testing.T) {
 					m.all.sessions[i].Name = "api"
 				}
 			}
-			m.opt.LastClient = func() (string, error) { return "/dev/ttys001", nil }
+			m.opt.LastClient = func() (string, time.Time, error) { return "/dev/ttys001", time.Time{}, nil }
 			m, cmd := m.openPairPage()
 			m, cmd = pump(t, m, cmd) // the offer
 			if m.pair == nil || m.pair.link == "" || cmd == nil {
@@ -805,7 +805,7 @@ func TestPairPageOpensAgainAfterAFold(t *testing.T) {
 			}
 			m, _ = pump(t, m, cmd) // what the fold left runs out
 
-			m.opt.LastClient = func() (string, error) { return "/dev/ttys001", nil }
+			m.opt.LastClient = func() (string, time.Time, error) { return "/dev/ttys001", time.Time{}, nil }
 			m, cmd = m.openPairPage()
 			m, cmd = pump(t, m, cmd)
 			if m.pair == nil || m.pair.link == "" || cmd == nil {
