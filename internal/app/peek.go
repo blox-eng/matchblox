@@ -321,6 +321,7 @@ func (m Model) sendPeek(s sample.Session, rec, text string) (tea.Model, tea.Cmd)
 	}
 	m.peekSent["a"+strconv.Itoa(m.acts)] = s.Name
 	toast := m.say("sending to " + s.Name + "…")
+	m = m.pairActed(action{rec: rec})
 	return m.peekNext(s.Pane), tea.Batch(cmd, toast)
 }
 

@@ -358,8 +358,8 @@ func (m Model) pairActed(a action) Model {
 	if p == nil || p.standalone || p.beat != 3 || h == nil || h.DeviceIn == nil {
 		return m
 	}
-	_, tty, ok := h.DeviceIn(p.device.ID)
-	if !ok || tty == "" || m.lastClient() != tty {
+	_, tty, found := h.DeviceIn(p.device.ID)
+	if !found || tty == "" || m.lastClient() != tty {
 		return m
 	}
 	verb, pane := "acted in", a.rec
@@ -376,10 +376,11 @@ func (m Model) pairActed(a action) Model {
 			verb = "compacted"
 		}
 	}
-	who := pane
-	if s, ok := m.sessionIn(pane); ok {
-		who = s.Name
+	s, ok := m.sessionIn(pane)
+	if !ok {
+		return m // the rec names no session (door:, stoker:): not an act in one
 	}
+	who := s.Name
 	next := *p
 	next.beat, next.line = 4, fmt.Sprintf("%s %s %s", p.device.Name, verb, who)
 	next.foldAt = m.now().Add(pairActFold)

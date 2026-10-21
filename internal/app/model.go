@@ -765,7 +765,8 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 				m.flash = s.Name + " is outside tmux: nothing to park"
 				break
 			}
-			return m, m.send(proto.Act{RecID: "park:" + s.Pane})
+			cmd := m.send(proto.Act{RecID: "park:" + s.Pane})
+			return m.pairActed(action{rec: "park:" + s.Pane}), cmd
 		}
 	case "space", " ":
 		if m.tab == tabGit {

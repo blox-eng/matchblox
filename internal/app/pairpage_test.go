@@ -631,3 +631,46 @@ func TestEscFoldsAtBeatThree(t *testing.T) {
 		t.Fatal("esc did not fold the page")
 	}
 }
+
+// TestBeatFourOnAPeekAnswer: the peek sends its answer without confirm. The
+// phone answers while the page waits at beat 3.
+func TestBeatFourOnAPeekAnswer(t *testing.T) {
+	st := queueState()
+	for i := range st.Sessions {
+		if st.Sessions[i].Pane == "%2" {
+			st.Sessions[i].Name = "api"
+		}
+	}
+	m, f := loadedWith(t, 100, st)
+	m.opt.LastClient = func() (string, error) { return phoneTTY, nil }
+	m.opt.Pair = &PairHost{DeviceIn: func(id string) (time.Time, string, bool) { return time.Now(), phoneTTY, id == "iPad-id" }}
+	next, _ := key(m, "down") // app-review finished its turn
+	next, _ = key(next, "a")
+	next = typeText(next, "ok")
+	m = next.(Model)
+	m.pair = &pairPage{beat: 3, device: PairDevice{Name: "iPad", ID: "iPad-id"}}
+	// The page takes keys, so the peek's Enter is its own call.
+	v, p, _ := m.peekNow()
+	if p.pane != "%2" {
+		t.Fatalf("peek on %q", p.pane)
+	}
+	next, cmd := m.sendPeek(v.s, "answer:%2", "ok")
+	drain(cmd)
+	got := next.(Model)
+	if got.pair == nil || got.pair.beat != 4 || got.pair.line != "iPad answered api" {
+		t.Fatalf("page %+v", got.pair)
+	}
+	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "answer:%2" {
+		t.Fatalf("acts %+v", acts)
+	}
+
+	// An act the builder sent, and an act that names no session, do not count.
+	m.opt.LastClient = func() (string, error) { return "/dev/ttys001", nil }
+	if got := m.pairActed(action{rec: "answer:%2"}); got.pair.beat != 3 {
+		t.Fatal("the builder's act counted")
+	}
+	m.opt.LastClient = func() (string, error) { return phoneTTY, nil }
+	if got := m.pairActed(action{rec: "door:guide"}); got.pair.beat != 3 {
+		t.Fatal("a door act counted")
+	}
+}

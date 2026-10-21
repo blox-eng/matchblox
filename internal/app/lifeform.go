@@ -247,6 +247,7 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	if f.rename {
 		cmd = m.send(proto.Act{RecID: "rename:" + f.pane, Confirm: "y", Text: name})
+		m = m.pairActed(action{rec: "rename:" + f.pane})
 	} else {
 		if strings.TrimSpace(f.where) == "" {
 			f.err, f.at = "where does it start? a path, or ←→ for the Git tab's", fieldWhere
