@@ -553,3 +553,20 @@ func TestAnUnpairedReplyIsDropped(t *testing.T) {
 		t.Errorf("replies %+v, want none", q.replies)
 	}
 }
+
+// TestTwoChatsInOnePaneJoinTheNewer: an interactive Cursor that runs
+// `agent -p` with its shell tool sends two chats' events from one pane.
+// The pane's session is the chat that spoke last, the same on every merge.
+func TestTwoChatsInOnePaneJoinTheNewer(t *testing.T) {
+	cursor := session("", "%6", "app", "idle", time.Minute)
+	cursor.Agent = sample.CursorAgent
+	q := New()
+	q.Apply(hooks.Event{Name: "UserPromptSubmit", Agent: hooks.CursorAgent, SessionID: "print", Pane: "%6", At: at(0)})
+	q.Apply(hooks.Event{Name: "Stop", Agent: hooks.CursorAgent, SessionID: "chat", Pane: "%6", At: at(5)})
+	for i := range 50 {
+		q.Merge([]sample.Session{cursor}, at(10+i))
+		if items := q.Items(); len(items) != 1 || items[0].SessionID != "chat" || items[0].State != StateFinished {
+			t.Fatalf("merge %d: items %+v, want the chat's finished turn", i, items)
+		}
+	}
+}

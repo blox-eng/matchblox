@@ -745,6 +745,9 @@ func (s *Sampler) agentName(pid int, p procfs.Proc) string {
 		case s.isAgent(CursorAgent) && cursorLauncher(argv):
 			name = CursorAgent
 		}
+		if name == CursorAgent && cursorPrint(argv) {
+			name = ""
+		}
 	}
 	s.names[key] = agentRef{p.Comm, name}
 	return name
@@ -755,6 +758,17 @@ type agentRef struct{ comm, name string }
 // CursorAgent is Cursor's CLI, by the command its installer adds beside
 // `agent`.
 const CursorAgent = "cursor-agent"
+
+// cursorPrint: argv is a print run of Cursor's CLI (-p), a script's, with
+// no one at it: no session.
+func cursorPrint(argv []string) bool {
+	for _, a := range argv[1:] {
+		if a == "-p" || a == "--print" || strings.HasPrefix(a, "--print=") {
+			return true
+		}
+	}
+	return false
+}
 
 // cursorLauncher: argv runs Cursor's CLI, whatever its argv[0]. Its
 // worker-server runs the same script and is no session: it outlives the

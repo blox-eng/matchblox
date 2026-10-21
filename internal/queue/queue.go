@@ -197,9 +197,7 @@ func (q *Queue) Pane(id string) string {
 func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 	byPane := map[string]string{} // pane -> hooked session id
 	for id, ev := range q.hooked {
-		if ev.Pane != "" {
-			byPane[ev.Pane] = id
-		}
+		q.byNewer(byPane, ev.Pane, id)
 	}
 	seen := map[string]bool{}
 	var items []Item
@@ -282,6 +280,22 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 	q.items = items
 }
 
+// byNewer puts id in byPane for pane unless a hooked session that spoke
+// later has it: a pane can send two sessions' events (a Cursor that runs
+// `agent -p` in its shell), and the one that spoke last is the pane's, the
+// same on every merge.
+func (q *Queue) byNewer(byPane map[string]string, pane, id string) {
+	if pane == "" {
+		return
+	}
+	if old, ok := byPane[pane]; ok {
+		if a, b := q.hooked[old].At, q.hooked[id].At; a.After(b) || a.Equal(b) && old > id {
+			return
+		}
+	}
+	byPane[pane] = id
+}
+
 // join is the hooked session a sampled one is: by its session id, else by
 // its pane. An event of another agent's hooks (Cursor's) joins only a
 // session of that agent: its hooks are global, and an `agent -p` in another
@@ -311,9 +325,7 @@ func (q *Queue) WithAsks(sessions []sample.Session) []sample.Session {
 	}
 	byPane := map[string]string{} // pane -> session id with a call
 	for id := range q.asks {
-		if p := q.hooked[id].Pane; p != "" {
-			byPane[p] = id
-		}
+		q.byNewer(byPane, q.hooked[id].Pane, id)
 	}
 	out, copied := sessions, false
 	for i, s := range sessions {

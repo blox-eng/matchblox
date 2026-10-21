@@ -102,6 +102,9 @@ func TestCursorsAgentLauncherIsCursorAndItsWorkerIsNot(t *testing.T) {
 		{900, 1, []string{"/home/u/.local/bin/agent", "--use-system-ca", js, "--trust"}},
 		{910, 1, []string{"/home/u/.local/share/cursor-agent/versions/2026.10.19-6bbf2c4/node", js, "worker-server"}},
 		{920, 1, []string{"/usr/bin/agent", "serve"}}, // another tool called agent
+		// A print run, from a script in a shell's pane: no session.
+		{930, 1, []string{"/home/u/.local/bin/agent", "--use-system-ca", js, "-p", "sum up"}},
+		{940, 1, []string{"/home/u/.local/bin/cursor-agent", "--use-system-ca", js, "--print", "sum up"}},
 	} {
 		pane := "%" + strconv.Itoa(20+i)
 		addProc(t, root, p.pid, p.ppid, "node", p.argv, pane)
@@ -113,7 +116,7 @@ func TestCursorsAgentLauncherIsCursorAndItsWorkerIsNot(t *testing.T) {
 	if s, ok := got["%20"]; !ok || s.Agent != CursorAgent {
 		t.Errorf("%%20 = %+v, want a %s session", s, CursorAgent)
 	}
-	for _, pane := range []string{"%21", "%22"} {
+	for _, pane := range []string{"%21", "%22", "%23", "%24"} {
 		if s, ok := got[pane]; ok {
 			t.Errorf("pane %s is not an agent: %+v", pane, s)
 		}

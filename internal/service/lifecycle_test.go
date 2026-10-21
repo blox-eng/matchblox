@@ -455,9 +455,13 @@ func TestNewStartsCursor(t *testing.T) {
 // adds both commands, a hand install may add only `agent`.
 func TestNewStartsCursorByAgentWhenOnlyThatIsInstalled(t *testing.T) {
 	s, ran := lifeTest(t)
+	agent := cursorInstall(t)
 	s.LookPath = func(cmd string) (string, error) {
-		if cmd == "cursor-agent" {
+		switch cmd {
+		case "cursor-agent":
 			return "", exec.ErrNotFound
+		case "agent":
+			return agent, nil
 		}
 		return "/usr/bin/" + cmd, nil
 	}
@@ -470,5 +474,51 @@ func TestNewStartsCursorByAgentWhenOnlyThatIsInstalled(t *testing.T) {
 	}
 	if !slices.Contains(s.startable(), "cursor-agent") {
 		t.Errorf("startable %q, want cursor-agent", s.startable())
+	}
+}
+
+// cursorInstall is Cursor's installer's `agent`: a link into its versions.
+func cursorInstall(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	bin := filepath.Join(home, ".local", "share", "cursor-agent", "versions", "2026.10.19-6bbf2c4", "cursor-agent")
+	link := filepath.Join(home, ".local", "bin", "agent")
+	for _, d := range []string{filepath.Dir(bin), filepath.Dir(link)} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(bin, link); err != nil {
+		t.Fatal(err)
+	}
+	return link
+}
+
+// TestAnotherAgentIsNotCursor: "agent" is a common name. Only Cursor's
+// own counts for Cursor.
+func TestAnotherAgentIsNotCursor(t *testing.T) {
+	s, ran := lifeTest(t)
+	other := filepath.Join(t.TempDir(), "agent")
+	if err := os.WriteFile(other, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s.LookPath = func(cmd string) (string, error) {
+		switch cmd {
+		case "cursor-agent":
+			return "", exec.ErrNotFound
+		case "agent":
+			return other, nil
+		}
+		return "/usr/bin/" + cmd, nil
+	}
+	if slices.Contains(s.startable(), "cursor-agent") {
+		t.Errorf("startable %q offers cursor-agent for another agent", s.startable())
+	}
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "cursor-agent", Name: "fresh"}))
+	if res.Err != "cursor-agent is not installed here" || len(*ran) != 0 {
+		t.Errorf("err %q ran %q, want it not installed", res.Err, *ran)
 	}
 }

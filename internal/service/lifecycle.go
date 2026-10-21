@@ -39,7 +39,7 @@ const KillAnyway = "anyway"
 var Startable = []string{"claude", "codex", "opencode", sample.CursorAgent}
 
 // cursorBins are the commands Cursor's CLI is installed as, the first one
-// found the one a new session runs.
+// found the one a new session runs; `agent` only when it is Cursor's.
 var cursorBins = []string{sample.CursorAgent, "agent"}
 
 // agentBin is the command that starts agent here ("" when none is
@@ -50,11 +50,23 @@ func agentBin(agent string, look func(string) (string, error)) string {
 		bins = cursorBins
 	}
 	for _, b := range bins {
-		if _, err := look(b); err == nil {
-			return b
+		path, err := look(b)
+		if err != nil {
+			continue
 		}
+		if b == "agent" && !cursorsAgent(path) {
+			continue
+		}
+		return b
 	}
 	return ""
+}
+
+// cursorsAgent: the `agent` at path is Cursor's, a link into its installed
+// versions. Other tools are called agent too.
+func cursorsAgent(path string) bool {
+	real, err := filepath.EvalSymlinks(path)
+	return err == nil && strings.Contains(filepath.ToSlash(real), "/cursor-agent/versions/")
 }
 
 // launchArgv is the agent's command, run as bin: Claude Code takes the
