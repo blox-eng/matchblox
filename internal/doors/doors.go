@@ -18,6 +18,7 @@ const (
 	Limits      = "limits"
 	SafetyNet   = "safetynet"
 	WayBack     = "wayback"
+	Pair        = "pair"
 	Guide       = "guide"
 	Night       = "night"
 	Ways        = "ways"
