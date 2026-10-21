@@ -78,14 +78,38 @@ final class PairingTests: XCTestCase {
         XCTAssertEqual(Pairing.message(for: .codeUsed, host: "ws-1"), used, "one meaning, one text")
         XCTAssertEqual(
             Pairing.message(for: .unreachable, host: "ws-1", address: "ws-1.local"),
-            "Can't reach ws-1. Check the address, or that the iPhone is on your network."
+            "Can't reach ws-1. Check the address, or that this device is on your network."
         )
     }
 
     func testHostKeyChangedWhilePairingNamesTheAddress() {
         XCTAssertEqual(
             Pairing.message(for: .hostKeyChanged, host: "ws-1", address: "192.168.1.20"),
-            "192.168.1.20 is not ws-1. Check the address, then tap Pair."
+            "192.168.1.20 is not ws-1. Check the address, then tap Try again."
+        )
+    }
+
+    /// The app has no form: a refusal asks for a new scan, never for a Pair button or a name.
+    func testRefusalsAskForANewScan() {
+        let cases: [(PairRefusal, String)] = [
+            (.badName, "ws-1 refused the name of this device. Scan the code again."),
+            (.writeFailed, "ws-1 could not save the key of this device. Check that ~/.ssh on ws-1 is writable, then scan the code again."),
+            (.tooSlow, "ws-1 did not get the key of this device in time. Scan the code again."),
+        ]
+        for (refusal, text) in cases {
+            XCTAssertEqual(Pairing.message(for: refusal, host: "ws-1"), text)
+        }
+    }
+
+    /// The app runs on an iPad too, so no message names the iPhone.
+    func testRefusalsNameThisDevice() {
+        XCTAssertEqual(
+            Pairing.message(for: .badKey, host: "ws-1"),
+            "ws-1 refused the key of this device. Update matchblox on ws-1, then run matchblox pair again."
+        )
+        XCTAssertEqual(
+            Pairing.message(for: .keyInUse, host: "ws-1"),
+            "The key of this device already opens a login on ws-1. Remove its line from ~/.ssh/authorized_keys on ws-1, then run matchblox pair again."
         )
     }
 
@@ -147,5 +171,15 @@ final class PairingTests: XCTestCase {
             output.finish()
         }
         return stream
+    }
+
+    func testFirstLinkInText() {
+        let a = "matchblox://pair?p=AAAA"
+        let b = "matchblox://pair?p=BBBB"
+        XCTAssertEqual(Pairing.firstLink(in: "Open \(a) on the phone"), URL(string: a))
+        XCTAssertEqual(Pairing.firstLink(in: "Scan this: \(a)."), URL(string: a))
+        XCTAssertEqual(Pairing.firstLink(in: "\(a)\n"), URL(string: a))
+        XCTAssertNil(Pairing.firstLink(in: "no link here, https://example.com/?p=1"))
+        XCTAssertEqual(Pairing.firstLink(in: "\(a) and \(b)"), URL(string: a))
     }
 }

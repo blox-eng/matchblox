@@ -49,6 +49,13 @@ public enum Pairing {
             && scalars.allSatisfy(isNameScalar)
     }
 
+    /// The first `matchblox://pair?p=…` token of pasted text. The token ends at the first character that base64url does not use.
+    public static func firstLink(in text: String) -> URL? {
+        guard let start = text.range(of: "matchblox://pair?p=", options: .caseInsensitive) else { return nil }
+        let payload = text[start.upperBound...].prefix { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
+        return URL(string: String(text[start.lowerBound..<start.upperBound]) + payload)
+    }
+
     public static func cleanName(_ name: String) -> String {
         var scalars = String.UnicodeScalarView(name.unicodeScalars.filter(isNameScalar))
         scalars = String.UnicodeScalarView(scalars.drop { $0 == " " }.prefix(maxNameLength))
@@ -87,9 +94,9 @@ public enum Pairing {
         case .refused:
             codeUsedMessage(host: host)
         case .unreachable:
-            "Can't reach \(host). Check the address, or that the iPhone is on your network."
+            "Can't reach \(host). Check the address, or that this device is on your network."
         case .hostKeyChanged:
-            "\(address) is not \(host). Check the address, then tap Pair."
+            "\(address) is not \(host). Check the address, then tap Try again."
         case .closed:
             "The connection to \(host) closed before pairing was done. Run matchblox pair on \(host) again."
         }
@@ -98,17 +105,17 @@ public enum Pairing {
     public static func message(for refusal: PairRefusal, host: String) -> String {
         switch refusal {
         case .badName:
-            "\(host) refused the iPhone name. Use only letters, digits and spaces, then tap Pair again."
+            "\(host) refused the name of this device. Scan the code again."
         case .badKey:
-            "\(host) refused the key of this iPhone. Update matchblox on \(host), then run matchblox pair again."
+            "\(host) refused the key of this device. Update matchblox on \(host), then run matchblox pair again."
         case .codeUsed:
             codeUsedMessage(host: host)
         case .keyInUse:
-            "The key of this iPhone already opens a login on \(host). Remove its line from ~/.ssh/authorized_keys on \(host), then run matchblox pair again."
+            "The key of this device already opens a login on \(host). Remove its line from ~/.ssh/authorized_keys on \(host), then run matchblox pair again."
         case .writeFailed:
-            "\(host) could not save the key of this iPhone. Check that ~/.ssh on \(host) is writable, then tap Pair again."
+            "\(host) could not save the key of this device. Check that ~/.ssh on \(host) is writable, then scan the code again."
         case .tooSlow:
-            "\(host) did not get the key of this iPhone in time. Tap Pair again."
+            "\(host) did not get the key of this device in time. Scan the code again."
         }
     }
 
