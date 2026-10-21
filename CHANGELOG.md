@@ -10,6 +10,12 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Added
 
+- **Cursor sessions show their context, model and account.** A new setup
+  step, "Show Cursor's context", taps Cursor's status line: each Cursor
+  session then shows its context use and window from its first turn, as
+  Claude Code's do, and Cursor's bar still shows. The account is the email
+  and team in `~/.cursor/cli-config.json`, marked `⬢`, and USAGE lists it.
+  Cursor's plan usage is not read yet.
 - **The box opens: pair a device in one gesture.** The door "Pair a
   device" and `DEVICES` on the Machine tab open the pair page in the
   console. It shows the matchbox with the code on its label. When the app
