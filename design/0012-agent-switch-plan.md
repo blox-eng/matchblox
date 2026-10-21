@@ -15,12 +15,13 @@
 
 ## Rulings and deviations from the spec
 
-- **Key `A`, not `S`.** `S` already reverses the sort (`internal/app/model.go:755`). `A` is free and stands for "agent".
+- **Key `A`, not `S`.** `S` already reverses the sort (`internal/app/model.go:764`). `A` is free and stands for "agent".
 - **Claude's own name** comes from `--name <name>` in `launchArgv` at respawn. No `/rename` step is needed.
-- **Cursor account usage: #148 shipped the account, plan usage stays deferred.** Since #148, Sessions and USAGE show Cursor's account (email and team, from `~/.cursor/cli-config.json`, marked `⬢`), and its context comes from Cursor's status line. Plan *usage* figures still have no cheap source. A spike on 2026-10-21 (CLI 2026.10.19-6bbf2c4) found `agent status` saying "Logged in (unable to fetch user details)", `agent about` saying "Subscription Tier Unknown", and no figures in `~/.cursor/*.json`. As the spec allows, this plan adds nothing for usage and shows no fake figures.
+- **Cursor account usage: #148 shipped the account, #151 the plan usage.** Since #148, Sessions and USAGE show Cursor's account (email and team, from `~/.cursor/cli-config.json`, marked `⬢`), and its context comes from Cursor's status line. A spike on 2026-10-21 (CLI 2026.10.19-6bbf2c4) found no plan usage in `agent status`, `agent about` or `~/.cursor/*.json`, so this plan deferred it. #151 then shipped it on main by another source: with `cursor_usage = true` under `[limits]`, USAGE shows the month's included usage from Cursor's API every 5 minutes. This branch adds nothing for usage.
 - **The stoker never switches.** An act from the stoker's server, or from a pane it drives, is refused. The spec only says the stoker's own session cannot be switched.
 - **The CLI jumps** with `tmux switch-client -t <pane>` when `TMUX` is set (the spec's default).
 - **The CLI refusal keeps kill's shape** (`work works: y again switches it mid-turn`; docs name `--anyway`). It does not print the plan.
+- **`--trust` came from main.** #151 added it to `launchArgv` on main (CHANGELOG 0.14.0), so after the rebase Task 1 leaves only `TestLaunchArgvOfEachAgent` and the `docs/agents.md` line; its CHANGELOG line was dropped as a duplicate.
 
 ## Global Constraints
 
