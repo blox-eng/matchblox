@@ -256,3 +256,16 @@ func TestASessionOutsideTmuxSaysSo(t *testing.T) {
 		t.Fatalf("sent %+v", acts)
 	}
 }
+
+func TestAShipWithoutADriverIsNotOutsideTmux(t *testing.T) {
+	m, _ := loadedWith(t, 100, fixtureState())
+	sh := proto.Ship{Number: 7}
+	for _, got := range []string{m.driverName(sh), m.driverGone(sh)} {
+		if strings.Contains(got, "outside tmux") {
+			t.Fatalf("%q", got)
+		}
+	}
+	if got := m.driverGone(sh); got != "its driver no longer runs" {
+		t.Fatalf("%q", got)
+	}
+}
