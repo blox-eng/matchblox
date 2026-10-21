@@ -1,6 +1,6 @@
-# matchblox for iPhone
+# matchblox for iPhone and iPad
 
-This app opens the matchblox console on your iPhone.
+This app opens the matchblox console on your iPhone or iPad.
 It pairs with your host by QR code. Then it connects over SSH.
 
 ## Build
@@ -11,10 +11,27 @@ You need a Mac with Xcode 16 and Homebrew.
 2. `make gen` makes `Matchblox.xcodeproj` from `project.yml`.
 3. `make build` builds the app for the simulator.
 
-To run the app on your iPhone, open `Matchblox.xcodeproj` in Xcode.
+To run the app on your iPhone or iPad, open `Matchblox.xcodeproj` in Xcode.
 Select the Matchblox target. Set your team under Signing & Capabilities.
 The first build asks you to trust the build plugin of SwiftTerm. Tap
 Trust & Enable. Xcode asks only once.
+
+If the build says that the Metal Toolchain is missing, run
+`xcodebuild -downloadComponent MetalToolchain`. SwiftTerm needs it.
+
+If Xcode says that the bundle identifier is not available, give your
+build its own identifier. Do not change `project.yml`:
+
+```sh
+xcodebuild -scheme Matchblox -destination 'id=<device id>' \
+  -allowProvisioningUpdates DEVELOPMENT_TEAM=<team> \
+  PRODUCT_BUNDLE_IDENTIFIER=com.blox.matchblox.<you> build
+```
+
+`xcrun devicectl list devices` shows the device id.
+
+`make icon` makes the app icon from `AppIcon.svg`, the mark of DESIGN.md §3.
+It needs `rsvg-convert` (`brew install librsvg`).
 
 `make test` runs the tests of the MatchbloxKit package.
 
