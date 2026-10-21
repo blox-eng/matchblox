@@ -59,7 +59,8 @@ type Shell struct {
 	height  int
 	dark    bool
 	st      styles
-	gen     int // the generation of the last console opened
+	gen     int        // the generation of the last console opened
+	offers  *pairWaits // the pair offers of every console: Close waits for all
 }
 
 // layerMsg asks the shell to go back to Hosts.
@@ -72,7 +73,7 @@ type connectedHostMsg struct {
 }
 
 func NewShell(opt ShellOptions) Shell {
-	s := Shell{opt: opt, width: 100, height: 30, dark: true, st: newStyles(true)}
+	s := Shell{opt: opt, width: 100, height: 30, dark: true, st: newStyles(true), offers: &pairWaits{}}
 	s.hosts = s.readHosts()
 	switch {
 	case opt.Start != "":
@@ -96,6 +97,10 @@ func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
 	o := s.opt.Open(host)
 	b := s.opt.Base
 	o.Binary, o.CompactAt, o.CompactTokens, o.NoMotion, o.Now, o.Self, o.StateDir = b.Binary, b.CompactAt, b.CompactTokens, b.NoMotion, b.Now, b.Self, b.StateDir
+	o.Clip = b.Clip
+	if host == "" {
+		o.Pair = b.Pair // the key goes in this machine's authorized_keys
+	}
 	if o.Run == nil {
 		o.Run = b.Run
 	}
@@ -107,6 +112,7 @@ func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
 	m := New(o)
 	m.width, m.height, m.dark, m.st = s.width, s.height, s.dark, s.st
 	m.splashDone = !first
+	m.pairOffers = s.offers
 	s.cur, s.curHost, s.layer = m, host, layerConsole
 	return s, m.Init()
 }
@@ -156,6 +162,7 @@ func (s Shell) back() Shell {
 	if s.cur.conn != nil {
 		_ = s.cur.conn.Close()
 	}
+	s.cur = s.cur.closePairPage("")
 	s.cur.quitting = true // its late messages find nothing to do
 	s.layer, s.adding, s.input, s.pending, s.flash = layerHosts, false, nil, nil, ""
 	s.hosts = s.readHosts()
@@ -431,8 +438,10 @@ func (s Shell) actionLine(w int) string {
 	return fit(" "+st.muted.Render(keys), w)
 }
 
-// Close ends the open console's connection when the program ends.
+// Close ends the open console's connection and its pair code when the
+// program ends.
 func (s Shell) Close() {
+	s.cur.ClosePair()
 	if s.layer == layerConsole && s.cur.conn != nil {
 		_ = s.cur.conn.Close()
 	}
