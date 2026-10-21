@@ -25,12 +25,13 @@ func (r devRow) key() string {
 // loadDevices reads the keys again. It runs when the Machine tab opens and
 // after a change, never per frame.
 func (m *Model) loadDevices() {
-	m.devices = nil
+	m.devices, m.devErr = nil, nil
 	if m.remoteDevices() || m.opt.Pair.Devices == nil {
 		return
 	}
 	ds, err := m.opt.Pair.Devices()
 	if err != nil {
+		m.devErr = err
 		return
 	}
 	// Phones first; the order of the file holds inside each kind.
@@ -103,6 +104,9 @@ func (m Model) devicesBody(w int) body {
 		return b
 	}
 	b := plain(m.region(fmt.Sprintf("devices · %d", len(m.devices)), w))
+	if m.devErr != nil {
+		b.add(-1, fit(" "+st.warn.Render("cannot read ~/.ssh/authorized_keys: "+m.devErr.Error()+". Check its owner and mode (600)."), w))
+	}
 	_, picked := m.selectedDevice()
 	sel := m.machineIndex() - len(m.snap.Orphans)
 	for i, r := range m.deviceRows() {
@@ -128,9 +132,10 @@ func (m Model) removeDevice(r devRow) *action {
 				return m, "Remove devices from the host's own terminal."
 			}
 			// By fingerprint: two devices can share a name.
+			at := m.machineIndex()
 			backup, err := m.opt.Pair.RemoveDevice(d.Fingerprint)
 			m.loadDevices()
-			m.machinePick(min(m.machineIndex(), max(m.machineRows()-1, 0)))
+			m.machinePick(min(at, max(m.machineRows()-1, 0))) // the cursor stays at the row
 			if err != nil {
 				return m, "not removed: " + err.Error()
 			}

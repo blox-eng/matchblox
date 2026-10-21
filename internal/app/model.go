@@ -290,6 +290,7 @@ type Model struct {
 	toast        string       // what an action did, on the header's right
 	toasts       int          // counts the toasts: a later one outlives the timer of an earlier one
 	devices      []PairDevice // the keys that open this host, read when the Machine tab opens
+	devErr       error        // why the keys could not be read
 	devPick      string       // the selected device row: its fingerprint, or devPlus
 	pair         *pairPage    // the pair page, while it shows
 	pairPolling  bool         // a poll of the pair page is on its way

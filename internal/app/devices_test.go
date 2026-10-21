@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,7 +92,7 @@ func TestDevicesRemoveNeedsATypedY(t *testing.T) {
 	if ds, _ := setup.Devices(r.home); len(ds) != 1 || ds[0].Name != "work-laptop" {
 		t.Fatalf("the file holds %v", ds)
 	}
-	if _, ok := got.selectedDevice(); !ok {
+	if r, ok := got.selectedDevice(); !ok || r.d.Name != "work-laptop" {
 		t.Fatalf("the cursor is lost:\n%s", screen(got))
 	}
 }
@@ -131,5 +132,18 @@ func TestDevicesKeepsOrphanRows(t *testing.T) {
 	next, _ = key(m, "down")
 	if r, ok := next.(Model).selectedDevice(); !ok || r.d.Name != "work-laptop" {
 		t.Fatalf("down from the iPad is %v", r)
+	}
+}
+
+func TestDevicesReadErrorTellsTheFix(t *testing.T) {
+	_, m := devicesConsole(t, 0)
+	host := *m.opt.Pair
+	host.Devices = func() ([]PairDevice, error) { return nil, errors.New("permission denied") }
+	m.opt.Pair = &host
+	m.setTab(tabMachine)
+	out := screen(m)
+	if !strings.Contains(out, "cannot read ~/.ssh/authorized_keys: permission denied. Check its owner and mode (600).") ||
+		strings.Contains(out, "iPad") || !strings.Contains(out, "+ pair a device") {
+		t.Fatalf("read error:\n%s", out)
 	}
 }
