@@ -171,6 +171,12 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 			if it, ok := q.waiting[id]; ok {
 				it.Pane, it.Target, it.Name = s.Pane, s.Target, s.Name
 				q.waiting[id] = it
+				if s.Busy && (it.State == StateFinished || it.Reminder) {
+					// A turn that ended asking nothing does not wait while the
+					// session works: its subagents, or the turn their results
+					// start with no prompt. It is back once the work ends.
+					continue
+				}
 				items = append(items, it)
 			}
 			continue

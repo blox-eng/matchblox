@@ -23,6 +23,16 @@ All notable changes to matchblox are in this file. The format follows
   at every sample, and a new pane, or a pane that starts an agent, has its
   processes read at once. A session from `N` or `matchblox new` shows at
   once. ([#119](https://github.com/blox-eng/matchblox/issues/119))
+- **A session working through its subagents no longer waits for you.** A
+  turn that dispatches background subagents ends at once, and its Stop hook
+  put the session in "waits for you" while the subagents worked, and while
+  the turn their results start ran. Subagent-driven development showed as
+  waiting most of the time. A turn that ended asking nothing now stays out
+  of the queue while the session works, and comes back when the work ends.
+  A question or an approval still waits.
+- **A peek shows the question, not the progress line under it.** `asks` in
+  `matchblox peek` and in the stoker's wakes was the reply's last line,
+  often the `Progress [...]` line that ends each reply.
 
 ## [0.10.1] - 2026-10-15
 
