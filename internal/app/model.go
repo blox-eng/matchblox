@@ -283,12 +283,13 @@ type Model struct {
 	stokerSel    int
 	stokerShown  string
 	ackSent      time.Time
-	sheet        *sheet    // the launch sheet, while it is open
-	stokerServer string    // the tmux server (-L) the stoker agent runs on; "" none
-	toast        string    // what an action did, on the header's right
-	toasts       int       // counts the toasts: a later one outlives the timer of an earlier one
-	pair         *pairPage // the pair page, while it shows
-	pairPolling  bool      // a poll of the pair page is on its way
+	sheet        *sheet     // the launch sheet, while it is open
+	stokerServer string     // the tmux server (-L) the stoker agent runs on; "" none
+	toast        string     // what an action did, on the header's right
+	toasts       int        // counts the toasts: a later one outlives the timer of an earlier one
+	pair         *pairPage  // the pair page, while it shows
+	pairPolling  bool       // a poll of the pair page is on its way
+	pairOffer    *pairOffer // the last offer of a key: the end of the program waits for it
 }
 
 func New(opt Options) Model {
@@ -460,6 +461,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.recv(), m.animate(), news, order)
 	case doorRanMsg:
 		return m.doorRan(msg)
+	case pairOfferMsg:
+		return m.offered(msg)
 	case pairPollMsg:
 		return m.pairPolled()
 	case pairFrameMsg:

@@ -90,11 +90,133 @@ func (r *pairRig) seenNotes(t *testing.T) []string {
 func openedPage(t *testing.T) (*pairRig, Model) {
 	t.Helper()
 	r, m := newPairRig(t)
-	m, _ = m.openPairPage()
+	m, cmd := m.openPairPage()
+	m = offered(t, m, cmd)
 	if m.pair == nil || m.pair.id == "" || m.pair.link == "" {
 		t.Fatalf("no code: %+v", m.pair)
 	}
 	return r, m
+}
+
+func pairKeyMsg(k string) tea.KeyPressMsg {
+	if k == "ctrl+c" {
+		return tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
+	}
+	return keyPress(k)
+}
+
+// findOffer runs cmd and finds the answer of the offer in it.
+func findOffer(cmd tea.Cmd) (pairOfferMsg, bool) {
+	if cmd == nil {
+		return pairOfferMsg{}, false
+	}
+	switch msg := cmd().(type) {
+	case pairOfferMsg:
+		return msg, true
+	case tea.BatchMsg:
+		for _, c := range msg {
+			if o, ok := findOffer(c); ok {
+				return o, true
+			}
+		}
+	}
+	return pairOfferMsg{}, false
+}
+
+// offered runs the offer that cmd started and gives its answer to m.
+func offered(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	msg, ok := findOffer(cmd)
+	if !ok {
+		t.Fatal("no offer ran")
+	}
+	next, _ := m.Update(msg)
+	return next.(Model)
+}
+
+func TestPairPageWaitsForTheOfferOffUpdate(t *testing.T) {
+	r, m := newPairRig(t)
+	release := make(chan struct{})
+	slow := *m.opt.Pair
+	offer := slow.Offer
+	slow.Offer = func(until time.Time) (string, string, error) {
+		<-release
+		return offer(until)
+	}
+	m.opt.Pair = &slow
+	m, cmd := m.openPairPage() // returns at once: the offer has not run
+	if !m.pair.waiting() || r.pairLines(t) != 0 {
+		t.Fatal("the page did not wait for the offer")
+	}
+	for _, dark := range []bool{true, false} {
+		v := m
+		v.dark, v.st = dark, newStyles(dark)
+		if _, err := replay.Parse(v.render(), Tokens(dark)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	text := pageText(m)
+	if !strings.Contains(text, "▚▞") || strings.Contains(text, "5:00") || strings.Contains(text, pairKeyLine) {
+		t.Fatalf("not the shut box with no countdown:\n%s", text)
+	}
+	close(release)
+	m = offered(t, m, cmd)
+	if m.pair.link == "" || r.pairLines(t) != 1 || !strings.Contains(pageText(m), "5:00") {
+		t.Fatalf("the offer did not fill the label: %+v", m.pair)
+	}
+}
+
+// A page that closes while its offer runs leaves no key, whichever side
+// sees the key last.
+func TestPairPageCancelledOfferLeavesNoKey(t *testing.T) {
+	for _, k := range []string{"esc", "ctrl+c"} {
+		// The offer returns after the close.
+		r, m := newPairRig(t)
+		m, cmd := m.openPairPage()
+		next, _ := m.Update(pairKeyMsg(k))
+		m = next.(Model)
+		msg, _ := findOffer(cmd)
+		next, _ = m.Update(msg)
+		if next.(Model).pair != nil || r.pairLines(t) != 0 {
+			t.Fatalf("%s while the offer ran: %d pair lines", k, r.pairLines(t))
+		}
+
+		// The offer returned before the close; its answer comes after.
+		r, m = newPairRig(t)
+		m, cmd = m.openPairPage()
+		msg, _ = findOffer(cmd)
+		if r.pairLines(t) != 1 {
+			t.Fatal("the offer wrote no key")
+		}
+		next, _ = m.Update(pairKeyMsg(k))
+		next, _ = next.Update(msg)
+		if next.(Model).pair != nil || r.pairLines(t) != 0 {
+			t.Fatalf("%s before the answer: %d pair lines", k, r.pairLines(t))
+		}
+	}
+}
+
+func TestPairPageClosePairWaitsForTheOffer(t *testing.T) {
+	r, m := newPairRig(t)
+	release := make(chan struct{})
+	slow := *m.opt.Pair
+	offer := slow.Offer
+	slow.Offer = func(until time.Time) (string, string, error) {
+		<-release
+		return offer(until)
+	}
+	m.opt.Pair = &slow
+	m, cmd := m.openPairPage()
+	go func() { _, _ = findOffer(cmd) }() // the program's goroutine
+	next, _ := m.Update(pairKeyMsg("ctrl+c"))
+	closed := make(chan struct{})
+	go func() { next.(Model).ClosePair(); close(closed) }() // main, after Run
+	time.Sleep(20 * time.Millisecond)
+	close(release)
+	<-closed
+	if r.pairLines(t) != 0 {
+		t.Fatal("the program ended before the offer removed its key")
+	}
 }
 
 func poll(t *testing.T, m Model) Model {
@@ -235,8 +357,8 @@ func TestPairPageExpires(t *testing.T) {
 		t.Fatal("a key other than esc and Enter closed the page")
 	}
 	old := m.pair.id
-	next, _ = key(m, "enter")
-	m = next.(Model)
+	next, cmd := key(m, "enter")
+	m = offered(t, next.(Model), cmd)
 	if m.pair == nil || m.pair.phase != boxShut || m.pair.id == old || r.pairLines(t) != 1 {
 		t.Fatalf("Enter made no new code: %+v", m.pair)
 	}
@@ -345,7 +467,8 @@ func TestPairPageOnlyForThisMachine(t *testing.T) {
 func TestPairPageWithoutTheBinaryWritesNoKey(t *testing.T) {
 	r, m := newPairRig(t)
 	m.opt.Pair = testPairHost(r.home, "", filepath.Join(t.TempDir(), "host.pub"))
-	m, _ = m.openPairPage()
+	m, cmd := m.openPairPage()
+	m = offered(t, m, cmd)
 	if m.pair == nil || m.pair.line != "cannot find this matchblox on the PATH" || r.pairLines(t) != 0 {
 		t.Fatalf("page %+v, %d lines", m.pair, r.pairLines(t))
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -56,6 +57,7 @@ type pairPage struct {
 	standalone bool       // matchblox pair: stops after the opening
 	beat       int        // 1 shut, 2 opened, 3 in, 4 first act (Task 9)
 	line       string     // the line under the box
+	offer      *pairOffer // the offer that writes the key
 }
 
 type pairPollMsg struct{}
@@ -85,28 +87,89 @@ func (m Model) clip(text string) {
 	_, _ = os.Stdout.WriteString(osc52(text))
 }
 
-// openPairPage makes the one-time key, writes it and starts the poll.
+// pairOffer is an Offer that runs off the Update goroutine: it can take
+// seconds (tailscale status). A page that closes while it runs cancels it,
+// and whichever side sees the key last removes it.
+type pairOffer struct {
+	mu        sync.Mutex
+	cancelled bool
+	id        string        // the key it wrote, once written
+	done      chan struct{} // closed when the Offer returned
+}
+
+// cancel stops the offer; the key it wrote already goes now.
+func (o *pairOffer) cancel(h *PairHost) {
+	o.mu.Lock()
+	o.cancelled = true
+	id := o.id
+	o.mu.Unlock()
+	if id != "" {
+		_, _ = h.Remove(id)
+	}
+}
+
+type pairOfferMsg struct {
+	offer    *pairOffer
+	id, link string
+	err      error
+}
+
+// pairBlank stands in for the link while the offer runs: the label is a
+// blank code of about the size of the real one.
+var pairBlank = "matchblox://pair?p=" + strings.Repeat("A", 110)
+
+// openPairPage starts the offer of a one-time key. The box shows shut, with
+// a blank label, until the key is written.
 func (m Model) openPairPage() (Model, tea.Cmd) {
 	now := m.now()
 	p := &pairPage{phase: boxShut, phaseAt: now, beat: 1}
 	m.pair, m.flash = p, ""
-	if m.opt.Pair == nil {
+	h := m.opt.Pair
+	if h == nil {
 		p.line = "Pair from the host's own terminal."
 		return m, nil
 	}
 	p.until = now.Add(pairWindow)
-	id, link, err := m.opt.Pair.Offer(p.until)
-	if err != nil {
-		p.line = err.Error()
+	o := &pairOffer{done: make(chan struct{})}
+	p.offer, m.pairOffer = o, o
+	until := p.until
+	return m, func() tea.Msg {
+		defer close(o.done)
+		id, link, err := h.Offer(until)
+		if err == nil {
+			o.mu.Lock()
+			o.id = id
+			gone := o.cancelled
+			o.mu.Unlock()
+			if gone {
+				_, _ = h.Remove(id)
+			}
+		}
+		return pairOfferMsg{o, id, link, err}
+	}
+}
+
+// offered fills in the label once the key is written, and starts the poll.
+func (m Model) offered(msg pairOfferMsg) (Model, tea.Cmd) {
+	if m.pair == nil || m.pair.offer != msg.offer {
+		return m, nil // the page closed: the offer removed its key
+	}
+	p := *m.pair
+	m.pair = &p
+	if msg.err != nil {
+		p.line = msg.err.Error()
 		return m, nil
 	}
-	p.id, p.link, p.line = id, link, pairScanLine
+	p.id, p.link, p.line = msg.id, msg.link, pairScanLine
 	if m.pairPolling {
 		return m, nil // the poll on its way goes on
 	}
 	m.pairPolling = true
 	return m, pairPoll()
 }
+
+// waiting is a page whose offer still runs.
+func (p *pairPage) waiting() bool { return p.offer != nil && p.link == "" && p.line == "" }
 
 // closePairPage removes the key line and the .seen note; why goes to the
 // flash. A device that claimed the code since the last poll is named.
@@ -117,6 +180,9 @@ func (m Model) closePairPage(why string) Model {
 		return m
 	}
 	m.flash = why
+	if p.offer != nil && m.opt.Pair != nil {
+		p.offer.cancel(m.opt.Pair)
+	}
 	if p.id == "" || m.opt.Pair == nil {
 		return m
 	}
@@ -130,8 +196,17 @@ func (m Model) closePairPage(why string) Model {
 }
 
 // ClosePair removes the one-time key of an open pair page. main calls it
-// when the program ends, however it ends.
-func (m Model) ClosePair() { _ = m.closePairPage("") }
+// when the program ends, however it ends. An offer that still runs is
+// waited for, so that it removes its key before the process exits.
+func (m Model) ClosePair() {
+	_ = m.closePairPage("")
+	if o := m.pairOffer; o != nil {
+		select {
+		case <-o.done:
+		case <-time.After(10 * time.Second):
+		}
+	}
+}
 
 // quit ends the program; an open pair page takes its code with it.
 func (m Model) quit() (tea.Model, tea.Cmd) {
@@ -278,8 +353,11 @@ func (m Model) pairView(w int) string {
 	text := []string{"", centre(line), centre(strings.Join(keys, "   "))}
 
 	var lines []string
-	if p.link != "" {
+	if p.link != "" || p.waiting() {
 		s := boxState{phase: p.phase, since: now.Sub(p.phaseAt), link: p.link, name: p.device.Name}
+		if p.waiting() {
+			s.phase, s.link = boxExpired, pairBlank // shut, blank paper
+		}
 		box, fits := pairBox(s, m.dark, m.opt.NoMotion, w, m.height)
 		if fits == fitNone {
 			for _, l := range strings.Split(ansi.Wordwrap(pairSmallLine, max(w-2, 1), ""), "\n") {
