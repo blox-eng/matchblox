@@ -2,6 +2,7 @@ package proto
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"slices"
 	"strconv"
@@ -35,19 +36,20 @@ func CheckName(name string) error {
 	return nil
 }
 
-// CheckHandoff refuses a handoff the service would: one short line, as
-// an answer, that does not start with - (the agent would read a flag).
-// Empty is no first message, and passes.
-func CheckHandoff(text string) error {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return nil
-	}
+// ErrDash is CheckFirst's refusal of a message that starts with a dash.
+var ErrDash = errors.New("does not start with -")
+
+// CheckFirst checks the first message an agent starts with, what in the
+// refusal ("the first message", "the handoff"): one line it takes as typed.
+// The console checks before it sends, the service again.
+func CheckFirst(text, what string) error {
 	if err := panes.CheckAnswer(text); err != nil {
-		return errors.New(strings.Replace(err.Error(), "the answer", "the handoff", 1))
+		return errors.New(strings.Replace(err.Error(), "the answer", what, 1))
 	}
-	if strings.HasPrefix(text, "-") {
-		return errors.New("the handoff does not start with -")
+	// It goes to the agent as an argument: one that starts with a dash
+	// would be read as a flag (--dangerously-skip-permissions).
+	if strings.HasPrefix(strings.TrimSpace(text), "-") {
+		return fmt.Errorf("%s %w", what, ErrDash)
 	}
 	return nil
 }

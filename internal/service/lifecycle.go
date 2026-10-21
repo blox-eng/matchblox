@@ -291,7 +291,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 		return proto.Result{Err: "the stoker does not switch agents: the builder does"}
 	}
 	if n.Handoff != "" {
-		if err := checkFirst(n.Handoff, "the handoff"); err != nil {
+		if err := proto.CheckFirst(n.Handoff, "the handoff"); err != nil {
 			return proto.Result{Err: err.Error()}
 		}
 	}
@@ -559,7 +559,7 @@ func (s *Service) newSteps(ctx context.Context, n proto.NewSession) (steps [][]s
 		return nil, "", "", fmt.Errorf("%s is not installed here", n.Agent)
 	}
 	if n.First != "" {
-		if err := checkFirst(n.First, "the first message"); errors.Is(err, errDash) {
+		if err := proto.CheckFirst(n.First, "the first message"); errors.Is(err, proto.ErrDash) {
 			return nil, "", "", errors.New("a first message does not start with -")
 		} else if err != nil {
 			return nil, "", "", err
@@ -587,23 +587,6 @@ func (s *Service) newSteps(ctx context.Context, n proto.NewSession) (steps [][]s
 		return nil, "", "", taken(name)
 	}
 	return steps, name, dir, nil
-}
-
-// errDash is checkFirst's refusal of a message that starts with a dash.
-var errDash = errors.New("does not start with -")
-
-// checkFirst checks the first message an agent starts with, what in the
-// refusal ("the first message", "the handoff"): one line it takes as typed.
-func checkFirst(text, what string) error {
-	if err := panes.CheckAnswer(text); err != nil {
-		return errors.New(strings.Replace(err.Error(), "the answer", what, 1))
-	}
-	// It goes to the agent as an argument: one that starts with a dash
-	// would be read as a flag (--dangerously-skip-permissions).
-	if strings.HasPrefix(strings.TrimSpace(text), "-") {
-		return fmt.Errorf("%s %w", what, errDash)
-	}
-	return nil
 }
 
 // worktreeStep adds a worktree for branch beside the repository dir is

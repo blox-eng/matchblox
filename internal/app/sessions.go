@@ -300,7 +300,7 @@ func (m Model) sessionKeys() []hint {
 	keys := []hint{{"⏎", "open", "enter"}}
 	s, ok := m.selectedSession()
 	if ok && s.Pane != "" {
-		keys = append(keys, hint{"a", m.peekWord(s), "a"}, hint{"x", "kill", "x"}, hint{"r", "rename", "r"}, hint{"z", m.parkWord(s), "z"})
+		keys = append(keys, hint{"a", m.peekWord(s), "a"}, hint{"x", "kill", "x"}, hint{"r", "rename", "r"}, hint{"A", "switch", "A"}, hint{"z", m.parkWord(s), "z"})
 	}
 	return append(keys, hint{"N", "new", "N"}, hint{"p", "ships", "p"}, hint{"f", "stoker", "f"})
 }

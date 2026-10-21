@@ -148,15 +148,8 @@ func (m Model) switchAction(f form) *action {
 	again, _ := json.Marshal(sw)
 	say := fmt.Sprintf("switch %s: %s → %s in %s, %s, then jump there", f.who, f.from, f.agent, f.pane, f.where)
 	a := &action{label: "switch", destructive: true, rec: "switch:" + f.pane, text: string(b), againText: string(again), say: say, done: "switched " + f.who + " to " + f.agent}
-	i := slices.IndexFunc(m.snap.Sessions, func(s sample.Session) bool { return s.Pane == f.pane })
-	if i < 0 {
-		return a
-	}
-	switch s := m.snap.Sessions[i]; {
-	case s.Ask != nil || s.Permits || m.waitsFor(s.Pane):
-		a.again = s.Name + " waits for you: y again switches it all the same"
-	case s.Works():
-		a.again = s.Name + " works: y again switches it mid-turn"
+	if i := slices.IndexFunc(m.snap.Sessions, func(s sample.Session) bool { return s.Pane == f.pane }); i >= 0 {
+		a.again = m.againFor(m.snap.Sessions[i], "switches")
 	}
 	return a
 }
@@ -238,6 +231,9 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	f.err = ""
 	if f.at == fieldAgent {
 		agents := m.formAgents()
+		if len(agents) == 0 {
+			return m, nil
+		}
 		i := slices.Index(agents, f.agent)
 		switch key {
 		case "left":
@@ -348,9 +344,11 @@ func (m Model) swapEnter(f form) (tea.Model, tea.Cmd) {
 		m.form.err, m.form.at = "which agent? ←→ picks one", fieldAgent
 		return m, nil
 	}
-	if err := proto.CheckHandoff(f.first); err != nil {
-		m.form.err, m.form.at = err.Error(), fieldFirst
-		return m, nil
+	if handoff := strings.TrimSpace(f.first); handoff != "" {
+		if err := proto.CheckFirst(handoff, "the handoff"); err != nil {
+			m.form.err, m.form.at = err.Error(), fieldFirst
+			return m, nil
+		}
 	}
 	m.form, m.pending = nil, m.switchAction(f)
 	return m, nil
@@ -571,14 +569,19 @@ func (m Model) killAction(s sample.Session) *action {
 	if len(steps) > 1 {
 		say += ", then " + shellLine(steps[1])
 	}
-	a := &action{label: "kill", steps: steps, destructive: true, rec: "kill:" + s.Pane, which: "secondary", say: say}
+	return &action{label: "kill", steps: steps, destructive: true, rec: "kill:" + s.Pane, which: "secondary", say: say, again: m.againFor(s, "kills")}
+}
+
+// againFor is what the second y's confirm says when s works or waits for
+// you, verb what y again does; "" when it rests.
+func (m Model) againFor(s sample.Session, verb string) string {
 	switch {
 	case s.Ask != nil || s.Permits || m.waitsFor(s.Pane):
-		a.again = s.Name + " waits for you: y again kills it all the same"
+		return s.Name + " waits for you: y again " + verb + " it all the same"
 	case s.Works():
-		a.again = s.Name + " works: y again kills it mid-turn"
+		return s.Name + " works: y again " + verb + " it mid-turn"
 	}
-	return a
+	return ""
 }
 
 // waitsFor tells if the queue says the session in pane waits for you.
