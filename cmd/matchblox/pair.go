@@ -147,7 +147,7 @@ func pairCmd(ctx context.Context, args []string, out io.Writer, now func() time.
 	if err := setup.AddPairKey(env.home, env.exe, authorized, id, until); err != nil {
 		return err
 	}
-	p := pair.Payload{V: 1, Host: *address, Port: *port, User: u.Username, Name: *name, HostKey: hostKey, Key: base64.StdEncoding.EncodeToString(seed)}
+	p := pair.Payload{V: 2, Host: *address, Port: *port, User: u.Username, Name: *name, HostKey: hostKey, Key: base64.StdEncoding.EncodeToString(seed)}
 	url := p.URL()
 	qr, err := pair.QR(url)
 	if err != nil {
