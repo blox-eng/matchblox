@@ -202,6 +202,15 @@ func consolePair(home, exe, hostKeyPath string, address func() string) *app.Pair
 			d, ok := setup.TakeClaim(home, id)
 			return app.PairDevice(d), ok
 		},
+		Devices: func() ([]app.PairDevice, error) {
+			ds, err := setup.Devices(home)
+			out := make([]app.PairDevice, len(ds))
+			for i, d := range ds {
+				out[i] = app.PairDevice(d)
+			}
+			return out, err
+		},
+		RemoveDevice: func(name string) (string, error) { return setup.RemoveDevice(home, name) },
 	}
 }
 

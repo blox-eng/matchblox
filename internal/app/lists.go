@@ -308,6 +308,9 @@ func (m Model) search(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // setTab opens a tab; a search belongs to the tab it was typed on.
 func (m *Model) setTab(t int) {
 	m.tab, m.filter, m.searching, m.armed = t, "", false, ""
+	if t == tabMachine {
+		m.loadDevices()
+	}
 	if t == tabStoker {
 		m.stokerSel = m.firstNeed() // its one action leads the key bar
 	}

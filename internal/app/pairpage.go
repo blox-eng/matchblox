@@ -45,6 +45,11 @@ type PairHost struct {
 	Remove func(id string) (removed bool, err error)
 	// Claim is the device that used the key. It gives a device once.
 	Claim func(id string) (PairDevice, bool)
+	// Devices are the keys that open this host.
+	Devices func() ([]PairDevice, error)
+	// RemoveDevice takes out one key, by its name or fingerprint, and gives
+	// the backup it made of the key file.
+	RemoveDevice func(nameOrFingerprint string) (backup string, err error)
 }
 
 type pairPage struct {

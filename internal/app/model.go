@@ -123,19 +123,20 @@ type action struct {
 	steps       [][]string
 	destructive bool
 	nav         bool
-	attach      bool     // the last step takes the terminal until it exits
-	rec         string   // the service's name for it
-	which       string   // primary | secondary
-	text        string   // what an answer types; a door's preview Sum
-	batch       []string // worktrees: one guarded act each
-	say         string   // what the confirm shows, when not the first step
-	term        bool     // the step takes this terminal (a door's command)
-	pair        bool     // the pair door: it opens the pair page, never a pending step
-	door        string   // the door it opens or closes
-	remote      bool     // steps[0] is the ssh argv that runs it on the host, checked
-	connect     bool     // it connects the host: install, update or authorize
-	pane        string   // a jump: the pane it goes to
-	again       string   // a kill of a session that works or waits: what the second y's confirm says
+	attach      bool                        // the last step takes the terminal until it exits
+	rec         string                      // the service's name for it
+	which       string                      // primary | secondary
+	text        string                      // what an answer types; a door's preview Sum
+	batch       []string                    // worktrees: one guarded act each
+	say         string                      // what the confirm shows, when not the first step
+	term        bool                        // the step takes this terminal (a door's command)
+	pair        bool                        // the pair door: it opens the pair page, never a pending step
+	door        string                      // the door it opens or closes
+	remote      bool                        // steps[0] is the ssh argv that runs it on the host, checked
+	connect     bool                        // it connects the host: install, update or authorize
+	pane        string                      // a jump: the pane it goes to
+	local       func(Model) (Model, string) // it runs in this console; its string is the flash
+	again       string                      // a kill of a session that works or waits: what the second y's confirm says
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -284,13 +285,15 @@ type Model struct {
 	stokerSel    int
 	stokerShown  string
 	ackSent      time.Time
-	sheet        *sheet     // the launch sheet, while it is open
-	stokerServer string     // the tmux server (-L) the stoker agent runs on; "" none
-	toast        string     // what an action did, on the header's right
-	toasts       int        // counts the toasts: a later one outlives the timer of an earlier one
-	pair         *pairPage  // the pair page, while it shows
-	pairPolling  bool       // a poll of the pair page is on its way
-	pairOffers   *pairWaits // the offers of a key that still run: the end of the program waits for them
+	sheet        *sheet       // the launch sheet, while it is open
+	stokerServer string       // the tmux server (-L) the stoker agent runs on; "" none
+	toast        string       // what an action did, on the header's right
+	toasts       int          // counts the toasts: a later one outlives the timer of an earlier one
+	devices      []PairDevice // the keys that open this host, read when the Machine tab opens
+	devPick      string       // the selected device row: its fingerprint, or devPlus
+	pair         *pairPage    // the pair page, while it shows
+	pairPolling  bool         // a poll of the pair page is on its way
+	pairOffers   *pairWaits   // the offers of a key that still run: the end of the program waits for them
 }
 
 func New(opt Options) Model {
@@ -849,6 +852,11 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 // confirm runs an action the person consented to: a Nav step here, any
 // other on the service.
 func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
+	if a.local != nil {
+		next, msg := a.local(m)
+		next.flash = msg
+		return next, nil
+	}
 	if a.remote {
 		return m.onHost(a)
 	}

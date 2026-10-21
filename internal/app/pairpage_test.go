@@ -69,6 +69,15 @@ func testPairHost(home, exe, hostKey string) *PairHost {
 			d, ok := setup.TakeClaim(home, id)
 			return PairDevice(d), ok
 		},
+		Devices: func() ([]PairDevice, error) {
+			ds, err := setup.Devices(home)
+			out := make([]PairDevice, len(ds))
+			for i, d := range ds {
+				out[i] = PairDevice(d)
+			}
+			return out, err
+		},
+		RemoveDevice: func(name string) (string, error) { return setup.RemoveDevice(home, name) },
 	}
 }
 
