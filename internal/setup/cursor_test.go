@@ -59,7 +59,7 @@ func readCursorHooks(t *testing.T, p string) cursorFile {
 	return f
 }
 
-func TestCursorHooksDoorWritesTheFiveEvents(t *testing.T) {
+func TestCursorHooksDoorWritesTheSixEvents(t *testing.T) {
 	e := cursorEnv(t)
 	open(t, e, doors.CursorHooks)
 	f := readCursorHooks(t, filepath.Join(e.Home, ".cursor", "hooks.json"))

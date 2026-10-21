@@ -12,7 +12,7 @@
 
 **Tech Stack:** Go 1.26, the standard library only (no new dependencies).
 
-**Spec:** `docs/superpowers/specs/2026-10-21-cursor-agent-design.md`. Read it first. Its "Live run" section is the source of truth for payloads, process argv, and screen text.
+**Spec:** `design/0009-cursor-agent.md`. Built with deviations: see its section "Revised after the live run". Read it first. Its "Live run" section is the source of truth for payloads, process argv, and screen text.
 
 ## Global Constraints
 

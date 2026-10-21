@@ -1,6 +1,6 @@
 # Cursor CLI support: design
 
-Date: 2026-10-21. Status: draft for review.
+Date: 2026-10-21. Status: built (see "Revised after the live run" at the end).
 
 ## Intent
 
@@ -262,3 +262,23 @@ not limited to Codex-style pane guessing.
   prompt. Test it live, and drop the prompt for Cursor if it can't.
 - Test structure, fixture names, and how much of the demo or golden
   screens to touch.
+
+## Revised after the live run (2026-10-21)
+
+An end-to-end run of the built branch (an isolated service, live tmux, a
+project `.cursor/hooks.json`) changed three decisions above:
+
+- **Six events, not five.** Cursor writes its transcript after its `stop`
+  hook runs, so `transcript_path` at `stop` held no reply, or the previous
+  turn's. The reply comes from `afterAgentResponse` (its `text`), mapped to
+  a `Reply` event that fills the line of its turn's finished wait and makes
+  it a question when it asks. The transcript is not read.
+- **Stop and Reply in either order.** Cursor runs both hooks at the same
+  moment, as separate processes. Events carry `Turn` (`generation_id`), and
+  the queue pairs a Reply with its own turn's Stop whichever comes first.
+- **Print runs and other `agent`s.** A Cursor process with `-p`/`--print`
+  is no session. `matchblox new` runs `agent` only when it resolves into
+  `…/cursor-agent/versions/`. When two hooked chats share a pane, the one
+  that spoke last is the pane's.
+
+Lines under Cursor's `▀` box edge are its footer, never what it said.
