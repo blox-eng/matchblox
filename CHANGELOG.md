@@ -6,8 +6,6 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
-## [0.14.0] - 2026-10-21
-
 ### Added
 
 - **`matchblox switch <who> --agent <name>` runs another agent in a session's
@@ -15,6 +13,11 @@ All notable changes to matchblox are in this file. The format follows
   from. Switch it from the CLI, or `A` in Sessions.
 - **Sessions says `outside tmux` for an agent with no pane.** The row and
   `matchblox sessions` name the place, instead of leaving it blank.
+
+## [0.14.0] - 2026-10-21
+
+### Added
+
 - **Cursor sessions show their context, model and account.** A new setup
   step, "Show Cursor's context", taps Cursor's status line: each Cursor
   session then shows its context use and window from its first turn, as
@@ -64,8 +67,6 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Changed
 
-- **A Cursor session matchblox starts trusts its directory (`--trust`).**
-  Its first turn no longer waits on the trust prompt.
 - **Build the app again with this release.** An older app cannot read the
   v2 link and says "This code is damaged…". The new app reads v1 and v2.
 
