@@ -35,7 +35,7 @@ func FetchCursorUsage(ctx context.Context, client *http.Client, api, token strin
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // a body read to its end loses nothing on close
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return nil, err
