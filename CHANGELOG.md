@@ -18,6 +18,27 @@ All notable changes to matchblox are in this file. The format follows
   5 minutes for the share of the month's included usage, as Cursor's
   `/usage` shows it, and when it resets. It reads the login token Cursor's
   CLI keeps in the macOS Keychain for each call, and never keeps it.
+### Fixed
+
+- **A renamed Cursor, Codex or OpenCode session shows its new name.** An
+  agent that keeps no name of its own is named as its tmux window (which
+  `r` renames), or its tmux session, no longer as its command.
+- **`matchblox new` starts Cursor trusting the folder you chose**
+  (`--trust`), so it does not stop at Cursor's trust prompt.
+- **A Cursor session at its trust prompt waits for you.** "Do you trust the
+  contents of this directory?" shows in the queue, as its approval menu
+  does.
+
+### Security
+
+- **Built with Go 1.26.10.** It fixes ten advisories in Go's own `net/http`,
+  `net/textproto`, `crypto/tls` and `crypto/x509` (GO-2026-6603 to 6617 and
+  GO-2026-6809), which Cursor's usage call makes reachable.
+
+## [0.13.0] - 2026-10-21
+
+### Added
+
 - **The box opens: pair a device in one gesture.** The door "Pair a
   device" and `DEVICES` on the Machine tab open the pair page in the
   console. It shows the matchbox with the code on its label. When the app
@@ -38,20 +59,6 @@ All notable changes to matchblox are in this file. The format follows
 
 - **Build the app again with this release.** An older app cannot read the
   v2 link and says "This code is damaged…". The new app reads v1 and v2.
-
-### Fixed
-
-- **A renamed Cursor, Codex or OpenCode session shows its new name.** An
-  agent that keeps no name of its own is named as its tmux window (which
-  `r` renames), or its tmux session, no longer as its command.
-- **`matchblox new` starts Cursor trusting the folder you chose**
-  (`--trust`), so it does not stop at Cursor's trust prompt.
-
-### Security
-
-- **Built with Go 1.26.10.** It fixes ten advisories in Go's own `net/http`,
-  `net/textproto`, `crypto/tls` and `crypto/x509` (GO-2026-6603 to 6617 and
-  GO-2026-6809), which Cursor's usage call makes reachable.
 
 ## [0.12.0] - 2026-10-21
 
@@ -437,7 +444,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/blox-eng/matchblox/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/blox-eng/matchblox/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/blox-eng/matchblox/compare/v0.10.3...v0.11.0
 [0.10.3]: https://github.com/blox-eng/matchblox/compare/v0.10.2...v0.10.3
