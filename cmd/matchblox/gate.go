@@ -36,8 +36,8 @@ func gateMain(args []string) error {
 		fmt.Fprintf(os.Stderr, "matchblox gate: refused %q: %v\n", orig, err)
 		os.Exit(126)
 	}
-	if id != "" {
-		// A note that fails never blocks the console.
+	if id != "" && orig == remote.ConsoleCommand {
+		// Only the console marks the device in; a note that fails never blocks it.
 		if home, err := os.UserHomeDir(); err == nil {
 			_ = setup.MarkDeviceIn(home, id, os.Getenv("SSH_TTY"), time.Now())
 		}

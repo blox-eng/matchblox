@@ -150,3 +150,34 @@ func TestGatePhoneRefusesABadID(t *testing.T) {
 		t.Fatalf("exit = %v, want 126\n%s", err, out)
 	}
 }
+
+// The service stream of a phone is not its console: it leaves the note alone.
+func TestGatePhoneServeStreamWritesNoNote(t *testing.T) {
+	home := t.TempDir()
+	const id = "0123456789ab"
+	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	if err := setup.MarkDeviceIn(home, id, "/dev/ttys004", at); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("SSH_TTY", "")
+	t.Setenv("SSH_ORIGINAL_COMMAND", remote.ServeCommand)
+	oldArgs, oldRun := os.Args, gateRun
+	t.Cleanup(func() { os.Args, gateRun = oldArgs, oldRun })
+	var ran []string
+	gateRun = func(argv []string) error { ran = argv; return nil }
+	if err := gateMain([]string{"phone", id}); err != nil || !slices.Equal(ran, []string{"serve", "--stdio"}) {
+		t.Fatalf("gateMain = %v, ran %q", err, ran)
+	}
+	if gotAt, tty, ok := setup.DeviceIn(home, id); !ok || tty != "/dev/ttys004" || !gotAt.Equal(at) {
+		t.Fatalf("the note changed: %v, %q, %v", gotAt, tty, ok)
+	}
+	// A device with no note gets none.
+	t.Setenv("SSH_ORIGINAL_COMMAND", remote.ServeCommand) // gateMain unset it
+	if err := gateMain([]string{"phone", "ba9876543210"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok := setup.DeviceIn(home, "ba9876543210"); ok {
+		t.Fatal("the serve stream wrote a note")
+	}
+}
