@@ -130,6 +130,9 @@ func run(args []string) error {
 		cfg, _ := config.Load(config.Path())
 		return statusLine(args[2:], os.Stdin, os.Stdout, os.Getenv, filepath.Dir(state.Path()), cfg, time.Now())
 	}
+	if len(args) > 1 && args[0] == "hook" && args[1] == "--cursor" {
+		return hookCursor(os.Stdin, os.Stdout, transport.SocketPath(), spoolPath())
+	}
 	if len(args) > 0 && args[0] == "hook" {
 		return hook(args[1:], os.Stdin, os.Stdout, transport.SocketPath(), spoolPath(), progressPrompt(args[1:]))
 	}
@@ -401,6 +404,21 @@ func hook(args []string, stdin io.Reader, out io.Writer, sock, spool string, pro
 		// Claude Code adds what a SessionStart hook prints to the session's
 		// context; the console reads the bar back from the transcript.
 		_, _ = fmt.Fprintln(out, hooks.ProgressPrompt)
+	}
+	return nil
+}
+
+// hookCursor delivers one event of Cursor's hooks (`matchblox hook
+// --cursor`; the event is in the payload), as hook does. It prints nothing:
+// Cursor reads what a hook prints, and a stop hook's followup_message would
+// start a turn.
+func hookCursor(stdin io.Reader, _ io.Writer, sock, spool string) error {
+	ev, err := hooks.ParseCursor(stdin, os.Getenv)
+	if err != nil {
+		return nil
+	}
+	if transport.Notify(sock, hookTimeout, proto.KindHook, ev) != nil {
+		_ = hooks.Append(spool, ev)
 	}
 	return nil
 }

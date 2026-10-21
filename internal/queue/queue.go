@@ -171,10 +171,7 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 	seen := map[string]bool{}
 	var items []Item
 	for _, s := range sessions {
-		id := s.SessionID
-		if _, ok := q.hooked[id]; !ok || id == "" {
-			id = byPane[s.Pane]
-		}
+		id := q.join(s, byPane)
 		if id != "" {
 			seen[id] = true
 			q.seen[id] = now
@@ -199,6 +196,13 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 				}
 				q.waiting[id] = it
 				items = append(items, it)
+			} else if s.Agent == sample.CursorAgent && s.Status == "idle" && s.Permits {
+				// No Cursor hook fires when its approval menu draws: its pane
+				// tells it.
+				items = append(items, Item{
+					SessionID: id, Pane: s.Pane, Target: s.Target, Name: s.Name,
+					State: StatePermission, Since: now.Add(-s.Idle), LastLine: s.LastLine, FromPane: true,
+				})
 			}
 			continue
 		}
@@ -238,6 +242,21 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 	q.items = items
 }
 
+// join is the hooked session a sampled one is: by its session id, else by
+// its pane. An event of another agent's hooks (Cursor's) joins only a
+// session of that agent: its hooks are global, and an `agent -p` in another
+// agent's pane sends its events from that pane too.
+func (q *Queue) join(s sample.Session, byPane map[string]string) string {
+	if _, ok := q.hooked[s.SessionID]; ok && s.SessionID != "" {
+		return s.SessionID
+	}
+	id := byPane[s.Pane]
+	if a := q.hooked[id].Agent; a != "" && a != s.Agent {
+		return ""
+	}
+	return id
+}
+
 func (q *Queue) Items() []Item { return append([]Item(nil), q.items...) }
 
 // WithAsks is sessions with the question tool's call each one waits on.
@@ -258,10 +277,7 @@ func (q *Queue) WithAsks(sessions []sample.Session) []sample.Session {
 	}
 	out, copied := sessions, false
 	for i, s := range sessions {
-		id := s.SessionID
-		if _, ok := q.hooked[id]; !ok || id == "" {
-			id = byPane[s.Pane]
-		}
+		id := q.join(s, byPane)
 		a, ok := q.asks[id]
 		if !ok || s.Ask != nil && s.Ask.ID == a.ask.ID {
 			continue

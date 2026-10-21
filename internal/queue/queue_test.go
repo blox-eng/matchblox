@@ -458,3 +458,40 @@ func TestHookAskEndsWithItsTurn(t *testing.T) {
 		t.Fatalf("the call came back: %+v", got)
 	}
 }
+
+// TestACursorEventJoinsOnlyACursorSession: Cursor's hooks are global, so an
+// `agent -p` in another agent's pane sends its events from that pane too.
+// They are Cursor's, and never decide another agent's session.
+func TestACursorEventJoinsOnlyACursorSession(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "Stop", Agent: hooks.CursorAgent, SessionID: "chat1", Pane: "%6", At: at(0)})
+	codex := session("", "%6", "api", "idle", time.Minute)
+	codex.Agent = "codex"
+	q.Merge([]sample.Session{codex}, at(10))
+	if items := q.Items(); len(items) != 1 || !items[0].Estimated {
+		t.Errorf("codex items %+v, want the one estimated from its pane", items)
+	}
+	cursor := session("", "%6", "api", "idle", time.Minute)
+	cursor.Agent = sample.CursorAgent
+	q.Merge([]sample.Session{cursor}, at(11))
+	if items := q.Items(); len(items) != 1 || items[0].State != StateFinished || items[0].Estimated {
+		t.Errorf("cursor items %+v, want one finished from the hook", items)
+	}
+}
+
+// TestAHookedCursorSessionThatPermitsWaitsForPermission: no Cursor hook
+// fires when its approval menu draws, so its pane tells it.
+func TestAHookedCursorSessionThatPermitsWaitsForPermission(t *testing.T) {
+	q := New()
+	q.Apply(hooks.Event{Name: "UserPromptSubmit", Agent: hooks.CursorAgent, SessionID: "chat1", Pane: "%7", At: at(0)})
+	q.Apply(hooks.Event{Name: "UserPromptSubmit", SessionID: "c1", Pane: "%8", At: at(0)})
+	cursor := session("", "%7", "web", "idle", time.Minute)
+	cursor.Agent, cursor.Permits, cursor.FromPane, cursor.LastLine = sample.CursorAgent, true, true, "Run this command?"
+	claude := session("c1", "%8", "api", "idle", time.Minute)
+	claude.Agent, claude.Permits = "claude", true
+	q.Merge([]sample.Session{cursor, claude}, at(10))
+	items := q.Items()
+	if len(items) != 1 || items[0].Pane != "%7" || items[0].State != StatePermission || items[0].LastLine != "Run this command?" {
+		t.Errorf("items %+v, want one permission wait of %%7", items)
+	}
+}
