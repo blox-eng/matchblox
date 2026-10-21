@@ -131,6 +131,9 @@ func (m Model) removeDevice(r devRow) *action {
 			if m.remoteDevices() || m.opt.Pair.RemoveDevice == nil {
 				return m, "Remove devices from the host's own terminal."
 			}
+			if m.fromDevice() { // checked again: the last client may have changed
+				return m, removeFromDeviceLine
+			}
 			// By fingerprint: two devices can share a name.
 			at := m.machineIndex()
 			backup, err := m.opt.Pair.RemoveDevice(d.Fingerprint)

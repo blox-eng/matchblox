@@ -78,6 +78,7 @@ func testPairHost(home, exe, hostKey string) *PairHost {
 			return out, err
 		},
 		RemoveDevice: func(name string) (string, error) { return setup.RemoveDevice(home, name) },
+		DeviceTTYs:   func() map[string]string { return setup.DeviceTTYs(home) },
 	}
 }
 

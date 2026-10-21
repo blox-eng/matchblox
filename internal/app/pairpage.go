@@ -50,6 +50,8 @@ type PairHost struct {
 	// RemoveDevice takes out one key, by its name or fingerprint, and gives
 	// the backup it made of the key file.
 	RemoveDevice func(nameOrFingerprint string) (backup string, err error)
+	// DeviceTTYs maps each terminal a device is in on to that device's id.
+	DeviceTTYs func() map[string]string
 }
 
 type pairPage struct {
@@ -337,6 +339,10 @@ func (m Model) pairKey(k string) (tea.Model, tea.Cmd) {
 		return m.closePairPage(why), nil
 	case "enter":
 		if p.phase == boxExpired || p.failed {
+			if m.fromDevice() {
+				m.flash = pairFromDeviceLine
+				return m, nil
+			}
 			return m.closePairPage("").openPairPage()
 		}
 	case "ctrl+c":

@@ -37,6 +37,10 @@ func (m Model) shownDoors(ds []doors.Door) []doors.Door {
 // openPairDoor is Enter or a tap on the pair door: the page owns the
 // screen and its keys, so nothing else stays open under it.
 func (m Model) openPairDoor() (Model, tea.Cmd) {
+	if m.fromDevice() {
+		m.flash = pairFromDeviceLine
+		return m, nil
+	}
 	m.pending, m.peek, m.sheet, m.form, m.held, m.searching = nil, nil, nil, nil, nil, false
 	m.armed = ""
 	return m.openPairPage()
