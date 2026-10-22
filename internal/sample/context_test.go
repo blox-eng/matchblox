@@ -629,3 +629,66 @@ func TestTheDirectoryFallbackTakesOnlyARolloutThatIsSurelyThisSessions(t *testin
 		t.Errorf("a rollout begun before the process: id %q, want none", s.SessionID)
 	}
 }
+
+// TestTheDirectoryFallbackCountsOnlyCodexSessions: a `codex exec` that
+// Claude Code runs in the TUI's directory, or a `codex mcp-server` it keeps,
+// is no second session there: the TUI keeps its rollout. Two rollouts
+// begun since the TUI started (an app thread, a /new) cannot be told
+// apart: no id, unmeasured. A rollout in the next day's directory (a
+// Codex in a zone ahead) is found. A process whose open files cannot be
+// read (macOS) is fresh once its directory shows no rollout of its own.
+func TestTheDirectoryFallbackCountsOnlyCodexSessions(t *testing.T) {
+	root := copyFixture(t)
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	started := fixtureNow.Add(-time.Duration((smp.FS.Uptime() - 10) * float64(time.Second)))
+	sessions := filepath.Join(root, "home", ".codex", "sessions")
+	tail := strings.SplitN(codexRollout("gpt-made-up", 51680, 258400), "\n", 2)[1]
+	write := func(day time.Time, name, meta string, at time.Time) {
+		path := filepath.Join(sessions, day.Format("2006/01/02"), name)
+		writeFile(t, path, meta+tail)
+		if err := os.Chtimes(path, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	proc := func(pid, ppid int, comm string, argv []string, pane, cwd string, fds bool) {
+		addProc(t, root, pid, ppid, comm, argv, pane)
+		if pane != "" {
+			addPane(t, root, pane+"\tw:"+strconv.Itoa(pid)+".1\tw\t"+strconv.Itoa(pid)+"\t"+comm+"\t"+cwd)
+		}
+		if fds {
+			symlink(t, "/dev/pts/3", filepath.Join(root, "proc", strconv.Itoa(pid), "fd", "0"))
+		}
+		symlink(t, cwd, filepath.Join(root, "proc", strconv.Itoa(pid), "cwd"))
+	}
+	after := started.Add(2 * time.Second)
+	// /work/tui: the TUI, a claude running `codex exec`, a `codex mcp-server`.
+	proc(900, 1, "codex", []string{"codex"}, "%20", "/work/tui", true)
+	proc(950, 1, "claude", []string{"claude"}, "%29", "/work/tui", true)
+	proc(951, 950, "codex", []string{"codex", "exec", "review"}, "", "/work/tui", false)
+	proc(960, 1, "codex", []string{"codex", "mcp-server"}, "", "/work/tui", false)
+	write(fixtureNow, "rollout-a-tui.jsonl", codexMeta("id-tui", "/work/tui", "codex-tui", after), fixtureNow.Add(-time.Second))
+	// /work/two: one TUI, two rollouts begun since it started.
+	proc(910, 1, "codex", []string{"codex"}, "%21", "/work/two", true)
+	write(fixtureNow, "rollout-b-one.jsonl", codexMeta("id-one", "/work/two", "codex-tui", after), fixtureNow.Add(-5*time.Second))
+	write(fixtureNow, "rollout-c-two.jsonl", codexMeta("id-two", "/work/two", "codex-tui", after.Add(time.Minute)), fixtureNow.Add(-time.Second))
+	// /work/ahead: its rollout under tomorrow's date.
+	proc(920, 1, "codex", []string{"codex"}, "%22", "/work/ahead", true)
+	write(fixtureNow.AddDate(0, 0, 1), "rollout-d-ahead.jsonl", codexMeta("id-ahead", "/work/ahead", "codex-tui", after), fixtureNow.Add(-time.Second))
+	// /work/mac: no open files to read, no rollout yet.
+	proc(930, 1, "codex", []string{"codex"}, "%23", "/work/mac", false)
+
+	got := byPane(smp.Sample())
+	if s := got["%20"]; s.SessionID != "id-tui" || s.Context != "known" {
+		t.Errorf("the TUI beside a codex exec and an mcp-server: id %q, context %q; want id-tui, known", s.SessionID, s.Context)
+	}
+	if s := got["%21"]; s.SessionID != "" || s.Context != "unmeasured" {
+		t.Errorf("two rollouts begun since the start: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
+	}
+	if s := got["%22"]; s.SessionID != "id-ahead" {
+		t.Errorf("a rollout in the next day's directory: id %q, want id-ahead", s.SessionID)
+	}
+	if s := got["%23"]; s.Context != "fresh" {
+		t.Errorf("no open files, no rollout since the start: context %q, want fresh", s.Context)
+	}
+}

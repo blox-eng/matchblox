@@ -41,27 +41,27 @@ func (s *Sampler) codexRollout(pid int, children map[int][]int) (path string, re
 }
 
 // codexInDir finds the rollout of a Codex that holds none open: Codex
-// 0.163 closes it after each write (#179). It is the newest rollout of the
-// process's directory written since the process started, among those
-// created since then (a month at most): a resumed session in an older
-// day's directory is not found. It must be this session's for sure, or z
-// parks the wrong pane: one that began before the process (a rollout
-// that names its start) or a `codex exec` run there is another's, and
-// the caller asks only when no other Codex runs in the directory. Codex
-// names its day directories in its own zone, so the scan starts a day
-// early; a directory not written since the process started is not read.
-func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) string {
+// 0.163 closes it after each write (#179), and macOS lists no open files
+// at all. It is the one rollout of the process's directory begun and
+// written since the process started, among those created since then (a
+// month at most): a resumed session in an older day's directory is not
+// found. It must be this session's for sure, or z parks the wrong pane:
+// a `codex exec` run's is another's, and two begun since the start (an
+// app thread there, a /new) cannot be told apart, so ambiguous is true.
+// The caller asks only when no other Codex session runs in the directory.
+// Codex names its day directories in its own zone, so the scan takes a
+// day either side; a directory not written since the start is not read.
+func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) (path string, ambiguous bool) {
 	if home == "" || cwd == "" {
-		return ""
+		return "", false
 	}
 	started, now = started.Local(), now.Local()
 	day := time.Date(started.Year(), started.Month(), started.Day()-1, 0, 0, 0, 0, time.Local)
 	if month := now.AddDate(0, -1, 0); day.Before(month) {
 		day = time.Date(month.Year(), month.Month(), month.Day(), 0, 0, 0, 0, time.Local)
 	}
-	var path string
-	var at time.Time
-	for ; !day.After(now); day = day.AddDate(0, 0, 1) {
+	found := 0
+	for last := now.AddDate(0, 0, 1); !day.After(last); day = day.AddDate(0, 0, 1) {
 		dir := filepath.Join(home, "sessions", day.Format("2006/01/02"))
 		if st, err := os.Stat(dir); err != nil || st.ModTime().Before(started) {
 			continue // no rollout was created there since
@@ -73,8 +73,7 @@ func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) strin
 				continue
 			}
 			f := filepath.Join(dir, name)
-			k, ok := statKey(f)
-			if !ok || k.mtime.Before(started) || path != "" && !k.mtime.After(at) {
+			if k, ok := statKey(f); !ok || k.mtime.Before(started) {
 				continue
 			}
 			m := r.metaOf(f)
@@ -83,10 +82,13 @@ func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) strin
 			if m.cwd != cwd || m.originator == "codex_exec" || !m.began.IsZero() && m.began.Before(started.Add(-time.Second)) {
 				continue
 			}
-			path, at = f, k.mtime
+			path, found = f, found+1
 		}
 	}
-	return path
+	if found > 1 {
+		return "", true
+	}
+	return path, false
 }
 
 // rolloutMeta is what a rollout's session_meta, its first line, says: the

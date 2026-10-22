@@ -560,7 +560,9 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 				opencodeIn[s.FS.Cwd(pid)]++
 			}
 		}
-		if s.agentName(pid, p) == "codex" && p.State != 'Z' && p.State != 'X' {
+		// Only sessions count: not a `codex exec` or an mcp-server that
+		// another agent runs, nor one of Codex's own non-interactive modes.
+		if s.agentName(pid, p) == "codex" && p.State != 'Z' && p.State != 'X' && !s.underAgent(p, procs) && !codexBatch(s.FS.Argv(pid)) {
 			if pp, ok := procs[p.PPID]; !ok || s.agentName(p.PPID, pp) != "codex" {
 				codexIn[s.FS.Cwd(pid)]++
 			}
@@ -625,12 +627,17 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		case "codex":
 			sess.Account, sess.Provider = s.accounts.codexAccount(env), "openai"
 			path, read := s.codexRollout(pid, children)
-			if path == "" && codexIn[sess.Cwd] == 1 {
+			// fresh: no rollout of its own yet, by its open files or, when
+			// they say nothing, by its directory.
+			fresh := read && (sess.Cwd == "" || codexIn[sess.Cwd] == 1)
+			if path == "" && sess.Cwd != "" && codexIn[sess.Cwd] == 1 && env.codexHome != "" {
 				started := now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
-				path = s.agents.codexInDir(env.codexHome, sess.Cwd, started, now)
+				var ambiguous bool
+				path, ambiguous = s.agents.codexInDir(env.codexHome, sess.Cwd, started, now)
+				fresh = !ambiguous
 			}
 			sess.Context = "unmeasured"
-			if read && (path != "" || sess.Cwd == "" || codexIn[sess.Cwd] == 1) { // with two here, no rollout yet is not known
+			if fresh || path != "" {
 				sess.Context = "fresh"
 			}
 			var lim *limits.Reading
@@ -838,6 +845,19 @@ func cursorPrint(argv []string) bool {
 
 // codexServer: argv runs a daemon of the Codex app, `codex app-server`,
 // which shares the CLI's name and is no session.
+// codexBatch: argv runs Codex without a person at it, a subcommand that
+// is no session of its own.
+func codexBatch(argv []string) bool {
+	if len(argv) < 2 {
+		return false
+	}
+	switch argv[1] {
+	case "exec", "e", "mcp-server", "mcp", "app-server", "proto":
+		return true
+	}
+	return false
+}
+
 func codexServer(argv []string) bool {
 	return len(argv) > 1 && argv[1] == "app-server" // its subcommand; an argument named so is a session's
 }

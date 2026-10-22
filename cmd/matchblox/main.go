@@ -230,9 +230,6 @@ func run(args []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", *cfgPath, err)
 	}
-	if *root == "" {
-		cfg.Agents = setup.Agents(cfg.Agents)
-	}
 	if *interval > 0 {
 		cfg.Interval.Duration = *interval
 	}
@@ -738,7 +735,7 @@ func shipsSource(cfg config.Config, dir string) service.ShipsSource {
 func newSampler(cfg config.Config, root string) *sample.Sampler {
 	smp := &sample.Sampler{
 		Cfg:    cfg,
-		Agents: cfg.Agents,
+		Agents: sessionAgents(cfg, root),
 		Rules: sample.Rules{
 			CompactAt:     cfg.Sessions.CompactAt,
 			CompactTokens: cfg.Sessions.CompactTokens,
