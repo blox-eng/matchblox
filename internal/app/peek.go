@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -195,35 +196,34 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		n = len(q.Options)
 	}
 	typing := v.ask == nil || p.at == n
-	key := k.String()
-	if time.Now().Before(m.peekQuiet) && key != "esc" && key != "ctrl+c" {
+	pk := m.keys.peek
+	// The quiet takes no key but esc; ctrl+c quit in Update before it.
+	if time.Now().Before(m.peekQuiet) && !bkey.Matches(k, pk.Close) {
 		return m, nil
 	}
 	switch {
-	case key == "esc":
+	case bkey.Matches(k, pk.Close):
 		m.peek = nil
 		return m, nil
-	case key == "ctrl+c":
-		return m.quit()
-	case key == "ctrl+o":
+	case bkey.Matches(k, pk.Jump):
 		m.peek = nil
 		if a := m.forHost(m.jump(v.s.Pane)); a != nil {
 			return m.confirm(*a)
 		}
 		return m, nil
-	case key == "right" || key == "tab":
+	case bkey.Matches(k, pk.Next):
 		return m.peekMove(p.pane, false), nil
-	case key == "left" || key == "shift+tab":
+	case bkey.Matches(k, pk.Prev):
 		return m.peekMove(p.pane, true), nil
 	case v.permit:
-		if key == "enter" {
+		if bkey.Matches(k, pk.Send) {
 			m.peek = nil
 			if a := m.forHost(m.jump(v.s.Pane)); a != nil {
 				return m.confirm(*a)
 			}
 		}
 		return m, nil
-	case key == "enter" && v.ask == nil:
+	case bkey.Matches(k, pk.Send) && v.ask == nil:
 		if strings.TrimSpace(p.text) == "" {
 			return m, nil
 		}
@@ -232,7 +232,7 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			rec = "answer:"
 		}
 		return m.sendPeek(v.s, rec+p.pane, p.text)
-	case key == "enter":
+	case bkey.Matches(k, pk.Send):
 		c := said.Choice{}
 		if q.Multi {
 			for i := 1; i <= n; i++ {
@@ -254,14 +254,14 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			c.Picks = []int{p.at + 1}
 		}
 		return m.peekChoose(v, p, c)
-	case key == "up" && v.ask != nil:
+	case bkey.Matches(k, pk.Up) && v.ask != nil:
 		p.at = max(p.at-1, 0)
-	case key == "down" && v.ask != nil:
+	case bkey.Matches(k, pk.Down) && v.ask != nil:
 		p.at = min(p.at+1, n)
-	case key == "backspace":
+	case bkey.Matches(k, pk.Erase):
 		p.text = trimLast(p.text)
-	case !typing && len(key) == 1 && key[0] >= '1' && key[0] <= '9':
-		d := int(key[0] - '0')
+	case !typing && bkey.Matches(k, pk.Pick):
+		d := int(k.String()[0] - '0')
 		switch {
 		case d == n+1:
 			p.at = n
@@ -271,7 +271,7 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		default:
 			return m.peekChoose(v, p, said.Choice{Picks: []int{d}})
 		}
-	case !typing && (key == "space" || key == " ") && q.Multi && p.at >= 0:
+	case !typing && bkey.Matches(k, pk.Tick) && q.Multi && p.at >= 0:
 		p.ticks = toggled(p.ticks, p.at+1)
 	case k.Text != "" && len([]rune(p.text)) < 500:
 		p.at, p.text = n, p.text+k.Text
@@ -448,28 +448,22 @@ func (m Model) peekBox(bw, maxH int, phone, fill bool) ([]string, []string, []sp
 	// The footer: each part a tap target (press "" none), " ─ " between
 	// them, two spaces inside the move group (← prev  3/7  next →).
 	var foot []footPart
-	key := func(k, label, press string) footPart {
-		t := st.accent.Render(k)
-		if label != "" {
-			t += st.muted.Render(" " + label)
-		}
-		return footPart{t, press, " ─ "}
-	}
+	pk, sep := m.keys.peek, " ─ "
 	switch {
 	case v.permit:
-		foot = append(foot, key("⏎", "open", "enter"))
+		foot = append(foot, st.footFor(pk.Send, "open", sep))
 	case v.ask != nil && p.q+1 < len(v.ask.Questions):
-		foot = append(foot, key("⏎", "question "+strconv.Itoa(p.q+2), "enter"))
+		foot = append(foot, st.footFor(pk.Send, "question "+strconv.Itoa(p.q+2), sep))
 	default:
-		foot = append(foot, key("⏎", "send", "enter"))
+		foot = append(foot, st.footFor(pk.Send, "", sep))
 	}
 	if v.ask != nil && v.ask.Questions[p.q].Multi && !typing {
-		foot = append(foot, key("␣", "tick", "space"))
+		foot = append(foot, st.footFor(pk.Tick, "", sep))
 	}
 	if ring := m.peekRing(p.pane); len(ring) > 1 {
-		foot = append(foot, footPart{st.accent.Render("←") + st.muted.Render(" prev"), "left", " ─ "})
+		foot = append(foot, st.footFor(pk.Prev, "", sep))
 		count := footPart{st.faint.Render(m.peekCount(p.pane, len(ring))), "", "  "}
-		next := footPart{st.muted.Render("next ") + st.accent.Render("→"), "right", "  "}
+		next := st.footForRev(pk.Next, "", "  ")
 		width := 3 + 3 + 3 // the corners, the space and esc
 		for _, f := range append(foot, count, next) {
 			width += lipgloss.Width(f.sep + f.text)
@@ -479,10 +473,10 @@ func (m Model) peekBox(bw, maxH int, phone, fill bool) ([]string, []string, []sp
 		}
 		foot = append(foot, next)
 	}
-	foot = append(foot, key("esc", "", "esc"))
+	foot = append(foot, st.footFor(pk.Close, "", sep))
 	// ^o goes to the pane itself, where it fits: the typing line takes
 	// every letter.
-	jump := key("^o", "jump", "ctrl+o")
+	jump := st.footFor(pk.Jump, "", sep)
 	width := 3 + 3 + lipgloss.Width(jump.sep+jump.text) // the corners and the space
 	for _, f := range foot {
 		width += lipgloss.Width(f.sep + f.text)
@@ -539,7 +533,7 @@ func boxFrame(hair lipgloss.Style, title string, lines []string, foot []footPart
 	}
 	line, x := hair.Render("╰─ "), 3
 	var spans []span
-	for i, f := range foot {
+	for i, f := range slices.DeleteFunc(slices.Clone(foot), func(f footPart) bool { return f == (footPart{}) }) {
 		if i > 0 {
 			line += hair.Render(f.sep)
 			x += lipgloss.Width(f.sep)
@@ -627,26 +621,4 @@ func (m Model) tapPeek(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 		m.peek = &p
 	}
 	return m.peekKey(keyPress(press))
-}
-
-// keyPress is the key a tap presses.
-func keyPress(k string) tea.KeyPressMsg {
-	switch k {
-	case "enter":
-		return tea.KeyPressMsg{Code: tea.KeyEnter}
-	case "tab":
-		return tea.KeyPressMsg{Code: tea.KeyTab}
-	case "left":
-		return tea.KeyPressMsg{Code: tea.KeyLeft}
-	case "right":
-		return tea.KeyPressMsg{Code: tea.KeyRight}
-	case "esc":
-		return tea.KeyPressMsg{Code: tea.KeyEsc}
-	case "space":
-		return tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
-	case "ctrl+o":
-		return tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl}
-	}
-	r := []rune(k)
-	return tea.KeyPressMsg{Code: r[0], Text: k}
 }

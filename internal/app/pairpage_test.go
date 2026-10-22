@@ -167,7 +167,7 @@ func TestPairPageWaitsForTheOfferOffUpdate(t *testing.T) {
 		}
 	}
 	text := pageText(m)
-	if !strings.Contains(text, "▚▞") || strings.Contains(text, "5:00") || strings.Contains(text, pairKeyLine) {
+	if !strings.Contains(text, "▚▞") || strings.Contains(text, "5:00") || strings.Contains(text, pairKeyLine(defaultKeys().pair)) {
 		t.Fatalf("not the shut box with no countdown:\n%s", text)
 	}
 	close(release)
@@ -546,7 +546,7 @@ func TestTheConsolePageNamesItsPort(t *testing.T) {
 	}
 	small := m
 	small.height = len(strings.Split(strings.TrimLeft(pageText(m), "\n"), "\n")) - 1 // all rows but the port line
-	if text := pageText(small); strings.Contains(text, pairPortLine) || !strings.Contains(text, pairKeyLine) {
+	if text := pageText(small); strings.Contains(text, pairPortLine) || !strings.Contains(text, pairKeyLine(defaultKeys().pair)) {
 		t.Fatalf("the port line took a row the page needs:\n%s", text)
 	}
 }

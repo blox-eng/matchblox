@@ -2,19 +2,17 @@ package app
 
 import (
 	"fmt"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
+
+	bkey "charm.land/bubbles/v2/key"
 
 	"github.com/blox-eng/matchblox/internal/docscheck"
 )
 
-// docKey turns a key as the docs write it into the name the console's key
-// handlers compare. Words match in any case.
+// docKey turns a key as the docs write it into the name a binding holds.
+// Words match in any case.
 var docKey = map[string]string{
 	"enter": "enter", "⏎": "enter", "esc": "esc", "↑": "up", "↓": "down", "←": "left", "→": "right",
 	"tab": "tab", "shift+tab": "shift+tab", "space": "space", "ctrl+c": "ctrl+c", "ctrl+o": "ctrl+o",
@@ -31,83 +29,35 @@ func keyName(doc string) string {
 	return doc
 }
 
-// keyLayer is the keys of one screen: groups are the cases of its key
-// function (keys that do the same thing), all is every key its handlers
-// compare with (case or ==).
+// keyLayer is the keys of one screen: groups are its bindings (the keys
+// of one act, and the key its help shows), all is every key of them.
 type keyLayer struct {
 	groups [][]string
 	all    map[string]bool
 }
 
-// handledKeys reads the key handlers from source, by receiver: Model is the
-// console, Shell is Hosts.
-func handledKeys(t *testing.T) map[string]*keyLayer {
-	t.Helper()
-	fset := token.NewFileSet()
-	layers := map[string]*keyLayer{"Model": {all: map[string]bool{}}, "Shell": {all: map[string]bool{}}}
-	for _, file := range []string{"model.go", "layers.go", "lists.go", "doors.go", "peek.go", "sheet.go"} {
-		f, err := parser.ParseFile(fset, file, nil, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, d := range f.Decls {
-			fn, ok := d.(*ast.FuncDecl)
-			if !ok || fn.Recv == nil || !slices.Contains([]string{"key", "peekKey", "scrollPreview", "search", "sheetKey"}, fn.Name.Name) {
-				continue
+// boundKeys reads the keys from the keymaps: Model is every keymap of the
+// console, Shell both of Hosts.
+func boundKeys() map[string]*keyLayer {
+	k, s := defaultKeys(), defaultShellKeys()
+	screens := map[string][][]bkey.Binding{
+		"Model": {k.global.bindings(), k.main.bindings(), k.form.bindings(), k.peek.bindings(), k.sheet.bindings(),
+			k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings()},
+		"Shell": {s.shell.bindings(), s.typing.bindings()},
+	}
+	layers := map[string]*keyLayer{}
+	for sc, maps := range screens {
+		l := &keyLayer{all: map[string]bool{}}
+		for _, b := range slices.Concat(maps...) {
+			g := append(slices.Clone(b.Keys()), b.Help().Key)
+			for _, key := range g {
+				l.all[key] = true
 			}
-			l := layers[recvName(fn)]
-			if l == nil {
-				continue
-			}
-			ast.Inspect(fn.Body, func(n ast.Node) bool {
-				switch n := n.(type) {
-				case *ast.CaseClause:
-					var g []string
-					for _, e := range n.List {
-						if s, ok := literal(e); ok {
-							g = append(g, s)
-							l.all[s] = true
-						}
-					}
-					if fn.Name.Name == "key" && len(g) > 0 {
-						l.groups = append(l.groups, g)
-					}
-				case *ast.BinaryExpr:
-					if n.Op == token.EQL {
-						if s, ok := literal(n.Y); ok {
-							l.all[s] = true
-							if fn.Name.Name == "key" && isKeyVar(n.X) {
-								l.groups = append(l.groups, []string{s})
-							}
-						}
-					}
-				}
-				return true
-			})
+			l.groups = append(l.groups, g)
 		}
+		layers[sc] = l
 	}
 	return layers
-}
-
-func recvName(fn *ast.FuncDecl) string {
-	if id, ok := fn.Recv.List[0].Type.(*ast.Ident); ok {
-		return id.Name
-	}
-	return ""
-}
-
-func isKeyVar(e ast.Expr) bool {
-	id, ok := e.(*ast.Ident)
-	return ok && (id.Name == "k" || id.Name == "key")
-}
-
-func literal(e ast.Expr) (string, bool) {
-	b, ok := e.(*ast.BasicLit)
-	if !ok || b.Kind != token.STRING {
-		return "", false
-	}
-	s, err := strconv.Unquote(b.Value)
-	return s, err == nil
 }
 
 // TestTheDocsNameEveryKeyAndOnlyRealOnes holds the keys of the README and
@@ -124,9 +74,9 @@ func TestTheDocsNameEveryKeyAndOnlyRealOnes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	layers := handledKeys(t)
+	layers := boundKeys()
 	if len(layers["Model"].groups) < 10 || len(layers["Shell"].groups) < 4 {
-		t.Fatalf("read %d console and %d Hosts key groups: the parse is broken", len(layers["Model"].groups), len(layers["Shell"].groups))
+		t.Fatalf("read %d console and %d Hosts key groups: the keymaps are broken", len(layers["Model"].groups), len(layers["Shell"].groups))
 	}
 	tabs := fmt.Sprintf("1-%d", len(tabNames))
 	named := map[string]map[string]bool{"Model": {}, "Shell": {}}
@@ -141,7 +91,7 @@ func TestTheDocsNameEveryKeyAndOnlyRealOnes(t *testing.T) {
 		}
 		ok := false
 		for _, sc := range screens {
-			if (sc == "Model" && r.Text == tabs) || layers[sc].all[k] {
+			if layers[sc].all[k] {
 				ok = true
 				if r.Table {
 					named[sc][k] = true

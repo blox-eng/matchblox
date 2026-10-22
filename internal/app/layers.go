@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/remote"
@@ -59,8 +60,9 @@ type Shell struct {
 	height  int
 	dark    bool
 	st      styles
-	gen     int        // the generation of the last console opened
-	offers  *pairWaits // the pair offers of every console: Close waits for all
+	gen     int          // the generation of the last console opened
+	offers  *pairWaits   // the pair offers of every console: Close waits for all
+	keys    shellKeymaps // the Hosts list keys
 }
 
 // layerMsg asks the shell to go back to Hosts.
@@ -73,7 +75,7 @@ type connectedHostMsg struct {
 }
 
 func NewShell(opt ShellOptions) Shell {
-	s := Shell{opt: opt, width: 100, height: 30, dark: true, st: newStyles(true), offers: &pairWaits{}}
+	s := Shell{opt: opt, width: 100, height: 30, dark: true, st: newStyles(true), offers: &pairWaits{}, keys: defaultShellKeys()}
 	s.hosts = s.readHosts()
 	switch {
 	case opt.Start != "":
@@ -210,8 +212,9 @@ func (s Shell) rows() []row {
 }
 
 func (s Shell) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	key := k.String()
-	if key == "ctrl+c" {
+	sk := s.keys.shell
+	// ctrl+c quits from Hosts, its name line and its questions too.
+	if bkey.Matches(k, sk.Interrupt) {
 		return s, tea.Quit
 	}
 	if s.input != nil {
@@ -220,7 +223,7 @@ func (s Shell) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if s.pending != nil {
 		a := *s.pending
 		s.pending = nil
-		if key == "y" {
+		if bkey.Matches(k, sk.Yes) {
 			return s.confirm(a)
 		}
 		s.flash = "cancelled: " + a.String()
@@ -228,22 +231,22 @@ func (s Shell) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	s.flash = ""
 	rs := s.rows()
-	switch key {
-	case "q":
+	switch {
+	case bkey.Matches(k, sk.Quit):
 		return s, tea.Quit
-	case "up", "k":
+	case bkey.Matches(k, sk.Up):
 		s.sel = max(s.sel-1, 0)
-	case "down", "j":
+	case bkey.Matches(k, sk.Down):
 		s.sel = min(s.sel+1, len(rs)-1)
-	case "esc":
+	case bkey.Matches(k, sk.Back):
 		if s.adding {
 			s.adding, s.sel = false, len(s.hosts)+1
 		}
-	case "x":
+	case bkey.Matches(k, sk.Remove):
 		if r := rs[min(s.sel, len(rs)-1)]; r.removable {
 			s.pending = &action{label: "remove", say: "remove " + r.host + " from the list (matchblox stays on " + r.host + ")", door: r.host, destructive: true}
 		}
-	case "enter":
+	case bkey.Matches(k, sk.Open):
 		return s.enter(rs[min(s.sel, len(rs)-1)])
 	}
 	return s, nil
@@ -307,11 +310,12 @@ func (s Shell) confirm(a action) (tea.Model, tea.Cmd) {
 // typing edits a host name; Enter shows its connect.
 func (s Shell) typing(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	text := *s.input
-	switch k.String() {
-	case "esc":
+	tk := s.keys.typing
+	switch {
+	case bkey.Matches(k, tk.Cancel):
 		s.input = nil
 		return s, nil
-	case "enter":
+	case bkey.Matches(k, tk.Connect):
 		s.input = nil
 		if !remote.ValidHost(text) {
 			s.flash = fmt.Sprintf("%q is not a host name: a name or user@address that ssh reaches", text)
@@ -319,7 +323,7 @@ func (s Shell) typing(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		s.pending = s.connect(text)
 		return s, nil
-	case "backspace":
+	case bkey.Matches(k, tk.Erase):
 		text = trimLast(text)
 	default:
 		if k.Text != "" && len(text) < 200 {
@@ -410,7 +414,7 @@ func (s Shell) render() string {
 	}
 	out = append(out, b.lines...)
 	if s.firstRun() && !s.adding {
-		out = append(out, "", fit(" "+st.faint.Render("You can add a host later: esc in a console comes back here."), w))
+		out = append(out, "", fit(" "+st.faint.Render("You can add a host later: "+defaultKeys().main.Back.Help().Key+" in a console comes back here."), w))
 	}
 	// The action line is at the bottom, as in a console (design/0006 §11.1);
 	// a step to confirm is a box over the dimmed list (#158).
@@ -424,26 +428,26 @@ func (s Shell) render() string {
 		if !phone {
 			bw = min(s.pending.width()+4, 72, w-8)
 		}
-		layBox(st, out, w, bw, phone, stepBox(st, *s.pending, bw))
+		layBox(st, out, w, bw, phone, stepBox(st, *s.pending, bw, s.keys.shell.Yes, s.keys.shell.Open, s.keys.shell.Back))
 	}
 	return strings.Join(out, "\n")
 }
 
 func (s Shell) actionLine(w int) string {
-	st := s.st
+	st, sk := s.st, s.keys.shell
 	switch {
 	case s.input != nil:
-		return fit(" "+st.label.Render("HOST ")+st.text.Render(*s.input)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ connect  esc cancel"), w)
+		return fit(" "+st.label.Render("HOST ")+st.text.Render(*s.input)+st.accent.Render("▏")+"  "+st.faint.Render(plainHints(hintFor(s.keys.typing.Connect, ""), hintFor(s.keys.typing.Cancel, ""))), w)
 	case s.pending != nil:
 		return "" // the box says it all
 	case s.flash != "":
 		return fit(" "+st.text.Render(s.flash), w)
 	case s.adding:
-		return fit(" "+st.muted.Render("↑↓ select  ⏎ connect  esc back  q quit"), w)
+		return fit(" "+st.muted.Render(plainHints(hintFor(sk.Up, ""), hintFor(sk.Open, "connect"), hintFor(sk.Back, ""), hintFor(sk.Quit, ""))), w)
 	}
-	keys := "↑↓ select  ⏎ open  q quit"
+	keys := plainHints(hintFor(sk.Up, ""), hintFor(sk.Open, ""), hintFor(sk.Quit, ""))
 	if rs := s.rows(); s.sel < len(rs) && rs[s.sel].removable {
-		keys = "↑↓ select  ⏎ open  x remove  q quit"
+		keys = plainHints(hintFor(sk.Up, ""), hintFor(sk.Open, ""), hintFor(sk.Remove, ""), hintFor(sk.Quit, ""))
 	}
 	return fit(" "+st.muted.Render(keys), w)
 }

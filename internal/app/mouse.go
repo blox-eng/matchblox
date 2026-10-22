@@ -72,7 +72,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	case ms.Y == sc.keysAt:
 		if s, ok := spanAt(sc.keys, ms.X); ok {
 			m.armed = ""
-			return m.keyed(s.press)
+			return m.keyed(keyPress(s.press))
 		}
 		return m, nil
 	case sc.dockAt >= 0 && ms.Y >= sc.dockAt && ms.Y < sc.dockAt+sc.dockH:
@@ -88,7 +88,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if ms.Y == sc.actKeysAt {
 		if s, ok := spanAt(sc.actKeys, ms.X); ok {
 			m.armed = ""
-			return m.keyed(s.press)
+			return m.keyed(keyPress(s.press))
 		}
 	}
 	i := ms.Y - sc.bodyTop
@@ -102,7 +102,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		m.foldRecs()
 		return m, nil
 	}
-	if _, ok := m.selectedRec(); ok && sc.rows[i] == m.rowIndex() && ms.X >= sc.listW-dismissWidth {
+	if _, ok := m.selectedRec(); ok && sc.rows[i] == m.rowIndex() && ms.X >= sc.listW-m.dismissWidth() {
 		m.dismissRec()
 		return m, nil
 	}

@@ -143,7 +143,7 @@ func TestOIsSealedAtNight(t *testing.T) {
 	until := time.Date(2026, 10, 10, 7, 0, 0, 0, time.Local)
 	m, f := loadedWith(t, 100, sheetState(proto.StokerView{Mode: proto.StokerMode{On: true, Until: until}}, "matchblox"))
 	next := sendKey(m, "o").(Model)
-	if next.sheet != nil || next.flash != sealedText || len(f.acts()) != 0 {
+	if next.sheet != nil || next.flash != next.sealedText() || len(f.acts()) != 0 {
 		t.Fatalf("flash %q sheet %v", next.flash, next.sheet)
 	}
 	run := proto.StokerOrder{ID: "r1", Words: "merge them", State: "running", Grants: []string{"merge"}}

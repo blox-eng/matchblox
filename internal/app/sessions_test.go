@@ -93,10 +93,10 @@ func TestTabsAndTheirDigits(t *testing.T) {
 	if next.(Model).tab != tabShips || !strings.Contains(screen(next), "No ships yet.") {
 		t.Fatalf("p does not open Ships:\n%s", screen(next))
 	}
-	if next, _ := m.key("tab"); next.(Model).tab != tabShips {
+	if next, _ := m.key(keyPress("tab")); next.(Model).tab != tabShips {
 		t.Fatal("Tab does not open the next tab")
 	}
-	if next, _ := m.key("shift+tab"); next.(Model).tab != tabStoker {
+	if next, _ := m.key(keyPress("shift+tab")); next.(Model).tab != tabStoker {
 		t.Fatal("Shift+Tab does not open the previous tab")
 	}
 	phone, _ := loadedWith(t, 44, queueState())

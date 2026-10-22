@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/doors"
@@ -104,7 +105,7 @@ func (m Model) doorRan(msg doorRanMsg) (tea.Model, tea.Cmd) {
 		m.flash = fmt.Sprintf("failed: %s: %v", msg.cmd, msg.err)
 		return m, nil
 	case msg.door == doors.Tmux:
-		m.flash = "tmux is installed: q, then matchblox, opens the console in tmux"
+		m.flash = "tmux is installed: " + m.keys.main.Quit.Help().Key + ", then matchblox, opens the console in tmux"
 	case msg.door == doors.Guide:
 		m.flash = "the guide runs in its window"
 		if m.conn != nil && !m.lost {
@@ -201,7 +202,7 @@ func (m Model) choiceLines(d doors.Door, w int) []string {
 	if m.alsoOn(d) {
 		box = "[x]"
 	}
-	return wrap(box+" m "+d.Also.Label, w-2, plainText)
+	return wrap(box+" "+m.keys.confirm.Also.Help().Key+" "+d.Also.Label, w-2, plainText)
 }
 
 // previewRoom is how many lines of the diff fit under the doors.
@@ -228,20 +229,22 @@ func (m Model) previewSeen() bool {
 }
 
 // scrollPreview moves a long diff with ↑↓; other keys go on to the confirm.
-func (m Model) scrollPreview(k string) (Model, bool) {
+// Only a door's diff scrolls: previewDoor is the guard.
+func (m Model) scrollPreview(k tea.KeyPressMsg) (Model, bool) {
 	d, ok := m.previewDoor()
 	if !ok {
 		return m, false
 	}
 	last := max(0, len(m.previewLines(d))-m.previewRoom())
-	switch k {
-	case "down", "j":
+	c := m.keys.confirm
+	switch {
+	case bkey.Matches(k, c.ScrollDown):
 		m.previewTop = min(m.previewTop+1, last)
-	case "up", "k":
+	case bkey.Matches(k, c.ScrollUp):
 		m.previewTop = max(m.previewTop-1, 0)
-	case "y":
+	case bkey.Matches(k, c.Yes):
 		return m, !m.previewSeen() // y waits for the end of the diff
-	case "m":
+	case bkey.Matches(k, c.Also):
 		if d.Also == nil {
 			return m, false
 		}
@@ -288,7 +291,7 @@ func (m Model) preview(b *body, d doors.Door, w int) {
 		b.add(-1, fit(" "+style.Render(tilde(l)), w))
 	}
 	if cut > 0 {
-		b.add(-1, fit(" "+st.faint.Render(fmt.Sprintf("… %d more lines: ↓ the rest of the diff, then y", cut)), w))
+		b.add(-1, fit(" "+st.faint.Render(fmt.Sprintf("… %d more lines: %s the rest of the diff, then %s", cut, m.keys.confirm.ScrollDown.Help().Key, m.keys.confirm.Yes.Help().Key)), w))
 	}
 }
 
