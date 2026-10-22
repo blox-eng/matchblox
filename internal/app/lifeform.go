@@ -351,7 +351,7 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 		m = m.pairActed(action{rec: "rename:" + f.pane})
 	} else {
 		if strings.TrimSpace(f.where) == "" {
-			f.err, f.at = "where does it start? a path, or "+m.keys.form.Left.Help().Key+" for the Git tab's", fieldWhere
+			f.err, f.at = "where does it start? a path, or ←→ for a repository", fieldWhere
 			return m, nil
 		}
 		n := proto.NewSession{Where: strings.TrimSpace(f.where), Branch: strings.TrimSpace(f.branch), Agent: f.agent, First: strings.TrimSpace(f.first)}
@@ -472,7 +472,7 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 	default:
 		hint := "a path"
 		if len(m.gitPaths()) > 0 {
-			hint = "a path, or " + m.keys.form.Left.Help().Key + " for the Git tab's"
+			hint = "a path, or ←→ for a repository"
 		}
 		field(fieldWhere, f.where, hint)
 		field(fieldBranch, f.branch, "blank: no new worktree")

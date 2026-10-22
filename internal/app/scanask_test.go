@@ -145,6 +145,20 @@ func TestFoundFeedsWhereNotGit(t *testing.T) {
 	}
 }
 
+func TestEmptyWhereNamesTheRepositories(t *testing.T) {
+	st := lifeState()
+	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{{Path: "/h/a"}}}
+	m, _ := loadedWith(t, 100, st)
+	next, _ := key(m, "N")
+	for range len(next.(Model).form.where) {
+		next, _ = key(next, "backspace")
+	}
+	next, _ = key(next, "enter")
+	if f := next.(Model).form; f == nil || f.err != "where does it start? a path, or ←→ for a repository" {
+		t.Fatalf("form %+v", f)
+	}
+}
+
 func TestFoundKeptWhenNil(t *testing.T) {
 	st := lifeState()
 	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{{Path: "/h/a"}}}
