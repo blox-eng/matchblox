@@ -25,14 +25,14 @@
                                                                │
                                                                │
                                                                │
-                                                               │
-                                                               │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  USAGE                                                         │ STOKER                              on
- ✻ Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                       │ watching 0 · 0 compacted · 0 waited · …
-          wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · out Fri ~21:00      │ no session full yet
- · login  not measured · OpenCode keeps no limits              │
- ❋ Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                           │
-          wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week      │
+ ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                │ watching 0 · 0 compacted · 0 waited · …
+                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00                │ no session full yet
+                 out Fri ~21:00                                │
+ · Google login  not measured · OpenCode keeps no limits       │
+ ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                    │
+                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00                │
+                 lasts the week                                │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  ⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit    sampled 0s ago

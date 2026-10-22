@@ -83,6 +83,10 @@ type Options struct {
 	LastClient func() (tty string, created time.Time, err error)
 	// Clip copies text to the builder's clipboard. Nil: OSC 52 with the output.
 	Clip func(text string)
+	// Graphics says whether every terminal that shows the console draws
+	// images, which they are, and whether any shows it (logos.Viewers).
+	// Nil: never.
+	Graphics func() (can bool, viewers string, watched bool)
 }
 
 type helloMsg proto.Hello
@@ -259,6 +263,10 @@ type Model struct {
 	acts       int
 	recRun     recRun // the last act on a recommendation, and what came of it
 	dark       bool
+	logos      bool   // USAGE draws the providers' logos
+	gfxKey     string // the viewers and background the logos went to
+	gfxBusy    bool   // a question about who shows the console waits
+	gfxAsks    int    // questions asked, for the tests
 	splashAt   time.Time
 	splashDone bool
 	armed      string // the step a second tap runs: what the first tap showed
@@ -336,7 +344,7 @@ func (m Model) Init() tea.Cmd {
 	if err := m.opt.DialErr; err != nil && m.conn == nil {
 		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd())
 	}
-	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd())
+	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0))
 }
 
 func (m Model) watchSilence() tea.Cmd {
@@ -471,6 +479,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m, order = m.sendOrder() // the stoker rests now: the order that waited for it goes
 		}
 		return m, tea.Batch(m.recv(), m.animate(), news, order)
+	case graphicsMsg:
+		return m.graphics(msg)
+	case graphicsTickMsg:
+		return m.askGraphics(msg)
 	case doorRanMsg:
 		return m.doorRan(msg)
 	case pairOfferMsg:

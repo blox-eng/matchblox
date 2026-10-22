@@ -6,6 +6,22 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **USAGE shows each provider's logo in kitty and Ghostty**, through tmux
+  too, while every terminal on the console's session can draw it; a phone
+  or another terminal attached there brings back the marks. matchblox
+  lets images pass through its own pane only. The logos are lobe-icons'
+  (MIT). ([#183](https://github.com/blox-eng/matchblox/issues/183))
+
+### Changed
+
+- **USAGE names the provider of each account.** Two plans called "Team"
+  read as `✻ Claude Team` and `❋ OpenAI Team`; Cursor, OpenCode and any
+  other provider are named too. On a narrow dock the meter shrinks so
+  the reset times stay whole.
+  ([#183](https://github.com/blox-eng/matchblox/issues/183))
+
 ### Fixed
 
 - **A known agent installed after the first run shows in Sessions.**
@@ -16,9 +32,9 @@ All notable changes to matchblox are in this file. The format follows
   `agents` adds others. The Codex app's `codex app-server` daemons are
   no session.
   ([#179](https://github.com/blox-eng/matchblox/issues/179))
-- **Codex 0.163 shows its context and limits.** It closes its rollout
-  after each write, so no open file named it and the session read as
-  fresh with no limits. The rollout is now also found as the newest one
+- **Codex shows its context and limits.** macOS lists no open files,
+  and Codex 0.163 closes its rollout after each write, so no open file
+  named it and the session read as unmeasured with no limits. The rollout is now also found as the newest one
   of the session's directory begun and written since it started, when it
   is the only Codex there and the rollout is not a `codex exec` run's.
   ([#179](https://github.com/blox-eng/matchblox/issues/179))
