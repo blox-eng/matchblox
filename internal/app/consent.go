@@ -138,7 +138,7 @@ func (m Model) overlayConsent(sc *drawn, w int) {
 // 40 at least: a desk's box is no wider than what it says.
 func (m Model) consentWidth() int {
 	if m.asksScan() {
-		return scanWidth()
+		return m.scanWidth()
 	}
 	if m.held != nil {
 		return 48

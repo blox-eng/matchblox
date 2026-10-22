@@ -729,6 +729,8 @@ func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		next, cmd = m.search(k)
 	case layerHeld:
 		next, cmd = m.answerTakeOver(k)
+	case layerScan:
+		next, cmd = m.answerScan(k)
 	case layerTakeOver:
 		m.held, m.flash = m.hold(k), ""
 		next = m
@@ -756,23 +758,10 @@ func stokerSeen(next tea.Model, cmd tea.Cmd) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
-func (m Model) key(k string) (tea.Model, tea.Cmd) {
-	if m.held != nil {
-		return m.answerTakeOver(k)
-	}
-	if m.asksScan() {
-		return m.answerScan(k)
-	}
-	if m.asksTakeOver(k) {
-		m.held, m.flash = m.hold(k), ""
-		return m, nil
-	}
-	if m.pending != nil && m.pending.door != "" && m.pending.which != "secondary" {
-		if mm, ok := m.scrollPreview(k); ok {
-			return mm, nil
-		}
-	}
-	if m.pending == nil && k == "enter" && errors.Is(m.blocked, remote.ErrHostKeyChanged) {
+// unblock is ⏎ on a host that is blocked or speaks another version: a
+// changed host key tries again, anything else shows the connect.
+func (m Model) unblock() (tea.Model, tea.Cmd) {
+	if errors.Is(m.blocked, remote.ErrHostKeyChanged) {
 		return m.tryAgain()
 	}
 	m.pending = m.connectAction()

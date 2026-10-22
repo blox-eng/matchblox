@@ -34,6 +34,7 @@ type keymaps struct {
 	pair     pairKeys
 	takeOver takeOverKeys
 	confirm  confirmKeys
+	scan     scanKeys
 }
 
 type shellKeymaps struct {
@@ -52,6 +53,7 @@ var shadowsMain = map[string]map[string]bool{
 	"pair":     {"c": true, "esc": true, "enter": true},
 	"takeOver": {"y": true, "n": true},
 	"confirm":  {"y": true, "enter": true, "up": true, "k": true, "down": true, "j": true},
+	"scan":     {"y": true, "n": true, "p": true, "esc": true},
 }
 
 func defaultKeys() keymaps {
@@ -141,6 +143,12 @@ func defaultKeys() keymaps {
 			Rest: bind(ks("y"), "y", "rest"),
 			Keep: bind(ks("n"), "n", "keep"),
 		},
+		scan: scanKeys{
+			Find:  bind(ks("y"), "y", "find"),
+			Never: bind(ks("n"), "n", "never"),
+			Pick:  bind(ks("p"), "p", "pick folders"),
+			Later: bind(ks("esc"), "esc", "later"),
+		},
 	}
 }
 
@@ -219,6 +227,11 @@ func (k pairKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Copy, k.Cl
 type takeOverKeys struct{ Rest, Keep bkey.Binding }
 
 func (k takeOverKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Rest, k.Keep} }
+
+// scanKeys answer "Find the Git repositories in your home folder?".
+type scanKeys struct{ Find, Never, Pick, Later bkey.Binding }
+
+func (k scanKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Find, k.Never, k.Pick, k.Later} }
 
 // shellKeys are the Hosts list.
 type shellKeys struct{ Quit, Up, Down, Back, Remove, Open, Yes, Interrupt bkey.Binding }

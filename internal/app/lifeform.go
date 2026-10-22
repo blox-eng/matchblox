@@ -352,7 +352,7 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 		m = m.pairActed(action{rec: "rename:" + f.pane})
 	} else {
 		if strings.TrimSpace(f.where) == "" {
-			f.err, f.at = "where does it start? a path, or ←→ for a repository", fieldWhere
+			f.err, f.at = "where does it start? a path, or "+m.keys.form.Left.Help().Key+" for a repository", fieldWhere
 			return m, nil
 		}
 		n := proto.NewSession{Where: strings.TrimSpace(f.where), Branch: strings.TrimSpace(f.branch), Agent: f.agent, First: strings.TrimSpace(f.first)}
@@ -473,7 +473,7 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 	default:
 		hint := "a path"
 		if len(m.gitPaths()) > 0 {
-			hint = "a path, or ←→ for a repository"
+			hint = "a path, or " + m.keys.form.Left.Help().Key + " for a repository"
 		}
 		field(fieldWhere, f.where, hint)
 		field(fieldBranch, f.branch, "blank: no new worktree")
@@ -537,7 +537,7 @@ func (m Model) formFoot() []footPart {
 	fk, sep := m.keys.form, " ─ "
 	switch {
 	case m.form.pick:
-		return []footPart{key("⏎", "find", "enter"), key("esc", "", "esc")}
+		return []footPart{st.footFor(fk.Enter, "find", sep), st.footFor(fk.Close, "", sep)}
 	case m.form.rename:
 		return []footPart{st.footFor(fk.Enter, "rename", sep), st.footFor(fk.Close, "", sep)}
 	case m.form.swap:
