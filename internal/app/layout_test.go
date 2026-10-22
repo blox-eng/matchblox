@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -405,14 +406,19 @@ func TestTheKeyLineIsAtTheBottom(t *testing.T) {
 			t.Fatalf("width %d: keys under the tabs", w)
 		}
 		next, _ := key(selectPane(t, m, "%3"), "enter")
-		if !strings.Contains(last(next), "RUN tmux switch-client -t %3") {
-			t.Fatalf("width %d: the confirm is not at the bottom: %q", w, last(next))
+		// The confirm is a box: on a phone its foot sits on the key line's
+		// hairline, under the thumb; wider, it is in the middle.
+		out := strings.Split(ansi.Strip(next.(Model).render()), "\n")
+		foot := slices.IndexFunc(out, func(l string) bool { return strings.Contains(l, "╰─ ⏎ run") })
+		phone := next.(Model).layoutAt(w) == Narrow || next.(Model).upright()
+		if !strings.Contains(actionLine(next), "tmux switch-client -t %3") || foot < 0 || phone != (foot == len(out)-3) {
+			t.Fatalf("width %d: the confirm box is not where it belongs:\n%s", w, strings.Join(out, "\n"))
 		}
 		next, _ = key(next, "esc")
 		next = selectPane(t, next, "%2")
 		next, _ = key(next, "a")
 		next = typeText(next, "yes")
-		out := strings.Split(ansi.Strip(next.(Model).render()), "\n")
+		out = strings.Split(ansi.Strip(next.(Model).render()), "\n")
 		if w < 60 && (!strings.Contains(out[len(out)-3], "⏎ send") || !strings.Contains(out[len(out)-4], "› yes▏")) {
 			t.Fatalf("width %d: the peek does not sit on the key line:\n%s", w, strings.Join(out, "\n"))
 		}

@@ -14,9 +14,9 @@
  1 without an agent: shell:1.1 zsh                             │ ship     #4540 ●━●━●━●━●  live
                                                                │          The 1.0 docs
  RECOMMENDATIONS · 7 · h hides                                 │          https://github.com/hearth/spa…
- ▲ The week runs short: compact spark-docs                     │ why      clear: idle 9m (clear after 0…
- ○ Clear spark-docs (%3)                                       │ sonnet · 176k / 200k tokens · +0k in
- ○ Clear kindle-web (%5)                                       │ 30 min · ✻ team@example.com · Max ·
+ ▲ The week runs short: compa╭─ Kill spark-docs ──────────────────────────╮lear: idle 9m (clear after 0…
+ ○ Clear spark-docs (%3)     │ tmux kill-pane -t %3, then kill -TERM 1400 │76k / 200k tokens · +0k in
+ ○ Clear kindle-web (%5)     ╰─ y run ─ any other key cancels ────────────╯ team@example.com · Max ·
  ○ Clear cinder-ci (%6)                                        │ pid 1400 · 1 process · started 3h20m
  ○ Clear flint-auth (%2)                                       │ ago
  ○ Clear ember-billing (%8)                                    │
@@ -35,4 +35,4 @@
                                                                │ 1310     claude              0%   9.8M…
                                                                │ 1400     claude              0%   9.8M…
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- RUN kill spark-docs: tmux kill-pane -t %3, then kill -TERM 1400   y run  any other key cancels
+ the question above waits for its key

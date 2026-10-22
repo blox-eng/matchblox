@@ -228,6 +228,8 @@ func (m Model) draw(w int) drawn {
 	sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
 	sc.lines = append(sc.lines, m.st.hair.Render(strings.Repeat("─", w)), keys)
 	switch {
+	case m.consenting():
+		m.overlayConsent(&sc, w)
 	case m.sheet != nil:
 		m.overlaySheet(&sc, w)
 	case m.form != nil:
@@ -506,6 +508,9 @@ func (m Model) keyLine(w int) (string, []span) {
 	st := m.st
 	if m.searching {
 		return fit(" "+st.label.Render("/ ")+st.text.Render(m.filter)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ keep  esc clear"), w), nil
+	}
+	if m.consenting() {
+		return fit(" "+st.faint.Render("the question above waits for its key"), w), nil
 	}
 	if m.held != nil {
 		switch {

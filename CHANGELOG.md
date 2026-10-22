@@ -19,6 +19,15 @@ All notable changes to matchblox are in this file. The format follows
 - **Sessions says `outside tmux` for an agent with no pane.** The row and
   `matchblox sessions` name the place, instead of leaving it blank.
 
+### Changed
+
+- **A step asks for consent in a box, not on the bottom line** (#158).
+  Kill, switch, merge, remove, connect, a jump and the stoker's take-over
+  show what runs in a box over the dimmed screen: its title says what it
+  does, its lines the exact commands, its foot the key. On a phone it rises
+  above the key line; wider, it sits in the middle. A door's long diff keeps
+  its confirm on the key line.
+
 ## [0.14.0] - 2026-10-21
 
 ### Added

@@ -23,9 +23,9 @@
  RECOMMENDATIONS · 7 · h hides
  ▲ The week runs short: compact spark-docs
  ○ Clear spark-docs (%3)
- ○ Clear kindle-web (%5)
- ○ Clear cinder-ci (%6)
- ○ Clear flint-auth (%2)
- ○ Clear ember-billing (%8)
+╭─ Kill spark-docs ────────────────────────╮
+│ tmux kill-pane -t %3, then kill -TERM    │
+│ 1400                                     │
+╰─ y run ─ any other key cancels ──────────╯
 ────────────────────────────────────────────
- RUN kill spark-docs: tmux kill-pane -t %3,…
+ the question above waits for its key
