@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.17.4] - 2026-10-22
+
 ### Fixed
 
 - **`matchblox pair` stops up front when sshd cannot use the one-time
@@ -554,7 +556,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.17.3...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.17.4...HEAD
+[0.17.4]: https://github.com/blox-eng/matchblox/compare/v0.17.3...v0.17.4
 [0.17.3]: https://github.com/blox-eng/matchblox/compare/v0.17.2...v0.17.3
 [0.17.2]: https://github.com/blox-eng/matchblox/compare/v0.17.1...v0.17.2
 [0.17.1]: https://github.com/blox-eng/matchblox/compare/v0.17.0...v0.17.1
