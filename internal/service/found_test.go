@@ -684,3 +684,35 @@ func TestRescanDropsReposOfAFolderThatAnswered(t *testing.T) {
 		t.Fatalf("console repos %v: a repo gone from a folder that answered stays gone", got)
 	}
 }
+
+func TestNamedFolderClearsHungMemory(t *testing.T) {
+	s, _ := foundTest(t)
+	var mu sync.Mutex
+	var skips []map[string]bool
+	s.Find = func(_ context.Context, _ []string, skip map[string]bool) gitscan.Result {
+		mu.Lock()
+		defer mu.Unlock()
+		skips = append(skips, skip)
+		return gitscan.Result{}
+	}
+	now := time.Now()
+	s.hung = map[string]time.Time{"/p": now, "/p/sub": now, "/q": now, "/px": now}
+	foundReady(t, s)
+	if r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Text: "/p", Console: true}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	if r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(skips) != 2 {
+		t.Fatalf("%d walks, want 2", len(skips))
+	}
+	if skips[0]["/p"] || skips[0]["/p/sub"] || !skips[0]["/q"] || !skips[0]["/px"] {
+		t.Fatalf("skip %v: a folder the builder names is never skipped; others still are", skips[0])
+	}
+	if !skips[1]["/q"] {
+		t.Fatalf("skip %v: a yes that names no folder clears nothing", skips[1])
+	}
+}

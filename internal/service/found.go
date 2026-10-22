@@ -71,10 +71,12 @@ func (s *Service) kickFound() {
 const hungFor = 6 * time.Hour
 
 // scanReq is a yes that waits for a walk of roots, the picked ones it
-// recorded. done holds one answer, so the loop never waits on a yes
-// whose console has gone.
+// recorded. named: the builder typed or picked them, so none is skipped
+// for having hung before. done holds one answer, so the loop never waits
+// on a yes whose console has gone.
 type scanReq struct {
 	roots []string
+	named bool
 	done  chan scanOutcome
 }
 
@@ -171,6 +173,11 @@ func (s *Service) walk(ctx context.Context, reqs []scanReq) {
 	roots := c.Roots
 	if s.ScanRoots != nil {
 		roots = s.ScanRoots(c.Roots)
+	}
+	for _, r := range reqs {
+		if r.named {
+			s.forgetHung(r.roots)
+		}
 	}
 	start := time.Now()
 	res := s.Find(ctx, roots, s.skipHung(start))
@@ -280,6 +287,25 @@ func (s *Service) skipHung(now time.Time) map[string]bool {
 	return skip
 }
 
+// forgetHung drops from the hung memory the folders at or below roots, as
+// picked and as ScanRoots spells them: a picked root is never skipped.
+func (s *Service) forgetHung(roots []string) {
+	var dirs []string
+	for _, r := range roots {
+		dirs = append(dirs, filepath.Clean(r))
+		if s.ScanRoots != nil {
+			if out := s.ScanRoots([]string{r}); len(out) > 0 {
+				dirs = append(dirs, filepath.Clean(out[0])) // the picked come first
+			}
+		}
+	}
+	for p := range s.hung {
+		if slices.ContainsFunc(dirs, func(d string) bool { return under(p, d) }) {
+			delete(s.hung, p)
+		}
+	}
+}
+
 // scanYes records a yes, with the roots in text (one a line; none: those
 // on record), and waits for a walk of them: it says how that walk went.
 func (s *Service) scanYes(ctx context.Context, text string) proto.Result {
@@ -292,8 +318,9 @@ func (s *Service) scanYes(ctx context.Context, text string) proto.Result {
 			roots = append(roots, l)
 		}
 	}
+	named := len(roots) > 0
 	s.consentMu.Lock()
-	if len(roots) == 0 {
+	if !named {
 		roots = s.consent().Roots
 	}
 	c := state.Consent{Answer: "yes", Roots: roots, At: s.now()}
@@ -308,7 +335,7 @@ func (s *Service) scanYes(ctx context.Context, text string) proto.Result {
 	s.setFound(f)
 	s.consentMu.Unlock()
 
-	r := scanReq{roots: roots, done: make(chan scanOutcome, 1)}
+	r := scanReq{roots: roots, named: named, done: make(chan scanOutcome, 1)}
 	stopped := proto.Result{Err: errScanStopped.Error()}
 	select {
 	case s.scanReqs <- r:
