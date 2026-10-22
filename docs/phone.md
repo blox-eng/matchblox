@@ -136,6 +136,15 @@ on `← prev` or `next →`, moves it along the list; `Esc` or a tap outside
 the peek closes it. See [the answer
 peek](console.md#the-answer-peek).
 
+## Switch an agent from the phone
+
+The selected agent's keys are under it: on a one-column phone at the foot
+of its opened row, held upright with a small font at the foot of the
+drawer. Tap `A switch` to open Switch agent. Tap the agent you want, then
+`Enter`; the plan rises in a box above the key line, and a typed `y` runs it (a tap is never consent). The new agent
+starts in the same pane with the same name, and the console jumps to it.
+See [`A` in Keys](keys.md).
+
 ## The phone layout
 
 A phone held upright is read by its shape, so the keyboard coming and
