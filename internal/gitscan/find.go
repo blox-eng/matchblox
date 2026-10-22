@@ -72,9 +72,15 @@ type Skip struct {
 
 // The reasons a folder is skipped.
 const (
+	whyNoAnswer  = "it did not answer"
 	whyHung      = "it did not answer before"
 	whyProtected = "macOS asks first; p picks it"
 )
+
+// Unanswered reports whether the folder was skipped because it did not
+// answer, this walk or a recent one: what was found there before still
+// stands.
+func (k Skip) Unanswered() bool { return k.Why == whyNoAnswer || k.Why == whyHung }
 
 func whyNetwork(fstype string) string { return "a network folder (" + fstype + ")" }
 
@@ -365,6 +371,10 @@ func (w *walker) note(msg string) {
 func (w *walker) skip(path, why string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.skipLocked(path, why)
+}
+
+func (w *walker) skipLocked(path, why string) {
 	if w.skipSeen[path] {
 		return
 	}
@@ -382,12 +392,25 @@ func (w *walker) setAt(dir string) {
 	w.mu.Unlock()
 }
 
-// result is what the walk has so far. hung: report what did not answer.
-// stuck: Limit fired, so the folder being read is one.
+// result is what the walk has so far. hung: report what did not answer,
+// in Hung for the caller and in Skipped for the builder. stuck: Limit
+// fired, so the folder being read is one.
 func (w *walker) result(hung, stuck bool) Result {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	var res Result
+	if hung {
+		for _, p := range w.asked {
+			if w.pending[p] {
+				res.Hung = append(res.Hung, p)
+				w.skipLocked(filepath.Clean(p), whyNoAnswer)
+			}
+		}
+		if stuck && w.at != "" {
+			res.Hung = append(res.Hung, w.at)
+			w.skipLocked(w.at, whyNoAnswer)
+		}
+	}
 	for _, c := range w.found {
 		res.Repos = append(res.Repos, c)
 	}
@@ -401,16 +424,6 @@ func (w *walker) result(hung, stuck bool) Result {
 	}
 	res.Skipped = append(res.Skipped, w.skipped...)
 	res.SkippedMore = w.skipMore
-	if hung {
-		for _, p := range w.asked {
-			if w.pending[p] {
-				res.Hung = append(res.Hung, p)
-			}
-		}
-		if stuck && w.at != "" {
-			res.Hung = append(res.Hung, w.at)
-		}
-	}
 	return res
 }
 

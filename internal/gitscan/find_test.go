@@ -787,3 +787,52 @@ func FuzzStripCredentials(f *testing.F) {
 		}
 	})
 }
+
+func TestFindListsARootThatDidNotAnswer(t *testing.T) {
+	a, dead := tmp(t), tmp(t)
+	mkRepo(t, filepath.Join(a, "r"), "main", "")
+	mkRepo(t, filepath.Join(dead, "r"), "main", "")
+	rs, _ := blockOn(t, dead)
+	swapFS(t, nil, rs)
+	o := FindOpts{Budget: 200 * time.Millisecond, Grace: 100 * time.Millisecond}
+	res := Find(context.Background(), []string{dead, a}, o)
+	if !slices.Equal(res.Hung, []string{dead}) {
+		t.Fatalf("Hung = %v, want %s", res.Hung, dead)
+	}
+	if want := []Skip{{dead, "it did not answer"}}; !slices.Equal(res.Skipped, want) {
+		t.Fatalf("skipped %v, want %v: a root that did not answer is not silent", res.Skipped, want)
+	}
+	if !res.Skipped[0].Unanswered() {
+		t.Fatal("Unanswered() false for a root that did not answer")
+	}
+}
+
+func TestFindListsAFolderThatHungMidWalk(t *testing.T) {
+	root := tmp(t)
+	stuck := filepath.Join(root, "z")
+	mkdir(t, stuck)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	swapFS(t, func(dir string) ([]os.DirEntry, error) {
+		if dir == stuck {
+			<-release
+		}
+		return os.ReadDir(dir)
+	}, nil)
+	o := FindOpts{Budget: 200 * time.Millisecond, Grace: 50 * time.Millisecond}
+	res := Find(context.Background(), []string{root}, o)
+	if want := []Skip{{stuck, "it did not answer"}}; !slices.Equal(res.Skipped, want) {
+		t.Fatalf("skipped %v, want %v", res.Skipped, want)
+	}
+}
+
+func TestSkipUnanswered(t *testing.T) {
+	for why, want := range map[string]bool{
+		"it did not answer": true, "it did not answer before": true,
+		"macOS asks first; p picks it": false, "a network folder (nfs)": false,
+	} {
+		if got := (Skip{Path: "/x", Why: why}).Unanswered(); got != want {
+			t.Errorf("%q: Unanswered() = %v, want %v", why, got, want)
+		}
+	}
+}
