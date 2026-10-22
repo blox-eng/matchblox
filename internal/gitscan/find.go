@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -263,31 +264,39 @@ func readCheckout(dir, remote string) (Checkout, bool) {
 	return c, true
 }
 
-// StripCredentials drops the user, the password and the query of a URL: a
-// token kept there never leaves the service. An ssh URL keeps its user
-// alone, which is not a secret.
-func StripCredentials(url string) string {
-	scheme, rest, ok := strings.Cut(url, "://")
+// StripCredentials drops the user, the password, the query and the fragment
+// of a URL: a token kept there never leaves the service. An ssh URL keeps its
+// user alone, which is not a secret. The userinfo is cut first, at the last @,
+// because a password with a / or ? still parses, with its tail in the path.
+func StripCredentials(raw string) string {
+	scheme, rest, ok := strings.Cut(raw, "://")
 	if !ok {
-		return url
+		return raw
 	}
-	rest, _, _ = strings.Cut(rest, "?")
-	host, path, slash := strings.Cut(rest, "/")
-	if i := strings.LastIndex(host, "@"); i >= 0 {
-		user := ""
+	user := ""
+	if i := strings.LastIndex(rest, "@"); i >= 0 {
 		switch strings.ToLower(scheme) {
 		case "ssh", "git+ssh", "ssh+git":
-			user, _, _ = strings.Cut(host[:i], ":")
+			user, _, _ = strings.Cut(rest[:i], ":")
 		}
-		host = host[i+1:]
+		rest = rest[i+1:]
+	}
+	if u, err := url.Parse(scheme + "://" + rest); err == nil {
+		u.User = nil
 		if user != "" {
-			host = user + "@" + host
+			u.User = url.User(user)
 		}
+		u.RawQuery, u.Fragment, u.RawFragment, u.ForceQuery = "", "", "", false
+		return u.String()
 	}
-	if !slash {
-		return scheme + "://" + host
+	// Unparsable: keep what is left, without the query and the fragment.
+	if i := strings.IndexAny(rest, "?#"); i >= 0 {
+		rest = rest[:i]
 	}
-	return scheme + "://" + host + "/" + path
+	if user != "" {
+		rest = user + "@" + rest
+	}
+	return scheme + "://" + rest
 }
 
 // ScanRoots are the folders a scan starts from: the picked ones, else the

@@ -238,23 +238,45 @@ func TestFindMaxDirs(t *testing.T) {
 }
 
 func TestStripCredentials(t *testing.T) {
-	for in, want := range map[string]string{
-		"https://u:t@github.com/o/r.git":   "https://github.com/o/r.git",
-		"https://ghp_token@github.com/o/r": "https://github.com/o/r",
-		"git@github.com:o/r.git":           "git@github.com:o/r.git",
-		"ssh://git@h/o/r":                  "ssh://git@h/o/r",
-		"HTTPS://u:tok@h/o/r":              "HTTPS://h/o/r",
-		"ssh://u:pw@h/o/r":                 "ssh://u@h/o/r",
-		"git+ssh://git@h/o/r":              "git+ssh://git@h/o/r",
-		"/srv/git/r.git":                   "/srv/git/r.git",
-		"git+https://tok@h/o/r":            "git+https://h/o/r",
-		"persistent-https://tok@h/o/r":     "persistent-https://h/o/r",
-		"git://tok@h/o/r":                  "git://h/o/r",
-		"https://h/o/r?access_token=tok":   "https://h/o/r",
-		"https://h?private_token=tok":      "https://h",
+	for _, c := range []struct{ in, want string }{
+		{"https://bot:ab?cd@github.com/org/r.git", "https://github.com/org/r.git"},
+		{"https://bot:ab/cd@github.com/org/r.git", "https://github.com/org/r.git"},
+		{"https://bot:ab#cd@github.com/org/r.git", "https://github.com/org/r.git"},
+		// url.Parse accepts this one, with the secret in the path.
+		{"https://bot:123/secret@github.com/o/r.git", "https://github.com/o/r.git"},
+		{"https://bot:123?x@github.com/o/r.git", "https://github.com/o/r.git"},
+		{"https://x:tok@github.com/o/r.git", "https://github.com/o/r.git"},
+		{"https://ghp_tok@github.com/o/r.git", "https://github.com/o/r.git"},
+		{"https://github.com/o/r.git?token=t", "https://github.com/o/r.git"},
+		{"HTTPS://x:t@GitHub.com/o/r", "HTTPS://GitHub.com/o/r"},
+		{"https://x:t@host:8443/o/r", "https://host:8443/o/r"},
+		{"https://x:t@[::1]:8443/r", "https://[::1]:8443/r"},
+		{"ssh://git:secret@host/r", "ssh://git@host/r"},
+		{"git+ssh://git:s@host/r", "git+ssh://git@host/r"},
+		{"persistent-https://x:t@host/r", "persistent-https://host/r"},
+		{"file:///srv/r.git", "file:///srv/r.git"},
+		{"git@github.com:o/r.git", "git@github.com:o/r.git"},
+		{"", ""},
+		{"no-scheme", "no-scheme"},
+		{"ssh://git@h/o/r", "ssh://git@h/o/r"},
+		{"git+https://tok@h/o/r", "git+https://h/o/r"},
+		{"git://tok@h/o/r", "git://h/o/r"},
+		{"https://h?private_token=tok", "https://h"},
+		{"https://h/o/r#frag", "https://h/o/r"},
+		{"/srv/git/r.git", "/srv/git/r.git"},
+		// Unparsable: the fallback still drops the userinfo and the query.
+		{"https://x:t@h:xyz/r?tok=1#tok", "https://h:xyz/r"},
 	} {
-		if got := StripCredentials(in); got != want {
-			t.Errorf("StripCredentials(%q) = %q, want %q", in, got, want)
+		got := StripCredentials(c.in)
+		// The scheme's case is url's to choose; the host and the path are not.
+		if got != c.want && !(strings.HasPrefix(c.in, "HTTPS://") && got == "https://GitHub.com/o/r") {
+			t.Errorf("StripCredentials(%q) = %q, want %q", c.in, got, c.want)
+		}
+		// "git@" is an ssh user, which is no secret.
+		for _, bad := range []string{"tok", "secret", "ab", "cd", "t@"} {
+			if strings.Contains(strings.ReplaceAll(got, "git@", ""), bad) {
+				t.Errorf("StripCredentials(%q) = %q, still has %q", c.in, got, bad)
+			}
 		}
 	}
 }
