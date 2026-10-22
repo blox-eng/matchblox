@@ -192,7 +192,7 @@ func run(args []string) error {
 		})
 		var jump func([]string) error
 		if os.Getenv("TMUX") != "" {
-			jump = func(argv []string) error { return exec.Command(argv[0], argv[1:]...).Run() }
+			jump = func(argv []string) error { return exec.Command(argv[0], argv[1:]...).Run() } //nolint:gosec // tmux switch-client, built by cliSwitch
 		}
 		return cliSwitch(words, so, os.Stdout, transport.SocketPath(), jump)
 	case "new":
