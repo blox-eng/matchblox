@@ -122,20 +122,19 @@ func TestCliScanSays(t *testing.T) {
 }
 
 func TestCLIScanListsSkipped(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		t.Skip("no home")
-	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	sock := isolate(t)
 	actService(t, sock, proto.Result{Scan: &proto.ScanSummary{Repos: 3, Took: 2 * time.Second,
 		Errors:      []string{"e1"},
-		Skipped:     []gitscan.Skip{{Path: filepath.Join(home, "Desktop"), Why: "macOS asks first"}, {Path: "/mnt/nas", Why: "network"}},
+		Skipped:     []gitscan.Skip{{Path: filepath.Join(home, "Desktop"), Why: "macOS asks first"}, {Path: home + "2/x", Why: "near"}, {Path: "/mnt/nas", Why: "network"}},
 		SkippedMore: 4}})
 	var out bytes.Buffer
 	if err := cliScan(nil, &out, sock); err != nil {
 		t.Fatal(err)
 	}
-	want := "found 3 repositories in 2s\ne1\nskipped ~/Desktop: macOS asks first\nskipped /mnt/nas: network\nand 4 more\n"
+	want := "found 3 repositories in 2s\ne1\nskipped ~/Desktop: macOS asks first\nskipped " + home + "2/x: near\nskipped /mnt/nas: network\nand 4 more\n"
 	if out.String() != want {
 		t.Fatalf("got %q, want %q", out.String(), want)
 	}
