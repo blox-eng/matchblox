@@ -143,13 +143,14 @@ func TestAPhoneRowOpensInPlace(t *testing.T) {
 	if !strings.Contains(out[at+1], "“Claude needs your permission to use Bash”") {
 		t.Fatalf("no last words under the row:\n%s", strings.Join(out, "\n"))
 	}
-	if !strings.Contains(out[at+2], "plan 75%") || !strings.Contains(out[at+2], "a answer  ⏎ open") {
-		t.Fatalf("no plan and keys: %q", out[at+2])
+	// The plan and the keys share no line at 50 columns: each gets its own.
+	if !strings.Contains(out[at+2], "plan 75%") || !strings.Contains(out[at+2], "! compact") || !strings.Contains(out[at+3], "a answer  A switch  ⏎ open") {
+		t.Fatalf("no plan and keys:\n%s", strings.Join(out[at:at+4], "\n"))
 	}
-	if !strings.HasPrefix(out[at-1], "────") || !strings.HasPrefix(out[at+3], "────") {
+	if !strings.HasPrefix(out[at-1], "────") || !strings.HasPrefix(out[at+4], "────") {
 		t.Fatalf("the opened block is not between hairlines:\n%s", strings.Join(out, "\n"))
 	}
-	if sessLine(t, m, "app-review") != at+4 || strings.Contains(out[at+5], "“") {
+	if sessLine(t, m, "app-review") != at+5 || strings.Contains(out[at+6], "“") {
 		t.Fatalf("the rows that are not selected open too:\n%s", strings.Join(out, "\n"))
 	}
 	if lineOf(t, m, "WAITS FOR YOU · 2") > lineOf(t, m, "QUIET · 1") {
@@ -158,7 +159,7 @@ func TestAPhoneRowOpensInPlace(t *testing.T) {
 	// Selected, app-review (done) offers an answer.
 	next, _ := key(m, "down")
 	out = strings.Split(ansi.Strip(next.(Model).render()), "\n")
-	if at := sessLine(t, next, "app-review"); !strings.Contains(out[at+1], "a answer  ⏎ open") {
+	if at := sessLine(t, next, "app-review"); !strings.Contains(out[at+1], "a answer  A switch  ⏎ open") {
 		t.Fatalf("no a for a session that waits for an answer:\n%s", strings.Join(out, "\n"))
 	}
 	for tab := range tabNames {

@@ -80,3 +80,6 @@ device before a release. `ws-1` is the host.
     mobile data). The app has no keepalive yet: write down what you see.
 15. Pair two hosts. Swipe to remove one. The app says how to remove its
     key on the host.
+16. Select a session in tmux and tap `A switch` under it. Switch agent
+    opens; tap another agent, then `Enter`, then type `y`. The console
+    jumps to the pane, where the new agent starts.

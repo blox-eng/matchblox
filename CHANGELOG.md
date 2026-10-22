@@ -11,6 +11,11 @@ All notable changes to matchblox are in this file. The format follows
 - **`matchblox switch <who> --agent <name>` runs another agent in a session's
   pane:** same name, directory, park and ship, with a handoff line to start
   from. Switch it from the CLI, or `A` in Sessions.
+- **`A switch` sits under the selected session, and a tap presses it.** A
+  phone's opened row and the detail beside the list carry the session's
+  keys; a tap on one presses it, so the iPhone app switches an agent with
+  no keyboard. On a narrow phone the plan and the keys get a line each, so
+  `! compact` is no longer cut.
 - **Sessions says `outside tmux` for an agent with no pane.** The row and
   `matchblox sessions` name the place, instead of leaving it blank.
 

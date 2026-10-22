@@ -18,7 +18,7 @@
  ○ Clear spark-docs (%3)           │ ways merge-order  priority  release-train  triage          │· Max · pid 1400 · 1 process ·
  ○ Clear kindle-web (%5)           ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
  ○ Clear cinder-ci (%6)                                                       │
- ○ Clear flint-auth (%2)                                                      │ a answer   ⏎ open it
+ ○ Clear flint-auth (%2)                                                      │ a answer   ⏎ open it   A switch agent
  ○ Clear ember-billing (%8)                                                   │
  ○ Clear wick-mobile (%7)                                                     │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
