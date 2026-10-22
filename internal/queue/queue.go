@@ -350,6 +350,32 @@ func (q *Queue) join(s sample.Session, byPane map[string]string) string {
 
 func (q *Queue) Items() []Item { return append([]Item(nil), q.items...) }
 
+// WithJoined fills the session id of a sampled session that has none, from
+// the hooked chat that joins it by pane. Cursor has no session file: its
+// hooks name the chat, and park needs that id. sessions is not changed: a
+// changed list is a copy.
+func (q *Queue) WithJoined(sessions []sample.Session) []sample.Session {
+	byPane := map[string]string{}
+	for id, ev := range q.hooked {
+		q.byNewer(byPane, ev.Pane, id)
+	}
+	out, copied := sessions, false
+	for i, s := range sessions {
+		if s.SessionID != "" {
+			continue
+		}
+		id := q.join(s, byPane)
+		if id == "" {
+			continue
+		}
+		if !copied {
+			out, copied = append([]sample.Session(nil), sessions...), true
+		}
+		out[i].SessionID = id
+	}
+	return out
+}
+
 // WithAsks is sessions with the question tool's call each one waits on.
 // The transcript's call stays when the hooks know none or the same one. A
 // hook's call fills a session whose transcript shows none, as in auto mode,
