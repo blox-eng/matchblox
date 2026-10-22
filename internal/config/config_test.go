@@ -57,6 +57,16 @@ alert = ["notify-send", "console"]
 	}
 }
 
+func TestLoadScanRoots(t *testing.T) {
+	c, err := Load(write(t, "[git]\nscan_roots = [\"/srv/x\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Git.ScanRoots) != 1 || c.Git.ScanRoots[0] != "/srv/x" {
+		t.Fatalf("scan_roots = %v", c.Git.ScanRoots)
+	}
+}
+
 func TestBadInput(t *testing.T) {
 	if _, err := Load(write(t, "[[groups]]\nname = \"x\"\ncontainer = \"(\"\n")); err == nil {
 		t.Error("bad regexp accepted")
