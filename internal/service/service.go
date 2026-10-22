@@ -180,6 +180,11 @@ type Service struct {
 	// hung are the folders that did not answer a walk, and when: the
 	// walks of the next 6 hours skip them. foundLoop's alone.
 	hung map[string]time.Time
+	// rootsResolved is where each root, as written, last resolved to,
+	// so a root that hangs in its lookup keeps the repos found where it
+	// led. foundLoop's alone, and not persisted: after a restart, a root
+	// that hangs on its first lookup has none.
+	rootsResolved map[string]string
 	// nos counts the noes, so a walk knows a no came while it ran even
 	// when a yes for the same roots came after it.
 	nos uint64

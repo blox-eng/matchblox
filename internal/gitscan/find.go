@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -91,6 +92,9 @@ type Result struct {
 	Skipped     []Skip   // at most maxSkipped
 	SkippedMore int
 	Hung        []string // roots as written that never resolved, and the folder read when Limit fired
+	// Resolved is each root that answered its lookup, as written, to the
+	// path it resolved to: a later walk where it hangs knows where it led.
+	Resolved map[string]string
 }
 
 const (
@@ -221,6 +225,7 @@ type walker struct {
 	skipped  []Skip
 	skipMore int
 	skipSeen map[string]bool
+	resolved map[string]string // Result.Resolved
 }
 
 // lookup is a path as written and what resolving it gave.
@@ -314,8 +319,12 @@ wait:
 		home = l.path
 	}
 	var dirs []string
+	answered := map[string]string{}
 	for _, r := range roots {
 		l, ok := got[r]
+		if ok && l.err == nil && !w.o.Skip[r] {
+			answered[r] = l.path
+		}
 		switch {
 		case !ok:
 		case l.skip: // as written when its lookup hung, else resolved
@@ -328,6 +337,9 @@ wait:
 			dirs = append(dirs, l.path)
 		}
 	}
+	w.mu.Lock()
+	w.resolved = answered
+	w.mu.Unlock()
 	// The deepest first: ~ then reaches ~/dev already walked, and skips it.
 	sort.SliceStable(dirs, func(i, j int) bool {
 		return strings.Count(dirs[i], string(filepath.Separator)) > strings.Count(dirs[j], string(filepath.Separator))
@@ -467,6 +479,9 @@ func (w *walker) result(hung, stuck bool) Result {
 	}
 	res.Skipped = append(res.Skipped, w.skipped...)
 	res.SkippedMore = w.skipMore
+	if len(w.resolved) > 0 {
+		res.Resolved = maps.Clone(w.resolved)
+	}
 	return res
 }
 

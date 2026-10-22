@@ -729,3 +729,21 @@ func TestScanRan(t *testing.T) {
 		}
 	}
 }
+
+func TestRescanKeepsReposOfASymlinkedRootThatDidNotAnswer(t *testing.T) {
+	s, _ := foundTest(t)
+	scripted(s,
+		gitscan.Result{Repos: []gitscan.Checkout{{Path: "/real/a"}, {Path: "/other/c"}},
+			Resolved: map[string]string{"/default": "/real"}},
+		gitscan.Result{Hung: []string{"/default"}, Skipped: []gitscan.Skip{{Path: "/default", Why: "it did not answer"}}},
+	)
+	foundReady(t, s)
+	for range 2 {
+		if r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true}); r.Err != "" {
+			t.Fatal(r.Err)
+		}
+	}
+	if got := repoPaths(firstFound(t, s).Repos); !slices.Equal(got, []string{"/real/a"}) {
+		t.Fatalf("console repos %v: a hung link keeps the repos under where it last led", got)
+	}
+}

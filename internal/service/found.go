@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -186,6 +187,10 @@ func (s *Service) walk(ctx context.Context, reqs []scanReq) {
 	for _, p := range res.Hung {
 		s.hung[p] = time.Now()
 	}
+	if s.rootsResolved == nil {
+		s.rootsResolved = map[string]string{}
+	}
+	maps.Copy(s.rootsResolved, res.Resolved)
 	if ctx.Err() != nil {
 		all(errScanStopped) // a cut walk must not replace the list
 		return
@@ -208,15 +213,22 @@ func (s *Service) walk(ctx context.Context, reqs []scanReq) {
 
 // carryOver is res's repos and, from the last scan, those under a folder
 // res could not read because it did not answer: a folder that did not
-// answer keeps what was found there, sorted by path as Find sorts.
+// answer keeps what was found there, sorted by path as Find sorts. A root
+// that hung as written also covers where it last resolved to.
 func (s *Service) carryOver(res gitscan.Result) []gitscan.Checkout {
 	var dark []string
-	for _, p := range res.Hung {
+	add := func(p string) {
 		dark = append(dark, filepath.Clean(p))
+		if r, ok := s.rootsResolved[p]; ok {
+			dark = append(dark, filepath.Clean(r))
+		}
+	}
+	for _, p := range res.Hung {
+		add(p)
 	}
 	for _, k := range res.Skipped {
 		if k.Unanswered() {
-			dark = append(dark, filepath.Clean(k.Path))
+			add(k.Path)
 		}
 	}
 	if len(dark) == 0 {

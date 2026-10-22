@@ -878,3 +878,19 @@ func TestFindProtectedBelowRootInAnotherCase(t *testing.T) {
 		}
 	}
 }
+
+func TestFindReportsResolvedRoots(t *testing.T) {
+	real := tmp(t)
+	link := filepath.Join(tmp(t), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(real, "gone")
+	res := Find(context.Background(), []string{link, real, missing}, FindOpts{})
+	if res.Resolved[link] != real || res.Resolved[real] != real {
+		t.Fatalf("Resolved = %v, want %s and %s both to %s", res.Resolved, link, real, real)
+	}
+	if _, ok := res.Resolved[missing]; ok {
+		t.Fatalf("Resolved = %v: a root that does not exist resolved to nothing", res.Resolved)
+	}
+}
