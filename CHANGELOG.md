@@ -20,7 +20,8 @@ All notable changes to matchblox are in this file. The format follows
 - **The app tells a refused gate from a silent host.** A host that exits
   with status 126 and no reply used to read as "did not answer". The app
   now says that the host refused the gate and what to change.
-  ([#102](https://github.com/blox-eng/matchblox/issues/102))
+  ([#102](https://github.com/blox-eng/matchblox/issues/102),
+  [#120](https://github.com/blox-eng/matchblox/issues/120))
 
 ## [0.17.3] - 2026-10-22
 
