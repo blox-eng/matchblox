@@ -25,11 +25,8 @@ func (d *Duration) UnmarshalText(b []byte) error {
 }
 
 type Config struct {
-	Interval Duration `toml:"interval"`
-	Agents   []string `toml:"agents"`
-	// AgentsSet: the file has an agents key. A config written before the
-	// first run found the agents has none; the console finds them then.
-	AgentsSet     bool     `toml:"-"`
+	Interval      Duration `toml:"interval"`
+	Agents        []string `toml:"agents"`
 	LatencyTarget string   `toml:"latency_target"`
 	Sessions      Sessions `toml:"sessions"`
 	Alerts        Alerts   `toml:"alerts"`
@@ -193,7 +190,6 @@ func Load(path string) (Config, error) {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return c, err
 	}
-	c.AgentsSet = md.IsDefined("agents")
 	c.Stoker.PaneSet = md.IsDefined("stoker", "pane")
 	if c.Limits.Quiet, err = limits.ParseQuiet(c.Limits.QuietHours, c.Limits.QuietDays); err != nil {
 		return c, errors.New("limits.quiet_hours or quiet_days: " + err.Error())

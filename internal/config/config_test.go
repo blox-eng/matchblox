@@ -92,22 +92,6 @@ func TestTheStokersPaneKeyIsGone(t *testing.T) {
 	}
 }
 
-// TestAgentsSetTellsAConfigWithoutAgents: a config written before agents
-// were found has no agents key; the console then finds them at start.
-func TestAgentsSetTellsAConfigWithoutAgents(t *testing.T) {
-	dir := t.TempDir()
-	old := filepath.Join(dir, "old.toml")
-	os.WriteFile(old, []byte("[alerts]\nload1_over = 8\n"), 0o600)
-	if c, err := Load(old); err != nil || c.AgentsSet {
-		t.Fatalf("old config: set %v, %v", c.AgentsSet, err)
-	}
-	set := filepath.Join(dir, "set.toml")
-	os.WriteFile(set, []byte("agents = [\"codex\"]\n"), 0o600)
-	if c, _ := Load(set); !c.AgentsSet || strings.Join(c.Agents, ",") != "codex" {
-		t.Fatalf("set config: %+v", c.Agents)
-	}
-}
-
 // TestQuietHoursShapeTheForecast: the forecast counts the hours the builder
 // does not usually work as quiet; the defaults are the night and the
 // weekend, and a value that does not parse is an error, not a guess.

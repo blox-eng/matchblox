@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -38,8 +39,8 @@ func WriteConfig(path string, cores int, memTotal uint64, agents []string) (bool
 	body := fmt.Sprintf(`# matchblox: the goals of this machine. Change them here.
 # Made from this machine: %d cores, %.0f GB of memory.
 
-# The coding agents found on this machine. A process with one of these
-# command names in a tmux pane is a session. Add any other agent by name.
+# The coding agents found on this machine. Every known agent is a session
+# wherever it is installed; add any other agent here by name.
 agents = [%s]
 
 [alerts]
@@ -81,4 +82,17 @@ func FindAgents(lookPath func(string) (string, error)) []string {
 		}
 	}
 	return found
+}
+
+// Agents are the process names that are sessions: every known agent,
+// installed at the first run or after it (#179), then the others the
+// config adds.
+func Agents(configured []string) []string {
+	out := slices.Clone(KnownAgents)
+	for _, a := range configured {
+		if !slices.Contains(out, a) {
+			out = append(out, a)
+		}
+	}
+	return out
 }

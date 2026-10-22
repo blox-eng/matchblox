@@ -31,6 +31,15 @@ func (s *Service) heldIn(pane string, x sample.Session) (holds.Hold, bool) {
 	if s.Holds == nil {
 		return holds.Hold{}, false
 	}
+	if x.SessionID == "" && pane != "" {
+		// An id the sampler lost sight of (a Codex rollout it can no longer
+		// tell apart): the park on the pane holds, as the console shows.
+		for _, h := range s.Holds.List() {
+			if h.Pane == pane && !h.Rebind {
+				return h, true
+			}
+		}
+	}
 	return s.Holds.Pending(pane)
 }
 
