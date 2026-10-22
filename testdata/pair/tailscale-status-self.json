@@ -1,0 +1,9 @@
+{
+  "Version": "1.80.0",
+  "BackendState": "Running",
+  "Self": {
+    "HostName": "ws-1",
+    "DNSName": "ws-1.tail1234.ts.net.",
+    "TailscaleIPs": ["100.101.102.103", "fd7a:115c:a1e0::1"]
+  }
+}

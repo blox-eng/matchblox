@@ -41,7 +41,8 @@ Non-goals:
 - The pair failures of #102 and #120 (Tailscale SSH, an other
   `AuthorizedKeysFile`). They get their own pull request. This design gives
   them a place: a failed check shows the shut box and one line with the fix,
-  as an expired code does.
+  as an expired code does. Done: the host refuses before the code, and the
+  app names a refused gate.
 - Renaming a device. The device name comes from the phone (§6.4); a rename is
   a later issue.
 - Pairing from a console of another host (remote mode). §4.6 says what that

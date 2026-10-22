@@ -1,0 +1,6 @@
+port 22
+addressfamily any
+permitrootlogin without-password
+pubkeyauthentication yes
+authorizedkeysfile .ssh/authorized_keys .ssh/authorized_keys2
+passwordauthentication no

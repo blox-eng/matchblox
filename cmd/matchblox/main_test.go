@@ -37,6 +37,8 @@ func TestMain(m *testing.M) {
 	}
 	// The replay draws the demo clock's times, never this machine's zone.
 	time.Local = time.UTC
+	// Pair tests stay off this machine's tailscale and sshd.
+	setup.SetPairProbe(setup.PairProbe{LookPath: func(string) (string, error) { return "", errors.New("not found") }})
 	os.Exit(m.Run())
 }
 
