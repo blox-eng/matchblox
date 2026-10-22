@@ -38,7 +38,8 @@ in `[git] repos` and `[git] scan_roots`, and N's `where` offers what it
 finds. `p pick folders` scans the folders you type instead of the usual
 ones; the two config keys always add. It skips `node_modules`, `vendor`,
 `target`, `Library` and hidden folders, follows no symlink, and does not
-look inside a repository. It reads files only: no git runs, nothing goes on
+look inside a repository, unless it is one of those folders (a home folder
+kept in git is still searched). It reads files only: no git runs, nothing goes on
 the network. It scans again every 30 minutes.
 
 The answer is in `~/.local/state/matchblox/scan.json` and the list in

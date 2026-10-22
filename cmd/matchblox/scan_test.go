@@ -8,9 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
-	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
@@ -89,23 +87,54 @@ func actService(t *testing.T, sock string, res proto.Result) <-chan proto.Act {
 	return got
 }
 
-func TestCliScanSays(t *testing.T) {
-	sock := isolate(t)
-	repos := filepath.Join(t.TempDir(), "repos.json")
-	state.WriteFound(repos, gitscan.Found{Consent: "yes", Took: 1300 * time.Millisecond, Repos: []gitscan.Checkout{{Path: "/a"}, {Path: "/b"}}})
-	actService(t, sock, proto.Result{})
-	var out bytes.Buffer
-	if err := cliScan(nil, &out, sock, repos); err != nil {
+// foundService answers the act, then the next console with a snapshot
+// carrying found: what the service itself found, not a file the CLI reads.
+func foundService(t *testing.T, sock string, found proto.Found) {
+	t.Helper()
+	l, err := transport.Listen(sock)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got := out.String(); got != "found 2 repositories in 1.3s\n" {
+	t.Cleanup(func() { l.Close() })
+	go func() {
+		for {
+			nc, err := l.Accept()
+			if err != nil {
+				return
+			}
+			c := transport.NewConn(nc)
+			c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version})
+			if env, err := c.Recv(); err != nil || env.Kind != proto.KindHello {
+				c.Close()
+				continue
+			}
+			st := proto.State{Found: &found}
+			st.At = time.Now()
+			c.Send(proto.KindSnapshot, "", st)
+			if env, err := c.Recv(); err == nil && env.Kind == proto.KindAct {
+				c.Send(proto.KindResult, env.ID, proto.Result{ActID: env.ID})
+			}
+			c.Close()
+		}
+	}()
+}
+
+func TestCliScanSays(t *testing.T) {
+	sock := isolate(t)
+	foundService(t, sock, proto.Found{Consent: "yes", Took: 1300 * time.Millisecond, Repos: []proto.Checkout{{Path: "/a"}, {Path: "/b"}},
+		Errors: []string{"stopped after 100000 folders: some repositories may be missing"}})
+	var out bytes.Buffer
+	if err := cliScan(nil, &out, sock); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.String(); got != "found 2 repositories in 1.3s\nstopped after 100000 folders: some repositories may be missing\n" {
 		t.Fatalf("got %q", got)
 	}
 
 	sock2 := filepath.Join(filepath.Dir(sock), "two.sock")
 	actService(t, sock2, proto.Result{})
 	out.Reset()
-	if err := cliScan([]string{"off"}, &out, sock2, repos); err != nil {
+	if err := cliScan([]string{"off"}, &out, sock2); err != nil {
 		t.Fatal(err)
 	}
 	if got := out.String(); got != "the scan is off, and its list is gone\n" {
@@ -113,10 +142,16 @@ func TestCliScanSays(t *testing.T) {
 	}
 }
 
+func TestScanOutwaitsTheWalk(t *testing.T) {
+	if scanWait <= 2*scanBudget {
+		t.Fatalf("matchblox scan waits %s: a walk of %s behind one already running ends after it", scanWait, scanBudget)
+	}
+}
+
 func TestCliScanRefused(t *testing.T) {
 	sock := isolate(t)
 	actService(t, sock, proto.Result{Err: "only you say yes to a scan, at a console or in your own shell"})
-	if err := cliScan(nil, &bytes.Buffer{}, sock, filepath.Join(t.TempDir(), "r.json")); err == nil || err.Error() != "scan: refused: only you say yes to a scan, at a console or in your own shell" {
+	if err := cliScan(nil, &bytes.Buffer{}, sock); err == nil || err.Error() != "scan: refused: only you say yes to a scan, at a console or in your own shell" {
 		t.Fatalf("err %v", err)
 	}
 }

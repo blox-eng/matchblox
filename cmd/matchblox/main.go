@@ -209,7 +209,7 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		return cliScan(words, os.Stdout, transport.SocketPath(), state.ReposPath())
+		return cliScan(words, os.Stdout, transport.SocketPath())
 	case "stoker":
 		words, err := positionals(fl, args) // all of them: a -- before the first word holds too
 		if err != nil {
@@ -580,7 +580,7 @@ func newService(cfg config.Config, root string) *service.Service {
 	}
 	s.Ships = shipsSource(cfg, filepath.Dir(s.StatePath))
 	if home, err := os.UserHomeDir(); err == nil {
-		opts := gitscan.FindOpts{Depth: gitscan.FindDepth, Remote: cfg.Git.Remote, MaxDirs: 100_000, Budget: 30 * time.Second}
+		opts := gitscan.FindOpts{Depth: gitscan.FindDepth, Remote: cfg.Git.Remote, MaxDirs: 100_000, Budget: scanBudget}
 		s.Find = func(ctx context.Context, roots []string) ([]gitscan.Checkout, []string) {
 			return gitscan.Find(ctx, roots, opts)
 		}
@@ -862,33 +862,39 @@ func status(w io.Writer, path string, cfg config.Config, root string, text bool)
 // fromService reads the first snapshot from a running service. A snapshot
 // older than maxAge means its sample loop is stuck: not current.
 func fromService(path string, maxAge time.Duration) (state.Doc, bool) {
+	st, ok := serviceState(path, maxAge)
+	return st.Doc, ok
+}
+
+// serviceState is the first snapshot the service sends a console.
+func serviceState(path string, maxAge time.Duration) (proto.State, bool) {
 	c, err := transport.Dial(path, 200*time.Millisecond)
 	if err != nil {
-		return state.Doc{}, false
+		return proto.State{}, false
 	}
 	defer c.Close()
 	timer := time.AfterFunc(3*time.Second, func() { c.Close() })
 	defer timer.Stop()
 	if c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version, Binary: version}) != nil {
-		return state.Doc{}, false
+		return proto.State{}, false
 	}
 	for {
 		env, err := c.Recv()
 		if err != nil {
-			return state.Doc{}, false
+			return proto.State{}, false
 		}
 		switch env.Kind {
 		case proto.KindHello:
 			var h proto.Hello
 			if json.Unmarshal(env.Body, &h) != nil || h.Version != proto.Version {
-				return state.Doc{}, false
+				return proto.State{}, false
 			}
 		case proto.KindSnapshot:
 			var st proto.State
 			if json.Unmarshal(env.Body, &st) != nil || time.Since(st.At) > maxAge {
-				return state.Doc{}, false
+				return proto.State{}, false
 			}
-			return st.Doc, true
+			return st, true
 		}
 	}
 }

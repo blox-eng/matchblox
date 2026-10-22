@@ -130,6 +130,17 @@ func TestFindStopsAtGit(t *testing.T) {
 	}
 }
 
+func TestFindDescendsIntoARootCheckout(t *testing.T) {
+	home := tmp(t)
+	mkRepo(t, home, "main", "")
+	proj := filepath.Join(home, "git", "proj")
+	mkRepo(t, proj, "main", "")
+	mkRepo(t, filepath.Join(proj, "sub"), "main", "")
+	if got := paths(find(t, home)); !slices.Equal(got, []string{home, proj}) {
+		t.Fatalf("got %v, want the home checkout and %s", got, proj)
+	}
+}
+
 func TestFindDepth(t *testing.T) {
 	root := tmp(t)
 	four := filepath.Join(root, "1", "2", "3", "4")
@@ -198,6 +209,8 @@ func TestStripCredentials(t *testing.T) {
 		"https://ghp_token@github.com/o/r": "https://github.com/o/r",
 		"git@github.com:o/r.git":           "git@github.com:o/r.git",
 		"ssh://git@h/o/r":                  "ssh://git@h/o/r",
+		"HTTPS://u:tok@h/o/r":              "HTTPS://h/o/r",
+		"ssh://u:pw@h/o/r":                 "ssh://u@h/o/r",
 		"/srv/git/r.git":                   "/srv/git/r.git",
 	} {
 		if got := StripCredentials(in); got != want {
@@ -224,5 +237,8 @@ func TestScanRoots(t *testing.T) {
 	got = ScanRoots(home, []string{"~/w"}, []string{"/srv/x"}, nil)
 	if want := []string{"/h/w", "/srv/x"}; !slices.Equal(got, want) {
 		t.Fatalf("picked: got %v, want %v", got, want)
+	}
+	if got := ScanRoots(home, []string{"dev"}, nil, nil); !slices.Equal(got, []string{"/h/dev"}) {
+		t.Fatalf("a relative folder: got %v, want it under the home", got)
 	}
 }

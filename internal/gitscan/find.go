@@ -67,7 +67,7 @@ func Find(ctx context.Context, roots []string, o FindOpts) (repos []Checkout, er
 		if fi, err := os.Stat(r); err != nil || !fi.IsDir() {
 			continue
 		}
-		if w.walk(ctx, r, o.Depth) {
+		if w.walk(ctx, r, o.Depth, true) {
 			break
 		}
 	}
@@ -90,8 +90,9 @@ type walker struct {
 	stop     string
 }
 
-// walk reports true once a bound stops the scan.
-func (w *walker) walk(ctx context.Context, dir string, left int) bool {
+// walk reports true once a bound stops the scan. A root that is a
+// checkout (dotfiles kept in git at ~) is still walked.
+func (w *walker) walk(ctx context.Context, dir string, left int, root bool) bool {
 	if l, ok := w.left[dir]; ok && l >= left {
 		return false
 	}
@@ -115,7 +116,9 @@ func (w *walker) walk(ctx context.Context, dir string, left int) bool {
 			if c, ok := readCheckout(dir, w.o.Remote); ok {
 				w.found[dir] = c
 			}
-			return false
+			if !root {
+				return false
+			}
 		}
 	}
 	if left == 0 {
@@ -126,7 +129,7 @@ func (w *walker) walk(ctx context.Context, dir string, left int) bool {
 		if !e.IsDir() || skipDirs[name] || strings.HasPrefix(name, ".") {
 			continue // a symlink is not IsDir: never followed
 		}
-		if w.walk(ctx, filepath.Join(dir, name), left-1) {
+		if w.walk(ctx, filepath.Join(dir, name), left-1, false) {
 			return true
 		}
 	}
@@ -202,18 +205,31 @@ func remoteURL(config []byte, name string) string {
 	return first
 }
 
-// StripCredentials drops the user and password of an http(s) URL: a token
-// kept there never leaves the service. An ssh user is not a secret.
+// StripCredentials drops the user and password of an http(s) URL, and the
+// password of any other: a token kept there never leaves the service. An
+// ssh user alone is not a secret.
 func StripCredentials(url string) string {
 	scheme, rest, ok := strings.Cut(url, "://")
-	if !ok || scheme != "https" && scheme != "http" {
+	if !ok {
 		return url
 	}
-	host, path, _ := strings.Cut(rest, "/")
-	if i := strings.LastIndex(host, "@"); i >= 0 {
-		host = host[i+1:]
+	host, path, slash := strings.Cut(rest, "/")
+	i := strings.LastIndex(host, "@")
+	if i < 0 {
+		return url
 	}
-	if path == "" && !strings.Contains(rest, "/") {
+	user := host[:i]
+	switch s := strings.ToLower(scheme); {
+	case s == "http" || s == "https":
+		user = ""
+	default:
+		user, _, _ = strings.Cut(user, ":")
+	}
+	host = host[i+1:]
+	if user != "" {
+		host = user + "@" + host
+	}
+	if !slash {
 		return scheme + "://" + host
 	}
 	return scheme + "://" + host + "/" + path
@@ -221,7 +237,8 @@ func StripCredentials(url string) string {
 
 // ScanRoots are the folders a scan starts from: the picked ones, else the
 // home and its usual code folders; then the configured repositories and
-// extra folders. A leading ~ is the home.
+// extra folders. A leading ~ is the home, and so is the base of a relative
+// folder: the service's own directory means nothing to the builder.
 func ScanRoots(home string, picked, repos, extra []string) []string {
 	base := picked
 	if len(base) == 0 {
@@ -236,6 +253,8 @@ func ScanRoots(home string, picked, repos, extra []string) []string {
 				p = home
 			case strings.HasPrefix(p, "~/"):
 				p = filepath.Join(home, p[2:])
+			case !filepath.IsAbs(p):
+				p = filepath.Join(home, p)
 			}
 			if p = filepath.Clean(p); p != "" && !seen[p] {
 				seen[p] = true

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/proto"
-	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // scanAct is the act of `matchblox scan`: a yes, with the folders given
@@ -37,8 +36,14 @@ func scanAct(words []string, here, home string) (proto.Act, error) {
 	return proto.Act{RecID: "scan:yes", Confirm: "y", Text: strings.Join(roots, "\n")}, nil
 }
 
-// cliScan sends the act, then says what the scan found in reposPath.
-func cliScan(words []string, w io.Writer, path, reposPath string) error {
+// scanBudget bounds one walk of the host.
+const scanBudget = 30 * time.Second
+
+// scanWait outlasts a walk queued behind one already running.
+const scanWait = 2*scanBudget + 15*time.Second
+
+// cliScan sends the act, then says what the service found.
+func cliScan(words []string, w io.Writer, path string) error {
 	here, err := os.Getwd()
 	if err != nil {
 		return err
@@ -48,7 +53,7 @@ func cliScan(words []string, w io.Writer, path, reposPath string) error {
 	if err != nil {
 		return err
 	}
-	res, err := doAct(path, a)
+	res, err := doActFor(path, a, scanWait)
 	if err != nil {
 		if errors.Is(err, errNoResult) {
 			return errors.New("scan: not known whether it ended: the N form lists what it found")
@@ -62,11 +67,22 @@ func cliScan(words []string, w io.Writer, path, reposPath string) error {
 		_, err := fmt.Fprintln(w, "the scan is off, and its list is gone")
 		return err
 	}
-	f := state.ReadFound(reposPath)
+	st, ok := serviceState(path, staleAfter)
+	if !ok || st.Found == nil {
+		return errors.New("scan: it ran, but the service did not say what it found: the N form lists it")
+	}
+	f := st.Found
 	noun := "repositories"
 	if len(f.Repos) == 1 {
 		noun = "repository"
 	}
-	_, err = fmt.Fprintf(w, "found %d %s in %s\n", len(f.Repos), noun, f.Took.Round(100*time.Millisecond))
-	return err
+	if _, err := fmt.Fprintf(w, "found %d %s in %s\n", len(f.Repos), noun, f.Took.Round(100*time.Millisecond)); err != nil {
+		return err
+	}
+	for _, e := range f.Errors {
+		if _, err := fmt.Fprintln(w, e); err != nil {
+			return err
+		}
+	}
+	return nil
 }
