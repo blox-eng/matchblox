@@ -103,6 +103,8 @@ type Result struct {
 	Ran     [][]string `json:"ran,omitempty"`
 	Skipped []string   `json:"skipped,omitempty"`
 	Err     string     `json:"err,omitempty"`
+	// Scan is how a scan:yes's scan went.
+	Scan *ScanSummary `json:"scan,omitempty"`
 }
 
 type Error struct {
@@ -161,6 +163,7 @@ type (
 	Worktree    = gitscan.Worktree
 	PR          = gitscan.PR
 	Found       = gitscan.Found
+	ScanSummary = gitscan.Summary
 	Checkout    = gitscan.Checkout
 	Ships       = ships.Report
 	Ship        = ships.Ship

@@ -173,9 +173,19 @@ type Service struct {
 	found     gitscan.Found
 	foundGen  uint64
 	foundKick chan struct{}
-	// scanMu runs one scan at a time; consentMu orders the answer and the
-	// cache, so a no is never followed by a scan's write.
-	scanMu, consentMu sync.Mutex
+	// scanReqs are the yeses that wait for foundLoop, the only walker;
+	// scanEnd closes when it ends.
+	scanReqs chan scanReq
+	scanEnd  chan struct{}
+	// hung are the folders that did not answer a walk, and when: the
+	// walks of the next 6 hours skip them. foundLoop's alone.
+	hung map[string]time.Time
+	// nos counts the noes, so a walk knows a no came while it ran even
+	// when a yes for the same roots came after it.
+	nos uint64
+	// consentMu orders the answer and the cache, so a no is never
+	// followed by a scan's write.
+	consentMu sync.Mutex
 }
 
 func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
@@ -189,6 +199,8 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		gitKick:   make(chan struct{}, 1),
 		shipKick:  make(chan struct{}, 1),
 		foundKick: make(chan struct{}, 1),
+		scanReqs:  make(chan scanReq, 64),
+		scanEnd:   make(chan struct{}),
 
 		sampleKick: make(chan struct{}, 1),
 		queue:      queue.New(),

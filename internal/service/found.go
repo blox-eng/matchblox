@@ -63,56 +63,142 @@ func (s *Service) kickFound() {
 	}
 }
 
-// foundLoop starts after the first sample and reads the consent before
-// every scan: no scan runs without a yes on record.
+// hungFor is how long a folder that did not answer is skipped: long
+// enough not to wait on it every 30 minutes, short enough that a slow
+// but live one comes back the same day.
+const hungFor = 6 * time.Hour
+
+// scanReq is a yes that waits for a walk of roots, the picked ones it
+// recorded. done holds one answer, so the loop never waits on a yes
+// whose console has gone.
+type scanReq struct {
+	roots []string
+	done  chan scanOutcome
+}
+
+// scanOutcome is a walk's answer to a yes: the Found it stored, or why
+// it stored none for that yes.
+type scanOutcome struct {
+	found gitscan.Found
+	err   error
+}
+
+var (
+	errScanNo         = errors.New("a no came while it ran: nothing is kept")
+	errScanStopped    = errors.New("the service stopped before the scan ended")
+	errScanSuperseded = errors.New("other folders were picked since")
+)
+
+// supersededError tells a yes that the roots it asked for are no longer
+// the ones on record.
+type supersededError struct{ roots []string }
+
+func (e supersededError) Error() string {
+	roots := strings.Join(e.roots, " ")
+	if roots == "" {
+		roots = "the defaults"
+	}
+	return errScanSuperseded.Error() + ": " + roots
+}
+
+func (e supersededError) Is(target error) bool { return target == errScanSuperseded }
+
+// foundLoop is the only walker. It starts after the first sample, or at
+// the first yes, and reads the consent before every walk: no walk runs
+// without a yes on record. The yeses that queue while it walks share the
+// next walk.
 func (s *Service) foundLoop(ctx context.Context) {
 	if s.Find == nil {
 		return
 	}
+	defer close(s.scanEnd)
+	var reqs []scanReq
 	select {
 	case <-ctx.Done():
 		return
 	case <-s.foundKick:
+	case r := <-s.scanReqs:
+		reqs = append(reqs, r)
 	}
 	t := time.NewTicker(scanEvery)
 	defer t.Stop()
 	for {
-		if s.consent().Answer == "yes" {
-			s.scan(ctx)
+		for drained := false; !drained; {
+			select {
+			case r := <-s.scanReqs:
+				reqs = append(reqs, r)
+			default:
+				drained = true
+			}
+		}
+		if reqs = s.walk(ctx, reqs); len(reqs) > 0 {
+			continue // they asked for the roots picked while it walked
 		}
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
 		case <-s.foundKick:
+		case r := <-s.scanReqs:
+			reqs = append(reqs, r)
 		}
 	}
 }
 
-// scan walks the roots on record. A no or other roots that come while it
-// walks win, and so does the service stopping: its result is dropped.
-func (s *Service) scan(ctx context.Context) {
-	s.scanMu.Lock()
-	defer s.scanMu.Unlock()
-	c := s.consent()
+// walk scans the roots on record and answers reqs. A no or other roots
+// that come while it walks win, and so does the service stopping: its
+// result is dropped. It hands back the yeses for the roots picked since,
+// for the next walk.
+func (s *Service) walk(ctx context.Context, reqs []scanReq) (next []scanReq) {
+	answer := func(r scanReq, o scanOutcome) { r.done <- o } // done holds one: never blocks
+	all := func(err error) {
+		for _, r := range reqs {
+			answer(r, scanOutcome{err: err})
+		}
+	}
+	if ctx.Err() != nil {
+		all(errScanStopped)
+		return nil
+	}
+	s.consentMu.Lock()
+	c, nos := s.consent(), s.nos
+	s.consentMu.Unlock()
 	if c.Answer != "yes" {
-		return
+		all(errScanNo)
+		return nil
 	}
 	roots := c.Roots
 	if s.ScanRoots != nil {
 		roots = s.ScanRoots(c.Roots)
 	}
 	start := time.Now()
-	res := s.Find(ctx, roots, nil)
+	res := s.Find(ctx, roots, s.skipHung(start))
+	for _, p := range res.Hung {
+		s.hung[p] = time.Now()
+	}
 	if ctx.Err() != nil {
-		return // the service stops: a cut walk must not replace the list
+		all(errScanStopped) // a cut walk must not replace the list
+		return nil
 	}
 	f := gitscan.Found{Consent: "yes", Roots: c.Roots, At: time.Now(), Took: time.Since(start),
 		Repos: res.Repos, Errors: res.Errors, Skipped: res.Skipped, SkippedMore: res.SkippedMore}
 	s.consentMu.Lock()
-	defer s.consentMu.Unlock()
-	if now := s.consent(); now.Answer != "yes" || !slices.Equal(now.Roots, c.Roots) {
-		return
+	now := s.consent()
+	switch {
+	case now.Answer != "yes" || s.nos != nos:
+		s.consentMu.Unlock()
+		all(errScanNo)
+		return nil
+	case !slices.Equal(now.Roots, c.Roots):
+		s.consentMu.Unlock()
+		for _, r := range reqs {
+			if slices.Equal(r.roots, now.Roots) {
+				next = append(next, r)
+			} else {
+				answer(r, scanOutcome{err: supersededError{now.Roots}})
+			}
+		}
+		return next
 	}
 	if s.ReposPath != "" {
 		if err := state.WriteFound(s.ReposPath, f); err != nil {
@@ -120,10 +206,37 @@ func (s *Service) scan(ctx context.Context) {
 		}
 	}
 	s.setFound(f)
+	s.consentMu.Unlock()
+	for _, r := range reqs {
+		if slices.Equal(r.roots, c.Roots) {
+			answer(r, scanOutcome{found: f})
+		} else {
+			answer(r, scanOutcome{err: supersededError{c.Roots}})
+		}
+	}
+	return nil
+}
+
+// skipHung forgets the folders that hung more than hungFor before now,
+// and hands Find a copy of the rest: its goroutines may read it after
+// it returns.
+func (s *Service) skipHung(now time.Time) map[string]bool {
+	if s.hung == nil {
+		s.hung = map[string]time.Time{}
+	}
+	skip := make(map[string]bool, len(s.hung))
+	for p, at := range s.hung {
+		if now.Sub(at) > hungFor {
+			delete(s.hung, p)
+		} else {
+			skip[p] = true
+		}
+	}
+	return skip
 }
 
 // scanYes records a yes, with the roots in text (one a line; none: those
-// on record), and scans now.
+// on record), and waits for a walk of them: it says how that walk went.
 func (s *Service) scanYes(ctx context.Context, text string) proto.Result {
 	if s.Find == nil {
 		return proto.Result{Err: "this service finds no repositories"}
@@ -149,8 +262,39 @@ func (s *Service) scanYes(ctx context.Context, text string) proto.Result {
 	f.Consent, f.Roots = "yes", roots
 	s.setFound(f)
 	s.consentMu.Unlock()
-	s.scan(ctx)
-	return proto.Result{}
+
+	r := scanReq{roots: roots, done: make(chan scanOutcome, 1)}
+	stopped := proto.Result{Err: errScanStopped.Error()}
+	select {
+	case s.scanReqs <- r:
+	case <-ctx.Done():
+		return stopped
+	case <-s.scanEnd:
+		return stopped
+	}
+	select {
+	case o := <-r.done:
+		return o.result()
+	case <-ctx.Done():
+		return stopped
+	case <-s.scanEnd:
+		select { // the loop answers every yes it took before it ends
+		case o := <-r.done:
+			return o.result()
+		default:
+			return stopped
+		}
+	}
+}
+
+// result is what the yes hears: why nothing was kept, or the summary of
+// the Found that was.
+func (o scanOutcome) result() proto.Result {
+	if o.err != nil {
+		return proto.Result{Err: o.err.Error()}
+	}
+	sum := o.found.Summary()
+	return proto.Result{Scan: &sum}
 }
 
 // scanNo records a no and forgets what was found.
@@ -163,6 +307,7 @@ func (s *Service) scanNo() proto.Result {
 	if err := s.writeConsent(state.Consent{Answer: "no", At: s.now()}); err != nil {
 		return proto.Result{Err: "scan.json: " + err.Error()}
 	}
+	s.nos++
 	s.setFound(gitscan.Found{Consent: "no"})
 	if s.ReposPath != "" {
 		if err := os.Remove(s.ReposPath); err != nil && !errors.Is(err, fs.ErrNotExist) {

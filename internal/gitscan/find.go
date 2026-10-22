@@ -41,6 +41,20 @@ func (f Found) Same(g Found) bool {
 		})
 }
 
+// Summary is what a yes hears of the scan it asked for: how many it
+// found, how long it took, and what it did not look at.
+type Summary struct {
+	Repos       int           `json:"repos"`
+	Took        time.Duration `json:"took_ns,omitempty"`
+	Errors      []string      `json:"errors,omitempty"`
+	Skipped     []Skip        `json:"skipped,omitempty"`
+	SkippedMore int           `json:"skipped_more,omitempty"`
+}
+
+func (f Found) Summary() Summary {
+	return Summary{Repos: len(f.Repos), Took: f.Took, Errors: f.Errors, Skipped: f.Skipped, SkippedMore: f.SkippedMore}
+}
+
 // Checkout is one repository or linked worktree on the host.
 type Checkout struct {
 	Path   string    `json:"path"`

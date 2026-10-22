@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -48,9 +49,28 @@ func foundTest(t *testing.T) (*Service, *finds) {
 	return s, f
 }
 
-func foundReady(s *Service) {
+// foundReady loads the consent, takes a first sample and starts the
+// scan loop, which ends with the test.
+func foundReady(t *testing.T, s *Service) {
+	t.Helper()
 	s.loadFound()
 	s.publish(sample.Snapshot{At: time.Now()}, func(state.Doc) {})
+	scanLoop(t, s, context.Background())
+}
+
+// scanLoop runs foundLoop under parent until the test ends, or until
+// stop, which waits for the loop to end.
+func scanLoop(t *testing.T, s *Service, parent context.Context) (stop func()) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(parent)
+	done := make(chan struct{})
+	go func() { s.foundLoop(ctx); close(done) }()
+	stop = func() {
+		cancel()
+		within(t, done, "end of the scan loop")
+	}
+	t.Cleanup(stop)
+	return stop
 }
 
 func firstFound(t *testing.T, s *Service) *proto.Found {
@@ -92,7 +112,7 @@ func TestNoScanAfterNo(t *testing.T) {
 
 func TestScanYesScansAndRecords(t *testing.T) {
 	s, f := foundTest(t)
-	foundReady(s)
+	foundReady(t, s)
 	if res := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true}); res.Err != "" {
 		t.Fatalf("scan:yes: %s", res.Err)
 	}
@@ -113,7 +133,7 @@ func TestScanYesScansAndRecords(t *testing.T) {
 func TestScanYesKeepsPickedRoots(t *testing.T) {
 	s, f := foundTest(t)
 	state.WriteConsent(s.ConsentPath, state.Consent{Answer: "yes", Roots: []string{"/w"}})
-	foundReady(s)
+	foundReady(t, s)
 	s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true})
 	s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true, Text: "/a\n\n/b\n"})
 	got := f.calls()
@@ -127,7 +147,7 @@ func TestScanYesKeepsPickedRoots(t *testing.T) {
 
 func TestScanNoDropsCache(t *testing.T) {
 	s, _ := foundTest(t)
-	foundReady(s)
+	foundReady(t, s)
 	s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true})
 	if res := s.act(t.Context(), proto.Act{RecID: "scan:no"}); res.Err != "" {
 		t.Fatalf("scan:no: %s", res.Err)
@@ -147,6 +167,7 @@ func TestScanYesRefusedFromAgentPane(t *testing.T) {
 	s, f := foundTest(t)
 	s.loadFound()
 	s.publish(sample.Snapshot{At: time.Now(), Sessions: []sample.Session{{Agent: "claude", Pane: "%3", Name: "other", Status: "busy"}}}, func(state.Doc) {})
+	scanLoop(t, s, context.Background())
 	if res := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", From: "%3"}); res.Err != scanRefused {
 		t.Fatalf("scan:yes from an agent's pane: %q", res.Err)
 	}
@@ -168,6 +189,7 @@ func TestScanYesRefusedFromAgentPaneClaimingConsole(t *testing.T) {
 	s, f := foundTest(t)
 	s.loadFound()
 	s.publish(sample.Snapshot{At: time.Now(), Sessions: []sample.Session{{Agent: "claude", Pane: "%3", Name: "other", Status: "busy"}}}, func(state.Doc) {})
+	scanLoop(t, s, context.Background())
 	if res := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", From: "%3", Console: true}); res.Err != scanRefused {
 		t.Fatalf("scan:yes from a console hello in an agent's pane: %q", res.Err)
 	}
@@ -176,10 +198,14 @@ func TestScanYesRefusedFromAgentPaneClaimingConsole(t *testing.T) {
 	}
 }
 
-// blockingFind holds each walk until release, and finds roots[0]/r.
-func blockingFind(s *Service) (started, release chan struct{}) {
-	started, release = make(chan struct{}, 2), make(chan struct{})
+// blockingFind holds each walk until release, records its roots in f,
+// and finds roots[0]/r.
+func blockingFind(s *Service, f *finds) (started, release chan struct{}) {
+	started, release = make(chan struct{}, 8), make(chan struct{})
 	s.Find = func(_ context.Context, roots []string, _ map[string]bool) gitscan.Result {
+		f.mu.Lock()
+		f.roots = append(f.roots, roots)
+		f.mu.Unlock()
 		started <- struct{}{}
 		<-release
 		return gitscan.Result{Repos: []gitscan.Checkout{{Path: roots[0] + "/r"}}}
@@ -187,18 +213,37 @@ func blockingFind(s *Service) (started, release chan struct{}) {
 	return started, release
 }
 
-func TestNoDuringScanWins(t *testing.T) {
-	s, _ := foundTest(t)
-	foundReady(s)
-	started, release := blockingFind(s)
-	done := make(chan struct{})
-	go func() { s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true}); close(done) }()
-	<-started
-	if res := s.act(t.Context(), proto.Act{RecID: "scan:no"}); res.Err != "" {
-		t.Fatal(res.Err)
+// yesAsync sends a yes with text and hands back its result.
+func yesAsync(ctx context.Context, s *Service, text string) <-chan proto.Result {
+	res := make(chan proto.Result, 1)
+	go func() { res <- s.act(ctx, proto.Act{RecID: "scan:yes", Confirm: "y", Console: true, Text: text}) }()
+	return res
+}
+
+func waitRoots(t *testing.T, s *Service, roots []string) {
+	t.Helper()
+	deadline := time.Now().Add(waitLimit)
+	for !slices.Equal(state.ReadConsent(s.ConsentPath).Roots, roots) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the roots %v were never recorded", roots)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestScanYesReportsNoMidWalk(t *testing.T) {
+	s, f := foundTest(t)
+	started, release := blockingFind(s, f)
+	foundReady(t, s)
+	res := yesAsync(t.Context(), s, "")
+	within(t, started, "walk")
+	if r := s.act(t.Context(), proto.Act{RecID: "scan:no"}); r.Err != "" {
+		t.Fatal(r.Err)
 	}
 	close(release)
-	<-done
+	if r := within(t, res, "yes result"); r.Err != "a no came while it ran: nothing is kept" || r.Scan != nil {
+		t.Fatalf("yes after a no mid-walk = %+v", r)
+	}
 	if _, err := os.Stat(s.ReposPath); !os.IsNotExist(err) {
 		t.Fatalf("repos.json written after a no: %v", err)
 	}
@@ -207,37 +252,156 @@ func TestNoDuringScanWins(t *testing.T) {
 	}
 }
 
-func TestNarrowedRootsDuringScanWin(t *testing.T) {
-	s, _ := foundTest(t)
-	state.WriteConsent(s.ConsentPath, state.Consent{Answer: "yes", Roots: []string{"/wide"}})
-	foundReady(s)
-	started, release := blockingFind(s)
-	first := make(chan struct{})
-	go func() { s.scan(t.Context()); close(first) }()
-	<-started
-	second := make(chan struct{})
-	go func() {
-		s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true, Text: "/narrow"})
-		close(second)
-	}()
+func TestScanYesSuperseded(t *testing.T) {
+	s, f := foundTest(t)
+	started, release := blockingFind(s, f)
+	foundReady(t, s)
+	first := yesAsync(t.Context(), s, "/a")
+	within(t, started, "walk of /a")
+	second := yesAsync(t.Context(), s, "/b\n/c")
+	waitRoots(t, s, []string{"/b", "/c"})
+	close(release)
+	if r := within(t, first, "first result"); r.Err != "other folders were picked since: /b /c" {
+		t.Fatalf("first yes = %+v", r)
+	}
+	r := within(t, second, "second result")
+	if r.Err != "" || r.Scan == nil || r.Scan.Repos != 1 {
+		t.Fatalf("second yes = %+v", r)
+	}
+	if got := f.calls(); len(got) != 2 {
+		t.Fatalf("scans = %v, want two", got)
+	}
+	if c := state.ReadFound(s.ReposPath); len(c.Repos) != 1 || c.Repos[0].Path != "/b/r" {
+		t.Fatalf("cache = %+v, want only the walk of /b /c", c)
+	}
+}
+
+func TestScanRequestsCoalesce(t *testing.T) {
+	s, f := foundTest(t)
+	state.WriteConsent(s.ConsentPath, state.Consent{Answer: "yes"})
+	started, release := blockingFind(s, f)
+	foundReady(t, s)
+	s.kickFound()
+	within(t, started, "the kicked walk")
+	var res []<-chan proto.Result
+	for range 3 {
+		res = append(res, yesAsync(t.Context(), s, ""))
+	}
 	deadline := time.Now().Add(waitLimit)
-	for !slices.Equal(state.ReadConsent(s.ConsentPath).Roots, []string{"/narrow"}) {
+	for len(s.scanReqs) < 3 {
 		if time.Now().After(deadline) {
-			t.Fatal("the narrowed roots were never recorded")
+			t.Fatal("the three yeses never queued")
 		}
 		time.Sleep(time.Millisecond)
 	}
+	close(release)
+	for i, ch := range res {
+		if r := within(t, ch, "result"); r.Err != "" || r.Scan == nil {
+			t.Fatalf("yes %d = %+v", i, r)
+		}
+	}
+	if n := len(f.calls()); n > 2 {
+		t.Fatalf("%d walks for one running and three queued yeses, want at most 2", n)
+	}
+}
+
+func TestScanStopped(t *testing.T) {
+	s, f := foundTest(t)
+	s.loadFound()
+	started := make(chan struct{}, 1)
+	s.Find = func(ctx context.Context, roots []string, _ map[string]bool) gitscan.Result {
+		f.mu.Lock()
+		f.roots = append(f.roots, roots)
+		f.mu.Unlock()
+		started <- struct{}{}
+		<-ctx.Done()
+		return gitscan.Result{Repos: []gitscan.Checkout{{Path: "/cut"}}}
+	}
+	stop := scanLoop(t, s, context.Background())
+	res := yesAsync(t.Context(), s, "")
+	within(t, started, "walk")
+	stop()
+	if r := within(t, res, "yes result"); r.Err != "the service stopped before the scan ended" {
+		t.Fatalf("yes cut by the service stopping = %+v", r)
+	}
+	if c := state.ReadFound(s.ReposPath); len(c.Repos) != 0 {
+		t.Fatalf("a cut walk was kept: %+v", c)
+	}
+	// The loop is gone: a later yes is told so, not left waiting.
+	if r := within(t, yesAsync(t.Context(), s, ""), "yes after the stop"); r.Err != "the service stopped before the scan ended" {
+		t.Fatalf("yes after the loop ended = %+v", r)
+	}
+}
+
+func TestHungFolderRemembered(t *testing.T) {
+	s, _ := foundTest(t)
+	var mu sync.Mutex
+	var skips []map[string]bool
+	s.Find = func(_ context.Context, _ []string, skip map[string]bool) gitscan.Result {
+		mu.Lock()
+		defer mu.Unlock()
+		skips = append(skips, skip)
+		if len(skips) == 1 {
+			return gitscan.Result{Hung: []string{"/x", "/y"}}
+		}
+		return gitscan.Result{}
+	}
+	s.hung = map[string]time.Time{"/old": time.Now().Add(-7 * time.Hour)}
+	foundReady(t, s)
+	for range 2 {
+		if r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true}); r.Err != "" {
+			t.Fatal(r.Err)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(skips) != 2 {
+		t.Fatalf("%d walks, want 2", len(skips))
+	}
+	if skips[0]["/old"] {
+		t.Fatal("a folder that hung more than 6 hours ago is still skipped")
+	}
+	if !skips[1]["/x"] || !skips[1]["/y"] {
+		t.Fatalf("second walk's skip = %v, want /x and /y", skips[1])
+	}
+}
+
+func TestScanWaiterGoneDoesNotBlock(t *testing.T) {
+	s, f := foundTest(t)
+	started, release := blockingFind(s, f)
+	foundReady(t, s)
+	ctx, cancel := context.WithCancel(t.Context())
+	gone := yesAsync(ctx, s, "")
+	within(t, started, "walk")
+	cancel()
+	within(t, gone, "the gone waiter's result")
+	close(release)
+	if r := within(t, yesAsync(t.Context(), s, ""), "next yes"); r.Err != "" {
+		t.Fatalf("next yes = %+v", r)
+	}
+}
+
+func TestNarrowedRootsDuringScanWin(t *testing.T) {
+	s, f := foundTest(t)
+	state.WriteConsent(s.ConsentPath, state.Consent{Answer: "yes", Roots: []string{"/wide"}})
+	started, release := blockingFind(s, f)
+	foundReady(t, s)
+	s.kickFound()
+	within(t, started, "the wide walk")
+	second := yesAsync(t.Context(), s, "/narrow")
+	waitRoots(t, s, []string{"/narrow"})
 	release <- struct{}{}
-	<-first
+	within(t, started, "the narrow walk")
 	if r := state.ReadFound(s.ReposPath); len(r.Repos) != 0 {
 		t.Fatalf("the wide walk was kept after the roots narrowed: %+v", r)
 	}
 	if st, _ := s.stateFor(&client{}); st.Found != nil && len(st.Found.Repos) != 0 {
 		t.Fatalf("the wide walk went to consoles: %+v", st.Found)
 	}
-	<-started
 	release <- struct{}{}
-	<-second
+	if res := within(t, second, "narrow result"); res.Err != "" {
+		t.Fatal(res.Err)
+	}
 	r := state.ReadFound(s.ReposPath)
 	if len(r.Repos) != 1 || r.Repos[0].Path != "/narrow/r" || !slices.Equal(r.Roots, []string{"/narrow"}) {
 		t.Fatalf("cache = %+v, want only the narrowed walk", r)
@@ -262,10 +426,17 @@ func TestCancelledScanKeepsCache(t *testing.T) {
 	s, _ := foundTest(t)
 	state.WriteConsent(s.ConsentPath, state.Consent{Answer: "yes"})
 	state.WriteFound(s.ReposPath, gitscan.Found{Consent: "yes", Repos: []gitscan.Checkout{{Path: "/h/cached"}}})
-	s.Find = func(context.Context, []string, map[string]bool) gitscan.Result { return gitscan.Result{} }
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	s.scan(ctx)
+	s.loadFound()
+	started := make(chan struct{}, 1)
+	s.Find = func(ctx context.Context, _ []string, _ map[string]bool) gitscan.Result {
+		started <- struct{}{}
+		<-ctx.Done()
+		return gitscan.Result{}
+	}
+	stop := scanLoop(t, s, context.Background())
+	s.kickFound()
+	within(t, started, "walk")
+	stop()
 	if r := state.ReadFound(s.ReposPath); len(r.Repos) != 1 || r.Repos[0].Path != "/h/cached" {
 		t.Fatalf("a scan cut short by the service stopping replaced the cache: %+v", r)
 	}
@@ -273,7 +444,7 @@ func TestCancelledScanKeepsCache(t *testing.T) {
 
 func TestFoundOncePerConsole(t *testing.T) {
 	s, _ := foundTest(t)
-	foundReady(s)
+	foundReady(t, s)
 	cl := &client{}
 	if st, _ := s.stateFor(cl); st.Found == nil {
 		t.Fatal("the first snapshot has no Found")
@@ -289,7 +460,7 @@ func TestFoundOncePerConsole(t *testing.T) {
 
 func TestNoFoundWithoutFind(t *testing.T) {
 	s := newTest(t, time.Hour)
-	foundReady(s)
+	foundReady(t, s)
 	if st, ok := s.stateFor(&client{}); !ok || st.Found != nil {
 		t.Fatalf("Found = %+v with no Find", st.Found)
 	}
@@ -297,7 +468,7 @@ func TestNoFoundWithoutFind(t *testing.T) {
 
 func TestUnchangedRescanSendsNothing(t *testing.T) {
 	s, _ := foundTest(t)
-	foundReady(s)
+	foundReady(t, s)
 	s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true})
 	gen := func() (uint64, time.Time, time.Duration) {
 		s.mu.Lock()
@@ -310,7 +481,9 @@ func TestUnchangedRescanSendsNothing(t *testing.T) {
 		t.Fatal("no first Found")
 	}
 	time.Sleep(2 * time.Millisecond)
-	s.scan(t.Context())
+	if res := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true}); res.Err != "" {
+		t.Fatal(res.Err)
+	}
 	g2, at2, took2 := gen()
 	if g2 != g1 {
 		t.Fatalf("foundGen %d -> %d on an unchanged rescan", g1, g2)
@@ -324,5 +497,15 @@ func TestUnchangedRescanSendsNothing(t *testing.T) {
 	st, _ := s.stateFor(&client{})
 	if st.Found == nil || st.Found.Took != took2 {
 		t.Fatalf("a new console's Found = %+v, want Took %v", st.Found, took2)
+	}
+}
+
+func TestScanSupersededIsTyped(t *testing.T) {
+	err := error(supersededError{roots: []string{"/a", "/b"}})
+	if !errors.Is(err, errScanSuperseded) || errors.Is(err, errScanNo) {
+		t.Fatalf("errors.Is(%v): superseded %v, no %v", err, errors.Is(err, errScanSuperseded), errors.Is(err, errScanNo))
+	}
+	if got := err.Error(); got != "other folders were picked since: /a /b" {
+		t.Fatalf("Error() = %q", got)
 	}
 }
