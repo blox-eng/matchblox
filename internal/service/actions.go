@@ -91,6 +91,11 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 			return proto.Result{Err: notTheBuilders}
 		}
 	}
+	if a.RecID == "scan:yes" && !a.Console {
+		if _, ok := s.sessionAt(a.From); agent || ok {
+			return proto.Result{Err: scanRefused}
+		}
+	}
 	if !agent && !strings.HasPrefix(a.RecID, "stoker:") {
 		s.touchStoker(s.now()) // the builder acts: a stoker that rests goes on resting
 	}
@@ -126,6 +131,10 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	case "rescan:git":
 		s.rescanGit()
 		return proto.Result{}
+	case "scan:yes":
+		return s.scanYes(ctx, a.Text)
+	case "scan:no":
+		return s.scanNo()
 	case "service:replace":
 		s.replace()
 		return proto.Result{}
