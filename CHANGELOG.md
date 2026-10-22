@@ -6,6 +6,15 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Sessions shows agents when the host has no UTF-8 locale.** With
+  `LANG` unset, tmux printed the sampler's tab-separated pane list with
+  `_` for each tab, so no panes were parsed and Sessions was empty. The
+  sampler now runs those tmux calls with `-u` (list and capture), so
+  tabs stay intact.
+  ([#112](https://github.com/blox-eng/matchblox/issues/112))
+
 ### Removed
 
 - **AUR (`matchblox-bin`) publishing and install docs.** AUR account
