@@ -836,3 +836,45 @@ func TestSkipUnanswered(t *testing.T) {
 		}
 	}
 }
+
+// answersTo reports whether dir/name exists: on a case-insensitive
+// volume, a folder in dir answers to name in another case.
+func answersTo(dir, name string) bool {
+	_, err := os.Stat(filepath.Join(dir, name))
+	return err == nil
+}
+
+func TestFindRootInAnotherCaseIsOneCheckout(t *testing.T) {
+	h := tmp(t)
+	mkRepo(t, filepath.Join(h, "Code", "app"), "main", "")
+	res := Find(context.Background(), ScanRoots(h, nil, nil, nil), FindOpts{Home: h})
+	got := paths(res.Repos)
+	if !answersTo(h, "code") {
+		if !slices.Equal(got, []string{filepath.Join(h, "Code", "app")}) {
+			t.Fatalf("repos %v", got)
+		}
+		t.Skip("case-sensitive volume: no second spelling to collapse")
+	}
+	if want := []string{filepath.Join(h, "Code", "app")}; !slices.Equal(got, want) {
+		t.Fatalf("repos %v, want %v: one checkout, in the case on disk", got, want)
+	}
+}
+
+func TestFindProtectedBelowRootInAnotherCase(t *testing.T) {
+	base := tmp(t)
+	h := filepath.Join(base, "Home")
+	mkRepo(t, filepath.Join(h, "Documents", "secret"), "main", "")
+	mkRepo(t, filepath.Join(h, "dev", "app"), "main", "")
+	o := FindOpts{Home: h, Protected: []string{filepath.Join(h, "Documents")}}
+	if !answersTo(base, "hOME") {
+		t.Skip("case-sensitive volume: hOME is another folder")
+	}
+	want := []string{filepath.Join(h, "dev", "app")}
+	wantSkip := []Skip{{filepath.Join(h, "Documents"), whyProtected}}
+	for _, root := range []string{h, filepath.Join(base, "hOME")} {
+		res := Find(context.Background(), []string{root}, o)
+		if got := paths(res.Repos); !slices.Equal(got, want) || !slices.Equal(res.Skipped, wantSkip) {
+			t.Fatalf("root %s: repos %v, skipped %v: want %v, %v", root, got, res.Skipped, want, wantSkip)
+		}
+	}
+}

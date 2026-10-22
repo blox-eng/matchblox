@@ -260,6 +260,9 @@ func (w *walker) run(ctx context.Context, roots []string) {
 		w.pending[p] = true
 		go func(p string, root bool) {
 			r, err := w.resolve(p)
+			if err == nil {
+				r = trueCase(r)
+			}
 			l := lookup{written: p, path: r, err: err}
 			if err == nil && root {
 				if l.skip = w.o.Skip[r]; !l.skip {
@@ -334,6 +337,46 @@ wait:
 			return
 		}
 	}
+}
+
+// trueCase is p, an absolute path with no links, in the letter case its
+// folders have on disk: on a case-insensitive volume ~/code resolves, but
+// a walk of ~ reaches it as ~/Code. Each name takes the entry of its
+// parent that equals it, else the one that equals it in another case;
+// a parent that cannot be read keeps the name as written.
+func trueCase(p string) string {
+	sep := string(filepath.Separator)
+	vol := filepath.VolumeName(p)
+	if !strings.HasPrefix(p[len(vol):], sep) {
+		return p
+	}
+	out := vol + sep
+	for _, name := range strings.Split(p[len(vol):], sep) {
+		if name != "" {
+			out = filepath.Join(out, nameOnDisk(out, name))
+		}
+	}
+	return out
+}
+
+func nameOnDisk(dir, name string) string {
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		return name
+	}
+	other := ""
+	for _, e := range ents {
+		switch n := e.Name(); {
+		case n == name:
+			return name
+		case other == "" && strings.EqualFold(n, name):
+			other = n
+		}
+	}
+	if other == "" {
+		return name
+	}
+	return other
 }
 
 // cause drops the path a PathError repeats.
