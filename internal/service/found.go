@@ -98,11 +98,12 @@ func (s *Service) scan(ctx context.Context) {
 		roots = s.ScanRoots(c.Roots)
 	}
 	start := time.Now()
-	repos, errs := s.Find(ctx, roots)
+	res := s.Find(ctx, roots, nil)
 	if ctx.Err() != nil {
 		return // the service stops: a cut walk must not replace the list
 	}
-	f := gitscan.Found{Consent: "yes", Roots: c.Roots, At: time.Now(), Took: time.Since(start), Repos: repos, Errors: errs}
+	f := gitscan.Found{Consent: "yes", Roots: c.Roots, At: time.Now(), Took: time.Since(start),
+		Repos: res.Repos, Errors: res.Errors, Skipped: res.Skipped, SkippedMore: res.SkippedMore}
 	s.consentMu.Lock()
 	defer s.consentMu.Unlock()
 	if now := s.consent(); now.Answer != "yes" || !slices.Equal(now.Roots, c.Roots) {

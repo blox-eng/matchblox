@@ -39,11 +39,11 @@ func foundTest(t *testing.T) (*Service, *finds) {
 		return picked
 	}
 	f := &finds{}
-	s.Find = func(_ context.Context, roots []string) ([]gitscan.Checkout, []string) {
+	s.Find = func(_ context.Context, roots []string, _ map[string]bool) gitscan.Result {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.roots = append(f.roots, roots)
-		return []gitscan.Checkout{{Path: "/h/a", Branch: "main"}}, nil
+		return gitscan.Result{Repos: []gitscan.Checkout{{Path: "/h/a", Branch: "main"}}}
 	}
 	return s, f
 }
@@ -179,10 +179,10 @@ func TestScanYesRefusedFromAgentPaneClaimingConsole(t *testing.T) {
 // blockingFind holds each walk until release, and finds roots[0]/r.
 func blockingFind(s *Service) (started, release chan struct{}) {
 	started, release = make(chan struct{}, 2), make(chan struct{})
-	s.Find = func(_ context.Context, roots []string) ([]gitscan.Checkout, []string) {
+	s.Find = func(_ context.Context, roots []string, _ map[string]bool) gitscan.Result {
 		started <- struct{}{}
 		<-release
-		return []gitscan.Checkout{{Path: roots[0] + "/r"}}, nil
+		return gitscan.Result{Repos: []gitscan.Checkout{{Path: roots[0] + "/r"}}}
 	}
 	return started, release
 }
@@ -248,9 +248,9 @@ func TestCacheSentBeforeFirstScan(t *testing.T) {
 	s, _ := foundTest(t)
 	state.WriteConsent(s.ConsentPath, state.Consent{Answer: "yes"})
 	state.WriteFound(s.ReposPath, gitscan.Found{Consent: "yes", Repos: []gitscan.Checkout{{Path: "/h/cached"}}})
-	s.Find = func(ctx context.Context, _ []string) ([]gitscan.Checkout, []string) {
+	s.Find = func(ctx context.Context, _ []string, _ map[string]bool) gitscan.Result {
 		<-ctx.Done()
-		return nil, nil
+		return gitscan.Result{}
 	}
 	run(t, s)
 	if got := firstFound(t, s); got == nil || len(got.Repos) != 1 || got.Repos[0].Path != "/h/cached" {
@@ -262,7 +262,7 @@ func TestCancelledScanKeepsCache(t *testing.T) {
 	s, _ := foundTest(t)
 	state.WriteConsent(s.ConsentPath, state.Consent{Answer: "yes"})
 	state.WriteFound(s.ReposPath, gitscan.Found{Consent: "yes", Repos: []gitscan.Checkout{{Path: "/h/cached"}}})
-	s.Find = func(context.Context, []string) ([]gitscan.Checkout, []string) { return nil, nil }
+	s.Find = func(context.Context, []string, map[string]bool) gitscan.Result { return gitscan.Result{} }
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	s.scan(ctx)

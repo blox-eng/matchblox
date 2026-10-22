@@ -2,11 +2,14 @@ package gitscan
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -15,12 +18,14 @@ import (
 
 // Found is what a scan of the host found, and the consent it ran under.
 type Found struct {
-	Consent string        `json:"consent"`         // "" never asked, "yes", "no"
-	Roots   []string      `json:"roots,omitempty"` // picked; empty: the defaults
-	At      time.Time     `json:"at,omitzero"`     // the last scan's end; zero: none yet
-	Took    time.Duration `json:"took_ns,omitempty"`
-	Repos   []Checkout    `json:"repos,omitempty"`
-	Errors  []string      `json:"errors,omitempty"`
+	Consent     string        `json:"consent"`         // "" never asked, "yes", "no"
+	Roots       []string      `json:"roots,omitempty"` // picked; empty: the defaults
+	At          time.Time     `json:"at,omitzero"`     // the last scan's end; zero: none yet
+	Took        time.Duration `json:"took_ns,omitempty"`
+	Repos       []Checkout    `json:"repos,omitempty"`
+	Errors      []string      `json:"errors,omitempty"`
+	Skipped     []Skip        `json:"skipped,omitempty"`
+	SkippedMore int           `json:"skipped_more,omitempty"` // skipped past the list's cap
 }
 
 // Checkout is one repository or linked worktree on the host.
@@ -32,107 +37,279 @@ type Checkout struct {
 	Active time.Time `json:"active"`           // the last checkout or commit
 }
 
+// Skip is a folder the scan did not walk, and why.
+type Skip struct {
+	Path string `json:"path"`
+	Why  string `json:"why"`
+}
+
+// The reasons a folder is skipped.
+const (
+	whyHung      = "it did not answer before"
+	whyProtected = "macOS asks first; p picks it"
+)
+
+func whyNetwork(fstype string) string { return "a network folder (" + fstype + ")" }
+
+// Result is what Find found, and what it did not look at.
+type Result struct {
+	Repos       []Checkout
+	Errors      []string // at most maxErrors lines, the last "and N more"
+	Skipped     []Skip   // at most maxSkipped
+	SkippedMore int
+	Hung        []string // roots as written that never resolved, and the folder read when Limit fired
+}
+
+const (
+	maxErrors  = 20
+	maxSkipped = 500
+)
+
 // FindDepth is how far below a root Find looks.
 const FindDepth = 4
 
 type FindOpts struct {
-	Depth   int    // 0: FindDepth
-	Remote  string // "": origin
-	MaxDirs int    // 0: no bound
-	Budget  time.Duration
-	Home    string // the one root searched below its own .git: dotfiles kept in git
+	Depth   int           // 0: FindDepth
+	Remote  string        // "": origin
+	MaxDirs int           // 0: no bound
+	Budget  time.Duration // 0: no bound at all
+	Home    string        // the one root searched below its own .git: dotfiles kept in git
+	Grace   time.Duration // how long past Budget a folder that does not answer is waited on; 0: 5 s
+	// Skip is never touched: resolved paths, and roots as written whose
+	// lookup hung.
+	Skip map[string]bool
+	// Protected folders are skipped below a root, never at one.
+	Protected []string
+	Mounts    func() mountTable // nil: readMounts
+}
+
+func (o FindOpts) grace() time.Duration {
+	if o.Grace <= 0 {
+		return 5 * time.Second
+	}
+	return o.Grace
+}
+
+// Limit is the longest Find runs when Budget is set.
+func (o FindOpts) Limit() time.Duration { return o.Budget + o.grace() }
+
+// DefaultProtected are the folders macOS asks about before an app reads
+// them. Elsewhere none.
+func DefaultProtected(home string) []string {
+	if runtime.GOOS != "darwin" {
+		return nil
+	}
+	var out []string
+	for _, d := range []string{"Documents", "Desktop", "Downloads", "Library", "Pictures", "Movies", "Music"} {
+		out = append(out, filepath.Join(home, d))
+	}
+	return out
 }
 
 // skipDirs hold dependencies, caches and builds, never a builder's checkout.
 var skipDirs = map[string]bool{"node_modules": true, "Library": true, "vendor": true, "target": true}
 
-// readDir and devOf are swapped in tests. hangGrace is how long past its
-// Budget Find waits on a folder that does not answer.
+// readDir and resolve are swapped in tests.
 var (
-	readDir   = os.ReadDir
-	devOf     = statDev
-	hangGrace = 5 * time.Second
+	readDir = os.ReadDir
+	resolve = filepath.EvalSymlinks
 )
 
 // Find lists the checkouts under roots without running git: it reads
 // directories and the few files of each .git. It follows no symlink below
 // a root and does not descend into a checkout. Past MaxDirs or Budget it
-// keeps what it found and says so in errs.
-func Find(ctx context.Context, roots []string, o FindOpts) (repos []Checkout, errs []string) {
+// keeps what it found and says so in Errors.
+//
+// With a Budget, nothing outside Limit is waited on: roots are looked up
+// in the walk's goroutine, and a folder that does not answer is left
+// behind in Hung for the caller to Skip next time.
+func Find(ctx context.Context, roots []string, o FindOpts) Result {
+	var hung <-chan time.Time
+	if o.Budget > 0 {
+		t := time.NewTimer(o.Limit())
+		defer t.Stop()
+		hung = t.C
+	}
 	if o.Depth <= 0 {
 		o.Depth = FindDepth
 	}
 	if o.Remote == "" {
 		o.Remote = "origin"
 	}
-	w := &walker{o: o, left: map[string]int{}, found: map[string]Checkout{}}
+	if o.Mounts == nil {
+		o.Mounts = readMounts
+	}
+	w := &walker{
+		o: o, readDir: readDir, resolve: resolve,
+		left: map[string]int{}, found: map[string]Checkout{}, pending: map[string]bool{},
+		noted: map[string]bool{}, skipSeen: map[string]bool{},
+	}
 	if o.Budget > 0 {
 		w.deadline = time.Now().Add(o.Budget)
 	}
-	var dirs []string
-	for _, r := range roots {
-		r, err := filepath.EvalSymlinks(r)
-		if err != nil {
-			continue
-		}
-		if fi, err := os.Stat(r); err != nil || !fi.IsDir() {
-			continue
-		}
-		dirs = append(dirs, r)
-	}
-	// The deepest first: ~ then reaches ~/dev already walked, and skips it.
-	sort.SliceStable(dirs, func(i, j int) bool {
-		return strings.Count(dirs[i], string(filepath.Separator)) > strings.Count(dirs[j], string(filepath.Separator))
-	})
-	home, _ := filepath.EvalSymlinks(o.Home)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for _, r := range dirs {
-			w.dev, w.devOK = devOf(r)
-			if w.walk(ctx, r, o.Depth, home != "" && r == home) {
-				return
-			}
-		}
+		w.run(ctx, roots)
 	}()
-	// A folder on a dead mount blocks its read for good: past the Budget
-	// the walk is left to end on its own, and what it found so far stands.
-	var hung <-chan time.Time
-	if o.Budget > 0 {
-		t := time.NewTimer(o.Budget + hangGrace)
-		defer t.Stop()
-		hung = t.C
-	}
+	// A folder on a dead mount blocks its read for good: past Limit the
+	// walk is left to end on its own, and what it found so far stands.
+	timedOut := false
 	select {
 	case <-done:
 	case <-ctx.Done():
 		w.halt(fmt.Sprintf("stopped after %s: some repositories may be missing", o.Budget))
 	case <-hung:
-		w.halt(fmt.Sprintf("stopped: a folder did not answer in %s: some repositories may be missing", o.Budget+hangGrace))
+		timedOut = true
+		w.halt(fmt.Sprintf("stopped: a folder did not answer in %s: some repositories may be missing", o.Limit()))
 	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	for _, c := range w.found {
-		repos = append(repos, c)
-	}
-	sort.Slice(repos, func(i, j int) bool { return repos[i].Path < repos[j].Path })
-	if w.stop != "" {
-		errs = append(errs, w.stop)
-	}
-	return repos, errs
+	return w.result(ctx.Err() == nil, timedOut)
 }
 
 type walker struct {
 	o        FindOpts
+	readDir  func(string) ([]os.DirEntry, error)
+	resolve  func(string) (string, error)
 	deadline time.Time
 	left     map[string]int // depth left when a directory was walked
 	dirs     int
-	dev      uint64 // the device of the root being walked, if devOK
-	devOK    bool
+	mounts   mountTable
+	guarded  map[string]bool // Protected, resolved
 
-	mu    sync.Mutex // found and stop: Find may stop waiting on the walk
-	found map[string]Checkout
-	stop  string
+	mu       sync.Mutex // all below: Find may stop waiting on the walk
+	asked    []string   // looked up, as written, in order
+	pending  map[string]bool
+	at       string // the directory being read
+	found    map[string]Checkout
+	stop     string
+	errs     []string
+	errMore  int
+	noted    map[string]bool
+	skipped  []Skip
+	skipMore int
+	skipSeen map[string]bool
+}
+
+// lookup is a path as written and what resolving it gave.
+type lookup struct {
+	written, path string
+	err           error
+	skip          bool // root: its resolved path is in Skip
+	dir           bool // root: a directory
+}
+
+// run looks up the roots, the home and the protected folders, each in its
+// own goroutine, then walks the roots that answered within the grace.
+func (w *walker) run(ctx context.Context, roots []string) {
+	isRoot := map[string]bool{}
+	for _, r := range roots {
+		isRoot[r] = true
+	}
+	var asks []string
+	seen := map[string]bool{}
+	for _, list := range [][]string{roots, {w.o.Home}, w.o.Protected} {
+		for _, p := range list {
+			if p != "" && !seen[p] {
+				seen[p] = true
+				asks = append(asks, p)
+			}
+		}
+	}
+	got := map[string]lookup{}
+	ch := make(chan lookup, len(asks))
+	w.mu.Lock()
+	w.asked = asks
+	for _, p := range asks {
+		if w.o.Skip[p] {
+			got[p] = lookup{written: p, path: filepath.Clean(p), skip: true}
+			continue
+		}
+		w.pending[p] = true
+		go func(p string, root bool) {
+			r, err := w.resolve(p)
+			l := lookup{written: p, path: r, err: err}
+			if err == nil && root {
+				if l.skip = w.o.Skip[r]; !l.skip {
+					var fi os.FileInfo
+					if fi, l.err = os.Stat(r); l.err == nil {
+						l.dir = fi.IsDir()
+					}
+				}
+			}
+			ch <- l
+		}(p, isRoot[p])
+	}
+	n := len(w.pending)
+	w.mu.Unlock()
+	w.mounts = w.o.Mounts()
+	var cut <-chan time.Time
+	if w.o.Budget > 0 {
+		t := time.NewTimer(w.o.grace())
+		defer t.Stop()
+		cut = t.C
+	}
+wait:
+	for ; n > 0; n-- {
+		select {
+		case l := <-ch:
+			got[l.written] = l
+			w.mu.Lock()
+			delete(w.pending, l.written)
+			w.mu.Unlock()
+		case <-cut:
+			break wait // what has not answered stays pending: Hung
+		case <-ctx.Done():
+			break wait
+		}
+	}
+
+	resolved := func(p string) string {
+		if l, ok := got[p]; ok && l.err == nil {
+			return l.path
+		}
+		return filepath.Clean(p)
+	}
+	w.guarded = map[string]bool{}
+	for _, p := range w.o.Protected {
+		w.guarded[resolved(p)] = true
+	}
+	home := ""
+	if l, ok := got[w.o.Home]; ok && l.err == nil {
+		home = l.path
+	}
+	var dirs []string
+	for _, r := range roots {
+		l, ok := got[r]
+		switch {
+		case !ok:
+		case l.skip: // as written when its lookup hung, else resolved
+			w.skip(l.path, whyHung)
+		case l.err != nil:
+			if !errors.Is(l.err, fs.ErrNotExist) {
+				w.note(fmt.Sprintf("cannot find root %s: %v", r, cause(l.err)))
+			}
+		case l.dir:
+			dirs = append(dirs, l.path)
+		}
+	}
+	// The deepest first: ~ then reaches ~/dev already walked, and skips it.
+	sort.SliceStable(dirs, func(i, j int) bool {
+		return strings.Count(dirs[i], string(filepath.Separator)) > strings.Count(dirs[j], string(filepath.Separator))
+	})
+	for _, r := range dirs {
+		if w.walk(ctx, r, w.o.Depth, home != "" && r == home) {
+			return
+		}
+	}
+}
+
+// cause drops the path a PathError repeats.
+func cause(err error) error {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		return pe.Err
+	}
+	return err
 }
 
 func (w *walker) halt(why string) {
@@ -141,6 +318,73 @@ func (w *walker) halt(why string) {
 	if w.stop == "" {
 		w.stop = why
 	}
+}
+
+// note keeps an error line once, the first maxErrors of them.
+func (w *walker) note(msg string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.noted[msg] {
+		return
+	}
+	w.noted[msg] = true
+	if len(w.errs) < maxErrors {
+		w.errs = append(w.errs, msg)
+	} else {
+		w.errMore++
+	}
+}
+
+func (w *walker) skip(path, why string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.skipSeen[path] {
+		return
+	}
+	w.skipSeen[path] = true
+	if len(w.skipped) < maxSkipped {
+		w.skipped = append(w.skipped, Skip{Path: path, Why: why})
+	} else {
+		w.skipMore++
+	}
+}
+
+func (w *walker) setAt(dir string) {
+	w.mu.Lock()
+	w.at = dir
+	w.mu.Unlock()
+}
+
+// result is what the walk has so far. hung: report what did not answer.
+// stuck: Limit fired, so the folder being read is one.
+func (w *walker) result(hung, stuck bool) Result {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	var res Result
+	for _, c := range w.found {
+		res.Repos = append(res.Repos, c)
+	}
+	sort.Slice(res.Repos, func(i, j int) bool { return res.Repos[i].Path < res.Repos[j].Path })
+	if w.stop != "" {
+		res.Errors = append(res.Errors, w.stop)
+	}
+	res.Errors = append(res.Errors, w.errs...)
+	if total := len(res.Errors) + w.errMore; total > maxErrors {
+		res.Errors = append(res.Errors[:maxErrors-1], fmt.Sprintf("and %d more", total-(maxErrors-1)))
+	}
+	res.Skipped = append(res.Skipped, w.skipped...)
+	res.SkippedMore = w.skipMore
+	if hung {
+		for _, p := range w.asked {
+			if w.pending[p] {
+				res.Hung = append(res.Hung, p)
+			}
+		}
+		if stuck && w.at != "" {
+			res.Hung = append(res.Hung, w.at)
+		}
+	}
+	return res
 }
 
 // walk reports true once a bound stops the scan. home: dir is searched
@@ -159,12 +403,17 @@ func (w *walker) walk(ctx context.Context, dir string, left int, home bool) bool
 	}
 	w.mu.Lock()
 	stopped := w.stop != ""
+	w.at = dir
 	w.mu.Unlock()
 	if stopped {
 		return true
 	}
-	ents, err := readDir(dir)
+	ents, err := w.readDir(dir)
 	if err != nil {
+		w.setAt("")
+		if !errors.Is(err, fs.ErrNotExist) {
+			w.note(fmt.Sprintf("cannot read %s: %v", dir, cause(err)))
+		}
 		return false
 	}
 	for _, e := range ents {
@@ -177,10 +426,12 @@ func (w *walker) walk(ctx context.Context, dir string, left int, home bool) bool
 				w.mu.Unlock()
 			}
 			if !home {
+				w.setAt("")
 				return false
 			}
 		}
 	}
+	w.setAt("")
 	if left == 0 {
 		return false
 	}
@@ -189,9 +440,20 @@ func (w *walker) walk(ctx context.Context, dir string, left int, home bool) bool
 		if !e.IsDir() || skipDirs[name] || strings.HasPrefix(name, ".") {
 			continue // a symlink is not IsDir: never followed
 		}
+		// Lookups only, no syscall: a folder that may not answer is
+		// never touched.
 		p := filepath.Join(dir, name)
-		if d, ok := devOf(p); w.devOK && ok && d != w.dev {
-			continue // another mount: a network one may never answer
+		if w.o.Skip[p] {
+			w.skip(p, whyHung)
+			continue
+		}
+		if w.guarded[p] {
+			w.skip(p, whyProtected)
+			continue
+		}
+		if fstype, ok := w.mounts.network(p); ok {
+			w.skip(p, whyNetwork(fstype))
+			continue
 		}
 		if w.walk(ctx, p, left-1, false) {
 			return true

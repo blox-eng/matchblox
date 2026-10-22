@@ -118,7 +118,7 @@ type Service struct {
 	Ships ShipsSource
 	// Find scans the host from roots, after a yes. Nil: no scan, and no
 	// Found sent (fixtures).
-	Find func(ctx context.Context, roots []string) ([]gitscan.Checkout, []string)
+	Find func(ctx context.Context, roots []string, skip map[string]bool) gitscan.Result
 	// ScanRoots are a scan's roots for the ones picked (empty: the
 	// defaults). Nil: the picked ones.
 	ScanRoots func(picked []string) []string

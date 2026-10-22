@@ -581,8 +581,10 @@ func newService(cfg config.Config, root string) *service.Service {
 	s.Ships = shipsSource(cfg, filepath.Dir(s.StatePath))
 	if home, err := os.UserHomeDir(); err == nil {
 		opts := gitscan.FindOpts{Depth: gitscan.FindDepth, Remote: cfg.Git.Remote, MaxDirs: scanMaxDirs, Budget: scanBudget, Home: home}
-		s.Find = func(ctx context.Context, roots []string) ([]gitscan.Checkout, []string) {
-			return gitscan.Find(ctx, roots, opts)
+		s.Find = func(ctx context.Context, roots []string, skip map[string]bool) gitscan.Result {
+			o := opts
+			o.Skip = skip
+			return gitscan.Find(ctx, roots, o)
 		}
 		s.ScanRoots = func(picked []string) []string {
 			return gitscan.ScanRoots(home, picked, cfg.Git.Repos, cfg.Git.ScanRoots)

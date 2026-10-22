@@ -3,10 +3,14 @@ package gitscan
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -65,11 +69,11 @@ func tmp(t *testing.T) string {
 
 func find(t *testing.T, roots ...string) []Checkout {
 	t.Helper()
-	got, errs := Find(context.Background(), roots, FindOpts{Depth: FindDepth})
-	if len(errs) > 0 {
-		t.Fatalf("errs: %v", errs)
+	res := Find(context.Background(), roots, FindOpts{Depth: FindDepth})
+	if len(res.Errors) > 0 || len(res.Skipped) > 0 || len(res.Hung) > 0 {
+		t.Fatalf("errors %v, skipped %v, hung %v", res.Errors, res.Skipped, res.Hung)
 	}
-	return got
+	return res.Repos
 }
 
 func paths(cs []Checkout) []string {
@@ -136,7 +140,7 @@ func TestFindDescendsIntoARootCheckout(t *testing.T) {
 	proj := filepath.Join(home, "git", "proj")
 	mkRepo(t, proj, "main", "")
 	mkRepo(t, filepath.Join(proj, "sub"), "main", "")
-	got, _ := Find(context.Background(), []string{home}, FindOpts{Home: home})
+	got := Find(context.Background(), []string{home}, FindOpts{Home: home}).Repos
 	if !slices.Equal(paths(got), []string{home, proj}) {
 		t.Fatalf("got %v, want the home checkout and %s", paths(got), proj)
 	}
@@ -147,7 +151,7 @@ func TestFindStopsAtARootCheckoutBesidesHome(t *testing.T) {
 	app := filepath.Join(home, "dev", "app")
 	mkRepo(t, app, "main", "")
 	mkRepo(t, filepath.Join(app, "testdata", "fixture"), "main", "")
-	got, _ := Find(context.Background(), []string{home, app}, FindOpts{Home: home})
+	got := Find(context.Background(), []string{home, app}, FindOpts{Home: home}).Repos
 	if !slices.Equal(paths(got), []string{app}) {
 		t.Fatalf("got %v, want %s alone: a configured repository is not searched below its .git", paths(got), app)
 	}
@@ -207,7 +211,7 @@ func TestFindWalksOverlappingRootsOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	roots := []string{home, filepath.Join(home, "dev")}
-	if _, errs := Find(context.Background(), roots, FindOpts{Depth: FindDepth, MaxDirs: 4}); len(errs) != 0 {
+	if errs := Find(context.Background(), roots, FindOpts{Depth: FindDepth, MaxDirs: 4}).Errors; len(errs) != 0 {
 		t.Fatalf("four folders took more than four reads: %v", errs)
 	}
 }
@@ -217,7 +221,8 @@ func TestFindStopsOnCancel(t *testing.T) {
 	mkRepo(t, filepath.Join(root, "a"), "main", "")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	got, errs := Find(ctx, []string{root}, FindOpts{Budget: time.Minute})
+	res := Find(ctx, []string{root}, FindOpts{Budget: time.Minute})
+	got, errs := res.Repos, res.Errors
 	if len(errs) != 1 || !strings.Contains(errs[0], "stopped after 1m0s") || len(got) != 0 {
 		t.Fatalf("got %v, errs %v", paths(got), errs)
 	}
@@ -228,7 +233,8 @@ func TestFindMaxDirs(t *testing.T) {
 	for i := range 10 {
 		mkRepo(t, filepath.Join(root, fmt.Sprint(i)), "main", "")
 	}
-	got, errs := Find(context.Background(), []string{root}, FindOpts{Depth: FindDepth, MaxDirs: 3})
+	res := Find(context.Background(), []string{root}, FindOpts{Depth: FindDepth, MaxDirs: 3})
+	got, errs := res.Repos, res.Errors
 	if len(errs) != 1 || !strings.Contains(errs[0], "3 folders") {
 		t.Fatalf("errs = %v, want one naming the bound", errs)
 	}
@@ -316,5 +322,352 @@ func TestScanRoots(t *testing.T) {
 	}
 	if got := ScanRoots(home, []string{"dev"}, nil, nil); !slices.Equal(got, []string{"/h/dev"}) {
 		t.Fatalf("a relative folder: got %v, want it under the home", got)
+	}
+}
+
+// fakeFS swaps readDir and resolve for one test, and restores them. reads
+// records each folder read.
+type fakeFS struct {
+	mu    sync.Mutex
+	reads map[string]int
+}
+
+func swapFS(t *testing.T, rd func(string) ([]os.DirEntry, error), rs func(string) (string, error)) *fakeFS {
+	t.Helper()
+	f := &fakeFS{reads: map[string]int{}}
+	if rd == nil {
+		rd = os.ReadDir
+	}
+	if rs == nil {
+		rs = filepath.EvalSymlinks
+	}
+	readDir = func(dir string) ([]os.DirEntry, error) {
+		f.mu.Lock()
+		f.reads[dir]++
+		f.mu.Unlock()
+		return rd(dir)
+	}
+	resolve = rs
+	t.Cleanup(func() { readDir, resolve = os.ReadDir, filepath.EvalSymlinks })
+	return f
+}
+
+func (f *fakeFS) read(dir string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.reads[dir]
+}
+
+// blockOn makes resolve hang on path until the test ends, and counts its calls.
+func blockOn(t *testing.T, path string) (func(string) (string, error), *atomic.Int32) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	var calls atomic.Int32
+	return func(p string) (string, error) {
+		if p == path {
+			calls.Add(1)
+			<-release
+		}
+		return filepath.EvalSymlinks(p)
+	}, &calls
+}
+
+func mounts(t mountTable) func() mountTable { return func() mountTable { return t } }
+
+func mkdir(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFindRootResolveIsBounded(t *testing.T) {
+	a, dead := tmp(t), tmp(t)
+	mkRepo(t, filepath.Join(a, "r"), "main", "")
+	rs, _ := blockOn(t, dead)
+	swapFS(t, nil, rs)
+	o := FindOpts{Budget: 200 * time.Millisecond, Grace: 100 * time.Millisecond}
+	start := time.Now()
+	res := Find(context.Background(), []string{dead, a}, o)
+	if took := time.Since(start); took > o.Limit()+100*time.Millisecond {
+		t.Fatalf("Find took %s on a root that never resolves, Limit %s", took, o.Limit())
+	}
+	if !slices.Equal(res.Hung, []string{dead}) {
+		t.Fatalf("Hung = %v, want %s", res.Hung, dead)
+	}
+	if !slices.Equal(paths(res.Repos), []string{filepath.Join(a, "r")}) {
+		t.Fatalf("repos = %v, want the other root's", paths(res.Repos))
+	}
+}
+
+func TestFindStopsWaitingOnAHungFolder(t *testing.T) {
+	root := tmp(t)
+	mkRepo(t, filepath.Join(root, "a"), "main", "")
+	stuck := filepath.Join(root, "z")
+	mkdir(t, stuck)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	swapFS(t, func(dir string) ([]os.DirEntry, error) {
+		if dir == stuck {
+			<-release
+		}
+		return os.ReadDir(dir)
+	}, nil)
+	o := FindOpts{Budget: 200 * time.Millisecond, Grace: 50 * time.Millisecond}
+	start := time.Now()
+	res := Find(context.Background(), []string{root}, o)
+	if took := time.Since(start); took > o.Limit()+100*time.Millisecond {
+		t.Fatalf("Find waited %s on a folder that never answered", took)
+	}
+	if !slices.Equal(paths(res.Repos), []string{filepath.Join(root, "a")}) || len(res.Errors) != 1 ||
+		res.Errors[0] != "stopped: a folder did not answer in 250ms: some repositories may be missing" {
+		t.Fatalf("got %v, errors %q: want what was found before the hang, and why it stopped", paths(res.Repos), res.Errors)
+	}
+	if !slices.Equal(res.Hung, []string{stuck}) {
+		t.Fatalf("Hung = %v, want %s", res.Hung, stuck)
+	}
+}
+
+func TestFindSkipsNetworkBelowRoot(t *testing.T) {
+	root := tmp(t)
+	net := filepath.Join(root, "net")
+	mkRepo(t, filepath.Join(net, "r"), "main", "")
+	mkRepo(t, filepath.Join(root, "a"), "main", "")
+	f := swapFS(t, nil, nil)
+	res := Find(context.Background(), []string{root}, FindOpts{Mounts: mounts(mountTable{net: "nfs"})})
+	if n := f.read(net); n != 0 {
+		t.Fatalf("read the network folder %d times", n)
+	}
+	if want := []Skip{{net, "a network folder (nfs)"}}; !slices.Equal(res.Skipped, want) || len(res.Errors) != 0 {
+		t.Fatalf("skipped %v, errors %v: want %v", res.Skipped, res.Errors, want)
+	}
+	if !slices.Equal(paths(res.Repos), []string{filepath.Join(root, "a")}) {
+		t.Fatalf("repos = %v", paths(res.Repos))
+	}
+}
+
+func TestFindWalksNetworkRoot(t *testing.T) {
+	root := tmp(t)
+	mkRepo(t, filepath.Join(root, "r"), "main", "")
+	res := Find(context.Background(), []string{root}, FindOpts{Mounts: mounts(mountTable{root: "nfs"})})
+	if !slices.Equal(paths(res.Repos), []string{filepath.Join(root, "r")}) || len(res.Skipped) != 0 {
+		t.Fatalf("repos %v, skipped %v: a root on nfs is still walked", paths(res.Repos), res.Skipped)
+	}
+}
+
+func TestFindWalksLocalMount(t *testing.T) {
+	root := tmp(t)
+	sub := filepath.Join(root, "repos")
+	mkRepo(t, filepath.Join(sub, "r"), "main", "")
+	res := Find(context.Background(), []string{root}, FindOpts{Mounts: mounts(mountTable{sub: "btrfs"})})
+	if !slices.Equal(paths(res.Repos), []string{filepath.Join(sub, "r")}) || len(res.Skipped) != 0 {
+		t.Fatalf("repos %v, skipped %v: a local mount is walked", paths(res.Repos), res.Skipped)
+	}
+}
+
+func TestFindHonorsSkip(t *testing.T) {
+	root := tmp(t)
+	dead := filepath.Join(root, "dead")
+	mkRepo(t, filepath.Join(dead, "r"), "main", "")
+	mkRepo(t, filepath.Join(root, "a"), "main", "")
+	f := swapFS(t, nil, nil)
+	res := Find(context.Background(), []string{root}, FindOpts{Skip: map[string]bool{dead: true}})
+	if n := f.read(dead); n != 0 {
+		t.Fatalf("read a skipped folder %d times", n)
+	}
+	if want := []Skip{{dead, "it did not answer before"}}; !slices.Equal(res.Skipped, want) {
+		t.Fatalf("skipped %v, want %v", res.Skipped, want)
+	}
+	if !slices.Equal(paths(res.Repos), []string{filepath.Join(root, "a")}) {
+		t.Fatalf("repos = %v", paths(res.Repos))
+	}
+}
+
+func TestFindHungRootSkippedByWrittenPath(t *testing.T) {
+	real := tmp(t)
+	r := filepath.Join(tmp(t), "link") // written; resolves to real
+	if err := os.Symlink(real, r); err != nil {
+		t.Fatal(err)
+	}
+	rs, calls := blockOn(t, r)
+	swapFS(t, nil, rs)
+	o := FindOpts{Budget: 100 * time.Millisecond, Grace: 50 * time.Millisecond}
+	if res := Find(context.Background(), []string{r}, o); !slices.Equal(res.Hung, []string{r}) {
+		t.Fatalf("Hung = %v, want the written %s", res.Hung, r)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("resolve(r) called %d times, want once", calls.Load())
+	}
+	o.Skip = map[string]bool{r: true}
+	res := Find(context.Background(), []string{r}, o)
+	if calls.Load() != 1 {
+		t.Fatal("a root in Skip was looked up again")
+	}
+	if want := []Skip{{r, "it did not answer before"}}; !slices.Equal(res.Skipped, want) || len(res.Hung) != 0 {
+		t.Fatalf("skipped %v, hung %v: want %v", res.Skipped, res.Hung, want)
+	}
+}
+
+func TestFindListsUnreadable(t *testing.T) {
+	root := tmp(t)
+	locked, gone := filepath.Join(root, "locked"), filepath.Join(root, "gone")
+	mkdir(t, locked)
+	mkdir(t, gone)
+	swapFS(t, func(dir string) ([]os.DirEntry, error) {
+		switch dir {
+		case locked:
+			return nil, &fs.PathError{Op: "open", Path: dir, Err: fs.ErrPermission}
+		case gone:
+			return nil, &fs.PathError{Op: "open", Path: dir, Err: fs.ErrNotExist}
+		}
+		return os.ReadDir(dir)
+	}, nil)
+	res := Find(context.Background(), []string{root}, FindOpts{})
+	if want := []string{"cannot read " + locked + ": permission denied"}; !slices.Equal(res.Errors, want) {
+		t.Fatalf("errors %q, want %q", res.Errors, want)
+	}
+}
+
+func TestFindListsUnresolvableRoot(t *testing.T) {
+	root := tmp(t)
+	bad := filepath.Join(root, "bad")
+	swapFS(t, nil, func(p string) (string, error) {
+		if p == bad {
+			return "", &fs.PathError{Op: "lstat", Path: p, Err: fs.ErrPermission}
+		}
+		return filepath.EvalSymlinks(p)
+	})
+	res := Find(context.Background(), []string{bad, filepath.Join(root, "missing"), root}, FindOpts{})
+	if want := []string{"cannot find root " + bad + ": permission denied"}; !slices.Equal(res.Errors, want) {
+		t.Fatalf("errors %q, want %q: a missing root is not listed", res.Errors, want)
+	}
+}
+
+func TestFindErrorsCapped(t *testing.T) {
+	root := tmp(t)
+	for i := range 30 {
+		mkdir(t, filepath.Join(root, fmt.Sprintf("d%02d", i)))
+	}
+	swapFS(t, func(dir string) ([]os.DirEntry, error) {
+		if dir != root {
+			return nil, fs.ErrPermission
+		}
+		return os.ReadDir(dir)
+	}, nil)
+	res := Find(context.Background(), []string{root}, FindOpts{})
+	if len(res.Errors) != 20 || res.Errors[19] != "and 11 more" || res.Errors[0] != "cannot read "+filepath.Join(root, "d00")+": permission denied" {
+		t.Fatalf("%d errors, %q", len(res.Errors), res.Errors)
+	}
+}
+
+func TestFindSkippedCapped(t *testing.T) {
+	root := tmp(t)
+	skip := map[string]bool{}
+	for i := range 503 {
+		p := filepath.Join(root, fmt.Sprintf("d%03d", i))
+		mkdir(t, p)
+		skip[p] = true
+	}
+	res := Find(context.Background(), []string{root}, FindOpts{Skip: skip, Depth: 1})
+	if len(res.Skipped) != 500 || res.SkippedMore != 3 {
+		t.Fatalf("%d skipped, %d more", len(res.Skipped), res.SkippedMore)
+	}
+}
+
+func TestFindProtectedBelowRootOnly(t *testing.T) {
+	root := tmp(t)
+	docs := filepath.Join(root, "Documents")
+	code := filepath.Join(docs, "code")
+	mkRepo(t, code, "main", "")
+	o := FindOpts{Protected: []string{docs}}
+	res := Find(context.Background(), []string{root, filepath.Join(root, "other")}, o)
+	if want := []Skip{{docs, "macOS asks first; p picks it"}}; !slices.Equal(res.Skipped, want) || len(res.Repos) != 0 || len(res.Errors) != 0 {
+		t.Fatalf("repos %v, skipped %v, errors %v: want %v alone", paths(res.Repos), res.Skipped, res.Errors, want)
+	}
+	for _, r := range []string{code, docs} {
+		res = Find(context.Background(), []string{r}, o)
+		if !slices.Equal(paths(res.Repos), []string{code}) || len(res.Skipped) != 0 {
+			t.Fatalf("root %s: repos %v, skipped %v: a root in a protected folder is walked", r, paths(res.Repos), res.Skipped)
+		}
+	}
+	// Reached from a root above, it is skipped whichever root that is.
+	res = Find(context.Background(), []string{code, root}, o)
+	if !slices.Equal(paths(res.Repos), []string{code}) || !slices.Equal(res.Skipped, []Skip{{docs, "macOS asks first; p picks it"}}) {
+		t.Fatalf("repos %v, skipped %v", paths(res.Repos), res.Skipped)
+	}
+}
+
+func TestFindProtectedUnderSymlinkedHome(t *testing.T) {
+	real := tmp(t)
+	h := filepath.Join(tmp(t), "h")
+	if err := os.Symlink(real, h); err != nil {
+		t.Fatal(err)
+	}
+	mkRepo(t, filepath.Join(real, "Documents", "r"), "main", "")
+	protected := DefaultProtected(h)
+	if len(protected) == 0 {
+		protected = []string{filepath.Join(h, "Documents")}
+	}
+	res := Find(context.Background(), []string{h}, FindOpts{Home: h, Protected: protected})
+	if want := []Skip{{filepath.Join(real, "Documents"), "macOS asks first; p picks it"}}; !slices.Equal(res.Skipped, want) || len(res.Repos) != 0 {
+		t.Fatalf("repos %v, skipped %v: want %v", paths(res.Repos), res.Skipped, want)
+	}
+}
+
+func TestDefaultProtected(t *testing.T) {
+	got := DefaultProtected("/h")
+	if runtime.GOOS != "darwin" {
+		if len(got) != 0 {
+			t.Fatalf("got %v off macOS", got)
+		}
+		return
+	}
+	want := []string{"/h/Documents", "/h/Desktop", "/h/Downloads", "/h/Library", "/h/Pictures", "/h/Movies", "/h/Music"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestFindStaleWorktreeGitFile(t *testing.T) {
+	root := tmp(t)
+	write(t, filepath.Join(root, "a", ".git"), "gitdir: "+filepath.Join(root, "gone", ".git", "worktrees", "a")+"\n")
+	mkRepo(t, filepath.Join(root, "b"), "main", "")
+	if got := paths(find(t, root)); !slices.Equal(got, []string{filepath.Join(root, "b")}) {
+		t.Fatalf("got %v, want the sibling alone and no error", got)
+	}
+}
+
+func TestFindSymlinkedHome(t *testing.T) {
+	real := tmp(t)
+	h := filepath.Join(tmp(t), "h")
+	if err := os.Symlink(real, h); err != nil {
+		t.Fatal(err)
+	}
+	mkRepo(t, filepath.Join(real, "dev", "a"), "main", "")
+	if got := paths(find(t, h)); !slices.Equal(got, []string{filepath.Join(real, "dev", "a")}) {
+		t.Fatalf("got %v, want the resolved path", got)
+	}
+}
+
+func TestLimit(t *testing.T) {
+	if got := (FindOpts{Budget: time.Second}).Limit(); got != 6*time.Second {
+		t.Fatalf("default grace: %s", got)
+	}
+	if got := (FindOpts{Budget: time.Second, Grace: time.Millisecond}).Limit(); got != time.Second+time.Millisecond {
+		t.Fatalf("grace: %s", got)
+	}
+}
+
+func TestFindSkipsRootByResolvedPath(t *testing.T) {
+	real := tmp(t)
+	mkRepo(t, real, "main", "")
+	link := filepath.Join(tmp(t), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	f := swapFS(t, nil, nil)
+	res := Find(context.Background(), []string{link}, FindOpts{Skip: map[string]bool{real: true}})
+	if f.read(real) != 0 || len(res.Repos) != 0 || !slices.Equal(res.Skipped, []Skip{{real, "it did not answer before"}}) {
+		t.Fatalf("reads %d, repos %v, skipped %v", f.read(real), paths(res.Repos), res.Skipped)
 	}
 }
