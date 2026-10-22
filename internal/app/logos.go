@@ -13,9 +13,10 @@ import (
 // images, and which ones they are (logos.Viewers). gen is the console
 // that asked: the shell's next console drops an older one's answer.
 type graphicsMsg struct {
-	gen int
-	can bool
-	key string
+	gen     int
+	can     bool
+	key     string
+	watched bool // some client is on the console's session
 }
 
 // graphicsTickMsg is the console's own clock for asking who shows it, so
@@ -53,8 +54,8 @@ func (m Model) askGraphics(msg graphicsTickMsg) (Model, tea.Cmd) {
 	m.gfxAsks++
 	g, gen := m.opt.Graphics, m.opt.Gen
 	return m, tea.Batch(next, func() tea.Msg {
-		can, key := g()
-		return graphicsMsg{gen, can, key}
+		can, key, watched := g()
+		return graphicsMsg{gen, can, key, watched}
 	})
 }
 
@@ -66,6 +67,11 @@ func (m Model) graphics(msg graphicsMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.gfxBusy = false
+	if !msg.watched {
+		// Nobody shows the console: kitty keeps the images, so the logos
+		// are there the moment the builder comes back.
+		return m, nil
+	}
 	if !msg.can {
 		m.logos, m.gfxKey = false, ""
 		return m, nil

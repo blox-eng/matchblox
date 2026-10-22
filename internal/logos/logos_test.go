@@ -71,21 +71,21 @@ func TestViewersDrawOnlyWhenEveryClientCan(t *testing.T) {
 		return []byte(clients), nil
 	}
 	clients = "/dev/ttys002\t100\txterm-kitty\tmy work\t@1\n/dev/ttys009\t109\txterm-256color\tdev\t@4\n"
-	can, here := Viewers(inTmux, tmux)
+	can, here, _ := Viewers(inTmux, tmux)
 	if !can {
 		t.Fatal("kitty alone on the console's session (named with a space) cannot draw")
 	}
 	clients = "/dev/ttys002\t100\txterm-kitty\tmy work\t@2\n"
-	if can, away := Viewers(inTmux, tmux); !can || away == here {
+	if can, away, _ := Viewers(inTmux, tmux); !can || away == here {
 		t.Fatalf("a client on another window: can %v, key %q unchanged", can, away)
 	}
 	clients = "/dev/ttys002\t100\txterm-kitty\tmy work\t@1\n/dev/ttys004\t104\txterm-ghostty\tmy work\t@1\n"
-	if can, two := Viewers(inTmux, tmux); !can || two == here {
+	if can, two, _ := Viewers(inTmux, tmux); !can || two == here {
 		t.Fatalf("kitty and Ghostty: can %v, key %q unchanged", can, two)
 	}
 	// A new kitty client on a departed one's tty needs the images too.
 	clients = "/dev/ttys002\t200\txterm-kitty\tmy work\t@1\n"
-	if can, again := Viewers(inTmux, tmux); !can || again == here {
+	if can, again, _ := Viewers(inTmux, tmux); !can || again == here {
 		t.Fatalf("a new client on a reused tty: can %v, key %q unchanged", can, again)
 	}
 	for name, c := range map[string]string{
@@ -94,18 +94,22 @@ func TestViewersDrawOnlyWhenEveryClientCan(t *testing.T) {
 		"no client":         "",
 	} {
 		clients = c
-		if can, _ := Viewers(inTmux, tmux); can {
+		can, _, watched := Viewers(inTmux, tmux)
+		if can {
 			t.Errorf("%s on the console's session: logos drawn", name)
 		}
+		if watched != (name != "no client") {
+			t.Errorf("%s: watched %v", name, watched)
+		}
 	}
-	if can, _ := Viewers(env(map[string]string{"TERM": "xterm-kitty"}), nil); !can {
+	if can, _, _ := Viewers(env(map[string]string{"TERM": "xterm-kitty"}), nil); !can {
 		t.Fatal("kitty outside tmux cannot draw")
 	}
-	if can, _ := Viewers(env(map[string]string{"TERM": "xterm-256color"}), nil); can {
+	if can, _, _ := Viewers(env(map[string]string{"TERM": "xterm-256color"}), nil); can {
 		t.Fatal("a plain terminal draws")
 	}
 	// NO_COLOR strips the colour that names the image: blank cells.
-	if can, _ := Viewers(env(map[string]string{"TERM": "xterm-kitty", "NO_COLOR": "1"}), nil); can {
+	if can, _, _ := Viewers(env(map[string]string{"TERM": "xterm-kitty", "NO_COLOR": "1"}), nil); can {
 		t.Fatal("logos drawn under NO_COLOR")
 	}
 }

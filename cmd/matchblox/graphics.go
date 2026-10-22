@@ -17,7 +17,7 @@ const graphicsTimeout = time.Second
 // consoleGraphics tells the console whether every terminal that shows it
 // draws the providers' logos (#183), and gives back the pane's own
 // allow-passthrough when the console ends.
-func consoleGraphics() (ask func() (bool, string), restore func()) {
+func consoleGraphics() (ask func() (bool, string, bool), restore func()) {
 	return consoleGraphicsWith(os.Getenv, func(args ...string) ([]byte, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), graphicsTimeout)
 		defer cancel()
@@ -31,8 +31,8 @@ func consoleGraphics() (ask func() (bool, string), restore func()) {
 // the marks stay. restore gives the pane back its own setting, unset or
 // as it was, since passthrough left open lets anything later printed in
 // that pane write to the terminal. env is os.Getenv; tmux runs tmux.
-func consoleGraphicsWith(env func(string) string, tmux func(args ...string) ([]byte, error)) (ask func() (bool, string), restore func()) {
-	ask = func() (bool, string) { return logos.Viewers(env, tmux) }
+func consoleGraphicsWith(env func(string) string, tmux func(args ...string) ([]byte, error)) (ask func() (bool, string, bool), restore func()) {
+	ask = func() (bool, string, bool) { return logos.Viewers(env, tmux) }
 	pane := env("TMUX_PANE")
 	if env("TMUX") == "" || pane == "" {
 		return ask, func() {}
@@ -47,7 +47,7 @@ func consoleGraphicsWith(env func(string) string, tmux func(args ...string) ([]b
 		}
 	}
 	if !passes {
-		return func() (bool, string) { return false, "" }, func() {}
+		return func() (bool, string, bool) { return false, "", true }, func() {}
 	}
 	return ask, func() {
 		if before == "" {

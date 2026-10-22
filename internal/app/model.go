@@ -84,8 +84,9 @@ type Options struct {
 	// Clip copies text to the builder's clipboard. Nil: OSC 52 with the output.
 	Clip func(text string)
 	// Graphics says whether every terminal that shows the console draws
-	// images, and which they are (logos.Viewers). Nil: never.
-	Graphics func() (can bool, viewers string)
+	// images, which they are, and whether any shows it (logos.Viewers).
+	// Nil: never.
+	Graphics func() (can bool, viewers string, watched bool)
 }
 
 type helloMsg proto.Hello

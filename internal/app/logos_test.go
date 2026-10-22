@@ -14,7 +14,7 @@ import (
 // provider's logo, sent once per set of viewers and background (#183).
 func TestUsageDrawsLogosWhereEveryViewerCan(t *testing.T) {
 	m, _ := loadedWith(t, 132, limitsState())
-	next, send := m.Update(graphicsMsg{can: true, key: "/dev/ttys002"})
+	next, send := m.Update(graphicsMsg{can: true, watched: true, key: "/dev/ttys002"})
 	m = next.(Model)
 	if send == nil {
 		t.Fatal("the logos are not sent to a new viewer")
@@ -24,14 +24,14 @@ func TestUsageDrawsLogosWhereEveryViewerCan(t *testing.T) {
 	if !strings.Contains(out, " "+claude+" Claude builder") || !strings.Contains(out, ansi.Strip(logos.Cells("openai"))+" OpenAI Plus") {
 		t.Fatalf("USAGE has no logos:\n%s", out)
 	}
-	if _, again := m.Update(graphicsMsg{can: true, key: "/dev/ttys002"}); again != nil {
+	if _, again := m.Update(graphicsMsg{can: true, watched: true, key: "/dev/ttys002"}); again != nil {
 		t.Error("the same viewers get the logos again")
 	}
-	if _, more := m.Update(graphicsMsg{can: true, key: "/dev/ttys002,/dev/ttys004"}); more == nil {
+	if _, more := m.Update(graphicsMsg{can: true, watched: true, key: "/dev/ttys002,/dev/ttys004"}); more == nil {
 		t.Error("a viewer that attached gets no logos")
 	}
 	// A phone attaches: marks again, and no placeholder it would draw as boxes.
-	next, _ = m.Update(graphicsMsg{})
+	next, _ = m.Update(graphicsMsg{watched: true})
 	if out := screen(next); strings.Contains(out, claude) || !strings.Contains(out, "✻ Claude builder") {
 		t.Fatalf("a viewer that cannot draw still gets logos:\n%s", out)
 	}
@@ -42,7 +42,7 @@ func TestUsageDrawsLogosWhereEveryViewerCan(t *testing.T) {
 func TestTheShellsConsoleAsksWhoShowsIt(t *testing.T) {
 	asked := 0
 	sh := NewShell(ShellOptions{
-		Base: Options{NoMotion: true, Graphics: func() (bool, string) { asked++; return true, "/dev/ttys002" }},
+		Base: Options{NoMotion: true, Graphics: func() (bool, string, bool) { asked++; return true, "/dev/ttys002", true }},
 		Open: func(string) Options { return Options{Conn: newFake()} },
 	})
 	for _, host := range []string{"", "ws-1"} {
@@ -50,7 +50,7 @@ func TestTheShellsConsoleAsksWhoShowsIt(t *testing.T) {
 		if opened.cur.opt.Graphics == nil {
 			t.Fatalf("host %q: the console has no Graphics", host)
 		}
-		next, _ := opened.Update(graphicsMsg{gen: opened.cur.opt.Gen, can: true, key: "/dev/ttys002"})
+		next, _ := opened.Update(graphicsMsg{gen: opened.cur.opt.Gen, can: true, watched: true, key: "/dev/ttys002"})
 		if !next.(Shell).cur.logos {
 			t.Fatalf("host %q: the shell does not pass graphicsMsg to its console", host)
 		}
@@ -63,7 +63,7 @@ func TestTheShellsConsoleAsksWhoShowsIt(t *testing.T) {
 // more every tick; a closed console's timer is dropped.
 func TestGraphicsAsksOnItsOwnClockOneAtATime(t *testing.T) {
 	m, _ := loadedWith(t, 132, limitsState())
-	m.opt.Graphics = func() (bool, string) { return true, "k" }
+	m.opt.Graphics = func() (bool, string, bool) { return true, "k", true }
 	next, cmd := m.Update(graphicsTickMsg{gen: m.opt.Gen})
 	if cmd == nil || !next.(Model).gfxBusy {
 		t.Fatal("a tick asks nothing")
@@ -73,7 +73,7 @@ func TestGraphicsAsksOnItsOwnClockOneAtATime(t *testing.T) {
 	if !next.(Model).gfxBusy || next.(Model).gfxAsks != m.gfxAsks {
 		t.Fatal("a tick asks again while the last question waits")
 	}
-	next, _ = next.Update(graphicsMsg{gen: m.opt.Gen, can: true, key: "k"})
+	next, _ = next.Update(graphicsMsg{gen: m.opt.Gen, can: true, watched: true, key: "k"})
 	if next.(Model).gfxBusy {
 		t.Fatal("the answer does not free the next question")
 	}
@@ -82,5 +82,21 @@ func TestGraphicsAsksOnItsOwnClockOneAtATime(t *testing.T) {
 	}
 	if m.opt.Graphics = nil; m.Init() == nil {
 		t.Fatal("no Init")
+	}
+}
+
+// TestLogosStayWhileNobodyShowsTheConsole: with no client on the console's
+// session (the builder is on another one), nothing changes: kitty keeps
+// the images, so the logos are there the moment the builder comes back,
+// with nothing to send again.
+func TestLogosStayWhileNobodyShowsTheConsole(t *testing.T) {
+	m, _ := loadedWith(t, 132, limitsState())
+	next, _ := m.Update(graphicsMsg{can: true, watched: true, key: "/dev/ttys002"})
+	next, _ = next.Update(graphicsMsg{})
+	if !next.(Model).logos {
+		t.Fatal("the logos went while nobody showed the console")
+	}
+	if _, send := next.Update(graphicsMsg{can: true, watched: true, key: "/dev/ttys002"}); send != nil {
+		t.Error("the logos are sent again to a client that has them")
 	}
 }

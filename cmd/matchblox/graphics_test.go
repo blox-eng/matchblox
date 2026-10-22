@@ -41,7 +41,7 @@ func TestOldTmuxKeepsTheMarks(t *testing.T) {
 	f := &fakeTmux{}
 	ask, restore := consoleGraphicsWith(inTmux, f.run)
 	defer restore()
-	if can, _ := ask(); can {
+	if can, _, _ := ask(); can {
 		t.Fatal("logos drawn where tmux passes no image")
 	}
 }
@@ -56,7 +56,7 @@ func TestConsoleRestoresPassthroughOnExit(t *testing.T) {
 	} {
 		f := &fakeTmux{set: true, before: before}
 		ask, restore := consoleGraphicsWith(inTmux, f.run)
-		if can, _ := ask(); !can {
+		if can, _, _ := ask(); !can {
 			t.Fatalf("before %q: kitty on a passing tmux cannot draw", before)
 		}
 		restore()

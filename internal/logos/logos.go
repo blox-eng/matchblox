@@ -102,24 +102,25 @@ var drawing = map[string]bool{"xterm-kitty": true, "xterm-ghostty": true}
 // Viewers says whether every terminal that shows this console can draw the
 // logos, and a key that changes with them: a client that attaches, or
 // comes to the console's window, needs the images again (tmux passes them
-// to the clients that show the pane). A client that names no terminal
-// cannot draw. NO_COLOR drops the colour that names each image. env is
-// os.Getenv; tmux runs tmux with args.
-func Viewers(env func(string) string, tmux func(args ...string) ([]byte, error)) (bool, string) {
+// to the clients that show the pane). watched is false when no client is
+// on the console's session at all: nothing to decide then. A client that
+// names no terminal cannot draw. NO_COLOR drops the colour that names
+// each image. env is os.Getenv; tmux runs tmux with args.
+func Viewers(env func(string) string, tmux func(args ...string) ([]byte, error)) (can bool, key string, watched bool) {
 	if env("NO_COLOR") != "" {
-		return false, ""
+		return false, "", true
 	}
 	if env("TMUX") == "" {
-		return drawing[env("TERM")] || env("TERM_PROGRAM") == "ghostty", "direct"
+		return drawing[env("TERM")] || env("TERM_PROGRAM") == "ghostty", "direct", true
 	}
 	out, err := tmux("display", "-p", "-t", env("TMUX_PANE"), "#{session_name}\t#{window_id}")
 	if err != nil {
-		return false, ""
+		return false, "", true
 	}
 	session, window, _ := strings.Cut(strings.TrimSuffix(string(out), "\n"), "\t")
 	// The pid tells a new client from a departed one on the same tty.
 	if out, err = tmux("list-clients", "-F", "#{client_tty}\t#{client_pid}\t#{client_termname}\t#{client_session}\t#{window_id}"); err != nil {
-		return false, ""
+		return false, "", true
 	}
 	var here []string
 	for line := range strings.Lines(string(out)) {
@@ -128,7 +129,7 @@ func Viewers(env func(string) string, tmux func(args ...string) ([]byte, error))
 			continue
 		}
 		if !drawing[f[2]] {
-			return false, ""
+			return false, "", true
 		}
 		at := "away"
 		if f[4] == window {
@@ -137,5 +138,5 @@ func Viewers(env func(string) string, tmux func(args ...string) ([]byte, error))
 		here = append(here, f[0]+":"+f[1]+"@"+at)
 	}
 	slices.Sort(here)
-	return len(here) > 0, strings.Join(here, ",")
+	return len(here) > 0, strings.Join(here, ","), len(here) > 0
 }
