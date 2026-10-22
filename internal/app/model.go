@@ -310,6 +310,7 @@ type Model struct {
 	pair         *pairPage    // the pair page, while it shows
 	pairPolling  bool         // a poll of the pair page is on its way
 	pairOffers   *pairWaits   // the offers of a key that still run: the end of the program waits for them
+	keys         keymaps      // the keys of every layer, as data
 }
 
 func New(opt Options) Model {
@@ -323,7 +324,7 @@ func New(opt Options) Model {
 		opt.Binary = "dev"
 	}
 	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60),
-		recPrefs: loadRecPrefs(opt.StateDir)}
+		recPrefs: loadRecPrefs(opt.StateDir), keys: defaultKeys()}
 	m.splashAt = m.now()
 	return m
 }

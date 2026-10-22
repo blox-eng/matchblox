@@ -59,8 +59,9 @@ type Shell struct {
 	height  int
 	dark    bool
 	st      styles
-	gen     int        // the generation of the last console opened
-	offers  *pairWaits // the pair offers of every console: Close waits for all
+	gen     int          // the generation of the last console opened
+	offers  *pairWaits   // the pair offers of every console: Close waits for all
+	keys    shellKeymaps // the Hosts list keys
 }
 
 // layerMsg asks the shell to go back to Hosts.
@@ -73,7 +74,7 @@ type connectedHostMsg struct {
 }
 
 func NewShell(opt ShellOptions) Shell {
-	s := Shell{opt: opt, width: 100, height: 30, dark: true, st: newStyles(true), offers: &pairWaits{}}
+	s := Shell{opt: opt, width: 100, height: 30, dark: true, st: newStyles(true), offers: &pairWaits{}, keys: defaultShellKeys()}
 	s.hosts = s.readHosts()
 	switch {
 	case opt.Start != "":
