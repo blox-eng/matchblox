@@ -185,7 +185,7 @@ func TestTheRepositoryFlips(t *testing.T) {
 	}
 	site := func(s string) string { return regexp.MustCompile(`(?s)<!--.*?-->`).ReplaceAllString(s, "") }
 	before, after := site(read(t, files[len(files)-1])), site(read(t, copies[len(copies)-1]))
-	for _, id := range []string{`id="t-script"`, `id="note"`, `class="news"`} {
+	for _, id := range []string{`id="t-script"`, `id="t-brew"`, `id="t-aur"`, `id="note"`, `class="news"`} {
 		if strings.Count(before, id) != 1 || strings.Count(after, id) != 1 {
 			t.Errorf("%s: %d before, %d after the flip", id, strings.Count(before, id), strings.Count(after, id))
 		}
