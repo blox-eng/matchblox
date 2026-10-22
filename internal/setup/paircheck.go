@@ -25,6 +25,17 @@ type pairProbeFns struct {
 
 var pairProbe = defaultPairProbe
 
+// PairProbe is pairProbeFns for tests outside this package.
+type PairProbe = pairProbeFns
+
+// SetPairProbe replaces how CheckPairPath looks at this host and returns the
+// one it replaced. It is for tests: a caller outside this package would
+// otherwise run this machine's tailscale and sshd.
+func SetPairProbe(p PairProbe) (old PairProbe) {
+	old, pairProbe = pairProbe, p
+	return old
+}
+
 var defaultPairProbe = pairProbeFns{
 	LookPath: pairLookPath,
 	TailscalePrefs: func(path string) ([]byte, error) {
