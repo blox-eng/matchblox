@@ -395,3 +395,10 @@ func (s *Service) writeConsent(c state.Consent) error {
 	}
 	return state.WriteConsent(s.ConsentPath, c)
 }
+
+// ScanRan reports whether err, a yes's Err, says its scan ran but kept
+// nothing for it, rather than that the yes was refused.
+func ScanRan(err string) bool {
+	return err == errScanNo.Error() || err == errScanStopped.Error() ||
+		err == errScanSuperseded.Error() || strings.HasPrefix(err, errScanSuperseded.Error()+": ")
+}

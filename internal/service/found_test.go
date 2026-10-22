@@ -716,3 +716,16 @@ func TestNamedFolderClearsHungMemory(t *testing.T) {
 		t.Fatalf("skip %v: a yes that names no folder clears nothing", skips[1])
 	}
 }
+
+func TestScanRan(t *testing.T) {
+	for _, err := range []error{errScanNo, errScanStopped, supersededError{[]string{"/a"}}, supersededError{}} {
+		if !ScanRan(err.Error()) {
+			t.Errorf("ScanRan(%q) = false", err.Error())
+		}
+	}
+	for _, msg := range []string{scanRefused, "scan.json: denied", "this service finds no repositories", ""} {
+		if ScanRan(msg) {
+			t.Errorf("ScanRan(%q) = true", msg)
+		}
+	}
+}

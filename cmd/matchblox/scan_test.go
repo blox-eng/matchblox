@@ -232,3 +232,18 @@ func TestCliScanRefused(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 }
+
+func TestCLIScanThatRanIsNotARefusal(t *testing.T) {
+	for _, msg := range []string{
+		"other folders were picked since: /a",
+		"a no came while it ran: nothing is kept",
+		"the service stopped before the scan ended",
+	} {
+		sock := isolate(t)
+		actService(t, sock, proto.Result{Err: msg})
+		err := cliScan(nil, &bytes.Buffer{}, sock)
+		if err == nil || err.Error() != "scan: "+msg {
+			t.Fatalf("err %v, want scan: %s", err, msg)
+		}
+	}
+}

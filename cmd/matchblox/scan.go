@@ -12,6 +12,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/service"
 )
 
 // stat is os.Stat; a test swaps it.
@@ -131,6 +132,9 @@ func cliScan(words []string, w io.Writer, path string) error {
 		return fmt.Errorf("scan: did not run: %w", err)
 	}
 	if err := reportResult(io.Discard, res); err != nil {
+		if service.ScanRan(res.Err) { // it ran, but kept nothing for this yes
+			return fmt.Errorf("scan: %w", err)
+		}
 		return fmt.Errorf("scan: refused: %w", err)
 	}
 	if a.RecID == "scan:no" {
