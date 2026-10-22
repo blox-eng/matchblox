@@ -1,6 +1,9 @@
 package app
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestHintForUsesBinding(t *testing.T) {
 	k := defaultKeys()
@@ -36,5 +39,30 @@ func TestFootForSkipsDisabled(t *testing.T) {
 	}
 	if f := m.st.footFor(off, "open", " ─ "); f != (footPart{}) {
 		t.Errorf("a disabled binding gave the part %+v", f)
+	}
+}
+
+func TestDisabledTabHintAndZeroSkips(t *testing.T) {
+	k := defaultKeys()
+	off := k.main.Tabs
+	off.SetEnabled(false)
+	if h := tabHint(off, 0, "sessions"); h != (hint{}) {
+		t.Errorf("a disabled tabs binding gave %+v", h)
+	}
+	if h := tabHint(k.main.Tabs, len(k.main.Tabs.Keys()), "x"); h != (hint{}) {
+		t.Errorf("a tab past the last gave %+v", h)
+	}
+	m := Model{keys: k}
+	m.st = newStyles(true)
+	with, _ := m.hintRow([]hint{hintFor(k.main.Open, "")}, 2)
+	skipped, _ := m.hintRow([]hint{{}, hintFor(k.main.Open, ""), {}}, 2)
+	if with != skipped {
+		t.Errorf("hintRow drew a zero hint: %q, want %q", skipped, with)
+	}
+	part := m.st.footFor(k.form.Enter, "start", "")
+	a, _ := boxFrame(m.st.hair, "t", []string{"x"}, []footPart{part}, 30)
+	b, _ := boxFrame(m.st.hair, "t", []string{"x"}, []footPart{{}, part, {}}, 30)
+	if strings.Join(a, "\n") != strings.Join(b, "\n") {
+		t.Errorf("boxFrame drew a zero part:\n%s\nwant\n%s", strings.Join(b, "\n"), strings.Join(a, "\n"))
 	}
 }

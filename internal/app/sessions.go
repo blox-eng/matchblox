@@ -625,7 +625,7 @@ func (m Model) detailLines(w, rows int) ([]string, bool) {
 		for _, l := range wrapPlain(text, w-2) {
 			out = append(out, " "+style.Render(l))
 		}
-		return append(out, "", " "+st.accent.Render("⏎")+st.muted.Render(" open   ")+st.accent.Render("x")+st.muted.Render(" close")), false
+		return append(out, "", " "+keyed(m.keys.main.Open, st.accent, st.muted, " open   ")+keyed(m.keys.main.Second, st.accent, st.muted, " close")), false
 	}
 	if r, ok := m.selectedRec(); ok {
 		out := []string{""}

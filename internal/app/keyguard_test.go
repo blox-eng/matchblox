@@ -1,6 +1,9 @@
 package app
 
 import (
+	"strconv"
+
+	bkey "charm.land/bubbles/v2/key"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -66,6 +69,56 @@ func TestNoKeyStringLiterals(t *testing.T) {
 				}
 				if isKeyExpr(n.X) && isStringLit(n.Y) || isKeyExpr(n.Y) && isStringLit(n.X) {
 					t.Errorf("%s: a key compared with a string: match a binding of keys.go", fset.Position(n.Pos()))
+				}
+			}
+			return true
+		})
+	}
+}
+
+// TestNoKeyGlyphLiteralsInRender keeps the key a footer or hint shows in
+// keys.go: no Render call is handed a string that is exactly a key of a
+// binding (its help key or one of its keys), as "y" or "⏎".
+func TestNoKeyGlyphLiteralsInRender(t *testing.T) {
+	glyphs := map[string]bool{}
+	k, s := defaultKeys(), defaultShellKeys()
+	for _, bs := range [][]bkey.Binding{k.global.bindings(), k.main.bindings(), k.form.bindings(), k.peek.bindings(),
+		k.sheet.bindings(), k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(),
+		s.shell.bindings(), s.typing.bindings()} {
+		for _, b := range bs {
+			glyphs[b.Help().Key] = true
+			for _, key := range b.Keys() {
+				glyphs[key] = true
+			}
+		}
+	}
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || name == "keys.go" {
+			continue
+		}
+		f, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			if sel, ok := call.Fun.(*ast.SelectorExpr); !ok || sel.Sel.Name != "Render" {
+				return true
+			}
+			for _, a := range call.Args {
+				if lit, ok := a.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+					if v, err := strconv.Unquote(lit.Value); err == nil && glyphs[v] {
+						t.Errorf("%s: Render(%s) is a key of keys.go: draw it from its binding", fset.Position(lit.Pos()), lit.Value)
+					}
 				}
 			}
 			return true

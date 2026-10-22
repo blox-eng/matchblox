@@ -428,26 +428,26 @@ func (s Shell) render() string {
 		if !phone {
 			bw = min(s.pending.width()+4, 72, w-8)
 		}
-		layBox(st, out, w, bw, phone, stepBox(st, *s.pending, bw))
+		layBox(st, out, w, bw, phone, stepBox(st, *s.pending, bw, s.keys.shell.Yes, s.keys.shell.Open, s.keys.shell.Back))
 	}
 	return strings.Join(out, "\n")
 }
 
 func (s Shell) actionLine(w int) string {
-	st := s.st
+	st, sk := s.st, s.keys.shell
 	switch {
 	case s.input != nil:
-		return fit(" "+st.label.Render("HOST ")+st.text.Render(*s.input)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ connect  esc cancel"), w)
+		return fit(" "+st.label.Render("HOST ")+st.text.Render(*s.input)+st.accent.Render("▏")+"  "+st.faint.Render(plainHints(hintFor(s.keys.typing.Connect, ""), hintFor(s.keys.typing.Cancel, ""))), w)
 	case s.pending != nil:
 		return "" // the box says it all
 	case s.flash != "":
 		return fit(" "+st.text.Render(s.flash), w)
 	case s.adding:
-		return fit(" "+st.muted.Render("↑↓ select  ⏎ connect  esc back  q quit"), w)
+		return fit(" "+st.muted.Render(plainHints(hintFor(sk.Up, ""), hintFor(sk.Open, "connect"), hintFor(sk.Back, ""), hintFor(sk.Quit, ""))), w)
 	}
-	keys := "↑↓ select  ⏎ open  q quit"
+	keys := plainHints(hintFor(sk.Up, ""), hintFor(sk.Open, ""), hintFor(sk.Quit, ""))
 	if rs := s.rows(); s.sel < len(rs) && rs[s.sel].removable {
-		keys = "↑↓ select  ⏎ open  x remove  q quit"
+		keys = plainHints(hintFor(sk.Up, ""), hintFor(sk.Open, ""), hintFor(sk.Remove, ""), hintFor(sk.Quit, ""))
 	}
 	return fit(" "+st.muted.Render(keys), w)
 }

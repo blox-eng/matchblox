@@ -2,8 +2,10 @@ package app
 
 import (
 	"strconv"
+	"strings"
 
 	bkey "charm.land/bubbles/v2/key"
+	"charm.land/lipgloss/v2"
 )
 
 // tabView is one tab: its rows and selection, what Enter and x do on the
@@ -52,6 +54,38 @@ func noTap(h hint) hint {
 	return h
 }
 
+// plainHints is hints as one line of plain text, key and word each, two
+// spaces between: for a line drawn in a single style.
+func plainHints(hs ...hint) string {
+	var parts []string
+	for _, h := range hs {
+		if h == (hint{}) {
+			continue
+		}
+		parts = append(parts, strings.TrimSpace(h.key+" "+h.label))
+	}
+	return strings.Join(parts, "  ")
+}
+
+// keyed is a binding's help key in its style, then rest in the word style:
+// the key and a phrase of prose after it.
+func keyed(b bkey.Binding, key, word lipgloss.Style, rest string) string {
+	return key.Render(b.Help().Key) + word.Render(rest)
+}
+
+// footKey is a binding's part of a box footer that no tap presses, its key
+// in the given style.
+func (st styles) footKey(b bkey.Binding, label, sep string, key lipgloss.Style) footPart {
+	if !b.Enabled() {
+		return footPart{}
+	}
+	t := key.Render(b.Help().Key)
+	if label != "" {
+		t += st.muted.Render(" " + label)
+	}
+	return footPart{t, "", sep}
+}
+
 // footFor is a binding's part of a box footer: the same rules as hintFor,
 // the key in the accent and its word muted.
 func (st styles) footFor(b bkey.Binding, label, sep string) footPart {
@@ -64,6 +98,15 @@ func (st styles) footFor(b bkey.Binding, label, sep string) footPart {
 		t += st.muted.Render(" " + h.label)
 	}
 	return footPart{t, h.press, sep}
+}
+
+// footForRev is footFor with the word first: "next →".
+func (st styles) footForRev(b bkey.Binding, label, sep string) footPart {
+	h := hintFor(b, label)
+	if h == (hint{}) {
+		return footPart{}
+	}
+	return footPart{st.muted.Render(h.label+" ") + st.accent.Render(h.key), h.press, sep}
 }
 
 const (

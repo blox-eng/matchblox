@@ -135,8 +135,8 @@ func (m Model) stokerLines(w int, full bool, toggle string) []string {
 	out := []string{spread(st.label.Render(" STOKER"), right, w)}
 	v := m.stoker
 	if v == nil || !v.On && len(v.Run) == 0 && m.card() == nil {
-		return append(out, fit(" "+st.muted.Render("off · ")+st.accent.Render("f")+st.muted.Render(" starts it · ")+
-			st.accent.Render("n")+st.muted.Render(" starts a night"), w))
+		return append(out, fit(" "+st.muted.Render("off · ")+keyed(m.keys.main.Stoke, st.accent, st.muted, " starts it · ")+
+			keyed(m.keys.main.Night, st.accent, st.muted, " starts a night"), w))
 	}
 	compacted, waited, given := m.stokerCounts()
 	score := fmt.Sprintf("%d compacted · %d waited · %s back", compacted, waited, sample.Kilo(given))
@@ -160,7 +160,7 @@ func (m Model) stokerLines(w int, full bool, toggle string) []string {
 		out = append(out, m.stepLine(v.Run[len(v.Run)-1], w))
 	}
 	if v.Unseen {
-		out = append(out, fit(" "+st.accent.Render("c")+st.muted.Render(" the whole run"), w))
+		out = append(out, fit(" "+keyed(m.keys.main.Stoker, st.accent, st.muted, " the whole run"), w))
 	}
 	return out
 }

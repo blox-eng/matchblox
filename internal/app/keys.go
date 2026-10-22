@@ -8,7 +8,9 @@ import (
 )
 
 // The console's keys, as data: one keymap per layer, one bkey.Binding per
-// act. A binding's help key and text are what the footer shows today.
+// act. A binding's help key and text are what the footer shows today; a
+// few texts are tuned to the footer's wording, and a draw site may pass its
+// own label.
 
 // bind is a binding of one act: its keys, and the help key and label.
 func bind(keys []string, helpKey, desc string) bkey.Binding {

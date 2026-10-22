@@ -2,6 +2,8 @@ package app
 
 import (
 	"strings"
+
+	bkey "charm.land/bubbles/v2/key"
 )
 
 // consenting is a question the builder answers with a key: a pending step,
@@ -29,7 +31,7 @@ const consentPad = 2
 func (m Model) consentBox(bw int) []string {
 	st := m.st
 	if m.held == nil {
-		return stepBox(st, *m.pending, bw)
+		return stepBox(st, *m.pending, bw, m.keys.confirm.Yes, m.keys.confirm.Enter, m.keys.main.Back)
 	}
 	var words [][]string
 	if m.flash != "" {
@@ -43,15 +45,16 @@ func (m Model) consentBox(bw int) []string {
 		}
 		words = append(words, said)
 	}
-	words = append(words, []string{st.accent.Render("y") + st.muted.Render("  rests it while you work"), st.accent.Render("n") + st.muted.Render("  keeps it on")})
+	tk := m.keys.takeOver
+	words = append(words, []string{keyed(tk.Rest, st.accent, st.muted, "  rests it while you work"), keyed(tk.Keep, st.accent, st.muted, "  keeps it on")})
 	box, _ := boxFrame(st.hair, st.warn.Bold(true).Render("The stoker is on. Take over?"), padded(words, bw),
-		[]footPart{{st.accent.Render("y") + st.muted.Render(" take over"), "", ""}, {st.accent.Render("n") + st.muted.Render(" keep it on"), "", " ─ "}}, bw)
+		[]footPart{st.footKey(tk.Rest, "take over", "", st.accent), st.footKey(tk.Keep, "keep it on", " ─ ", st.accent)}, bw)
 	return box
 }
 
 // stepBox is a pending step in a box: what it does in its title, how in
 // its lines, one step each, and the key that runs it in its foot.
-func stepBox(st styles, a action, bw int) []string {
+func stepBox(st styles, a action, bw int, yes, run, cancel bkey.Binding) []string {
 	head, body := a.consentWords()
 	var how []string
 	for _, b := range body {
@@ -59,9 +62,9 @@ func stepBox(st styles, a action, bw int) []string {
 			how = append(how, st.text.Render(l))
 		}
 	}
-	title, foot := st.accent.Bold(true).Render(head), []footPart{{st.accent.Render("⏎") + st.muted.Render(" run"), "", ""}, {st.accent.Render("esc") + st.muted.Render(" cancel"), "", " ─ "}}
+	title, foot := st.accent.Bold(true).Render(head), []footPart{st.footKey(run, "run", "", st.accent), st.footKey(cancel, "cancel", " ─ ", st.accent)}
 	if a.destructive {
-		title, foot = st.neg.Bold(true).Render(head), []footPart{{st.neg.Render("y") + st.muted.Render(" run"), "", ""}, {st.muted.Render("any other key cancels"), "", " ─ "}}
+		title, foot = st.neg.Bold(true).Render(head), []footPart{st.footKey(yes, "run", "", st.neg), {st.muted.Render("any other key cancels"), "", " ─ "}}
 	}
 	box, _ := boxFrame(st.hair, title, padded([][]string{how}, bw), foot, bw)
 	return box

@@ -463,7 +463,7 @@ func (m Model) peekBox(bw, maxH int, phone, fill bool) ([]string, []string, []sp
 	if ring := m.peekRing(p.pane); len(ring) > 1 {
 		foot = append(foot, st.footFor(pk.Prev, "", sep))
 		count := footPart{st.faint.Render(m.peekCount(p.pane, len(ring))), "", "  "}
-		next := footPart{st.muted.Render(pk.Next.Help().Desc+" ") + st.accent.Render(pk.Next.Help().Key), pk.Next.Keys()[0], "  "}
+		next := st.footForRev(pk.Next, "", "  ")
 		width := 3 + 3 + 3 // the corners, the space and esc
 		for _, f := range append(foot, count, next) {
 			width += lipgloss.Width(f.sep + f.text)

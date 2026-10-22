@@ -494,10 +494,11 @@ func (m Model) alert() string {
 	if m.layoutAt(m.width) == Narrow {
 		return m.st.warn.Render(fmt.Sprintf("▲ %d", n))
 	}
-	alert := m.st.warn.Render(fmt.Sprintf("▲ %d alert", n))
+	word := "alert"
 	if n > 1 {
-		alert += m.st.warn.Render("s")
+		word = "alerts"
 	}
+	alert := m.st.warn.Render(fmt.Sprintf("▲ %d %s", n, word))
 	return alert
 }
 
@@ -507,7 +508,7 @@ func (m Model) alert() string {
 func (m Model) keyLine(w int) (string, []span) {
 	st := m.st
 	if m.searching {
-		return fit(" "+st.label.Render("/ ")+st.text.Render(m.filter)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ keep  esc clear"), w), nil
+		return fit(" "+st.label.Render(m.keys.main.Search.Help().Key+" ")+st.text.Render(m.filter)+st.accent.Render("▏")+"  "+st.faint.Render(plainHints(hintFor(m.keys.search.Keep, ""), hintFor(m.keys.search.Clear, ""))), w), nil
 	}
 	if m.consenting() {
 		return "", nil // the box says it all
@@ -517,19 +518,20 @@ func (m Model) keyLine(w int) (string, []span) {
 		case m.flash != "":
 			return fit(" "+st.text.Render("Take over? ")+st.warn.Render(m.flash), w), nil
 		case m.layoutAt(w) == Narrow:
-			return fit(" "+st.text.Render("Stoker on. Take over? ")+st.accent.Render("y")+st.muted.Render(" rest · ")+
-				st.accent.Render("n")+st.muted.Render(" keep"), w), nil
+			return fit(" "+st.text.Render("Stoker on. Take over? ")+keyed(m.keys.takeOver.Rest, st.accent, st.muted, " rest · ")+
+				keyed(m.keys.takeOver.Keep, st.accent, st.muted, " keep"), w), nil
 		}
-		return fit(" "+st.text.Render("The stoker is on. Take over?  ")+st.accent.Render("y")+st.muted.Render(" rests it while you work · ")+
-			st.accent.Render("n")+st.muted.Render(" keeps it on"), w), nil
+		return fit(" "+st.text.Render("The stoker is on. Take over?  ")+keyed(m.keys.takeOver.Rest, st.accent, st.muted, " rests it while you work · ")+
+			keyed(m.keys.takeOver.Keep, st.accent, st.muted, " keeps it on"), w), nil
 	}
 	if m.pending != nil {
-		confirm := "⏎ run  esc cancel"
+		ck := m.keys.confirm
+		confirm := plainHints(hintFor(ck.Enter, ""), hintFor(m.keys.main.Back, "cancel"))
 		if m.pending.destructive {
-			confirm = st.neg.Render("y") + st.muted.Render(" run  any other key cancels")
+			confirm = keyed(ck.Yes, st.neg, st.muted, " run  any other key cancels")
 		}
 		if !m.previewSeen() {
-			confirm = st.muted.Render("↓ the rest, then ") + st.neg.Render("y")
+			confirm = st.muted.Render(plainHints(hintFor(ck.ScrollDown, ""))+", then ") + st.neg.Render(ck.Yes.Help().Key)
 		}
 		return fit(" "+st.label.Render("RUN ")+st.text.Render(m.pending.String())+"   "+st.muted.Render(confirm), w), nil
 	}
@@ -547,7 +549,7 @@ func (m Model) keyLine(w int) (string, []span) {
 	}
 	line, x := " ", 1
 	if m.filter != "" {
-		lead := "/ " + m.filter + " · esc clears  "
+		lead := m.keys.main.Search.Help().Key + " " + m.filter + " · " + m.keys.main.Back.Help().Key + " clears  "
 		line += st.muted.Render(lead)
 		x += lipgloss.Width(lead)
 	}

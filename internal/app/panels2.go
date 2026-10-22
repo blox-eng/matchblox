@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	bkey "charm.land/bubbles/v2/key"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -130,7 +131,7 @@ func (m Model) gitPanel(w int) body {
 	b.add(-1, "", fit(" "+st.faint.Render(fmt.Sprintf("scanned %s ago in %s · r rescans",
 		sample.Human(m.now().Sub(m.git.At)), m.git.Took.Round(time.Millisecond))), w))
 	if wt, ok := m.selectedWorktree(); ok {
-		b.add(-1, fit(" "+st.label.Render("⏎ ")+st.muted.Render("tmux new-window -c "+wt.Path), w))
+		b.add(-1, fit(" "+st.label.Render(m.keys.main.Open.Help().Key+" ")+st.muted.Render("tmux new-window -c "+wt.Path), w))
 		if wt.Safe {
 			b.add(-1, fit(" "+st.label.Render("x ")+st.muted.Render(strings.Join(wt.Remove, " ")), w))
 		}
@@ -152,11 +153,11 @@ func (m Model) recsSection(b *body, w int) {
 	}
 	if m.recPrefs.Folded {
 		b.add(recsLabelRow, st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d hidden", len(m.recs)))+st.faint.Render(" · ")+
-			st.accent.Render("h")+st.faint.Render(" shows"))
+			keyed(m.keys.main.Fold, st.accent, st.faint, " shows"))
 		return
 	}
 	b.add(recsLabelRow, st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d", len(m.recs)))+st.faint.Render(" · ")+
-		st.accent.Render("h")+st.faint.Render(" hides"))
+		keyed(m.keys.main.Fold, st.accent, st.faint, " hides"))
 	n := len(m.doors) + len(m.snap.Sessions)
 	sel := m.sessIndex() - n
 	for i, r := range m.recs {
@@ -179,7 +180,7 @@ func (m Model) recsSection(b *body, w int) {
 			}
 		}
 		if i == sel {
-			line = spread(line, dismissMark(st)+" ", w)
+			line = spread(line, dismissMark(st, m.keys.main.Dismiss)+" ", w)
 		}
 		b.addRow(n+i, i == sel, w, st, line)
 	}
@@ -306,7 +307,9 @@ func (m Model) historyPanel(w int) []string {
 }
 
 // dismissMark is the selected recommendation's tap target for d.
-func dismissMark(st styles) string { return st.accent.Render("d") + st.muted.Render(" dismiss") }
+func dismissMark(st styles, b bkey.Binding) string {
+	return keyed(b, st.accent, st.muted, " "+b.Help().Desc)
+}
 
 // dismissWidth is the width of the dismiss mark and the space after it.
 const dismissWidth = len("d dismiss") + 1
