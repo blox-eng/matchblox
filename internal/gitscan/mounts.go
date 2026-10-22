@@ -16,6 +16,8 @@ var networkFS = map[string]bool{
 	"nfs": true, "nfs4": true, "cifs": true, "smb3": true, "smbfs": true,
 	"afpfs": true, "webdav": true, "davfs": true, "fuse.sshfs": true,
 	"9p": true, "ceph": true, "glusterfs": true, "lustre": true, "autofs": true,
+	"fuse.rclone": true, "fuse.s3fs": true, "fuse.gcsfuse": true, "fuse.goofys": true,
+	"fuse.juicefs": true, "fuse.davfs2": true,
 }
 
 // network reports the type of path when it is a network mount point.
