@@ -6,6 +6,17 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The app takes you back to matchblox in one move.** From any pane,
+  swipe in from the left edge, tap `◂ matchblox` in the tmux status line,
+  or press ⌘M on a hardware keyboard. It no longer takes the tmux prefix
+  and `m` on the phone keyboard. The console gives tmux a key of its own
+  for it, which no keyboard types, so it works whatever your prefix is
+  and takes no key from the apps in your panes. The tap no longer needs
+  the tmux mouse in the app.
+  ([#121](https://github.com/blox-eng/matchblox/issues/121))
+
 ## [0.15.0] - 2026-10-22
 
 ### Added
