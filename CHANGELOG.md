@@ -6,69 +6,19 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
-## [0.18.0] - 2026-10-22
-
 ### Added
 
-- **USAGE shows each provider's logo in kitty and Ghostty**, through tmux
-  too, while every terminal on the console's session can draw it; a phone
-  or another terminal attached there brings back the marks. matchblox
-  lets images pass through its own pane only. The logos are lobe-icons'
-  (MIT). ([#183](https://github.com/blox-eng/matchblox/issues/183))
-
-### Changed
-
-- **USAGE names the provider of each account.** Two plans called "Team"
-  read as `✻ Claude Team` and `❋ OpenAI Team`; Cursor, OpenCode and any
-  other provider are named too. On a narrow dock the meter shrinks so
-  the reset times stay whole.
-  ([#183](https://github.com/blox-eng/matchblox/issues/183))
-
-### Fixed
-
-- **A known agent installed after the first run shows in Sessions.**
-  The first run froze the agents it found into `agents`, so Codex
-  installed later (or a session switched from Claude Code to Codex)
-  never showed. Every known agent (claude, codex, opencode, gemini,
-  cursor-agent, aider, crush, qwen) now counts wherever it is installed;
-  `agents` adds others. The Codex app's `codex app-server` daemons are
-  no session.
-  ([#179](https://github.com/blox-eng/matchblox/issues/179))
-- **Codex shows its context and limits.** macOS lists no open files,
-  and Codex 0.163 closes its rollout after each write, so no open file
-  named it and the session read as unmeasured with no limits. The rollout is now also found as the newest one
-  of the session's directory begun and written since it started, when it
-  is the only Codex there and the rollout is not a `codex exec` run's.
-  ([#179](https://github.com/blox-eng/matchblox/issues/179))
-- **`z` parks a Codex session.** Codex has no hooks, so its session had
-  no id and could not be held; the id now comes from its rollout, and its
-  pane still tells busy from idle.
-  ([#182](https://github.com/blox-eng/matchblox/issues/182))
-
-## [0.17.4] - 2026-10-22
-
-### Fixed
-
-- **`matchblox pair` stops up front when sshd cannot use the one-time
-  key.** With Tailscale SSH on the address of the code (MagicDNS name,
-  short name, or Tailscale IP on port 22), or when the host can see that
-  `AuthorizedKeysFile` is not `~/.ssh/authorized_keys` (`sshd -T -C`, or
-  the global line in `sshd_config`), pair showed a code that could never
-  work and the phone waited five minutes. The host now refuses before the
-  code, in the terminal and in the console, and names the fix. The
-  console points at `tailscale set --ssh=false` for Enter; `--address`
-  stays a terminal command. `--address` with an address that OpenSSH
-  serves still pairs.
-  ([#102](https://github.com/blox-eng/matchblox/issues/102),
-  [#120](https://github.com/blox-eng/matchblox/issues/120))
-- **The app tells a refused connection from a silent host.** A host that
-  exits with status 126 or 127 and no reply used to read as "did not
-  answer". The app now offers another address (Try again) and names
-  Tailscale SSH as the host-side fix.
-  ([#102](https://github.com/blox-eng/matchblox/issues/102),
-  [#120](https://github.com/blox-eng/matchblox/issues/120))
-
-## [0.17.3] - 2026-10-22
+- **N offers the repositories on your host, found once with your yes.**
+  The first console asks `Find the Git repositories in your home folder?`
+  (`y` / `n` / `p pick folders`) and never asks again. After a yes the
+  service looks four folders deep in `~`, `~/dev`, `~/src`, `~/code`,
+  `~/projects`, `~/work`, `[git] repos` and the new `[git] scan_roots`,
+  reads each checkout's path, remote, branch and last use without running
+  git, keeps the list on disk and scans again every 30 minutes. The list
+  feeds N's `where`, not the Git tab, and goes nowhere but this host and
+  its paired devices. `matchblox scan` scans now, in the folders given;
+  `matchblox scan off` stops and forgets.
+  ([#173](https://github.com/blox-eng/matchblox/issues/173))
 
 ### Fixed
 

@@ -1,6 +1,6 @@
 # The builder's repos on the host: design
 
-Date: 2026-10-22. Status: approved scope, open questions settled. Issue: #173.
+Date: 2026-10-22. Status: built. Issue: #173.
 Consumed by: #174 (where as a filtered list), #175 (start rows on an empty
 Sessions), #176 (paste a git URL).
 

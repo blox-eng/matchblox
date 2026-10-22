@@ -29,6 +29,22 @@ To use another file, give `matchblox --config <file>`.
 --8<-- "config.example.toml"
 ```
 
+## The repositories N offers
+
+The first console on a host asks once: `Find the Git repositories in your
+home folder?` With a yes, the service looks four folders deep in the home
+folder itself, `~/dev`, `~/src`, `~/code`, `~/projects` and `~/work`, then
+in `[git] repos` and `[git] scan_roots`, and N's `where` offers what it
+finds. `p pick folders` scans the folders you type instead of the usual
+ones; the two config keys always add. It skips `node_modules`, `vendor`,
+`target`, `Library` and hidden folders, follows no symlink, and does not
+look inside a repository. It reads files only: no git runs, nothing goes on
+the network. It scans again every 30 minutes.
+
+The answer is in `~/.local/state/matchblox/scan.json` and the list in
+`repos.json` beside it. The repositories found never show in the Git tab.
+`matchblox scan` scans now; `matchblox scan off` stops and forgets the list.
+
 ## The stoker's agent
 
 `[stoker] agent` is the command of the stoker agent. matchblox starts it
