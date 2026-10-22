@@ -131,9 +131,8 @@ func (s *Service) foundLoop(ctx context.Context) {
 				drained = true
 			}
 		}
-		if reqs = s.walk(ctx, reqs); len(reqs) > 0 {
-			continue // they asked for the roots picked while it walked
-		}
+		s.walk(ctx, reqs)
+		reqs = nil
 		select {
 		case <-ctx.Done():
 			return
@@ -145,27 +144,27 @@ func (s *Service) foundLoop(ctx context.Context) {
 	}
 }
 
-// walk scans the roots on record and answers reqs. A no or other roots
-// that come while it walks win, and so does the service stopping: its
-// result is dropped. It hands back the yeses for the roots picked since,
-// for the next walk.
-func (s *Service) walk(ctx context.Context, reqs []scanReq) (next []scanReq) {
-	answer := func(r scanReq, o scanOutcome) { r.done <- o } // done holds one: never blocks
+// walk scans the roots on record and answers every one of reqs. A no or
+// other roots that come while it walks win, and so does the service
+// stopping: its result is dropped. A yes whose roots are not the walk's
+// hears that other folders were picked; the yes that picked them is
+// queued and gets its own walk.
+func (s *Service) walk(ctx context.Context, reqs []scanReq) {
 	all := func(err error) {
 		for _, r := range reqs {
-			answer(r, scanOutcome{err: err})
+			r.done <- scanOutcome{err: err} // done holds one: never blocks
 		}
 	}
 	if ctx.Err() != nil {
 		all(errScanStopped)
-		return nil
+		return
 	}
 	s.consentMu.Lock()
 	c, nos := s.consent(), s.nos
 	s.consentMu.Unlock()
 	if c.Answer != "yes" {
 		all(errScanNo)
-		return nil
+		return
 	}
 	roots := c.Roots
 	if s.ScanRoots != nil {
@@ -173,32 +172,44 @@ func (s *Service) walk(ctx context.Context, reqs []scanReq) (next []scanReq) {
 	}
 	start := time.Now()
 	res := s.Find(ctx, roots, s.skipHung(start))
+	// Folders that hung are kept even when the walk's result is dropped:
+	// they hang the next walk just the same.
 	for _, p := range res.Hung {
 		s.hung[p] = time.Now()
 	}
 	if ctx.Err() != nil {
 		all(errScanStopped) // a cut walk must not replace the list
-		return nil
+		return
 	}
 	f := gitscan.Found{Consent: "yes", Roots: c.Roots, At: time.Now(), Took: time.Since(start),
 		Repos: res.Repos, Errors: res.Errors, Skipped: res.Skipped, SkippedMore: res.SkippedMore}
-	s.consentMu.Lock()
-	now := s.consent()
-	switch {
-	case now.Answer != "yes" || s.nos != nos:
-		s.consentMu.Unlock()
-		all(errScanNo)
-		return nil
-	case !slices.Equal(now.Roots, c.Roots):
-		s.consentMu.Unlock()
-		for _, r := range reqs {
-			if slices.Equal(r.roots, now.Roots) {
-				next = append(next, r)
-			} else {
-				answer(r, scanOutcome{err: supersededError{now.Roots}})
-			}
+	f, on, err := s.keep(f, nos)
+	if errors.Is(err, errScanNo) {
+		all(err)
+		return
+	}
+	for _, r := range reqs {
+		if err == nil && slices.Equal(r.roots, f.Roots) {
+			r.done <- scanOutcome{found: f}
+		} else {
+			r.done <- scanOutcome{err: supersededError{on}}
 		}
-		return next
+	}
+}
+
+// keep stores f, the walk of the roots in f.Roots that started after nos
+// noes, if the consent on record still asks for it. It hands back what
+// it stored and the roots on record: errScanNo if a no came since, a
+// supersededError if other roots were picked since.
+func (s *Service) keep(f gitscan.Found, nos uint64) (gitscan.Found, []string, error) {
+	s.consentMu.Lock()
+	defer s.consentMu.Unlock()
+	now := s.consent()
+	if now.Answer != "yes" || s.nos != nos {
+		return f, nil, errScanNo
+	}
+	if !slices.Equal(now.Roots, f.Roots) {
+		return f, now.Roots, supersededError{now.Roots}
 	}
 	if s.ReposPath != "" {
 		if err := state.WriteFound(s.ReposPath, f); err != nil {
@@ -206,15 +217,7 @@ func (s *Service) walk(ctx context.Context, reqs []scanReq) (next []scanReq) {
 		}
 	}
 	s.setFound(f)
-	s.consentMu.Unlock()
-	for _, r := range reqs {
-		if slices.Equal(r.roots, c.Roots) {
-			answer(r, scanOutcome{found: f})
-		} else {
-			answer(r, scanOutcome{err: supersededError{c.Roots}})
-		}
-	}
-	return nil
+	return f, now.Roots, nil
 }
 
 // skipHung forgets the folders that hung more than hungFor before now,

@@ -3,10 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -507,5 +510,90 @@ func TestScanSupersededIsTyped(t *testing.T) {
 	}
 	if got := err.Error(); got != "other folders were picked since: /a /b" {
 		t.Fatalf("Error() = %q", got)
+	}
+}
+
+// waitQueued waits until n yeses wait in the loop's queue.
+func waitQueued(t *testing.T, s *Service, n int) {
+	t.Helper()
+	deadline := time.Now().Add(waitLimit)
+	for len(s.scanReqs) < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d yeses never queued", n)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// A yes whose roots are not the walk's hears so from that walk, even when
+// its roots are picked again while the walk runs: it never waits for a
+// second walk.
+func TestScanSupersededWithinOneWalk(t *testing.T) {
+	s, f := foundTest(t)
+	state.WriteConsent(s.ConsentPath, state.Consent{Answer: "yes", Roots: []string{"/a"}})
+	started, release := blockingFind(s, f)
+	foundReady(t, s)
+	s.kickFound()
+	within(t, started, "walk 0")
+	y := yesAsync(t.Context(), s, "/b")
+	waitRoots(t, s, []string{"/b"})
+	waitQueued(t, s, 1)
+	z := yesAsync(t.Context(), s, "/a")
+	waitRoots(t, s, []string{"/a"})
+	waitQueued(t, s, 2)
+	release <- struct{}{}
+	within(t, started, "walk 1, of /a, for both queued yeses")
+	c := yesAsync(t.Context(), s, "/b")
+	waitRoots(t, s, []string{"/b"})
+	release <- struct{}{}
+	// Walk 2 is held: these answers can only come from walk 1.
+	if r := within(t, y, "the /b yes"); r.Err != "other folders were picked since: /b" {
+		t.Fatalf("yes /b queued before walk 1 = %+v", r)
+	}
+	if r := within(t, z, "the /a yes"); !strings.HasPrefix(r.Err, "other folders were picked since: /b") {
+		t.Fatalf("yes /a = %+v", r)
+	}
+	within(t, started, "walk 2, of /b")
+	release <- struct{}{}
+	if r := within(t, c, "the last /b yes"); r.Err != "" || r.Scan == nil {
+		t.Fatalf("last yes = %+v", r)
+	}
+	if got := f.calls(); len(got) != 3 {
+		t.Fatalf("scans = %v, want three", got)
+	}
+}
+
+// A no and then a yes for the same roots while a walk runs: the walk
+// began under the earlier yes, so it is dropped.
+func TestScanNoThenYesMidWalk(t *testing.T) {
+	s, _ := foundTest(t)
+	started, release := make(chan struct{}, 4), make(chan struct{})
+	var n atomic.Int32
+	s.Find = func(context.Context, []string, map[string]bool) gitscan.Result {
+		i := n.Add(1)
+		started <- struct{}{}
+		<-release
+		return gitscan.Result{Repos: []gitscan.Checkout{{Path: fmt.Sprintf("/walk%d", i)}}}
+	}
+	foundReady(t, s)
+	first := yesAsync(t.Context(), s, "")
+	within(t, started, "walk 1")
+	if r := s.act(t.Context(), proto.Act{RecID: "scan:no"}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	second := yesAsync(t.Context(), s, "")
+	waitQueued(t, s, 1)
+	close(release)
+	if r := within(t, first, "first yes"); r.Err != "a no came while it ran: nothing is kept" {
+		t.Fatalf("yes before the no = %+v", r)
+	}
+	if r := within(t, second, "second yes"); r.Err != "" || r.Scan == nil {
+		t.Fatalf("yes after the no = %+v", r)
+	}
+	if n.Load() != 2 {
+		t.Fatalf("%d walks, want 2", n.Load())
+	}
+	if c := state.ReadFound(s.ReposPath); len(c.Repos) != 1 || c.Repos[0].Path != "/walk2" {
+		t.Fatalf("cache = %+v, want only the walk after the no", c)
 	}
 }
