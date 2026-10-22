@@ -163,15 +163,11 @@ func (m Model) usageLines(w int, full bool, toggle string) []string {
 	if len(m.snap.Limits) == 0 {
 		return append(out, fit(" "+st.faint.Render("no session runs under a plan"), w))
 	}
-	names, nameW := m.accountNames()
 	now := m.now()
 	tight := !full && w < 50
+	names, nameW := m.accountNames(tight)
 	for i, a := range m.snap.Limits {
-		mark := providerMarks[a.Provider]
-		if mark == "" {
-			mark = "·"
-		}
-		head := " " + st.muted.Render(mark) + " " + st.text.Render(pad(names[i], nameW+1)) + " "
+		head := " " + m.accountMark(a.Provider) + " " + st.text.Render(pad(names[i], nameW+1)) + " "
 		indent := strings.Repeat(" ", lipgloss.Width(head))
 		if a.State == limits.Unmeasured {
 			out = append(out, fit(head+st.warn.Render("not measured · "+a.Fix), w))
@@ -194,15 +190,26 @@ func (m Model) usageLines(w int, full bool, toggle string) []string {
 		if tight {
 			uses = uses[:min(2, len(uses))]
 		}
+		// The meter gives way to the resets on a narrow dock, as small as the
+		// folded line's.
+		resets := make([]string, len(uses))
+		meterW := 8
+		for j, u := range uses {
+			if !u.Resets.IsZero() {
+				resets[j] = " · " + limits.When(u.Resets, now, "")
+			}
+			meterW = min(meterW, w-lipgloss.Width(head)-10-lipgloss.Width(resets[j]))
+		}
+		meterW = max(meterW, 3)
 		var lines []string
 		for j, u := range uses {
 			lead := head
 			if j > 0 {
 				lead = indent
 			}
-			line := lead + st.faint.Render(pad(u.Name, 5)) + m.meter(u.Pct, 8, m.useStyle(u.Pct)) + st.text.Render(pad(fmt.Sprintf(" %.0f%%", u.Pct), 5))
-			if !u.Resets.IsZero() {
-				line += st.faint.Render(" · " + limits.When(u.Resets, now, ""))
+			line := lead + st.faint.Render(pad(u.Name, 5)) + m.meter(u.Pct, meterW, m.useStyle(u.Pct)) + st.text.Render(pad(fmt.Sprintf(" %.0f%%", u.Pct), 5))
+			if resets[j] != "" {
+				line += st.faint.Render(resets[j])
 			}
 			lines = append(lines, line)
 		}
@@ -257,9 +264,15 @@ func (m Model) useStyle(pct float64) lipgloss.Style {
 // none an emoji.
 var providerMarks = map[string]string{"anthropic": "✻", "openai": "❋", "opencode": "▣", "cursor": "⬢"}
 
-// accountNames are the short names of the accounts: one account of a
-// provider by its plan, two by the name of their emails.
-func (m Model) accountNames() ([]string, int) {
+// providerNames name the provider of each account: the plans of two
+// providers are often the same word ("Team"). OpenCode's accounts are
+// under the provider its model runs on; another provider goes by its id.
+var providerNames = map[string]string{"anthropic": "Claude", "openai": "OpenAI", "opencode": "OpenCode", "cursor": "Cursor", "google": "Google"}
+
+// accountNames are the short names of the accounts, after their provider:
+// one account of a provider by its plan, two by the name of their emails.
+// A phone (tight) leaves out the plan.
+func (m Model) accountNames(tight bool) ([]string, int) {
 	per := map[string]int{}
 	for _, a := range m.snap.Limits {
 		per[a.Provider]++
@@ -268,13 +281,17 @@ func (m Model) accountNames() ([]string, int) {
 	nameW := 0
 	for i, a := range m.snap.Limits {
 		email, plan, _ := strings.Cut(a.Account, " · ")
-		names[i] = plan
+		name := plan
 		if per[a.Provider] > 1 || plan == "" {
-			names[i], _, _ = strings.Cut(email, "@")
+			name, _, _ = strings.Cut(email, "@")
+		} else if tight {
+			name = ""
 		}
-		if names[i] == "" {
-			names[i] = a.Provider
+		p := providerNames[a.Provider]
+		if p == "" {
+			p = a.Provider
 		}
+		names[i] = strings.TrimSpace(p + " " + name)
 		nameW = max(nameW, lipgloss.Width(names[i]))
 	}
 	return names, nameW

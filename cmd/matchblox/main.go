@@ -472,6 +472,9 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		OutsideTmux: os.Getenv("TMUX") == "", Self: invokedPath(os.Args[0]), StateDir: filepath.Dir(state.Path())}
 	home, _ := os.UserHomeDir()
 	base.Pair = consolePair(home, base.Self, defaultHostKey, setup.PairAddress)
+	if root == "" {
+		base.Graphics = consoleGraphics()
+	}
 	// The screen changes on a state or a key press, so 15 frames a second
 	// is still instant to the eye and wakes the process 4x less than 60.
 	if root != "" {

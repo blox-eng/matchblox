@@ -83,6 +83,9 @@ type Options struct {
 	LastClient func() (tty string, created time.Time, err error)
 	// Clip copies text to the builder's clipboard. Nil: OSC 52 with the output.
 	Clip func(text string)
+	// Graphics says whether every terminal that shows the console draws
+	// images, and which they are (logos.Viewers). Nil: never.
+	Graphics func() (can bool, viewers string)
 }
 
 type helloMsg proto.Hello
@@ -259,6 +262,9 @@ type Model struct {
 	acts       int
 	recRun     recRun // the last act on a recommendation, and what came of it
 	dark       bool
+	logos      bool      // USAGE draws the providers' logos
+	gfxKey     string    // the viewers and background the logos went to
+	gfxAsked   time.Time // when the console last asked who shows it
 	splashAt   time.Time
 	splashDone bool
 	armed      string // the step a second tap runs: what the first tap showed
@@ -470,7 +476,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.sheet != nil && m.sheet.queued && m.sheet.act == "" && m.stoker != nil && m.stoker.Ready {
 			m, order = m.sendOrder() // the stoker rests now: the order that waited for it goes
 		}
-		return m, tea.Batch(m.recv(), m.animate(), news, order)
+		return m, tea.Batch(m.recv(), m.animate(), news, order, m.askGraphics())
+	case graphicsMsg:
+		return m.graphics(msg)
 	case doorRanMsg:
 		return m.doorRan(msg)
 	case pairOfferMsg:

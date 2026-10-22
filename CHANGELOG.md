@@ -6,6 +6,22 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **USAGE shows each provider's logo in kitty and Ghostty**, through tmux
+  too, while every terminal on the console's session can draw it; a phone
+  or another terminal attached there brings back the marks. matchblox
+  lets images pass through its own pane only. The logos are lobe-icons'
+  (MIT). ([#183](https://github.com/blox-eng/matchblox/issues/183))
+
+### Changed
+
+- **USAGE names the provider of each account.** Two plans called "Team"
+  read as `✻ Claude Team` and `❋ OpenAI Team`; Cursor, OpenCode and any
+  other provider are named too. On a narrow dock the meter shrinks so
+  the reset times stay whole.
+  ([#183](https://github.com/blox-eng/matchblox/issues/183))
+
 ## [0.17.4] - 2026-10-22
 
 ### Fixed
