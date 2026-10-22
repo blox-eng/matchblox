@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -17,7 +18,7 @@ import (
 
 func TestHomeArgvOutsideTmux(t *testing.T) {
 	got := HomeArgv(false, true, []string{"/usr/local/bin/matchblox", "--no-motion"})
-	want := []string{"tmux", "new-session", "-A", "-s", "matchblox", "-e", "MATCHBLOX_HOME=1", "/usr/local/bin/matchblox", "--no-motion"}
+	want := []string{"tmux", "-u", "new-session", "-A", "-s", "matchblox", "-e", "MATCHBLOX_HOME=1", "/usr/local/bin/matchblox", "--no-motion"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -76,6 +77,8 @@ func TestWayBackParses(t *testing.T) {
 	if err != nil || stderr.Len() > 0 {
 		t.Fatalf("tmux: %v\n%s", err, stderr.String())
 	}
+	// tmux 3.8 pads list-keys with a column of its own: "bind-key  -T".
+	out = regexp.MustCompile(` {2,}`).ReplaceAll(out, []byte(" "))
 	for _, want := range []string{
 		"bind-key -T prefix m switch-client -t =matchblox",
 		`"switch-client -t =matchblox"`,

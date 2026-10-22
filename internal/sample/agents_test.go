@@ -74,8 +74,8 @@ func TestEveryAgentInAPaneIsASession(t *testing.T) {
 	snap := smp.Sample()
 	got := byPane(snap)
 	for pane, name := range map[string]string{"%10": "codex", "%11": "opencode", "%12": "cursor-agent", "%13": "gemini", "%14": "aider", "%15": "mybot"} {
-		if got[pane].Name != name {
-			t.Errorf("pane %s: name %q, want %q", pane, got[pane].Name, name)
+		if got[pane].Agent != name {
+			t.Errorf("pane %s: agent %q, want %q", pane, got[pane].Agent, name)
 		}
 	}
 	for _, pane := range []string{"%16", "%17"} {
@@ -85,6 +85,46 @@ func TestEveryAgentInAPaneIsASession(t *testing.T) {
 	}
 	if n := len(snap.Sessions); n != 3+6 {
 		t.Errorf("%d sessions, want 9", n)
+	}
+}
+
+// TestCursorsAgentLauncherIsCursorAndItsWorkerIsNot: Cursor's `agent`
+// launcher runs node with argv[0] set to the launcher (seen on a live
+// machine); its worker-server, also node and also Cursor's index.js,
+// outlives `agent -p` and is no session.
+func TestCursorsAgentLauncherIsCursorAndItsWorkerIsNot(t *testing.T) {
+	const js = "/home/u/.local/share/cursor-agent/versions/2026.10.19-6bbf2c4/index.js"
+	root := copyFixture(t)
+	for i, p := range []struct {
+		pid, ppid int
+		argv      []string
+	}{
+		{900, 1, []string{"/home/u/.local/bin/agent", "--use-system-ca", js, "--trust"}},
+		{910, 1, []string{"/home/u/.local/share/cursor-agent/versions/2026.10.19-6bbf2c4/node", js, "worker-server"}},
+		{920, 1, []string{"/usr/bin/agent", "serve"}}, // another tool called agent
+		// A print run, from a script in a shell's pane: no session.
+		{930, 1, []string{"/home/u/.local/bin/agent", "--use-system-ca", js, "-p", "sum up"}},
+		{940, 1, []string{"/home/u/.local/bin/cursor-agent", "--use-system-ca", js, "--print", "sum up"}},
+	} {
+		pane := "%" + strconv.Itoa(20+i)
+		addProc(t, root, p.pid, p.ppid, "node", p.argv, pane)
+		addPane(t, root, pane+"\tcur:"+strconv.Itoa(i)+".1\tw\t"+strconv.Itoa(p.pid)+"\tnode\t/work")
+	}
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "cursor-agent"}
+	got := byPane(smp.Sample())
+	if s, ok := got["%20"]; !ok || s.Agent != CursorAgent {
+		t.Errorf("%%20 = %+v, want a %s session", s, CursorAgent)
+	}
+	for _, pane := range []string{"%21", "%22", "%23", "%24"} {
+		if s, ok := got[pane]; ok {
+			t.Errorf("pane %s is not an agent: %+v", pane, s)
+		}
+	}
+	unlisted := newFixtureSampler(root)
+	unlisted.Agents = []string{"claude"}
+	if s, ok := byPane(unlisted.Sample())["%20"]; ok {
+		t.Errorf("cursor-agent is not in agents, yet %%20 is a session: %+v", s)
 	}
 }
 

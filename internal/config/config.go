@@ -54,6 +54,9 @@ type Ships struct {
 type Limits struct {
 	QuietHours string   `toml:"quiet_hours"` // "23:00-08:00": hours you do not usually work
 	QuietDays  []string `toml:"quiet_days"`  // ["Sat", "Sun"]
+	// CursorUsage reads Cursor's plan usage from Cursor's API, with the
+	// login token Cursor's CLI keeps in the macOS Keychain. Off by default.
+	CursorUsage bool `toml:"cursor_usage"`
 	// Quiet is QuietHours and QuietDays, read by Load.
 	Quiet limits.Quiet `toml:"-"`
 }
@@ -62,7 +65,7 @@ type Limits struct {
 type Stoker struct {
 	NightEnds string `toml:"night_ends"` // "07:00": n runs the stoker until then
 	// Agent is the command matchblox starts the stoker agent with, on its
-	// own tmux server: claude, codex or opencode.
+	// own tmux server: claude, codex, opencode or cursor-agent.
 	Agent string `toml:"agent"`
 	// PaneSet: the file still has the pane key of before matchblox started
 	// the agent itself. It is ignored, and status says so.

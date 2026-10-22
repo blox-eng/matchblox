@@ -103,6 +103,18 @@ side, and a match that stands on the drawer.
   shows the last frame only. The start screen stays while the console waits
   for the service.
 - **Console header:** `▰ matchblox · <host>`. The `▰` is the accent.
+- **The front-on box** (design/0009): the pair page and the app's pair
+  screens draw the site's theme-switch box seen front-on: the sleeve, the
+  striker along its top, the drawer that slides out to the right, and the
+  match. It has the site's parts, poses and timings (§5). It is taller than
+  the site's box, because it holds a square label. The label is paper, with
+  the code on it: in a dark terminal light modules are `fg` and dark modules
+  are `bg`; in a light terminal light modules are `bg` and dark modules are
+  `fg`. After a claim the label turns to plain paper with the device's name
+  in ink. The faces use `mark-*` and the striker uses `mark-striker`. In a
+  dark terminal the match burns after the strike; in a light one it stays
+  unlit. In the app the match head stays `match-head` after the strike, as
+  on the site. This match is the logo, not an agent (§4 rule 2).
 
 ## 4. The match
 
@@ -155,14 +167,23 @@ Rules:
 | Out | 400 ms | a session stops (§4) |
 | Burn | 600 ms | a session reaches the compact limit (§4) |
 | Fade | 140 ms | new values, menus |
-| Rise | 180 ms | the confirm bar, toasts |
+| Rise | 180 ms | the consent box, toasts |
 | Fall | 560 ms | the start screen (§3) |
 | Stamp | 240 ms | a confirmed destructive action |
 | Heal | 240 ms | a corrected figure shows "was X" |
 | Pulse | 1.6 s | a value that is not measured yet |
+| Knock | 240 ms | a device reached the pair page's code: the box moves one cell left and back, twice |
+| Open | about 1 s | a device claimed the code: the drawer slides out (260 ms), the match comes out (280 ms), strikes (150 ms, ease-in) and stands (320 ms) while the drawer shuts (260 ms) |
+| Lock | 180 ms | the app found a pair code: its outline moves to the corners of the code |
 
 There are no spinners. `--no-motion` and `NO_MOTION=1` make every motion an
-instant change; on the site, `prefers-reduced-motion` does the same.
+instant change; on the site, `prefers-reduced-motion` does the same. In the
+app, iOS Reduce Motion does the same. The app holds the stood frame for
+240 ms before the console slides in from the right (300 ms).
+
+**Haptics** (the app): lock is a light impact, the strike is a rigid
+impact, a stand is success, and a failure is error. Haptics play with
+Reduce Motion.
 
 ## 6. Console layout
 
@@ -249,8 +270,8 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   <repo>`, the title, `TRACK` with the five stages down (their times, the
   note on the current one, `┃` between done stages, `┆` after), the URL and
   the keys. `⏎` selects the driving session in Sessions; `x` on a ship
-  that waits for your merge shows `RUN gh pr merge <n> --<method> -R
-  <repo>` and runs it after a typed `y`; `a` on a stuck ship opens the
+  that waits for your merge asks `gh pr merge <n> --<method> -R
+  <repo>` in the consent box and runs it after a typed `y`; `a` on a stuck ship opens the
   answer peek on its session.
 - **Peek** (design/0006 §6, owner 2026-10-12): `a` on any session with a
   pane, or a tap on the selected one, opens the conversation: an answer to
@@ -288,10 +309,24 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   tap target (`⏎ open  a answer  p ships  f stoker`, `a message` on a
   session that does not wait); a desk adds `↑↓
   move`, `/ find` and `q quit`, and "sampled N ago" on the right. It is
-  also where the person acts: a tap shows `tap again: <command>`, a pending
-  action shows `RUN <command>` and its confirm, `/` the search, and the
-  stoker asks to take over here. A phone app that
-  shrinks the terminal for its keyboard keeps the bottom row above it.
+  also where the person acts: a tap shows `tap again: <command>`, and `/`
+  the search. A phone app that shrinks the terminal for its keyboard keeps
+  the bottom row above it.
+- **Consent** (owner 2026-10-22, #158, reversing the key line's RUN of
+  2026-10-12): a pending step, and the stoker's take-over, ask in a box
+  over the dimmed screen, the kind the peek and the forms are. Its title is
+  what the step does (`Kill spark-docs`, `neg` when it is destructive), its
+  lines how (the exact commands, one each), its foot the key: `y run ─ any
+  other key cancels`, or `⏎ run ─ esc cancels` for a move. On a phone it
+  rises from the key line's hairline, under the thumb and above the
+  keyboard; wider, it sits in the middle, no wider than what it says. The
+  second `y` of a session that works or waits changes the same box. A tap
+  anywhere cancels it: a tap is never consent. The key line under it is
+  blank: the box says it all. Inside, a blank row over and under its
+  words and two columns of indent past the frame's own; a step of
+  several (`kill-pane`, then `kill -TERM`) takes a line each. A door's long diff keeps its
+  confirm on the key line: the diff fills the body, and a box would hide
+  what it asks about.
 - **Widths:** the shape picks first. A cell is about twice as tall as it
   is wide, so a screen is portrait when rows × 2 ≥ columns. Portrait under
   90 columns is a phone: one column, the selected row opens in place; from
@@ -374,7 +409,7 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   night") sits with the doors and folds after the first run.
   While a run is in charge the whole console wears the night (§2.1) and the
   word takes the `night` token. The first key or second tap that acts on a
-  session (an act's `Enter`, `x`, `a`) asks on the key line `The stoker
+  session (an act's `Enter`, `x`, `a`) asks in the consent box `The stoker
   is on. Take over?  y rests it while you work · n keeps it on`, once a run
   (#45, owner 2026-10-11). What was pressed is held and runs after the
   answer; any other key drops both. `y` rests the stoker: the day look,
@@ -409,6 +444,40 @@ instant change; on the site, `prefers-reduced-motion` does the same.
   safe to remove (or says why not), `X` marks every safe one, and `x` with a
   typed `y` removes the marked ones: one guarded act each, then one summary
   ("removed 11, skipped 1: it has changes").
+- **The door "Pair a device"** (design/0009): under `SET UP`, with the why
+  `answer your agents from your phone`. `Enter` opens the pair page. It
+  shows no diff and no argv: the page is its preview. It folds when one or
+  more devices of kind `phone` open this host. `x` and a typed `y` close it,
+  as every door. `matchblox setup` shows it with the other doors.
+- **DEVICES · N** (design/0009): on the Machine tab, after the detached busy
+  loops and before the top processes. One row for each key that opens this
+  host, phones first: kind, name, fingerprint. The last row is `+ pair a
+  device`, and `Enter` on it opens the pair page. `x` on a device and a
+  typed `y` remove it, with its backup (the flash names it), as `matchblox
+  devices rm` does. With no devices only the `+` row shows. In a console of
+  another host, `DEVICES` has one row, `run matchblox pair on <host>`.
+- **The pair page** (design/0009): a layer over the console, as the peek is,
+  and it takes the whole screen. It shows the front-on box (§3) with the QR
+  code on its label, then `Scan with the matchblox app, or paste the link.`
+  and the countdown in `muted`, then the key line `c copies the link · esc
+  stops`. It fits 100 × 40. In a smaller terminal the code shows without the
+  box. Under 61 × 33 the page says `Make this terminal 61 × 33 or larger to
+  show the code, or press c to copy the link.` It polls each 100 ms. The
+  steps: the phone connects (the knock, `A device is here…` or `<name> is
+  here…`), the device claims the code (the opening, then `Paired <name>
+  (<fp>). Not yours? x on it in DEVICES.`), and in the console two more
+  beats. At beat 3, `<name> is in.`: the page folds to a one-line strip on
+  the key line and the keys go back to the shared console, so the device can
+  answer. `esc` with nothing else to cancel dismisses the strip. At beat 4
+  the strip says once `<name> <verb> <session>` for 1.5 s. Without beat 3 the
+  page folds after 60 s. `matchblox pair` in a terminal is the same page as a
+  program of its own; without a terminal it prints the plain QR and link.
+- **The device guard** (design/0009, owner 2026-10-21): a device sees
+  `DEVICES` but cannot pair or remove. The console asks tmux for the client
+  active last; when its tty is a device's, `Enter` on the door or on `+ pair
+  a device` says `Pair from the host's own terminal.` and `x` on a device
+  says `Remove devices from the host's own terminal.` It guards against a
+  mistake, not an attacker.
 - **After a jump** (owner, 2026-10-08): when `Enter` takes the person to an
   agent, the console selects the next session that waits, else the next
   idle one, so the way back lands on it.
@@ -428,6 +497,27 @@ instant change; on the site, `prefers-reduced-motion` does the same.
 - An error tells the fix: "the service (pid 4242) does not answer: kill
   4242, then start matchblox again".
 - Every command the console runs is shown before it runs, as the exact argv.
+- The pair page and the app's pair screens (design/0009), exactly:
+  - Page: `Scan with the matchblox app, or paste the link.`, `c copies the
+    link · esc stops`, `link copied`, `A device is here…`, `<name> is
+    here…`, `Paired <name> (<fp>). Not yours? x on it in DEVICES.`, `<name>
+    is in. Answer an agent from it, or esc to go back.`, `<name> <verb>
+    <session>`, `The code expired. Enter pairs again.` and `The code
+    expired. Run matchblox pair again.`, `Stopped. The code no longer
+    works.`, and under an offer that failed, `Enter tries again · esc goes
+    back`. In the console, under the key line when a row is free: `Port 22.
+    For another port, run matchblox pair --port <n>.`
+  - Guard: `Pair from the host's own terminal.` and `Remove devices from the
+    host's own terminal.`
+  - Door: `Pair a device`, `answer your agents from your phone`.
+  - App: `Run matchblox pair on your host, or open Pair a device in its
+    console.`, `That is not a matchblox pair link. Copy it again with c on
+    the pair page.`, and the system's `Paste` button.
+  - App failures have no Pair button, because the scan is the consent: a
+    refusal that needs a new code ends `Scan the code again.`; a host key
+    that does not match says `<address> is not <host>. Check the address,
+    then tap Try again.`, with the Address field. The messages say `this
+    device`, not `iPhone`, because the app runs on an iPad too.
 - Public text names no real machine, person or company. The demo host is
   `ws-1`. Its sessions build an invented app, Hearth: `hearth-api`,
   `flint-auth`, `spark-docs`, `kindle-web`, `ember-billing`, Codex in

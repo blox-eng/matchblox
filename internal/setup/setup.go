@@ -49,9 +49,15 @@ func Doors(e Env) []doors.Door {
 	_, tmuxErr := e.LookPath("tmux")
 	ds := []doors.Door{tmuxDoor(e, tmuxErr == nil)}
 	if usesClaude(e) {
-		ds = append(ds, hooksDoor(e), limitsDoor(e), safetyNetDoor(e))
+		ds = append(ds, hooksDoor(e))
 	}
-	ds = append(ds, wayBackDoor(e))
+	if usesCursor(e) {
+		ds = append(ds, cursorHooksDoor(e), cursorLimitsDoor(e))
+	}
+	if usesClaude(e) {
+		ds = append(ds, limitsDoor(e), safetyNetDoor(e))
+	}
+	ds = append(ds, wayBackDoor(e), pairDoor(e))
 	if usesClaude(e) {
 		ds = append(ds, guideDoor(), nightDoor(e))
 	}
@@ -69,6 +75,10 @@ func Open(e Env, id, seen string, also bool) (backup string, err error) {
 	switch id {
 	case doors.Hooks:
 		return AddHooks(settingsPath(e), e.Exe, seen)
+	case doors.CursorHooks:
+		return AddCursorHooks(cursorHooksPath(e), e.Exe, seen)
+	case doors.CursorLimits:
+		return TapCursorStatusLine(cursorConfigPath(e), e.Exe, seen)
 	case doors.Limits:
 		return TapStatusLine(settingsPath(e), e.Exe, seen)
 	case doors.SafetyNet:
@@ -83,7 +93,7 @@ func Open(e Env, id, seen string, also bool) (backup string, err error) {
 	return "", fmt.Errorf("no door %q", id)
 }
 
-var known = []string{doors.Tmux, doors.Hooks, doors.Limits, doors.SafetyNet, doors.WayBack, doors.Guide, doors.Night, doors.Ways}
+var known = []string{doors.Tmux, doors.Hooks, doors.CursorHooks, doors.CursorLimits, doors.Limits, doors.SafetyNet, doors.WayBack, doors.Pair, doors.Guide, doors.Night, doors.Ways}
 
 // Close hides a door from the console; `matchblox setup` shows it again.
 func Close(e Env, id string) error {
@@ -245,6 +255,20 @@ func nightDoor(e Env) doors.Door {
 		Why: "Going to sleep? n keeps your sessions lit until morning: each full one compacts and leaves a RESUME line."}
 	if m, err := stoker.ReadMode(e.StateDir); err == nil && !m.Since.IsZero() {
 		d.Done = true
+	}
+	return d
+}
+
+// pairDoor leads to the pair page. It is done once a phone is paired: the
+// console opens the page itself, and nothing here writes a file.
+func pairDoor(e Env) doors.Door {
+	d := doors.Door{ID: doors.Pair, Title: "Pair a device", Why: "answer your agents from your phone"}
+	if ds, err := Devices(e.Home); err == nil {
+		for _, x := range ds {
+			if x.Kind == "phone" {
+				d.Done = true
+			}
+		}
 	}
 	return d
 }

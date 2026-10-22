@@ -8,7 +8,9 @@ command.
   start them: [the stoker](stoker.md)'s compacts and the messages of a
   stoker agent you started (`n`, `f`), each logged with its command, and
   `[hooks] alert`, which runs the command you name on each alert.
-- Every action shows its exact command before it runs.
+- Every action shows its exact command before it runs, in a box that asks
+  for its key: on a phone above the key line, wider in the middle. A tap
+  cancels it; only a typed key runs it.
 - `Enter` never runs a destructive action. That needs `x`, then a typed
   `y`. The stoker's compact and the messages of its agent are the steps that
   run without it: `n` or `f`, and the order you send with `Enter`, are your
@@ -23,6 +25,12 @@ command.
 - matchblox runs as you, at the lowest CPU priority. It opens no network
   port. The service socket is in a directory that only you can open.
 - It sends no pane text to a model.
+- It reads no agent's login token, with one exception you turn on:
+  `[limits] cursor_usage = true` reads the token Cursor's CLI keeps in the
+  macOS Keychain (`cursor-access-token`), every 5 minutes while a Cursor
+  session runs, and sends it to Cursor's API only, for the plan usage
+  Cursor's own `/usage` shows. It keeps the token for that one call, and
+  never writes or shows it.
 - A setup step that edits a file (`~/.claude/settings.json`,
   `~/.tmux.conf`) shows the exact change first and keeps a backup.
 - A remote host's stream uses its own key. That key can start only the

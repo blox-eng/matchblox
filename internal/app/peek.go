@@ -204,8 +204,7 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.peek = nil
 		return m, nil
 	case key == "ctrl+c":
-		m.quitting = true
-		return m, tea.Quit
+		return m.quit()
 	case key == "ctrl+o":
 		m.peek = nil
 		if a := m.forHost(m.jump(v.s.Pane)); a != nil {
@@ -322,6 +321,7 @@ func (m Model) sendPeek(s sample.Session, rec, text string) (tea.Model, tea.Cmd)
 	}
 	m.peekSent["a"+strconv.Itoa(m.acts)] = s.Name
 	toast := m.say("sending to " + s.Name + "…")
+	m = m.pairActed(action{rec: rec})
 	return m.peekNext(s.Pane), tea.Batch(cmd, toast)
 }
 
@@ -572,27 +572,35 @@ func (m Model) overlayPeek(sc *drawn, w int) {
 // overlayBox dims the screen and lays a box over it, bw columns wide: on a
 // phone with its foot on the key line's hairline, else centred.
 func (m Model) overlayBox(sc *drawn, w, bw int, phone bool, box, press []string, spans []span) {
-	bottom := len(sc.lines) - 2 // the key line's hairline
-	x, y := (w-bw)/2, bottom-len(box)
+	x, y := layBox(m.st, sc.lines, w, bw, phone, box)
+	sc.peekAt, sc.peekX, sc.peekW, sc.peekRows, sc.peekKeys = y, x, bw, press, spans
+}
+
+// layBox dims lines, a screen with its key line and the hairline over it
+// last, and lays box over them in place, bw columns wide: on a phone with
+// its foot on that hairline, else centred. It says where the box went.
+func layBox(st styles, lines []string, w, bw int, phone bool, box []string) (x, y int) {
+	bottom := len(lines) - 2 // the key line's hairline
+	x, y = (w-bw)/2, bottom-len(box)
 	if !phone {
-		x, y = (w-bw)/2, max((len(sc.lines)-len(box))/2-1, 1)
+		y = max((len(lines)-len(box))/2-1, 1)
 	}
 	y = max(y, 1)
-	for i, l := range sc.lines {
-		sc.lines[i] = m.st.faint.Render(ansi.Strip(l))
+	for i, l := range lines {
+		lines[i] = st.faint.Render(ansi.Strip(l))
 	}
 	for j, b := range box {
 		r := y + j
-		if r >= len(sc.lines) {
+		if r >= len(lines) {
 			break
 		}
-		plain := ansi.Strip(sc.lines[r])
+		plain := ansi.Strip(lines[r])
 		left := ansi.Truncate(plain, x, "")
 		left += strings.Repeat(" ", x-lipgloss.Width(left))
 		right := ansi.TruncateLeft(plain, x+bw, "")
-		sc.lines[r] = m.st.faint.Render(left) + b + m.st.faint.Render(right)
+		lines[r] = st.faint.Render(left) + b + st.faint.Render(right)
 	}
-	sc.peekAt, sc.peekX, sc.peekW, sc.peekRows, sc.peekKeys = y, x, bw, press, spans
+	return x, y
 }
 
 // tapPeek is a tap while the peek is open: on an option it picks it, on

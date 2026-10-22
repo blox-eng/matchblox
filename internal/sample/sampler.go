@@ -261,6 +261,9 @@ type Sampler struct {
 	// LimitsDir is where the status-line tap keeps each Claude Code config
 	// directory's limits. Empty: none are read.
 	LimitsDir string
+	// CursorUsage reads Cursor's plan usage from its API ([limits]
+	// cursor_usage); nil: not read.
+	CursorUsage *limits.CursorUsage
 
 	agents   *agentReader
 	panes    map[procKey]string // environ is read once per process
@@ -629,6 +632,30 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 				}
 			}
 			lims.add(sess, limits.SourceCodex, lim)
+		case CursorAgent:
+			sess.Account, sess.Provider = s.accounts.cursorAccount(env), "cursor"
+			sess.Context = "unmeasured"
+			tmux, _ := s.FS.Environ(pid, "TMUX")
+			socket, _, _ := strings.Cut(tmux, ",")
+			started := now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
+			// A reading from before the process started is an earlier
+			// session's in the same pane.
+			if r, ok := limits.ReadCursor(s.LimitsDir, socket, paneID); ok && s.LimitsDir != "" && !r.At.Before(started) {
+				sess.Context = "fresh"
+				if r.Window > 0 {
+					s.measured(&sess, Usage{Model: r.Model, Tokens: r.Tokens, Window: r.Window, At: r.At}, "cursor:"+r.SessionID, now)
+				} else {
+					sess.Model = label(r.Model)
+				}
+			}
+			var usage *limits.Reading
+			if s.CursorUsage != nil {
+				usage = s.CursorUsage.Reading(now)
+			}
+			lims.add(sess, limits.SourceCursor, usage)
+			if s.CursorUsage != nil {
+				lims.fix(sess, "Cursor's API has not answered yet")
+			}
 		case "opencode":
 			sess.Context = "unmeasured"
 			if opencodeIn[sess.Cwd] != 1 {
@@ -654,7 +681,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			sess.Context = "unmeasured"
 		}
 		if sess.Name == "" {
-			sess.Name = agent
+			sess.Name = tmuxName(pane, agent)
 		}
 		if sess.SessionID == "" && paneID != "" {
 			fromPane = append(fromPane, len(snap.Sessions))
@@ -715,8 +742,10 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 // different in /proc depending on how it was installed: a native binary or
 // a Python entry point has the agent's process name; a node agent started
 // by a wrapper keeps the name in argv[0] while its process name is node's
-// "MainThread"; an npm script runs as `node <path>/<agent>`. The argv half
-// is read once per process and kept while its process name stays the same.
+// "MainThread"; an npm script runs as `node <path>/<agent>`. Cursor's
+// `agent` launcher is node with the launcher's path in argv[0] and Cursor's
+// index.js after it. The argv half is read once per process and kept while
+// its process name stays the same.
 func (s *Sampler) agentName(pid int, p procfs.Proc) string {
 	if s.isAgent(p.Comm) {
 		return p.Comm
@@ -737,8 +766,14 @@ func (s *Sampler) agentName(pid int, p procfs.Proc) string {
 				}
 			}
 		}
-		if s.isAgent(cmd) {
+		switch {
+		case s.isAgent(cmd):
 			name = cmd
+		case s.isAgent(CursorAgent) && cursorLauncher(argv):
+			name = CursorAgent
+		}
+		if name == CursorAgent && cursorPrint(argv) {
+			name = ""
 		}
 	}
 	s.names[key] = agentRef{p.Comm, name}
@@ -746,6 +781,57 @@ func (s *Sampler) agentName(pid int, p procfs.Proc) string {
 }
 
 type agentRef struct{ comm, name string }
+
+// WindowNamed: p's window has a name of its own, not the one tmux gives it
+// after the command it runs.
+func WindowNamed(p Pane, agent string) bool {
+	w := p.Window
+	return w != "" && w != p.Command && w != filepath.Base(p.Command) && w != agent
+}
+
+// tmuxName names an agent that keeps no name of its own as its tmux window,
+// which a rename sets; a window tmux named after the command it runs gives
+// way to the session's name, and no pane to the agent's.
+func tmuxName(p Pane, agent string) string {
+	if WindowNamed(p, agent) {
+		return p.Window
+	}
+	if session, _, ok := strings.Cut(p.Target, ":"); ok && session != "" {
+		return session
+	}
+	return agent
+}
+
+// CursorAgent is Cursor's CLI, by the command its installer adds beside
+// `agent`.
+const CursorAgent = "cursor-agent"
+
+// cursorPrint: argv is a print run of Cursor's CLI (-p), a script's, with
+// no one at it: no session.
+func cursorPrint(argv []string) bool {
+	for _, a := range argv[1:] {
+		if a == "-p" || a == "--print" || strings.HasPrefix(a, "--print=") {
+			return true
+		}
+	}
+	return false
+}
+
+// cursorLauncher: argv runs Cursor's CLI, whatever its argv[0]. Its
+// worker-server runs the same script and is no session: it outlives the
+// `agent -p` that started it.
+func cursorLauncher(argv []string) bool {
+	cursor := false
+	for _, a := range argv[1:] {
+		if a == "worker-server" {
+			return false
+		}
+		if strings.HasSuffix(a, "/index.js") && strings.Contains(a, "/cursor-agent/versions/") {
+			cursor = true
+		}
+	}
+	return cursor
+}
 
 // interpreter tells a program that runs an agent's script: its argv[0] is
 // the interpreter and the agent is the first argument that is not a flag.

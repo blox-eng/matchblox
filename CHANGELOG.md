@@ -17,6 +17,118 @@ All notable changes to matchblox are in this file. The format follows
   the tmux mouse in the app.
   ([#121](https://github.com/blox-eng/matchblox/issues/121))
 
+## [0.15.0] - 2026-10-22
+
+### Added
+
+- **`matchblox switch <who> --agent <name>` runs another agent in a session's
+  pane:** same name, directory, park and ship, with a handoff line to start
+  from. Switch it from the CLI, or `A` in Sessions.
+- **`A switch` sits under the selected session, and a tap presses it.** A
+  phone's opened row and the detail beside the list carry the session's
+  keys; a tap on one presses it, so the iPhone app switches an agent with
+  no keyboard. On a narrow phone the plan and the keys get a line each, so
+  `! compact` is no longer cut.
+- **Sessions says `outside tmux` for an agent with no pane.** The row and
+  `matchblox sessions` name the place, instead of leaving it blank.
+
+### Changed
+
+- **A step asks for consent in a box, not on the bottom line** (#158).
+  Kill, switch, merge, remove, connect, a jump and the stoker's take-over
+  show what runs in a box over the dimmed screen: its title says what it
+  does, its lines the exact commands, its foot the key. On a phone it rises
+  above the key line; wider, it sits in the middle. A door's long diff keeps
+  its confirm on the key line.
+
+## [0.14.0] - 2026-10-21
+
+### Added
+
+- **Cursor sessions show their context, model and account.** A new setup
+  step, "Show Cursor's context", taps Cursor's status line: each Cursor
+  session then shows its context use and window from its first turn, as
+  Claude Code's do, and Cursor's bar still shows. The account is the email
+  and team in `~/.cursor/cli-config.json`, marked `⬢`, and USAGE lists it.
+- **Cursor's plan usage in USAGE, when you turn it on.** With
+  `cursor_usage = true` under `[limits]`, matchblox asks Cursor's API every
+  5 minutes for the share of the month's included usage, as Cursor's
+  `/usage` shows it, and when it resets. It reads the login token Cursor's
+  CLI keeps in the macOS Keychain for each call, and never keeps it.
+### Fixed
+
+- **A renamed Cursor, Codex or OpenCode session shows its new name.** An
+  agent that keeps no name of its own is named as its tmux window (which
+  `r` renames), or its tmux session, no longer as its command.
+- **`matchblox new` starts Cursor trusting the folder you chose**
+  (`--trust`), so it does not stop at Cursor's trust prompt.
+- **A Cursor session at its trust prompt waits for you.** "Do you trust the
+  contents of this directory?" shows in the queue, as its approval menu
+  does.
+
+### Security
+
+- **Built with Go 1.26.10.** It fixes ten advisories in Go's own `net/http`,
+  `net/textproto`, `crypto/tls` and `crypto/x509` (GO-2026-6603 to 6617 and
+  GO-2026-6809), which Cursor's usage call makes reachable.
+
+## [0.13.0] - 2026-10-21
+
+### Added
+
+- **The box opens: pair a device in one gesture.** The door "Pair a
+  device" and `DEVICES` on the Machine tab open the pair page in the
+  console. It shows the matchbox with the code on its label. When the app
+  reaches the host the box knocks; when it claims the code the box opens,
+  the match strikes, and the label shows the device's name. Then the page
+  shows when the device is in and what it did first. A device sees
+  `DEVICES` but cannot pair or remove: it says to use the host's own
+  terminal.
+- **The app has no pairing form.** The scan is the consent: the box on the
+  screen catches the code and opens, with haptics, and the console slides
+  in. A device that cannot scan can paste the link. A failure shows the fix
+  on the screen.
+- **The pair code is half its area.** The v2 link packs the same facts in
+  binary, so the code is at most 57 × 29 cells (v1 was 77 × 39) and fits a
+  normal terminal.
+
+### Changed
+
+- **Build the app again with this release.** An older app cannot read the
+  v2 link and says "This code is damaged…". The new app reads v1 and v2.
+
+## [0.12.0] - 2026-10-21
+
+### Added
+
+- **Cursor's CLI is an agent like the others.** Sessions shows it, started
+  as `agent` or `cursor-agent`. The setup step "Add the Cursor hooks" puts
+  matchblox in `~/.cursor/hooks.json`, so a finished turn waits for you as
+  `done` and a reply that asks as `asks`; its approval menu is read from
+  its pane. `matchblox new --agent cursor-agent` and `[stoker] agent =
+  "agent"` start it. It shows no context use or account yet, and no merge
+  guard watches it.
+
+## [0.11.0] - 2026-10-21
+
+### Added
+
+- **The app runs on the iPad.** It was an iPhone app, so an iPad showed it
+  in a small phone window. It now fills the screen and turns to each side.
+- **The app has an icon: the matchblox mark.** It was blank on the home
+  screen. `make icon` makes it from `ios/AppIcon.svg`.
+
+## [0.10.3] - 2026-10-21
+
+### Fixed
+
+- **The phone shows the console's glyphs, not `_`.** The app's ssh session
+  sends no locale, so tmux took the phone for an ASCII terminal and drew
+  each match, bar, `▰`, `●` and `◂ matchblox` as `_`. The console now
+  starts tmux with `-u`, so its client is UTF-8 whatever the locale.
+
+## [0.10.2] - 2026-10-21
+
 ### Fixed
 
 - **Context use is a share of the session's real window.** A session of a
@@ -34,6 +146,17 @@ All notable changes to matchblox are in this file. The format follows
   at every sample, and a new pane, or a pane that starts an agent, has its
   processes read at once. A session from `N` or `matchblox new` shows at
   once. ([#119](https://github.com/blox-eng/matchblox/issues/119))
+- **A session working through its subagents no longer waits for you.** A
+  turn that dispatches background subagents ends at once, and its Stop hook
+  put the session in "waits for you" while the subagents worked, and while
+  the turn their results start ran. Subagent-driven development showed as
+  waiting most of the time. A turn that ended asking nothing now stays out
+  of the queue while the session works, and comes back when the work ends,
+  waiting since then, not since the turn that dispatched the subagents. A
+  question or an approval still waits.
+- **A peek shows the question, not the progress line under it.** `asks` in
+  `matchblox peek` and in the stoker's wakes was the reply's last line,
+  often the `Progress [...]` line that ends each reply.
 
 ## [0.10.1] - 2026-10-15
 
@@ -358,7 +481,14 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/blox-eng/matchblox/compare/v0.14.0...v0.15.0
+[0.14.0]: https://github.com/blox-eng/matchblox/compare/v0.13.0...v0.14.0
+[0.13.0]: https://github.com/blox-eng/matchblox/compare/v0.12.0...v0.13.0
+[0.12.0]: https://github.com/blox-eng/matchblox/compare/v0.11.0...v0.12.0
+[0.11.0]: https://github.com/blox-eng/matchblox/compare/v0.10.3...v0.11.0
+[0.10.3]: https://github.com/blox-eng/matchblox/compare/v0.10.2...v0.10.3
+[0.10.2]: https://github.com/blox-eng/matchblox/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/blox-eng/matchblox/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/blox-eng/matchblox/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/blox-eng/matchblox/compare/v0.8.0...v0.9.0

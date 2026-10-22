@@ -5,14 +5,14 @@ import (
 )
 
 // tap is a click or a finger on a phone. A tap on a tab opens it, on a key
-// of the key line presses it, on `● N wait for you` selects the first
+// of the key line, of an opened row or under the detail presses it, on `● N wait for you` selects the first
 // session that waits, on the dock's `machine ›` switches the panel. A tap
 // on a row selects it and shows the step a second tap runs: an answer for
 // a session that waits, else the row's Enter. The second tap runs it when
 // it only moves this terminal, or asks to confirm it. A tap is never
 // consent to a destructive step, and it cancels a pending one.
 func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
-	if ms.Button != tea.MouseLeft {
+	if ms.Button != tea.MouseLeft || m.pair.owns() { // the pair page takes keys only
 		return m, nil
 	}
 	if m.held != nil { // a tap is another key: it drops the question
@@ -85,6 +85,12 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if ms.Y == sc.actKeysAt {
+		if s, ok := spanAt(sc.actKeys, ms.X); ok {
+			m.armed = ""
+			return m.keyed(s.press)
+		}
+	}
 	i := ms.Y - sc.bodyTop
 	if i < 0 || i >= len(sc.rows) || ms.X >= sc.listW {
 		return m, nil
@@ -154,6 +160,9 @@ func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd)) {
 		return "", nil
 	}
 	return a.String(), func(m Model) (tea.Model, tea.Cmd) {
+		if a.pair {
+			return m.openPairDoor()
+		}
 		if a.nav && !a.destructive {
 			return m.confirm(*a)
 		}

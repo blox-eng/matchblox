@@ -7,12 +7,14 @@ const Home = "matchblox"
 // HomeArgv is the command that runs the console in its own tmux session:
 // -A attaches when the session is already there, so a second connection
 // sees the same console. Inside tmux, or without tmux, it is nil and the
-// console runs in place.
+// console runs in place. -u keeps the client UTF-8: an ssh session with no
+// locale, such as the phone's, would else see every glyph of the console
+// as "_".
 func HomeArgv(inTmux, haveTmux bool, self []string) []string {
 	if inTmux || !haveTmux || len(self) == 0 {
 		return nil
 	}
-	return append([]string{"tmux", "new-session", "-A", "-s", Home, "-e", HomeEnv + "=1"}, self...)
+	return append([]string{"tmux", "-u", "new-session", "-A", "-s", Home, "-e", HomeEnv + "=1"}, self...)
 }
 
 // SizeArgv makes the home window take the size of the device used last, so a

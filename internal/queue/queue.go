@@ -40,6 +40,18 @@ type Item struct {
 // keeps its events: the sampler can lag behind a hook.
 const UnseenGrace = 30 * time.Second
 
+// BusyAfter is how long after a wait starts a sample that says busy is
+// news: a hook is merged at once with the last sample, read while its turn
+// ran, and a turn's end takes a moment to reach the transcript.
+const BusyAfter = 5 * time.Second
+
+// working tells if a session works after its wait started (since; zero for
+// a wait already hidden for work): its own turn, or the subagents it left.
+// A pane that changes (a status line's clock) is no proof of work.
+func working(s sample.Session, since, now time.Time) bool {
+	return s.Busy && !s.FromPane && (since.IsZero() || now.Sub(since) >= BusyAfter)
+}
+
 // AskLife is how long a question tool's call from a hook is kept with no
 // hook that ends it: a session that died mid-menu sends none.
 const AskLife = 24 * time.Hour
@@ -56,16 +68,33 @@ type Queue struct {
 	waiting map[string]Item        // session id -> item, from hooks
 	seen    map[string]time.Time   // session id -> last time a hook or the sampler showed it
 	asks    map[string]hookAsk     // session id -> the question tool's call its menu waits on
+	// Cursor's Stop and Reply of a turn come in either order: the last
+	// Reply, and the turn of the last Stop, of each session.
+	replies map[string]hooks.Event
+	stopped map[string]string
+	forgot  map[string]time.Time // session id -> when its pane was forgotten
 	items   []Item
 }
 
 func New() *Queue {
-	return &Queue{hooked: map[string]hooks.Event{}, waiting: map[string]Item{}, seen: map[string]time.Time{}, asks: map[string]hookAsk{}}
+	return &Queue{hooked: map[string]hooks.Event{}, waiting: map[string]Item{}, seen: map[string]time.Time{}, asks: map[string]hookAsk{},
+		replies: map[string]hooks.Event{}, stopped: map[string]string{},
+		forgot: map[string]time.Time{}}
 }
 
 // Apply takes one hook event. Call Merge after it to update Items.
 func (q *Queue) Apply(ev hooks.Event) {
 	if ev.SessionID == "" {
+		return
+	}
+	if _, gone := q.forgot[ev.SessionID]; gone {
+		return
+	}
+	if ev.Name == hooks.Reply {
+		// Never stale: it is stamped by its own process, at the same time
+		// as its Stop.
+		q.replies[ev.SessionID] = ev
+		q.reply(ev.SessionID)
 		return
 	}
 	prev, known := q.hooked[ev.SessionID]
@@ -83,6 +112,9 @@ func (q *Queue) Apply(ev hooks.Event) {
 	set := func(state, line string) {
 		if !was {
 			it = Item{SessionID: ev.SessionID, Since: ev.At}
+		}
+		if it.Since.IsZero() {
+			it.Since = ev.At // the wait was hidden while the session worked
 		}
 		it.State, it.Pane, it.Reminder = state, ev.Pane, false
 		if line != "" {
@@ -126,6 +158,10 @@ func (q *Queue) Apply(ev hooks.Event) {
 		} else {
 			set(StateFinished, ev.Message)
 		}
+		if ev.Turn != "" {
+			q.stopped[ev.SessionID] = ev.Turn
+			q.reply(ev.SessionID)
+		}
 	case "PostToolUse":
 		// A tool ran: the person allowed it in the pane.
 		if was && it.State == StatePermission {
@@ -135,6 +171,50 @@ func (q *Queue) Apply(ev hooks.Event) {
 		// An ended session stays hooked until the sampler stops seeing it,
 		// so it is never guessed back into the queue.
 		delete(q.waiting, ev.SessionID)
+	}
+}
+
+// reply fills a finished wait with its turn's Reply, once both are in.
+func (q *Queue) reply(id string) {
+	r, ok := q.replies[id]
+	it, was := q.waiting[id]
+	if !ok || !was || it.State != StateFinished || r.Turn == "" || q.stopped[id] != r.Turn {
+		return
+	}
+	if r.Asks {
+		it.State = StateQuestion
+	}
+	if r.Message != "" {
+		it.LastLine = r.Message
+	}
+	q.waiting[id] = it
+	delete(q.replies, id)
+}
+
+// HookedIn is the ids of the hooked sessions whose last event names pane.
+func (q *Queue) HookedIn(pane string) []string {
+	var ids []string
+	for id, ev := range q.hooked {
+		if ev.Pane == pane {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+// Forget drops the hooked sessions ids, and the events they send from now
+// on: a switch's old agent is gone from its pane, and its late hooks must
+// not speak for the new one. The ids are taken (HookedIn) before the
+// switch, so a new agent that hooks in at once is not forgotten with them.
+func (q *Queue) Forget(ids []string, now time.Time) {
+	for _, id := range ids {
+		delete(q.hooked, id)
+		delete(q.waiting, id)
+		delete(q.seen, id)
+		delete(q.asks, id)
+		delete(q.replies, id)
+		delete(q.stopped, id)
+		q.forgot[id] = now
 	}
 }
 
@@ -149,17 +229,12 @@ func (q *Queue) Pane(id string) string {
 func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 	byPane := map[string]string{} // pane -> hooked session id
 	for id, ev := range q.hooked {
-		if ev.Pane != "" {
-			byPane[ev.Pane] = id
-		}
+		q.byNewer(byPane, ev.Pane, id)
 	}
 	seen := map[string]bool{}
 	var items []Item
 	for _, s := range sessions {
-		id := s.SessionID
-		if _, ok := q.hooked[id]; !ok || id == "" {
-			id = byPane[s.Pane]
-		}
+		id := q.join(s, byPane)
 		if id != "" {
 			seen[id] = true
 			q.seen[id] = now
@@ -170,8 +245,27 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 			}
 			if it, ok := q.waiting[id]; ok {
 				it.Pane, it.Target, it.Name = s.Pane, s.Target, s.Name
+				if working(s, it.Since, now) && (it.State == StateFinished || it.Reminder) {
+					// A turn that ended asking nothing does not wait while the
+					// session works: its subagents, or the turn their results
+					// start with no prompt. It is back once the work ends,
+					// waiting since then.
+					it.Since = time.Time{}
+					q.waiting[id] = it
+					continue
+				}
+				if it.Since.IsZero() {
+					it.Since = now
+				}
 				q.waiting[id] = it
 				items = append(items, it)
+			} else if s.Agent == sample.CursorAgent && s.Status == "idle" && s.Permits {
+				// No Cursor hook fires when its approval menu draws: its pane
+				// tells it.
+				items = append(items, Item{
+					SessionID: id, Pane: s.Pane, Target: s.Target, Name: s.Name,
+					State: StatePermission, Since: now.Add(-s.Idle), LastLine: s.LastLine, FromPane: true,
+				})
 			}
 			continue
 		}
@@ -195,6 +289,18 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 			delete(q.waiting, id)
 			delete(q.seen, id)
 			delete(q.asks, id)
+			delete(q.replies, id)
+			delete(q.stopped, id)
+		}
+	}
+	for id, at := range q.forgot {
+		if now.Sub(at) > UnseenGrace {
+			delete(q.forgot, id)
+		}
+	}
+	for id, r := range q.replies {
+		if _, ok := q.hooked[id]; !ok && now.Sub(r.At) > UnseenGrace {
+			delete(q.replies, id)
 		}
 	}
 	for id, a := range q.asks {
@@ -211,6 +317,37 @@ func (q *Queue) Merge(sessions []sample.Session, now time.Time) {
 	q.items = items
 }
 
+// byNewer puts id in byPane for pane unless a hooked session that spoke
+// later has it: a pane can send two sessions' events (a Cursor that runs
+// `agent -p` in its shell), and the one that spoke last is the pane's, the
+// same on every merge.
+func (q *Queue) byNewer(byPane map[string]string, pane, id string) {
+	if pane == "" {
+		return
+	}
+	if old, ok := byPane[pane]; ok {
+		if a, b := q.hooked[old].At, q.hooked[id].At; a.After(b) || a.Equal(b) && old > id {
+			return
+		}
+	}
+	byPane[pane] = id
+}
+
+// join is the hooked session a sampled one is: by its session id, else by
+// its pane. An event of another agent's hooks (Cursor's) joins only a
+// session of that agent: its hooks are global, and an `agent -p` in another
+// agent's pane sends its events from that pane too.
+func (q *Queue) join(s sample.Session, byPane map[string]string) string {
+	if _, ok := q.hooked[s.SessionID]; ok && s.SessionID != "" {
+		return s.SessionID
+	}
+	id := byPane[s.Pane]
+	if a := q.hooked[id].Agent; a != "" && a != s.Agent {
+		return ""
+	}
+	return id
+}
+
 func (q *Queue) Items() []Item { return append([]Item(nil), q.items...) }
 
 // WithAsks is sessions with the question tool's call each one waits on.
@@ -225,16 +362,11 @@ func (q *Queue) WithAsks(sessions []sample.Session) []sample.Session {
 	}
 	byPane := map[string]string{} // pane -> session id with a call
 	for id := range q.asks {
-		if p := q.hooked[id].Pane; p != "" {
-			byPane[p] = id
-		}
+		q.byNewer(byPane, q.hooked[id].Pane, id)
 	}
 	out, copied := sessions, false
 	for i, s := range sessions {
-		id := s.SessionID
-		if _, ok := q.hooked[id]; !ok || id == "" {
-			id = byPane[s.Pane]
-		}
+		id := q.join(s, byPane)
 		a, ok := q.asks[id]
 		if !ok || s.Ask != nil && s.Ask.ID == a.ask.ID {
 			continue

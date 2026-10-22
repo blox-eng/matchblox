@@ -52,7 +52,8 @@ expired, the Create Release job fails and says so. To replace it:
 | Publish, from a bug in the code or the workflow | Merge the fix: the next release is published and becomes the latest. The broken one stays a pre-release |
 | The changelog pull request did not merge itself | Update it with `main` (`gh pr update-branch <branch>`), then merge it once its checks pass |
 | No changelog pull request after a release | Run `.github/scripts/promote-changelog.sh X.Y.Z <date>`, `VERSION=vX.Y.Z .github/scripts/flip-release.sh` and `.github/scripts/announce-release.sh X.Y.Z`, and open the pull request yourself |
-| The changelog pull request says the news line is stale | The release's changelog section has no `- **headline**`: add one, run `.github/scripts/announce-release.sh X.Y.Z` on the branch, push, and merge |
+| The changelog pull request says the news line is stale, and Lint fails | The release's changelog section has no `- **headline**`: add one, run `.github/scripts/announce-release.sh X.Y.Z` on the branch, push, and merge |
+| Lint says `news-guard: the news line … does not name vX.Y.Z` | The news line in `www/index.html` was edited by hand, or the headline changed after the release. Run `.github/scripts/announce-release.sh X.Y.Z` and commit `www/index.html` |
 | The docs of a tag | Publish the tag again: the docs deploy after its verify job |
 | The docs site shows an older build of the release's commit | Merge the next fix: its tag deploys the docs. GitHub Pages keeps the first deployment of a commit, so publishing the same tag again does not replace it |
 

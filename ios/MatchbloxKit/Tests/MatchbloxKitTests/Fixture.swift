@@ -37,6 +37,16 @@ struct Fixture: Codable {
     }
 }
 
+/// The v2 vector holds the payload and its link only.
+struct FixtureV2: Codable {
+    let payload: PairPayload
+    let url: String
+
+    static func load() throws -> FixtureV2 {
+        try JSONDecoder().decode(FixtureV2.self, from: testdata("pair/v2.json"))
+    }
+}
+
 /// A file in the repository's testdata/, which the Go tests read too.
 func testdata(_ path: String) throws -> Data {
     let root = URL(fileURLWithPath: #filePath)
