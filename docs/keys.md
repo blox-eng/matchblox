@@ -84,7 +84,7 @@ text on the typing line.
 | Key | What it does |
 |---|---|
 | `Enter` | Sends the typed line, or the option under the cursor. With several questions, goes to the next one first. At a permission prompt, goes to its pane instead. |
-| A digit | Picks an option: the question goes on at once. With several choices, ticks it. The digit after the options opens the typing line. |
+| `1-9` | Picks an option: the question goes on at once. With several choices, ticks it. The digit after the options opens the typing line. |
 | `↑` or `↓` | Moves between the options and the typing line. |
 | `Space` | Ticks the option under the cursor, when the question takes several. |
 | `→` or `←` | Moves the peek to the next or the previous agent, in the order of Sessions (who waits first), wrapping. A phone's horizontal swipe sends them. `Tab` and `Shift+Tab` do the same. |
@@ -134,6 +134,7 @@ On the chips:
 | `Enter` | Opens the console of the host, or adds a host. |
 | `x` | Removes a host from the list. matchblox stays on that host. |
 | `y` | Confirms the remove or the connect. |
+| `Backspace` | Deletes the last character of a host you type. |
 | `Esc` | Leaves the list of hosts to add. |
 | `q` or `Ctrl+C` | Quits. |
 
