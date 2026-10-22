@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- **AUR (`matchblox-bin`) publishing and install docs.** AUR account
+  registration is unavailable, so Publish no longer writes or pushes an
+  AUR package. Homebrew (`blox-eng/tap/matchblox`) stays. Install with
+  the script, Homebrew, or Go.
+
 ## [0.17.1] - 2026-10-22
 
 ### Fixed
