@@ -50,6 +50,14 @@ func TmuxOn(server string) []string {
 	return []string{"tmux", "-L", server}
 }
 
+// tmuxUTF8 is TmuxOn with -u: format and capture output keep tabs and
+// glyphs when LANG is unset. Without it, tmux in the C locale prints
+// every non-printable as "_", and ParsePanes sees no panes.
+func tmuxUTF8(server string) []string {
+	a := TmuxOn(server)
+	return append([]string{a[0], "-u"}, a[1:]...)
+}
+
 // Tmux is the argv that reaches the server of the pane target, and the id
 // that server knows it by.
 func Tmux(target string) ([]string, string) {
@@ -101,7 +109,7 @@ func TmuxPanesOn(server string) ([]byte, error) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		return nil, nil
 	}
-	tmux := TmuxOn(server)
+	tmux := tmuxUTF8(server)
 	out, err := output(tmux[0], append(tmux[1:], "list-panes", "-a", "-F", PaneFormat)...)
 	if err != nil {
 		if ee := (*exec.ExitError)(nil); errors.As(err, &ee) {
@@ -137,7 +145,8 @@ func ParsePanes(b []byte) []Pane {
 func CapturePanes(panes []string) map[string]string {
 	out := map[string]string{}
 	for _, id := range panes {
-		tmux, bare := Tmux(id)
+		server, bare := SplitPane(id)
+		tmux := tmuxUTF8(server)
 		if b, err := output(tmux[0], append(tmux[1:], "capture-pane", "-p", "-t", bare)...); err == nil {
 			out[id] = string(b)
 		}
@@ -150,7 +159,8 @@ func CapturePanes(panes []string) map[string]string {
 func CapturePanesStyled(panes []string) map[string]string {
 	out := map[string]string{}
 	for _, id := range panes {
-		tmux, bare := Tmux(id)
+		server, bare := SplitPane(id)
+		tmux := tmuxUTF8(server)
 		if b, err := output(tmux[0], append(tmux[1:], "capture-pane", "-p", "-e", "-t", bare)...); err == nil {
 			out[id] = string(b)
 		}
@@ -175,7 +185,7 @@ func CaptureDir(dir string) func([]string) map[string]string {
 // ClientActivity is the last key of the builder in any tmux client: in a
 // console or in an agent's pane. Zero when no client is attached.
 func ClientActivity() time.Time {
-	b, err := output("tmux", "list-clients", "-F", "#{client_activity}")
+	b, err := output("tmux", "-u", "list-clients", "-F", "#{client_activity}")
 	if err != nil {
 		return time.Time{}
 	}
