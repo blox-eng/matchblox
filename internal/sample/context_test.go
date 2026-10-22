@@ -570,3 +570,62 @@ func TestAnotherHomeWithAKeyInItsEnvironmentShowsNoAPIKey(t *testing.T) {
 		}
 	}
 }
+
+// codexMeta is a rollout's first line as Codex 0.163 writes it, with the
+// fields the directory fallback reads.
+func codexMeta(id, cwd, originator string, at time.Time) string {
+	return `{"timestamp":"` + at.UTC().Format(time.RFC3339Nano) + `","type":"session_meta","payload":{"id":"` + id + `","timestamp":"` +
+		at.UTC().Format(time.RFC3339Nano) + `","cwd":"` + cwd + `","originator":"` + originator + `","cli_version":"0.163.0"}}` + "\n"
+}
+
+// TestTheDirectoryFallbackTakesOnlyARolloutThatIsSurelyThisSessions: the
+// fallback names a session by its directory, so it must not guess (#187
+// review). Two Codex processes in one directory, a `codex exec` run
+// there, or a rollout that began before the process started belong to
+// another session: no id, or z would park the wrong pane.
+func TestTheDirectoryFallbackTakesOnlyARolloutThatIsSurelyThisSessions(t *testing.T) {
+	root := copyFixture(t)
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	started := fixtureNow.Add(-time.Duration((smp.FS.Uptime() - 10) * float64(time.Second)))
+	day := filepath.Join(root, "home", ".codex", "sessions", fixtureNow.Format("2006/01/02"))
+	tail := strings.SplitN(codexRollout("gpt-made-up", 51680, 258400), "\n", 2)[1]
+	write := func(name, meta string, at time.Time) {
+		path := filepath.Join(day, name)
+		writeFile(t, path, meta+tail)
+		if err := os.Chtimes(path, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	proc := func(pid int, pane, cwd string) {
+		addProc(t, root, pid, 1, "codex", []string{"codex"}, pane)
+		addPane(t, root, pane+"\tw:"+strconv.Itoa(pid)+".1\tw\t"+strconv.Itoa(pid)+"\tcodex\t"+cwd)
+		symlink(t, "/dev/pts/3", filepath.Join(root, "proc", strconv.Itoa(pid), "fd", "0"))
+		symlink(t, cwd, filepath.Join(root, "proc", strconv.Itoa(pid), "cwd"))
+	}
+	after := started.Add(2 * time.Second)
+	// Two in /work/two, one rollout: whose it is cannot be told.
+	proc(900, "%20", "/work/two")
+	proc(901, "%21", "/work/two")
+	write("rollout-a-two.jsonl", codexMeta("id-two", "/work/two", "codex-tui", after), fixtureNow.Add(-time.Second))
+	// /work/tui: its own rollout, and a newer `codex exec` run there.
+	proc(910, "%22", "/work/tui")
+	write("rollout-b-tui.jsonl", codexMeta("id-tui", "/work/tui", "codex-tui", after), fixtureNow.Add(-5*time.Second))
+	write("rollout-c-exec.jsonl", codexMeta("id-exec", "/work/tui", "codex_exec", after), fixtureNow.Add(-time.Second))
+	// /work/old: a session that began before this process, still written.
+	proc(920, "%23", "/work/old")
+	write("rollout-d-old.jsonl", codexMeta("id-old", "/work/old", "codex-tui", started.Add(-time.Hour)), fixtureNow.Add(-time.Second))
+
+	got := byPane(smp.Sample())
+	for _, pane := range []string{"%20", "%21"} {
+		if s := got[pane]; s.SessionID != "" || s.Tokens != 0 || s.Context != "unmeasured" {
+			t.Errorf("%s, one of two in a directory: id %q, %d tokens, context %q; want none, unmeasured", pane, s.SessionID, s.Tokens, s.Context)
+		}
+	}
+	if s := got["%22"]; s.SessionID != "id-tui" {
+		t.Errorf("the TUI next to a codex exec run: id %q, want id-tui", s.SessionID)
+	}
+	if s := got["%23"]; s.SessionID != "" {
+		t.Errorf("a rollout begun before the process: id %q, want none", s.SessionID)
+	}
+}

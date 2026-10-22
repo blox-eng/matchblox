@@ -549,12 +549,20 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	// OpenCode does not say which session a process shows: two in one
 	// directory cannot be told apart.
 	opencodeIn := map[string]int{}
+	// Nor does a Codex that holds no rollout open: with two in a
+	// directory, its rollout is either's.
+	codexIn := map[string]int{}
 	for pid, p := range procs {
 		// An `opencode run` that another agent started counts too: it
 		// writes a session in the same directory.
 		if s.agentName(pid, p) == "opencode" && p.State != 'Z' && p.State != 'X' {
 			if pp, ok := procs[p.PPID]; !ok || s.agentName(p.PPID, pp) != "opencode" {
 				opencodeIn[s.FS.Cwd(pid)]++
+			}
+		}
+		if s.agentName(pid, p) == "codex" && p.State != 'Z' && p.State != 'X' {
+			if pp, ok := procs[p.PPID]; !ok || s.agentName(p.PPID, pp) != "codex" {
+				codexIn[s.FS.Cwd(pid)]++
 			}
 		}
 	}
@@ -617,12 +625,12 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		case "codex":
 			sess.Account, sess.Provider = s.accounts.codexAccount(env), "openai"
 			path, read := s.codexRollout(pid, children)
-			if path == "" {
+			if path == "" && codexIn[sess.Cwd] == 1 {
 				started := now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
 				path = s.agents.codexInDir(env.codexHome, sess.Cwd, started, now)
 			}
 			sess.Context = "unmeasured"
-			if read {
+			if read && (path != "" || sess.Cwd == "" || codexIn[sess.Cwd] == 1) { // with two here, no rollout yet is not known
 				sess.Context = "fresh"
 			}
 			var lim *limits.Reading
@@ -831,7 +839,7 @@ func cursorPrint(argv []string) bool {
 // codexServer: argv runs a daemon of the Codex app, `codex app-server`,
 // which shares the CLI's name and is no session.
 func codexServer(argv []string) bool {
-	return slices.Contains(argv, "app-server")
+	return len(argv) > 1 && argv[1] == "app-server" // its subcommand; an argument named so is a session's
 }
 
 // cursorLauncher: argv runs Cursor's CLI, whatever its argv[0]. Its

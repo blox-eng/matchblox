@@ -141,6 +141,7 @@ func TestCodexsAppServerIsNoSession(t *testing.T) {
 		{950, []string{"codex", "fix the build"}},
 		{960, []string{bin, "app-server", "--listen", "unix://", "--managed-daemon"}},
 		{970, []string{bin, "app-server", "daemon", "pid-update-loop"}},
+		{980, []string{"codex", "-C", "app-server"}}, // a repo called app-server
 	} {
 		pane := "%" + strconv.Itoa(30+i)
 		addProc(t, root, p.pid, 1, "codex", p.argv, pane)
@@ -149,8 +150,10 @@ func TestCodexsAppServerIsNoSession(t *testing.T) {
 	smp := newFixtureSampler(root)
 	smp.Agents = []string{"claude", "codex"}
 	got := byPane(smp.Sample())
-	if s, ok := got["%30"]; !ok || s.Agent != "codex" {
-		t.Errorf("%%30 = %+v, want a codex session", s)
+	for _, pane := range []string{"%30", "%33"} {
+		if s, ok := got[pane]; !ok || s.Agent != "codex" {
+			t.Errorf("%s = %+v, want a codex session", pane, s)
+		}
 	}
 	for _, pane := range []string{"%31", "%32"} {
 		if s, ok := got[pane]; ok {

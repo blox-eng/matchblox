@@ -19,7 +19,8 @@ All notable changes to matchblox are in this file. The format follows
 - **Codex 0.163 shows its context and limits.** It closes its rollout
   after each write, so no open file named it and the session read as
   fresh with no limits. The rollout is now also found as the newest one
-  of the session's directory written since it started.
+  of the session's directory begun and written since it started, when it
+  is the only Codex there and the rollout is not a `codex exec` run's.
   ([#179](https://github.com/blox-eng/matchblox/issues/179))
 - **`z` parks a Codex session.** Codex has no hooks, so its session had
   no id and could not be held; the id now comes from its rollout, and its

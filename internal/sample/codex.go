@@ -41,16 +41,21 @@ func (s *Sampler) codexRollout(pid int, children map[int][]int) (path string, re
 }
 
 // codexInDir finds the rollout of a Codex that holds none open: Codex
-// 0.163 closes it after each write (#179). As with OpenCode, it is the
-// newest rollout of the process's directory written since the process
-// started, among those created since then (a month at most): a resumed
-// session in an older day's directory is not found.
+// 0.163 closes it after each write (#179). It is the newest rollout of the
+// process's directory written since the process started, among those
+// created since then (a month at most): a resumed session in an older
+// day's directory is not found. It must be this session's for sure, or z
+// parks the wrong pane: one that began before the process (a rollout
+// that names its start) or a `codex exec` run there is another's, and
+// the caller asks only when no other Codex runs in the directory. Codex
+// names its day directories in its own zone, so the scan starts a day
+// early; a directory not written since the process started is not read.
 func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) string {
 	if home == "" || cwd == "" {
 		return ""
 	}
 	started, now = started.Local(), now.Local()
-	day := time.Date(started.Year(), started.Month(), started.Day(), 0, 0, 0, 0, time.Local)
+	day := time.Date(started.Year(), started.Month(), started.Day()-1, 0, 0, 0, 0, time.Local)
 	if month := now.AddDate(0, -1, 0); day.Before(month) {
 		day = time.Date(month.Year(), month.Month(), month.Day(), 0, 0, 0, 0, time.Local)
 	}
@@ -58,6 +63,9 @@ func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) strin
 	var at time.Time
 	for ; !day.After(now); day = day.AddDate(0, 0, 1) {
 		dir := filepath.Join(home, "sessions", day.Format("2006/01/02"))
+		if st, err := os.Stat(dir); err != nil || st.ModTime().Before(started) {
+			continue // no rollout was created there since
+		}
 		entries, _ := os.ReadDir(dir)
 		for _, e := range entries {
 			name := e.Name()
@@ -66,7 +74,13 @@ func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) strin
 			}
 			f := filepath.Join(dir, name)
 			k, ok := statKey(f)
-			if !ok || k.mtime.Before(started) || path != "" && !k.mtime.After(at) || r.metaOf(f).cwd != cwd {
+			if !ok || k.mtime.Before(started) || path != "" && !k.mtime.After(at) {
+				continue
+			}
+			m := r.metaOf(f)
+			// Process start times have tick precision; a session's own
+			// rollout begins a second or more after it.
+			if m.cwd != cwd || m.originator == "codex_exec" || !m.began.IsZero() && m.began.Before(started.Add(-time.Second)) {
 				continue
 			}
 			path, at = f, k.mtime
@@ -76,8 +90,12 @@ func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) strin
 }
 
 // rolloutMeta is what a rollout's session_meta, its first line, says: the
-// session's id and its directory.
-type rolloutMeta struct{ id, cwd string }
+// session's id, its directory, what started it (codex-tui, codex_exec)
+// and when it began.
+type rolloutMeta struct {
+	id, cwd, originator string
+	began               time.Time
+}
 
 func (r *agentReader) metaOf(path string) rolloutMeta {
 	if m, ok := r.rolloutMeta[path]; ok {
@@ -95,13 +113,16 @@ func (r *agentReader) metaOf(path string) rolloutMeta {
 	var meta struct {
 		Type    string `json:"type"`
 		Payload struct {
-			ID  string `json:"id"`
-			Cwd string `json:"cwd"`
+			ID         string    `json:"id"`
+			Cwd        string    `json:"cwd"`
+			Originator string    `json:"originator"`
+			Timestamp  time.Time `json:"timestamp"`
 		} `json:"payload"`
 	}
 	var m rolloutMeta
 	if json.Unmarshal(line, &meta) == nil && meta.Type == "session_meta" {
-		m = rolloutMeta{meta.Payload.ID, meta.Payload.Cwd}
+		p := meta.Payload
+		m = rolloutMeta{p.ID, p.Cwd, p.Originator, p.Timestamp}
 	}
 	r.rolloutMeta[path] = m
 	return m
