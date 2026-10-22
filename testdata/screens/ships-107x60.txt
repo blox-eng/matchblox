@@ -39,13 +39,13 @@
                                                      │
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
  USAGE                                               │ MACHINE                                    16 cores
- ✻ Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20             │ cpu  ▁ 0%   load 6.2
-          wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00             │ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
-          out Fri ~21:00                             │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
- · login  not measured · OpenCode keeps no limits    │ runs 5 claude · 1 codex · 1 opencode
- ❋ Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                 │
-          wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00             │ PID      COMMAND           CPU    MEM     OWNER
-          lasts the week                             │ 1        systemd             0%   9.8M    system
+ ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20      │ cpu  ▁ 0%   load 6.2
+                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00      │ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
+                 out Fri ~21:00                      │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
+ · Google login  not measured · OpenCode keeps no li…│ runs 5 claude · 1 codex · 1 opencode
+ ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59          │
+                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00      │ PID      COMMAND           CPU    MEM     OWNER
+                 lasts the week                      │ 1        systemd             0%   9.8M    system
                                                      │ 1200     claude              0%   9.8M    pane %1 ·…
                                                      │ 1300     zsh                 0%   9.8M    pane %2 ·…
                                                      │ 1310     claude              0%   9.8M    pane %2 ·…

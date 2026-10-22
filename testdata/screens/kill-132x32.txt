@@ -23,10 +23,10 @@
  ○ Clear wick-mobile (%7)                                                     │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  USAGE                                                                        │ MACHINE                                    16 cores
- ✻ Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                                      │ cpu  ▁ 0%   load 6.2
-          wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · out Fri ~21:00                     │ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
- · login  not measured · OpenCode keeps no limits                             │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
- ❋ Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                                          │ runs 5 claude · 1 codex · 1 opencode
-          wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week                     │
+ ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                               │ cpu  ▁ 0%   load 6.2
+                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · out Fri ~21:00              │ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
+ · Google login  not measured · OpenCode keeps no limits                      │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
+ ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                                   │ runs 5 claude · 1 codex · 1 opencode
+                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week              │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 

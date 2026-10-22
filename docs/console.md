@@ -22,13 +22,17 @@ Under the open tab, when there is room, the dock shows how much of each
 plan your agents have used, the machine, and [the stoker](stoker.md):
 
 ```
- USAGE                                    │ MACHINE        ws-1 · 16 cores
- ✻ Max    5h   ▰▰▰▰▰▱▱▱ 62%  · 16:00      │ cpu  ▃▄▅▄▃▅▆▅ 38%   load 4.2
-          wk   ▰▰▰▱▱▱▱▱ 41%  · Thu 09:00  │ mem  ▰▰▰▰▰▱▱▱ 41 of 64 GB
- ❋ Plus   5h   ▰▱▱▱▱▱▱▱ 12%  · 18:40      │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
-          wk   ▰▰▱▱▱▱▱▱ 30%  · Sat 11:00  │ runs 13 claude · 1 codex
+ USAGE                                         │ MACHINE        ws-1 · 16 cores
+ ✻ Claude Max  5h   ▰▰▰▰▰▱▱▱ 62%  · 16:00      │ cpu  ▃▄▅▄▃▅▆▅ 38%   load 4.2
+               wk   ▰▰▰▱▱▱▱▱ 41%  · Thu 09:00  │ mem  ▰▰▰▰▰▱▱▱ 41 of 64 GB
+ ❋ OpenAI Plus 5h   ▰▱▱▱▱▱▱▱ 12%  · 18:40      │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
+               wk   ▰▰▱▱▱▱▱▱ 30%  · Sat 11:00  │ runs 13 claude · 1 codex
 ```
 
+- Each account starts with its provider: its logo in kitty or Ghostty
+  (through tmux too) while every terminal on the console's session can
+  draw it, else its mark. Then its plan, or its email when the provider
+  has two accounts.
 - Each account shows its windows as `/usage` does: `5h` is this 5-hour
   window, `wk` this week, each with the percent used and when it resets.
   A bar turns `warn` from 60% and `neg` from 90%.

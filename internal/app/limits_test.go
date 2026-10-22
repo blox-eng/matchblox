@@ -72,9 +72,9 @@ func TestTheDockSaysUsageAndTheMachine(t *testing.T) {
 	}
 	until := limitsState().At.Add(26 * time.Hour).Local().Format("Mon")
 	for _, want := range []string{
-		"✻ builder  5h   ▰▰▰▰▰▱▱▱ 62%", "wk   ▰▰▰▱▱▱▱▱ 41%", "lasts the week",
-		"✻ work     not measured · open the door “Show your limits”",
-		"❋ Plus     5h   ▰▱▱▱▱▱▱▱ 12%", "92%", "out " + until,
+		"✻ Claude builder  5h   ▰▰▰▰▰▱▱▱ 62%", "wk   ▰▰▰▱▱▱▱▱ 41%", "lasts the week",
+		"✻ Claude work     not measured · open the door “Show your limits”",
+		"❋ OpenAI Plus     5h   ▰▱▱▱▱▱▱▱ 12%", "92%", "out " + until,
 		"cpu", "mem", "runs 3 claude",
 	} {
 		if !strings.Contains(out, want) {
@@ -104,7 +104,7 @@ func TestAPhoneDockShowsOnePanel(t *testing.T) {
 	if !strings.Contains(out, "USAGE") || !strings.Contains(out, "machine ›") || strings.Contains(out, "MACHINE") {
 		t.Fatalf("the phone dock is not usage alone:\n%s", out)
 	}
-	if !strings.Contains(out, "❋ Plus     5h ▱▱▱ 12% · wk 92%") {
+	if !strings.Contains(out, "❋ OpenAI          5h ▱▱▱ 12% · wk 92%") {
 		t.Fatalf("Codex does not fold to one line:\n%s", out)
 	}
 	fitsWidth(t, m, 44)
@@ -255,7 +255,7 @@ func TestCursorsAccountIsInTheDock(t *testing.T) {
 	st := limitsState()
 	st.Limits = append(st.Limits, limits.Account{Provider: "cursor", Account: "builder@example.com · Acme", State: limits.Unmeasured, Fix: "Cursor's plan usage is not read yet"})
 	m, _ := loadedWith(t, 132, st)
-	if out := screen(m); !strings.Contains(out, "⬢ Acme") || !strings.Contains(out, "not measured · Cursor's plan usage is not read yet") {
+	if out := screen(m); !strings.Contains(out, "⬢ Cursor Acme") || !strings.Contains(out, "not measured · Cursor's plan usage is not read yet") {
 		t.Errorf("the dock lacks Cursor's account:\n%s", out)
 	}
 }

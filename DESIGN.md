@@ -235,7 +235,16 @@ Reduce Motion.
   the body and the key line, when the body, the dock and one blank row fit;
   else it folds away and the Machine tab has it. With rows to spare it
   grows into them (forecasts and resets, the top processes, the stoker's
-  recent steps): no run of three blank rows while a panel has more to say. Usage is each account's windows
+  recent steps): no run of three blank rows while a panel has more to say. Each account leads with
+  its provider: the provider's mark in `muted` (`✻` Anthropic, `❋` OpenAI,
+  `⬢` Cursor, `▣` OpenCode, `·` any other) and its name (`✻ Claude Team`),
+  then the plan, or the email's name when the provider has two accounts;
+  a dock under 50 columns leaves out the plan. Where every terminal that
+  shows the console draws kitty's Unicode placeholders (kitty, Ghostty,
+  #183), the provider's logo takes the mark's place, two cells wide. A
+  logo is the provider's own identity, in its own colours, not a colour of
+  the console: it says no state, so rule 4 holds, and the name next to it
+  carries the meaning (rule 2). Usage is each account's windows
   as `/usage` says them: `5h`, `wk` (and any other window), a bar (`warn`
   from 60%, `neg` from 90%), the percent and the reset, then the forecast
   (`lasts the week` in `muted`, `out Fri ~20:00` in `warn`) and `as of
