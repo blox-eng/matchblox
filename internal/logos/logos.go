@@ -39,8 +39,7 @@ var byProvider = map[string]logo{
 	"openai":    {202, "openai.png"},
 	"cursor":    {203, "cursor.png"},
 	"opencode":  {204, "opencode.png"},
-	"google":    {205, "google-color.png"},
-	"gemini":    {206, "gemini-color.png"},
+	"google":    {205, "google-color.png"}, // OpenCode names Gemini's provider so
 }
 
 func idOf(provider string) string { return strconv.Itoa(byProvider[provider].id) }
@@ -118,23 +117,24 @@ func Viewers(env func(string) string, tmux func(args ...string) ([]byte, error))
 		return false, ""
 	}
 	session, window, _ := strings.Cut(strings.TrimSuffix(string(out), "\n"), "\t")
-	if out, err = tmux("list-clients", "-F", "#{client_tty}\t#{client_termname}\t#{client_session}\t#{window_id}"); err != nil {
+	// The pid tells a new client from a departed one on the same tty.
+	if out, err = tmux("list-clients", "-F", "#{client_tty}\t#{client_pid}\t#{client_termname}\t#{client_session}\t#{window_id}"); err != nil {
 		return false, ""
 	}
 	var here []string
 	for line := range strings.Lines(string(out)) {
 		f := strings.Split(strings.TrimSuffix(line, "\n"), "\t")
-		if len(f) != 4 || f[2] != session {
+		if len(f) != 5 || f[3] != session {
 			continue
 		}
-		if !drawing[f[1]] {
+		if !drawing[f[2]] {
 			return false, ""
 		}
 		at := "away"
-		if f[3] == window {
+		if f[4] == window {
 			at = "here"
 		}
-		here = append(here, f[0]+"@"+at)
+		here = append(here, f[0]+":"+f[1]+"@"+at)
 	}
 	slices.Sort(here)
 	return len(here) > 0, strings.Join(here, ",")

@@ -19,7 +19,7 @@ func TestCellsAreTwoColumnsNamingTheImage(t *testing.T) {
 			t.Errorf("%s: cells %q", p, c)
 		}
 	}
-	if Cells("zen") != "" {
+	if Cells("zen") != "" || Cells("gemini") != "" { // OpenCode names Gemini's provider google
 		t.Error("a provider without a logo has no cells")
 	}
 	if Cells("anthropic") == Cells("openai") {
@@ -70,22 +70,27 @@ func TestViewersDrawOnlyWhenEveryClientCan(t *testing.T) {
 		}
 		return []byte(clients), nil
 	}
-	clients = "/dev/ttys002\txterm-kitty\tmy work\t@1\n/dev/ttys009\txterm-256color\tdev\t@4\n"
+	clients = "/dev/ttys002\t100\txterm-kitty\tmy work\t@1\n/dev/ttys009\t109\txterm-256color\tdev\t@4\n"
 	can, here := Viewers(inTmux, tmux)
 	if !can {
 		t.Fatal("kitty alone on the console's session (named with a space) cannot draw")
 	}
-	clients = "/dev/ttys002\txterm-kitty\tmy work\t@2\n"
+	clients = "/dev/ttys002\t100\txterm-kitty\tmy work\t@2\n"
 	if can, away := Viewers(inTmux, tmux); !can || away == here {
 		t.Fatalf("a client on another window: can %v, key %q unchanged", can, away)
 	}
-	clients = "/dev/ttys002\txterm-kitty\tmy work\t@1\n/dev/ttys004\txterm-ghostty\tmy work\t@1\n"
+	clients = "/dev/ttys002\t100\txterm-kitty\tmy work\t@1\n/dev/ttys004\t104\txterm-ghostty\tmy work\t@1\n"
 	if can, two := Viewers(inTmux, tmux); !can || two == here {
 		t.Fatalf("kitty and Ghostty: can %v, key %q unchanged", can, two)
 	}
+	// A new kitty client on a departed one's tty needs the images too.
+	clients = "/dev/ttys002\t200\txterm-kitty\tmy work\t@1\n"
+	if can, again := Viewers(inTmux, tmux); !can || again == here {
+		t.Fatalf("a new client on a reused tty: can %v, key %q unchanged", can, again)
+	}
 	for name, c := range map[string]string{
-		"a phone":           "/dev/ttys002\txterm-kitty\tmy work\t@1\n/dev/ttys005\txterm-256color\tmy work\t@1\n",
-		"a nameless client": "/dev/ttys002\txterm-kitty\tmy work\t@1\n/dev/ttys006\t\tmy work\t@1\n",
+		"a phone":           "/dev/ttys002\t100\txterm-kitty\tmy work\t@1\n/dev/ttys005\t105\txterm-256color\tmy work\t@1\n",
+		"a nameless client": "/dev/ttys002\t100\txterm-kitty\tmy work\t@1\n/dev/ttys006\t106\t\tmy work\t@1\n",
 		"no client":         "",
 	} {
 		clients = c
