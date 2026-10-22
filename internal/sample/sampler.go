@@ -372,7 +372,8 @@ func (s *Sampler) Sample() Snapshot {
 
 // panesChanged lists tmux, which is cheap, between two scans: a pane the
 // last scan did not see, or a pane that now runs an agent, needs a scan at
-// once. A new session then shows within a sample, not within ProcEvery.
+// once. A new session then shows within a sample, not within ProcEvery
+// (#119, and #113's late agent after serve in a container).
 func (s *Sampler) panesChanged() bool {
 	out, err := s.Tmux()
 	if err != nil {
