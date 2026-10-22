@@ -196,15 +196,14 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	typing := v.ask == nil || p.at == n
 	key := k.String()
-	if time.Now().Before(m.peekQuiet) && key != "esc" && key != "ctrl+c" {
+	// The quiet takes no key but esc; ctrl+c quit in Update before it.
+	if time.Now().Before(m.peekQuiet) && key != "esc" {
 		return m, nil
 	}
 	switch {
 	case key == "esc":
 		m.peek = nil
 		return m, nil
-	case key == "ctrl+c":
-		return m.quit()
 	case key == "ctrl+o":
 		m.peek = nil
 		if a := m.forHost(m.jump(v.s.Pane)); a != nil {

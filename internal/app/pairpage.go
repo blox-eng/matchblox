@@ -403,8 +403,8 @@ func (m Model) pairActed(a action) Model {
 }
 
 // pairKey is a key while the page shows: c copies, esc closes, Enter
-// makes a new code after the old one expired, ctrl+c quits. Every other key
-// does nothing.
+// makes a new code after the old one expired. ctrl+c quits in Update; every
+// other key does nothing.
 func (m Model) pairKey(k string) (tea.Model, tea.Cmd) {
 	p := m.pair
 	m.flash = ""
@@ -431,8 +431,6 @@ func (m Model) pairKey(k string) (tea.Model, tea.Cmd) {
 			}
 			return m.closePairPage("").openPairPage()
 		}
-	case "ctrl+c":
-		return m.quit()
 	}
 	return m, nil
 }

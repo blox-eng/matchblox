@@ -292,8 +292,6 @@ func (m Model) search(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.searching, m.filter = false, ""
 	case "enter":
 		m.searching = false
-	case "ctrl+c":
-		return m.quit()
 	case "backspace":
 		m.filter = trimLast(m.filter)
 	default:

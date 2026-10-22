@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/advice"
@@ -651,18 +652,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var next tea.Model
 		var cmd tea.Cmd
-		switch {
-		case m.pair.owns():
+		f := m.focus(msg)
+		// ctrl+c quits from every layer but a question: there any key but
+		// its answers cancels, ctrl+c too.
+		if f != layerHeld && f != layerPending && bkey.Matches(msg, m.keys.global.Quit) {
+			next, cmd = m.quit()
+			if f == layerMain {
+				next, cmd = stokerSeen(next, cmd) // as every key of the tabs
+			}
+			return next, tea.Batch(touch, cmd)
+		}
+		switch f {
+		case layerPair:
 			next, cmd = m.pairKey(msg.String())
-		case m.pairStripEsc(msg.String()):
+		case layerPairStripEsc:
 			next, cmd = m.closePairPage(""), nil
-		case m.sheet != nil:
+		case layerSheet:
 			next, cmd = m.sheetKey(msg)
-		case m.form != nil:
+		case layerForm:
 			next, cmd = m.formKey(msg)
-		case m.peek != nil:
+		case layerPeek:
 			next, cmd = m.peekKey(msg)
-		case m.searching:
+		case layerSearch:
 			next, cmd = m.search(msg)
 		default:
 			next, cmd = m.keyed(msg.String())
@@ -702,7 +713,11 @@ func describe(r proto.Result) string {
 
 // keyed is a key pressed, and the stoker's steps seen when the tab shows them.
 func (m Model) keyed(k string) (tea.Model, tea.Cmd) {
-	next, cmd := m.key(k)
+	return stokerSeen(m.key(k))
+}
+
+// stokerSeen is a key's result, with the stoker's steps seen when the tab shows them.
+func stokerSeen(next tea.Model, cmd tea.Cmd) (tea.Model, tea.Cmd) {
 	if nm, ok := next.(Model); ok {
 		nm, ack := nm.seeStoker()
 		return nm, tea.Batch(cmd, ack)
@@ -710,27 +725,24 @@ func (m Model) keyed(k string) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
+// key is k on the layers under the overlays: focus's under.
 func (m Model) key(k string) (tea.Model, tea.Cmd) {
-	if m.held != nil {
+	switch m.under(k) {
+	case layerHeld:
 		return m.answerTakeOver(k)
-	}
-	if m.asksTakeOver(k) {
+	case layerTakeOver:
 		m.held, m.flash = m.hold(k), ""
 		return m, nil
-	}
-	if m.pending != nil && m.pending.door != "" && m.pending.which != "secondary" {
-		if mm, ok := m.scrollPreview(k); ok {
-			return mm, nil
+	case layerPreview:
+		mm, _ := m.scrollPreview(k)
+		return mm, nil
+	case layerBlocked:
+		if errors.Is(m.blocked, remote.ErrHostKeyChanged) {
+			return m.tryAgain()
 		}
-	}
-	if m.pending == nil && k == "enter" && errors.Is(m.blocked, remote.ErrHostKeyChanged) {
-		return m.tryAgain()
-	}
-	if m.pending == nil && k == "enter" && (m.mismatch || m.blocked != nil) {
 		m.pending = m.connectAction()
 		return m, nil
-	}
-	if m.pending != nil {
+	case layerPending:
 		a := *m.pending
 		m.pending = nil
 		if k == "y" && a.again != "" {
@@ -753,7 +765,7 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	switch k {
 	case "c":
 		return m.openStoker(), nil
-	case "q", "ctrl+c":
+	case "q", "ctrl+c": // ctrl+c quits in Update first; docs_test reads the keys here
 		return m.quit()
 	case "tab":
 		m.setTab((m.tab + 1) % len(tabNames))
