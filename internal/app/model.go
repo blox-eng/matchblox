@@ -653,9 +653,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var next tea.Model
 		var cmd tea.Cmd
 		f := m.focus(msg)
-		// ctrl+c quits from every layer but a question: there any key but
-		// its answers cancels, ctrl+c too.
-		if f != layerHeld && f != layerPending && bkey.Matches(msg, m.keys.global.Quit) {
+		// ctrl+c quits from every layer but a question, where any key but
+		// its answers cancels, and a peek on a gone session, which closes.
+		if f != layerHeld && f != layerPending && f != layerPeekGone && bkey.Matches(msg, m.keys.global.Quit) {
 			next, cmd = m.quit()
 			if f == layerMain {
 				next, cmd = stokerSeen(next, cmd) // as every key of the tabs
@@ -671,7 +671,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			next, cmd = m.sheetKey(msg)
 		case layerForm:
 			next, cmd = m.formKey(msg)
-		case layerPeek:
+		case layerPeek, layerPeekGone:
 			next, cmd = m.peekKey(msg)
 		case layerSearch:
 			next, cmd = m.search(msg)
