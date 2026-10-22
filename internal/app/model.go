@@ -171,9 +171,9 @@ func (m *Model) startRec(a action, act string) {
 	if a.rec == "" || !m.isRec(a.rec) {
 		return
 	}
-	key := "⏎"
+	key := m.keys.main.Open.Help().Key
 	if a.which == "secondary" {
-		key = "x"
+		key = m.keys.main.Second.Help().Key
 	}
 	m.recRun = recRun{rec: a.rec, act: act, key: key}
 }
@@ -558,7 +558,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.flash = "connection lost: " + msg.err.Error()
 		if m.batch != nil {
 			// Their results went with the connection.
-			m.flash += fmt.Sprintf("; %d removals have no answer, r on Git rescans", len(m.batch.ids))
+			m.flash += fmt.Sprintf("; %d removals have no answer, %s on Git rescans", len(m.batch.ids), m.keys.main.Rename.Help().Key)
 			m.batch = nil
 		}
 		if m.opt.Redial == nil {

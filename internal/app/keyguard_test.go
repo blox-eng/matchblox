@@ -8,6 +8,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -119,6 +120,42 @@ func TestNoKeyGlyphLiteralsInRender(t *testing.T) {
 					if v, err := strconv.Unquote(lit.Value); err == nil && glyphs[v] {
 						t.Errorf("%s: Render(%s) is a key of keys.go: draw it from its binding", fset.Position(lit.Pos()), lit.Value)
 					}
+				}
+			}
+			return true
+		})
+	}
+}
+
+// specialKey finds a special key's name or glyph as a whole word.
+var specialKey = regexp.MustCompile(`(^|[^\w+])(⏎|esc|Enter|␣|⌫|↑↓|←→|\^o|shift\+tab|ctrl\+\w+)($|[^\w+])`)
+
+// TestNoSpecialKeysInStrings keeps the name of a special key out of any
+// string of the console: a footer, a hint or a line of prose takes it from
+// its binding (the word tab, and a single letter is held to the Render guard above only).
+func TestNoSpecialKeysInStrings(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || name == "keys.go" {
+			continue
+		}
+		f, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			if v, err := strconv.Unquote(lit.Value); err == nil {
+				if m := specialKey.FindStringSubmatch(v); m != nil {
+					t.Errorf("%s: the string %s names the key %q: draw it from its binding", fset.Position(lit.Pos()), lit.Value, m[2])
 				}
 			}
 			return true

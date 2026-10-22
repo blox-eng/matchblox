@@ -291,7 +291,7 @@ func (m Model) preview(b *body, d doors.Door, w int) {
 		b.add(-1, fit(" "+style.Render(tilde(l)), w))
 	}
 	if cut > 0 {
-		b.add(-1, fit(" "+st.faint.Render(fmt.Sprintf("… %d more lines: ↓ the rest of the diff, then y", cut)), w))
+		b.add(-1, fit(" "+st.faint.Render(fmt.Sprintf("… %d more lines: %s the rest of the diff, then %s", cut, m.keys.confirm.ScrollDown.Help().Key, m.keys.confirm.Yes.Help().Key)), w))
 	}
 }
 

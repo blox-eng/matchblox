@@ -323,7 +323,7 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 		m = m.pairActed(action{rec: "rename:" + f.pane})
 	} else {
 		if strings.TrimSpace(f.where) == "" {
-			f.err, f.at = "where does it start? a path, or ←→ for the Git tab's", fieldWhere
+			f.err, f.at = "where does it start? a path, or "+m.keys.form.Left.Help().Key+" for the Git tab's", fieldWhere
 			return m, nil
 		}
 		n := proto.NewSession{Where: strings.TrimSpace(f.where), Branch: strings.TrimSpace(f.branch), Agent: f.agent, First: strings.TrimSpace(f.first)}
@@ -341,7 +341,7 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 // service checks it.
 func (m Model) swapEnter(f form) (tea.Model, tea.Cmd) {
 	if f.agent == "" {
-		m.form.err, m.form.at = "which agent? ←→ picks one", fieldAgent
+		m.form.err, m.form.at = "which agent? "+m.keys.form.Left.Help().Key+" picks one", fieldAgent
 		return m, nil
 	}
 	if handoff := strings.TrimSpace(f.first); handoff != "" {
@@ -438,7 +438,7 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 	default:
 		hint := "a path"
 		if len(m.gitPaths()) > 0 {
-			hint = "a path, or ←→ for the Git tab's"
+			hint = "a path, or " + m.keys.form.Left.Help().Key + " for the Git tab's"
 		}
 		field(fieldWhere, f.where, hint)
 		field(fieldBranch, f.branch, "blank: no new worktree")

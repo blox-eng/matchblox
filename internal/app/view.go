@@ -161,7 +161,7 @@ func (m Model) draw(w int) drawn {
 		}
 		sc.lines = append(sc.lines, "", strings.Repeat(" ", max((w-lipgloss.Width(why))/2, 0))+m.st.faint.Render(why))
 		if m.opt.Layered {
-			keys := "esc hosts  q quit"
+			keys := plainHints(hintFor(m.keys.main.Back, "hosts"), hintFor(m.keys.main.Quit, ""))
 			sc.lines = append(sc.lines, "", strings.Repeat(" ", max((w-len(keys))/2, 0))+m.st.muted.Render(keys))
 		}
 		return sc
@@ -494,11 +494,11 @@ func (m Model) alert() string {
 	if m.layoutAt(m.width) == Narrow {
 		return m.st.warn.Render(fmt.Sprintf("▲ %d", n))
 	}
-	word := "alert"
+	alert := m.st.warn.Render(fmt.Sprintf("▲ %d alert", n))
 	if n > 1 {
-		word = "alerts"
+		plural := "s" // the plural, not the sort key
+		alert += m.st.warn.Render(plural)
 	}
-	alert := m.st.warn.Render(fmt.Sprintf("▲ %d %s", n, word))
 	return alert
 }
 
@@ -582,7 +582,10 @@ func (m Model) keyLine(w int) (string, []span) {
 
 // spareKeys are the keys a short key line drops first, in that order:
 // each one is reached another way (a tab tap, the dock, the docs).
-var spareKeys = []string{"A", "↑↓", "q", "/", "p", "z", "f"}
+var spareKeys = func() []string {
+	k := defaultKeys().main
+	return []string{k.Switch.Help().Key, k.Up.Help().Key, k.Quit.Help().Key, k.Search.Help().Key, k.Ships.Help().Key, k.Park.Help().Key, k.Stoke.Help().Key}
+}()
 
 // fitHints drops spare keys until the hints fit in room columns. The
 // row's own keys always stay: a line that is still too long is cut.

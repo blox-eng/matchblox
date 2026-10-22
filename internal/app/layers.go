@@ -414,7 +414,7 @@ func (s Shell) render() string {
 	}
 	out = append(out, b.lines...)
 	if s.firstRun() && !s.adding {
-		out = append(out, "", fit(" "+st.faint.Render("You can add a host later: esc in a console comes back here."), w))
+		out = append(out, "", fit(" "+st.faint.Render("You can add a host later: "+defaultKeys().main.Back.Help().Key+" in a console comes back here."), w))
 	}
 	// The action line is at the bottom, as in a console (design/0006 §11.1);
 	// a step to confirm is a box over the dimmed list (#158).

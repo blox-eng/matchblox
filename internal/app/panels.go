@@ -156,7 +156,7 @@ func (m Model) procs(w int) body {
 	}
 	if o, ok := m.selectedOrphan(); ok {
 		b.add(-1, "", fit(" "+st.muted.Render(fmt.Sprintf("parent %s · age %s · cwd %s", o.Parent, sample.Human(o.Age), o.Cwd)), w))
-		b.add(-1, fit(" "+st.label.Render("x ")+st.muted.Render(strings.Join(o.Kill, " ")), w))
+		b.add(-1, fit(" "+st.label.Render(m.keys.main.Second.Help().Key+" ")+st.muted.Render(strings.Join(o.Kill, " ")), w))
 	}
 
 	dv := m.devicesBody(w)

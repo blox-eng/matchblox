@@ -114,7 +114,7 @@ func (m Model) tryAgain() (tea.Model, tea.Cmd) {
 // connected dials again after `matchblox connect`.
 func (m Model) connected(msg connectedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.flash = "not connected: " + msg.err.Error() + "; ⏎ tries again"
+		m.flash = "not connected: " + msg.err.Error() + "; " + m.keys.main.Open.Help().Key + " tries again"
 		return m, nil
 	}
 	m.blocked, m.mismatch = nil, false
@@ -144,7 +144,7 @@ func (m Model) blockedText(w int) string {
 		note = "ssh shows the host key and asks you to check it. Then it connects as above."
 	case errors.Is(m.blocked, remote.ErrHostKeyChanged):
 		why = host + "'s host key changed: this can be an attack"
-		note = "Check the new key with the owner of " + host + ". Only if you trust it: ssh-keygen -R " + host + ", then ⏎."
+		note = "Check the new key with the owner of " + host + ". Only if you trust it: ssh-keygen -R " + host + ", then " + m.keys.main.Open.Help().Key + "."
 	}
 	lines := []string{fit(" "+m.st.text.Render(why), w), ""}
 	if a := m.connectAction(); a != nil {
@@ -166,15 +166,16 @@ func (m Model) connectKeys(w int) string {
 	case m.flash != "":
 		return fit(" "+st.text.Render(m.flash), w)
 	}
-	keys := "q quit"
+	mk := m.keys.main
+	hs := []hint{hintFor(mk.Quit, "")}
 	if m.opt.Layered {
-		keys = "esc hosts  " + keys
+		hs = append([]hint{hintFor(mk.Back, "hosts")}, hs...)
 	}
 	switch {
 	case m.connectAction() != nil:
-		keys = "⏎ connect  " + keys
+		hs = append([]hint{hintFor(mk.Open, "connect")}, hs...)
 	case m.blocked != nil:
-		keys = "⏎ try again  " + keys
+		hs = append([]hint{hintFor(mk.Open, "try again")}, hs...)
 	}
-	return fit(" "+st.muted.Render(keys), w)
+	return fit(" "+st.muted.Render(plainHints(hs...)), w)
 }

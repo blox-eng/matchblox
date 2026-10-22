@@ -319,7 +319,7 @@ func (m *Model) setTab(t int) {
 // nothing is the empty state of a list: the search when there is one.
 func (m Model) nothing(text string) string {
 	if m.filter != "" {
-		return " nothing matches " + m.filter + "  esc clears"
+		return " nothing matches " + m.filter + "  " + m.keys.main.Back.Help().Key + " clears"
 	}
 	return text
 }

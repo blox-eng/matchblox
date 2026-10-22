@@ -377,7 +377,7 @@ func (m Model) agentLine(sel bool, w int) string {
 	if !v.PaneUp && !v.Starting {
 		return fit(left, w)
 	}
-	return spread(left, st.faint.Render("⏎ open the stoker")+" ", w)
+	return spread(left, st.faint.Render(plainHints(hintFor(m.keys.main.Open, "open the stoker")))+" ", w)
 }
 
 // goesLines say what the run's go chips give, what still asks the
