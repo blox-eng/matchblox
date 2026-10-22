@@ -30,6 +30,7 @@ func (s *Service) loadFound() {
 	if c.Answer == "yes" && s.ReposPath != "" {
 		cached := state.ReadFound(s.ReposPath)
 		f.At, f.Took, f.Repos, f.Errors = cached.At, cached.Took, cached.Repos, cached.Errors
+		f.Skipped, f.SkippedMore = cached.Skipped, cached.SkippedMore
 	}
 	s.setFound(f)
 }

@@ -425,6 +425,20 @@ func TestCacheSentBeforeFirstScan(t *testing.T) {
 	}
 }
 
+func TestCacheKeepsSkipped(t *testing.T) {
+	s, _ := foundTest(t)
+	state.WriteConsent(s.ConsentPath, state.Consent{Answer: "yes"})
+	skipped := []gitscan.Skip{{Path: "/h/Desktop", Why: "macOS asks first"}}
+	state.WriteFound(s.ReposPath, gitscan.Found{Consent: "yes", Repos: []gitscan.Checkout{{Path: "/h/cached"}}, Skipped: skipped, SkippedMore: 3})
+	s.loadFound()
+	s.mu.Lock()
+	f := s.found
+	s.mu.Unlock()
+	if !slices.Equal(f.Skipped, skipped) || f.SkippedMore != 3 {
+		t.Fatalf("after a restart Found = %+v, want the cached skipped list", f)
+	}
+}
+
 func TestCancelledScanKeepsCache(t *testing.T) {
 	s, _ := foundTest(t)
 	state.WriteConsent(s.ConsentPath, state.Consent{Answer: "yes"})
@@ -483,7 +497,9 @@ func TestUnchangedRescanSendsNothing(t *testing.T) {
 	if st, _ := s.stateFor(cl); st.Found == nil {
 		t.Fatal("no first Found")
 	}
-	time.Sleep(2 * time.Millisecond)
+	for !time.Now().After(at1) { // the rescan's At must be later, on any clock
+		time.Sleep(time.Millisecond)
+	}
 	if res := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
