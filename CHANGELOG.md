@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-22
+
 ### Added
 
 - **`matchblox switch <who> --agent <name>` runs another agent in a session's
@@ -468,7 +470,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/blox-eng/matchblox/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/blox-eng/matchblox/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/blox-eng/matchblox/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/blox-eng/matchblox/compare/v0.11.0...v0.12.0
