@@ -239,14 +239,16 @@ func TestFindMaxDirs(t *testing.T) {
 
 func TestStripCredentials(t *testing.T) {
 	for _, c := range []struct{ in, want string }{
-		{"https://bot:ab?cd@github.com/org/r.git", "https://github.com/org/r.git"},
-		{"https://bot:ab/cd@github.com/org/r.git", "https://github.com/org/r.git"},
-		{"https://bot:ab#cd@github.com/org/r.git", "https://github.com/org/r.git"},
+		// A delimiter before the last @: ambiguous, so only the scheme shows.
+		{"https://bot:ab?cd@github.com/org/r.git", "https://"},
+		{"https://bot:ab/cd@github.com/org/r.git", "https://"},
+		{"https://bot:ab#cd@github.com/org/r.git", "https://"},
 		// url.Parse accepts this one, with the secret in the path.
-		{"https://bot:123/secret@github.com/o/r.git", "https://github.com/o/r.git"},
-		{"https://bot:123?x@github.com/o/r.git", "https://github.com/o/r.git"},
+		{"https://bot:123/secret@github.com/o/r.git", "https://"},
+		{"https://bot:123?x@github.com/o/r.git", "https://"},
 		{"https://x:tok@github.com/o/r.git", "https://github.com/o/r.git"},
 		{"https://ghp_tok@github.com/o/r.git", "https://github.com/o/r.git"},
+		{"https://user:p@ss@host/r", "https://host/r"},
 		{"https://github.com/o/r.git?token=t", "https://github.com/o/r.git"},
 		{"HTTPS://x:t@GitHub.com/o/r", "https://GitHub.com/o/r"},
 		{"https://x:t@host:8443/o/r", "https://host:8443/o/r"},
@@ -264,15 +266,17 @@ func TestStripCredentials(t *testing.T) {
 		{"https://h?private_token=tok", "https://h"},
 		{"https://h/o/r#frag", "https://h/o/r"},
 		{"/srv/git/r.git", "/srv/git/r.git"},
-		// An @ in the query or the fragment must not make a secret the host.
-		{"https://host/r?email=a@b.com&token=SECRET", "https://host/r"},
-		{"https://host/r?u=a@b&token=SECRET#x", "https://host/r"},
-		{"https://host/r#x@y&token=SECRET", "https://host/r"},
-		{"https://host/r?a=1&b=2@c;token=SECRET", "https://host/r"},
-		{"https://host/r?@token=SECRET", "https://host/r"},
-		// Neither reading gives a host: only the scheme is shown.
+		// An @ after the path: the rule cannot tell it from a password's.
+		{"https://host/r?x=y@ghp_SECRETTOKEN", "https://"},
+		{"https://host/r#user@SECRETTOKEN", "https://"},
+		{"https://host/r?u=a@b/token=SECRET", "https://"},
+		{"https://host/r?redirect=me@evil.com/path/SECRET", "https://"},
+		{"https://host/r?email=a@b.com", "https://"},
+		{"https://u:SECRET@host/r?e=a@b", "https://"},
+		{"https://host/@scope/r", "https://"},
+		// Unparsable, or a host with other than host characters.
 		{"https://x:t@h:xyz/r?tok=1#tok", "https://"},
-		{"https://a@b=SECRET@c=SECRET/r", "https://"},
+		{"https://a@b=SECRET/r", "https://"},
 	} {
 		got := StripCredentials(c.in)
 		if got != c.want {
@@ -280,7 +284,7 @@ func TestStripCredentials(t *testing.T) {
 		}
 		// "git@" is an ssh user, which is no secret.
 		shown := got
-		if strings.Contains(c.in, "ssh") || !strings.Contains(c.in, "://") {
+		if strings.Contains(strings.SplitN(c.in, "://", 2)[0], "ssh") || !strings.Contains(c.in, "://") {
 			shown = strings.ReplaceAll(got, "git@", "")
 		}
 		for _, bad := range []string{"SECRET", "tok", "secret", "ab", "cd", "t@"} {
