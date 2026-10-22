@@ -54,41 +54,8 @@ func TestPackagesInstallTheReleaseBinaries(t *testing.T) {
 			t.Errorf("the formula lacks %s", want)
 		}
 	}
-
-	pkgbuild := read(t, filepath.Join(out, "aur", "PKGBUILD"))
-	srcinfo := read(t, filepath.Join(out, "aur", ".SRCINFO"))
-	for arch, target := range map[string]string{"x86_64": "linux-amd64", "aarch64": "linux-arm64"} {
-		for _, want := range []string{
-			"source_" + arch + `=("matchblox-${pkgver}-` + arch + "::" + base + "matchblox-" + target + `")`,
-			"sha256sums_" + arch + "=('" + sumOf(target) + "')",
-		} {
-			if !strings.Contains(pkgbuild, want) {
-				t.Errorf("the PKGBUILD lacks %s", want)
-			}
-		}
-		for _, want := range []string{
-			"\tsource_" + arch + " = matchblox-0.17.0-" + arch + "::" + base + "matchblox-" + target + "\n",
-			"\tsha256sums_" + arch + " = " + sumOf(target) + "\n",
-		} {
-			if !strings.Contains(srcinfo, want) {
-				t.Errorf("the .SRCINFO lacks %q", want)
-			}
-		}
-	}
-	for _, want := range []string{"pkgname=matchblox-bin\n", "pkgver=0.17.0\n", "pkgrel=1\n", `"${pkgdir}/usr/bin/matchblox"`} {
-		if !strings.Contains(pkgbuild, want) {
-			t.Errorf("the PKGBUILD lacks %s", want)
-		}
-	}
-	for _, want := range []string{"pkgbase = matchblox-bin\n", "\tpkgver = 0.17.0\n", "\tpkgrel = 1\n", "\n\npkgname = matchblox-bin\n"} {
-		if !strings.Contains(srcinfo, want) {
-			t.Errorf("the .SRCINFO lacks %q", want)
-		}
-	}
-	for _, s := range []string{sumOf("darwin-arm64"), sumOf("darwin-amd64")} {
-		if strings.Contains(pkgbuild+srcinfo, s) {
-			t.Errorf("the AUR package names a macOS sum %s", s)
-		}
+	if _, err := os.Stat(filepath.Join(out, "aur")); !os.IsNotExist(err) {
+		t.Errorf("packages.sh wrote an aur/ directory: %v", err)
 	}
 }
 
