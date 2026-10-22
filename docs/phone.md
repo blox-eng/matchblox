@@ -41,6 +41,15 @@ on port 22. If sshd listens on another port, run `matchblox pair --port <n>`.
 If the app says `Can't reach <host>.`,
 type the address that the device can reach, then tap `Try again`.
 
+The host stops before it shows a code if sshd cannot use the one-time key.
+It says so, with the fix, when Tailscale SSH answers on the address that
+the code names, or when sshd reads a different `AuthorizedKeysFile` than
+`~/.ssh/authorized_keys`. Turn Tailscale SSH off, or run
+`matchblox pair --address <host>` with an address that OpenSSH serves. Or
+point `AuthorizedKeysFile` at `~/.ssh/authorized_keys`. Then pair again. If
+a host still answers without the box, the app says that the host refused the
+gate, not that the host did not answer.
+
 If the app says "This code was used or expired", open Pair a device on the
 host again, or run `matchblox pair` again, and scan the new code.
 

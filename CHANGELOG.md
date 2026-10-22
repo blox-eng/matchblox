@@ -6,6 +6,22 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **`matchblox pair` stops up front when sshd cannot use the one-time
+  key.** With Tailscale SSH on the address of the code, or an
+  `AuthorizedKeysFile` other than `~/.ssh/authorized_keys`, pair showed a
+  code that could never work and the phone waited five minutes. The host
+  now refuses before the code, in the terminal and in the console, and
+  names the fix. `--address` with an address that OpenSSH serves still
+  pairs.
+  ([#102](https://github.com/blox-eng/matchblox/issues/102),
+  [#120](https://github.com/blox-eng/matchblox/issues/120))
+- **The app tells a refused gate from a silent host.** A host that exits
+  with status 126 and no reply used to read as "did not answer". The app
+  now says that the host refused the gate and what to change.
+  ([#102](https://github.com/blox-eng/matchblox/issues/102))
+
 ## [0.17.3] - 2026-10-22
 
 ### Fixed
