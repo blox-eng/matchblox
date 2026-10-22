@@ -83,9 +83,9 @@ func Transmit(dark, tmux bool) string {
 			if i+4096 < len(data) {
 				more = "1"
 			}
-			head := "m=" + more
+			head := "q=2,m=" + more // every chunk: a terminal may read q from the last
 			if i == 0 {
-				head = "a=T,U=1,f=100,i=" + strconv.Itoa(l.id) + ",c=2,r=1,q=2," + head
+				head = "a=T,U=1,f=100,i=" + strconv.Itoa(l.id) + ",c=2,r=1," + head
 			}
 			apc := "\x1b_G" + head + ";" + chunk + "\x1b\\"
 			if tmux {
@@ -101,31 +101,40 @@ func Transmit(dark, tmux bool) string {
 var drawing = map[string]bool{"xterm-kitty": true, "xterm-ghostty": true}
 
 // Viewers says whether every terminal that shows this console can draw the
-// logos, and a key that changes with them: a client that attaches or
-// switches to the console's tmux session needs the images again. env is
+// logos, and a key that changes with them: a client that attaches, or
+// comes to the console's window, needs the images again (tmux passes them
+// to the clients that show the pane). A client that names no terminal
+// cannot draw. NO_COLOR drops the colour that names each image. env is
 // os.Getenv; tmux runs tmux with args.
 func Viewers(env func(string) string, tmux func(args ...string) ([]byte, error)) (bool, string) {
+	if env("NO_COLOR") != "" {
+		return false, ""
+	}
 	if env("TMUX") == "" {
 		return drawing[env("TERM")] || env("TERM_PROGRAM") == "ghostty", "direct"
 	}
-	session, err := tmux("display", "-p", "-t", env("TMUX_PANE"), "#{session_name}")
+	out, err := tmux("display", "-p", "-t", env("TMUX_PANE"), "#{session_name}\t#{window_id}")
 	if err != nil {
 		return false, ""
 	}
-	out, err := tmux("list-clients", "-F", "#{client_tty} #{client_termname} #{client_session}")
-	if err != nil {
+	session, window, _ := strings.Cut(strings.TrimSuffix(string(out), "\n"), "\t")
+	if out, err = tmux("list-clients", "-F", "#{client_tty}\t#{client_termname}\t#{client_session}\t#{window_id}"); err != nil {
 		return false, ""
 	}
-	name := strings.TrimSpace(string(session))
 	var here []string
 	for line := range strings.Lines(string(out)) {
-		f := strings.Fields(line)
-		if len(f) == 3 && f[2] == name {
-			if !drawing[f[1]] {
-				return false, ""
-			}
-			here = append(here, f[0])
+		f := strings.Split(strings.TrimSuffix(line, "\n"), "\t")
+		if len(f) != 4 || f[2] != session {
+			continue
 		}
+		if !drawing[f[1]] {
+			return false, ""
+		}
+		at := "away"
+		if f[3] == window {
+			at = "here"
+		}
+		here = append(here, f[0]+"@"+at)
 	}
 	slices.Sort(here)
 	return len(here) > 0, strings.Join(here, ",")

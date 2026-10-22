@@ -55,40 +55,62 @@ func TestTransmitSendsEveryLogoInChunks(t *testing.T) {
 }
 
 // TestViewersDrawOnlyWhenEveryClientCan: in tmux, logos draw while every
-// client on the console's session is kitty or Ghostty; a phone, or any
-// other terminal, attached there turns them off. The key changes when
-// the clients do, so the logos are sent again to a new one.
+// client on the console's session is kitty or Ghostty; a phone, a client
+// that names no terminal, or any other terminal attached there turns them
+// off. The key changes when the clients do, and when one comes to the
+// console's window, so the logos are sent again to a client that can now
+// show them.
 func TestViewersDrawOnlyWhenEveryClientCan(t *testing.T) {
 	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 	inTmux := env(map[string]string{"TMUX": "/tmp/tmux-501/default,1,0", "TMUX_PANE": "%7"})
-	clients := ""
+	session, clients := "my work\t@1\n", ""
 	tmux := func(args ...string) ([]byte, error) {
 		if args[0] == "display" {
-			return []byte("matchblox\n"), nil
+			return []byte(session), nil
 		}
 		return []byte(clients), nil
 	}
-	clients = "/dev/ttys002 xterm-kitty matchblox\n/dev/ttys009 xterm-256color dev\n"
-	can, key := Viewers(inTmux, tmux)
+	clients = "/dev/ttys002\txterm-kitty\tmy work\t@1\n/dev/ttys009\txterm-256color\tdev\t@4\n"
+	can, here := Viewers(inTmux, tmux)
 	if !can {
-		t.Fatal("kitty alone on the console's session cannot draw")
+		t.Fatal("kitty alone on the console's session (named with a space) cannot draw")
 	}
-	clients = "/dev/ttys002 xterm-kitty matchblox\n/dev/ttys004 xterm-ghostty matchblox\n"
-	if can, key2 := Viewers(inTmux, tmux); !can || key2 == key {
-		t.Fatalf("kitty and Ghostty: can %v, key %q unchanged", can, key2)
+	clients = "/dev/ttys002\txterm-kitty\tmy work\t@2\n"
+	if can, away := Viewers(inTmux, tmux); !can || away == here {
+		t.Fatalf("a client on another window: can %v, key %q unchanged", can, away)
 	}
-	clients = "/dev/ttys002 xterm-kitty matchblox\n/dev/ttys005 xterm-256color matchblox\n"
-	if can, _ := Viewers(inTmux, tmux); can {
-		t.Fatal("a phone on the console's session would see boxes")
+	clients = "/dev/ttys002\txterm-kitty\tmy work\t@1\n/dev/ttys004\txterm-ghostty\tmy work\t@1\n"
+	if can, two := Viewers(inTmux, tmux); !can || two == here {
+		t.Fatalf("kitty and Ghostty: can %v, key %q unchanged", can, two)
 	}
-	clients = ""
-	if can, _ := Viewers(inTmux, tmux); can {
-		t.Fatal("no client: nothing to draw on")
+	for name, c := range map[string]string{
+		"a phone":           "/dev/ttys002\txterm-kitty\tmy work\t@1\n/dev/ttys005\txterm-256color\tmy work\t@1\n",
+		"a nameless client": "/dev/ttys002\txterm-kitty\tmy work\t@1\n/dev/ttys006\t\tmy work\t@1\n",
+		"no client":         "",
+	} {
+		clients = c
+		if can, _ := Viewers(inTmux, tmux); can {
+			t.Errorf("%s on the console's session: logos drawn", name)
+		}
 	}
 	if can, _ := Viewers(env(map[string]string{"TERM": "xterm-kitty"}), nil); !can {
 		t.Fatal("kitty outside tmux cannot draw")
 	}
 	if can, _ := Viewers(env(map[string]string{"TERM": "xterm-256color"}), nil); can {
 		t.Fatal("a plain terminal draws")
+	}
+	// NO_COLOR strips the colour that names the image: blank cells.
+	if can, _ := Viewers(env(map[string]string{"TERM": "xterm-kitty", "NO_COLOR": "1"}), nil); can {
+		t.Fatal("logos drawn under NO_COLOR")
+	}
+}
+
+// TestEveryChunkIsQuiet: a terminal that reads q from the last chunk
+// still answers nothing into the console's input.
+func TestEveryChunkIsQuiet(t *testing.T) {
+	for _, apc := range strings.Split(Transmit(true, false), "\x1b_G")[1:] {
+		if head, _, _ := strings.Cut(apc, ";"); !strings.Contains(head, "q=2") {
+			t.Fatalf("a chunk without q=2: %q", head)
+		}
 	}
 }

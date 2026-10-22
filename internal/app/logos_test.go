@@ -50,9 +50,37 @@ func TestTheShellsConsoleAsksWhoShowsIt(t *testing.T) {
 		if opened.cur.opt.Graphics == nil {
 			t.Fatalf("host %q: the console has no Graphics", host)
 		}
-		next, _ := opened.Update(graphicsMsg{can: true, key: "/dev/ttys002"})
+		next, _ := opened.Update(graphicsMsg{gen: opened.cur.opt.Gen, can: true, key: "/dev/ttys002"})
 		if !next.(Shell).cur.logos {
 			t.Fatalf("host %q: the shell does not pass graphicsMsg to its console", host)
 		}
+	}
+}
+
+// TestGraphicsAsksOnItsOwnClockOneAtATime: the console asks who shows it
+// on a timer of its own, so a viewer that cannot draw turns the logos off
+// even while no state arrives; a wedged tmux holds one question, not one
+// more every tick; a closed console's timer is dropped.
+func TestGraphicsAsksOnItsOwnClockOneAtATime(t *testing.T) {
+	m, _ := loadedWith(t, 132, limitsState())
+	m.opt.Graphics = func() (bool, string) { return true, "k" }
+	next, cmd := m.Update(graphicsTickMsg{gen: m.opt.Gen})
+	if cmd == nil || !next.(Model).gfxBusy {
+		t.Fatal("a tick asks nothing")
+	}
+	m = next.(Model)
+	next, _ = m.Update(graphicsTickMsg{gen: m.opt.Gen})
+	if !next.(Model).gfxBusy || next.(Model).gfxAsks != m.gfxAsks {
+		t.Fatal("a tick asks again while the last question waits")
+	}
+	next, _ = next.Update(graphicsMsg{gen: m.opt.Gen, can: true, key: "k"})
+	if next.(Model).gfxBusy {
+		t.Fatal("the answer does not free the next question")
+	}
+	if _, cmd := next.Update(graphicsTickMsg{gen: m.opt.Gen + 1}); cmd != nil {
+		t.Fatal("another console's tick runs here")
+	}
+	if m.opt.Graphics = nil; m.Init() == nil {
+		t.Fatal("no Init")
 	}
 }
