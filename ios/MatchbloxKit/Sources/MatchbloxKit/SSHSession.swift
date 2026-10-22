@@ -16,6 +16,10 @@ public actor SSHSession {
     private var connection: Channel?
     private var session: Channel?
 
+    /// The exit status the host sent for the command. Readable once the stream ends; nil if none came.
+    public var exitStatus: Int? { exitBox.value }
+    private let exitBox = ExitStatusBox()
+
     public init(host: String, port: Int, user: String, key: NIOSSHPrivateKey, hostKeyFingerprint: String) {
         self.init(host: host, port: port, user: user, key: key, hostKeyFingerprint: hostKeyFingerprint, deadline: .seconds(10))
     }
@@ -45,7 +49,7 @@ public actor SSHSession {
                 connection.pipeline.fireErrorCaught(SilentHost())
             }
             do {
-                let session = try await openSession(on: connection, output: output)
+                let session = try await openSession(on: connection, output: output, exitBox: exitBox)
                 self.session = session
                 if let pty {
                     try await session.triggerUserOutboundEvent(
@@ -137,14 +141,18 @@ public actor SSHSession {
             .get()
     }
 
-    private func openSession(on connection: Channel, output: AsyncStream<Data>.Continuation) async throws -> Channel {
+    private func openSession(
+        on connection: Channel,
+        output: AsyncStream<Data>.Continuation,
+        exitBox: ExitStatusBox
+    ) async throws -> Channel {
         try await connection.eventLoop.flatSubmit {
             let opened = connection.eventLoop.makePromise(of: Channel.self)
             do {
                 let ssh = try connection.pipeline.syncOperations.handler(type: NIOSSHHandler.self)
                 ssh.createChannel(opened, channelType: .session) { child, _ in
                     child.eventLoop.makeCompletedFuture {
-                        try child.pipeline.syncOperations.addHandler(SessionOutput(output: output))
+                        try child.pipeline.syncOperations.addHandler(SessionOutput(output: output, exitBox: exitBox))
                     }
                 }
             } catch {
@@ -208,14 +216,27 @@ private final class FirstError: ChannelInboundHandler {
     }
 }
 
+/// Set on the event loop before the stream ends, so a reader sees it as soon as the stream finishes.
+final class ExitStatusBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var status: Int?
+
+    var value: Int? {
+        get { lock.withLock { status } }
+        set { lock.withLock { status = newValue } }
+    }
+}
+
 /// Drops stderr: a pty sends all output as stdout, and the pairing reply is the stdout line only.
 private final class SessionOutput: ChannelInboundHandler {
     typealias InboundIn = SSHChannelData
 
     private let output: AsyncStream<Data>.Continuation
+    private let exitBox: ExitStatusBox
 
-    init(output: AsyncStream<Data>.Continuation) {
+    init(output: AsyncStream<Data>.Continuation, exitBox: ExitStatusBox) {
         self.output = output
+        self.exitBox = exitBox
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -227,6 +248,8 @@ private final class SessionOutput: ChannelInboundHandler {
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
         if event is ChannelFailureEvent {
             context.close(promise: nil)
+        } else if let exit = event as? SSHChannelRequestEvent.ExitStatus {
+            exitBox.value = exit.exitStatus
         }
         context.fireUserInboundEventTriggered(event)
     }
