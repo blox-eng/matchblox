@@ -448,28 +448,22 @@ func (m Model) peekBox(bw, maxH int, phone, fill bool) ([]string, []string, []sp
 	// The footer: each part a tap target (press "" none), " ─ " between
 	// them, two spaces inside the move group (← prev  3/7  next →).
 	var foot []footPart
-	key := func(k, label, press string) footPart {
-		t := st.accent.Render(k)
-		if label != "" {
-			t += st.muted.Render(" " + label)
-		}
-		return footPart{t, press, " ─ "}
-	}
+	pk, sep := m.keys.peek, " ─ "
 	switch {
 	case v.permit:
-		foot = append(foot, key("⏎", "open", "enter"))
+		foot = append(foot, st.footFor(pk.Send, "open", sep))
 	case v.ask != nil && p.q+1 < len(v.ask.Questions):
-		foot = append(foot, key("⏎", "question "+strconv.Itoa(p.q+2), "enter"))
+		foot = append(foot, st.footFor(pk.Send, "question "+strconv.Itoa(p.q+2), sep))
 	default:
-		foot = append(foot, key("⏎", "send", "enter"))
+		foot = append(foot, st.footFor(pk.Send, "", sep))
 	}
 	if v.ask != nil && v.ask.Questions[p.q].Multi && !typing {
-		foot = append(foot, key("␣", "tick", "space"))
+		foot = append(foot, st.footFor(pk.Tick, "", sep))
 	}
 	if ring := m.peekRing(p.pane); len(ring) > 1 {
-		foot = append(foot, footPart{st.accent.Render("←") + st.muted.Render(" prev"), "left", " ─ "})
+		foot = append(foot, st.footFor(pk.Prev, "", sep))
 		count := footPart{st.faint.Render(m.peekCount(p.pane, len(ring))), "", "  "}
-		next := footPart{st.muted.Render("next ") + st.accent.Render("→"), "right", "  "}
+		next := footPart{st.muted.Render(pk.Next.Help().Desc+" ") + st.accent.Render(pk.Next.Help().Key), pk.Next.Keys()[0], "  "}
 		width := 3 + 3 + 3 // the corners, the space and esc
 		for _, f := range append(foot, count, next) {
 			width += lipgloss.Width(f.sep + f.text)
@@ -479,10 +473,10 @@ func (m Model) peekBox(bw, maxH int, phone, fill bool) ([]string, []string, []sp
 		}
 		foot = append(foot, next)
 	}
-	foot = append(foot, key("esc", "", "esc"))
+	foot = append(foot, st.footFor(pk.Close, "", sep))
 	// ^o goes to the pane itself, where it fits: the typing line takes
 	// every letter.
-	jump := key("^o", "jump", "ctrl+o")
+	jump := st.footFor(pk.Jump, "", sep)
 	width := 3 + 3 + lipgloss.Width(jump.sep+jump.text) // the corners and the space
 	for _, f := range foot {
 		width += lipgloss.Width(f.sep + f.text)
@@ -539,7 +533,7 @@ func boxFrame(hair lipgloss.Style, title string, lines []string, foot []footPart
 	}
 	line, x := hair.Render("╰─ "), 3
 	var spans []span
-	for i, f := range foot {
+	for i, f := range slices.DeleteFunc(foot, func(f footPart) bool { return f == (footPart{}) }) {
 		if i > 0 {
 			line += hair.Render(f.sep)
 			x += lipgloss.Width(f.sep)

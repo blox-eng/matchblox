@@ -499,20 +499,14 @@ func (m Model) agentChips(iw int) (string, []span) {
 
 func (m Model) formFoot() []footPart {
 	st := m.st
-	key := func(k, label, press string) footPart {
-		t := st.accent.Render(k)
-		if label != "" {
-			t += st.muted.Render(" " + label)
-		}
-		return footPart{t, press, " ─ "}
-	}
+	fk, sep := m.keys.form, " ─ "
 	switch {
 	case m.form.rename:
-		return []footPart{key("⏎", "rename", "enter"), key("esc", "", "esc")}
+		return []footPart{st.footFor(fk.Enter, "rename", sep), st.footFor(fk.Close, "", sep)}
 	case m.form.swap:
-		return []footPart{key("⏎", "plan", "enter"), key("tab", "next", "tab"), key("esc", "", "esc")}
+		return []footPart{st.footFor(fk.Enter, "plan", sep), st.footFor(fk.Next, "", sep), st.footFor(fk.Close, "", sep)}
 	}
-	return []footPart{key("⏎", "start", "enter"), key("tab", "next", "tab"), key("esc", "", "esc")}
+	return []footPart{st.footFor(fk.Enter, "", sep), st.footFor(fk.Next, "", sep), st.footFor(fk.Close, "", sep)}
 }
 
 func (m Model) overlayForm(sc *drawn, w int) {

@@ -221,12 +221,13 @@ func (m Model) shipsPanel(w int) body {
 // shipKeys are the keys of a ship: its session, a merge when it waits for
 // yours, an answer when it is stuck.
 func (m Model) shipKeys(sh proto.Ship) []hint {
-	keys := []hint{{"⏎", "session", "enter"}}
+	mk := m.keys.main
+	keys := []hint{hintFor(mk.Open, "session")}
 	if len(sh.Merge) > 0 {
-		keys = append(keys, hint{"x", "merge", "x"})
+		keys = append(keys, hintFor(mk.Second, "merge"))
 	}
 	if sh.Kind == shipStuck {
-		keys = append(keys, hint{"a", "answer", "a"})
+		keys = append(keys, hintFor(mk.Peek, "answer"))
 	}
 	return keys
 }

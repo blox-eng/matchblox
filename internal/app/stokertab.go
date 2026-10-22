@@ -147,27 +147,28 @@ func (m Model) stokerNeeds() int {
 }
 
 func (m Model) stokerKeys() []hint {
+	mk := m.keys.main
 	var keys []hint
 	if r, ok := m.stokerSelected(); ok && r.kind == rowAgent {
 		if m.stoker.PaneUp || m.stoker.Starting {
-			keys = append(keys, hint{"⏎", "open the stoker", "enter"}, hint{"Q", "quit it", "Q"})
+			keys = append(keys, hintFor(mk.Open, "open the stoker"), hintFor(mk.QuitAgent, ""))
 		}
 	} else if ok {
 		switch {
 		case r.state() == "waits" && r.e.Needs != "":
-			keys = append(keys, hint{"y", "give the go", "y"})
+			keys = append(keys, hintFor(mk.Grant, ""))
 		case m.peekable(r):
-			keys = append(keys, hint{"a", "look", "a"})
+			keys = append(keys, hintFor(mk.Peek, ""))
 		}
 		if r.e != nil {
-			keys = append(keys, hint{"⏎", "command", "enter"})
+			keys = append(keys, hintFor(mk.Open, "command"))
 		}
 	}
-	keys = append(keys, hint{"1", "sessions", "1"}, hint{"p", "ships", "p"})
+	keys = append(keys, tabHint(mk.Tabs, tabSessions, "sessions"), hintFor(mk.Ships, ""))
 	if m.stoker != nil && m.stoker.On && !m.stoker.Until.IsZero() {
-		return append(keys, hint{"n", "stop night", "n"})
+		return append(keys, hintFor(mk.Night, ""))
 	}
-	return append(keys, hint{"f", "stoker", "f"})
+	return append(keys, hintFor(mk.Stoke, "stoker"))
 }
 
 // showCommand is Enter: the row's exact command, or hide it again.

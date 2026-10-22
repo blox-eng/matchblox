@@ -357,22 +357,16 @@ func (m Model) goLine(iw int) (string, []span) {
 
 func (m Model) sheetFoot() []footPart {
 	st := m.st
-	key := func(k, label, press string) footPart {
-		t := st.accent.Render(k)
-		if label != "" {
-			t += st.muted.Render(" " + label)
-		}
-		return footPart{t, press, " ─ "}
-	}
+	sk, sep := m.keys.sheet, " ─ "
 	verb := "send"
 	if m.noAgent() {
 		verb = "start"
 	}
-	foot := []footPart{key("⏎", verb, "enter")}
+	foot := []footPart{st.footFor(sk.Send, verb, sep)}
 	if m.sheet.onChips {
-		return append(foot, key("space", "toggle", "space"), key("tab", "back", "tab"))
+		return append(foot, st.footFor(sk.Tick, "", sep), st.footFor(sk.Chips, "back", sep))
 	}
-	return append(foot, key("tab", "chips", "tab"), key("esc", "", "esc"))
+	return append(foot, st.footFor(sk.Chips, "", sep), st.footFor(sk.Close, "", sep))
 }
 
 // chips are the recipes of the ways file, as many as the line holds, the

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strconv"
+
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 )
@@ -57,15 +59,15 @@ func defaultKeys() keymaps {
 			Quit:      bind(ks("q"), "q", "quit"), // ctrl+c is global.Quit
 			NextTab:   bind(ks("tab"), "tab", "next"),
 			PrevTab:   bind(ks("shift+tab"), "shift+tab", "back"),
-			Tabs:      bind(digits1to9[:len(tabNames)], "1-9", "tab"),
+			Tabs:      bind(digits1to9[:len(tabNames)], "1-"+strconv.Itoa(len(tabNames)), "tab"),
 			Search:    bind(ks("/"), "/", "find"),
 			Back:      bind(ks("esc"), "esc", "clear"),
 			Sort:      bind(ks("s"), "s", "sort"),
 			SortBack:  bind(ks("S", "shift+s"), "S", "sort back"),
-			Group:     bind(ks("g"), "g", "group"),
+			Group:     bind(ks("g"), "g", "group by"),
 			Park:      bind(ks("z"), "z", "park"),
 			Mark:      bind(ks("space", " "), "␣", "mark"),
-			Exited:    bind(ks("e"), "e", "exited"),
+			Exited:    bind(ks("e"), "e", "show exited"),
 			MarkSafe:  bind(ks("X", "shift+x"), "X", "all safe"),
 			QuitAgent: bind(ks("Q", "shift+q"), "Q", "quit it"),
 			Up:        bind(ks("up", "k"), "↑↓", "move"),
@@ -77,12 +79,12 @@ func defaultKeys() keymaps {
 			Grant:     bind(ks("y"), "y", "give the go"),
 			Peek:      bind(ks("a"), "a", "look"),
 			Dismiss:   bind(ks("d"), "d", "dismiss"),
-			Fold:      bind(ks("h"), "h", "fold"),
+			Fold:      bind(ks("h"), "h", "fold recs"),
 			Ships:     bind(ks("p"), "p", "ships"),
 			Dock:      bind(ks("u"), "u", "dock"),
 			Stoke:     bind(ks("f"), "f", "stoker"),
 			Night:     bind(ks("n"), "n", "stop night"),
-			Order:     bind(ks("o"), "o", "order"),
+			Order:     bind(ks("o"), "o", "new order"),
 			Rename:    bind(ks("r"), "r", "rename"),
 		},
 		form: formKeys{
@@ -128,7 +130,7 @@ func defaultKeys() keymaps {
 		confirm: confirmKeys{
 			Yes:        bind(ks("y"), "y", "run"),
 			Enter:      bind(ks("enter"), "⏎", "run"),
-			Also:       bind(ks("m"), "m", "also"),
+			Also:       bind(ks("m"), "m", "tick it"),
 			ScrollDown: bind(ks("down", "j"), "↓", "the rest"),
 			ScrollUp:   bind(ks("up", "k"), "↑", "back"),
 		},

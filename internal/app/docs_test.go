@@ -91,15 +91,10 @@ func TestTheDocsNameEveryKeyAndOnlyRealOnes(t *testing.T) {
 		}
 		ok := false
 		for _, sc := range screens {
-			if (sc == "Model" && r.Text == tabs) || layers[sc].all[k] {
+			if layers[sc].all[k] {
 				ok = true
 				if r.Table {
 					named[sc][k] = true
-				}
-			}
-			if sc == "Model" && r.Text == tabs && r.Table {
-				for _, d := range digits1to9[:len(tabNames)] {
-					named[sc][d] = true // the tab keys, each
 				}
 			}
 		}

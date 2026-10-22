@@ -539,10 +539,11 @@ func (m Model) keyLine(w int) (string, []span) {
 	if m.flash != "" {
 		return fit(" "+st.text.Render(m.flash), w), nil
 	}
-	hints := m.view().keys(m)
+	hints := slices.DeleteFunc(m.view().keys(m), func(h hint) bool { return h == (hint{}) })
 	if m.layoutAt(w) == Wide {
-		hints = append([]hint{{"↑↓", "move", ""}}, hints...)
-		hints = append(hints, hint{"/", "find", "/"}, hint{"q", "quit", ""})
+		mk := m.keys.main
+		hints = append([]hint{noTap(hintFor(mk.Up, ""))}, hints...)
+		hints = append(hints, hintFor(mk.Search, ""), noTap(hintFor(mk.Quit, "")))
 	}
 	line, x := " ", 1
 	if m.filter != "" {
