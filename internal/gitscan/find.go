@@ -266,37 +266,65 @@ func readCheckout(dir, remote string) (Checkout, bool) {
 
 // StripCredentials drops the user, the password, the query and the fragment
 // of a URL: a token kept there never leaves the service. An ssh URL keeps its
-// user alone, which is not a secret. The userinfo is cut first, at the last @,
-// because a password with a / or ? still parses, with its tail in the path.
+// user alone, which is not a secret. Two readings are tried, and one whose
+// host is not a plain host is rejected, so a secret never becomes the host;
+// when neither passes, only the scheme is shown.
 func StripCredentials(raw string) string {
 	scheme, rest, ok := strings.Cut(raw, "://")
 	if !ok {
 		return raw
 	}
-	user := ""
-	if i := strings.LastIndex(rest, "@"); i >= 0 {
+	sshUser := func(userinfo string) string {
 		switch strings.ToLower(scheme) {
 		case "ssh", "git+ssh", "ssh+git":
-			user, _, _ = strings.Cut(rest[:i], ":")
+			user, _, _ := strings.Cut(userinfo, ":")
+			return user
 		}
-		rest = rest[i+1:]
+		return ""
 	}
-	if u, err := url.Parse(scheme + "://" + rest); err == nil {
-		u.User = nil
-		if user != "" {
-			u.User = url.User(user)
-		}
-		u.RawQuery, u.Fragment, u.RawFragment, u.ForceQuery = "", "", "", false
-		return u.String()
+	// First, the userinfo ends at the last @ of everything: a password may
+	// hold a / or a ? and still parse, with its tail in the path.
+	user := ""
+	cut := rest
+	if i := strings.LastIndex(rest, "@"); i >= 0 {
+		user, cut = sshUser(rest[:i]), rest[i+1:]
 	}
-	// Unparsable: keep what is left, without the query and the fragment.
+	if out, ok := cleanURL(scheme, user, cut); ok {
+		return out
+	}
+	// Second, the classic reading: the query and the fragment end the URL,
+	// and the userinfo ends at the last @ of the authority.
 	if i := strings.IndexAny(rest, "?#"); i >= 0 {
 		rest = rest[:i]
 	}
-	if user != "" {
-		rest = user + "@" + rest
+	auth, path, _ := strings.Cut(rest, "/")
+	user = ""
+	if i := strings.LastIndex(auth, "@"); i >= 0 {
+		user, auth = sshUser(auth[:i]), auth[i+1:]
 	}
-	return scheme + "://" + rest
+	if path != "" {
+		auth += "/" + path
+	}
+	if out, ok := cleanURL(scheme, user, auth); ok {
+		return out
+	}
+	return scheme + "://"
+}
+
+// cleanURL parses scheme://rest and prints it without query and fragment,
+// with user alone as userinfo. It fails on a host with anything but host
+// characters.
+func cleanURL(scheme, user, rest string) (string, bool) {
+	u, err := url.Parse(scheme + "://" + rest)
+	if err != nil || strings.Trim(u.Host, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_[]:%") != "" {
+		return "", false
+	}
+	u.User = nil
+	if user != "" {
+		u.User = url.User(user)
+	}
+	u.RawQuery, u.Fragment, u.RawFragment, u.ForceQuery = "", "", "", false
+	return u.String(), true
 }
 
 // ScanRoots are the folders a scan starts from: the picked ones, else the

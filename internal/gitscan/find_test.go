@@ -248,7 +248,7 @@ func TestStripCredentials(t *testing.T) {
 		{"https://x:tok@github.com/o/r.git", "https://github.com/o/r.git"},
 		{"https://ghp_tok@github.com/o/r.git", "https://github.com/o/r.git"},
 		{"https://github.com/o/r.git?token=t", "https://github.com/o/r.git"},
-		{"HTTPS://x:t@GitHub.com/o/r", "HTTPS://GitHub.com/o/r"},
+		{"HTTPS://x:t@GitHub.com/o/r", "https://GitHub.com/o/r"},
 		{"https://x:t@host:8443/o/r", "https://host:8443/o/r"},
 		{"https://x:t@[::1]:8443/r", "https://[::1]:8443/r"},
 		{"ssh://git:secret@host/r", "ssh://git@host/r"},
@@ -264,17 +264,27 @@ func TestStripCredentials(t *testing.T) {
 		{"https://h?private_token=tok", "https://h"},
 		{"https://h/o/r#frag", "https://h/o/r"},
 		{"/srv/git/r.git", "/srv/git/r.git"},
-		// Unparsable: the fallback still drops the userinfo and the query.
-		{"https://x:t@h:xyz/r?tok=1#tok", "https://h:xyz/r"},
+		// An @ in the query or the fragment must not make a secret the host.
+		{"https://host/r?email=a@b.com&token=SECRET", "https://host/r"},
+		{"https://host/r?u=a@b&token=SECRET#x", "https://host/r"},
+		{"https://host/r#x@y&token=SECRET", "https://host/r"},
+		{"https://host/r?a=1&b=2@c;token=SECRET", "https://host/r"},
+		{"https://host/r?@token=SECRET", "https://host/r"},
+		// Neither reading gives a host: only the scheme is shown.
+		{"https://x:t@h:xyz/r?tok=1#tok", "https://"},
+		{"https://a@b=SECRET@c=SECRET/r", "https://"},
 	} {
 		got := StripCredentials(c.in)
-		// The scheme's case is url's to choose; the host and the path are not.
-		if got != c.want && !(strings.HasPrefix(c.in, "HTTPS://") && got == "https://GitHub.com/o/r") {
+		if got != c.want {
 			t.Errorf("StripCredentials(%q) = %q, want %q", c.in, got, c.want)
 		}
 		// "git@" is an ssh user, which is no secret.
-		for _, bad := range []string{"tok", "secret", "ab", "cd", "t@"} {
-			if strings.Contains(strings.ReplaceAll(got, "git@", ""), bad) {
+		shown := got
+		if strings.Contains(c.in, "ssh") || !strings.Contains(c.in, "://") {
+			shown = strings.ReplaceAll(got, "git@", "")
+		}
+		for _, bad := range []string{"SECRET", "tok", "secret", "ab", "cd", "t@"} {
+			if strings.Contains(shown, bad) {
 				t.Errorf("StripCredentials(%q) = %q, still has %q", c.in, got, bad)
 			}
 		}
