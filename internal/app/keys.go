@@ -25,6 +25,7 @@ type keymaps struct {
 	search   searchKeys
 	pair     pairKeys
 	takeOver takeOverKeys
+	confirm  confirmKeys
 }
 
 type shellKeymaps struct {
@@ -35,11 +36,14 @@ type shellKeymaps struct {
 // shadowsMain are the keys a modal layer shares with mainKeys on purpose:
 // the layer is on top, so its key wins. A new overlap fails
 // TestKeymapsHaveNoCollisions until it is added here.
-var shadowsMain = map[string]bool{
-	"esc": true, "enter": true, "tab": true, "shift+tab": true,
-	"up": true, "down": true, "space": true, " ": true,
-	"c": true, "y": true, "n": true,
-	"1": true, "2": true, "3": true, "4": true, "5": true, "6": true, "7": true,
+var shadowsMain = map[string]map[string]bool{
+	"form":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true},
+	"peek":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true, " ": true, "1": true, "2": true, "3": true, "4": true, "5": true, "6": true, "7": true},
+	"sheet":    {"esc": true, "enter": true, "tab": true, "space": true},
+	"search":   {"esc": true, "enter": true},
+	"pair":     {"c": true, "esc": true, "enter": true},
+	"takeOver": {"y": true, "n": true},
+	"confirm":  {"y": true, "enter": true, "up": true, "k": true, "down": true, "j": true},
 }
 
 func defaultKeys() keymaps {
@@ -47,7 +51,7 @@ func defaultKeys() keymaps {
 		global: globalKeys{Quit: bind(ks("ctrl+c"), "ctrl+c", "quit")},
 		main: mainKeys{
 			Stoker:    bind(ks("c"), "c", "stoker"),
-			Quit:      bind(ks("q"), "q", "quit"),
+			Quit:      bind(ks("q"), "q", "quit"), // ctrl+c is global.Quit
 			NextTab:   bind(ks("tab"), "tab", "next"),
 			PrevTab:   bind(ks("shift+tab"), "shift+tab", "back"),
 			Tabs:      bind(digits1to9[:len(tabNames)], "1-9", "tab"),
@@ -117,6 +121,13 @@ func defaultKeys() keymaps {
 			Copy:  bind(ks("c"), "c", "copies the link"),
 			Close: bind(ks("esc"), "esc", "stops"),
 			Again: bind(ks("enter"), "Enter", "tries again"),
+		},
+		confirm: confirmKeys{
+			Yes:        bind(ks("y"), "y", "run"),
+			Enter:      bind(ks("enter"), "⏎", "run"),
+			Also:       bind(ks("m"), "m", "also"),
+			ScrollDown: bind(ks("down", "j"), "↓", "the rest"),
+			ScrollUp:   bind(ks("up", "k"), "↑", "back"),
 		},
 		takeOver: takeOverKeys{
 			Rest: bind(ks("y"), "y", "rest"),
@@ -213,4 +224,11 @@ type shellTypingKeys struct{ Cancel, Connect, Erase bkey.Binding }
 
 func (k shellTypingKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Cancel, k.Connect, k.Erase}
+}
+
+// confirmKeys answer a pending action and scroll its diff preview.
+type confirmKeys struct{ Yes, Enter, Also, ScrollDown, ScrollUp bkey.Binding }
+
+func (k confirmKeys) bindings() []bkey.Binding {
+	return []bkey.Binding{k.Yes, k.Enter, k.Also, k.ScrollDown, k.ScrollUp}
 }

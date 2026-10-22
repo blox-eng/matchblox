@@ -14,6 +14,16 @@ type kmLayer struct {
 	name   string
 	binds  []bkey.Binding
 	fields []string
+	decl   []bkey.Binding // the struct fields, in declared order
+}
+
+func fieldBinds(v any) []bkey.Binding {
+	rv := reflect.ValueOf(v)
+	out := make([]bkey.Binding, rv.NumField())
+	for i := range out {
+		out[i] = rv.Field(i).Interface().(bkey.Binding)
+	}
+	return out
 }
 
 func fieldNames(v any) []string {
@@ -26,15 +36,16 @@ func fieldNames(v any) []string {
 }
 
 func layersOf(k keymaps) (main kmLayer, modal []kmLayer) {
-	main = kmLayer{"main", k.main.bindings(), fieldNames(k.main)}
+	main = kmLayer{"main", k.main.bindings(), fieldNames(k.main), fieldBinds(k.main)}
 	modal = []kmLayer{
-		{"global", k.global.bindings(), fieldNames(k.global)},
-		{"form", k.form.bindings(), fieldNames(k.form)},
-		{"peek", k.peek.bindings(), fieldNames(k.peek)},
-		{"sheet", k.sheet.bindings(), fieldNames(k.sheet)},
-		{"search", k.search.bindings(), fieldNames(k.search)},
-		{"pair", k.pair.bindings(), fieldNames(k.pair)},
-		{"takeOver", k.takeOver.bindings(), fieldNames(k.takeOver)},
+		{"global", k.global.bindings(), fieldNames(k.global), fieldBinds(k.global)},
+		{"form", k.form.bindings(), fieldNames(k.form), fieldBinds(k.form)},
+		{"peek", k.peek.bindings(), fieldNames(k.peek), fieldBinds(k.peek)},
+		{"sheet", k.sheet.bindings(), fieldNames(k.sheet), fieldBinds(k.sheet)},
+		{"search", k.search.bindings(), fieldNames(k.search), fieldBinds(k.search)},
+		{"pair", k.pair.bindings(), fieldNames(k.pair), fieldBinds(k.pair)},
+		{"confirm", k.confirm.bindings(), fieldNames(k.confirm), fieldBinds(k.confirm)},
+		{"takeOver", k.takeOver.bindings(), fieldNames(k.takeOver), fieldBinds(k.takeOver)},
 	}
 	return main, modal
 }
@@ -45,11 +56,16 @@ func allLayers(t *testing.T) []kmLayer {
 	s := defaultShellKeys()
 	all := append([]kmLayer{main}, modal...)
 	all = append(all,
-		kmLayer{"shell", s.shell.bindings(), fieldNames(s.shell)},
-		kmLayer{"shellTyping", s.typing.bindings(), fieldNames(s.typing)})
+		kmLayer{"shell", s.shell.bindings(), fieldNames(s.shell), fieldBinds(s.shell)},
+		kmLayer{"shellTyping", s.typing.bindings(), fieldNames(s.typing), fieldBinds(s.typing)})
 	for _, l := range all {
 		if len(l.binds) != len(l.fields) {
 			t.Errorf("%s: bindings() lists %d of %d fields", l.name, len(l.binds), len(l.fields))
+		}
+		for i, b := range l.binds {
+			if i < len(l.fields) && !reflect.DeepEqual(b, l.decl[i]) {
+				t.Errorf("%s: bindings()[%d] is not field %s", l.name, i, l.fields[i])
+			}
 		}
 	}
 	return all
@@ -77,20 +93,29 @@ func owners(t *testing.T, l kmLayer) map[string]string {
 func TestKeymapsHaveNoCollisions(t *testing.T) {
 	layers := allLayers(t)
 	main := owners(t, layers[0])
+	seen := map[string]bool{}
 	for _, l := range layers {
 		own := owners(t, l)
 		if l.name == "main" || l.name == "shell" || l.name == "shellTyping" {
 			continue
 		}
+		seen[l.name] = true
 		for k, f := range own {
-			if m, shared := main[k]; shared && !shadowsMain[k] {
-				t.Errorf("%s: key %q is in %s and in main %s: add it to shadowsMain if the kmLayer should shadow main", l.name, k, f, m)
+			if m, shared := main[k]; shared && !shadowsMain[l.name][k] {
+				t.Errorf("%s: key %q is in %s and in main %s: add it to shadowsMain[%q] if the layer should shadow main", l.name, k, f, m, l.name)
+			}
+		}
+		for k := range shadowsMain[l.name] {
+			_, mine := own[k]
+			_, theirs := main[k]
+			if !mine || !theirs {
+				t.Errorf("shadowsMain[%q] lists %q, which the layer binds: %v, and main uses: %v", l.name, k, mine, theirs)
 			}
 		}
 	}
-	for k := range shadowsMain {
-		if _, ok := main[k]; !ok {
-			t.Errorf("shadowsMain lists %q, which main does not use", k)
+	for name := range shadowsMain {
+		if !seen[name] {
+			t.Errorf("shadowsMain lists the layer %q, which has no keymap", name)
 		}
 	}
 }
