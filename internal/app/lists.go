@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/advice"
@@ -287,12 +288,12 @@ func (m Model) tapHeader(x int) (tea.Model, tea.Cmd) {
 
 // search edits the search of the open tab. Every printable key is text.
 func (m Model) search(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch k.String() {
-	case "esc":
+	switch {
+	case bkey.Matches(k, m.keys.search.Clear):
 		m.searching, m.filter = false, ""
-	case "enter":
+	case bkey.Matches(k, m.keys.search.Keep):
 		m.searching = false
-	case "backspace":
+	case bkey.Matches(k, m.keys.search.Erase):
 		m.filter = trimLast(m.filter)
 	default:
 		if k.Text != "" && len([]rune(m.filter)) < 100 {

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/doors"
@@ -80,19 +81,19 @@ func (m Model) resting() bool {
 
 // asksTakeOver: k acts on a session while the stoker is in charge, and the
 // builder has not been asked in this run. Looking around never asks.
-func (m Model) asksTakeOver(k string) bool {
+func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 	if !m.night() || m.stoker.Asked || m.pending != nil {
 		return false
 	}
 	if _, ok := m.selectedDoor(); ok {
 		return false
 	}
-	switch k {
-	case "enter":
+	switch {
+	case bkey.Matches(k, m.keys.main.Open):
 		return m.primary() != nil
-	case "x":
+	case bkey.Matches(k, m.keys.main.Second):
 		return m.secondary() != nil
-	case "a":
+	case bkey.Matches(k, m.keys.main.Peek):
 		pane, _ := m.peekTarget()
 		return pane != ""
 	}
@@ -101,15 +102,15 @@ func (m Model) asksTakeOver(k string) bool {
 
 // hold is what k does, fixed at the moment it was pressed: the answer
 // runs it on the row it was pressed on, wherever the selection is by then.
-func (m Model) hold(k string) func(Model) (tea.Model, tea.Cmd) {
-	switch k {
-	case "a":
+func (m Model) hold(k tea.KeyPressMsg) func(Model) (tea.Model, tea.Cmd) {
+	switch {
+	case bkey.Matches(k, m.keys.main.Peek):
 		pane, _ := m.peekTarget()
 		return func(m Model) (tea.Model, tea.Cmd) {
 			m.openPeek(pane)
 			return m, nil
 		}
-	case "x":
+	case bkey.Matches(k, m.keys.main.Second):
 		a := m.secondary()
 		return func(m Model) (tea.Model, tea.Cmd) {
 			m.pending = a
@@ -126,8 +127,9 @@ func (m Model) hold(k string) func(Model) (tea.Model, tea.Cmd) {
 // answerTakeOver is the builder's answer: y rests the stoker, n keeps it
 // on; either way what they pressed runs. Any other key drops the question
 // and what was held.
-func (m Model) answerTakeOver(k string) (tea.Model, tea.Cmd) {
-	if k != "y" && k != "n" {
+func (m Model) answerTakeOver(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	rest := bkey.Matches(k, m.keys.takeOver.Rest)
+	if !rest && !bkey.Matches(k, m.keys.takeOver.Keep) {
 		m.held, m.flash = nil, ""
 		return m, nil
 	}
@@ -137,7 +139,7 @@ func (m Model) answerTakeOver(k string) (tea.Model, tea.Cmd) {
 		return held(m)
 	}
 	if m.conn == nil || m.lost {
-		m.flash = "not sent, no connection · " + k + " tries again"
+		m.flash = "not sent, no connection · " + k.String() + " tries again"
 		return m, nil
 	}
 	held := m.held
@@ -145,7 +147,7 @@ func (m Model) answerTakeOver(k string) (tea.Model, tea.Cmd) {
 	v := *m.stoker
 	v.Asked = true
 	verb, say := "keep", "the stoker stays on"
-	if k == "y" {
+	if rest {
 		verb, say = "rest", "stoker rests · f turns it back on"
 		v.Rests, v.Touched = m.now(), m.now()
 		m.touched = m.now()

@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/remote"
@@ -211,8 +212,9 @@ func (s Shell) rows() []row {
 }
 
 func (s Shell) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	key := k.String()
-	if key == "ctrl+c" {
+	sk := s.keys.shell
+	// ctrl+c quits from Hosts, its name line and its questions too.
+	if bkey.Matches(k, sk.Interrupt) {
 		return s, tea.Quit
 	}
 	if s.input != nil {
@@ -221,7 +223,7 @@ func (s Shell) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if s.pending != nil {
 		a := *s.pending
 		s.pending = nil
-		if key == "y" {
+		if bkey.Matches(k, sk.Yes) {
 			return s.confirm(a)
 		}
 		s.flash = "cancelled: " + a.String()
@@ -229,22 +231,22 @@ func (s Shell) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	s.flash = ""
 	rs := s.rows()
-	switch key {
-	case "q":
+	switch {
+	case bkey.Matches(k, sk.Quit):
 		return s, tea.Quit
-	case "up", "k":
+	case bkey.Matches(k, sk.Up):
 		s.sel = max(s.sel-1, 0)
-	case "down", "j":
+	case bkey.Matches(k, sk.Down):
 		s.sel = min(s.sel+1, len(rs)-1)
-	case "esc":
+	case bkey.Matches(k, sk.Back):
 		if s.adding {
 			s.adding, s.sel = false, len(s.hosts)+1
 		}
-	case "x":
+	case bkey.Matches(k, sk.Remove):
 		if r := rs[min(s.sel, len(rs)-1)]; r.removable {
 			s.pending = &action{label: "remove", say: "remove " + r.host + " from the list (matchblox stays on " + r.host + ")", door: r.host, destructive: true}
 		}
-	case "enter":
+	case bkey.Matches(k, sk.Open):
 		return s.enter(rs[min(s.sel, len(rs)-1)])
 	}
 	return s, nil
@@ -308,11 +310,12 @@ func (s Shell) confirm(a action) (tea.Model, tea.Cmd) {
 // typing edits a host name; Enter shows its connect.
 func (s Shell) typing(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	text := *s.input
-	switch k.String() {
-	case "esc":
+	tk := s.keys.typing
+	switch {
+	case bkey.Matches(k, tk.Cancel):
 		s.input = nil
 		return s, nil
-	case "enter":
+	case bkey.Matches(k, tk.Connect):
 		s.input = nil
 		if !remote.ValidHost(text) {
 			s.flash = fmt.Sprintf("%q is not a host name: a name or user@address that ssh reaches", text)
@@ -320,7 +323,7 @@ func (s Shell) typing(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		s.pending = s.connect(text)
 		return s, nil
-	case "backspace":
+	case bkey.Matches(k, tk.Erase):
 		text = trimLast(text)
 	default:
 		if k.Text != "" && len(text) < 200 {

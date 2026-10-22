@@ -1,6 +1,9 @@
 package app
 
-import bkey "charm.land/bubbles/v2/key"
+import (
+	bkey "charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+)
 
 // The console's keys, as data: one keymap per layer, one bkey.Binding per
 // act. A binding's help key and text are what the footer shows today.
@@ -231,4 +234,28 @@ type confirmKeys struct{ Yes, Enter, Also, ScrollDown, ScrollUp bkey.Binding }
 
 func (k confirmKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Yes, k.Enter, k.Also, k.ScrollDown, k.ScrollUp}
+}
+
+// keyPress is the key a tap presses.
+func keyPress(k string) tea.KeyPressMsg {
+	switch k {
+	case "":
+		return tea.KeyPressMsg{} // no key: it matches no binding
+	case "enter":
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "tab":
+		return tea.KeyPressMsg{Code: tea.KeyTab}
+	case "left":
+		return tea.KeyPressMsg{Code: tea.KeyLeft}
+	case "right":
+		return tea.KeyPressMsg{Code: tea.KeyRight}
+	case "esc":
+		return tea.KeyPressMsg{Code: tea.KeyEsc}
+	case "space":
+		return tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
+	case "ctrl+o":
+		return tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl}
+	}
+	r := []rune(k)
+	return tea.KeyPressMsg{Code: r[0], Text: k}
 }

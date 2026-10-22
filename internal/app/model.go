@@ -647,37 +647,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var touch tea.Cmd
 		// f and n are stoker acts themselves: a touch sent with them would
 		// race them on the service.
-		if k := msg.String(); m.pair != nil || m.peek != nil || m.sheet != nil || m.form != nil || m.searching || k != "f" && k != "n" {
+		if m.pair != nil || m.peek != nil || m.sheet != nil || m.form != nil || m.searching || !bkey.Matches(msg, m.keys.main.Stoke, m.keys.main.Night) {
 			m, touch = m.touchRest()
 		}
-		var next tea.Model
-		var cmd tea.Cmd
 		f := m.focus(msg)
 		// ctrl+c quits from every layer but a question, where any key but
 		// its answers cancels, and a peek on a gone session, which closes.
 		if f != layerHeld && f != layerPending && f != layerPeekGone && bkey.Matches(msg, m.keys.global.Quit) {
-			next, cmd = m.quit()
+			next, cmd := m.quit()
 			if f == layerMain {
 				next, cmd = stokerSeen(next, cmd) // as every key of the tabs
 			}
 			return next, tea.Batch(touch, cmd)
 		}
-		switch f {
-		case layerPair:
-			next, cmd = m.pairKey(msg.String())
-		case layerPairStripEsc:
-			next, cmd = m.closePairPage(""), nil
-		case layerSheet:
-			next, cmd = m.sheetKey(msg)
-		case layerForm:
-			next, cmd = m.formKey(msg)
-		case layerPeek, layerPeekGone:
-			next, cmd = m.peekKey(msg)
-		case layerSearch:
-			next, cmd = m.search(msg)
-		default:
-			next, cmd = m.keyed(msg.String())
-		}
+		next, cmd := m.press(f, msg)
 		return next, tea.Batch(touch, cmd)
 	}
 	return m, nil
@@ -711,9 +694,48 @@ func describe(r proto.Result) string {
 	return strings.Join(parts, "; ")
 }
 
-// keyed is a key pressed, and the stoker's steps seen when the tab shows them.
-func (m Model) keyed(k string) (tea.Model, tea.Cmd) {
-	return stokerSeen(m.key(k))
+// keyed is a key a tap on a key hint presses: it reaches the layers under
+// the overlays, as a key does.
+func (m Model) keyed(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	return m.press(m.under(k), k)
+}
+
+// press gives k to the layer f, the one focus chose. A layer under the
+// overlays marks the stoker's steps seen when the tab shows them.
+func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	var next tea.Model = m
+	var cmd tea.Cmd
+	switch f {
+	case layerPair:
+		next, cmd = m.pairKey(k)
+	case layerPairStripEsc:
+		next = m.closePairPage("")
+	case layerSheet:
+		next, cmd = m.sheetKey(k)
+	case layerForm:
+		next, cmd = m.formKey(k)
+	case layerPeek, layerPeekGone:
+		next, cmd = m.peekKey(k)
+	case layerSearch:
+		next, cmd = m.search(k)
+	case layerHeld:
+		next, cmd = m.answerTakeOver(k)
+	case layerTakeOver:
+		m.held, m.flash = m.hold(k), ""
+		next = m
+	case layerPreview:
+		next, _ = m.scrollPreview(k)
+	case layerBlocked:
+		next, cmd = m.unblock()
+	case layerPending:
+		next, cmd = m.pendingKey(k)
+	case layerMain:
+		next, cmd = m.key(k)
+	}
+	if f.underOverlays() {
+		return stokerSeen(next, cmd)
+	}
+	return next, cmd
 }
 
 // stokerSeen is a key's result, with the stoker's steps seen when the tab shows them.
@@ -725,78 +747,78 @@ func stokerSeen(next tea.Model, cmd tea.Cmd) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
-// key is k on the layers under the overlays: focus's under.
-func (m Model) key(k string) (tea.Model, tea.Cmd) {
-	switch m.under(k) {
-	case layerHeld:
-		return m.answerTakeOver(k)
-	case layerTakeOver:
-		m.held, m.flash = m.hold(k), ""
-		return m, nil
-	case layerPreview:
-		mm, _ := m.scrollPreview(k)
-		return mm, nil
-	case layerBlocked:
-		if errors.Is(m.blocked, remote.ErrHostKeyChanged) {
-			return m.tryAgain()
+// unblock is ⏎ on a host that is blocked or speaks another version: a
+// changed host key tries again, anything else shows the connect.
+func (m Model) unblock() (tea.Model, tea.Cmd) {
+	if errors.Is(m.blocked, remote.ErrHostKeyChanged) {
+		return m.tryAgain()
+	}
+	m.pending = m.connectAction()
+	return m, nil
+}
+
+// pendingKey answers the action that waits: y runs it, ⏎ a safe one, and
+// any other key cancels.
+func (m Model) pendingKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	a := *m.pending
+	m.pending = nil
+	yes := bkey.Matches(k, m.keys.confirm.Yes)
+	if yes && a.again != "" {
+		// It works or waits for you: one more y, said plainly.
+		a.say, a.again, a.text = a.again, "", killAnyway
+		if a.againText != "" {
+			a.text = a.againText
 		}
-		m.pending = m.connectAction()
-		return m, nil
-	case layerPending:
-		a := *m.pending
-		m.pending = nil
-		if k == "y" && a.again != "" {
-			// It works or waits for you: one more y, said plainly.
-			a.say, a.again, a.text = a.again, "", killAnyway
-			if a.againText != "" {
-				a.text = a.againText
-			}
-			m.pending = &a
-			return m, nil
-		}
-		// A destructive action needs a typed y; Enter alone is not consent.
-		if k == "y" || (k == "enter" && !a.destructive) {
-			return m.confirm(a)
-		}
-		m.flash = "cancelled: " + a.String()
+		m.pending = &a
 		return m, nil
 	}
+	// A destructive action needs a typed y; Enter alone is not consent.
+	if yes || (bkey.Matches(k, m.keys.confirm.Enter) && !a.destructive) {
+		return m.confirm(a)
+	}
+	m.flash = "cancelled: " + a.String()
+	return m, nil
+}
+
+// key is k on the tabs, with nothing on top.
+func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	mk := m.keys.main
 	m.flash = ""
-	switch k {
-	case "c":
+	switch {
+	case bkey.Matches(k, mk.Stoker):
 		return m.openStoker(), nil
-	case "q", "ctrl+c": // ctrl+c quits in Update first; docs_test reads the keys here
+	case bkey.Matches(k, mk.Quit):
 		return m.quit()
-	case "tab":
+	case bkey.Matches(k, mk.NextTab):
 		m.setTab((m.tab + 1) % len(tabNames))
-	case "shift+tab":
+	case bkey.Matches(k, mk.PrevTab):
 		m.setTab((m.tab + len(tabNames) - 1) % len(tabNames))
-	case "/":
+	case bkey.Matches(k, mk.Search):
 		m.searching, m.filter = true, ""
 		m.refresh()
-	case "esc":
+	case bkey.Matches(k, mk.Back):
 		if m.filter != "" {
 			m.filter = ""
 			m.refresh()
 		} else if m.opt.Layered {
 			return m, func() tea.Msg { return layerMsg{} }
 		}
-	case "s":
+	case bkey.Matches(k, mk.Sort):
 		if s, _ := m.sortable(); s != nil {
 			_, names := m.sortable()
 			m.sortOn((s.col + 1) % len(names))
 		}
-	case "S", "shift+s":
+	case bkey.Matches(k, mk.SortBack):
 		if s, _ := m.sortable(); s != nil {
 			m.sortOn(s.col)
 		}
-	case "g":
+	case bkey.Matches(k, mk.Group):
 		if m.tab == tabSessions {
 			m.sessGroup = (m.sessGroup + 1) % len(groupModes)
 			m.flash = "group: " + groupModes[m.sessGroup]
 			m.refresh()
 		}
-	case "z":
+	case bkey.Matches(k, mk.Park):
 		if s, ok := m.selectedSession(); ok {
 			if s.Pane == "" {
 				m.flash = s.Name + " is outside tmux: nothing to park"
@@ -805,27 +827,27 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 			cmd := m.send(proto.Act{RecID: "park:" + s.Pane})
 			return m.pairActed(action{rec: "park:" + s.Pane}), cmd
 		}
-	case "space", " ":
+	case bkey.Matches(k, mk.Mark):
 		if m.tab == tabGit {
 			m.mark()
 		}
-	case "e":
+	case bkey.Matches(k, mk.Exited):
 		if m.tab == tabSessions {
 			m.showExited = !m.showExited
 		}
-	case "X", "shift+x":
+	case bkey.Matches(k, mk.MarkSafe):
 		if m.tab == tabGit {
 			m.markAllSafe()
 		}
-	case "Q", "shift+q":
+	case bkey.Matches(k, mk.QuitAgent):
 		if m.tab == tabStoker {
 			return m.quitAgent()
 		}
-	case "up", "k":
+	case bkey.Matches(k, mk.Up):
 		m.move(-1)
-	case "down", "j":
+	case bkey.Matches(k, mk.Down):
 		m.move(1)
-	case "enter":
+	case bkey.Matches(k, mk.Open):
 		switch m.tab {
 		case tabShips:
 			return m.toDriver(), nil
@@ -840,19 +862,19 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 			return m.openPairDoor()
 		}
 		m.pending, m.previewTop = m.primary(), 0
-	case "x":
+	case bkey.Matches(k, mk.Second):
 		m.pending = m.secondary()
-	case "N", "shift+n":
+	case bkey.Matches(k, mk.New):
 		return m.openNew()
-	case "A", "shift+a":
+	case bkey.Matches(k, mk.Switch):
 		if m.tab == tabSessions {
 			return m.openSwitch()
 		}
-	case "y":
+	case bkey.Matches(k, mk.Grant):
 		if m.tab == tabStoker {
 			return m.grantStep()
 		}
-	case "a":
+	case bkey.Matches(k, mk.Peek):
 		if m.tab == tabShips {
 			return m.shipAnswer(), nil
 		}
@@ -861,25 +883,25 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		} else {
 			m.flash = why
 		}
-	case "d":
+	case bkey.Matches(k, mk.Dismiss):
 		if m.tab == tabSessions {
 			m.dismissRec()
 		}
-	case "h":
+	case bkey.Matches(k, mk.Fold):
 		if m.tab == tabSessions {
 			m.foldRecs()
 		}
-	case "p":
+	case bkey.Matches(k, mk.Ships):
 		m.setTab(tabShips)
-	case "u":
+	case bkey.Matches(k, mk.Dock):
 		m.cycleDock()
-	case "f":
+	case bkey.Matches(k, mk.Stoke):
 		return m.stokerKey(false)
-	case "n":
+	case bkey.Matches(k, mk.Night):
 		return m.stokerKey(true)
-	case "o":
+	case bkey.Matches(k, mk.Order):
 		return m.orderKey()
-	case "r":
+	case bkey.Matches(k, mk.Rename):
 		if m.tab == tabSessions {
 			return m.openRename()
 		}
@@ -887,10 +909,8 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 			m.flash = "scanning git…"
 			return m, m.send(proto.Act{RecID: "rescan:git", Which: "primary"})
 		}
-	default:
-		if len(k) == 1 && k[0] >= '1' && int(k[0]-'1') < len(tabNames) {
-			m.setTab(int(k[0] - '1'))
-		}
+	case bkey.Matches(k, mk.Tabs):
+		m.setTab(int(k.String()[0] - '1'))
 	}
 	return m, nil
 }

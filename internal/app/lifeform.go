@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -212,17 +213,17 @@ func (f *form) move(by int) {
 func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	f := *m.form
 	m.form = &f
-	key := k.String()
-	switch key {
-	case "esc":
+	fk := m.keys.form
+	switch {
+	case bkey.Matches(k, fk.Close):
 		m.form = nil // nothing is sent
 		return m, nil
-	case "enter":
+	case bkey.Matches(k, fk.Enter):
 		return m.formEnter()
-	case "tab", "down":
+	case bkey.Matches(k, fk.Next):
 		f.move(1)
 		return m, nil
-	case "shift+tab", "up":
+	case bkey.Matches(k, fk.Prev):
 		f.move(-1)
 		return m, nil
 	}
@@ -233,26 +234,27 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		i := slices.Index(agents, f.agent)
-		switch key {
-		case "left":
+		switch {
+		case bkey.Matches(k, fk.Left):
 			f.agent = agents[(i+len(agents)-1)%len(agents)]
-		case "right", "space":
+		case bkey.Matches(k, fk.Right):
 			f.agent = agents[(i+1)%len(agents)]
 		}
 		return m, nil
 	}
-	if f.at == fieldWhere && (key == "left" || key == "right") {
+	// On where, space is text: only the arrows pick.
+	if f.at == fieldWhere && k.Text == "" && bkey.Matches(k, fk.Left, fk.Right) {
 		paths := m.gitPaths()
 		if len(paths) == 0 {
 			return m, nil
 		}
-		n := len(paths)
+		n, right := len(paths), bkey.Matches(k, fk.Right)
 		switch {
-		case f.whereAt < 0 && key == "right":
+		case f.whereAt < 0 && right:
 			f.whereAt = 0
 		case f.whereAt < 0:
 			f.whereAt = n - 1
-		case key == "right":
+		case right:
 			f.whereAt = (f.whereAt + 1) % n
 		default:
 			f.whereAt = (f.whereAt + n - 1) % n
@@ -264,8 +266,8 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if t == nil {
 		return m, nil
 	}
-	switch key {
-	case "backspace":
+	switch {
+	case bkey.Matches(k, fk.Erase):
 		*t = trimLast(*t)
 	default:
 		if k.Text == "" || len([]rune(*t+k.Text)) > maxField {

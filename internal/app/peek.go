@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -195,34 +196,34 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		n = len(q.Options)
 	}
 	typing := v.ask == nil || p.at == n
-	key := k.String()
+	pk := m.keys.peek
 	// The quiet takes no key but esc; ctrl+c quit in Update before it.
-	if time.Now().Before(m.peekQuiet) && key != "esc" {
+	if time.Now().Before(m.peekQuiet) && !bkey.Matches(k, pk.Close) {
 		return m, nil
 	}
 	switch {
-	case key == "esc":
+	case bkey.Matches(k, pk.Close):
 		m.peek = nil
 		return m, nil
-	case key == "ctrl+o":
+	case bkey.Matches(k, pk.Jump):
 		m.peek = nil
 		if a := m.forHost(m.jump(v.s.Pane)); a != nil {
 			return m.confirm(*a)
 		}
 		return m, nil
-	case key == "right" || key == "tab":
+	case bkey.Matches(k, pk.Next):
 		return m.peekMove(p.pane, false), nil
-	case key == "left" || key == "shift+tab":
+	case bkey.Matches(k, pk.Prev):
 		return m.peekMove(p.pane, true), nil
 	case v.permit:
-		if key == "enter" {
+		if bkey.Matches(k, pk.Send) {
 			m.peek = nil
 			if a := m.forHost(m.jump(v.s.Pane)); a != nil {
 				return m.confirm(*a)
 			}
 		}
 		return m, nil
-	case key == "enter" && v.ask == nil:
+	case bkey.Matches(k, pk.Send) && v.ask == nil:
 		if strings.TrimSpace(p.text) == "" {
 			return m, nil
 		}
@@ -231,7 +232,7 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			rec = "answer:"
 		}
 		return m.sendPeek(v.s, rec+p.pane, p.text)
-	case key == "enter":
+	case bkey.Matches(k, pk.Send):
 		c := said.Choice{}
 		if q.Multi {
 			for i := 1; i <= n; i++ {
@@ -253,14 +254,14 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			c.Picks = []int{p.at + 1}
 		}
 		return m.peekChoose(v, p, c)
-	case key == "up" && v.ask != nil:
+	case bkey.Matches(k, pk.Up) && v.ask != nil:
 		p.at = max(p.at-1, 0)
-	case key == "down" && v.ask != nil:
+	case bkey.Matches(k, pk.Down) && v.ask != nil:
 		p.at = min(p.at+1, n)
-	case key == "backspace":
+	case bkey.Matches(k, pk.Erase):
 		p.text = trimLast(p.text)
-	case !typing && len(key) == 1 && key[0] >= '1' && key[0] <= '9':
-		d := int(key[0] - '0')
+	case !typing && bkey.Matches(k, pk.Pick):
+		d := int(k.String()[0] - '0')
 		switch {
 		case d == n+1:
 			p.at = n
@@ -270,7 +271,7 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		default:
 			return m.peekChoose(v, p, said.Choice{Picks: []int{d}})
 		}
-	case !typing && (key == "space" || key == " ") && q.Multi && p.at >= 0:
+	case !typing && bkey.Matches(k, pk.Tick) && q.Multi && p.at >= 0:
 		p.ticks = toggled(p.ticks, p.at+1)
 	case k.Text != "" && len([]rune(p.text)) < 500:
 		p.at, p.text = n, p.text+k.Text
@@ -626,26 +627,4 @@ func (m Model) tapPeek(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 		m.peek = &p
 	}
 	return m.peekKey(keyPress(press))
-}
-
-// keyPress is the key a tap presses.
-func keyPress(k string) tea.KeyPressMsg {
-	switch k {
-	case "enter":
-		return tea.KeyPressMsg{Code: tea.KeyEnter}
-	case "tab":
-		return tea.KeyPressMsg{Code: tea.KeyTab}
-	case "left":
-		return tea.KeyPressMsg{Code: tea.KeyLeft}
-	case "right":
-		return tea.KeyPressMsg{Code: tea.KeyRight}
-	case "esc":
-		return tea.KeyPressMsg{Code: tea.KeyEsc}
-	case "space":
-		return tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
-	case "ctrl+o":
-		return tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl}
-	}
-	r := []rune(k)
-	return tea.KeyPressMsg{Code: r[0], Text: k}
 }

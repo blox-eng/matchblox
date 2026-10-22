@@ -1,6 +1,9 @@
 package app
 
-import tea "charm.land/bubbletea/v2"
+import (
+	bkey "charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+)
 
 // layerID is a layer that takes keys. The order is the precedence: the
 // first one open takes the key.
@@ -22,13 +25,16 @@ const (
 	layerMain
 )
 
+// underOverlays is a layer under the overlays: its key marks the stoker's
+// steps seen when the tab shows them.
+func (f layerID) underOverlays() bool { return f >= layerHeld }
+
 // focus is the layer that takes k.
 func (m Model) focus(k tea.KeyPressMsg) layerID {
-	s := k.String()
 	switch {
 	case m.pair.owns():
 		return layerPair
-	case m.pairStripEsc(s):
+	case m.pairStripEsc(k):
 		return layerPairStripEsc
 	case m.sheet != nil:
 		return layerSheet
@@ -42,19 +48,19 @@ func (m Model) focus(k tea.KeyPressMsg) layerID {
 	case m.searching:
 		return layerSearch
 	}
-	return m.under(s)
+	return m.under(k)
 }
 
 // under is focus below the overlays: what a tapped key hint reaches too.
-func (m Model) under(k string) layerID {
+func (m Model) under(k tea.KeyPressMsg) layerID {
 	switch {
 	case m.held != nil:
 		return layerHeld
 	case m.asksTakeOver(k):
 		return layerTakeOver
-	case m.pending != nil && m.pending.door != "" && m.pending.which != "secondary" && m.scrolls(k):
+	case m.scrolls(k):
 		return layerPreview
-	case m.pending == nil && k == "enter" && (m.mismatch || m.blocked != nil):
+	case m.pending == nil && bkey.Matches(k, m.keys.main.Open) && (m.mismatch || m.blocked != nil):
 		return layerBlocked
 	case m.pending != nil:
 		return layerPending
@@ -62,8 +68,9 @@ func (m Model) under(k string) layerID {
 	return layerMain
 }
 
-// scrolls tells if the open diff takes k; other keys go on to the confirm.
-func (m Model) scrolls(k string) bool {
+// scrolls tells if a door's diff is open and takes k; other keys go on to
+// the confirm.
+func (m Model) scrolls(k tea.KeyPressMsg) bool {
 	_, ok := m.scrollPreview(k)
 	return ok
 }

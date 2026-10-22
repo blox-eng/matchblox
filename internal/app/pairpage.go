@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -334,8 +335,8 @@ func (p *pairPage) strips() bool { return p != nil && p.beat >= 3 }
 
 // pairStripEsc is esc that dismisses the strip: the console has nothing
 // else of its own for it to cancel.
-func (m Model) pairStripEsc(k string) bool {
-	return k == "esc" && m.pair.strips() && m.peek == nil && m.form == nil && m.sheet == nil &&
+func (m Model) pairStripEsc(k tea.KeyPressMsg) bool {
+	return bkey.Matches(k, m.keys.pair.Close) && m.pair.strips() && m.peek == nil && m.form == nil && m.sheet == nil &&
 		m.pending == nil && m.held == nil && !m.searching && m.filter == ""
 }
 
@@ -405,22 +406,22 @@ func (m Model) pairActed(a action) Model {
 // pairKey is a key while the page shows: c copies, esc closes, Enter
 // makes a new code after the old one expired. ctrl+c quits in Update; every
 // other key does nothing.
-func (m Model) pairKey(k string) (tea.Model, tea.Cmd) {
+func (m Model) pairKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	p := m.pair
 	m.flash = ""
-	switch k {
-	case "c":
+	switch {
+	case bkey.Matches(k, m.keys.pair.Copy):
 		if p.live() {
 			m.flash = "link copied"
 			return m, m.clip(p.link)
 		}
-	case "esc":
+	case bkey.Matches(k, m.keys.pair.Close):
 		why := ""
 		if p.live() {
 			why = pairStoppedLine
 		}
 		return m.closePairPage(why), nil
-	case "enter":
+	case bkey.Matches(k, m.keys.pair.Again):
 		if p.standalone { // matchblox pair makes a new code on the next run
 			return m, nil
 		}

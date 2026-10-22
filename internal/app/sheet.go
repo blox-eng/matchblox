@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -92,22 +93,21 @@ func (m Model) noAgent() bool { return m.stoker.Agent == "" || m.stoker.Missing 
 
 func (m Model) sheetKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := *m.sheet
-	key := k.String()
 	m.sheet = &s
-	switch key {
-	case "enter":
+	sk := m.keys.sheet
+	if bkey.Matches(k, sk.Send) {
 		return m.sheetEnter()
 	}
 	if s.onChips {
 		n := len(goChips) + len(m.stoker.Recipes)
-		switch key {
-		case "esc", "tab":
+		switch {
+		case bkey.Matches(k, sk.Close, sk.Chips):
 			s.onChips = false
-		case "left":
+		case bkey.Matches(k, sk.Left):
 			s.at = (s.at + n - 1) % n
-		case "right":
+		case bkey.Matches(k, sk.Right):
 			s.at = (s.at + 1) % n
-		case "space":
+		case bkey.Matches(k, sk.Tick):
 			s.pick(m.stoker.Recipes)
 		default:
 			// Any other key is the order's: the cursor goes back to it.
@@ -116,14 +116,14 @@ func (m Model) sheetKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	switch key {
-	case "esc":
+	switch {
+	case bkey.Matches(k, sk.Close):
 		m.sheet = nil // nothing is sent
 		return m, nil
-	case "tab":
+	case bkey.Matches(k, sk.Chips):
 		s.onChips, s.at = true, 0
 		return m, nil
-	case "backspace":
+	case bkey.Matches(k, sk.Erase):
 		s.text = trimLast(s.text)
 		return m, nil
 	}

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/doors"
@@ -228,20 +229,22 @@ func (m Model) previewSeen() bool {
 }
 
 // scrollPreview moves a long diff with ↑↓; other keys go on to the confirm.
-func (m Model) scrollPreview(k string) (Model, bool) {
+// Only a door's diff scrolls: previewDoor is the guard.
+func (m Model) scrollPreview(k tea.KeyPressMsg) (Model, bool) {
 	d, ok := m.previewDoor()
 	if !ok {
 		return m, false
 	}
 	last := max(0, len(m.previewLines(d))-m.previewRoom())
-	switch k {
-	case "down", "j":
+	c := m.keys.confirm
+	switch {
+	case bkey.Matches(k, c.ScrollDown):
 		m.previewTop = min(m.previewTop+1, last)
-	case "up", "k":
+	case bkey.Matches(k, c.ScrollUp):
 		m.previewTop = max(m.previewTop-1, 0)
-	case "y":
+	case bkey.Matches(k, c.Yes):
 		return m, !m.previewSeen() // y waits for the end of the diff
-	case "m":
+	case bkey.Matches(k, c.Also):
 		if d.Also == nil {
 			return m, false
 		}
