@@ -558,10 +558,12 @@ func readCheckout(dir, remote string) (Checkout, bool) {
 // user alone, which is not a secret. The userinfo ends at the last @; a /, ?
 // or # before it could be a password's or the path's, and a URL that cannot
 // be told apart, or whose host is not a plain host, shows its scheme only.
+// Text before the first :// that is not a scheme makes the URL one without
+// a scheme: see stripNoScheme.
 func StripCredentials(raw string) string {
 	scheme, rest, ok := strings.Cut(raw, "://")
-	if !ok {
-		return raw
+	if !ok || !isScheme(scheme) {
+		return stripNoScheme(raw)
 	}
 	only := scheme + "://"
 	user := ""
@@ -586,6 +588,28 @@ func StripCredentials(raw string) string {
 	}
 	u.RawQuery, u.Fragment, u.RawFragment, u.ForceQuery = "", "", "", false
 	return u.String()
+}
+
+// isScheme is RFC 3986's scheme: a letter, then letters, digits, + . or -.
+func isScheme(s string) bool {
+	if s == "" || !('a' <= s[0]|0x20 && s[0]|0x20 <= 'z') {
+		return false
+	}
+	return strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+.-") == ""
+}
+
+// stripNoScheme is StripCredentials for scp-style and malformed remotes.
+// A ':' before the last @ is a password's, so all through that @ goes; a
+// user alone (git@host:path) is not a secret and stays. Then the query
+// and the fragment go.
+func stripNoScheme(raw string) string {
+	if i := strings.LastIndex(raw, "@"); i >= 0 && strings.Contains(raw[:i], ":") {
+		raw = raw[i+1:]
+	}
+	if i := strings.IndexAny(raw, "?#"); i >= 0 {
+		raw = raw[:i]
+	}
+	return raw
 }
 
 // ScanRoots are the folders a scan starts from: the picked ones, else the

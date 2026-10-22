@@ -284,6 +284,15 @@ func TestStripCredentials(t *testing.T) {
 		// Unparsable, or a host with other than host characters.
 		{"https://x:t@h:xyz/r?tok=1#tok", "https://"},
 		{"https://a@b=SECRET/r", "https://"},
+		// No scheme: text before the first :// that is not a scheme, or no
+		// :// at all. A password before the last @ goes with all before it.
+		{"user:SECRET@host:o/r?x=http://y", "host:o/r"},
+		{"user:SECRET@host:o/r#http://y", "host:o/r"},
+		{"u:SECRET@h:o/r?y=a://b", "h:o/r"},
+		{"https:u:SECRET@host/r", "host/r"},
+		{"https:/u:SECRET@host/r", "host/r"},
+		{"u:SECRET@github.com:o/r.git", "github.com:o/r.git"},
+		{"git@github.com:o/r.git?x=1#f", "git@github.com:o/r.git"},
 	} {
 		got := StripCredentials(c.in)
 		if got != c.want {
@@ -730,4 +739,51 @@ func BenchmarkFoundSame(b *testing.B) {
 			b.Fatal("want same")
 		}
 	}
+}
+
+// FuzzStripCredentials puts a marker password in a userinfo u:p, in the
+// shapes a remote takes, and checks the marker never comes out.
+func FuzzStripCredentials(f *testing.F) {
+	for _, s := range [][3]string{
+		{"https", "u", ""},
+		{"ssh", "git", "a@b"},
+		{"http", "user", "x?y#z/w"},
+		{"a", "u", "//"},
+		{"git+ssh", "", ":"},
+		{"https", "u", "?x=http://y"},
+	} {
+		f.Add(s[0], s[1], s[2])
+	}
+	const mark = "PWMARK"
+	f.Fuzz(func(t *testing.T, scheme, user, pass string) {
+		p := pass + mark + pass
+		ui := user + ":" + p
+		for _, in := range []string{
+			scheme + "://" + ui + "@host/path?q=1#f",
+			scheme + "://" + ui + "@host:22/o/r.git",
+			ui + "@host:o/r.git",
+			ui + "@host:o/r?x=http://y#f",
+			scheme + ":" + ui + "@host/r",
+			scheme + ":/" + ui + "@host/r",
+		} {
+			if strings.Contains(strings.Replace(in, mark, "", 1), mark) {
+				continue // the marker also outside the password: not a leak to find
+			}
+			got := StripCredentials(in)
+			if !strings.Contains(got, mark) {
+				continue
+			}
+			// An ssh URL keeps its user: an input that names the marker as
+			// that user, before the first ':' of its userinfo, says so.
+			if sch, rest, ok := strings.Cut(in, "://"); ok {
+				switch strings.ToLower(sch) {
+				case "ssh", "git+ssh", "ssh+git":
+					if u, _, _ := strings.Cut(rest[:max(strings.LastIndex(rest, "@"), 0)], ":"); strings.Contains(u, mark) {
+						continue
+					}
+				}
+			}
+			t.Fatalf("StripCredentials(%q) = %q, has the password", in, got)
+		}
+	})
 }
