@@ -43,6 +43,25 @@ expired, the Create Release job fails and says so. To replace it:
 2. `gh secret set RELEASE_TOKEN -R blox-eng/matchblox`, and paste it.
 3. Re-run the failed Release run.
 
+## Homebrew and the AUR
+
+The Publish job `packages` writes the Homebrew formula and the AUR package
+of each latest release (`.github/scripts/packages.sh`) and pushes them. Each
+push waits for its secret. Without it, the job says so and the release goes
+on. To turn them on, once:
+
+1. **Homebrew**: create the public repository `blox-eng/homebrew-tap`. Make
+   a fine-grained token for that repository only, with Contents set to read
+   and write, and `gh secret set HOMEBREW_TAP_TOKEN -R blox-eng/matchblox`.
+   Builders install with `brew install blox-eng/tap/matchblox`.
+2. **AUR**: make an account on aur.archlinux.org and add an SSH key to it
+   that is for this job only. `gh secret set AUR_SSH_KEY -R blox-eng/matchblox
+   < key` with its private key. The first push creates `matchblox-bin`.
+   Builders install with `yay -S matchblox-bin`.
+
+The next latest release fills both. To fill them for the current one,
+publish its tag again: `gh workflow run publish.yml --ref vX.Y.Z`.
+
 ## When something fails
 
 | What failed | What to do |
@@ -54,6 +73,8 @@ expired, the Create Release job fails and says so. To replace it:
 | No changelog pull request after a release | Run `.github/scripts/promote-changelog.sh X.Y.Z <date>`, `VERSION=vX.Y.Z .github/scripts/flip-release.sh` and `.github/scripts/announce-release.sh X.Y.Z`, and open the pull request yourself |
 | The changelog pull request says the news line is stale, and Lint fails | The release's changelog section has no `- **headline**`: add one, run `.github/scripts/announce-release.sh X.Y.Z` on the branch, push, and merge |
 | Lint says `news-guard: the news line … does not name vX.Y.Z` | The news line in `www/index.html` was edited by hand, or the headline changed after the release. Run `.github/scripts/announce-release.sh X.Y.Z` and commit `www/index.html` |
+| Homebrew or the AUR, from a runner or network hiccup | Publish the tag again: `gh workflow run publish.yml --ref vX.Y.Z`. A package that has the release already stays as it is |
+| The AUR push says the host key is not the one the AUR publishes | Stop. Compare the fingerprint with the one on aur.archlinux.org. Change it in `publish.yml` only when the AUR announced a new key |
 | The docs of a tag | Publish the tag again: the docs deploy after its verify job |
 | The docs site shows an older build of the release's commit | Merge the next fix: its tag deploys the docs. GitHub Pages keeps the first deployment of a commit, so publishing the same tag again does not replace it |
 
