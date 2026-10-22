@@ -9,8 +9,38 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
 )
+
+// stat is os.Stat; a test swaps it.
+var stat = os.Stat
+
+// statDir is nil when path is a folder. A folder that does not answer in
+// within is an error: a dead network mount must not hang the CLI.
+func statDir(path string, within time.Duration) error {
+	type answer struct {
+		fi  os.FileInfo
+		err error
+	}
+	ch := make(chan answer, 1)
+	go func() {
+		fi, err := stat(path)
+		ch <- answer{fi, err}
+	}()
+	t := time.NewTimer(within)
+	defer t.Stop()
+	select {
+	case a := <-ch:
+		if a.err != nil || a.fi == nil || !a.fi.IsDir() {
+			return errors.New("scan: no folder " + path)
+		}
+		return nil
+	case <-t.C:
+		return fmt.Errorf("scan: %s did not answer in %s", path, within)
+	}
+}
 
 // scanAct is the act of `matchblox scan`: a yes, with the folders given
 // (absolute, ~ the home), or off: a no.
@@ -28,8 +58,8 @@ func scanAct(words []string, here, home string) (proto.Act, error) {
 		case !filepath.IsAbs(w):
 			w = filepath.Join(here, w)
 		}
-		if fi, err := os.Stat(w); err != nil || !fi.IsDir() {
-			return proto.Act{}, errors.New("scan: no folder " + w)
+		if err := statDir(w, 2*time.Second); err != nil {
+			return proto.Act{}, err
 		}
 		roots = append(roots, w)
 	}
@@ -42,8 +72,16 @@ const (
 	scanMaxDirs = 100_000
 )
 
+// ioSlack is what the wait adds for the service to answer.
+const ioSlack = 10 * time.Second
+
+// scanOpts is how the service walks the host.
+func scanOpts(cfg config.Config, home string) gitscan.FindOpts {
+	return gitscan.FindOpts{Depth: gitscan.FindDepth, Remote: cfg.Git.Remote, MaxDirs: scanMaxDirs, Budget: scanBudget, Home: home, Protected: gitscan.DefaultProtected(home)}
+}
+
 // scanWait outlasts a walk queued behind one already running.
-const scanWait = 2*scanBudget + 15*time.Second
+func scanWait(o gitscan.FindOpts) time.Duration { return 2*o.Limit() + ioSlack }
 
 // cliScan sends the act, then says what the service found.
 func cliScan(words []string, w io.Writer, path string) error {
@@ -56,7 +94,7 @@ func cliScan(words []string, w io.Writer, path string) error {
 	if err != nil {
 		return err
 	}
-	res, err := doActFor(path, a, scanWait)
+	res, err := doActFor(path, a, scanWait(scanOpts(config.Config{}, home)))
 	if err != nil {
 		if errors.Is(err, errNoResult) {
 			return errors.New("scan: not known whether it ended: the N form lists what it found")
@@ -70,25 +108,34 @@ func cliScan(words []string, w io.Writer, path string) error {
 		_, err := fmt.Fprintln(w, "the scan is off, and its list is gone")
 		return err
 	}
-	st, ok := serviceState(path, staleAfter)
-	if !ok || st.Found == nil {
+	sc := res.Scan
+	if sc == nil {
 		return errors.New("scan: it ran, but the service did not say what it found: the N form lists it")
 	}
-	f := st.Found
-	if f.Consent != "yes" {
-		return errors.New("scan: a no came while it ran: nothing is kept")
-	}
 	noun := "repositories"
-	if len(f.Repos) == 1 {
+	if sc.Repos == 1 {
 		noun = "repository"
 	}
-	if _, err := fmt.Fprintf(w, "found %d %s in %s\n", len(f.Repos), noun, f.Took.Round(100*time.Millisecond)); err != nil {
+	if _, err := fmt.Fprintf(w, "found %d %s in %s\n", sc.Repos, noun, sc.Took.Round(100*time.Millisecond)); err != nil {
 		return err
 	}
-	for _, e := range f.Errors {
+	for _, e := range sc.Errors {
 		if _, err := fmt.Fprintln(w, e); err != nil {
 			return err
 		}
+	}
+	for _, k := range sc.Skipped {
+		p := k.Path
+		if home != "" && (p == home || strings.HasPrefix(p, home+string(filepath.Separator))) {
+			p = "~" + p[len(home):]
+		}
+		if _, err := fmt.Fprintf(w, "skipped %s: %s\n", p, k.Why); err != nil {
+			return err
+		}
+	}
+	if sc.SkippedMore > 0 {
+		_, err := fmt.Fprintf(w, "and %d more\n", sc.SkippedMore)
+		return err
 	}
 	return nil
 }
