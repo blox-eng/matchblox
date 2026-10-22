@@ -148,7 +148,7 @@ func (m Model) answerTakeOver(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	v.Asked = true
 	verb, say := "keep", "the stoker stays on"
 	if rest {
-		verb, say = "rest", "stoker rests · f turns it back on"
+		verb, say = "rest", "stoker rests · "+m.keys.main.Stoke.Help().Key+" turns it back on"
 		v.Rests, v.Touched = m.now(), m.now()
 		m.touched = m.now()
 	}

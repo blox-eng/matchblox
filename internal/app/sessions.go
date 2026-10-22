@@ -524,7 +524,7 @@ func (m Model) openedKeys(s sample.Session, w int) (string, []span) {
 func (m Model) hintRow(hs []hint, gap int) (string, []span) {
 	line, x := "", 0
 	var spans []span
-	for i, h := range slices.DeleteFunc(hs, func(h hint) bool { return h == (hint{}) }) {
+	for i, h := range slices.DeleteFunc(slices.Clone(hs), func(h hint) bool { return h == (hint{}) }) {
 		if i > 0 {
 			line += strings.Repeat(" ", gap)
 			x += gap
@@ -596,7 +596,7 @@ func (m Model) longWord(s sample.Session) string {
 	case "out":
 		return "out until " + m.idleCell(s)
 	case "stale":
-		return "stale, x ends it"
+		return "stale, " + m.keys.main.Second.Help().Key + " ends it"
 	default:
 		return w
 	}
@@ -625,7 +625,7 @@ func (m Model) detailLines(w, rows int) ([]string, bool) {
 		for _, l := range wrapPlain(text, w-2) {
 			out = append(out, " "+style.Render(l))
 		}
-		return append(out, "", " "+keyed(m.keys.main.Open, st.accent, st.muted, " open   ")+keyed(m.keys.main.Second, st.accent, st.muted, " close")), false
+		return append(out, "", " "+keyWord(m.keys.main.Open, st.accent, st.muted, " open   ")+keyWord(m.keys.main.Second, st.accent, st.muted, " close")), false
 	}
 	if r, ok := m.selectedRec(); ok {
 		out := []string{""}

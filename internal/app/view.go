@@ -518,17 +518,17 @@ func (m Model) keyLine(w int) (string, []span) {
 		case m.flash != "":
 			return fit(" "+st.text.Render("Take over? ")+st.warn.Render(m.flash), w), nil
 		case m.layoutAt(w) == Narrow:
-			return fit(" "+st.text.Render("Stoker on. Take over? ")+keyed(m.keys.takeOver.Rest, st.accent, st.muted, " rest · ")+
-				keyed(m.keys.takeOver.Keep, st.accent, st.muted, " keep"), w), nil
+			return fit(" "+st.text.Render("Stoker on. Take over? ")+keyWord(m.keys.takeOver.Rest, st.accent, st.muted, " rest · ")+
+				keyWord(m.keys.takeOver.Keep, st.accent, st.muted, " keep"), w), nil
 		}
-		return fit(" "+st.text.Render("The stoker is on. Take over?  ")+keyed(m.keys.takeOver.Rest, st.accent, st.muted, " rests it while you work · ")+
-			keyed(m.keys.takeOver.Keep, st.accent, st.muted, " keeps it on"), w), nil
+		return fit(" "+st.text.Render("The stoker is on. Take over?  ")+keyWord(m.keys.takeOver.Rest, st.accent, st.muted, " rests it while you work · ")+
+			keyWord(m.keys.takeOver.Keep, st.accent, st.muted, " keeps it on"), w), nil
 	}
 	if m.pending != nil {
 		ck := m.keys.confirm
 		confirm := plainHints(hintFor(ck.Enter, ""), hintFor(m.keys.main.Back, "cancel"))
 		if m.pending.destructive {
-			confirm = keyed(ck.Yes, st.neg, st.muted, " run  any other key cancels")
+			confirm = keyWord(ck.Yes, st.neg, st.muted, " run  any other key cancels")
 		}
 		if !m.previewSeen() {
 			confirm = st.muted.Render(plainHints(hintFor(ck.ScrollDown, ""))+", then ") + st.neg.Render(ck.Yes.Help().Key)
@@ -541,7 +541,7 @@ func (m Model) keyLine(w int) (string, []span) {
 	if m.flash != "" {
 		return fit(" "+st.text.Render(m.flash), w), nil
 	}
-	hints := slices.DeleteFunc(m.view().keys(m), func(h hint) bool { return h == (hint{}) })
+	hints := slices.DeleteFunc(slices.Clone(m.view().keys(m)), func(h hint) bool { return h == (hint{}) })
 	if m.layoutAt(w) == Wide {
 		mk := m.keys.main
 		hints = append([]hint{noTap(hintFor(mk.Up, ""))}, hints...)

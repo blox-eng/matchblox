@@ -188,7 +188,7 @@ func (m *Model) showCommand() {
 func (m Model) grantStep() (tea.Model, tea.Cmd) {
 	r, ok := m.stokerSelected()
 	if !ok || r.state() != "waits" || r.e.Needs == "" {
-		m.flash = "y gives the go a step waits for"
+		m.flash = m.keys.main.Grant.Help().Key + " gives the go a step waits for"
 		return m, nil
 	}
 	if m.conn == nil || m.lost {
@@ -216,11 +216,11 @@ func (m Model) peekable(r stokerRow) bool {
 func (m Model) endedWay() string {
 	switch {
 	case m.stoker.On && !m.stoker.Until.IsZero():
-		return " · n stops the night"
+		return " · " + m.keys.main.Night.Help().Key + " stops the night"
 	case m.stoker.On:
-		return " · o gives a new order"
+		return " · " + m.keys.main.Order.Help().Key + " gives a new order"
 	}
-	return " · f starts the stoker with a new order"
+	return " · " + m.keys.main.Stoke.Help().Key + " starts the stoker with a new order"
 }
 
 // firstNeed is the first step that waits for the builder, or 0.
@@ -367,7 +367,7 @@ func (m Model) agentLine(sel bool, w int) string {
 	case !v.PaneUp && v.Starting:
 		word, style = "starting", st.muted
 	case !v.PaneUp:
-		word, style = "not running · f starts it", st.faint
+		word, style = "not running · "+m.keys.main.Stoke.Help().Key+" starts it", st.faint
 	case m.stokerAsks():
 		word, style = "waits for you", st.accent
 	case v.Ready:
@@ -554,13 +554,13 @@ func (m Model) outcome(r stokerRow) []styled {
 	case "waits":
 		switch {
 		case r.kind == rowGo:
-			out = append(out, styled{"y gives the go, once", st.warn})
+			out = append(out, styled{m.keys.main.Grant.Help().Key + " gives the go, once", st.warn})
 		case r.e.Needs != "":
-			out = append(out, styled{"waits for your go: " + r.e.Needs + " · y gives it", st.warn})
+			out = append(out, styled{"waits for your go: " + r.e.Needs + " · " + m.keys.main.Grant.Help().Key + " gives it", st.warn})
 		}
 	case "failed":
 		if m.peekable(r) {
-			out = append(out, styled{"a shows its session", st.warn})
+			out = append(out, styled{m.keys.main.Peek.Help().Key + " shows its session", st.warn})
 		} else {
 			out = append(out, styled{"its session ended" + m.endedWay(), st.warn})
 		}

@@ -154,11 +154,11 @@ func (m Model) recsSection(b *body, w int) {
 	}
 	if m.recPrefs.Folded {
 		b.add(recsLabelRow, st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d hidden", len(m.recs)))+st.faint.Render(" · ")+
-			keyed(m.keys.main.Fold, st.accent, st.faint, " shows"))
+			keyWord(m.keys.main.Fold, st.accent, st.faint, " shows"))
 		return
 	}
 	b.add(recsLabelRow, st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d", len(m.recs)))+st.faint.Render(" · ")+
-		keyed(m.keys.main.Fold, st.accent, st.faint, " hides"))
+		keyWord(m.keys.main.Fold, st.accent, st.faint, " hides"))
 	n := len(m.doors) + len(m.snap.Sessions)
 	sel := m.sessIndex() - n
 	for i, r := range m.recs {
@@ -309,7 +309,7 @@ func (m Model) historyPanel(w int) []string {
 
 // dismissMark is the selected recommendation's tap target for d.
 func dismissMark(st styles, b bkey.Binding) string {
-	return keyed(b, st.accent, st.muted, " "+b.Help().Desc)
+	return keyWord(b, st.accent, st.muted, " "+b.Help().Desc)
 }
 
 // dismissWidth is the width of the dismiss mark and the space after it.

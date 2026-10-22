@@ -3,7 +3,6 @@ package app
 import (
 	"strconv"
 
-	bkey "charm.land/bubbles/v2/key"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -11,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	bkey "charm.land/bubbles/v2/key"
 )
 
 // isKeyExpr is a key as a handler holds it: k, key, or k.String().
@@ -160,5 +161,69 @@ func TestNoSpecialKeysInStrings(t *testing.T) {
 			}
 			return true
 		})
+	}
+}
+
+// letterVerb finds a single letter as a whole word, then a verb: "f starts it".
+var letterVerb = regexp.MustCompile(`(^|[^\w%])[a-zA-Z] (starts|stops|gives|ends|again|turns|shows|hides|rescans|tries|copies|on)($|[^\w])`)
+
+// letterSetOff finds a literal that is a single letter set off by spaces, as "box+" m "+label": a key glued to the text after it.
+var letterSetOff = regexp.MustCompile(`^\s[a-zA-Z]\s$`)
+
+// TestNoKeyLettersInProse keeps a plain letter key out of the prose of the
+// console: "f starts it" takes its f from the binding, as the special keys do.
+func TestNoKeyLettersInProse(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || name == "keys.go" {
+			continue
+		}
+		f, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			v, err := strconv.Unquote(lit.Value)
+			if err != nil {
+				return true
+			}
+			if m := letterVerb.FindString(v); m != "" {
+				t.Errorf("%s: the string %s has a letter key in its prose (%q): draw it from its binding", fset.Position(lit.Pos()), lit.Value, strings.TrimSpace(m))
+			} else if letterSetOff.MatchString(v) {
+				t.Errorf("%s: the string %s ends in a letter key set off by spaces: draw it from its binding", fset.Position(lit.Pos()), lit.Value)
+			}
+			return true
+		})
+	}
+}
+
+// TestKeyPressRoundTrips holds keyPress to the keys of the bindings: the tap
+// of a binding's first key matches the binding, and a key that prints no
+// text carries none.
+func TestKeyPressRoundTrips(t *testing.T) {
+	k, s := defaultKeys(), defaultShellKeys()
+	for _, bs := range [][]bkey.Binding{k.global.bindings(), k.main.bindings(), k.form.bindings(), k.peek.bindings(),
+		k.sheet.bindings(), k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(),
+		s.shell.bindings(), s.typing.bindings()} {
+		for _, b := range bs {
+			for _, key := range b.Keys() {
+				msg := keyPress(key)
+				if !bkey.Matches(msg, b) {
+					t.Errorf("keyPress(%q) does not match its binding %q", key, b.Help().Key)
+				}
+				if r := []rune(key); len(r) > 1 && key != "space" && msg.Text != "" {
+					t.Errorf("keyPress(%q) carries the text %q: it prints none", key, msg.Text)
+				}
+			}
+		}
 	}
 }

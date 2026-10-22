@@ -67,9 +67,9 @@ func plainHints(hs ...hint) string {
 	return strings.Join(parts, "  ")
 }
 
-// keyed is a binding's help key in its style, then rest in the word style:
+// keyWord is a binding's help key in its style, then rest in the word style:
 // the key and a phrase of prose after it.
-func keyed(b bkey.Binding, key, word lipgloss.Style, rest string) string {
+func keyWord(b bkey.Binding, key, word lipgloss.Style, rest string) string {
 	return key.Render(b.Help().Key) + word.Render(rest)
 }
 

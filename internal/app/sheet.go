@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	sealedText   = "The night is sealed: n stops it, then launch a new one."
 	startingText = "starting the stoker…"
 	busyText     = "the stoker is busy: your order waits for it to rest"
 )
@@ -78,11 +77,11 @@ func (m Model) orderKey() (tea.Model, tea.Cmd) {
 	case m.stoker == nil:
 		m.flash = "this service keeps no stoker"
 	case m.stoker.On && !m.stoker.Until.IsZero():
-		m.flash = sealedText
+		m.flash = m.sealedText()
 	case m.stoker.On:
 		return m.openSheet(false, true)
 	default:
-		m.flash = "o gives a new order to a running stoker: f starts it"
+		m.flash = m.keys.main.Order.Help().Key + " gives a new order to a running stoker: " + m.keys.main.Stoke.Help().Key + " starts it"
 	}
 	return m, nil
 }
@@ -491,4 +490,9 @@ func (m Model) tapSheet(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 		return m.sheetKey(keyPress(s.press))
 	}
 	return m, nil
+}
+
+// sealedText is what a sealed night says of its key.
+func (m Model) sealedText() string {
+	return "The night is sealed: " + m.keys.main.Night.Help().Key + " stops it, then launch a new one."
 }

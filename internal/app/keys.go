@@ -257,8 +257,20 @@ func keyPress(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEsc}
 	case "space":
 		return tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
-	case "ctrl+o":
-		return tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl}
+	case "up":
+		return tea.KeyPressMsg{Code: tea.KeyUp}
+	case "down":
+		return tea.KeyPressMsg{Code: tea.KeyDown}
+	case "backspace":
+		return tea.KeyPressMsg{Code: tea.KeyBackspace}
+	case "shift+tab":
+		return tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
+	}
+	if r := []rune(k); len(r) == 6 && k[:5] == "ctrl+" {
+		return tea.KeyPressMsg{Code: r[5], Mod: tea.ModCtrl}
+	}
+	if r := []rune(k); len(r) == 7 && k[:6] == "shift+" {
+		return tea.KeyPressMsg{Code: r[6], Mod: tea.ModShift}
 	}
 	r := []rune(k)
 	return tea.KeyPressMsg{Code: r[0], Text: k}

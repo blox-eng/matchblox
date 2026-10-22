@@ -571,9 +571,9 @@ func (m Model) killAction(s sample.Session) *action {
 func (m Model) againFor(s sample.Session, verb string) string {
 	switch {
 	case s.Ask != nil || s.Permits || m.waitsFor(s.Pane):
-		return s.Name + " waits for you: y again " + verb + " it all the same"
+		return s.Name + " waits for you: " + m.keys.main.Grant.Help().Key + " again " + verb + " it all the same"
 	case s.Works():
-		return s.Name + " works: y again " + verb + " it mid-turn"
+		return s.Name + " works: " + m.keys.main.Grant.Help().Key + " again " + verb + " it mid-turn"
 	}
 	return ""
 }

@@ -162,7 +162,7 @@ func (m Model) connectKeys(w int) string {
 	st := m.st
 	switch {
 	case m.pending != nil:
-		return fit(" "+keyed(m.keys.confirm.Yes, st.neg, st.muted, " runs it  any other key cancels"), w)
+		return fit(" "+keyWord(m.keys.confirm.Yes, st.neg, st.muted, " runs it  any other key cancels"), w)
 	case m.flash != "":
 		return fit(" "+st.text.Render(m.flash), w)
 	}

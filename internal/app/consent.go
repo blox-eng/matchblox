@@ -46,7 +46,7 @@ func (m Model) consentBox(bw int) []string {
 		words = append(words, said)
 	}
 	tk := m.keys.takeOver
-	words = append(words, []string{keyed(tk.Rest, st.accent, st.muted, "  rests it while you work"), keyed(tk.Keep, st.accent, st.muted, "  keeps it on")})
+	words = append(words, []string{keyWord(tk.Rest, st.accent, st.muted, "  rests it while you work"), keyWord(tk.Keep, st.accent, st.muted, "  keeps it on")})
 	box, _ := boxFrame(st.hair, st.warn.Bold(true).Render("The stoker is on. Take over?"), padded(words, bw),
 		[]footPart{st.footKey(tk.Rest, "take over", "", st.accent), st.footKey(tk.Keep, "keep it on", " ─ ", st.accent)}, bw)
 	return box

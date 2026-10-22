@@ -533,7 +533,7 @@ func boxFrame(hair lipgloss.Style, title string, lines []string, foot []footPart
 	}
 	line, x := hair.Render("╰─ "), 3
 	var spans []span
-	for i, f := range slices.DeleteFunc(foot, func(f footPart) bool { return f == (footPart{}) }) {
+	for i, f := range slices.DeleteFunc(slices.Clone(foot), func(f footPart) bool { return f == (footPart{}) }) {
 		if i > 0 {
 			line += hair.Render(f.sep)
 			x += lipgloss.Width(f.sep)

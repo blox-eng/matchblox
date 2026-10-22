@@ -105,7 +105,7 @@ func (m Model) doorRan(msg doorRanMsg) (tea.Model, tea.Cmd) {
 		m.flash = fmt.Sprintf("failed: %s: %v", msg.cmd, msg.err)
 		return m, nil
 	case msg.door == doors.Tmux:
-		m.flash = "tmux is installed: q, then matchblox, opens the console in tmux"
+		m.flash = "tmux is installed: " + m.keys.main.Quit.Help().Key + ", then matchblox, opens the console in tmux"
 	case msg.door == doors.Guide:
 		m.flash = "the guide runs in its window"
 		if m.conn != nil && !m.lost {
@@ -202,7 +202,7 @@ func (m Model) choiceLines(d doors.Door, w int) []string {
 	if m.alsoOn(d) {
 		box = "[x]"
 	}
-	return wrap(box+" m "+d.Also.Label, w-2, plainText)
+	return wrap(box+" "+m.keys.confirm.Also.Help().Key+" "+d.Also.Label, w-2, plainText)
 }
 
 // previewRoom is how many lines of the diff fit under the doors.
