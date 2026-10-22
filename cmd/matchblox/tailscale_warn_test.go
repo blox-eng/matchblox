@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/setup"
+	"github.com/blox-eng/matchblox/internal/transport"
 )
 
 func useTailscalePrefs(t *testing.T, prefsFile string) {
@@ -104,5 +106,62 @@ func TestSetupDoorsWarnsTailscaleSSHGate(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), setup.WarnTailscaleSSHGate) {
 		t.Fatalf("setup said:\n%s", out.String())
+	}
+}
+
+func TestServeWarnsTailscaleSSHGate(t *testing.T) {
+	useTailscalePrefs(t, "tailscale-prefs-ssh-on.json")
+	path := isolate(t)
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	copied := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&stderr, r)
+		close(copied)
+	}()
+	old := os.Stderr
+	os.Stderr = w
+	go serve(path, newService(config.Default(), fixtures(t))) //nolint:errcheck // ends with the test
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && transport.Owner(path) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	_ = w.Close()
+	os.Stderr = old
+	<-copied
+	if transport.Owner(path) == 0 {
+		t.Fatal("serve did not take the socket")
+	}
+	if !strings.Contains(stderr.String(), setup.WarnTailscaleSSHGate) {
+		t.Fatalf("stderr %q", stderr.String())
+	}
+}
+
+func TestServeSkipsTailscaleWarnWhenAlreadyRunning(t *testing.T) {
+	path := isolate(t)
+	serveInProcess(t, path)
+	useTailscalePrefs(t, "tailscale-prefs-ssh-on.json")
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stderr
+	os.Stderr = w
+	err = serve(path, newService(config.Default(), fixtures(t)))
+	_ = w.Close()
+	os.Stderr = old
+	if err != nil {
+		t.Fatal(err)
+	}
+	stderr, _ := io.ReadAll(r)
+	_ = r.Close()
+	if strings.Contains(string(stderr), setup.WarnTailscaleSSHGate) {
+		t.Fatalf("already-running serve still warned:\n%s", stderr)
+	}
+	if !strings.Contains(string(stderr), "already runs") {
+		t.Fatalf("stderr %q", stderr)
 	}
 }

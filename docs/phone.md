@@ -58,8 +58,9 @@ Pairing is not the whole story. With Tailscale SSH still on
 host's MagicDNS name or Tailscale IP on port 22 is answered by
 tailscaled, not OpenSSH. Permanent laptop and phone keys in
 `~/.ssh/authorized_keys` — including their `restrict` option and
-ForcedCommand (`matchblox gate …`) — are ignored on that path. The key
-holder gets whatever Tailscale SSH allows, not the gate. Turn it off with
+ForcedCommand (`matchblox gate …`) — are ignored on that path. Anyone
+Tailscale SSH admits gets what that policy allows, not the gate. Turn it
+off with
 `tailscale set --ssh=false`, or connect on an address and port that
 OpenSSH serves (`matchblox pair --address` / `--port`, or the same in the
 app). A Tailscale ACL can limit what Tailscale SSH allows; it does not
