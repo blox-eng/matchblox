@@ -128,6 +128,37 @@ func TestCursorsAgentLauncherIsCursorAndItsWorkerIsNot(t *testing.T) {
 	}
 }
 
+// TestCodexsAppServerIsNoSession: the Codex app keeps `codex app-server`
+// daemons running, named codex too (seen on a live machine). With codex a
+// known agent everywhere (#179) they must not count as sessions.
+func TestCodexsAppServerIsNoSession(t *testing.T) {
+	const bin = "/home/u/.codex/packages/app-server-daemon/releases/0.163.0/bin/codex"
+	root := copyFixture(t)
+	for i, p := range []struct {
+		pid  int
+		argv []string
+	}{
+		{950, []string{"codex", "fix the build"}},
+		{960, []string{bin, "app-server", "--listen", "unix://", "--managed-daemon"}},
+		{970, []string{bin, "app-server", "daemon", "pid-update-loop"}},
+	} {
+		pane := "%" + strconv.Itoa(30+i)
+		addProc(t, root, p.pid, 1, "codex", p.argv, pane)
+		addPane(t, root, pane+"\tcx:"+strconv.Itoa(i)+".1\tw\t"+strconv.Itoa(p.pid)+"\tcodex\t/work")
+	}
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	got := byPane(smp.Sample())
+	if s, ok := got["%30"]; !ok || s.Agent != "codex" {
+		t.Errorf("%%30 = %+v, want a codex session", s)
+	}
+	for _, pane := range []string{"%31", "%32"} {
+		if s, ok := got[pane]; ok {
+			t.Errorf("pane %s runs codex app-server, no session: %+v", pane, s)
+		}
+	}
+}
+
 // TestAnAgentOfAnotherTmuxServerTakesNoPaneOfOurs: pane ids repeat across
 // tmux servers. An agent started under another server (its TMUX names
 // another socket) never takes the pane with its TMUX_PANE in our list.

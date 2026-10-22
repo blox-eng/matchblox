@@ -230,9 +230,8 @@ func run(args []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", *cfgPath, err)
 	}
-	if !cfg.AgentsSet && *root == "" {
-		// A config from before the first run found the agents.
-		cfg.Agents = setup.FindAgents(agentLookPath(home()))
+	if *root == "" {
+		cfg.Agents = setup.Agents(cfg.Agents)
 	}
 	if *interval > 0 {
 		cfg.Interval.Duration = *interval

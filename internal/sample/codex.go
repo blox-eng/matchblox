@@ -1,6 +1,7 @@
 package sample
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -37,6 +38,73 @@ func (s *Sampler) codexRollout(pid int, children map[int][]int) (path string, re
 		stack = append(stack, children[cur]...)
 	}
 	return path, read
+}
+
+// codexInDir finds the rollout of a Codex that holds none open: Codex
+// 0.163 closes it after each write (#179). As with OpenCode, it is the
+// newest rollout of the process's directory written since the process
+// started, among those created since then (a month at most): a resumed
+// session in an older day's directory is not found.
+func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) string {
+	if home == "" || cwd == "" {
+		return ""
+	}
+	started, now = started.Local(), now.Local()
+	day := time.Date(started.Year(), started.Month(), started.Day(), 0, 0, 0, 0, time.Local)
+	if month := now.AddDate(0, -1, 0); day.Before(month) {
+		day = time.Date(month.Year(), month.Month(), month.Day(), 0, 0, 0, 0, time.Local)
+	}
+	var path string
+	var at time.Time
+	for ; !day.After(now); day = day.AddDate(0, 0, 1) {
+		dir := filepath.Join(home, "sessions", day.Format("2006/01/02"))
+		entries, _ := os.ReadDir(dir)
+		for _, e := range entries {
+			name := e.Name()
+			if !strings.HasPrefix(name, "rollout-") || !strings.HasSuffix(name, ".jsonl") {
+				continue
+			}
+			f := filepath.Join(dir, name)
+			k, ok := statKey(f)
+			if !ok || k.mtime.Before(started) || path != "" && !k.mtime.After(at) || r.metaOf(f).cwd != cwd {
+				continue
+			}
+			path, at = f, k.mtime
+		}
+	}
+	return path
+}
+
+// rolloutMeta is what a rollout's session_meta, its first line, says: the
+// session's id and its directory.
+type rolloutMeta struct{ id, cwd string }
+
+func (r *agentReader) metaOf(path string) rolloutMeta {
+	if m, ok := r.rolloutMeta[path]; ok {
+		return m
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return rolloutMeta{}
+	}
+	defer f.Close()
+	line, err := bufio.NewReader(io.LimitReader(f, 1<<20)).ReadBytes('\n')
+	if err != nil { // the first line is still being written
+		return rolloutMeta{}
+	}
+	var meta struct {
+		Type    string `json:"type"`
+		Payload struct {
+			ID  string `json:"id"`
+			Cwd string `json:"cwd"`
+		} `json:"payload"`
+	}
+	var m rolloutMeta
+	if json.Unmarshal(line, &meta) == nil && meta.Type == "session_meta" {
+		m = rolloutMeta{meta.Payload.ID, meta.Payload.Cwd}
+	}
+	r.rolloutMeta[path] = m
+	return m
 }
 
 func newer(a, b string) bool {

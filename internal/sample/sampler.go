@@ -617,12 +617,17 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		case "codex":
 			sess.Account, sess.Provider = s.accounts.codexAccount(env), "openai"
 			path, read := s.codexRollout(pid, children)
+			if path == "" {
+				started := now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
+				path = s.agents.codexInDir(env.codexHome, sess.Cwd, started, now)
+			}
 			sess.Context = "unmeasured"
 			if read {
 				sess.Context = "fresh"
 			}
 			var lim *limits.Reading
 			if path != "" {
+				sess.SessionID = s.agents.metaOf(path).id // z parks it by this id
 				var u Usage
 				var found codexFound
 				switch u, lim, found = s.agents.codexUsage(path); found {
@@ -684,7 +689,8 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		if sess.Name == "" {
 			sess.Name = tmuxName(pane, agent)
 		}
-		if sess.SessionID == "" && paneID != "" {
+		// Codex has a session id but no hooks: only its pane tells busy.
+		if (sess.SessionID == "" || agent == "codex") && paneID != "" {
 			fromPane = append(fromPane, len(snap.Sessions))
 		}
 		sess.Do, sess.Why = s.Rules.suggest(sess)
@@ -748,7 +754,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 // index.js after it. The argv half is read once per process and kept while
 // its process name stays the same.
 func (s *Sampler) agentName(pid int, p procfs.Proc) string {
-	if s.isAgent(p.Comm) {
+	if s.isAgent(p.Comm) && p.Comm != "codex" {
 		return p.Comm
 	}
 	key := procKey{pid, p.StartTime}
@@ -756,7 +762,11 @@ func (s *Sampler) agentName(pid int, p procfs.Proc) string {
 		return c.name
 	}
 	name := ""
-	if argv := s.FS.Argv(pid); len(argv) > 0 {
+	if argv := s.FS.Argv(pid); p.Comm == "codex" {
+		if s.isAgent(p.Comm) && !codexServer(argv) {
+			name = p.Comm
+		}
+	} else if len(argv) > 0 {
 		cmd := filepath.Base(argv[0])
 		if interpreter(cmd) {
 			cmd = ""
@@ -816,6 +826,12 @@ func cursorPrint(argv []string) bool {
 		}
 	}
 	return false
+}
+
+// codexServer: argv runs a daemon of the Codex app, `codex app-server`,
+// which shares the CLI's name and is no session.
+func codexServer(argv []string) bool {
+	return slices.Contains(argv, "app-server")
 }
 
 // cursorLauncher: argv runs Cursor's CLI, whatever its argv[0]. Its

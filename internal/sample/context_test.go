@@ -437,6 +437,57 @@ func TestACodexProcessWithTwoRolloutsShowsTheNewest(t *testing.T) {
 	}
 }
 
+// TestACodexThatHoldsNoRolloutOpenIsFoundByItsDirectory: Codex 0.163
+// closes its rollout after each write (seen on a live machine, #179), so
+// no open file names it. The session is then the newest rollout of the
+// process's directory written since the process started.
+func TestACodexThatHoldsNoRolloutOpenIsFoundByItsDirectory(t *testing.T) {
+	root := copyFixture(t)
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	started := fixtureNow.Add(-time.Duration((smp.FS.Uptime() - 10) * float64(time.Second)))
+	day := filepath.Join(root, "home", ".codex", "sessions", fixtureNow.Format("2006/01/02"))
+	for _, r := range []struct {
+		name, cwd string
+		tokens    int
+		at        time.Time
+	}{
+		{"rollout-a-cur.jsonl", "/work/api", 51680, fixtureNow.Add(-time.Second)},
+		{"rollout-b-before.jsonl", "/work/api", 200_000, started.Add(-time.Hour)}, // an earlier session here
+		{"rollout-c-other.jsonl", "/work/web", 129200, fixtureNow},                // another directory's
+	} {
+		path := filepath.Join(day, r.name)
+		writeFile(t, path, strings.ReplaceAll(codexRollout("gpt-made-up", r.tokens, 258400), "/work/api", r.cwd))
+		if err := os.Chtimes(path, r.at, r.at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	addProc(t, root, 900, 1, "codex", []string{"codex"}, "%20")
+	addPane(t, root, "%20\tapi:1.1\tw\t900\tcodex\t/work/api")
+	symlink(t, "/dev/pts/3", filepath.Join(root, "proc", "900", "fd", "0"))
+	symlink(t, "/work/api", filepath.Join(root, "proc", "900", "cwd"))
+	// Nothing written in its directory since it started: fresh.
+	addProc(t, root, 910, 1, "codex", []string{"codex"}, "%21")
+	addPane(t, root, "%21\tops:1.1\tw\t910\tcodex\t/work/ops")
+	symlink(t, "/dev/pts/4", filepath.Join(root, "proc", "910", "fd", "0"))
+	symlink(t, "/work/ops", filepath.Join(root, "proc", "910", "cwd"))
+
+	writeFile(t, filepath.Join(root, "panes", "20.txt"), "› fix the build\n")
+
+	got := byPane(smp.Sample())
+	if s := got["%20"]; s.Context != "known" || s.Tokens != 51680 || s.Window != 258400 {
+		t.Errorf("codex with no rollout open: %+v", s)
+	}
+	// Its rollout names the session, so z can park it; with no hooks its
+	// pane still tells busy from idle.
+	if s := got["%20"]; s.SessionID != "01a0-made-up" || !s.FromPane {
+		t.Errorf("codex session id %q, from its pane %v: want 01a0-made-up, true", s.SessionID, s.FromPane)
+	}
+	if s := got["%21"]; s.Context != "fresh" || s.Tokens != 0 {
+		t.Errorf("codex with no rollout since it started: %+v", s)
+	}
+}
+
 // TestOpenCodeWithTwoSessionsSinceItStartedIsNotMeasured: a finished
 // `opencode run` in the same directory, or an `opencode run` that another
 // agent started there, makes the TUI's session ambiguous: not measured.
