@@ -43,12 +43,15 @@ type the address that the device can reach, then tap `Try again`.
 
 The host stops before it shows a code if sshd cannot use the one-time key.
 It says so, with the fix, when Tailscale SSH answers on the address that
-the code names, or when sshd reads a different `AuthorizedKeysFile` than
-`~/.ssh/authorized_keys`. Turn Tailscale SSH off, or run
+the code names, or when it can read that sshd uses a different
+`AuthorizedKeysFile` than `~/.ssh/authorized_keys` (`sshd -T`, or the global
+line in `/etc/ssh/sshd_config`). Turn Tailscale SSH off, or run
 `matchblox pair --address <host>` with an address that OpenSSH serves. Or
-point `AuthorizedKeysFile` at `~/.ssh/authorized_keys`. Then pair again. If
-a host still answers without the box, the app says that the host refused the
-gate, not that the host did not answer.
+set `AuthorizedKeysFile` to `%h/.ssh/authorized_keys`, reload sshd, then
+pair again. In the console, Enter only helps after `tailscale set
+--ssh=false`; for `--address`, quit and run `matchblox pair` in a terminal.
+If Tailscale SSH still answers, the app says that the host refused this
+connection (with Try again for another address), not that it did not answer.
 
 If the app says "This code was used or expired", open Pair a device on the
 host again, or run `matchblox pair` again, and scan the new code.

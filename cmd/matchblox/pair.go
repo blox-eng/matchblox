@@ -217,7 +217,12 @@ func pairHost(home, exe, hostKeyPath string, address func() string, port int, na
 			}
 			id, link, err := setup.NewPairOffer(home, exe, address(), port, name, hostKeyPath, until)
 			if err != nil && console { // the page retries on Enter, not on a new command
-				err = errors.New(strings.Replace(err.Error(), "then matchblox pair again", "then press Enter", 1))
+				if errors.Is(err, setup.ErrTailscaleSSH) {
+					// Enter cannot take --address: the console always offers PairAddress.
+					err = errors.New(setup.ErrTailscaleSSHConsole)
+				} else {
+					err = errors.New(strings.Replace(err.Error(), "then matchblox pair again", "then press Enter", 1))
+				}
 			}
 			return id, link, err
 		},

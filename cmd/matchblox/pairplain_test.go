@@ -136,7 +136,7 @@ func TestPairHostOfferRefusesTailscaleSSH(t *testing.T) {
 		want    string
 	}{
 		{false, wantTailscaleSSH},
-		{true, strings.Replace(wantTailscaleSSH, "then matchblox pair again", "then press Enter", 1)},
+		{true, setup.ErrTailscaleSSHConsole},
 	} {
 		home := t.TempDir()
 		h := pairHost(home, testExe, hostKey, func() string { return "ws-1.tail1234.ts.net" }, 22, "ws-1", c.console)

@@ -50,6 +50,8 @@ func useProbe(t *testing.T, tools map[string]bool, prefs, status, sshd []byte) {
 		TailscaleStatus: out(status),
 		SSHDConfig:      out(sshd),
 		Username:        func() string { return "alice" },
+		HomeDir:         func() string { return "" }, // tests pass home explicitly
+		Uid:             func() string { return "501" },
 	}
 }
 
@@ -71,7 +73,10 @@ func wantTailscaleErr(t *testing.T, err error) {
 
 func TestCheckPairPathTailscaleSSHOnMagicDNS(t *testing.T) {
 	tailscaleProbe(t, "tailscale-prefs-ssh-on.json")
-	for _, addr := range []string{"ws-1.tail1234.ts.net", "ws-1.tail1234.ts.net.", "WS-1.tail1234.ts.net"} {
+	for _, addr := range []string{
+		"ws-1.tail1234.ts.net", "ws-1.tail1234.ts.net.", "WS-1.tail1234.ts.net",
+		"ws-1", "WS-1", " ws-1.tail1234.ts.net", "ws-1.tail1234.ts.net ",
+	} {
 		wantTailscaleErr(t, CheckPairPath(t.TempDir(), addr, 22))
 	}
 }
@@ -92,7 +97,15 @@ func TestCheckPairPathTailscaleSSHAllowsNon22(t *testing.T) {
 
 func TestCheckPairPathTailscaleSSHOnTailscaleIP(t *testing.T) {
 	tailscaleProbe(t, "tailscale-prefs-ssh-on.json")
-	wantTailscaleErr(t, CheckPairPath(t.TempDir(), "100.101.102.103", 22))
+	for _, addr := range []string{
+		"100.101.102.103",
+		"fd7a:115c:a1e0::1",
+		"FD7A:115C:A1E0::1",
+		"[fd7a:115c:a1e0::1]",
+		"fd7a:115c:a1e0:0:0:0:0:1",
+	} {
+		wantTailscaleErr(t, CheckPairPath(t.TempDir(), addr, 22))
+	}
 }
 
 func TestCheckPairPathTailscaleSSHOff(t *testing.T) {
@@ -129,8 +142,7 @@ func TestCheckPairPathAuthorizedKeysOther(t *testing.T) {
 	sshdProbe(t, pairTestdata(t, "sshd-T-other.txt"))
 	home := t.TempDir()
 	err := CheckPairPath(home, "ws-1", 22)
-	pairPath := filepath.Join(home, ".ssh", "authorized_keys")
-	want := "sshd reads AuthorizedKeysFile /etc/ssh/keys/%u, not " + pairPath + " where matchblox pair writes the one-time key. Point AuthorizedKeysFile at " + pairPath + " (or include it), then matchblox pair again"
+	want := "sshd reads AuthorizedKeysFile /etc/ssh/keys/%u, not %h/.ssh/authorized_keys where matchblox pair writes the one-time key. Set AuthorizedKeysFile to %h/.ssh/authorized_keys (or include it), reload sshd, then matchblox pair again"
 	if err == nil || err.Error() != want {
 		t.Fatalf("err = %v, want %q", err, want)
 	}
@@ -174,13 +186,61 @@ func TestCheckPairPathSSHDUnavailable(t *testing.T) {
 	if err := CheckPairPath(t.TempDir(), "ws-1", 22); err != nil {
 		t.Fatal(err)
 	}
-	// Installed, but sshd -T fails (it needs root on most hosts).
+	// Installed, but sshd -T fails and no config file fallback.
 	sshdProbe(t, nil)
 	if err := CheckPairPath(t.TempDir(), "ws-1", 22); err != nil {
 		t.Fatal(err)
 	}
 	// Installed, but the output names no AuthorizedKeysFile.
 	sshdProbe(t, []byte("port 22\n"))
+	if err := CheckPairPath(t.TempDir(), "ws-1", 22); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCheckPairPathAuthorizedKeysFromConfigFile(t *testing.T) {
+	// sshd -T fails (non-root), but sshd_config names another keys file.
+	useProbe(t, map[string]bool{"sshd": true}, nil, nil, nil)
+	old := pairProbe
+	pairProbe.SSHDFile = func() ([]byte, error) {
+		return []byte("# comment\nAuthorizedKeysFile /etc/ssh/keys/%u\nMatch User bob\nAuthorizedKeysFile /x/%u\n"), nil
+	}
+	t.Cleanup(func() { pairProbe = old })
+	err := CheckPairPath(t.TempDir(), "ws-1", 22)
+	if err == nil || !strings.Contains(err.Error(), "/etc/ssh/keys/%u") || !strings.Contains(err.Error(), "reload sshd") {
+		t.Fatalf("err = %v", err)
+	}
+	if strings.Contains(err.Error(), "/x/%u") {
+		t.Fatalf("Match block leaked into the global check: %v", err)
+	}
+}
+
+func TestCheckPairPathAuthorizedKeysPercentUNumeric(t *testing.T) {
+	home := t.TempDir()
+	sshdProbe(t, []byte("authorizedkeysfile /home/%U/.ssh/authorized_keys\n"))
+	// Default Uid is 501; that path is not home → refuse.
+	if err := CheckPairPath(home, "ws-1", 22); err == nil {
+		t.Fatal("uid token outside home passed")
+	}
+	sshdProbe(t, []byte("authorizedkeysfile "+home+"/.ssh/authorized_keys\n"))
+	if err := CheckPairPath(home, "ws-1", 22); err != nil {
+		t.Fatal(err)
+	}
+	parent := filepath.Dir(home)
+	sshdProbe(t, []byte("authorizedkeysfile "+parent+"/%U/.ssh/authorized_keys\n"))
+	pairProbe.Uid = func() string { return filepath.Base(home) }
+	if err := CheckPairPath(home, "ws-1", 22); err != nil {
+		t.Fatal(err)
+	}
+	sshdProbe(t, []byte("authorizedkeysfile /var/%U/.ssh/authorized_keys\n"))
+	pairProbe.Uid = func() string { return filepath.Base(home) }
+	if err := CheckPairPath(home, "ws-1", 22); err == nil {
+		t.Fatal("uid token under /var passed")
+	}
+}
+
+func TestCheckPairPathAuthorizedKeysUnknownTokenSkips(t *testing.T) {
+	sshdProbe(t, []byte("authorizedkeysfile /var/%k/keys\n"))
 	if err := CheckPairPath(t.TempDir(), "ws-1", 22); err != nil {
 		t.Fatal(err)
 	}
