@@ -111,13 +111,6 @@ func (u *updater) deferred() bool {
 		u.say("Homebrew installed matchblox. Update it with Homebrew:\n  brew upgrade matchblox")
 		return true
 	}
-	if _, err := u.lookPath("pacman"); err == nil {
-		if pkg, err := u.run([]string{"pacman", "-Qqo", u.self}); err == nil {
-			pkg = strings.TrimSpace(pkg)
-			u.say("pacman installed matchblox (%s). Update it the way you installed it, for example:\n  yay -Syu %s", pkg, pkg)
-			return true
-		}
-	}
 	return false
 }
 

@@ -15,8 +15,8 @@ import (
 	"testing"
 )
 
-// releaseWorld is a GitHub with one latest release, a gh and a pacman, and
-// this binary in a directory of its own.
+// releaseWorld is a GitHub with one latest release, a gh, and this binary
+// in a directory of its own.
 type releaseWorld struct {
 	t       *testing.T
 	latest  string // "" is a repository with no release
@@ -24,7 +24,6 @@ type releaseWorld struct {
 	sum     string // its published .sha256, the true one when ""
 	hits    []string
 	gh      string // "" no gh, "old", "out" (not logged in), "ok", "fail"
-	pacman  string // the package that owns the binary, "" none
 	calls   []string
 	out     bytes.Buffer
 	updater *updater
@@ -72,7 +71,7 @@ func (w *releaseWorld) serve(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (w *releaseWorld) lookPath(name string) (string, error) {
-	if (name == "gh" && w.gh != "") || (name == "pacman" && w.pacman != "") {
+	if name == "gh" && w.gh != "" {
 		return "/usr/bin/" + name, nil
 	}
 	return "", exec.ErrNotFound
@@ -83,11 +82,6 @@ func (w *releaseWorld) run(argv []string) (string, error) {
 	w.calls = append(w.calls, line)
 	fail := errors.New("exit status 1")
 	switch {
-	case argv[0] == "pacman":
-		if w.pacman == "" {
-			return "error: No package owns " + argv[2], fail
-		}
-		return w.pacman + "\n", nil
 	case line == "gh attestation verify --help":
 		if w.gh == "old" {
 			return `unknown command "attestation" for "gh"`, fail
@@ -240,30 +234,6 @@ func TestUpdateDefersToHomebrew(t *testing.T) {
 	mustContain(t, w.out.String(), "Homebrew installed matchblox", "brew upgrade matchblox")
 	if len(w.hits) != 0 {
 		t.Fatalf("reached GitHub: %v", w.hits)
-	}
-}
-
-func TestUpdateDefersToPacman(t *testing.T) {
-	w := newReleaseWorld(t, "v0.1.0", "v0.2.0")
-	w.pacman = "matchblox-bin"
-	if err := w.updater.update(); err != nil {
-		t.Fatal(err)
-	}
-	mustContain(t, w.out.String(), "pacman installed matchblox (matchblox-bin)", "yay -Syu matchblox-bin")
-	if got := w.installed(); got != "old" || len(w.hits) != 0 {
-		t.Fatalf("installed %q after %v", got, w.hits)
-	}
-}
-
-func TestUpdateWithPacmanThatDoesNotOwnIt(t *testing.T) {
-	w := newReleaseWorld(t, "v0.1.0", "v0.2.0")
-	w.pacman = ""
-	w.updater.lookPath = func(string) (string, error) { return "/usr/bin/x", nil } // pacman and gh
-	if err := w.updater.update(); err != nil {
-		t.Fatalf("%v\n%s", err, w.out.String())
-	}
-	if got := w.installed(); got != string(w.bin) {
-		t.Fatalf("installed %q", got)
 	}
 }
 

@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Writes the Homebrew formula and the AUR package of a release from the
-# .sha256 files that publish.yml attached to it:
+# Writes the Homebrew formula of a release from the .sha256 files that
+# publish.yml attached to it:
 #
 #   <out>/Formula/matchblox.rb       for the tap blox-eng/homebrew-tap
-#   <out>/aur/PKGBUILD, .SRCINFO     for the AUR package matchblox-bin
 #
-# Both install the release binaries that publish.yml built and attested;
+# It installs the release binaries that publish.yml built and attested;
 # nothing builds again. A pre-release tag, or a missing or malformed
 # checksum, writes nothing, and the script fails.
 #
@@ -38,7 +37,7 @@ darwin_amd64=$(sum darwin-amd64)
 linux_arm64=$(sum linux-arm64)
 linux_amd64=$(sum linux-amd64)
 
-mkdir -p "$out/Formula" "$out/aur"
+mkdir -p "$out/Formula"
 
 cat >"$out/Formula/matchblox.rb" <<EOF
 # Written by .github/scripts/packages.sh in $repo for $tag. Do not edit:
@@ -80,51 +79,4 @@ class Matchblox < Formula
     assert_equal "v#{version}", shell_output("#{bin}/matchblox version").strip
   end
 end
-EOF
-
-cat >"$out/aur/PKGBUILD" <<EOF
-# Written by .github/scripts/packages.sh in $repo for $tag. Do not edit:
-# the next release writes it again.
-pkgname=matchblox-bin
-pkgver=$version
-pkgrel=1
-pkgdesc="$desc"
-arch=('x86_64' 'aarch64')
-url="https://github.com/$repo"
-license=('MIT')
-depends=('tmux')
-provides=('matchblox')
-conflicts=('matchblox')
-options=('!strip')
-source_x86_64=("matchblox-\${pkgver}-x86_64::$base/matchblox-linux-amd64")
-source_aarch64=("matchblox-\${pkgver}-aarch64::$base/matchblox-linux-arm64")
-sha256sums_x86_64=('$linux_amd64')
-sha256sums_aarch64=('$linux_arm64')
-
-package() {
-  install -Dm755 "matchblox-\${pkgver}-\${CARCH}" "\${pkgdir}/usr/bin/matchblox"
-}
-EOF
-
-# What makepkg --printsrcinfo prints for the PKGBUILD above: the AUR reads
-# this file, not the PKGBUILD.
-cat >"$out/aur/.SRCINFO" <<EOF
-pkgbase = matchblox-bin
-	pkgdesc = $desc
-	pkgver = $version
-	pkgrel = 1
-	url = https://github.com/$repo
-	arch = x86_64
-	arch = aarch64
-	license = MIT
-	depends = tmux
-	provides = matchblox
-	conflicts = matchblox
-	options = !strip
-	source_x86_64 = matchblox-$version-x86_64::$base/matchblox-linux-amd64
-	sha256sums_x86_64 = $linux_amd64
-	source_aarch64 = matchblox-$version-aarch64::$base/matchblox-linux-arm64
-	sha256sums_aarch64 = $linux_arm64
-
-pkgname = matchblox-bin
 EOF
