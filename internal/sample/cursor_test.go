@@ -55,6 +55,9 @@ func TestCursorContextComesFromItsStatusLine(t *testing.T) {
 	if !ok {
 		t.Fatal("no Cursor session")
 	}
+	if s.SessionID != "151e5fee-2111-4149-a65e-53a27734b16a" {
+		t.Errorf("session id %q, want from its status line (park and holds need it)", s.SessionID)
+	}
 	if s.Context != "known" || s.Tokens != 14592 || s.Window != 256000 || s.Model != "Auto" || int(s.ContextPct*10) != 57 {
 		t.Errorf("context %q %d/%d %.2f%% %q, want known 14592/256000 5.7%% Auto", s.Context, s.Tokens, s.Window, s.ContextPct, s.Model)
 	}

@@ -641,7 +641,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			// A reading from before the process started is an earlier
 			// session's in the same pane.
 			if r, ok := limits.ReadCursor(s.LimitsDir, socket, paneID); ok && s.LimitsDir != "" && !r.At.Before(started) {
-				sess.Context = "fresh"
+				sess.SessionID, sess.Context = r.SessionID, "fresh"
 				if r.Window > 0 {
 					s.measured(&sess, Usage{Model: r.Model, Tokens: r.Tokens, Window: r.Window, At: r.At}, "cursor:"+r.SessionID, now)
 				} else {
