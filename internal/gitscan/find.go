@@ -1,8 +1,6 @@
 package gitscan
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -260,34 +258,9 @@ func readCheckout(dir, remote string) (Checkout, bool) {
 		c.Active = fi.ModTime()
 	}
 	if b, err := readSmall(filepath.Join(common, "config")); err == nil {
-		c.Remote = StripCredentials(remoteURL(b, remote))
+		c.Remote = StripCredentials(parseGitConfig(b).remoteURL(remote))
 	}
 	return c, true
-}
-
-// remoteURL is the url of [remote "<name>"], else of the first remote.
-func remoteURL(config []byte, name string) string {
-	var section, first string
-	sc := bufio.NewScanner(bytes.NewReader(config))
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if strings.HasPrefix(line, "[") {
-			section = line
-			continue
-		}
-		k, v, ok := strings.Cut(line, "=")
-		if !ok || strings.TrimSpace(k) != "url" || !strings.HasPrefix(section, `[remote "`) {
-			continue
-		}
-		v = strings.TrimSpace(v)
-		if section == `[remote "`+name+`"]` {
-			return v
-		}
-		if first == "" {
-			first = v
-		}
-	}
-	return first
 }
 
 // StripCredentials drops the user, the password and the query of a URL: a
