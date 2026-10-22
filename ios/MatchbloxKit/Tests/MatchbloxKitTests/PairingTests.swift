@@ -120,6 +120,22 @@ final class PairingTests: XCTestCase {
         )
     }
 
+    func testGateRefusedMessage() {
+        XCTAssertEqual(
+            Pairing.message(for: .gateRefused, host: "ws-1"),
+            "ws-1 refused this connection. Type an address that OpenSSH serves, then tap Try again. Or on ws-1, turn Tailscale SSH off and run matchblox pair again."
+        )
+        XCTAssertNotEqual(Pairing.message(for: .gateRefused, host: "ws-1"), Pairing.message(for: .noReply, host: "ws-1"))
+    }
+
+    func testExit126WithNoReplyIsGateRefused() {
+        XCTAssertEqual(Pairing.refineNoReply(.noReply, exitStatus: 126), .gateRefused)
+        XCTAssertEqual(Pairing.refineNoReply(.noReply, exitStatus: 127), .gateRefused)
+        XCTAssertEqual(Pairing.refineNoReply(.noReply, exitStatus: nil), .noReply)
+        XCTAssertEqual(Pairing.refineNoReply(.noReply, exitStatus: 1), .noReply)
+        XCTAssertEqual(Pairing.refineNoReply(.unknownAnswer, exitStatus: 126), .unknownAnswer)
+    }
+
     func testEveryFailureHasAMessage() {
         let debug = "NWError: POSIX 54 secret-detail"
         var messages: [String] = []

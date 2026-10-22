@@ -222,8 +222,12 @@ enum PairFlow {
         do {
             reply = try await exchange(request, over: session, output: output)
         } catch {
+            let error = Pairing.refineNoReply(error, exitStatus: await session.exitStatus)
             await session.close()
-            return .failed(Pairing.message(for: error, host: label))
+            return .failed(
+                Pairing.message(for: error, host: label),
+                retry: error == .gateRefused
+            )
         }
         await session.close()
 

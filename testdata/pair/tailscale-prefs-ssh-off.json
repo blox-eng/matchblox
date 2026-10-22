@@ -1,0 +1,6 @@
+{
+  "ControlURL": "https://controlplane.tailscale.com",
+  "RouteAll": false,
+  "RunSSH": false,
+  "Hostname": "ws-1"
+}

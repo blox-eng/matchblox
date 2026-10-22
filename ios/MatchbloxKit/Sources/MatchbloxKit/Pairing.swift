@@ -33,6 +33,8 @@ public enum PairReplyError: Error, CaseIterable, Equatable, Sendable {
     case noReply
     /// A JSON object that this app does not know, such as `bad request`.
     case unknownAnswer
+    /// The host ran bare `matchblox gate pair` (Tailscale SSH skips the ForcedCommand) and the gate exited 126 with no reply.
+    case gateRefused
 }
 
 public enum Pairing {
@@ -125,7 +127,15 @@ public enum Pairing {
             "\(host) did not answer. Check the network, or update matchblox on \(host), then run matchblox pair again."
         case .unknownAnswer:
             "\(host) gave an answer that this app does not know. Update matchblox on \(host) and update this app, then try again."
+        case .gateRefused:
+            "\(host) refused this connection. Type an address that OpenSSH serves, then tap Try again. Or on \(host), turn Tailscale SSH off and run matchblox pair again."
         }
+    }
+
+    /// A silent host that exited 126 or 127 ran without the forced-command gate (Tailscale SSH, or a shell that could not run matchblox), so it refused rather than stayed quiet.
+    public static func refineNoReply(_ error: PairReplyError, exitStatus: Int?) -> PairReplyError {
+        guard error == .noReply, let code = exitStatus else { return error }
+        return code == 126 || code == 127 ? .gateRefused : error
     }
 
     public static func message(for error: PairError) -> String {
