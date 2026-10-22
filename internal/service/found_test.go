@@ -178,6 +178,19 @@ func TestCacheSentBeforeFirstScan(t *testing.T) {
 	}
 }
 
+func TestCancelledScanKeepsCache(t *testing.T) {
+	s, _ := foundTest(t)
+	state.WriteConsent(s.ConsentPath, state.Consent{Answer: "yes"})
+	state.WriteFound(s.ReposPath, gitscan.Found{Consent: "yes", Repos: []gitscan.Checkout{{Path: "/h/cached"}}})
+	s.Find = func(context.Context, []string) ([]gitscan.Checkout, []string) { return nil, nil }
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	s.scan(ctx)
+	if r := state.ReadFound(s.ReposPath); len(r.Repos) != 1 || r.Repos[0].Path != "/h/cached" {
+		t.Fatalf("a scan cut short by the service stopping replaced the cache: %+v", r)
+	}
+}
+
 func TestFoundOncePerConsole(t *testing.T) {
 	s, _ := foundTest(t)
 	foundReady(s)

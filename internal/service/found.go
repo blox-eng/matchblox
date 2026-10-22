@@ -83,8 +83,8 @@ func (s *Service) foundLoop(ctx context.Context) {
 	}
 }
 
-// scan walks the roots on record. A no that comes while it walks wins:
-// its result is dropped.
+// scan walks the roots on record. A no that comes while it walks wins,
+// and so does the service stopping: its result is dropped.
 func (s *Service) scan(ctx context.Context) {
 	s.scanMu.Lock()
 	defer s.scanMu.Unlock()
@@ -98,6 +98,9 @@ func (s *Service) scan(ctx context.Context) {
 	}
 	start := time.Now()
 	repos, errs := s.Find(ctx, roots)
+	if ctx.Err() != nil {
+		return // the service stops: a cut walk must not replace the list
+	}
 	f := gitscan.Found{Consent: "yes", Roots: c.Roots, At: time.Now(), Took: time.Since(start), Repos: repos, Errors: errs}
 	s.consentMu.Lock()
 	defer s.consentMu.Unlock()
