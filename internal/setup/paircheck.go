@@ -92,7 +92,7 @@ func CheckPairPath(home, address string, port int) error {
 	return checkAuthorizedKeysFile(home)
 }
 
-const errTailscaleSSH = "Tailscale SSH answers on this address. Use matchblox pair --address with a host OpenSSH serves, or run tailscale set --ssh=false, then matchblox pair again"
+const errTailscaleSSH = "this address is answered by Tailscale SSH. Use matchblox pair --address with a host OpenSSH serves, or run tailscale set --ssh=false, then matchblox pair again"
 
 func checkTailscaleSSH(address string, port int) error {
 	p := pairProbe

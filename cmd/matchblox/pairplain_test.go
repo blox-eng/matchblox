@@ -65,7 +65,7 @@ func TestStandalonePairHostKeepsTheCommandError(t *testing.T) {
 	}
 }
 
-const wantTailscaleSSH = "Tailscale SSH answers on this address. Use matchblox pair --address with a host OpenSSH serves, or run tailscale set --ssh=false, then matchblox pair again"
+const wantTailscaleSSH = "this address is answered by Tailscale SSH. Use matchblox pair --address with a host OpenSSH serves, or run tailscale set --ssh=false, then matchblox pair again"
 
 // useTailscaleSSHProbe makes this host look like one where Tailscale SSH
 // answers port 22 on ws-1.tail1234.ts.net, whatever this machine runs.

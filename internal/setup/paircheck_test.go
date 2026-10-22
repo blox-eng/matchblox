@@ -60,7 +60,7 @@ func tailscaleProbe(t *testing.T, prefsFile string) {
 
 func wantTailscaleErr(t *testing.T, err error) {
 	t.Helper()
-	const want = "Tailscale SSH answers on this address. Use matchblox pair --address with a host OpenSSH serves, or run tailscale set --ssh=false, then matchblox pair again"
+	const want = "this address is answered by Tailscale SSH. Use matchblox pair --address with a host OpenSSH serves, or run tailscale set --ssh=false, then matchblox pair again"
 	if err == nil || err.Error() != want {
 		t.Fatalf("err = %v, want %q", err, want)
 	}
