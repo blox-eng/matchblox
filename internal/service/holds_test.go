@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/holds"
+	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -122,5 +123,22 @@ func TestReleaseOfAParkSendsNothing(t *testing.T) {
 	}
 	if len(s.Holds.List()) != 0 {
 		t.Fatal("still parked")
+	}
+}
+
+// TestParkACursorSessionJoinedByItsHook: Cursor's sampler has no session
+// file; its hooks name the chat. After a turn, z parks that chat.
+func TestParkACursorSessionJoinedByItsHook(t *testing.T) {
+	cur := sample.Session{PID: 9, Start: 3, Pane: "%3", Name: "cur", Agent: sample.CursorAgent, Status: "idle"}
+	s, _ := holdsTest(t, cur)
+	s.Hook(hooks.Event{Name: "Stop", Agent: hooks.CursorAgent, SessionID: "chat1", Pane: "%3", At: time.Now()})
+	if x, ok := s.sessionAt("%3"); !ok || x.SessionID != "chat1" {
+		t.Fatalf("session %+v, want chat1 from its hook", x)
+	}
+	if res := s.act(t.Context(), proto.Act{Console: true, RecID: "park:%3"}); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if h := s.State().Holds; len(h) != 1 || h[0].SessionID != "chat1" || h[0].By != holds.ByYou {
+		t.Fatalf("holds %+v", h)
 	}
 }

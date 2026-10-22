@@ -6,6 +6,12 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **`z` parks a Cursor session.** Cursor has no session file, so its chat
+  id never reached the hold. The status line and hooks now name it, and
+  park works after the first turn.
+
 ## [0.17.0] - 2026-10-22
 
 ### Added

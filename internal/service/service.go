@@ -348,9 +348,13 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	if s.Stoker != nil {
 		s.cur.Stoker = view
 	}
+	s.cur.Recommendations = advice.Build(snap, s.cur.Git)
+	// Join hooks before holds: Cursor has no session file, so its id comes
+	// from the hooked chat, and prune must see that id as present.
+	s.mergeQueue()
 	if s.Holds != nil {
-		present := make(map[string]bool, len(snap.Sessions))
-		for _, x := range snap.Sessions {
+		present := make(map[string]bool, len(s.cur.Sessions))
+		for _, x := range s.cur.Sessions {
 			present[x.SessionID] = true
 			if x.Pane == "" {
 				continue
@@ -364,8 +368,6 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		}
 		s.cur.Holds = s.Holds.List()
 	}
-	s.cur.Recommendations = advice.Build(snap, s.cur.Git)
-	s.mergeQueue()
 	doc := s.cur
 	s.mu.Unlock()
 	rec(doc)
@@ -417,7 +419,7 @@ func (s *Service) mergeQueue() {
 		now = s.now()
 	}
 	s.queue.Merge(s.sampled, now)
-	s.cur.Sessions = s.queue.WithAsks(s.sampled)
+	s.cur.Sessions = s.queue.WithJoined(s.queue.WithAsks(s.sampled))
 	s.cur.Queue = s.queue.Items()
 	s.cur.StokerServer = s.StokerServer
 	s.setReasons()
