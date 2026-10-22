@@ -2,6 +2,7 @@ package gitscan
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -669,5 +670,64 @@ func TestFindSkipsRootByResolvedPath(t *testing.T) {
 	res := Find(context.Background(), []string{link}, FindOpts{Skip: map[string]bool{real: true}})
 	if f.read(real) != 0 || len(res.Repos) != 0 || !slices.Equal(res.Skipped, []Skip{{real, "it did not answer before"}}) {
 		t.Fatalf("reads %d, repos %v, skipped %v", f.read(real), paths(res.Repos), res.Skipped)
+	}
+}
+
+func TestFoundSame(t *testing.T) {
+	at := time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC)
+	base := func() Found {
+		return Found{Consent: "yes", Roots: []string{"/h"}, At: at, Took: time.Second,
+			Repos:   []Checkout{{Path: "/h/a", Branch: "main", Active: at}},
+			Errors:  []string{"e"},
+			Skipped: []Skip{{Path: "/h/n", Why: whyHung}}}
+	}
+	a, b := base(), base()
+	b.At, b.Took = at.Add(time.Hour), 2*time.Second
+	if !a.Same(b) {
+		t.Fatal("only At and Took differ: want same")
+	}
+	b = base()
+	b.Repos[0].Branch = "dev"
+	if a.Same(b) {
+		t.Fatal("a branch differs: want different")
+	}
+	b = base()
+	b.SkippedMore = 1
+	if a.Same(b) {
+		t.Fatal("SkippedMore differs: want different")
+	}
+	b = base()
+	b.Consent = "no"
+	if a.Same(b) {
+		t.Fatal("Consent differs: want different")
+	}
+	raw, err := json.Marshal(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rt Found
+	if err := json.Unmarshal(raw, &rt); err != nil {
+		t.Fatal(err)
+	}
+	if !a.Same(rt) {
+		t.Fatalf("a JSON round trip differs: %+v vs %+v", a, rt)
+	}
+}
+
+func BenchmarkFoundSame(b *testing.B) {
+	at := time.Now()
+	mk := func() Found {
+		f := Found{Consent: "yes"}
+		for i := range 5000 {
+			f.Repos = append(f.Repos, Checkout{Path: fmt.Sprintf("/h/r%05d", i), Branch: "main", Remote: "https://x/y", Active: at})
+		}
+		return f
+	}
+	x, y := mk(), mk()
+	b.ResetTimer()
+	for range b.N {
+		if !x.Same(y) {
+			b.Fatal("want same")
+		}
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -26,6 +27,18 @@ type Found struct {
 	Errors      []string      `json:"errors,omitempty"`
 	Skipped     []Skip        `json:"skipped,omitempty"`
 	SkippedMore int           `json:"skipped_more,omitempty"` // skipped past the list's cap
+}
+
+// Same reports whether f and g tell a console the same thing: it ignores
+// At and Took, which change on every scan. Repos come sorted by path.
+func (f Found) Same(g Found) bool {
+	return f.Consent == g.Consent && f.SkippedMore == g.SkippedMore &&
+		slices.Equal(f.Roots, g.Roots) && slices.Equal(f.Errors, g.Errors) &&
+		slices.Equal(f.Skipped, g.Skipped) &&
+		slices.EqualFunc(f.Repos, g.Repos, func(a, b Checkout) bool {
+			return a.Path == b.Path && a.Main == b.Main && a.Remote == b.Remote &&
+				a.Branch == b.Branch && a.Active.Equal(b.Active)
+		})
 }
 
 // Checkout is one repository or linked worktree on the host.

@@ -45,10 +45,15 @@ func (s *Service) consent() state.Consent {
 
 func (s *Service) setFound(f gitscan.Found) {
 	s.mu.Lock()
-	s.found = f
-	s.foundGen++
+	same := s.foundGen > 0 && s.found.Same(f) // the first one always goes out
+	s.found = f                               // always kept: a new console reads the latest Took
+	if !same {
+		s.foundGen++
+	}
 	s.mu.Unlock()
-	s.broadcast()
+	if !same {
+		s.broadcast()
+	}
 }
 
 func (s *Service) kickFound() {

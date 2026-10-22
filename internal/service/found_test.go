@@ -294,3 +294,35 @@ func TestNoFoundWithoutFind(t *testing.T) {
 		t.Fatalf("Found = %+v with no Find", st.Found)
 	}
 }
+
+func TestUnchangedRescanSendsNothing(t *testing.T) {
+	s, _ := foundTest(t)
+	foundReady(s)
+	s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true})
+	gen := func() (uint64, time.Time, time.Duration) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.foundGen, s.found.At, s.found.Took
+	}
+	g1, at1, _ := gen()
+	cl := &client{}
+	if st, _ := s.stateFor(cl); st.Found == nil {
+		t.Fatal("no first Found")
+	}
+	time.Sleep(2 * time.Millisecond)
+	s.scan(t.Context())
+	g2, at2, took2 := gen()
+	if g2 != g1 {
+		t.Fatalf("foundGen %d -> %d on an unchanged rescan", g1, g2)
+	}
+	if !at2.After(at1) {
+		t.Fatal("the second scan was not stored")
+	}
+	if st, _ := s.stateFor(cl); st.Found != nil {
+		t.Fatalf("an unchanged rescan sent Found: %+v", st.Found)
+	}
+	st, _ := s.stateFor(&client{})
+	if st.Found == nil || st.Found.Took != took2 {
+		t.Fatalf("a new console's Found = %+v, want Took %v", st.Found, took2)
+	}
+}
