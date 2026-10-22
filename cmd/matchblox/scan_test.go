@@ -142,6 +142,15 @@ func TestCliScanSays(t *testing.T) {
 	}
 }
 
+func TestCliScanNoWhileItRan(t *testing.T) {
+	sock := isolate(t)
+	foundService(t, sock, proto.Found{Consent: "no"})
+	var out bytes.Buffer
+	if err := cliScan(nil, &out, sock); err == nil || err.Error() != "scan: a no came while it ran: nothing is kept" {
+		t.Fatalf("err %v, out %q", err, out.String())
+	}
+}
+
 func TestScanOutwaitsTheWalk(t *testing.T) {
 	if scanWait <= 2*scanBudget {
 		t.Fatalf("matchblox scan waits %s: a walk of %s behind one already running ends after it", scanWait, scanBudget)

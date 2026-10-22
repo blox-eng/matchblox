@@ -164,6 +164,86 @@ func TestScanYesRefusedFromAgentPane(t *testing.T) {
 	}
 }
 
+func TestScanYesRefusedFromAgentPaneClaimingConsole(t *testing.T) {
+	s, f := foundTest(t)
+	s.loadFound()
+	s.publish(sample.Snapshot{At: time.Now(), Sessions: []sample.Session{{Agent: "claude", Pane: "%3", Name: "other", Status: "busy"}}}, func(state.Doc) {})
+	if res := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", From: "%3", Console: true}); res.Err != scanRefused {
+		t.Fatalf("scan:yes from a console hello in an agent's pane: %q", res.Err)
+	}
+	if n := len(f.calls()); n != 0 {
+		t.Fatalf("scanned %d times", n)
+	}
+}
+
+// blockingFind holds each walk until release, and finds roots[0]/r.
+func blockingFind(s *Service) (started, release chan struct{}) {
+	started, release = make(chan struct{}, 2), make(chan struct{})
+	s.Find = func(_ context.Context, roots []string) ([]gitscan.Checkout, []string) {
+		started <- struct{}{}
+		<-release
+		return []gitscan.Checkout{{Path: roots[0] + "/r"}}, nil
+	}
+	return started, release
+}
+
+func TestNoDuringScanWins(t *testing.T) {
+	s, _ := foundTest(t)
+	foundReady(s)
+	started, release := blockingFind(s)
+	done := make(chan struct{})
+	go func() { s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true}); close(done) }()
+	<-started
+	if res := s.act(t.Context(), proto.Act{RecID: "scan:no"}); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	close(release)
+	<-done
+	if _, err := os.Stat(s.ReposPath); !os.IsNotExist(err) {
+		t.Fatalf("repos.json written after a no: %v", err)
+	}
+	if st, _ := s.stateFor(&client{}); st.Found == nil || st.Found.Consent != "no" || len(st.Found.Repos) != 0 {
+		t.Fatalf("Found = %+v", st.Found)
+	}
+}
+
+func TestNarrowedRootsDuringScanWin(t *testing.T) {
+	s, _ := foundTest(t)
+	state.WriteConsent(s.ConsentPath, state.Consent{Answer: "yes", Roots: []string{"/wide"}})
+	foundReady(s)
+	started, release := blockingFind(s)
+	first := make(chan struct{})
+	go func() { s.scan(t.Context()); close(first) }()
+	<-started
+	second := make(chan struct{})
+	go func() {
+		s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true, Text: "/narrow"})
+		close(second)
+	}()
+	deadline := time.Now().Add(waitLimit)
+	for !slices.Equal(state.ReadConsent(s.ConsentPath).Roots, []string{"/narrow"}) {
+		if time.Now().After(deadline) {
+			t.Fatal("the narrowed roots were never recorded")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	release <- struct{}{}
+	<-first
+	if r := state.ReadFound(s.ReposPath); len(r.Repos) != 0 {
+		t.Fatalf("the wide walk was kept after the roots narrowed: %+v", r)
+	}
+	if st, _ := s.stateFor(&client{}); st.Found != nil && len(st.Found.Repos) != 0 {
+		t.Fatalf("the wide walk went to consoles: %+v", st.Found)
+	}
+	<-started
+	release <- struct{}{}
+	<-second
+	r := state.ReadFound(s.ReposPath)
+	if len(r.Repos) != 1 || r.Repos[0].Path != "/narrow/r" || !slices.Equal(r.Roots, []string{"/narrow"}) {
+		t.Fatalf("cache = %+v, want only the narrowed walk", r)
+	}
+}
+
 func TestCacheSentBeforeFirstScan(t *testing.T) {
 	s, _ := foundTest(t)
 	state.WriteConsent(s.ConsentPath, state.Consent{Answer: "yes"})

@@ -50,6 +50,20 @@ func TestScanBoxYes(t *testing.T) {
 	}
 }
 
+func TestScanBoxYesResult(t *testing.T) {
+	m, _ := loadedWith(t, 100, askState())
+	next, _ := key(m, "y")
+	act := next.(Model).scanAct
+	done, _ := next.Update(resultMsg(proto.Result{ActID: act}))
+	if f := done.(Model).flash; f != "found your Git repositories: N offers them" {
+		t.Fatalf("flash %q", f)
+	}
+	refused, _ := next.Update(resultMsg(proto.Result{ActID: act, Err: "boom"}))
+	if f := refused.(Model).flash; f != "not found: boom" {
+		t.Fatalf("flash %q", f)
+	}
+}
+
 func TestScanBoxNo(t *testing.T) {
 	m, f := loadedWith(t, 100, askState())
 	next, cmd := key(m, "n")

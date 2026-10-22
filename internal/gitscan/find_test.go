@@ -136,8 +136,20 @@ func TestFindDescendsIntoARootCheckout(t *testing.T) {
 	proj := filepath.Join(home, "git", "proj")
 	mkRepo(t, proj, "main", "")
 	mkRepo(t, filepath.Join(proj, "sub"), "main", "")
-	if got := paths(find(t, home)); !slices.Equal(got, []string{home, proj}) {
-		t.Fatalf("got %v, want the home checkout and %s", got, proj)
+	got, _ := Find(context.Background(), []string{home}, FindOpts{Home: home})
+	if !slices.Equal(paths(got), []string{home, proj}) {
+		t.Fatalf("got %v, want the home checkout and %s", paths(got), proj)
+	}
+}
+
+func TestFindStopsAtARootCheckoutBesidesHome(t *testing.T) {
+	home := tmp(t)
+	app := filepath.Join(home, "dev", "app")
+	mkRepo(t, app, "main", "")
+	mkRepo(t, filepath.Join(app, "testdata", "fixture"), "main", "")
+	got, _ := Find(context.Background(), []string{home, app}, FindOpts{Home: home})
+	if !slices.Equal(paths(got), []string{app}) {
+		t.Fatalf("got %v, want %s alone: a configured repository is not searched below its .git", paths(got), app)
 	}
 }
 
@@ -189,6 +201,28 @@ func TestFindOverlappingRoots(t *testing.T) {
 	}
 }
 
+func TestFindWalksOverlappingRootsOnce(t *testing.T) {
+	home := tmp(t)
+	if err := os.MkdirAll(filepath.Join(home, "dev", "a", "b"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	roots := []string{home, filepath.Join(home, "dev")}
+	if _, errs := Find(context.Background(), roots, FindOpts{Depth: FindDepth, MaxDirs: 4}); len(errs) != 0 {
+		t.Fatalf("four folders took more than four reads: %v", errs)
+	}
+}
+
+func TestFindStopsOnCancel(t *testing.T) {
+	root := tmp(t)
+	mkRepo(t, filepath.Join(root, "a"), "main", "")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	got, errs := Find(ctx, []string{root}, FindOpts{Budget: time.Minute})
+	if len(errs) != 1 || !strings.Contains(errs[0], "stopped after 1m0s") || len(got) != 0 {
+		t.Fatalf("got %v, errs %v", paths(got), errs)
+	}
+}
+
 func TestFindMaxDirs(t *testing.T) {
 	root := tmp(t)
 	for i := range 10 {
@@ -211,7 +245,13 @@ func TestStripCredentials(t *testing.T) {
 		"ssh://git@h/o/r":                  "ssh://git@h/o/r",
 		"HTTPS://u:tok@h/o/r":              "HTTPS://h/o/r",
 		"ssh://u:pw@h/o/r":                 "ssh://u@h/o/r",
+		"git+ssh://git@h/o/r":              "git+ssh://git@h/o/r",
 		"/srv/git/r.git":                   "/srv/git/r.git",
+		"git+https://tok@h/o/r":            "git+https://h/o/r",
+		"persistent-https://tok@h/o/r":     "persistent-https://h/o/r",
+		"git://tok@h/o/r":                  "git://h/o/r",
+		"https://h/o/r?access_token=tok":   "https://h/o/r",
+		"https://h?private_token=tok":      "https://h",
 	} {
 		if got := StripCredentials(in); got != want {
 			t.Errorf("StripCredentials(%q) = %q, want %q", in, got, want)

@@ -91,7 +91,7 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 			return proto.Result{Err: notTheBuilders}
 		}
 	}
-	if a.RecID == "scan:yes" && !a.Console {
+	if a.RecID == "scan:yes" { // a console hello does not make an agent's pane a person's
 		if _, ok := s.sessionAt(a.From); agent || ok {
 			return proto.Result{Err: scanRefused}
 		}

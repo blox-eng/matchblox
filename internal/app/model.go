@@ -287,7 +287,7 @@ type Model struct {
 	found      *proto.Found                     // the host's repositories and the scan's consent; nil: the service scans nothing
 	scanLater  bool                             // the scan question was closed or answered at this console
 	scanAct    string                           // the act of the box's yes, for its result
-	form       *form                            // the open New session, Rename or Switch agent form; nil none
+	form       *form                            // the open New session, Rename, Switch agent or scan folders form; nil none
 	jumpAfter  struct{ act, pane, done string } // a switch sent: the pane to jump to when it runs
 	lastAgent  string                           // the agent this console last started
 	paneSort   sortBy

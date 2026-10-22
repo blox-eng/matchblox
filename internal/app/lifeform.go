@@ -36,8 +36,9 @@ const (
 
 var formLabels = [...]string{"where", "branch", "name", "agent", "first", "folders"}
 
-// form is the open New session, Rename or Switch agent form. Rename has
-// the name only; Switch agent the agent and the handoff (in first).
+// form is the open New session, Rename, Switch agent or scan folders form.
+// Rename has the name only; Switch agent the agent and the handoff (in
+// first); the scan's folders the roots.
 type form struct {
 	rename    bool
 	swap      bool   // Switch agent

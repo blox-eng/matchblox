@@ -36,8 +36,11 @@ func scanAct(words []string, here, home string) (proto.Act, error) {
 	return proto.Act{RecID: "scan:yes", Confirm: "y", Text: strings.Join(roots, "\n")}, nil
 }
 
-// scanBudget bounds one walk of the host.
-const scanBudget = 30 * time.Second
+// scanBudget and scanMaxDirs bound one walk of the host.
+const (
+	scanBudget  = 30 * time.Second
+	scanMaxDirs = 100_000
+)
 
 // scanWait outlasts a walk queued behind one already running.
 const scanWait = 2*scanBudget + 15*time.Second
@@ -72,6 +75,9 @@ func cliScan(words []string, w io.Writer, path string) error {
 		return errors.New("scan: it ran, but the service did not say what it found: the N form lists it")
 	}
 	f := st.Found
+	if f.Consent != "yes" {
+		return errors.New("scan: a no came while it ran: nothing is kept")
+	}
 	noun := "repositories"
 	if len(f.Repos) == 1 {
 		noun = "repository"

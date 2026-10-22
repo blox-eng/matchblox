@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -83,8 +84,8 @@ func (s *Service) foundLoop(ctx context.Context) {
 	}
 }
 
-// scan walks the roots on record. A no that comes while it walks wins,
-// and so does the service stopping: its result is dropped.
+// scan walks the roots on record. A no or other roots that come while it
+// walks win, and so does the service stopping: its result is dropped.
 func (s *Service) scan(ctx context.Context) {
 	s.scanMu.Lock()
 	defer s.scanMu.Unlock()
@@ -104,7 +105,7 @@ func (s *Service) scan(ctx context.Context) {
 	f := gitscan.Found{Consent: "yes", Roots: c.Roots, At: time.Now(), Took: time.Since(start), Repos: repos, Errors: errs}
 	s.consentMu.Lock()
 	defer s.consentMu.Unlock()
-	if s.consent().Answer != "yes" {
+	if now := s.consent(); now.Answer != "yes" || !slices.Equal(now.Roots, c.Roots) {
 		return
 	}
 	if s.ReposPath != "" {
@@ -156,12 +157,12 @@ func (s *Service) scanNo() proto.Result {
 	if err := s.writeConsent(state.Consent{Answer: "no", At: s.now()}); err != nil {
 		return proto.Result{Err: "scan.json: " + err.Error()}
 	}
+	s.setFound(gitscan.Found{Consent: "no"})
 	if s.ReposPath != "" {
 		if err := os.Remove(s.ReposPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return proto.Result{Err: "repos.json: " + err.Error()}
 		}
 	}
-	s.setFound(gitscan.Found{Consent: "no"})
 	return proto.Result{}
 }
 

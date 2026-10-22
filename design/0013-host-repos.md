@@ -171,12 +171,25 @@ How each field is read, without git:
 
 - Each root is resolved once (`filepath.EvalSymlinks`, `~` expanded) and
   walked to its own depth: `~/dev/a/b/c/d` is depth 5 from `~` but 4 from
-  `~/dev`. A directory already walked with as much depth left is not walked
-  again, so overlapping roots cost nothing.
+  `~/dev`. The deepest roots go first, and a directory already walked with
+  as much depth left is not walked again, so overlapping roots cost
+  nothing.
+- Only the home is searched below its own `.git` (dotfiles kept in git);
+  any other root that is a checkout, a configured repository say, is
+  recorded and not entered, so its submodules and fixtures stay out.
 - `os.ReadDir` only. An entry that is a symlink is never followed; an
-  unreadable directory is skipped silently.
+  unreadable directory is skipped silently. A directory on another device
+  than its root is not entered: a network mount may never answer.
+- A `.git`, `HEAD`, `commondir` or `config` is read only when it is a
+  regular file (or `.git` a directory), and 1 MiB of it at most: a pipe or
+  a link to `/dev/zero` would hang or flood the walk.
 - Bounds: 30 s and 100 000 directories per scan. Past either, the scan
-  keeps what it found and says so in `Errors`.
+  keeps what it found and says so in `Errors`. A read that blocks past the
+  30 s and 5 s more is left to end on its own: the scan returns what it
+  found and frees the next one.
+- A remote URL keeps neither user nor password nor query, except an ssh
+  URL's user.
+- A walk is dropped if a no, or other roots, came while it ran.
 
 ## The consent box
 
