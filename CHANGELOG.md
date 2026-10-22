@@ -6,6 +6,28 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`matchblox switch <who> --agent <name>` runs another agent in a session's
+  pane:** same name, directory, park and ship, with a handoff line to start
+  from. Switch it from the CLI, or `A` in Sessions.
+- **`A switch` sits under the selected session, and a tap presses it.** A
+  phone's opened row and the detail beside the list carry the session's
+  keys; a tap on one presses it, so the iPhone app switches an agent with
+  no keyboard. On a narrow phone the plan and the keys get a line each, so
+  `! compact` is no longer cut.
+- **Sessions says `outside tmux` for an agent with no pane.** The row and
+  `matchblox sessions` name the place, instead of leaving it blank.
+
+### Changed
+
+- **A step asks for consent in a box, not on the bottom line** (#158).
+  Kill, switch, merge, remove, connect, a jump and the stoker's take-over
+  show what runs in a box over the dimmed screen: its title says what it
+  does, its lines the exact commands, its foot the key. On a phone it rises
+  above the key line; wider, it sits in the middle. A door's long diff keeps
+  its confirm on the key line.
+
 ## [0.14.0] - 2026-10-21
 
 ### Added
