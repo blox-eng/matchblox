@@ -6,6 +6,16 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **An agent started after `matchblox serve` shows in Sessions in a
+  container too.** A new tmux session (or `matchblox new`) after the
+  first process scan used to wait for the slow process clock (~10s), so
+  a check at ~6s looked empty (`sessions: 0`, one idle pane). Listing
+  panes every sample already wakes a full scan for a new pane or an
+  agent command; regression tests pin the late-start case.
+  ([#113](https://github.com/blox-eng/matchblox/issues/113))
+
 ## [0.17.2] - 2026-10-22
 
 ### Fixed
