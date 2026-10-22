@@ -142,3 +142,23 @@ func TestParkACursorSessionJoinedByItsHook(t *testing.T) {
 		t.Fatalf("holds %+v", h)
 	}
 }
+
+// TestAParkedSessionThatLosesItsIDStaysParked: a Codex session's id comes
+// from a rollout the sampler can lose sight of (two Codex in a directory,
+// a /new). While the pane's session has no id, the builder's park on that
+// pane still refuses messages, as the console still shows it parked.
+func TestAParkedSessionThatLosesItsIDStaysParked(t *testing.T) {
+	cx := flint()
+	cx.Agent = "codex"
+	s, ran := holdsTest(t, cx)
+	ctx := t.Context()
+	if res := s.act(ctx, proto.Act{Console: true, RecID: "park:%3"}); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	cx.SessionID = ""
+	s.publish(sample.Snapshot{At: time.Now(), Sessions: []sample.Session{cx}}, func(state.Doc) {})
+	res := s.act(ctx, proto.Act{RecID: "message:%3", Which: "secondary", Confirm: "y", Text: "go"})
+	if res.Err != "flint is parked: z lets it go" || len(*ran) != 0 {
+		t.Fatalf("err %q, ran %q: a parked pane took a message once its id was lost", res.Err, *ran)
+	}
+}

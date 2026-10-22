@@ -549,12 +549,22 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	// OpenCode does not say which session a process shows: two in one
 	// directory cannot be told apart.
 	opencodeIn := map[string]int{}
+	// Nor does a Codex that holds no rollout open: with two in a
+	// directory, its rollout is either's.
+	codexIn := map[string]int{}
 	for pid, p := range procs {
 		// An `opencode run` that another agent started counts too: it
 		// writes a session in the same directory.
 		if s.agentName(pid, p) == "opencode" && p.State != 'Z' && p.State != 'X' {
 			if pp, ok := procs[p.PPID]; !ok || s.agentName(p.PPID, pp) != "opencode" {
 				opencodeIn[s.FS.Cwd(pid)]++
+			}
+		}
+		// Only sessions count: not a `codex exec` or an mcp-server that
+		// another agent runs, nor one of Codex's own non-interactive modes.
+		if s.agentName(pid, p) == "codex" && p.State != 'Z' && p.State != 'X' && !s.underAgent(p, procs) && !codexBatch(s.FS.Argv(pid)) {
+			if pp, ok := procs[p.PPID]; !ok || s.agentName(p.PPID, pp) != "codex" {
+				codexIn[s.FS.Cwd(pid)]++
 			}
 		}
 	}
@@ -617,12 +627,22 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		case "codex":
 			sess.Account, sess.Provider = s.accounts.codexAccount(env), "openai"
 			path, read := s.codexRollout(pid, children)
+			// fresh: no rollout of its own yet, by its open files or, when
+			// they say nothing, by its directory.
+			fresh := read && (sess.Cwd == "" || codexIn[sess.Cwd] == 1)
+			if path == "" && sess.Cwd != "" && codexIn[sess.Cwd] == 1 && env.codexHome != "" {
+				started := now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
+				var ambiguous bool
+				path, ambiguous = s.agents.codexInDir(env.codexHome, sess.Cwd, started, now)
+				fresh = !ambiguous
+			}
 			sess.Context = "unmeasured"
-			if read {
+			if fresh || path != "" {
 				sess.Context = "fresh"
 			}
 			var lim *limits.Reading
 			if path != "" {
+				sess.SessionID = s.agents.metaOf(path).id // z parks it by this id
 				var u Usage
 				var found codexFound
 				switch u, lim, found = s.agents.codexUsage(path); found {
@@ -684,7 +704,8 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		if sess.Name == "" {
 			sess.Name = tmuxName(pane, agent)
 		}
-		if sess.SessionID == "" && paneID != "" {
+		// Codex has a session id but no hooks: only its pane tells busy.
+		if (sess.SessionID == "" || agent == "codex") && paneID != "" {
 			fromPane = append(fromPane, len(snap.Sessions))
 		}
 		sess.Do, sess.Why = s.Rules.suggest(sess)
@@ -748,7 +769,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 // index.js after it. The argv half is read once per process and kept while
 // its process name stays the same.
 func (s *Sampler) agentName(pid int, p procfs.Proc) string {
-	if s.isAgent(p.Comm) {
+	if s.isAgent(p.Comm) && p.Comm != "codex" {
 		return p.Comm
 	}
 	key := procKey{pid, p.StartTime}
@@ -756,7 +777,11 @@ func (s *Sampler) agentName(pid int, p procfs.Proc) string {
 		return c.name
 	}
 	name := ""
-	if argv := s.FS.Argv(pid); len(argv) > 0 {
+	if argv := s.FS.Argv(pid); p.Comm == "codex" {
+		if s.isAgent(p.Comm) && !codexServer(argv) {
+			name = p.Comm
+		}
+	} else if len(argv) > 0 {
 		cmd := filepath.Base(argv[0])
 		if interpreter(cmd) {
 			cmd = ""
@@ -816,6 +841,25 @@ func cursorPrint(argv []string) bool {
 		}
 	}
 	return false
+}
+
+// codexServer: argv runs a daemon of the Codex app, `codex app-server`,
+// which shares the CLI's name and is no session.
+// codexBatch: argv runs Codex without a person at it, a subcommand that
+// is no session of its own.
+func codexBatch(argv []string) bool {
+	if len(argv) < 2 {
+		return false
+	}
+	switch argv[1] {
+	case "exec", "e", "mcp-server", "mcp", "app-server", "proto":
+		return true
+	}
+	return false
+}
+
+func codexServer(argv []string) bool {
+	return len(argv) > 1 && argv[1] == "app-server" // its subcommand; an argument named so is a session's
 }
 
 // cursorLauncher: argv runs Cursor's CLI, whatever its argv[0]. Its
