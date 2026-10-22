@@ -21,11 +21,11 @@
  1 without an agent: shell:1.1 zsh
 
  RECOMMENDATIONS · 7 · h hides
- ▲ The week runs short: compact spark-docs
- ○ Clear spark-docs (%3)
 ╭─ Kill spark-docs ────────────────────────╮
-│ tmux kill-pane -t %3, then kill -TERM    │
-│ 1400                                     │
+│                                          │
+│   tmux kill-pane -t %3                   │
+│   then kill -TERM 1400                   │
+│                                          │
 ╰─ y run ─ any other key cancels ──────────╯
 ────────────────────────────────────────────
- the question above waits for its key
+

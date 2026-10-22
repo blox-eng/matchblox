@@ -434,7 +434,7 @@ func (s Shell) actionLine(w int) string {
 	case s.input != nil:
 		return fit(" "+st.label.Render("HOST ")+st.text.Render(*s.input)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ connect  esc cancel"), w)
 	case s.pending != nil:
-		return fit(" "+st.faint.Render("the question above waits for its key"), w)
+		return "" // the box says it all
 	case s.flash != "":
 		return fit(" "+st.text.Render(s.flash), w)
 	case s.adding:

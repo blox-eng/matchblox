@@ -321,8 +321,10 @@ Reduce Motion.
   rises from the key line's hairline, under the thumb and above the
   keyboard; wider, it sits in the middle, no wider than what it says. The
   second `y` of a session that works or waits changes the same box. A tap
-  anywhere cancels it: a tap is never consent. The key line under it says
-  `the question above waits for its key`. A door's long diff keeps its
+  anywhere cancels it: a tap is never consent. The key line under it is
+  blank: the box says it all. Inside, a blank row over and under its
+  words and two columns of indent past the frame's own; a step of
+  several (`kill-pane`, then `kill -TERM`) takes a line each. A door's long diff keeps its
   confirm on the key line: the diff fills the body, and a box would hide
   what it asks about.
 - **Widths:** the shape picks first. A cell is about twice as tall as it

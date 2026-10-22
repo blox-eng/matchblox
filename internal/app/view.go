@@ -510,7 +510,7 @@ func (m Model) keyLine(w int) (string, []span) {
 		return fit(" "+st.label.Render("/ ")+st.text.Render(m.filter)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ keep  esc clear"), w), nil
 	}
 	if m.consenting() {
-		return fit(" "+st.faint.Render("the question above waits for its key"), w), nil
+		return "", nil // the box says it all
 	}
 	if m.held != nil {
 		switch {

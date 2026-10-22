@@ -105,7 +105,7 @@ func TestXKillsASession(t *testing.T) {
 		t.Fatalf("the keys of a session lack x: %q", actionLine(next))
 	}
 	next, _ = key(next, "x")
-	if line := actionLine(next); !strings.Contains(line, "Kill echo: tmux kill-pane -t %echo, then kill -TERM 5") {
+	if line := actionLine(next); !strings.Contains(line, "Kill echo: tmux kill-pane -t %echo then kill -TERM 5") {
 		t.Fatalf("x on echo: %q", line)
 	}
 	_, cmd = key(next, "y")
