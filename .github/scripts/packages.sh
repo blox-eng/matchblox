@@ -20,7 +20,6 @@ if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "packages: '$tag' is not a release tag (like v0.1.0); a pre-release gets no package" >&2
   exit 1
 fi
-version=${tag#v}
 repo="blox-eng/matchblox"
 base="https://github.com/$repo/releases/download/$tag"
 desc="One terminal console for every AI coding agent you run"
