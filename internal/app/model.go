@@ -284,6 +284,9 @@ type Model struct {
 	reasons    map[string]proto.IdleReason
 	agents     []string                         // the agents a new session can start on the host
 	renames    map[string]string                // the names sessions take at their next rest, by pane
+	found      *proto.Found                     // the host's repositories and the scan's consent; nil: the service scans nothing
+	scanLater  bool                             // the scan question was closed or answered at this console
+	scanAct    string                           // the act of the box's yes, for its result
 	form       *form                            // the open New session, Rename or Switch agent form; nil none
 	jumpAfter  struct{ act, pane, done string } // a switch sent: the pane to jump to when it runs
 	lastAgent  string                           // the agent this console last started
@@ -457,6 +460,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.shipReport = st.Ships
 		m.holds, m.reasons = st.Holds, st.Reasons
 		m.agents, m.renames = st.Agents, st.Renames
+		if st.Found != nil {
+			m.found = st.Found
+		}
 		if m.recRun.rec != "" && m.recRun.act == "" && !m.isRec(m.recRun.rec) {
 			m.recRun = recRun{} // its rec is gone: a later one with the same id starts fresh
 		}
@@ -505,6 +511,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case resultMsg:
 		m.endRec(msg.ActID, proto.Result(msg))
 		if mm, ok := m.formResult(proto.Result(msg)); ok {
+			return mm, mm.recv()
+		}
+		if mm, ok := m.scanResult(proto.Result(msg)); ok {
 			return mm, mm.recv()
 		}
 		if mm, ok := m.sheetResult(proto.Result(msg)); ok {
@@ -747,10 +756,23 @@ func stokerSeen(next tea.Model, cmd tea.Cmd) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
-// unblock is ⏎ on a host that is blocked or speaks another version: a
-// changed host key tries again, anything else shows the connect.
-func (m Model) unblock() (tea.Model, tea.Cmd) {
-	if errors.Is(m.blocked, remote.ErrHostKeyChanged) {
+func (m Model) key(k string) (tea.Model, tea.Cmd) {
+	if m.held != nil {
+		return m.answerTakeOver(k)
+	}
+	if m.asksScan() {
+		return m.answerScan(k)
+	}
+	if m.asksTakeOver(k) {
+		m.held, m.flash = m.hold(k), ""
+		return m, nil
+	}
+	if m.pending != nil && m.pending.door != "" && m.pending.which != "secondary" {
+		if mm, ok := m.scrollPreview(k); ok {
+			return mm, nil
+		}
+	}
+	if m.pending == nil && k == "enter" && errors.Is(m.blocked, remote.ErrHostKeyChanged) {
 		return m.tryAgain()
 	}
 	m.pending = m.connectAction()

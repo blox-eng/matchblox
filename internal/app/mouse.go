@@ -19,6 +19,10 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		m.held, m.flash = nil, ""
 		return m, nil
 	}
+	if m.asksScan() { // a tap is never an answer
+		m.scanLater = true
+		return m, nil
+	}
 	if m.splashing() {
 		m.splashDone = true
 		return m, nil

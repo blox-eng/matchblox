@@ -31,15 +31,18 @@ const (
 	fieldName
 	fieldAgent
 	fieldFirst
+	fieldFolders
 )
 
-var formLabels = [...]string{"where", "branch", "name", "agent", "first"}
+var formLabels = [...]string{"where", "branch", "name", "agent", "first", "folders"}
 
 // form is the open New session, Rename or Switch agent form. Rename has
 // the name only; Switch agent the agent and the handoff (in first).
 type form struct {
 	rename    bool
 	swap      bool   // Switch agent
+	pick      bool   // the scan's folders, in roots
+	roots     string // space separated
 	pane, who string // Rename, Switch agent: the session's pane and its name now
 	from      string // Switch agent: the session's agent now (where: its directory)
 	at        int    // the field the cursor is on
@@ -155,12 +158,23 @@ func (m Model) switchAction(f form) *action {
 	return a
 }
 
-// gitPaths are the repositories and worktrees of the Git tab, ←→ on where.
+// gitPaths are ←→ on where: the repositories and worktrees of the Git tab,
+// then the ones found on the host, the most recently used first.
 func (m Model) gitPaths() []string {
 	var out []string
 	for _, r := range m.allWorktreeRows() {
 		if !slices.Contains(out, r.wt.Path) {
 			out = append(out, r.wt.Path)
+		}
+	}
+	if m.found == nil {
+		return out
+	}
+	found := slices.Clone(m.found.Repos)
+	slices.SortStableFunc(found, func(a, b proto.Checkout) int { return b.Active.Compare(a.Active) })
+	for _, c := range found {
+		if !slices.Contains(out, c.Path) {
+			out = append(out, c.Path)
 		}
 	}
 	return out
@@ -169,6 +183,8 @@ func (m Model) gitPaths() []string {
 // fields are the form's fields, in Tab's order.
 func (f *form) fields() []int {
 	switch {
+	case f.pick:
+		return []int{fieldFolders}
 	case f.rename:
 		return []int{fieldName}
 	case f.swap:
@@ -187,6 +203,8 @@ func (f *form) text(field int) *string {
 		return &f.name
 	case fieldFirst:
 		return &f.first
+	case fieldFolders:
+		return &f.roots
 	}
 	return nil
 }
@@ -310,6 +328,16 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 	if f.swap {
 		return m.swapEnter(f)
 	}
+	if f.pick {
+		roots := strings.Fields(f.roots)
+		if len(roots) == 0 {
+			f.err = "which folders? ~ is your home"
+			return m, nil
+		}
+		cmd := m.send(proto.Act{RecID: "scan:yes", Confirm: "y", Text: strings.Join(roots, "\n")})
+		f.act, f.err = fmt.Sprintf("a%d", m.acts), ""
+		return m, cmd
+	}
 	name := strings.TrimSpace(f.name)
 	if f.rename || f.named {
 		if err := proto.CheckName(name); err != nil {
@@ -372,6 +400,8 @@ func (m Model) formResult(r proto.Result) (Model, bool) {
 	case len(r.Skipped) > 0:
 		f.err = strings.Join(r.Skipped, "; ")
 		return m, true
+	case f.pick:
+		m.scanLater, m.flash = true, "found your Git repositories: N offers them"
 	case f.rename:
 		m.flash = "renamed " + f.who + " to " + strings.TrimSpace(f.name)
 	default:
@@ -431,6 +461,10 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 		add(fmt.Sprintf("field:%d", fieldAgent), line)
 		agents = chips
 		field(fieldFirst, f.first, "blank: it waits for you")
+	case f.pick:
+		title = st.accent.Bold(true).Render("Find repositories in these folders")
+		field(fieldFolders, f.roots, "~ is your home")
+		add("", "", st.faint.Render(fit("a space between folders; four deep, they stay on this host", iw)))
 	case f.rename:
 		title = st.accent.Bold(true).Render("Rename " + f.who)
 		field(fieldName, f.name, "")
@@ -501,6 +535,8 @@ func (m Model) formFoot() []footPart {
 	st := m.st
 	fk, sep := m.keys.form, " ─ "
 	switch {
+	case m.form.pick:
+		return []footPart{key("⏎", "find", "enter"), key("esc", "", "esc")}
 	case m.form.rename:
 		return []footPart{st.footFor(fk.Enter, "rename", sep), st.footFor(fk.Close, "", sep)}
 	case m.form.swap:
