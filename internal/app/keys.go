@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strconv"
 
 	bkey "charm.land/bubbles/v2/key"
@@ -61,7 +62,7 @@ func defaultKeys() keymaps {
 			Quit:      bind(ks("q"), "q", "quit"), // ctrl+c is global.Quit
 			NextTab:   bind(ks("tab"), "tab", "next"),
 			PrevTab:   bind(ks("shift+tab"), "shift+tab", "back"),
-			Tabs:      bind(digits1to9[:len(tabNames)], "1-"+strconv.Itoa(len(tabNames)), "tab"),
+			Tabs:      bind(slices.Clip(digits1to9[:len(tabNames)]), "1-"+strconv.Itoa(len(tabNames)), "tab"),
 			Search:    bind(ks("/"), "/", "find"),
 			Back:      bind(ks("esc"), "esc", "clear"),
 			Sort:      bind(ks("s"), "s", "sort"),
