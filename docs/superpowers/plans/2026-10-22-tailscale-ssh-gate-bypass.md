@@ -49,7 +49,7 @@
   - `TestTailscaleSSHOnTrue` — prefs fixture `tailscale-prefs-ssh-on.json` → `TailscaleSSHOn()` true
   - `TestTailscaleSSHOnFalse` — `tailscale-prefs-ssh-off.json` → false
   - `TestTailscaleSSHOnNoTool` — LookPath fails → false
-  - `TestTailscaleSSHOnBadPrefs` — prefs returns `{` → false
+  - `TestTailscaleSSHOnBadPrefs` — prefs returns truncated JSON → false
   - `TestWarnTailscaleSSHGateCopy` — const contains `tailscale set --ssh=false`, `MagicDNS` or `port 22`, and `not gated` (or equivalent pinned substring set)
 
 - [ ] **Step 2: Run tests; expect FAIL**
