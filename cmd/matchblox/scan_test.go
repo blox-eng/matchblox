@@ -140,6 +140,49 @@ func TestCLIScanListsSkipped(t *testing.T) {
 	}
 }
 
+func TestCLIScanListsSkippedSymlinkedHome(t *testing.T) {
+	real, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(t.TempDir(), "home")
+	if err := os.Symlink(real, home); err != nil {
+		t.Skip(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	sock := isolate(t)
+	// The service reports resolved paths: under the real home.
+	actService(t, sock, proto.Result{Scan: &proto.ScanSummary{Repos: 1, Took: time.Second,
+		Skipped: []gitscan.Skip{{Path: filepath.Join(real, "Desktop"), Why: "macOS asks first"}, {Path: real + "2/x", Why: "near"}, {Path: filepath.Join(home, "Music"), Why: "raw"}}}})
+	var out bytes.Buffer
+	if err := cliScan(nil, &out, sock); err != nil {
+		t.Fatal(err)
+	}
+	want := "found 1 repository in 1s\nskipped ~/Desktop: macOS asks first\nskipped " + real + "2/x: near\nskipped ~/Music: raw\n"
+	if out.String() != want {
+		t.Fatalf("got %q, want %q", out.String(), want)
+	}
+}
+
+func TestResolveHomeBounded(t *testing.T) {
+	old := evalSymlinks
+	t.Cleanup(func() { evalSymlinks = old })
+	block := make(chan struct{})
+	t.Cleanup(func() { close(block) })
+	evalSymlinks = func(string) (string, error) { <-block; return "/never", nil }
+	start := time.Now()
+	if got := resolveHome("/h", 50*time.Millisecond); got != "/h" {
+		t.Fatalf("got %q, want the raw home", got)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("took %s", d)
+	}
+	if got := resolveHome("", time.Second); got != "" {
+		t.Fatalf("empty home: got %q", got)
+	}
+}
+
 func TestCLIScanSuperseded(t *testing.T) {
 	sock := isolate(t)
 	actService(t, sock, proto.Result{Err: "other folders were picked since: /a"})

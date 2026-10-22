@@ -17,6 +17,34 @@ import (
 // stat is os.Stat; a test swaps it.
 var stat = os.Stat
 
+// evalSymlinks is filepath.EvalSymlinks; a test swaps it.
+var evalSymlinks = filepath.EvalSymlinks
+
+// resolveHome is home with its links followed, as the service reports
+// paths; home itself when it does not resolve, or not in within.
+func resolveHome(home string, within time.Duration) string {
+	if home == "" {
+		return ""
+	}
+	ch := make(chan string, 1)
+	ev := evalSymlinks // read here: the goroutine may outlive a test that swaps it back
+	go func() {
+		if p, err := ev(home); err == nil {
+			ch <- p
+		} else {
+			ch <- home
+		}
+	}()
+	t := time.NewTimer(within)
+	defer t.Stop()
+	select {
+	case p := <-ch:
+		return p
+	case <-t.C:
+		return home
+	}
+}
+
 // statDir is nil when path is a folder. A folder that does not answer in
 // within is an error: a dead network mount must not hang the CLI.
 func statDir(path string, within time.Duration) error {
@@ -25,8 +53,9 @@ func statDir(path string, within time.Duration) error {
 		err error
 	}
 	ch := make(chan answer, 1)
+	st := stat // read here: the goroutine may outlive a test that swaps it back
 	go func() {
-		fi, err := stat(path)
+		fi, err := st(path)
 		ch <- answer{fi, err}
 	}()
 	t := time.NewTimer(within)
@@ -124,10 +153,14 @@ func cliScan(words []string, w io.Writer, path string) error {
 			return err
 		}
 	}
+	real := resolveHome(home, 2*time.Second)
 	for _, k := range sc.Skipped {
 		p := k.Path
-		if home != "" && (p == home || strings.HasPrefix(p, home+string(filepath.Separator))) {
-			p = "~" + p[len(home):]
+		for _, h := range []string{real, home} {
+			if h != "" && (p == h || strings.HasPrefix(p, h+string(filepath.Separator))) {
+				p = "~" + p[len(h):]
+				break
+			}
 		}
 		if _, err := fmt.Fprintf(w, "skipped %s: %s\n", p, k.Why); err != nil {
 			return err
