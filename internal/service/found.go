@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -183,7 +184,7 @@ func (s *Service) walk(ctx context.Context, reqs []scanReq) {
 		return
 	}
 	f := gitscan.Found{Consent: "yes", Roots: c.Roots, At: time.Now(), Took: time.Since(start),
-		Repos: res.Repos, Errors: res.Errors, Skipped: res.Skipped, SkippedMore: res.SkippedMore}
+		Repos: s.carryOver(res), Errors: res.Errors, Skipped: res.Skipped, SkippedMore: res.SkippedMore}
 	f, on, err := s.keep(f, nos)
 	if errors.Is(err, errScanNo) {
 		all(err)
@@ -196,6 +197,46 @@ func (s *Service) walk(ctx context.Context, reqs []scanReq) {
 			r.done <- scanOutcome{err: supersededError{on}}
 		}
 	}
+}
+
+// carryOver is res's repos and, from the last scan, those under a folder
+// res could not read because it did not answer: a folder that did not
+// answer keeps what was found there, sorted by path as Find sorts.
+func (s *Service) carryOver(res gitscan.Result) []gitscan.Checkout {
+	var dark []string
+	for _, p := range res.Hung {
+		dark = append(dark, filepath.Clean(p))
+	}
+	for _, k := range res.Skipped {
+		if k.Unanswered() {
+			dark = append(dark, filepath.Clean(k.Path))
+		}
+	}
+	if len(dark) == 0 {
+		return res.Repos
+	}
+	s.mu.Lock()
+	last := s.found.Repos
+	s.mu.Unlock()
+	out := slices.Clone(res.Repos)
+	have := map[string]bool{}
+	for _, c := range res.Repos {
+		have[c.Path] = true
+	}
+	for _, c := range last {
+		if !have[c.Path] && slices.ContainsFunc(dark, func(d string) bool { return under(c.Path, d) }) {
+			have[c.Path] = true
+			out = append(out, c)
+		}
+	}
+	slices.SortFunc(out, func(a, b gitscan.Checkout) int { return strings.Compare(a.Path, b.Path) })
+	return out
+}
+
+// under reports whether path is dir or below it.
+func under(path, dir string) bool {
+	path = filepath.Clean(path)
+	return path == dir || strings.HasPrefix(path, strings.TrimSuffix(dir, string(filepath.Separator))+string(filepath.Separator))
 }
 
 // keep stores f, the walk of the roots in f.Roots that started after nos

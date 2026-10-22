@@ -613,3 +613,74 @@ func TestScanNoThenYesMidWalk(t *testing.T) {
 		t.Fatalf("cache = %+v, want only the walk after the no", c)
 	}
 }
+
+// scripted returns the results in order, the last one again after.
+func scripted(s *Service, results ...gitscan.Result) {
+	var mu sync.Mutex
+	n := 0
+	s.Find = func(context.Context, []string, map[string]bool) gitscan.Result {
+		mu.Lock()
+		defer mu.Unlock()
+		r := results[min(n, len(results)-1)]
+		n++
+		return r
+	}
+}
+
+func repoPaths(cs []gitscan.Checkout) []string {
+	var out []string
+	for _, c := range cs {
+		out = append(out, c.Path)
+	}
+	return out
+}
+
+func TestRescanKeepsReposOfAFolderThatDidNotAnswer(t *testing.T) {
+	s, _ := foundTest(t)
+	scripted(s,
+		gitscan.Result{Repos: []gitscan.Checkout{{Path: "/default/a"}, {Path: "/default/b"}, {Path: "/other/c"}, {Path: "/defaultx/d"}}},
+		gitscan.Result{Repos: []gitscan.Checkout{{Path: "/other/e"}}, Hung: []string{"/default"},
+			Skipped: []gitscan.Skip{{Path: "/default", Why: "it did not answer"}}},
+		gitscan.Result{Repos: []gitscan.Checkout{{Path: "/other/e"}},
+			Skipped: []gitscan.Skip{{Path: "/default", Why: "it did not answer before"}}},
+	)
+	foundReady(t, s)
+	yes := func() proto.Result {
+		r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true})
+		if r.Err != "" {
+			t.Fatal(r.Err)
+		}
+		return r
+	}
+	yes()
+	want := []string{"/default/a", "/default/b", "/other/e"}
+	for i := range 2 {
+		r := yes()
+		if r.Scan.Repos != 3 || len(r.Scan.Skipped) != 1 || r.Scan.Skipped[0].Path != "/default" {
+			t.Fatalf("walk %d: scan %+v: want the kept repos counted and /default named", i+2, r.Scan)
+		}
+		if got := repoPaths(firstFound(t, s).Repos); !slices.Equal(got, want) {
+			t.Fatalf("walk %d: console repos %v, want %v", i+2, got, want)
+		}
+		if got := repoPaths(state.ReadFound(s.ReposPath).Repos); !slices.Equal(got, want) {
+			t.Fatalf("walk %d: repos.json %v, want %v", i+2, got, want)
+		}
+	}
+}
+
+func TestRescanDropsReposOfAFolderThatAnswered(t *testing.T) {
+	s, _ := foundTest(t)
+	scripted(s,
+		gitscan.Result{Repos: []gitscan.Checkout{{Path: "/default/a"}, {Path: "/default/b"}}},
+		gitscan.Result{Repos: []gitscan.Checkout{{Path: "/default/a"}}},
+	)
+	foundReady(t, s)
+	for range 2 {
+		if r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true}); r.Err != "" {
+			t.Fatal(r.Err)
+		}
+	}
+	if got := repoPaths(firstFound(t, s).Repos); !slices.Equal(got, []string{"/default/a"}) {
+		t.Fatalf("console repos %v: a repo gone from a folder that answered stays gone", got)
+	}
+}
