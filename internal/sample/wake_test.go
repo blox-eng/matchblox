@@ -47,3 +47,27 @@ func TestAnAgentStartedInAPaneIsReadAtTheNextSample(t *testing.T) {
 		t.Fatal("the agent started in %4 is missing")
 	}
 }
+
+// TestAnAgentStartedAfterServeShowsBeforeProcEvery: issue #113 — serve's
+// first scan has only a non-agent pane; a codex session started later must
+// appear on the next sample even when ProcEvery has not elapsed. Without a
+// pane-change wake, status at ~6s kept the first snapshot (sessions: 0,
+// one idle pane) and looked empty in containers.
+func TestAnAgentStartedAfterServeShowsBeforeProcEvery(t *testing.T) {
+	root := copyFixture(t)
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	smp.ProcEvery = time.Hour
+	first := smp.Sample()
+	if _, ok := byPane(first)["%9"]; ok {
+		t.Fatal("fixture already has %9")
+	}
+
+	addProc(t, root, 900, 1, "codex", []string{"/opt/codex/bin/codex"}, "%9")
+	addPane(t, root, "%9\tlate:1.1\tlate\t900\tcodex\t/tmp/w")
+	snap := smp.Sample()
+	got := byPane(snap)
+	if s, ok := got["%9"]; !ok || s.Agent != "codex" {
+		t.Fatalf("late codex missing before ProcEvery: sessions=%v idle=%v", got, snap.IdlePanes)
+	}
+}
