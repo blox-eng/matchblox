@@ -52,6 +52,12 @@
           <button type="button" role="tab" id="t-script" aria-selected="true" aria-controls="cmdline"
             data-cmd="curl -fsSL https://matchblox.sh | sh"
             data-note="Linux and macOS · amd64 or arm64 · checksum and provenance checked" data-read="1">Script</button>
+          <button type="button" role="tab" id="t-brew" aria-selected="false" aria-controls="cmdline" tabindex="-1"
+            data-cmd="brew install blox-eng/tap/matchblox"
+            data-note="macOS and Linux · the release binary · brew upgrade keeps it current">Brew</button>
+          <button type="button" role="tab" id="t-aur" aria-selected="false" aria-controls="cmdline" tabindex="-1"
+            data-cmd="yay -S matchblox-bin"
+            data-note="Arch Linux · the release binary · any AUR helper">AUR</button>
           <button type="button" role="tab" id="t-go" aria-selected="false" aria-controls="cmdline" tabindex="-1"
             data-cmd="go install github.com/blox-eng/matchblox/cmd/matchblox@latest"
             data-note="Go 1.26 or later · into ~/go/bin">Go</button>

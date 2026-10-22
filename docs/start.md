@@ -20,7 +20,30 @@ from source:
 go install github.com/blox-eng/matchblox/cmd/matchblox@latest
 ```
 
+With Homebrew, on macOS or Linux:
+
+```sh
+brew install blox-eng/tap/matchblox
+```
+
+On Arch Linux, from the AUR: `yay -S matchblox-bin`, or any AUR helper.
+
 Check that it runs: `matchblox version`.
+
+### Keep it current
+
+```sh
+matchblox update
+```
+
+It gets the latest release and makes the same checks as the script: the
+checksum and, with `gh` logged in, that CI built it. Only then does it
+replace the binary. When a check fails, nothing changes. Open matchblox
+after it: the console replaces the running service with the new version.
+
+When Homebrew or the AUR installed matchblox, `matchblox update` changes
+nothing and tells you the command to run: `brew upgrade matchblox`, or
+your AUR helper.
 
 ## 2. Run it
 

@@ -4,7 +4,8 @@ name: Publish
 # .sha256 for each, a CycloneDX SBOM, and build provenance and SBOM
 # attestations that `gh attestation verify` checks. The release is a draft
 # until they are attached, then a pre-release until the install script installed it on each OS and arch;
-# then it becomes the latest release, and its docs go live.
+# then it becomes the latest release, its docs go live, and Homebrew and the
+# AUR get it.
 #
 # To publish a tag again (a failed run):
 #   gh workflow run publish.yml --ref v0.1.0
@@ -278,6 +279,89 @@ jobs:
           curl -fsSL https://matchblox.sh | MATCHBLOX_BIN_DIR="$dir" MATCHBLOX_NO_START=1 sh
           got="$("$dir/matchblox" version)"
           [ "$got" = "$TAG" ] || { echo "the latest install says '$got', not '$TAG'" >&2; exit 1; }
+
+  # The latest release goes to Homebrew and the AUR, as packages of the
+  # binaries above: nothing builds again. Each one waits for its secret
+  # (RELEASING.md); without it, the step says so and the release goes on.
+  packages:
+    name: Homebrew and the AUR
+    needs: [build, promote]
+    if: needs.promote.outputs.latest == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Write the formula and the PKGBUILD
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release download "$TAG" --pattern 'matchblox-*.sha256' --dir "$RUNNER_TEMP/sums"
+          .github/scripts/packages.sh "$TAG" "$RUNNER_TEMP/sums" "$RUNNER_TEMP/packages"
+
+      - name: Push the formula to blox-eng/homebrew-tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::notice::No HOMEBREW_TAP_TOKEN: the Homebrew tap keeps its last release (RELEASING.md)"
+            exit 0
+          fi
+          tap="$RUNNER_TEMP/tap"
+          git clone -q "https://x-access-token:${TAP_TOKEN}@github.com/blox-eng/homebrew-tap.git" "$tap"
+          mkdir -p "$tap/Formula"
+          cp "$RUNNER_TEMP/packages/Formula/matchblox.rb" "$tap/Formula/matchblox.rb"
+          cd "$tap"
+          git add Formula/matchblox.rb
+          if git diff --cached --quiet; then
+            echo "the tap has $TAG already"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "matchblox ${TAG#v}"
+          git push -q origin HEAD
+
+      # The AUR host key is pinned to the fingerprint the AUR publishes on
+      # https://aur.archlinux.org: a changed key stops the push.
+      - name: Push the package to the AUR (matchblox-bin)
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -z "$AUR_SSH_KEY" ]; then
+            echo "::notice::No AUR_SSH_KEY: the AUR package keeps its last release (RELEASING.md)"
+            exit 0
+          fi
+          ssh="$RUNNER_TEMP/ssh"
+          mkdir -m 700 "$ssh"
+          (umask 077 && printf '%s\n' "$AUR_SSH_KEY" >"$ssh/key")
+          ssh-keyscan -t ed25519 aur.archlinux.org >"$ssh/known_hosts" 2>/dev/null
+          fp="$(ssh-keygen -lf "$ssh/known_hosts" | cut -d' ' -f2)"
+          [ "$fp" = "SHA256:RFzBCUItH9LZS0cKB5UE6ceAYhBD5C8GeOBip8Z11+4" ] ||
+            { echo "aur.archlinux.org has the host key $fp, not the one the AUR publishes" >&2; exit 1; }
+          export GIT_SSH_COMMAND="ssh -i $ssh/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$ssh/known_hosts -o StrictHostKeyChecking=yes"
+          aur="$RUNNER_TEMP/aur"
+          git clone -q ssh://aur@aur.archlinux.org/matchblox-bin.git "$aur"
+          cp "$RUNNER_TEMP/packages/aur/PKGBUILD" "$RUNNER_TEMP/packages/aur/.SRCINFO" "$aur/"
+          cd "$aur"
+          git add PKGBUILD .SRCINFO
+          if git diff --cached --quiet; then
+            echo "the AUR has $TAG already"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "matchblox ${TAG#v}"
+          git push -q origin HEAD:master
 
   docs:
     name: Docs

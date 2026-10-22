@@ -10,6 +10,7 @@
 //	matchblox pair            show a code that pairs the iPhone app
 //	matchblox devices         list the phones and laptops that open this host; devices rm <name> removes one
 //	matchblox setup           every setup door at once: tmux, the hooks, the way back
+//	matchblox update          replace this binary with the latest release, checked
 //	matchblox version         print the version
 package main
 
@@ -156,6 +157,8 @@ func run(args []string) error {
 	case "version":
 		fmt.Println(version)
 		return nil
+	case "update":
+		return updateCmd(os.Stdout)
 	case "sessions", "ships", "usage":
 		return cliRead(cmd, os.Stdout, transport.SocketPath(), *o.json)
 	case "peek":
@@ -272,7 +275,7 @@ func run(args []string) error {
 
 // commands are the commands a builder types. hook, authorize and gate run
 // from a hook, an ssh forced command and a connect.
-var commands = []string{"connect", "serve", "sessions", "ships", "status", "setup", "pair", "devices", "usage", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "switch"}
+var commands = []string{"connect", "serve", "sessions", "ships", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "switch"}
 
 type flags struct {
 	cfgPath, root         *string
@@ -302,6 +305,7 @@ Commands:
   matchblox setup                  every setup door at once: tmux, the hooks, the way back
   matchblox pair                   a one-time QR code that pairs the iPhone app
   matchblox devices [rm <name>]    the phones and laptops that open this host
+  matchblox update                 get the latest release, its checksum and build checked
   matchblox version                print the version
   matchblox sessions               every session, one line a row (--json)
   matchblox ships                  the pull requests the sessions drive (--json)

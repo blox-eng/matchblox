@@ -6,6 +6,16 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`matchblox update` gets the latest release, and Homebrew and the AUR
+  install matchblox.** The update makes the same checks as the install
+  script: the checksum and, with `gh` logged in, that CI built it. When a
+  check fails, nothing changes. When Homebrew or the AUR installed
+  matchblox, it tells you their command instead:
+  `brew install blox-eng/tap/matchblox`, `yay -S matchblox-bin`.
+  ([#95](https://github.com/blox-eng/matchblox/issues/95))
+
 ## [0.16.0] - 2026-10-22
 
 ### Added
