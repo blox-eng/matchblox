@@ -114,11 +114,14 @@ starts it. A second phone or laptop attaches to the same session.
 
 1. Tap an agent in Sessions. The key line says `tap again: <command>`.
 2. Tap it again. You are in the agent's pane.
-3. To come back, tap `◂ matchblox` at the left of the tmux status line, or
-   press `prefix m` (the tmux prefix, then m).
+3. To come back in the matchblox app, swipe in from the left edge, tap
+   `◂ matchblox` at the left of the tmux status line, or press ⌘M on a
+   hardware keyboard. All three work whatever your tmux prefix is, and
+   none needs the tmux mouse.
 
-The tap on `◂ matchblox` needs the tmux mouse on. Press `m` in the preview
-of "Add the way back" to turn it on with it, or add `set -g mouse on` to your
+In another SSH app, tap `◂ matchblox`, or press `prefix m` (the tmux prefix,
+then m). There the tap needs the tmux mouse on: press `m` in the preview of
+"Add the way back" to turn it on with it, or add `set -g mouse on` to your
 tmux config. Without it, use `prefix m`.
 
 The console then selects the next agent that waits.
