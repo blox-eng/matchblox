@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/actions"
+	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -184,4 +185,14 @@ func runInTerminal(argv []string) error {
 	c := exec.Command(argv[0], argv[1:]...) //nolint:gosec // a door's command, from setup.Doors
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return c.Run()
+}
+
+// sessionAgents are the process names that are sessions on this machine:
+// every known agent, installed at the first run or after it, then the
+// others the config adds (#179). A fixture tree keeps its config's.
+func sessionAgents(cfg config.Config, root string) []string {
+	if root != "" {
+		return cfg.Agents
+	}
+	return setup.Agents(cfg.Agents)
 }

@@ -54,8 +54,9 @@ tmux new -s docs aider
 ╿ done   4m    docs       docs:1.1        —
 ```
 
-The first run writes the agents it finds to `agents` in the
-[config](config.md). Add any other agent there by its command.
+matchblox knows claude, codex, opencode, gemini, cursor-agent, aider,
+crush and qwen, installed before its first run or after it. Add any other
+agent to `agents` in the [config](config.md) by its command.
 
 An agent that keeps no name of its own (all but Claude Code) is named as
 its tmux window, which `r` renames, or as its tmux session while tmux names

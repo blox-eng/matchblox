@@ -22,6 +22,27 @@ All notable changes to matchblox are in this file. The format follows
   the reset times stay whole.
   ([#183](https://github.com/blox-eng/matchblox/issues/183))
 
+### Fixed
+
+- **A known agent installed after the first run shows in Sessions.**
+  The first run froze the agents it found into `agents`, so Codex
+  installed later (or a session switched from Claude Code to Codex)
+  never showed. Every known agent (claude, codex, opencode, gemini,
+  cursor-agent, aider, crush, qwen) now counts wherever it is installed;
+  `agents` adds others. The Codex app's `codex app-server` daemons are
+  no session.
+  ([#179](https://github.com/blox-eng/matchblox/issues/179))
+- **Codex shows its context and limits.** macOS lists no open files,
+  and Codex 0.163 closes its rollout after each write, so no open file
+  named it and the session read as unmeasured with no limits. The rollout is now also found as the newest one
+  of the session's directory begun and written since it started, when it
+  is the only Codex there and the rollout is not a `codex exec` run's.
+  ([#179](https://github.com/blox-eng/matchblox/issues/179))
+- **`z` parks a Codex session.** Codex has no hooks, so its session had
+  no id and could not be held; the id now comes from its rollout, and its
+  pane still tells busy from idle.
+  ([#182](https://github.com/blox-eng/matchblox/issues/182))
+
 ## [0.17.4] - 2026-10-22
 
 ### Fixed

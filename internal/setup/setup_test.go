@@ -547,6 +547,20 @@ func TestFindAgentsAlwaysKeepsClaudeCode(t *testing.T) {
 	}
 }
 
+// TestAgentsSeesAKnownAgentInstalledLater: the first run wrote the agents
+// it found; Codex installed after it still shows (#179), and an agent the
+// config adds counts too, once.
+func TestAgentsSeesAKnownAgentInstalledLater(t *testing.T) {
+	got := Agents([]string{"claude", "cursor-agent", "goose", "claude"})
+	if !slices.Contains(got, "codex") || !slices.Contains(got, "goose") {
+		t.Fatalf("agents %q: want codex and goose", got)
+	}
+	want := strings.Join(KnownAgents, ",") + ",goose"
+	if strings.Join(got, ",") != want {
+		t.Fatalf("agents %q, want %q", got, want)
+	}
+}
+
 // The night door leads to the stoker, which compacts Claude Code only. It
 // folds after the first run and can be closed like any door.
 func TestNightDoorFoldsAfterTheFirstRun(t *testing.T) {
