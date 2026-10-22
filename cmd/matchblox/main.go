@@ -204,6 +204,12 @@ func run(args []string) error {
 			return err
 		}
 		return cliNew(words, newOpts{where: *o.where, agent: *o.agent, branch: *o.branch, name: *o.name}, os.Stdout, transport.SocketPath())
+	case "scan":
+		words, err := positionals(fl, args)
+		if err != nil {
+			return err
+		}
+		return cliScan(words, os.Stdout, transport.SocketPath(), state.ReposPath())
 	case "stoker":
 		words, err := positionals(fl, args) // all of them: a -- before the first word holds too
 		if err != nil {
@@ -271,7 +277,7 @@ func run(args []string) error {
 
 // commands are the commands a builder types. hook, authorize and gate run
 // from a hook, an ssh forced command and a connect.
-var commands = []string{"connect", "serve", "sessions", "ships", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "switch"}
+var commands = []string{"connect", "serve", "sessions", "ships", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "switch", "scan"}
 
 type flags struct {
 	cfgPath, root         *string
@@ -315,6 +321,7 @@ Commands:
   matchblox rename <who> <name>    name a session, its tmux session and its agent alike
   matchblox kill <who>             end a session: its agent and its pane (--anyway while it works)
   matchblox switch <who> --agent <name>  run another agent in a session's pane (--handoff, --anyway while it works)
+  matchblox scan [<folder>…|off]   find the Git repositories here for N, now and every 30 minutes (off: stop and forget)
   matchblox stoker plan|step       the stoker agent's plan and steps, for its card
   matchblox stoker when …          a trigger matchblox fires itself (--ship n --stage s, or --rest who)
   matchblox stoker quit            end the stoker agent and its own tmux session
@@ -572,6 +579,16 @@ func newService(cfg config.Config, root string) *service.Service {
 		fmt.Fprintln(os.Stderr, "matchblox: parking is off:", err)
 	}
 	s.Ships = shipsSource(cfg, filepath.Dir(s.StatePath))
+	if home, err := os.UserHomeDir(); err == nil {
+		opts := gitscan.FindOpts{Depth: gitscan.FindDepth, Remote: cfg.Git.Remote, MaxDirs: 100_000, Budget: 30 * time.Second}
+		s.Find = func(ctx context.Context, roots []string) ([]gitscan.Checkout, []string) {
+			return gitscan.Find(ctx, roots, opts)
+		}
+		s.ScanRoots = func(picked []string) []string {
+			return gitscan.ScanRoots(home, picked, cfg.Git.Repos, cfg.Git.ScanRoots)
+		}
+		s.ConsentPath, s.ReposPath = state.ScanPath(), state.ReposPath()
+	}
 	return s
 }
 
