@@ -161,7 +161,7 @@ func (m Model) draw(w int) drawn {
 		}
 		sc.lines = append(sc.lines, "", strings.Repeat(" ", max((w-lipgloss.Width(why))/2, 0))+m.st.faint.Render(why))
 		if m.opt.Layered {
-			keys := "esc hosts  q quit"
+			keys := plainHints(hintFor(m.keys.main.Back, "hosts"), hintFor(m.keys.main.Quit, ""))
 			sc.lines = append(sc.lines, "", strings.Repeat(" ", max((w-len(keys))/2, 0))+m.st.muted.Render(keys))
 		}
 		return sc
@@ -496,7 +496,8 @@ func (m Model) alert() string {
 	}
 	alert := m.st.warn.Render(fmt.Sprintf("▲ %d alert", n))
 	if n > 1 {
-		alert += m.st.warn.Render("s")
+		plural := "s" // the plural, not the sort key
+		alert += m.st.warn.Render(plural)
 	}
 	return alert
 }
@@ -507,7 +508,7 @@ func (m Model) alert() string {
 func (m Model) keyLine(w int) (string, []span) {
 	st := m.st
 	if m.searching {
-		return fit(" "+st.label.Render("/ ")+st.text.Render(m.filter)+st.accent.Render("▏")+"  "+st.faint.Render("⏎ keep  esc clear"), w), nil
+		return fit(" "+st.label.Render(m.keys.main.Search.Help().Key+" ")+st.text.Render(m.filter)+st.accent.Render("▏")+"  "+st.faint.Render(plainHints(hintFor(m.keys.search.Keep, ""), hintFor(m.keys.search.Clear, ""))), w), nil
 	}
 	if m.consenting() {
 		return "", nil // the box says it all
@@ -517,19 +518,20 @@ func (m Model) keyLine(w int) (string, []span) {
 		case m.flash != "":
 			return fit(" "+st.text.Render("Take over? ")+st.warn.Render(m.flash), w), nil
 		case m.layoutAt(w) == Narrow:
-			return fit(" "+st.text.Render("Stoker on. Take over? ")+st.accent.Render("y")+st.muted.Render(" rest · ")+
-				st.accent.Render("n")+st.muted.Render(" keep"), w), nil
+			return fit(" "+st.text.Render("Stoker on. Take over? ")+keyWord(m.keys.takeOver.Rest, st.accent, st.muted, " rest · ")+
+				keyWord(m.keys.takeOver.Keep, st.accent, st.muted, " keep"), w), nil
 		}
-		return fit(" "+st.text.Render("The stoker is on. Take over?  ")+st.accent.Render("y")+st.muted.Render(" rests it while you work · ")+
-			st.accent.Render("n")+st.muted.Render(" keeps it on"), w), nil
+		return fit(" "+st.text.Render("The stoker is on. Take over?  ")+keyWord(m.keys.takeOver.Rest, st.accent, st.muted, " rests it while you work · ")+
+			keyWord(m.keys.takeOver.Keep, st.accent, st.muted, " keeps it on"), w), nil
 	}
 	if m.pending != nil {
-		confirm := "⏎ run  esc cancel"
+		ck := m.keys.confirm
+		confirm := plainHints(hintFor(ck.Enter, ""), hintFor(m.keys.main.Back, "cancel"))
 		if m.pending.destructive {
-			confirm = st.neg.Render("y") + st.muted.Render(" run  any other key cancels")
+			confirm = keyWord(ck.Yes, st.neg, st.muted, " run  any other key cancels")
 		}
 		if !m.previewSeen() {
-			confirm = st.muted.Render("↓ the rest, then ") + st.neg.Render("y")
+			confirm = st.muted.Render(plainHints(hintFor(ck.ScrollDown, ""))+", then ") + st.neg.Render(ck.Yes.Help().Key)
 		}
 		return fit(" "+st.label.Render("RUN ")+st.text.Render(m.pending.String())+"   "+st.muted.Render(confirm), w), nil
 	}
@@ -539,14 +541,15 @@ func (m Model) keyLine(w int) (string, []span) {
 	if m.flash != "" {
 		return fit(" "+st.text.Render(m.flash), w), nil
 	}
-	hints := m.view().keys(m)
+	hints := slices.DeleteFunc(slices.Clone(m.view().keys(m)), func(h hint) bool { return h == (hint{}) })
 	if m.layoutAt(w) == Wide {
-		hints = append([]hint{{"↑↓", "move", ""}}, hints...)
-		hints = append(hints, hint{"/", "find", "/"}, hint{"q", "quit", ""})
+		mk := m.keys.main
+		hints = append([]hint{noTap(hintFor(mk.Up, ""))}, hints...)
+		hints = append(hints, hintFor(mk.Search, ""), noTap(hintFor(mk.Quit, "")))
 	}
 	line, x := " ", 1
 	if m.filter != "" {
-		lead := "/ " + m.filter + " · esc clears  "
+		lead := m.keys.main.Search.Help().Key + " " + m.filter + " · " + m.keys.main.Back.Help().Key + " clears  "
 		line += st.muted.Render(lead)
 		x += lipgloss.Width(lead)
 	}
@@ -579,7 +582,10 @@ func (m Model) keyLine(w int) (string, []span) {
 
 // spareKeys are the keys a short key line drops first, in that order:
 // each one is reached another way (a tab tap, the dock, the docs).
-var spareKeys = []string{"A", "↑↓", "q", "/", "p", "z", "f"}
+var spareKeys = func() []string {
+	k := defaultKeys().main
+	return []string{k.Switch.Help().Key, k.Up.Help().Key, k.Quit.Help().Key, k.Search.Help().Key, k.Ships.Help().Key, k.Park.Help().Key, k.Stoke.Help().Key}
+}()
 
 // fitHints drops spare keys until the hints fit in room columns. The
 // row's own keys always stay: a line that is still too long is cut.

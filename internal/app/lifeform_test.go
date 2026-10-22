@@ -277,3 +277,21 @@ func TestATapOnSwitchOpensTheForm(t *testing.T) {
 		}
 	}
 }
+
+// TestFormSpaceIsTextOnWhereAndPicksOnAgent: Right binds space for the
+// agent line, and the where line is text, so space types there.
+func TestFormSpaceIsTextOnWhereAndPicksOnAgent(t *testing.T) {
+	m, _ := loadedWith(t, 100, lifeState())
+	next, _ := key(m, "N")
+	next, _ = key(next, "space")
+	if fm := next.(Model).form; fm.at != fieldWhere || fm.where != "/src/api " || fm.whereAt != -1 {
+		t.Fatalf("space on where: %+v", fm)
+	}
+	for range 3 { // branch, name, agent
+		next, _ = key(next, "tab")
+	}
+	next, _ = key(next, "space")
+	if fm := next.(Model).form; fm.at != fieldAgent || fm.agent != "codex" {
+		t.Fatalf("space on agent: %+v", fm)
+	}
+}

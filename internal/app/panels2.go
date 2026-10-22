@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	bkey "charm.land/bubbles/v2/key"
+	"charm.land/lipgloss/v2"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -127,12 +129,12 @@ func (m Model) gitPanel(w int) body {
 	for _, e := range m.git.Errors {
 		b.add(-1, fit(" "+st.neg.Render("! ")+st.muted.Render(e), w))
 	}
-	b.add(-1, "", fit(" "+st.faint.Render(fmt.Sprintf("scanned %s ago in %s · r rescans",
-		sample.Human(m.now().Sub(m.git.At)), m.git.Took.Round(time.Millisecond))), w))
+	b.add(-1, "", fit(" "+st.faint.Render(fmt.Sprintf("scanned %s ago in %s · %s rescans",
+		sample.Human(m.now().Sub(m.git.At)), m.git.Took.Round(time.Millisecond), m.keys.main.Rename.Help().Key)), w))
 	if wt, ok := m.selectedWorktree(); ok {
-		b.add(-1, fit(" "+st.label.Render("⏎ ")+st.muted.Render("tmux new-window -c "+wt.Path), w))
+		b.add(-1, fit(" "+st.label.Render(m.keys.main.Open.Help().Key+" ")+st.muted.Render("tmux new-window -c "+wt.Path), w))
 		if wt.Safe {
-			b.add(-1, fit(" "+st.label.Render("x ")+st.muted.Render(strings.Join(wt.Remove, " ")), w))
+			b.add(-1, fit(" "+st.label.Render(m.keys.main.Second.Help().Key+" ")+st.muted.Render(strings.Join(wt.Remove, " ")), w))
 		}
 	}
 	return b
@@ -152,11 +154,11 @@ func (m Model) recsSection(b *body, w int) {
 	}
 	if m.recPrefs.Folded {
 		b.add(recsLabelRow, st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d hidden", len(m.recs)))+st.faint.Render(" · ")+
-			st.accent.Render("h")+st.faint.Render(" shows"))
+			keyWord(m.keys.main.Fold, st.accent, st.faint, " shows"))
 		return
 	}
 	b.add(recsLabelRow, st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d", len(m.recs)))+st.faint.Render(" · ")+
-		st.accent.Render("h")+st.faint.Render(" hides"))
+		keyWord(m.keys.main.Fold, st.accent, st.faint, " hides"))
 	n := len(m.doors) + len(m.snap.Sessions)
 	sel := m.sessIndex() - n
 	for i, r := range m.recs {
@@ -179,7 +181,7 @@ func (m Model) recsSection(b *body, w int) {
 			}
 		}
 		if i == sel {
-			line = spread(line, dismissMark(st)+" ", w)
+			line = spread(line, dismissMark(st, m.keys.main.Dismiss)+" ", w)
 		}
 		b.addRow(n+i, i == sel, w, st, line)
 	}
@@ -198,7 +200,7 @@ func (m Model) recActions(r advice.Rec, w int) []string {
 	for _, a := range []struct {
 		key string
 		act *advice.Action
-	}{{"⏎", r.Primary}, {"x", r.Second}} {
+	}{{m.keys.main.Open.Help().Key, r.Primary}, {m.keys.main.Second.Help().Key, r.Second}} {
 		if a.act == nil {
 			continue
 		}
@@ -208,7 +210,7 @@ func (m Model) recActions(r advice.Rec, w int) []string {
 		}
 		label := a.act.Label
 		if a.act.Destructive {
-			label += ", asks y"
+			label += ", asks " + m.keys.confirm.Yes.Help().Key
 		}
 		out = append(out, fit(" "+st.accent.Render(a.key+" ")+st.text.Render(label+": ")+st.muted.Render(cmd), w))
 	}
@@ -306,7 +308,11 @@ func (m Model) historyPanel(w int) []string {
 }
 
 // dismissMark is the selected recommendation's tap target for d.
-func dismissMark(st styles) string { return st.accent.Render("d") + st.muted.Render(" dismiss") }
+func dismissMark(st styles, b bkey.Binding) string {
+	return keyWord(b, st.accent, st.muted, " "+b.Help().Desc)
+}
 
 // dismissWidth is the width of the dismiss mark and the space after it.
-const dismissWidth = len("d dismiss") + 1
+func (m Model) dismissWidth() int {
+	return lipgloss.Width(dismissMark(m.st, m.keys.main.Dismiss)) + 1
+}

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -13,7 +14,6 @@ import (
 )
 
 const (
-	sealedText   = "The night is sealed: n stops it, then launch a new one."
 	startingText = "starting the stoker…"
 	busyText     = "the stoker is busy: your order waits for it to rest"
 )
@@ -77,11 +77,11 @@ func (m Model) orderKey() (tea.Model, tea.Cmd) {
 	case m.stoker == nil:
 		m.flash = "this service keeps no stoker"
 	case m.stoker.On && !m.stoker.Until.IsZero():
-		m.flash = sealedText
+		m.flash = m.sealedText()
 	case m.stoker.On:
 		return m.openSheet(false, true)
 	default:
-		m.flash = "o gives a new order to a running stoker: f starts it"
+		m.flash = m.keys.main.Order.Help().Key + " gives a new order to a running stoker: " + m.keys.main.Stoke.Help().Key + " starts it"
 	}
 	return m, nil
 }
@@ -92,24 +92,21 @@ func (m Model) noAgent() bool { return m.stoker.Agent == "" || m.stoker.Missing 
 
 func (m Model) sheetKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := *m.sheet
-	key := k.String()
 	m.sheet = &s
-	switch key {
-	case "ctrl+c":
-		return m.quit()
-	case "enter":
+	sk := m.keys.sheet
+	if bkey.Matches(k, sk.Send) {
 		return m.sheetEnter()
 	}
 	if s.onChips {
 		n := len(goChips) + len(m.stoker.Recipes)
-		switch key {
-		case "esc", "tab":
+		switch {
+		case bkey.Matches(k, sk.Close, sk.Chips):
 			s.onChips = false
-		case "left":
+		case bkey.Matches(k, sk.Left):
 			s.at = (s.at + n - 1) % n
-		case "right":
+		case bkey.Matches(k, sk.Right):
 			s.at = (s.at + 1) % n
-		case "space":
+		case bkey.Matches(k, sk.Tick):
 			s.pick(m.stoker.Recipes)
 		default:
 			// Any other key is the order's: the cursor goes back to it.
@@ -118,14 +115,14 @@ func (m Model) sheetKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	switch key {
-	case "esc":
+	switch {
+	case bkey.Matches(k, sk.Close):
 		m.sheet = nil // nothing is sent
 		return m, nil
-	case "tab":
+	case bkey.Matches(k, sk.Chips):
 		s.onChips, s.at = true, 0
 		return m, nil
-	case "backspace":
+	case bkey.Matches(k, sk.Erase):
 		s.text = trimLast(s.text)
 		return m, nil
 	}
@@ -359,22 +356,16 @@ func (m Model) goLine(iw int) (string, []span) {
 
 func (m Model) sheetFoot() []footPart {
 	st := m.st
-	key := func(k, label, press string) footPart {
-		t := st.accent.Render(k)
-		if label != "" {
-			t += st.muted.Render(" " + label)
-		}
-		return footPart{t, press, " ─ "}
-	}
+	sk, sep := m.keys.sheet, " ─ "
 	verb := "send"
 	if m.noAgent() {
 		verb = "start"
 	}
-	foot := []footPart{key("⏎", verb, "enter")}
+	foot := []footPart{st.footFor(sk.Send, verb, sep)}
 	if m.sheet.onChips {
-		return append(foot, key("space", "toggle", "space"), key("tab", "back", "tab"))
+		return append(foot, st.footFor(sk.Tick, "", sep), st.footFor(sk.Chips, "back", sep))
 	}
-	return append(foot, key("tab", "chips", "tab"), key("esc", "", "esc"))
+	return append(foot, st.footFor(sk.Chips, "", sep), st.footFor(sk.Close, "", sep))
 }
 
 // chips are the recipes of the ways file, as many as the line holds, the
@@ -499,4 +490,9 @@ func (m Model) tapSheet(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 		return m.sheetKey(keyPress(s.press))
 	}
 	return m, nil
+}
+
+// sealedText is what a sealed night says of its key.
+func (m Model) sealedText() string {
+	return "The night is sealed: " + m.keys.main.Night.Help().Key + " stops it, then launch a new one."
 }

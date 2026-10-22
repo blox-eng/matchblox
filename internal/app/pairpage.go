@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -22,13 +23,25 @@ const (
 )
 
 const (
-	pairScanLine      = "Scan with the matchblox app, or paste the link."
-	pairKeyLine       = "c copies the link · esc stops"
-	pairFailedKeyLine = "Enter tries again · esc goes back"
-	pairPortLine      = "Port 22. For another port, run matchblox pair --port <n>."
-	pairStoppedLine   = "Stopped. The code no longer works."
-	pairSmallLine     = "Make this terminal 61 × 33 or larger to show the code, or press c to copy the link."
+	pairScanLine    = "Scan with the matchblox app, or paste the link."
+	pairPortLine    = "Port 22. For another port, run matchblox pair --port <n>."
+	pairStoppedLine = "Stopped. The code no longer works."
 )
+
+// pairKeyLine is the page's keys while the code is live.
+func pairKeyLine(k pairKeys) string {
+	return k.Copy.Help().Key + " " + k.Copy.Help().Desc + " · " + k.Close.Help().Key + " " + k.Close.Help().Desc
+}
+
+// pairFailedKeyLine is the page's keys when it failed.
+func pairFailedKeyLine(k pairKeys) string {
+	return k.Again.Help().Key + " " + k.Again.Help().Desc + " · " + k.Close.Help().Key + " goes back"
+}
+
+// pairSmallLine is what a terminal too small for the code is told.
+func pairSmallLine(k pairKeys) string {
+	return "Make this terminal 61 × 33 or larger to show the code, or press " + k.Copy.Help().Key + " to copy the link."
+}
 
 // PairDevice is a device that claimed a pair code, as setup.Device.
 type PairDevice struct{ Kind, Name, Fingerprint, ID string }
@@ -246,14 +259,14 @@ func (p *pairPage) to(ph boxPhase, at time.Time) {
 }
 
 func pairedLine(d PairDevice) string {
-	return fmt.Sprintf("Paired %s (%s). Not yours? x on it in DEVICES.", d.Name, d.Fingerprint)
+	return fmt.Sprintf("Paired %s (%s). Not yours? %s on it in DEVICES.", d.Name, d.Fingerprint, defaultKeys().main.Second.Help().Key)
 }
 
 func (p *pairPage) expiredLine() string {
 	if p.standalone {
 		return "The code expired. Run matchblox pair again."
 	}
-	return "The code expired. Enter pairs again."
+	return "The code expired. " + defaultKeys().pair.Again.Help().Key + " pairs again."
 }
 
 // pairMoving tells if the knock or the opening still plays.
@@ -334,8 +347,8 @@ func (p *pairPage) strips() bool { return p != nil && p.beat >= 3 }
 
 // pairStripEsc is esc that dismisses the strip: the console has nothing
 // else of its own for it to cancel.
-func (m Model) pairStripEsc(k string) bool {
-	return k == "esc" && m.pair.strips() && m.peek == nil && m.form == nil && m.sheet == nil &&
+func (m Model) pairStripEsc(k tea.KeyPressMsg) bool {
+	return bkey.Matches(k, m.keys.pair.Close) && m.pair.strips() && m.peek == nil && m.form == nil && m.sheet == nil &&
 		m.pending == nil && m.held == nil && !m.searching && m.filter == ""
 }
 
@@ -354,7 +367,7 @@ func (m Model) pairWatched() (Model, tea.Cmd) {
 		}
 	case p.beat == 2:
 		if at, _, ok := h.DeviceIn(p.device.ID); ok && at.After(p.claimedAt) {
-			p.beat, p.line = 3, p.device.Name+" is in. Answer an agent from it, or esc to go back."
+			p.beat, p.line = 3, p.device.Name+" is in. Answer an agent from it, or "+m.keys.pair.Close.Help().Key+" to go back."
 		} else if now.Sub(p.claimedAt) >= pairInWait {
 			m.pairPolling = false
 			return m.closePairPage(pairedLine(p.device)), nil
@@ -403,24 +416,24 @@ func (m Model) pairActed(a action) Model {
 }
 
 // pairKey is a key while the page shows: c copies, esc closes, Enter
-// makes a new code after the old one expired, ctrl+c quits. Every other key
-// does nothing.
-func (m Model) pairKey(k string) (tea.Model, tea.Cmd) {
+// makes a new code after the old one expired. ctrl+c quits in Update; every
+// other key does nothing.
+func (m Model) pairKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	p := m.pair
 	m.flash = ""
-	switch k {
-	case "c":
+	switch {
+	case bkey.Matches(k, m.keys.pair.Copy):
 		if p.live() {
 			m.flash = "link copied"
 			return m, m.clip(p.link)
 		}
-	case "esc":
+	case bkey.Matches(k, m.keys.pair.Close):
 		why := ""
 		if p.live() {
 			why = pairStoppedLine
 		}
 		return m.closePairPage(why), nil
-	case "enter":
+	case bkey.Matches(k, m.keys.pair.Again):
 		if p.standalone { // matchblox pair makes a new code on the next run
 			return m, nil
 		}
@@ -431,8 +444,6 @@ func (m Model) pairKey(k string) (tea.Model, tea.Cmd) {
 			}
 			return m.closePairPage("").openPairPage()
 		}
-	case "ctrl+c":
-		return m.quit()
 	}
 	return m, nil
 }
@@ -457,9 +468,9 @@ func (m Model) pairView(w int) string {
 	}
 	switch {
 	case p.live():
-		keys = append(keys, m.st.muted.Render(pairKeyLine))
+		keys = append(keys, m.st.muted.Render(pairKeyLine(m.keys.pair)))
 	case p.failed && !p.standalone:
-		keys = append(keys, m.st.muted.Render(pairFailedKeyLine))
+		keys = append(keys, m.st.muted.Render(pairFailedKeyLine(m.keys.pair)))
 	}
 	text := []string{"", centre(line), centre(strings.Join(keys, "   "))}
 	if p.failed { // an error says how to fix it: wrapped, never cut
@@ -478,7 +489,7 @@ func (m Model) pairView(w int) string {
 		}
 		box, fits := pairBox(s, m.dark, m.opt.NoMotion, w, m.height)
 		if fits == fitNone {
-			for _, l := range strings.Split(ansi.Wordwrap(pairSmallLine, max(w-2, 1), ""), "\n") {
+			for _, l := range strings.Split(ansi.Wordwrap(pairSmallLine(m.keys.pair), max(w-2, 1), ""), "\n") {
 				box = append(box, centre(m.st.muted.Render(l)))
 			}
 		}

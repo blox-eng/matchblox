@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -291,18 +292,19 @@ func (m Model) selectedRec() (advice.Rec, bool) {
 
 // sessionKeys are the keys of the selected row of Sessions.
 func (m Model) sessionKeys() []hint {
+	mk := m.keys.main
 	if _, ok := m.selectedDoor(); ok {
-		return []hint{{"⏎", "open", "enter"}, {"x", "close", "x"}}
+		return []hint{hintFor(mk.Open, ""), hintFor(mk.Second, "close")}
 	}
 	if _, ok := m.selectedRec(); ok {
-		return []hint{{"⏎", "do", "enter"}, {"x", "other", "x"}, {"f", "stoker", "f"}}
+		return []hint{hintFor(mk.Open, "do"), hintFor(mk.Second, "other"), hintFor(mk.Stoke, "stoker")}
 	}
-	keys := []hint{{"⏎", "open", "enter"}}
+	keys := []hint{hintFor(mk.Open, "")}
 	s, ok := m.selectedSession()
 	if ok && s.Pane != "" {
-		keys = append(keys, hint{"a", m.peekWord(s), "a"}, hint{"x", "kill", "x"}, hint{"r", "rename", "r"}, hint{"A", "switch", "A"}, hint{"z", m.parkWord(s), "z"})
+		keys = append(keys, hintFor(mk.Peek, m.peekWord(s)), hintFor(mk.Second, "kill"), hintFor(mk.Rename, ""), hintFor(mk.Switch, ""), hintFor(mk.Park, m.parkWord(s)))
 	}
-	return append(keys, hint{"N", "new", "N"}, hint{"p", "ships", "p"}, hint{"f", "stoker", "f"})
+	return append(keys, hintFor(mk.New, ""), hintFor(mk.Ships, ""), hintFor(mk.Stoke, "stoker"))
 }
 
 func (m Model) sessionsPanel(w int) body {
@@ -507,9 +509,10 @@ func (m Model) opened(s sample.Session, w int) []string {
 // openedKeys are the keys on the right of an opened row, and where a tap
 // presses each, in columns of the row.
 func (m Model) openedKeys(s sample.Session, w int) (string, []span) {
-	hs := []hint{{"⏎", "open", "enter"}}
+	mk := m.keys.main
+	hs := []hint{hintFor(mk.Open, "")}
 	if s.Pane != "" {
-		hs = []hint{{"a", m.peekWord(s), "a"}, {"A", "switch", "A"}, hs[0]}
+		hs = []hint{hintFor(mk.Peek, m.peekWord(s)), hintFor(mk.Switch, ""), hs[0]}
 	}
 	keys, spans := m.hintRow(hs, 2)
 	keys += " "
@@ -521,7 +524,7 @@ func (m Model) openedKeys(s sample.Session, w int) (string, []span) {
 func (m Model) hintRow(hs []hint, gap int) (string, []span) {
 	line, x := "", 0
 	var spans []span
-	for i, h := range hs {
+	for i, h := range slices.DeleteFunc(slices.Clone(hs), func(h hint) bool { return h == (hint{}) }) {
 		if i > 0 {
 			line += strings.Repeat(" ", gap)
 			x += gap
@@ -593,7 +596,7 @@ func (m Model) longWord(s sample.Session) string {
 	case "out":
 		return "out until " + m.idleCell(s)
 	case "stale":
-		return "stale, x ends it"
+		return "stale, " + m.keys.main.Second.Help().Key + " ends it"
 	default:
 		return w
 	}
@@ -622,7 +625,7 @@ func (m Model) detailLines(w, rows int) ([]string, bool) {
 		for _, l := range wrapPlain(text, w-2) {
 			out = append(out, " "+style.Render(l))
 		}
-		return append(out, "", " "+st.accent.Render("⏎")+st.muted.Render(" open   ")+st.accent.Render("x")+st.muted.Render(" close")), false
+		return append(out, "", " "+keyWord(m.keys.main.Open, st.accent, st.muted, " open   ")+keyWord(m.keys.main.Second, st.accent, st.muted, " close")), false
 	}
 	if r, ok := m.selectedRec(); ok {
 		out := []string{""}
@@ -722,12 +725,13 @@ func (m Model) sessionDetail(s sample.Session, w, said int) ([]string, bool) {
 // detailKeys are the keys under a session's detail, and where a tap
 // presses each, in columns of the pane.
 func (m Model) detailKeys(s sample.Session) (string, []span) {
+	mk := m.keys.main
 	var hs []hint
 	if s.Pane != "" {
-		hs = append(hs, hint{"a", m.peekWord(s), "a"}, hint{"⏎", "open it", "enter"}, hint{"A", "switch agent", "A"})
+		hs = append(hs, hintFor(mk.Peek, m.peekWord(s)), hintFor(mk.Open, "open it"), hintFor(mk.Switch, "switch agent"))
 	}
 	if s.Age() == "stale" {
-		hs = append(hs, hint{"x", "end it", "x"})
+		hs = append(hs, hintFor(mk.Second, "end it"))
 	}
 	keys, spans := m.hintRow(hs, 3)
 	return " " + keys, shift(spans, 1)

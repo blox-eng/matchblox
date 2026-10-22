@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -212,19 +213,17 @@ func (f *form) move(by int) {
 func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	f := *m.form
 	m.form = &f
-	key := k.String()
-	switch key {
-	case "ctrl+c":
-		return m.quit()
-	case "esc":
+	fk := m.keys.form
+	switch {
+	case bkey.Matches(k, fk.Close):
 		m.form = nil // nothing is sent
 		return m, nil
-	case "enter":
+	case bkey.Matches(k, fk.Enter):
 		return m.formEnter()
-	case "tab", "down":
+	case bkey.Matches(k, fk.Next):
 		f.move(1)
 		return m, nil
-	case "shift+tab", "up":
+	case bkey.Matches(k, fk.Prev):
 		f.move(-1)
 		return m, nil
 	}
@@ -235,26 +234,27 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		i := slices.Index(agents, f.agent)
-		switch key {
-		case "left":
+		switch {
+		case bkey.Matches(k, fk.Left):
 			f.agent = agents[(i+len(agents)-1)%len(agents)]
-		case "right", "space":
+		case bkey.Matches(k, fk.Right):
 			f.agent = agents[(i+1)%len(agents)]
 		}
 		return m, nil
 	}
-	if f.at == fieldWhere && (key == "left" || key == "right") {
+	// On where, space is text: only the arrows pick.
+	if f.at == fieldWhere && k.Text == "" && bkey.Matches(k, fk.Left, fk.Right) {
 		paths := m.gitPaths()
 		if len(paths) == 0 {
 			return m, nil
 		}
-		n := len(paths)
+		n, right := len(paths), bkey.Matches(k, fk.Right)
 		switch {
-		case f.whereAt < 0 && key == "right":
+		case f.whereAt < 0 && right:
 			f.whereAt = 0
 		case f.whereAt < 0:
 			f.whereAt = n - 1
-		case key == "right":
+		case right:
 			f.whereAt = (f.whereAt + 1) % n
 		default:
 			f.whereAt = (f.whereAt + n - 1) % n
@@ -266,8 +266,8 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if t == nil {
 		return m, nil
 	}
-	switch key {
-	case "backspace":
+	switch {
+	case bkey.Matches(k, fk.Erase):
 		*t = trimLast(*t)
 	default:
 		if k.Text == "" || len([]rune(*t+k.Text)) > maxField {
@@ -323,7 +323,7 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 		m = m.pairActed(action{rec: "rename:" + f.pane})
 	} else {
 		if strings.TrimSpace(f.where) == "" {
-			f.err, f.at = "where does it start? a path, or ←→ for the Git tab's", fieldWhere
+			f.err, f.at = "where does it start? a path, or "+m.keys.form.Left.Help().Key+" for the Git tab's", fieldWhere
 			return m, nil
 		}
 		n := proto.NewSession{Where: strings.TrimSpace(f.where), Branch: strings.TrimSpace(f.branch), Agent: f.agent, First: strings.TrimSpace(f.first)}
@@ -341,7 +341,7 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 // service checks it.
 func (m Model) swapEnter(f form) (tea.Model, tea.Cmd) {
 	if f.agent == "" {
-		m.form.err, m.form.at = "which agent? ←→ picks one", fieldAgent
+		m.form.err, m.form.at = "which agent? "+m.keys.form.Left.Help().Key+" picks one", fieldAgent
 		return m, nil
 	}
 	if handoff := strings.TrimSpace(f.first); handoff != "" {
@@ -438,7 +438,7 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 	default:
 		hint := "a path"
 		if len(m.gitPaths()) > 0 {
-			hint = "a path, or ←→ for the Git tab's"
+			hint = "a path, or " + m.keys.form.Left.Help().Key + " for the Git tab's"
 		}
 		field(fieldWhere, f.where, hint)
 		field(fieldBranch, f.branch, "blank: no new worktree")
@@ -499,20 +499,14 @@ func (m Model) agentChips(iw int) (string, []span) {
 
 func (m Model) formFoot() []footPart {
 	st := m.st
-	key := func(k, label, press string) footPart {
-		t := st.accent.Render(k)
-		if label != "" {
-			t += st.muted.Render(" " + label)
-		}
-		return footPart{t, press, " ─ "}
-	}
+	fk, sep := m.keys.form, " ─ "
 	switch {
 	case m.form.rename:
-		return []footPart{key("⏎", "rename", "enter"), key("esc", "", "esc")}
+		return []footPart{st.footFor(fk.Enter, "rename", sep), st.footFor(fk.Close, "", sep)}
 	case m.form.swap:
-		return []footPart{key("⏎", "plan", "enter"), key("tab", "next", "tab"), key("esc", "", "esc")}
+		return []footPart{st.footFor(fk.Enter, "plan", sep), st.footFor(fk.Next, "", sep), st.footFor(fk.Close, "", sep)}
 	}
-	return []footPart{key("⏎", "start", "enter"), key("tab", "next", "tab"), key("esc", "", "esc")}
+	return []footPart{st.footFor(fk.Enter, "", sep), st.footFor(fk.Next, "", sep), st.footFor(fk.Close, "", sep)}
 }
 
 func (m Model) overlayForm(sc *drawn, w int) {
@@ -577,9 +571,9 @@ func (m Model) killAction(s sample.Session) *action {
 func (m Model) againFor(s sample.Session, verb string) string {
 	switch {
 	case s.Ask != nil || s.Permits || m.waitsFor(s.Pane):
-		return s.Name + " waits for you: y again " + verb + " it all the same"
+		return s.Name + " waits for you: " + m.keys.main.Grant.Help().Key + " again " + verb + " it all the same"
 	case s.Works():
-		return s.Name + " works: y again " + verb + " it mid-turn"
+		return s.Name + " works: " + m.keys.main.Grant.Help().Key + " again " + verb + " it mid-turn"
 	}
 	return ""
 }

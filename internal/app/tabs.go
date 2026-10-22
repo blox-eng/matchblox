@@ -1,6 +1,12 @@
 package app
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+
+	bkey "charm.land/bubbles/v2/key"
+	"charm.land/lipgloss/v2"
+)
 
 // tabView is one tab: its rows and selection, what Enter and x do on the
 // selected row, its keys and its body. The selection itself stays in the
@@ -19,6 +25,89 @@ type tabView struct {
 // hint is a key on the key line: the key, its word, and the key a tap on
 // it presses ("" for none).
 type hint struct{ key, label, press string }
+
+// hintFor is a binding's hint: its help key, the label (the binding's own
+// word when ""), and its first key as the press. A disabled binding is the
+// zero hint, which a key line skips.
+func hintFor(b bkey.Binding, label string) hint {
+	if !b.Enabled() {
+		return hint{}
+	}
+	if label == "" {
+		label = b.Help().Desc
+	}
+	return hint{b.Help().Key, label, b.Keys()[0]}
+}
+
+// tabHint is the hint of tab i: its own digit, as the tabs binding has it.
+func tabHint(b bkey.Binding, i int, label string) hint {
+	if !b.Enabled() || i >= len(b.Keys()) {
+		return hint{}
+	}
+	return hint{b.Keys()[i], label, b.Keys()[i]}
+}
+
+// noTap is the hint without the key a tap presses: a key the line shows
+// but does not take.
+func noTap(h hint) hint {
+	h.press = ""
+	return h
+}
+
+// plainHints is hints as one line of plain text, key and word each, two
+// spaces between: for a line drawn in a single style.
+func plainHints(hs ...hint) string {
+	var parts []string
+	for _, h := range hs {
+		if h == (hint{}) {
+			continue
+		}
+		parts = append(parts, strings.TrimSpace(h.key+" "+h.label))
+	}
+	return strings.Join(parts, "  ")
+}
+
+// keyWord is a binding's help key in its style, then rest in the word style:
+// the key and a phrase of prose after it.
+func keyWord(b bkey.Binding, key, word lipgloss.Style, rest string) string {
+	return key.Render(b.Help().Key) + word.Render(rest)
+}
+
+// footKey is a binding's part of a box footer that no tap presses, its key
+// in the given style.
+func (st styles) footKey(b bkey.Binding, label, sep string, key lipgloss.Style) footPart {
+	if !b.Enabled() {
+		return footPart{}
+	}
+	t := key.Render(b.Help().Key)
+	if label != "" {
+		t += st.muted.Render(" " + label)
+	}
+	return footPart{t, "", sep}
+}
+
+// footFor is a binding's part of a box footer: the same rules as hintFor,
+// the key in the accent and its word muted.
+func (st styles) footFor(b bkey.Binding, label, sep string) footPart {
+	h := hintFor(b, label)
+	if h == (hint{}) {
+		return footPart{}
+	}
+	t := st.accent.Render(h.key)
+	if h.label != "" {
+		t += st.muted.Render(" " + h.label)
+	}
+	return footPart{t, h.press, sep}
+}
+
+// footForRev is footFor with the word first: "next →".
+func (st styles) footForRev(b bkey.Binding, label, sep string) footPart {
+	h := hintFor(b, label)
+	if h == (hint{}) {
+		return footPart{}
+	}
+	return footPart{st.muted.Render(h.label+" ") + st.accent.Render(h.key), h.press, sep}
+}
 
 const (
 	tabSessions = iota
@@ -76,10 +165,11 @@ var views = [...]tabView{
 	tabShips: {
 		name: "ships",
 		keys: func(m Model) []hint {
+			mk := m.keys.main
 			if sh, ok := m.selectedShip(); ok {
-				return append(m.shipKeys(sh), hint{"f", "stoker", "f"})
+				return append(m.shipKeys(sh), hintFor(mk.Stoke, "stoker"))
 			}
-			return []hint{{"1", "sessions", "1"}, {"f", "stoker", "f"}}
+			return []hint{tabHint(mk.Tabs, tabSessions, "sessions"), hintFor(mk.Stoke, "stoker")}
 		},
 		count:     func(m Model) int { return len(m.ships()) },
 		index:     func(m Model) int { return min(m.shipSel, max(len(m.ships())-1, 0)) },
@@ -90,16 +180,18 @@ var views = [...]tabView{
 	tabMachine: {
 		name: "machine",
 		keys: func(m Model) []hint {
+			mk := m.keys.main
+			stoke := hintFor(mk.Stoke, "stoker")
 			if r, ok := m.selectedDevice(); ok {
 				if r.plus {
-					return []hint{{"⏎", "pair", "enter"}, {"f", "stoker", "f"}}
+					return []hint{hintFor(mk.Open, "pair"), stoke}
 				}
-				return []hint{{"x", "remove", "x"}, {"f", "stoker", "f"}}
+				return []hint{hintFor(mk.Second, "remove"), stoke}
 			}
 			if len(m.snap.Orphans) == 0 {
-				return []hint{{"p", "ships", "p"}, {"f", "stoker", "f"}}
+				return []hint{hintFor(mk.Ships, "ships"), stoke}
 			}
-			return []hint{{"⏎", "jump", "enter"}, {"x", "kill", "x"}, {"f", "stoker", "f"}}
+			return []hint{hintFor(mk.Open, "jump"), hintFor(mk.Second, "kill"), stoke}
 		},
 		count: Model.machineRows,
 		index: Model.machineIndex,
@@ -133,8 +225,9 @@ var views = [...]tabView{
 	},
 	tabGit: {
 		name: "git",
-		keys: func(Model) []hint {
-			return []hint{{"⏎", "shell", "enter"}, {"␣", "mark", "space"}, {"X", "all safe", "X"}, {"x", "remove", "x"}, {"r", "rescan", "r"}}
+		keys: func(m Model) []hint {
+			mk := m.keys.main
+			return []hint{hintFor(mk.Open, "shell"), hintFor(mk.Mark, ""), hintFor(mk.MarkSafe, ""), hintFor(mk.Second, "remove"), hintFor(mk.Rename, "rescan")}
 		},
 		count: func(m Model) int { return len(m.worktreeRows()) },
 		index: func(m Model) int { return min(m.gitSel, max(len(m.worktreeRows())-1, 0)) },
@@ -159,12 +252,14 @@ var views = [...]tabView{
 	},
 	tabHistory: {
 		name: "history",
-		keys: func(Model) []hint { return []hint{{"p", "ships", "p"}, {"f", "stoker", "f"}} },
+		keys: func(m Model) []hint {
+			return []hint{hintFor(m.keys.main.Ships, "ships"), hintFor(m.keys.main.Stoke, "stoker")}
+		},
 		body: func(m Model, w int) body { return plain(m.historyPanel(w)) },
 	},
 	tabPanes: {
 		name:  "panes",
-		keys:  func(Model) []hint { return []hint{{"⏎", "go", "enter"}, {"s", "sort", "s"}} },
+		keys:  func(m Model) []hint { return []hint{hintFor(m.keys.main.Open, "go"), hintFor(m.keys.main.Sort, "")} },
 		count: func(m Model) int { return len(m.paneRows()) },
 		index: func(m Model) int { return min(m.paneSel, max(len(m.paneRows())-1, 0)) },
 		pick:  func(m *Model, i int) { m.paneSel = i },
