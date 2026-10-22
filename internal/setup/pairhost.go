@@ -71,6 +71,9 @@ func HostKeyFingerprint(path string) (string, error) {
 // NewPairOffer makes a one-time key, lets it in until until, and returns
 // its id and the v2 link that carries it. With an error, no key stays.
 func NewPairOffer(home, exe, address string, port int, name, hostKeyPath string, until time.Time) (id, link string, err error) {
+	if err := CheckPairPath(home, address, port); err != nil {
+		return "", "", err
+	}
 	hostKey, err := HostKeyFingerprint(hostKeyPath)
 	if err != nil {
 		return "", "", err
