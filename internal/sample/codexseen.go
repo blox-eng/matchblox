@@ -15,38 +15,45 @@ type seenEntry struct {
 	At    time.Time `json:"at"`
 }
 
-// loadCodexSeen reads the Codex sessions seen in each directory. A file
-// that is missing or unreadable gives none: a neighbour is then forgotten,
-// as before the file.
-func loadCodexSeen(path string) map[string]map[procKey]time.Time {
-	seen := map[string]map[procKey]time.Time{}
+// seenDoc is CodexSeenFile: the sessions, and until when the sampler ran.
+type seenDoc struct {
+	Until time.Time              `json:"until"`
+	Seen  map[string][]seenEntry `json:"seen"`
+}
+
+// loadCodexSeen reads the Codex sessions seen in each directory, and the
+// last sample before matchblox stopped (zero: unknown). A file that is
+// missing or unreadable gives none: a neighbour is then forgotten, as
+// before the file.
+func loadCodexSeen(path string) (seen map[string]map[procKey]time.Time, until time.Time) {
+	seen = map[string]map[procKey]time.Time{}
 	if path == "" {
-		return seen
+		return seen, until
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return seen
+		return seen, until
 	}
-	var doc map[string][]seenEntry
+	var doc seenDoc
 	if json.Unmarshal(b, &doc) != nil {
-		return seen
+		return seen, until
 	}
-	for dir, entries := range doc {
+	for dir, entries := range doc.Seen {
 		seen[dir] = map[procKey]time.Time{}
 		for _, e := range entries {
 			seen[dir][procKey{e.PID, e.Start}] = e.At
 		}
 	}
-	return seen
+	return seen, doc.Until
 }
 
-// saveCodexSeen writes seen to path through a temp file, so a crash
-// leaves the old file whole.
-func saveCodexSeen(path string, seen map[string]map[procKey]time.Time) error {
-	doc := map[string][]seenEntry{}
+// saveCodexSeen writes seen, and until (the last sample), to path through
+// a temp file, so a crash leaves the old file whole.
+func saveCodexSeen(path string, seen map[string]map[procKey]time.Time, until time.Time) error {
+	doc := seenDoc{Until: until, Seen: map[string][]seenEntry{}}
 	for dir, keys := range seen {
 		for k, at := range keys {
-			doc[dir] = append(doc[dir], seenEntry{k.pid, k.start, at})
+			doc.Seen[dir] = append(doc.Seen[dir], seenEntry{k.pid, k.start, at})
 		}
 	}
 	b, err := json.Marshal(doc)
@@ -56,9 +63,19 @@ func saveCodexSeen(path string, seen map[string]map[procKey]time.Time) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	// A temp file of its own: two samplers may save at once.
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".codex-seen-*.json")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }

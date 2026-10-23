@@ -851,6 +851,7 @@ func status(w io.Writer, path string, cfg config.Config, root string, text bool)
 	if !ok {
 		smp := newSampler(cfg, root)
 		smp.ProcEvery = 0
+		smp.CodexSeenReadOnly = true // the service keeps the file
 		smp.Sample()
 		time.Sleep(time.Second)
 		doc = state.Doc{Snapshot: smp.Sample()}

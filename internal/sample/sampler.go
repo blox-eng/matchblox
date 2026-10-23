@@ -267,6 +267,9 @@ type Sampler struct {
 	// CodexSeenFile keeps the Codex sessions seen in each directory
 	// across a restart. Empty: kept in memory only.
 	CodexSeenFile string
+	// CodexSeenReadOnly reads CodexSeenFile and never writes it: a
+	// one-shot status read beside the service.
+	CodexSeenReadOnly bool
 
 	agents *agentReader
 	panes  map[procKey]string // environ is read once per process
@@ -274,24 +277,29 @@ type Sampler struct {
 	// codexSeen are the Codex sessions seen in each directory, by when
 	// each started: one that exited still owns the rollout it left.
 	codexSeen map[string]map[procKey]time.Time
-	screens   map[procKey]screen // last pane text of agents without an adapter
-	prevAt    time.Time
-	procAt    time.Time
-	prevProc  map[int]procfs.Proc
-	last      Snapshot // sessions and panes from the last process scan
-	prevCPU   procfs.CPUTimes
-	prevCore  []procfs.CPUTimes
-	prevNet   [2]uint64
-	prevDisk  [2]uint64
-	latAt     time.Time
-	lat       time.Duration
-	latErr    string
-	burn      map[string][]tokenPoint
-	burnLive  map[string]bool  // burn keys measured in this scan
-	longCtx   map[procKey]bool // processes started with a 1M model setting
-	envs      map[procKey]agentEnv
-	accounts  *accounts
-	opencode  *opencodeReader
+	// codexUntil is the last sample before this sampler started, from
+	// CodexSeenFile: what started in Codex since went unseen. Zero: unknown.
+	codexUntil time.Time
+	codexFirst time.Time          // this sampler's first sample
+	codexSaved time.Time          // when CodexSeenFile was last written
+	screens    map[procKey]screen // last pane text of agents without an adapter
+	prevAt     time.Time
+	procAt     time.Time
+	prevProc   map[int]procfs.Proc
+	last       Snapshot // sessions and panes from the last process scan
+	prevCPU    procfs.CPUTimes
+	prevCore   []procfs.CPUTimes
+	prevNet    [2]uint64
+	prevDisk   [2]uint64
+	latAt      time.Time
+	lat        time.Duration
+	latErr     string
+	burn       map[string][]tokenPoint
+	burnLive   map[string]bool  // burn keys measured in this scan
+	longCtx    map[procKey]bool // processes started with a 1M model setting
+	envs       map[procKey]agentEnv
+	accounts   *accounts
+	opencode   *opencodeReader
 
 	owners     map[procKey]string
 	hotSince   map[procKey]time.Time
@@ -327,7 +335,7 @@ func (s *Sampler) init() {
 		s.opencode = newOpencodeReader()
 		s.panes = map[procKey]string{}
 		s.names = map[procKey]agentRef{}
-		s.codexSeen = loadCodexSeen(s.CodexSeenFile)
+		s.codexSeen, s.codexUntil = loadCodexSeen(s.CodexSeenFile)
 		s.burn = map[string][]tokenPoint{}
 		s.burnLive = map[string]bool{}
 		s.longCtx = map[procKey]bool{}
@@ -598,8 +606,14 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			delete(s.codexSeen, dir)
 		}
 	}
-	if seenChanged && s.CodexSeenFile != "" {
-		_ = saveCodexSeen(s.CodexSeenFile, s.codexSeen) // unsaved: forgotten at a restart, as before
+	if s.codexFirst.IsZero() {
+		s.codexFirst = now
+	}
+	// The last sample is saved too, every 10 seconds at most: what starts
+	// in Codex while matchblox is down goes unseen.
+	if (seenChanged || now.Sub(s.codexSaved) >= 10*time.Second) && s.CodexSeenFile != "" && !s.CodexSeenReadOnly {
+		_ = saveCodexSeen(s.CodexSeenFile, s.codexSeen, now) // unsaved: forgotten at a restart, as before
+		s.codexSaved = now
 	}
 	for pid, p := range procs {
 		agent := s.agentName(pid, p)
@@ -689,6 +703,12 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 					if began := s.agents.metaOf(path).began; began.IsZero() || !began.Before(at) {
 						path, fresh = "", false
 					}
+				}
+				// A rollout begun while matchblox was down, for a session
+				// that ran through it, may be a neighbour's it never saw.
+				if began := s.agents.metaOf(path).began; path != "" && !s.codexUntil.IsZero() && started.Before(s.codexFirst) &&
+					began.After(s.codexUntil) && began.After(started) && began.Before(s.codexFirst) {
+					path, fresh = "", false
 				}
 				// A /resume in the TUI, or a /new, writes another session
 				// after its own.

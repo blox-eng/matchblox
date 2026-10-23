@@ -82,64 +82,81 @@ func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) (path
 // codexDisplaced: a session other than id was written in one of cwds
 // since the process started and after since, the last write of id's
 // rollout. A /new in id's TUI does that, a /resume of an older session
-// (its rollout is on an older day: codexMonth), and a session beside it:
+// (its rollout is on an older day: codexAll), and a session beside it:
 // which is the pane's cannot be told.
 func (r *agentReader) codexDisplaced(home string, cwds []string, id string, since, started, now time.Time) bool {
 	displaced := false
 	r.codexRollouts(home, cwds, started, now, func(_ string, mtime time.Time, m rolloutMeta) {
 		displaced = displaced || m.id != id && mtime.After(since)
 	})
-	for _, f := range r.codexMonth(home, now) {
-		if displaced {
-			break
-		}
-		if f.mtime.After(since) && !f.mtime.Before(started) {
-			m := r.metaOf(f.path)
-			displaced = m.id != id && m.cwd != "" && slices.Contains(cwds, m.cwd) && codexCLI[m.originator] && !m.subagent
+	for _, cwd := range cwds {
+		for _, f := range r.codexAll(home, now)[cwd] {
+			if displaced {
+				return true
+			}
+			// Stat on each sample: the list is read every 30 seconds, a
+			// /resume shows at once.
+			if k, ok := statKey(f); ok && k.mtime.After(since) && !k.mtime.Before(started) {
+				displaced = r.metaOf(f).id != id
+			}
 		}
 	}
 	return displaced
 }
 
-// codexFile is a rollout and when it was last written.
-type codexFile struct {
-	path  string
-	mtime time.Time
-}
-
-// codexWide is codexMonth's list of one CODEX_HOME, as of at.
+// codexWide is codexAll's list of one CODEX_HOME, as of at, and each day
+// directory's rollouts by the directory's time.
 type codexWide struct {
 	at    time.Time
-	files []codexFile
+	byCwd map[string][]string
+	days  map[string]codexDay
 }
 
-// codexMonth are the rollouts of CODEX_HOME's last month of day
-// directories, read again at most every 30 seconds for all panes at once:
-// a directory's time does not change when a rollout in it is written, so
-// the scan since a session's start cannot see an older session written
-// again.
-func (r *agentReader) codexMonth(home string, now time.Time) []codexFile {
-	if w, ok := r.wide[home]; ok && !now.Before(w.at) && now.Sub(w.at) < 30*time.Second {
-		return w.files
+// codexDay is a day directory's rollouts, as of its time.
+type codexDay struct {
+	mtime time.Time
+	files []string
+}
+
+// codexAll are CODEX_HOME's session rollouts of the CLI (not a subagent's)
+// by their directory, on every day: a /resume writes on in an older
+// session's. The list is read again at most every 30 seconds, for all
+// panes at once; a day directory is listed again only when its time
+// changes, as when a rollout is created in it.
+func (r *agentReader) codexAll(home string, now time.Time) map[string][]string {
+	w, ok := r.wide[home]
+	if ok && !now.Before(w.at) && now.Sub(w.at) < 30*time.Second {
+		return w.byCwd
 	}
-	w := codexWide{at: now}
-	local := now.Local()
-	for day, last := local.AddDate(0, -1, -1), local.AddDate(0, 0, 1); !day.After(last); day = day.AddDate(0, 0, 1) {
-		dir := filepath.Join(home, "sessions", day.Format("2006/01/02"))
-		entries, _ := os.ReadDir(dir)
-		for _, e := range entries {
-			name := e.Name()
-			if !strings.HasPrefix(name, "rollout-") || !strings.HasSuffix(name, ".jsonl") {
-				continue
+	if w.days == nil {
+		w.days = map[string]codexDay{}
+	}
+	w.at, w.byCwd = now, map[string][]string{}
+	dirs, _ := filepath.Glob(filepath.Join(home, "sessions", "*", "*", "*"))
+	for _, dir := range dirs {
+		st, err := os.Stat(dir)
+		if err != nil || !st.IsDir() {
+			continue
+		}
+		day, ok := w.days[dir]
+		if !ok || !st.ModTime().Equal(day.mtime) {
+			day = codexDay{mtime: st.ModTime()}
+			entries, _ := os.ReadDir(dir)
+			for _, e := range entries {
+				if name := e.Name(); strings.HasPrefix(name, "rollout-") && strings.HasSuffix(name, ".jsonl") {
+					day.files = append(day.files, filepath.Join(dir, name))
+				}
 			}
-			f := filepath.Join(dir, name)
-			if k, ok := statKey(f); ok {
-				w.files = append(w.files, codexFile{f, k.mtime})
+			w.days[dir] = day
+		}
+		for _, f := range day.files {
+			if m := r.metaOf(f); m.cwd != "" && codexCLI[m.originator] && !m.subagent {
+				w.byCwd[m.cwd] = append(w.byCwd[m.cwd], f)
 			}
 		}
 	}
 	r.wide[home] = w
-	return w.files
+	return w.byCwd
 }
 
 // codexRollouts calls fn for each session rollout of the Codex CLI in

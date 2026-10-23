@@ -723,6 +723,15 @@ func (d *codexDir) proc(pid int, argv []string, pane, cwd string) {
 	symlink(d.t, cwd, filepath.Join(d.root, "proc", strconv.Itoa(pid), "cwd"))
 }
 
+// advance moves the sampler's clock and the machine's uptime on by dt, so
+// a process keeps its start time.
+func (d *codexDir) advance(dt time.Duration) {
+	up := d.smp.FS.Uptime()
+	writeFile(d.t, filepath.Join(d.root, "proc", "uptime"), strconv.FormatFloat(up+dt.Seconds(), 'f', 2, 64)+" 0\n")
+	now := d.smp.Now().Add(dt)
+	d.smp.Now = func() time.Time { return now }
+}
+
 // write puts a rollout of tokens in day's directory, last written at.
 func (d *codexDir) write(day time.Time, name, meta string, tokens int, at time.Time) string {
 	tail := strings.SplitN(codexRollout("gpt-made-up", tokens, 258400), "\n", 2)[1]
@@ -1067,6 +1076,61 @@ func TestACodexAfterSlashResumeIsNotMeasured(t *testing.T) {
 		if s := got[pane]; s.SessionID != "" || s.Context != "unmeasured" {
 			t.Errorf("%s, after /resume of an older session: id %q, context %q; want none, unmeasured", pane, s.SessionID, s.Context)
 		}
+	}
+}
+
+// TestASlashResumeIsNotMeasuredAtTheNextSample: the list of older
+// rollouts is read every 30 seconds, but the files of the pane's own
+// directory are looked at on every sample.
+func TestASlashResumeIsNotMeasuredAtTheNextSample(t *testing.T) {
+	d := newCodexDir(t)
+	before := d.started.Add(-72 * time.Hour)
+	d.proc(900, []string{"codex"}, "%20", "/work/tui")
+	d.write(fixtureNow, "rollout-a-own.jsonl", codexMeta("id-own", "/work/tui", "codex-tui", d.started.Add(2*time.Second)), 150000, fixtureNow.Add(-time.Second))
+	x := d.write(before, "rollout-b-x.jsonl", codexMeta("id-x", "/work/tui", "codex-tui", before), 12000, before)
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "id-own" {
+		t.Fatalf("before the /resume: id %q, want id-own", s.SessionID)
+	}
+	d.advance(5 * time.Second)
+	if err := os.Chtimes(x, d.smp.Now(), d.smp.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "" || s.Context != "unmeasured" {
+		t.Errorf("5 s after /resume X: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
+	}
+}
+
+// TestASlashResumeOfAnOldSessionIsNotMeasured: a /resume of a session
+// begun over a month ago is seen too.
+func TestASlashResumeOfAnOldSessionIsNotMeasured(t *testing.T) {
+	d := newCodexDir(t)
+	old := d.started.Add(-40 * 24 * time.Hour)
+	d.proc(900, []string{"codex"}, "%20", "/work/tui")
+	d.write(fixtureNow, "rollout-a-own.jsonl", codexMeta("id-own", "/work/tui", "codex-tui", d.started.Add(2*time.Second)), 150000, d.started.Add(time.Minute))
+	d.write(old, "rollout-b-x.jsonl", codexMeta("id-x", "/work/tui", "codex-tui", old), 12000, fixtureNow.Add(-time.Second))
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "" || s.Context != "unmeasured" {
+		t.Errorf("after /resume of a 40-day-old session: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
+	}
+}
+
+// TestARolloutBegunWhileMatchbloxWasDownIsNotTaken: a neighbour that ran
+// and exited while matchblox was down was never seen. A rollout begun in
+// that gap is not taken for a session that was running through it.
+func TestARolloutBegunWhileMatchbloxWasDownIsNotTaken(t *testing.T) {
+	d := newCodexDir(t)
+	seen := filepath.Join(t.TempDir(), "codex-seen.json")
+	writeFile(t, seen, `{"until":"`+d.started.Add(30*time.Second).UTC().Format(time.RFC3339Nano)+`","seen":{}}`)
+	d.smp.CodexSeenFile = seen
+	d.proc(900, []string{"codex"}, "%20", "/work/r")
+	d.write(fixtureNow, "rollout-b.jsonl", codexMeta("id-b", "/work/r", "codex-tui", d.started.Add(time.Minute)), 90000, d.started.Add(2*time.Minute))
+	d.proc(910, []string{"codex"}, "%21", "/work/early")
+	d.write(fixtureNow, "rollout-c.jsonl", codexMeta("id-c", "/work/early", "codex-tui", d.started.Add(10*time.Second)), 90000, fixtureNow.Add(-time.Second))
+	got := byPane(d.smp.Sample())
+	if s := got["%20"]; s.SessionID != "" || s.Context == "known" {
+		t.Errorf("a rollout begun while matchblox was down: id %q, context %q; want none, not known", s.SessionID, s.Context)
+	}
+	if s := got["%21"]; s.SessionID != "id-c" {
+		t.Errorf("a rollout begun before the gap: id %q, want id-c", s.SessionID)
 	}
 }
 
