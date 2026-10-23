@@ -416,12 +416,12 @@ func (m Model) formResult(r proto.Result) (Model, bool) {
 	m.form = &f
 	f.act = ""
 	switch {
+	case r.Err != "":
+		f.err = r.Err // the folders typed stay, to fix
+		return m, true
 	case f.pick: // as the box's yes: the reply says how it went
 		m = m.closeScan()
 		m.flash = m.scanFlash(r)
-	case r.Err != "":
-		f.err = r.Err
-		return m, true
 	case len(r.Skipped) > 0 && f.rename && strings.HasSuffix(r.Skipped[0], "renames when it rests"):
 		m.flash = r.Skipped[0]
 	case len(r.Skipped) > 0:

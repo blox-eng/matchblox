@@ -29,10 +29,11 @@ type scanAsk struct{ at time.Time }
 // ctrl+c work at once.
 const askQuiet = 400 * time.Millisecond
 
-// scanShown tells if the box is on top: asked, and nothing over it.
+// scanShown tells if the box is on top: asked, and nothing over it, no
+// other question either.
 func (m Model) scanShown() bool {
 	return m.scanAsk != nil && !m.splashing() && !m.pair.owns() && m.sheet == nil && m.form == nil &&
-		m.peek == nil && !m.searching && m.held == nil
+		m.peek == nil && !m.searching && m.held == nil && m.pending == nil
 }
 
 // armScan starts the box's quiet: it shows now.

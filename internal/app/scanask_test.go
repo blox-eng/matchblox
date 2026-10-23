@@ -291,9 +291,29 @@ func TestScanFlashOnError(t *testing.T) {
 		t.Fatalf("box: flash %q", f)
 	}
 	next, act := pickSent(t)
+	roots := next.(Model).form.roots
 	done, _ = next.Update(resultMsg(proto.Result{ActID: act, Err: "stopped"}))
-	if nm := done.(Model); nm.flash != "not found: stopped" || nm.form != nil {
-		t.Fatalf("pick: flash %q, form %+v", nm.flash, nm.form)
+	if nm := done.(Model); nm.form == nil || nm.form.err != "stopped" || nm.form.roots != roots || !nm.form.pick {
+		t.Fatalf("pick: form %+v, flash %q: the error stays in the form, with the folders typed", nm.form, nm.flash)
+	}
+}
+
+// TestScanBoxNeverOverAConfirm: a y meant for a destructive step runs
+// it, and does not answer the scan.
+func TestScanBoxNeverOverAConfirm(t *testing.T) {
+	m, f := asked(t)
+	m.pending = &action{label: "kill", say: "kill it", rec: "kill:%1", destructive: true}
+	if m.scanShown() || m.focus(keyPress("y")) != layerPending {
+		t.Fatalf("box %v, focus %v", m.scanShown(), m.focus(keyPress("y")))
+	}
+	next, cmd := key(m, "y")
+	sendAll(t, cmd)
+	a := f.acts()
+	if len(a) != 1 || a[0].RecID != "kill:%1" || a[0].Confirm != "y" {
+		t.Fatalf("sent %+v", a)
+	}
+	if nm := next.(Model); nm.scanAsk == nil || !nm.scanShown() {
+		t.Fatal("the scan question went with the confirm")
 	}
 }
 

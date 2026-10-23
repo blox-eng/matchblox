@@ -18,9 +18,9 @@ const (
 	layerPeekGone // a peek whose session is gone: any key closes it, ctrl+c too
 	layerSearch
 	layerHeld     // a key waits for the take-over answer
-	layerScan     // the scan question
 	layerTakeOver // a key that acts on a session the stoker runs
 	layerPreview  // ↑↓ and friends on a door's diff, under its confirm
+	layerScan     // the scan question, with no other question open
 	layerBlocked  // ⏎ on a host that is blocked or speaks another version
 	layerPending
 	layerMain
@@ -57,12 +57,13 @@ func (m Model) under(k tea.KeyPressMsg) layerID {
 	switch {
 	case m.held != nil:
 		return layerHeld
-	case m.scanAsk != nil && !m.splashing():
-		return layerScan
 	case m.asksTakeOver(k):
 		return layerTakeOver
 	case m.scrolls(k):
 		return layerPreview
+	case m.scanAsk != nil && m.pending == nil && !m.splashing():
+		// Never over a confirm: its y must not answer the scan.
+		return layerScan
 	case m.pending == nil && bkey.Matches(k, m.keys.main.Open) && (m.mismatch || m.blocked != nil):
 		return layerBlocked
 	case m.pending != nil:
