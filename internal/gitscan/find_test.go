@@ -932,40 +932,33 @@ func TestFindHungHomeOrProtectedOutsideRootsIsNotSkipped(t *testing.T) {
 }
 
 func TestTrueCaseOnlyWhereNamesFoldCase(t *testing.T) {
-	if want := runtime.GOOS == "darwin" || runtime.GOOS == "windows"; caseInsensitive != want || FoldsCase() != want {
-		t.Fatalf("caseInsensitive = %v on %s, want %v", caseInsensitive, runtime.GOOS, want)
+	if want := runtime.GOOS == "darwin" || runtime.GOOS == "windows"; FoldsCase() != want {
+		t.Fatalf("FoldsCase() = %v on %s, want %v", FoldsCase(), runtime.GOOS, want)
 	}
 	dir := tmp(t)
 	mkdir(t, filepath.Join(dir, "Code", "2026"))
-	var mu sync.Mutex
 	reads := map[string]int{}
-	caseReadDir = func(d string) ([]os.DirEntry, error) {
-		mu.Lock()
+	rd := func(d string) ([]os.DirEntry, error) {
 		reads[d]++
-		mu.Unlock()
 		return os.ReadDir(d)
 	}
-	was := caseInsensitive
-	t.Cleanup(func() { caseReadDir, caseInsensitive = os.ReadDir, was })
 
-	caseInsensitive = false
-	if p := filepath.Join(dir, "code", "2026"); trueCase(p) != p || len(reads) != 0 {
-		t.Fatalf("trueCase(%s) = %s, %d reads: a case-sensitive host reads nothing", p, trueCase(p), len(reads))
+	if p := filepath.Join(dir, "code", "2026"); trueCaseIn(p, false, rd) != p || len(reads) != 0 {
+		t.Fatalf("trueCase(%s) = %s, %d reads: a case-sensitive host reads nothing", p, trueCaseIn(p, false, rd), len(reads))
 	}
 
-	caseInsensitive = true
-	trueCase(filepath.Join(dir, "gone", "deeper"))
+	trueCaseIn(filepath.Join(dir, "gone", "deeper"), true, rd)
 	if reads[dir] != 0 || reads[filepath.Join(dir, "gone")] != 0 {
 		t.Fatalf("reads %v: a name that is not there reads no folder", reads)
 	}
-	if got, want := trueCase(filepath.Join(dir, "Code", "2026")), filepath.Join(dir, "Code", "2026"); got != want {
+	if got, want := trueCaseIn(filepath.Join(dir, "Code", "2026"), true, rd), filepath.Join(dir, "Code", "2026"); got != want {
 		t.Fatalf("trueCase = %s, want %s", got, want)
 	}
 	if reads[filepath.Join(dir, "Code")] != 0 {
 		t.Fatalf("reads %v: a name with no letters has no other case to look for", reads)
 	}
 	if answersTo(dir, "code") {
-		if got, want := trueCase(filepath.Join(dir, "code", "2026")), filepath.Join(dir, "Code", "2026"); got != want {
+		if got, want := trueCaseIn(filepath.Join(dir, "code", "2026"), true, rd), filepath.Join(dir, "Code", "2026"); got != want {
 			t.Fatalf("trueCase = %s, want %s: the case on disk", got, want)
 		}
 	}

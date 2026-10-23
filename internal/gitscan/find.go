@@ -360,19 +360,19 @@ wait:
 // not there, has no letters, or whose parent cannot be read is kept as
 // written.
 // caseInsensitive: the host's volumes fold case by default, so a name
-// may resolve in another case than it has on disk. caseReadDir is
-// swapped in tests.
-var (
-	caseInsensitive = runtime.GOOS == "darwin" || runtime.GOOS == "windows"
-	caseReadDir     = os.ReadDir
-)
+// may resolve in another case than it has on disk.
+const caseInsensitive = runtime.GOOS == "darwin" || runtime.GOOS == "windows"
 
 // FoldsCase reports whether the host's folders answer to a name in
 // another letter case.
 func FoldsCase() bool { return caseInsensitive }
 
-func trueCase(p string) string {
-	if !caseInsensitive {
+func trueCase(p string) string { return trueCaseIn(p, caseInsensitive, os.ReadDir) }
+
+// trueCaseIn is trueCase where names fold case if fold, reading folders
+// with readDir.
+func trueCaseIn(p string, fold bool, readDir func(string) ([]os.DirEntry, error)) string {
+	if !fold {
 		return p
 	}
 	sep := string(filepath.Separator)
@@ -383,7 +383,7 @@ func trueCase(p string) string {
 	out := vol + sep
 	for _, name := range strings.Split(p[len(vol):], sep) {
 		if name != "" {
-			out = filepath.Join(out, nameOnDisk(out, name))
+			out = filepath.Join(out, nameOnDisk(out, name, readDir))
 		}
 	}
 	return out
@@ -393,12 +393,12 @@ func trueCase(p string) string {
 // that is not there reads no folder. The Lstat cannot tell the case
 // (a folding volume answers to any), so a name with letters still
 // reads its parent.
-func nameOnDisk(dir, name string) string {
+func nameOnDisk(dir, name string, readDir func(string) ([]os.DirEntry, error)) string {
 	fi, err := os.Lstat(filepath.Join(dir, name))
 	if err != nil || strings.ToLower(name) == strings.ToUpper(name) {
 		return name
 	}
-	ents, err := caseReadDir(dir)
+	ents, err := readDir(dir)
 	if err != nil {
 		return name
 	}
