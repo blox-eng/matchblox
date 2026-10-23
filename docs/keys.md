@@ -60,7 +60,7 @@ The key line shows `RUN` and the exact command.
 | `Enter` | Runs a safe action. |
 | `y` | Runs a destructive action. `Enter` never does. |
 | `y`, `n` | Answer "Take over?" while the stoker runs: `y` rests it while you work, `n` keeps it on. |
-| `y`, `n`, `p` | Answer "Find the Git repositories in your home folder?", asked once per host: `y` finds them for N, `n` never asks again, `p` picks the folders. `Esc` asks at the next start. The box takes no answer for a moment after it shows, so a key meant for what was there before does not answer it. After a yes the line under it says how many it found, that it found none, why the scan stopped early, or how many folders it could not read, and names the folders it skipped. The box is not drawn over a confirm or any other question. |
+| `y`, `n`, `p` | Answer "Find the Git repositories in your home folder?", asked once per host: `y` finds them for N, `n` never asks again, `p` picks the folders. `Esc` asks at the next start. The box takes no answer for a moment after it shows, so a key meant for what was there before does not answer it. After a yes the line under it says how many it found, that it found none, why the scan stopped early, how many folders it could not read, or that the list could not be saved, and names the folders it skipped. The box is not drawn over a confirm or any other question. |
 | `↓` or `j` | Scrolls a long change. `y` works only after its last line was on the screen. |
 | `m` | Turns the choice of a setup step on or off: the tmux mouse, in "Add the way back". |
 | `Esc` | Cancels. Any other key cancels too. |

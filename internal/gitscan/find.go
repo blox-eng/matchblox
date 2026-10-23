@@ -30,12 +30,15 @@ type Found struct {
 	Skipped     []Skip        `json:"skipped,omitempty"`
 	SkippedMore int           `json:"skipped_more,omitempty"` // skipped past the list's cap
 	Stopped     bool          `json:"stopped,omitempty"`      // a bound cut the walk: repos may be missing
+	Unreadable  int           `json:"unreadable,omitempty"`   // folders that could not be read, all of them
+	Unsaved     string        `json:"unsaved,omitempty"`      // why repos.json could not be written
 }
 
 // Same reports whether f and g tell a console the same thing: it ignores
 // At and Took, which change on every scan. Repos come sorted by path.
 func (f Found) Same(g Found) bool {
 	return f.Consent == g.Consent && f.SkippedMore == g.SkippedMore && f.Stopped == g.Stopped &&
+		f.Unreadable == g.Unreadable && f.Unsaved == g.Unsaved &&
 		slices.Equal(f.Roots, g.Roots) && slices.Equal(f.Errors, g.Errors) &&
 		slices.Equal(f.Skipped, g.Skipped) &&
 		slices.EqualFunc(f.Repos, g.Repos, func(a, b Checkout) bool {
@@ -56,10 +59,16 @@ type Summary struct {
 	// mid-walk); its reason is Errors[0]. Other Errors are folders that
 	// could not be read in a walk that ran to the end.
 	Stopped bool `json:"stopped,omitempty"`
+	// Unreadable is how many folders could not be read or looked up: the
+	// "cannot read" and "cannot find root" lines, past the cap on Errors.
+	Unreadable int `json:"unreadable,omitempty"`
+	// Unsaved is why the list could not be written to disk; empty: it was.
+	Unsaved string `json:"unsaved,omitempty"`
 }
 
 func (f Found) Summary() Summary {
-	return Summary{Repos: len(f.Repos), Took: f.Took, Errors: f.Errors, Skipped: f.Skipped, SkippedMore: f.SkippedMore, Stopped: f.Stopped}
+	return Summary{Repos: len(f.Repos), Took: f.Took, Errors: f.Errors, Skipped: f.Skipped, SkippedMore: f.SkippedMore,
+		Stopped: f.Stopped, Unreadable: f.Unreadable, Unsaved: f.Unsaved}
 }
 
 // Checkout is one repository or linked worktree on the host.
@@ -100,6 +109,7 @@ type Result struct {
 	Hung        []string // roots as written that never resolved, and the folder read when Limit fired
 	Stopped     bool     // a bound cut the walk: Errors[0] says which
 	Missing     []string // Named roots, as written, that are no folder
+	Unreadable  int      // folders that could not be read or looked up
 	// Resolved is each root that answered its lookup, as written, to the
 	// path it resolved to: a later walk where it hangs knows where it led.
 	Resolved map[string]string
@@ -240,6 +250,7 @@ type walker struct {
 	skipSeen map[string]bool
 	resolved map[string]string // Result.Resolved
 	missing  []string          // Result.Missing
+	unread   int               // Result.Unreadable
 }
 
 // lookup is a path as written and what resolving it gave.
@@ -362,7 +373,7 @@ wait:
 				w.mu.Unlock()
 			}
 		case l.err != nil:
-			w.note(fmt.Sprintf("cannot find root %s: %v", r, cause(l.err)))
+			w.unreadable(fmt.Sprintf("cannot find root %s: %v", r, cause(l.err)))
 		default:
 			dirs = append(dirs, l.path)
 		}
@@ -470,8 +481,22 @@ func (w *walker) halt(why string) {
 func (w *walker) note(msg string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.noteLocked(msg)
+}
+
+// unreadable notes a folder that could not be read, and counts it.
+func (w *walker) unreadable(msg string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.noteLocked(msg) {
+		w.unread++
+	}
+}
+
+// noteLocked reports whether msg is new.
+func (w *walker) noteLocked(msg string) bool {
 	if w.noted[msg] {
-		return
+		return false
 	}
 	w.noted[msg] = true
 	if len(w.errs) < maxErrors {
@@ -479,6 +504,7 @@ func (w *walker) note(msg string) {
 	} else {
 		w.errMore++
 	}
+	return true
 }
 
 func (w *walker) skip(path, why string) {
@@ -538,7 +564,7 @@ func (w *walker) result(hung, stuck bool) Result {
 		res.Stopped = true
 		res.Errors = append(res.Errors, w.stop)
 	}
-	res.Missing = slices.Clone(w.missing)
+	res.Missing, res.Unreadable = slices.Clone(w.missing), w.unread
 	res.Errors = append(res.Errors, w.errs...)
 	if total := len(res.Errors) + w.errMore; total > maxErrors {
 		res.Errors = append(res.Errors[:maxErrors-1], fmt.Sprintf("and %d more", total-(maxErrors-1)))
@@ -598,7 +624,7 @@ func (w *walker) walk(ctx context.Context, dir string, left int, home bool) bool
 	if err != nil {
 		w.setAt("")
 		if !errors.Is(err, fs.ErrNotExist) {
-			w.note(fmt.Sprintf("cannot read %s: %v", dir, cause(err)))
+			w.unreadable(fmt.Sprintf("cannot read %s: %v", dir, cause(err)))
 		}
 		return false
 	}

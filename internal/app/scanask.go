@@ -109,8 +109,10 @@ func (m Model) scanFlash(r proto.Result, roots string) string {
 			line += ": " + sum.Errors[0] // the bound that cut it
 		}
 		return line
-	case len(sum.Errors) > 0: // the walk ran to the end
-		return found + "; " + plural(unread(sum.Errors), "folder") + " could not be read: matchblox scan lists them"
+	case sum.Unsaved != "":
+		return found + ", but they could not be saved: " + sum.Unsaved
+	case sum.Unreadable > 0: // the walk ran to the end
+		return found + "; " + plural(sum.Unreadable, "folder") + " could not be read: matchblox scan lists them"
 	case sum.Repos == 0 && len(sum.Skipped) == 0:
 		return ansi.Truncate("found no Git repositories in "+roots, room, "…")
 	case len(sum.Skipped) == 0:
@@ -119,6 +121,9 @@ func (m Model) scanFlash(r proto.Result, roots string) string {
 	// The folders skipped, in order, as many as the line holds;
 	// matchblox scan lists them all.
 	line := ok + "; skipped"
+	if sum.Repos == 0 {
+		line = "found no Git repositories; skipped"
+	}
 	total := len(sum.Skipped) + sum.SkippedMore
 	for i, sk := range sum.Skipped {
 		next := line + " " + tilde(sk.Path)
@@ -144,17 +149,6 @@ func gitRepos(n int) string {
 		return "1 Git repository"
 	}
 	return fmt.Sprintf("%d Git repositories", n)
-}
-
-// unread is how many folders errs says could not be read: a capped list
-// ends "and N more".
-func unread(errs []string) int {
-	n := len(errs)
-	var more int
-	if _, err := fmt.Sscanf(errs[n-1], "and %d more", &more); err == nil {
-		return n - 1 + more
-	}
-	return n
 }
 
 func (m Model) scanBox(bw int) []string {

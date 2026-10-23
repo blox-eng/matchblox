@@ -36,7 +36,7 @@ func (s *Service) loadFound() {
 	if c.Answer == "yes" && s.ReposPath != "" {
 		cached := state.ReadFound(s.ReposPath)
 		f.At, f.Took, f.Repos, f.Errors = cached.At, cached.Took, cached.Repos, cached.Errors
-		f.Skipped, f.SkippedMore, f.Stopped = cached.Skipped, cached.SkippedMore, cached.Stopped
+		f.Skipped, f.SkippedMore, f.Stopped, f.Unreadable = cached.Skipped, cached.SkippedMore, cached.Stopped, cached.Unreadable
 	}
 	s.setFound(f)
 }
@@ -200,7 +200,7 @@ func (s *Service) walk(ctx context.Context, reqs []scanReq) {
 		return
 	}
 	f := gitscan.Found{Consent: "yes", Roots: c.Roots, At: time.Now(), Took: time.Since(start),
-		Repos: s.carryOver(res, roots), Errors: res.Errors, Skipped: res.Skipped, SkippedMore: res.SkippedMore, Stopped: res.Stopped}
+		Repos: s.carryOver(res, roots), Errors: res.Errors, Skipped: res.Skipped, SkippedMore: res.SkippedMore, Stopped: res.Stopped, Unreadable: res.Unreadable}
 	f, on, err := s.keep(f, nos)
 	if errors.Is(err, errScanNo) {
 		all(err)
@@ -358,7 +358,7 @@ func (s *Service) keep(f gitscan.Found, nos uint64) (gitscan.Found, []string, er
 	}
 	if s.ReposPath != "" {
 		if err := state.WriteFound(s.ReposPath, f); err != nil {
-			f.Errors = append(f.Errors, "repos.json: "+err.Error())
+			f.Errors, f.Unsaved = append(f.Errors, "repos.json: "+err.Error()), err.Error()
 		}
 	}
 	s.setFound(f)

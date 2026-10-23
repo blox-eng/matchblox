@@ -936,3 +936,23 @@ func TestScanYesSaysStopped(t *testing.T) {
 		t.Fatalf("a full walk's yes = %+v", r)
 	}
 }
+
+// A walk's unreadable count reaches the yes; a cache that could not be
+// written is said apart from the folders that could not be read.
+func TestScanYesSaysUnreadableAndUnsaved(t *testing.T) {
+	s, _ := foundTest(t)
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s.ReposPath = filepath.Join(file, "repos.json")
+	scripted(s, gitscan.Result{Unreadable: 2, Errors: []string{"cannot read /a: permission denied", "cannot read /b: permission denied"}})
+	foundReady(t, s)
+	r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true})
+	if r.Err != "" || r.Scan == nil || r.Scan.Unreadable != 2 || r.Scan.Unsaved == "" {
+		t.Fatalf("yes = %+v", r)
+	}
+	if strings.HasPrefix(r.Scan.Unsaved, "repos.json") {
+		t.Fatalf("Unsaved = %q, want the error alone", r.Scan.Unsaved)
+	}
+}

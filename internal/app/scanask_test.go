@@ -576,18 +576,46 @@ func TestScanFlashUnreadableIsNotAStop(t *testing.T) {
 		sum  proto.ScanSummary
 		want string
 	}{
-		{proto.ScanSummary{Repos: 12, Errors: []string{"cannot read /home/x/data/lost+found: permission denied"}},
+		{proto.ScanSummary{Repos: 12, Unreadable: 1, Errors: []string{"cannot read /home/x/data/lost+found: permission denied"}},
 			"found 12 Git repositories; 1 folder could not be read: matchblox scan lists them"},
-		{proto.ScanSummary{Repos: 1, Errors: []string{"cannot read /a: permission denied", "cannot read /b: permission denied"}},
+		{proto.ScanSummary{Repos: 1, Unreadable: 2, Errors: []string{"cannot read /a: permission denied", "cannot read /b: permission denied"}},
 			"found 1 Git repository; 2 folders could not be read: matchblox scan lists them"},
-		{proto.ScanSummary{Repos: 3, Errors: append(slices.Repeat([]string{"cannot read /a: permission denied"}, 19), "and 6 more")},
+		{proto.ScanSummary{Repos: 3, Unreadable: 25, Errors: append(slices.Repeat([]string{"cannot read /a: permission denied"}, 19), "and 6 more")},
 			"found 3 Git repositories; 25 folders could not be read: matchblox scan lists them"},
 		{proto.ScanSummary{Repos: 1, Stopped: true, Errors: []string{"stopped after 30s: some repositories may be missing"}},
 			"found 1 Git repository, but the scan stopped early: stopped after 30s: some repositories may be missing"},
+		// Lines that are no unreadable folder are not counted as one.
+		{proto.ScanSummary{Repos: 4, Errors: []string{"no folder /h/gone"}},
+			"found your Git repositories: N offers them"},
+		{proto.ScanSummary{Repos: 1, Unsaved: "open /x/repos.json: permission denied", Errors: []string{"repos.json: open /x/repos.json: permission denied"}},
+			"found 1 Git repository, but they could not be saved: open /x/repos.json: permission denied"},
+		{proto.ScanSummary{Repos: 2, Unreadable: 1, Unsaved: "disk full", Errors: []string{"cannot read /a: permission denied", "repos.json: disk full"}},
+			"found 2 Git repositories, but they could not be saved: disk full"},
 	} {
 		done, _ := next.Update(resultMsg(proto.Result{ActID: act, Scan: &c.sum}))
 		if f := done.(Model).flash; f != c.want {
 			t.Errorf("%+v: flash %q, want %q", c.sum, f, c.want)
 		}
+	}
+}
+
+// None found with folders skipped says none were found, then lists them.
+func TestScanFlashNoneFoundButSkipped(t *testing.T) {
+	m, _ := asked(t)
+	next, _ := key(m, "y")
+	act := next.(Model).scanAct
+	two := []gitscan.Skip{{Path: "/mnt/a", Why: "it did not answer"}, {Path: "/mnt/b", Why: "it did not answer"}}
+	done, _ := next.Update(resultMsg(proto.Result{ActID: act, Scan: &proto.ScanSummary{Skipped: two}}))
+	if f, want := done.(Model).flash, "found no Git repositories; skipped /mnt/a /mnt/b"; f != want {
+		t.Fatalf("flash %q, want %q", f, want)
+	}
+	var forty []gitscan.Skip
+	for i := range 40 {
+		forty = append(forty, gitscan.Skip{Path: fmt.Sprintf("/mnt/share-%02d", i), Why: "it did not answer"})
+	}
+	done, _ = next.Update(resultMsg(proto.Result{ActID: act, Scan: &proto.ScanSummary{Skipped: forty, SkippedMore: 5}}))
+	f := done.(Model).flash
+	if !regexp.MustCompile(`^found no Git repositories; skipped /mnt/share-00 .* and \d+ more$`).MatchString(f) || len([]rune(f)) > m.width-2 {
+		t.Fatalf("flash %q on %d columns", f, m.width)
 	}
 }

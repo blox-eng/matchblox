@@ -1066,3 +1066,38 @@ func TestMissing(t *testing.T) {
 		t.Fatalf("Missing = %q, want %q", got, want)
 	}
 }
+
+// Unreadable counts the folders that could not be read, past the cap on
+// Errors too; a named root that is not there is not one of them.
+func TestFindCountsUnreadable(t *testing.T) {
+	root := tmp(t)
+	locked := map[string]bool{}
+	for i := range 25 {
+		d := filepath.Join(root, fmt.Sprintf("d%02d", i))
+		mkdir(t, d)
+		locked[d] = true
+	}
+	bad, dve := filepath.Join(root, "bad"), filepath.Join(root, "dve")
+	swapFS(t, func(dir string) ([]os.DirEntry, error) {
+		if locked[dir] {
+			return nil, &fs.PathError{Op: "open", Path: dir, Err: fs.ErrPermission}
+		}
+		return os.ReadDir(dir)
+	}, func(p string) (string, error) {
+		if p == bad {
+			return "", &fs.PathError{Op: "lstat", Path: p, Err: fs.ErrPermission}
+		}
+		return filepath.EvalSymlinks(p)
+	})
+	res := Find(context.Background(), []string{bad, dve, root}, FindOpts{Named: map[string]bool{dve: true}})
+	if res.Unreadable != 26 {
+		t.Fatalf("Unreadable = %d, want 26 (25 folders and a root), errors %q", res.Unreadable, res.Errors)
+	}
+	f := Found{Unreadable: res.Unreadable}
+	if s := f.Summary(); s.Unreadable != 26 {
+		t.Fatalf("Summary drops Unreadable: %+v", s)
+	}
+	if f.Same(Found{}) {
+		t.Fatal("Unreadable differs: want different")
+	}
+}
