@@ -756,7 +756,7 @@ func StripCredentials(raw string) string {
 
 // isScheme is RFC 3986's scheme: a letter, then letters, digits, + . or -.
 func isScheme(s string) bool {
-	if s == "" || !('a' <= s[0]|0x20 && s[0]|0x20 <= 'z') {
+	if s == "" || 'a' > s[0]|0x20 || s[0]|0x20 > 'z' {
 		return false
 	}
 	return strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+.-") == ""

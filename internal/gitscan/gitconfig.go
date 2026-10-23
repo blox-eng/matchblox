@@ -22,10 +22,7 @@ func parseGitConfig(b []byte) gitConfig {
 		line, rest := cutLine(s)
 		s = rest
 		line = strings.TrimLeft(line, " \t")
-		for {
-			if line == "" || line[0] == '#' || line[0] == ';' {
-				break
-			}
+		for line != "" && line[0] != '#' && line[0] != ';' {
 			if line[0] == '[' {
 				name, after, ok := parseSection(line)
 				if !ok {

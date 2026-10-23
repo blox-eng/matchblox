@@ -621,9 +621,9 @@ func TestScanFlashNoneFoundButSkipped(t *testing.T) {
 }
 
 func TestPickSeveralMissingFoldersStaysOpen(t *testing.T) {
-	next, _ := pickTyped(t, `~/dve "~/My Wrok"`)
-	done, _ := next.Update(resultMsg(proto.Result{ActID: next.(Model).form.act, Err: "no folder ~/dve, ~/My Wrok"}))
-	if nm := done.(Model); nm.form == nil || nm.form.err != "no folder ~/dve, ~/My Wrok" || nm.form.roots != `~/dve "~/My Wrok"` {
+	next, _ := pickTyped(t, `~/dve "~/My Work"`)
+	done, _ := next.Update(resultMsg(proto.Result{ActID: next.(Model).form.act, Err: "no folder ~/dve, ~/My Work"}))
+	if nm := done.(Model); nm.form == nil || nm.form.err != "no folder ~/dve, ~/My Work" || nm.form.roots != `~/dve "~/My Work"` {
 		t.Fatalf("form %+v", nm.form)
 	}
 }
