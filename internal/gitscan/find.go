@@ -106,7 +106,7 @@ type Result struct {
 	Errors      []string // at most maxErrors lines, the last "and N more"
 	Skipped     []Skip   // at most maxSkipped
 	SkippedMore int
-	Hung        []string // roots as written that never resolved, and the folder read when Limit fired
+	Hung        []string // lookups that never answered, as written, and the folder read when Limit fired
 	Stopped     bool     // a bound cut the walk: Errors[0] says which
 	Missing     []string // Named roots, as written, that are no folder
 	Unreadable  int      // folders that could not be read or looked up
@@ -535,7 +535,8 @@ func (w *walker) setAt(dir string) {
 // in Hung for the caller and in Skipped for the builder. stuck: Limit
 // fired, so the folder being read is one. A home or protected lookup
 // that is no root is no folder the scan was asked to walk: it is never
-// in Skipped, and in Hung only below a root, where a walk would reach it.
+// in Skipped. It is in Hung all the same, wherever it is: a lookup asked
+// again blocks one more goroutine on it.
 func (w *walker) result(hung, stuck bool) Result {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -547,7 +548,7 @@ func (w *walker) result(hung, stuck bool) Result {
 			case slices.Contains(w.roots, p):
 				res.Hung = append(res.Hung, p)
 				w.skipLocked(filepath.Clean(p), whyNoAnswer)
-			case w.belowRootLocked(p):
+			default:
 				res.Hung = append(res.Hung, p)
 			}
 		}
@@ -575,28 +576,6 @@ func (w *walker) result(hung, stuck bool) Result {
 		res.Resolved = maps.Clone(w.resolved)
 	}
 	return res
-}
-
-// belowRootLocked reports whether p is at or below a root, as written or
-// as it resolved.
-func (w *walker) belowRootLocked(p string) bool {
-	p = filepath.Clean(p)
-	for _, r := range w.roots {
-		if below(p, filepath.Clean(r)) {
-			return true
-		}
-	}
-	for _, r := range w.resolved {
-		if below(p, r) {
-			return true
-		}
-	}
-	return false
-}
-
-// below reports whether path is dir or below it; both are clean.
-func below(path, dir string) bool {
-	return path == dir || strings.HasPrefix(path, strings.TrimSuffix(dir, string(filepath.Separator))+string(filepath.Separator))
 }
 
 // walk reports true once a bound stops the scan. home: dir is searched

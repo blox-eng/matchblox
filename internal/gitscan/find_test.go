@@ -907,19 +907,27 @@ func blockAll(t *testing.T, paths ...string) func(string) (string, error) {
 	}
 }
 
-func TestFindHungHomeOrProtectedOutsideRootsIsNotSkipped(t *testing.T) {
+func TestFindHungHomeOrProtectedOutsideRootsIsRemembered(t *testing.T) {
 	code, home := tmp(t), tmp(t)
 	mkRepo(t, filepath.Join(code, "r"), "main", "")
 	inside := filepath.Join(code, "Documents")
 	outside := filepath.Join(home, "Documents")
 	mkdir(t, inside)
 	mkdir(t, outside)
-	swapFS(t, nil, blockAll(t, home, inside, outside))
+	block := blockAll(t, home, inside, outside)
+	var mu sync.Mutex
+	asked := map[string]int{}
+	swapFS(t, nil, func(p string) (string, error) {
+		mu.Lock()
+		asked[p]++
+		mu.Unlock()
+		return block(p)
+	})
 	o := FindOpts{Budget: 200 * time.Millisecond, Grace: 100 * time.Millisecond,
 		Home: home, Protected: []string{inside, outside}}
 	res := Find(context.Background(), []string{code}, o)
-	if !slices.Equal(res.Hung, []string{inside}) {
-		t.Fatalf("Hung = %v, want only %s: a lookup outside every root is no folder of this walk", res.Hung, inside)
+	if want := []string{home, inside, outside}; !slices.Equal(res.Hung, want) {
+		t.Fatalf("Hung = %v, want %v: every lookup that did not answer, inside a root or not", res.Hung, want)
 	}
 	for _, k := range res.Skipped {
 		if k.Unanswered() {
@@ -928,6 +936,26 @@ func TestFindHungHomeOrProtectedOutsideRootsIsNotSkipped(t *testing.T) {
 	}
 	if got := paths(res.Repos); !slices.Equal(got, []string{filepath.Join(code, "r")}) {
 		t.Fatalf("repos %v", got)
+	}
+
+	// The next walk skips them: no lookup of them, so no goroutine waits on one.
+	o.Skip = map[string]bool{}
+	for _, p := range res.Hung {
+		o.Skip[p] = true
+	}
+	res = Find(context.Background(), []string{code}, o)
+	mu.Lock()
+	defer mu.Unlock()
+	for _, p := range []string{home, inside, outside} {
+		if asked[p] != 1 {
+			t.Fatalf("%s looked up %d times over two walks, want 1", p, asked[p])
+		}
+	}
+	if len(res.Hung) != 0 {
+		t.Fatalf("second walk Hung = %v", res.Hung)
+	}
+	if got := paths(res.Repos); !slices.Equal(got, []string{filepath.Join(code, "r")}) {
+		t.Fatalf("second walk repos %v", got)
 	}
 }
 
