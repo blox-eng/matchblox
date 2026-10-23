@@ -416,9 +416,10 @@ func TestFocusMovesOnlyThePhone(t *testing.T) {
 		}
 	}
 	sock := filepath.Join(t.TempDir(), "s")
-	env := slices.DeleteFunc(os.Environ(), func(e string) bool {
-		return strings.HasPrefix(e, "TMUX=") || strings.HasPrefix(e, "TMUX_PANE=")
-	})
+	// CI has no TERM, and a tmux client without one does not attach.
+	env := append(slices.DeleteFunc(os.Environ(), func(e string) bool {
+		return strings.HasPrefix(e, "TMUX=") || strings.HasPrefix(e, "TMUX_PANE=") || strings.HasPrefix(e, "TERM=")
+	}), "TERM=xterm-256color")
 	tmux := func(args ...string) string {
 		t.Helper()
 		cmd := exec.Command("tmux", append([]string{"-S", sock, "-f", "/dev/null"}, args...)...)
