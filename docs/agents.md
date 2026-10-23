@@ -88,10 +88,11 @@ show `—` and "not measured", and have no id:
 - a session after its `/new`;
 - a session that had no turn yet when another Codex session started in
   its directory, one that has exited since;
+- a session whose first turn came while matchblox was not running;
 - a session resumed without its id (`codex resume --last`, the picker).
 
-A session begun as `codex resume <id>` shows "not measured" while another
-session in its directory writes after it.
+A session shows "not measured" while another session in its directory
+writes after it.
 
 A `codex exec` run you start in a pane shows in Sessions, and takes no
 other session's rollout. One that another agent starts does not show.
