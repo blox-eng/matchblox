@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,17 +43,19 @@ func (s *Sampler) codexRollout(pid int, children map[int][]int) (path string, re
 
 // codexInDir finds the rollout of a Codex that holds none open: Codex
 // 0.163 closes it after each write (#179), and macOS lists no open files
-// at all. It is the one rollout of the process's directory begun and
-// written since the process started, among those created since then (a
-// month at most). It must be this session's for sure, or z parks the
-// wrong pane: only the CLI's rollouts count, not a `codex exec` run's or
-// a thread of the Codex app or an editor; two begun since the start (a
-// /new) cannot be told apart, and neither can one begun before it and
-// written since (a resume without an id, a session that ended after it
-// started), so ambiguous is true. The caller asks only when no other
-// Codex session runs in the directory. Codex names its day directories
-// in its own zone, so the scan takes a day either side; a directory not
-// written since the start is not read.
+// at all. It is the one session's rollout of the process's directory
+// begun and written since the process started, among those created since
+// then (a month at most). Two files of one session are one: a revert
+// (Esc Esc on an earlier prompt) writes on in a new file, and the newer is
+// taken. It must be this session's for sure, or z parks the wrong pane:
+// only the CLI's rollouts count, not a `codex exec` run's or a thread of
+// the Codex app or an editor. Two sessions begun since the start (a /new)
+// cannot be told apart, and neither can one begun before it and written
+// since (a resume without an id, a session that ended after it started):
+// ambiguous is true. The caller asks only when no other Codex session
+// runs in the directory. Codex names its day directories in its own zone,
+// so the scan takes a day either side; a directory not written since the
+// start is not read.
 func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) (path string, ambiguous bool) {
 	if home == "" || cwd == "" {
 		return "", false
@@ -62,7 +65,7 @@ func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) (path
 	if month := now.AddDate(0, -1, 0); day.Before(month) {
 		day = time.Date(month.Year(), month.Month(), month.Day(), 0, 0, 0, 0, time.Local)
 	}
-	found, older := 0, false
+	found, older, id := 0, false, ""
 	for last := now.AddDate(0, 0, 1); !day.After(last); day = day.AddDate(0, 0, 1) {
 		dir := filepath.Join(home, "sessions", day.Format("2006/01/02"))
 		if st, err := os.Stat(dir); err != nil || st.ModTime().Before(started) {
@@ -88,7 +91,12 @@ func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) (path
 				older = true
 				continue
 			}
-			path, found = f, found+1
+			switch {
+			case found == 0 || m.id == "" || m.id != id:
+				path, id, found = f, m.id, found+1
+			case newer(f, path): // the same session's later rollout: a revert
+				path = f
+			}
 		}
 	}
 	if found > 1 || found == 0 && older {
@@ -102,39 +110,77 @@ func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) (path
 // codex_exec, and the Codex app and editors write their own names.
 var codexCLI = map[string]bool{"": true, "codex-tui": true, "codex_cli_rs": true}
 
-// codexResumeID is the session id of `codex resume <id>`, or "".
+// codexArgv is argv as Codex reads it: an npm install runs
+// `node <script> ...`.
+func codexArgv(argv []string) []string {
+	if len(argv) > 1 && interpreter(filepath.Base(argv[0])) {
+		for i, a := range argv[1:] {
+			if !strings.HasPrefix(a, "-") {
+				return argv[i+1:]
+			}
+		}
+	}
+	return argv
+}
+
+// codexResume: argv resumes a session, after global options or not. A
+// guess that is wrong costs only "unmeasured".
+func codexResume(argv []string) bool {
+	return len(argv) > 1 && slices.Contains(argv[1:], "resume")
+}
+
+// codexResumeID is the session id of `codex resume <id>`, in the lower case
+// of its rollout's name, or "".
 func codexResumeID(argv []string) string {
-	if len(argv) < 3 || argv[1] != "resume" {
+	i := slices.Index(argv, "resume")
+	if i < 1 {
 		return ""
 	}
-	for _, a := range argv[2:] {
+	for _, a := range argv[i+1:] {
 		if !strings.HasPrefix(a, "-") {
 			if strings.Trim(a, "0123456789abcdefABCDEF-") != "" {
 				return "" // not an id: a prompt, or a flag's value
 			}
-			return a
+			return strings.ToLower(a)
 		}
 	}
 	return ""
 }
 
 // codexResumed finds the rollout of `codex resume <id>`, on whatever day it
-// began: Codex writes on in it, and names it after the session id. The
-// answer is kept, found or not: the rollout exists before Codex resumes it,
-// and does not move.
-func (r *agentReader) codexResumed(home, id string) string {
+// began: Codex writes on in it, and names it after the session id. A
+// revert (Esc Esc on an earlier prompt) writes on in
+// rollout-<ts>-<id>_<rollout>.jsonl, so the days around now are looked at
+// on each sample. The first rollout is kept once found; a miss is tried
+// again after 30 seconds, as Codex can unpack a compressed one late.
+func (r *agentReader) codexResumed(home, id string, now time.Time) string {
 	key := home + "\x00" + id
-	if path, ok := r.resumed[key]; ok {
-		return path
-	}
-	path := ""
-	matches, _ := filepath.Glob(filepath.Join(home, "sessions", "*", "*", "*", "rollout-*-"+id+".jsonl"))
-	for _, f := range matches {
-		if r.metaOf(f).id == id && (path == "" || newer(f, path)) {
-			path = f
+	path, ok := r.resumed[key]
+	if !ok {
+		if at, missed := r.resumedMiss[key]; !missed || now.Sub(at) >= 30*time.Second {
+			matches, _ := filepath.Glob(filepath.Join(home, "sessions", "*", "*", "*", "rollout-*-"+id+".jsonl"))
+			for _, f := range matches {
+				if r.metaOf(f).id == id && (path == "" || newer(f, path)) {
+					path = f
+				}
+			}
+			if path == "" {
+				r.resumedMiss[key] = now
+			} else {
+				r.resumed[key] = path
+				delete(r.resumedMiss, key)
+			}
 		}
 	}
-	r.resumed[key] = path
+	for d := -1; d <= 1; d++ {
+		dir := filepath.Join(home, "sessions", now.Local().AddDate(0, 0, d).Format("2006/01/02"))
+		reverted, _ := filepath.Glob(filepath.Join(dir, "rollout-*-"+id+"_*.jsonl"))
+		for _, f := range reverted {
+			if r.metaOf(f).id == id && (path == "" || newer(f, path)) {
+				path = f
+			}
+		}
+	}
 	return path
 }
 

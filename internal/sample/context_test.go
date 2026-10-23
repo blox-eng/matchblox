@@ -693,44 +693,62 @@ func TestTheDirectoryFallbackCountsOnlyCodexSessions(t *testing.T) {
 	}
 }
 
-// codexDirFixture builds Codex processes in panes and rollouts under
-// CODEX_HOME for the directory fallback. proc gives the process a tty, so
-// its open files read as none (Codex 0.163 closes its rollout).
-func codexDirFixture(t *testing.T) (smp *Sampler, started time.Time, proc func(pid int, argv []string, pane, cwd string), write func(day time.Time, name, meta string, at time.Time)) {
+// codexDir is a fixture for the directory fallback: Codex processes in
+// panes and rollouts under CODEX_HOME. A process has a tty, so its open
+// files read as none (Codex 0.163 closes its rollout).
+type codexDir struct {
+	t       *testing.T
+	root    string
+	smp     *Sampler
+	started time.Time
+}
+
+func newCodexDir(t *testing.T) *codexDir {
 	t.Helper()
 	root := copyFixture(t)
-	smp = newFixtureSampler(root)
+	smp := newFixtureSampler(root)
 	smp.Agents = []string{"claude", "codex"}
-	started = fixtureNow.Add(-time.Duration((smp.FS.Uptime() - 10) * float64(time.Second)))
-	tail := strings.SplitN(codexRollout("gpt-made-up", 51680, 258400), "\n", 2)[1]
-	proc = func(pid int, argv []string, pane, cwd string) {
-		addProc(t, root, pid, 1, "codex", argv, pane)
-		addPane(t, root, pane+"\tw:"+strconv.Itoa(pid)+".1\tw\t"+strconv.Itoa(pid)+"\tcodex\t"+cwd)
-		symlink(t, "/dev/pts/3", filepath.Join(root, "proc", strconv.Itoa(pid), "fd", "0"))
-		symlink(t, cwd, filepath.Join(root, "proc", strconv.Itoa(pid), "cwd"))
+	return &codexDir{t, root, smp, fixtureNow.Add(-time.Duration((smp.FS.Uptime() - 10) * float64(time.Second)))}
+}
+
+// proc starts argv in pane; an npm install runs as node, named MainThread.
+func (d *codexDir) proc(pid int, argv []string, pane, cwd string) {
+	comm := "codex"
+	if argv[0] == "node" {
+		comm = "MainThread"
 	}
-	write = func(day time.Time, name, meta string, at time.Time) {
-		path := filepath.Join(root, "home", ".codex", "sessions", day.Format("2006/01/02"), name)
-		writeFile(t, path, meta+tail)
-		if err := os.Chtimes(path, at, at); err != nil {
-			t.Fatal(err)
-		}
+	addProc(d.t, d.root, pid, 1, comm, argv, pane)
+	addPane(d.t, d.root, pane+"\tw:"+strconv.Itoa(pid)+".1\tw\t"+strconv.Itoa(pid)+"\t"+comm+"\t"+cwd)
+	symlink(d.t, "/dev/pts/3", filepath.Join(d.root, "proc", strconv.Itoa(pid), "fd", "0"))
+	symlink(d.t, cwd, filepath.Join(d.root, "proc", strconv.Itoa(pid), "cwd"))
+}
+
+// write puts a rollout of tokens in day's directory, last written at.
+func (d *codexDir) write(day time.Time, name, meta string, tokens int, at time.Time) {
+	tail := strings.SplitN(codexRollout("gpt-made-up", tokens, 258400), "\n", 2)[1]
+	path := filepath.Join(d.root, "home", ".codex", "sessions", day.Format("2006/01/02"), name)
+	writeFile(d.t, path, meta+tail)
+	if err := os.Chtimes(path, at, at); err != nil {
+		d.t.Fatal(err)
 	}
-	return smp, started, proc, write
 }
 
 // TestACodexExecTakesNoSessionsRollout: a `codex exec` run in a pane is
 // no session of the directory, so it must not take the rollout of the TUI
-// that started there after it: z on the exec row would park the TUI.
+// that started there after it: z on the exec row would park the TUI. An
+// npm install runs it as `node <script> exec`.
 func TestACodexExecTakesNoSessionsRollout(t *testing.T) {
-	smp, started, proc, write := codexDirFixture(t)
-	proc(900, []string{"codex", "exec", "fix the tests"}, "%20", "/work/both")
-	proc(901, []string{"codex"}, "%21", "/work/both")
-	write(fixtureNow, "rollout-a-tui.jsonl", codexMeta("id-tui", "/work/both", "codex-tui", started.Add(2*time.Second)), fixtureNow.Add(-time.Second))
+	d := newCodexDir(t)
+	d.proc(900, []string{"codex", "exec", "fix the tests"}, "%20", "/work/both")
+	d.proc(901, []string{"codex"}, "%21", "/work/both")
+	d.write(fixtureNow, "rollout-a-tui.jsonl", codexMeta("id-tui", "/work/both", "codex-tui", d.started.Add(2*time.Second)), 51680, fixtureNow.Add(-time.Second))
+	d.proc(910, []string{"node", "/usr/local/bin/codex", "exec", "fix it"}, "%22", "/work/npm")
 
-	got := byPane(smp.Sample())
-	if s := got["%20"]; s.SessionID != "" || s.Context != "unmeasured" {
-		t.Errorf("the codex exec row: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
+	got := byPane(d.smp.Sample())
+	for _, pane := range []string{"%20", "%22"} {
+		if s := got[pane]; s.SessionID != "" || s.Context != "unmeasured" {
+			t.Errorf("%s, a codex exec row: id %q, context %q; want none, unmeasured", pane, s.SessionID, s.Context)
+		}
 	}
 	if s := got["%21"]; s.SessionID != "id-tui" || s.Context != "known" {
 		t.Errorf("the TUI: id %q, context %q; want id-tui, known", s.SessionID, s.Context)
@@ -742,14 +760,14 @@ func TestACodexExecTakesNoSessionsRollout(t *testing.T) {
 // directory is another's (its originator is not the CLI's): the TUI stays
 // fresh, with no id. The CLI writes codex-tui (codex_cli_rs before it).
 func TestAFreshCodexDoesNotTakeAnAppThread(t *testing.T) {
-	smp, started, proc, write := codexDirFixture(t)
-	after := started.Add(2 * time.Second)
-	proc(900, []string{"codex"}, "%20", "/work/app")
-	write(fixtureNow, "rollout-a-app.jsonl", codexMeta("id-app", "/work/app", "Codex Desktop", after), fixtureNow.Add(-time.Second))
-	proc(910, []string{"codex"}, "%21", "/work/cli")
-	write(fixtureNow, "rollout-b-cli.jsonl", codexMeta("id-cli", "/work/cli", "codex_cli_rs", after), fixtureNow.Add(-time.Second))
+	d := newCodexDir(t)
+	after := d.started.Add(2 * time.Second)
+	d.proc(900, []string{"codex"}, "%20", "/work/app")
+	d.write(fixtureNow, "rollout-a-app.jsonl", codexMeta("id-app", "/work/app", "Codex Desktop", after), 51680, fixtureNow.Add(-time.Second))
+	d.proc(910, []string{"codex"}, "%21", "/work/cli")
+	d.write(fixtureNow, "rollout-b-cli.jsonl", codexMeta("id-cli", "/work/cli", "codex_cli_rs", after), 51680, fixtureNow.Add(-time.Second))
 
-	got := byPane(smp.Sample())
+	got := byPane(d.smp.Sample())
 	if s := got["%20"]; s.SessionID != "" || s.Context != "fresh" {
 		t.Errorf("a TUI beside an app thread: id %q, context %q; want none, fresh", s.SessionID, s.Context)
 	}
@@ -759,29 +777,94 @@ func TestAFreshCodexDoesNotTakeAnAppThread(t *testing.T) {
 }
 
 // TestAResumedCodexIsNotFresh: `codex resume <id>` writes on in the
-// rollout it began on another day: it is found by its id. Any other
-// session whose directory has a rollout begun before it started and
+// rollout it began on another day: it is found by its id, also from an
+// npm install, after global options, or with the id in capitals. Any
+// other session whose directory has a rollout begun before it started and
 // written since (a resume without an id, a session that ended after it
 // started) cannot be told apart: unmeasured, not fresh. So is a resume
 // whose rollout is not found: it began on a day the scan does not read.
 func TestAResumedCodexIsNotFresh(t *testing.T) {
-	smp, started, proc, write := codexDirFixture(t)
-	before := started.Add(-72 * time.Hour)
-	proc(900, []string{"codex", "resume", "0199a0b1-5e5e-7000-8000-00000000abcd"}, "%20", "/work/resumed")
-	write(before, "rollout-2026-09-18T10-00-00-0199a0b1-5e5e-7000-8000-00000000abcd.jsonl", codexMeta("0199a0b1-5e5e-7000-8000-00000000abcd", "/work/resumed", "codex-tui", before), fixtureNow.Add(-time.Second))
-	proc(910, []string{"codex", "resume", "--last"}, "%21", "/work/last")
-	write(fixtureNow, "rollout-b-last.jsonl", codexMeta("id-last", "/work/last", "codex-tui", started.Add(-time.Hour)), fixtureNow.Add(-time.Second))
-	proc(920, []string{"codex", "resume", "--last"}, "%22", "/work/away")
-	write(before, "rollout-c-away.jsonl", codexMeta("id-away", "/work/away", "codex-tui", before), fixtureNow.Add(-time.Second))
-
-	got := byPane(smp.Sample())
-	if s := got["%20"]; s.SessionID != "0199a0b1-5e5e-7000-8000-00000000abcd" || s.Context != "known" || s.Tokens != 51680 {
-		t.Errorf("codex resume <id>: id %q, context %q, %d tokens; want 0199a0b1-5e5e-7000-8000-00000000abcd, known, 51680", s.SessionID, s.Context, s.Tokens)
+	d := newCodexDir(t)
+	before := d.started.Add(-72 * time.Hour)
+	for i, argv := range [][]string{
+		{"codex", "resume", "ID"},
+		{"node", "/usr/local/bin/codex", "resume", "ID"},
+		{"codex", "-m", "gpt-made-up", "resume", "ID"},
+		{"codex", "resume", "UPPER"},
+	} {
+		id := "0199a0b1-5e5e-7000-8000-00000000abc" + strconv.Itoa(i)
+		for j := range argv {
+			switch argv[j] {
+			case "ID":
+				argv[j] = id
+			case "UPPER":
+				argv[j] = strings.ToUpper(id)
+			}
+		}
+		cwd := "/work/resumed" + strconv.Itoa(i)
+		d.proc(900+i, argv, "%2"+strconv.Itoa(i), cwd)
+		d.write(before, "rollout-2026-09-18T10-00-00-"+id+".jsonl", codexMeta(id, cwd, "codex-tui", before), 51680, fixtureNow.Add(-time.Second))
 	}
-	if s := got["%21"]; s.SessionID != "" || s.Context != "unmeasured" {
+	d.proc(910, []string{"codex", "resume", "--last"}, "%30", "/work/last")
+	d.write(fixtureNow, "rollout-b-last.jsonl", codexMeta("id-last", "/work/last", "codex-tui", d.started.Add(-time.Hour)), 51680, fixtureNow.Add(-time.Second))
+	d.proc(920, []string{"node", "/usr/local/bin/codex", "resume", "--last"}, "%31", "/work/away")
+	d.write(before, "rollout-c-away.jsonl", codexMeta("id-away", "/work/away", "codex-tui", before), 51680, fixtureNow.Add(-time.Second))
+
+	got := byPane(d.smp.Sample())
+	for i := range 4 {
+		id, pane := "0199a0b1-5e5e-7000-8000-00000000abc"+strconv.Itoa(i), "%2"+strconv.Itoa(i)
+		if s := got[pane]; s.SessionID != id || s.Context != "known" || s.Tokens != 51680 {
+			t.Errorf("%s, resumed by its id: id %q, context %q, %d tokens; want %s, known, 51680", pane, s.SessionID, s.Context, s.Tokens, id)
+		}
+	}
+	if s := got["%30"]; s.SessionID != "" || s.Context != "unmeasured" {
 		t.Errorf("codex resume --last: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
 	}
-	if s := got["%22"]; s.SessionID != "" || s.Context != "unmeasured" {
+	if s := got["%31"]; s.SessionID != "" || s.Context != "unmeasured" {
 		t.Errorf("codex resume --last of an older day's rollout: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
+	}
+}
+
+// TestACodexFollowsItsRevertedRollout: editing an earlier prompt (Esc Esc)
+// reverts the thread, and Codex writes on in
+// rollout-<ts>-<id>_<rollout>.jsonl, with the same session id. A resumed
+// session reads the newer file, and a TUI with both files keeps its id.
+func TestACodexFollowsItsRevertedRollout(t *testing.T) {
+	d := newCodexDir(t)
+	before := d.started.Add(-72 * time.Hour)
+	resumed := "0199a0b1-5e5e-7000-8000-00000000abcd"
+	d.proc(900, []string{"codex", "resume", resumed}, "%20", "/work/resumed")
+	d.write(before, "rollout-2026-09-18T10-00-00-"+resumed+".jsonl", codexMeta(resumed, "/work/resumed", "codex-tui", before), 200000, d.started.Add(-time.Hour))
+	d.write(fixtureNow, "rollout-2026-09-21T10-00-00-"+resumed+"_0199a0b1-5e5e-7000-8000-0000000fffff.jsonl", codexMeta(resumed, "/work/resumed", "codex-tui", before), 30000, fixtureNow.Add(-time.Second))
+	fresh := "0199a0b1-5e5e-7000-8000-000000001111"
+	after := d.started.Add(2 * time.Second)
+	d.proc(910, []string{"codex"}, "%21", "/work/tui")
+	d.write(fixtureNow, "rollout-2026-09-21T10-00-00-"+fresh+".jsonl", codexMeta(fresh, "/work/tui", "codex-tui", after), 90000, fixtureNow.Add(-time.Minute))
+	d.write(fixtureNow, "rollout-2026-09-21T10-05-00-"+fresh+"_0199a0b1-5e5e-7000-8000-0000000eeeee.jsonl", codexMeta(fresh, "/work/tui", "codex-tui", after), 30000, fixtureNow.Add(-time.Second))
+
+	got := byPane(d.smp.Sample())
+	if s := got["%20"]; s.SessionID != resumed || s.Tokens != 30000 {
+		t.Errorf("a resumed session after a revert: id %q, %d tokens; want %s, 30000", s.SessionID, s.Tokens, resumed)
+	}
+	if s := got["%21"]; s.SessionID != fresh || s.Tokens != 30000 {
+		t.Errorf("a TUI after a revert: id %q, %d tokens; want %s, 30000", s.SessionID, s.Tokens, fresh)
+	}
+}
+
+// TestAResumeFindsARolloutThatAppearsLater: Codex can write the rollout of
+// a resume after the process starts (it unpacks a compressed one). A miss
+// is tried again after 30 seconds.
+func TestAResumeFindsARolloutThatAppearsLater(t *testing.T) {
+	d := newCodexDir(t)
+	before := d.started.Add(-72 * time.Hour)
+	id := "0199a0b1-5e5e-7000-8000-00000000abcd"
+	d.proc(900, []string{"codex", "resume", id}, "%20", "/work/late")
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "" {
+		t.Fatalf("no rollout yet: id %q", s.SessionID)
+	}
+	d.write(before, "rollout-2026-09-18T10-00-00-"+id+".jsonl", codexMeta(id, "/work/late", "codex-tui", before), 51680, fixtureNow.Add(-time.Second))
+	d.smp.Now = func() time.Time { return fixtureNow.Add(31 * time.Second) }
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != id || s.Context != "known" {
+		t.Errorf("the rollout appeared: id %q, context %q; want %s, known", s.SessionID, s.Context, id)
 	}
 }

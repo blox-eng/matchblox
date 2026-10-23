@@ -562,7 +562,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		}
 		// Only sessions count: not a `codex exec` or an mcp-server that
 		// another agent runs, nor one of Codex's own non-interactive modes.
-		if s.agentName(pid, p) == "codex" && p.State != 'Z' && p.State != 'X' && !s.underAgent(p, procs) && !codexBatch(s.FS.Argv(pid)) {
+		if s.agentName(pid, p) == "codex" && p.State != 'Z' && p.State != 'X' && !s.underAgent(p, procs) && !codexBatch(codexArgv(s.FS.Argv(pid))) {
 			if pp, ok := procs[p.PPID]; !ok || s.agentName(p.PPID, pp) != "codex" {
 				codexIn[s.FS.Cwd(pid)]++
 			}
@@ -627,11 +627,11 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		case "codex":
 			sess.Account, sess.Provider = s.accounts.codexAccount(env), "openai"
 			path, read := s.codexRollout(pid, children)
-			argv := s.FS.Argv(pid)
+			argv := codexArgv(s.FS.Argv(pid))
 			batch := codexBatch(argv) // a `codex exec` row: no session of the directory
-			resume := len(argv) > 1 && argv[1] == "resume"
+			resume := codexResume(argv)
 			if id := codexResumeID(argv); path == "" && id != "" && env.codexHome != "" {
-				path = s.agents.codexResumed(env.codexHome, id)
+				path = s.agents.codexResumed(env.codexHome, id, now)
 			}
 			// fresh: no rollout of its own yet, by its open files or, when
 			// they say nothing, by its directory. A resumed session has one.
