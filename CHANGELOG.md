@@ -17,7 +17,9 @@ All notable changes to matchblox are in this file. The format follows
   git, keeps the list on disk and scans again every 30 minutes. The list
   feeds N's `where`, not the Git tab, and goes nowhere but this host and
   its paired devices. `matchblox scan` scans now, in the folders given;
-  `matchblox scan off` stops and forgets.
+  `matchblox scan off` stops and forgets. The question takes no key for a
+  moment after it shows, and after a yes the console says how the scan
+  went: the folders it skipped, or why it stopped early.
   ([#173](https://github.com/blox-eng/matchblox/issues/173))
 
 ## [0.18.0] - 2026-10-22

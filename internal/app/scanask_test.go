@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -18,6 +20,23 @@ func askState() proto.State {
 	return st
 }
 
+// asked is the console with the scan question up and its quiet over.
+func asked(t *testing.T) (Model, *fakeConn) {
+	t.Helper()
+	m, f := loadedWith(t, 100, askState())
+	if m.scanAsk == nil || !m.scanShown() {
+		t.Fatal("no scan question on a host never asked")
+	}
+	return calm(m), f
+}
+
+// calm ends the box's quiet, as if the builder had read it.
+func calm(m tea.Model) Model {
+	mm := m.(Model)
+	mm.scanAskUntil = time.Time{}
+	return mm
+}
+
 func sendAll(t *testing.T, cmd tea.Cmd) {
 	t.Helper()
 	if cmd != nil {
@@ -26,10 +45,7 @@ func sendAll(t *testing.T, cmd tea.Cmd) {
 }
 
 func TestScanBoxShowsOnce(t *testing.T) {
-	m, _ := loadedWith(t, 100, askState())
-	if !m.asksScan() {
-		t.Fatal("no scan question on a host never asked")
-	}
+	m, _ := asked(t)
 	s := screen(m)
 	for _, want := range []string{"Find the Git repositories in your home folder?", "they stay on this host and your paired devices", "y find", "n never", "p pick folders", "esc later"} {
 		if !strings.Contains(s, want) {
@@ -39,19 +55,19 @@ func TestScanBoxShowsOnce(t *testing.T) {
 }
 
 func TestScanBoxYes(t *testing.T) {
-	m, f := loadedWith(t, 100, askState())
+	m, f := asked(t)
 	next, cmd := key(m, "y")
 	sendAll(t, cmd)
 	if a := f.acts(); len(a) != 1 || a[0].RecID != "scan:yes" || a[0].Confirm != "y" || a[0].Text != "" {
 		t.Fatalf("sent %+v", a)
 	}
-	if nm := next.(Model); nm.asksScan() || nm.flash != "finding your Git repositories…" {
-		t.Fatalf("open %v, flash %q", nm.asksScan(), nm.flash)
+	if nm := next.(Model); nm.scanShown() || nm.flash != "finding your Git repositories…" {
+		t.Fatalf("open %v, flash %q", nm.scanShown(), nm.flash)
 	}
 }
 
 func TestScanBoxYesResult(t *testing.T) {
-	m, _ := loadedWith(t, 100, askState())
+	m, _ := asked(t)
 	next, _ := key(m, "y")
 	act := next.(Model).scanAct
 	done, _ := next.Update(resultMsg(proto.Result{ActID: act}))
@@ -65,30 +81,30 @@ func TestScanBoxYesResult(t *testing.T) {
 }
 
 func TestScanBoxNo(t *testing.T) {
-	m, f := loadedWith(t, 100, askState())
+	m, f := asked(t)
 	next, cmd := key(m, "n")
 	sendAll(t, cmd)
 	if a := f.acts(); len(a) != 1 || a[0].RecID != "scan:no" {
 		t.Fatalf("sent %+v", a)
 	}
-	if next.(Model).asksScan() {
+	if next.(Model).scanShown() {
 		t.Fatal("the box stayed open")
 	}
 }
 
 func TestScanBoxLater(t *testing.T) {
-	m, f := loadedWith(t, 100, askState())
+	m, f := asked(t)
 	next, _ := key(m, "esc")
-	if next.(Model).asksScan() {
+	if next.(Model).scanShown() {
 		t.Fatal("esc kept the box")
 	}
 	next, _ = next.Update(stateMsg(askState()))
-	if next.(Model).asksScan() {
+	if next.(Model).scanShown() {
 		t.Fatal("the next snapshot asked again")
 	}
-	m2, _ := loadedWith(t, 100, askState())
+	m2, _ := asked(t)
 	next, _ = tap(m2, 5, 5)
-	if next.(Model).asksScan() {
+	if next.(Model).scanShown() {
 		t.Fatal("a tap kept the box")
 	}
 	if len(f.acts()) != 0 {
@@ -97,7 +113,7 @@ func TestScanBoxLater(t *testing.T) {
 }
 
 func TestScanBoxPickFolders(t *testing.T) {
-	m, f := loadedWith(t, 100, askState())
+	m, f := asked(t)
 	next, _ := key(m, "p")
 	fm := next.(Model).form
 	if fm == nil || !fm.pick || fm.roots != "~ ~/dev ~/src ~/code ~/projects ~/work" || !slices.Equal(fm.fields(), []int{fieldFolders}) {
@@ -107,10 +123,10 @@ func TestScanBoxPickFolders(t *testing.T) {
 		t.Fatalf("the form:\n%s", s)
 	}
 	next, _ = key(next, "esc")
-	if !next.(Model).asksScan() {
+	if !next.(Model).scanShown() {
 		t.Fatal("esc in the folders did not go back to the box")
 	}
-	next, _ = key(next, "p")
+	next, _ = key(calm(next), "p")
 	for range len("~/projects ~/work") {
 		next, _ = key(next, "backspace")
 	}
@@ -120,17 +136,17 @@ func TestScanBoxPickFolders(t *testing.T) {
 		t.Fatalf("sent %+v", a)
 	}
 	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.act}))
-	if nm := next.(Model); nm.form != nil || nm.asksScan() {
-		t.Fatalf("form %+v, box %v", nm.form, nm.asksScan())
+	if nm := next.(Model); nm.form != nil || nm.scanShown() || nm.scanAsk != nil {
+		t.Fatalf("form %+v, box %v", nm.form, nm.scanShown())
 	}
 }
 
 func TestScanBoxClosesWhenAnsweredElsewhere(t *testing.T) {
-	m, _ := loadedWith(t, 100, askState())
+	m, _ := asked(t)
 	st := lifeState()
 	st.Found = &proto.Found{Consent: "yes"}
 	next, _ := m.Update(stateMsg(st))
-	if next.(Model).asksScan() {
+	if next.(Model).scanShown() {
 		t.Fatal("the box stayed after another console's yes")
 	}
 }
@@ -138,7 +154,7 @@ func TestScanBoxClosesWhenAnsweredElsewhere(t *testing.T) {
 func TestNoBoxWithoutFound(t *testing.T) {
 	m, _ := loadedWith(t, 100, lifeState())
 	next, _ := m.Update(stateMsg(lifeState()))
-	if next.(Model).asksScan() {
+	if next.(Model).scanShown() {
 		t.Fatal("asked with no Found: an older service scans nothing")
 	}
 }
@@ -180,5 +196,262 @@ func TestFoundKeptWhenNil(t *testing.T) {
 	next, _ := m.Update(stateMsg(lifeState()))
 	if f := next.(Model).found; f == nil || len(f.Repos) != 1 {
 		t.Fatalf("found = %+v", f)
+	}
+}
+
+func TestScanBoxIgnoresKeysWhileQuiet(t *testing.T) {
+	m, f := loadedWith(t, 100, askState())
+	at := time.Now().Add(-100 * time.Millisecond)
+	m.scanAsk.at, m.scanAskUntil = at, at.Add(askQuiet)
+	next, cmd := key(m, "y")
+	sendAll(t, cmd)
+	if len(f.acts()) != 0 || !next.(Model).scanShown() {
+		t.Fatalf("y at +100ms: sent %+v, box %v", f.acts(), next.(Model).scanShown())
+	}
+	m = next.(Model)
+	at = time.Now().Add(-500 * time.Millisecond)
+	m.scanAsk.at, m.scanAskUntil = at, at.Add(askQuiet)
+	_, cmd = key(m, "y")
+	sendAll(t, cmd)
+	if a := f.acts(); len(a) != 1 || a[0].RecID != "scan:yes" {
+		t.Fatalf("y at +500ms: sent %+v", a)
+	}
+}
+
+func TestScanBoxEscAndQuitWhileQuiet(t *testing.T) {
+	m, _ := loadedWith(t, 100, askState())
+	next, _ := key(m, "esc")
+	if nm := next.(Model); nm.scanShown() || nm.scanAsk != nil {
+		t.Fatal("esc in the quiet kept the box")
+	}
+	m, _ = loadedWith(t, 100, askState())
+	if next, cmd := m.Update(ctrlC); !quits(cmd) && !next.(Model).quitting {
+		t.Fatal("ctrl+c in the quiet did not quit")
+	}
+}
+
+func TestScanBoxNotFocusedOverSearchOrForm(t *testing.T) {
+	m, f := asked(t)
+	s := withLayers(m, "search")
+	if got := s.focus(keyPress("y")); got != layerSearch {
+		t.Fatalf("searching: focus %v", got)
+	}
+	next, cmd := key(s, "y")
+	sendAll(t, cmd)
+	if nm := next.(Model); nm.filter != "y" || nm.scanAsk == nil || len(f.acts()) != 0 {
+		t.Fatalf("searching: filter %q, ask %v, sent %+v", nm.filter, nm.scanAsk != nil, f.acts())
+	}
+	if strings.Contains(screen(next), scanTitle) {
+		t.Fatalf("the box shows over the search:\n%s", screen(next))
+	}
+	fm := withLayers(m, "form")
+	if got := fm.focus(keyPress("y")); got != layerForm {
+		t.Fatalf("form: focus %v", got)
+	}
+	next, cmd = key(fm, "y")
+	sendAll(t, cmd)
+	if nm := next.(Model); nm.scanAsk == nil || len(f.acts()) != 0 {
+		t.Fatalf("form: ask %v, sent %+v", nm.scanAsk != nil, f.acts())
+	}
+}
+
+func TestScanBoxReArmsAfterPeekCloses(t *testing.T) {
+	m, f := asked(t)
+	m = withLayers(m, "peek")
+	next, _ := key(m, "esc")
+	if nm := next.(Model); nm.peek != nil || !nm.scanShown() {
+		t.Fatalf("peek %v, box %v", nm.peek != nil, nm.scanShown())
+	}
+	next, cmd := key(next, "y")
+	sendAll(t, cmd)
+	if len(f.acts()) != 0 || !next.(Model).scanShown() {
+		t.Fatalf("y in the new quiet: sent %+v", f.acts())
+	}
+	_, cmd = key(calm(next), "y")
+	sendAll(t, cmd)
+	if a := f.acts(); len(a) != 1 || a[0].RecID != "scan:yes" {
+		t.Fatalf("sent %+v", a)
+	}
+}
+
+// pickSent is the pick form's yes sent: the model and its act.
+func pickSent(t *testing.T) (tea.Model, string) {
+	t.Helper()
+	m, _ := asked(t)
+	next, _ := key(m, "p")
+	next, _ = key(next, "enter")
+	return next, next.(Model).form.act
+}
+
+func TestScanFlashOnError(t *testing.T) {
+	m, _ := asked(t)
+	next, _ := key(m, "y")
+	done, _ := next.Update(resultMsg(proto.Result{ActID: next.(Model).scanAct, Err: "a no came"}))
+	if f := done.(Model).flash; f != "not found: a no came" {
+		t.Fatalf("box: flash %q", f)
+	}
+	next, act := pickSent(t)
+	done, _ = next.Update(resultMsg(proto.Result{ActID: act, Err: "stopped"}))
+	if nm := done.(Model); nm.flash != "not found: stopped" || nm.form != nil {
+		t.Fatalf("pick: flash %q, form %+v", nm.flash, nm.form)
+	}
+}
+
+func TestScanFlashPartial(t *testing.T) {
+	m, _ := asked(t)
+	next, _ := key(m, "y")
+	r := proto.Result{ActID: next.(Model).scanAct, Scan: &proto.ScanSummary{Repos: 7, Errors: []string{"the scan took too long"},
+		Skipped: []gitscan.Skip{{Path: "/x/a", Why: "it did not answer"}}}}
+	done, _ := next.Update(resultMsg(r))
+	want := "found 7 Git repositories, but the scan stopped early: the scan took too long"
+	if f := done.(Model).flash; f != want {
+		t.Fatalf("flash %q, want %q", f, want)
+	}
+	next, act := pickSent(t)
+	r.ActID = act
+	done, _ = next.Update(resultMsg(r))
+	if f := done.(Model).flash; f != want {
+		t.Fatalf("pick: flash %q, want %q", f, want)
+	}
+}
+
+func TestScanFlashFromReply(t *testing.T) {
+	const ok = "found your Git repositories: N offers them"
+	broken := askState()
+	broken.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{{Path: "/h/a"}}, Errors: []string{"the broadcast's own"}}
+	reply := func(m tea.Model) resultMsg {
+		return resultMsg(proto.Result{ActID: m.(Model).scanAct, Scan: &proto.ScanSummary{Repos: 1}})
+	}
+
+	m, _ := asked(t)
+	next, _ := key(m, "y")
+	next, _ = next.Update(reply(next))
+	next, _ = next.Update(stateMsg(broken))
+	if f := next.(Model).flash; f != ok {
+		t.Fatalf("result, then broadcast: flash %q", f)
+	}
+
+	m, _ = asked(t)
+	next, _ = key(m, "y")
+	r := reply(next)
+	next, _ = next.Update(stateMsg(broken))
+	next, _ = next.Update(r)
+	if f := next.(Model).flash; f != ok {
+		t.Fatalf("broadcast, then result: flash %q", f)
+	}
+
+	m, _ = asked(t)
+	next, _ = key(m, "y")
+	next, _ = next.Update(reply(next))
+	if f := next.(Model).flash; f != ok {
+		t.Fatalf("no broadcast: flash %q", f)
+	}
+}
+
+func TestScanFlashListsSkipped(t *testing.T) {
+	m, _ := asked(t)
+	next, _ := key(m, "y")
+	act := next.(Model).scanAct
+	h := home
+	if h == "" || h == "/" {
+		h = "/home/b"
+	}
+	three := []gitscan.Skip{{Path: h + "/Documents", Why: "macOS asks first; p picks it"}, {Path: h + "/Downloads"}, {Path: "/mnt/nas", Why: "it did not answer"}}
+	done, _ := next.Update(resultMsg(proto.Result{ActID: act, Scan: &proto.ScanSummary{Repos: 4, Skipped: three}}))
+	want := "found your Git repositories: N offers them; skipped " + tilde(h+"/Documents") + " " + tilde(h+"/Downloads") + " /mnt/nas"
+	if f := done.(Model).flash; f != want {
+		t.Fatalf("flash %q, want %q", f, want)
+	}
+
+	var forty []gitscan.Skip
+	for i := range 40 {
+		forty = append(forty, gitscan.Skip{Path: fmt.Sprintf("/mnt/share-%02d", i), Why: "it did not answer"})
+	}
+	done, _ = next.Update(resultMsg(proto.Result{ActID: act, Scan: &proto.ScanSummary{Repos: 4, Skipped: forty, SkippedMore: 5}}))
+	f := done.(Model).flash
+	if !regexp.MustCompile(`^found your Git repositories: N offers them; skipped /mnt/share-00 .* and \d+ more$`).MatchString(f) {
+		t.Fatalf("flash %q", f)
+	}
+	if n := len([]rune(f)); n > m.width-2 {
+		t.Fatalf("flash is %d wide on %d columns: %q", n, m.width, f)
+	}
+	var shown int
+	fmt.Sscanf(f[strings.LastIndex(f, "and ")+4:], "%d", &shown)
+	if listed := strings.Count(f, "/mnt/share-"); listed+shown != 45 {
+		t.Fatalf("lists %d and %d more of 45: %q", listed, shown, f)
+	}
+}
+
+// manyFound is 5000 checkouts found and 10 worktrees on the Git tab, 3
+// of them found too.
+func manyFound() proto.State {
+	st := lifeState()
+	var repos []gitscan.Repo
+	for i := range 10 {
+		p := fmt.Sprintf("/w/%d", i)
+		repos = append(repos, gitscan.Repo{Path: p, Worktrees: []proto.Worktree{{Path: p, Branch: "main"}}})
+	}
+	st.Git = &proto.GitReport{Repos: repos}
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	var found []proto.Checkout
+	for i := range 4997 {
+		found = append(found, proto.Checkout{Path: fmt.Sprintf("/h/%04d", i), Active: t0.Add(time.Duration(i) * time.Minute)})
+	}
+	for i := range 3 {
+		found = append(found, proto.Checkout{Path: fmt.Sprintf("/w/%d/", i), Active: t0.Add(time.Hour * 24 * 365)})
+	}
+	st.Found = &proto.Found{Consent: "yes", Repos: found}
+	return st
+}
+
+func TestFoundPathsBuiltOnceAndDeduped(t *testing.T) {
+	m, _ := loadedWith(t, 100, manyFound())
+	got := m.gitPaths()
+	if len(got) != 5007 {
+		t.Fatalf("%d paths, want 5007", len(got))
+	}
+	for i := range 10 {
+		if got[i] != fmt.Sprintf("/w/%d", i) {
+			t.Fatalf("paths[%d] = %s: the Git tab's come first", i, got[i])
+		}
+	}
+	if got[10] != "/h/4996" || got[len(got)-1] != "/h/0000" {
+		t.Fatalf("found: %s .. %s, want the newest first", got[10], got[len(got)-1])
+	}
+	next, _ := key(m, "N")
+	if next.(Model).form == nil {
+		t.Fatal("no form")
+	}
+	before := next.(Model).foundPaths
+	for range 100 {
+		screen(next)
+	}
+	if after := next.(Model).foundPaths; &after[0] != &before[0] || len(after) != len(before) {
+		t.Fatal("drawing the form rebuilt the found paths")
+	}
+	next, _ = next.Update(stateMsg(lifeStateWithGit(manyFound().Git)))
+	if after := next.(Model).foundPaths; &after[0] != &before[0] {
+		t.Fatal("a snapshot with the same worktrees rebuilt the found paths")
+	}
+}
+
+func lifeStateWithGit(g *proto.GitReport) proto.State {
+	st := lifeState()
+	st.Git = g
+	return st
+}
+
+func TestFoundPathsRebuiltOnGitReport(t *testing.T) {
+	st := lifeState()
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{{Path: "/h/a", Active: t0}, {Path: "/h/b", Active: t0.Add(time.Hour)}}}
+	m, _ := loadedWith(t, 100, st)
+	if !slices.Equal(m.foundPaths, []string{"/h/b", "/h/a"}) {
+		t.Fatalf("foundPaths = %v", m.foundPaths)
+	}
+	next, _ := m.Update(stateMsg(lifeStateWithGit(&proto.GitReport{Repos: []gitscan.Repo{{Path: "/h/a", Worktrees: []proto.Worktree{{Path: "/h/a", Branch: "main"}}}}})))
+	nm := next.(Model)
+	if !slices.Equal(nm.foundPaths, []string{"/h/b"}) || !slices.Equal(nm.gitPaths(), []string{"/h/a", "/h/b"}) {
+		t.Fatalf("foundPaths = %v, gitPaths = %v", nm.foundPaths, nm.gitPaths())
 	}
 }

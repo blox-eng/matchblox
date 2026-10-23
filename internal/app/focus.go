@@ -57,7 +57,7 @@ func (m Model) under(k tea.KeyPressMsg) layerID {
 	switch {
 	case m.held != nil:
 		return layerHeld
-	case m.asksScan():
+	case m.scanAsk != nil && !m.splashing():
 		return layerScan
 	case m.asksTakeOver(k):
 		return layerTakeOver

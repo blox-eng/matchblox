@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -20,29 +21,56 @@ const (
 	defaultRoots = "~ ~/dev ~/src ~/code ~/projects ~/work"
 )
 
-// asksScan: the service scans, nobody answered, and nothing else is open.
-func (m Model) asksScan() bool {
-	return m.found != nil && m.found.Consent == "" && !m.scanLater &&
-		m.form == nil && m.pending == nil && m.held == nil && m.peek == nil && m.sheet == nil && !m.pair.owns()
+// scanAsk is the question up at this console: since when it shows.
+type scanAsk struct{ at time.Time }
+
+// askQuiet is how long the box takes no answer after it shows: a key
+// meant for what was on screen before must not answer it. Esc and
+// ctrl+c work at once.
+const askQuiet = 400 * time.Millisecond
+
+// scanShown tells if the box is on top: asked, and nothing over it.
+func (m Model) scanShown() bool {
+	return m.scanAsk != nil && !m.splashing() && !m.pair.owns() && m.sheet == nil && m.form == nil &&
+		m.peek == nil && !m.searching && m.held == nil
+}
+
+// armScan starts the box's quiet: it shows now.
+func (m Model) armScan() Model {
+	now := time.Now()
+	m.scanAsk = &scanAsk{at: now}
+	m.scanAskUntil = now.Add(askQuiet)
+	return m
+}
+
+// closeScan closes the box at this console; the next console asks again
+// if nobody answered.
+func (m Model) closeScan() Model {
+	m.scanLater, m.scanAsk = true, nil
+	return m
 }
 
 func (m Model) answerScan(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	sk := m.keys.scan
+	if time.Now().Before(m.scanAskUntil) && !bkey.Matches(k, sk.Later) {
+		return m, nil
+	}
 	switch {
 	case bkey.Matches(k, sk.Find):
-		m.scanLater, m.flash = true, "finding your Git repositories…"
+		m = m.closeScan()
+		m.flash = "finding your Git repositories…"
 		cmd := m.send(proto.Act{RecID: "scan:yes", Confirm: "y"})
 		m.scanAct = fmt.Sprintf("a%d", m.acts)
 		return m, cmd
 	case bkey.Matches(k, sk.Never):
-		m.scanLater, m.flash = true, "no scan: matchblox scan finds them later"
+		m = m.closeScan()
+		m.flash = "no scan: matchblox scan finds them later"
 		return m, m.send(proto.Act{RecID: "scan:no"})
 	case bkey.Matches(k, sk.Pick):
 		m.form = &form{pick: true, at: fieldFolders, roots: defaultRoots}
 		return m, nil
 	}
-	m.scanLater = true
-	return m, nil
+	return m.closeScan(), nil
 }
 
 // scanResult says how the box's yes went.
@@ -51,11 +79,47 @@ func (m Model) scanResult(r proto.Result) (Model, bool) {
 		return m, false
 	}
 	m.scanAct = ""
-	m.flash = "found your Git repositories: N offers them"
-	if r.Err != "" {
-		m.flash = "not found: " + r.Err
-	}
+	m.flash = m.scanFlash(r)
 	return m, true
+}
+
+// scanFlash is how this console's scan:yes went, from its own reply: the
+// Found broadcast may be another console's scan, or none at all.
+func (m Model) scanFlash(r proto.Result) string {
+	if r.Err != "" {
+		return "not found: " + r.Err
+	}
+	ok := "found your Git repositories: " + m.keys.main.New.Help().Key + " offers them"
+	sum := r.Scan
+	switch {
+	case sum == nil:
+		return ok
+	case len(sum.Errors) > 0:
+		return fmt.Sprintf("found %d Git repositories, but the scan stopped early: %s", sum.Repos, sum.Errors[0])
+	case len(sum.Skipped) == 0:
+		return ok
+	}
+	// The folders skipped, in order, as many as the line holds;
+	// matchblox scan lists them all.
+	room := max(m.width, minWidth) - 2
+	line := ok + "; skipped"
+	total := len(sum.Skipped) + sum.SkippedMore
+	for i, sk := range sum.Skipped {
+		next := line + " " + tilde(sk.Path)
+		rest := total - i - 1
+		more := ""
+		if rest > 0 {
+			more = fmt.Sprintf(" and %d more", rest)
+		}
+		if len([]rune(next+more)) > room && i > 0 {
+			return line + fmt.Sprintf(" and %d more", total-i)
+		}
+		line = next
+	}
+	if sum.SkippedMore > 0 {
+		line += fmt.Sprintf(" and %d more", sum.SkippedMore)
+	}
+	return line
 }
 
 func (m Model) scanBox(bw int) []string {

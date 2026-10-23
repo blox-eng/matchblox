@@ -315,6 +315,18 @@ type Model struct {
 	pairPolling  bool         // a poll of the pair page is on its way
 	pairOffers   *pairWaits   // the offers of a key that still run: the end of the program waits for them
 	keys         keymaps      // the keys of every layer, as data
+
+	// scanAsk is the scan question, open at this console; nil none.
+	// scanAskUntil ends its quiet; scanUp: it was on top at the last
+	// message, so one that shows it again starts the quiet.
+	scanAsk      *scanAsk
+	scanAskUntil time.Time
+	scanUp       bool
+	// foundPaths are the checkouts found on the host, the most recently
+	// used first, less the Git tab's paths (foundWt): built when either
+	// changes, not at each draw.
+	foundPaths []string
+	foundWt    []string
 }
 
 func New(opt Options) Model {
@@ -417,6 +429,26 @@ func (m *Model) send(a proto.Act) tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m = m.scanShows()
+	next, cmd := m.update(msg)
+	if nm, ok := next.(Model); ok {
+		next = nm.scanShows()
+	}
+	return next, cmd
+}
+
+// scanShows starts the box's quiet when it is on top and was not: asked
+// just now, or a layer over it closed, or the start screen ended.
+func (m Model) scanShows() Model {
+	up := m.scanShown()
+	if up && !m.scanUp {
+		m = m.armScan()
+	}
+	m.scanUp = up
+	return m
+}
+
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.BackgroundColorMsg:
 		m.dark = msg.IsDark()
@@ -431,7 +463,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.conn != m.conn {
 			return m, nil
 		}
-		return m.Update(msg.msg)
+		return m.update(msg.msg)
 	case helloMsg:
 		m.host = proto.Hello(msg)
 		if m.olderLocal() {
@@ -462,7 +494,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.agents, m.renames = st.Agents, st.Renames
 		if st.Found != nil {
 			m.found = st.Found
+			switch {
+			case st.Found.Consent != "":
+				m.scanAsk = nil // answered, here or at another console
+			case !m.scanLater && m.scanAsk == nil:
+				m.scanAsk = &scanAsk{at: time.Now()}
+			}
 		}
+		m = m.rebuildFoundPaths(st.Found != nil)
 		if m.recRun.rec != "" && m.recRun.act == "" && !m.isRec(m.recRun.rec) {
 			m.recRun = recRun{} // its rec is gone: a later one with the same id starts fresh
 		}

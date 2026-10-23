@@ -11,7 +11,7 @@ import (
 // key line: the diff fills the body, and a box would hide what it asks
 // about.
 func (m Model) consenting() bool {
-	if m.held != nil || m.asksScan() {
+	if m.held != nil || m.scanShown() {
 		return true
 	}
 	if m.pending == nil {
@@ -30,7 +30,7 @@ const consentPad = 2
 // and the key that runs it. A destructive step says so in its title.
 func (m Model) consentBox(bw int) []string {
 	st := m.st
-	if m.asksScan() {
+	if m.scanShown() {
 		return m.scanBox(bw)
 	}
 	if m.held == nil {
@@ -137,7 +137,7 @@ func (m Model) overlayConsent(sc *drawn, w int) {
 // consentWidth is the columns the question's words take on one line each,
 // 40 at least: a desk's box is no wider than what it says.
 func (m Model) consentWidth() int {
-	if m.asksScan() {
+	if m.scanShown() {
 		return m.scanWidth()
 	}
 	if m.held != nil {

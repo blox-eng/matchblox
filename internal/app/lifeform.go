@@ -162,23 +162,46 @@ func (m Model) switchAction(f form) *action {
 // gitPaths are ←→ on where: the repositories and worktrees of the Git tab,
 // then the ones found on the host, the most recently used first.
 func (m Model) gitPaths() []string {
+	return append(m.worktreePaths(), m.foundPaths...)
+}
+
+// worktreePaths are the Git tab's paths, each once.
+func (m Model) worktreePaths() []string {
 	var out []string
 	for _, r := range m.allWorktreeRows() {
 		if !slices.Contains(out, r.wt.Path) {
 			out = append(out, r.wt.Path)
 		}
 	}
-	if m.found == nil {
-		return out
+	return out
+}
+
+// rebuildFoundPaths builds foundPaths when the found checkouts came
+// (found) or the Git tab's paths changed: once, not at each draw.
+func (m Model) rebuildFoundPaths(found bool) Model {
+	wt := m.worktreePaths()
+	if !found && slices.Equal(wt, m.foundWt) {
+		return m
 	}
-	found := slices.Clone(m.found.Repos)
-	slices.SortStableFunc(found, func(a, b proto.Checkout) int { return b.Active.Compare(a.Active) })
-	for _, c := range found {
-		if !slices.Contains(out, c.Path) {
-			out = append(out, c.Path)
+	m.foundWt, m.foundPaths = wt, nil
+	if m.found == nil {
+		return m
+	}
+	on := make(map[string]bool, len(wt))
+	for _, p := range wt {
+		on[filepath.Clean(p)] = true
+	}
+	repos := slices.Clone(m.found.Repos)
+	slices.SortStableFunc(repos, func(a, b proto.Checkout) int { return b.Active.Compare(a.Active) })
+	paths := make([]string, 0, len(repos))
+	for _, c := range repos {
+		if p := filepath.Clean(c.Path); !on[p] {
+			on[p] = true
+			paths = append(paths, p)
 		}
 	}
-	return out
+	m.foundPaths = paths
+	return m
 }
 
 // fields are the form's fields, in Tab's order.
@@ -393,6 +416,9 @@ func (m Model) formResult(r proto.Result) (Model, bool) {
 	m.form = &f
 	f.act = ""
 	switch {
+	case f.pick: // as the box's yes: the reply says how it went
+		m = m.closeScan()
+		m.flash = m.scanFlash(r)
 	case r.Err != "":
 		f.err = r.Err
 		return m, true
@@ -401,8 +427,6 @@ func (m Model) formResult(r proto.Result) (Model, bool) {
 	case len(r.Skipped) > 0:
 		f.err = strings.Join(r.Skipped, "; ")
 		return m, true
-	case f.pick:
-		m.scanLater, m.flash = true, "found your Git repositories: N offers them"
 	case f.rename:
 		m.flash = "renamed " + f.who + " to " + strings.TrimSpace(f.name)
 	default:
@@ -472,7 +496,7 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 		add("", "", st.faint.Render(fit("tmux and the agent take this name", iw)))
 	default:
 		hint := "a path"
-		if len(m.gitPaths()) > 0 {
+		if len(m.foundPaths) > 0 || len(m.allWorktreeRows()) > 0 {
 			hint = "a path, or " + m.keys.form.Left.Help().Key + " for a repository"
 		}
 		field(fieldWhere, f.where, hint)
