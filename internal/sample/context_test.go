@@ -743,8 +743,11 @@ func TestACodexExecTakesNoSessionsRollout(t *testing.T) {
 	d.proc(901, []string{"codex"}, "%21", "/work/both")
 	d.write(fixtureNow, "rollout-a-tui.jsonl", codexMeta("id-tui", "/work/both", "codex-tui", d.started.Add(2*time.Second)), 51680, fixtureNow.Add(-time.Second))
 	d.proc(910, []string{"node", "/usr/local/bin/codex", "exec", "fix it"}, "%22", "/work/npm")
-	// An option before exec: the TUI beside it keeps its rollout.
+	// An option before exec, and codex review: the TUI beside them keeps
+	// its rollout.
 	d.proc(920, []string{"codex", "-m", "gpt-made-up", "exec", "fix it"}, "%23", "/work/opt")
+	d.proc(922, []string{"codex", "--remote-auth-token-env", "TOKEN", "exec", "fix it"}, "%25", "/work/opt")
+	d.proc(923, []string{"codex", "review"}, "%26", "/work/opt")
 	d.proc(921, []string{"codex"}, "%24", "/work/opt")
 	d.write(fixtureNow, "rollout-b-opt.jsonl", codexMeta("id-opt", "/work/opt", "codex-tui", d.started.Add(2*time.Second)), 51680, fixtureNow.Add(-time.Second))
 
@@ -752,7 +755,7 @@ func TestACodexExecTakesNoSessionsRollout(t *testing.T) {
 	if s := got["%24"]; s.SessionID != "id-opt" || s.Context != "known" {
 		t.Errorf("the TUI beside codex -m X exec: id %q, context %q; want id-opt, known", s.SessionID, s.Context)
 	}
-	for _, pane := range []string{"%20", "%22", "%23"} {
+	for _, pane := range []string{"%20", "%22", "%23", "%25", "%26"} {
 		if s := got[pane]; s.SessionID != "" || s.Context != "unmeasured" {
 			t.Errorf("%s, a codex exec row: id %q, context %q; want none, unmeasured", pane, s.SessionID, s.Context)
 		}
@@ -799,6 +802,7 @@ func TestAResumedCodexIsNotFresh(t *testing.T) {
 		{"codex", "-m", "gpt-made-up", "resume", "ID"},
 		{"codex", "resume", "UPPER"},
 		{"codex", "resume", "-m", "gpt-made-up", "ID"},
+		{"codex", "--remote", "ws://example.com:1", "resume", "ID"},
 	} {
 		id := "0199a0b1-5e5e-7000-8000-00000000abc" + strconv.Itoa(i)
 		for j := range argv {
@@ -819,7 +823,7 @@ func TestAResumedCodexIsNotFresh(t *testing.T) {
 	d.write(before, "rollout-c-away.jsonl", codexMeta("id-away", "/work/away", "codex-tui", before), 51680, fixtureNow.Add(-time.Second))
 
 	got := byPane(d.smp.Sample())
-	for i := range 5 {
+	for i := range 6 {
 		id, pane := "0199a0b1-5e5e-7000-8000-00000000abc"+strconv.Itoa(i), "%2"+strconv.Itoa(i)
 		if s := got[pane]; s.SessionID != id || s.Context != "known" || s.Tokens != 51680 {
 			t.Errorf("%s, resumed by its id: id %q, context %q, %d tokens; want %s, known, 51680", pane, s.SessionID, s.Context, s.Tokens, id)
@@ -873,17 +877,59 @@ func TestAResumeFollowsARevertFromAnEarlierDay(t *testing.T) {
 	}
 }
 
-// TestAResumedCodexFollowsItsNew: after `codex resume A`, a /new in the
-// TUI writes a new rollout B; the pane is B's, though its argv names A.
-func TestAResumedCodexFollowsItsNew(t *testing.T) {
+// codexSubagentMeta is the first line of a subagent's rollout: the
+// parent's directory and originator, with the parent named.
+func codexSubagentMeta(id, parent, cwd string, at time.Time) string {
+	return `{"timestamp":"` + at.UTC().Format(time.RFC3339Nano) + `","type":"session_meta","payload":{"id":"` + id + `","timestamp":"` +
+		at.UTC().Format(time.RFC3339Nano) + `","cwd":"` + cwd + `","originator":"codex-tui","source":{"subagent":{"thread_spawn":{"parent_thread_id":"` +
+		parent + `","depth":1}}},"cli_version":"0.164.0"}}` + "\n"
+}
+
+// TestAResumedCodexKeepsItsOwnRollout: a pane begun as `codex resume A`
+// is A's while A is written last. Another session's rollout in its
+// directory (one that ran and exited there, A's subagent) never gives it
+// another id. Once another session begun since the start is written after
+// A (a /new in A's TUI, or a session beside it), which is the pane's cannot
+// be told: not measured, no id.
+func TestAResumedCodexKeepsItsOwnRollout(t *testing.T) {
 	d := newCodexDir(t)
-	a := "0199a0b1-5e5e-7000-8000-00000000000a"
 	before := d.started.Add(-72 * time.Hour)
-	d.proc(900, []string{"codex", "resume", a}, "%20", "/work/new")
-	d.write(before, "rollout-2026-09-18T10-00-00-"+a+".jsonl", codexMeta(a, "/work/new", "codex-tui", before), 200000, d.started.Add(time.Minute))
-	d.write(fixtureNow, "rollout-2026-09-21T10-00-00-id-b.jsonl", codexMeta("id-b", "/work/new", "codex-tui", d.started.Add(2*time.Minute)), 12000, fixtureNow.Add(-time.Second))
-	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "id-b" || s.Tokens != 12000 {
-		t.Errorf("a resumed session after its /new: id %q, %d tokens; want id-b, 12000", s.SessionID, s.Tokens)
+	resumed := func(n int, cwd string, lastWrite time.Time) string {
+		id := "0199a0b1-5e5e-7000-8000-00000000000" + strconv.Itoa(n)
+		d.proc(900+n, []string{"codex", "resume", id}, "%2"+strconv.Itoa(n), cwd)
+		d.write(before, "rollout-2026-09-18T10-00-00-"+id+".jsonl", codexMeta(id, cwd, "codex-tui", before), 200000, lastWrite)
+		return id
+	}
+	// %20: a session ran and exited there while A kept working.
+	a0 := resumed(0, "/work/exited", fixtureNow.Add(-time.Second))
+	d.write(fixtureNow, "rollout-b-exited.jsonl", codexMeta("id-exited", "/work/exited", "codex-tui", d.started.Add(2*time.Minute)), 12000, d.started.Add(5*time.Minute))
+	// %21: A's subagent, written after A.
+	a1 := resumed(1, "/work/sub", d.started.Add(time.Minute))
+	d.write(fixtureNow, "rollout-c-sub.jsonl", codexSubagentMeta("id-sub", a1, "/work/sub", d.started.Add(2*time.Minute)), 12000, fixtureNow.Add(-time.Second))
+	// %22: a /new in A's TUI.
+	resumed(2, "/work/new", d.started.Add(time.Minute))
+	d.write(fixtureNow, "rollout-d-new.jsonl", codexMeta("id-new", "/work/new", "codex-tui", d.started.Add(2*time.Minute)), 12000, fixtureNow.Add(-time.Second))
+
+	got := byPane(d.smp.Sample())
+	if s := got["%20"]; s.SessionID != a0 || s.Tokens != 200000 {
+		t.Errorf("beside an exited session: id %q, %d tokens; want %s, 200000", s.SessionID, s.Tokens, a0)
+	}
+	if s := got["%21"]; s.SessionID != a1 || s.Tokens != 200000 {
+		t.Errorf("beside its subagent: id %q, %d tokens; want %s, 200000", s.SessionID, s.Tokens, a1)
+	}
+	if s := got["%22"]; s.SessionID != "" || s.Context != "unmeasured" {
+		t.Errorf("after a /new in A's TUI: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
+	}
+}
+
+// TestAFreshCodexDoesNotTakeASubagent: a subagent of another session
+// begun in the directory is not the TUI's own rollout.
+func TestAFreshCodexDoesNotTakeASubagent(t *testing.T) {
+	d := newCodexDir(t)
+	d.proc(900, []string{"codex"}, "%20", "/work/sub")
+	d.write(fixtureNow, "rollout-a-sub.jsonl", codexSubagentMeta("id-sub", "id-other", "/work/sub", d.started.Add(2*time.Second)), 51680, fixtureNow.Add(-time.Second))
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "" || s.Context != "fresh" {
+		t.Errorf("a TUI beside a subagent's rollout: id %q, context %q; want none, fresh", s.SessionID, s.Context)
 	}
 }
 

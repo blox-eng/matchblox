@@ -44,39 +44,62 @@ func (s *Sampler) codexRollout(pid int, children map[int][]int) (path string, re
 // codexInDir finds the rollout of a Codex that holds none open: Codex
 // 0.163 closes it after each write (#179), and macOS lists no open files
 // at all. It is the one session's rollout of the process's directory
-// begun and written since the process started, among those created since
-// then (a month at most). Two files of one session are one: a revert
-// (Esc Esc on an earlier prompt) writes on in a new file, and the newer is
-// taken. It must be this session's for sure, or z parks the wrong pane:
-// only the CLI's rollouts count, not a `codex exec` run's or a thread of
-// the Codex app or an editor. Two sessions begun since the start (a /new)
-// cannot be told apart, and neither can one begun before it and written
-// since (a resume without an id, a session that ended after it started):
-// ambiguous is true. The caller asks only when no other Codex session
-// runs in the directory. Codex names its day directories in its own zone,
-// so the scan takes a day either side; a directory not written since the
-// start is not read.
+// begun and written since the process started. Two files of one session
+// are one: a revert (Esc Esc on an earlier prompt) writes on in a new
+// file, and the newer is taken. It must be this session's for sure, or z
+// parks the wrong pane: only sessions of the CLI count (codexRollouts).
+// Two sessions begun since the start (a /new) cannot be told apart, and
+// neither can one begun before it and written since (a resume without an
+// id, a session that ended after it started): ambiguous is true. The
+// caller asks only when no other Codex session runs in the directory.
 func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) (path string, ambiguous bool) {
-	path, sessions, older := r.codexScan(home, cwd, started, now)
+	id, sessions, older := "", 0, false
+	r.codexRollouts(home, cwd, started, now, func(f string, _ time.Time, m rolloutMeta) {
+		// Process start times have tick precision; a session's own
+		// rollout begins a second or more after it.
+		if !m.began.IsZero() && m.began.Before(started.Add(-time.Second)) {
+			older = true
+			return
+		}
+		switch {
+		case sessions == 0 || m.id == "" || m.id != id:
+			path, id, sessions = f, m.id, sessions+1
+		case newer(f, path): // the same session's later rollout: a revert
+			path = f
+		}
+	})
 	if sessions > 1 || sessions == 0 && older {
 		return "", true
 	}
 	return path, false
 }
 
-// codexScan is codexInDir's look at the directory: the newest rollout of
-// the sessions begun since the start, how many sessions those are, and
-// whether a CLI rollout begun before the start was written since.
-func (r *agentReader) codexScan(home, cwd string, started, now time.Time) (path string, sessions int, older bool) {
+// codexDisplaced: a session other than id was written in cwd after since,
+// the last write of id's rollout. A /new in id's TUI does that, and so
+// does a session beside it: which is the pane's cannot be told.
+func (r *agentReader) codexDisplaced(home, cwd, id string, since, started, now time.Time) bool {
+	displaced := false
+	r.codexRollouts(home, cwd, started, now, func(_ string, mtime time.Time, m rolloutMeta) {
+		displaced = displaced || m.id != id && mtime.After(since)
+	})
+	return displaced
+}
+
+// codexRollouts calls fn for each session rollout of the Codex CLI in cwd
+// written since started, among those created since then (a month at
+// most): not a `codex exec` run's, a thread of the Codex app or an
+// editor, nor a subagent's. Codex names its day directories in its own
+// zone, so the scan takes a day either side; a directory not written
+// since the start is not read.
+func (r *agentReader) codexRollouts(home, cwd string, started, now time.Time, fn func(path string, mtime time.Time, m rolloutMeta)) {
 	if home == "" || cwd == "" {
-		return "", 0, false
+		return
 	}
 	started, now = started.Local(), now.Local()
 	day := time.Date(started.Year(), started.Month(), started.Day()-1, 0, 0, 0, 0, time.Local)
 	if month := now.AddDate(0, -1, 0); day.Before(month) {
 		day = time.Date(month.Year(), month.Month(), month.Day(), 0, 0, 0, 0, time.Local)
 	}
-	id := ""
 	for last := now.AddDate(0, 0, 1); !day.After(last); day = day.AddDate(0, 0, 1) {
 		dir := filepath.Join(home, "sessions", day.Format("2006/01/02"))
 		if st, err := os.Stat(dir); err != nil || st.ModTime().Before(started) {
@@ -89,28 +112,15 @@ func (r *agentReader) codexScan(home, cwd string, started, now time.Time) (path 
 				continue
 			}
 			f := filepath.Join(dir, name)
-			if k, ok := statKey(f); !ok || k.mtime.Before(started) {
+			k, ok := statKey(f)
+			if !ok || k.mtime.Before(started) {
 				continue
 			}
-			m := r.metaOf(f)
-			if m.cwd != cwd || !codexCLI[m.originator] {
-				continue
-			}
-			// Process start times have tick precision; a session's own
-			// rollout begins a second or more after it.
-			if !m.began.IsZero() && m.began.Before(started.Add(-time.Second)) {
-				older = true
-				continue
-			}
-			switch {
-			case sessions == 0 || m.id == "" || m.id != id:
-				path, id, sessions = f, m.id, sessions+1
-			case newer(f, path): // the same session's later rollout: a revert
-				path = f
+			if m := r.metaOf(f); m.cwd == cwd && codexCLI[m.originator] && !m.subagent {
+				fn(f, k.mtime, m)
 			}
 		}
 	}
-	return path, sessions, older
 }
 
 // codexCLI are the originators of the Codex CLI's own rollouts: codex-tui,
@@ -137,6 +147,7 @@ var codexValued = map[string]bool{
 	"-m": true, "--model": true, "-c": true, "--config": true, "-p": true, "--profile": true,
 	"-C": true, "--cd": true, "-s": true, "--sandbox": true, "-a": true, "--ask-for-approval": true,
 	"-i": true, "--image": true, "--add-dir": true, "--local-provider": true, "--enable": true, "--disable": true,
+	"--remote": true, "--remote-auth-token-env": true,
 }
 
 // codexWords are argv's words that are no option nor an option's value:
@@ -213,11 +224,13 @@ func (r *agentReader) codexResumed(home, id string, now time.Time) string {
 }
 
 // rolloutMeta is what a rollout's session_meta, its first line, says: the
-// session's id, its directory, what started it (codex-tui, codex_exec)
-// and when it began.
+// session's id, its directory, what started it (codex-tui, codex_exec),
+// when it began, and whether it is a subagent's (or a review thread's) of
+// another session.
 type rolloutMeta struct {
 	id, cwd, originator string
 	began               time.Time
+	subagent            bool
 }
 
 func (r *agentReader) metaOf(path string) rolloutMeta {
@@ -236,16 +249,18 @@ func (r *agentReader) metaOf(path string) rolloutMeta {
 	var meta struct {
 		Type    string `json:"type"`
 		Payload struct {
-			ID         string    `json:"id"`
-			Cwd        string    `json:"cwd"`
-			Originator string    `json:"originator"`
-			Timestamp  time.Time `json:"timestamp"`
+			ID         string          `json:"id"`
+			Cwd        string          `json:"cwd"`
+			Originator string          `json:"originator"`
+			Timestamp  time.Time       `json:"timestamp"`
+			Source     json.RawMessage `json:"source"` // "cli", or {"subagent": …}
+			Parent     string          `json:"parent_thread_id"`
 		} `json:"payload"`
 	}
 	var m rolloutMeta
 	if json.Unmarshal(line, &meta) == nil && meta.Type == "session_meta" {
 		p := meta.Payload
-		m = rolloutMeta{p.ID, p.Cwd, p.Originator, p.Timestamp}
+		m = rolloutMeta{p.ID, p.Cwd, p.Originator, p.Timestamp, bytes.HasPrefix(bytes.TrimSpace(p.Source), []byte("{")) || p.Parent != ""}
 	}
 	r.rolloutMeta[path] = m
 	return m

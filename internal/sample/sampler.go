@@ -633,24 +633,19 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			started := now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
 			if id := codexResumeID(argv); path == "" && id != "" && env.codexHome != "" {
 				path = s.agents.codexResumed(env.codexHome, id, now)
-				// A /new (or /resume, /fork) in the TUI writes a session
-				// begun since the start: the pane is that one's.
-				if path != "" && sess.Cwd != "" && codexIn[sess.Cwd] == 1 {
-					switch newest, n, _ := s.agents.codexScan(env.codexHome, sess.Cwd, started, now); {
-					case n == 1:
-						path = newest
-					case n > 1:
-						path = "" // which one cannot be told: not measured
-					}
+				if k, ok := statKey(path); ok && s.agents.codexDisplaced(env.codexHome, sess.Cwd, id, k.mtime, started, now) {
+					path = "" // a /new, or a session beside it, written since: not measured
 				}
 			}
 			// fresh: no rollout of its own yet, by its open files or, when
 			// they say nothing, by its directory. A resumed session has one.
 			fresh := read && !batch && !resume && (sess.Cwd == "" || codexIn[sess.Cwd] == 1)
-			if path == "" && !batch && sess.Cwd != "" && codexIn[sess.Cwd] == 1 && env.codexHome != "" {
+			// A resume's own rollout began before it: one the directory
+			// shows is another's, or its /new.
+			if path == "" && !batch && !resume && sess.Cwd != "" && codexIn[sess.Cwd] == 1 && env.codexHome != "" {
 				var ambiguous bool
 				path, ambiguous = s.agents.codexInDir(env.codexHome, sess.Cwd, started, now)
-				fresh = !ambiguous && !resume
+				fresh = !ambiguous
 			}
 			sess.Context = "unmeasured"
 			if fresh || path != "" {
@@ -869,7 +864,7 @@ func codexBatch(argv []string) bool {
 		return false
 	}
 	switch w[0] {
-	case "exec", "e", "mcp-server", "mcp", "app-server", "proto":
+	case "exec", "e", "review", "mcp-server", "mcp", "app-server", "proto":
 		return true
 	}
 	return false
