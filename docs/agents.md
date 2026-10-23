@@ -39,9 +39,9 @@ tmux new -s app agent
 ╿ asks   1m    app        app:1.1   █░░░░░░░░░   6%   ⬢ you@example.com · Acme
 ```
 
-Cursor's CLI counts whether you start it as `agent` or `cursor-agent`. The
-first run lists it in `agents` as `cursor-agent`. matchblox starts it with
-`--trust`, so its first turn does not wait on the trust prompt; Cursor
+Cursor's CLI counts whether you start it as `agent` or `cursor-agent`.
+matchblox starts it with `--trust`, so its first turn does not wait on
+the trust prompt; Cursor
 then trusts the workspace's own config (its rules and MCP servers)
 without asking.
 
@@ -55,8 +55,10 @@ tmux new -s docs aider
 ```
 
 matchblox knows claude, codex, opencode, gemini, cursor-agent, aider,
-crush and qwen, installed before its first run or after it. Add any other
-agent to `agents` in the [config](config.md) by its command.
+crush and qwen. Each one is a session wherever it is installed, before
+matchblox's first run or after it. Add any other agent to `agents` in the
+[config](config.md) by its command. The Codex app's `codex app-server`
+processes are no session.
 
 An agent that keeps no name of its own (all but Claude Code) is named as
 its tmux window, which `r` renames, or as its tmux session while tmux names
@@ -71,6 +73,21 @@ in Sessions, or run `matchblox setup`, and each Cursor session shows its
 context, model and window from its first turn. A status line of your own
 keeps running inside it; without one, the line shows what Cursor's bar
 showed (`Auto · 5.7%`). Before the first turn a session is "fresh".
+
+Codex writes its context and limits to its rollout, a file under
+`sessions` in `CODEX_HOME` (`~/.codex`). matchblox reads the rollout the
+session holds open. When it holds none open, and always on macOS, the
+rollout is the one in the session's directory that began and was written
+since the session started. The rollout also gives the session its id, so `z` parks it.
+Some Codex sessions show `—` and "not measured", with no limits of
+their own:
+
+- two Codex sessions in one directory;
+- a session after its `/new`;
+- a resumed session, whose rollout began before it started, when no open
+  file names it.
+
+A `codex exec` run's rollout is never taken as a session's.
 
 The context use is a share of the session's window. matchblox uses the
 first window it finds, in this order:

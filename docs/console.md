@@ -31,8 +31,16 @@ plan your agents have used, the machine, and [the stoker](stoker.md):
 
 - Each account starts with its provider: its logo in kitty or Ghostty
   (through tmux too) while every terminal on the console's session can
-  draw it, else its mark. Then its plan, or its email when the provider
-  has two accounts.
+  draw it, else its mark. Then the provider's name and the plan
+  (`✻ Claude Team`, `❋ OpenAI Team`), or the email's name when the
+  provider has two accounts. A dock under 50 columns leaves out the plan,
+  and its bars shrink so the reset times stay whole.
+- A phone or any other terminal that attaches to the console's session
+  brings back the marks within about 2 seconds. `NO_COLOR` and tmux 3.2
+  or older show the marks. The console lets images through its own pane
+  only (`allow-passthrough`), and gives the pane its own setting back when
+  it ends. The logos come from
+  [lobe-icons](https://github.com/lobehub/lobe-icons) (MIT).
 - Each account shows its windows as `/usage` does: `5h` is this 5-hour
   window, `wk` this week, each with the percent used and when it resets.
   A bar turns `warn` from 60% and `neg` from 90%.
@@ -65,7 +73,8 @@ Where the figures come from:
 | Agent | What to do |
 |---|---|
 | Claude Code | Open the door "Show your limits" in Sessions. It adds matchblox to your status line; a status line you have keeps showing what it showed. |
-| Codex | Nothing: Codex reports its limits after each turn. A plan with a monthly limit shows `mo`. |
+| Codex | Nothing: Codex reports its limits after each turn, on Linux and macOS. A plan with a monthly limit shows `mo`. |
+| Cursor | Set `cursor_usage = true` under `[limits]` (macOS). See [Agents](agents.md#the-account). |
 | OpenCode | It shows "not measured": OpenCode keeps no limits. |
 
 A line that says `as of 14:02` has not changed for an hour: the account's
@@ -259,7 +268,7 @@ pane: its peek shows the prompt, and `Enter` goes there.
 - A new session shows in Sessions at the next sample, about 2 seconds
   after it starts. A session from `N` or `matchblox new` shows at once.
 - The account is the provider's mark, then the email and plan, or
-  "API key": `✻` Anthropic, `❋` OpenAI, `▣` OpenCode.
+  "API key": `✻` Anthropic, `❋` OpenAI, `⬢` Cursor, `▣` OpenCode.
 - An agent can draw a progress bar in its last reply:
   `Progress [████░░░░] <step>`. The console shows it as `▰▰▰▱▱ 75%`.
 - `s` sorts by another column (`newest` is the one with the least idle
