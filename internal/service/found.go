@@ -196,7 +196,7 @@ func (s *Service) walk(ctx context.Context, reqs []scanReq) {
 		return
 	}
 	f := gitscan.Found{Consent: "yes", Roots: c.Roots, At: time.Now(), Took: time.Since(start),
-		Repos: s.carryOver(res), Errors: res.Errors, Skipped: res.Skipped, SkippedMore: res.SkippedMore}
+		Repos: s.carryOver(res, roots), Errors: res.Errors, Skipped: res.Skipped, SkippedMore: res.SkippedMore}
 	f, on, err := s.keep(f, nos)
 	if errors.Is(err, errScanNo) {
 		all(err)
@@ -215,24 +215,60 @@ func (s *Service) walk(ctx context.Context, reqs []scanReq) {
 // res could not read because it did not answer: a folder that did not
 // answer keeps what was found there, sorted by path as Find sorts. A root
 // that hung as written also covers where it last resolved to.
-func (s *Service) carryOver(res gitscan.Result) []gitscan.Checkout {
-	var dark []string
-	add := func(p string) {
-		dark = append(dark, filepath.Clean(p))
-		if r, ok := s.rootsResolved[p]; ok {
-			dark = append(dark, filepath.Clean(r))
-		}
+//
+// It reaches no further than this walk could see. A repo is kept only
+// below one of roots, as written or as it last resolved: a home or
+// protected lookup that hung outside them brings nothing back. And below
+// a folder that did not answer, a root of this walk that did answer and
+// sits deeper says what is gone.
+func (s *Service) carryOver(res gitscan.Result, roots []string) []gitscan.Checkout {
+	isRoot := map[string]bool{}
+	for _, r := range roots {
+		isRoot[r] = true
 	}
+	var direct []string // what this walk could not read, as it said
 	for _, p := range res.Hung {
-		add(p)
+		if isRoot[p] { // a hung home or protected lookup is no folder of this walk
+			direct = append(direct, filepath.Clean(p))
+		}
 	}
 	for _, k := range res.Skipped {
 		if k.Unanswered() {
-			add(k.Path)
+			direct = append(direct, filepath.Clean(k.Path))
 		}
 	}
-	if len(dark) == 0 {
+	if len(direct) == 0 {
 		return res.Repos
+	}
+	answered := map[string]bool{} // where this walk's roots led
+	for _, p := range res.Resolved {
+		answered[filepath.Clean(p)] = true
+	}
+	for _, d := range direct {
+		delete(answered, d) // it led there, but was skipped there as hung
+	}
+	dark := slices.Clone(direct)
+	for _, d := range direct {
+		if r, ok := s.rootsResolved[d]; ok && !answered[filepath.Clean(r)] {
+			dark = append(dark, filepath.Clean(r))
+		}
+	}
+	var within []string
+	for _, r := range roots {
+		within = append(within, filepath.Clean(r))
+		if to, ok := s.rootsResolved[r]; ok {
+			within = append(within, filepath.Clean(to))
+		}
+	}
+	// deepest is the length of the longest of dirs that holds path, -1 if none.
+	deepest := func(path string, dirs []string) int {
+		n := -1
+		for _, d := range dirs {
+			if len(d) > n && under(path, d) {
+				n = len(d)
+			}
+		}
+		return n
 	}
 	s.mu.Lock()
 	last := s.found.Repos
@@ -242,8 +278,12 @@ func (s *Service) carryOver(res gitscan.Result) []gitscan.Checkout {
 	for _, c := range res.Repos {
 		have[c.Path] = true
 	}
+	answeredDirs := slices.Collect(maps.Keys(answered))
 	for _, c := range last {
-		if !have[c.Path] && slices.ContainsFunc(dark, func(d string) bool { return under(c.Path, d) }) {
+		if have[c.Path] || deepest(c.Path, within) < 0 {
+			continue
+		}
+		if d := deepest(c.Path, dark); d >= 0 && d > deepest(c.Path, answeredDirs) {
 			have[c.Path] = true
 			out = append(out, c)
 		}

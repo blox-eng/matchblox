@@ -215,6 +215,7 @@ type walker struct {
 
 	mu       sync.Mutex // all below: Find may stop waiting on the walk
 	asked    []string   // looked up, as written, in order
+	roots    []string   // as written
 	pending  map[string]bool
 	at       string // the directory being read
 	found    map[string]Checkout
@@ -256,7 +257,7 @@ func (w *walker) run(ctx context.Context, roots []string) {
 	got := map[string]lookup{}
 	ch := make(chan lookup, len(asks))
 	w.mu.Lock()
-	w.asked = asks
+	w.asked, w.roots = asks, roots
 	for _, p := range asks {
 		if w.o.Skip[p] {
 			got[p] = lookup{written: p, path: filepath.Clean(p), skip: true}
@@ -477,16 +478,22 @@ func (w *walker) setAt(dir string) {
 
 // result is what the walk has so far. hung: report what did not answer,
 // in Hung for the caller and in Skipped for the builder. stuck: Limit
-// fired, so the folder being read is one.
+// fired, so the folder being read is one. A home or protected lookup
+// that is no root is no folder the scan was asked to walk: it is never
+// in Skipped, and in Hung only below a root, where a walk would reach it.
 func (w *walker) result(hung, stuck bool) Result {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	var res Result
 	if hung {
 		for _, p := range w.asked {
-			if w.pending[p] {
+			switch {
+			case !w.pending[p]:
+			case slices.Contains(w.roots, p):
 				res.Hung = append(res.Hung, p)
 				w.skipLocked(filepath.Clean(p), whyNoAnswer)
+			case w.belowRootLocked(p):
+				res.Hung = append(res.Hung, p)
 			}
 		}
 		if stuck && w.at != "" {
@@ -511,6 +518,28 @@ func (w *walker) result(hung, stuck bool) Result {
 		res.Resolved = maps.Clone(w.resolved)
 	}
 	return res
+}
+
+// belowRootLocked reports whether p is at or below a root, as written or
+// as it resolved.
+func (w *walker) belowRootLocked(p string) bool {
+	p = filepath.Clean(p)
+	for _, r := range w.roots {
+		if below(p, filepath.Clean(r)) {
+			return true
+		}
+	}
+	for _, r := range w.resolved {
+		if below(p, r) {
+			return true
+		}
+	}
+	return false
+}
+
+// below reports whether path is dir or below it; both are clean.
+func below(path, dir string) bool {
+	return path == dir || strings.HasPrefix(path, strings.TrimSuffix(dir, string(filepath.Separator))+string(filepath.Separator))
 }
 
 // walk reports true once a bound stops the scan. home: dir is searched

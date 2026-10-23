@@ -895,6 +895,42 @@ func TestFindReportsResolvedRoots(t *testing.T) {
 	}
 }
 
+// blockAll makes resolve hang on each of paths until the test ends.
+func blockAll(t *testing.T, paths ...string) func(string) (string, error) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	return func(p string) (string, error) {
+		if slices.Contains(paths, p) {
+			<-release
+		}
+		return filepath.EvalSymlinks(p)
+	}
+}
+
+func TestFindHungHomeOrProtectedOutsideRootsIsNotSkipped(t *testing.T) {
+	code, home := tmp(t), tmp(t)
+	mkRepo(t, filepath.Join(code, "r"), "main", "")
+	inside := filepath.Join(code, "Documents")
+	outside := filepath.Join(home, "Documents")
+	mkdir(t, inside)
+	mkdir(t, outside)
+	swapFS(t, nil, blockAll(t, home, inside, outside))
+	o := FindOpts{Budget: 200 * time.Millisecond, Grace: 100 * time.Millisecond,
+		Home: home, Protected: []string{inside, outside}}
+	res := Find(context.Background(), []string{code}, o)
+	if !slices.Equal(res.Hung, []string{inside}) {
+		t.Fatalf("Hung = %v, want only %s: a lookup outside every root is no folder of this walk", res.Hung, inside)
+	}
+	for _, k := range res.Skipped {
+		if k.Unanswered() {
+			t.Fatalf("skipped %v: a home or protected lookup is not a folder the scan was asked to walk", res.Skipped)
+		}
+	}
+	if got := paths(res.Repos); !slices.Equal(got, []string{filepath.Join(code, "r")}) {
+		t.Fatalf("repos %v", got)
+	}
+}
+
 func TestTrueCaseOnlyWhereNamesFoldCase(t *testing.T) {
 	if want := runtime.GOOS == "darwin" || runtime.GOOS == "windows"; caseInsensitive != want || FoldsCase() != want {
 		t.Fatalf("caseInsensitive = %v on %s, want %v", caseInsensitive, runtime.GOOS, want)

@@ -747,3 +747,52 @@ func TestRescanKeepsReposOfASymlinkedRootThatDidNotAnswer(t *testing.T) {
 		t.Fatalf("console repos %v: a hung link keeps the repos under where it last led", got)
 	}
 }
+
+func TestRescanDropsReposUnderAWalkedRootBelowOneThatDidNotAnswer(t *testing.T) {
+	s, _ := foundTest(t)
+	s.ScanRoots = func([]string) []string { return []string{"/default", "/default/dev"} }
+	scripted(s,
+		gitscan.Result{Repos: []gitscan.Checkout{{Path: "/default/dev/a"}, {Path: "/default/dev/deleted"}, {Path: "/default/other/b"}},
+			Resolved: map[string]string{"/default": "/default", "/default/dev": "/default/dev"}},
+		gitscan.Result{Repos: []gitscan.Checkout{{Path: "/default/dev/a"}}, Hung: []string{"/default"},
+			Skipped:  []gitscan.Skip{{Path: "/default", Why: "it did not answer"}},
+			Resolved: map[string]string{"/default/dev": "/default/dev"}},
+	)
+	foundReady(t, s)
+	for range 2 {
+		if r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true}); r.Err != "" {
+			t.Fatal(r.Err)
+		}
+	}
+	if got, want := repoPaths(firstFound(t, s).Repos), []string{"/default/dev/a", "/default/other/b"}; !slices.Equal(got, want) {
+		t.Fatalf("console repos %v, want %v: a root that answered below one that did not says what is gone", got, want)
+	}
+}
+
+func TestRescanKeepsNoReposOutsideThePickedRoots(t *testing.T) {
+	s, _ := foundTest(t)
+	s.ScanRoots = func(picked []string) []string {
+		if len(picked) == 0 {
+			return []string{"/home/me"}
+		}
+		return picked
+	}
+	homeHung := gitscan.Result{Repos: []gitscan.Checkout{{Path: "/srv/code/x"}}, Hung: []string{"/home/me"},
+		Skipped:  []gitscan.Skip{{Path: "/home/me", Why: "it did not answer"}},
+		Resolved: map[string]string{"/srv/code": "/srv/code"}}
+	scripted(s,
+		gitscan.Result{Repos: []gitscan.Checkout{{Path: "/home/me/old"}}, Resolved: map[string]string{"/home/me": "/home/me"}},
+		homeHung, homeHung)
+	foundReady(t, s)
+	if r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	for i := range 2 {
+		if r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Text: "/srv/code", Console: true}); r.Err != "" {
+			t.Fatal(r.Err)
+		}
+		if got, want := repoPaths(firstFound(t, s).Repos), []string{"/srv/code/x"}; !slices.Equal(got, want) {
+			t.Fatalf("walk %d: console repos %v, want %v: a hung lookup outside the picked roots keeps nothing", i+2, got, want)
+		}
+	}
+}
