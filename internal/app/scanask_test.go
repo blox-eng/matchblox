@@ -202,7 +202,7 @@ func TestFoundKeptWhenNil(t *testing.T) {
 func TestScanBoxIgnoresKeysWhileQuiet(t *testing.T) {
 	m, f := loadedWith(t, 100, askState())
 	at := time.Now().Add(-100 * time.Millisecond)
-	m.scanAsk.at, m.scanAskUntil = at, at.Add(askQuiet)
+	m.scanAskUntil = at.Add(askQuiet)
 	next, cmd := key(m, "y")
 	sendAll(t, cmd)
 	if len(f.acts()) != 0 || !next.(Model).scanShown() {
@@ -210,7 +210,7 @@ func TestScanBoxIgnoresKeysWhileQuiet(t *testing.T) {
 	}
 	m = next.(Model)
 	at = time.Now().Add(-500 * time.Millisecond)
-	m.scanAsk.at, m.scanAskUntil = at, at.Add(askQuiet)
+	m.scanAskUntil = at.Add(askQuiet)
 	_, cmd = key(m, "y")
 	sendAll(t, cmd)
 	if a := f.acts(); len(a) != 1 || a[0].RecID != "scan:yes" {
@@ -473,5 +473,19 @@ func TestFoundPathsRebuiltOnGitReport(t *testing.T) {
 	nm := next.(Model)
 	if !slices.Equal(nm.foundPaths, []string{"/h/b"}) || !slices.Equal(nm.gitPaths(), []string{"/h/a", "/h/b"}) {
 		t.Fatalf("foundPaths = %v, gitPaths = %v", nm.foundPaths, nm.gitPaths())
+	}
+}
+
+// TestScanBoxNotDrawnWhileTakeOverIsDue: with the stoker on, a key that
+// acts on a session asks first; the scan box is not on top and takes no y.
+func TestScanBoxNotDrawnWhileTakeOverIsDue(t *testing.T) {
+	st := nightState()
+	st.Found = &proto.Found{}
+	m, _ := loadedWith(t, 100, st)
+	if m.scanAsk == nil {
+		t.Fatal("no scan question on a host never asked")
+	}
+	if m.scanShown() || m.consenting() || m.focus(keyPress("y")) == layerScan {
+		t.Fatalf("box %v, consenting %v, focus %v", m.scanShown(), m.consenting(), m.focus(keyPress("y")))
 	}
 }

@@ -498,7 +498,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case st.Found.Consent != "":
 				m.scanAsk = nil // answered, here or at another console
 			case !m.scanLater && m.scanAsk == nil:
-				m.scanAsk = &scanAsk{at: time.Now()}
+				m.scanAsk = &scanAsk{}
 			}
 		}
 		m = m.rebuildFoundPaths(st.Found != nil)

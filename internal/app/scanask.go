@@ -21,8 +21,8 @@ const (
 	defaultRoots = "~ ~/dev ~/src ~/code ~/projects ~/work"
 )
 
-// scanAsk is the question up at this console: since when it shows.
-type scanAsk struct{ at time.Time }
+// scanAsk is the question up at this console.
+type scanAsk struct{}
 
 // askQuiet is how long the box takes no answer after it shows: a key
 // meant for what was on screen before must not answer it. Esc and
@@ -30,17 +30,16 @@ type scanAsk struct{ at time.Time }
 const askQuiet = 400 * time.Millisecond
 
 // scanShown tells if the box is on top: asked, and nothing over it, no
-// other question either.
+// other question either, the stoker's take-over ask included.
 func (m Model) scanShown() bool {
-	return m.scanAsk != nil && !m.splashing() && !m.pair.owns() && m.sheet == nil && m.form == nil &&
+	return m.scanAsk != nil && !m.splashing() && !m.takeOverDue() && !m.pair.owns() && m.sheet == nil && m.form == nil &&
 		m.peek == nil && !m.searching && m.held == nil && m.pending == nil
 }
 
 // armScan starts the box's quiet: it shows now.
 func (m Model) armScan() Model {
-	now := time.Now()
-	m.scanAsk = &scanAsk{at: now}
-	m.scanAskUntil = now.Add(askQuiet)
+	m.scanAsk = &scanAsk{}
+	m.scanAskUntil = time.Now().Add(askQuiet)
 	return m
 }
 

@@ -61,8 +61,9 @@ func (m Model) under(k tea.KeyPressMsg) layerID {
 		return layerTakeOver
 	case m.scrolls(k):
 		return layerPreview
-	case m.scanAsk != nil && m.pending == nil && !m.splashing():
+	case m.scanAsk != nil && m.pending == nil && !m.splashing() && !m.takeOverDue():
 		// Never over a confirm: its y must not answer the scan.
+		// Nor while the take-over ask is still to come: the box is not drawn.
 		return layerScan
 	case m.pending == nil && bkey.Matches(k, m.keys.main.Open) && (m.mismatch || m.blocked != nil):
 		return layerBlocked
