@@ -22,6 +22,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -89,6 +90,9 @@ func main() {
 	}
 	if err := run(os.Args[1:]); err != nil {
 		pprof.StopCPUProfile()
+		if errors.Is(err, errRestart) {
+			os.Exit(exitRestart)
+		}
 		if errors.Is(err, errShown) {
 			os.Exit(1)
 		}
@@ -124,7 +128,14 @@ func run(args []string) error {
 			defer stop()
 			return pairCmd(ctx, args[1:], os.Stdout, time.Now)
 		case "devices":
-			return devicesCmd(args[1:], home(), os.Stdout)
+			var pv pushView
+			if len(args) == 1 { // the list; rm needs no sender
+				cfg, _ := config.Load(config.Path()) // a broken config: the default, push on
+				pv = livePushView(cfg.Push, defaultHostKey, transport.SocketPath())
+			}
+			return devicesCmd(args[1:], home(), pv, os.Stdout)
+		case "push":
+			return pushCmd(args[1:])
 		case "connect":
 			return liveConnect(args[1:])
 		}
@@ -268,7 +279,7 @@ func run(args []string) error {
 		if *stdio {
 			return serveStdio(path, os.Stdin, os.Stdout)
 		}
-		return serve(path, newService(cfg, *root))
+		return serve(path, func() *service.Service { return newService(cfg, *root) })
 	case "status":
 		return status(os.Stdout, path, cfg, *root, *text)
 	}
@@ -565,6 +576,18 @@ func newService(cfg config.Config, root string) *service.Service {
 		s.HistoryLog = cfg.History.Log
 	}
 	s.Exe = invokedPath(os.Args[0])
+	// A phone paired before ids gets one, so it can register for pushes.
+	// stderr is serve.log when the console starts the service.
+	if n, skipped, err := setup.UpgradePhoneLines(home(), s.Exe); err != nil {
+		fmt.Fprintln(os.Stderr, "matchblox: phone lines:", err)
+	} else {
+		if n > 0 {
+			fmt.Fprintf(os.Stderr, "matchblox: upgraded %d phone lines\n", n)
+		}
+		if skipped > 0 {
+			fmt.Fprintf(os.Stderr, "matchblox: left %d phone lines as they are: their matchblox is older than v0.13, whose gate takes no id\n", skipped)
+		}
+	}
 	s.Setup = liveSetup(cfg.Sessions.CompactAt)
 	s.Ways = config.WaysPath()
 	s.LimitsLog = &limits.Store{Path: filepath.Join(filepath.Dir(s.StatePath), "limits.jsonl")}
@@ -592,6 +615,7 @@ func newService(cfg config.Config, root string) *service.Service {
 		}
 		s.ConsentPath, s.ReposPath = state.ScanPath(), state.ReposPath()
 	}
+	wirePush(s, cfg.Push, home(), filepath.Dir(s.StatePath), defaultHostKey)
 	return s
 }
 
@@ -623,22 +647,73 @@ func invokedPath(arg0 string) string {
 	return abs
 }
 
+// errRestart: serve stopped for a new one, and said why. main exits with
+// exitRestart (EX_TEMPFAIL), and the user unit starts serve again only after
+// a nonzero exit; exit 0 is a signal or "the service already runs".
+var errRestart = errors.New("serve: stopped for a new one")
+
+const exitRestart = 75
+
+func gone(path string) bool {
+	_, err := os.Stat(path)
+	return errors.Is(err, fs.ErrNotExist)
+}
+
+// unitEnv is set on the serve a user unit starts (setup's keep-running
+// door). That serve waits for a socket in use instead of leaving with exit
+// 0: the unit stays up, and takes over when the other serve stops.
+const unitEnv = "MATCHBLOX_UNIT"
+
+// socketWait is how often the unit's serve tries the socket again.
+var socketWait = time.Second
+
 // serve runs the service on the socket until a signal, or until the binary
-// on disk is replaced (the next console starts the new one).
-func serve(path string, s *service.Service) error {
+// on disk is replaced or the socket removed (the user unit or the next
+// console starts the new one).
+//
+// mk builds the service once the socket is this serve's: a unit's serve may
+// wait long for it, and the state it reads (numbers, holds, the stoker) is
+// the other serve's until then.
+func serve(path string, mk func() *service.Service) error {
+	unit := os.Getenv(unitEnv) != ""
+	_ = os.Unsetenv(unitEnv) // what serve starts is not the unit's serve
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	l, err := transport.Listen(path)
 	if errors.Is(err, transport.ErrInUse) {
 		fmt.Fprintf(os.Stderr, "matchblox: the service already runs on %s (pid %d)\n", path, transport.Owner(path))
-		return nil
+		if !unit {
+			return nil
+		}
+		fmt.Fprintln(os.Stderr, "matchblox: started by the user unit: waiting to take over")
+		for errors.Is(err, transport.ErrInUse) {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(socketWait):
+			}
+			l, err = transport.Listen(path)
+		}
 	}
 	if err != nil {
 		return err
 	}
 	warnTailscaleSSHGate(os.Stderr)
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	s := mk()
+	if s.Push != nil {
+		defer s.Push.Close()
+	}
 	err = s.Serve(ctx, l)
-	if errors.Is(err, service.ErrReplaced) || errors.Is(err, service.ErrSocketGone) || errors.Is(err, context.Canceled) {
+	switch {
+	case errors.Is(err, service.ErrReplaced) && gone(s.Exe):
+		// Removed with nothing in its place: uninstalled. A restart would only
+		// fail to start, again and again.
+		fmt.Fprintln(os.Stderr, "matchblox: stopping, the binary is gone")
+		return nil
+	case errors.Is(err, service.ErrReplaced) || errors.Is(err, service.ErrSocketGone):
+		fmt.Fprintln(os.Stderr, "matchblox: stopping,", strings.TrimPrefix(err.Error(), "service: "))
+		return errRestart
+	case errors.Is(err, context.Canceled):
 		return nil
 	}
 	return err

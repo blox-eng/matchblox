@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -364,5 +365,130 @@ func TestValidDeviceKey(t *testing.T) {
 		if ValidDeviceKey(k) {
 			t.Errorf("%s accepted", name)
 		}
+	}
+}
+
+func TestClientTTYIsADeviceName(t *testing.T) {
+	for tty, ok := range map[string]bool{
+		"/dev/ttys004": true, "/dev/pts/3": true,
+		"": false, "ttys004": false, "/dev/": false, "/dev/tty;x": false, "/dev/tty x": false,
+		"/dev/#(id)": false, "/dev/../etc/passwd": false, "/dev/" + strings.Repeat("a", 64): false,
+	} {
+		if got := ClientTTY(tty); got != ok {
+			t.Errorf("ClientTTY(%q) = %v", tty, got)
+		}
+	}
+}
+
+// The focus moves one client, named by its tty, to one pane: nothing else.
+func TestFocusAllowedIsExact(t *testing.T) {
+	for _, c := range []struct {
+		argv []string
+		ok   bool
+	}{
+		{FocusArgv("/dev/ttys004", "%1"), true},
+		{FocusArgv("/dev/tty;x", "%1"), false},
+		{FocusArgv("/dev/ttys004", "%1;x"), false},
+		{[]string{"tmux", "switch-client", "-c", "/dev/ttys004", "-t", "%1"}, false},
+		{append(FocusArgv("/dev/ttys004", "%1")[:14:14], "%2"), false},
+		{[]string{"tmux", "switch-client", "-t", "%1"}, false},
+		{[]string{"tmux", "switch-client", "-c", "/dev/tty;x", "-t", "%1"}, false},
+		{[]string{"tmux", "switch-client", "-c", "/dev/ttys004", "-t", "%1;x"}, false},
+		{[]string{"tmux", "attach-session", "-c", "/dev/ttys004", "-t", "%1"}, false},
+		{[]string{"tmux", "switch-client", "-t", "%1", "-c", "/dev/ttys004"}, false},
+	} {
+		if got := FocusAllowed(c.argv); got != c.ok {
+			t.Errorf("FocusAllowed(%q) = %v", c.argv, got)
+		}
+	}
+	// The gate's and the console's nav allowlist does not grow.
+	if NavAllowed(FocusArgv("/dev/ttys004", "%1")) {
+		t.Error("NavAllowed takes the focus's -c")
+	}
+}
+
+// A focus moves the phone's client to the pane on a real tmux server, and
+// the desk, attached to the pane's session, stays where it is.
+func TestFocusMovesOnlyThePhone(t *testing.T) {
+	for _, bin := range []string{"tmux", "script"} {
+		if _, err := exec.LookPath(bin); err != nil {
+			t.Skip(bin, " is not installed")
+		}
+	}
+	sock := filepath.Join(t.TempDir(), "s")
+	env := slices.DeleteFunc(os.Environ(), func(e string) bool {
+		return strings.HasPrefix(e, "TMUX=") || strings.HasPrefix(e, "TMUX_PANE=")
+	})
+	tmux := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("tmux", append([]string{"-S", sock, "-f", "/dev/null"}, args...)...)
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("tmux %q: %v: %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	tmux("new-session", "-d", "-s", "work", "-x", "80", "-y", "24")
+	t.Cleanup(func() { _ = exec.Command("tmux", "-S", sock, "kill-server").Run() })
+	tmux("new-window", "-t", "work")
+	tmux("select-window", "-t", "work:0")
+	pane := tmux("display-message", "-p", "-t", "work:1", "#{pane_id}")
+	tmux("new-session", "-d", "-s", "matchblox", "-x", "80", "-y", "24")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	clients := func() map[string]string { // tty -> session:window
+		got := map[string]string{}
+		for _, l := range strings.Split(tmux("list-clients", "-F", "#{client_tty} #{session_name}:#{window_index}"), "\n") {
+			if tty, at, ok := strings.Cut(l, " "); ok {
+				got[tty] = at
+			}
+		}
+		return got
+	}
+	attach := func(session string, n int) string {
+		t.Helper()
+		before := clients()
+		// The client's stdin stays open: an EOF would end the pane's shell.
+		cmd := exec.CommandContext(ctx, "script", "-qc", "tmux -S "+sock+" attach -t "+session, "/dev/null")
+		cmd.Env = env
+		if _, err := cmd.StdinPipe(); err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+			if now := clients(); len(now) == n {
+				for tty := range now {
+					if _, old := before[tty]; !old {
+						return tty
+					}
+				}
+			}
+		}
+		t.Fatalf("no client attached to %s", session)
+		return ""
+	}
+	desk := attach("work", 1)
+	phone := attach("matchblox", 2)
+
+	for range 2 { // a second focus moves the phone again, and leaves no session behind
+		argv := FocusArgv(phone, pane)
+		if !FocusAllowed(argv) {
+			t.Fatalf("FocusAllowed(%q) = false", argv)
+		}
+		tmux(argv[1:]...)
+		got := clients()
+		if got[desk] != "work:0" {
+			t.Errorf("the desk moved to %s", got[desk])
+		}
+		if at := tmux("display-message", "-p", "-c", phone, "#{pane_id}"); at != pane {
+			t.Errorf("the phone is on %s, want %s", at, pane)
+		}
+	}
+	if n := len(strings.Split(tmux("list-sessions", "-F", "#{session_name}"), "\n")); n != 3 {
+		t.Errorf("%d sessions, want work, matchblox and the phone's", n)
 	}
 }

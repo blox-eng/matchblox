@@ -20,6 +20,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
+	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -28,6 +29,9 @@ import (
 func TestMain(m *testing.M) {
 	if args := os.Getenv("MATCHBLOX_TEST_ARGS"); args != "" {
 		if err := run(strings.Split(args, "\x1f")); err != nil {
+			if errors.Is(err, errRestart) {
+				os.Exit(exitRestart)
+			}
 			if !errors.Is(err, errShown) {
 				fmt.Fprintln(os.Stderr, "matchblox:", err) // as main says it
 			}
@@ -123,6 +127,127 @@ func TestEnsureServiceGivesUpWithTheFix(t *testing.T) {
 	}
 	if d := time.Since(start); d > 3*time.Second {
 		t.Fatalf("gave up after %v, want about 2 s", d)
+	}
+}
+
+// The user unit starts serve again only after a nonzero exit: a replaced
+// binary or a removed socket says so; a second serve, or a binary removed
+// with nothing in its place (uninstalled), exits 0.
+func TestServeAsksForARestart(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		after   func(exe, sock string) error
+		restart bool
+	}{
+		{"replaced", func(exe, _ string) error { return os.WriteFile(exe, []byte("v2, longer"), 0o600) }, true},
+		{"socket gone", func(_, sock string) error { return os.Remove(sock) }, true},
+		{"uninstalled", func(exe, _ string) error { return os.Remove(exe) }, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := isolate(t)
+			exe := filepath.Join(t.TempDir(), "matchblox")
+			if err := os.WriteFile(exe, []byte("v1"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			s := newService(config.Default(), fixtures(t))
+			s.Exe, s.ExeEvery = exe, 10*time.Millisecond
+			done := make(chan error, 1)
+			go func() { done <- serve(path, func() *service.Service { return s }) }()
+			deadline := time.Now().Add(2 * time.Second)
+			for {
+				c, err := transport.Dial(path, 100*time.Millisecond)
+				if err == nil {
+					c.Close()
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal(err)
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if err := tc.after(exe, path); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case err := <-done:
+				if errors.Is(err, errRestart) != tc.restart || !tc.restart && err != nil {
+					t.Fatalf("serve returned %v, want a restart: %v", err, tc.restart)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("serve kept running")
+			}
+		})
+	}
+	t.Run("already runs", func(t *testing.T) {
+		path := isolate(t)
+		serveInProcess(t, path)
+		if err := serve(path, func() *service.Service { return newService(config.Default(), fixtures(t)) }); err != nil {
+			t.Fatalf("serve returned %v, want nil", err)
+		}
+	})
+}
+
+// The serve a user unit starts waits for the socket instead of leaving with
+// exit 0, so the unit stays up and serves once the console's serve stops.
+func TestServeOfTheUnitWaitsForTheSocket(t *testing.T) {
+	path := isolate(t)
+	old := socketWait
+	socketWait = 20 * time.Millisecond
+	t.Cleanup(func() { socketWait = old })
+	t.Setenv(unitEnv, "1")
+	l, err := transport.Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	first := make(chan error, 1)
+	go func() { first <- newService(config.Default(), fixtures(t)).Serve(ctx, l) }()
+
+	// The state (numbers, holds, the stoker) is read once the socket is
+	// this serve's: the other serve changes it while this one waits.
+	built := make(chan struct{}, 1)
+	mk := func() *service.Service {
+		built <- struct{}{}
+		s := newService(config.Default(), fixtures(t))
+		s.ExeEvery = 10 * time.Millisecond
+		return s
+	}
+	done := make(chan error, 1)
+	go func() { done <- serve(path, mk) }()
+	select {
+	case err := <-done:
+		t.Fatalf("the unit's serve left with %v while the socket was in use", err)
+	case <-built:
+		t.Fatal("the unit's serve read its state while another serve owned the socket")
+	case <-time.After(200 * time.Millisecond):
+	}
+	if os.Getenv(unitEnv) != "" {
+		t.Error("what serve starts inherits " + unitEnv)
+	}
+	cancel()
+	<-first
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if c, err := transport.Dial(path, 100*time.Millisecond); err == nil {
+			c.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the unit's serve did not take the socket over")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, errRestart) {
+			t.Fatalf("serve returned %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("serve kept running")
 	}
 }
 
@@ -322,14 +447,15 @@ func setupEnv(t *testing.T) setup.Env {
 			}
 			return "", errors.New("not found")
 		},
-		Source: func(string) error { return nil }}
+		Source: func(string) error { return nil },
+		Run:    func([]string) error { return nil }} // no real launchctl or systemctl
 }
 
 func TestSetupCommandOpensWhatTheBuilderTypes(t *testing.T) {
 	e := setupEnv(t)
 	var out strings.Builder
 	var ran [][]string
-	err := setupDoors(e, strings.NewReader("y\n\n\nn\n"), &out, func(argv []string) error { ran = append(ran, argv); return nil })
+	err := setupDoors(e, strings.NewReader("y\n\n\nn\n\n"), &out, func(argv []string) error { ran = append(ran, argv); return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,7 +483,7 @@ func TestSetupCommandShowsClosedDoors(t *testing.T) {
 	}
 	var out strings.Builder
 	var ran [][]string
-	if err := setupDoors(e, strings.NewReader("\n\n\n\ny\n"), &out, func(argv []string) error { ran = append(ran, argv); return nil }); err != nil {
+	if err := setupDoors(e, strings.NewReader("\n\n\n\n\ny\n"), &out, func(argv []string) error { ran = append(ran, argv); return nil }); err != nil {
 		t.Fatal(err)
 	}
 	if len(ran) != 1 || ran[0][0] != "claude" {
@@ -468,7 +594,7 @@ func TestAgentLookPathFindsTheAgentsOwnDirs(t *testing.T) {
 func TestSetupCommandPointsTheNightToTheConsole(t *testing.T) {
 	e := setupEnv(t)
 	var out strings.Builder
-	if err := setupDoors(e, strings.NewReader("\n\n\n\ny\n"), &out, func([]string) error { return nil }); err != nil {
+	if err := setupDoors(e, strings.NewReader("\n\n\n\n\ny\n"), &out, func([]string) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	got := out.String()
@@ -530,11 +656,11 @@ func TestHelpListsTheCommands(t *testing.T) {
 func TestSetupSaysHowToPair(t *testing.T) {
 	e := setupEnv(t)
 	var out strings.Builder
-	if err := setupDoors(e, strings.NewReader("\n\n\n\ny\n"), &out, func([]string) error { return nil }); err != nil {
+	if err := setupDoors(e, strings.NewReader("\n\n\n\n\ny\n"), &out, func([]string) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	got := out.String()
-	pair := got[strings.Index(got, "Pair a device"):strings.Index(got, "Open a guide session")]
+	pair := got[strings.Index(got, "Pair a device"):strings.Index(got, "Keep matchblox running")]
 	if strings.Contains(pair, "y opens it") || !strings.Contains(pair, "press Enter on it in the console, or run matchblox pair") {
 		t.Fatalf("setup:\n%s", got)
 	}

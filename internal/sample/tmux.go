@@ -120,8 +120,12 @@ func TmuxPanesOn(server string) ([]byte, error) {
 	return out, nil
 }
 
+// ParsePanes reads the list of TmuxPanes. A pane listed again under another
+// session (the phone's, grouped with its own) is the same pane: the first
+// listing, its own session's, stays.
 func ParsePanes(b []byte) []Pane {
 	var panes []Pane
+	seen := map[[2]string]bool{}
 	for _, line := range strings.Split(string(b), "\n") {
 		f := strings.Split(line, "\t")
 		if len(f) < 6 {
@@ -135,7 +139,10 @@ func ParsePanes(b []byte) []Pane {
 		if len(f) > 7 {
 			p.Server = f[7]
 		}
-		panes = append(panes, p)
+		if k := [2]string{p.Server, p.ID}; !seen[k] {
+			seen[k] = true
+			panes = append(panes, p)
+		}
 	}
 	return panes
 }
