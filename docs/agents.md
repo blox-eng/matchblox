@@ -85,7 +85,8 @@ finds its rollout by the id. When no open file names the rollout, these
 show `—` and "not measured", and have no id:
 
 - two Codex sessions in one directory;
-- a session after its `/new`;
+- a session after its `/new`, unless it began as `codex resume <id>`:
+  that one follows the new session;
 - a session resumed without its id (`codex resume --last`, the picker).
 
 A `codex exec` run you start in a pane shows in Sessions, and takes no
