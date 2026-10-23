@@ -80,13 +80,18 @@ session holds open. When it holds none open, and always on macOS, the
 rollout is the one in the session's directory that began and was written
 since the session started. The rollout also gives the session its id,
 so `z` parks it. Only the CLI's own sessions count: not a `codex exec`
-run's, a thread of the Codex app or an editor, nor a subagent's. `codex resume <id>`
-finds its rollout by the id. When no open file names the rollout, these
+run's, a thread of the Codex app or an editor, nor a subagent's.
+`codex resume <id>` finds its rollout by the id. When no open file names the rollout, these
 show `—` and "not measured", and have no id:
 
 - two Codex sessions in one directory;
 - a session after its `/new`;
+- a session before its first turn, when another Codex session ran in its
+  directory since it started;
 - a session resumed without its id (`codex resume --last`, the picker).
+
+A session begun as `codex resume <id>` shows "not measured" while another
+session in its directory writes after it.
 
 A `codex exec` run you start in a pane shows in Sessions, and takes no
 other session's rollout. One that another agent starts does not show.
