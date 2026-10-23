@@ -43,6 +43,19 @@ type Doc struct {
 	// Agents are the agents a new session can start on this host: the
 	// installed ones of claude, codex, opencode and cursor-agent.
 	Agents []string `json:"agents,omitempty"`
+	// Accounts are the accounts each agent can start on: "default" first, then
+	// the folders under matchblox's root, then the hand-made folders live
+	// sessions run on (by path, "~/" for one under home). Agents without
+	// accounts have no entry.
+	Accounts map[string][]string `json:"accounts,omitempty"`
+	// LastAccount is, per agent, the account the builder last started, as
+	// listed in Accounts ("default" included): the new-session form opens on
+	// it. An account no longer listed is not sent.
+	LastAccount map[string]string `json:"last_account,omitempty"`
+	// LastAgent is the agent the builder last started a session on, from a
+	// console or the CLI: the new-session form opens on it. Sent only when it
+	// is in Agents.
+	LastAgent string `json:"last_agent,omitempty"`
 	// Renames are the names sessions take at their next rest, by pane.
 	Renames map[string]string `json:"renames,omitempty"`
 	// Focus is the session a tap on the island or a buzz opened on a phone,
@@ -53,6 +66,10 @@ type Doc struct {
 	// after a failed send, or the island's renewal. Empty: all is well, or
 	// no sender ([push] off).
 	Push string `json:"push,omitempty"`
+	// SignIns say, by pane (or by tmux session name when its pane was not
+	// found), how the sign-in of a new account goes: "by hand" when
+	// matchblox gave up driving it.
+	SignIns map[string]string `json:"sign_ins,omitempty"`
 }
 
 // Focus is the session to open: its pane, or Gone when its number's

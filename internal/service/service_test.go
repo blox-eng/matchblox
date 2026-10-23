@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
@@ -1188,5 +1190,64 @@ func TestAConsoleThatJoinsDuringABroadcastGetsItsSnapshot(t *testing.T) {
 		c, _ := connect(t, t.Context(), s)
 		snapshot(t, c)
 		c.Close()
+	}
+}
+
+func TestKnownAccountsPerAgent(t *testing.T) {
+	s, _, home := accountTest(t)
+	s.GOOS = "darwin"
+	prepared(t, home, "claude", "personal")
+	prepared(t, home, "claude", "work")
+	prepared(t, home, "codex", "work")
+	snap := lifeSnap(false)
+	snap.Sessions[0].AccountDir = filepath.Join(home, ".claude-old")
+	snap.Sessions[1].AccountDir = filepath.Join(home, ".claude-old") // twice: listed once
+	snap.Sessions[2].AccountDir = accounts.Folder(home, "codex", "work")
+	s.publish(snap, func(state.Doc) {})
+	want := map[string][]string{
+		"claude":       {"default", "personal", "work", "~/.claude-old"},
+		"codex":        {"default", "work"},
+		"cursor-agent": {"default"},
+	}
+	if got := s.State().Accounts; !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestKnownAccountsHideCursorOffMac(t *testing.T) {
+	s, _, home := accountTest(t) // linux
+	prepared(t, home, "cursor-agent", "work")
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	got := s.State().Accounts
+	if _, ok := got["cursor-agent"]; ok {
+		t.Fatalf("Cursor has accounts off macOS: %v", got)
+	}
+	if _, ok := got["claude"]; !ok {
+		t.Fatalf("claude lost its accounts: %v", got)
+	}
+}
+
+// TestKnownAccountsOnASymlinkedHomeListOnce: a session whose account folder
+// is named by its real path, under a symlinked home, is that account, and
+// the list has it once.
+func TestKnownAccountsOnASymlinkedHomeListOnce(t *testing.T) {
+	s, _, home := accountTest(t)
+	prepared(t, home, "claude", "work")
+	real, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := real + "-link"
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(link) })
+	s.Home = link
+	snap := lifeSnap(false)
+	snap.Sessions[0].AccountDir = accounts.Folder(real, "claude", "work")
+	s.publish(snap, func(state.Doc) {})
+	want := []string{"default", "work"}
+	if got := s.State().Accounts["claude"]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
 	}
 }

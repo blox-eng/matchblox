@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
@@ -116,6 +117,19 @@ type Names struct {
 	Accounts map[int]string `json:"accounts"`
 }
 
+// NotLinked starts the skip of a new session that started on a like-default
+// account whose new shared entries did not all link: it ran all the same.
+const NotLinked = "some shared entries did not link: "
+
+// NotLinkedNote is the NotLinked note of r when it is r's only skip and r
+// has no error: the act ran all the same.
+func NotLinkedNote(r Result) (string, bool) {
+	if r.Err != "" || len(r.Skipped) != 1 || !strings.HasPrefix(r.Skipped[0], NotLinked) {
+		return "", false
+	}
+	return r.Skipped[0], true
+}
+
 type Error struct {
 	Text string `json:"text"`
 }
@@ -201,13 +215,20 @@ type (
 // session of its own on the builder's server. Branch, when set, first
 // adds a worktree for it next to the repository in Where. Name is the
 // tmux session's, its window's and the agent's; empty, it is the
-// directory's. First is the agent's first message.
+// directory's. First is the agent's first message. Account is the
+// account the agent starts on: empty or "default" is the sign-in the
+// builder has. NewAccount makes the account first, set up as Setup says
+// (like-default, copy or empty; empty is like-default), and the session
+// starts without First: the builder signs in there.
 type NewSession struct {
-	Where  string `json:"where"`
-	Branch string `json:"branch,omitempty"`
-	Name   string `json:"name,omitempty"`
-	Agent  string `json:"agent"`
-	First  string `json:"first,omitempty"`
+	Where      string `json:"where"`
+	Branch     string `json:"branch,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Agent      string `json:"agent"`
+	First      string `json:"first,omitempty"`
+	Account    string `json:"account,omitempty"`
+	NewAccount bool   `json:"new_account,omitempty"`
+	Setup      string `json:"setup,omitempty"`
 }
 
 // SwitchAgent is the Text of a "switch:<pane>" act: start Agent in the

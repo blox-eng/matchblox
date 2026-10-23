@@ -73,8 +73,8 @@ The answer is in `~/.local/state/matchblox/scan.json` and the list in
 `[stoker] agent` is the command of the stoker agent. matchblox starts it
 itself, on a tmux server of its own (`tmux -L matchblox`, session
 `stoker`), the first time you press `f` or `n`. It is `claude` by default.
-`codex`, `opencode` and `agent` (Cursor) work too. The command must be on the service's
-`PATH`.
+`codex`, `opencode` and `cursor-agent` (Cursor, also installed as `agent`)
+work too. The command must be on the service's `PATH`.
 
 `[stoker] pane` is gone: you no longer start the stoker in a pane of your
 own. `matchblox status` warns while the config still names it, and nothing

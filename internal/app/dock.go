@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/limits"
 )
 
@@ -275,21 +276,26 @@ var providerNames = map[string]string{"anthropic": "Claude", "openai": "OpenAI",
 func (m Model) accountNames(tight bool) ([]string, int) {
 	per := map[string]int{}
 	for _, a := range m.snap.Limits {
-		per[a.Provider]++
+		if a.Dir == "" {
+			per[a.Provider]++ // an account folder is named by its folder, not by its email
+		}
 	}
 	names := make([]string, len(m.snap.Limits))
 	nameW := 0
 	for i, a := range m.snap.Limits {
-		email, plan, _ := strings.Cut(a.Account, " · ")
-		name := plan
-		if per[a.Provider] > 1 || plan == "" {
-			name, _, _ = strings.Cut(email, "@")
-		} else if tight {
-			name = ""
-		}
 		p := providerNames[a.Provider]
 		if p == "" {
 			p = a.Provider
+		}
+		email, plan, _ := strings.Cut(a.Account, " · ")
+		name := plan
+		switch {
+		case a.Dir != "":
+			name = accounts.Name(a.Dir)
+		case per[a.Provider] > 1 || plan == "":
+			name, _, _ = strings.Cut(email, "@")
+		case tight:
+			name = ""
 		}
 		names[i] = strings.TrimSpace(p + " " + name)
 		nameW = max(nameW, lipgloss.Width(names[i]))

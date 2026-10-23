@@ -13,6 +13,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/idle"
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -618,5 +619,50 @@ func TestSessionsLineMarksOutsideTmux(t *testing.T) {
 	}
 	if !strings.Contains(js.String(), `"target": ""`) {
 		t.Fatalf("json %s", js.String())
+	}
+}
+
+func TestUsageTextNamesTheAccount(t *testing.T) {
+	d := cliDoc()
+	d.Limits = []limits.Account{
+		{Provider: "anthropic", Account: "you@example.com · Max"},
+		{Provider: "anthropic", Account: "you@example.com · Max", Dir: "/home/u/.matchblox/accounts/claude/work"},
+		{Provider: "openai", Dir: "/home/u/codex-team"},
+	}
+	var buf bytes.Buffer
+	if err := writeUsage(&buf, d, false); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("%q", buf.String())
+	}
+	for i, want := range []string{"you@example.com · Max", "work", "codex-team"} {
+		if f := strings.Fields(lines[i]); len(f) < 2 || !strings.HasPrefix(strings.TrimSpace(lines[i][len(f[0]):]), want) {
+			t.Errorf("line %d %q does not name %q", i, lines[i], want)
+		}
+	}
+	if strings.Contains(lines[1], "you@example.com") {
+		t.Errorf("the account line %q names the default's login", lines[1])
+	}
+}
+
+func TestSessionsJSONNamesTheAccountFolder(t *testing.T) {
+	d := cliDoc()
+	d.Sessions[0].AccountDir = "/home/u/.matchblox/accounts/claude/work"
+	d.Sessions[0].SigningIn = true
+	var buf bytes.Buffer
+	if err := writeSessions(&buf, d, true); err != nil {
+		t.Fatal(err)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows[0]["account_dir"] != "/home/u/.matchblox/accounts/claude/work" || rows[0]["signing_in"] != true {
+		t.Fatalf("row %v", rows[0])
+	}
+	if rows[1]["account_dir"] != "" || rows[1]["signing_in"] != false {
+		t.Fatalf("a default row %v", rows[1])
 	}
 }

@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/panes"
@@ -72,9 +75,9 @@ func cursorsAgent(path string) bool {
 // launchArgv is the agent's command, run as bin: Claude Code takes the
 // session's name (--name, which its /rename changes later) and the first
 // message as its prompt; Codex takes the prompt; Cursor takes it after
-// --trust; OpenCode takes it with --prompt.
-func launchArgv(bin, agent, name, first string) []string {
-	argv := []string{bin}
+// --trust; OpenCode takes it with --prompt. extra goes right after bin.
+func launchArgv(bin, agent, name, first string, extra []string) []string {
+	argv := append([]string{bin}, extra...)
 	switch agent {
 	case "claude":
 		argv = append(argv, "--name", name)
@@ -259,7 +262,9 @@ func (s *Service) askKill(from, pane string, x sample.Session) {
 // and pane: one respawn-pane -k ends the agent there and starts the new
 // one in the same pane, guarded by the old agent's pid and start time. It
 // never closes the pane, and the new agent is named as the old one was
-// (seatWindow, and Claude's --name). A hold on the seat waits for the new agent's
+// (seatWindow, and Claude's --name), on the account it was last started on
+// (switchAccount), its env on the command; the switch does not change that
+// choice. A hold on the seat waits for the new agent's
 // session id and moves to it (Rebind); a guard that stops the switch, or
 // a respawn that fails, puts it back as it was. The builder takes the seat
 // back from the stoker, which drives it no more, and the old agent's
@@ -317,8 +322,20 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 			return proto.Result{Err: err.Error()}
 		}
 	}
+	acct := s.switchAccount(n.Agent)
+	argv := launchArgv(s.agentBin(n.Agent), n.Agent, x.Name, n.Handoff, accountArgs(n.Agent, acct))
+	var relink error
+	if acct != nil {
+		argv = slices.Concat(accounts.EnvArgv(n.Agent, acct.folder, false), argv)
+		unlock := s.lockAccount(acct.folder)
+		defer unlock()
+		if acct.again {
+			// It switches on the account as it is when that fails.
+			relink = accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode)
+		}
+	}
 	release := s.holdPane(pane)
-	act := SwitchAction(pane, x, s.seatWindow(pane, x), launchArgv(s.agentBin(n.Agent), n.Agent, x.Name, n.Handoff))
+	act := SwitchAction(pane, x, s.seatWindow(pane, x), argv)
 	s.mu.Lock()
 	old := s.queue.HookedIn(pane)
 	s.mu.Unlock()
@@ -341,6 +358,9 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 		}
 		return res
 	}
+	if relink != nil {
+		res.Skipped = append(res.Skipped, proto.NotLinked+relink.Error())
+	}
 	s.undrive(pane)
 	s.renames.drop(pane)
 	s.mu.Lock()
@@ -352,6 +372,22 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	default: // a sample is asked for already
 	}
 	return res
+}
+
+// switchAccount is the account a switch starts agent on: the one it was last
+// started on, when that is an account folder that is there or a hand-made
+// folder a live session runs on. Anything else, a Cursor account off macOS
+// included, is nil: the default. It never makes an account.
+func (s *Service) switchAccount(agent string) *onAccount {
+	label := s.lastAccounts.of(lastAccountsPath(s.StatePath), agent)
+	if label == "" || label == "default" || !slices.Contains(accountAgents, agent) {
+		return nil
+	}
+	acct, err := s.account(proto.NewSession{Agent: agent, Account: label})
+	if err != nil || acct == nil || acct.fresh {
+		return nil
+	}
+	return acct
 }
 
 // seatWindow is the name the seat's window takes before a switch, so the
@@ -566,21 +602,89 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	if n.Agent == "cursor" {
 		n.Agent = sample.CursorAgent
 	}
-	steps, name, dir, err := s.newSteps(ctx, n)
+	if s.agentsPane(a) && (n.NewAccount || n.Account != "" && n.Account != "default") {
+		return proto.Result{Err: "the stoker starts on default only"}
+	}
+	steps, name, dir, acct, err := s.newSteps(ctx, n)
 	if err != nil {
 		return proto.Result{Err: err.Error()}
 	}
+	act := advice.Action{Label: "new session"}
+	var launch []string
+	first := n.First
+	if acct != nil {
+		launch = accounts.EnvArgv(n.Agent, acct.folder, acct.fresh)
+		if acct.fresh {
+			// The builder signs in in the session: no first message.
+			first = ""
+			act.Label = newAccountLabel(n.Agent, acct.name, string(acct.mode))
+			act.Destructive = true
+		}
+	}
+	launch = slices.Concat(launch, launchArgv(s.agentBin(n.Agent), n.Agent, name, first, accountArgs(n.Agent, acct)))
 	steps = append(steps, slices.Concat(
 		[]string{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
 		sample.TmuxOn(""), []string{"new-session", "-d", "-s", name, "-n", name, "-c", dir},
-		launchArgv(s.agentBin(n.Agent), n.Agent, name, n.First)))
-	res := s.Actions.Do(ctx, advice.Action{Label: "new session", Steps: steps}, a.Confirm)
+		launch))
+	act.Steps = steps
+	// made: this call makes the folder, and takes it away when the start
+	// fails, so a retry finds no account.
+	made := false
+	var relink error
+	if acct != nil {
+		unlock := s.lockAccount(acct.folder)
+		defer unlock()
+		// Another start of this new account may have made it since the
+		// check: the folder is then that one's.
+		if acct.fresh {
+			if have, err := accounts.List(s.home(), n.Agent); err != nil {
+				return proto.Result{Err: err.Error()}
+			} else if slices.Contains(have, acct.name) {
+				return proto.Result{Err: alreadyThere(n.Agent, acct.name).Error()}
+			}
+		}
+	}
+	// Only a confirmed act makes a folder: a dry plan leaves the disk as it
+	// was. A like-default account gets what the default gained since; when
+	// that fails, it starts as it is.
+	switch {
+	case acct != nil && acct.fresh && a.Confirm == "y":
+		_, err := os.Lstat(acct.folder)
+		made = errors.Is(err, fs.ErrNotExist)
+		if err := accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode); err != nil {
+			s.unmake(made, acct.folder)
+			return proto.Result{Err: err.Error()}
+		}
+	case acct != nil && acct.again:
+		relink = accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode)
+	}
+	res := s.Actions.Do(ctx, act, a.Confirm)
 	if res.Err != "" || len(res.Ran) < len(steps) {
+		s.unmake(made, acct.folderOrEmpty())
 		return res
 	}
-	if s.agentsPane(a) {
+	if relink != nil {
+		res.Skipped = append(res.Skipped, proto.NotLinked+relink.Error())
+	}
+	var pane string
+	if s.agentsPane(a) || (acct != nil && acct.fresh) {
 		out, _ := s.tmuxOut(slices.Concat(sample.TmuxOn(""), []string{"display-message", "-p", "-t", "=" + name + ":", "#{pane_id}"}))
-		s.recordNew(strings.TrimSpace(out), name, res.Ran)
+		pane = strings.TrimSpace(out)
+	}
+	if s.agentsPane(a) {
+		s.recordNew(pane, name, res.Ran)
+	} else {
+		s.rememberStart(n, acct) // the stoker's starts are not the builder's choice
+	}
+	switch {
+	case acct == nil || !acct.fresh:
+	case pane != "":
+		go s.driveSignIn(ctx, pane, n.Agent, name)
+	default:
+		// No pane to drive: the builder signs in by hand, told by the
+		// session's name.
+		s.signIns.set(name, SignInByHand)
+		s.noteSignIn()
 	}
 	select {
 	case s.sampleKick <- struct{}{}:
@@ -591,43 +695,42 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 
 // newSteps checks a new session and builds the worktree's step, if any.
 // It returns the session's name and the directory it starts in.
-func (s *Service) newSteps(ctx context.Context, n proto.NewSession) (steps [][]string, name, dir string, err error) {
+func (s *Service) newSteps(ctx context.Context, n proto.NewSession) (steps [][]string, name, dir string, acct *onAccount, err error) {
 	look := s.LookPath
 	if look == nil {
 		look = exec.LookPath
 	}
 	switch {
 	case !slices.Contains(Startable, n.Agent):
-		return nil, "", "", fmt.Errorf("%s is not an agent matchblox starts: claude, codex, opencode or cursor-agent", n.Agent)
+		return nil, "", "", nil, fmt.Errorf("%s is not an agent matchblox starts: claude, codex, opencode or cursor-agent", n.Agent)
+	}
+	if acct, err = s.account(n); err != nil {
+		return nil, "", "", nil, err
 	}
 	if rest, ok := strings.CutPrefix(n.Where, "~/"); ok || n.Where == "~" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, "", "", err
-		}
-		n.Where = filepath.Join(home, rest)
+		n.Where = filepath.Join(s.home(), rest)
 	}
 	if !filepath.IsAbs(n.Where) {
-		return nil, "", "", errors.New("a new session starts in a full path")
+		return nil, "", "", nil, errors.New("a new session starts in a full path")
 	}
 	if agentBin(n.Agent, look) == "" {
-		return nil, "", "", fmt.Errorf("%s is not installed here", n.Agent)
+		return nil, "", "", nil, fmt.Errorf("%s is not installed here", n.Agent)
 	}
 	if n.First != "" {
 		if err := proto.CheckFirst(n.First, "the first message"); errors.Is(err, proto.ErrDash) {
-			return nil, "", "", errors.New("a first message does not start with -")
+			return nil, "", "", nil, errors.New("a first message does not start with -")
 		} else if err != nil {
-			return nil, "", "", err
+			return nil, "", "", nil, err
 		}
 	}
 	dir = filepath.Clean(n.Where)
 	if !s.isDir(dir) {
-		return nil, "", "", fmt.Errorf("no directory %s", dir)
+		return nil, "", "", nil, fmt.Errorf("no directory %s", dir)
 	}
 	if n.Branch != "" {
 		step, wt, err := worktreeStep(ctx, dir, n.Branch)
 		if err != nil {
-			return nil, "", "", err
+			return nil, "", "", nil, err
 		}
 		steps, dir = append(steps, step), wt
 	}
@@ -636,12 +739,191 @@ func (s *Service) newSteps(ctx context.Context, n proto.NewSession) (steps [][]s
 		name = proto.NameOf(filepath.Base(dir))
 	}
 	if err := proto.CheckName(name); err != nil {
-		return nil, "", "", err
+		return nil, "", "", nil, err
 	}
 	if _, in := s.tmuxSessions("")[name]; in {
-		return nil, "", "", taken(name)
+		return nil, "", "", nil, taken(name)
 	}
-	return steps, name, dir, nil
+	return steps, name, dir, acct, nil
+}
+
+// onAccount is the account a new session starts on: its folder, whether it
+// is made now, and how it is set up. again: an existing like-default account
+// that is prepared again before it starts.
+type onAccount struct {
+	name, folder string
+	fresh, again bool
+	hand         bool // a hand-made folder a live session runs on
+	mode         accounts.Mode
+}
+
+// lockAccount holds folder until the returned func is called.
+func (s *Service) lockAccount(folder string) func() {
+	m, _ := s.accountLocks.LoadOrStore(folder, &sync.Mutex{})
+	mu := m.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
+
+// alreadyThere refuses a new account whose folder is there.
+func alreadyThere(agent, name string) error {
+	return fmt.Errorf("the %s account %s is there already: start on it", agent, name)
+}
+
+func (a *onAccount) folderOrEmpty() string {
+	if a == nil {
+		return ""
+	}
+	return a.folder
+}
+
+// unmake takes away the folder of a new account that did not start, when
+// this call made it.
+func (s *Service) unmake(made bool, folder string) {
+	if made && folder != "" {
+		_ = os.RemoveAll(folder) // links go, never what they point to
+	}
+}
+
+// accountArgs is what the agent takes after its binary on acct. A
+// hand-made folder takes none: it may keep its sign-in in the keyring.
+func accountArgs(agent string, acct *onAccount) []string {
+	if acct == nil || acct.hand {
+		return nil
+	}
+	return accounts.Args(agent)
+}
+
+// newAccountLabel is what the console's confirm shows for a new account.
+func newAccountLabel(agent, name, setup string) string {
+	return fmt.Sprintf("new %s account %q, %s: sign in in the session", agent, name, setup)
+}
+
+// accountAgents are the agents that have accounts.
+var accountAgents = []string{"claude", "codex", sample.CursorAgent}
+
+// knownAccounts lists, per agent with accounts, what a new session can pick:
+// default, the folders under the root, then the hand-made folders live
+// sessions run on, deduplicated.
+func (s *Service) knownAccounts(sessions []sample.Session) map[string][]string {
+	home := s.home()
+	root := accounts.Root(home)
+	out := make(map[string][]string, len(accountAgents))
+	for _, agent := range accountAgents {
+		if agent == sample.CursorAgent && s.goos() != "darwin" {
+			continue // Cursor accounts run on macOS only: no field
+		}
+		list := []string{"default"}
+		have, _ := accounts.List(home, agent) // unreadable: default only
+		list = append(list, have...)
+		for _, x := range sessions {
+			if x.Agent != agent || x.AccountDir == "" || accounts.Under(root, x.AccountDir) {
+				continue
+			}
+			if l := s.folderLabel(x.AccountDir); !slices.Contains(list, l) {
+				list = append(list, l)
+			}
+		}
+		out[agent] = list
+	}
+	return out
+}
+
+// folderLabel is a hand-made folder as the console lists and sends it: with
+// "~/" when under home, else its path.
+func (s *Service) folderLabel(dir string) string {
+	if rest, ok := strings.CutPrefix(dir, s.home()+string(filepath.Separator)); ok {
+		return "~/" + rest
+	}
+	return dir
+}
+
+// liveFolder is the folder a hand-made account label, or its full path,
+// names, when a live session of agent in the last snapshot runs on it.
+func (s *Service) liveFolder(agent, label string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, x := range s.sampled {
+		if x.Agent != agent || x.AccountDir == "" {
+			continue
+		}
+		// The console sends the label; a shell sends the full path.
+		if s.folderLabel(x.AccountDir) == label || filepath.IsAbs(label) && filepath.Clean(label) == filepath.Clean(x.AccountDir) {
+			return x.AccountDir, true
+		}
+	}
+	return "", false
+}
+
+func (s *Service) goos() string {
+	if s.GOOS != "" {
+		return s.GOOS
+	}
+	return runtime.GOOS
+}
+
+func (s *Service) home() string {
+	if s.Home != "" {
+		return s.Home
+	}
+	h, _ := os.UserHomeDir()
+	return h
+}
+
+// account checks the account a new session asks for: nil is the builder's
+// default sign-in. An account that is not there needs NewAccount, and a
+// new one must not be there yet. Nothing is written.
+func (s *Service) account(n proto.NewSession) (*onAccount, error) {
+	if n.Account == "" || (n.Account == "default" && !n.NewAccount) {
+		return nil, nil
+	}
+	if n.Agent == "opencode" {
+		return nil, errors.New("opencode has no accounts")
+	}
+	goos := s.goos()
+	if n.Agent == sample.CursorAgent && goos != "darwin" {
+		// On Linux the account's HOME links ~/.config, where the default
+		// keeps its sign-in.
+		return nil, errors.New("Cursor accounts run on macOS only for now") //nolint:staticcheck // Cursor is a name
+	}
+	if strings.HasPrefix(n.Account, "~/") || strings.HasPrefix(n.Account, "/") {
+		// A hand-made folder is never made here: only one a live session runs on.
+		folder, ok := s.liveFolder(n.Agent, n.Account)
+		if n.NewAccount || !ok {
+			return nil, fmt.Errorf("no %s account %s", n.Agent, n.Account)
+		}
+		return &onAccount{name: n.Account, folder: folder, hand: true}, nil
+	}
+	home := s.home()
+	if err := accounts.CheckName(n.Agent, n.Account, home, goos); err != nil {
+		return nil, err
+	}
+	acct := &onAccount{name: n.Account, folder: accounts.Folder(home, n.Agent, n.Account), fresh: n.NewAccount}
+	have, err := accounts.List(home, n.Agent)
+	if err != nil {
+		return nil, err
+	}
+	there := slices.Contains(have, n.Account)
+	switch {
+	case !n.NewAccount && !there:
+		return nil, fmt.Errorf("no %s account %s: start it as a new account", n.Agent, n.Account)
+	case n.NewAccount && there:
+		return nil, alreadyThere(n.Agent, n.Account)
+	case !n.NewAccount:
+		if accounts.SetupOf(acct.folder) == accounts.LikeDefault {
+			acct.again, acct.mode = true, accounts.LikeDefault
+		}
+		return acct, nil
+	}
+	switch mode := accounts.Mode(n.Setup); mode {
+	case "":
+		acct.mode = accounts.LikeDefault
+	case accounts.LikeDefault, accounts.Copy, accounts.Empty:
+		acct.mode = mode
+	default:
+		return nil, fmt.Errorf("the setup %q is none of like-default, copy or empty", n.Setup)
+	}
+	return acct, nil
 }
 
 // worktreeStep adds a worktree for branch beside the repository dir is

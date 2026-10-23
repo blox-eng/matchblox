@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/hooks"
@@ -453,7 +454,7 @@ func TestLaunchArgvOfEachAgent(t *testing.T) {
 		{"agent", sample.CursorAgent, "go", []string{"agent", "--trust", "go"}},
 		{"cursor-agent", sample.CursorAgent, "", []string{"cursor-agent", "--trust"}},
 	} {
-		if got := launchArgv(c.bin, c.agent, "work", c.first); !slices.Equal(got, c.want) {
+		if got := launchArgv(c.bin, c.agent, "work", c.first, nil); !slices.Equal(got, c.want) {
 			t.Errorf("%s %q: got %q, want %q", c.agent, c.first, got, c.want)
 		}
 	}
@@ -883,5 +884,725 @@ func TestASwitchHearsTheNewAgentThatHooksInAtOnce(t *testing.T) {
 	s.publish(snap, func(state.Doc) {})
 	if it, ok := s.queued("%1"); !ok || it.Estimated || it.SessionID != "s9" {
 		t.Fatalf("the new agent's hook was forgotten: %+v %v", it, ok)
+	}
+}
+
+// accountTest is lifeTest with the builder's home in a temp dir.
+func accountTest(t *testing.T) (*Service, *[][]string, string) {
+	t.Helper()
+	s, ran := lifeTest(t)
+	// Short: codex refuses a folder whose socket path would be too long.
+	home, err := os.MkdirTemp("/tmp", "mb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	s.Home = home
+	s.GOOS = "linux"
+	return s, ran, home
+}
+
+func prepared(t *testing.T, home, agent, name string) string {
+	t.Helper()
+	folder := accounts.Folder(home, agent, name)
+	if err := accounts.Prepare(home, agent, folder, accounts.Empty); err != nil {
+		t.Fatal(err)
+	}
+	return folder
+}
+
+func TestStartOnAnAccount(t *testing.T) {
+	s, ran, home := accountTest(t)
+	folder := prepared(t, home, "claude", "work")
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: "work"}))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	got := strings.Join((*ran)[0], " ")
+	if !strings.HasSuffix(got, envOn("claude")+" CLAUDE_CONFIG_DIR="+folder+" claude --name fresh") || strings.Contains(got, "BROWSER") {
+		t.Fatalf("ran %q", got)
+	}
+}
+
+func TestUnknownAccountIsRefused(t *testing.T) {
+	s, ran, _ := accountTest(t)
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Account: "nope"}))
+	if !strings.Contains(res.Err, "no claude account nope") || len(*ran) != 0 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+}
+
+func TestNewAccountPreparesAndStartsWithoutFirst(t *testing.T) {
+	s, ran, home := accountTest(t)
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: "work2", NewAccount: true, Setup: "copy", First: "x"}))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	folder := accounts.Folder(home, "claude", "work2")
+	if fi, err := os.Stat(folder); err != nil || !fi.IsDir() {
+		t.Fatalf("no folder: %v", err)
+	}
+	got := strings.Join((*ran)[0], " ")
+	if !strings.Contains(got, "BROWSER=/usr/bin/true") || !strings.HasSuffix(got, " claude --name fresh") {
+		t.Fatalf("ran %q", got)
+	}
+}
+
+func TestNewAccountEmptySetupMeansLikeDefaultAndUnknownIsRefused(t *testing.T) {
+	s, ran, home := accountTest(t)
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".claude", "settings.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Account: "w", NewAccount: true}))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if _, err := os.Lstat(filepath.Join(accounts.Folder(home, "claude", "w"), "settings.json")); err != nil {
+		t.Fatalf("like-default links the default's settings: %v", err)
+	}
+	n := len(*ran)
+	res = s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Account: "w3", NewAccount: true, Setup: "bogus"}))
+	for _, m := range []string{"like-default", "copy", "empty"} {
+		if !strings.Contains(res.Err, m) {
+			t.Fatalf("err %q does not name %s", res.Err, m)
+		}
+	}
+	if len(*ran) != n {
+		t.Fatalf("ran %q", *ran)
+	}
+	if _, err := os.Stat(accounts.Folder(home, "claude", "w3")); err == nil {
+		t.Fatal("a refused setup wrote a folder")
+	}
+}
+
+func TestNewAccountAlreadyThereIsRefused(t *testing.T) {
+	s, _, home := accountTest(t)
+	prepared(t, home, "claude", "work")
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Account: "work", NewAccount: true}))
+	if !strings.Contains(res.Err, "work") || !strings.Contains(res.Err, "already") {
+		t.Fatalf("err %q", res.Err)
+	}
+}
+
+func TestDryNewAccountWritesNothing(t *testing.T) {
+	s, ran, home := accountTest(t)
+	a := newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Account: "work", NewAccount: true})
+	a.Confirm = ""
+	res := s.act(t.Context(), a)
+	if res.Err == "" || len(*ran) != 0 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	if _, err := os.Stat(accounts.Root(home)); err == nil {
+		t.Fatal("a dry plan wrote the account folder")
+	}
+}
+
+func TestNewAccountLabelNamesTheSetup(t *testing.T) {
+	got := newAccountLabel("claude", "work", "copy")
+	if want := `new claude account "work", copy: sign in in the session`; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestCodexAccountForcesFileStore(t *testing.T) {
+	s, ran, home := accountTest(t)
+	folder := prepared(t, home, "codex", "work")
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "codex", Name: "fresh", Account: "work"}))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	got := strings.Join((*ran)[0], " ")
+	if !strings.HasSuffix(got, envOn("codex")+" CODEX_HOME="+folder+" codex -c cli_auth_credentials_store=\"file\"") {
+		t.Fatalf("ran %q", got)
+	}
+}
+
+func TestNewAccountStepsNeverNameTheDefault(t *testing.T) {
+	for _, agent := range []string{"claude", "codex", "cursor-agent"} {
+		s, ran, home := accountTest(t)
+		s.GOOS = "darwin" // Cursor accounts run on macOS only
+		res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: agent, Name: "fresh", Account: "work", NewAccount: true}))
+		if res.Err != "" {
+			t.Fatalf("%s: %s", agent, res.Err)
+		}
+		for _, step := range *ran {
+			got := strings.Join(step, " ")
+			for _, bad := range []string{home + "/.claude", home + "/.codex", home + "/.cursor/auth.json", "security"} {
+				if strings.Contains(got, bad) {
+					t.Errorf("%s: step %q names %q", agent, got, bad)
+				}
+			}
+		}
+	}
+}
+
+func TestAccountEnvIsOnTheCommandNotTheSession(t *testing.T) {
+	for _, agent := range []string{"claude", "codex", "cursor-agent"} {
+		s, ran, _ := accountTest(t)
+		s.GOOS = "darwin" // Cursor accounts run on macOS only
+		res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: agent, Name: "fresh", Account: "work", NewAccount: true}))
+		if res.Err != "" {
+			t.Fatalf("%s: %s", agent, res.Err)
+		}
+		for _, step := range *ran {
+			for _, bad := range []string{"-e", "set-environment", "setenv"} {
+				if slices.Contains(step, bad) {
+					t.Errorf("%s: step %q has %s", agent, step, bad)
+				}
+			}
+		}
+	}
+}
+
+func TestDefaultStartsAsToday(t *testing.T) {
+	for _, account := range []string{"", "default"} {
+		s, ran, home := accountTest(t)
+		dir := t.TempDir()
+		res := s.act(t.Context(), newAct(t, proto.NewSession{Where: dir, Agent: "claude", Name: "fresh", Account: account, First: "go"}))
+		if res.Err != "" || len(*ran) != 1 {
+			t.Fatalf("%q: err %q ran %q", account, res.Err, *ran)
+		}
+		got := strings.Join((*ran)[0], " ")
+		want := "env -u GIT_TERMINAL_PROMPT -u GIT_SSH_COMMAND -u MATCHBLOX_HOME tmux new-session -d -s fresh -n fresh -c " + dir + " claude --name fresh go"
+		if got != want {
+			t.Errorf("%q: got %q, want %q", account, got, want)
+		}
+		if _, err := os.Stat(accounts.Root(home)); err == nil {
+			t.Error("the default made an account folder")
+		}
+	}
+}
+
+func TestOpencodeHasNoAccounts(t *testing.T) {
+	s, ran, _ := accountTest(t)
+	s.LookPath = func(cmd string) (string, error) { return "/usr/bin/" + cmd, nil }
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "opencode", Account: "work"}))
+	if !strings.Contains(res.Err, "opencode has no accounts") || len(*ran) != 0 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+}
+
+func TestStartOnAHandMadeFolder(t *testing.T) {
+	s, ran, home := accountTest(t)
+	old := filepath.Join(home, ".claude-old")
+	snap := lifeSnap(false)
+	snap.Sessions[0].AccountDir = old
+	s.publish(snap, func(state.Doc) {})
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: "~/.claude-old"}))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	got := strings.Join((*ran)[0], " ")
+	if !strings.Contains(got, envOn("claude")+" CLAUDE_CONFIG_DIR="+old+" claude") || strings.Contains(got, "BROWSER=") {
+		t.Fatalf("ran %q", got)
+	}
+}
+
+// TestHandMadeCodexFolderKeepsItsStore: a hand-made Codex folder may keep
+// its sign-in in the keyring, so its start does not force the file store.
+func TestHandMadeCodexFolderKeepsItsStore(t *testing.T) {
+	s, ran, home := accountTest(t)
+	old := filepath.Join(home, ".codex-old")
+	snap := lifeSnap(false)
+	snap.Sessions[2].AccountDir = old
+	s.publish(snap, func(state.Doc) {})
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "codex", Name: "fresh", Account: "~/.codex-old"}))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	got := strings.Join((*ran)[0], " ")
+	if !strings.HasSuffix(got, envOn("codex")+" CODEX_HOME="+old+" codex") || strings.Contains(got, "cli_auth_credentials_store") {
+		t.Fatalf("ran %q", got)
+	}
+}
+
+func TestUnknownFolderIsRefused(t *testing.T) {
+	s, ran, home := accountTest(t)
+	snap := lifeSnap(false)
+	snap.Sessions[2].AccountDir = filepath.Join(home, ".codex-old") // another agent's
+	s.publish(snap, func(state.Doc) {})
+	for _, acct := range []string{"~/.claude-old", home + "/.claude-old", "/etc"} {
+		res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: acct}))
+		if !strings.Contains(res.Err, "no claude account") {
+			t.Fatalf("%s: err %q", acct, res.Err)
+		}
+	}
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "codex", Name: "fresh", Account: "~/.codex-old", NewAccount: true}))
+	if res.Err == "" || len(*ran) != 0 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+}
+
+func TestCursorAccountsRunOnMacOnly(t *testing.T) {
+	s, ran, home := accountTest(t) // linux
+	prepared(t, home, "cursor-agent", "work")
+	for _, n := range []proto.NewSession{
+		{Agent: "cursor-agent", Account: "work"},
+		{Agent: "cursor-agent", Account: "new1", NewAccount: true},
+		{Agent: "cursor", Account: "work"},
+	} {
+		n.Where, n.Name = t.TempDir(), "fresh"
+		res := s.act(t.Context(), newAct(t, n))
+		if res.Err != "Cursor accounts run on macOS only for now" {
+			t.Fatalf("%+v: err %q", n, res.Err)
+		}
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+	if _, err := os.Stat(accounts.Folder(home, "cursor-agent", "new1")); err == nil {
+		t.Fatal("a refused Cursor account wrote a folder")
+	}
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "cursor-agent", Name: "fresh", Account: "default"}))
+	if res.Err != "" {
+		t.Fatalf("the default: %s", res.Err)
+	}
+	s.GOOS = "darwin"
+	res = s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "cursor-agent", Name: "mac", Account: "work"}))
+	if res.Err != "" {
+		t.Fatalf("on macOS: %s", res.Err)
+	}
+}
+
+// writeDefault writes a file in the builder's default folder of an agent.
+func writeDefault(t *testing.T, home, rel string) {
+	t.Helper()
+	path := filepath.Join(home, rel)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLikeDefaultAccountGetsNewEntriesOnStart(t *testing.T) {
+	s, _, home := accountTest(t)
+	writeDefault(t, home, ".claude/settings.json")
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "one", Account: "work", NewAccount: true}))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	writeDefault(t, home, ".claude/CLAUDE.md")
+	res = s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "two", Account: "work"}))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	got, err := os.Readlink(filepath.Join(accounts.Folder(home, "claude", "work"), "CLAUDE.md"))
+	if err != nil || got != filepath.Join(home, ".claude", "CLAUDE.md") {
+		t.Fatalf("CLAUDE.md: link %q, %v", got, err)
+	}
+}
+
+func TestCopyAccountIsNotLinkedAgain(t *testing.T) {
+	s, _, home := accountTest(t)
+	writeDefault(t, home, ".codex/config.toml")
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "codex", Name: "one", Account: "work", NewAccount: true, Setup: "copy"}))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	writeDefault(t, home, ".codex/AGENTS.md")
+	res = s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "codex", Name: "two", Account: "work"}))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if _, err := os.Lstat(filepath.Join(accounts.Folder(home, "codex", "work"), "AGENTS.md")); err == nil {
+		t.Fatal("a copy account got a new entry of the default")
+	}
+}
+
+func TestAccountWithNoMarkerIsLikeDefault(t *testing.T) {
+	s, _, home := accountTest(t)
+	folder := accounts.Folder(home, "claude", "old")
+	if err := os.MkdirAll(folder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeDefault(t, home, ".claude/settings.json")
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "two", Account: "old"}))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if _, err := os.Readlink(filepath.Join(folder, "settings.json")); err != nil {
+		t.Fatalf("an account made before the marker was not linked: %v", err)
+	}
+}
+
+func TestFailedNewAccountLeavesNoFolder(t *testing.T) {
+	t.Run("the start fails", func(t *testing.T) {
+		s, _, home := accountTest(t)
+		s.Actions.Run = func([]string) error { return errors.New("no tmux") }
+		res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: "work", NewAccount: true}))
+		if res.Err == "" {
+			t.Fatal("the start did not fail")
+		}
+		if _, err := os.Lstat(accounts.Folder(home, "claude", "work")); err == nil {
+			t.Fatal("the folder stayed")
+		}
+		s.Actions.Run = func([]string) error { return nil }
+		if res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: "work", NewAccount: true})); res.Err != "" {
+			t.Fatalf("the retry: %s", res.Err)
+		}
+	})
+	t.Run("the copy fails", func(t *testing.T) {
+		s, ran, home := accountTest(t)
+		writeDefault(t, home, ".claude/settings.json")
+		if err := os.Chmod(filepath.Join(home, ".claude", "settings.json"), 0); err != nil {
+			t.Fatal(err)
+		}
+		res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: "work", NewAccount: true, Setup: "copy"}))
+		if res.Err == "" || len(*ran) != 0 {
+			t.Fatalf("err %q ran %q", res.Err, *ran)
+		}
+		if _, err := os.Lstat(accounts.Folder(home, "claude", "work")); err == nil {
+			t.Fatal("the folder stayed")
+		}
+	})
+}
+
+func TestStartOnAHandMadeFolderByItsFullPath(t *testing.T) {
+	s, ran, home := accountTest(t)
+	old := filepath.Join(home, ".claude-old")
+	snap := lifeSnap(false)
+	snap.Sessions[0].AccountDir = old
+	s.publish(snap, func(state.Doc) {})
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: old + "/"}))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	if got := strings.Join((*ran)[0], " "); !strings.Contains(got, envOn("claude")+" CLAUDE_CONFIG_DIR="+old+" claude") {
+		t.Fatalf("ran %q", got)
+	}
+}
+
+func TestNewAccountWithNoPaneSaysByHand(t *testing.T) {
+	s, _, _ := accountTest(t)
+	s.TmuxOut = func([]string) (string, error) { return "", errors.New("no server") }
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: "work", NewAccount: true}))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if got := s.State().SignIns["fresh"]; got != SignInByHand {
+		t.Fatalf("notes %v", s.State().SignIns)
+	}
+	snap := lifeSnap(false)
+	snap.Panes = append(snap.Panes, sample.Pane{ID: "%50", Target: "fresh:1.1"})
+	s.publish(snap, func(state.Doc) {})
+	if got := s.State().SignIns["fresh"]; got != SignInByHand {
+		t.Fatalf("the note went while its session is here: %v", s.State().SignIns)
+	}
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	if n := s.State().SignIns; n != nil {
+		t.Fatalf("the note stayed after its session went: %v", n)
+	}
+}
+
+// TestTwoConfirmsOfOneNewAccountMakeItOnce: two confirms of one new account
+// at once start it once. Both pass the first check before either makes the
+// folder; the second is refused as there already, and the first's folder
+// stays.
+func TestTwoConfirmsOfOneNewAccountMakeItOnce(t *testing.T) {
+	s, _, home := accountTest(t)
+	// Each act looks up its agent after it checks the account: hold both
+	// there until both are in flight.
+	var arrived atomic.Int32
+	var timedOut atomic.Bool
+	both := make(chan struct{})
+	s.LookPath = func(cmd string) (string, error) {
+		if arrived.Add(1) == 2 {
+			close(both)
+		}
+		select {
+		case <-both:
+		case <-time.After(2 * time.Second):
+			timedOut.Store(true)
+		}
+		return "/usr/bin/" + cmd, nil
+	}
+	var starts atomic.Int32
+	s.Actions.Run = func([]string) error {
+		if starts.Add(1) > 1 {
+			return errors.New("no tmux") // a failed second start must not take the folder
+		}
+		return nil
+	}
+	results := make(chan proto.Result, 2)
+	for _, name := range []string{"one", "two"} {
+		go func() {
+			results <- s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: name, Account: "work", NewAccount: true}))
+		}()
+	}
+	var ok, refused int
+	for range 2 {
+		switch res := <-results; {
+		case res.Err == "":
+			ok++
+		case strings.Contains(res.Err, "the claude account work is there already"):
+			refused++
+		default:
+			t.Errorf("err %q", res.Err)
+		}
+	}
+	// An act waits at its first look-up, so the second arrival is the
+	// other act's: a barrier that timed out proves nothing.
+	if timedOut.Load() || arrived.Load() < 2 {
+		t.Fatalf("the acts were not in flight together: %d look-ups, timed out %v", arrived.Load(), timedOut.Load())
+	}
+	if ok != 1 || refused != 1 || starts.Load() != 1 {
+		t.Fatalf("%d started, %d refused, %d starts", ok, refused, starts.Load())
+	}
+	if _, err := os.Lstat(filepath.Join(accounts.Folder(home, "claude", "work"), accounts.SetupFile)); err != nil {
+		t.Fatalf("the first's folder went: %v", err)
+	}
+}
+
+// TestFailedRelinkStillStarts: when the entries of an existing like-default
+// account cannot be linked again, it starts all the same, and the result
+// names the first error.
+func TestFailedRelinkStillStarts(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a folder of mode 0")
+	}
+	s, ran, home := accountTest(t)
+	writeDefault(t, home, ".claude/settings.json")
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "one", Account: "work", NewAccount: true}))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	def := filepath.Join(home, ".claude")
+	if err := os.Chmod(def, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(def, 0o700) })
+	*ran = nil
+	res = s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "two", Account: "work"}))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	if len(res.Skipped) != 1 || !strings.HasPrefix(res.Skipped[0], "some shared entries did not link: ") || !strings.Contains(res.Skipped[0], "permission denied") {
+		t.Fatalf("skipped %q", res.Skipped)
+	}
+}
+
+func TestStokerStartsOnDefaultOnly(t *testing.T) {
+	for _, n := range []proto.NewSession{
+		{Agent: "claude", Name: "n88", Account: "work"},
+		{Agent: "claude", Name: "n88", Account: "fresh", NewAccount: true},
+		{Agent: "claude", Name: "n88", Account: "default", NewAccount: true},
+	} {
+		s, ran := handsLife(t)
+		n.Where = t.TempDir()
+		b := newAct(t, n)
+		if res := s.act(t.Context(), fromStokerAct("new:session", b.Text)); res.Err != "the stoker starts on default only" || len(*ran) != 0 {
+			t.Fatalf("%+v: err %q ran %q", n, res.Err, *ran)
+		}
+	}
+}
+
+// switchAccountTest is accountTest with switchTest's holds and /work/app.
+func switchAccountTest(t *testing.T) (*Service, *[][]string, string) {
+	t.Helper()
+	s, ran, home := accountTest(t)
+	s.IsDir = func(path string) bool {
+		fi, err := os.Stat(path)
+		return path == "/work/app" || err == nil && fi.IsDir()
+	}
+	hs, err := holds.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Holds = hs
+	return s, ran, home
+}
+
+func TestSwitchUsesTheTargetsLastAccount(t *testing.T) {
+	s, ran, home := switchAccountTest(t)
+	folder := prepared(t, home, "codex", "team")
+	if res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "codex", Name: "a1", Account: "team"})); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	*ran = nil
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff}))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	got := strings.Join((*ran)[0], " ")
+	want := " -u " + panes.HomeEnv + envOn("codex") + " CODEX_HOME=" + folder + ` codex -c cli_auth_credentials_store="file" ` + proto.DefaultHandoff
+	if !strings.HasSuffix(got, want) {
+		t.Fatalf("ran %q, want it to end %q", got, want)
+	}
+	if slices.Contains((*ran)[0], "new-session") || strings.Contains(got, " -e ") {
+		t.Fatalf("the env is not on the command: %q", got)
+	}
+	if got := lastOf(s, "codex"); got != "team" {
+		t.Fatalf("the switch changed the remembered account: %q", got)
+	}
+}
+
+func TestSwitchOnAGoneAccountUsesDefault(t *testing.T) {
+	s, ran, home := switchAccountTest(t)
+	folder := prepared(t, home, "codex", "team")
+	if res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "codex", Name: "a1", Account: "team"})); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if err := os.RemoveAll(folder); err != nil {
+		t.Fatal(err)
+	}
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	*ran = nil
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"}))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	if got := strings.Join((*ran)[0], " "); strings.Contains(got, "CODEX_HOME") || strings.Contains(got, "cli_auth_credentials_store") || !strings.HasSuffix(got, " -u "+panes.HomeEnv+" codex") {
+		t.Fatalf("ran %q, want the default", got)
+	}
+}
+
+func TestSwitchNeverMakesAnAccount(t *testing.T) {
+	s, ran, home := switchAccountTest(t)
+	// The file names an account that is not there, and a hand-made folder
+	// no live session runs on.
+	for _, label := range []string{"ghost", "~/.codex-old"} {
+		s.lastAccounts.set(lastAccountsPath(s.StatePath), "codex", label)
+		*ran = nil
+		res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"}))
+		if res.Err != "" || len(*ran) != 1 {
+			t.Fatalf("%s: err %q ran %q", label, res.Err, *ran)
+		}
+		if got := strings.Join((*ran)[0], " "); strings.Contains(got, "CODEX_HOME") {
+			t.Fatalf("%s: ran %q, want the default", label, got)
+		}
+		if _, err := os.Lstat(accounts.Root(home)); !os.IsNotExist(err) {
+			t.Fatalf("%s: the switch made the accounts root: %v", label, err)
+		}
+	}
+}
+
+// TestSwitchOnACursorAccountOffMacOSUsesDefault: Cursor accounts run on
+// macOS only, so a switch elsewhere starts Cursor on the default.
+func TestSwitchOnACursorAccountOffMacOSUsesDefault(t *testing.T) {
+	s, ran, home := switchAccountTest(t)
+	prepared(t, home, sample.CursorAgent, "team")
+	s.lastAccounts.set(lastAccountsPath(s.StatePath), sample.CursorAgent, "team")
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "cursor-agent"}))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	if got := strings.Join((*ran)[0], " "); strings.Contains(got, "CURSOR_CONFIG_DIR") {
+		t.Fatalf("ran %q, want the default", got)
+	}
+}
+
+// TestSwitchWithAFailedRelinkStillSwitches: a like-default account whose
+// entries do not link again switches all the same, and says so.
+func TestSwitchWithAFailedRelinkStillSwitches(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a folder of mode 0")
+	}
+	s, ran, home := switchAccountTest(t)
+	writeDefault(t, home, ".codex/config.toml")
+	if res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "codex", Name: "one", Account: "team", NewAccount: true})); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	def := filepath.Join(home, ".codex")
+	if err := os.Chmod(def, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(def, 0o700) })
+	// The new account is the last one once its session is signed in.
+	snap := lifeSnap(false)
+	snap.Sessions[2].AccountDir, snap.Sessions[2].Account = accounts.Folder(home, "codex", "team"), "you@example.com"
+	s.publish(snap, func(state.Doc) {})
+	*ran = nil
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"}))
+	if res.Err != "" || len(*ran) != 1 || !strings.Contains(strings.Join((*ran)[0], " "), "CODEX_HOME=") {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	if note, ok := proto.NotLinkedNote(res); !ok || !strings.Contains(note, "permission denied") {
+		t.Fatalf("skipped %q", res.Skipped)
+	}
+}
+
+// signInEnv is what an account start unsets, per agent: the sign-in a tmux
+// server can pass on.
+var signInEnv = map[string][]string{
+	"claude":       {"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"},
+	"codex":        {"CODEX_API_KEY", "CODEX_ACCESS_TOKEN", "OPENAI_API_KEY"},
+	"cursor-agent": {"CURSOR_API_KEY", "CURSOR_AUTH_TOKEN"},
+}
+
+// envOn is the start of the env command of an account start, joined by
+// spaces: env and the unsets of agent's sign-in.
+func envOn(agent string) string {
+	out := " env"
+	for _, n := range signInEnv[agent] {
+		out += " -u " + n
+	}
+	return out
+}
+
+// unsetsBefore says whether argv has `env -u <each name> ...` before want.
+func unsetsBefore(argv []string, names []string, want string) bool {
+	at := slices.Index(argv, want)
+	if at < 0 {
+		return false
+	}
+	for _, n := range names {
+		i := slices.Index(argv, n)
+		if i < 1 || i > at || argv[i-1] != "-u" {
+			return false
+		}
+	}
+	return true
+}
+
+// TestAccountStartDropsTheServersSignIn: a start on an account unsets the
+// sign-in env of its agent, so the account's own sign-in is used. A start
+// on default keeps it.
+func TestAccountStartDropsTheServersSignIn(t *testing.T) {
+	for agent, names := range signInEnv {
+		s, ran, home := accountTest(t)
+		s.GOOS = "darwin" // Cursor accounts run on macOS only
+		folder := prepared(t, home, agent, "work")
+		res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: agent, Name: "a1", Account: "work"}))
+		if res.Err != "" || len(*ran) != 1 {
+			t.Fatalf("%s: err %q ran %q", agent, res.Err, *ran)
+		}
+		first := accounts.Env(agent, folder, false)[0]
+		if !unsetsBefore((*ran)[0], names, first) {
+			t.Errorf("%s: ran %q, want %v unset before %s", agent, (*ran)[0], names, first)
+		}
+		*ran = nil
+		if res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: agent, Name: "a2", Account: "default"})); res.Err != "" || len(*ran) != 1 {
+			t.Fatalf("%s default: err %q ran %q", agent, res.Err, *ran)
+		}
+		for _, n := range names {
+			if slices.Contains((*ran)[0], n) {
+				t.Errorf("%s: a default start unsets %s: %q", agent, n, (*ran)[0])
+			}
+		}
+	}
+}
+
+// TestAccountSwitchDropsTheServersSignIn: a switch onto an account unsets
+// the sign-in env of the new agent.
+func TestAccountSwitchDropsTheServersSignIn(t *testing.T) {
+	s, ran, home := switchAccountTest(t)
+	folder := prepared(t, home, "codex", "team")
+	if res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "codex", Name: "a1", Account: "team"})); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	*ran = nil
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"}))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	if !unsetsBefore((*ran)[0], signInEnv["codex"], "CODEX_HOME="+folder) {
+		t.Errorf("ran %q, want %v unset", (*ran)[0], signInEnv["codex"])
 	}
 }

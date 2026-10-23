@@ -6,6 +6,71 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A new session starts on the account you pick, or on a new one.** `N`
+  picks the account. Claude Code and Codex sessions can run on an account
+  folder beside your default sign-in, and Cursor sessions on macOS only for
+  now. A new account is set up like the default, copied from it, or empty.
+  matchblox presses through the agent's first screens to its sign-in link,
+  and you finish the sign-in in the session. matchblox never writes the
+  default sign-in. That the agents also leave the default sign-in as it was
+  is not tested yet with a second real sign-in.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **`N` opens on the agent and the account you last started.** matchblox
+  remembers the last agent, and the last account of each agent, across
+  restarts. `matchblox new` without `--account` does not change the account
+  `N` opens on. A console that has started something keeps its own last
+  agent. The agent the service remembers opens only a console that has
+  started nothing yet, for example after a restart. A new account becomes
+  the account `N` opens on only once a session on it is signed in.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **Switch agent (`A`) starts the new agent on its last account.** This is
+  the account you last started that agent on, while it is still there;
+  else `default`. The confirm line names it. A switch never makes an
+  account, and it does not change the account `N` opens on. A switch on a
+  second real sign-in is not tested yet.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **`matchblox new` takes `--account <name>`, `--new-account` and
+  `--setup like-default|copy|empty`.** `--setup` needs `--new-account`, and
+  `--new-account` needs `--account`.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **A start on a new account asks for a typed `y`.** The row says
+  `signing in` until the account is signed in, and `sign in by hand` when
+  matchblox does not recognise the agent's first screens within 20 seconds.
+  An ask or a wait shows over both words. matchblox never reads a sign-in
+  code and never types a password.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- A start or a switch on an account drops the agent's sign-in environment
+  that the tmux server can pass on (such as `ANTHROPIC_API_KEY`,
+  `OPENAI_API_KEY` or `CURSOR_API_KEY`), so the account's own sign-in is
+  used. A start on `default` keeps it.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- The stoker starts sessions on `default` only.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- Cursor accounts read their plan usage from the account's `auth.json`, with
+  `cursor_usage = true` (not tested yet with a second real sign-in).
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- USAGE and Sessions name each account, and a new account shows `signing in`
+  until it is. A folder that you made by hand never shows `signing in`.
+  `matchblox usage` names each account folder, and `matchblox sessions
+  --json` gives `account_dir` and `signing_in`.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+
+### Fixed
+
+- An agent that the Codex app-server runs (such as `codex exec`) is not
+  a session, and a `node` launch of `codex app-server` is no session either.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- A Cursor login that you just signed in to reads its plan usage within 30
+  seconds, not after up to 5 minutes. Only a missing login is read again
+  every 30 seconds. A token read that is denied or fails otherwise (the
+  Keychain or `auth.json`) waits the normal interval, and USAGE says
+  "Cursor's login token could not be read". USAGE says that Cursor's API
+  has not answered yet only while the token is read or after matchblox
+  asked the API.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+
 ## [0.21.0] - 2026-10-23
 
 ### Added
@@ -149,6 +214,7 @@ All notable changes to matchblox are in this file. The format follows
   no id and could not be held; the id now comes from its rollout, and its
   pane still tells busy from idle.
   ([#182](https://github.com/blox-eng/matchblox/issues/182))
+||||||| b29edc3
 
 ## [0.17.4] - 2026-10-22
 

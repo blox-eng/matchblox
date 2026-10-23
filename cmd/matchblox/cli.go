@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/said"
@@ -105,6 +106,8 @@ type sessionJSON struct {
 	ContextPct float64   `json:"context_pct"`
 	PlanPct    *int      `json:"plan_pct"`
 	Account    string    `json:"account"`
+	AccountDir string    `json:"account_dir"`
+	SigningIn  bool      `json:"signing_in"`
 	Ship       *shipJSON `json:"ship"`
 }
 
@@ -143,7 +146,8 @@ func sessionRows(doc state.Doc) []sessionJSON {
 	rows := []sessionJSON{}
 	for _, s := range doc.Sessions {
 		r := sessionJSON{Name: s.Name, Pane: s.Pane, Target: s.Target, Status: s.Status, Word: stoker.Word(s),
-			Reason: doc.Reasons[s.Pane].Word, Held: heldBy(doc, s), Stoker: doc.StokerServer != "" && s.Server() == doc.StokerServer, ContextPct: s.ContextPct, Account: s.Account}
+			Reason: doc.Reasons[s.Pane].Word, Held: heldBy(doc, s), Stoker: doc.StokerServer != "" && s.Server() == doc.StokerServer, ContextPct: s.ContextPct, Account: s.Account,
+			AccountDir: s.AccountDir, SigningIn: s.SigningIn}
 		if s.Progress != nil {
 			r.PlanPct = &s.Progress.Pct
 		}
@@ -212,7 +216,12 @@ func writeUsage(w io.Writer, doc state.Doc, asJSON bool) error {
 		return writeJSON(w, accts)
 	}
 	for _, a := range accts {
-		line := fmt.Sprintf("%-10s %-24s", a.Provider, a.Account)
+		// An account folder is named as the console names it: by its folder.
+		who := a.Account
+		if a.Dir != "" {
+			who = accounts.Name(a.Dir)
+		}
+		line := fmt.Sprintf("%-10s %-24s", a.Provider, who)
 		for _, u := range a.Uses(doc.At) {
 			line += fmt.Sprintf("  %s %.0f%%", u.Name, u.Pct)
 		}

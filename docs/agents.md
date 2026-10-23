@@ -119,11 +119,140 @@ On a wide screen, Sessions shows the account of each session: the
 provider's mark, then the email and plan, or "API key". Only those two
 fields are read from the agent's auth files; no token reaches the console.
 Cursor's is the email and team its CLI keeps in `~/.cursor/cli-config.json`
-(`⬢ you@example.com · Acme`), and USAGE lists the account. Its plan usage,
+(`⬢ you@example.com · Acme`), or in `<folder>/cfg/cli-config.json` for an
+account, and USAGE lists the account. Its plan usage,
 the share of the month's included usage as Cursor's `/usage` shows it,
 needs `cursor_usage = true` under `[limits]`: matchblox then asks Cursor's
 API with the login token Cursor's CLI keeps in the macOS Keychain (see
-[Safety](safety.md)).
+[Safety](safety.md)). Each Cursor account's usage reads that account's
+`auth.json` instead (see [Limits](limits.md)). This is not tested yet with
+a second real sign-in.
+
+## Accounts
+
+Claude Code, Codex and Cursor can run on more than one sign-in at a time.
+Each extra sign-in is an account. The sign-in you already have is the
+account `default`. matchblox never writes it. OpenCode has no accounts.
+Cursor accounts run on macOS only for now: on Linux, Cursor keeps its
+sign-in under `~/.config`, which the account's `HOME` links.
+
+Start a session on an account with `N` (the account line) or
+`matchblox new --account work`. Make an account with `+ new account` in
+`N`, or with `matchblox new --account work --new-account`. Add
+`--setup like-default|copy|empty` to pick its setup. The default is
+`like-default`. `--setup` needs `--new-account`, and `--new-account` needs
+`--account`.
+
+`N` opens on the agent you last started, and the account line on the
+account you last started for that agent. If there is none, or the account
+is gone, it opens on `default`. matchblox remembers both across restarts.
+A new account becomes the last account only when matchblox sees a session
+on it that is signed in. Until then, `N` and Switch agent use the account
+from before.
+`matchblox new` without `--account` starts on `default` and does not change
+the account `N` opens on. A console that has started something keeps its
+own last agent. The agent the service remembers, which a CLI start can
+change, opens only a console that has started nothing yet, for example
+after a restart.
+
+Switch agent (`A`, or `matchblox switch`) starts the new agent on the
+account you last started that agent on, while it is still there; else on
+`default`. In the console, the confirm line names the account. A switch
+never makes an account, and does not change the account `N` opens on. A
+switch on a second real sign-in is not tested yet.
+
+Where an account lives:
+
+- Each account is a folder, `~/.matchblox/accounts/<agent>/<name>`, with
+  mode 0700. `<agent>` is `claude`, `codex` or `cursor-agent`.
+- A name is 1 to 10 characters: lowercase letters, digits and dashes.
+  `default` is not a folder. Codex keeps a socket in the folder, and a
+  socket path has a length cap: with a long home path, use a shorter name.
+- Remove an account: delete its folder.
+- A Claude Code or Codex folder you made by hand, such as
+  `~/.claude-work`, is listed while a session of that agent runs on it.
+  matchblox never makes such a folder, and its row never says
+  `signing in`. A Cursor folder counts as an
+  account only under `~/.matchblox/accounts/cursor-agent`.
+- On a Codex folder you made by hand, matchblox does not add
+  `-c cli_auth_credentials_store="file"`: the folder can keep its sign-in
+  in the keyring.
+
+The setup of a new account:
+
+- **like default** links the default's entries into the account. Every
+  account shares one setup: skills, plugins, settings and hooks.
+- **copy of default** copies those entries once. The account can then
+  change on its own. Settings can hold tokens: the copies stay on this
+  machine, in the account folder.
+- **empty** shares nothing. The agent starts as on its first run.
+
+Whatever the setup, matchblox never shares these entries. They stay per
+account:
+
+- Claude Code: `.claude.json`, `.credentials.json`, `projects`,
+  `sessions`, `history.jsonl`, `backups`, `remote-settings.json*`,
+  `policy-limits.json*`, `stats-cache.json` and `state`.
+- Codex: `auth.json`, `sessions`, `archived_sessions`, `history.jsonl`,
+  `session_index.jsonl`, `*.sqlite*`, `app-server-control`,
+  `app-server-daemon`, `packages`, `.tmp` and `installation_id`: the
+  accounts do not share one Codex install id.
+- Cursor, in `home/.cursor`: `auth.json`, `cli-config.json`, `chats`,
+  `projects`, `agent-cli-state.json`, `statsig-cache.json`, `ai-tracking`
+  and `managed`.
+
+These lists are checked against the folders of Claude Code 2.1.308,
+codex-cli 0.163.0 and Cursor 2026.10.19. A later version can add an entry
+that holds state: matchblox then shares it until the list names it.
+
+Each account folder also has `.matchblox-setup`, one line with its setup.
+At each start of a `like-default` account, matchblox links the entries the
+default got since. It never replaces or removes an entry. When a link
+fails, the session starts all the same, and the result says "some shared
+entries did not link" with the first error. A copy or empty
+account stays as it is. A folder with no `.matchblox-setup` is
+`like-default`.
+
+User scope MCP servers sit in `~/.claude.json`, which matchblox does not
+share, as it can hold tokens. In an account, use a plugin or a project
+`.mcp.json` instead.
+
+Cursor runs an account with a `HOME` of its own. That `HOME` links the
+entries of your real `HOME`, except `.cursor` and `.matchblox`, so git,
+ssh, gh and your shell work as usual. matchblox starts an account with
+`AGENT_CLI_CREDENTIAL_STORE=file`, so Cursor keeps the sign-in in a file
+and not in the Keychain entry of your default login. This is not tested
+yet with a second real sign-in. Never set `CURSOR_API_KEY` for an account:
+it replaces the account's sign-in with the key's.
+
+A start or a switch on an account drops the sign-in environment that the
+tmux server can pass on, so the account's own sign-in is used:
+
+- Claude Code: `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY` and
+  `ANTHROPIC_AUTH_TOKEN`.
+- Codex: `CODEX_API_KEY`, `CODEX_ACCESS_TOKEN` and `OPENAI_API_KEY`.
+- Cursor: `CURSOR_API_KEY` and `CURSOR_AUTH_TOKEN`.
+
+A start on `default` keeps them.
+
+Codex: each account's sessions read their logs and limits from that
+account's home, never from the default's. The app-server process (`codex
+app-server`) is not a session: Sessions does not list it. An agent that
+the app-server runs (such as `codex exec`) is not a session either.
+
+A new account starts in a session where you sign in. matchblox presses
+through the first screens of the agent to its sign-in link: for Claude
+Code, the theme and the login method; for Codex, the device code; for
+Cursor, any key. You finish the sign-in in the session. Until then the
+row says `signing in`. If matchblox does not recognise the screens within
+20 seconds, or cannot find the pane, the row says `sign in by hand`. An ask
+or a wait of the session shows over both words. matchblox never reads a
+sign-in code from the pane and never types a password. If a new account
+does not start, matchblox removes the folder it made for it.
+
+In the console, a start on a new account asks for a typed `y`, and a start
+on an account that exists runs on `Enter`. `matchblox new` sends the
+confirm itself.
 
 ## How an agent tells that it waits
 

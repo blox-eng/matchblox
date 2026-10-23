@@ -33,6 +33,12 @@ func keys(target string, args ...string) []string {
 	return slices.Concat(tmux, []string{"send-keys", "-t", id}, args)
 }
 
+// Keys is the send-keys step that presses keys (tmux key names) in the
+// pane, on the tmux server it is on.
+func Keys(target string, ks ...string) []string {
+	return keys(target, ks...)
+}
+
 // Pause is a step between two keys that change the question tool's page:
 // keys sent before the next page draws are lost.
 var Pause = []string{"sleep", "0.3"}

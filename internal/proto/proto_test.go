@@ -103,3 +103,22 @@ func TestEachMessageIsOneLine(t *testing.T) {
 		t.Fatalf("want exactly one trailing newline, got %q", buf.String())
 	}
 }
+
+func TestNotLinkedNoteIsTheOnlySkipOfARunAct(t *testing.T) {
+	note := NotLinked + "permission denied"
+	for _, c := range []struct {
+		r    Result
+		want bool
+	}{
+		{Result{Skipped: []string{note}}, true},
+		{Result{}, false},
+		{Result{Skipped: []string{"guard stopped it"}}, false},
+		{Result{Skipped: []string{note, "guard stopped it"}}, false},
+		{Result{Err: "no tmux", Skipped: []string{note}}, false},
+	} {
+		got, ok := NotLinkedNote(c.r)
+		if ok != c.want || ok && got != note || !ok && got != "" {
+			t.Errorf("%+v: %q %v", c.r, got, ok)
+		}
+	}
+}

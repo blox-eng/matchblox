@@ -186,3 +186,81 @@ func TestSwitchJumpsOnlyAfterItRan(t *testing.T) {
 		t.Fatalf("%q %v", buf.String(), err)
 	}
 }
+
+func TestNewTakesAnAccount(t *testing.T) {
+	a, err := newSessionAct(nil, newOpts{where: "/work/app", agent: "codex", account: "work"}, "", "/home/u")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n proto.NewSession
+	if err := json.Unmarshal([]byte(a.Text), &n); err != nil {
+		t.Fatal(err)
+	}
+	if n != (proto.NewSession{Where: "/work/app", Agent: "codex", Account: "work"}) {
+		t.Fatalf("%+v", n)
+	}
+	// A new account is set up like the default unless --setup says otherwise.
+	a, err = newSessionAct(nil, newOpts{where: "/work/app", account: "work", newAccount: true}, "", "/home/u")
+	if err != nil || !strings.Contains(a.Text, `"new_account":true`) || !strings.Contains(a.Text, `"setup":"like-default"`) {
+		t.Fatalf("%s %v", a.Text, err)
+	}
+	a, err = newSessionAct(nil, newOpts{account: "work", newAccount: true, setup: "copy"}, "", "/home/u")
+	if err != nil || !strings.Contains(a.Text, `"setup":"copy"`) {
+		t.Fatalf("%s %v", a.Text, err)
+	}
+}
+
+func TestNewAccountNeedsAName(t *testing.T) {
+	_, err := newSessionAct(nil, newOpts{newAccount: true}, "", "/home/u")
+	if err == nil || !strings.Contains(err.Error(), "--new-account needs --account") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestSetupNeedsNewAccount(t *testing.T) {
+	_, err := newSessionAct(nil, newOpts{account: "work", setup: "copy"}, "", "/home/u")
+	if err == nil || !strings.Contains(err.Error(), "--setup needs --new-account") {
+		t.Fatalf("%v", err)
+	}
+	_, err = newSessionAct(nil, newOpts{account: "work", newAccount: true, setup: "bogus"}, "", "/home/u")
+	if err == nil || !strings.Contains(err.Error(), "like-default, copy or empty") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestNewAccountTakesNoFirstMessage(t *testing.T) {
+	_, err := newSessionAct([]string{"fix", "it"}, newOpts{account: "work", newAccount: true}, "", "/home/u")
+	if err == nil || !strings.Contains(err.Error(), "without a first message") {
+		t.Fatalf("%v", err)
+	}
+}
+
+// TestNewThatRanThoughLinksFailedSucceeds: a start whose shared entries did
+// not all link ran: the command succeeds and prints the note.
+func TestNewThatRanThoughLinksFailedSucceeds(t *testing.T) {
+	var buf bytes.Buffer
+	note := proto.NotLinked + "open /home/u/.claude: permission denied"
+	if err := newOutcome(&buf, proto.Result{Ran: [][]string{{"tmux", "new-session"}}, Skipped: []string{note}}); err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "tmux new-session\n"+note+"\n" {
+		t.Fatalf("%q", buf.String())
+	}
+	if err := newOutcome(&buf, proto.Result{Skipped: []string{"tmux: a guard stopped it"}}); err == nil {
+		t.Fatal("any other skip is a refusal")
+	}
+}
+
+// TestSwitchThatRanThoughLinksFailedSaysSo: a switch whose account's new
+// shared entries did not all link ran: it says so after it switched.
+func TestSwitchThatRanThoughLinksFailedSaysSo(t *testing.T) {
+	var buf bytes.Buffer
+	note := proto.NotLinked + "open /home/u/.codex: permission denied"
+	sock := switchService(t, proto.Result{Ran: [][]string{{"tmux", "respawn-pane"}}, Skipped: []string{note}})
+	if err := cliSwitch([]string{"api"}, switchOpts{agent: "codex"}, &buf, sock, nil); err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "switched api to codex\n"+note+"\n" {
+		t.Fatalf("%q", buf.String())
+	}
+}

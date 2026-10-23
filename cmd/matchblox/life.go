@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
@@ -94,11 +95,16 @@ func switchAct(doc state.Doc, words []string, o switchOpts, from string) (proto.
 }
 
 // newOpts are matchblox new's flags.
-type newOpts struct{ where, agent, branch, name string }
+type newOpts struct {
+	where, agent, branch, name string
+	account, setup             string
+	newAccount                 bool
+}
 
 // newSessionAct is the act of matchblox new: an agent (claude by default)
 // in a tmux session of its own, in --where (here by default), with the
-// words as its first message.
+// words as its first message. --account picks an account of the agent;
+// --new-account makes it, set up as --setup says (like-default by default).
 func newSessionAct(words []string, o newOpts, from, here string) (proto.Act, error) {
 	n := proto.NewSession{Where: o.where, Agent: o.agent, Branch: o.branch, Name: o.name, First: strings.Join(words, " ")}
 	switch {
@@ -110,6 +116,27 @@ func newSessionAct(words []string, o newOpts, from, here string) (proto.Act, err
 	if n.Agent == "" {
 		n.Agent = "claude"
 	}
+	if o.newAccount && o.account == "" {
+		return proto.Act{}, errors.New("new: --new-account needs --account <name>")
+	}
+	if o.newAccount && len(words) > 0 {
+		return proto.Act{}, errors.New("new: a new account starts without a first message")
+	}
+	if o.setup != "" && !o.newAccount {
+		return proto.Act{}, errors.New("new: --setup needs --new-account")
+	}
+	if o.newAccount {
+		n.Setup = o.setup
+		if n.Setup == "" {
+			n.Setup = string(accounts.LikeDefault)
+		}
+		switch accounts.Mode(n.Setup) {
+		case accounts.LikeDefault, accounts.Copy, accounts.Empty:
+		default:
+			return proto.Act{}, fmt.Errorf("new: --setup is like-default, copy or empty, not %q", o.setup)
+		}
+	}
+	n.Account, n.NewAccount = o.account, o.newAccount
 	b, err := json.Marshal(n)
 	if err != nil {
 		return proto.Act{}, err
@@ -150,10 +177,25 @@ func cliNew(words []string, o newOpts, w io.Writer, path string) error {
 		}
 		return fmt.Errorf("new: did not run: %w", err)
 	}
-	if err := reportResult(w, res); err != nil {
+	if err := newOutcome(w, res); err != nil {
 		return fmt.Errorf("new: refused: %w", err)
 	}
 	return nil
+}
+
+// newOutcome is reportResult for a new session: a start whose new shared
+// entries did not all link ran, and the note follows its steps.
+func newOutcome(w io.Writer, res proto.Result) error {
+	note, ok := proto.NotLinkedNote(res)
+	if !ok {
+		return reportResult(w, res)
+	}
+	res.Skipped = nil
+	if err := reportResult(w, res); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintln(w, note)
+	return err
 }
 
 // cliSwitch switches the session's agent and, when jump is not nil, takes
@@ -173,6 +215,11 @@ func cliSwitch(words []string, o switchOpts, w io.Writer, path string, jump func
 	}
 	if _, err := fmt.Fprintf(w, "switched %s to %s\n", words[0], o.agent); err != nil {
 		return err
+	}
+	if note, ok := proto.NotLinkedNote(res); ok {
+		if _, err := fmt.Fprintln(w, note); err != nil {
+			return err
+		}
 	}
 	if jump == nil {
 		return nil
