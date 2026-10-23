@@ -6,6 +6,37 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The phone buzzes when an agent waits, with the app closed.** A new
+  wait buzzes the phone through a small relay that stores nothing. The
+  buzz text is sealed to the phone. Run `matchblox serve` with the door
+  "Keep matchblox running" and no console needs to be open. Set
+  `[push] off = true` to stop it.
+- **The island shows the session that matters most, or your usage.** The
+  Live Activity has two faces, Sessions and Usage, and the app's `Island`
+  screen sets which one, which host it follows and which hosts buzz. A wait
+  breaks through the Usage face for 60 s.
+- **A tap opens that session.** The activity, its `Answer` and a buzz open
+  the console on that session after Face ID; with no session on top, the
+  host's console. The app needs iOS 18.
+
+### Changed
+
+- **The app needs iOS 18.** It needed 17.2. The island's channel needs
+  iOS 18.
+- **A phone paired before this release gets an id.** At start the service
+  gives each old phone line in `~/.ssh/authorized_keys` an id, with a
+  backup, so the phone can register for the buzz without pairing again.
+  A line whose matchblox is older than v0.13 stays as it is: that gate
+  would refuse the id. `serve.log` says how many lines it changed and how
+  many it left.
+- **`matchblox devices` shows the push of each phone.** A phone's row says
+  `buzz on` or `buzz off` (with why: `[push] off`, or no host key), and
+  `island yes` or `island no`. The service's last push failure shows under
+  the list.
+- **`[push] relay` names the relay.** It is `https://matchblox.sh`.
+
 ## [0.20.0] - 2026-10-23
 
 ### Added

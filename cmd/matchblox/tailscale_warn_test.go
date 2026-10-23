@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -124,7 +125,8 @@ func TestServeWarnsTailscaleSSHGate(t *testing.T) {
 	}()
 	old := os.Stderr
 	os.Stderr = w
-	go serve(path, newService(config.Default(), fixtures(t))) //nolint:errcheck // ends with the test
+	s := newService(config.Default(), fixtures(t))
+	go serve(path, func() *service.Service { return s }) //nolint:errcheck // ends with the test
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) && transport.Owner(path) == 0 {
 		time.Sleep(10 * time.Millisecond)
@@ -150,7 +152,8 @@ func TestServeSkipsTailscaleWarnWhenAlreadyRunning(t *testing.T) {
 	}
 	old := os.Stderr
 	os.Stderr = w
-	err = serve(path, newService(config.Default(), fixtures(t)))
+	s := newService(config.Default(), fixtures(t))
+	err = serve(path, func() *service.Service { return s })
 	_ = w.Close()
 	os.Stderr = old
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/limits"
+	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/stoker"
 )
 
@@ -117,7 +118,7 @@ func TestHookReachesService(t *testing.T) {
 		}
 		return ""
 	}
-	go serve(sock, s) //nolint:errcheck // ends with the test process
+	go serve(sock, func() *service.Service { return s }) //nolint:errcheck // ends with the test process
 	deadline := time.Now().Add(5 * time.Second)
 	for len(s.State().Sessions) == 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)

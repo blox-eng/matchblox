@@ -351,6 +351,15 @@ func TestParsePanesSkipsJunk(t *testing.T) {
 	}
 }
 
+// A tap on the phone gives it a session grouped with the pane's: tmux then
+// lists the pane once for each session, and it is still one pane.
+func TestParsePanesListsAGroupedPaneOnce(t *testing.T) {
+	got := ParsePanes([]byte("%1\twork:1.1\tw\t10\tclaude\t/x\t/tmp/s\t7\n%1\twork-1:1.1\tw\t10\tclaude\t/x\t/tmp/s\t7\n%1\tother:1.1\tw\t20\tzsh\t/y\t/tmp/t\t8\n"))
+	if len(got) != 2 || got[0].Target != "work:1.1" || got[1].Server != "8" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
 func TestOrphanFlaggedAfterSustainedCPU(t *testing.T) {
 	root := copyFixture(t)
 	s := newFixtureSampler(root)

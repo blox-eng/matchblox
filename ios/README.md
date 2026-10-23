@@ -5,7 +5,7 @@ It pairs with your host by QR code. Then it connects over SSH.
 
 ## Build
 
-You need a Mac with Xcode 16 and Homebrew.
+You need a Mac with Xcode 16 and Homebrew. The app needs iOS 18.0 or later.
 
 1. `make install` installs XcodeGen.
 2. `make gen` makes `Matchblox.xcodeproj` from `project.yml`.
@@ -19,13 +19,23 @@ Trust & Enable. Xcode asks only once.
 If the build says that the Metal Toolchain is missing, run
 `xcodebuild -downloadComponent MetalToolchain`. SwiftTerm needs it.
 
+The app has two extensions: MatchbloxIsland (the Live Activity) and
+MatchbloxBuzz (the buzz). Set your team on all three targets. The app needs
+these capabilities: Push Notifications, App Attest, App Groups
+(`group.com.blox.matchblox`) and Keychain Sharing
+(`com.blox.matchblox`, the app's own and first, then
+`com.blox.matchblox.shared`). The extensions carry the App Group, and the
+buzz also the shared keychain group, which holds only the notification key.
+
 If Xcode says that the bundle identifier is not available, give your
-build its own identifier. Do not change `project.yml`:
+build its own identifier. Do not change `project.yml`. The app, both
+extensions, the App Group and the keychain group all derive from the one
+setting `MATCHBLOX_BUNDLE_ID`, so one override is enough:
 
 ```sh
 xcodebuild -scheme Matchblox -destination 'id=<device id>' \
   -allowProvisioningUpdates DEVELOPMENT_TEAM=<team> \
-  PRODUCT_BUNDLE_IDENTIFIER=com.blox.matchblox.<you> build
+  MATCHBLOX_BUNDLE_ID=com.blox.matchblox.<you> build
 ```
 
 `xcrun devicectl list devices` shows the device id.
@@ -83,3 +93,38 @@ device before a release. `ws-1` is the host.
 16. Select a session in tmux and tap `A switch` under it. Switch agent
     opens; tap another agent, then `Enter`, then type `y`. The console
     jumps to the pane, where the new agent starts.
+
+### The buzz and the island
+
+Use a private test host with its own `matchblox serve` (the door
+`Keep matchblox running` in `matchblox setup`). `ws-1` is the host; `work-1`
+is a second paired host.
+
+17. Open the console of `ws-1` once, so the app registers. Allow
+    notifications when the app asks. `matchblox devices` on `ws-1` shows
+    `push` next to the device.
+18. The buzz with the app closed: quit the app. Make a session on `ws-1`
+    wait. The device shows `ws-1 · <session> waits: "<question>"` within
+    30 s, with no app open.
+19. Push to start: with no island on the device, start a session on
+    `ws-1`. The island starts with the app closed.
+20. Both faces: on the Island screen (Hosts, then Island), pick `Sessions`.
+    The island shows the Sessions face. Pick `Usage`: it shows the windows
+    and the forecast. Pick `Auto (Usage while the stoker runs)`, then turn
+    the stoker on and off on the host: the face follows.
+21. Show changes the face at once, with no Face ID and no connect.
+22. A second host buzzes and does not take the island: keep `Follow` on
+    `ws-1`, make a session on `work-1` wait. The device buzzes for `work-1`;
+    the island still shows `ws-1`.
+23. Change `Follow` to `work-1`. One Face ID; then the island of `ws-1` ends
+    and `work-1` can start one. Turn off the network of `ws-1` first, and
+    the screen says `ws-1 is not reachable: it changes at the next connect`.
+24. Turn `Buzz` off for `ws-1`. One Face ID. A wait on `ws-1` no longer
+    buzzes; `work-1` still does.
+25. A tap opens the session: tap the island, and tap a buzz. After Face ID,
+    the console of that host opens on that session. A session that ended
+    says `That session ended.`
+26. Stray activities end at launch: follow `ws-1`, let its island run,
+    then make `ws-1` unreachable and change `Follow` to `work-1`. The island
+    of `ws-1` shows nothing. Quit and open the app: the activity of `ws-1`
+    is gone.

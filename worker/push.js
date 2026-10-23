@@ -1,0 +1,450 @@
+// The push relay on matchblox.sh/push/*. It stores nothing and logs
+// nothing: no console call anywhere in this file, so no payload, token or
+// grant reaches the Worker's logs.
+//
+//   POST /push/grant    an App Attest attestation (first call) or assertion
+//                       (later) → one grant per device or start token, and
+//                       an attest grant that carries the attested key so
+//                       later calls need no storage. No channel: its grant
+//                       comes only with the channel /push/channel makes.
+//   POST /push/channel  an assertion → a new broadcast channel and its grant.
+//   POST /push/channel/delete
+//                       an assertion and a channel's grant → that channel
+//                       deleted at Apple, which keeps at most 10,000.
+//   POST /push/send     an event the host sends (internal/push/relay.go) →
+//                       Apple's status, as the HTTP status and in {status}.
+//
+// A grant is hex(HMAC-SHA256(GRANT_SECRET, kind ":" target)) and opens that
+// one target only.
+//
+// Secrets (RELEASING.md): APNS_KEY (the .p8), APNS_KEY_ID, APNS_TEAM_ID,
+// APNS_BUNDLE_ID, GRANT_SECRET. APNS_ENV = "development" sends to Apple's
+// sandbox and accepts development App Attest keys; anything else is
+// production.
+//
+// Rate limits (wrangler.jsonc "ratelimits", design §3.3): RL_SEND per target
+// on /push/send, RL_GRANT per IP on /push/grant, RL_CHANNEL per IP and per
+// attested key on /push/channel and /push/channel/delete. An IPv6 address
+// counts by its /64. Over a limit the answer is 429. A binding that is
+// missing (tests, local dev) limits nothing.
+
+import { AttestError, fromBase64, verifyAssertion, verifyAttestation } from "./attest.js";
+
+const subtle = globalThis.crypto.subtle;
+const enc = new TextEncoder();
+
+// Apple's hosts, paths and headers, checked 2026-10-21 against:
+// - "Sending notification requests to APNs"
+//   (developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns):
+//   api.push.apple.com:443 / api.sandbox.push.apple.com:443, POST
+//   /3/device/<token>, authorization "bearer <token>", apns-push-type,
+//   apns-priority (10, 5 or 1), apns-topic (the bundle id).
+// - "Starting and updating Live Activities with ActivityKit push
+//   notifications" (developer.apple.com/documentation/activitykit/…):
+//   apns-push-type liveactivity, apns-topic "<bundle>.push-type.liveactivity";
+//   on a channel, apns-channel-id instead.
+// - "Sending broadcast push notification requests to APNs"
+//   (developer.apple.com/documentation/usernotifications/sending-broadcast-push-notification-requests-to-apns):
+//   POST /4/broadcasts/apps/<bundle> on api.push.apple.com:443, apns-channel-id,
+//   apns-expiration required (0 on a channel that stores no message),
+//   apns-priority, apns-push-type liveactivity.
+// - "Sending channel management requests to APNs"
+//   (developer.apple.com/documentation/usernotifications/sending-channel-management-requests-to-apns):
+//   api-manage-broadcast.push.apple.com:2196 (sandbox
+//   api-manage-broadcast.sandbox.push.apple.com:2195), POST
+//   /1/apps/<bundle>/channels, body {"message-storage-policy": 0|1,
+//   "push-type": "LiveActivity"}, 201 with the id in apns-channel-id;
+//   DELETE on the same path with apns-channel-id deletes one, 404 when
+//   Apple has no such channel.
+// - "Establishing a token-based connection to APNs"
+//   (developer.apple.com/documentation/usernotifications/establishing-a-token-based-connection-to-apns):
+//   ES256, header {alg, kid}, claims {iss: team, iat}; refresh no more than
+//   once each 20 minutes and no less than once each 60.
+export const APPLE = {
+  production: { push: "https://api.push.apple.com", manage: "https://api-manage-broadcast.push.apple.com:2196" },
+  development: { push: "https://api.sandbox.push.apple.com", manage: "https://api-manage-broadcast.sandbox.push.apple.com:2195" },
+  devicePath: (token) => `/3/device/${token}`,
+  broadcastPath: (bundle) => `/4/broadcasts/apps/${bundle}`,
+  channelsPath: (bundle) => `/1/apps/${bundle}/channels`,
+  liveActivityTopic: (bundle) => `${bundle}.push-type.liveactivity`,
+};
+
+// The token's iat is the start of a 50-minute bucket, so every isolate
+// signs the same claims and a token is made again only when the bucket
+// turns: never older than 50 minutes, inside Apple's 20–60 minute window.
+const TOKEN_BUCKET_S = 50 * 60;
+// The longest request body: Apple's broadcast payload is at most 5 KB, an
+// alert 4 KB; with the grant and the target this is ample.
+const MAX_BODY = 16 * 1024;
+// How far the time in client_data may be from now.
+const CLIENT_WINDOW_S = 10 * 60;
+const MAX_ITEMS = 8;
+
+// Each kind, its push type, and the shape of its target.
+const KINDS = {
+  __proto__: null,
+  device: { pushType: "alert", target: /^[0-9a-fA-F]{16,400}$/ },
+  start: { pushType: "liveactivity", target: /^[0-9a-fA-F]{16,400}$/ },
+  channel: { pushType: "liveactivity", target: /^[A-Za-z0-9+/]{4,200}={0,2}$/ },
+};
+
+const hex = (b) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+const fromHex = (s) => Uint8Array.from(s.match(/../g), (x) => parseInt(x, 16));
+const b64url = (b) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const fromB64url = (s) => fromBase64(s.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (s.length % 4)) % 4));
+const sha256 = async (b) => new Uint8Array(await subtle.digest("SHA-256", b));
+
+const hmacKey = (secret) =>
+  subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
+
+// grantFor answers the grant for one target: hex(HMAC(secret, kind ":" value)).
+export async function grantFor(secret, kind, value) {
+  return hex(await subtle.sign("HMAC", await hmacKey(secret), enc.encode(`${kind}:${value}`)));
+}
+
+// checkGrant says whether event.grant opens event.kind:event.target. The
+// compare is HMAC verify, so it takes the same time for any wrong grant.
+export async function checkGrant(secret, event) {
+  const { kind, target, grant } = event ?? {};
+  if (typeof kind !== "string" || !/^[a-z]+$/.test(kind)) return false;
+  if (typeof target !== "string" || target === "") return false;
+  if (typeof grant !== "string" || !/^[0-9a-f]{64}$/.test(grant)) return false;
+  return subtle.verify("HMAC", await hmacKey(secret), fromHex(grant), enc.encode(`${kind}:${target}`));
+}
+
+// attestGrantFor carries an attested key: "<key, base64url>.<hex HMAC>".
+// The HMAC's message has a newline, which no kind has, so it can never be a
+// push grant.
+export async function attestGrantFor(secret, publicKey) {
+  const k = b64url(publicKey);
+  return `${k}.${hex(await subtle.sign("HMAC", await hmacKey(secret), enc.encode(`attest\n${k}`)))}`;
+}
+
+async function openAttestGrant(secret, grant) {
+  const m = typeof grant === "string" && /^([A-Za-z0-9_-]{80,100})\.([0-9a-f]{64})$/.exec(grant);
+  if (!m) return null;
+  const ok = await subtle.verify("HMAC", await hmacKey(secret), fromHex(m[2]), enc.encode(`attest\n${m[1]}`));
+  return ok ? fromB64url(m[1]) : null;
+}
+
+// ---- the APNs token
+
+let cached = null;
+
+// resetTokenCache drops the kept token (tests).
+export function resetTokenCache() {
+  cached = null;
+}
+
+async function apnsToken(env, now) {
+  const iat = Math.floor(now() / 1000 / TOKEN_BUCKET_S) * TOKEN_BUCKET_S;
+  const id = `${env.APNS_TEAM_ID}/${env.APNS_KEY_ID}`;
+  if (cached && cached.id === id && cached.iat === iat) return cached.token;
+  let token;
+  try {
+    const der = fromBase64(String(env.APNS_KEY).replace(/-----[^-]+-----|\s/g, ""));
+    const key = await subtle.importKey("pkcs8", der, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+    const head = b64url(enc.encode(JSON.stringify({ alg: "ES256", kid: env.APNS_KEY_ID })));
+    const claims = b64url(enc.encode(JSON.stringify({ iss: env.APNS_TEAM_ID, iat })));
+    const sig = await subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, enc.encode(`${head}.${claims}`));
+    token = `${head}.${claims}.${b64url(sig)}`;
+  } catch {
+    // The relay's own key, not the caller's input.
+    refuse(500, "relay not configured: APNS_KEY is not a P-256 .p8 key");
+  }
+  cached = { id, iat, token };
+  return token;
+}
+
+// limited says whether key is over the binding's limit. No binding, or a
+// binding that fails, limits nothing: a push is worth more than the cap.
+async function limited(binding, key) {
+  if (!binding || typeof binding.limit !== "function") return false;
+  try {
+    const { success } = await binding.limit({ key });
+    return success === false;
+  } catch {
+    return false;
+  }
+}
+
+// clientIP is the caller's address as a rate key: an IPv4 address whole, an
+// IPv6 one as its /64, since one line is handed a whole /64.
+function clientIP(request) {
+  const ip = request.headers.get("cf-connecting-ip") || "unknown";
+  if (!ip.includes(":")) return ip;
+  const g = ipv6Groups(ip);
+  return g ? `${g.slice(0, 4).join(":")}::/64` : ip;
+}
+
+// ipv6Groups answers the eight groups of an IPv6 address, "::" filled in and
+// each without leading zeros, or null when it is not one.
+function ipv6Groups(ip) {
+  const halves = ip.toLowerCase().split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves[1] ? halves[1].split(":") : [];
+  const fill = halves.length === 2 ? 8 - head.length - tail.length : 0;
+  const g = [...head, ...Array(Math.max(fill, 0)).fill("0"), ...tail];
+  if (g.length !== 8 || !g.every((x) => /^[0-9a-f]{1,4}$/.test(x))) return null;
+  return g.map((x) => parseInt(x, 16).toString(16));
+}
+
+const apple = (env) => (env.APNS_ENV === "development" ? APPLE.development : APPLE.production);
+
+// apnsRequest builds Apple's request for one checked event.
+export async function apnsRequest(env, event, now = Date.now) {
+  const bundle = env.APNS_BUNDLE_ID;
+  const headers = {
+    authorization: `bearer ${await apnsToken(env, now)}`,
+    "apns-push-type": event.push_type,
+    "apns-priority": String(event.priority),
+  };
+  let url;
+  if (event.kind === "channel") {
+    url = apple(env).push + APPLE.broadcastPath(bundle);
+    headers["apns-channel-id"] = event.target;
+    headers["apns-expiration"] = "0";
+  } else {
+    url = apple(env).push + APPLE.devicePath(event.target);
+    headers["apns-topic"] = event.kind === "start" ? APPLE.liveActivityTopic(bundle) : bundle;
+  }
+  return { url, method: "POST", headers, body: JSON.stringify(event.payload) };
+}
+
+// ---- the routes
+
+const json = (status, body) =>
+  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+
+class HttpError extends Error {
+  constructor(status, msg) {
+    super(msg);
+    this.status = status;
+  }
+}
+const refuse = (status, msg) => {
+  throw new HttpError(status, msg);
+};
+
+async function readJSON(request) {
+  if (Number(request.headers.get("content-length") || 0) > MAX_BODY) refuse(413, "body too large");
+  const text = new TextDecoder().decode(await readCapped(request.body));
+  try {
+    return JSON.parse(text);
+  } catch {
+    refuse(400, "body is not JSON");
+  }
+}
+
+// readCapped reads a body up to MAX_BODY bytes and stops there: a chunked
+// body has no content-length, so the count is the only bound.
+async function readCapped(body) {
+  if (!body) return new Uint8Array();
+  const reader = body.getReader();
+  const parts = [];
+  let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    n += value.length;
+    if (n > MAX_BODY) {
+      reader.cancel().catch(() => {});
+      refuse(413, "body too large");
+    }
+    parts.push(value);
+  }
+  const out = new Uint8Array(n);
+  let o = 0;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.length;
+  }
+  return out;
+}
+
+function configured(env) {
+  for (const k of ["APNS_KEY", "APNS_KEY_ID", "APNS_TEAM_ID", "APNS_BUNDLE_ID", "GRANT_SECRET"]) {
+    if (!env[k]) refuse(500, "relay not configured");
+  }
+}
+
+// appleStatus answers Apple's status, and its reason when it is a plain word.
+async function appleStatus(res) {
+  const out = { status: res.status };
+  try {
+    const r = JSON.parse(await res.text()).reason;
+    if (typeof r === "string" && /^[A-Za-z]{1,64}$/.test(r)) out.reason = r;
+  } catch {
+    // An empty or other body: the status alone.
+  }
+  return out;
+}
+
+async function send(request, env, deps) {
+  const e = await readJSON(request);
+  if (!(await checkGrant(env.GRANT_SECRET, e))) refuse(403, "no grant for this target");
+  const k = KINDS[e.kind];
+  if (!k || !k.target.test(e.target)) refuse(400, "bad kind or target");
+  if (e.push_type !== k.pushType) refuse(400, "bad push type for this kind");
+  if (e.priority !== 10 && e.priority !== 5) refuse(400, "priority is 10 or 5");
+  if (typeof e.payload !== "object" || e.payload === null || Array.isArray(e.payload)) refuse(400, "payload is a JSON object");
+  // Per target, after the grant: only a grant holder spends a target's
+  // budget.
+  if (await limited(env.RL_SEND, `${e.kind}:${e.target}`)) refuse(429, "rate limited");
+  const r = await apnsRequest(env, e, deps.now);
+  let res;
+  try {
+    res = await deps.fetch(r.url, { method: r.method, headers: r.headers, body: r.body });
+  } catch {
+    refuse(502, "apns unreachable");
+  }
+  const out = await appleStatus(res);
+  return json(out.status, out);
+}
+
+// authenticate checks the App Attest part of a grant or channel call and
+// answers the attested key's id (hex), its attest grant and the client data.
+async function authenticate(body, env, deps) {
+  const raw = typeof body.client_data === "string" ? body.client_data : JSON.stringify(body.client_data ?? null);
+  let cd;
+  try {
+    cd = JSON.parse(raw);
+  } catch {
+    refuse(400, "client_data is not JSON");
+  }
+  if (typeof cd !== "object" || cd === null) refuse(400, "client_data is an object");
+  if (typeof cd.time !== "number" || Math.abs(cd.time - deps.now() / 1000) > CLIENT_WINDOW_S) {
+    refuse(403, "client_data time is out of its window");
+  }
+  if (typeof body.key_id !== "string") refuse(400, "key_id missing");
+  const keyId = fromBase64(body.key_id);
+  if (keyId.length !== 32) refuse(400, "bad key_id");
+  const clientDataHash = await sha256(enc.encode(raw));
+  const appId = `${env.APNS_TEAM_ID}.${env.APNS_BUNDLE_ID}`;
+  const attestEnv = env.APNS_ENV === "development" ? "development" : "production";
+  try {
+    if (typeof body.attestation === "string") {
+      const { publicKey } = await verifyAttestation({ attestation: fromBase64(body.attestation), keyId, clientDataHash,
+        appId, env: attestEnv, root: deps.root, now: deps.now() });
+      return { cd, keyId: hex(keyId), attestGrant: await attestGrantFor(env.GRANT_SECRET, publicKey) };
+    }
+    if (typeof body.assertion === "string") {
+      const publicKey = await openAttestGrant(env.GRANT_SECRET, body.attest_grant);
+      if (!publicKey || publicKey.length !== 65) refuse(403, "bad attest grant");
+      const id = await sha256(publicKey);
+      if (id.length !== keyId.length || !id.every((x, i) => x === keyId[i])) refuse(403, "key_id is not the attested key");
+      await verifyAssertion({ assertion: fromBase64(body.assertion), publicKey, clientDataHash, appId, env: attestEnv });
+      return { cd, keyId: hex(keyId), attestGrant: body.attest_grant };
+    }
+  } catch (err) {
+    if (err instanceof AttestError) refuse(403, "app attest: " + err.message);
+    throw err;
+  }
+  refuse(400, "an attestation or an assertion is needed");
+}
+
+async function grant(request, env, deps) {
+  if (await limited(env.RL_GRANT, `ip:${clientIP(request)}`)) refuse(429, "rate limited");
+  const body = await readJSON(request);
+  const items = typeof body.client_data === "string" ? safeItems(body.client_data) : body.client_data?.items;
+  if (!Array.isArray(items) || items.length > MAX_ITEMS) refuse(400, `client_data.items is a list of at most ${MAX_ITEMS}`);
+  for (const it of items) {
+    // A channel's grant comes only from /push/channel, with the channel it
+    // made: a grant here would open any channel id an attested app names.
+    if (it?.kind === "channel") refuse(400, "a channel's grant comes from /push/channel");
+    const k = KINDS[it?.kind];
+    if (!k || typeof it.value !== "string" || !k.target.test(it.value)) refuse(400, "bad item");
+  }
+  const { attestGrant } = await authenticate(body, env, deps);
+  const grants = {};
+  for (const it of items) grants[`${it.kind}:${it.value}`] = await grantFor(env.GRANT_SECRET, it.kind, it.value);
+  return json(200, { attest_grant: attestGrant, grants });
+}
+
+function safeItems(s) {
+  try {
+    return JSON.parse(s)?.items;
+  } catch {
+    return undefined;
+  }
+}
+
+async function channel(request, env, deps) {
+  if (await limited(env.RL_CHANNEL, `ip:${clientIP(request)}`)) refuse(429, "rate limited");
+  const body = await readJSON(request);
+  const { keyId } = await authenticate(body, env, deps);
+  // Per attested key too, after the check, so a replayed assertion or one
+  // phone on many addresses still makes few channels. The decoded id, not
+  // body.key_id: atob reads one key from many spellings.
+  if (await limited(env.RL_CHANNEL, `key:${keyId}`)) refuse(429, "rate limited");
+  const bundle = env.APNS_BUNDLE_ID;
+  const token = await apnsToken(env, deps.now);
+  let res;
+  try {
+    res = await deps.fetch(apple(env).manage + APPLE.channelsPath(bundle), {
+      method: "POST",
+      headers: { authorization: `bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ "message-storage-policy": 0, "push-type": "LiveActivity" }),
+    });
+  } catch {
+    refuse(502, "apns unreachable");
+  }
+  const id = res.headers.get("apns-channel-id");
+  if (res.status !== 201 || !id || !KINDS.channel.target.test(id)) {
+    const out = await appleStatus(res);
+    return json(res.status === 201 ? 502 : out.status, out);
+  }
+  return json(200, { channel: id, grant: await grantFor(env.GRANT_SECRET, "channel", id) });
+}
+
+// POST /push/channel/delete, the iOS app's call when it is done with a
+// channel. The request is /push/channel's (key_id, client_data, assertion,
+// attest_grant) plus channel, the channel's id, and grant, the grant
+// /push/channel answered with it. The answer is 200 with {} when the channel
+// is gone, Apple's 404 included; 403 without the grant or a good assertion;
+// 429 over RL_CHANNEL; otherwise Apple's status as {status, reason}.
+async function deleteChannel(request, env, deps) {
+  if (await limited(env.RL_CHANNEL, `ip:${clientIP(request)}`)) refuse(429, "rate limited");
+  const body = await readJSON(request);
+  const event = { kind: "channel", target: body.channel, grant: body.grant };
+  if (!(await checkGrant(env.GRANT_SECRET, event))) refuse(403, "no grant for this channel");
+  if (!KINDS.channel.target.test(body.channel)) refuse(400, "bad channel");
+  const { keyId } = await authenticate(body, env, deps);
+  if (await limited(env.RL_CHANNEL, `key:${keyId}`)) refuse(429, "rate limited");
+  const token = await apnsToken(env, deps.now);
+  let res;
+  try {
+    res = await deps.fetch(apple(env).manage + APPLE.channelsPath(env.APNS_BUNDLE_ID), {
+      method: "DELETE",
+      headers: { authorization: `bearer ${token}`, "apns-channel-id": body.channel },
+    });
+  } catch {
+    refuse(502, "apns unreachable");
+  }
+  if ((res.status >= 200 && res.status < 300) || res.status === 404) return json(200, {});
+  const out = await appleStatus(res);
+  return json(out.status, out);
+}
+
+const ROUTES = { "/push/grant": grant, "/push/channel": channel, "/push/channel/delete": deleteChannel, "/push/send": send };
+
+// handlePush answers one request under /push/. deps is for tests: fetch,
+// now (ms) and the App Attest root.
+export async function handlePush(request, env, deps = {}) {
+  const d = { fetch: deps.fetch ?? ((...a) => fetch(...a)), now: deps.now ?? Date.now, root: deps.root };
+  const route = ROUTES[new URL(request.url).pathname];
+  if (!route) return json(404, { error: "not found" });
+  if (request.method !== "POST") {
+    return new Response(JSON.stringify({ error: "POST only" }), { status: 405, headers: { Allow: "POST", "Content-Type": "application/json" } });
+  }
+  try {
+    configured(env);
+    return await route(request, env, d);
+  } catch (err) {
+    if (err instanceof HttpError) return json(err.status, { error: err.message });
+    // Any other failure (bad base64 and the like) is the caller's input; the
+    // error itself is not echoed, so nothing of the body comes back.
+    return json(400, { error: "bad request" });
+  }
+}

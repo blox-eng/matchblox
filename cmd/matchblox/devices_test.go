@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/blox-eng/matchblox/internal/push"
 	"github.com/blox-eng/matchblox/internal/setup"
 )
 
@@ -43,11 +44,11 @@ func fp(t *testing.T, key string) string {
 func TestDevicesListAndRemove(t *testing.T) {
 	home := homeWithDevices(t)
 	var out bytes.Buffer
-	if err := devicesCmd(nil, home, &out); err != nil {
+	if err := devicesCmd(nil, home, pushView{}, &out); err != nil {
 		t.Fatal(err)
 	}
-	want := "phone   Jordan's iPhone  " + fp(t, phoneKey1) + "\n" +
-		"phone   iPad             " + fp(t, phoneKey2) + "\n" +
+	want := "phone   Jordan's iPhone  " + fp(t, phoneKey1) + "  buzz off  island no\n" +
+		"phone   iPad             " + fp(t, phoneKey2) + "  buzz off  island no\n" +
 		"laptop  matchblox        " + fp(t, laptopKey) + "\n"
 	if out.String() != want {
 		t.Fatalf("list:\n%s\nwant:\n%s", out.String(), want)
@@ -58,7 +59,7 @@ func TestDevicesListAndRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 	out.Reset()
-	if err := devicesCmd([]string{"rm", "iPad"}, home, &out); err != nil {
+	if err := devicesCmd([]string{"rm", "iPad"}, home, pushView{}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(out.String(), "Removed iPad. Backup: "+filepath.Join(realHome, ".ssh")) {
@@ -70,14 +71,14 @@ func TestDevicesListAndRemove(t *testing.T) {
 	}
 
 	out.Reset()
-	if err := devicesCmd([]string{"rm", "matchblox"}, home, &out); err != nil {
+	if err := devicesCmd([]string{"rm", "matchblox"}, home, pushView{}, &out); err != nil {
 		t.Fatalf("rm laptop by name: %v", err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(home, ".ssh", "authorized_keys")); strings.Contains(string(b), laptopKey) {
 		t.Fatalf("laptop still there:\n%s", b)
 	}
 
-	err = devicesCmd([]string{"rm", "nobody"}, home, &out)
+	err = devicesCmd([]string{"rm", "nobody"}, home, pushView{}, &out)
 	if err == nil || err.Error() != "no device named nobody; run matchblox devices and give a name or a fingerprint from that list" {
 		t.Fatalf("rm unknown: %v", err)
 	}
@@ -86,7 +87,7 @@ func TestDevicesListAndRemove(t *testing.T) {
 func TestDevicesRefusesWrongArguments(t *testing.T) {
 	home := homeWithDevices(t)
 	for _, args := range [][]string{{"rm"}, {"--x"}, {"list"}} {
-		if err := devicesCmd(args, home, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "usage: matchblox devices") {
+		if err := devicesCmd(args, home, pushView{}, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "usage: matchblox devices") {
 			t.Errorf("%v: %v", args, err)
 		}
 	}
@@ -102,7 +103,7 @@ func TestDevicesRemoveANameWithASpace(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if err := devicesCmd([]string{"rm", "iPad", "2"}, home, &out); err != nil {
+	if err := devicesCmd([]string{"rm", "iPad", "2"}, home, pushView{}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(out.String(), "Removed iPad 2. Backup: ") {
@@ -115,10 +116,78 @@ func TestDevicesRemoveANameWithASpace(t *testing.T) {
 
 func TestDevicesWithoutKeysSaysHowToAddOne(t *testing.T) {
 	var out bytes.Buffer
-	if err := devicesCmd(nil, t.TempDir(), &out); err != nil {
+	if err := devicesCmd(nil, t.TempDir(), pushView{}, &out); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "matchblox pair") {
 		t.Fatalf("empty list: %q", out.String())
+	}
+}
+
+// Each phone shows whether it buzzes and whether it carries the island; a
+// phone that never registered does neither.
+func TestDevicesListShowsPushAndIsland(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const id1, id2 = "0123456789ab", "ba9876543210"
+	keys := `restrict,pty,command="'` + testExe + `' gate phone ` + id1 + `" ` + phoneKey1 + " matchblox:phone:Desk\n" +
+		`restrict,pty,command="'` + testExe + `' gate phone ` + id2 + `" ` + phoneKey2 + " matchblox:phone:iPad\n"
+	if err := os.WriteFile(filepath.Join(home, ".ssh", "authorized_keys"), []byte(keys), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := setup.Authorize(home, testExe, laptopKey+" matchblox"); err != nil {
+		t.Fatal(err)
+	}
+	r := push.Registration{Device: id1, RegisterRequest: push.RegisterRequest{DeviceToken: "tok", Buzz: true,
+		Island: &push.IslandReg{StartToken: "s", Channel: "c"}}}
+	if err := setup.Register(home, r); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := devicesCmd(nil, home, pushView{}, &out); err != nil {
+		t.Fatal(err)
+	}
+	want := "phone   Desk       " + fp(t, phoneKey1) + "  buzz on   island yes\n" +
+		"phone   iPad       " + fp(t, phoneKey2) + "  buzz off  island no\n" +
+		"laptop  matchblox  " + fp(t, laptopKey) + "\n"
+	if out.String() != want {
+		t.Fatalf("list:\n%s\nwant:\n%s", out.String(), want)
+	}
+}
+
+// A registration alone does not buzz: with [push] off or no host key the
+// host sends nothing, and the list says why. The sender's last word, from
+// the running service, follows the list.
+func TestDevicesListSaysWhyNoBuzzLeaves(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const id = "0123456789ab"
+	keys := `restrict,pty,command="'` + testExe + `' gate phone ` + id + `" ` + phoneKey1 + " matchblox:phone:Desk\n"
+	if err := os.WriteFile(filepath.Join(home, ".ssh", "authorized_keys"), []byte(keys), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := push.Registration{Device: id, RegisterRequest: push.RegisterRequest{DeviceToken: "tok", Buzz: true}}
+	if err := setup.Register(home, r); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		v    pushView
+		want string
+	}{
+		{pushView{Off: "[push] off"}, "buzz off ([push] off)  island no\n"},
+		{pushView{Off: "no host key"}, "buzz off (no host key)  island no\n"},
+		{pushView{Status: "push: relay 410"}, "buzz on  island no\npush: relay 410\n"},
+	} {
+		var out bytes.Buffer
+		if err := devicesCmd(nil, home, c.v, &out); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasSuffix(out.String(), c.want) {
+			t.Errorf("%+v: list:\n%s\nwant it to end with:\n%s", c.v, out.String(), c.want)
+		}
 	}
 }

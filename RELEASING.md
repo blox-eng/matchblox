@@ -43,6 +43,114 @@ expired, the Create Release job fails and says so. To replace it:
 2. `gh secret set RELEASE_TOKEN -R blox-eng/matchblox`, and paste it.
 3. Re-run the failed Release run.
 
+## The push relay's secrets
+
+The relay on `matchblox.sh/push/*` (`worker/push.js`) signs pushes with the
+matchblox APNs key and makes grants with an HMAC secret. They live in the
+Worker's secrets, never in the repository:
+
+| Secret | What |
+|---|---|
+| `APNS_KEY` | The APNs auth key: the whole `.p8` file, PEM lines and all |
+| `APNS_KEY_ID` | The key's 10-character Key ID |
+| `APNS_TEAM_ID` | The 10-character Team ID |
+| `APNS_BUNDLE_ID` | The app's bundle id |
+| `GRANT_SECRET` | A random secret for the grants, kept in a file only you can read |
+
+```sh
+npx wrangler secret put APNS_KEY < AuthKey_XXXXXXXXXX.p8
+npx wrangler secret put APNS_KEY_ID
+npx wrangler secret put APNS_TEAM_ID
+npx wrangler secret put APNS_BUNDLE_ID
+# Wrangler never shows a secret again, so keep GRANT_SECRET: the live check
+# below needs it. Keep a copy in the password manager too.
+(umask 077; mkdir -p ~/.config/matchblox && openssl rand -hex 32 | tr -d '\n' > ~/.config/matchblox/grant-secret)
+npx wrangler secret put GRANT_SECRET < ~/.config/matchblox/grant-secret
+```
+
+If the value is lost, make a new file the same way and put it again before
+the live check (this voids every grant, as below).
+
+A new `GRANT_SECRET` voids every grant: each phone gets new ones the next
+time the app opens. The optional variable `APNS_ENV = "development"` sends to
+Apple's sandbox and accepts development App Attest keys (a build from Xcode);
+without it the relay is production.
+
+The app's entitlements `aps-environment` (push) and the App Attest
+environment are `development` in the repository, which is right for a
+build from Xcode. A TestFlight or App Store build needs `production` for
+both, and a relay with no `APNS_ENV`. A mismatch makes the relay answer
+Apple's `BadDeviceToken`.
+
+### Rate rules
+
+`wrangler.jsonc` binds three Workers rate limiters, which the relay checks
+in code and answers `429` over the limit. Cloudflare counts each per
+location, over 60 seconds:
+
+| Binding | Route | Key | Limit |
+|---|---|---|---|
+| `RL_SEND` | `/push/send` | the target (`<kind>:<token or channel>`), after the grant check | 30 a minute |
+| `RL_GRANT` | `/push/grant` | the caller's IP | 10 a minute |
+| `RL_CHANNEL` | `/push/channel`, `/push/channel/delete` | the caller's IP, and the attested key after its check | 3 a minute each |
+
+An IPv6 caller counts by its /64, since one line is handed a whole /64.
+
+They deploy with the Worker; there is nothing to set in the dashboard. A
+binding that is missing or fails limits nothing, so a mistake here never
+stops pushes. Apple allows 10,000 channels for each app and environment:
+the app deletes a channel it is done with through `/push/channel/delete`,
+and `all-channels` (Apple's channel management API) shows how many there are.
+Deploy the Worker before the app build that deletes channels: until then
+the relay answers 404, and the app keeps the channel and tries again at the
+next open.
+
+### Live check (gates a release that ships the island)
+
+The relay reaches Apple over HTTP/2, and channel management on port 2196
+(sandbox 2195); the tests cannot reach either. Before the first release that
+ships the island, and after any change to `worker/push.js`, both checks
+below pass against Apple's sandbox, with a development build of the app on
+the iPad.
+
+1. Deploy to the sandbox (the secrets above are set):
+
+   ```sh
+   npx wrangler@4.148.0 deploy --var APNS_ENV:development
+   npx wrangler@4.148.0 tail --format json \
+     | jq -c 'select(.event.request.url|test("/push/")) | {url: .event.request.url, status: .event.response.status}'
+   ```
+
+   `tail` shows each call's path and status, never its body.
+
+2. **Channel create.** Open the development build and follow a host
+   (Settings → `Follow`). `tail` shows `/push/grant` and `/push/channel`
+   with status `200`: the relay made a channel at Apple. Then the island
+   appears for that host and moves with it (a start, then updates through
+   the channel).
+
+3. **Device send.** With the device token of that build (the host keeps it
+   in the phone's push registration, `device_token`) and the
+   `GRANT_SECRET` kept in `~/.config/matchblox/grant-secret` (Node reads it
+   from the file, so the secret is never in a command line or `ps`):
+
+   ```sh
+   TOKEN=<device token, hex>
+   GRANT=$(TOKEN="$TOKEN" node -e 'const c = require("crypto"), fs = require("fs");
+     const k = fs.readFileSync(process.env.HOME + "/.config/matchblox/grant-secret", "utf8").trim();
+     process.stdout.write(c.createHmac("sha256", k).update("device:" + process.env.TOKEN).digest("hex"))')
+   curl -sS https://matchblox.sh/push/send -H 'Content-Type: application/json' \
+     -d '{"target":"'"$TOKEN"'","kind":"device","grant":"'"$GRANT"'","push_type":"alert","priority":10,"payload":{"aps":{"alert":{"title":"matchblox","body":"relay live check"}}}}'
+   ```
+
+   It answers `{"status":200}` and the alert shows on the iPad. Any other
+   status is Apple's, with its `reason`.
+
+4. Back to production: `npx wrangler@4.148.0 deploy` (no `--var`).
+
+If either check fails, the island does not ship: `push: relay <status>`
+on the host's Machine tab names the same status.
+
 ## Homebrew
 
 The Publish job `packages` writes the Homebrew formula of each latest

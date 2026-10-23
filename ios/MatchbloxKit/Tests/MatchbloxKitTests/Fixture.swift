@@ -57,3 +57,14 @@ func testdata(_ path: String) throws -> Data {
         .deletingLastPathComponent()
     return try Data(contentsOf: root.appendingPathComponent("testdata").appendingPathComponent(path))
 }
+
+/// Loader for the shared testdata/push fixtures, which Go tests read too.
+enum PushFixture {
+    static func data(_ name: String) throws -> Data {
+        try testdata("push/\(name).json")
+    }
+
+    static func load<T: Decodable>(_ name: String, as type: T.Type = T.self) throws -> T {
+        try IslandJSON.decoder.decode(T.self, from: data(name))
+    }
+}

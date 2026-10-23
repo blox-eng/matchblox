@@ -38,6 +38,10 @@ const ServeCommand = "matchblox serve --stdio"
 // ConsoleCommand is what a phone asks the host's gate to run.
 const ConsoleCommand = "matchblox console"
 
+// PushRegisterCommand is what a phone asks the host's gate to run to be
+// pushed to: one request line in, one reply line out.
+const PushRegisterCommand = "matchblox push register"
+
 // install is the one install command, with no data in it. MATCHBLOX_NO_START
 // keeps the script from starting a console inside this one.
 const install = "curl -fsSL https://matchblox.sh | MATCHBLOX_NO_START=1 sh"
@@ -436,4 +440,28 @@ func (l *lockedBuffer) String() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.b.String()
+}
+
+var ttyRE = regexp.MustCompile(`^/dev/[A-Za-z0-9_/-]{1,32}$`)
+
+// ClientTTY tells if tty is the name of a terminal device, as SSH_TTY and
+// tmux's client_tty give it: the client a focus moves.
+func ClientTTY(tty string) bool { return ttyRE.MatchString(tty) }
+
+// FocusArgv moves the tmux client on tty to pane: a tap on the island or a
+// buzz opens the session's pane on the phone, and on no other terminal. A
+// switch to a pane changes its session's window for every client on that
+// session, so the phone gets a session of its own, grouped with the pane's
+// one, and goes there. The session ends once the phone leaves it.
+func FocusArgv(tty, pane string) []string {
+	return []string{"tmux", "new-session", "-d", "-t", pane,
+		";", "set-option", "destroy-unattached", "on",
+		";", "switch-client", "-c", tty, "-t", pane}
+}
+
+// FocusAllowed is exactly FocusArgv of a terminal device and a pane id. It
+// is not a Nav step: the gate never runs it.
+func FocusAllowed(argv []string) bool {
+	return len(argv) == 15 && ClientTTY(argv[12]) && PaneID(argv[4]) &&
+		slices.Equal(argv, FocusArgv(argv[12], argv[4]))
 }
