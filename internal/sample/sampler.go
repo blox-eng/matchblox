@@ -627,14 +627,20 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		case "codex":
 			sess.Account, sess.Provider = s.accounts.codexAccount(env), "openai"
 			path, read := s.codexRollout(pid, children)
+			argv := s.FS.Argv(pid)
+			batch := codexBatch(argv) // a `codex exec` row: no session of the directory
+			resume := len(argv) > 1 && argv[1] == "resume"
+			if id := codexResumeID(argv); path == "" && id != "" && env.codexHome != "" {
+				path = s.agents.codexResumed(env.codexHome, id)
+			}
 			// fresh: no rollout of its own yet, by its open files or, when
-			// they say nothing, by its directory.
-			fresh := read && (sess.Cwd == "" || codexIn[sess.Cwd] == 1)
-			if path == "" && sess.Cwd != "" && codexIn[sess.Cwd] == 1 && env.codexHome != "" {
+			// they say nothing, by its directory. A resumed session has one.
+			fresh := read && !batch && !resume && (sess.Cwd == "" || codexIn[sess.Cwd] == 1)
+			if path == "" && !batch && sess.Cwd != "" && codexIn[sess.Cwd] == 1 && env.codexHome != "" {
 				started := now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
 				var ambiguous bool
 				path, ambiguous = s.agents.codexInDir(env.codexHome, sess.Cwd, started, now)
-				fresh = !ambiguous
+				fresh = !ambiguous && !resume
 			}
 			sess.Context = "unmeasured"
 			if fresh || path != "" {

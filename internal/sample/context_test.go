@@ -692,3 +692,96 @@ func TestTheDirectoryFallbackCountsOnlyCodexSessions(t *testing.T) {
 		t.Errorf("no open files, no rollout since the start: context %q, want fresh", s.Context)
 	}
 }
+
+// codexDirFixture builds Codex processes in panes and rollouts under
+// CODEX_HOME for the directory fallback. proc gives the process a tty, so
+// its open files read as none (Codex 0.163 closes its rollout).
+func codexDirFixture(t *testing.T) (smp *Sampler, started time.Time, proc func(pid int, argv []string, pane, cwd string), write func(day time.Time, name, meta string, at time.Time)) {
+	t.Helper()
+	root := copyFixture(t)
+	smp = newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	started = fixtureNow.Add(-time.Duration((smp.FS.Uptime() - 10) * float64(time.Second)))
+	tail := strings.SplitN(codexRollout("gpt-made-up", 51680, 258400), "\n", 2)[1]
+	proc = func(pid int, argv []string, pane, cwd string) {
+		addProc(t, root, pid, 1, "codex", argv, pane)
+		addPane(t, root, pane+"\tw:"+strconv.Itoa(pid)+".1\tw\t"+strconv.Itoa(pid)+"\tcodex\t"+cwd)
+		symlink(t, "/dev/pts/3", filepath.Join(root, "proc", strconv.Itoa(pid), "fd", "0"))
+		symlink(t, cwd, filepath.Join(root, "proc", strconv.Itoa(pid), "cwd"))
+	}
+	write = func(day time.Time, name, meta string, at time.Time) {
+		path := filepath.Join(root, "home", ".codex", "sessions", day.Format("2006/01/02"), name)
+		writeFile(t, path, meta+tail)
+		if err := os.Chtimes(path, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return smp, started, proc, write
+}
+
+// TestACodexExecTakesNoSessionsRollout: a `codex exec` run in a pane is
+// no session of the directory, so it must not take the rollout of the TUI
+// that started there after it: z on the exec row would park the TUI.
+func TestACodexExecTakesNoSessionsRollout(t *testing.T) {
+	smp, started, proc, write := codexDirFixture(t)
+	proc(900, []string{"codex", "exec", "fix the tests"}, "%20", "/work/both")
+	proc(901, []string{"codex"}, "%21", "/work/both")
+	write(fixtureNow, "rollout-a-tui.jsonl", codexMeta("id-tui", "/work/both", "codex-tui", started.Add(2*time.Second)), fixtureNow.Add(-time.Second))
+
+	got := byPane(smp.Sample())
+	if s := got["%20"]; s.SessionID != "" || s.Context != "unmeasured" {
+		t.Errorf("the codex exec row: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
+	}
+	if s := got["%21"]; s.SessionID != "id-tui" || s.Context != "known" {
+		t.Errorf("the TUI: id %q, context %q; want id-tui, known", s.SessionID, s.Context)
+	}
+}
+
+// TestAFreshCodexDoesNotTakeAnAppThread: before its first turn a TUI has
+// no rollout. A thread of the Codex app or an editor begun in its
+// directory is another's (its originator is not the CLI's): the TUI stays
+// fresh, with no id. The CLI writes codex-tui (codex_cli_rs before it).
+func TestAFreshCodexDoesNotTakeAnAppThread(t *testing.T) {
+	smp, started, proc, write := codexDirFixture(t)
+	after := started.Add(2 * time.Second)
+	proc(900, []string{"codex"}, "%20", "/work/app")
+	write(fixtureNow, "rollout-a-app.jsonl", codexMeta("id-app", "/work/app", "Codex Desktop", after), fixtureNow.Add(-time.Second))
+	proc(910, []string{"codex"}, "%21", "/work/cli")
+	write(fixtureNow, "rollout-b-cli.jsonl", codexMeta("id-cli", "/work/cli", "codex_cli_rs", after), fixtureNow.Add(-time.Second))
+
+	got := byPane(smp.Sample())
+	if s := got["%20"]; s.SessionID != "" || s.Context != "fresh" {
+		t.Errorf("a TUI beside an app thread: id %q, context %q; want none, fresh", s.SessionID, s.Context)
+	}
+	if s := got["%21"]; s.SessionID != "id-cli" || s.Context != "known" {
+		t.Errorf("an older CLI's rollout: id %q, context %q; want id-cli, known", s.SessionID, s.Context)
+	}
+}
+
+// TestAResumedCodexIsNotFresh: `codex resume <id>` writes on in the
+// rollout it began on another day: it is found by its id. Any other
+// session whose directory has a rollout begun before it started and
+// written since (a resume without an id, a session that ended after it
+// started) cannot be told apart: unmeasured, not fresh. So is a resume
+// whose rollout is not found: it began on a day the scan does not read.
+func TestAResumedCodexIsNotFresh(t *testing.T) {
+	smp, started, proc, write := codexDirFixture(t)
+	before := started.Add(-72 * time.Hour)
+	proc(900, []string{"codex", "resume", "0199a0b1-5e5e-7000-8000-00000000abcd"}, "%20", "/work/resumed")
+	write(before, "rollout-2026-09-18T10-00-00-0199a0b1-5e5e-7000-8000-00000000abcd.jsonl", codexMeta("0199a0b1-5e5e-7000-8000-00000000abcd", "/work/resumed", "codex-tui", before), fixtureNow.Add(-time.Second))
+	proc(910, []string{"codex", "resume", "--last"}, "%21", "/work/last")
+	write(fixtureNow, "rollout-b-last.jsonl", codexMeta("id-last", "/work/last", "codex-tui", started.Add(-time.Hour)), fixtureNow.Add(-time.Second))
+	proc(920, []string{"codex", "resume", "--last"}, "%22", "/work/away")
+	write(before, "rollout-c-away.jsonl", codexMeta("id-away", "/work/away", "codex-tui", before), fixtureNow.Add(-time.Second))
+
+	got := byPane(smp.Sample())
+	if s := got["%20"]; s.SessionID != "0199a0b1-5e5e-7000-8000-00000000abcd" || s.Context != "known" || s.Tokens != 51680 {
+		t.Errorf("codex resume <id>: id %q, context %q, %d tokens; want 0199a0b1-5e5e-7000-8000-00000000abcd, known, 51680", s.SessionID, s.Context, s.Tokens)
+	}
+	if s := got["%21"]; s.SessionID != "" || s.Context != "unmeasured" {
+		t.Errorf("codex resume --last: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
+	}
+	if s := got["%22"]; s.SessionID != "" || s.Context != "unmeasured" {
+		t.Errorf("codex resume --last of an older day's rollout: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
+	}
+}

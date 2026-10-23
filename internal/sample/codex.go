@@ -44,13 +44,15 @@ func (s *Sampler) codexRollout(pid int, children map[int][]int) (path string, re
 // 0.163 closes it after each write (#179), and macOS lists no open files
 // at all. It is the one rollout of the process's directory begun and
 // written since the process started, among those created since then (a
-// month at most): a resumed session in an older day's directory is not
-// found. It must be this session's for sure, or z parks the wrong pane:
-// a `codex exec` run's is another's, and two begun since the start (an
-// app thread there, a /new) cannot be told apart, so ambiguous is true.
-// The caller asks only when no other Codex session runs in the directory.
-// Codex names its day directories in its own zone, so the scan takes a
-// day either side; a directory not written since the start is not read.
+// month at most). It must be this session's for sure, or z parks the
+// wrong pane: only the CLI's rollouts count, not a `codex exec` run's or
+// a thread of the Codex app or an editor; two begun since the start (a
+// /new) cannot be told apart, and neither can one begun before it and
+// written since (a resume without an id, a session that ended after it
+// started), so ambiguous is true. The caller asks only when no other
+// Codex session runs in the directory. Codex names its day directories
+// in its own zone, so the scan takes a day either side; a directory not
+// written since the start is not read.
 func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) (path string, ambiguous bool) {
 	if home == "" || cwd == "" {
 		return "", false
@@ -60,7 +62,7 @@ func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) (path
 	if month := now.AddDate(0, -1, 0); day.Before(month) {
 		day = time.Date(month.Year(), month.Month(), month.Day(), 0, 0, 0, 0, time.Local)
 	}
-	found := 0
+	found, older := 0, false
 	for last := now.AddDate(0, 0, 1); !day.After(last); day = day.AddDate(0, 0, 1) {
 		dir := filepath.Join(home, "sessions", day.Format("2006/01/02"))
 		if st, err := os.Stat(dir); err != nil || st.ModTime().Before(started) {
@@ -77,18 +79,63 @@ func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) (path
 				continue
 			}
 			m := r.metaOf(f)
+			if m.cwd != cwd || !codexCLI[m.originator] {
+				continue
+			}
 			// Process start times have tick precision; a session's own
 			// rollout begins a second or more after it.
-			if m.cwd != cwd || m.originator == "codex_exec" || !m.began.IsZero() && m.began.Before(started.Add(-time.Second)) {
+			if !m.began.IsZero() && m.began.Before(started.Add(-time.Second)) {
+				older = true
 				continue
 			}
 			path, found = f, found+1
 		}
 	}
-	if found > 1 {
+	if found > 1 || found == 0 && older {
 		return "", true
 	}
 	return path, false
+}
+
+// codexCLI are the originators of the Codex CLI's own rollouts: codex-tui,
+// codex_cli_rs before it, none before that. A `codex exec` run writes
+// codex_exec, and the Codex app and editors write their own names.
+var codexCLI = map[string]bool{"": true, "codex-tui": true, "codex_cli_rs": true}
+
+// codexResumeID is the session id of `codex resume <id>`, or "".
+func codexResumeID(argv []string) string {
+	if len(argv) < 3 || argv[1] != "resume" {
+		return ""
+	}
+	for _, a := range argv[2:] {
+		if !strings.HasPrefix(a, "-") {
+			if strings.Trim(a, "0123456789abcdefABCDEF-") != "" {
+				return "" // not an id: a prompt, or a flag's value
+			}
+			return a
+		}
+	}
+	return ""
+}
+
+// codexResumed finds the rollout of `codex resume <id>`, on whatever day it
+// began: Codex writes on in it, and names it after the session id. The
+// answer is kept, found or not: the rollout exists before Codex resumes it,
+// and does not move.
+func (r *agentReader) codexResumed(home, id string) string {
+	key := home + "\x00" + id
+	if path, ok := r.resumed[key]; ok {
+		return path
+	}
+	path := ""
+	matches, _ := filepath.Glob(filepath.Join(home, "sessions", "*", "*", "*", "rollout-*-"+id+".jsonl"))
+	for _, f := range matches {
+		if r.metaOf(f).id == id && (path == "" || newer(f, path)) {
+			path = f
+		}
+	}
+	r.resumed[key] = path
+	return path
 }
 
 // rolloutMeta is what a rollout's session_meta, its first line, says: the

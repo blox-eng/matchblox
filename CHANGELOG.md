@@ -17,6 +17,21 @@ All notable changes to matchblox are in this file. The format follows
   path would answer the code ([#184](https://github.com/blox-eng/matchblox/pull/184)).
   ([#185](https://github.com/blox-eng/matchblox/issues/185))
 
+### Fixed
+
+- **`z` parks the right Codex session.** A `codex exec` run in a pane took
+  the rollout of a Codex session that started after it in the same
+  directory, with its id, so `z` on the run parked the session. Before its
+  first turn, a Codex session took the rollout of a Codex app or editor
+  thread there. Now only the CLI's own rollouts count, and a `codex exec`
+  row takes none.
+- **A resumed Codex session shows its context.** `codex resume <id>` finds
+  its rollout by the id, on whatever day it began. A resume that is not
+  found shows "not measured", not "fresh", and so does a session whose
+  directory has a rollout begun before it and written since.
+- **`z` says why a Codex session has no id.** One whose rollout cannot be
+  told apart says so, not "park it after its first turn".
+
 ## [0.19.0] - 2026-10-23
 
 ### Added

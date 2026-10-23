@@ -162,3 +162,16 @@ func TestAParkedSessionThatLosesItsIDStaysParked(t *testing.T) {
 		t.Fatalf("err %q, ran %q: a parked pane took a message once its id was lost", res.Err, *ran)
 	}
 }
+
+// TestParkSaysWhyACodexSessionHasNoID: a Codex session whose rollout
+// cannot be told apart gets no id from more turns, so z must not say "after
+// its first turn".
+func TestParkSaysWhyACodexSessionHasNoID(t *testing.T) {
+	cx := flint()
+	cx.Agent, cx.SessionID, cx.Context = "codex", "", "unmeasured"
+	s, _ := holdsTest(t, cx)
+	res := s.act(t.Context(), proto.Act{Console: true, RecID: "park:%3"})
+	if want := "flint has no session id: its Codex rollout cannot be told apart from another's"; res.Err != want {
+		t.Fatalf("err %q, want %q", res.Err, want)
+	}
+}

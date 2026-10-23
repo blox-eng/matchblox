@@ -97,6 +97,9 @@ func (s *Service) park(pane string) proto.Result {
 	switch {
 	case !ok:
 		return proto.Result{Err: "no agent session in " + pane + " any more"}
+	case x.SessionID == "" && x.Agent == "codex" && x.Context == "unmeasured":
+		// More turns bring no id: two Codex in its directory, a /new.
+		return proto.Result{Err: x.Name + " has no session id: its Codex rollout cannot be told apart from another's"}
 	case x.SessionID == "":
 		return proto.Result{Err: x.Name + " has no session id yet: park it after its first turn"}
 	}
