@@ -634,6 +634,7 @@ func serve(path string, s *service.Service) error {
 	if err != nil {
 		return err
 	}
+	warnTailscaleSSHGate(os.Stderr)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	err = s.Serve(ctx, l)
@@ -816,17 +817,26 @@ func cursorUsage() *limits.CursorUsage {
 // stokerPaneGone warns of a config that still names the stoker's pane.
 const stokerPaneGone = "config: [stoker] pane is ignored: matchblox starts the stoker agent itself, on its own tmux server ([stoker] agent, default claude). Remove the line."
 
+// warnTailscaleSSHGate tells builders when Tailscale SSH bypasses the gate
+// on MagicDNS/:22. Probe failure is silence.
+func warnTailscaleSSHGate(w io.Writer) {
+	if setup.TailscaleSSHOn() {
+		_, _ = fmt.Fprintln(w, "matchblox:", setup.WarnTailscaleSSHGate)
+	}
+}
+
 // status prints the service's state. Without a service it uses a fresh
 // state file, and else samples on its own: two samples a second apart so
 // rates are real, and one git scan.
 func status(w io.Writer, path string, cfg config.Config, root string, text bool) error {
+	warn := io.Writer(os.Stderr) // JSON on stdout stays JSON
+	if text {
+		warn = w
+	}
 	if cfg.Stoker.PaneSet {
-		warn := io.Writer(os.Stderr) // JSON on stdout stays JSON
-		if text {
-			warn = w
-		}
 		_, _ = fmt.Fprintln(warn, stokerPaneGone)
 	}
+	warnTailscaleSSHGate(warn)
 	doc, ok := state.Doc{}, false
 	maxAge := max(staleAfter, 3*cfg.Interval.Duration)
 	if root == "" {

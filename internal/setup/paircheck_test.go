@@ -133,6 +133,47 @@ func TestCheckPairPathTailscaleProbeErrorDoesNotBlock(t *testing.T) {
 	}
 }
 
+func TestTailscaleSSHOnTrue(t *testing.T) {
+	tailscaleProbe(t, "tailscale-prefs-ssh-on.json")
+	if !TailscaleSSHOn() {
+		t.Fatal("TailscaleSSHOn() = false, want true")
+	}
+}
+
+func TestTailscaleSSHOnFalse(t *testing.T) {
+	tailscaleProbe(t, "tailscale-prefs-ssh-off.json")
+	if TailscaleSSHOn() {
+		t.Fatal("TailscaleSSHOn() = true, want false")
+	}
+}
+
+func TestTailscaleSSHOnNoTool(t *testing.T) {
+	useProbe(t, nil, pairTestdata(t, "tailscale-prefs-ssh-on.json"), nil, nil)
+	if TailscaleSSHOn() {
+		t.Fatal("TailscaleSSHOn() = true when tailscale is missing")
+	}
+}
+
+func TestTailscaleSSHOnBadPrefs(t *testing.T) {
+	useProbe(t, map[string]bool{"tailscale": true}, []byte("{"), nil, nil)
+	if TailscaleSSHOn() {
+		t.Fatal("TailscaleSSHOn() = true for bad prefs JSON")
+	}
+}
+
+func TestWarnTailscaleSSHGateCopy(t *testing.T) {
+	for _, want := range []string{
+		"tailscale set --ssh=false",
+		"port 22",
+		"not gated",
+		"MagicDNS",
+	} {
+		if !strings.Contains(WarnTailscaleSSHGate, want) {
+			t.Fatalf("WarnTailscaleSSHGate %q missing %q", WarnTailscaleSSHGate, want)
+		}
+	}
+}
+
 func sshdProbe(t *testing.T, sshd []byte) {
 	t.Helper()
 	useProbe(t, map[string]bool{"sshd": true}, nil, nil, sshd)
