@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"slices"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/setup"
 )
@@ -17,26 +19,45 @@ import (
 // door commands use the builder's own login, so a tmux client (which can
 // open a shell) or an agent is never one of its commands.
 func TestGateRunsOnlyItsCommands(t *testing.T) {
+	const id = "0123456789ab"
 	for _, c := range []struct {
-		mode, orig string
-		want       []string
+		mode, id, orig string
+		want           []string
 	}{
-		{"", remote.ServeCommand, []string{"serve", "--stdio"}},
-		{"phone", remote.ServeCommand, []string{"serve", "--stdio"}},
-		{"phone", remote.ConsoleCommand, []string{}},
+		{"", "", remote.ServeCommand, []string{"serve", "--stdio"}},
+		{"phone", "", remote.ServeCommand, []string{"serve", "--stdio"}},
+		{"phone", id, remote.ServeCommand, []string{"serve", "--stdio"}},
+		{"phone", "", remote.ConsoleCommand, []string{}},
+		{"phone", id, remote.ConsoleCommand, []string{}},
+		{"phone", id, "matchblox push register", []string{"push", "register", id}},
+		{"phone", id, "matchblox console --open 12", []string{}},
+		{"phone", "", "matchblox console --open 12", []string{}},
 	} {
-		got, err := gateDecision(c.mode, c.orig)
+		got, err := gateDecision(c.mode, c.id, c.orig)
 		if err != nil || !slices.Equal(got, c.want) || got == nil {
-			t.Fatalf("gateDecision(%q, %q) = %q, %v; want %q", c.mode, c.orig, got, err, c.want)
+			t.Fatalf("gateDecision(%q, %q, %q) = %q, %v; want %q", c.mode, c.id, c.orig, got, err, c.want)
 		}
 	}
 	// A laptop key never gets the console, and an unknown mode gets nothing.
-	if argv, err := gateDecision("", remote.ConsoleCommand); err == nil || argv != nil {
+	if argv, err := gateDecision("", "", remote.ConsoleCommand); err == nil || argv != nil {
 		t.Errorf("a laptop key opened the console: %q", argv)
 	}
-	for _, orig := range []string{remote.ServeCommand, remote.ConsoleCommand, ""} {
-		if argv, err := gateDecision("pair", orig); err == nil || argv != nil {
+	if argv, err := gateDecision("", id, "matchblox console --open 12"); err == nil || argv != nil {
+		t.Errorf("a laptop key opened a session: %q", argv)
+	}
+	for _, orig := range []string{remote.ServeCommand, remote.ConsoleCommand, remote.PushRegisterCommand, ""} {
+		if argv, err := gateDecision("pair", id, orig); err == nil || argv != nil {
 			t.Errorf("unknown mode ran %q", orig)
+		}
+	}
+	// Only a phone registers, and only one whose line has its id.
+	for _, c := range []struct{ mode, id, want string }{
+		{"phone", "", "this phone's key line is old; open matchblox serve once, then try again"},
+		{"", "", "this key starts only the matchblox stream; use your own ssh login for a shell"},
+		{"", id, "this key starts only the matchblox stream; use your own ssh login for a shell"},
+	} {
+		if argv, err := gateDecision(c.mode, c.id, remote.PushRegisterCommand); err == nil || argv != nil || err.Error() != c.want {
+			t.Errorf("gateDecision(%q, %q, register) = %q, %v; want %q", c.mode, c.id, argv, err, c.want)
 		}
 	}
 	last := func(a []string) string { return a[len(a)-1] }
@@ -55,10 +76,32 @@ func TestGateRunsOnlyItsCommands(t *testing.T) {
 		"matchblox console ",
 		"matchblox  console",
 		"matchblox gate pair 0123456789ab",
+		"matchblox push register x",
+		"matchblox push register " + id,
+		"matchblox push register ",
+		"matchblox push  register",
+		"matchblox push register; id",
+		"matchblox push",
+		"matchblox push unregister",
+		"matchblox console --open x",
+		"matchblox console --open 12 13",
+		"matchblox console --open -1",
+		"matchblox console --open 0",
+		"matchblox console --open 012",
+		"matchblox console --open +1",
+		"matchblox console --open",
+		"matchblox console --open ",
+		"matchblox console --open  12",
+		"matchblox console --open 12 ",
+		"matchblox console --open 12; id",
+		"matchblox console --open=12",
+		"matchblox console --open 99999999999999999999",
 	} {
 		for _, mode := range []string{"", "phone"} {
-			if argv, err := gateDecision(mode, orig); err == nil || argv != nil {
-				t.Errorf("gateDecision(%q, %q) let it run", mode, orig)
+			for _, i := range []string{"", id} {
+				if argv, err := gateDecision(mode, i, orig); err == nil || argv != nil {
+					t.Errorf("gateDecision(%q, %q, %q) let it run", mode, i, orig)
+				}
 			}
 		}
 	}
@@ -72,7 +115,7 @@ func TestGateRefusalNamesTheFixOfItsMode(t *testing.T) {
 		{"phone", "sh", "this key starts only the matchblox stream and console; use your own ssh login for a shell"},
 		{"", remote.ConsoleCommand, "this key starts only the matchblox stream; run matchblox pair to add a phone"},
 	} {
-		if _, err := gateDecision(c.mode, c.orig); err == nil || err.Error() != c.want {
+		if _, err := gateDecision(c.mode, "", c.orig); err == nil || err.Error() != c.want {
 			t.Errorf("gateDecision(%q, %q) error = %v, want %q", c.mode, c.orig, err, c.want)
 		}
 	}
@@ -179,5 +222,116 @@ func TestGatePhoneServeStreamWritesNoNote(t *testing.T) {
 	}
 	if _, _, ok := setup.DeviceIn(home, "ba9876543210"); ok {
 		t.Fatal("the serve stream wrote a note")
+	}
+}
+
+// A phone with an id registers through the gate: run gets the id from the
+// key line, never from the request, and the console's note stays as it was.
+func TestGatePhoneRegistersByTheIDOfItsLine(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SSH_TTY", "/dev/ttys004")
+	t.Setenv("SSH_ORIGINAL_COMMAND", remote.PushRegisterCommand)
+	oldArgs, oldRun := os.Args, gateRun
+	t.Cleanup(func() { os.Args, gateRun = oldArgs, oldRun })
+	var ran []string
+	gateRun = func(argv []string) error { ran = argv; return nil }
+	if err := gateMain([]string{"phone", "0123456789ab"}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(ran, []string{"push", "register", "0123456789ab"}) {
+		t.Fatalf("ran %q", ran)
+	}
+	if _, _, ok := setup.DeviceIn(home, "0123456789ab"); ok {
+		t.Fatal("registering marked the device in")
+	}
+}
+
+func TestOpenTargetReadsTheNumber(t *testing.T) {
+	for orig, want := range map[string]int{
+		"matchblox console --open 12":  12,
+		"matchblox console --open 1":   1,
+		"matchblox console --open 905": 905,
+	} {
+		if n, ok := openTarget(orig); !ok || n != want {
+			t.Errorf("openTarget(%q) = %d, %v; want %d", orig, n, ok, want)
+		}
+	}
+}
+
+func TestOpenTargetRefusesAnythingElse(t *testing.T) {
+	for _, orig := range []string{
+		remote.ConsoleCommand, "",
+		"matchblox console --open x",
+		"matchblox console --open 12 13",
+		"matchblox console --open -1",
+		"matchblox console --open 0",
+		"matchblox console --open 012",
+		"matchblox console --open +1",
+		"matchblox console --open 1e3",
+		"matchblox console --open",
+		"matchblox console --open ",
+		"matchblox console --open  12",
+		"matchblox console --open 12 ",
+		"matchblox console --open 99999999999999999999",
+		"matchblox console  --open 12",
+		"matchblox console --open 12\n",
+	} {
+		if n, ok := openTarget(orig); ok {
+			t.Errorf("openTarget(%q) = %d, true", orig, n)
+		}
+	}
+}
+
+// The open asks the service to focus the session before the console runs,
+// and the device is in, as for matchblox console.
+func TestGateOpenFocusesThenRunsTheConsole(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SSH_TTY", "/dev/ttys004")
+	t.Setenv("SSH_ORIGINAL_COMMAND", "matchblox console --open 12")
+	oldArgs, oldRun, oldFocus := os.Args, gateRun, gateFocus
+	t.Cleanup(func() { os.Args, gateRun, gateFocus = oldArgs, oldRun, oldFocus })
+	var steps []string
+	gateFocus = func(n int, tty string) error {
+		steps = append(steps, fmt.Sprint("focus ", n, " ", tty))
+		return errors.New("no service")
+	}
+	gateRun = func(argv []string) error { steps = append(steps, fmt.Sprintf("run %q", argv)); return nil }
+	if err := gateMain([]string{"phone", "0123456789ab"}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(steps, []string{"focus 12 /dev/ttys004", `run []`}) {
+		t.Fatalf("steps %q", steps)
+	}
+	if _, tty, ok := setup.DeviceIn(home, "0123456789ab"); !ok || tty != "/dev/ttys004" {
+		t.Fatalf("the open did not mark the device in: %q %v", tty, ok)
+	}
+	// The plain console asks for no focus.
+	steps = nil
+	t.Setenv("SSH_ORIGINAL_COMMAND", remote.ConsoleCommand)
+	if err := gateMain([]string{"phone", "0123456789ab"}); err != nil || !slices.Equal(steps, []string{`run []`}) {
+		t.Fatalf("gateMain = %v, steps %q", err, steps)
+	}
+}
+
+// A service that accepts the act but never answers holds the phone for
+// focusTimeout at most: the console opens after it.
+func TestGateFocusIsBounded(t *testing.T) {
+	old := focusTimeout
+	focusTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { focusTimeout = old })
+	start := time.Now()
+	err := sendFocus(func(proto.Act) (proto.Result, error) {
+		time.Sleep(5 * time.Second)
+		return proto.Result{}, nil
+	}, 12, "/dev/ttys004")
+	if err == nil || time.Since(start) > 2*time.Second {
+		t.Fatalf("sendFocus = %v after %v", err, time.Since(start))
+	}
+	var got proto.Act
+	if err := sendFocus(func(a proto.Act) (proto.Result, error) { got = a; return proto.Result{}, nil }, 12, "/dev/ttys004"); err != nil ||
+		got.RecID != "focus:12" || got.Text != "/dev/ttys004" {
+		t.Fatalf("sendFocus = %v, act %+v", err, got)
 	}
 }

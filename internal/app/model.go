@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"maps"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -82,6 +83,9 @@ type Options struct {
 	// active last in the home session. Nil: ask tmux. "" or an error: the
 	// builder's.
 	LastClient func() (tty string, created time.Time, err error)
+	// Clients are the ttys of the clients of this console's tmux server, for
+	// a focus that moves the phone's client. Nil: ask tmux.
+	Clients func() ([]string, error)
 	// Clip copies text to the builder's clipboard. Nil: OSC 52 with the output.
 	Clip func(text string)
 	// Graphics says whether every terminal that shows the console draws
@@ -225,6 +229,7 @@ type Model struct {
 	width      int
 	height     int
 	snap       sample.Snapshot
+	push       string // the push sender's line for the Machine tab, or ""
 	have       bool
 	git        *proto.GitReport
 	recs       []advice.Rec
@@ -327,6 +332,7 @@ type Model struct {
 	// changes, not at each draw.
 	foundPaths []string
 	foundWt    []string
+	focusAt    time.Time // the At of the last focus this console acted on
 }
 
 func New(opt Options) Model {
@@ -502,6 +508,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m = m.rebuildFoundPaths(st.Found != nil)
+		m.push = st.Push
 		if m.recRun.rec != "" && m.recRun.act == "" && !m.isRec(m.recRun.rec) {
 			m.recRun = recRun{} // its rec is gone: a later one with the same id starts fresh
 		}
@@ -518,6 +525,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.hist.Append(history.FromSnapshot(m.snap))
 		}
 		m.keepSelection()
+		m, focus := m.takeFocus(st.Focus)
 		var news, order tea.Cmd
 		if toast != "" && !first {
 			news = m.say(toast)
@@ -525,7 +533,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.sheet != nil && m.sheet.queued && m.sheet.act == "" && m.stoker != nil && m.stoker.Ready {
 			m, order = m.sendOrder() // the stoker rests now: the order that waited for it goes
 		}
-		return m, tea.Batch(m.recv(), m.animate(), news, order)
+		return m, tea.Batch(m.recv(), m.animate(), news, order, focus)
 	case graphicsMsg:
 		return m.graphics(msg)
 	case graphicsTickMsg:
@@ -712,6 +720,105 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return next, tea.Batch(touch, cmd)
 	}
 	return m, nil
+}
+
+// focusWait is how long a focus waits for the phone's tmux client to
+// attach: the gate sends the act before it runs the console.
+var focusWait = 10 * time.Second
+
+// focusGone is what a focus on a session that ended says.
+const focusGone = "That session ended."
+
+// takeFocus opens the session a tap on the island or a buzz asked for, once
+// for each focus the service sends, on Sessions: its answer peek when it
+// waits, else its pane on the phone's own tmux client. A form, sheet, pair
+// page, take-over or a peek with text typed keeps the keys: what the person
+// types there is not thrown away.
+func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
+	if f == nil || f.At.Equal(m.focusAt) {
+		return m, nil
+	}
+	m.focusAt = f.At
+	var s sample.Session
+	found := false
+	for _, x := range m.snap.Sessions {
+		if f.SessionID != "" && x.SessionID == f.SessionID || f.SessionID == "" && f.Pane != "" && x.Pane == f.Pane {
+			s, found = x, true
+			break
+		}
+	}
+	typing := m.peek != nil && m.peek.text != ""
+	busy := m.pair.owns() || m.sheet != nil || m.form != nil || m.held != nil || typing
+	if f.Gone || !found {
+		if !busy {
+			m.setTab(tabSessions)
+			m.pending = nil
+		}
+		m.flash = focusGone
+		return m, nil
+	}
+	if busy {
+		return m, nil
+	}
+	m.setTab(tabSessions)
+	m.pending, m.peek = nil, nil
+	m.doorPick, m.recPick, m.chose, m.selPID = "", "", true, s.PID
+	if s.Pane == "" {
+		return m, nil // outside tmux: no pane to open
+	}
+	if _, waits := m.waitOf(s); waits {
+		// The home console is shared: the peek shows on the phone too, and an
+		// Enter on its way at the desk must not answer it.
+		return m.peekTo(s.Pane), nil
+	}
+	// Only the phone's client moves, into a session of its own (FocusArgv),
+	// and only on this console's own tmux: a console of another host (over
+	// ssh) or outside tmux never moves a terminal for a tap on the phone.
+	if m.opt.Host != "" || m.opt.OutsideTmux || !remote.ClientTTY(f.Client) {
+		return m, nil
+	}
+	return m, focusJump(m.clients(), m.opt.Run, f.Client, s.Pane)
+}
+
+// clients is how this console reads the clients of its tmux server.
+func (m Model) clients() func() ([]string, error) {
+	if m.opt.Clients != nil {
+		return m.opt.Clients
+	}
+	return tmuxClients
+}
+
+// tmuxClients are the ttys of the clients of this console's tmux server.
+func tmuxClients() ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "tmux", "list-clients", "-F", "#{client_tty}").Output()
+	if err != nil {
+		return nil, err
+	}
+	return strings.Fields(string(out)), nil
+}
+
+// focusJump waits up to focusWait for the client on tty to attach to this
+// console's tmux, then moves it to pane. A client that never comes is not
+// this console's: nothing moves.
+func focusJump(clients func() ([]string, error), run func([]string) error, tty, pane string) tea.Cmd {
+	return func() tea.Msg {
+		argv := remote.FocusArgv(tty, pane)
+		if !remote.FocusAllowed(argv) {
+			return nil
+		}
+		for deadline := time.Now().Add(focusWait); ; time.Sleep(100 * time.Millisecond) {
+			if ttys, err := clients(); err == nil && slices.Contains(ttys, tty) {
+				break
+			}
+			if time.Now().After(deadline) {
+				return nil
+			}
+		}
+		// The toast names the move, not the session the phone gets for it.
+		return ranMsg{cmd: "tmux switch-client -c " + tty + " -t " + pane, err: run(argv), jumped: pane}
+	}
 }
 
 // olderLocal tells if the local service should give way to this console:

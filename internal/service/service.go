@@ -23,6 +23,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/idle"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/push"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/setup"
@@ -130,6 +131,15 @@ type Service struct {
 	// ConsentPath and ReposPath keep the answer and the last scan. Empty:
 	// kept in memory only.
 	ConsentPath, ReposPath string
+	// PushNumbers are the island's numbers of sessions and accounts; the
+	// names act names them. Nil: it names nothing.
+	PushNumbers *push.Numbers
+	// Push sends the buzz and the island of each published doc. Nil: none
+	// ([push] off, or a fixture).
+	Push *push.Sender
+	// PushOff is the Machine tab's push line while Push is nil because push
+	// could not start (`push: numbers: <why>`); "" when it is off by choice.
+	PushOff string
 
 	// alone is when the last console closed; zero while one is open. A new
 	// service starts alone.
@@ -410,9 +420,19 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		}
 		s.cur.Holds = s.Holds.List()
 	}
+	s.expireFocus(s.now())
+	s.cur.Push = s.PushOff
+	if s.Push != nil {
+		s.cur.Push = s.Push.Status() // the last send's: this doc's goes after
+	}
 	doc := s.cur
 	s.mu.Unlock()
 	rec(doc)
+	if s.Push != nil {
+		// Every tick, changed or not: a change the rates held goes out on
+		// the first tick after its wait. OnDoc never blocks.
+		s.Push.OnDoc(doc)
+	}
 	s.broadcast()
 }
 

@@ -62,6 +62,10 @@ quiet_hours = "23:00-08:00"  # hours you do not usually work, in this machine's 
 quiet_days = ["Sat", "Sun"]  # days you do not usually work
 cursor_usage = false     # true: read Cursor's plan usage from its API with the login token Cursor's CLI keeps in the macOS Keychain
 
+[push]                   # the buzz and the island on the phones that registered
+relay = "https://matchblox.sh"  # the relay that hands them to Apple; it stores nothing
+off = false              # true: no buzz, no island, and no connection to the relay
+
 [hooks]
 alert = []               # argv run on each new alert, title and evidence appended,
                          # e.g. ["notify-send", "matchblox"]

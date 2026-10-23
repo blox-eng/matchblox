@@ -105,6 +105,15 @@ type Result struct {
 	Err     string     `json:"err,omitempty"`
 	// Scan is how a scan:yes's scan went.
 	Scan *ScanSummary `json:"scan,omitempty"`
+	// Names answers the names act: what each number of the island is
+	// called now.
+	Names *Names `json:"names,omitempty"`
+}
+
+// Names are the session and account names by their island numbers.
+type Names struct {
+	Sessions map[int]string `json:"sessions"`
+	Accounts map[int]string `json:"accounts"`
 }
 
 type Error struct {
@@ -184,6 +193,8 @@ type (
 	StokerUnguard = stoker.Unguard
 	Hold          = holds.Hold
 	IdleReason    = idle.Reason
+	// Focus is the session a tap on the island or a buzz opens.
+	Focus = state.Focus
 )
 
 // NewSession is the Text of a "new:session" act: start an agent in a tmux
