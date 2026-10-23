@@ -171,6 +171,32 @@ func codexWords(argv []string) []string {
 	return words
 }
 
+// codexWorkDir is where Codex works: the directory -C gives it, else cwd.
+func codexWorkDir(argv []string, cwd string) string {
+	if dir := codexCd(argv, cwd); dir != "" {
+		return dir
+	}
+	return cwd
+}
+
+// codexInteractive: argv is a session a person works in, which leaves a
+// rollout: no subcommand (or a prompt), resume or fork. login, apply and
+// the other tools leave none.
+func codexInteractive(argv []string) bool {
+	w := codexWords(argv)
+	if len(w) == 0 {
+		return true
+	}
+	switch w[0] {
+	case "resume", "fork":
+		return true
+	case "exec", "e", "review", "login", "logout", "mcp", "mcp-server", "app-server", "proto", "completion",
+		"sandbox", "debug", "apply", "a", "cloud", "features", "help", "generate-ts", "responses-api-proxy", "stdio-to-uds":
+		return false
+	}
+	return true // a prompt
+}
+
 // codexCd is the directory `-C`/`--cd` gives Codex, against cwd, or "".
 func codexCd(argv []string, cwd string) string {
 	for i := 1; i < len(argv); i++ {

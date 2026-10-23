@@ -984,6 +984,49 @@ func TestAFreshCodexDoesNotTakeAnExitedNeighbour(t *testing.T) {
 	}
 }
 
+// TestAnExitedNeighbourWithoutARolloutKeepsTheTUIMeasured: a Codex that
+// started after the TUI and exited (`codex login`, or a TUI quit before
+// its first turn) owns no rollout begun before it started: the TUI keeps
+// its own.
+func TestAnExitedNeighbourWithoutARolloutKeepsTheTUIMeasured(t *testing.T) {
+	for _, argv := range [][]string{{"codex", "login"}, {"codex"}} {
+		d := newCodexDir(t)
+		// The fixture starts both at one tick: A's rollout began before
+		// the neighbour did, within the tick.
+		d.proc(900, []string{"codex"}, "%20", "/work/r")
+		d.write(fixtureNow, "rollout-a.jsonl", codexMeta("id-a", "/work/r", "codex-tui", d.started.Add(-500*time.Millisecond)), 150000, fixtureNow.Add(-time.Second))
+		d.proc(901, argv, "%21", "/work/r")
+		d.smp.Sample()
+		if err := os.RemoveAll(filepath.Join(d.root, "proc", "901")); err != nil {
+			t.Fatal(err)
+		}
+		if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "id-a" || s.Tokens != 150000 {
+			t.Errorf("after %q exited: id %q, %d tokens; want id-a, 150000", argv, s.SessionID, s.Tokens)
+		}
+	}
+}
+
+// TestACodexStartedWithCdCountsInItsDirectory: `codex -C /work/r` works
+// in /work/r whatever its shell's directory: it counts there.
+func TestACodexStartedWithCdCountsInItsDirectory(t *testing.T) {
+	d := newCodexDir(t)
+	d.proc(900, []string{"codex"}, "%20", "/work/r")
+	d.proc(901, []string{"codex", "-C", "/work/r"}, "%21", "/work/home")
+	d.write(fixtureNow, "rollout-b.jsonl", codexMeta("id-b", "/work/r", "codex-tui", d.started.Add(2*time.Second)), 120000, fixtureNow.Add(-time.Second))
+	d.proc(910, []string{"codex", "--cd", "../alone"}, "%22", "/work/home")
+	d.write(fixtureNow, "rollout-c.jsonl", codexMeta("id-c", "/work/alone", "codex-tui", d.started.Add(2*time.Second)), 200000, fixtureNow.Add(-time.Second))
+
+	got := byPane(d.smp.Sample())
+	for _, pane := range []string{"%20", "%21"} {
+		if s := got[pane]; s.SessionID != "" || s.Context == "known" || s.Context == "fresh" {
+			t.Errorf("%s, two Codex in /work/r: id %q, context %q; want none, unmeasured", pane, s.SessionID, s.Context)
+		}
+	}
+	if s := got["%22"]; s.SessionID != "id-c" || s.Tokens != 200000 {
+		t.Errorf("codex --cd alone: id %q, %d tokens; want id-c, 200000", s.SessionID, s.Tokens)
+	}
+}
+
 // TestAFreshCodexDoesNotTakeASubagent: a subagent of another session
 // begun in the directory is not the TUI's own rollout.
 func TestAFreshCodexDoesNotTakeASubagent(t *testing.T) {

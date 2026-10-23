@@ -568,13 +568,26 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		// another agent runs, nor one of Codex's own non-interactive modes.
 		if s.agentName(pid, p) == "codex" && p.State != 'Z' && p.State != 'X' && !s.underAgent(p, procs) && !codexBatch(codexArgv(s.FS.Argv(pid))) {
 			if pp, ok := procs[p.PPID]; !ok || s.agentName(p.PPID, pp) != "codex" {
-				cwd := s.FS.Cwd(pid)
-				codexIn[cwd]++
-				if s.codexSeen[cwd] == nil {
-					s.codexSeen[cwd] = map[procKey]time.Time{}
+				argv := codexArgv(s.FS.Argv(pid))
+				dir := codexWorkDir(argv, s.FS.Cwd(pid))
+				codexIn[dir]++
+				if codexInteractive(argv) {
+					if s.codexSeen[dir] == nil {
+						s.codexSeen[dir] = map[procKey]time.Time{}
+					}
+					s.codexSeen[dir][procKey{pid, p.StartTime}] = now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
 				}
-				s.codexSeen[cwd][procKey{pid, p.StartTime}] = now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
 			}
+		}
+	}
+	for dir, seen := range s.codexSeen { // a month is long enough to remember
+		for k, at := range seen {
+			if at.Before(now.AddDate(0, -1, 0)) {
+				delete(seen, k)
+			}
+		}
+		if len(seen) == 0 {
+			delete(s.codexSeen, dir)
 		}
 	}
 	for pid, p := range procs {
@@ -651,16 +664,20 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			}
 			// fresh: no rollout of its own yet, by its open files or, when
 			// they say nothing, by its directory. A resumed session has one.
-			fresh := read && !batch && !resume && (sess.Cwd == "" || codexIn[sess.Cwd] == 1)
+			dir := codexWorkDir(argv, sess.Cwd) // where Codex works: -C, else the shell's
+			fresh := read && !batch && !resume && (dir == "" || codexIn[dir] == 1)
 			// A resume's own rollout began before it: one the directory
 			// shows is another's, or its /new.
-			if path == "" && !batch && !resume && sess.Cwd != "" && codexIn[sess.Cwd] == 1 && env.codexHome != "" {
-				if s.codexNeighbour(sess.Cwd, key, started, now) {
-					fresh = false // a session that ran here since left its rollout
-				} else {
-					var ambiguous bool
-					path, ambiguous = s.agents.codexInDir(env.codexHome, sess.Cwd, started, now)
-					fresh = !ambiguous
+			if path == "" && !batch && !resume && dir != "" && codexIn[dir] == 1 && env.codexHome != "" {
+				var ambiguous bool
+				path, ambiguous = s.agents.codexInDir(env.codexHome, dir, started, now)
+				fresh = !ambiguous
+				// A session that started here after this one and exited
+				// owns any rollout begun since it started.
+				if at, ok := s.codexNeighbour(dir, key, started); ok && path != "" {
+					if began := s.agents.metaOf(path).began; began.IsZero() || !began.Before(at) {
+						path, fresh = "", false
+					}
 				}
 			}
 			sess.Context = "unmeasured"
@@ -870,21 +887,16 @@ func cursorPrint(argv []string) bool {
 	return false
 }
 
-// codexNeighbour: another Codex session started in cwd after the one of
-// key did, and has exited (a live one is counted in codexIn): a rollout
-// begun there since is maybe its. Sessions seen over a month ago are
-// forgotten.
-func (s *Sampler) codexNeighbour(cwd string, key procKey, started, now time.Time) bool {
-	found := false
-	for k, at := range s.codexSeen[cwd] {
-		switch {
-		case at.Before(now.AddDate(0, -1, 0)):
-			delete(s.codexSeen[cwd], k)
-		case k != key && !at.Before(started):
-			found = true
+// codexNeighbour is when the first Codex session started in dir after the
+// one of key did, now exited (a live one is counted in codexIn): a
+// rollout begun there since is maybe its.
+func (s *Sampler) codexNeighbour(dir string, key procKey, started time.Time) (first time.Time, ok bool) {
+	for k, at := range s.codexSeen[dir] {
+		if k != key && !at.Before(started) && (!ok || at.Before(first)) {
+			first, ok = at, true
 		}
 	}
-	return found
+	return first, ok
 }
 
 // codexServer: argv runs a daemon of the Codex app, `codex app-server`,

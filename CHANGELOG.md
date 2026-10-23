@@ -23,8 +23,9 @@ All notable changes to matchblox are in this file. The format follows
   the rollout of a Codex session that started after it in the same
   directory, with its id, so `z` on the run parked the session. Before its
   first turn, a Codex session took the rollout of a Codex app or editor
-  thread there, of a subagent, or of a Codex session that ran there after
-  it and exited. Now only the CLI's own sessions count,
+  thread there, of a subagent, or of a Codex session that started there
+  after it and exited. A Codex started with `-C <dir>` counts in `<dir>`,
+  and is measured from it. Now only the CLI's own sessions count,
   and a `codex exec` or `codex review` row takes none, with options before
   it or not.
 - **A resumed Codex session shows its context.** `codex resume <id>` finds
