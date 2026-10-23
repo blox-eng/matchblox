@@ -791,6 +791,7 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 	smp.ProcEvery = 5 * cfg.Interval.Duration
 	smp.OwnEntries = true
 	smp.LimitsDir = filepath.Dir(state.Path())
+	smp.CodexSeenFile = filepath.Join(smp.LimitsDir, "codex-seen.json")
 	if cfg.Limits.CursorUsage && runtime.GOOS == "darwin" {
 		smp.CursorUsage = cursorUsage()
 	}

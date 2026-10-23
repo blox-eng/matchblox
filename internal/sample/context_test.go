@@ -1027,6 +1027,49 @@ func TestACodexStartedWithCdCountsInItsDirectory(t *testing.T) {
 	}
 }
 
+// TestAnExitedNeighbourSurvivesARestart: the Codex sessions seen in each
+// directory are kept in a file, so a sampler that starts again still
+// knows a neighbour that exited before it.
+func TestAnExitedNeighbourSurvivesARestart(t *testing.T) {
+	d := newCodexDir(t)
+	seen := filepath.Join(t.TempDir(), "codex-seen.json")
+	d.smp.CodexSeenFile = seen
+	d.proc(900, []string{"codex"}, "%20", "/work/both")
+	d.proc(901, []string{"codex"}, "%21", "/work/both")
+	d.smp.Sample()
+	if err := os.RemoveAll(filepath.Join(d.root, "proc", "901")); err != nil {
+		t.Fatal(err)
+	}
+	d.write(fixtureNow, "rollout-a-exited.jsonl", codexMeta("id-exited", "/work/both", "codex-tui", d.started.Add(time.Minute)), 90000, fixtureNow.Add(-time.Second))
+	again := newFixtureSampler(d.root)
+	again.Agents, again.CodexSeenFile = d.smp.Agents, seen
+	if s := byPane(again.Sample())["%20"]; s.SessionID != "" || s.Context == "known" {
+		t.Errorf("after a restart, beside an exited neighbour's rollout: id %q, context %q; want none, not known", s.SessionID, s.Context)
+	}
+}
+
+// TestACodexAfterSlashResumeIsNotMeasured: /resume X in a TUI writes on
+// in X's rollout, begun on an older day. Once X is written after the
+// pane's own rollout, which is the pane's cannot be told: not measured.
+func TestACodexAfterSlashResumeIsNotMeasured(t *testing.T) {
+	d := newCodexDir(t)
+	before := d.started.Add(-72 * time.Hour)
+	d.proc(900, []string{"codex"}, "%20", "/work/tui")
+	d.write(fixtureNow, "rollout-a-own.jsonl", codexMeta("id-own", "/work/tui", "codex-tui", d.started.Add(2*time.Second)), 150000, d.started.Add(time.Minute))
+	d.write(before, "rollout-b-x.jsonl", codexMeta("id-x", "/work/tui", "codex-tui", before), 12000, fixtureNow.Add(-time.Second))
+	a := "0199a0b1-5e5e-7000-8000-00000000000a"
+	d.proc(910, []string{"codex", "resume", a}, "%21", "/work/res")
+	d.write(before, "rollout-2026-09-18T10-00-00-"+a+".jsonl", codexMeta(a, "/work/res", "codex-tui", before), 200000, d.started.Add(time.Minute))
+	d.write(before.Add(-24*time.Hour), "rollout-c-y.jsonl", codexMeta("id-y", "/work/res", "codex-tui", before), 12000, fixtureNow.Add(-time.Second))
+
+	got := byPane(d.smp.Sample())
+	for _, pane := range []string{"%20", "%21"} {
+		if s := got[pane]; s.SessionID != "" || s.Context != "unmeasured" {
+			t.Errorf("%s, after /resume of an older session: id %q, context %q; want none, unmeasured", pane, s.SessionID, s.Context)
+		}
+	}
+}
+
 // TestAFreshCodexDoesNotTakeASubagent: a subagent of another session
 // begun in the directory is not the TUI's own rollout.
 func TestAFreshCodexDoesNotTakeASubagent(t *testing.T) {

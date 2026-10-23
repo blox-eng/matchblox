@@ -24,16 +24,17 @@ All notable changes to matchblox are in this file. The format follows
   directory, with its id, so `z` on the run parked the session. Before its
   first turn, a Codex session took the rollout of a Codex app or editor
   thread there, of a subagent, or of a Codex session that started there
-  after it and exited. A Codex started with `-C <dir>` counts in `<dir>`,
-  and is measured from it. Now only the CLI's own sessions count,
+  after it and exited, also after matchblox restarts. A Codex started with
+  `-C <dir>` counts in `<dir>`, and is measured from it. Now only the CLI's own sessions count,
   and a `codex exec` or `codex review` row takes none, with options before
   it or not.
 - **A resumed Codex session shows its context.** `codex resume <id>` finds
   its rollout by the id, on whatever day it began, also from an npm install
   or with options such as `-m`. After you edit an earlier prompt (Esc Esc),
   Codex writes on in a new rollout, and matchblox follows it. After a
-  `/new` in it, or while another session in its directory (or the one
-  `-C` names) is written after it, it shows "not measured". A resume that is not found shows
+  `/new` or `/resume` in a Codex session, or while another session in its
+  directory (or the one `-C` names) is written after it, it shows "not
+  measured". A resume that is not found shows
   "not measured", not "fresh", and so does a session with no rollout of
   its own yet, in a directory where an older Codex CLI rollout has been
   written since it started.

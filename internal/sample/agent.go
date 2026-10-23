@@ -67,6 +67,7 @@ type agentReader struct {
 	rolloutMeta map[string]rolloutMeta       // by rollout path: its first line never changes
 	resumed     map[string]string            // by CODEX_HOME and session id: the rollout of `codex resume <id>`
 	resumedMiss map[string]time.Time         // by CODEX_HOME and session id: when the last search found nothing
+	wide        map[string]codexWide         // by CODEX_HOME: its last month of rollouts
 }
 
 type cached[T any] struct {
@@ -84,6 +85,7 @@ func newAgentReader() *agentReader {
 		rolloutMeta: map[string]rolloutMeta{},
 		resumed:     map[string]string{},
 		resumedMiss: map[string]time.Time{},
+		wide:        map[string]codexWide{},
 	}
 }
 

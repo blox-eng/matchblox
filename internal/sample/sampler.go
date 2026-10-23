@@ -264,6 +264,9 @@ type Sampler struct {
 	// CursorUsage reads Cursor's plan usage from its API ([limits]
 	// cursor_usage); nil: not read.
 	CursorUsage *limits.CursorUsage
+	// CodexSeenFile keeps the Codex sessions seen in each directory
+	// across a restart. Empty: kept in memory only.
+	CodexSeenFile string
 
 	agents *agentReader
 	panes  map[procKey]string // environ is read once per process
@@ -324,7 +327,7 @@ func (s *Sampler) init() {
 		s.opencode = newOpencodeReader()
 		s.panes = map[procKey]string{}
 		s.names = map[procKey]agentRef{}
-		s.codexSeen = map[string]map[procKey]time.Time{}
+		s.codexSeen = loadCodexSeen(s.CodexSeenFile)
 		s.burn = map[string][]tokenPoint{}
 		s.burnLive = map[string]bool{}
 		s.longCtx = map[procKey]bool{}
@@ -556,6 +559,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	// Nor does a Codex that holds no rollout open: with two in a
 	// directory, its rollout is either's.
 	codexIn := map[string]int{}
+	seenChanged := false
 	for pid, p := range procs {
 		// An `opencode run` that another agent started counts too: it
 		// writes a session in the same directory.
@@ -571,11 +575,14 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 				argv := codexArgv(s.FS.Argv(pid))
 				dir := codexWorkDir(argv, s.FS.Cwd(pid))
 				codexIn[dir]++
-				if codexInteractive(argv) {
+				if k := (procKey{pid, p.StartTime}); codexInteractive(argv) {
 					if s.codexSeen[dir] == nil {
 						s.codexSeen[dir] = map[procKey]time.Time{}
 					}
-					s.codexSeen[dir][procKey{pid, p.StartTime}] = now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
+					if _, ok := s.codexSeen[dir][k]; !ok {
+						s.codexSeen[dir][k] = now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
+						seenChanged = true
+					}
 				}
 			}
 		}
@@ -584,11 +591,15 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		for k, at := range seen {
 			if at.Before(now.AddDate(0, -1, 0)) {
 				delete(seen, k)
+				seenChanged = true
 			}
 		}
 		if len(seen) == 0 {
 			delete(s.codexSeen, dir)
 		}
+	}
+	if seenChanged && s.CodexSeenFile != "" {
+		_ = saveCodexSeen(s.CodexSeenFile, s.codexSeen) // unsaved: forgotten at a restart, as before
 	}
 	for pid, p := range procs {
 		agent := s.agentName(pid, p)
@@ -678,6 +689,11 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 					if began := s.agents.metaOf(path).began; began.IsZero() || !began.Before(at) {
 						path, fresh = "", false
 					}
+				}
+				// A /resume in the TUI, or a /new, writes another session
+				// after its own.
+				if k, ok := statKey(path); ok && s.agents.codexDisplaced(env.codexHome, []string{dir}, s.agents.metaOf(path).id, k.mtime, started, now) {
+					path, fresh = "", false
 				}
 			}
 			sess.Context = "unmeasured"
