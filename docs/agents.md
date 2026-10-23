@@ -83,11 +83,13 @@ Some Codex sessions show `—` and "not measured", with no limits of
 their own:
 
 - two Codex sessions in one directory;
+- a Codex app thread begun in its directory since it started;
 - a session after its `/new`;
 - a resumed session, whose rollout began before it started, when no open
   file names it.
 
-A `codex exec` run's rollout is never taken as a session's.
+A `codex exec` run shows in Sessions with no context: its rollout is never
+taken as a session's.
 
 The context use is a share of the session's window. matchblox uses the
 first window it finds, in this order:

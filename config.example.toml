@@ -50,7 +50,7 @@ source = ""              # another CSV with a ts column to chart alongside
 
 [stoker]                 # f and n: compact full idle sessions while you are away
 night_ends = "07:00"     # n runs the stoker until this time, then turns it off
-agent = "claude"         # the stoker agent matchblox starts on its own tmux server (or codex, opencode)
+agent = "claude"         # the stoker agent matchblox starts on its own tmux server (or codex, opencode, cursor-agent)
 max_steps = 60           # the most messages that agent sends in one run
 
 [ships]                  # pull requests sessions drive, through CI to live
