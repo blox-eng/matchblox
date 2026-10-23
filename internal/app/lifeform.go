@@ -2,10 +2,12 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
+	"unicode"
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -353,7 +355,11 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 		return m.swapEnter(f)
 	}
 	if f.pick {
-		roots := strings.Fields(f.roots)
+		roots, err := splitFolders(f.roots)
+		if err != nil {
+			f.err = err.Error()
+			return m, nil
+		}
 		if len(roots) == 0 {
 			f.err = "which folders? ~ is your home"
 			return m, nil
@@ -421,7 +427,8 @@ func (m Model) formResult(r proto.Result) (Model, bool) {
 		return m, true
 	case f.pick: // as the box's yes: the reply says how it went
 		m = m.closeScan()
-		m.flash = m.scanFlash(r)
+		roots, _ := splitFolders(f.roots)
+		m.flash = m.scanFlash(r, showFolders(roots))
 	case len(r.Skipped) > 0 && f.rename && strings.HasSuffix(r.Skipped[0], "renames when it rests"):
 		m.flash = r.Skipped[0]
 	case len(r.Skipped) > 0:
@@ -489,7 +496,7 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 	case f.pick:
 		title = st.accent.Bold(true).Render("Find repositories in these folders")
 		field(fieldFolders, f.roots, "~ is your home")
-		add("", "", st.faint.Render(fit("a space between folders; four deep, they stay on this host", iw)))
+		add("", "", st.faint.Render(fit(`a space between folders; "~/My Work" keeps its space`, iw)))
 	case f.rename:
 		title = st.accent.Bold(true).Render("Rename " + f.who)
 		field(fieldName, f.name, "")
@@ -647,4 +654,44 @@ func (m Model) waitsFor(pane string) bool {
 		}
 	}
 	return false
+}
+
+// splitFolders is the folders field: a space between folders, and a
+// folder in double quotes keeps its spaces.
+func splitFolders(s string) ([]string, error) {
+	var out []string
+	var word strings.Builder
+	quoted, open := false, false
+	end := func() {
+		if word.Len() > 0 {
+			out = append(out, word.String())
+		}
+		word.Reset()
+	}
+	for _, r := range s {
+		switch {
+		case r == '"':
+			quoted, open = !quoted, true
+		case !quoted && unicode.IsSpace(r):
+			end()
+		default:
+			word.WriteRune(r)
+		}
+	}
+	if quoted && open {
+		return nil, errors.New("a quote is not closed")
+	}
+	end()
+	return out, nil
+}
+
+// showFolders is folders as the field takes them, ~ the home.
+func showFolders(folders []string) string {
+	shown := make([]string, len(folders))
+	for i, f := range folders {
+		if shown[i] = tilde(f); strings.ContainsFunc(f, unicode.IsSpace) {
+			shown[i] = `"` + shown[i] + `"`
+		}
+	}
+	return strings.Join(shown, " ")
 }

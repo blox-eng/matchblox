@@ -31,7 +31,9 @@ All notable changes to matchblox are in this file. The format follows
   Repos show in one form, symlinks resolved and letter case as on disk;
   a remote's password or token never shows. The console's question takes
   no key for a moment after it shows, never sits over a confirm, and says
-  how the scan went; `matchblox scan` waits as long as a scan can take and
+  how the scan went: none found, stopped early only when a bound cut it.
+  In `p`, a folder in double quotes keeps its spaces, and a folder that is
+  not there is named and replaces nothing; `matchblox scan` waits as long as a scan can take and
   says "refused" only for a refused yes.
   ([#173](https://github.com/blox-eng/matchblox/issues/173))
 

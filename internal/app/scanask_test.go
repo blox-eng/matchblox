@@ -320,7 +320,7 @@ func TestScanBoxNeverOverAConfirm(t *testing.T) {
 func TestScanFlashPartial(t *testing.T) {
 	m, _ := asked(t)
 	next, _ := key(m, "y")
-	r := proto.Result{ActID: next.(Model).scanAct, Scan: &proto.ScanSummary{Repos: 7, Errors: []string{"the scan took too long"},
+	r := proto.Result{ActID: next.(Model).scanAct, Scan: &proto.ScanSummary{Repos: 7, Stopped: true, Errors: []string{"the scan took too long"},
 		Skipped: []gitscan.Skip{{Path: "/x/a", Why: "it did not answer"}}}}
 	done, _ := next.Update(resultMsg(r))
 	want := "found 7 Git repositories, but the scan stopped early: the scan took too long"
@@ -487,5 +487,107 @@ func TestScanBoxNotDrawnWhileTakeOverIsDue(t *testing.T) {
 	}
 	if m.scanShown() || m.consenting() || m.focus(keyPress("y")) == layerScan {
 		t.Fatalf("box %v, consenting %v, focus %v", m.scanShown(), m.consenting(), m.focus(keyPress("y")))
+	}
+}
+
+// pickTyped opens the folders form, types text over the usual folders and
+// sends it.
+func pickTyped(t *testing.T, text string) (tea.Model, *fakeConn) {
+	t.Helper()
+	m, f := asked(t)
+	next, _ := key(m, "p")
+	for range len([]rune(defaultRoots)) {
+		next, _ = key(next, "backspace")
+	}
+	next = typeText(next, text)
+	next, cmd := key(next, "enter")
+	sendAll(t, cmd)
+	return next, f
+}
+
+func TestPickFolderWithSpace(t *testing.T) {
+	_, f := pickTyped(t, `"~/My Projects" ~/dev`)
+	if a := f.acts(); len(a) != 1 || a[0].RecID != "scan:yes" || a[0].Text != "~/My Projects\n~/dev" {
+		t.Fatalf("sent %+v, want two folders, the space kept", a)
+	}
+	next, f := pickTyped(t, `~/a "~/My Projects`)
+	if nm := next.(Model); len(f.acts()) != 0 || nm.form == nil || nm.form.err == "" {
+		t.Fatalf("an open quote: sent %+v, form %+v", f.acts(), nm.form)
+	}
+}
+
+func TestSplitFolders(t *testing.T) {
+	for in, want := range map[string][]string{
+		`~ ~/dev`:                    {"~", "~/dev"},
+		`  "~/My Projects"   ~/dev `: {"~/My Projects", "~/dev"},
+		`~/a"b c"`:                   {"~/ab c"},
+		`""`:                         nil,
+		``:                           nil,
+	} {
+		got, err := splitFolders(in)
+		if err != nil || !slices.Equal(got, want) {
+			t.Errorf("splitFolders(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	if _, err := splitFolders(`"~/a`); err == nil {
+		t.Error("an open quote: no error")
+	}
+}
+
+// A folder that is not there keeps the form open, with why and the
+// folders typed: nothing replaced the usual ones.
+func TestPickMissingFolderStaysOpen(t *testing.T) {
+	next, _ := pickTyped(t, "~/dve")
+	done, _ := next.Update(resultMsg(proto.Result{ActID: next.(Model).form.act, Err: "no folder ~/dve"}))
+	nm := done.(Model)
+	if nm.form == nil || !nm.form.pick || nm.form.err != "no folder ~/dve" || nm.form.roots != "~/dve" || nm.scanAsk == nil {
+		t.Fatalf("form %+v, flash %q", nm.form, nm.flash)
+	}
+	if s := screen(done); !strings.Contains(s, "no folder ~/dve") {
+		t.Fatalf("the form:\n%s", s)
+	}
+}
+
+func TestScanFlashSaysNoneFound(t *testing.T) {
+	m, _ := asked(t)
+	next, _ := key(m, "y")
+	done, _ := next.Update(resultMsg(proto.Result{ActID: next.(Model).scanAct, Scan: &proto.ScanSummary{}}))
+	if f, want := done.(Model).flash, "found no Git repositories in "+defaultRoots; f != want {
+		t.Fatalf("box: flash %q, want %q", f, want)
+	}
+	next, _ = pickTyped(t, `~/w "~/My Work"`)
+	done, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.act, Scan: &proto.ScanSummary{}}))
+	if f, want := done.(Model).flash, `found no Git repositories in ~/w "~/My Work"`; f != want {
+		t.Fatalf("pick: flash %q, want %q", f, want)
+	}
+	long := strings.Repeat("~/folder ", 30)
+	next, _ = pickTyped(t, strings.TrimSpace(long))
+	done, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.act, Scan: &proto.ScanSummary{}}))
+	if f := done.(Model).flash; !strings.HasPrefix(f, "found no Git repositories in ~/folder") || len([]rune(f)) > m.width-2 {
+		t.Fatalf("pick, many folders: flash %q on %d columns", f, m.width)
+	}
+}
+
+func TestScanFlashUnreadableIsNotAStop(t *testing.T) {
+	m, _ := asked(t)
+	next, _ := key(m, "y")
+	act := next.(Model).scanAct
+	for _, c := range []struct {
+		sum  proto.ScanSummary
+		want string
+	}{
+		{proto.ScanSummary{Repos: 12, Errors: []string{"cannot read /home/x/data/lost+found: permission denied"}},
+			"found 12 Git repositories; 1 folder could not be read: matchblox scan lists them"},
+		{proto.ScanSummary{Repos: 1, Errors: []string{"cannot read /a: permission denied", "cannot read /b: permission denied"}},
+			"found 1 Git repository; 2 folders could not be read: matchblox scan lists them"},
+		{proto.ScanSummary{Repos: 3, Errors: append(slices.Repeat([]string{"cannot read /a: permission denied"}, 19), "and 6 more")},
+			"found 3 Git repositories; 25 folders could not be read: matchblox scan lists them"},
+		{proto.ScanSummary{Repos: 1, Stopped: true, Errors: []string{"stopped after 30s: some repositories may be missing"}},
+			"found 1 Git repository, but the scan stopped early: stopped after 30s: some repositories may be missing"},
+	} {
+		done, _ := next.Update(resultMsg(proto.Result{ActID: act, Scan: &c.sum}))
+		if f := done.(Model).flash; f != c.want {
+			t.Errorf("%+v: flash %q, want %q", c.sum, f, c.want)
+		}
 	}
 }

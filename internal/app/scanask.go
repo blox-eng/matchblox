@@ -7,6 +7,7 @@ import (
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 )
@@ -79,29 +80,44 @@ func (m Model) scanResult(r proto.Result) (Model, bool) {
 		return m, false
 	}
 	m.scanAct = ""
-	m.flash = m.scanFlash(r)
+	roots := defaultRoots
+	if len(m.found.Roots) > 0 {
+		roots = showFolders(m.found.Roots)
+	}
+	m.flash = m.scanFlash(r, roots)
 	return m, true
 }
 
-// scanFlash is how this console's scan:yes went, from its own reply: the
-// Found broadcast may be another console's scan, or none at all.
-func (m Model) scanFlash(r proto.Result) string {
+// scanFlash is how this console's scan:yes of roots, as shown, went, from
+// its own reply: the Found broadcast may be another console's scan, or
+// none at all.
+func (m Model) scanFlash(r proto.Result, roots string) string {
 	if r.Err != "" {
 		return "not found: " + r.Err
 	}
 	ok := "found your Git repositories: " + m.keys.main.New.Help().Key + " offers them"
 	sum := r.Scan
-	switch {
-	case sum == nil:
+	if sum == nil {
 		return ok
-	case len(sum.Errors) > 0:
-		return fmt.Sprintf("found %d Git repositories, but the scan stopped early: %s", sum.Repos, sum.Errors[0])
+	}
+	room := max(m.width, minWidth) - 2
+	found := "found " + gitRepos(sum.Repos)
+	switch {
+	case sum.Stopped:
+		line := found + ", but the scan stopped early"
+		if len(sum.Errors) > 0 {
+			line += ": " + sum.Errors[0] // the bound that cut it
+		}
+		return line
+	case len(sum.Errors) > 0: // the walk ran to the end
+		return found + "; " + plural(unread(sum.Errors), "folder") + " could not be read: matchblox scan lists them"
+	case sum.Repos == 0 && len(sum.Skipped) == 0:
+		return ansi.Truncate("found no Git repositories in "+roots, room, "…")
 	case len(sum.Skipped) == 0:
 		return ok
 	}
 	// The folders skipped, in order, as many as the line holds;
 	// matchblox scan lists them all.
-	room := max(m.width, minWidth) - 2
 	line := ok + "; skipped"
 	total := len(sum.Skipped) + sum.SkippedMore
 	for i, sk := range sum.Skipped {
@@ -120,6 +136,25 @@ func (m Model) scanFlash(r proto.Result) string {
 		line += fmt.Sprintf(" and %d more", sum.SkippedMore)
 	}
 	return line
+}
+
+// gitRepos is "1 Git repository", "2 Git repositories".
+func gitRepos(n int) string {
+	if n == 1 {
+		return "1 Git repository"
+	}
+	return fmt.Sprintf("%d Git repositories", n)
+}
+
+// unread is how many folders errs says could not be read: a capped list
+// ends "and N more".
+func unread(errs []string) int {
+	n := len(errs)
+	var more int
+	if _, err := fmt.Sscanf(errs[n-1], "and %d more", &more); err == nil {
+		return n - 1 + more
+	}
+	return n
 }
 
 func (m Model) scanBox(bw int) []string {
