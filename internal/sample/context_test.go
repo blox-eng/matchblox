@@ -743,9 +743,16 @@ func TestACodexExecTakesNoSessionsRollout(t *testing.T) {
 	d.proc(901, []string{"codex"}, "%21", "/work/both")
 	d.write(fixtureNow, "rollout-a-tui.jsonl", codexMeta("id-tui", "/work/both", "codex-tui", d.started.Add(2*time.Second)), 51680, fixtureNow.Add(-time.Second))
 	d.proc(910, []string{"node", "/usr/local/bin/codex", "exec", "fix it"}, "%22", "/work/npm")
+	// An option before exec: the TUI beside it keeps its rollout.
+	d.proc(920, []string{"codex", "-m", "gpt-made-up", "exec", "fix it"}, "%23", "/work/opt")
+	d.proc(921, []string{"codex"}, "%24", "/work/opt")
+	d.write(fixtureNow, "rollout-b-opt.jsonl", codexMeta("id-opt", "/work/opt", "codex-tui", d.started.Add(2*time.Second)), 51680, fixtureNow.Add(-time.Second))
 
 	got := byPane(d.smp.Sample())
-	for _, pane := range []string{"%20", "%22"} {
+	if s := got["%24"]; s.SessionID != "id-opt" || s.Context != "known" {
+		t.Errorf("the TUI beside codex -m X exec: id %q, context %q; want id-opt, known", s.SessionID, s.Context)
+	}
+	for _, pane := range []string{"%20", "%22", "%23"} {
 		if s := got[pane]; s.SessionID != "" || s.Context != "unmeasured" {
 			t.Errorf("%s, a codex exec row: id %q, context %q; want none, unmeasured", pane, s.SessionID, s.Context)
 		}
@@ -791,6 +798,7 @@ func TestAResumedCodexIsNotFresh(t *testing.T) {
 		{"node", "/usr/local/bin/codex", "resume", "ID"},
 		{"codex", "-m", "gpt-made-up", "resume", "ID"},
 		{"codex", "resume", "UPPER"},
+		{"codex", "resume", "-m", "gpt-made-up", "ID"},
 	} {
 		id := "0199a0b1-5e5e-7000-8000-00000000abc" + strconv.Itoa(i)
 		for j := range argv {
@@ -811,7 +819,7 @@ func TestAResumedCodexIsNotFresh(t *testing.T) {
 	d.write(before, "rollout-c-away.jsonl", codexMeta("id-away", "/work/away", "codex-tui", before), 51680, fixtureNow.Add(-time.Second))
 
 	got := byPane(d.smp.Sample())
-	for i := range 4 {
+	for i := range 5 {
 		id, pane := "0199a0b1-5e5e-7000-8000-00000000abc"+strconv.Itoa(i), "%2"+strconv.Itoa(i)
 		if s := got[pane]; s.SessionID != id || s.Context != "known" || s.Tokens != 51680 {
 			t.Errorf("%s, resumed by its id: id %q, context %q, %d tokens; want %s, known, 51680", pane, s.SessionID, s.Context, s.Tokens, id)
@@ -848,6 +856,34 @@ func TestACodexFollowsItsRevertedRollout(t *testing.T) {
 	}
 	if s := got["%21"]; s.SessionID != fresh || s.Tokens != 30000 {
 		t.Errorf("a TUI after a revert: id %q, %d tokens; want %s, 30000", s.SessionID, s.Tokens, fresh)
+	}
+}
+
+// TestAResumeFollowsARevertFromAnEarlierDay: Codex resumes into the
+// newest file of the thread, a revert's on whatever day it was made.
+func TestAResumeFollowsARevertFromAnEarlierDay(t *testing.T) {
+	d := newCodexDir(t)
+	id := "0199a0b1-5e5e-7000-8000-00000000abcd"
+	orig, reverted := d.started.Add(-5*24*time.Hour), d.started.Add(-3*24*time.Hour)
+	d.proc(900, []string{"codex", "resume", id}, "%20", "/work/rev")
+	d.write(orig, "rollout-2026-09-16T10-00-00-"+id+".jsonl", codexMeta(id, "/work/rev", "codex-tui", orig), 200000, orig)
+	d.write(reverted, "rollout-2026-09-18T10-00-00-"+id+"_0199a0b1-5e5e-7000-8000-0000000fffff.jsonl", codexMeta(id, "/work/rev", "codex-tui", reverted), 30000, fixtureNow.Add(-time.Second))
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != id || s.Tokens != 30000 {
+		t.Errorf("a resume of a thread reverted days ago: id %q, %d tokens; want %s, 30000", s.SessionID, s.Tokens, id)
+	}
+}
+
+// TestAResumedCodexFollowsItsNew: after `codex resume A`, a /new in the
+// TUI writes a new rollout B; the pane is B's, though its argv names A.
+func TestAResumedCodexFollowsItsNew(t *testing.T) {
+	d := newCodexDir(t)
+	a := "0199a0b1-5e5e-7000-8000-00000000000a"
+	before := d.started.Add(-72 * time.Hour)
+	d.proc(900, []string{"codex", "resume", a}, "%20", "/work/new")
+	d.write(before, "rollout-2026-09-18T10-00-00-"+a+".jsonl", codexMeta(a, "/work/new", "codex-tui", before), 200000, d.started.Add(time.Minute))
+	d.write(fixtureNow, "rollout-2026-09-21T10-00-00-id-b.jsonl", codexMeta("id-b", "/work/new", "codex-tui", d.started.Add(2*time.Minute)), 12000, fixtureNow.Add(-time.Second))
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "id-b" || s.Tokens != 12000 {
+		t.Errorf("a resumed session after its /new: id %q, %d tokens; want id-b, 12000", s.SessionID, s.Tokens)
 	}
 }
 
