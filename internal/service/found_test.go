@@ -956,3 +956,24 @@ func TestScanYesSaysUnreadableAndUnsaved(t *testing.T) {
 		t.Fatalf("Unsaved = %q, want the error alone", r.Scan.Unsaved)
 	}
 }
+
+// A pick with several missing folders names them all, as typed.
+func TestScanYesNamesEveryMissingFolder(t *testing.T) {
+	s, f := foundTest(t)
+	s.Missing = func(roots []string) []string {
+		var out []string
+		for _, r := range roots {
+			if r != "/dev" {
+				out = append(out, r)
+			}
+		}
+		return out
+	}
+	foundReady(t, s)
+	if r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true, Text: "/dve\n/dev\n/sr c"}); r.Err != "no folder /dve, /sr c" {
+		t.Fatalf("yes = %+v, want both missing folders", r)
+	}
+	if n := len(f.calls()); n != 0 {
+		t.Fatalf("%d walks for a refused pick", n)
+	}
+}

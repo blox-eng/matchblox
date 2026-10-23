@@ -32,9 +32,9 @@ All notable changes to matchblox are in this file. The format follows
   a remote's password or token never shows. The console's question takes
   no key for a moment after it shows, never sits over a confirm, and says
   how the scan went: none found, stopped early only when a bound cut it.
-  In `p`, a folder in double quotes keeps its spaces, and a folder that is
-  not there is named and replaces nothing; `matchblox scan` waits as long as a scan can take and
-  says "refused" only for a refused yes.
+  In `p`, a folder in double quotes keeps its spaces, and the folders
+  that are not there are named and replace nothing; `matchblox scan` waits
+  as long as a scan can take and says "refused" only for a refused yes.
   ([#173](https://github.com/blox-eng/matchblox/issues/173))
 
 ## [0.18.0] - 2026-10-22

@@ -247,3 +247,12 @@ func TestCLIScanThatRanIsNotARefusal(t *testing.T) {
 		}
 	}
 }
+
+func TestScanActMissingFolders(t *testing.T) {
+	dir := t.TempDir()
+	mkdir(t, filepath.Join(dir, "w"))
+	a, b := filepath.Join(dir, "gone"), filepath.Join(dir, "lost")
+	if _, err := scanAct([]string{a, "~/w", b}, dir, dir); err == nil || err.Error() != "scan: no folder "+a+", "+b {
+		t.Fatalf("err %v, want both missing folders", err)
+	}
+}

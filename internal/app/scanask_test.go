@@ -619,3 +619,11 @@ func TestScanFlashNoneFoundButSkipped(t *testing.T) {
 		t.Fatalf("flash %q on %d columns", f, m.width)
 	}
 }
+
+func TestPickSeveralMissingFoldersStaysOpen(t *testing.T) {
+	next, _ := pickTyped(t, `~/dve "~/My Wrok"`)
+	done, _ := next.Update(resultMsg(proto.Result{ActID: next.(Model).form.act, Err: "no folder ~/dve, ~/My Wrok"}))
+	if nm := done.(Model); nm.form == nil || nm.form.err != "no folder ~/dve, ~/My Wrok" || nm.form.roots != `~/dve "~/My Wrok"` {
+		t.Fatalf("form %+v", nm.form)
+	}
+}

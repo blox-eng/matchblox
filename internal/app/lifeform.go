@@ -661,7 +661,7 @@ func (m Model) waitsFor(pane string) bool {
 func splitFolders(s string) ([]string, error) {
 	var out []string
 	var word strings.Builder
-	quoted, open := false, false
+	quoted := false
 	end := func() {
 		if word.Len() > 0 {
 			out = append(out, word.String())
@@ -671,14 +671,14 @@ func splitFolders(s string) ([]string, error) {
 	for _, r := range s {
 		switch {
 		case r == '"':
-			quoted, open = !quoted, true
+			quoted = !quoted
 		case !quoted && unicode.IsSpace(r):
 			end()
 		default:
 			word.WriteRune(r)
 		}
 	}
-	if quoted && open {
+	if quoted {
 		return nil, errors.New("a quote is not closed")
 	}
 	end()

@@ -37,12 +37,13 @@ folder itself, `~/dev`, `~/src`, `~/code`, `~/projects` and `~/work`, then
 in `[git] repos` and `[git] scan_roots`, and N's `where` offers what it
 finds. `p pick folders` scans the folders you type instead of the usual
 ones: a space between them, and a folder in double quotes keeps its spaces
-(`"~/My Work" ~/dev`). A folder you type that is not there is named, and
-nothing is recorded: the usual ones stay. The two config keys always add. It skips `node_modules`, `vendor`,
-`target`, `Library` and hidden folders, follows no symlink, and does not
-look inside a repository (a home folder kept in git is the one searched
-below its `.git`). It reads files only: no git runs, nothing goes on the
-network. It scans again every 30 minutes.
+(`"~/My Work" ~/dev`). The folders you type that are not there are named,
+and nothing is recorded: the folders on record stay. The two config keys
+always add. It skips `node_modules`, `vendor`, `target`, `Library` and
+hidden folders, follows no symlink, and does not look inside a repository
+(a home folder kept in git is the one searched below its `.git`). It reads
+files only: no git runs, nothing goes on the network. It scans again every
+30 minutes.
 
 Some folders are not walked, and the scan says which and why, in the
 console and in `matchblox scan`:

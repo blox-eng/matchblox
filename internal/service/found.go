@@ -316,7 +316,7 @@ func (s *Service) walked(picked []string) map[string]bool {
 	return named
 }
 
-// noFolder is why a yes for picked fails: the first of them that is no
+// noFolder is why a yes for picked fails: each of them that is no
 // folder, as typed. It looks each up within a bound, and touches nothing
 // that is recorded.
 func (s *Service) noFolder(picked []string) string {
@@ -328,12 +328,16 @@ func (s *Service) noFolder(picked []string) string {
 		as[i] = s.walkedAs(r)
 	}
 	gone := s.Missing(as)
+	var named []string
 	for i, p := range as {
 		if slices.Contains(gone, p) {
-			return "no folder " + picked[i]
+			named = append(named, picked[i])
 		}
 	}
-	return ""
+	if len(named) == 0 {
+		return ""
+	}
+	return "no folder " + strings.Join(named, ", ")
 }
 
 // under reports whether path is dir or below it.

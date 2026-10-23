@@ -46,6 +46,8 @@ func resolveHome(home string, within time.Duration) string {
 	}
 }
 
+var errNoFolder = errors.New("no folder")
+
 // statDir is nil when path is a folder. A folder that does not answer in
 // within is an error: a dead network mount must not hang the CLI.
 func statDir(path string, within time.Duration) error {
@@ -64,7 +66,7 @@ func statDir(path string, within time.Duration) error {
 	select {
 	case a := <-ch:
 		if a.err != nil || a.fi == nil || !a.fi.IsDir() {
-			return errors.New("scan: no folder " + path)
+			return fmt.Errorf("scan: %w %s", errNoFolder, path)
 		}
 		return nil
 	case <-t.C:
@@ -78,7 +80,7 @@ func scanAct(words []string, here, home string) (proto.Act, error) {
 	if len(words) == 1 && words[0] == "off" {
 		return proto.Act{RecID: "scan:no"}, nil
 	}
-	var roots []string
+	var roots, missing []string
 	for _, w := range words {
 		switch {
 		case w == "~":
@@ -88,10 +90,16 @@ func scanAct(words []string, here, home string) (proto.Act, error) {
 		case !filepath.IsAbs(w):
 			w = filepath.Join(here, w)
 		}
-		if err := statDir(w, 2*time.Second); err != nil {
+		switch err := statDir(w, 2*time.Second); {
+		case errors.Is(err, errNoFolder):
+			missing = append(missing, w)
+		case err != nil:
 			return proto.Act{}, err
 		}
 		roots = append(roots, w)
+	}
+	if len(missing) > 0 {
+		return proto.Act{}, errors.New("scan: no folder " + strings.Join(missing, ", "))
 	}
 	return proto.Act{RecID: "scan:yes", Confirm: "y", Text: strings.Join(roots, "\n")}, nil
 }
