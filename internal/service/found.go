@@ -36,7 +36,7 @@ func (s *Service) loadFound() {
 	if c.Answer == "yes" && s.ReposPath != "" {
 		cached := state.ReadFound(s.ReposPath)
 		f.At, f.Took, f.Repos, f.Errors = cached.At, cached.Took, cached.Repos, cached.Errors
-		f.Skipped, f.SkippedMore = cached.Skipped, cached.SkippedMore
+		f.Skipped, f.SkippedMore, f.Stopped = cached.Skipped, cached.SkippedMore, cached.Stopped
 	}
 	s.setFound(f)
 }
@@ -185,7 +185,7 @@ func (s *Service) walk(ctx context.Context, reqs []scanReq) {
 		}
 	}
 	start := time.Now()
-	res := s.Find(ctx, roots, s.skipHung(start))
+	res := s.Find(ctx, roots, s.skipHung(start), s.walked(c.Roots))
 	// Folders that hung are kept even when the walk's result is dropped:
 	// they hang the next walk just the same.
 	for _, p := range res.Hung {
@@ -200,7 +200,7 @@ func (s *Service) walk(ctx context.Context, reqs []scanReq) {
 		return
 	}
 	f := gitscan.Found{Consent: "yes", Roots: c.Roots, At: time.Now(), Took: time.Since(start),
-		Repos: s.carryOver(res, roots), Errors: res.Errors, Skipped: res.Skipped, SkippedMore: res.SkippedMore}
+		Repos: s.carryOver(res, roots), Errors: res.Errors, Skipped: res.Skipped, SkippedMore: res.SkippedMore, Stopped: res.Stopped}
 	f, on, err := s.keep(f, nos)
 	if errors.Is(err, errScanNo) {
 		all(err)
@@ -296,6 +296,46 @@ func (s *Service) carryOver(res gitscan.Result, roots []string) []gitscan.Checko
 	return out
 }
 
+// walkedAs is the picked root r as the walk spells it.
+func (s *Service) walkedAs(r string) string {
+	if s.ScanRoots != nil {
+		if out := s.ScanRoots([]string{r}); len(out) > 0 {
+			return out[0] // the picked come first
+		}
+	}
+	return r
+}
+
+// walked is the picked roots as the walk spells them: Find says which of
+// them is no folder. The defaults are none of them.
+func (s *Service) walked(picked []string) map[string]bool {
+	named := make(map[string]bool, len(picked))
+	for _, r := range picked {
+		named[s.walkedAs(r)] = true
+	}
+	return named
+}
+
+// noFolder is why a yes for picked fails: the first of them that is no
+// folder, as typed. It looks each up within a bound, and touches nothing
+// that is recorded.
+func (s *Service) noFolder(picked []string) string {
+	if s.Missing == nil || len(picked) == 0 {
+		return ""
+	}
+	as := make([]string, len(picked))
+	for i, r := range picked {
+		as[i] = s.walkedAs(r)
+	}
+	gone := s.Missing(as)
+	for i, p := range as {
+		if slices.Contains(gone, p) {
+			return "no folder " + picked[i]
+		}
+	}
+	return ""
+}
+
 // under reports whether path is dir or below it.
 func under(path, dir string) bool {
 	path = filepath.Clean(path)
@@ -360,9 +400,7 @@ func (s *Service) forgetHung(roots []string) {
 	for _, r := range roots {
 		add(r)
 		if s.ScanRoots != nil {
-			if out := s.ScanRoots([]string{r}); len(out) > 0 {
-				add(out[0]) // the picked come first
-			}
+			add(s.walkedAs(r))
 		}
 	}
 	if fold {
@@ -394,6 +432,11 @@ func (s *Service) scanYes(ctx context.Context, text string) proto.Result {
 		}
 	}
 	named := len(roots) > 0
+	// A folder picked that is not there fails the yes before it is
+	// recorded: the roots on record stay, and so do the defaults.
+	if why := s.noFolder(roots); why != "" {
+		return proto.Result{Err: why}
+	}
 	s.consentMu.Lock()
 	if !named {
 		roots = s.consent().Roots

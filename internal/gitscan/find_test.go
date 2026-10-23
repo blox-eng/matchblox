@@ -963,3 +963,106 @@ func TestTrueCaseOnlyWhereNamesFoldCase(t *testing.T) {
 		}
 	}
 }
+
+// A root the builder named that is not there is said, and is in Missing;
+// a default root that is not there stays silent.
+func TestFindNamesAMissingNamedRoot(t *testing.T) {
+	h := tmp(t)
+	mkRepo(t, filepath.Join(h, "dev", "app"), "main", "")
+	dve, src, file := filepath.Join(h, "dve"), filepath.Join(h, "src"), filepath.Join(h, "notes")
+	write(t, file, "x")
+	o := FindOpts{Named: map[string]bool{dve: true, file: true, filepath.Join(h, "dev"): true}}
+	res := Find(context.Background(), []string{dve, file, filepath.Join(h, "dev"), src, h}, o)
+	if want := []string{"no folder " + dve, "no folder " + file}; !slices.Equal(res.Errors, want) {
+		t.Fatalf("errors %q, want %q: a missing default root says nothing", res.Errors, want)
+	}
+	if want := []string{dve, file}; !slices.Equal(res.Missing, want) {
+		t.Fatalf("Missing %q, want %q", res.Missing, want)
+	}
+	if res.Stopped {
+		t.Fatal("Stopped for a walk that ran to the end")
+	}
+	if !slices.Equal(paths(res.Repos), []string{filepath.Join(h, "dev", "app")}) {
+		t.Fatalf("repos %v", paths(res.Repos))
+	}
+}
+
+// Stopped is set only when a bound cut the walk, never for a folder that
+// could not be read.
+func TestFindStoppedOnlyWhenCut(t *testing.T) {
+	root := tmp(t)
+	for i := range 10 {
+		mkRepo(t, filepath.Join(root, fmt.Sprint(i)), "main", "")
+	}
+	if res := Find(context.Background(), []string{root}, FindOpts{MaxDirs: 3}); !res.Stopped {
+		t.Fatalf("MaxDirs cut the walk: Stopped false, errors %q", res.Errors)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if res := Find(ctx, []string{root}, FindOpts{Budget: time.Minute}); !res.Stopped {
+		t.Fatalf("a cancelled walk: Stopped false, errors %q", res.Errors)
+	}
+	locked := filepath.Join(root, "lost+found")
+	mkdir(t, locked)
+	swapFS(t, func(dir string) ([]os.DirEntry, error) {
+		if dir == locked {
+			return nil, &fs.PathError{Op: "open", Path: dir, Err: fs.ErrPermission}
+		}
+		return os.ReadDir(dir)
+	}, nil)
+	res := Find(context.Background(), []string{root}, FindOpts{})
+	if res.Stopped || len(res.Errors) != 1 || len(res.Repos) != 10 {
+		t.Fatalf("an unreadable folder in a full walk: Stopped %v, errors %q, %d repos", res.Stopped, res.Errors, len(res.Repos))
+	}
+	if s := (Found{Repos: res.Repos, Errors: res.Errors}).Summary(); s.Stopped {
+		t.Fatal("Summary says stopped")
+	}
+}
+
+func TestFindStoppedWhenAFolderHungMidWalk(t *testing.T) {
+	root := tmp(t)
+	stuck := filepath.Join(root, "z")
+	mkdir(t, stuck)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	swapFS(t, func(dir string) ([]os.DirEntry, error) {
+		if dir == stuck {
+			<-release
+		}
+		return os.ReadDir(dir)
+	}, nil)
+	res := Find(context.Background(), []string{root}, FindOpts{Budget: 200 * time.Millisecond, Grace: 50 * time.Millisecond})
+	if !res.Stopped {
+		t.Fatalf("a hang mid-walk: Stopped false, errors %q", res.Errors)
+	}
+	if s := (Found{Stopped: true}).Summary(); !s.Stopped {
+		t.Fatal("Summary drops Stopped")
+	}
+}
+
+func TestFoundSameStopped(t *testing.T) {
+	if (Found{Stopped: true}).Same(Found{}) {
+		t.Fatal("Stopped differs: want different")
+	}
+}
+
+// Missing looks named roots up within the grace: one that is not there,
+// or is no folder, is missing; one that does not answer is not.
+func TestMissing(t *testing.T) {
+	h := tmp(t)
+	dev, dve, file, dead := filepath.Join(h, "dev"), filepath.Join(h, "dve"), filepath.Join(h, "notes"), filepath.Join(h, "nfs")
+	mkdir(t, dev)
+	mkdir(t, dead)
+	write(t, file, "x")
+	rs, _ := blockOn(t, dead)
+	swapFS(t, nil, rs)
+	o := FindOpts{Grace: 50 * time.Millisecond}
+	start := time.Now()
+	got := o.Missing([]string{dev, dve, dead, file})
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("Missing waited %s on a folder that never answered", took)
+	}
+	if want := []string{dve, file}; !slices.Equal(got, want) {
+		t.Fatalf("Missing = %q, want %q", got, want)
+	}
+}

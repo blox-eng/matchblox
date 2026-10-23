@@ -43,7 +43,7 @@ func foundTest(t *testing.T) (*Service, *finds) {
 		return picked
 	}
 	f := &finds{}
-	s.Find = func(_ context.Context, roots []string, _ map[string]bool) gitscan.Result {
+	s.Find = func(_ context.Context, roots []string, _, _ map[string]bool) gitscan.Result {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.roots = append(f.roots, roots)
@@ -205,7 +205,7 @@ func TestScanYesRefusedFromAgentPaneClaimingConsole(t *testing.T) {
 // and finds roots[0]/r.
 func blockingFind(s *Service, f *finds) (started, release chan struct{}) {
 	started, release = make(chan struct{}, 8), make(chan struct{})
-	s.Find = func(_ context.Context, roots []string, _ map[string]bool) gitscan.Result {
+	s.Find = func(_ context.Context, roots []string, _, _ map[string]bool) gitscan.Result {
 		f.mu.Lock()
 		f.roots = append(f.roots, roots)
 		f.mu.Unlock()
@@ -312,7 +312,7 @@ func TestScanStopped(t *testing.T) {
 	s, f := foundTest(t)
 	s.loadFound()
 	started := make(chan struct{}, 1)
-	s.Find = func(ctx context.Context, roots []string, _ map[string]bool) gitscan.Result {
+	s.Find = func(ctx context.Context, roots []string, _, _ map[string]bool) gitscan.Result {
 		f.mu.Lock()
 		f.roots = append(f.roots, roots)
 		f.mu.Unlock()
@@ -340,7 +340,7 @@ func TestHungFolderRemembered(t *testing.T) {
 	s, _ := foundTest(t)
 	var mu sync.Mutex
 	var skips []map[string]bool
-	s.Find = func(_ context.Context, _ []string, skip map[string]bool) gitscan.Result {
+	s.Find = func(_ context.Context, _ []string, skip, _ map[string]bool) gitscan.Result {
 		mu.Lock()
 		defer mu.Unlock()
 		skips = append(skips, skip)
@@ -415,7 +415,7 @@ func TestCacheSentBeforeFirstScan(t *testing.T) {
 	s, _ := foundTest(t)
 	state.WriteConsent(s.ConsentPath, state.Consent{Answer: "yes"})
 	state.WriteFound(s.ReposPath, gitscan.Found{Consent: "yes", Repos: []gitscan.Checkout{{Path: "/h/cached"}}})
-	s.Find = func(ctx context.Context, _ []string, _ map[string]bool) gitscan.Result {
+	s.Find = func(ctx context.Context, _ []string, _, _ map[string]bool) gitscan.Result {
 		<-ctx.Done()
 		return gitscan.Result{}
 	}
@@ -445,7 +445,7 @@ func TestCancelledScanKeepsCache(t *testing.T) {
 	state.WriteFound(s.ReposPath, gitscan.Found{Consent: "yes", Repos: []gitscan.Checkout{{Path: "/h/cached"}}})
 	s.loadFound()
 	started := make(chan struct{}, 1)
-	s.Find = func(ctx context.Context, _ []string, _ map[string]bool) gitscan.Result {
+	s.Find = func(ctx context.Context, _ []string, _, _ map[string]bool) gitscan.Result {
 		started <- struct{}{}
 		<-ctx.Done()
 		return gitscan.Result{}
@@ -585,7 +585,7 @@ func TestScanNoThenYesMidWalk(t *testing.T) {
 	s, _ := foundTest(t)
 	started, release := make(chan struct{}, 4), make(chan struct{})
 	var n atomic.Int32
-	s.Find = func(context.Context, []string, map[string]bool) gitscan.Result {
+	s.Find = func(context.Context, []string, map[string]bool, map[string]bool) gitscan.Result {
 		i := n.Add(1)
 		started <- struct{}{}
 		<-release
@@ -618,7 +618,7 @@ func TestScanNoThenYesMidWalk(t *testing.T) {
 func scripted(s *Service, results ...gitscan.Result) {
 	var mu sync.Mutex
 	n := 0
-	s.Find = func(context.Context, []string, map[string]bool) gitscan.Result {
+	s.Find = func(context.Context, []string, map[string]bool, map[string]bool) gitscan.Result {
 		mu.Lock()
 		defer mu.Unlock()
 		r := results[min(n, len(results)-1)]
@@ -689,7 +689,7 @@ func TestNamedFolderClearsHungMemory(t *testing.T) {
 	s, _ := foundTest(t)
 	var mu sync.Mutex
 	var skips []map[string]bool
-	s.Find = func(_ context.Context, _ []string, skip map[string]bool) gitscan.Result {
+	s.Find = func(_ context.Context, _ []string, skip, _ map[string]bool) gitscan.Result {
 		mu.Lock()
 		defer mu.Unlock()
 		skips = append(skips, skip)
@@ -805,7 +805,7 @@ func TestNamedFolderClearsHungMemoryCanonically(t *testing.T) {
 		s, _ := foundTest(t)
 		var mu sync.Mutex
 		var skips []map[string]bool
-		s.Find = func(_ context.Context, _ []string, skip map[string]bool) gitscan.Result {
+		s.Find = func(_ context.Context, _ []string, skip, _ map[string]bool) gitscan.Result {
 			mu.Lock()
 			defer mu.Unlock()
 			skips = append(skips, skip)
@@ -824,5 +824,115 @@ func TestNamedFolderClearsHungMemoryCanonically(t *testing.T) {
 		if skip["/real/p/sub"] || !skip["/q"] || skip["/Users/x/Code/sub"] != !fold {
 			t.Fatalf("fold %v: skip %v: a named root clears its hung folders as they were stored", fold, skip)
 		}
+	}
+}
+
+// A picked folder that is not there fails the yes, with the folder as
+// typed: scan.json keeps the roots it had, no walk runs for it, and the
+// next walk is of the roots on record.
+func TestScanYesMissingFolderKeepsTheRoots(t *testing.T) {
+	s, f := foundTest(t)
+	s.ScanRoots = func(picked []string) []string {
+		if len(picked) == 0 {
+			return []string{"/default"}
+		}
+		var out []string
+		for _, p := range picked {
+			out = append(out, "/h/"+strings.TrimPrefix(p, "~/"))
+		}
+		return out
+	}
+	var asked [][]string
+	s.Missing = func(roots []string) []string {
+		asked = append(asked, roots)
+		var out []string
+		for _, r := range roots {
+			if r == "/h/dve" {
+				out = append(out, r)
+			}
+		}
+		return out
+	}
+	foundReady(t, s)
+	if r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true, Text: "~/dev\n~/dve"}); r.Err != "no folder ~/dve" || r.Scan != nil {
+		t.Fatalf("a yes for a missing folder before any answer = %+v", r)
+	}
+	if c := state.ReadConsent(s.ConsentPath); c.Answer != "" || len(c.Roots) != 0 {
+		t.Fatalf("consent = %+v, want still never asked", c)
+	}
+	if len(asked) != 1 || !slices.Equal(asked[0], []string{"/h/dev", "/h/dve"}) {
+		t.Fatalf("Missing asked %v, want the picked folders as walked", asked)
+	}
+	if r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true}); r.Err != "" {
+		t.Fatalf("yes: %s", r.Err)
+	}
+	if r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true, Text: "~/dve"}); r.Err != "no folder ~/dve" {
+		t.Fatalf("a yes for a missing folder = %+v", r)
+	}
+	if c := state.ReadConsent(s.ConsentPath); c.Answer != "yes" || len(c.Roots) != 0 {
+		t.Fatalf("consent = %+v, want yes to the defaults", c)
+	}
+	if st, _ := s.stateFor(&client{}); st.Found == nil || len(st.Found.Roots) != 0 {
+		t.Fatalf("Found = %+v, want the defaults' roots", st.Found)
+	}
+	if got := f.calls(); len(got) != 1 {
+		t.Fatalf("scans = %v, want only the defaults' walk", got)
+	}
+	if r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true}); r.Err != "" {
+		t.Fatalf("yes: %s", r.Err)
+	}
+	if got := f.calls(); len(got) != 2 || !slices.Equal(got[1], []string{"/default"}) {
+		t.Fatalf("scans = %v, want the defaults again", got)
+	}
+}
+
+// A walk names to Find the roots the builder picked, as walked, and only
+// those.
+func TestScanWalkNamesPickedRoots(t *testing.T) {
+	s, _ := foundTest(t)
+	s.ScanRoots = func(picked []string) []string {
+		if len(picked) == 0 {
+			return []string{"/default", "/conf"}
+		}
+		return append(slices.Clone(picked), "/conf")
+	}
+	var mu sync.Mutex
+	var named []map[string]bool
+	s.Find = func(_ context.Context, _ []string, _, n map[string]bool) gitscan.Result {
+		mu.Lock()
+		defer mu.Unlock()
+		named = append(named, n)
+		return gitscan.Result{}
+	}
+	foundReady(t, s)
+	for _, text := range []string{"", "/a\n/b"} {
+		if r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true, Text: text}); r.Err != "" {
+			t.Fatalf("yes %q: %s", text, r.Err)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(named) != 2 || len(named[0]) != 0 || len(named[1]) != 2 || !named[1]["/a"] || !named[1]["/b"] {
+		t.Fatalf("named = %v, want none for the defaults, then /a /b", named)
+	}
+}
+
+// A walk a bound cut says so to the yes, and in the cache; one that ran
+// to the end does not, whatever it could not read.
+func TestScanYesSaysStopped(t *testing.T) {
+	s, _ := foundTest(t)
+	scripted(s, gitscan.Result{Stopped: true, Errors: []string{"stopped after 30s: some repositories may be missing"}},
+		gitscan.Result{Errors: []string{"cannot read /h/lost+found: permission denied"}})
+	foundReady(t, s)
+	r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true})
+	if r.Err != "" || r.Scan == nil || !r.Scan.Stopped {
+		t.Fatalf("a cut walk's yes = %+v", r)
+	}
+	if c := state.ReadFound(s.ReposPath); !c.Stopped {
+		t.Fatalf("cache = %+v, want stopped", c)
+	}
+	r = s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Console: true})
+	if r.Err != "" || r.Scan == nil || r.Scan.Stopped || len(r.Scan.Errors) != 1 {
+		t.Fatalf("a full walk's yes = %+v", r)
 	}
 }

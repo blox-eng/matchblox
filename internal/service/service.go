@@ -116,9 +116,14 @@ type Service struct {
 	Now func() time.Time
 	// Ships follows the pull requests sessions drive. Nil: no ships.
 	Ships ShipsSource
-	// Find scans the host from roots, after a yes. Nil: no scan, and no
-	// Found sent (fixtures).
-	Find func(ctx context.Context, roots []string, skip map[string]bool) gitscan.Result
+	// Find scans the host from roots, after a yes, never touching skip.
+	// named are the roots the builder picked, as walked: one that is no
+	// folder is said. Nil: no scan, and no Found sent (fixtures).
+	Find func(ctx context.Context, roots []string, skip, named map[string]bool) gitscan.Result
+	// Missing is the folders among roots that are not there, looked up
+	// within a bound: a yes that picks one fails before it is recorded.
+	// Nil: none missing.
+	Missing func(roots []string) []string
 	// ScanRoots are a scan's roots for the ones picked (empty: the
 	// defaults). Nil: the picked ones.
 	ScanRoots func(picked []string) []string

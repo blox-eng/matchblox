@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -28,12 +29,13 @@ type Found struct {
 	Errors      []string      `json:"errors,omitempty"`
 	Skipped     []Skip        `json:"skipped,omitempty"`
 	SkippedMore int           `json:"skipped_more,omitempty"` // skipped past the list's cap
+	Stopped     bool          `json:"stopped,omitempty"`      // a bound cut the walk: repos may be missing
 }
 
 // Same reports whether f and g tell a console the same thing: it ignores
 // At and Took, which change on every scan. Repos come sorted by path.
 func (f Found) Same(g Found) bool {
-	return f.Consent == g.Consent && f.SkippedMore == g.SkippedMore &&
+	return f.Consent == g.Consent && f.SkippedMore == g.SkippedMore && f.Stopped == g.Stopped &&
 		slices.Equal(f.Roots, g.Roots) && slices.Equal(f.Errors, g.Errors) &&
 		slices.Equal(f.Skipped, g.Skipped) &&
 		slices.EqualFunc(f.Repos, g.Repos, func(a, b Checkout) bool {
@@ -50,10 +52,14 @@ type Summary struct {
 	Errors      []string      `json:"errors,omitempty"`
 	Skipped     []Skip        `json:"skipped,omitempty"`
 	SkippedMore int           `json:"skipped_more,omitempty"`
+	// Stopped: a bound cut the walk (MaxDirs, Budget, a folder that hung
+	// mid-walk); its reason is Errors[0]. Other Errors are folders that
+	// could not be read in a walk that ran to the end.
+	Stopped bool `json:"stopped,omitempty"`
 }
 
 func (f Found) Summary() Summary {
-	return Summary{Repos: len(f.Repos), Took: f.Took, Errors: f.Errors, Skipped: f.Skipped, SkippedMore: f.SkippedMore}
+	return Summary{Repos: len(f.Repos), Took: f.Took, Errors: f.Errors, Skipped: f.Skipped, SkippedMore: f.SkippedMore, Stopped: f.Stopped}
 }
 
 // Checkout is one repository or linked worktree on the host.
@@ -92,6 +98,8 @@ type Result struct {
 	Skipped     []Skip   // at most maxSkipped
 	SkippedMore int
 	Hung        []string // roots as written that never resolved, and the folder read when Limit fired
+	Stopped     bool     // a bound cut the walk: Errors[0] says which
+	Missing     []string // Named roots, as written, that are no folder
 	// Resolved is each root that answered its lookup, as written, to the
 	// path it resolved to: a later walk where it hangs knows where it led.
 	Resolved map[string]string
@@ -118,6 +126,10 @@ type FindOpts struct {
 	// Protected folders are skipped below a root, never at one.
 	Protected []string
 	Mounts    func() mountTable // nil: readMounts
+	// Named roots, as written, are the builder's: one that is no folder
+	// is said in Errors and listed in Missing. Any other root that is not
+	// there is a default most homes lack, and says nothing.
+	Named map[string]bool
 }
 
 func (o FindOpts) grace() time.Duration {
@@ -227,6 +239,7 @@ type walker struct {
 	skipMore int
 	skipSeen map[string]bool
 	resolved map[string]string // Result.Resolved
+	missing  []string          // Result.Missing
 }
 
 // lookup is a path as written and what resolving it gave.
@@ -235,6 +248,32 @@ type lookup struct {
 	err           error
 	skip          bool // root: its resolved path is in Skip
 	dir           bool // root: a directory
+}
+
+// lookUp resolves p and, for a root not in skip, tells if it is a folder.
+func lookUp(resolve func(string) (string, error), p string, root bool, skip map[string]bool) lookup {
+	r, err := resolve(p)
+	if err == nil {
+		r = trueCase(r)
+	}
+	l := lookup{written: p, path: r, err: err}
+	if err == nil && root {
+		if l.skip = skip[r]; !l.skip {
+			var fi os.FileInfo
+			if fi, l.err = os.Stat(r); l.err == nil {
+				l.dir = fi.IsDir()
+			}
+		}
+	}
+	return l
+}
+
+// noFolder: the root's lookup answered, and there is no folder there.
+func (l lookup) noFolder() bool {
+	if l.err != nil {
+		return errors.Is(l.err, fs.ErrNotExist) || errors.Is(l.err, syscall.ENOTDIR)
+	}
+	return !l.skip && !l.dir
 }
 
 // run looks up the roots, the home and the protected folders, each in its
@@ -264,22 +303,7 @@ func (w *walker) run(ctx context.Context, roots []string) {
 			continue
 		}
 		w.pending[p] = true
-		go func(p string, root bool) {
-			r, err := w.resolve(p)
-			if err == nil {
-				r = trueCase(r)
-			}
-			l := lookup{written: p, path: r, err: err}
-			if err == nil && root {
-				if l.skip = w.o.Skip[r]; !l.skip {
-					var fi os.FileInfo
-					if fi, l.err = os.Stat(r); l.err == nil {
-						l.dir = fi.IsDir()
-					}
-				}
-			}
-			ch <- l
-		}(p, isRoot[p])
+		go func(p string, root bool) { ch <- lookUp(w.resolve, p, root, w.o.Skip) }(p, isRoot[p])
 	}
 	n := len(w.pending)
 	w.mu.Unlock()
@@ -330,11 +354,16 @@ wait:
 		case !ok:
 		case l.skip: // as written when its lookup hung, else resolved
 			w.skip(l.path, whyHung)
-		case l.err != nil:
-			if !errors.Is(l.err, fs.ErrNotExist) {
-				w.note(fmt.Sprintf("cannot find root %s: %v", r, cause(l.err)))
+		case l.noFolder():
+			if w.o.Named[r] {
+				w.note("no folder " + r)
+				w.mu.Lock()
+				w.missing = append(w.missing, r)
+				w.mu.Unlock()
 			}
-		case l.dir:
+		case l.err != nil:
+			w.note(fmt.Sprintf("cannot find root %s: %v", r, cause(l.err)))
+		default:
 			dirs = append(dirs, l.path)
 		}
 	}
@@ -506,8 +535,10 @@ func (w *walker) result(hung, stuck bool) Result {
 	}
 	sort.Slice(res.Repos, func(i, j int) bool { return res.Repos[i].Path < res.Repos[j].Path })
 	if w.stop != "" {
+		res.Stopped = true
 		res.Errors = append(res.Errors, w.stop)
 	}
+	res.Missing = slices.Clone(w.missing)
 	res.Errors = append(res.Errors, w.errs...)
 	if total := len(res.Errors) + w.errMore; total > maxErrors {
 		res.Errors = append(res.Errors[:maxErrors-1], fmt.Sprintf("and %d more", total-(maxErrors-1)))
@@ -765,6 +796,41 @@ func ScanRoots(home string, picked, repos, extra []string) []string {
 				seen[p] = true
 				out = append(out, p)
 			}
+		}
+	}
+	return out
+}
+
+// Missing is the roots, as given, that are no folder: looked up as Find
+// looks up a root, each in its own goroutine, waited on for the grace.
+// One that does not answer in time is not missing: the walk says so.
+func (o FindOpts) Missing(roots []string) []string {
+	ch := make(chan lookup, len(roots))
+	rs := resolve // read here: a goroutine may outlive a test that swaps it back
+	asked := map[string]bool{}
+	for _, p := range roots {
+		if !asked[p] {
+			asked[p] = true
+			go func() { ch <- lookUp(rs, p, true, nil) }()
+		}
+	}
+	t := time.NewTimer(o.grace())
+	defer t.Stop()
+	gone := map[string]bool{}
+wait:
+	for range asked {
+		select {
+		case l := <-ch:
+			gone[l.written] = l.noFolder()
+		case <-t.C:
+			break wait
+		}
+	}
+	var out []string
+	for _, p := range roots {
+		if gone[p] {
+			out = append(out, p)
+			gone[p] = false
 		}
 	}
 	return out
