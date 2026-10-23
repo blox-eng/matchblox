@@ -31,6 +31,11 @@ func (s *Sampler) codexRollout(pid int, children map[int][]int) (path string, re
 			if !strings.HasPrefix(base, "rollout-") || !strings.HasSuffix(base, ".jsonl") || !strings.Contains(f, "/sessions/") {
 				continue
 			}
+			// A subagent runs in the TUI's process: its rollout is open
+			// too, and is not the session's.
+			if s.agents.metaOf(f).subagent {
+				continue
+			}
 			// More than one open: the one written last is on screen.
 			if path == "" || newer(f, path) {
 				path = f
@@ -54,7 +59,7 @@ func (s *Sampler) codexRollout(pid int, children map[int][]int) (path string, re
 // caller asks only when no other Codex session runs in the directory.
 func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) (path string, ambiguous bool) {
 	id, sessions, older := "", 0, false
-	r.codexRollouts(home, cwd, started, now, func(f string, _ time.Time, m rolloutMeta) {
+	r.codexRollouts(home, []string{cwd}, started, now, func(f string, _ time.Time, m rolloutMeta) {
 		// Process start times have tick precision; a session's own
 		// rollout begins a second or more after it.
 		if !m.began.IsZero() && m.began.Before(started.Add(-time.Second)) {
@@ -74,25 +79,26 @@ func (r *agentReader) codexInDir(home, cwd string, started, now time.Time) (path
 	return path, false
 }
 
-// codexDisplaced: a session other than id was written in cwd after since,
-// the last write of id's rollout. A /new in id's TUI does that, and so
-// does a session beside it: which is the pane's cannot be told.
-func (r *agentReader) codexDisplaced(home, cwd, id string, since, started, now time.Time) bool {
+// codexDisplaced: a session other than id was written in one of cwds
+// after since, the last write of id's rollout. A /new in id's TUI does
+// that, and so does a session beside it: which is the pane's cannot be
+// told.
+func (r *agentReader) codexDisplaced(home string, cwds []string, id string, since, started, now time.Time) bool {
 	displaced := false
-	r.codexRollouts(home, cwd, started, now, func(_ string, mtime time.Time, m rolloutMeta) {
+	r.codexRollouts(home, cwds, started, now, func(_ string, mtime time.Time, m rolloutMeta) {
 		displaced = displaced || m.id != id && mtime.After(since)
 	})
 	return displaced
 }
 
-// codexRollouts calls fn for each session rollout of the Codex CLI in cwd
-// written since started, among those created since then (a month at
+// codexRollouts calls fn for each session rollout of the Codex CLI in
+// cwds written since started, among those created since then (a month at
 // most): not a `codex exec` run's, a thread of the Codex app or an
 // editor, nor a subagent's. Codex names its day directories in its own
 // zone, so the scan takes a day either side; a directory not written
 // since the start is not read.
-func (r *agentReader) codexRollouts(home, cwd string, started, now time.Time, fn func(path string, mtime time.Time, m rolloutMeta)) {
-	if home == "" || cwd == "" {
+func (r *agentReader) codexRollouts(home string, cwds []string, started, now time.Time, fn func(path string, mtime time.Time, m rolloutMeta)) {
+	if home == "" || len(cwds) == 0 {
 		return
 	}
 	started, now = started.Local(), now.Local()
@@ -116,7 +122,7 @@ func (r *agentReader) codexRollouts(home, cwd string, started, now time.Time, fn
 			if !ok || k.mtime.Before(started) {
 				continue
 			}
-			if m := r.metaOf(f); m.cwd == cwd && codexCLI[m.originator] && !m.subagent {
+			if m := r.metaOf(f); m.cwd != "" && slices.Contains(cwds, m.cwd) && codexCLI[m.originator] && !m.subagent {
 				fn(f, k.mtime, m)
 			}
 		}
@@ -163,6 +169,26 @@ func codexWords(argv []string) []string {
 		}
 	}
 	return words
+}
+
+// codexCd is the directory `-C`/`--cd` gives Codex, against cwd, or "".
+func codexCd(argv []string, cwd string) string {
+	for i := 1; i < len(argv); i++ {
+		dir := ""
+		switch a := argv[i]; {
+		case (a == "-C" || a == "--cd") && i+1 < len(argv):
+			dir = argv[i+1]
+		case strings.HasPrefix(a, "--cd="):
+			dir = strings.TrimPrefix(a, "--cd=")
+		default:
+			continue
+		}
+		if !filepath.IsAbs(dir) {
+			dir = filepath.Join(cwd, dir)
+		}
+		return filepath.Clean(dir)
+	}
+	return ""
 }
 
 // codexResume: argv resumes a session. "resume" anywhere counts: a wrong

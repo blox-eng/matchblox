@@ -724,13 +724,14 @@ func (d *codexDir) proc(pid int, argv []string, pane, cwd string) {
 }
 
 // write puts a rollout of tokens in day's directory, last written at.
-func (d *codexDir) write(day time.Time, name, meta string, tokens int, at time.Time) {
+func (d *codexDir) write(day time.Time, name, meta string, tokens int, at time.Time) string {
 	tail := strings.SplitN(codexRollout("gpt-made-up", tokens, 258400), "\n", 2)[1]
 	path := filepath.Join(d.root, "home", ".codex", "sessions", day.Format("2006/01/02"), name)
 	writeFile(d.t, path, meta+tail)
 	if err := os.Chtimes(path, at, at); err != nil {
 		d.t.Fatal(err)
 	}
+	return path
 }
 
 // TestACodexExecTakesNoSessionsRollout: a `codex exec` run in a pane is
@@ -919,6 +920,67 @@ func TestAResumedCodexKeepsItsOwnRollout(t *testing.T) {
 	}
 	if s := got["%22"]; s.SessionID != "" || s.Context != "unmeasured" {
 		t.Errorf("after a /new in A's TUI: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
+	}
+}
+
+// TestAResumeInAnotherDirectoryLosesItsIDAfterANew: Codex works in the
+// resumed session's directory, or the one -C names, not the process's
+// own. A /new written there after A clears the id.
+func TestAResumeInAnotherDirectoryLosesItsIDAfterANew(t *testing.T) {
+	d := newCodexDir(t)
+	before := d.started.Add(-72 * time.Hour)
+	for i, argv := range [][]string{
+		{"codex", "resume", "ID"},
+		{"codex", "-C", "../proj1", "resume", "ID"},
+	} {
+		id := "0199a0b1-5e5e-7000-8000-00000000000" + strconv.Itoa(i)
+		proj := "/work/proj" + strconv.Itoa(i)
+		for j := range argv {
+			if argv[j] == "ID" {
+				argv[j] = id
+			}
+		}
+		d.proc(900+i, argv, "%2"+strconv.Itoa(i), "/work/home"+strconv.Itoa(i))
+		d.write(before, "rollout-2026-09-18T10-00-00-"+id+".jsonl", codexMeta(id, proj, "codex-tui", before), 200000, d.started.Add(time.Minute))
+		d.write(fixtureNow, "rollout-new-"+strconv.Itoa(i)+".jsonl", codexMeta("id-new"+strconv.Itoa(i), proj, "codex-tui", d.started.Add(2*time.Minute)), 12000, fixtureNow.Add(-time.Second))
+	}
+	got := byPane(d.smp.Sample())
+	for _, pane := range []string{"%20", "%21"} {
+		if s := got[pane]; s.SessionID != "" || s.Context != "unmeasured" {
+			t.Errorf("%s, a /new in Codex's own directory: id %q, context %q; want none, unmeasured", pane, s.SessionID, s.Context)
+		}
+	}
+}
+
+// TestAnOpenSubagentRolloutIsNotTheSessions: a subagent runs in the TUI's
+// process, so its rollout is among the open files; the session's is the
+// main one.
+func TestAnOpenSubagentRolloutIsNotTheSessions(t *testing.T) {
+	d := newCodexDir(t)
+	d.proc(900, []string{"codex"}, "%20", "/work/sub")
+	main := d.write(fixtureNow, "rollout-a-main.jsonl", codexMeta("id-main", "/work/sub", "codex-tui", d.started.Add(2*time.Second)), 150000, fixtureNow.Add(-time.Minute))
+	sub := d.write(fixtureNow, "rollout-b-sub.jsonl", codexSubagentMeta("id-sub", "id-main", "/work/sub", d.started.Add(time.Minute)), 12000, fixtureNow.Add(-time.Second))
+	symlink(t, main, filepath.Join(d.root, "proc", "900", "fd", "21"))
+	symlink(t, sub, filepath.Join(d.root, "proc", "900", "fd", "22"))
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "id-main" || s.Tokens != 150000 {
+		t.Errorf("a subagent's rollout open: id %q, %d tokens; want id-main, 150000", s.SessionID, s.Tokens)
+	}
+}
+
+// TestAFreshCodexDoesNotTakeAnExitedNeighbour: a Codex that started after
+// the TUI in its directory, worked and exited, left a rollout begun since
+// the TUI started. It is not the TUI's.
+func TestAFreshCodexDoesNotTakeAnExitedNeighbour(t *testing.T) {
+	d := newCodexDir(t)
+	d.proc(900, []string{"codex"}, "%20", "/work/both")
+	d.proc(901, []string{"codex"}, "%21", "/work/both")
+	d.smp.Sample()
+	if err := os.RemoveAll(filepath.Join(d.root, "proc", "901")); err != nil {
+		t.Fatal(err)
+	}
+	d.write(fixtureNow, "rollout-a-exited.jsonl", codexMeta("id-exited", "/work/both", "codex-tui", d.started.Add(time.Minute)), 90000, fixtureNow.Add(-time.Second))
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "" || s.Context == "known" {
+		t.Errorf("beside an exited neighbour's rollout: id %q, context %q; want none, not known", s.SessionID, s.Context)
 	}
 }
 
