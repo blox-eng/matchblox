@@ -894,3 +894,43 @@ func TestFindReportsResolvedRoots(t *testing.T) {
 		t.Fatalf("Resolved = %v: a root that does not exist resolved to nothing", res.Resolved)
 	}
 }
+
+func TestTrueCaseOnlyWhereNamesFoldCase(t *testing.T) {
+	if want := runtime.GOOS == "darwin" || runtime.GOOS == "windows"; caseInsensitive != want || FoldsCase() != want {
+		t.Fatalf("caseInsensitive = %v on %s, want %v", caseInsensitive, runtime.GOOS, want)
+	}
+	dir := tmp(t)
+	mkdir(t, filepath.Join(dir, "Code", "2026"))
+	var mu sync.Mutex
+	reads := map[string]int{}
+	caseReadDir = func(d string) ([]os.DirEntry, error) {
+		mu.Lock()
+		reads[d]++
+		mu.Unlock()
+		return os.ReadDir(d)
+	}
+	was := caseInsensitive
+	t.Cleanup(func() { caseReadDir, caseInsensitive = os.ReadDir, was })
+
+	caseInsensitive = false
+	if p := filepath.Join(dir, "code", "2026"); trueCase(p) != p || len(reads) != 0 {
+		t.Fatalf("trueCase(%s) = %s, %d reads: a case-sensitive host reads nothing", p, trueCase(p), len(reads))
+	}
+
+	caseInsensitive = true
+	trueCase(filepath.Join(dir, "gone", "deeper"))
+	if reads[dir] != 0 || reads[filepath.Join(dir, "gone")] != 0 {
+		t.Fatalf("reads %v: a name that is not there reads no folder", reads)
+	}
+	if got, want := trueCase(filepath.Join(dir, "Code", "2026")), filepath.Join(dir, "Code", "2026"); got != want {
+		t.Fatalf("trueCase = %s, want %s", got, want)
+	}
+	if reads[filepath.Join(dir, "Code")] != 0 {
+		t.Fatalf("reads %v: a name with no letters has no other case to look for", reads)
+	}
+	if answersTo(dir, "code") {
+		if got, want := trueCase(filepath.Join(dir, "code", "2026")), filepath.Join(dir, "Code", "2026"); got != want {
+			t.Fatalf("trueCase = %s, want %s: the case on disk", got, want)
+		}
+	}
+}

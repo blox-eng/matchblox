@@ -353,10 +353,27 @@ wait:
 
 // trueCase is p, an absolute path with no links, in the letter case its
 // folders have on disk: on a case-insensitive volume ~/code resolves, but
-// a walk of ~ reaches it as ~/Code. Each name takes the entry of its
-// parent that equals it, else the one that equals it in another case;
-// a parent that cannot be read keeps the name as written.
+// a walk of ~ reaches it as ~/Code. Where names never fold case it is p.
+// Each name takes the entry of its parent that equals it, else the one
+// that equals it in another case and is the same file; a name that is
+// not there, has no letters, or whose parent cannot be read is kept as
+// written.
+// caseInsensitive: the host's volumes fold case by default, so a name
+// may resolve in another case than it has on disk. caseReadDir is
+// swapped in tests.
+var (
+	caseInsensitive = runtime.GOOS == "darwin" || runtime.GOOS == "windows"
+	caseReadDir     = os.ReadDir
+)
+
+// FoldsCase reports whether the host's folders answer to a name in
+// another letter case.
+func FoldsCase() bool { return caseInsensitive }
+
 func trueCase(p string) string {
+	if !caseInsensitive {
+		return p
+	}
 	sep := string(filepath.Separator)
 	vol := filepath.VolumeName(p)
 	if !strings.HasPrefix(p[len(vol):], sep) {
@@ -371,8 +388,16 @@ func trueCase(p string) string {
 	return out
 }
 
+// nameOnDisk: an Lstat of the name as written comes first, so a name
+// that is not there reads no folder. The Lstat cannot tell the case
+// (a folding volume answers to any), so a name with letters still
+// reads its parent.
 func nameOnDisk(dir, name string) string {
-	ents, err := os.ReadDir(dir)
+	fi, err := os.Lstat(filepath.Join(dir, name))
+	if err != nil || strings.ToLower(name) == strings.ToUpper(name) {
+		return name
+	}
+	ents, err := caseReadDir(dir)
 	if err != nil {
 		return name
 	}
@@ -386,6 +411,9 @@ func nameOnDisk(dir, name string) string {
 		}
 	}
 	if other == "" {
+		return name
+	}
+	if ofi, err := os.Lstat(filepath.Join(dir, other)); err != nil || !os.SameFile(fi, ofi) {
 		return name
 	}
 	return other
