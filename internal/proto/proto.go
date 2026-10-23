@@ -70,6 +70,9 @@ const (
 type State struct {
 	state.Doc
 	History *history.Series `json:"history,omitempty"`
+	// Found is set in the first snapshot to each console and when it
+	// changes; nil: as the last one. A service with no scan never sets it.
+	Found *Found `json:"found,omitempty"`
 }
 
 type Event struct {
@@ -100,6 +103,8 @@ type Result struct {
 	Ran     [][]string `json:"ran,omitempty"`
 	Skipped []string   `json:"skipped,omitempty"`
 	Err     string     `json:"err,omitempty"`
+	// Scan is how a scan:yes's scan went.
+	Scan *ScanSummary `json:"scan,omitempty"`
 }
 
 type Error struct {
@@ -157,6 +162,9 @@ type (
 	GitReport   = gitscan.Report
 	Worktree    = gitscan.Worktree
 	PR          = gitscan.PR
+	Found       = gitscan.Found
+	ScanSummary = gitscan.Summary
+	Checkout    = gitscan.Checkout
 	Ships       = ships.Report
 	Ship        = ships.Ship
 	ShipStage   = ships.Stage

@@ -57,11 +57,14 @@ func Path() string {
 }
 
 // Write replaces the file atomically so a reader never sees half a snapshot.
-func Write(path string, doc Doc) error {
+func Write(path string, doc Doc) error { return writeJSON(path, doc) }
+
+// writeJSON replaces path atomically with v, readable by its owner only.
+func writeJSON(path string, v any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(doc, "", "  ")
+	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}

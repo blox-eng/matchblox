@@ -261,6 +261,12 @@ func (s *Scanner) Scan(ctx context.Context, in Input) Report {
 		}
 	}
 	for _, r := range in.Extra {
+		// Session cwds are kernel-resolved; resolve configured paths the same way.
+		if rr, err := filepath.EvalSymlinks(r); err == nil {
+			r = rr
+		} else {
+			r = filepath.Clean(r)
+		}
 		if top := Toplevel(r); top != "" {
 			repos[mainCheckout(top)] = true
 		}

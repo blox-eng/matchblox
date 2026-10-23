@@ -69,6 +69,13 @@ The first run asks one question: **Where do your agents run?**
 The first run also writes `~/.config/matchblox/config.toml` with goals for
 this machine, and the agents it finds on `PATH`.
 
+The console then asks, once: **Find the Git repositories in your home
+folder?** `y` lets N offer them when you start a session; they stay on
+this host and your paired devices. `n` never asks again, `p` picks the
+folders, and `esc` asks at the next start. The scan names every folder it skips,
+such as the ones macOS guards or a network folder. See
+[Config](config.md#the-repositories-n-offers).
+
 ## 4. Open the setup steps
 
 Sessions shows the setup steps above everything else, under `SET UP`.

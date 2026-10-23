@@ -33,6 +33,8 @@ func withLayers(m Model, layers ...string) Model {
 			m.blocked = errors.New("unreachable")
 		case "hostkey":
 			m.blocked = remote.ErrHostKeyChanged
+		case "scan":
+			m.scanAsk = &scanAsk{}
 		case "mismatch":
 			m.mismatch = true
 		default:
@@ -103,6 +105,18 @@ func TestFocusOrder(t *testing.T) {
 		{"blocked, another key: main", main, []string{"blocked"}, "x", layerMain},
 		{"blocked and pending, enter: pending", main, []string{"blocked", "pending"}, "enter", layerPending},
 		{"pending, ctrl+c: pending", main, []string{"pending"}, "ctrl+c", layerPending},
+		{"scan, y: scan", main, []string{"scan"}, "y", layerScan},
+		{"scan and pending, y: pending", main, []string{"scan", "pending"}, "y", layerPending},
+		{"scan and pending, enter: pending", main, []string{"scan", "pending"}, "enter", layerPending},
+		{"night with scan, enter: take over", night, []string{"scan"}, "enter", layerTakeOver},
+		{"scan and blocked, enter: scan", main, []string{"scan", "blocked"}, "enter", layerScan},
+		{"held and scan: held", main, []string{"held", "scan"}, "y", layerHeld},
+		{"search and scan: search", main, []string{"search", "scan"}, "y", layerSearch},
+		{"form and scan: form", main, []string{"form", "scan"}, "y", layerForm},
+		{"peek and scan: gone", main, []string{"peek", "scan"}, "y", layerPeekGone},
+		{"sheet and scan: sheet", main, []string{"sheet", "scan"}, "y", layerSheet},
+		{"pair and scan: pair", main, []string{"pair", "scan"}, "y", layerPair},
+		{"pair strip and scan, esc: scan", main, []string{"strip", "scan"}, "esc", layerScan},
 	}
 	for _, r := range rows {
 		t.Run(r.name, func(t *testing.T) {

@@ -6,6 +6,37 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **N offers the repositories on your host, found once with your yes.**
+  The first console asks `Find the Git repositories in your home folder?`
+  (`y` / `n` / `p pick folders`) and never asks again. After a yes the
+  service looks four folders deep in `~`, `~/dev`, `~/src`, `~/code`,
+  `~/projects`, `~/work`, `[git] repos` and the new `[git] scan_roots`,
+  reads each checkout's path, remote, branch and last use without running
+  git, keeps the list on disk and scans again every 30 minutes. The list
+  feeds N's `where`, not the Git tab, and goes nowhere but this host and
+  its paired devices. `matchblox scan` scans now, in the folders given;
+  `matchblox scan off` stops and forgets.
+  The scan never waits on a folder that may not answer. On macOS it skips
+  the folders macOS guards (`~/Documents`, `~/Desktop`, `~/Downloads`,
+  `~/Library`, `~/Pictures`, `~/Movies`, `~/Music`) when the walk reaches
+  them from above, so macOS never asks for them; a folder you name with
+  `p` or `matchblox scan <folder>` is walked. Network folders below a
+  root (NFS, SMB, sshfs, rclone and other FUSE remotes) are skipped by
+  the mount table without being touched, while local mounts are walked. A
+  folder that does not answer keeps its repos from the last scan and is
+  not waited on again for 6 hours, unless you name it. Every folder
+  skipped is named with its reason, in the console and in `matchblox scan`.
+  Repos show in one form, symlinks resolved and letter case as on disk;
+  a remote's password or token never shows. The console's question takes
+  no key for a moment after it shows, never sits over a confirm, and says
+  how the scan went: none found, stopped early only when a bound cut it.
+  In `p`, a folder in double quotes keeps its spaces, and the folders
+  that are not there are named and replace nothing; `matchblox scan` waits
+  as long as a scan can take and says "refused" only for a refused yes.
+  ([#173](https://github.com/blox-eng/matchblox/issues/173))
+
 ## [0.18.0] - 2026-10-22
 
 ### Added

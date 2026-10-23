@@ -2,10 +2,12 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
+	"unicode"
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -31,15 +33,19 @@ const (
 	fieldName
 	fieldAgent
 	fieldFirst
+	fieldFolders
 )
 
-var formLabels = [...]string{"where", "branch", "name", "agent", "first"}
+var formLabels = [...]string{"where", "branch", "name", "agent", "first", "folders"}
 
-// form is the open New session, Rename or Switch agent form. Rename has
-// the name only; Switch agent the agent and the handoff (in first).
+// form is the open New session, Rename, Switch agent or scan folders form.
+// Rename has the name only; Switch agent the agent and the handoff (in
+// first); the scan's folders the roots.
 type form struct {
 	rename    bool
 	swap      bool   // Switch agent
+	pick      bool   // the scan's folders, in roots
+	roots     string // space separated
 	pane, who string // Rename, Switch agent: the session's pane and its name now
 	from      string // Switch agent: the session's agent now (where: its directory)
 	at        int    // the field the cursor is on
@@ -155,8 +161,14 @@ func (m Model) switchAction(f form) *action {
 	return a
 }
 
-// gitPaths are the repositories and worktrees of the Git tab, ←→ on where.
+// gitPaths are ←→ on where: the repositories and worktrees of the Git tab,
+// then the ones found on the host, the most recently used first.
 func (m Model) gitPaths() []string {
+	return append(m.worktreePaths(), m.foundPaths...)
+}
+
+// worktreePaths are the Git tab's paths, each once.
+func (m Model) worktreePaths() []string {
 	var out []string
 	for _, r := range m.allWorktreeRows() {
 		if !slices.Contains(out, r.wt.Path) {
@@ -166,9 +178,39 @@ func (m Model) gitPaths() []string {
 	return out
 }
 
+// rebuildFoundPaths builds foundPaths when the found checkouts came
+// (found) or the Git tab's paths changed: once, not at each draw.
+func (m Model) rebuildFoundPaths(found bool) Model {
+	wt := m.worktreePaths()
+	if !found && slices.Equal(wt, m.foundWt) {
+		return m
+	}
+	m.foundWt, m.foundPaths = wt, nil
+	if m.found == nil {
+		return m
+	}
+	on := make(map[string]bool, len(wt))
+	for _, p := range wt {
+		on[filepath.Clean(p)] = true
+	}
+	repos := slices.Clone(m.found.Repos)
+	slices.SortStableFunc(repos, func(a, b proto.Checkout) int { return b.Active.Compare(a.Active) })
+	paths := make([]string, 0, len(repos))
+	for _, c := range repos {
+		if p := filepath.Clean(c.Path); !on[p] {
+			on[p] = true
+			paths = append(paths, p)
+		}
+	}
+	m.foundPaths = paths
+	return m
+}
+
 // fields are the form's fields, in Tab's order.
 func (f *form) fields() []int {
 	switch {
+	case f.pick:
+		return []int{fieldFolders}
 	case f.rename:
 		return []int{fieldName}
 	case f.swap:
@@ -187,6 +229,8 @@ func (f *form) text(field int) *string {
 		return &f.name
 	case fieldFirst:
 		return &f.first
+	case fieldFolders:
+		return &f.roots
 	}
 	return nil
 }
@@ -310,6 +354,20 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 	if f.swap {
 		return m.swapEnter(f)
 	}
+	if f.pick {
+		roots, err := splitFolders(f.roots)
+		if err != nil {
+			f.err = err.Error()
+			return m, nil
+		}
+		if len(roots) == 0 {
+			f.err = "which folders? ~ is your home"
+			return m, nil
+		}
+		cmd := m.send(proto.Act{RecID: "scan:yes", Confirm: "y", Text: strings.Join(roots, "\n")})
+		f.act, f.err = fmt.Sprintf("a%d", m.acts), ""
+		return m, cmd
+	}
 	name := strings.TrimSpace(f.name)
 	if f.rename || f.named {
 		if err := proto.CheckName(name); err != nil {
@@ -323,7 +381,7 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 		m = m.pairActed(action{rec: "rename:" + f.pane})
 	} else {
 		if strings.TrimSpace(f.where) == "" {
-			f.err, f.at = "where does it start? a path, or "+m.keys.form.Left.Help().Key+" for the Git tab's", fieldWhere
+			f.err, f.at = "where does it start? a path, or "+m.keys.form.Left.Help().Key+" for a repository", fieldWhere
 			return m, nil
 		}
 		n := proto.NewSession{Where: strings.TrimSpace(f.where), Branch: strings.TrimSpace(f.branch), Agent: f.agent, First: strings.TrimSpace(f.first)}
@@ -365,8 +423,12 @@ func (m Model) formResult(r proto.Result) (Model, bool) {
 	f.act = ""
 	switch {
 	case r.Err != "":
-		f.err = r.Err
+		f.err = r.Err // the folders typed stay, to fix
 		return m, true
+	case f.pick: // as the box's yes: the reply says how it went
+		m = m.closeScan()
+		roots, _ := splitFolders(f.roots)
+		m.flash = m.scanFlash(r, showFolders(roots))
 	case len(r.Skipped) > 0 && f.rename && strings.HasSuffix(r.Skipped[0], "renames when it rests"):
 		m.flash = r.Skipped[0]
 	case len(r.Skipped) > 0:
@@ -431,14 +493,18 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 		add(fmt.Sprintf("field:%d", fieldAgent), line)
 		agents = chips
 		field(fieldFirst, f.first, "blank: it waits for you")
+	case f.pick:
+		title = st.accent.Bold(true).Render("Find repositories in these folders")
+		field(fieldFolders, f.roots, "~ is your home")
+		add("", "", st.faint.Render(fit(`a space between folders; "~/My Work" keeps its space`, iw)))
 	case f.rename:
 		title = st.accent.Bold(true).Render("Rename " + f.who)
 		field(fieldName, f.name, "")
 		add("", "", st.faint.Render(fit("tmux and the agent take this name", iw)))
 	default:
 		hint := "a path"
-		if len(m.gitPaths()) > 0 {
-			hint = "a path, or " + m.keys.form.Left.Help().Key + " for the Git tab's"
+		if len(m.foundPaths) > 0 || len(m.allWorktreeRows()) > 0 {
+			hint = "a path, or " + m.keys.form.Left.Help().Key + " for a repository"
 		}
 		field(fieldWhere, f.where, hint)
 		field(fieldBranch, f.branch, "blank: no new worktree")
@@ -501,6 +567,8 @@ func (m Model) formFoot() []footPart {
 	st := m.st
 	fk, sep := m.keys.form, " ─ "
 	switch {
+	case m.form.pick:
+		return []footPart{st.footFor(fk.Enter, "find", sep), st.footFor(fk.Close, "", sep)}
 	case m.form.rename:
 		return []footPart{st.footFor(fk.Enter, "rename", sep), st.footFor(fk.Close, "", sep)}
 	case m.form.swap:
@@ -586,4 +654,44 @@ func (m Model) waitsFor(pane string) bool {
 		}
 	}
 	return false
+}
+
+// splitFolders is the folders field: a space between folders, and a
+// folder in double quotes keeps its spaces.
+func splitFolders(s string) ([]string, error) {
+	var out []string
+	var word strings.Builder
+	quoted := false
+	end := func() {
+		if word.Len() > 0 {
+			out = append(out, word.String())
+		}
+		word.Reset()
+	}
+	for _, r := range s {
+		switch {
+		case r == '"':
+			quoted = !quoted
+		case !quoted && unicode.IsSpace(r):
+			end()
+		default:
+			word.WriteRune(r)
+		}
+	}
+	if quoted {
+		return nil, errors.New("a quote is not closed")
+	}
+	end()
+	return out, nil
+}
+
+// showFolders is folders as the field takes them, ~ the home.
+func showFolders(folders []string) string {
+	shown := make([]string, len(folders))
+	for i, f := range folders {
+		if shown[i] = tilde(f); strings.ContainsFunc(f, unicode.IsSpace) {
+			shown[i] = `"` + shown[i] + `"`
+		}
+	}
+	return strings.Join(shown, " ")
 }

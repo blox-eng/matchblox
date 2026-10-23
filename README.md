@@ -67,6 +67,11 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   pane (Claude Code, Codex, OpenCode or Cursor) with the session's name,
   directory and pull request. The new agent gets a handoff to read the
   working tree and carry on. `matchblox switch` does it from the shell.
+- **Start where you work**: `N` starts an agent in a tmux session of its
+  own. Its `where` offers your repositories: after one yes, matchblox finds
+  the Git checkouts in your home folder, on this host only, and keeps the
+  list fresh, and says which folders it skipped. `matchblox scan` does it
+  from the shell.
 - **Ships**: every pull request your sessions drive, on one track from CI
   to live, said in words. One that waits for you merges after a typed `y`.
 - **The dock**: what `/usage` says for each account, in percentages; the
