@@ -128,10 +128,12 @@ type Group struct {
 func (g Group) Match(name string) bool { return g.re != nil && g.re.MatchString(name) }
 
 type Git struct {
-	Repos    []string `toml:"repos"` // checkouts to watch besides the ones sessions use
-	Interval Duration `toml:"interval"`
-	Main     string   `toml:"main"`   // default branch name; empty: what the remote's HEAD names
-	Remote   string   `toml:"remote"` // remote to compare against
+	Repos []string `toml:"repos"` // checkouts to watch besides the ones sessions use
+	// ScanRoots are more folders to find repositories in, after a yes.
+	ScanRoots []string `toml:"scan_roots"`
+	Interval  Duration `toml:"interval"`
+	Main      string   `toml:"main"`   // default branch name; empty: what the remote's HEAD names
+	Remote    string   `toml:"remote"` // remote to compare against
 }
 
 type History struct {

@@ -284,7 +284,10 @@ type Model struct {
 	reasons    map[string]proto.IdleReason
 	agents     []string                         // the agents a new session can start on the host
 	renames    map[string]string                // the names sessions take at their next rest, by pane
-	form       *form                            // the open New session, Rename or Switch agent form; nil none
+	found      *proto.Found                     // the host's repositories and the scan's consent; nil: the service scans nothing
+	scanLater  bool                             // the scan question was closed or answered at this console
+	scanAct    string                           // the act of the box's yes, for its result
+	form       *form                            // the open New session, Rename, Switch agent or scan folders form; nil none
 	jumpAfter  struct{ act, pane, done string } // a switch sent: the pane to jump to when it runs
 	lastAgent  string                           // the agent this console last started
 	paneSort   sortBy
@@ -312,6 +315,18 @@ type Model struct {
 	pairPolling  bool         // a poll of the pair page is on its way
 	pairOffers   *pairWaits   // the offers of a key that still run: the end of the program waits for them
 	keys         keymaps      // the keys of every layer, as data
+
+	// scanAsk is the scan question, open at this console; nil none.
+	// scanAskUntil ends its quiet; scanUp: it was on top at the last
+	// message, so one that shows it again starts the quiet.
+	scanAsk      *scanAsk
+	scanAskUntil time.Time
+	scanUp       bool
+	// foundPaths are the checkouts found on the host, the most recently
+	// used first, less the Git tab's paths (foundWt): built when either
+	// changes, not at each draw.
+	foundPaths []string
+	foundWt    []string
 }
 
 func New(opt Options) Model {
@@ -414,6 +429,26 @@ func (m *Model) send(a proto.Act) tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m = m.scanShows()
+	next, cmd := m.update(msg)
+	if nm, ok := next.(Model); ok {
+		next = nm.scanShows()
+	}
+	return next, cmd
+}
+
+// scanShows starts the box's quiet when it is on top and was not: asked
+// just now, or a layer over it closed, or the start screen ended.
+func (m Model) scanShows() Model {
+	up := m.scanShown()
+	if up && !m.scanUp {
+		m = m.armScan()
+	}
+	m.scanUp = up
+	return m
+}
+
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.BackgroundColorMsg:
 		m.dark = msg.IsDark()
@@ -428,7 +463,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.conn != m.conn {
 			return m, nil
 		}
-		return m.Update(msg.msg)
+		return m.update(msg.msg)
 	case helloMsg:
 		m.host = proto.Hello(msg)
 		if m.olderLocal() {
@@ -457,6 +492,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.shipReport = st.Ships
 		m.holds, m.reasons = st.Holds, st.Reasons
 		m.agents, m.renames = st.Agents, st.Renames
+		if st.Found != nil {
+			m.found = st.Found
+			switch {
+			case st.Found.Consent != "":
+				m.scanAsk = nil // answered, here or at another console
+			case !m.scanLater && m.scanAsk == nil:
+				m.scanAsk = &scanAsk{}
+			}
+		}
+		m = m.rebuildFoundPaths(st.Found != nil)
 		if m.recRun.rec != "" && m.recRun.act == "" && !m.isRec(m.recRun.rec) {
 			m.recRun = recRun{} // its rec is gone: a later one with the same id starts fresh
 		}
@@ -505,6 +550,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case resultMsg:
 		m.endRec(msg.ActID, proto.Result(msg))
 		if mm, ok := m.formResult(proto.Result(msg)); ok {
+			return mm, mm.recv()
+		}
+		if mm, ok := m.scanResult(proto.Result(msg)); ok {
 			return mm, mm.recv()
 		}
 		if mm, ok := m.sheetResult(proto.Result(msg)); ok {
@@ -720,6 +768,8 @@ func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		next, cmd = m.search(k)
 	case layerHeld:
 		next, cmd = m.answerTakeOver(k)
+	case layerScan:
+		next, cmd = m.answerScan(k)
 	case layerTakeOver:
 		m.held, m.flash = m.hold(k), ""
 		next = m

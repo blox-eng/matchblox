@@ -116,6 +116,20 @@ type Service struct {
 	Now func() time.Time
 	// Ships follows the pull requests sessions drive. Nil: no ships.
 	Ships ShipsSource
+	// Find scans the host from roots, after a yes, never touching skip.
+	// named are the roots the builder picked, as walked: one that is no
+	// folder is said. Nil: no scan, and no Found sent (fixtures).
+	Find func(ctx context.Context, roots []string, skip, named map[string]bool) gitscan.Result
+	// Missing is the folders among roots that are not there, looked up
+	// within a bound: a yes that picks one fails before it is recorded.
+	// Nil: none missing.
+	Missing func(roots []string) []string
+	// ScanRoots are a scan's roots for the ones picked (empty: the
+	// defaults). Nil: the picked ones.
+	ScanRoots func(picked []string) []string
+	// ConsentPath and ReposPath keep the answer and the last scan. Empty:
+	// kept in memory only.
+	ConsentPath, ReposPath string
 
 	// alone is when the last console closed; zero while one is open. A new
 	// service starts alone.
@@ -160,18 +174,43 @@ type Service struct {
 	grantMu sync.Mutex
 	// renames are the renames that wait for their session's rest, by pane.
 	renames renameState
+	// found goes to each console when foundGen passes the one it has.
+	found     gitscan.Found
+	foundGen  uint64
+	foundKick chan struct{}
+	// scanReqs are the yeses that wait for foundLoop, the only walker;
+	// scanEnd closes when it ends.
+	scanReqs chan scanReq
+	scanEnd  chan struct{}
+	// hung are the folders that did not answer a walk, and when: the
+	// walks of the next 6 hours skip them. foundLoop's alone.
+	hung map[string]time.Time
+	// rootsResolved is where each root, as written, last resolved to,
+	// so a root that hangs in its lookup keeps the repos found where it
+	// led. foundLoop's alone, and not persisted: after a restart, a root
+	// that hangs on its first lookup has none.
+	rootsResolved map[string]string
+	// nos counts the noes, so a walk knows a no came while it ran even
+	// when a yes for the same roots came after it.
+	nos uint64
+	// consentMu orders the answer and the cache, so a no is never
+	// followed by a scan's write.
+	consentMu sync.Mutex
 }
 
 func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 	s := &Service{
-		Binary:   "dev",
-		ExeEvery: time.Minute,
-		interval: cfg.Interval.Duration,
-		gitEvery: cfg.Git.Interval.Duration,
-		git:      git,
-		clients:  map[*client]struct{}{},
-		gitKick:  make(chan struct{}, 1),
-		shipKick: make(chan struct{}, 1),
+		Binary:    "dev",
+		ExeEvery:  time.Minute,
+		interval:  cfg.Interval.Duration,
+		gitEvery:  cfg.Git.Interval.Duration,
+		git:       git,
+		clients:   map[*client]struct{}{},
+		gitKick:   make(chan struct{}, 1),
+		shipKick:  make(chan struct{}, 1),
+		foundKick: make(chan struct{}, 1),
+		scanReqs:  make(chan scanReq, 64),
+		scanEnd:   make(chan struct{}),
 
 		sampleKick: make(chan struct{}, 1),
 		queue:      queue.New(),
@@ -303,8 +342,10 @@ func (s *Service) Run(ctx context.Context) {
 	}
 	s.mu.Unlock()
 	rec := s.recorder()
+	s.loadFound()
 	go s.gitLoop(ctx)
 	go s.shipsLoop(ctx)
+	go s.foundLoop(ctx)
 	s.loadHistory()
 	t := time.NewTicker(s.interval)
 	defer t.Stop()
@@ -316,6 +357,7 @@ func (s *Service) Run(ctx context.Context) {
 		if first {
 			s.rescanGit()
 			s.shipKick <- struct{}{}
+			s.kickFound()
 		}
 		select {
 		case <-ctx.Done():
@@ -585,6 +627,7 @@ type client struct {
 	c        transport.Conn
 	kick     chan struct{}
 	histSent bool
+	foundGen uint64
 }
 
 func (s *Service) join(cl *client) {
@@ -617,7 +660,7 @@ func (s *Service) broadcast() {
 }
 
 // stateFor is the next snapshot for one console. The history goes once,
-// in its first snapshot.
+// in its first snapshot; what the scan found, then and when it changes.
 func (s *Service) stateFor(cl *client) (proto.State, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -628,6 +671,10 @@ func (s *Service) stateFor(cl *client) (proto.State, bool) {
 	if !cl.histSent {
 		h := history.Series{Points: append([]history.Point(nil), s.hist.Points...)}
 		st.History, cl.histSent = &h, true
+	}
+	if cl.foundGen != s.foundGen {
+		f := s.found
+		st.Found, cl.foundGen = &f, s.foundGen
 	}
 	return st, true
 }

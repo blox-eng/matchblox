@@ -683,13 +683,15 @@ func reportResult(w io.Writer, res proto.Result) error {
 const actWait = 30 * time.Second
 
 // doAct sends one act to the running service and waits for its result.
-func doAct(path string, a proto.Act) (proto.Result, error) {
+func doAct(path string, a proto.Act) (proto.Result, error) { return doActFor(path, a, actWait) }
+
+func doActFor(path string, a proto.Act, wait time.Duration) (proto.Result, error) {
 	c, err := transport.Dial(path, time.Second)
 	if err != nil {
 		return proto.Result{}, errNotRunning
 	}
 	defer c.Close()
-	timer := time.AfterFunc(actWait, func() { c.Close() })
+	timer := time.AfterFunc(wait, func() { c.Close() })
 	defer timer.Stop()
 	if err := c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version, Binary: version, Client: proto.ClientCLI}); err != nil {
 		return proto.Result{}, errNotRunning

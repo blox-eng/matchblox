@@ -42,6 +42,7 @@ interval = "5m"
 # main = "main"         # default: the branch the remote's HEAD names
 remote = "origin"
 repos = []               # checkouts to watch besides the ones sessions use
+scan_roots = []          # more folders to find repositories in, after a yes to the scan
 
 [history]
 log = ""                 # default ~/.local/share/matchblox/history.csv; "-" disables

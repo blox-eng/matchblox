@@ -336,6 +336,16 @@ Reduce Motion.
   several (`kill-pane`, then `kill -TERM`) takes a line each. A door's long diff keeps its
   confirm on the key line: the diff fills the body, and a box would hide
   what it asks about.
+- **The scan question** (owner 2026-10-22, #173, design/0013): asked once
+  per host, in the consent box, when nothing else is open. Title `Find the
+  Git repositories in your home folder?` in the accent, then `they stay on
+  this host and your paired devices` in `text` and the folders in `muted`;
+  foot `y find ─ n never ─ p pick folders ─ esc later`. Only `y` and `n`
+  are answers, kept by the service. `p` opens a one-field form, `folders`,
+  the defaults in it; `esc` there goes back to the box. `esc`, any other
+  key or a tap closes the box until the next console and records nothing.
+  An answer at one console closes the box at every other. The repositories
+  found feed N's `where` after the Git tab's, never the Git tab.
 - **Widths:** the shape picks first. A cell is about twice as tall as it
   is wide, so a screen is portrait when rows × 2 ≥ columns. Portrait under
   90 columns is a phone: one column, the selected row opens in place; from

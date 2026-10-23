@@ -349,7 +349,7 @@ func (p *pairPage) strips() bool { return p != nil && p.beat >= 3 }
 // else of its own for it to cancel.
 func (m Model) pairStripEsc(k tea.KeyPressMsg) bool {
 	return bkey.Matches(k, m.keys.pair.Close) && m.pair.strips() && m.peek == nil && m.form == nil && m.sheet == nil &&
-		m.pending == nil && m.held == nil && !m.searching && m.filter == ""
+		m.pending == nil && m.held == nil && m.scanAsk == nil && !m.searching && m.filter == ""
 }
 
 // pairWatched is the poll after the claim: beat 3 is the device's own

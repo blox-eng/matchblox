@@ -16,6 +16,31 @@ import (
 	"github.com/blox-eng/matchblox/internal/state"
 )
 
+func TestStateFoundRoundTrip(t *testing.T) {
+	want := State{Found: &Found{Consent: "yes", Repos: []Checkout{{Path: "/h/a", Main: "/h/m", Remote: "git@h:o/a.git", Branch: "main", Active: time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC)}}}}
+	b, err := json.Marshal(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got State
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.Found, want.Found) {
+		t.Fatalf("got %+v, want %+v", got.Found, want.Found)
+	}
+}
+
+func TestStateWithoutFound(t *testing.T) {
+	b, err := json.Marshal(State{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(b, []byte(`"found"`)) {
+		t.Fatalf("a snapshot with no Found carries the key: %s", b)
+	}
+}
+
 func TestRoundTripEveryKind(t *testing.T) {
 	at := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
 	cases := []struct {

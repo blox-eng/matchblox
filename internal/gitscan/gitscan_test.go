@@ -220,3 +220,22 @@ func TestThePrimaryCheckoutOnABranchShowsItsPR(t *testing.T) {
 	}
 	_ = root
 }
+
+func TestReportResolvesConfigRepos(t *testing.T) {
+	root, repo := newRepo(t)
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(root, link); err != nil {
+		t.Skip("symlinks unavailable")
+	}
+	cfg := filepath.Join(link, "app")
+	merged := func(context.Context, string) map[string]bool { return nil }
+
+	rep := Scan(context.Background(), Input{Extra: []string{cfg}}, Git, merged)
+	if len(rep.Watching) != 1 || rep.Watching[0] != repo {
+		t.Fatalf("watching = %v, want [%s]", rep.Watching, repo)
+	}
+	rep = Scan(context.Background(), Input{SessionCwds: []string{repo}, Extra: []string{cfg}}, Git, merged)
+	if len(rep.Watching) != 1 || rep.Watching[0] != repo {
+		t.Fatalf("watching with a session = %v, want [%s]", rep.Watching, repo)
+	}
+}

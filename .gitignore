@@ -6,3 +6,6 @@ site/
 
 # Claude Code / Cursor agent worktrees (local only; settings stay tracked)
 .claude/worktrees/
+
+# built binary
+/cmd/matchblox/matchblox

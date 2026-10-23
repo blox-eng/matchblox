@@ -79,6 +79,10 @@ func (m Model) resting() bool {
 	return m.stoker != nil && m.stoker.On && !m.stoker.Rests.IsZero()
 }
 
+// takeOverDue: the stoker is in charge and the builder has not been asked
+// in this run, so a key that acts on a session will ask.
+func (m Model) takeOverDue() bool { return m.night() && !m.stoker.Asked }
+
 // asksTakeOver: k acts on a session while the stoker is in charge, and the
 // builder has not been asked in this run. Looking around never asks.
 func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
