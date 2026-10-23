@@ -169,6 +169,9 @@ How each field is read, without git:
 
 ## The walk
 
+- One scan owner: a single goroutine in the service walks, and every yes
+  waits for the scan that answers it; a scan queued behind one running
+  coalesces with the others.
 - Each root is resolved once (`filepath.EvalSymlinks`, `~` expanded) and
   walked to its own depth: `~/dev/a/b/c/d` is depth 5 from `~` but 4 from
   `~/dev`. The deepest roots go first, and a directory already walked with
@@ -177,9 +180,25 @@ How each field is read, without git:
 - Only the home is searched below its own `.git` (dotfiles kept in git);
   any other root that is a checkout, a configured repository say, is
   recorded and not entered, so its submodules and fixtures stay out.
+- Paths are canonical: symlinks resolved, letter case as on disk. A
+  repository is reported once in that form, and so are the configured
+  `[git] repos` (session cwds come from `readlink /proc/<pid>/cwd`, already
+  resolved), so the same checkout is never two entries.
 - `os.ReadDir` only. An entry that is a symlink is never followed; an
-  unreadable directory is skipped silently. A directory on another device
-  than its root is not entered: a network mount may never answer.
+  unreadable directory is skipped silently and listed.
+- Mounts come from the mount table (`/proc/self/mountinfo`, `getmntinfo` on
+  macOS), not from `st_dev`: a directory that is a mountpoint of a network
+  filesystem (nfs, smb, sshfs, rclone and other FUSE remotes, autofs) below
+  a root is skipped without being touched, since it may never answer. A root
+  itself is always walked. A local mount (a btrfs subvolume, a ZFS dataset, a
+  bind mount, a second disk) is walked.
+- On macOS the folders it guards (`~/Documents`, `~/Desktop`, `~/Downloads`,
+  `~/Library`, `~/Pictures`, `~/Movies`, `~/Music`) are skipped when the
+  walk reaches them from above; a root, or anything inside one, is walked.
+- Every folder skipped is listed with its reason (a network folder, it did
+  not answer, it did not answer before, macOS asks first). A folder that
+  does not answer keeps the repositories of the last scan and is not waited
+  on again for 6 hours, unless the builder names it.
 - A `.git`, `HEAD`, `commondir` or `config` is read only when it is a
   regular file (or `.git` a directory), and 1 MiB of it at most: a pipe or
   a link to `/dev/zero` would hang or flood the walk.
@@ -188,7 +207,7 @@ How each field is read, without git:
   30 s and 5 s more is left to end on its own: the scan returns what it
   found and frees the next one.
 - A remote URL keeps neither user nor password nor query, except an ssh
-  URL's user.
+  URL's user; one that cannot be parsed shows its scheme only.
 - A walk is dropped if a no, or other roots, came while it ran.
 
 ## The consent box
@@ -236,6 +255,11 @@ refused from an agent's pane, the stoker's and the sessions it drives
 included, with the rule `new:session` already has (`sessionAt(a.From)`
 finds a session): `only you say yes to a scan, at a console or in your own
 shell`. `scan:no` is taken from anyone: a refusal widens nothing.
+
+The check is best-effort. A pane with no agent session, or a process with no
+pane, counts as a person. The impact is low: an agent can already read
+those folders, and the yes only lets the service list the checkouts there.
+`scan:no` stays open to anyone.
 
 Roots on a later yes (call made for the owner): a `scan:yes` with an empty
 `Text` keeps the roots on record, so `matchblox scan` refreshes the walk the

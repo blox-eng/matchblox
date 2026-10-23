@@ -17,9 +17,22 @@ All notable changes to matchblox are in this file. The format follows
   git, keeps the list on disk and scans again every 30 minutes. The list
   feeds N's `where`, not the Git tab, and goes nowhere but this host and
   its paired devices. `matchblox scan` scans now, in the folders given;
-  `matchblox scan off` stops and forgets. The question takes no key for a
-  moment after it shows, and after a yes the console says how the scan
-  went: the folders it skipped, or why it stopped early.
+  `matchblox scan off` stops and forgets.
+  The scan never waits on a folder that may not answer. On macOS it skips
+  the folders macOS guards (`~/Documents`, `~/Desktop`, `~/Downloads`,
+  `~/Library`, `~/Pictures`, `~/Movies`, `~/Music`) when the walk reaches
+  them from above, so macOS never asks for them; a folder you name with
+  `p` or `matchblox scan <folder>` is walked. Network folders below a
+  root (NFS, SMB, sshfs, rclone and other FUSE remotes) are skipped by
+  the mount table without being touched, while local mounts are walked. A
+  folder that does not answer keeps its repos from the last scan and is
+  not waited on again for 6 hours, unless you name it. Every folder
+  skipped is named with its reason, in the console and in `matchblox scan`.
+  Repos show in one form, symlinks resolved and letter case as on disk;
+  a remote's password or token never shows. The console's question takes
+  no key for a moment after it shows, never sits over a confirm, and says
+  how the scan went; `matchblox scan` waits as long as a scan can take and
+  says "refused" only for a refused yes.
   ([#173](https://github.com/blox-eng/matchblox/issues/173))
 
 ## [0.18.0] - 2026-10-22

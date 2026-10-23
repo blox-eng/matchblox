@@ -19,6 +19,10 @@ import (
 // scanEvery is how often the host is scanned again after a yes.
 const scanEvery = 30 * time.Minute
 
+// scanRefused is the answer to a yes from an agent's pane. The check is
+// best-effort: a pane with no agent session, or a process with no pane,
+// counts as a person. That is low impact, since an agent can already read
+// those folders; scan:no stays open to anyone.
 const scanRefused = "only you say yes to a scan, at a console or in your own shell"
 
 // loadFound reads the consent and, after a yes, the last scan, so the

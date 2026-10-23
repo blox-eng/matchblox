@@ -70,7 +70,8 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
 - **Start where you work**: `N` starts an agent in a tmux session of its
   own. Its `where` offers your repositories: after one yes, matchblox finds
   the Git checkouts in your home folder, on this host only, and keeps the
-  list fresh. `matchblox scan` does it from the shell.
+  list fresh, and says which folders it skipped. `matchblox scan` does it
+  from the shell.
 - **Ships**: every pull request your sessions drive, on one track from CI
   to live, said in words. One that waits for you merges after a typed `y`.
 - **The dock**: what `/usage` says for each account, in percentages; the
