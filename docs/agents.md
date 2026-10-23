@@ -77,8 +77,8 @@ showed (`Auto · 5.7%`). Before the first turn a session is "fresh".
 Codex writes its context and limits to its rollout, a file under
 `sessions` in `CODEX_HOME` (`~/.codex`). matchblox reads the rollout the
 session holds open. When it holds none open, and always on macOS, the
-rollout is the one in the session's directory that began and was written
-since the session started. The rollout also gives the session its id,
+rollout is the one in Codex's directory (the one `-C` names, else the
+pane's) that began and was written since the session started. The rollout also gives the session its id,
 so `z` parks it. Only the CLI's own sessions count: not a `codex exec`
 run's, a thread of the Codex app or an editor, nor a subagent's.
 `codex resume <id>` finds its rollout by the id. When no open file names the rollout, these
@@ -86,8 +86,8 @@ show `—` and "not measured", and have no id:
 
 - two Codex sessions in one directory;
 - a session after its `/new`;
-- a session before its first turn, when another Codex session ran in its
-  directory since it started;
+- a session that had no turn yet when another Codex session started in
+  its directory, one that has exited since;
 - a session resumed without its id (`codex resume --last`, the picker).
 
 A session begun as `codex resume <id>` shows "not measured" while another
