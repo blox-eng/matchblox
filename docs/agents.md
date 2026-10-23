@@ -79,18 +79,17 @@ Codex writes its context and limits to its rollout, a file under
 session holds open. When it holds none open, and always on macOS, the
 rollout is the one in the session's directory that began and was written
 since the session started. The rollout also gives the session its id,
-so `z` parks it. When no open file names the rollout:
+so `z` parks it. Only the CLI's own rollouts count: not a `codex exec`
+run's, nor a thread of the Codex app or an editor. `codex resume <id>`
+finds its rollout by the id. When no open file names the rollout, these
+show `—` and "not measured", and have no id:
 
-- Two Codex sessions in one directory, or a session after its `/new`, show
-  `—` and "not measured". So does a session in a directory where a Codex
-  app thread began after the session's first turn.
-- Before its first turn, a session can show the context of a Codex app
-  thread begun in its directory.
-- A resumed session shows "fresh": its rollout began before it started.
+- two Codex sessions in one directory;
+- a session after its `/new`;
+- a session resumed without its id (`codex resume --last`, the picker).
 
-A `codex exec` run you start in a pane shows in Sessions. Its rollout is
-never taken as another session's. One that another agent starts does not
-show.
+A `codex exec` run you start in a pane shows in Sessions, and takes no
+other session's rollout. One that another agent starts does not show.
 
 The context use is a share of the session's window. matchblox uses the
 first window it finds, in this order:
