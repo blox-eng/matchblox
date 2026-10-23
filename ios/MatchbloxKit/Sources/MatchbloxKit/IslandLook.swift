@@ -81,10 +81,9 @@ public enum IslandLook {
         return end
     }
 
-    /// Where a tap and the button go: the top session of this host, if any.
+    /// Where a tap and the button go: the top session of this host, else its console.
     public static func link(_ s: IslandState) -> URL? {
-        guard let top = s.top else { return nil }
-        return OpenLink(host: s.host, session: top.n)?.url
+        OpenLink(host: s.host, session: s.top?.n)?.url
     }
 
     /// The link of one render: none for a face that shows nothing, so a tap there opens nothing.
@@ -106,8 +105,17 @@ public enum IslandLook {
         return (s.wait > 0, "\(w.name) \(w.pct)%", w.pct)
     }
 
-    /// The accounts a face shows: the expanded island and the lock screen have room for 2.
-    public static func shown(_ s: IslandState) -> [AccountUse] { Array(s.accounts.prefix(2)) }
+    /// The accounts a face shows: up to 4 on the lock screen, 2 on the expanded island.
+    public static func shown(_ s: IslandState, expanded: Bool) -> [AccountUse] {
+        Array(s.accounts.prefix(expanded ? 2 : 4))
+    }
+
+    /// Whether the lock screen draws each account on one line: from 3 accounts on, as
+    /// full blocks would not fit its height.
+    public static func oneLine(_ s: IslandState) -> Bool { s.accounts.count > 2 }
+
+    /// The fullest window of one account, which its one line shows.
+    public static func fullest(_ a: AccountUse) -> WindowUse? { a.windows.max { $0.pct < $1.pct } }
 
     /// The forecast of one account: `lasts the week` (muted) or `out Fri ~20:00` (warn).
     public static func forecast(_ a: AccountUse, now: Date, zone: TimeZone = .current) -> (text: String, out: Bool)? {

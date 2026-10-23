@@ -18,7 +18,8 @@ All notable changes to matchblox are in this file. The format follows
   screen sets which one, which host it follows and which hosts buzz. A wait
   breaks through the Usage face for 60 s.
 - **A tap opens that session.** The activity, its `Answer` and a buzz open
-  the console on that session after Face ID. The app needs iOS 18.
+  the console on that session after Face ID; with no session on top, the
+  host's console. The app needs iOS 18.
 
 ### Changed
 

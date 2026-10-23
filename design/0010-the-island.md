@@ -267,7 +267,9 @@ of a host that it does not follow whenever it runs.
 ### 4.4 A tap opens the session
 
 - The activity, its `Answer`, and a buzz carry a link
-  `matchblox://open?host=<fingerprint 8>&session=<number>`.
+  `matchblox://open?host=<fingerprint 8>&session=<number>`. With no top
+  session the link carries the host only, `matchblox://open?host=<fingerprint 8>`,
+  and opens its console on Sessions; the expanded Usage keeps `Open`.
 - The app opens it after Face ID: it connects to that host and starts the
   console with the target, through a new phone-only gate command
   `matchblox console --open <number>` (the open path of 0006 §6.3.5).
@@ -337,7 +339,9 @@ of a host that it does not follow whenever it runs.
 6. Session and account numbers stay for their life and are never used
    again on that host.
 7. One forecast per account.
-8. The Usage face shows up to 4 accounts; the expanded island shows 2.
+8. The Usage face shows up to 4 accounts; the expanded island shows 2. With
+   3 or 4, the lock screen draws each on one line: its name, its fullest
+   window and its forecast.
 9. A wait breaks through the Usage face for 60 s; the compact island keeps
    `╿` while any session waits.
 10. Usage updates at a change of 2 whole percent or a reset, at most each 5

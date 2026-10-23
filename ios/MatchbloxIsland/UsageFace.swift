@@ -17,8 +17,12 @@ struct UsageLock: View {
                 Spacer(minLength: 10)
                 UsageCounts(state: m.state)
             }
-            ForEach(IslandLook.shown(m.state), id: \.n) { a in
-                AccountBlock(account: a, names: m.names, now: m.now)
+            ForEach(IslandLook.shown(m.state, expanded: false), id: \.n) { a in
+                if IslandLook.oneLine(m.state) {
+                    AccountLine(account: a, names: m.names, now: m.now)
+                } else {
+                    AccountBlock(account: a, names: m.names, now: m.now)
+                }
             }
         }
         .padding(.horizontal, 16)
@@ -32,7 +36,7 @@ struct UsageExpanded: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(IslandLook.shown(m.state), id: \.n) { a in
+            ForEach(IslandLook.shown(m.state, expanded: true), id: \.n) { a in
                 AccountBlock(account: a, names: m.names, now: m.now)
             }
             if let link = m.link {
@@ -152,10 +156,38 @@ struct AccountBlock: View {
     }
 }
 
+/// One account on one line, for a lock screen with 3 or 4: its name, its fullest window
+/// without the reset, and its forecast.
+struct AccountLine: View {
+    let account: AccountUse
+    let names: IslandNames
+    let now: Date
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(names.account(account.n))
+                .font(IslandFont.name)
+                .foregroundStyle(Tokens.fg)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            if let w = IslandLook.fullest(account) {
+                WindowLine(window: w, now: now, reset: false)
+            }
+            if let f = IslandLook.forecast(account, now: now) {
+                Text(f.text)
+                    .font(IslandFont.monoSmall)
+                    .foregroundStyle(f.out ? Tokens.warn : Tokens.muted)
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
 /// `5h ▰▰▰▰▰▱▱▱ 61% · 14:10`: the fill in the accent below 60 %, warn from 60, neg from 90.
 struct WindowLine: View {
     let window: WindowUse
     let now: Date
+    var reset = true
 
     var body: some View {
         let level = barColorLevel(window.pct)
@@ -169,7 +201,7 @@ struct WindowLine: View {
             Text("\(window.pct)%")
                 .foregroundStyle(level.text)
                 .frame(width: 36, alignment: .trailing)
-            if let r = IslandLook.resets(window, now: now) {
+            if reset, let r = IslandLook.resets(window, now: now) {
                 Text("· \(r)")
                     .foregroundStyle(Tokens.muted)
                     .lineLimit(1)

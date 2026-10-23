@@ -58,12 +58,13 @@ final class IslandLookTests: XCTestCase {
         XCTAssertEqual(IslandLook.button(nil), "Open")
     }
 
+    /// The link opens the top session, and the host's console when nothing is on top.
     func testTheLinkOpensTheTopSession() throws {
         let s = try fixture()
         XCTAssertEqual(IslandLook.link(s)?.absoluteString, "matchblox://open?host=f10f7812&session=3")
         var none = s
         none.top = nil
-        XCTAssertNil(IslandLook.link(none))
+        XCTAssertEqual(IslandLook.link(none)?.absoluteString, "matchblox://open?host=f10f7812")
     }
 
     /// A face that shows nothing (a host not followed) opens nothing on a tap.
@@ -105,7 +106,18 @@ final class IslandLookTests: XCTestCase {
         XCTAssertTrue(out.out)
         XCTAssertEqual(IslandLook.resets(s.accounts[0].windows[0], now: now, zone: utc), "17:00")
         XCTAssertEqual(IslandLook.resets(s.accounts[0].windows[1], now: now, zone: utc), "Mon 09:00")
-        XCTAssertEqual(IslandLook.shown(s).count, 2)
+    }
+
+    /// The lock screen shows up to 4 accounts, one line each from 3 on; the expanded island 2.
+    func testTheLockScreenShowsUpToFourAccounts() throws {
+        var s = try fixture()
+        XCTAssertEqual(IslandLook.shown(s, expanded: false).count, 2)
+        XCTAssertFalse(IslandLook.oneLine(s))
+        s.accounts = (1...5).map { AccountUse(n: $0, windows: s.accounts[1].windows, lasts: false) }
+        XCTAssertEqual(IslandLook.shown(s, expanded: false).map(\.n), [1, 2, 3, 4])
+        XCTAssertEqual(IslandLook.shown(s, expanded: true).map(\.n), [1, 2])
+        XCTAssertTrue(IslandLook.oneLine(s))
+        XCTAssertEqual(IslandLook.fullest(s.accounts[0]), s.accounts[1].windows.max { $0.pct < $1.pct })
     }
 
     func testTheFollowedHostIsComparedByItsEightCharacters() throws {

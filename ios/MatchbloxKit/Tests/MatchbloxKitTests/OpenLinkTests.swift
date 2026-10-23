@@ -10,12 +10,23 @@ final class OpenLinkTests: XCTestCase {
         XCTAssertEqual(back.command, "matchblox console --open 12")
     }
 
+    /// A link without a session opens the host's console on Sessions.
+    func testAHostLinkRoundTrips() throws {
+        let link = try XCTUnwrap(OpenLink(host: "f10f7812"))
+        XCTAssertEqual(link.url.absoluteString, "matchblox://open?host=f10f7812")
+        XCTAssertEqual(OpenLink(url: link.url), link)
+        XCTAssertNil(link.session)
+        XCTAssertEqual(link.command, "matchblox console")
+    }
+
     func testAnOpenLinkWithABadNumberIsRefused() {
         for s in [
             "matchblox://open?host=f10f7812&session=0",
             "matchblox://open?host=f10f7812&session=-1",
             "matchblox://open?host=f10f7812&session=x",
-            "matchblox://open?host=f10f7812",
+            "matchblox://open?host=f10f7812&session=",
+            "matchblox://open?host=f10f7812&host=f10f7812",
+            "matchblox://open?session=1",
             "matchblox://open?host=F10F7812&session=1",
             "matchblox://open?host=f10f781&session=1",
             "matchblox://open?host=f10f78123&session=1",
