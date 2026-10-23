@@ -17,6 +17,32 @@ All notable changes to matchblox are in this file. The format follows
   path would answer the code ([#184](https://github.com/blox-eng/matchblox/pull/184)).
   ([#185](https://github.com/blox-eng/matchblox/issues/185))
 
+### Fixed
+
+- **`z` parks the right Codex session.** A `codex exec` run in a pane took
+  the rollout of a Codex session that started after it in the same
+  directory, with its id, so `z` on the run parked the session. Before its
+  first turn, a Codex session took the rollout of a Codex app or editor
+  thread there, of a subagent, or of a Codex session that started there
+  after it and exited, also after matchblox restarts, or while it was
+  down. A Codex started with
+  `-C <dir>` counts in `<dir>`, and is measured from it. Now only the
+  CLI's own sessions count, and a `codex exec` or `codex review` row takes
+  none, with options before it or not.
+- **A resumed Codex session shows its context.** `codex resume <id>` finds
+  its rollout by the id, on whatever day it began, also from an npm install
+  or with options such as `-m`. After you edit an earlier prompt (Esc Esc),
+  Codex writes on in a new rollout, and matchblox follows it. After a
+  `/new` or `/resume` in a Codex session (of a session from its
+  directory, however old), or while another session in its directory (or
+  the one `-C` names) is written after it, it shows "not measured" at the
+  next sample. A resume that is not found shows "not measured", not
+  "fresh", and so does a session with no rollout of its own yet, in a
+  directory where an older Codex CLI rollout has been written since it
+  started.
+- **`z` says why a Codex session has no id.** One whose rollout cannot be
+  told apart says so, not "park it after its first turn".
+
 ## [0.19.0] - 2026-10-23
 
 ### Added
