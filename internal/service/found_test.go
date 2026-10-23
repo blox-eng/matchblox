@@ -796,3 +796,33 @@ func TestRescanKeepsNoReposOutsideThePickedRoots(t *testing.T) {
 		}
 	}
 }
+
+func TestNamedFolderClearsHungMemoryCanonically(t *testing.T) {
+	was := foldsCase
+	t.Cleanup(func() { foldsCase = was })
+	for _, fold := range []bool{true, false} {
+		foldsCase = func() bool { return fold }
+		s, _ := foundTest(t)
+		var mu sync.Mutex
+		var skips []map[string]bool
+		s.Find = func(_ context.Context, _ []string, skip map[string]bool) gitscan.Result {
+			mu.Lock()
+			defer mu.Unlock()
+			skips = append(skips, skip)
+			return gitscan.Result{}
+		}
+		now := time.Now()
+		s.hung = map[string]time.Time{"/real/p/sub": now, "/Users/x/Code/sub": now, "/q": now}
+		s.rootsResolved = map[string]string{"/p": "/real/p"}
+		foundReady(t, s)
+		if r := s.act(t.Context(), proto.Act{RecID: "scan:yes", Confirm: "y", Text: "/p\n/Users/x/code", Console: true}); r.Err != "" {
+			t.Fatal(r.Err)
+		}
+		mu.Lock()
+		skip := skips[0]
+		mu.Unlock()
+		if skip["/real/p/sub"] || !skip["/q"] || skip["/Users/x/Code/sub"] != !fold {
+			t.Fatalf("fold %v: skip %v: a named root clears its hung folders as they were stored", fold, skip)
+		}
+	}
+}

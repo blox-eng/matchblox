@@ -340,19 +340,38 @@ func (s *Service) skipHung(now time.Time) map[string]bool {
 }
 
 // forgetHung drops from the hung memory the folders at or below roots, as
-// picked and as ScanRoots spells them: a picked root is never skipped.
+// picked, as ScanRoots spells them, and as they last resolved: the memory
+// holds paths as resolved, in the case on disk. Where folders fold case,
+// names compare in any case. Nothing here touches the disk: a root that
+// hangs must not hang the loop. A picked root is never skipped.
 func (s *Service) forgetHung(roots []string) {
+	fold := foldsCase()
 	var dirs []string
+	add := func(d string) {
+		dirs = append(dirs, filepath.Clean(d))
+		if r, ok := s.rootsResolved[d]; ok {
+			dirs = append(dirs, filepath.Clean(r))
+		}
+	}
 	for _, r := range roots {
-		dirs = append(dirs, filepath.Clean(r))
+		add(r)
 		if s.ScanRoots != nil {
 			if out := s.ScanRoots([]string{r}); len(out) > 0 {
-				dirs = append(dirs, filepath.Clean(out[0])) // the picked come first
+				add(out[0]) // the picked come first
 			}
 		}
 	}
+	if fold {
+		for i, d := range dirs {
+			dirs[i] = strings.ToLower(d)
+		}
+	}
 	for p := range s.hung {
-		if slices.ContainsFunc(dirs, func(d string) bool { return under(p, d) }) {
+		q := p
+		if fold {
+			q = strings.ToLower(p)
+		}
+		if slices.ContainsFunc(dirs, func(d string) bool { return under(q, d) }) {
 			delete(s.hung, p)
 		}
 	}
@@ -454,3 +473,6 @@ func ScanRan(err string) bool {
 	return err == errScanNo.Error() || err == errScanStopped.Error() ||
 		err == errScanSuperseded.Error() || strings.HasPrefix(err, errScanSuperseded.Error()+": ")
 }
+
+// foldsCase is gitscan.FoldsCase, swapped in tests.
+var foldsCase = gitscan.FoldsCase
