@@ -264,28 +264,42 @@ type Sampler struct {
 	// CursorUsage reads Cursor's plan usage from its API ([limits]
 	// cursor_usage); nil: not read.
 	CursorUsage *limits.CursorUsage
+	// CodexSeenFile keeps the Codex sessions seen in each directory
+	// across a restart. Empty: kept in memory only.
+	CodexSeenFile string
+	// CodexSeenReadOnly reads CodexSeenFile and never writes it: a
+	// one-shot status read beside the service.
+	CodexSeenReadOnly bool
 
-	agents   *agentReader
-	panes    map[procKey]string // environ is read once per process
-	names    map[procKey]agentRef
-	screens  map[procKey]screen // last pane text of agents without an adapter
-	prevAt   time.Time
-	procAt   time.Time
-	prevProc map[int]procfs.Proc
-	last     Snapshot // sessions and panes from the last process scan
-	prevCPU  procfs.CPUTimes
-	prevCore []procfs.CPUTimes
-	prevNet  [2]uint64
-	prevDisk [2]uint64
-	latAt    time.Time
-	lat      time.Duration
-	latErr   string
-	burn     map[string][]tokenPoint
-	burnLive map[string]bool  // burn keys measured in this scan
-	longCtx  map[procKey]bool // processes started with a 1M model setting
-	envs     map[procKey]agentEnv
-	accounts *accounts
-	opencode *opencodeReader
+	agents *agentReader
+	panes  map[procKey]string // environ is read once per process
+	names  map[procKey]agentRef
+	// codexSeen are the Codex sessions seen in each directory, by when
+	// each started: one that exited still owns the rollout it left.
+	codexSeen map[string]map[procKey]time.Time
+	// codexUntil is the last sample before this sampler started, from
+	// CodexSeenFile: what started in Codex since went unseen. Zero: unknown.
+	codexUntil time.Time
+	codexFirst time.Time          // this sampler's first sample
+	codexSaved time.Time          // when CodexSeenFile was last written
+	screens    map[procKey]screen // last pane text of agents without an adapter
+	prevAt     time.Time
+	procAt     time.Time
+	prevProc   map[int]procfs.Proc
+	last       Snapshot // sessions and panes from the last process scan
+	prevCPU    procfs.CPUTimes
+	prevCore   []procfs.CPUTimes
+	prevNet    [2]uint64
+	prevDisk   [2]uint64
+	latAt      time.Time
+	lat        time.Duration
+	latErr     string
+	burn       map[string][]tokenPoint
+	burnLive   map[string]bool  // burn keys measured in this scan
+	longCtx    map[procKey]bool // processes started with a 1M model setting
+	envs       map[procKey]agentEnv
+	accounts   *accounts
+	opencode   *opencodeReader
 
 	owners     map[procKey]string
 	hotSince   map[procKey]time.Time
@@ -321,6 +335,7 @@ func (s *Sampler) init() {
 		s.opencode = newOpencodeReader()
 		s.panes = map[procKey]string{}
 		s.names = map[procKey]agentRef{}
+		s.codexSeen, s.codexUntil = loadCodexSeen(s.CodexSeenFile)
 		s.burn = map[string][]tokenPoint{}
 		s.burnLive = map[string]bool{}
 		s.longCtx = map[procKey]bool{}
@@ -552,6 +567,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	// Nor does a Codex that holds no rollout open: with two in a
 	// directory, its rollout is either's.
 	codexIn := map[string]int{}
+	seenChanged := false
 	for pid, p := range procs {
 		// An `opencode run` that another agent started counts too: it
 		// writes a session in the same directory.
@@ -562,11 +578,42 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		}
 		// Only sessions count: not a `codex exec` or an mcp-server that
 		// another agent runs, nor one of Codex's own non-interactive modes.
-		if s.agentName(pid, p) == "codex" && p.State != 'Z' && p.State != 'X' && !s.underAgent(p, procs) && !codexBatch(s.FS.Argv(pid)) {
+		if s.agentName(pid, p) == "codex" && p.State != 'Z' && p.State != 'X' && !s.underAgent(p, procs) && !codexBatch(codexArgv(s.FS.Argv(pid))) {
 			if pp, ok := procs[p.PPID]; !ok || s.agentName(p.PPID, pp) != "codex" {
-				codexIn[s.FS.Cwd(pid)]++
+				argv := codexArgv(s.FS.Argv(pid))
+				dir := codexWorkDir(argv, s.FS.Cwd(pid))
+				codexIn[dir]++
+				if k := (procKey{pid, p.StartTime}); codexInteractive(argv) {
+					if s.codexSeen[dir] == nil {
+						s.codexSeen[dir] = map[procKey]time.Time{}
+					}
+					if _, ok := s.codexSeen[dir][k]; !ok {
+						s.codexSeen[dir][k] = now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
+						seenChanged = true
+					}
+				}
 			}
 		}
+	}
+	for dir, seen := range s.codexSeen { // a month is long enough to remember
+		for k, at := range seen {
+			if at.Before(now.AddDate(0, -1, 0)) {
+				delete(seen, k)
+				seenChanged = true
+			}
+		}
+		if len(seen) == 0 {
+			delete(s.codexSeen, dir)
+		}
+	}
+	if s.codexFirst.IsZero() {
+		s.codexFirst = now
+	}
+	// The last sample is saved too, every 10 seconds at most: what starts
+	// in Codex while matchblox is down goes unseen.
+	if (seenChanged || now.Sub(s.codexSaved) >= 10*time.Second) && s.CodexSeenFile != "" && !s.CodexSeenReadOnly {
+		_ = saveCodexSeen(s.CodexSeenFile, s.codexSeen, now) // unsaved: forgotten at a restart, as before
+		s.codexSaved = now
 	}
 	for pid, p := range procs {
 		agent := s.agentName(pid, p)
@@ -627,14 +674,47 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		case "codex":
 			sess.Account, sess.Provider = s.accounts.codexAccount(env), "openai"
 			path, read := s.codexRollout(pid, children)
+			argv := codexArgv(s.FS.Argv(pid))
+			batch := codexBatch(argv) // a `codex exec` row: no session of the directory
+			resume := codexResume(argv)
+			started := now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
+			if id := codexResumeID(argv); path == "" && id != "" && env.codexHome != "" {
+				path = s.agents.codexResumed(env.codexHome, id, now)
+				// Codex works where the session was, or where -C says, not
+				// always in the process's own directory.
+				cwds := []string{sess.Cwd, s.agents.metaOf(path).cwd, codexCd(argv, sess.Cwd)}
+				if k, ok := statKey(path); ok && (sess.Cwd == "" || s.agents.codexDisplaced(env.codexHome, cwds, id, k.mtime, started, now)) {
+					path = "" // a /new, or a session beside it, written since: not measured
+				}
+			}
 			// fresh: no rollout of its own yet, by its open files or, when
-			// they say nothing, by its directory.
-			fresh := read && (sess.Cwd == "" || codexIn[sess.Cwd] == 1)
-			if path == "" && sess.Cwd != "" && codexIn[sess.Cwd] == 1 && env.codexHome != "" {
-				started := now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
+			// they say nothing, by its directory. A resumed session has one.
+			dir := codexWorkDir(argv, sess.Cwd) // where Codex works: -C, else the shell's
+			fresh := read && !batch && !resume && (dir == "" || codexIn[dir] == 1)
+			// A resume's own rollout began before it: one the directory
+			// shows is another's, or its /new.
+			if path == "" && !batch && !resume && dir != "" && codexIn[dir] == 1 && env.codexHome != "" {
 				var ambiguous bool
-				path, ambiguous = s.agents.codexInDir(env.codexHome, sess.Cwd, started, now)
+				path, ambiguous = s.agents.codexInDir(env.codexHome, dir, started, now)
 				fresh = !ambiguous
+				// A session that started here after this one and exited
+				// owns any rollout begun since it started.
+				if at, ok := s.codexNeighbour(dir, key, started); ok && path != "" {
+					if began := s.agents.metaOf(path).began; began.IsZero() || !began.Before(at) {
+						path, fresh = "", false
+					}
+				}
+				// A rollout begun while matchblox was down, for a session
+				// that ran through it, may be a neighbour's it never saw.
+				if began := s.agents.metaOf(path).began; path != "" && !s.codexUntil.IsZero() && started.Before(s.codexFirst) &&
+					began.After(s.codexUntil) && began.After(started) && began.Before(s.codexFirst) {
+					path, fresh = "", false
+				}
+				// A /resume in the TUI, or a /new, writes another session
+				// after its own.
+				if k, ok := statKey(path); ok && s.agents.codexDisplaced(env.codexHome, []string{dir}, s.agents.metaOf(path).id, k.mtime, started, now) {
+					path, fresh = "", false
+				}
 			}
 			sess.Context = "unmeasured"
 			if fresh || path != "" {
@@ -843,16 +923,29 @@ func cursorPrint(argv []string) bool {
 	return false
 }
 
+// codexNeighbour is when the first Codex session started in dir after the
+// one of key did, now exited (a live one is counted in codexIn): a
+// rollout begun there since is maybe its.
+func (s *Sampler) codexNeighbour(dir string, key procKey, started time.Time) (first time.Time, ok bool) {
+	for k, at := range s.codexSeen[dir] {
+		if k != key && !at.Before(started) && (!ok || at.Before(first)) {
+			first, ok = at, true
+		}
+	}
+	return first, ok
+}
+
 // codexServer: argv runs a daemon of the Codex app, `codex app-server`,
 // which shares the CLI's name and is no session.
 // codexBatch: argv runs Codex without a person at it, a subcommand that
 // is no session of its own.
 func codexBatch(argv []string) bool {
-	if len(argv) < 2 {
+	w := codexWords(argv)
+	if len(w) == 0 {
 		return false
 	}
-	switch argv[1] {
-	case "exec", "e", "mcp-server", "mcp", "app-server", "proto":
+	switch w[0] {
+	case "exec", "e", "review", "mcp-server", "mcp", "app-server", "proto":
 		return true
 	}
 	return false

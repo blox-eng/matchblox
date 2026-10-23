@@ -692,3 +692,473 @@ func TestTheDirectoryFallbackCountsOnlyCodexSessions(t *testing.T) {
 		t.Errorf("no open files, no rollout since the start: context %q, want fresh", s.Context)
 	}
 }
+
+// codexDir is a fixture for the directory fallback: Codex processes in
+// panes and rollouts under CODEX_HOME. A process has a tty, so its open
+// files read as none (Codex 0.163 closes its rollout).
+type codexDir struct {
+	t       *testing.T
+	root    string
+	smp     *Sampler
+	started time.Time
+}
+
+func newCodexDir(t *testing.T) *codexDir {
+	t.Helper()
+	root := copyFixture(t)
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	return &codexDir{t, root, smp, fixtureNow.Add(-time.Duration((smp.FS.Uptime() - 10) * float64(time.Second)))}
+}
+
+// proc starts argv in pane; an npm install runs as node, named MainThread.
+func (d *codexDir) proc(pid int, argv []string, pane, cwd string) {
+	comm := "codex"
+	if argv[0] == "node" {
+		comm = "MainThread"
+	}
+	addProc(d.t, d.root, pid, 1, comm, argv, pane)
+	addPane(d.t, d.root, pane+"\tw:"+strconv.Itoa(pid)+".1\tw\t"+strconv.Itoa(pid)+"\t"+comm+"\t"+cwd)
+	symlink(d.t, "/dev/pts/3", filepath.Join(d.root, "proc", strconv.Itoa(pid), "fd", "0"))
+	symlink(d.t, cwd, filepath.Join(d.root, "proc", strconv.Itoa(pid), "cwd"))
+}
+
+// advance moves the sampler's clock and the machine's uptime on by dt, so
+// a process keeps its start time.
+func (d *codexDir) advance(dt time.Duration) {
+	up := d.smp.FS.Uptime()
+	writeFile(d.t, filepath.Join(d.root, "proc", "uptime"), strconv.FormatFloat(up+dt.Seconds(), 'f', 2, 64)+" 0\n")
+	now := d.smp.Now().Add(dt)
+	d.smp.Now = func() time.Time { return now }
+}
+
+// write puts a rollout of tokens in day's directory, last written at.
+func (d *codexDir) write(day time.Time, name, meta string, tokens int, at time.Time) string {
+	tail := strings.SplitN(codexRollout("gpt-made-up", tokens, 258400), "\n", 2)[1]
+	path := filepath.Join(d.root, "home", ".codex", "sessions", day.Format("2006/01/02"), name)
+	writeFile(d.t, path, meta+tail)
+	if err := os.Chtimes(path, at, at); err != nil {
+		d.t.Fatal(err)
+	}
+	return path
+}
+
+// TestACodexExecTakesNoSessionsRollout: a `codex exec` run in a pane is
+// no session of the directory, so it must not take the rollout of the TUI
+// that started there after it: z on the exec row would park the TUI. An
+// npm install runs it as `node <script> exec`.
+func TestACodexExecTakesNoSessionsRollout(t *testing.T) {
+	d := newCodexDir(t)
+	d.proc(900, []string{"codex", "exec", "fix the tests"}, "%20", "/work/both")
+	d.proc(901, []string{"codex"}, "%21", "/work/both")
+	d.write(fixtureNow, "rollout-a-tui.jsonl", codexMeta("id-tui", "/work/both", "codex-tui", d.started.Add(2*time.Second)), 51680, fixtureNow.Add(-time.Second))
+	d.proc(910, []string{"node", "/usr/local/bin/codex", "exec", "fix it"}, "%22", "/work/npm")
+	// An option before exec, and codex review: the TUI beside them keeps
+	// its rollout.
+	d.proc(920, []string{"codex", "-m", "gpt-made-up", "exec", "fix it"}, "%23", "/work/opt")
+	d.proc(922, []string{"codex", "--remote-auth-token-env", "TOKEN", "exec", "fix it"}, "%25", "/work/opt")
+	d.proc(923, []string{"codex", "review"}, "%26", "/work/opt")
+	d.proc(921, []string{"codex"}, "%24", "/work/opt")
+	d.write(fixtureNow, "rollout-b-opt.jsonl", codexMeta("id-opt", "/work/opt", "codex-tui", d.started.Add(2*time.Second)), 51680, fixtureNow.Add(-time.Second))
+
+	got := byPane(d.smp.Sample())
+	if s := got["%24"]; s.SessionID != "id-opt" || s.Context != "known" {
+		t.Errorf("the TUI beside codex -m X exec: id %q, context %q; want id-opt, known", s.SessionID, s.Context)
+	}
+	for _, pane := range []string{"%20", "%22", "%23", "%25", "%26"} {
+		if s := got[pane]; s.SessionID != "" || s.Context != "unmeasured" {
+			t.Errorf("%s, a codex exec row: id %q, context %q; want none, unmeasured", pane, s.SessionID, s.Context)
+		}
+	}
+	if s := got["%21"]; s.SessionID != "id-tui" || s.Context != "known" {
+		t.Errorf("the TUI: id %q, context %q; want id-tui, known", s.SessionID, s.Context)
+	}
+}
+
+// TestAFreshCodexDoesNotTakeAnAppThread: before its first turn a TUI has
+// no rollout. A thread of the Codex app or an editor begun in its
+// directory is another's (its originator is not the CLI's): the TUI stays
+// fresh, with no id. The CLI writes codex-tui (codex_cli_rs before it).
+func TestAFreshCodexDoesNotTakeAnAppThread(t *testing.T) {
+	d := newCodexDir(t)
+	after := d.started.Add(2 * time.Second)
+	d.proc(900, []string{"codex"}, "%20", "/work/app")
+	d.write(fixtureNow, "rollout-a-app.jsonl", codexMeta("id-app", "/work/app", "Codex Desktop", after), 51680, fixtureNow.Add(-time.Second))
+	d.proc(910, []string{"codex"}, "%21", "/work/cli")
+	d.write(fixtureNow, "rollout-b-cli.jsonl", codexMeta("id-cli", "/work/cli", "codex_cli_rs", after), 51680, fixtureNow.Add(-time.Second))
+
+	got := byPane(d.smp.Sample())
+	if s := got["%20"]; s.SessionID != "" || s.Context != "fresh" {
+		t.Errorf("a TUI beside an app thread: id %q, context %q; want none, fresh", s.SessionID, s.Context)
+	}
+	if s := got["%21"]; s.SessionID != "id-cli" || s.Context != "known" {
+		t.Errorf("an older CLI's rollout: id %q, context %q; want id-cli, known", s.SessionID, s.Context)
+	}
+}
+
+// TestAResumedCodexIsNotFresh: `codex resume <id>` writes on in the
+// rollout it began on another day: it is found by its id, also from an
+// npm install, after global options, or with the id in capitals. Any
+// other session whose directory has a rollout begun before it started and
+// written since (a resume without an id, a session that ended after it
+// started) cannot be told apart: unmeasured, not fresh. So is a resume
+// whose rollout is not found: it began on a day the scan does not read.
+func TestAResumedCodexIsNotFresh(t *testing.T) {
+	d := newCodexDir(t)
+	before := d.started.Add(-72 * time.Hour)
+	for i, argv := range [][]string{
+		{"codex", "resume", "ID"},
+		{"node", "/usr/local/bin/codex", "resume", "ID"},
+		{"codex", "-m", "gpt-made-up", "resume", "ID"},
+		{"codex", "resume", "UPPER"},
+		{"codex", "resume", "-m", "gpt-made-up", "ID"},
+		{"codex", "--remote", "ws://example.com:1", "resume", "ID"},
+	} {
+		id := "0199a0b1-5e5e-7000-8000-00000000abc" + strconv.Itoa(i)
+		for j := range argv {
+			switch argv[j] {
+			case "ID":
+				argv[j] = id
+			case "UPPER":
+				argv[j] = strings.ToUpper(id)
+			}
+		}
+		cwd := "/work/resumed" + strconv.Itoa(i)
+		d.proc(900+i, argv, "%2"+strconv.Itoa(i), cwd)
+		d.write(before, "rollout-2026-09-18T10-00-00-"+id+".jsonl", codexMeta(id, cwd, "codex-tui", before), 51680, fixtureNow.Add(-time.Second))
+	}
+	d.proc(910, []string{"codex", "resume", "--last"}, "%30", "/work/last")
+	d.write(fixtureNow, "rollout-b-last.jsonl", codexMeta("id-last", "/work/last", "codex-tui", d.started.Add(-time.Hour)), 51680, fixtureNow.Add(-time.Second))
+	d.proc(920, []string{"node", "/usr/local/bin/codex", "resume", "--last"}, "%31", "/work/away")
+	d.write(before, "rollout-c-away.jsonl", codexMeta("id-away", "/work/away", "codex-tui", before), 51680, fixtureNow.Add(-time.Second))
+
+	got := byPane(d.smp.Sample())
+	for i := range 6 {
+		id, pane := "0199a0b1-5e5e-7000-8000-00000000abc"+strconv.Itoa(i), "%2"+strconv.Itoa(i)
+		if s := got[pane]; s.SessionID != id || s.Context != "known" || s.Tokens != 51680 {
+			t.Errorf("%s, resumed by its id: id %q, context %q, %d tokens; want %s, known, 51680", pane, s.SessionID, s.Context, s.Tokens, id)
+		}
+	}
+	if s := got["%30"]; s.SessionID != "" || s.Context != "unmeasured" {
+		t.Errorf("codex resume --last: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
+	}
+	if s := got["%31"]; s.SessionID != "" || s.Context != "unmeasured" {
+		t.Errorf("codex resume --last of an older day's rollout: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
+	}
+}
+
+// TestACodexFollowsItsRevertedRollout: editing an earlier prompt (Esc Esc)
+// reverts the thread, and Codex writes on in
+// rollout-<ts>-<id>_<rollout>.jsonl, with the same session id. A resumed
+// session reads the newer file, and a TUI with both files keeps its id.
+func TestACodexFollowsItsRevertedRollout(t *testing.T) {
+	d := newCodexDir(t)
+	before := d.started.Add(-72 * time.Hour)
+	resumed := "0199a0b1-5e5e-7000-8000-00000000abcd"
+	d.proc(900, []string{"codex", "resume", resumed}, "%20", "/work/resumed")
+	d.write(before, "rollout-2026-09-18T10-00-00-"+resumed+".jsonl", codexMeta(resumed, "/work/resumed", "codex-tui", before), 200000, d.started.Add(-time.Hour))
+	d.write(fixtureNow, "rollout-2026-09-21T10-00-00-"+resumed+"_0199a0b1-5e5e-7000-8000-0000000fffff.jsonl", codexMeta(resumed, "/work/resumed", "codex-tui", before), 30000, fixtureNow.Add(-time.Second))
+	fresh := "0199a0b1-5e5e-7000-8000-000000001111"
+	after := d.started.Add(2 * time.Second)
+	d.proc(910, []string{"codex"}, "%21", "/work/tui")
+	d.write(fixtureNow, "rollout-2026-09-21T10-00-00-"+fresh+".jsonl", codexMeta(fresh, "/work/tui", "codex-tui", after), 90000, fixtureNow.Add(-time.Minute))
+	d.write(fixtureNow, "rollout-2026-09-21T10-05-00-"+fresh+"_0199a0b1-5e5e-7000-8000-0000000eeeee.jsonl", codexMeta(fresh, "/work/tui", "codex-tui", after), 30000, fixtureNow.Add(-time.Second))
+
+	got := byPane(d.smp.Sample())
+	if s := got["%20"]; s.SessionID != resumed || s.Tokens != 30000 {
+		t.Errorf("a resumed session after a revert: id %q, %d tokens; want %s, 30000", s.SessionID, s.Tokens, resumed)
+	}
+	if s := got["%21"]; s.SessionID != fresh || s.Tokens != 30000 {
+		t.Errorf("a TUI after a revert: id %q, %d tokens; want %s, 30000", s.SessionID, s.Tokens, fresh)
+	}
+}
+
+// TestAResumeFollowsARevertFromAnEarlierDay: Codex resumes into the
+// newest file of the thread, a revert's on whatever day it was made.
+func TestAResumeFollowsARevertFromAnEarlierDay(t *testing.T) {
+	d := newCodexDir(t)
+	id := "0199a0b1-5e5e-7000-8000-00000000abcd"
+	orig, reverted := d.started.Add(-5*24*time.Hour), d.started.Add(-3*24*time.Hour)
+	d.proc(900, []string{"codex", "resume", id}, "%20", "/work/rev")
+	d.write(orig, "rollout-2026-09-16T10-00-00-"+id+".jsonl", codexMeta(id, "/work/rev", "codex-tui", orig), 200000, orig)
+	d.write(reverted, "rollout-2026-09-18T10-00-00-"+id+"_0199a0b1-5e5e-7000-8000-0000000fffff.jsonl", codexMeta(id, "/work/rev", "codex-tui", reverted), 30000, fixtureNow.Add(-time.Second))
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != id || s.Tokens != 30000 {
+		t.Errorf("a resume of a thread reverted days ago: id %q, %d tokens; want %s, 30000", s.SessionID, s.Tokens, id)
+	}
+}
+
+// codexSubagentMeta is the first line of a subagent's rollout: the
+// parent's directory and originator, with the parent named.
+func codexSubagentMeta(id, parent, cwd string, at time.Time) string {
+	return `{"timestamp":"` + at.UTC().Format(time.RFC3339Nano) + `","type":"session_meta","payload":{"id":"` + id + `","timestamp":"` +
+		at.UTC().Format(time.RFC3339Nano) + `","cwd":"` + cwd + `","originator":"codex-tui","source":{"subagent":{"thread_spawn":{"parent_thread_id":"` +
+		parent + `","depth":1}}},"cli_version":"0.164.0"}}` + "\n"
+}
+
+// TestAResumedCodexKeepsItsOwnRollout: a pane begun as `codex resume A`
+// is A's while A is written last. Another session's rollout in its
+// directory (one that ran and exited there, A's subagent) never gives it
+// another id. Once another session begun since the start is written after
+// A (a /new in A's TUI, or a session beside it), which is the pane's cannot
+// be told: not measured, no id.
+func TestAResumedCodexKeepsItsOwnRollout(t *testing.T) {
+	d := newCodexDir(t)
+	before := d.started.Add(-72 * time.Hour)
+	resumed := func(n int, cwd string, lastWrite time.Time) string {
+		id := "0199a0b1-5e5e-7000-8000-00000000000" + strconv.Itoa(n)
+		d.proc(900+n, []string{"codex", "resume", id}, "%2"+strconv.Itoa(n), cwd)
+		d.write(before, "rollout-2026-09-18T10-00-00-"+id+".jsonl", codexMeta(id, cwd, "codex-tui", before), 200000, lastWrite)
+		return id
+	}
+	// %20: a session ran and exited there while A kept working.
+	a0 := resumed(0, "/work/exited", fixtureNow.Add(-time.Second))
+	d.write(fixtureNow, "rollout-b-exited.jsonl", codexMeta("id-exited", "/work/exited", "codex-tui", d.started.Add(2*time.Minute)), 12000, d.started.Add(5*time.Minute))
+	// %21: A's subagent, written after A.
+	a1 := resumed(1, "/work/sub", d.started.Add(time.Minute))
+	d.write(fixtureNow, "rollout-c-sub.jsonl", codexSubagentMeta("id-sub", a1, "/work/sub", d.started.Add(2*time.Minute)), 12000, fixtureNow.Add(-time.Second))
+	// %22: a /new in A's TUI.
+	resumed(2, "/work/new", d.started.Add(time.Minute))
+	d.write(fixtureNow, "rollout-d-new.jsonl", codexMeta("id-new", "/work/new", "codex-tui", d.started.Add(2*time.Minute)), 12000, fixtureNow.Add(-time.Second))
+
+	got := byPane(d.smp.Sample())
+	if s := got["%20"]; s.SessionID != a0 || s.Tokens != 200000 {
+		t.Errorf("beside an exited session: id %q, %d tokens; want %s, 200000", s.SessionID, s.Tokens, a0)
+	}
+	if s := got["%21"]; s.SessionID != a1 || s.Tokens != 200000 {
+		t.Errorf("beside its subagent: id %q, %d tokens; want %s, 200000", s.SessionID, s.Tokens, a1)
+	}
+	if s := got["%22"]; s.SessionID != "" || s.Context != "unmeasured" {
+		t.Errorf("after a /new in A's TUI: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
+	}
+}
+
+// TestAResumeInAnotherDirectoryLosesItsIDAfterANew: Codex works in the
+// resumed session's directory, or the one -C names, not the process's
+// own. A /new written there after A clears the id.
+func TestAResumeInAnotherDirectoryLosesItsIDAfterANew(t *testing.T) {
+	d := newCodexDir(t)
+	before := d.started.Add(-72 * time.Hour)
+	for i, argv := range [][]string{
+		{"codex", "resume", "ID"},
+		{"codex", "-C", "../proj1", "resume", "ID"},
+	} {
+		id := "0199a0b1-5e5e-7000-8000-00000000000" + strconv.Itoa(i)
+		proj := "/work/proj" + strconv.Itoa(i)
+		for j := range argv {
+			if argv[j] == "ID" {
+				argv[j] = id
+			}
+		}
+		d.proc(900+i, argv, "%2"+strconv.Itoa(i), "/work/home"+strconv.Itoa(i))
+		d.write(before, "rollout-2026-09-18T10-00-00-"+id+".jsonl", codexMeta(id, proj, "codex-tui", before), 200000, d.started.Add(time.Minute))
+		d.write(fixtureNow, "rollout-new-"+strconv.Itoa(i)+".jsonl", codexMeta("id-new"+strconv.Itoa(i), proj, "codex-tui", d.started.Add(2*time.Minute)), 12000, fixtureNow.Add(-time.Second))
+	}
+	got := byPane(d.smp.Sample())
+	for _, pane := range []string{"%20", "%21"} {
+		if s := got[pane]; s.SessionID != "" || s.Context != "unmeasured" {
+			t.Errorf("%s, a /new in Codex's own directory: id %q, context %q; want none, unmeasured", pane, s.SessionID, s.Context)
+		}
+	}
+}
+
+// TestAnOpenSubagentRolloutIsNotTheSessions: a subagent runs in the TUI's
+// process, so its rollout is among the open files; the session's is the
+// main one.
+func TestAnOpenSubagentRolloutIsNotTheSessions(t *testing.T) {
+	d := newCodexDir(t)
+	d.proc(900, []string{"codex"}, "%20", "/work/sub")
+	main := d.write(fixtureNow, "rollout-a-main.jsonl", codexMeta("id-main", "/work/sub", "codex-tui", d.started.Add(2*time.Second)), 150000, fixtureNow.Add(-time.Minute))
+	sub := d.write(fixtureNow, "rollout-b-sub.jsonl", codexSubagentMeta("id-sub", "id-main", "/work/sub", d.started.Add(time.Minute)), 12000, fixtureNow.Add(-time.Second))
+	symlink(t, main, filepath.Join(d.root, "proc", "900", "fd", "21"))
+	symlink(t, sub, filepath.Join(d.root, "proc", "900", "fd", "22"))
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "id-main" || s.Tokens != 150000 {
+		t.Errorf("a subagent's rollout open: id %q, %d tokens; want id-main, 150000", s.SessionID, s.Tokens)
+	}
+}
+
+// TestAFreshCodexDoesNotTakeAnExitedNeighbour: a Codex that started after
+// the TUI in its directory, worked and exited, left a rollout begun since
+// the TUI started. It is not the TUI's.
+func TestAFreshCodexDoesNotTakeAnExitedNeighbour(t *testing.T) {
+	d := newCodexDir(t)
+	d.proc(900, []string{"codex"}, "%20", "/work/both")
+	d.proc(901, []string{"codex"}, "%21", "/work/both")
+	d.smp.Sample()
+	if err := os.RemoveAll(filepath.Join(d.root, "proc", "901")); err != nil {
+		t.Fatal(err)
+	}
+	d.write(fixtureNow, "rollout-a-exited.jsonl", codexMeta("id-exited", "/work/both", "codex-tui", d.started.Add(time.Minute)), 90000, fixtureNow.Add(-time.Second))
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "" || s.Context == "known" {
+		t.Errorf("beside an exited neighbour's rollout: id %q, context %q; want none, not known", s.SessionID, s.Context)
+	}
+}
+
+// TestAnExitedNeighbourWithoutARolloutKeepsTheTUIMeasured: a Codex that
+// started after the TUI and exited (`codex login`, or a TUI quit before
+// its first turn) owns no rollout begun before it started: the TUI keeps
+// its own.
+func TestAnExitedNeighbourWithoutARolloutKeepsTheTUIMeasured(t *testing.T) {
+	for _, argv := range [][]string{{"codex", "login"}, {"codex"}} {
+		d := newCodexDir(t)
+		// The fixture starts both at one tick: A's rollout began before
+		// the neighbour did, within the tick.
+		d.proc(900, []string{"codex"}, "%20", "/work/r")
+		d.write(fixtureNow, "rollout-a.jsonl", codexMeta("id-a", "/work/r", "codex-tui", d.started.Add(-500*time.Millisecond)), 150000, fixtureNow.Add(-time.Second))
+		d.proc(901, argv, "%21", "/work/r")
+		d.smp.Sample()
+		if err := os.RemoveAll(filepath.Join(d.root, "proc", "901")); err != nil {
+			t.Fatal(err)
+		}
+		if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "id-a" || s.Tokens != 150000 {
+			t.Errorf("after %q exited: id %q, %d tokens; want id-a, 150000", argv, s.SessionID, s.Tokens)
+		}
+	}
+}
+
+// TestACodexStartedWithCdCountsInItsDirectory: `codex -C /work/r` works
+// in /work/r whatever its shell's directory: it counts there.
+func TestACodexStartedWithCdCountsInItsDirectory(t *testing.T) {
+	d := newCodexDir(t)
+	d.proc(900, []string{"codex"}, "%20", "/work/r")
+	d.proc(901, []string{"codex", "-C", "/work/r"}, "%21", "/work/home")
+	d.write(fixtureNow, "rollout-b.jsonl", codexMeta("id-b", "/work/r", "codex-tui", d.started.Add(2*time.Second)), 120000, fixtureNow.Add(-time.Second))
+	d.proc(910, []string{"codex", "--cd", "../alone"}, "%22", "/work/home")
+	d.write(fixtureNow, "rollout-c.jsonl", codexMeta("id-c", "/work/alone", "codex-tui", d.started.Add(2*time.Second)), 200000, fixtureNow.Add(-time.Second))
+
+	got := byPane(d.smp.Sample())
+	for _, pane := range []string{"%20", "%21"} {
+		if s := got[pane]; s.SessionID != "" || s.Context == "known" || s.Context == "fresh" {
+			t.Errorf("%s, two Codex in /work/r: id %q, context %q; want none, unmeasured", pane, s.SessionID, s.Context)
+		}
+	}
+	if s := got["%22"]; s.SessionID != "id-c" || s.Tokens != 200000 {
+		t.Errorf("codex --cd alone: id %q, %d tokens; want id-c, 200000", s.SessionID, s.Tokens)
+	}
+}
+
+// TestAnExitedNeighbourSurvivesARestart: the Codex sessions seen in each
+// directory are kept in a file, so a sampler that starts again still
+// knows a neighbour that exited before it.
+func TestAnExitedNeighbourSurvivesARestart(t *testing.T) {
+	d := newCodexDir(t)
+	seen := filepath.Join(t.TempDir(), "codex-seen.json")
+	d.smp.CodexSeenFile = seen
+	d.proc(900, []string{"codex"}, "%20", "/work/both")
+	d.proc(901, []string{"codex"}, "%21", "/work/both")
+	d.smp.Sample()
+	if err := os.RemoveAll(filepath.Join(d.root, "proc", "901")); err != nil {
+		t.Fatal(err)
+	}
+	d.write(fixtureNow, "rollout-a-exited.jsonl", codexMeta("id-exited", "/work/both", "codex-tui", d.started.Add(time.Minute)), 90000, fixtureNow.Add(-time.Second))
+	again := newFixtureSampler(d.root)
+	again.Agents, again.CodexSeenFile = d.smp.Agents, seen
+	if s := byPane(again.Sample())["%20"]; s.SessionID != "" || s.Context == "known" {
+		t.Errorf("after a restart, beside an exited neighbour's rollout: id %q, context %q; want none, not known", s.SessionID, s.Context)
+	}
+}
+
+// TestACodexAfterSlashResumeIsNotMeasured: /resume X in a TUI writes on
+// in X's rollout, begun on an older day. Once X is written after the
+// pane's own rollout, which is the pane's cannot be told: not measured.
+func TestACodexAfterSlashResumeIsNotMeasured(t *testing.T) {
+	d := newCodexDir(t)
+	before := d.started.Add(-72 * time.Hour)
+	d.proc(900, []string{"codex"}, "%20", "/work/tui")
+	d.write(fixtureNow, "rollout-a-own.jsonl", codexMeta("id-own", "/work/tui", "codex-tui", d.started.Add(2*time.Second)), 150000, d.started.Add(time.Minute))
+	d.write(before, "rollout-b-x.jsonl", codexMeta("id-x", "/work/tui", "codex-tui", before), 12000, fixtureNow.Add(-time.Second))
+	a := "0199a0b1-5e5e-7000-8000-00000000000a"
+	d.proc(910, []string{"codex", "resume", a}, "%21", "/work/res")
+	d.write(before, "rollout-2026-09-18T10-00-00-"+a+".jsonl", codexMeta(a, "/work/res", "codex-tui", before), 200000, d.started.Add(time.Minute))
+	d.write(before.Add(-24*time.Hour), "rollout-c-y.jsonl", codexMeta("id-y", "/work/res", "codex-tui", before), 12000, fixtureNow.Add(-time.Second))
+
+	got := byPane(d.smp.Sample())
+	for _, pane := range []string{"%20", "%21"} {
+		if s := got[pane]; s.SessionID != "" || s.Context != "unmeasured" {
+			t.Errorf("%s, after /resume of an older session: id %q, context %q; want none, unmeasured", pane, s.SessionID, s.Context)
+		}
+	}
+}
+
+// TestASlashResumeIsNotMeasuredAtTheNextSample: the list of older
+// rollouts is read every 30 seconds, but the files of the pane's own
+// directory are looked at on every sample.
+func TestASlashResumeIsNotMeasuredAtTheNextSample(t *testing.T) {
+	d := newCodexDir(t)
+	before := d.started.Add(-72 * time.Hour)
+	d.proc(900, []string{"codex"}, "%20", "/work/tui")
+	d.write(fixtureNow, "rollout-a-own.jsonl", codexMeta("id-own", "/work/tui", "codex-tui", d.started.Add(2*time.Second)), 150000, fixtureNow.Add(-time.Second))
+	x := d.write(before, "rollout-b-x.jsonl", codexMeta("id-x", "/work/tui", "codex-tui", before), 12000, before)
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "id-own" {
+		t.Fatalf("before the /resume: id %q, want id-own", s.SessionID)
+	}
+	d.advance(5 * time.Second)
+	if err := os.Chtimes(x, d.smp.Now(), d.smp.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "" || s.Context != "unmeasured" {
+		t.Errorf("5 s after /resume X: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
+	}
+}
+
+// TestASlashResumeOfAnOldSessionIsNotMeasured: a /resume of a session
+// begun over a month ago is seen too.
+func TestASlashResumeOfAnOldSessionIsNotMeasured(t *testing.T) {
+	d := newCodexDir(t)
+	old := d.started.Add(-40 * 24 * time.Hour)
+	d.proc(900, []string{"codex"}, "%20", "/work/tui")
+	d.write(fixtureNow, "rollout-a-own.jsonl", codexMeta("id-own", "/work/tui", "codex-tui", d.started.Add(2*time.Second)), 150000, d.started.Add(time.Minute))
+	d.write(old, "rollout-b-x.jsonl", codexMeta("id-x", "/work/tui", "codex-tui", old), 12000, fixtureNow.Add(-time.Second))
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "" || s.Context != "unmeasured" {
+		t.Errorf("after /resume of a 40-day-old session: id %q, context %q; want none, unmeasured", s.SessionID, s.Context)
+	}
+}
+
+// TestARolloutBegunWhileMatchbloxWasDownIsNotTaken: a neighbour that ran
+// and exited while matchblox was down was never seen. A rollout begun in
+// that gap is not taken for a session that was running through it.
+func TestARolloutBegunWhileMatchbloxWasDownIsNotTaken(t *testing.T) {
+	d := newCodexDir(t)
+	seen := filepath.Join(t.TempDir(), "codex-seen.json")
+	writeFile(t, seen, `{"until":"`+d.started.Add(30*time.Second).UTC().Format(time.RFC3339Nano)+`","seen":{}}`)
+	d.smp.CodexSeenFile = seen
+	d.proc(900, []string{"codex"}, "%20", "/work/r")
+	d.write(fixtureNow, "rollout-b.jsonl", codexMeta("id-b", "/work/r", "codex-tui", d.started.Add(time.Minute)), 90000, d.started.Add(2*time.Minute))
+	d.proc(910, []string{"codex"}, "%21", "/work/early")
+	d.write(fixtureNow, "rollout-c.jsonl", codexMeta("id-c", "/work/early", "codex-tui", d.started.Add(10*time.Second)), 90000, fixtureNow.Add(-time.Second))
+	got := byPane(d.smp.Sample())
+	if s := got["%20"]; s.SessionID != "" || s.Context == "known" {
+		t.Errorf("a rollout begun while matchblox was down: id %q, context %q; want none, not known", s.SessionID, s.Context)
+	}
+	if s := got["%21"]; s.SessionID != "id-c" {
+		t.Errorf("a rollout begun before the gap: id %q, want id-c", s.SessionID)
+	}
+}
+
+// TestAFreshCodexDoesNotTakeASubagent: a subagent of another session
+// begun in the directory is not the TUI's own rollout.
+func TestAFreshCodexDoesNotTakeASubagent(t *testing.T) {
+	d := newCodexDir(t)
+	d.proc(900, []string{"codex"}, "%20", "/work/sub")
+	d.write(fixtureNow, "rollout-a-sub.jsonl", codexSubagentMeta("id-sub", "id-other", "/work/sub", d.started.Add(2*time.Second)), 51680, fixtureNow.Add(-time.Second))
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "" || s.Context != "fresh" {
+		t.Errorf("a TUI beside a subagent's rollout: id %q, context %q; want none, fresh", s.SessionID, s.Context)
+	}
+}
+
+// TestAResumeFindsARolloutThatAppearsLater: Codex can write the rollout of
+// a resume after the process starts (it unpacks a compressed one). A miss
+// is tried again after 30 seconds.
+func TestAResumeFindsARolloutThatAppearsLater(t *testing.T) {
+	d := newCodexDir(t)
+	before := d.started.Add(-72 * time.Hour)
+	id := "0199a0b1-5e5e-7000-8000-00000000abcd"
+	d.proc(900, []string{"codex", "resume", id}, "%20", "/work/late")
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != "" {
+		t.Fatalf("no rollout yet: id %q", s.SessionID)
+	}
+	d.write(before, "rollout-2026-09-18T10-00-00-"+id+".jsonl", codexMeta(id, "/work/late", "codex-tui", before), 51680, fixtureNow.Add(-time.Second))
+	d.smp.Now = func() time.Time { return fixtureNow.Add(31 * time.Second) }
+	if s := byPane(d.smp.Sample())["%20"]; s.SessionID != id || s.Context != "known" {
+		t.Errorf("the rollout appeared: id %q, context %q; want %s, known", s.SessionID, s.Context, id)
+	}
+}

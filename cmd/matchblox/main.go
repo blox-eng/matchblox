@@ -791,6 +791,7 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 	smp.ProcEvery = 5 * cfg.Interval.Duration
 	smp.OwnEntries = true
 	smp.LimitsDir = filepath.Dir(state.Path())
+	smp.CodexSeenFile = filepath.Join(smp.LimitsDir, "codex-seen.json")
 	if cfg.Limits.CursorUsage && runtime.GOOS == "darwin" {
 		smp.CursorUsage = cursorUsage()
 	}
@@ -850,6 +851,7 @@ func status(w io.Writer, path string, cfg config.Config, root string, text bool)
 	if !ok {
 		smp := newSampler(cfg, root)
 		smp.ProcEvery = 0
+		smp.CodexSeenReadOnly = true // the service keeps the file
 		smp.Sample()
 		time.Sleep(time.Second)
 		doc = state.Doc{Snapshot: smp.Sample()}
