@@ -53,6 +53,20 @@ pair again. In the console, Enter only helps after `tailscale set
 If Tailscale SSH still answers, the app says that the host refused this
 connection (with Try again for another address), not that it did not answer.
 
+Pairing is not the whole story. With Tailscale SSH still on
+(`tailscale debug prefs` shows `"RunSSH": true`), a connection to the
+host's MagicDNS name or Tailscale IP on port 22 is answered by
+tailscaled, not OpenSSH. Permanent laptop and phone keys in
+`~/.ssh/authorized_keys` — including their `restrict` option and
+ForcedCommand (`matchblox gate …`) — are ignored on that path. Anyone
+Tailscale SSH admits gets what that policy allows, not the gate. Turn it
+off with
+`tailscale set --ssh=false`, or connect on an address and port that
+OpenSSH serves (`matchblox pair --address` / `--port`, or the same in the
+app). A Tailscale ACL can limit what Tailscale SSH allows; it does not
+run ForcedCommand. `matchblox serve`, `matchblox status`, and
+`matchblox setup` warn when Tailscale SSH is on.
+
 If the app says "This code was used or expired", open Pair a device on the
 host again, or run `matchblox pair` again, and scan the new code.
 

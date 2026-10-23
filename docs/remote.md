@@ -59,6 +59,17 @@ The stream can answer your agents, as the console does. Keep
 `~/.ssh/matchblox_ed25519` as private as any ssh key. The host key check is
 strict.
 
+## Tailscale SSH and the gate
+
+Laptop and phone keys are held to `matchblox gate` only when OpenSSH
+answers. If Tailscale SSH is on, the host's MagicDNS name and Tailscale
+IPs on port 22 are answered by tailscaled, which ignores
+`authorized_keys` and ForcedCommand. Keep the gate on every path with
+`tailscale set --ssh=false`, or reach OpenSSH on another address or port.
+Tailscale ACLs can limit Tailscale SSH; they do not restore the gate.
+See [The phone](phone.md) for the pair preflight and the same warning on
+`serve`, `status`, and `setup`.
+
 ## For scripts
 
 ```sh

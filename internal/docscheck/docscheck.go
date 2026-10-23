@@ -21,12 +21,18 @@ type Ref struct {
 }
 
 // Files lists the Markdown a builder reads: README.md, CONTRIBUTING.md and
-// every page under docs/, relative to the repository root.
+// every page under docs/, relative to the repository root. Agent plans under
+// docs/superpowers/ are skipped: they are not product docs.
 func Files(root string) ([]string, error) {
 	files := []string{filepath.Join(root, "README.md"), filepath.Join(root, "CONTRIBUTING.md")}
-	err := filepath.WalkDir(filepath.Join(root, "docs"), func(p string, d os.DirEntry, err error) error {
+	docs := filepath.Join(root, "docs")
+	skip := filepath.Join(docs, "superpowers")
+	err := filepath.WalkDir(docs, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if d.IsDir() && p == skip {
+			return filepath.SkipDir
 		}
 		if !d.IsDir() && strings.HasSuffix(p, ".md") {
 			files = append(files, p)

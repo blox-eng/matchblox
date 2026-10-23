@@ -6,6 +6,17 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`serve`, `status`, and `setup` warn when Tailscale SSH bypasses the
+  gate.** With Tailscale SSH on, the host's MagicDNS name and Tailscale
+  IP on port 22 are answered by tailscaled, so permanent paired keys'
+  `restrict` and ForcedCommand never run on that path. The warning names
+  `tailscale set --ssh=false` (or an OpenSSH address/port) as the fix;
+  the docs cover the same. Pair still refuses before the QR when that
+  path would answer the code ([#184](https://github.com/blox-eng/matchblox/pull/184)).
+  ([#185](https://github.com/blox-eng/matchblox/issues/185))
+
 ## [0.19.0] - 2026-10-23
 
 ### Added

@@ -106,6 +106,7 @@ func setupDoors(e setup.Env, in io.Reader, out io.Writer, run func(argv []string
 			_, werr = fmt.Fprintf(out, format, a...)
 		}
 	}
+	warnTailscaleSSHGate(out)
 	answers := bufio.NewReader(in)
 	for _, d := range setup.Doors(e) {
 		if d.Done {

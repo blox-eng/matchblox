@@ -3,6 +3,7 @@ package docscheck
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -45,5 +46,46 @@ func TestCommandsReadsTildeFences(t *testing.T) {
 	}
 	if len(refs) != 1 || refs[0].Text != "matchblox stat_us" {
 		t.Fatalf("got %+v", refs)
+	}
+}
+
+func TestFilesSkipsSuperpowers(t *testing.T) {
+	root := t.TempDir()
+	for _, rel := range []string{
+		"README.md",
+		"CONTRIBUTING.md",
+		"docs/phone.md",
+		"docs/superpowers/plans/x.md",
+		"docs/superpowers/specs/y.md",
+	} {
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("# x\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files, err := Files(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if strings.Contains(f, "superpowers") {
+			t.Fatalf("Files included agent plan %q", f)
+		}
+	}
+	want := []string{
+		filepath.Join(root, "README.md"),
+		filepath.Join(root, "CONTRIBUTING.md"),
+		filepath.Join(root, "docs", "phone.md"),
+	}
+	if len(files) != len(want) {
+		t.Fatalf("got %v, want %v", files, want)
+	}
+	for i := range want {
+		if files[i] != want[i] {
+			t.Errorf("file %d: got %q, want %q", i, files[i], want[i])
+		}
 	}
 }
