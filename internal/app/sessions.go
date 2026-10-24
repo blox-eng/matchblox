@@ -378,7 +378,56 @@ func (m Model) sessionRows(b *body, w int) {
 		if len(rows) > 1 {
 			b.add(-1, st.hair.Render(strings.Repeat("─", w)))
 		}
+		for _, l := range m.childRows(sample.ProcRef{PID: s.PID, Start: s.Start}, 1, w) {
+			b.add(-1, l)
+		}
 	}
+}
+
+// maxTreeDepth is how many levels of children are drawn under a session.
+const maxTreeDepth = 4
+
+// childrenOf are the children started by one process, in snapshot order.
+func (m Model) childrenOf(parent sample.ProcRef) []sample.Session {
+	var out []sample.Session
+	for _, c := range m.snap.Children {
+		if c.Parent != nil && *c.Parent == parent {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func (m Model) descendants(parent sample.ProcRef) int {
+	n := 0
+	for _, c := range m.childrenOf(parent) {
+		n += 1 + m.descendants(sample.ProcRef{PID: c.PID, Start: c.Start})
+	}
+	return n
+}
+
+// childRows are the lines under one session or child, depth first: a
+// branch for each child and a fold for what lies below the last level.
+func (m Model) childRows(parent sample.ProcRef, depth, w int) []string {
+	st := m.st
+	kids := m.childrenOf(parent)
+	if len(kids) == 0 {
+		return nil
+	}
+	indent := "  " + strings.Repeat("│ ", depth-1)
+	if depth > maxTreeDepth {
+		return []string{fit(st.faint.Render(indent+"└─ … "+strconv.Itoa(m.descendants(parent))+" more"), w)}
+	}
+	var out []string
+	for i, c := range kids {
+		branch := "├─ "
+		if i == len(kids)-1 {
+			branch = "└─ "
+		}
+		out = append(out, fit(st.faint.Render(indent+branch)+st.text.Render(c.Name)+st.faint.Render(" "+c.Status), w))
+		out = append(out, m.childRows(sample.ProcRef{PID: c.PID, Start: c.Start}, depth+1, w)...)
+	}
+	return out
 }
 
 // sessionRow is one line for a session. A row of 70 columns or more adds
@@ -736,6 +785,13 @@ func (m Model) sessionDetail(s sample.Session, w, said int) ([]string, bool) {
 	out = append(out, m.shipField(s, w)...)
 	if s.Agents > 0 {
 		field("agents", st.text.Render(plural(s.Agents, "subagent")+" running"))
+	}
+	if kids := m.childrenOf(sample.ProcRef{PID: s.PID, Start: s.Start}); len(kids) > 0 {
+		names := make([]string, len(kids))
+		for i, c := range kids {
+			names[i] = c.Name
+		}
+		field("children", st.text.Render(strings.Join(names, " · ")))
 	}
 	if len(s.Shells) > 0 {
 		shells := plural(len(s.Shells), "shell")
