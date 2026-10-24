@@ -23,6 +23,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/transport"
+
+	"github.com/blox-eng/matchblox/internal/testhome"
 )
 
 // TestMain lets a test start this binary as `matchblox <args>`.
@@ -43,7 +45,7 @@ func TestMain(m *testing.M) {
 	time.Local = time.UTC
 	// Pair tests stay off this machine's tailscale and sshd.
 	setup.SetPairProbe(setup.PairProbe{LookPath: func(string) (string, error) { return "", errors.New("not found") }})
-	os.Exit(m.Run())
+	os.Exit(testhome.Run(m))
 }
 
 func fixtures(t *testing.T) string {
