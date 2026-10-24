@@ -28,7 +28,7 @@ func TestParseLeavesPathsAlone(t *testing.T) {
 }
 
 func TestParseRefusesOptionsAndTransports(t *testing.T) {
-	for _, s := range []string{"-uhack", "--upload-pack=x", "ext::sh -c x", "file:///etc", "https://-x/o/r", "git@-x:o/r", "http://github.com/o/r"} {
+	for _, s := range []string{"-uhack", "--upload-pack=x", "ext::sh -c x", "file:///etc", "https://-x/o/r", "git@-x:o/r", "http://github.com/o/r", "ssh://-oProxyCommand=x@h/o/r", "https://-x@h/o/r"} {
 		if r, ok := Parse(s, "https"); ok {
 			t.Errorf("Parse(%q) = %+v, want refused", s, r)
 		}

@@ -71,6 +71,9 @@ func parseURL(s string) (Remote, bool) {
 		if err != nil || (u.Scheme != "https" && u.Scheme != "ssh") {
 			return Remote{}, false
 		}
+		if u.User != nil && (!part.MatchString(u.User.Username()) || strings.HasPrefix(u.User.Username(), "-")) {
+			return Remote{}, false
+		}
 		host, path = u.Hostname(), strings.TrimPrefix(u.Path, "/")
 	} else if m := scp.FindStringSubmatch(s); m != nil {
 		host, path = m[1], m[2]
