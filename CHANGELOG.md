@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-24
+
 ### Added
 
 - **Sessions shows which session started which.** A `codex exec` or
@@ -860,7 +862,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/blox-eng/matchblox/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/blox-eng/matchblox/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/blox-eng/matchblox/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/blox-eng/matchblox/compare/v0.19.0...v0.20.0
