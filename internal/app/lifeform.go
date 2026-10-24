@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -191,6 +192,11 @@ func (m Model) openSwitch() (tea.Model, tea.Cmd) {
 // and a second one for a session that works or waits.
 func (m Model) switchAction(f form) *action {
 	sw := proto.SwitchAgent{Agent: f.agent, Handoff: strings.TrimSpace(f.first)}
+	if len(f.accts[f.agent]) > 0 {
+		// The account the confirm names: the service refuses the switch when
+		// its last account is another by then.
+		sw.Account = cmp.Or(f.lastAccount(), "default")
+	}
 	b, _ := json.Marshal(sw)
 	sw.Anyway = true
 	again, _ := json.Marshal(sw)

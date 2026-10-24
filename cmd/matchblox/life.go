@@ -88,6 +88,18 @@ func switchAct(doc state.Doc, words []string, o switchOpts, from string) (proto.
 	if o.handoff != nil {
 		sw.Handoff = *o.handoff
 	}
+	// The account the console would show: the last one if it is still
+	// listed, else default.
+	agent := o.agent
+	if agent == "cursor" {
+		agent = sample.CursorAgent
+	}
+	if list := doc.Accounts[agent]; len(list) > 0 {
+		sw.Account = "default"
+		if a := doc.LastAccount[agent]; a != "default" && slices.Contains(list, a) {
+			sw.Account = a
+		}
+	}
 	b, err := json.Marshal(sw)
 	if err != nil {
 		return proto.Act{}, err

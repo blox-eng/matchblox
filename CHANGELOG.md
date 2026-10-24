@@ -59,6 +59,11 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- **A switch runs on the account its confirm named, or is refused.** `A` and
+  `matchblox switch` send the account they would start the agent on. If the
+  agent's last account changed meanwhile, the switch is refused with `the
+  last <agent> account is now <x>: switch again`, and nothing moves.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - The sign-in of a new account presses only what it sees. matchblox
   sends a key only when the option it picks is the highlighted one and the
   screen has not changed since it looked, and each key goes only to the

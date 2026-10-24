@@ -91,6 +91,14 @@ func TestSwitchNamesThePaneAndTheAgent(t *testing.T) {
 	if sw := decode(a); sw != (proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff}) {
 		t.Fatalf("%+v", sw)
 	}
+	doc := cliDoc()
+	doc.Accounts = map[string][]string{"codex": {"default", "team"}}
+	for last, want := range map[string]string{"team": "team", "": "default", "gone": "default"} {
+		doc.LastAccount = map[string]string{"codex": last}
+		if a, err = switchAct(doc, []string{"api"}, switchOpts{agent: "codex"}, ""); err != nil || decode(a).Account != want {
+			t.Fatalf("last %q: %+v %v, want account %q", last, a, err, want)
+		}
+	}
 	none := ""
 	if a, err = switchAct(cliDoc(), []string{"api"}, switchOpts{agent: "codex", handoff: &none}, ""); err != nil || decode(a).Handoff != "" {
 		t.Fatalf("%+v %v", a, err)

@@ -699,6 +699,28 @@ func TestSwitchConfirmNamesTheAccount(t *testing.T) {
 	}
 }
 
+// TestSwitchSendsTheAccountItsConfirmNamed: the act carries the account the
+// confirm names, its last one else default.
+func TestSwitchSendsTheAccountItsConfirmNamed(t *testing.T) {
+	for _, c := range []struct {
+		last map[string]string
+		want string
+	}{
+		{map[string]string{"codex": "team"}, "team"},
+		{nil, "default"},
+		{map[string]string{"codex": "gone"}, "default"},
+	} {
+		next, _ := switchState(t, lastAccountState(c.last))
+		next, _ = key(next, "A")
+		next, _ = key(next, "enter")
+		p := next.(Model).pending
+		var sw proto.SwitchAgent
+		if p == nil || json.Unmarshal([]byte(p.text), &sw) != nil || sw.Account != c.want {
+			t.Fatalf("%v: pending %+v, want account %q", c.last, p, c.want)
+		}
+	}
+}
+
 // TestSwitchWithANotLinkedNoteJumps: a switch whose account's new shared
 // entries did not all link ran: it jumps, and the flash carries the note.
 func TestSwitchWithANotLinkedNoteJumps(t *testing.T) {

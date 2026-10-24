@@ -1881,3 +1881,23 @@ func TestEachFailureOfAStartIsItsOwnNote(t *testing.T) {
 		}
 	}
 }
+
+// TestSwitchRefusesWhenTheLastAccountChanged: a switch whose confirm named
+// an account the target no longer starts on is refused, with nothing run.
+func TestSwitchRefusesWhenTheLastAccountChanged(t *testing.T) {
+	s, ran, home := switchAccountTest(t)
+	prepared(t, home, "codex", "team")
+	if res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "codex", Name: "a1", Account: "team"})); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	*ran = nil
+	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Account: "default"}))
+	if want := "the last codex account is now team: switch again"; res.Err != want || !res.Refused || len(*ran) != 0 {
+		t.Fatalf("err %q refused %v ran %q, want %q refused and nothing run", res.Err, res.Refused, *ran, want)
+	}
+	res = s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Account: "team"}))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("the account it named: err %q ran %q", res.Err, *ran)
+	}
+}

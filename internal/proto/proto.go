@@ -281,6 +281,10 @@ type SwitchAgent struct {
 	Agent   string `json:"agent"`
 	Handoff string `json:"handoff,omitempty"`
 	Anyway  bool   `json:"anyway,omitempty"`
+	// Account is the account the sender's confirm named for Agent ("default"
+	// included). The service refuses the switch when it would pick another
+	// now. Empty, from an older client, takes whichever it picks.
+	Account string `json:"account,omitempty"`
 }
 
 // DefaultHandoff is the first message a switched-in agent gets: it reads

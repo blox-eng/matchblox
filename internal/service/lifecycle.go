@@ -317,6 +317,11 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	// The account is held before the hold moves: a switch it refuses
 	// leaves the seat as it was.
 	acct := s.switchAccount(n.Agent)
+	if n.Account != "" {
+		if now := acct.label(); now != n.Account {
+			return refuseText(fmt.Sprintf("the last %s account is now %s: switch again", n.Agent, now))
+		}
+	}
 	argv := launchArgv(s.agentBin(n.Agent), n.Agent, x.Name, n.Handoff, accountArgs(n.Agent, acct))
 	var notes []string
 	if acct != nil {
@@ -757,6 +762,14 @@ type onAccount struct {
 	fresh, again bool
 	hand         bool // a hand-made folder a live session runs on
 	mode         accounts.Mode
+}
+
+// label is the account's name: "default" for nil.
+func (a *onAccount) label() string {
+	if a == nil {
+		return "default"
+	}
+	return a.name
 }
 
 // errBusy, errGone and errThere are holdAccount's refusals.
