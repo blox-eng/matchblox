@@ -1901,3 +1901,35 @@ func TestSwitchRefusesWhenTheLastAccountChanged(t *testing.T) {
 		t.Fatalf("the account it named: err %q ran %q", res.Err, *ran)
 	}
 }
+
+// TestSwitchWithTwoSpellingsOfTheLastFolderRuns: the last account is a
+// hand-made folder stored in a spelling the list drops for another, so the
+// clients send default; the switch runs.
+func TestSwitchWithTwoSpellingsOfTheLastFolderRuns(t *testing.T) {
+	s, ran, home := switchAccountTest(t)
+	hand := filepath.Join(home, ".claude-work")
+	if err := os.Mkdir(hand, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(home, ".claude-link")
+	if err := os.Symlink(hand, link); err != nil {
+		t.Fatal(err)
+	}
+	snap := lifeSnap(false)
+	snap.Sessions[0].AccountDir = link
+	snap.Sessions[1].AccountDir = hand
+	snap.Sessions[2].Cwd = "/work/app"
+	s.lastAccounts.set(lastAccountsPath(s.StatePath), "claude", "~/.claude-work")
+	s.publish(snap, func(state.Doc) {})
+	*ran = nil
+	// What matchblox switch sends: the last account if it is listed, else default.
+	doc := s.State()
+	sw := proto.SwitchAgent{Agent: "claude", Handoff: proto.DefaultHandoff, Account: "default"}
+	if a := doc.LastAccount["claude"]; a != "default" && slices.Contains(doc.Accounts["claude"], a) {
+		sw.Account = a
+	}
+	res := s.act(t.Context(), switchAct(t, "%3", sw))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("sent %q: err %q ran %q", sw.Account, res.Err, *ran)
+	}
+}
