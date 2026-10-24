@@ -87,6 +87,8 @@ type Session struct {
 	// when its turn ended: the subagents Claude Code counted then, and the
 	// shells its Bash tool still runs.
 	Agents int       `json:"agents,omitempty"`
+	Parent *ProcRef  `json:"parent,omitempty"` // the process that started this one: set on children only
+	Via    string    `json:"via,omitempty"`    // process | env: how the link was proven
 	Shells []Shell   `json:"shells,omitempty"`
 	turnAt time.Time // the newest real turn of the transcript
 	// TurnEnded is when the transcript's newest turn ended; zero while it
@@ -137,9 +139,12 @@ type Machine struct {
 }
 
 type Snapshot struct {
-	At        time.Time  `json:"at"`
-	Machine   Machine    `json:"machine"`
-	Sessions  []Session  `json:"sessions"`
+	At       time.Time `json:"at"`
+	Machine  Machine   `json:"machine"`
+	Sessions []Session `json:"sessions"`
+	// Children are agents another agent started, each under its Parent. They
+	// are shown, never acted on: no key, queue item or stoker step reaches one.
+	Children  []Session  `json:"children,omitempty"`
 	IdlePanes []IdlePane `json:"idle_panes"`
 	Orphans   []Orphan   `json:"orphans"`
 	Top       []ProcRow  `json:"top"`
@@ -388,7 +393,7 @@ func (s *Sampler) Sample() Snapshot {
 		s.scan(now)
 	}
 	l := s.last
-	snap.Sessions, snap.IdlePanes, snap.Orphans, snap.Top, snap.Exited = l.Sessions, l.IdlePanes, l.Orphans, l.Top, l.Exited
+	snap.Sessions, snap.Children, snap.IdlePanes, snap.Orphans, snap.Top, snap.Exited = l.Sessions, l.Children, l.IdlePanes, l.Orphans, l.Top, l.Exited
 	snap.Containers, snap.Groups, snap.GitPolling, snap.Limits, snap.Panes = l.Containers, l.Groups, l.GitPolling, l.Limits, l.Panes
 	snap.Errors = append(snap.Errors, l.Errors...)
 	s.alerts(&snap, now)
@@ -635,12 +640,21 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			snap.Exited = append(snap.Exited, Exited{PID: pid, Parent: p.PPID, ParentComm: procs[p.PPID].Comm})
 			continue
 		}
-		// An agent started anywhere below another agent (helpers, a nested
-		// `claude -p` in its shell) inherits its pane: count only the top one.
-		if s.underAgent(p, procs) {
+		key := procKey{pid, p.StartTime}
+		// An agent another agent started (a `codex exec` or `claude -p` in
+		// its shell) is its child, never a session of its pane.
+		switch r, parent, via := s.roleOf(pid, p, procs, byPID); r {
+		case roleNone:
+			continue
+		case roleSame:
+			alive[key] = true
+			continue
+		case roleChild:
+			if c, ok := s.child(pid, p, agent, procs[parent], via, procs, children, dt, uptime, now); ok {
+				snap.Children = append(snap.Children, c)
+			}
 			continue
 		}
-		key := procKey{pid, p.StartTime}
 		alive[key] = true
 		paneID, ok := s.panes[key]
 		if !ok {
@@ -826,6 +840,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		snap.Sessions = append(snap.Sessions, sess)
 	}
 	s.readPanes(snap.Sessions, fromPane, now)
+	snap.Children = linkChildren(snap.Sessions, snap.Children)
 	snap.Limits = lims.build(now, s.Cfg.Limits.Quiet)
 	for key := range s.envs {
 		if !alive[key] {
