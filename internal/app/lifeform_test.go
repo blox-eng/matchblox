@@ -429,7 +429,7 @@ func cloning(t *testing.T, w int) (tea.Model, *fakeConn) {
 	if cmd != nil {
 		cmd()
 	}
-	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.startAct}))
+	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.startAct, CloneID: 1}))
 	return next, f
 }
 
@@ -447,7 +447,7 @@ func TestEnterOnCloneStartsItAndMovesOn(t *testing.T) {
 	if s := screen(next); !strings.Contains(s, "cloning o/r…") || strings.Contains(s, "cloning o/r… 42%") {
 		t.Fatalf("before a percent:\n%s", s)
 	}
-	next, _ = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: 42}))
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: 42}))
 	if s := screen(next); !strings.Contains(s, "cloning o/r… 42%") {
 		t.Fatalf("the where line:\n%s", s)
 	}
@@ -455,7 +455,7 @@ func TestEnterOnCloneStartsItAndMovesOn(t *testing.T) {
 
 func TestEnterWhileCloningStartsWhenDone(t *testing.T) {
 	next, f := cloning(t, 100)
-	next, _ = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: 42}))
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: 42}))
 	next = typeText(next, "feat/9")
 	next, cmd := key(next, "enter")
 	if cmd != nil {
@@ -464,7 +464,7 @@ func TestEnterWhileCloningStartsWhenDone(t *testing.T) {
 	if acts := f.acts(); len(acts) != 2 || !next.(Model).form.startWhenDone || !strings.Contains(screen(next), "starts when the clone is done") {
 		t.Fatalf("sent %+v:\n%s", acts, screen(next))
 	}
-	next, cmd = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: 100, Done: true}))
+	next, cmd = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: 100, Done: true}))
 	runAll(cmd)
 	acts := f.acts()
 	var n proto.NewSession
@@ -480,7 +480,7 @@ func TestEnterWhileCloningStartsWhenDone(t *testing.T) {
 
 func TestEnterAfterTheCloneStartsAtOnce(t *testing.T) {
 	next, f := cloning(t, 100)
-	next, _ = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: 100, Done: true}))
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: 100, Done: true}))
 	next, cmd := key(next, "enter")
 	if cmd != nil {
 		cmd()
@@ -528,7 +528,7 @@ func TestEditingWhereStopsTheClone(t *testing.T) {
 
 func TestCloneFailureShowsInTheForm(t *testing.T) {
 	next, f := cloning(t, 100)
-	next, _ = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}))
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}))
 	if fm := next.(Model).form; !strings.Contains(screen(next), "! no network: github.com does not answer") || fm.cloning != "" {
 		t.Fatalf("form %+v:\n%s", fm, screen(next))
 	}
@@ -564,7 +564,7 @@ func TestDrawClone(t *testing.T) {
 		next, _ := planned(t, w, proto.ClonePlan{Have: []string{home + "/src/r"}, Target: home + "/src/r", Fresh: home + "/src/r-ember"})
 		t.Logf("%d columns, the plan:\n%s", w, screen(next))
 		next, _ = cloning(t, w)
-		next, _ = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: 42}))
+		next, _ = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: 42}))
 		t.Logf("%d columns, cloning:\n%s", w, screen(next))
 		next, _ = key(next, "enter")
 		t.Logf("%d columns, waiting:\n%s", w, screen(next))
@@ -603,7 +603,7 @@ func planResult(next tea.Model, p proto.ClonePlan) (tea.Model, tea.Cmd) {
 // there, which the service still lists for a minute.
 func TestCloneRetryIgnoresTheOldFailure(t *testing.T) {
 	next, f := cloning(t, 100)
-	failed := proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}
+	failed := proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}
 	next, _ = next.Update(cloneState(t, failed))
 	next = pressRun(next, "enter") // back to the clone rows: a fresh plan
 	if acts := f.acts(); len(acts) != 3 || acts[2].RecID != "clone:plan" {
@@ -688,18 +688,11 @@ func TestEnterBeforeThePlanIsKept(t *testing.T) {
 // A clone the snapshots no longer list, and never saw done, stopped.
 func TestCloneGoneFromTheSnapshot(t *testing.T) {
 	next, _ := cloning(t, 100)
-	next, _ = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: 42}))
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: 42}))
 	next, _ = next.Update(cloneState(t))
 	if fm := next.(Model).form; fm.cloning != "" || !strings.Contains(screen(next), "! the clone of o/r stopped before it was done") {
 		t.Fatalf("form %+v:\n%s", fm, screen(next))
 	}
-}
-
-// at sets the console's clock.
-func at(m tea.Model, t time.Time) tea.Model {
-	mm := m.(Model)
-	mm.opt.Now = func() time.Time { return t }
-	return mm
 }
 
 // A snapshot built before the service took the start may come after its
@@ -710,41 +703,53 @@ func TestStaleEmptySnapshotAfterTheStart(t *testing.T) {
 	if fm := next.(Model).form; fm.cloning != home+"/src/r" || fm.err != "" {
 		t.Fatalf("a stale snapshot stopped the clone: %+v", fm)
 	}
-	next, _ = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: 10}))
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: 10}))
 	next, _ = next.Update(cloneState(t))
 	if fm := next.(Model).form; fm.cloning != "" || !strings.Contains(fm.err, "stopped before it was done") {
 		t.Fatalf("form %+v", fm)
 	}
 }
 
-// A retry is not failed by the last try's failure, listed for a minute,
-// even in a snapshot that comes after the start's yes.
-func TestStaleOldErrAfterTheStart(t *testing.T) {
-	t0 := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+// retried is a clone into ~/src/r that failed (id 1), and a retry the
+// service took as id 2.
+func retried(t *testing.T) (tea.Model, proto.Clone) {
+	t.Helper()
 	next, _ := cloning(t, 100)
-	old := proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}
+	old := proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}
 	next, _ = next.Update(cloneState(t, old))
 	next = pressRun(next, "enter") // a fresh plan
 	next, _ = planResult(next, proto.ClonePlan{Target: home + "/src/r"})
-	next = at(pressRun(next, "enter"), t0)
-	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.startAct}))
+	next = pressRun(next, "enter")
+	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.startAct, CloneID: 2}))
+	return next, old
+}
+
+// A retry follows its own clone: the last try's record, listed for a
+// minute, says nothing of it, even in a snapshot after the start's yes.
+func TestStaleOldErrAfterTheStart(t *testing.T) {
+	next, old := retried(t)
 	for _, st := range []stateMsg{cloneState(t, old), cloneState(t), cloneState(t, old)} {
 		next, _ = next.Update(st)
 	}
-	if fm := next.(Model).form; fm.cloning != home+"/src/r" || fm.err != "" {
+	if fm := next.(Model).form; fm.cloning != home+"/src/r" || fm.err != "" || !strings.Contains(screen(next), "cloning o/r…") {
 		t.Fatalf("the old failure was taken: %+v", fm)
 	}
-	// Past the minute the old one is gone: the failure is this clone's.
-	next = at(next, t0.Add(62*time.Second))
-	next, _ = next.Update(cloneState(t, old))
-	if fm := next.(Model).form; fm.cloning != "" || !strings.Contains(fm.err, "no network") {
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 2, Target: home + "/src/r", Repo: "o/r", Pct: 30}))
+	if !strings.Contains(screen(next), "cloning o/r… 30%") {
+		t.Fatalf("the line:\n%s", screen(next))
+	}
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 2, Target: home + "/src/r", Repo: "o/r", Pct: 30, Err: "the disk is full: o/r is not cloned"}))
+	if fm := next.(Model).form; fm.cloning != "" || !strings.Contains(fm.err, "the disk is full") {
 		t.Fatalf("form %+v", fm)
 	}
-	// Once seen running, a failure counts at once.
-	next, _ = cloning(t, 100)
-	next, _ = next.Update(cloneState(t, old)) // no earlier try: this one's
-	if fm := next.(Model).form; fm.cloning != "" || !strings.Contains(fm.err, "no network") {
-		t.Fatalf("form %+v", fm)
+}
+
+// A retry that fails before it is ever listed running says why at once.
+func TestFastFailingRetryShowsItsReason(t *testing.T) {
+	next, _ := retried(t)
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 2, Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "o/r is not on github.com"}))
+	if fm := next.(Model).form; fm.cloning != "" || !strings.Contains(screen(next), "! o/r is not on github.com") {
+		t.Fatalf("form %+v:\n%s", fm, screen(next))
 	}
 }
 

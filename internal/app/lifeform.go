@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 	"unicode"
 
 	bkey "charm.land/bubbles/v2/key"
@@ -82,23 +81,15 @@ type form struct {
 	startWhenDone bool
 	startAs       proto.NewSession
 	pickOnPlan    bool // ⏎ or tab came before the plan: done when it lands
-	// What the snapshots say of the clone counts from its first sighting
-	// (see cloneNews): seen, it was listed running; prior, a record of the
-	// same folder may be listed from an earlier try; accepted, when the
-	// service took the start; lastTry, the folder of the last start.
-	seen     bool
-	prior    bool
-	accepted time.Time
-	lastTry  string
+	// cloneID is the id the service gave the clone: only its records
+	// count, never an earlier try's in the same folder. seen: a record of
+	// it was listed.
+	cloneID int64
+	seen    bool
 }
 
 // cloneStop is a clone:start whose clone stops as soon as it starts.
 type cloneStop struct{ act, target string }
-
-// cloneSettle is how long after a start every snapshot is built after it
-// and a record of an earlier try is gone: the service lists an ended
-// clone for a minute.
-const cloneSettle = 61 * time.Second
 
 const maxField = 300
 
@@ -520,10 +511,8 @@ func (m *Model) startClone(f *form, r whereRow) tea.Cmd {
 	}
 	b, _ := json.Marshal(proto.CloneStart{URL: f.plan.URL, Target: r.repo.path})
 	cmd := m.send(proto.Act{RecID: "clone:start", Text: string(b)})
-	_, listed := m.cloneFor(r.repo.path)
-	f.prior = listed || filepath.Clean(f.lastTry) == filepath.Clean(r.repo.path)
 	f.startAct, f.cloning, f.startWhenDone, f.err = fmt.Sprintf("a%d", m.acts), r.repo.path, false, ""
-	f.seen, f.accepted, f.lastTry = false, time.Time{}, r.repo.path
+	f.cloneID, f.seen = 0, false
 	f.listOpen, f.at = false, fieldBranch
 	return cmd
 }
@@ -579,7 +568,7 @@ func (f *form) forgetClone(err string) {
 		f.err = err
 	}
 	f.cloning, f.startWhenDone, f.plan, f.planFor = "", false, nil, ""
-	f.startAct, f.seen = "", false
+	f.startAct, f.cloneID, f.seen = "", 0, false
 }
 
 // formClone is the service's clone of the form, while it runs; false
@@ -589,7 +578,7 @@ func (m Model) formClone(f *form) (proto.Clone, bool) {
 		return proto.Clone{}, false
 	}
 	c, ok := m.cloneFor(f.cloning)
-	return c, ok && c.Err == "" && !c.Done
+	return c, ok && c.ID == f.cloneID && c.Err == "" && !c.Done
 }
 
 // cloneRepo is the o/r the form clones.
@@ -618,29 +607,23 @@ func (m *Model) cloneNews() tea.Cmd {
 	f := *m.form
 	m.form = &f
 	if f.startAct != "" {
-		return nil // the service may still list an earlier try in this folder
+		return nil // no id yet
 	}
-	// Snapshots are not ordered against the start's answer: one built
-	// before the service took the start may come after it. So until the
-	// clone is seen running, a missing record says nothing, and an Err
-	// counts only when no earlier try of the folder can be listed. Done
-	// counts at once: a finished clone leaves its folder, and the service
-	// starts no clone into a folder that is there. After cloneSettle every
-	// snapshot is newer than the start and an earlier record is gone.
+	// Only a record with the clone's id counts: snapshots are not ordered
+	// against the start's answer, and one built before the service took
+	// the start may list an earlier try in this folder, or none.
 	c, ok := m.cloneFor(f.cloning)
-	settled := !f.accepted.IsZero() && m.now().Sub(f.accepted) >= cloneSettle
-	switch {
-	case ok && c.Done:
-	case ok && c.Err == "":
-		f.seen = true
-		return nil
-	case !f.seen && !settled && (!ok || f.prior):
+	switch ok = ok && c.ID == f.cloneID; {
+	case !ok && !f.seen:
 		return nil
 	case !ok: // the service restarted, or the console was away past the minute
 		f.forgetClone("the clone of " + f.cloneRepo() + " stopped before it was done")
 		return nil
-	default:
+	case c.Err != "":
 		f.forgetClone(c.Err)
+		return nil
+	case !c.Done:
+		f.seen = true
 		return nil
 	}
 	f.where, f.picked, f.query, f.planFor, f.cloning = f.cloning, true, "", "", ""
@@ -749,7 +732,7 @@ func (m Model) cloneResult(r proto.Result) (Model, tea.Cmd) {
 		if r.Err != "" {
 			f.forgetClone(r.Err)
 		} else {
-			f.accepted = m.now()
+			f.cloneID = r.CloneID
 		}
 		return m, nil
 	}

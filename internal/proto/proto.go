@@ -112,6 +112,8 @@ type Result struct {
 	Scan *ScanSummary `json:"scan,omitempty"`
 	// Clone is a clone:plan's plan.
 	Clone *ClonePlan `json:"clone,omitempty"`
+	// CloneID is the id of the clone a clone:start started.
+	CloneID int64 `json:"clone_id,omitempty"`
 }
 
 // ClonePlan is where a clone of a URL goes, found offline. Target is
@@ -136,6 +138,8 @@ type CloneStart struct {
 
 // Clone is one clone the service runs or ran.
 type Clone struct {
+	// ID tells this clone from an earlier one into the same Target.
+	ID     int64  `json:"id,omitempty"`
 	Target string `json:"target"`
 	Repo   string `json:"repo"`
 	Pct    int    `json:"pct"` // -1: no percent yet

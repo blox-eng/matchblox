@@ -236,7 +236,7 @@ func (s *Service) cloneStart(ctx context.Context, text string) proto.Result {
 		return proto.Result{Err: msg}
 	}
 	go s.runClone(j.ctx, j, r)
-	return proto.Result{}
+	return proto.Result{CloneID: j.c.ID}
 }
 
 // registerClone checks target again and lists a clone of r into it, whose
@@ -271,7 +271,8 @@ func (s *Service) registerClone(ctx context.Context, r gitremote.Remote, target 
 		trash = t
 	}
 	jctx, cancel := context.WithCancel(ctx)
-	j := &cloneJob{ctx: jctx, cancel: cancel, done: make(chan struct{}), c: proto.Clone{Target: target, Repo: r.Slug(), Pct: -1}}
+	s.cloneSeq++
+	j := &cloneJob{ctx: jctx, cancel: cancel, done: make(chan struct{}), c: proto.Clone{ID: s.cloneSeq, Target: target, Repo: r.Slug(), Pct: -1}}
 	if s.clones == nil {
 		s.clones = map[string]*cloneJob{}
 	}

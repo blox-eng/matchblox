@@ -212,6 +212,9 @@ type Service struct {
 	// clones are the clones that run or ended in the last minute, by
 	// target, under mu.
 	clones map[string]*cloneJob
+	// cloneSeq is the id of the last clone started, under mu: each clone
+	// has its own, so a console tells it from an earlier one there.
+	cloneSeq int64
 	// cloneRand picks free names, under cloneMu. Nil: seeded from the time.
 	cloneRand *rand.Rand
 	cloneMu   sync.Mutex

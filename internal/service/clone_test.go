@@ -334,6 +334,24 @@ func TestCloneStopDeletesThePartial(t *testing.T) {
 	clonesUntil(t, s, "failed", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Err != "" && cs[0].Err != "stopped" })
 }
 
+// Each start of a folder is a clone of its own id, and the listing
+// carries the id of the one that runs there now.
+func TestCloneStartsHaveTheirOwnIDs(t *testing.T) {
+	s, root := cloneTest(t)
+	fakeGit(t, "exit 1")
+	target := filepath.Join(root, "r")
+	first := s.act(t.Context(), startAct(t, "https://github.com/o/r", target))
+	if first.Err != "" || first.CloneID == 0 {
+		t.Fatalf("first %+v", first)
+	}
+	clonesUntil(t, s, "the first failed", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Err != "" && cs[0].ID == first.CloneID })
+	second := s.act(t.Context(), startAct(t, "https://github.com/o/r", target))
+	if second.Err != "" || second.CloneID == 0 || second.CloneID == first.CloneID {
+		t.Fatalf("first %d, second %+v", first.CloneID, second)
+	}
+	clonesUntil(t, s, "the second is listed", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].ID == second.CloneID })
+}
+
 func TestCloneFromAnAgentsPaneIsRefused(t *testing.T) {
 	s, root := cloneTest(t)
 	for _, a := range []proto.Act{
