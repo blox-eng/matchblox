@@ -44,7 +44,11 @@ func (s *Sampler) roleOf(pid int, p procfs.Proc, procs map[int]procfs.Proc, byPI
 		if !ok {
 			break
 		}
-		if a := s.agentName(cur, q); a != "" && !s.server(cur, a) {
+		ref := s.agentRef(cur, q)
+		if ref.daemon { // Codex's app-server: its `codex exec` is its own work
+			return roleNone, 0, ""
+		}
+		if a := ref.name; a != "" && !s.server(cur, a) {
 			for ; hops < 64; hops++ { // a launcher's binary: the launcher holds the row
 				pp, ok := procs[q.PPID]
 				if !ok || s.agentName(q.PPID, pp) != a {
