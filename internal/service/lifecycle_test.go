@@ -1214,6 +1214,29 @@ func TestCopyAccountIsNotLinkedAgain(t *testing.T) {
 	}
 }
 
+func TestAStartOnACutCopyAccountResumesIt(t *testing.T) {
+	s, _, home := accountTest(t)
+	folder := accounts.Folder(home, "codex", "work")
+	if err := os.MkdirAll(folder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(folder, accounts.SetupFile), []byte("copy\nincomplete\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeDefault(t, home, ".codex/config.toml")
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "codex", Name: "two", Account: "work"}))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	fi, err := os.Lstat(filepath.Join(folder, "config.toml"))
+	if err != nil || !fi.Mode().IsRegular() {
+		t.Fatalf("config.toml was not copied: %v, %v", fi, err)
+	}
+	if accounts.Incomplete(folder) {
+		t.Error("the resumed copy is still marked incomplete")
+	}
+}
+
 func TestAccountWithNoMarkerIsLikeDefault(t *testing.T) {
 	s, _, home := accountTest(t)
 	folder := accounts.Folder(home, "claude", "old")

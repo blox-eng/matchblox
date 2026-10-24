@@ -172,12 +172,13 @@ func DefaultDir(home, agent string) string {
 }
 
 // SetupFile is the file in an account folder that says how it was set up:
-// one line, the Mode. It is an own entry.
+// a line with the Mode, and a second line "incomplete" while a copy has not
+// ended. It is an own entry.
 const SetupFile = ".matchblox-setup"
 
-// SetupOf is how the account folder was set up. A folder with no SetupFile
-// was made before the file existed, and is like-default. A file that names
-// no mode gives "".
+// SetupOf is how the account folder was set up: the first line of
+// SetupFile. A folder with no SetupFile was made before the file existed,
+// and is like-default. A file that names no mode gives "".
 func SetupOf(folder string) Mode {
 	b, err := os.ReadFile(filepath.Join(folder, SetupFile))
 	if errors.Is(err, fs.ErrNotExist) {
@@ -186,7 +187,8 @@ func SetupOf(folder string) Mode {
 	if err != nil {
 		return ""
 	}
-	switch m := Mode(strings.TrimSpace(string(b))); m {
+	first, _, _ := strings.Cut(string(b), "\n")
+	switch m := Mode(strings.TrimSpace(first)); m {
 	case LikeDefault, Copy, Empty:
 		return m
 	}

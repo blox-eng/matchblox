@@ -65,7 +65,8 @@ All notable changes to matchblox are in this file. The format follows
   the default stays as it was, and matchblox names it as still shared.
   Files are cloned copy-on-write where the file system can, else copied
   byte by byte. The copy stops at 200,000 entries, 16 GiB copied byte by
-  byte, or 90 seconds, and names what it left out. Cloning is tested on
+  byte, or 90 seconds, and names what it left out. A copy that stopped
+  goes on where it stopped at the account's next start. Cloning is tested on
   macOS (APFS) only; on Linux it is not tested yet.
   ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - An agent's pane cannot start a session on an account, new or not, even

@@ -12,7 +12,7 @@ import (
 var refusals = []error{unix.ENOTSUP, unix.EXDEV, unix.EINVAL, unix.EOPNOTSUPP}
 
 // cloneFile clones from to the new file to, copy-on-write (FICLONE), with
-// mode perm.
+// mode perm, as darwin does.
 func cloneFile(from, to string, perm fs.FileMode) error {
 	in, err := os.Open(from)
 	if err != nil {
@@ -25,6 +25,9 @@ func cloneFile(from, to string, perm fs.FileMode) error {
 	}
 	if err := unix.IoctlFileClone(int(out.Fd()), int(in.Fd())); err != nil { //nolint:gosec // a file descriptor fits an int
 		return errors.Join(&fs.PathError{Op: "ficlone", Path: to, Err: err}, out.Close(), os.Remove(to))
+	}
+	if err := out.Chmod(perm); err != nil {
+		return errors.Join(err, out.Close(), os.Remove(to))
 	}
 	if err := out.Close(); err != nil {
 		return errors.Join(err, os.Remove(to))

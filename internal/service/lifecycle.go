@@ -748,8 +748,9 @@ func (s *Service) newSteps(ctx context.Context, n proto.NewSession) (steps [][]s
 }
 
 // onAccount is the account a new session starts on: its folder, whether it
-// is made now, and how it is set up. again: an existing like-default account
-// that is prepared again before it starts.
+// is made now, and how it is set up. again: an existing like-default
+// account, or a copy that did not end, that is prepared again before it
+// starts.
 type onAccount struct {
 	name, folder string
 	fresh, again bool
@@ -910,8 +911,12 @@ func (s *Service) account(n proto.NewSession) (*onAccount, error) {
 	case n.NewAccount && there:
 		return nil, alreadyThere(n.Agent, n.Account)
 	case !n.NewAccount:
-		if accounts.SetupOf(acct.folder) == accounts.LikeDefault {
+		switch setup := accounts.SetupOf(acct.folder); {
+		case setup == accounts.LikeDefault:
 			acct.again, acct.mode = true, accounts.LikeDefault
+		case setup == accounts.Copy && accounts.Incomplete(acct.folder):
+			// A copy that did not end goes on where it stopped.
+			acct.again, acct.mode = true, accounts.Copy
 		}
 		return acct, nil
 	}
