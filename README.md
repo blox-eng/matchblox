@@ -71,7 +71,9 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   own. Its `where` offers your repositories: after one yes, matchblox finds
   the Git checkouts in your home folder, on this host only, and keeps the
   list fresh, and says which folders it skipped. `matchblox scan` does it
-  from the shell.
+  from the shell. The list shows each repo with its worktrees and `N live`,
+  the ones in use first. Paste a git URL in `where` and N clones it, then
+  starts the agent there.
 - **Ships**: every pull request your sessions drive, on one track from CI
   to live, said in words. One that waits for you merges after a typed `y`.
 - **The dock**: what `/usage` says for each account, in percentages; the

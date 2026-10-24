@@ -43,6 +43,7 @@ interval = "5m"
 remote = "origin"
 repos = []               # checkouts to watch besides the ones sessions use
 scan_roots = []          # more folders to find repositories in, after a yes to the scan
+clone_root = "~/src"     # where N clones a git URL: <clone_root>/<repo>
 
 [history]
 log = ""                 # default ~/.local/share/matchblox/history.csv; "-" disables

@@ -346,6 +346,16 @@ Reduce Motion.
   key or a tap closes the box until the next console and records nothing.
   An answer at one console closes the box at every other. The repositories
   found feed N's `where` after the Git tab's, never the Git tab.
+- **The where list** (#174, #176): layout C. While `where` has focus the
+  list fills the form box and the other fields fold to one `faint` line,
+  `then  branch · name · agent <agent> · first`. Labels `SUGGESTED` and
+  `ALL · N · by name`; a row's cells are name, short path, branch (a worktree:
+  its pull request), age and `N live`, with the worktrees under their repo.
+  `N live` on a repo sums its worktrees' sessions. No match glyph (`✦ ╿ │`)
+  on a repo row, no spinner: a clone shows `cloning o/r… 42%` on the where
+  line. Clone rows read `start in <path> (already a clone of o/r)`, `clone
+  o/r into <folder>` and `clone anew into <folder>`. Colours from the
+  tokens only.
 - **Widths:** the shape picks first. A cell is about twice as tall as it
   is wide, so a screen is portrait when rows × 2 ≥ columns. Portrait under
   90 columns is a phone: one column, the selected row opens in place; from

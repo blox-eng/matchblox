@@ -6,6 +6,36 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **N's `where` is a list of your repositories.** While `where` has focus,
+  the list fills the form box and the other lines fold to one faint line.
+  Each repo shows its worktrees under it, with the path, the branch, the age
+  and `N live`: the sessions in the repo and in its worktrees together, and
+  no match glyph on a repo row. SUGGESTED comes first (a repo with a live
+  session, then where matchblox last started one, then the last activity),
+  then ALL by name. Typing filters; a path that starts with `/`, `~` or `.`
+  matches whole folders only, and a path that is not a known folder is the
+  first row. matchblox records where its sessions started in `used.json` next
+  to its state. It needs no scan consent, and `matchblox scan off` keeps it.
+  An empty list says `no repos known yet · type a path, or paste a git URL`,
+  and `matchblox scan finds your repos` when the scan was never answered.
+  ([#174](https://github.com/blox-eng/matchblox/issues/174))
+- **N clones a git URL.** Paste `https://…`, `ssh://…`, `git@host:o/r` or
+  `gh:o/r` in `where` and the list shows `start in <path> (already a clone
+  of o/r)`, `clone o/r into <folder>` and `clone anew into <folder>`. A bare
+  `o/r` filters your repos first and shows the clone rows after. `⏎` on a
+  clone row starts the clone in the service and goes to branch; `where`
+  shows `cloning o/r… 42%`, the last `⏎` waits (`starts when the clone is
+  done`) and `esc` stops the clone and deletes the partial folder. A clone
+  goes through a hidden `.<name>.cloning` folder and takes its name when it
+  is done. A taken folder name gets a match word (`ember`, `flint`, `spark`
+  and more), then a 4-character tail. `[git] clone_root` (default `~/src`)
+  is where clones go; `o/r` uses the protocol of `gh config get
+  git_protocol`, else https. `matchblox new --where <url>` clones (or
+  reuses a clone), then starts, and waits up to 30 minutes.
+  ([#176](https://github.com/blox-eng/matchblox/issues/176))
+
 ## [0.19.0] - 2026-10-23
 
 ### Added
