@@ -63,8 +63,10 @@ All notable changes to matchblox are in this file. The format follows
   sends a key only when the option it picks is the highlighted one and the
   screen has not changed since it looked, and each key goes only to the
   agent first seen in the pane. Once you type in the pane, matchblox stops
-  pressing and the row says `sign in by hand`. The highlight marks are read
-  from the agents' screens; this is not tested yet against a live sign-in.
+  pressing and the row says `sign in by hand`. The screens, highlight marks
+  and option labels were checked live on codex-cli 0.163.0 and Claude Code
+  2.1.308 up to the login choice; Cursor's screen and the sign-in after the
+  choice are not tested yet.
   ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - A copy account is its own. A link in the default that points inside the
   default now points to the same place in the account, so the account

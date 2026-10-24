@@ -24,9 +24,10 @@ const (
 const SignInByHand = "by hand"
 
 // signInScreen is one of an agent's first screens on a new account: its
-// title, shown anywhere on it; the option its key picks, or moves from,
-// which must be the highlighted line ("" on a screen without options);
-// and the key. final marks the screen after which the link shows.
+// title, shown anywhere on it; the label of the option its key picks, or
+// moves from, which must be the highlighted line ("" on a screen without
+// options); and the key. final marks the screen after which the link
+// shows.
 type signInScreen struct {
 	title string
 	pick  string
@@ -35,15 +36,15 @@ type signInScreen struct {
 }
 
 // signInScreens are the first screens of each agent on a new account, in
-// the order the agent shows them. Probed on Claude Code 2.1.308, codex-cli
-// 0.163.0 and Cursor 2026.10.19. Codex's two screens are one picker: Down
+// the order the agent shows them. Codex's two screens are one picker: Down
 // moves from its first option to device code, and Enter picks that. The
-// option labels and the highlight marks (signInMarks) are read from the
-// agents' screens, not checked in a live run.
+// titles, labels and highlight marks (signInMarks) were checked live on
+// codex-cli 0.163.0 and Claude Code 2.1.308, up to the login choice;
+// Cursor 2026.10.19's screen was probed for its title only.
 var signInScreens = map[string][]signInScreen{
 	"claude": {
-		{"Choose the text style", "1. Dark mode", []string{"Enter"}, false},
-		{"Select login method", "1. Claude account", []string{"Enter"}, true},
+		{"Choose the text style", "Dark mode", []string{"Enter"}, false},
+		{"Select login method", "1. Claude account with subscription", []string{"Enter"}, true},
 	},
 	"codex": {
 		{"Sign in with ChatGPT", "1. Sign in with ChatGPT", []string{"Down"}, false},
@@ -52,30 +53,41 @@ var signInScreens = map[string][]signInScreen{
 	sample.CursorAgent: {{"Press any key to log in", "", []string{"Enter"}, true}},
 }
 
-// signInMarks are the marks each agent puts at the start of the selected
-// line of a list: Codex ›, Claude Code ❯. Cursor's sign-in screen has no
-// list.
-var signInMarks = map[string]string{"claude": "❯", "codex": "›"}
+// signInMarks are the marks each agent puts, followed by a space, at the
+// start of the selected line of a list: Codex 0.163.0 draws an ASCII >
+// (› is kept for a terminal or version that draws that), Claude Code ❯.
+// Cursor's sign-in screen has no list.
+var signInMarks = map[string][]string{"claude": {"❯"}, "codex": {">", "›"}}
 
-// highlighted is the selected line of a list on screen, without its mark,
-// or "" when no line, or more than one, carries the agent's mark. A frame
-// drawn around the list is skipped.
+// highlighted is the selected line of a list on screen, without its mark
+// and without the check mark Claude Code puts on the current choice, or ""
+// when no line, or more than one, carries the agent's mark. A frame drawn
+// around the list is skipped.
 func highlighted(agent, screen string) string {
-	mark := signInMarks[agent]
-	if mark == "" {
-		return ""
-	}
 	var out string
 	n := 0
 	for line := range strings.SplitSeq(screen, "\n") {
-		if rest, ok := strings.CutPrefix(strings.TrimLeft(line, " \t│┃|"), mark); ok {
-			out, n = strings.TrimSpace(strings.TrimRight(strings.TrimSpace(rest), "│┃|")), n+1
+		line = strings.TrimRight(strings.TrimRight(strings.TrimLeft(line, " \t│┃|"), " \t│┃|"), " \t")
+		for _, mark := range signInMarks[agent] {
+			if rest, ok := strings.CutPrefix(line, mark+" "); ok {
+				rest = strings.TrimSpace(rest)
+				rest = strings.TrimPrefix(rest, "✔ ")
+				out, n = strings.TrimSpace(strings.TrimSuffix(rest, " ✔")), n+1
+				break
+			}
 		}
 	}
 	if n != 1 {
 		return ""
 	}
 	return out
+}
+
+// isOption tells if the highlighted line sel is the option label: the
+// whole label, alone or followed by its " · " description. "Dark mode" is
+// not "Dark mode (colorblind-friendly)".
+func isOption(sel, label string) bool {
+	return sel == label || strings.HasPrefix(sel, label+" · ")
 }
 
 // signInStep is the screen of agent that screen shows: its index in the
@@ -103,7 +115,7 @@ func signInStep(agent, screen string) (step int, ready bool) {
 		first = i
 	}
 	for i := first; i <= at; i++ {
-		if steps[i].pick == "" || sel != "" && strings.HasPrefix(sel, steps[i].pick) {
+		if steps[i].pick == "" || sel != "" && isOption(sel, steps[i].pick) {
 			return i, true
 		}
 	}

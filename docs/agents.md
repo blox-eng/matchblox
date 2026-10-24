@@ -248,10 +248,12 @@ the highlighted one, and only to the agent it first saw in the pane. Once
 you press a key there yourself, matchblox stops pressing. You finish the
 sign-in in the session. Until then the row says `signing in`. If matchblox
 does not recognise the screens within 20 seconds, cannot find the pane, or
-stopped because you typed, the row says `sign in by hand`. An ask
-or a wait of the session shows over both words. matchblox never reads a
-sign-in code from the pane and never types a password. If a new account
-does not start, matchblox removes the folder it made for it.
+stopped because you typed, the row says `sign in by hand`. These screens
+were checked on codex-cli 0.163.0 and Claude Code 2.1.308 up to the login
+choice; Cursor's screen and the sign-in after the choice are not tested
+yet. An ask or a wait of the session shows over both words. matchblox
+never reads a sign-in code from the pane and never types a password. If a
+new account does not start, matchblox removes the folder it made for it.
 
 In the console, a start on a new account asks for a typed `y`, and a start
 on an account that exists runs on `Enter`. `matchblox new` sends the

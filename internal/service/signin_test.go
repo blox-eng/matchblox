@@ -15,30 +15,90 @@ import (
 	"github.com/blox-eng/matchblox/internal/state"
 )
 
-// The screens below are as the agents draw them, read from their
-// screens, not from a live run here: Codex marks the selected option
-// with ›, Claude Code with ❯.
+// The screens below are live captures (tmux, 120x40) of codex-cli
+// 0.163.0 and Claude Code 2.1.308 on a fresh home, up to the login
+// choice; the theme list is cut after its fourth option. Codex marks the
+// selected option with an ASCII >, Claude Code with ❯.
 
-// codexAt is Codex's sign-in picker with option n highlighted.
+// codexAt is Codex's sign-in picker with option n highlighted (0: none).
 func codexAt(n int) string {
-	opts := []string{"1. Sign in with ChatGPT", "2. Sign in with Device Code", "3. Provide your own API key"}
-	out := "  Sign in with ChatGPT to use Codex as part of your paid plan\n\n"
+	opts := []string{
+		"1. Sign in with ChatGPT\n     Usage included with Plus, Pro, Business, and Enterprise plans",
+		"2. Sign in with Device Code\n     Sign in from another device with a one-time code",
+		"3. Provide your own API key\n     Pay for what you use",
+	}
+	out := "  Welcome to Codex, OpenAI's command-line coding agent\n" +
+		"  Sign in with ChatGPT to use Codex as part of your paid plan\n" +
+		"  or connect an API key for usage-based billing\n"
 	for i, o := range opts {
 		mark := "  "
 		if i+1 == n {
-			mark = "› "
+			mark = "> "
 		}
 		out += mark + o + "\n"
 	}
-	return out + "  Press Enter to continue\n"
+	return out + "  Press enter to continue\n"
 }
 
-const (
-	claudeTheme      = "Choose the text style that looks best with your terminal\n ❯ 1. Dark mode ✔\n   2. Light mode\n   3. Dark mode (colorblind-friendly)"
-	claudeThemeLight = "Choose the text style that looks best with your terminal\n   1. Dark mode\n ❯ 2. Light mode ✔\n   3. Dark mode (colorblind-friendly)"
-	claudeLogin      = "Select login method:\n ❯ 1. Claude account with subscription\n   2. Anthropic Console account"
-	claudeLoginTwo   = "Select login method:\n   1. Claude account with subscription\n ❯ 2. Anthropic Console account"
+// claudeThemeOn is Claude Code's theme screen with the line of label
+// highlighted; Dark mode carries the check mark of the current choice.
+func claudeThemeOn(label string) string {
+	out := " Let's get started.\n Choose the text style that looks best with your terminal\n To change this later, run /theme\n"
+	for _, o := range []string{"Auto (match terminal)", "✔ Dark mode", "Light mode", "Dark mode (colorblind-friendly)"} {
+		mark := "   "
+		if strings.TrimPrefix(o, "✔ ") == label {
+			mark = " ❯ "
+		}
+		if !strings.HasPrefix(o, "✔ ") {
+			o = "  " + o
+		}
+		out += mark + o + "\n"
+	}
+	return out
+}
+
+// claudeLoginOn is Claude Code's login method screen with option n
+// highlighted.
+func claudeLoginOn(n int) string {
+	out := " Select login method:\n"
+	for i, o := range []string{
+		"1. Claude account with subscription · Pro, Max, Team, or Enterprise",
+		"2. Anthropic Console account · API usage billing",
+		"3. 3rd-party platform · Amazon Bedrock, Microsoft Foundry, Google Vertex AI",
+	} {
+		mark := "   "
+		if i+1 == n {
+			mark = " ❯ "
+		}
+		out += mark + o + "\n"
+	}
+	return out
+}
+
+var (
+	claudeTheme      = claudeThemeOn("Dark mode")
+	claudeThemeLight = claudeThemeOn("Light mode")
+	claudeLogin      = claudeLoginOn(1)
+	claudeLoginTwo   = claudeLoginOn(2)
 )
+
+func TestSignInScreensAreTheLiveCaptures(t *testing.T) {
+	const theme = " Let's get started.\n Choose the text style that looks best with your terminal\n To change this later, run /theme\n" +
+		"     Auto (match terminal)\n ❯ ✔ Dark mode\n     Light mode\n     Dark mode (colorblind-friendly)\n"
+	if claudeTheme != theme {
+		t.Fatalf("theme fixture\n%s\nwant\n%s", claudeTheme, theme)
+	}
+	const codex = "  Welcome to Codex, OpenAI's command-line coding agent\n" +
+		"  Sign in with ChatGPT to use Codex as part of your paid plan\n" +
+		"  or connect an API key for usage-based billing\n" +
+		"> 1. Sign in with ChatGPT\n     Usage included with Plus, Pro, Business, and Enterprise plans\n" +
+		"  2. Sign in with Device Code\n     Sign in from another device with a one-time code\n" +
+		"  3. Provide your own API key\n     Pay for what you use\n" +
+		"  Press enter to continue\n"
+	if codexAt(1) != codex {
+		t.Fatalf("codex fixture\n%s\nwant\n%s", codexAt(1), codex)
+	}
+}
 
 func TestSignInStepOfEachScreen(t *testing.T) {
 	for _, c := range []struct {
@@ -48,21 +108,28 @@ func TestSignInStepOfEachScreen(t *testing.T) {
 	}{
 		{"claude theme", "claude", claudeTheme, 0, true},
 		{"claude theme, light picked", "claude", claudeThemeLight, 0, false},
+		{"claude theme, colorblind picked", "claude", claudeThemeOn("Dark mode (colorblind-friendly)"), 0, false},
+		{"claude theme, auto picked", "claude", claudeThemeOn("Auto (match terminal)"), 0, false},
+		{"claude theme, older check mark after", "claude", "Choose the text style\n ❯ Dark mode ✔\n   Light mode", 0, true},
 		{"claude login", "claude", claudeLogin, 1, true},
 		{"claude login, console picked", "claude", claudeLoginTwo, 1, false},
+		{"claude login, third-party picked", "claude", claudeLoginOn(3), 1, false},
 		{"codex on its first option", "codex", codexAt(1), 0, true},
 		{"codex on device code", "codex", codexAt(2), 1, true},
 		{"codex on the api key", "codex", codexAt(3), 0, false},
 		{"codex, nothing marked", "codex", codexAt(0), 0, false},
+		{"codex drawn with ›", "codex", "Sign in with ChatGPT\n› 1. Sign in with ChatGPT\n  2. Sign in with Device Code", 0, true},
+		{"codex, > without a space", "codex", "Sign in with ChatGPT\n>1. Sign in with ChatGPT", 0, false},
+		{"codex, another > line", "codex", codexAt(1) + "> quoted text", 0, false},
 		{"cursor", "cursor-agent", "Press any key to log in", 0, true},
 		{"other claude", "claude", "Welcome back", -1, false},
 		{"codex on a claude screen", "codex", claudeLogin, -1, false},
 		{"unknown agent", "opencode", "Press any key to log in", -1, false},
-		{"styled", "codex", "  \x1b[1mSign in with \x1b[36mChatGPT\x1b[0m\n\x1b[36m› 1. Sign in with ChatGPT\x1b[0m\n  2. Sign in with Device Code", 0, true},
-		{"claude, both screens", "claude", "Choose the text style\n   1. Dark mode\n\nSelect login method\n ❯ 1. Claude account", 1, true},
-		{"in a frame", "claude", "│ Select login method │\n│ ❯ 1. Claude account │", 1, true},
-		{"two marks", "codex", "Sign in with ChatGPT\n› 1. Sign in with ChatGPT\n› 2. Sign in with Device Code", 0, false},
-		{"the title as an option", "codex", "› Sign in with ChatGPT", 0, false},
+		{"styled", "codex", "  \x1b[1mSign in with \x1b[36mChatGPT\x1b[0m\n\x1b[36m> 1. Sign in with ChatGPT\x1b[0m\n  2. Sign in with Device Code", 0, true},
+		{"claude, both screens", "claude", "Choose the text style\n     Dark mode\n\n" + claudeLogin, 1, true},
+		{"in a frame", "claude", "│ Select login method │\n│ ❯ 1. Claude account with subscription │", 1, true},
+		{"two marks", "codex", "Sign in with ChatGPT\n> 1. Sign in with ChatGPT\n> 2. Sign in with Device Code", 0, false},
+		{"the title as an option", "codex", "> Sign in with ChatGPT", 0, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			step, ready := signInStep(c.agent, c.screen)
@@ -170,7 +237,7 @@ func TestSignInDrivesClaudeThroughItsTwoScreens(t *testing.T) {
 // its keys once and stops.
 func TestSignInTakesTheLaterScreen(t *testing.T) {
 	s, ran := signInTest(t, func() string {
-		return "\x1b[2mChoose the text style\x1b[0m\n   1. Dark mode\n\n\x1b[1mSelect login\x1b[0m method\n ❯ 1. Claude account"
+		return "\x1b[2mChoose the text style\x1b[0m\n     Dark mode\n\n\x1b[1mSelect login\x1b[0m method:\n ❯ 1. Claude account with subscription · Pro, Max, Team, or Enterprise"
 	})
 	s.signInWait = time.Second
 	s.driveSignIn(t.Context(), "%42", "claude", "fresh")
