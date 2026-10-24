@@ -37,7 +37,7 @@
 
 | File | Does |
 |---|---|
-| `internal/clone/remote.go` (new) | `Remote`, `Parse`, `Same`, `Slug` |
+| `internal/gitremote/remote.go` (new) | `Remote`, `Parse`, `Same`, `Slug`: pure, no exec (the console imports it) |
 | `internal/clone/name.go` (new) | `Words`, `FreeName` |
 | `internal/clone/run.go` (new) | `Run`, `Progress`, `Explain` |
 | `internal/clone/*_test.go` (new) | its tests |
@@ -50,24 +50,25 @@
 | `cmd/matchblox/main.go`, `life.go` | wire paths and config; CLI `--where <url>` |
 | `internal/app/wherelist.go` (new) | the known repos, the rows, the fuzzy score |
 | `internal/app/lifeform.go` | the list in the form, keys, the clone flow |
-| `internal/app/keys.go` | no new binding expected; help text changes |
+| `internal/app/keys.go` | the form splits ↑↓ from tab / shift+tab (new `Up`/`Down` bindings) |
 | docs: `docs/keys.md`, `docs/config.md`, `docs/console.md`, `README.md`, `CHANGELOG.md`, DESIGN.md (§6 if the list adds a rule), replay frames |
 
 ---
 
-### Task 1: `internal/clone`: parse, compare and name
+### Task 1: `internal/gitremote` parses and compares; `internal/clone` names
 
 **Files:**
-- Create: `internal/clone/remote.go`, `internal/clone/name.go`, `internal/clone/remote_test.go`, `internal/clone/name_test.go`
+- Create: `internal/gitremote/remote.go`, `internal/gitremote/remote_test.go` (package `gitremote`: pure, no `os/exec`, no file access), `internal/clone/name.go`, `internal/clone/name_test.go`
+- Modify: `internal/arch_test.go`: add `"clone"` to the packages `internal/app` must not import
 
 **Interfaces:**
 - Produces:
-  - `type Remote struct { URL, Host, Owner, Repo string }` — `URL` is what git clones.
-  - `func (r Remote) Slug() string` — `"o/r"`.
-  - `func Parse(s, protocol string) (Remote, bool)` — `protocol` is `"ssh"` or `"https"`, used only for `o/r` and `gh:o/r` (host `github.com`). ssh shorthand → `git@github.com:o/r.git`; https → `https://github.com/o/r.git`.
-  - `func Same(a, b string) bool` — two remote URLs name the same repo.
-  - `var Words = []string{"ember", "flint", "spark", "cinder", "tinder", "wick", "flare", "char", "soot", "coal"}`
-  - `func FreeName(repo string, taken func(name string) bool, rnd *rand.Rand) string` — `math/rand/v2`.
+  - `gitremote.Remote struct { URL, Host, Owner, Repo string }` — `URL` is what git clones.
+  - `gitremote`: `func (r Remote) Slug() string` — `"o/r"`.
+  - `gitremote`: `func Parse(s, protocol string) (Remote, bool)` — `protocol` is `"ssh"` or `"https"`, used only for `o/r` and `gh:o/r` (host `github.com`). ssh shorthand → `git@github.com:o/r.git`; https → `https://github.com/o/r.git`.
+  - `gitremote`: `func Same(a, b string) bool` — two remote URLs name the same repo.
+  - `clone`: `var Words = []string{"ember", "flint", "spark", "cinder", "tinder", "wick", "flare", "char", "soot", "coal"}`
+  - `clone`: `func FreeName(repo string, taken func(name string) bool, rnd *rand.Rand) string` — `math/rand/v2`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -136,7 +137,7 @@ func TestFreeName(t *testing.T) {
 Run: `go test ./internal/clone/`
 Expected: FAIL (package does not build: `Parse` undefined).
 
-- [ ] **Step 3: Implement `Parse`, `Slug`, `Same` in `remote.go` and `Words`, `FreeName` in `name.go`**
+- [ ] **Step 3: Implement `Parse`, `Slug`, `Same` in `internal/gitremote/remote.go` and `Words`, `FreeName` in `internal/clone/name.go`**
 
 `Parse` trims spaces and one trailing `/`; refuses anything with a space inside, a leading `-`, a host or owner starting with `-`, `::`, or a scheme other than `https`/`ssh`. Shorthand is exactly `owner/repo` (one slash, no leading `~ . /`) or `gh:owner/repo`, each part `[A-Za-z0-9._-]+` and not starting with `-`. `Same` lowercases host and owner, drops scheme, user, `.git` and a trailing `/`, then compares `host/owner/repo`; empty is never the same. `FreeName` tries `repo` is the caller's job: it returns `repo-<word>` for a random free word (`rnd.Perm`), else `repo-<word>-<4 chars>` retried until free. Doc comments in the house voice.
 
@@ -148,7 +149,7 @@ Expected: `ok`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add internal/clone
+git add internal/clone internal/gitremote internal/arch_test.go
 git commit -S -m "feat: a git URL is parsed, compared and given a free folder name (#176)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -162,11 +163,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `internal/clone/run.go`, `internal/clone/run_test.go`
 
 **Interfaces:**
-- Consumes: `Remote` (Task 1).
+- Consumes: `gitremote.Remote` (Task 1).
 - Produces:
   - `func Progress(line string) (pct int, ok bool)` — reads one git progress line (`Receiving objects:  42% (…)`, `Resolving deltas: 100% …`); only `Receiving objects` gives a percent.
-  - `func Explain(stderr string, r Remote) string` — the failure in plain words (copy below).
-  - `func Run(ctx context.Context, r Remote, target string, progress func(pct int)) error` — clones `r.URL` into `target` through the sibling `filepath.Join(filepath.Dir(target), "."+filepath.Base(target)+".cloning")`, renamed to `target` on success. Errors when `target` or the sibling exists, before running git. On failure or ctx end it deletes the sibling only, and the error's text is `Explain(...)` (or `"stopped"` for ctx end).
+  - `func Explain(stderr string, r gitremote.Remote) string` — the failure in plain words (copy below).
+  - `func Run(ctx context.Context, r gitremote.Remote, target string, progress func(pct int)) error` — clones `r.URL` into `target` through the sibling `filepath.Join(filepath.Dir(target), "."+filepath.Base(target)+".cloning")`, renamed to `target` on success. Errors when `target` or the sibling exists, before running git. On failure or ctx end it deletes the sibling only, and the error's text is `Explain(...)` (or `"stopped"` for ctx end).
   - `func Cloning(target string) string` — the sibling's path (the service and `FreeName`'s `taken` use it).
 
 Failure copy (exact):
@@ -197,7 +198,7 @@ func TestProgress(t *testing.T) {
 }
 
 func TestExplain(t *testing.T) {
-	r := Remote{Host: "github.com", Owner: "o", Repo: "r"}
+	r := gitremote.Remote{Host: "github.com", Owner: "o", Repo: "r"}
 	if got := Explain("git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.", r); got != "no access to o/r: add an SSH key for github.com, or use its https URL" {
 		t.Error(got)
 	}
@@ -207,13 +208,13 @@ func TestExplain(t *testing.T) {
 }
 
 // localRepo makes a repo with one commit and returns its path, cloned as a URL by Run.
-func TestRunClonesAndReportsProgress(t *testing.T)        // target has .git, no ".r.cloning" left, progress got ≥1 call or none (a tiny repo may give none)
+func TestRunClonesAndReportsProgress(t *testing.T)        // target has .git and the commit, no ".r.cloning" sibling is left, Run returns nil
 func TestRunNeverWritesIntoAnExistingFolder(t *testing.T) // target exists with a file "keep": Run errors, "keep" is unchanged, nothing else in the folder
 func TestRunCancelLeavesNothing(t *testing.T)             // ctx cancelled before Run: error "stopped", neither target nor sibling exists
 func TestRunFailureLeavesNothing(t *testing.T)            // URL of a missing local repo: error non-empty, neither target nor sibling exists
 ```
 
-The run tests use a local repo made with `git init` + one commit in `t.TempDir()`, passed as `Remote{URL: path, Host: "github.com", Owner: "o", Repo: "r"}` (Run does not re-check the URL: Parse is the gate).
+The run tests use a local repo made with `git init` + one commit in `t.TempDir()`, passed as `gitremote.Remote{URL: path, Host: "github.com", Owner: "o", Repo: "r"}` (Run does not re-check the URL: Parse is the gate).
 
 - [ ] **Step 2: Run them to see them fail**
 
@@ -232,7 +233,7 @@ Expected: `ok`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add internal/clone
+git add internal/clone internal/gitremote internal/arch_test.go
 git commit -S -m "feat: a clone runs beside its folder and leaves nothing when it stops (#176)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -311,7 +312,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `internal/proto/proto.go`, `internal/config/config.go` (+ its test), `internal/service/actions.go`, `internal/service/service.go`, `cmd/matchblox/main.go`
 
 **Interfaces:**
-- Consumes: `clone.Parse`, `clone.Same`, `clone.FreeName`, `clone.Run`, `clone.Cloning` (Tasks 1–2); `addUsed` (Task 3); `s.found` (its `Repos[].Remote`).
+- Consumes: `gitremote.Parse`, `gitremote.Same`, `clone.FreeName`, `clone.Run`, `clone.Cloning` (Tasks 1–2); `addUsed` (Task 3); `s.found` (its `Repos[].Remote`).
 - Produces:
   - `config.Git.CloneRoot string \`toml:"clone_root"\`` default `"~/src"`; service field `CloneRoot string` (expanded, absolute).
   - `proto.ClonePlan { Repo string \`json:"repo"\`; URL string \`json:"url"\`; Target string \`json:"target"\`; Taken string \`json:"taken,omitempty"\`; Have []string \`json:"have,omitempty"\`; Fresh string \`json:"fresh,omitempty"\` }`.
@@ -342,7 +343,7 @@ func TestCloneFromAnAgentsPaneIsRefused(t *testing.T) // clone:start with From =
 func TestCloneRootDefault(t *testing.T)             // config.Default().Git.CloneRoot == "~/src"; a config with clone_root = "~/code" reads it
 ```
 
-A test may set an unexported hook (`s.cloneRun func(ctx, clone.Remote, target string, progress func(int)) error`, nil → `clone.Run`) to use a slow fake.
+A test may set an unexported hook (`s.cloneRun func(ctx, gitremote.Remote, target string, progress func(int)) error`, nil → `clone.Run`) to use a slow fake.
 
 - [ ] **Step 2: Run them to see them fail**
 
@@ -377,8 +378,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: Task 4's plan and run.
-- Produces: `newSession` accepts `NewSession.Where` that `clone.Parse` reads (and that is not an absolute or `~` path): it plans; when `Have` is not empty it starts in `Have[0]`; otherwise it clones into `Target` synchronously, then goes on as today with `Where = Target`. The clone stops when the act's connection closes. `Result.Skipped` gets a first line naming what happened: `cloned o/r into ~/src/r` or `o/r is already at ~/src/r: started there`.
-- CLI: `newSessionAct` sends `o.where` unchanged when it is not absolute, does not start with `~`, has no folder at `filepath.Join(here, o.where)`, and `clone.Parse(o.where, "https")` reads it; otherwise as today. `cliLife` for `new` uses `doActFor(path, a, cloneWait)` with `const cloneWait = 30 * time.Minute` when it sent a URL, and prints `cloning o/r…` first.
+- Produces: `newSession` accepts `NewSession.Where` that `gitremote.Parse` reads (and that is not an absolute or `~` path): it plans; when `Have` is not empty it starts in `Have[0]`; otherwise it clones into `Target` synchronously, then goes on as today with `Where = Target`. The clone stops when the act's connection closes. `Result.Skipped` gets a first line naming what happened: `cloned o/r into ~/src/r` or `o/r is already at ~/src/r: started there`.
+- CLI: `newSessionAct` sends `o.where` unchanged when it is not absolute, does not start with `~`, has no folder at `filepath.Join(here, o.where)`, and `gitremote.Parse(o.where, "https")` reads it; otherwise as today. `cliLife` for `new` uses `doActFor(path, a, cloneWait)` with `const cloneWait = 30 * time.Minute` when it sent a URL, and prints `cloning o/r…` first.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -500,7 +501,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Test: `internal/app/lifeform_test.go`
 
 **Interfaces:**
-- Consumes: acts and types of Task 4 (`clone:plan`, `clone:start`, `clone:stop`, `ClonePlan`, `Clone`, `State.Clones`); `clone.Parse` (Task 1) to recognise a URL in the console without a round trip (protocol `"https"`; only to decide that a row is a clone row, the service's plan decides the rest).
+- Consumes: acts and types of Task 4 (`clone:plan`, `clone:start`, `clone:stop`, `ClonePlan`, `Clone`, `State.Clones`); `gitremote.Parse` (Task 1) to recognise a URL in the console without a round trip (protocol `"https"`; only to decide that a row is a clone row, the service's plan decides the rest).
 - Produces: form fields `plan *proto.ClonePlan`, `planFor string` (the text the plan is for), `cloning string` (target of this form's clone), `startWhenDone bool`.
 
 Behaviour (spec "Clone"):
