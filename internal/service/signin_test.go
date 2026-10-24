@@ -2,54 +2,89 @@ package service
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
 )
 
-func TestSignInKeysOfEachScreen(t *testing.T) {
+// The screens below are as the agents draw them, read from their
+// screens, not from a live run here: Codex marks the selected option
+// with ›, Claude Code with ❯.
+
+// codexAt is Codex's sign-in picker with option n highlighted.
+func codexAt(n int) string {
+	opts := []string{"1. Sign in with ChatGPT", "2. Sign in with Device Code", "3. Provide your own API key"}
+	out := "  Sign in with ChatGPT to use Codex as part of your paid plan\n\n"
+	for i, o := range opts {
+		mark := "  "
+		if i+1 == n {
+			mark = "› "
+		}
+		out += mark + o + "\n"
+	}
+	return out + "  Press Enter to continue\n"
+}
+
+const (
+	claudeTheme      = "Choose the text style that looks best with your terminal\n ❯ 1. Dark mode ✔\n   2. Light mode\n   3. Dark mode (colorblind-friendly)"
+	claudeThemeLight = "Choose the text style that looks best with your terminal\n   1. Dark mode\n ❯ 2. Light mode ✔\n   3. Dark mode (colorblind-friendly)"
+	claudeLogin      = "Select login method:\n ❯ 1. Claude account with subscription\n   2. Anthropic Console account"
+	claudeLoginTwo   = "Select login method:\n   1. Claude account with subscription\n ❯ 2. Anthropic Console account"
+)
+
+func TestSignInStepOfEachScreen(t *testing.T) {
 	for _, c := range []struct {
 		name, agent, screen string
-		keys                []string
-		ok                  bool
+		step                int
+		ready               bool
 	}{
-		{"claude theme", "claude", "Choose the text style\n 1. Dark", []string{"Enter"}, true},
-		{"claude login", "claude", "Select login method\n 1. Claude account", []string{"Enter"}, true},
-		{"codex", "codex", "  Sign in with ChatGPT\n", []string{"Down", "Enter"}, true},
-		{"cursor", "cursor-agent", "Press any key to log in", []string{"Enter"}, true},
-		{"other claude", "claude", "Welcome back", nil, false},
-		{"codex on a claude screen", "codex", "Select login method", nil, false},
-		{"unknown agent", "opencode", "Press any key to log in", nil, false},
-		{"styled phrase", "codex", "  \x1b[1mSign in with \x1b[36mChatGPT\x1b[0m\n", []string{"Down", "Enter"}, true},
-		{"claude, both screens", "claude", "Choose the text style\n 1. Dark\n\nSelect login method\n 1. Claude account", []string{"Enter"}, true},
+		{"claude theme", "claude", claudeTheme, 0, true},
+		{"claude theme, light picked", "claude", claudeThemeLight, 0, false},
+		{"claude login", "claude", claudeLogin, 1, true},
+		{"claude login, console picked", "claude", claudeLoginTwo, 1, false},
+		{"codex on its first option", "codex", codexAt(1), 0, true},
+		{"codex on device code", "codex", codexAt(2), 1, true},
+		{"codex on the api key", "codex", codexAt(3), 0, false},
+		{"codex, nothing marked", "codex", codexAt(0), 0, false},
+		{"cursor", "cursor-agent", "Press any key to log in", 0, true},
+		{"other claude", "claude", "Welcome back", -1, false},
+		{"codex on a claude screen", "codex", claudeLogin, -1, false},
+		{"unknown agent", "opencode", "Press any key to log in", -1, false},
+		{"styled", "codex", "  \x1b[1mSign in with \x1b[36mChatGPT\x1b[0m\n\x1b[36m› 1. Sign in with ChatGPT\x1b[0m\n  2. Sign in with Device Code", 0, true},
+		{"claude, both screens", "claude", "Choose the text style\n   1. Dark mode\n\nSelect login method\n ❯ 1. Claude account", 1, true},
+		{"in a frame", "claude", "│ Select login method │\n│ ❯ 1. Claude account │", 1, true},
+		{"two marks", "codex", "Sign in with ChatGPT\n› 1. Sign in with ChatGPT\n› 2. Sign in with Device Code", 0, false},
+		{"the title as an option", "codex", "› Sign in with ChatGPT", 0, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			keys, ok := signInKeys(c.agent, c.screen)
-			if ok != c.ok || !slices.Equal(keys, c.keys) {
-				t.Fatalf("keys %q ok %v", keys, ok)
+			step, ready := signInStep(c.agent, c.screen)
+			if step != c.step || ready != c.ready {
+				t.Fatalf("step %d ready %v, want %d %v", step, ready, c.step, c.ready)
 			}
 		})
 	}
 }
 
-func TestSignInStepPrefersTheLaterScreen(t *testing.T) {
-	if got := signInStep("claude", "Choose the text style\n 1. Dark\nSelect login method"); got != 1 {
-		t.Fatalf("step %d, want 1: the login method", got)
-	}
-}
-
 // signInTest is a life test whose sign-in runs fast, with the steps it
-// ran recorded and the screen it reads set by the test.
+// ran recorded, the screen it reads set by the test, and the new
+// account's agent sampled in %42.
 func signInTest(t *testing.T, screen func() string) (*Service, *[][]string) {
 	t.Helper()
 	s, ran := lifeTest(t)
 	s.signInWait, s.signInEvery = 50*time.Millisecond, time.Millisecond
 	s.Capture = func([]string) map[string]string { return map[string]string{"%42": screen()} }
+	snap := lifeSnap(false)
+	snap.Sessions = append(snap.Sessions, sample.Session{Agent: "codex", PID: 142, Start: 9, Pane: "%42", Target: "fresh:1.1", Name: "fresh"})
+	snap.Panes = append(snap.Panes, sample.Pane{ID: "%42", Target: "fresh:1.1", Window: "fresh", Command: "codex"})
+	s.publish(snap, func(state.Doc) {})
 	return s, ran
 }
 
@@ -63,18 +98,54 @@ func sentKeys(ran *[][]string) []string {
 	return out
 }
 
+// agentFake is an agent's screen that answers the keys sent to it: on a
+// key it has a screen for, it moves there. The builder's keys are the
+// screens the test sets by hand.
+type agentFake struct {
+	mu     sync.Mutex
+	screen string
+	on     map[string]map[string]string // screen → key → next screen
+}
+
+func (f *agentFake) show() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.screen
+}
+
+func (f *agentFake) set(screen string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.screen = screen
+}
+
+// fakeSignIn wires f to a sign-in test: keys sent move its screen.
+func fakeSignIn(t *testing.T, f *agentFake) (*Service, *[][]string) {
+	t.Helper()
+	s, _ := signInTest(t, f.show)
+	var mu sync.Mutex
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error {
+		mu.Lock()
+		ran = append(ran, argv)
+		mu.Unlock()
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if next, ok := f.on[f.screen][argv[len(argv)-1]]; ok {
+			f.screen = next
+		}
+		return nil
+	}
+	return s, &ran
+}
+
 func TestSignInSendsKeysOnce(t *testing.T) {
-	s, ran := signInTest(t, func() string { return "Sign in with ChatGPT" })
+	f := &agentFake{screen: codexAt(1), on: map[string]map[string]string{codexAt(1): {"Down": codexAt(2)}, codexAt(2): {"Enter": "Open this link"}}}
+	s, ran := fakeSignIn(t, f)
 	s.signInWait = time.Second
 	s.driveSignIn(t.Context(), "%42", "codex", "fresh")
-	var got []string
-	for _, a := range *ran {
-		if i := slices.Index(a, "send-keys"); i >= 0 {
-			got = append(got, a[len(a)-1])
-		}
-	}
-	if !slices.Equal(got, []string{"Down", "Enter"}) {
-		t.Fatalf("sent %q from %q", got, *ran)
+	if got := sentKeys(ran); !slices.Equal(got, []string{"send-keys -t %42 Down", "send-keys -t %42 Enter"}) {
+		t.Fatalf("sent %q", got)
 	}
 	if n := s.State().SignIns; n != nil {
 		t.Fatalf("notes %v", n)
@@ -82,23 +153,15 @@ func TestSignInSendsKeysOnce(t *testing.T) {
 }
 
 func TestSignInDrivesClaudeThroughItsTwoScreens(t *testing.T) {
-	var mu sync.Mutex
-	calls := 0
-	s, ran := signInTest(t, func() string {
-		mu.Lock()
-		defer mu.Unlock()
-		calls++
-		switch {
-		case calls < 3:
-			return "Choose the text style"
-		default:
-			return "Select login method"
-		}
-	})
+	f := &agentFake{screen: claudeTheme, on: map[string]map[string]string{claudeTheme: {"Enter": claudeLogin}, claudeLogin: {"Enter": "Browser didn't open? Use the url below"}}}
+	s, ran := fakeSignIn(t, f)
 	s.signInWait = time.Second
 	s.driveSignIn(t.Context(), "%42", "claude", "fresh")
 	if got := sentKeys(ran); !slices.Equal(got, []string{"send-keys -t %42 Enter", "send-keys -t %42 Enter"}) {
 		t.Fatalf("sent %q", got)
+	}
+	if n := s.State().SignIns; n != nil {
+		t.Fatalf("notes %v", n)
 	}
 }
 
@@ -107,7 +170,7 @@ func TestSignInDrivesClaudeThroughItsTwoScreens(t *testing.T) {
 // its keys once and stops.
 func TestSignInTakesTheLaterScreen(t *testing.T) {
 	s, ran := signInTest(t, func() string {
-		return "\x1b[2mChoose the text style\x1b[0m\n 1. Dark\n\n\x1b[1mSelect login\x1b[0m method\n 1. Claude account"
+		return "\x1b[2mChoose the text style\x1b[0m\n   1. Dark mode\n\n\x1b[1mSelect login\x1b[0m method\n ❯ 1. Claude account"
 	})
 	s.signInWait = time.Second
 	s.driveSignIn(t.Context(), "%42", "claude", "fresh")
@@ -117,6 +180,194 @@ func TestSignInTakesTheLaterScreen(t *testing.T) {
 	if n := s.State().SignIns; n != nil {
 		t.Fatalf("notes %v", n)
 	}
+}
+
+// TestSignInDoesNotPressAfterTheBuilderMoved: a key goes only when the
+// option it picks, or moves from, is the highlighted one. The builder who
+// moved the highlight first gets no key at all; one who moved it after
+// the driver's Down gets no Enter.
+func TestSignInDoesNotPressAfterTheBuilderMoved(t *testing.T) {
+	t.Run("before the first key", func(t *testing.T) {
+		s, ran := signInTest(t, func() string { return codexAt(3) })
+		s.driveSignIn(t.Context(), "%42", "codex", "fresh")
+		if got := sentKeys(ran); got != nil {
+			t.Fatalf("sent %q", got)
+		}
+		if got := s.State().SignIns["%42"]; got != SignInByHand {
+			t.Fatalf("note %q", got)
+		}
+	})
+	t.Run("after the driver's Down", func(t *testing.T) {
+		// The builder pressed Down too: the highlight is past device code.
+		f := &agentFake{screen: codexAt(1), on: map[string]map[string]string{codexAt(1): {"Down": codexAt(3)}}}
+		s, ran := fakeSignIn(t, f)
+		s.signInWait = time.Second
+		s.driveSignIn(t.Context(), "%42", "codex", "fresh")
+		if got := sentKeys(ran); !slices.Equal(got, []string{"send-keys -t %42 Down"}) {
+			t.Fatalf("sent %q", got)
+		}
+		if got := s.State().SignIns["%42"]; got != SignInByHand {
+			t.Fatalf("note %q", got)
+		}
+	})
+	t.Run("claude's theme", func(t *testing.T) {
+		s, ran := signInTest(t, func() string { return claudeThemeLight })
+		s.driveSignIn(t.Context(), "%42", "claude", "fresh")
+		if got := sentKeys(ran); got != nil {
+			t.Fatalf("sent %q", got)
+		}
+	})
+}
+
+// TestSignInStopsWhenTheBuilderTypes: once the pane changes in a way the
+// driver's own keys do not explain, it sends nothing more, even when the
+// screen comes back to one it would answer, and notes the pane.
+func TestSignInStopsWhenTheBuilderTypes(t *testing.T) {
+	t.Run("between two screens", func(t *testing.T) {
+		// After the theme, the builder pressed Down at the login method,
+		// then Up again.
+		f := &agentFake{screen: claudeTheme, on: map[string]map[string]string{claudeTheme: {"Enter": claudeLoginTwo}}}
+		s, ran := fakeSignIn(t, f)
+		s.signInWait = 200 * time.Millisecond
+		done := make(chan struct{})
+		go func() { s.driveSignIn(t.Context(), "%42", "claude", "fresh"); close(done) }()
+		deadline := time.Now().Add(5 * time.Second)
+		for f.show() != claudeLoginTwo && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		time.Sleep(20 * time.Millisecond)
+		f.set(claudeLogin)
+		<-done
+		if got := sentKeys(ran); !slices.Equal(got, []string{"send-keys -t %42 Enter"}) {
+			t.Fatalf("sent %q", got)
+		}
+		if got := s.State().SignIns["%42"]; got != SignInByHand {
+			t.Fatalf("note %q", got)
+		}
+	})
+	t.Run("right before a key", func(t *testing.T) {
+		// The screen is still for two looks, then the builder types: the
+		// look right before the key shows it, and no key goes.
+		var mu sync.Mutex
+		looks := 0
+		s, ran := signInTest(t, func() string {
+			mu.Lock()
+			defer mu.Unlock()
+			looks++
+			if looks <= 2 {
+				return codexAt(1)
+			}
+			return codexAt(1) + "hello"
+		})
+		s.driveSignIn(t.Context(), "%42", "codex", "fresh")
+		if got := sentKeys(ran); got != nil {
+			t.Fatalf("sent %q", got)
+		}
+		if got := s.State().SignIns["%42"]; got != SignInByHand {
+			t.Fatalf("note %q", got)
+		}
+	})
+	t.Run("before any key", func(t *testing.T) {
+		// The driver waits for the agent to be sampled; the builder moves
+		// the highlight meanwhile and back.
+		var mu sync.Mutex
+		looks := 0
+		s, ran := signInTest(t, func() string {
+			mu.Lock()
+			defer mu.Unlock()
+			looks++
+			if looks > 5 && looks <= 10 {
+				return codexAt(2)
+			}
+			return codexAt(1)
+		})
+		s.publish(lifeSnap(false), func(state.Doc) {}) // not sampled yet
+		snap := lifeSnap(false)
+		snap.Sessions = append(snap.Sessions, sample.Session{Agent: "codex", PID: 142, Start: 9, Pane: "%42"})
+		snap.Panes = append(snap.Panes, sample.Pane{ID: "%42"})
+		go func() {
+			for {
+				mu.Lock()
+				n := looks
+				mu.Unlock()
+				if n > 12 {
+					s.publish(snap, func(state.Doc) {})
+					return
+				}
+				time.Sleep(time.Millisecond)
+			}
+		}()
+		s.signInWait = time.Second
+		s.driveSignIn(t.Context(), "%42", "codex", "fresh")
+		if got := sentKeys(ran); got != nil {
+			t.Fatalf("sent %q", got)
+		}
+	})
+}
+
+// TestSignInSendsCarryGuards: each key carries the pid and start of the
+// agent first sampled in the pane, so it never reaches another agent.
+func TestSignInSendsCarryGuards(t *testing.T) {
+	f := &agentFake{screen: claudeTheme, on: map[string]map[string]string{claudeTheme: {"Enter": claudeLogin}, claudeLogin: {"Enter": "Open this link"}}}
+	s, ran := fakeSignIn(t, f)
+	s.signInWait = time.Second
+	var mu sync.Mutex
+	var guards []advice.Guard
+	s.Actions.Check = func(g advice.Guard) error {
+		mu.Lock()
+		defer mu.Unlock()
+		guards = append(guards, g)
+		return nil
+	}
+	s.driveSignIn(t.Context(), "%42", "claude", "fresh")
+	want := advice.Guard{PID: 142, StartTicks: 9}
+	if len(guards) != 2 || guards[0] != want || guards[1] != want {
+		t.Fatalf("guards %+v", guards)
+	}
+	if got := sentKeys(ran); len(got) != 2 {
+		t.Fatalf("sent %q", got)
+	}
+
+	t.Run("a guard that fails", func(t *testing.T) {
+		s, ran := signInTest(t, func() string { return claudeTheme })
+		s.Actions.Check = func(advice.Guard) error { return errors.New("pid 142 is no longer the process that was flagged") }
+		s.driveSignIn(t.Context(), "%42", "claude", "fresh")
+		if got := sentKeys(ran); got != nil {
+			t.Fatalf("sent %q", got)
+		}
+		if got := s.State().SignIns["%42"]; got != SignInByHand {
+			t.Fatalf("note %q", got)
+		}
+	})
+	t.Run("another agent in the pane", func(t *testing.T) {
+		f := &agentFake{screen: claudeTheme, on: map[string]map[string]string{claudeTheme: {"Enter": claudeLogin}}}
+		s, ran := fakeSignIn(t, f)
+		s.signInWait = time.Second
+		s.Actions.Check = func(g advice.Guard) error {
+			// The first key went; the pane's agent is replaced before the
+			// next screen is read.
+			snap := lifeSnap(false)
+			snap.Sessions = append(snap.Sessions, sample.Session{Agent: "claude", PID: 143, Start: 11, Pane: "%42"})
+			snap.Panes = append(snap.Panes, sample.Pane{ID: "%42"})
+			s.publish(snap, func(state.Doc) {})
+			return nil
+		}
+		s.driveSignIn(t.Context(), "%42", "claude", "fresh")
+		if got := sentKeys(ran); !slices.Equal(got, []string{"send-keys -t %42 Enter"}) {
+			t.Fatalf("sent %q", got)
+		}
+		if got := s.State().SignIns["%42"]; got != SignInByHand {
+			t.Fatalf("note %q", got)
+		}
+	})
+	t.Run("no agent sampled", func(t *testing.T) {
+		s, ran := signInTest(t, func() string { return claudeTheme })
+		s.publish(lifeSnap(false), func(state.Doc) {})
+		s.driveSignIn(t.Context(), "%42", "claude", "fresh")
+		if got := sentKeys(ran); got != nil {
+			t.Fatalf("sent %q", got)
+		}
+	})
 }
 
 func TestSignInGivesUpAndSaysSo(t *testing.T) {
@@ -160,7 +411,7 @@ func TestSignInStopsWithTheContext(t *testing.T) {
 
 func TestSignInNeverReadsTheCode(t *testing.T) {
 	const code = "ABCD-12345"
-	s, ran := signInTest(t, func() string { return "Sign in with ChatGPT\nYour code: " + code })
+	s, ran := signInTest(t, func() string { return codexAt(1) + "Your code: " + code })
 	s.signInWait = time.Second
 	var logs strings.Builder
 	s.driveSignIn(t.Context(), "%42", "codex", "fresh")
@@ -192,7 +443,11 @@ func TestNewAccountDrivesItsSignIn(t *testing.T) {
 		ran = append(ran, argv)
 		return nil
 	}
-	s.Capture = func([]string) map[string]string { return map[string]string{"%42": "Choose the text style"} }
+	s.Capture = func([]string) map[string]string { return map[string]string{"%42": claudeTheme} }
+	snap := lifeSnap(false)
+	snap.Sessions = append(snap.Sessions, sample.Session{Agent: "claude", PID: 142, Start: 9, Pane: "%42"})
+	snap.Panes = append(snap.Panes, sample.Pane{ID: "%42"})
+	s.publish(snap, func(state.Doc) {})
 	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: "work2", NewAccount: true}))
 	if res.Err != "" {
 		t.Fatal(res.Err)

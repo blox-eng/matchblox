@@ -243,9 +243,12 @@ the app-server runs (such as `codex exec`) is not a session either.
 A new account starts in a session where you sign in. matchblox presses
 through the first screens of the agent to its sign-in link: for Claude
 Code, the theme and the login method; for Codex, the device code; for
-Cursor, any key. You finish the sign-in in the session. Until then the
-row says `signing in`. If matchblox does not recognise the screens within
-20 seconds, or cannot find the pane, the row says `sign in by hand`. An ask
+Cursor, any key. It presses a key only when the option the key picks is
+the highlighted one, and only to the agent it first saw in the pane. Once
+you press a key there yourself, matchblox stops pressing. You finish the
+sign-in in the session. Until then the row says `signing in`. If matchblox
+does not recognise the screens within 20 seconds, cannot find the pane, or
+stopped because you typed, the row says `sign in by hand`. An ask
 or a wait of the session shows over both words. matchblox never reads a
 sign-in code from the pane and never types a password. If a new account
 does not start, matchblox removes the folder it made for it.

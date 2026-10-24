@@ -59,6 +59,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- The sign-in of a new account presses only what it sees. matchblox
+  sends a key only when the option it picks is the highlighted one and the
+  screen has not changed since it looked, and each key goes only to the
+  agent first seen in the pane. Once you type in the pane, matchblox stops
+  pressing and the row says `sign in by hand`. The highlight marks are read
+  from the agents' screens; this is not tested yet against a live sign-in.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - A copy account is its own. A link in the default that points inside the
   default now points to the same place in the account, so the account
   reads its own files and never the default's. A link that points outside

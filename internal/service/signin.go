@@ -23,55 +23,111 @@ const (
 // sign-in: the builder finishes it.
 const SignInByHand = "by hand"
 
-// signInScreens are the first screens of each agent on a new account and
-// the keys that move toward its sign-in link, in the order the agent shows
-// them. Probed on Claude Code 2.1.308, codex-cli 0.163.0 and Cursor
-// 2026.10.19. final marks the screen after which the link shows.
-var signInScreens = map[string][]struct {
-	match string
+// signInScreen is one of an agent's first screens on a new account: its
+// title, shown anywhere on it; the option its key picks, or moves from,
+// which must be the highlighted line ("" on a screen without options);
+// and the key. final marks the screen after which the link shows.
+type signInScreen struct {
+	title string
+	pick  string
 	keys  []string
 	final bool
-}{
+}
+
+// signInScreens are the first screens of each agent on a new account, in
+// the order the agent shows them. Probed on Claude Code 2.1.308, codex-cli
+// 0.163.0 and Cursor 2026.10.19. Codex's two screens are one picker: Down
+// moves from its first option to device code, and Enter picks that. The
+// option labels and the highlight marks (signInMarks) are read from the
+// agents' screens, not checked in a live run.
+var signInScreens = map[string][]signInScreen{
 	"claude": {
-		{"Choose the text style", []string{"Enter"}, false},
-		{"Select login method", []string{"Enter"}, true},
+		{"Choose the text style", "1. Dark mode", []string{"Enter"}, false},
+		{"Select login method", "1. Claude account", []string{"Enter"}, true},
 	},
-	"codex":            {{"Sign in with ChatGPT", []string{"Down", "Enter"}, true}},
-	sample.CursorAgent: {{"Press any key to log in", []string{"Enter"}, true}},
+	"codex": {
+		{"Sign in with ChatGPT", "1. Sign in with ChatGPT", []string{"Down"}, false},
+		{"Sign in with ChatGPT", "2. Sign in with Device Code", []string{"Enter"}, true},
+	},
+	sample.CursorAgent: {{"Press any key to log in", "", []string{"Enter"}, true}},
+}
+
+// signInMarks are the marks each agent puts at the start of the selected
+// line of a list: Codex ›, Claude Code ❯. Cursor's sign-in screen has no
+// list.
+var signInMarks = map[string]string{"claude": "❯", "codex": "›"}
+
+// highlighted is the selected line of a list on screen, without its mark,
+// or "" when no line, or more than one, carries the agent's mark. A frame
+// drawn around the list is skipped.
+func highlighted(agent, screen string) string {
+	mark := signInMarks[agent]
+	if mark == "" {
+		return ""
+	}
+	var out string
+	n := 0
+	for line := range strings.SplitSeq(screen, "\n") {
+		if rest, ok := strings.CutPrefix(strings.TrimLeft(line, " \t│┃|"), mark); ok {
+			out, n = strings.TrimSpace(strings.TrimRight(strings.TrimSpace(rest), "│┃|")), n+1
+		}
+	}
+	if n != 1 {
+		return ""
+	}
+	return out
 }
 
 // signInStep is the screen of agent that screen shows: its index in the
-// agent's table, or -1. The screen is cleaned of its styles first, and the
-// later screen wins: one still showing an earlier prompt above a later one
-// is at the later one.
-func signInStep(agent, screen string) int {
+// agent's table, or -1; ready tells that its key may go, its option being
+// the highlighted line. The screen is cleaned of its styles first, and the
+// later title wins: one still showing an earlier prompt above a later one
+// is at the later one. Screens with the same title are one picker: the
+// one whose option is highlighted is the step.
+func signInStep(agent, screen string) (step int, ready bool) {
 	screen = said.Clean(screen)
 	steps := signInScreens[agent]
+	at := -1
 	for i := len(steps) - 1; i >= 0; i-- {
-		if strings.Contains(screen, steps[i].match) {
-			return i
+		if strings.Contains(screen, steps[i].title) {
+			at = i
+			break
 		}
 	}
-	return -1
-}
-
-// signInKeys are the keys that answer the sign-in screen the agent shows;
-// ok is false for any other screen. Only the keys leave this function,
-// never a line of the screen.
-func signInKeys(agent, screen string) (keys []string, ok bool) {
-	i := signInStep(agent, screen)
-	if i < 0 {
-		return nil, false
+	if at < 0 {
+		return -1, false
 	}
-	return signInScreens[agent][i].keys, true
+	sel := highlighted(agent, screen)
+	first := at
+	for i := at; i >= 0 && steps[i].title == steps[at].title; i-- {
+		first = i
+	}
+	for i := first; i <= at; i++ {
+		if steps[i].pick == "" || sel != "" && strings.HasPrefix(sel, steps[i].pick) {
+			return i, true
+		}
+	}
+	return first, false
 }
 
 // driveSignIn waits for the first screens of the agent in pane, a new
 // account's, and sends the keys that reach its sign-in link, each screen's
 // once. It never reads the link or the code: the builder finishes the
-// sign-in. When the screens do not come in time, or ctx ends first, it
-// stops; after the time it notes the pane for the builder. It never kills
-// the pane.
+// sign-in. It stops, and notes the pane "by hand", when the screens do not
+// come in time, when a key's guard fails, or when the builder takes over.
+// When ctx ends first it stops without a note. It never kills the pane.
+//
+// It acts only on a still screen: two looks a tick apart that agree, the
+// quiet moment the console's scan question also waits. It looks once more
+// right before a key and sends only if the screen is the same. A key goes
+// only at a ready step (signInStep), after the last one it sent, and only
+// to the agent first sampled in the pane (its pid and start guard it).
+//
+// The builder took over when a still screen differs from the last still
+// sign-in screen the driver saw, unless the driver's own key explains it:
+// a key went since, and the screen is at a later ready step. Anything else
+// (a highlight moved, a later screen with another option, a screen it does
+// not know) stops it for good, even if a known screen comes back.
 func (s *Service) driveSignIn(ctx context.Context, pane, agent, name string) {
 	wait, every := s.signInWait, s.signInEvery
 	if wait <= 0 {
@@ -84,18 +140,44 @@ func (s *Service) driveSignIn(ctx context.Context, pane, agent, name string) {
 	defer deadline.Stop()
 	tick := time.NewTicker(every)
 	defer tick.Stop()
-	sent := map[int]bool{}
+	steps := signInScreens[agent]
+	look := func() (string, bool) {
+		screen, ok := s.Capture([]string{pane})[pane]
+		return said.Clean(screen), ok
+	}
+	byHand := func() {
+		s.signIns.set(pane, SignInByHand)
+		s.noteSignIn()
+	}
+	var (
+		last    string         // the previous look
+		seen    string         // the last still sign-in screen
+		who     sample.Session // the agent the keys go to, first sampled
+		done    = -1           // the last step whose key went
+		pending bool           // a key went since seen
+	)
 	for {
-		if screen, ok := s.Capture([]string{pane})[pane]; ok {
-			if i := signInStep(agent, screen); i >= 0 && !sent[i] {
-				sent[i] = true
-				if !s.sendSignIn(ctx, pane, signInScreens[agent][i].keys) {
-					s.signIns.set(pane, SignInByHand)
-					s.noteSignIn()
+		screen, ok := look()
+		still := ok && screen == last
+		last = screen
+		if still {
+			i, ready := signInStep(agent, screen)
+			if seen != "" && screen != seen && (!pending || !ready || i <= done) {
+				byHand()
+				return
+			}
+			if i >= 0 {
+				seen, pending = screen, false
+			}
+			if ready && i > done {
+				switch sent, stop := s.pressSignIn(ctx, pane, screen, &who, steps[i].keys, look); {
+				case stop:
+					byHand()
 					return
-				}
-				if signInScreens[agent][i].final {
+				case sent && steps[i].final:
 					return
+				case sent:
+					done, pending = i, true
 				}
 			}
 		}
@@ -103,23 +185,50 @@ func (s *Service) driveSignIn(ctx context.Context, pane, agent, name string) {
 		case <-ctx.Done():
 			return
 		case <-deadline.C:
-			s.signIns.set(pane, SignInByHand)
-			s.noteSignIn()
+			byHand()
 			return
 		case <-tick.C:
 		}
 	}
 }
 
-// sendSignIn presses ks in pane, one send-keys each, and tells if they all
-// went.
-func (s *Service) sendSignIn(ctx context.Context, pane string, ks []string) bool {
+// pressSignIn sends ks to the agent in pane when the pane still shows
+// screen and holds the agent first sampled there (who, set on the first
+// call that finds one). sent tells the keys went; stop tells the driver
+// must stop: another agent is in the pane, or a key did not go. With no
+// agent sampled yet, or a screen that moved, nothing goes and the driver
+// looks again.
+func (s *Service) pressSignIn(ctx context.Context, pane, screen string, who *sample.Session, ks []string, look func() (string, bool)) (sent, stop bool) {
+	x, ok := s.sessionAt(pane)
+	switch {
+	case !ok:
+		return false, false
+	case who.PID == 0:
+		*who = x
+	case x.PID != who.PID || x.Start != who.Start:
+		return false, true
+	}
+	if again, ok := look(); !ok || again != screen {
+		return false, false
+	}
+	if !s.sendSignIn(ctx, pane, *who, ks) {
+		return false, true
+	}
+	return true, false
+}
+
+// sendSignIn presses ks in pane, one send-keys each, each guarded by the
+// agent's pid and start, and tells if they all went.
+func (s *Service) sendSignIn(ctx context.Context, pane string, who sample.Session, ks []string) bool {
 	act := advice.Action{Label: "sign in"}
+	g := advice.Guard{PID: who.PID, StartTicks: who.Start}
 	for i, k := range ks {
 		if i > 0 {
 			act.Steps = append(act.Steps, panes.Pause)
+			act.Guards = append(act.Guards, g)
 		}
 		act.Steps = append(act.Steps, panes.Keys(pane, k))
+		act.Guards = append(act.Guards, g)
 	}
 	release := s.holdPane(pane)
 	defer release()
