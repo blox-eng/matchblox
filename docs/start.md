@@ -67,7 +67,8 @@ The first run asks one question: **Where do your agents run?**
   [Remote hosts](remote.md).
 
 The first run also writes `~/.config/matchblox/config.toml` with goals for
-this machine, and the agents it finds on `PATH`.
+this machine, and the agents it finds on `PATH`. A known agent you install
+later shows in Sessions all the same.
 
 The console then asks, once: **Find the Git repositories in your home
 folder?** `y` lets N offer them when you start a session; they stay on

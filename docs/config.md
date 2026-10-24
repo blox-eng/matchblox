@@ -1,9 +1,9 @@
 # Config
 
 matchblox works without a config. The first run writes
-`~/.config/matchblox/config.toml` with goals for this machine: `load1_over`
-is the number of cores, and the agents it finds (the known agents count
-without it; `agents` adds others). Every key is optional.
+`~/.config/matchblox/config.toml` with goals for this machine (`load1_over`
+is the number of cores) and the agents it finds. Every known agent is a
+session without it; `agents` adds others. Every key is optional.
 
 The service reads the config when it starts. To apply a change, stop the
 service and run `matchblox` again. The lock file next to the service socket
