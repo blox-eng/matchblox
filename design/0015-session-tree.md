@@ -1,7 +1,26 @@
 # Sessions as a tree: design
 
-Date: 2026-10-24. Status: draft. Issue: #206. Live-checks and closes: #157
+Date: 2026-10-24. Status: built. Issue: #206. Live-checks and closes: #157
 (already fixed in code by #187).
+
+## Changed while planning (2026-10-24)
+
+- Children live in `Snapshot.Children`, never in `Sessions`, so a child is
+  never a full session.
+- A child with a pane of its own cannot be proven (tmux, not the agent,
+  starts it), so that case is dropped. Every child has an empty `Pane`.
+- The walk stops at a pane's shell or a tmux server.
+- "A family sorts by its most urgent member" falls away, because a child
+  never waits.
+- A parent whose child works reads Busy with `StatusAgents`, the same
+  invariant as a session working through subagents, and its compact and
+  clear suggestion is recomputed.
+- A parent's `Agents` stays the in-process subagent count. Children show on
+  their own `children` line.
+- A top-level `codex mcp-server` gets no row (the engine table's `Server`
+  rule).
+- `matchblox sessions` prints children under their parent, and `--json`
+  nests them in `children` with `name`, `agent`, `via` and `pid`.
 
 ## Intent
 

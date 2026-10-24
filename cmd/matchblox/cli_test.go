@@ -691,3 +691,36 @@ func TestSessionsLineSaysSignInByHand(t *testing.T) {
 		t.Fatalf("by session name: %q", buf.String())
 	}
 }
+
+func TestSessionsPrintsChildrenUnderTheirParent(t *testing.T) {
+	var doc state.Doc
+	doc.Sessions = []sample.Session{{PID: 200, Start: 1, Name: "app", Pane: "%1", Target: "app:1.1"}}
+	doc.Children = []sample.Session{
+		{PID: 221, Start: 2, Agent: "codex", Name: "codex exec", Via: "process", Parent: &sample.ProcRef{PID: 200, Start: 1}},
+		{PID: 230, Start: 3, Agent: "claude", Name: "claude -p", Via: "env", Parent: &sample.ProcRef{PID: 221, Start: 2}},
+	}
+	var b strings.Builder
+	if err := writeSessions(&b, doc, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"\n     └─ codex exec (via process)\n", "\n       └─ claude -p (via env)\n"} {
+		if !strings.Contains(b.String(), want) {
+			t.Fatalf("want %q in\n%s", want, b.String())
+		}
+	}
+	b.Reset()
+	if err := writeSessions(&b, doc, true); err != nil {
+		t.Fatal(err)
+	}
+	var rows []sessionJSON
+	if err := json.Unmarshal([]byte(b.String()), &rows); err != nil {
+		t.Fatal(err)
+	}
+	want := []childJSON{{Name: "codex exec", Agent: "codex", Via: "process", PID: 221, Children: []childJSON{{Name: "claude -p", Agent: "claude", Via: "env", PID: 230}}}}
+	if len(rows) != 1 || !reflect.DeepEqual(rows[0].Children, want) {
+		t.Fatalf("json\n%s", b.String())
+	}
+	if strings.Contains(b.String(), `"children": null`) {
+		t.Fatalf("empty children must be omitted\n%s", b.String())
+	}
+}

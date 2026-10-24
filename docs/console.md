@@ -213,6 +213,11 @@ console remembers both.
 - **HELD**, last: sessions you parked with `z` (`⏸ parked by you`) or the
   stoker holds (`⏸ held by stoker · why`). Nothing types into them.
 
+A `codex exec` or `claude -p` that an agent starts shows under that session
+with `├─` and `└─`, in `matchblox sessions` too. The console shows it and
+never acts on it. A link is drawn only when `/proc` proves it. A parent
+whose child works reads as working.
+
 A session at rest that does not ask you says why where its state word
 would be, in a few words: `#4556 waits your merge`, `CI red · lint`,
 `stuck: …`, `back 14:20`. It replaces `done`, `paused` and `idle`.
