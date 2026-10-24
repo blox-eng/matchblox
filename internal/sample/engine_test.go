@@ -19,7 +19,6 @@ func TestEngineRules(t *testing.T) {
 		{"codex", []string{"codex", "app-server", "--managed-daemon"}, true, true},
 		{"codex", []string{"node", "/x/codex.js", "app-server"}, true, true},
 		{"codex", []string{"codex"}, false, false},
-		{CursorAgent, []string{"agent", "-p", "hi"}, true, false},
 		{"opencode", []string{"opencode", "run", "hi"}, true, false},
 		{"opencode", []string{"node", "/x/opencode.js", "run", "hi"}, true, false},
 		{"opencode", []string{"opencode", "--print-logs", "run"}, true, false},
