@@ -29,6 +29,32 @@ func addProc(t *testing.T, root string, pid, ppid int, comm string, argv []strin
 	}
 }
 
+// addProcAt is addProc with a start time, a controlling tty and more
+// environment ("K=V" each).
+func addProcAt(t *testing.T, root string, pid, ppid int, comm string, argv []string, start uint64, tty int, env ...string) {
+	t.Helper()
+	dir := filepath.Join(root, "proc", strconv.Itoa(pid))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stat := strconv.Itoa(pid) + " (" + comm + ") S " + strconv.Itoa(ppid) + " 1 1 " + strconv.Itoa(tty) +
+		" -1 0 0 0 0 0 1 0 0 0 20 0 1 0 " + strconv.FormatUint(start, 10) + " 1 1"
+	uid := strconv.Itoa(os.Getuid())
+	files := map[string]string{
+		"stat":    stat,
+		"cmdline": strings.Join(argv, "\x00") + "\x00",
+		"status":  "Name:\t" + comm + "\nUid:\t" + uid + "\t" + uid + "\t" + uid + "\t" + uid + "\n",
+	}
+	if len(env) > 0 {
+		files["environ"] = strings.Join(env, "\x00") + "\x00"
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func addPane(t *testing.T, root, line string) {
 	t.Helper()
 	f, err := os.OpenFile(filepath.Join(root, "tmux-panes.txt"), os.O_APPEND|os.O_WRONLY, 0)

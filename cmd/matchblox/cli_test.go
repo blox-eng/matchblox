@@ -691,3 +691,51 @@ func TestSessionsLineSaysSignInByHand(t *testing.T) {
 		t.Fatalf("by session name: %q", buf.String())
 	}
 }
+
+func TestSessionsPrintsChildrenUnderTheirParent(t *testing.T) {
+	var doc state.Doc
+	doc.Sessions = []sample.Session{{PID: 200, Start: 1, Name: "app", Pane: "%1", Target: "app:1.1"}}
+	doc.Children = []sample.Session{
+		{PID: 221, Start: 2, Agent: "codex", Name: "codex exec", Via: "process", Parent: &sample.ProcRef{PID: 200, Start: 1}},
+		{PID: 230, Start: 3, Agent: "claude", Name: "claude -p", Via: "env", Parent: &sample.ProcRef{PID: 221, Start: 2}},
+		{PID: 240, Start: 4, Agent: "opencode", Name: "opencode run", Via: "process", Parent: &sample.ProcRef{PID: 200, Start: 1}},
+	}
+	var b strings.Builder
+	if err := writeSessions(&b, doc, false); err != nil {
+		t.Fatal(err)
+	}
+	if want := "\n     ├─ codex exec (via process)\n     │ └─ claude -p (via env)\n     └─ opencode run (via process)\n"; !strings.Contains(b.String(), want) {
+		t.Fatalf("want %q in\n%s", want, b.String())
+	}
+	b.Reset()
+	if err := writeSessions(&b, doc, true); err != nil {
+		t.Fatal(err)
+	}
+	var rows []sessionJSON
+	if err := json.Unmarshal([]byte(b.String()), &rows); err != nil {
+		t.Fatal(err)
+	}
+	want := []childJSON{{Name: "codex exec", Agent: "codex", Via: "process", PID: 221, Children: []childJSON{{Name: "claude -p", Agent: "claude", Via: "env", PID: 230}}}, {Name: "opencode run", Agent: "opencode", Via: "process", PID: 240}}
+	if len(rows) != 1 || !reflect.DeepEqual(rows[0].Children, want) {
+		t.Fatalf("json\n%s", b.String())
+	}
+	if strings.Contains(b.String(), `"children": null`) {
+		t.Fatalf("empty children must be omitted\n%s", b.String())
+	}
+}
+
+// TestSessionsSurvivesALoopInTheStateFile: a child listed twice, once
+// under its own child, as only a hand-edited file can hold, prints and ends.
+func TestSessionsSurvivesALoopInTheStateFile(t *testing.T) {
+	var doc state.Doc
+	doc.Sessions = []sample.Session{{PID: 200, Start: 1, Name: "app"}}
+	doc.Children = []sample.Session{
+		{PID: 221, Start: 2, Name: "a", Parent: &sample.ProcRef{PID: 200, Start: 1}},
+		{PID: 222, Start: 3, Name: "b", Parent: &sample.ProcRef{PID: 221, Start: 2}},
+		{PID: 221, Start: 2, Name: "a", Parent: &sample.ProcRef{PID: 222, Start: 3}},
+	}
+	var b strings.Builder
+	if err := writeSessions(&b, doc, true); err != nil {
+		t.Fatal(err)
+	}
+}

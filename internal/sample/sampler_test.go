@@ -295,14 +295,18 @@ func TestNestedAgentFoldsIntoTopSession(t *testing.T) {
 	os.WriteFile(filepath.Join(root, "proc", "220", "stat"), []byte("220 (bash) S 200 1 1 0 -1 0 0 0 0 0 1 0 0 0 20 0 1 0 1000 1 1"), 0o644)
 	os.WriteFile(filepath.Join(root, "proc", "221", "stat"), []byte("221 (claude) S 220 1 1 0 -1 0 0 0 0 0 1 0 0 0 20 0 1 0 1000 1 1"), 0o644)
 	os.WriteFile(filepath.Join(root, "proc", "221", "environ"), []byte("TMUX_PANE=%1\x00"), 0o644)
+	snap := newFixtureSampler(root).Sample()
 	n := 0
-	for _, x := range newFixtureSampler(root).Sample().Sessions {
+	for _, x := range snap.Sessions {
 		if x.Pane == "%1" {
 			n++
 		}
 	}
 	if n != 1 {
 		t.Fatalf("pane %%1 has %d sessions, want 1", n)
+	}
+	if len(snap.Children) != 1 || snap.Children[0].PID != 221 || snap.Children[0].Parent.PID != 200 {
+		t.Fatalf("children = %+v, want 221 under 200", snap.Children)
 	}
 }
 
