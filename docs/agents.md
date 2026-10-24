@@ -84,7 +84,8 @@ run's, a thread of the Codex app or an editor, nor a subagent's.
 `codex resume <id>` finds its rollout by the id. When no open file names the rollout, these
 show `—` and "not measured", and have no id:
 
-- two Codex sessions in one directory;
+- two Codex sessions in one directory, even with a different
+  `CODEX_HOME` each;
 - a session after its `/new` or `/resume`;
 - a session that had no turn yet when another Codex session started in
   its directory, one that has exited since;
