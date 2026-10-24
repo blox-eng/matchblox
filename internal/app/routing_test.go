@@ -147,8 +147,11 @@ func TestKeyRouting(t *testing.T) {
 				t.Fatal("the sheet stayed")
 			}
 		}},
-		{"form: esc closes it", func(t *testing.T) Model { return withRoute(t, "form") }, esc, false, func(t *testing.T, m, _ Model) {
-			if m.form != nil {
+		{"form: esc closes where's list, a second esc the form", func(t *testing.T) Model { return withRoute(t, "form") }, esc, false, func(t *testing.T, m, _ Model) {
+			if m.form == nil || m.form.listOpen {
+				t.Fatalf("the first esc: form %+v", m.form)
+			}
+			if next, _ := m.Update(esc); next.(Model).form != nil {
 				t.Fatal("the form stayed")
 			}
 		}},
@@ -643,7 +646,7 @@ var keyLines = map[string]string{
 	"peek/100":                           "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ send ─ ← prev  2/3  next → ─ esc ─╯",
 	"peek typed/100":                     "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ send ─ ← prev  2/3  next → ─ esc ─╯",
 	"peek question/100":                  "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ open ─ ← prev  1/3  next → ─ esc ─╯",
-	"form new/100":                       "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ start ─ tab next ─ esc ─────────────────────────────────╯",
+	"form new/100":                       "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ pick · ↑↓ move · ←→ repo · tab next · esc keep the path ╯",
 	"form rename/100":                    "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ rename ─ esc ───────────────────────────────────────────╯",
 	"form switch/100":                    "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ plan ─ tab next ─ esc ──────────────────────────────────╯",
 	"pending jump/100":                   "Jump: tmux switch-client -t %3 · ⏎ run ─ esc cancel || ╰─ ⏎ run ─ esc cancel ─────────────────────╯",
@@ -666,7 +669,7 @@ var keyLines = map[string]string{
 	"peek/50":                            "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ send ─ ← prev  2/3  next → ─ esc ───────────╯",
 	"peek typed/50":                      "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ send ─ ← prev  2/3  next → ─ esc ───────────╯",
 	"peek question/50":                   "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ open ─ ← prev  1/3  next → ─ esc ───────────╯",
-	"form new/50":                        "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ start ─ tab next ─ esc ─────────────────────╯",
+	"form new/50":                        "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ pick · ↑↓ move · esc keep the path ─────────╯",
 	"form rename/50":                     "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ rename ─ esc ───────────────────────────────╯",
 	"form switch/50":                     "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ plan ─ tab next ─ esc ──────────────────────╯",
 	"pending jump/50":                    "Jump: tmux switch-client -t %3 · ⏎ run ─ esc cancel || ╰─ ⏎ run ─ esc cancel ───────────────────────────╯",

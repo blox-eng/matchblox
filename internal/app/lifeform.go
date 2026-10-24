@@ -55,14 +55,23 @@ type form struct {
 	named     bool // the name was typed: it no longer follows where
 	agent     string
 	first     string
-	whereAt   int    // ←→ on where: the Git path it shows (-1: typed)
 	act, err  string // the act in flight, and why the last one did not go
+	// where's list (#174): its rows for the filter, the selected one and
+	// the first shown; picked: where holds a pick or a ←→ step, not a
+	// filter, and query is what was typed before it; extra: the folder N
+	// opened on, when it is not a known repo.
+	rows     []whereRow
+	sel, top int
+	listOpen bool
+	picked   bool
+	query    string
+	extra    string
 }
 
 const maxField = 300
 
-// openNew is N: the New session form, where from the selected row (a Git
-// repository or worktree, a session's directory), or the first repository.
+// openNew is N: the New session form, where's list open on the selected
+// row's folder (a Git worktree, a session's directory), or the first repo.
 func (m Model) openNew() (tea.Model, tea.Cmd) {
 	switch {
 	case m.conn == nil || m.lost:
@@ -72,25 +81,26 @@ func (m Model) openNew() (tea.Model, tea.Cmd) {
 		m.flash = "no agent to start here: install claude, codex, opencode or cursor-agent"
 		return m, nil
 	}
-	f := &form{at: fieldWhere, whereAt: -1, agent: m.agents[0]}
+	f := &form{at: fieldWhere, agent: m.agents[0]}
 	if slices.Contains(m.agents, m.lastAgent) {
 		f.agent = m.lastAgent
 	}
+	at := ""
 	switch m.tab {
 	case tabGit:
 		if wt, ok := m.selectedWorktree(); ok {
-			f.where = wt.Path
+			at = wt.Path
 		}
 	case tabSessions:
 		if s, ok := m.selectedSession(); ok {
-			f.where = s.Cwd
+			at = s.Cwd
 		}
 	}
-	if paths := m.gitPaths(); f.where == "" && len(paths) > 0 {
-		f.where, f.whereAt = paths[0], 0
-	}
-	if i := slices.Index(m.gitPaths(), f.where); i >= 0 {
-		f.whereAt = i
+	f.listOpen = true
+	m.refreshWhere(f, at)
+	if at != "" && filepath.Clean(m.whereSelectedIn(f).path()) != filepath.Clean(at) {
+		f.extra = filepath.Clean(at) // not a known repo: the first row
+		m.refreshWhere(f, at)
 	}
 	m.form, m.pending, m.peek = f, nil, nil
 	return m, nil
@@ -161,51 +171,6 @@ func (m Model) switchAction(f form) *action {
 	return a
 }
 
-// gitPaths are ←→ on where: the repositories and worktrees of the Git tab,
-// then the ones found on the host, the most recently used first.
-func (m Model) gitPaths() []string {
-	return append(m.worktreePaths(), m.foundPaths...)
-}
-
-// worktreePaths are the Git tab's paths, each once.
-func (m Model) worktreePaths() []string {
-	var out []string
-	for _, r := range m.allWorktreeRows() {
-		if !slices.Contains(out, r.wt.Path) {
-			out = append(out, r.wt.Path)
-		}
-	}
-	return out
-}
-
-// rebuildFoundPaths builds foundPaths when the found checkouts came
-// (found) or the Git tab's paths changed: once, not at each draw.
-func (m Model) rebuildFoundPaths(found bool) Model {
-	wt := m.worktreePaths()
-	if !found && slices.Equal(wt, m.foundWt) {
-		return m
-	}
-	m.foundWt, m.foundPaths = wt, nil
-	if m.found == nil {
-		return m
-	}
-	on := make(map[string]bool, len(wt))
-	for _, p := range wt {
-		on[filepath.Clean(p)] = true
-	}
-	repos := slices.Clone(m.found.Repos)
-	slices.SortStableFunc(repos, func(a, b proto.Checkout) int { return b.Active.Compare(a.Active) })
-	paths := make([]string, 0, len(repos))
-	for _, c := range repos {
-		if p := filepath.Clean(c.Path); !on[p] {
-			on[p] = true
-			paths = append(paths, p)
-		}
-	}
-	m.foundPaths = paths
-	return m
-}
-
 // fields are the form's fields, in Tab's order.
 func (f *form) fields() []int {
 	switch {
@@ -254,21 +219,39 @@ func (f *form) move(by int) {
 	f.at = fs[(i+by+len(fs))%len(fs)]
 }
 
+// moveTo is move, and back on where the list opens.
+func (m Model) moveTo(f *form, by int) {
+	f.move(by)
+	if f.at == fieldWhere {
+		m.openWhere(f)
+	}
+}
+
 func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	f := *m.form
 	m.form = &f
 	fk := m.keys.form
+	if f.whereList() {
+		f.err = ""
+		if bkey.Matches(k, fk.Enter) && f.pickWhere() {
+			return m, nil
+		}
+		if m.whereKey(&f, k) {
+			f.top = scrollTop(f.top, f.sel, m.listHeight(), len(f.rows))
+			return m, nil
+		}
+	}
 	switch {
 	case bkey.Matches(k, fk.Close):
 		m.form = nil // nothing is sent
 		return m, nil
 	case bkey.Matches(k, fk.Enter):
 		return m.formEnter()
-	case bkey.Matches(k, fk.Next):
-		f.move(1)
+	case bkey.Matches(k, fk.Next, fk.Down):
+		m.moveTo(&f, 1)
 		return m, nil
-	case bkey.Matches(k, fk.Prev):
-		f.move(-1)
+	case bkey.Matches(k, fk.Prev, fk.Up):
+		m.moveTo(&f, -1)
 		return m, nil
 	}
 	f.err = ""
@@ -288,43 +271,72 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	// On where, space is text: only the arrows pick.
 	if f.at == fieldWhere && k.Text == "" && bkey.Matches(k, fk.Left, fk.Right) {
-		paths := m.gitPaths()
-		if len(paths) == 0 {
-			return m, nil
-		}
-		n, right := len(paths), bkey.Matches(k, fk.Right)
-		switch {
-		case f.whereAt < 0 && right:
-			f.whereAt = 0
-		case f.whereAt < 0:
-			f.whereAt = n - 1
-		case right:
-			f.whereAt = (f.whereAt + 1) % n
-		default:
-			f.whereAt = (f.whereAt + n - 1) % n
-		}
-		f.where = paths[f.whereAt]
-		return m, nil
-	}
-	t := f.text(f.at)
-	if t == nil {
+		m.stepRepo(&f, bkey.Matches(k, fk.Right))
+		f.top = scrollTop(f.top, f.sel, m.listHeight(), len(f.rows))
 		return m, nil
 	}
 	switch {
 	case bkey.Matches(k, fk.Erase):
-		*t = trimLast(*t)
+		m.eraseField(&f)
+	case k.Text != "" && len([]rune(m.fieldText(&f)+k.Text)) <= maxField:
+		m.typeField(&f, k.Text)
+	}
+	return m, nil
+}
+
+// fieldText is the text of the field the cursor is on.
+func (m Model) fieldText(f *form) string {
+	if t := f.text(f.at); t != nil {
+		return *t
+	}
+	return ""
+}
+
+// typeField is text typed or pasted on the field the cursor is on, cut at
+// maxField.
+func (m Model) typeField(f *form, text string) {
+	t := f.text(f.at)
+	switch {
+	case t == nil:
+	case f.at == fieldWhere:
+		m.typeWhere(f, text)
 	default:
-		if k.Text == "" || len([]rune(*t+k.Text)) > maxField {
-			return m, nil
-		}
-		*t += k.Text
+		*t = cutField(*t + text)
+		f.named = f.named || f.at == fieldName
+	}
+}
+
+// eraseField is ⌫: on a pick in where, back to what was typed before it.
+func (m Model) eraseField(f *form) {
+	t := f.text(f.at)
+	switch {
+	case t == nil:
+		return
+	case f.at == fieldWhere && f.picked:
+		f.where, f.picked, f.query = f.query, false, ""
+	default:
+		*t = trimLast(*t)
 	}
 	switch f.at {
 	case fieldWhere:
-		f.whereAt = -1
+		f.listOpen = true
+		m.refreshWhere(f, "")
 	case fieldName:
 		f.named = f.name != ""
 	}
+}
+
+// formPaste is a paste on the open form: its text goes in the field the
+// cursor is on as typed, line breaks dropped and the ends trimmed.
+func (m Model) formPaste(text string) (tea.Model, tea.Cmd) {
+	f := *m.form
+	m.form = &f
+	text = strings.TrimSpace(strings.NewReplacer("\r\n", "", "\n", "", "\r", "").Replace(text))
+	if text == "" || f.text(f.at) == nil {
+		return m, nil
+	}
+	f.err = ""
+	m.typeField(&f, text)
 	return m, nil
 }
 
@@ -381,7 +393,11 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 		m = m.pairActed(action{rec: "rename:" + f.pane})
 	} else {
 		if strings.TrimSpace(f.where) == "" {
-			f.err, f.at = "where does it start? a path, or "+m.keys.form.Left.Help().Key+" for a repository", fieldWhere
+			f.err = "where does it start? type a path"
+			if len(m.wrepos) > 0 {
+				f.err = "where does it start? a path, or " + m.keys.form.Left.Help().Key + " for a repository"
+			}
+			m.openWhere(&f)
 			return m, nil
 		}
 		n := proto.NewSession{Where: strings.TrimSpace(f.where), Branch: strings.TrimSpace(f.branch), Agent: f.agent, First: strings.TrimSpace(f.first)}
@@ -501,9 +517,17 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 		title = st.accent.Bold(true).Render("Rename " + f.who)
 		field(fieldName, f.name, "")
 		add("", "", st.faint.Render(fit("tmux and the agent take this name", iw)))
+	case f.whereList():
+		field(fieldWhere, f.where, "a repo, a path, or a git URL")
+		add("", "")
+		rows, keys := m.whereLines(iw)
+		for i, l := range rows {
+			add(keys[i], l)
+		}
+		add("", "", m.thenLine(iw))
 	default:
 		hint := "a path"
-		if len(m.foundPaths) > 0 || len(m.allWorktreeRows()) > 0 {
+		if len(m.wrepos) > 0 {
 			hint = "a path, or " + m.keys.form.Left.Help().Key + " for a repository"
 		}
 		field(fieldWhere, f.where, hint)
@@ -528,7 +552,7 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 			add("", st.warn.Render("! ")+st.text.Render(l))
 		}
 	}
-	box, spans = boxFrame(st.hair, title, lines, m.formFoot(), bw)
+	box, spans = boxFrame(st.hair, title, lines, m.formFoot(bw), bw)
 	press = append(press, "") // the box's bottom edge: its footer keys are spans
 	return box, press, spans, agentsAt, agents
 }
@@ -563,10 +587,12 @@ func (m Model) agentChips(iw int) (string, []span) {
 	return line, spans
 }
 
-func (m Model) formFoot() []footPart {
+func (m Model) formFoot(bw int) []footPart {
 	st := m.st
 	fk, sep := m.keys.form, " ─ "
 	switch {
+	case m.form.whereList():
+		return m.listFoot(bw)
 	case m.form.pick:
 		return []footPart{st.footFor(fk.Enter, "find", sep), st.footFor(fk.Close, "", sep)}
 	case m.form.rename:
@@ -610,9 +636,18 @@ func (m Model) tapForm(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	var id int
-	if _, err := fmt.Sscanf(sc.peekRows[i], "field:%d", &id); err == nil {
-		f.at = id
+	if _, err := fmt.Sscanf(sc.peekRows[i], "row:%d", &id); err == nil && f.whereList() && id < len(f.rows) && f.rows[id].kind != rowLabel {
 		m.form = &f
+		if f.sel = id; !f.pickWhere() {
+			f.top = scrollTop(f.top, f.sel, m.listHeight(), len(f.rows))
+		}
+		return m, nil
+	}
+	if _, err := fmt.Sscanf(sc.peekRows[i], "field:%d", &id); err == nil {
+		m.form = &f
+		if f.at = id; id == fieldWhere && !f.listOpen {
+			m.openWhere(&f)
+		}
 	}
 	return m, nil
 }

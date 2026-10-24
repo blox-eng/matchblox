@@ -69,12 +69,20 @@ The key line shows `RUN` and the exact command.
 
 A tap on a line puts the cursor there, and a tap on an agent picks it.
 
+On where, New session lists your repos, each with its worktrees under it:
+SUGGESTED first (a repo with a live session, then where matchblox last
+started one, then the repo's last activity), then ALL by name. Typing
+filters the list; a paste goes in as typed. A tap on a row picks it. The
+other lines show again when you pick a row or leave where.
+
 | Key | What it does |
 |---|---|
-| `Tab` or `↓` | Goes to the next line. `Shift+Tab` or `↑` goes back. |
-| `←` or `→` | On where, steps through the Git tab's repositories and worktrees. On agent, picks the agent before or after; Switch agent leaves out the one the session runs. |
-| `Enter` | Starts the session, renames it, or shows the switch's plan. A refusal stays in the form, with why. |
-| `Esc` | Closes the form. Nothing is sent. |
+| `Tab` | Goes to the next line. `Shift+Tab` goes back. On where with the list open, picks the selected row first; `Shift+Tab` stays. |
+| `↓` or `↑` | On where with the list open, moves through the rows, repos and worktrees. On every other line, goes to the next or the previous line. |
+| `←` or `→` | On where, selects the previous or the next repo of the list and shows its path; the list keeps what you typed. On agent, picks the agent before or after; Switch agent leaves out the one the session runs. |
+| `Enter` | On where with the list open, picks the selected row and goes to branch. With no repo that matches, takes what you typed as a path. Else starts the session, renames it, or shows the switch's plan. A refusal stays in the form, with why. |
+| `Backspace` | Erases. On a path that `←` or `→` selected, goes back to what you typed. |
+| `Esc` | On where with the list open, closes the list and keeps the text as a path. Else closes the form. Nothing is sent. |
 
 ## The answer peek
 

@@ -23,14 +23,18 @@ func TestNOpensNewSessionWhereTheSessionWorks(t *testing.T) {
 	m, f := loadedWith(t, 100, lifeState())
 	next, _ := key(m, "N")
 	fm := next.(Model).form
-	if fm == nil || fm.rename || fm.where != "/src/api" || fm.agent != "claude" || fm.at != fieldWhere {
+	if fm == nil || fm.rename || fm.where != "" || !fm.listOpen || next.(Model).whereSelected().path() != "/src/api" || fm.agent != "claude" || fm.at != fieldWhere {
+		t.Fatalf("form %+v", fm)
+	}
+	// tab picks the session's directory and goes to branch.
+	next, _ = key(next, "tab")
+	if fm := next.(Model).form; fm.where != "/src/api" || fm.at != fieldBranch {
 		t.Fatalf("form %+v", fm)
 	}
 	if s := screen(next); !strings.Contains(s, "New session") || !strings.Contains(s, "blank: no new worktree") || !strings.Contains(s, "● claude") {
 		t.Fatalf("the form:\n%s", s)
 	}
 	// branch, then the agent (→ picks codex), then the first message.
-	next, _ = key(next, "tab")
 	next = typeText(next, "feat/88")
 	if fm := next.(Model).form; fm.autoName() != "api-feat-88" || !strings.Contains(screen(next), "api-feat-88") {
 		t.Fatalf("name %q:\n%s", fm.autoName(), screen(next))
@@ -72,6 +76,7 @@ func TestNewSessionEscSendsNothing(t *testing.T) {
 	m, f := loadedWith(t, 44, lifeState())
 	next, _ := key(m, "N")
 	next = typeText(next, "x")
+	next, _ = key(next, "esc") // closes where's list
 	next, _ = key(next, "esc")
 	if next.(Model).form != nil || len(f.acts()) != 0 {
 		t.Fatal("esc sent or kept the form")
@@ -119,6 +124,7 @@ func TestRRenamesTheSession(t *testing.T) {
 func TestATapPicksAnAgentAndAField(t *testing.T) {
 	m, _ := loadedWith(t, 44, lifeState())
 	next, _ := key(m, "N")
+	next, _ = key(next, "tab") // picks where: the other fields show
 	sc := next.(Model).draw(44)
 	if len(sc.formAgents) != 2 {
 		t.Fatalf("agent spans %+v", sc.formAgents)
@@ -284,7 +290,7 @@ func TestFormSpaceIsTextOnWhereAndPicksOnAgent(t *testing.T) {
 	m, _ := loadedWith(t, 100, lifeState())
 	next, _ := key(m, "N")
 	next, _ = key(next, "space")
-	if fm := next.(Model).form; fm.at != fieldWhere || fm.where != "/src/api " || fm.whereAt != -1 {
+	if fm := next.(Model).form; fm.at != fieldWhere || fm.where != " " || fm.picked {
 		t.Fatalf("space on where: %+v", fm)
 	}
 	for range 3 { // branch, name, agent

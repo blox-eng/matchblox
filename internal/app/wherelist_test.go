@@ -1,0 +1,318 @@
+package app
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+
+	"github.com/blox-eng/matchblox/internal/gitscan"
+	"github.com/blox-eng/matchblox/internal/proto"
+)
+
+// whereState is 52 repos found on the host (/src/r00 to /src/r48, and
+// ~/dev/matchblox, /src/matchblox-site, /src/tools/mbxctl), two of them
+// used by matchblox: matchblox last.
+func whereState(t *testing.T) proto.State {
+	t.Helper()
+	st := lifeState()
+	t0 := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	var repos []proto.Checkout
+	for i := range 49 {
+		repos = append(repos, proto.Checkout{Path: fmt.Sprintf("/src/r%02d", i), Branch: "main", Active: t0.Add(time.Duration(i) * time.Hour)})
+	}
+	repos = append(repos,
+		proto.Checkout{Path: "/dev/matchblox", Branch: "main", Active: t0},
+		proto.Checkout{Path: "/src/matchblox-site", Branch: "main", Active: t0.Add(-time.Hour)},
+		proto.Checkout{Path: "/src/tools/mbxctl", Branch: "dev", Active: t0.Add(-2 * time.Hour)})
+	st.Found = &proto.Found{Consent: "yes", Repos: repos}
+	st.Used = &proto.Used{Repos: []proto.Use{{Path: "/dev/matchblox", At: t0.Add(30 * 24 * time.Hour)}, {Path: "/src/r10", At: t0.Add(20 * 24 * time.Hour)}}}
+	return st
+}
+
+func selectable(rows []whereRow) []whereRow {
+	var out []whereRow
+	for _, r := range rows {
+		if r.kind != rowLabel {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func TestFuzzy(t *testing.T) {
+	if s, _ := fuzzy("mbx", "~/dev/matchblox"); s < 0 {
+		t.Fatal("mbx misses matchblox")
+	}
+	if s, _ := fuzzy("xyz", "~/dev/matchblox"); s >= 0 {
+		t.Fatal("xyz matches")
+	}
+	if s, hits := fuzzy("MBX", "matchblox"); s < 0 || fmt.Sprint(hits) != "[0 5 8]" {
+		t.Fatalf("MBX on matchblox: %d %v", s, hits)
+	}
+	a, _ := fuzzy("api", "shop-api")
+	b, _ := fuzzy("api", "a-pretty-index")
+	if a <= b {
+		t.Fatalf("a word start scores %d, scattered letters %d", a, b)
+	}
+}
+
+func TestWhereRowsSuggestedFirst(t *testing.T) {
+	st := whereState(t)
+	st.Sessions[0].Cwd = "/src/r30/web"
+	m, _ := loadedWith(t, 100, st)
+	rows := m.whereRows("")
+	if rows[0].kind != rowLabel || rows[0].text != "SUGGESTED" {
+		t.Fatalf("first row %+v", rows[0])
+	}
+	want := []string{"/src/r30", "/dev/matchblox", "/src/r10", "/src/r48", "/src/r47"}
+	for i, p := range want {
+		if r := rows[1+i]; r.kind != rowRepo || r.repo.path != p {
+			t.Fatalf("suggested %d is %+v, want %s", i, r, p)
+		}
+	}
+	if rows[1].repo.live != 1 {
+		t.Fatalf("r30 has %d live", rows[1].repo.live)
+	}
+	if r := rows[6]; r.kind != rowLabel || r.text != "ALL · 47 · by name" {
+		t.Fatalf("row 6 %+v", r)
+	}
+	seen := map[string]bool{}
+	for _, r := range rows {
+		if r.kind == rowRepo {
+			if seen[r.repo.path] {
+				t.Fatalf("%s twice", r.repo.path)
+			}
+			seen[r.repo.path] = true
+		}
+	}
+	if len(seen) != 52 || rows[7].repo.name != "matchblox-site" {
+		t.Fatalf("%d repos, the first of ALL %+v", len(seen), rows[7])
+	}
+}
+
+func TestWhereRowsWorktreesUnderTheirRepo(t *testing.T) {
+	st := lifeState()
+	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{
+		{Path: "/dev/.wt/matchblox-185", Main: "/dev/matchblox", Branch: "fix/185"},
+		{Path: "/dev/matchblox", Branch: "main"},
+		{Path: "/dev/.wt/matchblox-174", Main: "/dev/matchblox", Branch: "feat/174"},
+	}}
+	m, _ := loadedWith(t, 100, st)
+	rows := selectable(m.whereRows(""))
+	if len(rows) != 3 {
+		t.Fatalf("rows %+v", rows)
+	}
+	if rows[0].kind != rowRepo || rows[0].repo.path != "/dev/matchblox" ||
+		rows[1].kind != rowTree || rows[1].tree != "├─ " || rows[1].repo.branch != "feat/174" ||
+		rows[2].kind != rowTree || rows[2].tree != "╰─ " || rows[2].repo.branch != "fix/185" {
+		t.Fatalf("rows %+v", rows)
+	}
+	// The Git tab's worktrees go under their repo too, each path once.
+	st.Git = &proto.GitReport{Repos: []gitscan.Repo{{Path: "/dev/matchblox", Worktrees: []proto.Worktree{
+		{Path: "/dev/matchblox", Branch: "main"}, {Path: "/dev/.wt/matchblox-174", Branch: "feat/174", PR: &proto.PR{Number: 201}}}}}}
+	m, _ = loadedWith(t, 100, st)
+	rows = selectable(m.whereRows(""))
+	if len(rows) != 3 || rows[1].repo.pr != 201 {
+		t.Fatalf("rows %+v", rows)
+	}
+}
+
+func TestWhereRowsFilter(t *testing.T) {
+	m, _ := loadedWith(t, 100, whereState(t))
+	rows := m.whereRows("mbx")
+	if len(rows) != 3 || rows[0].repo.name != "matchblox" {
+		t.Fatalf("rows %+v", rows)
+	}
+	for _, r := range rows {
+		if r.kind != rowRepo {
+			t.Fatalf("a %d row: %+v", r.kind, r)
+		}
+	}
+	next, _ := key(m, "N")
+	next = typeText(next, "mbx")
+	if s := screen(next); !strings.Contains(s, "3 of 52") || strings.Contains(s, "SUGGESTED") {
+		t.Fatalf("the list:\n%s", s)
+	}
+}
+
+func TestWhereRowsNoMatch(t *testing.T) {
+	m, _ := loadedWith(t, 100, whereState(t))
+	rows := m.whereRows("zzz")
+	if len(rows) != 1 || rows[0].kind != rowNone || rows[0].text != `no repo matches "zzz" · ⏎ uses it as a path` {
+		t.Fatalf("rows %+v", rows)
+	}
+}
+
+func TestNOpensTheListOnTheSessionsRepo(t *testing.T) {
+	st := whereState(t)
+	st.Found.Repos = append(st.Found.Repos, proto.Checkout{Path: "/src/api", Branch: "main"})
+	m, _ := loadedWith(t, 100, st)
+	next, _ := key(m, "N")
+	f := next.(Model).form
+	if f.where != "" || !f.listOpen || next.(Model).whereSelected().path() != "/src/api" {
+		t.Fatalf("form %+v, selected %+v", f, next.(Model).whereSelected())
+	}
+	if s := screen(next); !strings.Contains(s, "SUGGESTED") || !strings.Contains(s, "then  branch · name · agent claude · first") || strings.Contains(s, "blank: no new worktree") {
+		t.Fatalf("the list:\n%s", s)
+	}
+}
+
+func TestWhereEnterPicksAndMovesOn(t *testing.T) {
+	m, _ := loadedWith(t, 100, whereState(t))
+	next, _ := key(m, "N")
+	rows := selectable(next.(Model).whereRows(""))
+	next, _ = key(next, "down")
+	next, _ = key(next, "enter")
+	f := next.(Model).form
+	if f.where != rows[1].path() || f.listOpen || f.at != fieldBranch {
+		t.Fatalf("form %+v, want %s", f, rows[1].path())
+	}
+	if s := screen(next); !strings.Contains(s, "blank: no new worktree") || strings.Contains(s, "SUGGESTED") {
+		t.Fatalf("the form:\n%s", s)
+	}
+	// Back on where, the list opens again.
+	next, _ = next.Update(keyPress("shift+tab"))
+	if f := next.(Model).form; f.at != fieldWhere || !f.listOpen {
+		t.Fatalf("form %+v", f)
+	}
+}
+
+func TestWhereArrowsStillStepRepos(t *testing.T) {
+	st := lifeState()
+	st.Sessions[0].Cwd = ""
+	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{
+		{Path: "/src/api", Branch: "main"},
+		{Path: "/src/.wt/api-1", Main: "/src/api", Branch: "feat/1"},
+		{Path: "/src/notes", Branch: "main"},
+		{Path: "/src/shop-api", Branch: "main"},
+	}}
+	m, _ := loadedWith(t, 100, st)
+	next, _ := key(m, "N")
+	next, _ = next.Update(keyPress("right"))
+	next, _ = next.Update(keyPress("right"))
+	f := next.(Model).form
+	if f.where != "/src/shop-api" || !f.picked {
+		t.Fatalf("form %+v", f)
+	}
+	if s := screen(next); !strings.Contains(s, "SUGGESTED") || !strings.Contains(s, "notes") {
+		t.Fatalf("the list is filtered by the pick:\n%s", s)
+	}
+	// Typing drops the pick and filters by what is typed.
+	next = typeText(next, "no")
+	if f := next.(Model).form; f.where != "no" || f.picked {
+		t.Fatalf("form %+v", f)
+	}
+}
+
+func TestWhereEscKeepsTheText(t *testing.T) {
+	m, f := loadedWith(t, 100, whereState(t))
+	next, _ := key(m, "N")
+	next = typeText(next, "/tmp/x")
+	next, _ = key(next, "esc")
+	if fm := next.(Model).form; fm == nil || fm.listOpen || fm.where != "/tmp/x" {
+		t.Fatalf("form %+v", fm)
+	}
+	next, _ = key(next, "esc")
+	if next.(Model).form != nil || len(f.acts()) != 0 {
+		t.Fatal("the second esc kept the form or sent")
+	}
+}
+
+func TestWhereListFitsAPhone(t *testing.T) {
+	st := whereState(t)
+	st.Found.Repos = append(st.Found.Repos,
+		proto.Checkout{Path: "/src/a-very-long-folder-name/deeper/still/shop-api", Branch: "feat/a-long-branch-name"},
+		proto.Checkout{Path: "/src/.wt/shop-api-2", Main: "/src/a-very-long-folder-name/deeper/still/shop-api", Branch: "fix/2"})
+	st.Used.Repos = append(st.Used.Repos, proto.Use{Path: "/src/a-very-long-folder-name/deeper/still/shop-api", At: st.Used.Repos[0].At})
+	for _, w := range []int{44, 100} {
+		m, _ := loadedWith(t, w, st)
+		next, _ := key(m, "N")
+		out := next.(Model).render()
+		for i, l := range strings.Split(out, "\n") {
+			if lw := lipgloss.Width(l); lw > w {
+				t.Fatalf("%d columns: line %d is %d wide: %q", w, i, lw, l)
+			}
+		}
+		s := screen(next)
+		for _, name := range []string{"matchblox", "shop-api", "fix/2", "r10"} {
+			if !strings.Contains(s, name) {
+				t.Fatalf("%d columns: %s is cut:\n%s", w, name, s)
+			}
+		}
+	}
+}
+
+func TestPasteFillsTheFocusedField(t *testing.T) {
+	m, _ := loadedWith(t, 100, whereState(t))
+	next, _ := key(m, "N")
+	next, _ = next.Update(tea.PasteMsg{Content: " /src/x\n"})
+	f := next.(Model).form
+	if f.where != "/src/x" || f.picked || !f.listOpen {
+		t.Fatalf("form %+v", f)
+	}
+	if s := screen(next); !strings.Contains(s, `no repo matches "/src/x"`) {
+		t.Fatalf("the list is not filtered:\n%s", s)
+	}
+	for range 4 { // branch, name, agent, first
+		next, _ = key(next, "tab")
+	}
+	next = typeText(next, "fix ")
+	next, _ = next.Update(tea.PasteMsg{Content: "the\r\nbug "})
+	if f := next.(Model).form; f.at != fieldFirst || f.first != "fix thebug" {
+		t.Fatalf("form %+v", f)
+	}
+}
+
+func TestWhereListWithNoRepos(t *testing.T) {
+	st := lifeState()
+	st.Sessions[0].Cwd = ""
+	st.Found = &proto.Found{}
+	m, _ := loadedWith(t, 100, st)
+	m.scanAsk = nil
+	next, _ := key(m, "N")
+	s := screen(next)
+	if !strings.Contains(s, "no repos known yet · type a path, or paste a git URL") || !strings.Contains(s, m.keys.scan.Find.Help().Key+" finds your repos") {
+		t.Fatalf("the list:\n%s", s)
+	}
+	st.Found = &proto.Found{Consent: "no"}
+	m, _ = loadedWith(t, 100, st)
+	next, _ = key(m, "N")
+	if s := screen(next); !strings.Contains(s, "no repos known yet") || strings.Contains(s, "finds your repos") {
+		t.Fatalf("the list:\n%s", s)
+	}
+}
+
+func TestNewSessionSendsThePickedPath(t *testing.T) {
+	m, f := loadedWith(t, 100, whereState(t))
+	next, _ := key(m, "N")
+	next = typeText(next, "mbx")
+	next, _ = key(next, "enter") // picks matchblox
+	next, cmd := key(next, "enter")
+	cmd()
+	var n proto.NewSession
+	if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &n) != nil || n.Where != "/dev/matchblox" {
+		t.Fatalf("sent %+v", f.acts())
+	}
+}
+
+// TestDrawWhereList prints the open list, for a look: go test -run
+// TestDrawWhereList -v.
+func TestDrawWhereList(t *testing.T) {
+	st := whereState(t)
+	st.Found.Repos = append(st.Found.Repos,
+		proto.Checkout{Path: "/dev/.wt/matchblox-174", Main: "/dev/matchblox", Branch: "feat/174"},
+		proto.Checkout{Path: "/dev/.wt/matchblox-185", Main: "/dev/matchblox", Branch: "fix/185"})
+	st.Sessions[0].Cwd = "/dev/.wt/matchblox-174"
+	for _, w := range []int{100, 44} {
+		m, _ := loadedWith(t, w, st)
+		next, _ := key(m, "N")
+		t.Logf("%d columns:\n%s", w, screen(next))
+		next = typeText(next, "mbx")
+		t.Logf("%d columns, mbx:\n%s", w, screen(next))
+	}
+}

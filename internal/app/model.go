@@ -322,11 +322,10 @@ type Model struct {
 	scanAsk      *scanAsk
 	scanAskUntil time.Time
 	scanUp       bool
-	// foundPaths are the checkouts found on the host, the most recently
-	// used first, less the Git tab's paths (foundWt): built when either
-	// changes, not at each draw.
-	foundPaths []string
-	foundWt    []string
+	// used is where matchblox started sessions; wrepos the known repos,
+	// for N's where list: built at each snapshot, not at each draw.
+	used   proto.Used
+	wrepos []whereRepo
 }
 
 func New(opt Options) Model {
@@ -501,7 +500,16 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.scanAsk = &scanAsk{}
 			}
 		}
-		m = m.rebuildFoundPaths(st.Found != nil)
+		if st.Used != nil {
+			m.used = *st.Used
+		}
+		m.wrepos = m.whereRepos()
+		if m.form != nil && m.form.whereList() {
+			f := *m.form
+			m.form = &f
+			sel := m.whereSelected().path()
+			m.refreshWhere(&f, sel)
+		}
 		if m.recRun.rec != "" && m.recRun.act == "" && !m.isRec(m.recRun.rec) {
 			m.recRun = recRun{} // its rec is gone: a later one with the same id starts fresh
 		}
@@ -678,6 +686,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		toast := m.say("ran: " + msg.cmd)
 		return m, toast
+	case tea.PasteMsg:
+		// Only the form takes a paste: in its field, as typed.
+		if m.focus(tea.KeyPressMsg{}) == layerForm {
+			return m.formPaste(msg.Content)
+		}
+		return m, nil
 	case tea.MouseClickMsg:
 		m, touch := m.touchRest()
 		next, cmd := m.tap(msg.Mouse())
