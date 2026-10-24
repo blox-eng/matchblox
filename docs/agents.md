@@ -85,7 +85,7 @@ run's, a thread of the Codex app or an editor, nor a subagent's.
 show `—` and "not measured", and have no id:
 
 - two Codex sessions in one directory;
-- a session after its `/new`;
+- a session after its `/new` or `/resume`;
 - a session that had no turn yet when another Codex session started in
   its directory, one that has exited since;
 - a session whose first turn came while matchblox was not running;
