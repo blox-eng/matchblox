@@ -609,6 +609,9 @@ func cutField(s string) string {
 // whereKey is a key on where with the list open; false: not the list's.
 func (m Model) whereKey(f *form, k tea.KeyPressMsg) bool {
 	fk := m.keys.form
+	if bkey.Matches(k, fk.Close, fk.Up, fk.Down) {
+		f.pickOnPlan = false // a moved selection waits for a new ⏎
+	}
 	switch {
 	case bkey.Matches(k, fk.Close):
 		f.listOpen = false
@@ -631,6 +634,7 @@ func (m Model) whereKey(f *form, k tea.KeyPressMsg) bool {
 // stepRepo is ← → on where: the previous or next repo of the list, its
 // path in where; the list stays filtered by what was typed.
 func (m Model) stepRepo(f *form, right bool) {
+	f.pickOnPlan = false
 	if !f.listOpen {
 		m.openWhere(f)
 	}

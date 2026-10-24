@@ -329,6 +329,11 @@ type Model struct {
 	// clones are the clones the service runs and the ones that ended in
 	// the last minute (#176).
 	clones []proto.Clone
+	// stopAfter are the clone:starts esc came before: each clone stops
+	// when the service takes its start. stopQuiet are the clone:stops
+	// whose answer says nothing.
+	stopAfter []cloneStop
+	stopQuiet []string
 }
 
 func New(opt Options) Model {

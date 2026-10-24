@@ -320,7 +320,7 @@ func runAll(cmd tea.Cmd) {
 	var msg tea.Msg
 	select {
 	case msg = <-got:
-	case <-time.After(time.Second):
+	case <-time.After(200 * time.Millisecond):
 		return
 	}
 	if b, ok := msg.(tea.BatchMsg); ok {
@@ -429,7 +429,7 @@ func cloning(t *testing.T, w int) (tea.Model, *fakeConn) {
 	if cmd != nil {
 		cmd()
 	}
-	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.cloneAct}))
+	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.startAct}))
 	return next, f
 }
 
@@ -618,8 +618,11 @@ func TestCloneRetryIgnoresTheOldFailure(t *testing.T) {
 	if fm := next.(Model).form; fm.cloning != home+"/src/r" || strings.Contains(screen(next), "! no network") {
 		t.Fatalf("the old failure was taken: %+v", fm)
 	}
-	next = pressRun(next, "esc")
-	if acts := f.acts(); len(acts) != 5 || acts[4] != (proto.Act{RecID: "clone:stop", Text: home + "/src/r"}) {
+	start := next.(Model).form.startAct
+	next = pressRun(next, "esc") // the stop waits for the start (R14)
+	next, cmd := next.Update(resultMsg(proto.Result{ActID: start}))
+	runAll(cmd)
+	if acts := f.acts(); len(acts) != 5 || acts[4] != (proto.Act{RecID: "clone:stop", Text: home + "/src/r"}) || next.(Model).form.cloning != "" {
 		t.Fatalf("sent %+v", acts)
 	}
 }
@@ -627,7 +630,7 @@ func TestCloneRetryIgnoresTheOldFailure(t *testing.T) {
 func TestRefusedStartAsksAFreshPlan(t *testing.T) {
 	next, f := planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
 	next = pressRun(next, "enter")
-	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.cloneAct, Err: "~/src/r is there already"}))
+	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.startAct, Err: "~/src/r is there already"}))
 	if fm := next.(Model).form; fm.cloning != "" || !strings.Contains(screen(next), "! ~/src/r is there already") {
 		t.Fatalf("form %+v:\n%s", fm, screen(next))
 	}
@@ -689,5 +692,114 @@ func TestCloneGoneFromTheSnapshot(t *testing.T) {
 	next, _ = next.Update(cloneState(t))
 	if fm := next.(Model).form; fm.cloning != "" || !strings.Contains(screen(next), "! the clone of o/r stopped before it was done") {
 		t.Fatalf("form %+v:\n%s", fm, screen(next))
+	}
+}
+
+// at sets the console's clock.
+func at(m tea.Model, t time.Time) tea.Model {
+	mm := m.(Model)
+	mm.opt.Now = func() time.Time { return t }
+	return mm
+}
+
+// A snapshot built before the service took the start may come after its
+// yes: an empty one does not say the clone stopped.
+func TestStaleEmptySnapshotAfterTheStart(t *testing.T) {
+	next, _ := cloning(t, 100)
+	next, _ = next.Update(cloneState(t))
+	if fm := next.(Model).form; fm.cloning != home+"/src/r" || fm.err != "" {
+		t.Fatalf("a stale snapshot stopped the clone: %+v", fm)
+	}
+	next, _ = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: 10}))
+	next, _ = next.Update(cloneState(t))
+	if fm := next.(Model).form; fm.cloning != "" || !strings.Contains(fm.err, "stopped before it was done") {
+		t.Fatalf("form %+v", fm)
+	}
+}
+
+// A retry is not failed by the last try's failure, listed for a minute,
+// even in a snapshot that comes after the start's yes.
+func TestStaleOldErrAfterTheStart(t *testing.T) {
+	t0 := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	next, _ := cloning(t, 100)
+	old := proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}
+	next, _ = next.Update(cloneState(t, old))
+	next = pressRun(next, "enter") // a fresh plan
+	next, _ = planResult(next, proto.ClonePlan{Target: home + "/src/r"})
+	next = at(pressRun(next, "enter"), t0)
+	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.startAct}))
+	for _, st := range []stateMsg{cloneState(t, old), cloneState(t), cloneState(t, old)} {
+		next, _ = next.Update(st)
+	}
+	if fm := next.(Model).form; fm.cloning != home+"/src/r" || fm.err != "" {
+		t.Fatalf("the old failure was taken: %+v", fm)
+	}
+	// Past the minute the old one is gone: the failure is this clone's.
+	next = at(next, t0.Add(62*time.Second))
+	next, _ = next.Update(cloneState(t, old))
+	if fm := next.(Model).form; fm.cloning != "" || !strings.Contains(fm.err, "no network") {
+		t.Fatalf("form %+v", fm)
+	}
+	// Once seen running, a failure counts at once.
+	next, _ = cloning(t, 100)
+	next, _ = next.Update(cloneState(t, old)) // no earlier try: this one's
+	if fm := next.(Model).form; fm.cloning != "" || !strings.Contains(fm.err, "no network") {
+		t.Fatalf("form %+v", fm)
+	}
+}
+
+// esc while the start is on its way stops the clone when the start lands.
+func TestEscWhileTheStartIsOnItsWay(t *testing.T) {
+	next, f := planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter")
+	start := next.(Model).form.startAct
+	next = pressRun(next, "esc")
+	if fm := next.(Model).form; fm == nil || fm.cloning != "" || len(f.acts()) != 2 {
+		t.Fatalf("form %+v sent %+v", fm, f.acts())
+	}
+	next, cmd := next.Update(resultMsg(proto.Result{ActID: start}))
+	runAll(cmd)
+	acts := f.acts()
+	if len(acts) != 3 || acts[2] != (proto.Act{RecID: "clone:stop", Text: home + "/src/r"}) {
+		t.Fatalf("sent %+v", acts)
+	}
+	// Its refusal, the clone gone already, is no error of the form.
+	next, _ = next.Update(resultMsg(proto.Result{ActID: "a3", Err: "~/src/r is not being cloned"}))
+	if fm := next.(Model).form; fm.err != "" || strings.Contains(next.(Model).flash, "not being cloned") {
+		t.Fatalf("form %+v flash %q", fm, next.(Model).flash)
+	}
+	// esc twice closes the form: the stop goes all the same.
+	next, f = planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter")
+	start = next.(Model).form.startAct
+	next = pressRun(pressRun(next, "esc"), "esc")
+	next, cmd = next.Update(resultMsg(proto.Result{ActID: start}))
+	runAll(cmd)
+	if acts := f.acts(); next.(Model).form != nil || len(acts) != 3 || acts[2].RecID != "clone:stop" {
+		t.Fatalf("sent %+v", acts)
+	}
+	// A start refused after esc needs no stop.
+	next, f = planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter")
+	start = next.(Model).form.startAct
+	next = pressRun(next, "esc")
+	_, cmd = next.Update(resultMsg(proto.Result{ActID: start, Err: "~/src/r is there already"}))
+	runAll(cmd)
+	if acts := f.acts(); len(acts) != 2 {
+		t.Fatalf("sent %+v", acts)
+	}
+}
+
+// Moving the selection after an early ⏎ drops it: only a new ⏎ picks.
+func TestArrowsDropAnEarlyEnter(t *testing.T) {
+	for _, k := range []string{"down", "up", "left", "right"} {
+		next, f := pastedURL(t, 100)
+		next = pressRun(next, "enter")
+		next, _ = next.Update(keyPress(k))
+		next, cmd := planResult(next, proto.ClonePlan{Target: home + "/src/r"})
+		runAll(cmd)
+		if acts := f.acts(); len(acts) != 1 || next.(Model).form.cloning != "" {
+			t.Fatalf("%s: sent %+v", k, acts)
+		}
 	}
 }

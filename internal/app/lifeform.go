@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 
 	bkey "charm.land/bubbles/v2/key"
@@ -69,19 +70,35 @@ type form struct {
 	extra    string
 	// A git URL in where (#176): plan is the service's plan for planFor,
 	// planErr why there is none, planAct the clone:plan in flight.
-	// cloning is the target of the clone this form started, cloneAct its
-	// clone:start or clone:stop in flight; startWhenDone: the final ⏎ came
+	// cloning is the target of the clone this form started, startAct its
+	// clone:start while it is on its way; startWhenDone: the final ⏎ came
 	// while it ran, and the session starts as startAs when it is done.
 	plan          *proto.ClonePlan
 	planFor       string
 	planErr       string
 	planAct       string
 	cloning       string
-	cloneAct      string
+	startAct      string
 	startWhenDone bool
 	startAs       proto.NewSession
 	pickOnPlan    bool // ⏎ or tab came before the plan: done when it lands
+	// What the snapshots say of the clone counts from its first sighting
+	// (see cloneNews): seen, it was listed running; prior, a record of the
+	// same folder may be listed from an earlier try; accepted, when the
+	// service took the start; lastTry, the folder of the last start.
+	seen     bool
+	prior    bool
+	accepted time.Time
+	lastTry  string
 }
+
+// cloneStop is a clone:start whose clone stops as soon as it starts.
+type cloneStop struct{ act, target string }
+
+// cloneSettle is how long after a start every snapshot is built after it
+// and a record of an earlier try is gone: the service lists an ended
+// clone for a minute.
+const cloneSettle = 61 * time.Second
 
 const maxField = 300
 
@@ -503,7 +520,10 @@ func (m *Model) startClone(f *form, r whereRow) tea.Cmd {
 	}
 	b, _ := json.Marshal(proto.CloneStart{URL: f.plan.URL, Target: r.repo.path})
 	cmd := m.send(proto.Act{RecID: "clone:start", Text: string(b)})
-	f.cloneAct, f.cloning, f.startWhenDone, f.err = fmt.Sprintf("a%d", m.acts), r.repo.path, false, ""
+	_, listed := m.cloneFor(r.repo.path)
+	f.prior = listed || filepath.Clean(f.lastTry) == filepath.Clean(r.repo.path)
+	f.startAct, f.cloning, f.startWhenDone, f.err = fmt.Sprintf("a%d", m.acts), r.repo.path, false, ""
+	f.seen, f.accepted, f.lastTry = false, time.Time{}, r.repo.path
 	f.listOpen, f.at = false, fieldBranch
 	return cmd
 }
@@ -515,10 +535,41 @@ func (m *Model) stopClone(f *form) tea.Cmd {
 	if target == "" {
 		return nil
 	}
+	if f.startAct != "" { // a stop now could come before the start: it stops when the start lands
+		m.stopAfter = append(slices.Clone(m.stopAfter), cloneStop{f.startAct, target})
+		f.forgetClone("")
+		return nil
+	}
 	f.forgetClone("")
+	return m.sendStop(target)
+}
+
+// sendStop sends clone:stop for target; its answer says nothing: the
+// builder has moved on.
+func (m *Model) sendStop(target string) tea.Cmd {
 	cmd := m.send(proto.Act{RecID: "clone:stop", Text: target})
-	f.cloneAct = fmt.Sprintf("a%d", m.acts)
+	m.stopQuiet = append(slices.Clone(m.stopQuiet), fmt.Sprintf("a%d", m.acts))
 	return cmd
+}
+
+// stopResult takes the answer to a start that esc came before, or to a
+// stop: they live on past the form, which may have closed.
+func (m Model) stopResult(r proto.Result) (Model, tea.Cmd, bool) {
+	id := r.ActID
+	if i := slices.Index(m.stopQuiet, id); i >= 0 {
+		m.stopQuiet = slices.Delete(slices.Clone(m.stopQuiet), i, i+1)
+		return m, nil, true
+	}
+	i := slices.IndexFunc(m.stopAfter, func(s cloneStop) bool { return s.act == id })
+	if i < 0 {
+		return m, nil, false
+	}
+	target := m.stopAfter[i].target
+	m.stopAfter = slices.Delete(slices.Clone(m.stopAfter), i, i+1)
+	if r.Err != "" { // it did not start: nothing to stop
+		return m, nil, true
+	}
+	return m, m.sendStop(target), true
 }
 
 // forgetClone drops the form's clone and its plan, err the form's error:
@@ -528,19 +579,17 @@ func (f *form) forgetClone(err string) {
 		f.err = err
 	}
 	f.cloning, f.startWhenDone, f.plan, f.planFor = "", false, nil, ""
+	f.startAct, f.seen = "", false
 }
 
-// starting tells if the form's clone:start is still on its way: the
-// service may list a clone that ended in the same folder before it.
-func (f *form) starting() bool { return f.cloning != "" && f.cloneAct != "" }
-
-// formClone is the service's clone of the form; false while its start is
-// on its way.
+// formClone is the service's clone of the form, while it runs; false
+// while its start is on its way.
 func (m Model) formClone(f *form) (proto.Clone, bool) {
-	if f.starting() {
+	if f.startAct != "" {
 		return proto.Clone{}, false
 	}
-	return m.cloneFor(f.cloning)
+	c, ok := m.cloneFor(f.cloning)
+	return c, ok && c.Err == "" && !c.Done
 }
 
 // cloneRepo is the o/r the form clones.
@@ -568,18 +617,30 @@ func (m Model) cloneFor(target string) (proto.Clone, bool) {
 func (m *Model) cloneNews() tea.Cmd {
 	f := *m.form
 	m.form = &f
-	if f.starting() {
-		return nil
+	if f.startAct != "" {
+		return nil // the service may still list an earlier try in this folder
 	}
+	// Snapshots are not ordered against the start's answer: one built
+	// before the service took the start may come after it. So until the
+	// clone is seen running, a missing record says nothing, and an Err
+	// counts only when no earlier try of the folder can be listed. Done
+	// counts at once: a finished clone leaves its folder, and the service
+	// starts no clone into a folder that is there. After cloneSettle every
+	// snapshot is newer than the start and an earlier record is gone.
 	c, ok := m.cloneFor(f.cloning)
+	settled := !f.accepted.IsZero() && m.now().Sub(f.accepted) >= cloneSettle
 	switch {
+	case ok && c.Done:
+	case ok && c.Err == "":
+		f.seen = true
+		return nil
+	case !f.seen && !settled && (!ok || f.prior):
+		return nil
 	case !ok: // the service restarted, or the console was away past the minute
 		f.forgetClone("the clone of " + f.cloneRepo() + " stopped before it was done")
 		return nil
-	case c.Err != "":
+	default:
 		f.forgetClone(c.Err)
-		return nil
-	case !c.Done:
 		return nil
 	}
 	f.where, f.picked, f.query, f.planFor, f.cloning = f.cloning, true, "", "", ""
@@ -636,7 +697,10 @@ func (m Model) swapEnter(f form) (tea.Model, tea.Cmd) {
 // formResult takes the result of the form's act: it closes when the act
 // went through, and a refusal stays in it.
 func (m Model) formResult(r proto.Result) (Model, tea.Cmd, bool) {
-	if m.form != nil && r.ActID != "" && (r.ActID == m.form.planAct || r.ActID == m.form.cloneAct) {
+	if m, cmd, ok := m.stopResult(r); ok {
+		return m, cmd, true
+	}
+	if m.form != nil && r.ActID != "" && (r.ActID == m.form.planAct || r.ActID == m.form.startAct) {
 		m, cmd := m.cloneResult(r)
 		return m, cmd, true
 	}
@@ -679,10 +743,13 @@ func (m Model) formResult(r proto.Result) (Model, tea.Cmd, bool) {
 func (m Model) cloneResult(r proto.Result) (Model, tea.Cmd) {
 	f := *m.form
 	m.form = &f
-	if r.ActID != f.planAct {
-		f.cloneAct = ""
+	switch id := r.ActID; {
+	case id == f.startAct:
+		f.startAct = ""
 		if r.Err != "" {
 			f.forgetClone(r.Err)
+		} else {
+			f.accepted = m.now()
 		}
 		return m, nil
 	}
