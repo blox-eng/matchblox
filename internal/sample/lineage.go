@@ -132,14 +132,12 @@ func childName(agent string, argv []string) string {
 	return agent
 }
 
-// linkChildren keeps the children whose line reaches a session. That
-// session works while they do: it reads busy, and an idle one reads
-// StatusAgents, as a session working through subagents does. The children
-// are sorted by parent, then start.
-func linkChildren(sessions, children []Session, rules Rules) []Session {
-	top := map[ProcRef]int{}
-	for i, x := range sessions {
-		top[ProcRef{x.PID, x.Start}] = i
+// linkChildren keeps the children whose line reaches a session, sorted by
+// parent, then start. A session reads as it would without them.
+func linkChildren(sessions, children []Session) []Session {
+	top := map[ProcRef]bool{}
+	for _, x := range sessions {
+		top[ProcRef{x.PID, x.Start}] = true
 	}
 	up := map[ProcRef]ProcRef{}
 	for _, c := range children {
@@ -149,14 +147,7 @@ func linkChildren(sessions, children []Session, rules Rules) []Session {
 	for _, c := range children {
 		at := *c.Parent
 		for hops := 0; hops < 64; hops++ {
-			if i, ok := top[at]; ok {
-				if root := &sessions[i]; !root.Busy {
-					root.Busy = true
-					if root.Status == "idle" {
-						root.Status = StatusAgents
-					}
-					root.Do, root.Why = rules.suggest(*root)
-				}
+			if top[at] {
 				kept = append(kept, c)
 				break
 			}

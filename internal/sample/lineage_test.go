@@ -62,24 +62,50 @@ func TestABatchAgentUnderASessionIsItsChild(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("pane %%1 has %d sessions, want 1", n)
 	}
-	// The fixture's claude on %1 is busy: a child leaves that as it is.
-	if s, _ := sessionOf(snap, 200); !s.Busy || s.Status != "busy" {
-		t.Fatalf("the busy parent reads %q", s.Status)
-	}
 }
 
-// TestARestingParentWithAWorkingChildReadsAgents: pane %2's claude rests
-// in the fixture; a child that works makes it read as working.
-func TestARestingParentWithAWorkingChildReadsAgents(t *testing.T) {
-	root := copyFixture(t)
-	addProcAt(t, root, 320, 310, "bash", []string{"bash"}, startedAgo(root, 10), 0)
-	addProcAt(t, root, 321, 320, "codex", []string{"codex", "exec", "fix"}, startedAgo(root, 10), 0, "TMUX_PANE=%2")
-	snap := lineageSample(root)
-	if _, ok := childOf(snap, 321); !ok {
-		t.Fatalf("children = %+v, want 321", snap.Children)
+// TestAChildLeavesItsParentAsItIs: pane %2's claude rests in the fixture
+// and %8's Codex, read from its pane, waits at an approval; each reads the
+// same with a working child as without it.
+func TestAChildLeavesItsParentAsItIs(t *testing.T) {
+	type state struct {
+		Busy, Asks, Permits bool
+		Status, Do, Why     string
 	}
-	if s, _ := sessionOf(snap, 310); !s.Busy || s.Status != StatusAgents {
-		t.Fatalf("the parent reads %q, want %q while its child works", s.Status, StatusAgents)
+	of := func(s Session) state { return state{s.Busy, s.Asks, s.Permits, s.Status, s.Do, s.Why} }
+	approval := "  Would you like to run the following command?\n\n  $ go test ./...\n\n› 1. Yes, proceed (y)\n  2. No (esc)\n\n  Press enter to confirm or esc to cancel\n"
+	sample := func(withChildren bool) (claude, codex state, children int) {
+		root := copyFixture(t)
+		addProcAt(t, root, 260, 1, "codex", []string{"codex"}, startedAgo(root, 60), 34826, "TMUX_PANE=%8")
+		addPane(t, root, "%8\tcx:1.1\tcx\t260\tcodex\t/work/cx")
+		if withChildren {
+			addProcAt(t, root, 320, 310, "bash", []string{"bash"}, startedAgo(root, 10), 0)
+			addProcAt(t, root, 321, 320, "codex", []string{"codex", "exec", "fix"}, startedAgo(root, 10), 0, "TMUX_PANE=%2")
+			addProcAt(t, root, 261, 260, "bash", []string{"bash"}, startedAgo(root, 10), 0)
+			addProcAt(t, root, 262, 261, "claude", []string{"claude", "-p", "q"}, startedAgo(root, 10), 0)
+		}
+		smp := newFixtureSampler(root)
+		smp.Agents = []string{"claude", "codex"}
+		smp.Capture = func([]string) map[string]string { return map[string]string{"%8": approval} }
+		smp.Sample() // a pane has no state until it is seen twice
+		snap := smp.Sample()
+		cl, _ := sessionOf(snap, 310)
+		cx, _ := sessionOf(snap, 260)
+		return of(cl), of(cx), len(snap.Children)
+	}
+	claude, codex, n := sample(false)
+	if claude.Busy || claude.Do != "clear" || codex.Busy || codex.Status != "idle" || !codex.Permits || n != 0 {
+		t.Fatalf("alone: claude %+v, codex %+v, %d children; want both resting, claude suggested a clear, codex at an approval", claude, codex, n)
+	}
+	withClaude, withCodex, n := sample(true)
+	if n != 2 {
+		t.Fatalf("%d children, want 2", n)
+	}
+	if withClaude != claude {
+		t.Errorf("claude with a child %+v, alone %+v", withClaude, claude)
+	}
+	if withCodex != codex {
+		t.Errorf("codex with a child %+v, alone %+v", withCodex, codex)
 	}
 }
 
@@ -237,25 +263,6 @@ func TestATopLevelCodexMCPServerHasNoRow(t *testing.T) {
 	}
 }
 
-// TestAPaneParentWithAWorkingChildWorks: a Codex reads busy from its pane
-// and has no status of its own; a working child makes it busy, never
-// resting.
-func TestAPaneParentWithAWorkingChildWorks(t *testing.T) {
-	root := copyFixture(t)
-	addProcAt(t, root, 260, 1, "codex", []string{"codex"}, startedAgo(root, 60), 34826, "TMUX_PANE=%8")
-	addPane(t, root, "%8\tcx:1.1\tcx\t260\tcodex\t/work/cx")
-	alone, _ := sessionOf(lineageSample(root), 260)
-	if alone.Busy || alone.Status != "" {
-		t.Fatalf("a Codex seen once must read neither busy nor a status: %+v", alone)
-	}
-	addProcAt(t, root, 261, 260, "bash", []string{"bash"}, startedAgo(root, 10), 0)
-	addProcAt(t, root, 262, 261, "claude", []string{"claude", "-p", "q"}, startedAgo(root, 10), 0)
-	s, _ := sessionOf(lineageSample(root), 260)
-	if !s.Busy || s.Status != "" || s.Resting() {
-		t.Fatalf("parent busy=%v status=%q resting=%v, want busy, no status, not resting", s.Busy, s.Status, s.Resting())
-	}
-}
-
 func TestChildName(t *testing.T) {
 	for _, tc := range []struct {
 		agent string
@@ -273,25 +280,5 @@ func TestChildName(t *testing.T) {
 		if got := childName(tc.agent, tc.argv); got != tc.want {
 			t.Errorf("childName(%q, %q) = %q, want %q", tc.agent, tc.argv, got, tc.want)
 		}
-	}
-}
-
-// TestAParentWorkingThroughAChildIsSuggestedAsWorking: pane %2's claude
-// rests an hour holding context, so alone it is suggested a clear; with a
-// child working it gets what a busy session with StatusAgents gets, no
-// clear.
-func TestAParentWorkingThroughAChildIsSuggestedAsWorking(t *testing.T) {
-	alone, _ := sessionOf(lineageSample(copyFixture(t)), 310)
-	if alone.Do != "clear" {
-		t.Fatalf("the fixture's resting claude on %%2 is suggested %q, want clear", alone.Do)
-	}
-	root := copyFixture(t)
-	addProcAt(t, root, 320, 310, "bash", []string{"bash"}, startedAgo(root, 10), 0)
-	addProcAt(t, root, 321, 320, "codex", []string{"codex", "exec", "fix"}, startedAgo(root, 10), 0, "TMUX_PANE=%2")
-	s, _ := sessionOf(lineageSample(root), 310)
-	alone.Busy, alone.Status = true, StatusAgents
-	do, why := DefaultRules.suggest(alone)
-	if s.Do != do || s.Why != why || s.Do == "clear" {
-		t.Fatalf("suggested %q (%s), want %q (%s) as a busy session with StatusAgents", s.Do, s.Why, do, why)
 	}
 }
