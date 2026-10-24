@@ -171,7 +171,7 @@ func childrenOf(all []sample.Session, parent sample.ProcRef) []childJSON {
 	var out []childJSON
 	for _, c := range all {
 		if c.Parent != nil && *c.Parent == parent {
-			out = append(out, childJSON{c.Name, c.Agent, c.Via, c.PID, childrenOf(all, sample.ProcRef{PID: c.PID, Start: c.Start})})
+			out = append(out, childJSON{Name: c.Name, Agent: c.Agent, Via: c.Via, PID: c.PID, Children: childrenOf(all, sample.ProcRef{PID: c.PID, Start: c.Start})})
 		}
 	}
 	return out
