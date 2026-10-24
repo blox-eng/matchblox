@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Sessions shows which session started which.** A `codex exec` or
+  `claude -p` that an agent starts shows as a branch under that session,
+  instead of hidden or a stray row. The link is proven from /proc, never
+  guessed. ([#206](https://github.com/blox-eng/matchblox/issues/206))
+
 ## [0.22.0] - 2026-10-24
 
 ### Added
@@ -58,10 +65,6 @@ All notable changes to matchblox are in this file. The format follows
   `matchblox usage` names each account folder, and `matchblox sessions
   --json` gives `account_dir` and `signing_in`.
   ([#170](https://github.com/blox-eng/matchblox/issues/170))
-- **Sessions shows which session started which.** A `codex exec` or
-  `claude -p` that an agent starts shows as a branch under that session,
-  instead of hidden or a stray row. The link is proven from /proc, never
-  guessed. (#206)
 
 ### Fixed
 
