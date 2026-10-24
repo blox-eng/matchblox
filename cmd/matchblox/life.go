@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/blox-eng/matchblox/internal/gitremote"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
@@ -104,6 +106,8 @@ func newSessionAct(words []string, o newOpts, from, here string) (proto.Act, err
 	switch {
 	case n.Where == "":
 		n.Where = here
+	case isCloneURL(o.where, here):
+		// a git URL goes as typed: the service clones it
 	case !filepath.IsAbs(n.Where):
 		n.Where = filepath.Join(here, n.Where)
 	}
@@ -115,6 +119,22 @@ func newSessionAct(words []string, o newOpts, from, here string) (proto.Act, err
 		return proto.Act{}, err
 	}
 	return proto.Act{RecID: service.NewSessionID, Confirm: "y", Text: string(b), From: from}, nil
+}
+
+// cloneWait is how long matchblox new waits for a clone: a big repo is slow.
+const cloneWait = 30 * time.Minute
+
+// isCloneURL tells if where is a git URL to clone: not a path, no folder of
+// that name here, and one gitremote reads.
+func isCloneURL(where, here string) bool {
+	if where == "" || filepath.IsAbs(where) || strings.HasPrefix(where, "~") {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(here, where)); err == nil {
+		return false
+	}
+	_, ok := gitremote.Parse(where, "https")
+	return ok
 }
 
 func cliLife(cmd string, words []string, anyway bool, w io.Writer, path string) error {
@@ -143,7 +163,16 @@ func cliNew(words []string, o newOpts, w io.Writer, path string) error {
 	if err != nil {
 		return err
 	}
-	res, err := doAct(path, a)
+	wait := actWait
+	if isCloneURL(o.where, here) {
+		wait = cloneWait
+		if r, ok := gitremote.Parse(o.where, "https"); ok {
+			if _, err := fmt.Fprintf(w, "cloning %s…\n", r.Slug()); err != nil {
+				return err
+			}
+		}
+	}
+	res, err := doActFor(path, a, wait)
 	if err != nil {
 		if errors.Is(err, errNoResult) {
 			return errors.New("new: not known whether it started: matchblox sessions shows it within seconds if it did")

@@ -558,6 +558,10 @@ func (s *Service) renameAtRest(ctx context.Context) {
 // and tracking nothing, so a bare push never goes to main. The stoker
 // starts sessions only in a run, each a message toward max_steps, and the
 // session it starts is one it drives from its first second.
+// connKey holds, in an act's context, the context that ends when the
+// act's connection closes: only a git URL's clone takes it.
+type connKey struct{}
+
 func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	var n proto.NewSession
 	if err := json.Unmarshal([]byte(a.Text), &n); err != nil {
@@ -565,6 +569,20 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	}
 	if n.Agent == "cursor" {
 		n.Agent = sample.CursorAgent
+	}
+	said := ""
+	if t := strings.TrimSpace(n.Where); t != "" && !filepath.IsAbs(t) && !strings.HasPrefix(t, "~") {
+		if r, ok := s.remoteOf(t); ok {
+			cctx := ctx
+			if c, ok := ctx.Value(connKey{}).(context.Context); ok {
+				cctx = c
+			}
+			dir, line, msg := s.cloneForNew(cctx, r)
+			if msg != "" {
+				return proto.Result{Err: msg}
+			}
+			n.Where, said = dir, line
+		}
 	}
 	steps, name, dir, err := s.newSteps(ctx, n)
 	if err != nil {
@@ -581,6 +599,9 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 		sample.TmuxOn(""), []string{"new-session", "-d", "-s", name, "-n", name, "-c", dir},
 		launchArgv(s.agentBin(n.Agent), n.Agent, name, n.First)))
 	res := s.Actions.Do(ctx, advice.Action{Label: "new session", Steps: steps}, a.Confirm)
+	if said != "" && res.Err == "" {
+		res.Skipped = append([]string{said}, res.Skipped...)
+	}
 	if res.Err != "" || len(res.Ran) < len(steps) {
 		return res
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"math/rand/v2"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/state"
+	"github.com/blox-eng/matchblox/internal/transport"
 )
 
 // cloneTest is a service whose home is a temp folder, with clone_root
@@ -430,5 +432,119 @@ func TestShutdownStopsClonesAndCleansUp(t *testing.T) {
 	s.stopClones(waitLimit)
 	if _, err := os.Lstat(clone.Cloning(target)); !os.IsNotExist(err) {
 		t.Fatalf("the partial is left: %v", err)
+	}
+}
+
+// urlRepo makes a local repo with a commit and points the URL parser at it.
+func urlRepo(t *testing.T, s *Service) {
+	t.Helper()
+	src := filepath.Join(t.TempDir(), "src-r")
+	repoWith(t, src, "")
+	gitIn(t, "-C", src, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x")
+	s.cloneRemote = func(text string) (gitremote.Remote, bool) {
+		if text != "https://github.com/o/r" {
+			return gitremote.Remote{}, false
+		}
+		return gitremote.Remote{URL: "https://github.com/o/r", Host: "github.com", Owner: "o", Repo: "r"}, true
+	}
+	s.cloneRun = func(ctx context.Context, _ gitremote.Remote, target string, _ func(int)) error {
+		return exec.CommandContext(ctx, "git", "clone", "-q", src, target).Run()
+	}
+}
+
+func TestNewSessionClonesAURL(t *testing.T) {
+	s, root := cloneTest(t)
+	urlRepo(t, s)
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: "https://github.com/o/r", Agent: "claude", Name: "n1"}))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	target := filepath.Join(root, "r")
+	if _, err := os.Stat(filepath.Join(target, ".git")); err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Ran) != 1 || !strings.Contains(strings.Join(res.Ran[0], " "), "-c "+target+" ") {
+		t.Fatalf("ran %q", res.Ran)
+	}
+	if len(res.Skipped) == 0 || res.Skipped[0] != "cloned o/r into ~/src/r" {
+		t.Fatalf("skipped %q", res.Skipped)
+	}
+	if got := usedPaths(state.ReadUsed(s.UsedPath)); !slices.Contains(got, target) {
+		t.Fatalf("used %q", got)
+	}
+}
+
+func TestNewSessionURLUsesTheExistingClone(t *testing.T) {
+	s, root := cloneTest(t)
+	urlRepo(t, s)
+	target := filepath.Join(root, "r")
+	repoWith(t, target, "https://github.com/o/r")
+	var ran bool
+	s.cloneRun = func(context.Context, gitremote.Remote, string, func(int)) error { ran = true; return nil }
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: "https://github.com/o/r", Agent: "claude", Name: "n1"}))
+	if res.Err != "" || ran {
+		t.Fatalf("err %q cloned %v", res.Err, ran)
+	}
+	if len(res.Ran) != 1 || !strings.Contains(strings.Join(res.Ran[0], " "), "-c "+target+" ") {
+		t.Fatalf("ran %q", res.Ran)
+	}
+	if len(res.Skipped) == 0 || res.Skipped[0] != "o/r is already at ~/src/r: started there" {
+		t.Fatalf("skipped %q", res.Skipped)
+	}
+}
+
+func TestNewSessionURLStopsWhenTheCLILeaves(t *testing.T) {
+	s, root := cloneTest(t)
+	urlRepo(t, s)
+	started := make(chan struct{})
+	stopped := make(chan struct{})
+	s.cloneRun = func(ctx context.Context, _ gitremote.Remote, target string, _ func(int)) error {
+		close(started)
+		<-ctx.Done()
+		close(stopped)
+		return ctx.Err()
+	}
+	x, y := net.Pipe()
+	go s.HandlePeer(t.Context(), transport.NewConn(y), 0) //nolint:errcheck // ends with the test
+	c := transport.NewConn(x)
+	defer c.Close()
+	go func() { _ = c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version, Client: proto.ClientCLI}) }()
+	next(t, c, proto.KindHello)
+	b, _ := json.Marshal(proto.NewSession{Where: "https://github.com/o/r", Agent: "claude", Name: "n1"})
+	go func() {
+		_ = c.Send(proto.KindAct, "x", proto.Act{RecID: "new:session", Confirm: "y", Text: string(b)})
+	}()
+	select {
+	case <-started:
+	case <-time.After(waitLimit):
+		t.Fatal("the clone did not start")
+	}
+	c.Close()
+	select {
+	case <-stopped:
+	case <-time.After(waitLimit):
+		t.Fatal("the clone went on after the CLI left")
+	}
+	clonesUntil(t, s, "the clone ended", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Err != "" })
+	for _, p := range []string{filepath.Join(root, "r"), clone.Cloning(filepath.Join(root, "r"))} {
+		if exists(p) {
+			t.Fatalf("%s is left", p)
+		}
+	}
+}
+
+func TestNewSessionPathStillWorks(t *testing.T) {
+	s, _ := cloneTest(t)
+	urlRepo(t, s)
+	dir := t.TempDir()
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: dir, Agent: "claude", Name: "fresh"}))
+	if res.Err != "" || len(res.Ran) != 1 || len(res.Skipped) != 0 {
+		t.Fatalf("%+v", res)
+	}
+	if got := strings.Join(res.Ran[0], " "); !strings.HasSuffix(got, "-c "+dir+" claude --name fresh") {
+		t.Fatalf("ran %q", got)
+	}
+	if res := s.act(t.Context(), newAct(t, proto.NewSession{Where: "api", Agent: "claude"})); res.Err != "a new session starts in a full path" {
+		t.Fatalf("%q", res.Err)
 	}
 }

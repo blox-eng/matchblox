@@ -27,6 +27,7 @@ const cloneStopWait = 10 * time.Second
 
 // cloneJob is one clone the service runs or ran, by target, under s.mu.
 type cloneJob struct {
+	ctx    context.Context
 	cancel context.CancelFunc
 	done   chan struct{} // closed when the run ended
 	c      proto.Clone
@@ -229,37 +230,48 @@ func (s *Service) cloneStart(ctx context.Context, text string) proto.Result {
 	if !ok {
 		return proto.Result{Err: "not a git URL"}
 	}
+	target := ExpandHome(strings.TrimSpace(cs.Target))
+	j, msg := s.registerClone(ctx, r, target)
+	if msg != "" {
+		return proto.Result{Err: msg}
+	}
+	go s.runClone(j.ctx, j, r)
+	return proto.Result{}
+}
+
+// registerClone checks target again and lists a clone of r into it, whose
+// context ends with ctx. It returns a message when the clone cannot start.
+func (s *Service) registerClone(ctx context.Context, r gitremote.Remote, target string) (*cloneJob, string) {
 	root := s.cloneRoot()
 	if root == "" {
-		return proto.Result{Err: "no clone_root is set"}
+		return nil, "no clone_root is set"
 	}
-	target := ExpandHome(strings.TrimSpace(cs.Target))
 	if base := filepath.Base(target); filepath.Dir(target) != root || strings.HasSuffix(base, ".cloning") || strings.Contains(base, ".cloning.stale-") {
-		return proto.Result{Err: tildeIn(fmt.Sprintf("a clone goes into a folder of its own in %s: %s is not one", root, target))}
+		return nil, tildeIn(fmt.Sprintf("a clone goes into a folder of its own in %s: %s is not one", root, target))
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil { //nolint:gosec // the builder's own source folder
-		return proto.Result{Err: tildeIn(fmt.Sprintf("cannot make %s: %v", root, err))}
+		return nil, tildeIn(fmt.Sprintf("cannot make %s: %v", root, err))
 	}
 	s.mu.Lock()
 	if j := s.clones[target]; j != nil && j.end.IsZero() {
 		s.mu.Unlock()
-		return proto.Result{Err: tildeIn(target + " is being cloned")}
+		return nil, tildeIn(target + " is being cloned")
 	}
 	if exists(target) {
 		s.mu.Unlock()
-		return proto.Result{Err: tildeIn(target + " is there already")}
+		return nil, tildeIn(target + " is there already")
 	}
 	trash := ""
 	if sib := clone.Cloning(target); exists(sib) {
 		t, ok := staleAway(root, target) // no clone into target runs: checked above
 		if !ok {
 			s.mu.Unlock()
-			return proto.Result{Err: tildeIn(sib + " is there already")}
+			return nil, tildeIn(sib + " is there already")
 		}
 		trash = t
 	}
 	jctx, cancel := context.WithCancel(ctx)
-	j := &cloneJob{cancel: cancel, done: make(chan struct{}), c: proto.Clone{Target: target, Repo: r.Slug(), Pct: -1}}
+	j := &cloneJob{ctx: jctx, cancel: cancel, done: make(chan struct{}), c: proto.Clone{Target: target, Repo: r.Slug(), Pct: -1}}
 	if s.clones == nil {
 		s.clones = map[string]*cloneJob{}
 	}
@@ -269,8 +281,32 @@ func (s *Service) cloneStart(ctx context.Context, text string) proto.Result {
 		_ = os.RemoveAll(trash)
 	}
 	s.broadcast()
-	go s.runClone(jctx, j, r)
-	return proto.Result{}
+	return j, ""
+}
+
+// cloneForNew is what a git URL in new:session's Where comes to: where the
+// session starts, and a line that says what happened. It clones on the
+// act's own goroutine, and stops when ctx ends.
+func (s *Service) cloneForNew(ctx context.Context, r gitremote.Remote) (dir, said, errText string) {
+	p, err := s.planClone(r)
+	if err != nil {
+		return "", "", err.Error()
+	}
+	if len(p.Have) > 0 {
+		return p.Have[0], fmt.Sprintf("%s is already at %s: started there", p.Repo, tildeIn(p.Have[0])), ""
+	}
+	j, msg := s.registerClone(ctx, r, p.Target)
+	if msg != "" {
+		return "", "", msg
+	}
+	s.runClone(j.ctx, j, r)
+	s.mu.Lock()
+	failed := j.c.Err
+	s.mu.Unlock()
+	if failed != "" {
+		return "", "", failed
+	}
+	return p.Target, fmt.Sprintf("cloned %s into %s", p.Repo, tildeIn(p.Target)), ""
 }
 
 func (s *Service) runClone(ctx context.Context, j *cloneJob, r gitremote.Remote) {

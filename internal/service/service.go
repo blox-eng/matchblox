@@ -782,6 +782,9 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 		}
 	}()
 
+	connCtx, connDone := context.WithCancel(ctx)
+	defer connDone() // a clone for this connection's act stops with it
+	actCtx := context.WithValue(ctx, connKey{}, connCtx)
 	for {
 		env, err := c.Recv()
 		if err != nil {
@@ -802,7 +805,7 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 			// A console in a pane the stoker drove, or in the stoker's own,
 			// is an agent that says it is one.
 			a.Console = h.Client == proto.ClientConsole && (pid <= 0 || !s.agentsPane(a))
-			res := s.act(ctx, a)
+			res := s.act(actCtx, a)
 			res.ActID = id
 			_ = c.Send(proto.KindResult, id, res)
 		}(env.ID)

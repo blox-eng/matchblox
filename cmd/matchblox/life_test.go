@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -184,5 +186,36 @@ func TestSwitchJumpsOnlyAfterItRan(t *testing.T) {
 	failing := func([]string) error { return errors.New("no client") }
 	if err := cliSwitch([]string{"api"}, o, &buf, sock, failing); err != nil || !strings.Contains(buf.String(), "switched, but not jumped: no client") {
 		t.Fatalf("%q %v", buf.String(), err)
+	}
+}
+
+func TestNewWhereURLIsSentAsIs(t *testing.T) {
+	where := func(o, here string) string {
+		t.Helper()
+		a, err := newSessionAct(nil, newOpts{where: o}, "", here)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var n proto.NewSession
+		if err := json.Unmarshal([]byte(a.Text), &n); err != nil {
+			t.Fatal(err)
+		}
+		return n.Where
+	}
+	here := t.TempDir()
+	if got := where("o/r", here); got != "o/r" {
+		t.Fatalf("no folder: %q", got)
+	}
+	if err := os.MkdirAll(filepath.Join(here, "o", "r"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := where("o/r", here); got != filepath.Join(here, "o", "r") {
+		t.Fatalf("a folder: %q", got)
+	}
+	if got := where("https://github.com/o/r", here); got != "https://github.com/o/r" {
+		t.Fatalf("url: %q", got)
+	}
+	if got := where("api", here); got != filepath.Join(here, "api") {
+		t.Fatalf("path: %q", got)
 	}
 }
