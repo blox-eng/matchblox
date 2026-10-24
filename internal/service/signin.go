@@ -55,7 +55,7 @@ var signInScreens = map[string][]signInScreen{
 
 // signInMarks are the marks each agent puts, followed by a space, at the
 // start of the selected line of a list: Codex 0.163.0 draws an ASCII >
-// (› is kept for a terminal or version that draws that), Claude Code ❯.
+// (› was not seen live; it is kept from the earlier reading), Claude Code ❯.
 // Cursor's sign-in screen has no list.
 var signInMarks = map[string][]string{"claude": {"❯"}, "codex": {">", "›"}}
 
@@ -131,7 +131,10 @@ func signInStep(agent, screen string) (step int, ready bool) {
 //
 // It acts only on a still screen: two looks a tick apart that agree, the
 // quiet moment the console's scan question also waits. It looks once more
-// right before a key and sends only if the screen is the same. A key goes
+// right before a key and sends only if the screen is the same; a key the
+// builder types in the few milliseconds between that look and the send
+// (the guard check runs there) can still be answered: tmux cannot close
+// that gap. A key goes
 // only at a ready step (signInStep), after the last one it sent, and only
 // to the agent first sampled in the pane (its pid and start guard it).
 //
@@ -139,7 +142,8 @@ func signInStep(agent, screen string) (step int, ready bool) {
 // sign-in screen the driver saw, unless the driver's own key explains it:
 // a key went since, and the screen is at a later ready step. Anything else
 // (a highlight moved, a later screen with another option, a screen it does
-// not know) stops it for good, even if a known screen comes back.
+// not know, such as a reflow when a client of another size attaches) stops
+// it for good, even if a known screen comes back.
 func (s *Service) driveSignIn(ctx context.Context, pane, agent, name string) {
 	wait, every := s.signInWait, s.signInEvery
 	if wait <= 0 {
@@ -178,7 +182,9 @@ func (s *Service) driveSignIn(ctx context.Context, pane, agent, name string) {
 				byHand()
 				return
 			}
-			if i >= 0 {
+			// The screen the key left, still shown while the agent redraws,
+			// keeps the key pending.
+			if i >= 0 && screen != seen {
 				seen, pending = screen, false
 			}
 			if ready && i > done {

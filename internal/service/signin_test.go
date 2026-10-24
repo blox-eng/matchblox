@@ -531,3 +531,40 @@ func TestNewAccountDrivesItsSignIn(t *testing.T) {
 	}
 	t.Fatal("no keys sent")
 }
+
+// TestSignInWaitsForASlowRedraw: an agent that redraws a while after the
+// driver's key, past a still look at its old screen, is not the builder
+// typing: the driver goes on.
+func TestSignInWaitsForASlowRedraw(t *testing.T) {
+	f := &agentFake{screen: claudeTheme}
+	s, _ := signInTest(t, f.show)
+	var mu sync.Mutex
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error {
+		mu.Lock()
+		ran = append(ran, argv)
+		mu.Unlock()
+		if argv[len(argv)-1] == "Enter" {
+			from := f.show()
+			time.AfterFunc(20*s.signInEvery, func() {
+				switch from {
+				case claudeTheme:
+					f.set(claudeLogin)
+				case claudeLogin:
+					f.set("Browser didn't open? Use the url below")
+				}
+			})
+		}
+		return nil
+	}
+	s.signInWait = 5 * time.Second
+	s.driveSignIn(t.Context(), "%42", "claude", "fresh")
+	mu.Lock()
+	defer mu.Unlock()
+	if got := sentKeys(&ran); !slices.Equal(got, []string{"send-keys -t %42 Enter", "send-keys -t %42 Enter"}) {
+		t.Fatalf("sent %q", got)
+	}
+	if n := s.State().SignIns; n != nil {
+		t.Fatalf("notes %v", n)
+	}
+}
