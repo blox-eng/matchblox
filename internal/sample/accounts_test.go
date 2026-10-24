@@ -186,3 +186,65 @@ func TestSymlinkedHomeAccountIsSigningIn(t *testing.T) {
 		t.Fatalf("symlinked home: %+v, want an account folder and signing in", s)
 	}
 }
+
+// TestDefaultViaSymlinkOrCaseIsDefault: the default config folder reached by
+// a link, or in another letter case, is the default, not an account.
+func TestDefaultViaSymlinkOrCaseIsDefault(t *testing.T) {
+	root := copyFixture(t)
+	home := filepath.Join(root, "home")
+	real := filepath.Join(home, "dotfiles", "claude")
+	if err := os.MkdirAll(real, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	def := filepath.Join(home, ".claude")
+	if err := os.RemoveAll(def); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, def); err != nil {
+		t.Fatal(err)
+	}
+	accountSession(t, root, 950, "claude", "%40", "CLAUDE_CONFIG_DIR="+real)
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude"}
+	if got := sessionOf(t, smp.Sample(), 950); got.AccountDir != "" || got.SigningIn {
+		t.Fatalf("the default by its real path: %+v", got)
+	}
+	t.Run("case", func(t *testing.T) {
+		if err := os.Remove(def); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(def, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		other := filepath.Join(home, ".Claude")
+		if _, err := os.Stat(other); err != nil {
+			t.Skip("this file system tells letter case apart")
+		}
+		accountSession(t, root, 951, "claude", "%41", "CLAUDE_CONFIG_DIR="+other)
+		smp := newFixtureSampler(root)
+		smp.Agents = []string{"claude"}
+		if got := sessionOf(t, smp.Sample(), 951); got.AccountDir != "" {
+			t.Fatalf("the default in another case: %+v", got)
+		}
+	})
+}
+
+// TestAccountFolderFoundOncePerProcess: a process's folder is kept while it
+// lives, and dropped with it.
+func TestAccountFolderFoundOncePerProcess(t *testing.T) {
+	root := copyFixture(t)
+	accountSession(t, root, 950, "claude", "%40", "CLAUDE_CONFIG_DIR="+filepath.Join(root, "home", ".claude-work"))
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude"}
+	smp.Sample()
+	if got := smp.tags[procKey{950, 1000}]; got.dir == "" {
+		t.Fatalf("no folder kept for the process: %v", smp.tags)
+	}
+	if err := os.RemoveAll(filepath.Join(root, "proc", "950")); err != nil {
+		t.Fatal(err)
+	}
+	smp.Sample()
+	if _, ok := smp.tags[procKey{950, 1000}]; ok {
+		t.Fatalf("a gone process keeps its folder: %v", smp.tags)
+	}
+}

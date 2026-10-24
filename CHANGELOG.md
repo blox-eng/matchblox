@@ -59,6 +59,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- **The default config folder is the default, however it is reached.** A
+  `~/.claude` that is a symlink, with `CLAUDE_CONFIG_DIR` set to its real
+  path, or `~/.Claude` on macOS, showed as a hand-made account. Both sides
+  of the comparison now name a folder one way, links resolved and letter case
+  as on disk. The account list and a session's folder are also found once,
+  not on every sample.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - **`N` names each account folder it does not offer, and why.** A folder
   under `~/.matchblox/accounts/<agent>/` whose name is not a-z, 0-9 and -,
   up to 10, was left out of the account list without a word. The form now

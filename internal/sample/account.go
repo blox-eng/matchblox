@@ -273,7 +273,7 @@ func (a *accounts) opencodeAccount(e agentEnv, provider string) string {
 // separate sign-ins.
 func (s *Sampler) accountDir(agent string, e agentEnv) string {
 	notDefault := func(dir, name string) string {
-		if dir == "" || dir == filepath.Join(s.Home, name) || dir == filepath.Join(s.homeAs(), name) {
+		if dir == "" || acct.SameDir(dir, filepath.Join(s.Home, name)) || acct.SameDir(dir, filepath.Join(s.homeAs(), name)) {
 			return ""
 		}
 		return dir
@@ -298,14 +298,28 @@ func (s *Sampler) accountDir(agent string, e agentEnv) string {
 	return ""
 }
 
+// folderTag is what a process's env says of its config folder: the folder
+// and whether matchblox made it.
+type folderTag struct {
+	dir  string
+	made bool
+}
+
 // tag marks a session that runs on a config folder other than the default,
 // and says whether it has not signed in yet. Only a folder under the
 // accounts root is signing in: a hand-made one may hold a login matchblox
-// does not read (a keyring sign-in).
+// does not read (a keyring sign-in). The folder is found once per process:
+// the env of a process does not change, and finding it reads the disk.
 func (s *Sampler) tag(sess *Session, agent string, e agentEnv) {
-	sess.AccountDir = s.accountDir(agent, e)
-	made := acct.Under(acct.Root(s.Home), sess.AccountDir) || acct.Under(acct.Root(s.homeAs()), sess.AccountDir)
-	sess.SigningIn = made && sess.Account == ""
+	key := procKey{sess.PID, sess.Start}
+	t, ok := s.tags[key]
+	if !ok {
+		t.dir = s.accountDir(agent, e)
+		t.made = acct.Under(acct.Root(s.Home), t.dir) || acct.Under(acct.Root(s.homeAs()), t.dir)
+		s.tags[key] = t
+	}
+	sess.AccountDir = t.dir
+	sess.SigningIn = t.made && sess.Account == ""
 }
 
 // limitsSigningIn is the fix of an account's limits while it is not signed

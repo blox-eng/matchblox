@@ -907,10 +907,18 @@ var accountAgents = []string{"claude", "codex", sample.CursorAgent}
 // knownAccounts lists, per agent with accounts, what a new session can pick:
 // default, the folders under the root, then the hand-made folders live
 // sessions run on, deduplicated. It also returns, per agent, the folders it
-// left out and why; an agent with none has no entry.
+// left out and why; an agent with none has no entry. The answer is kept
+// while the accounts folders' mtimes and the live sessions' folders are
+// as they were, so a sample reads no folder.
 func (s *Service) knownAccounts(sessions []sample.Session) (map[string][]string, map[string][]accounts.Skip) {
 	home := s.home()
 	root := accounts.Root(home)
+	sig, fresh := s.accountsSig(home, sessions)
+	s.knownMu.Lock()
+	defer s.knownMu.Unlock()
+	if s.known.sig == sig && s.known.out != nil && !fresh {
+		return s.known.out, s.known.skipped
+	}
 	out := make(map[string][]string, len(accountAgents))
 	var skipped map[string][]accounts.Skip
 	for _, agent := range accountAgents {
@@ -918,7 +926,7 @@ func (s *Service) knownAccounts(sessions []sample.Session) (map[string][]string,
 			continue // Cursor accounts run on macOS only: no field
 		}
 		list := []string{"default"}
-		have, skips, _ := accounts.List(home, agent) // unreadable: default only, and named
+		have, skips, _ := accounts.ListWith(s.readDirOrOS(), home, agent) // unreadable: default only, and named
 		list = append(list, have...)
 		if len(skips) > 0 {
 			if skipped == nil {
@@ -936,7 +944,47 @@ func (s *Service) knownAccounts(sessions []sample.Session) (map[string][]string,
 		}
 		out[agent] = list
 	}
+	s.known.sig, s.known.out, s.known.skipped = sig, out, skipped
 	return out, skipped
+}
+
+// knownCache is the last answer of knownAccounts and what it was made from.
+type knownCache struct {
+	sig     string
+	out     map[string][]string
+	skipped map[string][]accounts.Skip
+}
+
+// recent is how long a folder's mtime may be too new to trust: a change
+// within the clock's tick of a read leaves the same mtime.
+const recent = 2 * time.Second
+
+// accountsSig is what knownAccounts depends on without reading a folder:
+// the mtime of each agent's accounts root, and the folders live sessions
+// run on. fresh is true when a root changed within recent, so the answer
+// must not be kept.
+func (s *Service) accountsSig(home string, sessions []sample.Session) (sig string, fresh bool) {
+	var b strings.Builder
+	b.WriteString(home + "\x00" + s.goos())
+	for _, agent := range accountAgents {
+		b.WriteString("\x00" + agent + "=")
+		fi, err := os.Stat(filepath.Join(accounts.Root(home), agent))
+		if err != nil {
+			b.WriteString(err.Error())
+			continue
+		}
+		fmt.Fprint(&b, fi.ModTime().UnixNano())
+		fresh = fresh || time.Since(fi.ModTime()) < recent
+	}
+	var dirs []string
+	for _, x := range sessions {
+		if x.AccountDir != "" {
+			dirs = append(dirs, x.Agent+"\x00"+x.AccountDir)
+		}
+	}
+	slices.Sort(dirs)
+	b.WriteString("\x00" + strings.Join(slices.Compact(dirs), "\x01"))
+	return b.String(), fresh
 }
 
 // folderLabel is a hand-made folder as the console lists and sends it: with
@@ -958,7 +1006,7 @@ func (s *Service) liveFolder(agent, label string) (string, bool) {
 			continue
 		}
 		// The console sends the label; a shell sends the full path.
-		if s.folderLabel(x.AccountDir) == label || filepath.IsAbs(label) && filepath.Clean(label) == filepath.Clean(x.AccountDir) {
+		if s.folderLabel(x.AccountDir) == label || filepath.IsAbs(label) && accounts.SameDir(label, x.AccountDir) {
 			return x.AccountDir, true
 		}
 	}
@@ -1082,4 +1130,11 @@ func (s *Service) recordNew(pane, name string, ran [][]string) {
 	})
 	s.drive(pane)
 	s.refreshStoker()
+}
+
+func (s *Service) readDirOrOS() func(string) ([]os.DirEntry, error) {
+	if s.readDir != nil {
+		return s.readDir
+	}
+	return os.ReadDir
 }

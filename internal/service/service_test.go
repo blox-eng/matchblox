@@ -1300,3 +1300,81 @@ func TestUnreadableAccountsRootIsNamed(t *testing.T) {
 		t.Fatalf("only codex is unreadable: %v", st.AccountsSkipped)
 	}
 }
+
+// agedAccounts sets the mtime of the accounts folders back an hour, so a
+// read of them is not too fresh to trust.
+func agedAccounts(t *testing.T, home string) {
+	t.Helper()
+	old := time.Now().Add(-time.Hour)
+	for _, a := range accountAgents {
+		if err := os.Chtimes(filepath.Join(accounts.Root(home), a), old, old); err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestKnownAccountsNotReadEachSample: the account folders are read when
+// their root changes or a live session's folder does, not on every sample.
+func TestKnownAccountsNotReadEachSample(t *testing.T) {
+	s, _, home := accountTest(t)
+	s.GOOS = "darwin"
+	prepared(t, home, "claude", "work")
+	agedAccounts(t, home)
+	var reads int
+	s.readDir = func(p string) ([]os.DirEntry, error) { reads++; return os.ReadDir(p) }
+	snap := lifeSnap(false)
+	snap.Sessions[0].AccountDir = filepath.Join(home, ".claude-old")
+	s.publish(snap, func(state.Doc) {})
+	first := reads
+	if first == 0 {
+		t.Fatal("the first publish read no folder")
+	}
+	for range 3 {
+		s.publish(snap, func(state.Doc) {})
+	}
+	if reads != first {
+		t.Fatalf("%d reads after the first publish's %d: the folders are read once", reads, first)
+	}
+	if want := []string{"default", "work", "~/.claude-old"}; !reflect.DeepEqual(s.State().Accounts["claude"], want) {
+		t.Fatalf("got %v, want %v", s.State().Accounts["claude"], want)
+	}
+	prepared(t, home, "claude", "new")
+	s.publish(snap, func(state.Doc) {})
+	if want := []string{"default", "new", "work", "~/.claude-old"}; !reflect.DeepEqual(s.State().Accounts["claude"], want) {
+		t.Fatalf("a new account: got %v, want %v", s.State().Accounts["claude"], want)
+	}
+	snap.Sessions[1].AccountDir = filepath.Join(home, ".claude-two")
+	s.publish(snap, func(state.Doc) {})
+	if want := []string{"default", "new", "work", "~/.claude-old", "~/.claude-two"}; !reflect.DeepEqual(s.State().Accounts["claude"], want) {
+		t.Fatalf("a new live folder: got %v, want %v", s.State().Accounts["claude"], want)
+	}
+}
+
+// TestLiveFolderByLinkOrCase: a shell names a live hand-made folder by its
+// real path, or in another letter case: it is the same folder.
+func TestLiveFolderByLinkOrCase(t *testing.T) {
+	s, _, home := accountTest(t)
+	hand := filepath.Join(home, ".claude-work")
+	if err := os.Mkdir(hand, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(home, "link")
+	if err := os.Symlink(hand, link); err != nil {
+		t.Fatal(err)
+	}
+	snap := lifeSnap(false)
+	snap.Sessions[0].AccountDir = hand
+	s.publish(snap, func(state.Doc) {})
+	if f, ok := s.liveFolder("claude", link); !ok || f != hand {
+		t.Fatalf("by a link: %q, %v", f, ok)
+	}
+	t.Run("case", func(t *testing.T) {
+		other := filepath.Join(home, ".CLAUDE-WORK")
+		if _, err := os.Stat(other); err != nil {
+			t.Skip("this file system tells letter case apart")
+		}
+		if f, ok := s.liveFolder("claude", other); !ok || f != hand {
+			t.Fatalf("by another case: %q, %v", f, ok)
+		}
+	})
+}

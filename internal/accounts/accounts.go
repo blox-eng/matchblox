@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/blox-eng/matchblox/internal/gitscan"
 )
 
 // Mode is how a new account starts its setup.
@@ -90,8 +92,13 @@ func Folder(home, agent, name string) string {
 // List returns the account names of agent, sorted, and the folders it does
 // not offer, each with why. No folder means no accounts.
 func List(home, agent string) ([]string, []Skip, error) {
+	return ListWith(os.ReadDir, home, agent)
+}
+
+// ListWith is List reading the folder with readDir.
+func ListWith(readDir func(string) ([]os.DirEntry, error), home, agent string) ([]string, []Skip, error) {
 	dir := filepath.Join(Root(home), canon(agent))
-	es, err := os.ReadDir(dir)
+	es, err := readDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil, nil
 	}
@@ -229,7 +236,7 @@ func resolve(dir string) string {
 			for i := len(rest) - 1; i >= 0; i-- {
 				r = filepath.Join(r, rest[i])
 			}
-			return r
+			return gitscan.TrueCase(r)
 		}
 		parent := filepath.Dir(p)
 		if parent == p {

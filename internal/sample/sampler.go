@@ -306,6 +306,7 @@ type Sampler struct {
 	burnLive   map[string]bool  // burn keys measured in this scan
 	longCtx    map[procKey]bool // processes started with a 1M model setting
 	envs       map[procKey]agentEnv
+	tags       map[procKey]folderTag // the account folder of each process, found once
 	accounts   *accounts
 	opencode   *opencodeReader
 
@@ -339,6 +340,7 @@ func (s *Sampler) init() {
 	if s.agents == nil {
 		s.agents = newAgentReader()
 		s.envs = map[procKey]agentEnv{}
+		s.tags = map[procKey]folderTag{}
 		s.accounts = newAccounts()
 		s.opencode = newOpencodeReader()
 		s.panes = map[procKey]string{}
@@ -678,7 +680,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 				case r != nil:
 				case sess.SigningIn:
 					lims.fix(sess, limitsSigningIn)
-				case env.claudeDir != filepath.Join(s.Home, ".claude"):
+				case sess.AccountDir != "":
 					// The door edits the default settings: name the one this
 					// session reads.
 					lims.fix(sess, "run CLAUDE_CONFIG_DIR="+s.asProcess(env.claudeDir)+" matchblox setup")
@@ -826,6 +828,11 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	for key := range s.envs {
 		if !alive[key] {
 			delete(s.envs, key)
+		}
+	}
+	for key := range s.tags {
+		if !alive[key] {
+			delete(s.tags, key)
 		}
 	}
 	for key := range s.panes {

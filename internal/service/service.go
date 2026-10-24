@@ -221,6 +221,11 @@ type Service struct {
 	// lastAccounts are the accounts the builder last started, per agent, and
 	// the agent they last started.
 	lastAccounts lastAccountState
+	// readDir reads an accounts folder; nil is os.ReadDir. Tests count it.
+	readDir func(string) ([]os.DirEntry, error)
+	// known is the last list of accounts, kept while its sources hold.
+	knownMu sync.Mutex
+	known   knownCache
 	// signInWait and signInEvery are how long the sign-in driver waits for
 	// the agent's screens and how often it looks. Zero: 20 s and 500 ms.
 	signInWait, signInEvery time.Duration
