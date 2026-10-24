@@ -215,8 +215,8 @@ console remembers both.
 
 A `codex exec` or `claude -p` that an agent starts shows under that session
 with `├─` and `└─`, in `matchblox sessions` too. The console shows it and
-never acts on it. A link is drawn only when `/proc` proves it. A parent
-whose child works reads as working.
+never acts on it. A link is drawn only when `/proc` proves it. A child
+never changes how its parent reads: the child's own row shows its work.
 
 A session at rest that does not ask you says why where its state word
 would be, in a few words: `#4556 waits your merge`, `CI red · lint`,
