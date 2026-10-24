@@ -23,7 +23,7 @@ func lineageSample(root string) Snapshot {
 	return smp.Sample()
 }
 
-func sessionOf(snap Snapshot, pid int) (Session, bool) {
+func topOf(snap Snapshot, pid int) (Session, bool) {
 	for _, x := range snap.Sessions {
 		if x.PID == pid {
 			return x, true
@@ -89,8 +89,8 @@ func TestAChildLeavesItsParentAsItIs(t *testing.T) {
 		smp.Capture = func([]string) map[string]string { return map[string]string{"%8": approval} }
 		smp.Sample() // a pane has no state until it is seen twice
 		snap := smp.Sample()
-		cl, _ := sessionOf(snap, 310)
-		cx, _ := sessionOf(snap, 260)
+		cl, _ := topOf(snap, 310)
+		cx, _ := topOf(snap, 260)
 		return of(cl), of(cx), len(snap.Children)
 	}
 	claude, codex, n := sample(false)
@@ -128,7 +128,7 @@ func TestADetachedInteractiveAgentIsASession(t *testing.T) {
 	if _, ok := childOf(snap, 232); ok {
 		t.Fatalf("children = %+v, want no 232", snap.Children)
 	}
-	if _, ok := sessionOf(snap, 232); !ok {
+	if _, ok := topOf(snap, 232); !ok {
 		t.Fatal("the detached claude must be a session")
 	}
 }
@@ -166,7 +166,7 @@ func TestAForgedMarkerIsIgnored(t *testing.T) {
 			if len(snap.Children) != 0 {
 				t.Fatalf("children = %+v, want none", snap.Children)
 			}
-			if _, ok := sessionOf(snap, 230); !ok {
+			if _, ok := topOf(snap, 230); !ok {
 				t.Fatal("230 must stay a session")
 			}
 		})
@@ -180,7 +180,7 @@ func TestAPaneOnAServerStartedByClaudeIsASession(t *testing.T) {
 	addPane(t, root, "%9\tother:1.1\tother\t241\tclaude\t/work/other")
 	addProcAt(t, root, 242, 241, "claude", []string{"claude"}, startedAgo(root, 40), 34825, "TMUX_PANE=%9", "CLAUDE_PID=200")
 	snap := lineageSample(root)
-	if _, ok := sessionOf(snap, 242); !ok {
+	if _, ok := topOf(snap, 242); !ok {
 		t.Fatal("242 must be a session")
 	}
 	if _, ok := childOf(snap, 242); ok {
@@ -200,7 +200,7 @@ func TestAMarkerUnderAPaneIsIgnored(t *testing.T) {
 	if _, ok := childOf(snap, 243); ok {
 		t.Fatalf("children = %+v, want none", snap.Children)
 	}
-	if _, ok := sessionOf(snap, 243); !ok {
+	if _, ok := topOf(snap, 243); !ok {
 		t.Fatal("243 must be a session")
 	}
 }
@@ -214,7 +214,7 @@ func TestALaunchersBinaryIsTheSameSession(t *testing.T) {
 	if len(snap.Children) != 1 || snap.Children[0].PID != 250 {
 		t.Fatalf("children = %+v, want only 250", snap.Children)
 	}
-	if _, ok := sessionOf(snap, 251); ok {
+	if _, ok := topOf(snap, 251); ok {
 		t.Fatal("251 is the launcher's own binary: no row")
 	}
 }
@@ -236,7 +236,7 @@ func TestAChildWhoseParentEndedIsASession(t *testing.T) {
 	root := copyFixture(t)
 	addProcAt(t, root, 270, 1, "claude", []string{"claude", "-p", "q"}, startedAgo(root, 10), 0, "CLAUDE_PID=99999")
 	snap := lineageSample(root)
-	if _, ok := sessionOf(snap, 270); !ok {
+	if _, ok := topOf(snap, 270); !ok {
 		t.Fatalf("270 must be a session, children = %+v", snap.Children)
 	}
 }
@@ -249,7 +249,7 @@ func TestAYoungBatchChildIsNotShownYet(t *testing.T) {
 	if len(snap.Children) != 0 {
 		t.Fatalf("children = %+v, want none yet", snap.Children)
 	}
-	if _, ok := sessionOf(snap, 221); ok {
+	if _, ok := topOf(snap, 221); ok {
 		t.Fatal("221 must not be a session either")
 	}
 }
@@ -258,7 +258,7 @@ func TestCodexMCPServerIsNoOnesChild(t *testing.T) {
 	root := copyFixture(t)
 	addProcAt(t, root, 280, 200, "codex", []string{"codex", "mcp-server"}, startedAgo(root, 10), 0)
 	snap := lineageSample(root)
-	if _, ok := sessionOf(snap, 280); ok {
+	if _, ok := topOf(snap, 280); ok {
 		t.Fatal("a server is no session")
 	}
 	if _, ok := childOf(snap, 280); ok {
@@ -270,7 +270,7 @@ func TestATopLevelCodexMCPServerHasNoRow(t *testing.T) {
 	root := copyFixture(t)
 	addProcAt(t, root, 281, 1, "codex", []string{"codex", "mcp-server"}, startedAgo(root, 10), 0)
 	snap := lineageSample(root)
-	_, session := sessionOf(snap, 281)
+	_, session := topOf(snap, 281)
 	_, child := childOf(snap, 281)
 	if session || child {
 		t.Fatal("a server has no row")
