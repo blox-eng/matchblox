@@ -119,6 +119,20 @@ func TestADetachedChildIsProvenByItsMarker(t *testing.T) {
 	}
 }
 
+// TestADetachedInteractiveAgentIsASession: the marker proves only a batch
+// run; a detached claude a person may still attach to keeps its own row.
+func TestADetachedInteractiveAgentIsASession(t *testing.T) {
+	root := copyFixture(t)
+	addProcAt(t, root, 232, 1, "claude", []string{"claude"}, startedAgo(root, 10), 0, "CLAUDE_PID=200")
+	snap := lineageSample(root)
+	if _, ok := childOf(snap, 232); ok {
+		t.Fatalf("children = %+v, want no 232", snap.Children)
+	}
+	if _, ok := sessionOf(snap, 232); !ok {
+		t.Fatal("the detached claude must be a session")
+	}
+}
+
 func TestAForgedMarkerIsIgnored(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
