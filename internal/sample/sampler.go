@@ -840,7 +840,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		snap.Sessions = append(snap.Sessions, sess)
 	}
 	s.readPanes(snap.Sessions, fromPane, now)
-	snap.Children = linkChildren(snap.Sessions, snap.Children, s.Rules)
+	snap.Children = linkChildren(snap.Sessions, snap.Children)
 	snap.Limits = lims.build(now, s.Cfg.Limits.Quiet)
 	for key := range s.envs {
 		if !alive[key] {
