@@ -316,16 +316,19 @@ func (m Model) matchRows(q string) []whereRow {
 		trees    []whereRepo
 		treeHits [][]int
 		at       time.Time
+		exact    bool // q is typed as a path, and the path is the repo's or a worktree's
 	}
 	var ms []match
 	best := 0
 	for _, r := range m.wrepos {
 		mt := match{r: r, score: -1}
 		mt.score, mt.hits = placeScore(q, r.name, r.path)
+		mt.exact = pathLike(q) && samePath(r.path, q)
 		for _, t := range r.trees {
 			if s, h := placeScore(q, t.branch, t.path); s >= 0 {
 				mt.trees, mt.treeHits = append(mt.trees, t), append(mt.treeHits, h)
 				mt.score = max(mt.score, s)
+				mt.exact = mt.exact || pathLike(q) && samePath(t.path, q)
 			}
 		}
 		if mt.score < 0 {
@@ -342,6 +345,11 @@ func (m Model) matchRows(q string) []whereRow {
 	slices.SortStableFunc(ms, func(a, b match) int {
 		na, nb := near(a.score), near(b.score)
 		switch {
+		case a.exact != b.exact: // a typed path means that place, not one under it
+			if a.exact {
+				return -1
+			}
+			return 1
 		case na && nb:
 			return cmp.Or(b.at.Compare(a.at), cmp.Compare(b.score, a.score), byName(a.r, b.r))
 		case na != nb:
@@ -526,6 +534,12 @@ func (m Model) refreshWhere(f *form, path string) {
 	f.rows = m.whereRows(f.filter())
 	f.sel, f.top = firstRow(f.rows), 0
 	if path == "" {
+		// A typed path selects its own row: a worktree's is under its repo's.
+		if q := strings.TrimSpace(f.filter()); pathLike(q) {
+			if i := slices.IndexFunc(f.rows, func(r whereRow) bool { return r.picks() && samePath(r.path(), q) }); i >= 0 {
+				f.sel = i
+			}
+		}
 		return
 	}
 	path = filepath.Clean(path)

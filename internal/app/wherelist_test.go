@@ -353,6 +353,32 @@ func TestWhereTypedPathIsNotASibling(t *testing.T) {
 	if rows := next.(Model).form.rows; len(rows) != 1 || rows[0].kind != rowRepo || rows[0].repo.path != "/src/api-gateway" {
 		t.Fatalf("rows %+v", rows)
 	}
+	// A known repo at the typed path goes first, ahead of a newer one under it.
+	st = lifeState()
+	st.Sessions[0].Cwd = ""
+	now := time.Now()
+	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{
+		{Path: "/src/api", Branch: "main", Active: now.Add(-time.Hour)}, {Path: "/src/api/web", Branch: "main", Active: now}}}
+	m, f = loadedWith(t, 100, st)
+	next, _ = key(m, "N")
+	next, _ = next.Update(tea.PasteMsg{Content: "/src/api"})
+	if sel := next.(Model).whereSelected(); sel.kind != rowRepo || sel.path() != "/src/api" {
+		t.Fatalf("selected %+v of %+v", sel, next.(Model).form.rows)
+	}
+	next, _ = key(next, "enter")
+	next, cmd = key(next, "enter")
+	cmd()
+	if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &n) != nil || n.Where != "/src/api" {
+		t.Fatalf("sent %+v", f.acts())
+	}
+	// A worktree's exact path selects the worktree, not its repo above it.
+	st.Found.Repos = append(st.Found.Repos, proto.Checkout{Path: "/src/.wt/api-x", Main: "/src/api", Branch: "x"})
+	m, _ = loadedWith(t, 100, st)
+	next, _ = key(m, "N")
+	next, _ = next.Update(tea.PasteMsg{Content: "/src/.wt/api-x"})
+	if sel := next.(Model).whereSelected(); sel.kind != rowTree || sel.path() != "/src/.wt/api-x" {
+		t.Fatalf("selected %+v of %+v", sel, next.(Model).form.rows)
+	}
 }
 
 // A repo's row counts its worktrees' sessions too; a worktree's row its own.
