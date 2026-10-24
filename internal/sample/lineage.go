@@ -133,7 +133,8 @@ func childName(agent string, argv []string) string {
 }
 
 // linkChildren keeps the children whose line reaches a session, sets a
-// resting session whose children work to StatusAgents, suggested as such,
+// resting session whose children work to busy with StatusAgents, as a
+// session working through subagents reads, suggested as such,
 // and sorts them by parent, then start.
 func linkChildren(sessions, children []Session, rules Rules) []Session {
 	top := map[ProcRef]int{}
@@ -150,7 +151,7 @@ func linkChildren(sessions, children []Session, rules Rules) []Session {
 		for hops := 0; hops < 64; hops++ {
 			if i, ok := top[at]; ok {
 				if root := &sessions[i]; !root.Busy && root.Status != StatusAgents {
-					root.Status = StatusAgents
+					root.Busy, root.Status = true, StatusAgents
 					root.Do, root.Why = rules.suggest(*root)
 				}
 				kept = append(kept, c)
