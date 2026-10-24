@@ -73,11 +73,13 @@ const suggested = 5
 
 // whereRepos are the known repos, by name, each path once: the Git tab's,
 // the ones found on the host and the ones matchblox started sessions in.
-// A worktree goes under its main checkout.
+// A worktree goes under its main checkout; a used folder in a checkout is
+// that checkout, any other is its own entry.
 func (m Model) whereRepos() []whereRepo {
 	type entry struct {
 		r    whereRepo
 		main string // a worktree: its main checkout
+		real bool   // a checkout: the Git tab's or one found, not a used folder
 	}
 	known := map[string]*entry{}
 	var order []string
@@ -91,10 +93,12 @@ func (m Model) whereRepos() []whereRepo {
 		}
 		return e
 	}
-	// within is the known path p is in, nearest first; nil none.
+	checkout := func(p string) *entry { e := get(p); e.real = true; return e }
+	// within is the checkout p is in, nearest first; nil none. A used
+	// folder is never one: a used ~ must not take in the repos under it.
 	within := func(p string) *entry {
 		for q := filepath.Clean(p); ; q = filepath.Dir(q) {
-			if e, ok := known[q]; ok {
+			if e, ok := known[q]; ok && e.real {
 				return e
 			}
 			if q == filepath.Dir(q) {
@@ -104,9 +108,9 @@ func (m Model) whereRepos() []whereRepo {
 	}
 	if m.git != nil {
 		for _, r := range m.git.Repos {
-			main := get(r.Path).r.path
+			main := checkout(r.Path).r.path
 			for _, wt := range r.Worktrees {
-				e := get(wt.Path)
+				e := checkout(wt.Path)
 				if e.r.path != main && e.main == "" {
 					e.main = main
 				}
@@ -121,9 +125,9 @@ func (m Model) whereRepos() []whereRepo {
 	}
 	if m.found != nil {
 		for _, c := range m.found.Repos {
-			e := get(c.Path)
+			e := checkout(c.Path)
 			if c.Main != "" && filepath.Clean(c.Main) != e.r.path && e.main == "" {
-				e.main = get(c.Main).r.path
+				e.main = checkout(c.Main).r.path
 			}
 			if e.r.branch == "" {
 				e.r.branch = c.Branch
@@ -149,7 +153,11 @@ func (m Model) whereRepos() []whereRepo {
 		if s.Cwd == "" {
 			continue
 		}
-		if e := within(s.Cwd); e != nil {
+		e := within(s.Cwd)
+		if e == nil {
+			e = known[filepath.Clean(s.Cwd)] // a used folder counts its own sessions only
+		}
+		if e != nil {
 			e.r.live++
 		}
 	}

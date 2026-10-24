@@ -397,3 +397,33 @@ func TestWhereRepoLiveCountsItsWorktrees(t *testing.T) {
 		t.Fatalf("repo %q, worktree %q", repoLive, treeLive)
 	}
 }
+
+// A used folder is its own entry: one above other used folders does not
+// swallow them, nor count the sessions under them. A used folder in a real
+// checkout is that checkout, and so is a session in it.
+func TestWhereUsedFolderSwallowsNothing(t *testing.T) {
+	st := lifeState()
+	t0 := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	st.Git = nil
+	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{{Path: "/w/src/r", Branch: "main", Active: t0}}}
+	st.Used = &proto.Used{Repos: []proto.Use{
+		{Path: "/w/dev/a", At: t0.Add(time.Hour)}, {Path: "/w", At: t0.Add(2 * time.Hour)},
+		{Path: "/w/dev/b", At: t0.Add(3 * time.Hour)}, {Path: "/w/src/r/sub", At: t0.Add(4 * time.Hour)}}}
+	for i := range st.Sessions {
+		st.Sessions[i].Cwd = ""
+	}
+	st.Sessions[0].Cwd = "/w/dev/c" // under /w only: no entry counts it
+	st.Sessions[1].Cwd = "/w/dev/b" // the used folder itself
+	in := st.Sessions[1]
+	in.Pane, in.Cwd = "%77", "/w/src/r/sub/x" // in the real checkout
+	st.Sessions = append(st.Sessions, in)
+	m, _ := loadedWith(t, 100, st)
+	got := map[string]int{}
+	for _, r := range m.wrepos {
+		got[r.path] = r.live
+	}
+	want := map[string]int{"/w": 0, "/w/dev/a": 0, "/w/dev/b": 1, "/w/src/r": 1}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("repos and their sessions %v, want %v", got, want)
+	}
+}
