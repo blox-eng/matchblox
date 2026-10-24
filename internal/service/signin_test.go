@@ -568,3 +568,56 @@ func TestSignInWaitsForASlowRedraw(t *testing.T) {
 		t.Fatalf("notes %v", n)
 	}
 }
+
+// TestSignInWaitsOnEachScreen: each screen gets the whole wait. A theme
+// picker that shows after half a wait, and a login screen that shows three
+// quarters of a wait after its key, both get their key.
+func TestSignInWaitsOnEachScreen(t *testing.T) {
+	f := &agentFake{screen: "starting"}
+	s, _ := signInTest(t, f.show)
+	s.signInWait = time.Second
+	var mu sync.Mutex
+	var ran [][]string
+	s.Actions.Run = func(argv []string) error {
+		mu.Lock()
+		ran = append(ran, argv)
+		mu.Unlock()
+		if argv[len(argv)-1] == "Enter" {
+			switch f.show() {
+			case claudeTheme:
+				time.AfterFunc(s.signInWait*3/4, func() { f.set(claudeLogin) })
+			case claudeLogin:
+				f.set("Browser didn't open? Use the url below")
+			}
+		}
+		return nil
+	}
+	time.AfterFunc(s.signInWait/2, func() { f.set(claudeTheme) })
+	s.driveSignIn(t.Context(), "%42", "claude", "fresh")
+	mu.Lock()
+	defer mu.Unlock()
+	if got := sentKeys(&ran); !slices.Equal(got, []string{"send-keys -t %42 Enter", "send-keys -t %42 Enter"}) {
+		t.Fatalf("sent %q", got)
+	}
+	if n := s.State().SignIns; n != nil {
+		t.Fatalf("notes %v", n)
+	}
+}
+
+// TestSignInGivesUpOneWaitAfterItsKey: a screen its key does not move is
+// left by hand one wait after the key.
+func TestSignInGivesUpOneWaitAfterItsKey(t *testing.T) {
+	s, ran := signInTest(t, func() string { return claudeTheme })
+	s.signInWait = 200 * time.Millisecond
+	began := time.Now()
+	s.driveSignIn(t.Context(), "%42", "claude", "fresh")
+	if took := time.Since(began); took > 2*s.signInWait {
+		t.Fatalf("gave up after %v, want about %v", took, s.signInWait)
+	}
+	if got := s.State().SignIns["%42"]; got != SignInByHand {
+		t.Fatalf("note %q", got)
+	}
+	if got := sentKeys(ran); !slices.Equal(got, []string{"send-keys -t %42 Enter"}) {
+		t.Fatalf("sent %q", got)
+	}
+}

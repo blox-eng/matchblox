@@ -37,7 +37,7 @@ All notable changes to matchblox are in this file. The format follows
   ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - **A start on a new account asks for a typed `y`.** The row says
   `signing in` until the account is signed in, and `sign in by hand` when
-  matchblox does not recognise the agent's first screens within 20 seconds.
+  matchblox waits 20 seconds on a screen without a next screen it knows.
   An ask or a wait shows over both words. matchblox never reads a sign-in
   code and never types a password.
   ([#170](https://github.com/blox-eng/matchblox/issues/170))
@@ -80,8 +80,8 @@ All notable changes to matchblox are in this file. The format follows
   is cut and goes on at the next start. `N`, Switch agent and `matchblox
   new` show these notes after the start, and a new account names the
   session to sign in in (`sign in in <session>`). A start or a switch on an
-  account that another start is setting up is refused at once, and one
-  whose folder went away meanwhile is refused as gone. `matchblox new`
+  account that another start or switch is busy with is refused at once as
+  busy, and one whose folder went away meanwhile is refused as gone. `matchblox new`
   waits the copy's 90 seconds on top of its 30 for a new or copy account,
   and so does `matchblox switch` when the agent's last account is a copy.
   Both say "failed" for a start that ran and failed and "refused" only
@@ -99,13 +99,13 @@ All notable changes to matchblox are in this file. The format follows
   first seen in the pane. It stops for good, and the row says `sign in by
   hand`, when you type in the pane or when the screen changes in any other
   way: a reflow when a client of another size attaches counts. It also
-  says `sign in by hand` after 20 seconds without a screen it knows. A key
-  you type in the few milliseconds between its last look and its key can
-  still be answered: tmux cannot close that gap. An agent that redraws
-  slowly after a key is waited for. The screens, highlight marks and option
-  labels were checked live on codex-cli 0.163.0 and Claude Code 2.1.308 up
-  to the login choice; Cursor's screen and the sign-in after the choice
-  are not tested yet.
+  says `sign in by hand` after 20 seconds on a screen without a next screen
+  it knows. A key you type in the few milliseconds between its last look
+  and its key can still be answered: tmux cannot close that gap. An agent
+  that redraws slowly after a key is waited for. The screens, highlight
+  marks and option labels were checked live on codex-cli 0.163.0 and
+  Claude Code 2.1.308 up to the login choice; Cursor's screen and the
+  sign-in after the choice are not tested yet.
   ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - **A switch runs on the account its confirm named, or is refused.** `A`
   and `matchblox switch` send the account they would start the agent on.

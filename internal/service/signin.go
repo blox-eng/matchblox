@@ -12,7 +12,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// signInWait and signInEvery are how long the driver waits for a new
+// signInWait and signInEvery are how long the driver waits on each of a new
 // account's screens, and how often it looks at the pane.
 const (
 	signInWait  = 20 * time.Second
@@ -125,8 +125,8 @@ func signInStep(agent, screen string) (step int, ready bool) {
 // driveSignIn waits for the first screens of the agent in pane, a new
 // account's, and sends the keys that reach its sign-in link, each screen's
 // once. It never reads the link or the code: the builder finishes the
-// sign-in. It stops, and notes the pane "by hand", when the screens do not
-// come in time, when a key's guard fails, or when the builder takes over.
+// sign-in. It stops, and notes the pane "by hand", when a screen does not
+// come within the wait (counted again from each key it sends), when a key's guard fails, or when the builder takes over.
 // When ctx ends first it stops without a note. It never kills the pane.
 //
 // It acts only on a still screen: two looks a tick apart that agree, the
@@ -196,6 +196,7 @@ func (s *Service) driveSignIn(ctx context.Context, pane, agent, name string) {
 					return
 				case sent:
 					done, pending = i, true
+					deadline.Reset(wait) // the next screen gets the whole wait
 				}
 			}
 		}

@@ -780,13 +780,14 @@ type onAccount struct {
 
 // errBusy, errGone and errThere are holdAccount's refusals.
 var (
-	errBusy  = errors.New("being set up")
+	errBusy  = errors.New("busy with another start")
 	errGone  = errors.New("gone")
 	errThere = errors.New("there already")
 )
 
 // holdAccount holds acct's folder until the returned func is called. It
-// never waits: a folder another start holds is refused at once. Under the
+// never waits: a folder another start or switch holds, from its setup
+// through tmux, is refused at once as busy. Under the
 // hold it checks the account again, as the check before may be old: a new
 // account another start made since is there already, and an account that
 // was there and is gone since (a new account whose start failed took it

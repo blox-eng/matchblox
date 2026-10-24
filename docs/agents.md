@@ -254,9 +254,11 @@ the app-server runs (such as `codex exec`) is not a session either.
 A start or a switch on an account says what happened: each link still
 shared with the default and each entry not copied are named (five of each,
 then "and N more"), and so is a copy that is cut and goes on at the next
-start. A start on an account that another start is setting up is refused
-at once, and so is one whose folder went away meanwhile. A session in an
-agent's pane cannot start a session on an account, even as a console.
+start. A start or a switch on an account that another start or switch is
+busy with is refused at once (`the <agent> account <name> is busy with
+another start: start it when that ends`), and so is one whose folder went
+away meanwhile. A session in an agent's pane cannot start a session on an
+account, even as a console.
 When a switch's confirm named an account and the agent's last account
 changed meanwhile, the switch is refused and nothing moves.
 
@@ -269,13 +271,13 @@ sends it only to the agent it first saw in the pane. It stops for good when
 you type in the pane, and when the screen changes in any other way: a
 reflow when a client of another size attaches counts. You finish the
 sign-in in the session. Until then the row says `signing in`. If matchblox
-does not recognise the screens within 20 seconds, cannot find the pane, or
-stopped because you typed, the row says `sign in by hand`. These screens
-were checked on codex-cli 0.163.0 and Claude Code 2.1.308 up to the login
-choice; Cursor's screen and the sign-in after the choice are not tested
-yet. A key you type between its last look and its key can still be
-answered: tmux cannot close that gap. An ask or a wait of the session shows over both words. matchblox
-never reads a sign-in code from the pane and never types a password. If a
+waits 20 seconds on a screen without a next screen it knows, cannot find
+the pane, or stopped because you typed, the row says `sign in by hand`.
+These screens were checked on codex-cli 0.163.0 and Claude Code 2.1.308
+up to the login choice; Cursor's screen and the sign-in after the choice
+are not tested yet. A key you type between its last look and its key can
+still be answered: tmux cannot close that gap. An ask or a wait of the
+session shows over both words. matchblox never reads a sign-in code from the pane and never types a password. If a
 new account does not start, matchblox removes the folder it made for it.
 
 `N` names each account folder it leaves out of the account list and why

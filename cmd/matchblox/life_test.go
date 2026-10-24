@@ -292,7 +292,7 @@ func TestCLINewAccountFailureIsNotRefused(t *testing.T) {
 	}{
 		{proto.Result{Err: "open /home/u/.codex/config.toml: permission denied"}, "new: failed: open /home/u/.codex/config.toml: permission denied"},
 		{proto.Result{Err: "tmux new-session: exit status 1", Ran: [][]string{{"git"}}}, "new: failed: tmux new-session: exit status 1"},
-		{proto.Result{Err: "the codex account w2 is being set up: start it when that ends", Refused: true}, "new: refused: the codex account w2 is being set up: start it when that ends"},
+		{proto.Result{Err: "the codex account w2 is busy with another start: start it when that ends", Refused: true}, "new: refused: the codex account w2 is busy with another start: start it when that ends"},
 		{proto.Result{Skipped: []string{"a guard stopped it"}}, "new: refused: a guard stopped it"},
 	} {
 		var buf bytes.Buffer

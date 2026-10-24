@@ -1327,7 +1327,7 @@ func TestNewAccountWithNoPaneSaysByHand(t *testing.T) {
 
 // TestTwoConfirmsOfOneNewAccountMakeItOnce: two confirms of one new account
 // at once start it once. Both pass the first check before either makes the
-// folder; the second is refused, as being set up or as there already, and
+// folder; the second is refused, as busy or as there already, and
 // the first's folder stays.
 func TestTwoConfirmsOfOneNewAccountMakeItOnce(t *testing.T) {
 	s, _, home := accountTest(t)
@@ -1366,7 +1366,7 @@ func TestTwoConfirmsOfOneNewAccountMakeItOnce(t *testing.T) {
 		case res.Err == "":
 			ok++
 		case res.Refused && (strings.Contains(res.Err, "the claude account work is there already") ||
-			res.Err == "the claude account work is being set up: start it when that ends"):
+			res.Err == "the claude account work is busy with another start: start it when that ends"):
 			refused++
 		default:
 			t.Errorf("err %q", res.Err)
@@ -1703,13 +1703,13 @@ func atOnce(t *testing.T, do func() proto.Result) proto.Result {
 	}
 }
 
-// TestASecondStartOfAnAccountBeingSetUpIsRefusedAtOnce: while a start
+// TestASecondStartOfABusyAccountIsRefusedAtOnce: while a start
 // holds an account's folder, another start or a switch on it is refused at
 // once, and runs nothing.
-func TestASecondStartOfAnAccountBeingSetUpIsRefusedAtOnce(t *testing.T) {
+func TestASecondStartOfABusyAccountIsRefusedAtOnce(t *testing.T) {
 	s, ran, _ := switchAccountTest(t)
 	release, done := blockedNewAccount(t, s, "codex", "team")
-	const busy = "the codex account team is being set up: start it when that ends"
+	const busy = "the codex account team is busy with another start: start it when that ends"
 	res := atOnce(t, func() proto.Result {
 		return s.act(context.Background(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "codex", Name: "b1", Account: "team"}))
 	})
