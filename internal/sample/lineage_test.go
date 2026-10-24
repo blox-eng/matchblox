@@ -103,6 +103,11 @@ func TestAForgedMarkerIsIgnored(t *testing.T) {
 			addProcAt(t, root, 231, 1, "claude", []string{"claude"}, startedAgo(root, 5), 1)
 			return "231"
 		}},
+		// A launcher's own binary holds no row: its pid is no parent.
+		{"no session or child", func(t *testing.T, root string) string {
+			addProcAt(t, root, 233, 200, "claude", []string{"claude"}, startedAgo(root, 60), 0)
+			return "233"
+		}},
 		{"another uid", func(t *testing.T, root string) string {
 			addProcAt(t, root, 232, 1, "claude", []string{"claude"}, startedAgo(root, 60), 1)
 			other := os.Getuid() + 1
@@ -140,6 +145,23 @@ func TestAPaneOnAServerStartedByClaudeIsASession(t *testing.T) {
 	}
 	if _, ok := childOf(snap, 242); ok {
 		t.Fatal("242 must not be a child")
+	}
+}
+
+// TestAMarkerUnderAPaneIsIgnored: a pane's process never takes the env
+// path, even with no tty and a marker that would verify.
+func TestAMarkerUnderAPaneIsIgnored(t *testing.T) {
+	root := copyFixture(t)
+	addProcAt(t, root, 240, 200, "tmux: server", []string{"tmux"}, startedAgo(root, 60), 0)
+	addProcAt(t, root, 241, 240, "zsh", []string{"zsh"}, startedAgo(root, 50), 34825, "TMUX_PANE=%9")
+	addPane(t, root, "%9\tother:1.1\tother\t241\tzsh\t/work/other")
+	addProcAt(t, root, 243, 241, "codex", []string{"codex", "exec", "x"}, startedAgo(root, 10), 0, "TMUX_PANE=%9", "CLAUDE_PID=200")
+	snap := lineageSample(root)
+	if _, ok := childOf(snap, 243); ok {
+		t.Fatalf("children = %+v, want none", snap.Children)
+	}
+	if _, ok := sessionOf(snap, 243); !ok {
+		t.Fatal("243 must be a session")
 	}
 }
 
@@ -201,6 +223,36 @@ func TestCodexMCPServerIsNoOnesChild(t *testing.T) {
 	}
 	if _, ok := childOf(snap, 280); ok {
 		t.Fatal("a server is no child")
+	}
+}
+
+func TestATopLevelCodexMCPServerHasNoRow(t *testing.T) {
+	root := copyFixture(t)
+	addProcAt(t, root, 281, 1, "codex", []string{"codex", "mcp-server"}, startedAgo(root, 10), 0)
+	snap := lineageSample(root)
+	_, session := sessionOf(snap, 281)
+	_, child := childOf(snap, 281)
+	if session || child {
+		t.Fatal("a server has no row")
+	}
+}
+
+// TestAPaneParentWithAWorkingChildWorks: a Codex reads busy from its pane
+// and has no status of its own; a working child makes it busy, never
+// resting.
+func TestAPaneParentWithAWorkingChildWorks(t *testing.T) {
+	root := copyFixture(t)
+	addProcAt(t, root, 260, 1, "codex", []string{"codex"}, startedAgo(root, 60), 34826, "TMUX_PANE=%8")
+	addPane(t, root, "%8\tcx:1.1\tcx\t260\tcodex\t/work/cx")
+	alone, _ := sessionOf(lineageSample(root), 260)
+	if alone.Busy || alone.Status != "" {
+		t.Fatalf("a Codex seen once must read neither busy nor a status: %+v", alone)
+	}
+	addProcAt(t, root, 261, 260, "bash", []string{"bash"}, startedAgo(root, 10), 0)
+	addProcAt(t, root, 262, 261, "claude", []string{"claude", "-p", "q"}, startedAgo(root, 10), 0)
+	s, _ := sessionOf(lineageSample(root), 260)
+	if !s.Busy || s.Status != "" || s.Resting() {
+		t.Fatalf("parent busy=%v status=%q resting=%v, want busy, no status, not resting", s.Busy, s.Status, s.Resting())
 	}
 }
 
