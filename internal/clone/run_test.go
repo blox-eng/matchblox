@@ -5,7 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/gitremote"
 )
@@ -123,5 +125,77 @@ func TestRunFailureLeavesNothing(t *testing.T) {
 	}
 	if exists(target) || exists(Cloning(target)) {
 		t.Error("left something")
+	}
+}
+
+// fakeGit puts a git on PATH that runs script (sh) in place of the real one.
+func fakeGit(t *testing.T, script string) {
+	t.Helper()
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte("#!/bin/sh\n"+script), 0o755); err != nil { //nolint:gosec // a test script
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// A stop mid-clone returns at once, even with a child of git that holds its
+// stderr, and leaves neither the target nor the sibling.
+func TestRunStopMidCloneDoesNotWaitForChildren(t *testing.T) {
+	// The last argument is the sibling: make it, say a percent, and leave a
+	// child that keeps stderr open long after git is gone.
+	fakeGit(t, `for a; do dir=$a; done
+mkdir "$dir"
+echo "Receiving objects:   1% (1/100)" >&2
+sleep 8 &
+sleep 8
+`)
+	r := gitremote.Remote{URL: "https://github.com/o/r", Host: "github.com", Owner: "o", Repo: "r"}
+	target := filepath.Join(t.TempDir(), "r")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	var once sync.Once
+	done := make(chan error, 1)
+	go func() { done <- Run(ctx, r, target, func(int) { once.Do(func() { close(started) }) }) }()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the clone did not start")
+	}
+	at := time.Now()
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil || err.Error() != "stopped" {
+			t.Fatalf("err = %v", err)
+		}
+		if d := time.Since(at); d > 2*time.Second {
+			t.Fatalf("stopped after %v", d)
+		}
+	case <-time.After(12 * time.Second):
+		t.Fatal("Run did not return")
+	}
+	if exists(target) || exists(Cloning(target)) {
+		t.Error("left something")
+	}
+}
+
+// git runs with ssh in batch mode, so ssh fails instead of prompting; a
+// GIT_SSH_COMMAND the builder set is kept, with the option added.
+func TestRunSSHNeverPrompts(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "env")
+	fakeGit(t, `printf '%s|%s' "$GIT_SSH_COMMAND" "$GIT_TERMINAL_PROMPT" > "`+out+`"
+exit 1
+`)
+	r := gitremote.Remote{URL: "git@github.com:o/r.git", Host: "github.com", Owner: "o", Repo: "r"}
+	for set, want := range map[string]string{"": "ssh -o BatchMode=yes|0", "ssh -i ~/.ssh/k": "ssh -i ~/.ssh/k -o BatchMode=yes|0"} {
+		t.Setenv("GIT_SSH_COMMAND", set)
+		if set == "" {
+			_ = os.Unsetenv("GIT_SSH_COMMAND")
+		}
+		_ = Run(context.Background(), r, filepath.Join(t.TempDir(), "r"), nil)
+		if b, _ := os.ReadFile(out); string(b) != want {
+			t.Errorf("with %q: git saw %q, want %q", set, b, want)
+		}
 	}
 }

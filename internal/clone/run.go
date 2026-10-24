@@ -3,15 +3,18 @@ package clone
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/gitremote"
 )
@@ -87,30 +90,40 @@ func Run(ctx context.Context, r gitremote.Remote, target string, progress func(p
 	}
 
 	cmd := exec.CommandContext(ctx, "git", "clone", "--progress", "--", r.URL, sibling) //nolint:gosec // argv, never a shell string
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	pipe, err := cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND="+sshCommand(os.Getenv("GIT_SSH_COMMAND")))
+	ownGroup(cmd)
+	cmd.WaitDelay = waitDelay // a child that keeps stderr open does not hold a stop
+	pr, pw := io.Pipe()
+	cmd.Stderr = pw
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("git clone %s failed: %v", r.Slug(), err)
 	}
 	var tail []string
-	sc := bufio.NewScanner(pipe)
-	sc.Split(splitLines)
-	for sc.Scan() {
-		line := sc.Text()
-		if pct, ok := Progress(line); ok && progress != nil {
-			progress(pct)
-		}
-		if strings.TrimSpace(line) != "" {
-			tail = append(tail, line)
-			if len(tail) > 20 {
-				tail = tail[1:]
+	read := make(chan struct{})
+	go func() {
+		defer close(read)
+		sc := bufio.NewScanner(pr)
+		sc.Split(splitLines)
+		for sc.Scan() {
+			line := sc.Text()
+			if pct, ok := Progress(line); ok && progress != nil {
+				progress(pct)
+			}
+			if strings.TrimSpace(line) != "" {
+				tail = append(tail, line)
+				if len(tail) > 20 {
+					tail = tail[1:]
+				}
 			}
 		}
-	}
+		if err := sc.Err(); err != nil { // git's last words are lost: say why
+			tail = append(tail, "reading git's output: "+err.Error())
+			_, _ = io.Copy(io.Discard, pr) // git must not block on a full pipe
+		}
+	}()
 	werr := cmd.Wait()
+	_ = pw.Close()
+	<-read
 	if ctx.Err() != nil {
 		_ = os.RemoveAll(sibling)
 		return errors.New("stopped")
@@ -128,6 +141,16 @@ func Run(ctx context.Context, r gitremote.Remote, target string, progress func(p
 		return fmt.Errorf("%s is there already", target)
 	}
 	return nil
+}
+
+// waitDelay is how long a stopped clone waits for git's output to end.
+const waitDelay = time.Second
+
+// sshCommand is the ssh git runs: the builder's own, if set, in batch mode,
+// so ssh fails instead of asking for a password, a passphrase or a host key.
+// It overrides a core.sshCommand, as actions.Exec does.
+func sshCommand(own string) string {
+	return strings.TrimSpace(cmp.Or(strings.TrimSpace(own), "ssh") + " -o BatchMode=yes")
 }
 
 func exists(p string) bool { _, err := os.Lstat(p); return err == nil }
