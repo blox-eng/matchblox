@@ -536,11 +536,15 @@ func (m Model) whereSelectedIn(f *form) whereRow {
 }
 
 // refreshWhere rebuilds f's rows and selects the row of path, else the
-// first row.
+// first row. The list scrolls back to the top only for a new filter: a
+// snapshot keeps the rows shown.
 func (m Model) refreshWhere(f *form, path string) {
 	m.form = f // whereRows reads its extra
+	if q := f.filter(); q != f.rowsFor {
+		f.rowsFor, f.top = q, 0
+	}
 	f.rows = m.whereRows(f.filter())
-	f.sel, f.top = firstRow(f.rows), 0
+	f.sel = firstRow(f.rows)
 	if path == "" {
 		// A typed path selects its own row: a worktree's is under its repo's.
 		if q := strings.TrimSpace(f.filter()); pathLike(q) {

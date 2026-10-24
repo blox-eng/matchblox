@@ -427,3 +427,28 @@ func TestWhereUsedFolderSwallowsNothing(t *testing.T) {
 		t.Fatalf("repos and their sessions %v, want %v", got, want)
 	}
 }
+
+// A snapshot does not scroll the list: the rows shown stay where they are.
+func TestWhereSnapshotKeepsTheScroll(t *testing.T) {
+	m, _ := loadedWith(t, 100, whereState(t))
+	next, _ := key(m, "N")
+	h := next.(Model).listHeight()
+	for range h + 4 {
+		next, _ = key(next, "down")
+	}
+	for range h / 2 {
+		next, _ = key(next, "up")
+	}
+	shown := func(m Model) (top int, sel string) {
+		f := m.form
+		return scrollTop(f.top, f.sel, m.listHeight(), len(f.rows)), m.whereSelected().path()
+	}
+	top, sel := shown(next.(Model))
+	if top == 0 || top == next.(Model).form.sel {
+		t.Fatalf("not scrolled with the selection mid-view: top %d, selection %d", top, next.(Model).form.sel)
+	}
+	next, _ = next.Update(stateMsg(whereState(t)))
+	if top2, sel2 := shown(next.(Model)); top2 != top || sel2 != sel {
+		t.Fatalf("after a snapshot: top %d → %d, selection %s → %s", top, top2, sel, sel2)
+	}
+}

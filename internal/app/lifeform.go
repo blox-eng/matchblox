@@ -60,8 +60,10 @@ type form struct {
 	// where's list (#174): its rows for the filter, the selected one and
 	// the first shown; picked: where holds a pick or a ←→ step, not a
 	// filter, and query is what was typed before it; extra: the folder N
-	// opened on, when it is not a known repo.
+	// opened on, when it is not a known repo. rowsFor is the filter the
+	// rows are for: the scroll stays while it does.
 	rows     []whereRow
+	rowsFor  string
 	sel, top int
 	listOpen bool
 	picked   bool
