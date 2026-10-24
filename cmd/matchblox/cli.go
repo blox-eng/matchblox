@@ -166,27 +166,33 @@ func signsInByHand(doc state.Doc, s sample.Session) bool {
 		tmuxName != "" && doc.SignIns[tmuxName] == service.SignInByHand
 }
 
-// childrenOf nests the children whose proven parent is the given process.
-func childrenOf(all []sample.Session, parent sample.ProcRef) []childJSON {
+// childrenOf nests the children whose proven parent is the given process,
+// at most 64 levels down: a state file edited by hand may hold a loop.
+func childrenOf(all []sample.Session, parent sample.ProcRef, depth int) []childJSON {
+	if depth >= 64 {
+		return nil
+	}
 	var out []childJSON
 	for _, c := range all {
 		if c.Parent != nil && *c.Parent == parent {
-			out = append(out, childJSON{Name: c.Name, Agent: c.Agent, Via: c.Via, PID: c.PID, Children: childrenOf(all, sample.ProcRef{PID: c.PID, Start: c.Start})})
+			out = append(out, childJSON{Name: c.Name, Agent: c.Agent, Via: c.Via, PID: c.PID, Children: childrenOf(all, sample.ProcRef{PID: c.PID, Start: c.Start}, depth+1)})
 		}
 	}
 	return out
 }
 
-func writeChildren(w io.Writer, kids []childJSON, depth int) error {
+// writeChildren draws kids as the console does: indent carries a bar down
+// past each ancestor that has siblings below.
+func writeChildren(w io.Writer, kids []childJSON, indent string) error {
 	for i, k := range kids {
-		branch := "├─"
+		branch, below := "├─", "│ "
 		if i == len(kids)-1 {
-			branch = "└─"
+			branch, below = "└─", "  "
 		}
-		if _, err := fmt.Fprintf(w, "     %s%s %s (via %s)\n", strings.Repeat("  ", depth), branch, k.Name, k.Via); err != nil {
+		if _, err := fmt.Fprintf(w, "     %s%s %s (via %s)\n", indent, branch, k.Name, k.Via); err != nil {
 			return err
 		}
-		if err := writeChildren(w, k.Children, depth+1); err != nil {
+		if err := writeChildren(w, k.Children, indent+below); err != nil {
 			return err
 		}
 	}
@@ -205,7 +211,7 @@ func sessionRows(doc state.Doc) []sessionJSON {
 		if sh := shipOf(doc, s); sh != nil {
 			r.Ship = &shipJSON{sh.Repo, sh.Number, stageName(sh.Stage), sh.Kind, sh.Note}
 		}
-		r.Children = childrenOf(doc.Children, sample.ProcRef{PID: s.PID, Start: s.Start})
+		r.Children = childrenOf(doc.Children, sample.ProcRef{PID: s.PID, Start: s.Start}, 0)
 		rows = append(rows, r)
 	}
 	return rows
@@ -243,7 +249,7 @@ func writeSessions(w io.Writer, doc state.Doc, asJSON bool) error {
 		if _, err := fmt.Fprintln(w, line); err != nil {
 			return err
 		}
-		if err := writeChildren(w, r.Children, 0); err != nil {
+		if err := writeChildren(w, r.Children, ""); err != nil {
 			return err
 		}
 	}

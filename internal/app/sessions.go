@@ -375,11 +375,11 @@ func (m Model) sessionRows(b *body, w int) {
 			b.add(-1, st.hair.Render(strings.Repeat("─", w)))
 		}
 		b.addRow(base+i, i == sel, w, st, rows...)
-		if len(rows) > 1 {
-			b.add(-1, st.hair.Render(strings.Repeat("─", w)))
-		}
 		for _, l := range m.childRows(sample.ProcRef{PID: s.PID, Start: s.Start}, "  ", 1, w) {
 			b.add(-1, l)
+		}
+		if len(rows) > 1 {
+			b.add(-1, st.hair.Render(strings.Repeat("─", w)))
 		}
 	}
 }
