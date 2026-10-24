@@ -378,7 +378,7 @@ func (m Model) sessionRows(b *body, w int) {
 		if len(rows) > 1 {
 			b.add(-1, st.hair.Render(strings.Repeat("─", w)))
 		}
-		for _, l := range m.childRows(sample.ProcRef{PID: s.PID, Start: s.Start}, 1, w) {
+		for _, l := range m.childRows(sample.ProcRef{PID: s.PID, Start: s.Start}, "  ", 1, w) {
 			b.add(-1, l)
 		}
 	}
@@ -408,24 +408,28 @@ func (m Model) descendants(parent sample.ProcRef) int {
 
 // childRows are the lines under one session or child, depth first: a
 // branch for each child and a fold for what lies below the last level.
-func (m Model) childRows(parent sample.ProcRef, depth, w int) []string {
+// indent carries a bar down past each ancestor that has siblings below.
+func (m Model) childRows(parent sample.ProcRef, indent string, depth, w int) []string {
 	st := m.st
 	kids := m.childrenOf(parent)
 	if len(kids) == 0 {
 		return nil
 	}
-	indent := "  " + strings.Repeat("│ ", depth-1)
 	if depth > maxTreeDepth {
 		return []string{fit(st.faint.Render(indent+"└─ … "+strconv.Itoa(m.descendants(parent))+" more"), w)}
 	}
 	var out []string
 	for i, c := range kids {
-		branch := "├─ "
+		branch, below := "├─ ", "│ "
 		if i == len(kids)-1 {
-			branch = "└─ "
+			branch, below = "└─ ", "  "
 		}
-		out = append(out, fit(st.faint.Render(indent+branch)+st.text.Render(c.Name)+st.faint.Render(" "+c.Status), w))
-		out = append(out, m.childRows(sample.ProcRef{PID: c.PID, Start: c.Start}, depth+1, w)...)
+		line := st.faint.Render(indent+branch) + st.text.Render(c.Name)
+		if c.Status != "" {
+			line += st.faint.Render(" " + c.Status)
+		}
+		out = append(out, fit(line, w))
+		out = append(out, m.childRows(sample.ProcRef{PID: c.PID, Start: c.Start}, indent+below, depth+1, w)...)
 	}
 	return out
 }
