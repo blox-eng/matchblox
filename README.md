@@ -69,7 +69,9 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   on, else on `default`. The new agent gets a handoff to read the working tree and carry on.
   `matchblox switch` does it from the shell.
 - **More than one sign-in**: `N` starts Claude Code, Codex or Cursor on an
-  account, a folder beside your default sign-in, or makes a new one. You
+  account, a folder beside your default sign-in, or makes a new one: like
+  your default, an empty one, or a copy of it that is cloned and its own,
+  and a start says what stays shared with the default. You
   finish the sign-in in the session. `N` opens on the agent and the
   account you last started. Cursor accounts run on macOS only for now.
   [Accounts](https://docs.matchblox.com/agents/#accounts).

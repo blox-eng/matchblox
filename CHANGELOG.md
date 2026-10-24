@@ -59,61 +59,74 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
-- **The default config folder is the default, however it is reached.** A
-  `~/.claude` that is a symlink, with `CLAUDE_CONFIG_DIR` set to its real
-  path, or `~/.Claude` on macOS, showed as a hand-made account. Both sides
-  of the comparison now name a folder one way, links resolved and letter case
-  as on disk. The account list and a session's folder are also found once,
-  not on every sample.
+- **A copy of the default is cloned, and its own.** Files are cloned
+  copy-on-write where the file system can, and copied byte by byte where
+  it refuses. A link in the default that points inside the default points
+  to the same place in the account, so the account reads its own files and
+  never the default's. A link that points elsewhere, and an entry the
+  account keeps for itself, stay shared and are named. The copy stops at
+  200,000 entries, 16 GiB copied byte by byte, or 90 seconds, and names
+  every entry it left out. A cut copy is marked, and goes on where it
+  stopped at the account's next start. Measured on macOS (APFS) with a
+  real 2.0 GB `~/.claude` of 117 links: a copy took 4.6 to 4.8 seconds and
+  used no extra disk, all links into the default were kept inside the
+  account, and a resume over a finished copy took about 0.16 seconds.
+  Cloning on Linux is compiled and linted only: not tested yet.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **A start or a switch on an account says what it shared, skipped and
+  refused.** It names each link still shared with the default and each
+  entry not copied (five of each, then "and N more"), and says when a copy
+  is cut and goes on at the next start. `N`, Switch agent and `matchblox
+  new` show these notes after the start, and a new account names the
+  session to sign in in (`sign in in <session>`). A start or a switch on an
+  account that another start is setting up is refused at once, and one
+  whose folder went away meanwhile is refused as gone. `matchblox new`
+  waits the copy's 90 seconds on top of its 30 for a new or copy account,
+  and so does `matchblox switch` when the agent's last account is a copy.
+  Both say "failed" for a start that ran and failed and "refused" only
+  when matchblox refused it, and `matchblox new` says "stopped after" the
+  step that ran when a guard stopped the rest. `matchblox sessions` says
+  "sign in by hand" on the line of a new account that matchblox gave up
+  signing in.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **An agent's pane cannot start a session on an account, new or not, even
+  when it says it is a console.**
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **The sign-in of a new account presses only what it sees.** matchblox
+  sends a key only when the option it picks is the highlighted one, looks
+  at the screen again right before the key, and sends it only to the agent
+  first seen in the pane. It stops for good, and the row says `sign in by
+  hand`, when you type in the pane or when the screen changes in any other
+  way: a reflow when a client of another size attaches counts. It also
+  says `sign in by hand` after 20 seconds without a screen it knows. A key
+  you type in the few milliseconds between its last look and its key can
+  still be answered: tmux cannot close that gap. An agent that redraws
+  slowly after a key is waited for. The screens, highlight marks and option
+  labels were checked live on codex-cli 0.163.0 and Claude Code 2.1.308 up
+  to the login choice; Cursor's screen and the sign-in after the choice
+  are not tested yet.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **A switch runs on the account its confirm named, or is refused.** `A`
+  and `matchblox switch` send the account they would start the agent on.
+  If the agent's last account changed meanwhile, the switch is refused
+  with `the last <agent> account is now <x>: switch again`, and nothing
+  moves.
   ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - **`N` names each account folder it does not offer, and why.** A folder
   under `~/.matchblox/accounts/<agent>/` whose name is not a-z, 0-9 and -,
   up to 10, was left out of the account list without a word. The form now
   names them under the account field, `not listed: Team (not a-z, 0-9 and
-  -, up to 10)`, and an unreadable accounts folder says `accounts not read:`
-  with its error.
+  -, up to 10)` (three named, then "and N more"), and an unreadable
+  accounts folder says `accounts not read:` with its error.
   ([#170](https://github.com/blox-eng/matchblox/issues/170))
-- **A switch runs on the account its confirm named, or is refused.** `A` and
-  `matchblox switch` send the account they would start the agent on. If the
-  agent's last account changed meanwhile, the switch is refused with `the
-  last <agent> account is now <x>: switch again`, and nothing moves.
-  ([#170](https://github.com/blox-eng/matchblox/issues/170))
-- The sign-in of a new account presses only what it sees. matchblox
-  sends a key only when the option it picks is the highlighted one and the
-  screen has not changed since it looked, and each key goes only to the
-  agent first seen in the pane. Once you type in the pane, matchblox stops
-  pressing and the row says `sign in by hand`. The screens, highlight marks
-  and option labels were checked live on codex-cli 0.163.0 and Claude Code
-  2.1.308 up to the login choice; Cursor's screen and the sign-in after the
-  choice are not tested yet.
-  ([#170](https://github.com/blox-eng/matchblox/issues/170))
-- A copy account is its own. A link in the default that points inside the
-  default now points to the same place in the account, so the account
-  reads its own files and never the default's. A link that points outside
-  the default stays as it was, and matchblox names it as still shared.
-  Files are cloned copy-on-write where the file system can, else copied
-  byte by byte. The copy stops at 200,000 entries, 16 GiB copied byte by
-  byte, or 90 seconds, and names what it left out. A copy that stopped
-  goes on where it stopped at the account's next start. Cloning is tested on
-  macOS (APFS) only; on Linux it is not tested yet.
-  ([#170](https://github.com/blox-eng/matchblox/issues/170))
-- A start on an account says what happened. It names each link still
-  shared with the default and each entry not copied (five of each, then how
-  many more), and says when a copy is not complete and goes on at the next
-  start. `N`, Switch agent and `matchblox new` show these notes after the
-  start, and a new account names the session to sign in in. A start or a
-  switch on an account that another start is setting up is refused at once,
-  and one whose folder went away meanwhile is refused as gone. `matchblox
-  new` waits the copy's 90 seconds on top of its 30 for a new or copy
-  account, and so does `matchblox switch` when the agent's last account is
-  a copy. Both say "failed" for a start that ran and failed, "refused"
-  only when matchblox refused it, and `matchblox new` says "stopped after"
-  the step that ran when a guard stopped the rest. `matchblox sessions`
-  says "sign in by hand" on the line of a new account that matchblox gave
-  up signing in.
-  ([#170](https://github.com/blox-eng/matchblox/issues/170))
-- An agent's pane cannot start a session on an account, new or not, even
-  when it says it is a console.
+- **The default config folder is the default, however it is reached.** A
+  `~/.claude` that is a symlink, with `CLAUDE_CONFIG_DIR` set to its real
+  path, or `~/.Claude` on macOS, showed as a hand-made account. Both sides
+  of the comparison now name a folder one way, links resolved and letter
+  case as on disk. The account folders and a session's folder are read
+  once, not at every sample, and a folder that failed to read is read
+  again. A link retargeted while a process lives keeps that process's
+  first reading.
   ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - An agent that the Codex app-server runs (such as `codex exec`) is not
   a session, and a `node` launch of `codex app-server` is no session either.

@@ -184,7 +184,17 @@ The setup of a new account:
   account shares one setup: skills, plugins, settings and hooks.
 - **copy of default** copies those entries once. The account can then
   change on its own. Settings can hold tokens: the copies stay on this
-  machine, in the account folder.
+  machine, in the account folder. A copy takes seconds, and on APFS files
+  are cloned copy-on-write, so they use no extra disk; where the file
+  system refuses to clone, a file is copied byte by byte. A link in the
+  default that points inside the default points to the same place in the
+  account, so the account reads its own files. A link that points
+  elsewhere, and an entry the account keeps for itself (the lists below),
+  stay shared, and the start names them. The copy stops at 200,000
+  entries, 16 GiB copied byte by byte, or 90 seconds, and names each entry
+  it left out. A cut copy is marked, and goes on where it stopped at the
+  account's next start. Cloning is tested on macOS only; on Linux it is
+  not tested yet.
 - **empty** shares nothing. The agent starts as on its first run.
 
 Whatever the setup, matchblox never shares these entries. They stay per
@@ -209,8 +219,9 @@ Each account folder also has `.matchblox-setup`, one line with its setup.
 At each start of a `like-default` account, matchblox links the entries the
 default got since. It never replaces or removes an entry. When a link
 fails, the session starts all the same, and the result says "some shared
-entries did not link" with what failed. A copy or empty
-account stays as it is. A folder with no `.matchblox-setup` is
+entries did not link" with what failed. A copy account
+goes on with a cut copy at its start and is otherwise left as it is, and an
+empty account stays as it is. A folder with no `.matchblox-setup` is
 `like-default`.
 
 User scope MCP servers sit in `~/.claude.json`, which matchblox does not
@@ -240,24 +251,46 @@ account's home, never from the default's. The app-server process (`codex
 app-server`) is not a session: Sessions does not list it. An agent that
 the app-server runs (such as `codex exec`) is not a session either.
 
+A start or a switch on an account says what happened: each link still
+shared with the default and each entry not copied are named (five of each,
+then "and N more"), and so is a copy that is cut and goes on at the next
+start. A start on an account that another start is setting up is refused
+at once, and so is one whose folder went away meanwhile. A session in an
+agent's pane cannot start a session on an account, even as a console.
+When a switch's confirm named an account and the agent's last account
+changed meanwhile, the switch is refused and nothing moves.
+
 A new account starts in a session where you sign in. matchblox presses
 through the first screens of the agent to its sign-in link: for Claude
 Code, the theme and the login method; for Codex, the device code; for
 Cursor, any key. It presses a key only when the option the key picks is
-the highlighted one, and only to the agent it first saw in the pane. Once
-you press a key there yourself, matchblox stops pressing. You finish the
+the highlighted one, looks at the screen again right before the key, and
+sends it only to the agent it first saw in the pane. It stops for good when
+you type in the pane, and when the screen changes in any other way: a
+reflow when a client of another size attaches counts. You finish the
 sign-in in the session. Until then the row says `signing in`. If matchblox
 does not recognise the screens within 20 seconds, cannot find the pane, or
 stopped because you typed, the row says `sign in by hand`. These screens
 were checked on codex-cli 0.163.0 and Claude Code 2.1.308 up to the login
 choice; Cursor's screen and the sign-in after the choice are not tested
-yet. An ask or a wait of the session shows over both words. matchblox
+yet. A key you type between its last look and its key can still be
+answered: tmux cannot close that gap. An ask or a wait of the session shows over both words. matchblox
 never reads a sign-in code from the pane and never types a password. If a
 new account does not start, matchblox removes the folder it made for it.
 
+`N` names each account folder it leaves out of the account list and why
+(`not listed: Team (not a-z, 0-9 and -, up to 10)`; three named, then
+"and N more"), and says `accounts not read:` when the accounts folder
+cannot be read. A default folder reached by a link or in another letter
+case is the default, not an account.
+
 In the console, a start on a new account asks for a typed `y`, and a start
 on an account that exists runs on `Enter`. `matchblox new` sends the
-confirm itself.
+confirm itself, waits as long as a copy can take, and says `sign in in
+<session>` for a new account. It says "refused" when matchblox refused the
+start, "failed" when it ran and failed, and "stopped after" the step that
+ran when a guard stopped the rest. `matchblox sessions` says "sign in by
+hand" on the line of a new account matchblox gave up signing in.
 
 ## How an agent tells that it waits
 
