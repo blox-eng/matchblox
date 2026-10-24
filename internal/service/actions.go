@@ -82,6 +82,10 @@ func (a *acts) end(key string, ran bool) {
 // hand rules are user-wide, so any session may call the CLI unprompted.
 const notTheBuilders = "only the stoker and the sessions it drives act from an agent's pane: this one is neither"
 
+// noClone refuses a clone act from the stoker or a session it drives
+// (R16): a clone is the builder's, through N.
+const noClone = "the stoker does not clone: N is yours"
+
 func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	// A session the stoker drove speaks for the stoker: what it sends
 	// counts and drives, and it gives no go.

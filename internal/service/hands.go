@@ -67,6 +67,9 @@ func (s *Service) orderable(a proto.Act) error {
 	if strings.HasPrefix(a.RecID, "park:") {
 		return errors.New("the stoker does not park: z is yours")
 	}
+	if a.RecID == "clone:plan" || a.RecID == "clone:start" {
+		return errors.New(noClone)
+	}
 	pane := paneOf(a.RecID)
 	counts := pane != "" || a.RecID == NewSessionID // what makes a step of the run
 	if counts && (s.Stoker == nil || !s.Stoker.Mode().On) {

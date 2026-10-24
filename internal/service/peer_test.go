@@ -365,3 +365,28 @@ func TestAConsoleClaimFailsClosedWithoutDrivenJSON(t *testing.T) {
 		}
 	}
 }
+
+// R16: no agent clones, the stoker and the sessions it drives included; a
+// clone through N is the builder's.
+func TestNoAgentClones(t *testing.T) {
+	s, _ := drivenPaneTest(t)
+	s.CloneRoot = t.TempDir() // a clone could start: only the refusal stops it
+	target := filepath.Join(s.CloneRoot, "r")
+	acts := []proto.Act{
+		{RecID: "clone:plan", Text: "https://github.com/o/r"},
+		{RecID: "clone:start", Text: `{"url":"https://github.com/o/r","target":"` + target + `"}`},
+	}
+	for _, a := range acts {
+		for _, client := range []string{proto.ClientCLI, proto.ClientConsole} {
+			if res := actOver(t, s, 100, client, a); res.Err != noClone {
+				t.Errorf("%s %s from the driven pane: err %q", client, a.RecID, res.Err)
+			}
+		}
+		if res := s.act(t.Context(), fromStokerAct(a.RecID, a.Text)); res.Err != noClone {
+			t.Errorf("%s from the stoker: err %q", a.RecID, res.Err)
+		}
+	}
+	if _, err := os.Lstat(target); !os.IsNotExist(err) {
+		t.Fatalf("cloned: %v", err)
+	}
+}
