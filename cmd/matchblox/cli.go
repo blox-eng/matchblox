@@ -96,22 +96,31 @@ type shipJSON struct {
 }
 
 type sessionJSON struct {
-	Name       string    `json:"name"`
-	Pane       string    `json:"pane"`
-	Target     string    `json:"target"`
-	Status     string    `json:"status"`
-	Word       string    `json:"word"`
-	Reason     string    `json:"reason"`
-	Held       bool      `json:"held"`
-	Stoker     bool      `json:"stoker"`
-	ContextPct float64   `json:"context_pct"`
-	PlanPct    *int      `json:"plan_pct"`
-	Account    string    `json:"account"`
-	AccountDir string    `json:"account_dir"`
-	SigningIn  bool      `json:"signing_in"`
-	Ship       *shipJSON `json:"ship"`
+	Name       string      `json:"name"`
+	Pane       string      `json:"pane"`
+	Target     string      `json:"target"`
+	Status     string      `json:"status"`
+	Word       string      `json:"word"`
+	Reason     string      `json:"reason"`
+	Held       bool        `json:"held"`
+	Stoker     bool        `json:"stoker"`
+	ContextPct float64     `json:"context_pct"`
+	PlanPct    *int        `json:"plan_pct"`
+	Account    string      `json:"account"`
+	AccountDir string      `json:"account_dir"`
+	SigningIn  bool        `json:"signing_in"`
+	Ship       *shipJSON   `json:"ship"`
+	Children   []childJSON `json:"children,omitempty"`
 	// byHand: matchblox gave up driving the new account's sign-in.
 	byHand bool
+}
+
+type childJSON struct {
+	Name     string      `json:"name"`
+	Agent    string      `json:"agent"`
+	Via      string      `json:"via"`
+	PID      int         `json:"pid"`
+	Children []childJSON `json:"children,omitempty"`
 }
 
 var stageNames = [...]string{ships.StageOpen: "open", ships.StageCI: "ci", ships.StageGreen: "green", ships.StageMerged: "merged", ships.StageLive: "live"}
@@ -157,6 +166,33 @@ func signsInByHand(doc state.Doc, s sample.Session) bool {
 		tmuxName != "" && doc.SignIns[tmuxName] == service.SignInByHand
 }
 
+// childrenOf nests the children whose proven parent is the given process.
+func childrenOf(all []sample.Session, parent sample.ProcRef) []childJSON {
+	var out []childJSON
+	for _, c := range all {
+		if c.Parent != nil && *c.Parent == parent {
+			out = append(out, childJSON{c.Name, c.Agent, c.Via, c.PID, childrenOf(all, sample.ProcRef{PID: c.PID, Start: c.Start})})
+		}
+	}
+	return out
+}
+
+func writeChildren(w io.Writer, kids []childJSON, depth int) error {
+	for i, k := range kids {
+		branch := "├─"
+		if i == len(kids)-1 {
+			branch = "└─"
+		}
+		if _, err := fmt.Fprintf(w, "     %s%s %s (via %s)\n", strings.Repeat("  ", depth), branch, k.Name, k.Via); err != nil {
+			return err
+		}
+		if err := writeChildren(w, k.Children, depth+1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func sessionRows(doc state.Doc) []sessionJSON {
 	rows := []sessionJSON{}
 	for _, s := range doc.Sessions {
@@ -169,6 +205,7 @@ func sessionRows(doc state.Doc) []sessionJSON {
 		if sh := shipOf(doc, s); sh != nil {
 			r.Ship = &shipJSON{sh.Repo, sh.Number, stageName(sh.Stage), sh.Kind, sh.Note}
 		}
+		r.Children = childrenOf(doc.Children, sample.ProcRef{PID: s.PID, Start: s.Start})
 		rows = append(rows, r)
 	}
 	return rows
@@ -204,6 +241,9 @@ func writeSessions(w io.Writer, doc state.Doc, asJSON bool) error {
 			line += fmt.Sprintf("  %s#%d %s", r.Ship.Repo, r.Ship.Number, r.Ship.Stage)
 		}
 		if _, err := fmt.Fprintln(w, line); err != nil {
+			return err
+		}
+		if err := writeChildren(w, r.Children, 0); err != nil {
 			return err
 		}
 	}
