@@ -540,6 +540,27 @@ func TestServeStopsWhenSocketRemoved(t *testing.T) {
 	waitServe(t, done, ErrSocketGone)
 }
 
+// TestServeStopsWhenSocketGoneBeforeItWatches: a socket removed between
+// the listen and the start of the watch (a console that dials and removes
+// it at once, a slow start) is gone all the same.
+func TestServeStopsWhenSocketGoneBeforeItWatches(t *testing.T) {
+	s := newTest(t, time.Hour)
+	s.ExeEvery = 10 * time.Millisecond
+	dir, _ := os.MkdirTemp("", "mb")
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	path := filepath.Join(dir, "s.sock")
+	l, err := transport.Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- s.Serve(context.Background(), l) }()
+	waitServe(t, done, ErrSocketGone)
+}
+
 func TestReplaceActStopsServe(t *testing.T) {
 	s := newTest(t, time.Hour)
 	path, done := serveForTest(t, s)

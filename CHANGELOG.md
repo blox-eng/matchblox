@@ -59,6 +59,9 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- A service whose socket file was removed before it began to watch it
+  stops all the same, so the next console starts a new one; it used to
+  run on, unreachable.
 - **A copy of the default is cloned, and its own.** Files are cloned
   copy-on-write where the file system can, and copied byte by byte where
   it refuses. A link in the default that points inside the default points

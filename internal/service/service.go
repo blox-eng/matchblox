@@ -336,6 +336,12 @@ func (s *Service) watch(ctx context.Context, stop context.CancelCauseFunc, sock 
 		return now == nil || !os.SameFile(was, now) || now.Size() != was.Size() || !now.ModTime().Equal(was.ModTime())
 	}
 	exe, socket := stat(s.Exe), stat(sock)
+	if sock != "" && socket == nil {
+		// Removed between the listen and this first look: gone all the
+		// same, or no later look would ever tell.
+		stop(ErrSocketGone)
+		return
+	}
 	t := time.NewTicker(s.ExeEvery)
 	defer t.Stop()
 	for {
