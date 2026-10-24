@@ -565,8 +565,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case resultMsg:
 		m.endRec(msg.ActID, proto.Result(msg))
-		if mm, ok := m.formResult(proto.Result(msg)); ok {
-			return mm, mm.recv()
+		if mm, cmd, ok := m.formResult(proto.Result(msg)); ok {
+			return mm, tea.Batch(mm.recv(), cmd)
 		}
 		if mm, ok := m.scanResult(proto.Result(msg)); ok {
 			return mm, mm.recv()

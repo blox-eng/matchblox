@@ -75,9 +75,10 @@ started one, then the repo's last activity), then ALL by name. Typing
 filters the list; a paste goes in as typed. A tap on a row picks it. The
 other lines show again when you pick a row or leave where.
 
-A git URL on where (`https://…`, `git@host:o/r`, `ssh://…`, `gh:o/r` or
-`o/r`) shows clone rows in place of the repos: `start in <path> (already a
-clone of o/r)` for a clone you have, and `clone o/r into <folder>`. A path
+A git URL on where (`https://…`, `git@host:o/r`, `ssh://…` or `gh:o/r`)
+shows clone rows in place of the repos: `start in <path> (already a clone
+of o/r)` for a clone you have, and `clone o/r into <folder>`. A bare `o/r`
+still filters: the repos that match come first, the clone rows after. A path
 from the root, the home or here (`/…`, `~/…`, `./…`) is never a URL.
 `Enter` on a clone row starts the clone and goes to branch; where shows
 `cloning o/r… 42%` while you fill the rest.

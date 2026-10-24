@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -308,12 +309,21 @@ func TestFormSpaceIsTextOnWhereAndPicksOnAgent(t *testing.T) {
 const cloneURL = "https://github.com/o/r"
 
 // runAll runs cmd and, for a batch, each of its commands but the first
-// (the receive, which waits for the connection).
+// (the receive, which waits for the connection). A lone receive is left
+// waiting.
 func runAll(cmd tea.Cmd) {
 	if cmd == nil {
 		return
 	}
-	if b, ok := cmd().(tea.BatchMsg); ok {
+	got := make(chan tea.Msg, 1)
+	go func() { got <- cmd() }()
+	var msg tea.Msg
+	select {
+	case msg = <-got:
+	case <-time.After(time.Second):
+		return
+	}
+	if b, ok := msg.(tea.BatchMsg); ok {
 		for _, c := range b[1:] {
 			if c != nil {
 				c()
@@ -410,7 +420,8 @@ func TestPlanNamesTheTakenFolder(t *testing.T) {
 	}
 }
 
-// cloning is cloneURL planned into ~/src/r and ⏎ on its row.
+// cloning is cloneURL planned into ~/src/r, ⏎ on its row, and the
+// service's yes to the clone:start.
 func cloning(t *testing.T, w int) (tea.Model, *fakeConn) {
 	t.Helper()
 	next, f := planned(t, w, proto.ClonePlan{Target: home + "/src/r"})
@@ -418,6 +429,7 @@ func cloning(t *testing.T, w int) (tea.Model, *fakeConn) {
 	if cmd != nil {
 		cmd()
 	}
+	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.cloneAct}))
 	return next, f
 }
 
@@ -520,11 +532,13 @@ func TestCloneFailureShowsInTheForm(t *testing.T) {
 	if fm := next.(Model).form; !strings.Contains(screen(next), "! no network: github.com does not answer") || fm.cloning != "" {
 		t.Fatalf("form %+v:\n%s", fm, screen(next))
 	}
+	// The final ⏎ starts nothing: it goes back to the clone rows, planned
+	// afresh.
 	next, cmd := key(next, "enter")
 	if cmd != nil {
 		cmd()
 	}
-	if acts := f.acts(); len(acts) != 2 {
+	if acts := f.acts(); len(acts) != 3 || acts[2].RecID != "clone:plan" || !next.(Model).form.whereList() {
 		t.Fatalf("sent %+v", acts)
 	}
 }
@@ -559,5 +573,121 @@ func TestDrawClone(t *testing.T) {
 				t.Fatalf("%d columns: line %d is %d wide", w, i, lw)
 			}
 		}
+	}
+}
+
+// pressRun is key with its command run; a batch's receive is left out.
+func pressRun(m tea.Model, k string) tea.Model {
+	next, cmd := key(m, k)
+	if cmd == nil {
+		return next
+	}
+	if b, ok := cmd().(tea.BatchMsg); ok {
+		for _, c := range b[1:] {
+			if c != nil {
+				c()
+			}
+		}
+	}
+	return next
+}
+
+// planResult is the service's plan for cloneURL, as the result of the
+// form's clone:plan in flight.
+func planResult(next tea.Model, p proto.ClonePlan) (tea.Model, tea.Cmd) {
+	p.Repo, p.URL = "o/r", cloneURL
+	return next.Update(resultMsg(proto.Result{ActID: next.(Model).form.planAct, Clone: &p}))
+}
+
+// A retry into the same target is not taken for the clone that failed
+// there, which the service still lists for a minute.
+func TestCloneRetryIgnoresTheOldFailure(t *testing.T) {
+	next, f := cloning(t, 100)
+	failed := proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}
+	next, _ = next.Update(cloneState(t, failed))
+	next = pressRun(next, "enter") // back to the clone rows: a fresh plan
+	if acts := f.acts(); len(acts) != 3 || acts[2].RecID != "clone:plan" {
+		t.Fatalf("sent %+v", acts)
+	}
+	next, _ = planResult(next, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter") // the clone again: its start is in flight
+	if acts := f.acts(); len(acts) != 4 || acts[3].RecID != "clone:start" {
+		t.Fatalf("sent %+v", acts)
+	}
+	next, _ = next.Update(cloneState(t, failed)) // built before the service took the start
+	if fm := next.(Model).form; fm.cloning != home+"/src/r" || strings.Contains(screen(next), "! no network") {
+		t.Fatalf("the old failure was taken: %+v", fm)
+	}
+	next = pressRun(next, "esc")
+	if acts := f.acts(); len(acts) != 5 || acts[4] != (proto.Act{RecID: "clone:stop", Text: home + "/src/r"}) {
+		t.Fatalf("sent %+v", acts)
+	}
+}
+
+func TestRefusedStartAsksAFreshPlan(t *testing.T) {
+	next, f := planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter")
+	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.cloneAct, Err: "~/src/r is there already"}))
+	if fm := next.(Model).form; fm.cloning != "" || !strings.Contains(screen(next), "! ~/src/r is there already") {
+		t.Fatalf("form %+v:\n%s", fm, screen(next))
+	}
+	pressRun(next, "enter")
+	if acts := f.acts(); len(acts) != 3 || acts[2].RecID != "clone:plan" || acts[2].Text != cloneURL {
+		t.Fatalf("sent %+v", acts)
+	}
+}
+
+// A bare o/r still filters: the repos that match first, the clone after.
+func TestShorthandStillFilters(t *testing.T) {
+	m, f := loadedWith(t, 100, whereState(t))
+	next, _ := key(m, "N")
+	next, cmd := next.Update(tea.PasteMsg{Content: "dev/match"})
+	cmd()
+	fm := next.(Model).form
+	rows := selectable(fm.rows)
+	if len(rows) < 2 || rows[0].kind != rowRepo || rows[0].repo.path != "/dev/matchblox" || rows[len(rows)-1].kind != rowClone || next.(Model).whereSelected().path() != "/dev/matchblox" {
+		t.Fatalf("rows %+v", rows)
+	}
+	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "clone:plan" {
+		t.Fatalf("sent %+v", acts)
+	}
+	// No repo matches: the clone row is selected.
+	next, _ = key(m, "N")
+	next, _ = next.Update(tea.PasteMsg{Content: "zz/qq"})
+	if r := next.(Model).whereSelected(); r.kind != rowClone || len(next.(Model).form.rows) != 1 {
+		t.Fatalf("rows %+v", next.(Model).form.rows)
+	}
+}
+
+// ⏎ before the plan is kept, and done when the plan lands.
+func TestEnterBeforeThePlanIsKept(t *testing.T) {
+	next, f := pastedURL(t, 100)
+	next = pressRun(next, "enter")
+	if acts := f.acts(); len(acts) != 1 {
+		t.Fatalf("sent %+v", acts)
+	}
+	next, cmd := planResult(next, proto.ClonePlan{Target: home + "/src/r"})
+	runAll(cmd)
+	var cs proto.CloneStart
+	if acts := f.acts(); len(acts) != 2 || acts[1].RecID != "clone:start" || json.Unmarshal([]byte(acts[1].Text), &cs) != nil || cs.Target != home+"/src/r" || next.(Model).form.at != fieldBranch {
+		t.Fatalf("sent %+v", acts)
+	}
+	// A plan with the clone there already picks it.
+	next, f = pastedURL(t, 100)
+	next, _ = next.Update(keyPress("tab"))
+	next, cmd = planResult(next, proto.ClonePlan{Have: []string{home + "/src/r"}, Target: home + "/src/r", Fresh: home + "/src/r-ember"})
+	runAll(cmd)
+	if fm := next.(Model).form; fm.where != home+"/src/r" || fm.at != fieldBranch || len(f.acts()) != 1 {
+		t.Fatalf("form %+v sent %+v", fm, f.acts())
+	}
+}
+
+// A clone the snapshots no longer list, and never saw done, stopped.
+func TestCloneGoneFromTheSnapshot(t *testing.T) {
+	next, _ := cloning(t, 100)
+	next, _ = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: 42}))
+	next, _ = next.Update(cloneState(t))
+	if fm := next.(Model).form; fm.cloning != "" || !strings.Contains(screen(next), "! the clone of o/r stopped before it was done") {
+		t.Fatalf("form %+v:\n%s", fm, screen(next))
 	}
 }

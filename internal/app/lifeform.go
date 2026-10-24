@@ -80,6 +80,7 @@ type form struct {
 	cloneAct      string
 	startWhenDone bool
 	startAs       proto.NewSession
+	pickOnPlan    bool // ⏎ or tab came before the plan: done when it lands
 }
 
 const maxField = 300
@@ -252,6 +253,10 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if f.whereList() {
 		f.err = ""
 		if r := m.whereSelectedIn(&f); r.kind == rowClone && bkey.Matches(k, fk.Enter, fk.Next) {
+			if r.repo.path == "" { // the plan is on its way
+				f.pickOnPlan = true
+				return m, nil
+			}
 			return m, m.startClone(&f, r)
 		}
 		if bkey.Matches(k, fk.Enter) && f.pickWhere() {
@@ -348,7 +353,7 @@ func (m Model) eraseField(f *form) {
 	}
 	switch f.at {
 	case fieldWhere:
-		f.listOpen = true
+		f.listOpen, f.pickOnPlan = true, false
 		m.refreshWhere(f, "")
 	case fieldName:
 		f.named = f.name != ""
@@ -503,20 +508,48 @@ func (m *Model) startClone(f *form, r whereRow) tea.Cmd {
 	return cmd
 }
 
-// stopClone stops the clone f started, while it runs: the form forgets it
-// and the service deletes its partial folder.
+// stopClone stops the clone f started: the form forgets it and the
+// service deletes its partial folder. The next ⏎ asks for a fresh plan.
 func (m *Model) stopClone(f *form) tea.Cmd {
 	target := f.cloning
 	if target == "" {
 		return nil
 	}
-	f.cloning, f.startWhenDone = "", false
-	if c, ok := m.cloneFor(target); ok && (c.Done || c.Err != "") {
-		return nil
-	}
+	f.forgetClone("")
 	cmd := m.send(proto.Act{RecID: "clone:stop", Text: target})
 	f.cloneAct = fmt.Sprintf("a%d", m.acts)
 	return cmd
+}
+
+// forgetClone drops the form's clone and its plan, err the form's error:
+// a clone that failed or stopped is planned afresh.
+func (f *form) forgetClone(err string) {
+	if err != "" {
+		f.err = err
+	}
+	f.cloning, f.startWhenDone, f.plan, f.planFor = "", false, nil, ""
+}
+
+// starting tells if the form's clone:start is still on its way: the
+// service may list a clone that ended in the same folder before it.
+func (f *form) starting() bool { return f.cloning != "" && f.cloneAct != "" }
+
+// formClone is the service's clone of the form; false while its start is
+// on its way.
+func (m Model) formClone(f *form) (proto.Clone, bool) {
+	if f.starting() {
+		return proto.Clone{}, false
+	}
+	return m.cloneFor(f.cloning)
+}
+
+// cloneRepo is the o/r the form clones.
+func (f *form) cloneRepo() string {
+	if f.plan != nil {
+		return f.plan.Repo
+	}
+	r, _ := cloneOf(f.where)
+	return r.Slug()
 }
 
 // cloneFor is the service's clone into target.
@@ -535,12 +568,18 @@ func (m Model) cloneFor(target string) (proto.Clone, bool) {
 func (m *Model) cloneNews() tea.Cmd {
 	f := *m.form
 	m.form = &f
+	if f.starting() {
+		return nil
+	}
 	c, ok := m.cloneFor(f.cloning)
 	switch {
-	case !ok || !c.Done && c.Err == "":
+	case !ok: // the service restarted, or the console was away past the minute
+		f.forgetClone("the clone of " + f.cloneRepo() + " stopped before it was done")
 		return nil
 	case c.Err != "":
-		f.err, f.cloning, f.startWhenDone = c.Err, "", false
+		f.forgetClone(c.Err)
+		return nil
+	case !c.Done:
 		return nil
 	}
 	f.where, f.picked, f.query, f.planFor, f.cloning = f.cloning, true, "", "", ""
@@ -556,12 +595,9 @@ func (m *Model) cloneNews() tea.Cmd {
 // cloneText is where's line while the clone runs, in w columns: how far
 // it is, and that the session starts when it is done.
 func (m Model) cloneText(f *form, w int) string {
-	repo := ""
-	if f.plan != nil {
-		repo = f.plan.Repo
-	}
+	repo := f.cloneRepo()
 	pct := ""
-	if c, ok := m.cloneFor(f.cloning); ok {
+	if c, ok := m.formClone(f); ok {
 		repo = cmp.Or(c.Repo, repo)
 		if c.Pct >= 0 {
 			pct = fmt.Sprintf(" %d%%", c.Pct)
@@ -599,12 +635,13 @@ func (m Model) swapEnter(f form) (tea.Model, tea.Cmd) {
 
 // formResult takes the result of the form's act: it closes when the act
 // went through, and a refusal stays in it.
-func (m Model) formResult(r proto.Result) (Model, bool) {
+func (m Model) formResult(r proto.Result) (Model, tea.Cmd, bool) {
 	if m.form != nil && r.ActID != "" && (r.ActID == m.form.planAct || r.ActID == m.form.cloneAct) {
-		return m.cloneResult(r), true
+		m, cmd := m.cloneResult(r)
+		return m, cmd, true
 	}
 	if m.form == nil || m.form.act != r.ActID {
-		return m, false
+		return m, nil, false
 	}
 	f := *m.form
 	m.form = &f
@@ -612,7 +649,7 @@ func (m Model) formResult(r proto.Result) (Model, bool) {
 	switch {
 	case r.Err != "":
 		f.err = r.Err // the folders typed stay, to fix
-		return m, true
+		return m, nil, true
 	case f.pick: // as the box's yes: the reply says how it went
 		m = m.closeScan()
 		roots, _ := splitFolders(f.roots)
@@ -621,7 +658,7 @@ func (m Model) formResult(r proto.Result) (Model, bool) {
 		m.flash = r.Skipped[0]
 	case len(r.Skipped) > 0:
 		f.err = strings.Join(r.Skipped, "; ")
-		return m, true
+		return m, nil, true
 	case f.rename:
 		m.flash = "renamed " + f.who + " to " + strings.TrimSpace(f.name)
 	default:
@@ -633,29 +670,46 @@ func (m Model) formResult(r proto.Result) (Model, bool) {
 		m.lastAgent = f.agent
 	}
 	m.form = nil
-	return m, true
+	return m, nil, true
 }
 
 // cloneResult takes the result of a clone act of the form: the plan
-// fills where's rows; a clone that does not start or stop says why.
-func (m Model) cloneResult(r proto.Result) Model {
+// fills where's rows, and a ⏎ that came before it goes now; a clone that
+// does not start or stop says why.
+func (m Model) cloneResult(r proto.Result) (Model, tea.Cmd) {
 	f := *m.form
 	m.form = &f
-	if r.ActID == f.planAct {
-		f.planAct, f.plan, f.planErr = "", r.Clone, r.Err
-		if f.plan == nil && f.planErr == "" {
-			f.planErr = "no plan for this git URL"
+	if r.ActID != f.planAct {
+		f.cloneAct = ""
+		if r.Err != "" {
+			f.forgetClone(r.Err)
 		}
-		if f.whereList() {
-			m.refreshWhere(&f, "")
+		return m, nil
+	}
+	f.planAct, f.plan, f.planErr = "", r.Clone, r.Err
+	if f.plan == nil && f.planErr == "" {
+		f.planErr = "no plan for this git URL"
+	}
+	pick := f.pickOnPlan
+	f.pickOnPlan = false
+	if !f.whereList() {
+		return m, nil
+	}
+	was := m.whereSelectedIn(&f)
+	m.refreshWhere(&f, was.path())
+	if was.kind == rowClone { // the clone row was selected: the plan's first row is
+		if i := slices.IndexFunc(f.rows, func(r whereRow) bool { return r.kind == rowHave || r.kind == rowClone }); i >= 0 {
+			f.sel = i
 		}
-		return m
 	}
-	f.cloneAct = ""
-	if r.Err != "" {
-		f.err, f.cloning, f.startWhenDone = r.Err, "", false
+	if !pick || f.planErr != "" {
+		return m, nil
 	}
-	return m
+	if sel := m.whereSelectedIn(&f); sel.kind == rowClone {
+		return m, m.startClone(&f, sel)
+	}
+	f.pickWhere()
+	return m, nil
 }
 
 // formBox is the form's lines in bw columns, the key a tap on each line
@@ -836,6 +890,7 @@ func (m Model) tapForm(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 	if _, err := fmt.Sscanf(sc.peekRows[i], "row:%d", &id); err == nil && f.whereList() && id < len(f.rows) && f.rows[id].kind != rowLabel {
 		m.form = &f
 		if f.sel = id; f.rows[id].kind == rowClone {
+			f.pickOnPlan = f.rows[id].repo.path == ""
 			return m, m.startClone(&f, f.rows[id])
 		}
 		if !f.pickWhere() {

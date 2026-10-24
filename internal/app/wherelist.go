@@ -215,7 +215,13 @@ func (m Model) whereRows(query string) []whereRow {
 	}
 	if q := strings.TrimSpace(query); q != "" {
 		if r, ok := cloneOf(q); ok && m.form != nil {
-			return m.form.cloneRows(r, q)
+			rows := m.form.cloneRows(r, q)
+			if shorthand(q) { // a bare o/r filters too: the repos that match first
+				if match := m.matchRows(q); match[0].kind != rowNone {
+					rows = append(match, rows...)
+				}
+			}
+			return rows
 		}
 		return m.matchRows(q)
 	}
@@ -253,6 +259,10 @@ func cloneOf(q string) (gitremote.Remote, bool) {
 	}
 	return gitremote.Parse(q, "https")
 }
+
+// shorthand tells if the git URL q is the bare o/r, which may also be
+// typed to filter: no scheme, no gh:, no user@.
+func shorthand(q string) bool { return !strings.ContainsAny(q, ":@") }
 
 // cloneRows are the rows of the git URL q: one clone row at once, then
 // the service's plan for it: the clones there already, and where a clone
@@ -579,6 +589,7 @@ func (f *form) pickWhere() bool {
 
 // typeWhere is text typed or pasted on where: it drops a pick and filters.
 func (m Model) typeWhere(f *form, text string) {
+	f.pickOnPlan = false
 	if f.picked {
 		f.where, f.picked, f.query = "", false, ""
 	}
@@ -890,7 +901,7 @@ func (m Model) listFoot(bw int) []footPart {
 	enter, move, repo := st.footFor(fk.Enter, verb, sep), st.footFor(fk.Down, "move", sep), st.footFor(fk.Left, "repo", sep)
 	next, keep := st.footFor(fk.Next, "", sep), st.footFor(fk.Close, "keep the path", sep)
 	full := []footPart{enter, move, repo, next, keep}
-	if m.form.cloneList() { // no repo rows to step through
+	if m.form.cloneList() && !slices.ContainsFunc(m.form.rows, func(r whereRow) bool { return r.kind == rowRepo }) { // no repo to step to
 		full = []footPart{enter, move, next, keep}
 	}
 	for _, parts := range [][]footPart{full, {enter, move, next, keep}, {enter, move, keep}, {enter, keep}} {
