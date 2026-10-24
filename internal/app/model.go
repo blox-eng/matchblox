@@ -326,6 +326,9 @@ type Model struct {
 	// for N's where list: built at each snapshot, not at each draw.
 	used   proto.Used
 	wrepos []whereRepo
+	// clones are the clones the service runs and the ones that ended in
+	// the last minute (#176).
+	clones []proto.Clone
 }
 
 func New(opt Options) Model {
@@ -504,7 +507,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.used = *st.Used
 		}
 		m.wrepos = m.whereRepos()
-		if m.form != nil && m.form.whereList() {
+		m.clones = st.Clones
+		var started tea.Cmd
+		if m.form != nil && m.form.cloning != "" {
+			started = m.cloneNews()
+		}
+		if m.form != nil && m.form.whereList() && !m.form.cloneList() {
 			f := *m.form
 			m.form = &f
 			sel := m.whereSelected().path()
@@ -533,7 +541,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.sheet != nil && m.sheet.queued && m.sheet.act == "" && m.stoker != nil && m.stoker.Ready {
 			m, order = m.sendOrder() // the stoker rests now: the order that waited for it goes
 		}
-		return m, tea.Batch(m.recv(), m.animate(), news, order)
+		return m, tea.Batch(m.recv(), m.animate(), news, order, started)
 	case graphicsMsg:
 		return m.graphics(msg)
 	case graphicsTickMsg:

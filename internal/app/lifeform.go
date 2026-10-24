@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,6 +67,19 @@ type form struct {
 	picked   bool
 	query    string
 	extra    string
+	// A git URL in where (#176): plan is the service's plan for planFor,
+	// planErr why there is none, planAct the clone:plan in flight.
+	// cloning is the target of the clone this form started, cloneAct its
+	// clone:start or clone:stop in flight; startWhenDone: the final ⏎ came
+	// while it ran, and the session starts as startAs when it is done.
+	plan          *proto.ClonePlan
+	planFor       string
+	planErr       string
+	planAct       string
+	cloning       string
+	cloneAct      string
+	startWhenDone bool
+	startAs       proto.NewSession
 }
 
 const maxField = 300
@@ -203,8 +217,12 @@ func (f *form) text(field int) *string {
 // autoName is the name a new session takes when none is typed: the
 // worktree's for a branch, else the directory's, as the service makes it.
 func (f *form) autoName() string {
-	base := filepath.Base(filepath.Clean(f.where))
-	if f.where == "" {
+	where := f.where
+	if f.cloning != "" { // the session starts in the clone
+		where = f.cloning
+	}
+	base := filepath.Base(filepath.Clean(where))
+	if where == "" {
 		return ""
 	}
 	if f.branch != "" {
@@ -222,7 +240,7 @@ func (f *form) move(by int) {
 // moveTo is move, and back on where the list opens.
 func (m Model) moveTo(f *form, by int) {
 	f.move(by)
-	if f.at == fieldWhere {
+	if f.at == fieldWhere && f.cloning == "" { // no list while it clones
 		m.openWhere(f)
 	}
 }
@@ -233,6 +251,9 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	fk := m.keys.form
 	if f.whereList() {
 		f.err = ""
+		if r := m.whereSelectedIn(&f); r.kind == rowClone && bkey.Matches(k, fk.Enter, fk.Next) {
+			return m, m.startClone(&f, r)
+		}
 		if bkey.Matches(k, fk.Enter) && f.pickWhere() {
 			return m, nil
 		}
@@ -243,6 +264,9 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	switch {
 	case bkey.Matches(k, fk.Close):
+		if f.cloning != "" { // the first esc stops the clone; the form stays
+			return m, m.stopClone(&f)
+		}
 		m.form = nil // nothing is sent
 		return m, nil
 	case bkey.Matches(k, fk.Enter):
@@ -269,11 +293,16 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	// Editing where stops the clone of the URL there.
+	var stop tea.Cmd
+	if f.at == fieldWhere && f.cloning != "" && (k.Text != "" || bkey.Matches(k, fk.Erase, fk.Left, fk.Right)) {
+		stop = m.stopClone(&f)
+	}
 	// On where, space is text: only the arrows pick.
 	if f.at == fieldWhere && k.Text == "" && bkey.Matches(k, fk.Left, fk.Right) {
 		m.stepRepo(&f, bkey.Matches(k, fk.Right))
 		f.top = scrollTop(f.top, f.sel, m.listHeight(), len(f.rows))
-		return m, nil
+		return m, stop
 	}
 	switch {
 	case bkey.Matches(k, fk.Erase):
@@ -281,7 +310,7 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case k.Text != "" && len([]rune(m.fieldText(&f)+k.Text)) <= maxField:
 		m.typeField(&f, k.Text)
 	}
-	return m, nil
+	return m, tea.Batch(stop, m.planWhere(&f))
 }
 
 // fieldText is the text of the field the cursor is on.
@@ -336,8 +365,12 @@ func (m Model) formPaste(text string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	f.err = ""
+	var stop tea.Cmd
+	if f.at == fieldWhere {
+		stop = m.stopClone(&f)
+	}
 	m.typeField(&f, text)
-	return m, nil
+	return m, tea.Batch(stop, m.planWhere(&f))
 }
 
 // formAgents are the agents the form picks from: Switch agent leaves out
@@ -400,15 +433,151 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 			m.openWhere(&f)
 			return m, nil
 		}
-		n := proto.NewSession{Where: strings.TrimSpace(f.where), Branch: strings.TrimSpace(f.branch), Agent: f.agent, First: strings.TrimSpace(f.first)}
-		if f.named {
-			n.Name = name
+		n := f.newSession(strings.TrimSpace(f.where))
+		if f.cloning != "" { // it starts when the clone is done
+			f.startWhenDone, f.startAs, f.err = true, n, ""
+			return m, nil
 		}
-		b, _ := json.Marshal(n)
-		cmd = m.send(proto.Act{RecID: "new:session", Confirm: "y", Text: string(b)})
+		if _, ok := cloneOf(f.where); ok && !f.picked {
+			// A URL that is not cloned: back to its rows, where ⏎ clones.
+			m.openWhere(&f)
+			return m, m.planWhere(&f)
+		}
+		return m, m.sendNew(&f, n)
 	}
 	f.act, f.err = fmt.Sprintf("a%d", m.acts), ""
 	return m, cmd
+}
+
+// newSession is the New session form's new:session, in where.
+func (f *form) newSession(where string) proto.NewSession {
+	n := proto.NewSession{Where: where, Branch: strings.TrimSpace(f.branch), Agent: f.agent, First: strings.TrimSpace(f.first)}
+	if f.named {
+		n.Name = strings.TrimSpace(f.name)
+	}
+	return n
+}
+
+// sendNew sends n as f's act.
+func (m *Model) sendNew(f *form, n proto.NewSession) tea.Cmd {
+	b, _ := json.Marshal(n)
+	cmd := m.send(proto.Act{RecID: "new:session", Confirm: "y", Text: string(b)})
+	f.act, f.err = fmt.Sprintf("a%d", m.acts), ""
+	return cmd
+}
+
+// The clone in the form (#176): a git URL in where asks the service for a
+// plan; ⏎ on its clone row starts the clone, and the builder fills the
+// rest while it runs.
+
+// cloneList tells if where's list holds the rows of a git URL.
+func (f *form) cloneList() bool {
+	_, ok := cloneOf(f.filter())
+	return ok
+}
+
+// planWhere asks the service where a clone of the git URL in where goes,
+// once for each text.
+func (m *Model) planWhere(f *form) tea.Cmd {
+	q := strings.TrimSpace(f.filter())
+	if _, ok := cloneOf(q); f.at != fieldWhere || !ok || q == f.planFor {
+		return nil
+	}
+	f.plan, f.planErr, f.planFor = nil, "", q
+	cmd := m.send(proto.Act{RecID: "clone:plan", Text: q})
+	f.planAct = fmt.Sprintf("a%d", m.acts)
+	return cmd
+}
+
+// startClone is ⏎ or tab on a clone row: the clone starts in the service,
+// where keeps the URL and the cursor goes to branch. Nothing while the
+// plan is on its way.
+func (m *Model) startClone(f *form, r whereRow) tea.Cmd {
+	if r.kind != rowClone || r.repo.path == "" || f.plan == nil {
+		return nil
+	}
+	b, _ := json.Marshal(proto.CloneStart{URL: f.plan.URL, Target: r.repo.path})
+	cmd := m.send(proto.Act{RecID: "clone:start", Text: string(b)})
+	f.cloneAct, f.cloning, f.startWhenDone, f.err = fmt.Sprintf("a%d", m.acts), r.repo.path, false, ""
+	f.listOpen, f.at = false, fieldBranch
+	return cmd
+}
+
+// stopClone stops the clone f started, while it runs: the form forgets it
+// and the service deletes its partial folder.
+func (m *Model) stopClone(f *form) tea.Cmd {
+	target := f.cloning
+	if target == "" {
+		return nil
+	}
+	f.cloning, f.startWhenDone = "", false
+	if c, ok := m.cloneFor(target); ok && (c.Done || c.Err != "") {
+		return nil
+	}
+	cmd := m.send(proto.Act{RecID: "clone:stop", Text: target})
+	f.cloneAct = fmt.Sprintf("a%d", m.acts)
+	return cmd
+}
+
+// cloneFor is the service's clone into target.
+func (m Model) cloneFor(target string) (proto.Clone, bool) {
+	target = filepath.Clean(target)
+	i := slices.IndexFunc(m.clones, func(c proto.Clone) bool { return filepath.Clean(c.Target) == target })
+	if i < 0 {
+		return proto.Clone{}, false
+	}
+	return m.clones[i], true
+}
+
+// cloneNews is what a snapshot says of the form's clone: a failure is the
+// form's error; done, its folder is where, and a session that waited for
+// it starts there.
+func (m *Model) cloneNews() tea.Cmd {
+	f := *m.form
+	m.form = &f
+	c, ok := m.cloneFor(f.cloning)
+	switch {
+	case !ok || !c.Done && c.Err == "":
+		return nil
+	case c.Err != "":
+		f.err, f.cloning, f.startWhenDone = c.Err, "", false
+		return nil
+	}
+	f.where, f.picked, f.query, f.planFor, f.cloning = f.cloning, true, "", "", ""
+	if !f.startWhenDone {
+		return nil
+	}
+	f.startWhenDone = false
+	n := f.startAs
+	n.Where = f.where
+	return m.sendNew(&f, n)
+}
+
+// cloneText is where's line while the clone runs, in w columns: how far
+// it is, and that the session starts when it is done.
+func (m Model) cloneText(f *form, w int) string {
+	repo := ""
+	if f.plan != nil {
+		repo = f.plan.Repo
+	}
+	pct := ""
+	if c, ok := m.cloneFor(f.cloning); ok {
+		repo = cmp.Or(c.Repo, repo)
+		if c.Pct >= 0 {
+			pct = fmt.Sprintf(" %d%%", c.Pct)
+		}
+	}
+	line := "cloning " + repo + "…" + pct
+	if f.startWhenDone {
+		const after = "starts when the clone is done"
+		for _, l := range []string{line + " · " + after, strings.TrimSpace(pct) + " · " + after, after} {
+			if lipgloss.Width(l) <= w && !strings.HasPrefix(l, " ") {
+				return l
+			}
+		}
+		line = after
+	}
+	return fit(line, w)
 }
 
 // swapEnter turns the Switch agent form into its plan, checked as the
@@ -431,6 +600,9 @@ func (m Model) swapEnter(f form) (tea.Model, tea.Cmd) {
 // formResult takes the result of the form's act: it closes when the act
 // went through, and a refusal stays in it.
 func (m Model) formResult(r proto.Result) (Model, bool) {
+	if m.form != nil && r.ActID != "" && (r.ActID == m.form.planAct || r.ActID == m.form.cloneAct) {
+		return m.cloneResult(r), true
+	}
 	if m.form == nil || m.form.act != r.ActID {
 		return m, false
 	}
@@ -464,6 +636,28 @@ func (m Model) formResult(r proto.Result) (Model, bool) {
 	return m, true
 }
 
+// cloneResult takes the result of a clone act of the form: the plan
+// fills where's rows; a clone that does not start or stop says why.
+func (m Model) cloneResult(r proto.Result) Model {
+	f := *m.form
+	m.form = &f
+	if r.ActID == f.planAct {
+		f.planAct, f.plan, f.planErr = "", r.Clone, r.Err
+		if f.plan == nil && f.planErr == "" {
+			f.planErr = "no plan for this git URL"
+		}
+		if f.whereList() {
+			m.refreshWhere(&f, "")
+		}
+		return m
+	}
+	f.cloneAct = ""
+	if r.Err != "" {
+		f.err, f.cloning, f.startWhenDone = r.Err, "", false
+	}
+	return m
+}
+
 // formBox is the form's lines in bw columns, the key a tap on each line
 // presses, the footer's key spans, and the agent chips' line with the
 // agent a tap on each chip picks.
@@ -492,7 +686,10 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 			shown = "…" + string([]rune(shown)[len([]rune(shown))-(room-2):])
 		}
 		body := st.text.Render(shown)
-		if value == "" {
+		switch {
+		case id == fieldWhere && f.cloning != "":
+			body = st.muted.Render(m.cloneText(f, room-1))
+		case value == "":
 			body = st.faint.Render(fit(placeholder, room-1))
 		}
 		if f.at == id {
@@ -638,14 +835,17 @@ func (m Model) tapForm(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 	var id int
 	if _, err := fmt.Sscanf(sc.peekRows[i], "row:%d", &id); err == nil && f.whereList() && id < len(f.rows) && f.rows[id].kind != rowLabel {
 		m.form = &f
-		if f.sel = id; !f.pickWhere() {
+		if f.sel = id; f.rows[id].kind == rowClone {
+			return m, m.startClone(&f, f.rows[id])
+		}
+		if !f.pickWhere() {
 			f.top = scrollTop(f.top, f.sel, m.listHeight(), len(f.rows))
 		}
 		return m, nil
 	}
 	if _, err := fmt.Sscanf(sc.peekRows[i], "field:%d", &id); err == nil {
 		m.form = &f
-		if f.at = id; id == fieldWhere && !f.listOpen {
+		if f.at = id; id == fieldWhere && !f.listOpen && f.cloning == "" {
 			m.openWhere(&f)
 		}
 	}

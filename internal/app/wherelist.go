@@ -3,6 +3,7 @@ package app
 import (
 	"cmp"
 	"fmt"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -12,6 +13,8 @@ import (
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/blox-eng/matchblox/internal/gitremote"
 )
 
 // The where list of N (#174): while where has focus, the builder's repos
@@ -43,6 +46,8 @@ type whereRepo struct {
 // whereRow is one line of the list.
 type whereRow struct {
 	kind int
+	// repo: a clone row's path is its target, "" while the plan is on its
+	// way; a have row's the clone that is there.
 	repo whereRepo
 	tree string // "", "├─ ", "╰─ "
 	text string // a label, a path, a message
@@ -52,7 +57,7 @@ type whereRow struct {
 // path is where a pick of the row starts the session: "" for none.
 func (r whereRow) path() string {
 	switch r.kind {
-	case rowRepo, rowTree:
+	case rowRepo, rowTree, rowHave:
 		return r.repo.path
 	case rowPath:
 		return r.text
@@ -209,6 +214,9 @@ func (m Model) whereRows(query string) []whereRow {
 		extra = m.form.extra
 	}
 	if q := strings.TrimSpace(query); q != "" {
+		if r, ok := cloneOf(q); ok && m.form != nil {
+			return m.form.cloneRows(r, q)
+		}
 		return m.matchRows(q)
 	}
 	repos := m.wrepos
@@ -234,6 +242,41 @@ func (m Model) whereRows(query string) []whereRow {
 		}
 	}
 	return rows
+}
+
+// cloneOf is the remote of a git URL typed in where; false for a path
+// (from the root, the home or here), which is never a clone.
+func cloneOf(q string) (gitremote.Remote, bool) {
+	q = strings.TrimSpace(q)
+	if q == "" || pathLike(q) {
+		return gitremote.Remote{}, false
+	}
+	return gitremote.Parse(q, "https")
+}
+
+// cloneRows are the rows of the git URL q: one clone row at once, then
+// the service's plan for it: the clones there already, and where a clone
+// goes.
+func (f *form) cloneRows(r gitremote.Remote, q string) []whereRow {
+	p := f.plan
+	switch {
+	case f.planFor != q || p == nil && f.planErr == "":
+		return []whereRow{{kind: rowClone, text: "clone " + r.Slug() + "…"}}
+	case p == nil:
+		return []whereRow{{kind: rowNone, text: f.planErr}}
+	}
+	var rows []whereRow
+	for _, h := range p.Have {
+		rows = append(rows, whereRow{kind: rowHave, repo: whereRepo{path: h}, text: "start in " + tilde(h) + " (already a clone of " + p.Repo + ")"})
+	}
+	target, text := p.Target, "clone "+p.Repo+" into "+tilde(p.Target)
+	if p.Fresh != "" {
+		target, text = p.Fresh, "clone anew into "+tilde(p.Fresh)
+	}
+	if p.Taken != "" {
+		text += " (" + tilde(filepath.Join(filepath.Dir(p.Target), path.Base(p.Repo))) + " is " + p.Taken + ")"
+	}
+	return append(rows, whereRow{kind: rowClone, repo: whereRepo{path: target}, text: text})
 }
 
 // repoRows are a repo's row and its worktrees' under it.
@@ -635,7 +678,7 @@ func (m Model) whereLines(iw int) (lines, press []string) {
 		add("", "")
 	}
 	count := ""
-	if strings.TrimSpace(f.filter()) != "" && (len(f.rows) == 0 || f.rows[0].kind != rowNone) {
+	if strings.TrimSpace(f.filter()) != "" && (len(f.rows) == 0 || !slices.Contains([]int{rowNone, rowClone, rowHave}, f.rows[0].kind)) {
 		n := 0
 		for _, r := range f.rows {
 			if r.kind == rowRepo {
@@ -840,9 +883,17 @@ func (m Model) thenLine(iw int) string {
 // arrows go first.
 func (m Model) listFoot(bw int) []footPart {
 	st, fk, sep := m.st, m.keys.form, " · "
-	enter, move, repo := st.footFor(fk.Enter, "pick", sep), st.footFor(fk.Down, "move", sep), st.footFor(fk.Left, "repo", sep)
+	verb := "pick"
+	if m.whereSelected().kind == rowClone {
+		verb = "clone"
+	}
+	enter, move, repo := st.footFor(fk.Enter, verb, sep), st.footFor(fk.Down, "move", sep), st.footFor(fk.Left, "repo", sep)
 	next, keep := st.footFor(fk.Next, "", sep), st.footFor(fk.Close, "keep the path", sep)
-	for _, parts := range [][]footPart{{enter, move, repo, next, keep}, {enter, move, next, keep}, {enter, move, keep}, {enter, keep}} {
+	full := []footPart{enter, move, repo, next, keep}
+	if m.form.cloneList() { // no repo rows to step through
+		full = []footPart{enter, move, next, keep}
+	}
+	for _, parts := range [][]footPart{full, {enter, move, next, keep}, {enter, move, keep}, {enter, keep}} {
 		w := -lipgloss.Width(sep)
 		for _, p := range parts {
 			w += lipgloss.Width(p.text) + lipgloss.Width(sep)

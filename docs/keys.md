@@ -75,14 +75,21 @@ started one, then the repo's last activity), then ALL by name. Typing
 filters the list; a paste goes in as typed. A tap on a row picks it. The
 other lines show again when you pick a row or leave where.
 
+A git URL on where (`https://…`, `git@host:o/r`, `ssh://…`, `gh:o/r` or
+`o/r`) shows clone rows in place of the repos: `start in <path> (already a
+clone of o/r)` for a clone you have, and `clone o/r into <folder>`. A path
+from the root, the home or here (`/…`, `~/…`, `./…`) is never a URL.
+`Enter` on a clone row starts the clone and goes to branch; where shows
+`cloning o/r… 42%` while you fill the rest.
+
 | Key | What it does |
 |---|---|
 | `Tab` | Goes to the next line. `Shift+Tab` goes back. On where with the list open, picks the selected row first; `Shift+Tab` stays. |
 | `↓` or `↑` | On where with the list open, moves through the rows, repos and worktrees. On every other line, goes to the next or the previous line. |
 | `←` or `→` | On where, selects the previous or the next repo of the list and shows its path; the list keeps what you typed. On agent, picks the agent before or after; Switch agent leaves out the one the session runs. |
-| `Enter` | On where with the list open, picks the selected row and goes to branch. With no repo that matches, takes what you typed as a path. Else starts the session, renames it, or shows the switch's plan. A refusal stays in the form, with why. |
+| `Enter` | On where with the list open, picks the selected row and goes to branch; on a clone row, starts the clone. With no repo that matches, takes what you typed as a path. Else starts the session, renames it, or shows the switch's plan; while the clone runs, the session starts when it is done. A refusal stays in the form, with why. |
 | `Backspace` | Erases. On a path that `←` or `→` selected, goes back to what you typed. |
-| `Esc` | On where with the list open, closes the list and keeps the text as a path. Else closes the form. Nothing is sent. |
+| `Esc` | On where with the list open, closes the list and keeps the text as a path. While a clone runs, stops it and deletes its partial folder; the form stays, with the URL in where. Else closes the form. Nothing is sent. Editing where also stops the clone. |
 
 ## The answer peek
 

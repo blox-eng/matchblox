@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -299,5 +300,264 @@ func TestFormSpaceIsTextOnWhereAndPicksOnAgent(t *testing.T) {
 	next, _ = key(next, "space")
 	if fm := next.(Model).form; fm.at != fieldAgent || fm.agent != "codex" {
 		t.Fatalf("space on agent: %+v", fm)
+	}
+}
+
+// The clone in the form (#176).
+
+const cloneURL = "https://github.com/o/r"
+
+// runAll runs cmd and, for a batch, each of its commands but the first
+// (the receive, which waits for the connection).
+func runAll(cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	if b, ok := cmd().(tea.BatchMsg); ok {
+		for _, c := range b[1:] {
+			if c != nil {
+				c()
+			}
+		}
+	}
+}
+
+// pastedURL is N with cloneURL pasted into where.
+func pastedURL(t *testing.T, w int) (tea.Model, *fakeConn) {
+	t.Helper()
+	m, f := loadedWith(t, w, whereState(t))
+	next, _ := key(m, "N")
+	next, cmd := next.Update(tea.PasteMsg{Content: cloneURL})
+	if cmd != nil {
+		cmd()
+	}
+	return next, f
+}
+
+// planned is cloneURL pasted, and the service's plan for it.
+func planned(t *testing.T, w int, p proto.ClonePlan) (tea.Model, *fakeConn) {
+	t.Helper()
+	next, f := pastedURL(t, w)
+	p.Repo, p.URL = "o/r", cloneURL
+	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.planAct, Clone: &p}))
+	return next, f
+}
+
+// cloneState is whereState with the clones the service lists.
+func cloneState(t *testing.T, cs ...proto.Clone) stateMsg {
+	st := whereState(t)
+	st.Clones = cs
+	return stateMsg(st)
+}
+
+func rowTexts(rows []whereRow) []string {
+	var out []string
+	for _, r := range rows {
+		out = append(out, r.text)
+	}
+	return out
+}
+
+func TestPastedURLShowsTheCloneRowAtOnce(t *testing.T) {
+	next, f := pastedURL(t, 100)
+	fm := next.(Model).form
+	if len(fm.rows) != 1 || fm.rows[0].kind != rowClone || !strings.Contains(screen(next), "clone o/r") {
+		t.Fatalf("rows %+v:\n%s", fm.rows, screen(next))
+	}
+	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "clone:plan" || acts[0].Text != cloneURL {
+		t.Fatalf("sent %+v", acts)
+	}
+	// The same text again asks no second plan.
+	next, cmd := next.Update(tea.PasteMsg{Content: ""})
+	if cmd != nil {
+		cmd()
+	}
+	if acts := f.acts(); len(acts) != 1 {
+		t.Fatalf("sent %+v", acts)
+	}
+}
+
+func TestPlanOffersTheExistingClone(t *testing.T) {
+	next, _ := planned(t, 100, proto.ClonePlan{Have: []string{home + "/src/r"}, Target: home + "/src/r", Fresh: home + "/src/r-ember"})
+	fm := next.(Model).form
+	want := []string{"start in ~/src/r (already a clone of o/r)", "clone anew into ~/src/r-ember"}
+	if got := rowTexts(fm.rows); !slices.Equal(got, want) || fm.sel != 0 || fm.rows[0].kind != rowHave || fm.rows[1].kind != rowClone {
+		t.Fatalf("rows %q sel %d", got, fm.sel)
+	}
+	if s := screen(next); !strings.Contains(s, want[0]) || !strings.Contains(s, want[1]) {
+		t.Fatalf("the list:\n%s", s)
+	}
+	// ⏎ on the clone that is there takes its path, as a repo row.
+	next, _ = key(next, "enter")
+	if fm := next.(Model).form; fm.where != home+"/src/r" || fm.at != fieldBranch || fm.cloning != "" {
+		t.Fatalf("form %+v", fm)
+	}
+}
+
+func TestPlanNamesTheTakenFolder(t *testing.T) {
+	next, _ := planned(t, 100, proto.ClonePlan{Target: home + "/src/r-ember", Taken: "another repo"})
+	want := "clone o/r into ~/src/r-ember (~/src/r is another repo)"
+	if got := rowTexts(next.(Model).form.rows); !slices.Equal(got, []string{want}) || !strings.Contains(screen(next), want) {
+		t.Fatalf("rows %q:\n%s", got, screen(next))
+	}
+	// The session takes the clone's folder's name.
+	if next, _ = key(next, "enter"); next.(Model).form.autoName() != "r-ember" {
+		t.Fatalf("name %q", next.(Model).form.autoName())
+	}
+	next, _ = planned(t, 100, proto.ClonePlan{Target: home + "/src/r-ember", Taken: "being cloned"})
+	if got := rowTexts(next.(Model).form.rows); !slices.Equal(got, []string{"clone o/r into ~/src/r-ember (~/src/r is being cloned)"}) {
+		t.Fatalf("rows %q", got)
+	}
+}
+
+// cloning is cloneURL planned into ~/src/r and ⏎ on its row.
+func cloning(t *testing.T, w int) (tea.Model, *fakeConn) {
+	t.Helper()
+	next, f := planned(t, w, proto.ClonePlan{Target: home + "/src/r"})
+	next, cmd := key(next, "enter")
+	if cmd != nil {
+		cmd()
+	}
+	return next, f
+}
+
+func TestEnterOnCloneStartsItAndMovesOn(t *testing.T) {
+	next, f := cloning(t, 100)
+	acts := f.acts()
+	var cs proto.CloneStart
+	if len(acts) != 2 || acts[1].RecID != "clone:start" || json.Unmarshal([]byte(acts[1].Text), &cs) != nil || cs != (proto.CloneStart{URL: cloneURL, Target: home + "/src/r"}) {
+		t.Fatalf("sent %+v", acts)
+	}
+	fm := next.(Model).form
+	if fm.at != fieldBranch || fm.listOpen || fm.where != cloneURL || fm.cloning != home+"/src/r" {
+		t.Fatalf("form %+v", fm)
+	}
+	if s := screen(next); !strings.Contains(s, "cloning o/r…") || strings.Contains(s, "cloning o/r… 42%") {
+		t.Fatalf("before a percent:\n%s", s)
+	}
+	next, _ = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: 42}))
+	if s := screen(next); !strings.Contains(s, "cloning o/r… 42%") {
+		t.Fatalf("the where line:\n%s", s)
+	}
+}
+
+func TestEnterWhileCloningStartsWhenDone(t *testing.T) {
+	next, f := cloning(t, 100)
+	next, _ = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: 42}))
+	next = typeText(next, "feat/9")
+	next, cmd := key(next, "enter")
+	if cmd != nil {
+		cmd()
+	}
+	if acts := f.acts(); len(acts) != 2 || !next.(Model).form.startWhenDone || !strings.Contains(screen(next), "starts when the clone is done") {
+		t.Fatalf("sent %+v:\n%s", acts, screen(next))
+	}
+	next, cmd = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: 100, Done: true}))
+	runAll(cmd)
+	acts := f.acts()
+	var n proto.NewSession
+	if len(acts) != 3 || acts[2].RecID != "new:session" || json.Unmarshal([]byte(acts[2].Text), &n) != nil || n.Where != home+"/src/r" || n.Branch != "feat/9" {
+		t.Fatalf("sent %+v", acts)
+	}
+	// Its result closes the form as any start does.
+	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.act}))
+	if nm := next.(Model); nm.form != nil || !strings.Contains(nm.flash, "started r-feat-9") {
+		t.Fatalf("form %+v flash %q", nm.form, nm.flash)
+	}
+}
+
+func TestEnterAfterTheCloneStartsAtOnce(t *testing.T) {
+	next, f := cloning(t, 100)
+	next, _ = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: 100, Done: true}))
+	next, cmd := key(next, "enter")
+	if cmd != nil {
+		cmd()
+	}
+	var n proto.NewSession
+	if acts := f.acts(); len(acts) != 3 || acts[2].RecID != "new:session" || json.Unmarshal([]byte(acts[2].Text), &n) != nil || n.Where != home+"/src/r" {
+		t.Fatalf("sent %+v", acts)
+	}
+}
+
+func TestEscStopsTheClone(t *testing.T) {
+	next, f := cloning(t, 100)
+	next, cmd := key(next, "esc")
+	if cmd != nil {
+		cmd()
+	}
+	acts := f.acts()
+	if len(acts) != 3 || acts[2] != (proto.Act{RecID: "clone:stop", Text: home + "/src/r"}) {
+		t.Fatalf("sent %+v", acts)
+	}
+	if fm := next.(Model).form; fm == nil || fm.where != cloneURL || fm.cloning != "" || fm.startWhenDone {
+		t.Fatalf("form %+v", fm)
+	}
+	// A second esc closes the form.
+	if next, _ = key(next, "esc"); next.(Model).form != nil {
+		t.Fatal("the second esc kept the form")
+	}
+}
+
+func TestEditingWhereStopsTheClone(t *testing.T) {
+	next, f := cloning(t, 100)
+	next, _ = next.Update(keyPress("shift+tab")) // back on where: no list while it clones
+	if fm := next.(Model).form; fm.at != fieldWhere || fm.listOpen || !strings.Contains(screen(next), "cloning o/r…") {
+		t.Fatalf("form %+v:\n%s", fm, screen(next))
+	}
+	next, cmd := next.Update(keyPress("backspace"))
+	if cmd != nil {
+		cmd()
+	}
+	acts := f.acts()
+	if fm := next.(Model).form; len(acts) != 3 || acts[2] != (proto.Act{RecID: "clone:stop", Text: home + "/src/r"}) || fm.cloning != "" || fm.where != cloneURL[:len(cloneURL)-1] {
+		t.Fatalf("sent %+v form %+v", acts, fm)
+	}
+}
+
+func TestCloneFailureShowsInTheForm(t *testing.T) {
+	next, f := cloning(t, 100)
+	next, _ = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}))
+	if fm := next.(Model).form; !strings.Contains(screen(next), "! no network: github.com does not answer") || fm.cloning != "" {
+		t.Fatalf("form %+v:\n%s", fm, screen(next))
+	}
+	next, cmd := key(next, "enter")
+	if cmd != nil {
+		cmd()
+	}
+	if acts := f.acts(); len(acts) != 2 {
+		t.Fatalf("sent %+v", acts)
+	}
+}
+
+func TestTildePathIsNoClone(t *testing.T) {
+	for _, p := range []string{"~/o/r", "./o/r"} {
+		m, f := loadedWith(t, 100, whereState(t))
+		next, _ := key(m, "N")
+		next, cmd := next.Update(tea.PasteMsg{Content: p})
+		if cmd != nil {
+			cmd()
+		}
+		if fm := next.(Model).form; slices.ContainsFunc(fm.rows, func(r whereRow) bool { return r.kind == rowClone }) || len(f.acts()) != 0 {
+			t.Fatalf("%s: rows %+v sent %+v", p, fm.rows, f.acts())
+		}
+	}
+}
+
+// TestDrawClone prints the form with a clone row and with the clone's
+// line, for a look: go test -run TestDrawClone -v.
+func TestDrawClone(t *testing.T) {
+	for _, w := range []int{100, 44} {
+		next, _ := planned(t, w, proto.ClonePlan{Have: []string{home + "/src/r"}, Target: home + "/src/r", Fresh: home + "/src/r-ember"})
+		t.Logf("%d columns, the plan:\n%s", w, screen(next))
+		next, _ = cloning(t, w)
+		next, _ = next.Update(cloneState(t, proto.Clone{Target: home + "/src/r", Repo: "o/r", Pct: 42}))
+		t.Logf("%d columns, cloning:\n%s", w, screen(next))
+		next, _ = key(next, "enter")
+		t.Logf("%d columns, waiting:\n%s", w, screen(next))
+		for i, l := range strings.Split(next.(Model).render(), "\n") {
+			if lw := lipgloss.Width(l); lw > w {
+				t.Fatalf("%d columns: line %d is %d wide", w, i, lw)
+			}
+		}
 	}
 }

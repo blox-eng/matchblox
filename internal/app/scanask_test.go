@@ -456,7 +456,7 @@ func TestWhereReposBuiltOnceAndDeduped(t *testing.T) {
 	if after := next.(Model).wrepos; &after[0] != &before[0] || &next.(Model).form.rows[0] != &rows[0] {
 		t.Fatal("drawing the form rebuilt the repos")
 	}
-	next = typeText(next, "h/4996")
+	next = typeText(next, "4996") // h/4996 is the GitHub shorthand: a clone (#176)
 	if r := next.(Model).whereSelected(); r.path() != "/h/4996" {
 		t.Fatalf("selected %+v", r)
 	}
