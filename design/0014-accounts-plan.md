@@ -289,3 +289,111 @@ The owner asked: N must not make the builder re-pick (or re-sign-in) an account 
 - [ ] A failed re-prepare of an existing like-default account does not block the start: the start runs, and the action's result says "some shared entries did not link: <first error>". Test.
 - [ ] Codex `installation_id` is an own entry (accounts are not linked in Codex's telemetry). Update the own-entry fixture test and docs/agents.md.
 - [ ] Commit(s) `fix: …(#170)` per group.
+
+## Addendum 2 (2026-10-23): the bar #180 set
+
+#180 (host repos, #173) merged after a demanding review. These tasks bring
+accounts to the same bar. Each task adds the named test; each test fails
+before its fix.
+
+### Task 13: A console hello does not make an agent's pane a person's
+
+- `internal/service/actions.go`: a `new:session` act with `NewAccount`, or
+  with an `Account` other than `""`/`default`, from a pane where
+  `sessionAt(a.From)` finds a session, is refused like `scan:yes`, even
+  when `a.Console` is set. The stoker's own refusal (`lifecycle.go`
+  "the stoker starts on default only") stays.
+- Test: `TestNewAccountRefusedFromAgentPaneClaimingConsole` (and an
+  existing account start from such a pane is refused too).
+
+### Task 14: A copy is the account's own, cloned, and bounded
+
+- `internal/accounts`: `Copy` clones each regular file copy-on-write:
+  `unix.Clonefile` on darwin, `unix.IoctlFileClone` (FICLONE) on linux,
+  a byte copy when the clone is refused (`ENOTSUP`, `EXDEV`, `EINVAL`,
+  `EOPNOTSUPP`). Files `clone_darwin.go`, `clone_linux.go`,
+  `clone_other.go`. Modes stay as they were (owner rights at least).
+- A link whose target, resolved against its own folder, lies inside the
+  default folder is re-pointed to the same relative place inside the
+  account (a relative link, so the account can move). A link that points
+  outside the default stays as it is and is named as still shared.
+- Bounds: `CopyLimit{Entries: 200_000, Bytes: 16 << 30, Time: 90 * time.Second}`
+  (exported, so the CLI derives its wait). Bytes count only byte copies,
+  not clones. An entry past a bound is not copied and is named.
+- `Prepare` returns `(Report, error)`: `Report{Shared []string; Skipped
+  []Skip}` with `Skip{Path, Why string}`. `share` keeps going after an
+  entry fails and joins every failure (`errors.Join`), each with its path
+  (item 8): no entry is left unnamed.
+- Tests: `TestCopyDoesNotFollowTheDefaultThroughLinks` (a link into the
+  default reads the account's copy after the default is edited),
+  `TestCopyNamesLinksOutsideTheDefault`, `TestCopyStopsAtItsBound`
+  (entries and time bounds, injectable), `TestCopyFallsBackWhenCloneIsRefused`,
+  `TestRelinkNamesEveryEntryNotLinked`.
+
+### Task 15: The start says what happened, and never waits on a lock
+
+- `internal/service/lifecycle.go`: the account lock is a try-lock: a
+  start of an account whose folder is being set up is refused at once,
+  "the <agent> account <name> is being set up: start it when that ends".
+  Every account start (not only a new one) checks the folder again under
+  the lock (item 11): a folder gone since is refused.
+- The result names what the copy shared and skipped (`res.Skipped`, with a
+  prefix like `proto.NotLinked`; add `proto.StillShared` and
+  `proto.NotCopied`), and the form and CLI show them.
+- `cmd/matchblox/life.go`: a new-account start waits
+  `accounts.CopyLimit.Time + actWait`. "new: refused:" only for a
+  refusal; a failure that is not one (a write, tmux) reads "new: failed:".
+  A started new account prints "sign in in <session>" (item 6).
+  `matchblox sessions` shows the "by hand" note already: check, don't add.
+- Tests: `TestASecondStartOfAnAccountBeingSetUpIsRefusedAtOnce`,
+  `TestStartAfterAFailedNewAccountIsRefused`,
+  `TestCLINewAccountFailureIsNotRefused`, `TestCLINewAccountSaysWhereToSignIn`,
+  `TestNewWaitDerivesFromCopyLimit`.
+
+### Task 16: The sign-in driver presses only what it sees
+
+- `internal/service/signin.go`: a key goes only when the line of the
+  option it picks is the highlighted one (match the selected line's
+  marker, not a title anywhere on screen); it captures the pane again
+  right before sending and sends only if the screen is unchanged; each
+  send carries the agent's pid and start as guards
+  (`actions.go` guard form); the driver stops for good once the pane
+  shows input it did not send (the builder typed), and the note says
+  "sign in by hand".
+- Tests: `TestSignInDoesNotPressAfterTheBuilderMoved`,
+  `TestSignInStopsWhenTheBuilderTypes`, `TestSignInSendsCarryGuards`.
+
+### Task 17: A switch runs on the account its confirm named
+
+- `proto.SwitchAgent` gains `Account string`. The console and the CLI send
+  the account the confirm named. The service refuses the switch when the
+  account it would pick now differs: "the last <agent> account is now
+  <x>: switch again".
+- Test: `TestSwitchRefusesWhenTheLastAccountChanged`.
+
+### Task 18: Every account is named, or why not
+
+- `accounts.List` returns the names and `[]Skip` (a folder whose name
+  fails the rule: "not a-z, 0-9 and -, up to 10"; an unreadable root:
+  its error). The state carries them per agent (`AccountsSkipped`), and the
+  N form's account line shows "N not listed: <reason>" under the field.
+- Test: `TestUnreadableAccountsRootIsNamed`,
+  `TestAFolderWithABadNameIsNamed`.
+
+### Task 19: One form of a folder, read once
+
+- `internal/sample/account.go` `notDefault` and `lifecycle.go`
+  `liveFolder` compare with `accounts.SameDir` plus the letter case on
+  disk (as #180's `trueCase`): a symlinked or differently cased default is
+  the default.
+- `knownAccounts` and `tag` are cached: by the accounts root's mtime and
+  by procKey. Draws build nothing.
+- Tests: `TestDefaultViaSymlinkOrCaseIsDefault`,
+  `TestKnownAccountsNotReadEachSample` (counts ReadDir).
+
+### Task 20: Docs and changelog agree
+
+- README, docs/agents.md, docs/limits.md, CHANGELOG [Unreleased]: copy is
+  cloned and its own; what stays shared is named; the bounds; a busy
+  account is refused; the switch confirm. Verified claims only: what no
+  test or run shows says "not tested yet".
