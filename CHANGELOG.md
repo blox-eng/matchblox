@@ -77,8 +77,12 @@ All notable changes to matchblox are in this file. The format follows
   switch on an account that another start is setting up is refused at once,
   and one whose folder went away meanwhile is refused as gone. `matchblox
   new` waits the copy's 90 seconds on top of its 30 for a new or copy
-  account, and says "failed" for a start that ran and failed, "refused"
-  only when matchblox refused it.
+  account, and so does `matchblox switch` when the agent's last account is
+  a copy. Both say "failed" for a start that ran and failed, "refused"
+  only when matchblox refused it, and `matchblox new` says "stopped after"
+  the step that ran when a guard stopped the rest. `matchblox sessions`
+  says "sign in by hand" on the line of a new account that matchblox gave
+  up signing in.
   ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - An agent's pane cannot start a session on an account, new or not, even
   when it says it is a console.

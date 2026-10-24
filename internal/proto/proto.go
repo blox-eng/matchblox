@@ -113,7 +113,8 @@ type Result struct {
 	Names *Names `json:"names,omitempty"`
 	// Refused: the service refused the act before it ran anything (a
 	// check, a busy or gone account). An Err without it is a failure of
-	// something that ran. Only a new:session sets it.
+	// something that ran, or of a file that did not read. Only a
+	// new:session and a switch:<pane> set it.
 	Refused bool `json:"refused,omitempty"`
 }
 

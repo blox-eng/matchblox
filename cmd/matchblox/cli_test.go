@@ -666,3 +666,28 @@ func TestSessionsJSONNamesTheAccountFolder(t *testing.T) {
 		t.Fatalf("a default row %v", rows[1])
 	}
 }
+
+// TestSessionsLineSaysSignInByHand: a new account matchblox gave up
+// signing in says so on its line, by pane or by its tmux session's name.
+func TestSessionsLineSaysSignInByHand(t *testing.T) {
+	d := cliDoc()
+	d.Sessions[1].SigningIn = true
+	d.Sessions[2].SigningIn = true
+	d.SignIns = map[string]string{"%4": "by hand"}
+	var buf bytes.Buffer
+	if err := writeSessions(&buf, d, false); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(buf.String(), "\n")
+	if !strings.HasSuffix(lines[1], "  sign in by hand") || strings.Contains(lines[0]+lines[2], "sign in by hand") {
+		t.Fatalf("%q", buf.String())
+	}
+	d.SignIns = map[string]string{"app": "by hand"}
+	buf.Reset()
+	if err := writeSessions(&buf, d, false); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(buf.String(), "sign in by hand") != 2 {
+		t.Fatalf("by session name: %q", buf.String())
+	}
+}

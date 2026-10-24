@@ -177,7 +177,7 @@ func TestSwitchJumpsOnlyAfterItRan(t *testing.T) {
 	}
 
 	jumped = nil
-	sock = switchService(t, proto.Result{Err: "api works: y again switches it mid-turn"})
+	sock = switchService(t, proto.Result{Err: "api works: y again switches it mid-turn", Refused: true})
 	err := cliSwitch([]string{"api"}, o, &buf, sock, jump)
 	if err == nil || err.Error() != "switch api: refused: api works: y again switches it mid-turn" || jumped != nil {
 		t.Fatalf("%v %v", err, jumped)
@@ -342,5 +342,53 @@ func TestNewWaitDerivesFromCopyLimit(t *testing.T) {
 		if got := newWait(c.o, home); got != c.want {
 			t.Errorf("%+v: %v, want %v", c.o, got, c.want)
 		}
+	}
+}
+
+// TestCLISwitchFailureIsNotRefused: a switch that ran and failed reads
+// failed; only the service's refusal reads refused.
+func TestCLISwitchFailureIsNotRefused(t *testing.T) {
+	for _, c := range []struct {
+		res  proto.Result
+		want string
+	}{
+		{proto.Result{Err: "tmux respawn-pane: exit status 1", Ran: [][]string{{"tmux", "rename-window"}}}, "switch api: failed: tmux respawn-pane: exit status 1"},
+		{proto.Result{Err: "api runs codex already", Refused: true}, "switch api: refused: api runs codex already"},
+	} {
+		var buf bytes.Buffer
+		if err := cliSwitch([]string{"api"}, switchOpts{agent: "codex"}, &buf, switchService(t, c.res), nil); err == nil || err.Error() != c.want {
+			t.Errorf("%+v: %v, want %q", c.res, err, c.want)
+		}
+	}
+}
+
+// TestSwitchWaitDerivesFromCopyLimit: a switch to an agent whose last
+// account is a copy account may go on with its copy, and waits for it.
+func TestSwitchWaitDerivesFromCopyLimit(t *testing.T) {
+	home := t.TempDir()
+	cp := accounts.Folder(home, "codex", "cp")
+	if err := os.MkdirAll(cp, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cp, accounts.SetupFile), []byte("copy\nincomplete\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d := cliDoc()
+	d.LastAccount = map[string]string{"codex": "cp", "claude": "default"}
+	for agent, want := range map[string]time.Duration{"codex": accounts.CopyLimit.Time + actWait, "claude": actWait, "opencode": actWait} {
+		if got := switchWait(d, agent, home); got != want {
+			t.Errorf("%s: %v, want %v", agent, got, want)
+		}
+	}
+}
+
+// TestCLINewStoppedAfterAStepSaysSo: a start a guard stopped after a step
+// ran is neither refused nor failed: it says what ran.
+func TestCLINewStoppedAfterAStepSaysSo(t *testing.T) {
+	res := proto.Result{Ran: [][]string{{"git", "worktree", "add"}}, Skipped: []string{"tmux: a guard stopped it"}}
+	var buf bytes.Buffer
+	err := cliNew(nil, newOpts{agent: "codex"}, &buf, switchService(t, res))
+	if want := "new: stopped after git worktree add: tmux: a guard stopped it"; err == nil || err.Error() != want {
+		t.Fatalf("%v, want %q", err, want)
 	}
 }

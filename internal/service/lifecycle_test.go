@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1813,5 +1814,70 @@ func TestACopyThatStaysIncompleteSaysItGoesOn(t *testing.T) {
 	}
 	if !strings.HasPrefix(notes[0], proto.NotCopied) || !strings.Contains(notes[0], "permission denied") {
 		t.Fatalf("notes %q", notes)
+	}
+}
+
+// TestSwitchSaysRefusedOnlyForARefusal: a switch the service refuses is
+// Refused; one whose respawn ran and failed is not.
+func TestSwitchSaysRefusedOnlyForARefusal(t *testing.T) {
+	s, _, _ := switchAccountTest(t)
+	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "claude"})); res.Err == "" || !res.Refused {
+		t.Fatalf("same agent: err %q refused %v", res.Err, res.Refused)
+	}
+	s.Actions.Run = func([]string) error { return errors.New("exit status 1") }
+	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"})); res.Err == "" || res.Refused {
+		t.Fatalf("respawn failed: err %q refused %v", res.Err, res.Refused)
+	}
+}
+
+// TestAnUnreadableAccountsFolderIsAFailure: a start whose accounts folder
+// does not read failed; it is no refusal.
+func TestAnUnreadableAccountsFolderIsAFailure(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a folder of mode 0")
+	}
+	s, ran, home := accountTest(t)
+	prepared(t, home, "claude", "work")
+	dir := filepath.Dir(accounts.Folder(home, "claude", "work"))
+	if err := os.Chmod(dir, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "two", Account: "work"}))
+	if !strings.Contains(res.Err, "permission denied") || res.Refused || len(*ran) != 0 {
+		t.Fatalf("err %q refused %v ran %q", res.Err, res.Refused, *ran)
+	}
+}
+
+// TestEachFailureOfAStartIsItsOwnNote: a resumed copy that fails on many
+// entries names each failure in a note of its own, five, then how many more.
+func TestEachFailureOfAStartIsItsOwnNote(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a file of mode 0")
+	}
+	s, _, home := accountTest(t)
+	folder := accounts.Folder(home, "codex", "work")
+	if err := os.MkdirAll(folder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(folder, accounts.SetupFile), []byte("copy\nincomplete\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 7 {
+		f := filepath.Join(".codex", fmt.Sprintf("f%d", i))
+		writeDefault(t, home, f)
+		if err := os.Chmod(filepath.Join(home, f), 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "codex", Name: "two", Account: "work"}))
+	notes, ok := proto.StartNotes(res)
+	if !ok || len(notes) != 7 || notes[5] != proto.NotCopied+"and 2 more" || notes[6] != proto.CopyGoesOn {
+		t.Fatalf("err %q notes %q", res.Err, res.Skipped)
+	}
+	for _, n := range notes[:5] {
+		if !strings.Contains(n, "permission denied") || strings.Contains(n, "; ") {
+			t.Fatalf("notes %q", notes)
+		}
 	}
 }

@@ -272,11 +272,11 @@ func (s *Service) askKill(from, pane string, x sample.Session) {
 // takes a second confirm (Anyway).
 func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) proto.Result {
 	if a.Confirm != "y" {
-		return proto.Result{Err: "needs confirm"}
+		return refuseText("needs confirm")
 	}
 	var n proto.SwitchAgent
 	if err := json.Unmarshal([]byte(a.Text), &n); err != nil {
-		return proto.Result{Err: "the switch does not read: " + err.Error()}
+		return refuseText("the switch does not read: " + err.Error())
 	}
 	if n.Agent == "cursor" {
 		n.Agent = sample.CursorAgent
@@ -284,25 +284,25 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	x, ok := s.sessionAt(pane)
 	switch {
 	case ok && x.Agent == n.Agent:
-		return proto.Result{Err: x.Name + " runs " + n.Agent + " already"}
+		return refuseText(x.Name + " runs " + n.Agent + " already")
 	case !slices.Contains(Startable, n.Agent):
-		return proto.Result{Err: n.Agent + " is not an agent matchblox starts: claude, codex, opencode or cursor-agent"}
+		return refuseText(n.Agent + " is not an agent matchblox starts: claude, codex, opencode or cursor-agent")
 	case s.agentBin(n.Agent) == "":
-		return proto.Result{Err: n.Agent + " is not installed here"}
+		return refuseText(n.Agent + " is not installed here")
 	case !ok:
-		return proto.Result{Err: "no agent session in " + pane + " any more"}
+		return refuseText("no agent session in " + pane + " any more")
 	case s.fromStoker(proto.Act{From: pane}):
-		return proto.Result{Err: "the stoker's session keeps its agent"}
+		return refuseText("the stoker's session keeps its agent")
 	case s.agentsPane(a):
-		return proto.Result{Err: "the stoker does not switch agents: the builder does"}
+		return refuseText("the stoker does not switch agents: the builder does")
 	}
 	if n.Handoff != "" {
 		if err := proto.CheckFirst(n.Handoff, "the handoff"); err != nil {
-			return proto.Result{Err: err.Error()}
+			return refuse(err)
 		}
 	}
 	if !s.isDir(x.Cwd) {
-		return proto.Result{Err: "no directory " + x.Cwd}
+		return refuseText("no directory " + x.Cwd)
 	}
 	word := ""
 	switch {
@@ -312,7 +312,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 		word = "works"
 	}
 	if word != "" && !n.Anyway {
-		return proto.Result{Err: x.Name + " " + word + ": y again switches it mid-turn"}
+		return refuseText(x.Name + " " + word + ": y again switches it mid-turn")
 	}
 	// The account is held before the hold moves: a switch it refuses
 	// leaves the seat as it was.
@@ -323,7 +323,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 		argv = slices.Concat(accounts.EnvArgv(n.Agent, acct.folder, false), argv)
 		unlock, err := s.holdAccount(n.Agent, acct)
 		if err != nil {
-			return proto.Result{Err: err.Error()}
+			return refuseUnlessRead(err)
 		}
 		defer unlock()
 		if acct.again {
@@ -354,6 +354,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 			// agent still runs, and the switch did not happen.
 			res.Err = strings.Join(res.Skipped, "; ")
 			res.Skipped = nil
+			res.Refused = len(res.Ran) == 0
 		case len(res.Ran) == len(act.Steps)-1:
 			res.Err += ": the pane may have no agent now"
 		}
@@ -611,7 +612,7 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	}
 	steps, name, dir, acct, err := s.newSteps(ctx, n)
 	if err != nil {
-		return refuse(err)
+		return refuseUnlessRead(err)
 	}
 	act := advice.Action{Label: "new session"}
 	var launch []string
@@ -637,10 +638,7 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	if acct != nil {
 		unlock, err := s.holdAccount(n.Agent, acct)
 		if err != nil {
-			if errors.Is(err, errBusy) || errors.Is(err, errGone) || errors.Is(err, errThere) {
-				return refuse(err)
-			}
-			return proto.Result{Err: err.Error()}
+			return refuseUnlessRead(err)
 		}
 		defer unlock()
 	}
@@ -761,7 +759,7 @@ type onAccount struct {
 	mode         accounts.Mode
 }
 
-// errBusy, errGone and errThere mark holdAccount's refusals.
+// errBusy, errGone and errThere are holdAccount's refusals.
 var (
 	errBusy  = errors.New("being set up")
 	errGone  = errors.New("gone")
@@ -799,9 +797,38 @@ func (s *Service) holdAccount(agent string, acct *onAccount) (func(), error) {
 	return mu.Unlock, nil
 }
 
-// refuse is the result of a new session the service refused: nothing ran.
+// refuse is the result of a start or a switch the service refused:
+// nothing ran.
 func refuse(err error) proto.Result {
 	return proto.Result{Err: err.Error(), Refused: true}
+}
+
+func refuseText(why string) proto.Result { return refuse(errors.New(why)) }
+
+// refuseUnlessRead refuses for err, unless err is a file that did not read
+// (the accounts folder): that is a failure, not a refusal.
+func refuseUnlessRead(err error) proto.Result {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		return proto.Result{Err: err.Error()}
+	}
+	return refuse(err)
+}
+
+// leaves are the errors err joins, each on its own; err itself when it
+// joins none.
+func leaves(err error) []string {
+	j, ok := err.(interface{ Unwrap() []error }) //nolint:errorlint // a join's own errors, not a wrapped one
+	if !ok {
+		return []string{strings.ReplaceAll(err.Error(), "\n", "; ")}
+	}
+	var out []string
+	for _, e := range j.Unwrap() {
+		if e != nil {
+			out = append(out, leaves(e)...)
+		}
+	}
+	return out
 }
 
 // prepareNotes are the notes of a start on acct whose Prepare gave rep and
@@ -819,7 +846,7 @@ func prepareNotes(acct *onAccount, rep accounts.Report, err error) []string {
 		if acct.mode == accounts.Copy {
 			prefix = proto.NotCopied
 		}
-		notes = append(notes, prefix+strings.ReplaceAll(err.Error(), "\n", "; "))
+		notes = append(notes, proto.Notes(prefix, leaves(err))...)
 	}
 	if acct.mode == accounts.Copy && accounts.Incomplete(acct.folder) {
 		notes = append(notes, proto.CopyGoesOn)

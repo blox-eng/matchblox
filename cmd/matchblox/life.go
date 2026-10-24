@@ -180,8 +180,12 @@ func cliNew(words []string, o newOpts, w io.Writer, path string) error {
 		return fmt.Errorf("new: did not run: %w", err)
 	}
 	if err := newOutcome(w, res, o.newAccount); err != nil {
-		if res.Err != "" && !res.Refused {
+		switch {
+		case res.Err != "" && !res.Refused:
 			return fmt.Errorf("new: failed: %w", err)
+		case res.Err == "" && len(res.Ran) > 0:
+			// A guard stopped a later step: what ran stays.
+			return fmt.Errorf("new: stopped after %s: %w", strings.Join(res.Ran[len(res.Ran)-1], " "), err)
 		}
 		return fmt.Errorf("new: refused: %w", err)
 	}
@@ -203,6 +207,16 @@ func newWait(o newOpts, home string) time.Duration {
 		return accounts.CopyLimit.Time + actWait
 	}
 	return actWait
+}
+
+// switchWait is how long matchblox switch waits for its result: a switch
+// starts agent on its last account, and a copy account may go on with its
+// copy, as at a start (newWait).
+func switchWait(doc state.Doc, agent, home string) time.Duration {
+	if agent == "cursor" {
+		agent = sample.CursorAgent
+	}
+	return newWait(newOpts{agent: agent, account: doc.LastAccount[agent]}, home)
 }
 
 // newOutcome is reportResult for a new session: a start with notes on what
@@ -252,7 +266,11 @@ func cliSwitch(words []string, o switchOpts, w io.Writer, path string, jump func
 	if err != nil {
 		return err
 	}
-	res, err := doAct(path, a)
+	home, _ := os.UserHomeDir()
+	res, err := doActFor(path, a, switchWait(doc, o.agent, home))
+	if err == nil && res.Err != "" && !res.Refused {
+		return fmt.Errorf("switch %s: failed: %s", words[0], res.Err)
+	}
 	if err != nil || res.Err != "" || len(res.Ran) == 0 {
 		return handOutcome(w, "switch", words[0], res, err)
 	}
