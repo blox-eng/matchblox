@@ -19,6 +19,7 @@ import (
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/history"
@@ -291,6 +292,7 @@ type Model struct {
 	agents      []string                          // the agents a new session can start on the host
 	renames     map[string]string                 // the names sessions take at their next rest, by pane
 	accounts    map[string][]string               // the accounts each agent can start on: default first
+	skipped     map[string][]accounts.Skip        // the folders the service did not list, per agent
 	lastAccount map[string]string                 // the account last started, per agent
 	signIns     map[string]string                 // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
 	found       *proto.Found                      // the host's repositories and the scan's consent; nil: the service scans nothing
@@ -504,6 +506,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.shipReport = st.Ships
 		m.holds, m.reasons = st.Holds, st.Reasons
 		m.agents, m.renames, m.accounts, m.signIns = st.Agents, st.Renames, st.Accounts, st.SignIns
+		m.skipped = st.AccountsSkipped
 		m.lastAccount, m.keptAgent = st.LastAccount, st.LastAgent
 		if st.Found != nil {
 			m.found = st.Found

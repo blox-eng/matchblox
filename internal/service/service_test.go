@@ -1251,3 +1251,52 @@ func TestKnownAccountsOnASymlinkedHomeListOnce(t *testing.T) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 }
+
+// TestAFolderWithABadNameIsNamed: the state names a folder under the
+// accounts root that no account may be called, and why, beside the list.
+func TestAFolderWithABadNameIsNamed(t *testing.T) {
+	s, _, home := accountTest(t)
+	prepared(t, home, "claude", "work")
+	bad := filepath.Join(accounts.Root(home), "claude", "my_acct")
+	if err := os.MkdirAll(bad, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	st := s.State()
+	if want := []string{"default", "work"}; !reflect.DeepEqual(st.Accounts["claude"], want) {
+		t.Fatalf("accounts %v, want %v", st.Accounts["claude"], want)
+	}
+	want := map[string][]accounts.Skip{"claude": {{Path: bad, Why: "not a-z, 0-9 and -, up to 10"}}}
+	if !reflect.DeepEqual(st.AccountsSkipped, want) {
+		t.Fatalf("skipped %v, want %v", st.AccountsSkipped, want)
+	}
+}
+
+// TestUnreadableAccountsRootIsNamed: when the root of an agent's accounts
+// cannot be read, the state lists default only and names the error.
+func TestUnreadableAccountsRootIsNamed(t *testing.T) {
+	s, _, home := accountTest(t)
+	root := filepath.Join(accounts.Root(home), "codex")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(root, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(root, 0o700) })
+	if _, err := os.ReadDir(root); err == nil {
+		t.Skip("this user reads a folder with no permission")
+	}
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	st := s.State()
+	if want := []string{"default"}; !reflect.DeepEqual(st.Accounts["codex"], want) {
+		t.Fatalf("accounts %v, want %v", st.Accounts["codex"], want)
+	}
+	got := st.AccountsSkipped["codex"]
+	if len(got) != 1 || got[0].Path != root || !strings.Contains(got[0].Why, "permission denied") {
+		t.Fatalf("skipped %v", st.AccountsSkipped)
+	}
+	if len(st.AccountsSkipped) != 1 {
+		t.Fatalf("only codex is unreadable: %v", st.AccountsSkipped)
+	}
+}

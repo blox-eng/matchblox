@@ -59,6 +59,12 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- **`N` names each account folder it does not offer, and why.** A folder
+  under `~/.matchblox/accounts/<agent>/` whose name is not a-z, 0-9 and -,
+  up to 10, was left out of the account list without a word. The form now
+  says `N not listed: <why>` under the account field, and an unreadable
+  accounts folder shows its error the same way.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - **A switch runs on the account its confirm named, or is refused.** `A` and
   `matchblox switch` send the account they would start the agent on. If the
   agent's last account changed meanwhile, the switch is refused with `the

@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -88,13 +89,14 @@ type form struct {
 	named      bool // the name was typed: it no longer follows where
 	agent      string
 	first      string
-	whereAt    int                 // ←→ on where: the Git path it shows (-1: typed)
-	accts      map[string][]string // the accounts each agent can start on
-	last       map[string]string   // the account last started, per agent
-	account    string              // "": default; else the account, or the new one's name being typed
-	newAccount bool                // account is a name for a new one
-	setup      string              // a new account's setup: like-default | copy | empty
-	act, err   string              // the act in flight, and why the last one did not go
+	whereAt    int                        // ←→ on where: the Git path it shows (-1: typed)
+	accts      map[string][]string        // the accounts each agent can start on
+	skipped    map[string][]accounts.Skip // the folders not listed, per agent
+	last       map[string]string          // the account last started, per agent
+	account    string                     // "": default; else the account, or the new one's name being typed
+	newAccount bool                       // account is a name for a new one
+	setup      string                     // a new account's setup: like-default | copy | empty
+	act, err   string                     // the act in flight, and why the last one did not go
 }
 
 const maxField = 300
@@ -110,7 +112,7 @@ func (m Model) openNew() (tea.Model, tea.Cmd) {
 		m.flash = "no agent to start here: install claude, codex, opencode or cursor-agent"
 		return m, nil
 	}
-	f := &form{at: fieldWhere, whereAt: -1, agent: m.agents[0], accts: m.accounts, last: m.lastAccount}
+	f := &form{at: fieldWhere, whereAt: -1, agent: m.agents[0], accts: m.accounts, skipped: m.skipped, last: m.lastAccount}
 	// This console's last start first, else the service's, after a restart.
 	if slices.Contains(m.agents, m.lastAgent) {
 		f.agent = m.lastAgent
@@ -173,7 +175,7 @@ func (m Model) openSwitch() (tea.Model, tea.Cmd) {
 		m.flash = "not sent, no connection"
 		return m, nil
 	}
-	f := &form{swap: true, pane: s.Pane, who: s.Name, from: s.Agent, where: s.Cwd, at: fieldAgent, first: proto.DefaultHandoff, accts: m.accounts, last: m.lastAccount}
+	f := &form{swap: true, pane: s.Pane, who: s.Name, from: s.Agent, where: s.Cwd, at: fieldAgent, first: proto.DefaultHandoff, accts: m.accounts, skipped: m.skipped, last: m.lastAccount}
 	for _, a := range m.agents {
 		if a != s.Agent {
 			f.agent = a
@@ -766,8 +768,14 @@ func (m Model) accountLines(iw int, field func(int, string, string), add func(st
 		}
 		return out
 	}
+	notListed := func() {
+		if why := notListedLine(f.skipped[f.agent]); why != "" {
+			add("", st.faint.Render(strings.Repeat(" ", 9)+fit(why, room)))
+		}
+	}
 	if f.newAccount {
 		field(fieldAccount, f.account, "a name, up to 10")
+		notListed()
 		if f.account != "" && checkAccountName(f.account) != nil {
 			add("", st.faint.Render(strings.Repeat(" ", 9))+st.warn.Render(fit(accountNameWhy, room)))
 		}
@@ -783,6 +791,23 @@ func (m Model) accountLines(iw int, field func(int, string, string), add func(st
 		return
 	}
 	add(fmt.Sprintf("field:%d", fieldAccount), lead(fieldAccount)+choose(f.accountShown(), f.accountChoices()))
+	notListed()
+}
+
+// notListedLine says how many folders the account list left out and why: the
+// reason when they share it, else the first and "…". "" when none.
+func notListedLine(skips []accounts.Skip) string {
+	if len(skips) == 0 {
+		return ""
+	}
+	why := skips[0].Why
+	for _, s := range skips[1:] {
+		if s.Why != why {
+			why += " …"
+			break
+		}
+	}
+	return fmt.Sprintf("%d not listed: %s", len(skips), why)
 }
 
 // agentChips is the agent chips, the one chosen filled, with the span of

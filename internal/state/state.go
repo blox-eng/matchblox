@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/gitscan"
@@ -48,6 +49,10 @@ type Doc struct {
 	// sessions run on (by path, "~/" for one under home). Agents without
 	// accounts have no entry.
 	Accounts map[string][]string `json:"accounts,omitempty"`
+	// AccountsSkipped are, per agent, the folders under matchblox's root that
+	// Accounts does not list, each with why: a name that fails the rule, or
+	// the root itself when it cannot be read. The new-session form says so.
+	AccountsSkipped map[string][]accounts.Skip `json:"accounts_skipped,omitempty"`
 	// LastAccount is, per agent, the account the builder last started, as
 	// listed in Accounts ("default" included): the new-session form opens on
 	// it. An account no longer listed is not sent.

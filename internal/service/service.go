@@ -408,7 +408,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	if s.Stoker != nil {
 		view = s.stokerView(snap.Sessions)
 	}
-	known := s.knownAccounts(snap.Sessions)
+	known, skipped := s.knownAccounts(snap.Sessions)
 	s.lastAccounts.signedIn(lastAccountsPath(s.StatePath), snap.Sessions)
 	last := s.lastAccounts.listed(lastAccountsPath(s.StatePath), known)
 	lastAgent := s.lastAccounts.lastAgent(lastAccountsPath(s.StatePath))
@@ -419,7 +419,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	}
 	s.cur.Snapshot, s.sampled, s.have = snap, snap.Sessions, true
 	s.cur.Agents, s.cur.Renames = s.startable(), s.renames.names()
-	s.cur.Accounts = known
+	s.cur.Accounts, s.cur.AccountsSkipped = known, skipped
 	s.cur.LastAccount = last
 	s.cur.LastAgent = ""
 	if slices.Contains(s.cur.Agents, lastAgent) { // an agent no longer installed is not sent

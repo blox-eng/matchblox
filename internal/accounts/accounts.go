@@ -35,6 +35,9 @@ const (
 	socketMaxOther  = 107
 )
 
+// badName is why List does not offer a folder: its name fails the rule.
+const badName = "not a-z, 0-9 and -, up to 10"
+
 var nameRE = regexp.MustCompile(`^[a-z0-9-]+$`)
 
 // canon returns the agent's own name: cursor is an alias of cursor-agent.
@@ -84,22 +87,29 @@ func Folder(home, agent, name string) string {
 	return filepath.Join(Root(home), canon(agent), name)
 }
 
-// List returns the account names of agent, sorted. No folder means no accounts.
-func List(home, agent string) ([]string, error) {
-	es, err := os.ReadDir(filepath.Join(Root(home), canon(agent)))
+// List returns the account names of agent, sorted, and the folders it does
+// not offer, each with why. No folder means no accounts.
+func List(home, agent string) ([]string, []Skip, error) {
+	dir := filepath.Join(Root(home), canon(agent))
+	es, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, []Skip{{Path: dir, Why: err.Error()}}, err
 	}
 	var names []string
+	var skipped []Skip
 	for _, e := range es {
-		if e.IsDir() && nameRE.MatchString(e.Name()) {
+		switch {
+		case !e.IsDir():
+		case nameRE.MatchString(e.Name()) && len(e.Name()) <= maxName:
 			names = append(names, e.Name())
+		default:
+			skipped = append(skipped, Skip{Path: filepath.Join(dir, e.Name()), Why: badName})
 		}
 	}
-	return names, nil
+	return names, skipped, nil
 }
 
 // Env is the environment that makes agent use folder, as KEY=value pairs. A

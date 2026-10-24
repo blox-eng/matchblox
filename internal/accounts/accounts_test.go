@@ -63,15 +63,15 @@ func TestArgsForcesCodexFileStore(t *testing.T) {
 
 func TestFolderAndListAndDefaultDir(t *testing.T) {
 	home := t.TempDir()
-	if got, err := List(home, "claude"); err != nil || got != nil {
-		t.Fatalf("List with no root = %v, %v", got, err)
+	if got, skipped, err := List(home, "claude"); err != nil || got != nil || skipped != nil {
+		t.Fatalf("List with no root = %v, %v, %v", got, skipped, err)
 	}
 	for _, n := range []string{"zed", "work"} {
 		if _, err := Prepare(home, "claude", Folder(home, "claude", n), Empty); err != nil {
 			t.Fatal(err)
 		}
 	}
-	got, err := List(home, "claude")
+	got, _, err := List(home, "claude")
 	if err != nil || !reflect.DeepEqual(got, []string{"work", "zed"}) {
 		t.Fatalf("List = %v, %v", got, err)
 	}
@@ -102,5 +102,57 @@ func TestUnderAndSameDirResolveSymlinks(t *testing.T) {
 	}
 	if Under(Root(link), Root(real)) || Under(Root(real), filepath.Join(real, "other")) {
 		t.Error("the root itself or a sibling is under the root")
+	}
+}
+
+// TestAFolderWithABadNameIsNamed: a folder under the root that no account
+// may be named is not listed, and List says which and why.
+func TestAFolderWithABadNameIsNamed(t *testing.T) {
+	home := t.TempDir()
+	root := filepath.Join(Root(home), "claude")
+	for _, n := range []string{"work", "Team", "my_acct", "abcdefghijk"} {
+		if err := os.MkdirAll(filepath.Join(root, n), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "notes.txt"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, skipped, err := List(home, "claude")
+	if err != nil || !reflect.DeepEqual(got, []string{"work"}) {
+		t.Fatalf("List = %v, %v", got, err)
+	}
+	why := "not a-z, 0-9 and -, up to 10"
+	want := []Skip{
+		{Path: filepath.Join(root, "Team"), Why: why},
+		{Path: filepath.Join(root, "abcdefghijk"), Why: why},
+		{Path: filepath.Join(root, "my_acct"), Why: why},
+	}
+	if !reflect.DeepEqual(skipped, want) {
+		t.Fatalf("skipped = %v, want %v", skipped, want)
+	}
+}
+
+// TestUnreadableAccountsRootIsNamed: a root that cannot be read lists
+// nothing, and the error names the folder and says why.
+func TestUnreadableAccountsRootIsNamed(t *testing.T) {
+	home := t.TempDir()
+	root := filepath.Join(Root(home), "claude")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(root, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(root, 0o700) })
+	if _, err := os.ReadDir(root); err == nil {
+		t.Skip("this user reads a folder with no permission")
+	}
+	got, skipped, err := List(home, "claude")
+	if err == nil || got != nil {
+		t.Fatalf("List = %v, %v", got, err)
+	}
+	if len(skipped) != 1 || skipped[0].Path != root || skipped[0].Why != err.Error() {
+		t.Fatalf("skipped = %v, err %v", skipped, err)
 	}
 }

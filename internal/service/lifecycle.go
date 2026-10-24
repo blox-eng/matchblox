@@ -795,7 +795,7 @@ func (s *Service) holdAccount(agent string, acct *onAccount) (func(), error) {
 	if acct.hand {
 		return mu.Unlock, nil // checked by its live session, not on disk
 	}
-	have, err := accounts.List(s.home(), agent)
+	have, _, err := accounts.List(s.home(), agent)
 	switch there := slices.Contains(have, acct.name); {
 	case err != nil:
 	case acct.fresh && there:
@@ -906,18 +906,26 @@ var accountAgents = []string{"claude", "codex", sample.CursorAgent}
 
 // knownAccounts lists, per agent with accounts, what a new session can pick:
 // default, the folders under the root, then the hand-made folders live
-// sessions run on, deduplicated.
-func (s *Service) knownAccounts(sessions []sample.Session) map[string][]string {
+// sessions run on, deduplicated. It also returns, per agent, the folders it
+// left out and why; an agent with none has no entry.
+func (s *Service) knownAccounts(sessions []sample.Session) (map[string][]string, map[string][]accounts.Skip) {
 	home := s.home()
 	root := accounts.Root(home)
 	out := make(map[string][]string, len(accountAgents))
+	var skipped map[string][]accounts.Skip
 	for _, agent := range accountAgents {
 		if agent == sample.CursorAgent && s.goos() != "darwin" {
 			continue // Cursor accounts run on macOS only: no field
 		}
 		list := []string{"default"}
-		have, _ := accounts.List(home, agent) // unreadable: default only
+		have, skips, _ := accounts.List(home, agent) // unreadable: default only, and named
 		list = append(list, have...)
+		if len(skips) > 0 {
+			if skipped == nil {
+				skipped = map[string][]accounts.Skip{}
+			}
+			skipped[agent] = skips
+		}
 		for _, x := range sessions {
 			if x.Agent != agent || x.AccountDir == "" || accounts.Under(root, x.AccountDir) {
 				continue
@@ -928,7 +936,7 @@ func (s *Service) knownAccounts(sessions []sample.Session) map[string][]string {
 		}
 		out[agent] = list
 	}
-	return out
+	return out, skipped
 }
 
 // folderLabel is a hand-made folder as the console lists and sends it: with
@@ -1001,7 +1009,7 @@ func (s *Service) account(n proto.NewSession) (*onAccount, error) {
 		return nil, err
 	}
 	acct := &onAccount{name: n.Account, folder: accounts.Folder(home, n.Agent, n.Account), fresh: n.NewAccount}
-	have, err := accounts.List(home, n.Agent)
+	have, _, err := accounts.List(home, n.Agent)
 	if err != nil {
 		return nil, err
 	}

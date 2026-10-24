@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/proto"
 )
 
@@ -812,5 +813,56 @@ func TestANewAccountStartSaysWhereToSignInAndWhatItSkipped(t *testing.T) {
 	want := name + "; " + note + "; " + proto.CopyGoesOn
 	if nm := next.(Model); !strings.HasPrefix(name, "started ") || !strings.Contains(name, ": sign in in ") || nm.flash != want || nm.lastAgent != "codex" {
 		t.Fatalf("flash %q, want %q; last agent %q", nm.flash, want, nm.lastAgent)
+	}
+}
+
+// skippedState is accountState with folders the service did not list.
+func skippedState(skips ...accounts.Skip) proto.State {
+	st := accountState()
+	st.AccountsSkipped = map[string][]accounts.Skip{"claude": skips}
+	return st
+}
+
+func TestTheFormNamesTheFoldersNotListed(t *testing.T) {
+	why := "not a-z, 0-9 and -, up to 10"
+	for name, c := range map[string]struct {
+		skips []accounts.Skip
+		want  string
+	}{
+		"one":    {[]accounts.Skip{{Path: "/home/u/a/My_Acct", Why: why}}, "1 not listed: " + why},
+		"shared": {[]accounts.Skip{{Path: "/home/u/a/A", Why: why}, {Path: "/home/u/a/b_", Why: why}}, "2 not listed: " + why},
+		"mixed": {[]accounts.Skip{{Path: "/home/u/a/A", Why: why}, {Path: "/home/u/a/b", Why: "other"}},
+			"2 not listed: " + why + " …"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m, _ := loadedWith(t, 100, skippedState(c.skips...))
+			next, _ := key(m, "N")
+			for range 4 {
+				next, _ = key(next, "tab")
+			}
+			if s := screen(next); !strings.Contains(s, c.want) {
+				t.Fatalf("no %q:\n%s", c.want, s)
+			}
+		})
+	}
+}
+
+func TestTheFormSaysNothingWhenAllAreListed(t *testing.T) {
+	next, _ := toAccount(t)
+	if s := screen(next); strings.Contains(s, "not listed") {
+		t.Fatalf("the form:\n%s", s)
+	}
+}
+
+func TestAnUnreadableRootIsShownShortened(t *testing.T) {
+	long := "open /home/u/.matchblox/accounts/claude/" + strings.Repeat("x", 120) + ": permission denied"
+	m, _ := loadedWith(t, 100, skippedState(accounts.Skip{Path: "/home/u/.matchblox/accounts/claude", Why: long}))
+	next, _ := key(m, "N")
+	for range 4 {
+		next, _ = key(next, "tab")
+	}
+	s := screen(next)
+	if !strings.Contains(s, "1 not listed: open /home/u/.matchblox/accounts/c…") || strings.Contains(s, "permission denied") {
+		t.Fatalf("the form:\n%s", s)
 	}
 }
