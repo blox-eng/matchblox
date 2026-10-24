@@ -214,7 +214,7 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		return cliNew(words, newOpts{where: *o.where, agent: *o.agent, branch: *o.branch, name: *o.name}, os.Stdout, transport.SocketPath())
+		return cliNew(words, newOpts{where: *o.where, agent: *o.agent, branch: *o.branch, name: *o.name, account: *o.account, setup: *o.setup, newAccount: *o.newAccount}, os.Stdout, transport.SocketPath())
 	case "scan":
 		words, err := positionals(fl, args)
 		if err != nil {
@@ -304,6 +304,8 @@ type flags struct {
 	anyway                *bool
 	where, agent, branch  *string
 	name, handoff         *string
+	account, setup        *string
+	newAccount            *bool
 }
 
 // usageText heads --help: every command, one line each, then the flags.
@@ -328,7 +330,7 @@ Commands:
   matchblox compact <who>          compact a Claude Code session at rest
   matchblox hold <who> --why "…"   finish this step, then stop and wait
   matchblox release <who>          let a held session carry on
-  matchblox new ["<first message>"]  start an agent in a tmux session of its own (--where, --agent, --branch, --name)
+  matchblox new ["<first message>"]  start an agent in a tmux session of its own (--where, --agent, --branch, --name, --account)
   matchblox rename <who> <name>    name a session, its tmux session and its agent alike
   matchblox kill <who>             end a session: its agent and its pane (--anyway while it works)
   matchblox switch <who> --agent <name>  run another agent in a session's pane (--handoff, --anyway while it works)
@@ -349,30 +351,33 @@ func newFlags() (*flag.FlagSet, flags) {
 		fl.PrintDefaults()
 	}
 	return fl, flags{
-		cfgPath:  fl.String("config", config.Path(), "machine goals (TOML); a missing file means defaults"),
-		interval: fl.Duration("interval", 0, "sampling interval (default from config, else 2s)"),
-		root:     fl.String("fixtures", "", "read proc/, sys/, home/ and tmux-panes.txt from this directory instead of the live machine"),
-		text:     fl.Bool("text", false, "status: print a summary instead of JSON"),
-		stdio:    fl.Bool("stdio", false, "serve: speak on stdin and stdout, joined to the local service"),
-		json:     fl.Bool("json", false, "sessions, ships, usage, peek: print JSON instead of text"),
-		pick:     fl.Int("pick", 0, "send: answer the question the session asks with this option (from 1)"),
-		lines:    fl.Int("lines", 20, "peek: the last lines of what the session said (0: all)"),
-		why:      fl.String("why", "", "hold, stoker when … hold: why the session is held"),
-		state:    fl.String("state", "", "stoker step: doing, done, failed or waits"),
-		needs:    fl.String("needs", "", "stoker step: the go a waiting step needs from you (merge:#<n>, release, deploy); none for a step that waits on an event"),
-		rule:     fl.String("rule", "", "stoker step 0: the standing rule the step is for"),
-		ship:     fl.Int("ship", 0, "stoker when: the pull request whose stage fires the trigger"),
-		stage:    fl.String("stage", "", "stoker when --ship: ci, green, merged, live or red (CI failed)"),
-		rest:     fl.String("rest", "", "stoker when: the session whose turn's end fires the trigger"),
-		drop:     fl.String("drop", "", "stoker when: drop the trigger with this id"),
-		list:     fl.Bool("list", false, "stoker when: print the run's triggers"),
-		anyway:   fl.Bool("anyway", false, "kill, switch: act on a session that works or waits for you"),
-		where:    fl.String("where", "", "new: the directory, or the repository of --branch (default: here)"),
-		agent:    fl.String("agent", "claude", "new, switch: the agent to start: claude, codex, opencode or cursor-agent"),
-		handoff:  fl.String("handoff", "", "switch: the line the new agent starts from (default: read the tree and notes, summarise, continue; empty: none)"),
-		branch:   fl.String("branch", "", "new: first add a worktree for this new branch, beside the repository"),
-		name:     fl.String("name", "", "new: the name of the session, its tmux session and its agent (default: the directory's)"),
-		noMotion: fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),
+		cfgPath:    fl.String("config", config.Path(), "machine goals (TOML); a missing file means defaults"),
+		interval:   fl.Duration("interval", 0, "sampling interval (default from config, else 2s)"),
+		root:       fl.String("fixtures", "", "read proc/, sys/, home/ and tmux-panes.txt from this directory instead of the live machine"),
+		text:       fl.Bool("text", false, "status: print a summary instead of JSON"),
+		stdio:      fl.Bool("stdio", false, "serve: speak on stdin and stdout, joined to the local service"),
+		json:       fl.Bool("json", false, "sessions, ships, usage, peek: print JSON instead of text"),
+		pick:       fl.Int("pick", 0, "send: answer the question the session asks with this option (from 1)"),
+		lines:      fl.Int("lines", 20, "peek: the last lines of what the session said (0: all)"),
+		why:        fl.String("why", "", "hold, stoker when … hold: why the session is held"),
+		state:      fl.String("state", "", "stoker step: doing, done, failed or waits"),
+		needs:      fl.String("needs", "", "stoker step: the go a waiting step needs from you (merge:#<n>, release, deploy); none for a step that waits on an event"),
+		rule:       fl.String("rule", "", "stoker step 0: the standing rule the step is for"),
+		ship:       fl.Int("ship", 0, "stoker when: the pull request whose stage fires the trigger"),
+		stage:      fl.String("stage", "", "stoker when --ship: ci, green, merged, live or red (CI failed)"),
+		rest:       fl.String("rest", "", "stoker when: the session whose turn's end fires the trigger"),
+		drop:       fl.String("drop", "", "stoker when: drop the trigger with this id"),
+		list:       fl.Bool("list", false, "stoker when: print the run's triggers"),
+		anyway:     fl.Bool("anyway", false, "kill, switch: act on a session that works or waits for you"),
+		where:      fl.String("where", "", "new: the directory, or the repository of --branch (default: here)"),
+		agent:      fl.String("agent", "claude", "new, switch: the agent to start: claude, codex, opencode or cursor-agent"),
+		handoff:    fl.String("handoff", "", "switch: the line the new agent starts from (default: read the tree and notes, summarise, continue; empty: none)"),
+		branch:     fl.String("branch", "", "new: first add a worktree for this new branch, beside the repository"),
+		name:       fl.String("name", "", "new: the name of the session, its tmux session and its agent (default: the directory's)"),
+		account:    fl.String("account", "", "new: the account of the agent to start on (default: the default sign-in)"),
+		newAccount: fl.Bool("new-account", false, "new: make the --account, and sign in to it in the session"),
+		setup:      fl.String("setup", "", "new --new-account: like-default (default), copy or empty"),
+		noMotion:   fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),
 	}
 }
 
@@ -867,27 +872,48 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 	smp.OwnEntries = true
 	smp.LimitsDir = filepath.Dir(state.Path())
 	smp.CodexSeenFile = filepath.Join(smp.LimitsDir, "codex-seen.json")
-	if cfg.Limits.CursorUsage && runtime.GOOS == "darwin" {
-		smp.CursorUsage = cursorUsage()
+	if cfg.Limits.CursorUsage {
+		smp.CursorUsage = cursorUsage(runtime.GOOS)
 	}
 	return smp
 }
 
-// cursorUsage reads Cursor's plan usage every 5 minutes, with the login
-// token Cursor's CLI keeps in the macOS Keychain. The token is read for each
-// call and sent to Cursor's API only.
-func cursorUsage() *limits.CursorUsage {
+// cursorUsage reads Cursor's plan usage every 5 minutes. The default login's
+// token is in the macOS Keychain, so the default is read on darwin only; an
+// account's is in the auth.json of its folder (Cursor accounts run on macOS
+// only for now). A token is
+// read for each call and sent to Cursor's API only.
+func cursorUsage(goos string) *limits.CursorUsages {
 	client := &http.Client{Timeout: 10 * time.Second}
-	return &limits.CursorUsage{
+	u := &limits.CursorUsages{
 		Every: 5 * time.Minute,
-		Token: func(ctx context.Context) (string, error) {
-			out, err := exec.CommandContext(ctx, "security", "find-generic-password", "-s", "cursor-access-token", "-w").Output()
-			return strings.TrimSpace(string(out)), err
-		},
+		File:  limits.FileToken,
 		Fetch: func(ctx context.Context, token string) ([]byte, error) {
 			return limits.FetchCursorUsage(ctx, client, limits.CursorAPI, token)
 		},
 	}
+	if goos == "darwin" {
+		u.Keychain = func(ctx context.Context) (string, error) {
+			out, err := exec.CommandContext(ctx, "security", "find-generic-password", "-s", "cursor-access-token", "-w").Output()
+			return strings.TrimSpace(string(out)), keychainErr(err)
+		}
+	}
+	return u
+}
+
+// keychainNotFound is the exit status of security find-generic-password
+// when the Keychain has no such item.
+const keychainNotFound = 44
+
+// keychainErr is a failed Keychain read as limits.CursorUsages reads it: no
+// such item is a missing login, os.ErrNotExist; a denied or failed read is
+// any other error.
+func keychainErr(err error) error {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && ee.ExitCode() == keychainNotFound {
+		return fmt.Errorf("keychain: %w", os.ErrNotExist)
+	}
+	return err
 }
 
 // stokerPaneGone warns of a config that still names the stoker's pane.

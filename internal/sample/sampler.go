@@ -38,6 +38,12 @@ type Session struct {
 	// Account is a short label of the login it runs under ("a@b.c · Max",
 	// "API key"), never a credential.
 	Account string `json:"account,omitempty"`
+	// AccountDir is the config folder of a session that does not run on the
+	// default one: a matchblox account folder, or one made by hand. It tells
+	// two accounts apart before either has a name.
+	AccountDir string `json:"account_dir,omitempty"`
+	// SigningIn is true while a session on an account folder has no login yet.
+	SigningIn bool `json:"signing_in,omitempty"`
 	// Provider serves the model: anthropic, openai, bedrock, vertex, or an
 	// OpenCode provider id. The console shows it as a mark.
 	Provider   string        `json:"provider,omitempty"`
@@ -233,7 +239,8 @@ type Sampler struct {
 	// HomeAs is Home as the processes name it in their HOME; empty: Home.
 	// A fixture tree sets it: its processes name a made-up path.
 	HomeAs string
-	Tmux   func() ([]byte, error)
+
+	Tmux func() ([]byte, error)
 	// Stoker is the tmux server matchblox keeps the stoker agent on: its
 	// panes are listed too, each id carrying the server (OnServer), and
 	// StokerTmux lists them (nil: TmuxPanesOn(Stoker)). Empty: none.
@@ -262,8 +269,9 @@ type Sampler struct {
 	// directory's limits. Empty: none are read.
 	LimitsDir string
 	// CursorUsage reads Cursor's plan usage from its API ([limits]
-	// cursor_usage); nil: not read.
-	CursorUsage *limits.CursorUsage
+	// cursor_usage), for each login: the default's and each account's. Nil:
+	// not read.
+	CursorUsage *limits.CursorUsages
 	// CodexSeenFile keeps the Codex sessions seen in each directory
 	// across a restart. Empty: kept in memory only.
 	CodexSeenFile string
@@ -274,7 +282,7 @@ type Sampler struct {
 	agents *agentReader
 	panes  map[procKey]string // environ is read once per process
 	names  map[procKey]agentRef
-	// codexSeen are the Codex sessions seen in each directory, by when
+	// codexSeen are the Codex sessions seen in each place (codexPlace), by when
 	// each started: one that exited still owns the rollout it left.
 	codexSeen map[string]map[procKey]time.Time
 	// codexUntil is the last sample before this sampler started, from
@@ -298,6 +306,7 @@ type Sampler struct {
 	burnLive   map[string]bool  // burn keys measured in this scan
 	longCtx    map[procKey]bool // processes started with a 1M model setting
 	envs       map[procKey]agentEnv
+	tags       map[procKey]folderTag // the account folder of each process, found once
 	accounts   *accounts
 	opencode   *opencodeReader
 
@@ -331,6 +340,7 @@ func (s *Sampler) init() {
 	if s.agents == nil {
 		s.agents = newAgentReader()
 		s.envs = map[procKey]agentEnv{}
+		s.tags = map[procKey]folderTag{}
 		s.accounts = newAccounts()
 		s.opencode = newOpencodeReader()
 		s.panes = map[procKey]string{}
@@ -565,7 +575,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	// directory cannot be told apart.
 	opencodeIn := map[string]int{}
 	// Nor does a Codex that holds no rollout open: with two in a
-	// directory, its rollout is either's.
+	// directory of one Codex home, its rollout is either's.
 	codexIn := map[string]int{}
 	seenChanged := false
 	for pid, p := range procs {
@@ -581,14 +591,15 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		if s.agentName(pid, p) == "codex" && p.State != 'Z' && p.State != 'X' && !s.underAgent(p, procs) && !codexBatch(codexArgv(s.FS.Argv(pid))) {
 			if pp, ok := procs[p.PPID]; !ok || s.agentName(p.PPID, pp) != "codex" {
 				argv := codexArgv(s.FS.Argv(pid))
-				dir := codexWorkDir(argv, s.FS.Cwd(pid))
-				codexIn[dir]++
-				if k := (procKey{pid, p.StartTime}); codexInteractive(argv) {
-					if s.codexSeen[dir] == nil {
-						s.codexSeen[dir] = map[procKey]time.Time{}
+				k := procKey{pid, p.StartTime}
+				place := codexPlace(codexWorkDir(argv, s.FS.Cwd(pid)), s.accountDir("codex", s.envOf(pid, k)))
+				codexIn[place]++
+				if codexInteractive(argv) {
+					if s.codexSeen[place] == nil {
+						s.codexSeen[place] = map[procKey]time.Time{}
 					}
-					if _, ok := s.codexSeen[dir][k]; !ok {
-						s.codexSeen[dir][k] = now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
+					if _, ok := s.codexSeen[place][k]; !ok {
+						s.codexSeen[place][k] = now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
 						seenChanged = true
 					}
 				}
@@ -650,6 +661,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		switch agent {
 		case "claude":
 			sess.Account, sess.Provider = s.accounts.claudeAccount(env), claudeProvider(env)
+			s.tag(&sess, agent, env)
 			s.claudeSession(&sess, pid, p, key, env, uptime, now)
 			if sess.Resting() {
 				sess.Shells = s.backgroundShells(pid, procs, children, uptime, now)
@@ -665,7 +677,11 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 				if out := r.Out(now); out.After(sess.Out) && !sess.turnAt.After(r.At) {
 					sess.Out = out
 				}
-				if r == nil && env.claudeDir != filepath.Join(s.Home, ".claude") {
+				switch {
+				case r != nil:
+				case sess.SigningIn:
+					lims.fix(sess, limitsSigningIn)
+				case sess.AccountDir != "":
 					// The door edits the default settings: name the one this
 					// session reads.
 					lims.fix(sess, "run CLAUDE_CONFIG_DIR="+s.asProcess(env.claudeDir)+" matchblox setup")
@@ -673,6 +689,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			}
 		case "codex":
 			sess.Account, sess.Provider = s.accounts.codexAccount(env), "openai"
+			s.tag(&sess, agent, env)
 			path, read := s.codexRollout(pid, children)
 			argv := codexArgv(s.FS.Argv(pid))
 			batch := codexBatch(argv) // a `codex exec` row: no session of the directory
@@ -690,16 +707,17 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			// fresh: no rollout of its own yet, by its open files or, when
 			// they say nothing, by its directory. A resumed session has one.
 			dir := codexWorkDir(argv, sess.Cwd) // where Codex works: -C, else the shell's
-			fresh := read && !batch && !resume && (dir == "" || codexIn[dir] == 1)
+			place := codexPlace(dir, sess.AccountDir)
+			fresh := read && !batch && !resume && (dir == "" || codexIn[place] == 1)
 			// A resume's own rollout began before it: one the directory
 			// shows is another's, or its /new.
-			if path == "" && !batch && !resume && dir != "" && codexIn[dir] == 1 && env.codexHome != "" {
+			if path == "" && !batch && !resume && dir != "" && codexIn[place] == 1 && env.codexHome != "" {
 				var ambiguous bool
 				path, ambiguous = s.agents.codexInDir(env.codexHome, dir, started, now)
 				fresh = !ambiguous
 				// A session that started here after this one and exited
 				// owns any rollout begun since it started.
-				if at, ok := s.codexNeighbour(dir, key, started); ok && path != "" {
+				if at, ok := s.codexNeighbour(place, key, started); ok && path != "" {
 					if began := s.agents.metaOf(path).began; began.IsZero() || !began.Before(at) {
 						path, fresh = "", false
 					}
@@ -735,6 +753,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			lims.add(sess, limits.SourceCodex, lim)
 		case CursorAgent:
 			sess.Account, sess.Provider = s.accounts.cursorAccount(env), "cursor"
+			s.tag(&sess, agent, env)
 			sess.Context = "unmeasured"
 			tmux, _ := s.FS.Environ(pid, "TMUX")
 			socket, _, _ := strings.Cut(tmux, ",")
@@ -749,13 +768,28 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 					sess.Model = label(r.Model)
 				}
 			}
+			// Each login has its own month: an account never gets the
+			// default's reading.
 			var usage *limits.Reading
-			if s.CursorUsage != nil {
-				usage = s.CursorUsage.Reading(now)
+			reads := s.CursorUsage != nil && s.CursorUsage.Reads(sess.AccountDir)
+			if reads {
+				usage = s.CursorUsage.Reading(sess.AccountDir, now)
 			}
 			lims.add(sess, limits.SourceCursor, usage)
-			if s.CursorUsage != nil {
-				lims.fix(sess, "Cursor's API has not answered yet")
+			// With Cursor's usage off, no hint: the limits would not show.
+			// A read that found no token made no call: nothing has to
+			// answer, and the token is read again every 30 s. A read that
+			// failed otherwise made no call either. A read still running, or
+			// a call, waits for Cursor's API.
+			switch {
+			case reads && sess.SigningIn:
+				lims.fix(sess, limitsSigningIn)
+			case reads && s.CursorUsage.SignedOut(sess.AccountDir):
+				lims.fix(sess, cursorSignedOut)
+			case reads && s.CursorUsage.ReadFailed(sess.AccountDir):
+				lims.fix(sess, cursorUnreadable)
+			case reads:
+				lims.fix(sess, cursorNotAnswered)
 			}
 		case "opencode":
 			sess.Context = "unmeasured"
@@ -796,6 +830,11 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	for key := range s.envs {
 		if !alive[key] {
 			delete(s.envs, key)
+		}
+	}
+	for key := range s.tags {
+		if !alive[key] {
+			delete(s.tags, key)
 		}
 	}
 	for key := range s.panes {
@@ -840,6 +879,19 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	})
 }
 
+// cursorNotAnswered is the fix of Cursor's limits while its token is read,
+// or after a call to its API that gave no reading yet.
+const cursorNotAnswered = "Cursor's API has not answered yet"
+
+// cursorSignedOut is the fix of Cursor's limits once a read found no login token:
+// matchblox reads it again every 30 s.
+const cursorSignedOut = "no Cursor login token read yet"
+
+// cursorUnreadable is the fix of Cursor's limits once a read of its login
+// token ended in an error other than a missing login (a denied Keychain): no
+// call was made, and the token is read again after the interval.
+const cursorUnreadable = "Cursor's login token could not be read"
+
 // agentName is the configured agent a process runs, or "". An agent looks
 // different in /proc depending on how it was installed: a native binary or
 // a Python entry point has the agent's process name; a node agent started
@@ -847,27 +899,36 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 // "MainThread"; an npm script runs as `node <path>/<agent>`. Cursor's
 // `agent` launcher is node with the launcher's path in argv[0] and Cursor's
 // index.js after it. The argv half is read once per process and kept while
-// its process name stays the same.
+// its process name stays the same. Codex's app-server daemon is not a
+// session: it runs no conversation of its own.
 func (s *Sampler) agentName(pid int, p procfs.Proc) string {
+	return s.agentRef(pid, p).name
+}
+
+// agentRef is what agentName reads of a process: the agent it runs, and
+// whether it is Codex's app-server daemon.
+func (s *Sampler) agentRef(pid int, p procfs.Proc) agentRef {
 	if s.isAgent(p.Comm) && p.Comm != "codex" {
-		return p.Comm
+		return agentRef{p.Comm, p.Comm, false}
 	}
 	key := procKey{pid, p.StartTime}
 	if c, ok := s.names[key]; ok && c.comm == p.Comm {
-		return c.name
+		return c
 	}
-	name := ""
-	if argv := s.FS.Argv(pid); p.Comm == "codex" {
-		if s.isAgent(p.Comm) && !codexServer(argv) {
-			name = p.Comm
+	name, daemon := "", false
+	if argv := s.FS.Argv(pid); s.isAgent(p.Comm) {
+		name = p.Comm
+		if codexDaemon(argv, 0) {
+			name, daemon = "", true
 		}
 	} else if len(argv) > 0 {
+		at := 0
 		cmd := filepath.Base(argv[0])
 		if interpreter(cmd) {
 			cmd = ""
-			for _, a := range argv[1:] {
+			for i, a := range argv[1:] {
 				if !strings.HasPrefix(a, "-") {
-					cmd = filepath.Base(a)
+					at, cmd = i+1, filepath.Base(a)
 					break
 				}
 			}
@@ -881,12 +942,19 @@ func (s *Sampler) agentName(pid int, p procfs.Proc) string {
 		if name == CursorAgent && cursorPrint(argv) {
 			name = ""
 		}
+		if name == "codex" && codexDaemon(argv, at) {
+			name, daemon = "", true
+		}
 	}
-	s.names[key] = agentRef{p.Comm, name}
-	return name
+	ref := agentRef{p.Comm, name, daemon}
+	s.names[key] = ref
+	return ref
 }
 
-type agentRef struct{ comm, name string }
+type agentRef struct {
+	comm, name string
+	daemon     bool // Codex's app-server daemon
+}
 
 // WindowNamed: p's window has a name of its own, not the one tmux gives it
 // after the command it runs.
@@ -923,11 +991,21 @@ func cursorPrint(argv []string) bool {
 	return false
 }
 
-// codexNeighbour is when the first Codex session started in dir after the
+// codexPlace is where Codex sessions can take each other's rollout: their
+// directory within one Codex home. The default home's is the directory
+// alone, as codexSeen files from before accounts keep it.
+func codexPlace(dir, accountDir string) string {
+	if accountDir == "" {
+		return dir
+	}
+	return accountDir + "\x00" + dir
+}
+
+// codexNeighbour is when the first Codex session started in place after the
 // one of key did, now exited (a live one is counted in codexIn): a
 // rollout begun there since is maybe its.
-func (s *Sampler) codexNeighbour(dir string, key procKey, started time.Time) (first time.Time, ok bool) {
-	for k, at := range s.codexSeen[dir] {
+func (s *Sampler) codexNeighbour(place string, key procKey, started time.Time) (first time.Time, ok bool) {
+	for k, at := range s.codexSeen[place] {
 		if k != key && !at.Before(started) && (!ok || at.Before(first)) {
 			first, ok = at, true
 		}
@@ -935,8 +1013,6 @@ func (s *Sampler) codexNeighbour(dir string, key procKey, started time.Time) (fi
 	return first, ok
 }
 
-// codexServer: argv runs a daemon of the Codex app, `codex app-server`,
-// which shares the CLI's name and is no session.
 // codexBatch: argv runs Codex without a person at it, a subcommand that
 // is no session of its own.
 func codexBatch(argv []string) bool {
@@ -949,10 +1025,6 @@ func codexBatch(argv []string) bool {
 		return true
 	}
 	return false
-}
-
-func codexServer(argv []string) bool {
-	return len(argv) > 1 && argv[1] == "app-server" // its subcommand; an argument named so is a session's
 }
 
 // cursorLauncher: argv runs Cursor's CLI, whatever its argv[0]. Its
@@ -969,6 +1041,12 @@ func cursorLauncher(argv []string) bool {
 		}
 	}
 	return cursor
+}
+
+// codexDaemon: argv runs Codex's app-server daemon, the argument after the
+// command at argv[at] is "app-server".
+func codexDaemon(argv []string, at int) bool {
+	return len(argv) > at+1 && argv[at+1] == "app-server"
 }
 
 // interpreter tells a program that runs an agent's script: its argv[0] is
@@ -1208,13 +1286,15 @@ func (s *Sampler) measured(sess *Session, u Usage, burnKey string, now time.Time
 	s.burnLive[burnKey] = true
 }
 
+// underAgent: p runs below another agent, or below Codex's app-server
+// daemon, whose `codex exec` in a shell is its own work.
 func (s *Sampler) underAgent(p procfs.Proc, procs map[int]procfs.Proc) bool {
 	for cur, hops := p.PPID, 0; cur > 1 && hops < 64; hops++ {
 		pp, ok := procs[cur]
 		if !ok {
 			return false
 		}
-		if s.agentName(cur, pp) != "" {
+		if ref := s.agentRef(cur, pp); ref.name != "" || ref.daemon {
 			return true
 		}
 		cur = pp.PPID
@@ -1319,16 +1399,16 @@ func (s Session) Age() string {
 
 // limitSources gathers the newest reading of each account the sessions run
 // under.
-type limitSources map[[2]string]*limitSource
+type limitSources map[[3]string]*limitSource
 
 type limitSource struct {
-	provider, account, source string
-	r                         *limits.Reading
-	fix                       string // replaces the source's fix while there is no reading
+	provider, account, dir, source string
+	r                              *limits.Reading
+	fix                            string // replaces the source's fix while there is no reading
 }
 
 func (l limitSources) fix(s Session, fix string) {
-	if x, ok := l[[2]string{s.Provider, s.Account}]; ok && x.r == nil {
+	if x, ok := l[[3]string{s.Provider, s.Account, s.AccountDir}]; ok && x.r == nil {
 		x.fix = fix
 	}
 }
@@ -1338,10 +1418,10 @@ func (l limitSources) add(s Session, source string, r *limits.Reading) {
 	if s.Account == "API key" {
 		return
 	}
-	k := [2]string{s.Provider, s.Account}
+	k := [3]string{s.Provider, s.Account, s.AccountDir}
 	cur, ok := l[k]
 	if !ok {
-		l[k] = &limitSource{provider: s.Provider, account: s.Account, source: source, r: r}
+		l[k] = &limitSource{provider: s.Provider, account: s.Account, dir: s.AccountDir, source: source, r: r}
 		return
 	}
 	if r != nil && (cur.r == nil || r.At.After(cur.r.At)) {
@@ -1353,6 +1433,7 @@ func (l limitSources) build(now time.Time, q limits.Quiet) []limits.Account {
 	out := make([]limits.Account, 0, len(l))
 	for _, x := range l {
 		a := limits.Build(x.provider, x.account, x.source, x.r, now, q)
+		a.Dir = x.dir
 		if a.State == limits.Unmeasured && x.fix != "" && x.account != "API key" {
 			a.Fix = x.fix
 		}
@@ -1362,7 +1443,10 @@ func (l limitSources) build(now time.Time, q limits.Quiet) []limits.Account {
 		if out[i].Provider != out[j].Provider {
 			return out[i].Provider < out[j].Provider
 		}
-		return out[i].Account < out[j].Account
+		if out[i].Account != out[j].Account {
+			return out[i].Account < out[j].Account
+		}
+		return out[i].Dir < out[j].Dir
 	})
 	return out
 }

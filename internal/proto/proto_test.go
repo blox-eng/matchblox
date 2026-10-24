@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -101,5 +102,39 @@ func TestEachMessageIsOneLine(t *testing.T) {
 	}
 	if n := strings.Count(buf.String(), "\n"); n != 1 || !strings.HasSuffix(buf.String(), "\n") {
 		t.Fatalf("want exactly one trailing newline, got %q", buf.String())
+	}
+}
+
+func TestStartNotesAreTheSkipsOfARunAct(t *testing.T) {
+	linked, shared, copied := NotLinked+"permission denied", StillShared+"/a -> /b: outside the default", NotCopied+"/d/pipe: not a file, folder or link"
+	for _, c := range []struct {
+		r    Result
+		want []string
+	}{
+		{Result{Skipped: []string{linked}}, []string{linked}},
+		{Result{Skipped: []string{shared, copied, CopyGoesOn}}, []string{shared, copied, CopyGoesOn}},
+		{Result{}, nil},
+		{Result{Skipped: []string{"guard stopped it"}}, nil},
+		{Result{Skipped: []string{linked, "guard stopped it"}}, nil},
+		{Result{Err: "no tmux", Skipped: []string{linked}}, nil},
+	} {
+		got, ok := StartNotes(c.r)
+		if ok != (c.want != nil) || !slices.Equal(got, c.want) {
+			t.Errorf("%+v: %q %v", c.r, got, ok)
+		}
+	}
+}
+
+func TestNotesNameFiveThenHowManyMore(t *testing.T) {
+	items := []string{"a", "b", "c", "d", "e", "f", "g"}
+	want := []string{NotCopied + "a", NotCopied + "b", NotCopied + "c", NotCopied + "d", NotCopied + "e", NotCopied + "and 2 more"}
+	if got := Notes(NotCopied, items); !slices.Equal(got, want) {
+		t.Fatalf("%q", got)
+	}
+	if got := Notes(NotCopied, items[:5]); len(got) != 5 || got[4] != NotCopied+"e" {
+		t.Fatalf("%q", got)
+	}
+	if got := Notes(NotCopied, nil); got != nil {
+		t.Fatalf("%q", got)
 	}
 }

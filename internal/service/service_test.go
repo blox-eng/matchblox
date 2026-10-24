@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
@@ -535,6 +537,27 @@ func TestServeStopsWhenSocketRemoved(t *testing.T) {
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
+	waitServe(t, done, ErrSocketGone)
+}
+
+// TestServeStopsWhenSocketGoneBeforeItWatches: a socket removed between
+// the listen and the start of the watch (a console that dials and removes
+// it at once, a slow start) is gone all the same.
+func TestServeStopsWhenSocketGoneBeforeItWatches(t *testing.T) {
+	s := newTest(t, time.Hour)
+	s.ExeEvery = 10 * time.Millisecond
+	dir, _ := os.MkdirTemp("", "mb")
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	path := filepath.Join(dir, "s.sock")
+	l, err := transport.Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- s.Serve(context.Background(), l) }()
 	waitServe(t, done, ErrSocketGone)
 }
 
@@ -1188,5 +1211,269 @@ func TestAConsoleThatJoinsDuringABroadcastGetsItsSnapshot(t *testing.T) {
 		c, _ := connect(t, t.Context(), s)
 		snapshot(t, c)
 		c.Close()
+	}
+}
+
+func TestKnownAccountsPerAgent(t *testing.T) {
+	s, _, home := accountTest(t)
+	s.GOOS = "darwin"
+	prepared(t, home, "claude", "personal")
+	prepared(t, home, "claude", "work")
+	prepared(t, home, "codex", "work")
+	snap := lifeSnap(false)
+	snap.Sessions[0].AccountDir = filepath.Join(home, ".claude-old")
+	snap.Sessions[1].AccountDir = filepath.Join(home, ".claude-old") // twice: listed once
+	snap.Sessions[2].AccountDir = accounts.Folder(home, "codex", "work")
+	s.publish(snap, func(state.Doc) {})
+	want := map[string][]string{
+		"claude":       {"default", "personal", "work", "~/.claude-old"},
+		"codex":        {"default", "work"},
+		"cursor-agent": {"default"},
+	}
+	if got := s.State().Accounts; !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestKnownAccountsHideCursorOffMac(t *testing.T) {
+	s, _, home := accountTest(t) // linux
+	prepared(t, home, "cursor-agent", "work")
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	got := s.State().Accounts
+	if _, ok := got["cursor-agent"]; ok {
+		t.Fatalf("Cursor has accounts off macOS: %v", got)
+	}
+	if _, ok := got["claude"]; !ok {
+		t.Fatalf("claude lost its accounts: %v", got)
+	}
+}
+
+// TestKnownAccountsOnASymlinkedHomeListOnce: a session whose account folder
+// is named by its real path, under a symlinked home, is that account, and
+// the list has it once.
+func TestKnownAccountsOnASymlinkedHomeListOnce(t *testing.T) {
+	s, _, home := accountTest(t)
+	prepared(t, home, "claude", "work")
+	real, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := real + "-link"
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(link) })
+	s.Home = link
+	snap := lifeSnap(false)
+	snap.Sessions[0].AccountDir = accounts.Folder(real, "claude", "work")
+	s.publish(snap, func(state.Doc) {})
+	want := []string{"default", "work"}
+	if got := s.State().Accounts["claude"]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+// TestAFolderWithABadNameIsNamed: the state names a folder under the
+// accounts root that no account may be called, and why, beside the list.
+func TestAFolderWithABadNameIsNamed(t *testing.T) {
+	s, _, home := accountTest(t)
+	prepared(t, home, "claude", "work")
+	bad := filepath.Join(accounts.Root(home), "claude", "my_acct")
+	if err := os.MkdirAll(bad, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	st := s.State()
+	if want := []string{"default", "work"}; !reflect.DeepEqual(st.Accounts["claude"], want) {
+		t.Fatalf("accounts %v, want %v", st.Accounts["claude"], want)
+	}
+	want := map[string][]accounts.Skip{"claude": {{Path: bad, Why: "not a-z, 0-9 and -, up to 10"}}}
+	if !reflect.DeepEqual(st.AccountsSkipped, want) {
+		t.Fatalf("skipped %v, want %v", st.AccountsSkipped, want)
+	}
+}
+
+// TestUnreadableAccountsRootIsNamed: when the root of an agent's accounts
+// cannot be read, the state lists default only and names the error.
+func TestUnreadableAccountsRootIsNamed(t *testing.T) {
+	s, _, home := accountTest(t)
+	root := filepath.Join(accounts.Root(home), "codex")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(root, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(root, 0o700) })
+	if _, err := os.ReadDir(root); err == nil {
+		t.Skip("this user reads a folder with no permission")
+	}
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	st := s.State()
+	if want := []string{"default"}; !reflect.DeepEqual(st.Accounts["codex"], want) {
+		t.Fatalf("accounts %v, want %v", st.Accounts["codex"], want)
+	}
+	got := st.AccountsSkipped["codex"]
+	if len(got) != 1 || got[0].Path != root || !strings.Contains(got[0].Why, "permission denied") {
+		t.Fatalf("skipped %v", st.AccountsSkipped)
+	}
+	if len(st.AccountsSkipped) != 1 {
+		t.Fatalf("only codex is unreadable: %v", st.AccountsSkipped)
+	}
+}
+
+// agedAccounts sets the mtime of the accounts folders back an hour, so a
+// read of them is not too fresh to trust.
+func agedAccounts(t *testing.T, home string) {
+	t.Helper()
+	old := time.Now().Add(-time.Hour)
+	for _, a := range accountAgents {
+		if err := os.Chtimes(filepath.Join(accounts.Root(home), a), old, old); err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestKnownAccountsNotReadEachSample: the account folders are read when
+// their root changes or a live session's folder does, not on every sample.
+func TestKnownAccountsNotReadEachSample(t *testing.T) {
+	s, _, home := accountTest(t)
+	s.GOOS = "darwin"
+	prepared(t, home, "claude", "work")
+	agedAccounts(t, home)
+	var reads int
+	s.readDir = func(p string) ([]os.DirEntry, error) { reads++; return os.ReadDir(p) }
+	snap := lifeSnap(false)
+	snap.Sessions[0].AccountDir = filepath.Join(home, ".claude-old")
+	s.publish(snap, func(state.Doc) {})
+	first := reads
+	if first == 0 {
+		t.Fatal("the first publish read no folder")
+	}
+	for range 3 {
+		s.publish(snap, func(state.Doc) {})
+	}
+	if reads != first {
+		t.Fatalf("%d reads after the first publish's %d: the folders are read once", reads, first)
+	}
+	if want := []string{"default", "work", "~/.claude-old"}; !reflect.DeepEqual(s.State().Accounts["claude"], want) {
+		t.Fatalf("got %v, want %v", s.State().Accounts["claude"], want)
+	}
+	prepared(t, home, "claude", "new")
+	s.publish(snap, func(state.Doc) {})
+	if want := []string{"default", "new", "work", "~/.claude-old"}; !reflect.DeepEqual(s.State().Accounts["claude"], want) {
+		t.Fatalf("a new account: got %v, want %v", s.State().Accounts["claude"], want)
+	}
+	snap.Sessions[1].AccountDir = filepath.Join(home, ".claude-two")
+	s.publish(snap, func(state.Doc) {})
+	if want := []string{"default", "new", "work", "~/.claude-old", "~/.claude-two"}; !reflect.DeepEqual(s.State().Accounts["claude"], want) {
+		t.Fatalf("a new live folder: got %v, want %v", s.State().Accounts["claude"], want)
+	}
+}
+
+// TestLiveFolderByLinkOrCase: a shell names a live hand-made folder by its
+// real path, or in another letter case: it is the same folder.
+func TestLiveFolderByLinkOrCase(t *testing.T) {
+	s, _, home := accountTest(t)
+	hand := filepath.Join(home, ".claude-work")
+	if err := os.Mkdir(hand, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(home, "link")
+	if err := os.Symlink(hand, link); err != nil {
+		t.Fatal(err)
+	}
+	snap := lifeSnap(false)
+	snap.Sessions[0].AccountDir = hand
+	s.publish(snap, func(state.Doc) {})
+	if f, ok := s.liveFolder("claude", link); !ok || f != hand {
+		t.Fatalf("by a link: %q, %v", f, ok)
+	}
+	t.Run("case", func(t *testing.T) {
+		other := filepath.Join(home, ".CLAUDE-WORK")
+		if _, err := os.Stat(other); err != nil {
+			t.Skip("this file system tells letter case apart")
+		}
+		if f, ok := s.liveFolder("claude", other); !ok || f != hand {
+			t.Fatalf("by another case: %q, %v", f, ok)
+		}
+	})
+}
+
+// TestKnownAccountsReadAgainAfterAnError: a root that could not be read is
+// read again at the next publish, though a chmod leaves its mtime as it was.
+func TestKnownAccountsReadAgainAfterAnError(t *testing.T) {
+	s, _, home := accountTest(t)
+	prepared(t, home, "codex", "work")
+	root := filepath.Join(accounts.Root(home), "codex")
+	agedAccounts(t, home)
+	if err := os.Chmod(root, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(root, 0o700) })
+	if _, err := os.ReadDir(root); err == nil {
+		t.Skip("this user reads a folder with no permission")
+	}
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	if got := s.State().Accounts["codex"]; !reflect.DeepEqual(got, []string{"default"}) {
+		t.Fatalf("unreadable: %v", got)
+	}
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	if got, want := s.State().Accounts["codex"], []string{"default", "work"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("after the fix: %v, want %v", got, want)
+	}
+	if len(s.State().AccountsSkipped) != 0 {
+		t.Fatalf("still named: %v", s.State().AccountsSkipped)
+	}
+}
+
+// TestKnownAccountsNotKeptFromAFreshRoot: an answer read while the root was
+// too new to trust is not kept once it is old enough.
+func TestKnownAccountsNotKeptFromAFreshRoot(t *testing.T) {
+	s, _, home := accountTest(t)
+	prepared(t, home, "claude", "work")
+	fi, err := os.Stat(filepath.Join(accounts.Root(home), "claude"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := fi.ModTime().Add(time.Second)
+	s.Now = func() time.Time { return at }
+	var reads int
+	s.readDir = func(p string) ([]os.DirEntry, error) { reads++; return os.ReadDir(p) }
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	first := reads
+	at = at.Add(time.Minute)
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	if reads == first {
+		t.Fatal("the answer read from a fresh root was kept")
+	}
+	again := reads
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	if reads != again {
+		t.Fatal("an old root is read again")
+	}
+}
+
+// TestTwoSpellingsOfAHandMadeFolderListOnce: one folder named by a link and
+// by its real path is one entry, in the spelling first seen.
+func TestTwoSpellingsOfAHandMadeFolderListOnce(t *testing.T) {
+	s, _, home := accountTest(t)
+	hand := filepath.Join(home, ".claude-work")
+	if err := os.Mkdir(hand, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(home, ".claude-link")
+	if err := os.Symlink(hand, link); err != nil {
+		t.Fatal(err)
+	}
+	snap := lifeSnap(false)
+	snap.Sessions[0].AccountDir = link
+	snap.Sessions[1].AccountDir = hand
+	s.publish(snap, func(state.Doc) {})
+	if got, want := s.State().Accounts["claude"], []string{"default", "~/.claude-link"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
 	}
 }

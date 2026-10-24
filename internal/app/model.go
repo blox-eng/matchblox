@@ -19,6 +19,7 @@ import (
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/history"
@@ -152,6 +153,7 @@ type action struct {
 	again       string                      // a kill or switch of a session that works or waits: what the second y's confirm says
 	againText   string                      // the Text the second y sends ("": killAnyway)
 	done        string                      // a switch: what the flash says when it ran
+	agent       string                      // a start on a new account: the last agent once it ran
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -278,27 +280,33 @@ type Model struct {
 	armed      string // the step a second tap runs: what the first tap showed
 	// held is what the builder pressed or tapped while the stoker was in
 	// charge: it runs once they answer the take-over question.
-	held       func(Model) (tea.Model, tea.Cmd)
-	touched    time.Time // the last key that kept the stoker's rest
-	all        lists     // what the service sent; queue, recs and snap hold the drawn copies
-	filter     string    // the search of the open tab
-	searching  bool      // the search line takes the keys
-	sessSort   sortBy
-	sessGroup  int // what Sessions is grouped by: groupNeed .. groupNone
-	holds      []proto.Hold
-	reasons    map[string]proto.IdleReason
-	agents     []string                         // the agents a new session can start on the host
-	renames    map[string]string                // the names sessions take at their next rest, by pane
-	found      *proto.Found                     // the host's repositories and the scan's consent; nil: the service scans nothing
-	scanLater  bool                             // the scan question was closed or answered at this console
-	scanAct    string                           // the act of the box's yes, for its result
-	form       *form                            // the open New session, Rename, Switch agent or scan folders form; nil none
-	jumpAfter  struct{ act, pane, done string } // a switch sent: the pane to jump to when it runs
-	lastAgent  string                           // the agent this console last started
-	paneSort   sortBy
-	picked     map[string]bool // worktrees x removes
-	batch      *batch
-	showExited bool // e: the exited agents, one by one
+	held        func(Model) (tea.Model, tea.Cmd)
+	touched     time.Time // the last key that kept the stoker's rest
+	all         lists     // what the service sent; queue, recs and snap hold the drawn copies
+	filter      string    // the search of the open tab
+	searching   bool      // the search line takes the keys
+	sessSort    sortBy
+	sessGroup   int // what Sessions is grouped by: groupNeed .. groupNone
+	holds       []proto.Hold
+	reasons     map[string]proto.IdleReason
+	agents      []string                          // the agents a new session can start on the host
+	renames     map[string]string                 // the names sessions take at their next rest, by pane
+	accounts    map[string][]string               // the accounts each agent can start on: default first
+	skipped     map[string][]accounts.Skip        // the folders the service did not list, per agent
+	lastAccount map[string]string                 // the account last started, per agent
+	signIns     map[string]string                 // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
+	found       *proto.Found                      // the host's repositories and the scan's consent; nil: the service scans nothing
+	scanLater   bool                              // the scan question was closed or answered at this console
+	scanAct     string                            // the act of the box's yes, for its result
+	form        *form                             // the open New session, Rename, Switch agent or scan folders form; nil none
+	jumpAfter   struct{ act, pane, done string }  // a switch sent: the pane to jump to when it runs
+	startAfter  struct{ act, agent, done string } // a start on a new account sent: its agent, the last once it runs, and what it says then
+	lastAgent   string                            // the agent this console last started
+	keptAgent   string                            // the agent last started, as the service keeps it
+	paneSort    sortBy
+	picked      map[string]bool // worktrees x removes
+	batch       *batch
+	showExited  bool // e: the exited agents, one by one
 	// dockPanel is the panel a phone's dock shows (usage, the machine, the
 	// stoker), u cycling it; dockSwitched: u was pressed while the stoker
 	// claimed the dock, so it no longer takes it by itself.
@@ -497,7 +505,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
 		m.shipReport = st.Ships
 		m.holds, m.reasons = st.Holds, st.Reasons
-		m.agents, m.renames = st.Agents, st.Renames
+		m.agents, m.renames, m.accounts, m.signIns = st.Agents, st.Renames, st.Accounts, st.SignIns
+		m.skipped = st.AccountsSkipped
+		m.lastAccount, m.keptAgent = st.LastAccount, st.LastAgent
 		if st.Found != nil {
 			m.found = st.Found
 			switch {
@@ -557,6 +567,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case resultMsg:
 		m.endRec(msg.ActID, proto.Result(msg))
+		if mm, ok := m.started(proto.Result(msg)); ok {
+			return mm, mm.recv()
+		}
 		if mm, ok := m.formResult(proto.Result(msg)); ok {
 			return mm, mm.recv()
 		}
@@ -1115,7 +1128,32 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 	if pane, ok := strings.CutPrefix(a.rec, "switch:"); ok {
 		m.jumpAfter.act, m.jumpAfter.pane, m.jumpAfter.done = "a"+strconv.Itoa(m.acts), pane, a.done
 	}
+	if a.agent != "" {
+		m.startAfter.act, m.startAfter.agent, m.startAfter.done = "a"+strconv.Itoa(m.acts), a.agent, a.done
+	}
 	return m.pairActed(a), cmd
+}
+
+// started takes the result of a start on a new account: one that ran sets
+// the last agent and says where to sign in, with the notes of what its
+// account shared or skipped; one that did not leaves the last agent as it
+// was and goes on to the result's usual words (false).
+func (m Model) started(r proto.Result) (Model, bool) {
+	if r.ActID == "" || r.ActID != m.startAfter.act {
+		return m, false
+	}
+	a := m.startAfter
+	m.startAfter.act, m.startAfter.agent, m.startAfter.done = "", "", ""
+	notes, ran := proto.StartNotes(r)
+	if r.Err != "" || len(r.Ran) == 0 || len(r.Skipped) > 0 && !ran {
+		return m, false
+	}
+	m.lastAgent = a.agent
+	m.flash = a.done
+	if len(notes) > 0 {
+		m.flash += "; " + strings.Join(notes, "; ")
+	}
+	return m, true
 }
 
 // switched takes the result of a switch: one that ran jumps to its pane,
@@ -1123,17 +1161,22 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 func (m Model) switched(r proto.Result) (tea.Model, tea.Cmd) {
 	j := m.jumpAfter
 	m.jumpAfter.act, m.jumpAfter.pane, m.jumpAfter.done = "", "", ""
+	// A switch with notes on what its account shared or skipped ran.
+	notes, ran := proto.StartNotes(r)
 	switch {
 	case r.Err != "":
 		m.flash = tilde(r.Err)
 		return m, m.recv()
-	case len(r.Skipped) > 0:
+	case len(r.Skipped) > 0 && !ran:
 		m.flash = tilde(r.Skipped[len(r.Skipped)-1])
 		return m, m.recv()
 	}
 	next, jump := m.confirm(*m.jump(j.pane))
 	nm := next.(Model)
 	nm.flash = j.done
+	if ran {
+		nm.flash += "; " + strings.Join(notes, "; ")
+	}
 	return nm, tea.Batch(nm.recv(), jump)
 }
 

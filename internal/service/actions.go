@@ -87,6 +87,20 @@ const notTheBuilders = "only the stoker and the sessions it drives act from an a
 // number to a current session or account that had none.
 const NamesAct = "push:names"
 
+// accountRefused is the answer to a new session on an account from an agent's
+// pane that claims to be a console.
+const accountRefused = "an account is picked at the console or the shell, not from an agent's pane"
+
+// picksAccount reports whether a new session's text names a new account or an
+// account other than default. Text that does not read is left to the start.
+func picksAccount(text string) bool {
+	var n proto.NewSession
+	if json.Unmarshal([]byte(text), &n) != nil {
+		return false
+	}
+	return n.NewAccount || (n.Account != "" && n.Account != "default")
+}
+
 func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	if a.RecID == NamesAct {
 		// Before the agents-pane gate: it only reads names the socket already
@@ -107,6 +121,11 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	if a.RecID == "scan:yes" { // a console hello does not make an agent's pane a person's
 		if _, ok := s.sessionAt(a.From); agent || ok {
 			return proto.Result{Err: scanRefused}
+		}
+	}
+	if a.RecID == NewSessionID && a.Console && picksAccount(a.Text) { // likewise for an account
+		if _, ok := s.sessionAt(a.From); ok {
+			return proto.Result{Err: accountRefused}
 		}
 	}
 	if !agent && !strings.HasPrefix(a.RecID, "stoker:") {

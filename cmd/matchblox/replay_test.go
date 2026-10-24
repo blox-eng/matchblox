@@ -571,9 +571,9 @@ func replayAt(t *testing.T, z replaySize) {
 			// the ack c sent has come back: the dock no longer offers the run
 			return !strings.Contains(s, "NIGHT · 23:10") && strings.Contains(s, sessionsTab) && !strings.Contains(s, "c the whole run")
 		}},
-		// N: one more session, named, with its first message.
+		// N: one more session, named, with its first message (tab: agent, account, first).
 		{name: "a new session", at: 32500 * time.Millisecond, do: func() { sessionsNow = len(s.State().Sessions) }, keys: slices.Concat([]string{"N", "tab", "tab"}, strings.Split("rate-docs", ""),
-			[]string{"tab", "tab"}, strings.Split("write the rate limit docs", "")), ok: has("New session", "rate-docs", "write the rate limit docs", "● claude")},
+			[]string{"tab", "tab", "tab"}, strings.Split("write the rate limit docs", "")), ok: has("New session", "rate-docs", "write the rate limit docs", "● claude")},
 		{name: "it starts", at: 35 * time.Second, key: "enter", ok: func(s string) bool {
 			return strings.Contains(s, "started rate-docs") && strings.Contains(s, "SESSIONS "+strconv.Itoa(sessionsNow+1))
 		}},

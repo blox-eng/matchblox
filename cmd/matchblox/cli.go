@@ -13,10 +13,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/ships"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
@@ -105,7 +107,11 @@ type sessionJSON struct {
 	ContextPct float64   `json:"context_pct"`
 	PlanPct    *int      `json:"plan_pct"`
 	Account    string    `json:"account"`
+	AccountDir string    `json:"account_dir"`
+	SigningIn  bool      `json:"signing_in"`
 	Ship       *shipJSON `json:"ship"`
+	// byHand: matchblox gave up driving the new account's sign-in.
+	byHand bool
 }
 
 var stageNames = [...]string{ships.StageOpen: "open", ships.StageCI: "ci", ships.StageGreen: "green", ships.StageMerged: "merged", ships.StageLive: "live"}
@@ -139,11 +145,24 @@ func heldBy(doc state.Doc, s sample.Session) bool {
 	return false
 }
 
+// signsInByHand tells whether s is a new account whose sign-in matchblox
+// gave up driving: the note is by pane, or by the tmux session's name when
+// its pane was not found.
+func signsInByHand(doc state.Doc, s sample.Session) bool {
+	if !s.SigningIn {
+		return false
+	}
+	tmuxName, _, _ := strings.Cut(s.Target, ":")
+	return s.Pane != "" && doc.SignIns[s.Pane] == service.SignInByHand ||
+		tmuxName != "" && doc.SignIns[tmuxName] == service.SignInByHand
+}
+
 func sessionRows(doc state.Doc) []sessionJSON {
 	rows := []sessionJSON{}
 	for _, s := range doc.Sessions {
 		r := sessionJSON{Name: s.Name, Pane: s.Pane, Target: s.Target, Status: s.Status, Word: stoker.Word(s),
-			Reason: doc.Reasons[s.Pane].Word, Held: heldBy(doc, s), Stoker: doc.StokerServer != "" && s.Server() == doc.StokerServer, ContextPct: s.ContextPct, Account: s.Account}
+			Reason: doc.Reasons[s.Pane].Word, Held: heldBy(doc, s), Stoker: doc.StokerServer != "" && s.Server() == doc.StokerServer, ContextPct: s.ContextPct, Account: s.Account,
+			AccountDir: s.AccountDir, SigningIn: s.SigningIn, byHand: signsInByHand(doc, s)}
 		if s.Progress != nil {
 			r.PlanPct = &s.Progress.Pct
 		}
@@ -174,6 +193,9 @@ func writeSessions(w io.Writer, doc state.Doc, asJSON bool) error {
 		line := fmt.Sprintf("%-4s %-16s %-8s %-6s %3.0f%%", r.Pane, r.Name, target, r.Word, r.ContextPct)
 		if r.Held {
 			line += "  held"
+		}
+		if r.byHand {
+			line += "  sign in by hand"
 		}
 		if r.Reason != "" {
 			line += "  " + r.Reason
@@ -212,7 +234,12 @@ func writeUsage(w io.Writer, doc state.Doc, asJSON bool) error {
 		return writeJSON(w, accts)
 	}
 	for _, a := range accts {
-		line := fmt.Sprintf("%-10s %-24s", a.Provider, a.Account)
+		// An account folder is named as the console names it: by its folder.
+		who := a.Account
+		if a.Dir != "" {
+			who = accounts.Name(a.Dir)
+		}
+		line := fmt.Sprintf("%-10s %-24s", a.Provider, who)
 		for _, u := range a.Uses(doc.At) {
 			line += fmt.Sprintf("  %s %.0f%%", u.Name, u.Pct)
 		}

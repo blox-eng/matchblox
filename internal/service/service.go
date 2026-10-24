@@ -10,6 +10,8 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -75,6 +77,11 @@ type Service struct {
 	// the socket file; Serve stops when either changes. Empty Exe: no check.
 	Exe      string
 	ExeEvery time.Duration
+	// Home is the builder's home directory, where the accounts live. Empty:
+	// os.UserHomeDir().
+	Home string
+	// GOOS is the system the codex socket check is for. Empty: runtime.GOOS.
+	GOOS string
 	// Setup is the machine the doors are for. Nil: no doors (fixtures).
 	Setup *setup.Env
 	// Stoker keeps the stoker mode and its steps. Nil: no stoker.
@@ -206,6 +213,22 @@ type Service struct {
 	// consentMu orders the answer and the cache, so a no is never
 	// followed by a scan's write.
 	consentMu sync.Mutex
+	// signIns are the notes on a new account's sign-in, by pane.
+	signIns signInState
+	// accountLocks hold an account folder from its check to its start, by
+	// folder: two starts of one new account make it once.
+	accountLocks sync.Map
+	// lastAccounts are the accounts the builder last started, per agent, and
+	// the agent they last started.
+	lastAccounts lastAccountState
+	// readDir reads an accounts folder; nil is os.ReadDir. Tests count it.
+	readDir func(string) ([]os.DirEntry, error)
+	// known is the last list of accounts, kept while its sources hold.
+	knownMu sync.Mutex
+	known   knownCache
+	// signInWait and signInEvery are how long the sign-in driver waits for
+	// the agent's screens and how often it looks. Zero: 20 s and 500 ms.
+	signInWait, signInEvery time.Duration
 }
 
 func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
@@ -313,6 +336,12 @@ func (s *Service) watch(ctx context.Context, stop context.CancelCauseFunc, sock 
 		return now == nil || !os.SameFile(was, now) || now.Size() != was.Size() || !now.ModTime().Equal(was.ModTime())
 	}
 	exe, socket := stat(s.Exe), stat(sock)
+	if sock != "" && socket == nil {
+		// Removed between the listen and this first look: gone all the
+		// same, or no later look would ever tell.
+		stop(ErrSocketGone)
+		return
+	}
 	t := time.NewTicker(s.ExeEvery)
 	defer t.Stop()
 	for {
@@ -390,6 +419,10 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	if s.Stoker != nil {
 		view = s.stokerView(snap.Sessions)
 	}
+	known, skipped := s.knownAccounts(snap.Sessions)
+	s.lastAccounts.signedIn(lastAccountsPath(s.StatePath), snap.Sessions)
+	last := s.lastListed(known)
+	lastAgent := s.lastAccounts.lastAgent(lastAccountsPath(s.StatePath))
 	s.mu.Lock()
 	s.setDoors(gen, ds)
 	if s.have { // the first sample has no rates yet
@@ -397,6 +430,20 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	}
 	s.cur.Snapshot, s.sampled, s.have = snap, snap.Sessions, true
 	s.cur.Agents, s.cur.Renames = s.startable(), s.renames.names()
+	s.cur.Accounts, s.cur.AccountsSkipped = known, skipped
+	s.cur.LastAccount = last
+	s.cur.LastAgent = ""
+	if slices.Contains(s.cur.Agents, lastAgent) { // an agent no longer installed is not sent
+		s.cur.LastAgent = lastAgent
+	}
+	here := make(map[string]bool, len(snap.Panes))
+	for _, p := range snap.Panes {
+		here[p.ID] = true
+		if name, _, ok := strings.Cut(p.Target, ":"); ok {
+			here[name] = true
+		}
+	}
+	s.cur.SignIns = s.signIns.keep(here)
 	if s.Stoker != nil {
 		s.cur.Stoker = view
 	}

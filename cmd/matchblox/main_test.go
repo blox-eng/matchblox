@@ -23,6 +23,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/transport"
+
+	"github.com/blox-eng/matchblox/internal/testhome"
 )
 
 // TestMain lets a test start this binary as `matchblox <args>`.
@@ -43,7 +45,7 @@ func TestMain(m *testing.M) {
 	time.Local = time.UTC
 	// Pair tests stay off this machine's tailscale and sshd.
 	setup.SetPairProbe(setup.PairProbe{LookPath: func(string) (string, error) { return "", errors.New("not found") }})
-	os.Exit(m.Run())
+	os.Exit(testhome.Run(m))
 }
 
 func fixtures(t *testing.T) string {
@@ -663,5 +665,35 @@ func TestSetupSaysHowToPair(t *testing.T) {
 	pair := got[strings.Index(got, "Pair a device"):strings.Index(got, "Keep matchblox running")]
 	if strings.Contains(pair, "y opens it") || !strings.Contains(pair, "press Enter on it in the console, or run matchblox pair") {
 		t.Fatalf("setup:\n%s", got)
+	}
+}
+
+// TestAccountUsageRunsOffMac: off macOS the default's login (in the
+// keychain) is not read, and the accounts' (in files) are.
+func TestAccountUsageRunsOffMac(t *testing.T) {
+	for goos, wantDefault := range map[string]bool{"linux": false, "darwin": true} {
+		u := cursorUsage(goos)
+		if got := u.Reads(""); got != wantDefault {
+			t.Errorf("%s: default read %v, want %v", goos, got, wantDefault)
+		}
+		if !u.Reads("/home/u/.matchblox/accounts/cursor-agent/work") {
+			t.Errorf("%s: an account is not read", goos)
+		}
+	}
+}
+
+// TestKeychainNotFoundIsNoLogin: security's exit status 44 (no such item)
+// is a missing login; any other failure is not.
+func TestKeychainNotFoundIsNoLogin(t *testing.T) {
+	notFound := exec.Command("sh", "-c", "exit 44").Run()
+	if err := keychainErr(notFound); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("exit 44: %v, want os.ErrNotExist", err)
+	}
+	denied := exec.Command("sh", "-c", "exit 51").Run()
+	if err := keychainErr(denied); err == nil || errors.Is(err, os.ErrNotExist) {
+		t.Errorf("exit 51: %v, want an error that is not os.ErrNotExist", err)
+	}
+	if err := keychainErr(nil); err != nil {
+		t.Errorf("no error: %v, want nil", err)
 	}
 }
