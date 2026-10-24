@@ -60,9 +60,12 @@ func (s *Sampler) roleOf(pid int, p procfs.Proc, procs map[int]procfs.Proc, byPI
 		}
 		cur = q.PPID
 	}
-	// A detached process (no tty, re-parented past any pane) may name its
+	// A detached batch run (no tty, re-parented past any pane) may name its
 	// parent in a marker, trusted only once /proc verifies it.
 	if crossed || p.TTY != 0 {
+		return roleSession, 0, ""
+	}
+	if b := engineOf(agent).Batch; b == nil || !b(s.FS.Argv(pid)) {
 		return roleSession, 0, ""
 	}
 	uid, ok := s.FS.UID(pid)
