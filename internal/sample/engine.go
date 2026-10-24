@@ -20,8 +20,7 @@ var engines = map[string]engine{
 			return len(w) > 0 && (w[0] == "app-server" || w[0] == "mcp-server")
 		},
 	},
-	CursorAgent: {Name: CursorAgent, Batch: printRun},
-	"opencode":  {Name: "opencode", Batch: opencodeRun},
+	"opencode": {Name: "opencode", Batch: opencodeRun},
 }
 
 // engineOf is name's entry, or a zero entry with only Name: linked by the
