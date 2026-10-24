@@ -133,6 +133,11 @@ All notable changes to matchblox are in this file. The format follows
   once, not at every sample, and a folder that failed to read is read
   again. A link retargeted while a process lives keeps that process's
   first reading.
+- **A Codex account and the default share a directory.** matchblox counts
+  Codex sessions per directory within each Codex home, so a session on an
+  account and one on the default in the same directory each show their
+  context and limits. Two sessions on one home in one directory still show
+  "not measured".
   ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - An agent that the Codex app-server runs (such as `codex exec`) is not
   a session, and a `node` launch of `codex app-server` is no session either.

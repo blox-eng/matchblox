@@ -282,7 +282,7 @@ type Sampler struct {
 	agents *agentReader
 	panes  map[procKey]string // environ is read once per process
 	names  map[procKey]agentRef
-	// codexSeen are the Codex sessions seen in each directory, by when
+	// codexSeen are the Codex sessions seen in each place (codexPlace), by when
 	// each started: one that exited still owns the rollout it left.
 	codexSeen map[string]map[procKey]time.Time
 	// codexUntil is the last sample before this sampler started, from
@@ -575,7 +575,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 	// directory cannot be told apart.
 	opencodeIn := map[string]int{}
 	// Nor does a Codex that holds no rollout open: with two in a
-	// directory, its rollout is either's.
+	// directory of one Codex home, its rollout is either's.
 	codexIn := map[string]int{}
 	seenChanged := false
 	for pid, p := range procs {
@@ -591,14 +591,15 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		if s.agentName(pid, p) == "codex" && p.State != 'Z' && p.State != 'X' && !s.underAgent(p, procs) && !codexBatch(codexArgv(s.FS.Argv(pid))) {
 			if pp, ok := procs[p.PPID]; !ok || s.agentName(p.PPID, pp) != "codex" {
 				argv := codexArgv(s.FS.Argv(pid))
-				dir := codexWorkDir(argv, s.FS.Cwd(pid))
-				codexIn[dir]++
-				if k := (procKey{pid, p.StartTime}); codexInteractive(argv) {
-					if s.codexSeen[dir] == nil {
-						s.codexSeen[dir] = map[procKey]time.Time{}
+				k := procKey{pid, p.StartTime}
+				place := codexPlace(codexWorkDir(argv, s.FS.Cwd(pid)), s.accountDir("codex", s.envOf(pid, k)))
+				codexIn[place]++
+				if codexInteractive(argv) {
+					if s.codexSeen[place] == nil {
+						s.codexSeen[place] = map[procKey]time.Time{}
 					}
-					if _, ok := s.codexSeen[dir][k]; !ok {
-						s.codexSeen[dir][k] = now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
+					if _, ok := s.codexSeen[place][k]; !ok {
+						s.codexSeen[place][k] = now.Add(-time.Duration((uptime - float64(p.StartTime)/procfs.ClockTicks) * float64(time.Second)))
 						seenChanged = true
 					}
 				}
@@ -706,16 +707,17 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			// fresh: no rollout of its own yet, by its open files or, when
 			// they say nothing, by its directory. A resumed session has one.
 			dir := codexWorkDir(argv, sess.Cwd) // where Codex works: -C, else the shell's
-			fresh := read && !batch && !resume && (dir == "" || codexIn[dir] == 1)
+			place := codexPlace(dir, sess.AccountDir)
+			fresh := read && !batch && !resume && (dir == "" || codexIn[place] == 1)
 			// A resume's own rollout began before it: one the directory
 			// shows is another's, or its /new.
-			if path == "" && !batch && !resume && dir != "" && codexIn[dir] == 1 && env.codexHome != "" {
+			if path == "" && !batch && !resume && dir != "" && codexIn[place] == 1 && env.codexHome != "" {
 				var ambiguous bool
 				path, ambiguous = s.agents.codexInDir(env.codexHome, dir, started, now)
 				fresh = !ambiguous
 				// A session that started here after this one and exited
 				// owns any rollout begun since it started.
-				if at, ok := s.codexNeighbour(dir, key, started); ok && path != "" {
+				if at, ok := s.codexNeighbour(place, key, started); ok && path != "" {
 					if began := s.agents.metaOf(path).began; began.IsZero() || !began.Before(at) {
 						path, fresh = "", false
 					}
@@ -989,11 +991,21 @@ func cursorPrint(argv []string) bool {
 	return false
 }
 
-// codexNeighbour is when the first Codex session started in dir after the
+// codexPlace is where Codex sessions can take each other's rollout: their
+// directory within one Codex home. The default home's is the directory
+// alone, as codexSeen files from before accounts keep it.
+func codexPlace(dir, accountDir string) string {
+	if accountDir == "" {
+		return dir
+	}
+	return accountDir + "\x00" + dir
+}
+
+// codexNeighbour is when the first Codex session started in place after the
 // one of key did, now exited (a live one is counted in codexIn): a
 // rollout begun there since is maybe its.
-func (s *Sampler) codexNeighbour(dir string, key procKey, started time.Time) (first time.Time, ok bool) {
-	for k, at := range s.codexSeen[dir] {
+func (s *Sampler) codexNeighbour(place string, key procKey, started time.Time) (first time.Time, ok bool) {
+	for k, at := range s.codexSeen[place] {
 		if k != key && !at.Before(started) && (!ok || at.Before(first)) {
 			first, ok = at, true
 		}

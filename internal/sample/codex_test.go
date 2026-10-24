@@ -121,6 +121,33 @@ func TestCodexAccountRolloutStaysInItsHome(t *testing.T) {
 	}
 }
 
+// TestCodexTwoHomesOneDirEachReadsItsOwn: a default session and an account
+// session in one directory never share a rollout, so each reads its own.
+func TestCodexTwoHomesOneDirEachReadsItsOwn(t *testing.T) {
+	smp, root := daemonSession(t)
+	work := filepath.Join(root, "home", ".matchblox", "accounts", "codex", "work")
+	addProc(t, root, 901, 1, "codex", []string{"codex"}, "%21")
+	addPane(t, root, "%21\tapp:1.2\tw\t901\tcodex\t/work/app")
+	setEnv(t, root, 901, "TMUX_PANE=%21", "CODEX_HOME="+work)
+	symlink(t, "/work/app", filepath.Join(root, "proc", "901", "cwd"))
+	b, err := os.ReadFile(filepath.Join(root, "proc", "900", "stat"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, "proc", "901", "stat"), strings.Replace(string(b), "900 ", "901 ", 1))
+	daemonFile(t, filepath.Join(root, "home", ".codex"), "default", "/work/app", daemonStart.Add(time.Minute), 42)
+	daemonFile(t, work, "own", "/work/app", daemonStart.Add(2*time.Minute), 21)
+	got := map[string]float64{}
+	for _, a := range smp.Sample().Limits {
+		if a.Provider == "openai" && a.State == limits.Measured {
+			got[a.Dir] = a.Uses(fixtureNow)[0].Pct
+		}
+	}
+	if got[""] != 42 || got[work] != 21 {
+		t.Fatalf("measured %v, want 42 for the default and 21 for %s", got, work)
+	}
+}
+
 // codexDaemonProc adds the app-server daemon of the default Codex home:
 // pid 950, ppid 1, in cwd, started age before the clock of the sampler.
 func codexDaemonProc(t *testing.T, root, cwd string, age time.Duration) {
