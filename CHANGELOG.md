@@ -59,6 +59,15 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- A copy account is its own. A link in the default that points inside the
+  default now points to the same place in the account, so the account
+  reads its own files and never the default's. A link that points outside
+  the default stays as it was, and matchblox names it as still shared.
+  Files are cloned copy-on-write where the file system can, else copied
+  byte by byte. The copy stops at 200,000 entries, 16 GiB copied byte by
+  byte, or 90 seconds, and names what it left out. Cloning is tested on
+  macOS (APFS) only; on Linux it is not tested yet.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - An agent's pane cannot start a session on an account, new or not, even
   when it says it is a console.
   ([#170](https://github.com/blox-eng/matchblox/issues/170))

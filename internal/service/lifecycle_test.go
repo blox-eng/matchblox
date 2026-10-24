@@ -905,7 +905,7 @@ func accountTest(t *testing.T) (*Service, *[][]string, string) {
 func prepared(t *testing.T, home, agent, name string) string {
 	t.Helper()
 	folder := accounts.Folder(home, agent, name)
-	if err := accounts.Prepare(home, agent, folder, accounts.Empty); err != nil {
+	if _, err := accounts.Prepare(home, agent, folder, accounts.Empty); err != nil {
 		t.Fatal(err)
 	}
 	return folder

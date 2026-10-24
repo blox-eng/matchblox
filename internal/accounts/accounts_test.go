@@ -67,7 +67,7 @@ func TestFolderAndListAndDefaultDir(t *testing.T) {
 		t.Fatalf("List with no root = %v, %v", got, err)
 	}
 	for _, n := range []string{"zed", "work"} {
-		if err := Prepare(home, "claude", Folder(home, "claude", n), Empty); err != nil {
+		if _, err := Prepare(home, "claude", Folder(home, "claude", n), Empty); err != nil {
 			t.Fatal(err)
 		}
 	}

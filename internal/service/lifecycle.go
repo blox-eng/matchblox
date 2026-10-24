@@ -331,7 +331,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 		defer unlock()
 		if acct.again {
 			// It switches on the account as it is when that fails.
-			relink = accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode)
+			_, relink = accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode)
 		}
 	}
 	release := s.holdPane(pane)
@@ -651,12 +651,12 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	case acct != nil && acct.fresh && a.Confirm == "y":
 		_, err := os.Lstat(acct.folder)
 		made = errors.Is(err, fs.ErrNotExist)
-		if err := accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode); err != nil {
+		if _, err := accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode); err != nil {
 			s.unmake(made, acct.folder)
 			return proto.Result{Err: err.Error()}
 		}
 	case acct != nil && acct.again:
-		relink = accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode)
+		_, relink = accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode)
 	}
 	res := s.Actions.Do(ctx, act, a.Confirm)
 	if res.Err != "" || len(res.Ran) < len(steps) {

@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 // own lists the entries an account keeps for itself: sign-ins, the agent's
@@ -34,54 +36,98 @@ func isOwn(agent, name string) bool {
 	return false
 }
 
+// Report is what a Prepare left shared with the default, and what it did
+// not copy.
+type Report struct {
+	// Shared names each link of a copy that still reads the default's
+	// files, and why.
+	Shared []string
+	// Skipped names each entry of the default a copy left out.
+	Skipped []Skip
+}
+
+// Skip is an entry of the default that was not copied, and why.
+type Skip struct {
+	Path, Why string
+}
+
+func (r *Report) add(o Report) {
+	r.Shared = append(r.Shared, o.Shared...)
+	r.Skipped = append(r.Skipped, o.Skipped...)
+}
+
+// Limit bounds a copy. Bytes counts only what is copied byte by byte, not
+// clones.
+type Limit struct {
+	Entries int
+	Bytes   int64
+	Time    time.Duration
+}
+
+// CopyLimit bounds the copy of a default: an entry past it is not copied,
+// and is named in Report.Skipped.
+var CopyLimit = Limit{Entries: 200_000, Bytes: 16 << 30, Time: 90 * time.Second}
+
+// copyLimit, now and clone are CopyLimit, the clock and the file clone,
+// set apart for the tests.
+var (
+	copyLimit = CopyLimit
+	now       = time.Now
+	clone     = cloneFile
+)
+
 // Prepare makes folder for agent (mode 0700) and fills it as mode says. It
 // writes SetupFile when the folder has none. It can run again: it adds what
 // the default gained since, and never replaces or removes an entry that is
-// already there.
-func Prepare(home, agent, folder string, mode Mode) error {
+// already there. The report names what a copy left shared or out.
+func Prepare(home, agent, folder string, mode Mode) (Report, error) {
 	agent = canon(agent)
 	if _, ok := own[agent]; !ok {
-		return fmt.Errorf("%s has no accounts", agent)
+		return Report{}, fmt.Errorf("%s has no accounts", agent)
 	}
 	switch mode {
 	case LikeDefault, Copy, Empty:
 	default:
-		return fmt.Errorf("unknown setup %q", mode)
+		return Report{}, fmt.Errorf("unknown setup %q", mode)
 	}
 	if err := mkdir(folder); err != nil {
-		return err
+		return Report{}, err
 	}
 	if err := markSetup(folder, mode); err != nil {
-		return err
+		return Report{}, err
 	}
 	def := DefaultDir(home, agent)
+	isOwnEntry := func(n string) bool { return isOwn(agent, n) }
 	if agent != "cursor-agent" {
-		return share(def, folder, mode, func(n string) bool { return isOwn(agent, n) })
+		return share(def, folder, mode, isOwnEntry)
 	}
 
 	ah := filepath.Join(folder, "home")
 	if err := mkdir(ah); err != nil {
-		return err
+		return Report{}, err
 	}
 	// The builder's dotfiles, in every mode: the account runs on its own HOME.
 	// Not the accounts root: an account never reaches the others.
-	if err := share(home, ah, LikeDefault, func(n string) bool { return n == ".cursor" || n == ".matchblox" }); err != nil {
-		return err
+	rep, err := share(home, ah, LikeDefault, func(n string) bool { return n == ".cursor" || n == ".matchblox" })
+	if err != nil {
+		return rep, err
 	}
 	cfg := filepath.Join(folder, "cfg")
 	if err := mkdir(cfg); err != nil {
-		return err
+		return rep, err
 	}
 	if err := mkdir(filepath.Join(ah, ".cursor")); err != nil {
-		return err
+		return rep, err
 	}
 	if mode == Empty {
-		return nil
+		return rep, nil
 	}
-	if err := share(def, filepath.Join(ah, ".cursor"), mode, func(n string) bool { return isOwn(agent, n) }); err != nil {
-		return err
+	got, err := share(def, filepath.Join(ah, ".cursor"), mode, isOwnEntry)
+	rep.add(got)
+	if err != nil {
+		return rep, err
 	}
-	return seedConfig(filepath.Join(def, "cli-config.json"), filepath.Join(cfg, "cli-config.json"))
+	return rep, seedConfig(filepath.Join(def, "cli-config.json"), filepath.Join(cfg, "cli-config.json"))
 }
 
 // markSetup writes SetupFile with mode, when folder has none.
@@ -111,18 +157,22 @@ func mkdir(dir string) error {
 }
 
 // share puts the entries of src that skip does not name into dst, as links or
-// as copies. An entry that already exists in dst stays as it is.
-func share(src, dst string, mode Mode, skip func(string) bool) error {
+// as copies. An entry that already exists in dst stays as it is. It goes on
+// after an entry fails, and returns every failure.
+func share(src, dst string, mode Mode, skip func(string) bool) (Report, error) {
 	if mode == Empty {
-		return nil
+		return Report{}, nil
 	}
 	es, err := os.ReadDir(src)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil
+		return Report{}, nil
 	}
 	if err != nil {
-		return err
+		return Report{}, err
 	}
+	c := copier{def: src, acct: dst, own: skip, limit: copyLimit}
+	c.deadline = now().Add(c.limit.Time)
+	var errs []error
 	for _, e := range es {
 		name := e.Name()
 		if skip(name) {
@@ -134,30 +184,64 @@ func share(src, dst string, mode Mode, skip func(string) bool) error {
 		}
 		from := filepath.Join(src, name)
 		if mode == Copy {
-			err = copyTree(from, to)
+			err = c.copyTree(from, to)
 		} else {
 			err = os.Symlink(from, to)
 		}
 		if err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	return c.report, errors.Join(errs...)
 }
 
-// copyTree copies a file or folder. A link it meets is copied as a link.
-func copyTree(from, to string) error {
+// copier copies the default def into the account's acct, within its limit.
+type copier struct {
+	def, acct string
+	// own tells the default's entries the account keeps for itself.
+	own      func(string) bool
+	limit    Limit
+	deadline time.Time
+	entries  int
+	bytes    int64
+	// stop is why the copy stopped, once it is past its limit.
+	stop   string
+	report Report
+}
+
+// past tells whether the entry about to be copied is past the limit, and
+// names it in the report when it is.
+func (c *copier) past(from string) bool {
+	if c.stop == "" {
+		c.entries++
+		switch {
+		case c.entries > c.limit.Entries:
+			c.stop = fmt.Sprintf("the copy stops at %d entries", c.limit.Entries)
+		case now().After(c.deadline):
+			c.stop = fmt.Sprintf("the copy stops after %s", c.limit.Time)
+		}
+	}
+	if c.stop == "" {
+		return false
+	}
+	c.report.Skipped = append(c.report.Skipped, Skip{Path: from, Why: c.stop})
+	return true
+}
+
+// copyTree copies a file or folder. Regular files are cloned when the file
+// system can, else copied byte by byte. A link it meets stays a link: one
+// into the default points to the same place in the account.
+func (c *copier) copyTree(from, to string) error {
+	if c.past(from) {
+		return nil
+	}
 	fi, err := os.Lstat(from)
 	if err != nil {
 		return err
 	}
 	switch {
 	case fi.Mode()&os.ModeSymlink != 0:
-		target, err := os.Readlink(from)
-		if err != nil {
-			return err
-		}
-		return os.Symlink(target, to)
+		return c.copyLink(from, to)
 	case fi.IsDir():
 		if err := os.Mkdir(to, fi.Mode().Perm()|0o700); err != nil {
 			return err
@@ -166,16 +250,81 @@ func copyTree(from, to string) error {
 		if err != nil {
 			return err
 		}
+		var errs []error
 		for _, e := range es {
-			if err := copyTree(filepath.Join(from, e.Name()), filepath.Join(to, e.Name())); err != nil {
-				return err
+			if err := c.copyTree(filepath.Join(from, e.Name()), filepath.Join(to, e.Name())); err != nil {
+				errs = append(errs, err)
 			}
 		}
-		return nil
+		return errors.Join(errs...)
 	case fi.Mode().IsRegular():
-		return copyFile(from, to, fi.Mode().Perm())
+		perm := fi.Mode().Perm() | 0o600
+		err := clone(from, to, perm)
+		if !refused(err) {
+			return err
+		}
+		if c.bytes+fi.Size() > c.limit.Bytes {
+			c.stop = fmt.Sprintf("the copy stops at %d bytes copied byte by byte", c.limit.Bytes)
+			c.report.Skipped = append(c.report.Skipped, Skip{Path: from, Why: c.stop})
+			return nil
+		}
+		c.bytes += fi.Size()
+		return copyFile(from, to, perm)
 	}
 	return nil
+}
+
+// copyLink copies the link from. A target inside the default becomes a
+// relative link to the same place in the account, so the account reads its
+// own files and can move. A target outside the default, or on an entry the
+// account keeps for itself, stays, and is named as still shared.
+func (c *copier) copyLink(from, to string) error {
+	target, err := os.Readlink(from)
+	if err != nil {
+		return err
+	}
+	abs := target
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(filepath.Dir(from), abs)
+	}
+	rel, inside := c.inDefault(abs)
+	switch {
+	case !inside:
+		c.report.Shared = append(c.report.Shared, fmt.Sprintf("%s -> %s: outside the default", to, target))
+	case rel != "." && c.own(strings.Split(rel, string(filepath.Separator))[0]):
+		c.report.Shared = append(c.report.Shared, fmt.Sprintf("%s -> %s: the account keeps its own %s, so the link stays on the default's",
+			to, target, strings.Split(rel, string(filepath.Separator))[0]))
+	default:
+		if target, err = filepath.Rel(filepath.Dir(to), filepath.Join(c.acct, rel)); err != nil {
+			return err
+		}
+	}
+	return os.Symlink(target, to)
+}
+
+// inDefault is where path lies inside the default, and whether it does.
+func (c *copier) inDefault(path string) (string, bool) {
+	if !SameDir(c.def, path) && !Under(c.def, path) {
+		return "", false
+	}
+	// The place as written, else through the resolved folders.
+	for _, p := range [][2]string{{c.def, path}, {resolve(c.def), path}, {resolve(c.def), resolve(path)}} {
+		if rel, err := filepath.Rel(p[0], filepath.Clean(p[1])); err == nil && rel != ".." &&
+			!strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return rel, true
+		}
+	}
+	return "", false
+}
+
+// refused tells whether err is a file system's refusal to clone.
+func refused(err error) bool {
+	for _, r := range refusals {
+		if errors.Is(err, r) {
+			return true
+		}
+	}
+	return false
 }
 
 func copyFile(from, to string, perm fs.FileMode) error {

@@ -76,7 +76,7 @@ func TestOwnEntriesAreNeverLinkedOrCopied(t *testing.T) {
 			home := t.TempDir()
 			fakeDefault(t, filepath.Join(home, c.def), c.shared, c.own)
 			f := Folder(home, c.agent, "work")
-			if err := Prepare(home, c.agent, f, mode); err != nil {
+			if _, err := Prepare(home, c.agent, f, mode); err != nil {
 				t.Fatal(err)
 			}
 			for _, n := range c.shared {
@@ -100,7 +100,7 @@ func TestCursorHomeSkipsTheAccountsRoot(t *testing.T) {
 	home := t.TempDir()
 	write(t, filepath.Join(home, ".gitconfig"), "x")
 	c := Folder(home, "cursor-agent", "work")
-	if err := Prepare(home, "cursor-agent", c, LikeDefault); err != nil {
+	if _, err := Prepare(home, "cursor-agent", c, LikeDefault); err != nil {
 		t.Fatal(err)
 	}
 	if exists(filepath.Join(c, "home", ".matchblox")) {
@@ -115,7 +115,7 @@ func TestSetupMarkerSaysTheMode(t *testing.T) {
 	for _, mode := range []Mode{LikeDefault, Copy, Empty} {
 		home := t.TempDir()
 		f := Folder(home, "claude", "work")
-		if err := Prepare(home, "claude", f, mode); err != nil {
+		if _, err := Prepare(home, "claude", f, mode); err != nil {
 			t.Fatal(err)
 		}
 		fi, err := os.Stat(filepath.Join(f, SetupFile))
@@ -142,10 +142,10 @@ func TestNoMarkerIsLikeDefault(t *testing.T) {
 func TestPrepareKeepsTheFirstMarker(t *testing.T) {
 	home := t.TempDir()
 	f := Folder(home, "codex", "work")
-	if err := Prepare(home, "codex", f, Copy); err != nil {
+	if _, err := Prepare(home, "codex", f, Copy); err != nil {
 		t.Fatal(err)
 	}
-	if err := Prepare(home, "codex", f, LikeDefault); err != nil {
+	if _, err := Prepare(home, "codex", f, LikeDefault); err != nil {
 		t.Fatal(err)
 	}
 	if got := SetupOf(f); got != Copy {

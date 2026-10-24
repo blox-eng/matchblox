@@ -42,7 +42,7 @@ func TestLikeDefaultLinksAllButOwn(t *testing.T) {
 	home := t.TempDir()
 	def := fakeClaude(t, home)
 	f := Folder(home, "claude", "work")
-	if err := Prepare(home, "claude", f, LikeDefault); err != nil {
+	if _, err := Prepare(home, "claude", f, LikeDefault); err != nil {
 		t.Fatal(err)
 	}
 	for _, n := range []string{"settings.json", "skills"} {
@@ -63,7 +63,7 @@ func TestPrepareLeavesARealFileAlone(t *testing.T) {
 	fakeClaude(t, home)
 	f := Folder(home, "claude", "work")
 	write(t, filepath.Join(f, "settings.json"), "mine")
-	if err := Prepare(home, "claude", f, LikeDefault); err != nil {
+	if _, err := Prepare(home, "claude", f, LikeDefault); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(filepath.Join(f, "settings.json"))
@@ -76,11 +76,11 @@ func TestPrepareAddsNewEntries(t *testing.T) {
 	home := t.TempDir()
 	def := fakeClaude(t, home)
 	f := Folder(home, "claude", "work")
-	if err := Prepare(home, "claude", f, LikeDefault); err != nil {
+	if _, err := Prepare(home, "claude", f, LikeDefault); err != nil {
 		t.Fatal(err)
 	}
 	write(t, filepath.Join(def, "CLAUDE.md"), "hi")
-	if err := Prepare(home, "claude", f, LikeDefault); err != nil {
+	if _, err := Prepare(home, "claude", f, LikeDefault); err != nil {
 		t.Fatal(err)
 	}
 	if !isLink(filepath.Join(f, "CLAUDE.md")) {
@@ -92,7 +92,7 @@ func TestCopyIsIndependent(t *testing.T) {
 	home := t.TempDir()
 	def := fakeClaude(t, home)
 	f := Folder(home, "claude", "work")
-	if err := Prepare(home, "claude", f, Copy); err != nil {
+	if _, err := Prepare(home, "claude", f, Copy); err != nil {
 		t.Fatal(err)
 	}
 	for _, n := range []string{"settings.json", "skills"} {
@@ -121,14 +121,14 @@ func TestEmptySharesNothing(t *testing.T) {
 	write(t, filepath.Join(home, ".gitconfig"), "x")
 	write(t, filepath.Join(home, ".cursor", "hooks.json"), "{}")
 	f := Folder(home, "claude", "work")
-	if err := Prepare(home, "claude", f, Empty); err != nil {
+	if _, err := Prepare(home, "claude", f, Empty); err != nil {
 		t.Fatal(err)
 	}
 	if es, _ := os.ReadDir(f); len(es) != 1 || es[0].Name() != SetupFile {
 		t.Errorf("claude folder has %d entries, want only %s", len(es), SetupFile)
 	}
 	c := Folder(home, "cursor-agent", "work")
-	if err := Prepare(home, "cursor-agent", c, Empty); err != nil {
+	if _, err := Prepare(home, "cursor-agent", c, Empty); err != nil {
 		t.Fatal(err)
 	}
 	if !isLink(filepath.Join(c, "home", ".gitconfig")) {
@@ -149,7 +149,7 @@ func TestCursorHomeMirrorsHome(t *testing.T) {
 	write(t, filepath.Join(home, ".cursor", "hooks.json"), "{}")
 	write(t, filepath.Join(home, ".cursor", "auth.json"), "secret")
 	c := Folder(home, "cursor-agent", "work")
-	if err := Prepare(home, "cursor-agent", c, LikeDefault); err != nil {
+	if _, err := Prepare(home, "cursor-agent", c, LikeDefault); err != nil {
 		t.Fatal(err)
 	}
 	ah := filepath.Join(c, "home")
@@ -171,7 +171,7 @@ func TestCursorStatusLineSeeded(t *testing.T) {
 	write(t, filepath.Join(home, ".cursor", "cli-config.json"),
 		`{"statusLine":{"command":"x"},"authInfo":{"email":"you@example.com"}}`)
 	c := Folder(home, "cursor-agent", "work")
-	if err := Prepare(home, "cursor-agent", c, LikeDefault); err != nil {
+	if _, err := Prepare(home, "cursor-agent", c, LikeDefault); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(filepath.Join(c, "cfg", "cli-config.json"))
@@ -194,7 +194,7 @@ func TestEmptyHomeWorks(t *testing.T) {
 	for _, agent := range []string{"claude", "codex", "cursor-agent"} {
 		for _, mode := range []Mode{LikeDefault, Copy, Empty} {
 			home := t.TempDir()
-			if err := Prepare(home, agent, Folder(home, agent, "w"), mode); err != nil {
+			if _, err := Prepare(home, agent, Folder(home, agent, "w"), mode); err != nil {
 				t.Errorf("%s %s: %v", agent, mode, err)
 			}
 		}
@@ -204,7 +204,7 @@ func TestEmptyHomeWorks(t *testing.T) {
 func TestFolderIsPrivate(t *testing.T) {
 	home := t.TempDir()
 	f := Folder(home, "codex", "work")
-	if err := Prepare(home, "codex", f, LikeDefault); err != nil {
+	if _, err := Prepare(home, "codex", f, LikeDefault); err != nil {
 		t.Fatal(err)
 	}
 	fi, err := os.Stat(f)
@@ -221,7 +221,7 @@ func TestCodexOwnEntriesStayOut(t *testing.T) {
 		write(t, filepath.Join(d, n), "x")
 	}
 	f := Folder(home, "codex", "work")
-	if err := Prepare(home, "codex", f, LikeDefault); err != nil {
+	if _, err := Prepare(home, "codex", f, LikeDefault); err != nil {
 		t.Fatal(err)
 	}
 	if !isLink(filepath.Join(f, "AGENTS.md")) {
@@ -240,7 +240,7 @@ func TestClaudeBackupsStayOwn(t *testing.T) {
 		fakeClaude(t, home)
 		write(t, filepath.Join(home, ".claude", "backups", ".claude.json.backup.1"), "{}")
 		f := Folder(home, "claude", "work")
-		if err := Prepare(home, "claude", f, mode); err != nil {
+		if _, err := Prepare(home, "claude", f, mode); err != nil {
 			t.Fatal(err)
 		}
 		if exists(filepath.Join(f, "backups")) {
@@ -254,7 +254,7 @@ func TestCursorPermissionsSeeded(t *testing.T) {
 	write(t, filepath.Join(home, ".cursor", "cli-config.json"),
 		`{"permissions":{"allow":["Shell(ls)"]},"authInfo":{"email":"you@example.com"}}`)
 	c := Folder(home, "cursor-agent", "work")
-	if err := Prepare(home, "cursor-agent", c, LikeDefault); err != nil {
+	if _, err := Prepare(home, "cursor-agent", c, LikeDefault); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(filepath.Join(c, "cfg", "cli-config.json"))
