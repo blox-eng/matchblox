@@ -12,9 +12,9 @@ the keys of the open tab, and a tap on one presses it.
 | `↓` or `j` | Selects the row below. |
 | `Enter` | Shows the safe action of the row: go to the agent's pane (Sessions, Machine, Panes), open a shell in the worktree (Git), do a recommendation, show a setup step. On Ships, selects the session that drives the ship in Sessions. |
 | `x` | Shows the other action of the row: the second action of a recommendation, close a setup step or kill the session (Sessions), kill a detached busy loop (Machine), remove the marked worktrees (Git), merge a ship that waits for your merge (Ships). Kill shows its commands, `tmux kill-pane -t <pane>`, then `kill -TERM <pid>` for an agent still running, and runs them on a typed `y`. A session that works or waits for you asks for a second `y`. Its worktree and its transcript stay. |
-| `N` | Opens **New session** (Sessions, Git): where it starts (a path, or `←` `→` through the Git tab's repositories and worktrees, then the ones found on the host, the most recent first), a branch for a new worktree beside the repository (blank: none), its name, the agent (`←` `→`, from the installed Claude Code, Codex, OpenCode and Cursor) and a first message (blank: it waits for you). `Tab` goes to the next line, `⏎` starts it in a tmux session of its own, `Esc` sends nothing. The row shows in Sessions within seconds. |
+| `N` | Opens **New session** (Sessions, Git): where it starts (a path, or `←` `→` through the Git tab's repositories and worktrees, then the ones found on the host, the most recent first), a branch for a new worktree beside the repository (blank: none), its name, the agent (`←` `→`, from the installed Claude Code, Codex, OpenCode and Cursor), for Claude Code, Codex and Cursor the account (see below), and a first message (blank: it waits for you; a new account has none). `Tab` goes to the next line, `⏎` starts it in a tmux session of its own, `Esc` sends nothing. The row shows in Sessions within seconds. |
 | `r` | Renames the session (Sessions): its tmux window, its tmux session when it is that session's one window, and Claude Code's own name (`/rename`), all alike. A Claude Code session that works takes its new name when it rests. On Git, `r` scans the git checkouts again. |
-| `A` | Switches the agent of the session (Sessions): another installed agent (`←` `→`) starts in its pane and directory with a handoff line you may edit or clear. The plan shows, `y` runs it, and a session that works or waits asks for a second `y`. The console jumps to the pane after. |
+| `A` | Switches the agent of the session (Sessions): another installed agent (`←` `→`) starts in its pane and directory with a handoff line you may edit or clear. It starts on the account you last started that agent on, else on `default`, and the plan names it. The plan shows, `y` runs it, and a session that works or waits asks for a second `y`. The console jumps to the pane after. |
 | `a` | Opens the peek on the selected agent: what it said, and your answer to an agent that waits or a message to any other (Claude Code queues a message typed while it works). The key line says `a answer` or `a message`. On Ships, opens it on the session of a stuck ship. |
 | `1-7` | Opens a tab: Sessions, Ships, Machine, Git, History, Panes, Stoker. |
 | `p` | Opens Ships. |
@@ -75,6 +75,15 @@ A tap on a line puts the cursor there, and a tap on an agent picks it.
 | `←` or `→` | On where, steps through the Git tab's repositories and worktrees. On agent, picks the agent before or after; Switch agent leaves out the one the session runs. |
 | `Enter` | Starts the session, renames it, or shows the switch's plan. A refusal stays in the form, with why. |
 | `Esc` | Closes the form. Nothing is sent. |
+
+New session shows an account line when the agent keeps accounts: Claude Code, Codex, and Cursor on macOS. A new account adds a setup line.
+
+| Field | What it does |
+|---|---|
+| account | `←` `→` picks `default`, an account that exists, or `+ new account`. The form opens on the agent you last started, and the field on the account you last started for the agent. If there is none, or the account is gone, it opens on `default`. It never opens on `+ new account`. For a new account, type its name. The name has 1 to 10 lowercase letters, digits or dashes. A new account has no first message. |
+| setup | Shows for a new account. `←` `→` picks `like default` (links the default's setup, so every account shares one), `copy of default` (a one-time copy) or `empty` (nothing shared). |
+
+A start on a new account is a destructive action: the plan shows `RUN` and waits for a typed `y`. A start on an account that exists runs on `Enter`.
 
 ## The answer peek
 

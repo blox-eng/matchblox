@@ -140,20 +140,9 @@ func TestViewFitsWidth(t *testing.T) {
 	}
 }
 
+// key presses k, named as keyPress names it.
 func key(m tea.Model, k string) (tea.Model, tea.Cmd) {
-	r := []rune(k)
-	msg := tea.KeyPressMsg{Text: k, Code: r[0]}
-	switch k {
-	case "enter":
-		msg = tea.KeyPressMsg{Code: tea.KeyEnter}
-	case "down":
-		msg = tea.KeyPressMsg{Code: tea.KeyDown}
-	case "esc":
-		msg = tea.KeyPressMsg{Code: tea.KeyEsc}
-	case "tab", "space":
-		msg = keyPress(k)
-	}
-	return m.Update(msg)
+	return m.Update(keyPress(k))
 }
 
 func TestJumpPrintsCommandThenRunsOnConfirm(t *testing.T) {

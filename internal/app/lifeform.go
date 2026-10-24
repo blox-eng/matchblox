@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -34,29 +36,67 @@ const (
 	fieldAgent
 	fieldFirst
 	fieldFolders
+	fieldAccount // after agent, for an agent with accounts
+	fieldSetup   // under account, for a new account
 )
 
-var formLabels = [...]string{"where", "branch", "name", "agent", "first", "folders"}
+var formLabels = [...]string{"where", "branch", "name", "agent", "first", "folders", "account", "setup"}
+
+// newAccountChoice is the last entry of the account field.
+const newAccountChoice = "+ new account"
+
+// accountNameWhy is why a new account's name is refused: the rule of
+// accounts.CheckName, which needs the host's home and OS for Codex's
+// socket length (the service checks that one).
+const accountNameWhy = "a–z, 0–9 and -, up to 10"
+
+// setups are the ways a new account starts, in the order ←→ walks them:
+// the service's value, the words the form shows, and what it does.
+var setups = [...]struct{ id, label, help string }{
+	{"like-default", "like default", "shares skills, plugins and settings with default"},
+	{"copy", "copy of default", "copies setup files once; any tokens stay on this machine"},
+	{"empty", "empty", "nothing shared, the agent's first run"},
+}
+
+// checkAccountName is accounts.CheckName's name rule, as the builder types:
+// 1 to 10 characters from a-z, 0-9 and -, and not "default".
+func checkAccountName(name string) error {
+	if name == "default" || name == "" || len(name) > 10 {
+		return errors.New(accountNameWhy)
+	}
+	for _, r := range name {
+		if r != '-' && (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			return errors.New(accountNameWhy)
+		}
+	}
+	return nil
+}
 
 // form is the open New session, Rename, Switch agent or scan folders form.
 // Rename has the name only; Switch agent the agent and the handoff (in
 // first); the scan's folders the roots.
 type form struct {
-	rename    bool
-	swap      bool   // Switch agent
-	pick      bool   // the scan's folders, in roots
-	roots     string // space separated
-	pane, who string // Rename, Switch agent: the session's pane and its name now
-	from      string // Switch agent: the session's agent now (where: its directory)
-	at        int    // the field the cursor is on
-	where     string
-	branch    string
-	name      string
-	named     bool // the name was typed: it no longer follows where
-	agent     string
-	first     string
-	whereAt   int    // ←→ on where: the Git path it shows (-1: typed)
-	act, err  string // the act in flight, and why the last one did not go
+	rename     bool
+	swap       bool   // Switch agent
+	pick       bool   // the scan's folders, in roots
+	roots      string // space separated
+	pane, who  string // Rename, Switch agent: the session's pane and its name now
+	from       string // Switch agent: the session's agent now (where: its directory)
+	at         int    // the field the cursor is on
+	where      string
+	branch     string
+	name       string
+	named      bool // the name was typed: it no longer follows where
+	agent      string
+	first      string
+	whereAt    int                        // ←→ on where: the Git path it shows (-1: typed)
+	accts      map[string][]string        // the accounts each agent can start on
+	skipped    map[string][]accounts.Skip // the folders not listed, per agent
+	last       map[string]string          // the account last started, per agent
+	account    string                     // "": default; else the account, or the new one's name being typed
+	newAccount bool                       // account is a name for a new one
+	setup      string                     // a new account's setup: like-default | copy | empty
+	act, err   string                     // the act in flight, and why the last one did not go
 }
 
 const maxField = 300
@@ -72,10 +112,14 @@ func (m Model) openNew() (tea.Model, tea.Cmd) {
 		m.flash = "no agent to start here: install claude, codex, opencode or cursor-agent"
 		return m, nil
 	}
-	f := &form{at: fieldWhere, whereAt: -1, agent: m.agents[0]}
+	f := &form{at: fieldWhere, whereAt: -1, agent: m.agents[0], accts: m.accounts, skipped: m.skipped, last: m.lastAccount}
+	// This console's last start first, else the service's, after a restart.
 	if slices.Contains(m.agents, m.lastAgent) {
 		f.agent = m.lastAgent
+	} else if slices.Contains(m.agents, m.keptAgent) {
+		f.agent = m.keptAgent
 	}
+	f.account = f.lastAccount()
 	switch m.tab {
 	case tabGit:
 		if wt, ok := m.selectedWorktree(); ok {
@@ -131,7 +175,7 @@ func (m Model) openSwitch() (tea.Model, tea.Cmd) {
 		m.flash = "not sent, no connection"
 		return m, nil
 	}
-	f := &form{swap: true, pane: s.Pane, who: s.Name, from: s.Agent, where: s.Cwd, at: fieldAgent, first: proto.DefaultHandoff}
+	f := &form{swap: true, pane: s.Pane, who: s.Name, from: s.Agent, where: s.Cwd, at: fieldAgent, first: proto.DefaultHandoff, accts: m.accounts, skipped: m.skipped, last: m.lastAccount}
 	for _, a := range m.agents {
 		if a != s.Agent {
 			f.agent = a
@@ -150,10 +194,23 @@ func (m Model) openSwitch() (tea.Model, tea.Cmd) {
 // and a second one for a session that works or waits.
 func (m Model) switchAction(f form) *action {
 	sw := proto.SwitchAgent{Agent: f.agent, Handoff: strings.TrimSpace(f.first)}
+	if len(f.accts[f.agent]) > 0 {
+		// The account the confirm names: the service refuses the switch when
+		// its last account is another by then.
+		sw.Account = cmp.Or(f.lastAccount(), "default")
+	}
 	b, _ := json.Marshal(sw)
 	sw.Anyway = true
 	again, _ := json.Marshal(sw)
-	say := fmt.Sprintf("switch %s: %s → %s in %s, %s, then jump there", f.who, f.from, f.agent, f.pane, f.where)
+	// The service starts it on its last account: the confirm names it.
+	on := ""
+	if len(f.accts[f.agent]) > 0 {
+		on = " on default,"
+		if a := f.lastAccount(); a != "" {
+			on = " on " + a + ","
+		}
+	}
+	say := fmt.Sprintf("switch %s: %s → %s in %s, %s,%s then jump there", f.who, f.from, f.agent, f.pane, f.where, on)
 	a := &action{label: "switch", destructive: true, rec: "switch:" + f.pane, text: string(b), againText: string(again), say: say, done: "switched " + f.who + " to " + f.agent}
 	if i := slices.IndexFunc(m.snap.Sessions, func(s sample.Session) bool { return s.Pane == f.pane }); i >= 0 {
 		a.again = m.againFor(m.snap.Sessions[i], "switches")
@@ -216,7 +273,87 @@ func (f *form) fields() []int {
 	case f.swap:
 		return []int{fieldAgent, fieldFirst}
 	}
-	return []int{fieldWhere, fieldBranch, fieldName, fieldAgent, fieldFirst}
+	out := []int{fieldWhere, fieldBranch, fieldName, fieldAgent}
+	if f.hasAccounts() {
+		out = append(out, fieldAccount)
+		if f.newAccount {
+			out = append(out, fieldSetup)
+		}
+	}
+	if !f.newAccount {
+		out = append(out, fieldFirst) // a new account signs in first: no message
+	}
+	return out
+}
+
+// hasAccounts tells if the New session form shows the account field: the
+// agent keeps accounts, and the service listed them.
+func (f *form) hasAccounts() bool {
+	if f.rename || f.swap {
+		return false
+	}
+	switch f.agent {
+	case "claude", "codex", "cursor-agent", "cursor":
+		return len(f.accts[f.agent]) > 0
+	}
+	return false
+}
+
+// accountChoices are what ←→ walks on the account field: the accounts, the
+// default first, and the new one.
+func (f *form) accountChoices() []string {
+	return append(slices.Clone(f.accts[f.agent]), newAccountChoice)
+}
+
+// accountShown is the account the field names: default for "".
+func (f *form) accountShown() string {
+	switch {
+	case f.newAccount:
+		return newAccountChoice
+	case f.account == "":
+		return "default"
+	}
+	return f.account
+}
+
+// pickAccount moves the account field by one choice, wrapping.
+func (f *form) pickAccount(by int) {
+	cs := f.accountChoices()
+	i := slices.Index(cs, f.accountShown())
+	if i < 0 {
+		i = 0
+	}
+	c := cs[(i+by+len(cs))%len(cs)]
+	f.account, f.newAccount = c, false
+	switch c {
+	case "default":
+		f.account = ""
+	case newAccountChoice:
+		f.account, f.newAccount = "", true
+		if f.setup == "" {
+			f.setup = setups[0].id
+		}
+	}
+}
+
+// lastAccount is the account the field opens on for the agent: the one last
+// started when it is still in the agent's list, else "" for default. It is
+// never the new account.
+func (f *form) lastAccount() string {
+	a := f.last[f.agent]
+	if a == "default" || !slices.Contains(f.accts[f.agent], a) {
+		return ""
+	}
+	return a
+}
+
+// setAgent picks the agent; another one starts on the account last started
+// for it, else on its default account.
+func (f *form) setAgent(a string) {
+	if a != f.agent {
+		f.agent = a
+		f.account, f.newAccount, f.setup = f.lastAccount(), false, ""
+	}
 }
 
 func (f *form) text(field int) *string {
@@ -228,9 +365,16 @@ func (f *form) text(field int) *string {
 	case fieldName:
 		return &f.name
 	case fieldFirst:
+		if f.newAccount && !f.swap {
+			return nil
+		}
 		return &f.first
 	case fieldFolders:
 		return &f.roots
+	case fieldAccount:
+		if f.newAccount {
+			return &f.account
+		}
 	}
 	return nil
 }
@@ -280,9 +424,28 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		i := slices.Index(agents, f.agent)
 		switch {
 		case bkey.Matches(k, fk.Left):
-			f.agent = agents[(i+len(agents)-1)%len(agents)]
+			f.setAgent(agents[(i+len(agents)-1)%len(agents)])
 		case bkey.Matches(k, fk.Right):
-			f.agent = agents[(i+1)%len(agents)]
+			f.setAgent(agents[(i+1)%len(agents)])
+		}
+		return m, nil
+	}
+	// On a new account's name, space is not a pick: only the arrows are.
+	if f.at == fieldAccount && bkey.Matches(k, fk.Left, fk.Right) && (k.Text == "" || !f.newAccount) {
+		by := 1
+		if bkey.Matches(k, fk.Left) {
+			by = -1
+		}
+		f.pickAccount(by)
+		return m, nil
+	}
+	if f.at == fieldSetup {
+		i := setupAt(f.setup)
+		switch {
+		case bkey.Matches(k, fk.Left):
+			f.setup = setups[(i+len(setups)-1)%len(setups)].id
+		case bkey.Matches(k, fk.Right):
+			f.setup = setups[(i+1)%len(setups)].id
 		}
 		return m, nil
 	}
@@ -388,11 +551,47 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 		if f.named {
 			n.Name = name
 		}
+		if f.hasAccounts() && f.newAccount {
+			if err := checkAccountName(f.account); err != nil {
+				f.err, f.at = "name the new account: "+err.Error(), fieldAccount
+				return m, nil
+			}
+			n.Account, n.NewAccount, n.Setup, n.First = f.account, true, f.setup, "" // it signs in in the session first
+			sess := name
+			if !f.named {
+				sess = f.autoName()
+			}
+			m.form, m.pending = nil, m.startAction(n, sess)
+			return m, nil
+		}
+		if f.hasAccounts() {
+			// The account is always named, default too: the service
+			// remembers only a start that names its account.
+			n.Account = f.accountShown()
+		}
+		if n.Account != "" && n.Account != "default" {
+			m.flash = fmt.Sprintf("start %s in %s on %s", n.Agent, tilde(n.Where), n.Account)
+		}
 		b, _ := json.Marshal(n)
 		cmd = m.send(proto.Act{RecID: "new:session", Confirm: "y", Text: string(b)})
 	}
 	f.act, f.err = fmt.Sprintf("a%d", m.acts), ""
 	return m, cmd
+}
+
+// startAction is the plan of a start on a new account: it waits for a typed
+// y, the service's confirmed act. The account is made first and signs in in
+// the session, sess.
+func (m Model) startAction(n proto.NewSession, sess string) *action {
+	b, _ := json.Marshal(n)
+	say := fmt.Sprintf("new %s account %q, %s: sign in in the session", n.Agent, n.Account, setups[setupAt(n.Setup)].label)
+	return &action{label: "start", destructive: true, rec: "new:session", text: string(b), say: say, agent: n.Agent,
+		done: "started " + sess + ": sign in in " + sess}
+}
+
+// setupAt is the index in setups of the setup id, 0 (like default) if none.
+func setupAt(id string) int {
+	return max(slices.IndexFunc(setups[:], func(x struct{ id, label, help string }) bool { return x.id == id }), 0)
 }
 
 // swapEnter turns the Switch agent form into its plan, checked as the
@@ -421,6 +620,12 @@ func (m Model) formResult(r proto.Result) (Model, bool) {
 	f := *m.form
 	m.form = &f
 	f.act = ""
+	// A start with notes on what its account shared or skipped ran all
+	// the same.
+	notes, ran := proto.StartNotes(r)
+	if !f.rename && ran {
+		r.Skipped = nil
+	}
 	switch {
 	case r.Err != "":
 		f.err = r.Err // the folders typed stay, to fix
@@ -442,6 +647,9 @@ func (m Model) formResult(r proto.Result) (Model, bool) {
 			name = f.autoName()
 		}
 		m.flash = "started " + name + ": it shows in Sessions in a few seconds"
+		if len(notes) > 0 {
+			m.flash += "; " + strings.Join(notes, "; ")
+		}
 		m.lastAgent = f.agent
 	}
 	m.form = nil
@@ -517,7 +725,14 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 		line, chips := m.agentChips(iw)
 		add(fmt.Sprintf("field:%d", fieldAgent), line)
 		agents = chips
-		field(fieldFirst, f.first, "blank: it waits for you")
+		if f.hasAccounts() {
+			m.accountLines(iw, field, add)
+		}
+		if f.newAccount {
+			field(fieldFirst, "", "after sign-in")
+		} else {
+			field(fieldFirst, f.first, "blank: it waits for you")
+		}
 	}
 	if f.act != "" {
 		add("", "", st.muted.Render("starting…"))
@@ -531,6 +746,84 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 	box, spans = boxFrame(st.hair, title, lines, m.formFoot(), bw)
 	press = append(press, "") // the box's bottom edge: its footer keys are spans
 	return box, press, spans, agentsAt, agents
+}
+
+// accountLines are the account field, and for a new account its name's
+// reason when refused and the setup row with a line of help.
+func (m Model) accountLines(iw int, field func(int, string, string), add func(string, ...string)) {
+	st, f := m.st, m.form
+	room := iw - 9
+	lead := func(id int) string {
+		label := fmt.Sprintf("%-7s", formLabels[id])
+		if f.at == id {
+			return st.muted.Render(label) + st.accent.Render("› ")
+		}
+		return st.faint.Render(label) + "  "
+	}
+	// choose is ‹ the one chosen › and the others, as many as fit.
+	choose := func(chosen string, others []string) string {
+		out := st.accent.Render("‹ " + chosen + " ›")
+		if rest := strings.Join(others, " · "); rest != "" && lipgloss.Width(out)+2+lipgloss.Width(rest) <= room {
+			out += "  " + st.faint.Render(rest)
+		}
+		return out
+	}
+	notListed := func() {
+		if why := notListedLine(f.skipped[f.agent]); why != "" {
+			add("", st.faint.Render(strings.Repeat(" ", 9)+fit(why, room)))
+		}
+	}
+	if f.newAccount {
+		field(fieldAccount, f.account, "a name, up to 10")
+		notListed()
+		if f.account != "" && checkAccountName(f.account) != nil {
+			add("", st.faint.Render(strings.Repeat(" ", 9))+st.warn.Render(fit(accountNameWhy, room)))
+		}
+		labels := make([]string, len(setups))
+		for i, x := range setups {
+			labels[i] = x.label
+		}
+		i := setupAt(f.setup)
+		add(fmt.Sprintf("field:%d", fieldSetup), lead(fieldSetup)+choose(labels[i], slices.Delete(slices.Clone(labels), i, i+1)))
+		for _, l := range wrapPlain(setups[i].label+": "+setups[i].help, room) {
+			add(fmt.Sprintf("field:%d", fieldSetup), strings.Repeat(" ", 9)+st.faint.Render(l))
+		}
+		return
+	}
+	add(fmt.Sprintf("field:%d", fieldAccount), lead(fieldAccount)+choose(f.accountShown(), f.accountChoices()))
+	notListed()
+}
+
+// notListedLine names the folders the account list left out, and why:
+// "not listed: A, b_ (why)" when they share the reason, else each with its
+// own; three named, then how many more. A skip of the agent's accounts
+// folder itself (a child of the accounts root) says it was not read. "" when
+// none.
+func notListedLine(skips []accounts.Skip) string {
+	if len(skips) == 0 {
+		return ""
+	}
+	if s := skips[0]; filepath.Base(filepath.Dir(s.Path)) == "accounts" {
+		return "accounts not read: " + s.Why
+	}
+	shared := !slices.ContainsFunc(skips, func(s accounts.Skip) bool { return s.Why != skips[0].Why })
+	var names []string
+	for i, s := range skips {
+		if i == 3 {
+			names = append(names, fmt.Sprintf("and %d more", len(skips)-3))
+			break
+		}
+		n := filepath.Base(s.Path)
+		if !shared {
+			n += " (" + s.Why + ")"
+		}
+		names = append(names, n)
+	}
+	line := "not listed: " + strings.Join(names, ", ")
+	if shared {
+		line += " (" + skips[0].Why + ")"
+	}
+	return line
 }
 
 // agentChips is the agent chips, the one chosen filled, with the span of
@@ -598,7 +891,8 @@ func (m Model) tapForm(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 	f := *m.form
 	if ms.Y == sc.formAgentsAt {
 		if c, ok := spanAt(sc.formAgents, dx); ok {
-			f.agent, f.at = c.press, fieldAgent
+			f.setAgent(c.press)
+			f.at = fieldAgent
 			m.form = &f
 			return m, nil
 		}

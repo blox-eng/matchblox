@@ -132,7 +132,9 @@ the stoker reads `word`, not `status`, which is the agent's own word
 session in a tmux session of its own on your tmux server, never on
 matchblox's own, in a new worktree when it names `--branch`. It counts as
 one of the run's messages, and the session it starts is one the stoker
-drives from its first second, so the guard watches it.
+drives from its first second, so the guard watches it. It starts on
+`default` only: the service refuses another account or a new one from the
+stoker (`the stoker starts on default only`).
 `matchblox rename <session> <name>` names a session, its tmux session and
 its agent alike. `matchblox kill <session>` ends a session at rest that you
 did not park: with the `kills` go it runs at once; without it, the card

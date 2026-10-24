@@ -162,6 +162,32 @@ func TestCodexsAppServerIsNoSession(t *testing.T) {
 	}
 }
 
+// TestANodeLaunchOfCodexsAppServerIsNoSession: an npm install runs Codex
+// as `node <path>/codex`, so its app-server is `node <path>/codex
+// app-server`: no session either, while `node <path>/codex` is one.
+func TestANodeLaunchOfCodexsAppServerIsNoSession(t *testing.T) {
+	const js = "/usr/lib/node_modules/@openai/codex/bin/codex"
+	root := copyFixture(t)
+	for i, argv := range [][]string{
+		{"node", js},
+		{"node", "--no-warnings", js, "app-server", "--listen", "unix://"},
+	} {
+		pane := "%" + strconv.Itoa(40+i)
+		pid := 990 + i
+		addProc(t, root, pid, 1, "node", argv, pane)
+		addPane(t, root, pane+"	nx:"+strconv.Itoa(i)+".1	w	"+strconv.Itoa(pid)+"	node	/work")
+	}
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "codex"}
+	got := byPane(smp.Sample())
+	if s, ok := got["%40"]; !ok || s.Agent != "codex" {
+		t.Errorf("%%40 = %+v, want a codex session", s)
+	}
+	if s, ok := got["%41"]; ok {
+		t.Errorf("%%41 runs codex app-server under node, no session: %+v", s)
+	}
+}
+
 // TestAnAgentOfAnotherTmuxServerTakesNoPaneOfOurs: pane ids repeat across
 // tmux servers. An agent started under another server (its TMUX names
 // another socket) never takes the pane with its TMUX_PANE in our list.

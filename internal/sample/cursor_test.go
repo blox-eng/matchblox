@@ -2,6 +2,7 @@ package sample
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -103,9 +104,9 @@ func TestCursorUsageFillsItsLine(t *testing.T) {
 	if a := cursorLimits(smp.Sample()); a == nil || a.State != limits.Unmeasured || !strings.Contains(a.Fix, "cursor_usage") {
 		t.Errorf("off: %+v, want not measured with how to turn it on", a)
 	}
-	smp.CursorUsage = &limits.CursorUsage{
-		Every: time.Hour,
-		Token: func(context.Context) (string, error) { return "tok", nil },
+	smp.CursorUsage = &limits.CursorUsages{
+		Every:    time.Hour,
+		Keychain: func(context.Context) (string, error) { return "tok", nil },
 		Fetch: func(context.Context, string) ([]byte, error) {
 			return []byte(`{"billingCycleStart":"1790000000000","billingCycleEnd":"1792678400000","planUsage":{"totalPercentUsed":25}}`), nil
 		},
@@ -138,5 +139,81 @@ func TestAnAgentWithoutANameIsCalledAsItsTmuxWindow(t *testing.T) {
 		if got[pane].Name != want {
 			t.Errorf("pane %s: name %q, want %q", pane, got[pane].Name, want)
 		}
+	}
+}
+
+// TestCursorNotAnsweredOnlyAfterACall: the line says Cursor's API has not
+// answered only once matchblox asked it; with no token it asked nothing.
+func TestCursorNotAnsweredOnlyAfterACall(t *testing.T) {
+	smp, _ := cursorFixture(t, fixtureNow.Add(-time.Minute))
+	token := ""
+	smp.CursorUsage = &limits.CursorUsages{
+		Every: time.Hour,
+		Keychain: func(context.Context) (string, error) {
+			if token == "" {
+				return "", os.ErrNotExist
+			}
+			return token, nil
+		},
+		Fetch: func(context.Context, string) ([]byte, error) { return nil, context.DeadlineExceeded },
+	}
+	smp.Sample()
+	smp.CursorUsage.Wait()
+	if a := cursorLimits(smp.Sample()); a == nil || a.Fix != cursorSignedOut {
+		t.Errorf("no token: %+v, want %q", a, cursorSignedOut)
+	}
+	smp.CursorUsage.Wait()
+	// A login with no token is read again after 30 s.
+	token = "tok"
+	smp.Now = func() time.Time { return fixtureNow.Add(30 * time.Second) }
+	smp.Sample()
+	smp.CursorUsage.Wait()
+	if a := cursorLimits(smp.Sample()); a == nil || a.Fix != cursorNotAnswered {
+		t.Errorf("after a failed call: %+v, want %q", a, cursorNotAnswered)
+	}
+}
+
+// TestCursorTokenStillReadingIsNotSignedOut: while the first token read is
+// still running (held until Sample returns), the line says Cursor's API has
+// not answered, not that no token was read.
+func TestCursorTokenStillReadingIsNotSignedOut(t *testing.T) {
+	smp, _ := cursorFixture(t, fixtureNow.Add(-time.Minute))
+	release := make(chan struct{})
+	smp.CursorUsage = &limits.CursorUsages{
+		Every: time.Hour,
+		Keychain: func(context.Context) (string, error) {
+			<-release
+			return "tok", nil
+		},
+		Fetch: func(context.Context, string) ([]byte, error) { return nil, context.DeadlineExceeded },
+	}
+	a := cursorLimits(smp.Sample())
+	close(release)
+	smp.CursorUsage.Wait()
+	if a == nil || a.Fix == cursorSignedOut {
+		t.Errorf("reading: %+v, want not %q", a, cursorSignedOut)
+	}
+	if a != nil && a.Fix != cursorNotAnswered {
+		t.Errorf("reading: fix %q, want %q", a.Fix, cursorNotAnswered)
+	}
+}
+
+// TestCursorTokenReadDeniedCouldNotBeRead: a token read that ended in an
+// error other than a missing login (a denied Keychain) made no call, so the
+// line says the token could not be read, not that the API has not answered.
+func TestCursorTokenReadDeniedCouldNotBeRead(t *testing.T) {
+	smp, _ := cursorFixture(t, fixtureNow.Add(-time.Minute))
+	smp.CursorUsage = &limits.CursorUsages{
+		Every:    time.Hour,
+		Keychain: func(context.Context) (string, error) { return "", errors.New("security: exit status 51") },
+		Fetch: func(context.Context, string) ([]byte, error) {
+			t.Error("called the API with no token")
+			return nil, nil
+		},
+	}
+	smp.Sample()
+	smp.CursorUsage.Wait()
+	if a := cursorLimits(smp.Sample()); a == nil || a.Fix != cursorUnreadable {
+		t.Errorf("denied: %+v, want %q", a, cursorUnreadable)
 	}
 }

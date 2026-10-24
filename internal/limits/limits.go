@@ -58,6 +58,7 @@ type Outlook struct {
 type Account struct {
 	Provider string    `json:"provider"`
 	Account  string    `json:"account"`
+	Dir      string    `json:"dir,omitempty"` // the config folder of an account that is not the default
 	Source   string    `json:"source"`
 	State    string    `json:"state"`
 	Fix      string    `json:"fix,omitempty"`

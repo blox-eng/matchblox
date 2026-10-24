@@ -1,6 +1,7 @@
 package sample
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -113,3 +114,114 @@ func TestEachAccountShowsItsLimits(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+// TestCursorAccountIsNotGivenTheDefaultsMonth: a Cursor session on an account
+// folder is read with that folder's login; the default's reading is never
+// handed to it, and a folder not signed in has no call at all.
+func TestCursorAccountIsNotGivenTheDefaultsMonth(t *testing.T) {
+	root := copyFixture(t)
+	folder := filepath.Join(root, "home", ".matchblox", "accounts", "cursor-agent", "work")
+	writeFile(t, filepath.Join(folder, "cfg", "cli-config.json"), `{"authInfo":{"email":"you@example.com"}}`)
+	accountSession(t, root, 950, "cursor-agent", "%40",
+		"HOME="+filepath.Join(folder, "home"), "CURSOR_CONFIG_DIR="+filepath.Join(folder, "cfg"))
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"cursor-agent"}
+	plan := func(pct string) []byte {
+		return []byte(`{"billingCycleStart":"1790000000000","billingCycleEnd":"1792678400000","planUsage":{"totalPercentUsed":` + pct + `}}`)
+	}
+	signedIn := false
+	smp.CursorUsage = &limits.CursorUsages{
+		Every:    time.Hour,
+		Keychain: func(context.Context) (string, error) { return "tok-default", nil },
+		File: func(path string) (string, error) {
+			if want := filepath.Join(folder, "home", ".cursor", "auth.json"); path != want {
+				t.Errorf("read %s, want %s", path, want)
+			}
+			if !signedIn {
+				return "", os.ErrNotExist
+			}
+			return "tok-work", nil
+		},
+		Fetch: func(_ context.Context, token string) ([]byte, error) {
+			if token != "tok-work" {
+				t.Errorf("asked with %q, want the account's token", token)
+			}
+			return plan("10"), nil
+		},
+	}
+	smp.Sample()
+	smp.CursorUsage.Wait()
+	if a := byAccount(smp.Sample())["cursor you@example.com"]; len(a.Windows) != 0 {
+		t.Errorf("not signed in: %+v, want no reading", a)
+	}
+	smp.CursorUsage.Wait() // with no token, each sample reads again
+	// The sign-in is read 30 s on, not after the interval.
+	signedIn = true
+	smp.Now = func() time.Time { return fixtureNow.Add(30 * time.Second) }
+	smp.Sample()
+	smp.CursorUsage.Wait()
+	a := byAccount(smp.Sample())["cursor you@example.com"]
+	if len(a.Windows) != 1 || a.Windows[0].UsedPct != 10 {
+		t.Errorf("account %+v, want its own 10%%", a)
+	}
+}
+
+// TestAccountNotSignedInSaysSigningIn: an account folder with no sign-in yet
+// is not told to run setup or to wait for Cursor's API: it signs in first.
+func TestAccountNotSignedInSaysSigningIn(t *testing.T) {
+	root := copyFixture(t)
+	claude := filepath.Join(root, "home", ".matchblox", "accounts", "claude", "work")
+	accountSession(t, root, 950, "claude", "%40", "CLAUDE_CONFIG_DIR="+claude)
+	cursor := filepath.Join(root, "home", ".matchblox", "accounts", "cursor-agent", "work")
+	accountSession(t, root, 951, "cursor-agent", "%41",
+		"HOME="+filepath.Join(cursor, "home"), "CURSOR_CONFIG_DIR="+filepath.Join(cursor, "cfg"))
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"claude", "cursor-agent"}
+	smp.LimitsDir = filepath.Join(root, "state")
+	smp.CursorUsage = &limits.CursorUsages{
+		Every: time.Hour,
+		File:  func(string) (string, error) { return "", os.ErrNotExist },
+		Fetch: func(context.Context, string) ([]byte, error) { return nil, os.ErrNotExist },
+	}
+	snap := smp.Sample()
+	smp.CursorUsage.Wait()
+	n := 0
+	for _, a := range snap.Limits {
+		if a.Dir == "" {
+			continue
+		}
+		n++
+		if a.Fix != limitsSigningIn {
+			t.Errorf("%s %s: fix %q, want %q", a.Provider, a.Dir, a.Fix, limitsSigningIn)
+		}
+	}
+	if n != 2 {
+		t.Fatalf("%d account lines in %+v", n, snap.Limits)
+	}
+}
+
+// TestCursorSigningInSaysNothingWhenUsageIsOff: with Cursor's usage not
+// read, a Cursor account that signs in is not told its limits show once it
+// is signed in: they would not.
+func TestCursorSigningInSaysNothingWhenUsageIsOff(t *testing.T) {
+	root := copyFixture(t)
+	cursor := filepath.Join(root, "home", ".matchblox", "accounts", "cursor-agent", "work")
+	accountSession(t, root, 951, "cursor-agent", "%41",
+		"HOME="+filepath.Join(cursor, "home"), "CURSOR_CONFIG_DIR="+filepath.Join(cursor, "cfg"))
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"cursor-agent"}
+	smp.LimitsDir = filepath.Join(root, "state")
+	n := 0
+	for _, a := range smp.Sample().Limits {
+		if a.Dir == "" {
+			continue
+		}
+		n++
+		if a.Fix == limitsSigningIn {
+			t.Errorf("%s %s: fix %q with Cursor's usage off", a.Provider, a.Dir, a.Fix)
+		}
+	}
+	if n != 1 {
+		t.Fatalf("%d account lines in %+v", n, smp.Sample().Limits)
+	}
+}

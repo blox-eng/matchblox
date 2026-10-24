@@ -7,13 +7,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/blox-eng/matchblox/internal/testhome"
 )
 
 // TestMain keeps these tests off this machine's tailscale and sshd: a test
 // that wants a probe sets its own.
 func TestMain(m *testing.M) {
 	pairProbe = pairProbeFns{LookPath: func(string) (string, error) { return "", errors.New("not found") }}
-	os.Exit(m.Run())
+	os.Exit(testhome.Run(m))
 }
 
 func pairTestdata(t *testing.T, name string) []byte {

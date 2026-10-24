@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	acct "github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/said"
 )
 
@@ -34,9 +35,13 @@ func (s *Sampler) envOf(pid int, key procKey) agentEnv {
 		v, _ := s.FS.Environ(pid, k)
 		return v
 	}
-	home := s.Home
-	if h := get("HOME"); h != "" && filepath.Clean(h) != filepath.Clean(s.homeAs()) {
-		home = ""
+	home, cursorHome := s.Home, s.Home
+	if h := get("HOME"); h != "" && !acct.SameDir(h, s.homeAs()) {
+		home, cursorHome = "", ""
+		// A Cursor account folder keeps its own home; no other agent trusts it.
+		if acct.Under(filepath.Join(acct.Root(s.Home), "cursor-agent"), h) {
+			cursorHome = filepath.Clean(h)
+		}
 	}
 	under := func(parts ...string) string {
 		if home == "" {
@@ -54,7 +59,7 @@ func (s *Sampler) envOf(pid int, key procKey) agentEnv {
 		claudeDir:  under(".claude"),
 		claudeJSON: under(".claude.json"),
 		codexHome:  abs(get("CODEX_HOME"), under(".codex")),
-		cursorDir:  abs(get("CURSOR_CONFIG_DIR"), under(".cursor")),
+		cursorDir:  abs(get("CURSOR_CONFIG_DIR"), joinIn(cursorHome, ".cursor")),
 		dataHome:   abs(get("XDG_DATA_HOME"), under(".local", "share")),
 		cacheHome:  abs(get("XDG_CACHE_HOME"), under(".cache")),
 	}
@@ -261,3 +266,64 @@ func (a *accounts) opencodeAccount(e agentEnv, provider string) string {
 	})
 	return opencodeAuth[types[provider]]
 }
+
+// accountDir is the config folder a session runs on when it is not the
+// default one, else "". A Cursor folder counts only under the accounts root:
+// the account folder holding cfg, since any other CURSOR_CONFIG_DIR does not
+// separate sign-ins.
+func (s *Sampler) accountDir(agent string, e agentEnv) string {
+	notDefault := func(dir, name string) string {
+		if dir == "" || acct.SameDir(dir, filepath.Join(s.Home, name)) || acct.SameDir(dir, filepath.Join(s.homeAs(), name)) {
+			return ""
+		}
+		return dir
+	}
+	switch agent {
+	case "claude":
+		if e.cloud != "" {
+			return ""
+		}
+		return notDefault(e.claudeDir, ".claude")
+	case "codex":
+		return notDefault(e.codexHome, ".codex")
+	case CursorAgent:
+		root := filepath.Join(acct.Root(s.Home), "cursor-agent")
+		if e.cursorDir == "" || !acct.Under(root, e.cursorDir) {
+			return ""
+		}
+		rel, _ := filepath.Rel(root, e.cursorDir)
+		name, _, _ := strings.Cut(rel, string(filepath.Separator))
+		return filepath.Join(root, name)
+	}
+	return ""
+}
+
+// folderTag is what a process's env says of its config folder: the folder
+// and whether matchblox made it.
+type folderTag struct {
+	dir  string
+	made bool
+}
+
+// tag marks a session that runs on a config folder other than the default,
+// and says whether it has not signed in yet. Only a folder under the
+// accounts root is signing in: a hand-made one may hold a login matchblox
+// does not read (a keyring sign-in). The folder is found once per process:
+// the env of a process does not change, and finding it reads the disk. A
+// link retargeted while a process lives keeps that process's first
+// classification, as the env cache does.
+func (s *Sampler) tag(sess *Session, agent string, e agentEnv) {
+	key := procKey{sess.PID, sess.Start}
+	t, ok := s.tags[key]
+	if !ok {
+		t.dir = s.accountDir(agent, e)
+		t.made = acct.Under(acct.Root(s.Home), t.dir) || acct.Under(acct.Root(s.homeAs()), t.dir)
+		s.tags[key] = t
+	}
+	sess.AccountDir = t.dir
+	sess.SigningIn = t.made && sess.Account == ""
+}
+
+// limitsSigningIn is the fix of an account's limits while it is not signed
+// in yet.
+const limitsSigningIn = "signing in: the limits show once the account is signed in"
