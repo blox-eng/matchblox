@@ -20,6 +20,17 @@ func setFor[T any](t *testing.T, v *T, x T) {
 	t.Cleanup(func() { *v = old })
 }
 
+// shareAlso marks names shared for Claude and Cursor during the test, so a
+// copy test can use names of its own at the top of the default.
+func shareAlso(t *testing.T, names ...string) {
+	t.Helper()
+	m := maps.Clone(shared)
+	for _, a := range []string{"claude", "cursor-agent"} {
+		m[a] = append(slices.Clone(m[a]), names...)
+	}
+	setFor(t, &shared, m)
+}
+
 func link(t *testing.T, target, path string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -40,6 +51,7 @@ func read(t *testing.T, path string) string {
 }
 
 func TestCopyDoesNotFollowTheDefaultThroughLinks(t *testing.T) {
+	shareAlso(t, "RULES.md", "pack", "skills")
 	for _, agent := range []string{"claude", "cursor-agent"} {
 		t.Run(agent, func(t *testing.T) {
 			home := t.TempDir()
@@ -87,6 +99,7 @@ func TestCopyDoesNotFollowTheDefaultThroughLinks(t *testing.T) {
 }
 
 func TestCopyNamesLinksOutsideTheDefault(t *testing.T) {
+	shareAlso(t, "notes.md", "rel-notes.md")
 	home := t.TempDir()
 	def := fakeClaude(t, home)
 	out := filepath.Join(home, "elsewhere", "notes.md")
@@ -142,6 +155,7 @@ func skipped(rep Report) []string {
 }
 
 func TestCopyStopsAtItsBound(t *testing.T) {
+	shareAlso(t, "a", "b", "c", "d")
 	t.Run("entries", func(t *testing.T) {
 		home := t.TempDir()
 		def := DefaultDir(home, "claude")
@@ -205,6 +219,7 @@ func TestCopyStopsAtItsBound(t *testing.T) {
 }
 
 func TestCopyFallsBackWhenCloneIsRefused(t *testing.T) {
+	shareAlso(t, "a", "b")
 	for _, no := range refusals {
 		home := t.TempDir()
 		def := DefaultDir(home, "claude")
@@ -307,6 +322,7 @@ func refuseClones(t *testing.T) {
 }
 
 func TestALongByteCopyStopsAtTheDeadline(t *testing.T) {
+	shareAlso(t, "big")
 	home := t.TempDir()
 	def := DefaultDir(home, "claude")
 	write(t, filepath.Join(def, "big"), "abcdef")
@@ -330,6 +346,7 @@ func TestALongByteCopyStopsAtTheDeadline(t *testing.T) {
 }
 
 func TestCopyNamesWhatIsNoFileFolderOrLink(t *testing.T) {
+	shareAlso(t, "a", "pipe")
 	home := t.TempDir()
 	def := DefaultDir(home, "claude")
 	write(t, filepath.Join(def, "a"), "x")
@@ -347,6 +364,7 @@ func TestCopyNamesWhatIsNoFileFolderOrLink(t *testing.T) {
 }
 
 func TestCopyNamesALinkWhoseTargetWasLeftOut(t *testing.T) {
+	shareAlso(t, "a", "z")
 	home := t.TempDir()
 	def := DefaultDir(home, "claude")
 	link(t, filepath.Join(def, "z", "x"), filepath.Join(def, "a"))
@@ -362,6 +380,7 @@ func TestCopyNamesALinkWhoseTargetWasLeftOut(t *testing.T) {
 }
 
 func TestACutCopyIsMarkedIncomplete(t *testing.T) {
+	shareAlso(t, "a", "b")
 	home := t.TempDir()
 	def := DefaultDir(home, "claude")
 	for _, n := range []string{"a", "b"} {
@@ -413,6 +432,7 @@ func tree(t *testing.T, dir string) map[string]string {
 }
 
 func TestACopyResumesWhereItWasCut(t *testing.T) {
+	shareAlso(t, "a", "c", "d", "e")
 	home := t.TempDir()
 	def := DefaultDir(home, "claude")
 	for _, n := range []string{"a/1", "a/2", "a/b/3", "c", "d/4"} {

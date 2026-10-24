@@ -1775,17 +1775,18 @@ func TestACopyStartNamesWhatItSharedAndSkipped(t *testing.T) {
 	s, _, home := accountTest(t)
 	writeDefault(t, home, ".claude/settings.json")
 	def := filepath.Join(home, ".claude")
-	if err := os.Symlink("/etc/hosts", filepath.Join(def, "hosts")); err != nil {
+	writeDefault(t, home, ".claude/skills/x/SKILL.md")
+	if err := os.Symlink("/etc/hosts", filepath.Join(def, "skills", "hosts")); err != nil {
 		t.Fatal(err)
 	}
-	if err := syscall.Mkfifo(filepath.Join(def, "pipe"), 0o600); err != nil {
+	if err := syscall.Mkfifo(filepath.Join(def, "skills", "pipe"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: "work", NewAccount: true, Setup: "copy"}))
 	folder := accounts.Folder(home, "claude", "work")
 	want := []string{
-		proto.StillShared + filepath.Join(folder, "hosts") + " -> /etc/hosts: outside the default",
-		proto.NotCopied + filepath.Join(def, "pipe") + ": not a file, folder or link",
+		proto.StillShared + filepath.Join(folder, "skills", "hosts") + " -> /etc/hosts: outside the default",
+		proto.NotCopied + filepath.Join(def, "skills", "pipe") + ": not a file, folder or link",
 	}
 	if notes, ok := proto.StartNotes(res); !ok || !slices.Equal(notes, want) {
 		t.Fatalf("err %q skipped %q", res.Err, res.Skipped)
@@ -1867,7 +1868,7 @@ func TestEachFailureOfAStartIsItsOwnNote(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := range 7 {
-		f := filepath.Join(".codex", fmt.Sprintf("f%d", i))
+		f := filepath.Join(".codex", "rules", fmt.Sprintf("f%d", i))
 		writeDefault(t, home, f)
 		if err := os.Chmod(filepath.Join(home, f), 0); err != nil {
 			t.Fatal(err)

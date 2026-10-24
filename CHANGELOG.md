@@ -67,7 +67,7 @@ All notable changes to matchblox are in this file. The format follows
   it refuses. A link in the default that points inside the default points
   to the same place in the account, so the account reads its own files and
   never the default's. A link that points outside the default, or at an
-  entry the account keeps for itself, stays on the default's file and is
+  entry the account does not share, stays on the default's file and is
   named. The copy stops at 200,000 entries, 16 GiB copied byte by byte,
   or 90 seconds, and names every entry it left out. A cut copy is marked,
   and goes on where it stopped at the account's next start. Measured on
@@ -133,6 +133,12 @@ All notable changes to matchblox are in this file. The format follows
   once, not at every sample, and a folder that failed to read is read
   again. A link retargeted while a process lives keeps that process's
   first reading.
+- **A new account shares only the setup the list names.** Settings,
+  instructions, commands, skills, plugins, hooks and a few caches are
+  shared. Every other entry of the default stays with it, including one a
+  later agent version adds: Claude Code's daemon and its key, token
+  backups and job logs are never linked or copied.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - **A Codex account and the default share a directory.** matchblox counts
   Codex sessions per directory within each Codex home, so a session on an
   account and one on the default in the same directory each show their

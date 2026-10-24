@@ -11,7 +11,7 @@ import (
 // Claude Code 2.1.308, codex-cli 0.163.0 and Cursor 2026.10.19. When an agent
 // update adds an entry, add it here and decide if it is shared or own.
 var (
-	claudeShared = []string{".last-cleanup", "agents", "cache", "CLAUDE.md", "file-history", "hooks",
+	claudeShared = []string{".last-cleanup", "agents", "cache", "CLAUDE.md", "commands", "file-history", "hooks", "keybindings.json", "output-styles",
 		"paste-cache", "plugins", "session-env", "settings.json", "shell-snapshots", "skills"}
 	claudeOwn = []string{".claude.json", ".credentials.json", "backups", "history.jsonl",
 		"policy-limits.json", "policy-limits.json.signature-iat.json", "policy-limits.json.signature.json",
@@ -19,8 +19,8 @@ var (
 		"remote-settings.json.signature-iat.json", "remote-settings.json.signature.json",
 		"remote-settings.json.synced-at", "sessions", "state", "stats-cache.json", SetupFile}
 
-	codexShared = []string{".sandbox_migration", "cache", "config.toml", "mcp-oauth-locks",
-		"models_cache.json", "plugins", "rules", "shell_snapshots", "skills", "thread-writer-locks", "tmp",
+	codexShared = []string{".sandbox_migration", "AGENTS.md", "cache", "config.toml", "mcp-oauth-locks",
+		"models_cache.json", "plugins", "prompts", "rules", "shell_snapshots", "skills", "thread-writer-locks", "tmp",
 		"tui-thread-reference-capabilities", "version.json"}
 	codexOwn = []string{".sqlite-maintenance.lock", ".tmp", "app-server-control", "app-server-daemon", "auth.json",
 		"goals_1.sqlite", "history.jsonl", "installation_id", "logs_2.sqlite", "logs_2.sqlite-shm", "logs_2.sqlite-wal",
@@ -161,6 +161,32 @@ func TestAccountName(t *testing.T) {
 	} {
 		if got := Name(dir); got != want {
 			t.Errorf("Name(%q) = %q, want %q", dir, got, want)
+		}
+	}
+}
+
+// TestUnknownEntriesAreNeverLinkedOrCopied: an entry an agent update adds
+// stays with the default until it is named shared, such as Claude Code
+// 2.1.310's daemon (its control key) and backups of the default's sign-in.
+func TestUnknownEntriesAreNeverLinkedOrCopied(t *testing.T) {
+	unknown := []string{"daemon", "daemon.lock", "jobs", ".credentials.json.bak-1", "auth.json.bak", "new-in-next-version"}
+	for _, mode := range []Mode{LikeDefault, Copy} {
+		for _, c := range []struct{ agent, def, in string }{
+			{"claude", ".claude", ""},
+			{"codex", ".codex", ""},
+			{"cursor-agent", ".cursor", filepath.Join("home", ".cursor")},
+		} {
+			home := t.TempDir()
+			fakeDefault(t, filepath.Join(home, c.def), unknown)
+			f := Folder(home, c.agent, "work")
+			if _, err := Prepare(home, c.agent, f, mode); err != nil {
+				t.Fatal(err)
+			}
+			for _, n := range unknown {
+				if exists(filepath.Join(f, c.in, n)) {
+					t.Errorf("%s %s: %s was shared", mode, c.agent, n)
+				}
+			}
 		}
 	}
 }

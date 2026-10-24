@@ -7,32 +7,30 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
-// own lists the entries an account keeps for itself: sign-ins, the agent's
-// state, Codex's installation_id (accounts are not linked in its telemetry)
-// and SetupFile. They are never linked or copied. An entry may be a
-// glob. For cursor-agent they sit under home/.cursor. The lists are checked
+// shared lists the entries of the default an account shares: its setup
+// (settings, instructions, commands, skills, plugins, hooks) and caches.
+// Every other entry is the account's own and is never linked or copied:
+// sign-ins and their backups, sessions, the agent's state and daemons,
+// Codex's installation_id (accounts are not linked in its telemetry),
+// SetupFile, and any entry an agent update adds until it is named here.
+// For cursor-agent they sit under home/.cursor. The lists are checked
 // against the entries of Claude Code 2.1.308, codex-cli 0.163.0 and Cursor
 // 2026.10.19 (own_test.go).
-var own = map[string][]string{
-	"claude": {".claude.json", ".credentials.json", "projects", "sessions", "history.jsonl", "backups",
-		"remote-settings.json*", "policy-limits.json*", "stats-cache.json", "state", SetupFile},
-	"codex": {"auth.json", "sessions", "archived_sessions", "history.jsonl", "session_index.jsonl", "*.sqlite*",
-		"app-server-control", "app-server-daemon", "packages", ".tmp", "installation_id", SetupFile},
-	"cursor-agent": {"auth.json", "cli-config.json", "chats", "projects", "agent-cli-state.json",
-		"statsig-cache.json", "ai-tracking", "managed", SetupFile},
+var shared = map[string][]string{
+	"claude": {".last-cleanup", "agents", "cache", "CLAUDE.md", "commands", "file-history", "hooks",
+		"keybindings.json", "output-styles", "paste-cache", "plugins", "session-env", "settings.json",
+		"shell-snapshots", "skills"},
+	"codex": {".sandbox_migration", "AGENTS.md", "cache", "config.toml", "mcp-oauth-locks", "models_cache.json",
+		"plugins", "prompts", "rules", "shell_snapshots", "skills", "thread-writer-locks", "tmp",
+		"tui-thread-reference-capabilities", "version.json"},
+	"cursor-agent": {"hooks.json", "mcp.json", "plugins", "skills-cursor"},
 }
 
-func isOwn(agent, name string) bool {
-	for _, pat := range own[agent] {
-		if ok, _ := filepath.Match(pat, name); ok {
-			return true
-		}
-	}
-	return false
-}
+func isOwn(agent, name string) bool { return !slices.Contains(shared[agent], name) }
 
 // Report is what a Prepare left shared with the default, and what it did
 // not copy.
@@ -64,7 +62,7 @@ func (r *Report) add(o Report) {
 // stopped. The report names what a copy left shared or out.
 func Prepare(home, agent, folder string, mode Mode) (Report, error) {
 	agent = canon(agent)
-	if _, ok := own[agent]; !ok {
+	if _, ok := shared[agent]; !ok {
 		return Report{}, fmt.Errorf("%s has no accounts", agent)
 	}
 	switch mode {

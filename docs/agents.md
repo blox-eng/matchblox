@@ -180,40 +180,43 @@ Where an account lives:
 
 The setup of a new account:
 
-- **like default** links the default's entries into the account. Every
-  account shares one setup: skills, plugins, settings and hooks.
-- **copy of default** copies those entries once. The account can then
+- **like default** links the default's setup into the account (the lists
+  below). Every account shares one setup.
+- **copy of default** copies that setup once. The account can then
   change on its own. Settings can hold tokens: the copies stay on this
   machine, in the account folder. A copy takes seconds, and on APFS files
   are cloned copy-on-write, so they use no extra disk; where the file
   system refuses to clone, a file is copied byte by byte. A link in the
   default that points inside the default points to the same place in the
   account, so the account reads its own files. A link that points
-  outside the default, or at an entry the account keeps for itself (the
-  lists below), stays on the default's file and is named. The copy stops
-  at 200,000 entries, 16 GiB copied byte by byte, or 90 seconds, and names
-  each entry it left out. A cut copy is marked, and goes on where it
-  stopped at the account's next start. Cloning is tested on macOS only; on Linux it is
-  not tested yet.
+  outside the default, or at an entry the lists below do not name, stays
+  on the default's file and is named. The copy stops at 200,000 entries,
+  16 GiB copied byte by byte, or 90 seconds, and names each entry it left
+  out. A cut copy is marked, and goes on where it stopped at the account's
+  next start. Cloning is tested on macOS only; on Linux it is not tested
+  yet.
 - **empty** shares nothing. The agent starts as on its first run.
 
-Whatever the setup, matchblox never shares these entries. They stay per
-account:
+matchblox shares only these entries of the default:
 
-- Claude Code: `.claude.json`, `.credentials.json`, `projects`,
-  `sessions`, `history.jsonl`, `backups`, `remote-settings.json*`,
-  `policy-limits.json*`, `stats-cache.json` and `state`.
-- Codex: `auth.json`, `sessions`, `archived_sessions`, `history.jsonl`,
-  `session_index.jsonl`, `*.sqlite*`, `app-server-control`,
-  `app-server-daemon`, `packages`, `.tmp` and `installation_id`: the
-  accounts do not share one Codex install id.
-- Cursor, in `home/.cursor`: `auth.json`, `cli-config.json`, `chats`,
-  `projects`, `agent-cli-state.json`, `statsig-cache.json`, `ai-tracking`
-  and `managed`.
+- Claude Code: `settings.json`, `CLAUDE.md`, `commands`, `agents`,
+  `skills`, `plugins`, `hooks`, `output-styles`, `keybindings.json`, and
+  the caches `.last-cleanup`, `cache`, `file-history`, `paste-cache`,
+  `session-env` and `shell-snapshots`.
+- Codex: `config.toml`, `AGENTS.md`, `prompts`, `rules`, `skills`,
+  `plugins`, and the caches `.sandbox_migration`, `cache`,
+  `mcp-oauth-locks`, `models_cache.json`, `shell_snapshots`,
+  `thread-writer-locks`, `tmp`, `tui-thread-reference-capabilities` and
+  `version.json`.
+- Cursor, in `home/.cursor`: `hooks.json`, `mcp.json`, `plugins` and
+  `skills-cursor`.
 
-These lists are checked against the folders of Claude Code 2.1.308,
-codex-cli 0.163.0 and Cursor 2026.10.19. A later version can add an entry
-that holds state: matchblox then shares it until the list names it.
+Every other entry stays per account: sign-ins and their backups,
+sessions, history, the agent's state and daemons, Codex's
+`installation_id` (the accounts do not share one Codex install id). An
+entry that a later version of an agent adds stays per account too, until
+the list names it. The lists are checked against the folders of Claude
+Code 2.1.308, codex-cli 0.163.0 and Cursor 2026.10.19.
 
 Each account folder also has `.matchblox-setup`, one line with its setup.
 At each start of a `like-default` account, matchblox links the entries the
