@@ -1333,17 +1333,16 @@ func (s *Sampler) trackBurn(id string, now time.Time, tokens int) int {
 	return max(tokens-pts[0].tokens, 0)
 }
 
-// suggest: a session left idle while holding context should be cleared,
-// unless subagents or children still work for it;
+// suggest: a session left idle while holding context should be cleared;
 // one near its window should compact before its next turn hits the limit,
 // unless the plan's limit stops it (a compact needs the model).
 func (r Rules) suggest(s Session) (do, why string) {
 	switch {
 	case s.Tokens == 0:
 		return "", ""
-	case !s.Works() && s.Idle >= r.ClearStale:
+	case !s.Busy && s.Idle >= r.ClearStale:
 		return "clear", "idle " + Human(s.Idle) + " (clear after " + Human(r.ClearStale) + ")"
-	case !s.Works() && s.Idle >= r.ClearIdle && s.ContextPct >= r.ClearMinPct:
+	case !s.Busy && s.Idle >= r.ClearIdle && s.ContextPct >= r.ClearMinPct:
 		return "clear", "idle " + Human(s.Idle) + " holding " + pct(s.ContextPct) + " context"
 	case r.Full().Reached(s) && s.Out.IsZero():
 		return "compact", "context " + Kilo(s.Tokens) + " · " + pct(s.ContextPct) + " (compact at " + r.Full().String() + ")"

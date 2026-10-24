@@ -78,7 +78,7 @@ func TestARestingParentWithAWorkingChildReadsAgents(t *testing.T) {
 	if _, ok := childOf(snap, 321); !ok {
 		t.Fatalf("children = %+v, want 321", snap.Children)
 	}
-	if s, _ := sessionOf(snap, 310); s.Busy || s.Status != StatusAgents {
+	if s, _ := sessionOf(snap, 310); !s.Busy || s.Status != StatusAgents {
 		t.Fatalf("the parent reads %q, want %q while its child works", s.Status, StatusAgents)
 	}
 }
@@ -226,7 +226,8 @@ func TestChildName(t *testing.T) {
 
 // TestAParentWorkingThroughAChildIsSuggestedAsWorking: pane %2's claude
 // rests an hour holding context, so alone it is suggested a clear; with a
-// child working it gets what a session with StatusAgents gets, no clear.
+// child working it gets what a busy session with StatusAgents gets, no
+// clear.
 func TestAParentWorkingThroughAChildIsSuggestedAsWorking(t *testing.T) {
 	alone, _ := sessionOf(lineageSample(copyFixture(t)), 310)
 	if alone.Do != "clear" {
@@ -236,9 +237,9 @@ func TestAParentWorkingThroughAChildIsSuggestedAsWorking(t *testing.T) {
 	addProcAt(t, root, 320, 310, "bash", []string{"bash"}, startedAgo(root, 10), 0)
 	addProcAt(t, root, 321, 320, "codex", []string{"codex", "exec", "fix"}, startedAgo(root, 10), 0, "TMUX_PANE=%2")
 	s, _ := sessionOf(lineageSample(root), 310)
-	alone.Status = StatusAgents
+	alone.Busy, alone.Status = true, StatusAgents
 	do, why := DefaultRules.suggest(alone)
 	if s.Do != do || s.Why != why || s.Do == "clear" {
-		t.Fatalf("suggested %q (%s), want %q (%s) as a session with StatusAgents", s.Do, s.Why, do, why)
+		t.Fatalf("suggested %q (%s), want %q (%s) as a busy session with StatusAgents", s.Do, s.Why, do, why)
 	}
 }
