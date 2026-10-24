@@ -592,6 +592,7 @@ func newService(cfg config.Config, root string) *service.Service {
 		}
 		s.ConsentPath, s.ReposPath = state.ScanPath(), state.ReposPath()
 	}
+	s.UsedPath = state.UsedPath()
 	return s
 }
 

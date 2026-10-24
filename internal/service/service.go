@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"slices"
 	"sync"
 	"time"
 
@@ -130,6 +131,8 @@ type Service struct {
 	// ConsentPath and ReposPath keep the answer and the last scan. Empty:
 	// kept in memory only.
 	ConsentPath, ReposPath string
+	// UsedPath keeps where sessions started. Empty: kept in memory only.
+	UsedPath string
 
 	// alone is when the last console closed; zero while one is open. A new
 	// service starts alone.
@@ -178,6 +181,11 @@ type Service struct {
 	found     gitscan.Found
 	foundGen  uint64
 	foundKick chan struct{}
+	// used is where sessions started; it goes to each console when usedGen
+	// passes the one it has. usedMu orders the writes of its file.
+	used    state.Used
+	usedGen uint64
+	usedMu  sync.Mutex
 	// scanReqs are the yeses that wait for foundLoop, the only walker;
 	// scanEnd closes when it ends.
 	scanReqs chan scanReq
@@ -343,6 +351,7 @@ func (s *Service) Run(ctx context.Context) {
 	s.mu.Unlock()
 	rec := s.recorder()
 	s.loadFound()
+	s.loadUsed()
 	go s.gitLoop(ctx)
 	go s.shipsLoop(ctx)
 	go s.foundLoop(ctx)
@@ -628,6 +637,7 @@ type client struct {
 	kick     chan struct{}
 	histSent bool
 	foundGen uint64
+	usedGen  uint64
 }
 
 func (s *Service) join(cl *client) {
@@ -675,6 +685,10 @@ func (s *Service) stateFor(cl *client) (proto.State, bool) {
 	if cl.foundGen != s.foundGen {
 		f := s.found
 		st.Found, cl.foundGen = &f, s.foundGen
+	}
+	if cl.usedGen != s.usedGen {
+		u := state.Used{Repos: slices.Clone(s.used.Repos)}
+		st.Used, cl.usedGen = &u, s.usedGen
 	}
 	return st, true
 }

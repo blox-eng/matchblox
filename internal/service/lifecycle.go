@@ -570,6 +570,12 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	if err != nil {
 		return proto.Result{Err: err.Error()}
 	}
+	where := n.Where // newSteps expands a leading ~ in its own copy
+	if rest, ok := strings.CutPrefix(where, "~/"); ok || where == "~" {
+		if home, err := os.UserHomeDir(); err == nil {
+			where = filepath.Join(home, rest)
+		}
+	}
 	steps = append(steps, slices.Concat(
 		[]string{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
 		sample.TmuxOn(""), []string{"new-session", "-d", "-s", name, "-n", name, "-c", dir},
@@ -582,6 +588,7 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 		out, _ := s.tmuxOut(slices.Concat(sample.TmuxOn(""), []string{"display-message", "-p", "-t", "=" + name + ":", "#{pane_id}"}))
 		s.recordNew(strings.TrimSpace(out), name, res.Ran)
 	}
+	s.addUsed(where, dir) // dir is the worktree, if a branch asked for one
 	select {
 	case s.sampleKick <- struct{}{}:
 	default: // a sample is asked for already

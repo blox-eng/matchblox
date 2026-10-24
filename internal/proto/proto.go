@@ -73,6 +73,8 @@ type State struct {
 	// Found is set in the first snapshot to each console and when it
 	// changes; nil: as the last one. A service with no scan never sets it.
 	Found *Found `json:"found,omitempty"`
+	// Used is where sessions started: set as Found is.
+	Used *Used `json:"used,omitempty"`
 }
 
 type Event struct {
@@ -163,6 +165,8 @@ type (
 	Worktree    = gitscan.Worktree
 	PR          = gitscan.PR
 	Found       = gitscan.Found
+	Used        = state.Used
+	Use         = state.Use
 	ScanSummary = gitscan.Summary
 	Checkout    = gitscan.Checkout
 	Ships       = ships.Report
