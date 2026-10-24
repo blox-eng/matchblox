@@ -1,0 +1,351 @@
+package service
+
+import (
+	"encoding/json"
+	"math/rand/v2"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/blox-eng/matchblox/internal/clone"
+	"github.com/blox-eng/matchblox/internal/gitremote"
+	"github.com/blox-eng/matchblox/internal/gitscan"
+	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/state"
+)
+
+// cloneTest is a service whose home is a temp folder, with clone_root
+// ~/src and a seeded random source.
+func cloneTest(t *testing.T) (*Service, string) {
+	t.Helper()
+	home, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	s, _ := lifeTest(t)
+	s.CloneRoot = filepath.Join(home, "src")
+	s.UsedPath = filepath.Join(t.TempDir(), "used.json")
+	s.cloneRand = rand.New(rand.NewPCG(1, 2))
+	return s, s.CloneRoot
+}
+
+func gitIn(t *testing.T, args ...string) {
+	t.Helper()
+	if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+		t.Fatalf("git %q: %s %s", args, err, out)
+	}
+}
+
+// repoWith makes a repo at dir with origin url ("" for none).
+func repoWith(t *testing.T, dir, url string) {
+	t.Helper()
+	gitIn(t, "init", "-q", dir)
+	if url != "" {
+		gitIn(t, "-C", dir, "remote", "add", "origin", url)
+	}
+}
+
+func plan(t *testing.T, s *Service, text string) proto.ClonePlan {
+	t.Helper()
+	res := s.act(t.Context(), consoleAct("clone:plan", text))
+	if res.Err != "" || res.Clone == nil {
+		t.Fatalf("plan %q: err %q clone %+v", text, res.Err, res.Clone)
+	}
+	return *res.Clone
+}
+
+func freeIn(t *testing.T, root, repo, got string) {
+	t.Helper()
+	w, ok := strings.CutPrefix(got, filepath.Join(root, repo)+"-")
+	if !ok || !slices.Contains(clone.Words, w) {
+		t.Fatalf("%q is not a free name for %s in %s", got, repo, root)
+	}
+}
+
+func TestClonePlanFreeTarget(t *testing.T) {
+	s, root := cloneTest(t)
+	p := plan(t, s, "https://github.com/o/r")
+	want := proto.ClonePlan{Repo: "o/r", URL: "https://github.com/o/r", Target: filepath.Join(root, "r")}
+	if p.Repo != want.Repo || p.URL != want.URL || p.Target != want.Target || p.Taken != "" || p.Have != nil || p.Fresh != "" {
+		t.Fatalf("plan %+v, want %+v", p, want)
+	}
+}
+
+func TestClonePlanSameRepoAtTarget(t *testing.T) {
+	s, root := cloneTest(t)
+	repoWith(t, filepath.Join(root, "r"), "git@github.com:o/r.git")
+	p := plan(t, s, "https://github.com/O/r.git")
+	if p.Target != filepath.Join(root, "r") || p.Taken != "" {
+		t.Fatalf("plan %+v", p)
+	}
+	if len(p.Have) == 0 || p.Have[0] != filepath.Join(root, "r") {
+		t.Fatalf("have %q", p.Have)
+	}
+	freeIn(t, root, "r", p.Fresh)
+}
+
+func TestClonePlanAnotherRepoAtTarget(t *testing.T) {
+	s, root := cloneTest(t)
+	repoWith(t, filepath.Join(root, "r"), "https://github.com/x/r")
+	p := plan(t, s, "https://github.com/o/r")
+	if p.Taken != "another repo" || p.Have != nil || p.Fresh != "" {
+		t.Fatalf("plan %+v", p)
+	}
+	freeIn(t, root, "r", p.Target)
+
+	// a folder that is no repo, and a repo with no remote
+	if err := os.RemoveAll(filepath.Join(root, "r")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "r"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if p := plan(t, s, "https://github.com/o/r"); p.Taken != "not a repo" {
+		t.Fatalf("a plain folder: %+v", p)
+	}
+	repoWith(t, filepath.Join(root, "r"), "")
+	if p := plan(t, s, "https://github.com/o/r"); p.Taken != "another repo" {
+		t.Fatalf("a repo with no remote: %+v", p)
+	}
+}
+
+func TestClonePlanFileAtTarget(t *testing.T) {
+	s, root := cloneTest(t)
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "r"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := plan(t, s, "https://github.com/o/r")
+	if p.Taken != "a file" {
+		t.Fatalf("plan %+v", p)
+	}
+	freeIn(t, root, "r", p.Target)
+}
+
+func TestClonePlanKnownElsewhere(t *testing.T) {
+	s, root := cloneTest(t)
+	dev := filepath.Join(filepath.Dir(root), "dev")
+	repoWith(t, filepath.Join(dev, "r"), "git@github.com:o/r.git")
+	repoWith(t, filepath.Join(dev, "other"), "git@github.com:o/other.git")
+	repoWith(t, filepath.Join(dev, "used-r"), "https://github.com/o/r")
+	s.mu.Lock()
+	s.found = gitscan.Found{Consent: "yes", Repos: []gitscan.Checkout{
+		{Path: filepath.Join(dev, "r"), Remote: "git@github.com:o/r.git"},
+		{Path: filepath.Join(dev, "other"), Remote: "git@github.com:o/other.git"},
+	}}
+	s.mu.Unlock()
+	p := plan(t, s, "https://github.com/o/r")
+	if !slices.Equal(p.Have, []string{filepath.Join(dev, "r")}) || p.Target != filepath.Join(root, "r") || p.Taken != "" {
+		t.Fatalf("plan %+v", p)
+	}
+	// a place in the used record is known too, read from its disk
+	s.addUsed(filepath.Join(dev, "used-r"), filepath.Join(dev, "other"))
+	p = plan(t, s, "https://github.com/o/r")
+	if want := []string{filepath.Join(dev, "r"), filepath.Join(dev, "used-r")}; !slices.Equal(p.Have, want) {
+		t.Fatalf("have %q, want %q", p.Have, want)
+	}
+}
+
+// fakeGit puts a git on PATH that logs its arguments to the returned file
+// and then runs body.
+func fakeGit(t *testing.T, body string) string {
+	t.Helper()
+	bin := t.TempDir()
+	log := filepath.Join(t.TempDir(), "git.log")
+	script := "#!/bin/sh\necho \"$*\" >> '" + log + "'\n" + body + "\n"
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return log
+}
+
+func TestClonePlanIsOffline(t *testing.T) {
+	s, root := cloneTest(t)
+	repoWith(t, filepath.Join(root, "r"), "git@github.com:o/r.git")
+	log := fakeGit(t, "exit 1")
+	plan(t, s, "https://github.com/o/r")
+	plan(t, s, "git@github.com:x/r.git")
+	b, _ := os.ReadFile(log)
+	for _, net := range []string{"fetch", "ls-remote", "clone", "pull", "remote update"} {
+		if strings.Contains(string(b), net) {
+			t.Fatalf("a plan ran git %s:\n%s", net, b)
+		}
+	}
+}
+
+func TestClonePlanRefusesAPath(t *testing.T) {
+	s, _ := cloneTest(t)
+	for _, text := range []string{"~/src/r", "/src/r", "./r", "", "file:///src/r"} {
+		res := s.act(t.Context(), consoleAct("clone:plan", text))
+		if res.Err != "not a git URL" || res.Clone != nil {
+			t.Fatalf("%q: err %q clone %+v", text, res.Err, res.Clone)
+		}
+	}
+}
+
+func startAct(t *testing.T, url, target string) proto.Act {
+	t.Helper()
+	b, err := json.Marshal(proto.CloneStart{URL: url, Target: target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return consoleAct("clone:start", string(b))
+}
+
+// clonesUntil waits until ok holds for the snapshot's clones.
+func clonesUntil(t *testing.T, s *Service, what string, ok func([]proto.Clone) bool) []proto.Clone {
+	t.Helper()
+	deadline := time.Now().Add(waitLimit)
+	for {
+		st, _ := s.stateFor(&client{})
+		if ok(st.Clones) {
+			return st.Clones
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: clones %+v", what, st.Clones)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestCloneStartRunsAndReports(t *testing.T) {
+	s, root := cloneTest(t)
+	src := filepath.Join(t.TempDir(), "src-r")
+	repoWith(t, src, "")
+	gitIn(t, "-C", src, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x")
+	s.cloneRemote = func(string) (gitremote.Remote, bool) {
+		return gitremote.Remote{URL: src, Host: "github.com", Owner: "o", Repo: "r"}, true
+	}
+	target := filepath.Join(root, "r")
+	if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target)); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	cs := clonesUntil(t, s, "the clone is listed", func(cs []proto.Clone) bool { return len(cs) == 1 })
+	if cs[0].Target != target || cs[0].Repo != "o/r" {
+		t.Fatalf("listed %+v", cs)
+	}
+	clonesUntil(t, s, "the clone is done", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Done && cs[0].Err == "" })
+	if _, err := os.Stat(filepath.Join(target, ".git")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(clone.Cloning(target)); !os.IsNotExist(err) {
+		t.Fatalf("the sibling is left: %v", err)
+	}
+	if got := usedPaths(state.ReadUsed(s.UsedPath)); !slices.Equal(got, []string{target}) {
+		t.Fatalf("used %q", got)
+	}
+	// a done clone stays listed a minute, then goes
+	now := time.Now()
+	s.Now = func() time.Time { return now.Add(61 * time.Second) }
+	if st, _ := s.stateFor(&client{}); len(st.Clones) != 0 {
+		t.Fatalf("still listed: %+v", st.Clones)
+	}
+}
+
+func TestCloneStartRefusesAnExistingTarget(t *testing.T) {
+	s, root := cloneTest(t)
+	target := filepath.Join(root, "r")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	log := fakeGit(t, "exit 1")
+	res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target))
+	if res.Err != "~/src/r is there already" {
+		t.Fatalf("err %q", res.Err)
+	}
+	if ents, _ := os.ReadDir(target); len(ents) != 0 {
+		t.Fatalf("written into: %v", ents)
+	}
+	if b, _ := os.ReadFile(log); len(b) != 0 {
+		t.Fatalf("ran git %s", b)
+	}
+	// nor outside clone_root, nor a hidden name
+	for _, bad := range []string{filepath.Join(filepath.Dir(root), "r"), filepath.Join(root, "x", "r"), filepath.Join(root, ".r")} {
+		if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", bad)); res.Err == "" {
+			t.Fatalf("%s: not refused", bad)
+		}
+	}
+	if res := s.act(t.Context(), startAct(t, "/src/r", filepath.Join(root, "q"))); res.Err != "not a git URL" {
+		t.Fatalf("a path: %q", res.Err)
+	}
+}
+
+// slowGit is a git clone that makes its folder, says 10% and waits.
+const slowGit = `for a; do last=$a; done
+mkdir -p "$last"
+printf 'Receiving objects:  10%% (1/10)\r' >&2
+exec sleep 30`
+
+func TestCloneStartTwiceRefusesTheSecond(t *testing.T) {
+	s, root := cloneTest(t)
+	fakeGit(t, slowGit)
+	target := filepath.Join(root, "r")
+	if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target)); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	t.Cleanup(func() { s.act(t.Context(), consoleAct("clone:stop", target)) })
+	if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target)); res.Err != "~/src/r is being cloned" {
+		t.Fatalf("err %q", res.Err)
+	}
+	// a plan meanwhile does not offer the name being cloned
+	p := plan(t, s, "https://github.com/o/r")
+	freeIn(t, root, "r", p.Target)
+}
+
+func TestCloneStopDeletesThePartial(t *testing.T) {
+	s, root := cloneTest(t)
+	fakeGit(t, slowGit)
+	target := filepath.Join(root, "r")
+	if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target)); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	clonesUntil(t, s, "10%", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Pct == 10 })
+	if _, err := os.Stat(clone.Cloning(target)); err != nil {
+		t.Fatalf("no partial: %v", err)
+	}
+	if res := s.act(t.Context(), consoleAct("clone:stop", "~/src/r")); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	clonesUntil(t, s, "stopped", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Err == "stopped" && !cs[0].Done })
+	for _, p := range []string{target, clone.Cloning(target)} {
+		if _, err := os.Lstat(p); !os.IsNotExist(err) {
+			t.Fatalf("%s is left: %v", p, err)
+		}
+	}
+	if got := usedPaths(state.ReadUsed(s.UsedPath)); len(got) != 0 {
+		t.Fatalf("used %q", got)
+	}
+	// a stopped one may start again
+	fakeGit(t, "exit 1")
+	if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target)); res.Err != "" {
+		t.Fatalf("again: %q", res.Err)
+	}
+	clonesUntil(t, s, "failed", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Err != "" && cs[0].Err != "stopped" })
+}
+
+func TestCloneFromAnAgentsPaneIsRefused(t *testing.T) {
+	s, root := cloneTest(t)
+	for _, a := range []proto.Act{
+		{RecID: "clone:start", Text: `{"url":"https://github.com/o/r","target":"` + filepath.Join(root, "r") + `"}`, From: "%3"},
+		{RecID: "clone:plan", Text: "https://github.com/o/r", From: "%3"},
+	} {
+		if res := s.act(t.Context(), a); res.Err != notTheBuilders {
+			t.Fatalf("%s: err %q", a.RecID, res.Err)
+		}
+	}
+	if _, err := os.Lstat(root); !os.IsNotExist(err) {
+		t.Fatalf("clone_root made: %v", err)
+	}
+	// the builder's own shell plans
+	if res := s.act(t.Context(), proto.Act{RecID: "clone:plan", Text: "https://github.com/o/r", From: "%4"}); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+}

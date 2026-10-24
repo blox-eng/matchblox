@@ -673,6 +673,11 @@ func readSmall(path string) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(f, maxGitFile))
 }
 
+// ReadCheckout reads the checkout at dir from its .git, offline: its main
+// checkout, if a linked worktree, and the URL of remote (else the first
+// remote), credentials stripped.
+func ReadCheckout(dir, remote string) (Checkout, bool) { return readCheckout(dir, remote) }
+
 // readCheckout reads dir's .git: a directory for a main checkout, a file
 // naming the gitdir for a linked worktree.
 func readCheckout(dir, remote string) (Checkout, bool) {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math/rand/v2"
 	"net"
 	"os"
 	"runtime"
@@ -17,6 +18,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/actions"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/gitremote"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/holds"
@@ -133,6 +135,9 @@ type Service struct {
 	ConsentPath, ReposPath string
 	// UsedPath keeps where sessions started. Empty: kept in memory only.
 	UsedPath string
+	// CloneRoot is where a clone goes ([git] clone_root), absolute.
+	// Empty: no clones.
+	CloneRoot string
 
 	// alone is when the last console closed; zero while one is open. A new
 	// service starts alone.
@@ -204,6 +209,19 @@ type Service struct {
 	// consentMu orders the answer and the cache, so a no is never
 	// followed by a scan's write.
 	consentMu sync.Mutex
+	// clones are the clones that run or ended in the last minute, by
+	// target, under mu.
+	clones map[string]*cloneJob
+	// cloneRand picks free names, under cloneMu. Nil: seeded from the time.
+	cloneRand *rand.Rand
+	cloneMu   sync.Mutex
+	// cloneRun clones (tests). Nil: clone.Run.
+	cloneRun func(ctx context.Context, r gitremote.Remote, target string, progress func(pct int)) error
+	// cloneRemote reads a typed URL (tests). Nil: gitremote.Parse.
+	cloneRemote func(text string) (gitremote.Remote, bool)
+	// protocol is gh's git_protocol, asked once.
+	protoOnce sync.Once
+	protocol  string
 }
 
 func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
@@ -690,6 +708,7 @@ func (s *Service) stateFor(cl *client) (proto.State, bool) {
 		u := state.Used{Repos: slices.Clone(s.used.Repos)}
 		st.Used, cl.usedGen = &u, s.usedGen
 	}
+	st.Clones = s.cloneList()
 	return st, true
 }
 

@@ -86,7 +86,7 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	// A session the stoker drove speaks for the stoker: what it sends
 	// counts and drives, and it gives no go.
 	agent := s.agentsPane(a)
-	if !agent && !a.Console && (paneOf(a.RecID) != "" || a.RecID == NewSessionID) {
+	if !agent && !a.Console && (paneOf(a.RecID) != "" || a.RecID == NewSessionID || a.RecID == "clone:plan" || a.RecID == "clone:start") {
 		if _, ok := s.sessionAt(a.From); ok {
 			return proto.Result{Err: notTheBuilders}
 		}
@@ -138,6 +138,12 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	case "service:replace":
 		s.replace()
 		return proto.Result{}
+	case "clone:plan":
+		return s.clonePlan(a.Text)
+	case "clone:start":
+		return s.cloneStart(ctx, a.Text)
+	case "clone:stop":
+		return s.cloneStop(a.Text)
 	}
 	if verb, ok := strings.CutPrefix(a.RecID, "stoker:"); ok {
 		switch verb {

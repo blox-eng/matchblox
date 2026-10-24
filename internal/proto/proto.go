@@ -75,6 +75,9 @@ type State struct {
 	Found *Found `json:"found,omitempty"`
 	// Used is where sessions started: set as Found is.
 	Used *Used `json:"used,omitempty"`
+	// Clones are the clones the service runs, and the ones that ended
+	// in the last minute: in every snapshot while any is listed.
+	Clones []Clone `json:"clones,omitempty"`
 }
 
 type Event struct {
@@ -107,6 +110,37 @@ type Result struct {
 	Err     string     `json:"err,omitempty"`
 	// Scan is how a scan:yes's scan went.
 	Scan *ScanSummary `json:"scan,omitempty"`
+	// Clone is a clone:plan's plan.
+	Clone *ClonePlan `json:"clone,omitempty"`
+}
+
+// ClonePlan is where a clone of a URL goes, found offline. Target is
+// <clone_root>/<repo>, or a free name when something else is there; Taken
+// says what: "another repo", "not a repo" or "a file" ("" when free or the
+// same repo). Have are the checkouts of the same remote, <clone_root>/<repo>
+// first when it is one; then Fresh is a free name to clone anew into.
+type ClonePlan struct {
+	Repo   string   `json:"repo"` // owner/repo
+	URL    string   `json:"url"`
+	Target string   `json:"target"`
+	Taken  string   `json:"taken,omitempty"`
+	Have   []string `json:"have,omitempty"`
+	Fresh  string   `json:"fresh,omitempty"`
+}
+
+// CloneStart is the Text of a "clone:start" act: clone URL into Target.
+type CloneStart struct {
+	URL    string `json:"url"`
+	Target string `json:"target"`
+}
+
+// Clone is one clone the service runs or ran.
+type Clone struct {
+	Target string `json:"target"`
+	Repo   string `json:"repo"`
+	Pct    int    `json:"pct"` // -1: no percent yet
+	Err    string `json:"err,omitempty"`
+	Done   bool   `json:"done,omitempty"`
 }
 
 type Error struct {

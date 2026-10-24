@@ -593,6 +593,9 @@ func newService(cfg config.Config, root string) *service.Service {
 		s.ConsentPath, s.ReposPath = state.ScanPath(), state.ReposPath()
 	}
 	s.UsedPath = state.UsedPath()
+	if cfg.Git.CloneRoot != "" {
+		s.CloneRoot = service.ExpandHome(cfg.Git.CloneRoot)
+	}
 	return s
 }
 
