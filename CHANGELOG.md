@@ -69,6 +69,17 @@ All notable changes to matchblox are in this file. The format follows
   goes on where it stopped at the account's next start. Cloning is tested on
   macOS (APFS) only; on Linux it is not tested yet.
   ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- A start on an account says what happened. It names each link still
+  shared with the default and each entry not copied (five of each, then how
+  many more), and says when a copy is not complete and goes on at the next
+  start. `N`, Switch agent and `matchblox new` show these notes after the
+  start, and a new account names the session to sign in in. A start or a
+  switch on an account that another start is setting up is refused at once,
+  and one whose folder went away meanwhile is refused as gone. `matchblox
+  new` waits the copy's 90 seconds on top of its 30 for a new or copy
+  account, and says "failed" for a start that ran and failed, "refused"
+  only when matchblox refused it.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - An agent's pane cannot start a session on an account, new or not, even
   when it says it is a console.
   ([#170](https://github.com/blox-eng/matchblox/issues/170))

@@ -776,3 +776,19 @@ func TestNewAccountConfirmLeftKeepsTheLastAgent(t *testing.T) {
 		t.Fatalf("after a start: last agent %q, want codex", got)
 	}
 }
+
+// TestANewAccountStartSaysWhereToSignInAndWhatItSkipped: a start on a new
+// account that ran names the session to sign in in, and its notes.
+func TestANewAccountStartSaysWhereToSignInAndWhatItSkipped(t *testing.T) {
+	next, _ := toNewCodexAccount(t)
+	name := next.(Model).pending.done
+	next, cmd := key(next, "y")
+	cmd()
+	id := "a" + strconv.Itoa(next.(Model).acts)
+	note := proto.NotCopied + "/home/u/.codex/pipe: not a file, folder or link"
+	next, _ = next.Update(resultMsg(proto.Result{ActID: id, Ran: [][]string{{"tmux"}}, Skipped: []string{note, proto.CopyGoesOn}}))
+	want := name + "; " + note + "; " + proto.CopyGoesOn
+	if nm := next.(Model); !strings.HasPrefix(name, "started ") || !strings.Contains(name, ": sign in in ") || nm.flash != want || nm.lastAgent != "codex" {
+		t.Fatalf("flash %q, want %q; last agent %q", nm.flash, want, nm.lastAgent)
+	}
+}

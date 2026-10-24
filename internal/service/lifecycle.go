@@ -314,24 +314,30 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	if word != "" && !n.Anyway {
 		return proto.Result{Err: x.Name + " " + word + ": y again switches it mid-turn"}
 	}
+	// The account is held before the hold moves: a switch it refuses
+	// leaves the seat as it was.
+	acct := s.switchAccount(n.Agent)
+	argv := launchArgv(s.agentBin(n.Agent), n.Agent, x.Name, n.Handoff, accountArgs(n.Agent, acct))
+	var notes []string
+	if acct != nil {
+		argv = slices.Concat(accounts.EnvArgv(n.Agent, acct.folder, false), argv)
+		unlock, err := s.holdAccount(n.Agent, acct)
+		if err != nil {
+			return proto.Result{Err: err.Error()}
+		}
+		defer unlock()
+		if acct.again {
+			// It switches on the account as it is when that fails.
+			rep, err := accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode)
+			notes = prepareNotes(acct, rep, err)
+		}
+	}
 	h, held := s.heldIn(pane, x)
 	if held {
 		moving := h
 		moving.Rebind = true
 		if err := s.Holds.Set(moving); err != nil {
 			return proto.Result{Err: err.Error()}
-		}
-	}
-	acct := s.switchAccount(n.Agent)
-	argv := launchArgv(s.agentBin(n.Agent), n.Agent, x.Name, n.Handoff, accountArgs(n.Agent, acct))
-	var relink error
-	if acct != nil {
-		argv = slices.Concat(accounts.EnvArgv(n.Agent, acct.folder, false), argv)
-		unlock := s.lockAccount(acct.folder)
-		defer unlock()
-		if acct.again {
-			// It switches on the account as it is when that fails.
-			_, relink = accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode)
 		}
 	}
 	release := s.holdPane(pane)
@@ -358,9 +364,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 		}
 		return res
 	}
-	if relink != nil {
-		res.Skipped = append(res.Skipped, proto.NotLinked+relink.Error())
-	}
+	res.Skipped = append(res.Skipped, notes...)
 	s.undrive(pane)
 	s.renames.drop(pane)
 	s.mu.Lock()
@@ -597,17 +601,17 @@ func (s *Service) renameAtRest(ctx context.Context) {
 func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	var n proto.NewSession
 	if err := json.Unmarshal([]byte(a.Text), &n); err != nil {
-		return proto.Result{Err: "the new session does not read: " + err.Error()}
+		return refuse(errors.New("the new session does not read: " + err.Error()))
 	}
 	if n.Agent == "cursor" {
 		n.Agent = sample.CursorAgent
 	}
 	if s.agentsPane(a) && (n.NewAccount || n.Account != "" && n.Account != "default") {
-		return proto.Result{Err: "the stoker starts on default only"}
+		return refuse(errors.New("the stoker starts on default only"))
 	}
 	steps, name, dir, acct, err := s.newSteps(ctx, n)
 	if err != nil {
-		return proto.Result{Err: err.Error()}
+		return refuse(err)
 	}
 	act := advice.Action{Label: "new session"}
 	var launch []string
@@ -630,42 +634,41 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	// made: this call makes the folder, and takes it away when the start
 	// fails, so a retry finds no account.
 	made := false
-	var relink error
 	if acct != nil {
-		unlock := s.lockAccount(acct.folder)
-		defer unlock()
-		// Another start of this new account may have made it since the
-		// check: the folder is then that one's.
-		if acct.fresh {
-			if have, err := accounts.List(s.home(), n.Agent); err != nil {
-				return proto.Result{Err: err.Error()}
-			} else if slices.Contains(have, acct.name) {
-				return proto.Result{Err: alreadyThere(n.Agent, acct.name).Error()}
+		unlock, err := s.holdAccount(n.Agent, acct)
+		if err != nil {
+			if errors.Is(err, errBusy) || errors.Is(err, errGone) || errors.Is(err, errThere) {
+				return refuse(err)
 			}
+			return proto.Result{Err: err.Error()}
 		}
+		defer unlock()
 	}
 	// Only a confirmed act makes a folder: a dry plan leaves the disk as it
 	// was. A like-default account gets what the default gained since; when
-	// that fails, it starts as it is.
+	// that fails, it starts as it is. What a copy left shared or out, and
+	// whether it ended, goes in the result as notes.
+	var notes []string
 	switch {
 	case acct != nil && acct.fresh && a.Confirm == "y":
 		_, err := os.Lstat(acct.folder)
 		made = errors.Is(err, fs.ErrNotExist)
-		if _, err := accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode); err != nil {
+		rep, err := accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode)
+		if err != nil {
 			s.unmake(made, acct.folder)
 			return proto.Result{Err: err.Error()}
 		}
+		notes = prepareNotes(acct, rep, nil)
 	case acct != nil && acct.again:
-		_, relink = accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode)
+		rep, err := accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode)
+		notes = prepareNotes(acct, rep, err)
 	}
 	res := s.Actions.Do(ctx, act, a.Confirm)
 	if res.Err != "" || len(res.Ran) < len(steps) {
 		s.unmake(made, acct.folderOrEmpty())
 		return res
 	}
-	if relink != nil {
-		res.Skipped = append(res.Skipped, proto.NotLinked+relink.Error())
-	}
+	res.Skipped = append(res.Skipped, notes...)
 	var pane string
 	if s.agentsPane(a) || (acct != nil && acct.fresh) {
 		out, _ := s.tmuxOut(slices.Concat(sample.TmuxOn(""), []string{"display-message", "-p", "-t", "=" + name + ":", "#{pane_id}"}))
@@ -758,17 +761,75 @@ type onAccount struct {
 	mode         accounts.Mode
 }
 
-// lockAccount holds folder until the returned func is called.
-func (s *Service) lockAccount(folder string) func() {
-	m, _ := s.accountLocks.LoadOrStore(folder, &sync.Mutex{})
+// errBusy, errGone and errThere mark holdAccount's refusals.
+var (
+	errBusy  = errors.New("being set up")
+	errGone  = errors.New("gone")
+	errThere = errors.New("there already")
+)
+
+// holdAccount holds acct's folder until the returned func is called. It
+// never waits: a folder another start holds is refused at once. Under the
+// hold it checks the account again, as the check before may be old: a new
+// account another start made since is there already, and an account that
+// was there and is gone since (a new account whose start failed took it
+// away) is refused. A hand-made folder is checked by its live session
+// only, as account does.
+func (s *Service) holdAccount(agent string, acct *onAccount) (func(), error) {
+	m, _ := s.accountLocks.LoadOrStore(acct.folder, &sync.Mutex{})
 	mu := m.(*sync.Mutex)
-	mu.Lock()
-	return mu.Unlock
+	if !mu.TryLock() {
+		return nil, fmt.Errorf("the %s account %s is %w: start it when that ends", agent, acct.name, errBusy)
+	}
+	if acct.hand {
+		return mu.Unlock, nil // checked by its live session, not on disk
+	}
+	have, err := accounts.List(s.home(), agent)
+	switch there := slices.Contains(have, acct.name); {
+	case err != nil:
+	case acct.fresh && there:
+		err = alreadyThere(agent, acct.name)
+	case !acct.fresh && !there:
+		err = fmt.Errorf("the %s account %s is %w", agent, acct.name, errGone)
+	}
+	if err != nil {
+		mu.Unlock()
+		return nil, err
+	}
+	return mu.Unlock, nil
+}
+
+// refuse is the result of a new session the service refused: nothing ran.
+func refuse(err error) proto.Result {
+	return proto.Result{Err: err.Error(), Refused: true}
+}
+
+// prepareNotes are the notes of a start on acct whose Prepare gave rep and
+// err: each link a copy left on the default, each entry it left out, five
+// of each at most, what failed, and whether the copy has not ended.
+func prepareNotes(acct *onAccount, rep accounts.Report, err error) []string {
+	notes := proto.Notes(proto.StillShared, rep.Shared)
+	skipped := make([]string, 0, len(rep.Skipped))
+	for _, k := range rep.Skipped {
+		skipped = append(skipped, k.Path+": "+k.Why)
+	}
+	notes = append(notes, proto.Notes(proto.NotCopied, skipped)...)
+	if err != nil {
+		prefix := proto.NotLinked
+		if acct.mode == accounts.Copy {
+			prefix = proto.NotCopied
+		}
+		notes = append(notes, prefix+strings.ReplaceAll(err.Error(), "\n", "; "))
+	}
+	if acct.mode == accounts.Copy && accounts.Incomplete(acct.folder) {
+		notes = append(notes, proto.CopyGoesOn)
+	}
+	return notes
 }
 
 // alreadyThere refuses a new account whose folder is there.
 func alreadyThere(agent, name string) error {
-	return fmt.Errorf("the %s account %s is there already: start on it", agent, name)
+	return fmt.Errorf("the %s account %s is %w: start on it", agent, name, errThere)
 }
 
 func (a *onAccount) folderOrEmpty() string {

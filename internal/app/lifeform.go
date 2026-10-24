@@ -549,7 +549,11 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			n.Account, n.NewAccount, n.Setup, n.First = f.account, true, f.setup, "" // it signs in in the session first
-			m.form, m.pending = nil, m.startAction(n)
+			sess := name
+			if !f.named {
+				sess = f.autoName()
+			}
+			m.form, m.pending = nil, m.startAction(n, sess)
 			return m, nil
 		}
 		if f.hasAccounts() {
@@ -569,11 +573,12 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 
 // startAction is the plan of a start on a new account: it waits for a typed
 // y, the service's confirmed act. The account is made first and signs in in
-// the session.
-func (m Model) startAction(n proto.NewSession) *action {
+// the session, sess.
+func (m Model) startAction(n proto.NewSession, sess string) *action {
 	b, _ := json.Marshal(n)
 	say := fmt.Sprintf("new %s account %q, %s: sign in in the session", n.Agent, n.Account, setups[setupAt(n.Setup)].label)
-	return &action{label: "start", destructive: true, rec: "new:session", text: string(b), say: say, agent: n.Agent}
+	return &action{label: "start", destructive: true, rec: "new:session", text: string(b), say: say, agent: n.Agent,
+		done: "started " + sess + ": sign in in " + sess}
 }
 
 // setupAt is the index in setups of the setup id, 0 (like default) if none.
@@ -607,9 +612,10 @@ func (m Model) formResult(r proto.Result) (Model, bool) {
 	f := *m.form
 	m.form = &f
 	f.act = ""
-	// A start whose new shared entries did not all link ran all the same.
-	note, linked := proto.NotLinkedNote(r)
-	if !f.rename && linked {
+	// A start with notes on what its account shared or skipped ran all
+	// the same.
+	notes, ran := proto.StartNotes(r)
+	if !f.rename && ran {
 		r.Skipped = nil
 	}
 	switch {
@@ -633,8 +639,8 @@ func (m Model) formResult(r proto.Result) (Model, bool) {
 			name = f.autoName()
 		}
 		m.flash = "started " + name + ": it shows in Sessions in a few seconds"
-		if note != "" {
-			m.flash += "; " + note
+		if len(notes) > 0 {
+			m.flash += "; " + strings.Join(notes, "; ")
 		}
 		m.lastAgent = f.agent
 	}

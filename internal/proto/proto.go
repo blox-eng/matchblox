@@ -7,7 +7,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
@@ -109,6 +111,10 @@ type Result struct {
 	// Names answers the names act: what each number of the island is
 	// called now.
 	Names *Names `json:"names,omitempty"`
+	// Refused: the service refused the act before it ran anything (a
+	// check, a busy or gone account). An Err without it is a failure of
+	// something that ran. Only a new:session sets it.
+	Refused bool `json:"refused,omitempty"`
 }
 
 // Names are the session and account names by their island numbers.
@@ -117,17 +123,51 @@ type Names struct {
 	Accounts map[int]string `json:"accounts"`
 }
 
-// NotLinked starts the skip of a new session that started on a like-default
-// account whose new shared entries did not all link: it ran all the same.
-const NotLinked = "some shared entries did not link: "
+// The notes of a start on an account that ran: each is one skip of its
+// Result, and the start ran all the same (StartNotes).
+const (
+	// NotLinked starts the note of a like-default account whose new shared
+	// entries did not all link.
+	NotLinked = "some shared entries did not link: "
+	// StillShared starts the note of a link a copy left on the default's
+	// file, and why.
+	StillShared = "still shared with the default: "
+	// NotCopied starts the note of an entry of the default a copy left
+	// out, and why.
+	NotCopied = "not copied: "
+	// CopyGoesOn is the note of a copy that has not ended.
+	CopyGoesOn = "the copy is not complete: it goes on at the next start"
+)
 
-// NotLinkedNote is the NotLinked note of r when it is r's only skip and r
-// has no error: the act ran all the same.
-func NotLinkedNote(r Result) (string, bool) {
-	if r.Err != "" || len(r.Skipped) != 1 || !strings.HasPrefix(r.Skipped[0], NotLinked) {
-		return "", false
+// noteMax is how many entries Notes names before it counts the rest.
+const noteMax = 5
+
+// Notes is one note per item, each after prefix: the first five, then one
+// that says how many more there are.
+func Notes(prefix string, items []string) []string {
+	var out []string
+	for i, it := range items {
+		if i == noteMax {
+			return append(out, fmt.Sprintf("%sand %d more", prefix, len(items)-noteMax))
+		}
+		out = append(out, prefix+it)
 	}
-	return r.Skipped[0], true
+	return out
+}
+
+// StartNotes are the skips of r when r has no error and every skip is a
+// note of a start on an account (NotLinked, StillShared, NotCopied,
+// CopyGoesOn): the act ran all the same.
+func StartNotes(r Result) ([]string, bool) {
+	if r.Err != "" || len(r.Skipped) == 0 {
+		return nil, false
+	}
+	for _, k := range r.Skipped {
+		if k != CopyGoesOn && !strings.HasPrefix(k, NotLinked) && !strings.HasPrefix(k, StillShared) && !strings.HasPrefix(k, NotCopied) {
+			return nil, false
+		}
+	}
+	return slices.Clone(r.Skipped), true
 }
 
 type Error struct {

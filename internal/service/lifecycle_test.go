@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -1324,8 +1326,8 @@ func TestNewAccountWithNoPaneSaysByHand(t *testing.T) {
 
 // TestTwoConfirmsOfOneNewAccountMakeItOnce: two confirms of one new account
 // at once start it once. Both pass the first check before either makes the
-// folder; the second is refused as there already, and the first's folder
-// stays.
+// folder; the second is refused, as being set up or as there already, and
+// the first's folder stays.
 func TestTwoConfirmsOfOneNewAccountMakeItOnce(t *testing.T) {
 	s, _, home := accountTest(t)
 	// Each act looks up its agent after it checks the account: hold both
@@ -1362,7 +1364,8 @@ func TestTwoConfirmsOfOneNewAccountMakeItOnce(t *testing.T) {
 		switch res := <-results; {
 		case res.Err == "":
 			ok++
-		case strings.Contains(res.Err, "the claude account work is there already"):
+		case res.Refused && (strings.Contains(res.Err, "the claude account work is there already") ||
+			res.Err == "the claude account work is being set up: start it when that ends"):
 			refused++
 		default:
 			t.Errorf("err %q", res.Err)
@@ -1545,7 +1548,7 @@ func TestSwitchWithAFailedRelinkStillSwitches(t *testing.T) {
 	if res.Err != "" || len(*ran) != 1 || !strings.Contains(strings.Join((*ran)[0], " "), "CODEX_HOME=") {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
-	if note, ok := proto.NotLinkedNote(res); !ok || !strings.Contains(note, "permission denied") {
+	if notes, ok := proto.StartNotes(res); !ok || len(notes) != 1 || !strings.Contains(notes[0], "permission denied") {
 		t.Fatalf("skipped %q", res.Skipped)
 	}
 }
@@ -1654,5 +1657,161 @@ func TestNewOnDefaultStillStartsFromAConsoleInAnAgentPane(t *testing.T) {
 	a.From = "%1"
 	if res := s.act(t.Context(), a); res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+}
+
+// blockedNewAccount starts a new account of agent named name and holds its
+// start in tmux until release is closed; it returns once the folder is
+// made and the start holds the account's lock. done gets its result.
+func blockedNewAccount(t *testing.T, s *Service, agent, name string) (release chan struct{}, done chan proto.Result) {
+	t.Helper()
+	in, release, done := make(chan struct{}), make(chan struct{}), make(chan proto.Result, 1)
+	var first atomic.Bool
+	run := s.Actions.Run
+	s.Actions.Run = func(argv []string) error {
+		if first.CompareAndSwap(false, true) {
+			close(in)
+			<-release
+			return errors.New("no tmux")
+		}
+		return run(argv)
+	}
+	go func() {
+		done <- s.act(context.Background(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: agent, Name: "a1", Account: name, NewAccount: true}))
+	}()
+	select {
+	case <-in:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the new account did not reach its start")
+	}
+	return release, done
+}
+
+// atOnce is the result of do, or a failure when it waits on something
+// for seconds.
+func atOnce(t *testing.T, do func() proto.Result) proto.Result {
+	t.Helper()
+	got := make(chan proto.Result, 1)
+	go func() { got <- do() }()
+	select {
+	case res := <-got:
+		return res
+	case <-time.After(5 * time.Second):
+		t.Fatal("the start waited on the account's lock")
+		return proto.Result{}
+	}
+}
+
+// TestASecondStartOfAnAccountBeingSetUpIsRefusedAtOnce: while a start
+// holds an account's folder, another start or a switch on it is refused at
+// once, and runs nothing.
+func TestASecondStartOfAnAccountBeingSetUpIsRefusedAtOnce(t *testing.T) {
+	s, ran, _ := switchAccountTest(t)
+	release, done := blockedNewAccount(t, s, "codex", "team")
+	const busy = "the codex account team is being set up: start it when that ends"
+	res := atOnce(t, func() proto.Result {
+		return s.act(context.Background(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "codex", Name: "b1", Account: "team"}))
+	})
+	if res.Err != busy || !res.Refused || len(*ran) != 0 {
+		t.Fatalf("start: err %q refused %v ran %q", res.Err, res.Refused, *ran)
+	}
+	s.lastAccounts.set(lastAccountsPath(s.StatePath), "codex", "team")
+	if err := s.Holds.Set(holds.Hold{SessionID: "s1", Pane: "%1", Name: "work", By: holds.ByYou, At: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	res = atOnce(t, func() proto.Result {
+		return s.act(context.Background(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"}))
+	})
+	if res.Err != busy || len(*ran) != 0 {
+		t.Fatalf("switch: err %q ran %q", res.Err, *ran)
+	}
+	if h, ok := s.Holds.Of("s1"); !ok || h.Rebind {
+		t.Fatalf("a refused switch moved the hold: %+v %v", h, ok)
+	}
+	close(release)
+	<-done
+}
+
+// TestStartAfterAFailedNewAccountIsRefused: a start on an account checked
+// while a new account's start made its folder, then let go after that
+// start failed and took the folder away, is refused as gone, and makes
+// nothing.
+func TestStartAfterAFailedNewAccountIsRefused(t *testing.T) {
+	s, ran, home := accountTest(t)
+	release, done := blockedNewAccount(t, s, "claude", "work")
+	// The second start waits after its check, on its agent's look-up.
+	looked, goOn := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	s.LookPath = func(cmd string) (string, error) {
+		once.Do(func() { close(looked); <-goOn })
+		return "/usr/bin/" + cmd, nil
+	}
+	second := make(chan proto.Result, 1)
+	go func() {
+		second <- s.act(context.Background(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "b1", Account: "work"}))
+	}()
+	<-looked
+	close(release)
+	if res := <-done; res.Err == "" {
+		t.Fatal("the new account started")
+	}
+	close(goOn)
+	res := <-second
+	if res.Err != "the claude account work is gone" || !res.Refused || len(*ran) != 0 {
+		t.Fatalf("err %q refused %v ran %q", res.Err, res.Refused, *ran)
+	}
+	if _, err := os.Lstat(accounts.Folder(home, "claude", "work")); err == nil {
+		t.Fatal("the refused start made the folder again")
+	}
+}
+
+// TestACopyStartNamesWhatItSharedAndSkipped: a new copy account that
+// started names each link left on the default and each entry not copied.
+func TestACopyStartNamesWhatItSharedAndSkipped(t *testing.T) {
+	s, _, home := accountTest(t)
+	writeDefault(t, home, ".claude/settings.json")
+	def := filepath.Join(home, ".claude")
+	if err := os.Symlink("/etc/hosts", filepath.Join(def, "hosts")); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(filepath.Join(def, "pipe"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: "work", NewAccount: true, Setup: "copy"}))
+	folder := accounts.Folder(home, "claude", "work")
+	want := []string{
+		proto.StillShared + filepath.Join(folder, "hosts") + " -> /etc/hosts: outside the default",
+		proto.NotCopied + filepath.Join(def, "pipe") + ": not a file, folder or link",
+	}
+	if notes, ok := proto.StartNotes(res); !ok || !slices.Equal(notes, want) {
+		t.Fatalf("err %q skipped %q", res.Err, res.Skipped)
+	}
+}
+
+// TestACopyThatStaysIncompleteSaysItGoesOn: a start on a cut copy that
+// still did not end starts, and says the copy goes on at the next start.
+func TestACopyThatStaysIncompleteSaysItGoesOn(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a file of mode 0")
+	}
+	s, ran, home := accountTest(t)
+	folder := accounts.Folder(home, "codex", "work")
+	if err := os.MkdirAll(folder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(folder, accounts.SetupFile), []byte("copy\nincomplete\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeDefault(t, home, ".codex/config.toml")
+	if err := os.Chmod(filepath.Join(home, ".codex", "config.toml"), 0); err != nil {
+		t.Fatal(err)
+	}
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "codex", Name: "two", Account: "work"}))
+	notes, ok := proto.StartNotes(res)
+	if !ok || len(*ran) != 1 || notes[len(notes)-1] != proto.CopyGoesOn {
+		t.Fatalf("err %q skipped %q ran %q", res.Err, res.Skipped, *ran)
+	}
+	if !strings.HasPrefix(notes[0], proto.NotCopied) || !strings.Contains(notes[0], "permission denied") {
+		t.Fatalf("notes %q", notes)
 	}
 }

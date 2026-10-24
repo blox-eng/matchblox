@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -170,32 +171,74 @@ func cliNew(words []string, o newOpts, w io.Writer, path string) error {
 	if err != nil {
 		return err
 	}
-	res, err := doAct(path, a)
+	home, _ := os.UserHomeDir()
+	res, err := doActFor(path, a, newWait(o, home))
 	if err != nil {
 		if errors.Is(err, errNoResult) {
 			return errors.New("new: not known whether it started: matchblox sessions shows it within seconds if it did")
 		}
 		return fmt.Errorf("new: did not run: %w", err)
 	}
-	if err := newOutcome(w, res); err != nil {
+	if err := newOutcome(w, res, o.newAccount); err != nil {
+		if res.Err != "" && !res.Refused {
+			return fmt.Errorf("new: failed: %w", err)
+		}
 		return fmt.Errorf("new: refused: %w", err)
 	}
 	return nil
 }
 
-// newOutcome is reportResult for a new session: a start whose new shared
-// entries did not all link ran, and the note follows its steps.
-func newOutcome(w io.Writer, res proto.Result) error {
-	note, ok := proto.NotLinkedNote(res)
-	if !ok {
-		return reportResult(w, res)
+// newWait is how long matchblox new waits for its result: a start that may
+// copy the default (a new account, or a copy account, which goes on with a
+// copy that did not end) waits the copy's time limit on top of an act's.
+func newWait(o newOpts, home string) time.Duration {
+	agent := o.agent
+	if agent == "" {
+		agent = "claude"
 	}
-	res.Skipped = nil
+	// A hand-made folder (~/… or a path) is never a copy account.
+	named := o.account != "" && !strings.HasPrefix(o.account, "~") && !strings.ContainsRune(o.account, filepath.Separator)
+	copies := o.newAccount || named && accounts.SetupOf(accounts.Folder(home, agent, o.account)) == accounts.Copy
+	if copies {
+		return accounts.CopyLimit.Time + actWait
+	}
+	return actWait
+}
+
+// newOutcome is reportResult for a new session: a start with notes on what
+// its account shared or skipped ran, and the notes follow its steps. A new
+// account (signIn) then names the session to sign in in.
+func newOutcome(w io.Writer, res proto.Result, signIn bool) error {
+	notes, ran := proto.StartNotes(res)
+	if ran {
+		res.Skipped = nil
+	}
 	if err := reportResult(w, res); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintln(w, note)
+	for _, note := range notes {
+		if _, err := fmt.Fprintln(w, note); err != nil {
+			return err
+		}
+	}
+	if !signIn || len(res.Ran) == 0 {
+		return nil
+	}
+	_, err := fmt.Fprintf(w, "sign in in %s\n", sessionOf(res.Ran))
 	return err
+}
+
+// sessionOf is the name of the tmux session the steps of a new session
+// made: the -s of its new-session.
+func sessionOf(ran [][]string) string {
+	for _, argv := range slices.Backward(ran) {
+		if i := slices.Index(argv, "new-session"); i >= 0 {
+			if j := slices.Index(argv[i:], "-s"); j >= 0 && i+j+1 < len(argv) {
+				return argv[i+j+1]
+			}
+		}
+	}
+	return "the session"
 }
 
 // cliSwitch switches the session's agent and, when jump is not nil, takes
@@ -216,7 +259,8 @@ func cliSwitch(words []string, o switchOpts, w io.Writer, path string, jump func
 	if _, err := fmt.Fprintf(w, "switched %s to %s\n", words[0], o.agent); err != nil {
 		return err
 	}
-	if note, ok := proto.NotLinkedNote(res); ok {
+	notes, _ := proto.StartNotes(res)
+	for _, note := range notes {
 		if _, err := fmt.Fprintln(w, note); err != nil {
 			return err
 		}

@@ -288,19 +288,19 @@ type Model struct {
 	sessGroup   int // what Sessions is grouped by: groupNeed .. groupNone
 	holds       []proto.Hold
 	reasons     map[string]proto.IdleReason
-	agents      []string                         // the agents a new session can start on the host
-	renames     map[string]string                // the names sessions take at their next rest, by pane
-	accounts    map[string][]string              // the accounts each agent can start on: default first
-	lastAccount map[string]string                // the account last started, per agent
-	signIns     map[string]string                // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
-	found       *proto.Found                     // the host's repositories and the scan's consent; nil: the service scans nothing
-	scanLater   bool                             // the scan question was closed or answered at this console
-	scanAct     string                           // the act of the box's yes, for its result
-	form        *form                            // the open New session, Rename, Switch agent or scan folders form; nil none
-	jumpAfter   struct{ act, pane, done string } // a switch sent: the pane to jump to when it runs
-	startAfter  struct{ act, agent string }      // a start on a new account sent: its agent, the last once it runs
-	lastAgent   string                           // the agent this console last started
-	keptAgent   string                           // the agent last started, as the service keeps it
+	agents      []string                          // the agents a new session can start on the host
+	renames     map[string]string                 // the names sessions take at their next rest, by pane
+	accounts    map[string][]string               // the accounts each agent can start on: default first
+	lastAccount map[string]string                 // the account last started, per agent
+	signIns     map[string]string                 // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
+	found       *proto.Found                      // the host's repositories and the scan's consent; nil: the service scans nothing
+	scanLater   bool                              // the scan question was closed or answered at this console
+	scanAct     string                            // the act of the box's yes, for its result
+	form        *form                             // the open New session, Rename, Switch agent or scan folders form; nil none
+	jumpAfter   struct{ act, pane, done string }  // a switch sent: the pane to jump to when it runs
+	startAfter  struct{ act, agent, done string } // a start on a new account sent: its agent, the last once it runs, and what it says then
+	lastAgent   string                            // the agent this console last started
+	keptAgent   string                            // the agent last started, as the service keeps it
 	paneSort    sortBy
 	picked      map[string]bool // worktrees x removes
 	batch       *batch
@@ -564,7 +564,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case resultMsg:
 		m.endRec(msg.ActID, proto.Result(msg))
-		m.started(proto.Result(msg))
+		if mm, ok := m.started(proto.Result(msg)); ok {
+			return mm, mm.recv()
+		}
 		if mm, ok := m.formResult(proto.Result(msg)); ok {
 			return mm, mm.recv()
 		}
@@ -1124,22 +1126,31 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 		m.jumpAfter.act, m.jumpAfter.pane, m.jumpAfter.done = "a"+strconv.Itoa(m.acts), pane, a.done
 	}
 	if a.agent != "" {
-		m.startAfter.act, m.startAfter.agent = "a"+strconv.Itoa(m.acts), a.agent
+		m.startAfter.act, m.startAfter.agent, m.startAfter.done = "a"+strconv.Itoa(m.acts), a.agent, a.done
 	}
 	return m.pairActed(a), cmd
 }
 
 // started takes the result of a start on a new account: one that ran sets
-// the last agent, one that did not leaves it as it was.
-func (m *Model) started(r proto.Result) {
+// the last agent and says where to sign in, with the notes of what its
+// account shared or skipped; one that did not leaves the last agent as it
+// was and goes on to the result's usual words (false).
+func (m Model) started(r proto.Result) (Model, bool) {
 	if r.ActID == "" || r.ActID != m.startAfter.act {
-		return
+		return m, false
 	}
-	_, linked := proto.NotLinkedNote(r)
-	if r.Err == "" && (len(r.Skipped) == 0 || linked) {
-		m.lastAgent = m.startAfter.agent
+	a := m.startAfter
+	m.startAfter.act, m.startAfter.agent, m.startAfter.done = "", "", ""
+	notes, ran := proto.StartNotes(r)
+	if r.Err != "" || len(r.Ran) == 0 || len(r.Skipped) > 0 && !ran {
+		return m, false
 	}
-	m.startAfter.act, m.startAfter.agent = "", ""
+	m.lastAgent = a.agent
+	m.flash = a.done
+	if len(notes) > 0 {
+		m.flash += "; " + strings.Join(notes, "; ")
+	}
+	return m, true
 }
 
 // switched takes the result of a switch: one that ran jumps to its pane,
@@ -1147,21 +1158,21 @@ func (m *Model) started(r proto.Result) {
 func (m Model) switched(r proto.Result) (tea.Model, tea.Cmd) {
 	j := m.jumpAfter
 	m.jumpAfter.act, m.jumpAfter.pane, m.jumpAfter.done = "", "", ""
-	// A switch whose account's new shared entries did not all link ran.
-	note, linked := proto.NotLinkedNote(r)
+	// A switch with notes on what its account shared or skipped ran.
+	notes, ran := proto.StartNotes(r)
 	switch {
 	case r.Err != "":
 		m.flash = tilde(r.Err)
 		return m, m.recv()
-	case len(r.Skipped) > 0 && !linked:
+	case len(r.Skipped) > 0 && !ran:
 		m.flash = tilde(r.Skipped[len(r.Skipped)-1])
 		return m, m.recv()
 	}
 	next, jump := m.confirm(*m.jump(j.pane))
 	nm := next.(Model)
 	nm.flash = j.done
-	if linked {
-		nm.flash += "; " + note
+	if ran {
+		nm.flash += "; " + strings.Join(notes, "; ")
 	}
 	return nm, tea.Batch(nm.recv(), jump)
 }

@@ -86,6 +86,7 @@ const notTheBuilders = "only the stoker and the sessions it drives act from an a
 // registers through the gate gets the answer. It changes nothing but give a
 // number to a current session or account that had none.
 const NamesAct = "push:names"
+
 // accountRefused is the answer to a new session on an account from an agent's
 // pane that claims to be a console.
 const accountRefused = "an account is picked at the console or the shell, not from an agent's pane"

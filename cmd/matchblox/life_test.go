@@ -4,10 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/transport"
@@ -240,13 +244,13 @@ func TestNewAccountTakesNoFirstMessage(t *testing.T) {
 func TestNewThatRanThoughLinksFailedSucceeds(t *testing.T) {
 	var buf bytes.Buffer
 	note := proto.NotLinked + "open /home/u/.claude: permission denied"
-	if err := newOutcome(&buf, proto.Result{Ran: [][]string{{"tmux", "new-session"}}, Skipped: []string{note}}); err != nil {
+	if err := newOutcome(&buf, proto.Result{Ran: [][]string{{"tmux", "new-session"}}, Skipped: []string{note}}, false); err != nil {
 		t.Fatal(err)
 	}
 	if buf.String() != "tmux new-session\n"+note+"\n" {
 		t.Fatalf("%q", buf.String())
 	}
-	if err := newOutcome(&buf, proto.Result{Skipped: []string{"tmux: a guard stopped it"}}); err == nil {
+	if err := newOutcome(&buf, proto.Result{Skipped: []string{"tmux: a guard stopped it"}}, false); err == nil {
 		t.Fatal("any other skip is a refusal")
 	}
 }
@@ -262,5 +266,81 @@ func TestSwitchThatRanThoughLinksFailedSaysSo(t *testing.T) {
 	}
 	if buf.String() != "switched api to codex\n"+note+"\n" {
 		t.Fatalf("%q", buf.String())
+	}
+}
+
+// newStart is the result of a start of session w2 on a new account.
+func newStart(skipped ...string) proto.Result {
+	return proto.Result{Ran: [][]string{{"tmux", "new-session", "-d", "-s", "w2", "-n", "w2", "-c", "/work/app", "env", "codex"}}, Skipped: skipped}
+}
+
+// TestCLINewAccountFailureIsNotRefused: a start that ran and failed reads
+// failed; only the service's refusal reads refused.
+func TestCLINewAccountFailureIsNotRefused(t *testing.T) {
+	o := newOpts{agent: "codex", account: "w2", newAccount: true}
+	for _, c := range []struct {
+		res  proto.Result
+		want string
+	}{
+		{proto.Result{Err: "open /home/u/.codex/config.toml: permission denied"}, "new: failed: open /home/u/.codex/config.toml: permission denied"},
+		{proto.Result{Err: "tmux new-session: exit status 1", Ran: [][]string{{"git"}}}, "new: failed: tmux new-session: exit status 1"},
+		{proto.Result{Err: "the codex account w2 is being set up: start it when that ends", Refused: true}, "new: refused: the codex account w2 is being set up: start it when that ends"},
+		{proto.Result{Skipped: []string{"a guard stopped it"}}, "new: refused: a guard stopped it"},
+	} {
+		var buf bytes.Buffer
+		if err := cliNew(nil, o, &buf, switchService(t, c.res)); err == nil || err.Error() != c.want {
+			t.Errorf("%+v: %v, want %q", c.res, err, c.want)
+		}
+	}
+}
+
+// TestCLINewAccountSaysWhereToSignIn: a started new account names its
+// session to sign in in, after the notes of what it shared and skipped.
+func TestCLINewAccountSaysWhereToSignIn(t *testing.T) {
+	shared := proto.StillShared + "/home/u/.matchblox/accounts/codex/w2/rules -> /etc/rules: outside the default"
+	var buf bytes.Buffer
+	if err := cliNew(nil, newOpts{agent: "codex", account: "w2", newAccount: true}, &buf, switchService(t, newStart(shared, proto.CopyGoesOn))); err != nil {
+		t.Fatal(err)
+	}
+	want := "tmux new-session -d -s w2 -n w2 -c /work/app env codex\n" + shared + "\n" + proto.CopyGoesOn + "\nsign in in w2\n"
+	if buf.String() != want {
+		t.Fatalf("%q, want %q", buf.String(), want)
+	}
+	// A start on an account that is there signs in already.
+	buf.Reset()
+	if err := cliNew(nil, newOpts{agent: "codex", account: "w2"}, &buf, switchService(t, newStart())); err != nil || strings.Contains(buf.String(), "sign in") {
+		t.Fatalf("%q %v", buf.String(), err)
+	}
+}
+
+// TestNewWaitDerivesFromCopyLimit: a start that may copy waits the copy's
+// time limit on top of an act's; any other start an act's.
+func TestNewWaitDerivesFromCopyLimit(t *testing.T) {
+	home := t.TempDir()
+	long := accounts.CopyLimit.Time + actWait
+	copyAcct := accounts.Folder(home, "codex", "cp")
+	if err := os.MkdirAll(copyAcct, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(copyAcct, accounts.SetupFile), []byte("copy\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := accounts.Prepare(home, "codex", accounts.Folder(home, "codex", "ld"), accounts.LikeDefault); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		o    newOpts
+		want time.Duration
+	}{
+		{newOpts{agent: "codex", account: "nw", newAccount: true}, long},
+		{newOpts{account: "nw", newAccount: true}, long},
+		{newOpts{agent: "codex", account: "cp"}, long},
+		{newOpts{agent: "codex", account: "ld"}, actWait},
+		{newOpts{agent: "codex"}, actWait},
+		{newOpts{agent: "codex", account: "~/.codex-old"}, actWait},
+	} {
+		if got := newWait(c.o, home); got != c.want {
+			t.Errorf("%+v: %v, want %v", c.o, got, c.want)
+		}
 	}
 }

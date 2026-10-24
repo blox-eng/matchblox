@@ -209,7 +209,7 @@ Each account folder also has `.matchblox-setup`, one line with its setup.
 At each start of a `like-default` account, matchblox links the entries the
 default got since. It never replaces or removes an entry. When a link
 fails, the session starts all the same, and the result says "some shared
-entries did not link" with the first error. A copy or empty
+entries did not link" with what failed. A copy or empty
 account stays as it is. A folder with no `.matchblox-setup` is
 `like-default`.
 
