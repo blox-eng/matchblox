@@ -794,20 +794,36 @@ func (m Model) accountLines(iw int, field func(int, string, string), add func(st
 	notListed()
 }
 
-// notListedLine says how many folders the account list left out and why: the
-// reason when they share it, else the first and "…". "" when none.
+// notListedLine names the folders the account list left out, and why:
+// "not listed: A, b_ (why)" when they share the reason, else each with its
+// own; three named, then how many more. A skip of the agent's accounts
+// folder itself (a child of the accounts root) says it was not read. "" when
+// none.
 func notListedLine(skips []accounts.Skip) string {
 	if len(skips) == 0 {
 		return ""
 	}
-	why := skips[0].Why
-	for _, s := range skips[1:] {
-		if s.Why != why {
-			why += " …"
+	if s := skips[0]; filepath.Base(filepath.Dir(s.Path)) == "accounts" {
+		return "accounts not read: " + s.Why
+	}
+	shared := !slices.ContainsFunc(skips, func(s accounts.Skip) bool { return s.Why != skips[0].Why })
+	var names []string
+	for i, s := range skips {
+		if i == 3 {
+			names = append(names, fmt.Sprintf("and %d more", len(skips)-3))
 			break
 		}
+		n := filepath.Base(s.Path)
+		if !shared {
+			n += " (" + s.Why + ")"
+		}
+		names = append(names, n)
 	}
-	return fmt.Sprintf("%d not listed: %s", len(skips), why)
+	line := "not listed: " + strings.Join(names, ", ")
+	if shared {
+		line += " (" + skips[0].Why + ")"
+	}
+	return line
 }
 
 // agentChips is the agent chips, the one chosen filled, with the span of

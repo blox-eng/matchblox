@@ -829,10 +829,12 @@ func TestTheFormNamesTheFoldersNotListed(t *testing.T) {
 		skips []accounts.Skip
 		want  string
 	}{
-		"one":    {[]accounts.Skip{{Path: "/home/u/a/My_Acct", Why: why}}, "1 not listed: " + why},
-		"shared": {[]accounts.Skip{{Path: "/home/u/a/A", Why: why}, {Path: "/home/u/a/b_", Why: why}}, "2 not listed: " + why},
-		"mixed": {[]accounts.Skip{{Path: "/home/u/a/A", Why: why}, {Path: "/home/u/a/b", Why: "other"}},
-			"2 not listed: " + why + " …"},
+		"one":    {[]accounts.Skip{{Path: "/home/u/a/My_Acct", Why: why}}, "not listed: My_Acct (not a-z, 0-9"},
+		"shared": {[]accounts.Skip{{Path: "/home/u/a/A", Why: why}, {Path: "/home/u/a/b_", Why: why}}, "not listed: A, b_ (" + why + ")"},
+		"mixed": {[]accounts.Skip{{Path: "/home/u/a/A", Why: "gone"}, {Path: "/home/u/a/b", Why: "other"}},
+			"not listed: A (gone), b (other)"},
+		"many": {[]accounts.Skip{{Path: "/a/A", Why: "x"}, {Path: "/a/B", Why: "x"}, {Path: "/a/C", Why: "x"}, {Path: "/a/D", Why: "x"}, {Path: "/a/E", Why: "x"}},
+			"not listed: A, B, C, and 2 more (x)"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			m, _ := loadedWith(t, 100, skippedState(c.skips...))
@@ -862,7 +864,7 @@ func TestAnUnreadableRootIsShownShortened(t *testing.T) {
 		next, _ = key(next, "tab")
 	}
 	s := screen(next)
-	if !strings.Contains(s, "1 not listed: open /home/u/.matchblox/accounts/c…") || strings.Contains(s, "permission denied") {
+	if !strings.Contains(s, "accounts not read: open /home/u/.matchblox/accou…") || strings.Contains(s, "permission denied") {
 		t.Fatalf("the form:\n%s", s)
 	}
 }
