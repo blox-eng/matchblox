@@ -303,6 +303,10 @@ func (m Model) matchRows(q string) []whereRow {
 	for _, mt := range ms {
 		rows = append(rows, repoRows(mt.r, mt.trees, mt.hits, mt.treeHits)...)
 	}
+	// A typed path no row is: the path itself first, so ⏎ takes it.
+	if pathLike(q) && !slices.ContainsFunc(rows, func(r whereRow) bool { return r.picks() && samePath(r.path(), q) }) {
+		rows = append([]whereRow{{kind: rowPath, text: q}}, rows...)
+	}
 	return rows
 }
 
@@ -312,7 +316,7 @@ func (m Model) matchRows(q string) []whereRow {
 func placeScore(q, name, path string) (int, []int) {
 	if pathLike(q) {
 		// A typed path means that path: the places in it or under it.
-		if hasPrefixFold(path, q) || hasPrefixFold(tilde(path), q) {
+		if inPath(path, q) || inPath(tilde(path), q) {
 			return fuzzyRune * len([]rune(q)), nil
 		}
 		return -1, nil
@@ -337,8 +341,22 @@ func pathLike(q string) bool {
 	return strings.HasPrefix(q, "/") || strings.HasPrefix(q, "~") || strings.HasPrefix(q, ".")
 }
 
-func hasPrefixFold(s, prefix string) bool {
-	return len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix)
+// inPath tells if path is the folder q or one under it: /src/api is not
+// in /src/api-gateway.
+func inPath(path, q string) bool {
+	if !strings.HasSuffix(q, "/") {
+		if strings.EqualFold(path, q) {
+			return true
+		}
+		q += "/"
+	}
+	return len(path) >= len(q) && strings.EqualFold(path[:len(q)], q)
+}
+
+// samePath tells if the place at path is the folder q names.
+func samePath(path, q string) bool {
+	q = filepath.Clean(q)
+	return strings.EqualFold(path, q) || strings.EqualFold(tilde(path), q)
 }
 
 // The weights of fuzzy: each matched rune, and the bonus of one at the
@@ -603,7 +621,7 @@ func (m Model) whereLines(iw int) (lines, press []string) {
 	case len(f.rows) == 0:
 		add("", st.muted.Render(fit("no repos known yet · type a path, or paste a git URL", iw)))
 		if m.found == nil || m.found.Consent == "" {
-			add("", st.faint.Render(fit(m.keys.scan.Find.Help().Key+" finds your repos", iw)))
+			add("", st.faint.Render(fit("matchblox scan finds your repos", iw)))
 		}
 	default:
 		top := scrollTop(f.top, f.sel, h, len(f.rows))
@@ -658,7 +676,11 @@ func (m Model) whereCells(r whereRow) (name, path, branch, age, live string) {
 	if !p.at.IsZero() {
 		age = whereAge(m.now().Sub(p.at))
 	}
-	return name, path, branch, age, m.liveText(p.live)
+	n := p.live
+	if r.kind == rowRepo {
+		n, _, _ = p.rank() // a repo counts its worktrees' sessions too
+	}
+	return name, path, branch, age, m.liveText(n)
 }
 
 // treeFolder is a worktree's folder, short: from the parent of its repo's

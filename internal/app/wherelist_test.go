@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -276,7 +277,7 @@ func TestWhereListWithNoRepos(t *testing.T) {
 	m.scanAsk = nil
 	next, _ := key(m, "N")
 	s := screen(next)
-	if !strings.Contains(s, "no repos known yet · type a path, or paste a git URL") || !strings.Contains(s, m.keys.scan.Find.Help().Key+" finds your repos") {
+	if !strings.Contains(s, "no repos known yet · type a path, or paste a git URL") || !strings.Contains(s, "matchblox scan finds your repos") {
 		t.Fatalf("the list:\n%s", s)
 	}
 	st.Found = &proto.Found{Consent: "no"}
@@ -314,5 +315,59 @@ func TestDrawWhereList(t *testing.T) {
 		t.Logf("%d columns:\n%s", w, screen(next))
 		next = typeText(next, "mbx")
 		t.Logf("%d columns, mbx:\n%s", w, screen(next))
+	}
+}
+
+// A typed path is that path: a sibling that starts with the same letters
+// is not it.
+func TestWhereTypedPathIsNotASibling(t *testing.T) {
+	st := lifeState()
+	st.Sessions[0].Cwd = ""
+	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{
+		{Path: "/src/api-gateway", Branch: "main"}, {Path: "/src/api/web", Branch: "main"}}}
+	m, f := loadedWith(t, 100, st)
+	next, _ := key(m, "N")
+	next, _ = next.Update(tea.PasteMsg{Content: "/src/api"})
+	rows := next.(Model).form.rows
+	if sel := next.(Model).whereSelected(); sel.kind != rowPath || sel.path() != "/src/api" {
+		t.Fatalf("selected %+v of %+v", sel, rows)
+	}
+	for _, r := range rows {
+		if r.repo.path == "/src/api-gateway" {
+			t.Fatalf("the sibling matches: %+v", rows)
+		}
+	}
+	if !slices.ContainsFunc(rows, func(r whereRow) bool { return r.repo.path == "/src/api/web" }) {
+		t.Fatalf("a repo under the path is not listed: %+v", rows)
+	}
+	next, _ = key(next, "enter")
+	next, cmd := key(next, "enter")
+	cmd()
+	var n proto.NewSession
+	if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &n) != nil || n.Where != "/src/api" {
+		t.Fatalf("sent %+v", f.acts())
+	}
+	// The exact path of a known repo selects that repo, with no extra row.
+	next, _ = key(m, "N")
+	next, _ = next.Update(tea.PasteMsg{Content: "/src/api-gateway"})
+	if rows := next.(Model).form.rows; len(rows) != 1 || rows[0].kind != rowRepo || rows[0].repo.path != "/src/api-gateway" {
+		t.Fatalf("rows %+v", rows)
+	}
+}
+
+// A repo's row counts its worktrees' sessions too; a worktree's row its own.
+func TestWhereRepoLiveCountsItsWorktrees(t *testing.T) {
+	st := lifeState()
+	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{
+		{Path: "/dev/matchblox", Branch: "main"},
+		{Path: "/dev/.wt/matchblox-174", Main: "/dev/matchblox", Branch: "feat/174"}}}
+	st.Sessions[0].Cwd = "/dev/matchblox"
+	st.Sessions[1].Cwd = "/dev/.wt/matchblox-174/internal"
+	m, _ := loadedWith(t, 100, st)
+	rows := selectable(m.whereRows(""))
+	_, _, _, _, repoLive := m.whereCells(rows[0])
+	_, _, _, _, treeLive := m.whereCells(rows[1])
+	if repoLive != "2 live" || treeLive != "1 live" {
+		t.Fatalf("repo %q, worktree %q", repoLive, treeLive)
 	}
 }
