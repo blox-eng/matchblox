@@ -17,6 +17,9 @@ type ProcRef struct {
 	Start uint64 `json:"start_ticks"`
 }
 
+// maxHops bounds every walk up a line of processes or children.
+const maxHops = 64
+
 type role int
 
 const (
@@ -39,7 +42,7 @@ func (s *Sampler) roleOf(pid int, p procfs.Proc, procs map[int]procfs.Proc, byPI
 	// The process tree: the nearest agent above p, short of a pane's shell
 	// or a tmux server, whose own panes are sessions of their own.
 	crossed := false
-	for cur, hops := p.PPID, 0; cur > 1 && hops < 64; hops++ {
+	for cur, hops := p.PPID, 0; cur > 1 && hops < maxHops; hops++ {
 		q, ok := procs[cur]
 		if !ok {
 			break
@@ -49,7 +52,7 @@ func (s *Sampler) roleOf(pid int, p procfs.Proc, procs map[int]procfs.Proc, byPI
 			return roleNone, 0, ""
 		}
 		if a := ref.name; a != "" && !s.server(cur, a) {
-			for ; hops < 64; hops++ { // a launcher's binary: the launcher holds the row
+			for ; hops < maxHops; hops++ { // a launcher's binary: the launcher holds the row
 				pp, ok := procs[q.PPID]
 				if !ok || s.agentName(q.PPID, pp) != a {
 					break
@@ -153,7 +156,7 @@ func linkChildren(sessions, children []Session) []Session {
 	kept := children[:0]
 	for _, c := range children {
 		at := *c.Parent
-		for hops := 0; hops < 64; hops++ {
+		for hops := 0; hops < maxHops; hops++ {
 			if top[at] {
 				kept = append(kept, c)
 				break
