@@ -223,3 +223,22 @@ func TestChildName(t *testing.T) {
 		}
 	}
 }
+
+// TestAParentWorkingThroughAChildIsSuggestedAsWorking: pane %2's claude
+// rests an hour holding context, so alone it is suggested a clear; with a
+// child working it gets what a session with StatusAgents gets, no clear.
+func TestAParentWorkingThroughAChildIsSuggestedAsWorking(t *testing.T) {
+	alone, _ := sessionOf(lineageSample(copyFixture(t)), 310)
+	if alone.Do != "clear" {
+		t.Fatalf("the fixture's resting claude on %%2 is suggested %q, want clear", alone.Do)
+	}
+	root := copyFixture(t)
+	addProcAt(t, root, 320, 310, "bash", []string{"bash"}, startedAgo(root, 10), 0)
+	addProcAt(t, root, 321, 320, "codex", []string{"codex", "exec", "fix"}, startedAgo(root, 10), 0, "TMUX_PANE=%2")
+	s, _ := sessionOf(lineageSample(root), 310)
+	alone.Status = StatusAgents
+	do, why := DefaultRules.suggest(alone)
+	if s.Do != do || s.Why != why || s.Do == "clear" {
+		t.Fatalf("suggested %q (%s), want %q (%s) as a session with StatusAgents", s.Do, s.Why, do, why)
+	}
+}
