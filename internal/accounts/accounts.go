@@ -247,6 +247,10 @@ func resolve(dir string) string {
 	}
 }
 
+// Resolved is dir with its symlinks resolved and its letter case as on disk:
+// one form of a folder, to compare with another.
+func Resolved(dir string) string { return resolve(dir) }
+
 // SameDir tells whether a and b name the same folder, their symlinks
 // resolved.
 func SameDir(a, b string) bool {

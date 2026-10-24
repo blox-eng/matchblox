@@ -40,6 +40,8 @@ const partSuffix = ".matchblox-part"
 // copier copies the default def into the account's acct, within its limit.
 type copier struct {
 	def, acct string
+	// defReal is def resolved, found once.
+	defReal string
 	// own tells the default's entries the account keeps for itself.
 	own      func(string) bool
 	limit    Limit
@@ -249,17 +251,27 @@ func (c *copier) nameDangling() {
 
 // inDefault is where path lies inside the default, and whether it does.
 func (c *copier) inDefault(path string) (string, bool) {
-	if !SameDir(c.def, path) && !Under(c.def, path) {
+	if c.defReal == "" {
+		c.defReal = resolve(c.def)
+	}
+	rp := resolve(path)
+	if !within(c.defReal, rp) {
 		return "", false
 	}
 	// The place as written, else through the resolved folders.
-	for _, p := range [][2]string{{c.def, path}, {resolve(c.def), path}, {resolve(c.def), resolve(path)}} {
+	for _, p := range [][2]string{{c.def, path}, {c.defReal, path}, {c.defReal, rp}} {
 		if rel, err := filepath.Rel(p[0], p[1]); err == nil && rel != ".." &&
 			!strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return rel, true
 		}
 	}
 	return "", false
+}
+
+// within tells whether dir is root or below it, both resolved.
+func within(root, dir string) bool {
+	rel, err := filepath.Rel(root, dir)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // refused tells whether err is a file system's refusal to clone.

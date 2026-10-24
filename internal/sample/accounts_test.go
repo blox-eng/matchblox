@@ -229,16 +229,39 @@ func TestDefaultViaSymlinkOrCaseIsDefault(t *testing.T) {
 	})
 }
 
-// TestAccountFolderFoundOncePerProcess: a process's folder is kept while it
-// lives, and dropped with it.
+// TestAccountFolderFoundOncePerProcess: a process keeps the classification
+// of its first sample, though the default link moves after it, and drops it
+// when the process is gone.
 func TestAccountFolderFoundOncePerProcess(t *testing.T) {
 	root := copyFixture(t)
-	accountSession(t, root, 950, "claude", "%40", "CLAUDE_CONFIG_DIR="+filepath.Join(root, "home", ".claude-work"))
+	home := filepath.Join(root, "home")
+	a, b := filepath.Join(home, "dot", "a"), filepath.Join(home, "dot", "b")
+	for _, d := range []string{a, b} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	def := filepath.Join(home, ".claude")
+	if err := os.RemoveAll(def); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(a, def); err != nil {
+		t.Fatal(err)
+	}
+	accountSession(t, root, 950, "claude", "%40", "CLAUDE_CONFIG_DIR="+a)
 	smp := newFixtureSampler(root)
 	smp.Agents = []string{"claude"}
-	smp.Sample()
-	if got := smp.tags[procKey{950, 1000}]; got.dir == "" {
-		t.Fatalf("no folder kept for the process: %v", smp.tags)
+	if got := sessionOf(t, smp.Sample(), 950).AccountDir; got != "" {
+		t.Fatalf("the default by its real path: %q", got)
+	}
+	if err := os.Remove(def); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(b, def); err != nil {
+		t.Fatal(err)
+	}
+	if got := sessionOf(t, smp.Sample(), 950).AccountDir; got != "" {
+		t.Fatalf("a moved link changed a live process's folder to %q", got)
 	}
 	if err := os.RemoveAll(filepath.Join(root, "proc", "950")); err != nil {
 		t.Fatal(err)

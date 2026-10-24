@@ -1378,3 +1378,81 @@ func TestLiveFolderByLinkOrCase(t *testing.T) {
 		}
 	})
 }
+
+// TestKnownAccountsReadAgainAfterAnError: a root that could not be read is
+// read again at the next publish, though a chmod leaves its mtime as it was.
+func TestKnownAccountsReadAgainAfterAnError(t *testing.T) {
+	s, _, home := accountTest(t)
+	prepared(t, home, "codex", "work")
+	root := filepath.Join(accounts.Root(home), "codex")
+	agedAccounts(t, home)
+	if err := os.Chmod(root, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(root, 0o700) })
+	if _, err := os.ReadDir(root); err == nil {
+		t.Skip("this user reads a folder with no permission")
+	}
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	if got := s.State().Accounts["codex"]; !reflect.DeepEqual(got, []string{"default"}) {
+		t.Fatalf("unreadable: %v", got)
+	}
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	if got, want := s.State().Accounts["codex"], []string{"default", "work"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("after the fix: %v, want %v", got, want)
+	}
+	if len(s.State().AccountsSkipped) != 0 {
+		t.Fatalf("still named: %v", s.State().AccountsSkipped)
+	}
+}
+
+// TestKnownAccountsNotKeptFromAFreshRoot: an answer read while the root was
+// too new to trust is not kept once it is old enough.
+func TestKnownAccountsNotKeptFromAFreshRoot(t *testing.T) {
+	s, _, home := accountTest(t)
+	prepared(t, home, "claude", "work")
+	fi, err := os.Stat(filepath.Join(accounts.Root(home), "claude"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := fi.ModTime().Add(time.Second)
+	s.Now = func() time.Time { return at }
+	var reads int
+	s.readDir = func(p string) ([]os.DirEntry, error) { reads++; return os.ReadDir(p) }
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	first := reads
+	at = at.Add(time.Minute)
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	if reads == first {
+		t.Fatal("the answer read from a fresh root was kept")
+	}
+	again := reads
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	if reads != again {
+		t.Fatal("an old root is read again")
+	}
+}
+
+// TestTwoSpellingsOfAHandMadeFolderListOnce: one folder named by a link and
+// by its real path is one entry, in the spelling first seen.
+func TestTwoSpellingsOfAHandMadeFolderListOnce(t *testing.T) {
+	s, _, home := accountTest(t)
+	hand := filepath.Join(home, ".claude-work")
+	if err := os.Mkdir(hand, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(home, ".claude-link")
+	if err := os.Symlink(hand, link); err != nil {
+		t.Fatal(err)
+	}
+	snap := lifeSnap(false)
+	snap.Sessions[0].AccountDir = link
+	snap.Sessions[1].AccountDir = hand
+	s.publish(snap, func(state.Doc) {})
+	if got, want := s.State().Accounts["claude"], []string{"default", "~/.claude-link"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}

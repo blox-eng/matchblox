@@ -309,7 +309,9 @@ type folderTag struct {
 // and says whether it has not signed in yet. Only a folder under the
 // accounts root is signing in: a hand-made one may hold a login matchblox
 // does not read (a keyring sign-in). The folder is found once per process:
-// the env of a process does not change, and finding it reads the disk.
+// the env of a process does not change, and finding it reads the disk. A
+// link retargeted while a process lives keeps that process's first
+// classification, as the env cache does.
 func (s *Sampler) tag(sess *Session, agent string, e agentEnv) {
 	key := procKey{sess.PID, sess.Start}
 	t, ok := s.tags[key]

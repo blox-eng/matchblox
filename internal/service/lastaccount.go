@@ -35,7 +35,7 @@ type lastAccountState struct {
 
 // pendingAccount is a new account that is not signed in yet: its label and
 // its folder.
-type pendingAccount struct{ label, folder string }
+type pendingAccount struct{ label, folder, real string }
 
 // lastFile is the file's form. A file from before LastAgent is the bare map
 // of labels.
@@ -103,7 +103,7 @@ func (r *lastAccountState) await(agent, label, folder string) {
 	if r.pending == nil {
 		r.pending = map[string]pendingAccount{}
 	}
-	r.pending[agent] = pendingAccount{label, filepath.Clean(folder)}
+	r.pending[agent] = pendingAccount{label, filepath.Clean(folder), accounts.Resolved(folder)}
 }
 
 // signedIn remembers each pending account that a session of its agent on
@@ -114,7 +114,7 @@ func (r *lastAccountState) signedIn(path string, sessions []sample.Session) {
 	defer r.mu.Unlock()
 	for agent, p := range r.pending {
 		for _, x := range sessions {
-			if x.Agent != agent || x.AccountDir == "" || x.Account == "" || !accounts.SameDir(x.AccountDir, p.folder) {
+			if x.Agent != agent || x.AccountDir == "" || x.Account == "" || accounts.Resolved(x.AccountDir) != p.real {
 				continue
 			}
 			r.loadLocked(path)

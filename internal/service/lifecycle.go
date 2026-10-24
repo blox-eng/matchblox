@@ -921,12 +921,14 @@ func (s *Service) knownAccounts(sessions []sample.Session) (map[string][]string,
 	}
 	out := make(map[string][]string, len(accountAgents))
 	var skipped map[string][]accounts.Skip
+	failed := false // a chmod leaves the mtime: an error is read again
 	for _, agent := range accountAgents {
 		if agent == sample.CursorAgent && s.goos() != "darwin" {
 			continue // Cursor accounts run on macOS only: no field
 		}
 		list := []string{"default"}
-		have, skips, _ := accounts.ListWith(s.readDirOrOS(), home, agent) // unreadable: default only, and named
+		have, skips, err := accounts.ListWith(s.readDirOrOS(), home, agent) // unreadable: default only, and named
+		failed = failed || err != nil
 		list = append(list, have...)
 		if len(skips) > 0 {
 			if skipped == nil {
@@ -934,17 +936,30 @@ func (s *Service) knownAccounts(sessions []sample.Session) (map[string][]string,
 			}
 			skipped[agent] = skips
 		}
+		// A hand-made folder lists once, in the spelling first seen, whatever
+		// links or letter case name it.
+		var hand []string
+		seen := map[string]bool{}
 		for _, x := range sessions {
 			if x.Agent != agent || x.AccountDir == "" || accounts.Under(root, x.AccountDir) {
 				continue
 			}
-			if l := s.folderLabel(x.AccountDir); !slices.Contains(list, l) {
+			if key := accounts.Resolved(x.AccountDir); !seen[key] {
+				seen[key] = true
+				hand = append(hand, s.folderLabel(x.AccountDir))
+			}
+		}
+		slices.Sort(hand)
+		for _, l := range hand {
+			if !slices.Contains(list, l) {
 				list = append(list, l)
 			}
 		}
 		out[agent] = list
 	}
-	s.known.sig, s.known.out, s.known.skipped = sig, out, skipped
+	if !fresh && !failed {
+		s.known.sig, s.known.out, s.known.skipped = sig, out, skipped
+	}
 	return out, skipped
 }
 
@@ -974,7 +989,7 @@ func (s *Service) accountsSig(home string, sessions []sample.Session) (sig strin
 			continue
 		}
 		fmt.Fprint(&b, fi.ModTime().UnixNano())
-		fresh = fresh || time.Since(fi.ModTime()) < recent
+		fresh = fresh || s.now().Sub(fi.ModTime()) < recent
 	}
 	var dirs []string
 	for _, x := range sessions {
