@@ -1,9 +1,9 @@
 package sample
 
 import (
+	"cmp"
 	"maps"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -132,10 +132,10 @@ func childName(agent string, argv []string) string {
 	return agent
 }
 
-// linkChildren keeps the children whose line reaches a session, sets a
-// resting session whose children work to busy with StatusAgents, as a
-// session working through subagents reads, suggested as such,
-// and sorts them by parent, then start.
+// linkChildren keeps the children whose line reaches a session. That
+// session works while they do: it reads busy, and an idle one reads
+// StatusAgents, as a session working through subagents does. The children
+// are sorted by parent, then start.
 func linkChildren(sessions, children []Session, rules Rules) []Session {
 	top := map[ProcRef]int{}
 	for i, x := range sessions {
@@ -150,8 +150,11 @@ func linkChildren(sessions, children []Session, rules Rules) []Session {
 		at := *c.Parent
 		for hops := 0; hops < 64; hops++ {
 			if i, ok := top[at]; ok {
-				if root := &sessions[i]; !root.Busy && root.Status != StatusAgents {
-					root.Busy, root.Status = true, StatusAgents
+				if root := &sessions[i]; !root.Busy {
+					root.Busy = true
+					if root.Status == "idle" {
+						root.Status = StatusAgents
+					}
 					root.Do, root.Why = rules.suggest(*root)
 				}
 				kept = append(kept, c)
@@ -164,12 +167,11 @@ func linkChildren(sessions, children []Session, rules Rules) []Session {
 			at = next
 		}
 	}
-	sort.Slice(kept, func(i, j int) bool {
-		a, b := kept[i], kept[j]
-		if a.Parent.PID != b.Parent.PID {
-			return a.Parent.PID < b.Parent.PID
+	slices.SortFunc(kept, func(a, b Session) int {
+		if c := cmp.Compare(a.Parent.PID, b.Parent.PID); c != 0 {
+			return c
 		}
-		return a.Start < b.Start
+		return cmp.Compare(a.Start, b.Start)
 	})
 	return kept
 }
