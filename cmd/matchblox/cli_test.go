@@ -704,7 +704,7 @@ func TestSessionsPrintsChildrenUnderTheirParent(t *testing.T) {
 	if err := writeSessions(&b, doc, false); err != nil {
 		t.Fatal(err)
 	}
-	if want := "\n     ├─ codex exec (via process)\n       └─ claude -p (via env)\n     └─ opencode run (via process)\n"; !strings.Contains(b.String(), want) {
+	if want := "\n     ├─ codex exec (via process)\n     │ └─ claude -p (via env)\n     └─ opencode run (via process)\n"; !strings.Contains(b.String(), want) {
 		t.Fatalf("want %q in\n%s", want, b.String())
 	}
 	b.Reset()
@@ -721,5 +721,21 @@ func TestSessionsPrintsChildrenUnderTheirParent(t *testing.T) {
 	}
 	if strings.Contains(b.String(), `"children": null`) {
 		t.Fatalf("empty children must be omitted\n%s", b.String())
+	}
+}
+
+// TestSessionsSurvivesALoopInTheStateFile: a child listed twice, once
+// under its own child, as only a hand-edited file can hold, prints and ends.
+func TestSessionsSurvivesALoopInTheStateFile(t *testing.T) {
+	var doc state.Doc
+	doc.Sessions = []sample.Session{{PID: 200, Start: 1, Name: "app"}}
+	doc.Children = []sample.Session{
+		{PID: 221, Start: 2, Name: "a", Parent: &sample.ProcRef{PID: 200, Start: 1}},
+		{PID: 222, Start: 3, Name: "b", Parent: &sample.ProcRef{PID: 221, Start: 2}},
+		{PID: 221, Start: 2, Name: "a", Parent: &sample.ProcRef{PID: 222, Start: 3}},
+	}
+	var b strings.Builder
+	if err := writeSessions(&b, doc, true); err != nil {
+		t.Fatal(err)
 	}
 }

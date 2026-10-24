@@ -1,6 +1,9 @@
 package sample
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // engine is what is known of how one agent runs.
 type engine struct {
@@ -11,16 +14,21 @@ type engine struct {
 }
 
 var engines = map[string]engine{
-	"claude": {Name: "claude", Batch: printRun, ParentEnv: "CLAUDE_PID"},
+	"claude": {
+		Name:      "claude",
+		Batch:     printRun,
+		Server:    func(argv []string) bool { return !printRun(argv) && subcommandIs("mcp")(argv) }, // `claude -p mcp` asks a question
+		ParentEnv: "CLAUDE_PID",
+	},
 	"codex": {
 		Name:  "codex",
 		Batch: func(argv []string) bool { return codexBatch(codexArgv(argv)) },
 		Server: func(argv []string) bool {
 			w := codexWords(codexArgv(argv))
-			return len(w) > 0 && (w[0] == "app-server" || w[0] == "mcp-server")
+			return len(w) > 0 && (w[0] == "app-server" || w[0] == "mcp-server" || w[0] == "mcp")
 		},
 	},
-	"opencode": {Name: "opencode", Batch: opencodeRun},
+	"opencode": {Name: "opencode", Batch: subcommandIs("run"), Server: subcommandIs("serve", "mcp")},
 }
 
 // engineOf is name's entry, or a zero entry with only Name: linked by the
@@ -36,14 +44,16 @@ func printRun(argv []string) bool {
 	return len(argv) > 0 && cursorPrint(argv)
 }
 
-// opencodeRun: the first word after the program, or after its script when
-// an interpreter runs it, is `run`.
-func opencodeRun(argv []string) bool {
-	argv = codexArgv(argv)
-	for _, a := range argv[min(1, len(argv)):] {
-		if !strings.HasPrefix(a, "-") {
-			return a == "run"
+// subcommandIs: the first word after the program, or after its script when
+// an interpreter runs it, is one of words.
+func subcommandIs(words ...string) func([]string) bool {
+	return func(argv []string) bool {
+		argv = codexArgv(argv)
+		for _, a := range argv[min(1, len(argv)):] {
+			if !strings.HasPrefix(a, "-") {
+				return slices.Contains(words, a)
+			}
 		}
+		return false
 	}
-	return false
 }
