@@ -189,11 +189,11 @@ The setup of a new account:
   system refuses to clone, a file is copied byte by byte. A link in the
   default that points inside the default points to the same place in the
   account, so the account reads its own files. A link that points
-  elsewhere, and an entry the account keeps for itself (the lists below),
-  stay shared, and the start names them. The copy stops at 200,000
-  entries, 16 GiB copied byte by byte, or 90 seconds, and names each entry
-  it left out. A cut copy is marked, and goes on where it stopped at the
-  account's next start. Cloning is tested on macOS only; on Linux it is
+  outside the default, or at an entry the account keeps for itself (the
+  lists below), stays on the default's file and is named. The copy stops
+  at 200,000 entries, 16 GiB copied byte by byte, or 90 seconds, and names
+  each entry it left out. A cut copy is marked, and goes on where it
+  stopped at the account's next start. Cloning is tested on macOS only; on Linux it is
   not tested yet.
 - **empty** shares nothing. The agent starts as on its first run.
 

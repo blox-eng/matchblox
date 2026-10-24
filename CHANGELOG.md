@@ -63,14 +63,15 @@ All notable changes to matchblox are in this file. The format follows
   copy-on-write where the file system can, and copied byte by byte where
   it refuses. A link in the default that points inside the default points
   to the same place in the account, so the account reads its own files and
-  never the default's. A link that points elsewhere, and an entry the
-  account keeps for itself, stay shared and are named. The copy stops at
-  200,000 entries, 16 GiB copied byte by byte, or 90 seconds, and names
-  every entry it left out. A cut copy is marked, and goes on where it
-  stopped at the account's next start. Measured on macOS (APFS) with a
-  real 2.0 GB `~/.claude` of 117 links: a copy took 4.6 to 4.8 seconds and
-  used no extra disk, all links into the default were kept inside the
-  account, and a resume over a finished copy took about 0.16 seconds.
+  never the default's. A link that points outside the default, or at an
+  entry the account keeps for itself, stays on the default's file and is
+  named. The copy stops at 200,000 entries, 16 GiB copied byte by byte,
+  or 90 seconds, and names every entry it left out. A cut copy is marked,
+  and goes on where it stopped at the account's next start. Measured on
+  macOS (APFS) with a real 2.0 GB `~/.claude` of 117 links: a copy took
+  4.6 to 4.8 seconds and used no extra disk, all links into the default
+  were kept inside the account, and a resume over a finished copy took
+  about 0.16 seconds.
   Cloning on Linux is compiled and linted only: not tested yet.
   ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - **A start or a switch on an account says what it shared, skipped and
