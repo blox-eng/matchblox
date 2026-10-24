@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"math/rand/v2"
 	"os"
@@ -268,7 +269,7 @@ func TestCloneStartRefusesAnExistingTarget(t *testing.T) {
 		t.Fatalf("ran git %s", b)
 	}
 	// nor outside clone_root, nor a hidden name
-	for _, bad := range []string{filepath.Join(filepath.Dir(root), "r"), filepath.Join(root, "x", "r"), filepath.Join(root, ".r")} {
+	for _, bad := range []string{filepath.Join(filepath.Dir(root), "r"), filepath.Join(root, "x", "r"), filepath.Join(root, ".r.cloning"), root + "/.."} {
 		if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", bad)); res.Err == "" {
 			t.Fatalf("%s: not refused", bad)
 		}
@@ -347,5 +348,87 @@ func TestCloneFromAnAgentsPaneIsRefused(t *testing.T) {
 	// the builder's own shell plans
 	if res := s.act(t.Context(), proto.Act{RecID: "clone:plan", Text: "https://github.com/o/r", From: "%4"}); res.Err != "" {
 		t.Fatal(res.Err)
+	}
+}
+
+func TestCloneDotNamedRepoPlansAndStarts(t *testing.T) {
+	s, root := cloneTest(t)
+	fakeGit(t, "exit 1")
+	p := plan(t, s, "https://github.com/o/.github")
+	if p.Target != filepath.Join(root, ".github") || p.Taken != "" {
+		t.Fatalf("plan %+v", p)
+	}
+	if res := s.act(t.Context(), startAct(t, p.URL, p.Target)); res.Err != "" {
+		t.Fatalf("start: %q", res.Err)
+	}
+	clonesUntil(t, s, "ended", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Err != "" })
+}
+
+func TestCloneStaleSiblingFreesItsName(t *testing.T) {
+	s, root := cloneTest(t)
+	target := filepath.Join(root, "r")
+	stale := clone.Cloning(target)
+	if err := os.MkdirAll(filepath.Join(stale, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := plan(t, s, "https://github.com/o/r")
+	if p.Target != target || p.Taken != "" {
+		t.Fatalf("plan %+v", p)
+	}
+	if _, err := os.Lstat(stale); !os.IsNotExist(err) {
+		t.Fatalf("the stale sibling is left: %v", err)
+	}
+	// start alone clears one too
+	if err := os.MkdirAll(stale, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fakeGit(t, "exit 1")
+	if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target)); res.Err != "" {
+		t.Fatalf("start: %q", res.Err)
+	}
+	clonesUntil(t, s, "ended", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Err != "" })
+	// a link named as the sibling is never followed nor removed
+	other := t.TempDir()
+	if err := os.Symlink(other, stale); err != nil {
+		t.Fatal(err)
+	}
+	if p := plan(t, s, "https://github.com/o/r"); p.Target == target {
+		t.Fatalf("a link freed the name: %+v", p)
+	}
+	if _, err := os.Lstat(stale); err != nil {
+		t.Fatalf("the link is gone: %v", err)
+	}
+}
+
+func TestClonePlanKeepsARunningSibling(t *testing.T) {
+	s, root := cloneTest(t)
+	fakeGit(t, slowGit)
+	target := filepath.Join(root, "r")
+	if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target)); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	t.Cleanup(func() { s.act(t.Context(), consoleAct("clone:stop", target)) })
+	clonesUntil(t, s, "10%", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Pct == 10 })
+	if p := plan(t, s, "https://github.com/o/r"); p.Taken != "being cloned" {
+		t.Fatalf("plan %+v", p)
+	}
+	if _, err := os.Lstat(clone.Cloning(target)); err != nil {
+		t.Fatalf("a plan removed a running clone's folder: %v", err)
+	}
+}
+
+func TestShutdownStopsClonesAndCleansUp(t *testing.T) {
+	s, root := cloneTest(t)
+	fakeGit(t, slowGit)
+	target := filepath.Join(root, "r")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if res := s.act(ctx, startAct(t, "https://github.com/o/r", target)); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	clonesUntil(t, s, "10%", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Pct == 10 })
+	s.stopClones(waitLimit)
+	if _, err := os.Lstat(clone.Cloning(target)); !os.IsNotExist(err) {
+		t.Fatalf("the partial is left: %v", err)
 	}
 }

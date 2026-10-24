@@ -153,7 +153,7 @@ func (s *Service) planClone(r gitremote.Remote) (proto.ClonePlan, error) {
 
 	taken := func(name string) bool {
 		t := filepath.Join(root, name)
-		return exists(t) || exists(clone.Cloning(t)) || running[t]
+		return exists(t) || running[t] || s.siblingHeld(root, t)
 	}
 	p := proto.ClonePlan{Repo: r.Slug(), URL: r.URL, Target: filepath.Join(root, r.Repo)}
 	same := false
@@ -234,7 +234,7 @@ func (s *Service) cloneStart(ctx context.Context, text string) proto.Result {
 		return proto.Result{Err: "no clone_root is set"}
 	}
 	target := ExpandHome(strings.TrimSpace(cs.Target))
-	if filepath.Dir(target) != root || strings.HasPrefix(filepath.Base(target), ".") {
+	if base := filepath.Base(target); filepath.Dir(target) != root || strings.HasSuffix(base, ".cloning") || strings.Contains(base, ".cloning.stale-") {
 		return proto.Result{Err: tildeIn(fmt.Sprintf("a clone goes into a folder of its own in %s: %s is not one", root, target))}
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil { //nolint:gosec // the builder's own source folder
@@ -245,11 +245,18 @@ func (s *Service) cloneStart(ctx context.Context, text string) proto.Result {
 		s.mu.Unlock()
 		return proto.Result{Err: tildeIn(target + " is being cloned")}
 	}
-	for _, p := range []string{target, clone.Cloning(target)} {
-		if exists(p) {
+	if exists(target) {
+		s.mu.Unlock()
+		return proto.Result{Err: tildeIn(target + " is there already")}
+	}
+	trash := ""
+	if sib := clone.Cloning(target); exists(sib) {
+		t, ok := staleAway(root, target) // no clone into target runs: checked above
+		if !ok {
 			s.mu.Unlock()
-			return proto.Result{Err: tildeIn(p + " is there already")}
+			return proto.Result{Err: tildeIn(sib + " is there already")}
 		}
+		trash = t
 	}
 	jctx, cancel := context.WithCancel(ctx)
 	j := &cloneJob{cancel: cancel, done: make(chan struct{}), c: proto.Clone{Target: target, Repo: r.Slug(), Pct: -1}}
@@ -258,6 +265,9 @@ func (s *Service) cloneStart(ctx context.Context, text string) proto.Result {
 	}
 	s.clones[target] = j
 	s.mu.Unlock()
+	if trash != "" {
+		_ = os.RemoveAll(trash)
+	}
 	s.broadcast()
 	go s.runClone(jctx, j, r)
 	return proto.Result{}
@@ -325,4 +335,69 @@ func (s *Service) cloneList() []proto.Clone {
 	}
 	slices.SortFunc(out, func(a, b proto.Clone) int { return strings.Compare(a.Target, b.Target) })
 	return out
+}
+
+// stopClones stops the clones that run and waits, at most d, until each
+// has removed its partial folder: a clone cut off by the service's end
+// leaves nothing behind.
+func (s *Service) stopClones(d time.Duration) {
+	s.mu.Lock()
+	var running []*cloneJob
+	for _, j := range s.clones {
+		if j.end.IsZero() {
+			running = append(running, j)
+		}
+	}
+	s.mu.Unlock()
+	limit := time.After(d)
+	for _, j := range running {
+		j.cancel()
+	}
+	for _, j := range running {
+		select {
+		case <-j.done:
+		case <-limit:
+			return
+		}
+	}
+}
+
+// staleAway moves aside the work folder of a clone that no longer runs
+// (the service ended while it ran), so its name is free again. Only a real
+// folder named as target's sibling directly in clone_root goes; it returns
+// where it went, for the caller to remove outside s.mu. Hold s.mu, and
+// know no clone into target runs.
+func staleAway(root, target string) (string, bool) {
+	sib := clone.Cloning(target)
+	if filepath.Dir(sib) != root {
+		return "", false
+	}
+	fi, err := os.Lstat(sib)
+	if err != nil || !fi.IsDir() {
+		return "", false
+	}
+	trash := fmt.Sprintf("%s.stale-%d", sib, time.Now().UnixNano())
+	if os.Rename(sib, trash) != nil {
+		return "", false
+	}
+	return trash, true
+}
+
+// siblingHeld tells if target's work folder holds its name: a clone into
+// it runs, or the folder cannot be cleared. A stale one is removed.
+func (s *Service) siblingHeld(root, target string) bool {
+	if !exists(clone.Cloning(target)) {
+		return false
+	}
+	s.mu.Lock()
+	if j := s.clones[target]; j != nil && j.end.IsZero() {
+		s.mu.Unlock()
+		return true
+	}
+	trash, ok := staleAway(root, target)
+	s.mu.Unlock()
+	if ok {
+		_ = os.RemoveAll(trash)
+	}
+	return !ok
 }

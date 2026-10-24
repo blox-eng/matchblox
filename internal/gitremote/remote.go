@@ -42,9 +42,9 @@ func Parse(s, protocol string) (Remote, bool) {
 		return Remote{}, false
 	}
 	if protocol == "ssh" {
-		r.URL = "git@github.com:" + m[1] + "/" + m[2] + ".git"
+		r.URL = "git@github.com:" + m[1] + "/" + r.Repo + ".git"
 	} else {
-		r.URL = "https://github.com/" + m[1] + "/" + m[2] + ".git"
+		r.URL = "https://github.com/" + m[1] + "/" + r.Repo + ".git"
 	}
 	return r, true
 }

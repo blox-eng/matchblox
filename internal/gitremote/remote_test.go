@@ -10,6 +10,8 @@ func TestParse(t *testing.T) {
 		{"ssh://git@gitlab.example/o/r.git", "https", "ssh://git@gitlab.example/o/r.git", "o/r"},
 		{"gh:o/r", "ssh", "git@github.com:o/r.git", "o/r"},
 		{"o/r", "https", "https://github.com/o/r.git", "o/r"},
+		{"o/r.git", "https", "https://github.com/o/r.git", "o/r"},
+		{"gh:o/r.git", "ssh", "git@github.com:o/r.git", "o/r"},
 		{" https://github.com/o/r/ ", "https", "https://github.com/o/r", "o/r"},
 	} {
 		r, ok := Parse(c.in, c.proto)

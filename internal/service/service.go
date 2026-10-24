@@ -304,6 +304,7 @@ func (s *Service) Serve(ctx context.Context, l net.Listener) error {
 	}()
 	<-ctx.Done()
 	l.Close()
+	s.stopClones(cloneStopWait) // a clone cut off removes its partial folder first
 	if err := context.Cause(ctx); errors.Is(err, ErrReplaced) || errors.Is(err, ErrSocketGone) {
 		return err
 	}
