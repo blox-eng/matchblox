@@ -1606,3 +1606,30 @@ func TestAccountSwitchDropsTheServersSignIn(t *testing.T) {
 		t.Errorf("ran %q, want %v unset", (*ran)[0], signInEnv["codex"])
 	}
 }
+
+// TestNewAccountRefusedFromAgentPaneClaimingConsole: a console hello does not
+// make an agent's pane a person's, so it picks no account, new or existing.
+func TestNewAccountRefusedFromAgentPaneClaimingConsole(t *testing.T) {
+	for _, n := range []proto.NewSession{
+		{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: "work2", NewAccount: true},
+		{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: "work"},
+	} {
+		s, ran := lifeTest(t)
+		a := newAct(t, n)
+		a.From = "%1"
+		if res := s.act(t.Context(), a); res.Err != accountRefused || len(*ran) != 0 {
+			t.Fatalf("%+v: err %q ran %q", n, res.Err, *ran)
+		}
+	}
+}
+
+// TestNewOnDefaultStillStartsFromAConsoleInAnAgentPane: only an account is
+// refused there, a plain new session on default is not.
+func TestNewOnDefaultStillStartsFromAConsoleInAnAgentPane(t *testing.T) {
+	s, ran := lifeTest(t)
+	a := newAct(t, proto.NewSession{Where: t.TempDir(), Agent: "claude", Name: "fresh", Account: "default"})
+	a.From = "%1"
+	if res := s.act(t.Context(), a); res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+}

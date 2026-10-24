@@ -59,6 +59,9 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- An agent's pane cannot start a session on an account, new or not, even
+  when it says it is a console.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - An agent that the Codex app-server runs (such as `codex exec`) is not
   a session, and a `node` launch of `codex app-server` is no session either.
   ([#170](https://github.com/blox-eng/matchblox/issues/170))
