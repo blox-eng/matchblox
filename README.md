@@ -74,7 +74,9 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   from the shell.
 - **Ships**: every pull request your sessions drive, on one track from CI
   to live, said in words. One that waits for you merges after a typed `y`.
-- **The dock**: what `/usage` says for each account, in percentages; the
+- **The dock**: what `/usage` says for each account, in percentages, each
+  named by its provider (`✻ Claude Team`, `❋ OpenAI Team`), with its logo
+  in kitty and Ghostty; the
   machine; and the stoker. Press `n` before you sleep: each session that
   fills its context compacts itself and leaves one line on how to continue.
 - **Orders for the stoker**: matchblox starts the stoker agent you choose
@@ -130,7 +132,9 @@ and [SECURITY.md](SECURITY.md).
 
 matchblox works without a config. The first run writes
 `~/.config/matchblox/config.toml` with goals for this machine and the agents
-it finds. Every key is in [config.example.toml](config.example.toml) and on
+it finds. Every known agent (Claude Code, Codex, OpenCode, Cursor, Gemini,
+aider, crush, qwen) is a session wherever it is installed; `agents` adds
+others. Every key is in [config.example.toml](config.example.toml) and on
 [Config](https://docs.matchblox.com/config/).
 
 ## Built on tmux
