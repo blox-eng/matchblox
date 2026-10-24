@@ -1,7 +1,7 @@
 # Sessions as a tree: design
 
-Date: 2026-10-24. Status: built. Issue: #206. Live-checks and closes: #157
-(already fixed in code by #187).
+Date: 2026-10-24. Status: built. Issue: #206. Related: #157, already fixed
+in code by #187; its live repro was not run in this work, so it stays open.
 
 ## Changed while planning (2026-10-24)
 
@@ -12,11 +12,16 @@ Date: 2026-10-24. Status: built. Issue: #206. Live-checks and closes: #157
 - The walk stops at a pane's shell or a tmux server.
 - "A family sorts by its most urgent member" falls away, because a child
   never waits.
-- A parent whose child works reads Busy with `StatusAgents`, the same
-  invariant as a session working through subagents, and its compact and
-  clear suggestion is recomputed.
-- A parent's `Agents` stays the in-process subagent count. Children show on
-  their own `children` line.
+- A parent's own state is never changed by its children: its busy, status,
+  suggestion and `Agents` (the in-process subagent count) read as they would
+  without them. Children show on their own rows and `children` line.
+- The env proof covers only a detached batch run. A detached interactive
+  agent may still be attached to, so it keeps its own row.
+- Cursor's `agent -p` as a batch child is dropped: `agentName` never names
+  it, so no rule of the engine table can reach it.
+- The engine contract test is not built: `engine_test.go` checks each
+  entry's rules and the lineage fixtures cover the cases it listed.
+- #157 is not closed by this work: its live repro was not run.
 - A top-level `codex mcp-server` gets no row (the engine table's `Server`
   rule).
 - `matchblox sessions` prints children under their parent, and `--json`
@@ -53,15 +58,14 @@ a screen-rule manifest.
    re-parented to init or a subreaper still finds its parent, through an
    engine's own marker in its environment, verified against `/proc`.
 4. **Sessions draws the tree.** A child row sits under its parent with
-   `├─` / `└─`, in every group mode. It shows its own agent, status and
-   context. The family sorts by its most urgent member.
-5. **Servers are *none*, through the engine table.** `codex app-server`
-   (#157, fixed by #187), `codex mcp-server` and Cursor's `worker-server`
-   are *none*: their engine's `Server` rule says so. #157's repro is run
-   live in this work and the issue closed on it.
+   `├─` / `└─`, in every group mode. It shows its own name and status.
+5. **Servers are *none*.** `codex app-server` (#157, fixed by #187) and
+   `codex mcp-server` are *none* by Codex's `Server` rule. Cursor's
+   `worker-server` is never named an agent (`cursorLauncher`). #157's live
+   repro was not run in this work, so it stays open.
 6. **One engine table.** What each engine needs for this lives in one typed
-   Go table: its commands, which argv is a batch run, which is a server,
-   and which environment variable names its parent. Adding an engine is one
+   Go table: which argv is a batch run, which is a server, and which
+   environment variable names its parent. Adding an engine is one
    entry plus its fixture test. Adding a runtime touches no engine entry.
 
 ## Non-goals
@@ -89,8 +93,9 @@ a screen-rule manifest.
 - **Lineage that widens an action.** A key on a parent never acts on its
   children, and a key on a child never acts on its parent. `kill` keeps its
   exact target and its existing guards.
-- **A child that hides a wait.** A child that waits for the builder still
-  reaches the queue (see Goal 4: its family sorts as waiting).
+- **A child that hides a wait.** A child never changes how its parent
+  reads, so a parent that waits for the builder still reaches the queue
+  while its child works.
 
 ## Constraints
 
@@ -139,8 +144,8 @@ For each live agent process `p` (an `agentName` match, as today):
 4. Else: **session**, as today.
 
 `underAgent`'s silent drop goes away. Its walk becomes step 1 of the
-parent proof. Cursor's `agent -p` stays no agent at top level (as
-`cursorPrint` has it today); under a session it is a batch child.
+parent proof. Cursor's `agent -p` is no agent at all (`agentName` never
+names it, as `cursorPrint` has it), so it is no one's child either.
 
 ### Proving a parent
 
@@ -151,13 +156,15 @@ in `Via`.
    as today) to the nearest ancestor that is an agent process with a role
    of session or child. That ancestor is the parent. A tree walk cannot be
    forged by the child.
-2. **`env`: an engine marker.** Only for a process that the walk proves
-   *detached*: it reached init or a subreaper without passing a tmux
-   server or a pane's shell, and `p` has no controlling tty. A pane
-   session never takes the env path: a tmux server started from a Claude
-   Bash call seeds every pane with that call's `CLAUDE_PID`, and those are
-   honest facts that would draw a false family. Then read the variable that `p`'s *suspected* parent engine exports to
-   its shells (Claude Code: `CLAUDE_PID`). Accept the named pid only if all
+2. **`env`: an engine marker.** Only for a batch run (its own engine's
+   `Batch` rule) that the walk proves *detached*: it reached init or a
+   subreaper without passing a tmux server or a pane's shell, and `p` has
+   no controlling tty. A detached interactive agent may still be attached
+   to, so it keeps its own row. A pane session never takes the env path: a
+   tmux server started from a Claude Bash call seeds every pane with that
+   call's `CLAUDE_PID`, and those are honest facts that would draw a false
+   family. Then read the variable that `p`'s *suspected* parent engine
+   exports to its shells (Claude Code: `CLAUDE_PID`). Accept the named pid only if all
    hold:
    - it is alive, and it is an agent process of the engine that exports
      that variable;
@@ -179,22 +186,25 @@ deeper ones into `└─ … N more`.
 
 ```go
 type engine struct {
-	Name      string              // as in config agents: claude, codex, cursor-agent …
-	Batch     func([]string) bool // argv runs it with no person at it: exec, -p
+	Name      string              // as in config agents
+	Batch     func([]string) bool // argv runs it with no person at it
 	Server    func([]string) bool // argv is a daemon or server: never a session
-	ParentEnv string              // the variable it exports to its shells naming its own pid; "" if none
+	ParentEnv string              // the variable it exports to its shells naming its own pid
 }
 ```
 
-Today's ad-hoc helpers move into it: `codexBatch`, `codexServer`,
-`cursorLauncher`'s worker-server rule. Engines without a known marker
-(Codex, Cursor, OpenCode, the others in `docs/agents.md`) set `ParentEnv`
-to `""` and are linked by the process tree only. Any configured agent with
-no entry gets a zero entry: process tree only, no batch or server rule.
+The table has entries for Claude Code, Codex and OpenCode, built on
+today's helpers (`codexBatch`, `codexArgv`). Engines without a known marker
+(Codex, OpenCode) leave `ParentEnv` empty and are linked by the process
+tree only. Any configured agent with no entry (Cursor, the others in
+`docs/agents.md`) gets a zero entry: process tree only, no batch or server
+rule. Cursor's worker-server stays out of the table: `cursorLauncher`
+never names it an agent.
 
-A contract test runs every entry against the same lineage fixtures: a
-direct child, a re-parented child with a valid marker, one with a forged
-marker, one with a reused pid, and a stray daemon.
+There is no separate contract test. `engine_test.go` checks each entry's
+batch, server and marker rules, and the lineage fixtures cover a direct
+child, a re-parented child with a valid marker, forged markers, a reused
+pid and a server.
 
 **Runtimes stay out of the table.** Which pane a process belongs to
 (`TMUX_PANE` today, `HERDR_PANE_ID` with #200) is the runtime's question,
@@ -235,44 +245,34 @@ Parent *ProcRef `json:"parent,omitempty"` // the session that started this one
 Via    string   `json:"via,omitempty"`    // process | env: how the link was proven
 ```
 
-A child's identity is its `ProcRef`, never its parent's pane. Two kinds:
-
-- **A child with a pane of its own**: its controlling tty is a pane's tty
-  that differs from its parent's (an agent started in a new tmux window or
-  pane). It is a full session: pane, hooks, peek, answer, jump and the
-  queue work as for any session.
-- **A child in its parent's pane**: no controlling tty, or its parent's
-  (a `codex exec` or `claude -p` from a Bash call, which Claude Code runs
-  under `setsid` with no tty). Its `Pane` is empty, so no map keyed by
-  pane can confuse it with its parent. It is shown, never acted on: no
-  keys, no peek of a screen, no queue item, no hook match. Nobody could
-  answer it anyway. `matchblox sessions` prints children indented under their
-parent. `--json` carries `parent` and `via`.
+Children live in `Snapshot.Children`, never in `Sessions`. A child's
+identity is its `ProcRef`, never its parent's pane. Every child runs in its
+parent's pane, with no controlling tty or its parent's (a `codex exec` or
+`claude -p` from a Bash call, which Claude Code runs under `setsid` with no
+tty). Its `Pane` is empty, so no map keyed by pane can confuse it with its
+parent. It is shown, never acted on: no keys, no peek of a screen, no queue
+item, no hook match. Nobody could answer it anyway. `matchblox sessions`
+prints children indented under their parent, and `--json` nests them in
+`children` with `name`, `agent`, `via` and `pid`.
 
 ### Console
 
 - In every group mode, a child is drawn right after its parent, never on
-  its own under another group label. The family's group is that of its
-  most urgent member: a child with its own pane that waits for you puts
-  the family in WAITS FOR YOU, with the child row marked.
-- The child row: `├─` / `└─` in the tracks where the name starts, then its
-  own word, agent, status and context bar. A narrow (phone) layout keeps
-  the branch glyph and drops columns as it does today.
-- The opened parent row adds a line: `children  codex · busy, claude -p · idle`.
+  its own under another group label. The parent's group is its own.
+- The child row: `├─` / `└─`, then its name and status. Under a child with
+  siblings below, a `│` carries down; under a last child, blank space, as
+  `git log --graph` draws it. The phone keeps the same branches.
+- The opened parent row adds a line: `children  codex exec · claude -p`.
 - When a child ends, its row goes at the next sample. Nothing lingers.
 - `Agents` (in-process subagents) keeps its current count line.
 
 ### Queue and stoker
 
-- A child with its own pane that waits is a queue item like any other,
-  labelled with its parent: `claude (under app)`. A child in its
-  parent's pane is never a queue item.
-- **The sampler** sets a parent whose turn ended but whose child works to
-  `StatusAgents`, and `Agents` counts its working children with its
-  in-process subagents. So the console, the phone, the queue and
-  `status --json` all show the parent working, and `Resting`/`Works` keep
-  their meaning. The stoker never targets a child: no compact, no clear,
-  no go.
+- A child is never a queue item: it has no pane.
+- A parent's own state is never changed by its children. The sampler leaves
+  its busy, status, suggestion and `Agents` as they would be without them,
+  so the queue and the stoker treat the parent as they would without the
+  child. The stoker never targets a child: no compact, no clear, no go.
 
 ### Short-lived helpers
 
@@ -288,27 +288,28 @@ child shows at once.
   `CLAUDE_PID` with `via: env`.
 - A process that forges `CLAUDE_PID` to a session started after it, to
   another user's session, or to a dead pid stays top-level.
-- #157's live repro shows one claude row and no codex row on the pane.
+- A detached interactive agent with a valid `CLAUDE_PID` stays a session.
+- #157's live repro shows one claude row and no codex row on the pane. Not
+  run in this work; #157 stays open.
 - A child in its parent's pane has an empty `Pane`; no key reaches the
   parent through it.
 - An agent started in a pane of a tmux server that inherited `CLAUDE_PID`
   stays top-level.
 - `kill` on a parent targets only the parent. The stoker never acts on a
-  child, and waits while a child works.
-- Every engine entry passes the contract test. Adding a fake engine in the
-  test needs no change outside its entry.
+  child, and treats the parent as it would without it.
+- Every engine entry passes `engine_test.go` and the lineage fixtures.
+  Adding an engine needs no change outside its entry.
 
 ## Calls made in this design (for review)
 
 - The child-row lifetime threshold of 2 s for batch children.
 - Four drawn levels, then `… N more`.
-- A family sorts by its most urgent member.
 - `procfs` gains session id, tty and uid.
 - A child in its parent's pane is shown only, never acted on.
-- The env proof only for a detached process with no tty.
+- The env proof only for a detached batch run with no tty.
 - Same engine, direct parent, no shell between: one session, launcher's row.
 - `codex mcp-server` is a server (*none*), not a batch child.
-- A working child makes its parent `StatusAgents` in the sampler.
+- A child never changes its parent's state.
 - The new design lives in `design/`, following the repo's numbered docs,
   not `docs/superpowers/specs/`.
 
