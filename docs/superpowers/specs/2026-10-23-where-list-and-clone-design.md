@@ -13,10 +13,10 @@ repo is not on the host yet, they paste its URL and matchblox clones it
 and starts there. They never leave the console to `git clone`, and they
 never hunt with ← → through repos in an order unrelated to their work.
 
-Inspiration (the builder liked these): the Where picker of Goodboy's New
+Inspiration (the builder liked these): the Where picker of a desktop agent app's New
 session page (Suggested first, then all by name; one ranked list once you
 type) and its branch tree (branches under their repo with tree lines);
-herdr's "follow" (a new workspace starts where you are) and "an open
+a terminal agent multiplexer's "follow" (a new workspace starts where you are) and "an open
 checkout is focused, never opened twice".
 
 ## Goals
@@ -75,11 +75,11 @@ first`, and come back when the builder picks a row or leaves `where`.
 │ where  › a repo, a path, or a git URL▏                        │
 │                                                               │
 │ SUGGESTED                                                     │
-│▌matchblox        ~/Lexroom/dev        main        now  2 live │
+│▌matchblox        ~/dev                main        now  2 live │
 │  ├─ feat/174     .wt/matchblox-174    #201        2h   1 live │
 │  ╰─ fix/185      .wt/matchblox-185    #198        1d          │
-│  lexroom-api     ~/Lexroom/dev        dev         40m  1 live │
-│  goodboy         ~/src                main        1h          │
+│  shop-api        ~/dev                dev         40m  1 live │
+│  notes           ~/src                main        1h          │
 │                                                               │
 │ ALL · 52 · by name                                            │
 │  advent-2025     ~/src/fun            main        11mo        │
@@ -125,7 +125,7 @@ first`, and come back when the builder picks a row or leaves `where`.
 ```
 │ where  › mbx▏                                                 │
 │                                                               │
-│▌matchblox        ~/Lexroom/dev        main        now  2 live │
+│▌matchblox        ~/dev                main        now  2 live │
 │  mbxctl          ~/src/tools          dev         2w          │
 │  matchblox-site  ~/src                main        3d          │
 │  3 of 52                                                      │
@@ -135,7 +135,7 @@ first`, and come back when the builder picks a row or leaves `where`.
 - Fuzzy subsequence match on name and path. Word starts, path-segment
   starts and runs of letters score higher; recency only breaks near-ties
   (a much better text match always wins). `mbx` finds
-  `~/Lexroom/dev/matchblox`.
+  `~/dev/matchblox`.
 - Matched letters are marked: `fg` bold with an underline (the builder
   checks this against the replay's token rule; if underline is not
   allowed, bold alone).
@@ -148,9 +148,9 @@ first`, and come back when the builder picks a row or leaves `where`.
 ### 3. A git URL
 
 ```
-│ where  › https://github.com/akhayam99/goodboy▏                │
+│ where  › https://github.com/o/r▏                              │
 │                                                               │
-│▌↓ clone akhayam99/goodboy into ~/src/goodboy                  │
+│▌↓ clone o/r into ~/src/r                                      │
 ```
 
 See "Clone" below for every case of the row.
@@ -213,7 +213,7 @@ Notes:
 
 | On disk | The rows | ⏎ on a row |
 |---|---|---|
-| a known repo anywhere has the same remote | `start in ~/Lexroom/dev/r (already a clone of o/r)`, selected, above the clone row | picks that path, as any repo row |
+| a known repo anywhere has the same remote | `start in ~/dev/r (already a clone of o/r)`, selected, above the clone row | picks that path, as any repo row |
 | the target is the same repo | `start in ~/src/r (already a clone of o/r)`, selected, then `clone anew into ~/src/r-ember` | picks the path / starts the clone anew |
 | nothing at the target | `clone o/r into ~/src/r` | starts the clone |
 | another repo, a non-repo folder, or a file at the target | `clone o/r into ~/src/r-ember (~/src/r is another repo)` | starts the clone into the free name |
