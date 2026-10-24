@@ -1902,9 +1902,19 @@ func TestSwitchRefusesWhenTheLastAccountChanged(t *testing.T) {
 	}
 }
 
+// confirmedAccount is the account matchblox switch sends for agent, as
+// cmd/matchblox switchAct computes it: the last one if it is listed, else
+// default.
+func confirmedAccount(doc proto.State, agent string) string {
+	if a := doc.LastAccount[agent]; a != "default" && slices.Contains(doc.Accounts[agent], a) {
+		return a
+	}
+	return "default"
+}
+
 // TestSwitchWithTwoSpellingsOfTheLastFolderRuns: the last account is a
-// hand-made folder stored in a spelling the list drops for another, so the
-// clients send default; the switch runs.
+// hand-made folder stored in a spelling the list drops for another. The
+// confirm shows the listed spelling, and the switch runs on its folder.
 func TestSwitchWithTwoSpellingsOfTheLastFolderRuns(t *testing.T) {
 	s, ran, home := switchAccountTest(t)
 	hand := filepath.Join(home, ".claude-work")
@@ -1922,14 +1932,45 @@ func TestSwitchWithTwoSpellingsOfTheLastFolderRuns(t *testing.T) {
 	s.lastAccounts.set(lastAccountsPath(s.StatePath), "claude", "~/.claude-work")
 	s.publish(snap, func(state.Doc) {})
 	*ran = nil
-	// What matchblox switch sends: the last account if it is listed, else default.
-	doc := s.State()
-	sw := proto.SwitchAgent{Agent: "claude", Handoff: proto.DefaultHandoff, Account: "default"}
-	if a := doc.LastAccount["claude"]; a != "default" && slices.Contains(doc.Accounts["claude"], a) {
-		sw.Account = a
+	sw := proto.SwitchAgent{Agent: "claude", Handoff: proto.DefaultHandoff, Account: confirmedAccount(s.State(), "claude")}
+	if sw.Account != "~/.claude-link" {
+		t.Fatalf("the confirm shows %q, want the listed spelling ~/.claude-link", sw.Account)
 	}
 	res := s.act(t.Context(), switchAct(t, "%3", sw))
 	if res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("sent %q: err %q ran %q", sw.Account, res.Err, *ran)
+	}
+	if !slices.Contains((*ran)[0], "CLAUDE_CONFIG_DIR="+link) {
+		t.Fatalf("ran %q, want it on %s, the folder the confirm shows", (*ran)[0], link)
+	}
+}
+
+// TestSwitchOnALastAccountAStartRefusesShowsAndRunsDefault: a listed codex
+// account whose socket path would be too long is not the last account: the
+// confirm shows default, and default runs.
+func TestSwitchOnALastAccountAStartRefusesShowsAndRunsDefault(t *testing.T) {
+	s, ran, home := switchAccountTest(t)
+	s.Home = filepath.Join(home, strings.Repeat("h", 60))
+	prepared(t, s.Home, "codex", "team")
+	if accounts.CheckName("codex", "team", s.Home, s.goos()) == nil {
+		t.Fatal("the test needs a name a start refuses")
+	}
+	s.lastAccounts.set(lastAccountsPath(s.StatePath), "codex", "team")
+	s.publish(lifeSnap(false), func(state.Doc) {})
+	doc := s.State()
+	if !slices.Contains(doc.Accounts["codex"], "team") {
+		t.Fatalf("team is not listed: %v", doc.Accounts["codex"])
+	}
+	sw := proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff, Account: confirmedAccount(doc, "codex")}
+	if sw.Account != "default" {
+		t.Fatalf("the confirm shows %q, want default", sw.Account)
+	}
+	*ran = nil
+	res := s.act(t.Context(), switchAct(t, "%1", sw))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("err %q ran %q", res.Err, *ran)
+	}
+	if got := strings.Join((*ran)[0], " "); strings.Contains(got, "CODEX_HOME") {
+		t.Fatalf("ran %q, want the default", got)
 	}
 }

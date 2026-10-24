@@ -415,7 +415,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	}
 	known, skipped := s.knownAccounts(snap.Sessions)
 	s.lastAccounts.signedIn(lastAccountsPath(s.StatePath), snap.Sessions)
-	last := s.lastAccounts.listed(lastAccountsPath(s.StatePath), known)
+	last := s.lastListed(known)
 	lastAgent := s.lastAccounts.lastAgent(lastAccountsPath(s.StatePath))
 	s.mu.Lock()
 	s.setDoors(gen, ds)

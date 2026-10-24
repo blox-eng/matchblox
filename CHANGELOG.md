@@ -111,7 +111,9 @@ All notable changes to matchblox are in this file. The format follows
   and `matchblox switch` send the account they would start the agent on.
   If the agent's last account changed meanwhile, the switch is refused
   with `the last <agent> account is now <x>: switch again`, and nothing
-  moves.
+  moves. A hand-made folder named two ways shows, and runs, under the
+  spelling the list shows; a last account a start would refuse shows, and
+  runs, as `default`.
   ([#170](https://github.com/blox-eng/matchblox/issues/170))
 - **`N` names each account folder it does not offer, and why.** A folder
   under `~/.matchblox/accounts/<agent>/` whose name is not a-z, 0-9 and -,

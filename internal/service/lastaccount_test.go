@@ -352,13 +352,13 @@ func TestNewAccountIsRememberedOnceSignedIn(t *testing.T) {
 	if got := lastIn(s, pending, "claude"); got != "work" {
 		t.Fatalf("signing in: %q, want work", got)
 	}
-	if acct := s.switchAccount("claude"); acct == nil || acct.folder != work {
+	if _, acct := s.switchAccount("claude"); acct == nil || acct.folder != work {
 		t.Fatalf("a switch starts on %+v, want work", acct)
 	}
 	if got := lastIn(s, signedInOn(fresh), "claude"); got != "fresh" {
 		t.Fatalf("signed in: %q, want fresh", got)
 	}
-	if acct := s.switchAccount("claude"); acct == nil || acct.folder != fresh {
+	if _, acct := s.switchAccount("claude"); acct == nil || acct.folder != fresh {
 		t.Fatalf("a switch starts on %+v, want fresh", acct)
 	}
 }
@@ -373,7 +373,7 @@ func TestNewAccountNotSignedInLeavesTheDefault(t *testing.T) {
 	if got := lastOf(s, "claude"); got != "" {
 		t.Fatalf("remembered %q", got)
 	}
-	if acct := s.switchAccount("claude"); acct != nil {
+	if _, acct := s.switchAccount("claude"); acct != nil {
 		t.Fatalf("a switch starts on %+v, want default", acct)
 	}
 }

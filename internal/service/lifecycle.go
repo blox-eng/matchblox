@@ -316,11 +316,9 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	}
 	// The account is held before the hold moves: a switch it refuses
 	// leaves the seat as it was.
-	acct := s.switchAccount(n.Agent)
-	if n.Account != "" {
-		if now := s.listedLast(n.Agent); now != n.Account {
-			return refuseText(fmt.Sprintf("the last %s account is now %s: switch again", n.Agent, now))
-		}
+	now, acct := s.switchAccount(n.Agent)
+	if n.Account != "" && now != n.Account {
+		return refuseText(fmt.Sprintf("the last %s account is now %s: switch again", n.Agent, now))
 	}
 	argv := launchArgv(s.agentBin(n.Agent), n.Agent, x.Name, n.Handoff, accountArgs(n.Agent, acct))
 	var notes []string
@@ -384,34 +382,29 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	return res
 }
 
-// switchAccount is the account a switch starts agent on: the one it was last
-// started on, when that is an account folder that is there or a hand-made
-// folder a live session runs on. Anything else, a Cursor account off macOS
-// included, is nil: the default. It never makes an account.
-func (s *Service) switchAccount(agent string) *onAccount {
-	label := s.lastAccounts.of(lastAccountsPath(s.StatePath), agent)
-	if label == "" || label == "default" || !slices.Contains(accountAgents, agent) {
-		return nil
+// switchAccount is the account a switch starts agent on, and its label as
+// the clients are given it: the state's LastAccount, from the accounts as
+// they are now. That is the one agent was last started on when it is
+// listed and a start takes it (a hand-made folder under the spelling the
+// list shows), else default with a nil account. What a confirm shows is
+// what runs. It never makes an account.
+func (s *Service) switchAccount(agent string) (string, *onAccount) {
+	if !slices.Contains(accountAgents, agent) {
+		return "default", nil
+	}
+	s.mu.Lock()
+	sessions := s.sampled
+	s.mu.Unlock()
+	known, _ := s.knownAccounts(sessions)
+	label, ok := s.lastListed(known)[agent]
+	if !ok || label == "default" {
+		return "default", nil
 	}
 	acct, err := s.account(proto.NewSession{Agent: agent, Account: label})
 	if err != nil || acct == nil || acct.fresh {
-		return nil
+		return "default", nil
 	}
-	return acct
-}
-
-// listedLast is the last account of agent as the clients are given it, the
-// state's LastAccount: the remembered label when the accounts list it, else
-// default. The stored label may be a spelling the list drops for another,
-// or a folder a start refuses: the clients send what they were given.
-func (s *Service) listedLast(agent string) string {
-	s.mu.Lock()
-	known := s.cur.Accounts
-	s.mu.Unlock()
-	if label, ok := s.lastAccounts.listed(lastAccountsPath(s.StatePath), known)[agent]; ok {
-		return label
-	}
-	return "default"
+	return label, acct
 }
 
 // seatWindow is the name the seat's window takes before a switch, so the
@@ -1066,7 +1059,7 @@ func (s *Service) account(n proto.NewSession) (*onAccount, error) {
 		// keeps its sign-in.
 		return nil, errors.New("Cursor accounts run on macOS only for now") //nolint:staticcheck // Cursor is a name
 	}
-	if strings.HasPrefix(n.Account, "~/") || strings.HasPrefix(n.Account, "/") {
+	if handLabel(n.Account) {
 		// A hand-made folder is never made here: only one a live session runs on.
 		folder, ok := s.liveFolder(n.Agent, n.Account)
 		if n.NewAccount || !ok {

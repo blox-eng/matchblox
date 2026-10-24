@@ -2,9 +2,11 @@ package service
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/blox-eng/matchblox/internal/accounts"
@@ -181,15 +183,25 @@ func (r *lastAccountState) saveLocked(path string) {
 	r.dirty = false
 }
 
-// listed are the remembered labels that are still in known, per agent. Nil:
-// none.
-func (r *lastAccountState) listed(path string, known map[string][]string) map[string]string {
+// labels are the remembered labels, per agent, as a copy.
+func (r *lastAccountState) labels(path string) map[string]string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.loadLocked(path)
+	return maps.Clone(r.label)
+}
+
+// lastListed is, per agent, the account it was last started on as the
+// clients are given it (the state's LastAccount), from known: the
+// remembered label when known lists it and a start takes it. A hand-made
+// folder remembered under another spelling of a listed one is that
+// listing; a folder name a start refuses (CheckName) is left out. Nil:
+// none.
+func (s *Service) lastListed(known map[string][]string) map[string]string {
 	var out map[string]string
-	for agent, label := range r.label {
-		if !slices.Contains(known[agent], label) {
+	for agent, label := range s.lastAccounts.labels(lastAccountsPath(s.StatePath)) {
+		label, ok := s.listedAs(agent, label, known[agent])
+		if !ok {
 			continue
 		}
 		if out == nil {
@@ -198,6 +210,42 @@ func (r *lastAccountState) listed(path string, known map[string][]string) map[st
 		out[agent] = label
 	}
 	return out
+}
+
+// listedAs is label as list names it, and whether a start takes it.
+func (s *Service) listedAs(agent, label string, list []string) (string, bool) {
+	switch {
+	case slices.Contains(list, label):
+	case handLabel(label):
+		i := slices.IndexFunc(list, func(l string) bool {
+			return handLabel(l) && accounts.SameDir(s.labelPath(label), s.labelPath(l))
+		})
+		if i < 0 {
+			return "", false
+		}
+		label = list[i]
+	default:
+		return "", false
+	}
+	if label != "default" && !handLabel(label) && accounts.CheckName(agent, label, s.home(), s.goos()) != nil {
+		return "", false
+	}
+	return label, true
+}
+
+// handLabel tells a hand-made folder's label (~/x, or a full path) from an
+// account folder's name.
+func handLabel(label string) bool {
+	return strings.HasPrefix(label, "~/") || strings.HasPrefix(label, "/")
+}
+
+// labelPath is the folder a hand-made folder's label names: folderLabel
+// undone.
+func (s *Service) labelPath(label string) string {
+	if rest, ok := strings.CutPrefix(label, "~/"); ok {
+		return filepath.Join(s.home(), rest)
+	}
+	return label
 }
 
 // rememberStart notes the agent a start that ran in full was on, and its
