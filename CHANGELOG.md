@@ -289,7 +289,6 @@ All notable changes to matchblox are in this file. The format follows
   no id and could not be held; the id now comes from its rollout, and its
   pane still tells busy from idle.
   ([#182](https://github.com/blox-eng/matchblox/issues/182))
-||||||| b29edc3
 
 ## [0.17.4] - 2026-10-22
 

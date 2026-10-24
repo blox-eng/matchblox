@@ -1273,6 +1273,9 @@ func TestFailedNewAccountLeavesNoFolder(t *testing.T) {
 		}
 	})
 	t.Run("the copy fails", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("root reads a file of mode 0")
+		}
 		s, ran, home := accountTest(t)
 		writeDefault(t, home, ".claude/settings.json")
 		if err := os.Chmod(filepath.Join(home, ".claude", "settings.json"), 0); err != nil {
