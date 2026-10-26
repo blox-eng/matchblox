@@ -33,7 +33,8 @@ All notable changes to matchblox are in this file. The format follows
   and more), then a 4-character tail. `[git] clone_root` (default `~/src`)
   is where clones go; `o/r` uses the protocol of `gh config get
   git_protocol`, else https. `matchblox new --where <url>` clones (or
-  reuses a clone), then starts, and waits up to 30 minutes.
+  reuses a clone), then starts, and waits up to 30 minutes: it takes a URL
+  or `gh:o/r`, and a bare `o/r` there is a folder, so a typo never clones.
   ([#176](https://github.com/blox-eng/matchblox/issues/176))
 
 ## [0.19.0] - 2026-10-23

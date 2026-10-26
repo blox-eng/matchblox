@@ -196,9 +196,9 @@ Notes:
 - **A local path never becomes a clone** (*my call* on how):
   - In the console, `where` refuses relative paths today, so `o/r` (one
     slash, no leading `~`, `.` or `/`) is always the shorthand.
-  - In the CLI, `--where o/r` is a folder when that folder exists in the
-    directory the CLI runs in (as today, joined to it); otherwise the CLI
-    sends `o/r` as it is and the service treats it as the shorthand.
+  - In the CLI, `--where o/r` is always a folder, joined to the directory
+    the CLI runs in (as today): a typo never clones. The CLI clones a URL
+    with a scheme, `user@host:path`, or `gh:o/r` (builder's call, D2).
 - A paste shows the clone row on the same key, before any check.
   matchblox never reads the clipboard by itself.
 
@@ -219,7 +219,10 @@ Notes:
 | another repo, a non-repo folder, or a file at the target | `clone o/r into ~/src/r-ember (~/src/r is another repo)` | starts the clone into the free name |
 
 - **The same repo** (*my call*): the remote URLs match after normalising
-  (https vs ssh, `.git`, case of host and owner). The check is offline:
+  (https vs ssh, `.git`, the scheme's own port, case of the host; case of
+  owner and repo only on github.com, gitlab.com and bitbucket.org, which
+  ignore it: another server may hold `team/Repo` and `team/repo` as two
+  repos). The check is offline:
   it reads the remotes on disk and the found list's `Remote`, never the
   network. (A root-commit check would need a fetch: dropped.)
 - No `c` key (*my call*): "start there" and "clone anew" are two rows,
