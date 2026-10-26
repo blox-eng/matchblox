@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-10-26
+
 ### Fixed
 
 - A service whose binary was removed before it began to watch it stops as
@@ -869,7 +871,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.23.1...HEAD
+[0.23.1]: https://github.com/blox-eng/matchblox/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/blox-eng/matchblox/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/blox-eng/matchblox/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/blox-eng/matchblox/compare/v0.20.0...v0.21.0
