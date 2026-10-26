@@ -221,14 +221,18 @@ func TestValidHost(t *testing.T) {
 	}
 }
 
-func TestNavArgvAttachesOnTheHost(t *testing.T) {
-	jump := NavArgv("ws-1", [][]string{{"tmux", "switch-client", "-t", "%12"}})
-	if got, want := Line(jump), `ssh … ws-1 tmux select-window -t %12 ';' select-pane -t %12 ';' attach-session -t %12`; got != want {
-		t.Fatalf("jump %s\nwant %s", got, want)
+// TestJumpSSH: the jump's ssh is the builder's own login with a terminal,
+// no forwarding, and the host's tmux command list as one word.
+func TestJumpSSH(t *testing.T) {
+	j := Jump{Host: "ws-1", Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d", Outer: true}
+	got := JumpSSH("ws-1", j, nil)
+	want := append([]string{"ssh", "-t", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "--", "ws-1"}, onHost(j.Remote()...))
+	if !slices.Equal(got, want) {
+		t.Fatalf("got  %q\nwant %q", got, want)
 	}
-	shell := NavArgv("ws-1", [][]string{{"tmux", "new-window", "-c", "/w/a"}})
-	if got, want := Line(shell), `ssh … ws-1 tmux new-window -c /w/a ';' attach-session`; got != want {
-		t.Fatalf("shell %s\nwant %s", got, want)
+	master := []string{"-o", "ControlMaster=auto"}
+	if got := JumpSSH("ws-1", j, master); !slices.Equal(got[:4], []string{"ssh", "-t", "-o", "ControlMaster=auto"}) {
+		t.Fatalf("the master options go first: %q", got)
 	}
 }
 

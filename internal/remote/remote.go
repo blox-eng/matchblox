@@ -93,29 +93,13 @@ func onHost(argv ...string) string {
 // own ssh login: a jump or a door's command is interactive, and the
 // matchblox key never gets a terminal there.
 func TermArgv(host string, argv []string) []string {
-	return []string{"ssh", "-t", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "--", host, onHost(argv...)}
+	return append(termSSH(nil), host, onHost(argv...))
 }
 
-// NavArgv turns the console's tmux moves into one command that attaches to
-// the host's tmux: there is no tmux client of the host to switch.
-func NavArgv(host string, steps [][]string) []string {
-	cmd := []string{"tmux"}
-	attach := []string{"attach-session"}
-	for _, s := range steps {
-		if len(s) < 2 || s[0] != "tmux" {
-			continue
-		}
-		switch args := s[1:]; args[0] {
-		case "switch-client":
-			cmd = append(cmd, "select-window", "-t", args[2], ";", "select-pane", "-t", args[2], ";")
-			attach = []string{"attach-session", "-t", args[2]}
-		case "attach-session":
-			attach = args
-		default:
-			cmd = append(append(cmd, args...), ";")
-		}
-	}
-	return TermArgv(host, append(cmd, attach...))
+// termSSH is the builder's own ssh with a terminal and no forwarding, up to
+// the host. master is the options of a shared connection, or nil.
+func termSSH(master []string) []string {
+	return append(append([]string{"ssh", "-t"}, master...), "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "--")
 }
 
 // NavAllowed is what a tmux move may be: the console runs it on one key and

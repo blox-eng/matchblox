@@ -59,6 +59,17 @@ type Options struct {
 	// OutsideTmux: the console does not run in tmux, so going to a pane
 	// attaches to it, and the console comes back when tmux detaches.
 	OutsideTmux bool
+	// Prefix is this machine's tmux prefix, the key of the way back from a
+	// jump to a host. Nil or "": C-b.
+	Prefix func() string
+	// Home is the tmux session that holds the console, where the way back
+	// lands. Nil or "": matchblox.
+	Home func() string
+	// LocalTmux is this machine's tmux version, as tmux -V says it without
+	// "tmux ". "": unknown, and taken as new enough.
+	LocalTmux string
+	// JumpID names a jump's sessions. Nil: remote.NewJumpID.
+	JumpID func() string
 	// Host is the host this console reaches over SSH; "" is this machine.
 	// Its tmux moves and door commands run there, with the builder's own
 	// ssh login.

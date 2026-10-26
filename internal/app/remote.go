@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	"os/exec"
 	"strings"
 
@@ -13,10 +14,10 @@ import (
 )
 
 // forHost runs the console's own steps on the host it reaches, with the
-// builder's own ssh login: a tmux move attaches to the host's tmux, a
-// door's command runs there. The inner argv is checked here, before ssh
-// wraps it; a step that fails the check stays as it was, and the local
-// check refuses it on confirm.
+// builder's own ssh login: a tmux move jumps to the host, a door's command
+// runs there. The inner argv is checked here, before ssh wraps it; a step
+// that fails the check stays as it was, and the local check refuses it on
+// confirm.
 func (m Model) forHost(a *action) *action {
 	if a == nil || m.opt.Host == "" || a.remote {
 		return a
@@ -25,13 +26,7 @@ func (m Model) forHost(a *action) *action {
 	b := *a
 	switch {
 	case a.nav:
-		for _, s := range a.steps {
-			if !remote.NavAllowed(s) {
-				return a
-			}
-		}
-		b.steps = [][]string{remote.NavArgv(host, a.steps)}
-		b.say = shellLine(b.steps[0])
+		return m.jumpOnHost(a)
 	case a.term:
 		argv := a.steps[0]
 		if a.door == doors.Guide {
@@ -47,6 +42,81 @@ func (m Model) forHost(a *action) *action {
 	}
 	b.remote = true
 	return &b
+}
+
+// jumpOnHost turns a tmux move into a jump to the host: to the pane of a
+// switch or an attach, or to a new shell in the directory of a new-window.
+// The host opens in a session of its own on each side, never in the
+// console's pane. Inside tmux the step is a tmux command list that returns
+// at once; outside, the ssh takes this terminal.
+func (m Model) jumpOnHost(a *action) *action {
+	var j remote.Jump
+	for _, s := range a.steps {
+		if !remote.NavAllowed(s) {
+			return a
+		}
+		switch s[1] {
+		case "switch-client", "attach-session":
+			j.Pane = s[3]
+		case "new-window":
+			j.Dir = s[3]
+		}
+	}
+	j.Host, j.Prefix, j.Home, j.ID, j.Outer = m.opt.Host, m.prefix(), m.home(), m.jumpID(), !m.opt.OutsideTmux
+	if !remote.JumpAllowed(j) {
+		return a
+	}
+	if j.Outer && olderTmux(m.opt.LocalTmux, remote.MinLocalTmux) {
+		why := "tmux " + m.opt.LocalTmux + " is older than " + remote.MinLocalTmux + ": update tmux, or run the console outside tmux"
+		return &action{label: a.label, say: why, local: func(m Model) (Model, string) { return m, why }}
+	}
+	ssh := remote.JumpSSH(j.Host, j, nil)
+	b := *a
+	b.steps, b.say, b.remote = [][]string{ssh}, shellLine(ssh), true
+	if j.Outer {
+		b.steps = [][]string{j.Local(ssh)}
+	}
+	return &b
+}
+
+// prefix is this machine's tmux prefix: C-b when tmux did not say, or said
+// a key a jump cannot bind.
+func (m Model) prefix() string {
+	if m.opt.Prefix != nil {
+		if p := m.opt.Prefix(); remote.PrefixKey(p) {
+			return p
+		}
+	}
+	return "C-b"
+}
+
+// home is the session that holds the console: "" is matchblox.
+func (m Model) home() string {
+	if m.opt.Home == nil {
+		return ""
+	}
+	return m.opt.Home()
+}
+
+func (m Model) jumpID() string {
+	if m.opt.JumpID == nil {
+		return remote.NewJumpID()
+	}
+	return m.opt.JumpID()
+}
+
+// olderTmux is true when tmux version v (as tmux -V says it, without
+// "tmux ") is older than floor. A version it cannot read, such as a
+// development build or "", is not older.
+func olderTmux(v, floor string) bool {
+	var ma, mi, fma, fmi int
+	if _, err := fmt.Sscanf(strings.TrimPrefix(v, "next-"), "%d.%d", &ma, &mi); err != nil {
+		return false
+	}
+	if _, err := fmt.Sscanf(floor, "%d.%d", &fma, &fmi); err != nil {
+		return false
+	}
+	return ma < fma || ma == fma && mi < fmi
 }
 
 // blocking: trying again cannot help, connecting the host can.
@@ -78,9 +148,15 @@ func (m Model) connectAction() *action {
 
 type connectedMsg struct{ err error }
 
-// onHost gives this terminal to a step that runs on the host.
+// onHost gives this terminal to a step that runs on the host. A jump
+// inside tmux is a tmux command list instead: it switches the client and
+// returns at once.
 func (m Model) onHost(a action) (tea.Model, tea.Cmd) {
 	argv := a.steps[0]
+	if a.nav && !m.opt.OutsideTmux {
+		run := m.opt.Run
+		return m, func() tea.Msg { return ranMsg{cmd: a.String(), err: run(argv), jumped: a.pane} }
+	}
 	m.flash = "running: " + shellLine(argv)
 	return m, m.exec(argv, func(err error) tea.Msg {
 		switch {

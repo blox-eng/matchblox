@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -120,15 +121,28 @@ func TmuxPanesOn(server string) ([]byte, error) {
 	return out, nil
 }
 
+// jumpSessionRE is the host's session of a jump, or this machine's session
+// of a jump to a host (package remote names them).
+var jumpSessionRE = regexp.MustCompile(`^matchblox-(jump|[A-Za-z0-9_@%\[\]-]+)-[0-9a-f]{8}$`)
+
+// JumpSession is true for the name of a jump's session on either side: the
+// sampler skips them.
+func JumpSession(name string) bool { return jumpSessionRE.MatchString(name) }
+
 // ParsePanes reads the list of TmuxPanes. A pane listed again under another
 // session (the phone's, grouped with its own) is the same pane: the first
-// listing, its own session's, stays.
+// listing, its own session's, stays. A jump's session is skipped: on the
+// host it groups the agent's and can sort first, and on this machine it
+// holds only the ssh.
 func ParsePanes(b []byte) []Pane {
 	var panes []Pane
 	seen := map[[2]string]bool{}
 	for _, line := range strings.Split(string(b), "\n") {
 		f := strings.Split(line, "\t")
 		if len(f) < 6 {
+			continue
+		}
+		if session, _, _ := strings.Cut(f[1], ":"); JumpSession(session) {
 			continue
 		}
 		pid, _ := strconv.Atoi(f[3])

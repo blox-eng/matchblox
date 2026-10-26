@@ -39,9 +39,6 @@ var (
 	idRE     = regexp.MustCompile(`^[0-9a-f]{8}$`)
 	homeRE   = regexp.MustCompile(`^[A-Za-z0-9_@\[\]-]+$`)
 	prefixRE = regexp.MustCompile(`^(C-|M-|C-M-)?[A-Za-z0-9\]^_@\[]$`)
-	// jumpSessionRE is the host's session of a jump, or this machine's
-	// session of a jump to a host.
-	jumpSessionRE = regexp.MustCompile(`^matchblox-(jump|[A-Za-z0-9_@%\[\]-]+)-[0-9a-f]{8}$`)
 )
 
 // NewJumpID is 8 random hex digits.
@@ -61,10 +58,6 @@ func HostSessionName(host, id string) string {
 
 // JumpSessionName is the host's private session of a jump.
 func JumpSessionName(id string) string { return "matchblox-jump-" + id }
-
-// JumpSession is true for the name of a jump's session on either side: the
-// sampler skips them.
-func JumpSession(name string) bool { return jumpSessionRE.MatchString(name) }
 
 // PrefixKey is a tmux key name that is safe in a tmux command and a format
 // string: one character, with the C-, M- or C-M- modifier.
@@ -155,6 +148,12 @@ func (j Jump) Remote() []string {
 	// two-server test), before attach-session has a client for it.
 	cmds = append(cmds, setOption(g, "destroy-unattached", "on"))
 	return tmuxList(append(cmds, []string{"attach-session", "-t", "=" + g})...)
+}
+
+// JumpSSH is the builder's own ssh to host that runs j.Remote() there.
+// master is the options of a shared connection, or nil.
+func JumpSSH(host string, j Jump, master []string) []string {
+	return append(termSSH(master), host, onHost(j.Remote()...))
 }
 
 // Local is the one tmux command list that runs on this machine. It starts

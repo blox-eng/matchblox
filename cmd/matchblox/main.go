@@ -497,6 +497,9 @@ func spoolPath() string { return filepath.Join(filepath.Dir(state.Path()), "spoo
 func console(path string, cfg config.Config, root string, noMotion bool, host string) error {
 	base := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, CompactTokens: cfg.Sessions.CompactTokens, NoMotion: noMotion,
 		OutsideTmux: os.Getenv("TMUX") == "", Self: invokedPath(os.Args[0]), StateDir: filepath.Dir(state.Path())}
+	if !base.OutsideTmux {
+		base.Prefix, base.Home, base.LocalTmux = localTmux()
+	}
 	home, _ := os.UserHomeDir()
 	base.Pair = consolePair(home, base.Self, defaultHostKey, setup.PairAddress)
 	restore := func() {}
@@ -528,7 +531,7 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		Base:     base,
 		Hosts:    func() []string { return hosts.Read(list) },
 		SSHHosts: func() []string { return hosts.SSHHosts(home) },
-		Open:     func(h string) app.Options { return openHost(path, home, h, base.OutsideTmux) },
+		Open:     func(h string) app.Options { return openHost(path, home, h) },
 		Remove:   func(h string) error { return hosts.Remove(list, h) },
 		Start:    host,
 		FirstRun: !fileExists(asked) && !fileExists(list),
@@ -545,10 +548,10 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 // started when needed; another host goes over ssh with the matchblox key.
 // A host that cannot be reached yet still opens: the console says why and
 // offers the fix.
-func openHost(path, home, host string, outsideTmux bool) app.Options {
+func openHost(path, home, host string) app.Options {
 	if host == "" {
 		c, err := ensureService(path)
-		return app.Options{Conn: c, DialErr: err, Local: true, OutsideTmux: outsideTmux,
+		return app.Options{Conn: c, DialErr: err, Local: true,
 			Redial: func() (transport.Conn, error) { return ensureService(path) },
 			Owner:  func() int { return transport.Owner(path) }}
 	}
@@ -556,6 +559,23 @@ func openHost(path, home, host string, outsideTmux bool) app.Options {
 	dial := func() (transport.Conn, error) { return remote.Connect(context.Background(), t) }
 	c, err := dial()
 	return app.Options{Conn: c, DialErr: err, Redial: dial, Host: host}
+}
+
+// localTmux reads this machine's tmux once, for the jumps to a host: its
+// prefix, the session that holds the console, and its version. A read
+// that fails gives "", and the console takes the default.
+func localTmux() (prefix, home func() string, version string) {
+	read := func(args ...string) string {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(ctx, "tmux", args...).Output()
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(out))
+	}
+	p, h := read("show-options", "-gv", "prefix"), read("display-message", "-p", "#{session_name}")
+	return func() string { return p }, func() string { return h }, strings.TrimPrefix(read("-V"), "tmux ")
 }
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }

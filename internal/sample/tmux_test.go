@@ -33,3 +33,15 @@ func TestTmuxPanesKeepTabsWhenLangUnset(t *testing.T) {
 		t.Fatalf("pane incomplete: %+v (raw %q)", panes[0], out)
 	}
 }
+
+// TestParsePanesSkipsJumpSessions: a jump's session on either side groups
+// the agent's: its listing is the same pane, and `list-panes -a` sorts it
+// first by name. The pane's own session stays.
+func TestParsePanesSkipsJumpSessions(t *testing.T) {
+	got := sample.ParsePanes([]byte("%1\tmatchblox-jump-0a1b2c3d:1.1\tw\t10\tclaude\t/x\n" +
+		"%9\tmatchblox-ws-1-0a1b2c3d:1.1\tw\t30\tssh\t/y\n" +
+		"%1\twork:1.1\tw\t10\tclaude\t/x\n"))
+	if len(got) != 1 || got[0].Target != "work:1.1" {
+		t.Fatalf("got %+v", got)
+	}
+}

@@ -100,6 +100,8 @@ func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
 	b := s.opt.Base
 	o.Binary, o.CompactAt, o.CompactTokens, o.NoMotion, o.Now, o.Self, o.StateDir = b.Binary, b.CompactAt, b.CompactTokens, b.NoMotion, b.Now, b.Self, b.StateDir
 	o.Clip = b.Clip
+	// A jump starts from this machine's tmux, whatever the host.
+	o.OutsideTmux, o.Prefix, o.Home, o.LocalTmux, o.JumpID = b.OutsideTmux, b.Prefix, b.Home, b.LocalTmux, b.JumpID
 	o.Graphics = b.Graphics // the logos draw in this terminal, whatever the host
 	if host == "" {
 		o.Pair = b.Pair // the key goes in this machine's authorized_keys

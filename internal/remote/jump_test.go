@@ -3,6 +3,8 @@ package remote
 import (
 	"strings"
 	"testing"
+
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 func TestJumpRemoteToPane(t *testing.T) {
@@ -78,7 +80,7 @@ func TestHostSessionName(t *testing.T) {
 		if got != want {
 			t.Errorf("HostSessionName(%q) = %q, want %q", host, got, want)
 		}
-		if !JumpSession(got) {
+		if !sample.JumpSession(got) {
 			t.Errorf("JumpSession(%q) = false for host %q", got, host)
 		}
 		if j := (Jump{Host: host, Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d"}); !JumpAllowed(j) {
@@ -145,7 +147,7 @@ func TestJumpSession(t *testing.T) {
 		"matchblox-notes":         false,
 		"work":                    false,
 	} {
-		if got := JumpSession(name); got != want {
+		if got := sample.JumpSession(name); got != want {
 			t.Errorf("JumpSession(%q) = %v, want %v", name, got, want)
 		}
 	}
