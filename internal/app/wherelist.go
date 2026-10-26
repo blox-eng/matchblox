@@ -397,14 +397,19 @@ func (m Model) matchRows(q string) []whereRow {
 		rows = append(rows, repoRows(mt.r, mt.trees, mt.hits, mt.treeHits)...)
 	}
 	// A typed path no row is: the path itself first, so ⏎ takes it. One
-	// a row is only in another case goes below that row: on a disk that
-	// tells /src/MyRepo from /src/myrepo, it is another folder.
+	// a row is only in another case goes below that row, and below a
+	// repo's worktrees: on a disk that tells /src/MyRepo from /src/myrepo,
+	// it is another folder.
 	if pathLike(q) {
 		switch i := pathRow(rows, q); {
 		case i < 0:
 			rows = append([]whereRow{{kind: rowPath, text: q}}, rows...)
 		case !samePath(rows[i].path(), q):
-			rows = slices.Insert(rows, i+1, whereRow{kind: rowPath, text: q})
+			j := i + 1
+			for rows[i].kind == rowRepo && j < len(rows) && rows[j].kind == rowTree {
+				j++
+			}
+			rows = slices.Insert(rows, j, whereRow{kind: rowPath, text: q})
 		}
 	}
 	return rows

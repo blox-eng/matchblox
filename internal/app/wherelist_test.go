@@ -497,6 +497,32 @@ func TestWherePathInAnotherCaseSelectsTheRepo(t *testing.T) {
 	}
 }
 
+// The path in another case goes below the repo's worktrees, not between
+// the repo and them.
+func TestWherePathInAnotherCaseGoesBelowTheWorktrees(t *testing.T) {
+	st := lifeState()
+	st.Sessions[0].Cwd = ""
+	now := time.Now()
+	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{
+		{Path: "/src/MyRepo", Branch: "main", Active: now},
+		{Path: "/src/MyRepo/.wt/one", Main: "/src/MyRepo", Branch: "feat/1"},
+		{Path: "/src/MyRepo/.wt/two", Main: "/src/MyRepo", Branch: "feat/2"},
+	}}
+	m, _ := loadedWith(t, 100, st)
+	next, _ := key(m, "N")
+	next, _ = next.Update(tea.PasteMsg{Content: "/src/myrepo"})
+	fm := next.(Model).form
+	rows := selectable(fm.rows)
+	if len(rows) != 4 || rows[0].kind != rowRepo || rows[0].path() != "/src/MyRepo" ||
+		rows[1].kind != rowTree || rows[2].kind != rowTree ||
+		rows[3].kind != rowPath || rows[3].path() != "/src/myrepo" {
+		t.Fatalf("rows %+v", rows)
+	}
+	if sel := next.(Model).whereSelected(); sel.path() != "/src/MyRepo" {
+		t.Fatalf("selected %+v of %+v", sel, fm.rows)
+	}
+}
+
 func TestWhereExactPathKeepsItsCase(t *testing.T) {
 	st := lifeState()
 	st.Sessions[0].Cwd = ""
