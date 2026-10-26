@@ -32,7 +32,8 @@ Outside tmux, a jump takes the terminal. Press your prefix once, then `m`
 or `d`.
 
 Prefix `m` from any pane needs the way back that `matchblox setup` adds
-to your tmux config. See [Remote hosts](remote.md#jump-into-a-session).
+to your tmux config. From a jump, it goes back to the console, but the jump
+does not end. See [Remote hosts](remote.md#jump-into-a-session).
 
 ## Learn tmux
 

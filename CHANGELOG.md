@@ -170,8 +170,9 @@ All notable changes to matchblox are in this file. The format follows
 
 - **A jump from a console to a host no longer opens matchblox inside
   matchblox.** The jump opens in its own tmux session, with one status line.
-  `◂ console` (tmux 3.4 or newer), the home key or prefix `m` goes back and
-  ends the jump. A failed ssh waits for Enter.
+  `◂ console` (tmux 3.4 or newer) or the home key goes back and ends the
+  jump. Prefix `m` goes back and the jump does not end. A failed ssh waits
+  for Enter.
   ([#214](https://github.com/blox-eng/matchblox/issues/214))
 - A service whose socket file was removed before it began to watch it
   stops all the same, so the next console starts a new one; it used to
