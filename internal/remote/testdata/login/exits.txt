@@ -1,0 +1,3 @@
+tailscale-check.stderr 0
+tailscale-ok.stderr 0
+tailscale-denied.stderr 255
