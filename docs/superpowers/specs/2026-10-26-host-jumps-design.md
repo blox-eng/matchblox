@@ -101,7 +101,6 @@ It runs:
 1. One tmux command list:
    `new-session -d -s <S> -- <ssh argv>` `;`
    `set-option -t =<S>: detach-on-destroy off` `;`
-   `set-option -w -t =<S>: remain-on-exit failed` `;`
    the way back (§1.1) `;`
    `switch-client -t =<S>`.
 
@@ -118,12 +117,13 @@ kills or replaces another one: each S lives as long as its ssh. A dead S
 - A failing command does not stop the rest of the list.
 - `--` keeps the ssh argv as argv; a `';'` inside the quoted remote line
   stays one argument.
-- When ssh exits 0 (the builder left the agent), the session goes and the
-  client returns to the console (detach-on-destroy off). When ssh fails,
-  the pane stays dead with its status for the builder to read. **Open:** in
-  the probe, ssh's own error line did not survive in the dead pane; the
-  builder makes the error readable (§3 makes most failures happen before
-  the jump anyway).
+- The ssh runs under a fixed `/bin/sh -c` wrapper with the ssh argv as
+  `"$@"`. When ssh exits 0 (the builder left the agent), the session goes
+  and the client returns to the console (detach-on-destroy off). When ssh
+  fails, the wrapper prints `ssh exited <n>. Press Enter to go back.` and
+  waits, so the error stays readable; Enter ends the session. (Plan
+  pre-flight, 2026-10-26: in the probe, ssh's own error line did not
+  survive a `remain-on-exit` dead pane.)
 
 **Outside tmux** the console keeps today's path: it gives the terminal to
 the ssh argv and comes back when it exits. There is no outer tmux to
@@ -368,7 +368,6 @@ docs/remote.md and the CHANGELOG say all of this.
 ## Left to the builder
 
 - The minimum tmux version on each side, from the features used.
-- Making ssh's error readable in a dead pane (§1).
 - How to address the agent's window inside G (by window id, from the pane).
 - The status-line copy, the TUI field layout, the check's time limits.
 - How the console learns the jump ended outside tmux (today's

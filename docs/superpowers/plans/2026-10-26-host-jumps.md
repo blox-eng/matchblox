@@ -37,11 +37,11 @@
 **Files:**
 - Create: `internal/remote/jump.go`
 - Test: `internal/remote/jump_test.go`
-- Modify: `internal/remote/remote.go` (delete `NavArgv`; `NavAllowed` stays for local moves)
+- (`NavArgv` stays until Task 3 deletes it with its callers, so every commit builds.)
 
 **Interfaces:**
 - Produces:
-  - `type Jump struct { Host, Pane, Dir, Prefix, ID string; Outer bool }` — exactly one of Pane (a pane id) or Dir (absolute, no `#`/`;`); `Prefix` the laptop's tmux prefix key name (`C-b`); `ID` 8 lowercase hex; `Outer` the console runs inside tmux.
+  - `type Jump struct { Host, Pane, Dir, Prefix, Home, ID string; Outer bool }` — exactly one of Pane (a pane id) or Dir (absolute, no `#`/`;`); `Prefix` the laptop's tmux prefix key name (`C-b`); `ID` 8 lowercase hex; `Outer` the console runs inside tmux; `Home` the laptop session the console runs in ("" → `matchblox`), the target of the way back.
   - `func NewJumpID() string` (crypto/rand, 8 hex)
   - `func HostSessionName(host, id string) string` → `matchblox-<host with . and : as _>-<id>`
   - `func JumpSessionName(id string) string` → `matchblox-jump-<id>`
@@ -61,8 +61,8 @@ With `Outer:false`: `status on` and `status-left '◂ console: C-b m '` instead 
 `TestJumpRemoteToDir`: `Dir:"/w/a"` gives `new-session -d -s matchblox-jump-<id> -c /w/a` in place of the grouped `new-session`, and no select-window/select-pane.
 
 `TestJumpLocal`: `Jump{Host:"ws-1",…}.Local([]string{"ssh","x"})` equals
-`tmux new-session -d -s matchblox-ws-1-0a1b2c3d -- ssh x ';' set-option -t =matchblox-ws-1-0a1b2c3d: detach-on-destroy off ';' set-option -w -t =matchblox-ws-1-0a1b2c3d: remain-on-exit failed ';' set-option -t =matchblox-ws-1-0a1b2c3d: key-table matchblox-host ';' set-option -t =matchblox-ws-1-0a1b2c3d: mouse on ';' set-option -t =matchblox-ws-1-0a1b2c3d: status-left '#[range=user|matchblox] ◂ console #[norange]' ';' bind-key -T matchblox-host User900 switch-client -t =matchblox ';' bind-key -T matchblox-host MouseDown1Status if -F '#{==:#{mouse_status_range},matchblox}' 'switch-client -t =matchblox' '' ';' bind-key -T matchblox-host Any if -F '#{pane_dead}' kill-session 'send-keys' ';' switch-client -t =matchblox-ws-1-0a1b2c3d`
-(the dead-pane "any key closes" binding form is the implementer's to prove in Task 2; keep the assertion on everything else exact).
+`tmux new-session -d -s matchblox-ws-1-0a1b2c3d -- ssh x ';' set-option -t =matchblox-ws-1-0a1b2c3d: detach-on-destroy off ';' set-option -t =matchblox-ws-1-0a1b2c3d: key-table matchblox-host ';' set-option -t =matchblox-ws-1-0a1b2c3d: mouse on ';' set-option -t =matchblox-ws-1-0a1b2c3d: status-left '#[range=user|matchblox] ◂ console #[norange]' ';' bind-key -T matchblox-host User900 switch-client -t =matchblox ';' bind-key -T matchblox-host MouseDown1Status if -F '#{==:#{mouse_status_range},matchblox}' 'switch-client -t =matchblox' '' ';' switch-client -t =matchblox-ws-1-0a1b2c3d`
+where `ssh x` is wrapped (pre-flight ruling R3): the session's command is `/bin/sh -c 'ssh "$@"; s=$?; [ $s = 0 ] || { printf "\nssh exited %s. Press Enter to go back.\n" "$s"; read _; }; exit 0' sh ssh x` — the ssh argv stays argv, no user value in the script text. No remain-on-exit: the session always ends when the builder leaves, and a failure waits for Enter so it can be read.
 
 `TestHostSessionName` table: `ws-1`→`matchblox-ws-1-<id>`; `me@build.example.com`→`matchblox-me@build_example_com-<id>`; `[fe80::1]`→`matchblox-[fe80__1]-<id>`.
 
@@ -71,8 +71,8 @@ With `Outer:false`: `status on` and `status-left '◂ console: C-b m '` instead 
 `TestJumpSession`: `matchblox-jump-0a1b2c3d` true, `matchblox-ws-1-0a1b2c3d` true, `matchblox` false, `matchblox-notes` false, `work` false.
 
 - [ ] **Step 2: Run, expect FAIL** — `go test ./internal/remote/ -run 'Jump|HostSession'` → undefined: Jump.
-- [ ] **Step 3: Implement** `jump.go` per the Interfaces; `Remote` builds argv slices only (no string concatenation of user values except the fixed name formats). Delete `NavArgv` and its test; the compiler lists its callers for Task 3.
-- [ ] **Step 4: Run, expect PASS** (callers of NavArgv in `internal/app` and `cmd/matchblox/gate_test.go` fail to build until Task 3 — run only `./internal/remote/`).
+- [ ] **Step 3: Implement** `jump.go` per the Interfaces; `Remote` builds argv slices only (no string concatenation of user values except the fixed name formats).
+- [ ] **Step 4: Run, expect PASS** — `go test ./...`.
 - [ ] **Step 5: Commit** `feat(remote): jump argv for a private session on each side (#214)`.
 
 ### Task 2: The two-tmux-server guard
@@ -93,7 +93,7 @@ The fake ssh: a script in `t.TempDir()` named `ssh` that ignores its options and
   - `TestJumpWayBackHomeKey` and `…Tap`: send User900 / the status click to S; the outer client's session is `matchblox`.
   - `TestJumpWayBackWithPrefixCa`: outer prefix set to C-a, `Prefix:"C-a"`; send `C-a C-a m`; G is gone, S is gone, the outer client is on `matchblox`.
   - `TestJumpDropLeavesNothing`: kill the fake ssh process; within 2 s no S on outer, no G on inner, outer client on `matchblox`.
-  - `TestJumpFailedSSHIsReadable`: fake ssh prints `ssh: connect to host ws-1 port 22: Connection refused` and exits 255; S stays, its pane is dead, and `capture-pane` contains `Connection refused`. If ssh's text does not survive (seen in the 2026-10-26 probe), Local wraps the ssh argv as `/bin/sh -c 'ssh "$@"; s=$?; [ $s = 0 ] || { echo "ssh exited $s"; read _; }; exit $s' sh <ssh argv>` — argv, no user value in the script text — and the test asserts that.
+  - `TestJumpFailedSSHIsReadable`: fake ssh prints `ssh: connect to host ws-1 port 22: Connection refused` and exits 255; S stays and `capture-pane` contains `Connection refused` and `ssh exited 255`. The pane is alive and waiting; Enter ends S and the client is back on the console.
   - `TestTwoJumpsSameHost`: two outer clients jump to the same host; both S exist and neither client moved.
 - [ ] **Step 2: Run, expect FAIL** where the Task 1 forms are wrong; fix `jump.go` and the Task 1 expectations together. Record the window target form that selects in G only.
 - [ ] **Step 3: Find the minimum host tmux** from the features used (grouped sessions, `prefix None`, `key-table`, `destroy-unattached`); set `MinHostTmux` with a one-line reason.
@@ -111,6 +111,7 @@ The fake ssh: a script in `t.TempDir()` named `ssh` that ignores its options and
 - Consumes: Task 1 `Jump`, `NewJumpID`, `JumpAllowed`, `Jump.Local`, `Jump.Remote`; `remote.TermArgv`.
 - Produces:
   - `Options.Prefix func() string` — the laptop tmux prefix (`tmux show-options -gv prefix`); nil or "" → `C-b`.
+  - `Options.Home func() string` — the console's own tmux session (`tmux display-message -p '#{session_name}'`); nil or "" → `matchblox`.
   - `func (m Model) jumpOnHost(a *action) *action` — replaces the `a.nav` branch of `forHost`.
   - `func remote.JumpSSH(host string, j Jump, master []string) []string` — `ssh -t <master…> -o ForwardAgent=no -o ClearAllForwardings=yes -- host onHost(j.Remote())` (master is `nil` until Task 4).
 
@@ -121,7 +122,7 @@ The fake ssh: a script in `t.TempDir()` named `ssh` that ignores its options and
   - `TestRemoteNavStillRefusesUnknownSteps`: unchanged, still passes.
   - `TestParsePanesSkipsJumpSessions`: lines from `matchblox-jump-0a1b2c3d` and `matchblox-ws-1-0a1b2c3d` are dropped; `work` stays first even when the jump session sorts first.
 - [ ] **Step 2: Run, expect FAIL** — `go test ./internal/app/ ./internal/sample/ -run 'Remote|ParsePanes'`.
-- [ ] **Step 3: Implement.** `forHost`'s nav branch maps a `switch-client -t %N` or `attach-session` step to `Jump{Pane}`, a `new-window -c D` step to `Jump{Dir}`, anything else → return `a` unchanged (refused on confirm, as today). Inside tmux the action runs its single step with `opt.Run` (a tmux command list returns at once); outside, `exec`. Model takes the ID from `opt.JumpID func() string` (nil → `remote.NewJumpID`) so tests are fixed. Wire `Prefix` in `main.go`. Fix `gate_test.go` to use `JumpSSH`. Inside tmux older than `MinLocalTmux`, the jump is refused with the flash `tmux <v> is older than 3.2: update tmux, or run the console outside tmux` (test `TestRemoteJumpOldLocalTmuxRefused`, with `Options.LocalTmux string`).
+- [ ] **Step 3: Implement.** `forHost`'s nav branch maps a `switch-client -t %N` or `attach-session` step to `Jump{Pane}`, a `new-window -c D` step to `Jump{Dir}`, anything else → return `a` unchanged (refused on confirm, as today). Inside tmux the action runs its single step with `opt.Run` (a tmux command list returns at once); outside, `exec`. Model takes the ID from `opt.JumpID func() string` (nil → `remote.NewJumpID`) so tests are fixed. Wire `Prefix` and `Home` in `main.go`. Delete `remote.NavArgv` and its test; fix `gate_test.go` to use `JumpSSH`. Inside tmux older than `MinLocalTmux`, the jump is refused with the flash `tmux <v> is older than 3.2: update tmux, or run the console outside tmux` (test `TestRemoteJumpOldLocalTmuxRefused`, with `Options.LocalTmux string`).
 - [ ] **Step 4: Run, expect PASS** — `go test ./...`.
 - [ ] **Step 5: Commit** `fix(app): a jump to a host opens in its own session, never in the console's pane (#214)`.
 
@@ -219,10 +220,10 @@ The fake ssh: a script in `t.TempDir()` named `ssh` that ignores its options and
   - `type Source int` (`FromAgent, FromFile, NewKey, NotNow`); `type Step struct { Source Source; Path, Line, Fingerprint string; NoPassphrase bool }`
   - `func Ladder(agent []string, sshDir string) Step` — agent lines from `ssh-add -L`; order: agent `sk-ssh-ed25519@openssh.com` > agent `ssh-ed25519` > files `id_ed25519_sk`, `id_ed25519`, `id_ecdsa_sk`, `id_ecdsa`, `id_rsa` (first with a `.pub`) > `NewKey`.
   - `func HasNoPassphrase(path string) bool` — `ssh-keygen -y -P "" -f path` exits 0.
-  - `func InstallArgv(host string, line string, master []string, env []string) ([]string, error)` — refuses a line failing `ValidUserKey`; remote script fixed text: `umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; grep -qxF "$1" ~/.ssh/authorized_keys || printf '%s\n' "$1" >> ~/.ssh/authorized_keys` with the key as `$1`.
+  - `func InstallArgv(host string, line string, master []string) ([]string, error)` (the askpass env goes on the `exec.Cmd`, never in argv) — refuses a line failing `ValidUserKey`; remote script fixed text: `umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; grep -qxF "$1" ~/.ssh/authorized_keys || printf '%s\n' "$1" >> ~/.ssh/authorized_keys` with the key as `$1`.
   - `func NewKeyArgv(path string) []string` → `ssh-keygen -q -t ed25519 -C matchblox-login -f <path>` (passphrase via askpass; verified 2026-10-26).
   - `func AddArgv(path, goos string) []string` → `ssh-add [--apple-use-keychain] <path>`.
-  - `func ConfigLines(host string) string` (macOS: `Host <host>\n  AddKeysToAgent yes\n  UseKeychain yes\n`), shown as a diff via the existing `setup` diff helper.
+  - The macOS `~/.ssh/config` lines (`Host <host>\n  AddKeysToAgent yes\n  UseKeychain yes\n`) are a setup door `doors.SSHKeychain` in `internal/setup/sshconfig.go`, built like the way-back door (`internal/setup/tmux.go`): preview diff, append once, keep the file's bytes. Test `TestSSHKeychainDoorAppendsOnce`.
   - `remote.ValidUserKey(line string) bool` — `ssh-ed25519`, `sk-ssh-ed25519@openssh.com`, `ecdsa-sha2-nistp256/384/521`, `sk-ecdsa-sha2-nistp256@openssh.com`, `ssh-rsa`; base64 body; optional comment `[A-Za-z0-9@._-]+`.
 
 - [ ] **Step 1: Write the failing tests**
