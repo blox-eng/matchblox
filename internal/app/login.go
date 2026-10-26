@@ -26,10 +26,12 @@ const checkTimeout = 30 * time.Second
 // browser.
 const openTimeout = 5 * time.Minute
 
-// loginMsg is the result of the login check of host. seen: its stderr has
-// the server's version line, and tailscale is the host's kind.
+// loginMsg is the result of the login check of host, of the console of
+// gen. seen: its stderr has the server's version line, and tailscale is the
+// host's kind.
 type loginMsg struct {
 	host            string
+	gen             int
 	login           remote.Login
 	detail          string
 	seen, tailscale bool
@@ -140,15 +142,15 @@ func (m Model) checkLogin() (Model, tea.Cmd) {
 	case m.opt.Ask == nil && m.opt.NoAsk != "":
 		m.flash = "jumps to " + m.opt.Host + " ask your login in the terminal: " + m.opt.NoAsk
 	}
-	host, check := m.opt.Host, m.checker()
+	host, check, gen := m.opt.Host, m.checker(), m.opt.Gen
 	argv := remote.CheckArgv(host, dir)
 	ctx, stop := context.WithCancel(context.Background())
 	m.checkStop, m.checkCancelled = stop, false
-	return m, streamed(ctx, m.opt.Gen, false, checkTimeout, openTimeout, func(ctx context.Context, line func(string)) tea.Msg {
+	return m, streamed(ctx, gen, false, checkTimeout, openTimeout, func(ctx context.Context, line func(string)) tea.Msg {
 		defer stop()
 		stderr, exit := check(ctx, argv, line)
 		login, detail := remote.ClassifyLogin(stderr, exit)
-		return loginMsg{host: host, login: login, detail: detail, seen: remote.ServerSeen(stderr), tailscale: remote.Tailscale(stderr)}
+		return loginMsg{host: host, gen: gen, login: login, detail: detail, seen: remote.ServerSeen(stderr), tailscale: remote.Tailscale(stderr)}
 	})
 }
 
@@ -164,7 +166,7 @@ func (m Model) checker() func(ctx context.Context, argv []string, line func(stri
 // and the jump that waited goes, except to a changed host key or a check
 // the builder cancelled; a password login offers the key first.
 func (m Model) loggedIn(msg loginMsg) (tea.Model, tea.Cmd) {
-	if msg.host != m.opt.Host {
+	if msg.gen != m.opt.Gen || m.quitting || msg.host != m.opt.Host {
 		return m, nil
 	}
 	m.checking, m.login, m.loginURL, m.checkStop = false, msg.login, "", nil
