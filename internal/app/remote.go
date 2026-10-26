@@ -64,11 +64,10 @@ func (m Model) jumpOnHost(a *action) *action {
 	}
 	j.Host, j.Prefix, j.Home, j.ID, j.Outer = m.opt.Host, m.prefix(), m.home(), m.jumpID(), !m.opt.OutsideTmux
 	if !remote.JumpAllowed(j) {
-		return a
+		return refused(a, jumpRefusal(j))
 	}
 	if j.Outer && olderTmux(m.opt.LocalTmux, remote.MinLocalTmux) {
-		why := "tmux " + m.opt.LocalTmux + " is older than " + remote.MinLocalTmux + ": update tmux, or run the console outside tmux"
-		return &action{label: a.label, say: why, local: func(m Model) (Model, string) { return m, why }}
+		return refused(a, "tmux "+m.opt.LocalTmux+" is older than "+remote.MinLocalTmux+": update tmux, or run the console outside tmux")
 	}
 	ssh := remote.JumpSSH(j.Host, j, nil)
 	b := *a
@@ -77,6 +76,26 @@ func (m Model) jumpOnHost(a *action) *action {
 		b.steps = [][]string{j.Local(ssh)}
 	}
 	return &b
+}
+
+// refused is an action that runs nothing: its confirm and its flash say
+// why, and what fixes it.
+func refused(a *action, why string) *action {
+	return &action{label: a.label, say: why, local: func(m Model) (Model, string) { return m, why }}
+}
+
+// jumpRefusal says why JumpAllowed refuses j. The prefix and the id are
+// made here and always pass.
+func jumpRefusal(j remote.Jump) string {
+	noHome := j
+	noHome.Home = ""
+	switch {
+	case !remote.ValidHost(j.Host):
+		return "refused: " + j.Host + " is not a host name ssh takes: use a name from your ssh config"
+	case j.Home != "" && remote.JumpAllowed(noHome):
+		return `refused: tmux session "` + j.Home + `" holds the console, and a jump cannot name it: rename it to letters, digits, _ - @ [ ] only`
+	}
+	return "refused: a jump goes only to a pane id, or an absolute directory without # or ;"
 }
 
 // prefix is this machine's tmux prefix: C-b when tmux did not say, or said

@@ -355,3 +355,52 @@ func TestHostConsoleKeepsThisMachinesTmux(t *testing.T) {
 		t.Fatalf("the host's console lost this machine's tmux: %+v", o)
 	}
 }
+
+// TestRemoteJumpRefusalSaysTheFix: a jump that JumpAllowed refuses runs
+// nothing, here or on the host, and the flash says what fixes it.
+func TestRemoteJumpRefusalSaysTheFix(t *testing.T) {
+	for _, c := range []struct {
+		name, host, home string
+		steps            [][]string
+		want             string
+	}{
+		{"home", "ws-1", "my work", [][]string{{"tmux", "switch-client", "-t", "%1"}},
+			`refused: tmux session "my work" holds the console, and a jump cannot name it: rename it to letters, digits, _ - @ [ ] only`},
+		{"target", "ws-1", "", [][]string{{"tmux", "select-window", "-t", "%1"}},
+			"refused: a jump goes only to a pane id, or an absolute directory without # or ;"},
+		{"host", "ws 1", "", [][]string{{"tmux", "switch-client", "-t", "%1"}},
+			"refused: ws 1 is not a host name ssh takes: use a name from your ssh config"},
+	} {
+		st := fixtureState()
+		st.Recommendations = []advice.Rec{{ID: "r1", Title: "x", Primary: &advice.Action{Nav: true, Steps: c.steps}}}
+		m, execs := onHost(t, st)
+		m.opt.Host, m.tab, m.recPick = c.host, tabSessions, "r1"
+		m.opt.Home = func() string { return c.home }
+		next, _ := key(m, "enter")
+		next, cmd := key(next, "enter")
+		if cmd != nil {
+			next, _ = next.Update(cmd())
+		}
+		if len(*execs) != 0 || next.(Model).flash != c.want {
+			t.Errorf("%s: ran %q, flash %q", c.name, *execs, next.(Model).flash)
+		}
+	}
+}
+
+// TestRemoteConsoleNeverMovesThisMachinesTmux: a tmux move that is not a
+// jump never runs here from a host's console, however it was built.
+func TestRemoteConsoleNeverMovesThisMachinesTmux(t *testing.T) {
+	m, execs := onHost(t, fixtureState())
+	for _, a := range []action{
+		{label: "jump", nav: true, pane: "%1", steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}},
+		{label: "attach", nav: true, attach: true, pane: "%1", steps: [][]string{{"tmux", "attach-session", "-t", "%1"}}},
+	} {
+		next, cmd := m.confirm(a)
+		if cmd != nil {
+			next, _ = next.Update(cmd())
+		}
+		if f := next.(Model).flash; len(*execs) != 0 || f != "refused: a tmux move on ws-1 never runs on this machine" {
+			t.Errorf("%s: ran %q, flash %q", a.label, *execs, f)
+		}
+	}
+}

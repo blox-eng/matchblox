@@ -1162,6 +1162,12 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 	if a.remote {
 		return m.onHost(a)
 	}
+	if (a.nav || a.attach) && m.opt.Host != "" {
+		// A tmux move of a host names the host's panes: here it would move
+		// this machine's tmux. Only a jump (remote) goes there.
+		m.flash = "refused: a tmux move on " + m.opt.Host + " never runs on this machine"
+		return m, nil
+	}
 	if len(a.batch) > 0 {
 		if m.conn == nil || m.lost {
 			m.flash = "not sent, no connection: " + a.String()
