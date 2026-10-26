@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -580,6 +581,36 @@ func TestFirstArgThatIsNoCommandIsAHost(t *testing.T) {
 		cmd, host, rest, err := parseCommand(c.args)
 		if (err != nil) != c.wantErr || cmd != c.cmd || host != c.host || strings.Join(rest, " ") != strings.Join(c.rest, " ") {
 			t.Errorf("parseCommand(%q) = %q %q %q %v", c.args, cmd, host, rest, err)
+		}
+	}
+}
+
+func TestAskpassModeOnlyForAPrompt(t *testing.T) {
+	set := func(k string) string {
+		if k == askpass.EnvSocket {
+			return "/tmp/s"
+		}
+		return ""
+	}
+	for _, c := range []struct {
+		args []string
+		env  func(string) string
+		want bool
+	}{
+		{[]string{"Password: "}, set, true},
+		{[]string{"Enter passphrase for key '/k': "}, set, true},
+		{[]string{"Password: "}, os.Getenv, false},
+		{nil, set, false},
+		{[]string{"Password:", "x"}, set, false},
+		{[]string{"version"}, set, false},
+		{[]string{"serve"}, set, false},
+		{[]string{"gate"}, set, false},
+		{[]string{"authorize"}, set, false},
+		{[]string{"hook"}, set, false},
+		{[]string{"push"}, set, false},
+	} {
+		if got := askpassMode(c.args, c.env); got != c.want {
+			t.Errorf("askpassMode(%q) = %v, want %v", c.args, got, c.want)
 		}
 	}
 }

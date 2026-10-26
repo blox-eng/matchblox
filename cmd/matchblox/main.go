@@ -43,6 +43,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/actions"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/app"
+	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
@@ -124,6 +125,9 @@ func holdOnError(err error, env func(string) string, in io.Reader, out io.Writer
 var configArg string
 
 func run(args []string) error {
+	if askpassMode(args, os.Getenv) {
+		return askpassMain(args[0])
+	}
 	if len(args) > 0 {
 		switch args[0] {
 		case "gate":
@@ -291,6 +295,24 @@ func run(args []string) error {
 		return status(os.Stdout, path, cfg, *root, *text)
 	}
 	return console(path, cfg, *root, *noMotion, host)
+}
+
+// askpassMode tells if ssh runs this binary as its SSH_ASKPASS: the
+// console set MATCHBLOX_ASKPASS, and the one argument is a prompt, not a
+// word that run dispatches.
+func askpassMode(args []string, env func(string) string) bool {
+	return env(askpass.EnvSocket) != "" && len(args) == 1 &&
+		!slices.Contains(commands, args[0]) && !slices.Contains([]string{"gate", "authorize", "push", "hook"}, args[0])
+}
+
+// askpassMain prints the console's answer to the prompt for ssh, and
+// nothing else on stdout. It reads no config and starts no service.
+func askpassMain(prompt string) error {
+	if err := askpass.Ask(os.Getenv, prompt, os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, "matchblox askpass:", err)
+		return errShown // never holdOnError: ssh owns stdin
+	}
+	return nil
 }
 
 // commands are the commands a builder types. hook, authorize and gate run

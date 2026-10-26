@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -17,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/pair"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -297,4 +299,93 @@ func sshHasExpiryTime(version string) bool {
 		return false
 	}
 	return major > 7 || (major == 7 && minor >= 7)
+}
+
+// TestMasterReusedOnRealSSHD logs in with a key locked by a passphrase. The
+// passphrase goes through `matchblox askpass` (this test binary, through
+// run) to the server, once; a second ssh reuses the master and asks
+// nothing (design §3.4, §3.1).
+func TestMasterReusedOnRealSSHD(t *testing.T) {
+	h := startSSHD(t)
+	locked := filepath.Join(h.dir, "locked")
+	for _, ext := range []string{"", ".pub"} {
+		b, err := os.ReadFile(filepath.Join(h.dir, "builder"+ext))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(locked+ext, b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err := exec.Command("ssh-keygen", "-q", "-p", "-P", "", "-N", "p4ss", "-f", locked).CombinedOutput(); err != nil { //nolint:gosec // test
+		t.Fatalf("ssh-keygen -p: %v %s", err, out)
+	}
+	master, err := remote.EnsureMasterDir(filepath.Join(h.dir, "m"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv, err := askpass.Listen(filepath.Dir(master))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	srv.Program = filepath.Join(h.bin, "askpass")
+	helper := "#!/bin/sh\nMATCHBLOX_TEST_ARGS=\"$1\" exec " + os.Args[0] + "\n"
+	if err := os.WriteFile(srv.Program, []byte(helper), 0o700); err != nil { //nolint:gosec // a test script
+		t.Fatal(err)
+	}
+	opts := append([]string{"-i", locked, "-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none"}, remote.MasterOpts(master)...)
+	t.Cleanup(func() { _ = exec.Command("ssh", append(opts, "-O", "exit", "--", "ws-1")...).Run() }) //nolint:gosec // test
+	// ssh starts the master in the background; it keeps a pipe open, so
+	// its output goes to a file.
+	ssh := func() (<-chan error, *os.File) {
+		f, err := os.CreateTemp(h.dir, "out")
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := exec.Command("ssh", append(opts, "--", "ws-1", "true")...) //nolint:gosec // test
+		c.Env = append(os.Environ(), srv.Env("ws-1")...)
+		c.Stdin, c.Stdout, c.Stderr = strings.NewReader(""), f, f
+		done := make(chan error, 1)
+		go func() { done <- c.Run() }()
+		return done, f
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	first, out := ssh()
+	p, answer, err := srv.Next(ctx)
+	if err != nil {
+		b, _ := os.ReadFile(out.Name())
+		t.Fatalf("no prompt: %v\n%s", err, b)
+	}
+	if p.Host != "ws-1" || !strings.Contains(p.Text, "Enter passphrase for key") || p.Confirm {
+		t.Fatalf("prompt %+v", p)
+	}
+	answer("p4ss", true)
+	if err := <-first; err != nil {
+		b, _ := os.ReadFile(out.Name())
+		t.Fatalf("first ssh: %v\n%s", err, b)
+	}
+
+	asked := make(chan askpass.Prompt, 1)
+	watch, stop := context.WithCancel(ctx)
+	go func() {
+		if p, answer, err := srv.Next(watch); err == nil {
+			asked <- p
+			answer("", false)
+		}
+	}()
+	second, out := ssh()
+	err = <-second
+	stop()
+	select {
+	case p := <-asked:
+		t.Fatalf("the second ssh asks %+v", p)
+	default:
+	}
+	if err != nil {
+		b, _ := os.ReadFile(out.Name())
+		t.Fatalf("second ssh: %v\n%s", err, b)
+	}
 }
