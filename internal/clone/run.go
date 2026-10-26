@@ -113,7 +113,7 @@ func Run(ctx context.Context, r gitremote.Remote, target string, progress func(p
 	pr, pw := io.Pipe()
 	cmd.Stderr = pw
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("git clone %s failed: %v", r.Slug(), err)
+		return fmt.Errorf("git clone %s failed: %w", r.Slug(), err)
 	}
 	var tail []string
 	read := make(chan struct{})
@@ -161,7 +161,7 @@ func Run(ctx context.Context, r gitremote.Remote, target string, progress func(p
 		if exists(target) {
 			return fmt.Errorf("%s is there already", target)
 		}
-		return fmt.Errorf("cannot move the clone into %s: %v", target, err)
+		return fmt.Errorf("cannot move the clone into %s: %w", target, err)
 	}
 	return nil
 }

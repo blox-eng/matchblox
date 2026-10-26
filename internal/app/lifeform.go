@@ -1036,8 +1036,8 @@ func (m Model) formResult(r proto.Result) (Model, tea.Cmd, bool) {
 func (m Model) cloneResult(r proto.Result) (Model, tea.Cmd) {
 	f := *m.form
 	m.form = &f
-	switch id := r.ActID; {
-	case id == f.startAct:
+	switch r.ActID {
+	case f.startAct:
 		f.startAct = ""
 		if r.Err != "" {
 			f.forgetClone(r.Err)

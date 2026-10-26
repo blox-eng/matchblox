@@ -382,7 +382,7 @@ func TestPastedURLShowsTheCloneRowAtOnce(t *testing.T) {
 		t.Fatalf("sent %+v", acts)
 	}
 	// The same text again asks no second plan.
-	next, cmd := next.Update(tea.PasteMsg{Content: ""})
+	_, cmd := next.Update(tea.PasteMsg{Content: ""})
 	if cmd != nil {
 		cmd()
 	}
@@ -525,7 +525,7 @@ func TestCloneKeepsTheAccount(t *testing.T) {
 	if !next.(Model).form.startWhenDone {
 		t.Fatalf("form %+v", next.(Model).form)
 	}
-	next, cmd := done(next)
+	_, cmd := done(next)
 	runAll(cmd)
 	var n proto.NewSession
 	if acts := f.acts(); len(acts) != 3 || acts[2].RecID != "new:session" || json.Unmarshal([]byte(acts[2].Text), &n) != nil ||
@@ -554,7 +554,7 @@ func TestCloneKeepsTheAccount(t *testing.T) {
 func TestEnterAfterTheCloneStartsAtOnce(t *testing.T) {
 	next, f := cloning(t, 100)
 	next, _ = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: 100, Done: true}))
-	next, cmd := key(next, "enter")
+	_, cmd := key(next, "enter")
 	if cmd != nil {
 		cmd()
 	}
@@ -1087,7 +1087,7 @@ func TestStopLostWithTheConnectionGoesAgain(t *testing.T) {
 	// Its answer ends it: the next reconnect sends nothing.
 	next, _ = next.Update(resultMsg(proto.Result{ActID: fmt.Sprintf("a%d", next.(Model).acts)}))
 	next, f = reconnected(t, next)
-	next, cmd = next.Update(cloneState(t))
+	_, cmd = next.Update(cloneState(t))
 	runAll(cmd)
 	if acts := f.acts(); len(acts) != 0 {
 		t.Fatalf("sent %+v", acts)
@@ -1230,7 +1230,7 @@ func TestStartWhenDoneCells(t *testing.T) {
 		t.Fatalf("form %+v sent %+v", fm, f.acts())
 	}
 	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.startAct, CloneID: 1}))
-	next, cmd = next.Update(cloneState(t, done))
+	_, cmd = next.Update(cloneState(t, done))
 	runAll(cmd)
 	if news(f) != 1 {
 		t.Fatalf("sent %+v", f.acts())
@@ -1241,7 +1241,7 @@ func TestStartWhenDoneCells(t *testing.T) {
 	if fm := next.(Model).form; fm.startWhenDone {
 		t.Fatalf("form %+v", fm)
 	}
-	next, cmd = next.Update(cloneState(t, done))
+	_, cmd = next.Update(cloneState(t, done))
 	runAll(cmd)
 	if news(f) != 0 {
 		t.Fatalf("sent %+v", f.acts())
@@ -1257,7 +1257,7 @@ func TestStartWhenDoneCells(t *testing.T) {
 		if fm := next.(Model).form; fm.startWhenDone || fm.cloning != "" || news(f) != 0 {
 			t.Fatalf("form %+v sent %+v", fm, f.acts())
 		}
-		next, cmd = next.Update(cloneState(t, done))
+		_, cmd = next.Update(cloneState(t, done))
 		runAll(cmd)
 		if news(f) != 0 {
 			t.Fatalf("sent %+v", f.acts())

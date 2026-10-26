@@ -294,7 +294,7 @@ func TestNewSessionSendsThePickedPath(t *testing.T) {
 	next, _ := key(m, "N")
 	next = typeText(next, "mbx")
 	next, _ = key(next, "enter") // picks matchblox
-	next, cmd := key(next, "enter")
+	_, cmd := key(next, "enter")
 	cmd()
 	var n proto.NewSession
 	if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &n) != nil || n.Where != "/dev/matchblox" {
@@ -342,7 +342,7 @@ func TestWhereTypedPathIsNotASibling(t *testing.T) {
 		t.Fatalf("a repo under the path is not listed: %+v", rows)
 	}
 	next, _ = key(next, "enter")
-	next, cmd := key(next, "enter")
+	_, cmd := key(next, "enter")
 	cmd()
 	var n proto.NewSession
 	if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &n) != nil || n.Where != "/src/api" {
@@ -367,7 +367,7 @@ func TestWhereTypedPathIsNotASibling(t *testing.T) {
 		t.Fatalf("selected %+v of %+v", sel, next.(Model).form.rows)
 	}
 	next, _ = key(next, "enter")
-	next, cmd = key(next, "enter")
+	_, cmd = key(next, "enter")
 	cmd()
 	if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &n) != nil || n.Where != "/src/api" {
 		t.Fatalf("sent %+v", f.acts())
