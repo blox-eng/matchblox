@@ -253,8 +253,9 @@ func TestNewKeyThenInstall(t *testing.T) {
 	}
 }
 
-// TestNewKeyWithoutPassphraseRefused: a key that opens without a
-// passphrase never goes on the host, and the console says so loudly.
+// TestNewKeyWithoutPassphraseRefused: a new key that ssh-keygen does not
+// refuse to open empty never goes on the host: the console removes the
+// files it made and says so loudly.
 func TestNewKeyWithoutPassphraseRefused(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "id_ed25519")
 	h := ladderHost(t, login.Step{Source: login.NewKey, Path: path}, passwordRefusal)
@@ -265,8 +266,46 @@ func TestNewKeyWithoutPassphraseRefused(t *testing.T) {
 	if m.pending != nil || len(*h.ran) != 0 || len(*h.calls) != 1 {
 		t.Fatalf("pending %+v, ran %q, calls %q", m.pending, *h.ran, *h.calls)
 	}
-	if want := "refused: the new key " + path + " has no passphrase"; !strings.HasPrefix(m.flash, want) || !strings.Contains(m.flash, "ssh-keygen -p -f "+path) {
-		t.Fatalf("flash %q", m.flash)
+	if want := "refused: the new key " + path + " is not locked by a passphrase, so matchblox removed it and put nothing on ws-1: jump again and type a passphrase"; m.flash != want {
+		t.Fatalf("flash %q\nwant %q", m.flash, want)
+	}
+	for _, p := range []string{path, path + ".pub"} {
+		if _, err := os.Lstat(p); err == nil {
+			t.Errorf("%s is still there", p)
+		}
+	}
+}
+
+// TestNewKeyNeverOverwrites: a .pub or a key at the path stops the new key
+// before ssh-keygen runs, and stays as it is.
+func TestNewKeyNeverOverwrites(t *testing.T) {
+	for _, name := range []string{"id_ed25519", "id_ed25519.pub"} {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "id_ed25519")
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("mine\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		h := ladderHost(t, login.Step{Source: login.NewKey, Path: path}, passwordRefusal)
+		fakeKeygen(t, &h, "p4ss")
+		m := jumpOffer(t, h)
+		next, cmd := key(m, "y")
+		m = settle(t, next, cmd)
+		if len(*h.calls) != 0 || !strings.HasPrefix(m.flash, "refused: "+filepath.Join(dir, name)+" is there") {
+			t.Fatalf("%s: calls %q, flash %q", name, *h.calls, m.flash)
+		}
+		if b, _ := os.ReadFile(filepath.Join(dir, name)); string(b) != "mine\n" {
+			t.Fatalf("%s changed: %q", name, b)
+		}
+	}
+}
+
+// TestSecurityKeyNoPassphraseWarning: a security key's file needs the
+// token too: no "anyone who reads it" warning.
+func TestSecurityKeyNoPassphraseWarning(t *testing.T) {
+	const sk = "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIM4bfwfUcmyCX2tnMZ4mHkeEjSRJnkf0ehLEuB8iWLHUAAAABHNzaDo= yubikey"
+	h := ladderHost(t, login.Step{Source: login.FromFile, Path: "/home/builder/.ssh/id_ed25519_sk", Line: sk, Fingerprint: login.Fingerprint(sk), NoPassphrase: true}, passwordRefusal)
+	if words := offerWords(jumpOffer(t, h)); strings.Contains(words, "no passphrase") || strings.Contains(words, "anyone who reads") {
+		t.Fatalf("a warning for a security key:\n%s", words)
 	}
 }
 

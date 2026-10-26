@@ -73,7 +73,9 @@ func KeyFile(path string) (Step, bool) {
 	if !ok {
 		return Step{}, false
 	}
-	return Step{Source: FromFile, Path: path, Line: l, Fingerprint: Fingerprint(l), NoPassphrase: HasNoPassphrase(path)}, true
+	// A security key's file is no secret alone: it needs the token too.
+	open := !strings.HasPrefix(l, "sk-") && HasNoPassphrase(path)
+	return Step{Source: FromFile, Path: path, Line: l, Fingerprint: Fingerprint(l), NoPassphrase: open}, true
 }
 
 func regular(path string) bool {

@@ -494,6 +494,26 @@ func TestInstallOnRealSSHD(t *testing.T) {
 			t.Errorf("%s: %v %v, want %o", path, fi.Mode(), err, want)
 		}
 	}
-	run([]string{"ssh", "-i", key, "-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none", "-o", "BatchMode=yes",
-		"-o", "ControlMaster=no", "-o", "ControlPath=none", "--", "ws-1", "true"})
+	alone := func(k string) []string {
+		return []string{"ssh", "-i", k, "-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none", "-o", "BatchMode=yes",
+			"-o", "ControlMaster=no", "-o", "ControlPath=none", "--", "ws-1", "true"}
+	}
+	run(alone(key))
+
+	// A file whose last line has no newline: that line and the key both
+	// stay whole, and both log in.
+	builder, err := os.ReadFile(filepath.Join(h.dir, "builder.pub"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := strings.TrimSpace(string(builder))
+	if err := os.WriteFile(filepath.Join(h.far, ".ssh", "authorized_keys"), []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	run(argv)
+	if b, _ := os.ReadFile(filepath.Join(h.far, ".ssh", "authorized_keys")); string(b) != old+"\n"+line+"\n" {
+		t.Fatalf("authorized_keys after a file without its last newline: %q", b)
+	}
+	run(alone(key))
+	run(alone(filepath.Join(h.dir, "builder")))
 }

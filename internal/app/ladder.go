@@ -58,7 +58,8 @@ type keyMadeMsg struct {
 	gen     int
 	refused string // why ssh-keygen did not run
 	exit    int    // ssh-keygen's exit
-	open    bool   // the new key opens without a passphrase
+	open    bool   // the new key is not locked by a passphrase: it was removed
+	removed error  // why a file of that key stays
 	added   bool
 }
 
@@ -132,7 +133,7 @@ func (m Model) offer(c climb) *action {
 	if c.note != "" {
 		line(c.note)
 	}
-	if s.NoPassphrase {
+	if s.NoPassphrase && !strings.HasPrefix(s.Line, "sk-") { // a security key needs its token too
 		line("this key has no passphrase: anyone who reads " + s.Path + " logs in as you; lock it: ssh-keygen -p -f " + s.Path)
 	}
 	if argv, err := m.installArgv(s.Line); err == nil {
@@ -283,15 +284,24 @@ func (m Model) makeKey(c climb) (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		defer stop()
 		msg := keyMadeMsg{c: c, gen: gen}
-		if _, err := os.Lstat(path); !errors.Is(err, fs.ErrNotExist) {
-			msg.refused = path + " is there without its .pub: make it with ssh-keygen -y -f " + path + ", then jump again"
-			return msg
+		for _, p := range []string{path, path + ".pub"} {
+			if _, err := os.Lstat(p); !errors.Is(err, fs.ErrNotExist) {
+				msg.refused = p + " is there, but not its key pair: move it away, then jump again"
+				return msg
+			}
 		}
 		if _, msg.exit = ssh(ctx, login.NewKeyArgv(path), env); msg.exit != 0 {
 			return msg
 		}
-		if login.HasNoPassphrase(path) {
-			msg.open = true
+		made, err := login.StatMade(path)
+		if err != nil {
+			msg.refused = "ssh-keygen made no key at " + path + ": " + err.Error()
+			return msg
+		}
+		// matchblox never leaves a key without a passphrase: only a key
+		// ssh-keygen refuses to open empty is kept.
+		if !login.Locked(path) {
+			msg.open, msg.removed = true, made.Remove()
 			return msg
 		}
 		s, ok := login.KeyFile(path)
@@ -320,8 +330,10 @@ func (m Model) keyMade(msg keyMadeMsg) (tea.Model, tea.Cmd) {
 		m.flash = "refused: " + msg.refused
 	case msg.exit != 0:
 		m.flash = "no key made: ssh-keygen exited " + strconv.Itoa(msg.exit)
+	case msg.open && msg.removed != nil:
+		m.flash = "refused: the new key " + path + " is not locked by a passphrase, and not all of it was removed (" + msg.removed.Error() + "): remove it yourself, then jump again and type a passphrase"
 	case msg.open:
-		m.flash = "refused: the new key " + path + " has no passphrase, so it does not go on " + m.opt.Host + ": lock it with ssh-keygen -p -f " + path + ", then jump again"
+		m.flash = "refused: the new key " + path + " is not locked by a passphrase, so matchblox removed it and put nothing on " + m.opt.Host + ": jump again and type a passphrase"
 	default:
 		c := msg.c
 		if !msg.added {

@@ -157,3 +157,18 @@ func TestLadderSaysAFileKeyHasNoPassphrase(t *testing.T) {
 		t.Fatalf("Ladder = %+v", got)
 	}
 }
+
+// TestSecurityKeyFileIsNoOpenKey: an sk- key file without a passphrase
+// still needs its token: the step says nothing of a passphrase.
+func TestSecurityKeyFileIsNoOpenKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "id_ed25519_sk")
+	keygen(t, path, "") // a key file that opens empty, under an sk name
+	sk := line("sk-ssh-ed25519@openssh.com", "yubikey")
+	if err := os.WriteFile(path+".pub", []byte(sk+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := Ladder(nil, dir); got.Source != FromFile || got.Line != sk || got.NoPassphrase {
+		t.Fatalf("Ladder = %+v", got)
+	}
+}
