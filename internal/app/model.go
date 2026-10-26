@@ -73,9 +73,9 @@ type Options struct {
 	// Check runs the login check (remote.CheckArgv) and gives its stderr
 	// and exit. Nil: ssh, for 30 s at most.
 	Check func(argv []string) (stderr string, exit int)
-	// CacheDir is where the ssh masters of the jumps live, in CacheDir/ssh.
-	// "": no master, and each jump logs in again.
-	CacheDir string
+	// MasterBase holds the ssh masters of the jumps, in MasterBase/ssh:
+	// /tmp/matchblox-<uid>. "": no master, and each jump logs in again.
+	MasterBase string
 	// Host is the host this console reaches over SSH; "" is this machine.
 	// Its tmux moves and door commands run there, with the builder's own
 	// ssh login.

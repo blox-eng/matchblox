@@ -103,7 +103,7 @@ func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
 	// A jump starts from this machine's tmux, whatever the host.
 	o.OutsideTmux, o.Prefix, o.Home, o.LocalTmux, o.JumpID = b.OutsideTmux, b.Prefix, b.Home, b.LocalTmux, b.JumpID
 	// The builder's own ssh login goes from this machine, whatever the host.
-	o.Check, o.CacheDir = b.Check, b.CacheDir
+	o.Check, o.MasterBase = b.Check, b.MasterBase
 	o.Graphics = b.Graphics // the logos draw in this terminal, whatever the host
 	if host == "" {
 		o.Pair = b.Pair // the key goes in this machine's authorized_keys

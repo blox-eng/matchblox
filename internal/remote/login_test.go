@@ -78,6 +78,23 @@ func TestClassifyLoginShowsOnlyATailscaleURL(t *testing.T) {
 	}
 }
 
+// TestUnreachableSaysTimedOut: a check that ssh did not end by itself
+// (exit -1), or that said nothing, timed out.
+func TestUnreachableSaysTimedOut(t *testing.T) {
+	for _, c := range []struct {
+		stderr string
+		exit   int
+	}{
+		{"debug1: Connecting to ws-1 port 22.\n", -1},
+		{"", 255},
+		{"debug1: Connecting to ws-1 port 22.\n", 255},
+	} {
+		if got, detail := ClassifyLogin(c.stderr, c.exit); got != LoginUnreachable || detail != "timed out" {
+			t.Errorf("%q %d: %v %q", c.stderr, c.exit, got, detail)
+		}
+	}
+}
+
 // TestClassifyLoginCleansTheReason: Tailscale's reason and ssh's last line
 // come from the network: no control characters reach the screen.
 func TestClassifyLoginCleansTheReason(t *testing.T) {
@@ -110,23 +127,74 @@ func TestCheckArgv(t *testing.T) {
 	}
 }
 
-func TestMasterDirMode(t *testing.T) {
-	cache := filepath.Join(t.TempDir(), "matchblox")
-	dir, err := EnsureMasterDir(cache)
-	if err != nil || dir != filepath.Join(cache, "ssh") {
-		t.Fatalf("EnsureMasterDir = %q, %v", dir, err)
-	}
-	if fi, err := os.Stat(dir); err != nil || fi.Mode().Perm() != 0o700 {
-		t.Fatalf("mode %v, %v", fi.Mode().Perm(), err)
-	}
-	if _, err := EnsureMasterDir(cache); err != nil {
-		t.Fatalf("a second call: %v", err)
-	}
-	if err := os.Chmod(dir, 0o755); err != nil {
+// shortTemp is a temporary directory with a short path: a socket path
+// under it must fit sun_path.
+func shortTemp(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "mb")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := EnsureMasterDir(cache); err == nil {
-		t.Fatal("a 0755 directory was taken")
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	return dir
+}
+
+func TestMasterDirMode(t *testing.T) {
+	base := filepath.Join(shortTemp(t), "m")
+	dir, err := EnsureMasterDir(base)
+	if err != nil || dir != filepath.Join(base, "ssh") {
+		t.Fatalf("EnsureMasterDir = %q, %v", dir, err)
+	}
+	for _, d := range []string{base, dir} {
+		if fi, err := os.Stat(d); err != nil || fi.Mode().Perm() != 0o700 {
+			t.Fatalf("%s: mode %v, %v", d, fi.Mode().Perm(), err)
+		}
+	}
+	if _, err := EnsureMasterDir(base); err != nil {
+		t.Fatalf("a second call: %v", err)
+	}
+	for _, d := range []string{dir, base} {
+		if err := os.Chmod(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := EnsureMasterDir(base); err == nil {
+			t.Fatalf("a 0755 %s was taken", d)
+		}
+		if err := os.Chmod(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestMasterDirSymlinkRefused: another user can make /tmp/matchblox-<uid>
+// a link to a directory of theirs first.
+func TestMasterDirSymlinkRefused(t *testing.T) {
+	tmp := shortTemp(t)
+	if err := os.Mkdir(filepath.Join(tmp, "real"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(tmp, "real"), filepath.Join(tmp, "m")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EnsureMasterDir(filepath.Join(tmp, "m")); err == nil {
+		t.Fatal("a link was taken")
+	}
+}
+
+// TestMasterPathFits: ssh listens on ControlPath plus 17 bytes (".", 16
+// random characters), and a path too long for sun_path ends ssh with 255.
+// Such a directory gives no master.
+func TestMasterPathFits(t *testing.T) {
+	base := "/" + strings.Repeat("b", 69) // 70 bytes; the directory is base/ssh
+	dir := base + "/ssh"
+	if masterFits(dir, "darwin") || masterFits(dir, "linux") {
+		t.Fatalf("%d bytes fit", len(dir))
+	}
+	if !masterFits("/tmp/matchblox-501/ssh", "darwin") || !masterFits("/tmp/matchblox-1000/ssh", "linux") {
+		t.Fatal("the default directory does not fit")
+	}
+	if !masterFits(strings.Repeat("d", 49), "linux") || masterFits(strings.Repeat("d", 46), "darwin") {
+		t.Fatal("the limits are 108 on linux and 104 on darwin, with the NUL")
 	}
 }
 

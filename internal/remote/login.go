@@ -1,10 +1,13 @@
 package remote
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/transport"
@@ -56,18 +59,38 @@ func MasterOpts(dir string) []string {
 	return []string{"-o", "ControlMaster=auto", "-o", "ControlPath=" + filepath.Join(dir, "%C"), "-o", "ControlPersist=10m"}
 }
 
-// EnsureMasterDir is <cache>/ssh, the directory of the master sockets: it
-// makes it 0700, and refuses one that others can enter or another user
-// owns. A socket there logs in as the builder.
-func EnsureMasterDir(cache string) (string, error) {
-	dir := filepath.Join(cache, "ssh")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", err
+// ErrMasterTooLong: a master's socket path would not fit sun_path.
+var ErrMasterTooLong = errors.New("too long for an ssh socket")
+
+// EnsureMasterDir is <base>/ssh, the directory of the master sockets: it
+// makes base and it 0700, and refuses either when others can enter it,
+// another user owns it, or it is a link. A socket there logs in as the
+// builder. base is /tmp/matchblox-<uid>: short, so the socket path fits.
+func EnsureMasterDir(base string) (string, error) {
+	dir := filepath.Join(base, "ssh")
+	if !masterFits(dir, runtime.GOOS) {
+		return "", fmt.Errorf("%s is %w", dir, ErrMasterTooLong)
 	}
-	if err := transport.CheckDir(dir); err != nil {
-		return "", err
+	for _, d := range []string{base, dir} {
+		if err := os.Mkdir(d, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+			return "", err
+		}
+		if err := transport.CheckDir(d); err != nil {
+			return "", err
+		}
 	}
 	return dir, nil
+}
+
+// masterFits tells if a socket in dir fits sun_path (with its NUL: 104
+// bytes on darwin, 108 elsewhere). ssh names it %C (40 characters), and
+// first listens on that name plus "." and 16 random characters.
+func masterFits(dir, goos string) bool {
+	limit := 108
+	if goos == "darwin" {
+		limit = 104
+	}
+	return len(dir)+1+40+17 < limit
 }
 
 // CheckArgv is the login check: the builder's own ssh, never a prompt (it
@@ -121,7 +144,11 @@ func ClassifyLogin(stderr string, exit int) (Login, string) {
 	case exit == 0:
 		return LoginOK, ""
 	}
-	return LoginUnreachable, printable(lastSaid(stderr))
+	detail := printable(lastSaid(stderr))
+	if exit < 0 || detail == "" {
+		detail = "timed out" // ssh was ended, or said nothing
+	}
+	return LoginUnreachable, detail
 }
 
 // lastSaid is the last line of stderr that is not ssh -v's debug output.

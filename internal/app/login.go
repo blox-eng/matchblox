@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os/exec"
 	"time"
 
@@ -31,9 +32,16 @@ func (m Model) checkLogin() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.checked, m.checking = true, true
-	// A directory that is refused: the check goes without a master, and a
-	// jump says why.
-	dir, _ := m.masterDir()
+	// A directory that is refused: the check and the jumps go without a
+	// master, and the console says why once.
+	dir, err := m.masterDir()
+	if err != nil {
+		fix := "remove it, then open the host again"
+		if errors.Is(err, remote.ErrMasterTooLong) {
+			fix = "use a shorter directory"
+		}
+		m.flash = "jumps to " + m.opt.Host + " ask your login each time: " + err.Error() + ": " + fix
+	}
 	host, check := m.opt.Host, m.opt.Check
 	if check == nil {
 		check = runCheck
@@ -105,18 +113,18 @@ func (m Model) loginNote(l remote.Login, detail string) string {
 	case remote.LoginHostKeyChanged:
 		return "refused: " + host + "'s host key changed: this can be an attack. Only if you trust it: ssh-keygen -R " + host
 	case remote.LoginUnreachable:
-		return "cannot reach " + host + " with your ssh login: " + detail
+		return "cannot reach " + host + " with your ssh login: " + detail + "; check that ssh " + host + " works in a terminal"
 	}
 	return ""
 }
 
 // masterDir is the directory of the jumps' ssh masters: "" without a
-// cache directory.
+// base, or when it is refused.
 func (m Model) masterDir() (string, error) {
-	if m.opt.CacheDir == "" {
+	if m.opt.MasterBase == "" {
 		return "", nil
 	}
-	return remote.EnsureMasterDir(m.opt.CacheDir)
+	return remote.EnsureMasterDir(m.opt.MasterBase)
 }
 
 // hostTmuxRefusal refuses a jump to a host whose tmux cannot take it, and
@@ -139,8 +147,8 @@ func (m Model) hostTmuxRefusal(a *action) *action {
 	return b
 }
 
-// runCheck runs the check's ssh and gives its stderr and exit; -1 when it
-// did not end by itself.
+// runCheck runs the check's ssh and gives its stderr and exit; -1 when the
+// time limit ended it.
 func runCheck(argv []string) (string, int) {
 	ctx, cancel := context.WithTimeout(context.Background(), checkTimeout)
 	defer cancel()
@@ -152,7 +160,7 @@ func runCheck(argv []string) (string, int) {
 	cmd.WaitDelay = time.Second
 	err := cmd.Run()
 	if cmd.ProcessState == nil {
-		return err.Error(), -1
+		return err.Error(), 255 // it did not start: no ssh
 	}
 	return stderr.String(), cmd.ProcessState.ExitCode()
 }

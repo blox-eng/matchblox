@@ -74,10 +74,7 @@ func (m Model) jumpOnHost(a *action) *action {
 	if m.login == remote.LoginHostKeyChanged {
 		return refused(a, m.loginNote(m.login, ""))
 	}
-	dir, err := m.masterDir()
-	if err != nil {
-		return refused(a, "refused: the ssh masters' directory: "+err.Error())
-	}
+	dir, _ := m.masterDir() // a refused one: no master, and the check said why
 	ssh := remote.JumpSSH(j.Host, j, remote.MasterOpts(dir))
 	b := *a
 	b.steps, b.say, b.remote = [][]string{ssh}, shellLine(ssh), true

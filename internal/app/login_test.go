@@ -1,6 +1,7 @@
 package app
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -39,12 +40,24 @@ func loginCheckOf(cmd tea.Cmd) []loginMsg {
 	return nil
 }
 
+// shortTemp is a temporary directory with a short path: the master's
+// socket path under it must fit sun_path.
+func shortTemp(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "mb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	return dir
+}
+
 // checkedHost is the onHost console with a cache directory and a check
 // that records its argv and answers with the fixture's stderr and exit.
 func checkedHost(t *testing.T, st proto.State, stderr string, exit int) (Model, *[][]string, *[][]string) {
 	t.Helper()
 	m, execs := onHost(t, st)
-	m.opt.CacheDir = t.TempDir()
+	m.opt.MasterBase = shortTemp(t)
 	var checks [][]string
 	m.opt.Check = func(argv []string) (string, int) {
 		checks = append(checks, argv)
@@ -67,7 +80,7 @@ func TestHostOpenRunsLoginCheck(t *testing.T) {
 		t.Fatal("the hello did not start the check")
 	}
 	got := loginCheckOf(cmd)
-	want := remote.CheckArgv("ws-1", filepath.Join(m.opt.CacheDir, "ssh"))
+	want := remote.CheckArgv("ws-1", filepath.Join(m.opt.MasterBase, "ssh"))
 	if len(*checks) != 1 || !slices.Equal((*checks)[0], want) {
 		t.Fatalf("checks %q, want %q", *checks, want)
 	}
@@ -133,7 +146,7 @@ func TestJumpUsesMaster(t *testing.T) {
 	m, _, _ := checkedHost(t, fixtureState(), "", 0)
 	j := hostJump(&m, remote.Jump{Pane: "%1"})
 	a := m.forHost(m.jump("%1"))
-	ssh := remote.JumpSSH("ws-1", j, remote.MasterOpts(filepath.Join(m.opt.CacheDir, "ssh")))
+	ssh := remote.JumpSSH("ws-1", j, remote.MasterOpts(filepath.Join(m.opt.MasterBase, "ssh")))
 	if a == nil || len(a.steps) != 1 || !slices.Equal(a.steps[0], j.Local(ssh)) {
 		t.Fatalf("pending %+v\nwant %q", a, j.Local(ssh))
 	}
@@ -163,7 +176,8 @@ func TestLoginResultSaysTheFix(t *testing.T) {
 		{remote.LoginTailscaleCheck, "https://login.tailscale.com/a/0123", "Tailscale SSH on ws-1 asks for a check: open https://login.tailscale.com/a/0123", true},
 		{remote.LoginTailscaleDenied, "tailnet policy does not permit you", "Tailscale SSH on ws-1 refuses you: tailnet policy does not permit you; see your tailnet's SSH rules (docs/remote.md)", true},
 		{remote.LoginHostKeyUnknown, "", "ws-1's host key is not known: the jump's ssh shows it; check it before you answer yes", true},
-		{remote.LoginUnreachable, "ssh: connect to host ws-1 port 22: Connection refused", "cannot reach ws-1 with your ssh login: ssh: connect to host ws-1 port 22: Connection refused", true},
+		{remote.LoginUnreachable, "ssh: connect to host ws-1 port 22: Connection refused", "cannot reach ws-1 with your ssh login: ssh: connect to host ws-1 port 22: Connection refused; check that ssh ws-1 works in a terminal", true},
+		{remote.LoginUnreachable, "timed out", "cannot reach ws-1 with your ssh login: timed out; check that ssh ws-1 works in a terminal", true},
 		{remote.LoginHostKeyChanged, "", "refused: ws-1's host key changed: this can be an attack. Only if you trust it: ssh-keygen -R ws-1", false},
 	} {
 		m, _, _ := checkedHost(t, fixtureState(), "", 0)
@@ -236,11 +250,50 @@ func TestOldHostTmuxShowsDoor(t *testing.T) {
 // the base's check and cache.
 func TestHostConsoleKeepsTheLoginOptions(t *testing.T) {
 	sh := NewShell(ShellOptions{
-		Base: Options{NoMotion: true, CacheDir: "/c", Check: func([]string) (string, int) { return "", 0 }},
+		Base: Options{NoMotion: true, MasterBase: "/c", Check: func([]string) (string, int) { return "", 0 }},
 		Open: func(host string) Options { return Options{Conn: newFake(), Host: host} },
 	})
 	opened, _ := sh.open("ws-1", false)
-	if o := opened.cur.opt; o.CacheDir != "/c" || o.Check == nil {
+	if o := opened.cur.opt; o.MasterBase != "/c" || o.Check == nil {
 		t.Fatalf("the host's console lost the login options: %+v", o)
+	}
+}
+
+// TestMasterRefusedJumpsWithoutIt: a master directory that is not the
+// builder's alone gives no master: the check and the jumps go without it,
+// and the console says why once, with the fix.
+func TestMasterRefusedJumpsWithoutIt(t *testing.T) {
+	m, _, checks := checkedHost(t, fixtureState(), "", 0)
+	if err := os.Chmod(m.opt.MasterBase, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	next, cmd := m.Update(hostHello("3.4"))
+	loginCheckOf(cmd)
+	want := "jumps to ws-1 ask your login each time: " + m.opt.MasterBase + " is open to other users (mode 755); it must be 0700: remove it, then open the host again"
+	if f := next.(Model).flash; f != want {
+		t.Fatalf("flash %q\nwant %q", f, want)
+	}
+	if len(*checks) != 1 || !slices.Equal((*checks)[0], remote.CheckArgv("ws-1", "")) {
+		t.Fatalf("checks %q", *checks)
+	}
+	m = next.(Model)
+	j := hostJump(&m, remote.Jump{Pane: "%1"})
+	if a := m.forHost(m.jump("%1")); a == nil || a.local != nil || !slices.Equal(a.steps[0], j.Local(remote.JumpSSH("ws-1", j, nil))) {
+		t.Fatalf("pending %+v", a)
+	}
+}
+
+// TestMasterTooLongJumpsWithoutIt: a socket path that does not fit gives
+// no master, and the console says why.
+func TestMasterTooLongJumpsWithoutIt(t *testing.T) {
+	m, _, checks := checkedHost(t, fixtureState(), "", 0)
+	m.opt.MasterBase = filepath.Join(m.opt.MasterBase, strings.Repeat("b", 70))
+	next, cmd := m.Update(hostHello("3.4"))
+	loginCheckOf(cmd)
+	if f := next.(Model).flash; !strings.HasPrefix(f, "jumps to ws-1 ask your login each time: ") || !strings.Contains(f, "too long") {
+		t.Fatalf("flash %q", f)
+	}
+	if len(*checks) != 1 || !slices.Equal((*checks)[0], remote.CheckArgv("ws-1", "")) {
+		t.Fatalf("checks %q", *checks)
 	}
 }
