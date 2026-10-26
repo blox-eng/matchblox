@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"fmt"
 	"os/exec"
 	"strings"
 
@@ -66,10 +65,20 @@ func (m Model) jumpOnHost(a *action) *action {
 	if !remote.JumpAllowed(j) {
 		return refused(a, jumpRefusal(j))
 	}
-	if j.Outer && olderTmux(m.opt.LocalTmux, remote.MinLocalTmux) {
+	if j.Outer && remote.TmuxTooOld(m.opt.LocalTmux, remote.MinLocalTmux) {
 		return refused(a, "tmux "+m.opt.LocalTmux+" is older than "+remote.MinLocalTmux+": update tmux, or run the console outside tmux")
 	}
-	ssh := remote.JumpSSH(j.Host, j, nil)
+	if v := m.host.Tmux; v == "none" || remote.TmuxTooOld(v, remote.MinHostTmux) {
+		return m.hostTmuxRefusal(a)
+	}
+	if m.login == remote.LoginHostKeyChanged {
+		return refused(a, m.loginNote(m.login, ""))
+	}
+	dir, err := m.masterDir()
+	if err != nil {
+		return refused(a, "refused: the ssh masters' directory: "+err.Error())
+	}
+	ssh := remote.JumpSSH(j.Host, j, remote.MasterOpts(dir))
 	b := *a
 	b.steps, b.say, b.remote = [][]string{ssh}, shellLine(ssh), true
 	if j.Outer {
@@ -122,20 +131,6 @@ func (m Model) jumpID() string {
 		return remote.NewJumpID()
 	}
 	return m.opt.JumpID()
-}
-
-// olderTmux is true when tmux version v (as tmux -V says it, without
-// "tmux ") is older than floor. A version it cannot read, such as a
-// development build or "", is not older.
-func olderTmux(v, floor string) bool {
-	var ma, mi, fma, fmi int
-	if _, err := fmt.Sscanf(strings.TrimPrefix(v, "next-"), "%d.%d", &ma, &mi); err != nil {
-		return false
-	}
-	if _, err := fmt.Sscanf(floor, "%d.%d", &fma, &fmi); err != nil {
-		return false
-	}
-	return ma < fma || ma == fma && mi < fmi
 }
 
 // blocking: trying again cannot help, connecting the host can.

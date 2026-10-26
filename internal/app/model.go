@@ -70,6 +70,12 @@ type Options struct {
 	LocalTmux string
 	// JumpID names a jump's sessions. Nil: remote.NewJumpID.
 	JumpID func() string
+	// Check runs the login check (remote.CheckArgv) and gives its stderr
+	// and exit. Nil: ssh, for 30 s at most.
+	Check func(argv []string) (stderr string, exit int)
+	// CacheDir is where the ssh masters of the jumps live, in CacheDir/ssh.
+	// "": no master, and each jump logs in again.
+	CacheDir string
 	// Host is the host this console reaches over SSH; "" is this machine.
 	// Its tmux moves and door commands run there, with the builder's own
 	// ssh login.
@@ -276,7 +282,11 @@ type Model struct {
 	quitting   bool
 	host       proto.Hello
 	mismatch   bool
-	blocked    error // why the host cannot be reached, until the builder acts
+	blocked    error        // why the host cannot be reached, until the builder acts
+	login      remote.Login // the builder's own ssh login to the host, as the check found it
+	checking   bool         // the login check runs
+	checked    bool         // the login check started once
+	jumpLater  *action      // the jump that waits for the login check
 	lost       bool
 	backoff    time.Duration
 	redialing  bool
@@ -513,7 +523,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.mismatch {
 			return m, nil
 		}
-		return m, m.recv()
+		next, check := m.checkLogin()
+		return next, tea.Batch(next.recv(), check)
+	case loginMsg:
+		return m.loggedIn(msg)
 	case stateMsg:
 		first := !m.have
 		st := proto.State(msg)
@@ -1160,6 +1173,9 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 		return next, nil
 	}
 	if a.remote {
+		if a.nav {
+			return m.jumpAfterLogin(a)
+		}
 		return m.onHost(a)
 	}
 	if (a.nav || a.attach) && m.opt.Host != "" {

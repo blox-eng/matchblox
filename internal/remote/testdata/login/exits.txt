@@ -1,3 +1,7 @@
 tailscale-check.stderr 0
 tailscale-ok.stderr 0
 tailscale-denied.stderr 255
+openssh-password.stderr 255
+openssh-hostkey-unknown.stderr 255
+openssh-hostkey-changed.stderr 255
+openssh-refused.stderr 255

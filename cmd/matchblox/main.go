@@ -500,6 +500,9 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 	if !base.OutsideTmux {
 		base.Prefix, base.Home, base.LocalTmux = localTmux()
 	}
+	if cache, err := os.UserCacheDir(); err == nil {
+		base.CacheDir = filepath.Join(cache, "matchblox") // the ssh masters of the jumps
+	}
 	home, _ := os.UserHomeDir()
 	base.Pair = consolePair(home, base.Self, defaultHostKey, setup.PairAddress)
 	restore := func() {}

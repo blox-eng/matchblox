@@ -108,6 +108,33 @@ func (s *Service) tmuxOut(argv []string) (string, error) {
 	return string(out), err
 }
 
+// tmuxVersion is this machine's tmux for the hello, as tmux -V says it
+// without "tmux ", or "none". Every hook says hello, so a version is read
+// once a minute.
+func (s *Service) tmuxVersion() string {
+	s.tmuxMu.Lock()
+	defer s.tmuxMu.Unlock()
+	if s.tmuxV != "" && time.Since(s.tmuxAt) < time.Minute {
+		return s.tmuxV
+	}
+	look := s.LookPath
+	if look == nil {
+		look = exec.LookPath
+	}
+	s.tmuxV, s.tmuxAt = "none", time.Now()
+	bin, err := look("tmux")
+	if err != nil {
+		return s.tmuxV
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, bin, "-V").Output() //nolint:gosec // tmux from PATH, a fixed argument
+	if v := strings.TrimSpace(strings.TrimPrefix(string(out), "tmux ")); err == nil && v != "" {
+		s.tmuxV = v
+	}
+	return s.tmuxV
+}
+
 func (s *Service) isDir(path string) bool {
 	if s.IsDir != nil {
 		return s.IsDir(path)

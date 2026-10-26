@@ -1,0 +1,246 @@
+package app
+
+import (
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/remote"
+)
+
+// loginCheckOf runs cmd and the commands it batches for the login check's
+// message, skipping any that block (a recv on an empty connection).
+func loginCheckOf(cmd tea.Cmd) []loginMsg {
+	if cmd == nil {
+		return nil
+	}
+	out := make(chan tea.Msg, 1)
+	go func() { out <- cmd() }()
+	select {
+	case msg := <-out:
+		switch msg := msg.(type) {
+		case tea.BatchMsg:
+			var got []loginMsg
+			for _, c := range msg {
+				got = append(got, loginCheckOf(c)...)
+			}
+			return got
+		case loginMsg:
+			return []loginMsg{msg}
+		}
+	case <-time.After(50 * time.Millisecond):
+	}
+	return nil
+}
+
+// checkedHost is the onHost console with a cache directory and a check
+// that records its argv and answers with the fixture's stderr and exit.
+func checkedHost(t *testing.T, st proto.State, stderr string, exit int) (Model, *[][]string, *[][]string) {
+	t.Helper()
+	m, execs := onHost(t, st)
+	m.opt.CacheDir = t.TempDir()
+	var checks [][]string
+	m.opt.Check = func(argv []string) (string, int) {
+		checks = append(checks, argv)
+		return stderr, exit
+	}
+	return m, execs, &checks
+}
+
+func hostHello(tmux string) helloMsg {
+	return helloMsg(proto.Hello{Version: proto.Version, Host: "ws-1", Tmux: tmux})
+}
+
+// TestHostOpenRunsLoginCheck: the first hello of a host's console starts
+// one check of the builder's own login, with the master options, in the
+// background; a hello after a reconnect does not start another.
+func TestHostOpenRunsLoginCheck(t *testing.T) {
+	m, _, checks := checkedHost(t, fixtureState(), "", 0)
+	next, cmd := m.Update(hostHello("3.4"))
+	if !next.(Model).checking {
+		t.Fatal("the hello did not start the check")
+	}
+	got := loginCheckOf(cmd)
+	want := remote.CheckArgv("ws-1", filepath.Join(m.opt.CacheDir, "ssh"))
+	if len(*checks) != 1 || !slices.Equal((*checks)[0], want) {
+		t.Fatalf("checks %q, want %q", *checks, want)
+	}
+	if len(got) != 1 || got[0].login != remote.LoginOK {
+		t.Fatalf("messages %+v", got)
+	}
+	next, _ = next.Update(got[0])
+	if next.(Model).checking || next.(Model).flash != "" {
+		t.Fatalf("an ok login shows nothing: flash %q", next.(Model).flash)
+	}
+	_, cmd = next.Update(hostHello("3.4"))
+	loginCheckOf(cmd)
+	if len(*checks) != 1 {
+		t.Fatalf("a second hello checked again: %q", *checks)
+	}
+}
+
+// TestLocalConsoleRunsNoLoginCheck: this machine's console has no login to
+// check.
+func TestLocalConsoleRunsNoLoginCheck(t *testing.T) {
+	m, _ := loadedWith(t, 100, fixtureState())
+	m.opt.Check = func(argv []string) (string, int) { t.Fatalf("checked %q", argv); return "", 0 }
+	next, cmd := m.Update(helloMsg(proto.Hello{Version: proto.Version}))
+	loginCheckOf(cmd)
+	if next.(Model).checking {
+		t.Fatal("this machine's console checks a login")
+	}
+}
+
+// TestJumpWaitsForLoginCheck: a jump confirmed while the check runs waits
+// for its result, then runs once; a second jump replaces the first.
+func TestJumpWaitsForLoginCheck(t *testing.T) {
+	m, _, _ := checkedHost(t, fixtureState(), "", 0)
+	var ran [][]string
+	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	next, cmd := m.Update(hostHello("3.4"))
+	login := loginCheckOf(cmd)
+	m = next.(Model)
+	hostJump(&m, remote.Jump{Pane: "%1"})
+	next, cmd = m.confirm(*m.forHost(m.jump("%1")))
+	if cmd != nil || len(ran) != 0 {
+		t.Fatalf("the jump ran before the check: %q", ran)
+	}
+	next, _ = next.(Model).confirm(*m.forHost(m.jump("%2")))
+	if !strings.Contains(next.(Model).flash, "checking") {
+		t.Fatalf("flash %q", next.(Model).flash)
+	}
+	next, cmd = next.Update(login[0])
+	if cmd == nil {
+		t.Fatal("the check ended and the jump did not run")
+	}
+	cmd()
+	if len(ran) != 1 || !strings.Contains(strings.Join(ran[0], " "), "%2") {
+		t.Fatalf("ran %q, want one jump to %%2", ran)
+	}
+	if next.(Model).checking {
+		t.Fatal("still checking")
+	}
+}
+
+// TestJumpUsesMaster: the jump's ssh shares the master in the cache.
+func TestJumpUsesMaster(t *testing.T) {
+	m, _, _ := checkedHost(t, fixtureState(), "", 0)
+	j := hostJump(&m, remote.Jump{Pane: "%1"})
+	a := m.forHost(m.jump("%1"))
+	ssh := remote.JumpSSH("ws-1", j, remote.MasterOpts(filepath.Join(m.opt.CacheDir, "ssh")))
+	if a == nil || len(a.steps) != 1 || !slices.Equal(a.steps[0], j.Local(ssh)) {
+		t.Fatalf("pending %+v\nwant %q", a, j.Local(ssh))
+	}
+}
+
+// TestJumpNoMasterWithoutCache: no cache directory, no master; each jump
+// logs in again.
+func TestJumpNoMasterWithoutCache(t *testing.T) {
+	m, _ := onHost(t, fixtureState())
+	j := hostJump(&m, remote.Jump{Pane: "%1"})
+	a := m.forHost(m.jump("%1"))
+	if a == nil || !slices.Equal(a.steps[0], j.Local(remote.JumpSSH("ws-1", j, nil))) {
+		t.Fatalf("pending %+v", a)
+	}
+}
+
+// TestLoginResultSaysTheFix: a login that is not ok shows one line that
+// names it and its fix; the jump still goes, except to a changed host key.
+func TestLoginResultSaysTheFix(t *testing.T) {
+	for _, c := range []struct {
+		login  remote.Login
+		detail string
+		want   string
+		jumps  bool
+	}{
+		{remote.LoginPassword, "", "ws-1 asks your password at each jump: put your key there (ssh-copy-id ws-1)", true},
+		{remote.LoginTailscaleCheck, "https://login.tailscale.com/a/0123", "Tailscale SSH on ws-1 asks for a check: open https://login.tailscale.com/a/0123", true},
+		{remote.LoginTailscaleDenied, "tailnet policy does not permit you", "Tailscale SSH on ws-1 refuses you: tailnet policy does not permit you; see your tailnet's SSH rules (docs/remote.md)", true},
+		{remote.LoginHostKeyUnknown, "", "ws-1's host key is not known: the jump's ssh shows it; check it before you answer yes", true},
+		{remote.LoginUnreachable, "ssh: connect to host ws-1 port 22: Connection refused", "cannot reach ws-1 with your ssh login: ssh: connect to host ws-1 port 22: Connection refused", true},
+		{remote.LoginHostKeyChanged, "", "refused: ws-1's host key changed: this can be an attack. Only if you trust it: ssh-keygen -R ws-1", false},
+	} {
+		m, _, _ := checkedHost(t, fixtureState(), "", 0)
+		var ran [][]string
+		m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+		next, _ := m.Update(hostHello("3.4"))
+		m = next.(Model)
+		hostJump(&m, remote.Jump{Pane: "%1"})
+		next, _ = m.confirm(*m.forHost(m.jump("%1")))
+		next, cmd := next.Update(loginMsg{host: "ws-1", login: c.login, detail: c.detail})
+		if f := next.(Model).flash; f != c.want {
+			t.Errorf("%v: flash %q\nwant %q", c.login, f, c.want)
+		}
+		if cmd != nil {
+			cmd()
+		}
+		if jumped := len(ran) == 1; jumped != c.jumps {
+			t.Errorf("%v: ran %q", c.login, ran)
+		}
+		if c.jumps {
+			continue
+		}
+		// A jump after the result is refused at once, with the same fix.
+		next, _ = next.(Model).confirm(*next.(Model).forHost(m.jump("%1")))
+		if f := next.(Model).flash; f != c.want || len(ran) != 0 {
+			t.Errorf("%v: a later jump: flash %q, ran %q", c.login, f, ran)
+		}
+	}
+}
+
+// TestOldHostTmuxShowsDoor: a host without tmux, or with one older than
+// MinHostTmux, cannot take a jump: it is refused, and the tmux door is
+// selected. A host that does not say (an older matchblox) tries.
+func TestOldHostTmuxShowsDoor(t *testing.T) {
+	tmux := doors.Door{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}}
+	for _, c := range []struct {
+		tmux, want string
+	}{
+		{"none", "refused: ws-1 has no tmux: install it with its Install tmux door"},
+		{"3.1", "refused: tmux 3.1 on ws-1 is older than 3.2: update tmux there"},
+		{"", ""},
+		{"3.4", ""},
+	} {
+		m, execs, _ := checkedHost(t, doorState(tmux), "", 0)
+		next, cmd := m.Update(hostHello(c.tmux))
+		next, _ = next.Update(loginCheckOf(cmd)[0])
+		m = next.(Model)
+		m.tab = tabSessions
+		a := m.forHost(m.jump("%1"))
+		if c.want == "" {
+			if a == nil || a.local != nil {
+				t.Errorf("%q: refused %+v", c.tmux, a)
+			}
+			continue
+		}
+		next, cmd = m.confirm(*a)
+		if cmd != nil || len(*execs) != 0 {
+			t.Errorf("%q: it ran: %q", c.tmux, *execs)
+		}
+		if f := next.(Model).flash; f != c.want {
+			t.Errorf("%q: flash %q", c.tmux, f)
+		}
+		if p := next.(Model).doorPick; p != doors.Tmux {
+			t.Errorf("%q: the tmux door is not selected: %q", c.tmux, p)
+		}
+	}
+}
+
+// TestHostConsoleKeepsTheLoginOptions: the shell gives a host's console
+// the base's check and cache.
+func TestHostConsoleKeepsTheLoginOptions(t *testing.T) {
+	sh := NewShell(ShellOptions{
+		Base: Options{NoMotion: true, CacheDir: "/c", Check: func([]string) (string, int) { return "", 0 }},
+		Open: func(host string) Options { return Options{Conn: newFake(), Host: host} },
+	})
+	opened, _ := sh.open("ws-1", false)
+	if o := opened.cur.opt; o.CacheDir != "/c" || o.Check == nil {
+		t.Fatalf("the host's console lost the login options: %+v", o)
+	}
+}

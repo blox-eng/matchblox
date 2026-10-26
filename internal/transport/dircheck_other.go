@@ -2,4 +2,4 @@
 
 package transport
 
-func checkDir(string) error { return nil }
+func CheckDir(string) error { return nil }

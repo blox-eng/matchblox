@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -180,6 +181,26 @@ func recID(t *testing.T, st proto.State, prefix string) string {
 	}
 	t.Fatalf("no rec %q in %+v", prefix, st.Recommendations)
 	return ""
+}
+
+// TestHelloCarriesTmux: the hello says the host's tmux version, so the
+// console knows before a jump that the host cannot take it; "none" without
+// tmux.
+func TestHelloCarriesTmux(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("no tmux here")
+	}
+	s := newTest(t, time.Hour)
+	_, h := connect(t, run(t, s), s)
+	if h.Tmux == "" || h.Tmux == "none" || strings.HasPrefix(h.Tmux, "tmux") {
+		t.Fatalf("hello tmux %q", h.Tmux)
+	}
+
+	s = newTest(t, time.Hour)
+	s.LookPath = func(string) (string, error) { return "", exec.ErrNotFound }
+	if _, h = connect(t, run(t, s), s); h.Tmux != "none" {
+		t.Fatalf("without tmux the hello says %q", h.Tmux)
+	}
 }
 
 func TestServiceSendsHelloThenSnapshot(t *testing.T) {

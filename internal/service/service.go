@@ -178,6 +178,10 @@ type Service struct {
 	sample   func() sample.Snapshot
 	git      GitSource
 
+	tmuxMu sync.Mutex
+	tmuxV  string // the hello's tmux, read at tmuxAt
+	tmuxAt time.Time
+
 	mu  sync.Mutex
 	cur state.Doc
 	// startedAt is when matchblox started the stoker agent; zero once it
@@ -851,7 +855,7 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 		host, _ = os.Hostname()
 	}
 	if err := c.Send(proto.KindHello, "", proto.Hello{
-		Version: proto.Version, Binary: s.Binary, Host: host, OS: runtime.GOOS, Arch: runtime.GOARCH,
+		Version: proto.Version, Binary: s.Binary, Host: host, OS: runtime.GOOS, Arch: runtime.GOARCH, Tmux: s.tmuxVersion(),
 	}); err != nil {
 		return err
 	}

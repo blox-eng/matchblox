@@ -8,10 +8,10 @@ import (
 	"syscall"
 )
 
-// checkDir refuses a socket directory that is a symlink, that others can
+// CheckDir refuses a socket directory that is a symlink, that others can
 // enter, or that another user owns: on a shared /tmp another user could
 // make it first and serve a fake console.
-func checkDir(dir string) error {
+func CheckDir(dir string) error {
 	fi, err := os.Lstat(dir)
 	if err != nil {
 		return err
