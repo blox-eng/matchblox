@@ -42,6 +42,16 @@ All notable changes to matchblox are in this file. The format follows
   account still asks for its typed `y` once the clone is done.
   ([#176](https://github.com/blox-eng/matchblox/issues/176))
 
+## [0.23.2] - 2026-10-26
+
+### Fixed
+
+- **A service that waited for the socket restarts for an install made
+  meanwhile.** A service started by the user unit that waited while you
+  installed a new matchblox used to take the new binary for its own once it
+  took over, and run the old code on, with no console to replace it.
+  ([#212](https://github.com/blox-eng/matchblox/issues/212))
+
 ## [0.23.1] - 2026-10-26
 
 ### Fixed
@@ -908,7 +918,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.23.1...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.23.2...HEAD
+[0.23.2]: https://github.com/blox-eng/matchblox/compare/v0.23.1...v0.23.2
 [0.23.1]: https://github.com/blox-eng/matchblox/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/blox-eng/matchblox/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/blox-eng/matchblox/compare/v0.21.0...v0.22.0

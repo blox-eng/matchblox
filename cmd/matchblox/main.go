@@ -79,7 +79,13 @@ func buildVersion(stamp string, read func() (*debug.BuildInfo, bool)) string {
 	return stamp
 }
 
+// exeAt is the binary as this process started on it, looked at before
+// anything else: a serve that waits long for the socket compares the binary
+// with it, not with what is on disk when it takes over. Nil: not read.
+var exeAt os.FileInfo
+
 func main() {
+	exeAt, _ = os.Stat(invokedPath(os.Args[0])) //nolint:gosec // only looks at the binary this process runs
 	// MATCHBLOX_CPUPROFILE=file profiles this process, to keep its own cost
 	// honest.
 	if path := os.Getenv("MATCHBLOX_CPUPROFILE"); path != "" {
@@ -279,7 +285,7 @@ func run(args []string) error {
 		if *stdio {
 			return serveStdio(path, os.Stdin, os.Stdout)
 		}
-		return serve(path, func() *service.Service { return newService(cfg, *root) })
+		return serve(path, exeAt, func() *service.Service { return newService(cfg, *root) })
 	case "status":
 		return status(os.Stdout, path, cfg, *root, *text)
 	}
@@ -684,7 +690,7 @@ var socketWait = time.Second
 // mk builds the service once the socket is this serve's: a unit's serve may
 // wait long for it, and the state it reads (numbers, holds, the stoker) is
 // the other serve's until then.
-func serve(path string, mk func() *service.Service) error {
+func serve(path string, exeAt os.FileInfo, mk func() *service.Service) error {
 	unit := os.Getenv(unitEnv) != ""
 	_ = os.Unsetenv(unitEnv) // what serve starts is not the unit's serve
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -710,6 +716,9 @@ func serve(path string, mk func() *service.Service) error {
 	}
 	warnTailscaleSSHGate(os.Stderr)
 	s := mk()
+	if exeAt != nil && s.Exe != "" {
+		s.ExeAt = exeAt // the binary this process runs, not the one on disk now
+	}
 	if s.Push != nil {
 		defer s.Push.Close()
 	}

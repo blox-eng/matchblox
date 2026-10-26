@@ -79,10 +79,16 @@ type Service struct {
 	// the socket file; Serve stops when either changes. Empty Exe: no check.
 	Exe      string
 	ExeEvery time.Duration
+	// ExeAt is Exe as the process started on it. Nil: the watch's first look
+	// stands for it, so a binary replaced before that look is the one it
+	// knows.
+	ExeAt os.FileInfo
 	// watching closes once Serve's watch has taken its first look at Exe
 	// and the socket (Watching).
 	watching     chan struct{}
 	watchingOnce sync.Once
+	// runDone closes when the Run that Serve started returns.
+	runDone chan struct{}
 	// Home is the builder's home directory, where the accounts live. Empty:
 	// os.UserHomeDir().
 	Home string
@@ -327,7 +333,11 @@ func (s *Service) Serve(ctx context.Context, l net.Listener) error {
 	s.mu.Lock()
 	s.stop = cancel
 	s.mu.Unlock()
-	go s.Run(ctx)
+	runDone := make(chan struct{})
+	s.mu.Lock()
+	s.runDone = runDone
+	s.mu.Unlock()
+	go func() { s.Run(ctx); close(runDone) }()
 	sock := ""
 	if a, ok := l.Addr().(*net.UnixAddr); ok {
 		sock = a.Name
@@ -372,6 +382,17 @@ func (s *Service) watch(ctx context.Context, stop context.CancelCauseFunc, sock 
 		return now == nil || !os.SameFile(was, now) || now.Size() != was.Size() || !now.ModTime().Equal(was.ModTime())
 	}
 	exe, socket := stat(s.Exe), stat(sock)
+	if s.ExeAt != nil && s.Exe != "" {
+		was := exe
+		exe = s.ExeAt
+		if was == nil || changed(exe, s.Exe) {
+			// Installed over or removed since the process started, as while
+			// a unit's serve waits for the socket: not this process's code.
+			s.watchingOnce.Do(func() { close(s.watchingChan()) })
+			stop(ErrReplaced)
+			return
+		}
+	}
 	s.watchingOnce.Do(func() { close(s.watchingChan()) })
 	// Removed between the listen and this first look: gone all the same,
 	// or no later look would ever tell. A binary gone is uninstalled.
@@ -403,8 +424,9 @@ func (s *Service) watch(ctx context.Context, stop context.CancelCauseFunc, sock 
 }
 
 // Watching closes once Serve's watch has taken its first look at the
-// binary and the socket: a change after it is seen. A binary replaced
-// before it is the one the watch knows.
+// binary and the socket: a change after it is seen. Without ExeAt, a binary
+// replaced before that look is the one the watch knows; with it, a change
+// since the process started is seen too.
 func (s *Service) Watching() <-chan struct{} { return s.watchingChan() }
 
 func (s *Service) watchingChan() chan struct{} {
