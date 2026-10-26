@@ -5,9 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -260,6 +258,7 @@ func TestJumpWayBackHomeKey(t *testing.T) {
 	c.waitSession(HostSessionName(j.Host, j.ID))
 	mustTmux(t, e.outer, "send-keys", "-K", "-c", c.tty, "User900")
 	c.waitSession("matchblox")
+	waitFor(t, "the jump session is gone", func() bool { return !hasSession(e.outer, HostSessionName(j.Host, j.ID)) })
 }
 
 func TestJumpWayBackTap(t *testing.T) {
@@ -271,6 +270,7 @@ func TestJumpWayBackTap(t *testing.T) {
 	// A left click (SGR mouse) on the first columns of the status line.
 	c.type_("\x1b[<0;5;30M\x1b[<0;5;30m")
 	c.waitSession("matchblox")
+	waitFor(t, "the jump session is gone", func() bool { return !hasSession(e.outer, HostSessionName(j.Host, j.ID)) })
 }
 
 func TestJumpWayBackWithPrefixCa(t *testing.T) {
@@ -291,39 +291,32 @@ func TestJumpWayBackWithPrefixCa(t *testing.T) {
 	})
 }
 
+// TestJumpDropLeavesNothing: the link drops (ssh exits 255) while the
+// builder is on the console and S runs in the background. Nobody can press
+// Enter there, so S must end by itself.
 func TestJumpDropLeavesNothing(t *testing.T) {
 	e := newJumpEnv(t)
 	c := attach(t, e.outer, "matchblox")
 	j := e.newJump("0a1b2c3d")
-	e.jump(t, c, j, e.ssh)
-	s, g := HostSessionName(j.Host, j.ID), JumpSessionName(j.ID)
-	c.waitSession(s)
-	waitFor(t, "the jump is attached", func() bool { return len(clientsOf(e.inner, g)) == 1 })
-	killSSH(t, e.outer, s)
-	waitFor(t, "the host's jump session is gone", func() bool { return !hasSession(e.inner, g) })
-	waitFor(t, "the outer session is gone", func() bool { return !hasSession(e.outer, s) })
-	c.waitSession("matchblox")
-}
-
-// killSSH kills the ssh of the session's pane with SIGKILL. The client then
-// leaves the pty raw, and the wrapper's read returns at once, so the session
-// ends without "Press Enter". A graceful nonzero exit waits (see
-// TestJumpFailedSSHIsReadable).
-func killSSH(t *testing.T, sock, session string) {
-	t.Helper()
-	sh := mustTmux(t, sock, "display-message", "-p", "-t", "="+session+":", "#{pane_pid}")
-	var pid int
-	waitFor(t, "ssh runs under the wrapper", func() bool {
-		out, err := exec.Command("pgrep", "-P", sh).Output() //nolint:gosec // a pid of the test's own pane
-		if err != nil {
-			return false
-		}
-		pid, _ = strconv.Atoi(strings.Fields(string(out))[0])
-		return pid > 0
-	})
-	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+	drop := filepath.Join(t.TempDir(), "drop")
+	script := "#!/bin/sh\nwhile [ ! -e " + drop + " ]; do sleep 0.05; done\nexit 255\n"
+	ssh := filepath.Join(t.TempDir(), "ssh")
+	if err := os.WriteFile(ssh, []byte(script), 0o700); err != nil { //nolint:gosec // a test script must be executable
 		t.Fatal(err)
 	}
+	e.jump(t, c, j, ssh)
+	s := HostSessionName(j.Host, j.ID)
+	c.waitSession(s)
+	mustTmux(t, e.outer, "switch-client", "-c", c.tty, "-t", "=matchblox")
+	c.waitSession("matchblox")
+	if !hasSession(e.outer, s) {
+		t.Fatal("the session ended before the drop")
+	}
+	if err := os.WriteFile(drop, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the outer session is gone", func() bool { return !hasSession(e.outer, s) })
+	c.waitSession("matchblox")
 }
 
 func TestJumpFailedSSHIsReadable(t *testing.T) {

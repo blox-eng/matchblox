@@ -161,15 +161,17 @@ func (j Jump) Remote() []string {
 // waits for Enter so the error can be read. ssh stays argv.
 func (j Jump) Local(ssh []string) []string {
 	s := HostSessionName(j.Host, j.ID)
-	back := "switch-client -t =" + j.home()
-	const wrap = `"$@"; s=$?; [ $s = 0 ] || { printf "\nssh exited %s. Press Enter to go back.\n" "$s"; read _; }; exit 0`
+	back := "switch-client -t =" + j.home() + " ; kill-session -t =" + s
+	// A failed ssh waits for Enter only when a client looks at this session;
+	// in the background (the builder went home) nobody can press Enter.
+	const wrap = `"$@"; s=$?; [ $s = 0 ] || [ "$(tmux display-message -p '#{session_attached}')" = 0 ] || { printf "\nssh exited %s. Press Enter to go back.\n" "$s"; read _; }; exit 0`
 	return tmuxList(
 		append([]string{"new-session", "-d", "-s", s, "--", "/bin/sh", "-c", wrap, "sh"}, ssh...),
 		setOption(s, "detach-on-destroy", "off"),
 		setOption(s, "key-table", "matchblox-host"),
 		setOption(s, "mouse", "on"),
 		setOption(s, "status-left", "#[range=user|matchblox] ◂ console #[norange]"),
-		[]string{"bind-key", "-T", "matchblox-host", "User900", "switch-client", "-t", "=" + j.home()},
+		[]string{"bind-key", "-T", "matchblox-host", "User900", "if", "-F", "1", back, ""},
 		[]string{"bind-key", "-T", "matchblox-host", "MouseDown1Status", "if", "-F", "#{==:#{mouse_status_range},matchblox}", back, ""},
 		[]string{"switch-client", "-t", "=" + s},
 	)

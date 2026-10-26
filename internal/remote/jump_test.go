@@ -48,22 +48,22 @@ func TestJumpRemoteToDir(t *testing.T) {
 
 func TestJumpLocal(t *testing.T) {
 	const s = "'=matchblox-ws-1-0a1b2c3d:'"
-	wrap := `/bin/sh -c '"$@"; s=$?; [ $s = 0 ] || { printf "\nssh exited %s. Press Enter to go back.\n" "$s"; read _; }; exit 0' sh ssh x`
+	wrap := `/bin/sh -c '"$@"; s=$?; [ $s = 0 ] || [ "$(tmux display-message -p '\''#{session_attached}'\'')" = 0 ] || { printf "\nssh exited %s. Press Enter to go back.\n" "$s"; read _; }; exit 0' sh ssh x`
 	want := "tmux new-session -d -s matchblox-ws-1-0a1b2c3d -- " + wrap + " ';'" +
 		" set-option -t " + s + " detach-on-destroy off ';'" +
 		" set-option -t " + s + " key-table matchblox-host ';'" +
 		" set-option -t " + s + " mouse on ';'" +
 		" set-option -t " + s + " status-left '#[range=user|matchblox] ◂ console #[norange]' ';'" +
-		" bind-key -T matchblox-host User900 switch-client -t '=matchblox' ';'" +
-		" bind-key -T matchblox-host MouseDown1Status if -F '#{==:#{mouse_status_range},matchblox}' 'switch-client -t =matchblox' '' ';'" +
+		" bind-key -T matchblox-host User900 if -F 1 'switch-client -t =matchblox ; kill-session -t =matchblox-ws-1-0a1b2c3d' '' ';'" +
+		" bind-key -T matchblox-host MouseDown1Status if -F '#{==:#{mouse_status_range},matchblox}' 'switch-client -t =matchblox ; kill-session -t =matchblox-ws-1-0a1b2c3d' '' ';'" +
 		" switch-client -t '=matchblox-ws-1-0a1b2c3d'"
 	j := Jump{Host: "ws-1", Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d"}
 	if got := Line(j.Local([]string{"ssh", "x"})); got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}
 	j.Home = "work"
-	if got := Line(j.Local([]string{"ssh", "x"})); !strings.Contains(got, "switch-client -t '=work' ';'") ||
-		strings.Contains(got, "'=matchblox' ';'") {
+	if got := Line(j.Local([]string{"ssh", "x"})); strings.Count(got, "'switch-client -t =work ; kill-session") != 2 ||
+		strings.Contains(got, "=matchblox ;") {
 		t.Errorf("the way back ignores Home: %s", got)
 	}
 }
