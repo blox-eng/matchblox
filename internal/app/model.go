@@ -82,9 +82,9 @@ type Options struct {
 	// NoAsk is why Ask is nil; "": it says nothing.
 	NoAsk string
 	// SSH runs an ssh of the builder's own login that the console starts
-	// (a master's check, its open), with env added, and gives its stderr
-	// and exit. Nil: ssh, for 5 minutes at most.
-	SSH func(argv, env []string) (stderr string, exit int)
+	// (a master's check, its open), with env added, until ctx ends, and
+	// gives its stderr and exit. Nil: ssh, for 5 minutes at most.
+	SSH func(ctx context.Context, argv, env []string) (stderr string, exit int)
 	// Host is the host this console reaches over SSH; "" is this machine.
 	// Its tmux moves and door commands run there, with the builder's own
 	// ssh login.
@@ -392,6 +392,7 @@ type Model struct {
 	ask          *askField
 	askCtx       context.Context
 	askStop      context.CancelFunc
+	openStop     context.CancelFunc // ends the open-first that runs
 	askCancelled bool
 }
 

@@ -70,6 +70,7 @@ func (m Model) asked(msg askMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.ask = &askField{prompt: msg.prompt, answer: msg.answer}
+	m.pending, m.held = nil, nil // as a tap does: no key after the prompt confirms them
 	gone := msg.prompt.Gone
 	if gone == nil {
 		return m, nil
@@ -107,20 +108,39 @@ func (m Model) closeAsk(answer string, ok bool, flash string) (Model, tea.Cmd) {
 }
 
 func (m Model) askHost() string {
-	if h := m.ask.prompt.Host; h != "" {
-		return h
+	switch {
+	case m.ask == nil:
+		return m.opt.Host
+	case m.ask.prompt.Host != "":
+		return m.ask.prompt.Host
 	}
 	return "a host"
 }
 
+// asking: the field is on top, with a prompt, or waiting for the next one
+// of an open-first (sshd waits after a wrong password).
+func (m Model) asking() bool { return m.ask != nil || m.opening }
+
 // askKey is a key on the field: ⏎ answers, esc and ctrl+c cancel the ssh,
-// any other key is text.
+// any other key is text. While the field waits, esc and ctrl+c end the
+// open-first, and it takes every other key for nothing.
 func (m Model) askKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	ak := m.keys.ask
+	if m.ask == nil {
+		if bkey.Matches(k, ak.Cancel, m.keys.global.Quit) && m.openStop != nil {
+			m.openStop()
+			m.askCancelled = true
+			m.flash = "cancelled: the login to " + m.opt.Host + "…"
+		}
+		return m, nil
+	}
 	f := *m.ask
 	switch {
 	case bkey.Matches(k, ak.Cancel, m.keys.global.Quit):
 		m.askCancelled = true
+		if m.openStop != nil {
+			m.openStop() // ssh would ask again: the open ends here
+		}
 		return m.closeAsk("", false, "cancelled: the ssh to "+m.askHost()+" gets no answer")
 	case bkey.Matches(k, ak.Send):
 		return m.sendAsk()
@@ -236,6 +256,16 @@ func (m Model) askBox(bw, maxH int) []string {
 	return box
 }
 
+// waitBox is the field between two prompts of an open-first: it holds
+// the keys until ssh asks again or ends.
+func (m Model) waitBox(bw int) []string {
+	st := m.st
+	title := st.accent.Bold(true).Render("ssh " + m.askHost() + " asks")
+	foot := []footPart{st.footKey(m.keys.ask.Cancel, "cancel the ssh", "", st.accent)}
+	box, _ := boxFrame(st.hair, title, padded([][]string{{st.muted.Render("waiting for ssh…")}}, bw), foot, bw)
+	return box
+}
+
 // askInput is what was typed: a • per rune, or the words of a yes/no
 // prompt, which are no secret.
 func (m Model) askInput() string {
@@ -258,6 +288,9 @@ func (m Model) overlayAsk(sc *drawn, w int) {
 	if !phone {
 		bw = min(72, w-8)
 	}
-	box := m.askBox(bw, len(sc.lines)-3)
+	box := m.waitBox(bw)
+	if m.ask != nil {
+		box = m.askBox(bw, len(sc.lines)-3)
+	}
 	m.overlayBox(sc, w, bw, phone, box, make([]string, len(box)), nil)
 }

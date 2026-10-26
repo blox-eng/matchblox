@@ -198,8 +198,8 @@ func TestAskFieldShowsTheQuestion(t *testing.T) {
 	}
 }
 
-// TestAskFieldAboveEverything: the field takes the keys over a confirm
-// that waits, and the confirm stays.
+// TestAskFieldAboveEverything: a prompt drops a confirm that waits (as a
+// tap does): no key typed into the field, or after it, confirms it.
 func TestAskFieldAboveEverything(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	m.tab = tabSessions
@@ -209,12 +209,12 @@ func TestAskFieldAboveEverything(t *testing.T) {
 	}
 	a := &answers{}
 	next, _ = next.Update(askMsg{prompt: askpass.Prompt{Host: "ws-1", Text: "Password: "}, answer: a.answer})
-	next, _ = key(next, "y")
-	if next.(Model).pending == nil || next.(Model).ask == nil {
-		t.Fatal("y went under the field")
+	if next.(Model).pending != nil {
+		t.Fatal("the confirm stays under the prompt")
 	}
+	next, _ = key(next, "y")
 	next, _ = key(next, "enter")
-	if a.sent != 1 || a.got[0] != "y" || next.(Model).pending == nil {
+	if a.sent != 1 || a.got[0] != "y" || next.(Model).pending != nil {
 		t.Fatalf("answers %q, pending %v", a.got, next.(Model).pending)
 	}
 }

@@ -123,15 +123,19 @@ func (m Model) runJump(a action) (tea.Model, tea.Cmd) {
 		m.flash = "the login to " + host + " runs: answer it, or " + m.keys.ask.Cancel.Help().Key + " to cancel it"
 		return m, nil
 	}
-	m.opening, m.askCancelled = true, false
+	// The open lives as long as the console, and esc on its field ends it.
+	ctx, stop := context.WithCancel(m.askCtx)
+	m.opening, m.openStop, m.askCancelled = true, stop, false
+	m.pending, m.held = nil, nil // the field is on top: nothing waits under it
 	m.flash = "logging in to " + host + "…"
 	ssh, env, gen := m.ssh(), m.opt.Ask.Env(host), m.opt.Gen
 	up, open := remote.MasterUpArgv(host, a.master), remote.OpenArgv(host, a.master)
 	return m, func() tea.Msg {
-		if _, exit := ssh(up, nil); exit == 0 {
+		defer stop()
+		if _, exit := ssh(ctx, up, nil); exit == 0 {
 			return masterMsg{a: a, gen: gen}
 		}
-		stderr, exit := ssh(open, env)
+		stderr, exit := ssh(ctx, open, env)
 		return masterMsg{a: a, gen: gen, stderr: stderr, exit: exit}
 	}
 }
@@ -142,8 +146,8 @@ func (m Model) masterOpened(msg masterMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.opt.Gen || m.quitting {
 		return m, nil
 	}
-	m.opening = false
-	if msg.exit == 0 {
+	m.opening, m.openStop = false, nil
+	if msg.exit == 0 && !m.askCancelled {
 		m.flash = ""
 		return m.onHost(msg.a)
 	}
@@ -163,11 +167,13 @@ func (m Model) masterOpened(msg masterMsg) (tea.Model, tea.Cmd) {
 }
 
 // ssh runs an ssh of the builder's own login that the console starts.
-func (m Model) ssh() func(argv, env []string) (string, int) {
+func (m Model) ssh() func(ctx context.Context, argv, env []string) (string, int) {
 	if m.opt.SSH != nil {
 		return m.opt.SSH
 	}
-	return func(argv, env []string) (string, int) { return runSSH(argv, env, openTimeout) }
+	return func(ctx context.Context, argv, env []string) (string, int) {
+		return runSSH(ctx, argv, env, openTimeout)
+	}
 }
 
 // loginNote is one line that names a login result and its fix; "" for ok.
@@ -247,12 +253,14 @@ func (m Model) hostTmuxRefusal(a *action) *action {
 
 // runCheck runs the check's ssh and gives its stderr and exit; -1 when the
 // time limit ended it.
-func runCheck(argv []string) (string, int) { return runSSH(argv, nil, checkTimeout) }
+func runCheck(argv []string) (string, int) {
+	return runSSH(context.Background(), argv, nil, checkTimeout)
+}
 
 // runSSH runs an ssh of the builder's own login, with env added to this
-// process's, and gives its stderr and exit; -1 when limit ended it.
-func runSSH(argv, env []string, limit time.Duration) (string, int) {
-	ctx, cancel := context.WithTimeout(context.Background(), limit)
+// process's, and gives its stderr and exit; -1 when ctx or limit ended it.
+func runSSH(ctx context.Context, argv, env []string, limit time.Duration) (string, int) {
+	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // remote's argv of a host ValidHost took
 	if env != nil {

@@ -67,10 +67,10 @@ func (m Model) render() string {
 		return ""
 	}
 	w := max(m.width, minWidth)
-	if m.splashing() && m.ask == nil {
+	if m.splashing() && !m.asking() {
 		return m.splashView(w)
 	}
-	if m.pair.owns() && m.ask == nil {
+	if m.pair.owns() && !m.asking() {
 		return m.pairView(w)
 	}
 	if m.night() {
@@ -141,7 +141,7 @@ type drawn struct {
 // draw is the screen, with an ssh prompt over everything.
 func (m Model) draw(w int) drawn {
 	sc := m.drawScreen(w)
-	if m.ask != nil {
+	if m.asking() {
 		m.overlayAsk(&sc, w)
 	}
 	return sc

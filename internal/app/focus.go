@@ -34,7 +34,7 @@ func (f layerID) underOverlays() bool { return f >= layerHeld }
 // focus is the layer that takes k.
 func (m Model) focus(k tea.KeyPressMsg) layerID {
 	switch {
-	case m.ask != nil:
+	case m.asking():
 		return layerAsk
 	case m.pair.owns():
 		return layerPair

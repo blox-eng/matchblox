@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -251,7 +252,7 @@ func TestOldHostTmuxShowsDoor(t *testing.T) {
 func TestHostConsoleKeepsTheLoginOptions(t *testing.T) {
 	sh := NewShell(ShellOptions{
 		Base: Options{NoMotion: true, MasterBase: "/c", Check: func([]string) (string, int) { return "", 0 },
-			Ask: fakeAsk{}, NoAsk: "why", SSH: func([]string, []string) (string, int) { return "", 0 }},
+			Ask: fakeAsk{}, NoAsk: "why", SSH: func(context.Context, []string, []string) (string, int) { return "", 0 }},
 		Open: func(host string) Options { return Options{Conn: newFake(), Host: host} },
 	})
 	opened, _ := sh.open("ws-1", false)
@@ -314,7 +315,7 @@ func TestMasterTooLongJumpsWithoutIt(t *testing.T) {
 func TestNoAskSaysWhyOnce(t *testing.T) {
 	m, _, _ := checkedHost(t, fixtureState(), "", 0)
 	m.opt.NoAsk = "the prompt socket: permission denied"
-	m.opt.SSH = func(argv, _ []string) (string, int) { t.Fatalf("ssh %q", argv); return "", 0 }
+	m.opt.SSH = func(_ context.Context, argv, _ []string) (string, int) { t.Fatalf("ssh %q", argv); return "", 0 }
 	next, cmd := m.Update(hostHello("3.4"))
 	if want := "jumps to ws-1 ask your login in the terminal: the prompt socket: permission denied"; next.(Model).flash != want {
 		t.Fatalf("flash %q", next.(Model).flash)

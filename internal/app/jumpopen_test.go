@@ -1,14 +1,17 @@
 package app
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/remote"
@@ -25,8 +28,10 @@ func askingHost(t *testing.T, up bool, openErr string, openExit int) (Model, *[]
 	t.Helper()
 	m, _, _ := checkedHost(t, fixtureState(), "", 0)
 	m.opt.Ask = fakeAsk{}
+	m.askCtx, m.askStop = context.WithCancel(context.Background())
+	t.Cleanup(m.askStop)
 	calls := &[]sshCall{}
-	m.opt.SSH = func(argv, env []string) (string, int) {
+	m.opt.SSH = func(_ context.Context, argv, env []string) (string, int) {
 		*calls = append(*calls, sshCall{argv, env})
 		if slices.Contains(argv, "-O") {
 			if up {
@@ -230,5 +235,112 @@ func TestJumpCarriesNoAskpassEnv(t *testing.T) {
 		if !strings.HasPrefix(l, "-") && strings.Contains(l, "ASKPASS") {
 			t.Fatalf("the jump's session has the askpass env:\n%s", out)
 		}
+	}
+}
+
+// openingHost is the console of ws-1 whose open-first runs: its ssh waits
+// until its context ends, then says so on killed.
+func openingHost(t *testing.T) (tea.Model, tea.Cmd, chan struct{}, *[][]string) {
+	t.Helper()
+	m, _, ran := askingHost(t, false, "", 0)
+	killed := make(chan struct{})
+	m.opt.SSH = func(ctx context.Context, argv, _ []string) (string, int) {
+		if slices.Contains(argv, "-O") {
+			return "", 255
+		}
+		<-ctx.Done()
+		close(killed)
+		return "", -1
+	}
+	hostJump(&m, remote.Jump{Pane: "%1"})
+	next, cmd := m.confirm(*m.forHost(m.jump("%1")))
+	if !next.(Model).opening {
+		t.Fatal("no open-first")
+	}
+	return next, cmd, killed, ran
+}
+
+// bgCmd runs cmd in the background and gives its message.
+func bgCmd(cmd tea.Cmd) <-chan tea.Msg {
+	out := make(chan tea.Msg, 1)
+	go func() { out <- cmd() }()
+	return out
+}
+
+// TestOpenFirstKeysReachNothingBelow: between two prompts of an open-first
+// (sshd's failure delay) the field waits, and every key goes to it: no
+// search opens, no confirm, no quit, and nothing is typed anywhere.
+func TestOpenFirstKeysReachNothingBelow(t *testing.T) {
+	next, cmd, _, _ := openingHost(t)
+	nm := next.(Model)
+	nm.tab = tabSessions
+	nm.pending = nm.forHost(nm.jump("%1")) // a confirm left from before
+	next, _ = nm.Update(askMsg{prompt: askpass.Prompt{Host: "ws-1", Text: "Password: "}, answer: func(string, bool) {}})
+	next, _ = key(typeIn(next, "wrong"), "enter")
+	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "waiting for ssh") {
+		t.Fatalf("no waiting field:\n%s", out)
+	}
+	for _, k := range []string{"/", "s", "3", "c", "r", "e", "t", "y", "enter", "q", "x", "N"} {
+		var c tea.Cmd
+		next, c = key(next, k)
+		if c != nil {
+			if _, quit := c().(tea.QuitMsg); quit {
+				t.Fatalf("%q quit", k)
+			}
+		}
+	}
+	nm = next.(Model)
+	if nm.searching || nm.filter != "" || nm.pending != nil || nm.quitting || nm.form != nil || nm.held != nil {
+		t.Fatalf("a key reached a layer below: search %v %q, pending %v, quitting %v", nm.searching, nm.filter, nm.pending, nm.quitting)
+	}
+	if out := ansi.Strip(nm.render()); strings.Contains(out, "s3cret") || strings.Contains(out, "s3c") {
+		t.Fatalf("typed text drawn:\n%s", out)
+	}
+	_ = cmd
+}
+
+// TestOpenFirstEscCancels: esc while the open-first waits kills its ssh,
+// and the jump does not run.
+func TestOpenFirstEscCancels(t *testing.T) {
+	next, cmd, killed, ran := openingHost(t)
+	done := bgCmd(cmd)
+	next, _ = key(next, "esc")
+	select {
+	case <-killed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("esc did not kill the open-first ssh")
+	}
+	next, c := next.Update(<-done)
+	if c != nil {
+		next.Update(c())
+	}
+	nm := next.(Model)
+	if nm.opening || len(*ran) != 0 || !strings.HasPrefix(nm.flash, "cancelled") {
+		t.Fatalf("opening %v, ran %q, flash %q", nm.opening, *ran, nm.flash)
+	}
+	if strings.Contains(ansi.Strip(nm.render()), "waiting for ssh") {
+		t.Fatal("the waiting field stays")
+	}
+}
+
+// TestOpenFirstEndsWithTheConsole: back to Hosts kills the open-first ssh.
+func TestOpenFirstEndsWithTheConsole(t *testing.T) {
+	next, cmd, killed, _ := openingHost(t)
+	bgCmd(cmd)
+	next.(Model).stopAsk()
+	select {
+	case <-killed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the open-first ssh outlived its console")
+	}
+}
+
+// TestRunSSHKilledByContext: the open-first's ssh ends with its context.
+func TestRunSSHKilledByContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel)
+	start := time.Now()
+	if _, exit := runSSH(ctx, []string{"sleep", "30"}, nil, time.Minute); exit == 0 || time.Since(start) > 5*time.Second {
+		t.Fatalf("exit %d after %v", exit, time.Since(start))
 	}
 }
