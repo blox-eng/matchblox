@@ -366,6 +366,28 @@ func TestServeStopsWhenBinaryGoneBeforeItWatches(t *testing.T) {
 	waitServe(t, done, ErrReplaced)
 }
 
+// TestServeStopsWhenBinaryReplacedSinceItStarted: with ExeAt, the binary
+// as the process started on it, an install before the watch's first look
+// (a unit's serve that waited long for the socket) is seen.
+func TestServeStopsWhenBinaryReplacedSinceItStarted(t *testing.T) {
+	s := newTest(t, time.Hour)
+	exe := filepath.Join(t.TempDir(), "matchblox")
+	if err := os.WriteFile(exe, []byte("v1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	at, err := os.Stat(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Exe, s.ExeAt, s.ExeEvery = exe, at, 10*time.Millisecond
+	_, done := serveForTestBefore(t, s, func(string) {
+		if err := os.WriteFile(exe, []byte("v2 is longer"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	})
+	waitServe(t, done, ErrReplaced)
+}
+
 func TestServeStopsWhenBinaryReplaced(t *testing.T) {
 	s := newTest(t, time.Hour)
 	exe := filepath.Join(t.TempDir(), "matchblox")
@@ -390,7 +412,7 @@ func TestServeStopsWhenBinaryReplaced(t *testing.T) {
 		if !errors.Is(err, ErrReplaced) {
 			t.Fatalf("Serve returned %v, want ErrReplaced", err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(waitLimit):
 		t.Fatal("Serve kept running on a replaced binary")
 	}
 }
@@ -508,19 +530,34 @@ func serveForTest(t *testing.T, s *Service) (string, chan error) {
 // and Serve: what a console that dials at once can do before the watch.
 func serveForTestBefore(t *testing.T, s *Service, before func(sock string)) (string, chan error) {
 	t.Helper()
-	dir, _ := os.MkdirTemp("", "mb")
+	dir, err := os.MkdirTemp("", "mb") // short: a socket path has a length limit
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	path := filepath.Join(dir, "s.sock")
 	l, err := transport.Listen(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Serve stops at once here, while Run may still write its state: that
-	// goes to a folder whose removal does not fail on it.
-	s.StatePath = filepath.Join(dir, "state.json")
 	before(path)
 	done := make(chan error, 1)
 	go func() { done <- s.Serve(context.Background(), l) }()
+	// Serve stops at once here, while Run may still write its state: wait
+	// for Run before the test's folders go (cleanups run last in, first out).
+	t.Cleanup(func() {
+		s.mu.Lock()
+		runDone := s.runDone
+		s.mu.Unlock()
+		if runDone == nil {
+			return // Serve never started
+		}
+		select {
+		case <-runDone:
+		case <-time.After(waitLimit):
+			t.Errorf("Run did not stop in %v", waitLimit)
+		}
+	})
 	return path, done
 }
 
@@ -542,7 +579,7 @@ func waitServe(t *testing.T, done chan error, want error) {
 		if !errors.Is(err, want) {
 			t.Fatalf("Serve returned %v, want %v", err, want)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(waitLimit):
 		t.Fatal("Serve kept running")
 	}
 }
