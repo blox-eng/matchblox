@@ -456,6 +456,10 @@ func TestWhereReposBuiltOnceAndDeduped(t *testing.T) {
 	if after := next.(Model).wrepos; &after[0] != &before[0] || &next.(Model).form.rows[0] != &rows[0] {
 		t.Fatal("drawing the form rebuilt the repos")
 	}
+	next, _ = next.Update(stateMsg(lifeStateWithGit(manyFound().Git)))
+	if after := next.(Model).wrepos; &after[0] != &before[0] {
+		t.Fatal("a snapshot with the same worktrees rebuilt the repos")
+	}
 	next = typeText(next, "h/4996")
 	if r := next.(Model).whereSelected(); r.path() != "/h/4996" {
 		t.Fatalf("selected %+v", r)
@@ -629,5 +633,29 @@ func TestPickSeveralMissingFoldersStaysOpen(t *testing.T) {
 	done, _ := next.Update(resultMsg(proto.Result{ActID: next.(Model).form.act, Err: "no folder ~/dve, ~/My Work"}))
 	if nm := done.(Model); nm.form == nil || nm.form.err != "no folder ~/dve, ~/My Work" || nm.form.roots != `~/dve "~/My Work"` {
 		t.Fatalf("form %+v", nm.form)
+	}
+}
+
+// A new session in a repo counts in its row, though the repos are not
+// sent again.
+func TestWhereLiveFollowsTheSessions(t *testing.T) {
+	st := lifeState()
+	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{{Path: "/h/a"}, {Path: "/h/b"}}}
+	m, _ := loadedWith(t, 100, st)
+	live := func(m Model) map[string]int {
+		out := map[string]int{}
+		for _, r := range m.wrepos {
+			out[r.path] = r.live
+		}
+		return out
+	}
+	if got := live(m); got["/h/a"] != 0 {
+		t.Fatalf("live %v", got)
+	}
+	st2 := lifeState()
+	st2.Sessions[0].Cwd = "/h/a"
+	next, _ := m.Update(stateMsg(st2))
+	if got := live(next.(Model)); got["/h/a"] != 1 {
+		t.Fatalf("live %v", got)
 	}
 }

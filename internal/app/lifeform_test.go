@@ -2,6 +2,8 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -491,6 +493,28 @@ func TestEnterAfterTheCloneStartsAtOnce(t *testing.T) {
 	}
 }
 
+// The session in a folder this form cloned says so, whether it waited for
+// the clone or came after it: Cursor asks before it trusts the folder.
+func TestSessionAfterTheCloneSaysCloned(t *testing.T) {
+	done := proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: 100, Done: true}
+	for _, waits := range []bool{true, false} {
+		next, f := cloning(t, 100)
+		if waits {
+			next = pressRun(next, "enter")
+		}
+		next, cmd := next.Update(cloneState(t, done))
+		runAll(cmd)
+		if !waits {
+			pressRun(next, "enter")
+		}
+		acts := f.acts()
+		var n proto.NewSession
+		if len(acts) != 3 || acts[2].RecID != "new:session" || json.Unmarshal([]byte(acts[2].Text), &n) != nil || n.Where != home+"/src/r" || !n.Cloned {
+			t.Fatalf("waits %v: sent %+v", waits, acts)
+		}
+	}
+}
+
 func TestEscStopsTheClone(t *testing.T) {
 	next, f := cloning(t, 100)
 	next, cmd := key(next, "esc")
@@ -498,7 +522,7 @@ func TestEscStopsTheClone(t *testing.T) {
 		cmd()
 	}
 	acts := f.acts()
-	if len(acts) != 3 || acts[2] != (proto.Act{RecID: "clone:stop", Text: home + "/src/r"}) {
+	if len(acts) != 3 || acts[2] != stopOf(home+"/src/r", 1) {
 		t.Fatalf("sent %+v", acts)
 	}
 	if fm := next.(Model).form; fm == nil || fm.where != cloneURL || fm.cloning != "" || fm.startWhenDone {
@@ -521,7 +545,7 @@ func TestEditingWhereStopsTheClone(t *testing.T) {
 		cmd()
 	}
 	acts := f.acts()
-	if fm := next.(Model).form; len(acts) != 3 || acts[2] != (proto.Act{RecID: "clone:stop", Text: home + "/src/r"}) || fm.cloning != "" || fm.where != cloneURL[:len(cloneURL)-1] {
+	if fm := next.(Model).form; len(acts) != 3 || acts[2] != stopOf(home+"/src/r", 1) || fm.cloning != "" || fm.where != cloneURL[:len(cloneURL)-1] {
 		t.Fatalf("sent %+v form %+v", acts, fm)
 	}
 }
@@ -620,9 +644,9 @@ func TestCloneRetryIgnoresTheOldFailure(t *testing.T) {
 	}
 	start := next.(Model).form.startAct
 	next = pressRun(next, "esc") // the stop waits for the start (R14)
-	next, cmd := next.Update(resultMsg(proto.Result{ActID: start}))
+	next, cmd := next.Update(resultMsg(proto.Result{ActID: start, CloneID: 2}))
 	runAll(cmd)
-	if acts := f.acts(); len(acts) != 5 || acts[4] != (proto.Act{RecID: "clone:stop", Text: home + "/src/r"}) || next.(Model).form.cloning != "" {
+	if acts := f.acts(); len(acts) != 5 || acts[4] != stopOf(home+"/src/r", 2) || next.(Model).form.cloning != "" {
 		t.Fatalf("sent %+v", acts)
 	}
 }
@@ -762,10 +786,10 @@ func TestEscWhileTheStartIsOnItsWay(t *testing.T) {
 	if fm := next.(Model).form; fm == nil || fm.cloning != "" || len(f.acts()) != 2 {
 		t.Fatalf("form %+v sent %+v", fm, f.acts())
 	}
-	next, cmd := next.Update(resultMsg(proto.Result{ActID: start}))
+	next, cmd := next.Update(resultMsg(proto.Result{ActID: start, CloneID: 1}))
 	runAll(cmd)
 	acts := f.acts()
-	if len(acts) != 3 || acts[2] != (proto.Act{RecID: "clone:stop", Text: home + "/src/r"}) {
+	if len(acts) != 3 || acts[2] != stopOf(home+"/src/r", 1) {
 		t.Fatalf("sent %+v", acts)
 	}
 	// Its refusal, the clone gone already, is no error of the form.
@@ -806,5 +830,322 @@ func TestArrowsDropAnEarlyEnter(t *testing.T) {
 		if acts := f.acts(); len(acts) != 1 || next.(Model).form.cloning != "" {
 			t.Fatalf("%s: sent %+v", k, acts)
 		}
+	}
+}
+
+// reconnected is next with its connection lost and made again: the acts
+// after it go to the new connection.
+func reconnected(t *testing.T, next tea.Model) (tea.Model, *fakeConn) {
+	t.Helper()
+	next, _ = next.Update(lostMsg{err: io.EOF})
+	f := newFake()
+	next, _ = next.Update(connMsg{conn: f})
+	return next, f
+}
+
+// stopOf is the clone:stop of the clone id into target.
+func stopOf(target string, id int64) proto.Act {
+	b, _ := json.Marshal(proto.CloneStop{Target: target, ID: id})
+	return proto.Act{RecID: "clone:stop", Text: string(b)}
+}
+
+// The plan's answer went with the connection: the first snapshot after
+// the reconnect asks again, and the ⏎ that waited for it is dropped.
+func TestLostConnectionWhileThePlanIsOnItsWay(t *testing.T) {
+	next, _ := pastedURL(t, 100)
+	next = pressRun(next, "enter") // it waits for the plan
+	next, f := reconnected(t, next)
+	next, cmd := next.Update(cloneState(t))
+	runAll(cmd)
+	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "clone:plan" || acts[0].Text != cloneURL {
+		t.Fatalf("sent %+v", acts)
+	}
+	next, cmd = planResult(next, proto.ClonePlan{Target: home + "/src/r"})
+	runAll(cmd)
+	if fm := next.(Model).form; len(f.acts()) != 1 || fm.cloning != "" || !strings.Contains(screen(next), "clone o/r into ~/src/r") {
+		t.Fatalf("sent %+v form %+v:\n%s", f.acts(), fm, screen(next))
+	}
+}
+
+// The start's answer went with the connection: the snapshot after the
+// reconnect says if the clone runs.
+func TestLostConnectionWhileTheStartIsOnItsWay(t *testing.T) {
+	next, _ := planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter")
+	next, _ = reconnected(t, next)
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 7, Target: home + "/src/r", Repo: "o/r", Pct: 40}))
+	if fm := next.(Model).form; fm.startAct != "" || fm.cloneID != 7 || !strings.Contains(screen(next), "cloning o/r… 40%") {
+		t.Fatalf("form %+v:\n%s", fm, screen(next))
+	}
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 7, Target: home + "/src/r", Repo: "o/r", Pct: 100, Done: true}))
+	if fm := next.(Model).form; fm.cloning != "" || fm.where != home+"/src/r" {
+		t.Fatalf("form %+v", fm)
+	}
+	// Not listed: it never started, and ⏎ tries again.
+	next, _ = planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter")
+	next, f := reconnected(t, next)
+	next, _ = next.Update(cloneState(t))
+	if fm := next.(Model).form; fm.cloning != "" || fm.startAct != "" || !strings.Contains(screen(next), "! the clone's start got no answer: ⏎ tries again") {
+		t.Fatalf("form %+v:\n%s", fm, screen(next))
+	}
+	pressRun(next, "enter")
+	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "clone:plan" {
+		t.Fatalf("sent %+v", acts)
+	}
+}
+
+// A retry whose start went with the connection: the last try's failure,
+// listed after the reconnect, is not the retry's.
+func TestLostRetryStartIsNotTheOldFailure(t *testing.T) {
+	next, _ := cloning(t, 100)
+	old := proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}
+	next, _ = next.Update(cloneState(t, old))
+	next = pressRun(next, "enter") // a fresh plan
+	next, _ = planResult(next, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter") // the retry's start, lost
+	next, _ = reconnected(t, next)
+	next, cmd := next.Update(cloneState(t, old))
+	runAll(cmd)
+	if s := screen(next); !strings.Contains(s, "! the clone's start got no answer: ⏎ tries again") || strings.Contains(s, "no network") {
+		t.Fatalf("form %+v:\n%s", next.(Model).form, s)
+	}
+}
+
+// A clone whose start answered but no snapshot listed, gone after the
+// reconnect, aged out while the console was away: it is not waited for.
+func TestCloneAgedOutWhileAwayIsNotStuck(t *testing.T) {
+	next, _ := cloning(t, 100)
+	next, _ = reconnected(t, next)
+	next, _ = next.Update(cloneState(t))
+	if fm := next.(Model).form; fm.cloning != "" || !strings.Contains(screen(next), "! the clone of o/r stopped before it was done") {
+		t.Fatalf("form %+v:\n%s", fm, screen(next))
+	}
+}
+
+// esc while the start was on its way, then the connection went: the stop
+// goes once connected again, to the clone the snapshot lists.
+func TestEscWhileTheStartIsOnItsWayThenLost(t *testing.T) {
+	next, _ := planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter")
+	next = pressRun(next, "esc")
+	next, f := reconnected(t, next)
+	next, cmd := next.Update(cloneState(t, proto.Clone{ID: 3, Target: home + "/src/r", Repo: "o/r", Pct: 10}))
+	runAll(cmd)
+	if acts := f.acts(); len(acts) != 1 || acts[0] != stopOf(home+"/src/r", 3) || len(next.(Model).stopAfter) != 0 {
+		t.Fatalf("sent %+v, waiting %+v", acts, next.(Model).stopAfter)
+	}
+	// Not listed: it never started, nothing to stop.
+	next, _ = planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter")
+	next = pressRun(next, "esc")
+	next, f = reconnected(t, next)
+	next, cmd = next.Update(cloneState(t))
+	runAll(cmd)
+	if acts := f.acts(); len(acts) != 0 || len(next.(Model).stopAfter) != 0 {
+		t.Fatalf("sent %+v, waiting %+v", acts, next.(Model).stopAfter)
+	}
+}
+
+// esc on a running clone, then the connection went before the stop's
+// answer: the stop goes again once connected, to the same clone.
+func TestStopLostWithTheConnectionGoesAgain(t *testing.T) {
+	next, f := cloning(t, 100)
+	next = pressRun(next, "esc")
+	if acts := f.acts(); len(acts) != 3 || acts[2] != stopOf(home+"/src/r", 1) {
+		t.Fatalf("sent %+v", acts)
+	}
+	next, f = reconnected(t, next)
+	next, cmd := next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: 40}))
+	runAll(cmd)
+	if acts := f.acts(); len(acts) != 1 || acts[0] != stopOf(home+"/src/r", 1) {
+		t.Fatalf("sent %+v", acts)
+	}
+	// Its answer ends it: the next reconnect sends nothing.
+	next, _ = next.Update(resultMsg(proto.Result{ActID: fmt.Sprintf("a%d", next.(Model).acts)}))
+	next, f = reconnected(t, next)
+	next, cmd = next.Update(cloneState(t))
+	runAll(cmd)
+	if acts := f.acts(); len(acts) != 0 {
+		t.Fatalf("sent %+v", acts)
+	}
+}
+
+// Back on where after a clone that failed, the URL's rows ask a fresh
+// plan, and ⏎ on them clones.
+func TestBackOnWhereAfterAFailedClone(t *testing.T) {
+	next, f := cloning(t, 100)
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}))
+	next, cmd := next.Update(keyPress("shift+tab"))
+	runAll(cmd)
+	if acts := f.acts(); len(acts) != 3 || acts[2].RecID != "clone:plan" || !next.(Model).form.whereList() {
+		t.Fatalf("sent %+v", acts)
+	}
+	next, cmd = planResult(next, proto.ClonePlan{Target: home + "/src/r"})
+	runAll(cmd)
+	pressRun(next, "enter")
+	if acts := f.acts(); len(acts) != 4 || acts[3].RecID != "clone:start" {
+		t.Fatalf("sent %+v", acts)
+	}
+}
+
+// A tap back on where after a clone that failed asks a fresh plan too.
+func TestTapOnWhereAfterAFailedClone(t *testing.T) {
+	next, f := cloning(t, 100)
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}))
+	sc := next.(Model).draw(100)
+	i := slices.Index(sc.peekRows, fmt.Sprintf("field:%d", fieldWhere))
+	if i < 0 {
+		t.Fatalf("no where line in %q", sc.peekRows)
+	}
+	next, cmd := tap(next, sc.peekX+4, sc.peekAt+i)
+	runAll(cmd)
+	if acts := f.acts(); len(acts) != 3 || acts[2].RecID != "clone:plan" || !next.(Model).form.whereList() {
+		t.Fatalf("sent %+v", acts)
+	}
+	next, cmd = planResult(next, proto.ClonePlan{Target: home + "/src/r"})
+	runAll(cmd)
+	pressRun(next, "enter")
+	if acts := f.acts(); len(acts) != 4 || acts[3].RecID != "clone:start" {
+		t.Fatalf("sent %+v", acts)
+	}
+}
+
+// esc on a clone that was done by then: the service says where it is.
+func TestStopOfADoneCloneSaysWhereItIs(t *testing.T) {
+	next, f := cloning(t, 100)
+	next = pressRun(next, "esc")
+	acts := f.acts()
+	if len(acts) != 3 || acts[2] != stopOf(home+"/src/r", 1) {
+		t.Fatalf("sent %+v", acts)
+	}
+	next, _ = next.Update(resultMsg(proto.Result{ActID: "a3", Note: "the clone of o/r was done: it is in " + home + "/src/r"}))
+	if s := screen(next); !strings.Contains(s, "the clone of o/r was done: it is in ~/src/r") {
+		t.Fatalf("the note is not shown:\n%s", s)
+	}
+	// A refusal of the stop says nothing: the builder has moved on.
+	next, _ = cloning(t, 100)
+	next = pressRun(next, "esc")
+	next, _ = next.Update(resultMsg(proto.Result{ActID: "a3", Skipped: []string{"that clone is not running"}}))
+	if s := screen(next); strings.Contains(s, "not running") || next.(Model).form.err != "" {
+		t.Fatalf("the refusal shows:\n%s", s)
+	}
+}
+
+// A new:session that says what its where came to is no refusal: it
+// starts, and the line shows.
+func TestNewSessionNoteIsShown(t *testing.T) {
+	m, f := loadedWith(t, 100, whereState(t))
+	next, _ := key(m, "N")
+	next, _ = key(next, "enter")
+	next, cmd := key(next, "enter")
+	cmd()
+	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "new:session" {
+		t.Fatalf("sent %+v", acts)
+	}
+	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.act, Note: "o/r is already at " + home + "/src/r: started there"}))
+	if nm := next.(Model); nm.form != nil || !strings.Contains(nm.flash, "o/r is already at ~/src/r: started there") || !strings.Contains(nm.flash, "started ") {
+		t.Fatalf("form %+v flash %q", nm.form, nm.flash)
+	}
+}
+
+// waitingClone is a clone into ~/src/r whose start is answered (id 1),
+// listed running, and a final ⏎ that waits for it.
+func waitingClone(t *testing.T) (tea.Model, *fakeConn) {
+	t.Helper()
+	next, f := cloning(t, 100)
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: 42}))
+	next = pressRun(next, "enter")
+	if !next.(Model).form.startWhenDone {
+		t.Fatal("the ⏎ does not wait for the clone")
+	}
+	return next, f
+}
+
+// news counts the new:sessions sent.
+func news(f *fakeConn) int {
+	n := 0
+	for _, a := range f.acts() {
+		if a.RecID == "new:session" {
+			n++
+		}
+	}
+	return n
+}
+
+// The cells of a session that waits for its clone: it starts once where
+// the clone is done, and never where it is not.
+func TestStartWhenDoneCells(t *testing.T) {
+	done := proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: 100, Done: true}
+	// The start on its way × a snapshot with the clone done.
+	next, f := planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter")
+	next = pressRun(next, "enter")
+	if fm := next.(Model).form; !fm.startWhenDone || fm.startAct == "" {
+		t.Fatalf("form %+v", fm)
+	}
+	next, cmd := next.Update(cloneState(t, done))
+	runAll(cmd)
+	if news(f) != 0 {
+		t.Fatalf("started before the start's answer: %+v", f.acts())
+	}
+	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.startAct, CloneID: 1}))
+	for range 2 {
+		next, cmd = next.Update(cloneState(t, done))
+		runAll(cmd)
+	}
+	if fm := next.(Model).form; news(f) != 1 || fm.startWhenDone {
+		t.Fatalf("form %+v sent %+v", fm, f.acts())
+	}
+	// The start on its way × a snapshot without the clone: it waits.
+	next, f = planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter")
+	next = pressRun(next, "enter")
+	next, cmd = next.Update(cloneState(t))
+	runAll(cmd)
+	if fm := next.(Model).form; news(f) != 0 || !fm.startWhenDone || fm.cloning == "" {
+		t.Fatalf("form %+v sent %+v", fm, f.acts())
+	}
+	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.startAct, CloneID: 1}))
+	next, cmd = next.Update(cloneState(t, done))
+	runAll(cmd)
+	if news(f) != 1 {
+		t.Fatalf("sent %+v", f.acts())
+	}
+	// Running, waited for × esc: nothing starts, even when it is done.
+	next, f = waitingClone(t)
+	next = pressRun(next, "esc")
+	if fm := next.(Model).form; fm.startWhenDone {
+		t.Fatalf("form %+v", fm)
+	}
+	next, cmd = next.Update(cloneState(t, done))
+	runAll(cmd)
+	if news(f) != 0 {
+		t.Fatalf("sent %+v", f.acts())
+	}
+	// × a snapshot that says it failed, × one that no longer lists it.
+	for _, st := range []stateMsg{
+		cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}),
+		cloneState(t),
+	} {
+		next, f = waitingClone(t)
+		next, cmd = next.Update(st)
+		runAll(cmd)
+		if fm := next.(Model).form; fm.startWhenDone || fm.cloning != "" || news(f) != 0 {
+			t.Fatalf("form %+v sent %+v", fm, f.acts())
+		}
+		next, cmd = next.Update(cloneState(t, done))
+		runAll(cmd)
+		if news(f) != 0 {
+			t.Fatalf("sent %+v", f.acts())
+		}
+	}
+	// The plan on its way × its refusal: the ⏎ that waited starts nothing.
+	next, f = pastedURL(t, 100)
+	next = pressRun(next, "enter")
+	next, cmd = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.planAct, Err: "no clone_root is set"}))
+	runAll(cmd)
+	if fm := next.(Model).form; fm.pickOnPlan || fm.startWhenDone || fm.cloning != "" || len(f.acts()) != 1 {
+		t.Fatalf("form %+v sent %+v", fm, f.acts())
 	}
 }

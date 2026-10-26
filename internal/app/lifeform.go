@@ -88,10 +88,17 @@ type form struct {
 	// it was listed.
 	cloneID int64
 	seen    bool
+	// cloned is the folder this form's clone made: a session there says
+	// Cloned, and Cursor asks before it trusts it.
+	cloned string
 }
 
-// cloneStop is a clone:start whose clone stops as soon as it starts.
-type cloneStop struct{ act, target string }
+// cloneStop is a stop whose answer has not come: act is its clone:stop,
+// or the clone:start it waits for (id 0 until that start answers).
+type cloneStop struct {
+	act, target string
+	id          int64
+}
 
 const maxField = 300
 
@@ -248,12 +255,21 @@ func (f *form) move(by int) {
 	f.at = fs[(i+by+len(fs))%len(fs)]
 }
 
-// moveTo is move, and back on where the list opens.
-func (m Model) moveTo(f *form, by int) {
+// moveTo is move, and back on where the list opens (onWhere).
+func (m *Model) moveTo(f *form, by int) tea.Cmd {
 	f.move(by)
-	if f.at == fieldWhere && f.cloning == "" { // no list while it clones
-		m.openWhere(f)
+	return m.onWhere(f)
+}
+
+// onWhere is the cursor come back to where, by key or tap: the list
+// opens, on a git URL whose clone failed or stopped with a fresh plan
+// asked.
+func (m *Model) onWhere(f *form) tea.Cmd {
+	if f.at != fieldWhere || f.cloning != "" { // no list while it clones
+		return nil
 	}
+	m.openWhere(f)
+	return m.planWhere(f)
 }
 
 func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -287,11 +303,9 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case bkey.Matches(k, fk.Enter):
 		return m.formEnter()
 	case bkey.Matches(k, fk.Next, fk.Down):
-		m.moveTo(&f, 1)
-		return m, nil
+		return m, m.moveTo(&f, 1)
 	case bkey.Matches(k, fk.Prev, fk.Up):
-		m.moveTo(&f, -1)
-		return m, nil
+		return m, m.moveTo(&f, -1)
 	}
 	f.err = ""
 	if f.at == fieldAgent {
@@ -467,6 +481,7 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 // newSession is the New session form's new:session, in where.
 func (f *form) newSession(where string) proto.NewSession {
 	n := proto.NewSession{Where: where, Branch: strings.TrimSpace(f.branch), Agent: f.agent, First: strings.TrimSpace(f.first)}
+	n.Cloned = f.cloned != "" && filepath.Clean(where) == filepath.Clean(f.cloned)
 	if f.named {
 		n.Name = strings.TrimSpace(f.name)
 	}
@@ -527,19 +542,23 @@ func (m *Model) stopClone(f *form) tea.Cmd {
 		return nil
 	}
 	if f.startAct != "" { // a stop now could come before the start: it stops when the start lands
-		m.stopAfter = append(slices.Clone(m.stopAfter), cloneStop{f.startAct, target})
+		m.stopAfter = append(slices.Clone(m.stopAfter), cloneStop{act: f.startAct, target: target})
 		f.forgetClone("")
 		return nil
 	}
+	id := f.cloneID
 	f.forgetClone("")
-	return m.sendStop(target)
+	return m.sendStop(target, id)
 }
 
-// sendStop sends clone:stop for target; its answer says nothing: the
-// builder has moved on.
-func (m *Model) sendStop(target string) tea.Cmd {
-	cmd := m.send(proto.Act{RecID: "clone:stop", Text: target})
-	m.stopQuiet = append(slices.Clone(m.stopQuiet), fmt.Sprintf("a%d", m.acts))
+// sendStop sends clone:stop for the clone id into target, kept until
+// its answer comes: a stop the connection lost goes again. Its answer
+// says nothing, the builder has moved on, but for a clone that was done
+// by then: where it is.
+func (m *Model) sendStop(target string, id int64) tea.Cmd {
+	b, _ := json.Marshal(proto.CloneStop{Target: target, ID: id})
+	cmd := m.send(proto.Act{RecID: "clone:stop", Text: string(b)})
+	m.stopQuiet = append(slices.Clone(m.stopQuiet), cloneStop{act: fmt.Sprintf("a%d", m.acts), target: target, id: id})
 	return cmd
 }
 
@@ -547,8 +566,11 @@ func (m *Model) sendStop(target string) tea.Cmd {
 // stop: they live on past the form, which may have closed.
 func (m Model) stopResult(r proto.Result) (Model, tea.Cmd, bool) {
 	id := r.ActID
-	if i := slices.Index(m.stopQuiet, id); i >= 0 {
+	if i := slices.IndexFunc(m.stopQuiet, func(s cloneStop) bool { return s.act == id }); i >= 0 {
 		m.stopQuiet = slices.Delete(slices.Clone(m.stopQuiet), i, i+1)
+		if r.Note != "" { // the clone was done: its folder is there
+			m.flash = tilde(r.Note)
+		}
 		return m, nil, true
 	}
 	i := slices.IndexFunc(m.stopAfter, func(s cloneStop) bool { return s.act == id })
@@ -560,7 +582,46 @@ func (m Model) stopResult(r proto.Result) (Model, tea.Cmd, bool) {
 	if r.Err != "" { // it did not start: nothing to stop
 		return m, nil, true
 	}
-	return m, m.sendStop(target), true
+	return m, m.sendStop(target, r.CloneID), true
+}
+
+// cloneAgain is the first snapshot after a lost connection, for the
+// clone acts whose answers went with it: a plan is asked again; a start
+// is the clone the snapshot lists there, else it never started; a clone
+// never listed and gone now is not waited for; a stop with no answer goes
+// again; and the stops that waited for a start go to the clone listed.
+func (m *Model) cloneAgain() tea.Cmd {
+	var cmds []tea.Cmd
+	stops := m.stopQuiet
+	for _, s := range m.stopAfter {
+		if c, ok := m.cloneFor(s.target); ok && c.Err == "" {
+			stops = append(slices.Clone(stops), cloneStop{target: s.target, id: c.ID})
+		}
+	}
+	m.stopAfter, m.stopQuiet = nil, nil
+	for _, s := range stops {
+		cmds = append(cmds, m.sendStop(s.target, s.id))
+	}
+	if m.form == nil {
+		return tea.Batch(cmds...)
+	}
+	f := *m.form
+	m.form = &f
+	if f.planAct != "" {
+		f.planAct, f.planFor, f.pickOnPlan = "", "", false
+		cmds = append(cmds, m.planWhere(&f))
+	}
+	c, ok := m.cloneFor(f.cloning)
+	switch {
+	case f.cloning == "":
+	case f.startAct != "" && ok && c.Err == "": // a failed one may be the last try's
+		f.startAct, f.cloneID = "", c.ID
+	case f.startAct != "":
+		f.forgetClone("the clone's start got no answer: " + m.keys.form.Enter.Help().Key + " tries again")
+	case !f.seen && (!ok || c.ID != f.cloneID):
+		f.forgetClone("the clone of " + f.cloneRepo() + " stopped before it was done")
+	}
+	return tea.Batch(cmds...)
 }
 
 // forgetClone drops the form's clone and its plan, err the form's error:
@@ -629,12 +690,13 @@ func (m *Model) cloneNews() tea.Cmd {
 		return nil
 	}
 	f.where, f.picked, f.query, f.planFor, f.cloning = f.cloning, true, "", "", ""
+	f.cloned = f.where
 	if !f.startWhenDone {
 		return nil
 	}
 	f.startWhenDone = false
 	n := f.startAs
-	n.Where = f.where
+	n.Where, n.Cloned = f.where, true
 	return m.sendNew(&f, n)
 }
 
@@ -716,6 +778,9 @@ func (m Model) formResult(r proto.Result) (Model, tea.Cmd, bool) {
 			name = f.autoName()
 		}
 		m.flash = "started " + name + ": it shows in Sessions in a few seconds"
+		if r.Note != "" { // what its where came to
+			m.flash = tilde(r.Note) + " · " + m.flash
+		}
 		m.lastAgent = f.agent
 	}
 	m.form = nil
@@ -952,8 +1017,9 @@ func (m Model) tapForm(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 	}
 	if _, err := fmt.Sscanf(sc.peekRows[i], "field:%d", &id); err == nil {
 		m.form = &f
-		if f.at = id; id == fieldWhere && !f.listOpen && f.cloning == "" {
-			m.openWhere(&f)
+		if f.at = id; !f.listOpen {
+			cmd := m.onWhere(&f)
+			return m, cmd
 		}
 	}
 	return m, nil

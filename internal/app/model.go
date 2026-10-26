@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"maps"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -323,17 +324,19 @@ type Model struct {
 	scanAskUntil time.Time
 	scanUp       bool
 	// used is where matchblox started sessions; wrepos the known repos,
-	// for N's where list: built at each snapshot, not at each draw.
+	// for N's where list: built when what it reads changes (wfrom), not
+	// at each snapshot or draw.
 	used   proto.Used
 	wrepos []whereRepo
+	wfrom  []string
 	// clones are the clones the service runs and the ones that ended in
 	// the last minute (#176).
 	clones []proto.Clone
 	// stopAfter are the clone:starts esc came before: each clone stops
 	// when the service takes its start. stopQuiet are the clone:stops
-	// whose answer says nothing.
+	// with no answer yet, whose answer says nothing.
 	stopAfter []cloneStop
-	stopQuiet []string
+	stopQuiet []cloneStop
 }
 
 func New(opt Options) Model {
@@ -511,9 +514,14 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if st.Used != nil {
 			m.used = *st.Used
 		}
-		m.wrepos = m.whereRepos()
+		if from := m.whereFrom(); st.Found != nil || st.Used != nil || !slices.Equal(from, m.wfrom) {
+			m.wrepos, m.wfrom = m.whereRepos(), from
+		}
 		m.clones = st.Clones
-		var started tea.Cmd
+		var again, started tea.Cmd
+		if m.lost { // the clone acts' answers went with the connection
+			again = m.cloneAgain()
+		}
 		if m.form != nil && m.form.cloning != "" {
 			started = m.cloneNews()
 		}
@@ -546,7 +554,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.sheet != nil && m.sheet.queued && m.sheet.act == "" && m.stoker != nil && m.stoker.Ready {
 			m, order = m.sendOrder() // the stoker rests now: the order that waited for it goes
 		}
-		return m, tea.Batch(m.recv(), m.animate(), news, order, started)
+		return m, tea.Batch(m.recv(), m.animate(), news, order, again, started)
 	case graphicsMsg:
 		return m.graphics(msg)
 	case graphicsTickMsg:

@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -450,5 +451,64 @@ func TestWhereSnapshotKeepsTheScroll(t *testing.T) {
 	next, _ = next.Update(stateMsg(whereState(t)))
 	if top2, sel2 := shown(next.(Model)); top2 != top || sel2 != sel {
 		t.Fatalf("after a snapshot: top %d → %d, selection %s → %s", top, top2, sel, sel2)
+	}
+}
+
+// A path of wide runes cut from its start fits its column, at any width.
+func TestWhereWidePathFitsItsColumn(t *testing.T) {
+	m, _ := loadedWith(t, 100, whereState(t))
+	r := whereRow{kind: rowRepo, repo: whereRepo{path: "/中文中文中文中文/x", name: "x", branch: "main"}}
+	for w := 1; w <= 20; w++ {
+		line := ansi.Strip(m.whereLine(r, false, whereCols{name: 1, path: w}, 80))
+		if got := lipgloss.Width(strings.TrimRight(line, " ")); got > 1+1+2+w {
+			t.Fatalf("path in %d columns: %q is %d wide", w, line, got)
+		}
+	}
+	st := whereState(t)
+	st.Found.Repos = append(st.Found.Repos, proto.Checkout{Path: "/中文中文中文中文/x", Branch: "main"})
+	for _, w := range []int{36, 40, 44, 52, 60} {
+		m, _ := loadedWith(t, w, st)
+		next, _ := key(m, "N")
+		next = typeText(next, "/中")
+		for i, l := range strings.Split(next.(Model).render(), "\n") {
+			if lw := lipgloss.Width(l); lw > w {
+				t.Fatalf("%d columns: line %d is %d wide", w, i, lw)
+			}
+		}
+	}
+}
+
+// On a disk that ignores case, /src/myrepo is /src/MyRepo: typed, it
+// selects that repo. On one that tells them apart, /src/myrepo is another
+// folder: its own row comes below, one ↓ away.
+func TestWherePathInAnotherCaseSelectsTheRepo(t *testing.T) {
+	st := lifeState()
+	st.Sessions[0].Cwd = ""
+	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{{Path: "/src/MyRepo", Branch: "main", Active: time.Now()}}}
+	m, _ := loadedWith(t, 100, st)
+	next, _ := key(m, "N")
+	next, _ = next.Update(tea.PasteMsg{Content: "/src/myrepo"})
+	fm := next.(Model).form
+	if sel := next.(Model).whereSelected(); sel.path() != "/src/MyRepo" {
+		t.Fatalf("selected %+v of %+v", sel, fm.rows)
+	}
+	if i := slices.IndexFunc(fm.rows, func(r whereRow) bool { return r.kind == rowPath && r.path() == "/src/myrepo" }); i <= fm.sel {
+		t.Fatalf("no /src/myrepo row below the selected one in %+v", fm.rows)
+	}
+}
+
+func TestWhereExactPathKeepsItsCase(t *testing.T) {
+	st := lifeState()
+	st.Sessions[0].Cwd = ""
+	now := time.Now()
+	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{
+		{Path: "/src/project", Branch: "main", Active: now.Add(-time.Hour)}, {Path: "/src/Project", Branch: "main", Active: now}}}
+	m, _ := loadedWith(t, 100, st)
+	for _, p := range []string{"/src/project", "/src/Project"} {
+		next, _ := key(m, "N")
+		next, _ = next.Update(tea.PasteMsg{Content: p})
+		if sel := next.(Model).whereSelected(); sel.path() != p {
+			t.Fatalf("%s: selected %+v of %+v", p, sel, next.(Model).form.rows)
+		}
 	}
 }

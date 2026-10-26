@@ -185,6 +185,29 @@ func (m Model) whereRepos() []whereRepo {
 	return repos
 }
 
+// whereFrom is what whereRepos reads of each snapshot: the Git tab's
+// repos and worktrees, and the sessions' folders. Found and used come
+// only when they change.
+func (m Model) whereFrom() []string {
+	var out []string
+	if m.git != nil {
+		for _, r := range m.git.Repos {
+			out = append(out, "repo "+r.Path)
+			for _, wt := range r.Worktrees {
+				pr := 0
+				if wt.PR != nil {
+					pr = wt.PR.Number
+				}
+				out = append(out, fmt.Sprintf("worktree %s %s #%d", wt.Path, wt.Branch, pr))
+			}
+		}
+	}
+	for _, s := range m.snap.Sessions {
+		out = append(out, "session "+s.Cwd)
+	}
+	return out
+}
+
 func byName(a, b whereRepo) int {
 	return cmp.Or(cmp.Compare(a.name, b.name), cmp.Compare(a.path, b.path))
 }
@@ -328,15 +351,16 @@ func (m Model) matchRows(q string) []whereRow {
 	}
 	var ms []match
 	best := 0
+	same := m.samePlace(q)
 	for _, r := range m.wrepos {
 		mt := match{r: r, score: -1}
 		mt.score, mt.hits = placeScore(q, r.name, r.path)
-		mt.exact = pathLike(q) && samePath(r.path, q)
+		mt.exact = pathLike(q) && same(r.path)
 		for _, t := range r.trees {
 			if s, h := placeScore(q, t.branch, t.path); s >= 0 {
 				mt.trees, mt.treeHits = append(mt.trees, t), append(mt.treeHits, h)
 				mt.score = max(mt.score, s)
-				mt.exact = mt.exact || pathLike(q) && samePath(t.path, q)
+				mt.exact = mt.exact || pathLike(q) && same(t.path)
 			}
 		}
 		if mt.score < 0 {
@@ -372,9 +396,16 @@ func (m Model) matchRows(q string) []whereRow {
 	for _, mt := range ms {
 		rows = append(rows, repoRows(mt.r, mt.trees, mt.hits, mt.treeHits)...)
 	}
-	// A typed path no row is: the path itself first, so ⏎ takes it.
-	if pathLike(q) && !slices.ContainsFunc(rows, func(r whereRow) bool { return r.picks() && samePath(r.path(), q) }) {
-		rows = append([]whereRow{{kind: rowPath, text: q}}, rows...)
+	// A typed path no row is: the path itself first, so ⏎ takes it. One
+	// a row is only in another case goes below that row: on a disk that
+	// tells /src/MyRepo from /src/myrepo, it is another folder.
+	if pathLike(q) {
+		switch i := pathRow(rows, q); {
+		case i < 0:
+			rows = append([]whereRow{{kind: rowPath, text: q}}, rows...)
+		case !samePath(rows[i].path(), q):
+			rows = slices.Insert(rows, i+1, whereRow{kind: rowPath, text: q})
+		}
 	}
 	return rows
 }
@@ -422,10 +453,46 @@ func inPath(path, q string) bool {
 	return len(path) >= len(q) && strings.EqualFold(path[:len(q)], q)
 }
 
-// samePath tells if the place at path is the folder q names.
+// samePath tells if the place at path is the folder q names, in its
+// case: on a disk that tells /src/Project from /src/project, the other
+// is another folder.
 func samePath(path, q string) bool {
 	q = filepath.Clean(q)
+	return path == q || tilde(path) == q
+}
+
+// samePathFold is samePath in any case: a disk that ignores case has one
+// folder for /src/MyRepo and /src/myrepo.
+func samePathFold(path, q string) bool {
+	q = filepath.Clean(q)
 	return strings.EqualFold(path, q) || strings.EqualFold(tilde(path), q)
+}
+
+// samePlace is samePath for q among the known places: in any case when
+// no repo or worktree is q in its own case.
+func (m Model) samePlace(q string) func(path string) bool {
+	for _, r := range m.wrepos {
+		if samePath(r.path, q) || slices.ContainsFunc(r.trees, func(t whereRepo) bool { return samePath(t.path, q) }) {
+			return func(path string) bool { return samePath(path, q) }
+		}
+	}
+	return func(path string) bool { return samePathFold(path, q) }
+}
+
+// pathRow is the row a typed path q picks: the known place that is q in
+// its case, else one that is q in another case, else q's own row; -1 for
+// none.
+func pathRow(rows []whereRow, q string) int {
+	known := func(same func(string, string) bool) func(whereRow) bool {
+		return func(r whereRow) bool { return r.picks() && r.kind != rowPath && same(r.path(), q) }
+	}
+	if i := slices.IndexFunc(rows, known(samePath)); i >= 0 {
+		return i
+	}
+	if i := slices.IndexFunc(rows, known(samePathFold)); i >= 0 {
+		return i
+	}
+	return slices.IndexFunc(rows, func(r whereRow) bool { return r.kind == rowPath && samePath(r.path(), q) })
 }
 
 // The weights of fuzzy: each matched rune, and the bonus of one at the
@@ -548,7 +615,7 @@ func (m Model) refreshWhere(f *form, path string) {
 	if path == "" {
 		// A typed path selects its own row: a worktree's is under its repo's.
 		if q := strings.TrimSpace(f.filter()); pathLike(q) {
-			if i := slices.IndexFunc(f.rows, func(r whereRow) bool { return r.picks() && samePath(r.path(), q) }); i >= 0 {
+			if i := pathRow(f.rows, q); i >= 0 {
 				f.sel = i
 			}
 		}
@@ -864,8 +931,7 @@ func (m Model) whereLine(r whereRow, selected bool, t whereCols, iw int) string 
 			return ""
 		}
 		if cutStart && lipgloss.Width(s) > w {
-			rs := []rune(s)
-			s = "…" + string(rs[len(rs)-(w-1):])
+			s = cutStartTo(s, w)
 		}
 		return "  " + style.Render(fit(s, w))
 	}
@@ -877,6 +943,16 @@ func (m Model) whereLine(r whereRow, selected bool, t whereCols, iw int) string 
 		line = paint(st.selected.Render(line), st.theme.AccentWash, iw)
 	}
 	return line
+}
+
+// cutStartTo is s cut from its start to w columns, with … for what went:
+// a wide rune takes two.
+func cutStartTo(s string, w int) string {
+	rs := []rune(s)
+	for len(rs) > 0 && lipgloss.Width("…"+string(rs)) > w {
+		rs = rs[1:]
+	}
+	return "…" + string(rs)
 }
 
 // whereName is a row's name cell in w columns: the tree in faint, the
