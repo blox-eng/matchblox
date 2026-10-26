@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -164,20 +163,8 @@ func newSessionAct(words []string, o newOpts, from, here string) (proto.Act, err
 // cloneWait is how long matchblox new waits for a clone: a big repo is slow.
 const cloneWait = 30 * time.Minute
 
-// isCloneURL tells if where is a git URL to clone: one with a scheme
-// (https://, ssh://), user@host:path, or gh:o/r, that gitremote reads. A
-// bare o/r is a path, there or not: a typo never clones.
-func isCloneURL(where string) bool {
-	where = strings.TrimSpace(where)
-	if !strings.Contains(where, "://") && !strings.HasPrefix(where, "gh:") && !scpForm.MatchString(where) {
-		return false
-	}
-	_, ok := gitremote.Parse(where, "https")
-	return ok
-}
-
-// scpForm is git's user@host:path.
-var scpForm = regexp.MustCompile(`^[^/@:]+@[^/:]+:`)
+// isCloneURL tells if where is a git URL to clone, as the service reads it.
+func isCloneURL(where string) bool { return gitremote.Explicit(where) }
 
 func cliLife(cmd string, words []string, anyway bool, w io.Writer, path string) error {
 	doc, err := readDoc(path, staleAfter)
@@ -206,9 +193,8 @@ func cliNew(words []string, o newOpts, w io.Writer, path string) error {
 		return err
 	}
 	home, _ := os.UserHomeDir()
-	wait := newWait(o, home)
+	wait := newWaitFor(o, home)
 	if isCloneURL(o.where) {
-		wait = max(wait, cloneWait)
 		if r, ok := gitremote.Parse(o.where, "https"); ok {
 			if _, err := fmt.Fprintf(w, "cloning %s…\n", r.Slug()); err != nil {
 				return err
@@ -238,6 +224,14 @@ func cliNew(words []string, o newOpts, w io.Writer, path string) error {
 		return fmt.Errorf("new: refused: %w", err)
 	}
 	return nil
+}
+
+// newWaitFor is newWait, and a git URL waits for its clone as well.
+func newWaitFor(o newOpts, home string) time.Duration {
+	if isCloneURL(o.where) {
+		return max(newWait(o, home), cloneWait)
+	}
+	return newWait(o, home)
 }
 
 // newWait is how long matchblox new waits for its result: a start that may

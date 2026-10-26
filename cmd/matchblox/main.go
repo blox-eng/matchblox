@@ -624,6 +624,7 @@ func newService(cfg config.Config, root string) *service.Service {
 	if cfg.Git.CloneRoot != "" {
 		s.CloneRoot = service.ExpandHome(cfg.Git.CloneRoot)
 	}
+	s.GitRemote = cfg.Git.Remote
 	wirePush(s, cfg.Push, home(), filepath.Dir(s.StatePath), defaultHostKey)
 	return s
 }

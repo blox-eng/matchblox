@@ -218,6 +218,12 @@ func TestNewWhereURLIsSentAsIs(t *testing.T) {
 			t.Fatalf("url %q: %q", url, got)
 		}
 	}
+	// what gitremote refuses is no URL: it is a path here, and never cloned
+	for _, bad := range []string{"http://github.com/o/r", "file:///etc", "https://u:tok@github.com/o/r", "https://tok@github.com/o/r", "ext::sh -c x"} {
+		if got := where(bad, here); got != filepath.Join(here, bad) {
+			t.Fatalf("%q was sent as %q", bad, got)
+		}
+	}
 	// a bare o/r is a path, there or not: a typo never clones
 	if got := where("o/r", here); got != filepath.Join(here, "o", "r") {
 		t.Fatalf("no folder: %q", got)
@@ -414,6 +420,29 @@ func TestNewWaitDerivesFromCopyLimit(t *testing.T) {
 		{newOpts{agent: "codex", account: "~/.codex-old"}, actWait},
 	} {
 		if got := newWait(c.o, home); got != c.want {
+			t.Errorf("%+v: %v, want %v", c.o, got, c.want)
+		}
+	}
+}
+
+// A git URL waits for its clone as long as cloneWait; a path, bare o/r
+// and a refused URL wait as any start does.
+func TestNewWaitForWaitsForAClone(t *testing.T) {
+	home := t.TempDir()
+	for _, c := range []struct {
+		o    newOpts
+		want time.Duration
+	}{
+		{newOpts{where: "https://github.com/o/r"}, cloneWait},
+		{newOpts{where: "gh:o/r"}, cloneWait},
+		{newOpts{where: "git@github.com:o/r.git"}, cloneWait},
+		{newOpts{where: "https://github.com/o/r", newAccount: true}, max(cloneWait, accounts.CopyLimit.Time+actWait)},
+		{newOpts{where: "/src/app"}, actWait},
+		{newOpts{where: "o/r"}, actWait},
+		{newOpts{where: "https://tok@github.com/o/r"}, actWait},
+		{newOpts{}, actWait},
+	} {
+		if got := newWaitFor(c.o, home); got != c.want {
 			t.Errorf("%+v: %v, want %v", c.o, got, c.want)
 		}
 	}
