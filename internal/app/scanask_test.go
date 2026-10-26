@@ -165,8 +165,8 @@ func TestFoundFeedsWhereNotGit(t *testing.T) {
 	old, recent := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{{Path: "/w/app"}, {Path: "/h/old", Active: old}, {Path: "/h/new", Active: recent}}}
 	m, _ := loadedWith(t, 100, st)
-	if got := m.gitPaths(); !slices.Equal(got, []string{"/w/app", "/h/new", "/h/old"}) {
-		t.Fatalf("gitPaths = %v", got)
+	if got := repoPaths(m.whereRepos()); !slices.Equal(got, []string{"/w/app", "/h/new", "/h/old"}) {
+		t.Fatalf("where's repos = %v", got)
 	}
 	for _, r := range m.allWorktreeRows() {
 		if r.wt.Path != "/w/app" {
@@ -180,11 +180,9 @@ func TestEmptyWhereNamesTheRepositories(t *testing.T) {
 	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{{Path: "/h/a"}}}
 	m, _ := loadedWith(t, 100, st)
 	next, _ := key(m, "N")
-	for range len(next.(Model).form.where) {
-		next, _ = key(next, "backspace")
-	}
+	next, _ = key(next, "esc") // the list closes, where stays empty
 	next, _ = key(next, "enter")
-	if f := next.(Model).form; f == nil || f.err != "where does it start? a path, or ←→ for a repository" {
+	if f := next.(Model).form; f == nil || f.err != "where does it start? a path, or ←→ for a repository" || !f.listOpen {
 		t.Fatalf("form %+v", f)
 	}
 }
@@ -424,34 +422,47 @@ func manyFound() proto.State {
 	return st
 }
 
-func TestFoundPathsBuiltOnceAndDeduped(t *testing.T) {
-	m, _ := loadedWith(t, 100, manyFound())
-	got := m.gitPaths()
-	if len(got) != 5007 {
-		t.Fatalf("%d paths, want 5007", len(got))
-	}
-	for i := range 10 {
-		if got[i] != fmt.Sprintf("/w/%d", i) {
-			t.Fatalf("paths[%d] = %s: the Git tab's come first", i, got[i])
+// repoPaths are the paths of repos, each repo's worktrees after it.
+func repoPaths(repos []whereRepo) []string {
+	var out []string
+	for _, r := range repos {
+		out = append(out, r.path)
+		for _, t := range r.trees {
+			out = append(out, t.path)
 		}
 	}
-	if got[10] != "/h/4996" || got[len(got)-1] != "/h/0000" {
-		t.Fatalf("found: %s .. %s, want the newest first", got[10], got[len(got)-1])
+	return out
+}
+
+func TestWhereReposBuiltOnceAndDeduped(t *testing.T) {
+	m, _ := loadedWith(t, 100, manyFound())
+	got := repoPaths(m.wrepos)
+	if len(got) != 5007 || len(m.wrepos) != 5007 {
+		t.Fatalf("%d paths, want 5007", len(got))
 	}
 	next, _ := key(m, "N")
 	if next.(Model).form == nil {
 		t.Fatal("no form")
 	}
-	before := next.(Model).foundPaths
+	rows := next.(Model).form.rows
+	first := rows[slices.IndexFunc(rows, func(r whereRow) bool { return r.kind == rowRepo })]
+	if p := first.repo.path; p != "/w/0" && p != "/w/1" && p != "/w/2" {
+		t.Fatalf("the first suggested is %s: want a found Git tab repo, the newest", p)
+	}
+	before := next.(Model).wrepos
 	for range 100 {
 		screen(next)
 	}
-	if after := next.(Model).foundPaths; &after[0] != &before[0] || len(after) != len(before) {
-		t.Fatal("drawing the form rebuilt the found paths")
+	if after := next.(Model).wrepos; &after[0] != &before[0] || &next.(Model).form.rows[0] != &rows[0] {
+		t.Fatal("drawing the form rebuilt the repos")
 	}
 	next, _ = next.Update(stateMsg(lifeStateWithGit(manyFound().Git)))
-	if after := next.(Model).foundPaths; &after[0] != &before[0] {
-		t.Fatal("a snapshot with the same worktrees rebuilt the found paths")
+	if after := next.(Model).wrepos; &after[0] != &before[0] {
+		t.Fatal("a snapshot with the same worktrees rebuilt the repos")
+	}
+	next = typeText(next, "h/4996")
+	if r := next.(Model).whereSelected(); r.path() != "/h/4996" {
+		t.Fatalf("selected %+v", r)
 	}
 }
 
@@ -461,18 +472,15 @@ func lifeStateWithGit(g *proto.GitReport) proto.State {
 	return st
 }
 
-func TestFoundPathsRebuiltOnGitReport(t *testing.T) {
+func TestWhereReposRebuiltOnGitReport(t *testing.T) {
 	st := lifeState()
 	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{{Path: "/h/a", Active: t0}, {Path: "/h/b", Active: t0.Add(time.Hour)}}}
 	m, _ := loadedWith(t, 100, st)
-	if !slices.Equal(m.foundPaths, []string{"/h/b", "/h/a"}) {
-		t.Fatalf("foundPaths = %v", m.foundPaths)
-	}
-	next, _ := m.Update(stateMsg(lifeStateWithGit(&proto.GitReport{Repos: []gitscan.Repo{{Path: "/h/a", Worktrees: []proto.Worktree{{Path: "/h/a", Branch: "main"}}}}})))
-	nm := next.(Model)
-	if !slices.Equal(nm.foundPaths, []string{"/h/b"}) || !slices.Equal(nm.gitPaths(), []string{"/h/a", "/h/b"}) {
-		t.Fatalf("foundPaths = %v, gitPaths = %v", nm.foundPaths, nm.gitPaths())
+	next, _ := m.Update(stateMsg(lifeStateWithGit(&proto.GitReport{Repos: []gitscan.Repo{{Path: "/h/a", Worktrees: []proto.Worktree{
+		{Path: "/h/a", Branch: "main"}, {Path: "/h/a-2", Branch: "feat/2"}}}}})))
+	if got := repoPaths(next.(Model).wrepos); !slices.Equal(got, []string{"/h/a", "/h/a-2", "/h/b"}) {
+		t.Fatalf("where's repos = %v", got)
 	}
 }
 
@@ -625,5 +633,29 @@ func TestPickSeveralMissingFoldersStaysOpen(t *testing.T) {
 	done, _ := next.Update(resultMsg(proto.Result{ActID: next.(Model).form.act, Err: "no folder ~/dve, ~/My Work"}))
 	if nm := done.(Model); nm.form == nil || nm.form.err != "no folder ~/dve, ~/My Work" || nm.form.roots != `~/dve "~/My Work"` {
 		t.Fatalf("form %+v", nm.form)
+	}
+}
+
+// A new session in a repo counts in its row, though the repos are not
+// sent again.
+func TestWhereLiveFollowsTheSessions(t *testing.T) {
+	st := lifeState()
+	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{{Path: "/h/a"}, {Path: "/h/b"}}}
+	m, _ := loadedWith(t, 100, st)
+	live := func(m Model) map[string]int {
+		out := map[string]int{}
+		for _, r := range m.wrepos {
+			out[r.path] = r.live
+		}
+		return out
+	}
+	if got := live(m); got["/h/a"] != 0 {
+		t.Fatalf("live %v", got)
+	}
+	st2 := lifeState()
+	st2.Sessions[0].Cwd = "/h/a"
+	next, _ := m.Update(stateMsg(st2))
+	if got := live(next.(Model)); got["/h/a"] != 1 {
+		t.Fatalf("live %v", got)
 	}
 }

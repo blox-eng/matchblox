@@ -95,8 +95,10 @@ func defaultKeys() keymaps {
 		form: formKeys{
 			Close: bind(ks("esc"), "esc", ""),
 			Enter: bind(ks("enter"), "⏎", "start"),
-			Next:  bind(ks("tab", "down"), "tab", "next"),
-			Prev:  bind(ks("shift+tab", "up"), "shift+tab", "back"),
+			Next:  bind(ks("tab"), "tab", "next"),
+			Prev:  bind(ks("shift+tab"), "shift+tab", "back"),
+			Down:  bind(ks("down"), "↑↓", "move"),
+			Up:    bind(ks("up"), "↑↓", "move"),
 			Left:  bind(ks("left"), "←→", "pick"),
 			Right: bind(ks("right", "space"), "←→", "pick"),
 			Erase: bind(ks("backspace"), "⌫", "erase"),
@@ -192,11 +194,13 @@ func (k mainKeys) bindings() []bkey.Binding {
 		k.Stoke, k.Night, k.Order, k.Rename}
 }
 
-// formKeys are the new-session, switch and rename form.
-type formKeys struct{ Close, Enter, Next, Prev, Left, Right, Erase bkey.Binding }
+// formKeys are the new-session, switch and rename form. Down and Up go to
+// the next and the previous field, and move in where's list when it is
+// open.
+type formKeys struct{ Close, Enter, Next, Prev, Down, Up, Left, Right, Erase bkey.Binding }
 
 func (k formKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Close, k.Enter, k.Next, k.Prev, k.Left, k.Right, k.Erase}
+	return []bkey.Binding{k.Close, k.Enter, k.Next, k.Prev, k.Down, k.Up, k.Left, k.Right, k.Erase}
 }
 
 // peekKeys are the peek box. Every other key is text for its typing line.

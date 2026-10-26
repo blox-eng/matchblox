@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/gitremote"
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -363,5 +364,37 @@ func TestAConsoleClaimFailsClosedWithoutDrivenJSON(t *testing.T) {
 		if denies(t, s, "%2", "gh pr merge 5") {
 			t.Errorf("restart %v: the person's message did not free %%2", restart)
 		}
+	}
+}
+
+// R16: no agent clones, the stoker and the sessions it drives included; a
+// clone through N is the builder's.
+func TestNoAgentClones(t *testing.T) {
+	s, _ := drivenPaneTest(t)
+	s.CloneRoot = t.TempDir() // a clone could start: only the refusal stops it
+	target := filepath.Join(s.CloneRoot, "r")
+	s.cloneRemote = func(text string) (gitremote.Remote, bool) { return gitremote.Parse(text, "https") }
+	s.cloneRun = func(context.Context, gitremote.Remote, string, func(int)) error {
+		t.Error("a clone ran")
+		return nil
+	}
+	acts := []proto.Act{
+		{RecID: "clone:plan", Text: "https://github.com/o/r"},
+		{RecID: "clone:start", Text: `{"url":"https://github.com/o/r","target":"` + target + `"}`},
+		{RecID: "clone:stop", Text: target},
+		{RecID: NewSessionID, Confirm: "y", Text: `{"where":"gh:o/r","agent":"claude","name":"n1"}`},
+	}
+	for _, a := range acts {
+		for _, client := range []string{proto.ClientCLI, proto.ClientConsole} {
+			if res := actOver(t, s, 100, client, a); res.Err != noClone {
+				t.Errorf("%s %s from the driven pane: err %q", client, a.RecID, res.Err)
+			}
+		}
+		if res := s.act(t.Context(), fromStokerAct(a.RecID, a.Text)); res.Err != noClone {
+			t.Errorf("%s from the stoker: err %q", a.RecID, res.Err)
+		}
+	}
+	if _, err := os.Lstat(target); !os.IsNotExist(err) {
+		t.Fatalf("cloned: %v", err)
 	}
 }

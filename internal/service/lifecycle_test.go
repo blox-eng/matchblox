@@ -276,7 +276,7 @@ func TestNewRefuses(t *testing.T) {
 		"opencode is not installed here":                                                  {Where: dir, Agent: "opencode", Name: "x"},
 		"aider is not an agent matchblox starts: claude, codex, opencode or cursor-agent": {Where: dir, Agent: "aider", Name: "x"},
 		"no directory " + dir + "/nope":                                                   {Where: dir + "/nope", Agent: "claude", Name: "x"},
-		"a new session starts in a full path":                                             {Where: "rel/dir", Agent: "claude", Name: "x"},
+		"a new session starts in a full path":                                             {Where: "rel", Agent: "claude", Name: "x"},
 		"a new worktree needs a git repository: " + dir + " is none":                      {Where: dir, Branch: "b", Agent: "claude"},
 		"a first message does not start with -":                                           {Where: dir, Agent: "claude", Name: "x", First: "--dangerously-skip-permissions"},
 		"the first message must be one line, without control keys":                        {Where: dir, Agent: "claude", Name: "x", First: "a\nb"},
@@ -457,9 +457,13 @@ func TestLaunchArgvOfEachAgent(t *testing.T) {
 		{"agent", sample.CursorAgent, "go", []string{"agent", "--trust", "go"}},
 		{"cursor-agent", sample.CursorAgent, "", []string{"cursor-agent", "--trust"}},
 	} {
-		if got := launchArgv(c.bin, c.agent, "work", c.first, nil); !slices.Equal(got, c.want) {
+		if got := launchArgv(c.bin, c.agent, "work", c.first, true, nil); !slices.Equal(got, c.want) {
 			t.Errorf("%s %q: got %q, want %q", c.agent, c.first, got, c.want)
 		}
+	}
+	// a folder the builder did not choose: Cursor asks
+	if got, want := launchArgv("agent", sample.CursorAgent, "work", "go", false, nil), []string{"agent", "go"}; !slices.Equal(got, want) {
+		t.Errorf("untrusted: got %q, want %q", got, want)
 	}
 }
 

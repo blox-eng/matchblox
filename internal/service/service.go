@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math/rand/v2"
 	"net"
 	"os"
 	"runtime"
@@ -18,6 +19,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/actions"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/gitremote"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/holds"
@@ -148,6 +150,14 @@ type Service struct {
 	// ConsentPath and ReposPath keep the answer and the last scan. Empty:
 	// kept in memory only.
 	ConsentPath, ReposPath string
+	// UsedPath keeps where sessions started. Empty: kept in memory only.
+	UsedPath string
+	// CloneRoot is where a clone goes ([git] clone_root), absolute.
+	// Empty: no clones.
+	CloneRoot string
+	// GitRemote is the remote a checkout is compared at ([git] remote).
+	// Empty: origin.
+	GitRemote string
 	// PushNumbers are the island's numbers of sessions and accounts; the
 	// names act names them. Nil: it names nothing.
 	PushNumbers *push.Numbers
@@ -205,6 +215,11 @@ type Service struct {
 	found     gitscan.Found
 	foundGen  uint64
 	foundKick chan struct{}
+	// used is where sessions started; it goes to each console when usedGen
+	// passes the one it has. usedMu orders the writes of its file.
+	used    state.Used
+	usedGen uint64
+	usedMu  sync.Mutex
 	// scanReqs are the yeses that wait for foundLoop, the only walker;
 	// scanEnd closes when it ends.
 	scanReqs chan scanReq
@@ -223,6 +238,22 @@ type Service struct {
 	// consentMu orders the answer and the cache, so a no is never
 	// followed by a scan's write.
 	consentMu sync.Mutex
+	// clones are the clones that run or ended in the last minute, by
+	// target, under mu.
+	clones map[string]*cloneJob
+	// cloneSeq is the id of the last clone started, under mu: each clone
+	// has its own, so a console tells it from an earlier one there.
+	cloneSeq int64
+	// cloneRand picks free names, under cloneMu. Nil: seeded from the time.
+	cloneRand *rand.Rand
+	cloneMu   sync.Mutex
+	// cloneRun clones (tests). Nil: clone.Run.
+	cloneRun func(ctx context.Context, r gitremote.Remote, target string, progress func(pct int)) error
+	// cloneRemote reads a typed URL (tests). Nil: gitremote.Parse.
+	cloneRemote func(text string) (gitremote.Remote, bool)
+	// protocol is gh's git_protocol, asked once.
+	protoOnce sync.Once
+	protocol  string
 	// signIns are the notes on a new account's sign-in, by pane.
 	signIns signInState
 	// accountLocks hold an account folder from its check to its start, by
@@ -325,6 +356,7 @@ func (s *Service) Serve(ctx context.Context, l net.Listener) error {
 	}()
 	<-ctx.Done()
 	l.Close()
+	s.stopClones(cloneStopWait) // a clone cut off removes its partial folder first
 	if err := context.Cause(ctx); errors.Is(err, ErrReplaced) || errors.Is(err, ErrSocketGone) {
 		return err
 	}
@@ -427,6 +459,7 @@ func (s *Service) Run(ctx context.Context) {
 	s.mu.Unlock()
 	rec := s.recorder()
 	s.loadFound()
+	s.loadUsed()
 	go s.gitLoop(ctx)
 	go s.shipsLoop(ctx)
 	go s.foundLoop(ctx)
@@ -740,6 +773,7 @@ type client struct {
 	kick     chan struct{}
 	histSent bool
 	foundGen uint64
+	usedGen  uint64
 }
 
 func (s *Service) join(cl *client) {
@@ -788,6 +822,11 @@ func (s *Service) stateFor(cl *client) (proto.State, bool) {
 		f := s.found
 		st.Found, cl.foundGen = &f, s.foundGen
 	}
+	if cl.usedGen != s.usedGen {
+		u := state.Used{Repos: slices.Clone(s.used.Repos)}
+		st.Used, cl.usedGen = &u, s.usedGen
+	}
+	st.Clones = s.cloneList()
 	return st, true
 }
 
@@ -860,6 +899,9 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 		}
 	}()
 
+	connCtx, connDone := context.WithCancel(ctx)
+	defer connDone() // a clone for this connection's act stops with it
+	actCtx := context.WithValue(ctx, connKey{}, connCtx)
 	for {
 		env, err := c.Recv()
 		if err != nil {
@@ -880,7 +922,7 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 			// A console in a pane the stoker drove, or in the stoker's own,
 			// is an agent that says it is one.
 			a.Console = h.Client == proto.ClientConsole && (pid <= 0 || !s.agentsPane(a))
-			res := s.act(ctx, a)
+			res := s.act(actCtx, a)
 			res.ActID = id
 			_ = c.Send(proto.KindResult, id, res)
 		}(env.ID)

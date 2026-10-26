@@ -199,6 +199,78 @@ func TestSwitchJumpsOnlyAfterItRan(t *testing.T) {
 	}
 }
 
+func TestNewWhereURLIsSentAsIs(t *testing.T) {
+	where := func(o, here string) string {
+		t.Helper()
+		a, err := newSessionAct(nil, newOpts{where: o}, "", here)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var n proto.NewSession
+		if err := json.Unmarshal([]byte(a.Text), &n); err != nil {
+			t.Fatal(err)
+		}
+		return n.Where
+	}
+	here := t.TempDir()
+	for _, url := range []string{"https://github.com/o/r", "git@github.com:o/r.git", "ssh://git@h/o/r", "gh:o/r"} {
+		if got := where(url, here); got != url {
+			t.Fatalf("url %q: %q", url, got)
+		}
+	}
+	// what gitremote refuses is no URL: it is a path here, and never cloned
+	for _, bad := range []string{"http://github.com/o/r", "file:///etc", "https://u:tok@github.com/o/r", "https://tok@github.com/o/r", "ext::sh -c x"} {
+		if got := where(bad, here); got != filepath.Join(here, bad) {
+			t.Fatalf("%q was sent as %q", bad, got)
+		}
+	}
+	// a bare o/r is a path, there or not: a typo never clones
+	if got := where("o/r", here); got != filepath.Join(here, "o", "r") {
+		t.Fatalf("no folder: %q", got)
+	}
+	if got := where("src/api", here); got != filepath.Join(here, "src", "api") {
+		t.Fatalf("src/api: %q", got)
+	}
+	if got := where("api", here); got != filepath.Join(here, "api") {
+		t.Fatalf("path: %q", got)
+	}
+}
+
+// A URL's new says what the clone came to, and is no refusal.
+func TestNewSaysTheClone(t *testing.T) {
+	sock := isolate(t)
+	l, err := transport.Listen(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	go func() {
+		nc, err := l.Accept()
+		if err != nil {
+			return
+		}
+		c := transport.NewConn(nc)
+		defer c.Close()
+		c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version})
+		if env, err := c.Recv(); err != nil || env.Kind != proto.KindHello {
+			return
+		}
+		c.Send(proto.KindSnapshot, "", proto.State{})
+		env, err := c.Recv()
+		if err != nil || env.Kind != proto.KindAct {
+			return
+		}
+		c.Send(proto.KindResult, env.ID, proto.Result{ActID: env.ID, Ran: [][]string{{"tmux", "new-session"}}, Note: "cloned o/r into ~/src/r"})
+	}()
+	var buf bytes.Buffer
+	if err := cliNew(nil, newOpts{where: "gh:o/r"}, &buf, sock); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := buf.String(), "cloning o/r…\ncloned o/r into ~/src/r\ntmux new-session\n"; got != want {
+		t.Fatalf("said %q, want %q", got, want)
+	}
+}
+
 func TestNewTakesAnAccount(t *testing.T) {
 	a, err := newSessionAct(nil, newOpts{where: "/work/app", agent: "codex", account: "work"}, "", "/home/u")
 	if err != nil {
@@ -348,6 +420,29 @@ func TestNewWaitDerivesFromCopyLimit(t *testing.T) {
 		{newOpts{agent: "codex", account: "~/.codex-old"}, actWait},
 	} {
 		if got := newWait(c.o, home); got != c.want {
+			t.Errorf("%+v: %v, want %v", c.o, got, c.want)
+		}
+	}
+}
+
+// A git URL waits for its clone as long as cloneWait; a path, bare o/r
+// and a refused URL wait as any start does.
+func TestNewWaitForWaitsForAClone(t *testing.T) {
+	home := t.TempDir()
+	for _, c := range []struct {
+		o    newOpts
+		want time.Duration
+	}{
+		{newOpts{where: "https://github.com/o/r"}, cloneWait},
+		{newOpts{where: "gh:o/r"}, cloneWait},
+		{newOpts{where: "git@github.com:o/r.git"}, cloneWait},
+		{newOpts{where: "https://github.com/o/r", newAccount: true}, max(cloneWait, accounts.CopyLimit.Time+actWait)},
+		{newOpts{where: "/src/app"}, actWait},
+		{newOpts{where: "o/r"}, actWait},
+		{newOpts{where: "https://tok@github.com/o/r"}, actWait},
+		{newOpts{}, actWait},
+	} {
+		if got := newWaitFor(c.o, home); got != c.want {
 			t.Errorf("%+v: %v, want %v", c.o, got, c.want)
 		}
 	}

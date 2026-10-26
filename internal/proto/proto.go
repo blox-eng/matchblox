@@ -76,6 +76,11 @@ type State struct {
 	// Found is set in the first snapshot to each console and when it
 	// changes; nil: as the last one. A service with no scan never sets it.
 	Found *Found `json:"found,omitempty"`
+	// Used is where sessions started: set as Found is.
+	Used *Used `json:"used,omitempty"`
+	// Clones are the clones the service runs, and the ones that ended
+	// in the last minute: in every snapshot while any is listed.
+	Clones []Clone `json:"clones,omitempty"`
 }
 
 type Event struct {
@@ -108,6 +113,14 @@ type Result struct {
 	Err     string     `json:"err,omitempty"`
 	// Scan is how a scan:yes's scan went.
 	Scan *ScanSummary `json:"scan,omitempty"`
+	// Clone is a clone:plan's plan.
+	Clone *ClonePlan `json:"clone,omitempty"`
+	// CloneID is the id of the clone a clone:start started.
+	CloneID int64 `json:"clone_id,omitempty"`
+	// Note is a line the builder reads, not a refusal: what a URL in
+	// new:session came to, or that a clone:stop came after the clone was
+	// done.
+	Note string `json:"note,omitempty"`
 	// Names answers the names act: what each number of the island is
 	// called now.
 	Names *Names `json:"names,omitempty"`
@@ -116,6 +129,49 @@ type Result struct {
 	// something that ran, or of a file that did not read. Only a
 	// new:session and a switch:<pane> set it.
 	Refused bool `json:"refused,omitempty"`
+}
+
+// ClonePlan is where a clone of a URL goes, found offline. Target is
+// <clone_root>/<repo>, or a free name when something else is there; Taken
+// says what: "another repo", "not a repo", "a file" or "being cloned" ("" when
+// free or the same repo). Have are the checkouts of the same remote, <clone_root>/<repo>
+// first when it is one; then Fresh is a free name to clone anew into.
+type ClonePlan struct {
+	Repo   string   `json:"repo"` // owner/repo
+	URL    string   `json:"url"`
+	Target string   `json:"target"`
+	Taken  string   `json:"taken,omitempty"`
+	Have   []string `json:"have,omitempty"`
+	Fresh  string   `json:"fresh,omitempty"`
+}
+
+// CloneStart is the Text of a "clone:start" act: clone URL into Target.
+// Token is the console's own for this start: the clone's record carries
+// it, so a console that lost the answer knows its clone from another's.
+type CloneStart struct {
+	URL    string `json:"url"`
+	Target string `json:"target"`
+	Token  string `json:"token,omitempty"`
+}
+
+// CloneStop is the Text of a "clone:stop" act: stop the clone ID into
+// Target. A stop whose ID is not the clone's that runs there stops
+// nothing. A bare Target, from an older console, stops the clone there.
+type CloneStop struct {
+	Target string `json:"target"`
+	ID     int64  `json:"id,omitempty"`
+}
+
+// Clone is one clone the service runs or ran.
+type Clone struct {
+	// ID tells this clone from an earlier one into the same Target.
+	ID     int64  `json:"id,omitempty"`
+	Target string `json:"target"`
+	Repo   string `json:"repo"`
+	Pct    int    `json:"pct"` // -1: no percent yet
+	Err    string `json:"err,omitempty"`
+	Done   bool   `json:"done,omitempty"`
+	Token  string `json:"token,omitempty"` // its clone:start's, if any
 }
 
 // Names are the session and account names by their island numbers.
@@ -227,6 +283,8 @@ type (
 	Worktree    = gitscan.Worktree
 	PR          = gitscan.PR
 	Found       = gitscan.Found
+	Used        = state.Used
+	Use         = state.Use
 	ScanSummary = gitscan.Summary
 	Checkout    = gitscan.Checkout
 	Ships       = ships.Report
@@ -260,7 +318,9 @@ type (
 // account the agent starts on: empty or "default" is the sign-in the
 // builder has. NewAccount makes the account first, set up as Setup says
 // (like-default, copy or empty; empty is like-default), and the session
-// starts without First: the builder signs in there.
+// starts without First: the builder signs in there. Cloned says the
+// folder in Where is a clone made for this session: Cursor asks before it
+// trusts it. It can only take trust away.
 type NewSession struct {
 	Where      string `json:"where"`
 	Branch     string `json:"branch,omitempty"`
@@ -270,6 +330,7 @@ type NewSession struct {
 	Account    string `json:"account,omitempty"`
 	NewAccount bool   `json:"new_account,omitempty"`
 	Setup      string `json:"setup,omitempty"`
+	Cloned     bool   `json:"cloned,omitempty"`
 }
 
 // SwitchAgent is the Text of a "switch:<pane>" act: start Agent in the
