@@ -211,8 +211,10 @@ path was `work space.v1`.
   `<environment_context>` as user messages. The capture now drops it.
 - Found, not changed: Codex warns that `-c` launches run without its shared
   background server. Account launches already ran this way.
-- Found, not changed: with two tmux servers whose pane IDs overlap, the
-  sampler can attribute an agent of an unlisted server to a listed pane.
-  The isolated run caused this. It predates this work.
+- Found and fixed: with two tmux servers whose pane IDs overlap, the sampler
+  gave an agent of an unlisted server a listed pane, through its
+  `TMUX_PANE` or by walking up through the foreign server. An agent below a
+  tmux server short of a listed pane now takes no pane. The fault predates
+  this work.
 - Not run live: compaction. The brief tells the match to reread
   `MATCHBLOX_CONTEXT`; the files stay on disk.

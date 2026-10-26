@@ -138,12 +138,12 @@ func readCodexLaunchConfig(path string) (map[string]any, error) {
 		return nil, err
 	}
 	if !st.Mode().IsRegular() || st.Size() > matchEvidenceLimit {
-		return nil, fmt.Errorf("Codex launch configuration %s must be a regular file under %d bytes", path, matchEvidenceLimit)
+		return nil, fmt.Errorf("the Codex launch configuration %s must be a regular file under %d bytes", path, matchEvidenceLimit)
 	}
 	var cfg map[string]any
 	// Never print parser errors: they can contain secret configuration values.
 	if _, err := toml.NewDecoder(f).Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("Codex launch configuration %s does not parse: fix its TOML before launching", path)
+		return nil, fmt.Errorf("the Codex launch configuration %s does not parse: fix its TOML before launching", path)
 	}
 	return cfg, nil
 }

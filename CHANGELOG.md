@@ -19,6 +19,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
+- An agent on a tmux server that matchblox does not list no longer takes
+  the row of a listed pane with the same pane id. It shows outside tmux.
 - **Codex starts with workspace trust and workspace-write network access**
   through both `new` and `switch`. The settings apply to that invocation.
   Sandbox mode and command approval policy stay as configured. A folder

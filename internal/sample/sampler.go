@@ -1136,9 +1136,27 @@ func (s *Sampler) isAgent(name string) bool {
 // to walking up to a pane's shell. Pane ids repeat across tmux servers: an
 // agent whose TMUX names another server takes only a pane it descends from,
 // and one of the stoker's server (stokers) takes its pane there, with the
-// server in its id.
+// server in its id. An agent below a tmux server short of a listed pane runs
+// on a server matchblox does not list: its pane ids are that server's, so
+// it takes none, whatever its environment claims.
 func (s *Sampler) ownerPane(pid int, key procKey, procs map[int]procfs.Proc, byPID map[int]Pane, server, stokers Pane) string {
 	ours, on := true, ""
+	walked, foreign := "", false
+	for cur, hops := pid, 0; cur > 1 && hops < maxHops; hops++ {
+		if p, ok := byPID[cur]; ok {
+			walked = p.ID
+			break
+		}
+		q, ok := procs[cur]
+		if !ok {
+			break
+		}
+		if cur != pid && strings.HasPrefix(q.Comm, "tmux") {
+			foreign = true
+			break
+		}
+		cur = q.PPID
+	}
 	// TMUX is "<socket>,<server pid>,<session>": an agent can outlive its
 	// server, and a new server can take the same socket path.
 	if v, ok := s.FS.Environ(pid, "TMUX"); ok {
@@ -1152,6 +1170,9 @@ func (s *Sampler) ownerPane(pid int, key procKey, procs map[int]procfs.Proc, byP
 			ours = sock == server.Socket && (server.Server == "" || spid == server.Server)
 		}
 	}
+	if foreign && on == "" {
+		return ""
+	}
 	if dir := s.envOf(pid, key).claudeDir; dir != "" && ours {
 		if e, ok := s.agents.entry(dir, pid); ok && e.Tmux != "" {
 			if i := strings.LastIndexByte(e.Tmux, '.'); i >= 0 && strings.HasPrefix(e.Tmux[i+1:], "%") {
@@ -1162,13 +1183,7 @@ func (s *Sampler) ownerPane(pid int, key procKey, procs map[int]procfs.Proc, byP
 	if v, ok := s.FS.Environ(pid, "TMUX_PANE"); ok && ours {
 		return OnServer(v, on)
 	}
-	for cur, hops := pid, 0; cur > 1 && hops < 64; hops++ {
-		if p, ok := byPID[cur]; ok {
-			return p.ID
-		}
-		cur = procs[cur].PPID
-	}
-	return ""
+	return walked
 }
 
 func (s *Sampler) treeCPU(root int, procs map[int]procfs.Proc, children map[int][]int, dt float64) (float64, int) {
