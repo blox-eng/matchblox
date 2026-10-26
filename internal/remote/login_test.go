@@ -381,6 +381,19 @@ func TestMasterPathFits(t *testing.T) {
 	}
 }
 
+// TestHostTmux: a host's tmux version that is not a plain one is not known.
+func TestHostTmux(t *testing.T) {
+	long := strings.Repeat("9", 20)
+	for v, want := range map[string]string{
+		"none": "none", "3.4": "3.4", "3.3a": "3.3a", "next-3.6": "next-3.6", long: long,
+		"": "", long + "9": "", "3.1\x1b]0;owned\x07": "", "3.4 x": "", "3.4\n": "",
+	} {
+		if got := HostTmux(v); got != want {
+			t.Errorf("HostTmux(%q) = %q, want %q", v, got, want)
+		}
+	}
+}
+
 func TestTmuxTooOld(t *testing.T) {
 	for v, old := range map[string]bool{
 		"3.1c": true, "2.9a": true, "3.2": false, "3.2a": false, "3.4": false, "next-3.6": false,

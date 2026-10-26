@@ -237,6 +237,19 @@ func printable(s string) string {
 	}, s))
 }
 
+// tmuxVersion is a tmux version a host can say: "none", or a plain one
+// such as 3.4, 3.3a or next-3.5.
+var tmuxVersion = regexp.MustCompile(`^(none|[0-9A-Za-z.-]{1,20})$`)
+
+// HostTmux is the tmux version of a host's hello, or "" (not known) when
+// it is not a plain one: the host sets it, and the console shows it.
+func HostTmux(v string) string {
+	if !tmuxVersion.MatchString(v) {
+		return ""
+	}
+	return v
+}
+
 // TmuxTooOld is true when tmux version v (as tmux -V says it, without
 // "tmux ") is older than floor. A version it cannot read, such as a
 // development build or "", is not too old.

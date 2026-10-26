@@ -227,7 +227,8 @@ func TestLoginResultSaysTheFix(t *testing.T) {
 
 // TestOldHostTmuxShowsDoor: a host without tmux, or with one older than
 // MinHostTmux, cannot take a jump: it is refused, and the tmux door is
-// selected. A host that does not say (an older matchblox) tries.
+// selected. A host that does not say (an older matchblox) tries, as does a
+// host whose version is not a plain one: it is never shown.
 func TestOldHostTmuxShowsDoor(t *testing.T) {
 	tmux := doors.Door{ID: doors.Tmux, Title: "Install tmux", Term: []string{"sudo", "sh", "-c", "apt-get update && apt-get install -y tmux"}}
 	for _, c := range []struct {
@@ -237,6 +238,8 @@ func TestOldHostTmuxShowsDoor(t *testing.T) {
 		{"3.1", "refused: tmux 3.1 on ws-1 is older than 3.2: update tmux there"},
 		{"", ""},
 		{"3.4", ""},
+		{"3.1\x1b]0;owned\x07", ""},
+		{"3.1" + strings.Repeat("a", 18), ""},
 	} {
 		m, execs, _ := checkedHost(t, doorState(tmux), "", 0)
 		next, cmd := m.Update(hostHello(c.tmux))

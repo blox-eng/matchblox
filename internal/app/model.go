@@ -553,6 +553,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.update(msg.msg)
 	case helloMsg:
 		m.host = proto.Hello(msg)
+		m.host.Tmux = remote.HostTmux(m.host.Tmux)
 		if m.olderLocal() {
 			// The old service exits; the redial starts this binary.
 			m.replaced = true
