@@ -67,10 +67,10 @@ func (m Model) render() string {
 		return ""
 	}
 	w := max(m.width, minWidth)
-	if m.splashing() {
+	if m.splashing() && m.ask == nil {
 		return m.splashView(w)
 	}
-	if m.pair.owns() {
+	if m.pair.owns() && m.ask == nil {
 		return m.pairView(w)
 	}
 	if m.night() {
@@ -138,11 +138,20 @@ type drawn struct {
 	actKeys   []span
 }
 
-// draw lays out the screen, top to bottom: the header, the tabs, a
+// draw is the screen, with an ssh prompt over everything.
+func (m Model) draw(w int) drawn {
+	sc := m.drawScreen(w)
+	if m.ask != nil {
+		m.overlayAsk(&sc, w)
+	}
+	return sc
+}
+
+// drawScreen lays out the screen, top to bottom: the header, the tabs, a
 // hairline, the body (on an opened phone and a desk the list and the
 // detail side by side), the dock when it fits, then a hairline and the
 // key line (design/0006 §4.1).
-func (m Model) draw(w int) drawn {
+func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt := m.header(w)
 	tabs, tabSpans := m.tabsLine(w)
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,

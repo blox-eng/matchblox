@@ -811,3 +811,33 @@ func TestKeychainNotFoundIsNoLogin(t *testing.T) {
 		t.Errorf("no error: %v, want nil", err)
 	}
 }
+
+// TestConsoleAsk: one prompt socket per console run, in the checked base;
+// none, with why, without a base.
+func TestConsoleAsk(t *testing.T) {
+	base, err := os.MkdirTemp("", "mb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(base)
+	ask, closeAsk, why := consoleAsk(base)
+	if ask == nil || why != "" {
+		t.Fatalf("no socket: %q", why)
+	}
+	sock := ""
+	for _, kv := range ask.Env("ws-1") {
+		if v, ok := strings.CutPrefix(kv, "MATCHBLOX_ASKPASS="); ok {
+			sock = v
+		}
+	}
+	if !strings.HasPrefix(sock, base+string(os.PathSeparator)) {
+		t.Fatalf("the socket %q is not in %s", sock, base)
+	}
+	closeAsk()
+	if _, err := os.Stat(sock); err == nil {
+		t.Fatal("the socket outlived the run")
+	}
+	if ask, _, why := consoleAsk(""); ask != nil || why == "" {
+		t.Fatalf("no base: %v %q", ask, why)
+	}
+}

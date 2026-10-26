@@ -127,6 +127,24 @@ func TestCheckArgv(t *testing.T) {
 	}
 }
 
+// TestMasterArgv: the master's check starts no connection; its open has
+// no BatchMode, so ssh asks what it needs (through askpass), and runs
+// nothing but true on the host.
+func TestMasterArgv(t *testing.T) {
+	master := []string{"-o", "ControlMaster=auto", "-o", "ControlPath=/c/ssh/%C", "-o", "ControlPersist=10m"}
+	if got, want := MasterUpArgv("ws-1", "/c/ssh"), append(append([]string{"ssh"}, master...), "-O", "check", "--", "ws-1"); !slices.Equal(got, want) {
+		t.Errorf("MasterUpArgv =\n %q\nwant\n %q", got, want)
+	}
+	want := append(append([]string{"ssh"}, master...), "-o", "ConnectTimeout=10", "--", "ws-1", "true")
+	got := OpenArgv("ws-1", "/c/ssh")
+	if !slices.Equal(got, want) {
+		t.Errorf("OpenArgv =\n %q\nwant\n %q", got, want)
+	}
+	if slices.Contains(got, "BatchMode=yes") {
+		t.Error("the open must be able to ask")
+	}
+}
+
 // shortTemp is a temporary directory with a short path: a socket path
 // under it must fit sun_path.
 func shortTemp(t *testing.T) string {

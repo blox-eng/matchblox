@@ -552,6 +552,9 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		}
 		return err
 	}
+	ask, closeAsk, why := consoleAsk(base.MasterBase)
+	defer closeAsk()
+	base.Ask, base.NoAsk = ask, why
 	list := hosts.Path()
 	asked := filepath.Join(filepath.Dir(state.Path()), "asked-where")
 	sh := app.NewShell(app.ShellOptions{
@@ -569,6 +572,24 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		s.Close()
 	}
 	return err
+}
+
+// consoleAsk is the prompt socket of this console run (design §3.4), in
+// the masters' base, which it checks first. Nil, with why, when there is
+// none: an ssh then asks in the terminal. A refused base says nothing
+// here: the console says why at the host's open.
+func consoleAsk(base string) (app.AskSource, func(), string) {
+	if base == "" {
+		return nil, func() {}, "this system has no private directory for the prompt socket"
+	}
+	if _, err := remote.EnsureMasterDir(base); err != nil {
+		return nil, func() {}, ""
+	}
+	s, err := askpass.Listen(base)
+	if err != nil {
+		return nil, func() {}, "the prompt socket: " + err.Error()
+	}
+	return s, func() { _ = s.Close() }, ""
 }
 
 // openHost dials a host for the shell: "" is this machine's service,

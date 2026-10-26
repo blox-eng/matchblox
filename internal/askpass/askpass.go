@@ -57,10 +57,12 @@ const (
 )
 
 // Prompt is one ssh prompt for the console. Text is already cleaned.
-// Confirm is a yes/no prompt (a new host key).
+// Confirm is a yes/no prompt (a new host key). Gone closes when the helper
+// left (ssh gave up or was killed): nobody waits for the answer then.
 type Prompt struct {
 	Host, Text string
 	Confirm    bool
+	Gone       <-chan struct{}
 }
 
 type request struct {
@@ -77,6 +79,7 @@ type reply struct {
 type pending struct {
 	conn   net.Conn
 	prompt Prompt
+	gone   chan struct{}
 }
 
 // Server is the console's end of the socket.
@@ -177,7 +180,14 @@ func (s *Server) serve(c net.Conn) {
 	}
 	_ = c.SetReadDeadline(time.Time{})
 	text := clean(req.Text)
-	p := pending{conn: c, prompt: Prompt{Host: Clean(req.Host), Text: cut(text), Confirm: strings.Contains(text, "(yes/no")}}
+	gone := make(chan struct{})
+	p := pending{conn: c, gone: gone, prompt: Prompt{Host: Clean(req.Host), Text: cut(text), Confirm: strings.Contains(text, "(yes/no"), Gone: gone}}
+	// The helper sends nothing more: a read ends only when it leaves, or
+	// when the answer closes the connection.
+	go func() {
+		_, _ = c.Read(make([]byte, 1))
+		close(gone)
+	}()
 	select {
 	case s.prompts <- p:
 	case <-s.done:
@@ -188,7 +198,7 @@ func (s *Server) serve(c net.Conn) {
 // Next waits for the next prompt, one at a time: a second helper waits
 // until the first is answered. answer gives the reply once; ok=false makes
 // the helper fail, and ssh cancels. When ctx ends first, the prompt is
-// cancelled.
+// cancelled. A prompt whose helper already left is skipped.
 func (s *Server) Next(ctx context.Context) (Prompt, func(answer string, ok bool), error) {
 	select {
 	case s.turn <- struct{}{}:
@@ -198,14 +208,22 @@ func (s *Server) Next(ctx context.Context) (Prompt, func(answer string, ok bool)
 		return Prompt{}, nil, net.ErrClosed
 	}
 	var p pending
-	select {
-	case p = <-s.prompts:
-	case <-ctx.Done():
-		<-s.turn
-		return Prompt{}, nil, ctx.Err()
-	case <-s.done:
-		<-s.turn
-		return Prompt{}, nil, net.ErrClosed
+	for p.conn == nil {
+		select {
+		case p = <-s.prompts:
+		case <-ctx.Done():
+			<-s.turn
+			return Prompt{}, nil, ctx.Err()
+		case <-s.done:
+			<-s.turn
+			return Prompt{}, nil, net.ErrClosed
+		}
+		select {
+		case <-p.gone:
+			p.conn.Close()
+			p = pending{}
+		default:
+		}
 	}
 	var once sync.Once
 	answered := make(chan struct{})

@@ -101,6 +101,19 @@ func CheckArgv(host, dir string) []string {
 	return append(argv, "-o", "ConnectTimeout=10", "--", host, "true")
 }
 
+// MasterUpArgv asks if the master of host in dir runs: exit 0 when it
+// does. It starts no connection.
+func MasterUpArgv(host, dir string) []string {
+	return append(append([]string{"ssh"}, MasterOpts(dir)...), "-O", "check", "--", host)
+}
+
+// OpenArgv opens the master of host in dir before a jump (design §3.4):
+// without BatchMode, so ssh asks what it needs through askpass, in the
+// console. It runs only true on the host.
+func OpenArgv(host, dir string) []string {
+	return append(append([]string{"ssh"}, MasterOpts(dir)...), "-o", "ConnectTimeout=10", "--", host, "true")
+}
+
 var (
 	tailscaleRE    = regexp.MustCompile(`(?m)^debug1: Remote protocol version 2\.0, remote software version Tailscale\s*$`)
 	tailscaleURLRE = regexp.MustCompile(`^https://login\.tailscale\.com/[A-Za-z0-9/]+$`)

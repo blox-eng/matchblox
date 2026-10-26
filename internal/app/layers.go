@@ -96,6 +96,7 @@ func (s Shell) readHosts() []string {
 // open starts the console of a host. The start screen plays only for the
 // first console of a run.
 func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
+	s.cur.stopAsk()
 	o := s.opt.Open(host)
 	b := s.opt.Base
 	o.Binary, o.CompactAt, o.CompactTokens, o.NoMotion, o.Now, o.Self, o.StateDir = b.Binary, b.CompactAt, b.CompactTokens, b.NoMotion, b.Now, b.Self, b.StateDir
@@ -103,8 +104,9 @@ func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
 	// A jump starts from this machine's tmux, whatever the host.
 	o.OutsideTmux, o.Prefix, o.Home, o.LocalTmux, o.JumpID = b.OutsideTmux, b.Prefix, b.Home, b.LocalTmux, b.JumpID
 	// The builder's own ssh login goes from this machine, whatever the host.
-	o.Check, o.MasterBase = b.Check, b.MasterBase
-	o.Graphics = b.Graphics // the logos draw in this terminal, whatever the host
+	o.Check, o.MasterBase, o.SSH = b.Check, b.MasterBase, b.SSH
+	o.Ask, o.NoAsk = b.Ask, b.NoAsk // the prompts of this machine's ssh
+	o.Graphics = b.Graphics         // the logos draw in this terminal, whatever the host
 	if host == "" {
 		o.Pair = b.Pair // the key goes in this machine's authorized_keys
 	}
@@ -170,6 +172,7 @@ func (s Shell) back() Shell {
 		_ = s.cur.conn.Close()
 	}
 	s.cur = s.cur.closePairPage("")
+	s.cur.stopAsk()       // an open prompt is cancelled
 	s.cur.quitting = true // its late messages find nothing to do
 	s.layer, s.adding, s.input, s.pending, s.flash = layerHosts, false, nil, nil, ""
 	s.hosts = s.readHosts()
@@ -460,6 +463,7 @@ func (s Shell) actionLine(w int) string {
 // program ends.
 func (s Shell) Close() {
 	s.cur.ClosePair()
+	s.cur.stopAsk()
 	if s.layer == layerConsole && s.cur.conn != nil {
 		_ = s.cur.conn.Close()
 	}

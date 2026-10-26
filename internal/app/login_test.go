@@ -250,20 +250,29 @@ func TestOldHostTmuxShowsDoor(t *testing.T) {
 // the base's check and cache.
 func TestHostConsoleKeepsTheLoginOptions(t *testing.T) {
 	sh := NewShell(ShellOptions{
-		Base: Options{NoMotion: true, MasterBase: "/c", Check: func([]string) (string, int) { return "", 0 }},
+		Base: Options{NoMotion: true, MasterBase: "/c", Check: func([]string) (string, int) { return "", 0 },
+			Ask: fakeAsk{}, NoAsk: "why", SSH: func([]string, []string) (string, int) { return "", 0 }},
 		Open: func(host string) Options { return Options{Conn: newFake(), Host: host} },
 	})
 	opened, _ := sh.open("ws-1", false)
-	if o := opened.cur.opt; o.MasterBase != "/c" || o.Check == nil {
+	if o := opened.cur.opt; o.MasterBase != "/c" || o.Check == nil || o.Ask == nil || o.NoAsk != "why" || o.SSH == nil {
 		t.Fatalf("the host's console lost the login options: %+v", o)
+	}
+	// Back to Hosts ends the console's wait for prompts.
+	ctx := opened.cur.askCtx
+	opened.back()
+	if ctx == nil || ctx.Err() == nil {
+		t.Fatal("the closed console still waits for prompts")
 	}
 }
 
 // TestMasterRefusedJumpsWithoutIt: a master directory that is not the
-// builder's alone gives no master: the check and the jumps go without it,
-// and the console says why once, with the fix.
+// builder's alone gives no master: outside tmux the check and the jumps go
+// without it, and the console says why once, with the fix. Inside tmux the
+// jumps are refused (TestJumpNoMasterInsideTmuxRefused).
 func TestMasterRefusedJumpsWithoutIt(t *testing.T) {
 	m, _, checks := checkedHost(t, fixtureState(), "", 0)
+	m.opt.OutsideTmux = true
 	if err := os.Chmod(m.opt.MasterBase, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +287,7 @@ func TestMasterRefusedJumpsWithoutIt(t *testing.T) {
 	}
 	m = next.(Model)
 	j := hostJump(&m, remote.Jump{Pane: "%1"})
-	if a := m.forHost(m.jump("%1")); a == nil || a.local != nil || !slices.Equal(a.steps[0], j.Local(remote.JumpSSH("ws-1", j, nil))) {
+	if a := m.forHost(m.jump("%1")); a == nil || a.local != nil || !slices.Equal(a.steps[0], remote.JumpSSH("ws-1", j, nil)) {
 		t.Fatalf("pending %+v", a)
 	}
 }
@@ -287,6 +296,7 @@ func TestMasterRefusedJumpsWithoutIt(t *testing.T) {
 // no master, and the console says why.
 func TestMasterTooLongJumpsWithoutIt(t *testing.T) {
 	m, _, checks := checkedHost(t, fixtureState(), "", 0)
+	m.opt.OutsideTmux = true
 	m.opt.MasterBase = filepath.Join(m.opt.MasterBase, strings.Repeat("b", 70))
 	next, cmd := m.Update(hostHello("3.4"))
 	loginCheckOf(cmd)
@@ -295,5 +305,25 @@ func TestMasterTooLongJumpsWithoutIt(t *testing.T) {
 	}
 	if len(*checks) != 1 || !slices.Equal((*checks)[0], remote.CheckArgv("ws-1", "")) {
 		t.Fatalf("checks %q", *checks)
+	}
+}
+
+// TestNoAskSaysWhyOnce: with no prompts in the console, a host's console
+// says why when it opens, and its jumps ask as before: no master opens
+// first, and the jump's ssh may ask.
+func TestNoAskSaysWhyOnce(t *testing.T) {
+	m, _, _ := checkedHost(t, fixtureState(), "", 0)
+	m.opt.NoAsk = "the prompt socket: permission denied"
+	m.opt.SSH = func(argv, _ []string) (string, int) { t.Fatalf("ssh %q", argv); return "", 0 }
+	next, cmd := m.Update(hostHello("3.4"))
+	if want := "jumps to ws-1 ask your login in the terminal: the prompt socket: permission denied"; next.(Model).flash != want {
+		t.Fatalf("flash %q", next.(Model).flash)
+	}
+	next, _ = next.Update(loginCheckOf(cmd)[0])
+	m = next.(Model)
+	j := hostJump(&m, remote.Jump{Pane: "%1"})
+	a := m.forHost(m.jump("%1"))
+	if a == nil || a.master != "" || !slices.Equal(a.steps[0], j.Local(remote.JumpSSH("ws-1", j, remote.MasterOpts(filepath.Join(m.opt.MasterBase, "ssh"))))) {
+		t.Fatalf("pending %+v", a)
 	}
 }

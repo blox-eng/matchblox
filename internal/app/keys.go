@@ -35,6 +35,7 @@ type keymaps struct {
 	takeOver takeOverKeys
 	confirm  confirmKeys
 	scan     scanKeys
+	ask      askKeys
 }
 
 type shellKeymaps struct {
@@ -54,6 +55,7 @@ var shadowsMain = map[string]map[string]bool{
 	"takeOver": {"y": true, "n": true},
 	"confirm":  {"y": true, "enter": true, "up": true, "k": true, "down": true, "j": true},
 	"scan":     {"y": true, "n": true, "p": true, "esc": true},
+	"ask":      {"esc": true, "enter": true},
 }
 
 func defaultKeys() keymaps {
@@ -151,6 +153,11 @@ func defaultKeys() keymaps {
 			Pick:  bind(ks("p"), "p", "pick folders"),
 			Later: bind(ks("esc"), "esc", "later"),
 		},
+		ask: askKeys{
+			Send:   bind(ks("enter"), "⏎", "send"),
+			Cancel: bind(ks("esc"), "esc", "cancel the ssh"),
+			Erase:  bind(ks("backspace"), "⌫", "erase"),
+		},
 	}
 }
 
@@ -236,6 +243,11 @@ func (k takeOverKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Rest, 
 type scanKeys struct{ Find, Never, Pick, Later bkey.Binding }
 
 func (k scanKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Find, k.Never, k.Pick, k.Later} }
+
+// askKeys answer an ssh prompt. Every other key is text for its field.
+type askKeys struct{ Send, Cancel, Erase bkey.Binding }
+
+func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Cancel, k.Erase} }
 
 // shellKeys are the Hosts list.
 type shellKeys struct{ Quit, Up, Down, Back, Remove, Open, Yes, Interrupt bkey.Binding }

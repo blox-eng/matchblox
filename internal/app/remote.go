@@ -74,9 +74,20 @@ func (m Model) jumpOnHost(a *action) *action {
 	if m.login == remote.LoginHostKeyChanged {
 		return refused(a, m.loginNote(m.login, ""))
 	}
-	dir, _ := m.masterDir() // a refused one: no master, and the check said why
-	ssh := remote.JumpSSH(j.Host, j, remote.MasterOpts(dir))
+	dir, err := m.masterDir()
+	if err != nil && j.Outer {
+		// The jump switches the client at once: with no master to open
+		// first, its ssh would ask in a session of its own.
+		return refused(a, m.masterRefusal(err))
+	}
 	b := *a
+	master := remote.MasterOpts(dir)
+	if dir != "" && m.opt.Ask != nil {
+		// The console opens the master first: the jump's ssh never asks.
+		master = append(master, "-o", "BatchMode=yes")
+		b.master = dir
+	}
+	ssh := remote.JumpSSH(j.Host, j, master)
 	b.steps, b.say, b.remote = [][]string{ssh}, shellLine(ssh), true
 	if j.Outer {
 		b.steps = [][]string{j.Local(ssh)}

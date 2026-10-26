@@ -3,8 +3,10 @@ package askpass
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"log"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,7 +64,10 @@ func TestAskRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p != (Prompt{Host: "ws-1", Text: "Password: "}) {
+	if p.Gone == nil {
+		t.Fatal("the prompt has no Gone")
+	}
+	if p.Gone = nil; p != (Prompt{Host: "ws-1", Text: "Password: "}) {
 		t.Fatalf("prompt %+v", p)
 	}
 	answer("s3cret", true)
@@ -314,4 +319,65 @@ func (l lockedWriter) Write(p []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.w.Write(p)
+}
+
+// helperThatLeaves sends one prompt with the right token, then closes its
+// end: ssh gave up, or was killed.
+func helperThatLeaves(t *testing.T, s *Server, prompt string) net.Conn {
+	t.Helper()
+	env := envOf(s.Env("ws-1"))
+	c, err := net.Dial("unix", env(EnvSocket))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, _ := json.Marshal(request{Token: env(EnvToken), Host: "ws-1", Text: prompt})
+	if _, err := c.Write(append(req, '\n')); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// TestGoneHelperClosesPrompt: a prompt whose helper left after Next gave
+// it closes its Gone.
+func TestGoneHelperClosesPrompt(t *testing.T) {
+	s := listen(t)
+	c := helperThatLeaves(t, s, "Password: ")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	p, answer, err := s.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer answer("", false)
+	select {
+	case <-p.Gone:
+		t.Fatal("Gone closed while the helper waits")
+	case <-time.After(50 * time.Millisecond):
+	}
+	c.Close()
+	select {
+	case <-p.Gone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Gone did not close when the helper left")
+	}
+}
+
+// TestGoneHelperSkipped: a prompt whose helper left before Next took it
+// is never given; the next one is.
+func TestGoneHelperSkipped(t *testing.T) {
+	s := listen(t)
+	helperThatLeaves(t, s, "stale: ").Close()
+	time.Sleep(100 * time.Millisecond) // the server reads the EOF
+	done := ask(envOf(s.Env("ws-1")), "fresh: ")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	p, answer, err := s.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	answer("a", true)
+	if p.Text != "fresh: " {
+		t.Fatalf("Next gave %q, a prompt nobody waits for", p.Text)
+	}
+	<-done
 }

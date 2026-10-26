@@ -1,0 +1,31 @@
+ ▰ matchblox               ● 6 wait for you
+ SESSIONS 7  ships 3  machine  4  5  6  7
+────────────────────────────────────────────
+ WAITS FOR YOU · 6
+────────────────────────────────────────────
+▌│ spark-docs            done      9m   88%
+   “I rewrote the quick start and the
+   install page.”
+╭─ ssh ws-1 asks ──────────────────────────╮
+│                                          │
+│   The authenticity of host 'ws-1'        │
+│   can't be established.                  │
+│   ED25519 key fingerprint is             │
+│   SHA256:Hx1T4cGQ0bZp6Yd3lq9m0f8aJk2sW   │
+│   vR7uNcE5yXoLtI.                        │
+│   +--[ED25519 256]--+                    │
+│   |    .o+=*o.      |                    │
+│   |     o=B.+ .     |                    │
+│   |      +.X o      |                    │
+│   +----[SHA256]-----+                    │
+│   This key is not known by any other     │
+│   names.                                 │
+│   Are you sure you want to continue      │
+│   connecting (yes/no/[fingerprint])?     │
+│                                          │
+│   › y▏                                   │
+│   ! type yes or no, then ⏎               │
+│                                          │
+╰─ ⏎ answer ─ esc cancel the ssh ──────────╯
+────────────────────────────────────────────
+ ⏎ open  a answer  x kill  r rename  N new

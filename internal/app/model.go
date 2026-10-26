@@ -76,6 +76,15 @@ type Options struct {
 	// MasterBase holds the ssh masters of the jumps, in MasterBase/ssh:
 	// /tmp/matchblox-<uid>. "": no master, and each jump logs in again.
 	MasterBase string
+	// Ask gives the prompts of the ssh the console starts, for the ask
+	// field. Nil: an ssh asks in the terminal, as NoAsk says once.
+	Ask AskSource
+	// NoAsk is why Ask is nil; "": it says nothing.
+	NoAsk string
+	// SSH runs an ssh of the builder's own login that the console starts
+	// (a master's check, its open), with env added, and gives its stderr
+	// and exit. Nil: ssh, for 5 minutes at most.
+	SSH func(argv, env []string) (stderr string, exit int)
 	// Host is the host this console reaches over SSH; "" is this machine.
 	// Its tmux moves and door commands run there, with the builder's own
 	// ssh login.
@@ -167,6 +176,7 @@ type action struct {
 	remote      bool                        // steps[0] is the ssh argv that runs it on the host, checked
 	connect     bool                        // it connects the host: install, update or authorize
 	pane        string                      // a jump: the pane it goes to
+	master      string                      // a jump: the master directory the console opens first; "" none
 	local       func(Model) (Model, string) // it runs in this console; its string is the flash
 	again       string                      // a kill or switch of a session that works or waits: what the second y's confirm says
 	againText   string                      // the Text the second y sends ("": killAnyway)
@@ -287,6 +297,7 @@ type Model struct {
 	checking   bool         // the login check runs
 	checked    bool         // the login check started once
 	jumpLater  *action      // the jump that waits for the login check
+	opening    bool         // the master of a jump opens, its prompts in the console
 	lost       bool
 	backoff    time.Duration
 	redialing  bool
@@ -374,6 +385,14 @@ type Model struct {
 	stopAfter []cloneStop
 	stopQuiet []cloneStop
 	focusAt   time.Time // the At of the last focus this console acted on
+
+	// ask is the ssh prompt open in the console; nil none. askCtx lives as
+	// long as the console: it ends the wait for prompts. askCancelled: the
+	// builder cancelled the last one.
+	ask          *askField
+	askCtx       context.Context
+	askStop      context.CancelFunc
+	askCancelled bool
 }
 
 func New(opt Options) Model {
@@ -389,6 +408,9 @@ func New(opt Options) Model {
 	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60),
 		recPrefs: loadRecPrefs(opt.StateDir), keys: defaultKeys()}
 	m.splashAt = m.now()
+	if opt.Ask != nil {
+		m.askCtx, m.askStop = context.WithCancel(context.Background())
+	}
 	return m
 }
 
@@ -406,9 +428,9 @@ const silentAfter = 3 * time.Second
 
 func (m Model) Init() tea.Cmd {
 	if err := m.opt.DialErr; err != nil && m.conn == nil {
-		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd())
+		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk())
 	}
-	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0))
+	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk())
 }
 
 func (m Model) watchSilence() tea.Cmd {
@@ -527,6 +549,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return next, tea.Batch(next.recv(), check)
 	case loginMsg:
 		return m.loggedIn(msg)
+	case masterMsg:
+		return m.masterOpened(msg)
+	case askMsg:
+		return m.asked(msg)
+	case askGoneMsg:
+		return m.askGone(msg)
 	case stateMsg:
 		first := !m.have
 		st := proto.State(msg)
@@ -768,7 +796,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		toast := m.say("ran: " + msg.cmd)
 		return m, toast
 	case tea.PasteMsg:
-		// Only the form takes a paste: in its field, as typed.
+		// Only the ssh prompt and the form take a paste: in their field,
+		// as typed.
+		if m.ask != nil {
+			return m.askPaste(msg.Content), nil
+		}
 		if m.focus(tea.KeyPressMsg{}) == layerForm {
 			return m.formPaste(msg.Content)
 		}
@@ -796,7 +828,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		f := m.focus(msg)
 		// ctrl+c quits from every layer but a question, where any key but
 		// its answers cancels, and a peek on a gone session, which closes.
-		if f != layerHeld && f != layerPending && f != layerPeekGone && bkey.Matches(msg, m.keys.global.Quit) {
+		if f != layerAsk && f != layerHeld && f != layerPending && f != layerPeekGone && bkey.Matches(msg, m.keys.global.Quit) {
 			next, cmd := m.quit()
 			if f == layerMain {
 				next, cmd = stokerSeen(next, cmd) // as every key of the tabs
@@ -948,6 +980,8 @@ func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var next tea.Model = m
 	var cmd tea.Cmd
 	switch f {
+	case layerAsk:
+		next, cmd = m.askKey(k)
 	case layerPair:
 		next, cmd = m.pairKey(k)
 	case layerPairStripEsc:

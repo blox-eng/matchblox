@@ -12,7 +12,7 @@ import (
 // it only moves this terminal, or asks to confirm it. A tap is never
 // consent to a destructive step, and it cancels a pending one.
 func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
-	if ms.Button != tea.MouseLeft || m.pair.owns() { // the pair page takes keys only
+	if ms.Button != tea.MouseLeft || m.pair.owns() || m.ask != nil { // the pair page and an ssh prompt take keys only
 		return m, nil
 	}
 	if m.held != nil { // a tap is another key: it drops the question
@@ -176,6 +176,9 @@ func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd)) {
 
 // wheel is a swipe on a phone: it moves the selection, as ↑ and ↓ do.
 func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
+	if m.ask != nil {
+		return m, nil
+	}
 	m.held = nil // a swipe is another key: it drops the question
 	switch ms.Button {
 	case tea.MouseWheelUp:
