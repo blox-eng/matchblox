@@ -126,7 +126,7 @@ func TestServeWarnsTailscaleSSHGate(t *testing.T) {
 	old := os.Stderr
 	os.Stderr = w
 	s := newService(config.Default(), fixtures(t))
-	go serve(path, func() *service.Service { return s }) //nolint:errcheck // ends with the test
+	go serve(path, nil, func() *service.Service { return s }) //nolint:errcheck // ends with the test
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) && transport.Owner(path) == 0 {
 		time.Sleep(10 * time.Millisecond)
@@ -153,7 +153,7 @@ func TestServeSkipsTailscaleWarnWhenAlreadyRunning(t *testing.T) {
 	old := os.Stderr
 	os.Stderr = w
 	s := newService(config.Default(), fixtures(t))
-	err = serve(path, func() *service.Service { return s })
+	err = serve(path, nil, func() *service.Service { return s })
 	_ = w.Close()
 	os.Stderr = old
 	if err != nil {
