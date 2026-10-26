@@ -58,7 +58,7 @@ func loginCheckOf(cmd tea.Cmd) []loginMsg {
 // socket path under it must fit sun_path.
 func shortTemp(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "mb")
+	dir, err := os.MkdirTemp("/tmp", "mb") // not macOS $TMPDIR, too long
 	if err != nil {
 		t.Fatal(err)
 	}

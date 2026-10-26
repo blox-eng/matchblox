@@ -126,6 +126,9 @@ func TestJumpOpenCancelledSaysSo(t *testing.T) {
 	m, _, ran := askingHost(t, false, "builder@ws-1: Permission denied (publickey,password).\r\n", 255)
 	hostJump(&m, remote.Jump{Pane: "%1"})
 	next, cmd := m.confirm(*m.forHost(m.jump("%1")))
+	if cmd == nil {
+		t.Fatalf("no open: flash %q", next.(Model).flash)
+	}
 	opened := cmd()
 	a := &answers{}
 	next, _ = next.Update(askMsg{prompt: askpass.Prompt{Host: "ws-1", Text: "Password: "}, answer: a.answer})

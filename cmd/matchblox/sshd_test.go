@@ -42,7 +42,7 @@ func startSSHD(t *testing.T) realHost {
 	if _, err := os.Stat(sshd); err != nil || testing.Short() {
 		t.Skip("no sshd here")
 	}
-	dir, err := os.MkdirTemp("", "mbs") // short: the far socket path must fit 108 bytes
+	dir, err := os.MkdirTemp("/tmp", "mbs") // short, not macOS $TMPDIR: the far socket path must fit sun_path
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -422,7 +422,7 @@ func TestHostKeyPromptOnRealSSHD(t *testing.T) {
 			t.Fatalf("VisualHostKey=%s: no prompt: %v", visual, err)
 		}
 		answer("no", true)
-		if !p.Confirm || !regexp.MustCompile(`(?m)^ED25519 key fingerprint is SHA256:[A-Za-z0-9+/]{43}\.$`).MatchString(p.Text) ||
+		if !p.Confirm || !regexp.MustCompile(`(?m)^ED25519 key fingerprint is:? SHA256:[A-Za-z0-9+/]{43}\.?$`).MatchString(p.Text) ||
 			!strings.HasSuffix(p.Text, "(yes/no/[fingerprint])? ") {
 			t.Errorf("VisualHostKey=%s: prompt %+v", visual, p)
 		}

@@ -314,7 +314,7 @@ func TestMasterArgv(t *testing.T) {
 // under it must fit sun_path.
 func shortTemp(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "mb")
+	dir, err := os.MkdirTemp("/tmp", "mb") // short: macOS $TMPDIR is too long for sun_path
 	if err != nil {
 		t.Fatal(err)
 	}

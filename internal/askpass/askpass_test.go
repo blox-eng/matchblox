@@ -17,7 +17,7 @@ import (
 
 func listen(t *testing.T) *Server {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "ap") // short: the socket path must fit sun_path
+	dir, err := os.MkdirTemp("/tmp", "ap") // short, not macOS $TMPDIR: the socket path must fit sun_path
 	if err != nil {
 		t.Fatal(err)
 	}
