@@ -249,7 +249,7 @@ func (s *Service) cloneStart(ctx context.Context, text string) proto.Result {
 		return proto.Result{Err: "not a git URL"}
 	}
 	target := ExpandHome(strings.TrimSpace(cs.Target))
-	j, msg := s.registerClone(ctx, r, target)
+	j, msg := s.registerClone(ctx, r, target, cs.Token)
 	if msg != "" {
 		return proto.Result{Err: msg}
 	}
@@ -258,8 +258,9 @@ func (s *Service) cloneStart(ctx context.Context, text string) proto.Result {
 }
 
 // registerClone checks target again and lists a clone of r into it, whose
-// context ends with ctx. It returns a message when the clone cannot start.
-func (s *Service) registerClone(ctx context.Context, r gitremote.Remote, target string) (*cloneJob, string) {
+// context ends with ctx, with the token its start carried. It returns a
+// message when the clone cannot start.
+func (s *Service) registerClone(ctx context.Context, r gitremote.Remote, target, token string) (*cloneJob, string) {
 	root := s.cloneRoot()
 	if root == "" {
 		return nil, "no clone_root is set"
@@ -290,7 +291,7 @@ func (s *Service) registerClone(ctx context.Context, r gitremote.Remote, target 
 	}
 	jctx, cancel := context.WithCancel(ctx)
 	s.cloneSeq++
-	j := &cloneJob{ctx: jctx, cancel: cancel, done: make(chan struct{}), c: proto.Clone{ID: s.cloneSeq, Target: target, Repo: r.Slug(), Pct: -1}}
+	j := &cloneJob{ctx: jctx, cancel: cancel, done: make(chan struct{}), c: proto.Clone{ID: s.cloneSeq, Target: target, Repo: r.Slug(), Pct: -1, Token: token}}
 	if s.clones == nil {
 		s.clones = map[string]*cloneJob{}
 	}
@@ -315,7 +316,7 @@ func (s *Service) cloneForNew(ctx context.Context, r gitremote.Remote) (dir, sai
 	if len(p.Have) > 0 {
 		return p.Have[0], fmt.Sprintf("%s is already at %s: started there", p.Repo, tildeIn(p.Have[0])), false, ""
 	}
-	j, msg := s.registerClone(ctx, r, p.Target)
+	j, msg := s.registerClone(ctx, r, p.Target, "")
 	if msg != "" {
 		return "", "", false, msg
 	}

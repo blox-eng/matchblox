@@ -439,7 +439,7 @@ func TestEnterOnCloneStartsItAndMovesOn(t *testing.T) {
 	next, f := cloning(t, 100)
 	acts := f.acts()
 	var cs proto.CloneStart
-	if len(acts) != 2 || acts[1].RecID != "clone:start" || json.Unmarshal([]byte(acts[1].Text), &cs) != nil || cs != (proto.CloneStart{URL: cloneURL, Target: home + "/src/r"}) {
+	if len(acts) != 2 || acts[1].RecID != "clone:start" || json.Unmarshal([]byte(acts[1].Text), &cs) != nil || len(cs.Token) < 16 || cs != (proto.CloneStart{URL: cloneURL, Target: home + "/src/r", Token: cs.Token}) {
 		t.Fatalf("sent %+v", acts)
 	}
 	fm := next.(Model).form
@@ -870,21 +870,22 @@ func TestLostConnectionWhileThePlanIsOnItsWay(t *testing.T) {
 // The start's answer went with the connection: the snapshot after the
 // reconnect says if the clone runs.
 func TestLostConnectionWhileTheStartIsOnItsWay(t *testing.T) {
-	next, _ := planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next, f := planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
 	next = pressRun(next, "enter")
+	token := sentToken(t, f)
 	next, _ = reconnected(t, next)
-	next, _ = next.Update(cloneState(t, proto.Clone{ID: 7, Target: home + "/src/r", Repo: "o/r", Pct: 40}))
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 7, Target: home + "/src/r", Repo: "o/r", Pct: 40, Token: token}))
 	if fm := next.(Model).form; fm.startAct != "" || fm.cloneID != 7 || !strings.Contains(screen(next), "cloning o/r… 40%") {
 		t.Fatalf("form %+v:\n%s", fm, screen(next))
 	}
-	next, _ = next.Update(cloneState(t, proto.Clone{ID: 7, Target: home + "/src/r", Repo: "o/r", Pct: 100, Done: true}))
+	next, _ = next.Update(cloneState(t, proto.Clone{ID: 7, Target: home + "/src/r", Repo: "o/r", Pct: 100, Done: true, Token: token}))
 	if fm := next.(Model).form; fm.cloning != "" || fm.where != home+"/src/r" {
 		t.Fatalf("form %+v", fm)
 	}
 	// Not listed: it never started, and ⏎ tries again.
 	next, _ = planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
 	next = pressRun(next, "enter")
-	next, f := reconnected(t, next)
+	next, f = reconnected(t, next)
 	next, _ = next.Update(cloneState(t))
 	if fm := next.(Model).form; fm.cloning != "" || fm.startAct != "" || !strings.Contains(screen(next), "! the clone's start got no answer: ⏎ tries again") {
 		t.Fatalf("form %+v:\n%s", fm, screen(next))
@@ -926,11 +927,12 @@ func TestCloneAgedOutWhileAwayIsNotStuck(t *testing.T) {
 // esc while the start was on its way, then the connection went: the stop
 // goes once connected again, to the clone the snapshot lists.
 func TestEscWhileTheStartIsOnItsWayThenLost(t *testing.T) {
-	next, _ := planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next, f := planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
 	next = pressRun(next, "enter")
+	token := sentToken(t, f)
 	next = pressRun(next, "esc")
-	next, f := reconnected(t, next)
-	next, cmd := next.Update(cloneState(t, proto.Clone{ID: 3, Target: home + "/src/r", Repo: "o/r", Pct: 10}))
+	next, f = reconnected(t, next)
+	next, cmd := next.Update(cloneState(t, proto.Clone{ID: 3, Target: home + "/src/r", Repo: "o/r", Pct: 10, Token: token}))
 	runAll(cmd)
 	if acts := f.acts(); len(acts) != 1 || acts[0] != stopOf(home+"/src/r", 3) || len(next.(Model).stopAfter) != 0 {
 		t.Fatalf("sent %+v, waiting %+v", acts, next.(Model).stopAfter)
@@ -944,6 +946,56 @@ func TestEscWhileTheStartIsOnItsWayThenLost(t *testing.T) {
 	runAll(cmd)
 	if acts := f.acts(); len(acts) != 0 || len(next.(Model).stopAfter) != 0 {
 		t.Fatalf("sent %+v, waiting %+v", acts, next.(Model).stopAfter)
+	}
+}
+
+// sentToken is the token of the last clone:start f was sent.
+func sentToken(t *testing.T, f *fakeConn) string {
+	t.Helper()
+	acts := f.acts()
+	for i := len(acts) - 1; i >= 0; i-- {
+		var cs proto.CloneStart
+		if acts[i].RecID == "clone:start" && json.Unmarshal([]byte(acts[i].Text), &cs) == nil {
+			return cs.Token
+		}
+	}
+	t.Fatalf("no clone:start in %+v", acts)
+	return ""
+}
+
+// Two consoles plan the same folder and only one start runs. After a
+// reconnect, a start whose answer was lost is only the clone listed with
+// its own token: another console's clone there is not adopted, nor
+// stopped by an esc that waited for the start.
+func TestLostStartIsNotAnotherConsolesClone(t *testing.T) {
+	theirs := proto.Clone{ID: 4, Target: home + "/src/r", Repo: "o/r", Pct: 40, Token: "theirs"}
+	next, _ := planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter")
+	next, f := reconnected(t, next)
+	next, cmd := next.Update(cloneState(t, theirs))
+	runAll(cmd)
+	if fm := next.(Model).form; fm.cloning != "" || fm.cloneID != 0 || len(f.acts()) != 0 || !strings.Contains(screen(next), "! the clone's start got no answer: ⏎ tries again") {
+		t.Fatalf("sent %+v form %+v:\n%s", f.acts(), fm, screen(next))
+	}
+	// esc while the start was on its way: no stop for their clone.
+	next, _ = planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter")
+	next = pressRun(next, "esc")
+	next, f = reconnected(t, next)
+	next, cmd = next.Update(cloneState(t, theirs))
+	runAll(cmd)
+	if acts := f.acts(); len(acts) != 0 || len(next.(Model).stopAfter) != 0 {
+		t.Fatalf("sent %+v, waiting %+v", acts, next.(Model).stopAfter)
+	}
+	// Listed with its own token: it is the form's.
+	next, f = planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter")
+	mine := theirs
+	mine.Token = sentToken(t, f)
+	next, _ = reconnected(t, next)
+	next, _ = next.Update(cloneState(t, mine))
+	if fm := next.(Model).form; fm.startAct != "" || fm.cloneID != 4 || !strings.Contains(screen(next), "cloning o/r… 40%") {
+		t.Fatalf("form %+v:\n%s", fm, screen(next))
 	}
 }
 

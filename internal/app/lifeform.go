@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -88,16 +89,21 @@ type form struct {
 	// it was listed.
 	cloneID int64
 	seen    bool
+	// token is the form's own for its clone:start: after a lost answer,
+	// only a clone listed with it is the form's, never another console's
+	// start into the same folder.
+	token string
 	// cloned is the folder this form's clone made: a session there says
 	// Cloned, and Cursor asks before it trusts it.
 	cloned string
 }
 
 // cloneStop is a stop whose answer has not come: act is its clone:stop,
-// or the clone:start it waits for (id 0 until that start answers).
+// or the clone:start it waits for (id 0 until that start answers), whose
+// token is token.
 type cloneStop struct {
-	act, target string
-	id          int64
+	act, target, token string
+	id                 int64
 }
 
 const maxField = 300
@@ -526,12 +532,21 @@ func (m *Model) startClone(f *form, r whereRow) tea.Cmd {
 	if r.kind != rowClone || r.repo.path == "" || f.plan == nil {
 		return nil
 	}
-	b, _ := json.Marshal(proto.CloneStart{URL: f.plan.URL, Target: r.repo.path})
+	token := startToken()
+	b, _ := json.Marshal(proto.CloneStart{URL: f.plan.URL, Target: r.repo.path, Token: token})
 	cmd := m.send(proto.Act{RecID: "clone:start", Text: string(b)})
 	f.startAct, f.cloning, f.startWhenDone, f.err = fmt.Sprintf("a%d", m.acts), r.repo.path, false, ""
+	f.token = token
 	f.cloneID, f.seen = 0, false
 	f.listOpen, f.at = false, fieldBranch
 	return cmd
+}
+
+// startToken is a fresh token for a clone:start.
+func startToken() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b) // never fails
+	return fmt.Sprintf("%x", b)
 }
 
 // stopClone stops the clone f started: the form forgets it and the
@@ -542,7 +557,7 @@ func (m *Model) stopClone(f *form) tea.Cmd {
 		return nil
 	}
 	if f.startAct != "" { // a stop now could come before the start: it stops when the start lands
-		m.stopAfter = append(slices.Clone(m.stopAfter), cloneStop{act: f.startAct, target: target})
+		m.stopAfter = append(slices.Clone(m.stopAfter), cloneStop{act: f.startAct, target: target, token: f.token})
 		f.forgetClone("")
 		return nil
 	}
@@ -590,16 +605,21 @@ func (m Model) stopResult(r proto.Result) (Model, tea.Cmd, bool) {
 // is the clone the snapshot lists there, else it never started; a clone
 // never listed and gone now is not waited for; a stop with no answer goes
 // again; and the stops that waited for a start go to the clone listed.
+// A clone listed is a start's only when it carries that start's token:
+// another console may have started one into the same folder.
 func (m *Model) cloneAgain() tea.Cmd {
 	var cmds []tea.Cmd
 	stops := m.stopQuiet
 	for _, s := range m.stopAfter {
-		if c, ok := m.cloneFor(s.target); ok && c.Err == "" {
+		if c, ok := m.cloneFor(s.target); ok && c.Err == "" && ownStart(c, s.token) {
 			stops = append(slices.Clone(stops), cloneStop{target: s.target, id: c.ID})
 		}
 	}
 	m.stopAfter, m.stopQuiet = nil, nil
 	for _, s := range stops {
+		if s.id == 0 { // a bare stop would stop whatever runs there
+			continue
+		}
 		cmds = append(cmds, m.sendStop(s.target, s.id))
 	}
 	if m.form == nil {
@@ -614,7 +634,7 @@ func (m *Model) cloneAgain() tea.Cmd {
 	c, ok := m.cloneFor(f.cloning)
 	switch {
 	case f.cloning == "":
-	case f.startAct != "" && ok && c.Err == "": // a failed one may be the last try's
+	case f.startAct != "" && ok && c.Err == "" && ownStart(c, f.token): // a failed one may be the last try's
 		f.startAct, f.cloneID = "", c.ID
 	case f.startAct != "":
 		f.forgetClone("the clone's start got no answer: " + m.keys.form.Enter.Help().Key + " tries again")
@@ -624,6 +644,11 @@ func (m *Model) cloneAgain() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// ownStart tells if c is the clone of the start whose token is token.
+func ownStart(c proto.Clone, token string) bool {
+	return token != "" && c.Token == token
+}
+
 // forgetClone drops the form's clone and its plan, err the form's error:
 // a clone that failed or stopped is planned afresh.
 func (f *form) forgetClone(err string) {
@@ -631,7 +656,7 @@ func (f *form) forgetClone(err string) {
 		f.err = err
 	}
 	f.cloning, f.startWhenDone, f.plan, f.planFor = "", false, nil, ""
-	f.startAct, f.cloneID, f.seen = "", 0, false
+	f.startAct, f.cloneID, f.seen, f.token = "", 0, false, ""
 }
 
 // formClone is the service's clone of the form, while it runs; false

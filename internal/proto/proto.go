@@ -135,9 +135,12 @@ type ClonePlan struct {
 }
 
 // CloneStart is the Text of a "clone:start" act: clone URL into Target.
+// Token is the console's own for this start: the clone's record carries
+// it, so a console that lost the answer knows its clone from another's.
 type CloneStart struct {
 	URL    string `json:"url"`
 	Target string `json:"target"`
+	Token  string `json:"token,omitempty"`
 }
 
 // CloneStop is the Text of a "clone:stop" act: stop the clone ID into
@@ -157,6 +160,7 @@ type Clone struct {
 	Pct    int    `json:"pct"` // -1: no percent yet
 	Err    string `json:"err,omitempty"`
 	Done   bool   `json:"done,omitempty"`
+	Token  string `json:"token,omitempty"` // its clone:start's, if any
 }
 
 type Error struct {

@@ -367,6 +367,33 @@ func TestCloneStartsHaveTheirOwnIDs(t *testing.T) {
 	clonesUntil(t, s, "the second is listed", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].ID == second.CloneID })
 }
 
+// A start's token is in its clone's record, so a console that lost the
+// answer knows its own clone; a start with none, from an older console,
+// starts all the same.
+func TestCloneStartTokenIsListed(t *testing.T) {
+	s, root := cloneTest(t)
+	fakeGit(t, "exit 1")
+	b, err := json.Marshal(proto.CloneStart{URL: "https://github.com/o/r", Target: filepath.Join(root, "r"), Token: "t0k3n"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := s.act(t.Context(), consoleAct("clone:start", string(b)))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	clonesUntil(t, s, "the token is listed", func(cs []proto.Clone) bool {
+		return len(cs) == 1 && cs[0].ID == res.CloneID && cs[0].Token == "t0k3n"
+	})
+	old := s.act(t.Context(), startAct(t, "https://github.com/o/q", filepath.Join(root, "q")))
+	if old.Err != "" {
+		t.Fatal(old.Err)
+	}
+	clonesUntil(t, s, "the tokenless start is listed", func(cs []proto.Clone) bool {
+		i := slices.IndexFunc(cs, func(c proto.Clone) bool { return c.ID == old.CloneID })
+		return i >= 0 && cs[i].Token == ""
+	})
+}
+
 func TestCloneFromAnAgentsPaneIsRefused(t *testing.T) {
 	s, root := cloneTest(t)
 	for _, a := range []proto.Act{
