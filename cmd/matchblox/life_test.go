@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -203,19 +202,54 @@ func TestNewWhereURLIsSentAsIs(t *testing.T) {
 		return n.Where
 	}
 	here := t.TempDir()
-	if got := where("o/r", here); got != "o/r" {
+	for _, url := range []string{"https://github.com/o/r", "git@github.com:o/r.git", "ssh://git@h/o/r", "gh:o/r"} {
+		if got := where(url, here); got != url {
+			t.Fatalf("url %q: %q", url, got)
+		}
+	}
+	// a bare o/r is a path, there or not: a typo never clones
+	if got := where("o/r", here); got != filepath.Join(here, "o", "r") {
 		t.Fatalf("no folder: %q", got)
 	}
-	if err := os.MkdirAll(filepath.Join(here, "o", "r"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if got := where("o/r", here); got != filepath.Join(here, "o", "r") {
-		t.Fatalf("a folder: %q", got)
-	}
-	if got := where("https://github.com/o/r", here); got != "https://github.com/o/r" {
-		t.Fatalf("url: %q", got)
+	if got := where("src/api", here); got != filepath.Join(here, "src", "api") {
+		t.Fatalf("src/api: %q", got)
 	}
 	if got := where("api", here); got != filepath.Join(here, "api") {
 		t.Fatalf("path: %q", got)
+	}
+}
+
+// A URL's new says what the clone came to, and is no refusal.
+func TestNewSaysTheClone(t *testing.T) {
+	sock := isolate(t)
+	l, err := transport.Listen(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	go func() {
+		nc, err := l.Accept()
+		if err != nil {
+			return
+		}
+		c := transport.NewConn(nc)
+		defer c.Close()
+		c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version})
+		if env, err := c.Recv(); err != nil || env.Kind != proto.KindHello {
+			return
+		}
+		c.Send(proto.KindSnapshot, "", proto.State{})
+		env, err := c.Recv()
+		if err != nil || env.Kind != proto.KindAct {
+			return
+		}
+		c.Send(proto.KindResult, env.ID, proto.Result{ActID: env.ID, Ran: [][]string{{"tmux", "new-session"}}, Note: "cloned o/r into ~/src/r"})
+	}()
+	var buf bytes.Buffer
+	if err := cliNew(nil, newOpts{where: "gh:o/r"}, &buf, sock); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := buf.String(), "cloning o/r…\ncloned o/r into ~/src/r\ntmux new-session\n"; got != want {
+		t.Fatalf("said %q, want %q", got, want)
 	}
 }
