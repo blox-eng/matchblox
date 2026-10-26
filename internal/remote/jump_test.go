@@ -14,7 +14,9 @@ func TestJumpRemoteToPane(t *testing.T) {
 		" bind-key -T matchblox-jump-C-b-prefix d detach-client ';'" +
 		" bind-key -T matchblox-jump-C-b-prefix m detach-client ';'" +
 		" new-session -d -t %12 -s matchblox-jump-0a1b2c3d ';'"
-	tail := " set-option -t " + g + " prefix None ';'" +
+	tail := " set-option -t " + g + " @matchblox-jump 1 ';'" +
+		" set-option -t " + g + " prefix None ';'" +
+		" set-option -t " + g + " prefix2 None ';'" +
 		" set-option -t " + g + " key-table matchblox-jump-C-b ';'" +
 		" set-option -t " + g + " mouse off ';'" +
 		" run-shell -C -t %12 'select-window -t =matchblox-jump-0a1b2c3d:#{window_id}' ';' select-pane -t %12 ';'" +
@@ -50,21 +52,23 @@ func TestJumpRemoteToDir(t *testing.T) {
 
 func TestJumpLocal(t *testing.T) {
 	const s = "'=matchblox-ws-1-0a1b2c3d:'"
-	wrap := `/bin/sh -c '"$@"; s=$?; [ $s = 0 ] || [ "$(tmux display-message -p '\''#{session_attached}'\'')" = 0 ] || { printf "\nssh exited %s. Press Enter to go back.\n" "$s"; read _; }; exit 0' sh ssh x`
+	wrap := `/bin/sh -c 't=$1; shift; "$@"; s=$?; [ $s = 0 ] || [ "$(tmux display-message -p '\''#{session_attached}'\'')" = 0 ] || { printf "\nssh exited %s. Press Enter to go back.\n" "$s"; read _; }; tmux unbind-key -a -T "$t"; exit 0' sh matchblox-host-0a1b2c3d ssh x`
+	back := "'switch-client -t =matchblox ; unbind-key -a -T matchblox-host-0a1b2c3d ; kill-session -t =matchblox-ws-1-0a1b2c3d'"
 	want := "tmux new-session -d -s matchblox-ws-1-0a1b2c3d -- " + wrap + " ';'" +
+		" set-option -t " + s + " @matchblox-jump 1 ';'" +
 		" set-option -t " + s + " detach-on-destroy off ';'" +
-		" set-option -t " + s + " key-table matchblox-host ';'" +
+		" set-option -t " + s + " key-table matchblox-host-0a1b2c3d ';'" +
 		" set-option -t " + s + " mouse on ';'" +
 		" set-option -t " + s + " status-left '#[range=user|matchblox] ◂ console #[norange]' ';'" +
-		" bind-key -T matchblox-host User900 if -F 1 'switch-client -t =matchblox ; kill-session -t =matchblox-ws-1-0a1b2c3d' '' ';'" +
-		" bind-key -T matchblox-host MouseDown1Status if -F '#{==:#{mouse_status_range},matchblox}' 'switch-client -t =matchblox ; kill-session -t =matchblox-ws-1-0a1b2c3d' '' ';'" +
+		" bind-key -T matchblox-host-0a1b2c3d User900 if -F 1 " + back + " '' ';'" +
+		" bind-key -T matchblox-host-0a1b2c3d MouseDown1Status if -F '#{==:#{mouse_status_range},matchblox}' " + back + " '' ';'" +
 		" switch-client -t '=matchblox-ws-1-0a1b2c3d'"
 	j := Jump{Host: "ws-1", Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d"}
 	if got := Line(j.Local([]string{"ssh", "x"})); got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}
 	j.Home = "work"
-	if got := Line(j.Local([]string{"ssh", "x"})); strings.Count(got, "'switch-client -t =work ; kill-session") != 2 ||
+	if got := Line(j.Local([]string{"ssh", "x"})); strings.Count(got, "'switch-client -t =work ; unbind-key") != 2 ||
 		strings.Contains(got, "=matchblox ;") {
 		t.Errorf("the way back ignores Home: %s", got)
 	}
@@ -79,9 +83,6 @@ func TestHostSessionName(t *testing.T) {
 		got := HostSessionName(host, "0a1b2c3d")
 		if got != want {
 			t.Errorf("HostSessionName(%q) = %q, want %q", host, got, want)
-		}
-		if !sample.JumpSession(got) {
-			t.Errorf("JumpSession(%q) = false for host %q", got, host)
 		}
 		if j := (Jump{Host: host, Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d"}); !JumpAllowed(j) {
 			t.Errorf("JumpAllowed refuses host %q", host)
@@ -141,8 +142,9 @@ func TestPrefixKey(t *testing.T) {
 
 func TestJumpSession(t *testing.T) {
 	for name, want := range map[string]bool{
-		"matchblox-jump-0a1b2c3d": true,
-		"matchblox-ws-1-0a1b2c3d": true,
+		"matchblox-jump-0a1b2c3d": true,  // a host's, made by a console without the mark
+		"matchblox-ws-1-0a1b2c3d": false, // a builder may name a session so: the mark says a jump's
+		"matchblox-api-deadbeef":  false,
 		"matchblox":               false,
 		"matchblox-notes":         false,
 		"work":                    false,

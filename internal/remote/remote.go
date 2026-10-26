@@ -90,8 +90,8 @@ func onHost(argv ...string) string {
 }
 
 // TermArgv runs a command on the host in this terminal with the builder's
-// own ssh login: a jump or a door's command is interactive, and the
-// matchblox key never gets a terminal there.
+// own ssh login: a door's command is interactive, and the matchblox key
+// never gets a terminal there. A jump has JumpSSH.
 func TermArgv(host string, argv []string) []string {
 	return append(termSSH(nil), host, onHost(argv...))
 }
@@ -99,7 +99,7 @@ func TermArgv(host string, argv []string) []string {
 // termSSH is the builder's own ssh with a terminal and no forwarding, up to
 // the host. master is the options of a shared connection, or nil.
 func termSSH(master []string) []string {
-	return append(append([]string{"ssh", "-t"}, master...), "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "--")
+	return append(append(append([]string{"ssh", "-t"}, master...), NoForward()...), "--")
 }
 
 // NavAllowed is what a tmux move may be: the console runs it on one key and

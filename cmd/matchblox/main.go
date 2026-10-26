@@ -29,11 +29,11 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"runtime/debug"
 	"runtime/pprof"
 	"slices"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -526,8 +526,9 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		base.Prefix, base.Home, base.LocalTmux = localTmux()
 	}
 	if runtime.GOOS != "windows" {
-		// The ssh masters of the jumps: a short path, so their sockets fit.
-		base.MasterBase = "/tmp/matchblox-" + strconv.Itoa(os.Getuid())
+		// The ssh masters of the jumps and the prompt socket: a short,
+		// private path, so their sockets fit and no other user's are used.
+		base.MasterBase = remote.MasterBase(os.Getenv("XDG_RUNTIME_DIR"), "/tmp", os.Getuid())
 	}
 	home, _ := os.UserHomeDir()
 	base.Pair = consolePair(home, base.Self, defaultHostKey, setup.PairAddress)
@@ -554,7 +555,7 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		}
 		return err
 	}
-	ask, closeAsk, why := consoleAsk(base.MasterBase)
+	ask, closeAsk, why := consoleAsk(base.MasterBase, base.Self)
 	defer closeAsk()
 	base.Ask, base.NoAsk = ask, why
 	base.Keys = consoleKeys(home)
@@ -582,7 +583,7 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 // the masters' base, which it checks first. Nil, with why, when there is
 // none: an ssh then asks in the terminal. A refused base says nothing
 // here: the console says why at the host's open.
-func consoleAsk(base string) (app.AskSource, func(), string) {
+func consoleAsk(base, self string) (app.AskSource, func(), string) {
 	if base == "" {
 		return nil, func() {}, "this system has no private directory for the prompt socket"
 	}
@@ -592,6 +593,9 @@ func consoleAsk(base string) (app.AskSource, func(), string) {
 	s, err := askpass.Listen(base)
 	if err != nil {
 		return nil, func() {}, "the prompt socket: " + err.Error()
+	}
+	if self != "" {
+		s.Program = self // the path as run: a package's link stays, its versioned target goes at an upgrade
 	}
 	return s, func() { _ = s.Close() }, ""
 }
@@ -624,21 +628,34 @@ func openHost(path, home, host string) app.Options {
 	return app.Options{Conn: c, DialErr: err, Redial: dial, Host: host}
 }
 
-// localTmux reads this machine's tmux once, for the jumps to a host: its
-// prefix, the session that holds the console, and its version. A read
-// that fails gives "", and the console takes the default.
+// paneRE is a tmux pane id, as tmux sets TMUX_PANE.
+var paneRE = regexp.MustCompile(`^%[0-9]+$`)
+
+// localTmux reads this machine's tmux for the jumps to a host: its prefix
+// and version once, the session that holds the console at each jump. A
+// read that fails gives "", and the console takes the default.
 func localTmux() (prefix, home func() string, version string) {
 	read := func(args ...string) string {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		out, err := exec.CommandContext(ctx, "tmux", args...).Output()
+		out, err := exec.CommandContext(ctx, "tmux", args...).Output() //nolint:gosec // fixed tmux reads; the one value is a pane id paneRE took
 		if err != nil {
 			return ""
 		}
 		return strings.TrimSpace(string(out))
 	}
-	p, h := read("show-options", "-gv", "prefix"), read("display-message", "-p", "#{session_name}")
-	return func() string { return p }, func() string { return h }, strings.TrimPrefix(read("-V"), "tmux ")
+	p := read("show-options", "-gv", "prefix")
+	// The home is the session of the console's own pane at the jump: it may
+	// be renamed since, and without -t tmux names the session another
+	// client looks at.
+	pane := os.Getenv("TMUX_PANE")
+	home = func() string {
+		if !paneRE.MatchString(pane) {
+			return ""
+		}
+		return read("display-message", "-p", "-t", pane, "#{session_name}")
+	}
+	return func() string { return p }, home, strings.TrimPrefix(read("-V"), "tmux ")
 }
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }

@@ -119,19 +119,15 @@ func TestAskFieldConfirmNeedsTypedYes(t *testing.T) {
 }
 
 // TestAskFieldConfirmMasksTheRest: a hostile keyboard-interactive prompt
-// can say "(yes/no": the field shows only a start of yes or no, and
-// bullets for all else.
+// can say "(yes/no": the field shows yes or no once it is typed whole, and
+// bullets for all else, a start of yes or no too (a password can start so).
 func TestAskFieldConfirmMasksTheRest(t *testing.T) {
-	m, _ := asking(t, askpass.Prompt{Host: "ws-1", Text: "Password (yes/no): ", Confirm: true})
-	out := ansi.Strip(typeIn(m, "hunter2").(Model).render())
-	if strings.Contains(out, "hunter2") || !strings.Contains(out, "•••••••") {
-		t.Fatalf("the field shows what is typed:\n%s", out)
-	}
-	if out := ansi.Strip(typeIn(m, "ye").(Model).render()); !strings.Contains(out, "ye") || strings.Contains(out, "••") {
-		t.Fatalf("the field does not show ye:\n%s", out)
-	}
-	if out := ansi.Strip(typeIn(m, "no").(Model).render()); !strings.Contains(out, "no") || strings.Contains(out, "••") {
-		t.Fatalf("the field does not show no:\n%s", out)
+	m, _ := asking(t, askpass.Prompt{Host: "ws-1", Text: "Password: ", Confirm: true})
+	for typed, want := range map[string]string{"hunter2": "•••••••", "ye": "••", "nop": "•••", "yes": "yes", "no": "no"} {
+		out := ansi.Strip(typeIn(m, typed).(Model).render())
+		if !strings.Contains(out, want) || want != typed && strings.Contains(out, typed) {
+			t.Errorf("typed %q, want %q shown:\n%s", typed, want, out)
+		}
 	}
 }
 

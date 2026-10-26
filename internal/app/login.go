@@ -15,6 +15,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/remote"
+	"github.com/blox-eng/matchblox/internal/transport"
 )
 
 // checkTimeout ends a login check that waits, unless it shows a Tailscale
@@ -240,7 +241,7 @@ func (m Model) runJump(a action) (tea.Model, tea.Cmd) {
 	ctx, stop := context.WithCancel(m.askCtx)
 	m.opening, m.openStop, m.askCancelled = true, stop, false
 	m.pending, m.held = nil, nil // the field is on top: nothing waits under it
-	m.flash = "logging in to " + host + "…"
+	m.note, m.flash = m.flash, "logging in to "+host+"…"
 	ssh, env, gen := m.ssh(), m.opt.Ask.Env(host), m.opt.Gen
 	up, open := remote.MasterUpArgv(host, a.master), remote.OpenArgv(host, a.master)
 	// The open has no -v: the host's kind comes from its check.
@@ -261,8 +262,10 @@ func (m Model) masterOpened(msg masterMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.opening, m.openStop, m.loginURL = false, nil, ""
+	note := m.note
+	m.note = ""
 	if msg.exit == 0 && !m.askCancelled {
-		m.flash = ""
+		m.flash = note
 		return m.onHost(msg.a)
 	}
 	host := m.opt.Host
@@ -327,7 +330,8 @@ func (m Model) loginNote(l remote.Login, detail string) string {
 }
 
 // masterDir is the directory of the jumps' ssh masters: "" without a
-// base, or when it is refused.
+// base, or when it is refused. It is read at each jump (a few stat calls):
+// a /tmp cleaner may remove it, or its mode change, after the check.
 func (m Model) masterDir() (string, error) {
 	if m.opt.MasterBase == "" {
 		return "", nil
@@ -338,8 +342,11 @@ func (m Model) masterDir() (string, error) {
 // masterWhy is why the master directory is refused, and its fix.
 func masterWhy(err error) string {
 	fix := "remove it, then open the host again"
-	if errors.Is(err, remote.ErrMasterTooLong) {
+	switch {
+	case errors.Is(err, remote.ErrMasterTooLong):
 		fix = "use a shorter directory"
+	case errors.Is(err, transport.ErrNotYours):
+		fix = "only its owner or root can remove it; then open matchblox again"
 	}
 	return err.Error() + ": " + fix
 }
@@ -354,9 +361,9 @@ func (m Model) masterRefusal(err error) string {
 // selects the host's tmux door when it shows one.
 func (m Model) hostTmuxRefusal(a *action) *action {
 	host, v := m.opt.Host, m.host.Tmux
-	why := "refused: " + host + " has no tmux: install it with its Install tmux door"
+	why := "refused: " + host + " has no tmux: install it with its Install tmux door, then open the host again"
 	if v != "none" {
-		why = "refused: tmux " + v + " on " + host + " is older than " + remote.MinHostTmux + ": update tmux there"
+		why = "refused: tmux " + v + " on " + host + " is older than " + remote.MinHostTmux + ": update tmux there, then open the host again"
 	}
 	b := refused(a, why)
 	b.local = func(m Model) (Model, string) {
@@ -378,7 +385,8 @@ func runCheck(ctx context.Context, argv []string, line func(string)) (string, in
 
 // runSSH runs an ssh of the builder's own login, with env added to this
 // process's, gives each line of its stderr to line as ssh prints it, and
-// gives its stderr and exit; -1 when ctx or limit ended it.
+// gives its stderr and exit; -1 when ctx or limit ended it. It has no
+// terminal: an ssh before 8.4 would ask on the console's, over the screen.
 func runSSH(ctx context.Context, argv, env []string, limit time.Duration, line func(string)) (string, int) {
 	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
@@ -388,6 +396,7 @@ func runSSH(ctx context.Context, argv, env []string, limit time.Duration, line f
 	}
 	stderr := &lineWriter{line: line}
 	cmd.Stderr = stderr
+	ownSession(cmd)
 	// A new master stays in the background with ssh's stderr (-v keeps it
 	// open): Wait must not wait for the master to end.
 	cmd.WaitDelay = time.Second

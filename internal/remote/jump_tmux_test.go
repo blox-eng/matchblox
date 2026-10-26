@@ -1,3 +1,5 @@
+//go:build unix
+
 package remote
 
 import (
@@ -12,6 +14,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/blox-eng/matchblox/internal/sample"
 
 	"github.com/blox-eng/matchblox/internal/tmuxtest"
 )
@@ -110,26 +114,46 @@ func newJumpEnv(t *testing.T) jumpEnv {
 }
 
 // jumpSSH is an ssh that ignores its options and runs its last argument
-// (the host's command, see onHost) against the inner server. A command of
-// another shape exits 99: it must never reach the default server. With
-// fail set, it prints that line and exits 255, as ssh does for a refused
-// port.
+// (the host's command, see onHost) as the host would, with a tmux on the
+// host's own PATH that is the inner server: every tmux the command runs
+// goes there. A command of another shape exits 99: it must never reach the
+// default server. With fail set, it prints that line and exits 255, as ssh
+// does for a refused port.
 func jumpSSH(t *testing.T, inner, fail string) string {
 	t.Helper()
-	body := `#!/bin/bash
-cmd="${@: -1}"
-run="${cmd/ sh tmux / sh tmux -L ` + inner + ` }"
-case "$run" in
-*" sh tmux -L ` + inner + ` "*) ;;
-*) echo "fake ssh: not an onHost tmux command: $cmd" >&2; exit 99 ;;
-esac
-unset TMUX TMUX_PANE
-eval "exec $run"
-`
+	return jumpSSHWith(t, inner, fail, "")
+}
+
+// jumpSSHWith is jumpSSH whose host tmux first runs pre, a shell line that
+// sees the tmux arguments as "$@".
+func jumpSSHWith(t *testing.T, inner, fail, pre string) string {
+	t.Helper()
+	dir := t.TempDir()
 	if fail != "" {
-		body = "#!/bin/sh\necho '" + fail + "' >&2\nexit 255\n"
+		return script(t, filepath.Join(dir, "ssh"), "#!/bin/sh\necho '"+fail+"' >&2\nexit 255\n")
 	}
-	path := filepath.Join(t.TempDir(), "ssh")
+	real, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Skip("tmux is not installed")
+	}
+	home := filepath.Join(dir, "home")
+	script(t, filepath.Join(home, ".local", "bin", "tmux"), "#!/bin/bash\n"+pre+"\nunset TMUX TMUX_PANE\nexec "+real+" -L "+inner+" \"$@\"\n")
+	return script(t, filepath.Join(dir, "ssh"), `#!/bin/bash
+cmd="${@: -1}"
+case "$cmd" in
+"/bin/sh -c "*) ;;
+*) echo "fake ssh: not an onHost command: $cmd" >&2; exit 99 ;;
+esac
+export HOME=`+home+`
+eval "exec $cmd"
+`)
+}
+
+func script(t *testing.T, path, body string) string {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(path, []byte(body), 0o700); err != nil { //nolint:gosec // a test script must be executable
 		t.Fatal(err)
 	}
@@ -219,11 +243,12 @@ func (c *client) type_(keys ...string) {
 	}
 }
 
-// jump runs the laptop's command list, as the console does, for a client:
-// the one change is -c, since the test has no pane to take the client from.
+// jump runs the laptop's command list with the console's own ssh command
+// (ssh is the fake), for a client: the one change is -c, since the test
+// has no pane to take the client from.
 func (e jumpEnv) jump(t *testing.T, c *client, j Jump, ssh string) {
 	t.Helper()
-	argv := j.Local([]string{ssh, "-t", "--", j.Host, onHost(j.Remote()...)})
+	argv := j.Local(append([]string{ssh}, JumpSSH(j.Host, j, nil)[1:]...))
 	n := len(argv)
 	if argv[n-3] != "switch-client" {
 		t.Fatalf("the list does not end in switch-client: %v", argv[n-3:])
@@ -252,6 +277,14 @@ func TestJumpOneStatusLine(t *testing.T) {
 	}
 	if out := mustTmux(t, e.outer, "capture-pane", "-p", "-t", "="+s+":"); strings.Contains(out, "◂ matchblox") {
 		t.Errorf("the host's console status line shows in the jump:\n%s", out)
+	}
+	// The sampler on either side sees no pane of a jump's session.
+	for sock, name := range map[string]string{e.outer: s, e.inner: g} {
+		for _, p := range sample.ParsePanes([]byte(mustTmux(t, sock, "list-panes", "-a", "-F", sample.PaneFormat))) {
+			if strings.HasPrefix(p.Target, name+":") {
+				t.Errorf("the sampler lists %s", p.Target)
+			}
+		}
 	}
 }
 
@@ -382,6 +415,8 @@ func TestJumpFailedSSHIsReadable(t *testing.T) {
 	if !strings.Contains(out, "Connection refused") {
 		t.Errorf("ssh's own error is lost:\n%s", out)
 	}
+	// Without the read, the session ends within milliseconds of the line;
+	// a wait many times that is the probe. gstack-timing-ok: no clock asserted.
 	time.Sleep(300 * time.Millisecond)
 	if !hasSession(e.outer, s) || c.session() != s {
 		t.Fatal("the session ended before Enter")
@@ -405,5 +440,55 @@ func TestTwoJumpsSameHost(t *testing.T) {
 	})
 	if !hasSession(e.outer, sa) || !hasSession(e.outer, sb) || a.session() != sa || b.session() != sb {
 		t.Errorf("a jump moved the other: a on %q, b on %q", a.session(), b.session())
+	}
+}
+
+// TestWayBackEndsOnlyItsJump: two clients of the console jump, and the
+// first goes back: its jump ends, the other's stays. Each jump binds its
+// way back in a table of its own; one shared table would end the jump
+// that bound it last. The way back also drops its table.
+func TestWayBackEndsOnlyItsJump(t *testing.T) {
+	requireTmux(t, 3, 4, "send-keys -K")
+	e := newJumpEnv(t)
+	a, b := attach(t, e.outer, "matchblox"), attach(t, e.outer, "matchblox")
+	ja, jb := e.newJump("0a1b2c3d"), e.newJump("4e5f6a7b")
+	sa, sb := HostSessionName(ja.Host, ja.ID), HostSessionName(jb.Host, jb.ID)
+	e.jump(t, a, ja, e.ssh)
+	a.waitSession(sa)
+	e.jump(t, b, jb, e.ssh)
+	b.waitSession(sb)
+	mustTmux(t, e.outer, "send-keys", "-K", "-c", a.tty, "User900")
+	a.waitSession("matchblox")
+	waitFor(t, "the first jump is gone", func() bool { return !hasSession(e.outer, sa) })
+	if !hasSession(e.outer, sb) || b.session() != sb {
+		t.Fatalf("the way back of one jump ended the other: b on %q", b.session())
+	}
+	if out, err := tmuxOut(e.outer, "list-keys", "-T", KeyTable(ja.ID)); err == nil {
+		t.Errorf("the way back left its table:\n%s", out)
+	}
+}
+
+// TestJumpHostFailureLeavesNothing: a host command list that fails after
+// it made the jump's session ends that session; it would stay forever,
+// unattached, hidden from the sampler. Here the agent's pane is gone when
+// select-pane runs (tmux parses the whole list first, so only a failure
+// while it runs can leave the session).
+func TestJumpHostFailureLeavesNothing(t *testing.T) {
+	e := newJumpEnv(t)
+	j := e.newJump("0a1b2c3d")
+	gone := jumpSSHWith(t, e.inner, "", `a=(); sp=0; for w in "$@"; do if [ $sp = 2 ]; then w=%99999; sp=0; fi; [ $sp = 1 ] && [ "$w" = -t ] && sp=2; [ "$w" = select-pane ] && sp=1; a+=("$w"); done; set -- "${a[@]}"`)
+	c := attach(t, e.outer, "matchblox")
+	e.jump(t, c, j, gone)
+	s := HostSessionName(j.Host, j.ID)
+	c.waitSession(s)
+	waitFor(t, "the failed ssh says so", func() bool {
+		out, _ := tmuxOut(e.outer, "capture-pane", "-p", "-t", "="+s+":")
+		return strings.Contains(out, "ssh exited")
+	})
+	if out, _ := tmuxOut(e.outer, "capture-pane", "-p", "-t", "="+s+":"); !strings.Contains(out, "can't find pane") {
+		t.Fatalf("not the failure this test makes:\n%s", out)
+	}
+	if hasSession(e.inner, JumpSessionName(j.ID)) {
+		t.Fatal("the failed jump left its session on the host")
 	}
 }

@@ -91,6 +91,7 @@ func (m Model) jumpOnHost(a *action) *action {
 	b.steps, b.say, b.remote = [][]string{ssh}, shellLine(ssh), true
 	if j.Outer {
 		b.steps = [][]string{j.Local(ssh)}
+		b.undo = []string{"tmux", "kill-session", "-t", "=" + remote.HostSessionName(j.Host, j.ID)}
 	}
 	return &b
 }
@@ -176,8 +177,14 @@ type connectedMsg struct{ err error }
 func (m Model) onHost(a action) (tea.Model, tea.Cmd) {
 	argv := a.steps[0]
 	if a.nav && !m.opt.OutsideTmux {
-		run := m.opt.Run
-		return m, func() tea.Msg { return ranMsg{cmd: a.String(), err: run(argv), jumped: a.pane} }
+		run, undo := m.opt.Run, a.undo
+		return m, func() tea.Msg {
+			err := run(argv)
+			if err != nil && undo != nil {
+				_ = run(undo) // the list stopped after its new-session: its ssh would run on, unseen
+			}
+			return ranMsg{cmd: a.String(), err: err, jumped: a.pane}
+		}
 	}
 	m.flash = "running: " + shellLine(argv)
 	return m, m.exec(argv, func(err error) tea.Msg {

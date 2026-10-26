@@ -1616,3 +1616,32 @@ func TestServeWaitsForTheFinalStateWrite(t *testing.T) {
 		t.Fatalf("Serve returns without state: %v", err)
 	}
 }
+
+// TestHelloTmuxIsTheJumps: the hello says the tmux the jump runs, which
+// is the first in remote.HostPath, then PATH; and a host that had none
+// says its tmux at the next hello once it has one, not a minute later.
+func TestHelloTmuxIsTheJumps(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	fake := filepath.Join(t.TempDir(), "tmux")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\necho 'tmux 9.9'\n"), 0o700); err != nil { //nolint:gosec // a test script
+		t.Fatal(err)
+	}
+	ownTmux := filepath.Join(home, ".local", "bin", "tmux")
+	var installed atomic.Bool
+	s := newTest(t, time.Hour)
+	s.LookPath = func(p string) (string, error) {
+		if installed.Load() && p == ownTmux {
+			return fake, nil
+		}
+		return "", exec.ErrNotFound
+	}
+	ctx := run(t, s)
+	if _, h := connect(t, ctx, s); h.Tmux != "none" {
+		t.Fatalf("before: %q", h.Tmux)
+	}
+	installed.Store(true)
+	if _, h := connect(t, ctx, s); h.Tmux != "9.9" {
+		t.Fatalf("after tmux came to ~/.local/bin: %q", h.Tmux)
+	}
+}

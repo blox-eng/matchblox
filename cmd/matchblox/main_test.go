@@ -12,9 +12,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/tmuxtest"
 
 	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/config"
@@ -820,9 +824,12 @@ func TestConsoleAsk(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(base)
-	ask, closeAsk, why := consoleAsk(base)
+	ask, closeAsk, why := consoleAsk(base, "/opt/bin/matchblox")
 	if ask == nil || why != "" {
 		t.Fatalf("no socket: %q", why)
+	}
+	if !slices.Contains(ask.Env("ws-1"), "SSH_ASKPASS=/opt/bin/matchblox") {
+		t.Errorf("the helper is not the matchblox that runs, as run: %q", ask.Env("ws-1"))
 	}
 	sock := ""
 	for _, kv := range ask.Env("ws-1") {
@@ -837,14 +844,41 @@ func TestConsoleAsk(t *testing.T) {
 	if _, err := os.Stat(sock); err == nil {
 		t.Fatal("the socket outlived the run")
 	}
-	if ask, _, why := consoleAsk(""); ask != nil || why == "" {
+	if ask, _, why := consoleAsk("", ""); ask != nil || why == "" {
 		t.Fatalf("no base: %v %q", ask, why)
 	}
 	file := filepath.Join(base, "file")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if ask, _, why := consoleAsk(file); ask != nil || why == "" {
+	if ask, _, why := consoleAsk(file, ""); ask != nil || why == "" {
 		t.Fatalf("a base that is a file: %v %q", ask, why)
+	}
+}
+
+// TestLocalTmuxHomeIsLive: the way back goes to the session of the
+// console's own pane as it is at the jump: renamed since the console
+// started, and whatever session another client looks at.
+func TestLocalTmuxHomeIsLive(t *testing.T) {
+	name := tmuxtest.Server(t)
+	tm := func(args ...string) string {
+		out, err := exec.Command("tmux", append([]string{"-L", name}, args...)...).Output() //nolint:gosec // a test's own socket name
+		if err != nil {
+			t.Fatalf("tmux %q: %v", args, err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	tm("-f", "/dev/null", "new-session", "-d", "-s", "console", "sleep", "60")
+	tm("new-session", "-d", "-s", "other", "sleep", "60")
+	pane := tm("list-panes", "-t", "=console:", "-F", "#{pane_id}")
+	t.Setenv("TMUX", sample.SocketPath(name)+",1,0")
+	t.Setenv("TMUX_PANE", pane)
+	_, home, _ := localTmux()
+	if got := home(); got != "console" {
+		t.Fatalf("home %q", got)
+	}
+	tm("rename-session", "-t", "=console", "work")
+	if got := home(); got != "work" {
+		t.Fatalf("home after a rename %q", got)
 	}
 }

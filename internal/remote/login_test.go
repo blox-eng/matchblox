@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -143,7 +144,7 @@ func TestKeyOnlyHostIsNotAPasswordLogin(t *testing.T) {
 // TestKeyCheckArgvSkipsTheMaster: the check after an install must log in
 // with the key, not ride the master the install's password opened.
 func TestKeyCheckArgvSkipsTheMaster(t *testing.T) {
-	want := []string{"ssh", "-v", "-o", "BatchMode=yes", "-o", "ControlMaster=no", "-o", "ControlPath=none", "-o", "ConnectTimeout=10", "--", "ws-1", "true"}
+	want := []string{"ssh", "-v", "-o", "BatchMode=yes", "-o", "ControlMaster=no", "-o", "ControlPath=none", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "-o", "ForwardX11=no", "-o", "RemoteCommand=none", "-o", "ConnectTimeout=10", "--", "ws-1", "true"}
 	if got := KeyCheckArgv("ws-1"); !slices.Equal(got, want) {
 		t.Fatalf("KeyCheckArgv = %q", got)
 	}
@@ -261,7 +262,7 @@ func TestUnreachableSaysTimedOut(t *testing.T) {
 }
 
 // TestClassifyLoginCleansTheReason: Tailscale's reason and ssh's last line
-// come from the network: no control characters reach the screen.
+// come from the network: no control or format characters reach the screen.
 func TestClassifyLoginCleansTheReason(t *testing.T) {
 	_, detail := ClassifyLogin(tailscaleBanner+"tailscale: no\x1b[2J \x07way\n", 255)
 	if detail != "no[2J way" {
@@ -271,10 +272,22 @@ func TestClassifyLoginCleansTheReason(t *testing.T) {
 	if detail != "ssh: bad]0;t host" {
 		t.Errorf("detail %q", detail)
 	}
+	_, detail = ClassifyLogin("ssh: a\u202eb\u200bc\u2028d\n", 255) // bidi, zero-width, line separator
+	if detail != "ssh: abcd" {
+		t.Errorf("detail %q", detail)
+	}
+}
+
+// TestClassifyLoginOKWins: a login that went through is OK, whatever its
+// stderr says: a host's own output can carry ssh's phrases.
+func TestClassifyLoginOKWins(t *testing.T) {
+	if got, _ := ClassifyLogin("Host key verification failed.\n", 0); got != LoginOK {
+		t.Errorf("got %v, want ok", got)
+	}
 }
 
 func TestMasterOpts(t *testing.T) {
-	want := []string{"-o", "ControlMaster=auto", "-o", "ControlPath=/c/ssh/%C", "-o", "ControlPersist=10m"}
+	want := []string{"-o", "ControlMaster=auto", "-o", "ControlPath=/c/ssh/%C", "-o", "ControlPersist=10m", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3"}
 	if got := MasterOpts("/c/ssh"); !slices.Equal(got, want) {
 		t.Errorf("MasterOpts = %q", got)
 	}
@@ -285,8 +298,8 @@ func TestMasterOpts(t *testing.T) {
 
 func TestCheckArgv(t *testing.T) {
 	want := []string{"ssh", "-v", "-o", "BatchMode=yes",
-		"-o", "ControlMaster=auto", "-o", "ControlPath=/c/ssh/%C", "-o", "ControlPersist=10m",
-		"-o", "ConnectTimeout=10", "--", "ws-1", "true"}
+		"-o", "ControlMaster=auto", "-o", "ControlPath=/c/ssh/%C", "-o", "ControlPersist=10m", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3",
+		"-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "-o", "ForwardX11=no", "-o", "RemoteCommand=none", "-o", "ConnectTimeout=10", "--", "ws-1", "true"}
 	if got := CheckArgv("ws-1", "/c/ssh"); !slices.Equal(got, want) {
 		t.Errorf("CheckArgv =\n %q\nwant\n %q", got, want)
 	}
@@ -296,11 +309,11 @@ func TestCheckArgv(t *testing.T) {
 // no BatchMode, so ssh asks what it needs (through askpass), and runs
 // nothing but true on the host.
 func TestMasterArgv(t *testing.T) {
-	master := []string{"-o", "ControlMaster=auto", "-o", "ControlPath=/c/ssh/%C", "-o", "ControlPersist=10m"}
+	master := MasterOpts("/c/ssh")
 	if got, want := MasterUpArgv("ws-1", "/c/ssh"), append(append([]string{"ssh"}, master...), "-O", "check", "--", "ws-1"); !slices.Equal(got, want) {
 		t.Errorf("MasterUpArgv =\n %q\nwant\n %q", got, want)
 	}
-	want := append(append([]string{"ssh"}, master...), "-o", "ConnectTimeout=10", "--", "ws-1", "true")
+	want := append(append(append([]string{"ssh"}, master...), NoForward()...), "-o", "ConnectTimeout=10", "--", "ws-1", "true")
 	got := OpenArgv("ws-1", "/c/ssh")
 	if !slices.Equal(got, want) {
 		t.Errorf("OpenArgv =\n %q\nwant\n %q", got, want)
@@ -410,7 +423,67 @@ func TestTmuxTooOld(t *testing.T) {
 func TestLineFoldsAJumpWithAMaster(t *testing.T) {
 	j := Jump{Host: "ws-1", Pane: "%1", Prefix: "C-b", ID: "0a1b2c3d"}
 	got := Line(JumpSSH("ws-1", j, MasterOpts("/c/ssh")))
-	if want := "ssh … ws-1 " + Quote(j.Remote()); got != want {
+	if want := "ssh … ws-1 " + Quote(j.hostCommand()); got != want {
 		t.Errorf("Line =\n %s\nwant\n %s", got, want)
+	}
+}
+
+// TestOwnSSHForwardsNothing: every ssh of the builder's own login that
+// can start the shared connection takes nothing from ~/.ssh/config that
+// would outlive it or break it: no forwarding (a forward's port held by a
+// master for 10 minutes), no RemoteCommand (ssh refuses it with a command).
+// The master ends on a dead network instead of hanging the jumps.
+func TestOwnSSHForwardsNothing(t *testing.T) {
+	j := Jump{Host: "ws-1", Pane: "%1", Prefix: "C-b", ID: "0a1b2c3d"}
+	for name, argv := range map[string][]string{
+		"check":     CheckArgv("ws-1", "/c/ssh"),
+		"open":      OpenArgv("ws-1", "/c/ssh"),
+		"key check": KeyCheckArgv("ws-1"),
+		"term":      TermArgv("ws-1", []string{"true"}),
+		"jump":      JumpSSH("ws-1", j, MasterOpts("/c/ssh")),
+	} {
+		for _, o := range []string{"ForwardAgent=no", "ClearAllForwardings=yes", "ForwardX11=no", "RemoteCommand=none"} {
+			if i := slices.Index(argv, o); i < 1 || argv[i-1] != "-o" || i > slices.Index(argv, "--") {
+				t.Errorf("%s: no -o %s before --: %q", name, o, argv)
+			}
+		}
+	}
+	for _, o := range []string{"ServerAliveInterval=5", "ServerAliveCountMax=3"} {
+		if !slices.Contains(MasterOpts("/c/ssh"), o) {
+			t.Errorf("MasterOpts has no %s", o)
+		}
+	}
+}
+
+// TestMasterBase: the system's private runtime directory when it has one;
+// else /tmp/matchblox-<uid>; and when that name is not this user's (a link,
+// or another user made it first), a fresh directory of this console's own,
+// never theirs.
+func TestMasterBase(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no sockets")
+	}
+	uid := os.Getuid()
+	run := shortTemp(t)
+	if got := MasterBase(run, "/nonexistent", uid); got != filepath.Join(run, "matchblox") {
+		t.Errorf("with a runtime directory: %q", got)
+	}
+	tmp := shortTemp(t)
+	want := filepath.Join(tmp, "matchblox-"+strconv.Itoa(uid))
+	if got := MasterBase("", tmp, uid); got != want {
+		t.Errorf("no runtime directory: %q, want %q", got, want)
+	}
+	if got := MasterBase("relative", tmp, uid); got != want {
+		t.Errorf("a relative runtime directory: %q, want %q", got, want)
+	}
+	if err := os.Symlink(shortTemp(t), want); err != nil {
+		t.Fatal(err)
+	}
+	got := MasterBase("", tmp, uid)
+	if got == want || !strings.HasPrefix(got, want+"-") {
+		t.Fatalf("a link in the name: %q", got)
+	}
+	if fi, err := os.Lstat(got); err != nil || !fi.IsDir() || fi.Mode().Perm() != 0o700 {
+		t.Fatalf("the own directory: %v %v", fi, err)
 	}
 }

@@ -182,6 +182,7 @@ type action struct {
 	connect     bool                        // it connects the host: install, update or authorize
 	pane        string                      // a jump: the pane it goes to
 	master      string                      // a jump: the master directory the console opens first; "" none
+	undo        []string                    // a jump: ends what a failed steps[0] made; nil none
 	local       func(Model) (Model, string) // it runs in this console; its string is the flash
 	again       string                      // a kill or switch of a session that works or waits: what the second y's confirm says
 	againText   string                      // the Text the second y sends ("": killAnyway)
@@ -411,6 +412,9 @@ type Model struct {
 	checkCancelled bool
 	tailscale      bool
 	loginURL       string
+	// note is what the ladder said before the jump it held logs in: the
+	// login covers the flash, and the jump that goes shows it again.
+	note string
 }
 
 func New(opt Options) Model {

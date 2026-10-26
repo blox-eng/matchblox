@@ -91,7 +91,9 @@ func (m Model) findStep(a action) (tea.Model, tea.Cmd) {
 
 // foundStep offers the step.
 func (m Model) foundStep(msg stepMsg) (tea.Model, tea.Cmd) {
-	if msg.gen != m.opt.Gen || m.quitting {
+	// Two jumps confirmed while the keys were read give two steps: once one
+	// is answered (or another offer shows), the other is old.
+	if msg.gen != m.opt.Gen || m.quitting || m.opening || m.pending != nil || m.notNow || m.login != remote.LoginPassword {
 		return m, nil
 	}
 	m.flash = ""
@@ -240,6 +242,9 @@ func (m Model) installed(msg installedMsg) (tea.Model, tea.Cmd) {
 	host, s := m.opt.Host, msg.c.step
 	if m.askCancelled || msg.exit != 0 {
 		m.flash = m.notInstalled(msg)
+		if msg.c.jump != nil {
+			m.flash += ", and the jump did not run"
+		}
 		return m, nil
 	}
 	m.notNow = true

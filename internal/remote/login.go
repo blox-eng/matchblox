@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -55,16 +57,47 @@ func (l Login) String() string {
 }
 
 // MasterOpts share one connection per host for the builder's own ssh
-// (design §3.1). dir "" is no master.
+// (design §3.1). dir "" is no master. ServerAlive: a master on a dead
+// network (the laptop slept) ends in 15 s, so the next jump opens a new
+// one instead of hanging on it.
 func MasterOpts(dir string) []string {
 	if dir == "" {
 		return nil
 	}
-	return []string{"-o", "ControlMaster=auto", "-o", "ControlPath=" + filepath.Join(dir, "%C"), "-o", "ControlPersist=10m"}
+	return []string{"-o", "ControlMaster=auto", "-o", "ControlPath=" + filepath.Join(dir, "%C"), "-o", "ControlPersist=10m",
+		"-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3"}
+}
+
+// NoForward keeps what ~/.ssh/config forwards out of the builder's own ssh:
+// a master would hold a forward's port for 10 minutes, and ssh refuses a
+// command when the config has a RemoteCommand.
+func NoForward() []string {
+	return []string{"-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "-o", "ForwardX11=no", "-o", "RemoteCommand=none"}
 }
 
 // ErrMasterTooLong: a master's socket path would not fit sun_path.
 var ErrMasterTooLong = errors.New("too long for an ssh socket")
+
+// MasterBase is the base of the console's sockets (the masters, the
+// prompts): <runtimeDir>/matchblox when the system gives a private runtime
+// directory, else <tmp>/matchblox-<uid>. When that name is not this user's
+// (a link, or another user made it first), it is a fresh directory of this
+// console's own, never theirs.
+func MasterBase(runtimeDir, tmp string, uid int) string {
+	if filepath.IsAbs(runtimeDir) && transport.CheckDir(runtimeDir) == nil {
+		if base := filepath.Join(runtimeDir, "matchblox"); masterFits(filepath.Join(base, "ssh"), runtime.GOOS) {
+			return base
+		}
+	}
+	base := filepath.Join(tmp, "matchblox-"+strconv.Itoa(uid))
+	if transport.Mine(base) {
+		return base
+	}
+	if own, err := os.MkdirTemp(tmp, filepath.Base(base)+"-"); err == nil {
+		return own
+	}
+	return base // EnsureMasterDir refuses it, and says why
+}
 
 // EnsureMasterDir is <base>/ssh, the directory of the master sockets: it
 // makes base and it 0700, and refuses either when others can enter it,
@@ -101,14 +134,15 @@ func masterFits(dir, goos string) bool {
 // runs in the background), through the master. -v gives the server's
 // version line and the reason a login fails.
 func CheckArgv(host, dir string) []string {
-	argv := append([]string{"ssh", "-v", "-o", "BatchMode=yes"}, MasterOpts(dir)...)
+	argv := append(append([]string{"ssh", "-v", "-o", "BatchMode=yes"}, MasterOpts(dir)...), NoForward()...)
 	return append(argv, "-o", "ConnectTimeout=10", "--", host, "true")
 }
 
 // KeyCheckArgv checks a login with the builder's keys alone, after a key
 // install: no master, as the install's password left one up.
 func KeyCheckArgv(host string) []string {
-	return []string{"ssh", "-v", "-o", "BatchMode=yes", "-o", "ControlMaster=no", "-o", "ControlPath=none", "-o", "ConnectTimeout=10", "--", host, "true"}
+	argv := append([]string{"ssh", "-v", "-o", "BatchMode=yes", "-o", "ControlMaster=no", "-o", "ControlPath=none"}, NoForward()...)
+	return append(argv, "-o", "ConnectTimeout=10", "--", host, "true")
 }
 
 // MasterUpArgv asks if the master of host in dir runs: exit 0 when it
@@ -121,7 +155,8 @@ func MasterUpArgv(host, dir string) []string {
 // without BatchMode, so ssh asks what it needs through askpass, in the
 // console. It runs only true on the host.
 func OpenArgv(host, dir string) []string {
-	return append(append([]string{"ssh"}, MasterOpts(dir)...), "-o", "ConnectTimeout=10", "--", host, "true")
+	argv := append(append([]string{"ssh"}, MasterOpts(dir)...), NoForward()...)
+	return append(argv, "-o", "ConnectTimeout=10", "--", host, "true")
 }
 
 var (
@@ -164,6 +199,8 @@ func ClassifyLogin(stderr string, exit int) (Login, string) {
 // not a plain login.tailscale.com link is never given.
 func ClassifyAs(stderr string, exit int, tailscale bool) (Login, string) {
 	switch {
+	case exit == 0:
+		return LoginOK, "" // an approved check too: its link is old
 	case strings.Contains(stderr, "REMOTE HOST IDENTIFICATION HAS CHANGED"):
 		return LoginHostKeyChanged, ""
 	case strings.Contains(stderr, "Host key verification failed"):
@@ -180,8 +217,6 @@ func ClassifyAs(stderr string, exit int, tailscale bool) (Login, string) {
 		}
 	}
 	switch {
-	case exit == 0:
-		return LoginOK, "" // an approved check too: its link is old
 	case tailscale && check:
 		return LoginTailscaleCheck, url
 	case tailscale && denied != "":
@@ -226,11 +261,12 @@ func lastSaid(stderr string) string {
 	return ""
 }
 
-// printable drops control characters: the text comes from the network
-// and goes on the screen.
+// printable keeps the printable characters and spaces: the text comes from
+// the network and goes on the screen, so no control, bidi or zero-width
+// character reaches it.
 func printable(s string) string {
 	return strings.TrimSpace(strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0 {
+		if !unicode.IsPrint(r) {
 			return -1
 		}
 		return r

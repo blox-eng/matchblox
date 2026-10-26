@@ -12,11 +12,12 @@ import (
 	"github.com/blox-eng/matchblox/internal/remote"
 )
 
-// installScript appends the key ($1) to the host's authorized_keys once,
+// installScript appends the key ($1) to the host's authorized_keys once
+// (the key's blob says it is there, whatever its comment or options),
 // and makes ~/.ssh 0700 and the file 0600 when it makes them. A last line
 // without its newline gets one first, else the key would join it. It is
 // fixed text: the key is only ever its argument.
-const installScript = `umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; [ -s ~/.ssh/authorized_keys ] && [ "$(tail -c1 ~/.ssh/authorized_keys)" != "" ] && echo >> ~/.ssh/authorized_keys; grep -qxF "$1" ~/.ssh/authorized_keys || printf '%s\n' "$1" >> ~/.ssh/authorized_keys`
+const installScript = `umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; [ -s ~/.ssh/authorized_keys ] && [ "$(tail -c1 ~/.ssh/authorized_keys)" != "" ] && echo >> ~/.ssh/authorized_keys; k=$(printf '%s\n' "$1" | cut -d' ' -f2); grep -qF -- " $k" ~/.ssh/authorized_keys || printf '%s\n' "$1" >> ~/.ssh/authorized_keys`
 
 // InstallArgv puts the key line on the host with the builder's own login,
 // through the master options (the login it opens is the master the jumps
@@ -29,7 +30,7 @@ func InstallArgv(host, line string, master []string) ([]string, error) {
 	if !remote.ValidUserKey(line) {
 		return nil, errors.New("not a public key line")
 	}
-	argv := append(append([]string{"ssh"}, master...), "-o", "ConnectTimeout=10", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "--", host)
+	argv := append(append(append([]string{"ssh"}, master...), remote.NoForward()...), "-o", "ConnectTimeout=10", "--", host)
 	return append(argv, remote.Quote([]string{"/bin/sh", "-c", installScript, "sh", line})), nil
 }
 

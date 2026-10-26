@@ -331,3 +331,121 @@ func TestKeychainDoorAfterInstall(t *testing.T) {
 		t.Fatalf("opened %q, ran %q", opened, *h.ran)
 	}
 }
+
+// TestLadderDeclines: n and esc on each offer that the other tests answer
+// with y. n is not now and the jump goes; esc on an offer before the
+// install cancels the jump; after the install, the door's n and esc only
+// keep the file, and the jump goes.
+func TestLadderDeclines(t *testing.T) {
+	newKey := func(t *testing.T) passwordHost {
+		return ladderHost(t, login.Step{Source: login.NewKey, Path: filepath.Join(t.TempDir(), "id_ed25519")}, passwordRefusal)
+	}
+	keygens := func(h passwordHost) int {
+		n := 0
+		for _, c := range *h.calls {
+			if c.argv[0] == "ssh-keygen" {
+				n++
+			}
+		}
+		return n
+	}
+	t.Run("new key, n", func(t *testing.T) {
+		h := newKey(t)
+		m := jumpOffer(t, h)
+		next, cmd := key(m, "n")
+		m = settle(t, next, cmd)
+		if keygens(h) != 0 || !m.notNow || len(*h.ran) != 1 {
+			t.Fatalf("keygen %d, notNow %v, ran %q, flash %q", keygens(h), m.notNow, *h.ran, m.flash)
+		}
+	})
+	t.Run("new key, esc", func(t *testing.T) {
+		h := newKey(t)
+		m := jumpOffer(t, h)
+		next, cmd := key(m, "esc")
+		m = settle(t, next, cmd)
+		if len(*h.calls) != 0 || m.notNow || len(*h.ran) != 0 || !strings.Contains(m.flash, "the jump did not run") {
+			t.Fatalf("calls %q, notNow %v, ran %q, flash %q", *h.calls, m.notNow, *h.ran, m.flash)
+		}
+	})
+	for _, k := range []string{"n", "esc"} {
+		t.Run("Keychain door, "+k, func(t *testing.T) {
+			h := ladderHost(t, login.Step{Source: login.FromAgent, Line: testKey, Fingerprint: login.Fingerprint(testKey)}, passwordRefusal)
+			var opened []string
+			h.m.opt.Keys.Keychain = func(host string) doors.Door {
+				return doors.Door{ID: doors.SSHKeychain, Title: "Keep the key's passphrase in the Keychain", Path: "/h/.ssh/config", Sum: "s1", Preview: "+Host " + host}
+			}
+			h.m.opt.Keys.OpenKeychain = func(host, seen string) (string, error) { opened = append(opened, host); return "", nil }
+			m := jumpOffer(t, h)
+			next, cmd := key(m, "y")
+			m = settle(t, next, cmd)
+			next, cmd = key(m, k)
+			m = settle(t, next, cmd)
+			if len(opened) != 0 || len(*h.ran) != 1 || !strings.Contains(m.flash, "/h/.ssh/config stays as it is") {
+				t.Fatalf("opened %q, ran %q, flash %q", opened, *h.ran, m.flash)
+			}
+		})
+	}
+}
+
+// TestInstallFailureSaysWhy: a failed install says why, and that the jump
+// it held did not run; an install whose key ssh then does not use says so,
+// and the jump goes with the field.
+func TestInstallFailureSaysWhy(t *testing.T) {
+	step := login.Step{Source: login.FromAgent, Line: testKey, Fingerprint: login.Fingerprint(testKey)}
+	failInstall := func(h *passwordHost, stderr string, exit int) {
+		inner := h.m.opt.SSH
+		h.m.opt.SSH = func(ctx context.Context, argv, env []string, line func(string)) (string, int) {
+			if strings.Contains(argv[len(argv)-1], "authorized_keys") {
+				*h.calls = append(*h.calls, sshCall{argv, env})
+				return stderr, exit
+			}
+			return inner(ctx, argv, env, line)
+		}
+	}
+	t.Run("refused", func(t *testing.T) {
+		h := ladderHost(t, step, passwordRefusal)
+		failInstall(&h, passwordRefusal, 255)
+		m := jumpOffer(t, h)
+		next, cmd := key(m, "y")
+		m = settle(t, next, cmd)
+		if len(*h.ran) != 0 || !strings.Contains(m.flash, "it refused your login") || !strings.HasSuffix(m.flash, "and the jump did not run") {
+			t.Fatalf("ran %q, flash %q", *h.ran, m.flash)
+		}
+	})
+	t.Run("ssh says nothing", func(t *testing.T) {
+		h := ladderHost(t, step, passwordRefusal)
+		failInstall(&h, "", 1)
+		m := jumpOffer(t, h)
+		next, cmd := key(m, "y")
+		m = settle(t, next, cmd)
+		if len(*h.ran) != 0 || !strings.HasPrefix(m.flash, "your key is not on ws-1") {
+			t.Fatalf("ran %q, flash %q", *h.ran, m.flash)
+		}
+	})
+	t.Run("installed, but ssh does not use it", func(t *testing.T) {
+		h := ladderHost(t, step, passwordRefusal)
+		h.m.opt.Check = func(context.Context, []string, func(string)) (string, int) { return passwordRefusal, 255 }
+		m := jumpOffer(t, h)
+		next, cmd := key(m, "y")
+		m = settle(t, next, cmd)
+		if !strings.Contains(m.flash, "ssh cannot use it without a prompt") || len(*h.ran) != 1 {
+			t.Fatalf("ran %q, flash %q", *h.ran, m.flash)
+		}
+	})
+}
+
+// TestStaleStepOffersNothing: two jumps confirmed while the keys were read
+// give two offers; once one is answered, the other is old and shows
+// nothing.
+func TestStaleStepOffersNothing(t *testing.T) {
+	step := login.Step{Source: login.FromAgent, Line: testKey, Fingerprint: login.Fingerprint(testKey)}
+	h := ladderHost(t, step, passwordRefusal)
+	m := jumpOffer(t, h)
+	a := *m.forHost(m.jump("%1"))
+	stale := stepMsg{step: step, jump: &a, gen: m.opt.Gen}
+	next, cmd := key(m, "y")
+	m = settle(t, next, cmd)
+	if next, _ := m.Update(stale); next.(Model).pending != nil {
+		t.Fatalf("an old offer came back: %+v", next.(Model).pending)
+	}
+}

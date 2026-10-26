@@ -224,11 +224,12 @@ func TestValidHost(t *testing.T) {
 }
 
 // TestJumpSSH: the jump's ssh is the builder's own login with a terminal,
-// no forwarding, and the host's tmux command list as one word.
+// no forwarding, and the host's tmux command list (with its cleanup) as
+// one word.
 func TestJumpSSH(t *testing.T) {
 	j := Jump{Host: "ws-1", Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d", Outer: true}
 	got := JumpSSH("ws-1", j, nil)
-	want := append([]string{"ssh", "-t", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "--", "ws-1"}, onHost(j.Remote()...))
+	want := append(append(append([]string{"ssh", "-t"}, NoForward()...), "--", "ws-1"), onHost(j.hostCommand()...))
 	if !slices.Equal(got, want) {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}

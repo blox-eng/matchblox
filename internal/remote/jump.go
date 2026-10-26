@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // Jump is one jump into a host's agent pane or a new shell there. Exactly
@@ -55,6 +57,10 @@ func NewJumpID() string {
 func HostSessionName(host, id string) string {
 	return "matchblox-" + strings.NewReplacer(".", "_", ":", "_").Replace(host) + "-" + id
 }
+
+// KeyTable is the key table of a jump's session on this machine: its own,
+// as its way back names its own session.
+func KeyTable(id string) string { return "matchblox-host-" + id }
 
 // JumpSessionName is the host's private session of a jump.
 func JumpSessionName(id string) string { return "matchblox-jump-" + id }
@@ -130,7 +136,9 @@ func (j Jump) Remote() []string {
 		cmds = append(cmds, setOption(g, "status", "on"), setOption(g, "status-left", "◂ console: "+j.Prefix+" m "))
 	}
 	cmds = append(cmds,
+		setOption(g, sample.JumpMark, "1"),
 		setOption(g, "prefix", "None"),
+		setOption(g, "prefix2", "None"),
 		setOption(g, "key-table", table),
 		setOption(g, "mouse", "off"))
 	if j.Pane != "" {
@@ -151,9 +159,19 @@ func (j Jump) Remote() []string {
 }
 
 // JumpSSH is the builder's own ssh to host that runs j.Remote() there.
-// master is the options of a shared connection, or nil.
+// master is the options of a shared connection, or nil. tmux parses the
+// whole list before it runs it, but a command can still fail while it
+// runs (the agent's pane closed): the session it made then ends, as it is
+// not yet one that ends when its client goes.
 func JumpSSH(host string, j Jump, master []string) []string {
-	return append(termSSH(master), host, onHost(j.Remote()...))
+	return append(termSSH(master), host, onHost(j.hostCommand()...))
+}
+
+// hostCommand is j.Remote() that ends the jump's session when the list
+// fails.
+func (j Jump) hostCommand() []string {
+	const cleanup = `g=$1; shift; "$@" || { s=$?; tmux kill-session -t "=$g" 2>/dev/null; exit $s; }`
+	return append([]string{"/bin/sh", "-c", cleanup, "sh", JumpSessionName(j.ID)}, j.Remote()...)
 }
 
 // Local is the one tmux command list that runs on this machine. It starts
@@ -161,19 +179,21 @@ func JumpSSH(host string, j Jump, master []string) []string {
 // switches the client there. The session ends when ssh ends; a failed ssh
 // waits for Enter so the error can be read. ssh stays argv.
 func (j Jump) Local(ssh []string) []string {
-	s := HostSessionName(j.Host, j.ID)
-	back := "switch-client -t =" + j.home() + " ; kill-session -t =" + s
+	s, table := HostSessionName(j.Host, j.ID), KeyTable(j.ID)
+	back := "switch-client -t =" + j.home() + " ; unbind-key -a -T " + table + " ; kill-session -t =" + s
 	// A failed ssh waits for Enter only when a client looks at this session;
-	// in the background (the builder went home) nobody can press Enter.
-	const wrap = `"$@"; s=$?; [ $s = 0 ] || [ "$(tmux display-message -p '#{session_attached}')" = 0 ] || { printf "\nssh exited %s. Press Enter to go back.\n" "$s"; read _; }; exit 0`
+	// in the background (the builder went home) nobody can press Enter. A
+	// jump that ends without the way back drops its table here.
+	const wrap = `t=$1; shift; "$@"; s=$?; [ $s = 0 ] || [ "$(tmux display-message -p '#{session_attached}')" = 0 ] || { printf "\nssh exited %s. Press Enter to go back.\n" "$s"; read _; }; tmux unbind-key -a -T "$t"; exit 0`
 	return tmuxList(
-		append([]string{"new-session", "-d", "-s", s, "--", "/bin/sh", "-c", wrap, "sh"}, ssh...),
+		append([]string{"new-session", "-d", "-s", s, "--", "/bin/sh", "-c", wrap, "sh", table}, ssh...),
+		setOption(s, sample.JumpMark, "1"),
 		setOption(s, "detach-on-destroy", "off"),
-		setOption(s, "key-table", "matchblox-host"),
+		setOption(s, "key-table", table),
 		setOption(s, "mouse", "on"),
 		setOption(s, "status-left", "#[range=user|matchblox] ◂ console #[norange]"),
-		[]string{"bind-key", "-T", "matchblox-host", "User900", "if", "-F", "1", back, ""},
-		[]string{"bind-key", "-T", "matchblox-host", "MouseDown1Status", "if", "-F", "#{==:#{mouse_status_range},matchblox}", back, ""},
+		[]string{"bind-key", "-T", table, "User900", "if", "-F", "1", back, ""},
+		[]string{"bind-key", "-T", table, "MouseDown1Status", "if", "-F", "#{==:#{mouse_status_range},matchblox}", back, ""},
 		[]string{"switch-client", "-t", "=" + s},
 	)
 }

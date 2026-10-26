@@ -32,11 +32,11 @@ func TestInstallArgv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	head := append(append([]string{"ssh"}, master...), "-o", "ConnectTimeout=10", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "--", "ws-1")
+	head := append(append(append([]string{"ssh"}, master...), remote.NoForward()...), "-o", "ConnectTimeout=10", "--", "ws-1")
 	if !slices.Equal(argv[:len(argv)-1], head) {
 		t.Fatalf("argv %q", argv)
 	}
-	const script = `umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; [ -s ~/.ssh/authorized_keys ] && [ "$(tail -c1 ~/.ssh/authorized_keys)" != "" ] && echo >> ~/.ssh/authorized_keys; grep -qxF "$1" ~/.ssh/authorized_keys || printf '%s\n' "$1" >> ~/.ssh/authorized_keys`
+	const script = `umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; [ -s ~/.ssh/authorized_keys ] && [ "$(tail -c1 ~/.ssh/authorized_keys)" != "" ] && echo >> ~/.ssh/authorized_keys; k=$(printf '%s\n' "$1" | cut -d' ' -f2); grep -qF -- " $k" ~/.ssh/authorized_keys || printf '%s\n' "$1" >> ~/.ssh/authorized_keys`
 	words, err := remote.Split(argv[len(argv)-1])
 	if err != nil || !slices.Equal(words, []string{"/bin/sh", "-c", script, "sh", key}) {
 		t.Fatalf("remote line %q: %q %v", argv[len(argv)-1], words, err)
@@ -61,6 +61,10 @@ func TestInstallScriptTwice(t *testing.T) {
 		{"a last newline", old + "\n", old + "\n" + key + "\n"},
 		{"no last newline", old, old + "\n" + key + "\n"},
 		{"the key without its newline", key, key + "\n"},
+		// The same key put there before with another comment, or options:
+		// the key blob says it is there.
+		{"the key with another comment", strings.Replace(key, "me@laptop", "me@desk", 1) + "\n", strings.Replace(key, "me@laptop", "me@desk", 1) + "\n"},
+		{"the key with options", `from="10.0.0.0/8" ` + key + "\n", `from="10.0.0.0/8" ` + key + "\n"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			home := t.TempDir()

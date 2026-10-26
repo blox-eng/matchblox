@@ -2,12 +2,15 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/blox-eng/matchblox/internal/transport"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -17,30 +20,54 @@ import (
 	"github.com/blox-eng/matchblox/internal/remote"
 )
 
-// checkMsgsOf runs cmd and the commands it batches for the login check's
-// messages (its result, a link it printed), skipping any that block (a
-// recv on an empty connection).
+// checkMsgsOf runs cmd and the commands it batches, at once, for the
+// login check's messages (its result, a link it printed). A recv on an
+// empty connection never ends: it waits up to a second for the result,
+// then a moment more for what comes with it.
 func checkMsgsOf(cmd tea.Cmd) []tea.Msg {
-	if cmd == nil {
-		return nil
+	type result struct {
+		cmds []tea.Cmd
+		msg  tea.Msg
 	}
-	out := make(chan tea.Msg, 1)
-	go func() { out <- cmd() }()
-	select {
-	case msg := <-out:
-		switch msg := msg.(type) {
-		case tea.BatchMsg:
-			var got []tea.Msg
-			for _, c := range msg {
-				got = append(got, checkMsgsOf(c)...)
-			}
-			return got
-		case loginMsg, urlMsg:
-			return []tea.Msg{msg}
+	results := make(chan result, 64)
+	running := 0
+	run := func(c tea.Cmd) {
+		if c == nil {
+			return
 		}
-	case <-time.After(50 * time.Millisecond):
+		running++
+		go func() {
+			msg := c()
+			if b, ok := msg.(tea.BatchMsg); ok {
+				results <- result{cmds: b}
+				return
+			}
+			results <- result{msg: msg}
+		}()
 	}
-	return nil
+	run(cmd)
+	var got []tea.Msg
+	deadline := time.NewTimer(time.Second)
+	defer deadline.Stop()
+	for running > 0 {
+		select {
+		case r := <-results:
+			running--
+			for _, c := range r.cmds {
+				run(c)
+			}
+			switch r.msg.(type) {
+			case loginMsg:
+				deadline.Reset(50 * time.Millisecond)
+				got = append(got, r.msg)
+			case urlMsg:
+				got = append(got, r.msg)
+			}
+		case <-deadline.C:
+			return got
+		}
+	}
+	return got
 }
 
 // loginCheckOf is the login check's result among cmd's messages.
@@ -234,8 +261,8 @@ func TestOldHostTmuxShowsDoor(t *testing.T) {
 	for _, c := range []struct {
 		tmux, want string
 	}{
-		{"none", "refused: ws-1 has no tmux: install it with its Install tmux door"},
-		{"3.1", "refused: tmux 3.1 on ws-1 is older than 3.2: update tmux there"},
+		{"none", "refused: ws-1 has no tmux: install it with its Install tmux door, then open the host again"},
+		{"3.1", "refused: tmux 3.1 on ws-1 is older than 3.2: update tmux there, then open the host again"},
 		{"", ""},
 		{"3.4", ""},
 		{"3.1\x1b]0;owned\x07", ""},
@@ -598,5 +625,13 @@ func TestStreamedLimit(t *testing.T) {
 	}
 	if got := drain(streamed(context.Background(), 1, false, 50*time.Millisecond, 5*time.Second, waits("https://evil.example/a/1"))); got != "ended" {
 		t.Fatalf("a link that is not Tailscale's: %v", got)
+	}
+}
+
+// TestMasterWhyNamesAFixThatWorks: a directory another user made cannot be
+// removed by the builder; the fix says who can.
+func TestMasterWhyNamesAFixThatWorks(t *testing.T) {
+	if got := masterWhy(fmt.Errorf("/tmp/matchblox-1000 belongs to uid 1001: %w", transport.ErrNotYours)); strings.Contains(got, "remove it, then") || !strings.Contains(got, "only its owner or root") {
+		t.Errorf("masterWhy = %q", got)
 	}
 }

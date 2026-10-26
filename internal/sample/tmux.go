@@ -98,7 +98,11 @@ type Pane struct {
 }
 
 // PaneFormat is the -F format ParsePanes expects; fields are tab separated.
-const PaneFormat = "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}\t#{window_name}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}\t#{socket_path}\t#{pid}"
+const PaneFormat = "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}\t#{window_name}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}\t#{socket_path}\t#{pid}\t#{" + JumpMark + "}"
+
+// JumpMark is the session option that marks a jump's session on either
+// side (package remote sets it to 1): the sampler skips its panes.
+const JumpMark = "@matchblox-jump"
 
 // TmuxPanes lists every pane on the default tmux server. No server is not an
 // error: the console still shows the machine.
@@ -121,12 +125,12 @@ func TmuxPanesOn(server string) ([]byte, error) {
 	return out, nil
 }
 
-// jumpSessionRE is the host's session of a jump, or this machine's session
-// of a jump to a host (package remote names them).
-var jumpSessionRE = regexp.MustCompile(`^matchblox-(jump|[A-Za-z0-9_@%\[\]-]+)-[0-9a-f]{8}$`)
+// jumpSessionRE is the host's session of a jump, as package remote names
+// it: a console before JumpMark made it without the mark.
+var jumpSessionRE = regexp.MustCompile(`^matchblox-jump-[0-9a-f]{8}$`)
 
-// JumpSession is true for the name of a jump's session on either side: the
-// sampler skips them.
+// JumpSession is true for the name of a host's session of a jump without
+// JumpMark: the sampler skips them too.
 func JumpSession(name string) bool { return jumpSessionRE.MatchString(name) }
 
 // ParsePanes reads the list of TmuxPanes. A pane listed again under another
@@ -142,7 +146,7 @@ func ParsePanes(b []byte) []Pane {
 		if len(f) < 6 {
 			continue
 		}
-		if session, _, _ := strings.Cut(f[1], ":"); JumpSession(session) {
+		if session, _, _ := strings.Cut(f[1], ":"); JumpSession(session) || len(f) > 8 && f[8] == "1" {
 			continue
 		}
 		pid, _ := strconv.Atoi(f[3])

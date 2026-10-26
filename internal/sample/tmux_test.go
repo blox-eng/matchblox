@@ -36,12 +36,14 @@ func TestTmuxPanesKeepTabsWhenLangUnset(t *testing.T) {
 
 // TestParsePanesSkipsJumpSessions: a jump's session on either side groups
 // the agent's: its listing is the same pane, and `list-panes -a` sorts it
-// first by name. The pane's own session stays.
+// first by name. The pane's own session stays, and so does a builder's
+// session whose name looks like a jump's: the jump's mark says which.
 func TestParsePanesSkipsJumpSessions(t *testing.T) {
 	got := sample.ParsePanes([]byte("%1\tmatchblox-jump-0a1b2c3d:1.1\tw\t10\tclaude\t/x\n" +
-		"%9\tmatchblox-ws-1-0a1b2c3d:1.1\tw\t30\tssh\t/y\n" +
-		"%1\twork:1.1\tw\t10\tclaude\t/x\n"))
-	if len(got) != 1 || got[0].Target != "work:1.1" {
+		"%9\tmatchblox-ws-1-0a1b2c3d:1.1\tw\t30\tssh\t/y\t/s\t1\t1\n" +
+		"%1\twork:1.1\tw\t10\tclaude\t/x\n" +
+		"%5\tmatchblox-api-deadbeef:0.0\tw\t50\tclaude\t/z\t/s\t1\t\n"))
+	if len(got) != 2 || got[0].Target != "work:1.1" || got[1].Target != "matchblox-api-deadbeef:0.0" {
 		t.Fatalf("got %+v", got)
 	}
 }

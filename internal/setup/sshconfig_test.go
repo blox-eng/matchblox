@@ -3,6 +3,7 @@ package setup
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ func TestSSHKeychainDoorAppendsOnce(t *testing.T) {
 	if d.ID != doors.SSHKeychain || d.Path != conf || d.Done || d.Problem != "" {
 		t.Fatalf("door %+v", d)
 	}
-	for _, want := range []string{"+Host ws-1", "+  AddKeysToAgent yes", "+  UseKeychain yes"} {
+	for _, want := range []string{"+Match all", "+  IgnoreUnknown UseKeychain", "+Host ws-1", "+  AddKeysToAgent yes", "+  UseKeychain yes"} {
 		if !strings.Contains(d.Preview, want) {
 			t.Fatalf("preview lacks %q:\n%s", want, d.Preview)
 		}
@@ -36,7 +37,7 @@ func TestSSHKeychainDoorAppendsOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(conf)
-	if want := old + "\n\nHost ws-1\n  AddKeysToAgent yes\n  UseKeychain yes\n"; string(b) != want {
+	if want := old + "\n\nMatch all\n  IgnoreUnknown UseKeychain\n\nHost ws-1\n  AddKeysToAgent yes\n  UseKeychain yes\n"; string(b) != want {
 		t.Fatalf("config =\n%q\nwant\n%q", b, want)
 	}
 	if bk, _ := os.ReadFile(backup); string(bk) != old {
@@ -68,7 +69,7 @@ func TestSSHKeychainDoorNewFile(t *testing.T) {
 	}
 	conf := filepath.Join(home, ".ssh", "config")
 	b, _ := os.ReadFile(conf)
-	if string(b) != "Host ws-1\n  AddKeysToAgent yes\n  UseKeychain yes\n" {
+	if string(b) != "Match all\n  IgnoreUnknown UseKeychain\n\nHost ws-1\n  AddKeysToAgent yes\n  UseKeychain yes\n" {
 		t.Fatalf("config %q", b)
 	}
 	if fi, _ := os.Stat(conf); fi.Mode().Perm() != 0o600 {
@@ -86,5 +87,53 @@ func TestSSHKeychainDoorRefusesABadHost(t *testing.T) {
 		if _, err := AddSSHKeychain(home, h, Sum(nil)); err == nil {
 			t.Errorf("%q written", h)
 		}
+	}
+}
+
+// TestSSHKeychainBlockKeepsSSHWorking: UseKeychain is Apple's own; any
+// other OpenSSH (Homebrew's, Linux's) stops at it, in any Host block, and
+// then no ssh of the builder runs. The block makes every ssh skip it.
+func TestSSHKeychainBlockKeepsSSHWorking(t *testing.T) {
+	if _, err := exec.LookPath("ssh"); err != nil {
+		t.Skip("no ssh here")
+	}
+	home := t.TempDir()
+	conf := filepath.Join(home, ".ssh", "config")
+	if err := os.MkdirAll(filepath.Dir(conf), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(conf, []byte("Host other\n  User x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AddSSHKeychain(home, "ws-1", SSHKeychainDoor(home, "ws-1").Sum); err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range []string{"ws-1", "other", "elsewhere"} {
+		if out, err := exec.Command("ssh", "-G", "-F", conf, h).CombinedOutput(); err != nil { //nolint:gosec // test
+			t.Errorf("ssh -G %s: %v\n%s", h, err, out)
+		}
+	}
+}
+
+// TestSSHKeychainRefusesWhatSSHRejects: the door never writes a config
+// this machine's ssh cannot read; the file stays as it was.
+func TestSSHKeychainRefusesWhatSSHRejects(t *testing.T) {
+	if _, err := exec.LookPath("ssh"); err != nil {
+		t.Skip("no ssh here")
+	}
+	home := t.TempDir()
+	conf := filepath.Join(home, ".ssh", "config")
+	if err := os.MkdirAll(filepath.Dir(conf), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const old = "IgnoreUnknown Other\nNoSuchOption yes\n" // ssh stops at it already
+	if err := os.WriteFile(conf, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AddSSHKeychain(home, "ws-1", SSHKeychainDoor(home, "ws-1").Sum); err == nil || !strings.Contains(err.Error(), "ssh") {
+		t.Fatalf("written, or no reason: %v", err)
+	}
+	if b, _ := os.ReadFile(conf); string(b) != old {
+		t.Fatalf("the file changed: %q", b)
 	}
 }

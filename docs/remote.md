@@ -98,9 +98,17 @@ older, the console says so and does not jump.
 
 The console opens one ssh connection to a host and shares it for 10
 minutes. The jumps in that time ask nothing. The connection lives in
-`/tmp/matchblox-<uid>/ssh`. This directory is yours only (mode 0700). If
-another user owns it, or others can enter it, the console refuses to use
-it. It says why, and the fix is to remove it and open the host again.
+`$XDG_RUNTIME_DIR/matchblox/ssh` when your system has that directory, and
+in `/tmp/matchblox-<uid>/ssh` when it does not. This directory is yours
+only (mode 0700). If another user made `/tmp/matchblox-<uid>` first, the
+console makes a new directory of its own next to it. If others can enter
+the directory, the console refuses to use it, says why, and the fix is to
+remove it and open the host again.
+
+The connection ignores what your `~/.ssh/config` forwards for the host
+(ports, the agent, X11) and its `RemoteCommand`. A connection on a network
+that went away (the laptop slept) ends in 15 seconds, and the next jump
+opens a new one.
 
 When you open the console of a host, it checks your login in the
 background. Before a jump, the console opens the connection first. If ssh
@@ -144,6 +152,10 @@ the field.
 On macOS, the console then offers to add `AddKeysToAgent yes` and
 `UseKeychain yes` for the host to `~/.ssh/config`. It shows the change,
 and asks for a typed `y`. The Keychain then keeps the passphrase of the key.
+`UseKeychain` is Apple's own: an OpenSSH from Homebrew stops at it, and
+then no ssh runs. So the lines start with `Match all` and
+`IgnoreUnknown UseKeychain`, and the console writes nothing that the
+`ssh` on your PATH cannot read.
 
 A host that takes keys only, and none of yours, gets no offer. The console
 says to add your public key to `~/.ssh/authorized_keys` on the host another

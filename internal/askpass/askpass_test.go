@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"log"
 	"log/slog"
 	"net"
@@ -206,6 +208,16 @@ func TestEnv(t *testing.T) {
 	if len(env(EnvToken)) != 64 || env(EnvSocket) == "" {
 		t.Fatalf("token or socket missing: %q", s.Env("ws-1"))
 	}
+	// ssh before 8.4 has no SSH_ASKPASS_REQUIRE: it asks askpass only with
+	// a DISPLAY, and no terminal (the console's ssh has none).
+	t.Setenv("DISPLAY", "")
+	if env := envOf(s.Env("ws-1")); env("DISPLAY") == "" {
+		t.Fatalf("no DISPLAY: %q", s.Env("ws-1"))
+	}
+	t.Setenv("DISPLAY", ":7")
+	if env := envOf(s.Env("ws-1")); env("DISPLAY") != ":7" {
+		t.Fatalf("the builder's DISPLAY is not kept: %q", s.Env("ws-1"))
+	}
 }
 
 func TestCleanPrompt(t *testing.T) {
@@ -363,21 +375,70 @@ func TestGoneHelperClosesPrompt(t *testing.T) {
 }
 
 // TestGoneHelperSkipped: a prompt whose helper left before Next took it
-// is never given; the next one is.
+// is not given once the server saw it leave; one Next took in the moment
+// before comes with its Gone closed. Either way the next prompt is given.
 func TestGoneHelperSkipped(t *testing.T) {
 	s := listen(t)
 	helperThatLeaves(t, s, "stale: ").Close()
-	time.Sleep(100 * time.Millisecond) // the server reads the EOF
 	done := ask(envOf(s.Env("ws-1")), "fresh: ")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	p, answer, err := s.Next(ctx)
+	for {
+		p, answer, err := s.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.Text == "fresh: " {
+			answer("a", true)
+			break
+		}
+		select {
+		case <-p.Gone:
+		case <-ctx.Done():
+			t.Fatalf("Next gave %q, and its Gone never closed", p.Text)
+		}
+		answer("", false)
+	}
+	<-done
+}
+
+// TestListenSweepsDeadDirs: a console that was killed leaves its prompt
+// directory; the next one removes it. A directory whose socket answers is
+// another console's, and stays; so does anything that is not a prompt
+// directory.
+func TestListenSweepsDeadDirs(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "ap")
 	if err != nil {
 		t.Fatal(err)
 	}
-	answer("a", true)
-	if p.Text != "fresh: " {
-		t.Fatalf("Next gave %q, a prompt nobody waits for", p.Text)
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	live, err := Listen(dir)
+	if err != nil {
+		t.Fatal(err)
 	}
-	<-done
+	defer live.Close()
+	dead := filepath.Join(dir, "ask-deadbeef")
+	if err := os.MkdirAll(dead, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dead, "s"), nil, 0o600); err != nil { // a socket file nobody listens on
+		t.Fatal(err)
+	}
+	other := filepath.Join(dir, "ssh")
+	if err := os.Mkdir(other, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Listen(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if _, err := os.Stat(dead); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the dead console's directory stays: %v", err)
+	}
+	for _, keep := range []string{live.dir, other} {
+		if _, err := os.Stat(keep); err != nil {
+			t.Errorf("%s was removed", keep)
+		}
+	}
 }

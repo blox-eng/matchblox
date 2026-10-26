@@ -107,6 +107,7 @@ func Listen(dir string) (*Server, error) {
 	if _, err := rand.Read(b[:]); err != nil {
 		return nil, err
 	}
+	sweep(dir)
 	token := hex.EncodeToString(b[:32])
 	sub := filepath.Join(dir, "ask-"+hex.EncodeToString(b[32:]))
 	sock := filepath.Join(sub, "s")
@@ -141,11 +142,38 @@ func Listen(dir string) (*Server, error) {
 	return s, nil
 }
 
+// sweep removes the prompt directories under dir that a console left
+// when it was killed: this user's, no link, and their socket answers no
+// dial. A socket that answers is another console's, and stays.
+func sweep(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		sub := filepath.Join(dir, e.Name())
+		if !strings.HasPrefix(e.Name(), "ask-") || !e.IsDir() || transport.CheckDir(sub) != nil {
+			continue
+		}
+		if c, err := net.DialTimeout("unix", filepath.Join(sub, "s"), time.Second); err == nil {
+			c.Close()
+			continue
+		}
+		_ = os.RemoveAll(sub)
+	}
+}
+
 // Env is the environment that sends the prompts of an ssh to host here.
 // The token is the helper's key to this socket, not a secret of the
-// builder.
+// builder. The ssh has no terminal to ask on (it runs in a session of its
+// own), so it asks here on any version.
 func (s *Server) Env(host string) []string {
+	display := os.Getenv("DISPLAY")
+	if display == "" {
+		display = "matchblox:0" // ssh before 8.4 asks askpass only with one; X11 stays off (remote.NoForward)
+	}
 	return []string{
+		"DISPLAY=" + display,
 		"SSH_ASKPASS=" + s.Program,
 		"SSH_ASKPASS_REQUIRE=force",
 		EnvSocket + "=" + s.sock,

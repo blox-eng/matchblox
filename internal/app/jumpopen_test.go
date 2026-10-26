@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -341,10 +343,15 @@ func TestOpenFirstEndsWithTheConsole(t *testing.T) {
 // TestRunSSHStreamsLines: each line of stderr reaches line as ssh prints
 // it, not when it ends; the stderr comes back whole.
 func TestRunSSHStreamsLines(t *testing.T) {
+	fifo := filepath.Join(t.TempDir(), "go")
+	if err := exec.Command("mkfifo", fifo).Run(); err != nil {
+		t.Skip("no fifo here:", err)
+	}
 	lines := make(chan string, 4)
 	stderr := make(chan string, 1)
 	go func() {
-		s, _ := runSSH(context.Background(), []string{"sh", "-c", "echo one >&2; sleep 2; printf 'two\\r\\n' >&2"}, nil, time.Minute, func(l string) { lines <- l })
+		// The second line waits for the test: the first comes while ssh runs.
+		s, _ := runSSH(context.Background(), []string{"sh", "-c", "echo one >&2; read _ < " + fifo + "; printf 'two\\r\\n' >&2"}, nil, time.Minute, func(l string) { lines <- l })
 		stderr <- s
 	}()
 	select {
@@ -352,11 +359,32 @@ func TestRunSSHStreamsLines(t *testing.T) {
 		if l != "one" {
 			t.Fatalf("line %q", l)
 		}
-	case <-time.After(1500 * time.Millisecond):
-		t.Fatal("the line came only at the end")
+	case s := <-stderr:
+		t.Fatalf("the line came only at the end: %q", s)
+	case <-time.After(10 * time.Second):
+		t.Fatal("no line")
+	}
+	if err := os.WriteFile(fifo, []byte("\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	if s := <-stderr; s != "one\ntwo\r\n" || <-lines != "two" {
 		t.Fatalf("stderr %q", s)
+	}
+}
+
+// TestRunSSHNoBinary: an ssh that does not start says why, with ssh's own
+// exit for a failure.
+func TestRunSSHNoBinary(t *testing.T) {
+	if s, exit := runSSH(context.Background(), []string{"/nonexistent/ssh"}, nil, time.Minute, ignoreLine); exit != 255 || s == "" {
+		t.Fatalf("exit %d, stderr %q", exit, s)
+	}
+}
+
+// TestRunSSHLimit: the time limit ends an ssh that hangs.
+func TestRunSSHLimit(t *testing.T) {
+	start := time.Now()
+	if _, exit := runSSH(context.Background(), []string{"sleep", "30"}, nil, 100*time.Millisecond, ignoreLine); exit == 0 || time.Since(start) > 5*time.Second {
+		t.Fatalf("exit %d after %v", exit, time.Since(start))
 	}
 }
 
@@ -367,5 +395,55 @@ func TestRunSSHKilledByContext(t *testing.T) {
 	start := time.Now()
 	if _, exit := runSSH(ctx, []string{"sleep", "30"}, nil, time.Minute, func(string) {}); exit == 0 || time.Since(start) > 5*time.Second {
 		t.Fatalf("exit %d after %v", exit, time.Since(start))
+	}
+}
+
+// TestRunSSHHasNoTerminal: the console's ssh runs in a session of its own,
+// with no controlling terminal: an ssh before 8.4 ignores
+// SSH_ASKPASS_REQUIRE and would ask on the console's terminal, over the
+// screen, and read the keys meant for the console.
+func TestRunSSHHasNoTerminal(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("ps -o sid is procps")
+	}
+	script := `[ "$(ps -o sid= -p $$ | tr -d ' ')" = "$$" ] || { echo "sid $(ps -o sid= -p $$)" >&2; exit 1; }`
+	if stderr, exit := runSSH(context.Background(), []string{"sh", "-c", script}, nil, 10*time.Second, ignoreLine); exit != 0 {
+		t.Fatalf("not a session leader: %s", stderr)
+	}
+}
+
+// TestJumpLocalFailureEndsItsSession: a local command list that fails after
+// it made the jump's session (its ssh runs there) ends that session; else
+// an ssh would run on, unseen.
+func TestJumpLocalFailureEndsItsSession(t *testing.T) {
+	m, _, ran := askingHost(t, true, "", 0)
+	j, _ := batchJump(&m)
+	m.opt.Run = func(argv []string) error {
+		*ran = append(*ran, argv)
+		if len(*ran) == 1 {
+			return errors.New("exit status 1")
+		}
+		return nil
+	}
+	confirmJump(t, m)
+	kill := []string{"tmux", "kill-session", "-t", "=" + remote.HostSessionName(j.Host, j.ID)}
+	if len(*ran) != 2 || !slices.Equal((*ran)[1], kill) {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// TestJumpMakesTheMasterDirAgain: a /tmp cleaner may remove the master
+// directory after the check; the jump makes it again, before ssh needs it.
+func TestJumpMakesTheMasterDirAgain(t *testing.T) {
+	m, calls, _ := askingHost(t, false, "", 0)
+	if err := os.RemoveAll(m.opt.MasterBase); err != nil {
+		t.Fatal(err)
+	}
+	confirmJump(t, m)
+	if fi, err := os.Stat(filepath.Join(m.opt.MasterBase, "ssh")); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Fatalf("no master directory at the open: %v", err)
+	}
+	if len(*calls) == 0 {
+		t.Fatal("no ssh ran")
 	}
 }

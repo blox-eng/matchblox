@@ -10,7 +10,9 @@ All notable changes to matchblox are in this file. The format follows
 
 - **The console asks the login of a host once, in the console.** One ssh
   connection per host is shared for 10 minutes, in
-  `/tmp/matchblox-<uid>/ssh`. A password, a passphrase or a new host key
+  `$XDG_RUNTIME_DIR/matchblox/ssh` or `/tmp/matchblox-<uid>/ssh`. It takes
+  no forwarding from `~/.ssh/config`, and ends 15 seconds after the
+  network goes. A password, a passphrase or a new host key
   shows in a masked field in the console, never in the raw terminal. A host
   key needs a typed `yes`.
   ([#214](https://github.com/blox-eng/matchblox/issues/214))
@@ -18,7 +20,8 @@ All notable changes to matchblox are in this file. The format follows
   the most secure key first: a security key in your agent, then a key in
   your agent or `~/.ssh`, then a new key with a passphrase. A typed `y`
   installs it, and the install only appends to `authorized_keys`. On macOS
-  the console also offers the Keychain lines for `~/.ssh/config`.
+  the console also offers the Keychain lines for `~/.ssh/config`, which
+  every OpenSSH reads, not only Apple's.
   ([#214](https://github.com/blox-eng/matchblox/issues/214))
 - **A jump works on a Tailscale SSH host.** The console shows the link of
   Tailscale's check (`c` copies it), says why a tailnet policy refuses you,
