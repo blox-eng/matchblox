@@ -3,13 +3,16 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math/rand/v2"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -171,6 +174,24 @@ func TestClonePlanKnowsTheGitTabsRepos(t *testing.T) {
 	}
 }
 
+// The checkouts are read at the remote [git] remote names, not origin.
+func TestClonePlanReadsTheConfiguredRemote(t *testing.T) {
+	s, _ := cloneTest(t)
+	s.GitRemote = "upstream"
+	dev := filepath.Join(filepath.Dir(s.CloneRoot), "dev")
+	repoWith(t, filepath.Join(dev, "up"), "https://github.com/me/other")
+	gitIn(t, "-C", filepath.Join(dev, "up"), "remote", "add", "upstream", "https://github.com/o/r")
+	repoWith(t, filepath.Join(dev, "only-origin"), "https://github.com/o/r")
+	s.addUsed(filepath.Join(dev, "up"), filepath.Join(dev, "only-origin"))
+	if p := plan(t, s, "https://github.com/o/r"); !slices.Equal(p.Have, []string{filepath.Join(dev, "up")}) {
+		t.Fatalf("plan %+v", p)
+	}
+	s.GitRemote = "" // origin
+	if p := plan(t, s, "https://github.com/o/r"); !slices.Equal(p.Have, []string{filepath.Join(dev, "only-origin")}) {
+		t.Fatalf("plan %+v", p)
+	}
+}
+
 // fakeGit puts a git on PATH that logs its arguments to the returned file
 // and then runs body.
 func fakeGit(t *testing.T, body string) string {
@@ -254,8 +275,10 @@ func TestCloneStartRunsAndReports(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(target, ".git")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(clone.Cloning(target)); !os.IsNotExist(err) {
-		t.Fatalf("the sibling is left: %v", err)
+	for _, p := range []string{clone.Cloning(target), clone.OwnerFile(target)} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Fatalf("%s is left: %v", p, err)
+		}
 	}
 	if got := usedPaths(state.ReadUsed(s.UsedPath)); !slices.Equal(got, []string{target}) {
 		t.Fatalf("used %q", got)
@@ -286,7 +309,7 @@ func TestCloneStartRefusesAnExistingTarget(t *testing.T) {
 		t.Fatalf("ran git %s", b)
 	}
 	// nor outside clone_root, nor a hidden name
-	for _, bad := range []string{filepath.Join(filepath.Dir(root), "r"), filepath.Join(root, "x", "r"), filepath.Join(root, ".r.cloning"), root + "/.."} {
+	for _, bad := range []string{filepath.Join(filepath.Dir(root), "r"), filepath.Join(root, "x", "r"), filepath.Join(root, ".r.cloning"), filepath.Join(root, ".r.cloning.stale-123"), filepath.Join(root, ".r.cloning.owner"), root + "/.."} {
 		if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", bad)); res.Err == "" {
 			t.Fatalf("%s: not refused", bad)
 		}
@@ -333,7 +356,7 @@ func TestCloneStopDeletesThePartial(t *testing.T) {
 		t.Fatal(res.Err)
 	}
 	clonesUntil(t, s, "stopped", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Err == "stopped" && !cs[0].Done })
-	for _, p := range []string{target, clone.Cloning(target)} {
+	for _, p := range []string{target, clone.Cloning(target), clone.OwnerFile(target)} {
 		if _, err := os.Lstat(p); !os.IsNotExist(err) {
 			t.Fatalf("%s is left: %v", p, err)
 		}
@@ -365,6 +388,54 @@ func TestCloneStartsHaveTheirOwnIDs(t *testing.T) {
 		t.Fatalf("first %d, second %+v", first.CloneID, second)
 	}
 	clonesUntil(t, s, "the second is listed", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].ID == second.CloneID })
+}
+
+// A clone run that panics ends its job with an error: the job is not busy
+// for the life of the service.
+func TestCloneThatPanicsEndsItsJob(t *testing.T) {
+	s, root := cloneTest(t)
+	s.cloneRun = func(context.Context, gitremote.Remote, string, func(int)) error { panic("boom") }
+	target := filepath.Join(root, "r")
+	r := gitremote.Remote{URL: "https://github.com/o/r", Host: "github.com", Owner: "o", Repo: "r"}
+	j, msg := s.registerClone(t.Context(), r, target, "")
+	if msg != "" {
+		t.Fatal(msg)
+	}
+	s.runClone(j.ctx, j, r)
+	select {
+	case <-j.done:
+	default:
+		t.Fatal("done is not closed")
+	}
+	s.mu.Lock()
+	end, done, errText := j.end, j.c.Done, j.c.Err
+	s.mu.Unlock()
+	if end.IsZero() || done || errText != "the clone stopped on an error in matchblox" {
+		t.Fatalf("end %v done %v err %q", end, done, errText)
+	}
+	// the name is free again
+	if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target)); res.Err == "~/src/r is being cloned" {
+		t.Fatal("still busy")
+	}
+}
+
+// A console keeps clone ids across a reconnect: a restarted service must
+// not hand out an id its predecessor did.
+func TestCloneIDsDoNotRepeatAfterARestart(t *testing.T) {
+	first := func() int64 {
+		s, root := cloneTest(t)
+		fakeGit(t, "exit 1")
+		res := s.act(t.Context(), startAct(t, "https://github.com/o/r", filepath.Join(root, "r")))
+		if res.Err != "" || res.CloneID == 0 {
+			t.Fatalf("start %+v", res)
+		}
+		clonesUntil(t, s, "failed", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Err != "" })
+		return res.CloneID
+	}
+	a, b := first(), first()
+	if a == b || b < a {
+		t.Fatalf("first ids %d then %d", a, b)
+	}
 }
 
 // A start's token is in its clone's record, so a console that lost the
@@ -430,13 +501,51 @@ func TestCloneDotNamedRepoPlansAndStarts(t *testing.T) {
 	clonesUntil(t, s, "ended", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Err != "" })
 }
 
+// ownedBy makes the sibling of target with an owner file naming pid.
+func ownedBy(t *testing.T, target string, pid int) string {
+	t.Helper()
+	sib := clone.Cloning(target)
+	if err := os.MkdirAll(filepath.Join(sib, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(clone.OwnerFile(target), []byte(strconv.Itoa(pid)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return sib
+}
+
+// A work folder matchblox did not make is never removed; one whose owner
+// lives is held; both leave their name taken, and the plan picks another.
+func TestCloneSiblingOfNoOwnerOrALiveOneIsHeld(t *testing.T) {
+	s, root := cloneTest(t)
+	fakeGit(t, "exit 1")
+	for name, mk := range map[string]func(target string) string{
+		"no marker": func(target string) string {
+			sib := clone.Cloning(target)
+			_ = os.MkdirAll(filepath.Join(sib, ".git"), 0o755)
+			return sib
+		},
+		"live owner": func(target string) string { return ownedBy(t, target, os.Getpid()) },
+	} {
+		target := filepath.Join(root, name[:2]+"r")
+		sib := mk(target)
+		p := plan(t, s, "https://github.com/o/"+name[:2]+"r")
+		if p.Taken != "being cloned" || p.Target == target {
+			t.Errorf("%s: plan %+v", name, p)
+		}
+		if res := s.act(t.Context(), startAct(t, "https://github.com/o/"+name[:2]+"r", target)); res.Err == "" {
+			t.Errorf("%s: start was not refused", name)
+		}
+		if _, err := os.Lstat(filepath.Join(sib, ".git")); err != nil {
+			t.Errorf("%s: the folder was touched: %v", name, err)
+		}
+	}
+}
+
 func TestCloneStaleSiblingFreesItsName(t *testing.T) {
 	s, root := cloneTest(t)
 	target := filepath.Join(root, "r")
-	stale := clone.Cloning(target)
-	if err := os.MkdirAll(filepath.Join(stale, ".git"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	stale := ownedBy(t, target, 999999999)
 	p := plan(t, s, "https://github.com/o/r")
 	if p.Target != target || p.Taken != "" {
 		t.Fatalf("plan %+v", p)
@@ -444,10 +553,11 @@ func TestCloneStaleSiblingFreesItsName(t *testing.T) {
 	if _, err := os.Lstat(stale); !os.IsNotExist(err) {
 		t.Fatalf("the stale sibling is left: %v", err)
 	}
-	// start alone clears one too
-	if err := os.MkdirAll(stale, 0o755); err != nil {
-		t.Fatal(err)
+	if exists(clone.OwnerFile(target)) {
+		t.Fatal("the owner file is left")
 	}
+	// start alone clears one too
+	ownedBy(t, target, 999999999)
 	fakeGit(t, "exit 1")
 	if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target)); res.Err != "" {
 		t.Fatalf("start: %q", res.Err)
@@ -455,6 +565,9 @@ func TestCloneStaleSiblingFreesItsName(t *testing.T) {
 	clonesUntil(t, s, "ended", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Err != "" })
 	// a link named as the sibling is never followed nor removed
 	other := t.TempDir()
+	if err := os.WriteFile(clone.OwnerFile(target), []byte("999999999"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Symlink(other, stale); err != nil {
 		t.Fatal(err)
 	}
@@ -538,6 +651,19 @@ func TestNewSessionClonesAURL(t *testing.T) {
 	}
 }
 
+// A refusal after the clone ran still says the clone is there.
+func TestNewSessionRefusalAfterACloneSaysSo(t *testing.T) {
+	s, root := cloneTest(t)
+	urlRepo(t, s)
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: "https://github.com/o/r", Agent: "claude", Name: "n1", Branch: "x..y"}))
+	if want := "x..y is no branch name (o/r is cloned into ~/src/r)"; res.Err != want || !res.Refused {
+		t.Fatalf("want %q refused, got %+v", want, res)
+	}
+	if _, err := os.Stat(filepath.Join(root, "r", ".git")); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNewSessionURLUsesTheExistingClone(t *testing.T) {
 	s, root := cloneTest(t)
 	urlRepo(t, s)
@@ -613,6 +739,27 @@ func TestNewSessionPathStillWorks(t *testing.T) {
 	}
 }
 
+// A bare o/r in new:session is a relative path, not a clone: only the
+// console's own form clones the shorthand, through clone:plan.
+func TestNewSessionBareShorthandIsAPath(t *testing.T) {
+	s, _ := cloneTest(t)
+	noCloneRun(t, s)
+	for _, where := range []string{"projects/app", "o/r", "o/r.git"} {
+		if res := s.act(t.Context(), newAct(t, proto.NewSession{Where: where, Agent: "claude"})); res.Err != "a new session starts in a full path" {
+			t.Errorf("%s: err %q", where, res.Err)
+		}
+	}
+	if exists(s.CloneRoot) {
+		t.Fatal("clone_root made")
+	}
+	urlRepo(t, s)
+	s.cloneRemote = func(text string) (gitremote.Remote, bool) { return gitremote.Parse(text, "https") }
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: "gh:o/r", Agent: "claude", Name: "n1"}))
+	if res.Err != "" || res.Note != "cloned o/r into ~/src/r" {
+		t.Fatalf("gh:o/r: %+v", res)
+	}
+}
+
 // noCloneRun fails the test if a clone runs.
 func noCloneRun(t *testing.T, s *Service) {
 	t.Helper()
@@ -628,7 +775,7 @@ func TestStokerNewSessionNeverClones(t *testing.T) {
 	s, ran := handsLife(t)
 	s.CloneRoot = t.TempDir()
 	noCloneRun(t, s)
-	for _, where := range []string{"o/r", "https://github.com/o/r", "gh:o/r"} {
+	for _, where := range []string{"https://github.com/o/r", "gh:o/r"} {
 		b, _ := json.Marshal(proto.NewSession{Where: where, Agent: "claude", Name: "n1"})
 		if res := s.act(t.Context(), fromStokerAct(NewSessionID, string(b))); res.Err != noClone {
 			t.Errorf("%s from the stoker: err %q", where, res.Err)
@@ -644,11 +791,11 @@ func TestNewSessionURLChecksBeforeItClones(t *testing.T) {
 	s, _ := cloneTest(t)
 	noCloneRun(t, s)
 	for why, n := range map[string]proto.NewSession{
-		"aider is not an agent matchblox starts: claude, codex, opencode or cursor-agent": {Where: "o/r", Agent: "aider"},
-		"opencode is not installed here":                           {Where: "o/r", Agent: "opencode"},
-		"a first message does not start with -":                    {Where: "o/r", Agent: "claude", First: "--x"},
-		"a tmux session is named dev already: choose another name": {Where: "o/r", Agent: "claude", Name: "dev"},
-		"opencode has no accounts":                                 {Where: "o/r", Agent: "opencode", Account: "work"},
+		"aider is not an agent matchblox starts: claude, codex, opencode or cursor-agent": {Where: "gh:o/r", Agent: "aider"},
+		"opencode is not installed here":                           {Where: "gh:o/r", Agent: "opencode"},
+		"a first message does not start with -":                    {Where: "gh:o/r", Agent: "claude", First: "--x"},
+		"a tmux session is named dev already: choose another name": {Where: "gh:o/r", Agent: "claude", Name: "dev"},
+		"opencode has no accounts":                                 {Where: "gh:o/r", Agent: "opencode", Account: "work"},
 	} {
 		if res := s.act(t.Context(), newAct(t, n)); res.Err != why || !res.Refused {
 			t.Errorf("want %q refused, got %+v", why, res)
@@ -750,6 +897,165 @@ func stopAct(t *testing.T, target string, id int64) proto.Act {
 
 // A stop names the clone it stops: another clone into the same folder
 // runs on.
+// endedClone starts a clone that ends as how says (done, failed or
+// stopped) and returns its target and id, once it is listed so.
+func endedClone(t *testing.T, s *Service, root, how string) (string, int64) {
+	t.Helper()
+	target := filepath.Join(root, how)
+	s.cloneRun = func(ctx context.Context, _ gitremote.Remote, target string, _ func(int)) error {
+		switch how {
+		case "done":
+			return os.MkdirAll(target, 0o755)
+		case "failed":
+			return errors.New("no network: github.com does not answer")
+		}
+		<-ctx.Done()
+		return errors.New("stopped")
+	}
+	res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if how == "stopped" {
+		if got := s.act(t.Context(), stopAct(t, target, res.CloneID)); got.Err != "" {
+			t.Fatal(got.Err)
+		}
+	}
+	clonesUntil(t, s, how, func(cs []proto.Clone) bool {
+		return len(cs) == 1 && cs[0].ID == res.CloneID && (cs[0].Done == (how == "done")) && (how == "done") == (cs[0].Err == "")
+	})
+	return target, res.CloneID
+}
+
+// The cells of a clone that ended (done, failed, stopped) that a stop, a
+// minute and the service's end leave alone or quiet.
+func TestEndedCloneCells(t *testing.T) {
+	listed := func(s *Service) []proto.Clone {
+		st, _ := s.stateFor(&client{})
+		return st.Clones
+	}
+	for _, how := range []string{"done", "failed", "stopped"} {
+		t.Run(how+" stop with another id", func(t *testing.T) {
+			s, root := cloneTest(t)
+			target, id := endedClone(t, s, root, how)
+			before := listed(s)
+			got := s.act(t.Context(), stopAct(t, target, id+1))
+			if got.Err != "" || got.Note != "" || !slices.Equal(got.Skipped, []string{"that clone is not running"}) {
+				t.Fatalf("%+v", got)
+			}
+			if after := listed(s); !slices.Equal(before, after) || exists(target) != (how == "done") {
+				t.Fatalf("record %+v then %+v, folder %v", before, after, exists(target))
+			}
+		})
+		t.Run(how+" age out", func(t *testing.T) {
+			s, root := cloneTest(t)
+			target, _ := endedClone(t, s, root, how)
+			now := time.Now()
+			s.Now = func() time.Time { return now.Add(cloneListed + time.Second) }
+			if cs := listed(s); len(cs) != 0 {
+				t.Fatalf("still listed: %+v", cs)
+			}
+			if exists(target) != (how == "done") {
+				t.Fatalf("folder %v", exists(target))
+			}
+		})
+		t.Run(how+" shutdown", func(t *testing.T) {
+			s, root := cloneTest(t)
+			endedClone(t, s, root, how)
+			before := listed(s)
+			at := time.Now()
+			s.stopClones(10 * time.Second)
+			if d := time.Since(at); d > 2*time.Second {
+				t.Fatalf("shutdown waited %v for an ended clone", d)
+			}
+			if after := listed(s); !slices.Equal(before, after) {
+				t.Fatalf("record %+v then %+v", before, after)
+			}
+		})
+	}
+	for _, how := range []string{"failed", "stopped"} {
+		t.Run(how+" bare stop", func(t *testing.T) {
+			s, root := cloneTest(t)
+			target, _ := endedClone(t, s, root, how)
+			before := listed(s)
+			if got := s.act(t.Context(), consoleAct("clone:stop", target)); got.Err != "" || got.Note != "" || len(got.Skipped) != 0 {
+				t.Fatalf("%+v", got)
+			}
+			if after := listed(s); !slices.Equal(before, after) {
+				t.Fatalf("record %+v then %+v", before, after)
+			}
+		})
+	}
+	t.Run("stopped stop by id", func(t *testing.T) {
+		s, root := cloneTest(t)
+		target, id := endedClone(t, s, root, "stopped")
+		before := listed(s)
+		if got := s.act(t.Context(), stopAct(t, target, id)); got.Err != "" || got.Note != "" || len(got.Skipped) != 0 {
+			t.Fatalf("%+v", got)
+		}
+		if after := listed(s); !slices.Equal(before, after) || before[0].Err != "stopped" {
+			t.Fatalf("record %+v then %+v", before, after)
+		}
+	})
+}
+
+// A stop returns within its bound when the run ignores the stop.
+func TestCloneStopReturnsWhenTheRunIgnoresIt(t *testing.T) {
+	s, root := cloneTest(t)
+	old := cloneStopWait
+	cloneStopWait = 100 * time.Millisecond
+	t.Cleanup(func() { cloneStopWait = old })
+	release := make(chan struct{})
+	started := make(chan struct{})
+	s.cloneRun = func(context.Context, gitremote.Remote, string, func(int)) error {
+		close(started)
+		<-release // deaf to ctx
+		return nil
+	}
+	target := filepath.Join(root, "r")
+	if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target)); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	<-started
+	s.mu.Lock()
+	job := s.clones[target]
+	s.mu.Unlock()
+	t.Cleanup(func() { close(release); <-job.done })
+	took := make(chan proto.Result, 1)
+	go func() { took <- s.act(t.Context(), consoleAct("clone:stop", target)) }()
+	select {
+	case res := <-took:
+		if res.Err != "" || res.Note != "" {
+			t.Fatalf("%+v", res)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stop did not return")
+	}
+}
+
+// Two clones that end together keep both paths in the used record.
+func TestAddUsedFromTwoGoroutinesKeepsBoth(t *testing.T) {
+	s, root := cloneTest(t)
+	var wg sync.WaitGroup
+	paths := []string{filepath.Join(root, "a"), filepath.Join(root, "b")}
+	for _, p := range paths {
+		wg.Add(1)
+		go func() { defer wg.Done(); s.addUsed(p) }()
+	}
+	wg.Wait()
+	got := usedPaths(state.ReadUsed(s.UsedPath))
+	slices.Sort(got)
+	if !slices.Equal(got, paths) {
+		t.Fatalf("used %q, want %q", got, paths)
+	}
+	s.mu.Lock()
+	n := len(s.used.Repos)
+	s.mu.Unlock()
+	if n != 2 {
+		t.Fatalf("%d in memory", n)
+	}
+}
+
 func TestCloneStopOfAnotherClone(t *testing.T) {
 	s, root := cloneTest(t)
 	fakeGit(t, slowGit)

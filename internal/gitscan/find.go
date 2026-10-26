@@ -614,7 +614,7 @@ func (w *walker) walk(ctx context.Context, dir string, left int, home bool) bool
 		// A .git that is a link, a pipe or a device is no checkout, and
 		// reading one could hang.
 		if t := e.Type(); e.Name() == ".git" && (t.IsDir() || t.IsRegular()) {
-			if c, ok := readCheckout(dir, w.o.Remote); ok {
+			if c, ok := readCheckout(dir, w.o.Remote, false); ok {
 				w.mu.Lock()
 				w.found[dir] = c
 				w.mu.Unlock()
@@ -677,13 +677,15 @@ func readSmall(path string) ([]byte, error) {
 }
 
 // ReadCheckout reads the checkout at dir from its .git, offline: its main
-// checkout, if a linked worktree, and the URL of remote (else the first
-// remote), credentials stripped.
-func ReadCheckout(dir, remote string) (Checkout, bool) { return readCheckout(dir, remote) }
+// checkout, if a linked worktree, and the URL of remote, credentials
+// stripped. A checkout with no such remote has no URL: unlike a scan, it
+// does not fall back to its first remote.
+func ReadCheckout(dir, remote string) (Checkout, bool) { return readCheckout(dir, remote, true) }
 
 // readCheckout reads dir's .git: a directory for a main checkout, a file
-// naming the gitdir for a linked worktree.
-func readCheckout(dir, remote string) (Checkout, bool) {
+// naming the gitdir for a linked worktree. Unless only, a checkout with no
+// remote of that name takes the first remote's URL.
+func readCheckout(dir, remote string, only bool) (Checkout, bool) {
 	gitdir := filepath.Join(dir, ".git")
 	if b, err := readSmall(gitdir); err == nil {
 		p, ok := strings.CutPrefix(strings.TrimSpace(string(b)), "gitdir: ")
@@ -720,7 +722,10 @@ func readCheckout(dir, remote string) (Checkout, bool) {
 		c.Active = fi.ModTime()
 	}
 	if b, err := readSmall(filepath.Join(common, "config")); err == nil {
-		c.Remote = StripCredentials(parseGitConfig(b).remoteURL(remote))
+		cfg := parseGitConfig(b)
+		if !only || cfg.hasRemote(remote) {
+			c.Remote = StripCredentials(cfg.remoteURL(remote))
+		}
 	}
 	return c, true
 }

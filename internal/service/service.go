@@ -149,6 +149,9 @@ type Service struct {
 	// CloneRoot is where a clone goes ([git] clone_root), absolute.
 	// Empty: no clones.
 	CloneRoot string
+	// GitRemote is the remote a checkout is compared at ([git] remote).
+	// Empty: origin.
+	GitRemote string
 	// PushNumbers are the island's numbers of sessions and accounts; the
 	// names act names them. Nil: it names nothing.
 	PushNumbers *push.Numbers

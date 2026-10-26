@@ -382,7 +382,7 @@ func TestNoAgentClones(t *testing.T) {
 		{RecID: "clone:plan", Text: "https://github.com/o/r"},
 		{RecID: "clone:start", Text: `{"url":"https://github.com/o/r","target":"` + target + `"}`},
 		{RecID: "clone:stop", Text: target},
-		{RecID: NewSessionID, Confirm: "y", Text: `{"where":"o/r","agent":"claude","name":"n1"}`},
+		{RecID: NewSessionID, Confirm: "y", Text: `{"where":"gh:o/r","agent":"claude","name":"n1"}`},
 	}
 	for _, a := range acts {
 		for _, client := range []string{proto.ClientCLI, proto.ClientConsole} {

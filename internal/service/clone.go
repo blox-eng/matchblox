@@ -23,7 +23,7 @@ import (
 const cloneListed = time.Minute
 
 // cloneStopWait bounds how long clone:stop waits for the partial folder to go.
-const cloneStopWait = 10 * time.Second
+var cloneStopWait = 10 * time.Second
 
 // cloneJob is one clone the service runs or ran, by target, under s.mu.
 type cloneJob struct {
@@ -148,6 +148,10 @@ func (s *Service) planClone(r gitremote.Remote) (proto.ClonePlan, error) {
 	if root == "" {
 		return proto.ClonePlan{}, errors.New("no clone_root is set")
 	}
+	remote := s.GitRemote // [git] remote
+	if remote == "" {
+		remote = "origin"
+	}
 	s.mu.Lock()
 	running := map[string]bool{} // by lower case: see cloningInto
 	for t, j := range s.clones {
@@ -176,7 +180,7 @@ func (s *Service) planClone(r gitremote.Remote) (proto.ClonePlan, error) {
 	same := false
 	switch fi, err := os.Stat(p.Target); {
 	case err == nil && fi.IsDir():
-		if c, ok := gitscan.ReadCheckout(p.Target, "origin"); !ok {
+		if c, ok := gitscan.ReadCheckout(p.Target, remote); !ok {
 			p.Taken = "not a repo"
 		} else if gitremote.Same(c.Remote, r.URL) {
 			same = true
@@ -196,7 +200,7 @@ func (s *Service) planClone(r gitremote.Remote) (proto.ClonePlan, error) {
 			continue
 		}
 		// The list may be days old: the checkout is read now.
-		if now, ok := gitscan.ReadCheckout(c.Path, "origin"); ok && now.Main == "" && gitremote.Same(now.Remote, r.URL) {
+		if now, ok := gitscan.ReadCheckout(c.Path, remote); ok && now.Main == "" && gitremote.Same(now.Remote, r.URL) {
 			seen[c.Path] = true
 			known = append(known, c.Path)
 		}
@@ -205,7 +209,7 @@ func (s *Service) planClone(r gitremote.Remote) (proto.ClonePlan, error) {
 		if seen[u] {
 			continue
 		}
-		if c, ok := gitscan.ReadCheckout(u, "origin"); ok && c.Main == "" && gitremote.Same(c.Remote, r.URL) {
+		if c, ok := gitscan.ReadCheckout(u, remote); ok && c.Main == "" && gitremote.Same(c.Remote, r.URL) {
 			seen[u] = true
 			known = append(known, u)
 		}
@@ -265,7 +269,7 @@ func (s *Service) registerClone(ctx context.Context, r gitremote.Remote, target,
 	if root == "" {
 		return nil, "no clone_root is set"
 	}
-	if base := filepath.Base(target); filepath.Dir(target) != root || strings.HasSuffix(base, ".cloning") || strings.Contains(base, ".cloning.stale-") {
+	if base := filepath.Base(target); filepath.Dir(target) != root || strings.Contains(base, ".cloning") {
 		return nil, tildeIn(fmt.Sprintf("a clone goes into a folder of its own in %s: %s is not one", root, target))
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil { //nolint:gosec // the builder's own source folder
@@ -290,6 +294,9 @@ func (s *Service) registerClone(ctx context.Context, r gitremote.Remote, target,
 		trash = t
 	}
 	jctx, cancel := context.WithCancel(ctx)
+	if s.cloneSeq == 0 {
+		s.cloneSeq = time.Now().UnixNano() // ids never repeat across a restart
+	}
 	s.cloneSeq++
 	j := &cloneJob{ctx: jctx, cancel: cancel, done: make(chan struct{}), c: proto.Clone{ID: s.cloneSeq, Target: target, Repo: r.Slug(), Pct: -1, Token: token}}
 	if s.clones == nil {
@@ -330,12 +337,31 @@ func (s *Service) cloneForNew(ctx context.Context, r gitremote.Remote) (dir, sai
 	return p.Target, fmt.Sprintf("cloned %s into %s", p.Repo, tildeIn(p.Target)), true, ""
 }
 
+// runClone runs the clone j and ends its record, whatever the run does: a
+// panic in it is the job's error, and the job never stays busy.
 func (s *Service) runClone(ctx context.Context, j *cloneJob, r gitremote.Remote) {
+	var err error
+	defer func() {
+		if p := recover(); p != nil {
+			err = errors.New("the clone stopped on an error in matchblox")
+		}
+		s.mu.Lock()
+		j.end = s.now()
+		if err != nil {
+			j.c.Err = tildeIn(err.Error())
+		} else {
+			j.c.Done = true
+		}
+		s.mu.Unlock()
+		j.cancel()
+		close(j.done)
+		s.broadcast()
+	}()
 	run := s.cloneRun
 	if run == nil {
 		run = clone.Run
 	}
-	err := run(ctx, r, j.c.Target, func(pct int) {
+	err = run(ctx, r, j.c.Target, func(pct int) {
 		s.mu.Lock()
 		changed := j.c.Pct != pct
 		j.c.Pct = pct
@@ -347,17 +373,6 @@ func (s *Service) runClone(ctx context.Context, j *cloneJob, r gitremote.Remote)
 	if err == nil {
 		s.addUsed(j.c.Target) // a known repo before a console sees Done
 	}
-	s.mu.Lock()
-	j.end = s.now()
-	if err != nil {
-		j.c.Err = tildeIn(err.Error())
-	} else {
-		j.c.Done = true
-	}
-	s.mu.Unlock()
-	j.cancel()
-	close(j.done)
-	s.broadcast()
 }
 
 // cloneStop is the clone:stop act: Text is a proto.CloneStop, or the
@@ -438,12 +453,18 @@ func (s *Service) stopClones(d time.Duration) {
 
 // staleAway moves aside the work folder of a clone that no longer runs
 // (the service ended while it ran), so its name is free again. Only a real
-// folder named as target's sibling directly in clone_root goes; it returns
-// where it went, for the caller to remove outside s.mu. Hold s.mu, and
-// know no clone into target runs.
+// folder named as target's sibling directly in clone_root goes, and only
+// when matchblox made it and its maker is gone: the owner file beside it
+// names a pid that is not alive. A folder with no owner file, or whose
+// owner lives, is not touched. It returns where the folder went, for the
+// caller to remove outside s.mu. Hold s.mu, and know no clone into target
+// runs in this service.
 func staleAway(root, target string) (string, bool) {
 	sib := clone.Cloning(target)
 	if filepath.Dir(sib) != root {
+		return "", false
+	}
+	if pid, ok := clone.Owner(target); !ok || clone.Alive(pid) {
 		return "", false
 	}
 	fi, err := os.Lstat(sib)
@@ -454,6 +475,7 @@ func staleAway(root, target string) (string, bool) {
 	if os.Rename(sib, trash) != nil {
 		return "", false
 	}
+	_ = os.Remove(clone.OwnerFile(target))
 	return trash, true
 }
 
@@ -480,7 +502,8 @@ func (s *Service) cloningInto(target string) bool {
 }
 
 // siblingHeld tells if target's work folder holds its name: a clone into
-// it runs, or the folder cannot be cleared. A stale one is removed.
+// it runs, or the folder is not one matchblox made and left (see
+// staleAway). A stale one is removed.
 func (s *Service) siblingHeld(root, target string) bool {
 	if !exists(clone.Cloning(target)) {
 		return false

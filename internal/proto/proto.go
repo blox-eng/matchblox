@@ -133,8 +133,8 @@ type Result struct {
 
 // ClonePlan is where a clone of a URL goes, found offline. Target is
 // <clone_root>/<repo>, or a free name when something else is there; Taken
-// says what: "another repo", "not a repo" or "a file" ("" when free or the
-// same repo). Have are the checkouts of the same remote, <clone_root>/<repo>
+// says what: "another repo", "not a repo", "a file" or "being cloned" ("" when
+// free or the same repo). Have are the checkouts of the same remote, <clone_root>/<repo>
 // first when it is one; then Fresh is a free name to clone anew into.
 type ClonePlan struct {
 	Repo   string   `json:"repo"` // owner/repo

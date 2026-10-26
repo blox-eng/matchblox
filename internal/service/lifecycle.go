@@ -630,6 +630,7 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 		return refuse(errors.New("the stoker starts on default only"))
 	}
 	note, cloned := "", n.Cloned
+	kept := "" // said with a refusal after the clone: the clone stays
 	if r, ok := s.whereRemote(n.Where); ok {
 		// What is refused anyway is refused before a clone, not after.
 		if _, err := s.checkNew(n); err != nil {
@@ -644,6 +645,9 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 			return proto.Result{Err: msg}
 		}
 		n.Where, note, cloned = dir, line, fresh
+		if fresh {
+			kept = fmt.Sprintf("%s is cloned into %s", r.Slug(), tildeIn(dir))
+		}
 	}
 	where := n.Where // newSteps expands a leading ~ in its own copy
 	if rest, ok := cutHome(where); ok {
@@ -651,7 +655,7 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	}
 	steps, name, dir, acct, err := s.newSteps(ctx, n)
 	if err != nil {
-		return refuseUnlessRead(err)
+		return withKept(refuseUnlessRead(err), kept)
 	}
 	act := advice.Action{Label: "new session"}
 	var launch []string
@@ -680,7 +684,7 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	if acct != nil {
 		unlock, err := s.holdAccount(n.Agent, acct)
 		if err != nil {
-			return refuseUnlessRead(err)
+			return withKept(refuseUnlessRead(err), kept)
 		}
 		defer unlock()
 	}
@@ -740,6 +744,14 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	return res
 }
 
+// withKept adds, to the error of res, that a clone it came after is there.
+func withKept(res proto.Result, kept string) proto.Result {
+	if res.Err != "" && kept != "" {
+		res.Err += " (" + kept + ")"
+	}
+	return res
+}
+
 // readNew reads new:session's Text; "cursor" is Cursor's CLI.
 func readNew(text string) (proto.NewSession, error) {
 	var n proto.NewSession
@@ -752,10 +764,12 @@ func readNew(text string) (proto.NewSession, error) {
 	return n, nil
 }
 
-// whereRemote reads Where as a git URL: never a full path or one from ~.
+// whereRemote reads Where as a git URL: never a full path or one from ~,
+// and never a bare o/r, which is a path. The console clones the shorthand
+// through clone:plan and clone:start, not here.
 func (s *Service) whereRemote(where string) (gitremote.Remote, bool) {
 	t := strings.TrimSpace(where)
-	if t == "" || filepath.IsAbs(t) || strings.HasPrefix(t, "~") {
+	if t == "" || filepath.IsAbs(t) || strings.HasPrefix(t, "~") || !gitremote.Explicit(t) {
 		return gitremote.Remote{}, false
 	}
 	return s.remoteOf(t)
