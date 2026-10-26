@@ -65,6 +65,75 @@ An agent that keeps no name of its own (all but Claude Code) is named as
 its tmux window, which `r` renames, or as its tmux session while tmux names
 the window after the command.
 
+## A match knows its surroundings
+
+A match is an agent session. Every session that matchblox starts through
+`new` or `switch` receives a private environment brief. The brief identifies
+its workspace and explains how to find current peer state with
+`matchblox sessions --json` and `matchblox peek <who> --json`.
+It tells the match to check for overlapping work in a shared checkout.
+The brief grants no control over other matches. The existing service guards
+still apply.
+
+`MATCHBLOX_CONTEXT` points to the brief. A `handover.md` task record sits
+beside it. The match receives instructions to keep that record current at
+meaningful milestones. After compaction, it can read the same files again.
+Claude Code, Codex and Cursor receive access to their own context directory.
+OpenCode uses its configured external-directory permissions for record edits.
+An empty task or a sign-in-only launch starts no model task.
+
+Files live under `matches/` beside the service's state file, normally
+`~/.local/state/matchblox/`. Each launch has its own private directory.
+Directories use mode 0700 and files use mode 0600. Context stays on the host.
+The handover preview goes only to the console or CLI that requests it.
+matchblox retains these files across restarts and does not delete them
+automatically. Repository and account-wide instruction files stay unchanged.
+
+Launch adapters use Claude Code's appended system instructions, Codex's
+additional developer instructions, a Cursor plugin rule, and OpenCode's
+inline instruction-file configuration. Existing user task text stays intact.
+Existing OpenCode inline settings and Codex developer instructions remain
+part of the launch configuration.
+
+## Codex launch settings
+
+Both `matchblox new --agent codex` and `matchblox switch api --agent codex`
+set `projects.<workspace>.trust_level="trusted"` and
+`sandbox_workspace_write.network_access=true` for that invocation.
+The workspace path resolves through symlinks. New worktrees use their own
+path. A folder that `new` just cloned gets no trust setting: Codex asks, as
+Cursor does. The selected account supplies its configuration and credentials.
+
+matchblox preserves the sandbox mode and command approval policy. Network
+access applies when the selected sandbox is `workspace-write`.
+Codex runs a launch with `-c` settings in embedded mode, without its shared
+background server, and shows a startup warning that says so.
+An explicit untrusted project setting stops the launch with the config path
+to review. An unreadable or invalid Codex configuration also stops the launch
+before the current agent is replaced. matchblox never writes these settings
+to the account's configuration or bypasses hook trust.
+
+## Handover evidence
+
+A switch with a nonempty handoff captures the outgoing match's task record,
+recent user and assistant text from a verified Claude Code or Codex transcript,
+the last sampled reply, pending question, available pane text, and Git status,
+recent commits and diff statistics. Cursor and OpenCode use their managed task
+records and pane evidence when no verified transcript path is available.
+The capture names missing sources and does not infer a goal from changed files.
+Old replies and task records remain claims to check against the working tree.
+
+The default task tells the receiving match to read that capture, preserve the
+latest user direction, and continue the recorded next step. A custom handoff
+keeps your exact task text. An empty handoff starts no task and captures no
+handover. Match awareness still applies.
+
+The console loads an evidence excerpt before it accepts switch confirmation.
+`matchblox switch api --agent codex --preview` shows the full current capture
+without switching. The actual switch captures again just before replacement.
+A failed save leaves the outgoing agent running. A process that changes since
+the client selected it needs a new switch confirmation.
+
 ## Context use
 
 Claude Code, Codex and OpenCode show their context use, read from the

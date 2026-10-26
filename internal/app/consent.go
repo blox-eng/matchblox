@@ -101,6 +101,24 @@ func (a action) consentWords() (string, []string) {
 		for i := 1; i < len(steps); i++ {
 			steps[i] = "then " + steps[i]
 		}
+		if a.previewAct != "" {
+			steps = append(steps, "Reading handover evidence. Confirmation waits for the preview.")
+		}
+		if a.preview != "" {
+			// Keep consent usable on a phone. Full evidence is available with
+			// switch --preview; only quote a short excerpt in this box.
+			var quoted []string
+			for _, line := range strings.Split(a.preview, "\n") {
+				if strings.HasPrefix(line, "> ") && len(quoted) < 3 {
+					quoted = append(quoted, line)
+				}
+			}
+			excerpt := []rune(strings.Join(quoted, " "))
+			if len(excerpt) > 220 {
+				excerpt = append(excerpt[:220], []rune("…")...)
+			}
+			steps = append(steps, "Handover evidence: "+string(excerpt), "Missing intent stays unknown. switch --preview shows the full capture.")
+		}
 		return what, steps
 	}
 	if a.say != "" {

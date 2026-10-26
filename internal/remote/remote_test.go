@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -452,7 +453,11 @@ func TestFocusMovesOnlyThePhone(t *testing.T) {
 		t.Helper()
 		before := clients()
 		// The client's stdin stays open: an EOF would end the pane's shell.
-		cmd := exec.CommandContext(ctx, "script", "-qc", "tmux -S "+sock+" attach -t "+session, "/dev/null")
+		args := []string{"-qc", "tmux -S " + sock + " attach -t " + session, "/dev/null"}
+		if runtime.GOOS == "darwin" {
+			args = []string{"-q", "/dev/null", "tmux", "-S", sock, "attach", "-t", session}
+		}
+		cmd := exec.CommandContext(ctx, "script", args...)
 		cmd.Env = env
 		if _, err := cmd.StdinPipe(); err != nil {
 			t.Fatal(err)
@@ -460,6 +465,7 @@ func TestFocusMovesOnlyThePhone(t *testing.T) {
 		if err := cmd.Start(); err != nil {
 			t.Fatal(err)
 		}
+		t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
 		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
 			if now := clients(); len(now) == n {
 				for tty := range now {

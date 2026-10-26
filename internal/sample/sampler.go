@@ -94,9 +94,12 @@ type Session struct {
 	// TurnEnded is when the transcript's newest turn ended; zero while it
 	// runs. The service reads it, it never leaves the host.
 	TurnEnded time.Time `json:"-"`
-	// Transcript is the Claude Code session file, read back by the service
-	// after a step; it never leaves the host.
+	// Transcript is a verified Claude Code or Codex session file, read back
+	// by the service after a step or for handover. It stays on the host.
 	Transcript string `json:"-"`
+	// MatchContext is the private launch brief inherited by the process.
+	// It stays on the host and is never published to consoles.
+	MatchContext string `json:"-"`
 }
 
 // Shell is a shell an agent's Bash tool runs in the background.
@@ -672,6 +675,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			Agent: agent, CPU: cpu, Procs: n, Context: "unknown",
 		}
 		env := s.envOf(pid, key)
+		sess.MatchContext = env.matchContext
 		switch agent {
 		case "claude":
 			sess.Account, sess.Provider = s.accounts.claudeAccount(env), claudeProvider(env)
@@ -754,6 +758,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			}
 			var lim *limits.Reading
 			if path != "" {
+				sess.Transcript = path
 				sess.SessionID = s.agents.metaOf(path).id // z parks it by this id
 				var u Usage
 				var found codexFound

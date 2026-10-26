@@ -201,7 +201,7 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		so := switchOpts{anyway: *o.anyway}
+		so := switchOpts{anyway: *o.anyway, preview: *o.preview}
 		fl.Visit(func(f *flag.Flag) {
 			switch f.Name {
 			case "agent":
@@ -308,6 +308,7 @@ type flags struct {
 	stage, rest, drop     *string
 	list                  *bool
 	anyway                *bool
+	preview               *bool
 	where, agent, branch  *string
 	name, handoff         *string
 	account, setup        *string
@@ -377,7 +378,8 @@ func newFlags() (*flag.FlagSet, flags) {
 		anyway:     fl.Bool("anyway", false, "kill, switch: act on a session that works or waits for you"),
 		where:      fl.String("where", "", "new: the directory, or the repository of --branch (default: here)"),
 		agent:      fl.String("agent", "claude", "new, switch: the agent to start: claude, codex, opencode or cursor-agent"),
-		handoff:    fl.String("handoff", "", "switch: the line the new agent starts from (default: read the tree and notes, summarise, continue; empty: none)"),
+		handoff:    fl.String("handoff", "", "switch: the new agent's task (default: continue from captured handover evidence; empty: no task)"),
+		preview:    fl.Bool("preview", false, "switch: read the handover evidence without replacing the agent"),
 		branch:     fl.String("branch", "", "new: first add a worktree for this new branch, beside the repository"),
 		name:       fl.String("name", "", "new: the name of the session, its tmux session and its agent (default: the directory's)"),
 		account:    fl.String("account", "", "new: the account of the agent to start on (default: the default sign-in)"),

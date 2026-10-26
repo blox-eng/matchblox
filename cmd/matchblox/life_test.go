@@ -271,6 +271,15 @@ func TestNewSaysTheClone(t *testing.T) {
 	}
 }
 
+func TestSwitchPreviewPrintsEvidenceWithoutJumping(t *testing.T) {
+	var buf bytes.Buffer
+	sock := switchService(t, proto.Result{Preview: "Goal: keep CSV. Next: verify exports."})
+	err := cliSwitch([]string{"api"}, switchOpts{agent: "codex", preview: true}, &buf, sock, func([]string) error { t.Fatal("preview jumps to another pane"); return nil })
+	if err != nil || !strings.Contains(buf.String(), "Goal: keep CSV") || strings.Contains(buf.String(), "switched api") {
+		t.Fatalf("preview %q %v", buf.String(), err)
+	}
+}
+
 func TestNewTakesAnAccount(t *testing.T) {
 	a, err := newSessionAct(nil, newOpts{where: "/work/app", agent: "codex", account: "work"}, "", "/home/u")
 	if err != nil {

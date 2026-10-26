@@ -210,6 +210,10 @@ func TestLastAccountWriteIsRetried(t *testing.T) {
 	s, _, home := accountTest(t)
 	prepared(t, home, "claude", "work")
 	dir := filepath.Dir(s.StatePath)
+	// Context remains writable while the account ledger cannot be saved.
+	if err := os.MkdirAll(s.matchContextRoot(), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Chmod(dir, 0o500); err != nil {
 		t.Fatal(err)
 	}

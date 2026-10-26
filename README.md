@@ -66,7 +66,9 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
 - **Switch the agent, keep the seat**: `A` runs another agent in the same
   pane (Claude Code, Codex, OpenCode or Cursor) with the session's name,
   directory and pull request, on the account you last started that agent
-  on, else on `default`. The new agent gets a handoff to read the working tree and carry on.
+  on, else on `default`. The new agent gets saved handover evidence and a
+  guide to its workspace and neighboring matches. Codex launches include
+  workspace trust and workspace-write network access.
   `matchblox switch` does it from the shell.
 - **More than one sign-in**: `N` starts Claude Code, Codex or Cursor on an
   account, a folder beside your default sign-in, or makes a new one: like
