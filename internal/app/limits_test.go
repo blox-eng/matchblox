@@ -124,18 +124,24 @@ func TestAPhoneDockShowsOnePanel(t *testing.T) {
 }
 
 // TestTheDockFoldsWhenItDoesNotFit: the dock shows when the body, the
-// dock and one blank row fit; one row less and it folds into the Machine
-// tab, which has usage first.
+// dock and one blank row fit; a few rows short it stays at its fewest and
+// the body scrolls; when folding it leaves fewer than minBlank rows blank,
+// it folds into the Machine tab, which has usage first.
 func TestTheDockFoldsWhenItDoesNotFit(t *testing.T) {
 	m, _ := loadedWith(t, 44, limitsState())
-	need := len(m.body(44).lines) + len(m.dock(44, -1).lines) + 1 + 5 // the header, the tabs, two hairlines, the key line
-	for h, docked := range map[int]bool{need: true, need - 1: false} {
+	tall := len(m.body(44).lines)
+	need := tall + len(m.dock(44, -1).lines) + 1 + 5 // the header, the tabs, two hairlines, the key line
+	fold := tall + 5 + minBlank - 1
+	if fold >= need-1 {
+		t.Fatalf("the dock is too short to test: needs %d, folds at %d", need, fold)
+	}
+	for h, docked := range map[int]bool{need: true, need - 1: true, fold + 1: true, fold: false} {
 		m.height = h
 		if got := strings.Contains(screen(m), "USAGE"); got != docked {
-			t.Errorf("height %d (needs %d): docked %v, want %v:\n%s", h, need, got, docked, screen(m))
+			t.Errorf("height %d (needs %d, folds at %d): docked %v, want %v:\n%s", h, need, fold, got, docked, screen(m))
 		}
 	}
-	m.height = need - 1
+	m.height = fold
 	next, _ := key(m, "3")
 	lines := strings.Split(screen(next), "\n")
 	if !strings.Contains(lines[3], "USAGE") || !strings.Contains(screen(next), "MACHINE") {

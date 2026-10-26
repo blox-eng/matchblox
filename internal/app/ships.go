@@ -375,7 +375,7 @@ func (m Model) toDriver() Model {
 		return m
 	}
 	m.setTab(tabSessions)
-	m.doorPick, m.recPick, m.chose, m.selPID = "", "", true, s.PID
+	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, s.PID
 	return m
 }
 

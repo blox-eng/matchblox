@@ -536,8 +536,11 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "ships", at: 11 * time.Second, key: "2", ok: has("open → ci → green → merged → live", "#4551", "CI · 6 of 9 jobs", "#4552", "waits for your merge")},
 		{name: "a ship", at: 12500 * time.Millisecond, key: "j", ok: has("x merge")},
 		{name: "back to the sessions", at: 14 * time.Second, key: "1", ok: has("WAITS FOR YOU")},
-		// h folds the recommendations to one line: the dock has room again.
-		{name: "recommendations folded", at: 15 * time.Second, key: "h", ok: has("hidden · h shows", "USAGE")},
+		// h folds the recommendations to one line, under the ghost row on a
+		// phone: the dock has room again.
+		{name: "recommendations folded", at: 15 * time.Second, key: "h", ok: func(s string) bool {
+			return has("USAGE")(s) && !strings.Contains(s, "h hides")
+		}},
 		{name: "the launch sheet", at: 16 * time.Second, do: func() { clk.Set(night) }, key: "n", ok: has("How should I run tonight?", "○ merges")},
 		{name: "a night", at: 17 * time.Second, key: "enter", ok: func(s string) bool {
 			// spark-docs is past the line: the stoker compacts it at once,
@@ -568,8 +571,10 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "the morning card", at: 27500 * time.Millisecond, key: "c",
 			ok: has("NIGHT · 23:10 → 07:00", "ready ", "176k → 9k", "RESUME")},
 		{name: "back to sessions", at: 31 * time.Second, key: "1", ok: func(s string) bool {
-			// the ack c sent has come back: the dock no longer offers the run
-			return !strings.Contains(s, "NIGHT · 23:10") && strings.Contains(s, sessionsTab) && !strings.Contains(s, "c the whole run")
+			// the ack c sent has come back: the dock no longer offers the run,
+			// and the stoker's panel has given the dock back
+			return !strings.Contains(s, "NIGHT · 23:10") && strings.Contains(s, sessionsTab) && !strings.Contains(s, "c the whole run") &&
+				!strings.Contains(s, "STOKER")
 		}},
 		// N: one more session, named, with its first message (tab: agent, account, first).
 		{name: "a new session", at: 32500 * time.Millisecond, do: func() { sessionsNow = len(s.State().Sessions) }, keys: slices.Concat([]string{"N", "tab", "tab"}, strings.Split("rate-docs", ""),

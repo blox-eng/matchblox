@@ -215,6 +215,11 @@ console remembers both.
   agent.
 - **HELD**, last: sessions you parked with `z` (`⏸ parked by you`) or the
   stoker holds (`⏸ held by stoker · why`). Nothing types into them.
+- **`+ start a new session here`**, under the sessions: `Enter` opens New
+  session on that folder, the cursor on the agent. Here is the repo you
+  launched the console in, else the one you used last; from the phone or
+  over SSH, the one you used last. With no session it comes first, and
+  two more rows start in your next most recent repos.
 
 A `codex exec` or `claude -p` that an agent starts shows under that session
 with `├─` and `└─`, in `matchblox sessions` too. The console shows it and

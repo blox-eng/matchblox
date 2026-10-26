@@ -151,6 +151,10 @@ func (m Model) draw(w int) drawn {
 // hairline, the body (on an opened phone and a desk the list and the
 // detail side by side), the dock when it fits, then a hairline and the
 // key line (design/0006 §4.1).
+// minBlank is how many blank rows a folded dock may not leave: short of
+// fewer, the dock folds; of more, it stays and the body scrolls.
+const minBlank = 3
+
 func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt := m.header(w)
 	tabs, tabSpans := m.tabsLine(w)
@@ -197,11 +201,17 @@ func (m Model) drawScreen(w int) drawn {
 		d = m.dock(w, -1)
 	}
 	room := full
-	if len(d.lines) > 0 && max(len(b.lines), len(detail))+len(d.lines)+1 <= full {
+	tall := max(len(b.lines), len(detail))
+	switch {
+	case len(d.lines) > 0 && tall+len(d.lines)+1 <= full:
 		// The dock fits; it grows into the rows the body leaves free.
-		d = m.dock(w, full-max(len(b.lines), len(detail))-1)
+		d = m.dock(w, full-tall-1)
 		room -= len(d.lines) + 1
-	} else {
+	case len(d.lines) > 0 && full-tall >= minBlank && full-len(d.lines)-1 >= full/2:
+		// A few rows short: the dock stays at its fewest and the body
+		// scrolls, rather than leave the rows it would free blank.
+		room -= len(d.lines) + 1
+	default:
 		d = docked{}
 	}
 	sc.full = d.full || m.tab == tabMachine || m.tab == tabStoker

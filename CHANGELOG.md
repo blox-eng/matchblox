@@ -6,6 +6,18 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Sessions always offers `+ start a new session here`.** A ghost row under
+  the sessions: `⏎` opens N on its folder with the cursor on the agent. Here
+  is the repo the console was launched in (not over SSH, not home), else the
+  repo used most recently. With no session it comes first and has the
+  cursor, two quick starts follow for the next most recent repos, and it
+  replaces `no agent sessions found in tmux`. No session key acts on it,
+  and the Sessions count leaves it out. The dock now stays at its fewest
+  lines when the body is only a few rows short, and the body scrolls.
+  ([#175](https://github.com/blox-eng/matchblox/issues/175))
+
 ## [0.27.0] - 2026-10-28
 
 ### Added
