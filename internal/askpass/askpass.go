@@ -42,16 +42,18 @@ const (
 const (
 	// sunPath is the smallest sun_path (darwin), with its NUL.
 	sunPath = 104
-	// maxLine bounds one JSON line each way.
-	maxLine = 16 << 10
-	// maxSent bounds the prompt the helper sends; Clean cuts it again.
-	maxSent = 4 << 10
+	// maxLine bounds one JSON line each way: maxSent with every byte
+	// escaped as \u00XX fits.
+	maxLine = 64 << 10
+	// maxSent bounds the prompt the helper sends. A host-key prompt with
+	// its randomart is far below it.
+	maxSent = 8 << 10
 	// readRequest is the time a helper has to send its prompt.
 	readRequest = 10 * time.Second
 	// waitAnswer is the longest a helper waits for the console.
 	waitAnswer = 10 * time.Minute
 	// maxRunes is the longest prompt the console shows.
-	maxRunes = 200
+	maxRunes = 1000
 )
 
 // Prompt is one ssh prompt for the console. Text is already cleaned.
@@ -94,12 +96,16 @@ type Server struct {
 // Listen makes a fresh 0700 directory under dir (which the caller has
 // checked) with the socket in it, and starts to accept helpers.
 func Listen(dir string) (*Server, error) {
-	var b [32]byte
+	self, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	var b [32 + 4]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return nil, err
 	}
-	token := hex.EncodeToString(b[:])
-	sub := filepath.Join(dir, "ask-"+token[:8])
+	token := hex.EncodeToString(b[:32])
+	sub := filepath.Join(dir, "ask-"+hex.EncodeToString(b[32:]))
 	sock := filepath.Join(sub, "s")
 	if len(sock)+1 > sunPath {
 		return nil, fmt.Errorf("%s is too long for a socket", sock)
@@ -121,7 +127,6 @@ func Listen(dir string) (*Server, error) {
 		_ = os.RemoveAll(sub)
 		return nil, err
 	}
-	self, _ := os.Executable()
 	s := &Server{
 		Program: self,
 		dir:     sub, sock: sock, token: token, ln: ln,
@@ -171,8 +176,8 @@ func (s *Server) serve(c net.Conn) {
 		return
 	}
 	_ = c.SetReadDeadline(time.Time{})
-	text := Clean(req.Text)
-	p := pending{conn: c, prompt: Prompt{Host: Clean(req.Host), Text: text, Confirm: strings.Contains(text, "(yes/no")}}
+	text := clean(req.Text)
+	p := pending{conn: c, prompt: Prompt{Host: Clean(req.Host), Text: cut(text), Confirm: strings.Contains(text, "(yes/no")}}
 	select {
 	case s.prompts <- p:
 	case <-s.done:
@@ -223,8 +228,8 @@ func (s *Server) Next(ctx context.Context) (Prompt, func(answer string, ok bool)
 	return p.prompt, answer, nil
 }
 
-// send writes the reply once and zeroes the bytes this package owns. The
-// answer string itself is Go's and cannot be zeroed.
+// send writes the reply once and zeroes the reply line. The answer string
+// and the copies json makes cannot be zeroed.
 func send(c net.Conn, answer string, ok bool) {
 	defer c.Close()
 	if !ok {
@@ -290,7 +295,8 @@ func Ask(env func(string) string, prompt string, out io.Writer) error {
 	if !r.OK {
 		return errors.New("cancelled")
 	}
-	// r.Answer is a Go string and cannot be zeroed; the copy below can.
+	// line and b are zeroed; r.Answer and the copies of bufio and json
+	// cannot be.
 	b := append([]byte(r.Answer), '\n')
 	defer clear(b)
 	if bytes.ContainsAny(b[:len(b)-1], "\r\n\x00") {
@@ -302,14 +308,27 @@ func Ask(env func(string) string, prompt string, out io.Writer) error {
 	return nil
 }
 
-// Clean makes a prompt safe to draw: it drops escape sequences and C0 and
-// C1 controls, makes a line break or tab a space, drops what is not
-// printable or not UTF-8, and keeps at most 200 runes. A
+// Clean makes a prompt safe to draw: it drops escape sequences, C0 and
+// C1 controls but the line break, and what is not printable or not UTF-8.
+// It keeps at most two line breaks in a row and 1000 runes. A
 // keyboard-interactive prompt comes from the server.
-func Clean(s string) string {
-	var b strings.Builder
+func Clean(s string) string { return cut(clean(s)) }
+
+func cut(s string) string {
 	n := 0
-	for i := 0; i < len(s) && n < maxRunes; {
+	for i := range s {
+		if n == maxRunes {
+			return s[:i]
+		}
+		n++
+	}
+	return s
+}
+
+func clean(s string) string {
+	var b strings.Builder
+	breaks := 0
+	for i := 0; i < len(s); {
 		r, size := utf8.DecodeRuneInString(s[i:])
 		switch {
 		case r == 0x1b && i+1 < len(s):
@@ -321,13 +340,15 @@ func Clean(s string) string {
 		case r == 0x90 || r == 0x9d || r == 0x98 || r == 0x9e || r == 0x9f: // C1 strings
 			i += size + str(s[i+size:])
 			continue
-		case r == '\n' || r == '\r' || r == '\t':
-			b.WriteByte(' ')
-			n++
+		case r == '\n':
+			if breaks < 2 {
+				b.WriteByte('\n')
+			}
+			breaks++
 		case r == utf8.RuneError && size <= 1:
 		case unicode.IsPrint(r):
 			b.WriteRune(r)
-			n++
+			breaks = 0
 		}
 		i += size
 	}

@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -387,5 +388,48 @@ func TestMasterReusedOnRealSSHD(t *testing.T) {
 	if err != nil {
 		b, _ := os.ReadFile(out.Name())
 		t.Fatalf("second ssh: %v\n%s", err, b)
+	}
+}
+
+// TestHostKeyPromptOnRealSSHD: ssh's whole host-key message, with and
+// without randomart, reaches the console as a yes/no prompt with its
+// fingerprint, and a "no" stops the login.
+func TestHostKeyPromptOnRealSSHD(t *testing.T) {
+	h := startSSHD(t)
+	srv, err := askpass.Listen(h.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	srv.Program = filepath.Join(h.bin, "askpass")
+	helper := "#!/bin/sh\nMATCHBLOX_TEST_ARGS=\"$1\" exec " + os.Args[0] + "\n"
+	if err := os.WriteFile(srv.Program, []byte(helper), 0o700); err != nil { //nolint:gosec // a test script
+		t.Fatal(err)
+	}
+	for _, visual := range []string{"no", "yes"} {
+		known := filepath.Join(h.dir, "known-"+visual)
+		c := exec.Command("ssh", "-o", "UserKnownHostsFile="+known, "-o", "StrictHostKeyChecking=ask", "-o", "VisualHostKey="+visual, //nolint:gosec // test
+			"-o", "ControlMaster=no", "-o", "ControlPath=none", "-o", "IdentityAgent=none", "--", "ws-1", "true")
+		c.Env = append(os.Environ(), srv.Env("ws-1")...)
+		c.Stdin = strings.NewReader("")
+		done := make(chan error, 1)
+		go func() { done <- c.Run() }()
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		p, answer, err := srv.Next(ctx)
+		cancel()
+		if err != nil {
+			t.Fatalf("VisualHostKey=%s: no prompt: %v", visual, err)
+		}
+		answer("no", true)
+		if !p.Confirm || !regexp.MustCompile(`(?m)^ED25519 key fingerprint is SHA256:[A-Za-z0-9+/]{43}\.$`).MatchString(p.Text) ||
+			!strings.HasSuffix(p.Text, "(yes/no/[fingerprint])? ") {
+			t.Errorf("VisualHostKey=%s: prompt %+v", visual, p)
+		}
+		if visual == "yes" && !strings.Contains(p.Text, "+--[ED25519 256]--+") {
+			t.Errorf("no randomart in %q", p.Text)
+		}
+		if err := <-done; err == nil {
+			t.Errorf("VisualHostKey=%s: a no must stop the login", visual)
+		}
 	}
 }

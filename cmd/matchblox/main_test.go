@@ -587,6 +587,15 @@ func TestFirstArgThatIsNoCommandIsAHost(t *testing.T) {
 
 func TestAskpassModeOnlyForAPrompt(t *testing.T) {
 	set := func(k string) string {
+		switch k {
+		case askpass.EnvSocket:
+			return "/tmp/s"
+		case askpass.EnvToken:
+			return "t"
+		}
+		return ""
+	}
+	noToken := func(k string) string {
 		if k == askpass.EnvSocket {
 			return "/tmp/s"
 		}
@@ -600,6 +609,8 @@ func TestAskpassModeOnlyForAPrompt(t *testing.T) {
 		{[]string{"Password: "}, set, true},
 		{[]string{"Enter passphrase for key '/k': "}, set, true},
 		{[]string{"Password: "}, os.Getenv, false},
+		{[]string{"Password: "}, noToken, false},
+		{[]string{"ws-1"}, noToken, false},
 		{nil, set, false},
 		{[]string{"Password:", "x"}, set, false},
 		{[]string{"version"}, set, false},
@@ -612,6 +623,18 @@ func TestAskpassModeOnlyForAPrompt(t *testing.T) {
 		if got := askpassMode(c.args, c.env); got != c.want {
 			t.Errorf("askpassMode(%q) = %v, want %v", c.args, got, c.want)
 		}
+	}
+}
+
+// TestRunWithoutTokenIsNoAskpass: a shell that has only MATCHBLOX_ASKPASS
+// runs `matchblox <host>` as usual. "ws;1" is refused before anything
+// starts, so the error shows which way run went.
+func TestRunWithoutTokenIsNoAskpass(t *testing.T) {
+	t.Setenv(askpass.EnvSocket, "/tmp/none")
+	t.Setenv(askpass.EnvToken, "")
+	// Not a slice literal: gosec then flags gate.go args[1] (G602).
+	if err := run(strings.Fields("ws;1")); err == nil || errors.Is(err, errShown) || !strings.Contains(err.Error(), "not a command or a host") {
+		t.Fatalf("run took the askpass way: %v", err)
 	}
 }
 

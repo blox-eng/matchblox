@@ -208,7 +208,8 @@ func TestCleanPrompt(t *testing.T) {
 		"\x1b]0;pwn\x07Password: \x1b[31m":         "Password: ",
 		"\x1b]8;;http://x\x1b\\link\x1b]8;;\x1b\\": "link",
 		"a\u009b31mb\u009d0;t\u009cc\x00d\x7fe":    "abcde",
-		"line one\nline two\r\t":                   "line one line two  ",
+		"line one\nline two\r\t":                   "line one\nline two",
+		"a\n\n\n\n\x1b[0m\nb":                      "a\n\nb",
 		"\u202eevil":                               "evil",
 		"bad \xff utf8":                            "bad  utf8",
 	} {
@@ -216,24 +217,62 @@ func TestCleanPrompt(t *testing.T) {
 			t.Errorf("Clean(%q) = %q, want %q", in, got, want)
 		}
 	}
-	if got := []rune(Clean(strings.Repeat("é", 500))); len(got) != 200 {
-		t.Errorf("a 500-rune prompt keeps %d runes, want 200", len(got))
+	if got := []rune(Clean(strings.Repeat("é", 1500))); len(got) != 1000 {
+		t.Errorf("a 1500-rune prompt keeps %d runes, want 1000", len(got))
 	}
 }
 
+// hostKeyPrompt and randomartPrompt are what OpenSSH 9.6 gives askpass
+// for an unknown host key (recorded from the test sshd, with VisualHostKey
+// no and yes; host renamed).
+const (
+	hostKeyPrompt = "The authenticity of host 'ws-1 (192.0.2.1)' can't be established.\n" +
+		"ED25519 key fingerprint is SHA256:lViGGtJjGWBALGmVnR9Y7N8oBi25EwO/ufx8inKeOLw.\n" +
+		"This key is not known by any other names.\n" +
+		"Are you sure you want to continue connecting (yes/no/[fingerprint])? "
+	randomartPrompt = "The authenticity of host 'ws-1 (192.0.2.1)' can't be established.\n" +
+		"ED25519 key fingerprint is SHA256:lViGGtJjGWBALGmVnR9Y7N8oBi25EwO/ufx8inKeOLw.\n" +
+		"+--[ED25519 256]--+\n| ++o=o*+ .o      |\n|o..+.+*o.+ .     |\n|..  oo=+o o      |\n|     B.+ .       |\n" +
+		"|      O S o      |\n|     = o o .     |\n|  . . + .        |\n|   +.++  .       |\n|   E*+.+o        |\n" +
+		"+----[SHA256]-----+\n" +
+		"This key is not known by any other names.\n" +
+		"Are you sure you want to continue connecting (yes/no/[fingerprint])? "
+)
+
 func TestConfirmPrompt(t *testing.T) {
+	long := "The authenticity of host 'ws-1' can't be established.\n" + strings.Repeat("ws-1 known as ws-1.example.com\n", 60) +
+		"Are you sure you want to continue connecting (yes/no/[fingerprint])? "
 	s := listen(t)
-	done := ask(envOf(s.Env("ws-1")), "Are you sure you want to continue connecting (yes/no/[fingerprint])? ")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	p, answer, err := s.Next(ctx)
-	if err != nil {
-		t.Fatal(err)
+	for name, text := range map[string]string{
+		"short":     "Are you sure you want to continue connecting (yes/no/[fingerprint])? ",
+		"host key":  hostKeyPrompt,
+		"randomart": randomartPrompt,
+		"past cap":  long,
+	} {
+		done := ask(envOf(s.Env("ws-1")), text)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		p, answer, err := s.Next(ctx)
+		cancel()
+		if err != nil {
+			t.Fatal(err)
+		}
+		answer("yes", true)
+		<-done
+		if !p.Confirm {
+			t.Errorf("%s: prompt %q is a yes/no prompt", name, p.Text)
+		}
+		if name != "past cap" && p.Text != text {
+			t.Errorf("%s: text %q, want it whole", name, p.Text)
+		}
 	}
-	answer("yes", true)
-	<-done
-	if !p.Confirm {
-		t.Fatalf("prompt %+v is a yes/no prompt", p)
+}
+
+func TestListenDirIsNoPartOfTheToken(t *testing.T) {
+	s := listen(t)
+	env := envOf(s.Env("ws-1"))
+	dir := filepath.Base(filepath.Dir(env(EnvSocket)))
+	if !strings.HasPrefix(dir, "ask-") || strings.Contains(env(EnvToken), strings.TrimPrefix(dir, "ask-")) {
+		t.Fatalf("dir %q shows part of the token", dir)
 	}
 }
 

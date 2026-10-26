@@ -298,10 +298,10 @@ func run(args []string) error {
 }
 
 // askpassMode tells if ssh runs this binary as its SSH_ASKPASS: the
-// console set MATCHBLOX_ASKPASS, and the one argument is a prompt, not a
-// word that run dispatches.
+// console set MATCHBLOX_ASKPASS and its token, and the one argument is a
+// prompt, not a word that run dispatches.
 func askpassMode(args []string, env func(string) string) bool {
-	return env(askpass.EnvSocket) != "" && len(args) == 1 &&
+	return len(args) == 1 && env(askpass.EnvSocket) != "" && env(askpass.EnvToken) != "" &&
 		!slices.Contains(commands, args[0]) && !slices.Contains([]string{"gate", "authorize", "push", "hook"}, args[0])
 }
 
