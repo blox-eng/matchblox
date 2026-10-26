@@ -167,6 +167,12 @@ func TestServeAsksForARestart(t *testing.T) {
 				}
 				time.Sleep(10 * time.Millisecond)
 			}
+			// A change before the watch's first look is the binary it knows.
+			select {
+			case <-s.Watching():
+			case <-time.After(2 * time.Second):
+				t.Fatal("the watch did not start")
+			}
 			if err := tc.after(exe, path); err != nil {
 				t.Fatal(err)
 			}

@@ -348,6 +348,24 @@ func TestStateFileStillWritten(t *testing.T) {
 	}
 }
 
+// TestServeStopsWhenBinaryGoneBeforeItWatches: a binary removed between
+// the listen and the watch's first look is gone all the same: the service
+// stops as replaced, and its caller sees the binary gone.
+func TestServeStopsWhenBinaryGoneBeforeItWatches(t *testing.T) {
+	s := newTest(t, time.Hour)
+	exe := filepath.Join(t.TempDir(), "matchblox")
+	if err := os.WriteFile(exe, []byte("v1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.Exe, s.ExeEvery = exe, 10*time.Millisecond
+	_, done := serveForTestBefore(t, s, func(string) {
+		if err := os.Remove(exe); err != nil {
+			t.Fatal(err)
+		}
+	})
+	waitServe(t, done, ErrReplaced)
+}
+
 func TestServeStopsWhenBinaryReplaced(t *testing.T) {
 	s := newTest(t, time.Hour)
 	exe := filepath.Join(t.TempDir(), "matchblox")
@@ -363,7 +381,7 @@ func TestServeStopsWhenBinaryReplaced(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() { done <- s.Serve(context.Background(), l) }()
-	time.Sleep(30 * time.Millisecond)
+	waitWatching(t, s)
 	if err := os.WriteFile(exe, []byte("v2 is longer"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -486,6 +504,37 @@ func serveForTest(t *testing.T, s *Service) (string, chan error) {
 	return path, done
 }
 
+// serveForTestBefore is serveForTest with before run between the listen
+// and Serve: what a console that dials at once can do before the watch.
+func serveForTestBefore(t *testing.T, s *Service, before func(sock string)) (string, chan error) {
+	t.Helper()
+	dir, _ := os.MkdirTemp("", "mb")
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	path := filepath.Join(dir, "s.sock")
+	l, err := transport.Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Serve stops at once here, while Run may still write its state: that
+	// goes to a folder whose removal does not fail on it.
+	s.StatePath = filepath.Join(dir, "state.json")
+	before(path)
+	done := make(chan error, 1)
+	go func() { done <- s.Serve(context.Background(), l) }()
+	return path, done
+}
+
+// waitWatching waits for Serve's watch to take its first look, so a change
+// the test makes next is one it sees.
+func waitWatching(t *testing.T, s *Service) {
+	t.Helper()
+	select {
+	case <-s.Watching():
+	case <-time.After(waitLimit):
+		t.Fatalf("the watch did not start in %v", waitLimit)
+	}
+}
+
 func waitServe(t *testing.T, done chan error, want error) {
 	t.Helper()
 	select {
@@ -516,7 +565,7 @@ func TestServeStopsWhenSymlinkRepointed(t *testing.T) {
 	}
 	s.Exe, s.ExeEvery = link, 10*time.Millisecond
 	_, done := serveForTest(t, s)
-	time.Sleep(30 * time.Millisecond)
+	waitWatching(t, s)
 	tmp := link + ".new"
 	if err := os.Symlink(v2, tmp); err != nil {
 		t.Fatal(err)
@@ -533,7 +582,7 @@ func TestServeStopsWhenSocketRemoved(t *testing.T) {
 	s := newTest(t, time.Hour)
 	s.ExeEvery = 10 * time.Millisecond
 	path, done := serveForTest(t, s)
-	time.Sleep(30 * time.Millisecond)
+	waitWatching(t, s)
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
@@ -546,18 +595,11 @@ func TestServeStopsWhenSocketRemoved(t *testing.T) {
 func TestServeStopsWhenSocketGoneBeforeItWatches(t *testing.T) {
 	s := newTest(t, time.Hour)
 	s.ExeEvery = 10 * time.Millisecond
-	dir, _ := os.MkdirTemp("", "mb")
-	t.Cleanup(func() { os.RemoveAll(dir) })
-	path := filepath.Join(dir, "s.sock")
-	l, err := transport.Listen(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(path); err != nil {
-		t.Fatal(err)
-	}
-	done := make(chan error, 1)
-	go func() { done <- s.Serve(context.Background(), l) }()
+	_, done := serveForTestBefore(t, s, func(sock string) {
+		if err := os.Remove(sock); err != nil {
+			t.Fatal(err)
+		}
+	})
 	waitServe(t, done, ErrSocketGone)
 }
 

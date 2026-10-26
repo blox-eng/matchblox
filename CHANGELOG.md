@@ -6,6 +6,13 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A service whose binary was removed before it began to watch it stops as
+  uninstalled, instead of running on. The serve tests wait for the watch's
+  first look rather than a fixed time, so they no longer fail under load.
+  ([#212](https://github.com/blox-eng/matchblox/issues/212))
+
 ## [0.23.0] - 2026-10-24
 
 ### Added
