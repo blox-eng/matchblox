@@ -207,7 +207,7 @@ func TestTheHookProcessSpeaksForItsOwnPane(t *testing.T) {
 		asked.Add(1)
 		return service.PaneOfProcess(pid, []sample.Pane{{ID: agentIn.Load().(string), PID: os.Getpid()}})
 	}
-	go serve(sock, func() *service.Service { return s }) //nolint:errcheck // ends with the test process
+	go serve(sock, nil, func() *service.Service { return s }) //nolint:errcheck // ends with the test process
 	deadline := time.Now().Add(5 * time.Second)
 	for len(s.State().Sessions) == 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)

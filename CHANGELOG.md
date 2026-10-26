@@ -6,6 +6,14 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A service that waited for the socket restarts for an install made
+  meanwhile.** A service started by the user unit that waited while you
+  installed a new matchblox used to take the new binary for its own once it
+  took over, and run the old code on, with no console to replace it.
+  ([#212](https://github.com/blox-eng/matchblox/issues/212))
+
 ## [0.23.1] - 2026-10-26
 
 ### Fixed

@@ -154,8 +154,8 @@ func TestServeAsksForARestart(t *testing.T) {
 			s := newService(config.Default(), fixtures(t))
 			s.Exe, s.ExeEvery = exe, 10*time.Millisecond
 			done := make(chan error, 1)
-			go func() { done <- serve(path, func() *service.Service { return s }) }()
-			deadline := time.Now().Add(2 * time.Second)
+			go func() { done <- serve(path, nil, func() *service.Service { return s }) }()
+			deadline := time.Now().Add(waitLimit)
 			for {
 				c, err := transport.Dial(path, 100*time.Millisecond)
 				if err == nil {
@@ -170,7 +170,7 @@ func TestServeAsksForARestart(t *testing.T) {
 			// A change before the watch's first look is the binary it knows.
 			select {
 			case <-s.Watching():
-			case <-time.After(2 * time.Second):
+			case <-time.After(waitLimit):
 				t.Fatal("the watch did not start")
 			}
 			if err := tc.after(exe, path); err != nil {
@@ -181,7 +181,7 @@ func TestServeAsksForARestart(t *testing.T) {
 				if errors.Is(err, errRestart) != tc.restart || !tc.restart && err != nil {
 					t.Fatalf("serve returned %v, want a restart: %v", err, tc.restart)
 				}
-			case <-time.After(2 * time.Second):
+			case <-time.After(waitLimit):
 				t.Fatal("serve kept running")
 			}
 		})
@@ -189,7 +189,7 @@ func TestServeAsksForARestart(t *testing.T) {
 	t.Run("already runs", func(t *testing.T) {
 		path := isolate(t)
 		serveInProcess(t, path)
-		if err := serve(path, func() *service.Service { return newService(config.Default(), fixtures(t)) }); err != nil {
+		if err := serve(path, nil, func() *service.Service { return newService(config.Default(), fixtures(t)) }); err != nil {
 			t.Fatalf("serve returned %v, want nil", err)
 		}
 	})
@@ -222,7 +222,7 @@ func TestServeOfTheUnitWaitsForTheSocket(t *testing.T) {
 		return s
 	}
 	done := make(chan error, 1)
-	go func() { done <- serve(path, mk) }()
+	go func() { done <- serve(path, nil, mk) }()
 	select {
 	case err := <-done:
 		t.Fatalf("the unit's serve left with %v while the socket was in use", err)
@@ -235,7 +235,7 @@ func TestServeOfTheUnitWaitsForTheSocket(t *testing.T) {
 	}
 	cancel()
 	<-first
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(waitLimit)
 	for {
 		if c, err := transport.Dial(path, 100*time.Millisecond); err == nil {
 			c.Close()
@@ -254,8 +254,62 @@ func TestServeOfTheUnitWaitsForTheSocket(t *testing.T) {
 		if !errors.Is(err, errRestart) {
 			t.Fatalf("serve returned %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(waitLimit):
 		t.Fatal("serve kept running")
+	}
+}
+
+// waitLimit bounds a wait for something that happens on its own (a serve
+// that stops, a socket that answers): long, so a loaded runner never trips it.
+const waitLimit = 10 * time.Second
+
+// TestServeOfTheUnitStopsForAnInstallWhileItWaits: a binary installed while
+// the unit's serve waits for the socket ends the other serve, and the
+// unit's, running the old code, must not take the new binary for its own:
+// it stops for a restart once it has the socket.
+func TestServeOfTheUnitStopsForAnInstallWhileItWaits(t *testing.T) {
+	path := isolate(t)
+	old := socketWait
+	socketWait = 20 * time.Millisecond
+	t.Cleanup(func() { socketWait = old })
+	t.Setenv(unitEnv, "1")
+	exe := filepath.Join(t.TempDir(), "matchblox")
+	if err := os.WriteFile(exe, []byte("v1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	l, err := transport.Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	first := make(chan error, 1)
+	go func() { first <- newService(config.Default(), fixtures(t)).Serve(ctx, l) }()
+	// The binary as the unit's process started on it.
+	at, err := os.Stat(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- serve(path, at, func() *service.Service {
+			s := newService(config.Default(), fixtures(t))
+			s.Exe, s.ExeEvery = exe, 10*time.Millisecond
+			return s
+		})
+	}()
+	if err := os.WriteFile(exe, []byte("v2, a new install"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cancel() // the install ends the other serve
+	<-first
+	select {
+	case err := <-done:
+		if !errors.Is(err, errRestart) {
+			t.Fatalf("serve returned %v, want a restart", err)
+		}
+	case <-time.After(waitLimit):
+		t.Fatal("the unit's serve runs the old code on, after the install")
 	}
 }
 
