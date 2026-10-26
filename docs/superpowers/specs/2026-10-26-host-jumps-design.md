@@ -199,9 +199,10 @@ replaces `NavAllowed` for this shape.
 #### 3.1 One connection per host
 
 Jumps to a host share one ssh master on the builder's own login, owned by
-matchblox: `ControlMaster=auto`, `ControlPath=~/.cache/matchblox/ssh/%C`
-(directory 0700), `ControlPersist=10m`. The login happens once. Each jump
-then opens a channel on that master: no prompt, and faster. This master is
+matchblox: `ControlMaster=auto`, `ControlPath=/tmp/matchblox-<uid>/ssh/%C`
+(directory 0700), `ControlPersist=10m`. The path is short because a macOS
+socket path holds 104 bytes (ruling R11, 2026-10-26). The login happens
+once. Each jump then opens a channel on that master: no prompt, and faster. This master is
 never used for the stream (§Constraints).
 
 #### 3.2 The check before a jump

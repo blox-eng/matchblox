@@ -102,7 +102,9 @@ and shell stay as they are.
 - **A05 Misconfiguration.** No agent or port forwarding, no shared control
   master. A strict host-key check after the first connect.
 - **A07 Authentication.** Keys only for the stream. No password prompt in
-  the console. A changed host key stops the connection.
+  the console. A changed host key stops the connection. For the builder's own
+  login, a password prompt in the console is allowed:
+  `docs/superpowers/specs/2026-10-26-host-jumps-design.md`.
 - **A08 Integrity.** The host installs only a release that passes its
   checksum (the install script).
 - **A09 Logging.** Each action runs on the host's service, which logs it as
