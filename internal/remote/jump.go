@@ -25,12 +25,14 @@ type Jump struct {
 
 const defaultHome = "matchblox"
 
-// MinLocalTmux is the oldest tmux on this machine: the CI floor.
+// MinLocalTmux is the oldest tmux on this machine: the CI floor. The way
+// back by a tap needs 3.4 (user mouse ranges and mouse_status_range, per
+// tmux CHANGES); on 3.2 and 3.3 the home key still works.
 const MinLocalTmux = "3.2"
 
-// MinHostTmux is the oldest tmux on a host. run-shell -C (a tmux command
-// with formats) is the newest feature a jump uses; the jump tests run on
-// 3.2 and later, and no older tmux was tried.
+// MinHostTmux is the oldest tmux on a host. run-shell -C is the newest
+// feature a jump uses: tmux CHANGES lists it for 3.2. Deduced from CHANGES;
+// no tmux older than 3.4 was run.
 const MinHostTmux = "3.2"
 
 var (

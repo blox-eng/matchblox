@@ -1,11 +1,15 @@
 package remote
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -65,8 +69,29 @@ func hasSession(sock, name string) bool {
 	return err == nil
 }
 
+// requireTmux skips the test below tmux major.minor.
+func requireTmux(t *testing.T, major, minor int, why string) {
+	t.Helper()
+	out, err := exec.Command("tmux", "-V").Output()
+	if err != nil {
+		t.Skip("tmux is not installed")
+	}
+	var ma, mi int
+	v := strings.TrimPrefix(strings.TrimSpace(string(out)), "tmux ")
+	v = strings.TrimPrefix(v, "next-")
+	if _, err := fmt.Sscanf(v, "%d.%d", &ma, &mi); err != nil {
+		return // a development build: assume it is new
+	}
+	if ma < major || (ma == major && mi < minor) {
+		t.Skipf("tmux %d.%d or newer is needed: %s", major, minor, why)
+	}
+}
+
 func newJumpEnv(t *testing.T) jumpEnv {
 	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("the clients run on util-linux script -qfc")
+	}
 	if _, err := exec.LookPath("script"); err != nil {
 		t.Skip("script is not installed")
 	}
@@ -251,6 +276,7 @@ func clientsOf(sock, session string) []string {
 }
 
 func TestJumpWayBackHomeKey(t *testing.T) {
+	requireTmux(t, 3, 4, "send-keys -K")
 	e := newJumpEnv(t)
 	c := attach(t, e.outer, "matchblox")
 	j := e.newJump("0a1b2c3d")
@@ -262,6 +288,7 @@ func TestJumpWayBackHomeKey(t *testing.T) {
 }
 
 func TestJumpWayBackTap(t *testing.T) {
+	requireTmux(t, 3, 4, "user mouse ranges and mouse_status_range")
 	e := newJumpEnv(t)
 	c := attach(t, e.outer, "matchblox")
 	j := e.newJump("0a1b2c3d")
@@ -291,32 +318,46 @@ func TestJumpWayBackWithPrefixCa(t *testing.T) {
 	})
 }
 
-// TestJumpDropLeavesNothing: the link drops (ssh exits 255) while the
-// builder is on the console and S runs in the background. Nobody can press
-// Enter there, so S must end by itself.
+// TestJumpDropLeavesNothing: the link drops (the host's tmux client dies
+// and ssh ends with an error) while the builder is on the console and S
+// runs in the background. Nobody can press Enter there, so S must end by
+// itself, and the host's G must end with its client.
 func TestJumpDropLeavesNothing(t *testing.T) {
 	e := newJumpEnv(t)
 	c := attach(t, e.outer, "matchblox")
 	j := e.newJump("0a1b2c3d")
-	drop := filepath.Join(t.TempDir(), "drop")
-	script := "#!/bin/sh\nwhile [ ! -e " + drop + " ]; do sleep 0.05; done\nexit 255\n"
-	ssh := filepath.Join(t.TempDir(), "ssh")
-	if err := os.WriteFile(ssh, []byte(script), 0o700); err != nil { //nolint:gosec // a test script must be executable
-		t.Fatal(err)
-	}
-	e.jump(t, c, j, ssh)
-	s := HostSessionName(j.Host, j.ID)
+	e.jump(t, c, j, e.ssh)
+	s, g := HostSessionName(j.Host, j.ID), JumpSessionName(j.ID)
 	c.waitSession(s)
+	waitFor(t, "the jump is attached", func() bool { return len(clientsOf(e.inner, g)) == 1 })
 	mustTmux(t, e.outer, "switch-client", "-c", c.tty, "-t", "=matchblox")
 	c.waitSession("matchblox")
 	if !hasSession(e.outer, s) {
 		t.Fatal("the session ended before the drop")
 	}
-	if err := os.WriteFile(drop, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	killSSH(t, e.outer, s)
+	waitFor(t, "the host's jump session is gone", func() bool { return !hasSession(e.inner, g) })
 	waitFor(t, "the outer session is gone", func() bool { return !hasSession(e.outer, s) })
 	c.waitSession("matchblox")
+}
+
+// killSSH kills the ssh of the session's pane (the fake ssh is the host's
+// tmux client itself), as a dropped link ends it: a failed exit.
+func killSSH(t *testing.T, sock, session string) {
+	t.Helper()
+	sh := mustTmux(t, sock, "display-message", "-p", "-t", "="+session+":", "#{pane_pid}")
+	var pid int
+	waitFor(t, "ssh runs under the wrapper", func() bool {
+		out, err := exec.Command("pgrep", "-P", sh).Output() //nolint:gosec // a pid of the test's own pane
+		if err != nil {
+			return false
+		}
+		pid, _ = strconv.Atoi(strings.Fields(string(out))[0])
+		return pid > 0
+	})
+	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestJumpFailedSSHIsReadable(t *testing.T) {
