@@ -67,7 +67,7 @@ func (s *Service) orderable(a proto.Act) error {
 	if strings.HasPrefix(a.RecID, "park:") {
 		return errors.New("the stoker does not park: z is yours")
 	}
-	if a.RecID == "clone:plan" || a.RecID == "clone:start" {
+	if cloneAct(a.RecID) || (a.RecID == NewSessionID && s.newClones(a.Text)) {
 		return errors.New(noClone)
 	}
 	pane := paneOf(a.RecID)

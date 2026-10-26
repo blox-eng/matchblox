@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/gitremote"
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -71,9 +72,9 @@ func cursorsAgent(path string) bool {
 
 // launchArgv is the agent's command, run as bin: Claude Code takes the
 // session's name (--name, which its /rename changes later) and the first
-// message as its prompt; Codex takes the prompt; Cursor takes it after
-// --trust; OpenCode takes it with --prompt.
-func launchArgv(bin, agent, name, first string) []string {
+// message as its prompt; Codex takes the prompt; Cursor takes it, after
+// --trust when trust; OpenCode takes it with --prompt.
+func launchArgv(bin, agent, name, first string, trust bool) []string {
 	argv := []string{bin}
 	switch agent {
 	case "claude":
@@ -85,7 +86,9 @@ func launchArgv(bin, agent, name, first string) []string {
 	case sample.CursorAgent:
 		// The builder chose the directory: Cursor does not ask again
 		// whether to trust it.
-		argv = append(argv, "--trust")
+		if trust {
+			argv = append(argv, "--trust")
+		}
 	}
 	if first != "" {
 		argv = append(argv, first)
@@ -318,7 +321,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 		}
 	}
 	release := s.holdPane(pane)
-	act := SwitchAction(pane, x, s.seatWindow(pane, x), launchArgv(s.agentBin(n.Agent), n.Agent, x.Name, n.Handoff))
+	act := SwitchAction(pane, x, s.seatWindow(pane, x), launchArgv(s.agentBin(n.Agent), n.Agent, x.Name, n.Handoff, true))
 	s.mu.Lock()
 	old := s.queue.HookedIn(pane)
 	s.mu.Unlock()
@@ -551,45 +554,46 @@ func (s *Service) renameAtRest(ctx context.Context) {
 	}
 }
 
+// connKey holds, in an act's context, the context that ends when the
+// act's connection closes: only a git URL's clone takes it.
+type connKey struct{}
+
 // newSession starts an agent in a tmux session of its own on the
 // builder's server, never the stoker's: the session, its window and the
 // agent share one name. With a branch it first adds a worktree for it
 // next to the repository, branched from origin's default branch (or HEAD)
 // and tracking nothing, so a bare push never goes to main. The stoker
 // starts sessions only in a run, each a message toward max_steps, and the
-// session it starts is one it drives from its first second.
-// connKey holds, in an act's context, the context that ends when the
-// act's connection closes: only a git URL's clone takes it.
-type connKey struct{}
-
+// session it starts is one it drives from its first second. A git URL in
+// Where is cloned first (act refuses it from an agent's pane), or the
+// clone the builder has is used: Note says which.
 func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
-	var n proto.NewSession
-	if err := json.Unmarshal([]byte(a.Text), &n); err != nil {
-		return proto.Result{Err: "the new session does not read: " + err.Error()}
+	n, err := readNew(a.Text)
+	if err != nil {
+		return proto.Result{Err: err.Error()}
 	}
-	if n.Agent == "cursor" {
-		n.Agent = sample.CursorAgent
-	}
-	said := ""
-	if t := strings.TrimSpace(n.Where); t != "" && !filepath.IsAbs(t) && !strings.HasPrefix(t, "~") {
-		if r, ok := s.remoteOf(t); ok {
-			cctx := ctx
-			if c, ok := ctx.Value(connKey{}).(context.Context); ok {
-				cctx = c
-			}
-			dir, line, msg := s.cloneForNew(cctx, r)
-			if msg != "" {
-				return proto.Result{Err: msg}
-			}
-			n.Where, said = dir, line
+	note, cloned := "", n.Cloned
+	if r, ok := s.whereRemote(n.Where); ok {
+		// What is refused anyway is refused before a clone, not after.
+		if err := s.checkNew(n); err != nil {
+			return proto.Result{Err: err.Error()}
 		}
+		cctx := ctx
+		if c, ok := ctx.Value(connKey{}).(context.Context); ok {
+			cctx = c
+		}
+		dir, line, fresh, msg := s.cloneForNew(cctx, r)
+		if msg != "" {
+			return proto.Result{Err: msg}
+		}
+		n.Where, note, cloned = dir, line, fresh
 	}
 	steps, name, dir, err := s.newSteps(ctx, n)
 	if err != nil {
 		return proto.Result{Err: err.Error()}
 	}
 	where := n.Where // newSteps expands a leading ~ in its own copy
-	if rest, ok := strings.CutPrefix(where, "~/"); ok || where == "~" {
+	if rest, ok := cutHome(where); ok {
 		if home, err := os.UserHomeDir(); err == nil {
 			where = filepath.Join(home, rest)
 		}
@@ -597,10 +601,13 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	steps = append(steps, slices.Concat(
 		[]string{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
 		sample.TmuxOn(""), []string{"new-session", "-d", "-s", name, "-n", name, "-c", dir},
-		launchArgv(s.agentBin(n.Agent), n.Agent, name, n.First)))
+		// A folder just cloned, here or by the console for this session, is
+		// not one the builder chose: Cursor asks whether to trust it. A
+		// checkout already there is trusted, as N's Have rows are.
+		launchArgv(s.agentBin(n.Agent), n.Agent, name, n.First, !cloned)))
 	res := s.Actions.Do(ctx, advice.Action{Label: "new session", Steps: steps}, a.Confirm)
-	if said != "" && res.Err == "" {
-		res.Skipped = append([]string{said}, res.Skipped...)
+	if note != "" && res.Err == "" {
+		res.Note = note
 	}
 	if res.Err != "" || len(res.Ran) < len(steps) {
 		return res
@@ -617,18 +624,81 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	return res
 }
 
-// newSteps checks a new session and builds the worktree's step, if any.
-// It returns the session's name and the directory it starts in.
-func (s *Service) newSteps(ctx context.Context, n proto.NewSession) (steps [][]string, name, dir string, err error) {
+// readNew reads new:session's Text; "cursor" is Cursor's CLI.
+func readNew(text string) (proto.NewSession, error) {
+	var n proto.NewSession
+	if err := json.Unmarshal([]byte(text), &n); err != nil {
+		return n, errors.New("the new session does not read: " + err.Error())
+	}
+	if n.Agent == "cursor" {
+		n.Agent = sample.CursorAgent
+	}
+	return n, nil
+}
+
+// whereRemote reads Where as a git URL: never a full path or one from ~.
+func (s *Service) whereRemote(where string) (gitremote.Remote, bool) {
+	t := strings.TrimSpace(where)
+	if t == "" || filepath.IsAbs(t) || strings.HasPrefix(t, "~") {
+		return gitremote.Remote{}, false
+	}
+	return s.remoteOf(t)
+}
+
+// newClones tells if a new:session's Text asks for a clone.
+func (s *Service) newClones(text string) bool {
+	n, err := readNew(text)
+	if err != nil {
+		return false
+	}
+	_, ok := s.whereRemote(n.Where)
+	return ok
+}
+
+// checkNew checks what a new session asks for that needs no folder: the
+// agent, the first message and a name given.
+func (s *Service) checkNew(n proto.NewSession) error {
 	look := s.LookPath
 	if look == nil {
 		look = exec.LookPath
 	}
-	switch {
-	case !slices.Contains(Startable, n.Agent):
-		return nil, "", "", fmt.Errorf("%s is not an agent matchblox starts: claude, codex, opencode or cursor-agent", n.Agent)
+	if !slices.Contains(Startable, n.Agent) {
+		return fmt.Errorf("%s is not an agent matchblox starts: claude, codex, opencode or cursor-agent", n.Agent)
 	}
-	if rest, ok := strings.CutPrefix(n.Where, "~/"); ok || n.Where == "~" {
+	if agentBin(n.Agent, look) == "" {
+		return fmt.Errorf("%s is not installed here", n.Agent)
+	}
+	if n.First != "" {
+		if err := proto.CheckFirst(n.First, "the first message"); errors.Is(err, proto.ErrDash) {
+			return errors.New("a first message does not start with -")
+		} else if err != nil {
+			return err
+		}
+	}
+	if n.Name != "" {
+		return s.checkName(n.Name)
+	}
+	return nil
+}
+
+// checkName refuses a bad name, or one a tmux session has.
+func (s *Service) checkName(name string) error {
+	if err := proto.CheckName(name); err != nil {
+		return err
+	}
+	if _, in := s.tmuxSessions("")[name]; in {
+		return taken(name)
+	}
+	return nil
+}
+
+// newSteps checks a new session and builds the worktree's step, if any.
+// It returns the session's name and the directory it starts in.
+func (s *Service) newSteps(ctx context.Context, n proto.NewSession) (steps [][]string, name, dir string, err error) {
+	if err := s.checkNew(n); err != nil {
+		return nil, "", "", err
+	}
+	if rest, ok := cutHome(n.Where); ok {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return nil, "", "", err
@@ -637,16 +707,6 @@ func (s *Service) newSteps(ctx context.Context, n proto.NewSession) (steps [][]s
 	}
 	if !filepath.IsAbs(n.Where) {
 		return nil, "", "", errors.New("a new session starts in a full path")
-	}
-	if agentBin(n.Agent, look) == "" {
-		return nil, "", "", fmt.Errorf("%s is not installed here", n.Agent)
-	}
-	if n.First != "" {
-		if err := proto.CheckFirst(n.First, "the first message"); errors.Is(err, proto.ErrDash) {
-			return nil, "", "", errors.New("a first message does not start with -")
-		} else if err != nil {
-			return nil, "", "", err
-		}
 	}
 	dir = filepath.Clean(n.Where)
 	if !s.isDir(dir) {
@@ -662,12 +722,9 @@ func (s *Service) newSteps(ctx context.Context, n proto.NewSession) (steps [][]s
 	name = n.Name
 	if name == "" {
 		name = proto.NameOf(filepath.Base(dir))
-	}
-	if err := proto.CheckName(name); err != nil {
-		return nil, "", "", err
-	}
-	if _, in := s.tmuxSessions("")[name]; in {
-		return nil, "", "", taken(name)
+		if err := s.checkName(name); err != nil {
+			return nil, "", "", err
+		}
 	}
 	return steps, name, dir, nil
 }

@@ -41,13 +41,22 @@ func ExpandHome(p string) string {
 	if err != nil {
 		return filepath.Clean(p)
 	}
-	if rest, ok := strings.CutPrefix(p, "~/"); ok || p == "~" {
+	if rest, ok := cutHome(p); ok {
 		p = filepath.Join(home, rest)
 	}
 	if !filepath.IsAbs(p) {
 		p = filepath.Join(home, p)
 	}
 	return filepath.Clean(p)
+}
+
+// cutHome is p after a leading "~/", or "" for a bare "~"; ok when p
+// starts at the home folder.
+func cutHome(p string) (rest string, ok bool) {
+	if p == "~" {
+		return "", true
+	}
+	return strings.CutPrefix(p, "~/")
 }
 
 // tildeIn shows the home folder as ~ in text: only whole paths.
@@ -132,29 +141,36 @@ func (s *Service) cloneRoot() string {
 }
 
 // planClone finds where a clone of r goes, offline: it reads the folders
-// on disk, the found list and the used record, never the network.
+// on disk, the found list, the used record and the Git tab's repos, never
+// the network.
 func (s *Service) planClone(r gitremote.Remote) (proto.ClonePlan, error) {
 	root := s.cloneRoot()
 	if root == "" {
 		return proto.ClonePlan{}, errors.New("no clone_root is set")
 	}
 	s.mu.Lock()
-	running := map[string]bool{}
+	running := map[string]bool{} // by lower case: see cloningInto
 	for t, j := range s.clones {
 		if j.end.IsZero() {
-			running[t] = true
+			running[strings.ToLower(t)] = true
 		}
 	}
 	found := slices.Clone(s.found.Repos)
+	// The used record's places and the Git tab's repos: each is read now.
 	var used []string
 	for _, u := range s.used.Repos {
 		used = append(used, u.Path)
+	}
+	if s.cur.Git != nil {
+		for _, g := range s.cur.Git.Repos {
+			used = append(used, g.Path)
+		}
 	}
 	s.mu.Unlock()
 
 	taken := func(name string) bool {
 		t := filepath.Join(root, name)
-		return exists(t) || running[t] || s.siblingHeld(root, t)
+		return exists(t) || running[strings.ToLower(t)] || s.siblingHeld(root, t)
 	}
 	p := proto.ClonePlan{Repo: r.Slug(), URL: r.URL, Target: filepath.Join(root, r.Repo)}
 	same := false
@@ -176,11 +192,13 @@ func (s *Service) planClone(r gitremote.Remote) (proto.ClonePlan, error) {
 	seen := map[string]bool{p.Target: true}
 	var known []string
 	for _, c := range found {
-		if c.Main == "" && !seen[c.Path] && gitremote.Same(c.Remote, r.URL) {
-			if fi, err := os.Stat(c.Path); err == nil && fi.IsDir() {
-				seen[c.Path] = true
-				known = append(known, c.Path)
-			}
+		if c.Main != "" || seen[c.Path] || !gitremote.Same(c.Remote, r.URL) {
+			continue
+		}
+		// The list may be days old: the checkout is read now.
+		if now, ok := gitscan.ReadCheckout(c.Path, "origin"); ok && now.Main == "" && gitremote.Same(now.Remote, r.URL) {
+			seen[c.Path] = true
+			known = append(known, c.Path)
 		}
 	}
 	for _, u := range used {
@@ -253,7 +271,7 @@ func (s *Service) registerClone(ctx context.Context, r gitremote.Remote, target 
 		return nil, tildeIn(fmt.Sprintf("cannot make %s: %v", root, err))
 	}
 	s.mu.Lock()
-	if j := s.clones[target]; j != nil && j.end.IsZero() {
+	if s.cloningInto(target) {
 		s.mu.Unlock()
 		return nil, tildeIn(target + " is being cloned")
 	}
@@ -286,28 +304,29 @@ func (s *Service) registerClone(ctx context.Context, r gitremote.Remote, target 
 }
 
 // cloneForNew is what a git URL in new:session's Where comes to: where the
-// session starts, and a line that says what happened. It clones on the
-// act's own goroutine, and stops when ctx ends.
-func (s *Service) cloneForNew(ctx context.Context, r gitremote.Remote) (dir, said, errText string) {
+// session starts, a line that says what happened, and whether it cloned:
+// a checkout already there is reused. It clones on the act's own
+// goroutine, and stops when ctx ends.
+func (s *Service) cloneForNew(ctx context.Context, r gitremote.Remote) (dir, said string, cloned bool, errText string) {
 	p, err := s.planClone(r)
 	if err != nil {
-		return "", "", err.Error()
+		return "", "", false, err.Error()
 	}
 	if len(p.Have) > 0 {
-		return p.Have[0], fmt.Sprintf("%s is already at %s: started there", p.Repo, tildeIn(p.Have[0])), ""
+		return p.Have[0], fmt.Sprintf("%s is already at %s: started there", p.Repo, tildeIn(p.Have[0])), false, ""
 	}
 	j, msg := s.registerClone(ctx, r, p.Target)
 	if msg != "" {
-		return "", "", msg
+		return "", "", false, msg
 	}
 	s.runClone(j.ctx, j, r)
 	s.mu.Lock()
 	failed := j.c.Err
 	s.mu.Unlock()
 	if failed != "" {
-		return "", "", failed
+		return "", "", false, failed
 	}
-	return p.Target, fmt.Sprintf("cloned %s into %s", p.Repo, tildeIn(p.Target)), ""
+	return p.Target, fmt.Sprintf("cloned %s into %s", p.Repo, tildeIn(p.Target)), true, ""
 }
 
 func (s *Service) runClone(ctx context.Context, j *cloneJob, r gitremote.Remote) {
@@ -340,20 +359,37 @@ func (s *Service) runClone(ctx context.Context, j *cloneJob, r gitremote.Remote)
 	s.broadcast()
 }
 
-// cloneStop is the clone:stop act: Text is the target. It waits, within a
-// bound, until the partial folder is gone.
+// cloneStop is the clone:stop act: Text is a proto.CloneStop, or the
+// bare target from an older console. It stops only the clone of that ID
+// and waits, within a bound, until the partial folder is gone. A clone
+// that was done is said in Note: its folder stays.
 func (s *Service) cloneStop(text string) proto.Result {
-	target := ExpandHome(strings.TrimSpace(text))
+	cs := proto.CloneStop{Target: text}
+	if strings.HasPrefix(strings.TrimSpace(text), "{") {
+		if err := json.Unmarshal([]byte(text), &cs); err != nil {
+			return proto.Result{Err: "the stop does not read: " + err.Error()}
+		}
+	}
+	target := ExpandHome(strings.TrimSpace(cs.Target))
 	s.mu.Lock()
 	j := s.clones[target]
 	s.mu.Unlock()
 	if j == nil {
 		return proto.Result{Err: tildeIn(target + " is not being cloned")}
 	}
+	if cs.ID != 0 && cs.ID != j.c.ID { // ID never changes: no lock
+		return proto.Result{Skipped: []string{"that clone is not running"}}
+	}
 	j.cancel()
 	select {
 	case <-j.done:
 	case <-time.After(cloneStopWait):
+	}
+	s.mu.Lock()
+	done := j.c.Done
+	s.mu.Unlock()
+	if done {
+		return proto.Result{Note: fmt.Sprintf("the clone of %s was done: it is in %s", j.c.Repo, tildeIn(target))}
 	}
 	return proto.Result{}
 }
@@ -420,6 +456,28 @@ func staleAway(root, target string) (string, bool) {
 	return trash, true
 }
 
+// cloningInto tells if a clone that runs works in target's work folder.
+// A disk that ignores case makes .Foo.cloning and .foo.cloning one
+// folder: a target that differs only in case counts, as does one whose
+// work folder is the same. Hold s.mu.
+func (s *Service) cloningInto(target string) bool {
+	sib, sibErr := os.Lstat(clone.Cloning(target))
+	for t, j := range s.clones {
+		if !j.end.IsZero() {
+			continue
+		}
+		if strings.EqualFold(t, target) {
+			return true
+		}
+		if sibErr == nil {
+			if fi, err := os.Lstat(clone.Cloning(t)); err == nil && os.SameFile(fi, sib) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // siblingHeld tells if target's work folder holds its name: a clone into
 // it runs, or the folder cannot be cleared. A stale one is removed.
 func (s *Service) siblingHeld(root, target string) bool {
@@ -427,7 +485,7 @@ func (s *Service) siblingHeld(root, target string) bool {
 		return false
 	}
 	s.mu.Lock()
-	if j := s.clones[target]; j != nil && j.end.IsZero() {
+	if s.cloningInto(target) {
 		s.mu.Unlock()
 		return true
 	}

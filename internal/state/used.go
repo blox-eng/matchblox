@@ -1,6 +1,8 @@
 package state
 
 import (
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"slices"
 	"time"
@@ -53,3 +55,17 @@ func ReadUsed(path string) Used {
 }
 
 func WriteUsed(path string, u Used) error { return writeJSON(path, u) }
+
+// KeepBrokenUsed moves a Used file that is there but does not read to
+// path.broken, over an older one, so the next write does not lose it.
+func KeepBrokenUsed(path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil // missing, or not to be read: a write says why
+	}
+	var u Used
+	if json.Unmarshal(b, &u) == nil {
+		return nil
+	}
+	return os.Rename(path, path+".broken")
+}

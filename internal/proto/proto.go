@@ -114,6 +114,10 @@ type Result struct {
 	Clone *ClonePlan `json:"clone,omitempty"`
 	// CloneID is the id of the clone a clone:start started.
 	CloneID int64 `json:"clone_id,omitempty"`
+	// Note is a line the builder reads, not a refusal: what a URL in
+	// new:session came to, or that a clone:stop came after the clone was
+	// done.
+	Note string `json:"note,omitempty"`
 }
 
 // ClonePlan is where a clone of a URL goes, found offline. Target is
@@ -134,6 +138,14 @@ type ClonePlan struct {
 type CloneStart struct {
 	URL    string `json:"url"`
 	Target string `json:"target"`
+}
+
+// CloneStop is the Text of a "clone:stop" act: stop the clone ID into
+// Target. A stop whose ID is not the clone's that runs there stops
+// nothing. A bare Target, from an older console, stops the clone there.
+type CloneStop struct {
+	Target string `json:"target"`
+	ID     int64  `json:"id,omitempty"`
 }
 
 // Clone is one clone the service runs or ran.
@@ -232,13 +244,16 @@ type (
 // session of its own on the builder's server. Branch, when set, first
 // adds a worktree for it next to the repository in Where. Name is the
 // tmux session's, its window's and the agent's; empty, it is the
-// directory's. First is the agent's first message.
+// directory's. First is the agent's first message. Cloned says the folder
+// in Where is a clone made for this session: Cursor asks before it trusts
+// it. It can only take trust away.
 type NewSession struct {
 	Where  string `json:"where"`
 	Branch string `json:"branch,omitempty"`
 	Name   string `json:"name,omitempty"`
 	Agent  string `json:"agent"`
 	First  string `json:"first,omitempty"`
+	Cloned bool   `json:"cloned,omitempty"`
 }
 
 // SwitchAgent is the Text of a "switch:<pane>" act: start Agent in the

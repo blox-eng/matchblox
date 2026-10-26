@@ -156,6 +156,21 @@ func TestClonePlanKnownElsewhere(t *testing.T) {
 	}
 }
 
+// A repo the Git tab shows is known too, with no scan consent: its
+// checkout is read now, as the found ones are.
+func TestClonePlanKnowsTheGitTabsRepos(t *testing.T) {
+	s, _ := cloneTest(t)
+	dev := filepath.Join(filepath.Dir(s.CloneRoot), "dev")
+	repoWith(t, filepath.Join(dev, "r"), "git@github.com:o/r.git")
+	repoWith(t, filepath.Join(dev, "other"), "git@github.com:o/other.git")
+	s.mu.Lock()
+	s.cur.Git = &gitscan.Report{Repos: []gitscan.Repo{{Path: filepath.Join(dev, "r")}, {Path: filepath.Join(dev, "other")}}}
+	s.mu.Unlock()
+	if p := plan(t, s, "o/r"); !slices.Equal(p.Have, []string{filepath.Join(dev, "r")}) {
+		t.Fatalf("plan %+v", p)
+	}
+}
+
 // fakeGit puts a git on PATH that logs its arguments to the returned file
 // and then runs body.
 func fakeGit(t *testing.T, body string) string {
@@ -357,8 +372,12 @@ func TestCloneFromAnAgentsPaneIsRefused(t *testing.T) {
 	for _, a := range []proto.Act{
 		{RecID: "clone:start", Text: `{"url":"https://github.com/o/r","target":"` + filepath.Join(root, "r") + `"}`, From: "%3"},
 		{RecID: "clone:plan", Text: "https://github.com/o/r", From: "%3"},
+		// a console hello does not make an agent's pane a person's (R16)
+		{RecID: "clone:plan", Text: "https://github.com/o/r", From: "%3", Console: true},
+		{RecID: "clone:stop", Text: filepath.Join(root, "r"), From: "%3", Console: true},
+		{RecID: NewSessionID, Confirm: "y", Text: `{"where":"https://github.com/o/r","agent":"claude"}`, From: "%3", Console: true},
 	} {
-		if res := s.act(t.Context(), a); res.Err != notTheBuilders {
+		if res := s.act(t.Context(), a); res.Err != noClone {
 			t.Fatalf("%s: err %q", a.RecID, res.Err)
 		}
 	}
@@ -484,8 +503,8 @@ func TestNewSessionClonesAURL(t *testing.T) {
 	if len(res.Ran) != 1 || !strings.Contains(strings.Join(res.Ran[0], " "), "-c "+target+" ") {
 		t.Fatalf("ran %q", res.Ran)
 	}
-	if len(res.Skipped) == 0 || res.Skipped[0] != "cloned o/r into ~/src/r" {
-		t.Fatalf("skipped %q", res.Skipped)
+	if len(res.Skipped) != 0 || res.Note != "cloned o/r into ~/src/r" {
+		t.Fatalf("skipped %q note %q", res.Skipped, res.Note)
 	}
 	if got := usedPaths(state.ReadUsed(s.UsedPath)); !slices.Contains(got, target) {
 		t.Fatalf("used %q", got)
@@ -506,8 +525,8 @@ func TestNewSessionURLUsesTheExistingClone(t *testing.T) {
 	if len(res.Ran) != 1 || !strings.Contains(strings.Join(res.Ran[0], " "), "-c "+target+" ") {
 		t.Fatalf("ran %q", res.Ran)
 	}
-	if len(res.Skipped) == 0 || res.Skipped[0] != "o/r is already at ~/src/r: started there" {
-		t.Fatalf("skipped %q", res.Skipped)
+	if len(res.Skipped) != 0 || res.Note != "o/r is already at ~/src/r: started there" {
+		t.Fatalf("skipped %q note %q", res.Skipped, res.Note)
 	}
 }
 
@@ -556,7 +575,7 @@ func TestNewSessionPathStillWorks(t *testing.T) {
 	urlRepo(t, s)
 	dir := t.TempDir()
 	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: dir, Agent: "claude", Name: "fresh"}))
-	if res.Err != "" || len(res.Ran) != 1 || len(res.Skipped) != 0 {
+	if res.Err != "" || len(res.Ran) != 1 || len(res.Skipped) != 0 || res.Note != "" {
 		t.Fatalf("%+v", res)
 	}
 	if got := strings.Join(res.Ran[0], " "); !strings.HasSuffix(got, "-c "+dir+" claude --name fresh") {
@@ -564,5 +583,372 @@ func TestNewSessionPathStillWorks(t *testing.T) {
 	}
 	if res := s.act(t.Context(), newAct(t, proto.NewSession{Where: "api", Agent: "claude"})); res.Err != "a new session starts in a full path" {
 		t.Fatalf("%q", res.Err)
+	}
+}
+
+// noCloneRun fails the test if a clone runs.
+func noCloneRun(t *testing.T, s *Service) {
+	t.Helper()
+	s.cloneRemote = func(text string) (gitremote.Remote, bool) { return gitremote.Parse(text, "https") }
+	s.cloneRun = func(context.Context, gitremote.Remote, string, func(int)) error {
+		t.Error("a clone ran")
+		return nil
+	}
+}
+
+// The stoker and the sessions it drives never clone through new:session.
+func TestStokerNewSessionNeverClones(t *testing.T) {
+	s, ran := handsLife(t)
+	s.CloneRoot = t.TempDir()
+	noCloneRun(t, s)
+	for _, where := range []string{"o/r", "https://github.com/o/r", "gh:o/r"} {
+		b, _ := json.Marshal(proto.NewSession{Where: where, Agent: "claude", Name: "n1"})
+		if res := s.act(t.Context(), fromStokerAct(NewSessionID, string(b))); res.Err != noClone {
+			t.Errorf("%s from the stoker: err %q", where, res.Err)
+		}
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// A new session that will be refused never clones first.
+func TestNewSessionURLChecksBeforeItClones(t *testing.T) {
+	s, _ := cloneTest(t)
+	noCloneRun(t, s)
+	for why, n := range map[string]proto.NewSession{
+		"aider is not an agent matchblox starts: claude, codex, opencode or cursor-agent": {Where: "o/r", Agent: "aider"},
+		"opencode is not installed here":                           {Where: "o/r", Agent: "opencode"},
+		"a first message does not start with -":                    {Where: "o/r", Agent: "claude", First: "--x"},
+		"a tmux session is named dev already: choose another name": {Where: "o/r", Agent: "claude", Name: "dev"},
+	} {
+		if res := s.act(t.Context(), newAct(t, n)); res.Err != why {
+			t.Errorf("want %q, got %q", why, res.Err)
+		}
+	}
+	if exists(s.CloneRoot) {
+		t.Fatal("clone_root made")
+	}
+}
+
+// Cursor asks whether to trust a folder just cloned from a URL; a
+// checkout already there, reused for a URL, and a path the builder typed
+// it trusts.
+func TestNewSessionURLLetsCursorAsk(t *testing.T) {
+	s, root := cloneTest(t)
+	urlRepo(t, s)
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: "https://github.com/o/r", Agent: "cursor-agent", Name: "n1"}))
+	if res.Err != "" || len(res.Ran) != 1 {
+		t.Fatalf("%+v", res)
+	}
+	if got := strings.Join(res.Ran[0], " "); !strings.HasSuffix(got, "-c "+filepath.Join(root, "r")+" cursor-agent") {
+		t.Fatalf("ran %q", got)
+	}
+	// the same URL again: the checkout is there, reused
+	gitIn(t, "-C", filepath.Join(root, "r"), "remote", "set-url", "origin", "https://github.com/o/r")
+	res = s.act(t.Context(), newAct(t, proto.NewSession{Where: "https://github.com/o/r", Agent: "cursor-agent", Name: "n2"}))
+	if res.Err != "" || len(res.Ran) != 1 || !strings.HasPrefix(res.Note, "o/r is already at") || !slices.Contains(res.Ran[0], "--trust") {
+		t.Fatalf("reused: %+v", res)
+	}
+	res = s.act(t.Context(), newAct(t, proto.NewSession{Where: filepath.Join(root, "r"), Agent: "cursor-agent", Name: "n3"}))
+	if res.Err != "" || len(res.Ran) != 1 || !slices.Contains(res.Ran[0], "--trust") {
+		t.Fatalf("a typed path: %+v", res)
+	}
+}
+
+// A folder the console cloned for this session is one Cursor asks about,
+// though it comes as a path.
+func TestNewSessionClonedFolderLetsCursorAsk(t *testing.T) {
+	s, ran := lifeTest(t)
+	dir := t.TempDir()
+	res := s.act(t.Context(), newAct(t, proto.NewSession{Where: dir, Agent: "cursor-agent", Name: "n1", Cloned: true}))
+	if res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("%+v ran %q", res, *ran)
+	}
+	if slices.Contains((*ran)[0], "--trust") {
+		t.Fatalf("ran %q", (*ran)[0])
+	}
+}
+
+// On a disk that ignores case, .Foo.cloning is .foo.cloning: a plan for
+// o/Foo leaves the running clone of o/foo alone.
+func TestClonePlanKeepsARunningSiblingOfAnotherCase(t *testing.T) {
+	s, root := cloneTest(t)
+	fakeGit(t, slowGit)
+	target := filepath.Join(root, "foo")
+	if res := s.act(t.Context(), startAct(t, "https://github.com/o/foo", target)); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	t.Cleanup(func() { s.act(t.Context(), consoleAct("clone:stop", target)) })
+	clonesUntil(t, s, "10%", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Pct == 10 })
+	other := filepath.Join(root, "Foo")
+	if err := os.MkdirAll(clone.Cloning(other), 0o755); err != nil { // one folder where case is ignored
+		t.Fatal(err)
+	}
+	if p := plan(t, s, "https://github.com/o/Foo"); p.Taken != "being cloned" || p.Target == other {
+		t.Fatalf("plan %+v", p)
+	}
+	if res := s.act(t.Context(), startAct(t, "https://github.com/o/Foo", other)); res.Err != "~/src/Foo is being cloned" {
+		t.Fatalf("start: %q", res.Err)
+	}
+	for _, p := range []string{clone.Cloning(target), clone.Cloning(other)} {
+		if _, err := os.Lstat(p); err != nil {
+			t.Fatalf("%s removed: %v", p, err)
+		}
+	}
+}
+
+// A found checkout is offered only if its .git still names the repo.
+func TestClonePlanReadsAFoundCheckoutNow(t *testing.T) {
+	s, root := cloneTest(t)
+	dev := filepath.Join(filepath.Dir(root), "dev")
+	repoWith(t, filepath.Join(dev, "r"), "https://github.com/x/r")
+	s.mu.Lock()
+	s.found = gitscan.Found{Consent: "yes", Repos: []gitscan.Checkout{{Path: filepath.Join(dev, "r"), Remote: "git@github.com:o/r.git"}}}
+	s.mu.Unlock()
+	if p := plan(t, s, "https://github.com/o/r"); len(p.Have) != 0 {
+		t.Fatalf("offered a checkout of another repo: %+v", p)
+	}
+}
+
+func stopAct(t *testing.T, target string, id int64) proto.Act {
+	t.Helper()
+	b, err := json.Marshal(proto.CloneStop{Target: target, ID: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return consoleAct("clone:stop", string(b))
+}
+
+// A stop names the clone it stops: another clone into the same folder
+// runs on.
+func TestCloneStopOfAnotherClone(t *testing.T) {
+	s, root := cloneTest(t)
+	fakeGit(t, slowGit)
+	target := filepath.Join(root, "r")
+	res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	t.Cleanup(func() { s.act(t.Context(), stopAct(t, target, res.CloneID)) })
+	clonesUntil(t, s, "10%", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Pct == 10 })
+	got := s.act(t.Context(), stopAct(t, target, res.CloneID+1))
+	if got.Err != "" || !slices.Equal(got.Skipped, []string{"that clone is not running"}) {
+		t.Fatalf("%+v", got)
+	}
+	if cs := clonesUntil(t, s, "listed", func(cs []proto.Clone) bool { return len(cs) == 1 }); cs[0].Err != "" || cs[0].Done {
+		t.Fatalf("stopped: %+v", cs)
+	}
+	// its own id stops it
+	if got := s.act(t.Context(), stopAct(t, "~/src/r", res.CloneID)); got.Err != "" || len(got.Skipped) != 0 {
+		t.Fatalf("%+v", got)
+	}
+	clonesUntil(t, s, "stopped", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Err == "stopped" })
+}
+
+// A stop that comes when the clone is done says so: the folder stays.
+func TestCloneStopOfADoneClone(t *testing.T) {
+	s, root := cloneTest(t)
+	fakeGit(t, `for a; do last=$a; done
+mkdir -p "$last"`)
+	target := filepath.Join(root, "r")
+	res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	clonesUntil(t, s, "done", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Done })
+	for _, a := range []proto.Act{stopAct(t, target, res.CloneID), consoleAct("clone:stop", target)} {
+		got := s.act(t.Context(), a)
+		if got.Err != "" || len(got.Skipped) != 0 || got.Note != "the clone of o/r was done: it is in ~/src/r" {
+			t.Fatalf("%s: %+v", a.Text, got)
+		}
+	}
+	if !exists(target) {
+		t.Fatal("the folder is gone")
+	}
+	if got := usedPaths(state.ReadUsed(s.UsedPath)); !slices.Equal(got, []string{target}) {
+		t.Fatalf("used %q", got)
+	}
+}
+
+// A bare target, from an older console, stops the clone there.
+func TestCloneStopOfABareTarget(t *testing.T) {
+	s, root := cloneTest(t)
+	fakeGit(t, slowGit)
+	target := filepath.Join(root, "r")
+	if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target)); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	clonesUntil(t, s, "10%", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Pct == 10 })
+	if got := s.act(t.Context(), consoleAct("clone:stop", target)); got.Err != "" || len(got.Skipped) != 0 || got.Note != "" {
+		t.Fatalf("%+v", got)
+	}
+	clonesUntil(t, s, "stopped", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Err == "stopped" })
+}
+
+// A clone that failed: a stop is a quiet no-op, it ages out, and nothing
+// is on disk.
+func TestCloneThatFailed(t *testing.T) {
+	s, root := cloneTest(t)
+	fakeGit(t, "exit 1")
+	target := filepath.Join(root, "r")
+	res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	clonesUntil(t, s, "failed", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Err != "" })
+	if got := s.act(t.Context(), stopAct(t, target, res.CloneID)); got.Err != "" || len(got.Skipped) != 0 || got.Note != "" {
+		t.Fatalf("%+v", got)
+	}
+	for _, p := range []string{target, clone.Cloning(target)} {
+		if exists(p) {
+			t.Fatalf("%s is there", p)
+		}
+	}
+	now := time.Now()
+	s.Now = func() time.Time { return now.Add(61 * time.Second) }
+	if st, _ := s.stateFor(&client{}); len(st.Clones) != 0 {
+		t.Fatalf("still listed: %+v", st.Clones)
+	}
+}
+
+// A running clone is listed however long it runs.
+func TestARunningCloneNeverAgesOut(t *testing.T) {
+	s, root := cloneTest(t)
+	fakeGit(t, slowGit)
+	target := filepath.Join(root, "r")
+	if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target)); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	t.Cleanup(func() { s.act(t.Context(), consoleAct("clone:stop", target)) })
+	now := time.Now()
+	s.Now = func() time.Time { return now.Add(time.Hour) }
+	if st, _ := s.stateFor(&client{}); len(st.Clones) != 1 {
+		t.Fatalf("listed %+v", st.Clones)
+	}
+}
+
+// The service's end leaves a done clone's folder.
+func TestShutdownKeepsADoneClone(t *testing.T) {
+	s, root := cloneTest(t)
+	fakeGit(t, `for a; do last=$a; done
+mkdir -p "$last"`)
+	target := filepath.Join(root, "r")
+	if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", target)); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	clonesUntil(t, s, "done", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Done })
+	s.stopClones(waitLimit)
+	if !exists(target) {
+		t.Fatal("the folder is gone")
+	}
+}
+
+func TestNoCloneRoot(t *testing.T) {
+	s, root := cloneTest(t)
+	s.CloneRoot = ""
+	log := fakeGit(t, "exit 1")
+	if res := s.act(t.Context(), consoleAct("clone:plan", "https://github.com/o/r")); res.Err != "no clone_root is set" {
+		t.Fatalf("plan: %q", res.Err)
+	}
+	if res := s.act(t.Context(), startAct(t, "https://github.com/o/r", filepath.Join(root, "r"))); res.Err != "no clone_root is set" {
+		t.Fatalf("start: %q", res.Err)
+	}
+	if res := s.act(t.Context(), newAct(t, proto.NewSession{Where: "https://github.com/o/r", Agent: "claude", Name: "n1"})); res.Err != "no clone_root is set" {
+		t.Fatalf("new: %q", res.Err)
+	}
+	if b, _ := os.ReadFile(log); len(b) != 0 {
+		t.Fatalf("ran git %s", b)
+	}
+}
+
+// fakeGh puts a gh on PATH that logs its arguments and says protocol.
+func fakeGh(t *testing.T, s *Service, protocol string) string {
+	t.Helper()
+	bin := t.TempDir()
+	log := filepath.Join(t.TempDir(), "gh.log")
+	script := "#!/bin/sh\necho \"$*\" >> '" + log + "'\necho " + protocol + "\n"
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(script), 0o755); err != nil { //nolint:gosec // a test script
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	s.LookPath = exec.LookPath
+	return log
+}
+
+func TestGitProtocol(t *testing.T) {
+	s, _ := cloneTest(t)
+	fakeGh(t, s, "ssh")
+	if p := plan(t, s, "o/r"); p.URL != "git@github.com:o/r.git" {
+		t.Fatalf("gh says ssh: %+v", p)
+	}
+
+	s, _ = cloneTest(t)
+	s.LookPath = func(string) (string, error) { return "", exec.ErrNotFound }
+	if p := plan(t, s, "o/r"); p.URL != "https://github.com/o/r.git" {
+		t.Fatalf("no gh: %+v", p)
+	}
+
+	s, _ = cloneTest(t)
+	log := fakeGh(t, s, "ssh")
+	if p := plan(t, s, "https://github.com/o/r"); p.URL != "https://github.com/o/r" {
+		t.Fatalf("a full URL: %+v", p)
+	}
+	if b, _ := os.ReadFile(log); len(b) != 0 {
+		t.Fatalf("a full URL asked gh: %s", b)
+	}
+}
+
+func TestTildeIn(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for in, want := range map[string]string{
+		home + "/x":                          "~/x",
+		home + "x":                           home + "x",
+		home:                                 "~",
+		home + "/a and " + home + "/b":       "~/a and ~/b",
+		"cannot make " + home + ": no space": "cannot make ~: no space",
+		"'" + home + "/r' is there":          "'~/r' is there",
+		"/elsewhere/x":                       "/elsewhere/x",
+	} {
+		if got := tildeIn(in); got != want {
+			t.Errorf("tildeIn(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestExpandHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for in, want := range map[string]string{
+		"~":       home,
+		"~/a":     filepath.Join(home, "a"),
+		"src":     filepath.Join(home, "src"),
+		"/abs/x/": "/abs/x",
+		"~a":      filepath.Join(home, "~a"),
+	} {
+		if got := ExpandHome(in); got != want {
+			t.Errorf("ExpandHome(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A used.json that does not read is kept aside, not written over.
+func TestABrokenUsedFileIsKept(t *testing.T) {
+	s, _ := cloneTest(t)
+	if err := os.WriteFile(s.UsedPath, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.addUsed("/a")
+	if b, err := os.ReadFile(s.UsedPath + ".broken"); err != nil || string(b) != "{not json" {
+		t.Fatalf("broken: %q %v", b, err)
+	}
+	if got := usedPaths(state.ReadUsed(s.UsedPath)); !slices.Equal(got, []string{"/a"}) {
+		t.Fatalf("used %q", got)
+	}
+	// a good file is never moved
+	s.addUsed("/b")
+	if b, _ := os.ReadFile(s.UsedPath + ".broken"); string(b) != "{not json" {
+		t.Fatalf("broken: %q", b)
 	}
 }

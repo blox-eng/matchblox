@@ -453,9 +453,13 @@ func TestLaunchArgvOfEachAgent(t *testing.T) {
 		{"agent", sample.CursorAgent, "go", []string{"agent", "--trust", "go"}},
 		{"cursor-agent", sample.CursorAgent, "", []string{"cursor-agent", "--trust"}},
 	} {
-		if got := launchArgv(c.bin, c.agent, "work", c.first); !slices.Equal(got, c.want) {
+		if got := launchArgv(c.bin, c.agent, "work", c.first, true); !slices.Equal(got, c.want) {
 			t.Errorf("%s %q: got %q, want %q", c.agent, c.first, got, c.want)
 		}
+	}
+	// a folder the builder did not choose: Cursor asks
+	if got, want := launchArgv("agent", sample.CursorAgent, "work", "go", false), []string{"agent", "go"}; !slices.Equal(got, want) {
+		t.Errorf("untrusted: got %q, want %q", got, want)
 	}
 }
 

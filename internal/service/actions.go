@@ -82,15 +82,30 @@ func (a *acts) end(key string, ran bool) {
 // hand rules are user-wide, so any session may call the CLI unprompted.
 const notTheBuilders = "only the stoker and the sessions it drives act from an agent's pane: this one is neither"
 
-// noClone refuses a clone act from the stoker or a session it drives
-// (R16): a clone is the builder's, through N.
-const noClone = "the stoker does not clone: N is yours"
+// noClone refuses a clone act from any agent's pane, the stoker's, a
+// session it drives or another (R16): a clone is the builder's, through N.
+const noClone = "a clone is the builder's: N clones, not an agent"
+
+// cloneAct is an act that plans, starts or stops a clone.
+func cloneAct(recID string) bool {
+	return recID == "clone:plan" || recID == "clone:start" || recID == "clone:stop"
+}
 
 func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	// A session the stoker drove speaks for the stoker: what it sends
 	// counts and drives, and it gives no go.
 	agent := s.agentsPane(a)
-	if !agent && !a.Console && (paneOf(a.RecID) != "" || a.RecID == NewSessionID || a.RecID == "clone:plan" || a.RecID == "clone:start") {
+	// A clone is a person's (R16): never from an agent's pane, whatever
+	// its hello said, as with scan:yes.
+	if cloneAct(a.RecID) || (a.RecID == NewSessionID && s.newClones(a.Text)) {
+		if agent {
+			return proto.Result{Err: noClone}
+		}
+		if _, ok := s.sessionAt(a.From); ok {
+			return proto.Result{Err: noClone}
+		}
+	}
+	if !agent && !a.Console && (paneOf(a.RecID) != "" || a.RecID == NewSessionID) {
 		if _, ok := s.sessionAt(a.From); ok {
 			return proto.Result{Err: notTheBuilders}
 		}

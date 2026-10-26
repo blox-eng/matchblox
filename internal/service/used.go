@@ -1,6 +1,11 @@
 package service
 
-import "github.com/blox-eng/matchblox/internal/state"
+import (
+	"fmt"
+	"os"
+
+	"github.com/blox-eng/matchblox/internal/state"
+)
 
 // loadUsed reads the record of where sessions started, so the first
 // snapshot carries it. It needs no scan consent: it is matchblox's own use.
@@ -25,7 +30,14 @@ func (s *Service) addUsed(paths ...string) {
 	s.usedGen++
 	s.mu.Unlock()
 	if s.UsedPath != "" {
-		_ = state.WriteUsed(s.UsedPath, u) // best effort: the list only ranks
+		// A file that does not read is kept aside, not written over; a
+		// write that fails goes to the service's log: the list only ranks.
+		if err := state.KeepBrokenUsed(s.UsedPath); err != nil {
+			fmt.Fprintln(os.Stderr, "matchblox: used.json:", err)
+		}
+		if err := state.WriteUsed(s.UsedPath, u); err != nil {
+			fmt.Fprintln(os.Stderr, "matchblox: used.json:", err)
+		}
 	}
 	s.usedMu.Unlock()
 	s.broadcast()
