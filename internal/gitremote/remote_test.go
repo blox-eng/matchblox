@@ -45,3 +45,65 @@ func TestSame(t *testing.T) {
 		t.Fatal("different repos seen as one")
 	}
 }
+
+// A repo named "", "." or ".." once ".git" is gone is no repo.
+func TestParseRefusesADotRepo(t *testing.T) {
+	for _, s := range []string{"o/...git", "gh:o/...git", "o/..git", "https://github.com/o/...git", "git@github.com:o/..git", "ssh://git@h/o/.git"} {
+		if r, ok := Parse(s, "https"); ok {
+			t.Errorf("Parse(%q) = %+v, want refused", s, r)
+		}
+	}
+}
+
+// A password in the URL is refused: a token never reaches git's argv,
+// .git/config or a snapshot.
+func TestParseRefusesAPassword(t *testing.T) {
+	for _, s := range []string{"https://u:tok@github.com/o/r", "https://:tok@github.com/o/r", "ssh://git:pw@h/o/r"} {
+		if r, ok := Parse(s, "https"); ok {
+			t.Errorf("Parse(%q) = %+v, want refused", s, r)
+		}
+	}
+	if Same("https://u:tok@github.com/o/r", "https://github.com/o/r") {
+		t.Error("a URL with a password is the same repo")
+	}
+}
+
+// Owner and repo ignore case only on the hosts that compare them so; a
+// self-hosted server on a case-sensitive disk can hold team/Repo and
+// team/repo as two repos. The hostname ignores case everywhere.
+func TestSameCaseByHost(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		same bool
+	}{
+		{"https://github.com/o/Repo", "git@github.com:o/repo.git", true},
+		{"https://github.com/O/r", "https://GitHub.com/o/r", true},
+		{"https://gitlab.com/Team/Repo", "git@gitlab.com:team/repo", true},
+		{"https://bitbucket.org/Team/Repo", "https://bitbucket.org/team/repo", true},
+		{"https://git.example.com/team/Repo", "https://git.example.com/team/repo", false},
+		{"https://git.example.com/Team/r", "https://git.example.com/team/r", false},
+		{"https://Git.Example.com/team/r", "git@git.example.com:team/r", true},
+	} {
+		if got := Same(c.a, c.b); got != c.same {
+			t.Errorf("Same(%q, %q) = %v, want %v", c.a, c.b, got, c.same)
+		}
+	}
+}
+
+func TestSamePort(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		same bool
+	}{
+		{"https://h:8443/o/r", "https://h:9443/o/r", false},
+		{"https://h:8443/o/r", "https://h/o/r", false},
+		{"https://h:443/o/r", "https://h/o/r", true},
+		{"ssh://git@h:22/o/r", "git@h:o/r", true},
+		{"ssh://git@h:2222/o/r", "git@h:o/r", false},
+		{"ssh://git@h:2222/o/r", "ssh://git@h:2222/o/r.git", true},
+	} {
+		if got := Same(c.a, c.b); got != c.same {
+			t.Errorf("Same(%q, %q) = %v, want %v", c.a, c.b, got, c.same)
+		}
+	}
+}

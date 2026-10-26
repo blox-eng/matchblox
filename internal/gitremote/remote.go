@@ -9,8 +9,9 @@ import (
 )
 
 // Remote is a git remote split into its parts. URL is what git clones.
+// Port is the URL's port when it is not the scheme's own.
 type Remote struct {
-	URL, Host, Owner, Repo string
+	URL, Host, Port, Owner, Repo string
 }
 
 // Slug is "owner/repo".
@@ -38,7 +39,7 @@ func Parse(s, protocol string) (Remote, bool) {
 		return Remote{}, false
 	}
 	r := Remote{Host: "github.com", Owner: m[1], Repo: strings.TrimSuffix(m[2], ".git")}
-	if r.Repo == "" {
+	if r.Repo == "" || dots(r.Repo) {
 		return Remote{}, false
 	}
 	if protocol == "ssh" {
@@ -49,23 +50,37 @@ func Parse(s, protocol string) (Remote, bool) {
 	return r, true
 }
 
-// Same reports whether two remote URLs name the same repo. Host and owner
-// ignore case; scheme, user, ".git" and a trailing "/" are ignored.
+// Same reports whether two remote URLs name the same repo. The hostname
+// ignores case; owner and repo ignore case only on the hosts in foldHosts,
+// which compare them so. Scheme, user, ".git", a trailing "/" and the
+// scheme's own port are ignored.
 func Same(a, b string) bool {
 	ra, oka := parseURL(strings.TrimSuffix(strings.TrimSpace(a), "/"))
 	rb, okb := parseURL(strings.TrimSuffix(strings.TrimSpace(b), "/"))
 	return oka && okb && key(ra) == key(rb)
 }
 
+// foldHosts compare owner and repo without case. Any other host may sit on
+// a case-sensitive disk that holds team/Repo and team/repo as two repos.
+var foldHosts = map[string]bool{"github.com": true, "gitlab.com": true, "bitbucket.org": true}
+
 func key(r Remote) string {
-	return strings.ToLower(r.Host) + "/" + strings.ToLower(r.Owner) + "/" + r.Repo
+	host, path := strings.ToLower(r.Host), r.Owner+"/"+r.Repo
+	if foldHosts[host] {
+		path = strings.ToLower(path)
+	}
+	return host + ":" + r.Port + "/" + path
 }
+
+// ownPort is each scheme's port: a URL that names it names none.
+var ownPort = map[string]string{"https": "443", "ssh": "22", "http": "80"}
 
 func dots(s string) bool { return s == "." || s == ".." }
 
-// parseURL reads the https://, ssh:// and git@host:path forms.
+// parseURL reads the https://, ssh:// and git@host:path forms. A password
+// in the URL is refused: a token goes nowhere through matchblox.
 func parseURL(s string) (Remote, bool) {
-	var host, path string
+	var host, port, path string
 	if strings.Contains(s, "://") {
 		u, err := url.Parse(s)
 		if err != nil || (u.Scheme != "https" && u.Scheme != "ssh") {
@@ -74,7 +89,13 @@ func parseURL(s string) (Remote, bool) {
 		if u.User != nil && (!part.MatchString(u.User.Username()) || strings.HasPrefix(u.User.Username(), "-")) {
 			return Remote{}, false
 		}
+		if _, set := u.User.Password(); set {
+			return Remote{}, false
+		}
 		host, path = u.Hostname(), strings.TrimPrefix(u.Path, "/")
+		if port = u.Port(); port == ownPort[u.Scheme] {
+			port = ""
+		}
 	} else if m := scp.FindStringSubmatch(s); m != nil {
 		host, path = m[1], m[2]
 	} else {
@@ -93,8 +114,8 @@ func parseURL(s string) (Remote, bool) {
 		}
 	}
 	repo := strings.TrimSuffix(segs[len(segs)-1], ".git")
-	if repo == "" {
+	if repo == "" || dots(repo) {
 		return Remote{}, false
 	}
-	return Remote{URL: s, Host: host, Owner: strings.Join(segs[:len(segs)-1], "/"), Repo: repo}, true
+	return Remote{URL: s, Host: host, Port: port, Owner: strings.Join(segs[:len(segs)-1], "/"), Repo: repo}, true
 }
