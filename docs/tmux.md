@@ -19,12 +19,17 @@ them with `tmux switch-client`, and answers them with `tmux send-keys`.
 
 ## The way back without config
 
-A jump to a host opens a tmux session of its own on your laptop. It brings
-its own way back, and it needs none of your tmux config:
+When the console runs in tmux, a jump to a host opens a tmux session of its
+own on your laptop. It brings its own way back, and it needs none of your
+tmux config:
 
 - Tap `◂ console` in the status line (tmux 3.4 or newer).
 - Press the home key on the phone.
-- Press your prefix twice, then `m` or `d`.
+- Press your prefix twice, then `m` or `d`. This needs the `send-prefix`
+  binding on your prefix key.
+
+Outside tmux, a jump takes the terminal. Press your prefix once, then `m`
+or `d`.
 
 Prefix `m` from any pane needs the way back that `matchblox setup` adds
 to your tmux config. See [Remote hosts](remote.md#jump-into-a-session).
