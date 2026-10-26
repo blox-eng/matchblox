@@ -11,12 +11,12 @@ func TestJumpRemoteToPane(t *testing.T) {
 	common := "tmux bind-key -T matchblox-jump-C-b C-b switch-client -T matchblox-jump-C-b-prefix ';'" +
 		" bind-key -T matchblox-jump-C-b-prefix d detach-client ';'" +
 		" bind-key -T matchblox-jump-C-b-prefix m detach-client ';'" +
-		" new-session -d -t %12 -s matchblox-jump-0a1b2c3d ';'" +
-		" set-option -t " + g + " destroy-unattached on ';'"
+		" new-session -d -t %12 -s matchblox-jump-0a1b2c3d ';'"
 	tail := " set-option -t " + g + " prefix None ';'" +
 		" set-option -t " + g + " key-table matchblox-jump-C-b ';'" +
 		" set-option -t " + g + " mouse off ';'" +
-		" select-window -t %12 ';' select-pane -t %12 ';'" +
+		" run-shell -C -t %12 'select-window -t =matchblox-jump-0a1b2c3d:#{window_id}' ';' select-pane -t %12 ';'" +
+		" set-option -t " + g + " destroy-unattached on ';'" +
 		" attach-session -t '=matchblox-jump-0a1b2c3d'"
 
 	if got, want := Line(j.Remote()), common+" set-option -t "+g+" status off ';'"+tail; got != want {
@@ -48,7 +48,7 @@ func TestJumpRemoteToDir(t *testing.T) {
 
 func TestJumpLocal(t *testing.T) {
 	const s = "'=matchblox-ws-1-0a1b2c3d:'"
-	wrap := `/bin/sh -c 'ssh "$@"; s=$?; [ $s = 0 ] || { printf "\nssh exited %s. Press Enter to go back.\n" "$s"; read _; }; exit 0' sh ssh x`
+	wrap := `/bin/sh -c '"$@"; s=$?; [ $s = 0 ] || { printf "\nssh exited %s. Press Enter to go back.\n" "$s"; read _; }; exit 0' sh ssh x`
 	want := "tmux new-session -d -s matchblox-ws-1-0a1b2c3d -- " + wrap + " ';'" +
 		" set-option -t " + s + " detach-on-destroy off ';'" +
 		" set-option -t " + s + " key-table matchblox-host ';'" +
@@ -74,8 +74,15 @@ func TestHostSessionName(t *testing.T) {
 		"me@build.example.com": "matchblox-me@build_example_com-0a1b2c3d",
 		"[fe80::1]":            "matchblox-[fe80__1]-0a1b2c3d",
 	} {
-		if got := HostSessionName(host, "0a1b2c3d"); got != want {
+		got := HostSessionName(host, "0a1b2c3d")
+		if got != want {
 			t.Errorf("HostSessionName(%q) = %q, want %q", host, got, want)
+		}
+		if !JumpSession(got) {
+			t.Errorf("JumpSession(%q) = false for host %q", got, host)
+		}
+		if j := (Jump{Host: host, Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d"}); !JumpAllowed(j) {
+			t.Errorf("JumpAllowed refuses host %q", host)
 		}
 	}
 }

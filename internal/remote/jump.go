@@ -25,6 +25,14 @@ type Jump struct {
 
 const defaultHome = "matchblox"
 
+// MinLocalTmux is the oldest tmux on this machine: the CI floor.
+const MinLocalTmux = "3.2"
+
+// MinHostTmux is the oldest tmux on a host. run-shell -C (a tmux command
+// with formats) is the newest feature a jump uses; the jump tests run on
+// 3.2 and later, and no older tmux was tried.
+const MinHostTmux = "3.2"
+
 var (
 	idRE     = regexp.MustCompile(`^[0-9a-f]{8}$`)
 	homeRE   = regexp.MustCompile(`^[A-Za-z0-9_@\[\]-]+$`)
@@ -121,7 +129,6 @@ func (j Jump) Remote() []string {
 	} else {
 		cmds = append(cmds, []string{"new-session", "-d", "-s", g, "-c", j.Dir})
 	}
-	cmds = append(cmds, setOption(g, "destroy-unattached", "on"))
 	if j.Outer {
 		cmds = append(cmds, setOption(g, "status", "off"))
 	} else {
@@ -132,10 +139,19 @@ func (j Jump) Remote() []string {
 		setOption(g, "key-table", table),
 		setOption(g, "mouse", "off"))
 	if j.Pane != "" {
-		// A pane id names its window; the window is selected in the
-		// session that has it. Real tmux decides if that is g (Task 2).
-		cmds = append(cmds, []string{"select-window", "-t", j.Pane}, []string{"select-pane", "-t", j.Pane})
+		// select-window -t %12 picks the session that has the pane, and
+		// that can be the agent's own: it would move its clients. The
+		// window id is the only target that names a window of g, so
+		// run-shell -C reads it from the pane and runs the command (a
+		// tmux command, no shell). select-pane moves no window.
+		cmds = append(cmds,
+			[]string{"run-shell", "-C", "-t", j.Pane, "select-window -t =" + g + ":#{window_id}"},
+			[]string{"select-pane", "-t", j.Pane})
 	}
+	// destroy-unattached goes last: run-shell lets the server run, and the
+	// server ends an unattached session that has the option (seen in the
+	// two-server test), before attach-session has a client for it.
+	cmds = append(cmds, setOption(g, "destroy-unattached", "on"))
 	return tmuxList(append(cmds, []string{"attach-session", "-t", "=" + g})...)
 }
 
@@ -146,7 +162,7 @@ func (j Jump) Remote() []string {
 func (j Jump) Local(ssh []string) []string {
 	s := HostSessionName(j.Host, j.ID)
 	back := "switch-client -t =" + j.home()
-	const wrap = `ssh "$@"; s=$?; [ $s = 0 ] || { printf "\nssh exited %s. Press Enter to go back.\n" "$s"; read _; }; exit 0`
+	const wrap = `"$@"; s=$?; [ $s = 0 ] || { printf "\nssh exited %s. Press Enter to go back.\n" "$s"; read _; }; exit 0`
 	return tmuxList(
 		append([]string{"new-session", "-d", "-s", s, "--", "/bin/sh", "-c", wrap, "sh"}, ssh...),
 		setOption(s, "detach-on-destroy", "off"),
