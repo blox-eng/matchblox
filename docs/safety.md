@@ -26,11 +26,24 @@ command.
   port. The service socket is in a directory that only you can open.
 - It sends no pane text to a model.
 - It reads no agent's login token, with one exception you turn on:
-  `[limits] cursor_usage = true` reads the token Cursor's CLI keeps in the
-  macOS Keychain (`cursor-access-token`), every 5 minutes while a Cursor
-  session runs, and sends it to Cursor's API only, for the plan usage
-  Cursor's own `/usage` shows. It keeps the token for that one call, and
-  never writes or shows it.
+  `[limits] cursor_usage = true` reads a Cursor login token every 5
+  minutes while a Cursor session runs. Only a missing login is read again
+  every 30 seconds: no Keychain item, no `auth.json` (or one half written), or no token in it. A
+  read that is denied or fails otherwise waits the normal 5 minutes. For
+  the default login, that is the token Cursor's CLI keeps in the macOS
+  Keychain (`cursor-access-token`), on macOS only. For a Cursor account, that is `accessToken` in
+  `<folder>/home/.cursor/auth.json`: this is not tested yet with a second
+  real sign-in. matchblox reads the token when a call is due and sends it
+  to Cursor's API only, for the plan usage Cursor's own `/usage` shows. It
+  drops the token after that call, and never writes or shows it.
+- It never types a password and never reads a sign-in code from a pane.
+  On a new account it presses only the keys of the agent's first screens.
+  You finish the sign-in. It never writes the default sign-in. That the
+  agents also leave the default sign-in as it was is not tested yet with a
+  second real sign-in.
+- A start or a switch on an account drops the agent's sign-in environment
+  (tokens and API keys, listed in [Agents](agents.md)), so the account's
+  own sign-in is used and not one the tmux server passes on.
 - A setup step that edits a file (`~/.claude/settings.json`,
   `~/.tmux.conf`) shows the exact change first and keeps a backup.
 - A remote host's stream uses its own key. That key can start only the

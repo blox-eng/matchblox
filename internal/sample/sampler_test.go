@@ -295,14 +295,18 @@ func TestNestedAgentFoldsIntoTopSession(t *testing.T) {
 	os.WriteFile(filepath.Join(root, "proc", "220", "stat"), []byte("220 (bash) S 200 1 1 0 -1 0 0 0 0 0 1 0 0 0 20 0 1 0 1000 1 1"), 0o644)
 	os.WriteFile(filepath.Join(root, "proc", "221", "stat"), []byte("221 (claude) S 220 1 1 0 -1 0 0 0 0 0 1 0 0 0 20 0 1 0 1000 1 1"), 0o644)
 	os.WriteFile(filepath.Join(root, "proc", "221", "environ"), []byte("TMUX_PANE=%1\x00"), 0o644)
+	snap := newFixtureSampler(root).Sample()
 	n := 0
-	for _, x := range newFixtureSampler(root).Sample().Sessions {
+	for _, x := range snap.Sessions {
 		if x.Pane == "%1" {
 			n++
 		}
 	}
 	if n != 1 {
 		t.Fatalf("pane %%1 has %d sessions, want 1", n)
+	}
+	if len(snap.Children) != 1 || snap.Children[0].PID != 221 || snap.Children[0].Parent.PID != 200 {
+		t.Fatalf("children = %+v, want 221 under 200", snap.Children)
 	}
 }
 
@@ -347,6 +351,15 @@ func TestHuman(t *testing.T) {
 func TestParsePanesSkipsJunk(t *testing.T) {
 	got := ParsePanes([]byte("%1\ta:1.1\tw\t10\tzsh\t/x\n\ngarbage\n"))
 	if len(got) != 1 || got[0].PID != 10 || got[0].Path != "/x" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+// A tap on the phone gives it a session grouped with the pane's: tmux then
+// lists the pane once for each session, and it is still one pane.
+func TestParsePanesListsAGroupedPaneOnce(t *testing.T) {
+	got := ParsePanes([]byte("%1\twork:1.1\tw\t10\tclaude\t/x\t/tmp/s\t7\n%1\twork-1:1.1\tw\t10\tclaude\t/x\t/tmp/s\t7\n%1\tother:1.1\tw\t20\tzsh\t/y\t/tmp/t\t8\n"))
+	if len(got) != 2 || got[0].Target != "work:1.1" || got[1].Server != "8" {
 		t.Fatalf("got %+v", got)
 	}
 }

@@ -65,8 +65,16 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   digit answers; an agent at work takes a message.
 - **Switch the agent, keep the seat**: `A` runs another agent in the same
   pane (Claude Code, Codex, OpenCode or Cursor) with the session's name,
-  directory and pull request. The new agent gets a handoff to read the
-  working tree and carry on. `matchblox switch` does it from the shell.
+  directory and pull request, on the account you last started that agent
+  on, else on `default`. The new agent gets a handoff to read the working tree and carry on.
+  `matchblox switch` does it from the shell.
+- **More than one sign-in**: `N` starts Claude Code, Codex or Cursor on an
+  account, a folder beside your default sign-in, or makes a new one: like
+  your default, an empty one, or a copy of it that is cloned and its own,
+  and a start says what stays shared with the default. You
+  finish the sign-in in the session. `N` opens on the agent and the
+  account you last started. Cursor accounts run on macOS only for now.
+  [Accounts](https://docs.matchblox.com/agents/#accounts).
 - **Start where you work**: `N` starts an agent in a tmux session of its
   own. Its `where` offers your repositories: after one yes, matchblox finds
   the Git checkouts in your home folder, on this host only, and keeps the
@@ -76,7 +84,9 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   starts the agent there.
 - **Ships**: every pull request your sessions drive, on one track from CI
   to live, said in words. One that waits for you merges after a typed `y`.
-- **The dock**: what `/usage` says for each account, in percentages; the
+- **The dock**: what `/usage` says for each account, in percentages, each
+  named by its provider (`✻ Claude Team`, `❋ OpenAI Team`), with its logo
+  in kitty and Ghostty; the
   machine; and the stoker. Press `n` before you sleep: each session that
   fills its context compacts itself and leaves one line on how to continue.
 - **Orders for the stoker**: matchblox starts the stoker agent you choose
@@ -103,6 +113,7 @@ More in [The console](https://docs.matchblox.com/console/).
 | `Enter` | The safe action: go to the agent's pane. |
 | `a` | Answers the selected agent, or sends it a message. |
 | `x` | The destructive action. It runs only after a typed `y`. |
+| `N` | Starts a new session: where, the agent, its account and a first message (none on a new account). |
 | `A` | Switches the selected session to another agent in the same pane. |
 | `1-7` | Opens a tab: Sessions, Ships, Machine, Git, History, Panes, Stoker. |
 | `u` | Cycles the dock of a phone: usage, the machine, the stoker. |
@@ -132,7 +143,9 @@ and [SECURITY.md](SECURITY.md).
 
 matchblox works without a config. The first run writes
 `~/.config/matchblox/config.toml` with goals for this machine and the agents
-it finds. Every key is in [config.example.toml](config.example.toml) and on
+it finds. Every known agent (Claude Code, Codex, OpenCode, Cursor, Gemini,
+aider, crush, qwen) is a session wherever it is installed; `agents` adds
+others. Every key is in [config.example.toml](config.example.toml) and on
 [Config](https://docs.matchblox.com/config/).
 
 ## Built on tmux

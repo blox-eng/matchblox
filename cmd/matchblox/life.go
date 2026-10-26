@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/gitremote"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -89,6 +90,18 @@ func switchAct(doc state.Doc, words []string, o switchOpts, from string) (proto.
 	if o.handoff != nil {
 		sw.Handoff = *o.handoff
 	}
+	// The account the console would show: the last one if it is still
+	// listed, else default.
+	agent := o.agent
+	if agent == "cursor" {
+		agent = sample.CursorAgent
+	}
+	if list := doc.Accounts[agent]; len(list) > 0 {
+		sw.Account = "default"
+		if a := doc.LastAccount[agent]; a != "default" && slices.Contains(list, a) {
+			sw.Account = a
+		}
+	}
 	b, err := json.Marshal(sw)
 	if err != nil {
 		return proto.Act{}, err
@@ -97,11 +110,16 @@ func switchAct(doc state.Doc, words []string, o switchOpts, from string) (proto.
 }
 
 // newOpts are matchblox new's flags.
-type newOpts struct{ where, agent, branch, name string }
+type newOpts struct {
+	where, agent, branch, name string
+	account, setup             string
+	newAccount                 bool
+}
 
 // newSessionAct is the act of matchblox new: an agent (claude by default)
 // in a tmux session of its own, in --where (here by default), with the
-// words as its first message.
+// words as its first message. --account picks an account of the agent;
+// --new-account makes it, set up as --setup says (like-default by default).
 func newSessionAct(words []string, o newOpts, from, here string) (proto.Act, error) {
 	n := proto.NewSession{Where: o.where, Agent: o.agent, Branch: o.branch, Name: o.name, First: strings.Join(words, " ")}
 	switch {
@@ -115,6 +133,27 @@ func newSessionAct(words []string, o newOpts, from, here string) (proto.Act, err
 	if n.Agent == "" {
 		n.Agent = "claude"
 	}
+	if o.newAccount && o.account == "" {
+		return proto.Act{}, errors.New("new: --new-account needs --account <name>")
+	}
+	if o.newAccount && len(words) > 0 {
+		return proto.Act{}, errors.New("new: a new account starts without a first message")
+	}
+	if o.setup != "" && !o.newAccount {
+		return proto.Act{}, errors.New("new: --setup needs --new-account")
+	}
+	if o.newAccount {
+		n.Setup = o.setup
+		if n.Setup == "" {
+			n.Setup = string(accounts.LikeDefault)
+		}
+		switch accounts.Mode(n.Setup) {
+		case accounts.LikeDefault, accounts.Copy, accounts.Empty:
+		default:
+			return proto.Act{}, fmt.Errorf("new: --setup is like-default, copy or empty, not %q", o.setup)
+		}
+	}
+	n.Account, n.NewAccount = o.account, o.newAccount
 	b, err := json.Marshal(n)
 	if err != nil {
 		return proto.Act{}, err
@@ -166,9 +205,10 @@ func cliNew(words []string, o newOpts, w io.Writer, path string) error {
 	if err != nil {
 		return err
 	}
-	wait := actWait
+	home, _ := os.UserHomeDir()
+	wait := newWait(o, home)
 	if isCloneURL(o.where) {
-		wait = cloneWait
+		wait = max(wait, cloneWait)
 		if r, ok := gitremote.Parse(o.where, "https"); ok {
 			if _, err := fmt.Fprintf(w, "cloning %s…\n", r.Slug()); err != nil {
 				return err
@@ -187,10 +227,80 @@ func cliNew(words []string, o newOpts, w io.Writer, path string) error {
 			return err
 		}
 	}
-	if err := reportResult(w, res); err != nil {
+	if err := newOutcome(w, res, o.newAccount); err != nil {
+		switch {
+		case res.Err != "" && !res.Refused:
+			return fmt.Errorf("new: failed: %w", err)
+		case res.Err == "" && len(res.Ran) > 0:
+			// A guard stopped a later step: what ran stays.
+			return fmt.Errorf("new: stopped after %s: %w", strings.Join(res.Ran[len(res.Ran)-1], " "), err)
+		}
 		return fmt.Errorf("new: refused: %w", err)
 	}
 	return nil
+}
+
+// newWait is how long matchblox new waits for its result: a start that may
+// copy the default (a new account, or a copy account, which goes on with a
+// copy that did not end) waits the copy's time limit on top of an act's.
+func newWait(o newOpts, home string) time.Duration {
+	agent := o.agent
+	if agent == "" {
+		agent = "claude"
+	}
+	// A hand-made folder (~/… or a path) is never a copy account.
+	named := o.account != "" && !strings.HasPrefix(o.account, "~") && !strings.ContainsRune(o.account, filepath.Separator)
+	copies := o.newAccount || named && accounts.SetupOf(accounts.Folder(home, agent, o.account)) == accounts.Copy
+	if copies {
+		return accounts.CopyLimit.Time + actWait
+	}
+	return actWait
+}
+
+// switchWait is how long matchblox switch waits for its result: a switch
+// starts agent on its last account, and a copy account may go on with its
+// copy, as at a start (newWait).
+func switchWait(doc state.Doc, agent, home string) time.Duration {
+	if agent == "cursor" {
+		agent = sample.CursorAgent
+	}
+	return newWait(newOpts{agent: agent, account: doc.LastAccount[agent]}, home)
+}
+
+// newOutcome is reportResult for a new session: a start with notes on what
+// its account shared or skipped ran, and the notes follow its steps. A new
+// account (signIn) then names the session to sign in in.
+func newOutcome(w io.Writer, res proto.Result, signIn bool) error {
+	notes, ran := proto.StartNotes(res)
+	if ran {
+		res.Skipped = nil
+	}
+	if err := reportResult(w, res); err != nil {
+		return err
+	}
+	for _, note := range notes {
+		if _, err := fmt.Fprintln(w, note); err != nil {
+			return err
+		}
+	}
+	if !signIn || len(res.Ran) == 0 {
+		return nil
+	}
+	_, err := fmt.Fprintf(w, "sign in in %s\n", sessionOf(res.Ran))
+	return err
+}
+
+// sessionOf is the name of the tmux session the steps of a new session
+// made: the -s of its new-session.
+func sessionOf(ran [][]string) string {
+	for _, argv := range slices.Backward(ran) {
+		if i := slices.Index(argv, "new-session"); i >= 0 {
+			if j := slices.Index(argv[i:], "-s"); j >= 0 && i+j+1 < len(argv) {
+				return argv[i+j+1]
+			}
+		}
+	}
+	return "the session"
 }
 
 // cliSwitch switches the session's agent and, when jump is not nil, takes
@@ -204,12 +314,22 @@ func cliSwitch(words []string, o switchOpts, w io.Writer, path string, jump func
 	if err != nil {
 		return err
 	}
-	res, err := doAct(path, a)
+	home, _ := os.UserHomeDir()
+	res, err := doActFor(path, a, switchWait(doc, o.agent, home))
+	if err == nil && res.Err != "" && !res.Refused {
+		return fmt.Errorf("switch %s: failed: %s", words[0], res.Err)
+	}
 	if err != nil || res.Err != "" || len(res.Ran) == 0 {
 		return handOutcome(w, "switch", words[0], res, err)
 	}
 	if _, err := fmt.Fprintf(w, "switched %s to %s\n", words[0], o.agent); err != nil {
 		return err
+	}
+	notes, _ := proto.StartNotes(res)
+	for _, note := range notes {
+		if _, err := fmt.Fprintln(w, note); err != nil {
+			return err
+		}
 	}
 	if jump == nil {
 		return nil

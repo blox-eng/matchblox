@@ -5,6 +5,8 @@ package config
 import (
 	"errors"
 	"io/fs"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -38,6 +40,14 @@ type Config struct {
 	Stoker        Stoker   `toml:"stoker"`
 	Limits        Limits   `toml:"limits"`
 	Ships         Ships    `toml:"ships"`
+	Push          Push     `toml:"push"`
+}
+
+// Push sends the buzz and the island to the phones through the relay.
+type Push struct {
+	Relay string `toml:"relay"` // the relay's base URL
+	// Off: no sender, and the host never opens a connection to the relay.
+	Off bool `toml:"off"`
 }
 
 // Ships follows the pull requests sessions drive through CI to live.
@@ -51,8 +61,10 @@ type Ships struct {
 type Limits struct {
 	QuietHours string   `toml:"quiet_hours"` // "23:00-08:00": hours you do not usually work
 	QuietDays  []string `toml:"quiet_days"`  // ["Sat", "Sun"]
-	// CursorUsage reads Cursor's plan usage from Cursor's API, with the
-	// login token Cursor's CLI keeps in the macOS Keychain. Off by default.
+	// CursorUsage reads Cursor's plan usage from Cursor's API. The token of
+	// the default login comes from the macOS Keychain; the token of a Cursor
+	// account comes from its auth.json. Cursor accounts run on macOS only for
+	// now. Off by default.
 	CursorUsage bool `toml:"cursor_usage"`
 	// Quiet is QuietHours and QuietDays, read by Load.
 	Quiet limits.Quiet `toml:"-"`
@@ -169,6 +181,7 @@ func Default() Config {
 		Git:    Git{Interval: Duration{5 * time.Minute}, Remote: "origin", CloneRoot: "~/src"},
 		Stoker: Stoker{NightEnds: "07:00", MaxSteps: 60, Agent: "claude"},
 		Limits: Limits{QuietHours: "23:00-08:00", QuietDays: []string{"Sat", "Sun"}, Quiet: defaultQuiet},
+		Push:   Push{Relay: "https://matchblox.sh"},
 	}
 }
 
@@ -198,6 +211,9 @@ func Load(path string) (Config, error) {
 	if c.Limits.Quiet, err = limits.ParseQuiet(c.Limits.QuietHours, c.Limits.QuietDays); err != nil {
 		return c, errors.New("limits.quiet_hours or quiet_days: " + err.Error())
 	}
+	if !c.Push.Off && !safeRelay(c.Push.Relay) {
+		return c, errors.New("push.relay: " + c.Push.Relay + " is not https (plain http only to this machine)")
+	}
 	for i := range c.Groups {
 		re, err := regexp.Compile(c.Groups[i].Container)
 		if err != nil {
@@ -206,4 +222,28 @@ func Load(path string) (Config, error) {
 		c.Groups[i].re = re
 	}
 	return c, nil
+}
+
+// safeRelay says whether the relay may get device tokens and grants: https,
+// or plain http to a loopback address, as a relay on this machine is. Empty is
+// the default relay.
+func safeRelay(relay string) bool {
+	if relay == "" {
+		return true
+	}
+	u, err := url.Parse(relay)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	switch u.Scheme {
+	case "https":
+		return true
+	case "http":
+		if u.Hostname() == "localhost" {
+			return true
+		}
+		ip := net.ParseIP(u.Hostname())
+		return ip != nil && ip.IsLoopback()
+	}
+	return false
 }

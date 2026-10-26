@@ -20,6 +20,19 @@ func TestParseStatCommWithSpacesAndParens(t *testing.T) {
 	}
 }
 
+// TestStatReadsSessionAndTTY: a process's session id and controlling tty
+// come from stat fields 6 and 7; 0 is no tty.
+func TestStatReadsSessionAndTTY(t *testing.T) {
+	p, ok := parseStat(9, []byte("9 (codex) S 8 9 9 34817 9 0 0 0 0 0 1 0 0 0 20 0 1 0 555 1 1"), 4096)
+	if !ok || p.SID != 9 || p.TTY != 34817 {
+		t.Fatalf("got %+v", p)
+	}
+	p, _ = parseStat(10, []byte("10 (claude) S 1 10 10 0 -1 0 0 0 0 0 1 0 0 0 20 0 1 0 556 1 1"), 4096)
+	if p.SID != 10 || p.TTY != 0 {
+		t.Fatalf("detached: got %+v", p)
+	}
+}
+
 func TestProcs(t *testing.T) {
 	procs, err := FS{Root: fixture, PageSize: FixturePage}.Procs()
 	if err != nil {

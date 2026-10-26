@@ -2,7 +2,7 @@
 # Every key is optional; the values below are the defaults unless noted.
 
 interval = "2s"          # cheap counters and tmux panes; processes every 5x and at once for a new pane; git every git.interval
-agents = ["claude"]      # agent commands (default ["claude"]); the first run writes the ones it finds, e.g. ["claude", "codex", "opencode"]. Add any other by name
+agents = ["claude"]      # agent commands that are sessions besides the known ones (claude, codex, opencode, gemini, cursor-agent, aider, crush, qwen); the first run writes the ones it finds. Add any other by name
 latency_target = ""      # host:port to time a TCP connect against every 10 s, e.g. "example.com:443"
 
 [sessions]
@@ -51,7 +51,7 @@ source = ""              # another CSV with a ts column to chart alongside
 
 [stoker]                 # f and n: compact full idle sessions while you are away
 night_ends = "07:00"     # n runs the stoker until this time, then turns it off
-agent = "claude"         # the stoker agent matchblox starts on its own tmux server (or codex, opencode)
+agent = "claude"         # the stoker agent matchblox starts on its own tmux server (or codex, opencode, cursor-agent)
 max_steps = 60           # the most messages that agent sends in one run
 
 [ships]                  # pull requests sessions drive, through CI to live
@@ -61,7 +61,11 @@ max_steps = 60           # the most messages that agent sends in one run
 [limits]                 # the 5-hour window and the week of each account
 quiet_hours = "23:00-08:00"  # hours you do not usually work, in this machine's time zone: the forecast counts them as a tenth
 quiet_days = ["Sat", "Sun"]  # days you do not usually work
-cursor_usage = false     # true: read Cursor's plan usage from its API with the login token Cursor's CLI keeps in the macOS Keychain
+cursor_usage = false     # true: read Cursor's plan usage from its API; the default login's token comes from the macOS Keychain (macOS only), a Cursor account's from its auth.json (Cursor accounts run on macOS only for now)
+
+[push]                   # the buzz and the island on the phones that registered
+relay = "https://matchblox.sh"  # the relay that hands them to Apple; it stores nothing
+off = false              # true: no buzz, no island, and no connection to the relay
 
 [hooks]
 alert = []               # argv run on each new alert, title and evidence appended,

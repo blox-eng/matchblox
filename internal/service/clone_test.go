@@ -648,9 +648,10 @@ func TestNewSessionURLChecksBeforeItClones(t *testing.T) {
 		"opencode is not installed here":                           {Where: "o/r", Agent: "opencode"},
 		"a first message does not start with -":                    {Where: "o/r", Agent: "claude", First: "--x"},
 		"a tmux session is named dev already: choose another name": {Where: "o/r", Agent: "claude", Name: "dev"},
+		"opencode has no accounts":                                 {Where: "o/r", Agent: "opencode", Account: "work"},
 	} {
-		if res := s.act(t.Context(), newAct(t, n)); res.Err != why {
-			t.Errorf("want %q, got %q", why, res.Err)
+		if res := s.act(t.Context(), newAct(t, n)); res.Err != why || !res.Refused {
+			t.Errorf("want %q refused, got %+v", why, res)
 		}
 	}
 	if exists(s.CloneRoot) {

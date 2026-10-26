@@ -31,8 +31,16 @@ plan your agents have used, the machine, and [the stoker](stoker.md):
 
 - Each account starts with its provider: its logo in kitty or Ghostty
   (through tmux too) while every terminal on the console's session can
-  draw it, else its mark. Then its plan, or its email when the provider
-  has two accounts.
+  draw it, else its mark. Then the provider's name and the plan
+  (`✻ Claude Team`, `❋ OpenAI Team`), or the email's name when the
+  provider has two accounts. A dock under 50 columns leaves out the plan,
+  and its bars shrink so the reset times stay whole.
+- A phone or any other terminal that attaches to the console's session
+  brings back the marks within about 2 seconds. `NO_COLOR` and tmux 3.2
+  or older show the marks. The console lets images through its own pane
+  only (`allow-passthrough`), and gives the pane its own setting back when
+  it ends. The logos come from
+  [lobe-icons](https://github.com/lobehub/lobe-icons) (MIT).
 - Each account shows its windows as `/usage` does: `5h` is this 5-hour
   window, `wk` this week, each with the percent used and when it resets.
   A bar turns `warn` from 60% and `neg` from 90%.
@@ -49,6 +57,16 @@ plan your agents have used, the machine, and [the stoker](stoker.md):
   stoker takes the dock until you switch.
 - Wider, two panels side by side: usage and the machine, or usage and the
   stoker while it claims the dock. A wide desk shows all three.
+- An account folder shows by its name (`work`), the default sign-in by
+  its plan or email. A Claude Code account that is not signed in yet says
+  `not measured · signing in: the limits show once the account is signed
+  in`.
+- With `cursor_usage` on, a Cursor line with no figures yet says why:
+  `signing in: …` (a new account), `no Cursor login token read yet` (no
+  login; matchblox reads it again every 30 s), `Cursor's login token could
+  not be read` (the read was denied or failed; read again after 5
+  minutes), or `Cursor's API has not answered yet` (the token is read, or
+  the call gave no figures yet).
 - When the body leaves rows free, the dock grows into them: each account's
   forecast and resets, the top processes, the stoker's recent steps. The
   detail beside the list shows more of what the agent said.
@@ -65,8 +83,10 @@ Where the figures come from:
 | Agent | What to do |
 |---|---|
 | Claude Code | Open the door "Show your limits" in Sessions. It adds matchblox to your status line; a status line you have keeps showing what it showed. |
-| Codex | Nothing: Codex reports its limits after each turn. A plan with a monthly limit shows `mo`. |
+| Codex | Nothing: Codex reports its limits after each turn, on Linux and macOS. A plan with a monthly limit shows `mo`. |
+| Cursor | Set `cursor_usage = true` under `[limits]` (macOS). See [Agents](agents.md#the-account). |
 | OpenCode | It shows "not measured": OpenCode keeps no limits. |
+| Cursor | Set `cursor_usage = true` under `[limits]` in the [config](config.md). Cursor shows `mo`, the share of the month's included usage. See [Agents](agents.md#the-account). |
 
 A line that says `as of 14:02` has not changed for an hour: the account's
 agents have not worked since. Each reading is kept for five weeks in
@@ -77,7 +97,9 @@ agents have not worked since. Each reading is kept for five weeks in
 
 `matchblox sessions`, `matchblox ships` and `matchblox usage` print one line
 a row; with `--json` they print JSON. `matchblox ships --json` and
-`matchblox usage --json` print the ships and the accounts' limits. They need
+`matchblox usage --json` print the ships and the accounts' limits.
+`matchblox sessions` says "sign in by hand" on the line of a new account that matchblox gave up signing in. `matchblox usage` names an account folder by its name; `--json` gives its
+folder as `dir`. They need
 `matchblox serve` running (or a console), and else say so. Each row of
 `matchblox sessions --json` has:
 
@@ -92,7 +114,9 @@ a row; with `--json` they print JSON. `matchblox ships --json` and
 | `stoker` | It is the stoker agent, on matchblox's own tmux server. Sessions leaves it out. |
 | `context_pct` | How full its context is, in percent. |
 | `plan_pct` | The progress bar it drew in its last reply, or null. |
-| `account` | The account its plan runs on. |
+| `account` | The account its plan runs on: the email and plan, or `API key`. Empty when matchblox reads none, as on an account not signed in yet. |
+| `account_dir` | The account folder it runs on, or empty on the default sign-in. See [Agents](agents.md#accounts). |
+| `signing_in` | It runs on an account folder that is not signed in yet. |
 | `ship` | The pull request it drives (`repo`, `number`, `stage`, `kind`, `note`), or null. |
 
 `matchblox peek api` prints what the session said last and what it asks,
@@ -125,10 +149,10 @@ took it and the answer never came.
 | `matchblox compact api` | Types `/compact` into a Claude Code session at rest that waits for nothing and was not compacted in the last 30 minutes. |
 | `matchblox hold api --why "not the priority"` | Queues "finish this step, then stop and wait" and holds the session: nothing else types into it. |
 | `matchblox release api` | Lets a session the stoker held go, and tells it "carry on". A session you parked stays parked: only `z` at a console lets it go (`parked by you: only z lets it go`). |
-| `matchblox new "fix the flaky test"` | Starts Claude Code here, in a tmux session of its own named after the directory, with the words as its first message. `--where <path>` starts it elsewhere (`--where <url>` clones a git URL, `https://…`, `git@host:o/r` or `gh:o/r`, into `[git] clone_root`, or uses the clone you have, then starts; it waits up to 30 minutes. A bare `o/r` is a folder here, as any path), `--agent codex` (or `opencode`, `cursor-agent`) starts another agent, `--branch <b>` first adds a worktree for a new branch beside the repository (`<repo>-<b>`, from origin's default branch, tracking nothing), and `--name <name>` names it. The tmux session, its window and Claude Code's own name are that one name. A first message that starts with a dash is refused: the agent would read it as a flag. |
+| `matchblox new "fix the flaky test"` | Starts Claude Code here, in a tmux session of its own named after the directory, with the words as its first message. `--where <path>` starts it elsewhere (`--where <url>` clones a git URL, `https://…`, `git@host:o/r` or `gh:o/r`, into `[git] clone_root`, or uses the clone you have, then starts; it waits up to 30 minutes. A bare `o/r` is a folder here, as any path), `--agent codex` (or `opencode`, `cursor-agent`) starts another agent, `--branch <b>` first adds a worktree for a new branch beside the repository (`<repo>-<b>`, from origin's default branch, tracking nothing), `--name <name>` names it. `--account <name>` starts it on an account of that agent. `--new-account` makes that account first. `--setup like-default`, `copy` or `empty` picks its setup, and the default is `like-default`. A new account starts without a first message, and the command prints `sign in in <session>`. It waits as long as a copy of the default can take, and says "refused" when matchblox refused the start, "failed" when it ran and failed, and "stopped after" the step that ran when a guard stopped the rest. A start on an account that another start or switch is busy with is refused at once. The tmux session, its window and Claude Code's own name are that one name. A first message that starts with a dash is refused: the agent would read it as a flag. |
 | `matchblox rename api ships-flake` | Names the session, its tmux window, its tmux session when it is that session's one window, and Claude Code (`/rename`), all alike. A Claude Code session that works takes its name when it rests (`api renames when it rests`). A name is one word of letters, digits, dashes and underscores, and no other tmux session may have it. |
 | `matchblox kill api` | Ends the session: `tmux kill-pane`, then a `TERM` to its agent if it still runs. It is refused while the session works or waits for you: `--anyway` kills it all the same. Its worktree and its transcript stay. |
-| `matchblox switch api --agent codex` | Ends the session's agent and starts another in the same pane: same name, directory, park and ship. The new agent's first message is a handoff line, `Read the working tree and any local notes. Summarise progress so far, then continue the work from here.`; `--handoff "<line>"` gives another, `--handoff ''` none. It is refused while the session works or waits for you: `--anyway` switches it all the same. Inside tmux, your client jumps to the pane when the switch has run. |
+| `matchblox switch api --agent codex` | Ends the session's agent and starts another in the same pane: same name, directory, park and ship. The new agent starts on the account you last started it on, else on `default`. The new agent's first message is a handoff line, `Read the working tree and any local notes. Summarise progress so far, then continue the work from here.`; `--handoff "<line>"` gives another, `--handoff ''` none. It is refused while the session works or waits for you: `--anyway` switches it all the same. Inside tmux, your client jumps to the pane when the switch has run. |
 | `matchblox scan` | Finds the Git repositories in your home folder (the folder itself, `~/dev`, `~/src`, `~/code`, `~/projects`, `~/work`, and `[git] repos` and `scan_roots`), four folders deep, so N's `where` offers them. They never show in the Git tab. Running it is your yes: the service scans again every 30 minutes. `matchblox scan ~/w ~/oss` scans those folders instead of the usual ones; `matchblox scan off` stops the scans and forgets the list. It reads files only, runs no git and calls nothing on the network; the list stays on this host and the devices paired with it. On a Mac it skips the folders macOS guards unless you name them, and it skips network folders below a root; it waits as long as a scan can take, then prints what it found, each folder it skipped with its reason, and any error. An agent's pane cannot say yes for you. |
 
 An act typed in a pane of the stoker's tmux session is the stoker's, and so
@@ -188,6 +212,11 @@ console remembers both.
   agent.
 - **HELD**, last: sessions you parked with `z` (`⏸ parked by you`) or the
   stoker holds (`⏸ held by stoker · why`). Nothing types into them.
+
+A `codex exec` or `claude -p` that an agent starts shows under that session
+with `├─` and `└─`, in `matchblox sessions` too. The console shows it and
+never acts on it. A link is drawn only when `/proc` proves it. A child
+never changes how its parent reads: the child's own row shows its work.
 
 A session at rest that does not ask you says why where its state word
 would be, in a few words: `#4556 waits your merge`, `CI red · lint`,
@@ -259,7 +288,11 @@ pane: its peek shows the prompt, and `Enter` goes there.
 - A new session shows in Sessions at the next sample, about 2 seconds
   after it starts. A session from `N` or `matchblox new` shows at once.
 - The account is the provider's mark, then the email and plan, or
-  "API key": `✻` Anthropic, `❋` OpenAI, `▣` OpenCode.
+  "API key": `✻` Anthropic, `❋` OpenAI, `⬢` Cursor, `▣` OpenCode.
+- A session on an account folder shows the account's name after its own
+  name, in muted text (`api work`). Until the account is signed in, the
+  row says `signing in`, or `sign in by hand`. An ask or a wait shows over
+  it. See [Agents](agents.md#accounts).
 - An agent can draw a progress bar in its last reply:
   `Progress [████░░░░] <step>`. The console shows it as `▰▰▰▱▱ 75%`.
 - `s` sorts by another column (`newest` is the one with the least idle

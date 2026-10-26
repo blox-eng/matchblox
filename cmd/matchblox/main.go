@@ -22,6 +22,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -89,6 +90,9 @@ func main() {
 	}
 	if err := run(os.Args[1:]); err != nil {
 		pprof.StopCPUProfile()
+		if errors.Is(err, errRestart) {
+			os.Exit(exitRestart)
+		}
 		if errors.Is(err, errShown) {
 			os.Exit(1)
 		}
@@ -124,7 +128,14 @@ func run(args []string) error {
 			defer stop()
 			return pairCmd(ctx, args[1:], os.Stdout, time.Now)
 		case "devices":
-			return devicesCmd(args[1:], home(), os.Stdout)
+			var pv pushView
+			if len(args) == 1 { // the list; rm needs no sender
+				cfg, _ := config.Load(config.Path()) // a broken config: the default, push on
+				pv = livePushView(cfg.Push, defaultHostKey, transport.SocketPath())
+			}
+			return devicesCmd(args[1:], home(), pv, os.Stdout)
+		case "push":
+			return pushCmd(args[1:])
 		case "connect":
 			return liveConnect(args[1:])
 		}
@@ -203,7 +214,7 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		return cliNew(words, newOpts{where: *o.where, agent: *o.agent, branch: *o.branch, name: *o.name}, os.Stdout, transport.SocketPath())
+		return cliNew(words, newOpts{where: *o.where, agent: *o.agent, branch: *o.branch, name: *o.name, account: *o.account, setup: *o.setup, newAccount: *o.newAccount}, os.Stdout, transport.SocketPath())
 	case "scan":
 		words, err := positionals(fl, args)
 		if err != nil {
@@ -268,7 +279,7 @@ func run(args []string) error {
 		if *stdio {
 			return serveStdio(path, os.Stdin, os.Stdout)
 		}
-		return serve(path, newService(cfg, *root))
+		return serve(path, func() *service.Service { return newService(cfg, *root) })
 	case "status":
 		return status(os.Stdout, path, cfg, *root, *text)
 	}
@@ -293,6 +304,8 @@ type flags struct {
 	anyway                *bool
 	where, agent, branch  *string
 	name, handoff         *string
+	account, setup        *string
+	newAccount            *bool
 }
 
 // usageText heads --help: every command, one line each, then the flags.
@@ -317,7 +330,7 @@ Commands:
   matchblox compact <who>          compact a Claude Code session at rest
   matchblox hold <who> --why "…"   finish this step, then stop and wait
   matchblox release <who>          let a held session carry on
-  matchblox new ["<first message>"]  start an agent in a tmux session of its own (--where, --agent, --branch, --name)
+  matchblox new ["<first message>"]  start an agent in a tmux session of its own (--where, --agent, --branch, --name, --account)
   matchblox rename <who> <name>    name a session, its tmux session and its agent alike
   matchblox kill <who>             end a session: its agent and its pane (--anyway while it works)
   matchblox switch <who> --agent <name>  run another agent in a session's pane (--handoff, --anyway while it works)
@@ -338,30 +351,33 @@ func newFlags() (*flag.FlagSet, flags) {
 		fl.PrintDefaults()
 	}
 	return fl, flags{
-		cfgPath:  fl.String("config", config.Path(), "machine goals (TOML); a missing file means defaults"),
-		interval: fl.Duration("interval", 0, "sampling interval (default from config, else 2s)"),
-		root:     fl.String("fixtures", "", "read proc/, sys/, home/ and tmux-panes.txt from this directory instead of the live machine"),
-		text:     fl.Bool("text", false, "status: print a summary instead of JSON"),
-		stdio:    fl.Bool("stdio", false, "serve: speak on stdin and stdout, joined to the local service"),
-		json:     fl.Bool("json", false, "sessions, ships, usage, peek: print JSON instead of text"),
-		pick:     fl.Int("pick", 0, "send: answer the question the session asks with this option (from 1)"),
-		lines:    fl.Int("lines", 20, "peek: the last lines of what the session said (0: all)"),
-		why:      fl.String("why", "", "hold, stoker when … hold: why the session is held"),
-		state:    fl.String("state", "", "stoker step: doing, done, failed or waits"),
-		needs:    fl.String("needs", "", "stoker step: the go a waiting step needs from you (merge:#<n>, release, deploy); none for a step that waits on an event"),
-		rule:     fl.String("rule", "", "stoker step 0: the standing rule the step is for"),
-		ship:     fl.Int("ship", 0, "stoker when: the pull request whose stage fires the trigger"),
-		stage:    fl.String("stage", "", "stoker when --ship: ci, green, merged, live or red (CI failed)"),
-		rest:     fl.String("rest", "", "stoker when: the session whose turn's end fires the trigger"),
-		drop:     fl.String("drop", "", "stoker when: drop the trigger with this id"),
-		list:     fl.Bool("list", false, "stoker when: print the run's triggers"),
-		anyway:   fl.Bool("anyway", false, "kill, switch: act on a session that works or waits for you"),
-		where:    fl.String("where", "", "new: the directory, or the repository of --branch (default: here)"),
-		agent:    fl.String("agent", "claude", "new, switch: the agent to start: claude, codex, opencode or cursor-agent"),
-		handoff:  fl.String("handoff", "", "switch: the line the new agent starts from (default: read the tree and notes, summarise, continue; empty: none)"),
-		branch:   fl.String("branch", "", "new: first add a worktree for this new branch, beside the repository"),
-		name:     fl.String("name", "", "new: the name of the session, its tmux session and its agent (default: the directory's)"),
-		noMotion: fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),
+		cfgPath:    fl.String("config", config.Path(), "machine goals (TOML); a missing file means defaults"),
+		interval:   fl.Duration("interval", 0, "sampling interval (default from config, else 2s)"),
+		root:       fl.String("fixtures", "", "read proc/, sys/, home/ and tmux-panes.txt from this directory instead of the live machine"),
+		text:       fl.Bool("text", false, "status: print a summary instead of JSON"),
+		stdio:      fl.Bool("stdio", false, "serve: speak on stdin and stdout, joined to the local service"),
+		json:       fl.Bool("json", false, "sessions, ships, usage, peek: print JSON instead of text"),
+		pick:       fl.Int("pick", 0, "send: answer the question the session asks with this option (from 1)"),
+		lines:      fl.Int("lines", 20, "peek: the last lines of what the session said (0: all)"),
+		why:        fl.String("why", "", "hold, stoker when … hold: why the session is held"),
+		state:      fl.String("state", "", "stoker step: doing, done, failed or waits"),
+		needs:      fl.String("needs", "", "stoker step: the go a waiting step needs from you (merge:#<n>, release, deploy); none for a step that waits on an event"),
+		rule:       fl.String("rule", "", "stoker step 0: the standing rule the step is for"),
+		ship:       fl.Int("ship", 0, "stoker when: the pull request whose stage fires the trigger"),
+		stage:      fl.String("stage", "", "stoker when --ship: ci, green, merged, live or red (CI failed)"),
+		rest:       fl.String("rest", "", "stoker when: the session whose turn's end fires the trigger"),
+		drop:       fl.String("drop", "", "stoker when: drop the trigger with this id"),
+		list:       fl.Bool("list", false, "stoker when: print the run's triggers"),
+		anyway:     fl.Bool("anyway", false, "kill, switch: act on a session that works or waits for you"),
+		where:      fl.String("where", "", "new: the directory, or the repository of --branch (default: here)"),
+		agent:      fl.String("agent", "claude", "new, switch: the agent to start: claude, codex, opencode or cursor-agent"),
+		handoff:    fl.String("handoff", "", "switch: the line the new agent starts from (default: read the tree and notes, summarise, continue; empty: none)"),
+		branch:     fl.String("branch", "", "new: first add a worktree for this new branch, beside the repository"),
+		name:       fl.String("name", "", "new: the name of the session, its tmux session and its agent (default: the directory's)"),
+		account:    fl.String("account", "", "new: the account of the agent to start on (default: the default sign-in)"),
+		newAccount: fl.Bool("new-account", false, "new: make the --account, and sign in to it in the session"),
+		setup:      fl.String("setup", "", "new --new-account: like-default (default), copy or empty"),
+		noMotion:   fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),
 	}
 }
 
@@ -565,6 +581,18 @@ func newService(cfg config.Config, root string) *service.Service {
 		s.HistoryLog = cfg.History.Log
 	}
 	s.Exe = invokedPath(os.Args[0])
+	// A phone paired before ids gets one, so it can register for pushes.
+	// stderr is serve.log when the console starts the service.
+	if n, skipped, err := setup.UpgradePhoneLines(home(), s.Exe); err != nil {
+		fmt.Fprintln(os.Stderr, "matchblox: phone lines:", err)
+	} else {
+		if n > 0 {
+			fmt.Fprintf(os.Stderr, "matchblox: upgraded %d phone lines\n", n)
+		}
+		if skipped > 0 {
+			fmt.Fprintf(os.Stderr, "matchblox: left %d phone lines as they are: their matchblox is older than v0.13, whose gate takes no id\n", skipped)
+		}
+	}
 	s.Setup = liveSetup(cfg.Sessions.CompactAt)
 	s.Ways = config.WaysPath()
 	s.LimitsLog = &limits.Store{Path: filepath.Join(filepath.Dir(s.StatePath), "limits.jsonl")}
@@ -596,6 +624,7 @@ func newService(cfg config.Config, root string) *service.Service {
 	if cfg.Git.CloneRoot != "" {
 		s.CloneRoot = service.ExpandHome(cfg.Git.CloneRoot)
 	}
+	wirePush(s, cfg.Push, home(), filepath.Dir(s.StatePath), defaultHostKey)
 	return s
 }
 
@@ -627,21 +656,73 @@ func invokedPath(arg0 string) string {
 	return abs
 }
 
+// errRestart: serve stopped for a new one, and said why. main exits with
+// exitRestart (EX_TEMPFAIL), and the user unit starts serve again only after
+// a nonzero exit; exit 0 is a signal or "the service already runs".
+var errRestart = errors.New("serve: stopped for a new one")
+
+const exitRestart = 75
+
+func gone(path string) bool {
+	_, err := os.Stat(path)
+	return errors.Is(err, fs.ErrNotExist)
+}
+
+// unitEnv is set on the serve a user unit starts (setup's keep-running
+// door). That serve waits for a socket in use instead of leaving with exit
+// 0: the unit stays up, and takes over when the other serve stops.
+const unitEnv = "MATCHBLOX_UNIT"
+
+// socketWait is how often the unit's serve tries the socket again.
+var socketWait = time.Second
+
 // serve runs the service on the socket until a signal, or until the binary
-// on disk is replaced (the next console starts the new one).
-func serve(path string, s *service.Service) error {
+// on disk is replaced or the socket removed (the user unit or the next
+// console starts the new one).
+//
+// mk builds the service once the socket is this serve's: a unit's serve may
+// wait long for it, and the state it reads (numbers, holds, the stoker) is
+// the other serve's until then.
+func serve(path string, mk func() *service.Service) error {
+	unit := os.Getenv(unitEnv) != ""
+	_ = os.Unsetenv(unitEnv) // what serve starts is not the unit's serve
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	l, err := transport.Listen(path)
 	if errors.Is(err, transport.ErrInUse) {
 		fmt.Fprintf(os.Stderr, "matchblox: the service already runs on %s (pid %d)\n", path, transport.Owner(path))
-		return nil
+		if !unit {
+			return nil
+		}
+		fmt.Fprintln(os.Stderr, "matchblox: started by the user unit: waiting to take over")
+		for errors.Is(err, transport.ErrInUse) {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(socketWait):
+			}
+			l, err = transport.Listen(path)
+		}
 	}
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	warnTailscaleSSHGate(os.Stderr)
+	s := mk()
+	if s.Push != nil {
+		defer s.Push.Close()
+	}
 	err = s.Serve(ctx, l)
-	if errors.Is(err, service.ErrReplaced) || errors.Is(err, service.ErrSocketGone) || errors.Is(err, context.Canceled) {
+	switch {
+	case errors.Is(err, service.ErrReplaced) && gone(s.Exe):
+		// Removed with nothing in its place: uninstalled. A restart would only
+		// fail to start, again and again.
+		fmt.Fprintln(os.Stderr, "matchblox: stopping, the binary is gone")
+		return nil
+	case errors.Is(err, service.ErrReplaced) || errors.Is(err, service.ErrSocketGone):
+		fmt.Fprintln(os.Stderr, "matchblox: stopping,", strings.TrimPrefix(err.Error(), "service: "))
+		return errRestart
+	case errors.Is(err, context.Canceled):
 		return nil
 	}
 	return err
@@ -794,43 +875,74 @@ func newSampler(cfg config.Config, root string) *sample.Sampler {
 	smp.ProcEvery = 5 * cfg.Interval.Duration
 	smp.OwnEntries = true
 	smp.LimitsDir = filepath.Dir(state.Path())
-	if cfg.Limits.CursorUsage && runtime.GOOS == "darwin" {
-		smp.CursorUsage = cursorUsage()
+	smp.CodexSeenFile = filepath.Join(smp.LimitsDir, "codex-seen.json")
+	if cfg.Limits.CursorUsage {
+		smp.CursorUsage = cursorUsage(runtime.GOOS)
 	}
 	return smp
 }
 
-// cursorUsage reads Cursor's plan usage every 5 minutes, with the login
-// token Cursor's CLI keeps in the macOS Keychain. The token is read for each
-// call and sent to Cursor's API only.
-func cursorUsage() *limits.CursorUsage {
+// cursorUsage reads Cursor's plan usage every 5 minutes. The default login's
+// token is in the macOS Keychain, so the default is read on darwin only; an
+// account's is in the auth.json of its folder (Cursor accounts run on macOS
+// only for now). A token is
+// read for each call and sent to Cursor's API only.
+func cursorUsage(goos string) *limits.CursorUsages {
 	client := &http.Client{Timeout: 10 * time.Second}
-	return &limits.CursorUsage{
+	u := &limits.CursorUsages{
 		Every: 5 * time.Minute,
-		Token: func(ctx context.Context) (string, error) {
-			out, err := exec.CommandContext(ctx, "security", "find-generic-password", "-s", "cursor-access-token", "-w").Output()
-			return strings.TrimSpace(string(out)), err
-		},
+		File:  limits.FileToken,
 		Fetch: func(ctx context.Context, token string) ([]byte, error) {
 			return limits.FetchCursorUsage(ctx, client, limits.CursorAPI, token)
 		},
 	}
+	if goos == "darwin" {
+		u.Keychain = func(ctx context.Context) (string, error) {
+			out, err := exec.CommandContext(ctx, "security", "find-generic-password", "-s", "cursor-access-token", "-w").Output()
+			return strings.TrimSpace(string(out)), keychainErr(err)
+		}
+	}
+	return u
+}
+
+// keychainNotFound is the exit status of security find-generic-password
+// when the Keychain has no such item.
+const keychainNotFound = 44
+
+// keychainErr is a failed Keychain read as limits.CursorUsages reads it: no
+// such item is a missing login, os.ErrNotExist; a denied or failed read is
+// any other error.
+func keychainErr(err error) error {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && ee.ExitCode() == keychainNotFound {
+		return fmt.Errorf("keychain: %w", os.ErrNotExist)
+	}
+	return err
 }
 
 // stokerPaneGone warns of a config that still names the stoker's pane.
 const stokerPaneGone = "config: [stoker] pane is ignored: matchblox starts the stoker agent itself, on its own tmux server ([stoker] agent, default claude). Remove the line."
 
+// warnTailscaleSSHGate tells builders when Tailscale SSH bypasses the gate
+// on MagicDNS/:22. Probe failure is silence.
+func warnTailscaleSSHGate(w io.Writer) {
+	if setup.TailscaleSSHOn() {
+		_, _ = fmt.Fprintln(w, "matchblox:", setup.WarnTailscaleSSHGate)
+	}
+}
+
 // status prints the service's state. Without a service it uses a fresh
 // state file, and else samples on its own: two samples a second apart so
 // rates are real, and one git scan.
 func status(w io.Writer, path string, cfg config.Config, root string, text bool) error {
+	warn := io.Writer(os.Stderr) // JSON on stdout stays JSON
+	if text {
+		warn = w
+	}
 	if cfg.Stoker.PaneSet {
-		warn := io.Writer(os.Stderr) // JSON on stdout stays JSON
-		if text {
-			warn = w
-		}
 		_, _ = fmt.Fprintln(warn, stokerPaneGone)
 	}
+	warnTailscaleSSHGate(warn)
 	doc, ok := state.Doc{}, false
 	maxAge := max(staleAfter, 3*cfg.Interval.Duration)
 	if root == "" {
@@ -844,6 +956,7 @@ func status(w io.Writer, path string, cfg config.Config, root string, text bool)
 	if !ok {
 		smp := newSampler(cfg, root)
 		smp.ProcEvery = 0
+		smp.CodexSeenReadOnly = true // the service keeps the file
 		smp.Sample()
 		time.Sleep(time.Second)
 		doc = state.Doc{Snapshot: smp.Sample()}

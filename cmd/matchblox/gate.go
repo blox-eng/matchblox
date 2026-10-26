@@ -4,10 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
+	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/setup"
+	"github.com/blox-eng/matchblox/internal/transport"
 )
 
 // gateMain is the forced command of the matchblox key on a host
@@ -31,12 +36,13 @@ func gateMain(args []string) error {
 		os.Exit(126)
 	}
 	orig := os.Getenv("SSH_ORIGINAL_COMMAND")
-	argv, err := gateDecision(mode, orig)
+	argv, err := gateDecision(mode, id, orig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "matchblox gate: refused %q: %v\n", orig, err)
 		os.Exit(126)
 	}
-	if id != "" && orig == remote.ConsoleCommand {
+	n, open := openTarget(orig)
+	if id != "" && (orig == remote.ConsoleCommand || open) {
 		// Only the console marks the device in; a note that fails never blocks it.
 		if home, err := os.UserHomeDir(); err == nil {
 			_ = setup.MarkDeviceIn(home, id, os.Getenv("SSH_TTY"), time.Now())
@@ -49,6 +55,11 @@ func gateMain(args []string) error {
 	// The console re-runs itself in the home session with these arguments:
 	// without "gate" it is the builder's own `matchblox`.
 	os.Args = os.Args[:1]
+	if open {
+		// The console's home session ignores arguments: the service tells
+		// it which session to open. No service: the console just opens.
+		_ = gateFocus(n, os.Getenv("SSH_TTY"))
+	}
 	return gateRun(argv)
 }
 
@@ -64,16 +75,26 @@ const phoneMode = "phone"
 // the console and goHome's fixed argv. A laptop key (mode "") gets the
 // service stream alone; the phone mode also gets the console, which attaches
 // the shared home session, where goHome already decides tmux or in place. An
-// unknown mode gets nothing.
-func gateDecision(mode, orig string) (argv []string, err error) {
+// unknown mode gets nothing. A phone also registers for pushes, by the id of
+// its key line (id), never by anything in the request; a phone line from
+// before ids is refused until the service gives it one. A phone that opens
+// one session (`matchblox console --open <n>`, from the island or a buzz)
+// gets the console too; a laptop key never does.
+func gateDecision(mode, id, orig string) (argv []string, err error) {
 	if mode != "" && mode != phoneMode {
 		return nil, errors.New("this key line has an unknown gate mode; run matchblox connect or matchblox pair again")
 	}
 	switch {
+	case orig == remote.PushRegisterCommand && mode == phoneMode && setup.ValidPairID(id):
+		return []string{"push", "register", id}, nil
+	case orig == remote.PushRegisterCommand && mode == phoneMode:
+		return nil, errors.New("this phone's key line is old; open matchblox serve once, then try again")
 	case orig == remote.ServeCommand:
 		return []string{"serve", "--stdio"}, nil
 	case orig == remote.ConsoleCommand && mode == phoneMode:
 		return []string{}, nil
+	case mode == phoneMode && isOpen(orig):
+		return []string{}, nil // the console; gateMain tells the service the session
 	case orig == remote.ConsoleCommand:
 		return nil, errors.New("this key starts only the matchblox stream; run matchblox pair to add a phone")
 	case mode == phoneMode:
@@ -98,4 +119,57 @@ func gatePair(id string) error {
 		return errors.New("cannot find this matchblox on the PATH")
 	}
 	return pairMain(home, exe, os.Stdin, os.Stdout, id)
+}
+
+// openCommand is what a phone asks the gate to run when a tap on the island
+// or a buzz opens a session: the console, with the session's island number.
+const openCommand = remote.ConsoleCommand + " --open "
+
+// openTarget reads the number of `matchblox console --open <n>`: n a
+// positive decimal without a leading zero, and nothing after it.
+func openTarget(orig string) (n int, ok bool) {
+	v, ok := strings.CutPrefix(orig, openCommand)
+	if !ok || v == "" || len(v) > 9 || v[0] < '1' || v[0] > '9' {
+		return 0, false
+	}
+	for _, c := range v {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+	}
+	n, err := strconv.Atoi(v)
+	return n, err == nil
+}
+
+func isOpen(orig string) bool { _, ok := openTarget(orig); return ok }
+
+// gateFocus asks the running service to focus the session of island number
+// n and move the phone's tmux client (tty) to it; tests replace it.
+var gateFocus = func(n int, tty string) error {
+	return sendFocus(func(a proto.Act) (proto.Result, error) { return doAct(transport.SocketPath(), a) }, n, tty)
+}
+
+// focusTimeout bounds the focus act: the phone waits on it in the
+// foreground, and the console opens without it.
+var focusTimeout = 2 * time.Second
+
+// sendFocus sends the focus act of number n for the client on tty through
+// do, and gives up after focusTimeout.
+func sendFocus(do func(proto.Act) (proto.Result, error), n int, tty string) error {
+	done := make(chan error, 1)
+	go func() {
+		res, err := do(proto.Act{RecID: service.FocusAct(n), Text: tty})
+		if err == nil && res.Err != "" {
+			err = errors.New(res.Err)
+		}
+		done <- err
+	}()
+	timer := time.NewTimer(focusTimeout)
+	defer timer.Stop()
+	select {
+	case err := <-done:
+		return err
+	case <-timer.C:
+		return errors.New("the service did not answer the focus")
+	}
 }

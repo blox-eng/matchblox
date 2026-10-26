@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -151,7 +152,19 @@ func (m Model) rowWord(s sample.Session) (word string, merged bool) {
 		return st.muted.Render("⏸ " + why), true
 	}
 	plain := m.wordOf(s)
-	if r, ok := m.reasons[s.Pane]; ok && r.Word != "" && s.Pane != "" && plain != "asks" && plain != "waits" {
+	asks := plain == "asks" || plain == "waits"
+	if s.SigningIn && !asks {
+		// The new account's sign-in is not done: in the pane, and by hand
+		// when matchblox gave up driving it. A note whose pane was not
+		// found names the tmux session. An ask or a wait shows instead,
+		// so it is never hidden.
+		tmuxName, _, _ := strings.Cut(s.Target, ":")
+		if m.signIns[s.Pane] == "by hand" || tmuxName != "" && m.signIns[tmuxName] == "by hand" {
+			return st.accent.Render("sign in by hand"), true
+		}
+		return st.muted.Render("signing in"), true
+	}
+	if r, ok := m.reasons[s.Pane]; ok && r.Word != "" && s.Pane != "" && !asks {
 		return m.tone(r.Tone).Render(r.Word), true
 	}
 	if m.groupOf(s) == groupWaits {
@@ -362,10 +375,63 @@ func (m Model) sessionRows(b *body, w int) {
 			b.add(-1, st.hair.Render(strings.Repeat("─", w)))
 		}
 		b.addRow(base+i, i == sel, w, st, rows...)
+		for _, l := range m.childRows(sample.ProcRef{PID: s.PID, Start: s.Start}, "  ", 1, w) {
+			b.add(-1, l)
+		}
 		if len(rows) > 1 {
 			b.add(-1, st.hair.Render(strings.Repeat("─", w)))
 		}
 	}
+}
+
+// maxTreeDepth is how many levels of children are drawn under a session.
+const maxTreeDepth = 4
+
+// childrenOf are the children started by one process, in snapshot order.
+func (m Model) childrenOf(parent sample.ProcRef) []sample.Session {
+	var out []sample.Session
+	for _, c := range m.snap.Children {
+		if c.Parent != nil && *c.Parent == parent {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func (m Model) descendants(parent sample.ProcRef) int {
+	n := 0
+	for _, c := range m.childrenOf(parent) {
+		n += 1 + m.descendants(sample.ProcRef{PID: c.PID, Start: c.Start})
+	}
+	return n
+}
+
+// childRows are the lines under one session or child, depth first: a
+// branch for each child and a fold for what lies below the last level.
+// indent carries a bar down past each ancestor that has siblings below.
+func (m Model) childRows(parent sample.ProcRef, indent string, depth, w int) []string {
+	st := m.st
+	kids := m.childrenOf(parent)
+	if len(kids) == 0 {
+		return nil
+	}
+	if depth > maxTreeDepth {
+		return []string{fit(st.faint.Render(indent+"└─ … "+strconv.Itoa(m.descendants(parent))+" more"), w)}
+	}
+	var out []string
+	for i, c := range kids {
+		branch, below := "├─ ", "│ "
+		if i == len(kids)-1 {
+			branch, below = "└─ ", "  "
+		}
+		line := st.faint.Render(indent+branch) + st.text.Render(c.Name)
+		if c.Status != "" {
+			line += st.faint.Render(" " + c.Status)
+		}
+		out = append(out, fit(line, w))
+		out = append(out, m.childRows(sample.ProcRef{PID: c.PID, Start: c.Start}, indent+below, depth+1, w)...)
+	}
+	return out
 }
 
 // sessionRow is one line for a session. A row of 70 columns or more adds
@@ -387,13 +453,22 @@ func (m Model) sessionRow(s sample.Session, sel bool, w int) []string {
 		state = padTo(word, t.word+t.wait) // the wait column's cells are the word's too
 	}
 	if !t.wide {
-		line := spread(mark+m.matchCell(s)+st.ink(sel).Render(s.Name), state+cutLeft(ctx, t.ctx)+" ", w)
+		right := state + cutLeft(ctx, t.ctx) + " "
+		name := st.ink(sel).Render(s.Name)
+		if tag := m.accountTag(s); tag != "" {
+			name = m.taggedName(s.Name, tag, sel, w-lipgloss.Width(mark+m.matchCell(s))-lipgloss.Width(right)-1)
+		}
+		line := spread(mark+m.matchCell(s)+name, right, w)
 		if !opens {
 			return []string{line}
 		}
 		return append([]string{line}, m.opened(s, w)...)
 	}
-	line := mark + m.matchCell(s) + st.ink(sel).Render(pad(s.Name, t.name)) + state + cutLeft(ctx, t.ctx)
+	name := st.ink(sel).Render(pad(s.Name, t.name))
+	if tag := m.accountTag(s); tag != "" {
+		name = padTo(m.taggedName(s.Name, tag, sel, t.name-1), t.name) // pad's gap before the word
+	}
+	line := mark + m.matchCell(s) + name + state + cutLeft(ctx, t.ctx)
 	if t.plan > 0 {
 		plan := ""
 		switch {
@@ -419,6 +494,28 @@ func (m Model) sessionRow(s sample.Session, sel bool, w int) []string {
 		return []string{fit(line, w)}
 	}
 	return append([]string{fit(line, w)}, m.opened(s, w)...)
+}
+
+// accountTag is the account a session runs on, for a row: empty on the
+// default sign-in.
+func (m Model) accountTag(s sample.Session) string {
+	if s.AccountDir == "" {
+		return ""
+	}
+	return accounts.Name(s.AccountDir)
+}
+
+// taggedName is a session's name with its account after it in muted text,
+// in w cells: the name keeps its room, the tag takes what is left and is
+// dropped when fewer than four cells remain.
+func (m Model) taggedName(name, tag string, sel bool, w int) string {
+	name = ansi.Truncate(name, max(w, 0), "…")
+	out := m.st.ink(sel).Render(name)
+	room := w - lipgloss.Width(name) - 1
+	if room < 4 {
+		return out
+	}
+	return out + " " + m.st.muted.Render(ansi.Truncate(tag, room, "…"))
 }
 
 // tracks are the widths of a session row's columns, the same on every row
@@ -692,6 +789,13 @@ func (m Model) sessionDetail(s sample.Session, w, said int) ([]string, bool) {
 	out = append(out, m.shipField(s, w)...)
 	if s.Agents > 0 {
 		field("agents", st.text.Render(plural(s.Agents, "subagent")+" running"))
+	}
+	if kids := m.childrenOf(sample.ProcRef{PID: s.PID, Start: s.Start}); len(kids) > 0 {
+		names := make([]string, len(kids))
+		for i, c := range kids {
+			names[i] = c.Name
+		}
+		field("children", st.text.Render(strings.Join(names, " · ")))
 	}
 	if len(s.Shells) > 0 {
 		shells := plural(len(s.Shells), "shell")

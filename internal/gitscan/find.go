@@ -407,6 +407,9 @@ const caseInsensitive = runtime.GOOS == "darwin" || runtime.GOOS == "windows"
 // another letter case.
 func FoldsCase() bool { return caseInsensitive }
 
+// TrueCase is trueCase for the packages that compare folders.
+func TrueCase(p string) string { return trueCase(p) }
+
 func trueCase(p string) string { return trueCaseIn(p, caseInsensitive, os.ReadDir) }
 
 // trueCaseIn is trueCase where names fold case if fold, reading folders

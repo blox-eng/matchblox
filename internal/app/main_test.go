@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/setup"
+
+	"github.com/blox-eng/matchblox/internal/testhome"
 )
 
 // TestMain draws every time in UTC, as the frames in testdata/screens are.
@@ -16,5 +18,5 @@ import (
 func TestMain(m *testing.M) {
 	time.Local = time.UTC
 	setup.SetPairProbe(setup.PairProbe{LookPath: func(string) (string, error) { return "", errors.New("not found") }})
-	os.Exit(m.Run())
+	os.Exit(testhome.Run(m))
 }

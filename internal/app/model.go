@@ -19,6 +19,7 @@ import (
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/history"
@@ -83,6 +84,9 @@ type Options struct {
 	// active last in the home session. Nil: ask tmux. "" or an error: the
 	// builder's.
 	LastClient func() (tty string, created time.Time, err error)
+	// Clients are the ttys of the clients of this console's tmux server, for
+	// a focus that moves the phone's client. Nil: ask tmux.
+	Clients func() ([]string, error)
 	// Clip copies text to the builder's clipboard. Nil: OSC 52 with the output.
 	Clip func(text string)
 	// Graphics says whether every terminal that shows the console draws
@@ -149,6 +153,7 @@ type action struct {
 	again       string                      // a kill or switch of a session that works or waits: what the second y's confirm says
 	againText   string                      // the Text the second y sends ("": killAnyway)
 	done        string                      // a switch: what the flash says when it ran
+	agent       string                      // a start on a new account: the last agent once it ran
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -226,6 +231,7 @@ type Model struct {
 	width      int
 	height     int
 	snap       sample.Snapshot
+	push       string // the push sender's line for the Machine tab, or ""
 	have       bool
 	git        *proto.GitReport
 	recs       []advice.Rec
@@ -274,27 +280,33 @@ type Model struct {
 	armed      string // the step a second tap runs: what the first tap showed
 	// held is what the builder pressed or tapped while the stoker was in
 	// charge: it runs once they answer the take-over question.
-	held       func(Model) (tea.Model, tea.Cmd)
-	touched    time.Time // the last key that kept the stoker's rest
-	all        lists     // what the service sent; queue, recs and snap hold the drawn copies
-	filter     string    // the search of the open tab
-	searching  bool      // the search line takes the keys
-	sessSort   sortBy
-	sessGroup  int // what Sessions is grouped by: groupNeed .. groupNone
-	holds      []proto.Hold
-	reasons    map[string]proto.IdleReason
-	agents     []string                         // the agents a new session can start on the host
-	renames    map[string]string                // the names sessions take at their next rest, by pane
-	found      *proto.Found                     // the host's repositories and the scan's consent; nil: the service scans nothing
-	scanLater  bool                             // the scan question was closed or answered at this console
-	scanAct    string                           // the act of the box's yes, for its result
-	form       *form                            // the open New session, Rename, Switch agent or scan folders form; nil none
-	jumpAfter  struct{ act, pane, done string } // a switch sent: the pane to jump to when it runs
-	lastAgent  string                           // the agent this console last started
-	paneSort   sortBy
-	picked     map[string]bool // worktrees x removes
-	batch      *batch
-	showExited bool // e: the exited agents, one by one
+	held        func(Model) (tea.Model, tea.Cmd)
+	touched     time.Time // the last key that kept the stoker's rest
+	all         lists     // what the service sent; queue, recs and snap hold the drawn copies
+	filter      string    // the search of the open tab
+	searching   bool      // the search line takes the keys
+	sessSort    sortBy
+	sessGroup   int // what Sessions is grouped by: groupNeed .. groupNone
+	holds       []proto.Hold
+	reasons     map[string]proto.IdleReason
+	agents      []string                          // the agents a new session can start on the host
+	renames     map[string]string                 // the names sessions take at their next rest, by pane
+	accounts    map[string][]string               // the accounts each agent can start on: default first
+	skipped     map[string][]accounts.Skip        // the folders the service did not list, per agent
+	lastAccount map[string]string                 // the account last started, per agent
+	signIns     map[string]string                 // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
+	found       *proto.Found                      // the host's repositories and the scan's consent; nil: the service scans nothing
+	scanLater   bool                              // the scan question was closed or answered at this console
+	scanAct     string                            // the act of the box's yes, for its result
+	form        *form                             // the open New session, Rename, Switch agent or scan folders form; nil none
+	jumpAfter   struct{ act, pane, done string }  // a switch sent: the pane to jump to when it runs
+	startAfter  struct{ act, agent, done string } // a start on a new account sent: its agent, the last once it runs, and what it says then
+	lastAgent   string                            // the agent this console last started
+	keptAgent   string                            // the agent last started, as the service keeps it
+	paneSort    sortBy
+	picked      map[string]bool // worktrees x removes
+	batch       *batch
+	showExited  bool // e: the exited agents, one by one
 	// dockPanel is the panel a phone's dock shows (usage, the machine, the
 	// stoker), u cycling it; dockSwitched: u was pressed while the stoker
 	// claimed the dock, so it no longer takes it by itself.
@@ -337,6 +349,7 @@ type Model struct {
 	// with no answer yet, whose answer says nothing.
 	stopAfter []cloneStop
 	stopQuiet []cloneStop
+	focusAt   time.Time // the At of the last focus this console acted on
 }
 
 func New(opt Options) Model {
@@ -501,7 +514,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
 		m.shipReport = st.Ships
 		m.holds, m.reasons = st.Holds, st.Reasons
-		m.agents, m.renames = st.Agents, st.Renames
+		m.agents, m.renames, m.accounts, m.signIns = st.Agents, st.Renames, st.Accounts, st.SignIns
+		m.skipped = st.AccountsSkipped
+		m.lastAccount, m.keptAgent = st.LastAccount, st.LastAgent
 		if st.Found != nil {
 			m.found = st.Found
 			switch {
@@ -518,6 +533,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.wrepos, m.wfrom = m.whereRepos(), from
 		}
 		m.clones = st.Clones
+		m.push = st.Push
 		var again, started tea.Cmd
 		if m.lost { // the clone acts' answers went with the connection
 			again = m.cloneAgain()
@@ -547,6 +563,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.hist.Append(history.FromSnapshot(m.snap))
 		}
 		m.keepSelection()
+		m, focus := m.takeFocus(st.Focus)
 		var news, order tea.Cmd
 		if toast != "" && !first {
 			news = m.say(toast)
@@ -554,7 +571,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.sheet != nil && m.sheet.queued && m.sheet.act == "" && m.stoker != nil && m.stoker.Ready {
 			m, order = m.sendOrder() // the stoker rests now: the order that waited for it goes
 		}
-		return m, tea.Batch(m.recv(), m.animate(), news, order, again, started)
+		return m, tea.Batch(m.recv(), m.animate(), news, order, focus, again, started)
 	case graphicsMsg:
 		return m.graphics(msg)
 	case graphicsTickMsg:
@@ -578,6 +595,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case resultMsg:
 		m.endRec(msg.ActID, proto.Result(msg))
+		if mm, ok := m.started(proto.Result(msg)); ok {
+			return mm, mm.recv()
+		}
 		if mm, cmd, ok := m.formResult(proto.Result(msg)); ok {
 			return mm, tea.Batch(mm.recv(), cmd)
 		}
@@ -747,6 +767,105 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return next, tea.Batch(touch, cmd)
 	}
 	return m, nil
+}
+
+// focusWait is how long a focus waits for the phone's tmux client to
+// attach: the gate sends the act before it runs the console.
+var focusWait = 10 * time.Second
+
+// focusGone is what a focus on a session that ended says.
+const focusGone = "That session ended."
+
+// takeFocus opens the session a tap on the island or a buzz asked for, once
+// for each focus the service sends, on Sessions: its answer peek when it
+// waits, else its pane on the phone's own tmux client. A form, sheet, pair
+// page, take-over or a peek with text typed keeps the keys: what the person
+// types there is not thrown away.
+func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
+	if f == nil || f.At.Equal(m.focusAt) {
+		return m, nil
+	}
+	m.focusAt = f.At
+	var s sample.Session
+	found := false
+	for _, x := range m.snap.Sessions {
+		if f.SessionID != "" && x.SessionID == f.SessionID || f.SessionID == "" && f.Pane != "" && x.Pane == f.Pane {
+			s, found = x, true
+			break
+		}
+	}
+	typing := m.peek != nil && m.peek.text != ""
+	busy := m.pair.owns() || m.sheet != nil || m.form != nil || m.held != nil || typing
+	if f.Gone || !found {
+		if !busy {
+			m.setTab(tabSessions)
+			m.pending = nil
+		}
+		m.flash = focusGone
+		return m, nil
+	}
+	if busy {
+		return m, nil
+	}
+	m.setTab(tabSessions)
+	m.pending, m.peek = nil, nil
+	m.doorPick, m.recPick, m.chose, m.selPID = "", "", true, s.PID
+	if s.Pane == "" {
+		return m, nil // outside tmux: no pane to open
+	}
+	if _, waits := m.waitOf(s); waits {
+		// The home console is shared: the peek shows on the phone too, and an
+		// Enter on its way at the desk must not answer it.
+		return m.peekTo(s.Pane), nil
+	}
+	// Only the phone's client moves, into a session of its own (FocusArgv),
+	// and only on this console's own tmux: a console of another host (over
+	// ssh) or outside tmux never moves a terminal for a tap on the phone.
+	if m.opt.Host != "" || m.opt.OutsideTmux || !remote.ClientTTY(f.Client) {
+		return m, nil
+	}
+	return m, focusJump(m.clients(), m.opt.Run, f.Client, s.Pane)
+}
+
+// clients is how this console reads the clients of its tmux server.
+func (m Model) clients() func() ([]string, error) {
+	if m.opt.Clients != nil {
+		return m.opt.Clients
+	}
+	return tmuxClients
+}
+
+// tmuxClients are the ttys of the clients of this console's tmux server.
+func tmuxClients() ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "tmux", "list-clients", "-F", "#{client_tty}").Output()
+	if err != nil {
+		return nil, err
+	}
+	return strings.Fields(string(out)), nil
+}
+
+// focusJump waits up to focusWait for the client on tty to attach to this
+// console's tmux, then moves it to pane. A client that never comes is not
+// this console's: nothing moves.
+func focusJump(clients func() ([]string, error), run func([]string) error, tty, pane string) tea.Cmd {
+	return func() tea.Msg {
+		argv := remote.FocusArgv(tty, pane)
+		if !remote.FocusAllowed(argv) {
+			return nil
+		}
+		for deadline := time.Now().Add(focusWait); ; time.Sleep(100 * time.Millisecond) {
+			if ttys, err := clients(); err == nil && slices.Contains(ttys, tty) {
+				break
+			}
+			if time.Now().After(deadline) {
+				return nil
+			}
+		}
+		// The toast names the move, not the session the phone gets for it.
+		return ranMsg{cmd: "tmux switch-client -c " + tty + " -t " + pane, err: run(argv), jumped: pane}
+	}
 }
 
 // olderLocal tells if the local service should give way to this console:
@@ -1043,7 +1162,32 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 	if pane, ok := strings.CutPrefix(a.rec, "switch:"); ok {
 		m.jumpAfter.act, m.jumpAfter.pane, m.jumpAfter.done = "a"+strconv.Itoa(m.acts), pane, a.done
 	}
+	if a.agent != "" {
+		m.startAfter.act, m.startAfter.agent, m.startAfter.done = "a"+strconv.Itoa(m.acts), a.agent, a.done
+	}
 	return m.pairActed(a), cmd
+}
+
+// started takes the result of a start on a new account: one that ran sets
+// the last agent and says where to sign in, with the notes of what its
+// account shared or skipped; one that did not leaves the last agent as it
+// was and goes on to the result's usual words (false).
+func (m Model) started(r proto.Result) (Model, bool) {
+	if r.ActID == "" || r.ActID != m.startAfter.act {
+		return m, false
+	}
+	a := m.startAfter
+	m.startAfter.act, m.startAfter.agent, m.startAfter.done = "", "", ""
+	notes, ran := proto.StartNotes(r)
+	if r.Err != "" || len(r.Ran) == 0 || len(r.Skipped) > 0 && !ran {
+		return m, false
+	}
+	m.lastAgent = a.agent
+	m.flash = a.done
+	if len(notes) > 0 {
+		m.flash += "; " + strings.Join(notes, "; ")
+	}
+	return m, true
 }
 
 // switched takes the result of a switch: one that ran jumps to its pane,
@@ -1051,17 +1195,22 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 func (m Model) switched(r proto.Result) (tea.Model, tea.Cmd) {
 	j := m.jumpAfter
 	m.jumpAfter.act, m.jumpAfter.pane, m.jumpAfter.done = "", "", ""
+	// A switch with notes on what its account shared or skipped ran.
+	notes, ran := proto.StartNotes(r)
 	switch {
 	case r.Err != "":
 		m.flash = tilde(r.Err)
 		return m, m.recv()
-	case len(r.Skipped) > 0:
+	case len(r.Skipped) > 0 && !ran:
 		m.flash = tilde(r.Skipped[len(r.Skipped)-1])
 		return m, m.recv()
 	}
 	next, jump := m.confirm(*m.jump(j.pane))
 	nm := next.(Model)
 	nm.flash = j.done
+	if ran {
+		nm.flash += "; " + strings.Join(notes, "; ")
+	}
 	return nm, tea.Batch(nm.recv(), jump)
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/idle"
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -622,5 +623,123 @@ func TestSessionsLineMarksOutsideTmux(t *testing.T) {
 	}
 	if !strings.Contains(js.String(), `"target": ""`) {
 		t.Fatalf("json %s", js.String())
+	}
+}
+
+func TestUsageTextNamesTheAccount(t *testing.T) {
+	d := cliDoc()
+	d.Limits = []limits.Account{
+		{Provider: "anthropic", Account: "you@example.com · Max"},
+		{Provider: "anthropic", Account: "you@example.com · Max", Dir: "/home/u/.matchblox/accounts/claude/work"},
+		{Provider: "openai", Dir: "/home/u/codex-team"},
+	}
+	var buf bytes.Buffer
+	if err := writeUsage(&buf, d, false); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("%q", buf.String())
+	}
+	for i, want := range []string{"you@example.com · Max", "work", "codex-team"} {
+		if f := strings.Fields(lines[i]); len(f) < 2 || !strings.HasPrefix(strings.TrimSpace(lines[i][len(f[0]):]), want) {
+			t.Errorf("line %d %q does not name %q", i, lines[i], want)
+		}
+	}
+	if strings.Contains(lines[1], "you@example.com") {
+		t.Errorf("the account line %q names the default's login", lines[1])
+	}
+}
+
+func TestSessionsJSONNamesTheAccountFolder(t *testing.T) {
+	d := cliDoc()
+	d.Sessions[0].AccountDir = "/home/u/.matchblox/accounts/claude/work"
+	d.Sessions[0].SigningIn = true
+	var buf bytes.Buffer
+	if err := writeSessions(&buf, d, true); err != nil {
+		t.Fatal(err)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows[0]["account_dir"] != "/home/u/.matchblox/accounts/claude/work" || rows[0]["signing_in"] != true {
+		t.Fatalf("row %v", rows[0])
+	}
+	if rows[1]["account_dir"] != "" || rows[1]["signing_in"] != false {
+		t.Fatalf("a default row %v", rows[1])
+	}
+}
+
+// TestSessionsLineSaysSignInByHand: a new account matchblox gave up
+// signing in says so on its line, by pane or by its tmux session's name.
+func TestSessionsLineSaysSignInByHand(t *testing.T) {
+	d := cliDoc()
+	d.Sessions[1].SigningIn = true
+	d.Sessions[2].SigningIn = true
+	d.SignIns = map[string]string{"%4": "by hand"}
+	var buf bytes.Buffer
+	if err := writeSessions(&buf, d, false); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(buf.String(), "\n")
+	if !strings.HasSuffix(lines[1], "  sign in by hand") || strings.Contains(lines[0]+lines[2], "sign in by hand") {
+		t.Fatalf("%q", buf.String())
+	}
+	d.SignIns = map[string]string{"app": "by hand"}
+	buf.Reset()
+	if err := writeSessions(&buf, d, false); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(buf.String(), "sign in by hand") != 2 {
+		t.Fatalf("by session name: %q", buf.String())
+	}
+}
+
+func TestSessionsPrintsChildrenUnderTheirParent(t *testing.T) {
+	var doc state.Doc
+	doc.Sessions = []sample.Session{{PID: 200, Start: 1, Name: "app", Pane: "%1", Target: "app:1.1"}}
+	doc.Children = []sample.Session{
+		{PID: 221, Start: 2, Agent: "codex", Name: "codex exec", Via: "process", Parent: &sample.ProcRef{PID: 200, Start: 1}},
+		{PID: 230, Start: 3, Agent: "claude", Name: "claude -p", Via: "env", Parent: &sample.ProcRef{PID: 221, Start: 2}},
+		{PID: 240, Start: 4, Agent: "opencode", Name: "opencode run", Via: "process", Parent: &sample.ProcRef{PID: 200, Start: 1}},
+	}
+	var b strings.Builder
+	if err := writeSessions(&b, doc, false); err != nil {
+		t.Fatal(err)
+	}
+	if want := "\n     ├─ codex exec (via process)\n     │ └─ claude -p (via env)\n     └─ opencode run (via process)\n"; !strings.Contains(b.String(), want) {
+		t.Fatalf("want %q in\n%s", want, b.String())
+	}
+	b.Reset()
+	if err := writeSessions(&b, doc, true); err != nil {
+		t.Fatal(err)
+	}
+	var rows []sessionJSON
+	if err := json.Unmarshal([]byte(b.String()), &rows); err != nil {
+		t.Fatal(err)
+	}
+	want := []childJSON{{Name: "codex exec", Agent: "codex", Via: "process", PID: 221, Children: []childJSON{{Name: "claude -p", Agent: "claude", Via: "env", PID: 230}}}, {Name: "opencode run", Agent: "opencode", Via: "process", PID: 240}}
+	if len(rows) != 1 || !reflect.DeepEqual(rows[0].Children, want) {
+		t.Fatalf("json\n%s", b.String())
+	}
+	if strings.Contains(b.String(), `"children": null`) {
+		t.Fatalf("empty children must be omitted\n%s", b.String())
+	}
+}
+
+// TestSessionsSurvivesALoopInTheStateFile: a child listed twice, once
+// under its own child, as only a hand-edited file can hold, prints and ends.
+func TestSessionsSurvivesALoopInTheStateFile(t *testing.T) {
+	var doc state.Doc
+	doc.Sessions = []sample.Session{{PID: 200, Start: 1, Name: "app"}}
+	doc.Children = []sample.Session{
+		{PID: 221, Start: 2, Name: "a", Parent: &sample.ProcRef{PID: 200, Start: 1}},
+		{PID: 222, Start: 3, Name: "b", Parent: &sample.ProcRef{PID: 221, Start: 2}},
+		{PID: 221, Start: 2, Name: "a", Parent: &sample.ProcRef{PID: 222, Start: 3}},
+	}
+	var b strings.Builder
+	if err := writeSessions(&b, doc, true); err != nil {
+		t.Fatal(err)
 	}
 }

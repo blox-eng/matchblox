@@ -7,7 +7,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"slices"
+	"strings"
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
@@ -118,6 +121,14 @@ type Result struct {
 	// new:session came to, or that a clone:stop came after the clone was
 	// done.
 	Note string `json:"note,omitempty"`
+	// Names answers the names act: what each number of the island is
+	// called now.
+	Names *Names `json:"names,omitempty"`
+	// Refused: the service refused the act before it ran anything (a
+	// check, a busy or gone account). An Err without it is a failure of
+	// something that ran, or of a file that did not read. Only a
+	// new:session and a switch:<pane> set it.
+	Refused bool `json:"refused,omitempty"`
 }
 
 // ClonePlan is where a clone of a URL goes, found offline. Target is
@@ -161,6 +172,59 @@ type Clone struct {
 	Err    string `json:"err,omitempty"`
 	Done   bool   `json:"done,omitempty"`
 	Token  string `json:"token,omitempty"` // its clone:start's, if any
+}
+
+// Names are the session and account names by their island numbers.
+type Names struct {
+	Sessions map[int]string `json:"sessions"`
+	Accounts map[int]string `json:"accounts"`
+}
+
+// The notes of a start on an account that ran: each is one skip of its
+// Result, and the start ran all the same (StartNotes).
+const (
+	// NotLinked starts the note of a like-default account whose new shared
+	// entries did not all link.
+	NotLinked = "some shared entries did not link: "
+	// StillShared starts the note of a link a copy left on the default's
+	// file, and why.
+	StillShared = "still shared with the default: "
+	// NotCopied starts the note of an entry of the default a copy left
+	// out, and why.
+	NotCopied = "not copied: "
+	// CopyGoesOn is the note of a copy that has not ended.
+	CopyGoesOn = "the copy is not complete: it goes on at the next start"
+)
+
+// noteMax is how many entries Notes names before it counts the rest.
+const noteMax = 5
+
+// Notes is one note per item, each after prefix: the first five, then one
+// that says how many more there are.
+func Notes(prefix string, items []string) []string {
+	var out []string
+	for i, it := range items {
+		if i == noteMax {
+			return append(out, fmt.Sprintf("%sand %d more", prefix, len(items)-noteMax))
+		}
+		out = append(out, prefix+it)
+	}
+	return out
+}
+
+// StartNotes are the skips of r when r has no error and every skip is a
+// note of a start on an account (NotLinked, StillShared, NotCopied,
+// CopyGoesOn): the act ran all the same.
+func StartNotes(r Result) ([]string, bool) {
+	if r.Err != "" || len(r.Skipped) == 0 {
+		return nil, false
+	}
+	for _, k := range r.Skipped {
+		if k != CopyGoesOn && !strings.HasPrefix(k, NotLinked) && !strings.HasPrefix(k, StillShared) && !strings.HasPrefix(k, NotCopied) {
+			return nil, false
+		}
+	}
+	return slices.Clone(r.Skipped), true
 }
 
 type Error struct {
@@ -242,22 +306,31 @@ type (
 	StokerUnguard = stoker.Unguard
 	Hold          = holds.Hold
 	IdleReason    = idle.Reason
+	// Focus is the session a tap on the island or a buzz opens.
+	Focus = state.Focus
 )
 
 // NewSession is the Text of a "new:session" act: start an agent in a tmux
 // session of its own on the builder's server. Branch, when set, first
 // adds a worktree for it next to the repository in Where. Name is the
 // tmux session's, its window's and the agent's; empty, it is the
-// directory's. First is the agent's first message. Cloned says the folder
-// in Where is a clone made for this session: Cursor asks before it trusts
-// it. It can only take trust away.
+// directory's. First is the agent's first message. Account is the
+// account the agent starts on: empty or "default" is the sign-in the
+// builder has. NewAccount makes the account first, set up as Setup says
+// (like-default, copy or empty; empty is like-default), and the session
+// starts without First: the builder signs in there. Cloned says the
+// folder in Where is a clone made for this session: Cursor asks before it
+// trusts it. It can only take trust away.
 type NewSession struct {
-	Where  string `json:"where"`
-	Branch string `json:"branch,omitempty"`
-	Name   string `json:"name,omitempty"`
-	Agent  string `json:"agent"`
-	First  string `json:"first,omitempty"`
-	Cloned bool   `json:"cloned,omitempty"`
+	Where      string `json:"where"`
+	Branch     string `json:"branch,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Agent      string `json:"agent"`
+	First      string `json:"first,omitempty"`
+	Account    string `json:"account,omitempty"`
+	NewAccount bool   `json:"new_account,omitempty"`
+	Setup      string `json:"setup,omitempty"`
+	Cloned     bool   `json:"cloned,omitempty"`
 }
 
 // SwitchAgent is the Text of a "switch:<pane>" act: start Agent in the
@@ -269,6 +342,10 @@ type SwitchAgent struct {
 	Agent   string `json:"agent"`
 	Handoff string `json:"handoff,omitempty"`
 	Anyway  bool   `json:"anyway,omitempty"`
+	// Account is the account the sender's confirm named for Agent ("default"
+	// included). The service refuses the switch when it would pick another
+	// now. Empty, from an older client, takes whichever it picks.
+	Account string `json:"account,omitempty"`
 }
 
 // DefaultHandoff is the first message a switched-in agent gets: it reads

@@ -131,24 +131,53 @@ const errTailscaleSSH = "this address is answered by Tailscale SSH. Use matchblo
 // ErrTailscaleSSHConsole is the console refusal: Enter cannot take --address.
 const ErrTailscaleSSHConsole = "this address is answered by Tailscale SSH. Run tailscale set --ssh=false, then press Enter. Or quit and run matchblox pair --address with a host OpenSSH serves"
 
-func checkTailscaleSSH(address string, port int) error {
+// WarnTailscaleSSHGate tells builders that permanent paired keys are not
+// held to the gate on the MagicDNS/:22 path while Tailscale SSH is on.
+const WarnTailscaleSSHGate = "Tailscale SSH is on: paired keys are not gated on this host's MagicDNS name or Tailscale IP on port 22 (tailscaled answers, not OpenSSH). Run tailscale set --ssh=false, or connect on an address and port OpenSSH serves."
+
+// TailscaleSSHOn is true when this host's Tailscale prefs have RunSSH.
+// A missing tool or prefs probe is false, never an error.
+func TailscaleSSHOn() bool {
+	on, ok := runSSHFromPrefs()
+	return ok && on
+}
+
+// runSSHFromPrefs reads Tailscale prefs for RunSSH. ok is false when the
+// probe cannot run or prefs cannot be parsed.
+func runSSHFromPrefs() (on, ok bool) {
 	p := pairProbe
-	if port != 22 || p.LookPath == nil {
-		return nil
+	if p.LookPath == nil || p.TailscalePrefs == nil {
+		return false, false
 	}
 	path, err := p.LookPath("tailscale")
-	if err != nil || p.TailscalePrefs == nil || p.TailscaleStatus == nil {
-		return nil
+	if err != nil {
+		return false, false
 	}
 	b, err := p.TailscalePrefs(path)
 	if err != nil {
-		return nil
+		return false, false
 	}
 	var prefs struct{ RunSSH bool }
-	if json.Unmarshal(b, &prefs) != nil || !prefs.RunSSH {
+	if json.Unmarshal(b, &prefs) != nil {
+		return false, false
+	}
+	return prefs.RunSSH, true
+}
+
+func checkTailscaleSSH(address string, port int) error {
+	p := pairProbe
+	if port != 22 {
 		return nil
 	}
-	b, err = p.TailscaleStatus(path)
+	on, ok := runSSHFromPrefs()
+	if !ok || !on || p.TailscaleStatus == nil {
+		return nil
+	}
+	path, err := p.LookPath("tailscale")
+	if err != nil {
+		return nil
+	}
+	b, err := p.TailscaleStatus(path)
 	if err != nil {
 		return nil
 	}

@@ -35,7 +35,243 @@ All notable changes to matchblox are in this file. The format follows
   git_protocol`, else https. `matchblox new --where <url>` clones (or
   reuses a clone), then starts, and waits up to 30 minutes: it takes a URL
   or `gh:o/r`, and a bare `o/r` there is a folder, so a typo never clones.
+  A start that waits for its clone keeps the account you picked, and a new
+  account still asks for its typed `y` once the clone is done.
   ([#176](https://github.com/blox-eng/matchblox/issues/176))
+
+## [0.23.0] - 2026-10-24
+
+### Added
+
+- **Sessions shows which session started which.** A `codex exec` or
+  `claude -p` that an agent starts shows as a branch under that session,
+  instead of hidden or a stray row. The link is proven from /proc, never
+  guessed. ([#206](https://github.com/blox-eng/matchblox/issues/206))
+
+## [0.22.0] - 2026-10-24
+
+### Added
+
+- **A new session starts on the account you pick, or on a new one.** `N`
+  picks the account. Claude Code and Codex sessions can run on an account
+  folder beside your default sign-in, and Cursor sessions on macOS only for
+  now. A new account is set up like the default, copied from it, or empty.
+  matchblox presses through the agent's first screens to its sign-in link,
+  and you finish the sign-in in the session. matchblox never writes the
+  default sign-in. That the agents also leave the default sign-in as it was
+  is not tested yet with a second real sign-in.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **`N` opens on the agent and the account you last started.** matchblox
+  remembers the last agent, and the last account of each agent, across
+  restarts. `matchblox new` without `--account` does not change the account
+  `N` opens on. A console that has started something keeps its own last
+  agent. The agent the service remembers opens only a console that has
+  started nothing yet, for example after a restart. A new account becomes
+  the account `N` opens on only once a session on it is signed in.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **Switch agent (`A`) starts the new agent on its last account.** This is
+  the account you last started that agent on, while it is still there;
+  else `default`. The confirm line names it. A switch never makes an
+  account, and it does not change the account `N` opens on. A switch on a
+  second real sign-in is not tested yet.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **`matchblox new` takes `--account <name>`, `--new-account` and
+  `--setup like-default|copy|empty`.** `--setup` needs `--new-account`, and
+  `--new-account` needs `--account`.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **A start on a new account asks for a typed `y`.** The row says
+  `signing in` until the account is signed in, and `sign in by hand` when
+  matchblox waits 20 seconds on a screen without a next screen it knows.
+  An ask or a wait shows over both words. matchblox never reads a sign-in
+  code and never types a password.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- A start or a switch on an account drops the agent's sign-in environment
+  that the tmux server can pass on (such as `ANTHROPIC_API_KEY`,
+  `OPENAI_API_KEY` or `CURSOR_API_KEY`), so the account's own sign-in is
+  used. A start on `default` keeps it.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- The stoker starts sessions on `default` only.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- Cursor accounts read their plan usage from the account's `auth.json`, with
+  `cursor_usage = true` (not tested yet with a second real sign-in).
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- USAGE and Sessions name each account, and a new account shows `signing in`
+  until it is. A folder that you made by hand never shows `signing in`.
+  `matchblox usage` names each account folder, and `matchblox sessions
+  --json` gives `account_dir` and `signing_in`.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+
+### Fixed
+
+- A service whose socket file was removed before it began to watch it
+  stops all the same, so the next console starts a new one; it used to
+  run on, unreachable.
+- **A copy of the default is cloned, and its own.** Files are cloned
+  copy-on-write where the file system can, and copied byte by byte where
+  it refuses. A link in the default that points inside the default points
+  to the same place in the account, so the account reads its own files and
+  never the default's. A link that points outside the default, or at an
+  entry the account does not share, stays on the default's file and is
+  named. The copy stops at 200,000 entries, 16 GiB copied byte by byte,
+  or 90 seconds, and names every entry it left out. A cut copy is marked,
+  and goes on where it stopped at the account's next start. Measured on
+  macOS (APFS) with a real 2.0 GB `~/.claude` of 117 links: a copy took
+  4.6 to 4.8 seconds and used no extra disk, all links into the default
+  were kept inside the account, and a resume over a finished copy took
+  about 0.16 seconds.
+  Cloning on Linux is compiled and linted only: not tested yet.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **A start or a switch on an account says what it shared, skipped and
+  refused.** It names each link still shared with the default and each
+  entry not copied (five of each, then "and N more"), and says when a copy
+  is cut and goes on at the next start. `N`, Switch agent and `matchblox
+  new` show these notes after the start, and a new account names the
+  session to sign in in (`sign in in <session>`). A start or a switch on an
+  account that another start or switch is busy with is refused at once as
+  busy, and one whose folder went away meanwhile is refused as gone. `matchblox new`
+  waits the copy's 90 seconds on top of its 30 for a new or copy account,
+  and so does `matchblox switch` when the agent's last account is a copy.
+  Both say "failed" for a start that ran and failed and "refused" only
+  when matchblox refused it, and `matchblox new` says "stopped after" the
+  step that ran when a guard stopped the rest. `matchblox sessions` says
+  "sign in by hand" on the line of a new account that matchblox gave up
+  signing in.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **An agent's pane cannot start a session on an account, new or not, even
+  when it says it is a console.**
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **The sign-in of a new account presses only what it sees.** matchblox
+  sends a key only when the option it picks is the highlighted one, looks
+  at the screen again right before the key, and sends it only to the agent
+  first seen in the pane. It stops for good, and the row says `sign in by
+  hand`, when you type in the pane or when the screen changes in any other
+  way: a reflow when a client of another size attaches counts. It also
+  says `sign in by hand` after 20 seconds on a screen without a next screen
+  it knows. A key you type in the few milliseconds between its last look
+  and its key can still be answered: tmux cannot close that gap. An agent
+  that redraws slowly after a key is waited for. The screens, highlight
+  marks and option labels were checked live on codex-cli 0.163.0 and
+  Claude Code 2.1.308 up to the login choice; Cursor's screen and the
+  sign-in after the choice are not tested yet.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **A switch runs on the account its confirm named, or is refused.** `A`
+  and `matchblox switch` send the account they would start the agent on.
+  If the agent's last account changed meanwhile, the switch is refused
+  with `the last <agent> account is now <x>: switch again`, and nothing
+  moves. A hand-made folder named two ways shows, and runs, under the
+  spelling the list shows; a last account a start would refuse shows, and
+  runs, as `default`.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **`N` names each account folder it does not offer, and why.** A folder
+  under `~/.matchblox/accounts/<agent>/` whose name is not a-z, 0-9 and -,
+  up to 10, was left out of the account list without a word. The form now
+  names them under the account field, `not listed: Team (not a-z, 0-9 and
+  -, up to 10)` (three named, then "and N more"), and an unreadable
+  accounts folder says `accounts not read:` with its error.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **The default config folder is the default, however it is reached.** A
+  `~/.claude` that is a symlink, with `CLAUDE_CONFIG_DIR` set to its real
+  path, or `~/.Claude` on macOS, showed as a hand-made account. Both sides
+  of the comparison now name a folder one way, links resolved and letter
+  case as on disk. The account folders and a session's folder are read
+  once, not at every sample, and a folder that failed to read is read
+  again. A link retargeted while a process lives keeps that process's
+  first reading.
+- **A new account shares only the setup the list names.** Settings,
+  instructions, commands, skills, plugins, hooks and a few caches are
+  shared. Every other entry of the default stays with it, including one a
+  later agent version adds: Claude Code's daemon and its key, token
+  backups and job logs are never linked or copied.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- **A Codex account and the default share a directory.** matchblox counts
+  Codex sessions per directory within each Codex home, so a session on an
+  account and one on the default in the same directory each show their
+  context and limits. Two sessions on one home in one directory still show
+  "not measured".
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- An agent that the Codex app-server runs (such as `codex exec`) is not
+  a session, and a `node` launch of `codex app-server` is no session either.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+- A Cursor login that you just signed in to reads its plan usage within 30
+  seconds, not after up to 5 minutes. Only a missing login is read again
+  every 30 seconds. A token read that is denied or fails otherwise (the
+  Keychain or `auth.json`) waits the normal interval, and USAGE says
+  "Cursor's login token could not be read". USAGE says that Cursor's API
+  has not answered yet only while the token is read or after matchblox
+  asked the API.
+  ([#170](https://github.com/blox-eng/matchblox/issues/170))
+
+## [0.21.0] - 2026-10-23
+
+### Added
+
+- **The phone buzzes when an agent waits, with the app closed.** A new
+  wait buzzes the phone through a small relay that stores nothing. The
+  buzz text is sealed to the phone. Run `matchblox serve` with the door
+  "Keep matchblox running" and no console needs to be open. Set
+  `[push] off = true` to stop it.
+- **The island shows the session that matters most, or your usage.** The
+  Live Activity has two faces, Sessions and Usage, and the app's `Island`
+  screen sets which one, which host it follows and which hosts buzz. A wait
+  breaks through the Usage face for 60 s.
+- **A tap opens that session.** The activity, its `Answer` and a buzz open
+  the console on that session after Face ID; with no session on top, the
+  host's console. The app needs iOS 18.
+
+### Changed
+
+- **The app needs iOS 18.** It needed 17.2. The island's channel needs
+  iOS 18.
+- **A phone paired before this release gets an id.** At start the service
+  gives each old phone line in `~/.ssh/authorized_keys` an id, with a
+  backup, so the phone can register for the buzz without pairing again.
+  A line whose matchblox is older than v0.13 stays as it is: that gate
+  would refuse the id. `serve.log` says how many lines it changed and how
+  many it left.
+- **`matchblox devices` shows the push of each phone.** A phone's row says
+  `buzz on` or `buzz off` (with why: `[push] off`, or no host key), and
+  `island yes` or `island no`. The service's last push failure shows under
+  the list.
+- **`[push] relay` names the relay.** It is `https://matchblox.sh`.
+
+## [0.20.0] - 2026-10-23
+
+### Added
+
+- **`serve`, `status`, and `setup` warn when Tailscale SSH bypasses the
+  gate.** With Tailscale SSH on, the host's MagicDNS name and Tailscale
+  IP on port 22 are answered by tailscaled, so permanent paired keys'
+  `restrict` and ForcedCommand never run on that path. The warning names
+  `tailscale set --ssh=false` (or an OpenSSH address/port) as the fix;
+  the docs cover the same. Pair still refuses before the QR when that
+  path would answer the code ([#184](https://github.com/blox-eng/matchblox/pull/184)).
+  ([#185](https://github.com/blox-eng/matchblox/issues/185))
+
+### Fixed
+
+- **`z` parks the right Codex session.** A `codex exec` run in a pane took
+  the rollout of a Codex session that started after it in the same
+  directory, with its id, so `z` on the run parked the session. Before its
+  first turn, a Codex session took the rollout of a Codex app or editor
+  thread there, of a subagent, or of a Codex session that started there
+  after it and exited, also after matchblox restarts, or while it was
+  down. A Codex started with
+  `-C <dir>` counts in `<dir>`, and is measured from it. Now only the
+  CLI's own sessions count, and a `codex exec` or `codex review` row takes
+  none, with options before it or not.
+- **A resumed Codex session shows its context.** `codex resume <id>` finds
+  its rollout by the id, on whatever day it began, also from an npm install
+  or with options such as `-m`. After you edit an earlier prompt (Esc Esc),
+  Codex writes on in a new rollout, and matchblox follows it. After a
+  `/new` or `/resume` in a Codex session (of a session from its
+  directory, however old), or while another session in its directory (or
+  the one `-C` names) is written after it, it shows "not measured" at the
+  next sample. A resume that is not found shows "not measured", not
+  "fresh", and so does a session with no rollout of its own yet, in a
+  directory where an older Codex CLI rollout has been written since it
+  started.
+- **`z` says why a Codex session has no id.** One whose rollout cannot be
+  told apart says so, not "park it after its first turn".
 
 ## [0.19.0] - 2026-10-23
 
@@ -659,7 +895,11 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/blox-eng/matchblox/compare/v0.22.0...v0.23.0
+[0.22.0]: https://github.com/blox-eng/matchblox/compare/v0.21.0...v0.22.0
+[0.21.0]: https://github.com/blox-eng/matchblox/compare/v0.20.0...v0.21.0
+[0.20.0]: https://github.com/blox-eng/matchblox/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/blox-eng/matchblox/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/blox-eng/matchblox/compare/v0.17.4...v0.18.0
 [0.17.4]: https://github.com/blox-eng/matchblox/compare/v0.17.3...v0.17.4

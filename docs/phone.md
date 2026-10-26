@@ -53,6 +53,20 @@ pair again. In the console, Enter only helps after `tailscale set
 If Tailscale SSH still answers, the app says that the host refused this
 connection (with Try again for another address), not that it did not answer.
 
+Pairing is not the whole story. With Tailscale SSH still on
+(`tailscale debug prefs` shows `"RunSSH": true`), a connection to the
+host's MagicDNS name or Tailscale IP on port 22 is answered by
+tailscaled, not OpenSSH. Permanent laptop and phone keys in
+`~/.ssh/authorized_keys` — including their `restrict` option and
+ForcedCommand (`matchblox gate …`) — are ignored on that path. Anyone
+Tailscale SSH admits gets what that policy allows, not the gate. Turn it
+off with
+`tailscale set --ssh=false`, or connect on an address and port that
+OpenSSH serves (`matchblox pair --address` / `--port`, or the same in the
+app). A Tailscale ACL can limit what Tailscale SSH allows; it does not
+run ForcedCommand. `matchblox serve`, `matchblox status`, and
+`matchblox setup` warn when Tailscale SSH is on.
+
 If the app says "This code was used or expired", open Pair a device on the
 host again, or run `matchblox pair` again, and scan the new code.
 
@@ -98,6 +112,79 @@ matchblox devices rm <name>
 
 You can give the fingerprint instead of the name. See
 [Remote hosts](remote.md#see-and-remove-the-devices-of-a-host).
+
+## The buzz and the island
+
+With the app closed, the phone buzzes when an agent waits, and a Live
+Activity (the island) shows the session that matters most, or your usage.
+It needs iOS 18, and the host must run `matchblox serve`: the door "Keep
+matchblox running" in `matchblox setup` keeps it running with no console
+open. The door is done once the unit runs; while a console's service holds
+the socket, the unit's one waits and takes over when it stops. The app
+registers with the host each time it opens, after Face ID or the passcode.
+Nothing connects to a host from the background.
+
+- **The buzz:** a new wait, when a session asks for a permission or a
+  choice. At most one buzz each 30 s for each host. A tap on it opens the
+  session.
+- **The island:** the match of the session that matters most, and its state.
+  A new wait, done or out goes at once. Progress moves in steps of 5 %, at
+  most each 3 minutes. The Usage face moves when a window changes by 2 % or
+  more, or resets, at most each 5 minutes. A wait breaks through the Usage
+  face for 60 s.
+- **A tap opens the session:** the app asks for Face ID, connects and opens
+  the console on that session: on its answer peek if it waits, else on its
+  pane. If the session has ended, the console says `That session ended.`
+- **The setting:** the `Island` entry in the app's console, next to `Hosts`.
+  `Follow` is the one host that has the island (the host opened last). `Show`
+  is `Sessions`, `Usage` or `Auto (Usage while the stoker runs)`. `Buzz` is
+  on or off for each host. A host out of reach keeps its old setting until
+  the next connect.
+- **If a push fails,** the Machine tab says `push: <why>`. If the island
+  needs the app, it says `island: open matchblox on the phone to renew`.
+- **`[push] off = true`** in the config stops the sender: no buzz, no island
+  update, and the host never connects to the relay. A phone can still
+  register: the host keeps its registration and sends nothing.
+- **`matchblox devices`** shows `buzz on` or `buzz off`, and `island yes` or
+  `island no` (yes when the phone registered its island with this host),
+  next to each phone. A phone that registered for the buzz shows
+  `buzz off ([push] off)` or `buzz off (no host key)` when the host sends
+  nothing. The push line of the running service, if any, follows the list.
+
+### What leaves the host in clear
+
+The host sends to the relay, and the relay to Apple. An update to a Live
+Activity cannot be encrypted, so it holds only:
+
+- numbers: counts, session and account numbers, and percents;
+- states and progress;
+- times: when the newest wait began (`wait_at`), when a window resets, and
+  when an account runs out (`out Fri ~20:00`); and the stale date that Apple
+  keeps with an update, which is the end of the 60 s break-through;
+- whether the stoker runs;
+- window short names: `5h`, `wk`, `mo`;
+- `host`: 8 characters of the fingerprint of the host key.
+
+No session name, account name, provider, path or text is in an update.
+
+**The buzz has one sealed blob.** It is a line of the host's label, the
+session's name and a state word, with the last line of what the agent said,
+cut to 120 characters. The host seals it to the notification key of that
+phone (HPKE), and only the app's Notification Service Extension can open it.
+The relay and Apple see only ciphertext, the session number and `host`. The
+alert that Apple shows before the extension runs says only `matchblox`, with
+a sound; the start of an island has the title and the body `matchblox`.
+
+The phone shows the opened line when it is unlocked, and on the lock screen
+too when Show Previews is Always. With the default, When Unlocked, a locked
+phone shows `An agent waits` instead. To keep the line off the lock screen,
+set Settings > Notifications > matchblox > Show Previews to When Unlocked or
+Never.
+
+The app turns a number into a name on the phone, from the names the host
+sends back when the app registers, over ssh (`session 12` and `account 3`
+where it knows none). The relay stores
+nothing and logs no payload. A state is under 2 KB.
 
 ## Without the app
 
@@ -157,7 +244,8 @@ The selected agent's keys are under it: on a one-column phone at the foot
 of its opened row, held upright with a small font at the foot of the
 drawer. Tap `A switch` to open Switch agent. Tap the agent you want, then
 `Enter`; the plan rises in a box above the key line, and a typed `y` runs it (a tap is never consent). The new agent
-starts in the same pane with the same name, and the console jumps to it.
+starts in the same pane with the same name, on the account you last
+started that agent on, and the console jumps to it.
 See [`A` in Keys](keys.md).
 
 ## The phone layout

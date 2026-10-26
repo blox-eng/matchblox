@@ -1,9 +1,9 @@
 # Config
 
 matchblox works without a config. The first run writes
-`~/.config/matchblox/config.toml` with goals for this machine: `load1_over`
-is the number of cores, and the agents it finds (the known agents count
-without it; `agents` adds others). Every key is optional.
+`~/.config/matchblox/config.toml` with goals for this machine (`load1_over`
+is the number of cores) and the agents it finds. Every known agent is a
+session without it; `agents` adds others. Every key is optional.
 
 The service reads the config when it starts. To apply a change, stop the
 service and run `matchblox` again. The lock file next to the service socket
@@ -89,8 +89,8 @@ scan off` keeps it.
 `[stoker] agent` is the command of the stoker agent. matchblox starts it
 itself, on a tmux server of its own (`tmux -L matchblox`, session
 `stoker`), the first time you press `f` or `n`. It is `claude` by default.
-`codex`, `opencode` and `agent` (Cursor) work too. The command must be on the service's
-`PATH`.
+`codex`, `opencode` and `cursor-agent` (Cursor, also installed as `agent`)
+work too. The command must be on the service's `PATH`.
 
 `[stoker] pane` is gone: you no longer start the stoker in a pane of your
 own. `matchblox status` warns while the config still names it, and nothing

@@ -7,13 +7,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/blox-eng/matchblox/internal/testhome"
 )
 
 // TestMain keeps these tests off this machine's tailscale and sshd: a test
 // that wants a probe sets its own.
 func TestMain(m *testing.M) {
 	pairProbe = pairProbeFns{LookPath: func(string) (string, error) { return "", errors.New("not found") }}
-	os.Exit(m.Run())
+	os.Exit(testhome.Run(m))
 }
 
 func pairTestdata(t *testing.T, name string) []byte {
@@ -130,6 +132,47 @@ func TestCheckPairPathTailscaleProbeErrorDoesNotBlock(t *testing.T) {
 	useProbe(t, map[string]bool{"tailscale": true}, pairTestdata(t, "tailscale-prefs-ssh-on.json"), []byte("not json"), nil)
 	if err := CheckPairPath(t.TempDir(), "ws-1.tail1234.ts.net", 22); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTailscaleSSHOnTrue(t *testing.T) {
+	tailscaleProbe(t, "tailscale-prefs-ssh-on.json")
+	if !TailscaleSSHOn() {
+		t.Fatal("TailscaleSSHOn() = false, want true")
+	}
+}
+
+func TestTailscaleSSHOnFalse(t *testing.T) {
+	tailscaleProbe(t, "tailscale-prefs-ssh-off.json")
+	if TailscaleSSHOn() {
+		t.Fatal("TailscaleSSHOn() = true, want false")
+	}
+}
+
+func TestTailscaleSSHOnNoTool(t *testing.T) {
+	useProbe(t, nil, pairTestdata(t, "tailscale-prefs-ssh-on.json"), nil, nil)
+	if TailscaleSSHOn() {
+		t.Fatal("TailscaleSSHOn() = true when tailscale is missing")
+	}
+}
+
+func TestTailscaleSSHOnBadPrefs(t *testing.T) {
+	useProbe(t, map[string]bool{"tailscale": true}, []byte("{"), nil, nil)
+	if TailscaleSSHOn() {
+		t.Fatal("TailscaleSSHOn() = true for bad prefs JSON")
+	}
+}
+
+func TestWarnTailscaleSSHGateCopy(t *testing.T) {
+	for _, want := range []string{
+		"tailscale set --ssh=false",
+		"port 22",
+		"not gated",
+		"MagicDNS",
+	} {
+		if !strings.Contains(WarnTailscaleSSHGate, want) {
+			t.Fatalf("WarnTailscaleSSHGate %q missing %q", WarnTailscaleSSHGate, want)
+		}
 	}
 }
 
