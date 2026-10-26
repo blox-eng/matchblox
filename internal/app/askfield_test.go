@@ -118,6 +118,23 @@ func TestAskFieldConfirmNeedsTypedYes(t *testing.T) {
 	}
 }
 
+// TestAskFieldConfirmMasksTheRest: a hostile keyboard-interactive prompt
+// can say "(yes/no": the field shows only a start of yes or no, and
+// bullets for all else.
+func TestAskFieldConfirmMasksTheRest(t *testing.T) {
+	m, _ := asking(t, askpass.Prompt{Host: "ws-1", Text: "Password (yes/no): ", Confirm: true})
+	out := ansi.Strip(typeIn(m, "hunter2").(Model).render())
+	if strings.Contains(out, "hunter2") || !strings.Contains(out, "•••••••") {
+		t.Fatalf("the field shows what is typed:\n%s", out)
+	}
+	if out := ansi.Strip(typeIn(m, "ye").(Model).render()); !strings.Contains(out, "ye") || strings.Contains(out, "••") {
+		t.Fatalf("the field does not show ye:\n%s", out)
+	}
+	if out := ansi.Strip(typeIn(m, "no").(Model).render()); !strings.Contains(out, "no") || strings.Contains(out, "••") {
+		t.Fatalf("the field does not show no:\n%s", out)
+	}
+}
+
 func TestAskFieldRefusesEmptyNewPassphrase(t *testing.T) {
 	m, a := asking(t, askpass.Prompt{Host: "ws-1", Text: "Enter passphrase (empty for no passphrase): "})
 	next, _ := key(m, "enter")

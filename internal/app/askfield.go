@@ -300,12 +300,13 @@ func (m Model) waitBox(bw int) []string {
 	return box
 }
 
-// askInput is what was typed: a • per rune, or the words of a yes/no
-// prompt, which are no secret.
+// askInput is what was typed: a • per rune. A yes/no prompt shows a start
+// of yes or no, which is no secret; any other text can be a password, as
+// a hostile prompt can say "(yes/no" too.
 func (m Model) askInput() string {
 	f := m.ask
-	if f.prompt.Confirm {
-		return string(f.typed)
+	if t := string(f.typed); f.prompt.Confirm && (strings.HasPrefix("yes", t) || strings.HasPrefix("no", t)) {
+		return t
 	}
 	return strings.Repeat("•", len(f.typed))
 }
