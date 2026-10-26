@@ -50,10 +50,7 @@ func (m Model) checkLogin() (Model, tea.Cmd) {
 	case m.opt.Ask == nil && m.opt.NoAsk != "":
 		m.flash = "jumps to " + m.opt.Host + " ask your login in the terminal: " + m.opt.NoAsk
 	}
-	host, check := m.opt.Host, m.opt.Check
-	if check == nil {
-		check = runCheck
-	}
+	host, check := m.opt.Host, m.checker()
 	argv := remote.CheckArgv(host, dir)
 	return m, func() tea.Msg {
 		stderr, exit := check(argv)
@@ -62,8 +59,17 @@ func (m Model) checkLogin() (Model, tea.Cmd) {
 	}
 }
 
+// checker runs a login check: Options.Check, or ssh.
+func (m Model) checker() func(argv []string) (string, int) {
+	if m.opt.Check != nil {
+		return m.opt.Check
+	}
+	return runCheck
+}
+
 // loggedIn takes the check's result: a login that is not ok shows its fix,
-// and the jump that waited goes, except to a changed host key.
+// and the jump that waited goes, except to a changed host key; a password
+// login offers the key first.
 func (m Model) loggedIn(msg loginMsg) (tea.Model, tea.Cmd) {
 	if msg.host != m.opt.Host {
 		return m, nil
@@ -72,16 +78,13 @@ func (m Model) loggedIn(msg loginMsg) (tea.Model, tea.Cmd) {
 	a := m.jumpLater
 	m.jumpLater = nil
 	var cmd tea.Cmd
-	if a != nil {
-		m.flash = "" // the "checking" line
-		if msg.login != remote.LoginHostKeyChanged {
-			var next tea.Model
-			next, cmd = m.runJump(*a)
-			m = next.(Model)
-		}
-	}
 	if note := m.loginNote(msg.login, msg.detail); note != "" {
 		m.flash = note
+	}
+	if a != nil {
+		var next tea.Model
+		next, cmd = m.jumpAfterLogin(*a)
+		m = next.(Model)
 	}
 	return m, cmd
 }
@@ -97,6 +100,8 @@ func (m Model) jumpAfterLogin(a action) (tea.Model, tea.Cmd) {
 	case m.login == remote.LoginHostKeyChanged:
 		m.flash = m.loginNote(m.login, "")
 		return m, nil
+	case m.offersLadder():
+		return m.findStep(a)
 	}
 	return m.runJump(a)
 }
@@ -183,10 +188,15 @@ func (m Model) loginNote(l remote.Login, detail string) string {
 	host := m.opt.Host
 	switch l {
 	case remote.LoginPassword:
+		if m.offersLadder() {
+			return host + " asks your password: your first jump offers to put your key there"
+		}
 		if m.opt.Ask != nil {
 			return host + " asks your password: the console asks it at a jump, once in 10 minutes; put your key there to skip it (ssh-copy-id " + host + ")"
 		}
 		return host + " asks your password at each jump: put your key there (ssh-copy-id " + host + ")"
+	case remote.LoginKeyOnly:
+		return host + " takes keys only, and none of yours: add your public key to ~/.ssh/authorized_keys on " + host + " another way, such as from a session you have there, then open " + host + " again"
 	case remote.LoginTailscaleCheck:
 		if detail == "" {
 			return "Tailscale SSH on " + host + " asks for a check in a browser"

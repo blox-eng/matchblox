@@ -106,6 +106,7 @@ func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
 	// The builder's own ssh login goes from this machine, whatever the host.
 	o.Check, o.MasterBase, o.SSH = b.Check, b.MasterBase, b.SSH
 	o.Ask, o.NoAsk = b.Ask, b.NoAsk // the prompts of this machine's ssh
+	o.Keys = b.Keys                 // the builder's keys are on this machine
 	o.Graphics = b.Graphics         // the logos draw in this terminal, whatever the host
 	if host == "" {
 		o.Pair = b.Pair // the key goes in this machine's authorized_keys

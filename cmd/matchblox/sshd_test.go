@@ -21,6 +21,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/hosts"
+	"github.com/blox-eng/matchblox/internal/login"
 	"github.com/blox-eng/matchblox/internal/pair"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
@@ -432,4 +433,67 @@ func TestHostKeyPromptOnRealSSHD(t *testing.T) {
 			t.Errorf("VisualHostKey=%s: a no must stop the login", visual)
 		}
 	}
+}
+
+// TestInstallOnRealSSHD puts a key on a host through the builder's master,
+// twice, into a home with no ~/.ssh: the key is there once, ~/.ssh is 0700
+// and authorized_keys 0600, and the key logs in alone (design §3.3).
+func TestInstallOnRealSSHD(t *testing.T) {
+	h := startSSHD(t)
+	master, err := remote.EnsureMasterDir(filepath.Join(h.dir, "m"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := remote.MasterOpts(master)
+	t.Cleanup(func() { _ = exec.Command("ssh", append(opts, "-O", "exit", "--", "ws-1")...).Run() }) //nolint:gosec // test
+	// ssh leaves the master in the background with its stderr: the output
+	// goes to a file, so the run does not wait for the master.
+	run := func(argv []string) {
+		t.Helper()
+		f, err := os.CreateTemp(h.dir, "out")
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := exec.Command(argv[0], argv[1:]...) //nolint:gosec // test
+		c.Stdin, c.Stdout, c.Stderr = strings.NewReader(""), f, f
+		if err := c.Run(); err != nil {
+			b, _ := os.ReadFile(f.Name())
+			t.Fatalf("%q: %v\n%s", argv, err, b)
+		}
+	}
+	run(append(append([]string{"ssh", "-o", "BatchMode=yes"}, opts...), "--", "ws-1", "true"))
+	// The master is the builder's login now; the host's ~/.ssh goes, so the
+	// install makes it.
+	if err := os.RemoveAll(filepath.Join(h.far, ".ssh")); err != nil {
+		t.Fatal(err)
+	}
+	key := filepath.Join(h.dir, "newkey")
+	if out, err := exec.Command("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "matchblox-login", "-f", key).CombinedOutput(); err != nil { //nolint:gosec // test
+		t.Fatalf("ssh-keygen: %v %s", err, out)
+	}
+	pub, err := os.ReadFile(key + ".pub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := strings.TrimSpace(string(pub))
+	argv, err := login.InstallArgv("ws-1", line, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run(argv)
+	run(argv)
+	b, err := os.ReadFile(filepath.Join(h.far, ".ssh", "authorized_keys"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != line+"\n" {
+		t.Fatalf("authorized_keys %q", b)
+	}
+	for path, want := range map[string]os.FileMode{filepath.Join(h.far, ".ssh"): 0o700, filepath.Join(h.far, ".ssh", "authorized_keys"): 0o600} {
+		if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != want {
+			t.Errorf("%s: %v %v, want %o", path, fi.Mode(), err, want)
+		}
+	}
+	run([]string{"ssh", "-i", key, "-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none", "-o", "BatchMode=yes",
+		"-o", "ControlMaster=no", "-o", "ControlPath=none", "--", "ws-1", "true"})
 }

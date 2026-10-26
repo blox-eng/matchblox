@@ -45,12 +45,14 @@ import (
 	"github.com/blox-eng/matchblox/internal/app"
 	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/limits"
+	"github.com/blox-eng/matchblox/internal/login"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -555,6 +557,7 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 	ask, closeAsk, why := consoleAsk(base.MasterBase)
 	defer closeAsk()
 	base.Ask, base.NoAsk = ask, why
+	base.Keys = consoleKeys(home)
 	list := hosts.Path()
 	asked := filepath.Join(filepath.Dir(state.Path()), "asked-where")
 	sh := app.NewShell(app.ShellOptions{
@@ -590,6 +593,17 @@ func consoleAsk(base string) (app.AskSource, func(), string) {
 		return nil, func() {}, "the prompt socket: " + err.Error()
 	}
 	return s, func() { _ = s.Close() }, ""
+}
+
+// consoleKeys is the key ladder's side on this machine (design §3.3): the
+// agent's keys and ~/.ssh, and on macOS the Keychain door.
+func consoleKeys(home string) *app.Keys {
+	k := &app.Keys{GOOS: runtime.GOOS, Step: func() login.Step { return login.Ladder(login.AgentKeys(), filepath.Join(home, ".ssh")) }}
+	if runtime.GOOS == "darwin" {
+		k.Keychain = func(host string) doors.Door { return setup.SSHKeychainDoor(home, host) }
+		k.OpenKeychain = func(host, seen string) (string, error) { return setup.AddSSHKeychain(home, host, seen) }
+	}
+	return k
 }
 
 // openHost dials a host for the shell: "" is this machine's service,

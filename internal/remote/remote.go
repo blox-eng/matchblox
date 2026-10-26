@@ -190,6 +190,23 @@ func ValidDeviceKey(k string) bool {
 		string(fields[1]) == "nistp256" && len(fields[2]) == 65 && fields[2][0] == 0x04
 }
 
+var userKeyRE = regexp.MustCompile(`^(ssh-ed25519|sk-ssh-ed25519@openssh\.com|ecdsa-sha2-nistp(256|384|521)|sk-ecdsa-sha2-nistp256@openssh\.com|ssh-rsa) ([A-Za-z0-9+/]+={0,2})( [A-Za-z0-9@._-]+)?$`)
+
+// ValidUserKey is one public key line of the builder's own login, whose
+// blob names its type, and nothing a shell reads.
+func ValidUserKey(k string) bool {
+	m := userKeyRE.FindStringSubmatch(k)
+	if m == nil {
+		return false
+	}
+	blob, err := base64.StdEncoding.DecodeString(m[3])
+	if err != nil || len(blob) < 4 {
+		return false
+	}
+	n := int(binary.BigEndian.Uint32(blob))
+	return n <= len(blob)-4 && string(blob[4:4+n]) == m[1]
+}
+
 // Bootstrap is the command that connects a host, run with the builder's own
 // ssh login: the verified install (always: an older matchblox does not know
 // authorize, and would start its console instead), then authorize, which

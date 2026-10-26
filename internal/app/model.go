@@ -85,6 +85,9 @@ type Options struct {
 	// (a master's check, its open), with env added, until ctx ends, and
 	// gives its stderr and exit. Nil: ssh, for 5 minutes at most.
 	SSH func(ctx context.Context, argv, env []string) (stderr string, exit int)
+	// Keys finds and sets up the builder's own key for the login to the
+	// host (design §3.3). Nil: the console offers no key.
+	Keys *Keys
 	// Host is the host this console reaches over SSH; "" is this machine.
 	// Its tmux moves and door commands run there, with the builder's own
 	// ssh login.
@@ -184,6 +187,7 @@ type action struct {
 	agent       string                      // a start on a new account: the last agent once it ran
 	previewAct  string                      // switch evidence request; confirmation waits for it
 	preview     string                      // checked evidence excerpt for switch consent
+	climb       *climb                      // a rung of the key ladder
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -298,6 +302,7 @@ type Model struct {
 	checked    bool         // the login check started once
 	jumpLater  *action      // the jump that waits for the login check
 	opening    bool         // the master of a jump opens, its prompts in the console
+	notNow     bool         // the key ladder offers nothing more: not now, or the key is on the host
 	lost       bool
 	backoff    time.Duration
 	redialing  bool
@@ -552,6 +557,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.loggedIn(msg)
 	case masterMsg:
 		return m.masterOpened(msg)
+	case stepMsg:
+		return m.foundStep(msg)
+	case keyMadeMsg:
+		return m.keyMade(msg)
+	case installedMsg:
+		return m.installed(msg)
 	case askMsg:
 		return m.asked(msg)
 	case askGoneMsg:
@@ -1047,6 +1058,9 @@ func (m Model) pendingKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.flash = "reading handover evidence: wait for the preview, or any other key cancels"
 		return m, nil
 	}
+	if a.climb != nil && !yes {
+		return m.declined(*a.climb, bkey.Matches(k, m.keys.main.Back))
+	}
 	if yes && a.again != "" {
 		// It works or waits for you: one more y, said plainly.
 		a.say, a.again, a.text = a.again, "", killAnyway
@@ -1202,6 +1216,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // confirm runs an action the person consented to: a Nav step here, any
 // other on the service.
 func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
+	if a.climb != nil {
+		return m.climbed(*a.climb)
+	}
 	if a.local != nil {
 		next, msg := a.local(m)
 		next.flash = msg

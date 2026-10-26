@@ -20,6 +20,8 @@ const (
 	LoginOK Login = iota
 	// LoginPassword: the host asks a password (or keyboard-interactive).
 	LoginPassword
+	// LoginKeyOnly: the host takes keys only, and none of the builder's.
+	LoginKeyOnly
 	// LoginTailscaleCheck: Tailscale SSH waits for a check in a browser.
 	LoginTailscaleCheck
 	// LoginTailscaleDenied: the tailnet's SSH rules refuse this login.
@@ -36,6 +38,8 @@ func (l Login) String() string {
 		return "ok"
 	case LoginPassword:
 		return "password"
+	case LoginKeyOnly:
+		return "key only"
 	case LoginTailscaleCheck:
 		return "tailscale check"
 	case LoginTailscaleDenied:
@@ -101,6 +105,12 @@ func CheckArgv(host, dir string) []string {
 	return append(argv, "-o", "ConnectTimeout=10", "--", host, "true")
 }
 
+// KeyCheckArgv checks a login with the builder's keys alone, after a key
+// install: no master, as the install's password left one up.
+func KeyCheckArgv(host string) []string {
+	return []string{"ssh", "-v", "-o", "BatchMode=yes", "-o", "ControlMaster=no", "-o", "ControlPath=none", "-o", "ConnectTimeout=10", "--", host, "true"}
+}
+
 // MasterUpArgv asks if the master of host in dir runs: exit 0 when it
 // does. It starts no connection.
 func MasterUpArgv(host, dir string) []string {
@@ -152,8 +162,8 @@ func ClassifyLogin(stderr string, exit int) (Login, string) {
 		return LoginTailscaleCheck, url
 	case denied != "" && exit != 0:
 		return LoginTailscaleDenied, printable(denied)
-	case strings.Contains(stderr, "Permission denied"):
-		return LoginPassword, ""
+	case exit != 0 && strings.Contains(stderr, "Permission denied"):
+		return refused(stderr), ""
 	case exit == 0:
 		return LoginOK, ""
 	}
@@ -162,6 +172,25 @@ func ClassifyLogin(stderr string, exit int) (Login, string) {
 		detail = "timed out" // ssh was ended, or said nothing
 	}
 	return LoginUnreachable, detail
+}
+
+var methodsRE = regexp.MustCompile(`Permission denied \(([a-z0-9@.,-]+)\)`)
+
+// refused names a refused login from the methods ssh says the host takes:
+// a password or keyboard-interactive method can install a key, a host that
+// takes keys only cannot. A refusal without the methods (a wrong password)
+// is a password login.
+func refused(stderr string) Login {
+	all := methodsRE.FindAllStringSubmatch(stderr, -1)
+	if len(all) == 0 {
+		return LoginPassword
+	}
+	for m := range strings.SplitSeq(all[len(all)-1][1], ",") {
+		if m == "password" || m == "keyboard-interactive" {
+			return LoginPassword
+		}
+	}
+	return LoginKeyOnly
 }
 
 // lastSaid is the last line of stderr that is not ssh -v's debug output.

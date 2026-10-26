@@ -2,6 +2,8 @@ package remote
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"os"
 	"os/exec"
@@ -501,5 +503,41 @@ func TestFocusMovesOnlyThePhone(t *testing.T) {
 	}
 	if n := len(strings.Split(tmux("list-sessions", "-F", "#{session_name}"), "\n")); n != 3 {
 		t.Errorf("%d sessions, want work, matchblox and the phone's", n)
+	}
+}
+
+// userKey is a public key line of typ whose blob names typ, as ssh-keygen
+// writes it.
+func userKey(typ string) string {
+	blob := binary.BigEndian.AppendUint32(nil, uint32(len(typ)))
+	blob = append(append(blob, typ...), make([]byte, 36)...)
+	return typ + " " + base64.StdEncoding.EncodeToString(blob)
+}
+
+func TestValidUserKey(t *testing.T) {
+	for _, typ := range []string{"ssh-ed25519", "sk-ssh-ed25519@openssh.com", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384",
+		"ecdsa-sha2-nistp521", "sk-ecdsa-sha2-nistp256@openssh.com", "ssh-rsa"} {
+		k := userKey(typ)
+		if !ValidUserKey(k) || !ValidUserKey(k+" me@ws-1.example_x") {
+			t.Errorf("%s refused", typ)
+		}
+	}
+	good := userKey("ssh-ed25519")
+	for name, k := range map[string]string{
+		"a shell":        "ssh-ed25519 AAAA; rm -rf ~",
+		"dss":            userKey("ssh-dss"),
+		"blob of other":  "ssh-ed25519 " + strings.Fields(userKey("ssh-rsa"))[1],
+		"not base64":     "ssh-ed25519 AAAA$(id)",
+		"bad base64":     "ssh-ed25519 AAAAA",
+		"two comments":   good + " a b",
+		"quote comment":  good + ` x"y`,
+		"dollar comment": good + " $HOME",
+		"newline":        good + "\nssh-rsa AAAA",
+		"options first":  `command="id" ` + good,
+		"empty":          "",
+	} {
+		if ValidUserKey(k) {
+			t.Errorf("%s accepted: %q", name, k)
+		}
 	}
 }

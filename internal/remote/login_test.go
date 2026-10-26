@@ -61,6 +61,94 @@ func TestClassifyLogin(t *testing.T) {
 	}
 }
 
+// publickeyOnly is ssh -v of a key the test sshd (PasswordAuthentication
+// no) does not take, exit 255, recorded 2026-10-26 with OpenSSH 9.6 and
+// cleaned as the files in testdata/login.
+const publickeyOnly = `OpenSSH_9.6p1 Ubuntu-3ubuntu13.20, OpenSSL 3.0.13 30 Jan 2024
+debug1: Reading configuration data /home/builder/.ssh/config
+debug1: /home/builder/.ssh/config line 1: Applying options for *
+debug1: Connecting to localhost [127.0.0.1] port 22.
+debug1: fd 3 clearing O_NONBLOCK
+debug1: Connection established.
+debug1: identity file /home/builder/.ssh/id_ed25519 type 3
+debug1: identity file /home/builder/.ssh/id_ed25519-cert type -1
+debug1: Local version string SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.20
+debug1: Remote protocol version 2.0, remote software version OpenSSH_9.6p1 Ubuntu-3ubuntu13.20
+debug1: compat_banner: match: OpenSSH_9.6p1 Ubuntu-3ubuntu13.20 pat OpenSSH* compat 0x04000000
+debug1: Authenticating to localhost:22 as 'builder'
+debug1: load_hostkeys: fopen /etc/ssh/ssh_known_hosts: No such file or directory
+debug1: load_hostkeys: fopen /etc/ssh/ssh_known_hosts2: No such file or directory
+debug1: SSH2_MSG_KEXINIT sent
+debug1: SSH2_MSG_KEXINIT received
+debug1: kex: algorithm: sntrup761x25519-sha512@openssh.com
+debug1: kex: host key algorithm: ssh-ed25519
+debug1: kex: server->client cipher: chacha20-poly1305@openssh.com MAC: <implicit> compression: none
+debug1: kex: client->server cipher: chacha20-poly1305@openssh.com MAC: <implicit> compression: none
+debug1: expecting SSH2_MSG_KEX_ECDH_REPLY
+debug1: SSH2_MSG_KEX_ECDH_REPLY received
+debug1: Server host key: ssh-ed25519 SHA256:fingerprint
+debug1: load_hostkeys: fopen /etc/ssh/ssh_known_hosts: No such file or directory
+debug1: load_hostkeys: fopen /etc/ssh/ssh_known_hosts2: No such file or directory
+debug1: Host 'localhost' is known and matches the ED25519 host key.
+debug1: Found key in /home/builder/.ssh/known_hosts:1
+debug1: ssh_packet_send2_wrapped: resetting send seqnr 3
+debug1: rekey out after 134217728 blocks
+debug1: SSH2_MSG_NEWKEYS sent
+debug1: Sending SSH2_MSG_EXT_INFO
+debug1: expecting SSH2_MSG_NEWKEYS
+debug1: ssh_packet_read_poll2: resetting read seqnr 3
+debug1: SSH2_MSG_NEWKEYS received
+debug1: rekey in after 134217728 blocks
+debug1: SSH2_MSG_EXT_INFO received
+debug1: kex_ext_info_client_parse: server-sig-algs=<ssh-ed25519,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,sk-ssh-ed25519@openssh.com,sk-ecdsa-sha2-nistp256@openssh.com,rsa-sha2-512,rsa-sha2-256>
+debug1: kex_ext_info_check_ver: publickey-hostbound@openssh.com=<0>
+debug1: kex_ext_info_check_ver: ping@openssh.com=<0>
+debug1: SSH2_MSG_SERVICE_ACCEPT received
+debug1: SSH2_MSG_EXT_INFO received
+debug1: kex_ext_info_client_parse: server-sig-algs=<ssh-ed25519,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,sk-ssh-ed25519@openssh.com,sk-ecdsa-sha2-nistp256@openssh.com,rsa-sha2-512,rsa-sha2-256>
+debug1: Authentications that can continue: publickey
+debug1: Next authentication method: publickey
+debug1: Will attempt key: /home/builder/.ssh/id_ed25519 ED25519 SHA256:fingerprint explicit
+debug1: Offering public key: /home/builder/.ssh/id_ed25519 ED25519 SHA256:fingerprint explicit
+debug1: Authentications that can continue: publickey
+debug1: No more authentication methods to try.
+builder@localhost: Permission denied (publickey).
+`
+
+// TestKeyOnlyHostIsNotAPasswordLogin: a host that takes keys only cannot
+// take the password that installs a key: no ladder there. A refusal needs
+// a failed ssh, and the methods in its parentheses decide.
+func TestKeyOnlyHostIsNotAPasswordLogin(t *testing.T) {
+	if got, _ := ClassifyLogin(publickeyOnly, 255); got != LoginKeyOnly {
+		t.Fatalf("publickey only: %v", got)
+	}
+	for _, c := range []struct {
+		stderr string
+		exit   int
+		want   Login
+	}{
+		{"me@ws-1: Permission denied (publickey).\r\n", 255, LoginKeyOnly},
+		{"me@ws-1: Permission denied (publickey,gssapi-with-mic).\n", 255, LoginKeyOnly},
+		{"me@ws-1: Permission denied (publickey,keyboard-interactive).\n", 255, LoginPassword},
+		{"me@ws-1: Permission denied (password).\n", 255, LoginPassword},
+		{"Permission denied, please try again.\n", 255, LoginPassword},
+		{"me@ws-1: Permission denied (publickey,password).\n", 0, LoginOK},
+	} {
+		if got, _ := ClassifyLogin(c.stderr, c.exit); got != c.want {
+			t.Errorf("%q exit %d: %v, want %v", c.stderr, c.exit, got, c.want)
+		}
+	}
+}
+
+// TestKeyCheckArgvSkipsTheMaster: the check after an install must log in
+// with the key, not ride the master the install's password opened.
+func TestKeyCheckArgvSkipsTheMaster(t *testing.T) {
+	want := []string{"ssh", "-v", "-o", "BatchMode=yes", "-o", "ControlMaster=no", "-o", "ControlPath=none", "-o", "ConnectTimeout=10", "--", "ws-1", "true"}
+	if got := KeyCheckArgv("ws-1"); !slices.Equal(got, want) {
+		t.Fatalf("KeyCheckArgv = %q", got)
+	}
+}
+
 // TestClassifyLoginShowsOnlyATailscaleURL: the URL comes from the server,
 // so only a login.tailscale.com link of plain characters is shown.
 func TestClassifyLoginShowsOnlyATailscaleURL(t *testing.T) {
