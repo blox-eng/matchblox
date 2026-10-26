@@ -55,7 +55,7 @@ var shadowsMain = map[string]map[string]bool{
 	"takeOver": {"y": true, "n": true},
 	"confirm":  {"y": true, "enter": true, "up": true, "k": true, "down": true, "j": true},
 	"scan":     {"y": true, "n": true, "p": true, "esc": true},
-	"ask":      {"esc": true, "enter": true},
+	"ask":      {"esc": true, "enter": true, "c": true},
 }
 
 func defaultKeys() keymaps {
@@ -157,6 +157,7 @@ func defaultKeys() keymaps {
 			Send:   bind(ks("enter"), "⏎", "send"),
 			Cancel: bind(ks("esc"), "esc", "cancel the ssh"),
 			Erase:  bind(ks("backspace"), "⌫", "erase"),
+			Copy:   bind(ks("c"), "c", "copy the link"),
 		},
 	}
 }
@@ -245,9 +246,9 @@ type scanKeys struct{ Find, Never, Pick, Later bkey.Binding }
 func (k scanKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Find, k.Never, k.Pick, k.Later} }
 
 // askKeys answer an ssh prompt. Every other key is text for its field.
-type askKeys struct{ Send, Cancel, Erase bkey.Binding }
+type askKeys struct{ Send, Cancel, Erase, Copy bkey.Binding }
 
-func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Cancel, k.Erase} }
+func (k askKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Send, k.Cancel, k.Erase, k.Copy} }
 
 // shellKeys are the Hosts list.
 type shellKeys struct{ Quit, Up, Down, Back, Remove, Open, Yes, Interrupt bkey.Binding }

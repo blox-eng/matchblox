@@ -70,9 +70,10 @@ type Options struct {
 	LocalTmux string
 	// JumpID names a jump's sessions. Nil: remote.NewJumpID.
 	JumpID func() string
-	// Check runs the login check (remote.CheckArgv) and gives its stderr
-	// and exit. Nil: ssh, for 30 s at most.
-	Check func(argv []string) (stderr string, exit int)
+	// Check runs the login check (remote.CheckArgv) until ctx ends, gives
+	// each line of its stderr to line as ssh prints it, and gives its
+	// stderr and exit. Nil: ssh.
+	Check func(ctx context.Context, argv []string, line func(string)) (stderr string, exit int)
 	// MasterBase holds the ssh masters of the jumps, in MasterBase/ssh:
 	// /tmp/matchblox-<uid>. "": no master, and each jump logs in again.
 	MasterBase string
@@ -82,9 +83,10 @@ type Options struct {
 	// NoAsk is why Ask is nil; "": it says nothing.
 	NoAsk string
 	// SSH runs an ssh of the builder's own login that the console starts
-	// (a master's check, its open), with env added, until ctx ends, and
-	// gives its stderr and exit. Nil: ssh, for 5 minutes at most.
-	SSH func(ctx context.Context, argv, env []string) (stderr string, exit int)
+	// (a master's check, its open), with env added, until ctx ends, gives
+	// each line of its stderr to line as ssh prints it, and gives its
+	// stderr and exit. Nil: ssh, for 5 minutes at most.
+	SSH func(ctx context.Context, argv, env []string, line func(string)) (stderr string, exit int)
 	// Keys finds and sets up the builder's own key for the login to the
 	// host (design §3.3). Nil: the console offers no key.
 	Keys *Keys
@@ -399,6 +401,16 @@ type Model struct {
 	askStop      context.CancelFunc
 	openStop     context.CancelFunc // ends the open-first that runs
 	askCancelled bool
+
+	// checkStop ends the login check that runs; checkCancelled: the builder
+	// ended it at its Tailscale link. tailscale: the host is Tailscale SSH,
+	// as its last check with the server's version line said. loginURL is
+	// Tailscale's check link in the field, while the ssh that printed it
+	// waits; "" none. Only remote.VisitURL gives it.
+	checkStop      context.CancelFunc
+	checkCancelled bool
+	tailscale      bool
+	loginURL       string
 }
 
 func New(opt Options) Model {
@@ -555,6 +567,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return next, tea.Batch(next.recv(), check)
 	case loginMsg:
 		return m.loggedIn(msg)
+	case urlMsg:
+		return m.linkShown(msg)
 	case masterMsg:
 		return m.masterOpened(msg)
 	case stepMsg:

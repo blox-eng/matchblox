@@ -126,6 +126,7 @@ func OpenArgv(host, dir string) []string {
 
 var (
 	tailscaleRE    = regexp.MustCompile(`(?m)^debug1: Remote protocol version 2\.0, remote software version Tailscale\s*$`)
+	versionRE      = regexp.MustCompile(`(?m)^debug1: Remote protocol version [0-9.]+, remote software version `)
 	tailscaleURLRE = regexp.MustCompile(`^https://login\.tailscale\.com/[A-Za-z0-9/]+$`)
 )
 
@@ -133,11 +134,35 @@ var (
 // the version line of ssh -v.
 func Tailscale(stderr string) bool { return tailscaleRE.MatchString(stderr) }
 
-// ClassifyLogin names the result of the login check from its stderr and
-// exit. The string is the Tailscale check URL, the reason of a refusal, or
-// why the host is not reached; "" when there is none. A URL that is not a
-// plain login.tailscale.com link is never given.
+// ServerSeen tells if a check's stderr has the server's version line: a
+// check through a master that runs has none, and tells no kind.
+func ServerSeen(stderr string) bool { return versionRE.MatchString(stderr) }
+
+// VisitURL reads the link line of Tailscale's check mode: ok when line is
+// one, and its URL when it is a plain login.tailscale.com link, else "".
+func VisitURL(line string) (url string, ok bool) {
+	u, ok := strings.CutPrefix(strings.TrimRight(line, "\r"), "# To authenticate, visit: ")
+	if !ok {
+		return "", false
+	}
+	if u = strings.TrimSpace(u); !tailscaleURLRE.MatchString(u) {
+		return "", true
+	}
+	return u, true
+}
+
+// ClassifyLogin names the result of the login check (ssh -v) from its
+// stderr and exit, with the host's kind from the version line.
 func ClassifyLogin(stderr string, exit int) (Login, string) {
+	return ClassifyAs(stderr, exit, Tailscale(stderr))
+}
+
+// ClassifyAs names the result of a login from its stderr and exit. The
+// string is the Tailscale check URL, the reason of a refusal, or why the
+// host is not reached; "" when there is none. Tailscale's lines name a
+// result only when tailscale says the host is Tailscale SSH. A URL that is
+// not a plain login.tailscale.com link is never given.
+func ClassifyAs(stderr string, exit int, tailscale bool) (Login, string) {
 	switch {
 	case strings.Contains(stderr, "REMOTE HOST IDENTIFICATION HAS CHANGED"):
 		return LoginHostKeyChanged, ""
@@ -145,27 +170,24 @@ func ClassifyLogin(stderr string, exit int) (Login, string) {
 		return LoginHostKeyUnknown, ""
 	}
 	var url, denied string
+	var check bool
 	for line := range strings.SplitSeq(stderr, "\n") {
-		line = strings.TrimRight(line, "\r")
-		if u, ok := strings.CutPrefix(line, "# To authenticate, visit: "); ok {
-			url = strings.TrimSpace(u)
+		if u, ok := VisitURL(line); ok {
+			url, check = u, true
 		}
-		if r, ok := strings.CutPrefix(line, "tailscale: "); ok {
+		if r, ok := strings.CutPrefix(strings.TrimRight(line, "\r"), "tailscale: "); ok {
 			denied = r
 		}
 	}
 	switch {
-	case url != "":
-		if !tailscaleURLRE.MatchString(url) {
-			url = ""
-		}
-		return LoginTailscaleCheck, url
-	case denied != "" && exit != 0:
-		return LoginTailscaleDenied, printable(denied)
-	case exit != 0 && strings.Contains(stderr, "Permission denied"):
-		return refused(stderr), ""
 	case exit == 0:
-		return LoginOK, ""
+		return LoginOK, "" // an approved check too: its link is old
+	case tailscale && check:
+		return LoginTailscaleCheck, url
+	case tailscale && denied != "":
+		return LoginTailscaleDenied, printable(denied)
+	case strings.Contains(stderr, "Permission denied"):
+		return refused(stderr), ""
 	}
 	detail := printable(lastSaid(stderr))
 	if exit < 0 || detail == "" {

@@ -561,14 +561,15 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 	list := hosts.Path()
 	asked := filepath.Join(filepath.Dir(state.Path()), "asked-where")
 	sh := app.NewShell(app.ShellOptions{
-		Base:     base,
-		Hosts:    func() []string { return hosts.Read(list) },
-		SSHHosts: func() []string { return hosts.SSHHosts(home) },
-		Open:     func(h string) app.Options { return openHost(path, home, h) },
-		Remove:   func(h string) error { return hosts.Remove(list, h) },
-		Start:    host,
-		FirstRun: !fileExists(asked) && !fileExists(list),
-		Answered: func() { _ = os.MkdirAll(filepath.Dir(asked), 0o700); _ = os.WriteFile(asked, nil, 0o600) },
+		Base:          base,
+		Hosts:         func() []string { return hosts.Read(list) },
+		SSHHosts:      func() []string { return hosts.SSHHosts(home) },
+		Open:          func(h string) app.Options { return openHost(path, home, h) },
+		Remove:        func(h string) error { return hosts.Remove(list, h) },
+		Start:         host,
+		FirstRun:      !fileExists(asked) && !fileExists(list),
+		Answered:      func() { _ = os.MkdirAll(filepath.Dir(asked), 0o700); _ = os.WriteFile(asked, nil, 0o600) },
+		TailscaleGate: setup.TailscaleGateMessage,
 	})
 	final, err := tea.NewProgram(sh, tea.WithFPS(15)).Run()
 	if s, ok := final.(app.Shell); ok {
@@ -1021,7 +1022,7 @@ const stokerPaneGone = "config: [stoker] pane is ignored: matchblox starts the s
 // on MagicDNS/:22. Probe failure is silence.
 func warnTailscaleSSHGate(w io.Writer) {
 	if setup.TailscaleSSHOn() {
-		_, _ = fmt.Fprintln(w, "matchblox:", setup.WarnTailscaleSSHGate)
+		_, _ = fmt.Fprintln(w, "matchblox:", setup.TailscaleGateMessage)
 	}
 }
 

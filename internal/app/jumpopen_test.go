@@ -31,7 +31,7 @@ func askingHost(t *testing.T, up bool, openErr string, openExit int) (Model, *[]
 	m.askCtx, m.askStop = context.WithCancel(context.Background())
 	t.Cleanup(m.askStop)
 	calls := &[]sshCall{}
-	m.opt.SSH = func(_ context.Context, argv, env []string) (string, int) {
+	m.opt.SSH = func(_ context.Context, argv, env []string, _ func(string)) (string, int) {
 		*calls = append(*calls, sshCall{argv, env})
 		if slices.Contains(argv, "-O") {
 			if up {
@@ -244,7 +244,7 @@ func openingHost(t *testing.T) (tea.Model, tea.Cmd, chan struct{}, *[][]string) 
 	t.Helper()
 	m, _, ran := askingHost(t, false, "", 0)
 	killed := make(chan struct{})
-	m.opt.SSH = func(ctx context.Context, argv, _ []string) (string, int) {
+	m.opt.SSH = func(ctx context.Context, argv, _ []string, _ func(string)) (string, int) {
 		if slices.Contains(argv, "-O") {
 			return "", 255
 		}
@@ -335,12 +335,34 @@ func TestOpenFirstEndsWithTheConsole(t *testing.T) {
 	}
 }
 
+// TestRunSSHStreamsLines: each line of stderr reaches line as ssh prints
+// it, not when it ends; the stderr comes back whole.
+func TestRunSSHStreamsLines(t *testing.T) {
+	lines := make(chan string, 4)
+	stderr := make(chan string, 1)
+	go func() {
+		s, _ := runSSH(context.Background(), []string{"sh", "-c", "echo one >&2; sleep 2; printf 'two\\r\\n' >&2"}, nil, time.Minute, func(l string) { lines <- l })
+		stderr <- s
+	}()
+	select {
+	case l := <-lines:
+		if l != "one" {
+			t.Fatalf("line %q", l)
+		}
+	case <-time.After(1500 * time.Millisecond):
+		t.Fatal("the line came only at the end")
+	}
+	if s := <-stderr; s != "one\ntwo\r\n" || <-lines != "two" {
+		t.Fatalf("stderr %q", s)
+	}
+}
+
 // TestRunSSHKilledByContext: the open-first's ssh ends with its context.
 func TestRunSSHKilledByContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(50*time.Millisecond, cancel)
 	start := time.Now()
-	if _, exit := runSSH(ctx, []string{"sleep", "30"}, nil, time.Minute); exit == 0 || time.Since(start) > 5*time.Second {
+	if _, exit := runSSH(ctx, []string{"sleep", "30"}, nil, time.Minute, func(string) {}); exit == 0 || time.Since(start) > 5*time.Second {
 		t.Fatalf("exit %d after %v", exit, time.Since(start))
 	}
 }

@@ -75,9 +75,10 @@ type installedMsg struct {
 }
 
 // offersLadder: a jump to a host that asks a password offers the builder's
-// key first, once per console, unless they chose not now.
+// key first, once per console, unless they chose not now. Never on
+// Tailscale SSH: it does not read authorized_keys.
 func (m Model) offersLadder() bool {
-	return m.login == remote.LoginPassword && m.opt.Keys != nil && m.opt.Ask != nil && !m.notNow
+	return m.login == remote.LoginPassword && !m.tailscale && m.opt.Keys != nil && m.opt.Ask != nil && !m.notNow
 }
 
 // findStep finds the ladder's first step for the jump a, in the
@@ -212,12 +213,14 @@ func (m Model) install(c climb) (tea.Model, tea.Cmd) {
 	keychain := m.opt.Keys.Keychain
 	return m, func() tea.Msg {
 		defer stop()
-		stderr, exit := ssh(ctx, argv, env)
+		stderr, exit := ssh(ctx, argv, env, ignoreLine)
 		msg := installedMsg{c: c, gen: gen, stderr: stderr, exit: exit}
 		if exit != 0 || ctx.Err() != nil {
 			return msg
 		}
-		msg.check, _ = remote.ClassifyLogin(check(remote.KeyCheckArgv(host)))
+		kctx, cancel := context.WithTimeout(ctx, checkTimeout)
+		defer cancel()
+		msg.check, _ = remote.ClassifyLogin(check(kctx, remote.KeyCheckArgv(host), ignoreLine))
 		if keychain != nil {
 			if d := keychain(host); d.Open() && d.Problem == "" {
 				msg.door = &d
@@ -290,7 +293,7 @@ func (m Model) makeKey(c climb) (tea.Model, tea.Cmd) {
 				return msg
 			}
 		}
-		if _, msg.exit = ssh(ctx, login.NewKeyArgv(path), env); msg.exit != 0 {
+		if _, msg.exit = ssh(ctx, login.NewKeyArgv(path), env, ignoreLine); msg.exit != 0 {
 			return msg
 		}
 		made, err := login.StatMade(path)
@@ -310,7 +313,7 @@ func (m Model) makeKey(c climb) (tea.Model, tea.Cmd) {
 			return msg
 		}
 		msg.c.step = s
-		_, exit := ssh(ctx, add, env)
+		_, exit := ssh(ctx, add, env, ignoreLine)
 		msg.added = exit == 0
 		return msg
 	}

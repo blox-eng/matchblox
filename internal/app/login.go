@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -15,19 +17,107 @@ import (
 	"github.com/blox-eng/matchblox/internal/remote"
 )
 
-// checkTimeout ends a login check that waits: Tailscale's check mode waits
-// for a browser.
+// checkTimeout ends a login check that waits, unless it shows a Tailscale
+// link.
 const checkTimeout = 30 * time.Second
 
-// openTimeout ends a master's open that waits: the builder types its
-// password in the console.
+// openTimeout ends an ssh of the builder's login that waits: the builder
+// types a password in the console, or approves a Tailscale check in a
+// browser.
 const openTimeout = 5 * time.Minute
 
-// loginMsg is the result of the login check of host.
+// loginMsg is the result of the login check of host. seen: its stderr has
+// the server's version line, and tailscale is the host's kind.
 type loginMsg struct {
-	host   string
-	login  remote.Login
-	detail string
+	host            string
+	login           remote.Login
+	detail          string
+	seen, tailscale bool
+}
+
+// urlMsg: an ssh of the builder's login, of the console of gen, printed
+// Tailscale's link line. url is "" when the link is not a plain
+// login.tailscale.com one; tailscale says the host is Tailscale SSH. next
+// waits for the rest of the ssh.
+type urlMsg struct {
+	gen       int
+	url       string
+	tailscale bool
+	next      tea.Cmd
+}
+
+// streamed runs an ssh of the builder's login in the background, until
+// ctx ends or limit passes, and gives run's message when it ends. The link
+// line of Tailscale's check comes first, as a urlMsg, the moment ssh
+// prints it: the check waits for a browser. A plain link of a Tailscale
+// SSH host moves the end out to withURL from the start. The host is
+// Tailscale SSH when tailscale says so, or when a version line says so
+// before the link (ssh -v).
+func streamed(ctx context.Context, gen int, tailscale bool, limit, withURL time.Duration, run func(ctx context.Context, line func(string)) tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		ctx, stop := context.WithCancel(ctx)
+		start, end := time.Now(), time.AfterFunc(limit, stop)
+		urls, done := make(chan urlMsg, 1), make(chan tea.Msg, 1)
+		ts := tailscale
+		go func() {
+			defer stop()
+			defer end.Stop()
+			done <- run(ctx, func(l string) {
+				ts = ts || remote.Tailscale(l)
+				url, ok := remote.VisitURL(l)
+				if !ok {
+					return
+				}
+				if ts && url != "" {
+					end.Reset(time.Until(start.Add(withURL)))
+				}
+				select {
+				case urls <- urlMsg{gen: gen, url: url, tailscale: ts}:
+				default: // one waits already
+				}
+			})
+		}()
+		return nextURL(urls, done)()
+	}
+}
+
+// nextURL waits for the next link, or the end; a link that came first
+// goes first.
+func nextURL(urls <-chan urlMsg, done <-chan tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case u := <-urls:
+			u.next = nextURL(urls, done)
+			return u
+		default:
+		}
+		select {
+		case u := <-urls:
+			u.next = nextURL(urls, done)
+			return u
+		case msg := <-done:
+			return msg
+		}
+	}
+}
+
+// linkShown shows Tailscale's link in the field while its ssh waits. A
+// host that is not Tailscale SSH gets no link: its line can say anything.
+func (m Model) linkShown(msg urlMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.opt.Gen || m.quitting {
+		return m, nil
+	}
+	host := m.opt.Host
+	switch {
+	case !msg.tailscale:
+		m.flash = host + " printed an unexpected login link: nothing was opened"
+	case msg.url == "":
+		m.flash = "Tailscale SSH on " + host + " printed a link that is not login.tailscale.com: nothing was opened"
+	default:
+		m.loginURL = msg.url
+		m.pending, m.held = nil, nil // the field is on top: nothing waits under it
+	}
+	return m, msg.next
 }
 
 // checkLogin starts the check of the builder's own ssh login to the host,
@@ -52,15 +142,18 @@ func (m Model) checkLogin() (Model, tea.Cmd) {
 	}
 	host, check := m.opt.Host, m.checker()
 	argv := remote.CheckArgv(host, dir)
-	return m, func() tea.Msg {
-		stderr, exit := check(argv)
+	ctx, stop := context.WithCancel(context.Background())
+	m.checkStop, m.checkCancelled = stop, false
+	return m, streamed(ctx, m.opt.Gen, false, checkTimeout, openTimeout, func(ctx context.Context, line func(string)) tea.Msg {
+		defer stop()
+		stderr, exit := check(ctx, argv, line)
 		login, detail := remote.ClassifyLogin(stderr, exit)
-		return loginMsg{host: host, login: login, detail: detail}
-	}
+		return loginMsg{host: host, login: login, detail: detail, seen: remote.ServerSeen(stderr), tailscale: remote.Tailscale(stderr)}
+	})
 }
 
 // checker runs a login check: Options.Check, or ssh.
-func (m Model) checker() func(argv []string) (string, int) {
+func (m Model) checker() func(ctx context.Context, argv []string, line func(string)) (string, int) {
 	if m.opt.Check != nil {
 		return m.opt.Check
 	}
@@ -68,15 +161,28 @@ func (m Model) checker() func(argv []string) (string, int) {
 }
 
 // loggedIn takes the check's result: a login that is not ok shows its fix,
-// and the jump that waited goes, except to a changed host key; a password
-// login offers the key first.
+// and the jump that waited goes, except to a changed host key or a check
+// the builder cancelled; a password login offers the key first.
 func (m Model) loggedIn(msg loginMsg) (tea.Model, tea.Cmd) {
 	if msg.host != m.opt.Host {
 		return m, nil
 	}
-	m.checking, m.login = false, msg.login
+	m.checking, m.login, m.loginURL, m.checkStop = false, msg.login, "", nil
+	if msg.seen {
+		m.tailscale = msg.tailscale
+	}
 	a := m.jumpLater
 	m.jumpLater = nil
+	if m.checkCancelled {
+		if m.login != remote.LoginOK {
+			m.login = remote.LoginTailscaleCheck // the next jump asks for it again
+		}
+		m.flash = "cancelled: the Tailscale check of " + m.opt.Host + "; the next jump asks for it again"
+		if a != nil {
+			m.flash = "cancelled: the Tailscale check of " + m.opt.Host + ", and the jump did not run"
+		}
+		return m, nil
+	}
 	var cmd tea.Cmd
 	if note := m.loginNote(msg.login, msg.detail); note != "" {
 		m.flash = note
@@ -135,14 +241,15 @@ func (m Model) runJump(a action) (tea.Model, tea.Cmd) {
 	m.flash = "logging in to " + host + "…"
 	ssh, env, gen := m.ssh(), m.opt.Ask.Env(host), m.opt.Gen
 	up, open := remote.MasterUpArgv(host, a.master), remote.OpenArgv(host, a.master)
-	return m, func() tea.Msg {
+	// The open has no -v: the host's kind comes from its check.
+	return m, streamed(ctx, gen, m.tailscale, openTimeout, openTimeout, func(ctx context.Context, line func(string)) tea.Msg {
 		defer stop()
-		if _, exit := ssh(ctx, up, nil); exit == 0 {
+		if _, exit := ssh(ctx, up, nil, ignoreLine); exit == 0 {
 			return masterMsg{a: a, gen: gen}
 		}
-		stderr, exit := ssh(ctx, open, env)
+		stderr, exit := ssh(ctx, open, env, line)
 		return masterMsg{a: a, gen: gen, stderr: stderr, exit: exit}
-	}
+	})
 }
 
 // masterOpened runs the jump on a master that is up, or says why it did
@@ -151,16 +258,18 @@ func (m Model) masterOpened(msg masterMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.opt.Gen || m.quitting {
 		return m, nil
 	}
-	m.opening, m.openStop = false, nil
+	m.opening, m.openStop, m.loginURL = false, nil, ""
 	if msg.exit == 0 && !m.askCancelled {
 		m.flash = ""
 		return m.onHost(msg.a)
 	}
 	host := m.opt.Host
-	login, detail := remote.ClassifyLogin(msg.stderr, msg.exit)
+	login, detail := remote.ClassifyAs(msg.stderr, msg.exit, m.tailscale)
 	switch {
 	case m.askCancelled:
 		m.flash = "cancelled: the login to " + host + ", and the jump did not run"
+	case login == remote.LoginTailscaleCheck:
+		m.flash = "the jump did not run: the Tailscale check of " + host + " was not approved in time; jump again for a new link"
 	case login == remote.LoginPassword:
 		m.flash = "the jump did not run: " + host + " refused your login: jump again to type it again, or put your key there (ssh-copy-id " + host + ")"
 	case login == remote.LoginOK: // an exit that says nothing
@@ -172,12 +281,12 @@ func (m Model) masterOpened(msg masterMsg) (tea.Model, tea.Cmd) {
 }
 
 // ssh runs an ssh of the builder's own login that the console starts.
-func (m Model) ssh() func(ctx context.Context, argv, env []string) (string, int) {
+func (m Model) ssh() func(ctx context.Context, argv, env []string, line func(string)) (string, int) {
 	if m.opt.SSH != nil {
 		return m.opt.SSH
 	}
-	return func(ctx context.Context, argv, env []string) (string, int) {
-		return runSSH(ctx, argv, env, openTimeout)
+	return func(ctx context.Context, argv, env []string, line func(string)) (string, int) {
+		return runSSH(ctx, argv, env, openTimeout, line)
 	}
 }
 
@@ -198,12 +307,10 @@ func (m Model) loginNote(l remote.Login, detail string) string {
 	case remote.LoginKeyOnly:
 		return host + " takes keys only, and none of yours: add your public key to ~/.ssh/authorized_keys on " + host + " another way, such as from a session you have there, then open " + host + " again"
 	case remote.LoginTailscaleCheck:
-		if detail == "" {
-			return "Tailscale SSH on " + host + " asks for a check in a browser"
-		}
-		return "Tailscale SSH on " + host + " asks for a check: open " + detail
+		// Its link is old when the check ended: the next one shows a new one.
+		return "Tailscale SSH on " + host + " asks for a check in a browser: the next jump shows its link"
 	case remote.LoginTailscaleDenied:
-		return "Tailscale SSH on " + host + " refuses you: " + detail + "; see your tailnet's SSH rules (docs/remote.md)"
+		return "Tailscale SSH on " + host + " refuses you: " + detail + "; see your tailnet's SSH rules (docs/remote.md#tailscale-ssh)"
 	case remote.LoginHostKeyUnknown:
 		if m.opt.Ask != nil {
 			return host + "'s host key is not known: the console shows it at a jump; check it before you type yes"
@@ -261,23 +368,24 @@ func (m Model) hostTmuxRefusal(a *action) *action {
 	return b
 }
 
-// runCheck runs the check's ssh and gives its stderr and exit; -1 when the
-// time limit ended it.
-func runCheck(argv []string) (string, int) {
-	return runSSH(context.Background(), argv, nil, checkTimeout)
+// runCheck runs the check's ssh and gives its stderr and exit; -1 when ctx
+// ended it. Its caller sets the time limit: a Tailscale link moves it.
+func runCheck(ctx context.Context, argv []string, line func(string)) (string, int) {
+	return runSSH(ctx, argv, nil, openTimeout, line)
 }
 
 // runSSH runs an ssh of the builder's own login, with env added to this
-// process's, and gives its stderr and exit; -1 when ctx or limit ended it.
-func runSSH(ctx context.Context, argv, env []string, limit time.Duration) (string, int) {
+// process's, gives each line of its stderr to line as ssh prints it, and
+// gives its stderr and exit; -1 when ctx or limit ended it.
+func runSSH(ctx context.Context, argv, env []string, limit time.Duration, line func(string)) (string, int) {
 	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // remote's argv of a host ValidHost took
 	if env != nil {
 		cmd.Env = append(os.Environ(), env...)
 	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	stderr := &lineWriter{line: line}
+	cmd.Stderr = stderr
 	// A new master stays in the background with ssh's stderr (-v keeps it
 	// open): Wait must not wait for the master to end.
 	cmd.WaitDelay = time.Second
@@ -286,4 +394,37 @@ func runSSH(ctx context.Context, argv, env []string, limit time.Duration) (strin
 		return err.Error(), 255 // it did not start: no ssh
 	}
 	return stderr.String(), cmd.ProcessState.ExitCode()
+}
+
+// ignoreLine takes the lines of an ssh whose stderr is read at its end.
+func ignoreLine(string) {}
+
+// lineWriter keeps what ssh writes and gives each whole line to line, as
+// it comes, without its line break.
+type lineWriter struct {
+	mu   sync.Mutex
+	all  bytes.Buffer
+	part []byte
+	line func(string)
+}
+
+func (w *lineWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.all.Write(p)
+	w.part = append(w.part, p...)
+	for {
+		i := bytes.IndexByte(w.part, '\n')
+		if i < 0 {
+			return len(p), nil
+		}
+		w.line(strings.TrimSuffix(string(w.part[:i]), "\r"))
+		w.part = w.part[i+1:]
+	}
+}
+
+func (w *lineWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.all.String()
 }

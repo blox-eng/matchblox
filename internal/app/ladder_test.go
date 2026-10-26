@@ -33,7 +33,7 @@ func ladderHost(t *testing.T, step login.Step, firstCheck string) passwordHost {
 	t.Helper()
 	m, _, _ := checkedHost(t, fixtureState(), "", 0)
 	h := passwordHost{calls: &[]sshCall{}, ran: &[][]string{}, checks: &[][]string{}}
-	m.opt.Check = func(argv []string) (string, int) {
+	m.opt.Check = func(_ context.Context, argv []string, _ func(string)) (string, int) {
 		*h.checks = append(*h.checks, argv)
 		if len(*h.checks) == 1 {
 			return firstCheck, 255
@@ -45,7 +45,7 @@ func ladderHost(t *testing.T, step login.Step, firstCheck string) passwordHost {
 	t.Cleanup(m.askStop)
 	m.opt.Keys = &Keys{Step: func() login.Step { return step }, GOOS: "linux"}
 	up := false
-	m.opt.SSH = func(_ context.Context, argv, env []string) (string, int) {
+	m.opt.SSH = func(_ context.Context, argv, env []string, _ func(string)) (string, int) {
 		*h.calls = append(*h.calls, sshCall{argv, env})
 		if slices.Contains(argv, "-O") {
 			if up {
@@ -203,9 +203,9 @@ func fakeKeygen(t *testing.T, h *passwordHost, pass string) {
 		t.Skip("no ssh-keygen here")
 	}
 	inner := h.m.opt.SSH
-	h.m.opt.SSH = func(ctx context.Context, argv, env []string) (string, int) {
+	h.m.opt.SSH = func(ctx context.Context, argv, env []string, line func(string)) (string, int) {
 		if argv[0] != "ssh-keygen" {
-			return inner(ctx, argv, env)
+			return inner(ctx, argv, env, line)
 		}
 		*h.calls = append(*h.calls, sshCall{argv, env})
 		out, err := exec.Command(argv[0], append(argv[1:], "-N", pass)...).CombinedOutput() //nolint:gosec // test

@@ -10,15 +10,17 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 )
 
-// loginCheckOf runs cmd and the commands it batches for the login check's
-// message, skipping any that block (a recv on an empty connection).
-func loginCheckOf(cmd tea.Cmd) []loginMsg {
+// checkMsgsOf runs cmd and the commands it batches for the login check's
+// messages (its result, a link it printed), skipping any that block (a
+// recv on an empty connection).
+func checkMsgsOf(cmd tea.Cmd) []tea.Msg {
 	if cmd == nil {
 		return nil
 	}
@@ -28,17 +30,28 @@ func loginCheckOf(cmd tea.Cmd) []loginMsg {
 	case msg := <-out:
 		switch msg := msg.(type) {
 		case tea.BatchMsg:
-			var got []loginMsg
+			var got []tea.Msg
 			for _, c := range msg {
-				got = append(got, loginCheckOf(c)...)
+				got = append(got, checkMsgsOf(c)...)
 			}
 			return got
-		case loginMsg:
-			return []loginMsg{msg}
+		case loginMsg, urlMsg:
+			return []tea.Msg{msg}
 		}
 	case <-time.After(50 * time.Millisecond):
 	}
 	return nil
+}
+
+// loginCheckOf is the login check's result among cmd's messages.
+func loginCheckOf(cmd tea.Cmd) []loginMsg {
+	var got []loginMsg
+	for _, msg := range checkMsgsOf(cmd) {
+		if l, ok := msg.(loginMsg); ok {
+			got = append(got, l)
+		}
+	}
+	return got
 }
 
 // shortTemp is a temporary directory with a short path: the master's
@@ -60,7 +73,7 @@ func checkedHost(t *testing.T, st proto.State, stderr string, exit int) (Model, 
 	m, execs := onHost(t, st)
 	m.opt.MasterBase = shortTemp(t)
 	var checks [][]string
-	m.opt.Check = func(argv []string) (string, int) {
+	m.opt.Check = func(_ context.Context, argv []string, _ func(string)) (string, int) {
 		checks = append(checks, argv)
 		return stderr, exit
 	}
@@ -103,7 +116,10 @@ func TestHostOpenRunsLoginCheck(t *testing.T) {
 // check.
 func TestLocalConsoleRunsNoLoginCheck(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
-	m.opt.Check = func(argv []string) (string, int) { t.Fatalf("checked %q", argv); return "", 0 }
+	m.opt.Check = func(_ context.Context, argv []string, _ func(string)) (string, int) {
+		t.Fatalf("checked %q", argv)
+		return "", 0
+	}
 	next, cmd := m.Update(helloMsg(proto.Hello{Version: proto.Version}))
 	loginCheckOf(cmd)
 	if next.(Model).checking {
@@ -174,8 +190,8 @@ func TestLoginResultSaysTheFix(t *testing.T) {
 		jumps  bool
 	}{
 		{remote.LoginPassword, "", "ws-1 asks your password at each jump: put your key there (ssh-copy-id ws-1)", true},
-		{remote.LoginTailscaleCheck, "https://login.tailscale.com/a/0123", "Tailscale SSH on ws-1 asks for a check: open https://login.tailscale.com/a/0123", true},
-		{remote.LoginTailscaleDenied, "tailnet policy does not permit you", "Tailscale SSH on ws-1 refuses you: tailnet policy does not permit you; see your tailnet's SSH rules (docs/remote.md)", true},
+		{remote.LoginTailscaleCheck, "https://login.tailscale.com/a/0123", "Tailscale SSH on ws-1 asks for a check in a browser: the next jump shows its link", true},
+		{remote.LoginTailscaleDenied, "tailnet policy does not permit you", "Tailscale SSH on ws-1 refuses you: tailnet policy does not permit you; see your tailnet's SSH rules (docs/remote.md#tailscale-ssh)", true},
 		{remote.LoginHostKeyUnknown, "", "ws-1's host key is not known: the jump's ssh shows it; check it before you answer yes", true},
 		{remote.LoginUnreachable, "ssh: connect to host ws-1 port 22: Connection refused", "cannot reach ws-1 with your ssh login: ssh: connect to host ws-1 port 22: Connection refused; check that ssh ws-1 works in a terminal", true},
 		{remote.LoginUnreachable, "timed out", "cannot reach ws-1 with your ssh login: timed out; check that ssh ws-1 works in a terminal", true},
@@ -251,8 +267,8 @@ func TestOldHostTmuxShowsDoor(t *testing.T) {
 // the base's check and cache.
 func TestHostConsoleKeepsTheLoginOptions(t *testing.T) {
 	sh := NewShell(ShellOptions{
-		Base: Options{NoMotion: true, MasterBase: "/c", Check: func([]string) (string, int) { return "", 0 },
-			Ask: fakeAsk{}, NoAsk: "why", SSH: func(context.Context, []string, []string) (string, int) { return "", 0 }},
+		Base: Options{NoMotion: true, MasterBase: "/c", Check: func(context.Context, []string, func(string)) (string, int) { return "", 0 },
+			Ask: fakeAsk{}, NoAsk: "why", SSH: func(context.Context, []string, []string, func(string)) (string, int) { return "", 0 }},
 		Open: func(host string) Options { return Options{Conn: newFake(), Host: host} },
 	})
 	opened, _ := sh.open("ws-1", false)
@@ -315,7 +331,10 @@ func TestMasterTooLongJumpsWithoutIt(t *testing.T) {
 func TestNoAskSaysWhyOnce(t *testing.T) {
 	m, _, _ := checkedHost(t, fixtureState(), "", 0)
 	m.opt.NoAsk = "the prompt socket: permission denied"
-	m.opt.SSH = func(_ context.Context, argv, _ []string) (string, int) { t.Fatalf("ssh %q", argv); return "", 0 }
+	m.opt.SSH = func(_ context.Context, argv, _ []string, _ func(string)) (string, int) {
+		t.Fatalf("ssh %q", argv)
+		return "", 0
+	}
 	next, cmd := m.Update(hostHello("3.4"))
 	if want := "jumps to ws-1 ask your login in the terminal: the prompt socket: permission denied"; next.(Model).flash != want {
 		t.Fatalf("flash %q", next.(Model).flash)
@@ -326,5 +345,255 @@ func TestNoAskSaysWhyOnce(t *testing.T) {
 	a := m.forHost(m.jump("%1"))
 	if a == nil || a.master != "" || !slices.Equal(a.steps[0], j.Local(remote.JumpSSH("ws-1", j, remote.MasterOpts(filepath.Join(m.opt.MasterBase, "ssh"))))) {
 		t.Fatalf("pending %+v", a)
+	}
+}
+
+// tailscaleFixture is a recorded stderr of Tailscale SSH (internal/remote).
+func tailscaleFixture(t *testing.T, name string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("..", "remote", "testdata", "login", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// streamLines gives text to line, line by line, as ssh prints it.
+func streamLines(text string, line func(string)) {
+	for l := range strings.Lines(text) {
+		line(strings.TrimSuffix(l, "\n"))
+	}
+}
+
+// waitingCheck streams the recorded check mode as tailscaled prints it:
+// up to its link, then it waits for approve (exit 0) or its context (-1).
+func waitingCheck(t *testing.T, approve <-chan struct{}) func(context.Context, []string, func(string)) (string, int) {
+	before, after, _ := strings.Cut(tailscaleFixture(t, "tailscale-check.stderr"), "# Authentication checked")
+	after = "# Authentication checked" + after
+	return func(ctx context.Context, _ []string, line func(string)) (string, int) {
+		streamLines(before, line)
+		select {
+		case <-approve:
+		case <-ctx.Done():
+			return before, -1
+		}
+		streamLines(after, line)
+		return before + after, 0
+	}
+}
+
+// urlOf runs cmd and the commands it batches for the first link message.
+func urlOf(t *testing.T, cmd tea.Cmd) urlMsg {
+	t.Helper()
+	for _, msg := range checkMsgsOf(cmd) {
+		if u, ok := msg.(urlMsg); ok {
+			return u
+		}
+	}
+	t.Fatal("no link message")
+	return urlMsg{}
+}
+
+const checkURL = "https://login.tailscale.com/a/0123456789abcd"
+
+// tailscaleHost is ws-1 whose check streams check mode and waits, with a
+// jump to %1 confirmed while it runs, and the link on the screen.
+func tailscaleHost(t *testing.T, approve <-chan struct{}) (Model, tea.Cmd, *[][]string, *[]string) {
+	t.Helper()
+	m, _, _ := checkedHost(t, fixtureState(), "", 0)
+	m.opt.Check = waitingCheck(t, approve)
+	clipped, ran := &[]string{}, &[][]string{}
+	m.opt.Clip = func(s string) { *clipped = append(*clipped, s) }
+	m.opt.Run = func(argv []string) error { *ran = append(*ran, argv); return nil }
+	next, cmd := m.Update(hostHello("3.4"))
+	m = next.(Model)
+	hostJump(&m, remote.Jump{Pane: "%1"})
+	next, _ = m.confirm(*m.forHost(m.jump("%1")))
+	u := urlOf(t, cmd)
+	if u.url != checkURL || !u.tailscale {
+		t.Fatalf("link %+v", u)
+	}
+	next, cmd = next.Update(u)
+	return next.(Model), cmd, ran, clipped
+}
+
+// TestTailscaleCheckShowsURL: check mode shows its link the moment
+// tailscaled prints it, as an OSC 8 link in the field, while the check
+// waits; c copies it; the field holds the other keys; the ladder is never
+// offered; the approved check runs the jump and leaves no old link.
+func TestTailscaleCheckShowsURL(t *testing.T) {
+	approve := make(chan struct{})
+	m, wait, ran, clipped := tailscaleHost(t, approve)
+	if m.loginURL != checkURL || !m.asking() {
+		t.Fatalf("link %q, asking %v", m.loginURL, m.asking())
+	}
+	out := m.render()
+	if !strings.Contains(out, ansi.SetHyperlink(checkURL)) || !strings.Contains(ansi.Strip(out), "ssh ws-1 asks") {
+		t.Fatalf("no OSC 8 link in the field:\n%q", out)
+	}
+	next, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
+	if cmd != nil {
+		cmd()
+	}
+	if !slices.Equal(*clipped, []string{checkURL}) {
+		t.Fatalf("clipped %q", *clipped)
+	}
+	next, _ = next.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	if len(*ran) != 0 || next.(Model).loginURL != checkURL {
+		t.Fatalf("a key went past the field: ran %q", *ran)
+	}
+	close(approve)
+	next, cmd = next.Update(wait())
+	if cmd == nil {
+		t.Fatal("the approved check did not run the jump")
+	}
+	cmd()
+	m = next.(Model)
+	if len(*ran) != 1 || m.loginURL != "" || m.asking() || strings.Contains(m.flash, "tailscale.com") {
+		t.Fatalf("ran %q, link %q, flash %q", *ran, m.loginURL, m.flash)
+	}
+	if !m.tailscale {
+		t.Fatal("the console forgot that ws-1 is Tailscale SSH")
+	}
+	m.opt.Keys, m.opt.Ask, m.login = &Keys{}, fakeAsk{}, remote.LoginPassword
+	if m.offersLadder() {
+		t.Fatal("the ladder is offered on Tailscale SSH: authorized_keys does nothing there")
+	}
+}
+
+// TestTailscaleCheckEscCancels: esc on the link ends the check's ssh, and
+// the jump that waited does not run.
+func TestTailscaleCheckEscCancels(t *testing.T) {
+	m, wait, ran, _ := tailscaleHost(t, make(chan struct{}))
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	done := make(chan tea.Msg, 1)
+	go func() { done <- wait() }()
+	var msg tea.Msg
+	select {
+	case msg = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("esc did not end the check's ssh")
+	}
+	next, cmd := next.Update(msg)
+	if cmd != nil {
+		cmd()
+	}
+	m = next.(Model)
+	if len(*ran) != 0 || m.loginURL != "" || !strings.HasPrefix(m.flash, "cancelled") {
+		t.Fatalf("ran %q, link %q, flash %q", *ran, m.loginURL, m.flash)
+	}
+	if m.login != remote.LoginTailscaleCheck {
+		t.Fatalf("login %v: the next jump must ask for the check again", m.login)
+	}
+}
+
+// TestTailscaleDeniedSaysWhy: a refusal by the tailnet's rules says
+// Tailscale's reason and where the rules are explained.
+func TestTailscaleDeniedSaysWhy(t *testing.T) {
+	m, _, _ := checkedHost(t, fixtureState(), tailscaleFixture(t, "tailscale-denied.stderr"), 255)
+	next, cmd := m.Update(hostHello("3.4"))
+	next, _ = next.Update(loginCheckOf(cmd)[0])
+	want := `Tailscale SSH on ws-1 refuses you: tailnet policy does not permit you to SSH as user "nosuchuser"; see your tailnet's SSH rules (docs/remote.md#tailscale-ssh)`
+	if f := next.(Model).flash; f != want {
+		t.Fatalf("flash %q\nwant %q", f, want)
+	}
+}
+
+// TestTailscaleOpenFirstShowsURL: a jump meets check mode in the
+// open-first (no -v, so no version line): the host's kind from its check
+// lets the link show, live; the approved open runs the jump.
+func TestTailscaleOpenFirstShowsURL(t *testing.T) {
+	m, _, ran := askingHost(t, false, "", 0)
+	m.tailscale = true
+	approve := make(chan struct{})
+	open := waitingCheck(t, approve)
+	m.opt.SSH = func(ctx context.Context, argv, _ []string, line func(string)) (string, int) {
+		if slices.Contains(argv, "-O") {
+			return "", 255
+		}
+		return open(ctx, argv, func(l string) {
+			if !strings.HasPrefix(l, "debug1:") {
+				line(l)
+			}
+		})
+	}
+	hostJump(&m, remote.Jump{Pane: "%1"})
+	next, cmd := m.confirm(*m.forHost(m.jump("%1")))
+	u, ok := cmd().(urlMsg)
+	if !ok || u.url != checkURL {
+		t.Fatalf("link %+v", u)
+	}
+	next, cmd = next.Update(u)
+	if next.(Model).loginURL != checkURL || !strings.Contains(next.(Model).render(), ansi.SetHyperlink(checkURL)) {
+		t.Fatal("the open-first's link is not shown")
+	}
+	close(approve)
+	for cmd != nil {
+		next, cmd = next.Update(cmd())
+	}
+	if m := next.(Model); len(*ran) != 1 || m.loginURL != "" || m.opening || strings.Contains(m.flash, "tailscale.com") {
+		t.Fatalf("ran %q, link %q, flash %q", *ran, m.loginURL, m.flash)
+	}
+}
+
+// TestUnexpectedLoginLinkNotShown: a host that is not Tailscale SSH and
+// prints Tailscale's link line gets no link on the screen.
+func TestUnexpectedLoginLinkNotShown(t *testing.T) {
+	m, _, _ := askingHost(t, false, "", 0)
+	m.opt.SSH = func(_ context.Context, argv, _ []string, line func(string)) (string, int) {
+		if slices.Contains(argv, "-O") {
+			return "", 255
+		}
+		line("# To authenticate, visit: " + checkURL)
+		return "", 255
+	}
+	hostJump(&m, remote.Jump{Pane: "%1"})
+	next, cmd := m.confirm(*m.forHost(m.jump("%1")))
+	u, ok := cmd().(urlMsg)
+	if !ok {
+		t.Fatal("no link message")
+	}
+	next, _ = next.Update(u)
+	m = next.(Model)
+	if m.loginURL != "" || strings.Contains(m.render(), checkURL) {
+		t.Fatal("a link from a host that is not Tailscale SSH is shown")
+	}
+	if want := "ws-1 printed an unexpected login link: nothing was opened"; m.flash != want {
+		t.Fatalf("flash %q", m.flash)
+	}
+}
+
+// TestStreamedLimit: an ssh that waits is ended at its limit; a Tailscale
+// link moves the limit out (to openTimeout in the console).
+func TestStreamedLimit(t *testing.T) {
+	waits := func(link string) func(context.Context, func(string)) tea.Msg {
+		return func(ctx context.Context, line func(string)) tea.Msg {
+			line("debug1: Remote protocol version 2.0, remote software version Tailscale")
+			if link != "" {
+				line("# To authenticate, visit: " + link)
+			}
+			select {
+			case <-ctx.Done():
+				return "ended"
+			case <-time.After(300 * time.Millisecond):
+				return "done"
+			}
+		}
+	}
+	drain := func(cmd tea.Cmd) tea.Msg {
+		msg := cmd()
+		for u, ok := msg.(urlMsg); ok; u, ok = msg.(urlMsg) {
+			msg = u.next()
+		}
+		return msg
+	}
+	if got := drain(streamed(context.Background(), 1, false, 50*time.Millisecond, 5*time.Second, waits(""))); got != "ended" {
+		t.Fatalf("no link: %v", got)
+	}
+	if got := drain(streamed(context.Background(), 1, false, 50*time.Millisecond, 5*time.Second, waits(checkURL))); got != "done" {
+		t.Fatalf("a link: %v", got)
+	}
+	if got := drain(streamed(context.Background(), 1, false, 50*time.Millisecond, 5*time.Second, waits("https://evil.example/a/1"))); got != "ended" {
+		t.Fatalf("a link that is not Tailscale's: %v", got)
 	}
 }

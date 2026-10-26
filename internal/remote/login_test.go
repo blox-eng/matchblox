@@ -43,7 +43,7 @@ func TestClassifyLogin(t *testing.T) {
 		tailscale bool
 	}{
 		{"tailscale-ok.stderr", LoginOK, "", true},
-		{"tailscale-check.stderr", LoginTailscaleCheck, "https://login.tailscale.com/a/0123456789abcd", true},
+		{"tailscale-check.stderr", LoginOK, "", true}, // approved: no link to show any more
 		{"tailscale-denied.stderr", LoginTailscaleDenied, `tailnet policy does not permit you to SSH as user "nosuchuser"`, true},
 		{"openssh-password.stderr", LoginPassword, "", false},
 		{"openssh-hostkey-unknown.stderr", LoginHostKeyUnknown, "", false},
@@ -159,10 +159,87 @@ func TestClassifyLoginShowsOnlyATailscaleURL(t *testing.T) {
 		"https://login.tailscale.com/a/0123?x=1",
 		"http://login.tailscale.com/a/0123",
 	} {
-		stderr := "# Tailscale SSH requires an additional check.\n# To authenticate, visit: " + url + "\n"
+		stderr := tailscaleBanner + "# Tailscale SSH requires an additional check.\n# To authenticate, visit: " + url + "\n"
 		if got, detail := ClassifyLogin(stderr, 255); got != LoginTailscaleCheck || detail != "" {
 			t.Errorf("%q: %v %q", url, got, detail)
 		}
+	}
+}
+
+const tailscaleBanner = "debug1: Remote protocol version 2.0, remote software version Tailscale\n"
+
+// TestTailscaleCheckWaits: a check that ends before the approval (the
+// time limit, or esc) gives the URL.
+func TestTailscaleCheckWaits(t *testing.T) {
+	stderr, _ := fixture(t, "tailscale-check.stderr")
+	stderr, _, _ = strings.Cut(stderr, "# Authentication checked")
+	if got, detail := ClassifyLogin(stderr, -1); got != LoginTailscaleCheck || detail != "https://login.tailscale.com/a/0123456789abcd" {
+		t.Fatalf("%v %q", got, detail)
+	}
+}
+
+// TestTailscaleNeedsTheBanner: a host that is not Tailscale SSH can print
+// Tailscale's lines too: without the version line they name nothing.
+func TestTailscaleNeedsTheBanner(t *testing.T) {
+	for _, c := range []struct {
+		stderr string
+		exit   int
+	}{
+		{"# To authenticate, visit: https://login.tailscale.com/a/0123\n", -1},
+		{"tailscale: tailnet policy does not permit you\n", 255},
+		{"debug1: Remote protocol version 2.0, remote software version OpenSSH_9.6\ntailscale: no\n", 255},
+	} {
+		if got, _ := ClassifyLogin(c.stderr, c.exit); got == LoginTailscaleCheck || got == LoginTailscaleDenied {
+			t.Errorf("%q: %v", c.stderr, got)
+		}
+	}
+}
+
+// TestClassifyAsTailscale: the open-first runs without -v, so the host's
+// kind comes from its last check.
+func TestClassifyAsTailscale(t *testing.T) {
+	denied := "tailscale: tailnet policy does not permit you to SSH as user \"x\"\nConnection closed by 100.64.0.10 port 22\n"
+	if got, detail := ClassifyAs(denied, 255, true); got != LoginTailscaleDenied || detail != `tailnet policy does not permit you to SSH as user "x"` {
+		t.Errorf("denied: %v %q", got, detail)
+	}
+	if got, _ := ClassifyAs(denied, 255, false); got == LoginTailscaleDenied {
+		t.Errorf("an OpenSSH host: %v", got)
+	}
+	check := "# Tailscale SSH requires an additional check.\n# To authenticate, visit: https://login.tailscale.com/a/0123\n"
+	if got, detail := ClassifyAs(check, -1, true); got != LoginTailscaleCheck || detail != "https://login.tailscale.com/a/0123" {
+		t.Errorf("check: %v %q", got, detail)
+	}
+}
+
+// TestVisitURL: the check's link line gives its URL, and only a plain
+// login.tailscale.com link.
+func TestVisitURL(t *testing.T) {
+	for _, c := range []struct {
+		line, url string
+		ok        bool
+	}{
+		{"# To authenticate, visit: https://login.tailscale.com/a/0123\r", "https://login.tailscale.com/a/0123", true},
+		{"# To authenticate, visit: https://evil.example/a/0123", "", true},
+		{"# To authenticate, visit: https://login.tailscale.com/a/0\x1b]8;;x", "", true},
+		{"# Tailscale SSH requires an additional check.", "", false},
+		{"x # To authenticate, visit: https://login.tailscale.com/a/0123", "", false},
+	} {
+		if url, ok := VisitURL(c.line); url != c.url || ok != c.ok {
+			t.Errorf("%q: %q %v", c.line, url, ok)
+		}
+	}
+}
+
+// TestServerSeen: a check through a master that runs has no version line,
+// so it does not tell the host's kind.
+func TestServerSeen(t *testing.T) {
+	for _, f := range []string{"tailscale-ok.stderr", "openssh-password.stderr"} {
+		if stderr, _ := fixture(t, f); !ServerSeen(stderr) {
+			t.Errorf("%s: no server", f)
+		}
+	}
+	if ServerSeen("debug1: auto-mux: Trying existing master\n") {
+		t.Error("a check through the master saw a server")
 	}
 }
 
@@ -186,7 +263,7 @@ func TestUnreachableSaysTimedOut(t *testing.T) {
 // TestClassifyLoginCleansTheReason: Tailscale's reason and ssh's last line
 // come from the network: no control characters reach the screen.
 func TestClassifyLoginCleansTheReason(t *testing.T) {
-	_, detail := ClassifyLogin("tailscale: no\x1b[2J \x07way\n", 255)
+	_, detail := ClassifyLogin(tailscaleBanner+"tailscale: no\x1b[2J \x07way\n", 255)
 	if detail != "no[2J way" {
 		t.Errorf("detail %q", detail)
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/remote"
+	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
@@ -328,5 +329,48 @@ func TestALongHostListScrolls(t *testing.T) {
 	r.key(t, "enter")
 	if r.sh.input == nil {
 		t.Fatal("enter on the last row did not start typing")
+	}
+}
+
+// TestTailscaleHostRowWarns: a host whose check met Tailscale SSH keeps
+// that on its Hosts row: the stream is not gated there (#185). The secure
+// fix comes first; the selected row shows the whole message.
+func TestTailscaleHostRowWarns(t *testing.T) {
+	r := newShell(t, []string{"ws-1", "ws-2"}, nil, "", false)
+	r.sh.opt.TailscaleGate = setup.TailscaleGateMessage
+	r.sh, _ = r.sh.open("ws-1", false)
+	next, _ := r.sh.Update(loginMsg{host: "ws-1", login: remote.LoginOK, seen: true, tailscale: true})
+	r.sh = next.(Shell).back()
+	rows := r.sh.rows()
+	if !rows[1].tailscale || rows[2].tailscale {
+		t.Fatalf("rows %+v", rows)
+	}
+	lines := strings.Split(r.view(), "\n")
+	var row string
+	for _, l := range lines {
+		if strings.Contains(l, "ws-1") {
+			row = l
+			break
+		}
+	}
+	if !strings.Contains(row, "tailscale set --ssh=false") {
+		t.Fatalf("the ws-1 row does not warn:\n%s", r.view())
+	}
+	// ws-1 is selected (back from its console): the whole message shows.
+	flat := strings.Join(strings.Fields(strings.ReplaceAll(r.view(), " ! ", " ")), " ")
+	if !strings.Contains(flat, setup.TailscaleGateMessage) || !strings.Contains(flat, "docs/remote.md#tailscale-ssh") {
+		t.Fatalf("no #185 message:\n%s", r.view())
+	}
+	if i, j := strings.Index(setup.TailscaleGateMessage, "tailscale set --ssh=false"), strings.Index(setup.TailscaleGateMessage, "or connect"); i < 0 || i > j {
+		t.Fatalf("the secure fix is not first: %q", setup.TailscaleGateMessage)
+	}
+	r.key(t, "down")
+	if flat := strings.Join(strings.Fields(strings.ReplaceAll(r.view(), " ! ", " ")), " "); strings.Contains(flat, setup.TailscaleGateMessage) {
+		t.Fatal("the message shows on another host's row")
+	}
+	// The console of ws-1 opens knowing its kind.
+	r.sh, _ = r.sh.open("ws-1", false)
+	if !r.sh.cur.tailscale {
+		t.Fatal("the console of ws-1 forgot its kind")
 	}
 }

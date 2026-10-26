@@ -51,11 +51,14 @@ func (m Model) waitAsk() tea.Cmd {
 	}
 }
 
-// stopAsk ends the console's wait for prompts: an open prompt is
-// cancelled.
+// stopAsk ends the console's wait for prompts, and its login check: an
+// open prompt is cancelled.
 func (m Model) stopAsk() {
 	if m.askStop != nil {
 		m.askStop()
+	}
+	if m.checkStop != nil {
+		m.checkStop()
 	}
 }
 
@@ -117,20 +120,31 @@ func (m Model) askHost() string {
 	return "a host"
 }
 
-// asking: the field is on top, with a prompt, or waiting for the next one
-// of an open-first (sshd waits after a wrong password).
-func (m Model) asking() bool { return m.ask != nil || m.opening }
+// asking: the field is on top, with a prompt, with Tailscale's link, or
+// waiting for the next prompt of an open-first (sshd waits after a wrong
+// password).
+func (m Model) asking() bool { return m.ask != nil || m.opening || m.loginURL != "" }
 
 // askKey is a key on the field: ⏎ answers, esc and ctrl+c cancel the ssh,
 // any other key is text. While the field waits, esc and ctrl+c end the
-// open-first, and it takes every other key for nothing.
+// open-first or the check, c copies Tailscale's link, and it takes every
+// other key for nothing.
 func (m Model) askKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	ak := m.keys.ask
 	if m.ask == nil {
-		if bkey.Matches(k, ak.Cancel, m.keys.global.Quit) && m.openStop != nil {
+		switch {
+		case bkey.Matches(k, ak.Copy) && m.loginURL != "":
+			m.flash = "link copied"
+			return m, m.clip(m.loginURL)
+		case !bkey.Matches(k, ak.Cancel, m.keys.global.Quit):
+		case m.openStop != nil:
 			m.openStop()
 			m.askCancelled = true
 			m.flash = "cancelled: the login to " + m.opt.Host + "…"
+		case m.checking && m.checkStop != nil:
+			m.checkStop()
+			m.checkCancelled = true
+			m.flash = "cancelled: the Tailscale check of " + m.opt.Host + "…"
 		}
 		return m, nil
 	}
@@ -256,6 +270,26 @@ func (m Model) askBox(bw, maxH int) []string {
 	return box
 }
 
+// linkBox is the field with Tailscale's check link, an OSC 8 link, while
+// its ssh waits for the builder's browser. The link is a plain
+// login.tailscale.com URL (remote.VisitURL); the console never opens it.
+func (m Model) linkBox(bw int) []string {
+	st, ak := m.st, m.keys.ask
+	iw := max(bw-4-2*consentPad, 4)
+	var text []string
+	for _, l := range askLines("Tailscale SSH asks for a check. Open this link in a browser, then wait here:", iw) {
+		text = append(text, st.muted.Render(l))
+	}
+	link := []string{""}
+	for l := range strings.SplitSeq(ansi.Hardwrap(m.loginURL, iw, false), "\n") {
+		link = append(link, ansi.SetHyperlink(m.loginURL)+st.accent.Render(l)+ansi.ResetHyperlink())
+	}
+	title := st.accent.Bold(true).Render("ssh " + m.askHost() + " asks")
+	foot := []footPart{st.footKey(ak.Copy, "copy the link", "", st.accent), st.footKey(ak.Cancel, "cancel the ssh", " ─ ", st.accent)}
+	box, _ := boxFrame(st.hair, title, padded([][]string{text, link}, bw), foot, bw)
+	return box
+}
+
 // waitBox is the field between two prompts of an open-first: it holds
 // the keys until ssh asks again or ends.
 func (m Model) waitBox(bw int) []string {
@@ -288,9 +322,14 @@ func (m Model) overlayAsk(sc *drawn, w int) {
 	if !phone {
 		bw = min(72, w-8)
 	}
-	box := m.waitBox(bw)
-	if m.ask != nil {
+	var box []string
+	switch {
+	case m.ask != nil:
 		box = m.askBox(bw, len(sc.lines)-3)
+	case m.loginURL != "":
+		box = m.linkBox(bw)
+	default:
+		box = m.waitBox(bw)
 	}
 	m.overlayBox(sc, w, bw, phone, box, make([]string, len(box)), nil)
 }
