@@ -29,7 +29,10 @@ All notable changes to matchblox are in this file. The format follows
   shows `cloning o/r… 42%`, the last `⏎` waits (`starts when the clone is
   done`) and `esc` stops the clone and deletes the partial folder. A clone
   goes through a hidden `.<name>.cloning` folder and takes its name when it
-  is done. A taken folder name gets a match word (`ember`, `flint`, `spark`
+  is done. Beside it, `.<name>.cloning.owner` holds the pid of the service
+  that clones, until the clone ends. A leftover folder is cleared only when
+  that file names a process that is gone; with no file, or a live owner, it
+  is left alone and its name counts as taken. A taken folder name gets a match word (`ember`, `flint`, `spark`
   and more), then a 4-character tail. `[git] clone_root` (default `~/src`)
   is where clones go; `o/r` uses the protocol of `gh config get
   git_protocol`, else https. `matchblox new --where <url>` clones (or

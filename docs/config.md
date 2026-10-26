@@ -78,7 +78,13 @@ another repo, a file or a clone in progress, the folder gets a match word
 a 4-character tail. `o/r` on its own uses the protocol that
 `gh config get git_protocol` says, else https. The clone is a full clone and
 never asks for a password: git has no terminal, so a repo that needs one
-says why and how to sign in.
+says why and how to sign in. A URL with a token in it is refused: an
+`https` URL takes no user or password, an `ssh` URL only a plain user name
+(`git@`), and none takes a query or a fragment. While it runs, a
+clone works in a hidden `.<name>.cloning` folder, with a
+`.<name>.cloning.owner` file beside it that names the service. After a crash,
+matchblox clears that folder only when the owner file names a process that is
+gone; a folder it did not make is left alone, and its name counts as taken.
 
 matchblox keeps where its sessions started in `~/.local/state/matchblox/used.json`.
 N's `where` lists those folders. It needs no scan consent, and `matchblox
