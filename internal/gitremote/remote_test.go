@@ -68,6 +68,26 @@ func TestParseRefusesAPassword(t *testing.T) {
 	}
 }
 
+// Credentials in a URL are refused: https needs no user, ssh and scp take a
+// plain user name, and a query or fragment can carry a token.
+func TestParseRefusesCredentialsInAURL(t *testing.T) {
+	for _, s := range []string{
+		"https://ghp_x@github.com/o/r", "https://git@github.com/o/r", "https://@github.com/o/r",
+		"https://h/o/r?access_token=x", "https://github.com/o/r?", "https://github.com/o/r#tok", "https://github.com/o/r.git#frag",
+		"ssh://git@h/o/r?token=x", "ssh://git@h/o/r#x", "ssh://a%40b@h/o/r", "ssh://us er@h/o/r",
+		"git@github.com:o/r?token=x", "git@github.com:o/r#x", "git@github.com:o/r.git?x=1",
+	} {
+		if r, ok := Parse(s, "https"); ok {
+			t.Errorf("Parse(%q) = %+v, want refused", s, r)
+		}
+	}
+	for _, s := range []string{"https://ghp_x@github.com/o/r", "https://github.com/o/r?x=1", "git@github.com:o/r#x", "-x@h:o/r"} {
+		if Same(s, "https://github.com/o/r") {
+			t.Errorf("Same(%q) saw a URL with credentials as the repo", s)
+		}
+	}
+}
+
 // Owner and repo ignore case only on the hosts that compare them so; a
 // self-hosted server on a case-sensitive disk can hold team/Repo and
 // team/repo as two repos. The hostname ignores case everywhere.
@@ -104,6 +124,22 @@ func TestSamePort(t *testing.T) {
 	} {
 		if got := Same(c.a, c.b); got != c.same {
 			t.Errorf("Same(%q, %q) = %v, want %v", c.a, c.b, got, c.same)
+		}
+	}
+}
+
+// Explicit is true for what names a git remote on its face, so a typo of a
+// path never clones.
+func TestExplicit(t *testing.T) {
+	for s, want := range map[string]bool{
+		"https://github.com/o/r": true, "ssh://git@h/o/r": true, "git@github.com:o/r.git": true, "gh:o/r": true,
+		" https://github.com/o/r/ ": true,
+		"o/r":                       false, "projects/app": false, "~/o/r": false, "/src/o/r": false, "": false,
+		"http://github.com/o/r": false, "file:///etc": false, "ext::sh -c x": false,
+		"https://tok@github.com/o/r": false, "https://u:tok@github.com/o/r": false, "gh:-x/r": false,
+	} {
+		if got := Explicit(s); got != want {
+			t.Errorf("Explicit(%q) = %v, want %v", s, got, want)
 		}
 	}
 }

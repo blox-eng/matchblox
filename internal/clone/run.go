@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,7 +19,11 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitremote"
 )
 
-var receiving = regexp.MustCompile(`^Receiving objects:\s+(\d+)%`)
+var (
+	receiving = regexp.MustCompile(`^Receiving objects:\s+(\d+)%`)
+	userinfo  = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)[^\s/@'"]*@`)
+	query     = regexp.MustCompile(`\?[^\s'"]*`)
+)
 
 // Progress reads one git progress line. Only "Receiving objects" gives a percent.
 func Progress(line string) (pct int, ok bool) {
@@ -48,9 +53,9 @@ func Explain(stderr string, r gitremote.Remote) string {
 	case has("Permission denied (publickey)"):
 		return fmt.Sprintf("no access to %s: add an SSH key for %s, or use its https URL", slug, r.Host)
 	case has("could not read Username", "Authentication failed"):
-		return fmt.Sprintf("no access to %s: run gh auth login", slug)
+		return fmt.Sprintf("no access to %s: %s", slug, signIn(r))
 	case has("Repository not found") || notFound(stderr):
-		return fmt.Sprintf("%s is not on %s, or you have no access: run gh auth login", slug, r.Host)
+		return fmt.Sprintf("%s is not on %s, or you have no access: %s", slug, r.Host, signIn(r))
 	case has("Could not resolve host", "Network is unreachable", "Connection timed out"):
 		return fmt.Sprintf("no network: %s does not answer", r.Host)
 	case has("No space left on device"):
@@ -62,7 +67,17 @@ func Explain(stderr string, r gitremote.Remote) string {
 			last = l
 		}
 	}
+	// git may echo the URL it was given: its user and query stay out of the words.
+	last = query.ReplaceAllString(userinfo.ReplaceAllString(last, "$1"), "")
 	return fmt.Sprintf("git clone %s failed: %s", slug, last)
+}
+
+// signIn is the advice for a host that wants a sign-in: gh knows github.com only.
+func signIn(r gitremote.Remote) string {
+	if r.Host == "github.com" {
+		return "run gh auth login"
+	}
+	return "sign in to " + r.Host + " for git"
 }
 
 // notFound tells if git said a repository is not there: "repository
@@ -81,9 +96,54 @@ func Cloning(target string) string {
 	return filepath.Join(filepath.Dir(target), "."+filepath.Base(target)+".cloning")
 }
 
+// OwnerFile is the file next to Cloning(target) that holds the pid of the
+// process that clones into it. git needs the sibling empty or missing, so the
+// proof that matchblox made it cannot be inside.
+func OwnerFile(target string) string { return Cloning(target) + ".owner" }
+
+// Owner is the pid in OwnerFile(target); ok when there is one.
+func Owner(target string) (pid int, ok bool) {
+	b, err := os.ReadFile(OwnerFile(target))
+	if err != nil {
+		return 0, false
+	}
+	pid, err = strconv.Atoi(strings.TrimSpace(string(b)))
+	return pid, err == nil && pid > 0
+}
+
+// claim writes OwnerFile(target) with this process's pid, before git starts.
+// A file whose process is gone is taken over; one whose process lives is not.
+func claim(target string) error {
+	f := OwnerFile(target)
+	for range 2 {
+		fh, err := os.OpenFile(f, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) //nolint:gosec // beside the clone, in the builder's source folder
+		if err == nil {
+			_, werr := fh.WriteString(strconv.Itoa(os.Getpid()))
+			if cerr := fh.Close(); werr == nil {
+				werr = cerr
+			}
+			if werr != nil {
+				_ = os.Remove(f)
+				return fmt.Errorf("cannot write %s: %w", f, werr)
+			}
+			return nil
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return fmt.Errorf("cannot write %s: %w", f, err)
+		}
+		if pid, ok := Owner(target); ok && Alive(pid) {
+			break
+		}
+		_ = os.Remove(f) // its process is gone
+	}
+	return fmt.Errorf("%s is there already", f)
+}
+
 // Run clones r.URL into target through the sibling Cloning(target), renamed to
 // target on success. It never writes into an existing target, and on failure or
 // when ctx ends it deletes the sibling only. The parent of target must exist.
+// From before git starts until the clone ends, OwnerFile(target) names this
+// process.
 func Run(ctx context.Context, r gitremote.Remote, target string, progress func(pct int)) error {
 	sibling := Cloning(target)
 	if exists(target) {
@@ -98,6 +158,10 @@ func Run(ctx context.Context, r gitremote.Remote, target string, progress func(p
 	if ctx.Err() != nil {
 		return errors.New("stopped")
 	}
+	if err := claim(target); err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(OwnerFile(target)) }() // after the sibling is gone or renamed
 
 	cmd := exec.CommandContext(ctx, "git", "-c", "core.askPass=", "clone", "--progress", "--", r.URL, sibling) //nolint:gosec // argv, never a shell string
 	// git and its ssh have no terminal to ask on (ownGroup) and no askpass:

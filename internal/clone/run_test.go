@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -37,6 +38,36 @@ func TestExplain(t *testing.T) {
 		"Cloning into 'x'...\nfatal: odd thing\n\n":                                                     "git clone o/r failed: fatal: odd thing",
 	}
 	for in, want := range cases {
+		if got := Explain(in, r); got != want {
+			t.Errorf("Explain(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// The sign-in advice names gh only for github.com.
+func TestExplainSignInByHost(t *testing.T) {
+	for _, c := range []struct{ host, stderr, want string }{
+		{"github.com", "fatal: could not read Username for 'https://github.com'", "no access to o/r: run gh auth login"},
+		{"github.com", "remote: Repository not found.", "o/r is not on github.com, or you have no access: run gh auth login"},
+		{"git.example.org", "fatal: Authentication failed for 'https://git.example.org/o/r'", "no access to o/r: sign in to git.example.org for git"},
+		{"git.example.org", "remote: Repository not found.", "o/r is not on git.example.org, or you have no access: sign in to git.example.org for git"},
+	} {
+		r := gitremote.Remote{Host: c.host, Owner: "o", Repo: "r"}
+		if got := Explain(c.stderr, r); got != c.want {
+			t.Errorf("Explain(%q, %s) = %q, want %q", c.stderr, c.host, got, c.want)
+		}
+	}
+}
+
+// The last-line fallback never echoes a URL's user or query.
+func TestExplainFallbackHidesCredentials(t *testing.T) {
+	r := gitremote.Remote{Host: "h", Owner: "o", Repo: "r"}
+	for in, want := range map[string]string{
+		"fatal: odd thing with 'https://ghp_x@h/o/r'":         "git clone o/r failed: fatal: odd thing with 'https://h/o/r'",
+		"fatal: bad 'https://u:tok@h/o/r?access_token=abc' x": "git clone o/r failed: fatal: bad 'https://h/o/r' x",
+		"fatal: ssh://git@h/o/r?token=abc":                    "git clone o/r failed: fatal: ssh://h/o/r",
+		"fatal: plain https://h/o/r":                          "git clone o/r failed: fatal: plain https://h/o/r",
+	} {
 		if got := Explain(in, r); got != want {
 			t.Errorf("Explain(%q) = %q, want %q", in, got, want)
 		}
@@ -241,6 +272,9 @@ exit 0
 // A rename that fails for another reason than a folder in the way says
 // so: the target is not there.
 func TestRunSaysWhyTheMoveFailed(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores chmod")
+	}
 	parent := filepath.Join(t.TempDir(), "p")
 	if err := os.Mkdir(parent, 0o755); err != nil {
 		t.Fatal(err)
@@ -256,5 +290,124 @@ exit 0
 	err := Run(context.Background(), r, target, nil)
 	if err == nil || !strings.HasPrefix(err.Error(), "cannot move the clone into "+target+": ") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// The owner file names the process that clones, next to the sibling, from
+// before git starts until the clone ends: renamed, failed or stopped.
+func TestRunKeepsAnOwnerFileWhileItClonesAndNoneAfter(t *testing.T) {
+	r := gitremote.Remote{URL: "https://github.com/o/r", Host: "github.com", Owner: "o", Repo: "r"}
+	for name, c := range map[string]struct {
+		script string
+		stop   bool
+		ok     bool
+	}{
+		"success": {script: `for a; do dir=$a; done
+mkdir "$dir"
+exit 0
+`, ok: true},
+		"failure": {script: "exit 1\n"},
+		"stop":    {script: "sleep 30\n", stop: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			target := filepath.Join(t.TempDir(), "r")
+			seen := filepath.Join(filepath.Dir(target), "seen")
+			// what the owner file holds, as git starts
+			fakeGit(t, `cat "`+OwnerFile(target)+`" > "`+seen+`"
+`+c.script)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if c.stop {
+				time.AfterFunc(300*time.Millisecond, cancel)
+			}
+			err := Run(ctx, r, target, nil)
+			if (err == nil) != c.ok {
+				t.Fatalf("err = %v", err)
+			}
+			if b, _ := os.ReadFile(seen); string(b) != strconv.Itoa(os.Getpid()) {
+				t.Errorf("git saw the owner %q, want this pid", b)
+			}
+			if exists(OwnerFile(target)) {
+				t.Error("owner file left")
+			}
+		})
+	}
+}
+
+// An owner file with no sibling, left by a process that is gone, does not
+// block a clone; one of a live process does.
+func TestRunTakesOverADeadOwnersFile(t *testing.T) {
+	r := localRepo(t)
+	dir := t.TempDir()
+	target := filepath.Join(dir, "r")
+	if err := os.WriteFile(OwnerFile(target), []byte("999999999"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), r, target, nil); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(dir, "q")
+	if err := os.WriteFile(OwnerFile(other), []byte(strconv.Itoa(os.Getpid())), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), r, other, nil); err == nil || exists(other) || !exists(OwnerFile(other)) {
+		t.Fatalf("err %v, target %v, owner file %v", err, exists(other), exists(OwnerFile(other)))
+	}
+}
+
+// Owner reads the pid, and Alive tells a live process from a gone one.
+func TestOwnerAndAlive(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "r")
+	if _, ok := Owner(target); ok {
+		t.Fatal("an owner with no file")
+	}
+	for text, ok := range map[string]bool{"123": true, "123\n": true, "": false, "x": false, "-4": false, "0": false} {
+		if err := os.WriteFile(OwnerFile(target), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if pid, got := Owner(target); got != ok || (ok && pid != 123) {
+			t.Errorf("Owner(%q) = %d %v", text, pid, got)
+		}
+	}
+	if !Alive(os.Getpid()) {
+		t.Error("this process is not alive")
+	}
+	if Alive(999999999) {
+		t.Error("a pid that cannot exist is alive")
+	}
+}
+
+// An existing sibling is refused, git never runs and what is in it stays;
+// so is a parent that is missing or is a file.
+func TestRunRefusesASiblingAndABadParent(t *testing.T) {
+	r := gitremote.Remote{URL: "https://github.com/o/r", Host: "github.com", Owner: "o", Repo: "r"}
+	log := filepath.Join(t.TempDir(), "git.log")
+	fakeGit(t, `echo ran >> "`+log+`"`+"\nexit 0\n")
+	dir := t.TempDir()
+	target := filepath.Join(dir, "r")
+	marker := filepath.Join(Cloning(target), "marker")
+	if err := os.Mkdir(Cloning(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(marker, []byte("m"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(context.Background(), r, target, nil); err == nil || !strings.Contains(err.Error(), "is there already") {
+		t.Fatalf("sibling: err = %v", err)
+	}
+	if b, _ := os.ReadFile(marker); string(b) != "m" {
+		t.Error("the marker did not survive")
+	}
+	file := filepath.Join(dir, "file")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, parent := range []string{filepath.Join(dir, "missing"), file} {
+		if err := Run(context.Background(), r, filepath.Join(parent, "r"), nil); err == nil || !strings.HasSuffix(err.Error(), "is not a folder") {
+			t.Errorf("parent %s: err = %v", parent, err)
+		}
+	}
+	if b, _ := os.ReadFile(log); len(b) != 0 {
+		t.Errorf("git ran: %s", b)
 	}
 }

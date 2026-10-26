@@ -22,3 +22,10 @@ func ownGroup(cmd *exec.Cmd) {
 		return nil
 	}
 }
+
+// Alive tells if a process with this pid runs. A process we may not signal
+// runs all the same.
+func Alive(pid int) bool {
+	err := syscall.Kill(pid, 0)
+	return err == nil || !errors.Is(err, syscall.ESRCH)
+}

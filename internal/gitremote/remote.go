@@ -50,6 +50,18 @@ func Parse(s, protocol string) (Remote, bool) {
 	return r, true
 }
 
+// Explicit tells if s names a git remote on its face: a URL with a scheme
+// (https://, ssh://), user@host:path, or gh:o/r, that Parse reads. A bare
+// o/r is not: it may be a path, and a typo never clones.
+func Explicit(s string) bool {
+	s = strings.TrimSpace(s)
+	if !strings.Contains(s, "://") && !strings.HasPrefix(s, "gh:") && !scp.MatchString(s) {
+		return false
+	}
+	_, ok := Parse(s, "https")
+	return ok
+}
+
 // Same reports whether two remote URLs name the same repo. The hostname
 // ignores case; owner and repo ignore case only on the hosts in foldHosts,
 // which compare them so. Scheme, user, ".git", a trailing "/" and the
@@ -73,20 +85,26 @@ func key(r Remote) string {
 }
 
 // ownPort is each scheme's port: a URL that names it names none.
-var ownPort = map[string]string{"https": "443", "ssh": "22", "http": "80"}
+var ownPort = map[string]string{"https": "443", "ssh": "22"}
 
 func dots(s string) bool { return s == "." || s == ".." }
 
-// parseURL reads the https://, ssh:// and git@host:path forms. A password
-// in the URL is refused: a token goes nowhere through matchblox.
+// parseURL reads the https://, ssh:// and git@host:path forms. It refuses a
+// URL with a query ("?") or a fragment ("#"); an https URL with any user or
+// password; an ssh or scp URL with a password, or with a user that is not a
+// plain name (letters, digits, ".", "_" and "-", not starting with "-"). A
+// token goes nowhere through matchblox.
 func parseURL(s string) (Remote, bool) {
 	var host, port, path string
+	if strings.ContainsAny(s, "?#") {
+		return Remote{}, false
+	}
 	if strings.Contains(s, "://") {
 		u, err := url.Parse(s)
 		if err != nil || (u.Scheme != "https" && u.Scheme != "ssh") {
 			return Remote{}, false
 		}
-		if u.User != nil && (!part.MatchString(u.User.Username()) || strings.HasPrefix(u.User.Username(), "-")) {
+		if u.User != nil && (u.Scheme == "https" || !part.MatchString(u.User.Username()) || strings.HasPrefix(u.User.Username(), "-")) {
 			return Remote{}, false
 		}
 		if _, set := u.User.Password(); set {
@@ -96,7 +114,7 @@ func parseURL(s string) (Remote, bool) {
 		if port = u.Port(); port == ownPort[u.Scheme] {
 			port = ""
 		}
-	} else if m := scp.FindStringSubmatch(s); m != nil {
+	} else if m := scp.FindStringSubmatch(s); m != nil && !strings.HasPrefix(s, "-") {
 		host, path = m[1], m[2]
 	} else {
 		return Remote{}, false
