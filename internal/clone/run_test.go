@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -31,6 +32,8 @@ func TestExplain(t *testing.T) {
 		"remote: Repository not found.":                                                                 "o/r is not on github.com, or you have no access: run gh auth login",
 		"fatal: unable to access 'https://github.com/o/r/': Could not resolve host: github.com":         "no network: github.com does not answer",
 		"error: No space left on device":                                                                "the disk is full: o/r is not cloned",
+		"fatal: repository 'https://github.com/o/r/' not found":                                         "o/r is not on github.com, or you have no access: run gh auth login",
+		"Cloning into 'x'...\nssh: command not found":                                                   "git clone o/r failed: ssh: command not found",
 		"Cloning into 'x'...\nfatal: odd thing\n\n":                                                     "git clone o/r failed: fatal: odd thing",
 	}
 	for in, want := range cases {
@@ -180,15 +183,16 @@ sleep 8
 	}
 }
 
-// git runs with ssh in batch mode, so ssh fails instead of prompting; a
-// GIT_SSH_COMMAND the builder set is kept, with the option added.
+// git runs with no terminal to ask on and askpass off, so ssh fails
+// instead of prompting; the builder's own GIT_SSH_COMMAND reaches git as
+// it is, and git speaks English, which Explain reads.
 func TestRunSSHNeverPrompts(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "env")
-	fakeGit(t, `printf '%s|%s' "$GIT_SSH_COMMAND" "$GIT_TERMINAL_PROMPT" > "`+out+`"
+	fakeGit(t, `printf '%s|%s|%s|%s' "$GIT_SSH_COMMAND" "$GIT_TERMINAL_PROMPT" "$SSH_ASKPASS_REQUIRE" "$LC_ALL" > "`+out+`"
 exit 1
 `)
 	r := gitremote.Remote{URL: "git@github.com:o/r.git", Host: "github.com", Owner: "o", Repo: "r"}
-	for set, want := range map[string]string{"": "ssh -o BatchMode=yes|0", "ssh -i ~/.ssh/k": "ssh -i ~/.ssh/k -o BatchMode=yes|0"} {
+	for set, want := range map[string]string{"": "|0|never|C", "ssh -i ~/.ssh/k": "ssh -i ~/.ssh/k|0|never|C"} {
 		t.Setenv("GIT_SSH_COMMAND", set)
 		if set == "" {
 			_ = os.Unsetenv("GIT_SSH_COMMAND")
@@ -197,5 +201,60 @@ exit 1
 		if b, _ := os.ReadFile(out); string(b) != want {
 			t.Errorf("with %q: git saw %q, want %q", set, b, want)
 		}
+	}
+}
+
+// No askpass asks either: git's and ssh's are empty in git's env, and a
+// core.askPass from the builder's config is off for this clone.
+func TestRunTurnsAskpassOff(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "env")
+	fakeGit(t, `printf '%s|%s|%s|%s|%s' "${GIT_ASKPASS-unset}" "${SSH_ASKPASS-unset}" "$1" "$2" "$3" > "`+out+`"
+exit 1
+`)
+	t.Setenv("GIT_ASKPASS", "/usr/local/bin/ask")
+	t.Setenv("SSH_ASKPASS", "/usr/local/bin/ask")
+	r := gitremote.Remote{URL: "git@github.com:o/r.git", Host: "github.com", Owner: "o", Repo: "r"}
+	_ = Run(context.Background(), r, filepath.Join(t.TempDir(), "r"), nil)
+	if b, _ := os.ReadFile(out); string(b) != "||-c|core.askPass=|clone" {
+		t.Errorf("git saw %q", b)
+	}
+}
+
+// A git that is done but leaves a child holding its stderr has cloned:
+// the folder is kept.
+func TestRunKeepsADoneCloneWhoseChildHoldsStderr(t *testing.T) {
+	fakeGit(t, `for a; do dir=$a; done
+mkdir "$dir"
+sleep 5 &
+exit 0
+`)
+	r := gitremote.Remote{URL: "https://github.com/o/r", Host: "github.com", Owner: "o", Repo: "r"}
+	target := filepath.Join(t.TempDir(), "r")
+	if err := Run(context.Background(), r, target, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !exists(target) || exists(Cloning(target)) {
+		t.Errorf("target %v, sibling %v", exists(target), exists(Cloning(target)))
+	}
+}
+
+// A rename that fails for another reason than a folder in the way says
+// so: the target is not there.
+func TestRunSaysWhyTheMoveFailed(t *testing.T) {
+	parent := filepath.Join(t.TempDir(), "p")
+	if err := os.Mkdir(parent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(parent, 0o755) }) //nolint:gosec // a test folder
+	fakeGit(t, `for a; do dir=$a; done
+mkdir "$dir"
+chmod 555 "`+parent+`"
+exit 0
+`)
+	r := gitremote.Remote{URL: "https://github.com/o/r", Host: "github.com", Owner: "o", Repo: "r"}
+	target := filepath.Join(parent, "r")
+	err := Run(context.Background(), r, target, nil)
+	if err == nil || !strings.HasPrefix(err.Error(), "cannot move the clone into "+target+": ") {
+		t.Fatalf("err = %v", err)
 	}
 }

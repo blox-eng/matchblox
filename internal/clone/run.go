@@ -3,7 +3,6 @@ package clone
 import (
 	"bufio"
 	"bytes"
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -50,7 +49,7 @@ func Explain(stderr string, r gitremote.Remote) string {
 		return fmt.Sprintf("no access to %s: add an SSH key for %s, or use its https URL", slug, r.Host)
 	case has("could not read Username", "Authentication failed"):
 		return fmt.Sprintf("no access to %s: run gh auth login", slug)
-	case has("Repository not found", "not found"):
+	case has("Repository not found") || notFound(stderr):
 		return fmt.Sprintf("%s is not on %s, or you have no access: run gh auth login", slug, r.Host)
 	case has("Could not resolve host", "Network is unreachable", "Connection timed out"):
 		return fmt.Sprintf("no network: %s does not answer", r.Host)
@@ -64,6 +63,17 @@ func Explain(stderr string, r gitremote.Remote) string {
 		}
 	}
 	return fmt.Sprintf("git clone %s failed: %s", slug, last)
+}
+
+// notFound tells if git said a repository is not there: "repository
+// '<url>' not found", not any line that ends in "not found".
+func notFound(stderr string) bool {
+	for _, l := range strings.Split(stderr, "\n") {
+		if i := strings.Index(l, "repository '"); i >= 0 && strings.Contains(l[i:], "' not found") {
+			return true
+		}
+	}
+	return false
 }
 
 // Cloning is the folder a clone into target works in until it is done.
@@ -89,8 +99,15 @@ func Run(ctx context.Context, r gitremote.Remote, target string, progress func(p
 		return errors.New("stopped")
 	}
 
-	cmd := exec.CommandContext(ctx, "git", "clone", "--progress", "--", r.URL, sibling) //nolint:gosec // argv, never a shell string
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND="+sshCommand(os.Getenv("GIT_SSH_COMMAND")))
+	cmd := exec.CommandContext(ctx, "git", "-c", "core.askPass=", "clone", "--progress", "--", r.URL, sibling) //nolint:gosec // argv, never a shell string
+	// git and its ssh have no terminal to ask on (ownGroup) and no askpass:
+	// they fail instead of asking for a password, a passphrase or a host
+	// key. GIT_TERMINAL_PROMPT=0 does not stop an askpass, and an ssh
+	// before OpenSSH 8.4 ignores SSH_ASKPASS_REQUIRE: GIT_ASKPASS,
+	// SSH_ASKPASS and core.askPass are empty too. The builder's own ssh
+	// command and credential helpers stand. LC_ALL=C: Explain reads git's
+	// English.
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=", "SSH_ASKPASS=", "SSH_ASKPASS_REQUIRE=never", "LC_ALL=C")
 	ownGroup(cmd)
 	cmd.WaitDelay = waitDelay // a child that keeps stderr open does not hold a stop
 	pr, pw := io.Pipe()
@@ -122,6 +139,9 @@ func Run(ctx context.Context, r gitremote.Remote, target string, progress func(p
 		}
 	}()
 	werr := cmd.Wait()
+	if errors.Is(werr, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+		werr = nil // git is done; a child of it kept stderr open
+	}
 	_ = pw.Close()
 	<-read
 	if ctx.Err() != nil {
@@ -138,20 +158,16 @@ func Run(ctx context.Context, r gitremote.Remote, target string, progress func(p
 	}
 	if err := os.Rename(sibling, target); err != nil {
 		_ = os.RemoveAll(sibling)
-		return fmt.Errorf("%s is there already", target)
+		if exists(target) {
+			return fmt.Errorf("%s is there already", target)
+		}
+		return fmt.Errorf("cannot move the clone into %s: %v", target, err)
 	}
 	return nil
 }
 
 // waitDelay is how long a stopped clone waits for git's output to end.
 const waitDelay = time.Second
-
-// sshCommand is the ssh git runs: the builder's own, if set, in batch mode,
-// so ssh fails instead of asking for a password, a passphrase or a host key.
-// It overrides a core.sshCommand, as actions.Exec does.
-func sshCommand(own string) string {
-	return strings.TrimSpace(cmp.Or(strings.TrimSpace(own), "ssh") + " -o BatchMode=yes")
-}
 
 func exists(p string) bool { _, err := os.Lstat(p); return err == nil }
 
