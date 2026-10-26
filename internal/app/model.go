@@ -593,6 +593,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.n == m.toasts {
 			m.toast = ""
 		}
+	case planTickMsg:
+		return m.planTick(msg)
 	case resultMsg:
 		m.endRec(msg.ActID, proto.Result(msg))
 		if mm, ok := m.started(proto.Result(msg)); ok {

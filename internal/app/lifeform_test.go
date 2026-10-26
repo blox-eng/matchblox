@@ -391,6 +391,64 @@ func TestPastedURLShowsTheCloneRowAtOnce(t *testing.T) {
 	}
 }
 
+// A URL typed by hand is planned once it stands still, not for each key;
+// a paste plans at once.
+func TestTypedURLIsPlannedOnceItStandsStill(t *testing.T) {
+	m, f := loadedWith(t, 100, whereState(t))
+	next, _ := key(m, "N")
+	var ticks int
+	for _, r := range "o/ra" {
+		var cmd tea.Cmd
+		next, cmd = next.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+		if cmd != nil {
+			ticks++
+		}
+	}
+	if len(f.acts()) != 0 {
+		t.Fatalf("planned while typing: %+v", f.acts())
+	}
+	if ticks < 2 {
+		t.Fatalf("%d ticks asked for", ticks)
+	}
+	// the tick of "o/r" is stale; the last one plans
+	for _, text := range []string{"o/r", "o/ra"} {
+		var cmd tea.Cmd
+		next, cmd = next.Update(planTickMsg{text})
+		if cmd != nil {
+			cmd()
+		}
+	}
+	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "clone:plan" || acts[0].Text != "o/ra" {
+		t.Fatalf("sent %+v", acts)
+	}
+	// a tick of the same text again plans nothing more
+	_, cmd := next.Update(planTickMsg{"o/ra"})
+	if cmd != nil {
+		cmd()
+	}
+	if len(f.acts()) != 1 {
+		t.Fatalf("sent %+v", f.acts())
+	}
+}
+
+func TestEnterRightAfterTypingAURLPlansAtOnce(t *testing.T) {
+	m, f := loadedWith(t, 100, whereState(t))
+	next, _ := key(m, "N")
+	for _, r := range "https://github.com/o/ra" {
+		next, _ = next.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+	}
+	next, cmd := key(next, "enter")
+	if cmd != nil {
+		cmd()
+	}
+	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "clone:plan" || acts[0].Text != "https://github.com/o/ra" {
+		t.Fatalf("⏎ before the tick sent %+v", acts)
+	}
+	if !next.(Model).form.pickOnPlan {
+		t.Fatal("⏎ is not remembered for the plan")
+	}
+}
+
 func TestPlanOffersTheExistingClone(t *testing.T) {
 	next, _ := planned(t, 100, proto.ClonePlan{Have: []string{home + "/src/r"}, Target: home + "/src/r", Fresh: home + "/src/r-ember"})
 	fm := next.(Model).form
@@ -1020,6 +1078,83 @@ func TestEscWhileTheStartIsOnItsWayThenLost(t *testing.T) {
 	}
 }
 
+// stopsSent counts the clone:stops among the acts sent.
+func stopsSent(f *fakeConn) int {
+	n := 0
+	for _, a := range f.acts() {
+		if a.RecID == "clone:stop" {
+			n++
+		}
+	}
+	return n
+}
+
+// The cells of the form's clone that are quiet: a snapshot with no clone
+// of the form's while a plan is on its way, and an edit of where in each
+// state of the clone.
+func TestCloneFormQuietCells(t *testing.T) {
+	// plan in flight × a snapshot with no clone of the form's: nothing changes.
+	next, f := pastedURL(t, 100)
+	before := *next.(Model).form
+	next, cmd := next.Update(cloneState(t, proto.Clone{ID: 9, Target: home + "/src/other", Repo: "x/y", Pct: 5}))
+	runAll(cmd)
+	fm := next.(Model).form
+	if fm.planAct != before.planAct || fm.plan != nil || fm.where != before.where || fm.at != before.at || fm.cloning != "" ||
+		!slices.Equal(rowTexts(fm.rows), rowTexts(before.rows)) || len(f.acts()) != 1 {
+		t.Fatalf("form %+v sent %+v", fm, f.acts())
+	}
+	// edit where × each state of the clone
+	edit := func(next tea.Model) (tea.Model, tea.Cmd) {
+		next, _ = next.Update(keyPress("shift+tab"))
+		return next.Update(keyPress("backspace"))
+	}
+	typed := cloneURL[:len(cloneURL)-1]
+	for name, c := range map[string]func(t *testing.T) (tea.Model, *fakeConn){
+		"done": func(t *testing.T) (tea.Model, *fakeConn) {
+			next, f := cloning(t, 100)
+			next, cmd := next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: 100, Done: true}))
+			runAll(cmd)
+			return next, f
+		},
+		"failed": func(t *testing.T) (tea.Model, *fakeConn) {
+			next, f := cloning(t, 100)
+			next, _ = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}))
+			return next, f
+		},
+		"gone": func(t *testing.T) (tea.Model, *fakeConn) {
+			next, f := cloning(t, 100)
+			next, _ = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: 42}))
+			next, _ = next.Update(cloneState(t))
+			return next, f
+		},
+	} {
+		next, f := c(t)
+		next, cmd := edit(next)
+		runAll(cmd)
+		fm := next.(Model).form
+		if stopsSent(f) != 0 || fm.cloning != "" || len(next.(Model).stopAfter) != 0 {
+			t.Errorf("%s: sent %+v form %+v", name, f.acts(), fm)
+		}
+		if name != "done" && fm.where != typed {
+			t.Errorf("%s: where %q", name, fm.where)
+		}
+	}
+	// starting × edit where: the stop waits for the start's answer, then goes with the id.
+	next, f = planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter")
+	start := next.(Model).form.startAct
+	next, cmd = edit(next)
+	runAll(cmd)
+	if stopsSent(f) != 0 || len(next.(Model).stopAfter) != 1 || next.(Model).form.cloning != "" {
+		t.Fatalf("sent %+v waiting %+v", f.acts(), next.(Model).stopAfter)
+	}
+	next, cmd = next.Update(resultMsg(proto.Result{ActID: start, CloneID: 7}))
+	runAll(cmd)
+	if acts := f.acts(); stopsSent(f) != 1 || acts[len(acts)-1] != stopOf(home+"/src/r", 7) || len(next.(Model).stopAfter) != 0 {
+		t.Fatalf("sent %+v waiting %+v", acts, next.(Model).stopAfter)
+	}
+}
+
 // sentToken is the token of the last clone:start f was sent.
 func sentToken(t *testing.T, f *fakeConn) string {
 	t.Helper()
@@ -1196,6 +1331,25 @@ func news(f *fakeConn) int {
 	return n
 }
 
+// A snapshot that lists the clone done, before the start's answer, is not
+// forgotten: the answer reads it, and the session starts with no second snapshot.
+func TestStartAnswerReadsTheSnapshotThatCameFirst(t *testing.T) {
+	done := proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: 100, Done: true}
+	next, f := planned(t, 100, proto.ClonePlan{Target: home + "/src/r"})
+	next = pressRun(next, "enter")
+	next = pressRun(next, "enter")
+	next, cmd := next.Update(cloneState(t, done))
+	runAll(cmd)
+	if news(f) != 0 {
+		t.Fatalf("started before the start's answer: %+v", f.acts())
+	}
+	next, cmd = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.startAct, CloneID: 1}))
+	runAll(cmd)
+	if fm := next.(Model).form; news(f) != 1 || fm.startWhenDone {
+		t.Fatalf("form %+v sent %+v", fm, f.acts())
+	}
+}
+
 // The cells of a session that waits for its clone: it starts once where
 // the clone is done, and never where it is not.
 func TestStartWhenDoneCells(t *testing.T) {
@@ -1212,7 +1366,8 @@ func TestStartWhenDoneCells(t *testing.T) {
 	if news(f) != 0 {
 		t.Fatalf("started before the start's answer: %+v", f.acts())
 	}
-	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.startAct, CloneID: 1}))
+	next, cmd = next.Update(resultMsg(proto.Result{ActID: next.(Model).form.startAct, CloneID: 1}))
+	runAll(cmd) // the answer reads the snapshot that came first
 	for range 2 {
 		next, cmd = next.Update(cloneState(t, done))
 		runAll(cmd)

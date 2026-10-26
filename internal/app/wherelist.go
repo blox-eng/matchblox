@@ -652,7 +652,7 @@ func (m Model) openWhere(f *form) {
 }
 
 // stepSel moves the selection by one row, over the labels; repo only
-// stops on a repo, wrapping.
+// stops on a repo or a typed path, wrapping.
 func (f *form) stepSel(by int, repo bool) bool {
 	n := len(f.rows)
 	for i, k := f.sel+by, 0; k < n; i, k = i+by, k+1 {

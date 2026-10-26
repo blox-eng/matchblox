@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 
 	bkey "charm.land/bubbles/v2/key"
@@ -428,9 +429,9 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if f.whereList() {
 		f.err = ""
 		if r := m.whereSelectedIn(&f); r.kind == rowClone && bkey.Matches(k, fk.Enter, fk.Next) {
-			if r.repo.path == "" { // the plan is on its way
+			if r.repo.path == "" { // the plan is on its way, or asked for now
 				f.pickOnPlan = true
-				return m, nil
+				return m, m.planWhere(&f)
 			}
 			return m, m.startClone(&f, r)
 		}
@@ -507,7 +508,7 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case k.Text != "" && len([]rune(m.fieldText(&f)+k.Text)) <= maxField:
 		m.typeField(&f, k.Text)
 	}
-	return m, tea.Batch(stop, m.planWhere(&f))
+	return m, tea.Batch(stop, m.planSoon(&f))
 }
 
 // fieldText is the text of the field the cursor is on.
@@ -717,6 +718,34 @@ func (m *Model) planWhere(f *form) tea.Cmd {
 	cmd := m.send(proto.Act{RecID: "clone:plan", Text: q})
 	f.planAct = fmt.Sprintf("a%d", m.acts)
 	return cmd
+}
+
+// planTickMsg is a typed git URL that has stood still for planWait: the
+// plan is asked for text if it is still the text in where.
+type planTickMsg struct{ text string }
+
+// planWait is how long typed text stands still before its plan is asked for:
+// a URL typed by hand is not planned for each key.
+const planWait = 250 * time.Millisecond
+
+// planSoon is planWhere for typed text: it waits until the text has stood
+// still for planWait. A paste and ⏎ plan at once.
+func (m *Model) planSoon(f *form) tea.Cmd {
+	q := strings.TrimSpace(f.filter())
+	if _, ok := cloneOf(q); f.at != fieldWhere || !ok || q == f.planFor {
+		return nil
+	}
+	return tea.Tick(planWait, func(time.Time) tea.Msg { return planTickMsg{q} })
+}
+
+// planTick plans the text of a tick that is still the text in where.
+func (m Model) planTick(msg planTickMsg) (tea.Model, tea.Cmd) {
+	if m.form == nil || strings.TrimSpace(m.form.filter()) != msg.text {
+		return m, nil
+	}
+	f := *m.form
+	m.form = &f
+	return m, m.planWhere(&f)
 }
 
 // startClone is ⏎ or tab on a clone row: the clone starts in the service,
@@ -1043,6 +1072,8 @@ func (m Model) cloneResult(r proto.Result) (Model, tea.Cmd) {
 			f.forgetClone(r.Err)
 		} else {
 			f.cloneID = r.CloneID
+			// A snapshot may have said it is done before this answer: read it now.
+			return m, m.cloneNews()
 		}
 		return m, nil
 	}
