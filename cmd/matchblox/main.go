@@ -587,7 +587,7 @@ func consoleAsk(base string) (app.AskSource, func(), string) {
 		return nil, func() {}, "this system has no private directory for the prompt socket"
 	}
 	if _, err := remote.EnsureMasterDir(base); err != nil {
-		return nil, func() {}, ""
+		return nil, func() {}, "the prompt socket: " + err.Error()
 	}
 	s, err := askpass.Listen(base)
 	if err != nil {

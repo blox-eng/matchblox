@@ -813,9 +813,9 @@ func TestKeychainNotFoundIsNoLogin(t *testing.T) {
 }
 
 // TestConsoleAsk: one prompt socket per console run, in the checked base;
-// none, with why, without a base.
+// none, with why, without a base or with one it cannot use.
 func TestConsoleAsk(t *testing.T) {
-	base, err := os.MkdirTemp("", "mb")
+	base, err := os.MkdirTemp("/tmp", "mb") // short: macOS $TMPDIR is too long for sun_path
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -839,5 +839,12 @@ func TestConsoleAsk(t *testing.T) {
 	}
 	if ask, _, why := consoleAsk(""); ask != nil || why == "" {
 		t.Fatalf("no base: %v %q", ask, why)
+	}
+	file := filepath.Join(base, "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if ask, _, why := consoleAsk(file); ask != nil || why == "" {
+		t.Fatalf("a base that is a file: %v %q", ask, why)
 	}
 }
