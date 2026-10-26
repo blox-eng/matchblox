@@ -81,7 +81,7 @@ func (s *Service) codexLaunchConfig(dir string, trust bool, acct *onAccount, boo
 				}
 				rel, e := filepath.Rel(projectPath, real)
 				if e == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-					return nil, fmt.Errorf("Codex marks %s untrusted in %s: review that trust choice before launching it with matchblox", project, path)
+					return nil, fmt.Errorf("the Codex configuration marks %s untrusted in %s: review that trust choice before launching it with matchblox", project, path)
 				}
 			}
 		}
@@ -98,7 +98,7 @@ func (s *Service) codexLaunchConfig(dir string, trust bool, acct *onAccount, boo
 			}
 			// Newer Codex versions also support CODEX_HOME/<name>.config.toml.
 			if filepath.Base(profile) != profile {
-				return nil, errors.New("Codex profile must be a file name: fix the profile before launching")
+				return nil, errors.New("the Codex profile must be a file name: fix the profile before launching")
 			}
 			p, err := readCodexLaunchConfig(filepath.Join(home, profile+".config.toml"))
 			if err != nil {
@@ -113,7 +113,7 @@ func (s *Service) codexLaunchConfig(dir string, trust bool, acct *onAccount, boo
 		bootstrap = developer + "\n\n" + bootstrap
 	}
 	if len(tomlString(bootstrap)) > 64000 {
-		return nil, errors.New("Codex developer instructions exceed the launch limit: shorten them before launching with matchblox")
+		return nil, errors.New("the Codex developer instructions exceed the launch limit: shorten them before launching with matchblox")
 	}
 	// Codex splits a -c key on every dot and keeps quotes in its segments, so
 	// a path can only travel inside the TOML value.
