@@ -43,7 +43,8 @@ Cursor's CLI counts whether you start it as `agent` or `cursor-agent`.
 matchblox starts it with `--trust`, so its first turn does not wait on
 the trust prompt; Cursor
 then trusts the workspace's own config (its rules and MCP servers)
-without asking.
+without asking. A folder just cloned from a git URL is not one you
+chose: there Cursor asks first. A checkout already there is trusted.
 
 **Any other agent**, for example aider
 

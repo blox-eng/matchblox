@@ -68,6 +68,28 @@ The answer is in `~/.local/state/matchblox/scan.json` and the list in
 `repos.json` beside it. The repositories found never show in the Git tab.
 `matchblox scan` scans now; `matchblox scan off` stops and forgets the list.
 
+## Where N clones
+
+N's `where` takes a git URL: `https://…`, `ssh://…`, `git@host:o/r` or
+`gh:o/r`. A clone goes into `[git] clone_root`, `~/src` by default, in a
+folder named after the repo (`~/src/api`). When that name is taken by
+another repo, a file or a clone in progress, the folder gets a match word
+(`ember`, `flint`, `spark`, then more) and, when all are taken, a word with
+a 4-character tail. `o/r` on its own uses the protocol that
+`gh config get git_protocol` says, else https. The clone is a full clone and
+never asks for a password: git has no terminal, so a repo that needs one
+says why and how to sign in. A URL with a token in it is refused: an
+`https` URL takes no user or password, an `ssh` URL only a plain user name
+(`git@`), and none takes a query or a fragment. While it runs, a
+clone works in a hidden `.<name>.cloning` folder, with a
+`.<name>.cloning.owner` file beside it that names the service. After a crash,
+matchblox clears that folder only when the owner file names a process that is
+gone; a folder it did not make is left alone, and its name counts as taken.
+
+matchblox keeps where its sessions started in `~/.local/state/matchblox/used.json`.
+N's `where` lists those folders. It needs no scan consent, and `matchblox
+scan off` keeps it.
+
 ## The stoker's agent
 
 `[stoker] agent` is the command of the stoker agent. matchblox starts it

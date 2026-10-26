@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -271,6 +272,9 @@ func TestReportResultSaysWhyOnStderr(t *testing.T) {
 	}
 	if err := reportResult(&buf, proto.Result{Ran: [][]string{{"tmux", "send-keys"}}}); err != nil || buf.String() != "tmux send-keys\n" {
 		t.Fatalf("%q %v", buf.String(), err)
+	}
+	if err := reportResult(io.Discard, proto.Result{Ran: [][]string{{"tmux"}}, Note: "cloned o/r into ~/src/r"}); err != nil {
+		t.Fatalf("a note is no refusal: %v", err)
 	}
 }
 

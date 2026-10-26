@@ -146,6 +146,8 @@ type Git struct {
 	Interval  Duration `toml:"interval"`
 	Main      string   `toml:"main"`   // default branch name; empty: what the remote's HEAD names
 	Remote    string   `toml:"remote"` // remote to compare against
+	// CloneRoot is the folder a clone goes into: <clone_root>/<repo>.
+	CloneRoot string `toml:"clone_root"`
 }
 
 type History struct {
@@ -176,7 +178,7 @@ func Default() Config {
 			MinAge:   Duration{2 * time.Minute},
 			Commands: []string{"sh", "bash", "zsh", "dash", "fish"},
 		},
-		Git:    Git{Interval: Duration{5 * time.Minute}, Remote: "origin"},
+		Git:    Git{Interval: Duration{5 * time.Minute}, Remote: "origin", CloneRoot: "~/src"},
 		Stoker: Stoker{NightEnds: "07:00", MaxSteps: 60, Agent: "claude"},
 		Limits: Limits{QuietHours: "23:00-08:00", QuietDays: []string{"Sat", "Sun"}, Quiet: defaultQuiet},
 		Push:   Push{Relay: "https://matchblox.sh"},

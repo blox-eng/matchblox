@@ -151,6 +151,9 @@ func parseValue(line, s string) (string, string) {
 	return v.String()[:end], s
 }
 
+// hasRemote tells if [remote "<name>"] has a url.
+func (c gitConfig) hasRemote(name string) bool { return len(c.vals["remote."+name]["url"]) > 0 }
+
 // remoteURL is the first url of [remote "<name>"], else the first url of the
 // first remote that has one, in file order.
 func (c gitConfig) remoteURL(name string) string {

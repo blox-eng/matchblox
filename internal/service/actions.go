@@ -82,6 +82,15 @@ func (a *acts) end(key string, ran bool) {
 // hand rules are user-wide, so any session may call the CLI unprompted.
 const notTheBuilders = "only the stoker and the sessions it drives act from an agent's pane: this one is neither"
 
+// noClone refuses a clone act from any agent's pane, the stoker's, a
+// session it drives or another (R16): a clone is the builder's, through N.
+const noClone = "a clone is the builder's: N clones, not an agent"
+
+// cloneAct is an act that plans, starts or stops a clone.
+func cloneAct(recID string) bool {
+	return recID == "clone:plan" || recID == "clone:start" || recID == "clone:stop"
+}
+
 // NamesAct asks what each island number is called now. A phone that
 // registers through the gate gets the answer. It changes nothing but give a
 // number to a current session or account that had none.
@@ -113,6 +122,16 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	// A session the stoker drove speaks for the stoker: what it sends
 	// counts and drives, and it gives no go.
 	agent := s.agentsPane(a)
+	// A clone is a person's (R16): never from an agent's pane, whatever
+	// its hello said, as with scan:yes.
+	if cloneAct(a.RecID) || (a.RecID == NewSessionID && s.newClones(a.Text)) {
+		if agent {
+			return proto.Result{Err: noClone}
+		}
+		if _, ok := s.sessionAt(a.From); ok {
+			return proto.Result{Err: noClone}
+		}
+	}
 	if !agent && !a.Console && (paneOf(a.RecID) != "" || a.RecID == NewSessionID) {
 		if _, ok := s.sessionAt(a.From); ok {
 			return proto.Result{Err: notTheBuilders}
@@ -170,6 +189,12 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	case "service:replace":
 		s.replace()
 		return proto.Result{}
+	case "clone:plan":
+		return s.clonePlan(a.Text)
+	case "clone:start":
+		return s.cloneStart(ctx, a.Text)
+	case "clone:stop":
+		return s.cloneStop(a.Text)
 	}
 	if verb, ok := strings.CutPrefix(a.RecID, "stoker:"); ok {
 		switch verb {

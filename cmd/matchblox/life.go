@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/accounts"
+	"github.com/blox-eng/matchblox/internal/gitremote"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
@@ -123,6 +124,8 @@ func newSessionAct(words []string, o newOpts, from, here string) (proto.Act, err
 	switch {
 	case n.Where == "":
 		n.Where = here
+	case isCloneURL(o.where):
+		// a git URL goes as typed: the service clones it
 	case !filepath.IsAbs(n.Where):
 		n.Where = filepath.Join(here, n.Where)
 	}
@@ -157,6 +160,12 @@ func newSessionAct(words []string, o newOpts, from, here string) (proto.Act, err
 	return proto.Act{RecID: service.NewSessionID, Confirm: "y", Text: string(b), From: from}, nil
 }
 
+// cloneWait is how long matchblox new waits for a clone: a big repo is slow.
+const cloneWait = 30 * time.Minute
+
+// isCloneURL tells if where is a git URL to clone, as the service reads it.
+func isCloneURL(where string) bool { return gitremote.Explicit(where) }
+
 func cliLife(cmd string, words []string, anyway bool, w io.Writer, path string) error {
 	doc, err := readDoc(path, staleAfter)
 	if err != nil {
@@ -184,12 +193,25 @@ func cliNew(words []string, o newOpts, w io.Writer, path string) error {
 		return err
 	}
 	home, _ := os.UserHomeDir()
-	res, err := doActFor(path, a, newWait(o, home))
+	wait := newWaitFor(o, home)
+	if isCloneURL(o.where) {
+		if r, ok := gitremote.Parse(o.where, "https"); ok {
+			if _, err := fmt.Fprintf(w, "cloning %s…\n", r.Slug()); err != nil {
+				return err
+			}
+		}
+	}
+	res, err := doActFor(path, a, wait)
 	if err != nil {
 		if errors.Is(err, errNoResult) {
 			return errors.New("new: not known whether it started: matchblox sessions shows it within seconds if it did")
 		}
 		return fmt.Errorf("new: did not run: %w", err)
+	}
+	if res.Err == "" && res.Note != "" {
+		if _, err := fmt.Fprintln(w, res.Note); err != nil {
+			return err
+		}
 	}
 	if err := newOutcome(w, res, o.newAccount); err != nil {
 		switch {
@@ -202,6 +224,14 @@ func cliNew(words []string, o newOpts, w io.Writer, path string) error {
 		return fmt.Errorf("new: refused: %w", err)
 	}
 	return nil
+}
+
+// newWaitFor is newWait, and a git URL waits for its clone as well.
+func newWaitFor(o newOpts, home string) time.Duration {
+	if isCloneURL(o.where) {
+		return max(newWait(o, home), cloneWait)
+	}
+	return newWait(o, home)
 }
 
 // newWait is how long matchblox new waits for its result: a start that may

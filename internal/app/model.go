@@ -335,12 +335,21 @@ type Model struct {
 	scanAsk      *scanAsk
 	scanAskUntil time.Time
 	scanUp       bool
-	// foundPaths are the checkouts found on the host, the most recently
-	// used first, less the Git tab's paths (foundWt): built when either
-	// changes, not at each draw.
-	foundPaths []string
-	foundWt    []string
-	focusAt    time.Time // the At of the last focus this console acted on
+	// used is where matchblox started sessions; wrepos the known repos,
+	// for N's where list: built when what it reads changes (wfrom), not
+	// at each snapshot or draw.
+	used   proto.Used
+	wrepos []whereRepo
+	wfrom  []string
+	// clones are the clones the service runs and the ones that ended in
+	// the last minute (#176).
+	clones []proto.Clone
+	// stopAfter are the clone:starts esc came before: each clone stops
+	// when the service takes its start. stopQuiet are the clone:stops
+	// with no answer yet, whose answer says nothing.
+	stopAfter []cloneStop
+	stopQuiet []cloneStop
+	focusAt   time.Time // the At of the last focus this console acted on
 }
 
 func New(opt Options) Model {
@@ -517,8 +526,27 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.scanAsk = &scanAsk{}
 			}
 		}
-		m = m.rebuildFoundPaths(st.Found != nil)
+		if st.Used != nil {
+			m.used = *st.Used
+		}
+		if from := m.whereFrom(); st.Found != nil || st.Used != nil || !slices.Equal(from, m.wfrom) {
+			m.wrepos, m.wfrom = m.whereRepos(), from
+		}
+		m.clones = st.Clones
 		m.push = st.Push
+		var again, started tea.Cmd
+		if m.lost { // the clone acts' answers went with the connection
+			again = m.cloneAgain()
+		}
+		if m.form != nil && m.form.cloning != "" {
+			started = m.cloneNews()
+		}
+		if m.form != nil && m.form.whereList() && !m.form.cloneList() {
+			f := *m.form
+			m.form = &f
+			sel := m.whereSelected().path()
+			m.refreshWhere(&f, sel)
+		}
 		if m.recRun.rec != "" && m.recRun.act == "" && !m.isRec(m.recRun.rec) {
 			m.recRun = recRun{} // its rec is gone: a later one with the same id starts fresh
 		}
@@ -543,7 +571,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.sheet != nil && m.sheet.queued && m.sheet.act == "" && m.stoker != nil && m.stoker.Ready {
 			m, order = m.sendOrder() // the stoker rests now: the order that waited for it goes
 		}
-		return m, tea.Batch(m.recv(), m.animate(), news, order, focus)
+		return m, tea.Batch(m.recv(), m.animate(), news, order, focus, again, started)
 	case graphicsMsg:
 		return m.graphics(msg)
 	case graphicsTickMsg:
@@ -565,13 +593,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.n == m.toasts {
 			m.toast = ""
 		}
+	case planTickMsg:
+		return m.planTick(msg)
 	case resultMsg:
 		m.endRec(msg.ActID, proto.Result(msg))
 		if mm, ok := m.started(proto.Result(msg)); ok {
 			return mm, mm.recv()
 		}
-		if mm, ok := m.formResult(proto.Result(msg)); ok {
-			return mm, mm.recv()
+		if mm, cmd, ok := m.formResult(proto.Result(msg)); ok {
+			return mm, tea.Batch(mm.recv(), cmd)
 		}
 		if mm, ok := m.scanResult(proto.Result(msg)); ok {
 			return mm, mm.recv()
@@ -699,6 +729,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		toast := m.say("ran: " + msg.cmd)
 		return m, toast
+	case tea.PasteMsg:
+		// Only the form takes a paste: in its field, as typed.
+		if m.focus(tea.KeyPressMsg{}) == layerForm {
+			return m.formPaste(msg.Content)
+		}
+		return m, nil
 	case tea.MouseClickMsg:
 		m, touch := m.touchRest()
 		next, cmd := m.tap(msg.Mouse())

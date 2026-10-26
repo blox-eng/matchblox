@@ -67,6 +67,19 @@ func TestLoadScanRoots(t *testing.T) {
 	}
 }
 
+func TestCloneRootDefault(t *testing.T) {
+	if got := Default().Git.CloneRoot; got != "~/src" {
+		t.Fatalf("default clone_root %q", got)
+	}
+	c, err := Load(write(t, "[git]\nclone_root = \"~/code\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Git.CloneRoot != "~/code" {
+		t.Fatalf("clone_root %q", c.Git.CloneRoot)
+	}
+}
+
 func TestBadInput(t *testing.T) {
 	if _, err := Load(write(t, "[[groups]]\nname = \"x\"\ncontainer = \"(\"\n")); err == nil {
 		t.Error("bad regexp accepted")
