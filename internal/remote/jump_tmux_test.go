@@ -110,14 +110,21 @@ func newJumpEnv(t *testing.T) jumpEnv {
 }
 
 // jumpSSH is an ssh that ignores its options and runs its last argument
-// (the host's command, see onHost) against the inner server. With fail
-// set, it prints that line and exits 255, as ssh does for a refused port.
+// (the host's command, see onHost) against the inner server. A command of
+// another shape exits 99: it must never reach the default server. With
+// fail set, it prints that line and exits 255, as ssh does for a refused
+// port.
 func jumpSSH(t *testing.T, inner, fail string) string {
 	t.Helper()
 	body := `#!/bin/bash
 cmd="${@: -1}"
+run="${cmd/ sh tmux / sh tmux -L ` + inner + ` }"
+case "$run" in
+*" sh tmux -L ` + inner + ` "*) ;;
+*) echo "fake ssh: not an onHost tmux command: $cmd" >&2; exit 99 ;;
+esac
 unset TMUX TMUX_PANE
-eval "exec ${cmd/ sh tmux / sh tmux -L ` + inner + ` }"
+eval "exec $run"
 `
 	if fail != "" {
 		body = "#!/bin/sh\necho '" + fail + "' >&2\nexit 255\n"
