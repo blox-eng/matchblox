@@ -72,7 +72,9 @@ jobs:
   test:
     name: Test
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    # macOS runners vary: the race tests took 6m44s and 9m31s on the same
+    # code, so macOS gets room that a slow runner does not use up.
+    timeout-minutes: ${{ matrix.os == 'macos-latest' && 20 || 10 }}
     strategy:
       fail-fast: false
       matrix:
