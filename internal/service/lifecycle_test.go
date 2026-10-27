@@ -78,7 +78,7 @@ func TestKillEndsTheAgentAndItsPane(t *testing.T) {
 	s, ran := lifeTest(t)
 	res := s.act(t.Context(), consoleAct("kill:%1", ""))
 	want := [][]string{{"tmux", "kill-pane", "-t", "%1"}, {"kill", "-TERM", "101"}}
-	if res.Err != "" || !slices.EqualFunc(*ran, want, slices.Equal) {
+	if res.Err != "" || !slices.EqualFunc(seatLaunches(*ran), want, slices.Equal) {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
 }
@@ -132,7 +132,7 @@ func TestRenameNamesTmuxAndTheAgentAlike(t *testing.T) {
 		{"tmux", "rename-window", "-t", "%1", "ships-flake"},
 		{"tmux", "rename-session", "-t", "%1", "ships-flake"},
 	}
-	if res.Err != "" || !slices.EqualFunc(*ran, want, slices.Equal) {
+	if res.Err != "" || !slices.EqualFunc(seatLaunches(*ran), want, slices.Equal) {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
 }
@@ -221,7 +221,7 @@ func TestNewStartsTheAgentInASessionOfItsName(t *testing.T) {
 	if res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
-	got := strings.Join((*ran)[0], " ")
+	got := strings.Join(seatLaunch((*ran)[0]), " ")
 	want := "tmux new-session -d -s fresh -n fresh -c " + dir + " claude --name fresh fix the flaky test"
 	if !strings.HasSuffix(got, want) || !strings.HasPrefix(got, "env -u GIT_TERMINAL_PROMPT") || slices.Contains((*ran)[0], "-L") {
 		t.Fatalf("ran %q", got)
@@ -237,7 +237,7 @@ func TestNewNamesItAfterItsDirectory(t *testing.T) {
 	if res := s.act(t.Context(), newAct(t, proto.NewSession{Where: dir, Agent: "codex"})); res.Err != "" {
 		t.Fatal(res.Err)
 	}
-	if got := strings.Join((*ran)[0], " "); !strings.HasSuffix(got, "-s blox-api -n blox-api -c "+dir+" codex") {
+	if got := strings.Join(seatLaunch((*ran)[0]), " "); !strings.HasSuffix(got, "-s blox-api -n blox-api -c "+dir+" codex") {
 		t.Fatalf("ran %q", got)
 	}
 }
@@ -260,10 +260,10 @@ func TestNewAddsAWorktreeForABranch(t *testing.T) {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
 	wt := filepath.Join(filepath.Dir(repo), "blox-api-feat-88-x")
-	if got, want := strings.Join((*ran)[0], " "), "git -C "+repo+" worktree add --no-track -b feat/88-x "+wt+" HEAD"; got != want {
+	if got, want := strings.Join(seatLaunch((*ran)[0]), " "), "git -C "+repo+" worktree add --no-track -b feat/88-x "+wt+" HEAD"; got != want {
 		t.Fatalf("ran %q, want %q", got, want)
 	}
-	if got := strings.Join((*ran)[1], " "); !strings.HasSuffix(got, "-s blox-api-feat-88-x -n blox-api-feat-88-x -c "+wt+" claude --name blox-api-feat-88-x") {
+	if got := strings.Join(seatLaunch((*ran)[1]), " "); !strings.HasSuffix(got, "-s blox-api-feat-88-x -n blox-api-feat-88-x -c "+wt+" claude --name blox-api-feat-88-x") {
 		t.Fatalf("ran %q", got)
 	}
 }
@@ -475,7 +475,7 @@ func TestNewStartsCursor(t *testing.T) {
 		if res.Err != "" || len(*ran) != 1 {
 			t.Fatalf("%s: err %q ran %q", agent, res.Err, *ran)
 		}
-		if got := strings.Join((*ran)[0], " "); !strings.HasSuffix(got, "-c "+dir+" cursor-agent --trust fix the build") {
+		if got := strings.Join(seatLaunch((*ran)[0]), " "); !strings.HasSuffix(got, "-c "+dir+" cursor-agent --trust fix the build") {
 			t.Errorf("%s: ran %q", agent, got)
 		}
 	}
@@ -499,7 +499,7 @@ func TestNewStartsCursorByAgentWhenOnlyThatIsInstalled(t *testing.T) {
 	if res := s.act(t.Context(), newAct(t, proto.NewSession{Where: dir, Agent: "cursor-agent", Name: "fresh", First: "fix the build"})); res.Err != "" {
 		t.Fatal(res.Err)
 	}
-	if got := strings.Join((*ran)[0], " "); !strings.HasSuffix(got, "-c "+dir+" agent --trust fix the build") {
+	if got := strings.Join(seatLaunch((*ran)[0]), " "); !strings.HasSuffix(got, "-c "+dir+" agent --trust fix the build") {
 		t.Errorf("ran %q", got)
 	}
 	if !slices.Contains(s.startable(), "cursor-agent") {
@@ -580,7 +580,7 @@ func TestSwitchRespawnsTheAgentInItsPane(t *testing.T) {
 	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff}))
 	want := [][]string{{"tmux", "respawn-pane", "-k", "-t", "%1", "-c", "/work/app",
 		"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv, "codex", proto.DefaultHandoff}}
-	if res.Err != "" || !slices.EqualFunc(*ran, want, slices.Equal) {
+	if res.Err != "" || !slices.EqualFunc(seatLaunches(*ran), want, slices.Equal) {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
 	for _, step := range *ran {
@@ -598,7 +598,7 @@ func TestSwitchToClaudeKeepsTheName(t *testing.T) {
 	if res := s.act(t.Context(), switchAct(t, "%3", proto.SwitchAgent{Agent: "claude"})); res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
-	if got := strings.Join((*ran)[0], " "); !strings.HasSuffix(got, " claude --name cx") {
+	if got := strings.Join(seatLaunch((*ran)[0]), " "); !strings.HasSuffix(got, " claude --name cx") {
 		t.Fatalf("ran %q", got)
 	}
 }
@@ -640,7 +640,7 @@ func TestTheSeatKeepsItsNameThroughSwitches(t *testing.T) {
 		if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "claude"})); res.Err != "" || len(*ran) != 1 {
 			t.Fatalf("%s: back to claude: %+v ran %q", c.window, res, *ran)
 		}
-		if got := strings.Join((*ran)[0], " "); !strings.HasSuffix(got, " claude --name work") {
+		if got := strings.Join(seatLaunch((*ran)[0]), " "); !strings.HasSuffix(got, " claude --name work") {
 			t.Fatalf("%s: back to claude ran %q", c.window, got)
 		}
 	}
@@ -651,7 +651,7 @@ func TestSwitchToCursorTrusts(t *testing.T) {
 	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "cursor", Handoff: "go on"})); res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
-	if got := strings.Join((*ran)[0], " "); !strings.HasSuffix(got, " cursor-agent --trust go on") {
+	if got := strings.Join(seatLaunch((*ran)[0]), " "); !strings.HasSuffix(got, " cursor-agent --trust go on") {
 		t.Fatalf("ran %q", got)
 	}
 }
@@ -925,7 +925,7 @@ func TestStartOnAnAccount(t *testing.T) {
 	if res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
-	got := strings.Join((*ran)[0], " ")
+	got := strings.Join(seatLaunch((*ran)[0]), " ")
 	if !strings.HasSuffix(got, envOn("claude")+" CLAUDE_CONFIG_DIR="+folder+" claude --name fresh") || strings.Contains(got, "BROWSER") {
 		t.Fatalf("ran %q", got)
 	}
@@ -949,7 +949,7 @@ func TestNewAccountPreparesAndStartsWithoutFirst(t *testing.T) {
 	if fi, err := os.Stat(folder); err != nil || !fi.IsDir() {
 		t.Fatalf("no folder: %v", err)
 	}
-	got := strings.Join((*ran)[0], " ")
+	got := strings.Join(seatLaunch((*ran)[0]), " ")
 	if !strings.Contains(got, "BROWSER=/usr/bin/true") || !strings.HasSuffix(got, " claude --name fresh") {
 		t.Fatalf("ran %q", got)
 	}
@@ -1021,7 +1021,7 @@ func TestCodexAccountForcesFileStore(t *testing.T) {
 	if res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
-	got := strings.Join((*ran)[0], " ")
+	got := strings.Join(seatLaunch((*ran)[0]), " ")
 	if !strings.HasSuffix(got, envOn("codex")+" CODEX_HOME="+folder+" codex -c cli_auth_credentials_store=\"file\"") {
 		t.Fatalf("ran %q", got)
 	}
@@ -1072,7 +1072,7 @@ func TestDefaultStartsAsToday(t *testing.T) {
 		if res.Err != "" || len(*ran) != 1 {
 			t.Fatalf("%q: err %q ran %q", account, res.Err, *ran)
 		}
-		got := strings.Join((*ran)[0], " ")
+		got := strings.Join(seatLaunch((*ran)[0]), " ")
 		want := "env -u GIT_TERMINAL_PROMPT -u GIT_SSH_COMMAND -u MATCHBLOX_HOME tmux new-session -d -s fresh -n fresh -c " + dir + " claude --name fresh go"
 		if got != want {
 			t.Errorf("%q: got %q, want %q", account, got, want)
@@ -1102,7 +1102,7 @@ func TestStartOnAHandMadeFolder(t *testing.T) {
 	if res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
-	got := strings.Join((*ran)[0], " ")
+	got := strings.Join(seatLaunch((*ran)[0]), " ")
 	if !strings.Contains(got, envOn("claude")+" CLAUDE_CONFIG_DIR="+old+" claude") || strings.Contains(got, "BROWSER=") {
 		t.Fatalf("ran %q", got)
 	}
@@ -1120,7 +1120,7 @@ func TestHandMadeCodexFolderKeepsItsStore(t *testing.T) {
 	if res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
-	got := strings.Join((*ran)[0], " ")
+	got := strings.Join(seatLaunch((*ran)[0]), " ")
 	if !strings.HasSuffix(got, envOn("codex")+" CODEX_HOME="+old+" codex") || strings.Contains(got, "cli_auth_credentials_store") {
 		t.Fatalf("ran %q", got)
 	}
@@ -1181,7 +1181,7 @@ func writeDefault(t *testing.T, home, rel string) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("# fixture configuration\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1305,7 +1305,7 @@ func TestStartOnAHandMadeFolderByItsFullPath(t *testing.T) {
 	if res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
-	if got := strings.Join((*ran)[0], " "); !strings.Contains(got, envOn("claude")+" CLAUDE_CONFIG_DIR="+old+" claude") {
+	if got := strings.Join(seatLaunch((*ran)[0]), " "); !strings.Contains(got, envOn("claude")+" CLAUDE_CONFIG_DIR="+old+" claude") {
 		t.Fatalf("ran %q", got)
 	}
 }
@@ -1463,7 +1463,7 @@ func TestSwitchUsesTheTargetsLastAccount(t *testing.T) {
 	if res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
-	got := strings.Join((*ran)[0], " ")
+	got := strings.Join(seatLaunch((*ran)[0]), " ")
 	want := " -u " + panes.HomeEnv + envOn("codex") + " CODEX_HOME=" + folder + ` codex -c cli_auth_credentials_store="file" ` + proto.DefaultHandoff
 	if !strings.HasSuffix(got, want) {
 		t.Fatalf("ran %q, want it to end %q", got, want)
@@ -1491,7 +1491,7 @@ func TestSwitchOnAGoneAccountUsesDefault(t *testing.T) {
 	if res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
-	if got := strings.Join((*ran)[0], " "); strings.Contains(got, "CODEX_HOME") || strings.Contains(got, "cli_auth_credentials_store") || !strings.HasSuffix(got, " -u "+panes.HomeEnv+" codex") {
+	if got := strings.Join(seatLaunch((*ran)[0]), " "); strings.Contains(got, "CODEX_HOME") || strings.Contains(got, "cli_auth_credentials_store") || !strings.HasSuffix(got, " -u "+panes.HomeEnv+" codex") {
 		t.Fatalf("ran %q, want the default", got)
 	}
 }
@@ -1507,7 +1507,7 @@ func TestSwitchNeverMakesAnAccount(t *testing.T) {
 		if res.Err != "" || len(*ran) != 1 {
 			t.Fatalf("%s: err %q ran %q", label, res.Err, *ran)
 		}
-		if got := strings.Join((*ran)[0], " "); strings.Contains(got, "CODEX_HOME") {
+		if got := strings.Join(seatLaunch((*ran)[0]), " "); strings.Contains(got, "CODEX_HOME") {
 			t.Fatalf("%s: ran %q, want the default", label, got)
 		}
 		if _, err := os.Lstat(accounts.Root(home)); !os.IsNotExist(err) {
@@ -1526,14 +1526,14 @@ func TestSwitchOnACursorAccountOffMacOSUsesDefault(t *testing.T) {
 	if res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
-	if got := strings.Join((*ran)[0], " "); strings.Contains(got, "CURSOR_CONFIG_DIR") {
+	if got := strings.Join(seatLaunch((*ran)[0]), " "); strings.Contains(got, "CURSOR_CONFIG_DIR") {
 		t.Fatalf("ran %q, want the default", got)
 	}
 }
 
-// TestSwitchWithAFailedRelinkStillSwitches: a like-default account whose
-// entries do not link again switches all the same, and says so.
-func TestSwitchWithAFailedRelinkStillSwitches(t *testing.T) {
+// An unreadable Codex configuration cannot be checked for restrictive trust.
+// Refuse before replacement so the old agent remains available.
+func TestSwitchWithUnreadableConfigKeepsTheOldAgent(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root reads a folder of mode 0")
 	}
@@ -1553,11 +1553,8 @@ func TestSwitchWithAFailedRelinkStillSwitches(t *testing.T) {
 	s.publish(snap, func(state.Doc) {})
 	*ran = nil
 	res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex"}))
-	if res.Err != "" || len(*ran) != 1 || !strings.Contains(strings.Join((*ran)[0], " "), "CODEX_HOME=") {
+	if !strings.Contains(res.Err, "permission denied") || len(*ran) != 0 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
-	}
-	if notes, ok := proto.StartNotes(res); !ok || len(notes) != 1 || !strings.Contains(notes[0], "permission denied") {
-		t.Fatalf("skipped %q", res.Skipped)
 	}
 }
 
@@ -1978,7 +1975,44 @@ func TestSwitchOnALastAccountAStartRefusesShowsAndRunsDefault(t *testing.T) {
 	if res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("err %q ran %q", res.Err, *ran)
 	}
-	if got := strings.Join((*ran)[0], " "); strings.Contains(got, "CODEX_HOME") {
+	if got := strings.Join(seatLaunch((*ran)[0]), " "); strings.Contains(got, "CODEX_HOME") {
 		t.Fatalf("ran %q, want the default", got)
 	}
+}
+
+// seatLaunch removes the independently tested launch-context layer so these
+// lifecycle assertions keep checking pane identity, account selection and task
+// delivery. matchcontext_test.go checks the raw arguments and saved evidence.
+func seatLaunch(argv []string) []string {
+	var out []string
+	for i := 0; i < len(argv); i++ {
+		if argv[i] == "env" && i+1 < len(argv) && strings.HasPrefix(argv[i+1], "MATCHBLOX_CONTEXT=") {
+			i++
+			if i+1 < len(argv) && strings.HasPrefix(argv[i+1], "CODEX_HOME=") {
+				i++
+			}
+			continue
+		}
+		if (argv[i] == "--append-system-prompt" || argv[i] == "--plugin-dir" || argv[i] == "--add-dir") && i+1 < len(argv) {
+			i++
+			continue
+		}
+		if argv[i] == "-c" && i+1 < len(argv) && (strings.HasPrefix(argv[i+1], "projects=") || strings.HasPrefix(argv[i+1], "sandbox_workspace_write.network_access=") || strings.HasPrefix(argv[i+1], "developer_instructions=")) {
+			i++
+			continue
+		}
+		if strings.HasPrefix(argv[i], "Read the repository instructions, then ") && strings.Contains(argv[i], "/capture.md") {
+			out = append(out, proto.DefaultHandoff)
+			continue
+		}
+		out = append(out, argv[i])
+	}
+	return out
+}
+func seatLaunches(steps [][]string) [][]string {
+	out := make([][]string, len(steps))
+	for i, step := range steps {
+		out[i] = seatLaunch(step)
+	}
+	return out
 }

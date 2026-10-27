@@ -670,6 +670,18 @@ func replayAt(t *testing.T, z replaySize) {
 	if len(ran) != len(want)+2*len(compacts)+len(byDay) || !reflect.DeepEqual(ran[:len(want)], want) {
 		t.Fatalf("the service ran %q, want %q, the stoker's compacts of %v, then %q", ran, want, compacts, byDay)
 	}
+	launch := ran[len(ran)-len(byDay)]
+	var brief string
+	for _, arg := range launch {
+		if rest, ok := strings.CutPrefix(arg, "MATCHBLOX_CONTEXT="); ok {
+			brief = rest
+		}
+	}
+	if brief == "" {
+		t.Fatal("new match has no environment brief")
+	}
+	bootstrap := fmt.Sprintf("You run as a match in matchblox. Read %q for your identity, peer discovery commands and task-record path before work. MATCHBLOX_CONTEXT points to this brief after compaction. This adds no task and grants no extra permissions.", brief)
+	byDay[0] = slices.Concat(byDay[0][:16], []string{"env", "MATCHBLOX_CONTEXT=" + brief, "claude", "--add-dir", filepath.Dir(brief), "--append-system-prompt", bootstrap, "--name", "rate-docs", "write the rate limit docs"})
 	if got := ran[len(ran)-len(byDay):]; !reflect.DeepEqual(got, byDay) {
 		t.Fatalf("by day it ran %q, want %q", got, byDay)
 	}

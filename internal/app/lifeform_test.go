@@ -141,6 +141,7 @@ func TestATapPicksAnAgentAndAField(t *testing.T) {
 		t.Fatalf("form %+v", fm)
 	}
 	// A tap on the first message's line puts the cursor there.
+	sc = tapped.(Model).draw(44) // Codex's launch-settings hint changes the form's height.
 	for i, p := range sc.peekRows {
 		if p == "field:4" {
 			tapped, _ = tapped.Update(tea.MouseClickMsg{X: sc.peekX + 4, Y: sc.peekAt + i, Button: tea.MouseLeft})
@@ -181,6 +182,7 @@ func TestAOpensSwitchAgentAndJumpsAfter(t *testing.T) {
 	if nm.form != nil || nm.pending == nil || nm.pending.rec != "switch:%1" || !strings.Contains(nm.pending.say, "claude → codex") || len(f.acts()) != 0 {
 		t.Fatalf("form %+v pending %+v acts %+v", nm.form, nm.pending, f.acts())
 	}
+	next = readySwitchPreview(t, next)
 	next, cmd := key(next, "y")
 	cmd()
 	acts := f.acts()
@@ -188,7 +190,7 @@ func TestAOpensSwitchAgentAndJumpsAfter(t *testing.T) {
 		t.Fatalf("sent %+v", acts)
 	}
 	var sw proto.SwitchAgent
-	if err := json.Unmarshal([]byte(acts[0].Text), &sw); err != nil || sw != (proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff}) {
+	if err := json.Unmarshal([]byte(acts[0].Text), &sw); err != nil || sw != (proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff, ExpectedPID: 200, ExpectedStart: 1000}) {
 		t.Fatalf("%+v %v", sw, err)
 	}
 	// A refusal jumps nowhere and says why.
@@ -212,6 +214,7 @@ func TestSwitchOfABusySessionTakesASecondY(t *testing.T) {
 	next, f := switchState(t, st)
 	next, _ = key(next, "A")
 	next, _ = key(next, "enter")
+	next = readySwitchPreview(t, next)
 	next, cmd := key(next, "y")
 	if cmd != nil {
 		cmd()
@@ -1856,6 +1859,7 @@ func TestSwitchWithANotLinkedNoteJumps(t *testing.T) {
 	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
 	next, _ = key(m, "A")
 	next, _ = key(next, "enter")
+	next = readySwitchPreview(t, next)
 	next, cmd := key(next, "y")
 	cmd()
 	act := next.(Model).jumpAfter.act
@@ -1991,5 +1995,47 @@ func TestAnUnreadableRootIsShownShortened(t *testing.T) {
 	s := screen(next)
 	if !strings.Contains(s, "accounts not read: open /home/u/.matchblox/accou…") || strings.Contains(s, "permission denied") {
 		t.Fatalf("the form:\n%s", s)
+	}
+}
+
+func readySwitchPreview(t *testing.T, m tea.Model) tea.Model {
+	t.Helper()
+	mm := m.(Model)
+	if mm.pending == nil || mm.pending.previewAct == "" {
+		t.Fatal("no pending preview")
+	}
+	next, _ := mm.Update(resultMsg(proto.Result{ActID: mm.pending.previewAct, Preview: "# Handover evidence\n\n> Goal: fix the export.\n> Next action: run its tests.\n"}))
+	return next
+}
+
+func TestSwitchWaitsForPreviewAndCancellationIgnoresItsReply(t *testing.T) {
+	m, f := switchState(t, lifeState())
+	m, _ = key(m, "A")
+	m, cmd := key(m, "enter")
+	cmd()
+	id := m.(Model).pending.previewAct
+	acts := f.acts()
+	if len(acts) != 1 || acts[0].RecID != "switch-preview:%1" || acts[0].Confirm != "" {
+		t.Fatalf("preview mutates a match: %+v", acts)
+	}
+	m, cmd = key(m, "y")
+	if cmd != nil || m.(Model).pending == nil || m.(Model).pending.previewAct == "" || len(f.acts()) != 1 {
+		t.Fatal("confirmation bypasses pending preview")
+	}
+	m, _ = key(m, "esc")
+	m, _ = m.Update(resultMsg(proto.Result{ActID: id, Preview: "late evidence"}))
+	if m.(Model).pending != nil || len(f.acts()) != 1 {
+		t.Fatal("late preview restarts cancelled switch")
+	}
+}
+
+func TestSwitchPreviewFailureKeepsTheOldMatch(t *testing.T) {
+	m, f := switchState(t, lifeState())
+	m, _ = key(m, "A")
+	m, _ = key(m, "enter")
+	id := m.(Model).pending.previewAct
+	m, _ = m.Update(resultMsg(proto.Result{ActID: id, Err: "session is gone"}))
+	if m.(Model).pending != nil || len(f.acts()) != 0 || !strings.Contains(m.(Model).flash, "session is gone") {
+		t.Fatal("preview failure still offers switch")
 	}
 }

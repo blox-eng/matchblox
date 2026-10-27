@@ -17,14 +17,15 @@ import (
 // another HOME keeps its files there: unless its environment names a
 // directory, that directory is "" and nothing is read for it.
 type agentEnv struct {
-	claudeDir  string // CLAUDE_CONFIG_DIR, else ~/.claude
-	claudeJSON string // .claude.json next to it: in CLAUDE_CONFIG_DIR, else in the home
-	codexHome  string // CODEX_HOME, else ~/.codex
-	cursorDir  string // CURSOR_CONFIG_DIR, else ~/.cursor
-	dataHome   string // XDG_DATA_HOME, else ~/.local/share
-	cacheHome  string // XDG_CACHE_HOME, else ~/.cache
-	cloud      string // bedrock or vertex: Claude Code signs in through the cloud
-	apiKey     bool   // an API key is set in the environment (its value is never kept)
+	claudeDir    string // CLAUDE_CONFIG_DIR, else ~/.claude
+	claudeJSON   string // .claude.json next to it: in CLAUDE_CONFIG_DIR, else in the home
+	codexHome    string // CODEX_HOME, else ~/.codex
+	cursorDir    string // CURSOR_CONFIG_DIR, else ~/.cursor
+	dataHome     string // XDG_DATA_HOME, else ~/.local/share
+	cacheHome    string // XDG_CACHE_HOME, else ~/.cache
+	cloud        string // bedrock or vertex: Claude Code signs in through the cloud
+	apiKey       bool   // an API key is set in the environment (its value is never kept)
+	matchContext string // private matchblox launch brief; inherited by the process
 }
 
 func (s *Sampler) envOf(pid int, key procKey) agentEnv {
@@ -56,12 +57,13 @@ func (s *Sampler) envOf(pid int, key procKey) agentEnv {
 		return def
 	}
 	e := agentEnv{
-		claudeDir:  under(".claude"),
-		claudeJSON: under(".claude.json"),
-		codexHome:  abs(get("CODEX_HOME"), under(".codex")),
-		cursorDir:  abs(get("CURSOR_CONFIG_DIR"), joinIn(cursorHome, ".cursor")),
-		dataHome:   abs(get("XDG_DATA_HOME"), under(".local", "share")),
-		cacheHome:  abs(get("XDG_CACHE_HOME"), under(".cache")),
+		claudeDir:    under(".claude"),
+		claudeJSON:   under(".claude.json"),
+		codexHome:    abs(get("CODEX_HOME"), under(".codex")),
+		cursorDir:    abs(get("CURSOR_CONFIG_DIR"), joinIn(cursorHome, ".cursor")),
+		dataHome:     abs(get("XDG_DATA_HOME"), under(".local", "share")),
+		cacheHome:    abs(get("XDG_CACHE_HOME"), under(".cache")),
+		matchContext: get("MATCHBLOX_CONTEXT"),
 	}
 	if d := abs(get("CLAUDE_CONFIG_DIR"), ""); d != "" {
 		e.claudeDir, e.claudeJSON = d, filepath.Join(d, ".claude.json")

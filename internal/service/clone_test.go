@@ -640,7 +640,7 @@ func TestNewSessionClonesAURL(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(target, ".git")); err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Ran) != 1 || !strings.Contains(strings.Join(res.Ran[0], " "), "-c "+target+" ") {
+	if len(res.Ran) != 1 || !strings.Contains(strings.Join(seatLaunch(res.Ran[0]), " "), "-c "+target+" ") {
 		t.Fatalf("ran %q", res.Ran)
 	}
 	if len(res.Skipped) != 0 || res.Note != "cloned o/r into ~/src/r" {
@@ -675,7 +675,7 @@ func TestNewSessionURLUsesTheExistingClone(t *testing.T) {
 	if res.Err != "" || ran {
 		t.Fatalf("err %q cloned %v", res.Err, ran)
 	}
-	if len(res.Ran) != 1 || !strings.Contains(strings.Join(res.Ran[0], " "), "-c "+target+" ") {
+	if len(res.Ran) != 1 || !strings.Contains(strings.Join(seatLaunch(res.Ran[0]), " "), "-c "+target+" ") {
 		t.Fatalf("ran %q", res.Ran)
 	}
 	if len(res.Skipped) != 0 || res.Note != "o/r is already at ~/src/r: started there" {
@@ -731,7 +731,7 @@ func TestNewSessionPathStillWorks(t *testing.T) {
 	if res.Err != "" || len(res.Ran) != 1 || len(res.Skipped) != 0 || res.Note != "" {
 		t.Fatalf("%+v", res)
 	}
-	if got := strings.Join(res.Ran[0], " "); !strings.HasSuffix(got, "-c "+dir+" claude --name fresh") {
+	if got := strings.Join(seatLaunch(res.Ran[0]), " "); !strings.HasSuffix(got, "-c "+dir+" claude --name fresh") {
 		t.Fatalf("ran %q", got)
 	}
 	if res := s.act(t.Context(), newAct(t, proto.NewSession{Where: "api", Agent: "claude"})); res.Err != "a new session starts in a full path" {
@@ -816,7 +816,7 @@ func TestNewSessionURLLetsCursorAsk(t *testing.T) {
 	if res.Err != "" || len(res.Ran) != 1 {
 		t.Fatalf("%+v", res)
 	}
-	if got := strings.Join(res.Ran[0], " "); !strings.HasSuffix(got, "-c "+filepath.Join(root, "r")+" cursor-agent") {
+	if got := strings.Join(seatLaunch(res.Ran[0]), " "); !strings.HasSuffix(got, "-c "+filepath.Join(root, "r")+" cursor-agent") {
 		t.Fatalf("ran %q", got)
 	}
 	// the same URL again: the checkout is there, reused

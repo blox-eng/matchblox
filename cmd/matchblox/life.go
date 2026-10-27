@@ -62,6 +62,7 @@ type switchOpts struct {
 	agent   string
 	handoff *string
 	anyway  bool
+	preview bool
 }
 
 // switchAct is the act of matchblox switch <who> --agent <name>: the
@@ -86,6 +87,7 @@ func switchAct(doc state.Doc, words []string, o switchOpts, from string) (proto.
 		return proto.Act{}, fmt.Errorf("%s is outside tmux: nothing to switch", words[0])
 	}
 	sw := proto.SwitchAgent{Agent: o.agent, Handoff: proto.DefaultHandoff, Anyway: o.anyway}
+	sw.ExpectedPID, sw.ExpectedStart = sess.PID, sess.Start
 	if o.handoff != nil {
 		sw.Handoff = *o.handoff
 	}
@@ -306,6 +308,22 @@ func cliSwitch(words []string, o switchOpts, w io.Writer, path string, jump func
 	}
 	a, err := switchAct(doc, words, o, os.Getenv("TMUX_PANE"))
 	if err != nil {
+		return err
+	}
+	if o.preview {
+		a.RecID = "switch-preview:" + strings.TrimPrefix(a.RecID, "switch:")
+		a.Confirm = ""
+		res, err := doAct(path, a)
+		if err != nil {
+			return err
+		}
+		if res.Err != "" {
+			return errors.New(res.Err)
+		}
+		if res.Preview == "" {
+			return errors.New("the service returns no handover preview: update matchblox before switching")
+		}
+		_, err = fmt.Fprintln(w, res.Preview)
 		return err
 	}
 	home, _ := os.UserHomeDir()
