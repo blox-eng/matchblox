@@ -19,6 +19,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/replay"
+	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/testhome"
 )
 
 // demoSession is a Claude Code session of the demo machine.
@@ -464,9 +466,16 @@ func thisMachine() []string {
 	add(os.Getenv("USER"))
 	home, _ := os.UserHomeDir()
 	add(home)
-	if b, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output(); err == nil {
-		for _, n := range strings.Split(string(b), "\n") {
-			add(n)
+	// The tests run with no $TMUX (testhome.Run), so the names come from the
+	// server the builder ran them in and from the default one, by socket.
+	for _, sock := range []string{testhome.BuildersTmux, sample.SocketPath("default")} {
+		if sock == "" {
+			continue
+		}
+		if b, err := exec.Command("tmux", "-S", sock, "list-sessions", "-F", "#{session_name}").Output(); err == nil { //nolint:gosec // reads names only
+			for _, n := range strings.Split(string(b), "\n") {
+				add(n)
+			}
 		}
 	}
 	files, _ := filepath.Glob(filepath.Join(home, ".claude*", "sessions", "*.json"))

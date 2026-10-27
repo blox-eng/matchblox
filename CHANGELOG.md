@@ -6,6 +6,14 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **matchblox's tests leave your tmux server alone.** The test suite clears
+  `$TMUX` and `$TMUX_PANE`, so `go test ./...` inside tmux cannot end the
+  server with your agents in it. Each tmux a test runs names its own
+  server, and CI checks that a sentinel server survives the whole suite.
+  ([#215](https://github.com/blox-eng/matchblox/issues/215))
+
 ## [0.26.2] - 2026-10-28
 
 ### Fixed
@@ -23,6 +31,7 @@ All notable changes to matchblox are in this file. The format follows
   the owner's `name`, `pane` and `since`, and the stoker messages a
   session by name, never by pane.
   ([#80](https://github.com/blox-eng/matchblox/issues/80))
+||||||| parent of bfaf151 (test: matchblox's tests leave the builder's tmux server alone (#215))
 
 ## [0.26.1] - 2026-10-28
 
@@ -41,6 +50,7 @@ All notable changes to matchblox are in this file. The format follows
   agent or Tailscale SSH asks nothing. A failure stays on Hosts and says
   why. `matchblox connect` typed in a shell still asks in that terminal.
   Not tested yet with a real ssh on macOS. (#242)
+||||||| parent of 56dad68 (test: matchblox's tests leave the builder's tmux server alone (#215))
 
 ## [0.26.0] - 2026-10-27
 
@@ -68,6 +78,7 @@ All notable changes to matchblox are in this file. The format follows
   agent no longer runs: Enter and `a` do not reach it. Not tested yet with
   a live `/clear`. The stoker's merge guard still pairs by pane, as before,
   so it still lets that agent merge those PRs. (#235)
+||||||| parent of 578d056 (test: matchblox's tests leave the builder's tmux server alone (#215))
 
 ## [0.25.1] - 2026-10-27
 
