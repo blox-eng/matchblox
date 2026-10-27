@@ -447,3 +447,43 @@ func TestJumpMakesTheMasterDirAgain(t *testing.T) {
 		t.Fatal("no ssh ran")
 	}
 }
+
+// TestLineWriterIsBounded: a host can send stderr without end; the stream
+// keeps its start (ssh's version line) and its end (the result) within a
+// fixed size, and a line without end is dropped, not grown.
+func TestLineWriterIsBounded(t *testing.T) {
+	var lines int
+	w := &lineWriter{line: func(string) { lines++ }}
+	_, _ = w.Write([]byte("debug1: Remote protocol version 2.0, remote software version Tailscale\n"))
+	flood := []byte(strings.Repeat("banner line\n", 1000))
+	for range 1000 {
+		_, _ = w.Write(flood)
+	}
+	_, _ = w.Write([]byte(strings.Repeat("y", 1<<20))) // no newline
+	_, _ = w.Write([]byte("\nPermission denied (publickey,password).\n"))
+	s := w.String()
+	if len(s) > 80<<10 || len(w.part) > 8<<10 {
+		t.Fatalf("kept %d bytes, %d of a line", len(s), len(w.part))
+	}
+	if !strings.HasPrefix(s, "debug1: Remote protocol version 2.0") || !strings.HasSuffix(s, "Permission denied (publickey,password).\n") {
+		t.Fatalf("start or end lost: %q … %q", s[:40], s[len(s)-40:])
+	}
+	if lines < 1000*1000 {
+		t.Fatalf("lines %d", lines)
+	}
+}
+
+// TestLineWriterSmallWritesAreCheap: ssh writes a line at a time; a flood
+// of them must not copy the kept end at each one.
+func TestLineWriterSmallWritesAreCheap(t *testing.T) {
+	w := &lineWriter{line: func(string) {}}
+	line := []byte("banner line\n")
+	allocs := testing.AllocsPerRun(1, func() {
+		for range 100000 {
+			_, _ = w.Write(line)
+		}
+	})
+	if allocs > 150000 { // one per line is its string for line; a copy at each write is a second
+		t.Fatalf("%v allocations for 100000 lines", allocs)
+	}
+}

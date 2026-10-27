@@ -413,31 +413,64 @@ func runSSH(ctx context.Context, argv, env []string, limit time.Duration, line f
 func ignoreLine(string) {}
 
 // lineWriter keeps what ssh writes and gives each whole line to line, as
-// it comes, without its line break.
+// it comes, without its line break. A host can write without end: it keeps
+// the start (ssh's version line) and the end (the result) of it, and drops
+// a line longer than maxLine.
 type lineWriter struct {
 	mu   sync.Mutex
-	all  bytes.Buffer
+	head []byte
+	tail []byte
 	part []byte
+	skip bool // the line that comes is past maxLine: dropped up to its end
 	line func(string)
 }
+
+const (
+	keepHead = 16 << 10
+	keepTail = 48 << 10
+	maxLine  = 4 << 10
+)
 
 func (w *lineWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.all.Write(p)
-	w.part = append(w.part, p...)
-	for {
-		i := bytes.IndexByte(w.part, '\n')
+	n := len(p)
+	w.keep(p)
+	for len(p) > 0 {
+		i := bytes.IndexByte(p, '\n')
 		if i < 0 {
-			return len(p), nil
+			if !w.skip {
+				w.part = append(w.part, p...)
+			}
+			if len(w.part) > maxLine {
+				w.part, w.skip = nil, true
+			}
+			return n, nil
 		}
-		w.line(strings.TrimSuffix(string(w.part[:i]), "\r"))
-		w.part = w.part[i+1:]
+		if !w.skip {
+			w.part = append(w.part, p[:i]...)
+			w.line(strings.TrimSuffix(string(w.part), "\r"))
+		}
+		w.part, w.skip, p = w.part[:0], false, p[i+1:]
+	}
+	return n, nil
+}
+
+// keep adds p to the start until it is full, then to the end, which keeps
+// at least its last keepTail bytes: it is cut to them at twice that, so a
+// flood of small writes copies little.
+func (w *lineWriter) keep(p []byte) {
+	if n := min(keepHead-len(w.head), len(p)); n > 0 {
+		w.head, p = append(w.head, p[:n]...), p[n:]
+	}
+	w.tail = append(w.tail, p...)
+	if len(w.tail) > 2*keepTail {
+		w.tail = append(w.tail[:0:0], w.tail[len(w.tail)-keepTail:]...)
 	}
 }
 
 func (w *lineWriter) String() string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.all.String()
+	return string(w.head) + string(w.tail[max(0, len(w.tail)-keepTail):])
 }
