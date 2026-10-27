@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -249,11 +250,11 @@ func (c *client) type_(keys ...string) {
 func (e jumpEnv) jump(t *testing.T, c *client, j Jump, ssh string) {
 	t.Helper()
 	argv := j.Local(append([]string{ssh}, JumpSSH(j.Host, j, nil)[1:]...))
-	n := len(argv)
-	if argv[n-3] != "switch-client" {
-		t.Fatalf("the list does not end in switch-client: %v", argv[n-3:])
+	i := slices.Index(argv, "switch-client")
+	if i < 0 {
+		t.Fatalf("no switch-client in the list: %v", argv)
 	}
-	argv = append(argv[:n-2:n-2], "-c", c.tty, argv[n-2], argv[n-1])
+	argv = slices.Insert(argv, i+1, "-c", c.tty)
 	mustTmux(t, e.outer, argv[1:]...)
 }
 
@@ -358,10 +359,10 @@ func TestJumpWayBackWithPrefixCa(t *testing.T) {
 	})
 }
 
-// TestJumpDropLeavesNothing: the link drops (the host's tmux client dies
-// and ssh ends with an error) while the builder is on the console and S
-// runs in the background. Nobody can press Enter there, so S must end by
-// itself, and the host's G must end with its client.
+// TestJumpDropLeavesNothing: the link drops (the laptop slept) while the
+// builder is in the jump: the host's session goes, the error stays on the
+// screen though the killed ssh left the terminal raw, and Enter goes back
+// with nothing left here.
 func TestJumpDropLeavesNothing(t *testing.T) {
 	e := newJumpEnv(t)
 	c := attach(t, e.outer, "matchblox")
@@ -370,13 +371,13 @@ func TestJumpDropLeavesNothing(t *testing.T) {
 	s, g := HostSessionName(j.Host, j.ID), JumpSessionName(j.ID)
 	c.waitSession(s)
 	waitFor(t, "the jump is attached", func() bool { return len(clientsOf(e.inner, g)) == 1 })
-	mustTmux(t, e.outer, "switch-client", "-c", c.tty, "-t", "=matchblox")
-	c.waitSession("matchblox")
-	if !hasSession(e.outer, s) {
-		t.Fatal("the session ended before the drop")
-	}
-	killSSH(t, e.outer, s)
+	killSSH(t, e.outer, s) // the laptop slept: the ssh died under the builder
 	waitFor(t, "the host's jump session is gone", func() bool { return !hasSession(e.inner, g) })
+	waitFor(t, "the drop says so", func() bool {
+		out, _ := tmuxOut(e.outer, "capture-pane", "-p", "-t", "="+s+":")
+		return strings.Contains(out, "ssh exited")
+	})
+	c.type_("\r")
 	waitFor(t, "the outer session is gone", func() bool { return !hasSession(e.outer, s) })
 	c.waitSession("matchblox")
 }
@@ -386,18 +387,31 @@ func TestJumpDropLeavesNothing(t *testing.T) {
 func killSSH(t *testing.T, sock, session string) {
 	t.Helper()
 	sh := mustTmux(t, sock, "display-message", "-p", "-t", "="+session+":", "#{pane_pid}")
-	var pid int
+	var tree []int
 	waitFor(t, "ssh runs under the wrapper", func() bool {
-		out, err := exec.Command("pgrep", "-P", sh).Output() //nolint:gosec // a pid of the test's own pane
-		if err != nil {
-			return false
-		}
-		pid, _ = strconv.Atoi(strings.Fields(string(out))[0])
-		return pid > 0
+		tree = descendants(sh)
+		return len(tree) > 0
 	})
-	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
-		t.Fatal(err)
+	// A dead ssh leaves nothing here: the fake's own children go too,
+	// deepest first.
+	for i := len(tree) - 1; i >= 0; i-- {
+		_ = syscall.Kill(tree[i], syscall.SIGKILL)
 	}
+}
+
+// descendants are the processes under pid, parents first.
+func descendants(pid string) []int {
+	out, err := exec.Command("pgrep", "-P", pid).Output() //nolint:gosec // a pid of the test's own pane
+	if err != nil {
+		return nil
+	}
+	var all []int
+	for _, f := range strings.Fields(string(out)) {
+		if n, err := strconv.Atoi(f); err == nil {
+			all = append(append(all, n), descendants(f)...)
+		}
+	}
+	return all
 }
 
 func TestJumpFailedSSHIsReadable(t *testing.T) {
@@ -491,4 +505,47 @@ func TestJumpHostFailureLeavesNothing(t *testing.T) {
 	if hasSession(e.inner, JumpSessionName(j.ID)) {
 		t.Fatal("the failed jump left its session on the host")
 	}
+}
+
+// TestLeavingEndsTheJump: prefix m (the way back door's switch-client)
+// leaves the jump, and like the tap and the home key it ends it: the
+// session here, its table and the host's session go. Nothing runs unseen.
+func TestLeavingEndsTheJump(t *testing.T) {
+	e := newJumpEnv(t)
+	c := attach(t, e.outer, "matchblox")
+	j := e.newJump("0a1b2c3d")
+	e.jump(t, c, j, e.ssh)
+	s, g := HostSessionName(j.Host, j.ID), JumpSessionName(j.ID)
+	c.waitSession(s)
+	waitFor(t, "the jump is attached on the host", func() bool { return len(clientsOf(e.inner, g)) == 1 })
+	mustTmux(t, e.outer, "switch-client", "-c", c.tty, "-t", "=matchblox")
+	c.waitSession("matchblox")
+	waitFor(t, "the jump's session here is gone", func() bool { return !hasSession(e.outer, s) })
+	waitFor(t, "the host's session is gone", func() bool { return !hasSession(e.inner, g) })
+	waitFor(t, "the jump's table is gone", func() bool {
+		_, err := tmuxOut(e.outer, "list-keys", "-T", KeyTable(j.ID))
+		return err != nil
+	})
+}
+
+// TestJumpEndLandsOnTheConsole: when a jump ends by itself (Enter after a
+// failed ssh), its client goes to the console, not to the session tmux
+// would pick (the one most recently active).
+func TestJumpEndLandsOnTheConsole(t *testing.T) {
+	e := newJumpEnv(t)
+	mustTmux(t, e.outer, "new-session", "-d", "-s", "busy", "sleep", "600")
+	c := attach(t, e.outer, "matchblox")
+	j := e.newJump("0a1b2c3d")
+	e.jump(t, c, j, jumpSSH(t, e.inner, "ssh: connect to host ws-1 port 22: Connection refused"))
+	s := HostSessionName(j.Host, j.ID)
+	c.waitSession(s)
+	other := attach(t, e.outer, "busy")
+	other.type_("x") // busy is now the most recently active session
+	waitFor(t, "the error is on the screen", func() bool {
+		out, _ := tmuxOut(e.outer, "capture-pane", "-p", "-t", "="+s+":")
+		return strings.Contains(out, "ssh exited")
+	})
+	c.type_("\r")
+	waitFor(t, "the session is gone", func() bool { return !hasSession(e.outer, s) })
+	c.waitSession("matchblox")
 }

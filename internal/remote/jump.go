@@ -176,17 +176,21 @@ func (j Jump) hostCommand() []string {
 
 // Local is the one tmux command list that runs on this machine. It starts
 // the ssh in a session of its own, binds the way back to the console, and
-// switches the client there. The session ends when ssh ends; a failed ssh
-// waits for Enter so the error can be read. ssh stays argv.
+// switches the client there. The session ends when ssh ends, or when its
+// client leaves it by any way back; a failed ssh waits for Enter so the
+// error can be read. ssh stays argv.
 func (j Jump) Local(ssh []string) []string {
 	s, table := HostSessionName(j.Host, j.ID), KeyTable(j.ID)
-	back := "switch-client -t =" + j.home() + " ; unbind-key -a -T " + table + " ; kill-session -t =" + s
-	// A failed ssh waits for Enter only when a client looks at this session;
-	// in the background (the builder went home) nobody can press Enter. A
-	// jump that ends without the way back drops its table here.
-	const wrap = `t=$1; shift; "$@"; s=$?; [ $s = 0 ] || [ "$(tmux display-message -p '#{session_attached}')" = 0 ] || { printf "\nssh exited %s. Press Enter to go back.\n" "$s"; read _; }; tmux unbind-key -a -T "$t"; exit 0`
+	back := "unbind-key -a -T " + table + " ; switch-client -t =" + j.home()
+	// A failed ssh waits for Enter, as its client looks at it. An ssh that
+	// was killed leaves the terminal raw and non-blocking, so the wait
+	// resets it and reads again. A jump that ends by itself sends its
+	// client home: tmux would pick a session of its own. The session also
+	// ends when its client leaves it, by any way back (destroy-unattached),
+	// and its ssh with it; the wrapper then drops the table (a hangup too).
+	const wrap = `t=$1; h=$2; shift 2; trap 'tmux unbind-key -a -T "$t" 2>/dev/null; exit 0' HUP TERM; "$@"; s=$?; [ $s = 0 ] || { stty sane 2>/dev/null; printf "\nssh exited %s. Press Enter to go back.\n" "$s"; until read _; do sleep 0.2; done; }; for c in $(tmux list-clients -t "$TMUX_PANE" -F '#{client_tty}' 2>/dev/null); do tmux switch-client -c "$c" -t "=$h" 2>/dev/null; done; tmux unbind-key -a -T "$t" 2>/dev/null; exit 0`
 	return tmuxList(
-		append([]string{"new-session", "-d", "-s", s, "--", "/bin/sh", "-c", wrap, "sh", table}, ssh...),
+		append([]string{"new-session", "-d", "-s", s, "--", "/bin/sh", "-c", wrap, "sh", table, j.home()}, ssh...),
 		setOption(s, sample.JumpMark, "1"),
 		setOption(s, "detach-on-destroy", "off"),
 		setOption(s, "key-table", table),
@@ -195,5 +199,7 @@ func (j Jump) Local(ssh []string) []string {
 		[]string{"bind-key", "-T", table, "User900", "if", "-F", "1", back, ""},
 		[]string{"bind-key", "-T", table, "MouseDown1Status", "if", "-F", "#{==:#{mouse_status_range},matchblox}", back, ""},
 		[]string{"switch-client", "-t", "=" + s},
+		// After the switch: an unattached session with it would end at once.
+		setOption(s, "destroy-unattached", "on"),
 	)
 }

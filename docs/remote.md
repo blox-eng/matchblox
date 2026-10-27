@@ -75,9 +75,7 @@ To go back to the console in tmux, use one of these:
 
 - Tap `◂ console` in the status line. This needs tmux 3.4 or newer.
 - Press the home key on the phone.
-- Press prefix `m`, if you added the way back (see [tmux](tmux.md)). This
-  key does not end the jump: its session and its ssh stay open on your
-  laptop until you go back to the jump and leave it.
+- Press prefix `m`, if you added the way back (see [tmux](tmux.md)).
 - Press your prefix twice, then `m` or `d`. The tmux of your laptop takes
   the first prefix and sends the second to the host. This needs the
   `send-prefix` binding on the prefix key. tmux has it for `C-b`. With
@@ -87,7 +85,8 @@ Outside tmux, only the keys of the host work: press your prefix once, then
 `m` or `d`. The status line of the host shows them. The tap, the home key
 and prefix `m` are for a jump in tmux.
 
-The tap, the home key and the keys of the host end the jump. Nothing stays
+Every way back ends the jump: the tap, the home key, prefix `m`, the keys
+of the host, and any other move of your client away from it. Nothing stays
 on your laptop or on the host. If ssh fails, the jump waits and says
 `ssh exited <n>. Press Enter to go back.`
 
