@@ -195,15 +195,14 @@ func (bd Board) write(b *strings.Builder) {
 	}
 }
 
-// shipOfPane is the ship a session drives, by pane and then session id.
+// shipOfPane is the ship a session drives that the console's row leads
+// with (ships.Of).
 func shipOfPane(rep *ships.Report, x sample.Session) *ships.Ship {
 	if rep == nil {
 		return nil
 	}
-	for i, sh := range rep.Ships {
-		if sh.Session.Pane != "" && sh.Session.Pane == x.Pane || sh.Session.ID != "" && sh.Session.ID == x.SessionID {
-			return &rep.Ships[i]
-		}
+	if ss := ships.Of(rep.Ships, x.Pane, x.SessionID); len(ss) > 0 {
+		return &ss[0]
 	}
 	return nil
 }

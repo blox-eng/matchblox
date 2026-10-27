@@ -10,12 +10,26 @@ All notable changes to matchblox are in this file. The format follows
 
 - **A session's row counts every pull request it drives, not only the
   first.** The row leads with the ship that most needs you (stuck, then
-  waiting for you, in flight, merged, live) and adds `+1 merged`, or `+2`
-  when the row is narrow, naming the furthest stage of the others. The
+  waiting for you, in flight, merged, live) and adds a count of the others:
+  `+1 stuck` or `+1 waits` when one of them needs you, else the furthest
+  stage among them (`+1 merged`), and `+1` when the row is narrow. The
   count folds away before the track or the number. The detail, and the
-  opened row on a phone, list every ship of the session, each with its
-  track. A list where each session has one ship looks as it did. `matchblox sessions
-  --json` still gives one ship. (#235)
+  opened row on a phone, list the first three ships of the session, each
+  with its track, then `+N more · p ships`. A list where each session has
+  one ship looks as it did. (#235)
+- **Every reader names the same ship for a session.** The idle reason on
+  a row, `matchblox sessions --json` and the stoker's brief name the ship
+  the row leads with, not the first in the tracker's report, so a row no
+  longer shows one PR's track beside another PR's word. (#235)
+- **A ship belongs to a session by its session id when both have one.**
+  An agent started in a pane where another ran no longer takes that
+  agent's ships; while a session's id is not read yet, its pane still
+  pairs it. A Claude Code `/clear` starts a new session id, so the ships a
+  session had before a `/clear` leave its row, its idle reason, `--json`
+  and the stoker's brief. The Ships tab still lists them, but says their
+  agent no longer runs: Enter and `a` do not reach it. Not tested yet with
+  a live `/clear`. The stoker's merge guard still pairs by pane, as before,
+  so it still lets that agent merge those PRs. (#235)
 
 ## [0.25.1] - 2026-10-27
 

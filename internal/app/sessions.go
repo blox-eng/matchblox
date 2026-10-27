@@ -363,13 +363,14 @@ func (m Model) sessionRows(b *body, w int) {
 		b.add(-1, st.label.Render(fit(fmt.Sprintf(" %d SESSIONS · by %s %s", len(ss), sessCols[m.sessSort.col], m.sessSort.arrow()), w)))
 	}
 	group := ""
+	t := m.sessTracks(w) // the columns are every row's: worked out once
 	for i, s := range ss {
 		if g := m.groupLabel(s); m.sessGroup != groupNone && (g != group || i == 0) {
 			group = g
 			b.add(-1, st.label.Render(fit(fmt.Sprintf(" %s · %d", g, count[g])+by, w)))
 			by = ""
 		}
-		rows := m.sessionRow(s, i == sel, w)
+		rows := m.rowIn(s, i == sel, w, t)
 		if len(rows) > 1 {
 			// The opened block of a phone stands apart between hairlines.
 			b.add(-1, st.hair.Render(strings.Repeat("─", w)))
@@ -438,6 +439,12 @@ func (m Model) childRows(parent sample.ProcRef, indent string, depth, w int) []s
 // the plan, the pull request and the place; on a phone the selected one
 // opens in place.
 func (m Model) sessionRow(s sample.Session, sel bool, w int) []string {
+	return m.rowIn(s, sel, w, m.sessTracks(w))
+}
+
+// rowIn is a session's row in the columns t, which a list works out once
+// for all its rows.
+func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks) []string {
 	st := m.st
 	mark := " "
 	if sel {
@@ -446,7 +453,6 @@ func (m Model) sessionRow(s sample.Session, sel bool, w int) []string {
 	word, merged := m.rowWord(s)
 	wait := st.faint.Render(m.waitCell(s))
 	ctx := m.contextCell(s)
-	t := m.sessTracks(w)
 	opens := sel && m.layoutAt(m.width) == Narrow
 	state := padTo(word, t.word) + cutLeft(wait, t.wait)
 	if merged {
@@ -523,7 +529,8 @@ func (m Model) taggedName(name, tag string, sel bool, w int) string {
 // what the others leave. A list under 70 columns has the name and, on the
 // right, the word, the wait and the context; wider adds the plan and the
 // ship (or the pull request and the place), dropped in that order (the
-// place first) when the name would get under 12.
+// place first) when the name would get under 12. The count of a session's
+// other ships goes before the ship: shortened, then gone.
 type tracks struct {
 	wide                               bool
 	name, word, wait, ctx, plan, where int
@@ -551,7 +558,8 @@ func (m Model) sessTracks(w int) tracks {
 	t.where = 7 + 16                         // the pull request and the place
 	if len(m.ships()) > 0 {
 		// The count of a session's other ships takes what room the name
-		// can spare, shorter first, before the ship goes.
+		// can spare: the full count, else the short one, else none, all
+		// before the ship goes.
 		t.where = m.numW() + 1 + trackW
 		for _, short := range []bool{false, true} {
 			if more := m.moreW(short); w-fixed-t.plan-t.where-more >= 12 {

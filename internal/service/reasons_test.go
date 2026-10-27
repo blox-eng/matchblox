@@ -45,3 +45,19 @@ func TestEverySessionAtRestSaysWhyItIsIdle(t *testing.T) {
 		}
 	}
 }
+
+// The ship a session's idle reason names is the one its row leads with: a
+// stuck one before one that waits for your merge, whatever the report's
+// order.
+func TestTheReasonTakesTheShipTheRowLeadsWith(t *testing.T) {
+	s := newTest(t, time.Hour)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cur.Ships = &ships.Report{Ships: []proto.Ship{
+		{Number: 7, Kind: ships.WaitsForYou, Stage: ships.StageGreen, Session: proto.ShipSession{Pane: "%1"}},
+		{Number: 9, Kind: ships.Stuck, Stage: ships.StageCI, Session: proto.ShipSession{Pane: "%1"}},
+	}}
+	if sh := s.shipOf(sample.Session{Pane: "%1", SessionID: "a"}); sh == nil || sh.Number != 9 {
+		t.Fatalf("got %+v, want the stuck #9", sh)
+	}
+}

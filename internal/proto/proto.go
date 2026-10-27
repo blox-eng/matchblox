@@ -315,6 +315,13 @@ type (
 	Focus = state.Focus
 )
 
+// ShipsOf is ships.Of: the console finds a session's ships as the
+// service, the CLI and the stoker do.
+func ShipsOf(all []Ship, pane, id string) []Ship { return ships.Of(all, pane, id) }
+
+// ShipDrives is ships.Drives.
+func ShipDrives(sh Ship, pane, id string) bool { return ships.Drives(sh, pane, id) }
+
 // NewSession is the Text of a "new:session" act: start an agent in a tmux
 // session of its own on the builder's server. Branch, when set, first
 // adds a worktree for it next to the repository in Where. Name is the

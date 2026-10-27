@@ -1,7 +1,6 @@
 package app
 
 import (
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -24,7 +23,6 @@ const (
 	shipWaits   = "waits-for-you"
 	shipStuck   = "stuck"
 	shipDone    = "done"
-	stageMerged = 3
 	stageLive   = 4
 )
 
@@ -46,60 +44,37 @@ func (m Model) selectedShip() (proto.Ship, bool) {
 }
 
 // shipsOf are the ships a session drives, the one that most needs you
-// first: stuck, waiting for you, in flight, merged, then live. Ships of a
-// rank keep the report's order.
+// first: stuck, waiting for you, in flight, merged, then live (as the
+// service, the CLI and the stoker find them).
 func (m Model) shipsOf(s sample.Session) []proto.Ship {
-	var out []proto.Ship
-	for _, sh := range m.ships() {
-		if sh.Session.Pane != "" && sh.Session.Pane == s.Pane || sh.Session.ID != "" && sh.Session.ID == s.SessionID {
-			out = append(out, sh)
-		}
-	}
-	slices.SortStableFunc(out, func(a, b proto.Ship) int { return shipRank(a) - shipRank(b) })
-	return out
+	return proto.ShipsOf(m.ships(), s.Pane, s.SessionID)
 }
 
-// shipRank is where a ship stands among its session's: a merged ship still
-// deploying runs, so the stage tells it from one in flight.
-func shipRank(sh proto.Ship) int {
-	switch {
-	case sh.Kind == shipStuck:
-		return 0
-	case sh.Kind == shipWaits:
-		return 1
-	case sh.Stage < stageMerged:
-		return 2
-	case sh.Stage < stageLive:
-		return 3
-	}
-	return 4
-}
-
-// shipOf is the ship a session's row leads with.
-func (m Model) shipOf(s sample.Session) (proto.Ship, bool) {
-	if ss := m.shipsOf(s); len(ss) > 0 {
-		return ss[0], true
-	}
-	return proto.Ship{}, false
-}
-
-// shipsMore is what a row says after its ship when the session drives
-// others: " +1 merged", naming the most advanced stage of the others, or
-// " +1" when short is set.
-func (m Model) shipsMore(s sample.Session, short bool) string {
-	ss := m.shipsOf(s)
+// shipsMore is what a row says after its lead ship when the session drives
+// others: " +1 merged" names what the others need (stuck, then waits) or
+// else the furthest stage among them; short is " +1".
+func (m Model) shipsMore(ss []proto.Ship, short bool) string {
 	if len(ss) < 2 {
 		return ""
 	}
-	more := " +" + strconv.Itoa(len(ss)-1)
+	more := m.st.muted.Render(" +" + strconv.Itoa(len(ss)-1))
 	if short {
 		return more
 	}
-	stage := 0
+	stage, need := 0, proto.Ship{}
 	for _, sh := range ss[1:] {
-		stage = max(stage, sh.Stage)
+		stage = max(stage, min(sh.Stage, stageLive))
+		if (sh.Kind == shipStuck || sh.Kind == shipWaits) && need.Kind != shipStuck {
+			need = sh
+		}
 	}
-	return more + " " + stageNames[stage]
+	switch need.Kind {
+	case shipStuck:
+		return more + " " + m.shipStyle(need).Render("stuck")
+	case shipWaits:
+		return more + " " + m.shipStyle(need).Render("waits")
+	}
+	return more + m.st.muted.Render(" "+stageNames[stage])
 }
 
 // moreW is the room the rows' counts take: the widest full count, or the
@@ -107,15 +82,29 @@ func (m Model) shipsMore(s sample.Session, short bool) string {
 func (m Model) moreW(short bool) int {
 	w := 0
 	for _, s := range m.snap.Sessions {
-		w = max(w, lipgloss.Width(m.shipsMore(s, short)))
+		w = max(w, lipgloss.Width(m.shipsMore(m.shipsOf(s), short)))
 	}
 	return w
+}
+
+// shipsShown is how many of a session's ships its detail and a phone's
+// opened row list; the rest are a count, and the Ships tab lists them all.
+const shipsShown = 3
+
+// shipsLeft is the line under the ships listed when there are more:
+// "+2 more · p ships", or "+2 more" when no key opens Ships.
+func (m Model) shipsLeft(n int) string {
+	left := m.st.muted.Render("+" + strconv.Itoa(n) + " more")
+	if h := hintFor(m.keys.main.Ships, "ships"); h.key != "" {
+		left += m.st.muted.Render(" · ") + m.st.accent.Render(h.key) + m.st.muted.Render(" "+h.label)
+	}
+	return left
 }
 
 // driver is the session that drives a ship.
 func (m Model) driver(sh proto.Ship) (sample.Session, bool) {
 	for _, s := range m.all.sessions {
-		if sh.Session.Pane != "" && s.Pane == sh.Session.Pane || sh.Session.ID != "" && s.SessionID == sh.Session.ID {
+		if proto.ShipDrives(sh, s.Pane, s.SessionID) {
 			return s, true
 		}
 	}
@@ -406,12 +395,12 @@ func (m Model) mergeShip() *action {
 }
 
 // shipField is a session's ships in its detail, in the row's order: each
-// one's track and note, then its title and URL.
+// one's track and note, then its title and URL; past three, how many more.
 func (m Model) shipField(s sample.Session, w int) []string {
 	st := m.st
 	if ss := m.shipsOf(s); len(ss) > 0 {
 		var out []string
-		for i, sh := range ss {
+		for i, sh := range ss[:min(len(ss), shipsShown)] {
 			label := ""
 			if i == 0 {
 				label = "ship"
@@ -421,6 +410,9 @@ func (m Model) shipField(s sample.Session, w int) []string {
 			if sh.URL != "" {
 				out = append(out, fit(" "+pad("", 9)+st.faint.Render(sh.URL), w))
 			}
+		}
+		if len(ss) > shipsShown {
+			out = append(out, fit(" "+pad("", 9)+m.shipsLeft(len(ss)-shipsShown), w))
 		}
 		return out
 	}
@@ -443,11 +435,11 @@ func (m Model) shipField(s sample.Session, w int) []string {
 // merged", the count shorter or gone when w is narrow, or the number of
 // the worktree's open PR when no ship is read.
 func (m Model) shipRowCell(s sample.Session, w int) string {
-	if sh, ok := m.shipOf(s); ok {
-		cell := m.shipCell(sh, false)
+	if ss := m.shipsOf(s); len(ss) > 0 {
+		cell := m.shipCell(ss[0], false)
 		for _, short := range []bool{false, true} {
-			if more := m.shipsMore(s, short); more != "" && lipgloss.Width(cell+more) <= w {
-				return cell + m.st.muted.Render(more)
+			if more := m.shipsMore(ss, short); more != "" && lipgloss.Width(cell+more) <= w {
+				return cell + more
 			}
 		}
 		return cell
@@ -459,14 +451,17 @@ func (m Model) shipRowCell(s sample.Session, w int) string {
 }
 
 // shipOpened is a phone's opened row's ships: "#4545 ●━✕┄○┄○ conflicts
-// with main", a line each in the row's order, or the worktree's PR and its
-// title.
+// with main", a line each in the row's order and past three how many more,
+// or the worktree's PR and its title.
 func (m Model) shipOpened(s sample.Session, w int) []string {
 	st := m.st
 	if ss := m.shipsOf(s); len(ss) > 0 {
 		var out []string
-		for _, sh := range ss {
+		for _, sh := range ss[:min(len(ss), shipsShown)] {
 			out = append(out, ansi.Truncate("   "+m.shipCell(sh, true), w, "…"))
+		}
+		if len(ss) > shipsShown {
+			out = append(out, ansi.Truncate("   "+m.shipsLeft(len(ss)-shipsShown), w, "…"))
 		}
 		return out
 	}

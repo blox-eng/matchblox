@@ -229,9 +229,11 @@ session drives with its track (`#4551 ●━◉┄○┄○`, see [Ships](ships.
 no ships read, the open pull request of its worktree (`#N`) and its tmux
 place. A session that drives more than one ship leads with the one that
 most needs you (stuck, then waiting for you, in flight, merged, live) and
-counts the others by the furthest stage among them: `#4551 ●━◉┄○┄○ +1
-merged`. On a narrow row the count drops its stage, then goes, before the
-ship does. The detail lists every ship of the session in that order.
+counts the others: `+1 stuck` or `+1 waits` when one of them needs you,
+else the furthest stage among them, as in `#4551 ●━◉┄○┄○ +1 merged`. On a
+narrow row the count drops its word, then goes, before the ship does. The
+detail lists the first three ships of the session in that order, then
+`+N more · p ships`.
 
 On a phone the selected row opens: what the agent said last, its ships, its
 plan and its keys. The console reads the screen's shape (rows × 2 ≥

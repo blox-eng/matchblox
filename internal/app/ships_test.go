@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 func shipsAt(t *testing.T, w int, st proto.State) (Model, *fakeConn) {
@@ -229,15 +230,16 @@ func TestTheCountFoldsBeforeTheTrack(t *testing.T) {
 	}
 }
 
-// The detail and a phone's opened row list every ship of the session in
-// the row's order: stuck, waits for you, in flight, merged, live.
+// The detail and a phone's opened row list the session's ships in the
+// row's order (stuck, waits for you, in flight, merged, live): the first
+// three, then how many more.
 func TestTheDetailListsEveryShipOfTheSession(t *testing.T) {
 	st := withShips(screensState(t), "spark-docs",
 		proto.Ship{Number: 4549, Title: "Changelog", Kind: shipRunning, Note: "merged · deploying", Stage: 3},
 		proto.Ship{Number: 4548, Title: "Search", Kind: shipRunning, Note: "CI · 2 of 5 jobs", Stage: 1},
 		proto.Ship{Number: 4547, Title: "Typos", Kind: shipWaits, Note: "green · waits for your merge", Stage: 2},
 		proto.Ship{Number: 4546, Title: "Links", Kind: shipStuck, Note: "conflicts with main", Stage: 1})
-	want := []string{"#4546 ●━✕┄○┄○┄○", "#4547 ●━●━◉┄○┄○", "#4548 ●━◉┄○┄○┄○", "#4549 ●━●━●━◉┄○", "#4540 ●━●━●━●━●"}
+	want := []string{"#4546 ●━✕┄○┄○┄○", "#4547 ●━●━◉┄○┄○", "#4548 ●━◉┄○┄○┄○", "+2 more · p ships"}
 	for _, w := range []int{44, 132} {
 		f := newFake()
 		m := New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return demoAt }})
@@ -252,5 +254,117 @@ func TestTheDetailListsEveryShipOfTheSession(t *testing.T) {
 			}
 			at = i
 		}
+		nm := next.(Model)
+		for _, s := range nm.snap.Sessions {
+			if s.Name != "spark-docs" {
+				continue
+			}
+			var got []int
+			for _, sh := range nm.shipsOf(s) {
+				got = append(got, sh.Number)
+			}
+			if !slices.Equal(got, []int{4546, 4547, 4548, 4549, 4540}) {
+				t.Fatalf("spark-docs's ships in order: %v", got)
+			}
+		}
+	}
+}
+
+// A ship whose stage the console does not know is counted, not a crash.
+func TestACountWithAnUnknownStageDraws(t *testing.T) {
+	st := withShips(screensState(t), "hearth-api", proto.Ship{Number: 219, Title: "Future", Kind: shipRunning, Stage: 7})
+	m, _ := loadedWith(t, 132, st)
+	if row := rowOf(ansi.Strip(m.render()), "hearth-api"); !strings.Contains(row, "#4551 ●━◉┄○┄○┄○ +1") {
+		t.Fatalf("hearth-api's row: %q", row)
+	}
+}
+
+// The count names a need before a stage: another ship that waits for you
+// says so.
+func TestTheCountNamesWhatTheOthersNeed(t *testing.T) {
+	st := withShips(screensState(t), "hearth-api",
+		proto.Ship{Number: 4561, Title: "Retry the webhook", Kind: shipStuck, Note: "CI failed · lint", Stage: 1},
+		proto.Ship{Number: 4562, Title: "Docs", Kind: shipWaits, Note: "green · waits for your merge", Stage: 2})
+	m, _ := loadedWith(t, 132, st)
+	out := ansi.Strip(m.render())
+	if row := rowOf(out, "hearth-api"); !strings.Contains(row, "#4561 ●━✕┄○┄○┄○ +2 waits") {
+		t.Fatalf("hearth-api's row: %q\n%s", row, out)
+	}
+}
+
+// A ship an earlier agent in the same pane claimed is not this session's:
+// their session ids tell them apart, on the row and for Enter on the ship.
+func TestAShipOfAnEarlierAgentInThePaneIsNotTheSessions(t *testing.T) {
+	st := screensState(t)
+	var docs sample.Session
+	for _, s := range st.Sessions {
+		if s.Name == "spark-docs" {
+			docs = s
+		}
+	}
+	if docs.SessionID == "" {
+		t.Fatal("spark-docs has no session id")
+	}
+	old := proto.Ship{Repo: "hearth/spark-docs", Number: 4400, Title: "Old", Kind: shipDone, Note: "live", Stage: 4,
+		Session: proto.ShipSession{Pane: docs.Pane, ID: "an-earlier-agent"}}
+	r := *st.Ships
+	r.Ships = append(slices.Clone(r.Ships), old)
+	st.Ships = &r
+	m, _ := loadedWith(t, 132, st)
+	if row := rowOf(ansi.Strip(m.render()), "spark-docs"); strings.Contains(row, "+1") {
+		t.Fatalf("spark-docs counts the earlier agent's ship: %q", row)
+	}
+	if s, ok := m.driver(old); ok {
+		t.Fatalf("the earlier agent's ship is driven by %q", s.Name)
+	}
+}
+
+// drawnAt is the console on st at w×h, drawn: its lines without styles.
+func drawnAt(t *testing.T, st proto.State, w, h int) (drawn, []string) {
+	t.Helper()
+	m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	next, _ = next.Update(stateMsg(st))
+	nm := next.(Model)
+	nm.splashDone = true
+	sc := nm.draw(w)
+	lines := make([]string, len(sc.lines))
+	for i, l := range sc.lines {
+		lines[i] = ansi.Strip(l)
+	}
+	return sc, lines
+}
+
+// Many ships: the opened row on a short phone and the detail on a desk list
+// three and how many more, and the session's keys stay where a tap finds
+// them, on the line that shows them.
+func TestManyShipsKeepTheSessionsKeys(t *testing.T) {
+	var more []proto.Ship
+	for i := range 5 {
+		more = append(more, proto.Ship{Number: 4600 + i, Title: "Page " + strconv.Itoa(i), Kind: shipRunning, Note: "CI", Stage: 1})
+	}
+	st := withShips(screensState(t), "spark-docs", more...)
+	for _, size := range [][2]int{{44, 16}, {132, 32}} {
+		sc, lines := drawnAt(t, st, size[0], size[1])
+		out := strings.Join(lines, "\n")
+		if !strings.Contains(out, "+3 more") || strings.Contains(out, "#4603") {
+			t.Fatalf("%v: not three ships and +3 more:\n%s", size, out)
+		}
+		if sc.actKeysAt <= 0 || !strings.Contains(lines[sc.actKeysAt], "open") {
+			t.Fatalf("%v: the keys are marked on line %d:\n%s", size, sc.actKeysAt, out)
+		}
+	}
+}
+
+// Ships of one rank keep the report's order: two in flight list as the
+// report has them.
+func TestShipsOfARankKeepTheReportsOrder(t *testing.T) {
+	st := withShips(screensState(t), "spark-docs",
+		proto.Ship{Number: 4550, Title: "First", Kind: shipRunning, Note: "CI", Stage: 1},
+		proto.Ship{Number: 4549, Title: "Second", Kind: shipRunning, Note: "green", Stage: 2})
+	m, _ := loadedWith(t, 132, st)
+	out := ansi.Strip(m.render())
+	if a, b := strings.Index(out, "#4550 "), strings.Index(out, "#4549 "); a < 0 || b < 0 || a > b {
+		t.Fatalf("#4550 at %d, #4549 at %d:\n%s", a, b, out)
 	}
 }
