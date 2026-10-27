@@ -743,3 +743,15 @@ func TestSessionsSurvivesALoopInTheStateFile(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// sessions --json names the ship the console's row leads with: a stuck one
+// before one that waits for your merge.
+func TestSessionsJSONNamesTheShipTheRowLeadsWith(t *testing.T) {
+	d := cliDoc()
+	d.Ships.Ships = append(d.Ships.Ships, ships.Ship{Repo: "o/r", Number: 4557, Stage: ships.StageCI, Kind: ships.Stuck, Note: "conflicts with main", Session: ships.SessionRef{Pane: "%3"}})
+	for _, r := range sessionRows(d) {
+		if r.Pane == "%3" && (r.Ship == nil || r.Ship.Number != 4557) {
+			t.Fatalf("api's ship: %+v, want the stuck #4557", r.Ship)
+		}
+	}
+}
