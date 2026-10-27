@@ -8,10 +8,12 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Fixed
 
-- **matchblox's tests leave your tmux server alone.** The test suite clears
-  `$TMUX` and `$TMUX_PANE`, so `go test ./...` inside tmux cannot end the
-  server with your agents in it. Each tmux a test runs names its own
-  server, and CI checks that a sentinel server survives the whole suite.
+- **matchblox's tests leave your tmux servers alone.** The test suite
+  clears `$TMUX` and `$TMUX_PANE` and gives `$TMUX_TMPDIR` a new empty
+  folder. A tmux with no socket in a test, or in the code it tests, then
+  finds no server of yours: not the one `$TMUX` named, and not the default
+  one. Each tmux a test file starts also names its server. CI checks that
+  two sentinel servers, one of each kind, survive the whole suite.
   ([#215](https://github.com/blox-eng/matchblox/issues/215))
 
 ## [0.26.2] - 2026-10-28

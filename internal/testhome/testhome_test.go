@@ -16,22 +16,46 @@ func TestMain(m *testing.M) {
 // envSentinel names the session of the sentinel server to the child test.
 const envSentinel = "MATCHBLOX_TEST_SENTINEL"
 
-// TestATestCannotEndTheBuildersTmux: a builder runs the tests inside tmux,
-// so the test binary inherits $TMUX. A cleanup that runs tmux without a
-// socket then reaches the builder's server (#215). The sentinel stands in
-// for that server: a child test binary inherits a $TMUX that names it, and
-// runs a cleanup with no socket. The sentinel must survive.
+// TestATestCannotEndTheBuildersTmux: a builder runs the tests inside tmux.
+// A cleanup that runs tmux with no socket then reaches the builder's server
+// (#215): the one $TMUX names, or else the default one. A sentinel stands in
+// for that server. A child test binary inherits the builder's environment
+// and runs a cleanup with no socket. The sentinel must survive.
 func TestATestCannotEndTheBuildersTmux(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux is not installed")
 	}
-	dir, err := os.MkdirTemp("/tmp", "mbs") // short, not macOS $TMPDIR: the socket path must fit sun_path
+	t.Run("the server $TMUX names", func(t *testing.T) {
+		sock := filepath.Join(shortDir(t), "s")
+		sentinelSurvives(t, sock, "TMUX="+sock+",1,0", "TMUX_PANE=%0")
+	})
+	t.Run("the default server", func(t *testing.T) {
+		dir := shortDir(t)
+		sentinelSurvives(t, filepath.Join(dir, fmt.Sprintf("tmux-%d", os.Getuid()), "default"), "TMUX_TMPDIR="+dir)
+	})
+}
+
+// shortDir is a new folder under /tmp, not macOS $TMPDIR: a socket path
+// in it must fit sun_path.
+func shortDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "mbs")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	sock := filepath.Join(dir, "s")
-	session := fmt.Sprintf("sentinel-%d", os.Getpid()) // a name only the sentinel has
+	return dir
+}
+
+// sentinelSurvives starts a sentinel server on sock, proves that a tmux
+// with no socket in the builder's environment reaches it, and runs the
+// child test in that environment.
+func sentinelSurvives(t *testing.T, sock string, builders ...string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(sock), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	session := fmt.Sprintf("sentinel-%d-%s", os.Getpid(), filepath.Base(filepath.Dir(sock))) // a name only this sentinel has
 	sentinel := func(args ...string) error {
 		return exec.Command("tmux", append([]string{"-S", sock}, args...)...).Run() //nolint:gosec // test argv
 	}
@@ -39,23 +63,23 @@ func TestATestCannotEndTheBuildersTmux(t *testing.T) {
 		t.Fatalf("the sentinel does not start: %v", err)
 	}
 	t.Cleanup(func() { _ = sentinel("kill-server") })
-	inherited := append(os.Environ(), "TMUX="+sock+",1,0", "TMUX_PANE=%0")
+	env := append(os.Environ(), builders...) // the last value of a name wins
 
-	// The control: tmux with no socket and this $TMUX reaches the sentinel.
-	// Without it, the test below proves nothing.
+	// The control: tmux with no socket in this environment reaches the
+	// sentinel. Without it, the test below proves nothing.
 	control := exec.Command("tmux", "has-session", "-t", "="+session) //nolint:gosec // no socket on purpose: the control
-	control.Env = inherited
+	control.Env = env
 	if err := control.Run(); err != nil {
-		t.Fatalf("tmux with an inherited $TMUX does not reach the sentinel: %v", err)
+		t.Fatalf("tmux with no socket and %q does not reach the sentinel: %v", builders, err)
 	}
 
 	child := exec.Command(os.Args[0], "-test.run=^TestCleanupWithNoSocket$", "-test.count=1") //nolint:gosec // this test binary
-	child.Env = append(inherited, envSentinel+"="+session)
+	child.Env = append(env, envSentinel+"="+session)
 	if out, err := child.CombinedOutput(); err != nil {
 		t.Fatalf("the child test fails: %v\n%s", err, out)
 	}
 	if err := sentinel("has-session", "-t", "="+session); err != nil {
-		t.Fatal("a test with an inherited $TMUX ended the sentinel: testhome.Run must clear $TMUX")
+		t.Fatalf("a test with %q ended the sentinel: testhome.Run must clear $TMUX and set its own $TMUX_TMPDIR", builders)
 	}
 }
 

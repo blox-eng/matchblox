@@ -92,25 +92,30 @@ jobs:
       - name: tmux and sshd for the jump tests
         if: runner.os == 'Linux'
         run: sudo apt-get update -q && sudo apt-get install -y -q tmux openssh-server
-      # A sentinel tmux server stands in for the builder's: the suite runs
-      # with a $TMUX that names it, as it does inside tmux, and must leave
-      # it alive (#215).
-      - name: A sentinel tmux server for the tests to leave alone
+      # Two sentinel tmux servers stand in for the builder's: one that $TMUX
+      # names, as when the tests run inside tmux, and the default server.
+      # The suite must leave both alive (#215).
+      - name: Sentinel tmux servers for the tests to leave alone
         if: runner.os == 'Linux'
-        run: tmux -S "$RUNNER_TEMP/sentinel" -f /dev/null new-session -d -s sentinel sleep 7200
+        run: |
+          tmux -S "$RUNNER_TEMP/sentinel" -f /dev/null new-session -d -s sentinel sleep 7200
+          tmux -L default -f /dev/null new-session -d -s sentinel sleep 7200
       - name: Tests (race)
         env:
           CGO_ENABLED: '1'
           TMUX: ${{ runner.os == 'Linux' && format('{0}/sentinel,1,0', runner.temp) || '' }}
           TMUX_PANE: ${{ runner.os == 'Linux' && '%0' || '' }}
         run: go test -race -cover ./...
-      - name: The sentinel tmux server is alive
+      - name: The sentinel tmux servers are alive
         if: always() && runner.os == 'Linux'
         run: |
-          if ! tmux -S "$RUNNER_TEMP/sentinel" has-session -t '=sentinel'; then
-            echo "::error::A test ended the sentinel tmux server: a test's tmux names no server (-L or -S), or its package has no TestMain with testhome.Run (#215)"
-            exit 1
-          fi
+          for server in "-S $RUNNER_TEMP/sentinel" "-L default"; do
+            # shellcheck disable=SC2086 # the flag and its socket are two words
+            if ! tmux $server has-session -t '=sentinel'; then
+              echo "::error::A test ended the sentinel tmux server ($server): a test's tmux names no server (-L or -S), or its package has no TestMain with testhome.Run (#215)"
+              exit 1
+            fi
+          done
       - name: Fixture smoke run
         run: go run ./cmd/matchblox status --fixtures testdata/machine --text
 
