@@ -7,6 +7,7 @@ import (
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/remote"
 )
@@ -42,6 +43,10 @@ type ShellOptions struct {
 	// records that the builder answered.
 	FirstRun bool
 	Answered func()
+	// TailscaleGate says that the gate does not hold on a host Tailscale
+	// SSH answers (setup.TailscaleGateMessage, #185). The Hosts row of such
+	// a host shows it when selected.
+	TailscaleGate string
 }
 
 // Shell is the top of the console: the hosts layer, or one host's console.
@@ -63,6 +68,9 @@ type Shell struct {
 	gen     int          // the generation of the last console opened
 	offers  *pairWaits   // the pair offers of every console: Close waits for all
 	keys    shellKeymaps // the Hosts list keys
+	// tailscale: the hosts that are Tailscale SSH, as their consoles' last
+	// check said.
+	tailscale map[string]bool
 }
 
 // layerMsg asks the shell to go back to Hosts.
@@ -75,7 +83,7 @@ type connectedHostMsg struct {
 }
 
 func NewShell(opt ShellOptions) Shell {
-	s := Shell{opt: opt, width: 100, height: 30, dark: true, st: newStyles(true), offers: &pairWaits{}, keys: defaultShellKeys()}
+	s := Shell{opt: opt, width: 100, height: 30, dark: true, st: newStyles(true), offers: &pairWaits{}, keys: defaultShellKeys(), tailscale: map[string]bool{}}
 	s.hosts = s.readHosts()
 	switch {
 	case opt.Start != "":
@@ -96,11 +104,18 @@ func (s Shell) readHosts() []string {
 // open starts the console of a host. The start screen plays only for the
 // first console of a run.
 func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
+	s.cur.stopAsk()
 	o := s.opt.Open(host)
 	b := s.opt.Base
 	o.Binary, o.CompactAt, o.CompactTokens, o.NoMotion, o.Now, o.Self, o.StateDir = b.Binary, b.CompactAt, b.CompactTokens, b.NoMotion, b.Now, b.Self, b.StateDir
 	o.Clip = b.Clip
-	o.Graphics = b.Graphics // the logos draw in this terminal, whatever the host
+	// A jump starts from this machine's tmux, whatever the host.
+	o.OutsideTmux, o.Prefix, o.Home, o.LocalTmux, o.JumpID = b.OutsideTmux, b.Prefix, b.Home, b.LocalTmux, b.JumpID
+	// The builder's own ssh login goes from this machine, whatever the host.
+	o.Check, o.MasterBase, o.SSH = b.Check, b.MasterBase, b.SSH
+	o.Ask, o.NoAsk = b.Ask, b.NoAsk // the prompts of this machine's ssh
+	o.Keys = b.Keys                 // the builder's keys are on this machine
+	o.Graphics = b.Graphics         // the logos draw in this terminal, whatever the host
 	if host == "" {
 		o.Pair = b.Pair // the key goes in this machine's authorized_keys
 	}
@@ -116,6 +131,7 @@ func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
 	m.width, m.height, m.dark, m.st = s.width, s.height, s.dark, s.st
 	m.splashDone = !first
 	m.pairOffers = s.offers
+	m.tailscale = s.tailscale[host] // until its check says
 	s.cur, s.curHost, s.layer = m, host, layerConsole
 	return s, m.Init()
 }
@@ -166,7 +182,11 @@ func (s Shell) back() Shell {
 		_ = s.cur.conn.Close()
 	}
 	s.cur = s.cur.closePairPage("")
+	s.cur.stopAsk()       // an open prompt is cancelled
 	s.cur.quitting = true // its late messages find nothing to do
+	if s.curHost != "" {
+		s.tailscale[s.curHost] = s.cur.tailscale
+	}
 	s.layer, s.adding, s.input, s.pending, s.flash = layerHosts, false, nil, nil, ""
 	s.hosts = s.readHosts()
 	s.sel = 0
@@ -185,6 +205,7 @@ type row struct {
 	connect     bool   // Enter connects host
 	typed       bool   // Enter types a host
 	removable   bool
+	tailscale   bool // Tailscale SSH answers host: the gate does not hold there
 }
 
 func (s Shell) firstRun() bool { return s.opt.FirstRun && len(s.hosts) == 0 }
@@ -206,7 +227,11 @@ func (s Shell) rows() []row {
 		return append(rs, row{label: "another machine", note: "a host you reach with ssh", add: true})
 	}
 	for _, h := range s.hosts {
-		rs = append(rs, row{label: h, note: "over ssh", host: h, open: true, removable: true})
+		r := row{label: h, note: "over ssh", host: h, open: true, removable: true, tailscale: s.tailscale[h]}
+		if r.tailscale {
+			r.note = "not gated, Tailscale SSH: tailscale set --ssh=false there"
+		}
+		rs = append(rs, r)
 	}
 	return append(rs, row{label: "+ add a host", note: "from ~/.ssh/config, or type one", add: true})
 }
@@ -413,6 +438,13 @@ func (s Shell) render() string {
 		b.addRow(i, i == s.sel, w, st, line)
 	}
 	out = append(out, b.lines...)
+	if s.sel < len(rs) && rs[s.sel].tailscale && s.opt.TailscaleGate != "" {
+		out = append(out, "")
+		why := rs[s.sel].host + ": " + s.opt.TailscaleGate + " See docs/remote.md#tailscale-ssh."
+		for l := range strings.SplitSeq(ansi.Wrap(why, max(w-4, 8), ""), "\n") {
+			out = append(out, " "+st.warn.Render("! ")+st.text.Render(l))
+		}
+	}
 	if s.firstRun() && !s.adding {
 		out = append(out, "", fit(" "+st.faint.Render("You can add a host later: "+defaultKeys().main.Back.Help().Key+" in a console comes back here."), w))
 	}
@@ -456,6 +488,7 @@ func (s Shell) actionLine(w int) string {
 // program ends.
 func (s Shell) Close() {
 	s.cur.ClosePair()
+	s.cur.stopAsk()
 	if s.layer == layerConsole && s.cur.conn != nil {
 		_ = s.cur.conn.Close()
 	}

@@ -24,6 +24,9 @@ const (
 	Guide        = "guide"
 	Night        = "night"
 	Ways         = "ways"
+	// SSHKeychain keeps a key's passphrase in the macOS Keychain for one
+	// host; the console offers it after it puts a key there.
+	SSHKeychain = "sshkeychain"
 	// KeepRunning writes a user unit, then runs Term: the service writes
 	// the file and runs the command, so the terminal never runs it.
 	KeepRunning = "keeprunning"

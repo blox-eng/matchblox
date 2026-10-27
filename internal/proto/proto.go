@@ -59,6 +59,9 @@ type Hello struct {
 	// Client is what says hello to the service: ClientConsole, or
 	// ClientCLI for a matchblox command. Empty: a command.
 	Client string `json:"client,omitempty"`
+	// Tmux is the service's tmux version, as tmux -V says it without
+	// "tmux ", or "none". "": an older service, which does not say.
+	Tmux string `json:"tmux,omitempty"`
 }
 
 // The kinds of client in a hello. Only a console is a person at the keys.

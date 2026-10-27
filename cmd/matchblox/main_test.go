@@ -12,10 +12,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/tmuxtest"
+
+	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -584,6 +589,59 @@ func TestFirstArgThatIsNoCommandIsAHost(t *testing.T) {
 	}
 }
 
+func TestAskpassModeOnlyForAPrompt(t *testing.T) {
+	set := func(k string) string {
+		switch k {
+		case askpass.EnvSocket:
+			return "/tmp/s"
+		case askpass.EnvToken:
+			return "t"
+		}
+		return ""
+	}
+	noToken := func(k string) string {
+		if k == askpass.EnvSocket {
+			return "/tmp/s"
+		}
+		return ""
+	}
+	for _, c := range []struct {
+		args []string
+		env  func(string) string
+		want bool
+	}{
+		{[]string{"Password: "}, set, true},
+		{[]string{"Enter passphrase for key '/k': "}, set, true},
+		{[]string{"Password: "}, os.Getenv, false},
+		{[]string{"Password: "}, noToken, false},
+		{[]string{"ws-1"}, noToken, false},
+		{nil, set, false},
+		{[]string{"Password:", "x"}, set, false},
+		{[]string{"version"}, set, false},
+		{[]string{"serve"}, set, false},
+		{[]string{"gate"}, set, false},
+		{[]string{"authorize"}, set, false},
+		{[]string{"hook"}, set, false},
+		{[]string{"push"}, set, false},
+	} {
+		if got := askpassMode(c.args, c.env); got != c.want {
+			t.Errorf("askpassMode(%q) = %v, want %v", c.args, got, c.want)
+		}
+	}
+}
+
+// TestRunWithoutTokenIsNoAskpass: a shell that has only MATCHBLOX_ASKPASS
+// runs `matchblox <host>` as usual. "ws;1" is refused before anything
+// starts, so the error shows which way run went.
+func TestRunWithoutTokenIsNoAskpass(t *testing.T) {
+	t.Setenv(askpass.EnvSocket, "/tmp/none")
+	t.Setenv(askpass.EnvToken, "")
+	// Not a slice literal: gosec then flags gate.go args[1] (G602).
+	if err := run(strings.Fields("ws;1")); err == nil || errors.Is(err, errShown) || !strings.Contains(err.Error(), "not a command or a host") {
+		t.Fatalf("run took the askpass way: %v", err)
+	}
+}
+
 // fakeRemote puts an ssh on PATH whose far side is this test binary, as
 // `matchblox serve --stdio` on an isolated host.
 func fakeRemote(t *testing.T) {
@@ -755,5 +813,72 @@ func TestKeychainNotFoundIsNoLogin(t *testing.T) {
 	}
 	if err := keychainErr(nil); err != nil {
 		t.Errorf("no error: %v, want nil", err)
+	}
+}
+
+// TestConsoleAsk: one prompt socket per console run, in the checked base;
+// none, with why, without a base or with one it cannot use.
+func TestConsoleAsk(t *testing.T) {
+	base, err := os.MkdirTemp("/tmp", "mb") // short: macOS $TMPDIR is too long for sun_path
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(base)
+	ask, closeAsk, why := consoleAsk(base, "/opt/bin/matchblox")
+	if ask == nil || why != "" {
+		t.Fatalf("no socket: %q", why)
+	}
+	if !slices.Contains(ask.Env("ws-1"), "SSH_ASKPASS=/opt/bin/matchblox") {
+		t.Errorf("the helper is not the matchblox that runs, as run: %q", ask.Env("ws-1"))
+	}
+	sock := ""
+	for _, kv := range ask.Env("ws-1") {
+		if v, ok := strings.CutPrefix(kv, "MATCHBLOX_ASKPASS="); ok {
+			sock = v
+		}
+	}
+	if !strings.HasPrefix(sock, base+string(os.PathSeparator)) {
+		t.Fatalf("the socket %q is not in %s", sock, base)
+	}
+	closeAsk()
+	if _, err := os.Stat(sock); err == nil {
+		t.Fatal("the socket outlived the run")
+	}
+	if ask, _, why := consoleAsk("", ""); ask != nil || why == "" {
+		t.Fatalf("no base: %v %q", ask, why)
+	}
+	file := filepath.Join(base, "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if ask, _, why := consoleAsk(file, ""); ask != nil || why == "" {
+		t.Fatalf("a base that is a file: %v %q", ask, why)
+	}
+}
+
+// TestLocalTmuxHomeIsLive: the way back goes to the session of the
+// console's own pane as it is at the jump: renamed since the console
+// started, and whatever session another client looks at.
+func TestLocalTmuxHomeIsLive(t *testing.T) {
+	name := tmuxtest.Server(t)
+	tm := func(args ...string) string {
+		out, err := exec.Command("tmux", append([]string{"-L", name}, args...)...).Output() //nolint:gosec // a test's own socket name
+		if err != nil {
+			t.Fatalf("tmux %q: %v", args, err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	tm("-f", "/dev/null", "new-session", "-d", "-s", "console", "sleep", "60")
+	tm("new-session", "-d", "-s", "other", "sleep", "60")
+	pane := tm("list-panes", "-t", "=console:", "-F", "#{pane_id}")
+	t.Setenv("TMUX", sample.SocketPath(name)+",1,0")
+	t.Setenv("TMUX_PANE", pane)
+	_, home, _ := localTmux()
+	if got := home(); got != "console" {
+		t.Fatalf("home %q", got)
+	}
+	tm("rename-session", "-t", "=console", "work")
+	if got := home(); got != "work" {
+		t.Fatalf("home after a rename %q", got)
 	}
 }

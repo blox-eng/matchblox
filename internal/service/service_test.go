@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -180,6 +181,26 @@ func recID(t *testing.T, st proto.State, prefix string) string {
 	}
 	t.Fatalf("no rec %q in %+v", prefix, st.Recommendations)
 	return ""
+}
+
+// TestHelloCarriesTmux: the hello says the host's tmux version, so the
+// console knows before a jump that the host cannot take it; "none" without
+// tmux.
+func TestHelloCarriesTmux(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("no tmux here")
+	}
+	s := newTest(t, time.Hour)
+	_, h := connect(t, run(t, s), s)
+	if h.Tmux == "" || h.Tmux == "none" || strings.HasPrefix(h.Tmux, "tmux") {
+		t.Fatalf("hello tmux %q", h.Tmux)
+	}
+
+	s = newTest(t, time.Hour)
+	s.LookPath = func(string) (string, error) { return "", exec.ErrNotFound }
+	if _, h = connect(t, run(t, s), s); h.Tmux != "none" {
+		t.Fatalf("without tmux the hello says %q", h.Tmux)
+	}
 }
 
 func TestServiceSendsHelloThenSnapshot(t *testing.T) {
@@ -1593,5 +1614,34 @@ func TestServeWaitsForTheFinalStateWrite(t *testing.T) {
 	waitServe(t, done, context.Canceled)
 	if _, err := state.Read(s.StatePath); err != nil {
 		t.Fatalf("Serve returns without state: %v", err)
+	}
+}
+
+// TestHelloTmuxIsTheJumps: the hello says the tmux the jump runs, which
+// is the first in remote.HostPath, then PATH; and a host that had none
+// says its tmux at the next hello once it has one, not a minute later.
+func TestHelloTmuxIsTheJumps(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	fake := filepath.Join(t.TempDir(), "tmux")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\necho 'tmux 9.9'\n"), 0o700); err != nil { //nolint:gosec // a test script
+		t.Fatal(err)
+	}
+	ownTmux := filepath.Join(home, ".local", "bin", "tmux")
+	var installed atomic.Bool
+	s := newTest(t, time.Hour)
+	s.LookPath = func(p string) (string, error) {
+		if installed.Load() && p == ownTmux {
+			return fake, nil
+		}
+		return "", exec.ErrNotFound
+	}
+	ctx := run(t, s)
+	if _, h := connect(t, ctx, s); h.Tmux != "none" {
+		t.Fatalf("before: %q", h.Tmux)
+	}
+	installed.Store(true)
+	if _, h := connect(t, ctx, s); h.Tmux != "9.9" {
+		t.Fatalf("after tmux came to ~/.local/bin: %q", h.Tmux)
 	}
 }

@@ -10,7 +10,8 @@ import (
 type layerID int
 
 const (
-	layerPair         layerID = iota // the pair page, before its strip
+	layerAsk          layerID = iota // an ssh prompt: above everything
+	layerPair                        // the pair page, before its strip
 	layerPairStripEsc                // esc on the pair strip, with nothing else to close
 	layerSheet
 	layerForm
@@ -33,6 +34,8 @@ func (f layerID) underOverlays() bool { return f >= layerHeld }
 // focus is the layer that takes k.
 func (m Model) focus(k tea.KeyPressMsg) layerID {
 	switch {
+	case m.asking():
+		return layerAsk
 	case m.pair.owns():
 		return layerPair
 	case m.pairStripEsc(k):

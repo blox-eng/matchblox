@@ -90,32 +90,16 @@ func onHost(argv ...string) string {
 }
 
 // TermArgv runs a command on the host in this terminal with the builder's
-// own ssh login: a jump or a door's command is interactive, and the
-// matchblox key never gets a terminal there.
+// own ssh login: a door's command is interactive, and the matchblox key
+// never gets a terminal there. A jump has JumpSSH.
 func TermArgv(host string, argv []string) []string {
-	return []string{"ssh", "-t", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "--", host, onHost(argv...)}
+	return append(termSSH(nil), host, onHost(argv...))
 }
 
-// NavArgv turns the console's tmux moves into one command that attaches to
-// the host's tmux: there is no tmux client of the host to switch.
-func NavArgv(host string, steps [][]string) []string {
-	cmd := []string{"tmux"}
-	attach := []string{"attach-session"}
-	for _, s := range steps {
-		if len(s) < 2 || s[0] != "tmux" {
-			continue
-		}
-		switch args := s[1:]; args[0] {
-		case "switch-client":
-			cmd = append(cmd, "select-window", "-t", args[2], ";", "select-pane", "-t", args[2], ";")
-			attach = []string{"attach-session", "-t", args[2]}
-		case "attach-session":
-			attach = args
-		default:
-			cmd = append(append(cmd, args...), ";")
-		}
-	}
-	return TermArgv(host, append(cmd, attach...))
+// termSSH is the builder's own ssh with a terminal and no forwarding, up to
+// the host. master is the options of a shared connection, or nil.
+func termSSH(master []string) []string {
+	return append(append(append([]string{"ssh", "-t"}, master...), NoForward()...), "--")
 }
 
 // NavAllowed is what a tmux move may be: the console runs it on one key and
@@ -204,6 +188,23 @@ func ValidDeviceKey(k string) bool {
 	}
 	return len(blob) == 0 && string(fields[0]) == "ecdsa-sha2-nistp256" &&
 		string(fields[1]) == "nistp256" && len(fields[2]) == 65 && fields[2][0] == 0x04
+}
+
+var userKeyRE = regexp.MustCompile(`^(ssh-ed25519|sk-ssh-ed25519@openssh\.com|ecdsa-sha2-nistp(256|384|521)|sk-ecdsa-sha2-nistp256@openssh\.com|ssh-rsa) ([A-Za-z0-9+/]+={0,2})( [A-Za-z0-9@._-]+)?$`)
+
+// ValidUserKey is one public key line of the builder's own login, whose
+// blob names its type, and nothing a shell reads.
+func ValidUserKey(k string) bool {
+	m := userKeyRE.FindStringSubmatch(k)
+	if m == nil {
+		return false
+	}
+	blob, err := base64.StdEncoding.DecodeString(m[3])
+	if err != nil || len(blob) < 4 {
+		return false
+	}
+	n := int(binary.BigEndian.Uint32(blob))
+	return n <= len(blob)-4 && string(blob[4:4+n]) == m[1]
 }
 
 // Bootstrap is the command that connects a host, run with the builder's own

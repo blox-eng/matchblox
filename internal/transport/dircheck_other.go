@@ -2,4 +2,10 @@
 
 package transport
 
-func checkDir(string) error { return nil }
+import "errors"
+
+var ErrNotYours = errors.New("not yours")
+
+func CheckDir(string) error { return nil }
+
+func Mine(string) bool { return true }
