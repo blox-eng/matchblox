@@ -242,6 +242,9 @@ func (m Model) openSwitch() (tea.Model, tea.Cmd) {
 // and a second one for a session that works or waits.
 func (m Model) switchAction(f form) *action {
 	sw := proto.SwitchAgent{Agent: f.agent, Handoff: strings.TrimSpace(f.first)}
+	if i := slices.IndexFunc(m.snap.Sessions, func(s sample.Session) bool { return s.Pane == f.pane }); i >= 0 {
+		sw.ExpectedPID, sw.ExpectedStart = m.snap.Sessions[i].PID, m.snap.Sessions[i].Start
+	}
 	if len(f.accts[f.agent]) > 0 {
 		// The account the confirm names: the service refuses the switch when
 		// its last account is another by then.
@@ -259,6 +262,15 @@ func (m Model) switchAction(f form) *action {
 		}
 	}
 	say := fmt.Sprintf("switch %s: %s → %s in %s, %s,%s then jump there", f.who, f.from, f.agent, f.pane, f.where, on)
+	say += "; add match awareness"
+	if f.agent == "codex" {
+		say += "; trust this workspace and enable workspace-write network access"
+	}
+	if sw.Handoff == "" {
+		say += "; no task or handover"
+	} else {
+		say += "; capture handover before replacement"
+	}
 	a := &action{label: "switch", destructive: true, rec: "switch:" + f.pane, text: string(b), againText: string(again), say: say, done: "switched " + f.who + " to " + f.agent}
 	if i := slices.IndexFunc(m.snap.Sessions, func(s sample.Session) bool { return s.Pane == f.pane }); i >= 0 {
 		a.again = m.againFor(m.snap.Sessions[i], "switches")
@@ -1001,7 +1013,12 @@ func (m Model) swapEnter(f form) (tea.Model, tea.Cmd) {
 		}
 	}
 	m.form, m.pending = nil, m.switchAction(f)
-	return m, nil
+	if strings.TrimSpace(f.first) == "" {
+		return m, nil
+	}
+	cmd := m.send(proto.Act{RecID: "switch-preview:" + f.pane})
+	m.pending.previewAct = fmt.Sprintf("a%d", m.acts)
+	return m, cmd
 }
 
 // formResult takes the result of the form's act: it closes when the act
@@ -1190,6 +1207,11 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 			field(fieldFirst, "", "after sign-in")
 		} else {
 			field(fieldFirst, f.first, "blank: it waits for you")
+		}
+	}
+	if !f.rename && !f.pick {
+		if f.agent == "codex" {
+			add("", st.muted.Render(fit("Codex: trust this workspace; workspace-write network on", iw)))
 		}
 	}
 	if f.act != "" {

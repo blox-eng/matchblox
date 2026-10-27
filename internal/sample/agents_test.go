@@ -314,3 +314,48 @@ func paneIDs(snap Snapshot) []string {
 	}
 	return out
 }
+
+// An unlisted tmux server can descend from a listed pane. Its agent must
+// not inherit that outer pane through either its environment or ancestry.
+func TestUnlistedTmuxServerDoesNotBorrowTheOuterPane(t *testing.T) {
+	for _, metadata := range []bool{false, true} {
+		t.Run(strconv.FormatBool(metadata), func(t *testing.T) {
+			root := copyFixture(t)
+			addProc(t, root, 880, 200, "tmux: server", []string{"tmux"}, "")
+			addProc(t, root, 881, 880, "zsh", []string{"zsh"}, "")
+			addProc(t, root, 882, 881, "codex", []string{"codex"}, "")
+			env := "TMUX=/tmp/tmux-1000/other,880,0\x00TMUX_PANE=%1\x00"
+			if err := os.WriteFile(filepath.Join(root, "proc", "882", "environ"), []byte(env), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if metadata {
+				path := filepath.Join(root, "tmux-panes.txt")
+				b, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var rows []string
+				for _, line := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+					rows = append(rows, line+"\t/tmp/tmux-1000/default\t4242")
+				}
+				if err := os.WriteFile(path, []byte(strings.Join(rows, "\n")+"\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			smp := newFixtureSampler(root)
+			smp.Agents = []string{"claude", "codex"}
+			found := false
+			for _, session := range smp.Sample().Sessions {
+				if session.PID == 882 {
+					found = true
+					if session.Pane != "" {
+						t.Fatalf("unlisted match takes outer pane %s", session.Pane)
+					}
+				}
+			}
+			if !found {
+				t.Fatal("unlisted match disappears instead of showing outside tmux")
+			}
+		})
+	}
+}

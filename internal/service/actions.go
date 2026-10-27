@@ -111,6 +111,15 @@ func picksAccount(text string) bool {
 }
 
 func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
+	if pane, ok := strings.CutPrefix(a.RecID, "switch-preview:"); ok {
+		// Like sessions and peek, this reads without the action gate and
+		// never wakes the stoker, sends input, or changes a session.
+		x, found := s.sessionAt(pane)
+		if !found {
+			return refuseText("no agent session in " + pane + " any more")
+		}
+		return proto.Result{Preview: s.captureMatch(ctx, x)}
+	}
 	if a.RecID == NamesAct {
 		// Before the agents-pane gate: it only reads names the socket already
 		// serves in every doc, so an agent's pane learns nothing new from it.

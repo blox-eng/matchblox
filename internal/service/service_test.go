@@ -1556,3 +1556,42 @@ func TestTwoSpellingsOfAHandMadeFolderListOnce(t *testing.T) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 }
+
+func TestServeWaitsForTheFinalStateWrite(t *testing.T) {
+	s := newTest(t, time.Hour)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	s.sample = func() sample.Snapshot {
+		close(entered)
+		<-release
+		snap := orphanSnap
+		snap.At = time.Now()
+		return snap
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	dir, _ := os.MkdirTemp("", "mb")
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	listener, err := transport.Listen(filepath.Join(dir, "s.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- s.Serve(ctx, listener) }()
+	t.Cleanup(func() { cancel(); once.Do(func() { close(release) }) })
+	select {
+	case <-entered:
+	case <-time.After(waitLimit):
+		t.Fatal("sample never starts")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		t.Fatalf("Serve returns before its state write: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	once.Do(func() { close(release) })
+	waitServe(t, done, context.Canceled)
+	if _, err := state.Read(s.StatePath); err != nil {
+		t.Fatalf("Serve returns without state: %v", err)
+	}
+}

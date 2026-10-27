@@ -357,6 +357,9 @@ func (s *Service) Serve(ctx context.Context, l net.Listener) error {
 	<-ctx.Done()
 	l.Close()
 	s.stopClones(cloneStopWait) // a clone cut off removes its partial folder first
+	// The sample loop can still be writing its first state file when the
+	// socket disappears during startup. Finish it before Serve returns.
+	<-runDone
 	if err := context.Cause(ctx); errors.Is(err, ErrReplaced) || errors.Is(err, ErrSocketGone) {
 		return err
 	}

@@ -287,6 +287,8 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	}
 	x, ok := s.sessionAt(pane)
 	switch {
+	case ok && n.ExpectedPID != 0 && (n.ExpectedPID != x.PID || n.ExpectedStart != x.Start):
+		return refuseText("the match changed since the switch preview: open switch again")
 	case ok && x.Agent == n.Agent:
 		return refuseText(x.Name + " runs " + n.Agent + " already")
 	case !slices.Contains(Startable, n.Agent):
@@ -324,10 +326,8 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	if n.Account != "" && now != n.Account {
 		return refuseText(fmt.Sprintf("the last %s account is now %s: switch again", n.Agent, now))
 	}
-	argv := launchArgv(s.agentBin(n.Agent), n.Agent, x.Name, n.Handoff, true, accountArgs(n.Agent, acct))
 	var notes []string
 	if acct != nil {
-		argv = slices.Concat(accounts.EnvArgv(n.Agent, acct.folder, false), argv)
 		unlock, err := s.holdAccount(n.Agent, acct)
 		if err != nil {
 			return refuseUnlessRead(err)
@@ -338,6 +338,13 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 			rep, err := accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode)
 			notes = prepareNotes(acct, rep, err)
 		}
+	}
+	argv, _, err := s.matchLaunch(ctx, n.Agent, x.Name, x.Cwd, "", n.Handoff, true, acct, &x)
+	if err != nil {
+		return refuse(err)
+	}
+	if acct != nil {
+		argv = slices.Concat(accounts.EnvArgv(n.Agent, acct.folder, false), argv)
 	}
 	h, held := s.heldIn(pane, x)
 	if held {
@@ -706,6 +713,20 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	case acct != nil && acct.again:
 		rep, err := accounts.Prepare(s.home(), n.Agent, acct.folder, acct.mode)
 		notes = prepareNotes(acct, rep, err)
+	}
+	if a.Confirm == "y" {
+		prepared, _, err := s.matchLaunch(ctx, n.Agent, name, dir, n.Branch, first, !cloned, acct, nil)
+		if err != nil {
+			s.unmake(made, acct.folderOrEmpty())
+			return withKept(refuse(err), kept)
+		}
+		if acct != nil {
+			prepared = slices.Concat(accounts.EnvArgv(n.Agent, acct.folder, acct.fresh), prepared)
+		}
+		steps[len(steps)-1] = slices.Concat(
+			[]string{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
+			sample.TmuxOn(""), []string{"new-session", "-d", "-s", name, "-n", name, "-c", dir}, prepared)
+		act.Steps = steps
 	}
 	res := s.Actions.Do(ctx, act, a.Confirm)
 	if note != "" && res.Err == "" {

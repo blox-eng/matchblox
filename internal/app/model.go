@@ -5,6 +5,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -154,6 +155,8 @@ type action struct {
 	againText   string                      // the Text the second y sends ("": killAnyway)
 	done        string                      // a switch: what the flash says when it ran
 	agent       string                      // a start on a new account: the last agent once it ran
+	previewAct  string                      // switch evidence request; confirmation waits for it
+	preview     string                      // checked evidence excerpt for switch consent
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -596,6 +599,17 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planTickMsg:
 		return m.planTick(msg)
 	case resultMsg:
+		if m.pending != nil && m.pending.previewAct != "" && m.pending.previewAct == msg.ActID {
+			if msg.Err != "" || msg.Preview == "" {
+				m.pending = nil
+				m.flash = "handover preview unavailable: " + cmp.Or(msg.Err, "update matchblox and try again")
+				return m, m.recv()
+			}
+			a := *m.pending
+			a.previewAct, a.preview = "", msg.Preview
+			m.pending = &a
+			return m, m.recv()
+		}
 		m.endRec(msg.ActID, proto.Result(msg))
 		if mm, ok := m.started(proto.Result(msg)); ok {
 			return mm, mm.recv()
@@ -969,6 +983,11 @@ func (m Model) pendingKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	a := *m.pending
 	m.pending = nil
 	yes := bkey.Matches(k, m.keys.confirm.Yes)
+	if a.previewAct != "" && (yes || bkey.Matches(k, m.keys.confirm.Enter)) {
+		m.pending = &a
+		m.flash = "reading handover evidence: wait for the preview, or any other key cancels"
+		return m, nil
+	}
 	if yes && a.again != "" {
 		// It works or waits for you: one more y, said plainly.
 		a.say, a.again, a.text = a.again, "", killAnyway

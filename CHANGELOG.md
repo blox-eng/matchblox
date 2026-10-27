@@ -6,6 +6,27 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A match knows its workspace and how to find its peers.** New and
+  switched sessions receive a private environment brief and a task record
+  that survives compaction. Repository instruction files stay unchanged.
+- **Switches preserve handover evidence before replacing the agent.** The
+  capture contains the outgoing task record, recent conversation text when
+  available, the last reply and checked Git state. Missing context stays
+  unknown. The console previews the evidence before confirmation;
+  `matchblox switch api --agent codex --preview` reads it without switching.
+
+### Fixed
+
+- An agent on a tmux server that matchblox does not list no longer takes
+  the row of a listed pane with the same pane id. It shows outside tmux.
+- **Codex starts with workspace trust and workspace-write network access**
+  through both `new` and `switch`. The settings apply to that invocation.
+  Sandbox mode and command approval policy stay as configured. A folder
+  just cloned still asks, as Cursor does. An explicit untrusted project or
+  an unreadable account configuration stops the launch.
+
 ## [0.24.0] - 2026-10-26
 
 ### Added

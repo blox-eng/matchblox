@@ -111,6 +111,8 @@ type Result struct {
 	Ran     [][]string `json:"ran,omitempty"`
 	Skipped []string   `json:"skipped,omitempty"`
 	Err     string     `json:"err,omitempty"`
+	// Preview is the read-only evidence shown before an agent switch.
+	Preview string `json:"preview,omitempty"`
 	// Scan is how a scan:yes's scan went.
 	Scan *ScanSummary `json:"scan,omitempty"`
 	// Clone is a clone:plan's plan.
@@ -342,12 +344,16 @@ type SwitchAgent struct {
 	Agent   string `json:"agent"`
 	Handoff string `json:"handoff,omitempty"`
 	Anyway  bool   `json:"anyway,omitempty"`
+	// ExpectedPID/Start bind consent to the process shown by the client.
+	// Older clients omit them and retain the existing service-side guard.
+	ExpectedPID   int    `json:"expected_pid,omitempty"`
+	ExpectedStart uint64 `json:"expected_start,omitempty"`
 	// Account is the account the sender's confirm named for Agent ("default"
 	// included). The service refuses the switch when it would pick another
 	// now. Empty, from an older client, takes whichever it picks.
 	Account string `json:"account,omitempty"`
 }
 
-// DefaultHandoff is the first message a switched-in agent gets: it reads
-// the place, not another product's transcript.
-const DefaultHandoff = "Read the working tree and any local notes. Summarise progress so far, then continue the work from here."
+// DefaultHandoff selects an evidence capture and a concrete continuation
+// prompt. An edited handoff stays the user's exact text; empty starts no turn.
+const DefaultHandoff = "Continue from the saved handover: check the goal, latest user direction, progress, decisions, verification and next action against the current tree."

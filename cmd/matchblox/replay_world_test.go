@@ -199,6 +199,12 @@ const (
 func (w *demoWorld) start(argv []string) error {
 	name, dir := argv[slices.Index(argv, "-s")+1], argv[slices.Index(argv, "-c")+1]
 	agent := argv[slices.Index(argv, "-c")+2:]
+	// The real process inherits the launch context through env. Keep that
+	// wrapper out of cmdline, as /proc does after env execs the agent.
+	contextEnv := ""
+	if len(agent) > 2 && agent[0] == "env" && strings.HasPrefix(agent[1], "MATCHBLOX_CONTEXT=") {
+		contextEnv, agent = agent[1]+"\x00", agent[2:]
+	}
 	proc := filepath.Join(w.root, "proc", strconv.Itoa(newPID))
 	if err := os.MkdirAll(proc, 0o755); err != nil {
 		return err
@@ -206,7 +212,7 @@ func (w *demoWorld) start(argv []string) error {
 	ticks := int(w.uptime() * procfs.ClockTicks)
 	files := map[string]string{
 		"cmdline": strings.Join(agent, "\x00") + "\x00",
-		"environ": "HOME=/home/user\x00TMUX_PANE=" + newPane + "\x00TERM=tmux-256color\x00",
+		"environ": "HOME=/home/user\x00TMUX_PANE=" + newPane + "\x00TERM=tmux-256color\x00" + contextEnv,
 		"stat":    fmt.Sprintf("%d (%s) S 1 %d %d 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 %d 100000 2500", newPID, agent[0], newPID, newPID, ticks),
 	}
 	for f, body := range files {
