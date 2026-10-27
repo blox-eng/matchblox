@@ -25,7 +25,9 @@ only what it adds.
 A ship names the session that owns it now. Matchblox finds the owner
 again on every sample, and never keeps a pane or a name:
 
-1. a session in a worktree on the PR's head branch owns it;
+1. a session in a worktree on the PR's head branch owns it, if the PR is
+   open and its head is a branch of the repository itself: a fork's
+   branch of the same name is another branch;
 2. else the session with the strongest, then the newest evidence owns it,
    if it still runs;
 3. else no session owns it.
@@ -35,7 +37,8 @@ ships along. A pane that another session takes over takes none of them.
 `matchblox ships --json` gives the owner in `session`: its `name`, `pane`,
 `session_id` and `since`, when it became the owner. A ship that no session
 owns has no `name`, `pane` or `session_id`, and `since` says since when.
-Message the owner by its name, never by its pane.
+The Ships tab shows it `by no session`. Message the owner by its name,
+never by its pane.
 
 A Claude Code `/clear` starts a new session id. A ship that the old id
 found goes to the new one when it sits on the PR's branch, else it has no

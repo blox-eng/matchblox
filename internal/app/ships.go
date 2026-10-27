@@ -118,15 +118,21 @@ func (m Model) driverName(sh proto.Ship) string {
 	if sh.Session.Name != "" {
 		return sh.Session.Name
 	}
-	return sh.Session.Pane
+	switch {
+	case sh.Session.Pane != "":
+		return sh.Session.Pane
+	case sh.Session.ID != "":
+		return sh.Session.ID
+	}
+	return "no session"
 }
 
 // driverGone is the flash for a ship whose session is no longer there.
 func (m Model) driverGone(sh proto.Ship) string {
-	if name := m.driverName(sh); name != "" {
-		return name + " no longer runs"
+	if sh.Session.ID == "" && sh.Session.Pane == "" {
+		return "no session owns #" + strconv.Itoa(sh.Number)
 	}
-	return "its driver no longer runs"
+	return m.driverName(sh) + " no longer runs"
 }
 
 // shipStyle is the colour of a ship's current stage and note: warn while

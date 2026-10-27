@@ -179,6 +179,34 @@ func TestTheOwnerIsTheSessionNow(t *testing.T) {
 	want(scan(nil, stranger), "", "", "", w.clock)
 }
 
+// TestABranchNameOwnsOnlyItsOwnOpenPR: a session on a local branch does
+// not own a fork's PR whose head has the same name, nor an older PR of a
+// reused branch name. A bare merge from that branch would merge it.
+func TestABranchNameOwnsOnlyItsOwnOpenPR(t *testing.T) {
+	w := newWorld(t)
+	tr := w.tracker()
+	tr.load()
+	a := sample.Session{SessionID: "a", Pane: "%1", Cwd: "/w"}
+	b := sample.Session{SessionID: "b", Pane: "%2", Cwd: "/wt/ci"}
+	for n, f := range map[int]*facts{
+		312: {State: "OPEN", Head: "fix/ci", Fork: true},
+		300: {State: "MERGED", Head: "fix/ci"},
+		320: {State: "OPEN", Head: "fix/ci"},
+	} {
+		tr.st.PRs[key("hearth/hearth", n)] = &pr{Repo: "hearth/hearth", Number: n, Facts: f,
+			Claim: claim{Kind: Acted, At: now, Session: SessionRef{Pane: "%1", ID: "a"}}}
+	}
+	git := &gitscan.Report{Repos: []gitscan.Repo{{Path: "/w", Main: "main", Worktrees: []gitscan.Worktree{
+		{Path: "/w", Branch: "main"}, {Path: "/wt/ci", Branch: "fix/ci"},
+	}}}}
+	tr.own(context.Background(), Input{Sessions: []sample.Session{a, b}, Git: git}, now)
+	for n, id := range map[int]string{312: "a", 300: "a", 320: "b"} {
+		if got := tr.st.PRs[key("hearth/hearth", n)].Owner.ID; got != id {
+			t.Errorf("#%d belongs to %q, want %q", n, got, id)
+		}
+	}
+}
+
 // TestPollCadence: a new PR is read at once, then every PollEvery while
 // any is in flight, and never when none is.
 func TestPollCadence(t *testing.T) {

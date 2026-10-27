@@ -463,8 +463,10 @@ func (t *Tracker) own(ctx context.Context, in Input, now time.Time) {
 }
 
 // onBranch is the live sessions on each PR's head branch, by key: in the
-// worktree whose open PR it is, or whose branch is its head. A session
-// counts in its deepest worktree only.
+// worktree whose open PR it is, or whose branch is the head of an open PR
+// of the repository itself. A fork's head, or an old PR of a reused
+// branch name, is another branch of the same name. A session counts in
+// its deepest worktree only.
 func (t *Tracker) onBranch(ctx context.Context, in Input, now time.Time) map[string][]sample.Session {
 	out := map[string][]sample.Session{}
 	if in.Git == nil {
@@ -493,7 +495,7 @@ func (t *Tracker) onBranch(ctx context.Context, in Input, now time.Time) map[str
 		if at.Branch != "" && at.Branch != main {
 			if repo, _ := t.repoOf(ctx, at.Path, now); repo != "" {
 				for k, p := range t.st.PRs {
-					if p.Repo == strings.ToLower(repo) && p.Facts != nil && p.Facts.Head == at.Branch {
+					if f := p.Facts; p.Repo == strings.ToLower(repo) && f != nil && f.State == "OPEN" && !f.Fork && f.Head == at.Branch {
 						keys[k] = true
 					}
 				}

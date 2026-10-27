@@ -450,3 +450,17 @@ func TestAShipNobodyOwnsIsNoSessionsOwn(t *testing.T) {
 		t.Errorf("%%2 owns %v, want [4570]", prs)
 	}
 }
+
+// TestAPaneThatChangesHandsCarriesNoMerge: ships are read every 15s and
+// sessions every sample. A session that takes over a pane in between does
+// not own the PRs of the session that left it.
+func TestAPaneThatChangesHandsCarriesNoMerge(t *testing.T) {
+	s := &Service{}
+	s.cur.Sessions = []sample.Session{{SessionID: "new", Pane: "%2"}}
+	s.cur.Ships = &ships.Report{Ships: []proto.Ship{
+		{Repo: "o/r", Number: 4570, Session: ships.SessionRef{Pane: "%2", ID: "old"}, Evidence: ships.Created},
+	}}
+	if prs := s.owns()["%2"].PRs; len(prs) != 0 {
+		t.Errorf("the session new on %%2 owns %v", prs)
+	}
+}
