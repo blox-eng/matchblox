@@ -89,6 +89,9 @@ func (m Model) askGone(msg askGoneMsg) (tea.Model, tea.Cmd) {
 	if m.ask == nil || m.ask.prompt.Gone != msg.gone {
 		return m, nil
 	}
+	if m.ask.prompt.Notify {
+		return m.closeAsk("", false, "") // the touch came: ssh ended its notice
+	}
 	return m.closeAsk("", false, m.goneFlash())
 }
 
@@ -156,6 +159,8 @@ func (m Model) askKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.openStop() // ssh would ask again: the open ends here
 		}
 		return m.closeAsk("", false, "cancelled: the ssh to "+m.askHost()+" gets no answer")
+	case f.prompt.Notify:
+		return m, nil // a notice takes no answer: ssh waits for the touch
 	case bkey.Matches(k, ak.Send):
 		return m.sendAsk()
 	case bkey.Matches(k, ak.Erase):
@@ -174,6 +179,9 @@ func (m Model) askKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // askPaste types a paste into the field, without its line breaks.
 func (m Model) askPaste(text string) Model {
+	if m.ask.prompt.Notify {
+		return m
+	}
 	f := *m.ask
 	f.typed, f.note = typedRunes(f.typed, text), ""
 	m.ask = &f
@@ -246,6 +254,9 @@ func (m Model) askBox(bw, maxH int) []string {
 	iw := bw - 4 - 2*consentPad
 	text := askLines(f.prompt.Text, iw)
 	input := []string{st.accent.Render("› ") + st.text.Render(m.askInput()) + st.accent.Render("▏")}
+	if f.prompt.Notify {
+		input = []string{st.accent.Render("touch your security key")}
+	}
 	if f.note != "" {
 		input = append(input, st.warn.Render("! ")+st.text.Render(f.note))
 	}
@@ -266,6 +277,10 @@ func (m Model) askBox(bw, maxH int) []string {
 	}
 	title := st.accent.Bold(true).Render("ssh " + m.askHost() + " asks")
 	foot := []footPart{st.footKey(ak.Send, send, "", st.accent), st.footKey(ak.Cancel, "cancel the ssh", " ─ ", st.accent)}
+	if f.prompt.Notify {
+		foot = foot[1:]
+		foot[0].sep = ""
+	}
 	box, _ := boxFrame(st.hair, title, padded([][]string{text, input}, bw), foot, bw)
 	return box
 }

@@ -57,11 +57,14 @@ const (
 )
 
 // Prompt is one ssh prompt for the console. Text is already cleaned.
-// Confirm is a yes/no prompt (a new host key). Gone closes when the helper
-// left (ssh gave up or was killed): nobody waits for the answer then.
+// Confirm is a yes/no prompt (a new host key). Notify is a notice that
+// takes no answer: touch a security key; ssh ends the helper after the
+// touch. Gone closes when the helper left (ssh gave up or was killed, or
+// the touch came): nobody waits for the answer then.
 type Prompt struct {
 	Host, Text string
 	Confirm    bool
+	Notify     bool
 	Gone       <-chan struct{}
 }
 
@@ -69,6 +72,7 @@ type request struct {
 	Token string `json:"token"`
 	Host  string `json:"host"`
 	Text  string `json:"text"`
+	Kind  string `json:"kind,omitempty"` // ssh's SSH_ASKPASS_PROMPT: "none", "confirm" or ""
 }
 
 type reply struct {
@@ -209,7 +213,9 @@ func (s *Server) serve(c net.Conn) {
 	_ = c.SetReadDeadline(time.Time{})
 	text := clean(req.Text)
 	gone := make(chan struct{})
-	p := pending{conn: c, gone: gone, prompt: Prompt{Host: Clean(req.Host), Text: cut(text), Confirm: strings.Contains(text, "(yes/no"), Gone: gone}}
+	notify := req.Kind == "none"
+	p := pending{conn: c, gone: gone, prompt: Prompt{Host: Clean(req.Host), Text: cut(text), Gone: gone,
+		Confirm: !notify && (req.Kind == "confirm" || strings.Contains(text, "(yes/no")), Notify: notify}}
 	// The helper sends nothing more: a read ends only when it leaves, or
 	// when the answer closes the connection.
 	go func() {
@@ -322,7 +328,7 @@ func Ask(env func(string) string, prompt string, out io.Writer) error {
 	}
 	defer c.Close()
 	_ = c.SetDeadline(time.Now().Add(waitAnswer))
-	req, err := json.Marshal(request{Token: token, Host: env(EnvHost), Text: prompt})
+	req, err := json.Marshal(request{Token: token, Host: env(EnvHost), Text: prompt, Kind: env("SSH_ASKPASS_PROMPT")})
 	if err != nil {
 		return err
 	}

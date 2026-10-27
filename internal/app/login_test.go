@@ -652,3 +652,14 @@ func TestPrefixFallbackSaysSo(t *testing.T) {
 		t.Fatalf("a prefix a jump binds: flash %q", next.(Model).flash)
 	}
 }
+
+// TestCheckerAsksInTheConsole: the background check and the key check run
+// with the console's prompt socket: a security key asks its touch there
+// (BatchMode lets nothing else ask), and does not time out unseen.
+func TestCheckerAsksInTheConsole(t *testing.T) {
+	m, _ := loadedWith(t, 100, fixtureState())
+	m.opt.Host, m.opt.Ask = "ws-1", fakeAsk{}
+	if _, exit := m.checker()(context.Background(), []string{"sh", "-c", `[ "$SSH_ASKPASS_REQUIRE" = force ] && [ -n "$MATCHBLOX_ASKPASS_HOST" ]`}, ignoreLine); exit != 0 {
+		t.Fatal("the check's ssh has no prompt socket")
+	}
+}

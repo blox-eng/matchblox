@@ -442,3 +442,29 @@ func TestListenSweepsDeadDirs(t *testing.T) {
 		}
 	}
 }
+
+// TestAskKinds: ssh says what kind of prompt it runs the helper for, in
+// SSH_ASKPASS_PROMPT: "none" is a notice that takes no answer (touch a
+// security key; ssh ends the helper after the touch), "confirm" a yes/no.
+func TestAskKinds(t *testing.T) {
+	s := listen(t)
+	for kind, want := range map[string]Prompt{
+		"none":    {Host: "ws-1", Text: "Confirm user presence for key ED25519-SK SHA256:x", Notify: true},
+		"confirm": {Host: "ws-1", Text: "Allow use of key x?", Confirm: true},
+		"":        {Host: "ws-1", Text: "Password: "},
+	} {
+		env := envOf(append(s.Env("ws-1"), "SSH_ASKPASS_PROMPT="+kind))
+		done := ask(env, want.Text)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		p, answer, err := s.Next(ctx)
+		cancel()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.Gone = nil; p != want {
+			t.Errorf("kind %q: prompt %+v, want %+v", kind, p, want)
+		}
+		answer("", false)
+		<-done
+	}
+}

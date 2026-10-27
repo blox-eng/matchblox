@@ -246,3 +246,25 @@ func TestAskFieldWaitsForTheNext(t *testing.T) {
 		t.Fatalf("a late prompt of a closed console: answers %v", a.oks)
 	}
 }
+
+// TestAskFieldTouch: a security key's touch is a notice: the field says to
+// touch the key, takes no typing and sends nothing, and closes without a
+// word when ssh ends the helper after the touch. esc still cancels.
+func TestAskFieldTouch(t *testing.T) {
+	gone := make(chan struct{})
+	m, a := asking(t, askpass.Prompt{Host: "ws-1", Text: "Confirm user presence for key ED25519-SK SHA256:x", Notify: true, Gone: gone})
+	next, _ := key(typeIn(m, "abc"), "enter")
+	out := ansi.Strip(next.(Model).render())
+	if !strings.Contains(out, "touch your security key") || strings.Contains(out, "•") || a.sent != 0 {
+		t.Fatalf("answers %q, screen:\n%s", a.got, out)
+	}
+	close(gone)
+	next, _ = next.Update(askGoneMsg{gone: gone})
+	if got := next.(Model); got.ask != nil || strings.Contains(got.flash, "stopped asking") {
+		t.Fatalf("after the touch: field %v, flash %q", got.ask != nil, got.flash)
+	}
+	m, a = asking(t, askpass.Prompt{Host: "ws-1", Text: "Confirm user presence", Notify: true, Gone: make(chan struct{})})
+	if next, _ := key(m, "esc"); next.(Model).ask != nil || a.sent != 1 || a.oks[0] {
+		t.Fatalf("esc: answers %v", a.oks)
+	}
+}

@@ -157,12 +157,20 @@ func (m Model) checkLogin() (Model, tea.Cmd) {
 	})
 }
 
-// checker runs a login check: Options.Check, or ssh.
+// checker runs a login check: Options.Check, or ssh with the console's
+// prompt socket. The check has BatchMode, so only a security key's touch
+// asks there; without it, the touch would wait unseen and time out.
 func (m Model) checker() func(ctx context.Context, argv []string, line func(string)) (string, int) {
 	if m.opt.Check != nil {
 		return m.opt.Check
 	}
-	return runCheck
+	var env []string
+	if m.opt.Ask != nil {
+		env = m.opt.Ask.Env(m.opt.Host)
+	}
+	return func(ctx context.Context, argv []string, line func(string)) (string, int) {
+		return runSSH(ctx, argv, env, openTimeout, line)
+	}
 }
 
 // loggedIn takes the check's result: a login that is not ok shows its fix,
@@ -377,12 +385,6 @@ func (m Model) hostTmuxRefusal(a *action) *action {
 		return m, why
 	}
 	return b
-}
-
-// runCheck runs the check's ssh and gives its stderr and exit; -1 when ctx
-// ended it. Its caller sets the time limit: a Tailscale link moves it.
-func runCheck(ctx context.Context, argv []string, line func(string)) (string, int) {
-	return runSSH(ctx, argv, nil, openTimeout, line)
 }
 
 // runSSH runs an ssh of the builder's own login, with env added to this
