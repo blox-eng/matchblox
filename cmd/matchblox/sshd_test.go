@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -13,11 +14,14 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/hosts"
+	"github.com/blox-eng/matchblox/internal/login"
 	"github.com/blox-eng/matchblox/internal/pair"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
@@ -38,7 +42,7 @@ func startSSHD(t *testing.T) realHost {
 	if _, err := os.Stat(sshd); err != nil || testing.Short() {
 		t.Skip("no sshd here")
 	}
-	dir, err := os.MkdirTemp("", "mbs") // short: the far socket path must fit 108 bytes
+	dir, err := os.MkdirTemp("/tmp", "mbs") // short, not macOS $TMPDIR: the far socket path must fit sun_path
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,4 +301,219 @@ func sshHasExpiryTime(version string) bool {
 		return false
 	}
 	return major > 7 || (major == 7 && minor >= 7)
+}
+
+// TestMasterReusedOnRealSSHD logs in with a key locked by a passphrase. The
+// passphrase goes through `matchblox askpass` (this test binary, through
+// run) to the server, once; a second ssh reuses the master and asks
+// nothing (design §3.4, §3.1).
+func TestMasterReusedOnRealSSHD(t *testing.T) {
+	h := startSSHD(t)
+	locked := filepath.Join(h.dir, "locked")
+	for _, ext := range []string{"", ".pub"} {
+		b, err := os.ReadFile(filepath.Join(h.dir, "builder"+ext))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(locked+ext, b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err := exec.Command("ssh-keygen", "-q", "-p", "-P", "", "-N", "p4ss", "-f", locked).CombinedOutput(); err != nil { //nolint:gosec // test
+		t.Fatalf("ssh-keygen -p: %v %s", err, out)
+	}
+	master, err := remote.EnsureMasterDir(filepath.Join(h.dir, "m"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv, err := askpass.Listen(filepath.Dir(master))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	srv.Program = filepath.Join(h.bin, "askpass")
+	helper := "#!/bin/sh\nMATCHBLOX_TEST_ARGS=\"$1\" exec " + os.Args[0] + "\n"
+	if err := os.WriteFile(srv.Program, []byte(helper), 0o700); err != nil { //nolint:gosec // a test script
+		t.Fatal(err)
+	}
+	opts := append([]string{"-i", locked, "-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none"}, remote.MasterOpts(master)...)
+	t.Cleanup(func() { _ = exec.Command("ssh", append(opts, "-O", "exit", "--", "ws-1")...).Run() }) //nolint:gosec // test
+	// ssh starts the master in the background; it keeps a pipe open, so
+	// its output goes to a file.
+	ssh := func() (<-chan error, *os.File) {
+		f, err := os.CreateTemp(h.dir, "out")
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := exec.Command("ssh", append(opts, "--", "ws-1", "true")...) //nolint:gosec // test
+		c.Env = append(os.Environ(), srv.Env("ws-1")...)
+		c.Stdin, c.Stdout, c.Stderr = strings.NewReader(""), f, f
+		done := make(chan error, 1)
+		go func() { done <- c.Run() }()
+		return done, f
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	first, out := ssh()
+	p, answer, err := srv.Next(ctx)
+	if err != nil {
+		b, _ := os.ReadFile(out.Name())
+		t.Fatalf("no prompt: %v\n%s", err, b)
+	}
+	if p.Host != "ws-1" || !strings.Contains(p.Text, "Enter passphrase for key") || p.Confirm {
+		t.Fatalf("prompt %+v", p)
+	}
+	answer("p4ss", true)
+	if err := <-first; err != nil {
+		b, _ := os.ReadFile(out.Name())
+		t.Fatalf("first ssh: %v\n%s", err, b)
+	}
+
+	asked := make(chan askpass.Prompt, 1)
+	watch, stop := context.WithCancel(ctx)
+	go func() {
+		if p, answer, err := srv.Next(watch); err == nil {
+			asked <- p
+			answer("", false)
+		}
+	}()
+	second, out := ssh()
+	err = <-second
+	stop()
+	select {
+	case p := <-asked:
+		t.Fatalf("the second ssh asks %+v", p)
+	default:
+	}
+	if err != nil {
+		b, _ := os.ReadFile(out.Name())
+		t.Fatalf("second ssh: %v\n%s", err, b)
+	}
+}
+
+// TestHostKeyPromptOnRealSSHD: ssh's whole host-key message, with and
+// without randomart, reaches the console as a yes/no prompt with its
+// fingerprint, and a "no" stops the login.
+func TestHostKeyPromptOnRealSSHD(t *testing.T) {
+	h := startSSHD(t)
+	srv, err := askpass.Listen(h.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	srv.Program = filepath.Join(h.bin, "askpass")
+	helper := "#!/bin/sh\nMATCHBLOX_TEST_ARGS=\"$1\" exec " + os.Args[0] + "\n"
+	if err := os.WriteFile(srv.Program, []byte(helper), 0o700); err != nil { //nolint:gosec // a test script
+		t.Fatal(err)
+	}
+	for _, visual := range []string{"no", "yes"} {
+		known := filepath.Join(h.dir, "known-"+visual)
+		c := exec.Command("ssh", "-o", "UserKnownHostsFile="+known, "-o", "StrictHostKeyChecking=ask", "-o", "VisualHostKey="+visual, //nolint:gosec // test
+			"-o", "ControlMaster=no", "-o", "ControlPath=none", "-o", "IdentityAgent=none", "--", "ws-1", "true")
+		c.Env = append(os.Environ(), srv.Env("ws-1")...)
+		c.Stdin = strings.NewReader("")
+		done := make(chan error, 1)
+		go func() { done <- c.Run() }()
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		p, answer, err := srv.Next(ctx)
+		cancel()
+		if err != nil {
+			t.Fatalf("VisualHostKey=%s: no prompt: %v", visual, err)
+		}
+		answer("no", true)
+		if !p.Confirm || !regexp.MustCompile(`(?m)^ED25519 key fingerprint is:? SHA256:[A-Za-z0-9+/]{43}\.?$`).MatchString(p.Text) ||
+			!strings.HasSuffix(p.Text, "(yes/no/[fingerprint])? ") {
+			t.Errorf("VisualHostKey=%s: prompt %+v", visual, p)
+		}
+		if visual == "yes" && !strings.Contains(p.Text, "+--[ED25519 256]--+") {
+			t.Errorf("no randomart in %q", p.Text)
+		}
+		if err := <-done; err == nil {
+			t.Errorf("VisualHostKey=%s: a no must stop the login", visual)
+		}
+	}
+}
+
+// TestInstallOnRealSSHD puts a key on a host through the builder's master,
+// twice, into a home with no ~/.ssh: the key is there once, ~/.ssh is 0700
+// and authorized_keys 0600, and the key logs in alone (design §3.3).
+func TestInstallOnRealSSHD(t *testing.T) {
+	h := startSSHD(t)
+	master, err := remote.EnsureMasterDir(filepath.Join(h.dir, "m"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := remote.MasterOpts(master)
+	t.Cleanup(func() { _ = exec.Command("ssh", append(opts, "-O", "exit", "--", "ws-1")...).Run() }) //nolint:gosec // test
+	// ssh leaves the master in the background with its stderr: the output
+	// goes to a file, so the run does not wait for the master.
+	run := func(argv []string) {
+		t.Helper()
+		f, err := os.CreateTemp(h.dir, "out")
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := exec.Command(argv[0], argv[1:]...) //nolint:gosec // test
+		c.Stdin, c.Stdout, c.Stderr = strings.NewReader(""), f, f
+		if err := c.Run(); err != nil {
+			b, _ := os.ReadFile(f.Name())
+			t.Fatalf("%q: %v\n%s", argv, err, b)
+		}
+	}
+	run(append(append([]string{"ssh", "-o", "BatchMode=yes"}, opts...), "--", "ws-1", "true"))
+	// The master is the builder's login now; the host's ~/.ssh goes, so the
+	// install makes it.
+	if err := os.RemoveAll(filepath.Join(h.far, ".ssh")); err != nil {
+		t.Fatal(err)
+	}
+	key := filepath.Join(h.dir, "newkey")
+	if out, err := exec.Command("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "matchblox-login", "-f", key).CombinedOutput(); err != nil { //nolint:gosec // test
+		t.Fatalf("ssh-keygen: %v %s", err, out)
+	}
+	pub, err := os.ReadFile(key + ".pub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := strings.TrimSpace(string(pub))
+	argv, err := login.InstallArgv("ws-1", line, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run(argv)
+	run(argv)
+	b, err := os.ReadFile(filepath.Join(h.far, ".ssh", "authorized_keys"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != line+"\n" {
+		t.Fatalf("authorized_keys %q", b)
+	}
+	for path, want := range map[string]os.FileMode{filepath.Join(h.far, ".ssh"): 0o700, filepath.Join(h.far, ".ssh", "authorized_keys"): 0o600} {
+		if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != want {
+			t.Errorf("%s: %v %v, want %o", path, fi.Mode(), err, want)
+		}
+	}
+	alone := func(k string) []string {
+		return []string{"ssh", "-i", k, "-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none", "-o", "BatchMode=yes",
+			"-o", "ControlMaster=no", "-o", "ControlPath=none", "--", "ws-1", "true"}
+	}
+	run(alone(key))
+
+	// A file whose last line has no newline: that line and the key both
+	// stay whole, and both log in.
+	builder, err := os.ReadFile(filepath.Join(h.dir, "builder.pub"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := strings.TrimSpace(string(builder))
+	if err := os.WriteFile(filepath.Join(h.far, ".ssh", "authorized_keys"), []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	run(argv)
+	if b, _ := os.ReadFile(filepath.Join(h.far, ".ssh", "authorized_keys")); string(b) != old+"\n"+line+"\n" {
+		t.Fatalf("authorized_keys after a file without its last newline: %q", b)
+	}
+	run(alone(key))
+	run(alone(filepath.Join(h.dir, "builder")))
 }

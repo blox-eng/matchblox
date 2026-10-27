@@ -13,10 +13,10 @@ import (
 )
 
 // forHost runs the console's own steps on the host it reaches, with the
-// builder's own ssh login: a tmux move attaches to the host's tmux, a
-// door's command runs there. The inner argv is checked here, before ssh
-// wraps it; a step that fails the check stays as it was, and the local
-// check refuses it on confirm.
+// builder's own ssh login: a tmux move jumps to the host, a door's command
+// runs there. The inner argv is checked here, before ssh wraps it; a step
+// that fails the check stays as it was, and the local check refuses it on
+// confirm.
 func (m Model) forHost(a *action) *action {
 	if a == nil || m.opt.Host == "" || a.remote {
 		return a
@@ -25,13 +25,7 @@ func (m Model) forHost(a *action) *action {
 	b := *a
 	switch {
 	case a.nav:
-		for _, s := range a.steps {
-			if !remote.NavAllowed(s) {
-				return a
-			}
-		}
-		b.steps = [][]string{remote.NavArgv(host, a.steps)}
-		b.say = shellLine(b.steps[0])
+		return m.jumpOnHost(a)
 	case a.term:
 		argv := a.steps[0]
 		if a.door == doors.Guide {
@@ -47,6 +41,105 @@ func (m Model) forHost(a *action) *action {
 	}
 	b.remote = true
 	return &b
+}
+
+// jumpOnHost turns a tmux move into a jump to the host: to the pane of a
+// switch or an attach, or to a new shell in the directory of a new-window.
+// The host opens in a session of its own on each side, never in the
+// console's pane. Inside tmux the step is a tmux command list that returns
+// at once; outside, the ssh takes this terminal.
+func (m Model) jumpOnHost(a *action) *action {
+	var j remote.Jump
+	for _, s := range a.steps {
+		if !remote.NavAllowed(s) {
+			return a
+		}
+		switch s[1] {
+		case "switch-client", "attach-session":
+			j.Pane = s[3]
+		case "new-window":
+			j.Dir = s[3]
+		}
+	}
+	j.Host, j.Prefix, j.Home, j.ID, j.Outer = m.opt.Host, m.prefix(), m.home(), m.jumpID(), !m.opt.OutsideTmux
+	if !remote.JumpAllowed(j) {
+		return refused(a, jumpRefusal(j))
+	}
+	if j.Outer && remote.TmuxTooOld(m.opt.LocalTmux, remote.MinLocalTmux) {
+		return refused(a, "tmux "+m.opt.LocalTmux+" is older than "+remote.MinLocalTmux+": update tmux, or run the console outside tmux")
+	}
+	if v := m.host.Tmux; v == "none" || remote.TmuxTooOld(v, remote.MinHostTmux) {
+		return m.hostTmuxRefusal(a)
+	}
+	if m.login == remote.LoginHostKeyChanged {
+		return refused(a, m.loginNote(m.login, ""))
+	}
+	dir, err := m.masterDir()
+	if err != nil && j.Outer {
+		// The jump switches the client at once: with no master to open
+		// first, its ssh would ask in a session of its own.
+		return refused(a, m.masterRefusal(err))
+	}
+	b := *a
+	master := remote.MasterOpts(dir)
+	if dir != "" && m.opt.Ask != nil {
+		// The console opens the master first: the jump's ssh never asks.
+		master = append(master, "-o", "BatchMode=yes")
+		b.master = dir
+	}
+	ssh := remote.JumpSSH(j.Host, j, master)
+	b.steps, b.say, b.remote = [][]string{ssh}, shellLine(ssh), true
+	if j.Outer {
+		b.steps = [][]string{j.Local(ssh)}
+		b.undo = []string{"tmux", "kill-session", "-t", "=" + remote.HostSessionName(j.Host, j.ID)}
+	}
+	return &b
+}
+
+// refused is an action that runs nothing: its confirm and its flash say
+// why, and what fixes it.
+func refused(a *action, why string) *action {
+	return &action{label: a.label, say: why, local: func(m Model) (Model, string) { return m, why }}
+}
+
+// jumpRefusal says why JumpAllowed refuses j. The prefix and the id are
+// made here and always pass.
+func jumpRefusal(j remote.Jump) string {
+	noHome := j
+	noHome.Home = ""
+	switch {
+	case !remote.ValidHost(j.Host):
+		return "refused: " + j.Host + " is not a host name ssh takes: use a name from your ssh config"
+	case j.Home != "" && remote.JumpAllowed(noHome):
+		return `refused: tmux session "` + j.Home + `" holds the console, and a jump cannot name it: rename it to letters, digits, _ - @ [ ] only`
+	}
+	return "refused: a jump goes only to a pane id, or an absolute directory without # or ;"
+}
+
+// prefix is this machine's tmux prefix: C-b when tmux did not say, or said
+// a key a jump cannot bind.
+func (m Model) prefix() string {
+	if m.opt.Prefix != nil {
+		if p := m.opt.Prefix(); remote.PrefixKey(p) {
+			return p
+		}
+	}
+	return "C-b"
+}
+
+// home is the session that holds the console: "" is matchblox.
+func (m Model) home() string {
+	if m.opt.Home == nil {
+		return ""
+	}
+	return m.opt.Home()
+}
+
+func (m Model) jumpID() string {
+	if m.opt.JumpID == nil {
+		return remote.NewJumpID()
+	}
+	return m.opt.JumpID()
 }
 
 // blocking: trying again cannot help, connecting the host can.
@@ -78,9 +171,21 @@ func (m Model) connectAction() *action {
 
 type connectedMsg struct{ err error }
 
-// onHost gives this terminal to a step that runs on the host.
+// onHost gives this terminal to a step that runs on the host. A jump
+// inside tmux is a tmux command list instead: it switches the client and
+// returns at once.
 func (m Model) onHost(a action) (tea.Model, tea.Cmd) {
 	argv := a.steps[0]
+	if a.nav && !m.opt.OutsideTmux {
+		run, undo := m.opt.Run, a.undo
+		return m, func() tea.Msg {
+			err := run(argv)
+			if err != nil && undo != nil {
+				_ = run(undo) // the list stopped after its new-session: its ssh would run on, unseen
+			}
+			return ranMsg{cmd: a.String(), err: err, jumped: a.pane}
+		}
+	}
 	m.flash = "running: " + shellLine(argv)
 	return m, m.exec(argv, func(err error) tea.Msg {
 		switch {

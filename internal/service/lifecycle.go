@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/remote"
+
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/gitremote"
@@ -106,6 +108,56 @@ func (s *Service) tmuxOut(argv []string) (string, error) {
 	}
 	out, err := exec.Command(argv[0], argv[1:]...).Output() //nolint:gosec // argv built here, never a shell string
 	return string(out), err
+}
+
+// tmuxVersion is this machine's tmux for the hello, as tmux -V says it
+// without "tmux ", or "none". It is the tmux a jump runs: the first in
+// remote.HostPath, then PATH. Every hook says hello, so a version is read
+// once a minute; "none" is read again at each hello, so a tmux installed
+// since shows at once. The lock is not held while tmux runs.
+func (s *Service) tmuxVersion() string {
+	s.tmuxMu.Lock()
+	if s.tmuxV != "" && time.Since(s.tmuxAt) < time.Minute {
+		v := s.tmuxV
+		s.tmuxMu.Unlock()
+		return v
+	}
+	s.tmuxMu.Unlock()
+	v := "none"
+	if bin, ok := s.jumpTmux(); ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		out, err := exec.CommandContext(ctx, bin, "-V").Output() //nolint:gosec // tmux of HostPath or PATH, a fixed argument
+		cancel()
+		if w := strings.TrimSpace(strings.TrimPrefix(string(out), "tmux ")); err == nil && w != "" {
+			v = w
+		}
+	}
+	if v != "none" {
+		s.tmuxMu.Lock()
+		s.tmuxV, s.tmuxAt = v, time.Now()
+		s.tmuxMu.Unlock()
+	}
+	return v
+}
+
+// jumpTmux is the tmux a jump's shell finds: remote.HostPath goes before
+// PATH there.
+func (s *Service) jumpTmux() (string, bool) {
+	look := s.LookPath
+	if look == nil {
+		look = exec.LookPath
+	}
+	home, _ := os.UserHomeDir()
+	for _, dir := range strings.Split(strings.ReplaceAll(remote.HostPath, "$HOME", home), ":") {
+		if !filepath.IsAbs(dir) {
+			continue
+		}
+		if bin, err := look(filepath.Join(dir, "tmux")); err == nil {
+			return bin, true
+		}
+	}
+	bin, err := look("tmux")
+	return bin, err == nil
 }
 
 func (s *Service) isDir(path string) bool {

@@ -6,6 +6,38 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The console asks the login of a host once, in the console.** One ssh
+  connection per host is shared for 10 minutes, in
+  `$XDG_RUNTIME_DIR/matchblox/ssh` or `/tmp/matchblox-<uid>/ssh`. It takes
+  no forwarding from `~/.ssh/config`, and ends 15 seconds after the
+  network goes. A password, a passphrase or a new host key
+  shows in a masked field in the console, never in the raw terminal. A host
+  key needs a typed `yes`.
+  ([#214](https://github.com/blox-eng/matchblox/issues/214))
+- **The console offers your key for a host that asks a password.** It takes
+  the most secure key first: a security key in your agent, then a key in
+  your agent or `~/.ssh`, then a new key with a passphrase. A typed `y`
+  installs it, and the install only appends to `authorized_keys`. On macOS
+  the console also offers the Keychain lines for `~/.ssh/config`, which
+  every OpenSSH reads, not only Apple's.
+  ([#214](https://github.com/blox-eng/matchblox/issues/214))
+- **A jump works on a Tailscale SSH host.** The console shows the link of
+  Tailscale's check (`c` copies it), says why a tailnet policy refuses you,
+  and warns on the Hosts row that the gate does not hold there.
+  ([#214](https://github.com/blox-eng/matchblox/issues/214))
+
+### Fixed
+
+- **A jump from a console to a host no longer opens matchblox inside
+  matchblox.** The jump opens in its own tmux session, with one status line.
+  `◂ console` (tmux 3.4 or newer) or the home key goes back and ends the
+  jump, and so does prefix `m`: a jump that you leave ends, and nothing
+  runs on unseen. A failed ssh waits for Enter, then goes back to the
+  console.
+  ([#214](https://github.com/blox-eng/matchblox/issues/214))
+
 ## [0.25.0] - 2026-10-27
 
 ### Added

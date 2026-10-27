@@ -34,17 +34,17 @@ func useTailscalePrefs(t *testing.T, prefsFile string) {
 	t.Cleanup(func() { setup.SetPairProbe(old) })
 }
 
-func TestWarnTailscaleSSHGatePrintsWhenOn(t *testing.T) {
+func TestTailscaleGateMessagePrintsWhenOn(t *testing.T) {
 	useTailscalePrefs(t, "tailscale-prefs-ssh-on.json")
 	var buf bytes.Buffer
 	warnTailscaleSSHGate(&buf)
 	got := buf.String()
-	if !strings.Contains(got, setup.WarnTailscaleSSHGate) || !strings.HasPrefix(got, "matchblox: ") {
+	if !strings.Contains(got, setup.TailscaleGateMessage) || !strings.HasPrefix(got, "matchblox: ") {
 		t.Fatalf("got %q", got)
 	}
 }
 
-func TestWarnTailscaleSSHGateSilentWhenOff(t *testing.T) {
+func TestTailscaleGateMessageSilentWhenOff(t *testing.T) {
 	useTailscalePrefs(t, "tailscale-prefs-ssh-off.json")
 	var buf bytes.Buffer
 	warnTailscaleSSHGate(&buf)
@@ -61,12 +61,12 @@ func TestStatusWarnsTailscaleSSHGateText(t *testing.T) {
 	if err := status(&out, path, config.Default(), "", true); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), setup.WarnTailscaleSSHGate) {
+	if !strings.Contains(out.String(), setup.TailscaleGateMessage) {
 		t.Fatalf("status said:\n%s", out.String())
 	}
 	useTailscalePrefs(t, "tailscale-prefs-ssh-off.json")
 	out.Reset()
-	if err := status(&out, path, config.Default(), "", true); err != nil || strings.Contains(out.String(), setup.WarnTailscaleSSHGate) {
+	if err := status(&out, path, config.Default(), "", true); err != nil || strings.Contains(out.String(), setup.TailscaleGateMessage) {
 		t.Fatalf("off prefs still warned: %v\n%s", err, out.String())
 	}
 }
@@ -90,7 +90,7 @@ func TestStatusWarnsTailscaleSSHGateJSONOnStderr(t *testing.T) {
 	}
 	stderr, _ := io.ReadAll(r)
 	_ = r.Close()
-	if !strings.Contains(string(stderr), setup.WarnTailscaleSSHGate) {
+	if !strings.Contains(string(stderr), setup.TailscaleGateMessage) {
 		t.Fatalf("stderr %q", stderr)
 	}
 	if strings.Contains(out.String(), "Tailscale SSH") {
@@ -105,7 +105,7 @@ func TestSetupDoorsWarnsTailscaleSSHGate(t *testing.T) {
 	if err := setupDoors(e, strings.NewReader("\n\n\n\ny\n"), &out, func([]string) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), setup.WarnTailscaleSSHGate) {
+	if !strings.Contains(out.String(), setup.TailscaleGateMessage) {
 		t.Fatalf("setup said:\n%s", out.String())
 	}
 }
@@ -137,7 +137,7 @@ func TestServeWarnsTailscaleSSHGate(t *testing.T) {
 	if transport.Owner(path) == 0 {
 		t.Fatal("serve did not take the socket")
 	}
-	if !strings.Contains(stderr.String(), setup.WarnTailscaleSSHGate) {
+	if !strings.Contains(stderr.String(), setup.TailscaleGateMessage) {
 		t.Fatalf("stderr %q", stderr.String())
 	}
 }
@@ -161,7 +161,7 @@ func TestServeSkipsTailscaleWarnWhenAlreadyRunning(t *testing.T) {
 	}
 	stderr, _ := io.ReadAll(r)
 	_ = r.Close()
-	if strings.Contains(string(stderr), setup.WarnTailscaleSSHGate) {
+	if strings.Contains(string(stderr), setup.TailscaleGateMessage) {
 		t.Fatalf("already-running serve still warned:\n%s", stderr)
 	}
 	if !strings.Contains(string(stderr), "already runs") {

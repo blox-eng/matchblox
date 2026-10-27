@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/procfs"
@@ -134,6 +135,15 @@ func TestScreens(t *testing.T) {
 		check(t, life, "rename", size[0], size[1], append(append([]string{"r"}, slices.Repeat([]string{"backspace"}, len("spark-docs"))...), strings.Split("docs-1-0", "")...))
 		check(t, life, "kill", size[0], size[1], []string{"x"})
 	}
+	pw := askMsg{prompt: askpass.Prompt{Host: "ws-1", Text: "builder@ws-1's password: "}, answer: func(string, bool) {}}
+	hostKey := askMsg{prompt: askpass.Prompt{Host: "ws-1", Confirm: true, Text: "The authenticity of host 'ws-1' can't be established.\n" +
+		"ED25519 key fingerprint is SHA256:Hx1T4cGQ0bZp6Yd3lq9m0f8aJk2sWvR7uNcE5yXoLtI.\n" +
+		"+--[ED25519 256]--+\n|    .o+=*o.      |\n|     o=B.+ .     |\n|      +.X o      |\n+----[SHA256]-----+\n" +
+		"This key is not known by any other names.\nAre you sure you want to continue connecting (yes/no/[fingerprint])? "}, answer: func(string, bool) {}}
+	for _, size := range [][2]int{{44, 31}, {104, 38}} {
+		check(t, st, "ask", size[0], size[1], strings.Split("abc", ""), pw)
+		check(t, st, "askhostkey", size[0], size[1], []string{"y", "enter"}, hostKey)
+	}
 }
 
 // sheetScreen is the demo machine with a stoker agent, and the launch
@@ -156,7 +166,8 @@ func sheetScreen(st proto.State, day bool) proto.State {
 	return st
 }
 
-func check(t *testing.T, st proto.State, name string, w, h int, keys []string) {
+// check draws the console with msgs, then keys, against its golden frame.
+func check(t *testing.T, st proto.State, name string, w, h int, keys []string, msgs ...tea.Msg) {
 	t.Helper()
 	f := newFake()
 	m := New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return demoAt }})
@@ -172,6 +183,9 @@ func check(t *testing.T, st proto.State, name string, w, h int, keys []string) {
 		}
 	}
 	next = nm
+	for _, msg := range msgs {
+		next, _ = next.Update(msg)
+	}
 	for _, k := range keys {
 		next, _ = key(next, k)
 	}

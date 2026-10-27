@@ -29,6 +29,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"runtime/debug"
 	"runtime/pprof"
@@ -42,13 +43,16 @@ import (
 	"github.com/blox-eng/matchblox/internal/actions"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/app"
+	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/limits"
+	"github.com/blox-eng/matchblox/internal/login"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -123,6 +127,9 @@ func holdOnError(err error, env func(string) string, in io.Reader, out io.Writer
 var configArg string
 
 func run(args []string) error {
+	if askpassMode(args, os.Getenv) {
+		return askpassMain(args[0])
+	}
 	if len(args) > 0 {
 		switch args[0] {
 		case "gate":
@@ -290,6 +297,24 @@ func run(args []string) error {
 		return status(os.Stdout, path, cfg, *root, *text)
 	}
 	return console(path, cfg, *root, *noMotion, host)
+}
+
+// askpassMode tells if ssh runs this binary as its SSH_ASKPASS: the
+// console set MATCHBLOX_ASKPASS and its token, and the one argument is a
+// prompt, not a word that run dispatches.
+func askpassMode(args []string, env func(string) string) bool {
+	return len(args) == 1 && env(askpass.EnvSocket) != "" && env(askpass.EnvToken) != "" &&
+		!slices.Contains(commands, args[0]) && !slices.Contains([]string{"gate", "authorize", "push", "hook"}, args[0])
+}
+
+// askpassMain prints the console's answer to the prompt for ssh, and
+// nothing else on stdout. It reads no config and starts no service.
+func askpassMain(prompt string) error {
+	if err := askpass.Ask(os.Getenv, prompt, os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, "matchblox askpass:", err)
+		return errShown // never holdOnError: ssh owns stdin
+	}
+	return nil
 }
 
 // commands are the commands a builder types. hook, authorize and gate run
@@ -497,6 +522,14 @@ func spoolPath() string { return filepath.Join(filepath.Dir(state.Path()), "spoo
 func console(path string, cfg config.Config, root string, noMotion bool, host string) error {
 	base := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, CompactTokens: cfg.Sessions.CompactTokens, NoMotion: noMotion,
 		OutsideTmux: os.Getenv("TMUX") == "", Self: invokedPath(os.Args[0]), StateDir: filepath.Dir(state.Path())}
+	if !base.OutsideTmux {
+		base.Prefix, base.Home, base.LocalTmux = localTmux()
+	}
+	if runtime.GOOS != "windows" {
+		// The ssh masters of the jumps and the prompt socket: a short,
+		// private path, so their sockets fit and no other user's are used.
+		base.MasterBase = remote.MasterBase(os.Getenv("XDG_RUNTIME_DIR"), "/tmp", os.Getuid())
+	}
 	home, _ := os.UserHomeDir()
 	base.Pair = consolePair(home, base.Self, defaultHostKey, setup.PairAddress)
 	restore := func() {}
@@ -522,17 +555,22 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		}
 		return err
 	}
+	ask, closeAsk, why := consoleAsk(base.MasterBase, base.Self)
+	defer closeAsk()
+	base.Ask, base.NoAsk = ask, why
+	base.Keys = consoleKeys(home)
 	list := hosts.Path()
 	asked := filepath.Join(filepath.Dir(state.Path()), "asked-where")
 	sh := app.NewShell(app.ShellOptions{
-		Base:     base,
-		Hosts:    func() []string { return hosts.Read(list) },
-		SSHHosts: func() []string { return hosts.SSHHosts(home) },
-		Open:     func(h string) app.Options { return openHost(path, home, h, base.OutsideTmux) },
-		Remove:   func(h string) error { return hosts.Remove(list, h) },
-		Start:    host,
-		FirstRun: !fileExists(asked) && !fileExists(list),
-		Answered: func() { _ = os.MkdirAll(filepath.Dir(asked), 0o700); _ = os.WriteFile(asked, nil, 0o600) },
+		Base:          base,
+		Hosts:         func() []string { return hosts.Read(list) },
+		SSHHosts:      func() []string { return hosts.SSHHosts(home) },
+		Open:          func(h string) app.Options { return openHost(path, home, h) },
+		Remove:        func(h string) error { return hosts.Remove(list, h) },
+		Start:         host,
+		FirstRun:      !fileExists(asked) && !fileExists(list),
+		Answered:      func() { _ = os.MkdirAll(filepath.Dir(asked), 0o700); _ = os.WriteFile(asked, nil, 0o600) },
+		TailscaleGate: setup.TailscaleGateMessage,
 	})
 	final, err := tea.NewProgram(sh, tea.WithFPS(15)).Run()
 	if s, ok := final.(app.Shell); ok {
@@ -541,14 +579,46 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 	return err
 }
 
+// consoleAsk is the prompt socket of this console run (design §3.4), in
+// the masters' base, which it checks first. Nil, with why, when there is
+// none: an ssh then asks in the terminal. A refused base says nothing
+// here: the console says why at the host's open.
+func consoleAsk(base, self string) (app.AskSource, func(), string) {
+	if base == "" {
+		return nil, func() {}, "this system has no private directory for the prompt socket"
+	}
+	if _, err := remote.EnsureMasterDir(base); err != nil {
+		return nil, func() {}, "the prompt socket: " + err.Error()
+	}
+	s, err := askpass.Listen(base)
+	if err != nil {
+		return nil, func() {}, "the prompt socket: " + err.Error()
+	}
+	if self != "" {
+		s.Program = self // the path as run: a package's link stays, its versioned target goes at an upgrade
+	}
+	return s, func() { _ = s.Close() }, ""
+}
+
+// consoleKeys is the key ladder's side on this machine (design §3.3): the
+// agent's keys and ~/.ssh, and on macOS the Keychain door.
+func consoleKeys(home string) *app.Keys {
+	k := &app.Keys{GOOS: runtime.GOOS, Step: func() login.Step { return login.Ladder(login.AgentKeys(), filepath.Join(home, ".ssh")) }}
+	if runtime.GOOS == "darwin" {
+		k.Keychain = func(host string) doors.Door { return setup.SSHKeychainDoor(home, host) }
+		k.OpenKeychain = func(host, seen string) (string, error) { return setup.AddSSHKeychain(home, host, seen) }
+	}
+	return k
+}
+
 // openHost dials a host for the shell: "" is this machine's service,
 // started when needed; another host goes over ssh with the matchblox key.
 // A host that cannot be reached yet still opens: the console says why and
 // offers the fix.
-func openHost(path, home, host string, outsideTmux bool) app.Options {
+func openHost(path, home, host string) app.Options {
 	if host == "" {
 		c, err := ensureService(path)
-		return app.Options{Conn: c, DialErr: err, Local: true, OutsideTmux: outsideTmux,
+		return app.Options{Conn: c, DialErr: err, Local: true,
 			Redial: func() (transport.Conn, error) { return ensureService(path) },
 			Owner:  func() int { return transport.Owner(path) }}
 	}
@@ -556,6 +626,36 @@ func openHost(path, home, host string, outsideTmux bool) app.Options {
 	dial := func() (transport.Conn, error) { return remote.Connect(context.Background(), t) }
 	c, err := dial()
 	return app.Options{Conn: c, DialErr: err, Redial: dial, Host: host}
+}
+
+// paneRE is a tmux pane id, as tmux sets TMUX_PANE.
+var paneRE = regexp.MustCompile(`^%[0-9]+$`)
+
+// localTmux reads this machine's tmux for the jumps to a host: its prefix
+// and version once, the session that holds the console at each jump. A
+// read that fails gives "", and the console takes the default.
+func localTmux() (prefix, home func() string, version string) {
+	read := func(args ...string) string {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(ctx, "tmux", args...).Output() //nolint:gosec // fixed tmux reads; the one value is a pane id paneRE took
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(out))
+	}
+	p := read("show-options", "-gv", "prefix")
+	// The home is the session of the console's own pane at the jump: it may
+	// be renamed since, and without -t tmux names the session another
+	// client looks at.
+	pane := os.Getenv("TMUX_PANE")
+	home = func() string {
+		if !paneRE.MatchString(pane) {
+			return ""
+		}
+		return read("display-message", "-p", "-t", pane, "#{session_name}")
+	}
+	return func() string { return p }, home, strings.TrimPrefix(read("-V"), "tmux ")
 }
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
@@ -939,7 +1039,7 @@ const stokerPaneGone = "config: [stoker] pane is ignored: matchblox starts the s
 // on MagicDNS/:22. Probe failure is silence.
 func warnTailscaleSSHGate(w io.Writer) {
 	if setup.TailscaleSSHOn() {
-		_, _ = fmt.Fprintln(w, "matchblox:", setup.WarnTailscaleSSHGate)
+		_, _ = fmt.Fprintln(w, "matchblox:", setup.TailscaleGateMessage)
 	}
 }
 

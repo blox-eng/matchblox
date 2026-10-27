@@ -163,15 +163,15 @@ func TestTailscaleSSHOnBadPrefs(t *testing.T) {
 	}
 }
 
-func TestWarnTailscaleSSHGateCopy(t *testing.T) {
+func TestTailscaleGateMessageCopy(t *testing.T) {
 	for _, want := range []string{
 		"tailscale set --ssh=false",
 		"port 22",
 		"not gated",
 		"MagicDNS",
 	} {
-		if !strings.Contains(WarnTailscaleSSHGate, want) {
-			t.Fatalf("WarnTailscaleSSHGate %q missing %q", WarnTailscaleSSHGate, want)
+		if !strings.Contains(TailscaleGateMessage, want) {
+			t.Fatalf("TailscaleGateMessage %q missing %q", TailscaleGateMessage, want)
 		}
 	}
 }

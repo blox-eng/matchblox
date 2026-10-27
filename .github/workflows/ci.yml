@@ -85,6 +85,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      # The jump tests drive two real tmux servers and a real sshd; without
+      # them they skip, and the guard of #214 would pass unseen.
+      - name: tmux and sshd for the jump tests
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q tmux openssh-server
       - name: Tests (race)
         env:
           CGO_ENABLED: '1'

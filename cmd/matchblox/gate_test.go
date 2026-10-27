@@ -66,7 +66,7 @@ func TestGateRunsOnlyItsCommands(t *testing.T) {
 		"tmux attach-session",
 		"tmux select-window -t %12 ';' select-pane -t %12 ';' attach-session -t %12",
 		"tmux new-window -c / ';' attach-session",
-		last(remote.NavArgv("ws-1", [][]string{{"tmux", "switch-client", "-t", "%12"}})),
+		last(remote.JumpSSH("ws-1", remote.Jump{Host: "ws-1", Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d"}, nil)),
 		last(remote.TermArgv("ws-1", doors.GuideArgv(false))),
 		remote.Quote(doors.GuideArgv(false)),
 		"matchblox serve --stdio; id",

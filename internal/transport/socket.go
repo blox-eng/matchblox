@@ -41,7 +41,7 @@ func Listen(path string) (net.Listener, error) {
 	if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // a directory needs x to be entered; 0700 is owner only
 		return nil, err
 	}
-	if err := checkDir(dir); err != nil {
+	if err := CheckDir(dir); err != nil {
 		return nil, err
 	}
 	// Only the holder of the lock may remove a stale socket; without it two
@@ -97,9 +97,9 @@ func (l *locked) Close() error {
 	return errors.Join(l.Listener.Close(), l.release())
 }
 
-// Dial connects only through a directory that checkDir accepts.
+// Dial connects only through a directory that CheckDir accepts.
 func Dial(path string, timeout time.Duration) (Conn, error) {
-	if err := checkDir(filepath.Dir(path)); err != nil {
+	if err := CheckDir(filepath.Dir(path)); err != nil {
 		return nil, err
 	}
 	c, err := net.DialTimeout("unix", path, timeout)
@@ -115,7 +115,7 @@ func Dial(path string, timeout time.Duration) (Conn, error) {
 // agent that runs it.
 func Notify(path string, timeout time.Duration, kind proto.Kind, body any) error {
 	deadline := time.Now().Add(timeout)
-	if err := checkDir(filepath.Dir(path)); err != nil {
+	if err := CheckDir(filepath.Dir(path)); err != nil {
 		return err
 	}
 	nc, err := net.DialTimeout("unix", path, timeout)

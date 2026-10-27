@@ -131,9 +131,9 @@ const errTailscaleSSH = "this address is answered by Tailscale SSH. Use matchblo
 // ErrTailscaleSSHConsole is the console refusal: Enter cannot take --address.
 const ErrTailscaleSSHConsole = "this address is answered by Tailscale SSH. Run tailscale set --ssh=false, then press Enter. Or quit and run matchblox pair --address with a host OpenSSH serves"
 
-// WarnTailscaleSSHGate tells builders that permanent paired keys are not
+// TailscaleGateMessage tells builders that permanent paired keys are not
 // held to the gate on the MagicDNS/:22 path while Tailscale SSH is on.
-const WarnTailscaleSSHGate = "Tailscale SSH is on: paired keys are not gated on this host's MagicDNS name or Tailscale IP on port 22 (tailscaled answers, not OpenSSH). Run tailscale set --ssh=false, or connect on an address and port OpenSSH serves."
+const TailscaleGateMessage = "Tailscale SSH is on: paired keys are not gated on this host's MagicDNS name or Tailscale IP on port 22 (tailscaled answers, not OpenSSH). Run tailscale set --ssh=false, or connect on an address and port OpenSSH serves."
 
 // TailscaleSSHOn is true when this host's Tailscale prefs have RunSSH.
 // A missing tool or prefs probe is false, never an error.
