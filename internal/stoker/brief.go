@@ -16,7 +16,7 @@ import (
 // line, as the brief lists them. Each goes through the service and its
 // guards.
 const Hands = "- `matchblox sessions --json`: every session: its `word` (asks, busy, idle, background, agents: read this, not the agent's own `status`), why it is idle (`reason`), its ship, context, plan %, account, parked or held.\n" +
-	"- `matchblox ships --json`: the pull requests the sessions drive, and the stage of each.\n" +
+	"- `matchblox ships --json`: the pull requests the sessions drive, the stage of each and the session that owns each now: `session` gives its `name`, `pane` and `since`, and has no `session_id` when no session owns it.\n" +
 	"- `matchblox usage --json`: each account's 5-hour and week windows.\n" +
 	"- `matchblox peek <session> [--lines n] [--json]`: what the session said last and the question it asks, if any. Read it before you answer or send again.\n" +
 	"- `matchblox send <session> \"<text>\"`: types a line and Enter into a session. `--pick <n>` answers the question it asks with option n.\n" +
@@ -39,6 +39,7 @@ func Brief(o Order, ways, cmds string, board Board) string {
 	fmt.Fprintf(&b, "# The stoker's brief, run %s\n\n", o.ID)
 	b.WriteString("You are the stoker. You keep the builder's sessions moving while they are away. " +
 		"You act only through the sessions, by messaging the session that owns the work, and only with the matchblox commands below. " +
+		"Message a session by its name, never by its pane: a pane goes to another session when one ends or resumes. " +
 		"You never merge, push, release, deploy or edit code yourself, you never interrupt anything, and you end a session only with `matchblox kill`.\n\n")
 
 	b.WriteString("## The order\n\n")

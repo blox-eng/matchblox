@@ -16,18 +16,30 @@ strongest first:
 
 A PR named only in what an agent wrote does not count, and neither does a
 PR's URL anywhere else in a command: in `curl`, `echo`, `gh api`, a
-commit message or a PR's body it is a mention. One PR belongs to
-the session with the strongest, then the newest evidence. The open PR of a
+commit message or a PR's body it is a mention. The open PR of a
 session's worktree counts too. Each transcript is read whole once, then
 only what it adds.
 
-A ship is shown on a session by its session id when both have one, else
-by its pane (also while the session's id is not read yet), so an agent
-started in a pane where another ran does not take that agent's ships. A
-Claude Code `/clear` starts a new session id: the ships from before it
-stay on the Ships tab but leave the session's row, and Enter and `a` on
-them say their agent no longer runs (not tested yet with a live
-`/clear`).
+## Which session owns it
+
+A ship names the session that owns it now. Matchblox finds the owner
+again on every sample, and never keeps a pane or a name:
+
+1. a session in a worktree on the PR's head branch owns it;
+2. else the session with the strongest, then the newest evidence owns it,
+   if it still runs;
+3. else no session owns it.
+
+So a session that moves to a new pane, resumes or changes branch takes its
+ships along. A pane that another session takes over takes none of them.
+`matchblox ships --json` gives the owner in `session`: its `name`, `pane`,
+`session_id` and `since`, when it became the owner. A ship that no session
+owns has no `name`, `pane` or `session_id`, and `since` says since when.
+Message the owner by its name, never by its pane.
+
+A Claude Code `/clear` starts a new session id. A ship that the old id
+found goes to the new one when it sits on the PR's branch, else it has no
+session.
 
 ## The track
 

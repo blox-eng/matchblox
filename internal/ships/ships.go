@@ -57,11 +57,14 @@ type Ship struct {
 	Merge []string `json:"merge,omitempty"`
 }
 
-// SessionRef names the session that drives a ship.
+// SessionRef names the session that drives a ship. On a ship it is the
+// session that owns it on this sample, with no pane or id when none does;
+// Since is when that began.
 type SessionRef struct {
-	Pane string `json:"pane"`
-	ID   string `json:"session_id"`
-	Name string `json:"name,omitempty"`
+	Pane  string    `json:"pane"`
+	ID    string    `json:"session_id"`
+	Name  string    `json:"name,omitempty"`
+	Since time.Time `json:"since,omitzero"`
 }
 
 // Input is what the service knows: the live sessions with their
@@ -171,6 +174,9 @@ type pr struct {
 	// that failed while it was never read.
 	Asked time.Time `json:"asked,omitzero"`
 	Fails int       `json:"fails,omitempty"`
+	// Owner is the session that owned it on the last sample: kept only
+	// for its Since.
+	Owner SessionRef `json:"owner,omitzero"`
 }
 
 func (p *pr) inFlight() bool {
@@ -284,6 +290,7 @@ func (t *Tracker) Scan(ctx context.Context, in Input) Report {
 	t.links(in, now)
 	t.prune(now)
 	t.poll(ctx, now)
+	t.own(ctx, in, now)
 	rep := t.report(now)
 	_ = t.save() // a full disk loses the offsets, not the ships on screen
 	return rep
@@ -419,6 +426,99 @@ func (t *Tracker) links(in Input, now time.Time) {
 			}
 		}
 	}
+}
+
+// own names the owner of each PR on this sample: a live session in a
+// worktree on its head branch, else the live session of its evidence,
+// else none. Panes and names come from the sample, never from memory: a
+// session resumes in a new pane, and another session takes its old one.
+func (t *Tracker) own(ctx context.Context, in Input, now time.Time) {
+	live := map[string]sample.Session{}
+	for _, s := range in.Sessions {
+		if s.SessionID != "" {
+			live[s.SessionID] = s
+		}
+	}
+	onBranch := t.onBranch(ctx, in, now)
+	for k, p := range t.st.PRs {
+		if p.Done {
+			continue
+		}
+		var ref SessionRef
+		s, ok := live[p.Claim.Session.ID]
+		if here := onBranch[k]; len(here) > 0 {
+			s, ok = pick(here, p.Claim.Session.ID), true
+		}
+		if ok {
+			ref = SessionRef{Pane: s.Pane, ID: s.SessionID, Name: s.Name}
+		}
+		ref.Since = p.Owner.Since
+		if ref.ID != p.Owner.ID || ref.ID == "" && ref.Pane != p.Owner.Pane || ref.Since.IsZero() {
+			ref.Since = now
+		}
+		if ref != p.Owner {
+			p.Owner, t.dirty = ref, true
+		}
+	}
+}
+
+// onBranch is the live sessions on each PR's head branch, by key: in the
+// worktree whose open PR it is, or whose branch is its head. A session
+// counts in its deepest worktree only.
+func (t *Tracker) onBranch(ctx context.Context, in Input, now time.Time) map[string][]sample.Session {
+	out := map[string][]sample.Session{}
+	if in.Git == nil {
+		return out
+	}
+	for _, s := range in.Sessions {
+		var at *gitscan.Worktree
+		var main string
+		for _, r := range in.Git.Repos {
+			for i, wt := range r.Worktrees {
+				inside := s.Cwd == wt.Path || strings.HasPrefix(s.Cwd, wt.Path+string(filepath.Separator))
+				if inside && (at == nil || len(wt.Path) > len(at.Path)) {
+					at, main = &r.Worktrees[i], r.Main
+				}
+			}
+		}
+		if at == nil {
+			continue
+		}
+		keys := map[string]bool{}
+		if at.PR != nil {
+			if m := pullURL.FindStringSubmatch(at.PR.URL); m != nil {
+				keys[key(m[1]+"/"+m[2], at.PR.Number)] = true
+			}
+		}
+		if at.Branch != "" && at.Branch != main {
+			if repo, _ := t.repoOf(ctx, at.Path, now); repo != "" {
+				for k, p := range t.st.PRs {
+					if p.Repo == strings.ToLower(repo) && p.Facts != nil && p.Facts.Head == at.Branch {
+						keys[k] = true
+					}
+				}
+			}
+		}
+		for k := range keys {
+			out[k] = append(out[k], s)
+		}
+	}
+	return out
+}
+
+// pick is the owner among the sessions on a PR's branch: the session of
+// its evidence, else the newest.
+func pick(ss []sample.Session, id string) sample.Session {
+	best := ss[0]
+	for _, s := range ss {
+		if s.SessionID != "" && s.SessionID == id {
+			return s
+		}
+		if s.Started.After(best.Started) {
+			best = s
+		}
+	}
+	return best
 }
 
 // repoOf names the GitHub repository of a directory by its remote: ""
@@ -728,9 +828,12 @@ func (t *Tracker) report(now time.Time) Report {
 
 func (t *Tracker) ship(p *pr, paused bool, now time.Time) Ship {
 	s := Ship{
-		Repo: p.Repo, Number: p.Number, Session: p.Claim.Session, Evidence: p.Claim.Kind,
+		Repo: p.Repo, Number: p.Number, Session: p.Owner, Evidence: p.Claim.Kind,
 		URL:  fmt.Sprintf("https://github.com/%s/pull/%d", p.Repo, p.Number),
 		Kind: Unknown, Since: p.Claim.At,
+	}
+	if p.Owner.ID != p.Claim.Session.ID && (p.Owner.ID != "" || p.Owner.Pane != "") {
+		s.Evidence = Branch // the evidence is another session's: this one owns it by its branch
 	}
 	if f := p.Facts; f != nil {
 		tr := track(*f, t.deploy(p.Repo), now)

@@ -139,7 +139,7 @@ func (s *Service) owns() map[string]stoker.Own {
 		}
 		if s.cur.Ships != nil {
 			for _, sh := range s.cur.Ships.Ships {
-				mine := sh.Session.Pane == se.Pane || sh.Session.ID != "" && sh.Session.ID == se.SessionID
+				mine := sh.Session.Pane != "" && sh.Session.Pane == se.Pane || sh.Session.ID != "" && sh.Session.ID == se.SessionID
 				if mine && sh.Number > 0 && sh.Evidence != ships.Acted && !slices.Contains(o.PRs, sh.Number) {
 					o.PRs = append(o.PRs, sh.Number)
 				}

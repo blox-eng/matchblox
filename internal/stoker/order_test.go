@@ -176,6 +176,10 @@ func TestBriefCarriesTheMachineNow(t *testing.T) {
 			t.Errorf("the brief lacks %q:\n%s", want, brief)
 		}
 	}
+	// #80: a pane changes hands, so the stoker names the owner, never its pane.
+	if !strings.Contains(brief, "Message a session by its name, never by its pane") || !strings.Contains(brief, "the session that owns each now") {
+		t.Errorf("the brief does not say to message the owner by name:\n%s", brief)
+	}
 	if strings.Contains(brief, "- stoker (%9)") {
 		t.Errorf("the stoker is told of itself:\n%s", brief)
 	}

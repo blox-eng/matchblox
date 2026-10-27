@@ -23,6 +23,15 @@ All notable changes to matchblox are in this file. The format follows
   agent or Tailscale SSH asks nothing. A failure stays on Hosts and says
   why. `matchblox connect` typed in a shell still asks in that terminal.
   Not tested yet with a real ssh on macOS. (#242)
+- **Each ship names the session that owns it now.** On every sample, a
+  session in a worktree on the PR's head branch owns it. Else the session
+  whose transcript found it owns it, if that session still runs, with its
+  pane and name of now. Else the ship has no session. A session that moves
+  pane, resumes or changes branch takes its ships along, and a pane that
+  another session takes over takes none. `ships --json` gives the owner's
+  `name`, `pane` and `since`, and the stoker messages a session by name,
+  never by pane.
+  ([#80](https://github.com/blox-eng/matchblox/issues/80))
 
 ## [0.26.0] - 2026-10-27
 
