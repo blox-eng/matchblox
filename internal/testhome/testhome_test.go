@@ -6,7 +6,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestMain(m *testing.M) {
@@ -116,4 +118,47 @@ func TestBuildersTmuxIsTheInheritedSocket(t *testing.T) {
 	if strings.Contains(os.Getenv("TMUX"), ",") {
 		t.Fatal("$TMUX is set in a test")
 	}
+}
+
+// envLeave asks the child test to leave a tmux server running.
+const envLeave = "MATCHBLOX_TEST_LEAVE_SERVER"
+
+// TestRunEndsTheServersItsTestsLeave: Run removes its $TMUX_TMPDIR when the
+// tests end. A server that a test leaves would keep running with its socket
+// gone, and no tmux could reach it any more. So Run ends it first.
+func TestRunEndsTheServersItsTestsLeave(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux is not installed")
+	}
+	child := exec.Command(os.Args[0], "-test.run=^TestLeaveAServer$", "-test.count=1") //nolint:gosec // this test binary
+	child.Env = append(os.Environ(), envLeave+"=1")
+	out, err := child.Output()
+	if err != nil {
+		t.Fatalf("the child test fails: %v\n%s", err, out)
+	}
+	var pid int
+	if _, err := fmt.Sscanf(string(out), "server pid %d", &pid); err != nil || pid <= 1 {
+		t.Fatalf("no server pid from the child: %q", out)
+	}
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+	deadline := time.Now().Add(5 * time.Second)
+	for syscall.Kill(pid, 0) == nil {
+		if time.Now().After(deadline) {
+			t.Fatalf("the server a test left (pid %d) still runs after Run removed its socket", pid)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestLeaveAServer is the child of TestRunEndsTheServersItsTestsLeave. It
+// starts a server and ends no server.
+func TestLeaveAServer(t *testing.T) {
+	if os.Getenv(envLeave) == "" {
+		t.Skip("runs as the child of TestRunEndsTheServersItsTestsLeave")
+	}
+	out, err := exec.Command("tmux", "-L", "left", "-f", os.DevNull, "new-session", "-d", "-s", "left", "sleep", "300", ";", "display-message", "-p", "#{pid}").Output() //nolint:gosec // test argv
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("server pid %s", out)
 }

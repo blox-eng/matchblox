@@ -12,8 +12,10 @@ All notable changes to matchblox are in this file. The format follows
   clears `$TMUX` and `$TMUX_PANE` and gives `$TMUX_TMPDIR` a new empty
   folder. A tmux with no socket in a test, or in the code it tests, then
   finds no server of yours: not the one `$TMUX` named, and not the default
-  one. Each tmux a test file starts also names its server. CI checks that
-  two sentinel servers, one of each kind, survive the whole suite.
+  one. A test that starts tmux names its server, unless the call is marked
+  as deliberate. A server a test leaves behind is ended with the test
+  binary. On Linux, CI checks that two sentinel servers, one of each kind,
+  survive the whole suite.
   ([#215](https://github.com/blox-eng/matchblox/issues/215))
 
 ## [0.26.2] - 2026-10-28

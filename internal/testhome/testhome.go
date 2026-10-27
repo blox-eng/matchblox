@@ -5,6 +5,7 @@ package testhome
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -47,7 +48,7 @@ func Run(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, "testhome:", err)
 		return 1
 	}
-	defer func() { _ = os.RemoveAll(own) }()
+	defer func() { endServers(own); _ = os.RemoveAll(own) }()
 	if err := os.Setenv("TMUX_TMPDIR", own); err != nil {
 		fmt.Fprintln(os.Stderr, "testhome:", err)
 		return 1
@@ -61,6 +62,15 @@ func Run(m *testing.M) int {
 // keeps the tests off: the default one, and the one $TMUX named. Only a
 // test that reads the builder's session names uses them, with tmux -S.
 var BuildersTmux []string
+
+// endServers ends each tmux server whose socket is in dir: one that a test
+// left. With its socket removed, no tmux could reach it any more.
+func endServers(dir string) {
+	socks, _ := filepath.Glob(filepath.Join(dir, "tmux-*", "*"))
+	for _, sock := range socks {
+		_ = exec.Command("tmux", "-S", sock, "kill-server").Run() //nolint:gosec // a socket of this test binary's own folder
+	}
+}
 
 // socketOf is the socket path in a $TMUX value: socket,pid,session. The
 // path itself can hold a comma.

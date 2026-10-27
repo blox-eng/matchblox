@@ -88,6 +88,14 @@ func TestTheRuleReadsCallsNotLines(t *testing.T) {
 		`exec.Command("tmux", "-V")`:                                           0,
 		`exec.Command("tmux", "kill-server") //nolint // ` + noSocket + ` why`: 0,
 		`exec.Command("git", "status")`:                                        0,
+		`exec.Command("tmux", "capture-pane", "-p", "-S", "-20")`:              1,
+		`exec.Command("tmux", "select-pane", "-L")`:                            1,
+		`exec.Command("tmux", "-f", "-L", "kill-server")`:                      1,
+		`exec.Command("tmux", "-u", "-f", os.DevNull, "-L", sock, "ls")`:       0,
+		`exec.Command("tmux", flags, "kill-server")`:                           1,
+		`exec.Command("sh", "-c", "tmux kill-server")`:                         1,
+		`exec.Command("bash", "-c", "x; tmux -L t ls; tmux kill-server")`:      1,
+		`exec.Command("sh", "-c", "exec tmux -L t attach")`:                    0,
 	} {
 		fset := token.NewFileSet()
 		f, err := parser.ParseFile(fset, "x_test.go", "package x\nfunc f() {\n"+src+"\n}\n", parser.ParseComments)
@@ -113,10 +121,23 @@ func TestTheRuleReadsCallsNotLines(t *testing.T) {
 	}
 }
 
+// tmuxCall is a tmux that a test starts: its exec call, and its arguments
+// after the program. A token that is not a string literal is unknown.
+type tmuxCall struct {
+	call *ast.CallExpr
+	args []tmuxArg
+}
+
+type tmuxArg struct {
+	value string
+	known bool
+}
+
 // tmuxCalls are the exec.Command and exec.CommandContext calls of f whose
-// program is the literal "tmux".
-func tmuxCalls(f *ast.File) []*ast.CallExpr {
-	var calls []*ast.CallExpr
+// program is the literal "tmux", or sh or bash -c with a script that runs
+// tmux: each tmux of the script is a call of its own.
+func tmuxCalls(f *ast.File) []tmuxCall {
+	var calls []tmuxCall
 	ast.Inspect(f, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
@@ -134,16 +155,71 @@ func tmuxCalls(f *ast.File) []*ast.CallExpr {
 		default:
 			return true
 		}
-		if len(call.Args) > prog && literal(call.Args[prog]) == "tmux" {
-			calls = append(calls, call)
+		if len(call.Args) <= prog {
+			return true
+		}
+		switch literal(call.Args[prog]) {
+		case "tmux":
+			calls = append(calls, tmuxCall{call, tokens(call.Args[prog+1:])})
+		case "sh", "bash":
+			if len(call.Args) > prog+2 && literal(call.Args[prog+1]) == "-c" {
+				words := strings.Fields(literal(call.Args[prog+2]))
+				for i, w := range words {
+					if w == "tmux" {
+						args := []tmuxArg{}
+						for _, a := range words[i+1:] {
+							args = append(args, tmuxArg{strings.TrimRight(a, ";"), true})
+						}
+						calls = append(calls, tmuxCall{call, args})
+					}
+				}
+			}
 		}
 		return true
 	})
 	return calls
 }
 
-// unnamedTmux are the lines of the tmux calls of f that pass no -L, -S or
-// -V, and carry no noSocket comment.
+// tokens are the arguments of a call, with append([]string{…}, …) read
+// as its literal elements first.
+func tokens(args []ast.Expr) []tmuxArg {
+	var out []tmuxArg
+	for _, a := range args {
+		if app, ok := a.(*ast.CallExpr); ok && fmt.Sprint(app.Fun) == "append" && len(app.Args) > 0 {
+			if lit, ok := app.Args[0].(*ast.CompositeLit); ok {
+				out = append(out, tokens(lit.Elts)...)
+			}
+			out = append(out, tmuxArg{})
+			continue
+		}
+		v := literal(a)
+		out = append(out, tmuxArg{v, v != ""})
+	}
+	return out
+}
+
+// namesServer tells if tmux's global flags, which come before its command,
+// hold -L or -S, or -V, which asks no server. A -S after the command is the
+// command's own flag, as in capture-pane -S.
+func namesServer(args []tmuxArg) bool {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case !a.known:
+			return false
+		case a.value == "-L" || a.value == "-S" || a.value == "-V":
+			return true
+		case a.value == "-c" || a.value == "-f" || a.value == "-T":
+			i++ // the flag's value
+		case !strings.HasPrefix(a.value, "-"):
+			return false // the command
+		}
+	}
+	return false
+}
+
+// unnamedTmux are the lines of the tmux calls of f that name no server,
+// and carry no noSocket comment.
 func unnamedTmux(fset *token.FileSet, f *ast.File) []int {
 	marked := map[int]bool{}
 	for _, g := range f.Comments {
@@ -154,19 +230,9 @@ func unnamedTmux(fset *token.FileSet, f *ast.File) []int {
 		}
 	}
 	var bad []int
-	for _, call := range tmuxCalls(f) {
-		named := false
-		for _, arg := range call.Args {
-			ast.Inspect(arg, func(n ast.Node) bool {
-				switch literal(n) {
-				case "-L", "-S", "-V":
-					named = true
-				}
-				return !named
-			})
-		}
-		from, to := fset.Position(call.Pos()).Line, fset.Position(call.End()).Line
-		if !named && !marked[from] && !marked[to] {
+	for _, c := range tmuxCalls(f) {
+		from, to := fset.Position(c.call.Pos()).Line, fset.Position(c.call.End()).Line
+		if !namesServer(c.args) && !marked[from] && !marked[to] {
 			bad = append(bad, from)
 		}
 	}
