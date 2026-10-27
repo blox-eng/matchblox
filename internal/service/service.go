@@ -620,7 +620,7 @@ func (s *Service) mergeQueue() {
 }
 
 // setReasons says why each session at rest is idle. The ship of a session is
-// the one the console finds: by pane, then by session id. Hold s.mu.
+// the one its row leads with (ships.Of). Hold s.mu.
 func (s *Service) setReasons() {
 	now := s.cur.At
 	if now.IsZero() {
@@ -649,15 +649,14 @@ func (s *Service) setReasons() {
 	s.cur.Reasons = reasons
 }
 
-// shipOf is the ship a session drives, as the console finds it. Hold s.mu.
+// shipOf is the ship a session drives that its row leads with, as the
+// console finds it (ships.Of). Hold s.mu.
 func (s *Service) shipOf(sess sample.Session) *ships.Ship {
 	if s.cur.Ships == nil {
 		return nil
 	}
-	for i, sh := range s.cur.Ships.Ships {
-		if sh.Session.Pane != "" && sh.Session.Pane == sess.Pane || sh.Session.ID != "" && sh.Session.ID == sess.SessionID {
-			return &s.cur.Ships.Ships[i]
-		}
+	if ss := ships.Of(s.cur.Ships.Ships, sess.Pane, sess.SessionID); len(ss) > 0 {
+		return &ss[0]
 	}
 	return nil
 }

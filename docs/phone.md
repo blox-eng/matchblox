@@ -256,7 +256,7 @@ columns or more, the list sits on the left and the selected agent's detail
 in a drawer on the right, and the dock shows two panels side by side. On its side it
 goes by its width. Under 60 columns, the console has one column. Each agent is one line,
 grouped by what it needs from you: who waits first. The selected one opens
-in place: what it said last, its ship, its plan and its keys. Only
+in place: what it said last, its ships, its plan and its keys. Only
 the selected setup step shows its detail.
 
 Under the list, when there is room, the dock shows usage, the machine or

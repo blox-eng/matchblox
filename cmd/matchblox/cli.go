@@ -132,15 +132,14 @@ func stageName(n int) string {
 	return stageNames[n]
 }
 
-// shipOf is the ship a session drives, found by pane and then session id.
+// shipOf is the ship a session drives that the console's row leads with
+// (ships.Of).
 func shipOf(doc state.Doc, s sample.Session) *ships.Ship {
 	if doc.Ships == nil {
 		return nil
 	}
-	for i, sh := range doc.Ships.Ships {
-		if sh.Session.Pane != "" && sh.Session.Pane == s.Pane || sh.Session.ID != "" && sh.Session.ID == s.SessionID {
-			return &doc.Ships.Ships[i]
-		}
+	if ss := ships.Of(doc.Ships.Ships, s.Pane, s.SessionID); len(ss) > 0 {
+		return &ss[0]
 	}
 	return nil
 }

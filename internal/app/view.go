@@ -228,7 +228,7 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		sc.lines, sc.rows = append(sc.lines, line), append(sc.rows, row)
 	}
-	m.markActKeys(&sc, vis, detail, room, detailW, inline)
+	m.markActKeys(&sc, b, vis, detail, room, detailW, inline)
 	if len(d.lines) > 0 {
 		sc.dockAt, sc.dockH, sc.stx0, sc.stx1 = len(sc.lines)+1, len(d.lines), d.stx0, d.stx1
 		sc.lines = append(append(sc.lines, m.st.hair.Render(strings.Repeat("─", w))), d.lines...)
@@ -250,8 +250,10 @@ func (m Model) drawScreen(w int) drawn {
 }
 
 // markActKeys finds the selected session's own keys: the last line of its
-// opened row on a phone, the last line of its detail beside the list.
-func (m Model) markActKeys(sc *drawn, vis body, detail []string, room, detailW int, inline bool) {
+// opened row on a phone, the last line of its detail beside the list. An
+// opened row cut by the screen has no keys to tap: its last line is not
+// theirs.
+func (m Model) markActKeys(sc *drawn, b, vis body, detail []string, room, detailW int, inline bool) {
 	s, ok := m.selectedSession()
 	if !ok || m.tab != tabSessions {
 		return
@@ -261,13 +263,18 @@ func (m Model) markActKeys(sc *drawn, vis body, detail []string, room, detailW i
 		_, spans := m.detailKeys(s)
 		sc.actKeysAt, sc.actKeys = sc.bodyTop+len(detail)-1, shift(spans, sc.listW+1)
 	case detailW == 0 && m.layoutAt(m.width) == Narrow:
-		last := -1
+		last, shown, all := -1, 0, 0
 		for i, r := range vis.rows {
 			if r == m.rowIndex() {
-				last = i
+				last, shown = i, shown+1
 			}
 		}
-		if last > 0 && vis.rows[last-1] == m.rowIndex() { // opened: more than its one line
+		for _, r := range b.rows {
+			if r == m.rowIndex() {
+				all++
+			}
+		}
+		if last > 0 && vis.rows[last-1] == m.rowIndex() && shown == all { // opened, and whole
 			_, spans := m.openedKeys(s, sc.listW)
 			sc.actKeysAt, sc.actKeys = sc.bodyTop+last, spans
 		}

@@ -21,6 +21,14 @@ the session with the strongest, then the newest evidence. The open PR of a
 session's worktree counts too. Each transcript is read whole once, then
 only what it adds.
 
+A ship is shown on a session by its session id when both have one, else
+by its pane (also while the session's id is not read yet), so an agent
+started in a pane where another ran does not take that agent's ships. A
+Claude Code `/clear` starts a new session id: the ships from before it
+stay on the Ships tab but leave the session's row, and Enter and `a` on
+them say their agent no longer runs (not tested yet with a live
+`/clear`).
+
 ## The track
 
 ```
@@ -72,7 +80,8 @@ To count only the workflows that deploy a repository, name them in the
 
 On a phone the selected ship adds who drives it and its keys. Wider, the
 detail beside the list shows the five stages with their times, and the
-PR's URL. A session's row and detail show its ship too.
+PR's URL. A session's row shows its ship too, with a count of the others
+it drives (`+1 merged`), and its detail lists the first three.
 
 ## Reading GitHub
 
