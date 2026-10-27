@@ -23,7 +23,7 @@
 │   Are you sure you want to continue      │
 │   connecting (yes/no/[fingerprint])?     │
 │                                          │
-│   › y▏                                   │
+│   › •▏                                   │
 │   ! type yes or no, then ⏎               │
 │                                          │
 ╰─ ⏎ answer ─ esc cancel the ssh ──────────╯

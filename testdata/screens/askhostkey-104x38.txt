@@ -21,7 +21,7 @@
  ○ Clear flint-a│   Are you sure you want to continue connecting                       │
  ○ Clear ember-b│   (yes/no/[fingerprint])?                                            │
  ○ Clear wick-mo│                                                                      │A switch agent
-────────────────│   › y▏                                                               │────────────────
+────────────────│   › •▏                                                               │────────────────
  USAGE          │   ! type yes or no, then ⏎                                           │       16 cores
  ✻ Claude Max   │                                                                      │
                 ╰─ ⏎ answer ─ esc cancel the ssh ──────────────────────────────────────╯GB
