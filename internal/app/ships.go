@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ const (
 	shipWaits   = "waits-for-you"
 	shipStuck   = "stuck"
 	shipDone    = "done"
+	stageMerged = 3
 	stageLive   = 4
 )
 
@@ -43,15 +45,71 @@ func (m Model) selectedShip() (proto.Ship, bool) {
 	return ss[min(m.shipSel, len(ss)-1)], true
 }
 
-// shipOf is the ship a session drives: one in flight before one that went
-// live.
-func (m Model) shipOf(s sample.Session) (proto.Ship, bool) {
+// shipsOf are the ships a session drives, the one that most needs you
+// first: stuck, waiting for you, in flight, merged, then live. Ships of a
+// rank keep the report's order.
+func (m Model) shipsOf(s sample.Session) []proto.Ship {
+	var out []proto.Ship
 	for _, sh := range m.ships() {
 		if sh.Session.Pane != "" && sh.Session.Pane == s.Pane || sh.Session.ID != "" && sh.Session.ID == s.SessionID {
-			return sh, true
+			out = append(out, sh)
 		}
 	}
+	slices.SortStableFunc(out, func(a, b proto.Ship) int { return shipRank(a) - shipRank(b) })
+	return out
+}
+
+// shipRank is where a ship stands among its session's: a merged ship still
+// deploying runs, so the stage tells it from one in flight.
+func shipRank(sh proto.Ship) int {
+	switch {
+	case sh.Kind == shipStuck:
+		return 0
+	case sh.Kind == shipWaits:
+		return 1
+	case sh.Stage < stageMerged:
+		return 2
+	case sh.Stage < stageLive:
+		return 3
+	}
+	return 4
+}
+
+// shipOf is the ship a session's row leads with.
+func (m Model) shipOf(s sample.Session) (proto.Ship, bool) {
+	if ss := m.shipsOf(s); len(ss) > 0 {
+		return ss[0], true
+	}
 	return proto.Ship{}, false
+}
+
+// shipsMore is what a row says after its ship when the session drives
+// others: " +1 merged", naming the most advanced stage of the others, or
+// " +1" when short is set.
+func (m Model) shipsMore(s sample.Session, short bool) string {
+	ss := m.shipsOf(s)
+	if len(ss) < 2 {
+		return ""
+	}
+	more := " +" + strconv.Itoa(len(ss)-1)
+	if short {
+		return more
+	}
+	stage := 0
+	for _, sh := range ss[1:] {
+		stage = max(stage, sh.Stage)
+	}
+	return more + " " + stageNames[stage]
+}
+
+// moreW is the room the rows' counts take: the widest full count, or the
+// widest short one when short is set.
+func (m Model) moreW(short bool) int {
+	w := 0
+	for _, s := range m.snap.Sessions {
+		w = max(w, lipgloss.Width(m.shipsMore(s, short)))
+	}
+	return w
 }
 
 // driver is the session that drives a ship.
@@ -347,15 +405,22 @@ func (m Model) mergeShip() *action {
 		rec: "ship:" + sh.Repo + "#" + strconv.Itoa(sh.Number), which: "secondary"}
 }
 
-// shipDetailLine is a session's ship in its detail: the track and note,
-// then the title and the URL.
+// shipField is a session's ships in its detail, in the row's order: each
+// one's track and note, then its title and URL.
 func (m Model) shipField(s sample.Session, w int) []string {
 	st := m.st
-	if sh, ok := m.shipOf(s); ok {
-		out := []string{fit(" "+st.label.Render(pad("ship", 9))+m.shipCell(sh, true), w),
-			fit(" "+pad("", 9)+st.text.Render(sh.Title), w)}
-		if sh.URL != "" {
-			out = append(out, fit(" "+pad("", 9)+st.faint.Render(sh.URL), w))
+	if ss := m.shipsOf(s); len(ss) > 0 {
+		var out []string
+		for i, sh := range ss {
+			label := ""
+			if i == 0 {
+				label = "ship"
+			}
+			out = append(out, fit(" "+st.label.Render(pad(label, 9))+m.shipCell(sh, true), w),
+				fit(" "+pad("", 9)+st.text.Render(sh.Title), w))
+			if sh.URL != "" {
+				out = append(out, fit(" "+pad("", 9)+st.faint.Render(sh.URL), w))
+			}
 		}
 		return out
 	}
@@ -374,11 +439,18 @@ func (m Model) shipField(s sample.Session, w int) []string {
 	return out
 }
 
-// shipRowCell is the desk row's ship: "#4551 ●━◉┄○┄○", or the number of
+// shipRowCell is the desk row's ship in w cells: "#4551 ●━◉┄○┄○ +1
+// merged", the count shorter or gone when w is narrow, or the number of
 // the worktree's open PR when no ship is read.
-func (m Model) shipRowCell(s sample.Session) string {
+func (m Model) shipRowCell(s sample.Session, w int) string {
 	if sh, ok := m.shipOf(s); ok {
-		return m.shipCell(sh, false)
+		cell := m.shipCell(sh, false)
+		for _, short := range []bool{false, true} {
+			if more := m.shipsMore(s, short); more != "" && lipgloss.Width(cell+more) <= w {
+				return cell + m.st.muted.Render(more)
+			}
+		}
+		return cell
 	}
 	if p := m.prOf(s.Cwd); p != nil {
 		return m.st.accent.Render("#" + strconv.Itoa(p.Number))
@@ -386,20 +458,25 @@ func (m Model) shipRowCell(s sample.Session) string {
 	return ""
 }
 
-// shipOpened is a phone's opened row's ship: "#4545 ●━✕┄○┄○ conflicts with
-// main", or the worktree's PR and its title.
-func (m Model) shipOpened(s sample.Session, w int) string {
+// shipOpened is a phone's opened row's ships: "#4545 ●━✕┄○┄○ conflicts
+// with main", a line each in the row's order, or the worktree's PR and its
+// title.
+func (m Model) shipOpened(s sample.Session, w int) []string {
 	st := m.st
-	if sh, ok := m.shipOf(s); ok {
-		return ansi.Truncate("   "+m.shipCell(sh, true), w, "…")
+	if ss := m.shipsOf(s); len(ss) > 0 {
+		var out []string
+		for _, sh := range ss {
+			out = append(out, ansi.Truncate("   "+m.shipCell(sh, true), w, "…"))
+		}
+		return out
 	}
 	p := m.prOf(s.Cwd)
 	if p == nil {
-		return ""
+		return nil
 	}
 	title := p.Title
 	if p.Draft {
 		title = "draft " + title
 	}
-	return "   " + st.accent.Render("#"+strconv.Itoa(p.Number)) + " " + st.muted.Render(title)
+	return []string{"   " + st.accent.Render("#"+strconv.Itoa(p.Number)) + " " + st.muted.Render(title)}
 }

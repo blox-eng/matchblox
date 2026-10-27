@@ -484,9 +484,9 @@ func (m Model) sessionRow(s sample.Session, sel bool, w int) []string {
 	if t.where > 0 {
 		// The ship's track takes the room of the place when ships are read:
 		// the detail names the place.
-		where := padTo(m.shipRowCell(s), 7) + st.muted.Render(place(s.Target, s.Pane))
+		where := padTo(m.shipRowCell(s, 7), 7) + st.muted.Render(place(s.Target, s.Pane))
 		if len(m.ships()) > 0 {
-			where = m.shipRowCell(s)
+			where = m.shipRowCell(s, t.where)
 		}
 		line += padTo(where, t.where)
 	}
@@ -547,11 +547,19 @@ func (m Model) sessTracks(w int) tracks {
 		return t
 	}
 	t.wide, t.plan = true, 15
-	t.where = 7 + 16 // the pull request and the place
-	if len(m.ships()) > 0 {
-		t.where = m.numW() + 1 + trackW
-	}
 	fixed := 3 + t.word + t.wait + t.ctx + 1 // the mark, the match, the columns and a margin
+	t.where = 7 + 16                         // the pull request and the place
+	if len(m.ships()) > 0 {
+		// The count of a session's other ships takes what room the name
+		// can spare, shorter first, before the ship goes.
+		t.where = m.numW() + 1 + trackW
+		for _, short := range []bool{false, true} {
+			if more := m.moreW(short); w-fixed-t.plan-t.where-more >= 12 {
+				t.where += more
+				break
+			}
+		}
+	}
 	if w-fixed-t.plan-t.where < 12 {
 		t.where = 0
 	}
@@ -581,9 +589,7 @@ func (m Model) opened(s sample.Session, w int) []string {
 			out = append(out, "   "+st.muted.Render(l))
 		}
 	}
-	if l := m.shipOpened(s, w); l != "" {
-		out = append(out, l)
-	}
+	out = append(out, m.shipOpened(s, w)...)
 	left := "  "
 	if p := s.Progress; p != nil {
 		full := min(max((p.Pct*5+50)/100, 0), 5)

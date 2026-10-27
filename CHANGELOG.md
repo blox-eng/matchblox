@@ -6,6 +6,17 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **A session's row counts every pull request it drives, not only the
+  first.** The row leads with the ship that most needs you (stuck, then
+  waiting for you, in flight, merged, live) and adds `+1 merged`, or `+2`
+  when the row is narrow, naming the furthest stage of the others. The
+  count folds away before the track or the number. The detail, and the
+  opened row on a phone, list every ship of the session, each with its
+  track. A list where each session has one ship looks as it did. `matchblox sessions
+  --json` still gives one ship. (#235)
+
 ## [0.25.1] - 2026-10-27
 
 ### Added

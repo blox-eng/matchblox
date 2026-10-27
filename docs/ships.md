@@ -72,7 +72,8 @@ To count only the workflows that deploy a repository, name them in the
 
 On a phone the selected ship adds who drives it and its keys. Wider, the
 detail beside the list shows the five stages with their times, and the
-PR's URL. A session's row and detail show its ship too.
+PR's URL. A session's row shows its ship too, with a count of the others
+it drives (`+1 merged`), and its detail lists them all.
 
 ## Reading GitHub
 
