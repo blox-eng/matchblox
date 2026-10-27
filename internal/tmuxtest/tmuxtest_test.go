@@ -44,7 +44,8 @@ func TestEveryTestTmuxNamesItsServer(t *testing.T) {
 		}
 		rel, _ := filepath.Rel(root, path)
 		test := strings.HasSuffix(path, "_test.go")
-		if !test && !(strings.HasSuffix(path, ".go") && filepath.Dir(rel) == filepath.Join("internal", "tmuxtest")) {
+		helper := strings.HasSuffix(path, ".go") && filepath.Dir(rel) == filepath.Join("internal", "tmuxtest") // tmuxtest is test code
+		if !test && !helper {
 			return nil
 		}
 		fset := token.NewFileSet()
