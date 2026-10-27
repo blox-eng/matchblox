@@ -142,6 +142,8 @@ func (m Model) checkLogin() (Model, tea.Cmd) {
 		m.flash = m.masterRefusal(err)
 	case m.opt.Ask == nil && m.opt.NoAsk != "":
 		m.flash = "jumps to " + m.opt.Host + " ask your login in the terminal: " + m.opt.NoAsk
+	case !m.opt.OutsideTmux && m.opt.Prefix != nil && m.opt.Prefix() != "" && !remote.PrefixKey(m.opt.Prefix()):
+		m.flash = "jumps to " + m.opt.Host + " answer C-b, not your tmux prefix " + m.opt.Prefix() + ": a jump binds one key with C-, M- or C-M-"
 	}
 	host, check, gen := m.opt.Host, m.checker(), m.opt.Gen
 	argv := remote.CheckArgv(host, dir)

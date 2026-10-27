@@ -40,7 +40,7 @@ const MinHostTmux = "3.2"
 var (
 	idRE     = regexp.MustCompile(`^[0-9a-f]{8}$`)
 	homeRE   = regexp.MustCompile(`^[A-Za-z0-9_@\[\]-]+$`)
-	prefixRE = regexp.MustCompile(`^(C-|M-|C-M-)?[A-Za-z0-9\]^_@\[]$`)
+	prefixRE = regexp.MustCompile("^(C-|M-|C-M-)?([A-Za-z0-9\\]^_@\\[`]|Space)$")
 )
 
 // NewJumpID is 8 random hex digits.
@@ -66,7 +66,7 @@ func KeyTable(id string) string { return "matchblox-host-" + id }
 func JumpSessionName(id string) string { return "matchblox-jump-" + id }
 
 // PrefixKey is a tmux key name that is safe in a tmux command and a format
-// string: one character, with the C-, M- or C-M- modifier.
+// string: one character or Space, with the C-, M- or C-M- modifier.
 func PrefixKey(s string) bool { return prefixRE.MatchString(s) }
 
 // JumpAllowed is what a jump may be: every value in a command that tmux

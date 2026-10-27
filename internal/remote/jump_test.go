@@ -132,8 +132,9 @@ func TestJumpAllowed(t *testing.T) {
 
 func TestPrefixKey(t *testing.T) {
 	for s, want := range map[string]bool{
-		"C-b": true, "C-a": true, "M-a": true, "C-M-a": true, "`": false, "]": true, "C-]": true,
-		"None": false, "C-bb": false, "": false, "C- ": false, "'": false,
+		"C-b": true, "C-a": true, "M-a": true, "C-M-a": true, "`": true, "]": true, "C-]": true,
+		"C-Space": true, "M-Space": true, "C-M-Space": true,
+		"None": false, "C-bb": false, "": false, "C- ": false, "'": false, "C-Spacex": false, "#": false, ";": false,
 	} {
 		if got := PrefixKey(s); got != want {
 			t.Errorf("PrefixKey(%q) = %v, want %v", s, got, want)

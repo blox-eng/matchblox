@@ -342,17 +342,27 @@ func TestJumpWayBackTap(t *testing.T) {
 }
 
 func TestJumpWayBackWithPrefixCa(t *testing.T) {
+	for _, c := range []struct{ prefix, key string }{
+		{"C-a", "\x01"},
+		{"C-Space", "\x00"},
+		{"`", "`"},
+	} {
+		t.Run(c.prefix, func(t *testing.T) { wayBackWithPrefix(t, c.prefix, c.key) })
+	}
+}
+
+func wayBackWithPrefix(t *testing.T, prefix, key string) {
 	e := newJumpEnv(t)
-	mustTmux(t, e.outer, "set-option", "-g", "prefix", "C-a")
-	mustTmux(t, e.outer, "bind-key", "C-a", "send-prefix")
+	mustTmux(t, e.outer, "set-option", "-g", "prefix", prefix)
+	mustTmux(t, e.outer, "bind-key", prefix, "send-prefix")
 	c := attach(t, e.outer, "matchblox")
 	j := e.newJump("0a1b2c3d")
-	j.Prefix = "C-a"
+	j.Prefix = prefix
 	e.jump(t, c, j, e.ssh)
 	s, g := HostSessionName(j.Host, j.ID), JumpSessionName(j.ID)
 	c.waitSession(s)
 	waitFor(t, "the jump is attached", func() bool { return len(clientsOf(e.inner, g)) == 1 })
-	c.type_("\x01", "\x01", "m") // the outer tmux takes the first C-a (bind C-a send-prefix), the host the second
+	c.type_(key, key, "m") // the outer tmux takes the first prefix (bind send-prefix), the host the second
 	c.waitSession("matchblox")
 	waitFor(t, "both jump sessions are gone", func() bool {
 		return !hasSession(e.outer, s) && !hasSession(e.inner, g)

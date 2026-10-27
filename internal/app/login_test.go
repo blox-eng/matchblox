@@ -635,3 +635,20 @@ func TestMasterWhyNamesAFixThatWorks(t *testing.T) {
 		t.Errorf("masterWhy = %q", got)
 	}
 }
+
+// TestPrefixFallbackSaysSo: a tmux prefix a jump cannot bind becomes C-b
+// for the host's keys; the console says so once, at the check, not later
+// in a jump that answers to another key.
+func TestPrefixFallbackSaysSo(t *testing.T) {
+	m, _, _ := checkedHost(t, fixtureState(), "", 0)
+	m.opt.Prefix = func() string { return "C-F1" }
+	next, _ := m.Update(hostHello("3.4"))
+	if f := next.(Model).flash; !strings.Contains(f, "C-F1") || !strings.Contains(f, "C-b") {
+		t.Fatalf("flash %q", f)
+	}
+	m, _, _ = checkedHost(t, fixtureState(), "", 0)
+	m.opt.Prefix = func() string { return "C-Space" }
+	if next, _ := m.Update(hostHello("3.4")); next.(Model).flash != "" {
+		t.Fatalf("a prefix a jump binds: flash %q", next.(Model).flash)
+	}
+}
