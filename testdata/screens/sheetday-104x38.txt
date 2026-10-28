@@ -10,18 +10,18 @@
  ╿ wick-mobile                             done       0s    6% │ install page.
  WORKING · 1                                                   │
  ✦ hearth-api                              busy            79% │ context  ▰▰▰▰▰▰▰▰▰▱ 88%
-                                                               │ plan     ▰▰▰▰▰▰▰▰▰▰ 100%  docs for the…
- 1 without an agent: shell:1.1 zsh                             │ ship     #4540 ●━●━●━●━●  live
-                     ╭─ New order ────────────────────────────────────────────────╮ocs
- RECOMMENDATIONS · 7 │ How should I run?                                          │ithub.com/hearth/spa…
- ▲ The week runs shor│                                                            │le 9m (clear after 0…
- ○ Clear spark-docs (│ › ▏                                                        │0k tokens · +0k in
- ○ Clear kindle-web (│                                                            │ample.com · Max ·
- ○ Clear cinder-ci (%│ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │ss · started 3h20m
- ○ Clear flint-auth (│ ways merge-order  priority  release-train  triage          │
- ○ Clear ember-billin╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
- ○ Clear wick-mobile (%7)                                      │ a answer   ⏎ open it   A switch agent
-                                                               │
+ + start a new session                                         │ plan     ▰▰▰▰▰▰▰▰▰▰ 100%  docs for the…
+                                                               │ ship     #4540 ●━●━●━●━●  live
+ 1 without an agent: ╭─ New order ────────────────────────────────────────────────╮ocs
+                     │ How should I run?                                          │ithub.com/hearth/spa…
+ RECOMMENDATIONS · 7 │                                                            │le 9m (clear after 0…
+ ▲ The week runs shor│ › ▏                                                        │0k tokens · +0k in
+ ○ Clear spark-docs (│                                                            │ample.com · Max ·
+ ○ Clear kindle-web (│ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │ss · started 3h20m
+ ○ Clear cinder-ci (%│ ways merge-order  priority  release-train  triage          │
+ ○ Clear flint-auth (╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
+ ○ Clear ember-billing (%8)                                    │ a answer   ⏎ open it   A switch agent
+ ○ Clear wick-mobile (%7)                                      │
                                                                │
                                                                │
                                                                │

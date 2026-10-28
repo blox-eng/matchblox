@@ -17,11 +17,11 @@
  ╿ wick-mobile           done      0s    6%
  WORKING · 1
  ✦ hearth-api            busy           79%
+ + start a new session
 
  1 without an agent: shell:1.1 zsh
 
  RECOMMENDATIONS · 7 · h hides
- ▲ The week runs short: compact spark-docs
 ╭─ Rename spark-docs ──────────────────────╮
 │ name   › docs-1-0▏                       │
 │                                          │

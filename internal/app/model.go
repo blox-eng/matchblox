@@ -90,6 +90,10 @@ type Options struct {
 	// Keys finds and sets up the builder's own key for the login to the
 	// host (design §3.3). Nil: the console offers no key.
 	Keys *Keys
+	// Here is the root of the Git repo the console was launched in; "" when
+	// it was launched elsewhere, or over SSH and from the phone, where the
+	// launch folder means nothing. Sessions' ghost row starts there.
+	Here string
 	// Host is the host this console reaches over SSH; "" is this machine.
 	// Its tmux moves and door commands run there, with the builder's own
 	// ssh login.
@@ -191,6 +195,8 @@ type action struct {
 	previewAct  string                      // switch evidence request; confirmation waits for it
 	preview     string                      // checked evidence excerpt for switch consent
 	climb       *climb                      // a rung of the key ladder
+	ghost       bool                        // a ghost row of Sessions: it opens N on where
+	where       string                      // a ghost row: the folder N opens on ("": N as it is)
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -288,6 +294,7 @@ type Model struct {
 	selPID     int
 	orphanPID  int
 	recPick    string // the selected recommendation, above the sessions
+	ghostPick  int    // the ghost row picked in Sessions, from 1; 0 is none
 	chose      bool   // a session was picked; before, the first that waits is
 	gitSel     int
 	shipReport *proto.Ships
@@ -384,6 +391,7 @@ type Model struct {
 	used   proto.Used
 	wrepos []whereRepo
 	wfrom  []string
+	wghost []whereRepo // the ghost rows' repos, built with wrepos
 	// clones are the clones the service runs and the ones that ended in
 	// the last minute (#176).
 	clones []proto.Clone
@@ -617,6 +625,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if from := m.whereFrom(); st.Found != nil || st.Used != nil || !slices.Equal(from, m.wfrom) {
 			m.wrepos, m.wfrom = m.whereRepos(), from
+			m.wghost = m.ghostRepos()
 		}
 		m.clones = st.Clones
 		m.push = st.Push
@@ -912,7 +921,7 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	}
 	m.setTab(tabSessions)
 	m.pending, m.peek = nil, nil
-	m.doorPick, m.recPick, m.chose, m.selPID = "", "", true, s.PID
+	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, s.PID
 	if s.Pane == "" {
 		return m, nil // outside tmux: no pane to open
 	}
@@ -1177,6 +1186,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if a := m.primary(); a != nil && a.pair {
 			return m.openPairDoor()
+		}
+		if a := m.primary(); a != nil && a.ghost {
+			return m.openNewIn(a.where, ""), nil
 		}
 		m.pending, m.previewTop = m.primary(), 0
 	case bkey.Matches(k, mk.Second):
@@ -1458,7 +1470,7 @@ func (m Model) nextAfter(pane string) Model {
 	} {
 		for k := 1; k < len(ss); k++ {
 			if s := ss[(at+k)%len(ss)]; want(s) {
-				m.chose, m.selPID = true, s.PID
+				m.ghostPick, m.chose, m.selPID = 0, true, s.PID
 				return m
 			}
 		}

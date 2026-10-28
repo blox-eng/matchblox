@@ -10,8 +10,9 @@
  ╿ wick-mobile              done       0s    6%  ▲ clear                      ││ Should a refresh also rotate the token?           │
  WORKING · 1                                                                  ││ › 1 Rotate it  the old one stops at once          │
  ✦ hearth-api               busy            79%  ▰▰▰▱▱ 60%    #4551 ●━◉┄○┄○┄○ ││   2 Rotate, keep the old one a minute             │
-                                                                              ││   3 Keep the token                                │
- 1 without an agent: shell:1.1 zsh                                            ││   4 Type an answer…                               │
+ + start a new session                                                        ││   3 Keep the token                                │
+                                                                              ││   4 Type an answer…                               │
+ 1 without an agent: shell:1.1 zsh                                            ││                                                   │
                                                                               ││                                                   │
  RECOMMENDATIONS · 7 · h hides                                                ││                                                   │
  ▲ The week runs short: compact spark-docs                                    ││                                                   │
@@ -19,8 +20,7 @@
  ○ Clear kindle-web (%5)                                                      ││                                                   │
  ○ Clear cinder-ci (%6)                                                       ││                                                   │
  ○ Clear flint-auth (%2)                                                      ││                                                   │
- ○ Clear ember-billing (%8)                                                   ││                                                   │
- ○ Clear wick-mobile (%7)                                                     │╰─ ⏎ question 2 ─ ← prev  3/7  next → ─ esc ────────╯
+ ○ Clear ember-billing (%8)                                                   │╰─ ⏎ question 2 ─ ← prev  3/7  next → ─ esc ────────╯
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  USAGE                                                                        │ MACHINE                                    16 cores
  ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                               │ cpu  ▁ 0%   load 6.2

@@ -242,11 +242,11 @@ func (m Model) firstWaiting() int {
 }
 
 // sessIndex is the selected row of Sessions: the doors, the sessions,
-// then the recommendations. A door that folds passes the
+// the ghost rows, then the recommendations. A door that folds passes the
 // selection to the next door. Nothing picked: the first session that
-// waits, else the first door.
+// waits, else the first door; with no session, the first ghost row.
 func (m Model) sessIndex() int {
-	nd, ns, nr := len(m.doors), len(m.snap.Sessions), m.recRows()
+	nd, ns, ng, nr := len(m.doors), len(m.snap.Sessions), len(m.ghosts()), m.recRows()
 	for i, d := range m.doors {
 		if d.ID == m.doorPick {
 			return i
@@ -257,16 +257,16 @@ func (m Model) sessIndex() int {
 	}
 	for i, r := range m.recs[:nr] {
 		if r.ID == m.recPick && m.recPick != "" {
-			return nd + ns + i
+			return nd + ns + ng + i
 		}
 	}
-	if nd > 0 && !m.chose && m.firstWaiting() < 0 {
-		return 0
+	if m.ghostPick > 0 {
+		return nd + ns + min(m.ghostPick, ng) - 1
 	}
 	if ns == 0 {
-		if nr > 0 {
-			return nd
-		}
+		return nd
+	}
+	if nd > 0 && !m.chose && m.firstWaiting() < 0 {
 		return 0
 	}
 	return nd + m.selIndex()
@@ -296,7 +296,7 @@ func (m Model) selectedRec() (advice.Rec, bool) {
 	if m.tab != tabSessions {
 		return advice.Rec{}, false
 	}
-	i := m.sessIndex() - len(m.doors) - len(m.snap.Sessions)
+	i := m.sessIndex() - len(m.doors) - len(m.snap.Sessions) - len(m.ghosts())
 	if i < 0 || i >= m.recRows() {
 		return advice.Rec{}, false
 	}
@@ -311,6 +311,9 @@ func (m Model) sessionKeys() []hint {
 	}
 	if _, ok := m.selectedRec(); ok {
 		return []hint{hintFor(mk.Open, "do"), hintFor(mk.Second, "other"), hintFor(mk.Stoke, "stoker")}
+	}
+	if _, ok := m.selectedGhost(); ok {
+		return []hint{hintFor(mk.Open, "new session"), hintFor(mk.Ships, ""), hintFor(mk.Stoke, "stoker")}
 	}
 	keys := []hint{hintFor(mk.Open, "")}
 	s, ok := m.selectedSession()
@@ -345,12 +348,15 @@ func (m Model) sessionRows(b *body, w int) {
 	if len(b.lines) > 0 {
 		b.add(-1, "")
 	}
-	if len(ss) == 0 {
-		b.add(-1, st.faint.Render(m.nothing(" no agent sessions found in tmux")))
-		return
-	}
 	base := len(m.doors)
 	sel := m.sessIndex() - base
+	defer m.ghostRows(b, base+len(ss), sel-len(ss), w)
+	if len(ss) == 0 {
+		if m.filter != "" {
+			b.add(-1, st.faint.Render(m.nothing("")))
+		}
+		return
+	}
 	count := map[string]int{}
 	for _, s := range ss {
 		count[m.groupLabel(s)]++
@@ -748,6 +754,9 @@ func (m Model) detailLines(w, rows int) ([]string, bool) {
 			out = append(out, " "+st.muted.Render(l))
 		}
 		return append(append(out, ""), m.recActions(r, w)...), false
+	}
+	if g, ok := m.selectedGhost(); ok {
+		return m.ghostDetail(g, w), false
 	}
 	s, ok := m.selectedSession()
 	if !ok {

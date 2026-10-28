@@ -123,17 +123,19 @@ var views = [...]tabView{
 	tabSessions: {
 		name:  "sessions",
 		keys:  Model.sessionKeys,
-		count: func(m Model) int { return len(m.doors) + len(m.snap.Sessions) + m.recRows() },
+		count: func(m Model) int { return len(m.doors) + len(m.snap.Sessions) + len(m.ghosts()) + m.recRows() },
 		index: Model.sessIndex,
 		pick: func(m *Model, i int) {
-			nd, ns := len(m.doors), len(m.snap.Sessions)
+			nd, ns, ng := len(m.doors), len(m.snap.Sessions), len(m.ghosts())
 			switch {
 			case i < nd:
-				m.doorPick, m.doorAt, m.recPick = m.doors[i].ID, i, ""
+				m.doorPick, m.doorAt, m.recPick, m.ghostPick = m.doors[i].ID, i, "", 0
 			case i < nd+ns:
-				m.doorPick, m.recPick, m.chose, m.selPID = "", "", true, m.snap.Sessions[i-nd].PID
+				m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, m.snap.Sessions[i-nd].PID
+			case i < nd+ns+ng:
+				m.doorPick, m.recPick, m.ghostPick = "", "", i-nd-ns+1
 			default:
-				m.doorPick, m.recPick = "", m.recs[i-nd-ns].ID
+				m.doorPick, m.recPick, m.ghostPick = "", m.recs[i-nd-ns-ng].ID, 0
 			}
 		},
 		primary: func(m Model) *action {
@@ -142,6 +144,9 @@ var views = [...]tabView{
 			}
 			if r, ok := m.selectedRec(); ok {
 				return fromAdvice(r, "primary")
+			}
+			if g, ok := m.selectedGhost(); ok {
+				return ghostAction(g)
 			}
 			if s, ok := m.selectedSession(); ok && s.Pane != "" {
 				return m.jump(s.Pane)

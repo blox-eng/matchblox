@@ -18,6 +18,7 @@
  ╿ wick-mobile           done      0s    6%
  WORKING · 1
  ✦ hearth-api            busy           79%
+ + start a new session
 
  1 without an agent: shell:1.1 zsh
 
@@ -26,6 +27,5 @@
  ○ Clear spark-docs (%3)
  ○ Clear kindle-web (%5)
  ○ Clear cinder-ci (%6)
- ○ Clear flint-auth (%2)
 ────────────────────────────────────────────
  ⏎ open  a answer  x kill  r rename  N new

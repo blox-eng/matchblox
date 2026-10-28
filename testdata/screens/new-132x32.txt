@@ -10,17 +10,17 @@
  ╿ wick-mobile              done       0s    6%  ▲ clear                      │
  WORKING · 1                                                                  │ context  ▰▰▰▰▰▰▰▰▰▱ 88%
  ✦ hearth-api               busy   ╭─ New session ──────────────────────────────────────────────╮▰▰ 100%  docs for the 1.0 release
-                                   │ where    /work/spark-docs                                  │●━●━●━●  live
- 1 without an agent: shell:1.1 zsh │ branch   feat/88-rate-limits                               │docs
-                                   │ name     spark-docs-feat-88-rate-limits                    │github.com/hearth/spark-docs/pull/…
- RECOMMENDATIONS · 7 · h hides     │ agent    ● claude  ○ codex  ○ opencode                     │dle 9m (clear after 0s)
- ▲ The week runs short: compact spa│ first  › fix the flaky ships test▏                         │00k tokens · +0k in 30 min · ✻
- ○ Clear spark-docs (%3)           ╰─ ⏎ start ─ tab next ─ esc ─────────────────────────────────╯· Max · pid 1400 · 1 process ·
- ○ Clear kindle-web (%5)                                                      │ started 3h20m ago
- ○ Clear cinder-ci (%6)                                                       │
- ○ Clear flint-auth (%2)                                                      │ a answer   ⏎ open it   A switch agent
+ + start a new session             │ where    /work/spark-docs                                  │●━●━●━●  live
+                                   │ branch   feat/88-rate-limits                               │docs
+ 1 without an agent: shell:1.1 zsh │ name     spark-docs-feat-88-rate-limits                    │github.com/hearth/spark-docs/pull/…
+                                   │ agent    ● claude  ○ codex  ○ opencode                     │dle 9m (clear after 0s)
+ RECOMMENDATIONS · 7 · h hides     │ first  › fix the flaky ships test▏                         │00k tokens · +0k in 30 min · ✻
+ ▲ The week runs short: compact spa╰─ ⏎ start ─ tab next ─ esc ─────────────────────────────────╯· Max · pid 1400 · 1 process ·
+ ○ Clear spark-docs (%3)                                                      │ started 3h20m ago
+ ○ Clear kindle-web (%5)                                                      │
+ ○ Clear cinder-ci (%6)                                                       │ a answer   ⏎ open it   A switch agent
+ ○ Clear flint-auth (%2)                                                      │
  ○ Clear ember-billing (%8)                                                   │
- ○ Clear wick-mobile (%7)                                                     │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  USAGE                                                                        │ MACHINE                                    16 cores
  ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                               │ cpu  ▁ 0%   load 6.2

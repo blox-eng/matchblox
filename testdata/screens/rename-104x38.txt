@@ -10,17 +10,18 @@
  ╿ wick-mobile                             done       0s    6% │ install page.
  WORKING · 1                                                   │
  ✦ hearth-api                              busy            79% │ context  ▰▰▰▰▰▰▰▰▰▱ 88%
-                                                               │ plan     ▰▰▰▰▰▰▰▰▰▰ 100%  docs for the…
- 1 without an agent: shell:1.1 zsh                             │ ship     #4540 ●━●━●━●━●  live
-                                                               │          The 1.0 docs
- RECOMMENDATIONS · 7 ╭─ Rename spark-docs ────────────────────────────────────────╮ithub.com/hearth/spa…
- ▲ The week runs shor│ name   › docs-1-0▏                                         │le 9m (clear after 0…
- ○ Clear spark-docs (│                                                            │0k tokens · +0k in
- ○ Clear kindle-web (│ tmux and the agent take this name                          │ample.com · Max ·
- ○ Clear cinder-ci (%╰─ ⏎ rename ─ esc ───────────────────────────────────────────╯ss · started 3h20m
- ○ Clear flint-auth (%2)                                       │ ago
- ○ Clear ember-billing (%8)                                    │
- ○ Clear wick-mobile (%7)                                      │ a answer   ⏎ open it   A switch agent
+ + start a new session                                         │ plan     ▰▰▰▰▰▰▰▰▰▰ 100%  docs for the…
+                                                               │ ship     #4540 ●━●━●━●━●  live
+ 1 without an agent: shell:1.1 zsh                             │          The 1.0 docs
+                     ╭─ Rename spark-docs ────────────────────────────────────────╮ithub.com/hearth/spa…
+ RECOMMENDATIONS · 7 │ name   › docs-1-0▏                                         │le 9m (clear after 0…
+ ▲ The week runs shor│                                                            │0k tokens · +0k in
+ ○ Clear spark-docs (│ tmux and the agent take this name                          │ample.com · Max ·
+ ○ Clear kindle-web (╰─ ⏎ rename ─ esc ───────────────────────────────────────────╯ss · started 3h20m
+ ○ Clear cinder-ci (%6)                                        │ ago
+ ○ Clear flint-auth (%2)                                       │
+ ○ Clear ember-billing (%8)                                    │ a answer   ⏎ open it   A switch agent
+ ○ Clear wick-mobile (%7)                                      │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  USAGE                                                         │ MACHINE                       16 cores
  ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                │ cpu  ▁ 0%   load 6.2
@@ -33,6 +34,5 @@
                                                                │ 1200     claude              0%   9.8M…
                                                                │ 1300     zsh                 0%   9.8M…
                                                                │ 1310     claude              0%   9.8M…
-                                                               │ 1400     claude              0%   9.8M…
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  ⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit    sampled 0s ago

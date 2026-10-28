@@ -10,17 +10,17 @@
  ╿ wick-mobile              done       0s    6%  ▲ clear                      │
  WORKING · 1                                                                  │ context  ▰▰▰▰▰▰▰▰▰▱ 88%
  ✦ hearth-api               busy   ╭─ ☾ Night ──────────────────────────────────────────────────╮▰▰ 100%  docs for the 1.0 release
-                                   │ How should I run tonight?                                  │●━●━●━●  live
- 1 without an agent: shell:1.1 zsh │                                                            │docs
-                                   │ › merge them on green▏                                     │github.com/hearth/spark-docs/pull/…
- RECOMMENDATIONS · 7 · h hides     │                                                            │dle 9m (clear after 0s)
- ▲ The week runs short: compact spa│ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │00k tokens · +0k in 30 min · ✻
- ○ Clear spark-docs (%3)           │ ways merge-order  priority  release-train  triage          │· Max · pid 1400 · 1 process ·
- ○ Clear kindle-web (%5)           ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
- ○ Clear cinder-ci (%6)                                                       │
- ○ Clear flint-auth (%2)                                                      │ a answer   ⏎ open it   A switch agent
+ + start a new session             │ How should I run tonight?                                  │●━●━●━●  live
+                                   │                                                            │docs
+ 1 without an agent: shell:1.1 zsh │ › merge them on green▏                                     │github.com/hearth/spark-docs/pull/…
+                                   │                                                            │dle 9m (clear after 0s)
+ RECOMMENDATIONS · 7 · h hides     │ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │00k tokens · +0k in 30 min · ✻
+ ▲ The week runs short: compact spa│ ways merge-order  priority  release-train  triage          │· Max · pid 1400 · 1 process ·
+ ○ Clear spark-docs (%3)           ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
+ ○ Clear kindle-web (%5)                                                      │
+ ○ Clear cinder-ci (%6)                                                       │ a answer   ⏎ open it   A switch agent
+ ○ Clear flint-auth (%2)                                                      │
  ○ Clear ember-billing (%8)                                                   │
- ○ Clear wick-mobile (%7)                                                     │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  USAGE                                                                        │ MACHINE                                    16 cores
  ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                               │ cpu  ▁ 0%   load 6.2

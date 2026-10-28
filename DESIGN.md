@@ -210,6 +210,13 @@ Reduce Motion.
   `tests` when it runs a test runner) and `QUIET` (idle, cold, stale, out;
   the newest first). A sort other than the default drops the groups for
   one flat list named by its sort (`14 SESSIONS · by context ▾`). The
+  Under the sessions a ghost row, `+ start a new session here` (accent `+`,
+  the words `faint`, then the folder and its branch): here is the repo the
+  console was launched in, else the most recent one. `⏎` opens N on it,
+  the cursor on agent. With no session it leads and has the cursor, two
+  quick starts follow (`+ start in <repo>` with its age), and it replaces
+  `no agent sessions found in tmux`. It is no session: no session key acts
+  on it, and the count leaves it out (#175). The
   recommendations come last (owner 2026-10-12), under
   `RECOMMENDATIONS · N · h hides`: `d` or a tap on `d dismiss` hides the
   selected one until its evidence changes, `h` folds the section to
@@ -233,7 +240,9 @@ Reduce Motion.
   diff that waits for its `y` takes the full width.
 - **Dock** (design/0006 §7): usage, the machine and the stoker, between
   the body and the key line, when the body, the dock and one blank row fit;
-  else it folds away and the Machine tab has it. With rows to spare it
+  a few rows short (folding would leave three blank, and the body keeps
+  half the rows) it stays at its fewest lines and the body scrolls; else
+  it folds away and the Machine tab has it. With rows to spare it
   grows into them (forecasts and resets, the top processes, the stoker's
   recent steps): no run of three blank rows while a panel has more to say. Each account leads with
   its provider: the provider's mark in `muted` (`✻` Anthropic, `❋` OpenAI,
