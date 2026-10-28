@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -17,6 +18,11 @@ import (
 
 const recSock = "/tmp/tmux-501/default"
 
+// mainBranch: every folder is its own repository, on main.
+func mainBranch(dir string) recovery.Checkout {
+	return recovery.Checkout{Root: dir, Branch: "main", Common: dir + "/.git"}
+}
+
 // recoverTest is a service with a recovery record and a home where each
 // agent is installed. Its record holds what the sessions of the first
 // snapshot give it.
@@ -28,8 +34,10 @@ func recoverTest(t *testing.T, sessions ...sample.Session) (*Service, *[][]strin
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec.Git = func(dir string) (string, string) { return dir, "main" }
+	rec.Git = mainBranch
 	s.Recovery = rec
+	s.settle = time.Millisecond
+	s.TmuxOut = func([]string) (string, error) { return "", nil } // each started agent runs
 	s.LookPath = func(bin string) (string, error) {
 		switch bin {
 		case "claude", "codex", sample.CursorAgent:
@@ -47,9 +55,9 @@ func recoverTest(t *testing.T, sessions ...sample.Session) (*Service, *[][]strin
 func publishOn(s *Service, pid string, sessions ...sample.Session) {
 	var panes []sample.Pane
 	for _, x := range sessions {
-		panes = append(panes, sample.Pane{ID: x.Pane, Target: x.Target, Socket: recSock, Server: pid})
+		panes = append(panes, sample.Pane{ID: x.Pane, Target: x.Target, Socket: recSock, Server: pid, ServerStart: "1" + pid})
 	}
-	panes = append(panes, sample.Pane{ID: "%99", Target: "shell:1.0", Socket: recSock, Server: pid})
+	panes = append(panes, sample.Pane{ID: "%99", Target: "shell:1.0", Socket: recSock, Server: pid, ServerStart: "1" + pid})
 	s.publish(sample.Snapshot{At: time.Now(), Sessions: sessions, Panes: panes}, func(state.Doc) {})
 }
 
@@ -108,7 +116,7 @@ func TestTheServiceRecordsTheBuildersAgents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec.Git = func(dir string) (string, string) { return dir, "main" }
+	rec.Git = mainBranch
 	s.Recovery = rec
 	in := []sample.Session{
 		{Agent: "claude", SessionID: "c1", Pane: "%3", Target: "api:1.0", Cwd: "/src/api"},
@@ -122,7 +130,7 @@ func TestTheServiceRecordsTheBuildersAgents(t *testing.T) {
 	if len(got) != 2 || got[0].ConversationID != "c1" || got[1].ConversationID != "u1" {
 		t.Fatalf("the record holds %+v, want c1 and u1", got)
 	}
-	if e := got[0]; e.Session != "api" || e.Socket != recSock || e.ServerPID != "100" || e.Repo != "/src/api" {
+	if e := got[0]; e.Session != "api" || e.Socket != recSock || e.ServerPID != "100" || e.ServerStart != "1100" || e.Repo != "/src/api" || e.Common != "/src/api/.git" {
 		t.Fatalf("the entry is %+v", e)
 	}
 }
@@ -218,11 +226,12 @@ func TestRecoverSaysWhyItCannot(t *testing.T) {
 
 	must(t, os.RemoveAll(gone.Cwd))
 	must(t, os.RemoveAll(filepath.Join(s.Home, ".claude", "projects", "-src-nohist")))
-	s.Recovery.Git = func(dir string) (string, string) {
+	s.Recovery.Git = func(dir string) recovery.Checkout {
+		c := mainBranch(dir)
 		if dir == moved.Cwd {
-			return dir, "other"
+			c.Branch = "other"
 		}
-		return dir, "main"
+		return c
 	}
 	reg := filepath.Join(s.Home, ".claude", "sessions", strconv.Itoa(os.Getpid())+".json")
 	must(t, os.MkdirAll(filepath.Dir(reg), 0o700))
@@ -270,6 +279,9 @@ func TestRecoverTakesAMovedFolder(t *testing.T) {
 	loseServer(s)
 	to := filepath.Join(s.Home, "elsewhere")
 	must(t, os.Rename(api.Cwd, to))
+	s.Recovery.Git = func(dir string) recovery.Checkout { // the worktree moved: same repository
+		return recovery.Checkout{Root: dir, Branch: "main", Common: api.Cwd + "/.git"}
+	}
 	res := recoverAct(t, s, proto.Recover{Names: []string{"api"}, Dirs: map[string]string{"api": to}}, "")
 	if r := rows(res)["api"]; r.State != proto.RecoverReopened || r.Dir != to {
 		t.Fatalf("row %+v", r)
@@ -324,6 +336,117 @@ func TestRecoverRefusesAnUnknownName(t *testing.T) {
 	res := recoverAct(t, s, proto.Recover{Names: []string{"apx"}}, "")
 	if !strings.Contains(res.Err, "apx") || !strings.Contains(res.Err, "matchblox recover") || len(*ran) != 0 {
 		t.Fatalf("%+v, ran %q", res, *ran)
+	}
+}
+
+// TestRecoverRefusesAFolderOfAnotherRepository: --dir names a folder of
+// another repository on the same branch. The conversation does not reopen
+// there.
+func TestRecoverRefusesAFolderOfAnotherRepository(t *testing.T) {
+	s, ran := recoverTest(t)
+	api := agentIn(t, s, "claude", "c1", "api", "%3")
+	publishOn(s, "100", api)
+	loseServer(s)
+	other := filepath.Join(s.Home, "other")
+	must(t, os.MkdirAll(other, 0o700))
+	res := recoverAct(t, s, proto.Recover{Names: []string{"api"}, Dirs: map[string]string{"api": other}}, "")
+	if r := rows(res)["api"]; r.State != proto.RecoverCannot || !strings.Contains(r.Why, "is another repository than "+api.Cwd) {
+		t.Fatalf("row %+v", r)
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// TestRecoverRefusesARelativeDir: the service does not know the builder's
+// folder, so a --dir that is not a full path reopens nothing.
+func TestRecoverRefusesARelativeDir(t *testing.T) {
+	s, ran := recoverTest(t)
+	api := agentIn(t, s, "claude", "c1", "api", "%3")
+	publishOn(s, "100", api)
+	loseServer(s)
+	res := recoverAct(t, s, proto.Recover{Names: []string{"api"}, Dirs: map[string]string{"api": "."}}, "")
+	if r := rows(res)["api"]; r.State != proto.RecoverCannot || !strings.Contains(r.Why, "not a full path") || len(*ran) != 0 {
+		t.Fatalf("row %+v, ran %q", r, *ran)
+	}
+}
+
+// TestRecoverRefusesASessionItCannotSignInAgain: a session that ran on
+// Bedrock, Vertex or an API key got its sign-in from the shell. recover
+// cannot give it again, so it does not reopen the conversation on the
+// builder's default sign-in.
+func TestRecoverRefusesASessionItCannotSignInAgain(t *testing.T) {
+	s, ran := recoverTest(t)
+	bed := agentIn(t, s, "claude", "c1", "bed", "%3")
+	bed.Provider = "bedrock"
+	key := agentIn(t, s, "codex", "x1", "key", "%4")
+	key.Account = "API key"
+	publishOn(s, "100", bed, key)
+	loseServer(s)
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	r := rows(res)
+	if r["bed"].State != proto.RecoverCannot || !strings.Contains(r["bed"].Why, "bedrock") || !strings.Contains(r["bed"].Why, "claude --resume c1") {
+		t.Errorf("bed: %+v", r["bed"])
+	}
+	if r["key"].State != proto.RecoverCannot || !strings.Contains(r["key"].Why, "API key") || !strings.Contains(r["key"].Why, "codex resume x1") {
+		t.Errorf("key: %+v", r["key"])
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// TestRecoverByNameAnswersForThoseNames: matchblox recover api answers for
+// api only, so another entry that cannot reopen does not fail it.
+func TestRecoverByNameAnswersForThoseNames(t *testing.T) {
+	s, _ := recoverTest(t)
+	api := agentIn(t, s, "claude", "c1", "api", "%3")
+	old := agentIn(t, s, "claude", "c2", "old", "%4")
+	publishOn(s, "100", api, old)
+	loseServer(s)
+	must(t, os.RemoveAll(old.Cwd))
+	res := recoverAct(t, s, proto.Recover{Names: []string{"api"}}, "")
+	if len(res.Recover) != 1 || res.Recover[0].Name != "api" || res.Recover[0].State != proto.RecoverReopened {
+		t.Fatalf("rows %+v", res.Recover)
+	}
+}
+
+// TestRecoverTwiceBeforeASampleStartsNothing: a second recover comes
+// before a sample shows the reopened agents, or the sample shows the pane
+// before the agent's id. It starts no second agent.
+func TestRecoverTwiceBeforeASampleStartsNothing(t *testing.T) {
+	s, ran := recoverTest(t)
+	api := agentIn(t, s, "claude", "c1", "api", "%3")
+	publishOn(s, "100", api)
+	loseServer(s)
+	recoverAct(t, s, proto.Recover{All: true}, "")
+	if len(*ran) != 1 {
+		t.Fatalf("ran %q", *ran)
+	}
+	api.Pane, api.SessionID = "%0", "" // the sample sees the pane, not yet the id
+	publishOn(s, "200", api)
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	if len(*ran) != 1 || rows(res)["api"].State != proto.RecoverLive {
+		t.Fatalf("a second recover: %+v, ran %q", res.Recover, *ran)
+	}
+}
+
+// TestRecoverSaysWhenTheAgentExitsAtOnce: tmux started the session, but
+// the agent exited and took it along. The row says so, with the command
+// to run to see why, and the conversation does not count as live.
+func TestRecoverSaysWhenTheAgentExitsAtOnce(t *testing.T) {
+	s, _ := recoverTest(t)
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	publishOn(s, "100", web)
+	loseServer(s)
+	s.TmuxOut = func([]string) (string, error) { return "", errors.New("can't find session: web") }
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	r := rows(res)["web"]
+	if r.State != proto.RecoverCannot || !strings.Contains(r.Why, "codex exited at once: run cd "+web.Cwd+" && codex resume x1") {
+		t.Fatalf("row %+v", r)
+	}
+	if live, _ := s.recoverLive(); live[conversation("codex", "x1")] {
+		t.Fatal("an agent that exited counts as live")
 	}
 }
 

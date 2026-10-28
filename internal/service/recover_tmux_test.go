@@ -138,3 +138,33 @@ func TestRecoverAfterARealServerLoss(t *testing.T) {
 		t.Fatalf("after a second recover the sessions are %q", got)
 	}
 }
+
+// TestRecoverOnARealServerSaysWhenTheAgentExits: the agent's CLI fails at
+// start and its tmux session ends with it. recover says it could not
+// reopen, with the command to run to see why.
+func TestRecoverOnARealServerSaysWhenTheAgentExits(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux is not installed")
+	}
+	sock := sample.SocketPath("default")
+	must(t, os.MkdirAll(filepath.Dir(sock), 0o700))
+	t.Cleanup(func() { _ = exec.Command("tmux", "-S", sock, "kill-server").Run() }) //nolint:gosec // test argv
+	bin := t.TempDir()
+	must(t, os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\necho 'no such session' >&2\nexit 1\n"), 0o700)) //nolint:gosec // a test program
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	s := newTest(t, time.Hour)
+	s.Home = t.TempDir()
+	rec, err := recovery.Open(t.TempDir())
+	must(t, err)
+	s.Recovery = rec
+	s.Actions.Run = nil
+	web := agentIn(t, s, "codex", "x1", "web", "%4")
+	must(t, rec.Update([]recovery.Entry{{Agent: "codex", ConversationID: "x1", Session: "web", Pane: "%4", Cwd: web.Cwd, Socket: sock, ServerPID: "1"}}, nil, time.Now()))
+
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	r := rows(res)["web"]
+	if r.State != proto.RecoverCannot || !strings.Contains(r.Why, "codex exited at once") {
+		t.Fatalf("row %+v", r)
+	}
+}

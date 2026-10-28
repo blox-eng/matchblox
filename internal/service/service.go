@@ -186,6 +186,14 @@ type Service struct {
 	tmuxV  string // the hello's tmux, read at tmuxAt
 	tmuxAt time.Time
 
+	// recovering runs one recover act at a time; reopened is when each
+	// conversation it reopened started, until a sample shows it.
+	recovering sync.Mutex
+	reopened   map[string]time.Time
+	// settle is how long recover waits before it checks that each agent it
+	// reopened still runs (0: recoverSettle).
+	settle time.Duration
+
 	mu  sync.Mutex
 	cur state.Doc
 	// startedAt is when matchblox started the stoker agent; zero once it

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
@@ -24,7 +25,20 @@ func recoverAct(words []string, all bool, dir, from string) (proto.Act, error) {
 		if len(words) != 1 {
 			return proto.Act{}, errors.New("recover: --dir moves the folder of one session: matchblox recover <name> --dir <path>")
 		}
-		r.Dirs = map[string]string{words[0]: dir}
+		// The service runs elsewhere: it gets the folder from /, as the
+		// builder means it here.
+		if rest, ok := strings.CutPrefix(dir, "~"); ok && (rest == "" || strings.HasPrefix(rest, "/")) {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return proto.Act{}, err
+			}
+			dir = home + rest
+		}
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			return proto.Act{}, err
+		}
+		r.Dirs = map[string]string{words[0]: abs}
 	}
 	b, err := json.Marshal(r)
 	if err != nil {

@@ -61,6 +61,3 @@ func OpenIn(agent, configDir, id string) int {
 	}
 	return 0
 }
-
-// CheckoutOf is the root and branch of dir's checkout, as Update reads them.
-func (s *Store) CheckoutOf(dir string) (root, branch string) { return s.git(dir) }

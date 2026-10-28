@@ -728,6 +728,9 @@ func newService(cfg config.Config, root string) *service.Service {
 	}
 	if r, err := recovery.Open(filepath.Dir(s.StatePath)); err == nil {
 		s.Recovery = r
+		if r.Moved != "" {
+			fmt.Fprintln(os.Stderr, "matchblox: the recovery record did not read, so it starts empty: the old one is at", r.Moved)
+		}
 	} else {
 		fmt.Fprintln(os.Stderr, "matchblox: the recovery record is off:", err)
 	}

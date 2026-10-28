@@ -3,13 +3,22 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 )
 
+// TestRecoverActReadsTheCommandLine: --dir reaches the service as a full
+// path from the builder's folder, as the builder means it.
 func TestRecoverActReadsTheCommandLine(t *testing.T) {
+	here, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, _ := os.UserHomeDir()
 	for _, c := range []struct {
 		words []string
 		all   bool
@@ -21,6 +30,8 @@ func TestRecoverActReadsTheCommandLine(t *testing.T) {
 		{all: true, want: proto.Recover{All: true}},
 		{words: []string{"api", "web"}, want: proto.Recover{Names: []string{"api", "web"}}},
 		{words: []string{"api"}, dir: "/src/api2", want: proto.Recover{Names: []string{"api"}, Dirs: map[string]string{"api": "/src/api2"}}},
+		{words: []string{"api"}, dir: "rel", want: proto.Recover{Names: []string{"api"}, Dirs: map[string]string{"api": filepath.Join(here, "rel")}}},
+		{words: []string{"api"}, dir: "~/x", want: proto.Recover{Names: []string{"api"}, Dirs: map[string]string{"api": filepath.Join(home, "x")}}},
 		{words: []string{"api"}, all: true, err: "--all or names"},
 		{dir: "/x", err: "matchblox recover <name> --dir <path>"},
 		{words: []string{"a", "b"}, dir: "/x", err: "matchblox recover <name> --dir <path>"},
