@@ -16,6 +16,11 @@ This uses your own ssh login one time. It runs the install script on
 `ws-1`, and adds a key that can start only the console's stream there: no
 shell, no forwarding.
 
+A connect from Hosts runs in the background. If ssh asks something (a new
+host key, a password, a key's passphrase), the question shows in the
+console's field, as at a jump. A login by key, agent or Tailscale SSH asks
+nothing. `matchblox connect` typed in a shell asks in that terminal.
+
 ## Open the console of a host
 
 ```sh

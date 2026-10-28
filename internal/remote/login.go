@@ -251,6 +251,10 @@ func refused(stderr string) Login {
 }
 
 // lastSaid is the last line of stderr that is not ssh -v's debug output.
+// Said is the last line of stderr that is not ssh's debug, made safe for
+// the screen: the line can come from the host.
+func Said(stderr string) string { return printable(lastSaid(stderr)) }
+
 func lastSaid(stderr string) string {
 	lines := strings.Split(strings.TrimSpace(stderr), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {

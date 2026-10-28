@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
@@ -27,6 +28,10 @@ type connectEnv struct {
 	// Verify reaches the host with the matchblox key, as the console does,
 	// and returns the matchblox it runs.
 	Verify func(remote.Target) (string, error)
+	// Console: the console runs this connect, and ssh asks there through
+	// askpass (#242). The ssh then has no terminal, and -v tells the
+	// console a Tailscale SSH host by its version line.
+	Console bool
 }
 
 // connectHost connects a host (design/0005-remote-mode.md §3): it makes the
@@ -58,6 +63,9 @@ func connectHost(e connectEnv, host string) error {
 		return fmt.Errorf("%s.pub: %w", key, err)
 	}
 	argv := []string{"ssh", "-t", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "--", host, script}
+	if e.Console {
+		argv[1] = "-v"
+	}
 	say(argv)
 	if err := e.Run(argv); err != nil {
 		return fmt.Errorf("ssh %s: %w", host, err)
@@ -115,7 +123,8 @@ func liveConnect(args []string) error {
 	if err != nil {
 		return err
 	}
-	err = connectHost(connectEnv{Home: home, Hosts: hosts.Path(), Run: runInTerminal, Out: os.Stdout, Verify: verifyHost}, host)
+	err = connectHost(connectEnv{Home: home, Hosts: hosts.Path(), Run: runInTerminal, Out: os.Stdout, Verify: verifyHost,
+		Console: os.Getenv(askpass.EnvSocket) != ""}, host)
 	fi, _ := os.Stdin.Stat()
 	return holdFailure(err, fi != nil && fi.Mode()&os.ModeCharDevice != 0, os.Stdin, os.Stderr)
 }
