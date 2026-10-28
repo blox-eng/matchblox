@@ -83,7 +83,8 @@ type into it: there is one agent process. That is accepted (owner).
 
 1. **A see-through host tmux (picked, owner 2026-10-26).** The laptop opens
    each jump in its own local session; the host attaches the jump through a
-   private grouped session with no status line, no prefix and no mouse.
+   private grouped session with no status line, no prefix and only the
+   mouse keys of a pane (#240).
    Uses tmux features only; covers all three collisions.
 2. **Laptop side only.** A local session per host. It ends the loop, but the
    host's status line and `◂` tap still show inside, and `select-window` on
@@ -161,7 +162,9 @@ tmux command list on H, it:
    own current window.
 3. sets on G: `destroy-unattached on`, `status off` (inside an outer tmux;
    outside, a one-line status that says `◂ console: <P> m`), `prefix None`,
-   `key-table matchblox-jump-<P>`, `mouse off`.
+   `key-table matchblox-jump-<P>`, `mouse on`. The table also holds tmux's
+   own mouse keys for a pane (wheel, click, drag, border drag): a
+   key-table hides root, and a swipe would scroll nothing (#240).
 4. selects the agent's window in G only, and its pane (shared, Goal 2).
 5. `attach-session -t =<G>`.
 

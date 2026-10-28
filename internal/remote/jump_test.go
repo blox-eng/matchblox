@@ -7,18 +7,29 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
+// mouseIn is paneMouse(table) as a line.
+func mouseIn(table string) string {
+	const app = "'#{||:#{pane_in_mode},#{mouse_any_flag}}'"
+	b := " bind-key -T " + table
+	return b + " WheelUpPane if -F " + app + " 'send-keys -M' 'copy-mode -e' ';'" +
+		b + " MouseDown1Pane if -F 1 'select-pane -t = ; send-keys -M' '' ';'" +
+		b + " MouseDrag1Pane if -F " + app + " 'send-keys -M' 'copy-mode -M' ';'" +
+		b + " MouseDrag1Border resize-pane -M ';'"
+}
+
 func TestJumpRemoteToPane(t *testing.T) {
 	j := Jump{Host: "ws-1", Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d", Outer: true}
 	const g = "'=matchblox-jump-0a1b2c3d:'"
 	common := "tmux bind-key -T matchblox-jump-C-b C-b switch-client -T matchblox-jump-C-b-prefix ';'" +
 		" bind-key -T matchblox-jump-C-b-prefix d detach-client ';'" +
 		" bind-key -T matchblox-jump-C-b-prefix m detach-client ';'" +
+		mouseIn("matchblox-jump-C-b") +
 		" new-session -d -t %12 -s matchblox-jump-0a1b2c3d ';'"
 	tail := " set-option -t " + g + " @matchblox-jump 1 ';'" +
 		" set-option -t " + g + " prefix None ';'" +
 		" set-option -t " + g + " prefix2 None ';'" +
 		" set-option -t " + g + " key-table matchblox-jump-C-b ';'" +
-		" set-option -t " + g + " mouse off ';'" +
+		" set-option -t " + g + " mouse on ';'" +
 		" run-shell -C -t %12 'select-window -t =matchblox-jump-0a1b2c3d:#{window_id}' ';' select-pane -t %12 ';'" +
 		" set-option -t " + g + " destroy-unattached on ';'" +
 		" attach-session -t '=matchblox-jump-0a1b2c3d'"
@@ -40,7 +51,7 @@ func TestJumpRemoteToDir(t *testing.T) {
 	if !strings.Contains(line, "new-session -d -s matchblox-jump-0a1b2c3d -c /w/a ';'") {
 		t.Errorf("no private session in the directory: %s", line)
 	}
-	for _, bad := range []string{" -t %", "select-window", "select-pane"} {
+	for _, bad := range []string{" -t %", "select-window", "select-pane -t %"} {
 		if strings.Contains(line, bad) {
 			t.Errorf("%q in a directory jump: %s", bad, line)
 		}
@@ -62,6 +73,7 @@ func TestJumpLocal(t *testing.T) {
 		" set-option -t " + s + " status-left '#[range=user|matchblox] ◂ console #[norange]' ';'" +
 		" bind-key -T matchblox-host-0a1b2c3d User900 if -F 1 " + back + " '' ';'" +
 		" bind-key -T matchblox-host-0a1b2c3d MouseDown1Status if -F '#{==:#{mouse_status_range},matchblox}' " + back + " '' ';'" +
+		mouseIn("matchblox-host-0a1b2c3d") +
 		" switch-client -t '=matchblox-ws-1-0a1b2c3d' ';'" +
 		" set-option -t " + s + " destroy-unattached on"
 	j := Jump{Host: "ws-1", Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d"}

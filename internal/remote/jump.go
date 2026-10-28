@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -111,6 +112,19 @@ func setOption(session, name, value string) []string {
 	return []string{"set-option", "-t", "=" + session + ":", name, value}
 }
 
+// paneMouse binds in table tmux's own mouse keys for a pane (its defaults
+// in 3.2 to 3.5). A session's key-table hides root, so without them a
+// swipe scrolls nothing in a jump and a drag selects nothing (#240).
+func paneMouse(table string) [][]string {
+	const app = "#{||:#{pane_in_mode},#{mouse_any_flag}}"
+	return [][]string{
+		{"bind-key", "-T", table, "WheelUpPane", "if", "-F", app, "send-keys -M", "copy-mode -e"},
+		{"bind-key", "-T", table, "MouseDown1Pane", "if", "-F", "1", "select-pane -t = ; send-keys -M", ""},
+		{"bind-key", "-T", table, "MouseDrag1Pane", "if", "-F", app, "send-keys -M", "copy-mode -M"},
+		{"bind-key", "-T", table, "MouseDrag1Border", "resize-pane", "-M"},
+	}
+}
+
 // Remote is the one tmux command list that runs on the host. It binds the
 // way back for this machine's prefix, then opens a private session grouped
 // with the pane's (or a new one in Dir) with no prefix of its own, and
@@ -125,6 +139,7 @@ func (j Jump) Remote() []string {
 		{"bind-key", "-T", wait, "d", "detach-client"},
 		{"bind-key", "-T", wait, "m", "detach-client"},
 	}
+	cmds = append(cmds, paneMouse(table)...)
 	if j.Pane != "" {
 		cmds = append(cmds, []string{"new-session", "-d", "-t", j.Pane, "-s", g})
 	} else {
@@ -140,7 +155,9 @@ func (j Jump) Remote() []string {
 		setOption(g, "prefix", "None"),
 		setOption(g, "prefix2", "None"),
 		setOption(g, "key-table", table),
-		setOption(g, "mouse", "off"))
+		// The host's tmux takes the mouse, so a swipe scrolls the agent's
+		// history there; its table has no binding of the host's own.
+		setOption(g, "mouse", "on"))
 	if j.Pane != "" {
 		// select-window -t %12 picks the session that has the pane, and
 		// that can be the agent's own: it would move its clients. The
@@ -189,17 +206,18 @@ func (j Jump) Local(ssh []string) []string {
 	// ends when its client leaves it, by any way back (destroy-unattached),
 	// and its ssh with it; the wrapper then drops the table (a hangup too).
 	const wrap = `t=$1; h=$2; shift 2; trap 'tmux unbind-key -a -T "$t" 2>/dev/null; exit 0' HUP TERM; "$@"; s=$?; [ $s = 0 ] || { stty sane 2>/dev/null; printf "\nssh exited %s. Press Enter to go back.\n" "$s"; until read _; do sleep 0.2; done; }; for c in $(tmux list-clients -t "$TMUX_PANE" -F '#{client_tty}' 2>/dev/null); do tmux switch-client -c "$c" -t "=$h" 2>/dev/null; done; tmux unbind-key -a -T "$t" 2>/dev/null; exit 0`
-	return tmuxList(
+	return tmuxList(slices.Concat([][]string{
 		append([]string{"new-session", "-d", "-s", s, "--", "/bin/sh", "-c", wrap, "sh", table, j.home()}, ssh...),
 		setOption(s, sample.JumpMark, "1"),
 		setOption(s, "detach-on-destroy", "off"),
 		setOption(s, "key-table", table),
 		setOption(s, "mouse", "on"),
 		setOption(s, "status-left", "#[range=user|matchblox] ◂ console #[norange]"),
-		[]string{"bind-key", "-T", table, "User900", "if", "-F", "1", back, ""},
-		[]string{"bind-key", "-T", table, "MouseDown1Status", "if", "-F", "#{==:#{mouse_status_range},matchblox}", back, ""},
-		[]string{"switch-client", "-t", "=" + s},
+		{"bind-key", "-T", table, "User900", "if", "-F", "1", back, ""},
+		{"bind-key", "-T", table, "MouseDown1Status", "if", "-F", "#{==:#{mouse_status_range},matchblox}", back, ""},
+	}, paneMouse(table), [][]string{
+		{"switch-client", "-t", "=" + s},
 		// After the switch: an unattached session with it would end at once.
 		setOption(s, "destroy-unattached", "on"),
-	)
+	})...)
 }
