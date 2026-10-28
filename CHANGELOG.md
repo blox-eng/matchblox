@@ -6,6 +6,24 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **You get your agents back after your tmux server dies.** While your
+  agents run, the service keeps a recovery record (`recover.json` in its
+  state folder): each agent's conversation, which follows `/clear` and
+  `/resume`, its tmux session, folder, branch and tmux server. An agent
+  you quit leaves it; the agents of a server that died stay 14 days.
+  `matchblox recover` lists them as live, can reopen, or cannot reopen
+  with the cause and the fix: a folder that is gone, another branch, no
+  saved history, an agent not installed, or a conversation another
+  Claude Code process has open. `matchblox recover --all` (or `recover
+  <name>…`) reopens each in its folder and tmux session with `claude
+  --resume`, `codex resume` or `cursor-agent --resume`. It sends no
+  prompt and replays no command, so each agent waits for you, and a
+  second run starts nothing. `--dir` gives a moved folder its new place.
+  Claude Code, Codex and Cursor; Cursor's history is not checked.
+  ([#215](https://github.com/blox-eng/matchblox/issues/215))
+
 ### Fixed
 
 - **matchblox's tests leave your tmux servers alone.** The test suite

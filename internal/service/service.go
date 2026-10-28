@@ -29,6 +29,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/push"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/recovery"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/ships"
@@ -100,6 +101,9 @@ type Service struct {
 	Stoker *stoker.Store
 	// Holds are the parked and stoker-held sessions. Nil: none kept.
 	Holds *holds.Store
+	// Recovery is the record of the agents on the builder's tmux server,
+	// for matchblox recover (#215). Nil: none kept.
+	Recovery *recovery.Store
 	// NightEnds is when a night turns the stoker off ("07:00").
 	NightEnds string
 	// StokerServer is the tmux server (-L) matchblox keeps the stoker agent
@@ -552,6 +556,11 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		}
 		s.cur.Holds = s.Holds.List()
 	}
+	var live []recovery.Entry
+	var alive map[string]string
+	if s.Recovery != nil {
+		live, alive = recordable(s.cur.Sessions, snap.Panes)
+	}
 	s.expireFocus(s.now())
 	s.cur.Push = s.PushOff
 	if s.Push != nil {
@@ -559,6 +568,12 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	}
 	doc := s.cur
 	s.mu.Unlock()
+	if s.Recovery != nil {
+		// Out of the lock: it reads the checkout of a new agent's folder.
+		if err := s.Recovery.Update(live, alive, s.now()); err != nil {
+			doc.Errors = append(slices.Clip(doc.Errors), "recovery record: "+err.Error())
+		}
+	}
 	rec(doc)
 	if s.Push != nil {
 		// Every tick, changed or not: a change the rates held goes out on
