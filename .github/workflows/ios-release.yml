@@ -22,13 +22,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Resolve the marketing version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ github.event.inputs.marketing_version }}
         run: |
-          if [ "${{ github.event_name }}" = push ]; then
+          if [ "$EVENT_NAME" = push ]; then
             version="${GITHUB_REF_NAME#ios-v}"
           else
-            version="${{ github.event.inputs.marketing_version }}"
+            version="$INPUT_VERSION"
           fi
-          if [ -z "$version" ]; then echo "::error::no marketing version"; exit 1; fi
+          # Only digits and dots: rejects an empty value and any crafted
+          # input (quotes, spaces, ';') so it stays a literal, never a command.
+          case "$version" in
+            ''|*[!0-9.]*) echo "::error::bad marketing version: '$version'"; exit 1;;
+          esac
           echo "MARKETING_VERSION=$version" >> "$GITHUB_ENV"
           echo "Releasing $version"
 
