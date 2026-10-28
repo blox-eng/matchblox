@@ -367,7 +367,7 @@ func (m Model) toDriver() Model {
 			m.flash = "no session owns #" + strconv.Itoa(sh.Number) + ", and no checkout of " + sh.Repo + " is here"
 			return m
 		}
-		return m.openNewAt(sh.Where, "Take over #"+strconv.Itoa(sh.Number)+" ("+sh.URL+"): read where it stands, then carry it to live.")
+		return m.openNewIn(sh.Where, "Take over #"+strconv.Itoa(sh.Number)+" ("+sh.URL+"): read where it stands, then carry it to live.")
 	}
 	s, ok := m.driver(sh)
 	if !ok {

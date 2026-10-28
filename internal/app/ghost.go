@@ -4,7 +4,6 @@ import (
 	"path/filepath"
 	"slices"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
 
@@ -83,19 +82,22 @@ func ghostAction(g ghost) *action {
 	return &action{label: "new session", say: say, ghost: true, where: g.repo.path}
 }
 
-// openNewIn is N with where picked, the cursor on agent; with no folder,
-// N as it is.
-func (m Model) openNewIn(where string) (tea.Model, tea.Cmd) {
-	next, cmd := m.openNew()
-	nm, ok := next.(Model)
-	if !ok || nm.form == nil || where == "" {
-		return next, cmd
+// openNewIn is N with where picked and the cursor on agent, so ⏎ ⏎ starts
+// it, with first as the first message to edit; with no folder, N as it is.
+func (m Model) openNewIn(where, first string) Model {
+	if where == "" {
+		next, _ := m.openNew()
+		return next.(Model)
+	}
+	nm := m.openNewAt(where, first)
+	if nm.form == nil {
+		return nm
 	}
 	f := *nm.form
 	f.where, f.picked, f.query, f.extra = where, true, "", ""
 	f.listOpen, f.at = false, fieldAgent
 	nm.form = &f
-	return nm, cmd
+	return nm
 }
 
 // ghostRow is one ghost row, drawn faint as a session row is laid out:

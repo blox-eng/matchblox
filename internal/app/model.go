@@ -1186,7 +1186,7 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.openPairDoor()
 		}
 		if a := m.primary(); a != nil && a.ghost {
-			return m.openNewIn(a.where)
+			return m.openNewIn(a.where, ""), nil
 		}
 		m.pending, m.previewTop = m.primary(), 0
 	case bkey.Matches(k, mk.Second):
