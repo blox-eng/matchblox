@@ -6,6 +6,22 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A swipe scrolls in a host jump again, and a drag selects there.** Each
+  jump's session has its own key table since v0.25.0, and tmux then skips
+  its default mouse keys: on a phone a swipe in a jump scrolled nothing.
+  Each jump's table now holds tmux's own mouse keys for a pane (wheel,
+  click, drag, border drag), and the host's side takes the mouse, so a
+  swipe scrolls the agent's history there. (#240)
+- **A connect from Hosts asks ssh's questions in the console.** It gave
+  the raw terminal to `matchblox connect`, so ssh asked for a host key or a
+  password as plain text. Now a host key, a password or a passphrase shows
+  in the same field as a jump's, and `esc` ends the ssh. A login by key,
+  agent or Tailscale SSH asks nothing. A failure stays on Hosts and says
+  why. `matchblox connect` typed in a shell still asks in that terminal.
+  Not tested yet with a real ssh on macOS. (#242)
+
 ## [0.26.0] - 2026-10-27
 
 ### Changed

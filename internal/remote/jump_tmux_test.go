@@ -341,6 +341,32 @@ func TestJumpWayBackTap(t *testing.T) {
 	waitFor(t, "the jump session is gone", func() bool { return !hasSession(e.outer, HostSessionName(j.Host, j.ID)) })
 }
 
+// TestJumpSwipeScrolls: a swipe on a phone is a wheel event. In a jump it
+// scrolls the agent's pane on the host, as it does outside a jump (#240).
+func TestJumpSwipeScrolls(t *testing.T) {
+	e := newJumpEnv(t)
+	c := attach(t, e.outer, "matchblox")
+	j := e.newJump("0a1b2c3d")
+	e.jump(t, c, j, e.ssh)
+	s := HostSessionName(j.Host, j.ID)
+	c.waitSession(s)
+	waitFor(t, "the jump is attached", func() bool { return len(clientsOf(e.inner, JumpSessionName(j.ID))) == 1 })
+	waitFor(t, "the host asks for the mouse", func() bool {
+		out, _ := tmuxOut(e.outer, "display-message", "-p", "-t", "="+s+":", "#{mouse_any_flag}")
+		return out == "1"
+	})
+	inCopyMode := func() bool {
+		out, _ := tmuxOut(e.inner, "display-message", "-p", "-t", e.pane, "#{pane_mode}")
+		return out == "copy-mode"
+	}
+	c.type_("\x1b[<64;10;5M") // SGR mouse: wheel up in the pane
+	waitFor(t, "a swipe puts the agent's pane in copy-mode", inCopyMode)
+	mustTmux(t, e.inner, "send-keys", "-t", e.pane, "-X", "cancel")
+	waitFor(t, "copy-mode ends", func() bool { return !inCopyMode() })
+	c.type_("\x1b[<0;10;5M", "\x1b[<32;14;5M") // press, then drag
+	waitFor(t, "a drag selects in the agent's pane", inCopyMode)
+}
+
 func TestJumpWayBackWithPrefixCa(t *testing.T) {
 	for _, c := range []struct{ prefix, key string }{
 		{"C-a", "\x01"},
