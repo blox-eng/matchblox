@@ -630,7 +630,9 @@ func consoleKeys(home string) *app.Keys {
 func openHost(path, home, host string) app.Options {
 	if host == "" {
 		c, err := ensureService(path)
+		cwd, _ := os.Getwd()
 		return app.Options{Conn: c, DialErr: err, Local: true,
+			Here:   launchRepo(cwd, home, os.Getenv("SSH_CONNECTION") != ""),
 			Redial: func() (transport.Conn, error) { return ensureService(path) },
 			Owner:  func() int { return transport.Owner(path) }}
 	}
@@ -668,6 +670,22 @@ func localTmux() (prefix, home func() string, version string) {
 		return read("display-message", "-p", "-t", pane, "#{session_name}")
 	}
 	return func() string { return p }, home, strings.TrimPrefix(read("-V"), "tmux ")
+}
+
+// launchRepo is the root of the Git repo dir is in, where Sessions' ghost
+// row starts: "" outside one, for home (the repo of its dotfiles is no
+// place to start) and over SSH, where the shell's folder is not the
+// person's.
+func launchRepo(dir, home string, ssh bool) string {
+	if ssh || dir == "" {
+		return ""
+	}
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+	root := filepath.Clean(strings.TrimSpace(string(out)))
+	if err != nil || root == "." || root == filepath.Clean(home) {
+		return ""
+	}
+	return root
 }
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }

@@ -159,7 +159,7 @@ func (m Model) recsSection(b *body, w int) {
 	}
 	b.add(recsLabelRow, st.label.Render(fmt.Sprintf(" RECOMMENDATIONS · %d", len(m.recs)))+st.faint.Render(" · ")+
 		keyWord(m.keys.main.Fold, st.accent, st.faint, " hides"))
-	n := len(m.doors) + len(m.snap.Sessions)
+	n := len(m.doors) + len(m.snap.Sessions) + len(m.ghosts())
 	sel := m.sessIndex() - n
 	for i, r := range m.recs {
 		mark := st.faint.Render("○ ")

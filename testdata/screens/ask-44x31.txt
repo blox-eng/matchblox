@@ -17,9 +17,9 @@
  ╿ wick-mobile           done      0s    6%
  WORKING · 1
  ✦ hearth-api            busy           79%
+ + start a new session
 
  1 without an agent: shell:1.1 zsh
-
 ╭─ ssh ws-1 asks ──────────────────────────╮
 │                                          │
 │   builder@ws-1's password:               │

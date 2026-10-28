@@ -10,8 +10,9 @@
  ╿ wick-mobile                   done       0s    6% ││ Should a refresh also rotate the token?           │
  WORKING · 1                                         ││ › 1 Rotate it  the old one stops at once          │
  ✦ hearth-api                    busy            79% ││   2 Rotate, keep the old one a minute             │
-                                                     ││   3 Keep the token                                │
- 1 without an agent: shell:1.1 zsh                   ││   4 Type an answer…                               │
+ + start a new session                               ││   3 Keep the token                                │
+                                                     ││   4 Type an answer…                               │
+ 1 without an agent: shell:1.1 zsh                   ││                                                   │
                                                      ││                                                   │
  RECOMMENDATIONS · 7 · h hides                       ││                                                   │
  ▲ The week runs short: compact spark-docs           ││                                                   │
@@ -21,7 +22,6 @@
  ○ Clear flint-auth (%2)                             ││                                                   │
  ○ Clear ember-billing (%8)                          ││                                                   │
  ○ Clear wick-mobile (%7)                            ││                                                   │
-                                                     ││                                                   │
                                                      ││                                                   │
                                                      ││                                                   │
                                                      ││                                                   │

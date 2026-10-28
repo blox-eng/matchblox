@@ -391,6 +391,8 @@ func TestEnterOnAShipNobodyOwnsStartsASessionThere(t *testing.T) {
 		t.Fatalf("enter did not open New session: %q", nm.flash)
 	case nm.whereSelectedIn(nm.form).path() != "/w/hearth-api":
 		t.Fatalf("New session opens in %q", nm.whereSelectedIn(nm.form).path())
+	case nm.form.at != fieldAgent || !nm.form.picked:
+		t.Fatalf("the folder is not picked with the cursor on agent, as a ghost row does: at %v", nm.form.at)
 	case !strings.Contains(nm.form.first, "#"+n):
 		t.Fatalf("the first message %q does not name #%s", nm.form.first, n)
 	case len(f.acts()) != 0:

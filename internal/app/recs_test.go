@@ -32,12 +32,12 @@ func TestRecommendationsSitUnderTheSessions(t *testing.T) {
 		t.Fatalf("the recommendations are not under the sessions:\n%s", out)
 	}
 	var next tea.Model = m
-	for range len(m.snap.Sessions) {
+	for range len(m.snap.Sessions) + len(m.ghosts()) {
 		next, _ = key(next, "down")
 	}
 	got := next.(Model)
 	if r, ok := got.selectedRec(); !ok || r.ID != "r1" {
-		t.Fatal("↓ from the sessions does not select the recommendation")
+		t.Fatal("↓ from the sessions and the ghost row does not select the recommendation")
 	}
 	if _, ok := got.selectedSession(); ok {
 		t.Fatal("a session is still selected")
@@ -161,7 +161,7 @@ func TestFoldTheRecommendations(t *testing.T) {
 	if !strings.Contains(out, "RECOMMENDATIONS · 2 hidden · h shows") || strings.Contains(out, "▲ Compact app-feature") {
 		t.Fatalf("h did not fold:\n%s", out)
 	}
-	if _, ok := folded.(Model).selectedRec(); ok || folded.(Model).rowCount() != len(m.snap.Sessions) {
+	if _, ok := folded.(Model).selectedRec(); ok || folded.(Model).rowCount() != len(m.snap.Sessions)+len(m.ghosts()) {
 		t.Fatal("a folded recommendation can still be selected")
 	}
 	if !strings.Contains(screen(loadedIn(t, dir, twoRecs())), "2 hidden") {

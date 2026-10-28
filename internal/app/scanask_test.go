@@ -659,3 +659,18 @@ func TestWhereLiveFollowsTheSessions(t *testing.T) {
 		t.Fatalf("live %v", got)
 	}
 }
+
+// TestGhostsAreBuiltWithTheRepos: the ghost rows sort every known repo, so
+// they are built once with wrepos, not at each draw. On #219's first CI a
+// frame that asked for them many times over 5007 repos ran past the 10
+// minute limit on macOS.
+func TestGhostsAreBuiltWithTheRepos(t *testing.T) {
+	m, _ := loadedWith(t, 100, manyFound())
+	if len(m.wghost) == 0 {
+		t.Fatal("the ghost repos are not built with the repos")
+	}
+	m.wghost = []whereRepo{{path: "/kept", name: "kept"}}
+	if g := m.ghosts(); g[0].repo.path != "/kept" {
+		t.Fatalf("ghosts sorted the repos again: %+v", g[0].repo)
+	}
+}

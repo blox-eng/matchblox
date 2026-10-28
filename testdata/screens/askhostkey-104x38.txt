@@ -10,21 +10,22 @@
  ╿ wick-mobile  ╭─ ssh ws-1 asks ──────────────────────────────────────────────────────╮
  WORKING · 1    │                                                                      │
  ✦ hearth-api   │   The authenticity of host 'ws-1' can't be established.              │
-                │   ED25519 key fingerprint is                                         │%  docs for the…
- 1 without an ag│   SHA256:Hx1T4cGQ0bZp6Yd3lq9m0f8aJk2sWvR7uNcE5yXoLtI.                │●  live
-                │   +--[ED25519 256]--+                                                │
- RECOMMENDATIONS│   |    .o+=*o.      |                                                │.com/hearth/spa…
- ▲ The week runs│   |     o=B.+ .     |                                                │ (clear after 0…
- ○ Clear spark-d│   |      +.X o      |                                                │kens · +0k in
- ○ Clear kindle-│   +----[SHA256]-----+                                                │.com · Max ·
- ○ Clear cinder-│   This key is not known by any other names.                          │started 3h20m
- ○ Clear flint-a│   Are you sure you want to continue connecting                       │
- ○ Clear ember-b│   (yes/no/[fingerprint])?                                            │
- ○ Clear wick-mo│                                                                      │A switch agent
-────────────────│   › •▏                                                               │────────────────
- USAGE          │   ! type yes or no, then ⏎                                           │       16 cores
- ✻ Claude Max   │                                                                      │
-                ╰─ ⏎ answer ─ esc cancel the ssh ──────────────────────────────────────╯GB
+ + start a new s│   ED25519 key fingerprint is                                         │%  docs for the…
+                │   SHA256:Hx1T4cGQ0bZp6Yd3lq9m0f8aJk2sWvR7uNcE5yXoLtI.                │●  live
+ 1 without an ag│   +--[ED25519 256]--+                                                │
+                │   |    .o+=*o.      |                                                │.com/hearth/spa…
+ RECOMMENDATIONS│   |     o=B.+ .     |                                                │ (clear after 0…
+ ▲ The week runs│   |      +.X o      |                                                │kens · +0k in
+ ○ Clear spark-d│   +----[SHA256]-----+                                                │.com · Max ·
+ ○ Clear kindle-│   This key is not known by any other names.                          │started 3h20m
+ ○ Clear cinder-│   Are you sure you want to continue connecting                       │
+ ○ Clear flint-a│   (yes/no/[fingerprint])?                                            │
+ ○ Clear ember-b│                                                                      │A switch agent
+ ○ Clear wick-mo│   › •▏                                                               │
+────────────────│   ! type yes or no, then ⏎                                           │────────────────
+ USAGE          │                                                                      │       16 cores
+ ✻ Claude Max   ╰─ ⏎ answer ─ esc cancel the ssh ──────────────────────────────────────╯
+                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00                │ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
                  out Fri ~21:00                                │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
  · Google login  not measured · OpenCode keeps no limits       │ runs 5 claude · 1 codex · 1 opencode
  ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                    │
@@ -33,6 +34,5 @@
                                                                │ 1200     claude              0%   9.8M…
                                                                │ 1300     zsh                 0%   9.8M…
                                                                │ 1310     claude              0%   9.8M…
-                                                               │ 1400     claude              0%   9.8M…
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
  ⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit    sampled 0s ago
