@@ -338,14 +338,18 @@ func (m Model) overlayAsk(sc *drawn, w int) {
 	if !phone {
 		bw = min(72, w-8)
 	}
-	var box []string
+	box := m.fieldBox(bw, len(sc.lines)-3)
+	m.overlayBox(sc, w, bw, phone, box, make([]string, len(box)), nil)
+}
+
+// fieldBox is the field as it stands: a prompt, Tailscale's link, or the
+// wait between two prompts. A prompt's box is at most maxH lines.
+func (m Model) fieldBox(bw, maxH int) []string {
 	switch {
 	case m.ask != nil:
-		box = m.askBox(bw, len(sc.lines)-3)
+		return m.askBox(bw, maxH)
 	case m.loginURL != "":
-		box = m.linkBox(bw)
-	default:
-		box = m.waitBox(bw)
+		return m.linkBox(bw)
 	}
-	m.overlayBox(sc, w, bw, phone, box, make([]string, len(box)), nil)
+	return m.waitBox(bw)
 }

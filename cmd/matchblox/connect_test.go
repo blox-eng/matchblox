@@ -61,6 +61,23 @@ func TestConnectMakesTheKeyThenBootstraps(t *testing.T) {
 	}
 }
 
+// TestConnectFromTheConsoleHasNoTerminal: the console runs the connect, so
+// its ssh asks through askpass and has no -t; -v names a Tailscale SSH
+// host (#242).
+func TestConnectFromTheConsoleHasNoTerminal(t *testing.T) {
+	var ran [][]string
+	err := connectHost(connectEnv{Home: t.TempDir(), Run: keygen(t, &ran, nil), Out: &bytes.Buffer{}, Console: true,
+		Verify: func(remote.Target) (string, error) { return "v0.1.0", nil }}, "ws-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script, _ := remote.Bootstrap(testPub)
+	want := []string{"ssh", "-v", "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "--", "ws-1", script}
+	if len(ran) != 2 || !slices.Equal(ran[1], want) {
+		t.Fatalf("ran %q\nwant %q", ran, want)
+	}
+}
+
 func TestConnectKeepsAnExistingKey(t *testing.T) {
 	home := t.TempDir()
 	key := remote.KeyPath(home)

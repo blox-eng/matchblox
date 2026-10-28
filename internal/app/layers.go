@@ -60,14 +60,16 @@ type Shell struct {
 	adding  bool    // the rows are hosts to add
 	input   *string // a host being typed
 	pending *action // connect or remove, waiting for its y
-	flash   string
-	width   int
-	height  int
-	dark    bool
-	st      styles
-	gen     int          // the generation of the last console opened
-	offers  *pairWaits   // the pair offers of every console: Close waits for all
-	keys    shellKeymaps // the Hosts list keys
+	// connecting is the field of a connect that runs: its ssh asks there.
+	connecting *Model
+	flash      string
+	width      int
+	height     int
+	dark       bool
+	st         styles
+	gen        int          // the generation of the last console opened
+	offers     *pairWaits   // the pair offers of every console: Close waits for all
+	keys       shellKeymaps // the Hosts list keys
 	// tailscale: the hosts that are Tailscale SSH, as their consoles' last
 	// check said.
 	tailscale map[string]bool
@@ -144,12 +146,23 @@ func (s Shell) Init() tea.Cmd {
 }
 
 func (s Shell) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if s.connecting != nil {
+		if next, cmd, ok := s.connectUpdate(msg); ok {
+			return next, cmd
+		}
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		s.width, s.height = msg.Width, msg.Height
+		if s.connecting != nil {
+			s.connecting.width, s.connecting.height = s.width, s.height
+		}
 	case tea.BackgroundColorMsg:
 		s.dark = msg.IsDark()
 		s.st = newStyles(s.dark)
+		if s.connecting != nil {
+			s.connecting.dark, s.connecting.st = s.dark, s.st
+		}
 	case layerMsg:
 		return s.back(), nil
 	case connectedHostMsg:
@@ -311,7 +324,13 @@ func (s Shell) connect(host string) *action {
 
 func (s Shell) confirm(a action) (tea.Model, tea.Cmd) {
 	host := a.door
-	if a.connect {
+	if a.connect && s.opt.Base.Ask != nil {
+		s.gen++
+		f, cmd := s.connectField(host, s.gen).connect(a.steps[0])
+		s.connecting, s.flash = &f, "connecting "+host+"…"
+		return s, cmd
+	}
+	if a.connect { // no prompt socket: ssh asks in this terminal
 		s.flash = "running: " + a.String()
 		done := func(err error) tea.Msg { return connectedHostMsg{host, err} }
 		if s.opt.Exec != nil {
@@ -462,6 +481,14 @@ func (s Shell) render() string {
 		}
 		layBox(st, out, w, bw, phone, stepBox(st, *s.pending, bw, s.keys.shell.Yes, s.keys.shell.Open, s.keys.shell.Back))
 	}
+	if f := s.connecting; f != nil && f.asking() {
+		phone := layout(w, s.height) == Narrow || portrait(w, s.height)
+		bw := min(w, 72)
+		if !phone {
+			bw = min(72, w-8)
+		}
+		layBox(st, out, w, bw, phone, f.fieldBox(bw, len(out)-3))
+	}
 	return strings.Join(out, "\n")
 }
 
@@ -489,6 +516,9 @@ func (s Shell) actionLine(w int) string {
 func (s Shell) Close() {
 	s.cur.ClosePair()
 	s.cur.stopAsk()
+	if s.connecting != nil {
+		s.connecting.stopAsk()
+	}
 	if s.layer == layerConsole && s.cur.conn != nil {
 		_ = s.cur.conn.Close()
 	}
