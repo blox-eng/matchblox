@@ -171,7 +171,11 @@ func (bd Board) write(b *strings.Builder) {
 			if n++; n > 8 {
 				continue
 			}
-			lines = append(lines, fmt.Sprintf("- #%d %s: %s · no session drives it", sh.Number, sh.Repo, stageOf(sh)))
+			line := fmt.Sprintf("- #%d %s: %s · no session drives it", sh.Number, sh.Repo, stageOf(sh))
+			if sh.Where != "" {
+				line += " · start one: `matchblox new --where " + shellWord(sh.Where) + "`"
+			}
+			lines = append(lines, line)
 		}
 		if n > 8 {
 			lines = append(lines, fmt.Sprintf("- %d more ships: `matchblox ships --json` lists them", n-8))
@@ -206,6 +210,15 @@ func shipOfPane(rep *ships.Report, x sample.Session) *ships.Ship {
 		return &ss[0]
 	}
 	return nil
+}
+
+// shellWord is s as one shell word: in single quotes when it holds
+// anything a shell reads, as remote.Quote does (that package imports this one).
+func shellWord(s string) string {
+	if s != "" && !strings.ContainsAny(s, " \t\n'\"\\$`!*?[]{}()<>|&;#~=") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // stageOf is a ship's stage in a word, and its red CI.

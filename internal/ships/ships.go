@@ -55,6 +55,10 @@ type Ship struct {
 	// Merge is the command that merges a ship that waits for your merge,
 	// with the repository's merge method. The console shows it and asks.
 	Merge []string `json:"merge,omitempty"`
+	// Where is the checkout a new session takes a ship nobody owns from:
+	// the worktree on its head branch, else its repository's main checkout.
+	// Empty while a session owns it, or when no checkout of it is here.
+	Where string `json:"where,omitempty"`
 }
 
 // SessionRef names the session that drives a ship. On a ship it is the
@@ -177,6 +181,9 @@ type pr struct {
 	// Owner is the session that owned it on the last sample: kept only
 	// for its Since.
 	Owner SessionRef `json:"owner,omitzero"`
+	// where is the checkout a new session takes it from, while nobody owns
+	// it: read again on every sample.
+	where string
 }
 
 func (p *pr) inFlight() bool {
@@ -459,7 +466,37 @@ func (t *Tracker) own(ctx context.Context, in Input, now time.Time) {
 		if ref != p.Owner {
 			p.Owner, t.dirty = ref, true
 		}
+		p.where = ""
+		if !ok {
+			p.where = t.start(ctx, in.Git, p, now)
+		}
 	}
+}
+
+// start is the checkout a new session takes an open PR from: the worktree
+// on its head branch, else the main checkout of its repository. "" when no
+// checkout of its repository is here.
+func (t *Tracker) start(ctx context.Context, git *gitscan.Report, p *pr, now time.Time) string {
+	f := p.Facts
+	if git == nil || f != nil && f.State != "OPEN" {
+		return ""
+	}
+	main := ""
+	for _, r := range git.Repos {
+		if repo, _ := t.repoOf(ctx, r.Path, now); !strings.EqualFold(repo, p.Repo) {
+			continue
+		}
+		if main == "" {
+			main = r.Path
+		}
+		for _, wt := range r.Worktrees {
+			onHead := f != nil && !f.Fork && wt.Branch != "" && wt.Branch != r.Main && wt.Branch == f.Head
+			if onHead || wt.PR != nil && wt.PR.Number == p.Number {
+				return wt.Path
+			}
+		}
+	}
+	return main
 }
 
 // onBranch is the live sessions on each PR's head branch, by key: in the
@@ -830,7 +867,7 @@ func (t *Tracker) report(now time.Time) Report {
 
 func (t *Tracker) ship(p *pr, paused bool, now time.Time) Ship {
 	s := Ship{
-		Repo: p.Repo, Number: p.Number, Session: p.Owner, Evidence: p.Claim.Kind,
+		Repo: p.Repo, Number: p.Number, Session: p.Owner, Evidence: p.Claim.Kind, Where: p.where,
 		URL:  fmt.Sprintf("https://github.com/%s/pull/%d", p.Repo, p.Number),
 		Kind: Unknown, Since: p.Claim.At,
 	}

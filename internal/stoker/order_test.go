@@ -156,7 +156,7 @@ func TestBriefCarriesTheMachineNow(t *testing.T) {
 		Reasons: map[string]string{"%1": "#4556 waits your merge", "%3": "idle"},
 		Ships: &ships.Report{Ships: []ships.Ship{
 			{Repo: "o/app", Number: 4556, Stage: ships.StageGreen, Session: ships.SessionRef{Pane: "%1"}},
-			{Repo: "o/web", Number: 4570, Stage: ships.StageCI, Kind: ships.Stuck, Failed: "test"},
+			{Repo: "o/web", Number: 4570, Stage: ships.StageCI, Kind: ships.Stuck, Failed: "test", Where: "/w/my web"},
 		}},
 		Holds: []holds.Hold{{SessionID: "s3", Pane: "%3", Name: "docs", By: "you"}, {SessionID: "s2", Pane: "%2", Name: "billing", By: "stoker", Why: "not priority"}},
 		Limits: []limits.Account{{Provider: "claude", Account: "me@x", Windows: []limits.Window{
@@ -169,7 +169,7 @@ func TestBriefCarriesTheMachineNow(t *testing.T) {
 		"- work (%1): idle · #4556 waits your merge · #4556 green · context 45% · plan 70%",
 		"- billing (%2): busy · context 81% · held by the stoker: not priority",
 		"- docs (%3): idle · context 12% · parked by you",
-		"- #4570 o/web: ci, CI red · test · no session drives it",
+		"- #4570 o/web: ci, CI red · test · no session drives it · start one: `matchblox new --where '/w/my web'`",
 		"- claude me@x: 5h 84% · week 61%",
 	} {
 		if !strings.Contains(brief, want) {

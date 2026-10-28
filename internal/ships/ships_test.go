@@ -207,6 +207,36 @@ func TestABranchNameOwnsOnlyItsOwnOpenPR(t *testing.T) {
 	}
 }
 
+// TestAShipNobodyOwnsSaysWhereToStartOne: a ship with no session names
+// the checkout a new session takes it from: the worktree on its head
+// branch, else the repository's main checkout. A ship with an owner names
+// none.
+func TestAShipNobodyOwnsSaysWhereToStartOne(t *testing.T) {
+	w := newWorld(t)
+	tr := w.tracker()
+	a := w.session("a", "%1",
+		toolUse("c1", "/w", "", "gh pr create --fill"),
+		toolResult("c1", "/w", "https://github.com/hearth/hearth/pull/4557", nil),
+	)
+	git := func(wts ...gitscan.Worktree) *gitscan.Report {
+		return &gitscan.Report{Repos: []gitscan.Repo{{Path: "/w", Main: "main", Worktrees: append([]gitscan.Worktree{{Path: "/w", Branch: "main"}}, wts...)}}}
+	}
+	scan := func(g *gitscan.Report, ss ...sample.Session) *Ship {
+		t.Helper()
+		w.clock = w.clock.Add(time.Minute)
+		return find(tr.Scan(context.Background(), Input{Sessions: ss, Git: g}), 4557)
+	}
+	if s := scan(git(), a); s.Where != "" {
+		t.Errorf("an owned ship names %q to start a session in", s.Where)
+	}
+	if s := scan(git(gitscan.Worktree{Path: "/wt/4557", Branch: "feat/4557"})); s.Where != "/wt/4557" {
+		t.Errorf("start in %q, want the worktree on its branch", s.Where)
+	}
+	if s := scan(git()); s.Where != "/w" {
+		t.Errorf("start in %q, want the main checkout", s.Where)
+	}
+}
+
 // TestPollCadence: a new PR is read at once, then every PollEvery while
 // any is in flight, and never when none is.
 func TestPollCadence(t *testing.T) {
