@@ -778,6 +778,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			lims.add(sess, limits.SourceCodex, lim)
 		case CursorAgent:
 			sess.Account, sess.Provider = s.accounts.cursorAccount(env), "cursor"
+			sess.EnvAPIKey = env.apiKey
 			s.tag(&sess, agent, env)
 			sess.Context = "unmeasured"
 			tmux, _ := s.FS.Environ(pid, "TMUX")

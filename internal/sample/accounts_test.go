@@ -128,6 +128,21 @@ func TestCursorAccountReadsItsOwnHome(t *testing.T) {
 	}
 }
 
+// TestACursorKeyInTheEnvironmentIsSeen: a Cursor that runs on
+// CURSOR_API_KEY signs in from its shell, which matchblox recover cannot
+// give again.
+func TestACursorKeyInTheEnvironmentIsSeen(t *testing.T) {
+	root := copyFixture(t)
+	accountSession(t, root, 950, "cursor-agent", "%40", "CURSOR_API_KEY=key")
+	accountSession(t, root, 951, "cursor-agent", "%41")
+	smp := newFixtureSampler(root)
+	smp.Agents = []string{"cursor-agent"}
+	snap := smp.Sample()
+	if !sessionOf(t, snap, 950).EnvAPIKey || sessionOf(t, snap, 951).EnvAPIKey {
+		t.Fatalf("key %+v, none %+v", sessionOf(t, snap, 950), sessionOf(t, snap, 951))
+	}
+}
+
 // TestSigningInWhileNoName: a session on an account folder with no login is
 // signing in.
 func TestSigningInWhileNoName(t *testing.T) {

@@ -500,6 +500,22 @@ func TestARecoveredAgentThatExitsLaterIsNotLive(t *testing.T) {
 	}
 }
 
+// TestRecoverRefusesDirForARepoWithNoIdentity: a repository with no origin
+// and no commit has nothing that names it, so --dir cannot be checked.
+func TestRecoverRefusesDirForARepoWithNoIdentity(t *testing.T) {
+	s, ran := recoverTest(t)
+	s.Recovery.Git = func(dir string) recovery.Checkout { return recovery.Checkout{Root: dir, Branch: "main"} }
+	api := agentIn(t, s, "claude", "c1", "api", "%3")
+	publishOn(s, "100", api)
+	loseServer(s)
+	other := filepath.Join(s.Home, "other")
+	must(t, os.MkdirAll(other, 0o700))
+	res := recoverAct(t, s, proto.Recover{Names: []string{"api"}, Dirs: map[string]string{"api": other}}, "")
+	if r := rows(res)["api"]; r.State != proto.RecoverCannot || !strings.Contains(r.Why, "cannot tell") || len(*ran) != 0 {
+		t.Fatalf("row %+v, ran %q", r, *ran)
+	}
+}
+
 func must(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {

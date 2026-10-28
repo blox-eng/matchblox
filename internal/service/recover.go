@@ -233,6 +233,9 @@ func (s *Service) recoverRow(e recovery.Entry, moved string, live, taken map[str
 	if st, err := os.Stat(row.Dir); err != nil || !st.IsDir() {
 		return cannot("the folder %s is gone: run matchblox recover %s --dir <its new place>", row.Dir, e.Session)
 	}
+	if moved != "" && e.Repo != "" && e.Ident == "" {
+		return cannot("matchblox cannot tell that %s is the same repository as %s (it had no origin and no commit): run cd %s && %s", row.Dir, e.Repo, row.Dir, resume)
+	}
 	if e.Unread && moved != "" {
 		return cannot("git never answered for %s while it ran, so matchblox cannot check that %s is the same repository: run cd %s && %s", e.Cwd, row.Dir, row.Dir, resume)
 	}

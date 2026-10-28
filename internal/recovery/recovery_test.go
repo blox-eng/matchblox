@@ -257,6 +257,42 @@ func TestAMovedCloneKeepsItsIdent(t *testing.T) {
 	}
 }
 
+// TestTheRecordKeepsNoOriginCredential: an origin URL can carry a token.
+// The record keeps a hash of the place it names, so no token is written,
+// and a clone over ssh names the same repository as one over https.
+func TestTheRecordKeepsNoOriginCredential(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	const token = "ghp_SECRETTOKEN123"
+	dir := t.TempDir()
+	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"remote", "add", "origin", "https://x-access-token:" + token + "@GitHub.com/o/api.git"}} {
+		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil { //nolint:gosec // test argv
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	rec := t.TempDir()
+	s, err := Open(rec)
+	must(t, err)
+	e := live("a")
+	e.Cwd = dir
+	must(t, s.Update([]Entry{e}, nil, t0))
+	b, err := os.ReadFile(filepath.Join(rec, File))
+	must(t, err)
+	if strings.Contains(string(b), token) || strings.Contains(string(b), "x-access-token") {
+		t.Fatalf("the record holds the origin's credential:\n%s", b)
+	}
+	got := s.List()[0].Ident
+	for _, url := range []string{"git@github.com:o/api.git", "ssh://git@github.com:22/o/api", "https://github.com/o/api/"} {
+		if id := hashed("origin " + originPlace(url)); id != got {
+			t.Errorf("%s names another repository: %s, want %s", url, id, got)
+		}
+	}
+	if id := hashed("origin " + originPlace("git@github.com:o/web.git")); id == got {
+		t.Error("o/web names the same repository as o/api")
+	}
+}
+
 func must(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {

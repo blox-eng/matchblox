@@ -5,6 +5,8 @@ package recovery
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -72,9 +74,10 @@ func (e Entry) key() string { return e.Socket + "\x00" + e.server() + "\x00" + e
 
 func (e Entry) conversation() string { return e.Agent + "\x00" + e.ConversationID }
 
-// Checkout is a folder's checkout: see Entry. Ident is "origin <url>",
-// or "roots <hashes>" (its root commits) for a repository with no origin:
-// both move with a clone, and an unrelated repository has others. Unread:
+// Checkout is a folder's checkout: see Entry. Ident is a hash of the place
+// its origin names, or of its root commits when it has no origin: both
+// move with a clone, and an unrelated repository has others. "" when git
+// tells neither (no origin, no commit yet). Unread:
 // git did not answer within gitWait, and the rest says nothing.
 type Checkout struct {
 	Root, Branch, Ident string
@@ -229,16 +232,46 @@ func ReadCheckout(dir string) Checkout {
 	branch, _ := git("symbolic-ref", "--short", "-q", "HEAD")
 	ident := ""
 	if url, err := git("config", "--get", "remote.origin.url"); err == nil && url != "" {
-		ident = "origin " + url
+		ident = hashed("origin " + originPlace(url))
 	} else if roots, err := git("rev-list", "--max-parents=0", "HEAD"); err == nil && roots != "" {
 		list := strings.Fields(roots)
 		sort.Strings(list)
-		ident = "roots " + strings.Join(list, " ")
+		ident = hashed("roots " + strings.Join(list, " "))
 	}
 	if ctx.Err() != nil {
 		return Checkout{Unread: true}
 	}
 	return Checkout{Root: root, Branch: branch, Ident: ident}
+}
+
+// hashed is a short hash of what names a repository: the record keeps no
+// origin URL, which can hold a token.
+func hashed(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:8])
+}
+
+// originPlace is the host and path an origin URL names, without its
+// scheme, user, password, port or .git: a clone over ssh and one over
+// https of one repository name the same place.
+func originPlace(raw string) string {
+	s := raw
+	if _, rest, ok := strings.Cut(s, "://"); ok {
+		s = rest
+	} else if host, path, ok := strings.Cut(s, ":"); ok && !strings.Contains(host, "/") {
+		s = host + "/" + path // scp form: git@host:o/r
+	}
+	if i := strings.Index(s, "/"); i >= 0 {
+		host, path := s[:i], s[i:]
+		if at := strings.LastIndex(host, "@"); at >= 0 {
+			host = host[at+1:]
+		}
+		if h, _, ok := strings.Cut(host, ":"); ok {
+			host = h
+		}
+		s = strings.ToLower(host) + path
+	}
+	return strings.TrimSuffix(strings.TrimSuffix(s, "/"), ".git")
 }
 
 // List is every entry, by tmux session and conversation.
