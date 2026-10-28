@@ -1,0 +1,3 @@
+scheme "Matchblox"
+export_method "app-store"
+clean true
