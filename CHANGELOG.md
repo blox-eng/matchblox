@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-10-28
+
 ### Added
 
 - **You get your agents back after your tmux server dies.** While your
@@ -1076,7 +1078,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.26.2...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.27.0...HEAD
+[0.27.0]: https://github.com/blox-eng/matchblox/compare/v0.26.2...v0.27.0
 [0.26.2]: https://github.com/blox-eng/matchblox/compare/v0.26.1...v0.26.2
 [0.26.1]: https://github.com/blox-eng/matchblox/compare/v0.26.0...v0.26.1
 [0.26.0]: https://github.com/blox-eng/matchblox/compare/v0.25.1...v0.26.0
