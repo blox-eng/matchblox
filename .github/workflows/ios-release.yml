@@ -1,0 +1,68 @@
+name: ios-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: "Marketing version (CFBundleShortVersionString)"
+        required: true
+        default: "0.1.0"
+  push:
+    tags:
+      - "ios-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  testflight:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve the marketing version
+        run: |
+          if [ "${{ github.event_name }}" = push ]; then
+            version="${GITHUB_REF_NAME#ios-v}"
+          else
+            version="${{ github.event.inputs.marketing_version }}"
+          fi
+          if [ -z "$version" ]; then echo "::error::no marketing version"; exit 1; fi
+          echo "MARKETING_VERSION=$version" >> "$GITHUB_ENV"
+          echo "Releasing $version"
+
+      - name: Select the newest Xcode 16
+        run: |
+          xcode=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$xcode" ]; then echo "::error::no Xcode 16 on this runner"; exit 1; fi
+          sudo xcode-select -s "$xcode"
+          swift --version
+
+      - name: Download the Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Install fastlane
+        working-directory: ios
+        run: bundle install
+
+      - name: Generate the project
+        run: make -C ios gen
+
+      - name: Build and upload to TestFlight
+        working-directory: ios
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: bundle exec fastlane beta
+
+      - name: Clean up signing material
+        if: always()
+        run: |
+          security delete-keychain fastlane_tmp_keychain 2>/dev/null || true
+          find . -name '*.p8' -delete 2>/dev/null || true
