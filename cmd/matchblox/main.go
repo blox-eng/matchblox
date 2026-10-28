@@ -56,6 +56,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/recovery"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
@@ -197,6 +198,12 @@ func run(args []string) error {
 			return err
 		}
 		return cliHand(cmd, words, *o.pick, *o.why, os.Stdout, transport.SocketPath())
+	case "recover":
+		words, err := positionals(fl, args)
+		if err != nil {
+			return err
+		}
+		return cliRecover(words, *o.all, *o.dir, *o.json, os.Stdout, transport.SocketPath())
 	case "kill", "rename":
 		words, err := positionals(fl, args)
 		if err != nil {
@@ -319,7 +326,7 @@ func askpassMain(prompt string) error {
 
 // commands are the commands a builder types. hook, authorize and gate run
 // from a hook, an ssh forced command and a connect.
-var commands = []string{"connect", "serve", "sessions", "ships", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "switch", "scan"}
+var commands = []string{"connect", "serve", "sessions", "ships", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "switch", "scan", "recover"}
 
 type flags struct {
 	cfgPath, root         *string
@@ -338,6 +345,8 @@ type flags struct {
 	name, handoff         *string
 	account, setup        *string
 	newAccount            *bool
+	all                   *bool
+	dir                   *string
 }
 
 // usageText heads --help: every command, one line each, then the flags.
@@ -366,6 +375,7 @@ Commands:
   matchblox rename <who> <name>    name a session, its tmux session and its agent alike
   matchblox kill <who>             end a session: its agent and its pane (--anyway while it works)
   matchblox switch <who> --agent <name>  run another agent in a session's pane (--handoff, --anyway while it works)
+  matchblox recover [<name>…]      the agents a lost tmux server ran, and what reopens (--all reopens each, --dir a moved folder, --json)
   matchblox scan [<folder>…|off]   find the Git repositories here for N, now and every 30 minutes (off: stop and forget)
   matchblox stoker plan|step       the stoker agent's plan and steps, for its card
   matchblox stoker when …          a trigger matchblox fires itself (--ship n --stage s, or --rest who)
@@ -388,7 +398,7 @@ func newFlags() (*flag.FlagSet, flags) {
 		root:       fl.String("fixtures", "", "read proc/, sys/, home/ and tmux-panes.txt from this directory instead of the live machine"),
 		text:       fl.Bool("text", false, "status: print a summary instead of JSON"),
 		stdio:      fl.Bool("stdio", false, "serve: speak on stdin and stdout, joined to the local service"),
-		json:       fl.Bool("json", false, "sessions, ships, usage, peek: print JSON instead of text"),
+		json:       fl.Bool("json", false, "sessions, ships, usage, peek, recover: print JSON instead of text"),
 		pick:       fl.Int("pick", 0, "send: answer the question the session asks with this option (from 1)"),
 		lines:      fl.Int("lines", 20, "peek: the last lines of what the session said (0: all)"),
 		why:        fl.String("why", "", "hold, stoker when … hold: why the session is held"),
@@ -410,6 +420,8 @@ func newFlags() (*flag.FlagSet, flags) {
 		account:    fl.String("account", "", "new: the account of the agent to start on (default: the default sign-in)"),
 		newAccount: fl.Bool("new-account", false, "new: make the --account, and sign in to it in the session"),
 		setup:      fl.String("setup", "", "new --new-account: like-default (default), copy or empty"),
+		all:        fl.Bool("all", false, "recover: reopen each conversation that can reopen"),
+		dir:        fl.String("dir", "", "recover <name>: the new place of the session's folder"),
 		noMotion:   fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),
 	}
 }
@@ -713,6 +725,14 @@ func newService(cfg config.Config, root string) *service.Service {
 		s.Holds = h
 	} else {
 		fmt.Fprintln(os.Stderr, "matchblox: parking is off:", err)
+	}
+	if r, err := recovery.Open(filepath.Dir(s.StatePath)); err == nil {
+		s.Recovery = r
+		if r.Moved != "" {
+			fmt.Fprintln(os.Stderr, "matchblox: the recovery record did not read, so it starts empty: the old one is at", r.Moved)
+		}
+	} else {
+		fmt.Fprintln(os.Stderr, "matchblox: the recovery record is off:", err)
 	}
 	s.Ships = shipsSource(cfg, filepath.Dir(s.StatePath))
 	if home, err := os.UserHomeDir(); err == nil {

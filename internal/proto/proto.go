@@ -134,6 +134,41 @@ type Result struct {
 	// something that ran, or of a file that did not read. Only a
 	// new:session and a switch:<pane> set it.
 	Refused bool `json:"refused,omitempty"`
+	// Recover is a recover act's answer: each entry of the recovery record,
+	// and what recover found or did with it.
+	Recover []Recovered `json:"recover,omitempty"`
+}
+
+// Recover is the Text of a "recover" act: reopen the conversations of the
+// recovery record that no agent runs now (#215). All reopens each one that
+// can; Names reopens those of these tmux sessions. Neither: a preview,
+// which changes nothing. Dirs is the new folder of a session whose folder
+// moved, by its name.
+type Recover struct {
+	All   bool              `json:"all,omitempty"`
+	Names []string          `json:"names,omitempty"`
+	Dirs  map[string]string `json:"dirs,omitempty"`
+}
+
+// The states of a Recovered.
+const (
+	RecoverLive     = "live"     // an agent runs the conversation now
+	RecoverReady    = "ready"    // it can reopen
+	RecoverReopened = "reopened" // it reopened, in As
+	RecoverCannot   = "cannot"   // it cannot reopen: Why says why and the fix
+)
+
+// Recovered is one entry of the recovery record: its tmux session, agent,
+// conversation and folder, and its state. Why is the cause and the fix of
+// a cannot, or a note.
+type Recovered struct {
+	Name         string `json:"name"`
+	Agent        string `json:"agent"`
+	Conversation string `json:"conversation"`
+	Dir          string `json:"dir"`
+	State        string `json:"state"`
+	Why          string `json:"why,omitempty"`
+	As           string `json:"as,omitempty"`
 }
 
 // ClonePlan is where a clone of a URL goes, found offline. Target is

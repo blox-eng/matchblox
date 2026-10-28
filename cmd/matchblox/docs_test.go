@@ -42,6 +42,7 @@ var commandFlags = map[string][]string{
 	"rename":   {},
 	"kill":     {"anyway"},
 	"switch":   {"agent", "handoff", "anyway", "preview"},
+	"recover":  {"all", "dir", "json"},
 }
 
 // checkCommand returns the command a docs line shows ("console", "<host>"

@@ -217,7 +217,8 @@ func TestJumpCarriesNoAskpassEnv(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bin, "ssh"), []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	env := []string{"PATH=" + bin + ":/usr/bin:/bin", "HOME=" + t.TempDir(), "TERM=xterm-256color"}
+	// TMUX_TMPDIR places the -L socket where tmuxtest's cleanup kills it.
+	env := []string{"PATH=" + bin + ":/usr/bin:/bin", "HOME=" + t.TempDir(), "TERM=xterm-256color", "TMUX_TMPDIR=" + os.Getenv("TMUX_TMPDIR")}
 	tmux := func(args ...string) (string, error) {
 		cmd := exec.Command("tmux", append([]string{"-L", sock, "-f", "/dev/null"}, args...)...)
 		cmd.Env = env

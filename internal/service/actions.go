@@ -235,6 +235,9 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	if a.RecID == NewSessionID {
 		return s.newSession(ctx, a)
 	}
+	if a.RecID == RecoverID {
+		return s.recover(ctx, a)
+	}
 	key := a.RecID + "\x00" + a.Which
 	id, door := strings.CutPrefix(a.RecID, "door:")
 	if door {

@@ -6,6 +6,39 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **You get your agents back after your tmux server dies.** While your
+  agents run, the service keeps a recovery record (`recover.json` in its
+  state folder): each agent's conversation, which follows `/clear` and
+  `/resume`, its tmux session, folder, branch and tmux server. An agent
+  you quit leaves it; the agents of a server that died stay 14 days.
+  `matchblox recover` lists them as live, can reopen, or cannot reopen
+  with the cause and the fix: a folder that is gone, another branch or
+  repository, no saved history, an agent not installed, a conversation
+  another Claude Code process has open, or a session that signed in
+  through your shell (Bedrock, Vertex, an API key set there), which it does not
+  move to your default sign-in. `matchblox recover --all` (or `recover
+  <name>…`) reopens each in its folder and tmux session with `claude
+  --resume`, `codex resume` or `cursor-agent --resume`. It sends no
+  prompt and replays no command, so each agent waits for you; it says
+  reopened only for an agent that still runs a moment later, and a
+  second run starts nothing. `--dir` gives a moved folder its new place.
+  Claude Code, Codex and Cursor; Cursor's history is not checked.
+  ([#215](https://github.com/blox-eng/matchblox/issues/215))
+
+### Fixed
+
+- **matchblox's tests leave your tmux servers alone.** The test suite
+  clears `$TMUX` and `$TMUX_PANE` and gives `$TMUX_TMPDIR` a new empty
+  folder. A tmux with no socket in a test, or in the code it tests, then
+  finds no server of yours: not the one `$TMUX` named, and not the default
+  one. A test that starts tmux names its server, unless the call is marked
+  as deliberate. A server a test leaves behind is ended with the test
+  binary. On Linux, CI checks that two sentinel servers, one of each kind,
+  survive the whole suite.
+  ([#215](https://github.com/blox-eng/matchblox/issues/215))
+
 ## [0.26.2] - 2026-10-28
 
 ### Fixed
@@ -23,6 +56,7 @@ All notable changes to matchblox are in this file. The format follows
   the owner's `name`, `pane` and `since`, and the stoker messages a
   session by name, never by pane.
   ([#80](https://github.com/blox-eng/matchblox/issues/80))
+||||||| parent of bfaf151 (test: matchblox's tests leave the builder's tmux server alone (#215))
 
 ## [0.26.1] - 2026-10-28
 
@@ -41,6 +75,7 @@ All notable changes to matchblox are in this file. The format follows
   agent or Tailscale SSH asks nothing. A failure stays on Hosts and says
   why. `matchblox connect` typed in a shell still asks in that terminal.
   Not tested yet with a real ssh on macOS. (#242)
+||||||| parent of 56dad68 (test: matchblox's tests leave the builder's tmux server alone (#215))
 
 ## [0.26.0] - 2026-10-27
 
@@ -68,6 +103,7 @@ All notable changes to matchblox are in this file. The format follows
   agent no longer runs: Enter and `a` do not reach it. Not tested yet with
   a live `/clear`. The stoker's merge guard still pairs by pane, as before,
   so it still lets that agent merge those PRs. (#235)
+||||||| parent of 578d056 (test: matchblox's tests leave the builder's tmux server alone (#215))
 
 ## [0.25.1] - 2026-10-27
 
