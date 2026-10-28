@@ -17,7 +17,7 @@ All notable changes to matchblox are in this file. The format follows
   with the cause and the fix: a folder that is gone, another branch or
   repository, no saved history, an agent not installed, a conversation
   another Claude Code process has open, or a session that signed in
-  through your shell (Bedrock, Vertex, an API key), which it does not
+  through your shell (Bedrock, Vertex, an API key set there), which it does not
   move to your default sign-in. `matchblox recover --all` (or `recover
   <name>…`) reopens each in its folder and tmux session with `claude
   --resume`, `codex resume` or `cursor-agent --resume`. It sends no

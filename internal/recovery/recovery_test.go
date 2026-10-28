@@ -2,6 +2,7 @@ package recovery
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,7 +22,7 @@ func open(t *testing.T, dir string) *Store {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Git = func(dir string) Checkout { return Checkout{Root: dir, Branch: "main", Common: dir + "/.git"} }
+	s.Git = func(dir string) Checkout { return Checkout{Root: dir, Branch: "main", Ident: "origin " + dir} }
 	return s
 }
 
@@ -175,6 +176,84 @@ func TestAHungGitDoesNotHoldTheRecord(t *testing.T) {
 	}
 	if l := s.List(); len(l) != 1 || l[0].Repo != "" || time.Since(start) > gitWait+3*time.Second {
 		t.Fatalf("after a hung git the entry is %+v", l)
+	}
+}
+
+// TestASlowGitKeepsTheCheckout: git did not answer in time for a live
+// agent's folder. The record keeps what it read before, which recover
+// checks.
+func TestASlowGitKeepsTheCheckout(t *testing.T) {
+	s := open(t, t.TempDir())
+	alive := map[string]string{"/tmp/tmux-501/default": "100@1"}
+	must(t, s.Update([]Entry{live("a")}, alive, t0))
+	s.Git = func(string) Checkout { return Checkout{Unread: true} }
+	must(t, s.Update([]Entry{live("a")}, alive, t0.Add(2*refresh)))
+	if l := s.List(); len(l) != 1 || l[0].Repo != "/src/api" || l[0].Branch != "main" || l[0].Unread || !l[0].Seen.Equal(t0.Add(2*refresh)) {
+		t.Fatalf("after a slow git the entry is %+v", l)
+	}
+	b := live("b")
+	b.Pane = "%4"
+	must(t, s.Update([]Entry{live("a"), b}, alive, t0.Add(4*refresh)))
+	for _, e := range s.List() {
+		if e.ConversationID == "b" && (!e.Unread || e.Repo != "") {
+			t.Fatalf("a new entry git never answered for: %+v", e)
+		}
+	}
+}
+
+// TestAHungGitHoldsTheSampleOnce: the reads of many folders on a dead
+// mount run at once, so Update waits about gitWait, not gitWait for each.
+func TestAHungGitHoldsTheSampleOnce(t *testing.T) {
+	bin := t.TempDir()
+	must(t, os.WriteFile(filepath.Join(bin, "git"), []byte("#!/bin/sh\nexec sleep 30\n"), 0o700)) //nolint:gosec // a test program
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	s, err := Open(t.TempDir())
+	must(t, err)
+	var many []Entry
+	for i := range 5 {
+		e := live(string(rune('a' + i)))
+		e.Pane = "%" + string(rune('0'+i))
+		many = append(many, e)
+	}
+	start := time.Now()
+	must(t, s.Update(many, nil, t0))
+	if d := time.Since(start); d > gitWait+2*time.Second {
+		t.Fatalf("five hung reads held Update %v", d)
+	}
+}
+
+// TestAMovedCloneKeepsItsIdent: a clone moved by hand is the same
+// repository; another repository is not.
+func TestAMovedCloneKeepsItsIdent(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	base := t.TempDir()
+	repo := func(name string) string {
+		dir := filepath.Join(base, name)
+		must(t, os.MkdirAll(dir, 0o700))
+		for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", name}} {
+			if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil { //nolint:gosec // test argv
+				t.Fatalf("git %v: %v %s", args, err, out)
+			}
+		}
+		return dir
+	}
+	api, local, other := repo("api"), repo("local"), repo("other")
+	if out, err := exec.Command("git", "-C", api, "remote", "add", "origin", "https://example.invalid/o/api.git").CombinedOutput(); err != nil { //nolint:gosec // test argv
+		t.Fatalf("git remote add: %v %s", err, out)
+	}
+	for _, dir := range []string{api, local} { // with an origin, and with none
+		was := ReadCheckout(dir)
+		moved := dir + "-moved"
+		must(t, os.Rename(dir, moved))
+		now := ReadCheckout(moved)
+		if was.Ident == "" || now.Ident != was.Ident || now.Branch != "main" || now.Unread {
+			t.Errorf("the moved clone reads %+v, it read %+v", now, was)
+		}
+		if o := ReadCheckout(other); o.Ident == was.Ident {
+			t.Errorf("another repository has the same ident %q", o.Ident)
+		}
 	}
 }
 

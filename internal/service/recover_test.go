@@ -20,7 +20,7 @@ const recSock = "/tmp/tmux-501/default"
 
 // mainBranch: every folder is its own repository, on main.
 func mainBranch(dir string) recovery.Checkout {
-	return recovery.Checkout{Root: dir, Branch: "main", Common: dir + "/.git"}
+	return recovery.Checkout{Root: dir, Branch: "main", Ident: "origin " + dir}
 }
 
 // recoverTest is a service with a recovery record and a home where each
@@ -37,7 +37,7 @@ func recoverTest(t *testing.T, sessions ...sample.Session) (*Service, *[][]strin
 	rec.Git = mainBranch
 	s.Recovery = rec
 	s.settle = time.Millisecond
-	s.TmuxOut = func([]string) (string, error) { return "", nil } // each started agent runs
+	s.TmuxOut = func([]string) (string, error) { return "0\n", nil } // each started agent runs: its pane is not dead
 	s.LookPath = func(bin string) (string, error) {
 		switch bin {
 		case "claude", "codex", sample.CursorAgent:
@@ -130,7 +130,7 @@ func TestTheServiceRecordsTheBuildersAgents(t *testing.T) {
 	if len(got) != 2 || got[0].ConversationID != "c1" || got[1].ConversationID != "u1" {
 		t.Fatalf("the record holds %+v, want c1 and u1", got)
 	}
-	if e := got[0]; e.Session != "api" || e.Socket != recSock || e.ServerPID != "100" || e.ServerStart != "1100" || e.Repo != "/src/api" || e.Common != "/src/api/.git" {
+	if e := got[0]; e.Session != "api" || e.Socket != recSock || e.ServerPID != "100" || e.ServerStart != "1100" || e.Repo != "/src/api" || e.Ident != "origin /src/api" {
 		t.Fatalf("the entry is %+v", e)
 	}
 }
@@ -279,8 +279,8 @@ func TestRecoverTakesAMovedFolder(t *testing.T) {
 	loseServer(s)
 	to := filepath.Join(s.Home, "elsewhere")
 	must(t, os.Rename(api.Cwd, to))
-	s.Recovery.Git = func(dir string) recovery.Checkout { // the worktree moved: same repository
-		return recovery.Checkout{Root: dir, Branch: "main", Common: api.Cwd + "/.git"}
+	s.Recovery.Git = func(dir string) recovery.Checkout { // the clone moved: same repository
+		return recovery.Checkout{Root: dir, Branch: "main", Ident: "origin " + api.Cwd}
 	}
 	res := recoverAct(t, s, proto.Recover{Names: []string{"api"}, Dirs: map[string]string{"api": to}}, "")
 	if r := rows(res)["api"]; r.State != proto.RecoverReopened || r.Dir != to {
@@ -379,20 +379,22 @@ func TestRecoverRefusesASessionItCannotSignInAgain(t *testing.T) {
 	s, ran := recoverTest(t)
 	bed := agentIn(t, s, "claude", "c1", "bed", "%3")
 	bed.Provider = "bedrock"
-	key := agentIn(t, s, "codex", "x1", "key", "%4")
-	key.Account = "API key"
-	publishOn(s, "100", bed, key)
+	key := agentIn(t, s, "claude", "c2", "key", "%4")
+	key.Account, key.EnvAPIKey = "a@b.c · Max", true // signed in, and a key in the shell wins
+	stored := agentIn(t, s, "codex", "x1", "stored", "%5")
+	stored.Account = "API key" // codex login --api-key: in auth.json, so it signs in again
+	publishOn(s, "100", bed, key, stored)
 	loseServer(s)
 	res := recoverAct(t, s, proto.Recover{All: true}, "")
 	r := rows(res)
 	if r["bed"].State != proto.RecoverCannot || !strings.Contains(r["bed"].Why, "bedrock") || !strings.Contains(r["bed"].Why, "claude --resume c1") {
 		t.Errorf("bed: %+v", r["bed"])
 	}
-	if r["key"].State != proto.RecoverCannot || !strings.Contains(r["key"].Why, "API key") || !strings.Contains(r["key"].Why, "codex resume x1") {
+	if r["key"].State != proto.RecoverCannot || !strings.Contains(r["key"].Why, "API key") || !strings.Contains(r["key"].Why, "claude --resume c2") {
 		t.Errorf("key: %+v", r["key"])
 	}
-	if len(*ran) != 0 {
-		t.Fatalf("ran %q", *ran)
+	if r["stored"].State != proto.RecoverReopened || len(*ran) != 1 {
+		t.Fatalf("a Codex with its key in auth.json: %+v, ran %q", r["stored"], *ran)
 	}
 }
 
@@ -447,6 +449,54 @@ func TestRecoverSaysWhenTheAgentExitsAtOnce(t *testing.T) {
 	}
 	if live, _ := s.recoverLive(); live[conversation("codex", "x1")] {
 		t.Fatal("an agent that exited counts as live")
+	}
+}
+
+// TestRecoverRefusesWhenGitDoesNotAnswer: git did not answer for the
+// folder in time, so recover cannot check its checkout and reopens nothing.
+// An entry whose checkout was never read takes no --dir either.
+func TestRecoverRefusesWhenGitDoesNotAnswer(t *testing.T) {
+	s, ran := recoverTest(t)
+	api := agentIn(t, s, "claude", "c1", "api", "%3")
+	web := agentIn(t, s, "claude", "c2", "web", "%4")
+	s.Recovery.Git = func(dir string) recovery.Checkout {
+		if dir == web.Cwd {
+			return recovery.Checkout{Unread: true}
+		}
+		return mainBranch(dir)
+	}
+	publishOn(s, "100", api, web)
+	loseServer(s)
+	s.Recovery.Git = func(string) recovery.Checkout { return recovery.Checkout{Unread: true} }
+	res := recoverAct(t, s, proto.Recover{Names: []string{"api"}}, "")
+	if r := rows(res)["api"]; r.State != proto.RecoverCannot || !strings.Contains(r.Why, "git did not answer") {
+		t.Errorf("api: %+v", r)
+	}
+	other := filepath.Join(s.Home, "other")
+	must(t, os.MkdirAll(other, 0o700))
+	res = recoverAct(t, s, proto.Recover{Names: []string{"web"}, Dirs: map[string]string{"web": other}}, "")
+	if r := rows(res)["web"]; r.State != proto.RecoverCannot || !strings.Contains(r.Why, "git never answered") {
+		t.Errorf("web: %+v", r)
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// TestARecoveredAgentThatExitsLaterIsNotLive: a sample after recover has
+// no session of the reopened name: the agent exited after recover looked.
+// The next recover reopens it again instead of calling it live.
+func TestARecoveredAgentThatExitsLaterIsNotLive(t *testing.T) {
+	s, ran := recoverTest(t)
+	api := agentIn(t, s, "claude", "c1", "api", "%3")
+	publishOn(s, "100", api)
+	loseServer(s)
+	recoverAct(t, s, proto.Recover{All: true}, "")
+	time.Sleep(time.Millisecond) // the next sample is after the reopen
+	loseServer(s)
+	res := recoverAct(t, s, proto.Recover{All: true}, "")
+	if len(*ran) != 2 || rows(res)["api"].State != proto.RecoverReopened {
+		t.Fatalf("rows %+v, ran %q", res.Recover, *ran)
 	}
 }
 

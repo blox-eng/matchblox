@@ -38,13 +38,14 @@ type Entry struct {
 	Session        string `json:"session"`         // the tmux session's name
 	Pane           string `json:"pane"`
 	Cwd            string `json:"cwd"`
-	// Repo, Branch and Common are the checkout of Cwd when last seen: the
-	// root of its worktree, its branch, and the repository's own git
-	// folder, which every worktree of one repository shares. Empty: not a
-	// git folder.
+	// Repo, Branch and Ident are the checkout of Cwd when last read: the
+	// root of its worktree, its branch, and what names the repository
+	// wherever its folder moves (Checkout.Ident). Empty: not a git folder.
+	// Unread: git never answered for Cwd in time, so none is known.
 	Repo   string `json:"repo,omitempty"`
 	Branch string `json:"branch,omitempty"`
-	Common string `json:"common,omitempty"`
+	Ident  string `json:"ident,omitempty"`
+	Unread bool   `json:"unread,omitempty"`
 	// AccountDir is the config folder of an agent not on the default
 	// account, as sample.Session has it.
 	AccountDir string `json:"account_dir,omitempty"`
@@ -71,8 +72,14 @@ func (e Entry) key() string { return e.Socket + "\x00" + e.server() + "\x00" + e
 
 func (e Entry) conversation() string { return e.Agent + "\x00" + e.ConversationID }
 
-// Checkout is a folder's checkout: see Entry.
-type Checkout struct{ Root, Branch, Common string }
+// Checkout is a folder's checkout: see Entry. Ident is "origin <url>",
+// or "roots <hashes>" (its root commits) for a repository with no origin:
+// both move with a clone, and an unrelated repository has others. Unread:
+// git did not answer within gitWait, and the rest says nothing.
+type Checkout struct {
+	Root, Branch, Ident string
+	Unread              bool
+}
 
 // Store keeps recover.json in a directory. An empty dir keeps it in memory.
 type Store struct {
@@ -135,10 +142,32 @@ func (s *Store) Update(live []Entry, alive map[string]string, now time.Time) err
 		read = append(read, i)
 	}
 	s.mu.Unlock()
-	for _, i := range read {
-		c := s.git(live[i].Cwd)
-		live[i].Repo, live[i].Branch, live[i].Common, live[i].Seen = c.Root, c.Branch, c.Common, now
+	// In parallel: each read has gitWait, so a dead mount under many agents
+	// holds the sample for gitWait, not for each of them.
+	reads := make([]Checkout, len(read))
+	var wg sync.WaitGroup
+	for j, i := range read {
+		wg.Go(func() { reads[j] = s.git(live[i].Cwd) })
 	}
+	wg.Wait()
+	s.mu.Lock()
+	for j, i := range read {
+		c := reads[j]
+		l := &live[i]
+		l.Seen = now
+		if c.Unread {
+			// Keep what was read before: a slow git must not erase the
+			// checkout recover checks.
+			if old, had := s.by[l.key()]; had && old.Cwd == l.Cwd {
+				l.Repo, l.Branch, l.Ident, l.Unread = old.Repo, old.Branch, old.Ident, old.Unread
+			} else {
+				l.Repo, l.Branch, l.Ident, l.Unread = "", "", "", true
+			}
+			continue
+		}
+		l.Repo, l.Branch, l.Ident, l.Unread = c.Root, c.Branch, c.Ident, false
+	}
+	s.mu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	changed := len(read) > 0
@@ -179,8 +208,8 @@ func (s *Store) git(dir string) Checkout {
 // CheckoutOf is the checkout of dir, as Update reads it.
 func (s *Store) CheckoutOf(dir string) Checkout { return s.git(dir) }
 
-// ReadCheckout reads the checkout of dir with git, within gitWait. A value
-// git does not tell in time is "". It only reads.
+// ReadCheckout reads the checkout of dir with git, within gitWait: Unread
+// when git did not answer in time. It only reads.
 func ReadCheckout(dir string) Checkout {
 	ctx, cancel := context.WithTimeout(context.Background(), gitWait)
 	defer cancel()
@@ -190,19 +219,26 @@ func ReadCheckout(dir string) Checkout {
 		out, err := c.Output()
 		return strings.TrimSpace(string(out)), err
 	}
-	out, err := git("rev-parse", "--show-toplevel", "--git-common-dir")
-	root, common, ok := strings.Cut(out, "\n")
-	if err != nil || !ok {
-		return Checkout{}
+	root, err := git("rev-parse", "--show-toplevel")
+	if ctx.Err() != nil {
+		return Checkout{Unread: true}
 	}
-	if !filepath.IsAbs(common) {
-		common = filepath.Join(dir, common)
-	}
-	if r, err := filepath.EvalSymlinks(common); err == nil {
-		common = r
+	if err != nil {
+		return Checkout{} // not a git folder
 	}
 	branch, _ := git("symbolic-ref", "--short", "-q", "HEAD")
-	return Checkout{Root: root, Branch: branch, Common: common}
+	ident := ""
+	if url, err := git("config", "--get", "remote.origin.url"); err == nil && url != "" {
+		ident = "origin " + url
+	} else if roots, err := git("rev-list", "--max-parents=0", "HEAD"); err == nil && roots != "" {
+		list := strings.Fields(roots)
+		sort.Strings(list)
+		ident = "roots " + strings.Join(list, " ")
+	}
+	if ctx.Err() != nil {
+		return Checkout{Unread: true}
+	}
+	return Checkout{Root: root, Branch: branch, Ident: ident}
 }
 
 // List is every entry, by tmux session and conversation.

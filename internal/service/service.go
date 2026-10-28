@@ -189,7 +189,7 @@ type Service struct {
 	// recovering runs one recover act at a time; reopened is when each
 	// conversation it reopened started, until a sample shows it.
 	recovering sync.Mutex
-	reopened   map[string]time.Time
+	reopened   map[string]reopenedAt
 	// settle is how long recover waits before it checks that each agent it
 	// reopened still runs (0: recoverSettle).
 	settle time.Duration

@@ -140,12 +140,22 @@ func TestRecoverAfterARealServerLoss(t *testing.T) {
 }
 
 // TestRecoverOnARealServerSaysWhenTheAgentExits: the agent's CLI fails at
-// start and its tmux session ends with it. recover says it could not
-// reopen, with the command to run to see why.
+// start. Its tmux session ends with it, or stays with a dead pane under the
+// builder's remain-on-exit. recover says it could not reopen, with the
+// command to run to see why, and leaves no dead session.
 func TestRecoverOnARealServerSaysWhenTheAgentExits(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux is not installed")
 	}
+	t.Run("the session ends", func(t *testing.T) { agentExits(t, "") })
+	t.Run("remain-on-exit", func(t *testing.T) { agentExits(t, "set -g remain-on-exit on\n") })
+}
+
+func agentExits(t *testing.T, conf string) {
+	home, _ := os.UserHomeDir() // testhome's: tmux reads its .tmux.conf
+	rc := filepath.Join(home, ".tmux.conf")
+	must(t, os.WriteFile(rc, []byte(conf), 0o600))
+	t.Cleanup(func() { _ = os.Remove(rc) })
 	sock := sample.SocketPath("default")
 	must(t, os.MkdirAll(filepath.Dir(sock), 0o700))
 	t.Cleanup(func() { _ = exec.Command("tmux", "-S", sock, "kill-server").Run() }) //nolint:gosec // test argv
@@ -166,5 +176,8 @@ func TestRecoverOnARealServerSaysWhenTheAgentExits(t *testing.T) {
 	r := rows(res)["web"]
 	if r.State != proto.RecoverCannot || !strings.Contains(r.Why, "codex exited at once") {
 		t.Fatalf("row %+v", r)
+	}
+	if err := exec.Command("tmux", "-S", sock, "has-session", "-t", "=web").Run(); err == nil { //nolint:gosec // test argv
+		t.Fatal("the dead session stays")
 	}
 }

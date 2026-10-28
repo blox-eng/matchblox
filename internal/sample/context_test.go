@@ -255,8 +255,11 @@ func TestEachClaudeSessionShowsTheAccountOfItsConfigDirectory(t *testing.T) {
 	if s := got["%40"]; s.Account != "work@example.net · Team" || s.SessionID == "" {
 		t.Errorf("CLAUDE_CONFIG_DIR: account %q session %q", s.Account, s.SessionID)
 	}
-	if s := got["%41"]; s.Account != "API key" {
-		t.Errorf("API key session: %q", s.Account)
+	if s := got["%41"]; s.Account != "API key" || !s.EnvAPIKey {
+		t.Errorf("API key session: %q, key in the environment %v", s.Account, s.EnvAPIKey)
+	}
+	if s := got["%1"]; s.EnvAPIKey {
+		t.Error("a login session has a key in its environment")
 	}
 	// Claude Code through a cloud: the cloud is the provider, no login.
 	addProc(t, root, 970, 1, "claude", []string{"claude"}, "%42")

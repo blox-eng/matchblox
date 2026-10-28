@@ -66,7 +66,7 @@ func recordable(sessions []sample.Session, ps []sample.Pane) ([]recovery.Entry, 
 		}
 		live = append(live, recovery.Entry{
 			Agent: x.Agent, ConversationID: x.SessionID, Session: x.TmuxSession(), Pane: x.Pane,
-			Cwd: x.Cwd, AccountDir: x.AccountDir, Provider: x.Provider, APIKey: x.Account == "API key",
+			Cwd: x.Cwd, AccountDir: x.AccountDir, Provider: x.Provider, APIKey: x.EnvAPIKey,
 			Socket: p.Socket, ServerPID: p.Server, ServerStart: p.ServerStart,
 		})
 	}
@@ -129,6 +129,12 @@ func (s *Service) recover(ctx context.Context, a proto.Act) proto.Result {
 	return proto.Result{Recover: rows}
 }
 
+// reopenedAt is when recover reopened a conversation, and its tmux session.
+type reopenedAt struct {
+	at time.Time
+	as string
+}
+
 // recoverLive are the conversations that run now (or that recover reopened
 // within reopenedFor), and the tmux session names taken on the builder's
 // server.
@@ -141,18 +147,20 @@ func (s *Service) recoverLive() (live, taken map[string]bool) {
 			live[conversation(x.Agent, x.SessionID)] = true
 		}
 	}
-	for c, at := range s.reopened {
-		if live[c] || s.now().Sub(at) >= reopenedFor {
-			delete(s.reopened, c) // a sample shows it, or it is old
-			continue
-		}
-		live[c] = true
-	}
 	for _, p := range s.cur.Panes {
 		if server, _ := sample.SplitPane(p.ID); server == "" {
 			name, _, _ := strings.Cut(p.Target, ":")
 			taken[name] = true
 		}
+	}
+	for c, r := range s.reopened {
+		// A sample shows it, or it is old, or a sample after its start has
+		// no session of its name: its agent exited after recover looked.
+		if live[c] || s.now().Sub(r.at) >= reopenedFor || s.cur.At.After(r.at) && !taken[r.as] {
+			delete(s.reopened, c)
+			continue
+		}
+		live[c] = true
 	}
 	return live, taken
 }
@@ -170,18 +178,24 @@ func (s *Service) settled(ctx context.Context, rows []proto.Recovered, started m
 	}
 	s.mu.Lock()
 	if s.reopened == nil {
-		s.reopened = map[string]time.Time{}
+		s.reopened = map[string]reopenedAt{}
 	}
 	s.mu.Unlock()
 	for i, cmd := range started {
 		row := &rows[i]
-		if _, err := s.tmuxOut(slices.Concat(sample.TmuxOn(""), []string{"has-session", "-t", "=" + row.As})); err != nil {
+		// pane_dead, not has-session: under remain-on-exit the session of
+		// an agent that exited stays, with a dead pane.
+		out, err := s.tmuxOut(slices.Concat(sample.TmuxOn(""), []string{"list-panes", "-t", "=" + row.As, "-F", "#{pane_dead}"}))
+		if err != nil || !strings.Contains(out, "0") {
+			if err == nil {
+				_, _ = s.tmuxOut(slices.Concat(sample.TmuxOn(""), []string{"kill-session", "-t", "=" + row.As}))
+			}
 			row.State, row.Why = proto.RecoverCannot, fmt.Sprintf("%s exited at once: run cd %s && %s to see why", row.Agent, row.Dir, cmd)
 			continue
 		}
 		row.State = proto.RecoverReopened
 		s.mu.Lock()
-		s.reopened[conversation(row.Agent, row.Conversation)] = s.now()
+		s.reopened[conversation(row.Agent, row.Conversation)] = reopenedAt{s.now(), row.As}
 		s.mu.Unlock()
 	}
 }
@@ -219,12 +233,17 @@ func (s *Service) recoverRow(e recovery.Entry, moved string, live, taken map[str
 	if st, err := os.Stat(row.Dir); err != nil || !st.IsDir() {
 		return cannot("the folder %s is gone: run matchblox recover %s --dir <its new place>", row.Dir, e.Session)
 	}
+	if e.Unread && moved != "" {
+		return cannot("git never answered for %s while it ran, so matchblox cannot check that %s is the same repository: run cd %s && %s", e.Cwd, row.Dir, row.Dir, resume)
+	}
 	if e.Repo != "" {
 		c := s.Recovery.CheckoutOf(row.Dir)
 		switch {
+		case c.Unread:
+			return cannot("git did not answer for %s in time: run matchblox recover again", row.Dir)
 		case c.Root == "":
 			return cannot("%s is no git checkout now: run matchblox recover %s --dir <the checkout of %s>", row.Dir, e.Session, orNone(e.Branch))
-		case e.Common != "" && c.Common != e.Common:
+		case e.Ident != "" && c.Ident != e.Ident:
 			return cannot("%s is another repository than %s: run matchblox recover %s --dir <a checkout of %s>", row.Dir, e.Repo, e.Session, e.Repo)
 		case c.Branch != e.Branch:
 			return cannot("%s is on branch %s now, not %s: check out %s there, then run matchblox recover again", row.Dir, orNone(c.Branch), orNone(e.Branch), orNone(e.Branch))

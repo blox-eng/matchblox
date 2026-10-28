@@ -42,6 +42,10 @@ type Session struct {
 	// default one: a matchblox account folder, or one made by hand. It tells
 	// two accounts apart before either has a name.
 	AccountDir string `json:"account_dir,omitempty"`
+	// EnvAPIKey: the agent's environment holds an API key (its value is
+	// never kept). Only the service reads it: a key from the shell is one
+	// matchblox recover cannot give again.
+	EnvAPIKey bool `json:"-"`
 	// SigningIn is true while a session on an account folder has no login yet.
 	SigningIn bool `json:"signing_in,omitempty"`
 	// Provider serves the model: anthropic, openai, bedrock, vertex, or an
@@ -679,6 +683,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 		switch agent {
 		case "claude":
 			sess.Account, sess.Provider = s.accounts.claudeAccount(env), claudeProvider(env)
+			sess.EnvAPIKey = env.apiKey
 			s.tag(&sess, agent, env)
 			s.claudeSession(&sess, pid, p, key, env, uptime, now)
 			if sess.Resting() {
@@ -707,6 +712,7 @@ func (s *Sampler) sampleSessions(snap *Snapshot, panes []Pane, procs map[int]pro
 			}
 		case "codex":
 			sess.Account, sess.Provider = s.accounts.codexAccount(env), "openai"
+			sess.EnvAPIKey = env.apiKey
 			s.tag(&sess, agent, env)
 			path, read := s.codexRollout(pid, children)
 			argv := codexArgv(s.FS.Argv(pid))
