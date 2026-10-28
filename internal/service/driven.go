@@ -139,7 +139,10 @@ func (s *Service) owns() map[string]stoker.Own {
 		}
 		if s.cur.Ships != nil {
 			for _, sh := range s.cur.Ships.Ships {
-				mine := sh.Session.Pane == se.Pane || sh.Session.ID != "" && sh.Session.ID == se.SessionID
+				// Stricter than ships.Drives: by id whenever the ship has one, even
+				// while the session's id is not read yet, since a pane can change
+				// hands between two ships reads and a merge must not follow it.
+				mine := sh.Session.ID != "" && sh.Session.ID == se.SessionID || sh.Session.ID == "" && sh.Session.Pane != "" && sh.Session.Pane == se.Pane
 				if mine && sh.Number > 0 && sh.Evidence != ships.Acted && !slices.Contains(o.PRs, sh.Number) {
 					o.PRs = append(o.PRs, sh.Number)
 				}
