@@ -70,6 +70,11 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   guide to its workspace and neighboring matches. Codex launches include
   workspace trust and workspace-write network access.
   `matchblox switch` does it from the shell.
+- **Get your agents back after tmux dies**: while your agents run, the
+  service records each one's conversation, tmux session, folder, branch
+  and server. When the server dies, `matchblox recover` lists them, and
+  `matchblox recover --all` reopens each conversation in its folder,
+  waiting for you, with no duplicates.
 - **More than one sign-in**: `N` starts Claude Code, Codex or Cursor on an
   account, a folder beside your default sign-in, or makes a new one: like
   your default, an empty one, or a copy of it that is cloned and its own,

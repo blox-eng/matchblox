@@ -318,7 +318,16 @@ exit 0
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			if c.stop {
-				time.AfterFunc(300*time.Millisecond, cancel)
+				// Stop once git has read the owner file: a fixed delay
+				// stopped a git the race detector had not started yet.
+				go func() {
+					for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+						if b, _ := os.ReadFile(seen); len(b) > 0 { //nolint:gosec // the test's own file
+							break
+						}
+					}
+					cancel()
+				}()
 			}
 			err := Run(ctx, r, target, nil)
 			if (err == nil) != c.ok {

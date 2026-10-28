@@ -74,7 +74,7 @@ func (s *Sampler) envOf(pid int, key procKey) agentEnv {
 	case truthy(get("CLAUDE_CODE_USE_VERTEX")):
 		e.cloud = "vertex"
 	}
-	for _, k := range []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "CODEX_API_KEY"} {
+	for _, k := range []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "CODEX_API_KEY", "CURSOR_API_KEY", "CURSOR_AUTH_TOKEN"} {
 		if get(k) != "" {
 			e.apiKey = true
 		}

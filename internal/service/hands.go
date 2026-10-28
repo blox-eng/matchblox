@@ -67,6 +67,9 @@ func (s *Service) orderable(a proto.Act) error {
 	if strings.HasPrefix(a.RecID, "park:") {
 		return errors.New("the stoker does not park: z is yours")
 	}
+	if a.RecID == RecoverID {
+		return errors.New("the stoker does not reopen sessions: matchblox recover is yours")
+	}
 	if cloneAct(a.RecID) || (a.RecID == NewSessionID && s.newClones(a.Text)) {
 		return errors.New(noClone)
 	}

@@ -95,10 +95,13 @@ type Pane struct {
 	Path    string `json:"path"`
 	Socket  string `json:"socket,omitempty"` // the tmux server's socket
 	Server  string `json:"server,omitempty"` // the tmux server's pid
+	// ServerStart is when the tmux server started (unix seconds): with
+	// Server, it tells a new server that took a lost one's pid apart.
+	ServerStart string `json:"server_start,omitempty"`
 }
 
 // PaneFormat is the -F format ParsePanes expects; fields are tab separated.
-const PaneFormat = "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}\t#{window_name}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}\t#{socket_path}\t#{pid}\t#{" + JumpMark + "}"
+const PaneFormat = "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}\t#{window_name}\t#{pane_pid}\t#{pane_current_command}\t#{pane_current_path}\t#{socket_path}\t#{pid}\t#{" + JumpMark + "}\t#{start_time}"
 
 // JumpMark is the session option that marks a jump's session on either
 // side (package remote sets it to 1): the sampler skips its panes.
@@ -156,6 +159,9 @@ func ParsePanes(b []byte) []Pane {
 		}
 		if len(f) > 7 {
 			p.Server = f[7]
+		}
+		if len(f) > 9 {
+			p.ServerStart = f[9]
 		}
 		if k := [2]string{p.Server, p.ID}; !seen[k] {
 			seen[k] = true
