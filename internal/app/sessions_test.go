@@ -265,7 +265,11 @@ func TestAShipWithoutADriverIsNotOutsideTmux(t *testing.T) {
 			t.Fatalf("%q", got)
 		}
 	}
-	if got := m.driverGone(sh); got != "its driver no longer runs" {
+	// #80: a ship whose session is gone names no session, never a blank.
+	if got := m.driverName(sh); got != "no session" {
+		t.Fatalf("by %q", got)
+	}
+	if got := m.driverGone(sh); got != "no session owns #7" {
 		t.Fatalf("%q", got)
 	}
 }

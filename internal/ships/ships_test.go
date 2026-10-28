@@ -119,6 +119,124 @@ func TestOwnership(t *testing.T) {
 	}
 }
 
+// TestTheOwnerIsTheSessionNow: a ship names the session that owns it on
+// this sample, never the pane it was found in. A session on the PR's head
+// branch owns it, else the live session of the evidence, else nobody. The
+// first real stoker run (#80) messaged sessions about PRs they never had.
+func TestTheOwnerIsTheSessionNow(t *testing.T) {
+	w := newWorld(t)
+	tr := w.tracker()
+	a := w.session("a", "%1",
+		toolUse("c1", "/w", "", "gh pr create --fill"),
+		toolResult("c1", "/w", "https://github.com/hearth/hearth/pull/4557", nil),
+	)
+	var rep Report
+	scan := func(git *gitscan.Report, ss ...sample.Session) *Ship {
+		t.Helper()
+		w.clock = w.clock.Add(time.Minute)
+		rep = tr.Scan(context.Background(), Input{Sessions: ss, Git: git})
+		s := find(rep, 4557)
+		if s == nil {
+			t.Fatal("#4557 is not a ship")
+		}
+		return s
+	}
+	want := func(s *Ship, id, pane, name string, since time.Time) {
+		t.Helper()
+		if s.Session.ID != id || s.Session.Pane != pane || s.Session.Name != name || !s.Session.Since.Equal(since) {
+			t.Errorf("#%d belongs to %+v, want %s on %q (%s) since %s", s.Number, s.Session, id, pane, name, since.Format("15:04"))
+		}
+	}
+	worktree := func(branch string, pr *gitscan.PR) *gitscan.Report {
+		return &gitscan.Report{Repos: []gitscan.Repo{{Path: "/w", Worktrees: []gitscan.Worktree{{Path: "/wt/x", Branch: branch, PR: pr}}}}}
+	}
+
+	want(scan(nil, a), "a", "%1", "agent a", w.clock)
+	found := w.clock
+
+	// The session resumes in a new pane, under a new name.
+	a.Pane, a.Name = "%7", "billing"
+	want(scan(nil, a), "a", "%7", "billing", found)
+
+	// Another session sits on the PR's head branch: it owns the PR now.
+	d := sample.Session{SessionID: "d", Pane: "%5", Name: "docs", Cwd: "/wt/x/sub", Started: at}
+	s := scan(worktree("feat/4557", nil), a, d)
+	if want(s, "d", "%5", "docs", w.clock); s.Evidence != Branch {
+		t.Errorf("d owns #4557 by its branch, not by %s", s.Evidence)
+	}
+
+	// Its worktree changes branch: the ship goes back to the evidence's session.
+	pr4551 := &gitscan.PR{Number: 4551, URL: "https://github.com/hearth/hearth/pull/4551"}
+	s = scan(worktree("feat/4551", pr4551), a, d)
+	want(s, "a", "%7", "billing", w.clock)
+	if s := find(rep, 4551); s == nil || s.Session.ID != "d" {
+		t.Errorf("#4551 should belong to d, on its branch: %+v", s)
+	}
+
+	// Both sessions end: nobody owns it, and a pane now held by another
+	// session does not.
+	stranger := sample.Session{SessionID: "e", Pane: "%7", Name: "tests", Cwd: "/elsewhere"}
+	want(scan(nil, stranger), "", "", "", w.clock)
+}
+
+// TestABranchNameOwnsOnlyItsOwnOpenPR: a session on a local branch does
+// not own a fork's PR whose head has the same name, nor an older PR of a
+// reused branch name. A bare merge from that branch would merge it.
+func TestABranchNameOwnsOnlyItsOwnOpenPR(t *testing.T) {
+	w := newWorld(t)
+	tr := w.tracker()
+	tr.load()
+	a := sample.Session{SessionID: "a", Pane: "%1", Cwd: "/w"}
+	b := sample.Session{SessionID: "b", Pane: "%2", Cwd: "/wt/ci"}
+	for n, f := range map[int]*facts{
+		312: {State: "OPEN", Head: "fix/ci", Fork: true},
+		300: {State: "MERGED", Head: "fix/ci"},
+		320: {State: "OPEN", Head: "fix/ci"},
+	} {
+		tr.st.PRs[key("hearth/hearth", n)] = &pr{Repo: "hearth/hearth", Number: n, Facts: f,
+			Claim: claim{Kind: Acted, At: now, Session: SessionRef{Pane: "%1", ID: "a"}}}
+	}
+	git := &gitscan.Report{Repos: []gitscan.Repo{{Path: "/w", Main: "main", Worktrees: []gitscan.Worktree{
+		{Path: "/w", Branch: "main"}, {Path: "/wt/ci", Branch: "fix/ci"},
+	}}}}
+	tr.own(context.Background(), Input{Sessions: []sample.Session{a, b}, Git: git}, now)
+	for n, id := range map[int]string{312: "a", 300: "a", 320: "b"} {
+		if got := tr.st.PRs[key("hearth/hearth", n)].Owner.ID; got != id {
+			t.Errorf("#%d belongs to %q, want %q", n, got, id)
+		}
+	}
+}
+
+// TestAShipNobodyOwnsSaysWhereToStartOne: a ship with no session names
+// the checkout a new session takes it from: the worktree on its head
+// branch, else the repository's main checkout. A ship with an owner names
+// none.
+func TestAShipNobodyOwnsSaysWhereToStartOne(t *testing.T) {
+	w := newWorld(t)
+	tr := w.tracker()
+	a := w.session("a", "%1",
+		toolUse("c1", "/w", "", "gh pr create --fill"),
+		toolResult("c1", "/w", "https://github.com/hearth/hearth/pull/4557", nil),
+	)
+	git := func(wts ...gitscan.Worktree) *gitscan.Report {
+		return &gitscan.Report{Repos: []gitscan.Repo{{Path: "/w", Main: "main", Worktrees: append([]gitscan.Worktree{{Path: "/w", Branch: "main"}}, wts...)}}}
+	}
+	scan := func(g *gitscan.Report, ss ...sample.Session) *Ship {
+		t.Helper()
+		w.clock = w.clock.Add(time.Minute)
+		return find(tr.Scan(context.Background(), Input{Sessions: ss, Git: g}), 4557)
+	}
+	if s := scan(git(), a); s.Where != "" {
+		t.Errorf("an owned ship names %q to start a session in", s.Where)
+	}
+	if s := scan(git(gitscan.Worktree{Path: "/wt/4557", Branch: "feat/4557"})); s.Where != "/wt/4557" {
+		t.Errorf("start in %q, want the worktree on its branch", s.Where)
+	}
+	if s := scan(git()); s.Where != "/w" {
+		t.Errorf("start in %q, want the main checkout", s.Where)
+	}
+}
+
 // TestPollCadence: a new PR is read at once, then every PollEvery while
 // any is in flight, and never when none is.
 func TestPollCadence(t *testing.T) {

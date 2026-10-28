@@ -63,6 +63,7 @@ type facts struct {
 	AutoMerge  bool      `json:"auto_merge,omitempty"`
 	Base       string    `json:"base"`
 	Head       string    `json:"head"`
+	Fork       bool      `json:"fork,omitempty"`     // its head is a branch of another repository
 	HeadOID    string    `json:"head_oid,omitempty"` // the head commit: a merge is pinned to it
 	Created    time.Time `json:"created"`
 	Merged     time.Time `json:"merged,omitzero"`
@@ -131,7 +132,7 @@ func query(owner, name string, numbers []int, history, open bool) string {
 	b.WriteString("}}")
 	b.WriteString(`fragment suite on CheckSuite{status conclusion updatedAt workflowRun{createdAt workflow{name}}}`)
 	b.WriteString(`fragment pr on PullRequest{number title url state isDraft mergeable mergeStateStatus reviewDecision ` +
-		`baseRefName headRefName headRefOid createdAt mergedAt autoMergeRequest{enabledAt} ` +
+		`baseRefName headRefName isCrossRepository headRefOid createdAt mergedAt autoMergeRequest{enabledAt} ` +
 		`mergeCommit{oid checkSuites(first:30){nodes{...suite}}} ` +
 		`commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){` +
 		`checkRunCount checkRunCountsByState{state count} statusContextCount statusContextCountsByState{state count} ` +
@@ -171,6 +172,7 @@ type prJSON struct {
 	ReviewDecision   string    `json:"reviewDecision"`
 	BaseRefName      string    `json:"baseRefName"`
 	HeadRefName      string    `json:"headRefName"`
+	Fork             bool      `json:"isCrossRepository"`
 	HeadRefOid       string    `json:"headRefOid"`
 	CreatedAt        time.Time `json:"createdAt"`
 	MergedAt         time.Time `json:"mergedAt"`
@@ -364,7 +366,7 @@ func factsOf(p prJSON, history []suiteJSON, asked bool, now time.Time) facts {
 	f := facts{
 		Title: clean(p.Title), URL: p.URL, State: p.State, Draft: p.IsDraft,
 		Mergeable: p.Mergeable, MergeState: p.MergeStateStatus, Review: p.ReviewDecision,
-		AutoMerge: p.AutoMergeRequest != nil, Base: p.BaseRefName, Head: p.HeadRefName, HeadOID: p.HeadRefOid,
+		AutoMerge: p.AutoMergeRequest != nil, Base: p.BaseRefName, Head: p.HeadRefName, Fork: p.Fork, HeadOID: p.HeadRefOid,
 		Created: p.CreatedAt, Merged: p.MergedAt, Fetched: now,
 	}
 	if n := p.Commits.Nodes; len(n) > 0 && n[0].Commit.StatusCheckRollup != nil {

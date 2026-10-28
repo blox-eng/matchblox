@@ -149,24 +149,9 @@ type cloneStop struct {
 const maxField = 300
 
 // openNew is N: the New session form, where's list open on the selected
-// row's folder (a Git worktree, a session's directory), or the first repo.
+// row's folder (a Git worktree, a session's directory, the checkout of a
+// ship nobody owns), or the first repo.
 func (m Model) openNew() (tea.Model, tea.Cmd) {
-	switch {
-	case m.conn == nil || m.lost:
-		m.flash = "not sent, no connection"
-		return m, nil
-	case len(m.agents) == 0:
-		m.flash = "no agent to start here: install claude, codex, opencode or cursor-agent"
-		return m, nil
-	}
-	f := &form{at: fieldWhere, agent: m.agents[0], accts: m.accounts, skipped: m.skipped, last: m.lastAccount}
-	// This console's last start first, else the service's, after a restart.
-	if slices.Contains(m.agents, m.lastAgent) {
-		f.agent = m.lastAgent
-	} else if slices.Contains(m.agents, m.keptAgent) {
-		f.agent = m.keptAgent
-	}
-	f.account = f.lastAccount()
 	at := ""
 	switch m.tab {
 	case tabGit:
@@ -177,7 +162,33 @@ func (m Model) openNew() (tea.Model, tea.Cmd) {
 		if s, ok := m.selectedSession(); ok {
 			at = s.Cwd
 		}
+	case tabShips:
+		if sh, ok := m.selectedShip(); ok {
+			at = sh.Where
+		}
 	}
+	return m.openNewAt(at, ""), nil
+}
+
+// openNewAt is the New session form, where's list open on at, with first
+// as the first message to edit.
+func (m Model) openNewAt(at, first string) Model {
+	switch {
+	case m.conn == nil || m.lost:
+		m.flash = "not sent, no connection"
+		return m
+	case len(m.agents) == 0:
+		m.flash = "no agent to start here: install claude, codex, opencode or cursor-agent"
+		return m
+	}
+	f := &form{at: fieldWhere, agent: m.agents[0], accts: m.accounts, skipped: m.skipped, last: m.lastAccount, first: first}
+	// This console's last start first, else the service's, after a restart.
+	if slices.Contains(m.agents, m.lastAgent) {
+		f.agent = m.lastAgent
+	} else if slices.Contains(m.agents, m.keptAgent) {
+		f.agent = m.keptAgent
+	}
+	f.account = f.lastAccount()
 	f.listOpen = true
 	m.refreshWhere(f, at)
 	if at != "" && filepath.Clean(m.whereSelectedIn(f).path()) != filepath.Clean(at) {
@@ -185,7 +196,7 @@ func (m Model) openNew() (tea.Model, tea.Cmd) {
 		m.refreshWhere(f, at)
 	}
 	m.form, m.pending, m.peek = f, nil, nil
-	return m, nil
+	return m
 }
 
 // openRename is r on a session: Rename, its name to edit.

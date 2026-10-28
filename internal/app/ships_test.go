@@ -368,3 +368,40 @@ func TestShipsOfARankKeepTheReportsOrder(t *testing.T) {
 		t.Fatalf("#4550 at %d, #4549 at %d:\n%s", a, b, out)
 	}
 }
+
+// TestEnterOnAShipNobodyOwnsStartsASessionThere: #80, a ship whose session
+// is gone is no dead end. Enter opens New session in the checkout the ship
+// names, its first message about the PR, and sends nothing on its own.
+func TestEnterOnAShipNobodyOwnsStartsASessionThere(t *testing.T) {
+	st := screensState(t)
+	r := *st.Ships
+	r.Ships = slices.Clone(r.Ships)
+	r.Ships[0].Session, r.Ships[0].Where = proto.ShipSession{}, "/w/hearth-api"
+	st.Ships = &r
+	st.Agents = []string{"claude"}
+	m, f := shipsAt(t, 86, st)
+	if out := ansi.Strip(m.render()); !strings.Contains(out, "by no session") {
+		t.Fatalf("the ship does not say no session owns it:\n%s", out)
+	}
+	next, _ := key(m, "enter")
+	nm := next.(Model)
+	n := strconv.Itoa(r.Ships[0].Number)
+	switch {
+	case nm.form == nil:
+		t.Fatalf("enter did not open New session: %q", nm.flash)
+	case nm.whereSelectedIn(nm.form).path() != "/w/hearth-api":
+		t.Fatalf("New session opens in %q", nm.whereSelectedIn(nm.form).path())
+	case !strings.Contains(nm.form.first, "#"+n):
+		t.Fatalf("the first message %q does not name #%s", nm.form.first, n)
+	case len(f.acts()) != 0:
+		t.Fatalf("enter sent %+v", f.acts())
+	}
+
+	// No checkout of it here: the flash says so.
+	r.Ships[0].Where = ""
+	m, _ = shipsAt(t, 86, st)
+	next, _ = key(m, "enter")
+	if nm := next.(Model); nm.form != nil || !strings.Contains(nm.flash, "no checkout of") {
+		t.Fatalf("form %v, flash %q", nm.form != nil, nm.flash)
+	}
+}
