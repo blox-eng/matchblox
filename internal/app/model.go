@@ -391,6 +391,7 @@ type Model struct {
 	used   proto.Used
 	wrepos []whereRepo
 	wfrom  []string
+	wghost []whereRepo // the ghost rows' repos, built with wrepos
 	// clones are the clones the service runs and the ones that ended in
 	// the last minute (#176).
 	clones []proto.Clone
@@ -624,6 +625,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if from := m.whereFrom(); st.Found != nil || st.Used != nil || !slices.Equal(from, m.wfrom) {
 			m.wrepos, m.wfrom = m.whereRepos(), from
+			m.wghost = m.ghostRepos()
 		}
 		m.clones = st.Clones
 		m.push = st.Push

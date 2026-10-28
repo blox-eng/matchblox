@@ -21,6 +21,24 @@ const quickStarts = 2
 // next most recent repos. Here is the repo the console was launched in,
 // else the most recent one.
 func (m Model) ghosts() []ghost {
+	rs := m.wghost
+	if len(rs) == 0 {
+		rs = m.ghostRepos() // before the first state: no repos to sort
+	}
+	out := []ghost{{repo: rs[0], here: true}}
+	if len(m.snap.Sessions) > 0 {
+		return out
+	}
+	for _, r := range rs[1:] {
+		out = append(out, ghost{repo: r})
+	}
+	return out
+}
+
+// ghostRepos is the ghost rows' repos: here first, then the quickStarts
+// most suggested others. It sorts every known repo, so it is built with
+// wrepos (wghost), never at a draw: a frame asks for the ghosts many times.
+func (m Model) ghostRepos() []whereRepo {
 	repos := slices.SortedFunc(slices.Values(m.wrepos), bySuggested)
 	var here whereRepo
 	switch {
@@ -29,16 +47,13 @@ func (m Model) ghosts() []ghost {
 	case len(repos) > 0:
 		here = repos[0]
 	}
-	out := []ghost{{repo: here, here: true}}
-	if len(m.snap.Sessions) > 0 {
-		return out
-	}
+	out := []whereRepo{here}
 	for _, r := range repos {
 		if len(out) > quickStarts {
 			break
 		}
 		if r.path != here.path {
-			out = append(out, ghost{repo: r})
+			out = append(out, r)
 		}
 	}
 	return out
