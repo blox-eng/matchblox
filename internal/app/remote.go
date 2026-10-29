@@ -226,12 +226,11 @@ func (m Model) connected(msg connectedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if i := m.peerAt(msg.host); msg.host != m.opt.Host && i >= 0 {
-		if c := m.peers[i].conn; c != nil {
-			_ = c.Close() // a peer of another version still holds it
-		}
 		next, cmd := m.peerTryAgain(i)
 		nm := next.(Model)
-		nm.flash = "connected " + msg.host + ", opening…"
+		if cmd != nil {
+			nm.flash = "connected " + msg.host + ", opening…"
+		}
 		return nm, cmd
 	}
 	m.blocked, m.mismatch = nil, false

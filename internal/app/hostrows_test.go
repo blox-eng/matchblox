@@ -369,3 +369,61 @@ func TestShortHomeLossStaysQuiet(t *testing.T) {
 		t.Fatalf("a short home loss changed the frame:\n%s\nwant:\n%s", got, before)
 	}
 }
+
+// TestSilentPeerSaysWhy: a peer whose service never sends a state is a
+// row with today's words, until its first state comes.
+func TestSilentPeerSaysWhy(t *testing.T) {
+	now := lostAt
+	m, _, conns := hostsAt(t, &now, "", 132, 30, "ws-1")
+	m = upd(t, m, stateMsg(hostState(sess(1, "api-auth", "%1", nil))))
+	ws := conns["ws-1"]
+	old := upd(t, m, peerMsg{host: "ws-1", conn: newFake(), msg: silentMsg{}})
+	if len(old.blockedHosts()) != 0 {
+		t.Fatal("the silence of an old conn made a row")
+	}
+	m = upd(t, m, peerMsg{host: "ws-1", conn: ws, msg: silentMsg{ws}})
+	want := "ws-1  does not answer  run ssh ws-1 matchblox status to see why"
+	if l := lineWith(frameOf(m), "ws-1  "); !strings.Contains(l, want) {
+		t.Fatalf("the silent peer's row is %q, want %q", l, want)
+	}
+	next, _ := key(toBlocked(t, m), "enter")
+	if want := "ws-1 does not answer: run ssh ws-1 matchblox status to see why"; next.(Model).flash != want {
+		t.Fatalf("⏎ on the silent row says %q, want %q", next.(Model).flash, want)
+	}
+	m = upd(t, m, peerMsg{host: "ws-1", conn: ws, msg: stateMsg(hostState(sess(2, "peer-2", "%2", nil)))})
+	if len(m.blockedHosts()) != 0 {
+		t.Fatal("the row stays after the peer's first state")
+	}
+}
+
+// TestPeerStartWatchesForSilence: a peer's start ticks once silentAfter
+// passes, with its conn.
+func TestPeerStartWatchesForSilence(t *testing.T) {
+	now := lostAt
+	m, _, conns := hostsAt(t, &now, "", 132, 30, "ws-1")
+	defer conns["ws-1"].Close() // ends the read the start began
+	batch, ok := m.peerStart(0)().(tea.BatchMsg)
+	if !ok {
+		t.Fatal("the peer's start is not a batch")
+	}
+	got := make(chan tea.Msg, len(batch))
+	for _, c := range batch {
+		go func() { got <- c() }()
+	}
+	deadline := time.After(silentAfter + 2*time.Second)
+	for {
+		select {
+		case msg := <-got:
+			if pm, ok := msg.(peerMsg); ok {
+				if s, ok := pm.msg.(silentMsg); ok {
+					if pm.conn != conns["ws-1"] || s.conn != conns["ws-1"] {
+						t.Fatalf("the tick names conn %v", pm.conn)
+					}
+					return
+				}
+			}
+		case <-deadline:
+			t.Fatal("no silence tick for the peer")
+		}
+	}
+}

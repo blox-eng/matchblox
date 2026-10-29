@@ -197,3 +197,59 @@ func TestReconciledPeerKeepsItsDialErr(t *testing.T) {
 		t.Fatalf("gpu-1 starts lost %v, blocked %v", p.lost, p.blocked)
 	}
 }
+
+// TestTryAgainDialsAReconciledPeer: a link a reconcile opened has an id of
+// its own; ⏎ try again on its changed host key still dials it.
+func TestTryAgainDialsAReconciledPeer(t *testing.T) {
+	ws, again := newFake(), newFake()
+	m := New(Options{NoMotion: true, Conn: newFake()})
+	m, _ = m.reconcile([]Peer{{Host: "ws-1", Conn: ws, Redial: func() (transport.Conn, error) { return again, nil }}})
+	if m.peers[0].id == 0 {
+		t.Fatal("a reconciled link has the id of Options.Peers")
+	}
+	err := fmt.Errorf("ws-1: %w", remote.ErrHostKeyChanged)
+	next, _ := m.Update(peerMsg{host: "ws-1", conn: ws, msg: lostMsg{err: err, conn: ws}})
+	next, cmd := next.(Model).peerTryAgain(0)
+	if cmd == nil {
+		t.Fatal("try again sent no redial tick")
+	}
+	next, cmd = next.Update(cmd())
+	if cmd == nil {
+		t.Fatal("the redial tick of a reconciled link dialed nothing")
+	}
+	next, _ = next.Update(cmd())
+	if p := next.(Model).peers[0]; p.conn != again || p.redialing || p.blocked != nil {
+		t.Fatalf("after try again: conn %v, redialing %v, blocked %v; want the new conn", p.conn, p.redialing, p.blocked)
+	}
+}
+
+// TestTryAgainWithNoRedialKeepsTheRow: a peer that cannot dial again keeps
+// its blocked row, and the flash says so.
+func TestTryAgainWithNoRedialKeepsTheRow(t *testing.T) {
+	m, _, ws := peered(nil)
+	err := fmt.Errorf("ws-1: %w", remote.ErrHostKeyChanged)
+	next, _ := m.Update(peerMsg{host: "ws-1", conn: ws, msg: lostMsg{err: err, conn: ws}})
+	next, cmd := next.(Model).peerTryAgain(0)
+	nm := next.(Model)
+	if cmd != nil || len(nm.blockedHosts()) != 1 {
+		t.Fatalf("cmd %v, blocked rows %+v; want the row kept and no dial", cmd, nm.blockedHosts())
+	}
+	if want := "ws-1 cannot try again from this console"; nm.flash != want {
+		t.Fatalf("flash %q, want %q", nm.flash, want)
+	}
+}
+
+// TestMismatchedPeerClosesItsConn: the console reads nothing more from a
+// peer of another version, so it closes the conn at once.
+func TestMismatchedPeerClosesItsConn(t *testing.T) {
+	m, _, ws := peered(nil)
+	next, _ := m.Update(peerMsg{host: "ws-1", conn: ws, msg: helloMsg(proto.Hello{Version: proto.Version + 1})})
+	if !next.(Model).peers[0].mismatch {
+		t.Fatal("the peer of another version is not marked")
+	}
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+	if !ws.closed {
+		t.Fatal("the conn of a mismatched peer stays open")
+	}
+}

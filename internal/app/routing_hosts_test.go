@@ -228,3 +228,16 @@ func TestHomeRefusalAndLabelUseItsName(t *testing.T) {
 		t.Fatalf("the label is %+v", r)
 	}
 }
+
+// TestSwitchJumpsOnItsHost: a switch on the peer that ran jumps to the
+// peer's pane over ssh, never to this machine's tmux.
+func TestSwitchJumpsOnItsHost(t *testing.T) {
+	m, _, _ := samePane(t, nil)
+	mm := m.(Model)
+	mm.opt.Run = func(argv []string) error { t.Fatalf("a tmux move of ws-1 ran on this machine: %v", argv); return nil }
+	mm.jumpAfter.act, mm.jumpAfter.host, mm.jumpAfter.pane, mm.jumpAfter.done = "a9", "ws-1", "%12", "switched peer-12 to codex"
+	next, jump := mm.switched(proto.Result{ActID: "a9", Ran: [][]string{{"tmux"}}})
+	if jump == nil || next.flash != "switched peer-12 to codex" {
+		t.Fatalf("jump %v, flash %q; want the switch, and the jump on ws-1", jump != nil, next.flash)
+	}
+}

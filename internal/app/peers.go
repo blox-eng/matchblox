@@ -37,6 +37,7 @@ type link struct {
 	redial                    func() (transport.Conn, error)
 	dialErr                   error // why the first dial failed
 	lost, redialing, answered bool
+	silent                    bool // connected, and no state in silentAfter: a row says why
 	backoff                   time.Duration
 	blocked                   error
 	mismatch                  bool // the peer runs another version: a blocked row, never a stream
@@ -106,7 +107,14 @@ func (m Model) peerStart(i int) tea.Cmd {
 	case l.conn == nil && l.redialing:
 		return m.dialPeer(i)
 	}
-	return tea.Batch(toPeer(l.host, helloOn(l.conn, m.opt.Binary)), m.peerRecv(i))
+	return tea.Batch(toPeer(l.host, helloOn(l.conn, m.opt.Binary)), m.peerRecv(i), m.watchPeer(i))
+}
+
+// watchPeer ticks once silentAfter passes on peer i's conn, as
+// watchSilence does for the home host.
+func (m Model) watchPeer(i int) tea.Cmd {
+	host, c, id := m.peers[i].host, m.peers[i].conn, m.peers[i].id
+	return tea.Tick(silentAfter, func(time.Time) tea.Msg { return peerMsg{host: host, conn: c, msg: silentMsg{c}, id: id} })
 }
 
 func (m Model) peerRecv(i int) tea.Cmd {
@@ -211,11 +219,11 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		stale := m.stale(l.host) // a short loss showed nothing: its end shows nothing
 		m.peers = slices.Clone(m.peers)
 		p := &m.peers[i]
-		p.conn, p.redialing, p.answered, p.acts = msg.conn, false, false, nil
+		p.conn, p.redialing, p.answered, p.silent, p.acts = msg.conn, false, false, false, nil
 		if stale {
 			m.flash = p.host + ": connected again"
 		}
-		return m, tea.Batch(toPeer(p.host, helloOn(p.conn, m.opt.Binary)), m.peerRecv(i))
+		return m, tea.Batch(toPeer(p.host, helloOn(p.conn, m.opt.Binary)), m.peerRecv(i), m.watchPeer(i))
 	}
 	if pm.conn != l.conn {
 		return m, nil
@@ -223,11 +231,16 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 	m.peers = slices.Clone(m.peers)
 	p := &m.peers[i]
 	switch msg := pm.msg.(type) {
+	case silentMsg:
+		// Its own read runs: this tick starts none.
+		p.silent = pm.id == p.id && !p.answered && !p.lost && !p.mismatch
+		return m, nil
 	case helloMsg:
 		p.hello = proto.Hello(msg)
 		p.hello.Tmux = remote.HostTmux(p.hello.Tmux)
 		if p.mismatch = p.hello.Version != proto.Version; p.mismatch {
-			return m, nil // as the home host: a row with the fix, and no more reads
+			_ = p.conn.Close() // a row with the fix, and no more reads
+			return m, nil
 		}
 		next, check := m.checkLogin(p.host)
 		return next, tea.Batch(next.peerRecv(i), check)
@@ -238,7 +251,7 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		st.Used = cmp.Or(st.Used, p.st.Used)
 		m.noteChanges(p.host, st.Sessions)
 		first := !p.have
-		p.st, p.at, p.have, p.answered = st, m.now(), true, true
+		p.st, p.at, p.have, p.answered, p.silent = st, m.now(), true, true, false
 		p.cpu.push(st.Machine)
 		switch {
 		case msg.History != nil:
@@ -287,7 +300,7 @@ func (m Model) peerLost(i int, err error) (tea.Model, tea.Cmd) {
 		_ = p.conn.Close()
 	}
 	first := !p.lost
-	p.lost = true
+	p.lost, p.silent = true, false
 	news := m.noAnswer(*p)
 	m.batchLost(p.host, p.acts)
 	p.acts = nil

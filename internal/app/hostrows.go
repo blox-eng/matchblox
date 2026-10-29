@@ -140,11 +140,12 @@ type blockedHost struct {
 	err     error
 	other   bool // the host runs another version, version
 	version int
+	silent  bool // the host connects, and its service sends no state
 }
 
 // fixable: ⏎ fixes it from here. A newer host has no fix here: the
-// console is the one to update.
-func (b blockedHost) fixable() bool { return !b.other || b.version < proto.Version }
+// console is the one to update. A silent host is fixed on the host.
+func (b blockedHost) fixable() bool { return !b.silent && (!b.other || b.version < proto.Version) }
 
 // blockOf is why host cannot be reached, and whether it runs an older
 // version, which matchblox connect updates.
@@ -177,6 +178,8 @@ func (m Model) blockedHosts() []blockedHost {
 			out = append(out, blockedHost{host: l.host, other: true, version: l.hello.Version})
 		case l.blocked != nil:
 			out = append(out, blockedHost{host: l.host, err: l.blocked})
+		case l.silent:
+			out = append(out, blockedHost{host: l.host, silent: true})
 		}
 	}
 	return out
@@ -206,6 +209,9 @@ func (m Model) selectedBlocked() (blockedHost, bool) {
 // blockedWords are today's words of why a host cannot be reached, and
 // its fix, for its row.
 func (m Model) blockedWords(b blockedHost) (why, fix string) {
+	if b.silent {
+		return "does not answer", "run ssh " + b.host + " matchblox status to see why"
+	}
 	if b.other {
 		why = fmt.Sprintf("is version %d, the console is version %d", b.version, proto.Version)
 		if b.version > proto.Version {
@@ -251,6 +257,11 @@ func (m Model) unblockHost(b blockedHost) (tea.Model, tea.Cmd) {
 	if b.host == m.opt.Host {
 		return m.unblock()
 	}
+	if b.silent {
+		why, fix := m.blockedWords(b)
+		m.flash = b.host + " " + why + ": " + fix
+		return m, nil
+	}
 	i := m.peerAt(b.host)
 	if errors.Is(m.peers[i].blocked, remote.ErrHostKeyChanged) {
 		return m.peerTryAgain(i)
@@ -264,16 +275,17 @@ func (m Model) unblockHost(b blockedHost) (tea.Model, tea.Cmd) {
 // peerTryAgain dials peer i again, after the builder fixed what its row
 // showed.
 func (m Model) peerTryAgain(i int) (tea.Model, tea.Cmd) {
+	if m.peers[i].redial == nil {
+		m.flash = m.peers[i].host + " cannot try again from this console"
+		return m, nil
+	}
 	m.peers = slices.Clone(m.peers)
 	p := &m.peers[i]
 	p.blocked, p.mismatch = nil, false
 	m.flash = "trying " + p.host + " again…"
-	if p.redial == nil {
-		return m, nil
-	}
 	p.lost, p.redialing = true, true
-	host, gen := p.host, m.opt.Gen
-	return m, func() tea.Msg { return peerRedialMsg{host: host, gen: gen} }
+	host, gen, id := p.host, m.opt.Gen, p.id
+	return m, func() tea.Msg { return peerRedialMsg{host, gen, id} }
 }
 
 // rowTag is the muted words after a session's name, in room cells: its

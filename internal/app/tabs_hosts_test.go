@@ -416,3 +416,23 @@ func TestRescanOnThePeersRow(t *testing.T) {
 		t.Fatalf("home got %v", acts)
 	}
 }
+
+// TestHomeLossKeepsThePeersPartOfABatch: the home host's loss counts only
+// its own removals; the peer's result still ends the batch.
+func TestHomeLossKeepsThePeersPartOfABatch(t *testing.T) {
+	m, homeConn, wsConn := gitHosts(t)
+	m = pressAll(selectWorktree(t, m, ""), "space").(Model)
+	m = pressAll(selectWorktree(t, m, "ws-1"), "space", "x", "y").(Model)
+	if m.batch == nil || len(m.batch.ids) != 2 {
+		t.Fatalf("batch %+v", m.batch)
+	}
+	m = upd(t, m, lostMsg{err: io.EOF, conn: homeConn})
+	if m.batch == nil || len(m.batch.ids) != 1 {
+		t.Fatalf("the home host's loss ended the peer's part: batch %+v, flash %q", m.batch, m.flash)
+	}
+	wsID := m.peers[0].acts[0]
+	m = upd(t, m, peerMsg{host: "ws-1", conn: wsConn, msg: resultMsg(proto.Result{ActID: wsID, Ran: [][]string{{"git", "worktree", "remove", "/src/api/wt/done"}}})})
+	if want := "removed 1, failed 1: this machine: connection lost"; m.batch != nil || m.flash != want {
+		t.Fatalf("batch %+v, flash %q, want %q", m.batch, m.flash, want)
+	}
+}

@@ -747,9 +747,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			lost = append(lost, "connection lost: "+msg.err.Error())
 		}
 		if m.batch != nil {
-			// Their results went with the connection.
-			lost = append(lost, fmt.Sprintf("%d removals have no answer, %s on Git rescans", len(m.batch.ids), m.keys.main.Rename.Help().Key))
-			m.batch = nil
+			// Their results went with the connection; a peer's still come.
+			var home []string
+			for id := range m.batch.ids {
+				if !slices.ContainsFunc(m.peers, func(l link) bool { return slices.Contains(l.acts, id) }) {
+					home = append(home, id)
+				}
+			}
+			if len(home) == len(m.batch.ids) {
+				lost = append(lost, fmt.Sprintf("%d removals have no answer, %s on Git rescans", len(home), m.keys.main.Rename.Help().Key))
+				m.batch = nil
+			} else {
+				m.batchLost(m.nameOf(m.opt.Host), home)
+			}
 		}
 		var stale tea.Cmd
 		if first {
@@ -1426,12 +1436,17 @@ func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 		m.flash = tilde(r.Skipped[len(r.Skipped)-1])
 		return m, nil
 	}
-	next, jump := m.confirm(*m.jumpOn(j.host, j.pane))
+	m.flash = ""
+	next, jump := m.confirm(*m.forHost(j.host, m.jumpOn(j.host, j.pane)))
 	nm := next.(Model)
-	nm.flash = j.done
+	say := []string{j.done}
 	if ran {
-		nm.flash += "; " + strings.Join(notes, "; ")
+		say = append(say, notes...)
 	}
+	if nm.flash != "" { // the jump refused, or waits for its host's login
+		say = append(say, nm.flash)
+	}
+	nm.flash = strings.Join(say, "; ")
 	return nm, jump
 }
 
