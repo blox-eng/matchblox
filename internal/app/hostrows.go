@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"slices"
@@ -10,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -62,6 +64,15 @@ func (m Model) stateAt(host string) time.Time {
 	return time.Time{}
 }
 
+// nameOf is the word for host on screen. The home host goes by the name
+// in its hello, this machine before it; s.Host stays the routing key.
+func (m Model) nameOf(host string) string {
+	if host == m.opt.Host {
+		return cmp.Or(m.opt.Host, m.host.Host, hosts.ThisMachine)
+	}
+	return hostName(host)
+}
+
 // hosts are the console's hosts in Hosts order: home first.
 func (m Model) hosts() []string {
 	out := []string{m.opt.Host}
@@ -79,7 +90,7 @@ func (m Model) staleHosts() []string {
 	var out []string
 	for _, h := range m.hosts() {
 		if m.stale(h) {
-			out = append(out, hostName(h))
+			out = append(out, m.nameOf(h))
 		}
 	}
 	return out
@@ -101,7 +112,7 @@ func (m Model) lostLine() string {
 		if blocked != nil || !m.stale(h) {
 			continue
 		}
-		names = append(names, hostName(h))
+		names = append(names, m.nameOf(h))
 		if redialing && (next == 0 || backoff < next) {
 			next = backoff
 		}
@@ -221,7 +232,7 @@ func (m Model) blockedRow(b blockedHost, sel bool, w int) string {
 		mark = st.accent.Render("▌")
 	}
 	why, fix := m.blockedWords(b)
-	line := mark + st.ink(sel).Render(hostName(b.host)) + "  " + st.warn.Render(why) + "  "
+	line := mark + st.ink(sel).Render(m.nameOf(b.host)) + "  " + st.warn.Render(why) + "  "
 	if !b.fixable() {
 		return fit(line+st.muted.Render(fix), w)
 	}
@@ -273,7 +284,7 @@ func (m Model) rowTag(s sample.Session, room int) string {
 	if m.hostCount() == 1 {
 		return account
 	}
-	host := hostName(s.Host)
+	host := m.nameOf(s.Host)
 	if account == "" {
 		return host
 	}

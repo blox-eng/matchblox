@@ -335,3 +335,37 @@ func TestThreeHostFrames(t *testing.T) {
 		}
 	}
 }
+
+// TestHomeGoesByItsOwnName: the home row's word is the name in its
+// hello; this machine is only for before it.
+func TestHomeGoesByItsOwnName(t *testing.T) {
+	now := lostAt
+	m, _, conns := hostsAt(t, &now, "", 132, 30, "ws-1")
+	m = upd(t, m, stateMsg(hostState(sess(1, "api", "%1", nil))))
+	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(hostState(sess(2, "tl", "%2", nil)))})
+	if l := lineWith(frameOf(m), " api "); !strings.Contains(l, "api this mach") {
+		t.Fatalf("before the hello the home row is %q, want this machine", l)
+	}
+	m = upd(t, m, helloMsg(proto.Hello{Version: proto.Version, Host: "hearth"}))
+	if l := lineWith(frameOf(m), " api "); !strings.Contains(l, "api hearth") {
+		t.Fatalf("after the hello the home row is %q, want hearth", l)
+	}
+	if s := m.all.sessions[0]; s.Host != "" {
+		t.Fatalf("the home row's routing key changed to %q", s.Host)
+	}
+}
+
+// TestShortHomeLossStaysQuiet: with a peer, a home loss and reconnect
+// under 30 s leaves the frame as it was (anti-goal 5).
+func TestShortHomeLossStaysQuiet(t *testing.T) {
+	now := lostAt
+	m, home, conns := hostsAt(t, &now, "", 132, 12, "ws-1")
+	m = upd(t, m, stateMsg(stateAt(hostState(sess(1, "api", "%1", nil)), now)))
+	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(hostState(sess(2, "tl", "%2", nil)))})
+	before := strings.Join(frameOf(m), "\n")
+	m = upd(t, m, lostMsg{err: io.EOF, conn: home})
+	m = upd(t, m, connMsg{conn: newFake()})
+	if got := strings.Join(frameOf(m), "\n"); got != before {
+		t.Fatalf("a short home loss changed the frame:\n%s\nwant:\n%s", got, before)
+	}
+}

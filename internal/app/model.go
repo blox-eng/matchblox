@@ -819,8 +819,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = msg.conn.Close() // the console that dialed it is gone
 			return m, nil
 		}
+		if m.hostCount() == 1 || m.stale(m.opt.Host) {
+			m.flash = "connected again" // a short loss of two or more hosts showed nothing: its end shows nothing
+		}
 		m.conn, m.redialing, m.answered = msg.conn, false, false
-		m.flash = "connected again"
 		return m, tea.Batch(m.hello(), m.recv(), m.watchSilence())
 	case ranMsg:
 		if msg.err != nil {
