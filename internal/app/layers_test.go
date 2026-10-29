@@ -62,7 +62,7 @@ func rigShell(t *testing.T, added, hidden, ssh []string, start string, firstRun 
 		},
 		Exec: func(argv []string, done func(error) tea.Msg) tea.Cmd {
 			r.ran = append(r.ran, argv)
-			if len(argv) == 3 && argv[1] == "connect" {
+			if len(argv) == 3 && argv[1] == "connect" && !slices.Contains(r.added, argv[2]) {
 				r.added = append(r.added, argv[2]) // what matchblox connect writes
 			}
 			return func() tea.Msg { return done(nil) }
@@ -72,7 +72,18 @@ func rigShell(t *testing.T, added, hidden, ssh []string, start string, firstRun 
 	})
 	next, _ := r.sh.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	r.sh = next.(Shell)
+	r.dialPeers()
 	return r
+}
+
+// dialPeers runs the first dial of each peer of the console, as its Init
+// would.
+func (r *shellRig) dialPeers() {
+	for i, l := range r.sh.cur.peers {
+		if l.conn == nil && l.redialing {
+			r.update(r.sh.cur.dialPeer(i)())
+		}
+	}
 }
 
 func (r *shellRig) key(t *testing.T, k string) {
@@ -101,7 +112,7 @@ func (r *shellRig) drain(cmd tea.Cmd) {
 		for _, c := range msg {
 			r.drain(c)
 		}
-	case layerMsg, connectedHostMsg:
+	case layerMsg, connectedHostMsg, peerMsg:
 		next, cmd := r.sh.Update(msg)
 		r.sh = next.(Shell)
 		r.drain(cmd)
@@ -616,5 +627,120 @@ func TestBackKeepsEveryHostsKind(t *testing.T) {
 	r.toHosts(t)
 	if rows := r.sh.rows(); rows[1].tailscale || !rows[2].tailscale {
 		t.Fatalf("rows %+v", rows)
+	}
+}
+
+// within fails the test when f takes a second or more.
+func within(t *testing.T, what string, f func()) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() { f(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatalf("%s waited for a slow host's dial", what)
+	}
+}
+
+// I1: a peer's dial runs in the background. A host that takes long to
+// answer holds neither the start, nor Enter, nor this machine's rows.
+func TestASlowHostNeverStallsTheConsole(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	conns := map[string]*fakeConn{"": newFake(), "ws-1": newFake(), "gpu-1": newFake()}
+	added := []string{"ws-1"}
+	opt := ShellOptions{
+		Base:  Options{NoMotion: true},
+		Hosts: func() []string { return slices.Clone(added) },
+		Open: func(host string) Options {
+			if host != "" {
+				<-release // the ssh of a sleeping host
+			}
+			return Options{Conn: conns[host], Host: host}
+		},
+	}
+	var sh Shell
+	within(t, "NewShell", func() { sh = NewShell(opt) })
+	if sh.layer != layerConsole || len(sh.cur.peers) != 1 || !sh.cur.peers[0].redialing {
+		t.Fatalf("layer %v, peers %+v", sh.layer, sh.cur.peers)
+	}
+	dial := sh.cur.dialPeer(0)
+	var next tea.Model = sh
+	within(t, "the first frame", func() {
+		next, _ = next.Update(tea.WindowSizeMsg{Width: 132, Height: 30})
+		next, _ = next.Update(stateMsg(hostState(sess(2, "home-run", "%2", nil))))
+		_ = next.(Shell).render()
+	})
+	s := next.(Shell)
+	if out := ansi.Strip(s.render()); !strings.Contains(out, "home-run") {
+		t.Fatalf("this machine's rows do not show:\n%s", out)
+	}
+	if why := s.cur.refusal("ws-1"); why != "ws-1 is not connected." {
+		t.Fatalf("an act to ws-1 while it dials: %q", why)
+	}
+	s.cur.pending = &action{label: "go", say: "go", rec: "go:%2", which: "primary"}
+	next = pressAll(s, "enter")
+	if got := conns[""].acts(); len(got) != 1 {
+		t.Fatalf("this machine got %+v while ws-1 dials", got)
+	}
+	// Enter with a new host ticked: gpu-1 dials in the background too.
+	added = append(added, "gpu-1")
+	next, _ = next.Update(layerMsg{}) // esc
+	within(t, "Enter", func() { next, _ = key(next, "enter") })
+	s = next.(Shell)
+	if s.layer != layerConsole || len(s.cur.peers) != 2 || !s.cur.peers[1].redialing {
+		t.Fatalf("after Enter: layer %v, peers %+v", s.layer, s.cur.peers)
+	}
+	// The dial ends: ws-1's rows join.
+	got := make(chan tea.Msg, 1)
+	go func() { got <- dial() }()
+	release <- struct{}{}
+	next, _ = s.Update(<-got)
+	next, _ = next.Update(peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(hostState(sess(3, "ws-run", "%3", nil)))})
+	if out := ansi.Strip(next.(Shell).render()); !strings.Contains(out, "ws-run") || !strings.Contains(out, "home-run") {
+		t.Fatalf("ws-1's rows did not join:\n%s", out)
+	}
+}
+
+// I2: a connect keeps the ticks: the console that opens after it is the
+// ticked hosts, the connected one among them.
+func TestAConnectKeepsTheTicks(t *testing.T) {
+	r := newShell(t, []string{"ws-1", "gpu-1"}, []string{"ws-1", "gpu-1", "ws-2"}, "", false)
+	r.toHosts(t)
+	r.key(t, "down") // ws-1
+	r.key(t, "c")
+	r.key(t, "y")
+	if r.sh.layer != layerConsole || r.sh.cur.opt.Host != "" || !slices.Equal(peerHosts(r.sh.cur), []string{"ws-1", "gpu-1"}) {
+		t.Fatalf("c on ws-1: layer %v, home %q, peers %q", r.sh.layer, r.sh.cur.opt.Host, peerHosts(r.sh.cur))
+	}
+	r.toHosts(t)
+	r.key(t, "down")
+	r.key(t, "down")
+	r.key(t, "down")
+	r.key(t, "enter") // + add a host
+	r.key(t, "enter") // ws-2
+	r.key(t, "y")
+	if !slices.Equal(peerHosts(r.sh.cur), []string{"ws-1", "gpu-1", "ws-2"}) {
+		t.Fatalf("ws-2 added: peers %q", peerHosts(r.sh.cur))
+	}
+}
+
+// S1: with no host ticked, Enter opens the selected host alone, says so,
+// and the header still counts the hidden.
+func TestEnterWithNoneTickedSaysSo(t *testing.T) {
+	r := hidingShell(t, []string{"ws-1"}, []string{"this machine", "ws-1"}, "")
+	r.key(t, "down") // ws-1
+	r.key(t, "enter")
+	if r.sh.layer != layerConsole || r.sh.curHost != "ws-1" || len(r.sh.cur.peers) != 0 {
+		t.Fatalf("layer %v, host %q", r.sh.layer, r.sh.curHost)
+	}
+	r.update(stateMsg(fixtureState()))
+	r.sh.cur.splashDone = true
+	lines := strings.Split(r.view(), "\n")
+	if !strings.Contains(lines[0], "ws-1 · 1 hidden") {
+		t.Fatalf("header %q", lines[0])
+	}
+	if last := strings.TrimSpace(lines[len(lines)-1]); last != "No host is ticked: ws-1 opens alone." {
+		t.Fatalf("key line %q", last)
 	}
 }

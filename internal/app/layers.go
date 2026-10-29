@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/remote"
+	"github.com/blox-eng/matchblox/internal/transport"
 )
 
 // The layers of the console, as in k9s: Hosts above the console of one
@@ -165,10 +167,26 @@ func (s Shell) keep(peerHosts []string) (Shell, tea.Cmd) {
 	return s, cmd
 }
 
-// peer dials host for the console as a peer.
+// peer is host for the console as a peer, not dialed yet: the console
+// dials it in the background, so a slow host never holds the screen or
+// the other hosts. The first dial is Open's; the next ones its Redial.
 func (s Shell) peer(host string) Peer {
-	o := s.opt.Open(host)
-	return Peer{Host: host, Conn: o.Conn, Redial: o.Redial, DialErr: o.DialErr}
+	open := s.opt.Open
+	var mu sync.Mutex
+	var redial func() (transport.Conn, error)
+	return Peer{Host: host, Redial: func() (transport.Conn, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if redial != nil {
+			return redial()
+		}
+		o := open(host)
+		redial = o.Redial
+		if redial == nil {
+			redial = func() (transport.Conn, error) { o := open(host); return o.Conn, o.DialErr }
+		}
+		return o.Conn, o.DialErr
+	}}
 }
 
 // closeConsole ends the open console: its streams, its prompts, its
@@ -264,8 +282,11 @@ func (s Shell) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			s.flash = "not connected: " + msg.err.Error()
 			return s, nil
 		}
-		s.hosts, s.adding = s.readHosts(), false
-		return s.open(msg.host, false)
+		s.hosts, s.hidden, s.adding = s.readHosts(), s.readHidden(), false
+		if len(s.ticked()) == 0 {
+			return s.open(msg.host, false)
+		}
+		return s.openTicked(false) // an added host is ticked: it joins the others
 	}
 	if s.layer == layerConsole {
 		next, cmd := s.cur.Update(msg)
@@ -467,7 +488,10 @@ func (s Shell) flip(host string) Shell {
 func (s Shell) enterTicked(host string) (Shell, tea.Cmd) {
 	switch t := s.ticked(); {
 	case len(t) == 0:
-		return s.open(host, false)
+		s, cmd := s.open(host, false)
+		s.cur.hidden = s.hiddenCount() - 1 // all but the one that opens
+		s.cur.flash = "No host is ticked: " + s.cur.nameOf(host) + " opens alone."
+		return s, cmd
 	case s.live() && t[0] == s.curHost:
 		return s.keep(t[1:])
 	}

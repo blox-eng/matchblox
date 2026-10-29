@@ -18,6 +18,8 @@ import (
 // stream to it next to the home one.
 type Peer struct {
 	Host string
+	// Conn nil, with no DialErr: the console dials with Redial at its
+	// start, so a slow host never holds the others.
 	Conn transport.Conn
 	// Redial connects again after the connection drops. Nil: no retry.
 	Redial func() (transport.Conn, error)
@@ -79,7 +81,8 @@ func links(peers []Peer) []link {
 }
 
 func newLink(p Peer, id int) link {
-	return link{host: p.Host, id: id, conn: p.Conn, redial: p.Redial, dialErr: p.DialErr}
+	dials := p.Conn == nil && p.DialErr == nil && p.Redial != nil
+	return link{host: p.Host, id: id, conn: p.Conn, redial: p.Redial, dialErr: p.DialErr, redialing: dials}
 }
 
 // hostCount is the hosts of the console: home and its peers.
@@ -89,12 +92,16 @@ func (m Model) peerAt(host string) int {
 	return slices.IndexFunc(m.peers, func(l link) bool { return l.host == host })
 }
 
-// peerStart says hello to peer i and reads from it, or reports why its first
-// dial failed.
+// peerStart says hello to peer i and reads from it, reports why its first
+// dial failed, or dials it.
 func (m Model) peerStart(i int) tea.Cmd {
 	l := m.peers[i]
-	if err := l.dialErr; err != nil && l.conn == nil {
+	switch {
+	case l.dialErr != nil && l.conn == nil:
+		err := l.dialErr
 		return func() tea.Msg { return peerMsg{host: l.host, msg: lostMsg{err: err}} }
+	case l.conn == nil && l.redialing:
+		return m.dialPeer(i)
 	}
 	return tea.Batch(toPeer(l.host, helloOn(l.conn, m.opt.Binary)), m.peerRecv(i))
 }
@@ -145,7 +152,7 @@ func (m Model) refusal(host string) string {
 		redialing, backoff = l.redialing, l.backoff
 	}
 	why := m.nameOf(host) + " is not connected."
-	if redialing {
+	if redialing && backoff > 0 { // 0: its first dial runs
 		why += " It tries again in " + backoff.String() + "."
 	}
 	return why
@@ -311,8 +318,14 @@ func (m Model) peerRedial(msg peerRedialMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.opt.Gen || i < 0 || msg.id != m.peers[i].id || !m.peers[i].redialing || m.quitting {
 		return m, nil // a tick from a console that was closed, or a link that is gone
 	}
-	redial, host, gen, id := m.peers[i].redial, msg.host, m.opt.Gen, msg.id
-	return m, func() tea.Msg {
+	return m, m.dialPeer(i)
+}
+
+// dialPeer dials peer i in the background: its connMsg or redialFailed
+// comes back with the link's id.
+func (m Model) dialPeer(i int) tea.Cmd {
+	redial, host, gen, id := m.peers[i].redial, m.peers[i].host, m.opt.Gen, m.peers[i].id
+	return func() tea.Msg {
 		c, err := redial()
 		if err != nil {
 			return peerMsg{host: host, msg: redialFailed{err, gen}, id: id}

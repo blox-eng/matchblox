@@ -235,7 +235,7 @@ func hostsTicks(st proto.State, w, h int) Shell {
 		},
 	})
 	_, ws := peerStates(st)
-	var next tea.Model = sh
+	next, _ := sh.Update(sh.cur.dialPeer(0)()) // ws-1's first dial, as Init runs it
 	for _, msg := range []tea.Msg{
 		tea.WindowSizeMsg{Width: w, Height: h},
 		stateMsg(st),
