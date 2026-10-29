@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -315,29 +314,8 @@ func TestFormSpaceIsTextOnWhereAndPicksOnAgent(t *testing.T) {
 
 const cloneURL = "https://github.com/o/r"
 
-// runAll runs cmd and, for a batch, each of its commands but the first
-// (the receive, which waits for the connection). A lone receive is left
-// waiting.
-func runAll(cmd tea.Cmd) {
-	if cmd == nil {
-		return
-	}
-	got := make(chan tea.Msg, 1)
-	go func() { got <- cmd() }()
-	var msg tea.Msg
-	select {
-	case msg = <-got:
-	case <-time.After(200 * time.Millisecond):
-		return
-	}
-	if b, ok := msg.(tea.BatchMsg); ok {
-		for _, c := range b[1:] {
-			if c != nil {
-				c()
-			}
-		}
-	}
-}
+// runAll runs cmd and every command it batches; a receive is left waiting.
+func runAll(cmd tea.Cmd) { drain(cmd) }
 
 // pastedURL is N with cloneURL pasted into where.
 func pastedURL(t *testing.T, w int) (tea.Model, *fakeConn) {

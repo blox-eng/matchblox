@@ -86,7 +86,19 @@ func (f *fakeConn) Close() error {
 	return nil
 }
 
+// acts is what the console asked, but for the watch of the screen it keeps
+// current on its own.
 func (f *fakeConn) acts() []proto.Act {
+	var out []proto.Act
+	for _, a := range f.allActs() {
+		if !strings.HasPrefix(a.RecID, proto.WatchPrefix) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+func (f *fakeConn) allActs() []proto.Act {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []proto.Act

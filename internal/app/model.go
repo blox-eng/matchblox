@@ -285,6 +285,8 @@ type Model struct {
 	doorAt     int    // its row, for the door after it when it folds
 	previewTop int    // the first line of a door's diff on screen
 	paneSel    int
+	screen     proto.Screen      // the last capture of the watched pane
+	watching   string            // the pane the service sends, or ""
 	peek       *peek             // the answer peek, over the screen
 	peekSent   map[string]string // the peek's sends in flight: act id -> the session's name
 	peekQuiet  time.Time         // the peek takes no key until then: it just moved
@@ -510,6 +512,11 @@ func (m Model) recv() tea.Cmd {
 				if json.Unmarshal(env.Body, &r) == nil {
 					return fromConn{c, resultMsg(r)}
 				}
+			case proto.KindScreen:
+				var sc proto.Screen
+				if json.Unmarshal(env.Body, &sc) == nil {
+					return fromConn{c, screenMsg(sc)}
+				}
 			}
 		}
 	}
@@ -531,7 +538,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m = m.scanShows()
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
-		next = nm.scanShows()
+		nm = nm.scanShows()
+		if watch := nm.watchCmd(); watch != nil {
+			cmd = tea.Batch(cmd, watch)
+		}
+		next = nm
 	}
 	return next, cmd
 }
@@ -563,6 +574,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.update(msg.msg)
+	case screenMsg:
+		if msg.Pane == m.watching {
+			m.screen = proto.Screen(msg)
+		}
+		return m, m.recv()
 	case helloMsg:
 		m.host = proto.Hello(msg)
 		m.host.Tmux = remote.HostTmux(m.host.Tmux)

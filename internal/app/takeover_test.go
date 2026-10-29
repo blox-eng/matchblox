@@ -241,10 +241,8 @@ func TestAQuestionOutlivedByItsRunJustRuns(t *testing.T) {
 
 func TestTapsAndTypingKeepTheRest(t *testing.T) {
 	m, f := loadedWith(t, 120, restingState())
-	next, cmd := m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
-	if cmd != nil {
-		next.Update(cmd())
-	}
+	_, cmd := m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+	drain(cmd)
 	if got := recIDs(f.acts()); len(got) != 1 || got[0] != "stoker:touch" {
 		t.Fatalf("a swipe: acts %v", got)
 	}

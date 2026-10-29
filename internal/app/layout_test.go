@@ -182,7 +182,8 @@ func TestTapSelectsThenActs(t *testing.T) {
 		// A session that does not wait: the first tap selects it, a tap on
 		// it selected opens the peek to message it. Nothing runs.
 		next, cmd := tap(m, 5, sessLine(t, m, "tools"))
-		if cmd != nil || ran != nil || next.(Model).peek != nil {
+		drain(cmd)
+		if len(f.acts()) != 0 || ran != nil || next.(Model).peek != nil {
 			t.Fatalf("width %d: the first tap acted", w)
 		}
 		if it, _ := next.(Model).selectedSession(); it.Pane != "%3" {
