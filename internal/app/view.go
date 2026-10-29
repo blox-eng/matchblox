@@ -84,7 +84,14 @@ func (m Model) render() string {
 	return m.frame(w)
 }
 
-func (m Model) frame(w int) string { return strings.Join(m.draw(w).lines, "\n") }
+func (m Model) frame(w int) string {
+	sc := m.draw(w)
+	f := strings.Join(sc.lines, "\n")
+	if sc.nowX >= 0 {
+		f = overlayNow(f, sc.nowX, sc.nowTop, sc.nowBottom, m.st)
+	}
+	return f
+}
 
 // span is a tap target on a line: columns x0 to x1, and the key it presses.
 type span struct {
@@ -136,6 +143,8 @@ type drawn struct {
 	// detail: their line, and the key a tap on each presses.
 	actKeysAt int
 	actKeys   []span
+	// The rule of now: its column (-1 none) and its first and last line.
+	nowX, nowTop, nowBottom int
 }
 
 // draw is the screen, with an ssh prompt over everything.
@@ -143,6 +152,7 @@ func (m Model) draw(w int) drawn {
 	sc := m.drawScreen(w)
 	if m.asking() {
 		m.overlayAsk(&sc, w)
+		sc.nowX = -1 // the rule never cuts a box over the list
 	}
 	return sc
 }
@@ -160,7 +170,7 @@ func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt := m.header(w)
 	tabs, tabSpans := m.tabsLine(w)
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
-		bodyTop: 3, listW: w, dockAt: -1, keysAt: -1, actKeysAt: -1}
+		bodyTop: 3, listW: w, dockAt: -1, keysAt: -1, actKeysAt: -1, nowX: -1}
 	switch {
 	case m.hostCount() > 1 && m.shows():
 		// A blocked host of two or more is a row, never the screen.
@@ -185,6 +195,12 @@ func (m Model) drawScreen(w int) drawn {
 	full := max(m.height-5, 1)
 	listW, detailW := m.panes(w)
 	sc.listW = listW
+	lanes := m.tab == tabSessions && len(m.snap.Sessions) > 0 && m.sessTracks(listW).lane > 0
+	if lanes {
+		sc.lines = append(sc.lines, m.axisLines(m.sessTracks(listW), listW)...)
+		sc.bodyTop += 2
+		full = max(full-2, 1)
+	}
 	b := m.body(listW)
 	_, _, peeking := m.peekNow()
 	inline := peeking && detailW > 0 // the peek takes the detail pane
@@ -258,6 +274,11 @@ func (m Model) drawScreen(w int) drawn {
 		m.overlayForm(&sc, w)
 	case peeking && !inline:
 		m.overlayPeek(&sc, w)
+	case lanes:
+		sc.nowX, sc.nowTop, sc.nowBottom = m.sessTracks(listW).laneX(listW)+lanePast, 2, sc.keysAt-1
+		if sc.dockAt >= 0 {
+			sc.nowBottom = sc.dockAt - 1
+		}
 	}
 	return sc
 }

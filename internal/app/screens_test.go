@@ -19,6 +19,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -166,6 +167,44 @@ func TestScreens(t *testing.T) {
 	machine := threeHosts(t, st, 104, 38, "stale")
 	machine.setTab(tabMachine)
 	golden(t, machine, "machine3", 104, 38)
+	golden(t, nowScreen(t, st, 132, 32), "nowline", 132, 32)
+}
+
+// nowScreen is the demo machine in list only after the console watched it
+// for two hours: hearth-api works on and off, spark-docs is on a limit
+// whose 5 hours reset in 35 minutes, and the rest keep their state.
+func nowScreen(t *testing.T, st proto.State, w, h int) Model {
+	t.Helper()
+	now := demoAt.Add(-(lanePast - 1) * laneCell)
+	m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return now }})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	out := demoAt.Add(35 * time.Minute)
+	limited := st
+	limited.Sessions = slices.Clone(st.Sessions)
+	limited.Limits = append(slices.Clone(st.Limits), limits.Account{Provider: "claude", Account: "demo", State: limits.Measured, At: demoAt,
+		Windows: []limits.Window{{UsedPct: 100, Minutes: 300, ResetsAt: out}}})
+	for i, s := range limited.Sessions {
+		if s.Name == "spark-docs" {
+			s.Busy, s.Status, s.Idle, s.Out = false, "idle", 4*time.Minute, out
+			limited.Sessions[i] = s
+		}
+	}
+	for step := range lanePast {
+		now = demoAt.Add(-time.Duration(lanePast-1-step) * laneCell)
+		at := limited
+		at.Sessions = slices.Clone(limited.Sessions)
+		for i, s := range at.Sessions {
+			if s.Name == "hearth-api" {
+				s.Busy = step%6 < 4
+				at.Sessions[i] = s
+			}
+		}
+		next, _ = next.Update(stateMsg(at))
+	}
+	nm := next.(Model)
+	nm.splashDone = true
+	nm.viewPrefs.ListOnlyDesk = true
+	return nm
 }
 
 // threeHostShips is Ships over three hosts: the demo machine's four, the
