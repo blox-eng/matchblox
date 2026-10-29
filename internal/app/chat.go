@@ -10,6 +10,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 )
 
+const watchActID = "watch"
+
 // screenMsg is one capture of the watched pane.
 type screenMsg proto.Screen
 
@@ -69,6 +71,9 @@ func (m *Model) watchCmd() tea.Cmd {
 			want = s.Pane
 		}
 	}
+	if m.watchHeld != "" && want == m.watchHeld {
+		want = m.watching
+	}
 	if want == m.watching {
 		return nil
 	}
@@ -78,7 +83,7 @@ func (m *Model) watchCmd() tea.Cmd {
 	}
 	c := m.conn
 	return func() tea.Msg { // not m.send: the watch takes no number from the acts the builder sees
-		if err := c.Send(proto.KindAct, "watch", proto.Act{RecID: proto.WatchPrefix + want}); err != nil {
+		if err := c.Send(proto.KindAct, watchActID, proto.Act{RecID: proto.WatchPrefix + want}); err != nil {
 			return lostMsg{err, c}
 		}
 		return nil
@@ -100,5 +105,6 @@ func (m Model) chatLines(w, h int) []string {
 		}
 		return lines
 	}
-	return fitScreen(m.screen.Text, w, h)
+	fit := fitScreen(m.screen.Text, w, h)
+	return append(lines[:h-len(fit)], fit...)
 }

@@ -287,6 +287,7 @@ type Model struct {
 	paneSel    int
 	screen     proto.Screen      // the last capture of the watched pane
 	watching   string            // the pane the service sends, or ""
+	watchHeld  string            // the pane the service refused, until the next snapshot
 	peek       *peek             // the answer peek, over the screen
 	peekSent   map[string]string // the peek's sends in flight: act id -> the session's name
 	peekQuiet  time.Time         // the peek takes no key until then: it just moved
@@ -612,6 +613,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.askGone(msg)
 	case stateMsg:
 		first := !m.have
+		m.watchHeld = ""
 		st := proto.State(msg)
 		m.queue = st.Queue
 		toast := m.stokerNews(st.Stoker)
@@ -707,6 +709,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planTickMsg:
 		return m.planTick(msg)
 	case resultMsg:
+		if msg.ActID == watchActID && msg.Err != "" {
+			// A pane that went before the watch came is a race, not the builder's error.
+			m.watchHeld, m.watching, m.screen = m.watching, "", proto.Screen{}
+			return m, m.recv()
+		}
 		if m.pending != nil && m.pending.previewAct != "" && m.pending.previewAct == msg.ActID {
 			if msg.Err != "" || msg.Preview == "" {
 				m.pending = nil

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -12,12 +13,16 @@ import (
 )
 
 func TestFitKeepsTheBottomAndCutsRules(t *testing.T) {
+	prose := ""
+	for i := 0; i < 180; i++ {
+		prose += string(rune('a' + i%26))
+	}
 	var lines []string
 	for i := 0; i < 39; i++ {
 		if i%2 == 0 {
 			lines = append(lines, strings.Repeat("─", 200))
 		} else {
-			lines = append(lines, strings.Repeat("p", 180))
+			lines = append(lines, prose)
 		}
 	}
 	lines = append(lines, "> ")
@@ -25,18 +30,24 @@ func TestFitKeepsTheBottomAndCutsRules(t *testing.T) {
 	if len(got) != 20 {
 		t.Fatalf("got %d lines, want 20", len(got))
 	}
+	full := false
 	for i, l := range got {
 		w := ansi.StringWidth(l)
 		if w > 44 || strings.Contains(l, "─") && w != 44 {
 			t.Fatalf("line %d is %d wide", i, w)
 		}
+		full = full || w == 44
+	}
+	if !full {
+		t.Fatal("no line is 44 wide")
 	}
 	if strings.TrimRight(got[19], " ") != ">" {
 		t.Fatalf("last line = %q", got[19])
 	}
-	// The wrapped prose keeps all its text: 180 p's in 5 lines of 44 at most.
-	if n := strings.Count(strings.Join(got, ""), "p"); n%180 != 0 || n == 0 {
-		t.Fatalf("prose was cut: %d p's", n)
+	// The last prose line wraps whole: 44+44+44+44+4.
+	tail := strings.Join(got[13:18], "")
+	if tail != prose {
+		t.Fatalf("prose %q, want %q", tail, prose)
 	}
 }
 
@@ -115,4 +126,44 @@ func TestChatLinesWhenTheSessionEnded(t *testing.T) {
 	if len(lines) != 5 || strings.TrimSpace(lines[2]) != "That session ended." {
 		t.Fatalf("lines = %q", lines)
 	}
+}
+
+func TestChatLinesFillTheViewFromTheBottom(t *testing.T) {
+	m, _ := chatModel(t)
+	sel, _ := m.selected()
+	next, _ := m.Update(screenMsg{Pane: sel.Pane, Text: "one\ntwo"})
+	lines := next.(Model).chatLines(40, 5)
+	if len(lines) != 5 || lines[3] != "one" || lines[4] != "two" || lines[0] != "" {
+		t.Fatalf("lines = %q", lines)
+	}
+	next, _ = m.Update(screenMsg{Pane: sel.Pane, Text: "   \n\n"})
+	if lines := next.(Model).chatLines(40, 5); len(lines) != 5 {
+		t.Fatalf("a blank screen gave %d lines", len(lines))
+	}
+}
+
+func TestRefusedWatchRetriesOnTheNextSnapshotAndSaysNothing(t *testing.T) {
+	m, f := chatModel(t)
+	sel, _ := m.selected()
+	next, cmd := m.Update(resultMsg(proto.Result{ActID: "watch", Err: "no agent session in " + sel.Pane + " any more"}))
+	drain(cmd)
+	mm := next.(Model)
+	if mm.flash != "" || mm.watching != "" {
+		t.Fatalf("flash %q watching %q", mm.flash, mm.watching)
+	}
+	next, cmd = mm.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	drain(cmd)
+	n := len(f.allActs())
+	next, cmd = next.Update(stateMsg(fixtureStateWith(sel)))
+	drain(cmd)
+	acts := f.allActs()
+	if len(acts) != n+1 || acts[n].RecID != proto.WatchPrefix+sel.Pane || next.(Model).flash != "" {
+		t.Fatalf("acts %+v", acts[n:])
+	}
+}
+
+func fixtureStateWith(ss ...sample.Session) proto.State {
+	st := fixtureState()
+	st.Sessions = ss
+	return st
 }
