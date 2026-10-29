@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -51,7 +52,7 @@ func TestVFoldsThePaneAndTheDock(t *testing.T) {
 	if sc.listW >= 92 || sc.dockAt < 0 || opensInPlace(m, sc) {
 		t.Fatalf("the full view: list %d, dock at %d, opened %v", sc.listW, sc.dockAt, opensInPlace(m, sc))
 	}
-	if k := keyText(sc); !strings.Contains(k, "list only v") || strings.HasSuffix(strings.TrimSpace(k), "list only") {
+	if k := keyText(sc); strings.HasSuffix(strings.TrimSpace(k), "list only") {
 		t.Fatalf("the full view's key line: %q", k)
 	}
 	next, _ := key(m, "v")
@@ -61,8 +62,13 @@ func TestVFoldsThePaneAndTheDock(t *testing.T) {
 		t.Fatalf("list only: on %v, list %d, dock at %d, opened %v\n%s", lo.listOnly(), sc.listW, sc.dockAt, opensInPlace(lo, sc), screen(lo))
 	}
 	k := keyText(sc)
-	if !strings.Contains(k, "full view v") || !strings.HasSuffix(strings.TrimSpace(k), "list only") {
+	if !strings.Contains(k, "full view v") {
 		t.Fatalf("list only's key line: %q", k)
+	}
+	panes := lo
+	panes.setTab(tabPanes) // fewer keys: room for the mark
+	if k := keyText(panes.draw(92)); !strings.HasSuffix(strings.TrimSpace(k), "list only") {
+		t.Fatalf("list only's key line has no mark: %q", k)
 	}
 	var at span
 	for _, s := range sc.keys {
@@ -137,4 +143,56 @@ func TestVIsFree(t *testing.T) {
 		t.Fatalf("v is %q", got)
 	}
 	TestKeymapsHaveNoCollisions(t)
+}
+
+// TestTheSwitchGivesWayOnTheDesk: on the full view list only v is the
+// first spare key to go, so a desk key line keeps every key it had, and
+// shows the switch where room is left.
+func TestTheSwitchGivesWayOnTheDesk(t *testing.T) {
+	m := loaded(t, 100)
+	if k := keyText(m.draw(100)); !strings.Contains(k, "/ find") || strings.Contains(k, "list only v") {
+		t.Fatalf("the switch took a key's place: %q", k)
+	}
+	m.tab = tabPanes
+	if k := keyText(m.draw(100)); !strings.Contains(k, "/ find") || !strings.Contains(k, "q quit") || !strings.Contains(k, "list only v") {
+		t.Fatalf("a line with room has no switch, or lost a key: %q", k)
+	}
+	desk := demoIn(t, "", 132, 32)
+	if k := keyText(desk.draw(132)); !strings.Contains(k, "A switch") || !strings.Contains(k, "/ find") {
+		t.Fatalf("the switch took a key's place at 132: %q", k)
+	}
+}
+
+// TestFullViewStaysWhenRoomIsShort: in list only the way back stays; the
+// list only mark goes first, then the age, before a spare key.
+func TestFullViewStaysWhenRoomIsShort(t *testing.T) {
+	m, _ := loadedWith(t, 50, queueState())
+	m.tab = tabPanes
+	k := keyText(m.draw(50))
+	if !m.listOnly() || !strings.Contains(k, "full view v") || !strings.Contains(k, "s sort") || strings.HasSuffix(strings.TrimSpace(k), "list only") {
+		t.Fatalf("list only on a short line: %q", k)
+	}
+	if !strings.Contains(k, "sampled") {
+		t.Fatalf("the age went before the mark: %q", k)
+	}
+}
+
+// TestTheMarkKeepsItsGap: the age and the list only mark stand two
+// columns clear of the keys, so they never read as one phrase.
+func TestTheMarkKeepsItsGap(t *testing.T) {
+	gap := regexp.MustCompile(`\S {2,}(sampled \S+ ago  )?list only $`)
+	for w := 40; w <= 140; w++ {
+		m := demoIn(t, "", w, 40)
+		if !m.listOnly() {
+			m = fullView(m)
+			m.viewPrefs.ListOnlyDesk = true
+		}
+		for _, tab := range []int{tabSessions, tabPanes, tabMachine} {
+			m.setTab(tab)
+			k := keyText(m.draw(w))
+			if strings.HasSuffix(k, "list only ") && !gap.MatchString(k) {
+				t.Fatalf("w=%d %s: the mark has no gap: %q", w, tabNames[tab], k)
+			}
+		}
+	}
 }

@@ -27,4 +27,4 @@
  · Google login  not measured · OpenCode …│ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
  ❋ OpenAI        5h ▰▱▱ 40% · wk 12%      │ runs 5 claude · 1 codex · 1 opencode
 ──────────────────────────────────────────────────────────────────────────────────────
- ⏎ open  a answer  x kill  r rename  N new  f stoker  list only v      sampled 0s ago
+ ⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  sampled 0s ago

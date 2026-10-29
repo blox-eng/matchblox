@@ -57,4 +57,4 @@
                  │   4 Type an answer…                                                  │
                  ╰─ ⏎ question 2 ─ ← prev  3/7  next → ─ esc ─ ^o jump ─────────────────╯
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ open  a answer  x kill  r rename  z park  N new  f stoker  full view v        sampled 0s ago  list only
+ ⏎ open  a answer  x kill  r rename  A switch  z park  N new  p ships  f stoker  full view v

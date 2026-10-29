@@ -37,4 +37,4 @@
 
 
 ────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ open  a answer  x kill  r rename  N new  f stoker  full view v sampled 0s ago  list only
+ ⏎ open  a answer  x kill  r rename  A switch  z park  N new  p ships  f stoker  full view v

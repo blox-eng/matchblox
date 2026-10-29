@@ -598,31 +598,39 @@ func (m Model) keyLine(w int) (string, []span) {
 		line += st.muted.Render(lead)
 		x += lipgloss.Width(lead)
 	}
-	// List only's switch names its key after its word.
+	// List only's switch names its key after its word. On the full view
+	// it is the first spare key to go, before every other one and the age.
+	// In list only it is the way back, so it stays: the list only mark goes
+	// first, then the age, then a spare key; a key of the row outranks it.
+	on := m.listOnly()
 	var flip hint
 	flipW := 0
 	if m.tab != tabMachine && m.tab != tabStoker {
 		flip = m.listOnlyHint()
 		flipW = lipgloss.Width(flip.label+" "+flip.key) + 2
 	}
-	room := w - x
 	age := st.faint.Render("sampled " + sample.Human(m.now().Sub(m.snap.At)) + " ago ")
-	mark, markW := "", 0
-	if m.listOnly() {
-		mark = st.accent.Render("list only") + " "
-		markW = lipgloss.Width(mark) + 1
-	}
-	// The age goes before a spare key does, the list only mark before the
-	// age, and the switch before the mark; a spare key goes before the
-	// switch, and the switch before a key of the row.
-	for _, r := range []int{lipgloss.Width("sampled 59m ago ") + markW + flipW, markW + flipW, flipW, 0} {
-		if fit := fitHints(hints, room-r); hintsWidth(fit) <= room-r || r == 0 {
-			hints = fit
-			break
+	ageW := lipgloss.Width("sampled 59m ago ")
+	room := w - x
+	switch {
+	case on:
+		hints = fitHints(hints, room-flipW)
+		if hintsWidth(hints)+flipW > room {
+			flip = hint{}
 		}
-	}
-	if hintsWidth(hints)+flipW > room {
-		flip = hint{}
+	default:
+		if fit := fitHints(hints, room-ageW); hintsWidth(fit) <= room-ageW {
+			hints = fit
+		} else {
+			hints = fitHints(hints, room)
+		}
+		rest := room - hintsWidth(hints)
+		if x+hintsWidth(hints)+lipgloss.Width(age)+1 <= w {
+			rest -= lipgloss.Width(age) + 1 // the age stays before the switch
+		}
+		if flipW > rest {
+			flip = hint{}
+		}
 	}
 	var spans []span
 	parts := 0
@@ -643,18 +651,19 @@ func (m Model) keyLine(w int) (string, []span) {
 	if flip != (hint{}) {
 		add(st.muted.Render(flip.label+" ")+st.accent.Render(flip.key), flip.press)
 	}
-	right := age
-	if mark != "" {
-		right = age + " " + mark
-		if lipgloss.Width(line)+lipgloss.Width(right)+1 > w {
-			right = mark
+	right, gap := age, 1
+	if on {
+		// The mark keeps two columns from the keys, as every key does.
+		mark := st.accent.Render("list only") + " "
+		right, gap = age+" "+mark, 2
+		if lipgloss.Width(line)+lipgloss.Width(right)+gap > w {
+			right = age
+		} else {
+			spans = append(spans, span{w - lipgloss.Width(mark), w - 1, m.keys.main.ListOnly.Keys()[0]})
 		}
 	}
-	if lipgloss.Width(line)+lipgloss.Width(right)+1 > w {
-		return fit(line, w), spans // the keys matter more than the age and the mark
-	}
-	if mark != "" {
-		spans = append(spans, span{w - lipgloss.Width(mark), w - 1, m.keys.main.ListOnly.Keys()[0]})
+	if lipgloss.Width(line)+lipgloss.Width(right)+gap > w {
+		return fit(line, w), spans // the keys matter more than the age
 	}
 	return line + strings.Repeat(" ", w-lipgloss.Width(line)-lipgloss.Width(right)) + right, spans
 }

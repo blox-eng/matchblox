@@ -29,4 +29,4 @@
  ○ Clear wick-mobile (%7)
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit  full view v        sampled 0s ago  list only
+ ↑↓ move  ⏎ open  a answer  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit  full view v
