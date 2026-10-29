@@ -47,6 +47,9 @@ func (m Model) selectedShip() (proto.Ship, bool) {
 // first: stuck, waiting for you, in flight, merged, then live (as the
 // service, the CLI and the stoker find them).
 func (m Model) shipsOf(s sample.Session) []proto.Ship {
+	if s.Host != m.opt.Host {
+		return nil // the ships are the home host's: a pane id repeats on another
+	}
 	return proto.ShipsOf(m.ships(), s.Pane, s.SessionID)
 }
 
@@ -104,7 +107,7 @@ func (m Model) shipsLeft(n int) string {
 // driver is the session that drives a ship.
 func (m Model) driver(sh proto.Ship) (sample.Session, bool) {
 	for _, s := range m.all.sessions {
-		if proto.ShipDrives(sh, s.Pane, s.SessionID) {
+		if s.Host == m.opt.Host && proto.ShipDrives(sh, s.Pane, s.SessionID) {
 			return s, true
 		}
 	}
@@ -375,7 +378,7 @@ func (m Model) toDriver() Model {
 		return m
 	}
 	m.setTab(tabSessions)
-	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, s.PID
+	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
 	return m
 }
 

@@ -28,6 +28,9 @@ type Exited struct {
 
 // Session is one agent process and the pane that owns it.
 type Session struct {
+	// Host is the host the console read the session from: set by the
+	// console, never sent.
+	Host   string `json:"-"`
 	PID    int    `json:"pid"`
 	Start  uint64 `json:"start_ticks"` // /proc/<pid>/stat field 22: tells a reused pid apart
 	Pane   string `json:"pane"`

@@ -131,7 +131,8 @@ var views = [...]tabView{
 			case i < nd:
 				m.doorPick, m.doorAt, m.recPick, m.ghostPick = m.doors[i].ID, i, "", 0
 			case i < nd+ns:
-				m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, m.snap.Sessions[i-nd].PID
+				s := m.snap.Sessions[i-nd]
+				m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
 			case i < nd+ns+ng:
 				m.doorPick, m.recPick, m.ghostPick = "", "", i-nd-ns+1
 			default:

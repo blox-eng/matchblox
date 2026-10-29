@@ -295,6 +295,7 @@ type Model struct {
 	animating  bool
 	hist       history.Series
 	selPID     int
+	selHost    string // the host of selPID: PIDs repeat across hosts
 	orphanPID  int
 	recPick    string // the selected recommendation, above the sessions
 	ghostPick  int    // the ghost row picked in Sessions, from 1; 0 is none
@@ -335,7 +336,8 @@ type Model struct {
 	// charge: it runs once they answer the take-over question.
 	held        func(Model) (tea.Model, tea.Cmd)
 	touched     time.Time // the last key that kept the stoker's rest
-	all         lists     // what the service sent; queue, recs and snap hold the drawn copies
+	all         lists     // what every host sent, merged; queue, recs and snap hold the drawn copies
+	homeAll     lists     // what the home host sent
 	filter      string    // the search of the open tab
 	searching   bool      // the search line takes the keys
 	sessSort    sortBy
@@ -665,8 +667,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.recRun.rec != "" && m.recRun.act == "" && !m.isRec(m.recRun.rec) {
 			m.recRun = recRun{} // its rec is gone: a later one with the same id starts fresh
 		}
-		m.all = lists{queue: st.Queue, recs: st.Recommendations, sessions: st.Sessions, orphans: st.Orphans}
-		m.refresh()
+		m.homeAll = lists{queue: st.Queue, recs: st.Recommendations, sessions: st.Sessions, orphans: st.Orphans, children: st.Children}
+		m.merge()
 		if m.lost {
 			m.lost, m.backoff, m.flash = false, 0, ""
 		}
@@ -927,6 +929,9 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	var s sample.Session
 	found := false
 	for _, x := range m.snap.Sessions {
+		if x.Host != m.opt.Host {
+			continue // the focus is the home host's
+		}
 		if f.SessionID != "" && x.SessionID == f.SessionID || f.SessionID == "" && f.Pane != "" && x.Pane == f.Pane {
 			s, found = x, true
 			break
@@ -947,7 +952,7 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	}
 	m.setTab(tabSessions)
 	m.pending, m.peek = nil, nil
-	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, s.PID
+	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
 	if s.Pane == "" {
 		return m, nil // outside tmux: no pane to open
 	}
@@ -1439,7 +1444,7 @@ func (m Model) selIndex() int {
 		}
 	}
 	for i, s := range m.snap.Sessions {
-		if s.PID == m.selPID {
+		if s.PID == m.selPID && s.Host == m.selHost {
 			return i
 		}
 	}
@@ -1453,10 +1458,10 @@ func (m Model) selected() (sample.Session, bool) {
 	return m.snap.Sessions[m.selIndex()], true
 }
 
-// keepSelection follows the selected session by PID across re-sorts.
+// keepSelection follows the selected session by host and PID across re-sorts.
 func (m *Model) keepSelection() {
-	if _, ok := m.selected(); ok {
-		m.selPID = m.snap.Sessions[m.selIndex()].PID
+	if s, ok := m.selected(); ok {
+		m.selPID, m.selHost = s.PID, s.Host
 	}
 }
 
@@ -1496,7 +1501,7 @@ func (m Model) nextAfter(pane string) Model {
 	} {
 		for k := 1; k < len(ss); k++ {
 			if s := ss[(at+k)%len(ss)]; want(s) {
-				m.ghostPick, m.chose, m.selPID = 0, true, s.PID
+				m.ghostPick, m.chose, m.selPID, m.selHost = 0, true, s.PID, s.Host
 				return m
 			}
 		}

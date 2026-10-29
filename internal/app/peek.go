@@ -96,7 +96,7 @@ func (m Model) peekWord(s sample.Session) string {
 func (m *Model) openPeek(pane string) {
 	m.peek, m.flash = &peek{pane: pane}, ""
 	if s, ok := m.sessionIn(pane); ok {
-		m.ghostPick, m.chose, m.selPID = 0, true, s.PID
+		m.ghostPick, m.chose, m.selPID, m.selHost = 0, true, s.PID, s.Host
 		if s.Ask != nil {
 			m.peek.askID = s.Ask.ID
 		}

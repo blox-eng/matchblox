@@ -68,6 +68,9 @@ func links(peers []Peer) []link {
 	return out
 }
 
+// hostCount is the hosts of the console: home and its peers.
+func (m Model) hostCount() int { return 1 + len(m.peers) }
+
 func (m Model) peerAt(host string) int {
 	return slices.IndexFunc(m.peers, func(l link) bool { return l.host == host })
 }
@@ -168,6 +171,8 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 				m.flash = ""
 			}
 		}
+		m.merge()
+		m.keepSelection()
 	case resultMsg:
 		at := slices.Index(p.acts, msg.ActID)
 		if at < 0 {

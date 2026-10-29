@@ -12,9 +12,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // lists is what the service sent, before the search and the sort of the
@@ -24,7 +26,94 @@ type lists struct {
 	recs     []advice.Rec
 	sessions []sample.Session
 	orphans  []sample.Orphan
+	children []sample.Session
 }
+
+// merge joins the lists of every host that sent a state, home first and
+// the peers in Hosts order, each item with its host, and draws them again.
+// Recommendations and orphans stay the home host's. One local host: the
+// lists are home's as they came.
+func (m *Model) merge() {
+	m.all, m.snap.Children = m.homeAll, m.homeAll.children
+	if m.opt.Host == "" && !slices.ContainsFunc(m.peers, func(l link) bool { return l.have }) {
+		m.refresh()
+		return
+	}
+	m.all.sessions = sessionsOn(nil, m.opt.Host, m.homeAll.sessions)
+	m.all.queue = itemsOn(nil, m.opt.Host, m.homeAll.queue)
+	m.snap.Children = sessionsOn(nil, m.opt.Host, m.homeAll.children)
+	for _, l := range m.peers {
+		if l.have {
+			m.all.sessions = sessionsOn(m.all.sessions, l.host, l.st.Sessions)
+			m.all.queue = itemsOn(m.all.queue, l.host, l.st.Queue)
+			m.snap.Children = sessionsOn(m.snap.Children, l.host, l.st.Children)
+		}
+	}
+	m.all.children = m.snap.Children
+	m.refresh()
+}
+
+func sessionsOn(to []sample.Session, host string, ss []sample.Session) []sample.Session {
+	for _, s := range ss {
+		s.Host = host
+		to = append(to, s)
+	}
+	return to
+}
+
+func itemsOn(to []queue.Item, host string, items []queue.Item) []queue.Item {
+	for _, it := range items {
+		it.Host = host
+		to = append(to, it)
+	}
+	return to
+}
+
+// stateOf is the last state of a host, for the lookups by pane. The home
+// host's is a view of the Model's own fields; a host with no state yet
+// has an empty one.
+func (m Model) stateOf(host string) *proto.State {
+	if host != m.opt.Host {
+		if i := m.peerAt(host); i >= 0 {
+			return &m.peers[i].st
+		}
+		return &proto.State{}
+	}
+	return &proto.State{Doc: state.Doc{Holds: m.holds, Reasons: m.reasons, Renames: m.renames,
+		SignIns: m.signIns, StokerServer: m.stokerServer}}
+}
+
+// hostOrder is the place of a host in Hosts order: home first.
+func (m Model) hostOrder(host string) int {
+	if host == m.opt.Host {
+		return 0
+	}
+	return 1 + m.peerAt(host)
+}
+
+// machineOf is the machine a host last sampled.
+func (m Model) machineOf(host string) sample.Machine {
+	if host == m.opt.Host {
+		return m.snap.Machine
+	}
+	return m.stateOf(host).Machine
+}
+
+// limitsOf are the plan limits a host last read.
+func (m Model) limitsOf(host string) []limits.Account {
+	if host == m.opt.Host {
+		return m.snap.Limits
+	}
+	return m.stateOf(host).Limits
+}
+
+// rowKey is a session's identity across hosts: PIDs repeat on two hosts.
+type rowKey struct {
+	host string
+	pid  int
+}
+
+func keyOf(s sample.Session) rowKey { return rowKey{s.Host, s.PID} }
 
 // sortBy is a column and its direction: rev is the other way from the
 // column's own (busy first, longest wait first, A to Z).
@@ -88,19 +177,19 @@ func (m *Model) refresh() {
 			return !keep(strconv.Itoa(o.PID), o.Comm, o.Cmdline, o.Cwd, o.Target)
 		})
 	}
-	need, since := map[int]int{}, map[int]time.Time{}
+	need, since := map[rowKey]int{}, map[rowKey]time.Time{}
 	for _, s := range sessions {
-		need[s.PID] = m.groupOf(s)
+		need[keyOf(s)] = m.groupOf(s)
 		if it, ok := m.waitOf(s); ok {
-			since[s.PID] = it.Since
+			since[keyOf(s)] = it.Since
 		}
 	}
 	rank := m.groupRanks(sessions, need)
 	slices.SortStableFunc(sessions, func(a, b sample.Session) int {
-		if c := rank[a.PID] - rank[b.PID]; c != 0 {
+		if c := rank[keyOf(a)] - rank[keyOf(b)]; c != 0 {
 			return c // the groups keep their order; the sort works inside them
 		}
-		return m.sessSort.compare(a, b, need, since)
+		return m.sessSort.compare(a, b, need, since, m.hostOrder)
 	})
 	m.snap.Sessions = sessions
 	if m.git != nil {
@@ -115,12 +204,12 @@ func (m *Model) refresh() {
 // groupRanks is the place of each session's group in the list: by need
 // the groups' own order, by state the needier first, by repo the names
 // A to Z.
-func (m Model) groupRanks(sessions []sample.Session, need map[int]int) map[int]int {
+func (m Model) groupRanks(sessions []sample.Session, need map[rowKey]int) map[rowKey]int {
 	first := map[string]int{}
 	for _, s := range sessions {
 		l := m.groupLabel(s)
-		if n, ok := first[l]; !ok || need[s.PID] < n {
-			first[l] = need[s.PID]
+		if n, ok := first[l]; !ok || need[keyOf(s)] < n {
+			first[l] = need[keyOf(s)]
 		}
 	}
 	labels := slices.SortedFunc(maps.Keys(first), func(a, b string) int {
@@ -129,16 +218,16 @@ func (m Model) groupRanks(sessions []sample.Session, need map[int]int) map[int]i
 		}
 		return strings.Compare(a, b)
 	})
-	rank := map[int]int{}
+	rank := map[rowKey]int{}
 	for _, s := range sessions {
-		rank[s.PID] = slices.Index(labels, m.groupLabel(s))
+		rank[keyOf(s)] = slices.Index(labels, m.groupLabel(s))
 	}
 	return rank
 }
 
 // compare orders two sessions inside a group. group holds the need of
-// each pid, since when it waits.
-func (s sortBy) compare(a, b sample.Session, group map[int]int, since map[int]time.Time) int {
+// each session, since when it waits; a tie goes by host, in hostOrder.
+func (s sortBy) compare(a, b sample.Session, group map[rowKey]int, since map[rowKey]time.Time, hostOrder func(string) int) int {
 	if s.rev {
 		a, b = b, a
 	}
@@ -148,12 +237,13 @@ func (s sortBy) compare(a, b sample.Session, group map[int]int, since map[int]ti
 	case sortState:
 		// Who waits for the person, the oldest wait first; who works; then
 		// the quiet ones, the newest first: the oldest sink to the bottom.
-		c = group[a.PID] - group[b.PID]
+		ga := group[keyOf(a)]
+		c = ga - group[keyOf(b)]
 		switch {
 		case c != 0:
-		case group[a.PID] == groupWaits:
-			c = since[a.PID].Compare(since[b.PID])
-		case group[a.PID] == groupQuiet, group[a.PID] == groupHeld:
+		case ga == groupWaits:
+			c = since[keyOf(a)].Compare(since[keyOf(b)])
+		case ga == groupQuiet, ga == groupHeld:
 			c = cmpF(float64(a.Idle), float64(b.Idle))
 		}
 	case sortIdle:
@@ -171,6 +261,12 @@ func (s sortBy) compare(a, b sample.Session, group map[int]int, since map[int]ti
 	}
 	if c == 0 {
 		c = strings.Compare(a.Name, b.Name)
+	}
+	if c == 0 {
+		c = hostOrder(a.Host) - hostOrder(b.Host)
+		if s.rev {
+			c = -c // home first both ways
+		}
 	}
 	if c == 0 {
 		c = a.PID - b.PID

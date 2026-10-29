@@ -44,8 +44,11 @@ func TestPeerStateIsKept(t *testing.T) {
 	if !p.have || p.at.IsZero() || len(p.st.Sessions) != len(st.Sessions) || len(st.Sessions) == 0 {
 		t.Fatalf("the peer's state was not kept: have %v, at %v, %d sessions", p.have, p.at, len(p.st.Sessions))
 	}
-	if nm.have || len(nm.all.sessions) != 0 || len(nm.hist.Points) != 0 {
+	if nm.have || len(nm.homeAll.sessions) != 0 || len(nm.hist.Points) != 0 {
 		t.Fatal("a peer's state changed the home host's")
+	}
+	if len(nm.all.sessions) != len(st.Sessions) || nm.all.sessions[0].Host != "ws-1" {
+		t.Fatal("the peer's sessions did not join the list")
 	}
 	later := fixtureState() // History, Found and Used come in the first state only
 	next, _ = next.Update(peerMsg{host: "ws-1", conn: ws, msg: stateMsg(later)})

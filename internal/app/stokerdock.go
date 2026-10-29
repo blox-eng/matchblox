@@ -64,7 +64,8 @@ func (m Model) quitAgent() (tea.Model, tea.Cmd) {
 
 // isStoker tells a session of the stoker's own tmux server.
 func (m Model) isStoker(s sample.Session) bool {
-	return m.stokerServer != "" && s.Server() == m.stokerServer
+	server := m.stateOf(s.Host).StokerServer
+	return server != "" && s.Server() == server
 }
 
 // stokerAsks tells if the stoker's own agent waits for you: a question or

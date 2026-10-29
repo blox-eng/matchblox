@@ -49,6 +49,9 @@ var groupModes = [...]string{"need", "status", "repo", "none"}
 // id outside tmux, where no pane tells sessions apart.
 func (m Model) waitOf(s sample.Session) (queue.Item, bool) {
 	for _, it := range m.queue {
+		if it.Host != s.Host {
+			continue
+		}
 		if s.Pane != "" && it.Pane == s.Pane || s.Pane == "" && s.SessionID != "" && it.SessionID == s.SessionID {
 			return it, true
 		}
@@ -86,7 +89,7 @@ func (m Model) parkWord(s sample.Session) string {
 // holdOf is the hold on a session: by its id, or by its pane outside
 // tmux's reach of ids.
 func (m Model) holdOf(s sample.Session) (proto.Hold, bool) {
-	for _, h := range m.holds {
+	for _, h := range m.stateOf(s.Host).Holds {
 		if s.SessionID != "" && h.SessionID == s.SessionID || s.SessionID == "" && s.Pane != "" && h.Pane == s.Pane {
 			return h, true
 		}
@@ -159,12 +162,13 @@ func (m Model) rowWord(s sample.Session) (word string, merged bool) {
 		// found names the tmux session. An ask or a wait shows instead,
 		// so it is never hidden.
 		tmuxName, _, _ := strings.Cut(s.Target, ":")
-		if m.signIns[s.Pane] == "by hand" || tmuxName != "" && m.signIns[tmuxName] == "by hand" {
+		signIns := m.stateOf(s.Host).SignIns
+		if signIns[s.Pane] == "by hand" || tmuxName != "" && signIns[tmuxName] == "by hand" {
 			return st.accent.Render("sign in by hand"), true
 		}
 		return st.muted.Render("signing in"), true
 	}
-	if r, ok := m.reasons[s.Pane]; ok && r.Word != "" && s.Pane != "" && !asks {
+	if r, ok := m.stateOf(s.Host).Reasons[s.Pane]; ok && r.Word != "" && s.Pane != "" && !asks {
 		return m.tone(r.Tone).Render(r.Word), true
 	}
 	if m.groupOf(s) == groupWaits {
@@ -382,7 +386,7 @@ func (m Model) sessionRows(b *body, w int) {
 			b.add(-1, st.hair.Render(strings.Repeat("─", w)))
 		}
 		b.addRow(base+i, i == sel, w, st, rows...)
-		for _, l := range m.childRows(sample.ProcRef{PID: s.PID, Start: s.Start}, "  ", 1, w) {
+		for _, l := range m.childRows(s.Host, sample.ProcRef{PID: s.PID, Start: s.Start}, "  ", 1, w) {
 			b.add(-1, l)
 		}
 		if len(rows) > 1 {
@@ -394,21 +398,22 @@ func (m Model) sessionRows(b *body, w int) {
 // maxTreeDepth is how many levels of children are drawn under a session.
 const maxTreeDepth = 4
 
-// childrenOf are the children started by one process, in snapshot order.
-func (m Model) childrenOf(parent sample.ProcRef) []sample.Session {
+// childrenOf are the children started by one process of host, in
+// snapshot order.
+func (m Model) childrenOf(host string, parent sample.ProcRef) []sample.Session {
 	var out []sample.Session
 	for _, c := range m.snap.Children {
-		if c.Parent != nil && *c.Parent == parent {
+		if c.Host == host && c.Parent != nil && *c.Parent == parent {
 			out = append(out, c)
 		}
 	}
 	return out
 }
 
-func (m Model) descendants(parent sample.ProcRef) int {
+func (m Model) descendants(host string, parent sample.ProcRef) int {
 	n := 0
-	for _, c := range m.childrenOf(parent) {
-		n += 1 + m.descendants(sample.ProcRef{PID: c.PID, Start: c.Start})
+	for _, c := range m.childrenOf(host, parent) {
+		n += 1 + m.descendants(host, sample.ProcRef{PID: c.PID, Start: c.Start})
 	}
 	return n
 }
@@ -416,14 +421,14 @@ func (m Model) descendants(parent sample.ProcRef) int {
 // childRows are the lines under one session or child, depth first: a
 // branch for each child and a fold for what lies below the last level.
 // indent carries a bar down past each ancestor that has siblings below.
-func (m Model) childRows(parent sample.ProcRef, indent string, depth, w int) []string {
+func (m Model) childRows(host string, parent sample.ProcRef, indent string, depth, w int) []string {
 	st := m.st
-	kids := m.childrenOf(parent)
+	kids := m.childrenOf(host, parent)
 	if len(kids) == 0 {
 		return nil
 	}
 	if depth > maxTreeDepth {
-		return []string{fit(st.faint.Render(indent+"└─ … "+strconv.Itoa(m.descendants(parent))+" more"), w)}
+		return []string{fit(st.faint.Render(indent+"└─ … "+strconv.Itoa(m.descendants(host, parent))+" more"), w)}
 	}
 	var out []string
 	for i, c := range kids {
@@ -436,7 +441,7 @@ func (m Model) childRows(parent sample.ProcRef, indent string, depth, w int) []s
 			line += st.faint.Render(" " + c.Status)
 		}
 		out = append(out, fit(line, w))
-		out = append(out, m.childRows(sample.ProcRef{PID: c.PID, Start: c.Start}, indent+below, depth+1, w)...)
+		out = append(out, m.childRows(host, sample.ProcRef{PID: c.PID, Start: c.Start}, indent+below, depth+1, w)...)
 	}
 	return out
 }
@@ -813,7 +818,7 @@ func (m Model) sessionDetail(s sample.Session, w, said int) ([]string, bool) {
 	if s.Agents > 0 {
 		field("agents", st.text.Render(plural(s.Agents, "subagent")+" running"))
 	}
-	if kids := m.childrenOf(sample.ProcRef{PID: s.PID, Start: s.Start}); len(kids) > 0 {
+	if kids := m.childrenOf(s.Host, sample.ProcRef{PID: s.PID, Start: s.Start}); len(kids) > 0 {
 		names := make([]string, len(kids))
 		for i, c := range kids {
 			names[i] = c.Name
