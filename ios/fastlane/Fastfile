@@ -46,15 +46,13 @@ platform :ios do
         "CURRENT_PROJECT_VERSION=#{build}",
         "DEVELOPMENT_TEAM=#{team_id}",
       ].join(" "),
-      export_xcargs: "-allowProvisioningUpdates #{auth}",
-      # Export with automatic signing too; without this gym defaults to manual
-      # and fails with "no provisioning profile mapping was provided". Combined
-      # with -allowProvisioningUpdates + the API key it fetches the app-store
-      # distribution profiles for all three targets.
-      export_options: {
-        method: "app-store",
-        signingStyle: "automatic",
-      },
+      # export_method comes from the Gymfile ("app-store"). Do NOT add an
+      # export_options Hash (gym then demands a manual provisioningProfiles map)
+      # and do NOT repeat the auth flags in export_xcargs (xcodebuild rejects a
+      # second -authenticationKeyPath). gym forwards these xcargs to
+      # -exportArchive too, so one copy signs both the archive and the export.
+      # This is the wikimedia/wikipedia-ios pattern (app + extensions, automatic
+      # signing, API key, no match).
     )
 
     upload_to_testflight(
