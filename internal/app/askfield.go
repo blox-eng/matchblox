@@ -172,9 +172,14 @@ func (m Model) fieldHost() string {
 
 // askOwner is the host whose login the open prompt belongs to: the
 // prompt's host when its login opens, else the field's. A new key's
-// prompts name this machine.
+// prompts name this machine: they belong to the host whose ladder makes
+// the key.
 func (m Model) askOwner() string {
-	if h := m.ask.prompt.Host; m.loginOf(h).opening {
+	h := m.ask.prompt.Host
+	switch {
+	case h == newKeyHost && m.keyFor != "":
+		return m.keyFor
+	case m.loginOf(h).opening:
 		return h
 	}
 	return m.fieldHost()

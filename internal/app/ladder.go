@@ -292,6 +292,7 @@ func (m Model) notInstalled(msg installedMsg) string {
 func (m Model) makeKey(c climb) (tea.Model, tea.Cmd) {
 	path := c.step.Path
 	m, ctx, stop := m.startLogin(c.host, "making your ssh key…")
+	m.keyFor = c.host
 	ssh, env, gen, add := m.ssh(), m.opt.Ask.Env(newKeyHost), m.opt.Gen, login.AddArgv(path, m.opt.Keys.GOOS)
 	return m, func() tea.Msg {
 		defer stop()
@@ -335,6 +336,7 @@ func (m Model) keyMade(msg keyMadeMsg) (tea.Model, tea.Cmd) {
 	}
 	host := msg.c.host
 	m.editLogin(host, func(l *hostLogin) { l.opening, l.openStop = false, nil })
+	m.keyFor = ""
 	path := msg.c.step.Path
 	switch {
 	case m.loginOf(host).askCancelled:

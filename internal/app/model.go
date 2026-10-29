@@ -413,6 +413,7 @@ type Model struct {
 	// long as the console: it ends the wait for prompts.
 	ask      *askField
 	askQueue []askMsg
+	keyFor   string // the host whose ladder makes a new key; its prompts name this machine
 	askCtx   context.Context
 	askStop  context.CancelFunc
 }

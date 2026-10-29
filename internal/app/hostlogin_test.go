@@ -184,3 +184,55 @@ func TestPeerJumpFailureNamesThePeer(t *testing.T) {
 		t.Fatal("gpu-1 still opens")
 	}
 }
+
+// TestEscEndsOnlyItsOwnLogin: two opens wait on their prompts; esc on
+// gpu-1's ends gpu-1's alone.
+func TestEscEndsOnlyItsOwnLogin(t *testing.T) {
+	h := twoLogins(t, "")
+	h.jumpTo("ws-1", "%1")
+	h.jumpTo("gpu-1", "%2")
+	h.m = upd(t, h.m, askMsg{prompt: askpass.Prompt{Host: "gpu-1", Text: "builder@gpu-1's password:"}, answer: (&answers{}).answer})
+	h.m = upd(t, h.m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if ws, gpu := h.m.loginOf("ws-1"), h.m.loginOf("gpu-1"); ws.askCancelled || !ws.opening || !gpu.askCancelled {
+		t.Fatalf("ws-1 cancelled %v, opening %v; gpu-1 cancelled %v", ws.askCancelled, ws.opening, gpu.askCancelled)
+	}
+}
+
+// makingKey is twoLogins with gpu-1's ladder making a new key, its
+// passphrase prompt (named this machine) in the field.
+func makingKey(t *testing.T) loginHosts {
+	t.Helper()
+	h := twoLogins(t, "")
+	next, _ := h.m.makeKey(climb{host: "gpu-1", step: login.Step{Source: login.NewKey, Path: filepath.Join(t.TempDir(), "id_ed25519")}})
+	h.m = next.(Model)
+	return h
+}
+
+func keyPrompt() askMsg {
+	return askMsg{prompt: askpass.Prompt{Host: newKeyHost, Text: "Enter passphrase (empty for no passphrase):"}, answer: (&answers{}).answer}
+}
+
+// TestEscOnTheNewKeyEndsThatLadder: home opens while gpu-1 makes a key;
+// esc on the key's passphrase ends gpu-1's ladder, and home's open goes on.
+func TestEscOnTheNewKeyEndsThatLadder(t *testing.T) {
+	h := makingKey(t)
+	h.jumpTo("ws-1", "%1") // its check ended: it opens now
+	h.m = upd(t, h.m, keyPrompt())
+	h.m = upd(t, h.m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if ws, gpu := h.m.loginOf("ws-1"), h.m.loginOf("gpu-1"); ws.askCancelled || !ws.opening || !gpu.askCancelled {
+		t.Fatalf("ws-1 cancelled %v, opening %v; gpu-1 cancelled %v", ws.askCancelled, ws.opening, gpu.askCancelled)
+	}
+}
+
+// TestEscOnTheNewKeyBesideALink: another host shows a Tailscale link;
+// esc on the key's passphrase says no key was made because it cancelled.
+func TestEscOnTheNewKeyBesideALink(t *testing.T) {
+	h := makingKey(t)
+	h.m.editLogin("ws-1", func(l *hostLogin) { l.loginURL = checkURL })
+	h.m = upd(t, h.m, keyPrompt())
+	h.m = upd(t, h.m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	h.m = upd(t, h.m, keyMadeMsg{c: climb{host: "gpu-1"}, gen: h.m.opt.Gen, exit: 1})
+	if h.m.flash != "cancelled: no key made" || h.m.loginOf("ws-1").askCancelled {
+		t.Fatalf("flash %q, ws-1 cancelled %v", h.m.flash, h.m.loginOf("ws-1").askCancelled)
+	}
+}

@@ -264,11 +264,14 @@ func (m Model) answerTakeOver(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return next, tea.Batch(send, run)
 }
 
-// touchRest tells the service of the host acted on, at most once a
-// minute, that the builder is still at the console, so its stoker goes on
-// resting.
+// touchRest tells the service of the host the selected row acts on, at
+// most once a minute, that the builder is still at the console, so its
+// stoker goes on resting.
 func (m Model) touchRest() (Model, tea.Cmd) {
-	host := m.rowHost()
+	if !slices.ContainsFunc(m.hosts(), m.restingOn) {
+		return m, nil // the act's host is looked up only when a stoker rests
+	}
+	host := m.actHost(m.primary())
 	if !m.restingOn(host) || m.unsent(host) != "" || m.now().Sub(m.touched[host]) < time.Minute {
 		return m, nil
 	}

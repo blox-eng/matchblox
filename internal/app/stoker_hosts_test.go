@@ -148,3 +148,74 @@ func TestStokerTabSectionPerHost(t *testing.T) {
 		t.Fatalf("sections %q\n%s", heads, strings.Join(frameOf(m), "\n"))
 	}
 }
+
+// onPanes opens the Panes tab, whose Enter, for this test, jumps to the
+// selected pane on gpu-1: a row of gpu-1 that is not a Sessions row.
+func onPanes(t *testing.T, m Model) Model {
+	t.Helper()
+	was := views[tabPanes].primary
+	t.Cleanup(func() { views[tabPanes].primary = was })
+	views[tabPanes].primary = func(m Model) *action {
+		if p, ok := m.selectedPane(); ok && p.id != "" {
+			return m.jumpOn("gpu-1", p.id)
+		}
+		return nil
+	}
+	m.opt.JumpID = func() string { return "0a1b2c3d" } // the second tap sees the step the first showed
+	m.setTab(tabPanes)
+	return m
+}
+
+// tapSelected taps the selected row.
+func tapSelected(t *testing.T, m Model) Model {
+	t.Helper()
+	sc := m.draw(max(m.width, minWidth))
+	for i, r := range sc.rows {
+		if r == m.rowIndex() {
+			next, _ := tap(m, 2, sc.bodyTop+i)
+			return next.(Model)
+		}
+	}
+	t.Fatal("the selected row is not on the screen")
+	return m
+}
+
+// TestTapAsksTheActsHost: a second tap on a gpu-1 row off the Sessions
+// tab, at gpu-1's night, asks the take-over question, and y rests gpu-1's
+// stoker.
+func TestTapAsksTheActsHost(t *testing.T) {
+	m, home, conns := stokedHosts(t, nil, nil, nightView())
+	m = onPanes(t, m)
+	if a := m.primary(); a == nil || m.actHost(a) != "gpu-1" {
+		t.Fatalf("the row's Enter is %+v", a)
+	}
+	m = tapSelected(t, tapSelected(t, m))
+	if m.held == nil || m.heldOn != "gpu-1" || m.focus(keyPress("y")) != layerHeld {
+		t.Fatalf("held %v on %q, pending %+v, flash %q", m.held != nil, m.heldOn, m.pending, m.flash)
+	}
+	pressAll(m, "y")
+	if got := stokerActs(conns["gpu-1"]); !slices.Equal(got, []string{"stoker:rest"}) {
+		t.Fatalf("gpu-1 got %v", got)
+	}
+	if got := stokerActs(home); len(got) != 0 {
+		t.Fatalf("home got %v", got)
+	}
+}
+
+// TestTouchOffTheSessionsTab: a key on a gpu-1 row off the Sessions tab
+// touches gpu-1's resting stoker, not home's.
+func TestTouchOffTheSessionsTab(t *testing.T) {
+	rests := nightView()
+	rests.Rests = lostAt
+	homeRests := nightView()
+	homeRests.Rests = lostAt
+	m, home, conns := stokedHosts(t, homeRests, nil, rests)
+	m = onPanes(t, m)
+	pressAll(m, "down")
+	if got := stokerActs(conns["gpu-1"]); !slices.Equal(got, []string{"stoker:touch"}) {
+		t.Fatalf("gpu-1 got %v", got)
+	}
+	if got := stokerActs(home); len(got) != 0 {
+		t.Fatalf("home got %v", got)
+	}
+}

@@ -138,7 +138,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return open(m)
 	}
-	say, run := m.tapAct()
+	say, run, host := m.tapAct()
 	if run == nil {
 		m.armed, m.flash = "", "nothing to do here"
 		return m, nil
@@ -150,19 +150,19 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.armed = ""
-	if _, door := m.selectedDoor(); !door && m.takeOverOn(m.rowHost()) {
-		m.held, m.heldOn, m.flash = run, m.rowHost(), ""
+	if _, door := m.selectedDoor(); !door && m.takeOverOn(host) {
+		m.held, m.heldOn, m.flash = run, host, ""
 		return m, nil
 	}
 	return run(m)
 }
 
-// tapAct is what a second tap on the selected row does, and what the
-// first one shows: the row's Enter.
-func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd)) {
+// tapAct is what a second tap on the selected row does, what the first
+// one shows, and the host it acts on: the row's Enter.
+func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd), string) {
 	a := m.primary()
 	if a == nil {
-		return "", nil
+		return "", nil, ""
 	}
 	return a.String(), func(m Model) (tea.Model, tea.Cmd) {
 		if a.pair {
@@ -176,7 +176,7 @@ func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd)) {
 		}
 		m.pending = a
 		return m, nil
-	}
+	}, m.actHost(a)
 }
 
 // wheel is a swipe on a phone: it moves the selection, as ↑ and ↓ do.
