@@ -50,6 +50,7 @@ nav:
   - Safety: safety.md
   - Limits: limits.md
   - tmux: tmux.md
+  - Privacy: privacy.md
 
 markdown_extensions:
   - tables
