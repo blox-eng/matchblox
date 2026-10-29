@@ -499,8 +499,8 @@ func (m Model) tabLabel(i int, named bool) string {
 	case tabSessions:
 		count = strconv.Itoa(len(m.all.sessions))
 	case tabShips:
-		if m.shipReport != nil && m.shipReport.InFlight > 0 {
-			count = strconv.Itoa(m.shipReport.InFlight)
+		if n := m.inFlight(); n > 0 {
+			count = strconv.Itoa(n)
 		}
 	case tabMachine:
 		if len(m.all.orphans) > 0 {

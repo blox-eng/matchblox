@@ -179,7 +179,7 @@ type action struct {
 	rec         string                      // the service's name for it
 	which       string                      // primary | secondary
 	text        string                      // what an answer types; a door's preview Sum
-	batch       []string                    // worktrees: one guarded act each
+	batch       []wtKey                     // worktrees: one guarded act each, on its host
 	say         string                      // what the confirm shows, when not the first step
 	term        bool                        // the step takes this terminal (a door's command)
 	pair        bool                        // the pair door: it opens the pair page, never a pending step
@@ -306,6 +306,7 @@ type Model struct {
 	chose      bool   // a session was picked; before, the first that waits is
 	gitSel     int
 	shipReport *proto.Ships
+	allShips   []proto.Ship // every host's ships, as merge joins them
 	shipSel    int
 	tab        int
 	pending    *action
@@ -362,7 +363,7 @@ type Model struct {
 	lastAgent   string                                 // the agent this console last started
 	keptAgent   string                                 // the agent last started, as the service keeps it
 	paneSort    sortBy
-	picked      map[string]bool // worktrees x removes
+	picked      map[wtKey]bool // worktrees x removes
 	batch       *batch
 	showExited  bool // e: the exited agents, one by one
 	// dockPanel is the panel a phone's dock shows (usage, the machine, the
@@ -1249,7 +1250,7 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.openPairDoor()
 		}
 		if a := m.primary(); a != nil && a.ghost {
-			return m.openNewIn(a.where, ""), nil
+			return m.openNewIn(m.opt.Host, a.where, ""), nil
 		}
 		m.pending, m.previewTop = m.primary(), 0
 		m.refuse()
@@ -1297,9 +1298,8 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabSessions {
 			return m.openRename()
 		}
-		if m.tab == tabGit && m.conn != nil && !m.lost {
-			m.flash = "scanning git…"
-			return m, m.send(proto.Act{RecID: "rescan:git", Which: "primary"})
+		if m.tab == tabGit {
+			return m.rescan()
 		}
 	case bkey.Matches(k, mk.Tabs):
 		m.setTab(int(k.String()[0] - '1'))
@@ -1343,8 +1343,8 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if len(a.batch) > 0 {
-		if m.conn == nil || m.lost {
-			m.flash = "not sent, no connection: " + a.String()
+		if why := m.batchRefusal(a); why != "" {
+			m.flash = why
 			return m, nil
 		}
 		return m.sendBatch(a)

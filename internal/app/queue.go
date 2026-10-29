@@ -47,18 +47,25 @@ func (m Model) stateWord(s sample.Session) string {
 	return "idle"
 }
 
-// paneRow is one tmux pane, with an agent or not.
+// paneRow is one tmux pane of a host, with an agent or not.
 type paneRow struct {
-	id, target, what, path string
+	host, id, target, what, path string
 }
 
 func (m Model) paneRows() []paneRow {
 	var rows []paneRow
 	for _, s := range m.snap.Sessions {
-		rows = append(rows, paneRow{s.Pane, s.Target, s.Name, s.Cwd})
+		rows = append(rows, paneRow{s.Host, s.Pane, s.Target, s.Name, s.Cwd})
 	}
 	for _, p := range m.snap.IdlePanes {
-		rows = append(rows, paneRow{p.Pane, p.Target, p.Command, p.Path})
+		rows = append(rows, paneRow{m.opt.Host, p.Pane, p.Target, p.Command, p.Path})
+	}
+	for _, l := range m.peers {
+		if l.have {
+			for _, p := range l.st.IdlePanes {
+				rows = append(rows, paneRow{l.host, p.Pane, p.Target, p.Command, p.Path})
+			}
+		}
 	}
 	q := strings.ToLower(m.filter)
 	if m.tab == tabPanes && q != "" {
@@ -89,9 +96,13 @@ func (m Model) panesPanel(w int) body {
 		if i == sel {
 			where = "▌" + where
 		}
-		lines := []string{" " + st.muted.Render(pad(where, colPane)) + st.text.Render(pad(r.what, colName)) + st.muted.Render(tilde(r.path))}
+		path := st.muted.Render(tilde(r.path))
+		if m.hostCount() > 1 {
+			path = st.text.Render(m.nameOf(r.host)) + st.faint.Render(" · ") + path
+		}
+		lines := []string{" " + st.muted.Render(pad(where, colPane)) + st.text.Render(pad(r.what, colName)) + path}
 		if narrow {
-			lines = []string{" " + st.muted.Render(pad(where, colPane)) + st.text.Render(r.what), "   " + st.muted.Render(tilde(r.path))}
+			lines = []string{" " + st.muted.Render(pad(where, colPane)) + st.text.Render(r.what), "   " + path}
 		}
 		b.addRow(i, i == sel, w, st, lines...)
 	}

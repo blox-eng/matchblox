@@ -169,7 +169,7 @@ func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd), string) {
 			return m.openPairDoor()
 		}
 		if a.ghost {
-			return m.openNewIn(a.where, ""), nil
+			return m.openNewIn(m.opt.Host, a.where, ""), nil
 		}
 		if a.nav && !a.destructive {
 			return m.confirm(*a)

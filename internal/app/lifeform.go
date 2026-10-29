@@ -151,14 +151,14 @@ const maxField = 300
 
 // openNew is N: the New session form, where's list open on the selected
 // row's folder (a Git worktree, a session's directory, the checkout of a
-// ship nobody owns), or the first repo. It starts on the selected
-// session's host, else on the home host.
+// ship nobody owns), or the first repo. It starts on the selected row's
+// host, else on the home host.
 func (m Model) openNew() (tea.Model, tea.Cmd) {
 	at, host := "", m.opt.Host
 	switch m.tab {
 	case tabGit:
-		if wt, ok := m.selectedWorktree(); ok {
-			at = wt.Path
+		if r, ok := m.selectedWorktree(); ok {
+			at, host = r.wt.Path, r.host
 		}
 	case tabSessions:
 		if s, ok := m.selectedSession(); ok {
@@ -166,7 +166,7 @@ func (m Model) openNew() (tea.Model, tea.Cmd) {
 		}
 	case tabShips:
 		if sh, ok := m.selectedShip(); ok {
-			at = sh.Where
+			at, host = sh.Where, sh.Host
 		}
 	}
 	return m.openNewAt(host, at, ""), nil

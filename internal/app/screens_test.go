@@ -159,6 +159,33 @@ func TestScreens(t *testing.T) {
 	for _, size := range [][2]int{{44, 31}, {86, 30}} {
 		golden(t, hostsTicks(st, size[0], size[1]), "hoststicks", size[0], size[1])
 	}
+	golden(t, threeHostShips(t, st, 132, 32), "ships3", 132, 32)
+	machine := threeHosts(t, st, 104, 38, "stale")
+	machine.setTab(tabMachine)
+	golden(t, machine, "machine3", 104, 38)
+}
+
+// threeHostShips is Ships over three hosts: the demo machine's four, the
+// one gpu-1's train-loop drives and waits for your merge, and the one
+// ws-1's api-auth drives through CI.
+func threeHostShips(t *testing.T, st proto.State, w, h int) Model {
+	t.Helper()
+	m := threeHosts(t, st, w, h, "fine")
+	gpu, ws := peerStates(st)
+	ship := func(repo string, n int, title, pane, name, kind, note string, stage int, age time.Duration) *proto.Ships {
+		sh := proto.Ship{Repo: repo, Number: n, Title: title, Session: proto.ShipSession{Pane: pane, Name: name},
+			Stage: stage, Kind: kind, Note: note, Since: demoAt.Add(-age)}
+		for i := 0; i <= stage; i++ {
+			sh.Stages[i].At = demoAt.Add(-age - time.Duration(stage-i)*20*time.Minute)
+		}
+		return &proto.Ships{At: demoAt, InFlight: 1, Ships: []proto.Ship{sh}}
+	}
+	gpu.Ships = ship("hearth/train", 88, "Mixed precision for the train loop", "%1", "train-loop", shipWaits, "green · waits for your merge", 2, 3*time.Minute)
+	ws.Ships = ship("hearth/hearth-api", 4560, "Token refresh on the edge", "%1", "api-auth", shipRunning, "CI · 2 of 9 jobs", 1, 2*time.Minute)
+	m = upd(t, m, peerMsg{host: "gpu-1", conn: m.peers[0].conn, msg: stateMsg(gpu)})
+	m = upd(t, m, peerMsg{host: "ws-1", conn: m.peers[1].conn, msg: stateMsg(ws)})
+	m.setTab(tabShips)
+	return m
 }
 
 // threeHosts is the demo machine with two peers: gpu-1, whose train-loop

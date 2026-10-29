@@ -1,14 +1,17 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/limits"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // The dock is usage, the machine and the stoker, between the body and the
@@ -64,6 +67,10 @@ func (m Model) panel(p, w int, toggle string) (least, most []string) {
 	case panelUsage:
 		return m.usageLines(w, false, toggle), m.usageLines(w, true, toggle)
 	case panelMachine:
+		if m.hostCount() > 1 {
+			least = m.machineHosts(w, toggle)
+			return least, least
+		}
 		least = m.machineLines(w, false, toggle)
 		return least, append(slices.Clone(least), m.topLines(w)...)
 	}
@@ -161,14 +168,18 @@ func (m Model) usageLines(w int, full bool, toggle string) []string {
 		right = st.accent.Render(toggle) + " "
 	}
 	out := []string{spread(st.label.Render(" USAGE"), right, w)}
-	if len(m.snap.Limits) == 0 {
+	tight := !full && w < 50
+	rows, nameW := m.usageRows(tight)
+	if len(rows) == 0 {
 		return append(out, fit(" "+st.faint.Render("no session runs under a plan"), w))
 	}
+	if m.hostCount() > 1 {
+		return append(out, m.usageCells(rows, nameW, w)...)
+	}
 	now := m.now()
-	tight := !full && w < 50
-	names, nameW := m.accountNames(tight)
-	for i, a := range m.snap.Limits {
-		head := " " + m.accountMark(a.Provider) + " " + st.text.Render(pad(names[i], nameW+1)) + " "
+	for _, r := range rows {
+		a := r.a
+		head := " " + m.accountMark(a.Provider) + " " + st.text.Render(pad(r.name, nameW+1)) + " "
 		indent := strings.Repeat(" ", lipgloss.Width(head))
 		if a.State == limits.Unmeasured {
 			out = append(out, fit(head+st.warn.Render("not measured · "+a.Fix), w))
@@ -270,19 +281,131 @@ var providerMarks = map[string]string{"anthropic": "✻", "openai": "❋", "open
 // under the provider its model runs on; another provider goes by its id.
 var providerNames = map[string]string{"anthropic": "Claude", "openai": "OpenAI", "opencode": "OpenCode", "cursor": "Cursor", "google": "Google"}
 
+// usageCells are the usage lines of two or more hosts: an account label's
+// line for each window, with each host's own reading as a cell, in Hosts
+// order: "✻ Claude work 5h   ws-1 58% · gpu-1 61%". A cell is never a sum
+// or a mean of two hosts (R10); a stale host's cell says so. Short of
+// room the window name goes, then the cells are cut.
+func (m Model) usageCells(rows []usageRow, nameW, w int) []string {
+	st, now := m.st, m.now()
+	var out []string
+	for len(rows) > 0 {
+		n := 1
+		for n < len(rows) && rows[n].name == rows[0].name {
+			n++
+		}
+		group := rows[:n]
+		rows = rows[n:]
+		head := " " + m.accountMark(group[0].a.Provider) + " " + st.text.Render(pad(group[0].name, nameW+1)) + " "
+		indent := strings.Repeat(" ", lipgloss.Width(head))
+		uses := make([][]limits.Use, len(group))
+		var wins []string
+		for i, r := range group {
+			if r.a.State == limits.Unmeasured {
+				continue
+			}
+			uses[i] = r.a.Uses(now)
+			for _, u := range uses[i] {
+				if !slices.Contains(wins, u.Name) {
+					wins = append(wins, u.Name)
+				}
+			}
+		}
+		if len(wins) == 0 {
+			if a := group[0].a; a.State == limits.Unmeasured {
+				out = append(out, fit(head+st.warn.Render("not measured · "+a.Fix), w))
+			} else {
+				out = append(out, fit(head+st.faint.Render("no window read"), w))
+			}
+			continue
+		}
+		for j, win := range wins {
+			var cells []string
+			for i, r := range group {
+				cells = append(cells, m.usageCell(r, uses[i], win))
+			}
+			lead := head
+			if j > 0 {
+				lead = indent
+			}
+			joined := strings.Join(cells, st.faint.Render(" · "))
+			line := lead + st.faint.Render(pad(win, 5)) + joined
+			if lipgloss.Width(line) > w {
+				line = ansi.Truncate(lead+joined, w-1, "…")
+			}
+			out = append(out, fit(line, w))
+		}
+	}
+	return out
+}
+
+// usageCell is host's reading of window win: "ws-1 58%".
+func (m Model) usageCell(r usageRow, uses []limits.Use, win string) string {
+	st, name := m.st, m.nameOf(r.host)
+	if m.stale(r.host) {
+		return st.faint.Render(name + " stale")
+	}
+	if r.a.State == limits.Unmeasured {
+		return st.faint.Render(name + " not measured")
+	}
+	for _, u := range uses {
+		if u.Name == win {
+			return st.muted.Render(name+" ") + m.useStyle(u.Pct).Render(fmt.Sprintf("%.0f%%", u.Pct))
+		}
+	}
+	return st.faint.Render(name + " —")
+}
+
+// usageRow is an account's limits on a host, with its short name.
+type usageRow struct {
+	host, name string
+	a          limits.Account
+}
+
+// usageRows are the accounts of the dock and the widest name. Two or more
+// hosts: a row per host and account, each named as on its own host, the
+// same name together in the order it first shows, in Hosts order; the
+// dock draws each name once, with a cell for each host (R10).
+func (m Model) usageRows(tight bool) ([]usageRow, int) {
+	hosts := []string{m.opt.Host}
+	if m.hostCount() > 1 {
+		hosts = m.statedHosts()
+	}
+	var rows []usageRow
+	nameW := 0
+	for _, h := range hosts {
+		ls := m.limitsOf(h)
+		names, w := accountNames(ls, tight)
+		nameW = max(nameW, w)
+		for i, a := range ls {
+			rows = append(rows, usageRow{h, names[i], a})
+		}
+	}
+	if len(hosts) > 1 {
+		first := map[string]int{}
+		for i, r := range rows {
+			if _, ok := first[r.name]; !ok {
+				first[r.name] = i
+			}
+		}
+		slices.SortStableFunc(rows, func(a, b usageRow) int { return first[a.name] - first[b.name] })
+	}
+	return rows, nameW
+}
+
 // accountNames are the short names of the accounts, after their provider:
 // one account of a provider by its plan, two by the name of their emails.
 // A phone (tight) leaves out the plan.
-func (m Model) accountNames(tight bool) ([]string, int) {
+func accountNames(ls []limits.Account, tight bool) ([]string, int) {
 	per := map[string]int{}
-	for _, a := range m.snap.Limits {
+	for _, a := range ls {
 		if a.Dir == "" {
 			per[a.Provider]++ // an account folder is named by its folder, not by its email
 		}
 	}
-	names := make([]string, len(m.snap.Limits))
+	names := make([]string, len(ls))
 	nameW := 0
-	for i, a := range m.snap.Limits {
+	for i, a := range ls {
 		p := providerNames[a.Provider]
 		if p == "" {
 			p = a.Provider
@@ -306,11 +429,13 @@ func (m Model) accountNames(tight bool) ([]string, int) {
 // machineLines are the machine in a few lines: cpu with its last minute
 // and the load, memory, disk, and the agents that run.
 func (m Model) machineLines(w int, full bool, toggle string) []string {
+	return m.machineAbout(w, full, toggle, cmp.Or(m.opt.Host, m.host.Host))
+}
+
+// machineAbout is machineLines with host named on its first line ("":
+// none).
+func (m Model) machineAbout(w int, full bool, toggle, host string) []string {
 	st, mc := m.st, m.snap.Machine
-	host := m.opt.Host
-	if host == "" {
-		host = m.host.Host
-	}
 	about := ""
 	if host != "" {
 		about = host + " · "
@@ -324,11 +449,7 @@ func (m Model) machineLines(w int, full bool, toggle string) []string {
 	if full {
 		sp = 24
 	}
-	used := mc.MemTotal - mc.MemAvail
-	memPct := 0.0
-	if mc.MemTotal > 0 {
-		memPct = float64(used) / float64(mc.MemTotal) * 100
-	}
+	used, memPct := memUse(mc)
 	out := []string{
 		spread(st.label.Render(" MACHINE"), right, w),
 		" " + st.label.Render("cpu  ") + st.accent.Render(spark(m.history.cpu, sp, 100)) +
@@ -344,6 +465,47 @@ func (m Model) machineLines(w int, full bool, toggle string) []string {
 }
 
 func gb(b uint64) float64 { return float64(b) / (1 << 30) }
+
+// memUse is the memory in use, in bytes and in percent.
+func memUse(mc sample.Machine) (uint64, float64) {
+	used := mc.MemTotal - mc.MemAvail
+	if mc.MemTotal == 0 {
+		return used, 0
+	}
+	return used, float64(used) / float64(mc.MemTotal) * 100
+}
+
+// machineHosts is the dock's machine with two or more hosts: a line for
+// each host with a state, in Hosts order; a stale host's says since when.
+func (m Model) machineHosts(w int, toggle string) []string {
+	st := m.st
+	right := st.faint.Render(plural(m.hostCount(), "host") + " ")
+	if toggle != "" {
+		right = st.accent.Render(toggle) + " "
+	}
+	out := []string{spread(st.label.Render(" MACHINE"), right, w)}
+	hosts := m.statedHosts()
+	nameW := 0
+	for _, h := range hosts {
+		nameW = max(nameW, lipgloss.Width(m.nameOf(h)))
+	}
+	for _, h := range hosts {
+		line := " " + st.text.Render(pad(m.nameOf(h), nameW+1))
+		if note := m.staleNote(h); note != "" {
+			out = append(out, fit(line+st.faint.Render(note), w))
+			continue
+		}
+		mc := m.machineOf(h)
+		_, memPct := memUse(mc)
+		line += st.label.Render("cpu ") + st.accent.Render(spark(m.viewOf(h).history.cpu, 8, 100)) + st.text.Render(pad(fmt.Sprintf(" %.0f%%", mc.CPU), 6)) +
+			st.label.Render("mem ") + st.text.Render(pad(fmt.Sprintf("%.0f%%", memPct), 5))
+		if len(mc.Disks) > 0 {
+			line += st.label.Render("disk ") + m.useStyle(mc.Disks[0].Pct()).Render(fmt.Sprintf("%.0f%%", mc.Disks[0].Pct()))
+		}
+		out = append(out, fit(line, w))
+	}
+	return out
+}
 
 // diskCell is the use of the home's file system, "▰▰▰▰▰▱▱▱ 71% of 1 TB",
 // and of / when it is another; the disk's traffic when none was read.
@@ -399,14 +561,79 @@ func (m Model) runs() string {
 }
 
 // machinePanel is the Machine tab: usage first, then the machine, then
-// the detached busy loops and the top processes.
+// the detached busy loops and the top processes. Two or more hosts: a
+// section for each host, in Hosts order, headed by its name; the busy
+// loops and the devices are the home host's.
 func (m Model) machinePanel(w int) body {
 	var b body
 	b.add(-1, m.usageLines(w, true, "")...)
-	b.add(-1, "")
-	b.add(-1, m.machineLines(w, true, "")...)
-	b.add(-1, m.machine(w)...)
-	p := m.procs(w)
-	b.lines, b.rows = append(b.lines, p.lines...), append(b.rows, p.rows...)
+	if m.hostCount() == 1 {
+		b.add(-1, "")
+		b.add(-1, m.machineLines(w, true, "")...)
+		b.add(-1, m.machine(w)...)
+		p := m.procs(w)
+		b.lines, b.rows = append(b.lines, p.lines...), append(b.rows, p.rows...)
+		return b
+	}
+	for _, h := range m.statedHosts() {
+		on := m.viewOf(h)
+		b.add(-1, "", m.hostHead(h, w))
+		b.add(-1, on.machineAbout(w, true, "", "")...)
+		b.add(-1, on.machine(w)...)
+		if h == m.opt.Host {
+			p := on.procs(w)
+			b.lines, b.rows = append(b.lines, p.lines...), append(b.rows, p.rows...)
+			continue
+		}
+		b.add(-1, on.region("top processes", w)...)
+		b.add(-1, on.topRows(w)...)
+	}
 	return b
+}
+
+// statedHosts are the hosts that sent a state, in Hosts order.
+func (m Model) statedHosts() []string {
+	var out []string
+	if m.have {
+		out = append(out, m.opt.Host)
+	}
+	for _, l := range m.peers {
+		if l.have {
+			out = append(out, l.host)
+		}
+	}
+	return out
+}
+
+// viewOf is m with host's machine in the home host's place: the Machine
+// and History tabs and the dock draw that host with it.
+func (m Model) viewOf(host string) Model {
+	if host == m.opt.Host {
+		m.snap.Sessions, m.all.sessions = m.homeAll.sessions, m.homeAll.sessions
+		return m
+	}
+	if i := m.peerAt(host); i >= 0 {
+		l := m.peers[i]
+		m.snap, m.history, m.hist, m.push = l.st.Snapshot, l.cpu, l.hist, l.st.Push
+		m.all.sessions = l.st.Sessions
+	}
+	return m
+}
+
+// hostHead heads a host's section: its name, and since when a stale
+// host's numbers are.
+func (m Model) hostHead(host string, w int) string {
+	head := m.st.label.Render(" " + m.nameOf(host))
+	if note := m.staleNote(host); note != "" {
+		head += "  " + m.st.faint.Render(note)
+	}
+	return fit(head, w)
+}
+
+// staleNote is "stale · as of 14:02" for a stale host of two or more.
+func (m Model) staleNote(host string) string {
+	if m.hostCount() == 1 || !m.stale(host) {
+		return ""
+	}
+	return "stale · as of " + m.stateAt(host).Format("15:04")
 }

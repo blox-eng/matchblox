@@ -46,7 +46,7 @@ func TestHandMadeFolderIsNamedByItsBase(t *testing.T) {
 func TestDefaultBlocksKeepTheirNames(t *testing.T) {
 	st := limitsState()
 	m, _ := loadedWith(t, 132, st)
-	names, _ := m.accountNames(false)
+	names, _ := accountNames(m.snap.Limits, false)
 	want := []string{"Claude builder", "OpenAI Plus", "Claude work"}
 	for i, w := range want {
 		if names[i] != w {
@@ -56,7 +56,7 @@ func TestDefaultBlocksKeepTheirNames(t *testing.T) {
 	// One default block of a provider is named by its plan, as it was.
 	st.Limits = st.Limits[:1]
 	m, _ = loadedWith(t, 132, st)
-	if names, _ := m.accountNames(false); names[0] != "Claude Max" {
+	if names, _ := accountNames(m.snap.Limits, false); names[0] != "Claude Max" {
 		t.Errorf("a lone default block is named %q, want Claude Max", names[0])
 	}
 }

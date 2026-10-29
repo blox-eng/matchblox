@@ -22,11 +22,11 @@
  ○ Clear spark-docs (%3)                                                      │
  ○ Clear kindle-web (%5)                                                      │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- USAGE                                                                        │ MACHINE                                    16 cores
- ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                               │ cpu  ▁ 0%   load 6.2
-                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · out Fri ~21:00              │ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
- · Google login  not measured · OpenCode keeps no limits                      │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
- ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                                   │ runs 8 claude · 1 codex · 1 opencode
-                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week              │
+ USAGE                                                                        │ MACHINE                                     3 hosts
+ ✻ Claude Max    5h   this machine 84% · gpu-1 84% · ws-1 84%                 │ this machine cpu ▁ 0%   mem 40%  disk 71%
+                 wk   this machine 82% · gpu-1 82% · ws-1 82%                 │ gpu-1        cpu ▁ 0%   mem 40%  disk 71%
+ · Google login  not measured · OpenCode keeps no limits                      │ ws-1         cpu ▁ 0%   mem 40%  disk 71%
+ ❋ OpenAI Plus   5h   this machine 40% · gpu-1 40% · ws-1 40%                 │
+                 wk   this machine 12% · gpu-1 12% · ws-1 12%                 │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ↑↓ move  ⏎ open  a answer  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit             sampled 0s ago

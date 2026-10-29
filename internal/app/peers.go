@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
@@ -43,7 +44,9 @@ type link struct {
 	at                        time.Time   // the last stateMsg
 	st                        proto.State // the last state; History, Found, Used kept from the first
 	have                      bool
-	acts                      []string // the act ids sent on conn with no result yet
+	cpu                       *series        // the Machine's graphs, as Model.history
+	hist                      history.Series // the History tab's points, as Model.hist
+	acts                      []string       // the act ids sent on conn with no result yet
 	wrepos                    []whereRepo
 	wfrom                     []string // what wrepos was built from, as Model's
 }
@@ -82,7 +85,7 @@ func links(peers []Peer) []link {
 
 func newLink(p Peer, id int) link {
 	dials := p.Conn == nil && p.DialErr == nil && p.Redial != nil
-	return link{host: p.Host, id: id, conn: p.Conn, redial: p.Redial, dialErr: p.DialErr, redialing: dials}
+	return link{host: p.Host, id: id, conn: p.Conn, redial: p.Redial, dialErr: p.DialErr, redialing: dials, cpu: newSeries(60)}
 }
 
 // hostCount is the hosts of the console: home and its peers.
@@ -234,7 +237,15 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		st.Found = cmp.Or(st.Found, p.st.Found)
 		st.Used = cmp.Or(st.Used, p.st.Used)
 		m.noteChanges(p.host, st.Sessions)
+		first := !p.have
 		p.st, p.at, p.have, p.answered = st, m.now(), true, true
+		p.cpu.push(st.Machine)
+		switch {
+		case msg.History != nil:
+			p.hist = *msg.History
+		case !first:
+			p.hist.Append(history.FromSnapshot(st.Snapshot))
+		}
 		if from := m.whereFrom(p.host); msg.Found != nil || msg.Used != nil || !slices.Equal(from, p.wfrom) {
 			p.wrepos, p.wfrom = m.whereRepos(p.host), from
 		}
@@ -278,6 +289,7 @@ func (m Model) peerLost(i int, err error) (tea.Model, tea.Cmd) {
 	first := !p.lost
 	p.lost = true
 	news := m.noAnswer(*p)
+	m.batchLost(p.host, p.acts)
 	p.acts = nil
 	if blocking(err) {
 		// Its row says why: the flash of the host goes.

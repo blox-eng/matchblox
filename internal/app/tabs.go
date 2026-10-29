@@ -241,8 +241,8 @@ var views = [...]tabView{
 		index: func(m Model) int { return min(m.gitSel, max(len(m.worktreeRows())-1, 0)) },
 		pick:  func(m *Model, i int) { m.gitSel = i },
 		primary: func(m Model) *action {
-			if wt, ok := m.selectedWorktree(); ok {
-				return &action{label: "shell", nav: true, steps: [][]string{{"tmux", "new-window", "-c", wt.Path}}}
+			if r, ok := m.selectedWorktree(); ok {
+				return &action{label: "shell", nav: true, steps: [][]string{{"tmux", "new-window", "-c", r.wt.Path}}, host: r.host}
 			}
 			return nil
 		},
@@ -250,9 +250,9 @@ var views = [...]tabView{
 			if a := m.removeMarked(); a != nil {
 				return a
 			}
-			if wt, ok := m.selectedWorktree(); ok && wt.Safe {
-				return &action{label: "remove", steps: [][]string{wt.Remove}, destructive: true,
-					rec: "worktree:" + wt.Path, which: "secondary"}
+			if r, ok := m.selectedWorktree(); ok && r.wt.Safe {
+				return &action{label: "remove", steps: [][]string{r.wt.Remove}, destructive: true,
+					rec: "worktree:" + r.wt.Path, which: "secondary", host: r.host}
 			}
 			return nil
 		},
@@ -263,7 +263,7 @@ var views = [...]tabView{
 		keys: func(m Model) []hint {
 			return []hint{hintFor(m.keys.main.Ships, "ships"), hintFor(m.keys.main.Stoke, "stoker")}
 		},
-		body: func(m Model, w int) body { return plain(m.historyPanel(w)) },
+		body: Model.historyBody,
 	},
 	tabPanes: {
 		name:  "panes",
@@ -273,7 +273,7 @@ var views = [...]tabView{
 		pick:  func(m *Model, i int) { m.paneSel = i },
 		primary: func(m Model) *action {
 			if p, ok := m.selectedPane(); ok && p.id != "" {
-				return m.jump(p.id)
+				return m.jumpOn(p.host, p.id)
 			}
 			return nil
 		},

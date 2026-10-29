@@ -1,0 +1,32 @@
+ ▰ matchblox · 3 hosts                                                                                             ● 8 wait for you
+ sessions 10    SHIPS 5    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ open → ci → green → merged → live                                            │
+▌#88   Mixed precision for the train loop                         gpu-1    3m │ #88  by train-loop on gpu-1 · hearth/train
+   ●━●━◉┄○┄○  green · waits for your merge                                    │ Mixed precision for the train loop
+                                                                              │
+ #4552 Invoice export as CSV and PDF                       this machine    6m │ TRACK
+   ●━●━◉┄○┄○  green · waits for your merge                                    │  ● open    22:07
+                                                                              │  ┃
+ #4545 Refresh tokens that rotate                          this machine   40m │  ● ci      22:27
+   ●━✕┄○┄○┄○  conflicts with main                                             │  ┃
+                                                                              │  ◉ green   22:47 green · waits for your merge
+ #4560 Token refresh on the edge                                   ws-1    2m │  ┆
+   ●━◉┄○┄○┄○  CI · 2 of 9 jobs                                                │  ○ merged
+                                                                              │  ┆
+ #4551 Rate limits on the public API                       this machine    4m │  ○ live
+   ●━◉┄○┄○┄○  CI · 6 of 9 jobs                                                │
+                                                                              │ ⏎ session
+ #4540 The 1.0 docs                                        this machine    2h │
+   ●━●━●━●━●  live                                                            │
+                                                                              │
+                                                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ USAGE                                                                        │ MACHINE                                     3 hosts
+ ✻ Claude Max    5h   this machine 84% · gpu-1 84% · ws-1 84%                 │ this machine cpu ▁ 0%   mem 40%  disk 71%
+                 wk   this machine 82% · gpu-1 82% · ws-1 82%                 │ gpu-1        cpu ▁▁ 0%   mem 40%  disk 71%
+ · Google login  not measured · OpenCode keeps no limits                      │ ws-1         cpu ▁▁ 0%   mem 40%  disk 71%
+ ❋ OpenAI Plus   5h   this machine 40% · gpu-1 40% · ws-1 40%                 │
+                 wk   this machine 12% · gpu-1 12% · ws-1 12%                 │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ↑↓ move  ⏎ session  f stoker  / find  q quit                                                                        sampled 0s ago

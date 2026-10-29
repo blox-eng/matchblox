@@ -31,10 +31,11 @@ type lists struct {
 
 // merge joins the lists of every host that sent a state, home first and
 // the peers in Hosts order, each item with its host, and draws them again.
-// Recommendations and orphans stay the home host's. One local host: the
-// lists are home's as they came.
+// The ships are every host's too. Recommendations and orphans stay the
+// home host's. One local host: the lists are home's as they came.
 func (m *Model) merge() {
 	m.all, m.snap.Children = m.homeAll, m.homeAll.children
+	m.allShips = m.shipsMerged()
 	if m.opt.Host == "" && !slices.ContainsFunc(m.peers, func(l link) bool { return l.have }) {
 		m.refresh()
 		return
@@ -202,11 +203,9 @@ func (m *Model) refresh() {
 		return m.sessSort.compare(a, b, need, since, m.hostOrder)
 	})
 	m.snap.Sessions = sessions
-	if m.git != nil {
-		for p := range m.picked {
-			if !m.safeWorktree(p) {
-				delete(m.picked, p)
-			}
+	for k := range m.picked {
+		if m.gitOf(k.host) != nil && !m.safeWorktree(k) {
+			delete(m.picked, k)
 		}
 	}
 }
@@ -432,9 +431,9 @@ func (m Model) nothing(text string) string {
 
 // safeWorktree reads every worktree, not the found ones: a search hides
 // rows, not marks.
-func (m Model) safeWorktree(path string) bool {
+func (m Model) safeWorktree(k wtKey) bool {
 	for _, r := range m.allWorktreeRows() {
-		if r.wt.Path == path {
+		if r.key() == k {
 			return r.wt.Safe && len(r.wt.Remove) > 0
 		}
 	}
@@ -443,18 +442,18 @@ func (m Model) safeWorktree(path string) bool {
 
 // mark adds the selected worktree to the ones x removes, or takes it out.
 func (m *Model) mark() {
-	wt, ok := m.selectedWorktree()
+	r, ok := m.selectedWorktree()
 	switch {
 	case !ok:
-	case m.picked[wt.Path]:
-		delete(m.picked, wt.Path)
-	case !wt.Safe:
-		m.flash = "not safe to remove: " + unsafeWhy(wt)
+	case m.picked[r.key()]:
+		delete(m.picked, r.key())
+	case !r.wt.Safe:
+		m.flash = "not safe to remove: " + unsafeWhy(r.wt)
 	default:
 		if m.picked == nil {
-			m.picked = map[string]bool{}
+			m.picked = map[wtKey]bool{}
 		}
-		m.picked[wt.Path] = true
+		m.picked[r.key()] = true
 	}
 }
 
@@ -475,14 +474,14 @@ func unsafeWhy(wt proto.Worktree) string {
 // markAllSafe marks every safe worktree, or clears the marks when all of
 // them are marked already.
 func (m *Model) markAllSafe() {
-	var safe []string
+	var safe []wtKey
 	for _, r := range m.worktreeRows() {
 		if r.wt.Safe && len(r.wt.Remove) > 0 {
-			safe = append(safe, r.wt.Path)
+			safe = append(safe, r.key())
 		}
 	}
 	all := len(safe) > 0 && len(m.picked) == len(safe)
-	m.picked = map[string]bool{}
+	m.picked = map[wtKey]bool{}
 	if all {
 		return
 	}
@@ -497,16 +496,30 @@ func (m *Model) markAllSafe() {
 // removeMarked is x with marks: every marked worktree, behind one typed y.
 func (m Model) removeMarked() *action {
 	var steps [][]string
-	var paths []string
+	var keys []wtKey
 	for _, r := range m.allWorktreeRows() {
-		if m.picked[r.wt.Path] {
-			steps, paths = append(steps, r.wt.Remove), append(paths, r.wt.Path)
+		if m.picked[r.key()] {
+			steps, keys = append(steps, r.wt.Remove), append(keys, r.key())
 		}
 	}
-	if len(paths) == 0 {
+	if len(keys) == 0 {
 		return nil
 	}
-	return &action{label: fmt.Sprintf("remove %d", len(paths)), steps: steps, destructive: true, batch: paths}
+	return &action{label: fmt.Sprintf("remove %d", len(keys)), steps: steps, destructive: true, batch: keys}
+}
+
+// batchRefusal is why a batch is not sent: a host of its worktrees
+// cannot take it.
+func (m Model) batchRefusal(a action) string {
+	for _, k := range a.batch {
+		if why := m.refusal(k.host); why != "" {
+			return why
+		}
+		if k.host == m.opt.Host && (m.conn == nil || m.lost) {
+			return "not sent, no connection: " + a.String()
+		}
+	}
+	return ""
 }
 
 // batch counts the results of the acts of one confirm.
@@ -516,13 +529,13 @@ type batch struct {
 	why                      string
 }
 
-// sendBatch sends one guarded act for each worktree: the service checks
-// each one again and removes only what is still safe.
+// sendBatch sends one guarded act for each worktree, to its host: the
+// service checks each one again and removes only what is still safe.
 func (m Model) sendBatch(a action) (tea.Model, tea.Cmd) {
 	b := &batch{ids: map[string]bool{}}
 	var cmds []tea.Cmd
-	for _, p := range a.batch {
-		cmds = append(cmds, m.send(proto.Act{RecID: "worktree:" + p, Which: "secondary", Confirm: "y"}))
+	for _, k := range a.batch {
+		cmds = append(cmds, m.sendTo(k.host, proto.Act{RecID: "worktree:" + k.path, Which: "secondary", Confirm: "y"}))
 		b.ids["a"+strconv.Itoa(m.acts)] = true
 	}
 	m.batch, m.picked = b, nil
@@ -550,9 +563,34 @@ func (m *Model) tally(r proto.Result) bool {
 	case len(r.Ran) > 0:
 		b.removed++
 	}
-	if len(b.ids) > 0 {
-		return true
+	if len(b.ids) == 0 {
+		m.endBatch()
 	}
+	return true
+}
+
+// batchLost counts the removals sent on a host's lost conn as failed: their
+// results went with it.
+func (m *Model) batchLost(host string, acts []string) {
+	if m.batch == nil {
+		return
+	}
+	b := m.batch
+	for _, id := range acts {
+		if b.ids[id] {
+			delete(b.ids, id)
+			b.failed++
+			b.why = host + ": connection lost"
+		}
+	}
+	if len(b.ids) == 0 {
+		m.endBatch()
+	}
+}
+
+// endBatch writes the batch's summary.
+func (m *Model) endBatch() {
+	b := m.batch
 	text := fmt.Sprintf("removed %d", b.removed)
 	if b.skipped > 0 {
 		text += fmt.Sprintf(", skipped %d", b.skipped)
@@ -564,5 +602,4 @@ func (m *Model) tally(r proto.Result) bool {
 		text += ": " + b.why
 	}
 	m.flash, m.batch = text, nil
-	return true
 }
