@@ -579,7 +579,7 @@ func tagRoom(name string, w int) int {
 // right, the word, the wait and the context; wider adds the plan and the
 // ship (or the pull request and the place), and from 107 columns the lane.
 // When the name would get under 12 the place goes first, then the lane,
-// then the plan. The count of a session's other ships goes before the
+// then the plan; a ship outlasts the lane. The count of a session's other ships goes before the
 // ship: shortened, then gone.
 type tracks struct {
 	wide                                     bool
@@ -614,6 +614,9 @@ func (m Model) sessTracks(w int) tracks {
 		// can spare: the full count, else the short one, else none, all
 		// before the ship goes.
 		t.where = m.numW() + 1 + trackW
+		if w-fixed-t.plan-t.where-t.lane < 12 {
+			t.lane = 0 // the ship is acted on, the lane only shows: the lane goes first
+		}
 		for _, short := range []bool{false, true} {
 			if more := m.moreW(short); w-fixed-t.plan-t.where-t.lane-more >= 12 {
 				t.where += more

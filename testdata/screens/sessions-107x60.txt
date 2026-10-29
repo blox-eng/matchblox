@@ -1,60 +1,60 @@
  ▰ matchblox                                                                              ● 6 wait for you
  SESSIONS 7    ships 3    machine    git    history    panes    stoker
-───────────────────────────────────────────────────────────────────────────────────┬───────────────────────
-                                                           −2h         −1h         │ now     +1h
-                                                           ┊           ┊           │
- WAITS FOR YOU · 6                                                                 │
-───────────────────────────────────────────────────────────────────────────────────┼───────────────────────
-▌│ spark-docs           done       9m   88%  ▲ clear                              ━│
-   “I rewrote the quick start and the install page.”                               │
-   #4540 ●━●━●━●━●  live                                                           │
+───────────────────────────────────────────────────────────────────────────────────────────────────────────
+ WAITS FOR YOU · 6
+───────────────────────────────────────────────────────────────────────────────────────────────────────────
+▌│ spark-docs                                            done       9m   88%  ▲ clear      #4540 ●━●━●━●━●
+   “I rewrote the quick start and the install page.”
+   #4540 ●━●━●━●━●  live
    ▰▰▰▰▰ plan 100%  ▲ clear                                                     a answer  A switch  ⏎ open
-───────────────────────────────────────────────────────────────────────────────────┼───────────────────────
- ╿ ember-billing        done       4m   32%  ▲ clear                              ━│
- ╿ flint-auth           asks       2m   41%  ▲ clear                              ━│
- ╿ kindle-web           asks       1m   56%  ▲ clear                              ━│
- ╿ cinder-ci            done       0s   55%  ▲ clear                              ━│
- ╿ wick-mobile          done       0s    6%  ▲ clear                              ━│
- WORKING · 1                                                                       │
- ✦ hearth-api           busy            79%  ▰▰▰▱▱ 60%                            ━│
- + start a new session                                                             │
-                                                                                   │
- 1 without an agent: shell:1.1 zsh                                                 │
-                                                                                   │
- RECOMMENDATIONS · 7 · h hides                                                     │
- ▲ The week runs short: compact spark-docs                                         │
- ○ Clear spark-docs (%3)                                                           │
- ○ Clear kindle-web (%5)                                                           │
- ○ Clear cinder-ci (%6)                                                            │
- ○ Clear flint-auth (%2)                                                           │
- ○ Clear ember-billing (%8)                                                        │
- ○ Clear wick-mobile (%7)                                                          │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-                                                                                   │
-───────────────────────────────────────────────────────────────────────────────────┴───────────────────────
+───────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ╿ ember-billing                                         done       4m   32%  ▲ clear      #4552 ●━●━◉┄○┄○
+ ╿ flint-auth                                            asks       2m   41%  ▲ clear      #4545 ●━✕┄○┄○┄○
+ ╿ kindle-web                                            asks       1m   56%  ▲ clear
+ ╿ cinder-ci                                             done       0s   55%  ▲ clear
+ ╿ wick-mobile                                           done       0s    6%  ▲ clear
+ WORKING · 1
+ ✦ hearth-api                                            busy            79%  ▰▰▰▱▱ 60%    #4551 ●━◉┄○┄○┄○
+ + start a new session
+
+ 1 without an agent: shell:1.1 zsh
+
+ RECOMMENDATIONS · 7 · h hides
+ ▲ The week runs short: compact spark-docs
+ ○ Clear spark-docs (%3)
+ ○ Clear kindle-web (%5)
+ ○ Clear cinder-ci (%6)
+ ○ Clear flint-auth (%2)
+ ○ Clear ember-billing (%8)
+ ○ Clear wick-mobile (%7)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────
  ⏎ open  a answer  x kill  r rename  A switch  z park  N new  p ships  f stoker  full view v

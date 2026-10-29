@@ -17,6 +17,10 @@ import (
 
 const ruleGlyphs = "│┬┴┿┼"
 
+// isRule: g is one of the rule's glyphs; the empty second half of a wide
+// glyph is not.
+func isRule(g string) bool { return g != "" && strings.Contains(ruleGlyphs, g) }
+
 // nowState is a host with api at work, docs idle, and bench on a limit
 // whose 5 hours reset in 35 minutes.
 func nowState(now time.Time) proto.State {
@@ -106,7 +110,7 @@ func TestNowRuleIsOneColumn(t *testing.T) {
 	}
 	for y := range c.Height() {
 		cell := c.CellAt(x, y)
-		ruled := strings.Contains(ruleGlyphs, cell.Content) || strings.TrimSpace(cell.Content) != "" && sameColor(cell.Style.Fg, m.st.theme.Accent)
+		ruled := isRule(cell.Content) || strings.TrimSpace(cell.Content) != "" && sameColor(cell.Style.Fg, m.st.theme.Accent)
 		if in := y >= 2 && y <= bottom; ruled != in || in && !sameColor(cell.Style.Fg, m.st.theme.Accent) {
 			t.Errorf("line %d has %q in %v at the rule's column %d", y, cell.Content, cell.Style.Fg, x)
 		}
@@ -119,7 +123,7 @@ func TestNowRuleKeepsTheSelectedWash(t *testing.T) {
 	x, _ := ruleOf(t, c)
 	y := rowLine(t, c, "▌")
 	cell := c.CellAt(x, y)
-	if !strings.Contains(ruleGlyphs, cell.Content) {
+	if !isRule(cell.Content) {
 		t.Fatalf("the selected row has %q at the rule", cell.Content)
 	}
 	if !sameColor(cell.Style.Bg, m.st.theme.AccentWash) {
@@ -176,9 +180,27 @@ func TestResizeMovesTheRule(t *testing.T) {
 		t.Fatalf("the rule stays at %d after the resize", x)
 	}
 	for y := range c.Height() {
-		if g := cellGlyph(c, old, y); strings.Contains(ruleGlyphs, g) {
+		if g := cellGlyph(c, old, y); isRule(g) {
 			t.Errorf("line %d keeps %q at the old column %d", y, g, old)
 		}
+	}
+}
+
+// TestAShipOutlastsTheLane: with ships read, 107 columns keep every row's
+// ship and have no lane; a wider list has both.
+func TestAShipOutlastsTheLane(t *testing.T) {
+	f := ansi.Strip(demoIn(t, "", 107, 60).render())
+	if strings.Contains(f, "−2h") || strings.ContainsAny(f, "┬┴") {
+		t.Fatalf("107 columns with ships have a lane:\n%s", f)
+	}
+	for name, ship := range map[string]string{"ember-billing": "#4552", "flint-auth": "#4545", "hearth-api": "#4551", "spark-docs": "#4540"} {
+		if row := lineWith(strings.Split(f, "\n"), name); !strings.Contains(row, ship) {
+			t.Errorf("at 107 columns the row of %s lost its ship %s: %q", name, ship, row)
+		}
+	}
+	wide := ansi.Strip(demoIn(t, "", 120, 60).render())
+	if !strings.Contains(wide, "−2h") || !strings.Contains(wide, "┬") || !strings.Contains(wide, "#4540 ●━●━●━●━●") {
+		t.Fatalf("120 columns lack the lane or the ship:\n%s", wide)
 	}
 }
 
