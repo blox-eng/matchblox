@@ -6,10 +6,12 @@ into a pane and back without tmux keys.
 
 ## The matchblox app
 
-The matchblox app for iPhone and iPad is not in the App Store or on
-TestFlight yet. To get it now, build it on a Mac with Xcode: see
+**Matchblox Pocket** — the matchblox app for iPhone and iPad — is in beta on
+TestFlight: [join First Strikers](https://testflight.apple.com/join/t2rtbjHz).
+Install the TestFlight app, open the link, and it installs. You can also build
+it yourself on a Mac with Xcode: see
 [ios/README.md](https://github.com/blox-eng/matchblox/blob/main/ios/README.md).
-Without a Mac, use [Without the app](#without-the-app).
+Without the app, use [Without the app](#without-the-app).
 
 The app pairs with one scan. It needs no account and no password. Build
 the app again with each release that changes the pair link: an older app

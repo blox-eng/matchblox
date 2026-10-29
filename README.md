@@ -29,6 +29,10 @@ Works with Claude Code, Codex, OpenCode, Cursor, and any agent in tmux.
 
 **Docs: [docs.matchblox.com](https://docs.matchblox.com)**
 
+**On your phone:** [Matchblox Pocket](https://testflight.apple.com/join/t2rtbjHz)
+runs the console on iPhone and iPad — pair with one scan, get a buzz when a
+session waits, and answer from anywhere. In beta on TestFlight.
+
 
 ## Quick start
 

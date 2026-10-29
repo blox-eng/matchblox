@@ -3,6 +3,10 @@
 This app opens the matchblox console on your iPhone or iPad.
 It pairs with your host by QR code. Then it connects over SSH.
 
+On the store it is **Matchblox Pocket**, in beta on TestFlight:
+[join First Strikers](https://testflight.apple.com/join/t2rtbjHz). This page
+is about building and shipping it yourself.
+
 ## Build
 
 You need a Mac with Xcode 26 and Homebrew. The app needs iOS 18.0 or later.
