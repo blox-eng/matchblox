@@ -18,14 +18,14 @@
 
 
 
+
+
+
+
+
+
+
+
+
 ────────────────────────────────────────────
- USAGE                            machine ›
- ✻ Claude Max    5h   ▰▰▰▰▱ 84%  · Fri 01:20
-                 wk   ▰▰▰▰▱ 82%  · Mon 09:00
-                 out Fri ~21:00
- · Google login  not measured · OpenCode ke…
- ❋ OpenAI Plus   5h   ▰▰▱▱▱ 40%  · 23:59
-                 wk   ▰▱▱▱▱ 12%  · Tue 09:00
-                 lasts the week
-────────────────────────────────────────────
- ⏎ session  f stoker         sampled 0s ago
+ ⏎ session  f stoker  full view v list only

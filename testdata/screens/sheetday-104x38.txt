@@ -35,4 +35,4 @@
                  wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00                │
                  lasts the week                                │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit    sampled 0s ago
+ ⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  list only v       sampled 0s ago

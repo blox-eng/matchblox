@@ -270,7 +270,8 @@ func fromAdvice(r advice.Rec, which string) *action {
 }
 
 type Model struct {
-	recPrefs   recPrefs // dismissed recommendations and the fold
+	recPrefs   recPrefs  // dismissed recommendations and the fold
+	viewPrefs  viewPrefs // list only, for a phone and for a desk
 	opt        Options
 	conn       transport.Conn
 	peers      []link // the other ticked hosts, in Hosts order; copied on write
@@ -432,7 +433,7 @@ func New(opt Options) Model {
 		opt.Binary = "dev"
 	}
 	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60),
-		recPrefs: loadRecPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers)}
+		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers)}
 	m.splashAt = m.now()
 	if opt.Ask != nil {
 		m.askCtx, m.askStop = context.WithCancel(context.Background())
@@ -1288,6 +1289,8 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.setTab(tabShips)
 	case bkey.Matches(k, mk.Dock):
 		m.cycleDock()
+	case bkey.Matches(k, mk.ListOnly):
+		m.flipListOnly()
 	case bkey.Matches(k, mk.Stoke):
 		return m.stokerKey(false)
 	case bkey.Matches(k, mk.Night):

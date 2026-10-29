@@ -20,6 +20,7 @@ the keys of the open tab, and a tap on one presses it.
 | `p` | Opens Ships. |
 | `Tab` or `Shift+Tab` | Opens the next or the previous tab. |
 | `u` | Cycles the dock of a phone: usage, the machine, the stoker. While a run is in charge, or has steps you have not seen, the stoker's panel takes the dock until you press `u`. |
+| `v` | Folds the detail pane and the dock, so the list takes the screen. The selected row opens in place. `v` again shows them. A phone and a desk each keep their own choice. A phone starts with list only. |
 | `c` | Opens the STOKER tab: your words and the gos, the plan with each step's outcome, the goes that wait for you, the triggers, the standing rules, today's compacts with their RESUME lines. Opening it marks the steps seen. |
 | `/` | Searches the open tab. |
 | `s` | Sorts Sessions and Panes by the next column. |

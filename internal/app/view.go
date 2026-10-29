@@ -149,7 +149,8 @@ func (m Model) draw(w int) drawn {
 
 // drawScreen lays out the screen, top to bottom: the header, the tabs, a
 // hairline, the body (on an opened phone and a desk the list and the
-// detail side by side), the dock when it fits, then a hairline and the
+// detail side by side), the dock when it fits and the view is not list
+// only, then a hairline and the
 // key line (design/0006 §4.1).
 // minBlank is how many blank rows a folded dock may not leave: short of
 // fewer, the dock folds; of more, it stays and the body scrolls.
@@ -199,7 +200,7 @@ func (m Model) drawScreen(w int) drawn {
 	}
 	detail := paneLines(0)
 	var d docked
-	if m.tab != tabMachine && m.tab != tabStoker {
+	if m.tab != tabMachine && m.tab != tabStoker && !m.listOnly() {
 		d = m.dock(w, -1)
 	}
 	room := full
@@ -216,7 +217,7 @@ func (m Model) drawScreen(w int) drawn {
 	default:
 		d = docked{}
 	}
-	sc.full = d.full || m.tab == tabMachine || m.tab == tabStoker
+	sc.full = d.full || m.tab == tabMachine || m.tab == tabStoker || m.listOnly() // list only has no dock to show
 	detail = paneLines(room)
 	sc.paneFull = paneFull && len(detail) <= room
 	if inline {
@@ -274,7 +275,7 @@ func (m Model) markActKeys(sc *drawn, b, vis body, detail []string, room, detail
 	case detailW > 0 && !inline && len(detail) <= room:
 		_, spans := m.detailKeys(s)
 		sc.actKeysAt, sc.actKeys = sc.bodyTop+len(detail)-1, shift(spans, sc.listW+1)
-	case detailW == 0 && m.layoutAt(m.width) == Narrow:
+	case detailW == 0 && m.inPlace():
 		last, shown, all := -1, 0, 0
 		for i, r := range vis.rows {
 			if r == m.rowIndex() {
@@ -294,11 +295,11 @@ func (m Model) markActKeys(sc *drawn, b, vis body, detail []string, room, detail
 }
 
 // panes splits Sessions into the list and the detail: at the middle on an
-// opened phone, the list's ≈78 columns on a desk. A phone and the other
-// tabs have one column, and so has a door's diff while it waits for its
-// y: it shows whole.
+// opened phone, the list's ≈78 columns on a desk. A phone, list only and
+// the other tabs have one column, and so has a door's diff while it waits
+// for its y: it shows whole.
 func (m Model) panes(w int) (list, detail int) {
-	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || m.layoutAt(w) == Narrow || preview {
+	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || m.layoutAt(w) == Narrow || m.listOnly() || preview {
 		return w, 0
 	}
 	at := splitAt(w, m.layoutAt(w))
@@ -597,29 +598,63 @@ func (m Model) keyLine(w int) (string, []span) {
 		line += st.muted.Render(lead)
 		x += lipgloss.Width(lead)
 	}
-	// The age goes before a spare key does; a spare key goes before a key
-	// of the row.
-	if fit := fitHints(hints, w-x-lipgloss.Width("sampled 59m ago ")); hintsWidth(fit) <= w-x-lipgloss.Width("sampled 59m ago ") {
-		hints = fit
-	} else {
-		hints = fitHints(hints, w-x)
+	// List only's switch names its key after its word.
+	var flip hint
+	flipW := 0
+	if m.tab != tabMachine && m.tab != tabStoker {
+		flip = m.listOnlyHint()
+		flipW = lipgloss.Width(flip.label+" "+flip.key) + 2
+	}
+	room := w - x
+	age := st.faint.Render("sampled " + sample.Human(m.now().Sub(m.snap.At)) + " ago ")
+	mark, markW := "", 0
+	if m.listOnly() {
+		mark = st.accent.Render("list only") + " "
+		markW = lipgloss.Width(mark) + 1
+	}
+	// The age goes before a spare key does, the list only mark before the
+	// age, and the switch before the mark; a spare key goes before the
+	// switch, and the switch before a key of the row.
+	for _, r := range []int{lipgloss.Width("sampled 59m ago ") + markW + flipW, markW + flipW, flipW, 0} {
+		if fit := fitHints(hints, room-r); hintsWidth(fit) <= room-r || r == 0 {
+			hints = fit
+			break
+		}
+	}
+	if hintsWidth(hints)+flipW > room {
+		flip = hint{}
 	}
 	var spans []span
-	for i, h := range hints {
-		if i > 0 {
+	parts := 0
+	add := func(part, press string) {
+		if parts++; parts > 1 {
 			line += "  "
 			x += 2
 		}
-		part := st.accent.Render(h.key) + st.muted.Render(" "+h.label)
-		if h.press != "" {
-			spans = append(spans, span{x, x + lipgloss.Width(part), h.press})
+		if press != "" {
+			spans = append(spans, span{x, x + lipgloss.Width(part), press})
 		}
 		line += part
 		x += lipgloss.Width(part)
 	}
-	right := st.faint.Render("sampled " + sample.Human(m.now().Sub(m.snap.At)) + " ago ")
+	for _, h := range hints {
+		add(st.accent.Render(h.key)+st.muted.Render(" "+h.label), h.press)
+	}
+	if flip != (hint{}) {
+		add(st.muted.Render(flip.label+" ")+st.accent.Render(flip.key), flip.press)
+	}
+	right := age
+	if mark != "" {
+		right = age + " " + mark
+		if lipgloss.Width(line)+lipgloss.Width(right)+1 > w {
+			right = mark
+		}
+	}
 	if lipgloss.Width(line)+lipgloss.Width(right)+1 > w {
-		return fit(line, w), spans // the keys matter more than the age
+		return fit(line, w), spans // the keys matter more than the age and the mark
+	}
+	if mark != "" {
+		spans = append(spans, span{w - lipgloss.Width(mark), w - 1, m.keys.main.ListOnly.Keys()[0]})
 	}
 	return line + strings.Repeat(" ", w-lipgloss.Width(line)-lipgloss.Width(right)) + right, spans
 }

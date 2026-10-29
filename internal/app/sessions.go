@@ -490,7 +490,7 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks) []string {
 			wait = st.warn.Render(m.waitCell(s))
 		}
 	}
-	opens := sel && m.layoutAt(m.width) == Narrow
+	opens := sel && m.inPlace()
 	state := padTo(word, t.word) + cutLeft(wait, t.wait)
 	if merged {
 		state = padTo(word, t.word+t.wait) // the wait column's cells are the word's too

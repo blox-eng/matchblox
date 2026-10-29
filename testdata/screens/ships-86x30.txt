@@ -27,4 +27,4 @@
  ❋ OpenAI        5h ▰▱▱ 40% · wk 12%      │ runs 5 claude · 1 codex · 1 opencode
                                           │
 ──────────────────────────────────────────────────────────────────────────────────────
- ⏎ session  f stoker                                                   sampled 0s ago
+ ⏎ session  f stoker  list only v                                      sampled 0s ago

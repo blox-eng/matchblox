@@ -97,7 +97,7 @@ func screensState(t *testing.T) proto.State {
 // of design/0006 §10 against the frames in testdata/screens: Sessions with
 // the one that waits opened, the answer peek with its options, Ships with
 // a ship of each kind, Sessions where two sessions drive two ships each,
-// and the dock folded on a short phone. -update
+// the dock folded on a short phone, and list only on a desk. -update
 // writes them again.
 func TestScreens(t *testing.T) {
 	// Times on the screen are local: the frames are drawn in UTC, which
@@ -120,6 +120,9 @@ func TestScreens(t *testing.T) {
 		}
 	}
 	check(t, st, "folded", 44, 16, nil)
+	for _, size := range [][2]int{{92, 40}, {132, 32}} {
+		check(t, st, "listonly", size[0], size[1], []string{"v"})
+	}
 	for _, size := range [][2]int{{44, 31}, {132, 32}} {
 		check(t, twoShipsState(t), "sessionships", size[0], size[1], nil)
 	}
