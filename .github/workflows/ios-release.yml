@@ -39,10 +39,12 @@ jobs:
           echo "MARKETING_VERSION=$version" >> "$GITHUB_ENV"
           echo "Releasing $version"
 
-      - name: Select the newest Xcode 16
+      - name: Select the newest Xcode 26
+        # App Store Connect rejects uploads built with an older SDK: builds must
+        # use the iOS 26 SDK (Xcode 26+).
         run: |
-          xcode=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
-          if [ -z "$xcode" ]; then echo "::error::no Xcode 16 on this runner"; exit 1; fi
+          xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$xcode" ]; then echo "::error::no Xcode 26 on this runner"; exit 1; fi
           sudo xcode-select -s "$xcode"
           swift --version
 
