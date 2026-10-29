@@ -164,6 +164,7 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		st.History = cmp.Or(st.History, p.st.History)
 		st.Found = cmp.Or(st.Found, p.st.Found)
 		st.Used = cmp.Or(st.Used, p.st.Used)
+		m.noteChanges(p.host, st.Sessions)
 		p.st, p.at, p.have, p.answered = st, m.now(), true, true
 		if p.lost {
 			p.lost, p.backoff = false, 0

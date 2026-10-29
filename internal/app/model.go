@@ -288,10 +288,10 @@ type Model struct {
 	doorAt     int    // its row, for the door after it when it folds
 	previewTop int    // the first line of a door's diff on screen
 	paneSel    int
-	peek       *peek             // the answer peek, over the screen
-	peekSent   map[string]string // the peek's sends in flight: act id -> the session's name
-	peekQuiet  time.Time         // the peek takes no key until then: it just moved
-	changes    map[string]change // pane -> a match change that plays once
+	peek       *peek              // the answer peek, over the screen
+	peekSent   map[string]string  // the peek's sends in flight: act id -> the session's name
+	peekQuiet  time.Time          // the peek takes no key until then: it just moved
+	changes    map[paneKey]change // a match change that plays once
 	animating  bool
 	hist       history.Series
 	selPID     int
@@ -626,7 +626,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.dockSwitched = false
 		}
 		m.doors = m.shownDoors(st.Doors)
-		m.noteChanges(st.Sessions)
+		m.noteChanges(m.opt.Host, st.Sessions)
 		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
 		m.shipReport = st.Ships
 		m.holds, m.reasons = st.Holds, st.Reasons

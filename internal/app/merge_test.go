@@ -21,8 +21,8 @@ import (
 func hostState(sess ...func(sample.Session) sample.Session) proto.State {
 	st := fixtureState()
 	base := st.Sessions[0]
-	base.SessionID, base.Busy, base.Status, base.Idle, base.Do, base.Shells, base.Agents, base.Progress =
-		"", false, "idle", time.Minute, "", nil, 0, nil
+	base.SessionID, base.Busy, base.Status, base.Idle, base.Do, base.Shells, base.Agents, base.Progress, base.Context =
+		"", false, "idle", time.Minute, "", nil, 0, nil, "fresh"
 	st.Sessions, st.Children, st.Queue, st.Holds, st.Reasons = nil, nil, nil, nil, nil
 	for _, f := range sess {
 		st.Sessions = append(st.Sessions, f(base))
@@ -193,5 +193,47 @@ func TestMachineAndLimitsAreTheHosts(t *testing.T) {
 	}
 	if len(m.limitsOf("")) != 0 || len(m.limitsOf("ws-1")) != 1 || m.limitsOf("ws-1")[0].Account != "ws-1 max" {
 		t.Fatalf("limits %v, %v", m.limitsOf(""), m.limitsOf("ws-1"))
+	}
+}
+
+// moving is a console of two hosts with motion on, at a time the breath of
+// an ask shows.
+func movingHosts(t *testing.T, home, peer proto.State) (Model, *fakeConn) {
+	t.Helper()
+	ws := newFake()
+	at := time.UnixMilli(1000*breathFor.Milliseconds() + breathFor.Milliseconds()/2)
+	m := New(Options{Conn: newFake(), Now: func() time.Time { return at }, Peers: []Peer{{Host: "ws-1", Conn: ws}}})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 132, Height: 30})
+	next, _ = next.Update(stateMsg(home))
+	next, _ = next.Update(peerMsg{host: "ws-1", conn: ws, msg: stateMsg(peer)})
+	return next.(Model), ws
+}
+
+func TestAPeerQuestionBreathesOnItsOwnRow(t *testing.T) {
+	home := hostState(sess(1, "home-12", "%12", nil))
+	peer := hostState(sess(2, "peer-12", "%12", nil))
+	peer.Queue = []queue.Item{{Pane: "%12", State: queue.StateQuestion, Since: peer.At}}
+	home.Queue = []queue.Item{{Pane: "%12", State: queue.StateFinished, Since: home.At}}
+	m, _ := movingHosts(t, home, peer)
+	for _, s := range m.snap.Sessions {
+		_, c := m.matchFor(s)
+		if breathes := c != m.marks().Head; breathes != (s.Host == "ws-1") {
+			t.Errorf("%s on %q breathes: %v", s.Name, s.Host, breathes)
+		}
+	}
+}
+
+func TestMatchChangesPlayOnTheirOwnHost(t *testing.T) {
+	busy := func(s *sample.Session) { s.Busy, s.Status = true, "busy" }
+	home := hostState(sess(1, "home-12", "%12", busy)) // it works: the peer's quiet row comes after it
+	m, ws := movingHosts(t, home, hostState(sess(2, "peer-12", "%12", nil)))
+	next, _ := m.Update(stateMsg(home))
+	next, _ = next.Update(peerMsg{host: "ws-1", conn: ws, msg: stateMsg(hostState(sess(2, "peer-12", "%12", busy)))})
+	got := map[paneKey]changeKind{}
+	for k, c := range next.(Model).changes {
+		got[k] = c.kind
+	}
+	if want := map[paneKey]changeKind{{"ws-1", "%12"}: changeStrike}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("changes %v, want %v", got, want)
 	}
 }
