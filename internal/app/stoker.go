@@ -117,8 +117,9 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 // runs it on the row it was pressed on, wherever the selection is by then.
 func (m Model) hold(k tea.KeyPressMsg) func(Model) (tea.Model, tea.Cmd) {
 	switch {
-	case m.chatKeys:
-		return func(m Model) (tea.Model, tea.Cmd) { return m.chatKey(k) }
+	case m.chatKeys && !bkey.Matches(k, m.keys.main.Jump):
+		text, _ := keyName(k)
+		return m.heldKeys(m.pressed(text))
 	case bkey.Matches(k, m.keys.main.Peek):
 		pane, _ := m.peekTarget()
 		return func(m Model) (tea.Model, tea.Cmd) {

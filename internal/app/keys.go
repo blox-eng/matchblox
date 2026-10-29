@@ -292,6 +292,12 @@ var keyNames = map[string]string{
 	"shift+tab": "BTab", "esc": "Escape", "ctrl+c": "C-c", "backspace": "BSpace", "space": "lit: ",
 }
 
+// The names the chat sends for Enter and for ^C.
+var (
+	enterName = keyNames["enter"]
+	ctrlCName = keyNames["ctrl+c"]
+)
+
 // keyName is k as the service takes it: a key name, or "lit:" and the
 // text it types. A key with no name and no text is not sent.
 func keyName(k tea.KeyPressMsg) (text string, ok bool) {

@@ -2,6 +2,7 @@ package app
 
 import (
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -481,5 +482,108 @@ func TestTheChatsFirstKeyAsksToTakeOverAndCtrlCStays(t *testing.T) {
 	pressKeys(t, next.(Model), "n")
 	if got := keyActs(f); len(got) != 1 || got[0].Text != "C-c" {
 		t.Fatalf("the held ^C did not go: %+v", f.acts())
+	}
+}
+
+// nightChat is the console at night with the keys in %1's chat.
+func nightChat(t *testing.T) (Model, *fakeConn) {
+	t.Helper()
+	st := nightState()
+	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a"}, {PID: 2, Pane: "%2", Name: "b"}}
+	m, f := loadedWith(t, 100, st)
+	m = pressKeys(t, onPane(t, m, "%1"), "enter")
+	if !m.chatKeys {
+		t.Fatal("enter did not give the chat the keys")
+	}
+	return m, f
+}
+
+func TestAHeldKeyGoesToTheAgentItWasPressedFor(t *testing.T) {
+	m, f := nightChat(t)
+	m = pressKeys(t, m, "down")
+	if m.held == nil {
+		t.Fatal("the first key to the agent did not ask to take over")
+	}
+	m.selPID = 2 // the selection moves to b while the question waits
+	m = pressKeys(t, m, "n")
+	if got := keyActs(f); len(got) != 1 || got[0].RecID != proto.KeysPrefix+"%1" || got[0].PID != 1 || got[0].Text != "Down" {
+		t.Fatalf("acts %+v", got)
+	}
+
+	m, f = nightChat(t)
+	m = pressKeys(t, m, "down")
+	st := nightState()
+	st.Sessions = []sample.Session{{PID: 2, Pane: "%2", Name: "b"}}
+	next, _ := m.Update(stateMsg(st))
+	m = pressKeys(t, next.(Model), "n")
+	if got := keyActs(f); len(got) != 0 || m.flash != "not sent: a ended" {
+		t.Fatalf("acts %+v flash %q", got, m.flash)
+	}
+}
+
+func TestASearchKeepsQueuedKeys(t *testing.T) {
+	m, f := inChat(t)
+	m = pressKeys(t, m, "down", "enter", "ctrl+]", "/", "b")
+	if !m.searching || slices.ContainsFunc(m.snap.Sessions, func(s sample.Session) bool { return s.Pane == "%1" }) {
+		t.Fatalf("the search did not hide a: searching %v", m.searching)
+	}
+	if len(m.keyQ) != 1 || m.flash != "" {
+		t.Fatalf("queue %+v flash %q", m.keyQ, m.flash)
+	}
+	answered(t, m, "")
+	if got := keyActs(f); len(got) != 2 || got[1].RecID != proto.KeysPrefix+"%1" || got[1].Text != "Enter" {
+		t.Fatalf("acts %+v", got)
+	}
+}
+
+func TestCtrlCHoldIsPerAgentAndFromWhenItWent(t *testing.T) {
+	m, f := inChat(t)
+	now := time.Unix(1000, 0)
+	m.opt.Now = func() time.Time { return now }
+	m = pressKeys(t, m, "ctrl+c", "ctrl+]")
+	m = pressKeys(t, onPane(t, m, "%2"), "enter")
+	now = now.Add(300 * time.Millisecond)
+	m = pressKeys(t, m, "ctrl+c")
+	if m.flash != "" {
+		t.Fatalf("a ^C to b was held: %q", m.flash)
+	}
+	m = answered(t, m, "")
+	if got := keyActs(f); len(got) != 2 || got[0].RecID != proto.KeysPrefix+"%1" || got[1].RecID != proto.KeysPrefix+"%2" {
+		t.Fatalf("acts %+v", got)
+	}
+
+	// A ^C still in the queue went no time ago: the next one waits.
+	m = answered(t, m, "")
+	now = now.Add(2 * time.Second)
+	m = pressKeys(t, m, "down", "ctrl+c")
+	if m.flash != "" || len(m.keyQ) != 1 {
+		t.Fatalf("a ^C 2 s after the last was held: %q", m.flash)
+	}
+	now = now.Add(2 * time.Second)
+	m = pressKeys(t, m, "ctrl+c")
+	if !strings.HasPrefix(m.flash, "^C held: one went 0.0 s ago") {
+		t.Fatalf("flash %q", m.flash)
+	}
+}
+
+func TestAPasteGoesAsTextAndEnter(t *testing.T) {
+	m, f := inChat(t)
+	long := strings.Repeat("x", 250)
+	next, cmd := m.Update(tea.PasteMsg{Content: "yes\r\nno\x07" + long})
+	drain(cmd)
+	m = next.(Model)
+	for range 3 {
+		m = answered(t, m, "")
+	}
+	var got []string
+	for _, a := range keyActs(f) {
+		if a.RecID != proto.KeysPrefix+"%1" {
+			t.Fatalf("act %+v", a)
+		}
+		got = append(got, a.Text)
+	}
+	want := []string{"lit:yes", "Enter", "lit:no" + long[:198], "lit:" + long[:52]}
+	if !slices.Equal(got, want) {
+		t.Fatalf("texts %q, want %q", got, want)
 	}
 }

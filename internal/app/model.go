@@ -338,8 +338,8 @@ type Model struct {
 	chatKeys    bool      // the chat has the keys: they go to the selected session's agent
 	keyQ        []chatKey // the chat's keys behind the one in flight
 	keyInFlight string    // the act id of the chat's key the service has not answered
-	ctrlCAt     time.Time // when the chat's last ^C went
-	ctrlCHeld   bool      // a ^C came within a second of the last one: the next one goes
+	ctrlC       ctrlCMark // the last ^C the chat sent, and when it went
+	ctrlCHeld   ctrlCMark // the agent whose next ^C goes: one came within a second of the last
 	touched     time.Time // the last key that kept the stoker's rest
 	all         lists     // what the service sent; queue, recs and snap hold the drawn copies
 	filter      string    // the search of the open tab
@@ -875,13 +875,16 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		toast := m.say("ran: " + msg.cmd)
 		return m, toast
 	case tea.PasteMsg:
-		// Only the ssh prompt and the form take a paste: in their field,
-		// as typed.
+		// Only the ssh prompt, the form and the chat take a paste: in
+		// their field, as typed, or to the agent.
 		if m.ask != nil {
 			return m.askPaste(msg.Content), nil
 		}
-		if m.focus(tea.KeyPressMsg{}) == layerForm {
+		switch f := m.focus(tea.KeyPressMsg{}); {
+		case f == layerForm:
 			return m.formPaste(msg.Content)
+		case f == layerMain && m.chatKeys:
+			return m.chatPaste(msg.Content)
 		}
 		return m, nil
 	case tea.MouseClickMsg:

@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -155,9 +157,17 @@ func (m Model) intoPane() Model {
 	return m
 }
 
+// ctrlCMark names an agent the chat sent ^C to, and when.
+type ctrlCMark struct {
+	pane string
+	pid  int
+	at   time.Time
+}
+
+func (c ctrlCMark) is(k chatKey) bool { return c.pane != "" && c.pane == k.pane && c.pid == k.pid }
+
 // chatKey is k while the chat has the keys: ctrl+] gives them back, ctrl+o
-// goes into the pane, and every other key goes to the agent. A ^C within a
-// second of the last one waits for a third: two ^C stop Claude Code.
+// goes into the pane, and every other key goes to the agent.
 func (m Model) chatKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.flash = ""
 	switch {
@@ -168,31 +178,128 @@ func (m Model) chatKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.intoPane(), nil
 	}
 	text, ok := keyName(k)
-	s, have := m.selectedSession()
-	if !ok || !have || s.Pane == "" {
+	if !ok {
+		return m, nil
+	}
+	name, keys := m.pressed(text)
+	return m.toAgent(name, keys...)
+}
+
+// pressed is what goes to the chat's agent for the texts pressed now: its
+// pane and agent, and the screen they answer, fixed at this moment. Name
+// is the session's, for a line that says it ended.
+func (m Model) pressed(texts ...string) (name string, keys []chatKey) {
+	s, ok := m.selectedSession()
+	if !ok || s.Pane == "" {
+		return "", nil
+	}
+	var seen time.Time
+	if m.screen.Pane == s.Pane {
+		seen = m.screen.At
+	}
+	for _, t := range texts {
+		keys = append(keys, chatKey{pane: s.Pane, pid: s.PID, text: t, seen: seen})
+	}
+	return s.Name, keys
+}
+
+// heldKeys is the take-over answer's replay of keys pressed in the chat:
+// they go to the agent they were pressed for, wherever the selection is.
+func (m Model) heldKeys(name string, keys []chatKey) func(Model) (tea.Model, tea.Cmd) {
+	return func(m Model) (tea.Model, tea.Cmd) { return m.toAgent(name, keys...) }
+}
+
+// chatPaste is a paste in the chat: text to the agent. A newline goes as
+// Enter; other control characters drop.
+func (m Model) chatPaste(text string) (tea.Model, tea.Cmd) {
+	m.flash = ""
+	name, keys := m.pressed(pasteTexts(text)...)
+	if len(keys) == 0 {
+		return m, nil
+	}
+	if m.night() && !m.stoker.Asked {
+		m.held = m.heldKeys(name, keys)
+		return m, nil
+	}
+	return m.toAgent(name, keys...)
+}
+
+// pasteTexts are the keys of a paste: its text in "lit:" chunks of at most
+// maxLit bytes, with Enter for each newline.
+func pasteTexts(text string) []string {
+	var out []string
+	var chunk strings.Builder
+	flush := func() {
+		if chunk.Len() > 0 {
+			out = append(out, "lit:"+chunk.String())
+			chunk.Reset()
+		}
+	}
+	for _, r := range text {
+		switch {
+		case r == '\n':
+			flush()
+			out = append(out, enterName)
+		case unicode.IsControl(r):
+		default:
+			if chunk.Len()+utf8.RuneLen(r) > maxLit {
+				flush()
+			}
+			chunk.WriteRune(r)
+		}
+	}
+	flush()
+	return out
+}
+
+// toAgent queues keys for the agent they were pressed for, unless there is
+// no connection or that agent left. A ^C within a second of the last one
+// sent to the same agent waits for a third: two ^C stop Claude Code.
+func (m Model) toAgent(name string, keys ...chatKey) (tea.Model, tea.Cmd) {
+	if len(keys) == 0 {
 		return m, nil
 	}
 	if m.conn == nil || m.lost {
 		m.flash = "not sent, no connection"
 		return m, nil
 	}
-	if text == "C-c" {
-		now := m.now()
-		if since := now.Sub(m.ctrlCAt); !m.ctrlCHeld && since < time.Second {
-			m.ctrlCHeld = true
+	if !m.agentIn(keys[0]) {
+		m.flash = "not sent: " + name + " ended"
+		return m, nil
+	}
+	if k := keys[0]; k.text == ctrlCName {
+		if m.ctrlCHeld.is(k) {
+			m.ctrlCHeld = ctrlCMark{}
+		} else if since, ok := m.sinceCtrlC(k); ok && since < time.Second {
+			m.ctrlCHeld = ctrlCMark{pane: k.pane, pid: k.pid, at: m.now()}
 			stop := m.keys.chat.Stop.Help().Key
 			m.flash = fmt.Sprintf("%s held: one went %.1f s ago, %s again stops the agent", stop, since.Seconds(), stop)
 			return m, nil
 		}
-		m.ctrlCAt, m.ctrlCHeld = now, false
 	}
-	var seen time.Time
-	if m.screen.Pane == s.Pane {
-		seen = m.screen.At
+	for _, k := range keys {
+		m.queueKey(k)
 	}
-	m.queueKey(chatKey{pane: s.Pane, pid: s.PID, text: text, seen: seen})
 	cmd := m.sendKey()
 	return m, cmd
+}
+
+// sinceCtrlC is how long ago the last ^C to k's agent went: none yet while
+// one waits in the queue. Ok is false when none went to it.
+func (m Model) sinceCtrlC(k chatKey) (time.Duration, bool) {
+	if slices.ContainsFunc(m.keyQ, func(q chatKey) bool { return q.text == k.text && q.pane == k.pane && q.pid == k.pid }) {
+		return 0, true
+	}
+	if m.ctrlC.is(k) {
+		return m.now().Sub(m.ctrlC.at), true
+	}
+	return 0, false
+}
+
+// agentIn tells if k's agent is still in its pane, in all the service
+// sent: a search or the stoker's own row does not hide it.
+func (m Model) agentIn(k chatKey) bool {
+	return slices.ContainsFunc(m.all.sessions, func(s sample.Session) bool { return s.Pane == k.pane && s.PID == k.pid })
 }
 
 // queueKey puts k behind the keys that wait. Text typed after text for the
@@ -221,6 +328,9 @@ func (m *Model) sendKey() tea.Cmd {
 	m.keyQ = m.keyQ[1:]
 	cmd := m.send(proto.Act{RecID: proto.KeysPrefix + k.pane, Text: k.text, PID: k.pid, Seen: k.seen})
 	m.keyInFlight = "a" + strconv.Itoa(m.acts)
+	if k.text == ctrlCName {
+		m.ctrlC = ctrlCMark{pane: k.pane, pid: k.pid, at: m.now()}
+	}
 	return cmd
 }
 
@@ -253,7 +363,7 @@ func (m Model) keepChat(was Model) Model {
 	}
 	var gone []chatKey
 	q := slices.DeleteFunc(slices.Clone(m.keyQ), func(k chatKey) bool {
-		if slices.ContainsFunc(m.snap.Sessions, func(s sample.Session) bool { return s.Pane == k.pane && s.PID == k.pid }) {
+		if m.agentIn(k) {
 			return false
 		}
 		gone = append(gone, k)
@@ -263,8 +373,8 @@ func (m Model) keepChat(was Model) Model {
 		return m
 	}
 	name := gone[0].pane
-	if i := slices.IndexFunc(was.snap.Sessions, func(s sample.Session) bool { return s.PID == gone[0].pid }); i >= 0 {
-		name = was.snap.Sessions[i].Name
+	if i := slices.IndexFunc(was.all.sessions, func(s sample.Session) bool { return s.PID == gone[0].pid }); i >= 0 {
+		name = was.all.sessions[i].Name
 	}
 	m.keyQ, m.flash = q, "not sent: "+name+" ended"
 	return m
