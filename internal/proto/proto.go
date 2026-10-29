@@ -11,6 +11,7 @@ import (
 	"io"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
@@ -39,6 +40,8 @@ const (
 	KindResult   Kind = "result"
 	KindStoker   Kind = "stoker"
 	KindError    Kind = "error"
+	// KindScreen is the text of the pane a console watches.
+	KindScreen Kind = "screen"
 	// KindHook is the first and only message of `matchblox hook`: one
 	// hooks.Event, sent after the service hello, with no hello back.
 	KindHook Kind = "hook"
@@ -104,9 +107,23 @@ type Act struct {
 	// Where the service knows the caller's pid, it finds the pane itself
 	// and this is ignored.
 	From string `json:"from,omitempty"`
+	// Seen is when the console last saw the screen it acts on.
+	Seen time.Time `json:"seen,omitempty"`
 	// Console: the act came from a console, a person at the keys. The
 	// service sets it from the hello; it never comes over the wire.
 	Console bool `json:"-"`
+}
+
+// WatchPrefix starts an act that names the pane a console watches; with no
+// pane after it, the console watches none.
+const WatchPrefix = "watch:"
+
+// Screen is one capture of the watched pane. Gone: the pane is not there.
+type Screen struct {
+	Pane string    `json:"pane"`
+	At   time.Time `json:"at"`
+	Text string    `json:"text"`
+	Gone bool      `json:"gone,omitempty"`
 }
 
 type Result struct {

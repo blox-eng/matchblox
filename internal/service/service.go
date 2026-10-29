@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/actions"
@@ -798,11 +799,15 @@ func (s *Service) resting(pane string) bool {
 // client is one console. kick holds at most one wake-up, so a slow console
 // gets the latest state and never makes the loops wait.
 type client struct {
-	c        transport.Conn
-	kick     chan struct{}
-	histSent bool
-	foundGen uint64
-	usedGen  uint64
+	c    transport.Conn
+	kick chan struct{}
+	// watch is the pane this console streams; screenKick wakes watchLoop
+	// before its next tick.
+	watch      atomic.Pointer[string]
+	screenKick chan struct{}
+	histSent   bool
+	foundGen   uint64
+	usedGen    uint64
 }
 
 func (s *Service) join(cl *client) {
@@ -905,7 +910,7 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 	// The first wake-up goes in before the console joins: a broadcast
 	// after the join fills kick, and a send then would wait for a reader
 	// that starts below.
-	cl := &client{c: c, kick: make(chan struct{}, 1)}
+	cl := &client{c: c, kick: make(chan struct{}, 1), screenKick: make(chan struct{}, 1)}
 	cl.kick <- struct{}{}
 	s.join(cl)
 	defer s.leave(cl)
@@ -931,6 +936,7 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 	connCtx, connDone := context.WithCancel(ctx)
 	defer connDone() // a clone for this connection's act stops with it
 	actCtx := context.WithValue(ctx, connKey{}, connCtx)
+	go s.watchLoop(connCtx, cl)
 	for {
 		env, err := c.Recv()
 		if err != nil {
@@ -946,6 +952,12 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 		}
 		if pid > 0 {
 			a.From = s.PeerPane(pid)
+		}
+		if pane, ok := strings.CutPrefix(a.RecID, proto.WatchPrefix); ok {
+			res := s.watchAct(cl, h.Client, a, pane)
+			res.ActID = env.ID
+			_ = c.Send(proto.KindResult, env.ID, res)
+			continue
 		}
 		go func(id string) {
 			// A console in a pane the stoker drove, or in the stoker's own,
