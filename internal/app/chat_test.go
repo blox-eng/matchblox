@@ -561,7 +561,7 @@ func TestCtrlCHoldIsPerAgentAndFromWhenItWent(t *testing.T) {
 	}
 	now = now.Add(2 * time.Second)
 	m = pressKeys(t, m, "ctrl+c")
-	if !strings.HasPrefix(m.flash, "^C held: one went 0.0 s ago") {
+	if m.flash != "^C held: one waits to go, ^C again stops the agent" {
 		t.Fatalf("flash %q", m.flash)
 	}
 }
@@ -585,5 +585,34 @@ func TestAPasteGoesAsTextAndEnter(t *testing.T) {
 	want := []string{"lit:yes", "Enter", "lit:no" + long[:198], "lit:" + long[:52]}
 	if !slices.Equal(got, want) {
 		t.Fatalf("texts %q, want %q", got, want)
+	}
+}
+
+func TestPasteNewlines(t *testing.T) {
+	for in, want := range map[string][]string{
+		"a\rb":   {"lit:a", "Enter", "lit:b"},
+		"a\r\nb": {"lit:a", "Enter", "lit:b"},
+		"a\nb":   {"lit:a", "Enter", "lit:b"},
+		"a\n\nb": {"lit:a", "Enter", "Enter", "lit:b"},
+		"a\tb":   {"lit:ab"},
+	} {
+		if got := pasteTexts(in); !slices.Equal(got, want) {
+			t.Errorf("%q = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestAPasteTouchesTheStokersRest(t *testing.T) {
+	m, f := inChat(t)
+	var v proto.StokerView
+	v.On, v.Rests = true, m.now()
+	m.stoker = &v
+	if !m.resting() || m.night() {
+		t.Fatal("the stoker does not rest")
+	}
+	next, cmd := m.Update(tea.PasteMsg{Content: "hi"})
+	drain(cmd)
+	if next.(Model).touched.IsZero() || !slices.ContainsFunc(f.acts(), func(a proto.Act) bool { return a.RecID == "stoker:touch" }) {
+		t.Fatalf("acts %+v", f.acts())
 	}
 }

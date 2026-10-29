@@ -225,7 +225,8 @@ func (m Model) chatPaste(text string) (tea.Model, tea.Cmd) {
 }
 
 // pasteTexts are the keys of a paste: its text in "lit:" chunks of at most
-// maxLit bytes, with Enter for each newline.
+// maxLit bytes, with Enter for each newline: \n, \r or \r\n, as terminals
+// paste a newline as \r.
 func pasteTexts(text string) []string {
 	var out []string
 	var chunk strings.Builder
@@ -235,9 +236,11 @@ func pasteTexts(text string) []string {
 			chunk.Reset()
 		}
 	}
+	var prev rune
 	for _, r := range text {
 		switch {
-		case r == '\n':
+		case r == '\n' && prev == '\r': // \r\n is one newline
+		case r == '\n' || r == '\r':
 			flush()
 			out = append(out, enterName)
 		case unicode.IsControl(r):
@@ -247,6 +250,7 @@ func pasteTexts(text string) []string {
 			}
 			chunk.WriteRune(r)
 		}
+		prev = r
 	}
 	flush()
 	return out
@@ -270,10 +274,10 @@ func (m Model) toAgent(name string, keys ...chatKey) (tea.Model, tea.Cmd) {
 	if k := keys[0]; k.text == ctrlCName {
 		if m.ctrlCHeld.is(k) {
 			m.ctrlCHeld = ctrlCMark{}
-		} else if since, ok := m.sinceCtrlC(k); ok && since < time.Second {
+		} else if last := m.lastCtrlC(k); last != "" {
 			m.ctrlCHeld = ctrlCMark{pane: k.pane, pid: k.pid, at: m.now()}
 			stop := m.keys.chat.Stop.Help().Key
-			m.flash = fmt.Sprintf("%s held: one went %.1f s ago, %s again stops the agent", stop, since.Seconds(), stop)
+			m.flash = fmt.Sprintf("%s held: %s, %s again stops the agent", stop, last, stop)
 			return m, nil
 		}
 	}
@@ -284,16 +288,17 @@ func (m Model) toAgent(name string, keys ...chatKey) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// sinceCtrlC is how long ago the last ^C to k's agent went: none yet while
-// one waits in the queue. Ok is false when none went to it.
-func (m Model) sinceCtrlC(k chatKey) (time.Duration, bool) {
+// lastCtrlC says the ^C to k's agent that a new one comes too close to:
+// one that waits in the queue, or one sent less than a second ago. Empty
+// when there is none.
+func (m Model) lastCtrlC(k chatKey) string {
 	if slices.ContainsFunc(m.keyQ, func(q chatKey) bool { return q.text == k.text && q.pane == k.pane && q.pid == k.pid }) {
-		return 0, true
+		return "one waits to go"
 	}
-	if m.ctrlC.is(k) {
-		return m.now().Sub(m.ctrlC.at), true
+	if since := m.now().Sub(m.ctrlC.at); m.ctrlC.is(k) && since < time.Second {
+		return fmt.Sprintf("one went %.1f s ago", since.Seconds())
 	}
-	return 0, false
+	return ""
 }
 
 // agentIn tells if k's agent is still in its pane, in all the service

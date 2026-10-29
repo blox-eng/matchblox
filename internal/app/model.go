@@ -884,7 +884,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case f == layerForm:
 			return m.formPaste(msg.Content)
 		case f == layerMain && m.chatKeys:
-			return m.chatPaste(msg.Content)
+			m, touch := m.touchRest()
+			next, cmd := m.chatPaste(msg.Content)
+			return next, tea.Batch(touch, cmd)
 		}
 		return m, nil
 	case tea.MouseClickMsg:
