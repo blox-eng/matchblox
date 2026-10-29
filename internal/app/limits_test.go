@@ -60,15 +60,18 @@ func TestTheHeaderHasNoLimits(t *testing.T) {
 	}
 }
 
-// TestTheDockSaysUsageAndTheMachine: under the body, each account's
-// windows as /usage says them, with the forecast on its block, and the
-// machine; side by side when there is room.
+// TestTheDockSaysUsageAndTheMachine: each account's windows as /usage
+// says them, with the forecast on its block, and the machine; on a desk
+// stacked under the list, on an opened phone side by side in the dock.
 func TestTheDockSaysUsageAndTheMachine(t *testing.T) {
-	m, _ := loadedWith(t, 132, limitsState())
+	drawer, _ := loadedWith(t, 86, limitsState())
+	if !strings.Contains(strings.Split(screen(drawer), "\n")[lineOf(t, drawer, "USAGE")], "MACHINE") {
+		t.Fatalf("usage and the machine are not side by side:\n%s", screen(drawer))
+	}
+	m, _ := loadedWith(t, 200, limitsState())
 	out := screen(m)
-	at := lineOf(t, m, "USAGE")
-	if !strings.Contains(strings.Split(out, "\n")[at], "MACHINE") {
-		t.Fatalf("usage and the machine are not side by side:\n%s", out)
+	if lineOf(t, m, "USAGE") >= lineOf(t, m, "MACHINE") {
+		t.Fatalf("the machine is not under usage:\n%s", out)
 	}
 	until := limitsState().At.Add(26 * time.Hour).Local().Format("Mon")
 	for _, want := range []string{
@@ -159,7 +162,7 @@ func TestARecommendationShowsItsResult(t *testing.T) {
 		Primary:  &advice.Action{Label: "jump to the session", Nav: true, Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}},
 		Second: &advice.Action{Label: "send /compact", Destructive: true, Steps: [][]string{{"tmux", "send-keys", "-t", "%1", "/compact", "Enter"}},
 			Guards: []advice.Guard{{IdlePane: "%1"}}}}}
-	m, f := loadedWith(t, 100, st)
+	m, f := loadedWith(t, 200, st)
 	var next tea.Model = m
 	next = selectRec(t, next, "wk")
 	next, _ = key(next, "x")
@@ -225,7 +228,7 @@ func TestAJumpLaterDoesNotRewriteTheRow(t *testing.T) {
 	st := limitsState()
 	st.Recommendations = []advice.Rec{{ID: "wk", Level: "warn", Title: "The week runs out Wed ~19:00: compact app-feature",
 		Primary: &advice.Action{Label: "jump to the session", Nav: true, Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}}}}
-	m, _ := loadedWith(t, 100, st)
+	m, _ := loadedWith(t, 200, st)
 	var next tea.Model = m
 	next = selectRec(t, next, "wk")
 	next, _ = key(next, "enter")
@@ -260,7 +263,7 @@ func TestStatusTextHasTheLimits(t *testing.T) {
 func TestCursorsAccountIsInTheDock(t *testing.T) {
 	st := limitsState()
 	st.Limits = append(st.Limits, limits.Account{Provider: "cursor", Account: "builder@example.com · Acme", State: limits.Unmeasured, Fix: "Cursor's plan usage is not read yet"})
-	m, _ := loadedWith(t, 132, st)
+	m, _ := loadedWith(t, 200, st)
 	if out := screen(m); !strings.Contains(out, "⬢ Cursor Acme") || !strings.Contains(out, "not measured · Cursor's plan usage is not read yet") {
 		t.Errorf("the dock lacks Cursor's account:\n%s", out)
 	}

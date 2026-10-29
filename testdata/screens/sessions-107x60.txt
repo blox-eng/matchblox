@@ -1,24 +1,24 @@
  ▰ matchblox                                                                              ● 6 wait for you
  SESSIONS 7    ships 3    machine    git    history    panes    stoker
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
- WAITS FOR YOU · 6                                   │
-▌│ spark-docs                    done       9m   88% │ spark-docs
- ╿ ember-billing                 done       4m   32% │ │ done, waits for you · 9m · hearth:3.1 · /work/spa…
+ WAITS FOR YOU · 6                                   │ spark-docs · done
+▌│ spark-docs                    done       9m   88% │
+ ╿ ember-billing                 done       4m   32% │
  ╿ flint-auth                    asks       2m   41% │
- ╿ kindle-web                    asks       1m   56% │ CLAUDE SAID
- ╿ cinder-ci                     done       0s   55% │ I rewrote the quick start and the install page.
+ ╿ kindle-web                    asks       1m   56% │
+ ╿ cinder-ci                     done       0s   55% │
  ╿ wick-mobile                   done       0s    6% │
- WORKING · 1                                         │ context  ▰▰▰▰▰▰▰▰▰▱ 88%
- ✦ hearth-api                    busy            79% │ plan     ▰▰▰▰▰▰▰▰▰▰ 100%  docs for the 1.0 release
- + start a new session                               │ ship     #4540 ●━●━●━●━●  live
-                                                     │          The 1.0 docs
- 1 without an agent: shell:1.1 zsh                   │          https://github.com/hearth/spark-docs/pull/…
-                                                     │ why      clear: idle 9m (clear after 0s)
- RECOMMENDATIONS · 7 · h hides                       │ sonnet · 176k / 200k tokens · +0k in 30 min · ✻
- ▲ The week runs short: compact spark-docs           │ team@example.com · Max · pid 1400 · 1 process ·
- ○ Clear spark-docs (%3)                             │ started 3h20m ago
+ WORKING · 1                                         │
+ ✦ hearth-api                    busy            79% │
+ + start a new session                               │
+                                                     │
+ 1 without an agent: shell:1.1 zsh                   │
+                                                     │
+ RECOMMENDATIONS · 7 · h hides                       │
+ ▲ The week runs short: compact spark-docs           │
+ ○ Clear spark-docs (%3)                             │
  ○ Clear kindle-web (%5)                             │
- ○ Clear cinder-ci (%6)                              │ a answer   ⏎ open it   A switch agent
+ ○ Clear cinder-ci (%6)                              │
  ○ Clear flint-auth (%2)                             │
  ○ Clear ember-billing (%8)                          │
  ○ Clear wick-mobile (%7)                            │
@@ -57,4 +57,4 @@
                                                      │ 1900     claude              0%   9.8M    pane %8 ·…
                                                      │ 4242     bash                0%   9.8M    pane %9
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ open  a answer  x kill  r rename  A switch  z park  N new  p ships  f stoker             sampled 0s ago
+ ⏎ chat  a chat  x kill  r rename  A switch  z park  N new  p ships  f stoker               sampled 0s ago

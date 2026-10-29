@@ -109,7 +109,7 @@ type drawn struct {
 	tabs    []span
 	bodyTop int   // the line of the first body row
 	rows    []int // the row each body line shows; -1 none, headerRow
-	listW   int   // the list's columns; the detail pane is right of them
+	listW   int   // the list's columns; the detail or the chat is right of them
 	dockAt  int   // the dock's first line; -1 when it is folded
 	keysAt  int   // the key line; -1 when there is none
 	keys    []span
@@ -136,6 +136,9 @@ type drawn struct {
 	// detail: their line, and the key a tap on each presses.
 	actKeysAt int
 	actKeys   []span
+	// chatFull: the chat is the whole screen, and a tap on its title row
+	// goes back to Sessions.
+	chatFull bool
 }
 
 // draw is the screen, with an ssh prompt over everything.
@@ -179,16 +182,22 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		return sc
 	}
+	if m.chatKeys && m.tab == tabSessions && m.layoutAt(w) == Narrow {
+		return m.chatScreen(w)
+	}
 	full := max(m.height-5, 1)
 	listW, detailW := m.panes(w)
 	sc.listW = listW
 	b := m.body(listW)
 	_, _, peeking := m.peekNow()
 	inline := peeking && detailW > 0 // the peek takes the detail pane
+	chat, chatting := m.chatShown(detailW)
+	chatting = chatting && !inline
+	stacked := m.tab == tabSessions && detailW > 0 && m.layoutAt(w) == Wide // usage and the machine under the list
 	paneFull := true
 	paneLines := func(rows int) []string {
 		switch {
-		case detailW == 0 || inline:
+		case detailW == 0 || inline || chatting:
 			return nil
 		}
 		lines, all := m.detailPane(detailW, rows)
@@ -197,7 +206,7 @@ func (m Model) drawScreen(w int) drawn {
 	}
 	detail := paneLines(0)
 	var d docked
-	if m.tab != tabMachine && m.tab != tabStoker {
+	if m.tab != tabMachine && m.tab != tabStoker && !stacked {
 		d = m.dock(w, -1)
 	}
 	room := full
@@ -223,7 +232,17 @@ func (m Model) drawScreen(w int) drawn {
 		detail, press, spans = m.peekBox(detailW, room, false, true)
 		sc.peekAt, sc.peekX, sc.peekW, sc.peekRows, sc.peekKeys, sc.peekInline = sc.bodyTop, listW+1, detailW, press, spans, true
 	}
+	if chatting {
+		detail = m.chatPane(chat, detailW, room)
+	}
 	vis := windowed(b, room, m.rowIndex())
+	if stacked {
+		vis, sc.full = m.leftColumn(b, listW, room)
+	}
+	edge := m.st.hair
+	if chatting && m.chatKeys {
+		edge = m.st.accent
+	}
 	for i := range room {
 		line, row := "", -1
 		if i < len(vis.lines) {
@@ -234,11 +253,11 @@ func (m Model) drawScreen(w int) drawn {
 			if i < len(detail) {
 				right = detail[i]
 			}
-			line = fit(line, listW) + m.st.hair.Render("│") + fit(right, detailW)
+			line = fit(line, listW) + edge.Render("│") + fit(right, detailW)
 		}
 		sc.lines, sc.rows = append(sc.lines, line), append(sc.rows, row)
 	}
-	m.markActKeys(&sc, b, vis, detail, room, detailW, inline)
+	m.markActKeys(&sc, b, vis, detail, room, detailW, inline || chatting)
 	if len(d.lines) > 0 {
 		sc.dockAt, sc.dockH, sc.stx0, sc.stx1 = len(sc.lines)+1, len(d.lines), d.stx0, d.stx1
 		sc.lines = append(append(sc.lines, m.st.hair.Render(strings.Repeat("─", w))), d.lines...)
@@ -262,14 +281,14 @@ func (m Model) drawScreen(w int) drawn {
 // markActKeys finds the selected session's own keys: the last line of its
 // opened row on a phone, the last line of its detail beside the list. An
 // opened row cut by the screen has no keys to tap: its last line is not
-// theirs.
-func (m Model) markActKeys(sc *drawn, b, vis body, detail []string, room, detailW int, inline bool) {
+// theirs. Covered: the right side is not the detail.
+func (m Model) markActKeys(sc *drawn, b, vis body, detail []string, room, detailW int, covered bool) {
 	s, ok := m.selectedSession()
 	if !ok || m.tab != tabSessions {
 		return
 	}
 	switch {
-	case detailW > 0 && !inline && len(detail) <= room:
+	case detailW > 0 && !covered && len(detail) <= room:
 		_, spans := m.detailKeys(s)
 		sc.actKeysAt, sc.actKeys = sc.bodyTop+len(detail)-1, shift(spans, sc.listW+1)
 	case detailW == 0 && m.layoutAt(m.width) == Narrow:
@@ -291,15 +310,18 @@ func (m Model) markActKeys(sc *drawn, b, vis body, detail []string, room, detail
 	}
 }
 
-// panes splits Sessions into the list and the detail: at the middle on an
-// opened phone, the list's ≈78 columns on a desk. A phone and the other
-// tabs have one column, and so has a door's diff while it waits for its
-// y: it shows whole.
+// panes splits Sessions into the list and the right side: at the middle
+// on an opened phone; on a desk the list's ≈78 columns, at most 40% of
+// the screen beside the chat. A phone and the other tabs have one column,
+// and so has a door's diff while it waits for its y: it shows whole.
 func (m Model) panes(w int) (list, detail int) {
 	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || m.layoutAt(w) == Narrow || preview {
 		return w, 0
 	}
 	at := splitAt(w, m.layoutAt(w))
+	if m.tab == tabSessions && m.layoutAt(w) == Wide {
+		at = min(at, w*2/5)
+	}
 	return at, w - at - 1
 }
 

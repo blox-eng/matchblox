@@ -47,14 +47,14 @@ func typeText(m tea.Model, s string) tea.Model {
 }
 
 // TestSessionsIsTheDefaultTab: the console opens on Sessions, on the first
-// session that waits; its detail says what it asked.
+// session that waits; its chat is beside the list.
 func TestSessionsIsTheDefaultTab(t *testing.T) {
 	m, _ := loadedWith(t, 132, queueState())
 	out := ansi.Strip(m.render())
 	if m.tab != tabSessions {
 		t.Fatalf("the console opens on tab %d", m.tab)
 	}
-	for _, want := range []string{"SESSIONS 3", "WAITS FOR YOU · 2", "asks", "app-feature", "Claude needs your permission to use Bash", "panes"} {
+	for _, want := range []string{"SESSIONS 3", "WAITS FOR YOU · 2", "app-feature · asks", "panes"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("view lacks %q:\n%s", want, out)
 		}
@@ -524,10 +524,10 @@ func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
 		Status: "idle", Idle: time.Minute, Context: "unmeasured", FromPane: true, Permits: true, LastLine: q, Procs: 1})
 	st.Queue = []queue.Item{{Pane: "%9", Target: "api:1.1", Name: "codex", State: queue.StatePermission,
 		Since: st.At.Add(-time.Minute), LastLine: q, Estimated: true, FromPane: true}}
-	for _, w := range []int{132, 50} {
+	for w, wants := range map[int][]string{132: {"codex", "asks"}, 50: {"codex", "asks", "Would you like to run"}} { // a desk shows the pane itself
 		m, _ := loadedWith(t, w, st)
 		out := ansi.Strip(m.render())
-		for _, want := range []string{"codex", "asks", "Would you like to run"} {
+		for _, want := range wants {
 			if !strings.Contains(out, want) {
 				t.Fatalf("width %d: the session lacks %q:\n%s", w, want, out)
 			}
@@ -542,7 +542,8 @@ func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "⏎ open") || strings.Contains(out, "› y") || len(f.acts()) != 0 {
 		t.Fatalf("a on an approval menu: acts %+v\n%s", f.acts(), out)
 	}
-	m.tab, m.selPID, m.width = tabSessions, 900, 132
+	m, _ = loadedWith(t, 132, outsideTmux(st)) // the detail: a desk shows a session in a pane as its chat
+	m.selPID, m.chose = 900, true
 	out := ansi.Strip(m.render())
 	if strings.Contains(out, "1 processes") {
 		t.Fatalf("one process in the plural:\n%s", out)
@@ -651,12 +652,13 @@ func TestTwoSessionsOutsideTmuxKeepTheirOwnWords(t *testing.T) {
 }
 
 // TestAnEstimatedRowShowsWhatTheAgentAsked: a session without hooks that
-// waits on a question shows the question, so `a` answers what it reads.
+// waits on a question shows the question on its opened row, so `a`
+// answers what it reads. A desk shows the pane itself.
 func TestAnEstimatedRowShowsWhatTheAgentAsked(t *testing.T) {
 	st := queueState()
 	q := "Should a refresh also rotate the token?"
 	st.Queue[1].State, st.Queue[1].LastLine = queue.StateQuestion, q
-	for _, w := range []int{132, 44} {
+	for _, w := range []int{44} {
 		m, _ := loadedWith(t, w, st)
 		next := selectPane(t, m, "%2")
 		if out := strings.Join(strings.Fields(ansi.Strip(next.(Model).render())), " "); !strings.Contains(out, q) {
@@ -751,12 +753,12 @@ func TestThePeekShowsTheEndOfWhatWasSaid(t *testing.T) {
 }
 
 // TestAMessagesASessionThatWorks: a opens the peek on a session that does
-// not wait, titled To <name>, its key line says a message, and Enter
+// not wait, titled To <name>, its key line says a chat, and Enter
 // sends the line as a message.
 func TestAMessagesASessionThatWorks(t *testing.T) {
 	m, f := loadedWith(t, 100, queueState())
 	sel := selectPane(t, m, "%3")
-	if l := footerOf(sel); !strings.Contains(l, "a message") {
+	if l := footerOf(sel); !strings.Contains(l, "a chat") {
 		t.Fatalf("the key line of a working session: %q", l)
 	}
 	next, _ := openedPeek(sel)

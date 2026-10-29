@@ -145,7 +145,7 @@ func TestAPhoneRowOpensInPlace(t *testing.T) {
 		t.Fatalf("no last words under the row:\n%s", strings.Join(out, "\n"))
 	}
 	// The plan and the keys share no line at 50 columns: each gets its own.
-	if !strings.Contains(out[at+2], "plan 75%") || !strings.Contains(out[at+2], "! compact") || !strings.Contains(out[at+3], "a answer  A switch  ⏎ open") {
+	if !strings.Contains(out[at+2], "plan 75%") || !strings.Contains(out[at+2], "! compact") || !strings.Contains(out[at+3], "a chat  A switch  ⏎ chat") {
 		t.Fatalf("no plan and keys:\n%s", strings.Join(out[at:at+4], "\n"))
 	}
 	if !strings.HasPrefix(out[at-1], "────") || !strings.HasPrefix(out[at+4], "────") {
@@ -157,10 +157,10 @@ func TestAPhoneRowOpensInPlace(t *testing.T) {
 	if lineOf(t, m, "WAITS FOR YOU · 2") > lineOf(t, m, "QUIET · 1") {
 		t.Fatalf("the quiet ones come first:\n%s", strings.Join(out, "\n"))
 	}
-	// Selected, app-review (done) offers an answer.
+	// Selected, app-review (done) offers its chat.
 	next, _ := key(m, "down")
 	out = strings.Split(ansi.Strip(next.(Model).render()), "\n")
-	if at := sessLine(t, next, "app-review"); !strings.Contains(out[at+1], "a answer  A switch  ⏎ open") {
+	if at := sessLine(t, next, "app-review"); !strings.Contains(out[at+1], "a chat  A switch  ⏎ chat") {
 		t.Fatalf("no a for a session that waits for an answer:\n%s", strings.Join(out, "\n"))
 	}
 	for tab := range tabNames {
@@ -395,10 +395,10 @@ func TestTheKeyLineIsAtTheBottom(t *testing.T) {
 			return out[len(out)-1]
 		}
 		// A phone drops the spare keys first: p ships is a tab tap away.
-		if l := last(m); !strings.Contains(l, "⏎ open") || !strings.Contains(l, "a answer") || !strings.Contains(l, "x kill") || !strings.Contains(l, "N new") || w > 60 && !strings.Contains(l, "p ships") {
+		if l := last(m); !strings.Contains(l, "⏎ chat") || !strings.Contains(l, "a chat") || !strings.Contains(l, "x kill") || !strings.Contains(l, "N new") || w > 60 && !strings.Contains(l, "p ships") {
 			t.Fatalf("width %d: the keys are not at the bottom: %q", w, l)
 		}
-		if l := last(selectPane(t, m, "%3")); !strings.Contains(l, "a message") {
+		if l := last(selectPane(t, m, "%3")); !strings.Contains(l, "a chat") {
 			t.Fatalf("width %d: the keys are not at the bottom: %q", w, l)
 		}
 		if strings.Contains(ansi.Strip(strings.Split(m.render(), "\n")[2]), "open") {
@@ -442,9 +442,9 @@ func TestATapOnAKeyPressesIt(t *testing.T) {
 	if p := next.(Model).pending; p == nil || p.rec != "kill:%1" {
 		t.Fatalf("a tap on x kill: pending %+v", p)
 	}
-	next, _ = tap(m, len([]rune(line[:strings.Index(line, "⏎ open")])), y)
+	next, _ = tap(m, len([]rune(line[:strings.Index(line, "⏎ chat")])), y)
 	if !next.(Model).chatKeys {
-		t.Fatal("a tap on ⏎ open did not open the chat")
+		t.Fatal("a tap on ⏎ chat did not open the chat")
 	}
 	// The header's count of who waits selects the first one.
 	moved := selectPane(t, m, "%3")
@@ -479,11 +479,14 @@ func selectPane(t *testing.T, m tea.Model, pane string) tea.Model {
 }
 
 // listOf is the list column of a screen line: its first w cells, the list
-// width of a console w wide.
+// width of Sessions on a console w wide.
 func listOf(line string, w int) string {
 	lw := w
 	if byWidth(w) != Narrow {
 		lw = splitAt(w, byWidth(w))
+	}
+	if byWidth(w) == Wide {
+		lw = min(lw, w*2/5)
 	}
 	r := []rune(line)
 	return string(r[:min(lw, len(r))])

@@ -119,6 +119,50 @@ func (m Model) chatLines(w, h int) []string {
 	return append(lines[:len(lines)-len(fit)], fit...)
 }
 
+// chatShown is the session whose chat is the right side of Sessions: the
+// selected one, when it has a pane and the screen has a right side.
+func (m Model) chatShown(rightW int) (sample.Session, bool) {
+	s, ok := m.selectedSession()
+	return s, ok && s.Pane != "" && m.tab == tabSessions && rightW > 0
+}
+
+// chatTitle names the chat's session and its state.
+func (m Model) chatTitle(s sample.Session) string { return s.Name + " · " + m.wordOf(s) }
+
+// chatPane is the chat beside the list, w by h: its title, in the accent
+// while the chat has the keys, over the screen.
+func (m Model) chatPane(s sample.Session, w, h int) []string {
+	ink := m.st.label
+	if m.chatKeys {
+		ink = m.st.accent
+	}
+	return append([]string{fit(" "+ink.Render(m.chatTitle(s)), w)}, m.screenLines(w, h-1)...)
+}
+
+// screenLines are chatLines, each closed so the pane's styles stop at its
+// end.
+func (m Model) screenLines(w, h int) []string {
+	lines := m.chatLines(w, h)
+	for i, l := range lines {
+		lines[i] = l + ansi.ResetStyle
+	}
+	return lines
+}
+
+// chatScreen is the chat on an upright phone: the whole screen under a
+// title row that goes back to Sessions, over the key line.
+func (m Model) chatScreen(w int) drawn {
+	st := m.st
+	s, _ := m.selectedSession()
+	title := " " + st.accent.Render("‹ Sessions") + st.muted.Render(" · ") + st.accent.Render(m.chatTitle(s))
+	sc := drawn{lines: []string{fit(title, w)}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true}
+	sc.lines = append(sc.lines, m.screenLines(w, max(m.height-3, 1))...)
+	keys, spans := m.keyLine(w)
+	sc.keysAt, sc.keys = len(sc.lines)+1, spans
+	sc.lines = append(sc.lines, st.hair.Render(strings.Repeat("─", w)), keys)
+	return sc
+}
+
 // homeKey is the app's home gesture (panes.HomeKey, which the console may
 // not import): it gives the keys back to Sessions.
 const homeKey = "\x1b_matchblox\x1b\\"
@@ -358,7 +402,10 @@ func (m Model) keepChat(was Model) Model {
 	if m.chatKeys {
 		s, ok := m.selectedSession()
 		before, _ := was.selectedSession()
-		if !ok || s.Pane == "" || s.Pane != before.Pane || m.screen.Pane == s.Pane && m.screen.Gone {
+		switch {
+		case ok && s.Pane != "" && s.Pane == before.Pane && m.screen.Pane == s.Pane && m.screen.Gone:
+			m.chatKeys, m.flash = false, "That session ended." // a phone shows the list again: the key line says why
+		case !ok || s.Pane == "" || s.Pane != before.Pane:
 			m.chatKeys = false
 		}
 	}

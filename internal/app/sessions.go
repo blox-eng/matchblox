@@ -315,10 +315,10 @@ func (m Model) sessionKeys() []hint {
 	if _, ok := m.selectedGhost(); ok {
 		return []hint{hintFor(mk.Open, "new session"), hintFor(mk.Ships, ""), hintFor(mk.Stoke, "stoker")}
 	}
-	keys := []hint{hintFor(mk.Open, "")}
+	keys := []hint{hintFor(mk.Open, "chat")}
 	s, ok := m.selectedSession()
 	if ok && s.Pane != "" {
-		keys = append(keys, hintFor(mk.Peek, m.peekWord(s)), hintFor(mk.Second, "kill"), hintFor(mk.Rename, ""), hintFor(mk.Switch, ""), hintFor(mk.Park, m.parkWord(s)))
+		keys = append(keys, hintFor(mk.Peek, "chat"), hintFor(mk.Second, "kill"), hintFor(mk.Rename, ""), hintFor(mk.Switch, ""), hintFor(mk.Park, m.parkWord(s)))
 	}
 	return append(keys, hintFor(mk.New, ""), hintFor(mk.Ships, ""), hintFor(mk.Stoke, "stoker"))
 }
@@ -627,9 +627,9 @@ func (m Model) opened(s sample.Session, w int) []string {
 // presses each, in columns of the row.
 func (m Model) openedKeys(s sample.Session, w int) (string, []span) {
 	mk := m.keys.main
-	hs := []hint{hintFor(mk.Open, "")}
+	hs := []hint{hintFor(mk.Open, "chat")}
 	if s.Pane != "" {
-		hs = []hint{hintFor(mk.Peek, m.peekWord(s)), hintFor(mk.Switch, ""), hs[0]}
+		hs = []hint{hintFor(mk.Peek, "chat"), hintFor(mk.Switch, ""), hs[0]}
 	}
 	keys, spans := m.hintRow(hs, 2)
 	keys += " "
@@ -850,15 +850,12 @@ func (m Model) sessionDetail(s sample.Session, w, said int) ([]string, bool) {
 }
 
 // detailKeys are the keys under a session's detail, and where a tap
-// presses each, in columns of the pane.
+// presses each, in columns of the pane. A session with a pane shows its
+// chat in place of the detail.
 func (m Model) detailKeys(s sample.Session) (string, []span) {
-	mk := m.keys.main
 	var hs []hint
-	if s.Pane != "" {
-		hs = append(hs, hintFor(mk.Peek, m.peekWord(s)), hintFor(mk.Open, "open it"), hintFor(mk.Switch, "switch agent"))
-	}
 	if s.Age() == "stale" {
-		hs = append(hs, hintFor(mk.Second, "end it"))
+		hs = append(hs, hintFor(m.keys.main.Second, "end it"))
 	}
 	keys, spans := m.hintRow(hs, 3)
 	return " " + keys, shift(spans, 1)

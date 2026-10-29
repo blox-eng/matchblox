@@ -271,10 +271,10 @@ func TestSwitchEscSendsNothing(t *testing.T) {
 	}
 }
 
-// A phone has no A key to hand: the opened row, and the detail beside the
-// list, carry A switch, and a tap on it opens the form.
+// A phone has no A key to hand: the opened row carries A switch, and a
+// tap on it opens the form. Beside the list a desk shows the chat.
 func TestATapOnSwitchOpensTheForm(t *testing.T) {
-	for _, w := range []int{50, 120} {
+	for _, w := range []int{50} {
 		st := lifeState()
 		st.Queue = nil
 		m, _ := loadedWith(t, w, st)

@@ -70,28 +70,23 @@ func TestHistoryWithAFlatSeries(t *testing.T) {
 }
 
 // TestProgressShowsWhereThePersonLooks: the bar an agent reported shows
-// under its opened row on a phone, on its desk row, and with its step in
-// the detail.
+// under its opened row on a phone and on its desk row.
 func TestProgressShowsWhereThePersonLooks(t *testing.T) {
 	m, _ := loadedWith(t, 50, queueState())
 	if out := screen(m); !strings.Contains(out, "▰▰▰▰▱ plan 75%") {
 		t.Fatalf("the opened row has no plan:\n%s", out)
 	}
-	m, _ = loadedWith(t, 132, queueState())
-	out := screen(m)
+	m, _ = loadedWith(t, 200, queueState())
 	// On a desk row an action that is due (! compact) holds the plan
 	// column; the bar shows there when nothing is due.
-	if l := rowOf(m.render(), "app-feature"); !strings.Contains(l, "! compact") || strings.Contains(listOf(l, 132), "75%") {
+	if l := rowOf(m.render(), "app-feature"); !strings.Contains(l, "! compact") || strings.Contains(listOf(l, 200), "75%") {
 		t.Fatalf("the due action did not win the plan column: %q", l)
-	}
-	if !strings.Contains(out, "plan     ▰▰▰▰▰▰▰▰▱▱ 75%  wiring the console") {
-		t.Fatalf("the detail has no plan:\n%s", out)
 	}
 	st := queueState()
 	for i := range st.Sessions {
 		st.Sessions[i].Do = ""
 	}
-	idle, _ := loadedWith(t, 132, st)
+	idle, _ := loadedWith(t, 200, st)
 	if l := rowOf(idle.render(), "app-feature"); !strings.Contains(l, "▰▰▰▰▱ 75%") {
 		t.Fatalf("with nothing due the row has no plan: %q", l)
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
@@ -614,5 +615,127 @@ func TestAPasteTouchesTheStokersRest(t *testing.T) {
 	drain(cmd)
 	if next.(Model).touched.IsZero() || !slices.ContainsFunc(f.acts(), func(a proto.Act) bool { return a.RecID == "stoker:touch" }) {
 		t.Fatalf("acts %+v", f.acts())
+	}
+}
+
+// demoSized is the demo machine at w by h, the selected session's screen
+// a question with three options.
+func demoSized(t *testing.T, w, h int) Model {
+	t.Helper()
+	m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	next, _ = next.Update(stateMsg(screensState(t)))
+	nm := next.(Model)
+	nm.splashDone = true
+	next, _ = nm.Update(screenMsg{Pane: nm.watching, At: demoAt, Text: askScreen})
+	return next.(Model)
+}
+
+// askLast is the last line of askScreen.
+const askLast = "Enter to select · ↑/↓ to navigate · Esc to cancel"
+
+// sides are the lines of a frame cut at the list's edge: the list, and
+// what is right of its hairline.
+func sides(sc drawn, w int) (left, right []string) {
+	for _, l := range sc.lines {
+		plain := ansi.Strip(l)
+		left = append(left, ansi.Cut(plain, 0, sc.listW))
+		right = append(right, ansi.Cut(plain, sc.listW+1, w))
+	}
+	return left, right
+}
+
+func TestWideStacksStatsLeft(t *testing.T) {
+	m := demoSized(t, 200, 50)
+	sc := m.draw(200)
+	if sc.listW > 200*2/5 {
+		t.Fatalf("the left column is %d of 200 columns", sc.listW)
+	}
+	if sc.dockAt >= 0 {
+		t.Fatal("the dock is drawn on a desk")
+	}
+	left, right := sides(sc, 200)
+	at := map[string]int{}
+	for y, l := range left {
+		for _, title := range []string{"SESSIONS", "USAGE", "MACHINE"} {
+			if _, seen := at[title]; !seen && strings.Contains(l, title) {
+				at[title] = y
+			}
+		}
+	}
+	if len(at) != 3 || at["SESSIONS"] >= at["USAGE"] || at["USAGE"] >= at["MACHINE"] {
+		t.Fatalf("titles at %v:\n%s", at, strings.Join(left, "\n"))
+	}
+	if !slices.ContainsFunc(right, func(l string) bool { return strings.Contains(l, askLast) }) {
+		t.Fatalf("the right side has no screen:\n%s", strings.Join(right, "\n"))
+	}
+}
+
+func TestMediumSplitsListAndChat(t *testing.T) {
+	m := demoSized(t, 86, 30)
+	sc := m.draw(86)
+	if sc.listW != (86-1)/2 {
+		t.Fatalf("the list is %d of 86 columns", sc.listW)
+	}
+	if sc.dockAt < 0 {
+		t.Fatal("no dock on an opened phone")
+	}
+	_, right := sides(sc, 86)
+	if !slices.ContainsFunc(right, func(l string) bool { return strings.Contains(l, "Esc to") }) {
+		t.Fatalf("the right half has no screen:\n%s", strings.Join(right, "\n"))
+	}
+}
+
+func TestNarrowSwapsToChat(t *testing.T) {
+	list := demoSized(t, 44, 31)
+	m := pressKeys(t, list, "enter")
+	sc := m.draw(44)
+	if got := strings.TrimSpace(ansi.Strip(sc.lines[0])); got != "‹ Sessions · spark-docs · done" {
+		t.Fatalf("title row %q", got)
+	}
+	out := ansi.Strip(strings.Join(sc.lines, "\n"))
+	if len(sc.lines) != 31 || strings.Contains(out, "WAITS FOR YOU") || !strings.Contains(out, "Esc to") {
+		t.Fatalf("not the chat alone, %d lines:\n%s", len(sc.lines), out)
+	}
+	next, _ := m.Update(tea.MouseClickMsg(tea.Mouse{X: 3, Y: 0, Button: tea.MouseLeft}))
+	if m = next.(Model); m.chatKeys || screen(m) != screen(list) {
+		t.Fatalf("a tap on ‹ Sessions: chatKeys %v, not the list as before:\n%s", m.chatKeys, screen(m))
+	}
+	tall := pressKeys(t, demoSized(t, 44, 50), "enter")
+	next, _ = tall.Update(tea.MouseClickMsg(tea.Mouse{X: 3, Y: 0, Button: tea.MouseLeft}))
+	if sc := next.(Model).draw(44); sc.dockAt < 0 {
+		t.Fatalf("no dock under the list:\n%s", screen(next))
+	}
+}
+
+func TestChatFrameShowsWhoHasKeys(t *testing.T) {
+	titleInk := func(m Model) string {
+		t.Helper()
+		sc := m.draw(m.width)
+		s, _ := m.selectedSession()
+		x := 0
+		for _, sp := range parsed(t, m.render())[sc.bodyTop] {
+			if x > sc.listW && strings.Contains(sp.Text, s.Name) {
+				return sp.FG
+			}
+			x += lipgloss.Width(sp.Text)
+		}
+		t.Fatalf("no title on the chat:\n%s", screen(m))
+		return ""
+	}
+	m := pressKeys(t, demoSized(t, 132, 32), "enter")
+	if ink := titleInk(m); ink != "accent" {
+		t.Fatalf("with the keys, the chat's title is %q", ink)
+	}
+	if ink := titleInk(pressKeys(t, m, "ctrl+]")); ink == "accent" {
+		t.Fatal("without the keys, the chat's title is in the accent")
+	}
+}
+
+func TestAGoneScreenSaysTheSessionEnded(t *testing.T) {
+	m, _ := inChat(t)
+	next, _ := m.Update(screenMsg{Pane: "%1", Gone: true})
+	if m = next.(Model); m.chatKeys || m.flash != "That session ended." {
+		t.Fatalf("chatKeys %v, flash %q", m.chatKeys, m.flash)
 	}
 }

@@ -84,15 +84,6 @@ func (m Model) peekTarget() (pane, why string) {
 	return s.Pane, ""
 }
 
-// peekWord is the key line's word for `a` on a session: answer one that
-// waits, message any other.
-func (m Model) peekWord(s sample.Session) string {
-	if _, waits := m.waitOf(s); waits {
-		return "answer"
-	}
-	return "message"
-}
-
 func (m *Model) openPeek(pane string) {
 	m.peek, m.flash = &peek{pane: pane}, ""
 	if s, ok := m.sessionIn(pane); ok {

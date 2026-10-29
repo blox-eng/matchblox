@@ -130,19 +130,19 @@ func loaded(t *testing.T, width int) Model {
 }
 
 func TestViewFitsWidth(t *testing.T) {
-	for _, w := range []int{80, 100, 160} {
-		out := loaded(t, w).render()
+	for _, w := range []int{80, 100, 200} {
+		m := loaded(t, w)
+		out := m.render()
 		for i, line := range strings.Split(out, "\n") {
 			if lw := lipgloss.Width(line); lw > w {
 				t.Fatalf("width %d: line %d is %d wide: %q", w, i, lw, line)
 			}
 		}
 		out = ansi.Strip(out)
-		wants := []string{"app-feature", "app-review", "fresh", "1 without an agent: notes:1.1 zsh"}
+		s, _ := m.selectedSession()
+		wants := []string{"app-feature", "app-review", "fresh", "1 without an agent: notes:1.1 zsh", m.chatTitle(s)} // the chat of the selected one
 		if w >= 120 {
 			wants = append(wants, "! compact", "▲ clear") // the desk's plan column
-		} else {
-			wants = append(wants, "why      compact:") // the detail of the selected one
 		}
 		for _, want := range wants {
 			if !strings.Contains(out, want) {

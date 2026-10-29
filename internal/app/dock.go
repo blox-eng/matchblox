@@ -143,6 +143,79 @@ func (m Model) dock(w, rows int) docked {
 	return d
 }
 
+// stokerPanelRow marks the stoker's panel in a desk's left column: a tap
+// there opens its tab.
+const stokerPanelRow = -4
+
+// leftColumn is Sessions on a desk, h lines of w columns: the list, and
+// under it usage, the machine and the stoker, each below a hairline. The
+// stoker is there while it claims the dock, in the machine's place when
+// the rows are short, or when the list leaves it room. The panels take
+// their fewest lines and grow into the rows the list leaves free; when
+// they would leave a long list less than a third of the rows they fold,
+// and the Machine tab has it all. All: they show all they have.
+func (m Model) leftColumn(b body, w, h int) (col body, all bool) {
+	least, most := map[int][]string{}, map[int][]string{}
+	for p := range panels {
+		least[p], most[p] = m.panel(p, w, "")
+	}
+	height := func(ps []int) int {
+		n := 0
+		for _, p := range ps {
+			n += 1 + len(least[p])
+		}
+		return n
+	}
+	every := []int{panelUsage, panelMachine, panelStoker}
+	var tries [][]int
+	switch {
+	case m.stokerClaims():
+		tries = [][]int{every, {panelUsage, panelStoker}}
+	case h-len(b.lines) >= height(every):
+		tries = [][]int{every}
+	default:
+		tries = [][]int{{panelUsage, panelMachine}}
+	}
+	var set []int
+	for _, ps := range tries {
+		if height(ps) <= h-min(len(b.lines), h/3) {
+			set = ps
+			break
+		}
+	}
+	if set == nil {
+		return windowed(b, h, m.rowIndex()), false
+	}
+	spare := max(h-len(b.lines)-height(set), 0)
+	all = len(set) == len(every)
+	var stats body
+	for _, p := range set {
+		lines, grow := least[p], len(most[p])-len(least[p])
+		switch {
+		case grow <= spare:
+			lines, spare = most[p], spare-grow
+		case p != panelUsage: // usage shows whole or at its fewest, never cut
+			lines, spare = most[p][:len(least[p])+spare], 0
+			all = false
+		default:
+			all = false
+		}
+		row := -1
+		if p == panelStoker {
+			row = stokerPanelRow
+		}
+		stats.add(row, m.st.hair.Render(strings.Repeat("─", w)))
+		stats.add(row, lines...)
+	}
+	list := windowed(b, h-len(stats.lines), m.rowIndex())
+	col = body{lines: slices.Clone(list.lines), rows: slices.Clone(list.rows)}
+	for len(col.lines) < h-len(stats.lines) {
+		col.add(-1, "")
+	}
+	col.lines, col.rows = append(col.lines, stats.lines...), append(col.rows, stats.rows...)
+	return col, all
+}
+
 // dockToggle is where the phone dock's switch sits on its first line.
 func (m Model) dockToggle(w int) (x0, x1 int) {
 	word := panelWords[(m.dockShows()+1)%panels]
