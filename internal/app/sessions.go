@@ -753,7 +753,18 @@ func (m Model) detailLines(w, rows int) ([]string, bool) {
 		for _, l := range wrapPlain(tilde(r.Evidence), w-2) {
 			out = append(out, " "+st.muted.Render(l))
 		}
-		return append(append(out, ""), m.recActions(r, w)...), false
+		out = append(append(out, ""), m.recActions(r, w)...)
+		if mark, said := m.recOutcome(r); mark != "" { // the row cuts it when the list is narrow
+			out = append(out, "")
+			for i, l := range wrapPlain(said, w-4) {
+				lead := "   "
+				if i == 0 {
+					lead = " " + mark
+				}
+				out = append(out, lead+st.text.Render(l))
+			}
+		}
+		return out, false
 	}
 	if g, ok := m.selectedGhost(); ok {
 		return m.ghostDetail(g, w), false

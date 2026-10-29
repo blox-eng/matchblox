@@ -17,7 +17,7 @@
  RECOMMENDATIONS · 7 │                                                            │
  ▲ The week runs shor│ › ▏                                                        │
  ○ Clear spark-docs (│                                                            │
- ○ Clear kindle-web (│ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │
+ ↓ 5 more            │ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │
 ─────────────────────│ ways merge-order  priority  release-train  triage          │
  USAGE               ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
  ✻ Claude        5h   ▰▰▰ 84%  · Fri 01:…│

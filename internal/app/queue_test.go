@@ -658,12 +658,11 @@ func TestAnEstimatedRowShowsWhatTheAgentAsked(t *testing.T) {
 	st := queueState()
 	q := "Should a refresh also rotate the token?"
 	st.Queue[1].State, st.Queue[1].LastLine = queue.StateQuestion, q
-	for _, w := range []int{44} {
-		m, _ := loadedWith(t, w, st)
-		next := selectPane(t, m, "%2")
-		if out := strings.Join(strings.Fields(ansi.Strip(next.(Model).render())), " "); !strings.Contains(out, q) {
-			t.Fatalf("width %d: the session lacks the question:\n%s", w, ansi.Strip(next.(Model).render()))
-		}
+	const w = 44
+	m, _ := loadedWith(t, w, st)
+	next := selectPane(t, m, "%2")
+	if out := strings.Join(strings.Fields(ansi.Strip(next.(Model).render())), " "); !strings.Contains(out, q) {
+		t.Fatalf("width %d: the session lacks the question:\n%s", w, ansi.Strip(next.(Model).render()))
 	}
 }
 

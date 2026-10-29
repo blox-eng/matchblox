@@ -340,6 +340,15 @@ func windowed(b body, room, sel int) body {
 	if len(b.lines) <= room {
 		return b
 	}
+	start := windowStart(b, room, sel)
+	return body{lines: b.lines[start : start+room], rows: b.rows[start : start+room]}
+}
+
+// windowStart is the first line of b that windowed shows.
+func windowStart(b body, room, sel int) int {
+	if len(b.lines) <= room {
+		return 0
+	}
 	first, last := -1, -1
 	for i, r := range b.rows {
 		if r == sel && r >= 0 {
@@ -356,7 +365,7 @@ func windowed(b body, room, sel int) body {
 	if first >= 0 && first < start {
 		start = max(first-1, 0)
 	}
-	return body{lines: b.lines[start : start+room], rows: b.rows[start : start+room]}
+	return start
 }
 
 // header is one line: the mark, the name and the host on the left; who

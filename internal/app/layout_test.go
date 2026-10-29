@@ -173,43 +173,43 @@ func tap(m tea.Model, x, y int) (tea.Model, tea.Cmd) {
 	return m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
 }
 
+// On a desk; a phone's tap opens the chat (TestATapOnAPhoneRowOpensItsChat).
 func TestTapSelectsThenActs(t *testing.T) {
-	for _, w := range []int{50, 100} {
-		m, f := loadedWith(t, w, queueState())
-		var ran []string
-		m.opt.Run = func(argv []string) error { ran = argv; return nil }
+	const w = 100
+	m, f := loadedWith(t, w, queueState())
+	var ran []string
+	m.opt.Run = func(argv []string) error { ran = argv; return nil }
 
-		// A session that does not wait: the first tap selects it, a tap on
-		// it selected opens the peek to message it. Nothing runs.
-		next, cmd := tap(m, 5, sessLine(t, m, "tools"))
-		drain(cmd)
-		if len(f.acts()) != 0 || ran != nil || next.(Model).peek != nil {
-			t.Fatalf("width %d: the first tap acted", w)
-		}
-		if it, _ := next.(Model).selectedSession(); it.Pane != "%3" {
-			t.Fatalf("width %d: selected %q, want %%3", w, it.Pane)
-		}
-		next, cmd = tap(next, 5, sessLine(t, next, "tools"))
-		if p := next.(Model).peek; p == nil || p.pane != "%3" || cmd != nil || ran != nil {
-			t.Fatalf("width %d: the second tap did not open the peek on tools: %+v", w, p)
-		}
-		if !strings.Contains(screen(next), "To tools") {
-			t.Fatalf("width %d: the peek is not titled To tools:\n%s", w, screen(next))
-		}
-		if len(f.acts()) != 0 {
-			t.Fatalf("width %d: a tap sent %v to the service", w, f.acts())
-		}
+	// A session that does not wait: the first tap selects it, a tap on
+	// it selected opens the peek to message it. Nothing runs.
+	next, cmd := tap(m, 5, sessLine(t, m, "tools"))
+	drain(cmd)
+	if len(f.acts()) != 0 || ran != nil || next.(Model).peek != nil {
+		t.Fatalf("width %d: the first tap acted", w)
+	}
+	if it, _ := next.(Model).selectedSession(); it.Pane != "%3" {
+		t.Fatalf("width %d: selected %q, want %%3", w, it.Pane)
+	}
+	next, cmd = tap(next, 5, sessLine(t, next, "tools"))
+	if p := next.(Model).peek; p == nil || p.pane != "%3" || cmd != nil || ran != nil {
+		t.Fatalf("width %d: the second tap did not open the peek on tools: %+v", w, p)
+	}
+	if !strings.Contains(screen(next), "To tools") {
+		t.Fatalf("width %d: the peek is not titled To tools:\n%s", w, screen(next))
+	}
+	if len(f.acts()) != 0 {
+		t.Fatalf("width %d: a tap sent %v to the service", w, f.acts())
+	}
 
-		// A session that waits: the first tap selects it, a tap on it
-		// selected opens the answer peek.
-		next, _ = tap(m, 5, sessLine(t, m, "app-review"))
-		if p := next.(Model).peek; p != nil {
-			t.Fatalf("width %d: the first tap opened the peek", w)
-		}
-		next, _ = tap(next, 5, sessLine(t, next, "app-review"))
-		if p := next.(Model).peek; p == nil || p.pane != "%2" {
-			t.Fatalf("width %d: the second tap did not open the peek: %+v", w, p)
-		}
+	// A session that waits: the first tap selects it, a tap on it
+	// selected opens the answer peek.
+	next, _ = tap(m, 5, sessLine(t, m, "app-review"))
+	if p := next.(Model).peek; p != nil {
+		t.Fatalf("width %d: the first tap opened the peek", w)
+	}
+	next, _ = tap(next, 5, sessLine(t, next, "app-review"))
+	if p := next.(Model).peek; p == nil || p.pane != "%2" {
+		t.Fatalf("width %d: the second tap did not open the peek: %+v", w, p)
 	}
 }
 
@@ -345,10 +345,11 @@ func TestNarrowScrollsToTheSelection(t *testing.T) {
 	}
 }
 
-// TestFirstTapOnTheSelectedRowOnlyShows: the default selection is not a
-// tap; the step shows before a tap runs it, and a key in between disarms.
+// TestFirstTapOnTheSelectedRowOnlyShows: on a desk the default selection
+// is not a tap; the step shows before a tap runs it, and a key in between
+// disarms.
 func TestFirstTapOnTheSelectedRowOnlyShows(t *testing.T) {
-	m, _ := loadedWith(t, 50, queueState())
+	m, _ := loadedWith(t, 100, queueState())
 	var ran []string
 	m.opt.Run = func(argv []string) error { ran = argv; return nil }
 	y := sessLine(t, m, "app-feature")

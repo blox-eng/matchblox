@@ -33,18 +33,18 @@
  MACHINE                                                             16 cores │
  cpu  ▁ 0%   load 6.2                                                         │
  mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB                                                    │
- disk ▰▰▰▰▰▰▱▱ 71% of 1 TB                                                    │⏺ The refresh endpoint is in and its tests pass.
+ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB                                                    │ ⏺ The refresh endpoint is in and its tests pass.
  runs 5 claude · 1 codex · 1 opencode                                         │
-                                                                              │────────────────────────────────────────────────────────────────────────────────
- PID      COMMAND           CPU    MEM     OWNER                              │ ☐ Rotate
+                                                                              │ ────────────────────────────────────────────────────────────────────────────────
+ PID      COMMAND           CPU    MEM     OWNER                              │  ☐ Rotate
  1        systemd             0%   9.8M    system                             │
- 1200     claude              0%   9.8M    pane %1 · hearth-api               │Should a refresh also rotate the token?
+ 1200     claude              0%   9.8M    pane %1 · hearth-api               │ Should a refresh also rotate the token?
  1300     zsh                 0%   9.8M    pane %2 · flint-auth               │
- 1310     claude              0%   9.8M    pane %2 · flint-auth               │❯ 1. Rotate it
- 1400     claude              0%   9.8M    pane %3 · spark-docs               │     The old one stops at once.
- 1500     zsh                 0%   9.8M    pane %4                            │  2. Rotate, keep the old one a minute
-──────────────────────────────────────────────────────────────────────────────│  3. Type something.
+ 1310     claude              0%   9.8M    pane %2 · flint-auth               │ ❯ 1. Rotate it
+ 1400     claude              0%   9.8M    pane %3 · spark-docs               │      The old one stops at once.
+ 1500     zsh                 0%   9.8M    pane %4                            │   2. Rotate, keep the old one a minute
+──────────────────────────────────────────────────────────────────────────────│   3. Type something.
  STOKER                                                                   off │
- off · f starts it · n starts a night                                         │Enter to select · ↑/↓ to navigate · Esc to cancel
+ off · f starts it · n starts a night                                         │ Enter to select · ↑/↓ to navigate · Esc to cancel
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  keys go to flint-auth · ctrl+] back · ctrl+o into tmux

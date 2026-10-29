@@ -143,6 +143,28 @@ func (m Model) dock(w, rows int) docked {
 	return d
 }
 
+// listAbove is the part of the list that fits in h lines of w columns. When
+// rows are cut below, its last line says how many: the window keeps a
+// line to spare under the selection.
+func (m Model) listAbove(b body, w, h int) body {
+	vis := windowed(b, h, m.rowIndex())
+	col := body{lines: slices.Clone(vis.lines), rows: slices.Clone(vis.rows)}
+	if h <= 0 || len(b.lines) <= h {
+		return col
+	}
+	below := map[int]bool{}
+	for _, r := range b.rows[windowStart(b, h, m.rowIndex())+h-1:] {
+		if r >= 0 {
+			below[r] = true
+		}
+	}
+	if len(below) > 0 {
+		col.lines[len(col.lines)-1] = fit(m.st.faint.Render(fmt.Sprintf(" ↓ %d more", len(below))), w)
+		col.rows[len(col.rows)-1] = -1
+	}
+	return col
+}
+
 // stokerPanelRow marks the stoker's panel in a desk's left column: a tap
 // there opens its tab.
 const stokerPanelRow = -4
@@ -151,9 +173,11 @@ const stokerPanelRow = -4
 // under it usage, the machine and the stoker, each below a hairline. The
 // stoker is there while it claims the dock, in the machine's place when
 // the rows are short, or when the list leaves it room. The panels take
-// their fewest lines and grow into the rows the list leaves free; when
-// they would leave a long list less than a third of the rows they fold,
-// and the Machine tab has it all. All: they show all they have.
+// their fewest lines and grow into the rows the list leaves free. They
+// fold as the dock does: when the list does not fit beside them they stay
+// only if it keeps half the rows, the machine first, then all; the Machine
+// tab has it all. A list cut short says how many rows are below it. All:
+// the panels show all they have.
 func (m Model) leftColumn(b body, w, h int) (col body, all bool) {
 	least, most := map[int][]string{}, map[int][]string{}
 	for p := range panels {
@@ -166,25 +190,30 @@ func (m Model) leftColumn(b body, w, h int) (col body, all bool) {
 		}
 		return n
 	}
+	tall := len(b.lines)
+	fits := func(ps []int) bool {
+		n := height(ps)
+		return tall+n <= h || h-tall >= minBlank && h-n >= h/2
+	}
 	every := []int{panelUsage, panelMachine, panelStoker}
 	var tries [][]int
 	switch {
 	case m.stokerClaims():
 		tries = [][]int{every, {panelUsage, panelStoker}}
-	case h-len(b.lines) >= height(every):
+	case tall+height(every) <= h:
 		tries = [][]int{every}
 	default:
-		tries = [][]int{{panelUsage, panelMachine}}
+		tries = [][]int{{panelUsage, panelMachine}, {panelUsage}}
 	}
 	var set []int
 	for _, ps := range tries {
-		if height(ps) <= h-min(len(b.lines), h/3) {
+		if fits(ps) {
 			set = ps
 			break
 		}
 	}
 	if set == nil {
-		return windowed(b, h, m.rowIndex()), false
+		return m.listAbove(b, w, h), false
 	}
 	spare := max(h-len(b.lines)-height(set), 0)
 	all = len(set) == len(every)
@@ -207,8 +236,7 @@ func (m Model) leftColumn(b body, w, h int) (col body, all bool) {
 		stats.add(row, m.st.hair.Render(strings.Repeat("─", w)))
 		stats.add(row, lines...)
 	}
-	list := windowed(b, h-len(stats.lines), m.rowIndex())
-	col = body{lines: slices.Clone(list.lines), rows: slices.Clone(list.rows)}
+	col = m.listAbove(b, w, h-len(stats.lines))
 	for len(col.lines) < h-len(stats.lines) {
 		col.add(-1, "")
 	}

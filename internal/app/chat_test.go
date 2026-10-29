@@ -730,6 +730,74 @@ func TestChatFrameShowsWhoHasKeys(t *testing.T) {
 	if ink := titleInk(pressKeys(t, m, "ctrl+]")); ink == "accent" {
 		t.Fatal("without the keys, the chat's title is in the accent")
 	}
+	edgeInk := func(m Model) string {
+		t.Helper()
+		sc := m.draw(m.width)
+		x := 0
+		for _, sp := range parsed(t, m.render())[sc.bodyTop+1] {
+			if x == sc.listW && strings.HasPrefix(sp.Text, "│") {
+				return sp.FG
+			}
+			x += lipgloss.Width(sp.Text)
+		}
+		t.Fatalf("no edge at column %d:\n%s", sc.listW, screen(m))
+		return ""
+	}
+	if ink := edgeInk(m); ink != "accent" {
+		t.Fatalf("with the keys, the chat's edge is %q", ink)
+	}
+	if ink := edgeInk(pressKeys(t, m, "ctrl+]")); ink != "hair" {
+		t.Fatalf("without the keys, the chat's edge is %q", ink)
+	}
+}
+
+// A step that asks to confirm shows over a phone's chat, so the next key
+// never answers what the builder cannot see.
+func TestAPhoneChatShowsWhatAsksToConfirm(t *testing.T) {
+	m := pressKeys(t, demoSized(t, 44, 31), "enter", "ctrl+o")
+	if out := screen(m); m.pending == nil || !strings.Contains(out, "tmux switch-client") || !strings.Contains(out, "⏎ run") {
+		t.Fatalf("no jump box over the chat:\n%s", out)
+	}
+	st := nightState()
+	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a"}, {PID: 2, Pane: "%2", Name: "b"}}
+	night, _ := loadedWith(t, 44, st)
+	night = pressKeys(t, night, "enter", "x")
+	if out := screen(night); night.held == nil || !strings.Contains(out, "The stoker is on. Take over?") {
+		t.Fatalf("no take-over box over the chat:\n%s", out)
+	}
+}
+
+func TestAPhoneChatFitsAShortScreen(t *testing.T) {
+	m := pressKeys(t, demoSized(t, 44, 3), "enter")
+	if n := len(strings.Split(m.render(), "\n")); !m.chatKeys || n > 3 {
+		t.Fatalf("chatKeys %v, %d lines on a 3-line screen", m.chatKeys, n)
+	}
+}
+
+func TestATapOnAPhoneRowOpensItsChat(t *testing.T) {
+	m := demoSized(t, 44, 31)
+	next, _ := tap(m, 5, sessLine(t, m, "flint-auth"))
+	m = next.(Model)
+	if s, _ := m.selectedSession(); !m.chatKeys || s.Name != "flint-auth" {
+		t.Fatalf("chatKeys %v on %q", m.chatKeys, s.Name)
+	}
+	if got := strings.TrimSpace(ansi.Strip(m.draw(44).lines[0])); got != "‹ Sessions · flint-auth · asks" {
+		t.Fatalf("title row %q", got)
+	}
+}
+
+func TestACutListSaysHowManyAreBelow(t *testing.T) {
+	m := demoSized(t, 132, 32)
+	sc := m.draw(132)
+	left, _ := sides(sc, 132)
+	if !slices.ContainsFunc(left, func(l string) bool {
+		return strings.HasPrefix(strings.TrimSpace(l), "↓ ") && strings.Contains(l, " more")
+	}) {
+		t.Fatalf("the cut list does not say what is below:\n%s", strings.Join(left, "\n"))
+	}
+	if !slices.ContainsFunc(left, func(l string) bool { return strings.Contains(l, "RECOMMENDATIONS") }) {
+		t.Fatalf("no recommendations on a desk:\n%s", strings.Join(left, "\n"))
+	}
 }
 
 func TestAGoneScreenSaysTheSessionEnded(t *testing.T) {

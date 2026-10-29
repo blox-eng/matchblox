@@ -136,7 +136,11 @@ func (m Model) chatPane(s sample.Session, w, h int) []string {
 	if m.chatKeys {
 		ink = m.st.accent
 	}
-	return append([]string{fit(" "+ink.Render(m.chatTitle(s)), w)}, m.screenLines(w, h-1)...)
+	lines := []string{fit(" "+ink.Render(m.chatTitle(s)), w)}
+	for _, l := range m.screenLines(w-1, h-1) {
+		lines = append(lines, " "+l)
+	}
+	return lines
 }
 
 // screenLines are chatLines, each closed so the pane's styles stop at its
@@ -150,16 +154,21 @@ func (m Model) screenLines(w, h int) []string {
 }
 
 // chatScreen is the chat on an upright phone: the whole screen under a
-// title row that goes back to Sessions, over the key line.
+// title row that goes back to Sessions, over the key line, with a step
+// that asks to confirm on top. Its title, hairline and key line always
+// show: a screen under 4 rows has no room for the agent's lines.
 func (m Model) chatScreen(w int) drawn {
 	st := m.st
 	s, _ := m.selectedSession()
 	title := " " + st.accent.Render("‹ Sessions") + st.muted.Render(" · ") + st.accent.Render(m.chatTitle(s))
 	sc := drawn{lines: []string{fit(title, w)}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true}
-	sc.lines = append(sc.lines, m.screenLines(w, max(m.height-3, 1))...)
+	sc.lines = append(sc.lines, m.screenLines(w, max(m.height-3, 0))...)
 	keys, spans := m.keyLine(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, spans
 	sc.lines = append(sc.lines, st.hair.Render(strings.Repeat("─", w)), keys)
+	if m.consenting() {
+		m.overlayConsent(&sc, w)
+	}
 	return sc
 }
 
@@ -397,7 +406,8 @@ func (m Model) keyAnswered(r proto.Result) (tea.Model, tea.Cmd) {
 }
 
 // keepChat gives the keys back to Sessions when the chat no longer shows
-// the session it had, and drops the keys of an agent that left.
+// the session it had (a chat opened just now on another session keeps
+// them), and drops the keys of an agent that left.
 func (m Model) keepChat(was Model) Model {
 	if m.chatKeys {
 		s, ok := m.selectedSession()
@@ -405,7 +415,7 @@ func (m Model) keepChat(was Model) Model {
 		switch {
 		case ok && s.Pane != "" && s.Pane == before.Pane && m.screen.Pane == s.Pane && m.screen.Gone:
 			m.chatKeys, m.flash = false, "That session ended." // a phone shows the list again: the key line says why
-		case !ok || s.Pane == "" || s.Pane != before.Pane:
+		case !ok || s.Pane == "" || was.chatKeys && s.Pane != before.Pane:
 			m.chatKeys = false
 		}
 	}

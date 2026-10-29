@@ -13,20 +13,20 @@
  + start a new session                              │
                                                     │
  1 without an agent: shell:1.1 zsh                  │
+                                                    │
+ RECOMMENDATIONS · 7 · h hides                      │
+ ▲ The week runs short: compact spark-docs          │ ⏺ The refresh endpoint is in and its tests pass.
+ ○ Clear spark-docs (%3)                            │
+ ○ Clear kindle-web (%5)                            │ ──────────────────────────────────────────────────────────────────────────────
+ ↓ 4 more                                           │  ☐ Rotate
 ────────────────────────────────────────────────────│
- USAGE                                              │
- ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20     │⏺ The refresh endpoint is in and its tests pass.
-                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00     │
-                 out Fri ~21:00                     │───────────────────────────────────────────────────────────────────────────────
- · Google login  not measured · OpenCode keeps no l…│ ☐ Rotate
- ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59         │
-                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00     │Should a refresh also rotate the token?
-                 lasts the week                     │
-────────────────────────────────────────────────────│❯ 1. Rotate it
- MACHINE                                   16 cores │     The old one stops at once.
- cpu  ▁ 0%   load 6.2                               │  2. Rotate, keep the old one a minute
- mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB                          │  3. Type something.
- disk ▰▰▰▰▰▰▱▱ 71% of 1 TB                          │
- runs 5 claude · 1 codex · 1 opencode               │Enter to select · ↑/↓ to navigate · Esc to cancel
+ USAGE                                              │ Should a refresh also rotate the token?
+ ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20     │
+                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00     │ ❯ 1. Rotate it
+                 out Fri ~21:00                     │      The old one stops at once.
+ · Google login  not measured · OpenCode keeps no l…│   2. Rotate, keep the old one a minute
+ ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59         │   3. Type something.
+                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00     │
+                 lasts the week                     │ Enter to select · ↑/↓ to navigate · Esc to cancel
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  keys go to flint-auth · ctrl+] back · ctrl+o into tmux

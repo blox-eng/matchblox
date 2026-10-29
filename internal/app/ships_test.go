@@ -240,32 +240,31 @@ func TestTheOpenedRowListsEveryShipOfTheSession(t *testing.T) {
 		proto.Ship{Number: 4547, Title: "Typos", Kind: shipWaits, Note: "green · waits for your merge", Stage: 2},
 		proto.Ship{Number: 4546, Title: "Links", Kind: shipStuck, Note: "conflicts with main", Stage: 1})
 	want := []string{"#4546 ●━✕┄○┄○┄○", "#4547 ●━●━◉┄○┄○", "#4548 ●━◉┄○┄○┄○", "+2 more · p ships"}
-	for _, w := range []int{44} {
-		f := newFake()
-		m := New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return demoAt }})
-		next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: 60})
-		next, _ = next.Update(stateMsg(st))
-		out := ansi.Strip(next.(Model).render())
-		at := -1
-		for _, s := range want {
-			i := strings.Index(out, s)
-			if i < 0 || i < at {
-				t.Fatalf("width %d: %q is missing or out of order:\n%s", w, s, out)
-			}
-			at = i
+	const w = 44
+	f := newFake()
+	m := New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return demoAt }})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: 60})
+	next, _ = next.Update(stateMsg(st))
+	out := ansi.Strip(next.(Model).render())
+	at := -1
+	for _, s := range want {
+		i := strings.Index(out, s)
+		if i < 0 || i < at {
+			t.Fatalf("width %d: %q is missing or out of order:\n%s", w, s, out)
 		}
-		nm := next.(Model)
-		for _, s := range nm.snap.Sessions {
-			if s.Name != "spark-docs" {
-				continue
-			}
-			var got []int
-			for _, sh := range nm.shipsOf(s) {
-				got = append(got, sh.Number)
-			}
-			if !slices.Equal(got, []int{4546, 4547, 4548, 4549, 4540}) {
-				t.Fatalf("spark-docs's ships in order: %v", got)
-			}
+		at = i
+	}
+	nm := next.(Model)
+	for _, s := range nm.snap.Sessions {
+		if s.Name != "spark-docs" {
+			continue
+		}
+		var got []int
+		for _, sh := range nm.shipsOf(s) {
+			got = append(got, sh.Number)
+		}
+		if !slices.Equal(got, []int{4546, 4547, 4548, 4549, 4540}) {
+			t.Fatalf("spark-docs's ships in order: %v", got)
 		}
 	}
 }
@@ -344,15 +343,14 @@ func TestManyShipsKeepTheSessionsKeys(t *testing.T) {
 		more = append(more, proto.Ship{Number: 4600 + i, Title: "Page " + strconv.Itoa(i), Kind: shipRunning, Note: "CI", Stage: 1})
 	}
 	st := withShips(screensState(t), "spark-docs", more...)
-	for _, size := range [][2]int{{44, 16}} {
-		sc, lines := drawnAt(t, st, size[0], size[1])
-		out := strings.Join(lines, "\n")
-		if !strings.Contains(out, "+3 more") || strings.Contains(out, "#4603") {
-			t.Fatalf("%v: not three ships and +3 more:\n%s", size, out)
-		}
-		if sc.actKeysAt <= 0 || !strings.Contains(lines[sc.actKeysAt], "⏎ chat") {
-			t.Fatalf("%v: the keys are marked on line %d:\n%s", size, sc.actKeysAt, out)
-		}
+	size := [2]int{44, 16}
+	sc, lines := drawnAt(t, st, size[0], size[1])
+	out := strings.Join(lines, "\n")
+	if !strings.Contains(out, "+3 more") || strings.Contains(out, "#4603") {
+		t.Fatalf("%v: not three ships and +3 more:\n%s", size, out)
+	}
+	if sc.actKeysAt <= 0 || !strings.Contains(lines[sc.actKeysAt], "⏎ chat") {
+		t.Fatalf("%v: the keys are marked on line %d:\n%s", size, sc.actKeysAt, out)
 	}
 }
 

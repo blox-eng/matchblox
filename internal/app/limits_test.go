@@ -162,7 +162,7 @@ func TestARecommendationShowsItsResult(t *testing.T) {
 		Primary:  &advice.Action{Label: "jump to the session", Nav: true, Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}},
 		Second: &advice.Action{Label: "send /compact", Destructive: true, Steps: [][]string{{"tmux", "send-keys", "-t", "%1", "/compact", "Enter"}},
 			Guards: []advice.Guard{{IdlePane: "%1"}}}}}
-	m, f := loadedWith(t, 200, st)
+	m, f := loadedWith(t, 100, st)
 	var next tea.Model = m
 	next = selectRec(t, next, "wk")
 	next, _ = key(next, "x")
@@ -196,7 +196,7 @@ func TestARecommendationShowsItsResult(t *testing.T) {
 	gone.Recommendations = nil
 	next, _ = next.Update(stateMsg(gone))
 	next, _ = next.Update(stateMsg(st))
-	if out := screen(next); strings.Contains(out, "✗ failed") || !strings.Contains(out, "▲ The week runs out Wed ~19:00") {
+	if out := screen(next); strings.Contains(out, "✗ failed") || !strings.Contains(out, "The week runs out Wed ~19:00") { // its row, or its detail beside a narrow list
 		t.Fatalf("an old result came back with the rec:\n%s", out)
 	}
 }
@@ -228,7 +228,7 @@ func TestAJumpLaterDoesNotRewriteTheRow(t *testing.T) {
 	st := limitsState()
 	st.Recommendations = []advice.Rec{{ID: "wk", Level: "warn", Title: "The week runs out Wed ~19:00: compact app-feature",
 		Primary: &advice.Action{Label: "jump to the session", Nav: true, Steps: [][]string{{"tmux", "switch-client", "-t", "%1"}}}}}
-	m, _ := loadedWith(t, 200, st)
+	m, _ := loadedWith(t, 100, st)
 	var next tea.Model = m
 	next = selectRec(t, next, "wk")
 	next, _ = key(next, "enter")

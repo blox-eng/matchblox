@@ -174,11 +174,8 @@ func (m Model) recsSection(b *body, w int) {
 			lead = st.accent.Render("▌")
 		}
 		line := lead + mark + st.ink(i == sel).Render(tilde(r.Title))
-		if run := m.recRun; run.rec == r.ID && run.out != "" {
-			line = " " + st.accent.Render("✓ ") + st.text.Render(tilde(run.out))
-			if run.failed {
-				line = " " + st.neg.Render("✗ ") + st.text.Render(tilde(run.out))
-			}
+		if mark, out := m.recOutcome(r); mark != "" {
+			line = " " + mark + st.text.Render(out)
 		}
 		if i == sel {
 			line = spread(line, dismissMark(st, m.keys.main.Dismiss)+" ", w)
@@ -191,6 +188,19 @@ func (m Model) recsSection(b *body, w int) {
 	r := m.recs[sel]
 	b.add(-1, wrap(" "+tilde(r.Evidence), w, st.muted.Render)...)
 	b.add(-1, m.recActions(r, w)...)
+}
+
+// recOutcome is what came of the last act on r, and its mark: ✓ it ran,
+// ✗ it did not. Empty when nothing was run on r.
+func (m Model) recOutcome(r advice.Rec) (mark, out string) {
+	run := m.recRun
+	switch {
+	case run.rec != r.ID || run.out == "":
+		return "", ""
+	case run.failed:
+		return m.st.neg.Render("✗ "), tilde(run.out)
+	}
+	return m.st.accent.Render("✓ "), tilde(run.out)
 }
 
 // recActions are the two steps of a recommendation with their keys.
