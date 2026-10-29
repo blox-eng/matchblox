@@ -9,6 +9,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 func keysTest(t *testing.T) (*Service, *[][]string) {
@@ -57,7 +58,7 @@ func TestKeysRefusesWhatIsNotAKey(t *testing.T) {
 		}
 	}
 	s, _ := keysTest(t)
-	if res := s.act(t.Context(), key("C-x")); res.Err != "not sent: C-x is not a key" {
+	if res := s.act(t.Context(), key("C-x")); res.Err != `not sent: "C-x" is not a key` {
 		t.Fatalf("err %q", res.Err)
 	}
 }
@@ -114,5 +115,78 @@ func TestKeysOnlyFromAConsole(t *testing.T) {
 	}
 	if len(*ran) != 0 {
 		t.Fatalf("ran %q", *ran)
+	}
+}
+
+func TestKeysWaitForThePaneAndThenCheckTheAgent(t *testing.T) {
+	s, ran := keysTest(t)
+	release := s.holdPane("%1")
+	done := make(chan proto.Result, 1)
+	go func() { done <- s.act(t.Context(), key("Down")) }()
+	select {
+	case res := <-done:
+		t.Fatalf("a key went past the pane's lock: %+v", res)
+	case <-time.After(50 * time.Millisecond):
+	}
+	s.publish(sample.Snapshot{At: time.Now(), Sessions: []sample.Session{{PID: 43, Pane: "%1", Name: "new", SessionID: "s2", Status: "idle"}}}, func(state.Doc) {})
+	release()
+	if res := <-done; res.Err != "not sent: %1 runs a different agent now" || len(*ran) != 0 {
+		t.Fatalf("res %+v ran %q", res, *ran)
+	}
+}
+
+func TestKeysKeepTheStokerResting(t *testing.T) {
+	s, _, _ := stokerTest(t)
+	s.Now = func() time.Time { return night0.Add(time.Minute) }
+	s.publish(sample.Snapshot{At: night0, Sessions: []sample.Session{{PID: 42, Pane: "%1", Name: "work", SessionID: "s1", Status: "idle"}}}, func(state.Doc) {})
+	if r := s.act(t.Context(), proto.Act{Console: true, RecID: "stoker:rest"}); r.Err != "" {
+		t.Fatal(r.Err)
+	}
+	s.Now = func() time.Time { return night0.Add(2 * time.Minute) }
+	if res := s.act(t.Context(), key("Down")); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if got := s.Stoker.Mode().Touched; !got.Equal(night0.Add(2 * time.Minute)) {
+		t.Fatalf("touched %v", got)
+	}
+}
+
+func TestAKeyFromTheConsoleFreesADrivenPane(t *testing.T) {
+	s, _, _ := guardedRun(t)
+	s.cur.Sessions[0].PID = 42
+	if !denies(t, s, "%1", "gh pr merge 4556") {
+		t.Fatal("the pane is not driven")
+	}
+	if res := s.act(t.Context(), key("Down")); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if denies(t, s, "%1", "gh pr merge 4556") {
+		t.Fatal("the person's key at a console did not free the pane")
+	}
+}
+
+func TestAKeyKicksTheWatchingConsole(t *testing.T) {
+	s, _ := keysTest(t)
+	cl := console(s)
+	cl.screenKick = make(chan struct{}, 1)
+	pane := "%1"
+	cl.watch.Store(&pane)
+	if res := s.act(t.Context(), key("Down")); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	select {
+	case <-cl.screenKick:
+	default:
+		t.Fatal("the watching console was not kicked")
+	}
+}
+
+func TestWatchIsRefusedFromTheStokersServer(t *testing.T) {
+	s, _ := keysTest(t)
+	s.StokerServer = "mbtest"
+	cl := console(s)
+	res := s.watchAct(cl, proto.ClientConsole, proto.Act{From: "%7@mbtest"}, "%1")
+	if res.Err != "keys go only from a console" {
+		t.Fatalf("err %q", res.Err)
 	}
 }

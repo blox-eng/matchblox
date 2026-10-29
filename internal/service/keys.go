@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"unicode"
@@ -28,23 +29,35 @@ func keyStep(pane, text string) ([]string, string) {
 		return panes.Keys(pane, "-l", "--", lit), ""
 	}
 	if !slices.Contains(keyNames, text) {
-		return nil, "not sent: " + text + " is not a key"
+		return nil, fmt.Sprintf("not sent: %q is not a key", cut(text, 20))
 	}
 	return panes.Keys(pane, text), ""
 }
 
+// cut keeps the first n runes of text.
+func cut(text string, n int) string {
+	if r := []rune(text); len(r) > n {
+		return string(r[:n])
+	}
+	return text
+}
+
 // keys sends one key to the agent in pane. The console names the agent it
 // saw, and for Enter the time it saw the screen: a key never lands on a new
-// agent, and Enter never on a question the person did not see.
+// agent, and Enter never on a question the person did not see. The checks
+// run under the pane's lock, so nothing changes between them and the key.
 func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Result {
 	if !s.aConsole(a.Console, a) {
 		return proto.Result{Err: keysOnlyFromConsole}
 	}
+	s.touchStoker(s.now()) // the builder acts: a stoker that rests goes on resting
+	unlock := s.holdPane(pane)
+	defer unlock()
 	x, ok := s.sessionAt(pane)
 	if !ok {
 		return proto.Result{Err: "no agent session in " + pane + " any more"}
 	}
-	if x.PID != a.PID {
+	if a.PID <= 0 || x.PID != a.PID {
 		return proto.Result{Err: "not sent: " + pane + " runs a different agent now"}
 	}
 	step, why := keyStep(pane, a.Text)
@@ -56,9 +69,11 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 			return proto.Result{Err: "not sent: " + x.Name + " asks something new — look again"}
 		}
 	}
-	unlock := s.holdPane(pane)
-	defer unlock()
-	res := s.Actions.Do(ctx, advice.Action{Label: "keys", Steps: [][]string{step}}, "")
+	g := advice.Guard{PID: x.PID, StartTicks: x.Start}
+	res := s.Actions.Do(ctx, advice.Action{Label: "keys", Steps: [][]string{step}, Guards: []advice.Guard{g}}, "")
+	if res.Err == "" && len(res.Ran) > 0 {
+		s.undrive(pane) // the pane's last input is the person's, as with a message
+	}
 	s.kickScreens(pane)
 	return res
 }
