@@ -128,6 +128,9 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	if strings.HasPrefix(a.RecID, focusPrefix) {
 		return s.focus(a) // it moves the consoles; the stoker goes on resting
 	}
+	if pane, ok := strings.CutPrefix(a.RecID, proto.KeysPrefix); ok {
+		return s.keys(ctx, pane, a) // a key twice is twice: no dedupe
+	}
 	// A session the stoker drove speaks for the stoker: what it sends
 	// counts and drives, and it gives no go.
 	agent := s.agentsPane(a)

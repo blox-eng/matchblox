@@ -9,10 +9,19 @@ import (
 
 const watchEvery = 150 * time.Millisecond
 
+const keysOnlyFromConsole = "keys go only from a console"
+
+// aConsole tells if the act comes from a person at a console: not from an
+// agent's pane, nor the stoker's.
+func (s *Service) aConsole(console bool, a proto.Act) bool {
+	_, inAgent := s.sessionAt(a.From)
+	return console && !inAgent && !s.agentsPane(a) && !s.fromStoker(a)
+}
+
 // watchAct sets the pane cl streams; an empty pane stops the stream.
 func (s *Service) watchAct(cl *client, clientKind string, a proto.Act, pane string) proto.Result {
-	if _, inAgent := s.sessionAt(a.From); clientKind != proto.ClientConsole || inAgent || s.agentsPane(a) {
-		return proto.Result{Err: "keys go only from a console"}
+	if !s.aConsole(clientKind == proto.ClientConsole, a) {
+		return proto.Result{Err: keysOnlyFromConsole}
 	}
 	if _, ok := s.sessionAt(pane); pane != "" && !ok {
 		return proto.Result{Err: "no agent session in " + pane + " any more"}

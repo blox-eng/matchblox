@@ -109,6 +109,8 @@ type Act struct {
 	From string `json:"from,omitempty"`
 	// Seen is when the console last saw the screen it acts on.
 	Seen time.Time `json:"seen,omitempty"`
+	// PID is the agent the console saw in the pane a "keys:" act names.
+	PID int `json:"pid,omitempty"`
 	// Console: the act came from a console, a person at the keys. The
 	// service sets it from the hello; it never comes over the wire.
 	Console bool `json:"-"`
@@ -117,6 +119,10 @@ type Act struct {
 // WatchPrefix starts an act that names the pane a console watches; with no
 // pane after it, the console watches none.
 const WatchPrefix = "watch:"
+
+// KeysPrefix starts an act that sends one key to the pane after it. Text is
+// a key name of the keys set, or "lit:" and the text to type.
+const KeysPrefix = "keys:"
 
 // Screen is one capture of the watched pane. Gone: the pane is not there.
 type Screen struct {
