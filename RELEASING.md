@@ -151,6 +151,41 @@ the iPad.
 If either check fails, the island does not ship: `push: relay <status>`
 on the host's Machine tab names the same status.
 
+## iOS TestFlight
+
+The workflow `.github/workflows/ios-release.yml` builds and uploads the
+iPhone/iPad app to TestFlight. Set this up once, then every release is a
+pushed `ios-v*` tag (see [ios/README.md](ios/README.md)).
+
+One-time setup on your Apple Developer account:
+
+1. Register three App IDs and enable the capabilities each needs:
+   - `com.blox.matchblox` — App Groups, Push Notifications, App Attest.
+   - `com.blox.matchblox.island` — App Groups.
+   - `com.blox.matchblox.buzz` — App Groups.
+2. Create the App Group `group.com.blox.matchblox` and attach it to all
+   three App IDs.
+3. Create the App Store Connect app record for `com.blox.matchblox`.
+4. Create an App Store Connect API key with the **Admin** role, and
+   download its `.p8` once (Apple shows it only that one time). Admin,
+   because the build creates provisioning profiles, which App Manager
+   cannot.
+5. In the GitHub repository, add three secrets and one variable:
+   - secret `APP_STORE_CONNECT_KEY_ID` — the key's id.
+   - secret `APP_STORE_CONNECT_ISSUER_ID` — the issuer id.
+   - secret `APP_STORE_CONNECT_KEY_P8` — the `.p8` contents, base64
+     (`base64 -i AuthKey_XXXXXXXXXX.p8 | pbcopy`).
+   - variable `APPLE_TEAM_ID` — your 10-character team id.
+
+The app's entitlements are `development` in the repository, which is right
+for a build from Xcode. The workflow archives the Release configuration,
+which signs `Matchblox/Matchblox.production.entitlements`
+(`aps-environment` and the App Attest environment set to `production`), as
+a TestFlight build needs. Deploy the push relay with **no `APNS_ENV`** so
+it talks to Apple's production service and accepts production App Attest
+keys; otherwise it answers `BadDeviceToken`. This is the same rule as the
+entitlements note under [The push relay's secrets](#the-push-relays-secrets).
+
 ## Homebrew
 
 The Publish job `packages` writes the Homebrew formula of each latest

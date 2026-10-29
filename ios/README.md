@@ -51,6 +51,34 @@ The workflow `.github/workflows/ios.yml` runs on a macOS runner.
 It runs `swift test` on MatchbloxKit. Then it runs `make build`.
 It starts when you change `ios/`, `testdata/pair/` or the workflow.
 
+## Publish to TestFlight
+
+The workflow `.github/workflows/ios-release.yml` builds a signed Release and
+uploads it to TestFlight. It needs no Mac of yours: it runs on GitHub's
+macOS runner, with fastlane and Xcode automatic ("cloud") signing driven by
+an App Store Connect API key. The one-time Apple-side setup (the three App
+IDs, the App Group, the App Store Connect app record, the API key and the
+GitHub secrets) is in [RELEASING.md](../RELEASING.md#ios-testflight).
+
+To cut a release, push a tag:
+
+```sh
+git tag ios-v0.2.0 && git push origin ios-v0.2.0
+```
+
+The tag after `ios-v` is the marketing version (`CFBundleShortVersionString`).
+Or run the workflow by hand from the Actions tab and type a `marketing_version`.
+The build number (`CFBundleVersion`) is the next one after the latest on
+TestFlight, the same for the app and both extensions; the first ever build
+is 1.
+
+A build from Xcode signs the `development` entitlements (push and App
+Attest), which is right for a build you install yourself. The Release
+configuration the workflow archives signs the `production` ones
+(`Matchblox/Matchblox.production.entitlements`), which TestFlight needs.
+The push relay must then run with no `APNS_ENV`, or it answers
+`BadDeviceToken`; see [RELEASING.md](../RELEASING.md#ios-testflight).
+
 ## Check on a device
 
 CI has no Secure Enclave, no camera and no Face ID. Do these checks on a
