@@ -293,10 +293,12 @@ type Model struct {
 	doorAt     int    // its row, for the door after it when it folds
 	previewTop int    // the first line of a door's diff on screen
 	paneSel    int
-	peek       *peek              // the answer peek, over the screen
-	peekSent   map[string]string  // the peek's sends in flight: act id -> the session's name
-	peekQuiet  time.Time          // the peek takes no key until then: it just moved
-	changes    map[paneKey]change // a match change that plays once
+	peek       *peek                           // the answer peek, over the screen
+	lanes      map[laneKey][lanePast]laneState // each session's last two hours; replaced, never written in place
+	laneStart  time.Time                       // the cell boundary lanes is aligned to
+	peekSent   map[string]string               // the peek's sends in flight: act id -> the session's name
+	peekQuiet  time.Time                       // the peek takes no key until then: it just moved
+	changes    map[paneKey]change              // a match change that plays once
 	animating  bool
 	hist       history.Series
 	selPID     int
