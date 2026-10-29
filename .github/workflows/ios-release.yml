@@ -46,8 +46,13 @@ jobs:
           sudo xcode-select -s "$xcode"
           swift --version
 
-      - name: Download the Metal toolchain
-        run: xcodebuild -downloadComponent MetalToolchain
+      - name: Download the Metal toolchain if needed
+        # Best-effort. The runner's Xcode already ships the Metal toolchain
+        # (ios.yml's make build compiles SwiftTerm's shader on the same image),
+        # and -downloadComponent is rejected with exit 64 on some Xcode 16
+        # images. If Metal were truly missing, the archive fails later with a
+        # clear "missing Metal Toolchain" message, so this stays non-fatal.
+        run: xcodebuild -downloadComponent MetalToolchain || echo "Metal toolchain step skipped (already present or flag unsupported on this Xcode)"
 
       - name: Install XcodeGen
         run: brew install xcodegen
