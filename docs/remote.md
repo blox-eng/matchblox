@@ -21,18 +21,83 @@ host key, a password, a key's passphrase), the question shows in the
 console's field, as at a jump. A login by key, agent or Tailscale SSH asks
 nothing. `matchblox connect` typed in a shell asks in that terminal.
 
-## Open the console of a host
+## See every host in one console
 
 ```sh
-matchblox ws-1
+matchblox
 ```
 
-`esc` goes back to Hosts: `this machine`, each host you added, and
-`+ add a host`. `Enter` opens a row.
+With hosts added, this opens one console over the hosts you show. Sessions
+is one queue. A wait on any host is at the top. `matchblox ws-1` opens
+`ws-1` alone.
 
-- The header names the host. While the connection is lost, it says `stale`.
-- A host that the console cannot reach says why, and shows the connect.
-- A jump to a pane uses your own ssh login. See [Jump into a session](#jump-into-a-session).
+`esc` goes back to Hosts: `this machine`, each host you added, and
+`+ add a host`. The header says `HOSTS · 3 · 2 SHOWN`.
+
+- `space` shows or hides the selected host. matchblox keeps the hidden
+  hosts in `~/.config/matchblox/hidden`, one per line. `this machine` is
+  the line that hides your laptop. A host you add shows by default.
+- `Enter` opens one console of the shown hosts. With no host shown, it
+  opens the selected host alone, and the key line says
+  `No host is ticked: <host> opens alone.`
+- A shown host has a live note: `5 sessions · 1 waits`. A hidden host has
+  the note `hidden`. It has no connection, so matchblox has no count for it.
+- `esc` and `Enter` again keep the connections that stay shown. The
+  selection and the lanes stay too.
+
+With two or more hosts shown, the console changes in these ways:
+
+- The header says `3 hosts`. When you hide a host, it adds `· 1 hidden`.
+- A row names its host after the session: `train-loop gpu-1`. A row with
+  an account says `api-auth ws-1 · work`. A long host name ends in `…`.
+  The detail shows it whole.
+- Each host connects, reconnects and fails on its own. One lost host does
+  not stop the others.
+- A lost host keeps its rows, in their groups. After 30 seconds the header
+  says `· gpu-1 stale`, and each row says `stale` and shows the age since
+  the host last spoke. The detail and the dock say `stale · as of 14:02`.
+  A reconnect of a few seconds changes nothing on the screen.
+- The key line names the lost host: `gpu-1: connection lost. Tries again
+  in 8s.` For two hosts, it says `2 hosts lost: gpu-1, ws-1. Tries again
+  in 8s.`
+- A host that the console cannot reach is one row at the end of the list,
+  with its fix: `gpu-1  is not connected  ⏎ connect`. `Enter` runs the
+  connect. The other hosts keep going.
+- Each key on a row goes to the host of that row: `a`, `Enter`, `x`, `r`,
+  park, pick and the peek. Two hosts can have the same pane id; the console
+  never mixes them. While a host is lost, an act on its rows is refused:
+  `gpu-1 is not connected. It tries again in 8s.` While the console
+  first dials a host, the text is `gpu-1 is not connected.` If a lost host
+  held acts that got no answer, the console says `ws-1: 1 act has no
+  answer`.
+- `n` and the ghost row start a session on the host of the selected row,
+  or on this machine when no row is selected.
+- Ships, Git and Panes list the rows of every shown host and name the host
+  of each. Machine, History and Stoker show one section for each host, in
+  Hosts order, headed by its name.
+- The dock shows one usage row for each account label. Each host adds a
+  short cell to the row, in Hosts order: `work  5h  ws-1 58% · gpu-1 61%`.
+  matchblox never adds or averages the readings of two hosts. A short line
+  drops whole cells and ends in ` …`. It shows one machine line for each
+  host.
+- The stoker is one for each host. The header counts the hosts where it
+  runs: `stoker 2/3`. A key on a row asks about the stoker of that row's
+  host. `y` rests that stoker only. `s` starts the stoker of the selected
+  row's host. The Stoker tab shows the stoker of another host, but only
+  for reading. The dock claims the stoker of this machine.
+- Recs, the doors, clones, the scan question and pairing stay with this
+  machine.
+- Each host keeps its own ssh login: its connection, its background check,
+  its key and its Tailscale link. The checks run at open and never ask. A
+  question comes only at a jump. The field shows one question at a time and
+  names its host. A jump to a lost host works: it uses your own ssh, not
+  the stream.
+- A host that runs an older matchblox works in the combined console. No
+  service changes, and matchblox adds no key between hosts.
+
+A host that the console cannot reach says why, and shows the connect. A
+jump to a pane uses your own ssh login. See
+[Jump into a session](#jump-into-a-session).
 
 ## See and remove the devices of a host
 

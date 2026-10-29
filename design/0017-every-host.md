@@ -1,6 +1,6 @@
 # Every host in one console: design
 
-Date: 2026-10-29. Status: design. Issue: #198. Related: #96, #15.
+Date: 2026-10-29. Status: built. Issue: #198. Related: #96, #15.
 Mockups: the brainstorm page of 2026-10-29 (frames for Hosts, Sessions,
 stale, the phone, the dock, the now line and list only).
 
@@ -375,3 +375,50 @@ at 132 columns. Regenerating goldens needs the owner's yes.
   inside the theme.
 - The exact width at which the lane drops when the name would get under
   12 columns, by the rule `sessTracks` has today.
+
+## Changed while building (2026-10-29)
+
+Each item changes the text above. The change wins.
+
+- **R10 (owner).** Usage is one row for each account label. Each host's
+  reading is a short cell on that row, in Hosts order:
+  `work  5h  ws-1 58% · gpu-1 61%`. A reading is never merged, added or
+  averaged. A short line keeps its window and drops whole cells, with ` …`.
+- **The home host's word.** The home host's row word is its own name from
+  its hello. `this machine` shows only before the hello.
+- **A lost peer.** It sets no flash before 30 s. The key line copy shows
+  once the host is stale. Acts lost with a host show as a toast:
+  `ws-1: 1 act has no answer`.
+- **Acts and lost hosts.** The console refuses an act whenever its host is
+  lost, for any time. `stale` is display only. While the first dial of a
+  peer runs, the refusal is `<host> is not connected.`, with no "tries
+  again" part. A jump to a lost host is not refused: it uses the builder's
+  own ssh, not the stream.
+- **Dials.** Peers dial in the background, so a slow host never stalls the
+  console. A remote home host (this machine hidden) still dials as one
+  host does today.
+- **Connect from Hosts.** It reopens the ticked hosts. With none ticked,
+  `Enter` opens the selected host alone, and the key line says
+  `No host is ticked: <host> opens alone.`
+- **Git.** The host is on each repository heading, not on each worktree
+  row.
+- **The stoker.** The dock's claim stays the home host's. The Stoker tab
+  shows a peer's section for reading only: take-over, rest, touch and `s`
+  are per host.
+- **Not per host in v1.** Recs, doors, clones, the scan question and
+  pairing stay the home host's.
+- **List only, the key line.** On the full view, `list only v` is the first
+  hint to drop. In list only, `full view v` stays: a row's own keys outrank
+  it on a narrow row. The mark goes first, then the age.
+- **The now line.** The now column is its own column, right of the 24 past
+  cells. With ships read, the lane drops before the ship. With no ships, the
+  place drops first, then the lane, then the plan. The console does not
+  draw the rule while a peek, a sheet, a form, a consent or an ask box is
+  up.
+- **Where the lanes show.** They show only where the list is 107 columns
+  or wider: in list only on a desk (press `v`), or on a very wide screen.
+  The list of the full view is at most 78 columns.
+- **A lane's key.** A lane is keyed by host, pid and the start of the
+  process, so a new process on an old pid starts empty.
+- **The site's phone demo.** It starts in the full view, so its dock story
+  still plays.

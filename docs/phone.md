@@ -275,3 +275,27 @@ detail of the selected agent sit side by side.
 
 Every key is on the key bar of an SSH app: letters, digits, arrows, `Enter`
 and `Esc`. See [Keys](keys.md).
+
+## List only
+
+On a phone held upright, the console starts in list only. The detail pane
+and the dock fold, and the list takes the screen. The key line says
+`full view v`, and `list only` stays at its right edge. The selected row
+opens in place under itself. `a` opens the answer box over the list.
+The header still says who waits.
+
+Press `v`, or tap the word `full view v`, to show the detail pane and the
+dock. Press `v` again, or tap `list only v`, to fold them. The phone and
+your desk each keep their own choice, so one does not change the other.
+matchblox keeps the choice when the console restarts.
+
+## The hosts on the phone
+
+The phone shows what the console of its host can open. If you connected
+`ws-1` to `gpu-1` yourself, a phone paired to `ws-1` sees `gpu-1` in the
+combined console and acts on it. The same phone reaches `gpu-1` today with
+`esc`, then Hosts, then `gpu-1`. matchblox sets up no key between hosts, so
+a phone never sees a host that its host cannot open.
+
+The phone does not combine the hosts that you paired in the app. Each host
+you pair has its own console. See [Use the app](#use-the-app).
