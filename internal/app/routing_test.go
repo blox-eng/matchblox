@@ -291,9 +291,17 @@ func keyLineStates(t *testing.T) []keyLineAt {
 	t.Helper()
 	var out []keyLineAt
 	add := func(name string, m tea.Model) { out = append(out, keyLineAt{name, m}) }
+	// Each state draws on a still clock, its own sample's time, so the
+	// age on a key line never moves with the wall clock.
 	at := func(w int, st proto.State) tea.Model {
-		m, _ := loadedWith(t, w, st)
-		return m
+		now := st.At
+		if now.IsZero() {
+			now = demoAt
+		}
+		m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return now }})
+		next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: 30})
+		next, _ = next.Update(stateMsg(st))
+		return next
 	}
 	tabAt := func(m tea.Model, tab int) tea.Model {
 		return sendKey(m, string(rune('1'+tab)))
@@ -625,7 +633,7 @@ var keyLines = map[string]string{
 	"demo/50/ships/row 1":                "⏎ session  x merge  f stoker  full view v",
 	"demo/50/ships/row 2":                "⏎ session  a answer  f stoker  full view v",
 	"demo/50/ships/row 3":                "⏎ session  f stoker  full view v",
-	"demo/50/machine/row 0":              "p ships  f stoker  sampled 27d22h ago  list only",
+	"demo/50/machine/row 0":              "p ships  f stoker      sampled 0s ago  list only",
 	"demo/50/git/row 0":                  "⏎ shell  ␣ mark  X all safe  x remove  r rescan",
 	"demo/50/history/row 0":              "p ships  f stoker  full view v",
 	"demo/50/panes/row 0":                "⏎ go  s sort  full view v",
