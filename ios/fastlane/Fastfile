@@ -47,6 +47,14 @@ platform :ios do
         "DEVELOPMENT_TEAM=#{team_id}",
       ].join(" "),
       export_xcargs: "-allowProvisioningUpdates #{auth}",
+      # Export with automatic signing too; without this gym defaults to manual
+      # and fails with "no provisioning profile mapping was provided". Combined
+      # with -allowProvisioningUpdates + the API key it fetches the app-store
+      # distribution profiles for all three targets.
+      export_options: {
+        method: "app-store",
+        signingStyle: "automatic",
+      },
     )
 
     upload_to_testflight(
