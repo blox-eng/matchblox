@@ -182,3 +182,18 @@ func TestPeerBlockedClearsItsFlash(t *testing.T) {
 		t.Fatalf("flash %q, in flight %v, toast %q; want no flash, no act, the toast", nm.flash, nm.peers[0].acts, nm.toast)
 	}
 }
+
+// A reconcile keeps each link's own dial error: the peers before it move,
+// and the new one still starts blocked.
+func TestReconciledPeerKeepsItsDialErr(t *testing.T) {
+	err := fmt.Errorf("gpu-1: %w", remote.ErrNotInstalled)
+	m := New(Options{NoMotion: true, Conn: newFake(), Peers: []Peer{{Host: "ws-1", Conn: newFake()}}})
+	m, cmd := m.reconcile([]Peer{{Host: "gpu-1", DialErr: err}, {Host: "ws-1"}})
+	if cmd == nil || len(m.peers) != 2 || m.peers[0].host != "gpu-1" {
+		t.Fatalf("peers %+v", m.peers)
+	}
+	next, _ := m.Update(m.peerStart(0)())
+	if p := next.(Model).peers[0]; !p.lost || !errors.Is(p.blocked, remote.ErrNotInstalled) {
+		t.Fatalf("gpu-1 starts lost %v, blocked %v", p.lost, p.blocked)
+	}
+}

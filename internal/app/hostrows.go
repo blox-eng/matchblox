@@ -273,7 +273,7 @@ func (m Model) peerTryAgain(i int) (tea.Model, tea.Cmd) {
 	}
 	p.lost, p.redialing = true, true
 	host, gen := p.host, m.opt.Gen
-	return m, func() tea.Msg { return peerRedialMsg{host, gen} }
+	return m, func() tea.Msg { return peerRedialMsg{host: host, gen: gen} }
 }
 
 // rowTag is the muted words after a session's name, in room cells: its
@@ -292,4 +292,35 @@ func (m Model) rowTag(s sample.Session, room int) string {
 		return full
 	}
 	return host
+}
+
+// hostNote is host's live note on Hosts: its sessions, and those that
+// wait. "" before its first state.
+func (m Model) hostNote(host string) string {
+	have := m.have
+	if host != m.opt.Host {
+		i := m.peerAt(host)
+		if i < 0 {
+			return ""
+		}
+		have = m.peers[i].have
+	}
+	if !have {
+		return ""
+	}
+	n, waits := 0, 0
+	for _, s := range m.all.sessions {
+		if s.Host != host {
+			continue
+		}
+		n++
+		if m.groupOf(s) == groupWaits {
+			waits++
+		}
+	}
+	note := fmt.Sprintf("%d sessions", n)
+	if waits > 0 {
+		note += fmt.Sprintf(" · %d waits", waits)
+	}
+	return note
 }

@@ -273,7 +273,9 @@ type Model struct {
 	recPrefs   recPrefs // dismissed recommendations and the fold
 	opt        Options
 	conn       transport.Conn
-	peers      []link // the other ticked hosts, as Options.Peers; copied on write
+	peers      []link // the other ticked hosts, in Hosts order; copied on write
+	linked     int    // the links reconcile opened: the id of the last
+	hidden     int    // the hosts the builder hid: the header counts them (R6)
 	st         styles
 	width      int
 	height     int

@@ -54,3 +54,20 @@ func (m *Model) editLogin(host string, f func(*hostLogin)) {
 	f(&l)
 	m.setLogin(host, l)
 }
+
+// dropLogin ends host's login check and open, and forgets its login: the
+// host left the console.
+func (m *Model) dropLogin(host string) {
+	l, ok := m.logins[host]
+	if !ok {
+		return
+	}
+	for _, stop := range []context.CancelFunc{l.checkStop, l.openStop} {
+		if stop != nil {
+			stop()
+		}
+	}
+	logins := maps.Clone(m.logins)
+	delete(logins, host)
+	m.logins = logins
+}

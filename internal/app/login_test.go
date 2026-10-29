@@ -305,10 +305,15 @@ func TestHostConsoleKeepsTheLoginOptions(t *testing.T) {
 	if o := opened.cur.opt; o.MasterBase != "/c" || o.Check == nil || o.Ask == nil || o.NoAsk != "why" || o.SSH == nil {
 		t.Fatalf("the host's console lost the login options: %+v", o)
 	}
-	// Back to Hosts ends the console's wait for prompts.
+	// Back to Hosts keeps the console's wait for prompts (R12); the next
+	// console ends it.
 	ctx := opened.cur.askCtx
-	opened.back()
-	if ctx == nil || ctx.Err() == nil {
+	opened = opened.back()
+	if ctx == nil || ctx.Err() != nil {
+		t.Fatal("the console under Hosts stopped waiting for prompts")
+	}
+	opened, _ = opened.open("ws-2", false)
+	if ctx.Err() == nil {
 		t.Fatal("the closed console still waits for prompts")
 	}
 }

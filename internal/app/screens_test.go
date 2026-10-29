@@ -156,6 +156,9 @@ func TestScreens(t *testing.T) {
 	}
 	golden(t, threeHosts(t, st, 86, 30, "stale"), "stale3", 86, 30)
 	golden(t, threeHosts(t, st, 86, 30, "blocked"), "blocked3", 86, 30)
+	for _, size := range [][2]int{{44, 31}, {86, 30}} {
+		golden(t, hostsTicks(st, size[0], size[1]), "hoststicks", size[0], size[1])
+	}
 }
 
 // threeHosts is the demo machine with two peers: gpu-1, whose train-loop
@@ -170,28 +173,7 @@ func threeHosts(t *testing.T, st proto.State, w, h int, gpu string) Model {
 		Peers: []Peer{{Host: "gpu-1", Conn: conns["gpu-1"]}, {Host: "ws-1", Conn: conns["ws-1"]}}})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	next, _ = next.Update(stateMsg(st))
-	base := st.Sessions[0]
-	base.SessionID, base.Busy, base.Status, base.Idle, base.Do, base.Shells, base.Agents, base.Progress, base.AccountDir =
-		"", false, "idle", 3*time.Minute, "", nil, 0, nil, ""
-	on := func(name, pane string, f func(*sample.Session)) sample.Session {
-		s := base
-		s.Name, s.Pane, s.Target = name, pane, "w:"+name
-		if f != nil {
-			f(&s)
-		}
-		return s
-	}
-	peer := func(ss []sample.Session, q []queue.Item) proto.State {
-		snap := st.Snapshot
-		snap.Sessions, snap.Children, snap.IdlePanes = ss, nil, nil
-		return proto.State{Doc: state.Doc{Snapshot: snap, Queue: q}}
-	}
-	gpuState := peer([]sample.Session{on("train-loop", "%1", func(s *sample.Session) { s.Do = "clear" })},
-		[]queue.Item{{Pane: "%1", Name: "train-loop", State: queue.StatePermission, Since: demoAt.Add(-4 * time.Minute)}})
-	wsState := peer([]sample.Session{
-		on("api-auth", "%1", func(s *sample.Session) { s.AccountDir = "/home/user/.matchblox/accounts/claude/work" }),
-		on("docs-sweep", "%2", func(s *sample.Session) { s.Busy, s.Status = true, "edits" }),
-	}, []queue.Item{{Pane: "%1", Name: "api-auth", State: queue.StateQuestion, Since: demoAt.Add(-time.Minute)}})
+	gpuState, wsState := peerStates(st)
 	switch gpu {
 	case "blocked":
 		next, _ = next.Update(peerMsg{host: "gpu-1", conn: conns["gpu-1"], msg: lostMsg{err: fmt.Errorf("gpu-1: %w", remote.ErrNotConnected), conn: conns["gpu-1"]}})
@@ -209,6 +191,60 @@ func threeHosts(t *testing.T, st proto.State, w, h int, gpu string) Model {
 	}
 	nm.splashDone = true
 	return nm
+}
+
+// peerStates are the states of gpu-1, whose train-loop waits, and ws-1,
+// whose api-auth asks on the work account while docs-sweep edits.
+func peerStates(st proto.State) (gpu, ws proto.State) {
+	base := st.Sessions[0]
+	base.SessionID, base.Busy, base.Status, base.Idle, base.Do, base.Shells, base.Agents, base.Progress, base.AccountDir =
+		"", false, "idle", 3*time.Minute, "", nil, 0, nil, ""
+	on := func(name, pane string, f func(*sample.Session)) sample.Session {
+		s := base
+		s.Name, s.Pane, s.Target = name, pane, "w:"+name
+		if f != nil {
+			f(&s)
+		}
+		return s
+	}
+	peer := func(ss []sample.Session, q []queue.Item) proto.State {
+		snap := st.Snapshot
+		snap.Sessions, snap.Children, snap.IdlePanes = ss, nil, nil
+		return proto.State{Doc: state.Doc{Snapshot: snap, Queue: q}}
+	}
+	gpu = peer([]sample.Session{on("train-loop", "%1", func(s *sample.Session) { s.Do = "clear" })},
+		[]queue.Item{{Pane: "%1", Name: "train-loop", State: queue.StatePermission, Since: demoAt.Add(-4 * time.Minute)}})
+	ws = peer([]sample.Session{
+		on("api-auth", "%1", func(s *sample.Session) { s.AccountDir = "/home/user/.matchblox/accounts/claude/work" }),
+		on("docs-sweep", "%2", func(s *sample.Session) { s.Busy, s.Status = true, "edits" }),
+	}, []queue.Item{{Pane: "%1", Name: "api-auth", State: queue.StateQuestion, Since: demoAt.Add(-time.Minute)}})
+	return gpu, ws
+}
+
+// hostsTicks is Hosts over the console of this machine and ws-1, with
+// gpu-1 hidden: the ticks, and the live notes of the ticked hosts.
+func hostsTicks(st proto.State, w, h int) Shell {
+	conns := map[string]*fakeConn{}
+	sh := NewShell(ShellOptions{
+		Base:   Options{NoMotion: true, Now: func() time.Time { return demoAt }},
+		Hosts:  func() []string { return []string{"ws-1", "gpu-1"} },
+		Hidden: func() []string { return []string{"gpu-1"} },
+		Open: func(host string) Options {
+			conns[host] = newFake()
+			return Options{Conn: conns[host], Host: host}
+		},
+	})
+	_, ws := peerStates(st)
+	var next tea.Model = sh
+	for _, msg := range []tea.Msg{
+		tea.WindowSizeMsg{Width: w, Height: h},
+		stateMsg(st),
+		peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(ws)},
+		layerMsg{},
+	} {
+		next, _ = next.Update(msg)
+	}
+	return next.(Shell)
 }
 
 // sheetScreen is the demo machine with a stoker agent, and the launch
@@ -257,9 +293,9 @@ func check(t *testing.T, st proto.State, name string, w, h int, keys []string, m
 	golden(t, next.(Model), name, w, h)
 }
 
-// golden checks the frame of m against testdata/screens/name-wxh.txt;
-// -update writes it.
-func golden(t *testing.T, m Model, name string, w, h int) {
+// golden checks the frame of m, a console or Hosts, against
+// testdata/screens/name-wxh.txt; -update writes it.
+func golden(t *testing.T, m interface{ render() string }, name string, w, h int) {
 	t.Helper()
 	got := ansi.Strip(m.render())
 	lines := strings.Split(got, "\n")

@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/setup"
 	"github.com/blox-eng/matchblox/internal/transport"
@@ -18,25 +20,45 @@ import (
 // shellFor is a shell whose consoles talk to fakes; opened records the hosts
 // it opened, ran what it gave the terminal to.
 type shellRig struct {
-	sh     Shell
-	opened []string
-	conns  map[string]*fakeConn
-	ran    [][]string
-	added  []string
+	sh      Shell
+	opened  []string
+	conns   map[string]*fakeConn
+	ran     [][]string
+	added   []string
+	hidden  []string       // the hidden file's lines
+	redials map[string]int // the redials of each host's stream
 }
 
 func newShell(t *testing.T, added []string, ssh []string, start string, firstRun bool) *shellRig {
 	t.Helper()
-	r := &shellRig{added: added, conns: map[string]*fakeConn{}}
+	return rigShell(t, added, nil, ssh, start, firstRun)
+}
+
+// hidingShell is a shell whose hidden file already lists hidden.
+func hidingShell(t *testing.T, added, hidden []string, start string) *shellRig {
+	t.Helper()
+	return rigShell(t, added, hidden, nil, start, false)
+}
+
+func rigShell(t *testing.T, added, hidden, ssh []string, start string, firstRun bool) *shellRig {
+	t.Helper()
+	r := &shellRig{added: added, hidden: hidden, conns: map[string]*fakeConn{}, redials: map[string]int{}}
 	r.sh = NewShell(ShellOptions{
 		Base:     Options{NoMotion: true, Self: "/bin/matchblox"},
 		Hosts:    func() []string { return slices.Clone(r.added) },
 		SSHHosts: func() []string { return ssh },
+		Hidden:   func() []string { return slices.Clone(r.hidden) },
+		Hide:     func(h string) error { r.hidden = append(r.hidden, h); return nil },
+		Show: func(h string) error {
+			r.hidden = slices.DeleteFunc(r.hidden, func(l string) bool { return l == h })
+			return nil
+		},
 		Open: func(host string) Options {
 			r.opened = append(r.opened, host)
 			f := newFake()
 			r.conns[host] = f
-			return Options{Conn: f, Host: host}
+			redial := func() (transport.Conn, error) { r.redials[host]++; return newFake(), nil }
+			return Options{Conn: f, Host: host, Redial: redial}
 		},
 		Exec: func(argv []string, done func(error) tea.Msg) tea.Cmd {
 			r.ran = append(r.ran, argv)
@@ -95,33 +117,31 @@ func TestNoHostsStartsInThisMachinesConsole(t *testing.T) {
 	}
 }
 
-func TestHostsStartOnTheHostsLayer(t *testing.T) {
+func TestHostsListsEveryHost(t *testing.T) {
 	r := newShell(t, []string{"ws-1", "ws-2"}, nil, "", false)
+	r.toHosts(t)
 	out := r.view()
 	for _, want := range []string{"matchblox · hosts", "this machine", "ws-1", "ws-2", "+ add a host"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("view lacks %q:\n%s", want, out)
 		}
 	}
-	if len(r.opened) != 0 {
-		t.Fatalf("opened %q before a pick", r.opened)
-	}
 }
 
 func TestEnterOpensAHostAndEscComesBack(t *testing.T) {
-	r := newShell(t, []string{"ws-1"}, nil, "", false)
-	r.key(t, "down")
+	r := hidingShell(t, []string{"ws-1"}, []string{"this machine"}, "")
+	r.toHosts(t) // ws-1 selected
 	r.key(t, "enter")
 	if r.sh.layer != layerConsole || !slices.Equal(r.opened, []string{"ws-1"}) {
 		t.Fatalf("layer %v, opened %q", r.sh.layer, r.opened)
 	}
 	next, _ := r.sh.Update(stateMsg(fixtureState()))
 	r.sh = next.(Shell)
-	if first := strings.Split(r.view(), "\n")[0]; !strings.Contains(first, "matchblox · ws-1") {
+	if first := strings.Split(r.view(), "\n")[0]; !strings.Contains(first, "matchblox · ws-1 · 1 hidden") {
 		t.Fatalf("header %q", first)
 	}
 	r.key(t, "esc")
-	if r.sh.layer != layerHosts || !r.conns["ws-1"].closed {
+	if r.sh.layer != layerHosts || r.conns["ws-1"].closed {
 		t.Fatalf("esc: layer %v, closed %v", r.sh.layer, r.conns["ws-1"].closed)
 	}
 	if r.sh.sel != 1 {
@@ -155,6 +175,7 @@ func TestAHostArgumentOpensItDirectly(t *testing.T) {
 
 func TestAddAHostConnectsThenOpensIt(t *testing.T) {
 	r := newShell(t, []string{"ws-1"}, []string{"ws-1", "ws-2", "github.com"}, "", false)
+	r.toHosts(t)
 	r.key(t, "down")
 	r.key(t, "down")
 	r.key(t, "enter") // + add a host
@@ -232,6 +253,7 @@ func TestRemoveAHostNeedsAY(t *testing.T) {
 	removed := ""
 	r := newShell(t, []string{"ws-1"}, nil, "", false)
 	r.sh.opt.Remove = func(h string) error { removed = h; return nil }
+	r.toHosts(t)
 	r.key(t, "down")
 	r.key(t, "x")
 	if removed != "" || !strings.Contains(r.view(), "╭─ Remove") || !strings.Contains(r.view(), "remove ws-1") {
@@ -247,9 +269,9 @@ func TestOldConsoleMessagesDoNotReachTheNewOne(t *testing.T) {
 	r := newShell(t, []string{"ws-1", "ws-2"}, nil, "ws-1", false)
 	old := r.conns["ws-1"]
 	r.key(t, "esc")
-	r.key(t, "down") // from ws-1 to ws-2
-	r.key(t, "enter")
-	if r.curHostIs(t) != "ws-2" {
+	r.key(t, "down")  // from ws-1 to ws-2
+	r.key(t, "enter") // the ticked hosts: a new console, this machine its home
+	if r.curHostIs(t) != "" || r.conns["ws-1"] == old {
 		t.Fatalf("opened %q", r.opened)
 	}
 	next, _ := r.sh.Update(fromConn{old, stateMsg(fixtureState())})
@@ -283,16 +305,18 @@ func TestALateRedialOfAClosedConsoleIsDropped(t *testing.T) {
 	r := newShell(t, []string{"ws-1"}, nil, "ws-1", false)
 	gen := r.sh.cur.opt.Gen
 	r.key(t, "esc")
+	r.key(t, "enter") // the ticked hosts: a new console, this machine its home
+	if r.sh.layer != layerConsole || r.sh.cur.opt.Gen == gen {
+		t.Fatalf("no new console: layer %v, gen %d", r.sh.layer, r.sh.cur.opt.Gen)
+	}
+	r.key(t, "esc")
 	late := newFake()
 	next, _ := r.sh.Update(connMsg{conn: late, gen: gen}) // on Hosts
 	r.sh = next.(Shell)
 	if !late.closed {
 		t.Fatal("a late connection that reached Hosts was left open")
 	}
-	r.key(t, "enter") // ws-1, still selected: a new console
-	if r.sh.layer != layerConsole || r.sh.cur.opt.Gen == gen {
-		t.Fatalf("no new console: layer %v, gen %d", r.sh.layer, r.sh.cur.opt.Gen)
-	}
+	r.key(t, "enter")
 	cur := r.sh.cur.conn
 	late = newFake()
 	next, _ = r.sh.Update(connMsg{conn: late, gen: gen})
@@ -398,5 +422,199 @@ func TestTailscaleHostRowWarns(t *testing.T) {
 	r.sh, _ = r.sh.open("ws-1", false)
 	if !homeLogin(r.sh.cur).tailscale {
 		t.Fatal("the console of ws-1 forgot its kind")
+	}
+}
+
+// rowOf is the Hosts line that names host.
+func (r *shellRig) rowOf(host string) string {
+	for _, l := range strings.Split(r.view(), "\n") {
+		if strings.Contains(l, " "+host+" ") || strings.HasSuffix(l, " "+host) {
+			return l
+		}
+	}
+	return ""
+}
+
+// toHosts goes from the console back to Hosts.
+func (r *shellRig) toHosts(t *testing.T) {
+	t.Helper()
+	r.key(t, "esc")
+	if r.sh.layer != layerHosts {
+		t.Fatal("esc did not go back to Hosts")
+	}
+}
+
+func (r *shellRig) update(msg tea.Msg) tea.Cmd {
+	next, cmd := r.sh.Update(msg)
+	r.sh = next.(Shell)
+	return cmd
+}
+
+func peerHosts(m Model) []string {
+	var out []string
+	for _, l := range m.peers {
+		out = append(out, l.host)
+	}
+	return out
+}
+
+func TestSpaceHidesAndShows(t *testing.T) {
+	r := newShell(t, []string{"ws-1", "gpu-1"}, nil, "", false)
+	r.toHosts(t)
+	if row := r.rowOf("gpu-1"); !strings.Contains(row, "● gpu-1") {
+		t.Fatalf("gpu-1 is not ticked: %q", row)
+	}
+	r.key(t, "down")
+	r.key(t, "down")
+	r.key(t, "space")
+	if !slices.Equal(r.hidden, []string{"gpu-1"}) {
+		t.Fatalf("space wrote %q", r.hidden)
+	}
+	if row := r.rowOf("gpu-1"); !strings.Contains(row, "○ gpu-1") || !strings.HasSuffix(strings.TrimSpace(row), "hidden") {
+		t.Fatalf("the hidden row: %q", row)
+	}
+	if !strings.Contains(r.view(), "HOSTS · 3 · 2 SHOWN") || !strings.Contains(r.view(), "show/hide space  open ⏎  connect c  quit q") {
+		t.Fatalf("label or key line:\n%s", r.view())
+	}
+	r.key(t, "space")
+	if len(r.hidden) != 0 || !strings.Contains(r.rowOf("gpu-1"), "● gpu-1") {
+		t.Fatalf("the second space: hidden %q, row %q", r.hidden, r.rowOf("gpu-1"))
+	}
+}
+
+// The note of a ticked host is live: its stream runs while Hosts shows.
+func TestHostsNotesAreLive(t *testing.T) {
+	r := newShell(t, []string{"ws-1"}, nil, "", false)
+	r.toHosts(t)
+	ws := hostState(sess(2, "api-auth", "%1", nil), sess(3, "docs", "%2", nil))
+	ws.Queue = []queue.Item{{Pane: "%1", Name: "api-auth", State: queue.StateQuestion, Since: time.Now().Add(-time.Minute)}}
+	r.update(peerMsg{host: "ws-1", conn: r.conns["ws-1"], msg: stateMsg(ws)})
+	if row := r.rowOf("ws-1"); !strings.HasSuffix(strings.TrimSpace(row), "2 sessions · 1 waits") {
+		t.Fatalf("the ws-1 note: %q", row)
+	}
+}
+
+func TestEnterOpensTheTickedHosts(t *testing.T) {
+	r := hidingShell(t, []string{"ws-1", "gpu-1"}, []string{"gpu-1"}, "gpu-1")
+	r.toHosts(t)
+	r.key(t, "enter")
+	if r.sh.layer != layerConsole || r.sh.cur.opt.Host != "" || !slices.Equal(peerHosts(r.sh.cur), []string{"ws-1"}) {
+		t.Fatalf("layer %v, home %q, peers %q", r.sh.layer, r.sh.cur.opt.Host, peerHosts(r.sh.cur))
+	}
+	if !slices.Equal(r.opened, []string{"gpu-1", "", "ws-1"}) || !r.conns["gpu-1"].closed {
+		t.Fatalf("opened %q, gpu-1 closed %v", r.opened, r.conns["gpu-1"].closed)
+	}
+}
+
+func TestEscKeepsTheStreams(t *testing.T) {
+	r := newShell(t, []string{"ws-1"}, nil, "", false)
+	r.update(stateMsg(fixtureState()))
+	r.key(t, "down")
+	gen, sel := r.sh.cur.opt.Gen, r.sh.cur.selPID
+	r.toHosts(t)
+	r.key(t, "enter")
+	if r.sh.layer != layerConsole || r.sh.cur.opt.Gen != gen {
+		t.Fatalf("layer %v, gen %d, was %d", r.sh.layer, r.sh.cur.opt.Gen, gen)
+	}
+	if !slices.Equal(r.opened, []string{"", "ws-1"}) || r.conns[""].closed || r.conns["ws-1"].closed {
+		t.Fatalf("opened %q, closed home %v ws-1 %v", r.opened, r.conns[""].closed, r.conns["ws-1"].closed)
+	}
+	if r.sh.cur.selPID != sel || sel == 0 {
+		t.Fatalf("selection %d, was %d", r.sh.cur.selPID, sel)
+	}
+}
+
+// Review Focus 3: a hidden peer's late redial tick reopens nothing, and its
+// stale tick draws nothing. A host shown again is a new link: the old tick
+// is not its own.
+func TestHidingAPeerClosesItAndItsTick(t *testing.T) {
+	r := newShell(t, []string{"ws-1"}, nil, "", false)
+	r.update(stateMsg(fixtureState()))
+	ws := r.conns["ws-1"]
+	r.update(peerMsg{host: "ws-1", conn: ws, msg: stateMsg(hostState(sess(2, "api-auth", "%1", nil)))})
+	r.update(peerMsg{host: "ws-1", conn: ws, msg: lostMsg{err: io.EOF, conn: ws}})
+	late := peerRedialMsg{host: "ws-1", gen: r.sh.cur.opt.Gen, id: r.sh.cur.peers[0].id}
+	r.toHosts(t)
+	r.key(t, "down")
+	r.key(t, "space")
+	r.key(t, "enter")
+	if len(r.sh.cur.peers) != 0 || !ws.closed {
+		t.Fatalf("peers %q, ws-1 closed %v", peerHosts(r.sh.cur), ws.closed)
+	}
+	if strings.Contains(r.view(), "api-auth") {
+		t.Fatalf("a hidden host's rows stay:\n%s", r.view())
+	}
+	if cmd := r.update(late); cmd != nil {
+		cmd()
+	}
+	before := r.view()
+	r.update(staleMsg{})
+	if r.redials["ws-1"] != 0 || r.view() != before {
+		t.Fatalf("the late ticks: %d redials, frame changed %v", r.redials["ws-1"], r.view() != before)
+	}
+	// Shown again: a new stream, lost too; only its own tick dials.
+	r.toHosts(t)
+	r.key(t, "down")
+	r.key(t, "space")
+	r.key(t, "enter")
+	again := r.conns["ws-1"]
+	if again == ws || len(r.sh.cur.peers) != 1 {
+		t.Fatalf("ws-1 shown again: peers %q", peerHosts(r.sh.cur))
+	}
+	r.update(peerMsg{host: "ws-1", conn: again, msg: lostMsg{err: io.EOF, conn: again}})
+	if cmd := r.update(late); cmd != nil {
+		cmd()
+	}
+	if r.redials["ws-1"] != 0 {
+		t.Fatal("the old link's tick dialed the new one")
+	}
+	own := peerRedialMsg{host: "ws-1", gen: r.sh.cur.opt.Gen, id: r.sh.cur.peers[0].id}
+	if cmd := r.update(own); cmd == nil || cmd() == nil || r.redials["ws-1"] != 1 {
+		t.Fatalf("its own tick: %d redials", r.redials["ws-1"])
+	}
+}
+
+func TestHeaderCountsHidden(t *testing.T) {
+	r := hidingShell(t, []string{"ws-1", "gpu-1"}, []string{"gpu-1"}, "")
+	r.update(stateMsg(fixtureState()))
+	r.sh.cur.splashDone = true
+	if head := strings.Split(r.view(), "\n")[0]; !strings.Contains(head, "2 hosts · 1 hidden") {
+		t.Fatalf("header %q", head)
+	}
+	one := newShell(t, nil, nil, "", false)
+	one.update(stateMsg(fixtureState()))
+	one.sh.cur.splashDone = true
+	if head := strings.Split(one.view(), "\n")[0]; strings.Contains(head, "hidden") {
+		t.Fatalf("one host: header %q", head)
+	}
+}
+
+// R8: matchblox with added hosts opens the ticked hosts; matchblox ws-1
+// opens ws-1 alone.
+func TestStartOpensTheTickedHosts(t *testing.T) {
+	r := hidingShell(t, []string{"ws-1", "gpu-1"}, []string{"gpu-1"}, "")
+	if r.sh.layer != layerConsole || r.sh.cur.opt.Host != "" || !slices.Equal(r.opened, []string{"", "ws-1"}) || !slices.Equal(peerHosts(r.sh.cur), []string{"ws-1"}) {
+		t.Fatalf("layer %v, opened %q, peers %q", r.sh.layer, r.opened, peerHosts(r.sh.cur))
+	}
+	if r.sh.cur.splashDone {
+		t.Fatal("the first console of a run plays its start")
+	}
+	one := hidingShell(t, []string{"ws-1", "gpu-1"}, nil, "ws-1")
+	if !slices.Equal(one.opened, []string{"ws-1"}) || len(one.sh.cur.peers) != 0 {
+		t.Fatalf("matchblox ws-1: opened %q, peers %q", one.opened, peerHosts(one.sh.cur))
+	}
+	none := hidingShell(t, []string{"ws-1"}, []string{"this machine", "ws-1"}, "")
+	if none.sh.layer != layerHosts || len(none.opened) != 0 {
+		t.Fatalf("nothing ticked: layer %v, opened %q", none.sh.layer, none.opened)
+	}
+}
+
+// Back to Hosts keeps the kind every host's check found, peers' too.
+func TestBackKeepsEveryHostsKind(t *testing.T) {
+	r := newShell(t, []string{"ws-1", "ws-2"}, nil, "", false)
+	r.update(loginMsg{host: "ws-2", gen: r.sh.cur.opt.Gen, login: remote.LoginOK, seen: true, tailscale: true})
+	r.toHosts(t)
+	if rows := r.sh.rows(); rows[1].tailscale || !rows[2].tailscale {
+		t.Fatalf("rows %+v", rows)
 	}
 }

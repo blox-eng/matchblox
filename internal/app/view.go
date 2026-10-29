@@ -360,6 +360,10 @@ func (m Model) header(w int) (string, span, span) {
 		// One host: what shows is the last state it sent.
 		lost = st.faint.Render(" · ") + st.warn.Render("stale")
 	}
+	if m.hidden > 0 {
+		// A hidden host has no stream, so no count of its waits (R6).
+		lost += st.faint.Render(" · ") + st.muted.Render(fmt.Sprintf("%d hidden", m.hidden))
+	}
 	if !m.shows() {
 		if host != "" {
 			left += st.faint.Render(" · ") + st.muted.Render(host)

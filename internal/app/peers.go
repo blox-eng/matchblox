@@ -29,8 +29,10 @@ type Peer struct {
 // in Model's own fields.
 type link struct {
 	host                      string
+	id                        int // 0 for Options.Peers; a link a reconcile opens gets its own
 	conn                      transport.Conn
 	redial                    func() (transport.Conn, error)
+	dialErr                   error // why the first dial failed
 	lost, redialing, answered bool
 	backoff                   time.Duration
 	blocked                   error
@@ -46,17 +48,21 @@ type link struct {
 
 // peerMsg tags a message with the peer and the conn it came from: after a
 // redial, messages from the old conn are dropped. A redial's own messages
-// (connMsg, redialFailed) carry no conn.
+// (connMsg, redialFailed) carry no conn, but the id of the link that dialed.
 type peerMsg struct {
 	host string
 	conn transport.Conn
 	msg  tea.Msg
+	id   int
 }
 
-// peerRedialMsg is a peer's redial tick; gen is as in redialMsg.
+// peerRedialMsg is a peer's redial tick; gen is as in redialMsg, id is the
+// link's: a host hidden and shown again is a new link, and the old tick is
+// not its own.
 type peerRedialMsg struct {
 	host string
 	gen  int
+	id   int
 }
 
 // redialAfter is the wait before the next redial after one that waited b.
@@ -67,9 +73,13 @@ func redialAfter(b time.Duration) time.Duration {
 func links(peers []Peer) []link {
 	var out []link
 	for _, p := range peers {
-		out = append(out, link{host: p.Host, conn: p.Conn, redial: p.Redial})
+		out = append(out, newLink(p, 0))
 	}
 	return out
+}
+
+func newLink(p Peer, id int) link {
+	return link{host: p.Host, id: id, conn: p.Conn, redial: p.Redial, dialErr: p.DialErr}
 }
 
 // hostCount is the hosts of the console: home and its peers.
@@ -83,7 +93,7 @@ func (m Model) peerAt(host string) int {
 // dial failed.
 func (m Model) peerStart(i int) tea.Cmd {
 	l := m.peers[i]
-	if err := m.opt.Peers[i].DialErr; err != nil && l.conn == nil {
+	if err := l.dialErr; err != nil && l.conn == nil {
 		return func() tea.Msg { return peerMsg{host: l.host, msg: lostMsg{err: err}} }
 	}
 	return tea.Batch(toPeer(l.host, helloOn(l.conn, m.opt.Binary)), m.peerRecv(i))
@@ -152,9 +162,9 @@ func toPeer(host string, cmd tea.Cmd) tea.Cmd {
 	return func() tea.Msg {
 		switch msg := cmd().(type) {
 		case fromConn:
-			return peerMsg{host, msg.conn, msg.msg}
+			return peerMsg{host: host, conn: msg.conn, msg: msg.msg}
 		case lostMsg:
-			return peerMsg{host, msg.conn, msg}
+			return peerMsg{host: host, conn: msg.conn, msg: msg}
 		default:
 			return msg
 		}
@@ -177,14 +187,14 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.peerLost(i, msg.err)
 	case redialFailed:
-		if msg.gen != m.opt.Gen || !l.redialing {
+		if msg.gen != m.opt.Gen || pm.id != l.id || !l.redialing {
 			return m, nil
 		}
 		m.peers = slices.Clone(m.peers)
 		m.peers[i].redialing = false
 		return m.peerLost(i, msg.err)
 	case connMsg:
-		if msg.gen != m.opt.Gen || m.quitting || !l.redialing {
+		if msg.gen != m.opt.Gen || pm.id != l.id || m.quitting || !l.redialing {
 			_ = msg.conn.Close() // the console or the redial that dialed it is gone
 			return m, nil
 		}
@@ -260,15 +270,8 @@ func (m Model) peerLost(i int, err error) (tea.Model, tea.Cmd) {
 	}
 	first := !p.lost
 	p.lost = true
-	var news tea.Cmd
-	if n := len(p.acts); n > 0 {
-		verb := "have"
-		if n == 1 {
-			verb = "has"
-		}
-		news = m.say(p.host + ": " + plural(n, "act") + " " + verb + " no answer")
-		p.acts = nil
-	}
+	news := m.noAnswer(*p)
+	p.acts = nil
 	if blocking(err) {
 		// Its row says why: the flash of the host goes.
 		p.blocked = err
@@ -286,21 +289,82 @@ func (m Model) peerLost(i int, err error) (tea.Model, tea.Cmd) {
 	}
 	p.redialing = true
 	p.backoff = redialAfter(p.backoff)
-	host, gen := p.host, m.opt.Gen
-	return m, tea.Batch(news, stale, tea.Tick(p.backoff, func(time.Time) tea.Msg { return peerRedialMsg{host, gen} }))
+	host, gen, id := p.host, m.opt.Gen, p.id
+	return m, tea.Batch(news, stale, tea.Tick(p.backoff, func(time.Time) tea.Msg { return peerRedialMsg{host, gen, id} }))
+}
+
+// noAnswer says at once that l's acts in flight have no answer.
+func (m *Model) noAnswer(l link) tea.Cmd {
+	n := len(l.acts)
+	if n == 0 {
+		return nil
+	}
+	verb := "have"
+	if n == 1 {
+		verb = "has"
+	}
+	return m.say(l.host + ": " + plural(n, "act") + " " + verb + " no answer")
 }
 
 func (m Model) peerRedial(msg peerRedialMsg) (tea.Model, tea.Cmd) {
 	i := m.peerAt(msg.host)
-	if msg.gen != m.opt.Gen || i < 0 || !m.peers[i].redialing || m.quitting {
-		return m, nil // a tick from a console that was closed, or a peer that is gone
+	if msg.gen != m.opt.Gen || i < 0 || msg.id != m.peers[i].id || !m.peers[i].redialing || m.quitting {
+		return m, nil // a tick from a console that was closed, or a link that is gone
 	}
-	redial, host, gen := m.peers[i].redial, msg.host, m.opt.Gen
+	redial, host, gen, id := m.peers[i].redial, msg.host, m.opt.Gen, msg.id
 	return m, func() tea.Msg {
 		c, err := redial()
 		if err != nil {
-			return peerMsg{host: host, msg: redialFailed{err, gen}}
+			return peerMsg{host: host, msg: redialFailed{err, gen}, id: id}
 		}
-		return peerMsg{host: host, msg: connMsg{c, gen}}
+		return peerMsg{host: host, msg: connMsg{c, gen}, id: id}
+	}
+}
+
+// reconcile makes peers the console's peers, in their order (R12): a link
+// whose host stays is kept, with its stream, backoff and state; a dropped
+// one is closed, and its late ticks find no link of theirs; a new one
+// opens. A Peer of a kept host needs only its Host.
+func (m Model) reconcile(peers []Peer) (Model, tea.Cmd) {
+	var next []link
+	var start []int
+	for _, p := range peers {
+		if i := m.peerAt(p.Host); i >= 0 {
+			next = append(next, m.peers[i])
+			continue
+		}
+		m.linked++
+		start = append(start, len(next))
+		next = append(next, newLink(p, m.linked))
+	}
+	var news []tea.Cmd
+	for _, l := range m.peers {
+		if slices.ContainsFunc(next, func(n link) bool { return n.host == l.host }) {
+			continue
+		}
+		if l.conn != nil {
+			_ = l.conn.Close()
+		}
+		news = append(news, m.noAnswer(l))
+		m.dropLogin(l.host)
+	}
+	m.peers = next
+	m.merge()
+	m.keepSelection()
+	for _, i := range start {
+		news = append(news, m.peerStart(i))
+	}
+	return m, tea.Batch(news...)
+}
+
+// closeStreams closes the console's stream to every host.
+func (m Model) closeStreams() {
+	if m.conn != nil {
+		_ = m.conn.Close()
+	}
+	for _, l := range m.peers {
+		if l.conn != nil {
+			_ = l.conn.Close()
+		}
 	}
 }
