@@ -68,8 +68,8 @@ func (m Model) jumpOnHost(host string, a *action) *action {
 	if v := m.helloOf(host).Tmux; v == "none" || remote.TmuxTooOld(v, remote.MinHostTmux) {
 		return m.hostTmuxRefusal(host, a)
 	}
-	if l := m.loginOf(host); host == m.opt.Host && l.login == remote.LoginHostKeyChanged {
-		return refused(a, m.loginNote(l.login, ""))
+	if l := m.loginOf(host); l.login == remote.LoginHostKeyChanged {
+		return refused(a, m.loginNote(host, l.login, ""))
 	}
 	dir, err := m.masterDir()
 	if err != nil && j.Outer {

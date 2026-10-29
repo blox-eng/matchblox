@@ -330,13 +330,17 @@ type Model struct {
 	splashDone bool
 	armed      string // the step a second tap runs: what the first tap showed
 	// held is what the builder pressed or tapped while the stoker was in
-	// charge: it runs once they answer the take-over question.
+	// charge: it runs once they answer the take-over question. heldOn is
+	// the host it acts on, whose stoker the question is about (R14).
+	// touched is the last key that kept each host's stoker resting; it is
+	// copied on write.
 	held        func(Model) (tea.Model, tea.Cmd)
-	touched     time.Time // the last key that kept the stoker's rest
-	all         lists     // what every host sent, merged; queue, recs and snap hold the drawn copies
-	homeAll     lists     // what the home host sent
-	filter      string    // the search of the open tab
-	searching   bool      // the search line takes the keys
+	heldOn      string
+	touched     map[string]time.Time
+	all         lists  // what every host sent, merged; queue, recs and snap hold the drawn copies
+	homeAll     lists  // what the home host sent
+	filter      string // the search of the open tab
+	searching   bool   // the search line takes the keys
 	sessSort    sortBy
 	sessGroup   int // what Sessions is grouped by: groupNeed .. groupNone
 	holds       []proto.Hold
@@ -404,11 +408,13 @@ type Model struct {
 	stopQuiet []cloneStop
 	focusAt   time.Time // the At of the last focus this console acted on
 
-	// ask is the ssh prompt open in the console; nil none. askCtx lives as
+	// ask is the ssh prompt open in the console; nil none. askQueue are
+	// the prompts that wait for the field, first first. askCtx lives as
 	// long as the console: it ends the wait for prompts.
-	ask     *askField
-	askCtx  context.Context
-	askStop context.CancelFunc
+	ask      *askField
+	askQueue []askMsg
+	askCtx   context.Context
+	askStop  context.CancelFunc
 }
 
 func New(opt Options) Model {
@@ -598,7 +604,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.mismatch {
 			return m, nil
 		}
-		next, check := m.checkLogin()
+		next, check := m.checkLogin(m.opt.Host)
 		return next, tea.Batch(next.recv(), check)
 	case loginMsg:
 		return m.loggedIn(msg)
@@ -685,9 +691,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if toast != "" && !first {
 			news = m.say(toast)
 		}
-		if m.sheet != nil && m.sheet.queued && m.sheet.act == "" && m.stoker != nil && m.stoker.Ready {
-			m, order = m.sendOrder() // the stoker rests now: the order that waited for it goes
-		}
+		m, order = m.queuedOrder(m.opt.Host)
 		return m, tea.Batch(m.recv(), m.animate(), news, order, focus, again, started)
 	case graphicsMsg:
 		return m.graphics(msg)
@@ -1085,7 +1089,8 @@ func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case layerScan:
 		next, cmd = m.answerScan(k)
 	case layerTakeOver:
-		m.held, m.flash = m.hold(k), ""
+		m.held, m.heldOn = m.hold(k)
+		m.flash = ""
 		next = m
 	case layerPreview:
 		next, _ = m.scrollPreview(k)

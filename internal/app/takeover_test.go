@@ -254,7 +254,7 @@ func TestTapsAndTypingKeepTheRest(t *testing.T) {
 	f.mu.Lock()
 	f.sent = nil // the / itself touched
 	f.mu.Unlock()
-	searching.touched = time.Time{}
+	searching.touched = nil
 	sendKey(searching, "x")
 	if got := recIDs(f.acts()); len(got) != 1 || got[0] != "stoker:touch" {
 		t.Fatalf("typing a search: acts %v", got)

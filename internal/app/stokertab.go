@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -249,7 +250,43 @@ func (m Model) stokerPeekTarget() (pane, why string) {
 	return r.e.Pane, ""
 }
 
+// stokerBody is the tab: one host's stoker, or with two or more hosts a
+// section for each host with a stoker, in Hosts order, headed by its name.
+// The selection and the tab's keys are the home host's.
 func (m Model) stokerBody(w int) body {
+	if m.hostCount() == 1 {
+		return m.stokerHostBody(w)
+	}
+	var b body
+	for _, h := range m.hosts() {
+		if m.stokerOf(h) == nil {
+			continue
+		}
+		on := m.onStoker(h)
+		if h != m.opt.Host {
+			on.stokerSel, on.stokerShown = -1, ""
+		}
+		sec := on.stokerHostBody(w)
+		if h != m.opt.Host {
+			sec.rows = slices.Repeat([]int{-1}, len(sec.rows))
+		}
+		b.add(-1, "", m.st.label.Render(fit(" "+m.nameOf(h), w)))
+		b.lines, b.rows = append(b.lines, sec.lines...), append(b.rows, sec.rows...)
+	}
+	if len(b.lines) == 0 {
+		return m.stokerHostBody(w)
+	}
+	return b
+}
+
+// onStoker is m with host's stoker in the home host's place: the tab draws
+// that host's section with it.
+func (m Model) onStoker(host string) Model {
+	m.stoker, m.stokerServer = m.stokerOf(host), m.stateOf(host).StokerServer
+	return m
+}
+
+func (m Model) stokerHostBody(w int) body {
 	st, v := m.st, m.stoker
 	var b body
 	b.add(-1, "")

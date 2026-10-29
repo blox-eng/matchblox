@@ -295,7 +295,7 @@ func (m Model) whereRows(query string) []whereRow {
 	}
 	label := "SUGGESTED"
 	if m.hostCount() > 1 {
-		label += " · " + hostName(m.formHost())
+		label += " · " + m.nameOf(m.formHost())
 	}
 	rows := []whereRow{{kind: rowLabel, text: label}}
 	if extra != "" {

@@ -1,7 +1,10 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -13,6 +16,47 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
+
+// stokerOf is host's stoker view; nil when its service keeps none. Each
+// host keeps its own stoker (R14).
+func (m Model) stokerOf(host string) *proto.StokerView {
+	if host == m.opt.Host {
+		return m.stoker
+	}
+	return m.stateOf(host).Stoker
+}
+
+// setStoker keeps v as host's stoker view until its next state.
+func (m *Model) setStoker(host string, v *proto.StokerView) {
+	if host == m.opt.Host {
+		m.stoker = v
+		return
+	}
+	if i := m.peerAt(host); i >= 0 {
+		m.peers = slices.Clone(m.peers)
+		m.peers[i].st.Stoker = v
+	}
+}
+
+// rowHost is the host of the selected session, else the home host: the
+// host a stoker key acts on.
+func (m Model) rowHost() string {
+	if s, ok := m.selectedSession(); ok {
+		return s.Host
+	}
+	return m.opt.Host
+}
+
+// unsent is why an act to host cannot go now; "" when it can.
+func (m Model) unsent(host string) string {
+	if why := m.refusal(host); why != "" {
+		return why
+	}
+	if host == m.opt.Host && (m.conn == nil || m.lost) {
+		return "not sent, no connection"
+	}
+	return ""
+}
 
 // stokedShows: the stoker has steps, or the card of a run, the builder
 // has not seen.
@@ -29,27 +73,29 @@ func (m Model) card() *proto.StokerCard {
 }
 
 // stokerKey is f (the stoker off, or the launch sheet) and n (a night's
-// launch sheet, or the night off).
+// launch sheet, or the night off), on the selected row's host.
 func (m Model) stokerKey(night bool) (tea.Model, tea.Cmd) {
-	if m.conn == nil || m.lost {
-		m.flash = "not sent, no connection"
+	host := m.rowHost()
+	if why := m.unsent(host); why != "" {
+		m.flash = why
 		return m, nil
 	}
-	if m.stoker == nil {
+	v := m.stokerOf(host)
+	if v == nil {
 		m.flash = "this service keeps no stoker"
 		return m, nil
 	}
 	var verb, say string
 	switch {
-	case !night && m.resting():
+	case !night && m.restingOn(host):
 		verb, say = "wake", "the stoker is back on"
-	case night && m.stoker.On && !m.stoker.Until.IsZero(), !night && m.stoker.On:
+	case night && v.On && !v.Until.IsZero(), !night && v.On:
 		verb, say = "off", "the stoker is off"
 	default:
-		return m.openSheet(night, false)
+		return m.openSheet(host, night, false)
 	}
 	m.flash = say
-	return m, m.send(proto.Act{RecID: "stoker:" + verb, Which: "primary"})
+	return m, m.sendTo(host, proto.Act{RecID: "stoker:" + verb, Which: "primary"})
 }
 
 // seeStoker marks the stoker's steps seen while the STOKER tab is open: to
@@ -74,90 +120,142 @@ func stokerWordOf(md proto.StokerMode) string {
 	return "stoker"
 }
 
-// resting: the builder took over and the stoker waits for them to leave.
-func (m Model) resting() bool {
-	return m.stoker != nil && m.stoker.On && !m.stoker.Rests.IsZero()
+// stokersBadge is the stoker's word of two or more hosts: how many of
+// them it runs on, `stoker 2/3`; off when it runs on none.
+func (m Model) stokersBadge(short bool) string {
+	st, kept, runs := m.st, false, 0
+	for _, h := range m.hosts() {
+		if v := m.stokerOf(h); v != nil {
+			kept = true
+			if v.On {
+				runs++
+			}
+		}
+	}
+	switch {
+	case !kept:
+		return ""
+	case m.stokerAsks() && short:
+		return st.accent.Render("stoker waits")
+	case m.stokerAsks():
+		return st.accent.Render("stoker waits for you")
+	case runs == 0:
+		return st.faint.Render("stoker off")
+	}
+	return st.stoker.Render(fmt.Sprintf("stoker %d/%d", runs, m.hostCount()))
 }
 
-// takeOverDue: the stoker is in charge and the builder has not been asked
-// in this run, so a key that acts on a session will ask.
-func (m Model) takeOverDue() bool { return m.night() && !m.stoker.Asked }
+// resting: the builder took over and the home host's stoker waits for
+// them to leave.
+func (m Model) resting() bool { return m.restingOn(m.opt.Host) }
 
-// asksTakeOver: k acts on a session while the stoker is in charge, and the
-// builder has not been asked in this run. Looking around never asks.
+// restingOn: the builder took over and host's stoker waits for them to
+// leave.
+func (m Model) restingOn(host string) bool {
+	v := m.stokerOf(host)
+	return v != nil && v.On && !v.Rests.IsZero()
+}
+
+// nightOn: host's stoker is in charge.
+func (m Model) nightOn(host string) bool {
+	v := m.stokerOf(host)
+	return v != nil && v.On && v.Rests.IsZero()
+}
+
+// takeOverOn: host's stoker is in charge and the builder has not been
+// asked in this run, so a key that acts on a session of host will ask.
+func (m Model) takeOverOn(host string) bool { return m.nightOn(host) && !m.stokerOf(host).Asked }
+
+// takeOverDue: some host's take-over question is still to come.
+func (m Model) takeOverDue() bool { return slices.ContainsFunc(m.hosts(), m.takeOverOn) }
+
+// asksTakeOver: k acts on a session of a host whose stoker is in charge,
+// and the builder has not been asked in this run. Looking around never
+// asks.
 func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
-	if !m.night() || m.stoker.Asked || m.pending != nil {
+	if m.pending != nil {
 		return false
 	}
 	if _, ok := m.selectedDoor(); ok {
 		return false
 	}
+	on := func(a *action) bool { return a != nil && m.takeOverOn(m.actHost(a)) }
 	switch {
 	case bkey.Matches(k, m.keys.main.Open):
-		return m.primary() != nil
+		return on(m.primary())
 	case bkey.Matches(k, m.keys.main.Second):
-		return m.secondary() != nil
+		return on(m.secondary())
 	case bkey.Matches(k, m.keys.main.Peek):
 		at, _ := m.peekTarget()
-		return at.pane != ""
+		return at.pane != "" && m.takeOverOn(cmp.Or(at.host, m.opt.Host))
 	}
 	return false
 }
 
-// hold is what k does, fixed at the moment it was pressed: the answer
-// runs it on the row it was pressed on, wherever the selection is by then.
-func (m Model) hold(k tea.KeyPressMsg) func(Model) (tea.Model, tea.Cmd) {
+// hold is what k does, fixed at the moment it was pressed, and the host it
+// acts on: the answer runs it on the row it was pressed on, wherever the
+// selection is by then.
+func (m Model) hold(k tea.KeyPressMsg) (func(Model) (tea.Model, tea.Cmd), string) {
 	switch {
 	case bkey.Matches(k, m.keys.main.Peek):
 		at, _ := m.peekTarget()
 		return func(m Model) (tea.Model, tea.Cmd) {
 			m.openPeek(at)
 			return m, nil
-		}
+		}, cmp.Or(at.host, m.opt.Host)
 	case bkey.Matches(k, m.keys.main.Second):
 		a := m.secondary()
 		return func(m Model) (tea.Model, tea.Cmd) {
 			m.pending = a
 			return m, nil
-		}
+		}, m.actHost(a)
 	}
 	a := m.primary()
 	return func(m Model) (tea.Model, tea.Cmd) {
 		m.pending, m.previewTop = a, 0
 		return m, nil
-	}
+	}, m.actHost(a)
 }
 
-// answerTakeOver is the builder's answer: y rests the stoker, n keeps it
-// on; either way what they pressed runs. Any other key drops the question
-// and what was held.
+// actHost is the host a acts on; the home host for none.
+func (m Model) actHost(a *action) string {
+	if a == nil {
+		return m.opt.Host
+	}
+	return m.hostOf(*a)
+}
+
+// answerTakeOver is the builder's answer about the stoker of the host the
+// held key acts on: y rests it, n keeps it on; either way what they
+// pressed runs. Any other key drops the question and what was held.
 func (m Model) answerTakeOver(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	rest := bkey.Matches(k, m.keys.takeOver.Rest)
 	if !rest && !bkey.Matches(k, m.keys.takeOver.Keep) {
 		m.held, m.flash = nil, ""
 		return m, nil
 	}
-	if !m.night() { // the run ended or rests since the question: nothing to take over
+	host := cmp.Or(m.heldOn, m.opt.Host)
+	if !m.nightOn(host) { // the run ended or rests since the question: nothing to take over
 		held := m.held
 		m.held = nil
 		return held(m)
 	}
-	if m.conn == nil || m.lost {
-		m.flash = "not sent, no connection · " + k.String() + " tries again"
+	if why := m.unsent(host); why != "" {
+		m.flash = why + " · " + k.String() + " tries again"
 		return m, nil
 	}
 	held := m.held
 	m.held = nil
-	v := *m.stoker
+	v := *m.stokerOf(host)
 	v.Asked = true
 	verb, say := "keep", "the stoker stays on"
 	if rest {
 		verb, say = "rest", "stoker rests · "+m.keys.main.Stoke.Help().Key+" turns it back on"
 		v.Rests, v.Touched = m.now(), m.now()
-		m.touched = m.now()
+		m.touchedAt(host)
 	}
-	m.stoker = &v
-	send := m.send(proto.Act{RecID: "stoker:" + verb, Which: "primary"})
+	m.setStoker(host, &v)
+	send := m.sendTo(host, proto.Act{RecID: "stoker:" + verb, Which: "primary"})
 	next, run := held(m)
 	if nm, ok := next.(Model); ok && nm.flash == "" {
 		nm.flash = say
@@ -166,14 +264,26 @@ func (m Model) answerTakeOver(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return next, tea.Batch(send, run)
 }
 
-// touchRest tells the service, at most once a minute, that the builder is
-// still at the console, so the stoker goes on resting.
+// touchRest tells the service of the host acted on, at most once a
+// minute, that the builder is still at the console, so its stoker goes on
+// resting.
 func (m Model) touchRest() (Model, tea.Cmd) {
-	if !m.resting() || m.conn == nil || m.lost || m.now().Sub(m.touched) < time.Minute {
+	host := m.rowHost()
+	if !m.restingOn(host) || m.unsent(host) != "" || m.now().Sub(m.touched[host]) < time.Minute {
 		return m, nil
 	}
-	m.touched = m.now()
-	return m, m.send(proto.Act{RecID: "stoker:touch", Which: "primary"})
+	m.touchedAt(host)
+	return m, m.sendTo(host, proto.Act{RecID: "stoker:touch", Which: "primary"})
+}
+
+// touchedAt keeps now as the last key that kept host's rest.
+func (m *Model) touchedAt(host string) {
+	touched := maps.Clone(m.touched)
+	if touched == nil {
+		touched = map[string]time.Time{}
+	}
+	touched[host] = m.now()
+	m.touched = touched
 }
 
 func nightDoorAction(d doors.Door) *action {

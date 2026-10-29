@@ -37,7 +37,7 @@ func (m Model) connect(argv []string) (Model, tea.Cmd) {
 	ctx, stop := context.WithCancel(m.askCtx)
 	m.editLogin(m.opt.Host, func(l *hostLogin) { l.opening, l.openStop, l.askCancelled = true, stop, false })
 	ssh, env, gen := m.ssh(), m.opt.Ask.Env(m.opt.Host), m.opt.Gen
-	run := streamed(ctx, gen, m.loginOf(m.opt.Host).tailscale, openTimeout, openTimeout, func(ctx context.Context, line func(string)) tea.Msg {
+	run := streamed(ctx, m.opt.Host, gen, m.loginOf(m.opt.Host).tailscale, openTimeout, openTimeout, func(ctx context.Context, line func(string)) tea.Msg {
 		defer stop()
 		stderr, exit := ssh(ctx, argv, env, line)
 		return connectDoneMsg{gen: gen, stderr: stderr, exit: exit}

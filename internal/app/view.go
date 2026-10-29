@@ -427,6 +427,9 @@ func (m Model) stokerHit(word string, w int) span {
 // stoker's token, resting in muted. A phone drops the night's end.
 func (m Model) stokerBadge(short bool) string {
 	st := m.st
+	if m.hostCount() > 1 {
+		return m.stokersBadge(short)
+	}
 	switch {
 	case m.stoker == nil:
 		return ""

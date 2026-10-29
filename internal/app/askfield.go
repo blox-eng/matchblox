@@ -51,11 +51,14 @@ func (m Model) waitAsk() tea.Cmd {
 	}
 }
 
-// stopAsk ends the console's wait for prompts, and its login check: an
-// open prompt is cancelled.
+// stopAsk ends the console's wait for prompts, and its login checks: an
+// open prompt is cancelled, and so are those that wait for the field.
 func (m Model) stopAsk() {
 	if m.askStop != nil {
 		m.askStop()
+	}
+	for _, q := range m.askQueue {
+		q.answer("", false)
 	}
 	for _, l := range m.logins {
 		if l.checkStop != nil {
@@ -64,16 +67,25 @@ func (m Model) stopAsk() {
 	}
 }
 
-// asked opens the field on a prompt. The server closed, or the console
-// ended: no more prompts.
+// asked opens the field on a prompt, or queues it while the field holds
+// another: two hosts never share the field (R13). The server closed, or
+// the console ended: no more prompts.
 func (m Model) asked(msg askMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case msg.err != nil:
 		return m, nil
-	case msg.gen != m.opt.Gen || m.quitting || m.ask != nil:
+	case msg.gen != m.opt.Gen || m.quitting:
 		msg.answer("", false) // a prompt of a console that closed
 		return m, nil
+	case m.ask != nil:
+		m.askQueue = append(slices.Clip(m.askQueue), msg)
+		return m, nil
 	}
+	return m.openAsk(msg)
+}
+
+// openAsk shows the prompt in the field.
+func (m Model) openAsk(msg askMsg) (Model, tea.Cmd) {
 	m.ask = &askField{prompt: msg.prompt, answer: msg.answer}
 	m.pending, m.held = nil, nil // as a tap does: no key after the prompt confirms them
 	gone := msg.prompt.Gone
@@ -84,6 +96,22 @@ func (m Model) asked(msg askMsg) (tea.Model, tea.Cmd) {
 		<-gone // it closes after the answer too
 		return askGoneMsg{gone}
 	}
+}
+
+// nextAsk opens the first queued prompt whose ssh still asks.
+func (m Model) nextAsk() (Model, tea.Cmd) {
+	for len(m.askQueue) > 0 {
+		q := m.askQueue[0]
+		m.askQueue = m.askQueue[1:]
+		select {
+		case <-q.prompt.Gone:
+			q.answer("", false)
+			continue
+		default:
+		}
+		return m.openAsk(q)
+	}
+	return m, nil
 }
 
 // askGone closes the field of a prompt whose ssh stopped asking.
@@ -102,8 +130,8 @@ func (m Model) goneFlash() string {
 	return "ssh stopped asking: the ssh to " + m.askHost() + " ended before your answer"
 }
 
-// closeAsk answers the prompt, drops what was typed, and waits for the
-// next prompt.
+// closeAsk answers the prompt, drops what was typed, shows the next
+// prompt that waits, and waits for the next prompt.
 func (m Model) closeAsk(answer string, ok bool, flash string) (Model, tea.Cmd) {
 	f := m.ask
 	f.answer(answer, ok)
@@ -112,25 +140,59 @@ func (m Model) closeAsk(answer string, ok bool, flash string) (Model, tea.Cmd) {
 	if flash != "" {
 		m.flash = flash
 	}
-	return m, m.waitAsk()
+	m, next := m.nextAsk()
+	return m, tea.Batch(m.waitAsk(), next)
 }
 
 func (m Model) askHost() string {
 	switch {
 	case m.ask == nil:
-		return m.opt.Host
+		return m.fieldHost()
 	case m.ask.prompt.Host != "":
 		return m.ask.prompt.Host
 	}
 	return "a host"
 }
 
+// fieldHost is the host the field waits for with no prompt: the first, in
+// Hosts order, with Tailscale's link, then the first whose login opens.
+func (m Model) fieldHost() string {
+	for _, h := range m.hosts() {
+		if m.loginOf(h).loginURL != "" {
+			return h
+		}
+	}
+	for _, h := range m.hosts() {
+		if m.loginOf(h).opening {
+			return h
+		}
+	}
+	return m.opt.Host
+}
+
+// askOwner is the host whose login the open prompt belongs to: the
+// prompt's host when its login opens, else the field's. A new key's
+// prompts name this machine.
+func (m Model) askOwner() string {
+	if h := m.ask.prompt.Host; m.loginOf(h).opening {
+		return h
+	}
+	return m.fieldHost()
+}
+
 // asking: the field is on top, with a prompt, with Tailscale's link, or
 // waiting for the next prompt of an open-first (sshd waits after a wrong
 // password).
 func (m Model) asking() bool {
-	l := m.loginOf(m.opt.Host)
-	return m.ask != nil || l.opening || l.loginURL != ""
+	if m.ask != nil {
+		return true
+	}
+	for _, l := range m.logins {
+		if l.opening || l.loginURL != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // askKey is a key on the field: ⏎ answers, esc and ctrl+c cancel the ssh,
@@ -140,7 +202,7 @@ func (m Model) asking() bool {
 func (m Model) askKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	ak := m.keys.ask
 	if m.ask == nil {
-		host := m.opt.Host
+		host := m.fieldHost()
 		l := m.loginOf(host)
 		switch {
 		case bkey.Matches(k, ak.Copy) && l.loginURL != "":
@@ -162,12 +224,13 @@ func (m Model) askKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	f := *m.ask
 	switch {
 	case bkey.Matches(k, ak.Cancel, m.keys.global.Quit):
-		l := m.loginOf(m.opt.Host)
+		host := m.askOwner()
+		l := m.loginOf(host)
 		l.askCancelled = true
 		if l.openStop != nil {
 			l.openStop() // ssh would ask again: the open ends here
 		}
-		m.setLogin(m.opt.Host, l)
+		m.setLogin(host, l)
 		return m.closeAsk("", false, "cancelled: the ssh to "+m.askHost()+" gets no answer")
 	case f.prompt.Notify:
 		return m, nil // a notice takes no answer: ssh waits for the touch
@@ -306,7 +369,7 @@ func (m Model) linkBox(bw int) []string {
 		text = append(text, st.muted.Render(l))
 	}
 	link := []string{""}
-	url := m.loginOf(m.opt.Host).loginURL
+	url := m.loginOf(m.fieldHost()).loginURL
 	for l := range strings.SplitSeq(ansi.Hardwrap(url, iw, false), "\n") {
 		link = append(link, ansi.SetHyperlink(url)+st.accent.Render(l)+ansi.ResetHyperlink())
 	}
@@ -359,7 +422,7 @@ func (m Model) fieldBox(bw, maxH int) []string {
 	switch {
 	case m.ask != nil:
 		return m.askBox(bw, maxH)
-	case m.loginOf(m.opt.Host).loginURL != "":
+	case m.loginOf(m.fieldHost()).loginURL != "":
 		return m.linkBox(bw)
 	}
 	return m.waitBox(bw)

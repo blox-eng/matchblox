@@ -207,3 +207,24 @@ func TestPeekAndKillStayOnTheirHost(t *testing.T) {
 		t.Fatalf("the kill is %+v", a)
 	}
 }
+
+// TestHomeRefusalAndLabelUseItsName: after its hello, the home host is
+// called by its own name in a refusal and in the where list's label.
+func TestHomeRefusalAndLabelUseItsName(t *testing.T) {
+	m, _, _ := samePane(t, nil)
+	mm := upd(t, m.(Model), helloMsg(proto.Hello{Version: proto.Version, Host: "hearth"}))
+	mm.lost, mm.redialing, mm.backoff = true, true, time.Second
+	if got, want := mm.refusal(mm.opt.Host), "hearth is not connected. It tries again in 1s."; got != want {
+		t.Fatalf("refusal %q, want %q", got, want)
+	}
+	mm.lost = false
+	mm.found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{{Path: "/w/home-repo"}}}
+	mm.agents, mm.wrepos = []string{"claude"}, mm.whereRepos(mm.opt.Host)
+	nm := mm.openNewAt(mm.opt.Host, "", "")
+	if nm.form == nil || len(nm.form.rows) == 0 {
+		t.Fatalf("no where list: %+v", nm.form)
+	}
+	if r := nm.form.rows[0]; r.kind != rowLabel || r.text != "SUGGESTED · hearth" {
+		t.Fatalf("the label is %+v", r)
+	}
+}

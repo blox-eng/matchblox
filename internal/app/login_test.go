@@ -487,7 +487,7 @@ func TestTailscaleCheckShowsURL(t *testing.T) {
 	}
 	m.opt.Keys, m.opt.Ask = &Keys{}, fakeAsk{}
 	m.editLogin(m.opt.Host, func(l *hostLogin) { l.login = remote.LoginPassword })
-	if m.offersLadder() {
+	if m.offersLadder(m.opt.Host) {
 		t.Fatal("the ladder is offered on Tailscale SSH: authorized_keys does nothing there")
 	}
 }
@@ -618,13 +618,13 @@ func TestStreamedLimit(t *testing.T) {
 		}
 		return msg
 	}
-	if got := drain(streamed(context.Background(), 1, false, 50*time.Millisecond, 5*time.Second, waits(""))); got != "ended" {
+	if got := drain(streamed(context.Background(), "ws-1", 1, false, 50*time.Millisecond, 5*time.Second, waits(""))); got != "ended" {
 		t.Fatalf("no link: %v", got)
 	}
-	if got := drain(streamed(context.Background(), 1, false, 50*time.Millisecond, 5*time.Second, waits(checkURL))); got != "done" {
+	if got := drain(streamed(context.Background(), "ws-1", 1, false, 50*time.Millisecond, 5*time.Second, waits(checkURL))); got != "done" {
 		t.Fatalf("a link: %v", got)
 	}
-	if got := drain(streamed(context.Background(), 1, false, 50*time.Millisecond, 5*time.Second, waits("https://evil.example/a/1"))); got != "ended" {
+	if got := drain(streamed(context.Background(), "ws-1", 1, false, 50*time.Millisecond, 5*time.Second, waits("https://evil.example/a/1"))); got != "ended" {
 		t.Fatalf("a link that is not Tailscale's: %v", got)
 	}
 }
@@ -660,7 +660,7 @@ func TestPrefixFallbackSaysSo(t *testing.T) {
 func TestCheckerAsksInTheConsole(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	m.opt.Host, m.opt.Ask = "ws-1", fakeAsk{}
-	if _, exit := m.checker()(context.Background(), []string{"sh", "-c", `[ "$SSH_ASKPASS_REQUIRE" = force ] && [ -n "$MATCHBLOX_ASKPASS_HOST" ]`}, ignoreLine); exit != 0 {
+	if _, exit := m.checker(m.opt.Host)(context.Background(), []string{"sh", "-c", `[ "$SSH_ASKPASS_REQUIRE" = force ] && [ -n "$MATCHBLOX_ASKPASS_HOST" ]`}, ignoreLine); exit != 0 {
 		t.Fatal("the check's ssh has no prompt socket")
 	}
 }

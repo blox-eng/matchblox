@@ -1,6 +1,8 @@
 package app
 
 import (
+	"cmp"
+
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -130,8 +132,8 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 			return m, nil // the default selection is not a tap
 		}
 		open := func(m Model) (tea.Model, tea.Cmd) { m.openPeek(at); return m, nil }
-		if m.night() && !m.stoker.Asked {
-			m.held = open
+		if host := cmp.Or(at.host, m.opt.Host); m.takeOverOn(host) {
+			m.held, m.heldOn = open, host
 			return m, nil
 		}
 		return open(m)
@@ -148,8 +150,8 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.armed = ""
-	if _, door := m.selectedDoor(); !door && m.night() && !m.stoker.Asked {
-		m.held, m.flash = run, ""
+	if _, door := m.selectedDoor(); !door && m.takeOverOn(m.rowHost()) {
+		m.held, m.heldOn, m.flash = run, m.rowHost(), ""
 		return m, nil
 	}
 	return run(m)

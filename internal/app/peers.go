@@ -134,7 +134,7 @@ func (m Model) refusal(host string) string {
 		}
 		redialing, backoff = l.redialing, l.backoff
 	}
-	why := hostName(host) + " is not connected."
+	why := m.nameOf(host) + " is not connected."
 	if redialing {
 		why += " It tries again in " + backoff.String() + "."
 	}
@@ -209,6 +209,8 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		if p.mismatch = p.hello.Version != proto.Version; p.mismatch {
 			return m, nil // as the home host: a row with the fix, and no more reads
 		}
+		next, check := m.checkLogin(p.host)
+		return next, tea.Batch(next.peerRecv(i), check)
 	case stateMsg:
 		st := proto.State(msg)
 		st.History = cmp.Or(st.History, p.st.History)
@@ -232,6 +234,8 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		}
 		m.merge()
 		m.keepSelection()
+		next, order := m.queuedOrder(p.host)
+		return next, tea.Batch(next.peerRecv(i), order)
 	case resultMsg:
 		at := slices.Index(p.acts, msg.ActID)
 		if at < 0 {
