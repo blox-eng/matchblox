@@ -117,7 +117,7 @@ func TestJumpOpenFailsRunsNothing(t *testing.T) {
 	if want := "the jump did not run: ws-1 refused your login: jump again to type it again, or put your key there (ssh-copy-id ws-1)"; next.flash != want {
 		t.Fatalf("flash %q\nwant %q", next.flash, want)
 	}
-	if next.opening {
+	if homeLogin(next).opening {
 		t.Fatal("still opening")
 	}
 }
@@ -260,7 +260,7 @@ func openingHost(t *testing.T) (tea.Model, tea.Cmd, chan struct{}, *[][]string) 
 	}
 	hostJump(&m, remote.Jump{Pane: "%1"})
 	next, cmd := m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
-	if !next.(Model).opening {
+	if !homeLogin(next.(Model)).opening {
 		t.Fatal("no open-first")
 	}
 	return next, cmd, killed, ran
@@ -321,8 +321,8 @@ func TestOpenFirstEscCancels(t *testing.T) {
 		next.Update(c())
 	}
 	nm := next.(Model)
-	if nm.opening || len(*ran) != 0 || !strings.HasPrefix(nm.flash, "cancelled") {
-		t.Fatalf("opening %v, ran %q, flash %q", nm.opening, *ran, nm.flash)
+	if homeLogin(nm).opening || len(*ran) != 0 || !strings.HasPrefix(nm.flash, "cancelled") {
+		t.Fatalf("opening %v, ran %q, flash %q", homeLogin(nm).opening, *ran, nm.flash)
 	}
 	if strings.Contains(ansi.Strip(nm.render()), "waiting for ssh") {
 		t.Fatal("the waiting field stays")

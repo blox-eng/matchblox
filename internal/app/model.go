@@ -312,13 +312,8 @@ type Model struct {
 	quitting   bool
 	host       proto.Hello
 	mismatch   bool
-	blocked    error        // why the host cannot be reached, until the builder acts
-	login      remote.Login // the builder's own ssh login to the host, as the check found it
-	checking   bool         // the login check runs
-	checked    bool         // the login check started once
-	jumpLater  *action      // the jump that waits for the login check
-	opening    bool         // the master of a jump opens, its prompts in the console
-	notNow     bool         // the key ladder offers nothing more: not now, or the key is on the host
+	blocked    error                // why the host cannot be reached, until the builder acts
+	logins     map[string]hostLogin // the builder's own ssh login to each host; copied on write
 	lost       bool
 	backoff    time.Duration
 	redialing  bool
@@ -410,26 +405,10 @@ type Model struct {
 	focusAt   time.Time // the At of the last focus this console acted on
 
 	// ask is the ssh prompt open in the console; nil none. askCtx lives as
-	// long as the console: it ends the wait for prompts. askCancelled: the
-	// builder cancelled the last one.
-	ask          *askField
-	askCtx       context.Context
-	askStop      context.CancelFunc
-	openStop     context.CancelFunc // ends the open-first that runs
-	askCancelled bool
-
-	// checkStop ends the login check that runs; checkCancelled: the builder
-	// ended it at its Tailscale link. tailscale: the host is Tailscale SSH,
-	// as its last check with the server's version line said. loginURL is
-	// Tailscale's check link in the field, while the ssh that printed it
-	// waits; "" none. Only remote.VisitURL gives it.
-	checkStop      context.CancelFunc
-	checkCancelled bool
-	tailscale      bool
-	loginURL       string
-	// note is what the ladder said before the jump it held logs in: the
-	// login covers the flash, and the jump that goes shows it again.
-	note string
+	// long as the console: it ends the wait for prompts.
+	ask     *askField
+	askCtx  context.Context
+	askStop context.CancelFunc
 }
 
 func New(opt Options) Model {

@@ -27,7 +27,7 @@ func (s Shell) connectField(host string, gen int) Model {
 	m := New(Options{Host: host, Ask: b.Ask, SSH: b.SSH, Gen: gen, Clip: b.Clip, Layered: true})
 	m.width, m.height, m.dark, m.st = s.width, s.height, s.dark, s.st
 	m.splashDone = true
-	m.tailscale = s.tailscale[host]
+	m.editLogin(host, func(l *hostLogin) { l.tailscale = s.tailscale[host] })
 	return m
 }
 
@@ -35,9 +35,9 @@ func (s Shell) connectField(host string, gen int) Model {
 // its ssh's prompts in the field, until it ends or esc ends it.
 func (m Model) connect(argv []string) (Model, tea.Cmd) {
 	ctx, stop := context.WithCancel(m.askCtx)
-	m.opening, m.openStop, m.askCancelled = true, stop, false
+	m.editLogin(m.opt.Host, func(l *hostLogin) { l.opening, l.openStop, l.askCancelled = true, stop, false })
 	ssh, env, gen := m.ssh(), m.opt.Ask.Env(m.opt.Host), m.opt.Gen
-	run := streamed(ctx, gen, m.tailscale, openTimeout, openTimeout, func(ctx context.Context, line func(string)) tea.Msg {
+	run := streamed(ctx, gen, m.loginOf(m.opt.Host).tailscale, openTimeout, openTimeout, func(ctx context.Context, line func(string)) tea.Msg {
 		defer stop()
 		stderr, exit := ssh(ctx, argv, env, line)
 		return connectDoneMsg{gen: gen, stderr: stderr, exit: exit}
@@ -75,7 +75,8 @@ func (s Shell) connectUpdate(msg tea.Msg) (Shell, tea.Cmd, bool) {
 		}
 		f.stopAsk()
 		s.connecting = nil
-		return s, func() tea.Msg { return connectedHostMsg{f.opt.Host, connectErr(msg, f.askCancelled)} }, true
+		cancelled := f.loginOf(f.opt.Host).askCancelled
+		return s, func() tea.Msg { return connectedHostMsg{f.opt.Host, connectErr(msg, cancelled)} }, true
 	case askMsg:
 		next, cmd = f.asked(msg)
 	case askGoneMsg:

@@ -319,13 +319,13 @@ func TestALateLoginCheckOfAClosedConsoleIsDropped(t *testing.T) {
 		t.Fatalf("no new console: layer %v, gen %d", r.sh.layer, r.sh.cur.opt.Gen)
 	}
 	stopped := false
-	r.sh.cur.checking, r.sh.cur.checkStop = true, func() { stopped = true }
-	r.sh.cur.jumpLater, r.sh.cur.flash, r.sh.cur.login = &action{}, "checking", remote.LoginPassword
+	r.sh.cur.setLogin("ws-1", hostLogin{checking: true, checkStop: func() { stopped = true }, jumpLater: &action{}, login: remote.LoginPassword})
+	r.sh.cur.flash = "checking"
 	next, cmd := r.sh.Update(loginMsg{host: "ws-1", gen: gen, login: remote.LoginUnreachable, detail: "timed out"})
 	r.sh = next.(Shell)
-	c := r.sh.cur
-	if cmd != nil || !c.checking || c.checkStop == nil || c.jumpLater == nil || c.flash != "checking" || c.login != remote.LoginPassword {
-		t.Fatalf("the old check reached the new console: checking %v, stop %v, waits %v, flash %q, login %v", c.checking, c.checkStop != nil, c.jumpLater != nil, c.flash, c.login)
+	c := r.sh.cur.loginOf("ws-1")
+	if cmd != nil || !c.checking || c.checkStop == nil || c.jumpLater == nil || r.sh.cur.flash != "checking" || c.login != remote.LoginPassword {
+		t.Fatalf("the old check reached the new console: checking %v, stop %v, waits %v, flash %q, login %v", c.checking, c.checkStop != nil, c.jumpLater != nil, r.sh.cur.flash, c.login)
 	}
 	c.checkStop()
 	if !stopped {
@@ -396,7 +396,7 @@ func TestTailscaleHostRowWarns(t *testing.T) {
 	}
 	// The console of ws-1 opens knowing its kind.
 	r.sh, _ = r.sh.open("ws-1", false)
-	if !r.sh.cur.tailscale {
+	if !homeLogin(r.sh.cur).tailscale {
 		t.Fatal("the console of ws-1 forgot its kind")
 	}
 }

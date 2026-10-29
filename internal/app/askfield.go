@@ -57,8 +57,10 @@ func (m Model) stopAsk() {
 	if m.askStop != nil {
 		m.askStop()
 	}
-	if m.checkStop != nil {
-		m.checkStop()
+	for _, l := range m.logins {
+		if l.checkStop != nil {
+			l.checkStop()
+		}
 	}
 }
 
@@ -126,7 +128,10 @@ func (m Model) askHost() string {
 // asking: the field is on top, with a prompt, with Tailscale's link, or
 // waiting for the next prompt of an open-first (sshd waits after a wrong
 // password).
-func (m Model) asking() bool { return m.ask != nil || m.opening || m.loginURL != "" }
+func (m Model) asking() bool {
+	l := m.loginOf(m.opt.Host)
+	return m.ask != nil || l.opening || l.loginURL != ""
+}
 
 // askKey is a key on the field: ⏎ answers, esc and ctrl+c cancel the ssh,
 // any other key is text. While the field waits, esc and ctrl+c end the
@@ -135,29 +140,34 @@ func (m Model) asking() bool { return m.ask != nil || m.opening || m.loginURL !=
 func (m Model) askKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	ak := m.keys.ask
 	if m.ask == nil {
+		host := m.opt.Host
+		l := m.loginOf(host)
 		switch {
-		case bkey.Matches(k, ak.Copy) && m.loginURL != "":
+		case bkey.Matches(k, ak.Copy) && l.loginURL != "":
 			m.flash = "link copied"
-			return m, m.clip(m.loginURL)
+			return m, m.clip(l.loginURL)
 		case !bkey.Matches(k, ak.Cancel, m.keys.global.Quit):
-		case m.openStop != nil:
-			m.openStop()
-			m.askCancelled = true
-			m.flash = "cancelled: the login to " + m.opt.Host + "…"
-		case m.checking && m.checkStop != nil:
-			m.checkStop()
-			m.checkCancelled = true
-			m.flash = "cancelled: the Tailscale check of " + m.opt.Host + "…"
+		case l.openStop != nil:
+			l.openStop()
+			l.askCancelled = true
+			m.flash = "cancelled: the login to " + host + "…"
+		case l.checking && l.checkStop != nil:
+			l.checkStop()
+			l.checkCancelled = true
+			m.flash = "cancelled: the Tailscale check of " + host + "…"
 		}
+		m.setLogin(host, l)
 		return m, nil
 	}
 	f := *m.ask
 	switch {
 	case bkey.Matches(k, ak.Cancel, m.keys.global.Quit):
-		m.askCancelled = true
-		if m.openStop != nil {
-			m.openStop() // ssh would ask again: the open ends here
+		l := m.loginOf(m.opt.Host)
+		l.askCancelled = true
+		if l.openStop != nil {
+			l.openStop() // ssh would ask again: the open ends here
 		}
+		m.setLogin(m.opt.Host, l)
 		return m.closeAsk("", false, "cancelled: the ssh to "+m.askHost()+" gets no answer")
 	case f.prompt.Notify:
 		return m, nil // a notice takes no answer: ssh waits for the touch
@@ -296,8 +306,9 @@ func (m Model) linkBox(bw int) []string {
 		text = append(text, st.muted.Render(l))
 	}
 	link := []string{""}
-	for l := range strings.SplitSeq(ansi.Hardwrap(m.loginURL, iw, false), "\n") {
-		link = append(link, ansi.SetHyperlink(m.loginURL)+st.accent.Render(l)+ansi.ResetHyperlink())
+	url := m.loginOf(m.opt.Host).loginURL
+	for l := range strings.SplitSeq(ansi.Hardwrap(url, iw, false), "\n") {
+		link = append(link, ansi.SetHyperlink(url)+st.accent.Render(l)+ansi.ResetHyperlink())
 	}
 	title := st.accent.Bold(true).Render("ssh " + m.askHost() + " asks")
 	foot := []footPart{st.footKey(ak.Copy, "copy the link", "", st.accent), st.footKey(ak.Cancel, "cancel the ssh", " ─ ", st.accent)}
@@ -348,7 +359,7 @@ func (m Model) fieldBox(bw, maxH int) []string {
 	switch {
 	case m.ask != nil:
 		return m.askBox(bw, maxH)
-	case m.loginURL != "":
+	case m.loginOf(m.opt.Host).loginURL != "":
 		return m.linkBox(bw)
 	}
 	return m.waitBox(bw)

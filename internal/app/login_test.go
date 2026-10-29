@@ -117,7 +117,7 @@ func hostHello(tmux string) helloMsg {
 func TestHostOpenRunsLoginCheck(t *testing.T) {
 	m, _, checks := checkedHost(t, fixtureState(), "", 0)
 	next, cmd := m.Update(hostHello("3.4"))
-	if !next.(Model).checking {
+	if !homeLogin(next.(Model)).checking {
 		t.Fatal("the hello did not start the check")
 	}
 	got := loginCheckOf(cmd)
@@ -129,7 +129,7 @@ func TestHostOpenRunsLoginCheck(t *testing.T) {
 		t.Fatalf("messages %+v", got)
 	}
 	next, _ = next.Update(got[0])
-	if next.(Model).checking || next.(Model).flash != "" {
+	if homeLogin(next.(Model)).checking || next.(Model).flash != "" {
 		t.Fatalf("an ok login shows nothing: flash %q", next.(Model).flash)
 	}
 	_, cmd = next.Update(hostHello("3.4"))
@@ -149,7 +149,7 @@ func TestLocalConsoleRunsNoLoginCheck(t *testing.T) {
 	}
 	next, cmd := m.Update(helloMsg(proto.Hello{Version: proto.Version}))
 	loginCheckOf(cmd)
-	if next.(Model).checking {
+	if homeLogin(next.(Model)).checking {
 		t.Fatal("this machine's console checks a login")
 	}
 }
@@ -180,7 +180,7 @@ func TestJumpWaitsForLoginCheck(t *testing.T) {
 	if len(ran) != 1 || !strings.Contains(strings.Join(ran[0], " "), "%2") {
 		t.Fatalf("ran %q, want one jump to %%2", ran)
 	}
-	if next.(Model).checking {
+	if homeLogin(next.(Model)).checking {
 		t.Fatal("still checking")
 	}
 }
@@ -454,8 +454,8 @@ func tailscaleHost(t *testing.T, approve <-chan struct{}) (Model, tea.Cmd, *[][]
 func TestTailscaleCheckShowsURL(t *testing.T) {
 	approve := make(chan struct{})
 	m, wait, ran, clipped := tailscaleHost(t, approve)
-	if m.loginURL != checkURL || !m.asking() {
-		t.Fatalf("link %q, asking %v", m.loginURL, m.asking())
+	if homeLogin(m).loginURL != checkURL || !m.asking() {
+		t.Fatalf("link %q, asking %v", homeLogin(m).loginURL, m.asking())
 	}
 	out := m.render()
 	if !strings.Contains(out, ansi.SetHyperlink(checkURL)) || !strings.Contains(ansi.Strip(out), "ssh ws-1 asks") {
@@ -469,7 +469,7 @@ func TestTailscaleCheckShowsURL(t *testing.T) {
 		t.Fatalf("clipped %q", *clipped)
 	}
 	next, _ = next.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
-	if len(*ran) != 0 || next.(Model).loginURL != checkURL {
+	if len(*ran) != 0 || homeLogin(next.(Model)).loginURL != checkURL {
 		t.Fatalf("a key went past the field: ran %q", *ran)
 	}
 	close(approve)
@@ -479,13 +479,14 @@ func TestTailscaleCheckShowsURL(t *testing.T) {
 	}
 	cmd()
 	m = next.(Model)
-	if len(*ran) != 1 || m.loginURL != "" || m.asking() || strings.Contains(m.flash, "tailscale.com") {
-		t.Fatalf("ran %q, link %q, flash %q", *ran, m.loginURL, m.flash)
+	if len(*ran) != 1 || homeLogin(m).loginURL != "" || m.asking() || strings.Contains(m.flash, "tailscale.com") {
+		t.Fatalf("ran %q, link %q, flash %q", *ran, homeLogin(m).loginURL, m.flash)
 	}
-	if !m.tailscale {
+	if !homeLogin(m).tailscale {
 		t.Fatal("the console forgot that ws-1 is Tailscale SSH")
 	}
-	m.opt.Keys, m.opt.Ask, m.login = &Keys{}, fakeAsk{}, remote.LoginPassword
+	m.opt.Keys, m.opt.Ask = &Keys{}, fakeAsk{}
+	m.editLogin(m.opt.Host, func(l *hostLogin) { l.login = remote.LoginPassword })
 	if m.offersLadder() {
 		t.Fatal("the ladder is offered on Tailscale SSH: authorized_keys does nothing there")
 	}
@@ -509,11 +510,11 @@ func TestTailscaleCheckEscCancels(t *testing.T) {
 		cmd()
 	}
 	m = next.(Model)
-	if len(*ran) != 0 || m.loginURL != "" || !strings.HasPrefix(m.flash, "cancelled") {
-		t.Fatalf("ran %q, link %q, flash %q", *ran, m.loginURL, m.flash)
+	if len(*ran) != 0 || homeLogin(m).loginURL != "" || !strings.HasPrefix(m.flash, "cancelled") {
+		t.Fatalf("ran %q, link %q, flash %q", *ran, homeLogin(m).loginURL, m.flash)
 	}
-	if m.login != remote.LoginTailscaleCheck {
-		t.Fatalf("login %v: the next jump must ask for the check again", m.login)
+	if homeLogin(m).login != remote.LoginTailscaleCheck {
+		t.Fatalf("login %v: the next jump must ask for the check again", homeLogin(m).login)
 	}
 }
 
@@ -534,7 +535,7 @@ func TestTailscaleDeniedSaysWhy(t *testing.T) {
 // lets the link show, live; the approved open runs the jump.
 func TestTailscaleOpenFirstShowsURL(t *testing.T) {
 	m, _, ran := askingHost(t, false, "", 0)
-	m.tailscale = true
+	m.editLogin(m.opt.Host, func(l *hostLogin) { l.tailscale = true })
 	approve := make(chan struct{})
 	open := waitingCheck(t, approve)
 	m.opt.SSH = func(ctx context.Context, argv, _ []string, line func(string)) (string, int) {
@@ -554,15 +555,15 @@ func TestTailscaleOpenFirstShowsURL(t *testing.T) {
 		t.Fatalf("link %+v", u)
 	}
 	next, cmd = next.Update(u)
-	if next.(Model).loginURL != checkURL || !strings.Contains(next.(Model).render(), ansi.SetHyperlink(checkURL)) {
+	if homeLogin(next.(Model)).loginURL != checkURL || !strings.Contains(next.(Model).render(), ansi.SetHyperlink(checkURL)) {
 		t.Fatal("the open-first's link is not shown")
 	}
 	close(approve)
 	for cmd != nil {
 		next, cmd = next.Update(cmd())
 	}
-	if m := next.(Model); len(*ran) != 1 || m.loginURL != "" || m.opening || strings.Contains(m.flash, "tailscale.com") {
-		t.Fatalf("ran %q, link %q, flash %q", *ran, m.loginURL, m.flash)
+	if m := next.(Model); len(*ran) != 1 || homeLogin(m).loginURL != "" || homeLogin(m).opening || strings.Contains(m.flash, "tailscale.com") {
+		t.Fatalf("ran %q, link %q, flash %q", *ran, homeLogin(m).loginURL, m.flash)
 	}
 }
 
@@ -585,7 +586,7 @@ func TestUnexpectedLoginLinkNotShown(t *testing.T) {
 	}
 	next, _ = next.Update(u)
 	m = next.(Model)
-	if m.loginURL != "" || strings.Contains(m.render(), checkURL) {
+	if homeLogin(m).loginURL != "" || strings.Contains(m.render(), checkURL) {
 		t.Fatal("a link from a host that is not Tailscale SSH is shown")
 	}
 	if want := "ws-1 printed an unexpected login link: nothing was opened"; m.flash != want {

@@ -133,7 +133,7 @@ func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
 	m.width, m.height, m.dark, m.st = s.width, s.height, s.dark, s.st
 	m.splashDone = !first
 	m.pairOffers = s.offers
-	m.tailscale = s.tailscale[host] // until its check says
+	m.editLogin(host, func(l *hostLogin) { l.tailscale = s.tailscale[host] }) // until its check says
 	s.cur, s.curHost, s.layer = m, host, layerConsole
 	return s, m.Init()
 }
@@ -198,7 +198,7 @@ func (s Shell) back() Shell {
 	s.cur.stopAsk()       // an open prompt is cancelled
 	s.cur.quitting = true // its late messages find nothing to do
 	if s.curHost != "" {
-		s.tailscale[s.curHost] = s.cur.tailscale
+		s.tailscale[s.curHost] = s.cur.loginOf(s.curHost).tailscale
 	}
 	s.layer, s.adding, s.input, s.pending, s.flash = layerHosts, false, nil, nil, ""
 	s.hosts = s.readHosts()

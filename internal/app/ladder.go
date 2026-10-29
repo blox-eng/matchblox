@@ -78,7 +78,8 @@ type installedMsg struct {
 // key first, once per console, unless they chose not now. Never on
 // Tailscale SSH: it does not read authorized_keys.
 func (m Model) offersLadder() bool {
-	return m.login == remote.LoginPassword && !m.tailscale && m.opt.Keys != nil && m.opt.Ask != nil && !m.notNow
+	l := m.loginOf(m.opt.Host)
+	return l.login == remote.LoginPassword && !l.tailscale && m.opt.Keys != nil && m.opt.Ask != nil && !l.notNow
 }
 
 // findStep finds the ladder's first step for the jump a, in the
@@ -93,7 +94,7 @@ func (m Model) findStep(a action) (tea.Model, tea.Cmd) {
 func (m Model) foundStep(msg stepMsg) (tea.Model, tea.Cmd) {
 	// Two jumps confirmed while the keys were read give two steps: once one
 	// is answered (or another offer shows), the other is old.
-	if msg.gen != m.opt.Gen || m.quitting || m.opening || m.pending != nil || m.notNow || m.login != remote.LoginPassword {
+	if l := m.loginOf(m.opt.Host); msg.gen != m.opt.Gen || m.quitting || l.opening || m.pending != nil || l.notNow || l.login != remote.LoginPassword {
 		return m, nil
 	}
 	m.flash = ""
@@ -182,7 +183,7 @@ func (m Model) declined(c climb, esc bool) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	default:
-		m.notNow = true
+		m.editLogin(m.opt.Host, func(l *hostLogin) { l.notNow = true })
 		m.flash = "not now: " + m.opt.Host + " asks your password at a jump"
 	}
 	if c.jump == nil {
@@ -195,7 +196,7 @@ func (m Model) declined(c climb, esc bool) (tea.Model, tea.Cmd) {
 // the field waits on top, and esc ends it.
 func (m Model) startLogin(flash string) (Model, context.Context, context.CancelFunc) {
 	ctx, stop := context.WithCancel(m.askCtx)
-	m.opening, m.openStop, m.askCancelled = true, stop, false
+	m.editLogin(m.opt.Host, func(l *hostLogin) { l.opening, l.openStop, l.askCancelled = true, stop, false })
 	m.pending, m.held = nil, nil
 	m.flash = flash
 	return m, ctx, stop
@@ -238,19 +239,19 @@ func (m Model) installed(msg installedMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.opt.Gen || m.quitting {
 		return m, nil
 	}
-	m.opening, m.openStop = false, nil
+	m.editLogin(m.opt.Host, func(l *hostLogin) { l.opening, l.openStop = false, nil })
 	host, s := m.opt.Host, msg.c.step
-	if m.askCancelled || msg.exit != 0 {
+	if m.loginOf(m.opt.Host).askCancelled || msg.exit != 0 {
 		m.flash = m.notInstalled(msg)
 		if msg.c.jump != nil {
 			m.flash += ", and the jump did not run"
 		}
 		return m, nil
 	}
-	m.notNow = true
+	m.editLogin(host, func(l *hostLogin) { l.notNow = true })
 	m.flash = "your key " + s.Fingerprint + " is on " + host
 	if msg.check == remote.LoginOK {
-		m.login = remote.LoginOK
+		m.editLogin(host, func(l *hostLogin) { l.login = remote.LoginOK })
 		m.flash += ": your login uses it, no password"
 	} else {
 		m.flash += ", but ssh cannot use it without a prompt: a jump asks its passphrase here"
@@ -270,7 +271,7 @@ func (m Model) installed(msg installedMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) notInstalled(msg installedMsg) string {
 	host := m.opt.Host
-	if m.askCancelled {
+	if m.loginOf(host).askCancelled {
 		return "cancelled: your key is not on " + host
 	}
 	login, detail := remote.ClassifyLogin(msg.stderr, msg.exit)
@@ -329,10 +330,10 @@ func (m Model) keyMade(msg keyMadeMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.opt.Gen || m.quitting {
 		return m, nil
 	}
-	m.opening, m.openStop = false, nil
+	m.editLogin(m.opt.Host, func(l *hostLogin) { l.opening, l.openStop = false, nil })
 	path := msg.c.step.Path
 	switch {
-	case m.askCancelled:
+	case m.loginOf(m.opt.Host).askCancelled:
 		m.flash = "cancelled: no key made"
 	case msg.refused != "":
 		m.flash = "refused: " + msg.refused

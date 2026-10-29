@@ -117,7 +117,7 @@ func (m Model) linkShown(msg urlMsg) (tea.Model, tea.Cmd) {
 	case msg.url == "":
 		m.flash = "Tailscale SSH on " + host + " printed a link that is not login.tailscale.com: nothing was opened"
 	default:
-		m.loginURL = msg.url
+		m.editLogin(host, func(l *hostLogin) { l.loginURL = msg.url })
 		m.pending, m.held = nil, nil // the field is on top: nothing waits under it
 	}
 	return m, msg.next
@@ -127,10 +127,11 @@ func (m Model) linkShown(msg urlMsg) (tea.Model, tea.Cmd) {
 // once per console, in the background (design §3.2). It changes nothing on
 // either machine; an ok check leaves the master up for the jumps.
 func (m Model) checkLogin() (Model, tea.Cmd) {
-	if !remote.ValidHost(m.opt.Host) || m.checked {
+	l := m.loginOf(m.opt.Host)
+	if !remote.ValidHost(m.opt.Host) || l.checked {
 		return m, nil
 	}
-	m.checked, m.checking = true, true
+	l.checked, l.checking = true, true
 	// A directory that is refused: the check goes without a master, and
 	// the console says why once. Inside tmux the jumps are refused (see
 	// jumpOnHost); outside, they log in each time.
@@ -148,7 +149,8 @@ func (m Model) checkLogin() (Model, tea.Cmd) {
 	host, check, gen := m.opt.Host, m.checker(), m.opt.Gen
 	argv := remote.CheckArgv(host, dir)
 	ctx, stop := context.WithCancel(context.Background())
-	m.checkStop, m.checkCancelled = stop, false
+	l.checkStop, l.checkCancelled = stop, false
+	m.setLogin(host, l)
 	return m, streamed(ctx, gen, false, checkTimeout, openTimeout, func(ctx context.Context, line func(string)) tea.Msg {
 		defer stop()
 		stderr, exit := check(ctx, argv, line)
@@ -180,16 +182,18 @@ func (m Model) loggedIn(msg loginMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.opt.Gen || m.quitting || msg.host != m.opt.Host {
 		return m, nil
 	}
-	m.checking, m.login, m.loginURL, m.checkStop = false, msg.login, "", nil
+	l := m.loginOf(msg.host)
+	l.checking, l.login, l.loginURL, l.checkStop = false, msg.login, "", nil
 	if msg.seen {
-		m.tailscale = msg.tailscale
+		l.tailscale = msg.tailscale
 	}
-	a := m.jumpLater
-	m.jumpLater = nil
-	if m.checkCancelled {
-		if m.login != remote.LoginOK {
-			m.login = remote.LoginTailscaleCheck // the next jump asks for it again
-		}
+	a := l.jumpLater
+	l.jumpLater = nil
+	if l.checkCancelled && l.login != remote.LoginOK {
+		l.login = remote.LoginTailscaleCheck // the next jump asks for it again
+	}
+	m.setLogin(msg.host, l)
+	if l.checkCancelled {
 		m.flash = "cancelled: the Tailscale check of " + m.opt.Host + "; the next jump asks for it again"
 		if a != nil {
 			m.flash = "cancelled: the Tailscale check of " + m.opt.Host + ", and the jump did not run"
@@ -212,14 +216,15 @@ func (m Model) loggedIn(msg loginMsg) (tea.Model, tea.Cmd) {
 // second jump replaces the one that waits. The check and the key ladder
 // are the home host's: a jump to another host runs as it is.
 func (m Model) jumpAfterLogin(a action) (tea.Model, tea.Cmd) {
+	l := m.loginOf(m.opt.Host)
 	switch {
 	case m.hostOf(a) != m.opt.Host: // it runs now
-	case m.checking:
-		m.jumpLater = &a
+	case l.checking:
+		m.editLogin(m.opt.Host, func(l *hostLogin) { l.jumpLater = &a })
 		m.flash = "checking your ssh login to " + m.opt.Host + "…"
 		return m, nil
-	case m.login == remote.LoginHostKeyChanged:
-		m.flash = m.loginNote(m.login, "")
+	case l.login == remote.LoginHostKeyChanged:
+		m.flash = m.loginNote(l.login, "")
 		return m, nil
 	case m.offersLadder():
 		return m.findStep(a)
@@ -245,19 +250,22 @@ func (m Model) runJump(a action) (tea.Model, tea.Cmd) {
 		return m.onHost(a)
 	}
 	host := m.hostOf(a)
-	if m.opening {
+	l := m.loginOf(m.opt.Host)
+	if l.opening {
 		m.flash = "the login to " + host + " runs: answer it, or " + m.keys.ask.Cancel.Help().Key + " to cancel it"
 		return m, nil
 	}
 	// The open lives as long as the console, and esc on its field ends it.
 	ctx, stop := context.WithCancel(m.askCtx)
-	m.opening, m.openStop, m.askCancelled = true, stop, false
+	l.opening, l.openStop, l.askCancelled = true, stop, false
+	l.note = m.flash
+	m.setLogin(m.opt.Host, l)
 	m.pending, m.held = nil, nil // the field is on top: nothing waits under it
-	m.note, m.flash = m.flash, "logging in to "+host+"…"
+	m.flash = "logging in to " + host + "…"
 	ssh, env, gen := m.ssh(), m.opt.Ask.Env(host), m.opt.Gen
 	up, open := remote.MasterUpArgv(host, a.master), remote.OpenArgv(host, a.master)
 	// The open has no -v: the host's kind comes from its check.
-	return m, streamed(ctx, gen, m.tailscale && host == m.opt.Host, openTimeout, openTimeout, func(ctx context.Context, line func(string)) tea.Msg {
+	return m, streamed(ctx, gen, l.tailscale && host == m.opt.Host, openTimeout, openTimeout, func(ctx context.Context, line func(string)) tea.Msg {
 		defer stop()
 		if _, exit := ssh(ctx, up, nil, ignoreLine); exit == 0 {
 			return masterMsg{a: a, gen: gen}
@@ -273,17 +281,18 @@ func (m Model) masterOpened(msg masterMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.opt.Gen || m.quitting {
 		return m, nil
 	}
-	m.opening, m.openStop, m.loginURL = false, nil, ""
-	note := m.note
-	m.note = ""
-	if msg.exit == 0 && !m.askCancelled {
+	l := m.loginOf(m.opt.Host)
+	note := l.note
+	l.opening, l.openStop, l.loginURL, l.note = false, nil, "", ""
+	m.setLogin(m.opt.Host, l)
+	if msg.exit == 0 && !l.askCancelled {
 		m.flash = note
 		return m.onHost(msg.a)
 	}
 	host := m.hostOf(msg.a)
-	login, detail := remote.ClassifyAs(msg.stderr, msg.exit, m.tailscale && host == m.opt.Host)
+	login, detail := remote.ClassifyAs(msg.stderr, msg.exit, l.tailscale && host == m.opt.Host)
 	switch {
-	case m.askCancelled:
+	case l.askCancelled:
 		m.flash = "cancelled: the login to " + host + ", and the jump did not run"
 	case login == remote.LoginTailscaleCheck:
 		m.flash = "the jump did not run: the Tailscale check of " + host + " was not approved in time; jump again for a new link"
