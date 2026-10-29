@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/limits"
@@ -285,7 +284,7 @@ var providerNames = map[string]string{"anthropic": "Claude", "openai": "OpenAI",
 // line for each window, with each host's own reading as a cell, in Hosts
 // order: "✻ Claude work 5h   ws-1 58% · gpu-1 61%". A cell is never a sum
 // or a mean of two hosts (R10); a stale host's cell says so. Short of
-// room the window name goes, then the cells are cut.
+// room the line keeps its window and the cells that fit.
 func (m Model) usageCells(rows []usageRow, nameW, w int) []string {
 	st, now := m.st, m.now()
 	var out []string
@@ -328,15 +327,31 @@ func (m Model) usageCells(rows []usageRow, nameW, w int) []string {
 			if j > 0 {
 				lead = indent
 			}
-			joined := strings.Join(cells, st.faint.Render(" · "))
-			line := lead + st.faint.Render(pad(win, 5)) + joined
-			if lipgloss.Width(line) > w {
-				line = ansi.Truncate(lead+joined, w-1, "…")
-			}
-			out = append(out, fit(line, w))
+			out = append(out, fit(m.cellsIn(lead+st.faint.Render(pad(win, 5)), cells, w), w))
 		}
 	}
 	return out
+}
+
+// cellsIn is line with as many whole cells as fit in w, then "…" for the
+// rest: a cell is never cut, so no percent is short of its digits.
+func (m Model) cellsIn(line string, cells []string, w int) string {
+	more := m.st.faint.Render(" …")
+	for i, c := range cells {
+		next := c
+		if i > 0 {
+			next = m.st.faint.Render(" · ") + c
+		}
+		room := w
+		if i < len(cells)-1 {
+			room -= lipgloss.Width(more)
+		}
+		if lipgloss.Width(line+next) > room {
+			return line + more
+		}
+		line += next
+	}
+	return line
 }
 
 // usageCell is host's reading of window win: "ws-1 58%".

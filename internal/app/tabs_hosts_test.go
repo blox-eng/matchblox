@@ -303,3 +303,116 @@ func TestRunsCountTheirHostsAgents(t *testing.T) {
 		t.Fatalf("home runs %q", got)
 	}
 }
+
+// TestShortUsageLineKeepsItsWindow: short of room each line still names
+// its window, and every cell shown is whole and of its own host.
+func TestShortUsageLineKeepsItsWindow(t *testing.T) {
+	acct := func(box, week float64) limits.Account {
+		return limits.Account{Provider: "anthropic", Account: "you@example.com · Max", State: limits.Measured, At: time.Now(),
+			Windows: []limits.Window{{UsedPct: box, Minutes: limits.BoxMinutes}, {UsedPct: week, Minutes: limits.WeekMinutes}}}
+	}
+	home, peer := hostState(), hostState()
+	home.Limits, peer.Limits = []limits.Account{acct(84, 82)}, []limits.Account{acct(61, 12)}
+	m, _ := twoHosts(t, home, peer)
+	want := map[string][]string{"5h": {"this machine 84%", "ws-1 61%"}, "wk": {"this machine 82%", "ws-1 12%"}}
+	for _, w := range []int{40, 50, 100} {
+		lines := m.usageLines(w, false, "")[1:]
+		if len(lines) != 2 {
+			t.Fatalf("width %d: %d lines:\n%s", w, len(lines), ansi.Strip(strings.Join(lines, "\n")))
+		}
+		for i, win := range []string{"5h", "wk"} {
+			l := strings.TrimSpace(ansi.Strip(lines[i]))
+			_, cells, ok := strings.Cut(l, win+"   ")
+			if !ok {
+				t.Fatalf("width %d: line %q does not name %s", w, l, win)
+			}
+			cells = strings.TrimSuffix(strings.TrimSpace(cells), " …")
+			got := strings.Split(cells, " · ")
+			for j, c := range got {
+				if j >= len(want[win]) || c != want[win][j] {
+					t.Fatalf("width %d, %s: cell %q, want a prefix of %q", w, win, c, want[win])
+				}
+			}
+			if w == 100 && len(got) != 2 {
+				t.Fatalf("width 100, %s: cells %q", win, got)
+			}
+		}
+	}
+}
+
+// gitHosts is a console of this machine and ws-1, each with a safe
+// worktree at the same path, on the Git tab.
+func gitHosts(t *testing.T) (Model, *fakeConn, *fakeConn) {
+	t.Helper()
+	home, peer := hostState(sess(1, "home-12", "%12", nil)), hostState(sess(1, "peer-12", "%12", nil))
+	safe := proto.Worktree{Path: "/src/api/wt/done", Branch: "done", Merged: true, Safe: true, Remove: []string{"git", "worktree", "remove", "/src/api/wt/done"}}
+	for _, st := range []*proto.State{&home, &peer} {
+		st.Git = &proto.GitReport{Repos: []gitscan.Repo{{Path: "/src/api", Worktrees: []proto.Worktree{{Path: "/src/api"}, safe}}}}
+	}
+	m, homeConn, wsConn := peered(nil)
+	m = upd(t, m, tea.WindowSizeMsg{Width: 132, Height: 30})
+	m = upd(t, m, stateMsg(home))
+	m = upd(t, m, peerMsg{host: "ws-1", conn: wsConn, msg: stateMsg(peer)})
+	m.setTab(tabGit)
+	return m, homeConn, wsConn
+}
+
+// selectWorktree selects the worktree row of host that is not main.
+func selectWorktree(t *testing.T, m Model, host string) Model {
+	t.Helper()
+	at := slices.IndexFunc(m.worktreeRows(), func(r wtRow) bool { return r.host == host && !r.main })
+	if at < 0 {
+		t.Fatalf("no worktree row on %q", host)
+	}
+	m.gitSel = at
+	return m
+}
+
+func TestLostPeerEndsItsBatch(t *testing.T) {
+	m, _, wsConn := gitHosts(t)
+	m = pressAll(selectWorktree(t, m, "ws-1"), "space", "x", "y").(Model)
+	if len(wsConn.acts()) != 1 || m.batch == nil {
+		t.Fatalf("the peer got %v, batch %+v", wsConn.acts(), m.batch)
+	}
+	m = upd(t, m, peerMsg{host: "ws-1", conn: wsConn, msg: lostMsg{err: io.EOF, conn: wsConn}})
+	if m.batch != nil || m.flash != "removed 0, failed 1: ws-1: connection lost" {
+		t.Fatalf("batch %+v, flash %q", m.batch, m.flash)
+	}
+}
+
+func TestMixedBatchEndsByResultAndLoss(t *testing.T) {
+	m, homeConn, wsConn := gitHosts(t)
+	m = pressAll(selectWorktree(t, m, ""), "space").(Model)
+	m = pressAll(selectWorktree(t, m, "ws-1"), "space", "x", "y").(Model)
+	if len(homeConn.acts()) != 1 || len(wsConn.acts()) != 1 || m.batch == nil || len(m.batch.ids) != 2 {
+		t.Fatalf("home got %v, the peer %v, batch %+v", homeConn.acts(), wsConn.acts(), m.batch)
+	}
+	var homeID string
+	for id := range m.batch.ids {
+		if !slices.Contains(m.peers[0].acts, id) {
+			homeID = id
+		}
+	}
+	m = upd(t, m, resultMsg(proto.Result{ActID: homeID, Ran: [][]string{{"git", "worktree", "remove", "/src/api/wt/done"}}}))
+	if m.batch == nil || len(m.batch.ids) != 1 {
+		t.Fatalf("one result ended the batch: %+v, flash %q", m.batch, m.flash)
+	}
+	m = upd(t, m, peerMsg{host: "ws-1", conn: wsConn, msg: lostMsg{err: io.EOF, conn: wsConn}})
+	if m.batch != nil || m.flash != "removed 1, failed 1: ws-1: connection lost" {
+		t.Fatalf("batch %+v, flash %q", m.batch, m.flash)
+	}
+}
+
+func TestRescanOnThePeersRow(t *testing.T) {
+	m, homeConn, wsConn := gitHosts(t)
+	m = pressAll(selectWorktree(t, m, "ws-1"), "r").(Model)
+	if m.flash != "scanning git on ws-1…" {
+		t.Fatalf("flash %q", m.flash)
+	}
+	if acts := wsConn.acts(); len(acts) != 1 || acts[0].RecID != "rescan:git" {
+		t.Fatalf("the peer got %v", acts)
+	}
+	if acts := homeConn.acts(); len(acts) != 0 {
+		t.Fatalf("home got %v", acts)
+	}
+}
