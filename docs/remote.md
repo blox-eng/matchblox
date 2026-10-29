@@ -59,7 +59,7 @@ hide `this machine`. Then it is the first ticked host after it.
 - A row names its host after the session: `train-loop gpu-1`.
 - A row with an account says `api-auth ws-1 · work`.
 - A long host name ends in `…`. The detail shows it whole.
-- `n` and the ghost row start a session on the host of the selected row.
+- `N` and the ghost row start a session on the host of the selected row.
   With no row selected, they start it on the home host.
 
 ### A host is lost
@@ -80,6 +80,9 @@ stop the others.
 - A host that the console cannot reach is one row at the end of the list.
   The row shows its fix: `gpu-1  is not connected  ⏎ connect`.
 - `Enter` on that row runs the connect.
+- A host that connects and sends no state in 3 seconds is one row too:
+  `ws-1  does not answer  run ssh ws-1 matchblox status to see why`.
+  The row goes when the host sends its first state.
 - The other hosts keep going.
 
 ### Acts go to the row's host
@@ -115,7 +118,7 @@ stop the others.
   runs: `stoker 2/3`.
 - A key on a row asks about the stoker of that row's host.
 - `y` rests that stoker only.
-- `s` starts the stoker of the selected row's host.
+- `f` starts the stoker of the selected row's host.
 - The Stoker tab shows the section of another host for reading only.
 - The dock claims the stoker of the home host.
 
@@ -134,8 +137,14 @@ host. They are not per host in this version.
 
 ### Older hosts and keys
 
-A host that runs an older matchblox works in the combined console. No
-service changes, and matchblox adds no key between hosts.
+A host that runs an older matchblox works in the combined console when
+its protocol version is the console's. No service changes, and matchblox
+adds no key between hosts.
+
+A host at another protocol version is one row at the end of the list. The
+row shows the version of the host and of the console. An older host shows
+`⏎ connect`. `Enter` runs the connect, and the connect updates the host. A
+newer host shows `update the console`.
 
 A host that the console cannot reach says why, and shows the connect. A
 jump to a pane uses your own ssh login. See

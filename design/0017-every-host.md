@@ -95,7 +95,7 @@ agent) made; the person can overturn it.
 | R11 | A long host name is cut with `…` on a row; the detail shows it whole. Mine. | No new setting. |
 | R12 | `Shell` owns the streams, not the console. `esc` to Hosts keeps them open. `Enter` dials the newly ticked hosts, closes the newly hidden ones and keeps the rest, with their lanes, selection and backoff. Mine. | The Hosts notes are live, and a trip to Hosts must not wipe the lanes or replay the splash. |
 | R13 | The ssh login of each remote host is its own: its master, its background check, its key ladder and its Tailscale link. The checks run for each ticked host at open and never prompt. A prompt comes only at a jump. One field shows at a time, names its host, and the next waits. Mine. | Two hosts must not race for one field, and opening three hosts must not ask three questions. |
-| R14 | The stoker is per host. A key on a row asks about that row's host's stoker, and `y` rests that one only. A touch goes to the host acted on. `s` starts the stoker of the selected row's host. Mine. | A stoker owns one host. Resting one that the builder did not touch would be a surprise. |
+| R14 | The stoker is per host. A key on a row asks about that row's host's stoker, and `y` rests that one only. A touch goes to the host acted on. `f` starts the stoker of the selected row's host. Mine. | A stoker owns one host. Resting one that the builder did not touch would be a surprise. |
 | R15 | A phone sees what its host's console can open, as today. If the builder connected `ws-1` to `gpu-1` themselves, a phone paired to `ws-1` sees and acts on `gpu-1` in the combined console. v1 never sets up host-to-host keys. Owner, 2026-10-29. | It widens no key: `esc` → Hosts → `gpu-1` from that phone reaches the same host today. Non-goal 1 is about matchblox making a hub, not about one the builder made. |
 
 ## The experience
@@ -142,8 +142,8 @@ agent) made; the person can overturn it.
   the host is cut (R11).
 - The groups and the sort are today's, across hosts. The order of a group
   breaks ties by host, in Hosts order.
-- The ghost row and `n` start a session on the host of the selected row,
-  or on this machine when no row is selected. The where list of `n` shows
+- The ghost row and `N` start a session on the host of the selected row,
+  or on this machine when no row is selected. The where list of `N` shows
   that host's repos and names the host in its label.
 
 ### A host is lost
@@ -403,7 +403,7 @@ Each item changes the text above. The change wins.
 - **Git.** The host is on each repository heading, not on each worktree
   row.
 - **The stoker.** The dock's claim stays the home host's. The Stoker tab
-  shows a peer's section for reading only: take-over, rest, touch and `s`
+  shows a peer's section for reading only: take-over, rest, touch and `f`
   are per host.
 - **Not per host in v1.** Recs, doors, clones, the scan question and
   pairing stay the home host's.
@@ -422,3 +422,18 @@ Each item changes the text above. The change wins.
   process, so a new process on an old pid starts empty.
 - **The site's phone demo.** It starts in the full view, so its dock story
   still plays.
+- **Key names.** The stoker key is `f`, not `s`: `s` sorts. The New
+  session key is `N`, not `n`: `n` opens the night sheet. R14 and
+  §Sessions use the correct keys now.
+- **Older hosts (non-goal 2).** An older matchblox works only at the
+  console's protocol version. A host at another protocol version is a
+  blocked row: `is version N, the console is version M  ⏎ connect`. A
+  newer host shows `update the console` and has no `⏎`.
+- **A silent host.** A peer that connects and sends no state in 3 s is a
+  row with today's words:
+  `ws-1  does not answer  run ssh ws-1 matchblox status to see why`. Its
+  first state removes the row. `Enter` on the row shows the same words.
+- **Try again.** `⏎ try again` and `⏎ connect` dial the host again from
+  any link, also a link that Hosts opened. A host that cannot dial again
+  keeps its row, and the key line says `ws-1 cannot try again from this
+  console`.

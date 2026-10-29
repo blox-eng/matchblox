@@ -23,7 +23,9 @@ All notable changes to matchblox are in this file. The format follows
   account label, with a cell for each host, and the stoker is one for each
   host (`stoker 2/3`). Hidden hosts are kept in
   `~/.config/matchblox/hidden`, and the header says `· 1 hidden`. No
-  service changes, so an older matchblox on a host works. See
+  service changes, so an older matchblox at the same protocol version
+  works. A host at another protocol version is a row with `⏎ connect`. A
+  host that connects and sends no state is a row that says why. See
   [Remote hosts](https://docs.matchblox.com/remote/#see-every-host-in-one-console).
   ([#198](https://github.com/blox-eng/matchblox/issues/198))
 - **List only (`v`).** The detail pane and the dock fold, and the list takes
