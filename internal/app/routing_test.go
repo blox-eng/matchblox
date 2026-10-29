@@ -78,7 +78,8 @@ func withRoute(t *testing.T, layer string) Model {
 		return m
 	case "peek":
 		m := selectPane(t, routeAt(t, queueState()), "%2").(Model)
-		m = sendKey(m, "a").(Model)
+		next, _ := openedPeek(m)
+		m = next.(Model)
 		if m.peek == nil {
 			t.Fatal("a opened no peek")
 		}
@@ -96,16 +97,16 @@ func withRoute(t *testing.T, layer string) Model {
 		}
 		return m
 	case "held":
-		m := routeAt(t, nightState(), "enter")
+		m := routeAt(t, nightState(), "ctrl+o")
 		if m.held == nil {
 			t.Fatal("enter at night held no key")
 		}
 		return m
 	case "pending":
 		m := selectPane(t, routeAt(t, queueState()), "%3").(Model)
-		m = sendKey(m, "enter").(Model)
+		m = sendKey(m, "ctrl+o").(Model)
 		if m.pending == nil {
-			t.Fatal("enter set no pending")
+			t.Fatal("ctrl+o set no pending")
 		}
 		return m
 	}
@@ -341,17 +342,17 @@ func keyLineStates(t *testing.T) []keyLineAt {
 		on := func(pane string) tea.Model { return selectPane(t, q, pane) }
 		add(fmt.Sprintf("search/%d", w), typeText(sendKey(q, "/"), "app"))
 		add(fmt.Sprintf("search kept/%d", w), sendKey(typeText(sendKey(q, "/"), "app"), "enter"))
-		peek := sendKey(on("%2"), "a")
+		peek, _ := openedPeek(on("%2"))
 		add(fmt.Sprintf("peek/%d", w), peek)
 		add(fmt.Sprintf("peek typed/%d", w), typeText(peek, "yes"))
-		add(fmt.Sprintf("peek question/%d", w), sendKey(on("%1"), "a"))
+		add(fmt.Sprintf("peek question/%d", w), peekOn(on("%1")))
 		add(fmt.Sprintf("form new/%d", w), sendKey(q, "N"))
 		add(fmt.Sprintf("form rename/%d", w), sendKey(on("%2"), "r"))
 		add(fmt.Sprintf("form switch/%d", w), sendKey(on("%2"), "A"))
-		add(fmt.Sprintf("pending jump/%d", w), sendKey(on("%3"), "enter"))
+		add(fmt.Sprintf("pending jump/%d", w), sendKey(on("%3"), "ctrl+o"))
 		add(fmt.Sprintf("pending kill/%d", w), sendKey(on("%3"), "x"))
 		add(fmt.Sprintf("pending cancelled/%d", w), sendKey(sendKey(on("%3"), "x"), "esc"))
-		add(fmt.Sprintf("held/%d", w), sendKey(at(w, nightState()), "enter"))
+		add(fmt.Sprintf("held/%d", w), sendKey(at(w, nightState()), "ctrl+o"))
 		add(fmt.Sprintf("held x/%d", w), sendKey(at(w, nightState()), "x"))
 		door := at(w, doorState(hooksDoor, wayBack))
 		add(fmt.Sprintf("pending door/%d", w), sendKey(door, "enter"))

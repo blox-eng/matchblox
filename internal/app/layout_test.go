@@ -72,7 +72,7 @@ func TestAnUprightPhoneGetsTheDrawer(t *testing.T) {
 				t.Fatalf("107x%d: the selected row opens in place: %q", h, rows)
 			}
 		}
-		p, _ := key(m, "a")
+		p, _ := openedPeek(m)
 		if sc := p.(Model).draw(107); !sc.peekInline || sc.peekX != 54 || sc.peekW != 53 {
 			t.Fatalf("107x%d: the peek is not the drawer: inline %v at %d, %d wide", h, sc.peekInline, sc.peekX, sc.peekW)
 		}
@@ -259,9 +259,9 @@ func TestTapNeverRunsADestructiveStep(t *testing.T) {
 
 func TestTapWhilePendingCancels(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
-	next, _ := key(m, "enter")
+	next, _ := key(m, "ctrl+o")
 	if next.(Model).pending == nil {
-		t.Fatal("enter did not ask to confirm")
+		t.Fatal("ctrl+o did not ask to confirm")
 	}
 	next, cmd := tap(next, 5, sessLine(t, next, "app-feature"))
 	if cmd != nil || next.(Model).pending != nil {
@@ -290,13 +290,11 @@ func TestNoCtrlKeysNeeded(t *testing.T) {
 		m.tab = tabSessions
 		next, _ := key(m, "down") // the second row waits for an answer
 		next, _ = key(next, "a")
-		if next.(Model).peek == nil {
-			t.Fatal("a does not start an answer")
+		if !next.(Model).chatKeys {
+			t.Fatal("a does not open the chat")
 		}
-		next, _ = key(next, "esc")
-		if next.(Model).peek != nil {
-			t.Fatal("esc does not leave the answer")
-		}
+		// The way back is a tap on the list or the app's home gesture:
+		// TestClicksMoveTheKeys and TestHomeKeyGivesKeysBack.
 		if next, cmd := key(m, "q"); cmd == nil || !next.(Model).quitting {
 			t.Fatal("q does not quit")
 		}
@@ -406,7 +404,7 @@ func TestTheKeyLineIsAtTheBottom(t *testing.T) {
 		if strings.Contains(ansi.Strip(strings.Split(m.render(), "\n")[2]), "open") {
 			t.Fatalf("width %d: keys under the tabs", w)
 		}
-		next, _ := key(selectPane(t, m, "%3"), "enter")
+		next, _ := key(selectPane(t, m, "%3"), "ctrl+o")
 		// The confirm is a box: on a phone its foot sits on the key line's
 		// hairline, under the thumb; wider, it is in the middle.
 		out := strings.Split(ansi.Strip(next.(Model).render()), "\n")
@@ -417,7 +415,7 @@ func TestTheKeyLineIsAtTheBottom(t *testing.T) {
 		}
 		next, _ = key(next, "esc")
 		next = selectPane(t, next, "%2")
-		next, _ = key(next, "a")
+		next, _ = openedPeek(next)
 		next = typeText(next, "yes")
 		out = strings.Split(ansi.Strip(next.(Model).render()), "\n")
 		if w < 60 && (!strings.Contains(out[len(out)-3], "⏎ send") || !strings.Contains(out[len(out)-4], "› yes▏")) {
@@ -445,8 +443,8 @@ func TestATapOnAKeyPressesIt(t *testing.T) {
 		t.Fatalf("a tap on x kill: pending %+v", p)
 	}
 	next, _ = tap(m, len([]rune(line[:strings.Index(line, "⏎ open")])), y)
-	if p := next.(Model).pending; p == nil || p.String() != "tmux switch-client -t %1" {
-		t.Fatalf("a tap on ⏎ open: pending %+v", p)
+	if !next.(Model).chatKeys {
+		t.Fatal("a tap on ⏎ open did not open the chat")
 	}
 	// The header's count of who waits selects the first one.
 	moved := selectPane(t, m, "%3")

@@ -3,6 +3,8 @@ package app
 import (
 	"slices"
 	"strconv"
+	"strings"
+	"unicode"
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -29,6 +31,7 @@ type keymaps struct {
 	main     mainKeys
 	form     formKeys
 	peek     peekKeys
+	chat     chatKeymap
 	sheet    sheetKeys
 	search   searchKeys
 	pair     pairKeys
@@ -47,9 +50,9 @@ type shellKeymaps struct {
 // the layer is on top, so its key wins. A new overlap fails
 // TestKeymapsHaveNoCollisions until it is added here.
 var shadowsMain = map[string]map[string]bool{
-	"form":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true},
-	"peek":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true, " ": true, "1": true, "2": true, "3": true, "4": true, "5": true, "6": true, "7": true},
-	"sheet":    {"esc": true, "enter": true, "tab": true, "space": true},
+	"form":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true, "right": true},
+	"peek":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true, " ": true, "right": true, "ctrl+o": true, "1": true, "2": true, "3": true, "4": true, "5": true, "6": true, "7": true},
+	"sheet":    {"esc": true, "enter": true, "tab": true, "space": true, "right": true},
 	"search":   {"esc": true, "enter": true},
 	"pair":     {"c": true, "esc": true, "enter": true},
 	"takeOver": {"y": true, "n": true},
@@ -93,6 +96,8 @@ func defaultKeys() keymaps {
 			Night:     bind(ks("n"), "n", "stop night"),
 			Order:     bind(ks("o"), "o", "new order"),
 			Rename:    bind(ks("r"), "r", "rename"),
+			Chat:      bind(ks("right"), "→", "chat"),
+			Jump:      bind(ks("ctrl+o"), "ctrl+o", "into tmux"),
 		},
 		form: formKeys{
 			Close: bind(ks("esc"), "esc", ""),
@@ -116,6 +121,10 @@ func defaultKeys() keymaps {
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 			Pick:  bind(digits1to9, "1-9", "pick"),
 			Tick:  bind(ks("space", " "), "␣", "tick"),
+		},
+		chat: chatKeymap{
+			Back: bind(ks("ctrl+]"), "ctrl+]", "back"),
+			Stop: bind(ks("ctrl+c"), "^C", "stops the agent"),
 		},
 		sheet: sheetKeys{
 			Send:  bind(ks("enter"), "⏎", "send"),
@@ -192,14 +201,14 @@ type mainKeys struct {
 	Stoker, Quit, NextTab, PrevTab, Tabs, Search, Back, Sort, SortBack bkey.Binding
 	Group, Park, Mark, Exited, MarkSafe, QuitAgent, Up, Down, Open     bkey.Binding
 	Second, New, Switch, Grant, Peek, Dismiss, Fold, Ships, Dock       bkey.Binding
-	Stoke, Night, Order, Rename                                        bkey.Binding
+	Stoke, Night, Order, Rename, Chat, Jump                            bkey.Binding
 }
 
 func (k mainKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Stoker, k.Quit, k.NextTab, k.PrevTab, k.Tabs, k.Search, k.Back, k.Sort, k.SortBack,
 		k.Group, k.Park, k.Mark, k.Exited, k.MarkSafe, k.QuitAgent, k.Up, k.Down, k.Open,
 		k.Second, k.New, k.Switch, k.Grant, k.Peek, k.Dismiss, k.Fold, k.Ships, k.Dock,
-		k.Stoke, k.Night, k.Order, k.Rename}
+		k.Stoke, k.Night, k.Order, k.Rename, k.Chat, k.Jump}
 }
 
 // formKeys are the new-session, switch and rename form. Down and Up go to
@@ -217,6 +226,12 @@ type peekKeys struct{ Close, Jump, Next, Prev, Send, Up, Down, Erase, Pick, Tick
 func (k peekKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Close, k.Jump, k.Next, k.Prev, k.Send, k.Up, k.Down, k.Erase, k.Pick, k.Tick}
 }
+
+// chatKeymap are the chat's own keys. Every other key goes to the agent;
+// Stop is the agent's ^C, which a second one within a second waits for.
+type chatKeymap struct{ Back, Stop bkey.Binding }
+
+func (k chatKeymap) bindings() []bkey.Binding { return []bkey.Binding{k.Back, k.Stop} }
 
 // sheetKeys are the stoker's order sheet.
 type sheetKeys struct{ Send, Close, Chips, Left, Right, Tick, Erase bkey.Binding }
@@ -269,6 +284,24 @@ type confirmKeys struct{ Yes, Enter, Also, ScrollDown, ScrollUp bkey.Binding }
 
 func (k confirmKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Yes, k.Enter, k.Also, k.ScrollDown, k.ScrollUp}
+}
+
+// keyNames are the keys the chat sends by name.
+var keyNames = map[string]string{
+	"up": "Up", "down": "Down", "left": "Left", "right": "Right", "enter": "Enter", "tab": "Tab",
+	"shift+tab": "BTab", "esc": "Escape", "ctrl+c": "C-c", "backspace": "BSpace", "space": "lit: ",
+}
+
+// keyName is k as the service takes it: a key name, or "lit:" and the
+// text it types. A key with no name and no text is not sent.
+func keyName(k tea.KeyPressMsg) (text string, ok bool) {
+	if name, ok := keyNames[k.String()]; ok {
+		return name, true
+	}
+	if k.Mod&^tea.ModShift != 0 || k.Text == "" || strings.IndexFunc(k.Text, unicode.IsControl) >= 0 {
+		return "", false
+	}
+	return "lit:" + k.Text, true
 }
 
 // keyPress is the key a tap presses.

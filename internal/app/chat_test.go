@@ -4,10 +4,13 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -188,5 +191,295 @@ func TestRefusalOfAnOldWatchHoldsNothing(t *testing.T) {
 	mm := next.(Model)
 	if mm.watchHeld != "" || mm.watching != b.Pane || mm.screen.Text != "kept" {
 		t.Fatalf("held %q watching %q screen %q", mm.watchHeld, mm.watching, mm.screen.Text)
+	}
+}
+
+// inChat is the console with the first session's screen and the keys in
+// its chat.
+func inChat(t *testing.T) (Model, *fakeConn) {
+	t.Helper()
+	m, f := chatModel(t)
+	m = onPane(t, m, "%1")
+	next, _ := m.Update(screenMsg{Pane: m.watching, At: time.Unix(100, 0), Text: "> "})
+	next, _ = key(next, "enter")
+	m = next.(Model)
+	if !m.chatKeys {
+		t.Fatal("enter did not give the chat the keys")
+	}
+	return m, f
+}
+
+// onPane is m with the session in pane selected.
+func onPane(t *testing.T, m Model, pane string) Model {
+	t.Helper()
+	for _, k := range []string{"up", "down", "down"} {
+		if s, _ := m.selected(); s.Pane == pane {
+			return m
+		}
+		next, _ := key(m, k)
+		m = next.(Model)
+	}
+	t.Fatalf("no session in %s to select", pane)
+	return m
+}
+
+// keyActs are the keys the console sent, in order.
+func keyActs(f *fakeConn) []proto.Act {
+	var out []proto.Act
+	for _, a := range f.acts() {
+		if strings.HasPrefix(a.RecID, proto.KeysPrefix) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// pressKeys is ks on m, with its commands run.
+func pressKeys(t *testing.T, m Model, ks ...string) Model {
+	t.Helper()
+	for _, k := range ks {
+		next, cmd := key(m, k)
+		drain(cmd)
+		m = next.(Model)
+	}
+	return m
+}
+
+// answered is the result of the key in flight, with the next one sent.
+func answered(t *testing.T, m Model, err string) Model {
+	t.Helper()
+	if m.keyInFlight == "" {
+		t.Fatal("no key in flight")
+	}
+	next, cmd := m.Update(resultMsg(proto.Result{ActID: m.keyInFlight, Err: err}))
+	drain(cmd)
+	return next.(Model)
+}
+
+func TestEnterGivesTheChatTheKeys(t *testing.T) {
+	for _, k := range []string{"enter", "a", "right"} {
+		m, f := chatModel(t)
+		s, _ := m.selected()
+		m = pressKeys(t, m, k)
+		if !m.chatKeys {
+			t.Fatalf("%s: the chat has no keys", k)
+		}
+		line, _ := m.keyLine(100)
+		if want := "keys go to " + s.Name + " · ctrl+] back · ctrl+o into tmux"; !strings.Contains(ansi.Strip(line), want) {
+			t.Fatalf("%s: key line %q, want %q", k, ansi.Strip(line), want)
+		}
+		if len(f.acts()) != 0 {
+			t.Fatalf("%s: sent %+v", k, f.acts())
+		}
+	}
+}
+
+func TestEnterOnASessionOutsideTmuxSaysWhy(t *testing.T) {
+	st := fixtureState()
+	st.Sessions = []sample.Session{{PID: 1, Name: "out"}}
+	m, _ := loadedWith(t, 100, st)
+	m = pressKeys(t, m, "enter")
+	if m.chatKeys || !strings.Contains(m.flash, "runs outside tmux") {
+		t.Fatalf("chatKeys=%v flash=%q", m.chatKeys, m.flash)
+	}
+}
+
+func TestCtrlBracketGivesKeysBack(t *testing.T) {
+	m, f := inChat(t)
+	m = pressKeys(t, m, "ctrl+]")
+	if m.chatKeys || len(f.acts()) != 0 {
+		t.Fatalf("chatKeys=%v acts=%+v", m.chatKeys, f.acts())
+	}
+}
+
+func TestChatSendsKeysInOrder(t *testing.T) {
+	m, f := inChat(t)
+	m = pressKeys(t, m, "down", "down", "enter")
+	if got := keyActs(f); len(got) != 1 || got[0].Text != "Down" || got[0].RecID != proto.KeysPrefix+"%1" {
+		t.Fatalf("in flight: %+v", got)
+	}
+	m = answered(t, m, "")
+	if got := keyActs(f); len(got) != 2 || got[1].Text != "Down" {
+		t.Fatalf("second: %+v", got)
+	}
+	m = answered(t, m, "")
+	got := keyActs(f)
+	if len(got) != 3 || got[2].Text != "Enter" || !got[2].Seen.Equal(m.screen.At) || got[2].PID != 1 {
+		t.Fatalf("third: %+v", got)
+	}
+	m = answered(t, m, "")
+	if m.keyInFlight != "" || len(m.keyQ) != 0 {
+		t.Fatalf("left: %q %+v", m.keyInFlight, m.keyQ)
+	}
+}
+
+func TestTypedTextCoalesces(t *testing.T) {
+	m, f := inChat(t)
+	m = pressKeys(t, m, "down", "y", "e", "s")
+	answered(t, m, "")
+	if got := keyActs(f); len(got) != 2 || got[1].Text != "lit:yes" {
+		t.Fatalf("acts: %+v", got)
+	}
+}
+
+func TestKeyNames(t *testing.T) {
+	for k, want := range map[string]string{
+		"up": "Up", "down": "Down", "left": "Left", "right": "Right", "enter": "Enter", "tab": "Tab",
+		"shift+tab": "BTab", "esc": "Escape", "ctrl+c": "C-c", "backspace": "BSpace", "space": "lit: ", "y": "lit:y", "Y": "lit:Y",
+	} {
+		if got, ok := keyName(keyPress(k)); !ok || got != want {
+			t.Errorf("%s = %q %v, want %q", k, got, ok, want)
+		}
+	}
+	if got, ok := keyName(keyPress("ctrl+x")); ok {
+		t.Errorf("ctrl+x = %q, want no key", got)
+	}
+}
+
+func TestQueuedKeysStayWithTheirPane(t *testing.T) {
+	m, f := inChat(t)
+	m = pressKeys(t, m, "down", "enter", "ctrl+]")
+	m = onPane(t, m, "%2")
+	answered(t, m, "")
+	if got := keyActs(f); len(got) != 2 || got[1].RecID != proto.KeysPrefix+"%1" || got[1].Text != "Enter" {
+		t.Fatalf("acts: %+v", got)
+	}
+
+	m, f = inChat(t)
+	m = pressKeys(t, m, "down", "enter")
+	st := fixtureState()
+	st.Sessions = []sample.Session{{PID: 2, Pane: "%2", Name: "b"}}
+	next, _ := m.Update(stateMsg(st))
+	m = next.(Model)
+	if len(m.keyQ) != 0 || m.flash != "not sent: a ended" {
+		t.Fatalf("queue %+v flash %q", m.keyQ, m.flash)
+	}
+	m = answered(t, m, "")
+	if got := keyActs(f); len(got) != 1 {
+		t.Fatalf("acts: %+v", got)
+	}
+}
+
+func TestChatLeavesWhenItsSessionEnds(t *testing.T) {
+	m, _ := inChat(t)
+	st := fixtureState()
+	st.Sessions = []sample.Session{{PID: 2, Pane: "%2", Name: "b"}}
+	next, _ := m.Update(stateMsg(st))
+	if next.(Model).chatKeys {
+		t.Fatal("the chat kept the keys of a session that ended")
+	}
+}
+
+func TestCtrlCTwiceIsHeld(t *testing.T) {
+	m, f := inChat(t)
+	now := time.Unix(1000, 0)
+	m.opt.Now = func() time.Time { return now }
+	m = pressKeys(t, m, "ctrl+c")
+	if m.quitting {
+		t.Fatal("ctrl+c quit the console")
+	}
+	m = answered(t, m, "")
+	now = now.Add(500 * time.Millisecond)
+	m = pressKeys(t, m, "ctrl+c")
+	if got := keyActs(f); len(got) != 1 || got[0].Text != "C-c" {
+		t.Fatalf("acts: %+v", got)
+	}
+	if m.flash != "^C held: one went 0.5 s ago, ^C again stops the agent" {
+		t.Fatalf("flash %q", m.flash)
+	}
+	now = now.Add(300 * time.Millisecond)
+	m = pressKeys(t, m, "ctrl+c")
+	if got := keyActs(f); len(got) != 2 || got[1].Text != "C-c" {
+		t.Fatalf("acts: %+v", got)
+	}
+}
+
+func TestCtrlOGoesIntoThePane(t *testing.T) {
+	var ran []string
+	m, _ := inChat(t)
+	m.opt.Run = func(argv []string) error { ran = argv; return nil }
+	m = pressKeys(t, m, "ctrl+o")
+	if m.pending == nil || m.pending.String() != "tmux switch-client -t %1" {
+		t.Fatalf("pending %v", m.pending)
+	}
+	_, cmd := key(m, "enter")
+	drain(cmd)
+	if strings.Join(ran, " ") != "tmux switch-client -t %1" {
+		t.Fatalf("ran %q", ran)
+	}
+}
+
+func TestKeysWithNoConnection(t *testing.T) {
+	m, f := inChat(t)
+	m.lost = true
+	m = pressKeys(t, m, "down")
+	if len(m.keyQ) != 0 || m.keyInFlight != "" || len(keyActs(f)) != 0 || m.flash != "not sent, no connection" {
+		t.Fatalf("queue %+v flight %q flash %q", m.keyQ, m.keyInFlight, m.flash)
+	}
+}
+
+func TestRefusalShowsAndClearsQueue(t *testing.T) {
+	m, f := inChat(t)
+	m = pressKeys(t, m, "down", "down", "enter")
+	const why = "not sent: a asks something new — look again"
+	m = answered(t, m, why)
+	if m.flash != why || len(m.keyQ) != 0 || m.keyInFlight != "" || len(keyActs(f)) != 1 {
+		t.Fatalf("flash %q queue %+v flight %q", m.flash, m.keyQ, m.keyInFlight)
+	}
+}
+
+func TestEscGoesToTheAgent(t *testing.T) {
+	m, f := inChat(t)
+	m = pressKeys(t, m, "esc")
+	if got := keyActs(f); len(got) != 1 || got[0].Text != "Escape" || !m.chatKeys {
+		t.Fatalf("acts %+v chatKeys %v", got, m.chatKeys)
+	}
+}
+
+func TestHomeKeyGivesKeysBack(t *testing.T) {
+	if homeKey != panes.HomeKey {
+		t.Fatalf("homeKey %q, the app sends %q", homeKey, panes.HomeKey)
+	}
+	m, _ := inChat(t)
+	next, _ := m.Update(uv.UnknownApcEvent(panes.HomeKey))
+	if next.(Model).chatKeys {
+		t.Fatal("the home key left the keys in the chat")
+	}
+}
+
+func TestClicksMoveTheKeys(t *testing.T) {
+	m, _ := chatModel(t)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 200, Height: 50})
+	m = next.(Model)
+	sc := m.draw(200)
+	if sc.listW >= 200 {
+		t.Fatal("no right side at 200 columns")
+	}
+	right := tea.Mouse{X: sc.listW + 5, Y: sc.bodyTop + 1, Button: tea.MouseLeft}
+	next, _ = m.Update(tea.MouseClickMsg(right))
+	m = next.(Model)
+	if !m.chatKeys {
+		t.Fatal("a click on the right did not give the chat the keys")
+	}
+	left := tea.Mouse{X: 2, Y: sc.bodyTop + 1, Button: tea.MouseLeft}
+	next, _ = m.Update(tea.MouseClickMsg(left))
+	if next.(Model).chatKeys {
+		t.Fatal("a click on the left left the keys in the chat")
+	}
+}
+
+func TestTheChatsFirstKeyAsksToTakeOverAndCtrlCStays(t *testing.T) {
+	m, f := loadedWith(t, 120, nightState())
+	m = pressKeys(t, m, "enter")
+	if !m.chatKeys || m.held != nil {
+		t.Fatalf("opening the chat: chatKeys %v, held %v", m.chatKeys, m.held != nil)
+	}
+	next, cmd := key(m, "ctrl+c")
+	if quits(cmd) || next.(Model).quitting || next.(Model).held == nil {
+		t.Fatal("ctrl+c in the chat at night quit, or did not ask to take over")
+	}
+	pressKeys(t, next.(Model), "n")
+	if got := keyActs(f); len(got) != 1 || got[0].Text != "C-c" {
+		t.Fatalf("the held ^C did not go: %+v", f.acts())
 	}
 }

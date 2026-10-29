@@ -61,11 +61,11 @@ func TestSessionsIsTheDefaultTab(t *testing.T) {
 	}
 }
 
-func TestEnterOnQueueRowSwitches(t *testing.T) {
+func TestCtrlOOnQueueRowSwitches(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
 	var ran []string
 	m.opt.Run = func(argv []string) error { ran = argv; return nil }
-	next, _ := key(m, "enter")
+	next, _ := key(m, "ctrl+o")
 	next, cmd := key(next, "enter")
 	if cmd == nil {
 		t.Fatal("no command")
@@ -76,12 +76,12 @@ func TestEnterOnQueueRowSwitches(t *testing.T) {
 	}
 }
 
-func TestEnterOutsideTmuxAttaches(t *testing.T) {
+func TestCtrlOOutsideTmuxAttaches(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
 	m.opt.OutsideTmux = true
 	var ran [][]string
 	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
-	next, _ := key(m, "enter")
+	next, _ := key(m, "ctrl+o")
 	p := next.(Model).pending
 	want := [][]string{
 		{"tmux", "select-window", "-t", "%1"},
@@ -114,7 +114,7 @@ func TestEnterOutsideTmuxAttaches(t *testing.T) {
 func TestThePeekSendsOnEnter(t *testing.T) {
 	m, f := loadedWith(t, 100, queueState())
 	m, _ = func() (Model, tea.Cmd) { n, c := key(m, "down"); return n.(Model), c }() // app-review finished its turn
-	next, _ := key(m, "a")
+	next, _ := openedPeek(m)
 	next = typeText(next, "yes, open it")
 	out := ansi.Strip(next.(Model).render())
 	for _, want := range []string{"app-review said", "› yes, open it▏", "⏎ send", "← prev", "next →", "esc"} {
@@ -146,7 +146,7 @@ func TestThePeekSendsOnEnter(t *testing.T) {
 func TestThePeekSaysWhenNothingWasSent(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
 	m, _ = func() (Model, tea.Cmd) { n, c := key(m, "down"); return n.(Model), c }()
-	next, _ := key(m, "a")
+	next, _ := openedPeek(m)
 	next = typeText(next, "yes")
 	next, _ = key(next, "enter")
 	next, _ = next.Update(resultMsg(proto.Result{ActID: "a1", Skipped: []string{"the session in %2 no longer waits for an answer"}}))
@@ -170,7 +170,7 @@ func TestASecondEnterNeverAnswersTheNextQuestion(t *testing.T) {
 	}
 	m, f := loadedWith(t, 86, st)
 	m, _ = func() (Model, tea.Cmd) { n, c := key(m, "down"); return n.(Model), c }()
-	next, _ := key(m, "a")
+	next, _ := openedPeek(m)
 	first := next.(Model).peek.pane
 	next, cmd := key(next, "1")
 	drain(cmd)
@@ -208,7 +208,7 @@ func TestAnswerOnPermissionGoesToPane(t *testing.T) {
 	m, f := loadedWith(t, 100, queueState()) // app-feature asks for permission
 	var ran []string
 	m.opt.Run = func(argv []string) error { ran = argv; return nil }
-	next, _ := key(m, "a")
+	next, _ := openedPeek(m)
 	out := ansi.Strip(next.(Model).render())
 	if !strings.Contains(out, "app-feature asks") || !strings.Contains(out, "Claude needs your permission") ||
 		!strings.Contains(out, "⏎ open") || strings.Contains(out, "▏") {
@@ -243,7 +243,7 @@ func TestThePeekAnswersTheQuestionTool(t *testing.T) {
 	for _, w := range []int{44, 86} {
 		m, f := loadedWith(t, w, st)
 		m, _ = func() (Model, tea.Cmd) { n, c := key(m, "down"); return n.(Model), c }()
-		next, _ := key(m, "a")
+		next, _ := openedPeek(m)
 		out := ansi.Strip(next.(Model).render())
 		for _, want := range []string{"app-review asks · 1 of 2", "Task 10 is done", "Which next?", "› 1 Start task 11", "2 Fix the flake", "3 Type an answer…"} {
 			if !strings.Contains(out, want) {
@@ -287,14 +287,14 @@ func TestAnswerEscCancels(t *testing.T) {
 	m0, f := loadedWith(t, 100, queueState())
 	down, _ := key(m0, "down") // app-review finished its turn
 	m := down.(Model)
-	next, _ := key(m, "a")
+	next, _ := openedPeek(m)
 	next = typeText(next, "no")
 	next, _ = key(next, "esc")
 	if next.(Model).peek != nil || next.(Model).pending != nil || len(f.acts()) != 0 {
 		t.Fatal("esc did not cancel")
 	}
 	// q inside the peek is text, not quit.
-	next, _ = key(m, "a")
+	next, _ = openedPeek(m)
 	next, cmd := key(next, "q")
 	if cmd != nil || next.(Model).quitting {
 		t.Fatal("q quit while typing")
@@ -537,7 +537,7 @@ func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
 	// selected choice, so the console never types a line into it.
 	m, f := loadedWith(t, 100, st)
 	m.selPID, m.chose = 900, true
-	next, _ := key(m, "a")
+	next, _ := openedPeek(m)
 	next = typeText(next, "y")
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "⏎ open") || strings.Contains(out, "› y") || len(f.acts()) != 0 {
 		t.Fatalf("a on an approval menu: acts %+v\n%s", f.acts(), out)
@@ -598,7 +598,7 @@ func TestSessionsSayWhatTheQueueSays(t *testing.T) {
 func TestAJumpMovesTheCursorToTheNextThatWaits(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
 	m.opt.Run = func([]string) error { return nil }
-	next, cmd := key(m, "enter")
+	next, cmd := key(m, "ctrl+o")
 	if it, _ := m.selectedSession(); it.Pane != "%1" {
 		t.Fatalf("starts on %s", it.Pane)
 	}
@@ -615,7 +615,7 @@ func TestAJumpMovesTheCursorToTheNextThatWaits(t *testing.T) {
 	m.opt.Run = func([]string) error { return nil }
 	m.tab = tabSessions
 	from, _ := m.selected()
-	armed, cmd := key(m, "enter")
+	armed, cmd := key(m, "ctrl+o")
 	if cmd == nil {
 		armed, cmd = key(armed, "enter")
 	}
@@ -694,7 +694,7 @@ func TestATapOnAnOptionPicksIt(t *testing.T) {
 			m.chose, m.selPID = true, s.PID
 		}
 	}
-	next, _ := key(m, "a")
+	next, _ := openedPeek(m)
 	next = typeText(next, "x")
 	out := strings.Split(ansi.Strip(next.(Model).render()), "\n")
 	y := -1
@@ -726,7 +726,7 @@ func TestThePeekShowsTheEndOfWhatWasSaid(t *testing.T) {
 	}
 	m, _ := loadedWith(t, 86, st)
 	m, _ = func() (Model, tea.Cmd) { n, c := key(m, "down"); return n.(Model), c }()
-	next, _ := key(m, "a")
+	next, _ := openedPeek(m)
 	out := ansi.Strip(next.(Model).render())
 	if !strings.Contains(out, "rotation now?") || strings.Contains(out, "BEGINNING") || !strings.Contains(out, "│ …") {
 		t.Fatalf("the peek cut the end of the reply:\n%s", out)
@@ -738,7 +738,7 @@ func TestThePeekShowsTheEndOfWhatWasSaid(t *testing.T) {
 	}
 	m, _ = loadedWith(t, 86, st)
 	m, _ = func() (Model, tea.Cmd) { n, c := key(m, "down"); return n.(Model), c }()
-	next, _ = key(m, "a")
+	next, _ = openedPeek(m)
 	out = ansi.Strip(next.(Model).render())
 	lines := strings.Split(out, "\n")
 	for i, l := range lines {
@@ -759,7 +759,7 @@ func TestAMessagesASessionThatWorks(t *testing.T) {
 	if l := footerOf(sel); !strings.Contains(l, "a message") {
 		t.Fatalf("the key line of a working session: %q", l)
 	}
-	next, _ := key(sel, "a")
+	next, _ := openedPeek(sel)
 	if next.(Model).peek == nil {
 		t.Fatalf("a refused a working session: %q", next.(Model).flash)
 	}
@@ -803,7 +803,7 @@ func TestArrowsMoveThePeek(t *testing.T) {
 	if len(ring) < 3 {
 		t.Fatalf("ring %v", ring)
 	}
-	next, _ := key(selectPane(t, m, ring[0]), "a")
+	next, _ := openedPeek(selectPane(t, m, ring[0]))
 	for i := 1; i <= len(ring); i++ {
 		next, _ = key(quiet(next), "right")
 		if got, want := peekPane(next), ring[i%len(ring)]; got != want {
@@ -851,7 +851,7 @@ func TestLettersTypeOnAQuestion(t *testing.T) {
 		}
 	}
 	m, _ := loadedWith(t, 100, st)
-	open, _ := key(selectPane(t, m, "%2"), "a")
+	open, _ := openedPeek(selectPane(t, m, "%2"))
 	open, _ = key(quiet(open), "down") // an option has the cursor
 	next := typeText(open, "np")
 	if peekPane(next) != "%2" || !strings.Contains(screen(next), "› np▏") {
@@ -866,7 +866,7 @@ func TestThePeekFooterTaps(t *testing.T) {
 		w, h := size[0], size[1]
 		m, f := loadedWith(t, w, queueState())
 		next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
-		open, _ := key(selectPane(t, next, "%2"), "a")
+		open, _ := openedPeek(selectPane(t, next, "%2"))
 		open = quiet(typeText(open, "ok"))
 		tapOn := func(m tea.Model, label string) (tea.Model, tea.Cmd) {
 			t.Helper()
@@ -924,7 +924,7 @@ func TestThePeekIsTheDrawer(t *testing.T) {
 		w, h := size[0], size[1]
 		m, f := loadedWith(t, w, st)
 		next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
-		open, _ := key(selectPane(t, next, "%2"), "a")
+		open, _ := openedPeek(selectPane(t, next, "%2"))
 		open = quiet(open)
 		sc := open.(Model).draw(w)
 		lw, _ := open.(Model).panes(w)
@@ -993,7 +993,7 @@ func TestCtrlOJumpsFromThePeek(t *testing.T) {
 	m, _ := loadedWith(t, 132, queueState())
 	var ran [][]string
 	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
-	next, _ := key(selectPane(t, m, "%3"), "a")
+	next, _ := openedPeek(selectPane(t, m, "%3"))
 	next = typeText(quiet(next), "half a line")
 	if out := screen(next); !strings.Contains(out, "^o jump") {
 		t.Fatalf("the peek does not offer the jump:\n%s", out)
@@ -1006,4 +1006,23 @@ func TestCtrlOJumpsFromThePeek(t *testing.T) {
 	if len(ran) != 1 || strings.Join(ran[0], " ") != "tmux switch-client -t %3" {
 		t.Fatalf("ran %v", ran)
 	}
+}
+
+// openedPeek is the answer peek on the selected session, or the flash that
+// says why there is none: `a` opens the chat now, and the peek stays only
+// until the question card replaces it.
+func openedPeek(m tea.Model) (tea.Model, tea.Cmd) {
+	mm := m.(Model)
+	if pane, why := mm.peekTarget(); pane != "" {
+		mm.openPeek(pane)
+	} else {
+		mm.flash = why
+	}
+	return mm, nil
+}
+
+// peekOn is openedPeek without its command.
+func peekOn(m tea.Model) tea.Model {
+	next, _ := openedPeek(m)
+	return next
 }

@@ -19,7 +19,7 @@ var docKey = map[string]string{
 	"backspace": "backspace",
 }
 
-func keyName(doc string) string {
+func docKeyName(doc string) string {
 	if k, ok := docKey[strings.ToLower(doc)]; ok && len(doc) > 1 {
 		return k
 	}
@@ -81,7 +81,7 @@ func TestTheDocsNameEveryKeyAndOnlyRealOnes(t *testing.T) {
 	tabs := fmt.Sprintf("1-%d", len(tabNames))
 	named := map[string]map[string]bool{"Model": {}, "Shell": {}}
 	for _, r := range refs {
-		k := keyName(r.Text)
+		k := docKeyName(r.Text)
 		screens := []string{"Model", "Shell"}
 		if r.Table {
 			screens = []string{"Model"}

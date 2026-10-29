@@ -7,7 +7,8 @@ import (
 // tap is a click or a finger on a phone. A tap on a tab opens it, on a key
 // of the key line, of an opened row or under the detail presses it, on `● N wait for you` selects the first
 // session that waits, on the dock's `machine ›` switches the panel. A tap
-// on a row selects it and shows the step a second tap runs: an answer for
+// right of the list gives the chat the keys; a tap on the list gives them
+// back to Sessions. A tap on a row selects it and shows the step a second tap runs: an answer for
 // a session that waits, else the row's Enter. The second tap runs it when
 // it only moves this terminal, or asks to confirm it. A tap is never
 // consent to a destructive step, and it cancels a pending one.
@@ -95,9 +96,16 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 	}
 	i := ms.Y - sc.bodyTop
-	if i < 0 || i >= len(sc.rows) || ms.X >= sc.listW {
+	if i < 0 || i >= len(sc.rows) {
 		return m, nil
 	}
+	if ms.X >= sc.listW {
+		if m.tab == tabSessions {
+			return m.openChat(), nil
+		}
+		return m, nil
+	}
+	m.chatKeys = false
 	if sc.rows[i] == headerRow {
 		return m.tapHeader(ms.X)
 	}

@@ -162,10 +162,10 @@ func TestJumpPrintsCommandThenRunsOnConfirm(t *testing.T) {
 	m := loaded(t, 100)
 	m.opt.Run = func(argv []string) error { ran = argv; return nil }
 
-	next, _ := key(m, "enter")
+	next, _ := key(m, "ctrl+o")
 	out := next.(Model).render()
 	if !strings.Contains(out, "tmux switch-client -t %1") || ran != nil {
-		t.Fatalf("enter must print the command and wait; ran=%v\n%s", ran, out)
+		t.Fatalf("ctrl+o must print the command and wait; ran=%v\n%s", ran, out)
 	}
 	next, cmd := key(next, "enter")
 	if cmd == nil {
@@ -180,7 +180,7 @@ func TestJumpPrintsCommandThenRunsOnConfirm(t *testing.T) {
 func TestEscCancelsAction(t *testing.T) {
 	m := loaded(t, 100)
 	m.opt.Run = func([]string) error { t.Fatal("must not run"); return nil }
-	next, _ := key(m, "enter")
+	next, _ := key(m, "ctrl+o")
 	next, cmd := key(next, "esc")
 	if cmd != nil || !strings.Contains(next.(Model).render(), "cancelled") {
 		t.Fatal("esc must cancel without running")

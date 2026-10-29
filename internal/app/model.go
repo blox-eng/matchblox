@@ -19,6 +19,7 @@ import (
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
@@ -334,6 +335,11 @@ type Model struct {
 	// held is what the builder pressed or tapped while the stoker was in
 	// charge: it runs once they answer the take-over question.
 	held        func(Model) (tea.Model, tea.Cmd)
+	chatKeys    bool      // the chat has the keys: they go to the selected session's agent
+	keyQ        []chatKey // the chat's keys behind the one in flight
+	keyInFlight string    // the act id of the chat's key the service has not answered
+	ctrlCAt     time.Time // when the chat's last ^C went
+	ctrlCHeld   bool      // a ^C came within a second of the last one: the next one goes
 	touched     time.Time // the last key that kept the stoker's rest
 	all         lists     // what the service sent; queue, recs and snap hold the drawn copies
 	filter      string    // the search of the open tab
@@ -539,7 +545,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m = m.scanShows()
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
-		nm = nm.scanShows()
+		nm = nm.scanShows().keepChat(m)
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
 		}
@@ -575,6 +581,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.update(msg.msg)
+	case uv.UnknownApcEvent:
+		if string(msg) == homeKey {
+			m.chatKeys = false
+		}
+		return m, nil
 	case screenMsg:
 		if msg.Pane == m.watching {
 			m.screen = proto.Screen(msg)
@@ -709,6 +720,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planTickMsg:
 		return m.planTick(msg)
 	case resultMsg:
+		if msg.ActID != "" && msg.ActID == m.keyInFlight {
+			return m.keyAnswered(proto.Result(msg))
+		}
 		if pane, ok := strings.CutPrefix(msg.ActID, watchActID); ok && msg.Err != "" {
 			// A pane that went before the watch came is a race, not the builder's error.
 			if pane != "" && pane == m.watching {
@@ -887,13 +901,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var touch tea.Cmd
 		// f and n are stoker acts themselves: a touch sent with them would
 		// race them on the service.
-		if m.pair != nil || m.peek != nil || m.sheet != nil || m.form != nil || m.searching || !bkey.Matches(msg, m.keys.main.Stoke, m.keys.main.Night) {
+		if m.pair != nil || m.peek != nil || m.sheet != nil || m.form != nil || m.searching || m.chatKeys || !bkey.Matches(msg, m.keys.main.Stoke, m.keys.main.Night) {
 			m, touch = m.touchRest()
 		}
 		f := m.focus(msg)
 		// ctrl+c quits from every layer but a question, where any key but
-		// its answers cancels, and a peek on a gone session, which closes.
-		if f != layerAsk && f != layerHeld && f != layerPending && f != layerPeekGone && bkey.Matches(msg, m.keys.global.Quit) {
+		// its answers cancels, a peek on a gone session, which closes, and
+		// the chat, which sends it to the agent.
+		chat := m.chatKeys && (f == layerMain || f == layerTakeOver)
+		if f != layerAsk && f != layerHeld && f != layerPending && f != layerPeekGone && !chat && bkey.Matches(msg, m.keys.global.Quit) {
 			next, cmd := m.quit()
 			if f == layerMain {
 				next, cmd = stokerSeen(next, cmd) // as every key of the tabs
@@ -1133,6 +1149,9 @@ func (m Model) pendingKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // key is k on the tabs, with nothing on top.
 func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.chatKeys {
+		return m.chatKey(k)
+	}
 	mk := m.keys.main
 	m.flash = ""
 	switch {
@@ -1209,6 +1228,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.showCommand()
 			return m, nil
 		}
+		if _, ok := m.selectedSession(); ok {
+			return m.openChat(), nil
+		}
 		if a := m.primary(); a != nil && a.pair {
 			return m.openPairDoor()
 		}
@@ -1232,11 +1254,20 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabShips {
 			return m.shipAnswer(), nil
 		}
+		if m.tab == tabSessions {
+			return m.openChat(), nil
+		}
 		if pane, why := m.peekTarget(); pane != "" {
 			m.openPeek(pane)
 		} else {
 			m.flash = why
 		}
+	case bkey.Matches(k, mk.Chat):
+		if m.tab == tabSessions {
+			return m.openChat(), nil
+		}
+	case bkey.Matches(k, mk.Jump):
+		return m.intoPane(), nil
 	case bkey.Matches(k, mk.Dismiss):
 		if m.tab == tabSessions {
 			m.dismissRec()

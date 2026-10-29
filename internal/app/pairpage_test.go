@@ -730,7 +730,7 @@ func TestBeatFourOnAPeekAnswer(t *testing.T) {
 	m.opt.LastClient = func() (string, time.Time, error) { return phoneTTY, time.Time{}, nil }
 	m.opt.Pair = &PairHost{DeviceIn: func(id string) (time.Time, string, bool) { return time.Now(), phoneTTY, id == "iPad-id" }}
 	next, _ := key(m, "down") // app-review finished its turn
-	next, _ = key(next, "a")
+	next, _ = openedPeek(next)
 	next = typeText(next, "ok")
 	m = next.(Model)
 	m.pair = &pairPage{beat: 3, device: PairDevice{Name: "iPad", ID: "iPad-id"}}
@@ -782,14 +782,16 @@ func TestTheStripHandsTheConsoleBack(t *testing.T) {
 
 	next, _ := key(m, "down")
 	next, _ = key(next, "a")
-	if next.(Model).peek == nil {
+	if !next.(Model).chatKeys {
 		t.Fatal("a key did not reach the console at beat 3")
 	}
+	next, _ = key(next, "ctrl+]")
+	next, _ = openedPeek(next)
 	next, _ = key(next, "esc") // closes the peek, not the strip
 	if got := next.(Model); got.peek != nil || got.pair == nil {
 		t.Fatalf("esc: peek %v, page %v", got.peek, got.pair)
 	}
-	next, _ = key(next, "a")
+	next, _ = openedPeek(next)
 	next = typeText(next, "ok")
 	next, cmd := key(next, "enter")
 	drain(cmd)

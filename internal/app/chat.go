@@ -1,13 +1,20 @@
 package app
 
 import (
+	"fmt"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
+	"time"
 
+	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // watchActID starts the id of a watch act; the pane follows, so a refusal says which watch it was for.
@@ -108,4 +115,178 @@ func (m Model) chatLines(w, h int) []string {
 	}
 	fit := fitScreen(m.screen.Text, w, h)
 	return append(lines[:len(lines)-len(fit)], fit...)
+}
+
+// homeKey is the app's home gesture (panes.HomeKey, which the console may
+// not import): it gives the keys back to Sessions.
+const homeKey = "\x1b_matchblox\x1b\\"
+
+// chatKey is one key the chat sends to an agent: the pane and the agent it
+// was pressed for, and when the screen it answers was taken.
+type chatKey struct {
+	pane string
+	pid  int
+	text string
+	seen time.Time
+}
+
+// maxLit is the most text one "lit:" key carries; the service takes no more.
+const maxLit = 200
+
+// openChat gives the chat the keys, or says why the selected session has
+// none. The selection stays on the session while the chat has its keys.
+func (m Model) openChat() Model {
+	pane, why := m.peekTarget()
+	if pane == "" {
+		m.flash = why
+		return m
+	}
+	s, _ := m.selectedSession()
+	m.chatKeys, m.chose, m.selPID, m.flash = true, true, s.PID, ""
+	return m
+}
+
+// intoPane is ctrl+o: the selected session's pane, behind a confirm, as
+// Enter on a session was before the chat.
+func (m Model) intoPane() Model {
+	if s, ok := m.selectedSession(); ok && s.Pane != "" {
+		m.pending, m.previewTop = m.primary(), 0
+	}
+	return m
+}
+
+// chatKey is k while the chat has the keys: ctrl+] gives them back, ctrl+o
+// goes into the pane, and every other key goes to the agent. A ^C within a
+// second of the last one waits for a third: two ^C stop Claude Code.
+func (m Model) chatKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	m.flash = ""
+	switch {
+	case bkey.Matches(k, m.keys.chat.Back):
+		m.chatKeys = false
+		return m, nil
+	case bkey.Matches(k, m.keys.main.Jump):
+		return m.intoPane(), nil
+	}
+	text, ok := keyName(k)
+	s, have := m.selectedSession()
+	if !ok || !have || s.Pane == "" {
+		return m, nil
+	}
+	if m.conn == nil || m.lost {
+		m.flash = "not sent, no connection"
+		return m, nil
+	}
+	if text == "C-c" {
+		now := m.now()
+		if since := now.Sub(m.ctrlCAt); !m.ctrlCHeld && since < time.Second {
+			m.ctrlCHeld = true
+			stop := m.keys.chat.Stop.Help().Key
+			m.flash = fmt.Sprintf("%s held: one went %.1f s ago, %s again stops the agent", stop, since.Seconds(), stop)
+			return m, nil
+		}
+		m.ctrlCAt, m.ctrlCHeld = now, false
+	}
+	var seen time.Time
+	if m.screen.Pane == s.Pane {
+		seen = m.screen.At
+	}
+	m.queueKey(chatKey{pane: s.Pane, pid: s.PID, text: text, seen: seen})
+	cmd := m.sendKey()
+	return m, cmd
+}
+
+// queueKey puts k behind the keys that wait. Text typed after text for the
+// same agent joins it, up to maxLit.
+func (m *Model) queueKey(k chatKey) {
+	q := slices.Clone(m.keyQ)
+	if n := len(q); n > 0 {
+		last := &q[n-1]
+		typed, isText := strings.CutPrefix(k.text, "lit:")
+		if isText && strings.HasPrefix(last.text, "lit:") && last.pane == k.pane && last.pid == k.pid && len(last.text)+len(typed) <= len("lit:")+maxLit {
+			last.text += typed
+			m.keyQ = q
+			return
+		}
+	}
+	m.keyQ = append(q, k)
+}
+
+// sendKey sends the first key that waits when none is in flight: one at a
+// time, so they reach the agent in the order they were pressed.
+func (m *Model) sendKey() tea.Cmd {
+	if m.keyInFlight != "" || len(m.keyQ) == 0 || m.conn == nil || m.lost {
+		return nil
+	}
+	k := m.keyQ[0]
+	m.keyQ = m.keyQ[1:]
+	cmd := m.send(proto.Act{RecID: proto.KeysPrefix + k.pane, Text: k.text, PID: k.pid, Seen: k.seen})
+	m.keyInFlight = "a" + strconv.Itoa(m.acts)
+	return cmd
+}
+
+// keyAnswered is the service's answer to the key in flight: the next key
+// goes, or a refusal shows and the keys behind it drop, as they were
+// pressed for a screen that is no longer there.
+func (m Model) keyAnswered(r proto.Result) (tea.Model, tea.Cmd) {
+	m.keyInFlight = ""
+	if r.Err != "" {
+		m.keyQ, m.flash = nil, r.Err
+		return m, m.recv()
+	}
+	cmd := m.sendKey()
+	return m, tea.Batch(m.recv(), cmd)
+}
+
+// keepChat gives the keys back to Sessions when the chat no longer shows
+// the session it had, and drops the keys of an agent that left.
+func (m Model) keepChat(was Model) Model {
+	if m.chatKeys {
+		s, ok := m.selectedSession()
+		before, _ := was.selectedSession()
+		if !ok || s.Pane == "" || s.Pane != before.Pane || m.screen.Pane == s.Pane && m.screen.Gone {
+			m.chatKeys = false
+		}
+	}
+	if m.conn == nil || m.lost {
+		m.keyQ, m.keyInFlight = nil, ""
+		return m
+	}
+	var gone []chatKey
+	q := slices.DeleteFunc(slices.Clone(m.keyQ), func(k chatKey) bool {
+		if slices.ContainsFunc(m.snap.Sessions, func(s sample.Session) bool { return s.Pane == k.pane && s.PID == k.pid }) {
+			return false
+		}
+		gone = append(gone, k)
+		return true
+	})
+	if len(gone) == 0 {
+		return m
+	}
+	name := gone[0].pane
+	if i := slices.IndexFunc(was.snap.Sessions, func(s sample.Session) bool { return s.PID == gone[0].pid }); i >= 0 {
+		name = was.snap.Sessions[i].Name
+	}
+	m.keyQ, m.flash = q, "not sent: "+name+" ended"
+	return m
+}
+
+// chatKeyLine is the key line while the chat has the keys: whose agent
+// they go to, and the way back and the way into tmux.
+func (m Model) chatKeyLine(w int) (string, []span) {
+	st := m.st
+	s, _ := m.selectedSession()
+	lead := "keys go to " + s.Name + " · "
+	line, x := " "+st.text.Render(lead), 1+lipgloss.Width(lead)
+	var spans []span
+	for i, b := range []bkey.Binding{m.keys.chat.Back, m.keys.main.Jump} {
+		if i > 0 {
+			line += st.muted.Render(" · ")
+			x += lipgloss.Width(" · ")
+		}
+		part := st.accent.Render(b.Help().Key) + st.muted.Render(" "+b.Help().Desc)
+		spans = append(spans, span{x, x + lipgloss.Width(part), b.Keys()[0]})
+		line += part
+		x += lipgloss.Width(part)
+	}
+	return fit(line, w), spans
 }

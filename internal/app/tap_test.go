@@ -220,7 +220,7 @@ func TestFocusPicksNothing(t *testing.T) {
 // session or on its own, does not throw the text away.
 func TestFocusKeepsAPeekBeingTyped(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
-	next, _ := key(selectPane(t, m, "%2"), "a")
+	next, _ := openedPeek(selectPane(t, m, "%2"))
 	next = typeText(next, "no, wait")
 	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
 	next, _ = next.Update(stateMsg(withFocus(queueState(), "%1", at)))
