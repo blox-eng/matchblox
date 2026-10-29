@@ -9,7 +9,7 @@ All notable changes to matchblox are in this file. The format follows
 ### Added
 
 - **One console over every host you show.** On Hosts, `space` shows or
-  hides a host, and `Enter` opens one console of the shown hosts.
+  hides a host, and `Enter` opens one console of the ticked hosts.
   `matchblox` with added hosts opens that console; `matchblox ws-1` still
   opens `ws-1` alone. Sessions is one queue, and a wait on any host is at
   the top. A row names its host (`train-loop gpu-1`), and the header says

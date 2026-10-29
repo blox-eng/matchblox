@@ -159,7 +159,7 @@ On the chips:
 |---|---|
 | `↑` or `k`, `↓` or `j` | Selects a host. |
 | `Space` | Shows or hides the host. A hidden host has no stream, and the header counts it. |
-| `Enter` | Opens one console of the shown hosts, or adds a host. With no host shown, it opens the selected host. |
+| `Enter` | Opens one console of the ticked hosts, or adds a host. With no host ticked, it opens the selected host. |
 | `c` | Connects the host again with `matchblox connect`. |
 | `x` | Removes a host from the list. matchblox stays on that host. |
 | `y` | Confirms the remove or the connect. |

@@ -254,7 +254,7 @@ waits is already selected.
 
 ### Every host, list only and the now line
 
-With two or more hosts shown, Sessions is one queue over all of them. Each
+With two or more hosts ticked, Sessions is one queue over all of them. Each
 row names its host. See [Remote hosts](remote.md#see-every-host-in-one-console).
 
 `v` folds the detail pane and the dock, so the list takes the screen. The
