@@ -98,8 +98,8 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 	case bkey.Matches(k, m.keys.main.Second):
 		return m.secondary() != nil
 	case bkey.Matches(k, m.keys.main.Peek):
-		pane, _ := m.peekTarget()
-		return pane != ""
+		at, _ := m.peekTarget()
+		return at.pane != ""
 	}
 	return false
 }
@@ -109,9 +109,9 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 func (m Model) hold(k tea.KeyPressMsg) func(Model) (tea.Model, tea.Cmd) {
 	switch {
 	case bkey.Matches(k, m.keys.main.Peek):
-		pane, _ := m.peekTarget()
+		at, _ := m.peekTarget()
 		return func(m Model) (tea.Model, tea.Cmd) {
-			m.openPeek(pane)
+			m.openPeek(at)
 			return m, nil
 		}
 	case bkey.Matches(k, m.keys.main.Second):

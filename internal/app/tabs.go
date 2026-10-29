@@ -150,7 +150,7 @@ var views = [...]tabView{
 				return ghostAction(g)
 			}
 			if s, ok := m.selectedSession(); ok && s.Pane != "" {
-				return m.jump(s.Pane)
+				return m.jumpOn(s.Host, s.Pane)
 			}
 			return nil
 		},
@@ -321,16 +321,24 @@ func (m *Model) selectRow(i int) {
 
 func (m Model) primary() *action {
 	if v := m.view(); v.primary != nil {
-		return m.forHost(v.primary(m))
+		return m.onRowHost(v.primary(m))
 	}
 	return nil
 }
 
 func (m Model) secondary() *action {
 	if v := m.view(); v.secondary != nil {
-		return m.forHost(v.secondary(m))
+		return m.onRowHost(v.secondary(m))
 	}
 	return nil
+}
+
+// onRowHost is a on the host of its row.
+func (m Model) onRowHost(a *action) *action {
+	if a == nil {
+		return nil
+	}
+	return m.forHost(m.hostOf(*a), a)
 }
 
 func (m Model) body(w int) body { return m.view().body(m, w) }

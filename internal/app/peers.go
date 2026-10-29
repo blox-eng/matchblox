@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/transport"
@@ -38,6 +39,8 @@ type link struct {
 	st                        proto.State // the last state; History, Found, Used kept from the first
 	have                      bool
 	acts                      []string // the act ids sent on conn with no result yet
+	wrepos                    []whereRepo
+	wfrom                     []string // what wrepos was built from, as Model's
 }
 
 // peerMsg tags a message with the peer and the conn it came from: after a
@@ -100,6 +103,46 @@ func (m *Model) sendPeer(i int, a proto.Act) tea.Cmd {
 	return toPeer(l.host, cmd)
 }
 
+// helloOf is the hello a host sent; the zero one before it says hello.
+func (m Model) helloOf(host string) proto.Hello {
+	if host == m.opt.Host {
+		return m.host
+	}
+	if i := m.peerAt(host); i >= 0 {
+		return m.peers[i].hello
+	}
+	return proto.Hello{}
+}
+
+// refusal is why an act cannot go to host now; "" when it can. One host
+// keeps today's checks and their words. A lost host refuses, however
+// short the loss: its act would have no answer.
+func (m Model) refusal(host string) string {
+	var redialing bool
+	var backoff time.Duration
+	switch i := m.peerAt(host); {
+	case host == m.opt.Host:
+		if m.hostCount() == 1 || m.conn != nil && !m.lost {
+			return ""
+		}
+		redialing, backoff = m.redialing, m.backoff
+	case i >= 0:
+		l := m.peers[i]
+		if l.conn != nil && !l.lost {
+			return ""
+		}
+		redialing, backoff = l.redialing, l.backoff
+	}
+	why := hostName(host) + " is not connected."
+	if redialing {
+		why += " It tries again in " + backoff.String() + "."
+	}
+	return why
+}
+
+// hostName is a host as the console names it.
+func hostName(host string) string { return cmp.Or(host, hosts.ThisMachine) }
+
 // toPeer turns the messages of a home-shaped read or send into peerMsgs.
 func toPeer(host string, cmd tea.Cmd) tea.Cmd {
 	if cmd == nil {
@@ -146,7 +189,7 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		}
 		m.peers = slices.Clone(m.peers)
 		p := &m.peers[i]
-		p.conn, p.redialing, p.answered = msg.conn, false, false
+		p.conn, p.redialing, p.answered, p.acts = msg.conn, false, false, nil
 		m.flash = p.host + ": connected again"
 		return m, tea.Batch(toPeer(p.host, helloOn(p.conn, m.opt.Binary)), m.peerRecv(i))
 	}
@@ -166,6 +209,14 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 		st.Used = cmp.Or(st.Used, p.st.Used)
 		m.noteChanges(p.host, st.Sessions)
 		p.st, p.at, p.have, p.answered = st, m.now(), true, true
+		if from := m.whereFrom(p.host); msg.Found != nil || msg.Used != nil || !slices.Equal(from, p.wfrom) {
+			p.wrepos, p.wfrom = m.whereRepos(p.host), from
+		}
+		if m.form != nil && m.form.host == p.host && m.form.whereList() && !m.form.cloneList() {
+			f := *m.form
+			m.form = &f
+			m.refreshWhere(&f, m.whereSelected().path())
+		}
 		if p.lost {
 			p.lost, p.backoff = false, 0
 			if strings.HasPrefix(m.flash, p.host+": ") {

@@ -132,6 +132,8 @@ func (m Model) matchCell(s sample.Session) string {
 // paneKey is a pane on a host: pane ids repeat across hosts.
 type paneKey struct{ host, pane string }
 
+func paneOf(s sample.Session) paneKey { return paneKey{s.Host, s.Pane} }
+
 // noteChanges records the changes between a host's last state and its
 // next, so each plays once.
 func (m *Model) noteChanges(host string, next []sample.Session) {

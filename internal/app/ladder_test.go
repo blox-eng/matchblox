@@ -81,7 +81,7 @@ func settle(t *testing.T, m tea.Model, cmd tea.Cmd) Model {
 func jumpOffer(t *testing.T, h passwordHost) Model {
 	t.Helper()
 	hostJump(&h.m, remote.Jump{Pane: "%1"})
-	next, cmd := h.m.confirm(*h.m.forHost(h.m.jump("%1")))
+	next, cmd := h.m.confirm(*h.m.forHost(h.m.opt.Host, h.m.jump("%1")))
 	m := settle(t, next, cmd)
 	if m.pending == nil || m.pending.climb == nil {
 		t.Fatalf("no ladder offer: pending %+v, flash %q", m.pending, m.flash)
@@ -129,7 +129,7 @@ func TestPasswordLoginOffersLadder(t *testing.T) {
 			t.Fatalf("login %v, ran %q, flash %q", m.login, *h.ran, m.flash)
 		}
 		// The offer is gone: the next jump just goes.
-		next, cmd = m.confirm(*m.forHost(m.jump("%1")))
+		next, cmd = m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 		if m = settle(t, next, cmd); m.pending != nil || len(*h.ran) != 2 {
 			t.Fatalf("second jump: pending %+v, ran %q", m.pending, *h.ran)
 		}
@@ -147,7 +147,7 @@ func TestPasswordLoginOffersLadder(t *testing.T) {
 		if len(*h.ran) != 1 {
 			t.Fatalf("ran %q", *h.ran)
 		}
-		next, cmd = m.confirm(*m.forHost(m.jump("%1")))
+		next, cmd = m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 		if m = settle(t, next, cmd); m.pending != nil || len(*h.ran) != 2 {
 			t.Fatalf("not now asks again: pending %+v", m.pending)
 		}
@@ -188,7 +188,7 @@ func TestKeyOnlyHostOffersNoLadder(t *testing.T) {
 		t.Fatalf("flash %q\nwant %q", h.m.flash, want)
 	}
 	hostJump(&h.m, remote.Jump{Pane: "%1"})
-	next, cmd := h.m.confirm(*h.m.forHost(h.m.jump("%1")))
+	next, cmd := h.m.confirm(*h.m.forHost(h.m.opt.Host, h.m.jump("%1")))
 	if m := settle(t, next, cmd); m.pending != nil && m.pending.climb != nil {
 		t.Fatalf("a ladder on a key-only host: %+v", m.pending)
 	}
@@ -441,7 +441,7 @@ func TestStaleStepOffersNothing(t *testing.T) {
 	step := login.Step{Source: login.FromAgent, Line: testKey, Fingerprint: login.Fingerprint(testKey)}
 	h := ladderHost(t, step, passwordRefusal)
 	m := jumpOffer(t, h)
-	a := *m.forHost(m.jump("%1"))
+	a := *m.forHost(m.opt.Host, m.jump("%1"))
 	stale := stepMsg{step: step, jump: &a, gen: m.opt.Gen}
 	next, cmd := key(m, "y")
 	m = settle(t, next, cmd)

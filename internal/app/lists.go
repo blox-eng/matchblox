@@ -69,9 +69,9 @@ func itemsOn(to []queue.Item, host string, items []queue.Item) []queue.Item {
 	return to
 }
 
-// stateOf is the last state of a host, for the lookups by pane. The home
-// host's is a view of the Model's own fields; a host with no state yet
-// has an empty one.
+// stateOf is the last state of a host, for the lookups by pane and the
+// forms. The home host's is a view of the Model's own fields; a host with
+// no state yet has an empty one.
 func (m Model) stateOf(host string) *proto.State {
 	if host != m.opt.Host {
 		if i := m.peerAt(host); i >= 0 {
@@ -79,8 +79,18 @@ func (m Model) stateOf(host string) *proto.State {
 		}
 		return &proto.State{}
 	}
+	used := m.used
 	return &proto.State{Doc: state.Doc{Holds: m.holds, Reasons: m.reasons, Renames: m.renames,
-		SignIns: m.signIns, StokerServer: m.stokerServer}}
+		SignIns: m.signIns, StokerServer: m.stokerServer, Git: m.git, Agents: m.agents, Accounts: m.accounts,
+		AccountsSkipped: m.skipped, LastAccount: m.lastAccount, LastAgent: m.keptAgent}, Found: m.found, Used: &used}
+}
+
+// sessionsOf are the sessions host sent last.
+func (m Model) sessionsOf(host string) []sample.Session {
+	if host == m.opt.Host {
+		return m.homeAll.sessions
+	}
+	return m.stateOf(host).Sessions
 }
 
 // hostOrder is the place of a host in Hosts order: home first.

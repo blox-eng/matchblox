@@ -104,7 +104,7 @@ func (m Model) openNewIn(where, first string) Model {
 		next, _ := m.openNew()
 		return next.(Model)
 	}
-	nm := m.openNewAt(where, first)
+	nm := m.openNewAt(m.opt.Host, where, first)
 	if nm.form == nil {
 		return nm
 	}

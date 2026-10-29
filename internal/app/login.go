@@ -139,7 +139,7 @@ func (m Model) checkLogin() (Model, tea.Cmd) {
 	case err != nil && m.opt.OutsideTmux:
 		m.flash = "jumps to " + m.opt.Host + " ask your login each time: " + masterWhy(err)
 	case err != nil:
-		m.flash = m.masterRefusal(err)
+		m.flash = m.masterRefusal(m.opt.Host, err)
 	case m.opt.Ask == nil && m.opt.NoAsk != "":
 		m.flash = "jumps to " + m.opt.Host + " ask your login in the terminal: " + m.opt.NoAsk
 	case !m.opt.OutsideTmux && m.opt.Prefix != nil && m.opt.Prefix() != "" && !remote.PrefixKey(m.opt.Prefix()):
@@ -209,9 +209,11 @@ func (m Model) loggedIn(msg loginMsg) (tea.Model, tea.Cmd) {
 }
 
 // jumpAfterLogin runs a jump, or keeps it until the login check ends. A
-// second jump replaces the one that waits.
+// second jump replaces the one that waits. The check and the key ladder
+// are the home host's: a jump to another host runs as it is.
 func (m Model) jumpAfterLogin(a action) (tea.Model, tea.Cmd) {
 	switch {
+	case m.hostOf(a) != m.opt.Host: // it runs now
 	case m.checking:
 		m.jumpLater = &a
 		m.flash = "checking your ssh login to " + m.opt.Host + "…"
@@ -242,7 +244,7 @@ func (m Model) runJump(a action) (tea.Model, tea.Cmd) {
 	if a.master == "" {
 		return m.onHost(a)
 	}
-	host := m.opt.Host
+	host := m.hostOf(a)
 	if m.opening {
 		m.flash = "the login to " + host + " runs: answer it, or " + m.keys.ask.Cancel.Help().Key + " to cancel it"
 		return m, nil
@@ -255,7 +257,7 @@ func (m Model) runJump(a action) (tea.Model, tea.Cmd) {
 	ssh, env, gen := m.ssh(), m.opt.Ask.Env(host), m.opt.Gen
 	up, open := remote.MasterUpArgv(host, a.master), remote.OpenArgv(host, a.master)
 	// The open has no -v: the host's kind comes from its check.
-	return m, streamed(ctx, gen, m.tailscale, openTimeout, openTimeout, func(ctx context.Context, line func(string)) tea.Msg {
+	return m, streamed(ctx, gen, m.tailscale && host == m.opt.Host, openTimeout, openTimeout, func(ctx context.Context, line func(string)) tea.Msg {
 		defer stop()
 		if _, exit := ssh(ctx, up, nil, ignoreLine); exit == 0 {
 			return masterMsg{a: a, gen: gen}
@@ -278,8 +280,8 @@ func (m Model) masterOpened(msg masterMsg) (tea.Model, tea.Cmd) {
 		m.flash = note
 		return m.onHost(msg.a)
 	}
-	host := m.opt.Host
-	login, detail := remote.ClassifyAs(msg.stderr, msg.exit, m.tailscale)
+	host := m.hostOf(msg.a)
+	login, detail := remote.ClassifyAs(msg.stderr, msg.exit, m.tailscale && host == m.opt.Host)
 	switch {
 	case m.askCancelled:
 		m.flash = "cancelled: the login to " + host + ", and the jump did not run"
@@ -363,19 +365,22 @@ func masterWhy(err error) string {
 
 // masterRefusal refuses the jumps inside tmux that have no master to open
 // first.
-func (m Model) masterRefusal(err error) string {
-	return "refused: jumps to " + m.opt.Host + " need their ssh master: " + masterWhy(err)
+func (m Model) masterRefusal(host string, err error) string {
+	return "refused: jumps to " + host + " need their ssh master: " + masterWhy(err)
 }
 
 // hostTmuxRefusal refuses a jump to a host whose tmux cannot take it, and
-// selects the host's tmux door when it shows one.
-func (m Model) hostTmuxRefusal(a *action) *action {
-	host, v := m.opt.Host, m.host.Tmux
+// selects the home host's tmux door when it shows one.
+func (m Model) hostTmuxRefusal(host string, a *action) *action {
+	v := m.helloOf(host).Tmux
 	why := "refused: " + host + " has no tmux: install it with its Install tmux door, then open the host again"
 	if v != "none" {
 		why = "refused: tmux " + v + " on " + host + " is older than " + remote.MinHostTmux + ": update tmux there, then open the host again"
 	}
 	b := refused(a, why)
+	if host != m.opt.Host {
+		return b // the doors are the home host's
+	}
 	b.local = func(m Model) (Model, string) {
 		for i, d := range m.doors {
 			if d.ID == doors.Tmux {

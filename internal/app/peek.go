@@ -26,7 +26,7 @@ import (
 
 // peek is the open peek.
 type peek struct {
-	pane string
+	host, pane string
 	// The question tool's call: the question on screen, the row under the
 	// cursor (the typing row after the options; -1 none), the options
 	// ticked (from 1), and the answers to the questions before it.
@@ -36,6 +36,8 @@ type peek struct {
 	choices []said.Choice
 	text    string // the typing line
 }
+
+func (p peek) key() paneKey { return paneKey{p.host, p.pane} }
 
 // peekView is the session of the open peek and what it asks: the question
 // tool's call, or a permission prompt, which is answered in its pane.
@@ -51,7 +53,7 @@ func (m Model) peekNow() (peekView, peek, bool) {
 	if m.peek == nil {
 		return peekView{}, peek{}, false
 	}
-	s, ok := m.sessionIn(m.peek.pane)
+	s, ok := m.sessionIn(m.peek.host, m.peek.pane)
 	if !ok {
 		return peekView{}, peek{}, false
 	}
@@ -62,7 +64,7 @@ func (m Model) peekNow() (peekView, peek, bool) {
 		v.permit = it.State == queue.StatePermission
 	} else if p.askID != s.Ask.ID {
 		// A new call: nothing is picked until the person picks it.
-		p = peek{pane: p.pane, askID: s.Ask.ID, at: -1}
+		p = peek{host: p.host, pane: p.pane, askID: s.Ask.ID, at: -1}
 	}
 	return v, p, true
 }
@@ -70,18 +72,19 @@ func (m Model) peekNow() (peekView, peek, bool) {
 // peekTarget is the pane `a` opens the peek on: the selected session,
 // whatever it does, when it has a pane to type into. Why says why there is
 // none.
-func (m Model) peekTarget() (pane, why string) {
+func (m Model) peekTarget() (at paneKey, why string) {
 	if m.tab == tabStoker {
-		return m.stokerPeekTarget()
+		pane, why := m.stokerPeekTarget()
+		return paneKey{m.opt.Host, pane}, why
 	}
 	s, ok := m.selectedSession()
 	switch {
 	case !ok:
-		return "", ""
+		return paneKey{}, ""
 	case s.Pane == "":
-		return "", s.Name + " runs outside tmux: there is no pane to type into"
+		return paneKey{}, s.Name + " runs outside tmux: there is no pane to type into"
 	}
-	return s.Pane, ""
+	return paneOf(s), ""
 }
 
 // peekWord is the key line's word for `a` on a session: answer one that
@@ -93,9 +96,9 @@ func (m Model) peekWord(s sample.Session) string {
 	return "message"
 }
 
-func (m *Model) openPeek(pane string) {
-	m.peek, m.flash = &peek{pane: pane}, ""
-	if s, ok := m.sessionIn(pane); ok {
+func (m *Model) openPeek(at paneKey) {
+	m.peek, m.flash = &peek{host: at.host, pane: at.pane}, ""
+	if s, ok := m.sessionIn(at.host, at.pane); ok {
 		m.ghostPick, m.chose, m.selPID, m.selHost = 0, true, s.PID, s.Host
 		if s.Ask != nil {
 			m.peek.askID = s.Ask.ID
@@ -104,11 +107,11 @@ func (m *Model) openPeek(pane string) {
 }
 
 // peekQueue is every other session that waits, in the list's order after
-// the one in pane: the ones a send goes to.
-func (m Model) peekQueue(pane string) []sample.Session {
+// the one in at: the ones a send goes to.
+func (m Model) peekQueue(at paneKey) []sample.Session {
 	var out []sample.Session
-	for _, s := range m.peekRing(pane) {
-		if s.Pane != pane && m.groupOf(s) == groupWaits {
+	for _, s := range m.peekRing(at) {
+		if paneOf(s) != at && m.groupOf(s) == groupWaits {
 			out = append(out, s)
 		}
 	}
@@ -116,14 +119,14 @@ func (m Model) peekQueue(pane string) []sample.Session {
 }
 
 // peekRing is every session with a pane, in the list's order (who waits
-// first), starting after the one in pane and ending on it: the ring ← and
+// first), starting after the one in at and ending on it: the ring ← and
 // → move along.
-func (m Model) peekRing(pane string) []sample.Session {
+func (m Model) peekRing(at paneKey) []sample.Session {
 	ss := m.snap.Sessions
-	at := slices.IndexFunc(ss, func(s sample.Session) bool { return s.Pane == pane })
+	i := slices.IndexFunc(ss, func(s sample.Session) bool { return paneOf(s) == at })
 	var out []sample.Session
 	for k := 1; k <= len(ss); k++ {
-		if s := ss[(at+k+len(ss))%len(ss)]; s.Pane != "" {
+		if s := ss[(i+k+len(ss))%len(ss)]; s.Pane != "" {
 			out = append(out, s)
 		}
 	}
@@ -136,17 +139,17 @@ func (m Model) peekRing(pane string) []sample.Session {
 const peekQuiet = 400 * time.Millisecond
 
 // peekNext moves the peek to the next session that waits, or closes it.
-func (m Model) peekNext(pane string) Model {
+func (m Model) peekNext(at paneKey) Model {
 	m.peek = nil
-	if next := m.peekQueue(pane); len(next) > 0 {
-		m = m.peekTo(next[0].Pane)
+	if next := m.peekQueue(at); len(next) > 0 {
+		m = m.peekTo(paneOf(next[0]))
 	}
 	return m
 }
 
 // peekMove moves the peek along the ring, by one either way, wrapping.
-func (m Model) peekMove(pane string, back bool) Model {
-	ring := m.peekRing(pane)
+func (m Model) peekMove(at paneKey, back bool) Model {
+	ring := m.peekRing(at)
 	if len(ring) < 2 {
 		return m
 	}
@@ -154,29 +157,29 @@ func (m Model) peekMove(pane string, back bool) Model {
 	if back {
 		to = ring[len(ring)-2]
 	}
-	return m.peekTo(to.Pane)
+	return m.peekTo(paneOf(to))
 }
 
 // peekCount is where the peek is among the n sessions it moves along:
 // "3/9", in the list's order.
-func (m Model) peekCount(pane string, n int) string {
-	at := 0
+func (m Model) peekCount(at paneKey, n int) string {
+	i := 0
 	for _, s := range m.snap.Sessions {
 		if s.Pane == "" {
 			continue
 		}
-		at++
-		if s.Pane == pane {
+		i++
+		if paneOf(s) == at {
 			break
 		}
 	}
-	return fmt.Sprintf("%d/%d", at, n)
+	return fmt.Sprintf("%d/%d", i, n)
 }
 
 // peekTo opens the peek on another session: nothing is picked, and keys
 // wait a moment.
-func (m Model) peekTo(pane string) Model {
-	m.openPeek(pane)
+func (m Model) peekTo(at paneKey) Model {
+	m.openPeek(at)
 	m.peek.at, m.peekQuiet = -1, time.Now().Add(peekQuiet)
 	return m
 }
@@ -207,18 +210,18 @@ func (m Model) peekKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case bkey.Matches(k, pk.Jump):
 		m.peek = nil
-		if a := m.forHost(m.jump(v.s.Pane)); a != nil {
+		if a := m.forHost(v.s.Host, m.jumpOn(v.s.Host, v.s.Pane)); a != nil {
 			return m.confirm(*a)
 		}
 		return m, nil
 	case bkey.Matches(k, pk.Next):
-		return m.peekMove(p.pane, false), nil
+		return m.peekMove(p.key(), false), nil
 	case bkey.Matches(k, pk.Prev):
-		return m.peekMove(p.pane, true), nil
+		return m.peekMove(p.key(), true), nil
 	case v.permit:
 		if bkey.Matches(k, pk.Send) {
 			m.peek = nil
-			if a := m.forHost(m.jump(v.s.Pane)); a != nil {
+			if a := m.forHost(v.s.Host, m.jumpOn(v.s.Host, v.s.Pane)); a != nil {
 				return m.confirm(*a)
 			}
 		}
@@ -310,19 +313,23 @@ func (m Model) peekChoose(v peekView, p peek, c said.Choice) (tea.Model, tea.Cmd
 // toast says "sent to" only when the result says every key went; a guard
 // that stopped it says why on the key line.
 func (m Model) sendPeek(s sample.Session, rec, text string) (tea.Model, tea.Cmd) {
-	if m.conn == nil || m.lost {
+	if why := m.refusal(s.Host); why != "" {
+		m.flash = why
+		return m, nil
+	}
+	if s.Host == m.opt.Host && (m.conn == nil || m.lost) {
 		m.flash = "not sent, no connection: the answer to " + s.Name
 		return m, nil
 	}
-	cmd := m.send(proto.Act{RecID: rec, Which: "secondary", Confirm: "y", Text: text})
+	cmd := m.sendTo(s.Host, proto.Act{RecID: rec, Which: "secondary", Confirm: "y", Text: text})
 	m.peekSent = maps.Clone(m.peekSent)
 	if m.peekSent == nil {
 		m.peekSent = map[string]string{}
 	}
 	m.peekSent["a"+strconv.Itoa(m.acts)] = s.Name
 	toast := m.say("sending to " + s.Name + "…")
-	m = m.pairActed(action{rec: rec})
-	return m.peekNext(s.Pane), tea.Batch(cmd, toast)
+	m = m.pairActed(action{rec: rec, host: s.Host})
+	return m.peekNext(paneOf(s)), tea.Batch(cmd, toast)
 }
 
 // peekBox is the peek's lines in bw columns, and the key each line presses
@@ -460,9 +467,9 @@ func (m Model) peekBox(bw, maxH int, phone, fill bool) ([]string, []string, []sp
 	if v.ask != nil && v.ask.Questions[p.q].Multi && !typing {
 		foot = append(foot, st.footFor(pk.Tick, "", sep))
 	}
-	if ring := m.peekRing(p.pane); len(ring) > 1 {
+	if ring := m.peekRing(p.key()); len(ring) > 1 {
 		foot = append(foot, st.footFor(pk.Prev, "", sep))
-		count := footPart{st.faint.Render(m.peekCount(p.pane, len(ring))), "", "  "}
+		count := footPart{st.faint.Render(m.peekCount(p.key(), len(ring))), "", "  "}
 		next := st.footForRev(pk.Next, "", "  ")
 		width := 3 + 3 + 3 // the corners, the space and esc
 		for _, f := range append(foot, count, next) {

@@ -15,6 +15,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/blox-eng/matchblox/internal/gitremote"
+	"github.com/blox-eng/matchblox/internal/proto"
 )
 
 // The where list of N (#174): while where has focus, the builder's repos
@@ -71,11 +72,12 @@ func (r whereRow) picks() bool { return r.path() != "" }
 // suggested is how many repos SUGGESTED holds.
 const suggested = 5
 
-// whereRepos are the known repos, by name, each path once: the Git tab's,
-// the ones found on the host and the ones matchblox started sessions in.
-// A worktree goes under its main checkout; a used folder in a checkout is
-// that checkout, any other is its own entry.
-func (m Model) whereRepos() []whereRepo {
+// whereRepos are the known repos of host, by name, each path once: the
+// Git tab's, the ones found on the host and the ones matchblox started
+// sessions in. A worktree goes under its main checkout; a used folder in a
+// checkout is that checkout, any other is its own entry.
+func (m Model) whereRepos(host string) []whereRepo {
+	st := m.stateOf(host)
 	type entry struct {
 		r    whereRepo
 		main string // a worktree: its main checkout
@@ -106,8 +108,8 @@ func (m Model) whereRepos() []whereRepo {
 			}
 		}
 	}
-	if m.git != nil {
-		for _, r := range m.git.Repos {
+	if st.Git != nil {
+		for _, r := range st.Git.Repos {
 			main := checkout(r.Path).r.path
 			for _, wt := range r.Worktrees {
 				e := checkout(wt.Path)
@@ -123,8 +125,8 @@ func (m Model) whereRepos() []whereRepo {
 			}
 		}
 	}
-	if m.found != nil {
-		for _, c := range m.found.Repos {
+	if st.Found != nil {
+		for _, c := range st.Found.Repos {
 			e := checkout(c.Path)
 			if c.Main != "" && filepath.Clean(c.Main) != e.r.path && e.main == "" {
 				e.main = checkout(c.Main).r.path
@@ -137,7 +139,11 @@ func (m Model) whereRepos() []whereRepo {
 			}
 		}
 	}
-	for _, u := range m.used.Repos {
+	var used proto.Used
+	if st.Used != nil {
+		used = *st.Used
+	}
+	for _, u := range used.Repos {
 		e := within(u.Path)
 		if e == nil {
 			e = get(u.Path)
@@ -149,7 +155,7 @@ func (m Model) whereRepos() []whereRepo {
 			e.r.at = u.At
 		}
 	}
-	for _, s := range m.snap.Sessions {
+	for _, s := range m.sessionsOf(host) {
 		if s.Cwd == "" {
 			continue
 		}
@@ -185,13 +191,13 @@ func (m Model) whereRepos() []whereRepo {
 	return repos
 }
 
-// whereFrom is what whereRepos reads of each snapshot: the Git tab's
-// repos and worktrees, and the sessions' folders. Found and used come
-// only when they change.
-func (m Model) whereFrom() []string {
+// whereFrom is what whereRepos reads of each snapshot of host: the Git
+// tab's repos and worktrees, and the sessions' folders. Found and used
+// come only when they change.
+func (m Model) whereFrom(host string) []string {
 	var out []string
-	if m.git != nil {
-		for _, r := range m.git.Repos {
+	if g := m.stateOf(host).Git; g != nil {
+		for _, r := range g.Repos {
 			out = append(out, "repo "+r.Path)
 			for _, wt := range r.Worktrees {
 				pr := 0
@@ -202,11 +208,38 @@ func (m Model) whereFrom() []string {
 			}
 		}
 	}
-	for _, s := range m.snap.Sessions {
+	for _, s := range m.sessionsOf(host) {
 		out = append(out, "session "+s.Cwd)
 	}
 	return out
 }
+
+// reposOf are the known repos of host, as whereRepos built them last.
+func (m Model) reposOf(host string) []whereRepo {
+	if host == m.opt.Host {
+		return m.wrepos
+	}
+	if i := m.peerAt(host); i >= 0 {
+		return m.peers[i].wrepos
+	}
+	return nil
+}
+
+// formHost is the host of the open form; the home host with none.
+func (m Model) formHost() string {
+	if m.form == nil {
+		return m.opt.Host
+	}
+	return m.formHostOf(m.form)
+}
+
+func (m Model) formHostOf(f *form) string { return cmp.Or(f.host, m.opt.Host) }
+
+// clonesIn tells if f can clone a git URL: clones are the home host's.
+func (m Model) clonesIn(f *form) bool { return m.formHostOf(f) == m.opt.Host }
+
+// formRepos are the known repos of the open form's host.
+func (m Model) formRepos() []whereRepo { return m.reposOf(m.formHost()) }
 
 func byName(a, b whereRepo) int {
 	return cmp.Or(cmp.Compare(a.name, b.name), cmp.Compare(a.path, b.path))
@@ -245,7 +278,7 @@ func (m Model) whereRows(query string) []whereRow {
 		extra = m.form.extra
 	}
 	if q := strings.TrimSpace(query); q != "" {
-		if r, ok := cloneOf(q); ok && m.form != nil {
+		if r, ok := cloneOf(q); ok && m.form != nil && m.clonesIn(m.form) {
 			rows := m.form.cloneRows(r, q)
 			if shorthand(q) { // a bare o/r filters too: the repos that match first
 				if match := m.matchRows(q); match[0].kind != rowNone {
@@ -256,11 +289,15 @@ func (m Model) whereRows(query string) []whereRow {
 		}
 		return m.matchRows(q)
 	}
-	repos := m.wrepos
+	repos := m.formRepos()
 	if len(repos) == 0 && extra == "" {
 		return nil
 	}
-	rows := []whereRow{{kind: rowLabel, text: "SUGGESTED"}}
+	label := "SUGGESTED"
+	if m.hostCount() > 1 {
+		label += " · " + hostName(m.formHost())
+	}
+	rows := []whereRow{{kind: rowLabel, text: label}}
 	if extra != "" {
 		rows = append(rows, whereRow{kind: rowPath, text: extra})
 	}
@@ -352,7 +389,7 @@ func (m Model) matchRows(q string) []whereRow {
 	var ms []match
 	best := 0
 	same := m.samePlace(q)
-	for _, r := range m.wrepos {
+	for _, r := range m.formRepos() {
 		mt := match{r: r, score: -1}
 		mt.score, mt.hits = placeScore(q, r.name, r.path)
 		mt.exact = pathLike(q) && same(r.path)
@@ -476,7 +513,7 @@ func samePathFold(path, q string) bool {
 // samePlace is samePath for q among the known places: in any case when
 // no repo or worktree is q in its own case.
 func (m Model) samePlace(q string) func(path string) bool {
-	for _, r := range m.wrepos {
+	for _, r := range m.formRepos() {
 		if samePath(r.path, q) || slices.ContainsFunc(r.trees, func(t whereRepo) bool { return samePath(t.path, q) }) {
 			return func(path string) bool { return samePath(path, q) }
 		}
@@ -776,7 +813,7 @@ func (m Model) whereLines(iw int) (lines, press []string) {
 	switch {
 	case len(f.rows) == 0:
 		add("", st.muted.Render(fit("no repos known yet · type a path, or paste a git URL", iw)))
-		if m.found == nil || m.found.Consent == "" {
+		if found := m.stateOf(m.formHost()).Found; found == nil || found.Consent == "" {
 			add("", st.faint.Render(fit("matchblox scan finds your repos", iw)))
 		}
 	default:
@@ -798,7 +835,7 @@ func (m Model) whereLines(iw int) (lines, press []string) {
 				n++
 			}
 		}
-		count = st.faint.Render(fmt.Sprintf("%d of %d", n, len(m.wrepos)))
+		count = st.faint.Render(fmt.Sprintf("%d of %d", n, len(m.formRepos())))
 	}
 	add("", count)
 	return lines, press
@@ -859,7 +896,7 @@ func (m Model) liveText(n int) string {
 func (m Model) liveAt(p string) int {
 	n := 0
 	p = filepath.Clean(p)
-	for _, s := range m.snap.Sessions {
+	for _, s := range m.sessionsOf(m.formHost()) {
 		if c := filepath.Clean(s.Cwd); s.Cwd != "" && (c == p || strings.HasPrefix(c, p+string(filepath.Separator))) {
 			n++
 		}

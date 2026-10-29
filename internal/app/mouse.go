@@ -122,14 +122,14 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if pane, _ := m.peekTarget(); pane != "" {
+	if at, _ := m.peekTarget(); at.pane != "" {
 		// A session opens in place with its keys; a tap on it once it is
 		// selected opens the peek, to answer it or to message it.
 		m.armed, m.flash = "", ""
 		if !picked {
 			return m, nil // the default selection is not a tap
 		}
-		open := func(m Model) (tea.Model, tea.Cmd) { m.openPeek(pane); return m, nil }
+		open := func(m Model) (tea.Model, tea.Cmd) { m.openPeek(at); return m, nil }
 		if m.night() && !m.stoker.Asked {
 			m.held = open
 			return m, nil

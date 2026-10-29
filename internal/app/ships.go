@@ -395,7 +395,7 @@ func (m Model) shipAnswer() Model {
 		m.flash = m.driverGone(sh)
 		return m
 	}
-	m.openPeek(s.Pane)
+	m.openPeek(paneOf(s))
 	return m
 }
 

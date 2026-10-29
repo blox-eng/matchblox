@@ -164,11 +164,11 @@ func TestJumpWaitsForLoginCheck(t *testing.T) {
 	login := loginCheckOf(cmd)
 	m = next.(Model)
 	hostJump(&m, remote.Jump{Pane: "%1"})
-	next, cmd = m.confirm(*m.forHost(m.jump("%1")))
+	next, cmd = m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 	if cmd != nil || len(ran) != 0 {
 		t.Fatalf("the jump ran before the check: %q", ran)
 	}
-	next, _ = next.(Model).confirm(*m.forHost(m.jump("%2")))
+	next, _ = next.(Model).confirm(*m.forHost(m.opt.Host, m.jump("%2")))
 	if !strings.Contains(next.(Model).flash, "checking") {
 		t.Fatalf("flash %q", next.(Model).flash)
 	}
@@ -189,7 +189,7 @@ func TestJumpWaitsForLoginCheck(t *testing.T) {
 func TestJumpUsesMaster(t *testing.T) {
 	m, _, _ := checkedHost(t, fixtureState(), "", 0)
 	j := hostJump(&m, remote.Jump{Pane: "%1"})
-	a := m.forHost(m.jump("%1"))
+	a := m.forHost(m.opt.Host, m.jump("%1"))
 	ssh := remote.JumpSSH("ws-1", j, remote.MasterOpts(filepath.Join(m.opt.MasterBase, "ssh")))
 	if a == nil || len(a.steps) != 1 || !slices.Equal(a.steps[0], j.Local(ssh)) {
 		t.Fatalf("pending %+v\nwant %q", a, j.Local(ssh))
@@ -201,7 +201,7 @@ func TestJumpUsesMaster(t *testing.T) {
 func TestJumpNoMasterWithoutCache(t *testing.T) {
 	m, _ := onHost(t, fixtureState())
 	j := hostJump(&m, remote.Jump{Pane: "%1"})
-	a := m.forHost(m.jump("%1"))
+	a := m.forHost(m.opt.Host, m.jump("%1"))
 	if a == nil || !slices.Equal(a.steps[0], j.Local(remote.JumpSSH("ws-1", j, nil))) {
 		t.Fatalf("pending %+v", a)
 	}
@@ -230,7 +230,7 @@ func TestLoginResultSaysTheFix(t *testing.T) {
 		next, _ := m.Update(hostHello("3.4"))
 		m = next.(Model)
 		hostJump(&m, remote.Jump{Pane: "%1"})
-		next, _ = m.confirm(*m.forHost(m.jump("%1")))
+		next, _ = m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 		next, cmd := next.Update(loginMsg{host: "ws-1", login: c.login, detail: c.detail})
 		if f := next.(Model).flash; f != c.want {
 			t.Errorf("%v: flash %q\nwant %q", c.login, f, c.want)
@@ -245,7 +245,7 @@ func TestLoginResultSaysTheFix(t *testing.T) {
 			continue
 		}
 		// A jump after the result is refused at once, with the same fix.
-		next, _ = next.(Model).confirm(*next.(Model).forHost(m.jump("%1")))
+		next, _ = next.(Model).confirm(*next.(Model).forHost(next.(Model).opt.Host, m.jump("%1")))
 		if f := next.(Model).flash; f != c.want || len(ran) != 0 {
 			t.Errorf("%v: a later jump: flash %q, ran %q", c.login, f, ran)
 		}
@@ -273,7 +273,7 @@ func TestOldHostTmuxShowsDoor(t *testing.T) {
 		next, _ = next.Update(loginCheckOf(cmd)[0])
 		m = next.(Model)
 		m.tab = tabSessions
-		a := m.forHost(m.jump("%1"))
+		a := m.forHost(m.opt.Host, m.jump("%1"))
 		if c.want == "" {
 			if a == nil || a.local != nil {
 				t.Errorf("%q: refused %+v", c.tmux, a)
@@ -334,7 +334,7 @@ func TestMasterRefusedJumpsWithoutIt(t *testing.T) {
 	}
 	m = next.(Model)
 	j := hostJump(&m, remote.Jump{Pane: "%1"})
-	if a := m.forHost(m.jump("%1")); a == nil || a.local != nil || !slices.Equal(a.steps[0], remote.JumpSSH("ws-1", j, nil)) {
+	if a := m.forHost(m.opt.Host, m.jump("%1")); a == nil || a.local != nil || !slices.Equal(a.steps[0], remote.JumpSSH("ws-1", j, nil)) {
 		t.Fatalf("pending %+v", a)
 	}
 }
@@ -372,7 +372,7 @@ func TestNoAskSaysWhyOnce(t *testing.T) {
 	next, _ = next.Update(loginCheckOf(cmd)[0])
 	m = next.(Model)
 	j := hostJump(&m, remote.Jump{Pane: "%1"})
-	a := m.forHost(m.jump("%1"))
+	a := m.forHost(m.opt.Host, m.jump("%1"))
 	if a == nil || a.master != "" || !slices.Equal(a.steps[0], j.Local(remote.JumpSSH("ws-1", j, remote.MasterOpts(filepath.Join(m.opt.MasterBase, "ssh"))))) {
 		t.Fatalf("pending %+v", a)
 	}
@@ -438,7 +438,7 @@ func tailscaleHost(t *testing.T, approve <-chan struct{}) (Model, tea.Cmd, *[][]
 	next, cmd := m.Update(hostHello("3.4"))
 	m = next.(Model)
 	hostJump(&m, remote.Jump{Pane: "%1"})
-	next, _ = m.confirm(*m.forHost(m.jump("%1")))
+	next, _ = m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 	u := urlOf(t, cmd)
 	if u.url != checkURL || !u.tailscale {
 		t.Fatalf("link %+v", u)
@@ -548,7 +548,7 @@ func TestTailscaleOpenFirstShowsURL(t *testing.T) {
 		})
 	}
 	hostJump(&m, remote.Jump{Pane: "%1"})
-	next, cmd := m.confirm(*m.forHost(m.jump("%1")))
+	next, cmd := m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 	u, ok := cmd().(urlMsg)
 	if !ok || u.url != checkURL {
 		t.Fatalf("link %+v", u)
@@ -578,7 +578,7 @@ func TestUnexpectedLoginLinkNotShown(t *testing.T) {
 		return "", 255
 	}
 	hostJump(&m, remote.Jump{Pane: "%1"})
-	next, cmd := m.confirm(*m.forHost(m.jump("%1")))
+	next, cmd := m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 	u, ok := cmd().(urlMsg)
 	if !ok {
 		t.Fatal("no link message")

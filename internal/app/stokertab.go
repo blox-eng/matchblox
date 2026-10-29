@@ -208,7 +208,7 @@ func (m Model) peekable(r stokerRow) bool {
 	if r.state() != "failed" {
 		return false
 	}
-	_, ok := m.sessionIn(r.e.Pane)
+	_, ok := m.sessionIn(m.opt.Host, r.e.Pane)
 	return ok
 }
 
@@ -243,7 +243,7 @@ func (m Model) stokerPeekTarget() (pane, why string) {
 	case r.state() != "failed":
 		return "", "a looks at the session of a failed step"
 	}
-	if _, ok := m.sessionIn(r.e.Pane); !ok {
+	if _, ok := m.sessionIn(m.opt.Host, r.e.Pane); !ok {
 		return "", r.e.Name + " is gone: there is no pane to look at"
 	}
 	return r.e.Pane, ""

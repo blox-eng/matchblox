@@ -54,7 +54,7 @@ func askingHost(t *testing.T, up bool, openErr string, openExit int) (Model, *[]
 // message, until nothing is left.
 func confirmJump(t *testing.T, m Model) Model {
 	t.Helper()
-	next, cmd := m.confirm(*m.forHost(m.jump("%1")))
+	next, cmd := m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 	for cmd != nil {
 		next, cmd = next.Update(cmd())
 	}
@@ -127,7 +127,7 @@ func TestJumpOpenFailsRunsNothing(t *testing.T) {
 func TestJumpOpenCancelledSaysSo(t *testing.T) {
 	m, _, ran := askingHost(t, false, "builder@ws-1: Permission denied (publickey,password).\r\n", 255)
 	hostJump(&m, remote.Jump{Pane: "%1"})
-	next, cmd := m.confirm(*m.forHost(m.jump("%1")))
+	next, cmd := m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 	if cmd == nil {
 		t.Fatalf("no open: flash %q", next.(Model).flash)
 	}
@@ -259,7 +259,7 @@ func openingHost(t *testing.T) (tea.Model, tea.Cmd, chan struct{}, *[][]string) 
 		return "", -1
 	}
 	hostJump(&m, remote.Jump{Pane: "%1"})
-	next, cmd := m.confirm(*m.forHost(m.jump("%1")))
+	next, cmd := m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 	if !next.(Model).opening {
 		t.Fatal("no open-first")
 	}
@@ -280,7 +280,7 @@ func TestOpenFirstKeysReachNothingBelow(t *testing.T) {
 	next, cmd, _, _ := openingHost(t)
 	nm := next.(Model)
 	nm.tab = tabSessions
-	nm.pending = nm.forHost(nm.jump("%1")) // a confirm left from before
+	nm.pending = nm.forHost(nm.opt.Host, nm.jump("%1")) // a confirm left from before
 	next, _ = nm.Update(askMsg{prompt: askpass.Prompt{Host: "ws-1", Text: "Password: "}, answer: func(string, bool) {}})
 	next, _ = key(typeIn(next, "wrong"), "enter")
 	if out := ansi.Strip(next.(Model).render()); !strings.Contains(out, "waiting for ssh") {

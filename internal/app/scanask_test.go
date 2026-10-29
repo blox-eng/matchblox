@@ -165,7 +165,7 @@ func TestFoundFeedsWhereNotGit(t *testing.T) {
 	old, recent := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	st.Found = &proto.Found{Consent: "yes", Repos: []proto.Checkout{{Path: "/w/app"}, {Path: "/h/old", Active: old}, {Path: "/h/new", Active: recent}}}
 	m, _ := loadedWith(t, 100, st)
-	if got := repoPaths(m.whereRepos()); !slices.Equal(got, []string{"/w/app", "/h/new", "/h/old"}) {
+	if got := repoPaths(m.whereRepos(m.opt.Host)); !slices.Equal(got, []string{"/w/app", "/h/new", "/h/old"}) {
 		t.Fatalf("where's repos = %v", got)
 	}
 	for _, r := range m.allWorktreeRows() {
