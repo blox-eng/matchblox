@@ -1,0 +1,44 @@
+require_relative "build_number"
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Build and upload a signed Release to TestFlight"
+  lane :beta do
+    marketing_version = ENV["MARKETING_VERSION"]
+    team_id = ENV["APPLE_TEAM_ID"]
+
+    key = app_store_connect_api_key(
+      key_id: ENV["ASC_KEY_ID"],
+      issuer_id: ENV["ASC_ISSUER_ID"],
+      key_content: ENV["ASC_KEY_P8_BASE64"],
+      is_key_content_base64: true,
+    )
+
+    # Survive the first ever upload: a brand-new app record has no build,
+    # so the query raises or returns nothing. next_build_number turns that
+    # into 1; otherwise it increments the latest. See build_number.rb.
+    build = next_build_number do
+      latest_testflight_build_number(
+        api_key: key,
+        version: marketing_version,
+        initial_build_number: 0,
+      )
+    end
+
+    build_app(
+      xcargs: [
+        "-allowProvisioningUpdates",
+        "-skipPackagePluginValidation",
+        "MARKETING_VERSION=#{marketing_version}",
+        "CURRENT_PROJECT_VERSION=#{build}",
+        "DEVELOPMENT_TEAM=#{team_id}",
+      ].join(" "),
+    )
+
+    upload_to_testflight(
+      api_key: key,
+      skip_waiting_for_build_processing: true,
+    )
+  end
+end
