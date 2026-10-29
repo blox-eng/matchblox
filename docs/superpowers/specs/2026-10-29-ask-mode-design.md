@@ -14,10 +14,24 @@ view serves agents that run outside tmux (herdr).
 
 ## What the builder sees
 
+The owner's three parts (2026-10-29):
+
+1. **The pane, consolidated into the console.** There is no "ask mode" to
+   enter and no jump to tmux. On a desk or an expanded phone, the right
+   side always shows the selected session's live screen. On a phone that
+   is not expanded, the session takes the whole screen.
+2. **The simplified iOS keys.** Only the keys the builder needs, and each
+   one large enough to hit with a finger.
+3. **Stats consolidated.** Usage and Machine go in the left column on a
+   desk. On a phone that is not expanded, they stay at the bottom, and a
+   key cycles through them.
+
 **The chat** is the selected session's live screen, drawn inside the
-console. When the builder presses `Enter`, the chat takes the keys. This is
-the issue's "ask mode". This spec calls it the chat, the word the owner
-used.
+console. It is always shown. The only question is which side has the keys.
+`Enter`, `→`, `a` or a click moves the keys to the chat. `Ctrl+]`, or a
+click on the left, moves them back to Sessions. The key line always names
+the side that has the keys. (My call: one key area must own `↑`/`↓`, so the
+chat cannot take keys without a way to move them back.)
 
 ### Wide (a desk, `Wide` layout)
 
@@ -65,7 +79,9 @@ today. The keys work as in Wide. Usage and Machine stay in the dock.
 
 ### Narrow (an upright phone)
 
-1. Sessions fills the screen. The dock folds as it does today.
+1. Sessions fills the screen. Usage and Machine stay in the dock at the
+   bottom, one panel at a time, and `u` (or a tap on the dock) cycles them,
+   as it does today.
 2. `Enter`, or a tap on a row, replaces the screen with that session's
    chat, with the keys in the chat. The title row reads `‹ Sessions ·
    <name> · <state>`.
@@ -178,14 +194,16 @@ holds one key: a tmux key name (`Up`, `Down`, `Enter`, `Tab`, `BTab`,
   service refuses the act when the pane's agent PID differs (see #198: a
   new process on an old pid). The refusal says
   `not sent: <pane> runs a different agent now`.
-- **Order.** The service runs `keys:` acts for one pane one at a time, in
-  arrival order. The console sends each key at once. Keys typed while one
-  is in flight go in the next act as one literal run.
-- **No dedupe.** The act key carries a sequence number from the console. Two
-  `↓` presses are two acts, not "already done".
-- **Seen before sent.** An `Enter` act carries the `Since` of the wait and
-  the `Ask.ID` that the console showed. When the session now waits on
-  another question, the service refuses with
+- **Order.** The service runs each act in its own goroutine, so the
+  console keeps the order. It has at most one `keys:` act in flight. Keys
+  pressed while one is in flight queue in the console and go in order.
+  Plain text that follows plain text goes as one literal run.
+- **No dedupe.** `keys:` skips the service's `acts.begin` dedupe. Two `↓`
+  presses are two acts, not "already done".
+- **Seen before sent.** Each `screen` message carries `At`, the time of its
+  capture. An `Enter` act carries the `At` of the frame that the console
+  showed (`Act.Seen`). If the session's wait started after that frame (the
+  queue item's `Since` is later than `Seen`), the service refuses with
   `not sent: <name> asks something new — look again`. Typing and arrows
   carry no such guard: they change nothing on their own.
 - **`^C` twice.** A second `Ctrl+C` within one second is held. The key line
@@ -236,8 +254,8 @@ chat. My call:
   `peekChoose`/`sendPeek` stay for the card's `pick:`.
 - `internal/app/stokertab.go`, `ships`: `a` on a stuck ship or a failed
   step opens the chat of its session.
-- `internal/proto`: a `screen` kind (`pane`, `seq`, `text`, `cols`,
-  `rows`) and the `watch:` and `keys:` acts.
+- `internal/proto`: a `screen` kind (`pane`, `at`, `text`), `Act.Seen`,
+  and the `watch:` and `keys:` acts.
 - `internal/service`: the watch loop, `keys:` with its guards, and the
   console-only check.
 - `ios/Matchblox/ConsoleView.swift`, `ConsoleTerminalView.swift`: the
