@@ -100,6 +100,8 @@ type Options struct {
 	Host string
 	// DialErr is why the first dial failed; the console starts with it.
 	DialErr error
+	// Peers are the other ticked hosts, in Hosts order.
+	Peers []Peer
 	// Self is this binary, which connects a host (`matchblox connect`).
 	Self string
 	// Gen tells this console's redial messages from those of a console the
@@ -270,6 +272,7 @@ type Model struct {
 	recPrefs   recPrefs // dismissed recommendations and the fold
 	opt        Options
 	conn       transport.Conn
+	peers      []link // the other ticked hosts, as Options.Peers; copied on write
 	st         styles
 	width      int
 	height     int
@@ -436,7 +439,7 @@ func New(opt Options) Model {
 		opt.Binary = "dev"
 	}
 	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60),
-		recPrefs: loadRecPrefs(opt.StateDir), keys: defaultKeys()}
+		recPrefs: loadRecPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers)}
 	m.splashAt = m.now()
 	if opt.Ask != nil {
 		m.askCtx, m.askStop = context.WithCancel(context.Background())
@@ -457,10 +460,15 @@ func run(argv []string) error {
 const silentAfter = 3 * time.Second
 
 func (m Model) Init() tea.Cmd {
-	if err := m.opt.DialErr; err != nil && m.conn == nil {
-		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk())
+	var start []tea.Cmd
+	for i := range m.peers {
+		start = append(start, m.peerStart(i))
 	}
-	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk())
+	peers := tea.Batch(start...)
+	if err := m.opt.DialErr; err != nil && m.conn == nil {
+		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk(), peers)
+	}
+	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk(), peers)
 }
 
 func (m Model) watchSilence() tea.Cmd {
@@ -468,8 +476,9 @@ func (m Model) watchSilence() tea.Cmd {
 	return tea.Tick(silentAfter, func(time.Time) tea.Msg { return silentMsg{c} })
 }
 
-func (m Model) hello() tea.Cmd {
-	c, bin := m.conn, m.opt.Binary
+func (m Model) hello() tea.Cmd { return helloOn(m.conn, m.opt.Binary) }
+
+func helloOn(c transport.Conn, bin string) tea.Cmd {
 	if c == nil {
 		return nil
 	}
@@ -483,8 +492,9 @@ func (m Model) hello() tea.Cmd {
 
 // recv reads one message. Each handled message asks for the next, so one
 // read is in flight at a time.
-func (m Model) recv() tea.Cmd {
-	c := m.conn
+func (m Model) recv() tea.Cmd { return recvOn(m.conn) }
+
+func recvOn(c transport.Conn) tea.Cmd {
 	if c == nil {
 		return nil
 	}
@@ -516,10 +526,16 @@ func (m Model) recv() tea.Cmd {
 }
 
 func (m *Model) send(a proto.Act) tea.Cmd {
-	c := m.conn
+	_, cmd := m.sendOn(m.conn, a)
+	return cmd
+}
+
+// sendOn sends a on c with the next act id. One counter serves every host,
+// so an act id names one act in the console.
+func (m *Model) sendOn(c transport.Conn, a proto.Act) (string, tea.Cmd) {
 	m.acts++
 	id := "a" + strconv.Itoa(m.acts)
-	return func() tea.Msg {
+	return id, func() tea.Msg {
 		if err := c.Send(proto.KindAct, id, a); err != nil {
 			return lostMsg{err, c}
 		}
@@ -563,6 +579,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.update(msg.msg)
+	case peerMsg:
+		return m.peerUpdate(msg)
+	case peerRedialMsg:
+		return m.peerRedial(msg)
 	case helloMsg:
 		m.host = proto.Hello(msg)
 		m.host.Tmux = remote.HostTmux(m.host.Tmux)
@@ -691,62 +711,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planTickMsg:
 		return m.planTick(msg)
 	case resultMsg:
-		if m.pending != nil && m.pending.previewAct != "" && m.pending.previewAct == msg.ActID {
-			if msg.Err != "" || msg.Preview == "" {
-				m.pending = nil
-				m.flash = "handover preview unavailable: " + cmp.Or(msg.Err, "update matchblox and try again")
-				return m, m.recv()
-			}
-			a := *m.pending
-			a.previewAct, a.preview = "", msg.Preview
-			m.pending = &a
-			return m, m.recv()
-		}
-		m.endRec(msg.ActID, proto.Result(msg))
-		if mm, ok := m.started(proto.Result(msg)); ok {
-			return mm, mm.recv()
-		}
-		if mm, cmd, ok := m.formResult(proto.Result(msg)); ok {
-			return mm, tea.Batch(mm.recv(), cmd)
-		}
-		if mm, ok := m.scanResult(proto.Result(msg)); ok {
-			return mm, mm.recv()
-		}
-		if mm, ok := m.sheetResult(proto.Result(msg)); ok {
-			if r := proto.Result(msg); r.Err == "" && mm.sheet == nil {
-				toast := mm.say("the order is on")
-				return mm, tea.Batch(mm.recv(), toast)
-			}
-			return mm, mm.recv()
-		}
-		if r := proto.Result(msg); m.peekSent[r.ActID] != "" {
-			name := m.peekSent[r.ActID]
-			m.peekSent = maps.Clone(m.peekSent)
-			delete(m.peekSent, r.ActID)
-			why := r.Err
-			if n := len(r.Skipped); n > 0 && why == "" {
-				why = r.Skipped[n-1]
-			}
-			if why != "" {
-				m.toast, m.flash = "", tilde("not sent to "+name+": "+why)
-				return m, m.recv()
-			}
-			return m, tea.Batch(m.recv(), m.say("sent to "+name))
-		}
-		if r := proto.Result(msg); r.ActID != "" && r.ActID == m.jumpAfter.act {
-			return m.switched(r)
-		}
-		if m.tally(proto.Result(msg)) {
-			return m, m.recv()
-		}
-		r := proto.Result(msg)
-		if text := describe(r); text != "" && r.Err == "" && len(r.Skipped) == 0 {
-			toast := m.say(tilde(text))
-			return m, tea.Batch(m.recv(), toast)
-		} else if text != "" {
-			m.flash = tilde(text)
-		}
-		return m, m.recv()
+		mm, cmd := m.result(proto.Result(msg))
+		return mm, tea.Batch(mm.recv(), cmd)
 	case lostMsg:
 		if m.mismatch || m.quitting || m.redialing || (msg.conn != nil && msg.conn != m.conn) {
 			return m, nil
@@ -770,7 +736,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.redialing = true
-		m.backoff = min(max(m.backoff*2, 250*time.Millisecond), 10*time.Second)
+		m.backoff = redialAfter(m.backoff)
 		m.flash += "; trying again in " + m.backoff.String()
 		gen := m.opt.Gen
 		return m, tea.Tick(m.backoff, func(time.Time) tea.Msg { return redialMsg{gen} })
@@ -877,6 +843,66 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		next, cmd := m.press(f, msg)
 		return next, tea.Batch(touch, cmd)
+	}
+	return m, nil
+}
+
+// result ends the act r answers. The caller reads the next message of the
+// conn r came on.
+func (m Model) result(r proto.Result) (Model, tea.Cmd) {
+	if m.pending != nil && m.pending.previewAct != "" && m.pending.previewAct == r.ActID {
+		if r.Err != "" || r.Preview == "" {
+			m.pending = nil
+			m.flash = "handover preview unavailable: " + cmp.Or(r.Err, "update matchblox and try again")
+			return m, nil
+		}
+		a := *m.pending
+		a.previewAct, a.preview = "", r.Preview
+		m.pending = &a
+		return m, nil
+	}
+	m.endRec(r.ActID, r)
+	if mm, ok := m.started(r); ok {
+		return mm, nil
+	}
+	if mm, cmd, ok := m.formResult(r); ok {
+		return mm, cmd
+	}
+	if mm, ok := m.scanResult(r); ok {
+		return mm, nil
+	}
+	if mm, ok := m.sheetResult(r); ok {
+		if r.Err == "" && mm.sheet == nil {
+			toast := mm.say("the order is on")
+			return mm, toast
+		}
+		return mm, nil
+	}
+	if name := m.peekSent[r.ActID]; name != "" {
+		m.peekSent = maps.Clone(m.peekSent)
+		delete(m.peekSent, r.ActID)
+		why := r.Err
+		if n := len(r.Skipped); n > 0 && why == "" {
+			why = r.Skipped[n-1]
+		}
+		if why != "" {
+			m.toast, m.flash = "", tilde("not sent to "+name+": "+why)
+			return m, nil
+		}
+		toast := m.say("sent to " + name)
+		return m, toast
+	}
+	if r.ActID != "" && r.ActID == m.jumpAfter.act {
+		return m.switched(r)
+	}
+	if m.tally(r) {
+		return m, nil
+	}
+	if text := describe(r); text != "" && r.Err == "" && len(r.Skipped) == 0 {
+		toast := m.say(tilde(text))
+		return m, toast
+	} else if text != "" {
+		m.flash = tilde(text)
 	}
 	return m, nil
 }
@@ -1329,7 +1355,7 @@ func (m Model) started(r proto.Result) (Model, bool) {
 
 // switched takes the result of a switch: one that ran jumps to its pane,
 // one that did not says why.
-func (m Model) switched(r proto.Result) (tea.Model, tea.Cmd) {
+func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 	j := m.jumpAfter
 	m.jumpAfter.act, m.jumpAfter.pane, m.jumpAfter.done = "", "", ""
 	// A switch with notes on what its account shared or skipped ran.
@@ -1337,10 +1363,10 @@ func (m Model) switched(r proto.Result) (tea.Model, tea.Cmd) {
 	switch {
 	case r.Err != "":
 		m.flash = tilde(r.Err)
-		return m, m.recv()
+		return m, nil
 	case len(r.Skipped) > 0 && !ran:
 		m.flash = tilde(r.Skipped[len(r.Skipped)-1])
-		return m, m.recv()
+		return m, nil
 	}
 	next, jump := m.confirm(*m.jump(j.pane))
 	nm := next.(Model)
@@ -1348,7 +1374,7 @@ func (m Model) switched(r proto.Result) (tea.Model, tea.Cmd) {
 	if ran {
 		nm.flash += "; " + strings.Join(notes, "; ")
 	}
-	return nm, tea.Batch(nm.recv(), jump)
+	return nm, jump
 }
 
 func runNav(a action, run func([]string) error) ranMsg {
