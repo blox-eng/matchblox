@@ -43,6 +43,10 @@ targets:
         NSCameraUsageDescription: matchblox uses the camera to scan the pairing code of your host.
         NSFaceIDUsageDescription: Face ID unlocks the key that opens your console.
         NSSupportsLiveActivities: true
+        # The app uses only standard, exemption-qualifying encryption (SSH/TLS),
+        # so it declares no non-exempt encryption. This clears App Store Connect
+        # export compliance (incl. the France declaration) with no per-build prompt.
+        ITSAppUsesNonExemptEncryption: false
         MatchbloxAppGroup: group.$(MATCHBLOX_BUNDLE_ID)
         MatchbloxKeychainGroup: $(AppIdentifierPrefix)$(MATCHBLOX_BUNDLE_ID).shared
         MatchbloxOwnKeychainGroup: $(AppIdentifierPrefix)$(MATCHBLOX_BUNDLE_ID)
