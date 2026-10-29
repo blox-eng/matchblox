@@ -709,9 +709,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planTickMsg:
 		return m.planTick(msg)
 	case resultMsg:
-		if msg.ActID == watchActID && msg.Err != "" {
+		if pane, ok := strings.CutPrefix(msg.ActID, watchActID); ok && msg.Err != "" {
 			// A pane that went before the watch came is a race, not the builder's error.
-			m.watchHeld, m.watching, m.screen = m.watching, "", proto.Screen{}
+			if pane != "" && pane == m.watching {
+				m.watchHeld, m.watching, m.screen = pane, "", proto.Screen{}
+			}
 			return m, m.recv()
 		}
 		if m.pending != nil && m.pending.previewAct != "" && m.pending.previewAct == msg.ActID {

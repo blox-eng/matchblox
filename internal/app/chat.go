@@ -10,7 +10,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 )
 
-const watchActID = "watch"
+// watchActID starts the id of a watch act; the pane follows, so a refusal says which watch it was for.
+const watchActID = "watch:"
 
 // screenMsg is one capture of the watched pane.
 type screenMsg proto.Screen
@@ -83,7 +84,7 @@ func (m *Model) watchCmd() tea.Cmd {
 	}
 	c := m.conn
 	return func() tea.Msg { // not m.send: the watch takes no number from the acts the builder sees
-		if err := c.Send(proto.KindAct, watchActID, proto.Act{RecID: proto.WatchPrefix + want}); err != nil {
+		if err := c.Send(proto.KindAct, watchActID+want, proto.Act{RecID: proto.WatchPrefix + want}); err != nil {
 			return lostMsg{err, c}
 		}
 		return nil
@@ -106,5 +107,5 @@ func (m Model) chatLines(w, h int) []string {
 		return lines
 	}
 	fit := fitScreen(m.screen.Text, w, h)
-	return append(lines[:h-len(fit)], fit...)
+	return append(lines[:len(lines)-len(fit)], fit...)
 }

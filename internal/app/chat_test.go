@@ -145,7 +145,7 @@ func TestChatLinesFillTheViewFromTheBottom(t *testing.T) {
 func TestRefusedWatchRetriesOnTheNextSnapshotAndSaysNothing(t *testing.T) {
 	m, f := chatModel(t)
 	sel, _ := m.selected()
-	next, cmd := m.Update(resultMsg(proto.Result{ActID: "watch", Err: "no agent session in " + sel.Pane + " any more"}))
+	next, cmd := m.Update(resultMsg(proto.Result{ActID: "watch:" + sel.Pane, Err: "no agent session in " + sel.Pane + " any more"}))
 	drain(cmd)
 	mm := next.(Model)
 	if mm.flash != "" || mm.watching != "" {
@@ -166,4 +166,27 @@ func fixtureStateWith(ss ...sample.Session) proto.State {
 	st := fixtureState()
 	st.Sessions = ss
 	return st
+}
+
+func TestChatLinesTakeNoNegativeHeight(t *testing.T) {
+	m, _ := chatModel(t)
+	sel, _ := m.selected()
+	next, _ := m.Update(screenMsg{Pane: sel.Pane, Text: "one"})
+	if lines := next.(Model).chatLines(40, -1); len(lines) != 0 {
+		t.Fatalf("lines = %q", lines)
+	}
+}
+
+func TestRefusalOfAnOldWatchHoldsNothing(t *testing.T) {
+	m, _ := chatModel(t)
+	a, _ := m.selected()
+	next, cmd := key(m, "down")
+	drain(cmd)
+	b, _ := next.(Model).selected()
+	next, _ = next.Update(screenMsg{Pane: b.Pane, Text: "kept"})
+	next, _ = next.Update(resultMsg(proto.Result{ActID: "watch:" + a.Pane, Err: "no agent session in " + a.Pane + " any more"}))
+	mm := next.(Model)
+	if mm.watchHeld != "" || mm.watching != b.Pane || mm.screen.Text != "kept" {
+		t.Fatalf("held %q watching %q screen %q", mm.watchHeld, mm.watching, mm.screen.Text)
+	}
 }
