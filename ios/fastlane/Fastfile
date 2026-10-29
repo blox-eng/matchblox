@@ -1,4 +1,5 @@
 require_relative "build_number"
+require "base64"
 
 default_platform(:ios)
 
@@ -26,14 +27,26 @@ platform :ios do
       )
     end
 
+    # gym does not forward the App Store Connect key to xcodebuild's
+    # -allowProvisioningUpdates, so automatic signing has no account to create
+    # the app-store profiles with ("No Accounts … No profiles for …"). Write the
+    # key to a file and pass the auth flags to both the archive and the export.
+    key_file = File.join(Dir.pwd, "asc_api_key.p8")
+    File.write(key_file, Base64.decode64(ENV["ASC_KEY_P8_BASE64"]))
+    auth = "-authenticationKeyPath #{key_file} " \
+           "-authenticationKeyID #{ENV['ASC_KEY_ID']} " \
+           "-authenticationKeyIssuerID #{ENV['ASC_ISSUER_ID']}"
+
     build_app(
       xcargs: [
         "-allowProvisioningUpdates",
+        auth,
         "-skipPackagePluginValidation",
         "MARKETING_VERSION=#{marketing_version}",
         "CURRENT_PROJECT_VERSION=#{build}",
         "DEVELOPMENT_TEAM=#{team_id}",
       ].join(" "),
+      export_xcargs: "-allowProvisioningUpdates #{auth}",
     )
 
     upload_to_testflight(
