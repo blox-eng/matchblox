@@ -124,7 +124,7 @@ func TestLaneDropsASessionGoneForAWindow(t *testing.T) {
 	m = upd(t, m, stateMsg(hostState(sess(1, "api", "%1", busy))))
 	now = now.Add(lanePast * laneCell)
 	m = upd(t, m, stateMsg(hostState(sess(2, "web", "%2", busy))))
-	if _, ok := m.lanes[laneKey{"gpu-0", 1}]; ok {
+	if _, ok := m.lanes[laneKey{"gpu-0", 1, 0}]; ok {
 		t.Fatal("the lane of a session gone for a window stays")
 	}
 }
@@ -137,5 +137,23 @@ func TestLaneCopiesOnWrite(t *testing.T) {
 	m = upd(t, m, stateMsg(waiting(hostState(sess(1, "api", "%1", nil)))))
 	if before.laneOf(m.all.sessions[0], now)[lanePast-1] != laneWork {
 		t.Fatal("a later state wrote into an earlier copy")
+	}
+}
+
+func TestLaneNewProcessOnAnOldPidStartsEmpty(t *testing.T) {
+	now := laneAt
+	m, _ := laneModel(t, &now)
+	old := func(s *sample.Session) { busy(s); s.Start = 100 }
+	m = upd(t, m, stateMsg(hostState(sess(4242, "old", "%1", old))))
+	now = now.Add(10 * time.Minute)
+	m = upd(t, m, stateMsg(hostState(sess(4242, "new", "%1", func(s *sample.Session) { s.Start = 200 }))))
+	lane := laneOfPID(m, "gpu-0", 4242)
+	for i, c := range lane[:lanePast-1] {
+		if c != laneNone {
+			t.Fatalf("cell %d is %d: the new process has the old one's past", i, c)
+		}
+	}
+	if lane[lanePast-1] != laneIdle {
+		t.Fatalf("the open cell is %d", lane[lanePast-1])
 	}
 }

@@ -24,10 +24,12 @@ const (
 	laneWait
 )
 
-// laneKey is a session of a host: PIDs repeat across hosts.
+// laneKey is a session of a host: PIDs repeat across hosts, and a host
+// reuses a PID, so the start tells a new process from the dead one.
 type laneKey struct {
-	host string
-	pid  int
+	host  string
+	pid   int
+	start uint64
 }
 
 // noteLanes writes the state of every session into the cell of now, after
@@ -46,7 +48,7 @@ func (m *Model) noteLanes(now time.Time) {
 		if m.hostAt(s.Host).Before(start) {
 			continue
 		}
-		key := laneKey{s.Host, s.PID}
+		key := laneKey{s.Host, s.PID, s.Start}
 		ring := lanes[key]
 		ring[lanePast-1] = max(ring[lanePast-1], m.laneStateOf(s))
 		lanes[key] = ring
@@ -59,7 +61,7 @@ func (m *Model) noteLanes(now time.Time) {
 
 // laneOf is the lane of s as of now: the last cell is the one of now.
 func (m Model) laneOf(s sample.Session, now time.Time) [lanePast]laneState {
-	return shiftLane(m.lanes[laneKey{s.Host, s.PID}], m.laneShift(now.Truncate(laneCell)))
+	return shiftLane(m.lanes[laneKey{s.Host, s.PID, s.Start}], m.laneShift(now.Truncate(laneCell)))
 }
 
 // laneShift is the cells from the ring's end to the cell that starts at start.
@@ -87,7 +89,8 @@ func (m Model) laneStateOf(s sample.Session) laneState {
 	return laneIdle
 }
 
-// hostAt is the time of the last state of a host.
+// hostAt is the time of the last state of a host. A peer that speaks less
+// often than every cell leaves blank cells: the lane never invents a past.
 func (m Model) hostAt(host string) time.Time {
 	if i := m.peerAt(host); i >= 0 && host != m.opt.Host {
 		return m.peers[i].at
