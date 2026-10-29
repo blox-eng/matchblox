@@ -5,7 +5,8 @@ It pairs with your host by QR code. Then it connects over SSH.
 
 ## Build
 
-You need a Mac with Xcode 16 and Homebrew. The app needs iOS 18.0 or later.
+You need a Mac with Xcode 26 and Homebrew. The app needs iOS 18.0 or later.
+(App Store Connect requires the iOS 26 SDK, which Xcode 26 ships.)
 
 1. `make install` installs XcodeGen.
 2. `make gen` makes `Matchblox.xcodeproj` from `project.yml`.
