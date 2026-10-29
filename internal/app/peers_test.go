@@ -71,8 +71,12 @@ func TestPeerLostRedialsOnItsOwn(t *testing.T) {
 	if home.closed || nm.lost || nm.redialing {
 		t.Fatal("a lost peer took the home host down")
 	}
-	if want := "ws-1: connection lost: EOF; trying again in 250ms"; nm.flash != want {
-		t.Fatalf("flash %q, want %q", nm.flash, want)
+	if nm.flash != "" {
+		t.Fatalf("flash %q at the loss: a short one must not show", nm.flash)
+	}
+	nm.peers[0].at, nm.peers[0].have = nm.now().Add(-staleAfter), true
+	if want := "ws-1: connection lost. Tries again in 250ms."; nm.lostLine() != want {
+		t.Fatalf("once stale the key line is %q, want %q", nm.lostLine(), want)
 	}
 	if cmd == nil {
 		t.Fatal("no redial scheduled")
@@ -147,8 +151,8 @@ func TestResultOfAnActLostWithItsPeer(t *testing.T) {
 	m.peekSent = map[string]string{id: "app-review"}
 	next, _ := m.Update(peerMsg{host: "ws-1", conn: x, msg: lostMsg{err: io.EOF, conn: x}})
 	nm := next.(Model)
-	if want := "ws-1: connection lost: EOF; 1 act has no answer; trying again in 250ms"; nm.flash != want {
-		t.Fatalf("flash %q, want %q", nm.flash, want)
+	if want := "ws-1: 1 act has no answer"; nm.toast != want || nm.flash != "" {
+		t.Fatalf("toast %q, flash %q; want the toast %q", nm.toast, nm.flash, want)
 	}
 	if len(nm.peers[0].acts) != 0 {
 		t.Fatal("the lost acts are still in flight")
@@ -157,10 +161,24 @@ func TestResultOfAnActLostWithItsPeer(t *testing.T) {
 	flash := nm.flash
 	next, cmd := nm.Update(peerMsg{host: "ws-1", conn: y, msg: resultMsg{ActID: id, Err: "late"}})
 	nm = next.(Model)
-	if nm.peekSent[id] != "app-review" || nm.toast != "" || nm.flash != flash {
+	if nm.peekSent[id] != "app-review" || nm.toast != "ws-1: 1 act has no answer" || nm.flash != flash {
 		t.Fatalf("a result on the new conn was taken for the lost act: peekSent %v, toast %q, flash %q", nm.peekSent, nm.toast, nm.flash)
 	}
 	if cmd == nil {
 		t.Fatal("the peer's next message is not read")
+	}
+}
+
+// TestPeerBlockedClearsItsFlash: a blocked peer is its row: the flash it
+// set goes, and its acts in flight say they have no answer.
+func TestPeerBlockedClearsItsFlash(t *testing.T) {
+	m, _, ws := peered(func() (transport.Conn, error) { return newFake(), nil })
+	_ = m.sendPeer(0, proto.Act{RecID: "answer:%12", Text: "yes"})()
+	m.flash = "ws-1: connected again"
+	err := fmt.Errorf("ws-1: %w", remote.ErrHostKeyChanged)
+	next, _ := m.Update(peerMsg{host: "ws-1", conn: ws, msg: lostMsg{err: err, conn: ws}})
+	nm := next.(Model)
+	if nm.flash != "" || len(nm.peers[0].acts) != 0 || nm.toast != "ws-1: 1 act has no answer" {
+		t.Fatalf("flash %q, in flight %v, toast %q; want no flash, no act, the toast", nm.flash, nm.peers[0].acts, nm.toast)
 	}
 }

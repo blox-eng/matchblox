@@ -144,6 +144,9 @@ func (m Model) repoOf(s sample.Session) string {
 // or a reason, long enough to take the wait column's cells too.
 func (m Model) rowWord(s sample.Session) (word string, merged bool) {
 	st := m.st
+	if m.hostCount() > 1 && m.stale(s.Host) {
+		return st.faint.Render("stale"), false
+	}
 	if h, ok := m.holdOf(s); ok {
 		if h.By == holdByYou {
 			return st.muted.Render("⏸ parked by you"), true
@@ -210,8 +213,12 @@ func (m Model) wordOf(s sample.Session) string {
 }
 
 // waitCell is how long a session waits, or sat idle, or when the plan's
-// limit lets it work again; a session at work has none.
+// limit lets it work again; a session at work has none. A stale host of
+// two or more: how long since it last spoke.
 func (m Model) waitCell(s sample.Session) string {
+	if m.hostCount() > 1 && m.stale(s.Host) {
+		return brief(m.now().Sub(m.stateAt(s.Host)))
+	}
 	if it, ok := m.waitOf(s); ok && m.groupOf(s) == groupWaits {
 		return brief(m.now().Sub(it.Since))
 	}
@@ -250,7 +257,7 @@ func (m Model) firstWaiting() int {
 // selection to the next door. Nothing picked: the first session that
 // waits, else the first door; with no session, the first ghost row.
 func (m Model) sessIndex() int {
-	nd, ns, ng, nr := len(m.doors), len(m.snap.Sessions), len(m.ghosts()), m.recRows()
+	nd, ns, ng, nr := len(m.doors), len(m.snap.Sessions), len(m.ghosts())+len(m.blockedHosts()), m.recRows()
 	for i, d := range m.doors {
 		if d.ID == m.doorPick {
 			return i
@@ -300,7 +307,7 @@ func (m Model) selectedRec() (advice.Rec, bool) {
 	if m.tab != tabSessions {
 		return advice.Rec{}, false
 	}
-	i := m.sessIndex() - len(m.doors) - len(m.snap.Sessions) - len(m.ghosts())
+	i := m.sessIndex() - len(m.doors) - len(m.snap.Sessions) - len(m.ghosts()) - len(m.blockedHosts())
 	if i < 0 || i >= m.recRows() {
 		return advice.Rec{}, false
 	}
@@ -318,6 +325,12 @@ func (m Model) sessionKeys() []hint {
 	}
 	if _, ok := m.selectedGhost(); ok {
 		return []hint{hintFor(mk.Open, "new session"), hintFor(mk.Ships, ""), hintFor(mk.Stoke, "stoker")}
+	}
+	if b, ok := m.selectedBlocked(); ok {
+		if _, fix := m.blockedWords(b); b.fixable() {
+			return []hint{hintFor(mk.Open, fix), hintFor(mk.New, ""), hintFor(mk.Stoke, "stoker")}
+		}
+		return []hint{hintFor(mk.New, ""), hintFor(mk.Stoke, "stoker")}
 	}
 	keys := []hint{hintFor(mk.Open, "")}
 	s, ok := m.selectedSession()
@@ -354,7 +367,11 @@ func (m Model) sessionRows(b *body, w int) {
 	}
 	base := len(m.doors)
 	sel := m.sessIndex() - base
-	defer m.ghostRows(b, base+len(ss), sel-len(ss), w)
+	defer func() {
+		ng := len(m.ghosts())
+		m.ghostRows(b, base+len(ss), sel-len(ss), w)
+		m.blockedRows(b, base+len(ss)+ng, sel-len(ss)-ng, w)
+	}()
 	if len(ss) == 0 {
 		if m.filter != "" {
 			b.add(-1, st.faint.Render(m.nothing("")))
@@ -464,6 +481,15 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks) []string {
 	word, merged := m.rowWord(s)
 	wait := st.faint.Render(m.waitCell(s))
 	ctx := m.contextCell(s)
+	ink := st.ink(sel)
+	stale := m.hostCount() > 1 && m.stale(s.Host)
+	if stale {
+		// The last state, faint; the age turns amber from a minute.
+		ink, ctx = st.faint, st.faint.Render(ansi.Strip(ctx))
+		if m.now().Sub(m.stateAt(s.Host)) >= time.Minute {
+			wait = st.warn.Render(m.waitCell(s))
+		}
+	}
 	opens := sel && m.layoutAt(m.width) == Narrow
 	state := padTo(word, t.word) + cutLeft(wait, t.wait)
 	if merged {
@@ -471,9 +497,10 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks) []string {
 	}
 	if !t.wide {
 		right := state + cutLeft(ctx, t.ctx) + " "
-		name := st.ink(sel).Render(s.Name)
-		if tag := m.accountTag(s); tag != "" {
-			name = m.taggedName(s.Name, tag, sel, w-lipgloss.Width(mark+m.matchCell(s))-lipgloss.Width(right)-1)
+		name := ink.Render(s.Name)
+		room := w - lipgloss.Width(mark+m.matchCell(s)) - lipgloss.Width(right) - 1
+		if tag := m.rowTag(s, tagRoom(s.Name, room)); tag != "" {
+			name = m.taggedName(s.Name, tag, ink, room)
 		}
 		line := spread(mark+m.matchCell(s)+name, right, w)
 		if !opens {
@@ -481,9 +508,9 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks) []string {
 		}
 		return append([]string{line}, m.opened(s, w)...)
 	}
-	name := st.ink(sel).Render(pad(s.Name, t.name))
-	if tag := m.accountTag(s); tag != "" {
-		name = padTo(m.taggedName(s.Name, tag, sel, t.name-1), t.name) // pad's gap before the word
+	name := ink.Render(pad(s.Name, t.name))
+	if tag := m.rowTag(s, tagRoom(s.Name, t.name-1)); tag != "" {
+		name = padTo(m.taggedName(s.Name, tag, ink, t.name-1), t.name) // pad's gap before the word
 	}
 	line := mark + m.matchCell(s) + name + state + cutLeft(ctx, t.ctx)
 	if t.plan > 0 {
@@ -495,6 +522,9 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks) []string {
 			plan = st.warn.Render("▲ clear")
 		case s.Progress != nil:
 			plan = m.progressCell(s.Progress, 5)
+		}
+		if stale {
+			plan = st.faint.Render("as of " + m.stateAt(s.Host).Format("15:04"))
 		}
 		line += "  " + padTo(plan, t.plan-2)
 	}
@@ -525,14 +555,19 @@ func (m Model) accountTag(s sample.Session) string {
 // taggedName is a session's name with its account after it in muted text,
 // in w cells: the name keeps its room, the tag takes what is left and is
 // dropped when fewer than four cells remain.
-func (m Model) taggedName(name, tag string, sel bool, w int) string {
+func (m Model) taggedName(name, tag string, ink lipgloss.Style, w int) string {
 	name = ansi.Truncate(name, max(w, 0), "…")
-	out := m.st.ink(sel).Render(name)
+	out := ink.Render(name)
 	room := w - lipgloss.Width(name) - 1
 	if room < 4 {
 		return out
 	}
 	return out + " " + m.st.muted.Render(ansi.Truncate(tag, room, "…"))
+}
+
+// tagRoom is the cells taggedName leaves for the tag after name in w.
+func tagRoom(name string, w int) int {
+	return w - lipgloss.Width(ansi.Truncate(name, max(w, 0), "…")) - 1
 }
 
 // tracks are the widths of a session row's columns, the same on every row

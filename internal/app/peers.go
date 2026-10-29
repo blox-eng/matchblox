@@ -34,6 +34,7 @@ type link struct {
 	lost, redialing, answered bool
 	backoff                   time.Duration
 	blocked                   error
+	mismatch                  bool // the peer runs another version: a blocked row, never a stream
 	hello                     proto.Hello
 	at                        time.Time   // the last stateMsg
 	st                        proto.State // the last state; History, Found, Used kept from the first
@@ -122,13 +123,13 @@ func (m Model) refusal(host string) string {
 	var backoff time.Duration
 	switch i := m.peerAt(host); {
 	case host == m.opt.Host:
-		if m.hostCount() == 1 || m.conn != nil && !m.lost {
+		if m.hostCount() == 1 || m.conn != nil && !m.lost && !m.mismatch {
 			return ""
 		}
 		redialing, backoff = m.redialing, m.backoff
 	case i >= 0:
 		l := m.peers[i]
-		if l.conn != nil && !l.lost {
+		if l.conn != nil && !l.lost && !l.mismatch {
 			return ""
 		}
 		redialing, backoff = l.redialing, l.backoff
@@ -171,7 +172,7 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 	l := m.peers[i]
 	switch msg := pm.msg.(type) {
 	case lostMsg:
-		if m.quitting || l.redialing || (msg.conn != nil && msg.conn != l.conn) {
+		if m.quitting || l.redialing || l.mismatch || (msg.conn != nil && msg.conn != l.conn) {
 			return m, nil
 		}
 		return m.peerLost(i, msg.err)
@@ -187,10 +188,13 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 			_ = msg.conn.Close() // the console or the redial that dialed it is gone
 			return m, nil
 		}
+		stale := m.stale(l.host) // a short loss showed nothing: its end shows nothing
 		m.peers = slices.Clone(m.peers)
 		p := &m.peers[i]
 		p.conn, p.redialing, p.answered, p.acts = msg.conn, false, false, nil
-		m.flash = p.host + ": connected again"
+		if stale {
+			m.flash = p.host + ": connected again"
+		}
 		return m, tea.Batch(toPeer(p.host, helloOn(p.conn, m.opt.Binary)), m.peerRecv(i))
 	}
 	if pm.conn != l.conn {
@@ -202,6 +206,9 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 	case helloMsg:
 		p.hello = proto.Hello(msg)
 		p.hello.Tmux = remote.HostTmux(p.hello.Tmux)
+		if p.mismatch = p.hello.Version != proto.Version; p.mismatch {
+			return m, nil // as the home host: a row with the fix, and no more reads
+		}
 	case stateMsg:
 		st := proto.State(msg)
 		st.History = cmp.Or(st.History, p.st.History)
@@ -238,35 +245,45 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 }
 
 // peerLost closes peer i's conn and dials again after the backoff, as the
-// home host does, unless trying again cannot help.
+// home host does, unless trying again cannot help. A short loss shows
+// nothing: from staleAfter its rows and the key line say so. Acts in
+// flight say at once that they have no answer.
 func (m Model) peerLost(i int, err error) (tea.Model, tea.Cmd) {
 	m.peers = slices.Clone(m.peers)
 	p := &m.peers[i]
 	if p.conn != nil {
 		_ = p.conn.Close()
 	}
+	first := !p.lost
 	p.lost = true
-	if blocking(err) {
-		p.blocked = err
-		return m, nil
-	}
-	m.flash = p.host + ": connection lost: " + err.Error()
+	var news tea.Cmd
 	if n := len(p.acts); n > 0 {
 		verb := "have"
 		if n == 1 {
 			verb = "has"
 		}
-		m.flash += "; " + plural(n, "act") + " " + verb + " no answer"
+		news = m.say(p.host + ": " + plural(n, "act") + " " + verb + " no answer")
 		p.acts = nil
 	}
+	if blocking(err) {
+		// Its row says why: the flash of the host goes.
+		p.blocked = err
+		if strings.HasPrefix(m.flash, p.host+": ") {
+			m.flash = ""
+		}
+		return m, news
+	}
+	var stale tea.Cmd
+	if first {
+		stale = m.staleTick(p.at)
+	}
 	if p.redial == nil {
-		return m, nil
+		return m, tea.Batch(news, stale)
 	}
 	p.redialing = true
 	p.backoff = redialAfter(p.backoff)
-	m.flash += "; trying again in " + p.backoff.String()
 	host, gen := p.host, m.opt.Gen
-	return m, tea.Tick(p.backoff, func(time.Time) tea.Msg { return peerRedialMsg{host, gen} })
+	return m, tea.Batch(news, stale, tea.Tick(p.backoff, func(time.Time) tea.Msg { return peerRedialMsg{host, gen} }))
 }
 
 func (m Model) peerRedial(msg peerRedialMsg) (tea.Model, tea.Cmd) {

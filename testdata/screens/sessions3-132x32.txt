@@ -1,0 +1,32 @@
+ ▰ matchblox · 3 hosts                                                                                             ● 8 wait for you
+ SESSIONS 10    ships 3    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ WAITS FOR YOU · 8                                                            │
+▌│ spark-docs this machine  done       9m   88%  ▲ clear      #4540 ●━●━●━●━● │ spark-docs
+ ╿ ember-billing this mach… done       4m   32%  ▲ clear      #4552 ●━●━◉┄○┄○ │ │ done, waits for you · 9m · hearth:3.1 · /work/spa…
+ │ train-loop gpu-1         asks       4m   88%  ▲ clear                      │
+ ╿ flint-auth this machine  asks       2m   41%  ▲ clear      #4545 ●━✕┄○┄○┄○ │ CLAUDE SAID
+ ╿ kindle-web this machine  asks       1m   56%  ▲ clear                      │ I rewrote the quick start and the install page.
+ ╿ cinder-ci this machine   done       0s   55%  ▲ clear                      │
+ ╿ wick-mobile this machine done       0s    6%  ▲ clear                      │ context  ▰▰▰▰▰▰▰▰▰▱ 88%
+ │ api-auth ws-1 · work     waits      1m   88%                               │ plan     ▰▰▰▰▰▰▰▰▰▰ 100%  docs for the 1.0 release
+ WORKING · 2                                                                  │ ship     #4540 ●━●━●━●━●  live
+ │ docs-sweep ws-1          busy            88%                               │          The 1.0 docs
+ ✦ hearth-api this machine  busy            79%  ▰▰▰▱▱ 60%    #4551 ●━◉┄○┄○┄○ │          https://github.com/hearth/spark-docs/pull/…
+ + start a new session                                                        │ why      clear: idle 9m (clear after 0s)
+                                                                              │ sonnet · 176k / 200k tokens · +0k in 30 min · ✻
+ 1 without an agent: shell:1.1 zsh                                            │ team@example.com · Max · pid 1400 · 1 process ·
+                                                                              │ started 3h20m ago
+ RECOMMENDATIONS · 7 · h hides                                                │
+ ▲ The week runs short: compact spark-docs                                    │ a answer   ⏎ open it   A switch agent
+ ○ Clear spark-docs (%3)                                                      │
+ ○ Clear kindle-web (%5)                                                      │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ USAGE                                                                        │ MACHINE                                    16 cores
+ ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                               │ cpu  ▁ 0%   load 6.2
+                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · out Fri ~21:00              │ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
+ · Google login  not measured · OpenCode keeps no limits                      │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
+ ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                                   │ runs 8 claude · 1 codex · 1 opencode
+                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ↑↓ move  ⏎ open  a answer  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit             sampled 0s ago

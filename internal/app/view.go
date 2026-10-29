@@ -161,6 +161,8 @@ func (m Model) drawScreen(w int) drawn {
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
 		bodyTop: 3, listW: w, dockAt: -1, keysAt: -1, actKeysAt: -1}
 	switch {
+	case m.hostCount() > 1 && m.shows():
+		// A blocked host of two or more is a row, never the screen.
 	case m.mismatch:
 		sc.lines = append(sc.lines, "", m.mismatchText(w))
 		return sc
@@ -347,12 +349,18 @@ func (m Model) header(w int) (string, span, span) {
 	if host == "" {
 		host = m.host.Host
 	}
+	if n := m.hostCount(); n > 1 {
+		host = fmt.Sprintf("%d hosts", n)
+	}
 	lost := ""
-	if m.lost && m.have {
-		// What shows is the last state the host sent.
+	switch names := m.staleHosts(); {
+	case len(names) > 0:
+		lost = st.faint.Render(" · ") + st.warn.Render(strings.Join(names, ", ")+" stale")
+	case m.stale(m.opt.Host):
+		// One host: what shows is the last state it sent.
 		lost = st.faint.Render(" · ") + st.warn.Render("stale")
 	}
-	if !m.have {
+	if !m.shows() {
 		if host != "" {
 			left += st.faint.Render(" · ") + st.muted.Render(host)
 		}
@@ -566,6 +574,9 @@ func (m Model) keyLine(w int) (string, []span) {
 	}
 	if m.flash != "" {
 		return fit(" "+st.text.Render(m.flash), w), nil
+	}
+	if l := m.lostLine(); l != "" {
+		return fit(" "+st.text.Render(l), w), nil
 	}
 	hints := slices.DeleteFunc(slices.Clone(m.view().keys(m)), func(h hint) bool { return h == (hint{}) })
 	if m.layoutAt(w) == Wide {

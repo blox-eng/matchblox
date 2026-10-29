@@ -8,7 +8,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/doors"
-	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 )
 
@@ -154,10 +153,12 @@ func blocking(err error) bool {
 // connectAction connects the host: it installs or updates matchblox there
 // and lets this console's key start it. It runs `matchblox connect` in this
 // terminal after a typed y: the ssh login there is the builder's own.
-func (m Model) connectAction() *action {
-	host := m.opt.Host
-	older := m.mismatch && m.host.Version < proto.Version
-	if host == "" || (m.blocked == nil && !older) || errors.Is(m.blocked, remote.ErrHostKeyChanged) {
+func (m Model) connectAction() *action { return m.connectOn(m.opt.Host) }
+
+// connectOn is connectAction for any host of the console.
+func (m Model) connectOn(host string) *action {
+	blocked, older := m.blockOf(host)
+	if host == "" || (blocked == nil && !older) || errors.Is(blocked, remote.ErrHostKeyChanged) {
 		return nil // a changed host key is the builder's call, never a connect
 	}
 	self := m.opt.Self
@@ -165,10 +166,13 @@ func (m Model) connectAction() *action {
 		self = "matchblox"
 	}
 	argv := []string{self, "connect", host} // it also updates an older one
-	return &action{label: "connect", say: shellLine(argv), steps: [][]string{argv}, destructive: true, remote: true, connect: true}
+	return &action{label: "connect", say: shellLine(argv), steps: [][]string{argv}, destructive: true, remote: true, connect: true, host: host}
 }
 
-type connectedMsg struct{ err error }
+type connectedMsg struct {
+	err  error
+	host string
+}
 
 // onHost gives this terminal to a step that runs on the host. A jump
 // inside tmux is a tmux command list instead: it switches the client and
@@ -189,7 +193,7 @@ func (m Model) onHost(a action) (tea.Model, tea.Cmd) {
 	return m, m.exec(argv, func(err error) tea.Msg {
 		switch {
 		case a.connect:
-			return connectedMsg{err}
+			return connectedMsg{err, a.host}
 		case a.door != "":
 			return doorRanMsg{door: a.door, cmd: shellLine(argv), err: err}
 		}
@@ -220,6 +224,15 @@ func (m Model) connected(msg connectedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		m.flash = "not connected: " + msg.err.Error() + "; " + m.keys.main.Open.Help().Key + " tries again"
 		return m, nil
+	}
+	if i := m.peerAt(msg.host); msg.host != m.opt.Host && i >= 0 {
+		if c := m.peers[i].conn; c != nil {
+			_ = c.Close() // a peer of another version still holds it
+		}
+		next, cmd := m.peerTryAgain(i)
+		nm := next.(Model)
+		nm.flash = "connected " + msg.host + ", opening…"
+		return nm, cmd
 	}
 	m.blocked, m.mismatch = nil, false
 	m.flash = "connected " + m.opt.Host + ", opening…"

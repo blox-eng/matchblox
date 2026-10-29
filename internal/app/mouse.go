@@ -30,7 +30,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		m.flash, m.pending = "cancelled: "+m.pending.String(), nil
 		return m, nil
 	}
-	if !m.have || m.mismatch {
+	if !m.shows() || m.hostCount() == 1 && m.mismatch {
 		return m, nil
 	}
 	m.searching = false // keep the search; what the tap asks for shows on the key line

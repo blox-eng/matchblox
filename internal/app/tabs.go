@@ -121,12 +121,14 @@ const (
 
 var views = [...]tabView{
 	tabSessions: {
-		name:  "sessions",
-		keys:  Model.sessionKeys,
-		count: func(m Model) int { return len(m.doors) + len(m.snap.Sessions) + len(m.ghosts()) + m.recRows() },
+		name: "sessions",
+		keys: Model.sessionKeys,
+		count: func(m Model) int {
+			return len(m.doors) + len(m.snap.Sessions) + len(m.ghosts()) + len(m.blockedHosts()) + m.recRows()
+		},
 		index: Model.sessIndex,
 		pick: func(m *Model, i int) {
-			nd, ns, ng := len(m.doors), len(m.snap.Sessions), len(m.ghosts())
+			nd, ns, ng := len(m.doors), len(m.snap.Sessions), len(m.ghosts())+len(m.blockedHosts())
 			switch {
 			case i < nd:
 				m.doorPick, m.doorAt, m.recPick, m.ghostPick = m.doors[i].ID, i, "", 0

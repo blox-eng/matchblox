@@ -280,6 +280,7 @@ type Model struct {
 	snap       sample.Snapshot
 	push       string // the push sender's line for the Machine tab, or ""
 	have       bool
+	at         time.Time // the last stateMsg
 	git        *proto.GitReport
 	recs       []advice.Rec
 	queue      []queue.Item
@@ -299,7 +300,7 @@ type Model struct {
 	selHost    string // the host of selPID: PIDs repeat across hosts
 	orphanPID  int
 	recPick    string // the selected recommendation, above the sessions
-	ghostPick  int    // the ghost row picked in Sessions, from 1; 0 is none
+	ghostPick  int    // the ghost row, then the blocked host's row, picked in Sessions, from 1; 0 is none
 	chose      bool   // a session was picked; before, the first that waits is
 	gitSel     int
 	shipReport *proto.Ships
@@ -603,6 +604,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.peerUpdate(msg)
 	case peerRedialMsg:
 		return m.peerRedial(msg)
+	case staleMsg:
+		return m, nil // a lost host turns stale: the frame draws it
 	case helloMsg:
 		m.host = proto.Hello(msg)
 		m.host.Tmux = remote.HostTmux(m.host.Tmux)
@@ -645,7 +648,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.doors = m.shownDoors(st.Doors)
 		m.noteChanges(m.opt.Host, st.Sessions)
-		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
+		m.snap, m.git, m.recs, m.have, m.answered, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, m.now()
 		m.shipReport = st.Ships
 		m.holds, m.reasons = st.Holds, st.Reasons
 		m.agents, m.renames, m.accounts, m.signIns = st.Agents, st.Renames, st.Accounts, st.SignIns
@@ -740,26 +743,39 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.conn != nil {
 			_ = m.conn.Close()
 		}
+		first := !m.lost
 		m.lost = true
 		if blocking(msg.err) {
 			// Trying again cannot help: connecting the host can.
 			m.blocked, m.flash = msg.err, ""
 			return m, nil
 		}
-		m.flash = "connection lost: " + msg.err.Error()
+		// Two or more hosts: a short loss shows nothing, as a peer's;
+		// from staleAfter the rows and the key line say so.
+		var lost []string
+		if m.hostCount() == 1 {
+			lost = append(lost, "connection lost: "+msg.err.Error())
+		}
 		if m.batch != nil {
 			// Their results went with the connection.
-			m.flash += fmt.Sprintf("; %d removals have no answer, %s on Git rescans", len(m.batch.ids), m.keys.main.Rename.Help().Key)
+			lost = append(lost, fmt.Sprintf("%d removals have no answer, %s on Git rescans", len(m.batch.ids), m.keys.main.Rename.Help().Key))
 			m.batch = nil
 		}
+		var stale tea.Cmd
+		if first {
+			stale = m.staleTick(m.at)
+		}
+		m.flash = strings.Join(lost, "; ")
 		if m.opt.Redial == nil {
-			return m, nil
+			return m, stale
 		}
 		m.redialing = true
 		m.backoff = redialAfter(m.backoff)
-		m.flash += "; trying again in " + m.backoff.String()
+		if m.hostCount() == 1 {
+			m.flash += "; trying again in " + m.backoff.String()
+		}
 		gen := m.opt.Gen
-		return m, tea.Tick(m.backoff, func(time.Time) tea.Msg { return redialMsg{gen} })
+		return m, tea.Batch(stale, tea.Tick(m.backoff, func(time.Time) tea.Msg { return redialMsg{gen} }))
 	case redialMsg:
 		if msg.gen != m.opt.Gen || !m.redialing || m.quitting {
 			return m, nil // a tick from a console that was closed
@@ -1236,6 +1252,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			m.showCommand()
 			return m, nil
+		}
+		if b, ok := m.selectedBlocked(); ok {
+			return m.unblockHost(b)
 		}
 		if a := m.primary(); a != nil && a.pair {
 			return m.openPairDoor()
