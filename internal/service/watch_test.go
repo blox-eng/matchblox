@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
@@ -103,6 +105,8 @@ type captureOf struct {
 	mu      sync.Mutex
 	screens map[string]string
 	calls   int
+	// leave publishes a snapshot whose sessions are in panes.
+	leave func(panes ...string)
 }
 
 func (f *captureOf) capture(panes []string) map[string]string {
@@ -124,22 +128,47 @@ func (f *captureOf) set(pane, text string) {
 	f.screens[pane] = text
 }
 
-func watchTest(t *testing.T, screens map[string]string) (*Service, *captureOf, context.Context) {
+// watchTest serves screens and a session in each pane of sessions (default:
+// each pane with a screen).
+func watchTest(t *testing.T, screens map[string]string, sessions ...string) (*Service, *captureOf, context.Context) {
 	t.Helper()
 	s := newTest(t, time.Hour)
 	f := &captureOf{screens: screens}
 	s.Capture = f.capture
+	if sessions == nil {
+		for p := range screens {
+			sessions = append(sessions, p)
+		}
+	}
+	snap := func(panes []string) sample.Snapshot {
+		out := sample.Snapshot{At: time.Now()}
+		for _, p := range panes {
+			out.Sessions = append(out.Sessions, sample.Session{Agent: "claude", Pane: p, Name: p, Status: "idle"})
+		}
+		return out
+	}
+	s.sample = func() sample.Snapshot { return snap(sessions) }
+	s.publish(snap(sessions), func(state.Doc) {})
+	f.leave = func(panes ...string) { s.publish(snap(panes), func(state.Doc) {}) }
 	return s, f, run(t, s)
 }
 
 func TestWatchSendsTheScreen(t *testing.T) {
 	s, _, ctx := watchTest(t, map[string]string{"%1": idleScreen})
 	c := connectAs(t, ctx, s, proto.ClientConsole)
-	if res := act(t, c, "w", proto.Act{RecID: proto.WatchPrefix + "%1"}); res.Err != "" {
+	r := read(c)
+	if res := r.act(t, "w", proto.WatchPrefix+"%1"); res.Err != "" {
 		t.Fatal(res.Err)
 	}
-	sc := decodeScreen(t, next(t, c, proto.KindScreen))
-	if sc.Pane != "%1" || sc.Text != idleScreen || sc.At.IsZero() || sc.Gone {
+	deadline := time.Now().Add(waitLimit)
+	for len(r.got()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	g := r.got()
+	if len(g) == 0 {
+		t.Fatal("no screen")
+	}
+	if sc := g[0]; sc.Pane != "%1" || sc.Text != idleScreen || sc.At.IsZero() || sc.Gone {
 		t.Fatalf("screen %+v", sc)
 	}
 }
@@ -166,7 +195,7 @@ func TestWatchSendsOnlyChanges(t *testing.T) {
 }
 
 func TestWatchPaneGone(t *testing.T) {
-	s, _, ctx := watchTest(t, map[string]string{})
+	s, _, ctx := watchTest(t, map[string]string{}, "%1")
 	c := connectAs(t, ctx, s, proto.ClientConsole)
 	r := read(c)
 	if res := r.act(t, "w", proto.WatchPrefix+"%1"); res.Err != "" {
@@ -228,5 +257,64 @@ func TestWatchRefusedForCLI(t *testing.T) {
 	c := connectAs(t, ctx, s, proto.ClientCLI)
 	if res := act(t, c, "w", proto.Act{RecID: proto.WatchPrefix + "%1"}); res.Err != "keys go only from a console" {
 		t.Fatalf("err %q", res.Err)
+	}
+}
+
+func TestWatchRefusesAnUnknownPane(t *testing.T) {
+	s, _, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	c := connectAs(t, ctx, s, proto.ClientConsole)
+	r := read(c)
+	if res := r.act(t, "w", proto.WatchPrefix+"%7"); res.Err != "no agent session in %7 any more" {
+		t.Fatalf("err %q", res.Err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if g := r.got(); len(g) != 0 {
+		t.Fatalf("screens %+v", g)
+	}
+}
+
+func TestWatchRefusedFromAnAgentPane(t *testing.T) {
+	s, _, ctx := watchTest(t, map[string]string{"%1": idleScreen, "%2": idleScreen})
+	c := connectAs(t, ctx, s, proto.ClientConsole)
+	if err := c.Send(proto.KindAct, "w", proto.Act{RecID: proto.WatchPrefix + "%1", From: "%2"}); err != nil {
+		t.Fatal(err)
+	}
+	var res proto.Result
+	if err := json.Unmarshal(next(t, c, proto.KindResult).Body, &res); err != nil {
+		t.Fatal(err)
+	}
+	if res.Err != "keys go only from a console" {
+		t.Fatalf("err %q", res.Err)
+	}
+}
+
+func TestWatchStopsWhenTheSessionLeaves(t *testing.T) {
+	s, f, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	c := connectAs(t, ctx, s, proto.ClientConsole)
+	r := read(c)
+	if res := r.act(t, "w", proto.WatchPrefix+"%1"); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	deadline := time.Now().Add(waitLimit)
+	for len(r.got()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	f.leave()
+	for len(r.got()) < 2 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if g := r.got(); len(g) != 2 || !g[1].Gone {
+		t.Fatalf("screens %+v, want a screen then gone", g)
+	}
+	f.mu.Lock()
+	calls := f.calls
+	f.mu.Unlock()
+	f.set("%1", "back\n")
+	time.Sleep(400 * time.Millisecond)
+	f.mu.Lock()
+	after := f.calls
+	f.mu.Unlock()
+	if after != calls || len(r.got()) != 2 {
+		t.Fatalf("capture went on: %d calls after %d, %d screens", after, calls, len(r.got()))
 	}
 }

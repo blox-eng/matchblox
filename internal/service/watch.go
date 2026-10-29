@@ -11,8 +11,11 @@ const watchEvery = 150 * time.Millisecond
 
 // watchAct sets the pane cl streams; an empty pane stops the stream.
 func (s *Service) watchAct(cl *client, clientKind string, a proto.Act, pane string) proto.Result {
-	if clientKind != proto.ClientConsole || s.agentsPane(a) {
+	if _, inAgent := s.sessionAt(a.From); clientKind != proto.ClientConsole || inAgent || s.agentsPane(a) {
 		return proto.Result{Err: "keys go only from a console"}
+	}
+	if _, ok := s.sessionAt(pane); pane != "" && !ok {
+		return proto.Result{Err: "no agent session in " + pane + " any more"}
 	}
 	cl.watch.Store(&pane)
 	select {
@@ -43,8 +46,12 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 		}
 		pane := *p
 		scr := proto.Screen{Pane: pane, At: s.now()}
-		text, ok := s.Capture([]string{pane})[pane]
-		scr.Text, scr.Gone = text, !ok
+		var text string
+		_, live := s.sessionAt(pane)
+		if live {
+			text, live = s.Capture([]string{pane})[pane]
+		}
+		scr.Text, scr.Gone = text, !live
 		if sent && pane == last.Pane && text == last.Text && scr.Gone == last.Gone {
 			continue
 		}
