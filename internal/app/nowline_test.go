@@ -127,11 +127,35 @@ func TestNowRuleKeepsTheSelectedWash(t *testing.T) {
 	}
 }
 
-func TestNowRuleCrossesBars(t *testing.T) {
+func TestNowRuleStandsBesideTheBar(t *testing.T) {
 	c := canvasOf(nowModel(t, 132).render())
 	x, _ := ruleOf(t, c)
-	if g := cellGlyph(c, x, rowLine(t, c, "api")); g != "┿" {
-		t.Fatalf("the working row has %q at the rule", g)
+	y := rowLine(t, c, "api")
+	if left, at := cellGlyph(c, x-1, y), cellGlyph(c, x, y); left != "━" || at != "│" {
+		t.Fatalf("the working row has %q%q at the rule, want ━│", left, at)
+	}
+}
+
+func TestOverlayNowCrossings(t *testing.T) {
+	st := newStyles(true)
+	wash := lipgloss.NewStyle().Background(st.theme.AccentWash)
+	lines := []string{"──", " a", "  ", "━━", "╌╌", "┊┊", wash.Render(" x"), "──"}
+	c := canvasOf(overlayNow(strings.Join(lines, "\n"), 1, 0, len(lines)-1, st))
+	want := []string{"┬", "a", "│", "┿", "┼", "│", "x", "┴"}
+	for y, g := range want {
+		cell := c.CellAt(1, y)
+		if cell.Content != g || !sameColor(cell.Style.Fg, st.theme.Accent) {
+			t.Errorf("line %d: %q in %v, want %q in the accent", y, cell.Content, cell.Style.Fg, g)
+		}
+		if left := c.CellAt(0, y); sameColor(left.Style.Fg, st.theme.Accent) {
+			t.Errorf("line %d: the rule spills left", y)
+		}
+	}
+	if bg := c.CellAt(1, 6).Style.Bg; !sameColor(bg, st.theme.AccentWash) {
+		t.Errorf("the washed cell is on %v", bg)
+	}
+	if bg := c.CellAt(1, 2).Style.Bg; bg != nil {
+		t.Errorf("a plain cell gained %v", bg)
 	}
 }
 
@@ -161,7 +185,7 @@ func TestResizeMovesTheRule(t *testing.T) {
 func TestLimitRunsToItsReset(t *testing.T) {
 	f := ansi.Strip(nowModel(t, 132).render())
 	row := lineWith(strings.Split(f, "\n"), "bench")
-	if !strings.Contains(row, "│"+strings.Repeat("┄", 7)+" 5h resets") && !strings.Contains(row, "┼"+strings.Repeat("┄", 7)+" 5h resets") {
+	if !strings.Contains(row, "╌│"+strings.Repeat("┄", 7)+" 5h resets") || strings.Contains(row, strings.Repeat("┄", 8)) {
 		t.Fatalf("the limited row runs %q", row)
 	}
 }
@@ -170,7 +194,7 @@ func TestLaneCellsDrawEachState(t *testing.T) {
 	var l [lanePast]laneState
 	l[0], l[lanePast-3], l[lanePast-2], l[lanePast-1] = laneIdle, laneWork, laneWait, laneIdle
 	got := ansi.Strip(laneCells(l, time.Time{}, "", laneAt, newStyles(true)))
-	want := "‹" + strings.Repeat(" ", lanePast-4) + "━━╌╌"
+	want := "‹" + strings.Repeat(" ", lanePast-4) + "━━╌ "
 	if got != want {
 		t.Fatalf("the lane is %q, want %q", got, want)
 	}

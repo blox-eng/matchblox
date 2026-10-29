@@ -4,19 +4,19 @@
                                                            −2h         −1h           now     +1h
                                                            ┊           ┊
  WAITS FOR YOU · 6
- │ spark-docs           done       9m   88%  ▲ clear                              ━━
- ╿ ember-billing        done       4m   32%  ▲ clear                              ━━
+ │ spark-docs           done       9m   88%  ▲ clear                              ━
+ ╿ ember-billing        done       4m   32%  ▲ clear                              ━
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
-▌╿ flint-auth           asks       2m   41%  ▲ clear                              ━━
+▌╿ flint-auth           asks       2m   41%  ▲ clear                              ━
    “The refresh flow works and the tests pass. One choice is yours before I wire the rotation.”
    #4545 ●━✕┄○┄○┄○  conflicts with main
     ▲ clear                                                                     a answer  A switch  ⏎ open
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
- ╿ kindle-web           asks       1m   56%  ▲ clear                              ━━
- ╿ cinder-ci            done       0s   55%  ▲ clear                              ━━
- ╿ wick-mobile          done       0s    6%  ▲ clear                              ━━
+ ╿ kindle-web           asks       1m   56%  ▲ clear                              ━
+ ╿ cinder-ci            done       0s   55%  ▲ clear                              ━
+ ╿ wick-mobile          done       0s    6%  ▲ clear                              ━
  WORKING · 1
- ✦ hearth-api           busy            79%  ▰▰▰▱▱ 60%                            ━━
+ ✦ hearth-api           busy            79%  ▰▰▰▱▱ 60%                            ━
  + start a new session
 
  1 without an agent: shell:1.1 zsh

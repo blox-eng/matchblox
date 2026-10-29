@@ -16,10 +16,10 @@ const laneW = 1 + lanePast + 1 + laneAhead + len(" 5h resets")
 // laneMin is the narrowest list that has lanes.
 const laneMin = 107
 
-// laneCells is a lane on one time scale: the cells of the past, the cell of
-// now (the rule's), then a limit's run to its reset and the window's name.
-// The cell of now carries the state of now, so the rule crosses its bar;
-// a session seen at the window's start began before it.
+// laneCells is a lane on one time scale: the cells of the past (the last
+// is the current five minutes), the column of now, blank for the rule,
+// then a limit's run to its reset and the window's name. A session seen at
+// the window's start began before it.
 func laneCells(l [lanePast]laneState, reset time.Time, window string, now time.Time, st styles) string {
 	var b strings.Builder
 	for i, c := range l {
@@ -29,7 +29,7 @@ func laneCells(l [lanePast]laneState, reset time.Time, window string, now time.T
 		}
 		b.WriteString(laneGlyph(c, st))
 	}
-	b.WriteString(laneGlyph(l[lanePast-1], st))
+	b.WriteString(" ")
 	if !reset.After(now) {
 		return b.String()
 	}

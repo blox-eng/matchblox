@@ -5,18 +5,18 @@
                                                                                     ┊           ┊           │
  WAITS FOR YOU · 5                                                                                          │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────┼───────────────────────
-▌╿ ember-billing                  done       4m   32%  ▲ clear      #4552 ●━●━◉┄○┄○ ‹━━━━━━━━━━━━━━━━━━━━━━━┿
+▌╿ ember-billing                  done       4m   32%  ▲ clear      #4552 ●━●━◉┄○┄○ ‹━━━━━━━━━━━━━━━━━━━━━━━│
    “The invoice export is done and its tests pass.”                                                         │
    #4552 ●━●━◉┄○┄○  green · waits for your merge                                                            │
    ▰▰▰▰▰ plan 100%  ▲ clear                                                                              a answer  A switch  ⏎ open
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────┼───────────────────────
- ╿ flint-auth                     asks       2m   41%  ▲ clear      #4545 ●━✕┄○┄○┄○ ‹━━━━━━━━━━━━━━━━━━━━━━━┿
- ╿ kindle-web                     asks       1m   56%  ▲ clear                      ‹━━━━━━━━━━━━━━━━━━━━━━━┿
- ╿ cinder-ci                      done       0s   55%  ▲ clear                      ‹━━━━━━━━━━━━━━━━━━━━━━━┿
- ╿ wick-mobile                    done       0s    6%  ▲ clear                      ‹━━━━━━━━━━━━━━━━━━━━━━━┿
+ ╿ flint-auth                     asks       2m   41%  ▲ clear      #4545 ●━✕┄○┄○┄○ ‹━━━━━━━━━━━━━━━━━━━━━━━│
+ ╿ kindle-web                     asks       1m   56%  ▲ clear                      ‹━━━━━━━━━━━━━━━━━━━━━━━│
+ ╿ cinder-ci                      done       0s   55%  ▲ clear                      ‹━━━━━━━━━━━━━━━━━━━━━━━│
+ ╿ wick-mobile                    done       0s    6%  ▲ clear                      ‹━━━━━━━━━━━━━━━━━━━━━━━│
  QUIET · 2                                                                                                  │
- ╿ hearth-api                     idle       0s   79%  ▰▰▰▱▱ 60%    #4551 ●━◉┄○┄○┄○ ‹━━━╌╌━━━━╌╌━━━━╌╌━━━━╌╌┼
- │ spark-docs                     out     23:25   88%  ▲ clear      #4540 ●━●━●━●━● ‹╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼┄┄┄┄┄┄┄ 5h resets
+ ╿ hearth-api                     idle       0s   79%  ▰▰▰▱▱ 60%    #4551 ●━◉┄○┄○┄○ ‹━━━╌╌━━━━╌╌━━━━╌╌━━━━╌╌│
+ │ spark-docs                     out     23:25   88%  ▲ clear      #4540 ●━●━●━●━● ‹╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│┄┄┄┄┄┄┄ 5h resets
  + start a new session                                                                                      │
                                                                                                             │
  1 without an agent: shell:1.1 zsh                                                                          │

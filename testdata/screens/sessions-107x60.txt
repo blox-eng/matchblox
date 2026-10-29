@@ -5,18 +5,18 @@
                                                            ┊           ┊           │
  WAITS FOR YOU · 6                                                                 │
 ───────────────────────────────────────────────────────────────────────────────────┼───────────────────────
-▌│ spark-docs           done       9m   88%  ▲ clear                              ━┿
+▌│ spark-docs           done       9m   88%  ▲ clear                              ━│
    “I rewrote the quick start and the install page.”                               │
    #4540 ●━●━●━●━●  live                                                           │
    ▰▰▰▰▰ plan 100%  ▲ clear                                                     a answer  A switch  ⏎ open
 ───────────────────────────────────────────────────────────────────────────────────┼───────────────────────
- ╿ ember-billing        done       4m   32%  ▲ clear                              ━┿
- ╿ flint-auth           asks       2m   41%  ▲ clear                              ━┿
- ╿ kindle-web           asks       1m   56%  ▲ clear                              ━┿
- ╿ cinder-ci            done       0s   55%  ▲ clear                              ━┿
- ╿ wick-mobile          done       0s    6%  ▲ clear                              ━┿
+ ╿ ember-billing        done       4m   32%  ▲ clear                              ━│
+ ╿ flint-auth           asks       2m   41%  ▲ clear                              ━│
+ ╿ kindle-web           asks       1m   56%  ▲ clear                              ━│
+ ╿ cinder-ci            done       0s   55%  ▲ clear                              ━│
+ ╿ wick-mobile          done       0s    6%  ▲ clear                              ━│
  WORKING · 1                                                                       │
- ✦ hearth-api           busy            79%  ▰▰▰▱▱ 60%                            ━┿
+ ✦ hearth-api           busy            79%  ▰▰▰▱▱ 60%                            ━│
  + start a new session                                                             │
                                                                                    │
  1 without an agent: shell:1.1 zsh                                                 │
