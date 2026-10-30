@@ -251,15 +251,34 @@ func (m Model) chatOn(pane string) Model {
 	if !ok {
 		return m
 	}
+	cur, _ := m.selectedSession()
+	shown := cur.Pane == pane && m.cardDrawn()
 	if m.tab != tabSessions {
 		m.setTab(tabSessions)
 	}
 	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, s.PID
 	m.chatKeys, m.flash = true, ""
-	if s.Ask != nil && m.cardSeen.askID != s.Ask.ID { // the card was not on screen before the chat opened
-		m.cardSeen = cardSeen{askID: s.Ask.ID, at: m.now()}
+	if !shown || s.Ask != nil && m.cardSeen.askID != s.Ask.ID { // the chat, or its card, was not on screen before
+		m.cardSeen = cardSeen{pane: pane, at: m.now()}
+		if s.Ask != nil {
+			m.cardSeen.askID = s.Ask.ID
+		}
 	}
 	return m
+}
+
+// chatHushed tells if k answers the wait of a chat that opened a moment
+// ago: an Enter or a digit, which a prompt takes as its answer.
+func (m Model) chatHushed(k chatKey) bool {
+	if m.cardSeen.pane != k.pane || !m.now().Before(m.cardSeen.at.Add(cardQuiet)) {
+		return false
+	}
+	s, ok := m.sessionIn(k.pane)
+	if _, waits := m.waitOf(s); !ok || !waits {
+		return false
+	}
+	typed, isText := strings.CutPrefix(k.text, "lit:")
+	return k.text == enterName || isText && typed != "" && typed[0] >= '0' && typed[0] <= '9'
 }
 
 // intoPane is ctrl+o: the selected session's pane, behind a confirm, as
@@ -386,6 +405,10 @@ func (m Model) toAgent(name string, keys ...chatKey) (tea.Model, tea.Cmd) {
 	}
 	if !m.agentIn(keys[0]) {
 		m.flash = "not sent: " + name + " ended"
+		return m, nil
+	}
+	if slices.ContainsFunc(keys, m.chatHushed) {
+		m.flash = askedAgain(name)
 		return m, nil
 	}
 	if k := keys[0]; k.text == ctrlCName {

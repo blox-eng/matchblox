@@ -970,6 +970,30 @@ func TestNoCardAtAPermissionPrompt(t *testing.T) {
 	}
 }
 
+// On a phone the chat is not on screen until Enter opens it: an Enter or a
+// digit at once goes nowhere, as the builder has not read the prompt. After
+// the moment they go. On a desk the chat was already beside the list.
+func TestAPhoneChatIsQuietAtAPermissionPrompt(t *testing.T) {
+	m, f := loadedWith(t, 44, queueState()) // app-feature (%1) asks for permission
+	m, now := clocked(m)
+	m = pressKeys(t, onPane(t, m, "%1"), "enter", "enter", "1")
+	if !m.chatKeys || len(keyActs(f)) != 0 || m.flash != "not sent: app-feature asks something new — look again" {
+		t.Fatalf("enter enter 1: chatKeys %v acts %+v flash %q", m.chatKeys, keyActs(f), m.flash)
+	}
+	*now = now.Add(cardQuiet)
+	pressKeys(t, m, "enter")
+	if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" {
+		t.Fatalf("after the quiet: acts %+v", f.acts())
+	}
+
+	m, f = loadedWith(t, 100, queueState())
+	m, _ = clocked(m)
+	pressKeys(t, onPane(t, m, "%1"), "enter", "enter")
+	if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" {
+		t.Fatalf("a desk's chat was on screen: acts %+v", f.acts())
+	}
+}
+
 // Esc, Tab, Shift+Tab and ^C go to the agent over a card: Claude Code
 // needs them to leave its question.
 func TestTheCardLeavesTheAgentItsOwnKeys(t *testing.T) {

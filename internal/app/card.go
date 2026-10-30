@@ -35,13 +35,16 @@ type card struct {
 	text    string
 }
 
-// cardQuiet is how long a card sends nothing after it shows, or after the
-// chat opens on it: a second Enter, a key repeat or a buffered tap meant for
-// what was there before must not answer a question nobody has read.
+// cardQuiet is how long a card sends nothing after it shows, or a chat
+// sends no answer to a wait after it opens: a second Enter, a key repeat or
+// a buffered tap meant for what was there before must not answer a
+// question nobody has read.
 const cardQuiet = 400 * time.Millisecond
 
-// cardSeen is the ask a card showed for, and when its quiet started.
+// cardSeen is the pane and the ask a card or a chat showed for, and when
+// its quiet started.
 type cardSeen struct {
+	pane  string
 	askID string
 	at    time.Time
 }
@@ -93,7 +96,7 @@ func (m Model) cardSends(k tea.KeyPressMsg) bool {
 // before.
 func (m Model) noteCard() Model {
 	if s, _, ok := m.cardNow(); ok && s.Ask.ID != m.cardSeen.askID && m.cardDrawn() {
-		m.cardSeen = cardSeen{askID: s.Ask.ID, at: m.now()}
+		m.cardSeen = cardSeen{pane: s.Pane, askID: s.Ask.ID, at: m.now()}
 	}
 	return m
 }
