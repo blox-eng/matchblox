@@ -162,22 +162,41 @@ is a second paired host.
     of `ws-1` shows nothing. Quit and open the app: the activity of `ws-1`
     is gone.
 
-### The chat and the key bar
+### The chat and the key belt
 
 Use an iPhone held upright, with a Claude Code session that waits on a
 question.
 
 27. Tap the session. Its live screen fills the screen, with the question
     card at the bottom. `↓ ↓ ⏎` picks the third option.
-28. Each of the nine keys (`◂ ↑ ↓ ⏎ Tab ⇧Tab Esc ^C ⌨`) works on the first
-    tap, with the keyboard up and with it down. `⇧Tab` changes the mode of
-    the agent. `^C` stops a working agent. A second `^C` within 1 s is held.
-29. `⌨` hides the keyboard, and the key bar stays at the bottom. `⌨` again
-    brings the keyboard back. Typing has no autocorrect or suggestions.
-30. Swipe down in the chat: earlier lines show, and the title says
+28. Each key of Steer (`◂ ↑ ↓ ⏎ Esc ^C ⇞ ⇟`) works on the first tap, with
+    the keyboard up and with it down. `^C` stops a working agent. A second
+    `^C` within 1 s is held. A drag on the belt never presses a key, even
+    when it starts on one.
+29. Turn the belt. You feel a tick for each stop, halfway between two stops,
+    and a firmer click at home (`◂` at the left). Keys fold round the phone
+    at both edges, and the belt turns on without end. It always stops with
+    a key at the left. Check at 60 and at 120 fps (ProMotion): no dropped
+    frames.
+30. `⌨` on the handle row hides the keyboard, and the belt stays at the
+    bottom. `⌨` again brings the keyboard back. It never opens the tray.
+    Typing has no autocorrect or suggestions.
+31. Tap the grip, tap the name, and pull up on the handle row: each opens
+    the tray. Pick another match: it strikes, the old one goes out, and
+    the tray closes after 0.9 s. The screen does not change size. Open the
+    tray again: every match is new, and the one in use burns. The layout
+    stays after you quit the app.
+32. Choose Commands in a Claude Code chat: the commands carry its mark.
+    Open a session of another agent: the commands change. `compact` waits
+    until the agent rests. Jump to a pane with `Ctrl+O`: the command keys
+    are dim, and a tap says `commands run from the chat`.
+33. Choose Mine, then `EDIT MINE`. Tap a key to add it and to take it off.
+    Drag a key to move it. A tap on `◂` says `◂ always stays: it is the
+    way back`. Quit the app and open it again: Mine is the same.
+34. Swipe down in the chat: earlier lines show, and the title says
     `↑ n lines up`. The first key goes back to live and sends nothing.
-31. Press `Ctrl+O` on a hardware keyboard to go into the tmux pane. A swipe
+35. Press `Ctrl+O` on a hardware keyboard to go into the tmux pane. A swipe
     scrolls its history, about as fast as the finger. A long press, then a
     drag, selects text. `◂` goes back to the console.
-32. On a 320 pt screen (Slide Over on iPad), `⇧Tab` shrinks to fit, and no
-    key clips.
+36. On a 320 pt screen (Slide Over on iPad), no key clips and the belt
+    still folds at both edges.
