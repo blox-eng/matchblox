@@ -101,6 +101,9 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     /// The builder picked a layout in the tray.
     var onLayout: (BeltLayout) -> Void = { _ in }
     var onEditMine: () -> Void = {}
+    /// True as the drawer starts to open, false once it has closed: the screen over the belt
+    /// holds the terminal's size in between.
+    var onScreenHold: (Bool) -> Void = { _ in }
 
     private(set) var trayOpen = false
 
@@ -132,6 +135,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     private let trayHost: UIHostingController<MatchTrayView>
     /// Counts each open, close and pick, so a close that was due after a pick knows it is stale.
     private var trayMoves = 0
+    private var holdingScreen = false
 
     private let selection = UISelectionFeedbackGenerator()
     private let impact = UIImpactFeedbackGenerator(style: .medium)
@@ -742,6 +746,10 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
         if open {
             trayModel.freshBox(inUse: layout)
             drawer.isHidden = false
+            if !holdingScreen {
+                holdingScreen = true
+                onScreenHold(true)
+            }
         }
         spoken = nil
         drawerHeight.constant = open ? Self.drawerOpen : 0
@@ -754,6 +762,10 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
             guard let self, !open, self.trayMoves == moves else { return }
             self.drawer.isHidden = true
             self.trayModel.freshBox(inUse: self.layout)
+            if self.holdingScreen {
+                self.holdingScreen = false
+                self.onScreenHold(false)
+            }
         }
         defer { UIAccessibility.post(notification: .layoutChanged, argument: nil) }
         guard animated, window != nil, !UIAccessibility.isReduceMotionEnabled else {

@@ -19,6 +19,8 @@ struct BeltEditor: View {
     @State private var refusals = 0
     @State private var done = false
     @State private var dropTarget: String?
+    /// The grids' width, so a dragged key keeps its size.
+    @State private var gridWidth: CGFloat = 0
 
     var body: some View {
         ScrollView {
@@ -44,7 +46,7 @@ struct BeltEditor: View {
                     ForEach(catalog.keys(.mine, agent: nil, mine: mine.keys), id: \.id) { key in
                         cell(key, on: true)
                             .draggable(key.id) {
-                                cell(key, on: true).frame(width: CGFloat(key.cells) * 52, height: Cells.height)
+                                cell(key, on: true).frame(width: Cells.width(span: key.cells, in: gridWidth), height: Cells.height)
                             }
                             .dropDestination(for: String.self) { ids, _ in
                                 move(ids.first, to: key.id)
@@ -80,6 +82,7 @@ struct BeltEditor: View {
                 .buttonStyle(.plain)
                 .padding(.top, 12)
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
             .padding(EdgeInsets(top: 10, leading: 12, bottom: 16, trailing: 12))
         }
         .background(Color(uiColor: BeltLook.sheet))
@@ -176,18 +179,23 @@ private struct Cells: Layout {
         return CGSize(width: width, height: rows == 0 ? 0 : rows * Self.height + (rows - 1) * Self.gap)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    /// The width of a key `span` cells wide in a grid `width` wide.
+    static func width(span: Int, in width: CGFloat) -> CGFloat {
         let columns = CGFloat(CellGrid.columns)
-        let cell = (bounds.width - Self.gap * (columns - 1)) / columns
+        let cell = (width - gap * (columns - 1)) / columns
+        return max(0, cell * CGFloat(span) + gap * CGFloat(span - 1))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let step = Self.width(span: 1, in: bounds.width) + Self.gap
         for (view, spot) in zip(subviews, spots(subviews)) {
-            let span = CGFloat(spot.span)
             view.place(
                 at: CGPoint(
-                    x: bounds.minX + CGFloat(spot.column) * (cell + Self.gap),
+                    x: bounds.minX + CGFloat(spot.column) * step,
                     y: bounds.minY + CGFloat(spot.row) * (Self.height + Self.gap)
                 ),
                 anchor: .topLeading,
-                proposal: ProposedViewSize(width: cell * span + Self.gap * (span - 1), height: Self.height)
+                proposal: ProposedViewSize(width: Self.width(span: spot.span, in: bounds.width), height: Self.height)
             )
         }
     }

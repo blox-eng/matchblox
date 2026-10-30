@@ -46,8 +46,7 @@ struct MatchView: View {
         let th = g.th, bt = th * 0.78
         // The unburnt wood.
         if g.front < g.end {
-            Path(roundedRect: CGRect(x: g.front, y: g.y - th / 2, width: g.end - g.front, height: th), cornerRadius: th * 0.25)
-                .fill(Tokens.markStick)
+            g.stick(from: g.front).fill(Tokens.markStick)
         }
         // The burnt wood, thinner, with a faint top edge.
         Path(roundedRect: CGRect(x: g.wood0, y: g.y - bt / 2, width: max(0, g.front - g.wood0), height: bt), cornerRadius: bt * 0.3)
@@ -55,8 +54,7 @@ struct MatchView: View {
         Path(CGRect(x: g.wood0, y: g.y - bt / 2, width: max(0, g.front - g.wood0), height: max(1, bt * 0.18)))
             .fill(Tokens.markTop)
         // The burnt head.
-        Path(ellipseIn: CGRect(x: g.x, y: g.y - th * 0.78, width: g.headW, height: th * 1.56))
-            .fill(Tokens.markRight)
+        g.head.fill(Tokens.markRight)
         Path(ellipseIn: CGRect(x: g.x + g.headW * 0.15, y: g.y - th * 0.52, width: g.headW * 0.6, height: th * 0.44))
             .fill(Tokens.markTop.opacity(0.6))
     }
@@ -84,12 +82,9 @@ struct ReadyMatchView: View {
     var body: some View {
         GeometryReader { geo in
             let g = MatchGeometry(size: geo.size, th: thickness, front: 0, minimal: false)
-            let th = g.th
             ZStack(alignment: .topLeading) {
-                Path(roundedRect: CGRect(x: g.wood0, y: g.y - th / 2, width: g.end - g.wood0, height: th), cornerRadius: th * 0.25)
-                    .fill(Tokens.markStick)
-                Path(ellipseIn: CGRect(x: g.x, y: g.y - th * 0.78, width: g.headW, height: th * 1.56))
-                    .fill(Tokens.matchHead)
+                g.stick(from: g.wood0).fill(Tokens.markStick)
+                g.head.fill(Tokens.matchHead)
             }
         }
     }
@@ -115,6 +110,16 @@ struct MatchGeometry {
     }
 
     var end: CGFloat { x + len }
+
+    /// The unburnt wood, from `start` to the end of the stick.
+    func stick(from start: CGFloat) -> Path {
+        Path(roundedRect: CGRect(x: start, y: y - th / 2, width: end - start, height: th), cornerRadius: th * 0.25)
+    }
+
+    /// The head: red on a ready match, burnt on a struck one.
+    var head: Path {
+        Path(ellipseIn: CGRect(x: x, y: y - th * 0.78, width: headW, height: th * 1.56))
+    }
 }
 
 /// The still flame at the front: a soft glow and three tongues, flame, amber and core.

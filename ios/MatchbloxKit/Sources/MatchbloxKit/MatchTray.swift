@@ -105,3 +105,33 @@ public enum CellGrid {
         spots.map(\.row).max().map { $0 + 1 } ?? 0
     }
 }
+
+/// The terminal's size while a matchbox tray is open. The tray makes the screen shorter, but
+/// the terminal keeps the size it had: its lines slide up and the top ones go under the edge,
+/// as in the mockup, so the host gets no resize. When the trays close, the terminal follows
+/// the screen again once the screen is back to the held height, or once its width changes.
+public struct ScreenHold: Equatable, Sendable {
+    private var trays = 0
+    public private(set) var held: CGSize?
+
+    public init() {}
+
+    /// A tray starts to open over a screen of this size.
+    public mutating func open(screen: CGSize) {
+        if trays == 0, held == nil { held = screen }
+        trays += 1
+    }
+
+    /// A tray has closed, its animation done.
+    public mutating func close() {
+        trays = max(0, trays - 1)
+    }
+
+    /// The terminal's height on a screen of this size. It is never less than the screen's.
+    public mutating func height(screen: CGSize) -> CGFloat {
+        if let held, trays == 0, screen.height >= held.height || screen.width != held.width {
+            self.held = nil
+        }
+        return max(screen.height, held?.height ?? 0)
+    }
+}

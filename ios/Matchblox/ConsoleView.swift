@@ -125,17 +125,51 @@ private struct TerminalRepresentable: UIViewRepresentable {
         terminal.terminalDelegate = connection
         connection.terminal = terminal
 
-        let belts = Belts(terminal: terminal)
+        let screen = HeldScreen(terminal: terminal)
+        screen.backgroundColor = bg
+        let belts = Belts(terminal: terminal, screen: screen)
         terminal.inputAccessoryView = belts.lifted
         terminal.onFocus = { [weak belts] focused in belts?.focusChanged(focused) }
         connection.onAgent = { agent in belts.agentChanged(agent) }
         connection.onOutput = { belts.outputArrived() }
-        let stack = UIStackView(arrangedSubviews: [terminal, belts.dock])
+        let stack = UIStackView(arrangedSubviews: [screen, belts.dock])
         stack.axis = .vertical
         return stack
     }
 
     func updateUIView(_ stack: UIStackView, context: Context) {}
+}
+
+/// The terminal's place on screen. While a matchbox tray is open the place gets shorter, but
+/// the terminal keeps its size (`ScreenHold`): its lines slide up and the top ones go under the
+/// edge. SwiftTerm resizes only when its bounds change, so the host gets no resize.
+private final class HeldScreen: UIView {
+    private let terminal: UIView
+    private var hold = ScreenHold()
+
+    init(terminal: UIView) {
+        self.terminal = terminal
+        super.init(frame: .zero)
+        clipsToBounds = true
+        addSubview(terminal)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    func trayMoved(open: Bool) {
+        if open {
+            hold.open(screen: bounds.size)
+        } else {
+            hold.close()
+        }
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let height = hold.height(screen: bounds.size)
+        terminal.frame = CGRect(x: 0, y: bounds.height - height, width: bounds.width, height: height)
+    }
 }
 
 /// The two belts, the one on the keyboard and the one docked under the terminal, kept as one:
@@ -147,10 +181,11 @@ private final class Belts: NSObject {
     private weak var terminal: ConsoleTerminalView?
     private var agent: String?
 
-    init(terminal: ConsoleTerminalView) {
+    init(terminal: ConsoleTerminalView, screen: HeldScreen) {
         self.terminal = terminal
         super.init()
         for belt in [lifted, dock] {
+            belt.onScreenHold = { [weak screen] holding in screen?.trayMoved(open: holding) }
             belt.onSend = { [weak terminal] bytes in terminal?.send(bytes) }
             belt.onKeyboard = { [weak terminal] in
                 guard let terminal else { return }

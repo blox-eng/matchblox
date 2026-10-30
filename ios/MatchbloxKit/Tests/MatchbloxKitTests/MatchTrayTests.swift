@@ -53,8 +53,7 @@ final class MatchTrayTests: XCTestCase {
     func testTheIslandMatchOfEachState() {
         XCTAssertNil(MatchTray.Match.ready.look)
         XCTAssertEqual(MatchTray.Match.burns.look, IslandLook.Match(state: .burns, front: 0.12))
-        XCTAssertEqual(MatchTray.Match.out.look?.state, .out)
-        XCTAssertGreaterThan(MatchTray.Match.out.look?.front ?? 0, 0.12)
+        XCTAssertEqual(MatchTray.Match.out.look, IslandLook.Match(state: .out, front: 0.34))
     }
 
     func testTheTraysTimesAndSlide() {
@@ -107,5 +106,70 @@ final class MatchTrayTests: XCTestCase {
     func testAWideKeyNeverSpansMoreThanTheGrid() {
         XCTAssertEqual(CellGrid.place([9], columns: 6), [CellGrid.Spot(row: 0, column: 0, span: 6)])
         XCTAssertEqual(CellGrid.place([0]), [CellGrid.Spot(row: 0, column: 0, span: 1)])
+    }
+
+    // MARK: The screen under the tray
+
+    private let tall = CGSize(width: 390, height: 600)
+    private let short = CGSize(width: 390, height: 504)
+
+    func testWithNoTrayTheTerminalFollowsTheScreen() {
+        var hold = ScreenHold()
+        XCTAssertEqual(hold.height(screen: tall), 600)
+        XCTAssertEqual(hold.height(screen: short), 504)
+        XCTAssertNil(hold.held)
+    }
+
+    func testAnOpenTrayHoldsTheTerminalsHeight() {
+        var hold = ScreenHold()
+        hold.open(screen: tall)
+        XCTAssertEqual(hold.height(screen: short), 600)
+        XCTAssertEqual(hold.height(screen: tall), 600)
+    }
+
+    func testAClosedTrayHoldsUntilTheScreenIsBack() {
+        var hold = ScreenHold()
+        hold.open(screen: tall)
+        _ = hold.height(screen: short)
+        hold.close()
+        // The keyboard's accessory can shrink after the tray's own animation ends.
+        XCTAssertEqual(hold.height(screen: short), 600)
+        XCTAssertEqual(hold.height(screen: tall), 600)
+        XCTAssertNil(hold.held)
+        XCTAssertEqual(hold.height(screen: short), 504)
+    }
+
+    func testANewWidthEndsTheHold() {
+        var hold = ScreenHold()
+        hold.open(screen: tall)
+        hold.close()
+        XCTAssertEqual(hold.height(screen: CGSize(width: 844, height: 300)), 300)
+        XCTAssertNil(hold.held)
+    }
+
+    func testAWidthChangeWhileOpenStillHolds() {
+        var hold = ScreenHold()
+        hold.open(screen: tall)
+        XCTAssertEqual(hold.height(screen: CGSize(width: 844, height: 300)), 600)
+    }
+
+    func testTwoTraysHoldTheFirstHeightUntilBothClose() {
+        var hold = ScreenHold()
+        hold.open(screen: tall)
+        hold.open(screen: short)
+        XCTAssertEqual(hold.held, tall)
+        hold.close()
+        XCTAssertEqual(hold.height(screen: tall), 600)
+        XCTAssertEqual(hold.height(screen: short), 600)
+        hold.close()
+        XCTAssertEqual(hold.height(screen: tall), 600)
+        XCTAssertNil(hold.held)
+    }
+
+    func testACloseWithNoOpenChangesNothing() {
+        var hold = ScreenHold()
+        hold.close()
+        hold.open(screen: tall)
+        XCTAssertEqual(hold.height(screen: short), 600)
     }
 }

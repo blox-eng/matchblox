@@ -210,6 +210,8 @@ private struct TrayFloor: View {
         let shape = RoundedRectangle(cornerRadius: Self.radius)
         let light = Color(uiColor: BeltLook.grainLight)
         let dark = Color(uiColor: BeltLook.grainDark)
+        let shadowTop = Color(uiColor: BeltLook.trayShadowTop)
+        let shadowBottom = Color(uiColor: BeltLook.trayShadowBottom)
         Canvas { context, size in
             var x: CGFloat = 0
             while x < size.width {
@@ -224,11 +226,11 @@ private struct TrayFloor: View {
         }
         .background(Theme.markTray)
         .overlay(alignment: .top) {
-            LinearGradient(colors: [.black.opacity(0.85), .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+            LinearGradient(colors: [shadowTop, shadowTop.opacity(0)], startPoint: .top, endPoint: .bottom)
                 .frame(height: 11)
         }
         .overlay(alignment: .bottom) {
-            LinearGradient(colors: [.black.opacity(0), .black.opacity(0.6)], startPoint: .top, endPoint: .bottom)
+            LinearGradient(colors: [shadowBottom.opacity(0), shadowBottom], startPoint: .top, endPoint: .bottom)
                 .frame(height: 5)
         }
         .clipShape(shape)
