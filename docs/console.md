@@ -318,7 +318,7 @@ answer that did not go says `not sent to flint-auth` and why on the key
 line.
 
 While the card shows, the agent's own menu leaves the screen: the lines from
-its last rule down. The card is the one place to answer. While you scroll up
+the rule over the question's header (its ☐ ☒ ✔ tabs) down. The card is the one place to answer. While you scroll up
 through the history, the screen stays as the agent drew it.
 
 There is no card at a permission prompt. Its keys go to the agent as they
