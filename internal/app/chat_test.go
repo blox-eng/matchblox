@@ -1001,10 +1001,13 @@ func TestCardTypesTheAnswer(t *testing.T) {
 func TestCardAnswersEveryQuestion(t *testing.T) {
 	checks := said.Question{Question: "Which checks?", Multi: true, Options: []said.Option{{Label: "unit"}, {Label: "e2e"}, {Label: "lint"}}}
 	m, f := askModel(t, 100, threeWays, checks)
+	m, now := clocked(m)
 	if out := ansi.Strip(strings.Join(m.chatLines(60, 20), "\n")); !strings.Contains(out, "a asks · 1 of 2") || !strings.Contains(out, "⏎ question 2") {
 		t.Fatalf("the first question:\n%s", out)
 	}
-	m = pressKeys(t, m, "2", "space", "3")
+	m = pressKeys(t, m, "2")
+	*now = now.Add(cardQuiet) // the second question's quiet
+	m = pressKeys(t, m, "space", "3")
 	out := ansi.Strip(strings.Join(m.chatLines(60, 20), "\n"))
 	for _, want := range []string{"2 of 2", "Which checks?", "[✔] unit", "[ ] e2e", "[✔] lint"} {
 		if !strings.Contains(out, want) {
@@ -1239,5 +1242,41 @@ func TestTheCardKeepsItsRowsOnAShortScreen(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(out, "\n"), "a line of the agent") {
 		t.Fatalf("no room left for the agent's screen:\n%s", strings.Join(out, "\n"))
+	}
+}
+
+// The card's next question is new to the builder: an Enter at once on it
+// sends nothing.
+func TestTheNextQuestionIsQuietToo(t *testing.T) {
+	checks := said.Question{Question: "Which checks?", Options: []said.Option{{Label: "unit"}, {Label: "e2e"}}}
+	m, f := askModel(t, 100, threeWays, checks)
+	m, now := clocked(m)
+	m = pressKeys(t, m, "enter", "enter")
+	if len(pickActs(f)) != 0 || m.flash != "not sent: a asks something new — look again" {
+		t.Fatalf("enter at once on question 2: picks %+v flash %q", pickActs(f), m.flash)
+	}
+	*now = now.Add(cardQuiet)
+	pressKeys(t, m, "enter")
+	if got := pickActs(f); len(got) != 1 || got[0].Text != `{"id":"toolu_1","choices":[{"picks":[1]},{"picks":[1]}]}` {
+		t.Fatalf("after the quiet: picks %+v", got)
+	}
+}
+
+// On a desk the card is on the right side before the chat has the keys: its
+// quiet runs from when it was first drawn, and opening the chat does not
+// start it again.
+func TestADrawnCardIsNotQuietAgain(t *testing.T) {
+	m, f := loadedWith(t, 200, cardState("toolu_1", threeWays))
+	m, now := clocked(onPane(t, m, "%1"))
+	m.cardSeen = cardSeen{}
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 200, Height: 50})
+	m = next.(Model)
+	if !strings.Contains(screen(m), "a asks") || m.cardSeen.askID != "toolu_1" {
+		t.Fatalf("the card is not drawn on the right (seen %+v):\n%s", m.cardSeen, screen(m))
+	}
+	*now = now.Add(cardQuiet + 100*time.Millisecond)
+	pressKeys(t, m, "enter", "down", "down", "enter")
+	if got := pickActs(f); len(got) != 1 || got[0].Text != `{"id":"toolu_1","choices":[{"picks":[3]}]}` {
+		t.Fatalf("picks %+v", got)
 	}
 }

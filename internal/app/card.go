@@ -89,13 +89,21 @@ func (m Model) cardSends(k tea.KeyPressMsg) bool {
 	return bkey.Matches(k, ck.Send) || c.at != len(s.Ask.Questions[c.q].Options) && bkey.Matches(k, ck.Pick)
 }
 
-// noteCard starts the quiet of a card that shows for an ask it did not show
-// for before.
+// noteCard starts the quiet of a card drawn for an ask it was not drawn for
+// before.
 func (m Model) noteCard() Model {
-	if s, _, ok := m.cardNow(); ok && s.Ask.ID != m.cardSeen.askID {
+	if s, _, ok := m.cardNow(); ok && s.Ask.ID != m.cardSeen.askID && m.cardDrawn() {
 		m.cardSeen = cardSeen{askID: s.Ask.ID, at: m.now()}
 	}
 	return m
+}
+
+// cardDrawn tells if the chat, and so its card, is on screen: beside the
+// list on a desk or an opened phone, or the whole screen once it has the
+// keys.
+func (m Model) cardDrawn() bool {
+	_, right := m.panes(max(m.width, minWidth))
+	return m.tab == tabSessions && (m.chatKeys || right > 0)
 }
 
 // cardHushed is the card's quiet: what it would send now goes nowhere.
@@ -209,6 +217,7 @@ func (m Model) cardChoose(s sample.Session, c card, ch said.Choice) (tea.Model, 
 	if c.q+1 < len(s.Ask.Questions) {
 		c.q, c.at, c.ticks, c.text = c.q+1, 0, nil, ""
 		m.askCard = c
+		m.cardSeen.at = m.now() // the next question is new to the builder too
 		return m, nil
 	}
 	b, err := json.Marshal(said.Answer{ID: s.Ask.ID, Choices: c.choices})
