@@ -586,6 +586,16 @@ func (m *Model) tellAgent() tea.Cmd {
 	return tea.Raw(logos.Passthrough(say))
 }
 
+// agentGone is the empty agent signal of a console that goes while the app
+// shows an agent's Commands: no chat runs them now.
+func (m *Model) agentGone() tea.Cmd {
+	if m.agentSaid == "" || m.agentSaid == keycmd.AgentSignal("") {
+		return nil
+	}
+	m.chatKeys = false
+	return m.tellAgent()
+}
+
 // commandKey runs the phone's command key apc in the chat, behind the
 // chat's guards, as a key pressed there. Compact and clear run matchblox's
 // own acts on the pane; any other command types its text and Enter. A

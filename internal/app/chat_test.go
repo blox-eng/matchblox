@@ -3,6 +3,7 @@ package app
 import (
 	"io"
 	"os"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -1689,25 +1690,37 @@ func TestACommandAtNightAsksToTakeOver(t *testing.T) {
 	}
 }
 
-// raws are the strings cmd writes through Bubble Tea's raw output.
-func raws(cmd tea.Cmd) []string {
+// cmdMsgs are the messages cmd gives, a batch's or a sequence's each in
+// turn. A command that blocks (a read) gives none.
+func cmdMsgs(cmd tea.Cmd) []tea.Msg {
 	if cmd == nil {
 		return nil
 	}
 	out := make(chan tea.Msg, 1)
 	go func() { out <- cmd() }()
-	var got []string
+	var msg tea.Msg
 	select {
-	case msg := <-out:
-		switch msg := msg.(type) {
-		case tea.BatchMsg:
-			for _, c := range msg {
-				got = append(got, raws(c)...)
-			}
-		case tea.RawMsg:
-			got = append(got, msg.Msg.(string))
-		}
+	case msg = <-out:
 	case <-time.After(50 * time.Millisecond):
+		return nil
+	}
+	if v := reflect.ValueOf(msg); v.Kind() == reflect.Slice && v.Type().Elem() == reflect.TypeFor[tea.Cmd]() { // a batch or a sequence
+		var got []tea.Msg
+		for i := range v.Len() {
+			got = append(got, cmdMsgs(v.Index(i).Interface().(tea.Cmd))...)
+		}
+		return got
+	}
+	return []tea.Msg{msg}
+}
+
+// raws are the strings cmd writes through Bubble Tea's raw output.
+func raws(cmd tea.Cmd) []string {
+	var got []string
+	for _, msg := range cmdMsgs(cmd) {
+		if r, ok := msg.(tea.RawMsg); ok {
+			got = append(got, r.Msg.(string))
+		}
 	}
 	return got
 }
@@ -1838,5 +1851,28 @@ func TestOldTmuxSaysCommandsNeedIt(t *testing.T) {
 	m, got = agentRaws(t, m, "ctrl+]", "enter")
 	if len(got) != 0 || m.flash != "" {
 		t.Fatalf("second open wrote %q, flash %q", got, m.flash)
+	}
+}
+
+func TestQuitWithTheChatOpenSendsNoAgent(t *testing.T) {
+	m, _ := agentRaws(t, agentChat(t, "claude", "codex"), "enter")
+	_, cmd := m.quit()
+	got := cmdMsgs(cmd)
+	want := tea.RawMsg{Msg: logos.Passthrough(keycmd.AgentSignal(""))}
+	if len(got) != 2 || got[0] != want || got[1] != (tea.QuitMsg{}) {
+		t.Fatalf("quit gave %#v, want the empty agent, then quit", got)
+	}
+	if _, cmd = agentChat(t, "claude", "codex").quit(); len(raws(cmd)) != 0 {
+		t.Fatalf("a quit with no chat told the app %q", raws(cmd))
+	}
+}
+
+func TestBackToHostsWithTheChatOpenSendsNoAgent(t *testing.T) {
+	r := newShell(t, nil, nil, "", false)
+	m, _ := agentRaws(t, agentChat(t, "claude", "codex"), "enter")
+	r.sh.cur = m
+	next, cmd := r.sh.Update(layerMsg{})
+	if got, want := raws(cmd), logos.Passthrough(keycmd.AgentSignal("")); !slices.Equal(got, []string{want}) || next.(Shell).layer != layerHosts {
+		t.Fatalf("back wrote %q, want %q (layer %v)", got, want, next.(Shell).layer)
 	}
 }
