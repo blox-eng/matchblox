@@ -288,6 +288,32 @@ func TestWatchRefusedForCLI(t *testing.T) {
 	}
 }
 
+// Only a console streams screens: a CLI peer starts no watch loop, so a
+// watch it holds by any way captures nothing.
+func TestNoWatchLoopForTheCLI(t *testing.T) {
+	s, f, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	connectAs(t, ctx, s, proto.ClientCLI)
+	pane, held := "%1", 0
+	for deadline := time.Now().Add(waitLimit); held == 0 && time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		s.mu.Lock()
+		for cl := range s.clients {
+			cl.watch.Store(&pane)
+			held++
+		}
+		s.mu.Unlock()
+	}
+	if held == 0 {
+		t.Fatal("the CLI peer did not join")
+	}
+	s.kickScreens(pane)
+	time.Sleep(400 * time.Millisecond)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.calls != 0 {
+		t.Fatalf("a CLI peer captured the pane %d times", f.calls)
+	}
+}
+
 func TestWatchRefusesAnUnknownPane(t *testing.T) {
 	s, _, ctx := watchTest(t, map[string]string{"%1": idleScreen})
 	c := connectAs(t, ctx, s, proto.ClientConsole)

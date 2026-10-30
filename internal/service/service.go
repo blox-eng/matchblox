@@ -936,7 +936,9 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 	connCtx, connDone := context.WithCancel(ctx)
 	defer connDone() // a clone for this connection's act stops with it
 	actCtx := context.WithValue(ctx, connKey{}, connCtx)
-	go s.watchLoop(connCtx, cl)
+	if h.Client == proto.ClientConsole {
+		go s.watchLoop(connCtx, cl)
+	}
 	for {
 		env, err := c.Recv()
 		if err != nil {
