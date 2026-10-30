@@ -1,11 +1,13 @@
 import MatchbloxKit
+import SwiftUI
 import UIKit
 
 /// The key belt: one row of keys from the phone's left side to its right side, turning round
 /// both sides and on behind the phone, with no end. It moves in detents and clicks under the
 /// thumb; a key sends when a touch lifts without a drag. Over it is the handle row: the
-/// layout's name, the grip, and the keyboard key. One belt rides on the keyboard and one docks
-/// under the terminal while the keyboard is down.
+/// layout's name, the grip, and the keyboard key. A pull up on the handle row, or a tap on its
+/// grip or name, opens the matchbox drawer between the two: the tray of layouts. One belt
+/// rides on the keyboard and one docks under the terminal while the keyboard is down.
 final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     private struct Piece {
         let layer: CALayer
@@ -41,6 +43,15 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     /// A layout change runs the old keys off this far each frame, for this many frames.
     private static let runOffStep: CGFloat = 18
     private static let runOffFrames: CGFloat = 12
+    /// The drawer: the tray, 4 pt under the handle row and 4 pt over the belt.
+    private static let drawerOpen: CGFloat = MatchTrayView.height + 8
+    private static let trayInset: CGFloat = 6
+    /// A tap this near the grip's centre, on either side, is a tap on the grip.
+    private static let gripReach: CGFloat = 30
+    /// A pull up or down this far opens or closes the drawer.
+    private static let pullDistance: CGFloat = 12
+    private static let drawerGrowTime: TimeInterval = 0.26
+    private static let traySlideTime: TimeInterval = 0.3
 
     private static let glyphFont = UIFont.monospacedSystemFont(ofSize: 16, weight: .medium)
     private static let bigFont = UIFont.monospacedSystemFont(ofSize: 21, weight: .medium)
@@ -48,7 +59,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     private static let nameFont = UIFont.monospacedSystemFont(ofSize: 10, weight: .medium)
 
     /// The app's copy of the console's command table.
-    private static let catalog: KeyCatalog = {
+    static let catalog: KeyCatalog = {
         if let url = Bundle.main.url(forResource: "commands", withExtension: "json"),
            let data = try? Data(contentsOf: url),
            let catalog = try? KeyCatalog(commands: data) {
@@ -70,6 +81,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     var agent: String? {
         didSet {
             if agent?.isEmpty == true { agent = nil }
+            trayModel.agent = agent
             guard agent != oldValue else { return }
             if layout == .commands { rebuild() }
         }
@@ -86,7 +98,11 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
 
     var onSend: ([UInt8]) -> Void = { _ in }
     var onKeyboard: () -> Void = {}
-    var onOpenTray: () -> Void = {}
+    /// The builder picked a layout in the tray.
+    var onLayout: (BeltLayout) -> Void = { _ in }
+    var onEditMine: () -> Void = {}
+
+    private(set) var trayOpen = false
 
     var keyboardUp = false {
         didSet {
@@ -98,6 +114,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     private let handle = UIView()
     private let markView = UIImageView()
     private let nameLabel = UILabel()
+    private let nameStack = UIStackView()
     private let grip = UIView()
     private let keyboardButton = UIButton(type: .system)
     private let belt = UIView()
@@ -107,11 +124,21 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     private let strikerBottom = CALayer()
     private let track = CALayer()
     private let pan = UIPanGestureRecognizer()
+    private let handleTap = UITapGestureRecognizer()
+    private let pull = UIPanGestureRecognizer()
+    private let drawer = UIView()
+    private lazy var drawerHeight: NSLayoutConstraint = drawer.heightAnchor.constraint(equalToConstant: 0)
+    private let trayModel: TrayModel
+    private let trayHost: UIHostingController<MatchTrayView>
+    /// Counts each open, close and pick, so a close that was due after a pick knows it is stale.
+    private var trayMoves = 0
 
     private let selection = UISelectionFeedbackGenerator()
     private let impact = UIImpactFeedbackGenerator(style: .medium)
 
     private var motion: BeltMotion?
+    /// The layout's keys the belt holds now.
+    private var builtKeys: [BeltKey] = []
     private var pieces: [Piece] = []
     private var builtWidth: CGFloat = 0
     private var touch: Touch?
@@ -126,11 +153,18 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     private var spoken: [Any]?
 
     init() {
-        layout = BeltLayout.load(from: .standard)
+        let layout = BeltLayout.load(from: .standard)
+        let model = TrayModel(inUse: layout)
+        self.layout = layout
+        trayModel = model
+        trayHost = UIHostingController(rootView: MatchTrayView(model: model))
         super.init(frame: CGRect(x: 0, y: 0, width: 0, height: Self.handleHeight + BeltGeometry.height), inputViewStyle: .default)
         allowsSelfSizing = true
         backgroundColor = BeltLook.sleeve
+        model.onPick = { [weak self] picked in self?.picked(picked) }
+        model.onEdit = { [weak self] in self?.editMine() }
         buildHandle()
+        buildDrawer()
         buildBelt()
         updateName()
     }
@@ -150,7 +184,9 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
         handle.addSubview(edge)
 
         markView.contentMode = .scaleAspectFit
-        let name = UIStackView(arrangedSubviews: [markView, nameLabel])
+        let name = nameStack
+        name.addArrangedSubview(markView)
+        name.addArrangedSubview(nameLabel)
         name.spacing = 5
         name.alignment = .center
         name.translatesAutoresizingMaskIntoConstraints = false
@@ -171,9 +207,13 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
         keyboardButton.addAction(UIAction { [weak self] _ in self?.onKeyboard() }, for: .touchUpInside)
         handle.addSubview(keyboardButton)
 
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTapped))
-        tap.delegate = self
-        handle.addGestureRecognizer(tap)
+        handleTap.addTarget(self, action: #selector(handleTapped))
+        handleTap.delegate = self
+        handle.addGestureRecognizer(handleTap)
+        pull.addTarget(self, action: #selector(pulled))
+        pull.maximumNumberOfTouches = 1
+        pull.delegate = self
+        handle.addGestureRecognizer(pull)
 
         NSLayoutConstraint.activate([
             handle.topAnchor.constraint(equalTo: topAnchor),
@@ -197,6 +237,33 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
             keyboardButton.topAnchor.constraint(equalTo: handle.topAnchor, constant: 1),
             keyboardButton.bottomAnchor.constraint(equalTo: handle.bottomAnchor),
             keyboardButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 44),
+        ])
+    }
+
+    /// The matchbox drawer: shut, it has no height; open, the tray slides up out of the sleeve.
+    private func buildDrawer() {
+        drawer.backgroundColor = BeltLook.sleeve
+        drawer.clipsToBounds = true
+        drawer.isHidden = true
+        drawer.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(drawer)
+
+        trayHost.safeAreaRegions = []
+        let tray: UIView = trayHost.view
+        tray.backgroundColor = .clear
+        tray.translatesAutoresizingMaskIntoConstraints = false
+        tray.transform = CGAffineTransform(translationX: 0, y: MatchTray.slide)
+        drawer.addSubview(tray)
+
+        NSLayoutConstraint.activate([
+            drawer.topAnchor.constraint(equalTo: handle.bottomAnchor),
+            drawer.leadingAnchor.constraint(equalTo: leadingAnchor),
+            drawer.trailingAnchor.constraint(equalTo: trailingAnchor),
+            drawerHeight,
+            tray.topAnchor.constraint(equalTo: drawer.topAnchor, constant: 4),
+            tray.leadingAnchor.constraint(equalTo: drawer.safeAreaLayoutGuide.leadingAnchor, constant: Self.trayInset),
+            tray.trailingAnchor.constraint(equalTo: drawer.safeAreaLayoutGuide.trailingAnchor, constant: -Self.trayInset),
+            tray.heightAnchor.constraint(equalToConstant: MatchTrayView.height),
         ])
     }
 
@@ -233,7 +300,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
         let bottom = belt.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor)
         bottom.priority = .init(999)
         NSLayoutConstraint.activate([
-            belt.topAnchor.constraint(equalTo: handle.bottomAnchor),
+            belt.topAnchor.constraint(equalTo: drawer.bottomAnchor),
             belt.leadingAnchor.constraint(equalTo: leadingAnchor),
             belt.trailingAnchor.constraint(equalTo: trailingAnchor),
             belt.heightAnchor.constraint(equalToConstant: BeltGeometry.height),
@@ -278,6 +345,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
         runOffLeft = 0
         builtWidth = width
         let keys = Self.catalog.keys(layout, agent: agent, mine: Mine.load(from: .standard).keys)
+        builtKeys = keys
         guard !keys.isEmpty else { return }
         let geometry = BeltGeometry(width: width)
         let motion = BeltMotion(keys: keys, geometry: geometry)
@@ -500,16 +568,27 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     }
 
     override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
-        if let pan = gesture as? UIPanGestureRecognizer, pan.view === belt {
+        if gesture === pan {
             let v = pan.velocity(in: belt)
             return abs(v.x) > abs(v.y)
+        }
+        if gesture === pull {
+            let v = pull.velocity(in: handle)
+            return abs(v.y) > abs(v.x)
         }
         return super.gestureRecognizerShouldBegin(gesture)
     }
 
+    /// The keyboard key is its own button: no touch on it opens the drawer. A tap opens it
+    /// only on the grip or the name.
     func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         guard gesture.view === handle else { return true }
-        return !(touch.view?.isDescendant(of: keyboardButton) ?? false)
+        if touch.view?.isDescendant(of: keyboardButton) ?? false { return false }
+        guard gesture === handleTap else { return true }
+        let p = touch.location(in: handle)
+        let onGrip = abs(p.x - grip.center.x) <= Self.gripReach
+        let onName = p.x <= nameStack.frame.maxX + Self.handlePadding
+        return onGrip || onName
     }
 
     @objc private func panned(_ pan: UIPanGestureRecognizer) {
@@ -533,7 +612,17 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     }
 
     @objc private func handleTapped() {
-        onOpenTray()
+        setTray(open: !trayOpen)
+    }
+
+    @objc private func pulled(_ pull: UIPanGestureRecognizer) {
+        guard pull.state == .ended else { return }
+        let dy = pull.translation(in: handle).y
+        if dy < -Self.pullDistance {
+            setTray(open: true)
+        } else if dy > Self.pullDistance {
+            setTray(open: false)
+        }
     }
 
     /// The key under `point`; the gap between two keys goes half to each.
@@ -629,6 +718,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     override func willMove(toWindow newWindow: UIWindow?) {
         super.willMove(toWindow: newWindow)
         guard newWindow == nil else { return }
+        setTray(open: false, animated: false)
         stopLink()
         if runOffLeft > 0 { rebuild() }
         // A belt that leaves the screen mid-coast rests on its nearest detent at once.
@@ -638,6 +728,81 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
             _ = motion?.step(dt: 1)
         }
         place()
+    }
+
+    // MARK: The matchbox drawer
+
+    /// Opens or closes the drawer. A closed box comes back fresh: every match ready again but
+    /// the one in use.
+    func setTray(open: Bool, animated: Bool = true) {
+        trayMoves += 1
+        guard open != trayOpen else { return }
+        trayOpen = open
+        let moves = trayMoves
+        if open {
+            trayModel.freshBox(inUse: layout)
+            drawer.isHidden = false
+        }
+        spoken = nil
+        drawerHeight.constant = open ? Self.drawerOpen : 0
+        invalidateIntrinsicContentSize()
+
+        let tray: UIView = trayHost.view
+        let slid = open ? .identity : CGAffineTransform(translationX: 0, y: MatchTray.slide)
+        let host = superview ?? self
+        let finish = { [weak self] in
+            guard let self, !open, self.trayMoves == moves else { return }
+            self.drawer.isHidden = true
+            self.trayModel.freshBox(inUse: self.layout)
+        }
+        defer { UIAccessibility.post(notification: .layoutChanged, argument: nil) }
+        guard animated, window != nil, !UIAccessibility.isReduceMotionEnabled else {
+            tray.transform = slid
+            host.layoutIfNeeded()
+            finish()
+            return
+        }
+        let grow = UIViewPropertyAnimator(duration: Self.drawerGrowTime, timingParameters: Self.drawerCurve())
+        grow.addAnimations { host.layoutIfNeeded() }
+        let slide = UIViewPropertyAnimator(duration: Self.traySlideTime, timingParameters: Self.drawerCurve())
+        slide.addAnimations { tray.transform = slid }
+        slide.addCompletion { _ in finish() }
+        grow.startAnimation()
+        slide.startAnimation()
+    }
+
+    /// The mockup's drawer curve: quick out of the sleeve, soft at the end.
+    private static func drawerCurve() -> UICubicTimingParameters {
+        UICubicTimingParameters(controlPoint1: CGPoint(x: 0.3, y: 0.7), controlPoint2: CGPoint(x: 0.2, y: 1))
+    }
+
+    /// A picked match strikes, the belt runs to its layout, and the tray closes once the strike
+    /// shows.
+    private func picked(_ picked: BeltLayout) {
+        layout = picked
+        onLayout(picked)
+        trayMoves += 1
+        let moves = trayMoves
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(MatchTray.closeDelay))
+            guard let self, self.trayMoves == moves else { return }
+            self.setTray(open: false)
+        }
+    }
+
+    private func editMine() {
+        setTray(open: false)
+        onEditMine()
+    }
+
+    /// The editor closed. Done shows Mine; a Mine on the belt runs to its new keys.
+    func mineEdited(show: Bool) {
+        if show && layout != .mine {
+            layout = .mine
+        } else if layout == .mine,
+                  Self.catalog.keys(.mine, agent: agent, mine: Mine.load(from: .standard).keys) != builtKeys {
+            runOff()
+        }
     }
 
     // MARK: The other belt
@@ -664,8 +829,14 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
             name.accessibilityLabel = "Layouts, \(layout.rawValue)"
             name.accessibilityTraits = .button
             name.accessibilityFrameInContainerSpace = CGRect(x: 0, y: 0, width: grip.frame.maxX, height: Self.handleHeight)
-            name.activate = { [weak self] in self?.onOpenTray(); return true }
+            name.accessibilityValue = trayOpen ? "open" : nil
+            name.activate = { [weak self] in
+                guard let self else { return false }
+                self.setTray(open: !self.trayOpen)
+                return true
+            }
             var elements: [Any] = [name, keyboardButton]
+            if trayOpen { elements.append(trayHost.view as Any) }
             guard let motion else {
                 spoken = elements
                 return elements

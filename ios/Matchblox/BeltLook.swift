@@ -1,8 +1,9 @@
 import UIKit
 
 /// The key belt's colours. The tokens come from `Theme`; the mockup's few colours that are no
-/// token (the key bevel, the card ground under the grit, the grip, the light and dark lines)
-/// are named here and nowhere else.
+/// token (the key bevel, the card ground under the grit, the grip, the light and dark lines,
+/// the tray's grain, the `EDIT MINE` stamp and the editor's sheet) are named here and nowhere
+/// else.
 @MainActor
 enum BeltLook {
     // Tokens.
@@ -31,6 +32,14 @@ enum BeltLook {
     static let strikerTopLine = UIColor(white: 0, alpha: 0xAA / 255)
     static let strikerBottomLine = UIColor(white: 1, alpha: 0x10 / 255)
     static let grip = UIColor(hex: 0x5A5244)
+    /// The tray floor's card grain: light lines down every 3 pt, dark lines across every 4 pt.
+    static let grainLight = UIColor(white: 1, alpha: 0x05 / 255)
+    static let grainDark = UIColor(white: 0, alpha: 0x18 / 255)
+    /// `EDIT MINE`, stamped on the tray floor: its ink and its edge.
+    static let stampInk = UIColor(hex: 0x8A7A5C)
+    static let stampEdge = UIColor(hex: 0x3A3226)
+    /// The editor's sheet.
+    static let sheet = UIColor(hex: 0x17140F)
 }
 
 private extension UIColor {

@@ -156,8 +156,8 @@ private final class Belts: NSObject {
                 guard let terminal else { return }
                 _ = terminal.isFirstResponder ? terminal.resignFirstResponder() : terminal.becomeFirstResponder()
             }
-            // The tray is the matchbox drawer: it comes with the layout picker.
-            belt.onOpenTray = {}
+            belt.onLayout = { [weak self] layout in self?.layoutPicked(layout) }
+            belt.onEditMine = { [weak self] in self?.editMine() }
         }
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardChanged), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
     }
@@ -179,10 +179,39 @@ private final class Belts: NSObject {
     func focusChanged(_ focused: Bool) {
         dock.isHidden = focused
         if focused {
+            dock.setTray(open: false, animated: false)
             lifted.follow(dock)
         } else {
             dock.follow(lifted)
         }
+    }
+
+    /// A layout picked on one belt is the layout of both.
+    private func layoutPicked(_ layout: BeltLayout) {
+        lifted.layout = layout
+        dock.layout = layout
+    }
+
+    /// The Mine editor, as a sheet over the console.
+    private func editMine() {
+        guard var top = terminal?.window?.rootViewController else { return }
+        while let next = top.presentedViewController { top = next }
+        let editor = UIHostingController(rootView: BeltEditor(
+            catalog: BeltView.catalog,
+            dismiss: { [weak top] in top?.dismiss(animated: true) },
+            closed: { [weak self] done in self?.mineEdited(show: done) }
+        ))
+        editor.view.backgroundColor = BeltLook.sheet
+        if let sheet = editor.sheetPresentationController {
+            sheet.detents = [.custom { $0.maximumDetentValue * 0.7 }, .large()]
+            sheet.preferredCornerRadius = 16
+        }
+        top.present(editor, animated: true)
+    }
+
+    private func mineEdited(show: Bool) {
+        lifted.mineEdited(show: show)
+        dock.mineEdited(show: show)
     }
 
     /// The keyboard's frame holds the lifted belt. Only a system keyboard makes it taller than

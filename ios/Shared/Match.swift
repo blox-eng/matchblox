@@ -12,8 +12,18 @@ struct MatchView: View {
     var minimal = false
     /// The strike: the flame 1.6x its size in a brighter glow. The island never sets it.
     var flare = false
+    /// The island clips its match to its frame; the tray lets the flame rise over its floor.
+    var clips = true
 
     var body: some View {
+        if clips {
+            drawing.clipped()
+        } else {
+            drawing
+        }
+    }
+
+    private var drawing: some View {
         GeometryReader { geo in
             let size = geo.size
             if match.state == .quiet {
@@ -29,7 +39,6 @@ struct MatchView: View {
                 }
             }
         }
-        .clipped()
     }
 
     @ViewBuilder
@@ -64,6 +73,25 @@ struct MatchView: View {
                 ],
                 startPoint: UnitPoint(x: start / max(1, g.size.width), y: 0.5),
                 endPoint: UnitPoint(x: g.front / max(1, g.size.width), y: 0.5)))
+    }
+}
+
+/// A match not struck yet, as the closed box holds it: the full stick and the red head. The
+/// tray draws a layout that is not in use so; the geometry is the island's match.
+struct ReadyMatchView: View {
+    let thickness: CGFloat
+
+    var body: some View {
+        GeometryReader { geo in
+            let g = MatchGeometry(size: geo.size, th: thickness, front: 0, minimal: false)
+            let th = g.th
+            ZStack(alignment: .topLeading) {
+                Path(roundedRect: CGRect(x: g.wood0, y: g.y - th / 2, width: g.end - g.wood0, height: th), cornerRadius: th * 0.25)
+                    .fill(Tokens.markStick)
+                Path(ellipseIn: CGRect(x: g.x, y: g.y - th * 0.78, width: g.headW, height: th * 1.56))
+                    .fill(Tokens.matchHead)
+            }
+        }
     }
 }
 
@@ -123,6 +151,8 @@ struct FlameView: View {
 /// Still puffs of smoke rising from the front and drifting right, fading as they grow.
 struct SmokeView: View {
     let x: CGFloat, y: CGFloat, th: CGFloat, puffs: Int
+    /// The tray's dark floor shows the island's puffs this much stronger.
+    var gain = 1.0
 
     private static let steps: [(dx: CGFloat, dy: CGFloat, r: CGFloat, a: Double)] = [
         (0.3, 1.0, 0.9, 0.30), (0.9, 2.4, 1.5, 0.22), (0.5, 4.0, 2.1, 0.15), (1.5, 5.6, 2.7, 0.09),
@@ -133,7 +163,7 @@ struct SmokeView: View {
             ForEach(0..<min(puffs, Self.steps.count), id: \.self) { i in
                 let s = Self.steps[i]
                 let r = s.r * th
-                let a = puffs < Self.steps.count ? s.a * 0.6 : s.a
+                let a = (puffs < Self.steps.count ? s.a * 0.6 : s.a) * gain
                 Circle()
                     .fill(RadialGradient(colors: [Tokens.muted.opacity(a), Tokens.muted.opacity(0)], center: .center, startRadius: 0, endRadius: r))
                     .frame(width: r * 2, height: r * 2)
