@@ -237,8 +237,13 @@ Reduce Motion.
   the place, `CLAUDE SAID` and the last message (six lines at most), the
   context and plan bars, the ship, the subagents and the background
   shells, the figures (model, tokens, account, pid) and the keys. A door's
-  diff that waits for its `y` takes the full width.
-- **Dock** (design/0006 §7): usage, the machine and the stoker, between
+  diff that waits for its `y` takes the full width. A session with a pane
+  shows the chat in its place (see Chat).
+- **Dock** (design/0006 §7; #261 moves it on Wide): on Wide, usage, the
+  machine and the stoker stack in the left column under Sessions, each
+  below a hairline, and fold by the half rule below (the machine first,
+  then all); a list cut short ends in `↓ <n> more`. Elsewhere it is
+  usage, the machine and the stoker, between
   the body and the key line, when the body, the dock and one blank row fit;
   a few rows short (folding would leave three blank, and the body keeps
   half the rows) it stays at its fewest lines and the body scrolls; else
@@ -290,49 +295,48 @@ Reduce Motion.
   the keys. `⏎` selects the driving session in Sessions; `x` on a ship
   that waits for your merge asks `gh pr merge <n> --<method> -R
   <repo>` in the consent box and runs it after a typed `y`; `a` on a stuck ship opens the
-  answer peek on its session.
-- **Peek** (design/0006 §6, owner 2026-10-12): `a` on any session with a
-  pane, or a tap on the selected one, opens the conversation: an answer to
-  a session that waits, a message to any other. Where there is a detail
-  pane (an opened phone, an upright drawer, a desk) it is that pane: the
-  list stays lit beside it, its selection following the peek, the title
-  says the state, the typing line and the footer sit at the pane's foot,
-  and `esc` gives the pane back to the detail. On a one-column phone it is
-  a panel over the screen, everything else redrawn in `faint`, full width
-  up to 72 columns (centred past that), its foot on the line above the key
-  line's hairline; from 60 columns it is a
-  box in the middle, 62 columns at most. A rounded `hair` frame; the title
-  in it, `<name> asks` (the question tool, a question, a permission),
-  `<name> said` (it waits) or `To <name>` (it does not), in the accent and
-  `muted`, with `· 1 of 2` in `faint` for
-  several questions. Inside: the last message whole up to 8 lines on a
-  phone and 9 wider, its end kept and a leading `…`, light Markdown as
-  plain text; then the question tool's question in
-  `text` and its options, `› 1 <label>  <description>` (the cursor's on the
-  wash, `[✔]` ticks for several choices), the last always `Type an
-  answer…`; then, when typing, a `├─┤` rule and `› <text>▏`. The foot is
-  the keys: `⏎ send` (`⏎ question 2` before the last question, `⏎ open` at
-  a permission prompt) `─ ␣ tick ─ ← prev  3/7  next → ─ esc`, each a
-  tap target, the place in the list when it fits. `←`/`→` (a phone's
-  horizontal swipe) and `⇥`/Shift+Tab move the peek along Sessions (who
-  waits first, wrapping); every letter is text, `n` and `p` too. `⏎` sends with no
-  second confirm (the peek is the review); options go to Claude Code's
-  menu as its keys (digits, `Down`, `Enter`, `1` on the review page),
-  never as typed text. After a send the toast says `sending to <name>…`,
-  then `sent to <name>` when the keys went, or the key line says `not sent
-  to <name>: <why>`; the peek moves to the next that waits, with nothing
-  picked and no key taken for 400 ms, or closes.
+  chat on its session.
+- **Chat** (#261, owner 2026-10-29, replacing the peek of design/0006 §6):
+  the selected session's live screen, drawn inside the console. On Wide
+  and Medium it is the right side of Sessions, always; its frame title is
+  `<name> · <state>`, in the accent while it has the keys. `⏎`, `a` and
+  `→` (where `→` has no other use) or a click give it the keys; `ctrl+]`
+  or a click on the left gives them back; `ctrl+o` goes into the tmux pane.
+  The key line then says `keys go to <name> · ctrl+] back · ctrl+o into
+  tmux`. Every other key goes to the agent, `esc` too, in order, one at a
+  time, to the agent the chat showed (`not sent: <pane> runs a different
+  agent now`). A paste goes as text, and CR, LF and CRLF become `Enter`.
+  A pane that is gone says `That session ended.` and gives the keys back.
+  A second `^C` to one agent within 1 s is held (`^C held: one went 0.6 s
+  ago, ^C again stops the agent`; `one waits to go` when it is still
+  queued), because two stop Claude Code. On Narrow, `⏎` or a tap on a row
+  replaces the screen with the chat; its title row is `‹ Sessions ·
+  <name> · <state>`, and a tap on `‹ Sessions`, the app's edge swipe or ⌘M
+  (the home APC), or `ctrl+]` goes back. Only a console sends keys: `keys
+  go only from a console`.
+  The **question card** sits at the foot of the chat while the session
+  asks with Claude Code's question tool: the question in `text` and its
+  options, `› 1 <label>  <description>` (the cursor's on the wash, `[✔]`
+  ticks for several choices), the last `Type something`; the foot is the
+  keys, each a tap target. `↑` `↓` move, `space` ticks, typing fills the
+  last row, `⏎` sends (`⏎ question 2` before the last question) and a tap
+  picks. The options go to Claude Code's menu as its keys, never as typed
+  text. A permission prompt has no card. For 400 ms after a card first
+  shows, and after it moves to the next question, nothing sends: `not
+  sent: <name> asks something new — look again`. At night, the first key
+  that sends something to an agent asks "take over?"; keys that move on
+  the card do not. After a send the toast says `sending to <name>…`, then
+  `sent to <name>`, or the key line says `not sent to <name>: <why>`.
 - **Key line** (owner, 2026-10-12, reversing 2026-10-08): the last line,
   under a hairline. The keys of the open tab and the selected row, each a
-  tap target (`⏎ open  a answer  p ships  f stoker`, `a message` on a
-  session that does not wait); a desk adds `↑↓
+  tap target (`⏎ chat  a chat  x kill  p ships  f stoker`); a desk adds `↑↓
   move`, `/ find` and `q quit`, and "sampled N ago" on the right. It is
   also where the person acts: a tap shows `tap again: <command>`, and `/`
   the search. A phone app that shrinks the terminal for its keyboard keeps
   the bottom row above it.
 - **Consent** (owner 2026-10-22, #158, reversing the key line's RUN of
   2026-10-12): a pending step, and the stoker's take-over, ask in a box
-  over the dimmed screen, the kind the peek and the forms are. Its title is
+  over the dimmed screen, the kind the forms are. Its title is
   what the step does (`Kill spark-docs`, `neg` when it is destructive), its
   lines how (the exact commands, one each), its foot the key: `y run ─ any
   other key cancels`, or `⏎ run ─ esc cancels` for a move. On a phone it
@@ -373,11 +377,12 @@ Reduce Motion.
   keyboard down) splits the list and the detail at the middle, the detail
   a drawer on the right, no row opening in place. Every portrait screen
   has one dock panel at a time (`u` switches, the fold rule unchanged) and
-  a peek at the bottom, 72 columns at most, centred; its layout holds when
-  the keyboard comes and goes. A landscape screen goes by its width: under
+  the chat full-screen under `‹ Sessions`; its layout holds when the
+  keyboard comes and goes. A landscape screen goes by its width: under
   60 columns (phone) as above; 60 to 99, the list and the detail split at
   the middle, usage and the machine side by side; 100 and over, the list
-  with every column and the detail beside it.
+  with every column and the chat beside it, with usage and the machine
+  under the list.
 - **Rows:** each list row spans its pane, the selection wash too. Its
   columns are fixed tracks computed once per render from the pane's width
   (the word, the wait, the context, then the plan and the ship or the
@@ -494,7 +499,7 @@ Reduce Motion.
   typed `y` remove it, with its backup (the flash names it), as `matchblox
   devices rm` does. With no devices only the `+` row shows. In a console of
   another host, `DEVICES` has one row, `run matchblox pair on <host>`.
-- **The pair page** (design/0009): a layer over the console, as the peek is,
+- **The pair page** (design/0009): a layer over the console, as the forms are,
   and it takes the whole screen. It shows the front-on box (§3) with the QR
   code on its label, then `Scan with the matchblox app, or paste the link.`
   and the countdown in `muted`, then the key line `c copies the link · esc

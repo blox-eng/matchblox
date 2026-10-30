@@ -63,10 +63,11 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   done), then who works, then who is quiet. A match for each: `✦` burning
   while it works, `╿` at rest, `│` spent. Context use, the account, and when
   to compact or clear.
-- **Answer without leaving**: `a` opens the conversation with the selected
-  agent, in the right pane where there is one, else a peek at the bottom of
-  a phone. When it asks with its question tool, its options are there and a
-  digit answers; an agent at work takes a message.
+- **Steer without leaving**: the chat is the live screen of the selected
+  agent, on the right of Sessions, or full-screen on a phone. `Enter` or
+  `a` gives it the keys, and every key then goes to the agent. When it asks
+  with its question tool, a card shows its options and a digit answers.
+  `Ctrl+]` gives the keys back.
 - **Switch the agent, keep the seat**: `A` runs another agent in the same
   pane (Claude Code, Codex, OpenCode or Cursor) with the session's name,
   directory and pull request, on the account you last started that agent
@@ -121,13 +122,13 @@ More in [The console](https://docs.matchblox.com/console/).
 | Key | What it does |
 |---|---|
 | `↑` or `k`, `↓` or `j` | Selects a row. |
-| `Enter` | The safe action: go to the agent's pane. |
-| `a` | Answers the selected agent, or sends it a message. |
+| `Enter` | The safe action: give the chat of the selected agent the keys. |
+| `a` | Gives the chat the keys, as `Enter` does. |
 | `x` | The destructive action. It runs only after a typed `y`. |
 | `N` | Starts a new session: where, the agent, its account and a first message (none on a new account). |
 | `A` | Switches the selected session to another agent in the same pane. |
 | `1-7` | Opens a tab: Sessions, Ships, Machine, Git, History, Panes, Stoker. |
-| `u` | Cycles the dock of a phone: usage, the machine, the stoker. |
+| `u` | Cycles the dock of a narrow screen: usage, the machine, the stoker. |
 | `/` | Searches the open tab. |
 | `f`, `n` | The stoker on or off; a night that ends in the morning. |
 | `q` | Quits. The service keeps running. |
@@ -138,8 +139,8 @@ Every key: [Keys](https://docs.matchblox.com/keys/).
 
 Set the startup snippet of your SSH app (Termius, for example) to
 `matchblox`, or run `ssh -t ws-1 matchblox`. The console is the first
-screen. Tap a row twice to answer it or send it a message, `Enter` to go to
-its pane, `A switch` under it to give its seat to another agent; tap `◂ matchblox` in the tmux
+screen. Tap a row to open its chat, and type or tap an option to steer it;
+`‹ Sessions` goes back. `A switch` under it to give its seat to another agent; tap `◂ matchblox` in the tmux
 status line (with `set -g mouse on`) to come back, or press `prefix m`. See
 [The phone](https://docs.matchblox.com/phone/).
 
