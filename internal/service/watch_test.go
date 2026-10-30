@@ -513,3 +513,46 @@ func TestEnterSeenOnAnyOfManyHistoryScreensIsRefused(t *testing.T) {
 		t.Fatalf("enter on the live screen: %+v", res)
 	}
 }
+
+// Stamps taken in turn by a console up the history and one live never put
+// the live one inside the history's run.
+func TestALiveStampIsNeverInAHistoryRun(t *testing.T) {
+	var u upScreens
+	at := time.Unix(1000, 0)
+	still := func() time.Time { return at } // one clock reading for all: the stamps still rise
+	var lives, ups []time.Time
+	for range 5 {
+		ups = append(ups, u.stamp("%1", still, true))
+		lives = append(lives, u.stamp("%1", still, false))
+	}
+	ups = append(ups, u.stamp("%1", still, true), u.stamp("%1", still, true))
+	for _, l := range lives {
+		if u.has("%1", l) {
+			t.Fatalf("live stamp %v refused", l)
+		}
+	}
+	for _, h := range ups[len(ups)-2:] {
+		if !u.has("%1", h) {
+			t.Fatalf("history stamp %v not refused", h)
+		}
+	}
+}
+
+// Two consoles on one pane, one up the history: the live one's Enter goes.
+func TestTheLiveConsoleEnterGoesWhileAnotherIsUp(t *testing.T) {
+	s, f, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	ra := read(connectAs(t, ctx, s, proto.ClientConsole))
+	rb := read(connectAs(t, ctx, s, proto.ClientConsole))
+	rb.act(t, "w", proto.WatchPrefix+"%1")
+	for n := 1; n <= 10; n++ {
+		ra.actText(t, fmt.Sprint("a", n), proto.WatchPrefix+"%1", fmt.Sprint("up:", n))
+		f.set("%1", fmt.Sprintf("live %d\n", n))
+		rb.screenThat(t, func(sc proto.Screen) bool { return sc.Text == fmt.Sprintf("live %d\n", n) })
+		ra.screenThat(t, func(sc proto.Screen) bool { return sc.Up == n })
+	}
+	g := rb.got()
+	live := g[len(g)-1]
+	if res := s.act(ctx, proto.Act{Console: true, RecID: proto.KeysPrefix + "%1", Text: "Enter", PID: 100, Seen: live.At}); res.Err != "" || len(res.Ran) != 1 {
+		t.Fatalf("the live console's Enter: %+v", res)
+	}
+}

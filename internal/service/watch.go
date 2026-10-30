@@ -80,7 +80,8 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 			continue
 		}
 		pane := w.pane
-		scr := proto.Screen{Pane: pane, At: s.now()}
+		// Stamped before the capture: a wait that begins during it is newer.
+		scr := proto.Screen{Pane: pane, At: s.upScreens.stamp(pane, s.now, w.up > 0)}
 		var text string
 		_, live := s.sessionAt(pane)
 		switch {
@@ -97,7 +98,6 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 			continue
 		}
 		sent, last = true, scr
-		s.upScreens.sent(pane, scr.At, scr.Up > 0)
 		if cl.c.Send(proto.KindScreen, "", scr) != nil {
 			cl.c.Close()
 			return
@@ -125,26 +125,34 @@ func (s *Service) kickScreens(pane string) {
 	}
 }
 
-// upScreens are, for each pane, the screens of the history sent since the
-// last live screen before them: a span of times, so it never forgets one
-// and never grows.
+// upScreens are, for each pane, the latest run of screens of the history:
+// those taken after the last live screen before them. It is one span of
+// times, so it never grows; an older run is forgotten, and the queued
+// question's Since stays the backstop for an Enter seen on one.
 type upScreens struct {
 	mu sync.Mutex
 	at map[string]upSpan
 }
 
-// upSpan: the screens sent after from, up to to, were of the history; live
-// is the last live screen sent.
+// upSpan: the screens taken after from, up to to, were of the history;
+// live is the last live screen taken.
 type upSpan struct{ from, to, live time.Time }
 
-// sent notes a screen of pane sent at at: of the history when up.
-func (u *upScreens) sent(pane string, at time.Time, up bool) {
+// stamp is the time of a screen of pane taken now, of the history when up.
+// It is taken and noted under one lock, and the stamps of a pane rise, so a
+// live screen of one console is never inside another console's run of the
+// history.
+func (u *upScreens) stamp(pane string, now func() time.Time, up bool) time.Time {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if u.at == nil {
 		u.at = map[string]upSpan{}
 	}
 	sp := u.at[pane]
+	at := now()
+	if last := maxTime(sp.to, sp.live); !at.After(last) {
+		at = last.Add(time.Nanosecond)
+	}
 	switch {
 	case !up:
 		sp.live = at
@@ -154,9 +162,18 @@ func (u *upScreens) sent(pane string, at time.Time, up bool) {
 		sp.to = at
 	}
 	u.at[pane] = sp
+	return at
 }
 
-// has tells if the screen of pane taken at at was one of the history.
+func maxTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
+}
+
+// has tells if the screen of pane taken at at was one of the latest run of
+// the history.
 func (u *upScreens) has(pane string, at time.Time) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
