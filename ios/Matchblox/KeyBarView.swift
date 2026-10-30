@@ -2,15 +2,61 @@ import MatchbloxKit
 import SwiftTerm
 import UIKit
 
-/// The keys of `KeyBar` in one row under a hairline, in the console's tokens. The hit areas meet
+/// Nine keys in one row under a hairline, in the console's tokens. The hit areas meet
 /// edge to edge at the bar's full height; each key is drawn inset within its own. A key acts at
 /// touch-down, so the first tap always counts. One bar rides on the keyboard and one docks under
 /// the terminal while the keyboard is down, so each knows which way `⌨` goes.
 final class KeyBarView: UIInputView {
+    private struct Key: Sendable {
+        enum Action: Sendable, Equatable {
+            case send([UInt8])
+            /// Shows or hides the system keyboard.
+            case keyboard
+        }
+
+        let label: String
+        let action: Action
+        let accessibilityLabel: String
+        /// The width, in widths of a plain key.
+        let width: CGFloat
+        /// The height, in points.
+        let height: CGFloat
+
+        init(_ label: String, _ accessibilityLabel: String, width: CGFloat = 1, height: CGFloat = KeyBarView.minSide) {
+            self.init(label, .send(KeyBar.bytes(for: label)!), accessibilityLabel, width: width, height: height)
+        }
+
+        init(_ label: String, _ action: Action, _ accessibilityLabel: String, width: CGFloat = 1, height: CGFloat = KeyBarView.minSide) {
+            self.label = label
+            self.action = action
+            self.accessibilityLabel = accessibilityLabel
+            self.width = width
+            self.height = height
+        }
+    }
+
+    /// The smallest side of a key, in points: Apple's smallest tap target.
+    private static let minSide: CGFloat = 44
+    /// The arrows are the keys a thumb looks for most.
+    private static let arrowWidth: CGFloat = 1.5
+    private static let arrowHeight: CGFloat = 52
+
+    private static let keys: [Key] = [
+        Key("◂", "Back to matchblox"),
+        Key("↑", "Up", width: arrowWidth, height: arrowHeight),
+        Key("↓", "Down", width: arrowWidth, height: arrowHeight),
+        Key("⏎", "Return"),
+        Key("Tab", "Tab"),
+        Key("⇧Tab", "Shift Tab"),
+        Key("Esc", "Escape"),
+        Key("^C", "Interrupt"),
+        Key("⌨", .keyboard, "Keyboard"),
+    ]
+
     private static let inset: CGFloat = 2
     private static let radius: CGFloat = 6
     private static let hairline: CGFloat = 1
-    private static let rowHeight = KeyBar.height + 2 * inset
+    private static let rowHeight = arrowHeight + 2 * inset
     private static let glyphFont = UIFont.monospacedSystemFont(ofSize: 17, weight: .medium)
     private static let arrowFont = UIFont.monospacedSystemFont(ofSize: 22, weight: .medium)
     private static let nameFont = UIFont.monospacedSystemFont(ofSize: 12, weight: .medium)
@@ -38,7 +84,7 @@ final class KeyBarView: UIInputView {
         hair.translatesAutoresizingMaskIntoConstraints = false
         addSubview(hair)
 
-        let buttons = KeyBar.keys.map { button(for: $0) }
+        let buttons = Self.keys.map { button(for: $0) }
         let row = UIStackView(arrangedSubviews: buttons)
         row.axis = .horizontal
         row.translatesAutoresizingMaskIntoConstraints = false
@@ -60,10 +106,10 @@ final class KeyBarView: UIInputView {
         // Each key is a multiple of the first one's width, and that one keeps the floor where
         // the row has room. A view narrower than the keys (any iPhone upright) shrinks them.
         let unit = buttons[0]
-        let floor = unit.widthAnchor.constraint(greaterThanOrEqualToConstant: KeyBar.minSide)
+        let floor = unit.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.minSide)
         floor.priority = .init(999)
         floor.isActive = true
-        for (key, button) in zip(KeyBar.keys, buttons).dropFirst() {
+        for (key, button) in zip(Self.keys, buttons).dropFirst() {
             button.widthAnchor.constraint(equalTo: unit.widthAnchor, multiplier: key.width).isActive = true
         }
 
@@ -79,10 +125,10 @@ final class KeyBarView: UIInputView {
     @objc private func keyboardChanged(_ note: Notification) {
         guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
         let onScreen = end.minY < (window?.windowScene?.screen.bounds.height ?? .greatestFiniteMagnitude)
-        lit = onScreen && end.height - max(bounds.height, Self.hairline + Self.rowHeight) > KeyBar.minSide
+        lit = onScreen && end.height - max(bounds.height, Self.hairline + Self.rowHeight) > Self.minSide
     }
 
-    private func button(for key: KeyBar.Key) -> UIButton {
+    private func button(for key: Key) -> UIButton {
         let vertical = (Self.rowHeight - key.height) / 2
         var config = UIButton.Configuration.plain()
         config.title = key.label
@@ -123,7 +169,7 @@ final class KeyBarView: UIInputView {
         button.titleLabel?.minimumScaleFactor = 0.5
     }
 
-    private func press(_ key: KeyBar.Key) {
+    private func press(_ key: Key) {
         haptic.impactOccurred()
         haptic.prepare()
         switch key.action {
