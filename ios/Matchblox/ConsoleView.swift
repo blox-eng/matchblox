@@ -123,6 +123,10 @@ private struct TerminalRepresentable: UIViewRepresentable {
         terminal.inlinePredictionType = .no
         terminal.inputAccessoryView = KeyBarView(terminal: terminal)
         terminal.contentInsetAdjustmentBehavior = .never
+        // A swipe down lowers the keyboard. tmux fills the screen exactly, so the terminal must
+        // bounce for the swipe to start.
+        terminal.keyboardDismissMode = .interactive
+        terminal.alwaysBounceVertical = true
         terminal.terminalDelegate = connection
         connection.terminal = terminal
 

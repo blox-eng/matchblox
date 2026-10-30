@@ -14,6 +14,7 @@ final class KeyBarView: UIInputView {
         self.terminal = terminal
         super.init(frame: CGRect(x: 0, y: 0, width: 0, height: KeyBar.minSide + 2 * Self.gap), inputViewStyle: .keyboard)
         allowsSelfSizing = true
+        haptic.prepare()
 
         let row = UIStackView(arrangedSubviews: KeyBar.keys.map { button(for: $0) })
         row.axis = .horizontal
@@ -21,9 +22,12 @@ final class KeyBarView: UIInputView {
         row.spacing = Self.gap
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
+        // Below required, so the docked bar can collapse when its stack view hides it.
+        let bottom = row.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -Self.gap)
+        bottom.priority = .init(999)
         NSLayoutConstraint.activate([
             row.topAnchor.constraint(equalTo: topAnchor, constant: Self.gap),
-            row.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -Self.gap),
+            bottom,
             row.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor, constant: Self.gap),
             row.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -Self.gap),
         ])
@@ -41,15 +45,19 @@ final class KeyBarView: UIInputView {
         button.layer.cornerRadius = 6
         button.accessibilityLabel = key.accessibilityLabel
         button.addAction(UIAction { [weak self] _ in self?.press(key) }, for: .touchDown)
+        // A view narrower than seven keys (Slide Over, 320 pt) shrinks them instead.
+        let width = button.widthAnchor.constraint(greaterThanOrEqualToConstant: KeyBar.minSide)
+        width.priority = .init(999)
         NSLayoutConstraint.activate([
             button.heightAnchor.constraint(equalToConstant: KeyBar.minSide),
-            button.widthAnchor.constraint(greaterThanOrEqualToConstant: KeyBar.minSide),
+            width,
         ])
         return button
     }
 
     private func press(_ key: KeyBar.Key) {
         haptic.impactOccurred()
+        haptic.prepare()
         terminal?.send(key.bytes)
     }
 }
