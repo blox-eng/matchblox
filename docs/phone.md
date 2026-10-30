@@ -278,7 +278,8 @@ and `Esc`. See [Keys](keys.md).
 
 ## List only
 
-On a phone held upright, the console starts in list only. The detail pane
+On a tall screen, such as a phone held upright, the console starts in list
+only. The detail pane
 and the dock fold, and the list takes the screen. The key line says
 `full view v`, and `list only` stays at its right edge. The selected row
 opens in place under itself. `a` opens the answer box over the list.

@@ -82,7 +82,8 @@ stop the others.
 - `Enter` on that row runs the connect.
 - A host that connects and sends no state in 3 seconds is one row too:
   `ws-1  does not answer  run ssh ws-1 matchblox status to see why`.
-  The row goes when the host sends its first state.
+  `Enter` on it shows that command again: the console cannot fix the
+  service. The row goes when the host sends its first state.
 - The other hosts keep going.
 
 ### Acts go to the row's host
@@ -118,7 +119,7 @@ stop the others.
   runs: `stoker 2/3`.
 - A key on a row asks about the stoker of that row's host.
 - `y` rests that stoker only.
-- `f` starts the stoker of the selected row's host.
+- `f` starts, wakes or turns off the stoker of the selected row's host.
 - The Stoker tab shows the section of another host for reading only.
 - The dock claims the stoker of the home host.
 
