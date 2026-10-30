@@ -329,6 +329,7 @@ type Model struct {
 	dark       bool
 	logos      bool   // USAGE draws the providers' logos
 	gfxKey     string // the viewers and background the logos went to
+	viewers    string // the viewers the agent signal went to
 	gfxBusy    bool   // a question about who shows the console waits
 	gfxAsks    int    // questions asked, for the tests
 	splashAt   time.Time

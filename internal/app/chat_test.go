@@ -1876,3 +1876,29 @@ func TestBackToHostsWithTheChatOpenSendsNoAgent(t *testing.T) {
 		t.Fatalf("back wrote %q, want %q (layer %v)", got, want, next.(Shell).layer)
 	}
 }
+
+// TestANewViewerGetsTheAgentAgain: the phone attaches to a console whose
+// chat is open already (after a reconnect, or beside the desktop). It
+// starts with no agent, so the console sends the chat's agent again to the
+// new set of viewers, and once only.
+func TestANewViewerGetsTheAgentAgain(t *testing.T) {
+	m, _ := agentRaws(t, agentChat(t, "claude", "codex"), "enter")
+	next, cmd := m.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: "/dev/ttys002:100@here"})
+	want := logos.Passthrough(keycmd.AgentSignal("claude"))
+	if got := raws(cmd); !slices.Equal(got, []string{want}) {
+		t.Fatalf("the first viewers got %q, want %q", got, want)
+	}
+	m = next.(Model)
+	if _, cmd = m.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: "/dev/ttys002:100@here"}); len(raws(cmd)) != 0 {
+		t.Fatalf("the same viewers got %q again", raws(cmd))
+	}
+	phone := "/dev/ttys002:100@here,/dev/ttys005:105@here"
+	next, cmd = m.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: phone})
+	if got := raws(cmd); !slices.Equal(got, []string{want}) {
+		t.Fatalf("a phone that attached got %q, want %q", got, want)
+	}
+	m, _ = agentRaws(t, next.(Model), "ctrl+]")
+	if _, cmd = m.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: "/dev/ttys005:205@here"}); len(raws(cmd)) != 0 {
+		t.Fatalf("a viewer of a closed chat got %q", raws(cmd))
+	}
+}
