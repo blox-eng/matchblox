@@ -266,6 +266,20 @@ func TestUntickEndsTheBatchOfItsHost(t *testing.T) {
 	}
 }
 
+// TestPeerSilentAfterReconnectShowsItsRow: a peer that dials again but
+// sends no state says it does not answer, as on its first dial.
+func TestPeerSilentAfterReconnectShowsItsRow(t *testing.T) {
+	y := newFake()
+	m, _, x := peered(func() (transport.Conn, error) { return y, nil })
+	m = upd(t, m, peerMsg{host: "ws-1", conn: x, msg: stateMsg(hostState(sess(2, "tl", "%2", nil)))})
+	m = upd(t, m, peerMsg{host: "ws-1", conn: x, msg: lostMsg{err: io.EOF, conn: x}})
+	m = redialTo(t, m)
+	m = upd(t, m, peerMsg{host: "ws-1", conn: y, msg: silentMsg{y}, id: m.peers[0].id})
+	if hs := m.blockedHosts(); len(hs) != 1 || !hs[0].silent {
+		t.Fatalf("blocked rows %+v: the silent peer has no row", hs)
+	}
+}
+
 // TestBlockedPeerIgnoresALateLoss: a send that fails after its peer was
 // blocked dials nothing: the row waits for the builder.
 func TestBlockedPeerIgnoresALateLoss(t *testing.T) {
@@ -274,5 +288,16 @@ func TestBlockedPeerIgnoresALateLoss(t *testing.T) {
 	next, cmd := m.Update(peerMsg{host: "ws-1", conn: ws, msg: lostMsg{err: io.ErrClosedPipe, conn: ws}})
 	if p := next.(Model).peers[0]; p.redialing || cmd != nil || !errors.Is(p.blocked, remote.ErrNotInstalled) {
 		t.Fatalf("redialing %v, cmd %v, blocked %v: a late loss dialed a blocked peer", p.redialing, cmd != nil, p.blocked)
+	}
+}
+
+// TestLostPeerWaitingToDialIsNotSilent: the silence tick of the conn just
+// lost makes no row while the peer waits to dial again.
+func TestLostPeerWaitingToDialIsNotSilent(t *testing.T) {
+	m, _, x := peered(func() (transport.Conn, error) { return newFake(), nil })
+	m = upd(t, m, peerMsg{host: "ws-1", conn: x, msg: lostMsg{err: io.EOF, conn: x}})
+	m = upd(t, m, peerMsg{host: "ws-1", conn: x, msg: silentMsg{x}, id: m.peers[0].id})
+	if hs := m.blockedHosts(); len(hs) != 0 {
+		t.Fatalf("blocked rows %+v: a peer that redials says it does not answer", hs)
 	}
 }

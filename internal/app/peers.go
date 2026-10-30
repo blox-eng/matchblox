@@ -233,7 +233,7 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 	switch msg := pm.msg.(type) {
 	case silentMsg:
 		// Its own read runs: this tick starts none.
-		p.silent = pm.id == p.id && !p.answered && !p.lost && !p.mismatch
+		p.silent = pm.id == p.id && !p.answered && !p.redialing && !p.mismatch && p.blocked == nil
 		return m, nil
 	case helloMsg:
 		p.hello = proto.Hello(msg)
