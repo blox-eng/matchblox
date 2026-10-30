@@ -178,12 +178,29 @@ private signal the home key uses (`ESC _ matchblox … ESC \`):
   `ESC _ matchblox;agent=<id> ESC \`, where `<id>` is `claude`, `codex`,
   `opencode`, `cursor` or empty. The app reads it from the terminal stream,
   switches Commands, and does not draw it.
+  Changed (2026-10-30): `<id>` can also be `other`. The console sends
+  `other` when the chat shows an agent with no commands. The app then shows
+  `◂ ↑ ↓ ⏎` on Commands and no agent mark, and its command keys stay live.
+  A command key sends, and the console says why the command does not run.
+  Changed (2026-10-30): when a new terminal shows the console (the phone
+  connects again, or comes back from a jumped pane), the console sends the
+  chat's agent again. This occurs within one graphics tick (2 s).
 - **App → console.** A command key sends `ESC _ matchblox;cmd=<name> ESC \`.
   The console runs it on the session on screen, behind the chat's guards
   (#261: right agent, seen screen, console only):
   - `compact` and `clear` run matchblox's own guarded actions (`compact:<pane>`
     and its clear), which wait until the agent rests;
   - any other command types its text and Enter through the `keys:` act;
+    Changed (2026-10-30): any other command goes through the `cmd:<pane>`
+    act, not the `keys:` act. The act holds the command id and the PID of
+    the agent that the chat shows. The service refuses the command if the
+    PID is not the agent in the pane, or if the agent is not the command's
+    agent. It types the text and Enter only while the agent rests, with no
+    question, no permission prompt and no draft on the prompt. Before the
+    Enter, the prompt must show the command. Where matchblox cannot read the
+    prompt (OpenCode, Cursor), it does not check the draft. The key line
+    shows each refusal. `compact:` and `clear:` from the chat also hold the
+    PID;
   - a command the session's agent does not have sends nothing, and the key line
     says `/<name> is <Agent>'s: <session> runs <other agent>`.
 - The per-agent command list lives in the console (the host), one table, with
