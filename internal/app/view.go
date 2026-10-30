@@ -237,7 +237,7 @@ func (m Model) drawScreen(w int) drawn {
 		vis, sc.full = m.leftColumn(b, listW, room)
 	}
 	edge := m.st.hair
-	if chatting && m.chatKeys && m.up == 0 {
+	if chatting && m.chatKeys && !m.notLive() {
 		edge = m.st.accent
 	}
 	for i := range room {

@@ -47,7 +47,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	ci, dx := ms.Y-sc.cardAt, ms.X-sc.cardX
 	onCard := ci >= 0 && ci < len(sc.cardRows) && dx >= 0 && dx < sc.cardW
-	if m.up > 0 && m.chatKeys {
+	if m.notLive() && m.chatKeys {
 		switch {
 		case onCard:
 			return m.backToLive(), nil

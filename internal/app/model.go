@@ -290,6 +290,7 @@ type Model struct {
 	watchHeld  string            // the pane the service refused, until the next snapshot
 	up         int               // the lines up the chat shows of the agent's history; 0 is live
 	watchUp    int               // the lines up the service sends
+	liveWait   bool              // the chat came back from the history, and waits for the live screen
 	askCard    card              // the question card's answer, in the chat
 	cardSeen   cardSeen          // the card's quiet: the ask it is for and its start
 	cardSent   map[string]string // the card's sends in flight: act id -> the session's name
@@ -590,6 +591,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screenMsg:
 		if msg.Pane == m.watching && (msg.Up == 0 || m.watchUp > 0) { // the history after live is not live
 			m.screen = proto.Screen(msg)
+			m.liveWait = m.liveWait && msg.Up > 0
 		}
 		return m, m.recv()
 	case helloMsg:
@@ -728,7 +730,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A pane that went before the watch came is a race, not the builder's error.
 			if pane != "" && pane == m.watching {
 				m.watchHeld, m.watching, m.screen = pane, "", proto.Screen{}
-				m.up, m.watchUp = 0, 0
+				m.up, m.watchUp, m.liveWait = 0, 0, false
 			}
 			return m, m.recv()
 		}
@@ -873,7 +875,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.formPaste(msg.Content)
 		case f == layerMain && m.chatKeys:
 			m, touch := m.touchRest()
-			if m.up > 0 {
+			if m.notLive() {
 				return m.backToLive(), touch
 			}
 			next, cmd := m.chatPaste(msg.Content)
@@ -901,7 +903,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m, touch = m.touchRest()
 		}
 		f := m.focus(msg)
-		if m.up > 0 && m.chatKeys && (f == layerMain || f == layerTakeOver) {
+		if m.notLive() && m.chatKeys && (f == layerMain || f == layerTakeOver) {
 			return m.backToLive(), touch
 		}
 		// ctrl+c quits from every layer but a question, where any key but

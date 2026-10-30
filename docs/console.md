@@ -329,10 +329,12 @@ So an `Enter` never answers a question you have not read.
 The mouse wheel over the chat, or a swipe on a phone, shows the earlier
 lines of the agent's pane, 3 lines for each step, up to 2000 lines. The
 wheel down goes back toward the live screen. While the chat shows the
-history, its title adds `↑ <n> lines up` and its frame is dim. The first
+history, its title adds `↑ <n> lines up`, its frame is dim and the key
+line says `a key goes back to live`. The first
 key then goes back to the live screen and goes to no agent: a key, a paste
 or a key of the card. The key line says `back to live — the agent did not
-get that key`. A tap on the title also goes back to the live screen, and so
+get that key`. The chat is blank until the live screen comes, and keys go
+nowhere until then. A tap on the title also goes back to the live screen, and so
 does a change of the selected session or a click on the list. The service
 refuses an `Enter` that answers a screen of the history.
 

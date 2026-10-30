@@ -487,3 +487,29 @@ func TestEnterSeenOnTheHistoryIsRefused(t *testing.T) {
 		t.Fatalf("enter on the live screen: %+v", res)
 	}
 }
+
+// Every screen of the history since the last live one stays refused, however
+// many came, and the live screen after them is not.
+func TestEnterSeenOnAnyOfManyHistoryScreensIsRefused(t *testing.T) {
+	s, _, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	c := connectAs(t, ctx, s, proto.ClientConsole)
+	r := read(c)
+	var ups []proto.Screen
+	for n := 1; n <= 40; n++ {
+		r.actText(t, fmt.Sprint("w", n), proto.WatchPrefix+"%1", fmt.Sprint("up:", n))
+		ups = append(ups, r.screenThat(t, func(sc proto.Screen) bool { return sc.Up == n }))
+	}
+	enter := func(seen time.Time) proto.Result {
+		return s.act(ctx, proto.Act{Console: true, RecID: proto.KeysPrefix + "%1", Text: "Enter", PID: 100, Seen: seen})
+	}
+	for _, sc := range []proto.Screen{ups[0], ups[20], ups[39]} {
+		if res := enter(sc.At); res.Err == "" {
+			t.Fatalf("enter on the history screen up %d went", sc.Up)
+		}
+	}
+	r.actText(t, "live", proto.WatchPrefix+"%1", "up:0")
+	live := r.screenThat(t, func(sc proto.Screen) bool { return sc.Up == 0 && sc.At.After(ups[39].At) })
+	if res := enter(live.At); res.Err != "" || len(res.Ran) != 1 {
+		t.Fatalf("enter on the live screen: %+v", res)
+	}
+}

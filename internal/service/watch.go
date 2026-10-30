@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -98,9 +97,7 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 			continue
 		}
 		sent, last = true, scr
-		if scr.Up > 0 {
-			s.upScreens.add(pane, scr.At)
-		}
+		s.upScreens.sent(pane, scr.At, scr.Up > 0)
 		if cl.c.Send(proto.KindScreen, "", scr) != nil {
 			cl.c.Close()
 			return
@@ -128,29 +125,41 @@ func (s *Service) kickScreens(pane string) {
 	}
 }
 
-// keptUp is how many screens of the history upScreens keeps for each pane:
-// a console's Enter answers the last screen it got.
-const keptUp = 32
-
-// upScreens are the times of the screens of the history sent, by pane.
+// upScreens are, for each pane, the screens of the history sent since the
+// last live screen before them: a span of times, so it never forgets one
+// and never grows.
 type upScreens struct {
 	mu sync.Mutex
-	at map[string][]time.Time
+	at map[string]upSpan
 }
 
-func (u *upScreens) add(pane string, at time.Time) {
+// upSpan: the screens sent after from, up to to, were of the history; live
+// is the last live screen sent.
+type upSpan struct{ from, to, live time.Time }
+
+// sent notes a screen of pane sent at at: of the history when up.
+func (u *upScreens) sent(pane string, at time.Time, up bool) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if u.at == nil {
-		u.at = map[string][]time.Time{}
+		u.at = map[string]upSpan{}
 	}
-	kept := append(u.at[pane], at)
-	u.at[pane] = kept[max(len(kept)-keptUp, 0):]
+	sp := u.at[pane]
+	switch {
+	case !up:
+		sp.live = at
+	case sp.to.IsZero() || sp.live.After(sp.to): // the first of a new run
+		sp.from, sp.to = sp.live, at
+	default:
+		sp.to = at
+	}
+	u.at[pane] = sp
 }
 
 // has tells if the screen of pane taken at at was one of the history.
 func (u *upScreens) has(pane string, at time.Time) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	return slices.ContainsFunc(u.at[pane], at.Equal)
+	sp, ok := u.at[pane]
+	return ok && !sp.to.IsZero() && at.After(sp.from) && !at.After(sp.to)
 }

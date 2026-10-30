@@ -28,4 +28,4 @@ Should a refresh also rotate the token?
 │   4 Type an answer…                      │
 ╰─ ⏎ question 2 ───────────────────────────╯
 ────────────────────────────────────────────
- keys go to flint-auth · ctrl+] back · ctrl…
+ a key goes back to live

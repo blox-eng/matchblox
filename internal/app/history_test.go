@@ -3,6 +3,7 @@ package app
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -71,6 +72,15 @@ func wheelChat(t *testing.T, m Model, up bool, n int) Model {
 	return m
 }
 
+// historyCame is m with a screen of the history up lines up.
+func historyCame(t *testing.T, m Model, up int) Model {
+	t.Helper()
+	s, _ := m.selectedSession()
+	next, cmd := m.Update(screenMsg{Pane: s.Pane, At: demoAt.Add(time.Duration(up) * time.Second), Text: "history", Up: up})
+	drain(cmd)
+	return next.(Model)
+}
+
 // lastWatch is the text of the last watch act sent.
 func lastWatch(t *testing.T, f *fakeConn) proto.Act {
 	t.Helper()
@@ -108,6 +118,14 @@ func TestAChatUpSaysSoInADimFrame(t *testing.T) {
 	m, _ := deskChat(t)
 	m = wheelChat(t, m, true, 2)
 	sc := m.draw(m.width)
+	if title := ansi.Strip(sc.lines[sc.bodyTop]); strings.Contains(title, "lines up") {
+		t.Fatalf("title %q before the history came", title)
+	}
+	if ink := chatEdgeInk(t, m); ink != "hair" {
+		t.Fatalf("a chat that waits for the history has its edge in %q", ink)
+	}
+	m = historyCame(t, m, 6)
+	sc = m.draw(m.width)
 	if title := ansi.Strip(sc.lines[sc.bodyTop]); !strings.Contains(title, "↑ 6 lines up") {
 		t.Fatalf("title %q", title)
 	}
@@ -117,11 +135,38 @@ func TestAChatUpSaysSoInADimFrame(t *testing.T) {
 	if ink := chatEdgeInk(t, m); ink != "hair" {
 		t.Fatalf("a chat up the history has its edge in %q", ink)
 	}
+	if keys := ansi.Strip(sc.lines[sc.keysAt]); !strings.Contains(keys, "a key goes back to live") || strings.Contains(keys, "keys go to") {
+		t.Fatalf("key line %q", keys)
+	}
+}
+
+// Back from the history, the chat is blank until the live screen comes,
+// and a key until then goes nowhere: it would answer a screen not shown.
+func TestBackToLiveWaitsForTheLiveScreen(t *testing.T) {
+	m, f := deskChat(t)
+	s, _ := m.selectedSession()
+	m = historyCame(t, wheelChat(t, m, true, 1), 3)
+	m = pressKeys(t, m, "x")
+	if m.screen.Text != "" || !m.notLive() {
+		t.Fatalf("screen %+v after going back to live:\n%s", m.screen, screen(m))
+	}
+	n := len(f.acts())
+	m = pressKeys(t, m, "enter")
+	if got := f.acts()[n:]; len(got) != 0 || m.keyInFlight != "" {
+		t.Fatalf("an Enter before the live screen sent %+v", got)
+	}
+	next, cmd := m.Update(screenMsg{Pane: s.Pane, At: demoAt.Add(time.Minute), Text: askScreen})
+	drain(cmd)
+	m = pressKeys(t, next.(Model), "enter")
+	got := f.acts()[n:]
+	if len(got) != 1 || got[0].Text != "Enter" || !got[0].Seen.Equal(demoAt.Add(time.Minute)) {
+		t.Fatalf("an Enter on the live screen sent %+v", got)
+	}
 }
 
 func TestAPhoneChatUpSaysSo(t *testing.T) {
 	m := pressKeys(t, demoSized(t, 44, 31), "enter")
-	m = wheelAt(t, m, true, 10, 10)
+	m = historyCame(t, wheelAt(t, m, true, 10, 10), 3)
 	if title := ansi.Strip(m.draw(44).lines[0]); !strings.Contains(title, "↑ 3 lines up") {
 		t.Fatalf("title %q", title)
 	}

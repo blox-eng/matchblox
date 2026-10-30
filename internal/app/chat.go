@@ -86,8 +86,11 @@ func (m *Model) watchCmd() tea.Cmd {
 	if m.watchHeld != "" && want == m.watchHeld {
 		want = m.watching
 	}
-	if want != m.watching {
-		m.up, m.screen = 0, proto.Screen{} // another pane opens live
+	switch {
+	case want != m.watching:
+		m.up, m.screen, m.liveWait = 0, proto.Screen{}, false // another pane opens live
+	case m.up == 0 && m.watchUp > 0:
+		m.screen, m.liveWait = proto.Screen{}, true // the history goes; blank until the live screen comes
 	}
 	if want == m.watching && m.up == m.watchUp {
 		return nil
@@ -155,14 +158,19 @@ func (m Model) upNote() string {
 // chatStep is how many lines one turn of the wheel scrolls the chat.
 const chatStep = 3
 
-// upShown is how many lines up the chat shows: as asked, or as far as the
-// history went.
+// upShown is how many lines up the screen the chat shows is: as far as
+// the history went.
 func (m Model) upShown() int {
-	if m.screen.Up > 0 {
-		return min(m.up, m.screen.Up)
+	if m.up == 0 {
+		return 0
 	}
-	return m.up
+	return m.screen.Up
 }
+
+// notLive tells if the chat does not show the agent's live screen: it is
+// up the history, or waits for the live screen after it. A key then goes
+// nowhere.
+func (m Model) notLive() bool { return m.up > 0 || m.screen.Up > 0 || m.liveWait }
 
 // scrollChat turns the wheel over the chat: up shows earlier lines of the
 // agent's pane, down goes back toward live. The chat takes the keys: it
@@ -176,7 +184,11 @@ func (m Model) scrollChat(up bool) Model {
 	if up {
 		m.up = min(m.up+chatStep, proto.MaxUp)
 	} else {
-		m.up = max(m.upShown()-chatStep, 0)
+		from := m.up
+		if m.screen.Up > 0 {
+			from = min(from, m.screen.Up) // the history stopped short
+		}
+		m.up = max(from-chatStep, 0)
 	}
 	return m
 }
@@ -194,7 +206,7 @@ func (m Model) backToLive() Model {
 func (m Model) chatPane(s sample.Session, w, h int) []string {
 	ink := m.st.label
 	switch {
-	case m.up > 0:
+	case m.notLive():
 		ink = m.st.muted
 	case m.chatKeys:
 		ink = m.st.accent
@@ -274,7 +286,7 @@ func (m Model) chatScreen(w int) drawn {
 	st := m.st
 	s, _ := m.selectedSession()
 	ink := st.accent
-	if m.up > 0 {
+	if m.notLive() {
 		ink = st.muted
 	}
 	title := " " + st.accent.Render("‹ Sessions") + st.muted.Render(" · ")
@@ -664,10 +676,14 @@ func (m Model) keepChat(was Model) Model {
 }
 
 // chatKeyLine is the key line while the chat has the keys: whose agent
-// they go to, and the way back and the way into tmux.
+// they go to, and the way back and the way into tmux; or, up the history,
+// that a key goes back to live.
 func (m Model) chatKeyLine(w int) (string, []span) {
 	st := m.st
 	s, _ := m.selectedSession()
+	if m.notLive() { // ctrl+] and ctrl+o too only go back to live
+		return fit(" "+st.text.Render("a key goes back to live"), w), nil
+	}
 	lead := "keys go to " + s.Name + " · "
 	line, x := " "+st.text.Render(lead), 1+lipgloss.Width(lead)
 	var spans []span
