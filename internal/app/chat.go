@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strconv"
@@ -204,12 +205,16 @@ func (m Model) markCard(sc *drawn, bottom, x, w, h int) {
 const homeKey = "\x1b_matchblox\x1b\\"
 
 // chatKey is one key the chat sends to an agent: the pane and the agent it
-// was pressed for, and when the screen it answers was taken.
+// was pressed for, and when the screen it answers was taken. A card's
+// answer waits among the keys as pick, the said.Answer for the session
+// named name.
 type chatKey struct {
 	pane string
 	pid  int
 	text string
 	seen time.Time
+	pick string
+	name string
 }
 
 // maxLit is the most text one "lit:" key carries; the service takes no more.
@@ -464,15 +469,27 @@ func (m *Model) queueKey(k chatKey) {
 }
 
 // sendKey sends the first key that waits when none is in flight: one at a
-// time, so they reach the agent in the order they were pressed.
+// time, so they reach the agent in the order they were pressed. A card's
+// answer goes as its pick: act.
 func (m *Model) sendKey() tea.Cmd {
 	if m.keyInFlight != "" || len(m.keyQ) == 0 || m.conn == nil || m.lost {
 		return nil
 	}
 	k := m.keyQ[0]
 	m.keyQ = m.keyQ[1:]
-	cmd := m.send(proto.Act{RecID: proto.KeysPrefix + k.pane, Text: k.text, PID: k.pid, Seen: k.seen})
+	act := proto.Act{RecID: proto.KeysPrefix + k.pane, Text: k.text, PID: k.pid, Seen: k.seen}
+	if k.pick != "" {
+		act = proto.Act{RecID: "pick:" + k.pane, Which: "secondary", Confirm: "y", Text: k.pick}
+	}
+	cmd := m.send(act)
 	m.keyInFlight = "a" + strconv.Itoa(m.acts)
+	if k.pick != "" {
+		m.cardSent = maps.Clone(m.cardSent)
+		if m.cardSent == nil {
+			m.cardSent = map[string]string{}
+		}
+		m.cardSent[m.keyInFlight] = k.name
+	}
 	if k.text == ctrlCName {
 		m.ctrlC = ctrlCMark{pane: k.pane, pid: k.pid, at: m.now()}
 	}
@@ -484,6 +501,9 @@ func (m *Model) sendKey() tea.Cmd {
 // pressed for a screen that is no longer there.
 func (m Model) keyAnswered(r proto.Result) (tea.Model, tea.Cmd) {
 	m.keyInFlight = ""
+	if name, ok := m.cardSent[r.ActID]; ok {
+		return m.cardAnswered(name, r)
+	}
 	if r.Err != "" {
 		m.keyQ, m.flash = nil, r.Err
 		return m, m.recv()

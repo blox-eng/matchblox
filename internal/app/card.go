@@ -228,28 +228,41 @@ func (m Model) cardChoose(s sample.Session, c card, ch said.Choice) (tea.Model, 
 		m.flash = err.Error()
 		return m, nil
 	}
-	return m.sendCard(s, "pick:"+s.Pane, string(b))
+	return m.sendCard(s, string(b))
 }
 
-// sendCard sends the card's answer. The card starts over with nothing
-// picked: a second ⏎ does not answer twice. The toast says "sent to" only
-// when the result says every key went; a guard that stopped it says why
-// on the key line.
-func (m Model) sendCard(s sample.Session, rec, text string) (tea.Model, tea.Cmd) {
+// sendCard sends the card's answer, in its turn among the chat's keys. The
+// card starts over with nothing picked: a second ⏎ does not answer twice.
+func (m Model) sendCard(s sample.Session, answer string) (tea.Model, tea.Cmd) {
 	if m.conn == nil || m.lost {
 		m.flash = "not sent, no connection: the answer to " + s.Name
 		return m, nil
 	}
 	m.askCard = card{askID: s.Ask.ID, at: -1}
-	cmd := m.send(proto.Act{RecID: rec, Which: "secondary", Confirm: "y", Text: text})
-	m.cardSent = maps.Clone(m.cardSent)
-	if m.cardSent == nil {
-		m.cardSent = map[string]string{}
-	}
-	m.cardSent["a"+strconv.Itoa(m.acts)] = s.Name
+	m.queueKey(chatKey{pane: s.Pane, pid: s.PID, pick: answer, name: s.Name})
+	cmd := m.sendKey()
 	toast := m.say("sending to " + s.Name + "…")
-	m = m.pairActed(action{rec: rec})
+	m = m.pairActed(action{rec: "pick:" + s.Pane})
 	return m, tea.Batch(cmd, toast)
+}
+
+// cardAnswered is the service's answer to the card's: the toast says "sent
+// to" only when every key went; a guard that stopped it says why on the key
+// line, and the keys behind it drop, as behind a refused key.
+func (m Model) cardAnswered(name string, r proto.Result) (tea.Model, tea.Cmd) {
+	m.cardSent = maps.Clone(m.cardSent)
+	delete(m.cardSent, r.ActID)
+	why := r.Err
+	if n := len(r.Skipped); n > 0 && why == "" {
+		why = r.Skipped[n-1]
+	}
+	if why != "" {
+		m.keyQ, m.toast, m.flash = nil, "", tilde("not sent to "+name+": "+why)
+		return m, m.recv()
+	}
+	toast := m.say("sent to " + name)
+	cmd := m.sendKey()
+	return m, tea.Batch(m.recv(), toast, cmd)
 }
 
 // cardLines is the card in at most w columns, or nothing when no question

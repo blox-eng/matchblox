@@ -994,6 +994,38 @@ func TestAPhoneChatIsQuietAtAPermissionPrompt(t *testing.T) {
 	}
 }
 
+// A card's answer and the keys around it go one at a time, in the order
+// they were pressed: no key passes an answer in flight, and no answer a key.
+func TestTheCardsAnswerKeepsItsPlaceAmongTheKeys(t *testing.T) {
+	m, f := askModel(t, 100, threeWays)
+	m = pressKeys(t, m, "1", "esc")
+	if len(pickActs(f)) != 1 || len(keyActs(f)) != 0 {
+		t.Fatalf("esc behind the answer: picks %+v keys %+v", pickActs(f), keyActs(f))
+	}
+	m = answered(t, m, "")
+	if got := keyActs(f); len(got) != 1 || got[0].Text != "Escape" {
+		t.Fatalf("esc after the answer: %+v", f.acts())
+	}
+	if m.toast != "sent to a" {
+		t.Fatalf("toast %q", m.toast)
+	}
+
+	m, f = askModel(t, 100, threeWays)
+	m = pressKeys(t, m, "tab", "2")
+	if len(keyActs(f)) != 1 || len(pickActs(f)) != 0 {
+		t.Fatalf("the answer behind tab: keys %+v picks %+v", keyActs(f), pickActs(f))
+	}
+	m = answered(t, m, "")
+	if got := pickActs(f); len(got) != 1 || got[0].Text != `{"id":"toolu_1","choices":[{"picks":[2]}]}` {
+		t.Fatalf("the answer after tab: %+v", f.acts())
+	}
+	m = pressKeys(t, m, "esc")
+	answered(t, m, "the session in %1 no longer waits on that question")
+	if len(keyActs(f)) != 1 {
+		t.Fatalf("esc went after a refused answer: %+v", keyActs(f))
+	}
+}
+
 // Esc, Tab, Shift+Tab and ^C go to the agent over a card: Claude Code
 // needs them to leave its question.
 func TestTheCardLeavesTheAgentItsOwnKeys(t *testing.T) {
@@ -1153,6 +1185,7 @@ func TestTheCardIsQuietAtFirst(t *testing.T) {
 	if len(pickActs(f)) != 1 {
 		t.Fatalf("after the quiet: picks %+v flash %q", pickActs(f), m.flash)
 	}
+	m = answered(t, m, "")
 
 	// The agent asks again, with a new call: its card starts over, quiet.
 	next, _ := m.Update(stateMsg(cardState("toolu_2", threeWays)))

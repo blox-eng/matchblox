@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -757,20 +756,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return mm, tea.Batch(mm.recv(), toast)
 			}
 			return mm, mm.recv()
-		}
-		if r := proto.Result(msg); m.cardSent[r.ActID] != "" {
-			name := m.cardSent[r.ActID]
-			m.cardSent = maps.Clone(m.cardSent)
-			delete(m.cardSent, r.ActID)
-			why := r.Err
-			if n := len(r.Skipped); n > 0 && why == "" {
-				why = r.Skipped[n-1]
-			}
-			if why != "" {
-				m.toast, m.flash = "", tilde("not sent to "+name+": "+why)
-				return m, m.recv()
-			}
-			return m, tea.Batch(m.recv(), m.say("sent to "+name))
 		}
 		if r := proto.Result(msg); r.ActID != "" && r.ActID == m.jumpAfter.act {
 			return m.switched(r)
