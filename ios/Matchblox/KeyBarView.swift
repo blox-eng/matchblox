@@ -83,7 +83,7 @@ final class KeyBarView: UIInputView {
     }
 
     private func button(for key: KeyBar.Key) -> UIButton {
-        let vertical = (Self.rowHeight - key.height) / 2 + Self.inset
+        let vertical = (Self.rowHeight - key.height) / 2
         var config = UIButton.Configuration.plain()
         config.title = key.label
         config.titleLineBreakMode = .byClipping
@@ -104,7 +104,9 @@ final class KeyBarView: UIInputView {
         button.configurationUpdateHandler = { [weak self] button in
             let held = button.isHighlighted || (isKeyboard && self?.lit == true)
             button.configuration?.background.backgroundColor = UIColor(held ? Theme.hair : Theme.wash)
+            Self.shrinkToFit(button)
         }
+        Self.shrinkToFit(button)
         if isKeyboard { keyboardKey = button }
         button.accessibilityLabel = isKeyboard
             ? (keyboardUp ? "Hide keyboard" : "Show keyboard")
@@ -112,6 +114,13 @@ final class KeyBarView: UIInputView {
         button.addAction(UIAction { [weak self] _ in self?.press(key) }, for: .touchDown)
         button.heightAnchor.constraint(equalToConstant: Self.rowHeight).isActive = true
         return button
+    }
+
+    /// A key name (`⇧Tab`) shrinks rather than clips on a narrow key (320 pt Slide Over). Set
+    /// again on each update, as the configuration may rebuild the label.
+    private static func shrinkToFit(_ button: UIButton) {
+        button.titleLabel?.adjustsFontSizeToFitWidth = true
+        button.titleLabel?.minimumScaleFactor = 0.5
     }
 
     private func press(_ key: KeyBar.Key) {
