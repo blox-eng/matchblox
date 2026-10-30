@@ -74,6 +74,17 @@ final class BeltLayoutsTests: XCTestCase {
         XCTAssertEqual(keys, [BeltKey(id: "◂", cells: 1), BeltKey(id: "compact", cells: 2)])
     }
 
+    /// The belt opens on key 0 and clicks home there, so Mine starts at `◂` wherever the
+    /// builder moved it. The ring keeps the order of the editor.
+    func testMineLayoutStartsAtHome() throws {
+        var mine = Mine.defaults
+        _ = mine.toggle(BeltKey(id: "Esc", cells: 1))
+        mine.move(from: 0, to: 2)
+        XCTAssertEqual(mine.keys.map(\.id), ["↑", "↓", "◂", "⏎", "Esc"])
+        let keys = try catalog().keys(.mine, agent: nil, mine: mine.keys)
+        XCTAssertEqual(keys.map(\.id), ["◂", "⏎", "Esc", "↑", "↓"])
+    }
+
     // MARK: Bytes
 
     func testEveryKeyHasBytes() throws {
