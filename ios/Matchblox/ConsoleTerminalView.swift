@@ -6,6 +6,11 @@ import UIKit
 /// a tap on "◂ matchblox" in the tmux status line, and ⌘M. Each one sends `HomeKey`.
 final class ConsoleTerminalView: TerminalView {
     var onHome: @MainActor () -> Void = {}
+    /// Called when the terminal takes or gives up the keyboard.
+    var onFocus: @MainActor (Bool) -> Void = { _ in }
+
+    /// SwiftTerm does not declare this trait, so UIKit would keep inline predictions on.
+    @objc var inlinePredictionType: UITextInlinePredictionType = .no
 
     private let haptic = UIImpactFeedbackGenerator(style: .light)
     private var edge: UIScreenEdgePanGestureRecognizer?
@@ -41,6 +46,18 @@ final class ConsoleTerminalView: TerminalView {
         if let edge, gesture is UIPanGestureRecognizer, gesture !== edge {
             gesture.require(toFail: edge)
         }
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { onFocus(true) }
+        return became
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { onFocus(false) }
+        return resigned
     }
 
     override var keyCommands: [UIKeyCommand]? {

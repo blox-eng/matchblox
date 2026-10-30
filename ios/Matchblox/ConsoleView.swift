@@ -100,10 +100,12 @@ struct ConsoleView: View {
     }
 }
 
+/// The terminal, with the key bar above the keyboard. An input accessory shows only while its
+/// view has the keyboard, so a second bar stays under the terminal while the keyboard is down.
 private struct TerminalRepresentable: UIViewRepresentable {
     let connection: ConsoleConnection
 
-    func makeUIView(context: Context) -> ConsoleTerminalView {
+    func makeUIView(context: Context) -> UIStackView {
         let terminal = ConsoleTerminalView(font: UIFont.monospacedSystemFont(ofSize: 13, weight: .regular))
         terminal.onHome = { [weak connection] in connection?.goHome() }
         let bg = UIColor(Theme.bg)
@@ -112,13 +114,26 @@ private struct TerminalRepresentable: UIViewRepresentable {
         terminal.nativeForegroundColor = UIColor(Theme.fg)
         terminal.caretColor = UIColor(Theme.accent)
         terminal.keyboardAppearance = .dark
+        terminal.autocorrectionType = .no
+        terminal.spellCheckingType = .no
+        terminal.smartQuotesType = .no
+        terminal.smartDashesType = .no
+        terminal.smartInsertDeleteType = .no
+        terminal.autocapitalizationType = .none
+        terminal.inlinePredictionType = .no
+        terminal.inputAccessoryView = KeyBarView(terminal: terminal)
         terminal.contentInsetAdjustmentBehavior = .never
         terminal.terminalDelegate = connection
         connection.terminal = terminal
-        return terminal
+
+        let dock = KeyBarView(terminal: terminal)
+        terminal.onFocus = { [weak dock] focused in dock?.isHidden = focused }
+        let stack = UIStackView(arrangedSubviews: [terminal, dock])
+        stack.axis = .vertical
+        return stack
     }
 
-    func updateUIView(_ terminal: ConsoleTerminalView, context: Context) {}
+    func updateUIView(_ stack: UIStackView, context: Context) {}
 }
 
 /// Owns one SSHSession for each connect. A session that ends at once opens again; a good session that ends waits for a tap. It stops when the view goes away or the app goes to the background.
