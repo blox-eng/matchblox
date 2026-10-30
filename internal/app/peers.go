@@ -384,6 +384,7 @@ func (m Model) reconcile(peers []Peer) (Model, tea.Cmd) {
 			_ = l.conn.Close()
 		}
 		news = append(news, m.noAnswer(l))
+		m.batchLost(l.host, l.acts)
 		m.dropLogin(l.host)
 	}
 	m.peers = next

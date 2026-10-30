@@ -253,3 +253,15 @@ func TestMismatchedPeerClosesItsConn(t *testing.T) {
 		t.Fatal("the conn of a mismatched peer stays open")
 	}
 }
+
+// TestUntickEndsTheBatchOfItsHost: a host unticked while its removals run
+// counts them failed, so the batch still ends with its summary.
+func TestUntickEndsTheBatchOfItsHost(t *testing.T) {
+	m, _, _ := peered(nil)
+	m.peers[0].acts = []string{"a7"}
+	m.batch = &batch{ids: map[string]bool{"a7": true}}
+	m, _ = m.reconcile(nil)
+	if m.batch != nil || m.flash != "removed 0, failed 1: ws-1: connection lost" {
+		t.Fatalf("batch %v, flash %q: the batch waits on a host that is gone", m.batch, m.flash)
+	}
+}
