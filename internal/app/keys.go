@@ -118,8 +118,10 @@ func defaultKeys() keymaps {
 			Tick:  bind(ks("space", " "), "␣", "tick"),
 		},
 		chat: chatKeymap{
-			Back: bind(ks("ctrl+]"), "ctrl+]", "back"),
-			Stop: bind(ks("ctrl+c"), "^C", "stops the agent"),
+			Back:     bind(ks("ctrl+]"), "ctrl+]", "back"),
+			Stop:     bind(ks("ctrl+c"), "^C", "stops the agent"),
+			PageUp:   bind(ks("pgup"), "PgUp", "a page up the history"),
+			PageDown: bind(ks("pgdown"), "PgDn", "a page down the history"),
 		},
 		sheet: sheetKeys{
 			Send:  bind(ks("enter"), "⏎", "send"),
@@ -225,9 +227,11 @@ func (k cardKeys) bindings() []bkey.Binding {
 
 // chatKeymap are the chat's own keys. Every other key goes to the agent;
 // Stop is the agent's ^C, which a second one within a second waits for.
-type chatKeymap struct{ Back, Stop bkey.Binding }
+type chatKeymap struct{ Back, Stop, PageUp, PageDown bkey.Binding }
 
-func (k chatKeymap) bindings() []bkey.Binding { return []bkey.Binding{k.Back, k.Stop} }
+func (k chatKeymap) bindings() []bkey.Binding {
+	return []bkey.Binding{k.Back, k.Stop, k.PageUp, k.PageDown}
+}
 
 // sheetKeys are the stoker's order sheet.
 type sheetKeys struct{ Send, Close, Chips, Left, Right, Tick, Erase bkey.Binding }
@@ -331,6 +335,10 @@ func keyPress(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyBackspace}
 	case "shift+tab":
 		return tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
+	case "pgup":
+		return tea.KeyPressMsg{Code: tea.KeyPgUp}
+	case "pgdown":
+		return tea.KeyPressMsg{Code: tea.KeyPgDown}
 	}
 	if r := []rune(k); len(r) == 6 && k[:5] == "ctrl+" {
 		return tea.KeyPressMsg{Code: r[5], Mod: tea.ModCtrl}

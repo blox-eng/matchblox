@@ -61,6 +61,12 @@ func Cells(provider string) string {
 	return b.String()
 }
 
+// Passthrough wraps s for tmux to hand on to the terminal, which it does
+// only for a pane with allow-passthrough.
+func Passthrough(s string) string {
+	return "\x1bPtmux;" + strings.ReplaceAll(s, "\x1b", "\x1b\x1b") + "\x1b\\"
+}
+
 // Transmit sends every logo, for a dark or a light background, as virtual
 // placements of 2x1 cells. In tmux each chunk is wrapped for passthrough,
 // which the pane must allow. Sending again replaces the images.
@@ -88,7 +94,7 @@ func Transmit(dark, tmux bool) string {
 			}
 			apc := "\x1b_G" + head + ";" + chunk + "\x1b\\"
 			if tmux {
-				apc = "\x1bPtmux;" + strings.ReplaceAll(apc, "\x1b", "\x1b\x1b") + "\x1b\\"
+				apc = Passthrough(apc)
 			}
 			b.WriteString(apc)
 		}

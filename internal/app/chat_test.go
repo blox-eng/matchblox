@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/logos"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/said"
@@ -1685,5 +1686,157 @@ func TestACommandAtNightAsksToTakeOver(t *testing.T) {
 	pressKeys(t, m, "n")
 	if got := f.acts(); len(got) != 2 || got[1].RecID != "compact:%1" {
 		t.Fatalf("acts %+v", got)
+	}
+}
+
+// raws are the strings cmd writes through Bubble Tea's raw output.
+func raws(cmd tea.Cmd) []string {
+	if cmd == nil {
+		return nil
+	}
+	out := make(chan tea.Msg, 1)
+	go func() { out <- cmd() }()
+	var got []string
+	select {
+	case msg := <-out:
+		switch msg := msg.(type) {
+		case tea.BatchMsg:
+			for _, c := range msg {
+				got = append(got, raws(c)...)
+			}
+		case tea.RawMsg:
+			got = append(got, msg.Msg.(string))
+		}
+	case <-time.After(50 * time.Millisecond):
+	}
+	return got
+}
+
+// agentRaws are the agent signals the console wrote while m took ks.
+func agentRaws(t *testing.T, m Model, ks ...string) (Model, []string) {
+	t.Helper()
+	var got []string
+	for _, k := range ks {
+		next, cmd := key(m, k)
+		got = append(got, raws(cmd)...)
+		m = next.(Model)
+	}
+	return m, got
+}
+
+// agentChat is the console on a, in %1, which runs agent, and b, in %2,
+// which runs other, with the chat of a on screen but not yet open.
+func agentChat(t *testing.T, agent, other string) Model {
+	t.Helper()
+	st := fixtureState()
+	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a", Agent: agent}, {PID: 2, Pane: "%2", Name: "b", Agent: other}}
+	m, _ := loadedWith(t, 100, st)
+	m = onPane(t, m, "%1")
+	next, _ := m.Update(screenMsg{Pane: m.watching, At: time.Unix(100, 0), Text: "> "})
+	return next.(Model)
+}
+
+func TestChatSendsItsAgent(t *testing.T) {
+	m := agentChat(t, "claude", "codex")
+	m, got := agentRaws(t, m, "enter")
+	if want := logos.Passthrough(keycmd.AgentSignal("claude")); !slices.Equal(got, []string{want}) {
+		t.Fatalf("open wrote %q, want %q", got, want)
+	}
+	if !m.chatKeys {
+		t.Fatal("enter did not open the chat")
+	}
+	m = m.openChat()
+	if _, got = agentRaws(t, m, "x", "y"); len(got) != 0 {
+		t.Fatalf("the open chat wrote %q again", got)
+	}
+}
+
+func TestChatCloseSendsNoAgent(t *testing.T) {
+	m, _ := agentRaws(t, agentChat(t, "claude", "codex"), "enter")
+	m, got := agentRaws(t, m, "ctrl+]")
+	if want := logos.Passthrough(keycmd.AgentSignal("")); !slices.Equal(got, []string{want}) {
+		t.Fatalf("close wrote %q, want %q", got, want)
+	}
+	if _, got = agentRaws(t, m, "down"); len(got) != 0 {
+		t.Fatalf("the closed chat wrote %q", got)
+	}
+}
+
+func TestSwitchingSessionSendsTheNewAgent(t *testing.T) {
+	m, _ := agentRaws(t, agentChat(t, "claude", "cursor-agent"), "enter")
+	next, cmd := m.chatOn("%2").Update(screenMsg{Pane: "%2", Text: "> "})
+	if got, want := raws(cmd), logos.Passthrough(keycmd.AgentSignal("cursor")); !slices.Equal(got, []string{want}) {
+		t.Fatalf("switch wrote %q, want %q", got, want)
+	}
+	if s, _ := next.(Model).selectedSession(); s.Pane != "%2" || !next.(Model).chatKeys {
+		t.Fatalf("chat on %s, keys %v", s.Pane, next.(Model).chatKeys)
+	}
+}
+
+func TestAgentSignalOutsideTmuxIsNotWrapped(t *testing.T) {
+	m := agentChat(t, "opencode", "")
+	m.opt.OutsideTmux = true
+	if _, got := agentRaws(t, m, "enter"); !slices.Equal(got, []string{keycmd.AgentSignal("opencode")}) {
+		t.Fatalf("open wrote %q", got)
+	}
+}
+
+// lastUp is the lines up the last watch the console sent asks for.
+func lastUp(t *testing.T, f *fakeConn) string {
+	t.Helper()
+	acts := f.allActs()
+	for i := len(acts) - 1; i >= 0; i-- {
+		if strings.HasPrefix(acts[i].RecID, proto.WatchPrefix) {
+			if acts[i].RecID != proto.WatchPrefix+"%1" {
+				t.Fatalf("watch %q", acts[i].RecID)
+			}
+			return acts[i].Text
+		}
+	}
+	t.Fatal("no watch sent")
+	return ""
+}
+
+func TestPageUpScrollsTheHistory(t *testing.T) {
+	m, f := commandChat(t, "claude")
+	page := m.draw(m.width).chatRows
+	if page <= chatStep {
+		t.Fatalf("the chat shows %d rows", page)
+	}
+	m = pressKeys(t, m, "pgup")
+	if got, want := lastUp(t, f), proto.UpPrefix+strconv.Itoa(page); got != want || !m.chatKeys {
+		t.Fatalf("pgup asked %q, want %q (keys %v)", got, want, m.chatKeys)
+	}
+	m = pressKeys(t, m, "pgup")
+	if got := lastUp(t, f); got != proto.UpPrefix+strconv.Itoa(2*page) {
+		t.Fatalf("second pgup asked %q", got)
+	}
+	m = pressKeys(t, m, "pgdown")
+	if got := lastUp(t, f); got != proto.UpPrefix+strconv.Itoa(page) {
+		t.Fatalf("pgdown asked %q", got)
+	}
+	m = pressKeys(t, m, "x") // any other key goes back to live and types nothing
+	if m.up != 0 || len(keyActs(f)) != 0 {
+		t.Fatalf("up %d, keys %+v", m.up, keyActs(f))
+	}
+	m = pressKeys(t, m, "pgup", "pgdown")
+	if got := lastUp(t, f); got != proto.UpPrefix+"0" || m.up != 0 {
+		t.Fatalf("pgdown to live asked %q", got)
+	}
+}
+
+func TestOldTmuxSaysCommandsNeedIt(t *testing.T) {
+	m := agentChat(t, "claude", "codex")
+	m.opt.LocalTmux = "3.2a"
+	m, got := agentRaws(t, m, "enter")
+	if len(got) != 0 {
+		t.Fatalf("an old tmux got %q", got)
+	}
+	if m.flash != "COMMANDS · needs tmux 3.3" || !strings.Contains(screen(m), "COMMANDS · needs tmux 3.3") {
+		t.Fatalf("flash %q\n%s", m.flash, screen(m))
+	}
+	m, got = agentRaws(t, m, "ctrl+]", "enter")
+	if len(got) != 0 || m.flash != "" {
+		t.Fatalf("second open wrote %q, flash %q", got, m.flash)
 	}
 }

@@ -338,6 +338,8 @@ type Model struct {
 	// charge: it runs once they answer the take-over question.
 	held        func(Model) (tea.Model, tea.Cmd)
 	chatKeys    bool      // the chat has the keys: they go to the selected session's agent
+	agentSaid   string    // the agent signal last written to the terminal; "" none yet
+	tmuxSaid    bool      // the key line said this tmux passes no agent signal
 	keyQ        []chatKey // the chat's keys behind the one in flight
 	keyInFlight string    // the act id of the chat's key the service has not answered
 	ctrlC       ctrlCMark // the last ^C the chat sent, and when it went
@@ -550,6 +552,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		nm = nm.scanShows().keepChat(m).noteCard()
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
+		}
+		if say := nm.tellAgent(); say != nil {
+			cmd = tea.Batch(cmd, say)
 		}
 		next = nm
 	}
@@ -904,6 +909,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m, touch = m.touchRest()
 		}
 		f := m.focus(msg)
+		if m.chatKeys && f == layerMain && bkey.Matches(msg, m.keys.chat.PageUp, m.keys.chat.PageDown) {
+			m.flash = ""
+			page := max(m.draw(max(m.width, minWidth)).chatRows, 1)
+			return m.scrollChat(bkey.Matches(msg, m.keys.chat.PageUp), page), touch
+		}
 		if m.notLive() && m.chatKeys && (f == layerMain || f == layerTakeOver) {
 			return m.backToLive(), touch
 		}

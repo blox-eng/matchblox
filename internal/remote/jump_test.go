@@ -17,13 +17,30 @@ func mouseIn(table string) string {
 		b + " MouseDrag1Border resize-pane -M ';'"
 }
 
+// pageIn is panePage(table) as a line.
+func pageIn(table string) string {
+	b := " bind-key -T " + table
+	return b + " PPage copy-mode -u ';'" +
+		b + " NPage if -F '#{pane_in_mode}' 'send-keys -X page-down' 'send-keys NPage' ';'"
+}
+
+// TestJumpTablePagesInCopyMode: in a jump, PgUp enters tmux's copy mode a
+// page up, and PgDn pages down in it (#122). Outside copy mode PgDn goes to
+// the pane.
+func TestJumpTablePagesInCopyMode(t *testing.T) {
+	line := Line(Jump{Host: "ws-1", Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d", Outer: true}.Remote())
+	if !strings.Contains(line, pageIn("matchblox-jump-C-b")) {
+		t.Fatalf("no page keys in the jump's table: %s", line)
+	}
+}
+
 func TestJumpRemoteToPane(t *testing.T) {
 	j := Jump{Host: "ws-1", Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d", Outer: true}
 	const g = "'=matchblox-jump-0a1b2c3d:'"
 	common := "tmux bind-key -T matchblox-jump-C-b C-b switch-client -T matchblox-jump-C-b-prefix ';'" +
 		" bind-key -T matchblox-jump-C-b-prefix d detach-client ';'" +
 		" bind-key -T matchblox-jump-C-b-prefix m detach-client ';'" +
-		mouseIn("matchblox-jump-C-b") +
+		mouseIn("matchblox-jump-C-b") + pageIn("matchblox-jump-C-b") +
 		" new-session -d -t %12 -s matchblox-jump-0a1b2c3d ';'"
 	tail := " set-option -t " + g + " @matchblox-jump 1 ';'" +
 		" set-option -t " + g + " prefix None ';'" +

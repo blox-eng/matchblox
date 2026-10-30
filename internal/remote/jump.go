@@ -125,6 +125,15 @@ func paneMouse(table string) [][]string {
 	}
 }
 
+// panePage binds in table PgUp to a page up in tmux's copy mode; in it,
+// copy mode's own table pages. Outside it PgDn goes to the pane.
+func panePage(table string) [][]string {
+	return [][]string{
+		{"bind-key", "-T", table, "PPage", "copy-mode", "-u"},
+		{"bind-key", "-T", table, "NPage", "if", "-F", "#{pane_in_mode}", "send-keys -X page-down", "send-keys NPage"},
+	}
+}
+
 // Remote is the one tmux command list that runs on the host. It binds the
 // way back for this machine's prefix, then opens a private session grouped
 // with the pane's (or a new one in Dir) with no prefix of its own, and
@@ -140,6 +149,7 @@ func (j Jump) Remote() []string {
 		{"bind-key", "-T", wait, "m", "detach-client"},
 	}
 	cmds = append(cmds, paneMouse(table)...)
+	cmds = append(cmds, panePage(table)...)
 	if j.Pane != "" {
 		cmds = append(cmds, []string{"new-session", "-d", "-t", j.Pane, "-s", g})
 	} else {

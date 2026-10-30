@@ -18,7 +18,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/logos"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -213,23 +215,23 @@ func (m Model) upShown() int {
 // nowhere.
 func (m Model) notLive() bool { return m.up > 0 || m.screen.Up > 0 || m.liveWait }
 
-// scrollChat turns the wheel over the chat: up shows earlier lines of the
+// scrollChat moves the chat by lines: up shows earlier lines of the
 // agent's pane, down goes back toward live. The chat takes the keys: it
 // goes back to live when it loses them.
-func (m Model) scrollChat(up bool) Model {
+func (m Model) scrollChat(up bool, lines int) Model {
 	if !m.chatKeys {
 		if m = m.openChat(); !m.chatKeys {
 			return m
 		}
 	}
 	if up {
-		m.up = min(m.up+chatStep, proto.MaxUp)
+		m.up = min(m.up+lines, proto.MaxUp)
 	} else {
 		from := m.up
 		if m.screen.Up > 0 {
 			from = min(from, m.screen.Up) // the history stopped short
 		}
-		m.up = max(from-chatStep, 0)
+		m.up = max(from-lines, 0)
 	}
 	return m
 }
@@ -340,9 +342,10 @@ func (m Model) chatScreen(w int) drawn {
 		title = spread(title, st.accent.Render(ansi.Truncate(m.toast, max(w/2, 1), "…"))+" ", w)
 	}
 	title = fit(title, w)
-	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true}
-	sc.lines = append(sc.lines, m.screenLines(w, max(m.height-3, 0))...)
-	m.markCard(&sc, len(sc.lines), 0, w, max(m.height-3, 0))
+	rows := max(m.height-3, 0)
+	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true, chatRows: rows}
+	sc.lines = append(sc.lines, m.screenLines(w, rows)...)
+	m.markCard(&sc, len(sc.lines), 0, w, rows)
 	keys, spans := m.keyLine(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, spans
 	sc.lines = append(sc.lines, st.hair.Render(strings.Repeat("─", w)), keys)
@@ -544,6 +547,43 @@ func commandAgent(agent string) string {
 		return "cursor"
 	}
 	return agent
+}
+
+// minSignalTmux is the oldest tmux that passes the agent signal through to
+// the terminal (allow-passthrough).
+const minSignalTmux = "3.3"
+
+// tellAgent writes to the terminal, when it changes, which agent the chat
+// is on, for the phone's Commands: the command table's id, or none for an
+// agent with no commands and for a closed chat. A tmux too old to pass it
+// gets none, and the key line says so once.
+func (m *Model) tellAgent() tea.Cmd {
+	say := m.agentSaid
+	switch {
+	case m.chatKeys:
+		s, _ := m.selectedSession()
+		id := commandAgent(s.Agent)
+		if len(keycmd.ForAgent(id)) == 0 {
+			id = ""
+		}
+		say = keycmd.AgentSignal(id)
+	case say != "":
+		say = keycmd.AgentSignal("")
+	}
+	if say == m.agentSaid {
+		return nil
+	}
+	m.agentSaid = say
+	if m.opt.OutsideTmux {
+		return tea.Raw(say)
+	}
+	if remote.TmuxTooOld(m.opt.LocalTmux, minSignalTmux) {
+		if m.chatKeys && !m.tmuxSaid {
+			m.tmuxSaid, m.flash = true, "COMMANDS · needs tmux "+minSignalTmux
+		}
+		return nil
+	}
+	return tea.Raw(logos.Passthrough(say))
 }
 
 // commandKey runs the phone's command key apc in the chat, behind the

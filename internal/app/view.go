@@ -142,8 +142,10 @@ type drawn struct {
 	actKeysAt int
 	actKeys   []span
 	// chatFull: the chat is the whole screen, and a tap on its title row
-	// goes back to Sessions.
+	// goes back to Sessions. chatRows: the lines of the agent's screen the
+	// chat shows, one page of its history.
 	chatFull bool
+	chatRows int
 }
 
 // draw is the screen, with an ssh prompt over everything.
@@ -230,6 +232,7 @@ func (m Model) drawScreen(w int) drawn {
 	sc.paneFull = paneFull && len(detail) <= room
 	if chatting {
 		detail = m.chatPane(chat, detailW, room)
+		sc.chatRows = room - 1 - len(m.chatStrip(chat, detailW, room-1))
 		m.markCard(&sc, sc.bodyTop+room, listW+2, detailW-1, room-1-len(m.chatStrip(chat, detailW, room-1)))
 	}
 	vis := windowed(b, room, m.rowIndex())
