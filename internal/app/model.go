@@ -288,6 +288,8 @@ type Model struct {
 	screen     proto.Screen      // the last capture of the watched pane
 	watching   string            // the pane the service sends, or ""
 	watchHeld  string            // the pane the service refused, until the next snapshot
+	up         int               // the lines up the chat shows of the agent's history; 0 is live
+	watchUp    int               // the lines up the service sends
 	askCard    card              // the question card's answer, in the chat
 	cardSeen   cardSeen          // the card's quiet: the ask it is for and its start
 	cardSent   map[string]string // the card's sends in flight: act id -> the session's name
@@ -586,7 +588,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case screenMsg:
-		if msg.Pane == m.watching {
+		if msg.Pane == m.watching && (msg.Up == 0 || m.watchUp > 0) { // the history after live is not live
 			m.screen = proto.Screen(msg)
 		}
 		return m, m.recv()
@@ -726,6 +728,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A pane that went before the watch came is a race, not the builder's error.
 			if pane != "" && pane == m.watching {
 				m.watchHeld, m.watching, m.screen = pane, "", proto.Screen{}
+				m.up, m.watchUp = 0, 0
 			}
 			return m, m.recv()
 		}
@@ -870,6 +873,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.formPaste(msg.Content)
 		case f == layerMain && m.chatKeys:
 			m, touch := m.touchRest()
+			if m.up > 0 {
+				return m.backToLive(), touch
+			}
 			next, cmd := m.chatPaste(msg.Content)
 			return next, tea.Batch(touch, cmd)
 		}
@@ -895,6 +901,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m, touch = m.touchRest()
 		}
 		f := m.focus(msg)
+		if m.up > 0 && m.chatKeys && (f == layerMain || f == layerTakeOver) {
+			return m.backToLive(), touch
+		}
 		// ctrl+c quits from every layer but a question, where any key but
 		// its answers cancels, and the chat, which sends it to the agent.
 		chat := m.chatKeys && (f == layerMain || f == layerTakeOver)

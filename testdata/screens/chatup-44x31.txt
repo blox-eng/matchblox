@@ -1,0 +1,31 @@
+ ‹ Sessions · flint-auth · ↑ 6 lines up
+
+
+
+
+⏺ Read(src/auth/refresh.go)
+  ⎿  Read 142 lines
+
+⏺ Update(src/auth/refresh.go)
+  ⎿  Updated src/auth/refresh.go with 18 add
+itions
+
+⏺ Bash(go test ./auth/...)
+  ⎿  ok  example.com/auth  0.41s
+
+⏺ The refresh endpoint is in and its tests p
+ass.
+
+────────────────────────────────────────────
+ ☐ Rotate
+
+Should a refresh also rotate the token?
+╭─ flint-auth asks · 1 of 2 ───────────────╮
+│ Should a refresh also rotate the token?  │
+│ › 1 Rotate it  the old one stops at once │
+│   2 Rotate, keep the old one a minute    │
+│   3 Keep the token                       │
+│   4 Type an answer…                      │
+╰─ ⏎ question 2 ───────────────────────────╯
+────────────────────────────────────────────
+ keys go to flint-auth · ctrl+] back · ctrl…

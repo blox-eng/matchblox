@@ -1,0 +1,50 @@
+ ▰ matchblox                                                                                                                                                                           ● 6 wait for you
+ SESSIONS 7    ships 3    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ WAITS FOR YOU · 6                                                            │ flint-auth · asks · ↑ 6 lines up
+ │ spark-docs               done       9m   88%  ▲ clear      #4540 ●━●━●━●━● │ ✻ team@example.com · Max · #4545 ●━✕┄○┄○┄○  conflicts with main
+ ╿ ember-billing            done       4m   32%  ▲ clear      #4552 ●━●━◉┄○┄○ │
+▌╿ flint-auth               asks       2m   41%  ▲ clear      #4545 ●━✕┄○┄○┄○ │
+ ╿ kindle-web               asks       1m   56%  ▲ clear                      │
+ ╿ cinder-ci                done       0s   55%  ▲ clear                      │
+ ╿ wick-mobile              done       0s    6%  ▲ clear                      │
+ WORKING · 1                                                                  │
+ ✦ hearth-api               busy            79%  ▰▰▰▱▱ 60%    #4551 ●━◉┄○┄○┄○ │
+ + start a new session                                                        │
+                                                                              │
+ 1 without an agent: shell:1.1 zsh                                            │
+                                                                              │
+ RECOMMENDATIONS · 7 · h hides                                                │
+ ▲ The week runs short: compact spark-docs                                    │
+ ○ Clear spark-docs (%3)                                                      │
+ ○ Clear kindle-web (%5)                                                      │
+ ○ Clear cinder-ci (%6)                                                       │
+ ○ Clear flint-auth (%2)                                                      │
+ ○ Clear ember-billing (%8)                                                   │
+ ○ Clear wick-mobile (%7)                                                     │
+──────────────────────────────────────────────────────────────────────────────│
+ USAGE                                                                        │
+ ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                               │ ⏺ Read(src/auth/refresh.go)
+                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · out Fri ~21:00              │   ⎿  Read 142 lines
+ · Google login  not measured · OpenCode keeps no limits                      │
+ ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                                   │ ⏺ Update(src/auth/refresh.go)
+                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week              │   ⎿  Updated src/auth/refresh.go with 18 additions
+──────────────────────────────────────────────────────────────────────────────│
+ MACHINE                                                             16 cores │ ⏺ Bash(go test ./auth/...)
+ cpu  ▁ 0%   load 6.2                                                         │   ⎿  ok  example.com/auth  0.41s
+ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB                                                    │
+ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB                                                    │ ⏺ The refresh endpoint is in and its tests pass.
+ runs 5 claude · 1 codex · 1 opencode                                         │
+                                                                              │ ────────────────────────────────────────────────────────────────────────────────
+ PID      COMMAND           CPU    MEM     OWNER                              │  ☐ Rotate
+ 1        systemd             0%   9.8M    system                             │
+ 1200     claude              0%   9.8M    pane %1 · hearth-api               │ Should a refresh also rotate the token?
+ 1300     zsh                 0%   9.8M    pane %2 · flint-auth               │ ╭─ flint-auth asks · 1 of 2 ─────────────────────────────────╮
+ 1310     claude              0%   9.8M    pane %2 · flint-auth               │ │ Should a refresh also rotate the token?                    │
+ 1400     claude              0%   9.8M    pane %3 · spark-docs               │ │ › 1 Rotate it  the old one stops at once                   │
+ 1500     zsh                 0%   9.8M    pane %4                            │ │   2 Rotate, keep the old one a minute                      │
+──────────────────────────────────────────────────────────────────────────────│ │   3 Keep the token                                         │
+ STOKER                                                                   off │ │   4 Type an answer…                                        │
+ off · f starts it · n starts a night                                         │ ╰─ ⏎ question 2 ─────────────────────────────────────────────╯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ keys go to flint-auth · ctrl+] back · ctrl+o into tmux

@@ -45,8 +45,19 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.form != nil {
 		return m.tapForm(ms, sc)
 	}
-	if i, dx := ms.Y-sc.cardAt, ms.X-sc.cardX; i >= 0 && i < len(sc.cardRows) && dx >= 0 && dx < sc.cardW {
-		return m.tapCard(i, dx, sc)
+	ci, dx := ms.Y-sc.cardAt, ms.X-sc.cardX
+	onCard := ci >= 0 && ci < len(sc.cardRows) && dx >= 0 && dx < sc.cardW
+	if m.up > 0 && m.chatKeys {
+		switch {
+		case onCard:
+			return m.backToLive(), nil
+		case sc.chatFull && ms.Y == 0, !sc.chatFull && ms.Y == sc.bodyTop && ms.X > sc.listW:
+			m.up = 0 // the title: back to live, the keys stay
+			return m, nil
+		}
+	}
+	if onCard {
+		return m.tapCard(ci, dx, sc)
 	}
 	if sc.chatFull && ms.Y != sc.keysAt {
 		if ms.Y == 0 {
@@ -189,12 +200,17 @@ func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd)) {
 	}
 }
 
-// wheel is a swipe on a phone: it moves the selection, as ↑ and ↓ do.
+// wheel is a swipe on a phone: over the chat it scrolls the agent's
+// history, elsewhere it moves the selection, as ↑ and ↓ do.
 func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.asking() {
 		return m, nil
 	}
 	m.held = nil // a swipe is another key: it drops the question
+	if m.overChat(ms) {
+		m.armed = ""
+		return m.scrollChat(ms.Button == tea.MouseWheelUp), nil
+	}
 	switch ms.Button {
 	case tea.MouseWheelUp:
 		m.move(-1)
@@ -203,4 +219,20 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	m.armed = ""
 	return m, nil
+}
+
+// overChat tells if ms is over the chat: the whole screen of a phone's
+// chat, or the chat beside the list.
+func (m Model) overChat(ms tea.Mouse) bool {
+	if !m.have || m.mismatch || m.pair.owns() || m.sheet != nil || m.form != nil || m.pending != nil {
+		return false
+	}
+	w := max(m.width, minWidth)
+	sc := m.draw(w)
+	if sc.chatFull {
+		return true
+	}
+	_, detailW := m.panes(w)
+	_, chatting := m.chatShown(detailW)
+	return chatting && ms.X > sc.listW && ms.Y >= sc.bodyTop && ms.Y < sc.bodyTop+len(sc.rows)
 }

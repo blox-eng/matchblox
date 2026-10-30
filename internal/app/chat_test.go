@@ -711,44 +711,17 @@ func TestNarrowSwapsToChat(t *testing.T) {
 }
 
 func TestChatFrameShowsWhoHasKeys(t *testing.T) {
-	titleInk := func(m Model) string {
-		t.Helper()
-		sc := m.draw(m.width)
-		s, _ := m.selectedSession()
-		x := 0
-		for _, sp := range parsed(t, m.render())[sc.bodyTop] {
-			if x > sc.listW && strings.Contains(sp.Text, s.Name) {
-				return sp.FG
-			}
-			x += lipgloss.Width(sp.Text)
-		}
-		t.Fatalf("no title on the chat:\n%s", screen(m))
-		return ""
-	}
 	m := pressKeys(t, demoSized(t, 132, 32), "enter")
-	if ink := titleInk(m); ink != "accent" {
+	if ink := chatTitleInk(t, m); ink != "accent" {
 		t.Fatalf("with the keys, the chat's title is %q", ink)
 	}
-	if ink := titleInk(pressKeys(t, m, "ctrl+]")); ink == "accent" {
+	if ink := chatTitleInk(t, pressKeys(t, m, "ctrl+]")); ink == "accent" {
 		t.Fatal("without the keys, the chat's title is in the accent")
 	}
-	edgeInk := func(m Model) string {
-		t.Helper()
-		sc := m.draw(m.width)
-		x := 0
-		for _, sp := range parsed(t, m.render())[sc.bodyTop+1] {
-			if x == sc.listW && strings.HasPrefix(sp.Text, "│") {
-				return sp.FG
-			}
-			x += lipgloss.Width(sp.Text)
-		}
-		t.Fatalf("no edge at column %d:\n%s", sc.listW, screen(m))
-		return ""
-	}
-	if ink := edgeInk(m); ink != "accent" {
+	if ink := chatEdgeInk(t, m); ink != "accent" {
 		t.Fatalf("with the keys, the chat's edge is %q", ink)
 	}
-	if ink := edgeInk(pressKeys(t, m, "ctrl+]")); ink != "hair" {
+	if ink := chatEdgeInk(t, pressKeys(t, m, "ctrl+]")); ink != "hair" {
 		t.Fatalf("without the keys, the chat's edge is %q", ink)
 	}
 }

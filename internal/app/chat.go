@@ -73,8 +73,9 @@ func isRule(line string) bool {
 }
 
 // watchCmd asks the service for the selected session's screen when it is
-// not the one already watched, and for none when the selection has no pane.
-// A screen of another pane never stays.
+// not the one already watched, and for none when the selection has no pane;
+// and for the lines up the chat shows when they changed. A screen of
+// another pane never stays.
 func (m *Model) watchCmd() tea.Cmd {
 	want := ""
 	if m.conn != nil && !m.lost && !m.mismatch {
@@ -85,16 +86,19 @@ func (m *Model) watchCmd() tea.Cmd {
 	if m.watchHeld != "" && want == m.watchHeld {
 		want = m.watching
 	}
-	if want == m.watching {
+	if want != m.watching {
+		m.up, m.screen = 0, proto.Screen{} // another pane opens live
+	}
+	if want == m.watching && m.up == m.watchUp {
 		return nil
 	}
-	m.watching, m.screen = want, proto.Screen{}
+	m.watching, m.watchUp = want, m.up
 	if m.conn == nil || m.lost || m.mismatch {
 		return nil // the service forgot the watch with the connection
 	}
-	c := m.conn
+	c, up := m.conn, proto.UpPrefix+strconv.Itoa(m.up)
 	return func() tea.Msg { // not m.send: the watch takes no number from the acts the builder sees
-		if err := c.Send(proto.KindAct, watchActID+want, proto.Act{RecID: proto.WatchPrefix + want}); err != nil {
+		if err := c.Send(proto.KindAct, watchActID+want, proto.Act{RecID: proto.WatchPrefix + want, Text: up}); err != nil {
 			return lostMsg{err, c}
 		}
 		return nil
@@ -139,14 +143,63 @@ func (m Model) chatShown(rightW int) (sample.Session, bool) {
 // chatTitle names the chat's session and its state.
 func (m Model) chatTitle(s sample.Session) string { return s.Name + " · " + m.wordOf(s) }
 
+// upNote is what the chat's title adds while it shows the history: how far
+// up.
+func (m Model) upNote() string {
+	if n := m.upShown(); n > 0 {
+		return " · ↑ " + plural(n, "line") + " up"
+	}
+	return ""
+}
+
+// chatStep is how many lines one turn of the wheel scrolls the chat.
+const chatStep = 3
+
+// upShown is how many lines up the chat shows: as asked, or as far as the
+// history went.
+func (m Model) upShown() int {
+	if m.screen.Up > 0 {
+		return min(m.up, m.screen.Up)
+	}
+	return m.up
+}
+
+// scrollChat turns the wheel over the chat: up shows earlier lines of the
+// agent's pane, down goes back toward live. The chat takes the keys: it
+// goes back to live when it loses them.
+func (m Model) scrollChat(up bool) Model {
+	if !m.chatKeys {
+		if m = m.openChat(); !m.chatKeys {
+			return m
+		}
+	}
+	if up {
+		m.up = min(m.up+chatStep, proto.MaxUp)
+	} else {
+		m.up = max(m.upShown()-chatStep, 0)
+	}
+	return m
+}
+
+// backToLive is the chat on the agent's live screen again, after a key
+// that went nowhere.
+func (m Model) backToLive() Model {
+	m.up, m.flash = 0, "back to live — the agent did not get that key"
+	return m
+}
+
 // chatPane is the chat beside the list, w by h: its title, in the accent
-// while the chat has the keys, over the strip and the screen.
+// while the chat has the keys and shows the live screen, over the strip
+// and the screen.
 func (m Model) chatPane(s sample.Session, w, h int) []string {
 	ink := m.st.label
-	if m.chatKeys {
+	switch {
+	case m.up > 0:
+		ink = m.st.muted
+	case m.chatKeys:
 		ink = m.st.accent
 	}
-	lines := []string{fit(" "+ink.Render(m.chatTitle(s)), w)}
+	lines := []string{fit(" "+ink.Render(m.chatTitle(s)+m.upNote()), w)}
 	strip := m.chatStrip(s, w, h-1)
 	lines = append(lines, strip...)
 	for _, l := range m.screenLines(w-1, h-1-len(strip)) {
@@ -220,7 +273,16 @@ func (m Model) screenLines(w, h int) []string {
 func (m Model) chatScreen(w int) drawn {
 	st := m.st
 	s, _ := m.selectedSession()
-	title := " " + st.accent.Render("‹ Sessions") + st.muted.Render(" · ") + st.accent.Render(m.chatTitle(s))
+	ink := st.accent
+	if m.up > 0 {
+		ink = st.muted
+	}
+	title := " " + st.accent.Render("‹ Sessions") + st.muted.Render(" · ")
+	head, note := m.chatTitle(s), m.upNote() // the state, then the name, give way to the note
+	if room := w - lipgloss.Width(title) - lipgloss.Width(note); lipgloss.Width(head) > room {
+		head = ansi.Truncate(s.Name, max(room, 1), "…")
+	}
+	title += ink.Render(head + note)
 	if m.toast != "" { // as the header says it, where there is one
 		title = spread(title, st.accent.Render(ansi.Truncate(m.toast, max(w/2, 1), "…"))+" ", w)
 	}
@@ -384,7 +446,7 @@ func (m Model) pressed(texts ...string) (name string, keys []chatKey) {
 		return "", nil
 	}
 	var seen time.Time
-	if m.screen.Pane == s.Pane {
+	if m.screen.Pane == s.Pane && m.screen.Up == 0 { // no Enter answers the history
 		seen = m.screen.At
 	}
 	for _, t := range texts {
@@ -574,6 +636,9 @@ func (m Model) keepChat(was Model) Model {
 		case !ok || s.Pane == "" || was.chatKeys && s.Pane != before.Pane:
 			m.chatKeys = false
 		}
+	}
+	if !m.chatKeys {
+		m.up = 0
 	}
 	if m.conn == nil || m.lost {
 		m.keyQ, m.keyInFlight = nil, ""
