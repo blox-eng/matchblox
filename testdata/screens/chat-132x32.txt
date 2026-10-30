@@ -1,0 +1,32 @@
+ ▰ matchblox                                                                                                       ● 6 wait for you
+ SESSIONS 7    ships 3    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ WAITS FOR YOU · 6                                  │ flint-auth · asks
+ │ spark-docs                   done       9m   88% │ ✻ team@example.com · Max · #4545 ●━✕┄○┄○┄○  conflicts with main
+ ╿ ember-billing                done       4m   32% │
+▌╿ flint-auth                   asks       2m   41% │
+ ╿ kindle-web                   asks       1m   56% │
+ ╿ cinder-ci                    done       0s   55% │
+ ╿ wick-mobile                  done       0s    6% │
+ WORKING · 1                                        │
+ ✦ hearth-api                   busy            79% │
+ + start a new session                              │
+                                                    │
+ ↓ 7 more                                           │
+────────────────────────────────────────────────────│
+ USAGE                                              │
+ ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20     │
+                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00     │
+                 out Fri ~21:00                     │
+ · Google login  not measured · OpenCode keeps no l…│
+ ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59         │
+                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00     │ ⏺ The refresh endpoint is in and its tests pass.
+                 lasts the week                     │ ╭─ flint-auth asks · 1 of 2 ─────────────────────────────────╮
+────────────────────────────────────────────────────│ │ Should a refresh also rotate the token?                    │
+ MACHINE                                   16 cores │ │ › 1 Rotate it  the old one stops at once                   │
+ cpu  ▁ 0%   load 6.2                               │ │   2 Rotate, keep the old one a minute                      │
+ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB                          │ │   3 Keep the token                                         │
+ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB                          │ │   4 Type an answer…                                        │
+ runs 5 claude · 1 codex · 1 opencode               │ ╰─ ⏎ question 2 ─────────────────────────────────────────────╯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ keys go to flint-auth · ctrl+] back · ctrl+o into tmux

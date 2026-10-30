@@ -31,7 +31,7 @@ func recIDs(acts []proto.Act) []string {
 func TestTheFirstActingKeyAsksToTakeOver(t *testing.T) {
 	for _, w := range []int{40, 120} {
 		m, f := loadedWith(t, w, nightState())
-		next := sendKey(m, "enter")
+		next := sendKey(m, "ctrl+o")
 		if a := f.acts(); len(a) != 0 {
 			t.Fatalf("w=%d: sent %+v before the answer", w, a)
 		}
@@ -46,7 +46,7 @@ func TestTheFirstActingKeyAsksToTakeOver(t *testing.T) {
 
 func TestYesRestsTheStokerAndRunsTheKey(t *testing.T) {
 	m, f := loadedWith(t, 120, nightState())
-	next := sendKey(sendKey(m, "enter"), "y")
+	next := sendKey(sendKey(m, "ctrl+o"), "y")
 	if got := recIDs(f.acts()); len(got) != 1 || got[0] != "stoker:rest" {
 		t.Fatalf("acts %v", got)
 	}
@@ -64,7 +64,7 @@ func TestYesRestsTheStokerAndRunsTheKey(t *testing.T) {
 
 func TestNoKeepsTheStokerOnAndRunsTheKey(t *testing.T) {
 	m, f := loadedWith(t, 120, nightState())
-	next := sendKey(sendKey(m, "enter"), "n")
+	next := sendKey(sendKey(m, "ctrl+o"), "n")
 	if got := recIDs(f.acts()); len(got) != 1 || got[0] != "stoker:keep" {
 		t.Fatalf("acts %v", got)
 	}
@@ -72,7 +72,7 @@ func TestNoKeepsTheStokerOnAndRunsTheKey(t *testing.T) {
 	if mm.pending == nil || !mm.night() {
 		t.Fatalf("after n: pending %v night %v", mm.pending, mm.night())
 	}
-	if again := sendKey(sendKey(next, "esc"), "enter"); strings.Contains(footerOf(again), "Take over?") {
+	if again := sendKey(sendKey(next, "esc"), "ctrl+o"); strings.Contains(footerOf(again), "Take over?") {
 		t.Fatal("asked twice in one night")
 	}
 }
@@ -93,26 +93,27 @@ func TestLookingAroundNeverAsks(t *testing.T) {
 
 func TestAnswerAsksToo(t *testing.T) {
 	m, _ := loadedWith(t, 120, nightState())
-	// The first row waits on a permission prompt; the second can be answered.
-	if got := footerOf(sendKey(sendKey(m, "j"), "a")); !strings.Contains(got, "Take over?") {
+	// The first row waits on a permission prompt; the second can be
+	// answered. a opens its chat, and the first key to the agent asks.
+	if got := footerOf(sendKey(sendKey(sendKey(m, "j"), "a"), "enter")); !strings.Contains(got, "Take over?") {
 		t.Fatalf("footer %q", got)
 	}
 }
 
 func TestAnyOtherKeyDropsTheQuestion(t *testing.T) {
 	m, f := loadedWith(t, 120, nightState())
-	next := sendKey(sendKey(m, "enter"), "esc")
+	next := sendKey(sendKey(m, "ctrl+o"), "esc")
 	if strings.Contains(footerOf(next), "Take over?") || next.(Model).pending != nil || len(f.acts()) != 0 {
 		t.Fatalf("esc: footer %q", footerOf(next))
 	}
-	if !strings.Contains(footerOf(sendKey(next, "enter")), "Take over?") {
+	if !strings.Contains(footerOf(sendKey(next, "ctrl+o")), "Take over?") {
 		t.Fatal("unanswered, yet not asked again")
 	}
 }
 
 func TestTakeOverWithoutAConnectionSaysSo(t *testing.T) {
 	m, f := loadedWith(t, 120, nightState())
-	next := sendKey(m, "enter")
+	next := sendKey(m, "ctrl+o")
 	mm := next.(Model)
 	mm.lost = true
 	next = sendKey(mm, "y")
@@ -138,7 +139,7 @@ func TestAStokerThatRestsLooksLikeTheDay(t *testing.T) {
 	if h := ansi.Strip(m.head(120)); !strings.Contains(h, "stoker rests") {
 		t.Fatalf("header %q", h)
 	}
-	if got := footerOf(sendKey(m, "enter")); strings.Contains(got, "Take over?") {
+	if got := footerOf(sendKey(m, "ctrl+o")); strings.Contains(got, "Take over?") {
 		t.Fatal("asked while it rests")
 	}
 }
@@ -187,7 +188,7 @@ func TestASecondTapAsksAndYRunsIt(t *testing.T) {
 func TestTheHeldKeyActsOnWhatWasSelected(t *testing.T) {
 	m, _ := loadedWith(t, 120, nightState())
 	want := m.primary().String()
-	next := sendKey(m, "enter")
+	next := sendKey(m, "ctrl+o")
 	mm := next.(Model)
 	mm.move(1) // the selection moves before the answer
 	if mm.primary().String() == want {
@@ -201,12 +202,12 @@ func TestTheHeldKeyActsOnWhatWasSelected(t *testing.T) {
 
 func TestASwipeOrATapDropsTheQuestion(t *testing.T) {
 	m, f := loadedWith(t, 120, nightState())
-	next := sendKey(m, "enter")
+	next := sendKey(m, "ctrl+o")
 	next, _ = next.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
 	if next.(Model).held != nil {
 		t.Fatal("a swipe kept the question")
 	}
-	next = sendKey(m, "enter")
+	next = sendKey(m, "ctrl+o")
 	next, _ = tap(next, 5, 1)
 	if next.(Model).held != nil {
 		t.Fatal("a tap kept the question")
@@ -231,7 +232,7 @@ func TestATapOnADoorNeverAsks(t *testing.T) {
 
 func TestAQuestionOutlivedByItsRunJustRuns(t *testing.T) {
 	m, f := loadedWith(t, 120, nightState())
-	next := sendKey(m, "enter")
+	next := sendKey(m, "ctrl+o")
 	next, _ = next.Update(stateMsg(stokerState(proto.StokerView{}))) // the night ended meanwhile
 	got := sendKey(next, "y").(Model)
 	if len(f.acts()) != 0 || got.pending == nil || got.held != nil {
@@ -241,10 +242,8 @@ func TestAQuestionOutlivedByItsRunJustRuns(t *testing.T) {
 
 func TestTapsAndTypingKeepTheRest(t *testing.T) {
 	m, f := loadedWith(t, 120, restingState())
-	next, cmd := m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
-	if cmd != nil {
-		next.Update(cmd())
-	}
+	_, cmd := m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+	drain(cmd)
 	if got := recIDs(f.acts()); len(got) != 1 || got[0] != "stoker:touch" {
 		t.Fatalf("a swipe: acts %v", got)
 	}

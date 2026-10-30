@@ -299,7 +299,7 @@ func writeUsage(w io.Writer, doc state.Doc, asJSON bool) error {
 }
 
 // cliPeek runs `matchblox peek <session>`: what the session said last and
-// what it asks, as the console's peek shows it. It acts on nothing.
+// what it asks. It acts on nothing.
 func cliPeek(words []string, lines int, w io.Writer, path string, asJSON bool) error {
 	if len(words) != 1 {
 		return errors.New("peek needs one session: matchblox peek <who>")

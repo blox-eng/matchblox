@@ -9,6 +9,7 @@ import (
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 )
@@ -55,7 +56,7 @@ func (m Model) openSheet(night, restart bool) (Model, tea.Cmd) {
 	if o := m.stokerOrder(); restart && o != nil {
 		m.sheet.goes = slices.Clone(o.Grants)
 	}
-	m.peek, m.pending = nil, nil
+	m.pending = nil
 	return m, m.startStoker()
 }
 
@@ -455,7 +456,7 @@ func joinList(s []string) string {
 	return strings.Join(s[:len(s)-1], ", ") + " and " + s[len(s)-1]
 }
 
-// overlaySheet lays the sheet over the dimmed screen like the peek: full
+// overlaySheet lays the sheet over the dimmed screen: full
 // width up to 72 columns on a phone, else a centred box.
 func (m Model) overlaySheet(sc *drawn, w int) {
 	phone := m.layoutAt(w) == Narrow || m.upright()
@@ -465,14 +466,14 @@ func (m Model) overlaySheet(sc *drawn, w int) {
 	}
 	box, press, spans, goesAt, goes := m.sheetBox(bw)
 	m.overlayBox(sc, w, bw, phone, box, press, spans)
-	sc.sheetGoesAt, sc.sheetGoes = sc.peekAt+goesAt, goes
+	sc.sheetGoesAt, sc.sheetGoes = sc.boxAt+goesAt, goes
 }
 
 // tapSheet: a tap on a go chip toggles it, and one on a key of the footer
 // presses it; any other tap does nothing, so the screen behind stays.
 func (m Model) tapSheet(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
-	dx := ms.X - sc.peekX
-	if dx < 0 || dx >= sc.peekW {
+	dx := ms.X - sc.boxX
+	if dx < 0 || dx >= sc.boxW {
 		return m, nil
 	}
 	if ms.Y == sc.sheetGoesAt {
@@ -483,10 +484,10 @@ func (m Model) tapSheet(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if ms.Y != sc.peekAt+len(sc.peekRows)-1 {
+	if ms.Y != sc.boxAt+len(sc.boxRows)-1 {
 		return m, nil
 	}
-	if s, ok := spanAt(sc.peekKeys, dx); ok {
+	if s, ok := spanAt(sc.boxKeys, dx); ok {
 		return m.sheetKey(keyPress(s.press))
 	}
 	return m, nil
@@ -495,4 +496,75 @@ func (m Model) tapSheet(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 // sealedText is what a sealed night says of its key.
 func (m Model) sealedText() string {
 	return "The night is sealed: " + m.keys.main.Night.Help().Key + " stops it, then launch a new one."
+}
+
+// footPart is one part of a box's footer: its text, the key a tap on it
+// presses ("" none) and the separator before it.
+type footPart struct{ text, press, sep string }
+
+// boxFrame draws the rounded box the launch sheet and the forms share: the
+// title in the top edge, each body line between the sides ("sep" is a
+// divider) and the footer in the bottom edge, with the footer's keys as
+// spans from the box's left edge.
+func boxFrame(hair lipgloss.Style, title string, lines []string, foot []footPart, bw int) ([]string, []span) {
+	iw := bw - 4
+	top := hair.Render("╭─ ") + title + " "
+	out := []string{top + hair.Render(strings.Repeat("─", max(bw-lipgloss.Width(top)-1, 0))+"╮")}
+	for _, l := range lines {
+		if l == "sep" {
+			out = append(out, hair.Render("├"+strings.Repeat("─", bw-2)+"┤"))
+		} else {
+			out = append(out, hair.Render("│ ")+fit(l, iw)+hair.Render(" │"))
+		}
+	}
+	line, x := hair.Render("╰─ "), 3
+	var spans []span
+	for i, f := range slices.DeleteFunc(slices.Clone(foot), func(f footPart) bool { return f == (footPart{}) }) {
+		if i > 0 {
+			line += hair.Render(f.sep)
+			x += lipgloss.Width(f.sep)
+		}
+		if f.press != "" {
+			spans = append(spans, span{x, x + lipgloss.Width(f.text), f.press})
+		}
+		line += f.text
+		x += lipgloss.Width(f.text)
+	}
+	line += " "
+	out = append(out, ansi.Truncate(line, bw-1, "")+hair.Render(strings.Repeat("─", max(bw-1-lipgloss.Width(line), 0))+"╯"))
+	return out, spans
+}
+
+// overlayBox dims the screen and lays a box over it, bw columns wide: on a
+// phone with its foot on the key line's hairline, else centred.
+func (m Model) overlayBox(sc *drawn, w, bw int, phone bool, box, press []string, spans []span) {
+	x, y := layBox(m.st, sc.lines, w, bw, phone, box)
+	sc.boxAt, sc.boxX, sc.boxW, sc.boxRows, sc.boxKeys = y, x, bw, press, spans
+}
+
+// layBox dims lines, a screen with its key line and the hairline over it
+// last, and lays box over them in place, bw columns wide: on a phone with
+// its foot on that hairline, else centred. It says where the box went.
+func layBox(st styles, lines []string, w, bw int, phone bool, box []string) (x, y int) {
+	bottom := len(lines) - 2 // the key line's hairline
+	x, y = (w-bw)/2, bottom-len(box)
+	if !phone {
+		y = max((len(lines)-len(box))/2-1, 1)
+	}
+	y = max(y, 1)
+	for i, l := range lines {
+		lines[i] = st.faint.Render(ansi.Strip(l))
+	}
+	for j, b := range box {
+		r := y + j
+		if r >= len(lines) {
+			break
+		}
+		plain := ansi.Strip(lines[r])
+		left := ansi.Truncate(plain, x, "")
+		left += strings.Repeat(" ", x-lipgloss.Width(left))
+		right := ansi.TruncateLeft(plain, x+bw, "")
+		lines[r] = st.faint.Render(left) + b + st.faint.Render(right)
+	}
+	return x, y
 }

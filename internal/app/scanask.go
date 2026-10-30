@@ -34,7 +34,7 @@ const askQuiet = 400 * time.Millisecond
 // other question either, the stoker's take-over ask included.
 func (m Model) scanShown() bool {
 	return m.scanAsk != nil && !m.splashing() && !m.takeOverDue() && !m.pair.owns() && m.sheet == nil && m.form == nil &&
-		m.peek == nil && !m.searching && m.held == nil && m.pending == nil
+		!m.searching && m.held == nil && m.pending == nil
 }
 
 // armScan starts the box's quiet: it shows now.

@@ -92,14 +92,23 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 	if _, ok := m.selectedDoor(); ok {
 		return false
 	}
+	if m.chatKeys {
+		if m.cardTakes(k) {
+			return m.cardSends(k) // moving on the card changes nothing on the session
+		}
+		_, toAgent := keyName(k)
+		return toAgent || bkey.Matches(k, m.keys.main.Jump)
+	}
+	s, onSession := m.selectedSession()
 	switch {
+	case bkey.Matches(k, m.keys.main.Chat), onSession && bkey.Matches(k, m.keys.main.Open):
+		return false // the chat: looking around
+	case bkey.Matches(k, m.keys.main.Jump):
+		return onSession && s.Pane != ""
 	case bkey.Matches(k, m.keys.main.Open):
 		return m.primary() != nil
 	case bkey.Matches(k, m.keys.main.Second):
 		return m.secondary() != nil
-	case bkey.Matches(k, m.keys.main.Peek):
-		pane, _ := m.peekTarget()
-		return pane != ""
 	}
 	return false
 }
@@ -108,12 +117,11 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 // runs it on the row it was pressed on, wherever the selection is by then.
 func (m Model) hold(k tea.KeyPressMsg) func(Model) (tea.Model, tea.Cmd) {
 	switch {
-	case bkey.Matches(k, m.keys.main.Peek):
-		pane, _ := m.peekTarget()
-		return func(m Model) (tea.Model, tea.Cmd) {
-			m.openPeek(pane)
-			return m, nil
-		}
+	case m.chatKeys && m.cardTakes(k):
+		return m.heldCard(k, false)
+	case m.chatKeys && !bkey.Matches(k, m.keys.main.Jump):
+		text, _ := keyName(k)
+		return m.heldKeys(m.pressed(text))
 	case bkey.Matches(k, m.keys.main.Second):
 		a := m.secondary()
 		return func(m Model) (tea.Model, tea.Cmd) {

@@ -196,8 +196,8 @@ func sized(t *testing.T, w, h int, st proto.State) Model {
 
 // TestTheStokerLivesInTheDock: while a run is in charge the stoker's panel
 // takes a phone's dock until u switches it, and the machine's place
-// beside usage on a drawer; a wide desk shows all three. A tap on the
-// panel opens the STOKER tab.
+// beside usage on a drawer; a desk stacks all three under the list. A tap
+// on the panel opens the STOKER tab.
 func TestTheStokerLivesInTheDock(t *testing.T) {
 	st := stokerState(runningNight(fixtureState().At))
 	phone := sized(t, 44, 31, st)
@@ -232,9 +232,13 @@ func TestTheStokerLivesInTheDock(t *testing.T) {
 	}
 
 	desk := sized(t, 192, 60, st)
-	at = strings.Split(screen(desk), "\n")[lineOf(t, desk, "USAGE")]
-	if !strings.Contains(at, "MACHINE") || !strings.Contains(at, "STOKER") {
-		t.Fatalf("192x60: the desk does not show all three:\n%s", screen(desk))
+	usage, machine, stoker := lineOf(t, desk, "USAGE"), lineOf(t, desk, "MACHINE"), lineOf(t, desk, "STOKER")
+	if usage >= machine || machine >= stoker {
+		t.Fatalf("192x60: the desk does not stack all three under the list:\n%s", screen(desk))
+	}
+	card, _ = tap(desk, 3, stoker+1)
+	if cm := card.(Model); cm.tab != tabStoker {
+		t.Fatalf("192x60: a tap on the stoker does not open its tab:\n%s", screen(card))
 	}
 
 	off := sized(t, 192, 60, stokerState(proto.StokerView{}))

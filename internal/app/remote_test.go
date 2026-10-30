@@ -49,7 +49,7 @@ func TestRemoteJumpInsideTmuxOpensItsOwnSession(t *testing.T) {
 	var ran [][]string
 	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
 	ssh := remote.JumpSSH("ws-1", j, nil)
-	next, _ := key(m, "enter")
+	next, _ := key(m, "ctrl+o")
 	if a := next.(Model).pending; a == nil || a.say != shellLine(ssh) {
 		t.Fatalf("the confirm must show the ssh line %q: %+v", shellLine(ssh), a)
 	}
@@ -77,7 +77,7 @@ func TestRemoteJumpOutsideTmuxTakesTheTerminal(t *testing.T) {
 	if j.Outer {
 		t.Fatal("outside tmux the jump is not Outer")
 	}
-	next, _ := key(m, "enter")
+	next, _ := key(m, "ctrl+o")
 	if a := next.(Model).pending; a == nil || a.say != shellLine(want) {
 		t.Fatalf("the confirm must show the ssh line %q: %+v", shellLine(want), a)
 	}
@@ -123,7 +123,7 @@ func TestRemoteJumpUsesThisMachinesTmux(t *testing.T) {
 		m.opt.Home = func() string { return c.home }
 		j := hostJump(&m, remote.Jump{Pane: "%1", Home: c.home})
 		j.Prefix = c.want
-		next, _ := key(m, "enter")
+		next, _ := key(m, "ctrl+o")
 		if a := next.(Model).pending; a == nil || len(a.steps) != 1 || !slices.Equal(a.steps[0], j.Local(remote.JumpSSH("ws-1", j, nil))) {
 			t.Errorf("prefix %q, home %q: pending %+v", c.prefix, c.home, a)
 		}
@@ -136,7 +136,7 @@ func TestRemoteJumpOldLocalTmuxRefused(t *testing.T) {
 	m, execs := onHost(t, fixtureState())
 	m.tab, m.opt.LocalTmux = tabSessions, "3.1"
 	hostJump(&m, remote.Jump{Pane: "%1"})
-	next, _ := key(m, "enter")
+	next, _ := key(m, "ctrl+o")
 	next, cmd := key(next, "enter")
 	if cmd != nil {
 		next, _ = next.Update(cmd())
@@ -146,7 +146,7 @@ func TestRemoteJumpOldLocalTmuxRefused(t *testing.T) {
 		t.Fatalf("ran %q, flash %q", *execs, next.(Model).flash)
 	}
 	m.opt.LocalTmux = "3.2a"
-	if next, _ := key(m, "enter"); next.(Model).pending == nil || next.(Model).pending.local != nil {
+	if next, _ := key(m, "ctrl+o"); next.(Model).pending == nil || next.(Model).pending.local != nil {
 		t.Fatalf("tmux 3.2a is refused: %+v", next.(Model).pending)
 	}
 }

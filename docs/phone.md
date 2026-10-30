@@ -135,8 +135,8 @@ Nothing connects to a host from the background.
   more, or resets, at most each 5 minutes. A wait breaks through the Usage
   face for 60 s.
 - **A tap opens the session:** the app asks for Face ID, connects and opens
-  the console on that session: on its answer peek if it waits, else on its
-  pane. If the session has ended, the console says `That session ended.`
+  the console on that session: on its chat. If the session has ended, the
+  console says `That session ended.`
 - **The setting:** the `Island` entry in the app's console, next to `Hosts`.
   `Follow` is the one host that has the island (the host opened last). `Show`
   is `Sessions`, `Usage` or `Auto (Usage while the stoker runs)`. `Buzz` is
@@ -211,14 +211,55 @@ or `~/go/bin/matchblox` after `go install`.
 Outside tmux, `matchblox` attaches to the tmux session `matchblox`, or
 starts it. A second phone or laptop attaches to the same session.
 
-## Go to an agent and back
+## Read and steer an agent
 
-1. Tap an agent in Sessions. The key line says `tap again: <command>`.
-2. Tap it again. You are in the agent's pane.
-3. To come back in the matchblox app, swipe in from the left edge, tap
-   `◂ matchblox` at the left of the tmux status line, or press ⌘M on a
-   hardware keyboard. All three work whatever your tmux prefix is, and
-   none needs the tmux mouse.
+The chat is the agent's live screen, inside the console. You do not leave
+the console to answer an agent. See [the chat](console.md#the-chat).
+
+1. Tap an agent in Sessions. On a one-column phone, its chat fills the
+   screen. The title row reads `‹ Sessions · <name> · <state>`. Held wide,
+   the chat is the pane beside the list: tap the agent again, or tap the
+   chat, to give it the keys.
+2. Type. Every key goes to the agent. When the agent asks with its
+   question tool, a card shows at the foot. Tap an option, or type and
+   press `Enter`.
+3. To go back to Sessions, tap `‹ Sessions` or `◂` on the key bar. You can
+   also swipe in from the left edge, or press ⌘M on a hardware keyboard.
+   `Ctrl+]` does it too.
+
+The app's key bar has nine keys: `◂ ↑ ↓ ⏎ Tab ⇧Tab Esc ^C ⌨`. Each key
+works at the first tap. The keys touch edge to edge, so a tap between two
+keys always hits one. Each key is at least 44 pt tall. `↑` and `↓` are
+wider than the other keys and 52 pt tall. The system keyboard types the
+rest. The terminal turns off autocorrect, suggestions, smart quotes, smart
+dashes and auto capitalisation. So they never change a key you send.
+
+- `◂` goes back. In the chat it goes to Sessions. In a tmux pane it goes
+  to the console.
+- `^C` interrupts. `^C` twice stops Claude Code. A second `^C` within 1 s
+  is held, and the key line says so.
+- `⌨` shows or hides the system keyboard. While the system keyboard is
+  on screen, `⌨` looks held down. While the keyboard is down, the key bar
+  stays at the foot of the screen.
+
+A vertical swipe scrolls the console and a tmux pane. The lines move with
+your finger: one line for each line of travel. In a tmux pane each wheel
+step scrolls 5 lines, so the app sends one step for each 5 lines of travel.
+Swipe down for older lines, and up for newer lines. A flick carries on for
+at most 0.5 s, and scrolls the same lines in the console and in a pane.
+To select text, touch and hold, then tap Select and drag. Where the
+program does not read the mouse, the terminal scrolls its own history.
+
+## Go to an agent's pane and back
+
+`Ctrl+O` in the chat goes to the agent's pane in tmux. A phone has no
+`Ctrl+O`: a tap on a row of Panes does it. Tap the row, and the
+key line says `tap again: <command>`. Tap it again. You are in the pane.
+
+To come back in the matchblox app, tap `◂` on the key bar, swipe in from
+the left edge, tap `◂ matchblox` at the left of the tmux status line, or
+press ⌘M on a hardware keyboard. All four work whatever your tmux prefix
+is, and none needs the tmux mouse.
 
 In another SSH app, tap `◂ matchblox`, or press `prefix m` (the tmux prefix,
 then m). There the tap needs the tmux mouse on: press `m` in the preview of
@@ -227,26 +268,13 @@ tmux config. Without it, use `prefix m`.
 
 The console then selects the next agent that waits.
 
-## Answer without leaving the console
-
-Tap an agent, then tap it again: on a one-column phone the peek rises from
-the bottom, over the dimmed list, with what the agent said last; held
-upright with a small font, the drawer on the right becomes the
-conversation and the list stays beside it. Tap an option, or type a line
-and press `Enter`; it goes to that agent's pane at once. An agent that
-works gets it as a message, which Claude Code queues. After an answer the
-peek moves to the next agent that waits. A swipe left or right, or a tap
-on `← prev` or `next →`, moves it along the list; `Esc` or a tap outside
-the peek closes it. See [the answer
-peek](console.md#the-answer-peek).
-
 ## Switch an agent from the phone
 
 The selected agent's keys are under it: on a one-column phone at the foot
 of its opened row, held upright with a small font at the foot of the
 drawer. Tap `A switch` to open Switch agent. Tap the agent you want, then
-`Enter`; the plan rises in a box above the key line, and a typed `y` runs it (a tap is never consent). The new agent
-starts in the same pane with the same name, on the account you last
+`Enter`; the plan rises in a box above the key line. A typed `y` runs it (a
+tap is never consent). The new agent starts in the same pane with the same name, on the account you last
 started that agent on, and the console jumps to it.
 See [`A` in Keys](keys.md).
 
@@ -255,14 +283,15 @@ See [`A` in Keys](keys.md).
 A phone held upright is read by its shape, so the keyboard coming and
 going does not change the layout. With a small font that makes it 90
 columns or more, the list sits on the left and the selected agent's detail
-in a drawer on the right, and the dock shows two panels side by side. On its side it
-goes by its width. Under 60 columns, the console has one column. Each agent is one line,
-grouped by what it needs from you: who waits first. The selected one opens
+in a drawer on the right, and the dock shows two panels side by side. On
+its side it goes by its width. Under 60 columns, the console has one
+column. Each agent is one line, grouped by what it needs from you: who waits first. The selected one opens
 in place: what it said last, its ships, its plan and its keys. Only
 the selected setup step shows its detail.
 
 Under the list, when there is room, the dock shows usage, the machine or
-the stoker: `u`, or a tap on the word at its right, goes to the next. While
+the stoker (a wide desk puts them in the left column instead). `u`, or a
+tap on the word at its right, goes to the next. While
 the stoker runs, its panel shows by itself until you switch; a tap on it
 opens the Stoker tab. With the keyboard up the dock
 folds away; the Machine tab has it.
@@ -274,4 +303,4 @@ Turn the phone on its side, at 60 columns or more, and the list and the
 detail of the selected agent sit side by side.
 
 Every key is on the key bar of an SSH app: letters, digits, arrows, `Enter`
-and `Esc`. See [Keys](keys.md).
+and `Esc`. The matchblox app adds its nine keys. See [Keys](keys.md).

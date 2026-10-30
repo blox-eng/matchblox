@@ -8,7 +8,7 @@
    install page.”
    #4540 ●━●━●━●━●  live
    ▰▰▰▰▰ plan 100%  ▲ clear
-                 a answer  A switch  ⏎ open
+                   a chat  A switch  ⏎ chat
 ────────────────────────────────────────────
  ╿ ember-billing         done      4m   32%
  ╿ flint-auth            asks      2m   41%
@@ -28,4 +28,4 @@
  ○ Clear cinder-ci (%6)
  ○ Clear flint-auth (%2)
 ────────────────────────────────────────────
- ⏎ open  a answer  x kill  r rename  N new
+ ⏎ chat  a chat  x kill  r rename  N new

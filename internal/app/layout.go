@@ -63,7 +63,7 @@ func (m Model) layoutAt(w int) Layout {
 }
 
 // upright is a portrait screen: its dock shows one panel at a time and its
-// peek sits at the bottom, as on a phone.
+// boxes sit at the bottom, as on a phone.
 func (m Model) upright() bool { return portrait(m.width, m.height) }
 
 // phoneDock is a dock of one panel, u cycling it: a one-column phone.

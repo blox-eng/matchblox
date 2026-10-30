@@ -9,23 +9,23 @@
    “The refresh flow works and the tests
    pass. One choice is yours before I wire…
    #4545 ●━✕┄○┄○┄○  conflicts with main
-    ▲ clear      a answer  A switch  ⏎ open
+    ▲ clear        a chat  A switch  ⏎ chat
 ────────────────────────────────────────────
  ╿ kindle-web            asks      1m   56%
  ╿ cinder-ci             done      0s   55%
  ╿ wick-mobile           done      0s    6%
  WORKING · 1
-╭─ flint-auth asks · 1 of 2 ───────────────╮
-│ The refresh endpoint is in and its tests │
-│ pass. One choice is yours before I wire  │
-│ the rotation: what should a refresh do   │
-│ with the token it was given?             │
-│                                          │
-│ Should a refresh also rotate the token?  │
-│ › 1 Rotate it  the old one stops at once │
-│   2 Rotate, keep the old one a minute    │
-│   3 Keep the token                       │
-│   4 Type an answer…                      │
-╰─ ⏎ question 2 ─ ← prev  next → ─ esc ────╯
+ ✦ hearth-api            busy           79%
+ + start a new session
+
+ 1 without an agent: shell:1.1 zsh
+
+ RECOMMENDATIONS · 7 · h hides
+ ▲ The week runs short: compact spark-docs
+ ○ Clear spark-docs (%3)
+ ○ Clear kindle-web (%5)
+ ○ Clear cinder-ci (%6)
+ ○ Clear flint-auth (%2)
+ ○ Clear ember-billing (%8)
 ────────────────────────────────────────────
- ⏎ open  a answer  x kill  r rename  N new
+ That session ended.

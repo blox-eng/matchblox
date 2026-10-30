@@ -15,11 +15,11 @@ import (
 // Words match in any case.
 var docKey = map[string]string{
 	"enter": "enter", "⏎": "enter", "esc": "esc", "↑": "up", "↓": "down", "←": "left", "→": "right",
-	"tab": "tab", "shift+tab": "shift+tab", "space": "space", "ctrl+c": "ctrl+c", "ctrl+o": "ctrl+o",
+	"tab": "tab", "shift+tab": "shift+tab", "space": "space", "ctrl+c": "ctrl+c", "ctrl+o": "ctrl+o", "ctrl+]": "ctrl+]",
 	"backspace": "backspace",
 }
 
-func keyName(doc string) string {
+func docKeyName(doc string) string {
 	if k, ok := docKey[strings.ToLower(doc)]; ok && len(doc) > 1 {
 		return k
 	}
@@ -41,7 +41,7 @@ type keyLayer struct {
 func boundKeys() map[string]*keyLayer {
 	k, s := defaultKeys(), defaultShellKeys()
 	screens := map[string][][]bkey.Binding{
-		"Model": {k.global.bindings(), k.main.bindings(), k.form.bindings(), k.peek.bindings(), k.sheet.bindings(),
+		"Model": {k.global.bindings(), k.main.bindings(), k.form.bindings(), k.card.bindings(), k.chat.bindings(), k.sheet.bindings(),
 			k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(), k.scan.bindings()},
 		"Shell": {s.shell.bindings(), s.typing.bindings()},
 	}
@@ -81,7 +81,7 @@ func TestTheDocsNameEveryKeyAndOnlyRealOnes(t *testing.T) {
 	tabs := fmt.Sprintf("1-%d", len(tabNames))
 	named := map[string]map[string]bool{"Model": {}, "Shell": {}}
 	for _, r := range refs {
-		k := keyName(r.Text)
+		k := docKeyName(r.Text)
 		screens := []string{"Model", "Shell"}
 		if r.Table {
 			screens = []string{"Model"}

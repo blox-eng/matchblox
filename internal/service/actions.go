@@ -128,6 +128,9 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	if strings.HasPrefix(a.RecID, focusPrefix) {
 		return s.focus(a) // it moves the consoles; the stoker goes on resting
 	}
+	if pane, ok := strings.CutPrefix(a.RecID, proto.KeysPrefix); ok {
+		return s.keys(ctx, pane, a) // a key twice is twice: no dedupe
+	}
 	// A session the stoker drove speaks for the stoker: what it sends
 	// counts and drives, and it gives no go.
 	agent := s.agentsPane(a)
@@ -452,7 +455,8 @@ func (s *Service) messageable(pane string, pid int) error {
 }
 
 // pick answers the question tool's call a session waits on, with the
-// choices the person made in the answer peek. Act.Text is a said.Answer.
+// choices the person made on the chat's question card. Act.Text is a
+// said.Answer.
 func (s *Service) pick(ctx context.Context, pane string, a proto.Act) proto.Result {
 	var ans said.Answer
 	if err := json.Unmarshal([]byte(a.Text), &ans); err != nil {

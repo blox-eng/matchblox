@@ -7,7 +7,10 @@ import (
 // tap is a click or a finger on a phone. A tap on a tab opens it, on a key
 // of the key line, of an opened row or under the detail presses it, on `● N wait for you` selects the first
 // session that waits, on the dock's `machine ›` switches the panel. A tap
-// on a row selects it and shows the step a second tap runs: an answer for
+// right of the list gives the chat the keys, and so does a tap on a
+// session's row on a phone; a tap on the list, or on the title row of a
+// phone's chat, gives them back to Sessions. A tap on an option of the
+// chat's question card picks it. A tap on a row selects it and shows the step a second tap runs: an answer for
 // a session that waits, else the row's Enter. The second tap runs it when
 // it only moves this terminal, or asks to confirm it. A tap is never
 // consent to a destructive step, and it cancels a pending one.
@@ -42,15 +45,25 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.form != nil {
 		return m.tapForm(ms, sc)
 	}
-	if m.peek != nil {
-		inside := ms.Y >= sc.peekAt && ms.Y < sc.peekAt+len(sc.peekRows) && ms.X >= sc.peekX && ms.X < sc.peekX+sc.peekW
-		if !sc.peekInline || inside {
-			return m.tapPeek(ms, sc)
+	ci, dx := ms.Y-sc.cardAt, ms.X-sc.cardX
+	onCard := ci >= 0 && ci < len(sc.cardRows) && dx >= 0 && dx < sc.cardW
+	if m.notLive() && m.chatKeys {
+		switch {
+		case onCard:
+			return m.backToLive(), nil
+		case sc.chatFull && ms.Y == 0, !sc.chatFull && ms.Y == sc.bodyTop && ms.X > sc.listW:
+			m.up = 0 // the title: back to live, the keys stay
+			return m, nil
 		}
-		// The list beside the pane is live: the tap closes the peek and
-		// does what it does there.
-		m.peek = nil
-		sc = m.draw(w)
+	}
+	if onCard {
+		return m.tapCard(ci, dx, sc)
+	}
+	if sc.chatFull && ms.Y != sc.keysAt {
+		if ms.Y == 0 {
+			m.chatKeys = false
+		}
+		return m, nil
 	}
 	switch {
 	case ms.Y == 0:
@@ -95,8 +108,19 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 	}
 	i := ms.Y - sc.bodyTop
-	if i < 0 || i >= len(sc.rows) || ms.X >= sc.listW {
+	if i < 0 || i >= len(sc.rows) {
 		return m, nil
+	}
+	if ms.X >= sc.listW {
+		if m.tab == tabSessions {
+			return m.openChat(), nil
+		}
+		return m, nil
+	}
+	back := m.chatKeys // the tap gives the keys back, and opens nothing
+	m.chatKeys = false
+	if sc.rows[i] == stokerPanelRow {
+		return m.openStoker().seeStoker()
 	}
 	if sc.rows[i] == headerRow {
 		return m.tapHeader(ms.X)
@@ -114,6 +138,10 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	picked := m.view().index != nil && m.rowIndex() == sc.rows[i] && (m.tab != tabSessions || m.chose)
 	m.selectRow(sc.rows[i])
+	if s, ok := m.selectedSession(); ok && s.Pane != "" && m.tab == tabSessions && m.layoutAt(w) == Narrow {
+		m.armed = "" // a phone's session opens in its chat, as Enter does
+		return m.openChat(), nil
+	}
 	if m.tab == tabShips {
 		// A tap on the selected ship goes to its session, as Enter does.
 		m.armed, m.flash = "", ""
@@ -122,19 +150,14 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if pane, _ := m.peekTarget(); pane != "" {
+	if pane, _ := m.chatTarget(); pane != "" {
 		// A session opens in place with its keys; a tap on it once it is
-		// selected opens the peek, to answer it or to message it.
+		// selected gives the keys to its chat.
 		m.armed, m.flash = "", ""
-		if !picked {
+		if !picked || back {
 			return m, nil // the default selection is not a tap
 		}
-		open := func(m Model) (tea.Model, tea.Cmd) { m.openPeek(pane); return m, nil }
-		if m.night() && !m.stoker.Asked {
-			m.held = open
-			return m, nil
-		}
-		return open(m)
+		return m.chatOn(pane), nil
 	}
 	say, run := m.tapAct()
 	if run == nil {
@@ -177,12 +200,17 @@ func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd)) {
 	}
 }
 
-// wheel is a swipe on a phone: it moves the selection, as ↑ and ↓ do.
+// wheel is a swipe on a phone: over the chat it scrolls the agent's
+// history, elsewhere it moves the selection, as ↑ and ↓ do.
 func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.asking() {
 		return m, nil
 	}
 	m.held = nil // a swipe is another key: it drops the question
+	if m.overChat(ms) {
+		m.armed = ""
+		return m.scrollChat(ms.Button == tea.MouseWheelUp), nil
+	}
 	switch ms.Button {
 	case tea.MouseWheelUp:
 		m.move(-1)
@@ -191,4 +219,20 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	m.armed = ""
 	return m, nil
+}
+
+// overChat tells if ms is over the chat: the whole screen of a phone's
+// chat, or the chat beside the list.
+func (m Model) overChat(ms tea.Mouse) bool {
+	if !m.have || m.mismatch || m.pair.owns() || m.sheet != nil || m.form != nil || m.pending != nil {
+		return false
+	}
+	w := max(m.width, minWidth)
+	sc := m.draw(w)
+	if sc.chatFull {
+		return true
+	}
+	_, detailW := m.panes(w)
+	_, chatting := m.chatShown(detailW)
+	return chatting && ms.X > sc.listW && ms.Y >= sc.bodyTop && ms.Y < sc.bodyTop+len(sc.rows)
 }

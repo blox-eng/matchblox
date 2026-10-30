@@ -1,38 +1,38 @@
  ▰ matchblox                                                                           ● 6 wait for you
  SESSIONS 7    ships 3    machine    git    history    panes    stoker
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- WAITS FOR YOU · 6                                             │
-▌│ spark-docs                              done       9m   88% │ spark-docs
- ╿ ember-billing                           done       4m   32% │ │ done, waits for you · 9m · hearth:3.…
- ╿ flint-auth                              asks       2m   41% │
- ╿ kindle-web                              asks       1m   56% │ CLAUDE SAID
- ╿ cinder-ci                               done       0s   55% │ I rewrote the quick start and the
- ╿ wick-mobile                             done       0s    6% │ install page.
- WORKING · 1                                                   │
- ✦ hearth-api                              busy            79% │ context  ▰▰▰▰▰▰▰▰▰▱ 88%
- + start a new session                                         │ plan     ▰▰▰▰▰▰▰▰▰▰ 100%  docs for the…
-                                                               │ ship     #4540 ●━●━●━●━●  live
+ WAITS FOR YOU · 6                       │ spark-docs · done
+▌│ spark-docs        done       9m   88% │ ✻ team@example.com · Max · #4540 ●━●━●━●━●  live
+ ╿ ember-billing     done       4m   32% │
+ ╿ flint-auth        asks       2m   41% │
+ ╿ kindle-web        asks       1m   56% │
+ ╿ cinder-ci         done       0s   55% │
+ ╿ wick-mobile       done       0s    6% │
+ WORKING · 1                             │
+ ✦ hearth-api        busy            79% │
+ + start a new session                   │
+                                         │
  1 without an ag╭─ ssh ws-1 asks ──────────────────────────────────────────────────────╮
-                │                                                                      │.com/hearth/spa…
- RECOMMENDATIONS│   builder@ws-1's password:                                           │ (clear after 0…
- ▲ The week runs│                                                                      │kens · +0k in
- ○ Clear spark-d│   › •••▏                                                             │.com · Max ·
- ○ Clear kindle-│                                                                      │started 3h20m
+                │                                                                      │
+ RECOMMENDATIONS│   builder@ws-1's password:                                           │
+ ▲ The week runs│                                                                      │
+ ○ Clear spark-d│   › •••▏                                                             │
+ ○ Clear kindle-│                                                                      │
  ○ Clear cinder-╰─ ⏎ send ─ esc cancel the ssh ────────────────────────────────────────╯
- ○ Clear flint-auth (%2)                                       │
- ○ Clear ember-billing (%8)                                    │ a answer   ⏎ open it   A switch agent
- ○ Clear wick-mobile (%7)                                      │
+ ○ Clear flint-auth (%2)                 │
+ ○ Clear ember-billing (%8)              │
+ ○ Clear wick-mobile (%7)                │
+─────────────────────────────────────────│
+ USAGE                                   │
+ ✻ Claude        5h   ▰▰▰ 84%  · Fri 01:…│
+                 wk   ▰▰▱ 82%  · Mon 09:…│
+ · Google login  not measured · OpenCode…│
+ ❋ OpenAI        5h ▰▱▱ 40% · wk 12%     │
+─────────────────────────────────────────│
+ MACHINE                        16 cores │
+ cpu  ▁ 0%   load 6.2                    │
+ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB               │
+ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB               │
+ runs 5 claude · 1 codex · 1 opencode    │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- USAGE                                                         │ MACHINE                       16 cores
- ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                │ cpu  ▁ 0%   load 6.2
-                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00                │ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
-                 out Fri ~21:00                                │ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
- · Google login  not measured · OpenCode keeps no limits       │ runs 5 claude · 1 codex · 1 opencode
- ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                    │
-                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00                │ PID      COMMAND           CPU    MEM …
-                 lasts the week                                │ 1        systemd             0%   9.8M…
-                                                               │ 1200     claude              0%   9.8M…
-                                                               │ 1300     zsh                 0%   9.8M…
-                                                               │ 1310     claude              0%   9.8M…
-────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit    sampled 0s ago
+ ⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit      sampled 0s ago

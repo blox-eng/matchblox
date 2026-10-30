@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -136,15 +135,15 @@ func TestATapPicksAnAgentAndAField(t *testing.T) {
 		t.Fatalf("agent spans %+v", sc.formAgents)
 	}
 	c := sc.formAgents[1]
-	tapped, _ := next.Update(tea.MouseClickMsg{X: sc.peekX + c.x0, Y: sc.formAgentsAt, Button: tea.MouseLeft})
+	tapped, _ := next.Update(tea.MouseClickMsg{X: sc.boxX + c.x0, Y: sc.formAgentsAt, Button: tea.MouseLeft})
 	if fm := tapped.(Model).form; fm.agent != "codex" || fm.at != fieldAgent {
 		t.Fatalf("form %+v", fm)
 	}
 	// A tap on the first message's line puts the cursor there.
 	sc = tapped.(Model).draw(44) // Codex's launch-settings hint changes the form's height.
-	for i, p := range sc.peekRows {
+	for i, p := range sc.boxRows {
 		if p == "field:4" {
-			tapped, _ = tapped.Update(tea.MouseClickMsg{X: sc.peekX + 4, Y: sc.peekAt + i, Button: tea.MouseLeft})
+			tapped, _ = tapped.Update(tea.MouseClickMsg{X: sc.boxX + 4, Y: sc.boxAt + i, Button: tea.MouseLeft})
 		}
 	}
 	if fm := tapped.(Model).form; fm.at != fieldFirst {
@@ -272,24 +271,23 @@ func TestSwitchEscSendsNothing(t *testing.T) {
 	}
 }
 
-// A phone has no A key to hand: the opened row, and the detail beside the
-// list, carry A switch, and a tap on it opens the form.
+// A phone has no A key to hand: the opened row carries A switch, and a
+// tap on it opens the form. Beside the list a desk shows the chat.
 func TestATapOnSwitchOpensTheForm(t *testing.T) {
-	for _, w := range []int{50, 120} {
-		st := lifeState()
-		st.Queue = nil
-		m, _ := loadedWith(t, w, st)
-		next := selectPane(t, m, "%1")
-		out := strings.Split(ansi.Strip(next.(Model).render()), "\n")
-		y := slices.IndexFunc(out[:len(out)-1], func(l string) bool { return strings.Contains(l, "A switch") })
-		if y < 0 {
-			t.Fatalf("%d columns: no A switch above the key line:\n%s", w, strings.Join(out, "\n"))
-		}
-		x := len([]rune(out[y][:strings.Index(out[y], "A switch")]))
-		tapped, _ := tap(next, x, y)
-		if fm := tapped.(Model).form; fm == nil || !fm.swap {
-			t.Fatalf("%d columns: a tap on A switch opened %+v", w, fm)
-		}
+	const w = 50
+	st := lifeState()
+	st.Queue = nil
+	m, _ := loadedWith(t, w, st)
+	next := selectPane(t, m, "%1")
+	out := strings.Split(ansi.Strip(next.(Model).render()), "\n")
+	y := slices.IndexFunc(out[:len(out)-1], func(l string) bool { return strings.Contains(l, "A switch") })
+	if y < 0 {
+		t.Fatalf("%d columns: no A switch above the key line:\n%s", w, strings.Join(out, "\n"))
+	}
+	x := len([]rune(out[y][:strings.Index(out[y], "A switch")]))
+	tapped, _ := tap(next, x, y)
+	if fm := tapped.(Model).form; fm == nil || !fm.swap {
+		t.Fatalf("%d columns: a tap on A switch opened %+v", w, fm)
 	}
 }
 
@@ -315,29 +313,8 @@ func TestFormSpaceIsTextOnWhereAndPicksOnAgent(t *testing.T) {
 
 const cloneURL = "https://github.com/o/r"
 
-// runAll runs cmd and, for a batch, each of its commands but the first
-// (the receive, which waits for the connection). A lone receive is left
-// waiting.
-func runAll(cmd tea.Cmd) {
-	if cmd == nil {
-		return
-	}
-	got := make(chan tea.Msg, 1)
-	go func() { got <- cmd() }()
-	var msg tea.Msg
-	select {
-	case msg = <-got:
-	case <-time.After(200 * time.Millisecond):
-		return
-	}
-	if b, ok := msg.(tea.BatchMsg); ok {
-		for _, c := range b[1:] {
-			if c != nil {
-				c()
-			}
-		}
-	}
-}
+// runAll runs cmd and every command it batches; a receive is left waiting.
+func runAll(cmd tea.Cmd) { drain(cmd) }
 
 // pastedURL is N with cloneURL pasted into where.
 func pastedURL(t *testing.T, w int) (tea.Model, *fakeConn) {
@@ -1255,11 +1232,11 @@ func TestTapOnWhereAfterAFailedClone(t *testing.T) {
 	next, f := cloning(t, 100)
 	next, _ = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}))
 	sc := next.(Model).draw(100)
-	i := slices.Index(sc.peekRows, fmt.Sprintf("field:%d", fieldWhere))
+	i := slices.Index(sc.boxRows, fmt.Sprintf("field:%d", fieldWhere))
 	if i < 0 {
-		t.Fatalf("no where line in %q", sc.peekRows)
+		t.Fatalf("no where line in %q", sc.boxRows)
 	}
-	next, cmd := tap(next, sc.peekX+4, sc.peekAt+i)
+	next, cmd := tap(next, sc.boxX+4, sc.boxAt+i)
 	runAll(cmd)
 	if acts := f.acts(); len(acts) != 3 || acts[2].RecID != "clone:plan" || !next.(Model).form.whereList() {
 		t.Fatalf("sent %+v", acts)

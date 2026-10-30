@@ -57,7 +57,7 @@ func routeAt(t *testing.T, st proto.State, keys ...string) Model {
 	return m.(Model)
 }
 
-// withRoute is a model with the layer open: sheet, form, peek, search, pair,
+// withRoute is a model with the layer open: sheet, form, chat, search, pair,
 // held, pending, or none (main).
 func withRoute(t *testing.T, layer string) Model {
 	t.Helper()
@@ -76,11 +76,10 @@ func withRoute(t *testing.T, layer string) Model {
 			t.Fatal("N opened no form")
 		}
 		return m
-	case "peek":
-		m := selectPane(t, routeAt(t, queueState()), "%2").(Model)
-		m = sendKey(m, "a").(Model)
-		if m.peek == nil {
-			t.Fatal("a opened no peek")
+	case "chat":
+		m := sendKey(selectPane(t, routeAt(t, queueState()), "%2"), "enter").(Model)
+		if !m.chatKeys {
+			t.Fatal("enter gave the chat no keys")
 		}
 		return m
 	case "search":
@@ -96,16 +95,16 @@ func withRoute(t *testing.T, layer string) Model {
 		}
 		return m
 	case "held":
-		m := routeAt(t, nightState(), "enter")
+		m := routeAt(t, nightState(), "ctrl+o")
 		if m.held == nil {
 			t.Fatal("enter at night held no key")
 		}
 		return m
 	case "pending":
 		m := selectPane(t, routeAt(t, queueState()), "%3").(Model)
-		m = sendKey(m, "enter").(Model)
+		m = sendKey(m, "ctrl+o").(Model)
 		if m.pending == nil {
-			t.Fatal("enter set no pending")
+			t.Fatal("ctrl+o set no pending")
 		}
 		return m
 	}
@@ -155,9 +154,14 @@ func TestKeyRouting(t *testing.T) {
 				t.Fatal("the form stayed")
 			}
 		}},
-		{"peek: esc closes it", func(t *testing.T) Model { return withRoute(t, "peek") }, esc, false, func(t *testing.T, m, _ Model) {
-			if m.peek != nil {
-				t.Fatal("the peek stayed")
+		{"chat: esc goes to the agent", func(t *testing.T) Model { return withRoute(t, "chat") }, esc, false, func(t *testing.T, m, _ Model) {
+			if !m.chatKeys || m.keyInFlight == "" {
+				t.Fatalf("chatKeys %v, key in flight %q", m.chatKeys, m.keyInFlight)
+			}
+		}},
+		{"chat: ctrl+c goes to the agent", func(t *testing.T) Model { return withRoute(t, "chat") }, ctrlC, false, func(t *testing.T, m, _ Model) {
+			if m.quitting || m.keyInFlight == "" {
+				t.Fatalf("quitting %v, key in flight %q", m.quitting, m.keyInFlight)
 			}
 		}},
 		{"search: x is typed", func(t *testing.T) Model { return withRoute(t, "search") }, text("x"), false, func(t *testing.T, m, _ Model) {
@@ -213,7 +217,7 @@ func TestKeyRouting(t *testing.T) {
 			}
 		}},
 	}
-	for _, layer := range []string{"sheet", "form", "peek", "search", "pair", "main"} {
+	for _, layer := range []string{"sheet", "form", "search", "pair", "main"} {
 		rows = append(rows, row{layer + ": ctrl+c quits", func(t *testing.T) Model { return withRoute(t, layer) }, ctrlC, true, func(t *testing.T, m, _ Model) {
 			if !m.quitting {
 				t.Fatal("not quitting")
@@ -341,17 +345,14 @@ func keyLineStates(t *testing.T) []keyLineAt {
 		on := func(pane string) tea.Model { return selectPane(t, q, pane) }
 		add(fmt.Sprintf("search/%d", w), typeText(sendKey(q, "/"), "app"))
 		add(fmt.Sprintf("search kept/%d", w), sendKey(typeText(sendKey(q, "/"), "app"), "enter"))
-		peek := sendKey(on("%2"), "a")
-		add(fmt.Sprintf("peek/%d", w), peek)
-		add(fmt.Sprintf("peek typed/%d", w), typeText(peek, "yes"))
-		add(fmt.Sprintf("peek question/%d", w), sendKey(on("%1"), "a"))
+		add(fmt.Sprintf("chat/%d", w), sendKey(on("%2"), "enter"))
 		add(fmt.Sprintf("form new/%d", w), sendKey(q, "N"))
 		add(fmt.Sprintf("form rename/%d", w), sendKey(on("%2"), "r"))
 		add(fmt.Sprintf("form switch/%d", w), sendKey(on("%2"), "A"))
-		add(fmt.Sprintf("pending jump/%d", w), sendKey(on("%3"), "enter"))
+		add(fmt.Sprintf("pending jump/%d", w), sendKey(on("%3"), "ctrl+o"))
 		add(fmt.Sprintf("pending kill/%d", w), sendKey(on("%3"), "x"))
 		add(fmt.Sprintf("pending cancelled/%d", w), sendKey(sendKey(on("%3"), "x"), "esc"))
-		add(fmt.Sprintf("held/%d", w), sendKey(at(w, nightState()), "enter"))
+		add(fmt.Sprintf("held/%d", w), sendKey(at(w, nightState()), "ctrl+o"))
 		add(fmt.Sprintf("held x/%d", w), sendKey(at(w, nightState()), "x"))
 		door := at(w, doorState(hooksDoor, wayBack))
 		add(fmt.Sprintf("pending door/%d", w), sendKey(door, "enter"))
@@ -415,9 +416,9 @@ var keyLines = map[string]string{
 	"empty/100/history/row 0":            "↑↓ move  p ships  f stoker  / find  q quit",
 	"empty/100/panes/row 0":              "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"empty/100/stoker/row 0":             "↑↓ move  1 sessions  p ships  f stoker  / find  q quit",
-	"fixture/100/sessions/row 0":         "⏎ open  a message  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"fixture/100/sessions/row 1":         "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"fixture/100/sessions/row 2":         "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
+	"fixture/100/sessions/row 0":         "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"fixture/100/sessions/row 1":         "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"fixture/100/sessions/row 2":         "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"fixture/100/sessions/row 3":         "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit",
 	"fixture/100/sessions/row 4":         "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
 	"fixture/100/sessions/row 5":         "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
@@ -430,9 +431,9 @@ var keyLines = map[string]string{
 	"fixture/100/panes/row 2":            "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"fixture/100/panes/row 3":            "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"fixture/100/stoker/row 0":           "↑↓ move  1 sessions  p ships  f stoker  / find  q quit",
-	"queue/100/sessions/row 0":           "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"queue/100/sessions/row 1":           "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"queue/100/sessions/row 2":           "⏎ open  a message  x kill  r rename  z park  N new  p ships  f stoker  / find",
+	"queue/100/sessions/row 0":           "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"queue/100/sessions/row 1":           "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"queue/100/sessions/row 2":           "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"queue/100/sessions/row 3":           "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit",
 	"queue/100/sessions/row 4":           "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
 	"queue/100/sessions/row 5":           "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
@@ -445,9 +446,9 @@ var keyLines = map[string]string{
 	"queue/100/panes/row 2":              "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"queue/100/panes/row 3":              "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"queue/100/stoker/row 0":             "↑↓ move  1 sessions  p ships  f stoker  / find  q quit",
-	"queue/50/sessions/row 0":            "⏎ open  a answer  x kill  r rename  N new",
-	"queue/50/sessions/row 1":            "⏎ open  a answer  x kill  r rename  N new",
-	"queue/50/sessions/row 2":            "⏎ open  a message  x kill  r rename  N new",
+	"queue/50/sessions/row 0":            "⏎ chat  a chat  x kill  r rename  N new  f stoker",
+	"queue/50/sessions/row 1":            "⏎ chat  a chat  x kill  r rename  N new  f stoker",
+	"queue/50/sessions/row 2":            "⏎ chat  a chat  x kill  r rename  N new  f stoker",
 	"queue/50/sessions/row 3":            "⏎ new session  p ships  f stoker",
 	"queue/50/sessions/row 4":            "⏎ do  x other  f stoker",
 	"queue/50/sessions/row 5":            "⏎ do  x other  f stoker",
@@ -462,9 +463,9 @@ var keyLines = map[string]string{
 	"queue/50/stoker/row 0":              "1 sessions  p ships  f stoker",
 	"doors/100/sessions/row 0":           "↑↓ move  ⏎ open  x close  / find  q quit",
 	"doors/100/sessions/row 1":           "↑↓ move  ⏎ open  x close  / find  q quit",
-	"doors/100/sessions/row 2":           "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"doors/100/sessions/row 3":           "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"doors/100/sessions/row 4":           "⏎ open  a message  x kill  r rename  z park  N new  p ships  f stoker  / find",
+	"doors/100/sessions/row 2":           "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"doors/100/sessions/row 3":           "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"doors/100/sessions/row 4":           "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"doors/100/sessions/row 5":           "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit",
 	"doors/100/sessions/row 6":           "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
 	"doors/100/sessions/row 7":           "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
@@ -477,9 +478,9 @@ var keyLines = map[string]string{
 	"doors/100/panes/row 2":              "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"doors/100/panes/row 3":              "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"doors/100/stoker/row 0":             "↑↓ move  1 sessions  p ships  f stoker  / find  q quit",
-	"night/100/sessions/row 0":           "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"night/100/sessions/row 1":           "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"night/100/sessions/row 2":           "⏎ open  a message  x kill  r rename  z park  N new  p ships  f stoker  / find",
+	"night/100/sessions/row 0":           "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"night/100/sessions/row 1":           "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"night/100/sessions/row 2":           "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"night/100/sessions/row 3":           "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit",
 	"night/100/sessions/row 4":           "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
 	"night/100/sessions/row 5":           "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
@@ -499,9 +500,9 @@ var keyLines = map[string]string{
 	"night/100/stoker/row 5":             "y give the go  ⏎ command  1 sessions  p ships  n stop night  / find  q quit",
 	"night/100/stoker/row 6":             "↑↓ move  ⏎ command  1 sessions  p ships  n stop night  / find  q quit",
 	"night/100/stoker/row 7":             "↑↓ move  ⏎ command  1 sessions  p ships  n stop night  / find  q quit",
-	"night/50/sessions/row 0":            "⏎ open  a answer  x kill  r rename  N new",
-	"night/50/sessions/row 1":            "⏎ open  a answer  x kill  r rename  N new",
-	"night/50/sessions/row 2":            "⏎ open  a message  x kill  r rename  N new",
+	"night/50/sessions/row 0":            "⏎ chat  a chat  x kill  r rename  N new  f stoker",
+	"night/50/sessions/row 1":            "⏎ chat  a chat  x kill  r rename  N new  f stoker",
+	"night/50/sessions/row 2":            "⏎ chat  a chat  x kill  r rename  N new  f stoker",
 	"night/50/sessions/row 3":            "⏎ new session  p ships  f stoker",
 	"night/50/sessions/row 4":            "⏎ do  x other  f stoker",
 	"night/50/sessions/row 5":            "⏎ do  x other  f stoker",
@@ -521,9 +522,9 @@ var keyLines = map[string]string{
 	"night/50/stoker/row 5":              "y give the go  ⏎ command  1 sessions  n stop nig…",
 	"night/50/stoker/row 6":              "⏎ command  1 sessions  p ships  n stop night",
 	"night/50/stoker/row 7":              "⏎ command  1 sessions  p ships  n stop night",
-	"morning/100/sessions/row 0":         "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"morning/100/sessions/row 1":         "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"morning/100/sessions/row 2":         "⏎ open  a message  x kill  r rename  z park  N new  p ships  f stoker  / find",
+	"morning/100/sessions/row 0":         "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"morning/100/sessions/row 1":         "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"morning/100/sessions/row 2":         "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"morning/100/sessions/row 3":         "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit",
 	"morning/100/sessions/row 4":         "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
 	"morning/100/sessions/row 5":         "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
@@ -543,9 +544,9 @@ var keyLines = map[string]string{
 	"morning/100/stoker/row 5":           "↑↓ move  ⏎ command  1 sessions  p ships  f stoker  / find  q quit",
 	"morning/100/stoker/row 6":           "↑↓ move  ⏎ command  1 sessions  p ships  f stoker  / find  q quit",
 	"morning/100/stoker/row 7":           "↑↓ move  ⏎ command  1 sessions  p ships  f stoker  / find  q quit",
-	"stoker up/100/sessions/row 0":       "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"stoker up/100/sessions/row 1":       "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"stoker up/100/sessions/row 2":       "⏎ open  a message  x kill  r rename  z park  N new  p ships  f stoker  / find",
+	"stoker up/100/sessions/row 0":       "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"stoker up/100/sessions/row 1":       "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"stoker up/100/sessions/row 2":       "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"stoker up/100/sessions/row 3":       "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit",
 	"stoker up/100/sessions/row 4":       "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
 	"stoker up/100/sessions/row 5":       "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
@@ -558,9 +559,9 @@ var keyLines = map[string]string{
 	"stoker up/100/panes/row 2":          "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"stoker up/100/panes/row 3":          "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"stoker up/100/stoker/row 0":         "⏎ open the stoker  Q quit it  1 sessions  p ships  f stoker  / find  q quit",
-	"stoker starting/100/sessions/row 0": "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"stoker starting/100/sessions/row 1": "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"stoker starting/100/sessions/row 2": "⏎ open  a message  x kill  r rename  z park  N new  p ships  f stoker  / find",
+	"stoker starting/100/sessions/row 0": "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"stoker starting/100/sessions/row 1": "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"stoker starting/100/sessions/row 2": "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"stoker starting/100/sessions/row 3": "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit",
 	"stoker starting/100/sessions/row 4": "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
 	"stoker starting/100/sessions/row 5": "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
@@ -573,9 +574,9 @@ var keyLines = map[string]string{
 	"stoker starting/100/panes/row 2":    "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"stoker starting/100/panes/row 3":    "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"stoker starting/100/stoker/row 0":   "⏎ open the stoker  Q quit it  1 sessions  p ships  f stoker  / find  q quit",
-	"stoker run/100/sessions/row 0":      "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"stoker run/100/sessions/row 1":      "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"stoker run/100/sessions/row 2":      "⏎ open  a message  x kill  r rename  z park  N new  p ships  f stoker  / find",
+	"stoker run/100/sessions/row 0":      "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"stoker run/100/sessions/row 1":      "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"stoker run/100/sessions/row 2":      "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"stoker run/100/sessions/row 3":      "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit",
 	"stoker run/100/sessions/row 4":      "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
 	"stoker run/100/sessions/row 5":      "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
@@ -589,13 +590,13 @@ var keyLines = map[string]string{
 	"stoker run/100/panes/row 3":         "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"stoker run/100/stoker/row 0":        "↑↓ move  ⏎ command  1 sessions  p ships  f stoker  / find  q quit",
 	"stoker run/100/stoker/row 1":        "↑↓ move  ⏎ command  1 sessions  p ships  f stoker  / find  q quit",
-	"demo/100/sessions/row 0":            "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"demo/100/sessions/row 1":            "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"demo/100/sessions/row 2":            "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"demo/100/sessions/row 3":            "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"demo/100/sessions/row 4":            "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"demo/100/sessions/row 5":            "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"demo/100/sessions/row 6":            "⏎ open  a message  x kill  r rename  z park  N new  p ships  f stoker  / find",
+	"demo/100/sessions/row 0":            "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"demo/100/sessions/row 1":            "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"demo/100/sessions/row 2":            "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ question 2 ─────────────────────────────────────────╯",
+	"demo/100/sessions/row 3":            "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"demo/100/sessions/row 4":            "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"demo/100/sessions/row 5":            "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"demo/100/sessions/row 6":            "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"demo/100/sessions/row 7":            "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit",
 	"demo/100/ships/row 0":               "↑↓ move  ⏎ session  f stoker  / find  q quit",
 	"demo/100/ships/row 1":               "↑↓ move  ⏎ session  x merge  f stoker  / find  q quit",
@@ -613,13 +614,13 @@ var keyLines = map[string]string{
 	"demo/100/panes/row 6":               "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"demo/100/panes/row 7":               "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"demo/100/stoker/row 0":              "↑↓ move  1 sessions  p ships  f stoker  / find  q quit",
-	"demo/50/sessions/row 0":             "⏎ open  a answer  x kill  r rename  N new",
-	"demo/50/sessions/row 1":             "⏎ open  a answer  x kill  r rename  N new",
-	"demo/50/sessions/row 2":             "⏎ open  a answer  x kill  r rename  N new",
-	"demo/50/sessions/row 3":             "⏎ open  a answer  x kill  r rename  N new",
-	"demo/50/sessions/row 4":             "⏎ open  a answer  x kill  r rename  N new",
-	"demo/50/sessions/row 5":             "⏎ open  a answer  x kill  r rename  N new",
-	"demo/50/sessions/row 6":             "⏎ open  a message  x kill  r rename  N new",
+	"demo/50/sessions/row 0":             "⏎ chat  a chat  x kill  r rename  N new  f stoker",
+	"demo/50/sessions/row 1":             "⏎ chat  a chat  x kill  r rename  N new  f stoker",
+	"demo/50/sessions/row 2":             "⏎ chat  a chat  x kill  r rename  N new  f stoker",
+	"demo/50/sessions/row 3":             "⏎ chat  a chat  x kill  r rename  N new  f stoker",
+	"demo/50/sessions/row 4":             "⏎ chat  a chat  x kill  r rename  N new  f stoker",
+	"demo/50/sessions/row 5":             "⏎ chat  a chat  x kill  r rename  N new  f stoker",
+	"demo/50/sessions/row 6":             "⏎ chat  a chat  x kill  r rename  N new  f stoker",
 	"demo/50/sessions/row 7":             "⏎ new session  p ships  f stoker",
 	"demo/50/ships/row 0":                "⏎ session  f stoker",
 	"demo/50/ships/row 1":                "⏎ session  x merge  f stoker",
@@ -637,9 +638,9 @@ var keyLines = map[string]string{
 	"demo/50/panes/row 6":                "⏎ go  s sort",
 	"demo/50/panes/row 7":                "⏎ go  s sort",
 	"demo/50/stoker/row 0":               "1 sessions  p ships  f stoker",
-	"orphans/100/sessions/row 0":         "⏎ open  a message  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"orphans/100/sessions/row 1":         "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
-	"orphans/100/sessions/row 2":         "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find",
+	"orphans/100/sessions/row 0":         "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"orphans/100/sessions/row 1":         "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"orphans/100/sessions/row 2":         "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"orphans/100/sessions/row 3":         "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit",
 	"orphans/100/sessions/row 4":         "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
 	"orphans/100/sessions/row 5":         "↑↓ move  ⏎ do  x other  f stoker  / find  q quit",
@@ -653,13 +654,11 @@ var keyLines = map[string]string{
 	"orphans/100/panes/row 3":            "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"orphans/100/stoker/row 0":           "↑↓ move  1 sessions  p ships  f stoker  / find  q quit",
 	"search/100":                         "/ app▏  ⏎ keep  esc clear",
-	"search kept/100":                    "/ app · esc clears  ⏎ open  a answer  x kill  r rename  z park  N new  f stoker",
-	"peek/100":                           "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ send ─ ← prev  2/3  next → ─ esc ─╯",
-	"peek typed/100":                     "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ send ─ ← prev  2/3  next → ─ esc ─╯",
-	"peek question/100":                  "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ open ─ ← prev  1/3  next → ─ esc ─╯",
-	"form new/100":                       "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ pick · ↑↓ move · ←→ repo · tab next · esc keep the path ╯",
-	"form rename/100":                    "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ rename ─ esc ───────────────────────────────────────────╯",
-	"form switch/100":                    "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ plan ─ tab next ─ esc ──────────────────────────────────╯",
+	"chat/100":                           "keys go to app-review · ctrl+] back · ctrl+o into tmux",
+	"search kept/100":                    "/ app · esc clears  ⏎ chat  a chat  x kill  r rename  z park  N new  f stoker",
+	"form new/100":                       "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ pick · ↑↓ move · ←→ repo · tab next · esc keep the path ╯",
+	"form rename/100":                    "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ rename ─ esc ───────────────────────────────────────────╯",
+	"form switch/100":                    "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ plan ─ tab next ─ esc ──────────────────────────────────╯",
 	"pending jump/100":                   "Jump: tmux switch-client -t %3 · ⏎ run ─ esc cancel || ╰─ ⏎ run ─ esc cancel ─────────────────────╯",
 	"pending kill/100":                   "Kill tools: tmux kill-pane -t %3 then kill -TERM 400 · y run ─ any other key cancels || ╰─ y run ─ any other key cancels ──────────╯",
 	"pending cancelled/100":              "cancelled: kill tools: tmux kill-pane -t %3, then kill -TERM 400",
@@ -668,21 +667,19 @@ var keyLines = map[string]string{
 	"pending door/100":                   "RUN Add the queue hooks: write ~/.claude/settings.json   y run  any other key cancels",
 	"pending door long/100":              "RUN Add the queue hooks: write ~/.claude/settings.json   ↓ the rest, then y",
 	"pending door also/100":              "RUN Add the way back: write ~/.tmux.conf   y run  any other key cancels",
-	"sheet f/100":                        "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ start ─ tab chips ─ esc ────────────────────────────────╯",
-	"sheet n/100":                        "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯",
-	"sheet chips/100":                    "⏎ open  a answer  x kill  r rename  z park  N new  p ships  f stoker  / find || ╰─ ⏎ send ─ space toggle ─ tab back ─────────────────────────╯",
+	"sheet f/100":                        "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ start ─ tab chips ─ esc ────────────────────────────────╯",
+	"sheet n/100":                        "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯",
+	"sheet chips/100":                    "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ send ─ space toggle ─ tab back ─────────────────────────╯",
 	"stoker step ask/100":                "go given: gh release create v1.4",
 	"stoker step look/100":               "kindle-web is gone: there is no pane to look at",
 	"stoker command/100":                 "y give the go  ⏎ command  1 sessions  p ships  n stop night  / find  q quit",
 	"stoker quit agent/100":              "Quit the stoker agent: tmux -L matchblox kill-session -t =stoker · y run ─ any other key cancels || ╰─ y run ─ any other key cancels ───────────────╯",
 	"search/50":                          "/ app▏  ⏎ keep  esc clear",
-	"search kept/50":                     "/ app · esc clears  ⏎ open  a answer  x kill  r …",
-	"peek/50":                            "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ send ─ ← prev  2/3  next → ─ esc ───────────╯",
-	"peek typed/50":                      "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ send ─ ← prev  2/3  next → ─ esc ───────────╯",
-	"peek question/50":                   "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ open ─ ← prev  1/3  next → ─ esc ───────────╯",
-	"form new/50":                        "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ pick · ↑↓ move · esc keep the path ─────────╯",
-	"form rename/50":                     "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ rename ─ esc ───────────────────────────────╯",
-	"form switch/50":                     "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ plan ─ tab next ─ esc ──────────────────────╯",
+	"chat/50":                            "keys go to app-review · ctrl+] back · ctrl+o int…",
+	"search kept/50":                     "/ app · esc clears  ⏎ chat  a chat  x kill  r re…",
+	"form new/50":                        "⏎ chat  a chat  x kill  r rename  N new  f stoker || ╰─ ⏎ pick · ↑↓ move · esc keep the path ─────────╯",
+	"form rename/50":                     "⏎ chat  a chat  x kill  r rename  N new  f stoker || ╰─ ⏎ rename ─ esc ───────────────────────────────╯",
+	"form switch/50":                     "⏎ chat  a chat  x kill  r rename  N new  f stoker || ╰─ ⏎ plan ─ tab next ─ esc ──────────────────────╯",
 	"pending jump/50":                    "Jump: tmux switch-client -t %3 · ⏎ run ─ esc cancel || ╰─ ⏎ run ─ esc cancel ───────────────────────────╯",
 	"pending kill/50":                    "Kill tools: tmux kill-pane -t %3 then kill -TERM 400 · y run ─ any other key cancels || ╰─ y run ─ any other key cancels ────────────────╯",
 	"pending cancelled/50":               "cancelled: kill tools: tmux kill-pane -t %3, the…",
@@ -691,9 +688,9 @@ var keyLines = map[string]string{
 	"pending door/50":                    "RUN Add the queue hooks: write ~/.claude/setting…",
 	"pending door long/50":               "RUN Add the queue hooks: write ~/.claude/setting…",
 	"pending door also/50":               "RUN Add the way back: write ~/.tmux.conf   y run…",
-	"sheet f/50":                         "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ start ─ tab chips ─ esc ────────────────────╯",
-	"sheet n/50":                         "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────╯",
-	"sheet chips/50":                     "⏎ open  a answer  x kill  r rename  N new || ╰─ ⏎ send ─ space toggle ─ tab back ─────────────╯",
+	"sheet f/50":                         "⏎ chat  a chat  x kill  r rename  N new  f stoker || ╰─ ⏎ start ─ tab chips ─ esc ────────────────────╯",
+	"sheet n/50":                         "⏎ chat  a chat  x kill  r rename  N new  f stoker || ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────╯",
+	"sheet chips/50":                     "⏎ chat  a chat  x kill  r rename  N new  f stoker || ╰─ ⏎ send ─ space toggle ─ tab back ─────────────╯",
 	"stoker step ask/50":                 "go given: gh release create v1.4",
 	"stoker step look/50":                "kindle-web is gone: there is no pane to look at",
 	"stoker command/50":                  "y give the go  ⏎ command  1 sessions  n stop nig…",

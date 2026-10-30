@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -46,6 +47,23 @@ func demoSessions(t *testing.T, w int) Model {
 	return m
 }
 
+// demoDetails is demoSessions with every session outside tmux: with no
+// pane to chat in, the selected one shows its detail beside the list.
+func demoDetails(t *testing.T, w int) Model {
+	t.Helper()
+	m, _ := loadedWith(t, w, outsideTmux(demoState(t)))
+	m.tab = tabSessions
+	return m
+}
+
+func outsideTmux(st proto.State) proto.State {
+	st.Sessions = slices.Clone(st.Sessions)
+	for i := range st.Sessions {
+		st.Sessions[i].Pane = ""
+	}
+	return st
+}
+
 // rowOf is the screen line of a session's row: its name in the list
 // column, never a recommendation that names it ("Compact x (%1)").
 func rowOf(out, name string) string {
@@ -71,7 +89,7 @@ func TestTheDetailNamesTheAccountWithItsProviderMark(t *testing.T) {
 		"codex":      "❋ team@example.com · Plus",
 		"opencode":   "google · login",
 	} {
-		m := demoSessions(t, 160)
+		m := demoDetails(t, 160)
 		for _, s := range m.snap.Sessions {
 			// Codex and OpenCode are named as their tmux windows.
 			if s.Name == name || s.Name != "hearth-api" && s.Agent == name {
@@ -170,14 +188,15 @@ func TestNoCredentialReachesTheScreen(t *testing.T) {
 	secrets = append(secrets, "made-up")
 	shown := false
 	for _, w := range []int{50, 100, 160, 220} {
-		m := demoSessions(t, w)
-		for tab := range tabNames {
-			m.tab = tab
-			out := ansi.Strip(m.render())
-			shown = shown || strings.Contains(out, "team@example.com")
-			for _, s := range secrets {
-				if strings.Contains(out, s) {
-					t.Fatalf("width %d tab %d shows %q", w, tab, s)
+		for _, m := range []Model{demoSessions(t, w), demoDetails(t, w)} {
+			for tab := range tabNames {
+				m.tab = tab
+				out := ansi.Strip(m.render())
+				shown = shown || strings.Contains(out, "team@example.com")
+				for _, s := range secrets {
+					if strings.Contains(out, s) {
+						t.Fatalf("width %d tab %d shows %q", w, tab, s)
+					}
 				}
 			}
 		}
@@ -190,7 +209,7 @@ func TestNoCredentialReachesTheScreen(t *testing.T) {
 // TestADetailWithoutAWindowShowsNoFigureForIt: tokens without a window
 // (a model OpenCode's cache does not know) never print "/ 0".
 func TestADetailWithoutAWindowShowsNoFigureForIt(t *testing.T) {
-	st := demoState(t)
+	st := outsideTmux(demoState(t))
 	for i, s := range st.Sessions {
 		if s.Agent == "opencode" {
 			st.Sessions[i].Context, st.Sessions[i].Window, st.Sessions[i].ContextPct = "unmeasured", 0, 0
@@ -214,7 +233,7 @@ func TestADetailWithoutAWindowShowsNoFigureForIt(t *testing.T) {
 // TestTheDetailShowsTheAccount: on an opened phone the detail names the
 // selected session's account too.
 func TestTheDetailShowsTheAccount(t *testing.T) {
-	m := demoSessions(t, 86)
+	m := demoDetails(t, 86)
 	for _, s := range m.snap.Sessions {
 		if s.Agent == "codex" {
 			choose(&m, s.PID)

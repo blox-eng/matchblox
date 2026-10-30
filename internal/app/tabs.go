@@ -100,15 +100,6 @@ func (st styles) footFor(b bkey.Binding, label, sep string) footPart {
 	return footPart{t, h.press, sep}
 }
 
-// footForRev is footFor with the word first: "next →".
-func (st styles) footForRev(b bkey.Binding, label, sep string) footPart {
-	h := hintFor(b, label)
-	if h == (hint{}) {
-		return footPart{}
-	}
-	return footPart{st.muted.Render(h.label+" ") + st.accent.Render(h.key), h.press, sep}
-}
-
 const (
 	tabSessions = iota
 	tabShips

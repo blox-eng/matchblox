@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -19,6 +18,7 @@ import (
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
@@ -285,9 +285,15 @@ type Model struct {
 	doorAt     int    // its row, for the door after it when it folds
 	previewTop int    // the first line of a door's diff on screen
 	paneSel    int
-	peek       *peek             // the answer peek, over the screen
-	peekSent   map[string]string // the peek's sends in flight: act id -> the session's name
-	peekQuiet  time.Time         // the peek takes no key until then: it just moved
+	screen     proto.Screen      // the last capture of the watched pane
+	watching   string            // the pane the service sends, or ""
+	watchHeld  string            // the pane the service refused, until the next snapshot
+	up         int               // the lines up the chat shows of the agent's history; 0 is live
+	watchUp    int               // the lines up the service sends
+	liveWait   bool              // the chat came back from the history, and waits for the live screen
+	askCard    card              // the question card's answer, in the chat
+	cardSeen   cardSeen          // the card's quiet: the ask it is for and its start
+	cardSent   map[string]string // the card's sends in flight: act id -> the session's name
 	changes    map[string]change // pane -> a match change that plays once
 	animating  bool
 	hist       history.Series
@@ -331,6 +337,11 @@ type Model struct {
 	// held is what the builder pressed or tapped while the stoker was in
 	// charge: it runs once they answer the take-over question.
 	held        func(Model) (tea.Model, tea.Cmd)
+	chatKeys    bool      // the chat has the keys: they go to the selected session's agent
+	keyQ        []chatKey // the chat's keys behind the one in flight
+	keyInFlight string    // the act id of the chat's key the service has not answered
+	ctrlC       ctrlCMark // the last ^C the chat sent, and when it went
+	ctrlCHeld   ctrlCMark // the agent whose next ^C goes: one came within a second of the last
 	touched     time.Time // the last key that kept the stoker's rest
 	all         lists     // what the service sent; queue, recs and snap hold the drawn copies
 	filter      string    // the search of the open tab
@@ -510,6 +521,11 @@ func (m Model) recv() tea.Cmd {
 				if json.Unmarshal(env.Body, &r) == nil {
 					return fromConn{c, resultMsg(r)}
 				}
+			case proto.KindScreen:
+				var sc proto.Screen
+				if json.Unmarshal(env.Body, &sc) == nil {
+					return fromConn{c, screenMsg(sc)}
+				}
 			}
 		}
 	}
@@ -531,7 +547,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m = m.scanShows()
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
-		next = nm.scanShows()
+		nm = nm.scanShows().keepChat(m).noteCard()
+		if watch := nm.watchCmd(); watch != nil {
+			cmd = tea.Batch(cmd, watch)
+		}
+		next = nm
 	}
 	return next, cmd
 }
@@ -563,6 +583,17 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.update(msg.msg)
+	case uv.UnknownApcEvent:
+		if string(msg) == homeKey {
+			m.chatKeys = false
+		}
+		return m, nil
+	case screenMsg:
+		if msg.Pane == m.watching && (msg.Up == 0 || m.watchUp > 0) { // the history after live is not live
+			m.screen = proto.Screen(msg)
+			m.liveWait = m.liveWait && msg.Up > 0
+		}
+		return m, m.recv()
 	case helloMsg:
 		m.host = proto.Hello(msg)
 		m.host.Tmux = remote.HostTmux(m.host.Tmux)
@@ -596,6 +627,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.askGone(msg)
 	case stateMsg:
 		first := !m.have
+		m.watchHeld = ""
 		st := proto.State(msg)
 		m.queue = st.Queue
 		toast := m.stokerNews(st.Stoker)
@@ -691,6 +723,17 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planTickMsg:
 		return m.planTick(msg)
 	case resultMsg:
+		if msg.ActID != "" && msg.ActID == m.keyInFlight {
+			return m.keyAnswered(proto.Result(msg))
+		}
+		if pane, ok := strings.CutPrefix(msg.ActID, watchActID); ok && msg.Err != "" {
+			// A pane that went before the watch came is a race, not the builder's error.
+			if pane != "" && pane == m.watching {
+				m.watchHeld, m.watching, m.screen = pane, "", proto.Screen{}
+				m.up, m.watchUp, m.liveWait = 0, 0, false
+			}
+			return m, m.recv()
+		}
 		if m.pending != nil && m.pending.previewAct != "" && m.pending.previewAct == msg.ActID {
 			if msg.Err != "" || msg.Preview == "" {
 				m.pending = nil
@@ -718,20 +761,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return mm, tea.Batch(mm.recv(), toast)
 			}
 			return mm, mm.recv()
-		}
-		if r := proto.Result(msg); m.peekSent[r.ActID] != "" {
-			name := m.peekSent[r.ActID]
-			m.peekSent = maps.Clone(m.peekSent)
-			delete(m.peekSent, r.ActID)
-			why := r.Err
-			if n := len(r.Skipped); n > 0 && why == "" {
-				why = r.Skipped[n-1]
-			}
-			if why != "" {
-				m.toast, m.flash = "", tilde("not sent to "+name+": "+why)
-				return m, m.recv()
-			}
-			return m, tea.Batch(m.recv(), m.say("sent to "+name))
 		}
 		if r := proto.Result(msg); r.ActID != "" && r.ActID == m.jumpAfter.act {
 			return m.switched(r)
@@ -836,13 +865,21 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		toast := m.say("ran: " + msg.cmd)
 		return m, toast
 	case tea.PasteMsg:
-		// Only the ssh prompt and the form take a paste: in their field,
-		// as typed.
+		// Only the ssh prompt, the form and the chat take a paste: in
+		// their field, as typed, or to the agent.
 		if m.ask != nil {
 			return m.askPaste(msg.Content), nil
 		}
-		if m.focus(tea.KeyPressMsg{}) == layerForm {
+		switch f := m.focus(tea.KeyPressMsg{}); {
+		case f == layerForm:
 			return m.formPaste(msg.Content)
+		case f == layerMain && m.chatKeys:
+			m, touch := m.touchRest()
+			if m.notLive() {
+				return m.backToLive(), touch
+			}
+			next, cmd := m.chatPaste(msg.Content)
+			return next, tea.Batch(touch, cmd)
 		}
 		return m, nil
 	case tea.MouseClickMsg:
@@ -862,13 +899,17 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var touch tea.Cmd
 		// f and n are stoker acts themselves: a touch sent with them would
 		// race them on the service.
-		if m.pair != nil || m.peek != nil || m.sheet != nil || m.form != nil || m.searching || !bkey.Matches(msg, m.keys.main.Stoke, m.keys.main.Night) {
+		if m.pair != nil || m.sheet != nil || m.form != nil || m.searching || m.chatKeys || !bkey.Matches(msg, m.keys.main.Stoke, m.keys.main.Night) {
 			m, touch = m.touchRest()
 		}
 		f := m.focus(msg)
+		if m.notLive() && m.chatKeys && (f == layerMain || f == layerTakeOver) {
+			return m.backToLive(), touch
+		}
 		// ctrl+c quits from every layer but a question, where any key but
-		// its answers cancels, and a peek on a gone session, which closes.
-		if f != layerAsk && f != layerHeld && f != layerPending && f != layerPeekGone && bkey.Matches(msg, m.keys.global.Quit) {
+		// its answers cancels, and the chat, which sends it to the agent.
+		chat := m.chatKeys && (f == layerMain || f == layerTakeOver)
+		if f != layerAsk && f != layerHeld && f != layerPending && !chat && bkey.Matches(msg, m.keys.global.Quit) {
 			next, cmd := m.quit()
 			if f == layerMain {
 				next, cmd = stokerSeen(next, cmd) // as every key of the tabs
@@ -889,10 +930,10 @@ var focusWait = 10 * time.Second
 const focusGone = "That session ended."
 
 // takeFocus opens the session a tap on the island or a buzz asked for, once
-// for each focus the service sends, on Sessions: its answer peek when it
-// waits, else its pane on the phone's own tmux client. A form, sheet, pair
-// page, take-over or a peek with text typed keeps the keys: what the person
-// types there is not thrown away.
+// for each focus the service sends, on Sessions: its chat when it waits,
+// else its pane on the phone's own tmux client. A form, sheet, pair page,
+// take-over or a card with text typed keeps the keys: what the person types
+// there is not thrown away.
 func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	if f == nil || f.At.Equal(m.focusAt) {
 		return m, nil
@@ -906,7 +947,7 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 			break
 		}
 	}
-	typing := m.peek != nil && m.peek.text != ""
+	typing := m.chatKeys && m.askCard.text != ""
 	busy := m.pair.owns() || m.sheet != nil || m.form != nil || m.held != nil || typing
 	if f.Gone || !found {
 		if !busy {
@@ -920,15 +961,20 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.setTab(tabSessions)
-	m.pending, m.peek = nil, nil
+	m.pending = nil
 	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, s.PID
 	if s.Pane == "" {
 		return m, nil // outside tmux: no pane to open
 	}
 	if _, waits := m.waitOf(s); waits {
-		// The home console is shared: the peek shows on the phone too, and an
-		// Enter on its way at the desk must not answer it.
-		return m.peekTo(s.Pane), nil
+		// The home console is shared: the chat shows on the phone too, and an
+		// Enter on its way at the desk must not answer it: its card has
+		// nothing picked.
+		m = m.chatOn(s.Pane)
+		if s.Ask != nil {
+			m.askCard = card{askID: s.Ask.ID, at: -1}
+		}
+		return m, nil
 	}
 	// Only the phone's client moves, into a session of its own (FocusArgv),
 	// and only on this console's own tmux: a console of another host (over
@@ -1030,8 +1076,6 @@ func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		next, cmd = m.sheetKey(k)
 	case layerForm:
 		next, cmd = m.formKey(k)
-	case layerPeek, layerPeekGone:
-		next, cmd = m.peekKey(k)
 	case layerSearch:
 		next, cmd = m.search(k)
 	case layerHeld:
@@ -1108,6 +1152,9 @@ func (m Model) pendingKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // key is k on the tabs, with nothing on top.
 func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.chatKeys {
+		return m.chatKey(k)
+	}
 	mk := m.keys.main
 	m.flash = ""
 	switch {
@@ -1184,6 +1231,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.showCommand()
 			return m, nil
 		}
+		if _, ok := m.selectedSession(); ok {
+			return m.openChat(), nil
+		}
 		if a := m.primary(); a != nil && a.pair {
 			return m.openPairDoor()
 		}
@@ -1203,15 +1253,13 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabStoker {
 			return m.grantStep()
 		}
-	case bkey.Matches(k, mk.Peek):
+	case bkey.Matches(k, mk.Chat):
 		if m.tab == tabShips {
-			return m.shipAnswer(), nil
+			return m.shipChat(), nil
 		}
-		if pane, why := m.peekTarget(); pane != "" {
-			m.openPeek(pane)
-		} else {
-			m.flash = why
-		}
+		return m.openChat(), nil
+	case bkey.Matches(k, mk.Jump):
+		return m.intoPane(), nil
 	case bkey.Matches(k, mk.Dismiss):
 		if m.tab == tabSessions {
 			m.dismissRec()

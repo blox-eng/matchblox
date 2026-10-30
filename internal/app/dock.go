@@ -143,6 +143,114 @@ func (m Model) dock(w, rows int) docked {
 	return d
 }
 
+// listAbove is the part of the list that fits in h lines of w columns.
+// When rows are cut below, the window takes one line less and the line
+// under it says how many: the hint never covers the selection.
+func (m Model) listAbove(b body, w, h int) body {
+	sel := m.rowIndex()
+	if h <= 1 || len(b.lines) <= h {
+		vis := windowed(b, h, sel)
+		return body{lines: slices.Clone(vis.lines), rows: slices.Clone(vis.rows)}
+	}
+	start := windowStart(b, h-1, sel)
+	below := map[int]bool{}
+	for _, r := range b.rows[start+h-1:] {
+		if r >= 0 {
+			below[r] = true
+		}
+	}
+	if len(below) == 0 { // the window is at the list's end: nothing to say
+		vis := windowed(b, h, sel)
+		return body{lines: slices.Clone(vis.lines), rows: slices.Clone(vis.rows)}
+	}
+	col := body{lines: slices.Clone(b.lines[start : start+h-1]), rows: slices.Clone(b.rows[start : start+h-1])}
+	col.add(-1, fit(m.st.faint.Render(fmt.Sprintf(" ↓ %d more", len(below))), w))
+	return col
+}
+
+// stokerPanelRow marks the stoker's panel in a desk's left column: a tap
+// there opens its tab.
+const stokerPanelRow = -4
+
+// minListRows are the fewest rows of the list a desk's left column keeps
+// over its panels, with the hint under them.
+const minListRows = 3
+
+// leftColumn is Sessions on a desk, h lines of w columns: the list, and
+// under it usage, the machine and the stoker, each below a hairline. The
+// stoker is there while it claims the dock, in the machine's place when
+// the rows are short, or when the list leaves it room. The panels take
+// their fewest lines and grow into the rows the list leaves free. When
+// the list does not fit beside them, the list gives way: the panels stay
+// while it keeps minListRows rows and the hint, then the machine folds,
+// then all; the Machine tab has it all. A list cut short says how many
+// rows are below it. All: the panels show all they have.
+func (m Model) leftColumn(b body, w, h int) (col body, all bool) {
+	least, most := map[int][]string{}, map[int][]string{}
+	for p := range panels {
+		least[p], most[p] = m.panel(p, w, "")
+	}
+	height := func(ps []int) int {
+		n := 0
+		for _, p := range ps {
+			n += 1 + len(least[p])
+		}
+		return n
+	}
+	tall := len(b.lines)
+	fits := func(ps []int) bool {
+		n := height(ps)
+		return tall+n <= h || h-n >= minListRows+1
+	}
+	every := []int{panelUsage, panelMachine, panelStoker}
+	var tries [][]int
+	switch {
+	case m.stokerClaims():
+		tries = [][]int{every, {panelUsage, panelStoker}}
+	case tall+height(every) <= h:
+		tries = [][]int{every}
+	default:
+		tries = [][]int{{panelUsage, panelMachine}, {panelUsage}}
+	}
+	var set []int
+	for _, ps := range tries {
+		if fits(ps) {
+			set = ps
+			break
+		}
+	}
+	if set == nil {
+		return m.listAbove(b, w, h), false
+	}
+	spare := max(h-len(b.lines)-height(set), 0)
+	all = len(set) == len(every)
+	var stats body
+	for _, p := range set {
+		lines, grow := least[p], len(most[p])-len(least[p])
+		switch {
+		case grow <= spare:
+			lines, spare = most[p], spare-grow
+		case p != panelUsage: // usage shows whole or at its fewest, never cut
+			lines, spare = most[p][:len(least[p])+spare], 0
+			all = false
+		default:
+			all = false
+		}
+		row := -1
+		if p == panelStoker {
+			row = stokerPanelRow
+		}
+		stats.add(row, m.st.hair.Render(strings.Repeat("─", w)))
+		stats.add(row, lines...)
+	}
+	col = m.listAbove(b, w, h-len(stats.lines))
+	for len(col.lines) < h-len(stats.lines) {
+		col.add(-1, "")
+	}
+	col.lines, col.rows = append(col.lines, stats.lines...), append(col.rows, stats.rows...)
+	return col, all
+}
+
 // dockToggle is where the phone dock's switch sits on its first line.
 func (m Model) dockToggle(w int) (x0, x1 int) {
 	word := panelWords[(m.dockShows()+1)%panels]

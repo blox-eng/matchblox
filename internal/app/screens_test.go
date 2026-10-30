@@ -92,8 +92,8 @@ func screensState(t *testing.T) proto.State {
 
 // TestScreens holds the console on the demo machine at the three sizes
 // of design/0006 §10 against the frames in testdata/screens: Sessions with
-// the one that waits opened, the answer peek with its options, Ships with
-// a ship of each kind, Sessions where two sessions drive two ships each,
+// the one that waits opened, Ships with a ship of each kind, the chat with
+// its question card, Sessions where two sessions drive two ships each,
 // and the dock folded on a short phone. -update
 // writes them again.
 func TestScreens(t *testing.T) {
@@ -107,7 +107,6 @@ func TestScreens(t *testing.T) {
 	}
 	shots := []shot{
 		{"sessions", nil},
-		{"peek", []string{"a"}},
 		{"ships", []string{"2"}},
 	}
 	sizes := [][2]int{{44, 31}, {86, 30}, {107, 60}, {132, 32}}
@@ -129,6 +128,15 @@ func TestScreens(t *testing.T) {
 		check(t, tabMorning(st), "stokermorning", size[0], size[1], []string{"c"})
 	}
 	check(t, sheetScreen(st, true), "sheetday", 104, 38, []string{"o"})
+	asks := screenMsg{Pane: paneOf(st, "flint-auth"), At: demoAt, Text: askScreen}
+	for _, size := range [][2]int{{200, 50}, {132, 32}, {44, 31}} {
+		check(t, st, "chat", size[0], size[1], []string{"enter"}, asks)
+	}
+	for _, size := range [][2]int{{200, 50}, {44, 31}} {
+		up := afterKeys{screenMsg{Pane: asks.Pane, At: demoAt, Text: historyScreen, Up: 6}}
+		check(t, st, "chatup", size[0], size[1], []string{"enter", wheelUp, wheelUp}, asks, up)
+	}
+	check(t, st, "chatended", 44, 31, []string{"enter"}, screenMsg{Pane: paneOf(st, "flint-auth"), Gone: true})
 	life := st
 	life.Agents = []string{"claude", "codex", "opencode"}
 	newKeys := append([]string{"N", "tab"}, strings.Split("feat/88-rate-limits", "")...)
@@ -148,6 +156,46 @@ func TestScreens(t *testing.T) {
 		check(t, st, "ask", size[0], size[1], strings.Split("abc", ""), pw)
 		check(t, st, "askhostkey", size[0], size[1], []string{"y", "enter"}, hostKey)
 	}
+}
+
+// askScreen is Claude Code asking with its question tool, three options.
+const askScreen = "⏺ The refresh endpoint is in and its tests pass.\n\n" +
+	"────────────────────────────────────────────────────────────────────────────────\n" +
+	" ☐ Rotate\n\n" +
+	"Should a refresh also rotate the token?\n\n" +
+	"❯ 1. Rotate it\n" +
+	"     The old one stops at once.\n" +
+	"  2. Rotate, keep the old one a minute\n" +
+	"  3. Type something.\n\n" +
+	"Enter to select · ↑/↓ to navigate · Esc to cancel\n"
+
+// historyScreen is the lines of flint-auth's pane six lines up from its
+// bottom: the work before its question.
+const historyScreen = "⏺ Read(src/auth/refresh.go)\n" +
+	"  ⎿  Read 142 lines\n\n" +
+	"⏺ Update(src/auth/refresh.go)\n" +
+	"  ⎿  Updated src/auth/refresh.go with 18 additions\n\n" +
+	"⏺ Bash(go test ./auth/...)\n" +
+	"  ⎿  ok  example.com/auth  0.41s\n\n" +
+	"⏺ The refresh endpoint is in and its tests pass.\n\n" +
+	"────────────────────────────────────────────────────────────────────────────────\n" +
+	" ☐ Rotate\n\n" +
+	"Should a refresh also rotate the token?\n"
+
+// wheelUp, among check's keys, turns the wheel up over the chat.
+const wheelUp = "wheel-up"
+
+// afterKeys are messages check sends after its keys.
+type afterKeys []tea.Msg
+
+// paneOf is the pane of the session named name.
+func paneOf(st proto.State, name string) string {
+	for _, s := range st.Sessions {
+		if s.Name == name {
+			return s.Pane
+		}
+	}
+	return ""
 }
 
 // sheetScreen is the demo machine with a stoker agent, and the launch
@@ -179,19 +227,32 @@ func check(t *testing.T, st proto.State, name string, w, h int, keys []string, m
 	next, _ = next.Update(stateMsg(st))
 	nm := next.(Model)
 	nm.splashDone = true
-	if name == "peek" {
+	if strings.HasPrefix(name, "chat") {
 		for i, s := range nm.snap.Sessions {
 			if s.Name == "flint-auth" {
 				nm.chose, nm.selPID = true, nm.snap.Sessions[i].PID
 			}
 		}
+		nm.watchCmd() // the watch follows the selection; the fake answers nothing
 	}
 	next = nm
+	var later []tea.Msg
 	for _, msg := range msgs {
+		if a, ok := msg.(afterKeys); ok {
+			later = append(later, a...)
+			continue
+		}
 		next, _ = next.Update(msg)
 	}
 	for _, k := range keys {
+		if k == wheelUp {
+			next, _ = next.Update(tea.MouseWheelMsg{X: w - 2, Y: h / 2, Button: tea.MouseWheelUp})
+			continue
+		}
 		next, _ = key(next, k)
+	}
+	for _, msg := range later {
+		next, _ = next.Update(msg)
 	}
 	got := ansi.Strip(next.(Model).render())
 	lines := strings.Split(got, "\n")
