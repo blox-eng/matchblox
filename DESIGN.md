@@ -317,13 +317,15 @@ Reduce Motion.
   The **question card** sits at the foot of the chat while the session
   asks with Claude Code's question tool: the question in `text` and its
   options, `› 1 <label>  <description>` (the cursor's on the wash, `[✔]`
-  ticks for several choices), the last `Type something`; the foot is the
+  ticks for several choices), the last `Type an answer…`; the foot is the
   keys, each a tap target. `↑` `↓` move, `space` ticks, typing fills the
   last row, `⏎` sends (`⏎ question 2` before the last question) and a tap
   picks. The options go to Claude Code's menu as its keys, never as typed
-  text. A permission prompt has no card. For 400 ms after a card first
-  shows, and after it moves to the next question, nothing sends: `not
-  sent: <name> asks something new — look again`. At night, the first key
+  text. A permission prompt has no card. The service refuses any `Enter`
+  for a question that started after the screen the console showed (`not
+  sent: <name> asks something new — look again`); the card adds a second
+  guard with the same words: for 400 ms after it first shows, and after it
+  moves to the next question, nothing sends. At night, the first key
   that sends something to an agent asks "take over?"; keys that move on
   the card do not. After a send the toast says `sending to <name>…`, then
   `sent to <name>`, or the key line says `not sent to <name>: <why>`.

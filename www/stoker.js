@@ -189,8 +189,8 @@
     return out;
   };
 
-  // The selected session, open: what it said, its context and its plan.
-  const peek = (S, at, name) => {
+  // The selected session's detail: what it said, its context and its plan.
+  const detail = (S, at, name) => {
     const s = sessions(S, at).find((x) => x.name === name);
     if (!s) return [];
     const [g, gc, word, wc] = state(S, s);
@@ -202,7 +202,7 @@
     L.push(text(" SAID", F, HALF));
     wrap(s.said, HALF - 2).forEach((t) => L.push(text(" " + t, T, HALF)));
     L.push([], bar("context", s.ctx, s.ctx > 80 ? N : M), bar("plan", s.plan, s.plan > 90 ? W : M), []);
-    L.push(cut([[" ⏎", A, 0, "Enter"], [" open   ", M], ["a", A], [" answer   ", M], ["z", A, 0, "z"], [S.parked.has(s.name) ? " let go" : " park", M, 0, "z"]], HALF));
+    L.push(cut([[" ⏎", A, 0, "Enter"], [" chat   ", M], ["a", A], [" chat   ", M], ["z", A, 0, "z"], [S.parked.has(s.name) ? " let go" : " park", M, 0, "z"]], HALF));
     return L;
   };
 
@@ -313,11 +313,11 @@ Name the sessions or the issues that come first.
   // Folded the phone shows `main` (with `over` drawn over its foot); open,
   // the Duo shows the sessions left and `side` right.
   const STEPS = [
-    { on: "off", tab: "s", keys: [["⏎", "open", "Enter"], ["a", "answer"], ["z", "park"], ["n", "night"], ["f", "stoker"]], list: true,
-      side: (S) => peek(S, null, S.sel),
+    { on: "off", tab: "s", keys: [["⏎", "chat", "Enter"], ["a", "chat"], ["z", "park"], ["n", "night"], ["f", "stoker"]], list: true,
+      side: (S) => detail(S, null, S.sel),
       h: "Every quiet session says why", p: "A parked session leaves the quiet pile. Try g and s, or z on a row." },
-    { on: "off", tab: "s", keys: [["⏎", "open", "Enter"], ["a", "answer"], ["z", "park"], ["n", "night"], ["f", "stoker"]], list: true, over: launch,
-      side: (S) => peek(S, null, S.sel),
+    { on: "off", tab: "s", keys: [["⏎", "chat", "Enter"], ["a", "chat"], ["z", "park"], ["n", "night"], ["f", "stoker"]], list: true, over: launch,
+      side: (S) => detail(S, null, S.sel),
       h: "n asks for tonight’s orders", p: "matchblox starts the stoker agent on a tmux server of its own. Say it in your own words, or tap a recipe from your ways. Turn on the gos you give: merges, releases, deploys. ⏎ and the night starts at once." },
     { on: "night", tab: "k", keys: [["y", "give the go"], ["⏎", "command"], ["1", "sessions"], ["n", "stop night"]], at: "night", main: () => card("night"), night: true,
       h: "At 03:12 it works its own plan", p: "Each step is a message to a session. The merge you gave goes through; a release you did not waits for your y. Where it would wait, the stoker sets a trigger, and matchblox fires it." },

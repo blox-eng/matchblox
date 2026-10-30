@@ -13,7 +13,7 @@
 
 <p>
 <img src="www/demo/replay-desk.svg" width="74%" alt="The matchblox console on a desk, on a demo machine: who waits for you, an answer picked from the agent's own options, the pull requests your sessions drive, usage and the machine, then a night the stoker keeps burning, its score in the morning, a new session started with its first message and a finished one killed">
-<img src="www/demo/replay-phone.svg" width="24%" alt="The same console on a phone: one column, the selected session open in place, the answer peek at the bottom">
+<img src="www/demo/replay-phone.svg" width="24%" alt="The same console on a phone: one column, and a tap on a session opens its chat full-screen, with the agent's question card at the bottom">
 </p>
 
 <p>
@@ -139,9 +139,10 @@ Every key: [Keys](https://docs.matchblox.com/keys/).
 
 Set the startup snippet of your SSH app (Termius, for example) to
 `matchblox`, or run `ssh -t ws-1 matchblox`. The console is the first
-screen. Tap a row to open its chat, and type or tap an option to steer it;
-`‹ Sessions` goes back. `A switch` under it to give its seat to another agent; tap `◂ matchblox` in the tmux
-status line (with `set -g mouse on`) to come back, or press `prefix m`. See
+screen. Tap a row to open its chat. Type, or tap an option of its question
+card, to steer the agent. `‹ Sessions` goes back. `A switch` under a row
+gives its seat to another agent. Tap `◂ matchblox` in the tmux status line
+(with `set -g mouse on`) to come back from a pane, or press `prefix m`. See
 [The phone](https://docs.matchblox.com/phone/).
 
 ## Safety

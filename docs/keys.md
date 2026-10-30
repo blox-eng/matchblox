@@ -1,10 +1,10 @@
 # Keys
 
 Every key of the console works on the key bar of a phone SSH app: letters,
-digits, arrows, `Enter` and `Esc`. No key of the console needs `Ctrl`. In the
-chat, `Ctrl+]` and `Ctrl+O` are for a hardware keyboard; on a phone, the
-app's edge swipe goes back, and its key bar sends `^C`. The key line at the bottom shows
-the keys of the open tab, and a tap on one presses it.
+digits, arrows, `Enter` and `Esc`. No key of the console needs `Ctrl`.
+`Ctrl+]` and `Ctrl+O` in the chat are for a hardware keyboard. On a phone,
+the app's edge swipe goes back, and its key bar sends `^C`. The key line at
+the bottom shows the keys of the open tab. A tap on a key presses it.
 
 ## The console
 
@@ -21,7 +21,7 @@ the keys of the open tab, and a tap on one presses it.
 | `1-7` | Opens a tab: Sessions, Ships, Machine, Git, History, Panes, Stoker. |
 | `p` | Opens Ships. |
 | `Tab` or `Shift+Tab` | Opens the next or the previous tab. |
-| `u` | Cycles the dock of a narrow screen: usage, the machine, the stoker. A wide screen shows all three beside the list. While a run is in charge, or has steps you have not seen, the stoker's panel takes the dock until you press `u`. |
+| `u` | Cycles the dock of a narrow screen: usage, the machine, the stoker. A wide screen stacks all three under the list. While a run is in charge, or has steps you have not seen, the stoker's panel takes the dock until you press `u`. |
 | `c` | Opens the STOKER tab: your words and the gos, the plan with each step's outcome, the goes that wait for you, the triggers, the standing rules, today's compacts with their RESUME lines. Opening it marks the steps seen. |
 | `/` | Searches the open tab. |
 | `s` | Sorts Sessions and Panes by the next column. |
@@ -114,16 +114,21 @@ keeps the keys until you give them to the chat.
 |---|---|
 | `Enter`, `a` or `→` | On Sessions, gives the chat the keys. A click on the chat does it too. The key line then says `keys go to <name> · ctrl+] back · ctrl+o into tmux`. |
 | `Ctrl+]` | Gives the keys back to Sessions. A click on the left does it too. On a narrow screen, it goes back to Sessions. |
-| `Ctrl+O` | Goes to the agent's pane in tmux, as `Enter` on Sessions did before the chat. |
-| `Ctrl+C` | Sends `^C` to the agent. A second one within 1 s waits. See below. |
+| `Ctrl+O` | Goes to the selected agent's pane in tmux. It works on Sessions too. |
+| `Ctrl+C` | Sends `^C` to the agent. A second one within 1 s is held. See below. |
 
 In the chat, every other key goes to the agent: `↑ ↓ ← →`, `Enter`, `Tab`,
 `Shift+Tab`, `Esc`, `Backspace` and the letters. `Esc` goes to the agent
-too, so it cancels a question, closes a menu or stops a turn there. The keys
-go in the order you press them, one at a time. A paste goes as text, and
-each newline (CR, LF or CRLF) goes as `Enter`. Every key goes to the agent
-that the chat showed. If the pane runs a different agent now, nothing is
-sent: `not sent: <pane> runs a different agent now`.
+too. There it cancels a question, closes a menu or stops a turn. The keys
+go in the order you press them, one at a time. A paste goes as text. Each
+newline (CR, LF or CRLF) goes as `Enter`. Every key goes to the agent that
+the chat showed. If the pane runs a different agent now, nothing is sent:
+`not sent: <pane> runs a different agent now`.
+
+The service also guards `Enter`. If the question started after the screen
+your console showed, the `Enter` is refused: `not sent: <name> asks
+something new — look again`. So an `Enter` never answers a question you
+have not seen.
 
 `^C` twice stops Claude Code. A second `^C` within 1 s to the same agent is
 held, and the key line says why: `^C held: one went 0.6 s ago, ^C again
@@ -157,13 +162,14 @@ card: its keys go to the agent as they are.
 | `Space` | Ticks the option under the cursor, when the question takes several. |
 | `Backspace` | Deletes the last character of the typing row. |
 
-Typing fills the "Type something" row. A tap on an option picks it. A tap
+Typing fills the `Type an answer…` row. A tap on an option picks it. A tap
 on a key of the card's foot presses it.
 
-The card sends nothing for 400 ms after it first shows, and after it moves
-to the next question. A send in that time is refused: `not sent: <name>
-asks something new — look again`. So an `Enter` meant for what was there
-before never answers a question you have not read.
+The card has a second guard. It sends nothing for 400 ms after it first
+shows, and after it moves to the next question. A send in that time is
+refused with the same words: `not sent: <name> asks something new — look
+again`. So an `Enter` meant for what was there before never answers a
+question you have not read.
 
 ## The launch sheet
 

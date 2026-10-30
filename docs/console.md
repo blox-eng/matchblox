@@ -265,28 +265,27 @@ Come back from a jump and the next agent that waits is already selected.
 ### The chat
 
 The chat is the live screen of the selected agent, drawn inside the
-console. You do not enter it and you do not leave the console to use it.
-On a wide desk and on a phone held wide, it is always the right side of
-Sessions, and `↑` `↓` change which agent it shows. Its frame title is `<name>
-· <state>`, in the accent while the chat has the keys.
+console. You do not leave the console to use it. On a wide desk and on a
+phone held wide, it is always the right side of Sessions. `↑` `↓` change
+which agent it shows. Its frame title is `<name> · <state>`. The title is
+in the accent while the chat has the keys.
 
 ```
 ╭─ Sessions ────────────────────╮╭─ api-auth · asks ───────────────────────────╮
 │ ● api-auth      asks    2m    ││ I can fix the login in two ways.            │
 │ ◐ web-cart      busy   12m    ││                                             │
-│ ○ docs          idle    1h    ││ ╭─ Which way? ────────────────────────────╮ │
+│ ○ docs          idle    1h    ││ ╭─ api-auth asks ─────────────────────────╮ │
 ├─ Usage ───────────────────────┤│ │ › 1 Patch the token check               │ │
 │ max   ▇▇▇▇▇▁▁▁ 61%            ││ │   2 Move to the new session store       │ │
-├─ Machine ─────────────────────┤│ │   3 Type something                      │ │
-│ cpu 34%  mem 41/64G           ││ ╰─ ⏎ send ─────────────────────────────────╯ │
+├─ Machine ─────────────────────┤│ │   3 Type an answer…                     │ │
+│ cpu 34%  mem 41/64G          ││ ╰─ ⏎ send ─────────────────────────────────╯ │
 ╰───────────────────────────────╯╰─────────────────────────────────────────────╯
  keys go to api-auth · ctrl+] back · ctrl+o into tmux
 ```
 
 `Enter`, `a` and `→` (where `→` has no other use) give the chat the keys,
 and so does a click on it. `Ctrl+]` and a click on the left give them back.
-`Ctrl+O` goes into the agent's pane in tmux, as `Enter` on Sessions did
-before. While the chat has the keys, the key line says `keys go to <name> ·
+`Ctrl+O` goes into the agent's pane in tmux. While the chat has the keys, the key line says `keys go to <name> ·
 ctrl+] back · ctrl+o into tmux`.
 
 In the chat, all keys go to the agent, `Esc` too. They go in order, one at
@@ -303,7 +302,7 @@ one waits to go, ^C again stops the agent`. A third goes.
 
 When Claude Code asks with its question tool, the question card sits at the
 foot of the chat. `↑` `↓` move, `Space` ticks an option of a question with
-several choices, typing fills "Type something", `Enter` sends, and a tap
+several choices, typing fills `Type an answer…`, `Enter` sends, and a tap
 picks an option. Several questions come one at a time. In auto mode the
 options come from the queue hooks (see
 [Agents](agents.md#how-an-agent-tells-that-it-waits)), so add them again
@@ -317,10 +316,11 @@ line.
 There is no card at a permission prompt. Its keys go to the agent as they
 are: the chat shows the prompt, and `Enter` approves it.
 
-For 400 ms after a card first shows, and after it moves to the next
-question, the card sends nothing: `not sent: <name> asks something new —
-look again`. So an `Enter` meant for what was there before never answers a
-question you have not read.
+The service refuses any `Enter` for a question that started after the
+screen your console showed: `not sent: <name> asks something new — look
+again`. The card has a second guard with the same words. For 400 ms after a
+card first shows, and after it moves to the next question, it sends nothing.
+So an `Enter` never answers a question you have not read.
 
 At night, the first key that sends something to an agent asks "Take over?".
 Keys that only move on the card do not ask.

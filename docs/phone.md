@@ -135,7 +135,8 @@ Nothing connects to a host from the background.
   more, or resets, at most each 5 minutes. A wait breaks through the Usage
   face for 60 s.
 - **A tap opens the session:** the app asks for Face ID, connects and opens
-  the console on that session: on its chat. If the session has ended, the console says `That session ended.`
+  the console on that session: on its chat. If the session has ended, the
+  console says `That session ended.`
 - **The setting:** the `Island` entry in the app's console, next to `Hosts`.
   `Follow` is the one host that has the island (the host opened last). `Show`
   is `Sessions`, `Usage` or `Auto (Usage while the stoker runs)`. `Buzz` is
@@ -219,15 +220,16 @@ the console to answer an agent. See [the chat](console.md#the-chat).
    screen. The title row reads `‹ Sessions · <name> · <state>`. Held wide,
    the chat is the pane beside the list: tap the agent again, or tap the
    chat, to give it the keys.
-2. Type. Every key goes to the agent. When the agent asks with its question
-   tool, a card shows at the foot: tap an option, or type and press `Enter`.
-3. To go back to Sessions, tap `‹ Sessions`, swipe in from the left edge of
-   the screen, or press ⌘M on a hardware keyboard. `Ctrl+]` does it too.
+2. Type. Every key goes to the agent. When the agent asks with its
+   question tool, a card shows at the foot. Tap an option, or type and
+   press `Enter`.
+3. To go back to Sessions, tap `‹ Sessions`. You can also swipe in from the
+   left edge, or press ⌘M on a hardware keyboard. `Ctrl+]` does it too.
 
 The app's key bar has seven keys: `↑ ↓ ⏎ Tab ⇧Tab Esc ^C`. Each one is at
 least 44 pt, and works at the first tap. The system keyboard types the rest.
 The terminal turns off autocorrect, suggestions, smart quotes, smart
-dashes and auto capitalisation, so they never change a key you send.
+dashes and auto capitalisation. So they never change a key you send.
 
 `^C` twice stops Claude Code. A second `^C` within 1 s is held, and the
 key line says so.
@@ -255,8 +257,8 @@ The console then selects the next agent that waits.
 The selected agent's keys are under it: on a one-column phone at the foot
 of its opened row, held upright with a small font at the foot of the
 drawer. Tap `A switch` to open Switch agent. Tap the agent you want, then
-`Enter`; the plan rises in a box above the key line, and a typed `y` runs it (a tap is never consent). The new agent
-starts in the same pane with the same name, on the account you last
+`Enter`; the plan rises in a box above the key line. A typed `y` runs it (a
+tap is never consent). The new agent starts in the same pane with the same name, on the account you last
 started that agent on, and the console jumps to it.
 See [`A` in Keys](keys.md).
 
@@ -265,14 +267,15 @@ See [`A` in Keys](keys.md).
 A phone held upright is read by its shape, so the keyboard coming and
 going does not change the layout. With a small font that makes it 90
 columns or more, the list sits on the left and the selected agent's detail
-in a drawer on the right, and the dock shows two panels side by side. On its side it
-goes by its width. Under 60 columns, the console has one column. Each agent is one line,
-grouped by what it needs from you: who waits first. The selected one opens
+in a drawer on the right, and the dock shows two panels side by side. On
+its side it goes by its width. Under 60 columns, the console has one
+column. Each agent is one line, grouped by what it needs from you: who waits first. The selected one opens
 in place: what it said last, its ships, its plan and its keys. Only
 the selected setup step shows its detail.
 
 Under the list, when there is room, the dock shows usage, the machine or
-the stoker (a wide desk puts them in the left column instead): `u`, or a tap on the word at its right, goes to the next. While
+the stoker (a wide desk puts them in the left column instead). `u`, or a
+tap on the word at its right, goes to the next. While
 the stoker runs, its panel shows by itself until you switch; a tap on it
 opens the Stoker tab. With the keyboard up the dock
 folds away; the Machine tab has it.
