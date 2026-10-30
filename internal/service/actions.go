@@ -455,7 +455,8 @@ func (s *Service) messageable(pane string, pid int) error {
 }
 
 // pick answers the question tool's call a session waits on, with the
-// choices the person made in the answer peek. Act.Text is a said.Answer.
+// choices the person made on the chat's question card. Act.Text is a
+// said.Answer.
 func (s *Service) pick(ctx context.Context, pane string, a proto.Act) proto.Result {
 	var ans said.Answer
 	if err := json.Unmarshal([]byte(a.Text), &ans); err != nil {
