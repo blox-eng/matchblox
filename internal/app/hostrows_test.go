@@ -427,3 +427,22 @@ func TestPeerStartWatchesForSilence(t *testing.T) {
 		}
 	}
 }
+
+// TestLongNameKeepsHostWord: the same long name on two hosts is two rows
+// that say whose they are: the name is cut before the host word goes.
+func TestLongNameKeepsHostWord(t *testing.T) {
+	const long = "matchblox-feat-198-every-host-review"
+	for _, w := range []int{60, 92, 132} {
+		now := lostAt
+		m, _, conns := hostsAt(t, &now, "", w, 30, "ws-1")
+		m = upd(t, m, stateMsg(hostState(sess(1, long, "%1", work))))
+		m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(hostState(sess(2, long, "%2", work)))})
+		for _, lo := range []bool{false, true} {
+			m.viewPrefs.ListOnlyDesk = lo
+			f := frameOf(m)
+			if lineWith(f, "matchblox-feat") == "" || lineWith(f, " ws-1") == "" || lineWith(f, " thi…") == "" {
+				t.Fatalf("%d columns, list only %v: the rows lost their host word:\n%s", w, lo, strings.Join(f, "\n"))
+			}
+		}
+	}
+}

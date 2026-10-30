@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/hosts"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -304,6 +305,22 @@ func (m Model) rowTag(s sample.Session, room int) string {
 		return full
 	}
 	return host
+}
+
+// rowName is s's name and its tag in w cells, or false with no tag.
+// With two or more hosts a name that would leave the host word no room
+// is cut to leave it four cells, so two hosts' rows of one long name
+// still differ (R11).
+func (m Model) rowName(s sample.Session, ink lipgloss.Style, w int) (string, bool) {
+	name := s.Name
+	if m.hostCount() > 1 && tagRoom(name, w) < 4 && w >= 9 {
+		name = ansi.Truncate(name, w-5, "…")
+	}
+	tag := m.rowTag(s, tagRoom(name, w))
+	if tag == "" {
+		return "", false
+	}
+	return m.taggedName(name, tag, ink, w), true
 }
 
 // hostNote is host's live note on Hosts: its sessions, and those that

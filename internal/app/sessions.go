@@ -499,8 +499,8 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks) []string {
 		right := state + cutLeft(ctx, t.ctx) + " "
 		name := ink.Render(s.Name)
 		room := w - lipgloss.Width(mark+m.matchCell(s)) - lipgloss.Width(right) - 1
-		if tag := m.rowTag(s, tagRoom(s.Name, room)); tag != "" {
-			name = m.taggedName(s.Name, tag, ink, room)
+		if tagged, ok := m.rowName(s, ink, room); ok {
+			name = tagged
 		}
 		line := spread(mark+m.matchCell(s)+name, right, w)
 		if !opens {
@@ -509,8 +509,8 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks) []string {
 		return append([]string{line}, m.opened(s, w)...)
 	}
 	name := ink.Render(pad(s.Name, t.name))
-	if tag := m.rowTag(s, tagRoom(s.Name, t.name-1)); tag != "" {
-		name = padTo(m.taggedName(s.Name, tag, ink, t.name-1), t.name) // pad's gap before the word
+	if tagged, ok := m.rowName(s, ink, t.name-1); ok {
+		name = padTo(tagged, t.name) // pad's gap before the word
 	}
 	line := mark + m.matchCell(s) + name + state + cutLeft(ctx, t.ctx)
 	if t.plan > 0 {
