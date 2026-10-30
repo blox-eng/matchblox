@@ -257,7 +257,9 @@ switches the dock. On Panes, a tap on a column header sorts by it.
 
 The app's command keys run a command of the agent on the chat's session,
 for example `/compact`. The console runs the command behind the chat's
-guards. A command key works only while the chat has the keys. Otherwise the
+guards. A command types only while the agent rests, with no question, no
+permission prompt and no draft on its prompt. A command key works only
+while the chat has the keys. Otherwise the
 key line says `commands run from the chat`. A command of a different agent
 sends nothing, and the key line says `/<name> is <Agent>'s: <session> runs
 <other agent>`. The console tells the app which agent the chat shows, so

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"cmp"
 	"fmt"
 	"maps"
 	"regexp"
@@ -375,7 +374,8 @@ const homeKey = "\x1b_matchblox\x1b\\"
 // was pressed for, and when the screen it answers was taken. A card's
 // answer waits among the keys as pick, the said.Answer for the session
 // named name. A command key that runs one of matchblox's own acts on the
-// pane waits as act ("compact:", "clear:").
+// pane waits as act ("compact:", "clear:", or "cmd:" with the command's id
+// as text).
 type chatKey struct {
 	pane string
 	pid  int
@@ -538,17 +538,6 @@ func (m Model) chatPaste(text string) (tea.Model, tea.Cmd) {
 // the APC's end (keycmd.Sequence).
 const commandPrefix = "\x1b_matchblox;cmd="
 
-// agentNames are the agents of the command table, as a key line names them.
-var agentNames = map[string]string{"claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "cursor": "Cursor"}
-
-// commandAgent is the command table's id of the agent a session runs.
-func commandAgent(agent string) string {
-	if agent == sample.CursorAgent {
-		return "cursor"
-	}
-	return agent
-}
-
 // minSignalTmux is the oldest tmux that passes the agent signal through to
 // the terminal (allow-passthrough).
 const minSignalTmux = "3.3"
@@ -562,7 +551,7 @@ func (m *Model) tellAgent() tea.Cmd {
 	switch {
 	case m.chatKeys:
 		s, _ := m.selectedSession()
-		id := commandAgent(s.Agent)
+		id := keycmd.AgentOf(s.Agent)
 		if len(keycmd.ForAgent(id)) == 0 {
 			id = ""
 		}
@@ -598,9 +587,10 @@ func (m *Model) agentGone() tea.Cmd {
 
 // commandKey runs the phone's command key apc in the chat, behind the
 // chat's guards, as a key pressed there. Compact and clear run matchblox's
-// own acts on the pane; any other command types its text and Enter. A
-// command the chat's agent does not have sends nothing; an id the table
-// does not know does nothing.
+// own acts on the pane; any other command runs the command act, which
+// types its text and Enter at rest, with no question and no draft. Each
+// names the agent the chat showed. A command the chat's agent does not
+// have sends nothing; an id the table does not know does nothing.
 func (m Model) commandKey(apc string) (tea.Model, tea.Cmd) {
 	id, ok := strings.CutPrefix(apc, commandPrefix)
 	id, end := strings.CutSuffix(id, "\x1b\\")
@@ -621,24 +611,17 @@ func (m Model) commandKey(apc string) (tea.Model, tea.Cmd) {
 	}
 	m.flash = ""
 	s, _ := m.selectedSession()
-	if have := commandAgent(s.Agent); have != c.Agent {
-		runs := agentNames[have]
-		if runs == "" {
-			runs = cmp.Or(s.Agent, "no agent matchblox knows")
-		}
-		m.flash = fmt.Sprintf("/%s is %s's: %s runs %s", c.Label, agentNames[c.Agent], s.Name, runs)
+	if keycmd.AgentOf(s.Agent) != c.Agent {
+		m.flash = keycmd.Refusal(c, s.Name, s.Agent)
 		return m, touch
 	}
-	var name string
-	var keys []chatKey
-	switch c.Run {
-	case "compact", "clear":
-		name, keys = m.pressed("")
-		for i := range keys {
-			keys[i].act = c.Run + ":"
-		}
-	default:
-		name, keys = m.pressed("lit:"+c.Text, enterName)
+	act, text := c.Run+":", ""
+	if c.Run == "type" {
+		act, text = proto.CommandPrefix, c.ID
+	}
+	name, keys := m.pressed(text)
+	for i := range keys {
+		keys[i].act = act
 	}
 	if m.night() && !m.stoker.Asked {
 		m.held = m.heldKeys(name, keys)
@@ -765,7 +748,7 @@ func (m *Model) sendKey() tea.Cmd {
 	case k.pick != "":
 		act = proto.Act{RecID: "pick:" + k.pane, Which: "secondary", Confirm: "y", Text: k.pick}
 	case k.act != "":
-		act = proto.Act{RecID: k.act + k.pane, Confirm: "y"}
+		act = proto.Act{RecID: k.act + k.pane, Confirm: "y", PID: k.pid, Text: k.text}
 	}
 	cmd := m.send(act)
 	m.keyInFlight = "a" + strconv.Itoa(m.acts)

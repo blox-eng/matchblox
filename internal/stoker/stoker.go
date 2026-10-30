@@ -294,6 +294,18 @@ func ClearAction(pane string) advice.Action {
 	return atRest(pane, "clear", "/clear", "")
 }
 
+// CommandAction types a command key's text and its Enter into a pane,
+// under the guards of CompactAction. Where the agent's prompt cannot be
+// read (read false), no draft shows there, and the Enter does not wait
+// for the text on the prompt.
+func CommandAction(pane, text string, read bool) advice.Action {
+	a := atRest(pane, "command", text, "")
+	if !read {
+		a.Guards[1].Typed = ""
+	}
+	return a
+}
+
 // atRest types command and its args into pane, then Enter. The Enter waits
 // until the pane shows the command typed.
 func atRest(pane, label, command, args string) advice.Action {

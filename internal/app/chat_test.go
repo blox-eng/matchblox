@@ -1612,7 +1612,7 @@ func command(t *testing.T, m Model, id string) Model {
 func TestCompactKeyRunsTheCompactAct(t *testing.T) {
 	m, f := commandChat(t, "claude")
 	m = command(t, m, "compact")
-	if got := f.acts(); len(got) != 1 || got[0].RecID != "compact:%1" || got[0].Confirm != "y" {
+	if got := f.acts(); len(got) != 1 || got[0].RecID != "compact:%1" || got[0].Confirm != "y" || got[0].PID != 1 {
 		t.Fatalf("acts %+v", got)
 	}
 	if m.flash != "" {
@@ -1623,20 +1623,21 @@ func TestCompactKeyRunsTheCompactAct(t *testing.T) {
 func TestClearKeyRunsTheClearAct(t *testing.T) {
 	m, f := commandChat(t, "claude")
 	command(t, m, "clear")
-	if got := f.acts(); len(got) != 1 || got[0].RecID != "clear:%1" || got[0].Confirm != "y" {
+	if got := f.acts(); len(got) != 1 || got[0].RecID != "clear:%1" || got[0].Confirm != "y" || got[0].PID != 1 {
 		t.Fatalf("acts %+v", got)
 	}
 }
 
-func TestTypeCommandTypesThroughKeys(t *testing.T) {
+// TestTypeCommandRunsTheCommandAct: a typed command goes as one act the
+// service guards (rest, no question, no draft), never as bare keys.
+func TestTypeCommandRunsTheCommandAct(t *testing.T) {
 	m, f := commandChat(t, "claude")
 	m = command(t, m, "model")
-	if got := keyActs(f); len(got) != 1 || got[0].RecID != proto.KeysPrefix+"%1" || got[0].Text != "lit:/model" || got[0].PID != 1 || !got[0].Seen.Equal(m.screen.At) {
-		t.Fatalf("first: %+v", got)
+	if got := f.acts(); len(got) != 1 || got[0].RecID != proto.CommandPrefix+"%1" || got[0].Text != "model" || got[0].PID != 1 || got[0].Confirm != "y" {
+		t.Fatalf("acts %+v", got)
 	}
-	m = answered(t, m, "")
-	if got := keyActs(f); len(got) != 2 || got[1].Text != "Enter" || got[1].PID != 1 || !got[1].Seen.Equal(m.screen.At) {
-		t.Fatalf("second: %+v", got)
+	if m = answered(t, m, "/model not sent: the pane %1 has text you typed"); m.flash != "/model not sent: the pane %1 has text you typed" {
+		t.Fatalf("flash %q", m.flash)
 	}
 }
 
