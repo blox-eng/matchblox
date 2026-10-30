@@ -77,7 +77,11 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
 
     /// False in a jumped pane, or with no agent: command keys dim and send nothing.
     var commandsLive = false {
-        didSet { if commandsLive != oldValue { place() } }
+        didSet {
+            guard commandsLive != oldValue else { return }
+            spoken = nil
+            place()
+        }
     }
 
     var onSend: ([UInt8]) -> Void = { _ in }
@@ -118,6 +122,8 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     /// Frames left of a layout change's run-off.
     private var runOffLeft: CGFloat = 0
     private var flashes = 0
+    /// VoiceOver's elements, built when asked and dropped when the keys change or come to rest.
+    private var spoken: [Any]?
 
     init() {
         layout = BeltLayout.load(from: .standard)
@@ -288,6 +294,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
         CATransaction.commit()
 
         self.motion = motion
+        spoken = nil
         place()
         updateName()
         UIAccessibility.post(notification: .layoutChanged, argument: nil)
@@ -358,6 +365,10 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
 
     /// A pressed key is `hair` with its label in `accent`.
     private static func paint(_ piece: Piece, pressed: Bool) {
+        // No implicit fade: the press is 140 ms, shorter than a layer's default animation.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
         let ground = pressed ? [BeltLook.hair, BeltLook.hair] : [BeltLook.keyBevelTop, BeltLook.keyBevelBottom]
         piece.face.colors = ground.map(\.cgColor)
         piece.text.string = NSAttributedString(string: piece.key.label, attributes: [
@@ -427,8 +438,10 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
         }
         selection.prepare()
         impact.prepare()
-        if runOffLeft > 0 { rebuild() }
-        let wasAtRest = motion?.atRest ?? true
+        // A touch during a layout change ends it, and is no tap: the keys under it just came.
+        let wasRunningOff = runOffLeft > 0
+        if wasRunningOff { rebuild() }
+        let wasAtRest = !wasRunningOff && (motion?.atRest ?? true)
         if !wasAtRest {
             // A touch stops a coast, as in a scroll view.
             stopLink()
@@ -536,7 +549,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     }
 
     private func press(_ i: Int) {
-        guard let motion else { return }
+        guard let motion, pieces.indices.contains(i) else { return }
         let piece = pieces[i]
         if piece.key.isCommand && !commandsLive {
             flash("commands run from the chat")
@@ -586,6 +599,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
         play(ticks)
         if motion?.atRest ?? true {
             stopLink()
+            spoken = nil
             UIAccessibility.post(notification: .layoutChanged, argument: nil)
         }
     }
@@ -645,13 +659,17 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
 
     override var accessibilityElements: [Any]? {
         get {
+            if let spoken { return spoken }
             let name = Element(accessibilityContainer: self)
             name.accessibilityLabel = "Layouts, \(layout.rawValue)"
             name.accessibilityTraits = .button
             name.accessibilityFrameInContainerSpace = CGRect(x: 0, y: 0, width: grip.frame.maxX, height: Self.handleHeight)
             name.activate = { [weak self] in self?.onOpenTray(); return true }
             var elements: [Any] = [name, keyboardButton]
-            guard let motion else { return elements }
+            guard let motion else {
+                spoken = elements
+                return elements
+            }
             for (i, piece) in pieces.enumerated() {
                 let x0 = motion.x(ofKeyAt: i)
                 guard x0 >= 0, x0 + piece.width <= belt.bounds.width else { continue }
@@ -660,9 +678,16 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
                 key.accessibilityTraits = piece.key.isCommand && !commandsLive ? [.button, .notEnabled] : .button
                 key.accessibilityFrameInContainerSpace = CGRect(
                     x: x0, y: belt.frame.minY + Self.keyTop, width: piece.width, height: BeltGeometry.keyHeight)
-                key.activate = { [weak self] in self?.press(i); return true }
+                // A key element outlives its key when the belt rebuilds: it finds its key by layer.
+                let layer = piece.layer
+                key.activate = { [weak self] in
+                    guard let self, let i = self.pieces.firstIndex(where: { $0.layer === layer }) else { return false }
+                    self.press(i)
+                    return true
+                }
                 elements.append(key)
             }
+            spoken = elements
             return elements
         }
         set {}
