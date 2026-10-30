@@ -140,15 +140,64 @@ func (m Model) chatShown(rightW int) (sample.Session, bool) {
 func (m Model) chatTitle(s sample.Session) string { return s.Name + " · " + m.wordOf(s) }
 
 // chatPane is the chat beside the list, w by h: its title, in the accent
-// while the chat has the keys, over the screen.
+// while the chat has the keys, over the strip and the screen.
 func (m Model) chatPane(s sample.Session, w, h int) []string {
 	ink := m.st.label
 	if m.chatKeys {
 		ink = m.st.accent
 	}
 	lines := []string{fit(" "+ink.Render(m.chatTitle(s)), w)}
-	for _, l := range m.screenLines(w-1, h-1) {
+	strip := m.chatStrip(s, w, h-1)
+	lines = append(lines, strip...)
+	for _, l := range m.screenLines(w-1, h-1-len(strip)) {
 		lines = append(lines, " "+l)
+	}
+	return lines
+}
+
+// chatStrip is what the session's detail said of it, over its chat in w
+// columns and at most rows lines: its account, its PR and its background
+// work. One line where they fit, else two; none when it has none.
+func (m Model) chatStrip(s sample.Session, w, rows int) []string {
+	st := m.st
+	var facts []string
+	if a := accountCell(s); a != "" {
+		facts = append(facts, st.muted.Render(a))
+	}
+	if ss := m.shipsOf(s); len(ss) > 0 {
+		facts = append(facts, m.shipCell(ss[0], true)+m.shipsMore(ss, false))
+	} else if p := m.prOf(s.Cwd); p != nil {
+		pr := st.accent.Render("#" + strconv.Itoa(p.Number))
+		if p.Draft {
+			pr += " " + st.text.Render("draft")
+		}
+		facts = append(facts, pr)
+	}
+	if s.Agents > 0 {
+		facts = append(facts, st.text.Render(plural(s.Agents, "subagent")+" running"))
+	}
+	if len(s.Shells) > 0 {
+		shells := plural(len(s.Shells), "shell")
+		if old := s.Shells[0].Started; !old.IsZero() {
+			shells += " · oldest " + sample.Human(m.now().Sub(old))
+		}
+		facts = append(facts, st.text.Render(shells))
+	}
+	if len(facts) == 0 {
+		return nil
+	}
+	sep := st.muted.Render(" · ")
+	lines := []string{facts[0]}
+	for _, f := range facts[1:] {
+		if last := len(lines) - 1; last > 0 || lipgloss.Width(" "+lines[last]+sep+f) <= w {
+			lines[last] += sep + f
+		} else {
+			lines = append(lines, f)
+		}
+	}
+	lines = lines[:min(len(lines), max(rows, 0))]
+	for i, l := range lines {
+		lines[i] = fit(" "+l, w)
 	}
 	return lines
 }

@@ -2,7 +2,7 @@
  SESSIONS 7    ships 3    machine    git    history    panes    stoker
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  WAITS FOR YOU · 6                                  │ spark-docs · done
-▌│ spark-docs                   done       9m   88% │
+▌│ spark-docs                   done       9m   88% │ ✻ team@example.com · Max · #4540 ●━●━●━●━●  live
  ╿ ember-billing                done       4m   32% │
  ╿ flint-auth                   asks       2m   41% │
  ╿ kindle-web                   asks       1m   56% │

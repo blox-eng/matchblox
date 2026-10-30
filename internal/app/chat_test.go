@@ -804,6 +804,101 @@ func TestACutListSaysHowManyAreBelow(t *testing.T) {
 	}
 }
 
+// flintSized is the demo machine at w by h with flint-auth, edited by
+// edit, selected and its screen asking.
+func flintSized(t *testing.T, w, h int, edit func(*sample.Session)) Model {
+	t.Helper()
+	st := screensState(t)
+	for i := range st.Sessions {
+		if st.Sessions[i].Name == "flint-auth" {
+			edit(&st.Sessions[i])
+		}
+	}
+	m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	next, _ = next.Update(stateMsg(st))
+	nm := next.(Model)
+	nm.splashDone = true
+	for _, s := range nm.snap.Sessions {
+		if s.Name == "flint-auth" {
+			nm.chose, nm.selPID = true, s.PID
+		}
+	}
+	nm.watchCmd()
+	next, _ = nm.Update(screenMsg{Pane: nm.watching, At: demoAt, Text: askScreen})
+	return next.(Model)
+}
+
+// everyFact gives a session an account, background work and, with its
+// ship, all three facts of the chat's strip.
+func everyFact(s *sample.Session) {
+	s.Provider, s.Account, s.Agents = "anthropic", "work", 1
+	s.Shells = []sample.Shell{{PID: 2240632, Started: demoAt.Add(-37 * time.Hour), Command: "sleep 15"}}
+}
+
+// The strip between the chat's title and its screen says the session's
+// account, its PR and its background work, on one line where it fits.
+// The screen gives the strip its rows.
+func TestTheChatStripSaysTheSessionsFacts(t *testing.T) {
+	m := flintSized(t, 200, 50, everyFact)
+	sc := m.draw(200)
+	_, right := sides(sc, 200)
+	strip := right[sc.bodyTop+1]
+	for _, want := range []string{"✻ work", "#4545", "conflicts with main", "1 subagent running", "1 shell · oldest 1d13h"} {
+		if !strings.Contains(strip, want) {
+			t.Fatalf("no %q in the strip %q:\n%s", want, strip, strings.Join(right, "\n"))
+		}
+	}
+	if strings.Contains(right[sc.bodyTop+2], "work") {
+		t.Fatalf("the strip takes two lines where one fits:\n%s", strings.Join(right, "\n"))
+	}
+	if len(sc.lines) != 50 || !slices.ContainsFunc(right, func(l string) bool { return strings.Contains(l, "╰─ ⏎") }) {
+		t.Fatalf("%d lines, or the card is gone:\n%s", len(sc.lines), strings.Join(right, "\n"))
+	}
+}
+
+// A session with no account, no PR and no background work has no strip:
+// the screen starts under the title.
+func TestTheChatStripTakesNoRowsWithoutFacts(t *testing.T) {
+	m := flintSized(t, 200, 50, func(s *sample.Session) {
+		s.Provider, s.Account, s.Agents, s.Shells = "", "", 0, nil
+	})
+	m.shipReport = nil
+	s, _ := m.selectedSession()
+	got := m.chatPane(s, 121, 40)
+	want := m.screenLines(120, 39)
+	if len(got) != 40 {
+		t.Fatalf("%d lines in a pane of 40", len(got))
+	}
+	for i, l := range want {
+		if got[i+1] != " "+l {
+			t.Fatalf("line %d under the title is %q, not the screen's %q", i+1, ansi.Strip(got[i+1]), ansi.Strip(l))
+		}
+	}
+}
+
+// A strip too long for one line takes two, never more.
+func TestTheChatStripWrapsToTwoLinesAtMost(t *testing.T) {
+	m := flintSized(t, 104, 38, func(s *sample.Session) {
+		everyFact(s)
+		s.Account = "a-long-account-name@example.com · Max"
+	})
+	sc := m.draw(104)
+	_, right := sides(sc, 104)
+	first, second, third := right[sc.bodyTop+1], right[sc.bodyTop+2], right[sc.bodyTop+3]
+	if !strings.Contains(first, "a-long-account") || !strings.Contains(second, "#4545") && !strings.Contains(second, "subagent") {
+		t.Fatalf("the strip is not on two lines:\n%s", strings.Join(right, "\n"))
+	}
+	if strings.Contains(third, "subagent") || strings.Contains(third, "shell") {
+		t.Fatalf("the strip takes a third line:\n%s", strings.Join(right, "\n"))
+	}
+	for _, l := range right[sc.bodyTop+1 : sc.bodyTop+3] {
+		if lipgloss.Width(l) > 104-sc.listW-1 {
+			t.Fatalf("a strip line is wider than the chat: %q", l)
+		}
+	}
+}
+
 // On a short desk the stats keep their rows and the list gives way, down
 // to 3 rows and the hint under them; shorter, the machine folds, then
 // usage.

@@ -514,7 +514,13 @@ func replayAt(t *testing.T, z replaySize) {
 	full := time.Date(2026, 10, 1, 23, 40, 0, 0, time.UTC)
 	morning := time.Date(2026, 10, 2, 6, 59, 50, 0, time.UTC)
 	// The list beside the chat cuts long names on the duo.
-	who := []string{"● 4 wait for you", "WAITS FOR YOU · 4", "flint-auth", "asks", "kindle-", "ember-b", "The refresh flow works"}
+	// flint-auth's words: its opened row on a phone, the foot of its
+	// screen beside the list, under the chat's strip.
+	flint := "The refresh flow works"
+	if !phone {
+		flint = "wire the rotation."
+	}
+	who := []string{"● 4 wait for you", "WAITS FOR YOU · 4", "flint-auth", "asks", "kindle-", "ember-b", flint}
 	if !phone {
 		who = append(who, "ws-1", "USAGE") // a phone drops the host, and its long list folds the dock
 	}
@@ -524,7 +530,7 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "who waits", at: 1300 * time.Millisecond, ok: has(who...)},
 		// The selection moves: the next one that waits shows what it said.
 		{name: "the next one", at: 2600 * time.Millisecond, key: "j", ok: has("I rewrote the quick start")},
-		{name: "back up", at: 3500 * time.Millisecond, key: "k", ok: has("The refresh flow works")},
+		{name: "back up", at: 3500 * time.Millisecond, key: "k", ok: has(flint)},
 		// a: flint-auth's chat takes the keys; its question tool's options
 		// are on the card at the foot of its screen, under the pane's own
 		// menu once its screen has come.

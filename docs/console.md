@@ -269,7 +269,10 @@ The chat is the live screen of the selected agent, drawn inside the
 console. You do not leave the console to use it. On a wide desk and on a
 phone held wide, it is always the right side of Sessions. `↑` `↓` change
 which agent it shows. Its frame title is `<name> · <state>`. The title is
-in the accent while the chat has the keys.
+in the accent while the chat has the keys. Under the title, a strip shows
+the session's account, its PR and its background work. It shows only what
+the session has, on one line or two. A session with none of these has no
+strip. On an upright phone the chat has no strip.
 
 ```
 ╭─ Sessions ────────────────────╮╭─ api-auth · asks ───────────────────────────╮
