@@ -99,3 +99,59 @@ func TestSSHHostsIncludeCannotLoop(t *testing.T) {
 		t.Fatalf("SSHHosts = %q", got)
 	}
 }
+
+func TestHideAddsOneLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hidden")
+	if err := os.WriteFile(path, []byte("# mine\nws-1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Hide(path, "gpu-1"); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(path)
+	if string(b) != "# mine\nws-1\ngpu-1\n" {
+		t.Fatalf("hidden:\n%s", b)
+	}
+}
+
+func TestHideTwiceIsOneLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "matchblox", "hidden")
+	for range 2 {
+		if err := Hide(path, ThisMachine); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := Hidden(path); !slices.Equal(got, []string{ThisMachine}) {
+		t.Fatalf("Hidden = %q", got)
+	}
+}
+
+func TestShowRemovesOnlyThatLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hidden")
+	if err := os.WriteFile(path, []byte("# mine\nws-1\ngpu-1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Show(path, "ws-1"); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(path)
+	if string(b) != "# mine\ngpu-1\n" {
+		t.Fatalf("hidden:\n%s", b)
+	}
+}
+
+func TestHiddenReadsThisMachine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hidden")
+	if got := Hidden(path); got != nil {
+		t.Fatalf("no file: %q", got)
+	}
+	if err := os.WriteFile(path, []byte("this machine\n-oProxyCommand=x\nws-1 # old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := Hidden(path); !slices.Equal(got, []string{ThisMachine, "ws-1"}) {
+		t.Fatalf("Hidden = %q", got)
+	}
+	if err := Hide(path, "-oProxyCommand=x"); err == nil {
+		t.Fatal("hid a name ssh reads as an option")
+	}
+}

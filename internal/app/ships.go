@@ -1,6 +1,8 @@
 package app
 
 import (
+	"cmp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -28,11 +30,82 @@ const (
 
 var stageNames = [...]string{"open", "ci", "green", "merged", "live"}
 
-func (m Model) ships() []proto.Ship {
-	if m.shipReport == nil {
-		return nil
+// ships are every host's ships, merged (see shipsMerged).
+func (m Model) ships() []proto.Ship { return m.allShips }
+
+// shipOrder is the order of the service's report: what waits for you, what
+// is stuck, what runs, then what is done.
+var shipOrder = map[string]int{shipWaits: 0, shipStuck: 1, shipRunning: 2, shipDone: 4}
+
+// shipsMerged are the ships of every host that sent a state, each with its
+// host, in the report's order; a tie keeps Hosts order. One local host:
+// the home report's ships as they came.
+func (m Model) shipsMerged() []proto.Ship {
+	home := m.shipReport
+	if m.opt.Host == "" && !slices.ContainsFunc(m.peers, func(l link) bool { return l.have && l.st.Ships != nil }) {
+		if home == nil {
+			return nil
+		}
+		return home.Ships
 	}
-	return m.shipReport.Ships
+	var out []proto.Ship
+	add := func(host string, r *proto.Ships) {
+		if r == nil {
+			return
+		}
+		for _, sh := range r.Ships {
+			sh.Host = host
+			out = append(out, sh)
+		}
+	}
+	add(m.opt.Host, home)
+	for _, l := range m.peers {
+		if l.have {
+			add(l.host, l.st.Ships)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b proto.Ship) int {
+		if c := cmp.Compare(shipRank(a), shipRank(b)); c != 0 {
+			return c
+		}
+		return b.Since.Compare(a.Since)
+	})
+	return out
+}
+
+func shipRank(sh proto.Ship) int {
+	if r, ok := shipOrder[sh.Kind]; ok {
+		return r
+	}
+	return 3
+}
+
+// shipReports are the ship reports of the hosts, in Hosts order.
+func (m Model) shipReports() []hostShips {
+	var out []hostShips
+	if m.shipReport != nil {
+		out = append(out, hostShips{m.opt.Host, m.shipReport})
+	}
+	for _, l := range m.peers {
+		if l.have && l.st.Ships != nil {
+			out = append(out, hostShips{l.host, l.st.Ships})
+		}
+	}
+	return out
+}
+
+type hostShips struct {
+	host string
+	r    *proto.Ships
+}
+
+// inFlight counts the ships of every host that are not live yet.
+func (m Model) inFlight() int {
+	n := 0
+	for _, h := range m.shipReports() {
+		n += h.r.InFlight
+	}
+	return n
 }
 
 func (m Model) selectedShip() (proto.Ship, bool) {
@@ -47,7 +120,8 @@ func (m Model) selectedShip() (proto.Ship, bool) {
 // first: stuck, waiting for you, in flight, merged, then live (as the
 // service, the CLI and the stoker find them).
 func (m Model) shipsOf(s sample.Session) []proto.Ship {
-	return proto.ShipsOf(m.ships(), s.Pane, s.SessionID)
+	// A pane and a session id can repeat on another host.
+	return slices.DeleteFunc(proto.ShipsOf(m.ships(), s.Pane, s.SessionID), func(sh proto.Ship) bool { return sh.Host != s.Host })
 }
 
 // shipsMore is what a row says after its lead ship when the session drives
@@ -101,10 +175,10 @@ func (m Model) shipsLeft(n int) string {
 	return left
 }
 
-// driver is the session that drives a ship.
+// driver is the session that drives a ship, on the ship's own host.
 func (m Model) driver(sh proto.Ship) (sample.Session, bool) {
 	for _, s := range m.all.sessions {
-		if proto.ShipDrives(sh, s.Pane, s.SessionID) {
+		if s.Host == sh.Host && proto.ShipDrives(sh, s.Pane, s.SessionID) {
 			return s, true
 		}
 	}
@@ -125,6 +199,16 @@ func (m Model) driverName(sh proto.Ship) string {
 		return sh.Session.ID
 	}
 	return "no session"
+}
+
+// driverOn is the driver's name, and with two or more hosts its host:
+// "api-auth on ws-1".
+func (m Model) driverOn(sh proto.Ship) string {
+	by := m.st.text.Render(m.driverName(sh))
+	if m.hostCount() > 1 {
+		by += m.st.faint.Render(" on ") + m.st.text.Render(m.nameOf(sh.Host))
+	}
+	return by
 }
 
 // driverGone is the flash for a ship whose session is no longer there.
@@ -211,20 +295,23 @@ func (m Model) shipAge(sh proto.Ship) string {
 
 // shipsStrip says plainly why the ships may be behind: GitHub's rate limit,
 // gh that cannot read, a repository whose poll failed.
+// With two or more hosts each line starts with its host.
 func (m Model) shipsStrip(w int) []string {
-	r := m.shipReport
-	if r == nil {
-		return nil
-	}
 	var says []string
-	if !r.Paused.IsZero() {
-		says = append(says, "paused · GitHub's rate limit is low, ships read again at "+r.Paused.Local().Format("15:04"))
-	}
-	if r.Unknown != "" {
-		says = append(says, "GitHub cannot be read: "+r.Unknown)
-	}
-	for _, e := range r.Errors {
-		says = append(says, "not read: "+e)
+	for _, h := range m.shipReports() {
+		on, r := "", h.r
+		if m.hostCount() > 1 {
+			on = m.nameOf(h.host) + ": "
+		}
+		if !r.Paused.IsZero() {
+			says = append(says, on+"paused · GitHub's rate limit is low, ships read again at "+r.Paused.Local().Format("15:04"))
+		}
+		if r.Unknown != "" {
+			says = append(says, on+"GitHub cannot be read: "+r.Unknown)
+		}
+		for _, e := range r.Errors {
+			says = append(says, on+"not read: "+e)
+		}
 	}
 	var out []string
 	for _, say := range says {
@@ -258,12 +345,16 @@ func (m Model) shipsPanel(w int) body {
 		if on {
 			mark = st.accent.Render("▌")
 		}
+		right := cutLeft(st.faint.Render(m.shipAge(sh)), 4) + " "
+		if m.hostCount() > 1 {
+			right = st.muted.Render(m.nameOf(sh.Host)) + "  " + right
+		}
 		lines := []string{
-			spread(mark+padTo(st.accent.Render("#"+strconv.Itoa(sh.Number)), m.numW())+" "+st.ink(on).Render(sh.Title), cutLeft(st.faint.Render(m.shipAge(sh)), 4)+" ", w),
+			spread(mark+padTo(st.accent.Render("#"+strconv.Itoa(sh.Number)), m.numW())+" "+st.ink(on).Render(sh.Title), right, w),
 			"   " + m.track(sh) + "  " + m.shipStyle(sh).Render(sh.Note),
 		}
-		if on && m.layoutAt(m.width) == Narrow {
-			lines = append(lines, spread("   "+st.faint.Render("by ")+st.text.Render(m.driverName(sh)), m.shipKeysLine(sh)+" ", w))
+		if on && m.inPlace() {
+			lines = append(lines, spread("   "+st.faint.Render("by ")+m.driverOn(sh), m.shipKeysLine(sh)+" ", w))
 		}
 		b.addRow(i, on, w, st, lines...)
 		b.add(-1, "")
@@ -302,7 +393,7 @@ func (m Model) shipDetail(w int) []string {
 	if !ok {
 		return nil
 	}
-	out := []string{"", fit(" "+st.accent.Bold(true).Render("#"+strconv.Itoa(sh.Number))+st.faint.Render("  by ")+st.text.Render(m.driverName(sh))+
+	out := []string{"", fit(" "+st.accent.Bold(true).Render("#"+strconv.Itoa(sh.Number))+st.faint.Render("  by ")+m.driverOn(sh)+
 		st.faint.Render(" · "+sh.Repo), w)}
 	for _, l := range wrapPlain(sh.Title, w-2) {
 		out = append(out, " "+st.text.Render(l))
@@ -367,7 +458,7 @@ func (m Model) toDriver() Model {
 			m.flash = "no session owns #" + strconv.Itoa(sh.Number) + ", and no checkout of " + sh.Repo + " is here"
 			return m
 		}
-		return m.openNewIn(sh.Where, "Take over #"+strconv.Itoa(sh.Number)+" ("+sh.URL+"): read where it stands, then carry it to live.")
+		return m.openNewIn(sh.Host, sh.Where, "Take over #"+strconv.Itoa(sh.Number)+" ("+sh.URL+"): read where it stands, then carry it to live.")
 	}
 	s, ok := m.driver(sh)
 	if !ok {
@@ -375,7 +466,7 @@ func (m Model) toDriver() Model {
 		return m
 	}
 	m.setTab(tabSessions)
-	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, s.PID
+	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
 	return m
 }
 
@@ -392,7 +483,7 @@ func (m Model) shipAnswer() Model {
 		m.flash = m.driverGone(sh)
 		return m
 	}
-	m.openPeek(s.Pane)
+	m.openPeek(paneOf(s))
 	return m
 }
 
@@ -404,7 +495,7 @@ func (m Model) mergeShip() *action {
 		return nil
 	}
 	return &action{label: "merge", steps: [][]string{sh.Merge}, destructive: true,
-		rec: "ship:" + sh.Repo + "#" + strconv.Itoa(sh.Number), which: "secondary"}
+		rec: "ship:" + sh.Repo + "#" + strconv.Itoa(sh.Number), which: "secondary", host: sh.Host}
 }
 
 // shipField is a session's ships in its detail, in the row's order: each

@@ -23,6 +23,7 @@ const (
 // the cursor from the order line to the chips (onChips), where at is the
 // chip it is on: the go chips first, then the recipes.
 type sheet struct {
+	host           string // whose stoker the order goes to (R14)
 	night, restart bool
 	text           string
 	onChips        bool
@@ -49,37 +50,43 @@ const maxOrder = 500
 // openSheet opens the launch sheet for a night, a day run, or by day a new
 // order to the run that is on: its chips then start as the run's goes.
 // With no stoker agent running, matchblox starts it now: the sheet says so
-// until it rests.
-func (m Model) openSheet(night, restart bool) (Model, tea.Cmd) {
-	m.sheet = &sheet{night: night, restart: restart}
-	if o := m.stokerOrder(); restart && o != nil {
+// until it rests. The sheet is host's stoker's.
+func (m Model) openSheet(host string, night, restart bool) (Model, tea.Cmd) {
+	m.sheet = &sheet{host: host, night: night, restart: restart}
+	if o := m.stokerOf(host).Order; restart && o != nil {
 		m.sheet.goes = slices.Clone(o.Grants)
 	}
 	m.peek, m.pending = nil, nil
 	return m, m.startStoker()
 }
 
-// startStoker asks the service to start the stoker agent, when there is
-// one to start and it neither runs nor starts.
+// sheetView is the stoker view of the sheet's host.
+func (m Model) sheetView() *proto.StokerView { return m.stokerOf(m.sheet.host) }
+
+// startStoker asks the sheet's host to start its stoker agent, when there
+// is one to start and it neither runs nor starts.
 func (m Model) startStoker() tea.Cmd {
-	v := m.stoker
-	if m.noAgent() || v.PaneUp || v.Starting || m.conn == nil || m.lost {
+	v := m.sheetView()
+	if m.noAgent() || v.PaneUp || v.Starting || m.unsent(m.sheet.host) != "" {
 		return nil
 	}
-	return m.send(proto.Act{RecID: "stoker:start", Which: "primary"})
+	return m.sendTo(m.sheet.host, proto.Act{RecID: "stoker:start", Which: "primary"})
 }
 
-// orderKey is o: a new order for a day run. A night is sealed.
+// orderKey is o: a new order for a day run on the selected row's host. A
+// night is sealed.
 func (m Model) orderKey() (tea.Model, tea.Cmd) {
-	switch {
-	case m.conn == nil || m.lost:
-		m.flash = "not sent, no connection"
-	case m.stoker == nil:
+	host := m.rowHost()
+	v := m.stokerOf(host)
+	switch why := m.unsent(host); {
+	case why != "":
+		m.flash = why
+	case v == nil:
 		m.flash = "this service keeps no stoker"
-	case m.stoker.On && !m.stoker.Until.IsZero():
+	case v.On && !v.Until.IsZero():
 		m.flash = m.sealedText()
-	case m.stoker.On:
-		return m.openSheet(false, true)
+	case v.On:
+		return m.openSheet(host, false, true)
 	default:
 		m.flash = m.keys.main.Order.Help().Key + " gives a new order to a running stoker: " + m.keys.main.Stoke.Help().Key + " starts it"
 	}
@@ -88,7 +95,7 @@ func (m Model) orderKey() (tea.Model, tea.Cmd) {
 
 // noAgent: there is no stoker agent to start (fixtures), or its command
 // is not on PATH. ⏎ then turns today's stoker on.
-func (m Model) noAgent() bool { return m.stoker.Agent == "" || m.stoker.Missing != "" }
+func (m Model) noAgent() bool { v := m.sheetView(); return v.Agent == "" || v.Missing != "" }
 
 func (m Model) sheetKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := *m.sheet
@@ -98,7 +105,7 @@ func (m Model) sheetKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.sheetEnter()
 	}
 	if s.onChips {
-		n := len(goChips) + len(m.stoker.Recipes)
+		n := len(goChips) + len(m.sheetView().Recipes)
 		switch {
 		case bkey.Matches(k, sk.Close, sk.Chips):
 			s.onChips = false
@@ -107,7 +114,7 @@ func (m Model) sheetKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case bkey.Matches(k, sk.Right):
 			s.at = (s.at + 1) % n
 		case bkey.Matches(k, sk.Tick):
-			s.pick(m.stoker.Recipes)
+			s.pick(m.sheetView().Recipes)
 		default:
 			// Any other key is the order's: the cursor goes back to it.
 			s.onChips = false
@@ -173,13 +180,25 @@ func joinWords(text, word string) string {
 func (m Model) sheetEnter() (tea.Model, tea.Cmd) {
 	s := *m.sheet
 	m.sheet = &s
-	if m.conn == nil || m.lost {
-		s.err = "not sent, no connection"
+	if why := m.unsent(s.host); why != "" {
+		s.err = why
 		return m, nil
 	}
-	if !m.noAgent() && !m.stoker.Ready {
+	if !m.noAgent() && !m.sheetView().Ready {
 		s.queued, s.err = true, ""
 		return m, m.startStoker()
+	}
+	return m.sendOrder()
+}
+
+// queuedOrder sends the order that waited for host's stoker agent, once
+// it rests.
+func (m Model) queuedOrder(host string) (Model, tea.Cmd) {
+	if m.sheet == nil || m.sheet.host != host || !m.sheet.queued || m.sheet.act != "" {
+		return m, nil
+	}
+	if v := m.stokerOf(host); v == nil || !v.Ready {
+		return m, nil
 	}
 	return m.sendOrder()
 }
@@ -201,7 +220,7 @@ func (m Model) sendOrder() (Model, tea.Cmd) {
 		Night  bool     `json:"night"`
 		Grants []string `json:"grants,omitempty"`
 	}{strings.TrimSpace(s.text), s.night, goes})
-	cmd := m.send(proto.Act{RecID: "stoker:order", Which: "primary", Confirm: "y", Text: string(body)})
+	cmd := m.sendTo(s.host, proto.Act{RecID: "stoker:order", Which: "primary", Confirm: "y", Text: string(body)})
 	if m.noAgent() { // today's run starts at once: a refusal is a flash
 		m.sheet = nil
 		return m, cmd
@@ -262,7 +281,7 @@ func (m Model) sheetBox(bw int) (box, press []string, spans []span, goesAt int, 
 	add("")
 	goesAt = len(lines) + 1 // the box's top line comes first
 	add(line)
-	if r := m.stoker.Recipes; len(r) > 0 {
+	if r := m.sheetView().Recipes; len(r) > 0 {
 		focus := -1
 		if s.onChips {
 			focus = s.at - len(goChips)
@@ -273,7 +292,7 @@ func (m Model) sheetBox(bw int) (box, press []string, spans []span, goesAt int, 
 		chipSpans[i].x0 += 2 // the box's "│ "
 		chipSpans[i].x1 += 2
 	}
-	switch v := m.stoker; {
+	switch v := m.sheetView(); {
 	case v.Agent == "":
 	case v.Missing != "":
 		// The agent cannot start: the door comes first, not after ⏎.

@@ -158,10 +158,12 @@ func quietNight() proto.StokerView {
 }
 
 // TestAQuietNightShowsItsCard: the night's score takes the dock's stoker
-// panel until it is seen, and c opens the whole card.
+// panel until it is seen, and c opens the whole card. The phone shows it
+// in its full view: list only has no dock.
 func TestAQuietNightShowsItsCard(t *testing.T) {
 	for _, w := range []int{40, 120} {
 		m, _ := loadedWith(t, w, stokerState(quietNight()))
+		m = fullView(m)
 		if out := ansi.Strip(m.render()); !strings.Contains(out, "STOKER") || !strings.Contains(out, "ready 7/7") || strings.Contains(out, "NIGHT · 01:08") {
 			t.Fatalf("w=%d: the dock does not show the night's score:\n%s", w, out)
 		}

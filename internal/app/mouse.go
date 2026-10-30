@@ -1,6 +1,8 @@
 package app
 
 import (
+	"cmp"
+
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -30,7 +32,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		m.flash, m.pending = "cancelled: "+m.pending.String(), nil
 		return m, nil
 	}
-	if !m.have || m.mismatch {
+	if !m.shows() || m.hostCount() == 1 && m.mismatch {
 		return m, nil
 	}
 	m.searching = false // keep the search; what the tap asks for shows on the key line
@@ -122,21 +124,21 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if pane, _ := m.peekTarget(); pane != "" {
+	if at, _ := m.peekTarget(); at.pane != "" {
 		// A session opens in place with its keys; a tap on it once it is
 		// selected opens the peek, to answer it or to message it.
 		m.armed, m.flash = "", ""
 		if !picked {
 			return m, nil // the default selection is not a tap
 		}
-		open := func(m Model) (tea.Model, tea.Cmd) { m.openPeek(pane); return m, nil }
-		if m.night() && !m.stoker.Asked {
-			m.held = open
+		open := func(m Model) (tea.Model, tea.Cmd) { m.openPeek(at); return m, nil }
+		if host := cmp.Or(at.host, m.opt.Host); m.takeOverOn(host) {
+			m.held, m.heldOn = open, host
 			return m, nil
 		}
 		return open(m)
 	}
-	say, run := m.tapAct()
+	say, run, host := m.tapAct()
 	if run == nil {
 		m.armed, m.flash = "", "nothing to do here"
 		return m, nil
@@ -148,33 +150,33 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.armed = ""
-	if _, door := m.selectedDoor(); !door && m.night() && !m.stoker.Asked {
-		m.held, m.flash = run, ""
+	if _, door := m.selectedDoor(); !door && m.takeOverOn(host) {
+		m.held, m.heldOn, m.flash = run, host, ""
 		return m, nil
 	}
 	return run(m)
 }
 
-// tapAct is what a second tap on the selected row does, and what the
-// first one shows: the row's Enter.
-func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd)) {
+// tapAct is what a second tap on the selected row does, what the first
+// one shows, and the host it acts on: the row's Enter.
+func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd), string) {
 	a := m.primary()
 	if a == nil {
-		return "", nil
+		return "", nil, ""
 	}
 	return a.String(), func(m Model) (tea.Model, tea.Cmd) {
 		if a.pair {
 			return m.openPairDoor()
 		}
 		if a.ghost {
-			return m.openNewIn(a.where, ""), nil
+			return m.openNewIn(m.opt.Host, a.where, ""), nil
 		}
 		if a.nav && !a.destructive {
 			return m.confirm(*a)
 		}
 		m.pending = a
 		return m, nil
-	}
+	}, m.actHost(a)
 }
 
 // wheel is a swipe on a phone: it moves the selection, as ↑ and ↓ do.

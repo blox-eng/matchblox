@@ -20,7 +20,9 @@ type recPrefs struct {
 	Folded    bool              `json:"folded,omitempty"`
 }
 
-func recPrefsPath(dir string) string { return filepath.Join(dir, "recommendations.json") }
+const recPrefsFile = "recommendations.json"
+
+func recPrefsPath(dir string) string { return filepath.Join(dir, recPrefsFile) }
 
 func loadRecPrefs(dir string) recPrefs {
 	var p recPrefs
@@ -35,22 +37,26 @@ func loadRecPrefs(dir string) recPrefs {
 
 // save writes the prefs; a console with no state directory keeps them
 // for its run only.
-func (p recPrefs) save(dir string) error {
+func (p recPrefs) save(dir string) error { return keepState(dir, recPrefsFile, p) }
+
+// keepState writes v as JSON to the file in the state directory, whole
+// or not at all; with no state directory it keeps nothing.
+func keepState(dir, file string, v any) error {
 	if dir == "" {
 		return nil
 	}
-	b, err := json.Marshal(p)
+	b, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	tmp := recPrefsPath(dir) + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	path := filepath.Join(dir, file)
+	if err := os.WriteFile(path+".tmp", b, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, recPrefsPath(dir))
+	return os.Rename(path+".tmp", path)
 }
 
 // dismissed: the person dismissed this recommendation, and its evidence

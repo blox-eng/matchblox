@@ -1,15 +1,18 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/remote"
+	"github.com/blox-eng/matchblox/internal/transport"
 )
 
 // The layers of the console, as in k9s: Hosts above the console of one
@@ -35,6 +38,10 @@ type ShellOptions struct {
 	Open func(host string) Options
 	// Remove takes a host out of the list.
 	Remove func(host string) error
+	// Hidden are the hosts the builder hid (~/.config/matchblox/hidden):
+	// a hidden host has no stream (R6, R7). Hide and Show write one line.
+	Hidden     func() []string
+	Hide, Show func(host string) error
 	// Exec gives this terminal to argv until it exits. Nil: tea.ExecProcess.
 	Exec func(argv []string, done func(error) tea.Msg) tea.Cmd
 	// Start is the host the shell opens first; "" decides by the list.
@@ -49,13 +56,15 @@ type ShellOptions struct {
 	TailscaleGate string
 }
 
-// Shell is the top of the console: the hosts layer, or one host's console.
+// Shell is the top of the console: the hosts layer, or the console of the
+// ticked hosts. The console's streams live under Hosts too (R12).
 type Shell struct {
 	opt     ShellOptions
 	layer   layer
 	cur     Model
 	curHost string
 	hosts   []string
+	hidden  []string // the hidden file's lines: hosts.ThisMachine for ""
 	sel     int
 	adding  bool    // the rows are hosts to add
 	input   *string // a host being typed
@@ -86,13 +95,106 @@ type connectedHostMsg struct {
 
 func NewShell(opt ShellOptions) Shell {
 	s := Shell{opt: opt, width: 100, height: 30, dark: true, st: newStyles(true), offers: &pairWaits{}, keys: defaultShellKeys(), tailscale: map[string]bool{}}
-	s.hosts = s.readHosts()
+	s.hosts, s.hidden = s.readHosts(), s.readHidden()
 	switch {
 	case opt.Start != "":
 		s, _ = s.open(opt.Start, true)
-	case len(s.hosts) == 0 && !opt.FirstRun:
+	case len(s.hosts) > 0:
+		s, _ = s.openTicked(true) // R8; nothing ticked stays on Hosts
+	case !opt.FirstRun:
 		s, _ = s.open("", true)
 	}
+	return s
+}
+
+func (s Shell) readHidden() []string {
+	if s.opt.Hidden == nil {
+		return nil
+	}
+	return s.opt.Hidden()
+}
+
+func (s Shell) isHidden(host string) bool { return slices.Contains(s.hidden, hostName(host)) }
+
+// ticked are the hosts the console shows: "" for this machine, then the
+// added hosts, minus the hidden, in Hosts order.
+func (s Shell) ticked() []string {
+	var out []string
+	for _, h := range append([]string{""}, s.hosts...) {
+		if !s.isHidden(h) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+func (s Shell) hiddenCount() int { return 1 + len(s.hosts) - len(s.ticked()) }
+
+// live: a console is open, on screen or under Hosts.
+func (s Shell) live() bool { return s.cur.opt.Gen != 0 && !s.cur.quitting }
+
+// openTicked opens one console over the ticked hosts: home is the first,
+// the rest are its peers. Nothing ticked opens nothing.
+func (s Shell) openTicked(first bool) (Shell, tea.Cmd) {
+	t := s.ticked()
+	if len(t) == 0 {
+		return s, nil
+	}
+	s, cmd := s.openOn(t[0], t[1:], first)
+	s.cur.hidden = s.hiddenCount()
+	return s, cmd
+}
+
+// keep gives the open console the peers of the ticks (R12): it keeps the
+// streams of the hosts that stay and dials only the newly ticked.
+func (s Shell) keep(peerHosts []string) (Shell, tea.Cmd) {
+	var peers []Peer
+	var added []string
+	for _, h := range peerHosts {
+		if s.cur.peerAt(h) >= 0 {
+			peers = append(peers, Peer{Host: h})
+			continue
+		}
+		peers = append(peers, s.peer(h))
+		added = append(added, h)
+	}
+	m, cmd := s.cur.reconcile(peers)
+	for _, h := range added {
+		m.editLogin(h, func(l *hostLogin) { l.tailscale = s.tailscale[h] }) // until its check says
+	}
+	m.hidden = s.hiddenCount()
+	s.cur, s.layer = m, layerConsole
+	return s, cmd
+}
+
+// peer is host for the console as a peer, not dialed yet: the console
+// dials it in the background, so a slow host never holds the screen or
+// the other hosts. The first dial is Open's; the next ones its Redial.
+func (s Shell) peer(host string) Peer {
+	open := s.opt.Open
+	var mu sync.Mutex
+	var redial func() (transport.Conn, error)
+	return Peer{Host: host, Redial: func() (transport.Conn, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if redial != nil {
+			return redial()
+		}
+		o := open(host)
+		redial = o.Redial
+		if redial == nil {
+			redial = func() (transport.Conn, error) { o := open(host); return o.Conn, o.DialErr }
+		}
+		return o.Conn, o.DialErr
+	}}
+}
+
+// closeConsole ends the open console: its streams, its prompts, its
+// checks. Its late messages find nothing to do.
+func (s Shell) closeConsole() Shell {
+	s.cur.stopAsk()
+	s.cur.closeStreams()
+	s.cur.quitting = true
 	return s
 }
 
@@ -103,11 +205,19 @@ func (s Shell) readHosts() []string {
 	return s.opt.Hosts()
 }
 
-// open starts the console of a host. The start screen plays only for the
-// first console of a run.
+// open starts the console of a host alone. The start screen plays only for
+// the first console of a run.
 func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
-	s.cur.stopAsk()
+	return s.openOn(host, nil, first)
+}
+
+// openOn starts the console of home with peers, in place of the open one.
+func (s Shell) openOn(host string, peers []string, first bool) (Shell, tea.Cmd) {
+	s = s.closeConsole()
 	o := s.opt.Open(host)
+	for _, h := range peers {
+		o.Peers = append(o.Peers, s.peer(h))
+	}
 	b := s.opt.Base
 	o.Binary, o.CompactAt, o.CompactTokens, o.NoMotion, o.Now, o.Self, o.StateDir = b.Binary, b.CompactAt, b.CompactTokens, b.NoMotion, b.Now, b.Self, b.StateDir
 	o.Clip = b.Clip
@@ -133,7 +243,9 @@ func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
 	m.width, m.height, m.dark, m.st = s.width, s.height, s.dark, s.st
 	m.splashDone = !first
 	m.pairOffers = s.offers
-	m.tailscale = s.tailscale[host] // until its check says
+	for _, h := range m.hosts() {
+		m.editLogin(h, func(l *hostLogin) { l.tailscale = s.tailscale[h] }) // until its check says
+	}
 	s.cur, s.curHost, s.layer = m, host, layerConsole
 	return s, m.Init()
 }
@@ -170,8 +282,11 @@ func (s Shell) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			s.flash = "not connected: " + msg.err.Error()
 			return s, nil
 		}
-		s.hosts, s.adding = s.readHosts(), false
-		return s.open(msg.host, false)
+		s.hosts, s.hidden, s.adding = s.readHosts(), s.readHidden(), false
+		if len(s.ticked()) == 0 {
+			return s.open(msg.host, false)
+		}
+		return s.openTicked(false) // an added host is ticked: it joins the others
 	}
 	if s.layer == layerConsole {
 		next, cmd := s.cur.Update(msg)
@@ -179,29 +294,36 @@ func (s Shell) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return s, cmd
 	}
 	switch msg := msg.(type) {
-	case connMsg:
-		_ = msg.conn.Close() // a closed console's late connection
 	case tea.KeyPressMsg:
 		return s.key(msg)
 	case tea.MouseClickMsg:
 		return s.tap(msg.Mouse())
+	case tea.KeyMsg, tea.MouseMsg, tea.PasteMsg:
+		return s, nil // the builder's input is for Hosts
+	}
+	if s.live() {
+		// The streams run under Hosts (R12): the notes stay live.
+		next, cmd := s.cur.Update(msg)
+		s.cur = next.(Model)
+		return s, cmd
+	}
+	if c, ok := msg.(connMsg); ok {
+		_ = c.conn.Close() // a closed console's late connection
 	}
 	return s, nil
 }
 
-// back closes the console and shows Hosts with its host selected.
+// back shows Hosts with the console's home host selected. The console
+// stays open under it, with its streams (R12).
 func (s Shell) back() Shell {
-	if s.cur.conn != nil {
-		_ = s.cur.conn.Close()
-	}
 	s.cur = s.cur.closePairPage("")
-	s.cur.stopAsk()       // an open prompt is cancelled
-	s.cur.quitting = true // its late messages find nothing to do
-	if s.curHost != "" {
-		s.tailscale[s.curHost] = s.cur.tailscale
+	for _, h := range s.cur.hosts() {
+		if h != "" {
+			s.tailscale[h] = s.cur.loginOf(h).tailscale
+		}
 	}
 	s.layer, s.adding, s.input, s.pending, s.flash = layerHosts, false, nil, nil, ""
-	s.hosts = s.readHosts()
+	s.hosts, s.hidden = s.readHosts(), s.readHidden()
 	s.sel = 0
 	if i := slices.Index(s.hosts, s.curHost); i >= 0 {
 		s.sel = i + 1
@@ -218,7 +340,8 @@ type row struct {
 	connect     bool   // Enter connects host
 	typed       bool   // Enter types a host
 	removable   bool
-	tailscale   bool // Tailscale SSH answers host: the gate does not hold there
+	tailscale   bool   // Tailscale SSH answers host: the gate does not hold there
+	tick        string // ● ticked, ○ hidden; "" a row with no tick
 }
 
 func (s Shell) firstRun() bool { return s.opt.FirstRun && len(s.hosts) == 0 }
@@ -246,8 +369,30 @@ func (s Shell) rows() []row {
 		}
 		rs = append(rs, r)
 	}
+	for i := range rs {
+		if s.ticks() {
+			s.tick(&rs[i])
+		}
+	}
 	return append(rs, row{label: "+ add a host", note: "from ~/.ssh/config, or type one", add: true})
 }
+
+// tick marks a host's row; a ticked host's note is live (R12). A hidden
+// host has no stream, so its note is hidden and nothing else (R6).
+func (s Shell) tick(r *row) {
+	r.tick = "●"
+	switch {
+	case s.isHidden(r.host):
+		r.tick, r.note = "○", "hidden"
+	case r.tailscale: // its warning stays
+	case s.live():
+		r.note = cmp.Or(s.cur.hostNote(r.host), r.note)
+	}
+}
+
+// ticks: Hosts shows the ticks once a host is added. One host has no
+// choice to make.
+func (s Shell) ticks() bool { return len(s.hosts) > 0 && !s.adding }
 
 func (s Shell) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	sk := s.keys.shell
@@ -284,6 +429,14 @@ func (s Shell) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if r := rs[min(s.sel, len(rs)-1)]; r.removable {
 			s.pending = &action{label: "remove", say: "remove " + r.host + " from the list (matchblox stays on " + r.host + ")", door: r.host, destructive: true}
 		}
+	case bkey.Matches(k, sk.Tick):
+		if r := rs[min(s.sel, len(rs)-1)]; r.tick != "" {
+			return s.flip(r.host), nil
+		}
+	case bkey.Matches(k, sk.Connect):
+		if r := rs[min(s.sel, len(rs)-1)]; r.removable {
+			s.pending = s.connect(r.host)
+		}
 	case bkey.Matches(k, sk.Open):
 		return s.enter(rs[min(s.sel, len(rs)-1)])
 	}
@@ -299,7 +452,7 @@ func (s Shell) enter(r row) (tea.Model, tea.Cmd) {
 	}
 	switch {
 	case r.open:
-		return s.open(r.host, false)
+		return s.enterTicked(r.host)
 	case r.add:
 		s.adding, s.sel = true, 0
 	case r.typed:
@@ -309,6 +462,40 @@ func (s Shell) enter(r row) (tea.Model, tea.Cmd) {
 		s.pending = s.connect(r.host)
 	}
 	return s, nil
+}
+
+// flip ticks host, or hides it, in the hidden file (R7). The console
+// changes at Enter.
+func (s Shell) flip(host string) Shell {
+	write := s.opt.Hide
+	if s.isHidden(host) {
+		write = s.opt.Show
+	}
+	if write == nil {
+		return s
+	}
+	if err := write(hostName(host)); err != nil {
+		s.flash = "not saved: " + err.Error()
+		return s
+	}
+	s.hidden = s.readHidden()
+	return s
+}
+
+// enterTicked opens the console of the ticked hosts. The open one stays
+// when its home host does: Enter dials the newly ticked and closes the
+// newly hidden (R12). With none ticked, host opens alone.
+func (s Shell) enterTicked(host string) (Shell, tea.Cmd) {
+	switch t := s.ticked(); {
+	case len(t) == 0:
+		s, cmd := s.open(host, false)
+		s.cur.hidden = s.hiddenCount() - 1 // all but the one that opens
+		s.cur.flash = "No host is ticked: " + s.cur.nameOf(host) + " opens alone."
+		return s, cmd
+	case s.live() && t[0] == s.curHost:
+		return s.keep(t[1:])
+	}
+	return s.openTicked(false)
 }
 
 // connect is `matchblox connect <host>` in this terminal: the ssh login is
@@ -325,6 +512,9 @@ func (s Shell) connect(host string) *action {
 func (s Shell) confirm(a action) (tea.Model, tea.Cmd) {
 	host := a.door
 	if a.connect && s.opt.Base.Ask != nil {
+		// The connect's field takes the prompts: the console under Hosts
+		// must not wait for them too. The connected host opens anew.
+		s = s.closeConsole()
 		s.gen++
 		f, cmd := s.connectField(host, s.gen).connect(a.steps[0])
 		s.connecting, s.flash = &f, "connecting "+host+"…"
@@ -434,6 +624,9 @@ func (s Shell) render() string {
 		st.hair.Render(strings.Repeat("─", w)),
 	}
 	label := fmt.Sprintf(" HOSTS · %d", len(s.hosts)+1)
+	if s.ticks() {
+		label += fmt.Sprintf(" · %d SHOWN", len(s.ticked()))
+	}
 	switch {
 	case s.adding:
 		label = " ADD A HOST"
@@ -450,9 +643,13 @@ func (s Shell) render() string {
 		if i == s.sel {
 			mark = "▌ "
 		}
-		line := " " + st.accent.Render(mark) + st.text.Render(pad(r.label, 24)) + st.muted.Render(r.note)
+		tick, label := "", pad(r.label, 24)
+		if s.ticks() {
+			tick, label = s.tickMark(r), pad(r.label, 22)
+		}
+		line := " " + st.accent.Render(mark) + tick + st.text.Render(label) + st.muted.Render(r.note)
 		if layout(w, s.height) == Narrow {
-			line = " " + st.accent.Render(mark) + st.text.Render(r.label)
+			line = " " + st.accent.Render(mark) + tick + st.text.Render(r.label)
 		}
 		b.addRow(i, i == s.sel, w, st, line)
 	}
@@ -492,6 +689,17 @@ func (s Shell) render() string {
 	return strings.Join(out, "\n")
 }
 
+// tickMark is a row's tick and its space: blank on a row with none.
+func (s Shell) tickMark(r row) string {
+	switch r.tick {
+	case "●":
+		return s.st.accent.Render("●") + " "
+	case "○":
+		return s.st.faint.Render("○") + " "
+	}
+	return "  "
+}
+
 func (s Shell) actionLine(w int) string {
 	st, sk := s.st, s.keys.shell
 	switch {
@@ -503,6 +711,14 @@ func (s Shell) actionLine(w int) string {
 		return fit(" "+st.text.Render(s.flash), w)
 	case s.adding:
 		return fit(" "+st.muted.Render(plainHints(hintFor(sk.Up, ""), hintFor(sk.Open, "connect"), hintFor(sk.Back, ""), hintFor(sk.Quit, ""))), w)
+	}
+	if s.ticks() {
+		// The list of ticks names the act, then its key (design/0017 §Hosts).
+		var parts []string
+		for _, b := range []bkey.Binding{sk.Tick, sk.Open, sk.Connect, sk.Quit} {
+			parts = append(parts, b.Help().Desc+" "+b.Help().Key)
+		}
+		return fit(" "+st.muted.Render(strings.Join(parts, "  ")), w)
 	}
 	keys := plainHints(hintFor(sk.Up, ""), hintFor(sk.Open, ""), hintFor(sk.Quit, ""))
 	if rs := s.rows(); s.sel < len(rs) && rs[s.sel].removable {
@@ -519,7 +735,5 @@ func (s Shell) Close() {
 	if s.connecting != nil {
 		s.connecting.stopAsk()
 	}
-	if s.layer == layerConsole && s.cur.conn != nil {
-		_ = s.cur.conn.Close()
-	}
+	s.cur.closeStreams() // under Hosts too: they stay open there
 }

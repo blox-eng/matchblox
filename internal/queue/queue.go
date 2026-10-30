@@ -20,6 +20,9 @@ const (
 )
 
 type Item struct {
+	// Host is the host the console read the item from: set by the console,
+	// never sent.
+	Host      string    `json:"-"`
 	SessionID string    `json:"session_id"`
 	Pane      string    `json:"pane"`
 	Target    string    `json:"target"`

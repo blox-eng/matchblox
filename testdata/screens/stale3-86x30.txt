@@ -1,0 +1,30 @@
+ ▰ matchblox · 3 hosts · gpu-1 stale                                 ● 8 wait for you
+ SESSIONS 10    ships 3    machine    git    history    panes    stoker
+──────────────────────────────────────────────────────────────────────────────────────
+ WAITS FOR YOU · 8                        │
+▌│ spark-docs this m… done       9m   88% │ spark-docs
+ ╿ ember-billing thi… done       4m   32% │ │ done, waits for you · 9m · hearth:3.1 ·…
+ │ train-loop gpu-1   stale     40s   88% │
+ ╿ flint-auth this m… asks       2m   41% │ CLAUDE SAID
+ ╿ kindle-web this m… asks       1m   56% │ I rewrote the quick start and the
+ ╿ cinder-ci this ma… done       0s   55% │ install page.
+ ╿ wick-mobile this … done       0s    6% │
+ │ api-auth ws-1      waits      1m   88% │ context  ▰▰▰▰▰▰▰▰▰▱ 88%
+ WORKING · 2                              │ plan     ▰▰▰▰▰▰▰▰▰▰ 100%  docs for the 1.…
+ │ docs-sweep ws-1    busy            88% │ ship     #4540 ●━●━●━●━●  live
+ ✦ hearth-api this m… busy            79% │          The 1.0 docs
+ + start a new session                    │          https://github.com/hearth/spark-…
+                                          │ why      clear: idle 9m (clear after 0s)
+ 1 without an agent: shell:1.1 zsh        │ sonnet · 176k / 200k tokens · +0k in 30
+                                          │ min · ✻ team@example.com · Max · pid 1400
+ RECOMMENDATIONS · 7 · h hides            │ · 1 process · started 3h20m ago
+ ▲ The week runs short: compact spark-docs│
+ ○ Clear spark-docs (%3)                  │ a answer   ⏎ open it   A switch agent
+ ○ Clear kindle-web (%5)                  │
+ ○ Clear cinder-ci (%6)                   │
+ ○ Clear flint-auth (%2)                  │
+ ○ Clear ember-billing (%8)               │
+ ○ Clear wick-mobile (%7)                 │
+                                          │
+──────────────────────────────────────────────────────────────────────────────────────
+ gpu-1: connection lost. Tries again in 8s.

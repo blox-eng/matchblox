@@ -121,17 +121,20 @@ const (
 
 var views = [...]tabView{
 	tabSessions: {
-		name:  "sessions",
-		keys:  Model.sessionKeys,
-		count: func(m Model) int { return len(m.doors) + len(m.snap.Sessions) + len(m.ghosts()) + m.recRows() },
+		name: "sessions",
+		keys: Model.sessionKeys,
+		count: func(m Model) int {
+			return len(m.doors) + len(m.snap.Sessions) + len(m.ghosts()) + len(m.blockedHosts()) + m.recRows()
+		},
 		index: Model.sessIndex,
 		pick: func(m *Model, i int) {
-			nd, ns, ng := len(m.doors), len(m.snap.Sessions), len(m.ghosts())
+			nd, ns, ng := len(m.doors), len(m.snap.Sessions), len(m.ghosts())+len(m.blockedHosts())
 			switch {
 			case i < nd:
 				m.doorPick, m.doorAt, m.recPick, m.ghostPick = m.doors[i].ID, i, "", 0
 			case i < nd+ns:
-				m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, m.snap.Sessions[i-nd].PID
+				s := m.snap.Sessions[i-nd]
+				m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
 			case i < nd+ns+ng:
 				m.doorPick, m.recPick, m.ghostPick = "", "", i-nd-ns+1
 			default:
@@ -149,7 +152,7 @@ var views = [...]tabView{
 				return ghostAction(g)
 			}
 			if s, ok := m.selectedSession(); ok && s.Pane != "" {
-				return m.jump(s.Pane)
+				return m.jumpOn(s.Host, s.Pane)
 			}
 			return nil
 		},
@@ -238,8 +241,8 @@ var views = [...]tabView{
 		index: func(m Model) int { return min(m.gitSel, max(len(m.worktreeRows())-1, 0)) },
 		pick:  func(m *Model, i int) { m.gitSel = i },
 		primary: func(m Model) *action {
-			if wt, ok := m.selectedWorktree(); ok {
-				return &action{label: "shell", nav: true, steps: [][]string{{"tmux", "new-window", "-c", wt.Path}}}
+			if r, ok := m.selectedWorktree(); ok {
+				return &action{label: "shell", nav: true, steps: [][]string{{"tmux", "new-window", "-c", r.wt.Path}}, host: r.host}
 			}
 			return nil
 		},
@@ -247,9 +250,9 @@ var views = [...]tabView{
 			if a := m.removeMarked(); a != nil {
 				return a
 			}
-			if wt, ok := m.selectedWorktree(); ok && wt.Safe {
-				return &action{label: "remove", steps: [][]string{wt.Remove}, destructive: true,
-					rec: "worktree:" + wt.Path, which: "secondary"}
+			if r, ok := m.selectedWorktree(); ok && r.wt.Safe {
+				return &action{label: "remove", steps: [][]string{r.wt.Remove}, destructive: true,
+					rec: "worktree:" + r.wt.Path, which: "secondary", host: r.host}
 			}
 			return nil
 		},
@@ -260,7 +263,7 @@ var views = [...]tabView{
 		keys: func(m Model) []hint {
 			return []hint{hintFor(m.keys.main.Ships, "ships"), hintFor(m.keys.main.Stoke, "stoker")}
 		},
-		body: func(m Model, w int) body { return plain(m.historyPanel(w)) },
+		body: Model.historyBody,
 	},
 	tabPanes: {
 		name:  "panes",
@@ -270,7 +273,7 @@ var views = [...]tabView{
 		pick:  func(m *Model, i int) { m.paneSel = i },
 		primary: func(m Model) *action {
 			if p, ok := m.selectedPane(); ok && p.id != "" {
-				return m.jump(p.id)
+				return m.jumpOn(p.host, p.id)
 			}
 			return nil
 		},
@@ -320,16 +323,24 @@ func (m *Model) selectRow(i int) {
 
 func (m Model) primary() *action {
 	if v := m.view(); v.primary != nil {
-		return m.forHost(v.primary(m))
+		return m.onRowHost(v.primary(m))
 	}
 	return nil
 }
 
 func (m Model) secondary() *action {
 	if v := m.view(); v.secondary != nil {
-		return m.forHost(v.secondary(m))
+		return m.onRowHost(v.secondary(m))
 	}
 	return nil
+}
+
+// onRowHost is a on the host of its row.
+func (m Model) onRowHost(a *action) *action {
+	if a == nil {
+		return nil
+	}
+	return m.forHost(m.hostOf(*a), a)
 }
 
 func (m Model) body(w int) body { return m.view().body(m, w) }

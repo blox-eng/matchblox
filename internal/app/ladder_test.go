@@ -60,8 +60,8 @@ func ladderHost(t *testing.T, step login.Step, firstCheck string) passwordHost {
 	next, cmd := m.Update(hostHello("3.4"))
 	next, _ = next.Update(loginCheckOf(cmd)[0])
 	h.m = next.(Model)
-	if h.m.login != remote.LoginPassword && firstCheck == passwordRefusal {
-		t.Fatalf("login %v", h.m.login)
+	if homeLogin(h.m).login != remote.LoginPassword && firstCheck == passwordRefusal {
+		t.Fatalf("login %v", homeLogin(h.m).login)
 	}
 	return h
 }
@@ -81,7 +81,7 @@ func settle(t *testing.T, m tea.Model, cmd tea.Cmd) Model {
 func jumpOffer(t *testing.T, h passwordHost) Model {
 	t.Helper()
 	hostJump(&h.m, remote.Jump{Pane: "%1"})
-	next, cmd := h.m.confirm(*h.m.forHost(h.m.jump("%1")))
+	next, cmd := h.m.confirm(*h.m.forHost(h.m.opt.Host, h.m.jump("%1")))
 	m := settle(t, next, cmd)
 	if m.pending == nil || m.pending.climb == nil {
 		t.Fatalf("no ladder offer: pending %+v, flash %q", m.pending, m.flash)
@@ -125,11 +125,11 @@ func TestPasswordLoginOffersLadder(t *testing.T) {
 		if checks := *h.checks; len(checks) != 2 || !slices.Equal(checks[1], remote.KeyCheckArgv("ws-1")) {
 			t.Fatalf("checks %q", checks)
 		}
-		if m.login != remote.LoginOK || len(*h.ran) != 1 {
-			t.Fatalf("login %v, ran %q, flash %q", m.login, *h.ran, m.flash)
+		if homeLogin(m).login != remote.LoginOK || len(*h.ran) != 1 {
+			t.Fatalf("login %v, ran %q, flash %q", homeLogin(m).login, *h.ran, m.flash)
 		}
 		// The offer is gone: the next jump just goes.
-		next, cmd = m.confirm(*m.forHost(m.jump("%1")))
+		next, cmd = m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 		if m = settle(t, next, cmd); m.pending != nil || len(*h.ran) != 2 {
 			t.Fatalf("second jump: pending %+v, ran %q", m.pending, *h.ran)
 		}
@@ -147,7 +147,7 @@ func TestPasswordLoginOffersLadder(t *testing.T) {
 		if len(*h.ran) != 1 {
 			t.Fatalf("ran %q", *h.ran)
 		}
-		next, cmd = m.confirm(*m.forHost(m.jump("%1")))
+		next, cmd = m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 		if m = settle(t, next, cmd); m.pending != nil || len(*h.ran) != 2 {
 			t.Fatalf("not now asks again: pending %+v", m.pending)
 		}
@@ -180,15 +180,15 @@ func TestNoPassphraseKeyWarns(t *testing.T) {
 // a password to install one: the console says the fix, and offers nothing.
 func TestKeyOnlyHostOffersNoLadder(t *testing.T) {
 	h := ladderHost(t, login.Step{Source: login.FromAgent, Line: testKey, Fingerprint: login.Fingerprint(testKey)}, "me@ws-1: Permission denied (publickey).\r\n")
-	if h.m.login != remote.LoginKeyOnly {
-		t.Fatalf("login %v", h.m.login)
+	if homeLogin(h.m).login != remote.LoginKeyOnly {
+		t.Fatalf("login %v", homeLogin(h.m).login)
 	}
 	want := "ws-1 takes keys only, and none of yours: add your public key to ~/.ssh/authorized_keys on ws-1 another way, such as from a session you have there, then open ws-1 again"
 	if h.m.flash != want {
 		t.Fatalf("flash %q\nwant %q", h.m.flash, want)
 	}
 	hostJump(&h.m, remote.Jump{Pane: "%1"})
-	next, cmd := h.m.confirm(*h.m.forHost(h.m.jump("%1")))
+	next, cmd := h.m.confirm(*h.m.forHost(h.m.opt.Host, h.m.jump("%1")))
 	if m := settle(t, next, cmd); m.pending != nil && m.pending.climb != nil {
 		t.Fatalf("a ladder on a key-only host: %+v", m.pending)
 	}
@@ -248,8 +248,8 @@ func TestNewKeyThenInstall(t *testing.T) {
 	}
 	next, cmd = key(m, "y")
 	m = settle(t, next, cmd)
-	if m.login != remote.LoginOK || len(*h.ran) != 1 {
-		t.Fatalf("login %v, ran %q, flash %q", m.login, *h.ran, m.flash)
+	if homeLogin(m).login != remote.LoginOK || len(*h.ran) != 1 {
+		t.Fatalf("login %v, ran %q, flash %q", homeLogin(m).login, *h.ran, m.flash)
 	}
 }
 
@@ -354,8 +354,8 @@ func TestLadderDeclines(t *testing.T) {
 		m := jumpOffer(t, h)
 		next, cmd := key(m, "n")
 		m = settle(t, next, cmd)
-		if keygens(h) != 0 || !m.notNow || len(*h.ran) != 1 {
-			t.Fatalf("keygen %d, notNow %v, ran %q, flash %q", keygens(h), m.notNow, *h.ran, m.flash)
+		if keygens(h) != 0 || !homeLogin(m).notNow || len(*h.ran) != 1 {
+			t.Fatalf("keygen %d, notNow %v, ran %q, flash %q", keygens(h), homeLogin(m).notNow, *h.ran, m.flash)
 		}
 	})
 	t.Run("new key, esc", func(t *testing.T) {
@@ -363,8 +363,8 @@ func TestLadderDeclines(t *testing.T) {
 		m := jumpOffer(t, h)
 		next, cmd := key(m, "esc")
 		m = settle(t, next, cmd)
-		if len(*h.calls) != 0 || m.notNow || len(*h.ran) != 0 || !strings.Contains(m.flash, "the jump did not run") {
-			t.Fatalf("calls %q, notNow %v, ran %q, flash %q", *h.calls, m.notNow, *h.ran, m.flash)
+		if len(*h.calls) != 0 || homeLogin(m).notNow || len(*h.ran) != 0 || !strings.Contains(m.flash, "the jump did not run") {
+			t.Fatalf("calls %q, notNow %v, ran %q, flash %q", *h.calls, homeLogin(m).notNow, *h.ran, m.flash)
 		}
 	})
 	for _, k := range []string{"n", "esc"} {
@@ -441,7 +441,7 @@ func TestStaleStepOffersNothing(t *testing.T) {
 	step := login.Step{Source: login.FromAgent, Line: testKey, Fingerprint: login.Fingerprint(testKey)}
 	h := ladderHost(t, step, passwordRefusal)
 	m := jumpOffer(t, h)
-	a := *m.forHost(m.jump("%1"))
+	a := *m.forHost(m.opt.Host, m.jump("%1"))
 	stale := stepMsg{step: step, jump: &a, gen: m.opt.Gen}
 	next, cmd := key(m, "y")
 	m = settle(t, next, cmd)

@@ -909,7 +909,8 @@ func TestThePeekFooterTaps(t *testing.T) {
 // TestThePeekIsTheDrawer: where there is a detail pane, a turns it into the
 // conversation; the list beside it stays lit and its selection follows the
 // peek; esc gives the pane back to the detail. Its options and its footer
-// are tap targets, and a tap on the list closes the peek and selects.
+// are tap targets, and a tap on the list closes the peek and selects. The
+// upright phone has its pane in its full view.
 func TestThePeekIsTheDrawer(t *testing.T) {
 	st := queueState()
 	for i := range st.Sessions {
@@ -923,7 +924,7 @@ func TestThePeekIsTheDrawer(t *testing.T) {
 	for _, size := range [][2]int{{86, 30}, {107, 60}, {132, 32}} {
 		w, h := size[0], size[1]
 		m, f := loadedWith(t, w, st)
-		next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+		next, _ := fullView(m).Update(tea.WindowSizeMsg{Width: w, Height: h})
 		open, _ := key(selectPane(t, next, "%2"), "a")
 		open = quiet(open)
 		sc := open.(Model).draw(w)

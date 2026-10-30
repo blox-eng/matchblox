@@ -29,4 +29,4 @@
                                                                               │ PID      COMMAND           CPU    MEM     OWNER
                                                                               │ 1        systemd             0%   9.8M    system
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  ⏎ session  f stoker  / find  q quit                                                                        sampled 0s ago
+ ↑↓ move  ⏎ session  f stoker  / find  q quit  list only v                                                           sampled 0s ago

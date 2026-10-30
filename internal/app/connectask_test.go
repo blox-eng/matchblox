@@ -35,6 +35,7 @@ func (a *oneAsk) Env(host string) []string { return fakeAsk{}.Env(host) }
 func connectRig(t *testing.T, prompt *askpass.Prompt, stderr string, exit int) (*shellRig, *oneAsk, *[]sshCall, tea.Cmd) {
 	t.Helper()
 	r := newShell(t, []string{"ws-1"}, []string{"ws-1", "ws-2"}, "", false)
+	r.toHosts(t)
 	ask := &oneAsk{prompt: prompt, answers: make(chan string, 1)}
 	calls := &[]sshCall{}
 	r.sh.opt.Base.Ask = ask

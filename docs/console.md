@@ -252,6 +252,35 @@ the account, the tokens and the background work.
 `Enter` jumps to the pane. Come back from a jump and the next agent that
 waits is already selected.
 
+### Every host, list only and the now line
+
+With two or more hosts ticked, Sessions is one queue over all of them. Each
+row names its host. See [Remote hosts](remote.md#see-every-host-in-one-console).
+
+`v` folds the detail pane and the dock, so the list takes the screen. The
+key line says `list only v` on the full view and `full view v` in list
+only. `list only` stays at its right edge while it is on. On a short line of the
+full view, `list only v` is the first hint to go. In list only, `full view
+v` stays: the mark goes first, then the age, then a spare key. A key of the
+row outranks `full view v`.
+
+From 107 columns of list, each row has a lane on one time scale: 2 hours
+back and 1 hour ahead, 5 minutes in a cell. The list is that wide in list
+only on a desk, or on a very wide screen. The full view's list is at most
+78 columns, so it has no lanes.
+
+- A cell shows the most urgent state the console saw in its 5 minutes: a
+  wait (amber `━`), work (`━`), or idle (faint `╌`). A blank cell is a
+  time the console did not see. The lane starts when the console opens. A
+  new process on an old pid starts an empty lane.
+- A session on a limit runs dotted (`┄`) to the reset of its window.
+- One line, `│`, runs down the list at now. It crosses the axis, the group
+  labels and the blank rows. It is not drawn while a peek, a sheet, a
+  form, a consent or an ask box is up.
+- The bars of a stale host stop where it last spoke, short of the line.
+- When the row is short, the lane drops before the ship. With no ship
+  read, the place goes first, then the lane, then the plan.
+
 ### The answer peek
 
 `a` on an agent opens the conversation with it. Where the detail sits
