@@ -445,11 +445,36 @@ func TestHomeKeyGivesKeysBack(t *testing.T) {
 	if homeKey != panes.HomeKey {
 		t.Fatalf("homeKey %q, the app sends %q", homeKey, panes.HomeKey)
 	}
-	m, _ := inChat(t)
-	next, _ := m.Update(uv.UnknownApcEvent(panes.HomeKey))
-	if next.(Model).chatKeys {
+	m, f := inChat(t)
+	for _, e := range decoded(t, panes.HomeKey) {
+		next, _ := m.Update(e)
+		m = next.(Model)
+	}
+	if m.chatKeys {
 		t.Fatal("the home key left the keys in the chat")
 	}
+	if got := keyActs(f); len(got) != 0 {
+		t.Fatalf("the home key went to the agent as %+v", got)
+	}
+}
+
+// decoded is raw, the bytes a terminal sends, read in one go by the input
+// decoder the console runs on, as Bubble Tea hands them to the model.
+func decoded(t *testing.T, raw string) []tea.Msg {
+	t.Helper()
+	events := make(chan uv.Event)
+	go func() {
+		defer close(events)
+		_ = uv.NewTerminalReader(strings.NewReader(raw), "xterm-256color").StreamEvents(t.Context(), events)
+	}()
+	var msgs []tea.Msg
+	for e := range events {
+		if k, ok := e.(uv.KeyPressEvent); ok {
+			e = tea.KeyPressMsg(k)
+		}
+		msgs = append(msgs, e)
+	}
+	return msgs
 }
 
 func TestClicksMoveTheKeys(t *testing.T) {
