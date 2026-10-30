@@ -223,16 +223,23 @@ the console to answer an agent. See [the chat](console.md#the-chat).
 2. Type. Every key goes to the agent. When the agent asks with its
    question tool, a card shows at the foot. Tap an option, or type and
    press `Enter`.
-3. To go back to Sessions, tap `‹ Sessions`. You can also swipe in from the
-   left edge, or press ⌘M on a hardware keyboard. `Ctrl+]` does it too.
+3. To go back to Sessions, tap `‹ Sessions` or `◂` on the key bar. You can
+   also swipe in from the left edge, or press ⌘M on a hardware keyboard.
+   `Ctrl+]` does it too.
 
-The app's key bar has seven keys: `↑ ↓ ⏎ Tab ⇧Tab Esc ^C`. Each one is at
-least 44 pt, and works at the first tap. The system keyboard types the rest.
-The terminal turns off autocorrect, suggestions, smart quotes, smart
+The app's key bar has nine keys: `◂ ↑ ↓ ⏎ Tab ⇧Tab Esc ^C ⌨`. Each key
+works at the first tap. Each key is at least 44 pt tall. `↑` and `↓` are
+wider than the other keys and 52 pt tall. The system keyboard types the
+rest. The terminal turns off autocorrect, suggestions, smart quotes, smart
 dashes and auto capitalisation. So they never change a key you send.
 
-`^C` twice stops Claude Code. A second `^C` within 1 s is held, and the
-key line says so.
+- `◂` goes back. In the chat it goes to Sessions. In a tmux pane it goes
+  to the console.
+- `^C` interrupts. `^C` twice stops Claude Code. A second `^C` within 1 s
+  is held, and the key line says so.
+- `⌨` shows or hides the system keyboard. While the keyboard is up, `⌨` is
+  in the accent colour. While the keyboard is down, the key bar stays at
+  the foot of the screen.
 
 ## Go to an agent's pane and back
 
@@ -240,10 +247,10 @@ key line says so.
 `Ctrl+O`: a tap on a row of Panes does it. Tap the row, and the
 key line says `tap again: <command>`. Tap it again. You are in the pane.
 
-To come back in the matchblox app, swipe in from the left edge, tap
-`◂ matchblox` at the left of the tmux status line, or press ⌘M on a
-hardware keyboard. All three work whatever your tmux prefix is, and none
-needs the tmux mouse.
+To come back in the matchblox app, tap `◂` on the key bar, swipe in from
+the left edge, tap `◂ matchblox` at the left of the tmux status line, or
+press ⌘M on a hardware keyboard. All four work whatever your tmux prefix
+is, and none needs the tmux mouse.
 
 In another SSH app, tap `◂ matchblox`, or press `prefix m` (the tmux prefix,
 then m). There the tap needs the tmux mouse on: press `m` in the preview of
@@ -287,4 +294,4 @@ Turn the phone on its side, at 60 columns or more, and the list and the
 detail of the selected agent sit side by side.
 
 Every key is on the key bar of an SSH app: letters, digits, arrows, `Enter`
-and `Esc`. The matchblox app adds its seven keys. See [Keys](keys.md).
+and `Esc`. The matchblox app adds its nine keys. See [Keys](keys.md).

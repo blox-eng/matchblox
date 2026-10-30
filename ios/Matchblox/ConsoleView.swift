@@ -121,16 +121,12 @@ private struct TerminalRepresentable: UIViewRepresentable {
         terminal.smartInsertDeleteType = .no
         terminal.autocapitalizationType = .none
         terminal.inlinePredictionType = .no
-        terminal.inputAccessoryView = KeyBarView(terminal: terminal)
+        terminal.inputAccessoryView = KeyBarView(terminal: terminal, keyboardUp: true)
         terminal.contentInsetAdjustmentBehavior = .never
-        // A swipe down lowers the keyboard. tmux fills the screen exactly, so the terminal must
-        // bounce for the swipe to start.
-        terminal.keyboardDismissMode = .interactive
-        terminal.alwaysBounceVertical = true
         terminal.terminalDelegate = connection
         connection.terminal = terminal
 
-        let dock = KeyBarView(terminal: terminal)
+        let dock = KeyBarView(terminal: terminal, keyboardUp: false)
         terminal.onFocus = { [weak dock] focused in dock?.isHidden = focused }
         let stack = UIStackView(arrangedSubviews: [terminal, dock])
         stack.axis = .vertical
