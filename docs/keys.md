@@ -262,7 +262,9 @@ permission prompt and no draft on its prompt. A command key works only
 while the chat has the keys. Otherwise the
 key line says `commands run from the chat`. A command of a different agent
 sends nothing, and the key line says `/<name> is <Agent>'s: <session> runs
-<other agent>`. The console tells the app which agent the chat shows, so
+<other agent>`. A command that matchblox on the host does not know sends
+nothing, and the key line says `/<id> is new to this console: update
+matchblox on the host`. The console tells the app which agent the chat shows, so
 the app shows the commands of that agent. Inside tmux 3.2 or older the
 console cannot tell the app. The key line then says `COMMANDS · needs tmux
 3.3` once.

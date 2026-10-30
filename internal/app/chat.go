@@ -538,6 +538,9 @@ func (m Model) chatPaste(text string) (tea.Model, tea.Cmd) {
 // the APC's end (keycmd.Sequence).
 const commandPrefix = "\x1b_matchblox;cmd="
 
+// maxCommandID is the longest command id the key line repeats.
+const maxCommandID = 32
+
 // minSignalTmux is the oldest tmux that passes the agent signal through to
 // the terminal (allow-passthrough).
 const minSignalTmux = "3.3"
@@ -590,12 +593,17 @@ func (m *Model) agentGone() tea.Cmd {
 // own acts on the pane; any other command runs the command act, which
 // types its text and Enter at rest, with no question and no draft. Each
 // names the agent the chat showed. A command the chat's agent does not
-// have sends nothing; an id the table does not know does nothing.
+// have sends nothing; an id the table does not know says the host is older.
+// A layer on top takes no command: the key line shows that layer.
 func (m Model) commandKey(apc string) (tea.Model, tea.Cmd) {
 	id, ok := strings.CutPrefix(apc, commandPrefix)
 	id, end := strings.CutSuffix(id, "\x1b\\")
 	c, known := keycmd.ByID(id)
-	if !ok || !end || !known {
+	if !ok || !end || len(id) > maxCommandID || strings.ContainsFunc(id, unicode.IsControl) {
+		return m, nil
+	}
+	if !known {
+		m.flash = "/" + id + " is new to this console: update matchblox on the host"
 		return m, nil
 	}
 	if !m.chatKeys {

@@ -1668,11 +1668,30 @@ func TestCommandWithNoChatSendsNothing(t *testing.T) {
 	}
 }
 
-func TestUnknownCommandSendsNothing(t *testing.T) {
+// TestUnknownCommandSaysTheHostIsOlder: an app newer than the host sends
+// an id the host's table does not have. Nothing goes, and the key line
+// says what to do.
+func TestUnknownCommandSaysTheHostIsOlder(t *testing.T) {
 	m, f := commandChat(t, "claude")
 	m = command(t, m, "nope")
-	if got := f.acts(); len(got) != 0 || m.flash != "" || !m.chatKeys {
+	if got := f.acts(); len(got) != 0 || m.flash != "/nope is new to this console: update matchblox on the host" || !m.chatKeys {
 		t.Fatalf("acts %+v flash %q chatKeys %v", got, m.flash, m.chatKeys)
+	}
+	if m = command(t, m, "no\x07pe"); m.flash != "/nope is new to this console: update matchblox on the host" {
+		t.Fatalf("an id with a control character: flash %q", m.flash)
+	}
+}
+
+// TestACommandUnderALayerSendsNothing: the layer on top holds the key
+// line (here the take-over question), so the person sees what to close.
+func TestACommandUnderALayerSendsNothing(t *testing.T) {
+	st := nightState()
+	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a", Agent: "claude"}}
+	m, f := loadedWith(t, 100, st)
+	m = command(t, pressKeys(t, onPane(t, m, "%1"), "enter"), "compact")
+	m = command(t, m, "clear")
+	if out := screen(m); len(f.acts()) != 0 || m.held == nil || !strings.Contains(out, "Take over?") {
+		t.Fatalf("acts %+v, held %v\n%s", f.acts(), m.held != nil, out)
 	}
 }
 
