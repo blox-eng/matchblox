@@ -1269,7 +1269,9 @@ func TestAOpensTheChatOnShipsAndStoker(t *testing.T) {
 
 // clocked is m on a clock the test moves.
 func clocked(m Model) (Model, *time.Time) {
-	now := time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC)
+	// From m's own time, never back: a card drawn on the wall clock stays
+	// in its past whatever the day the test runs.
+	now := m.now()
 	m.opt.Now = func() time.Time { return now }
 	return m, &now
 }
