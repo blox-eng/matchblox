@@ -112,6 +112,7 @@ final class MatchTrayTests: XCTestCase {
 
     private let tall = CGSize(width: 390, height: 600)
     private let short = CGSize(width: 390, height: 504)
+    private let drawer: CGFloat = 96
 
     func testWithNoTrayTheTerminalFollowsTheScreen() {
         var hold = ScreenHold()
@@ -122,54 +123,77 @@ final class MatchTrayTests: XCTestCase {
 
     func testAnOpenTrayHoldsTheTerminalsHeight() {
         var hold = ScreenHold()
-        hold.open(screen: tall)
+        hold.open(screen: tall, drawer: drawer)
         XCTAssertEqual(hold.height(screen: short), 600)
+        XCTAssertEqual(hold.height(screen: CGSize(width: 390, height: 300)), 600)
         XCTAssertEqual(hold.height(screen: tall), 600)
     }
 
-    func testAClosedTrayHoldsUntilTheScreenIsBack() {
+    func testAScreenStillShortByTheDrawerAfterACloseHoldsThenLetsGoOnTheNextSize() {
         var hold = ScreenHold()
-        hold.open(screen: tall)
-        _ = hold.height(screen: short)
+        hold.open(screen: tall, drawer: drawer)
         hold.close()
-        // The keyboard's accessory can shrink after the tray's own animation ends.
+        // The keyboard's accessory can shrink back after the tray's own animation ends.
         XCTAssertEqual(hold.height(screen: short), 600)
+        XCTAssertEqual(hold.height(screen: CGSize(width: 390, height: 504.3)), 600)
         XCTAssertEqual(hold.height(screen: tall), 600)
         XCTAssertNil(hold.held)
         XCTAssertEqual(hold.height(screen: short), 504)
     }
 
-    func testANewWidthEndsTheHold() {
+    func testAShorterScreenAfterACloseThatIsNotTheDrawerLetsGo() {
         var hold = ScreenHold()
-        hold.open(screen: tall)
+        hold.open(screen: tall, drawer: drawer)
         hold.close()
-        XCTAssertEqual(hold.height(screen: CGSize(width: 844, height: 300)), 300)
+        // The dock's tray closed as the keyboard came up: the screen is short by the keyboard.
+        XCTAssertEqual(hold.height(screen: CGSize(width: 390, height: 300)), 300)
         XCTAssertNil(hold.held)
     }
 
-    func testAWidthChangeWhileOpenStillHolds() {
+    func testAShortHeldScreenLetsGoOnAnyOtherSize() {
         var hold = ScreenHold()
-        hold.open(screen: tall)
-        XCTAssertEqual(hold.height(screen: CGSize(width: 844, height: 300)), 600)
+        hold.open(screen: tall, drawer: drawer)
+        hold.close()
+        XCTAssertEqual(hold.height(screen: short), 600)
+        XCTAssertEqual(hold.height(screen: CGSize(width: 390, height: 450)), 450)
+        XCTAssertNil(hold.held)
+    }
+
+    func testANewWidthEndsTheHoldEvenWhileOpen() {
+        var hold = ScreenHold()
+        hold.open(screen: tall, drawer: drawer)
+        XCTAssertEqual(hold.height(screen: CGSize(width: 844, height: 300)), 300)
+        XCTAssertNil(hold.held)
+        hold.close()
+        XCTAssertEqual(hold.height(screen: CGSize(width: 844, height: 204)), 204)
+    }
+
+    func testAScreenWithNoSizeYetHoldsNothing() {
+        var hold = ScreenHold()
+        hold.open(screen: .zero, drawer: drawer)
+        XCTAssertNil(hold.held)
+        XCTAssertEqual(hold.height(screen: short), 504)
+        hold.close()
+        hold.open(screen: tall, drawer: drawer)
+        XCTAssertEqual(hold.height(screen: short), 600)
     }
 
     func testTwoTraysHoldTheFirstHeightUntilBothClose() {
         var hold = ScreenHold()
-        hold.open(screen: tall)
-        hold.open(screen: short)
+        hold.open(screen: tall, drawer: drawer)
+        hold.open(screen: short, drawer: drawer)
         XCTAssertEqual(hold.held?.height, 600)
         hold.close()
-        XCTAssertEqual(hold.height(screen: tall), 600)
-        XCTAssertEqual(hold.height(screen: short), 600)
+        XCTAssertEqual(hold.height(screen: CGSize(width: 390, height: 300)), 600)
         hold.close()
-        XCTAssertEqual(hold.height(screen: tall), 600)
+        XCTAssertEqual(hold.height(screen: CGSize(width: 390, height: 300)), 300)
         XCTAssertNil(hold.held)
     }
 
     func testACloseWithNoOpenChangesNothing() {
         var hold = ScreenHold()
         hold.close()
-        hold.open(screen: tall)
+        hold.open(screen: tall, drawer: drawer)
         XCTAssertEqual(hold.height(screen: short), 600)
     }
 }

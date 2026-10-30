@@ -158,7 +158,7 @@ private final class HeldScreen: UIView {
 
     func trayMoved(open: Bool) {
         if open {
-            hold.open(screen: bounds.size)
+            hold.open(screen: bounds.size, drawer: BeltView.drawerOpen)
         } else {
             hold.close()
         }

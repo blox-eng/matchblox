@@ -44,7 +44,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     private static let runOffStep: CGFloat = 18
     private static let runOffFrames: CGFloat = 12
     /// The drawer: the tray, 4 pt under the handle row and 4 pt over the belt.
-    private static let drawerOpen: CGFloat = MatchTrayView.height + 8
+    static let drawerOpen: CGFloat = MatchTrayView.height + 8
     private static let trayInset: CGFloat = 6
     /// A tap this near the grip's centre, on either side, is a tap on the grip.
     private static let gripReach: CGFloat = 30

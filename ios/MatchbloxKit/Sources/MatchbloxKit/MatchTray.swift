@@ -106,20 +106,28 @@ public enum CellGrid {
     }
 }
 
-/// The terminal's size while a matchbox tray is open. The tray makes the screen shorter, but
-/// the terminal keeps the size it had: its lines slide up and the top ones go under the edge,
-/// as in the mockup, so the host gets no resize. When the trays close, the terminal follows
-/// the screen again once the screen is back to the held height, or once its width changes.
+/// The terminal's size while a matchbox tray is open. The tray makes the screen shorter by the
+/// drawer, but the terminal keeps the size it had: its lines slide up and the top ones go under
+/// the edge, as in the mockup, so the host gets no resize. The hold always lets go: a new width
+/// ends it at once, and once the trays have closed it lasts only while the screen is still short
+/// by exactly the drawer (the keyboard's accessory can shrink back after the tray's animation).
 public struct ScreenHold: Sendable {
+    /// Two heights this close are the same height.
+    static let slack: CGFloat = 0.5
+
     private var trays = 0
+    private var drawer: CGFloat = 0
     public private(set) var held: CGSize?
 
     public init() {}
 
-    /// A tray starts to open over a screen of this size.
-    public mutating func open(screen: CGSize) {
-        if trays == 0, held == nil { held = screen }
+    /// A tray starts to open over a screen of this size, and makes it `drawer` shorter. A screen
+    /// with no size yet holds nothing.
+    public mutating func open(screen: CGSize, drawer: CGFloat) {
         trays += 1
+        guard held == nil, screen.width > 0, screen.height > 0 else { return }
+        held = screen
+        self.drawer = drawer
     }
 
     /// A tray has closed, its animation done.
@@ -129,9 +137,14 @@ public struct ScreenHold: Sendable {
 
     /// The terminal's height on a screen of this size. It is never less than the screen's.
     public mutating func height(screen: CGSize) -> CGFloat {
-        if let held, trays == 0, screen.height >= held.height || screen.width != held.width {
+        if let held, !holds(held, on: screen) {
             self.held = nil
         }
         return max(screen.height, held?.height ?? 0)
+    }
+
+    private func holds(_ held: CGSize, on screen: CGSize) -> Bool {
+        guard abs(screen.width - held.width) <= Self.slack else { return false }
+        return trays > 0 || abs(screen.height - (held.height - drawer)) <= Self.slack
     }
 }
