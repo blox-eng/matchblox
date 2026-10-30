@@ -187,8 +187,7 @@ question.
     tray again: every match is new, and the one in use burns. The layout
     stays after you quit the app.
 32. Choose Commands in a Claude Code chat: the commands carry its mark.
-    Open a session of another agent: the commands change. `compact` waits
-    until the agent rests. Jump to a pane with `Ctrl+O`: the command keys
+    Open a session of another agent: the commands change. `compact` mid-turn is refused with a message; after the turn ends it succeeds. Another agent types its own commands. Jump to a pane with `Ctrl+O`: the command keys
     are dim, and a tap says `commands run from the chat`.
 33. Choose Mine, then `EDIT MINE`. Tap a key to add it and to take it off.
     Drag a key to move it. A tap on `◂` says `◂ always stays: it is the

@@ -236,15 +236,24 @@ behind the phone. Drag the belt with one finger. It slows after you lift
 and stops with a key at the left side.
 
 - **Home.** Each layout opens at home. At home, `◂` is at the left, and
-  `↑` `↓` `⏎` are at the right (`⏎` is two cells wide).
+  `↑` `↓` `⏎` are at the right (each is two cells wide).
 - **A key sends when you lift.** A touch that moves 8 pt or more is a
   drag. A drag never presses a key.
-- **The feel.** The phone gives one tick for each stop, halfway between two
-  stops. Home gives a firmer click.
-- **Edges and size.** Each key is at least 44 pt tall. A one-cell key is at
+- **The feel.** The phone gives one tick each time the belt passes halfway between two stops. Home gives a firmer click.
+- **Size.** Each key is at least 44 pt tall. A one-cell key is at
   least 44 pt wide. The terminal turns off autocorrect, suggestions, smart
   quotes, smart dashes and auto capitalisation. So they never change a key
   you send.
+
+- `◂` goes back. In the chat it goes to Sessions. In a tmux pane it goes
+  to the console.
+- `^C` interrupts. `^C` twice stops Claude Code. A second `^C` within 1 s
+  is held, and the key line says so.
+- `⇞` and `⇟` send `PgUp` and `PgDn` (`ESC [ 5 ~` and `ESC [ 6 ~`). In the
+  chat of the console they move the history one screen up and down. In a
+  pane you jumped to on a host, the jump table of the host starts tmux copy
+  mode one page up, and moves it one page. In a local jump they go to the
+  agent.
 
 The row above the belt is the handle row. It shows the name of the layout
 (on Commands, the mark of the agent too), the grip, and a ghost keyboard
@@ -277,10 +286,8 @@ layout you chose, and opens on it the next time.
 The Commands layout follows the agent of the chat. Each command key has the
 mark of its agent. A command key runs only from the chat. In a pane you
 jumped to, or when the console has no chat open, the command keys are dim,
-and a tap shows `commands run from the chat`. `compact` and `clear` wait
-until the agent rests. A command of another agent sends nothing. See
-[the keys of the chat](keys.md) and [the chat](console.md#the-chat). With
-tmux 3.2 or older on the host, the console says `COMMANDS · needs tmux 3.3`.
+and a tap shows `commands run from the chat`. `compact` and `clear` run only in Claude Code. The key is refused, with a message, until the agent rests (and while it waits for you). The commands of other agents type their own command. A command of another agent sends nothing. See
+[the keys of the chat](keys.md) and [the chat](console.md#the-chat). The console says `COMMANDS · needs tmux 3.3` once, when the chat opens, with tmux older than 3.3 on the host.
 
 #### Mine
 
@@ -288,13 +295,6 @@ Tap `EDIT MINE` on the tray floor. The sheet lists all keys in groups. Tap
 a key to add it to Mine, or to take it off. Drag a key to move it. `◂`
 always stays: the sheet says `◂ always stays: it is the way back`. Mine is
 one set for the device, for all hosts. It stays when you quit the app.
-
-- `◂` goes back. In the chat it goes to Sessions. In a tmux pane it goes
-  to the console.
-- `^C` interrupts. `^C` twice stops Claude Code. A second `^C` within 1 s
-  is held, and the key line says so.
-- `⇞` and `⇟` move the history one screen up and down. In a pane you jumped
-  to, they start and move tmux copy mode.
 
 A vertical swipe scrolls the console and a tmux pane. The lines move with
 your finger: one line for each line of travel. In a tmux pane each wheel
