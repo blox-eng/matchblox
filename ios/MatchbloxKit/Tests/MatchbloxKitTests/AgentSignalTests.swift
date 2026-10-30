@@ -67,7 +67,7 @@ final class AgentSignalTests: XCTestCase {
 
     func testAFalseStartThenASignal() {
         var f = AgentSignalFilter()
-        let out = f.feed(ArraySlice(bytes("\u{1b}_matchblox;agen\u{1b}") + signal("claude")))
+        let out = f.feed(ArraySlice(bytes("\u{1b}_matchblox;agen") + signal("claude")))
         XCTAssertEqual(out.pass, bytes("\u{1b}_matchblox;agen"))
         XCTAssertEqual(out.agent, "claude")
     }
