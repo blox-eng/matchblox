@@ -126,7 +126,7 @@ final class ConsoleTerminalView: TerminalView {
         case .began, .changed:
             if pan.state == .began {
                 stopCoast()
-                wheel = WheelScroll(cellHeight: cellSize.height)
+                wheel = WheelScroll(cellHeight: cellSize.height, linesPerStep: inTmuxPane ? WheelScroll.tmuxLines : 1)
             }
             let dy = pan.translation(in: self).y
             pan.setTranslation(.zero, in: self)
@@ -170,7 +170,8 @@ final class ConsoleTerminalView: TerminalView {
         let pixelX = Int(point.x)
         let pixelY = Int(point.y - contentOffset.y)
         for step in steps {
-            terminal.sendEvent(buttonFlags: step.flags, x: col, y: row, pixelX: pixelX, pixelY: pixelY)
+            let flags = terminal.encodeButton(button: step.button, release: false, shift: false, meta: false, control: false)
+            terminal.sendEvent(buttonFlags: flags, x: col, y: row, pixelX: pixelX, pixelY: pixelY)
         }
     }
 
@@ -195,11 +196,22 @@ final class ConsoleTerminalView: TerminalView {
         let col = Int(point.x / cell.width)
         let row = Int(point.y / cell.height) - terminal.buffer.yDisp
         for status in [0, terminal.rows - 1] where abs(row - status) <= 1 {
-            let cells = (0..<terminal.cols).map { terminal.getCharacter(col: $0, row: status) ?? " " }
-            if let label = HomeKey.labelColumns(in: cells), (label.lowerBound - 1...label.upperBound).contains(col) {
+            if let label = labelColumns(row: status), (label.lowerBound - 1...label.upperBound).contains(col) {
                 return true
             }
         }
         return false
+    }
+
+    /// A jumped tmux pane shows the way back in its status line; the console does not.
+    private var inTmuxPane: Bool {
+        let terminal = getTerminal()
+        return [0, terminal.rows - 1].contains { labelColumns(row: $0) != nil }
+    }
+
+    private func labelColumns(row: Int) -> Range<Int>? {
+        let terminal = getTerminal()
+        let cells = (0..<terminal.cols).map { terminal.getCharacter(col: $0, row: row) ?? " " }
+        return HomeKey.labelColumns(in: cells)
     }
 }

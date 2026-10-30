@@ -241,11 +241,13 @@ dashes and auto capitalisation. So they never change a key you send.
   in the accent colour. While the keyboard is down, the key bar stays at
   the foot of the screen.
 
-A vertical swipe scrolls the console and a tmux pane. Each line of travel
-scrolls one line. Swipe down for older lines, and up for newer lines. A
-flick carries on for at most 0.5 s. To select text, touch and hold, then
-tap Select and drag. Where the program does not read the mouse, the
-terminal scrolls its own history.
+A vertical swipe scrolls the console and a tmux pane. The lines move with
+your finger: one line for each line of travel. In a tmux pane each wheel
+step scrolls 5 lines, so the app sends one step for each 5 lines of travel.
+Swipe down for older lines, and up for newer lines. A flick carries on for
+at most 0.5 s, and scrolls the same lines in the console and in a pane.
+To select text, touch and hold, then tap Select and drag. Where the
+program does not read the mouse, the terminal scrolls its own history.
 
 ## Go to an agent's pane and back
 

@@ -26,9 +26,35 @@ final class WheelScrollTests: XCTestCase {
         XCTAssertEqual(wheel.move(100), [])
     }
 
-    func testWheelFlags() {
-        XCTAssertEqual(WheelScroll.Step.up.flags, 64)
-        XCTAssertEqual(WheelScroll.Step.down.flags, 65)
+    func testWheelButtons() {
+        XCTAssertEqual(WheelScroll.Step.up.button, 4)
+        XCTAssertEqual(WheelScroll.Step.down.button, 5)
+    }
+
+    func testOneStepForEachFiveCellsInATmuxPane() {
+        XCTAssertEqual(WheelScroll.tmuxLines, 5)
+        var wheel = WheelScroll(cellHeight: 16, linesPerStep: WheelScroll.tmuxLines)
+        XCTAssertEqual(wheel.move(79), [])
+        XCTAssertEqual(wheel.move(1), [.up])
+        XCTAssertEqual(wheel.move(-160), [.down, .down])
+    }
+
+    func testTheConsoleStepsEachCell() {
+        XCTAssertEqual(WheelScroll(cellHeight: 16).linesPerStep, 1)
+    }
+
+    func testAFlickScrollsTheSameLinesEitherWay() {
+        let carried = WheelScroll.coast(velocity: 3000, after: WheelScroll.coastTime)
+        var console = WheelScroll(cellHeight: 16)
+        var pane = WheelScroll(cellHeight: 16, linesPerStep: 5)
+        let consoleLines = console.move(carried).count
+        let paneLines = pane.move(carried).count * 5
+        XCTAssertLessThan(abs(consoleLines - paneLines), 5)
+    }
+
+    func testNoLinesPerStepSendsNothing() {
+        var wheel = WheelScroll(cellHeight: 16, linesPerStep: 0)
+        XCTAssertEqual(wheel.move(100), [])
     }
 
     func testCoastFollowsTheFlick() {
