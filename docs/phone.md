@@ -228,7 +228,8 @@ the console to answer an agent. See [the chat](console.md#the-chat).
    `Ctrl+]` does it too.
 
 The app's key bar has nine keys: `◂ ↑ ↓ ⏎ Tab ⇧Tab Esc ^C ⌨`. Each key
-works at the first tap. Each key is at least 44 pt tall. `↑` and `↓` are
+works at the first tap. The keys touch edge to edge, so a tap between two
+keys always hits one. Each key is at least 44 pt tall. `↑` and `↓` are
 wider than the other keys and 52 pt tall. The system keyboard types the
 rest. The terminal turns off autocorrect, suggestions, smart quotes, smart
 dashes and auto capitalisation. So they never change a key you send.
@@ -237,9 +238,9 @@ dashes and auto capitalisation. So they never change a key you send.
   to the console.
 - `^C` interrupts. `^C` twice stops Claude Code. A second `^C` within 1 s
   is held, and the key line says so.
-- `⌨` shows or hides the system keyboard. While the keyboard is up, `⌨` is
-  in the accent colour. While the keyboard is down, the key bar stays at
-  the foot of the screen.
+- `⌨` shows or hides the system keyboard. While the system keyboard is
+  on screen, `⌨` looks held down. While the keyboard is down, the key bar
+  stays at the foot of the screen.
 
 A vertical swipe scrolls the console and a tmux pane. The lines move with
 your finger: one line for each line of travel. In a tmux pane each wheel
