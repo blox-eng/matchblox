@@ -30,7 +30,7 @@ type keymaps struct {
 	global   globalKeys
 	main     mainKeys
 	form     formKeys
-	peek     peekKeys
+	card     cardKeys
 	chat     chatKeymap
 	sheet    sheetKeys
 	search   searchKeys
@@ -51,7 +51,7 @@ type shellKeymaps struct {
 // TestKeymapsHaveNoCollisions until it is added here.
 var shadowsMain = map[string]map[string]bool{
 	"form":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true, "right": true},
-	"peek":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true, " ": true, "right": true, "ctrl+o": true, "1": true, "2": true, "3": true, "4": true, "5": true, "6": true, "7": true},
+	"card":     {"enter": true, "up": true, "down": true, "space": true, " ": true, "1": true, "2": true, "3": true, "4": true, "5": true, "6": true, "7": true},
 	"sheet":    {"esc": true, "enter": true, "tab": true, "space": true, "right": true},
 	"search":   {"esc": true, "enter": true},
 	"pair":     {"c": true, "esc": true, "enter": true},
@@ -87,7 +87,6 @@ func defaultKeys() keymaps {
 			New:       bind(ks("N", "shift+n"), "N", "new"),
 			Switch:    bind(ks("A", "shift+a"), "A", "switch"),
 			Grant:     bind(ks("y"), "y", "give the go"),
-			Peek:      bind(ks("a"), "a", "look"),
 			Dismiss:   bind(ks("d"), "d", "dismiss"),
 			Fold:      bind(ks("h"), "h", "fold recs"),
 			Ships:     bind(ks("p"), "p", "ships"),
@@ -96,7 +95,7 @@ func defaultKeys() keymaps {
 			Night:     bind(ks("n"), "n", "stop night"),
 			Order:     bind(ks("o"), "o", "new order"),
 			Rename:    bind(ks("r"), "r", "rename"),
-			Chat:      bind(ks("right"), "→", "chat"),
+			Chat:      bind(ks("a", "right"), "a", "chat"),
 			Jump:      bind(ks("ctrl+o"), "ctrl+o", "into tmux"),
 		},
 		form: formKeys{
@@ -110,11 +109,7 @@ func defaultKeys() keymaps {
 			Right: bind(ks("right", "space"), "←→", "pick"),
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 		},
-		peek: peekKeys{
-			Close: bind(ks("esc"), "esc", ""),
-			Jump:  bind(ks("ctrl+o"), "^o", "jump"),
-			Next:  bind(ks("right", "tab"), "→", "next"),
-			Prev:  bind(ks("left", "shift+tab"), "←", "prev"),
+		card: cardKeys{
 			Send:  bind(ks("enter"), "⏎", "send"),
 			Up:    bind(ks("up"), "↑↓", "move"),
 			Down:  bind(ks("down"), "↑↓", "move"),
@@ -200,14 +195,14 @@ func (k globalKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Quit} }
 type mainKeys struct {
 	Stoker, Quit, NextTab, PrevTab, Tabs, Search, Back, Sort, SortBack bkey.Binding
 	Group, Park, Mark, Exited, MarkSafe, QuitAgent, Up, Down, Open     bkey.Binding
-	Second, New, Switch, Grant, Peek, Dismiss, Fold, Ships, Dock       bkey.Binding
+	Second, New, Switch, Grant, Dismiss, Fold, Ships, Dock             bkey.Binding
 	Stoke, Night, Order, Rename, Chat, Jump                            bkey.Binding
 }
 
 func (k mainKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Stoker, k.Quit, k.NextTab, k.PrevTab, k.Tabs, k.Search, k.Back, k.Sort, k.SortBack,
 		k.Group, k.Park, k.Mark, k.Exited, k.MarkSafe, k.QuitAgent, k.Up, k.Down, k.Open,
-		k.Second, k.New, k.Switch, k.Grant, k.Peek, k.Dismiss, k.Fold, k.Ships, k.Dock,
+		k.Second, k.New, k.Switch, k.Grant, k.Dismiss, k.Fold, k.Ships, k.Dock,
 		k.Stoke, k.Night, k.Order, k.Rename, k.Chat, k.Jump}
 }
 
@@ -220,11 +215,12 @@ func (k formKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Close, k.Enter, k.Next, k.Prev, k.Down, k.Up, k.Left, k.Right, k.Erase}
 }
 
-// peekKeys are the peek box. Every other key is text for its typing line.
-type peekKeys struct{ Close, Jump, Next, Prev, Send, Up, Down, Erase, Pick, Tick bkey.Binding }
+// cardKeys are the question card's, in the chat. Every other printable
+// key is text for its typing row; the rest go to the agent.
+type cardKeys struct{ Send, Up, Down, Erase, Pick, Tick bkey.Binding }
 
-func (k peekKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Close, k.Jump, k.Next, k.Prev, k.Send, k.Up, k.Down, k.Erase, k.Pick, k.Tick}
+func (k cardKeys) bindings() []bkey.Binding {
+	return []bkey.Binding{k.Send, k.Up, k.Down, k.Erase, k.Pick, k.Tick}
 }
 
 // chatKeymap are the chat's own keys. Every other key goes to the agent;

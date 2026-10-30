@@ -9,7 +9,8 @@ import (
 // session that waits, on the dock's `machine ›` switches the panel. A tap
 // right of the list gives the chat the keys, and so does a tap on a
 // session's row on a phone; a tap on the list, or on the title row of a
-// phone's chat, gives them back to Sessions. A tap on a row selects it and shows the step a second tap runs: an answer for
+// phone's chat, gives them back to Sessions. A tap on an option of the
+// chat's question card picks it. A tap on a row selects it and shows the step a second tap runs: an answer for
 // a session that waits, else the row's Enter. The second tap runs it when
 // it only moves this terminal, or asks to confirm it. A tap is never
 // consent to a destructive step, and it cancels a pending one.
@@ -44,15 +45,8 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.form != nil {
 		return m.tapForm(ms, sc)
 	}
-	if m.peek != nil {
-		inside := ms.Y >= sc.peekAt && ms.Y < sc.peekAt+len(sc.peekRows) && ms.X >= sc.peekX && ms.X < sc.peekX+sc.peekW
-		if !sc.peekInline || inside {
-			return m.tapPeek(ms, sc)
-		}
-		// The list beside the pane is live: the tap closes the peek and
-		// does what it does there.
-		m.peek = nil
-		sc = m.draw(w)
+	if i, dx := ms.Y-sc.cardAt, ms.X-sc.cardX; i >= 0 && i < len(sc.cardRows) && dx >= 0 && dx < sc.cardW {
+		return m.tapCard(i, dx, sc)
 	}
 	if sc.chatFull && ms.Y != sc.keysAt {
 		if ms.Y == 0 {
@@ -112,6 +106,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	back := m.chatKeys // the tap gives the keys back, and opens nothing
 	m.chatKeys = false
 	if sc.rows[i] == stokerPanelRow {
 		return m.openStoker().seeStoker()
@@ -144,19 +139,14 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if pane, _ := m.peekTarget(); pane != "" {
+	if pane, _ := m.chatTarget(); pane != "" {
 		// A session opens in place with its keys; a tap on it once it is
-		// selected opens the peek, to answer it or to message it.
+		// selected gives the keys to its chat.
 		m.armed, m.flash = "", ""
-		if !picked {
+		if !picked || back {
 			return m, nil // the default selection is not a tap
 		}
-		open := func(m Model) (tea.Model, tea.Cmd) { m.openPeek(pane); return m, nil }
-		if m.night() && !m.stoker.Asked {
-			m.held = open
-			return m, nil
-		}
-		return open(m)
+		return m.chatOn(pane), nil
 	}
 	say, run := m.tapAct()
 	if run == nil {

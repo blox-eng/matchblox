@@ -111,7 +111,7 @@ func TestATapTogglesAGoChip(t *testing.T) {
 		t.Fatalf("chip spans %+v", sc.sheetGoes)
 	}
 	at := sc.sheetGoes[2] // deploys
-	tapped, _ := next.Update(tea.MouseClickMsg{X: sc.peekX + at.x0, Y: sc.sheetGoesAt, Button: tea.MouseLeft})
+	tapped, _ := next.Update(tea.MouseClickMsg{X: sc.boxX + at.x0, Y: sc.sheetGoesAt, Button: tea.MouseLeft})
 	if goes := tapped.(Model).sheet.goes; !slices.Equal(goes, []string{"deploy"}) {
 		t.Fatalf("a tap on deploys: %q", goes)
 	}

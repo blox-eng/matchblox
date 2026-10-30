@@ -318,7 +318,7 @@ func (m Model) sessionKeys() []hint {
 	keys := []hint{hintFor(mk.Open, "chat")}
 	s, ok := m.selectedSession()
 	if ok && s.Pane != "" {
-		keys = append(keys, hintFor(mk.Peek, "chat"), hintFor(mk.Second, "kill"), hintFor(mk.Rename, ""), hintFor(mk.Switch, ""), hintFor(mk.Park, m.parkWord(s)))
+		keys = append(keys, hintFor(mk.Chat, "chat"), hintFor(mk.Second, "kill"), hintFor(mk.Rename, ""), hintFor(mk.Switch, ""), hintFor(mk.Park, m.parkWord(s)))
 	}
 	return append(keys, hintFor(mk.New, ""), hintFor(mk.Ships, ""), hintFor(mk.Stoke, "stoker"))
 }
@@ -629,7 +629,7 @@ func (m Model) openedKeys(s sample.Session, w int) (string, []span) {
 	mk := m.keys.main
 	hs := []hint{hintFor(mk.Open, "chat")}
 	if s.Pane != "" {
-		hs = []hint{hintFor(mk.Peek, "chat"), hintFor(mk.Switch, ""), hs[0]}
+		hs = []hint{hintFor(mk.Chat, "chat"), hintFor(mk.Switch, ""), hs[0]}
 	}
 	keys, spans := m.hintRow(hs, 2)
 	keys += " "

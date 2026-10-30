@@ -171,7 +171,6 @@ func (m Model) openStoker() Model {
 		m.flash = "this service keeps no stoker"
 		return m
 	}
-	m.peek = nil
 	m.setTab(tabStoker)
 	return m
 }

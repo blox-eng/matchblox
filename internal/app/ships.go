@@ -280,7 +280,7 @@ func (m Model) shipKeys(sh proto.Ship) []hint {
 		keys = append(keys, hintFor(mk.Second, "merge"))
 	}
 	if sh.Kind == shipStuck {
-		keys = append(keys, hintFor(mk.Peek, "answer"))
+		keys = append(keys, hintFor(mk.Chat, "answer"))
 	}
 	return keys
 }
@@ -379,9 +379,8 @@ func (m Model) toDriver() Model {
 	return m
 }
 
-// shipAnswer is a on a stuck ship: the peek on its session, to answer it
-// when it waits and to message it when it does not.
-func (m Model) shipAnswer() Model {
+// shipChat is a on a stuck ship: the chat of its session, to answer it.
+func (m Model) shipChat() Model {
 	sh, ok := m.selectedShip()
 	if !ok || sh.Kind != shipStuck {
 		m.flash = "a answers the session of a stuck ship"
@@ -392,8 +391,7 @@ func (m Model) shipAnswer() Model {
 		m.flash = m.driverGone(sh)
 		return m
 	}
-	m.openPeek(s.Pane)
-	return m
+	return m.chatOn(s.Pane)
 }
 
 // mergeShip is x on a ship that waits for your merge: the repository's

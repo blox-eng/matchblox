@@ -57,7 +57,7 @@ func routeAt(t *testing.T, st proto.State, keys ...string) Model {
 	return m.(Model)
 }
 
-// withRoute is a model with the layer open: sheet, form, peek, search, pair,
+// withRoute is a model with the layer open: sheet, form, chat, search, pair,
 // held, pending, or none (main).
 func withRoute(t *testing.T, layer string) Model {
 	t.Helper()
@@ -76,12 +76,10 @@ func withRoute(t *testing.T, layer string) Model {
 			t.Fatal("N opened no form")
 		}
 		return m
-	case "peek":
-		m := selectPane(t, routeAt(t, queueState()), "%2").(Model)
-		next, _ := openedPeek(m)
-		m = next.(Model)
-		if m.peek == nil {
-			t.Fatal("a opened no peek")
+	case "chat":
+		m := sendKey(selectPane(t, routeAt(t, queueState()), "%2"), "enter").(Model)
+		if !m.chatKeys {
+			t.Fatal("enter gave the chat no keys")
 		}
 		return m
 	case "search":
@@ -156,9 +154,14 @@ func TestKeyRouting(t *testing.T) {
 				t.Fatal("the form stayed")
 			}
 		}},
-		{"peek: esc closes it", func(t *testing.T) Model { return withRoute(t, "peek") }, esc, false, func(t *testing.T, m, _ Model) {
-			if m.peek != nil {
-				t.Fatal("the peek stayed")
+		{"chat: esc goes to the agent", func(t *testing.T) Model { return withRoute(t, "chat") }, esc, false, func(t *testing.T, m, _ Model) {
+			if !m.chatKeys || m.keyInFlight == "" {
+				t.Fatalf("chatKeys %v, key in flight %q", m.chatKeys, m.keyInFlight)
+			}
+		}},
+		{"chat: ctrl+c goes to the agent", func(t *testing.T) Model { return withRoute(t, "chat") }, ctrlC, false, func(t *testing.T, m, _ Model) {
+			if m.quitting || m.keyInFlight == "" {
+				t.Fatalf("quitting %v, key in flight %q", m.quitting, m.keyInFlight)
 			}
 		}},
 		{"search: x is typed", func(t *testing.T) Model { return withRoute(t, "search") }, text("x"), false, func(t *testing.T, m, _ Model) {
@@ -214,7 +217,7 @@ func TestKeyRouting(t *testing.T) {
 			}
 		}},
 	}
-	for _, layer := range []string{"sheet", "form", "peek", "search", "pair", "main"} {
+	for _, layer := range []string{"sheet", "form", "search", "pair", "main"} {
 		rows = append(rows, row{layer + ": ctrl+c quits", func(t *testing.T) Model { return withRoute(t, layer) }, ctrlC, true, func(t *testing.T, m, _ Model) {
 			if !m.quitting {
 				t.Fatal("not quitting")
@@ -342,10 +345,7 @@ func keyLineStates(t *testing.T) []keyLineAt {
 		on := func(pane string) tea.Model { return selectPane(t, q, pane) }
 		add(fmt.Sprintf("search/%d", w), typeText(sendKey(q, "/"), "app"))
 		add(fmt.Sprintf("search kept/%d", w), sendKey(typeText(sendKey(q, "/"), "app"), "enter"))
-		peek, _ := openedPeek(on("%2"))
-		add(fmt.Sprintf("peek/%d", w), peek)
-		add(fmt.Sprintf("peek typed/%d", w), typeText(peek, "yes"))
-		add(fmt.Sprintf("peek question/%d", w), peekOn(on("%1")))
+		add(fmt.Sprintf("chat/%d", w), sendKey(on("%2"), "enter"))
 		add(fmt.Sprintf("form new/%d", w), sendKey(q, "N"))
 		add(fmt.Sprintf("form rename/%d", w), sendKey(on("%2"), "r"))
 		add(fmt.Sprintf("form switch/%d", w), sendKey(on("%2"), "A"))
@@ -592,7 +592,7 @@ var keyLines = map[string]string{
 	"stoker run/100/stoker/row 1":        "↑↓ move  ⏎ command  1 sessions  p ships  f stoker  / find  q quit",
 	"demo/100/sessions/row 0":            "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"demo/100/sessions/row 1":            "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"demo/100/sessions/row 2":            "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"demo/100/sessions/row 2":            "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ question 2 ─────────────────────────────────────────╯",
 	"demo/100/sessions/row 3":            "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"demo/100/sessions/row 4":            "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"demo/100/sessions/row 5":            "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
@@ -654,10 +654,8 @@ var keyLines = map[string]string{
 	"orphans/100/panes/row 3":            "↑↓ move  ⏎ go  s sort  / find  q quit",
 	"orphans/100/stoker/row 0":           "↑↓ move  1 sessions  p ships  f stoker  / find  q quit",
 	"search/100":                         "/ app▏  ⏎ keep  esc clear",
+	"chat/100":                           "keys go to app-review · ctrl+] back · ctrl+o into tmux",
 	"search kept/100":                    "/ app · esc clears  ⏎ chat  a chat  x kill  r rename  z park  N new  f stoker",
-	"peek/100":                           "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ send ─ ← prev  2/3  next → ─ esc ─ ^o jump ──────────╯",
-	"peek typed/100":                     "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ send ─ ← prev  2/3  next → ─ esc ─ ^o jump ──────────╯",
-	"peek question/100":                  "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ open ─ ← prev  1/3  next → ─ esc ─ ^o jump ──────────╯",
 	"form new/100":                       "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ pick · ↑↓ move · ←→ repo · tab next · esc keep the path ╯",
 	"form rename/100":                    "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ rename ─ esc ───────────────────────────────────────────╯",
 	"form switch/100":                    "⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ plan ─ tab next ─ esc ──────────────────────────────────╯",
@@ -677,10 +675,8 @@ var keyLines = map[string]string{
 	"stoker command/100":                 "y give the go  ⏎ command  1 sessions  p ships  n stop night  / find  q quit",
 	"stoker quit agent/100":              "Quit the stoker agent: tmux -L matchblox kill-session -t =stoker · y run ─ any other key cancels || ╰─ y run ─ any other key cancels ───────────────╯",
 	"search/50":                          "/ app▏  ⏎ keep  esc clear",
+	"chat/50":                            "keys go to app-review · ctrl+] back · ctrl+o int…",
 	"search kept/50":                     "/ app · esc clears  ⏎ chat  a chat  x kill  r re…",
-	"peek/50":                            "⏎ chat  a chat  x kill  r rename  N new  f stoker || ╰─ ⏎ send ─ ← prev  2/3  next → ─ esc ───────────╯",
-	"peek typed/50":                      "⏎ chat  a chat  x kill  r rename  N new  f stoker || ╰─ ⏎ send ─ ← prev  2/3  next → ─ esc ───────────╯",
-	"peek question/50":                   "⏎ chat  a chat  x kill  r rename  N new  f stoker || ╰─ ⏎ open ─ ← prev  1/3  next → ─ esc ───────────╯",
 	"form new/50":                        "⏎ chat  a chat  x kill  r rename  N new  f stoker || ╰─ ⏎ pick · ↑↓ move · esc keep the path ─────────╯",
 	"form rename/50":                     "⏎ chat  a chat  x kill  r rename  N new  f stoker || ╰─ ⏎ rename ─ esc ───────────────────────────────╯",
 	"form switch/50":                     "⏎ chat  a chat  x kill  r rename  N new  f stoker || ╰─ ⏎ plan ─ tab next ─ esc ──────────────────────╯",

@@ -15,8 +15,6 @@ const (
 	layerPairStripEsc                // esc on the pair strip, with nothing else to close
 	layerSheet
 	layerForm
-	layerPeek
-	layerPeekGone // a peek whose session is gone: any key closes it, ctrl+c too
 	layerSearch
 	layerHeld     // a key waits for the take-over answer
 	layerTakeOver // a key that acts on a session the stoker runs
@@ -44,11 +42,6 @@ func (m Model) focus(k tea.KeyPressMsg) layerID {
 		return layerSheet
 	case m.form != nil:
 		return layerForm
-	case m.peek != nil:
-		if _, _, ok := m.peekNow(); !ok {
-			return layerPeekGone
-		}
-		return layerPeek
 	case m.searching:
 		return layerSearch
 	}

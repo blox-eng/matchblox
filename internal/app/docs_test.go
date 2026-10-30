@@ -41,7 +41,7 @@ type keyLayer struct {
 func boundKeys() map[string]*keyLayer {
 	k, s := defaultKeys(), defaultShellKeys()
 	screens := map[string][][]bkey.Binding{
-		"Model": {k.global.bindings(), k.main.bindings(), k.form.bindings(), k.peek.bindings(), k.sheet.bindings(),
+		"Model": {k.global.bindings(), k.main.bindings(), k.form.bindings(), k.card.bindings(), k.sheet.bindings(),
 			k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(), k.scan.bindings()},
 		"Shell": {s.shell.bindings(), s.typing.bindings()},
 	}

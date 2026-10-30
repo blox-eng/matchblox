@@ -8,25 +8,25 @@
  ╿ kindle-web                   asks       1m   56% │
  ╿ cinder-ci                    done       0s   55% │
  ╿ wick-mobile                  done       0s    6% │
- WORKING · 1                                        │
+ WORKING · 1                                        │ ⏺ The refresh endpoint is in and its tests pass.
  ✦ hearth-api                   busy            79% │
- + start a new session                              │
-                                                    │
+ + start a new session                              │ ──────────────────────────────────────────────────────────────────────────────
+                                                    │  ☐ Rotate
  1 without an agent: shell:1.1 zsh                  │
-                                                    │
+                                                    │ Should a refresh also rotate the token?
  RECOMMENDATIONS · 7 · h hides                      │
- ▲ The week runs short: compact spark-docs          │ ⏺ The refresh endpoint is in and its tests pass.
- ○ Clear spark-docs (%3)                            │
- ○ Clear kindle-web (%5)                            │ ──────────────────────────────────────────────────────────────────────────────
- ↓ 4 more                                           │  ☐ Rotate
+ ▲ The week runs short: compact spark-docs          │ ❯ 1. Rotate it
+ ○ Clear spark-docs (%3)                            │      The old one stops at once.
+ ○ Clear kindle-web (%5)                            │   2. Rotate, keep the old one a minute
+ ↓ 4 more                                           │   3. Type something.
 ────────────────────────────────────────────────────│
- USAGE                                              │ Should a refresh also rotate the token?
- ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20     │
-                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00     │ ❯ 1. Rotate it
-                 out Fri ~21:00                     │      The old one stops at once.
- · Google login  not measured · OpenCode keeps no l…│   2. Rotate, keep the old one a minute
- ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59         │   3. Type something.
-                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00     │
-                 lasts the week                     │ Enter to select · ↑/↓ to navigate · Esc to cancel
+ USAGE                                              │ Enter to select · ↑/↓ to navigate · Esc to cancel
+ ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20     │ ╭─ flint-auth asks · 1 of 2 ─────────────────────────────────╮
+                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00     │ │ Should a refresh also rotate the token?                    │
+                 out Fri ~21:00                     │ │ › 1 Rotate it  the old one stops at once                   │
+ · Google login  not measured · OpenCode keeps no l…│ │   2 Rotate, keep the old one a minute                      │
+ ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59         │ │   3 Keep the token                                         │
+                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00     │ │   4 Type an answer…                                        │
+                 lasts the week                     │ ╰─ ⏎ question 2 ─────────────────────────────────────────────╯
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  keys go to flint-auth · ctrl+] back · ctrl+o into tmux

@@ -40,7 +40,7 @@ func layersOf(k keymaps) (main kmLayer, modal []kmLayer) {
 	modal = []kmLayer{
 		{"global", k.global.bindings(), fieldNames(k.global), fieldBinds(k.global)},
 		{"form", k.form.bindings(), fieldNames(k.form), fieldBinds(k.form)},
-		{"peek", k.peek.bindings(), fieldNames(k.peek), fieldBinds(k.peek)},
+		{"card", k.card.bindings(), fieldNames(k.card), fieldBinds(k.card)},
 		{"chat", k.chat.bindings(), fieldNames(k.chat), fieldBinds(k.chat)},
 		{"sheet", k.sheet.bindings(), fieldNames(k.sheet), fieldBinds(k.sheet)},
 		{"search", k.search.bindings(), fieldNames(k.search), fieldBinds(k.search)},

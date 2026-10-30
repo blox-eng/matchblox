@@ -289,9 +289,8 @@ type Model struct {
 	screen     proto.Screen      // the last capture of the watched pane
 	watching   string            // the pane the service sends, or ""
 	watchHeld  string            // the pane the service refused, until the next snapshot
-	peek       *peek             // the answer peek, over the screen
-	peekSent   map[string]string // the peek's sends in flight: act id -> the session's name
-	peekQuiet  time.Time         // the peek takes no key until then: it just moved
+	askCard    card              // the question card's answer, in the chat
+	cardSent   map[string]string // the card's sends in flight: act id -> the session's name
 	changes    map[string]change // pane -> a match change that plays once
 	animating  bool
 	hist       history.Series
@@ -758,10 +757,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return mm, mm.recv()
 		}
-		if r := proto.Result(msg); m.peekSent[r.ActID] != "" {
-			name := m.peekSent[r.ActID]
-			m.peekSent = maps.Clone(m.peekSent)
-			delete(m.peekSent, r.ActID)
+		if r := proto.Result(msg); m.cardSent[r.ActID] != "" {
+			name := m.cardSent[r.ActID]
+			m.cardSent = maps.Clone(m.cardSent)
+			delete(m.cardSent, r.ActID)
 			why := r.Err
 			if n := len(r.Skipped); n > 0 && why == "" {
 				why = r.Skipped[n-1]
@@ -906,15 +905,14 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var touch tea.Cmd
 		// f and n are stoker acts themselves: a touch sent with them would
 		// race them on the service.
-		if m.pair != nil || m.peek != nil || m.sheet != nil || m.form != nil || m.searching || m.chatKeys || !bkey.Matches(msg, m.keys.main.Stoke, m.keys.main.Night) {
+		if m.pair != nil || m.sheet != nil || m.form != nil || m.searching || m.chatKeys || !bkey.Matches(msg, m.keys.main.Stoke, m.keys.main.Night) {
 			m, touch = m.touchRest()
 		}
 		f := m.focus(msg)
 		// ctrl+c quits from every layer but a question, where any key but
-		// its answers cancels, a peek on a gone session, which closes, and
-		// the chat, which sends it to the agent.
+		// its answers cancels, and the chat, which sends it to the agent.
 		chat := m.chatKeys && (f == layerMain || f == layerTakeOver)
-		if f != layerAsk && f != layerHeld && f != layerPending && f != layerPeekGone && !chat && bkey.Matches(msg, m.keys.global.Quit) {
+		if f != layerAsk && f != layerHeld && f != layerPending && !chat && bkey.Matches(msg, m.keys.global.Quit) {
 			next, cmd := m.quit()
 			if f == layerMain {
 				next, cmd = stokerSeen(next, cmd) // as every key of the tabs
@@ -935,10 +933,10 @@ var focusWait = 10 * time.Second
 const focusGone = "That session ended."
 
 // takeFocus opens the session a tap on the island or a buzz asked for, once
-// for each focus the service sends, on Sessions: its answer peek when it
-// waits, else its pane on the phone's own tmux client. A form, sheet, pair
-// page, take-over or a peek with text typed keeps the keys: what the person
-// types there is not thrown away.
+// for each focus the service sends, on Sessions: its chat when it waits,
+// else its pane on the phone's own tmux client. A form, sheet, pair page,
+// take-over or a card with text typed keeps the keys: what the person types
+// there is not thrown away.
 func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	if f == nil || f.At.Equal(m.focusAt) {
 		return m, nil
@@ -952,7 +950,7 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 			break
 		}
 	}
-	typing := m.peek != nil && m.peek.text != ""
+	typing := m.chatKeys && m.askCard.text != ""
 	busy := m.pair.owns() || m.sheet != nil || m.form != nil || m.held != nil || typing
 	if f.Gone || !found {
 		if !busy {
@@ -966,15 +964,20 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.setTab(tabSessions)
-	m.pending, m.peek = nil, nil
+	m.pending = nil
 	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, s.PID
 	if s.Pane == "" {
 		return m, nil // outside tmux: no pane to open
 	}
 	if _, waits := m.waitOf(s); waits {
-		// The home console is shared: the peek shows on the phone too, and an
-		// Enter on its way at the desk must not answer it.
-		return m.peekTo(s.Pane), nil
+		// The home console is shared: the chat shows on the phone too, and an
+		// Enter on its way at the desk must not answer it: its card has
+		// nothing picked.
+		m = m.chatOn(s.Pane)
+		if s.Ask != nil {
+			m.askCard = card{askID: s.Ask.ID, at: -1}
+		}
+		return m, nil
 	}
 	// Only the phone's client moves, into a session of its own (FocusArgv),
 	// and only on this console's own tmux: a console of another host (over
@@ -1076,8 +1079,6 @@ func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		next, cmd = m.sheetKey(k)
 	case layerForm:
 		next, cmd = m.formKey(k)
-	case layerPeek, layerPeekGone:
-		next, cmd = m.peekKey(k)
 	case layerSearch:
 		next, cmd = m.search(k)
 	case layerHeld:
@@ -1255,22 +1256,11 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabStoker {
 			return m.grantStep()
 		}
-	case bkey.Matches(k, mk.Peek):
-		if m.tab == tabShips {
-			return m.shipAnswer(), nil
-		}
-		if m.tab == tabSessions {
-			return m.openChat(), nil
-		}
-		if pane, why := m.peekTarget(); pane != "" {
-			m.openPeek(pane)
-		} else {
-			m.flash = why
-		}
 	case bkey.Matches(k, mk.Chat):
-		if m.tab == tabSessions {
-			return m.openChat(), nil
+		if m.tab == tabShips {
+			return m.shipChat(), nil
 		}
+		return m.openChat(), nil
 	case bkey.Matches(k, mk.Jump):
 		return m.intoPane(), nil
 	case bkey.Matches(k, mk.Dismiss):

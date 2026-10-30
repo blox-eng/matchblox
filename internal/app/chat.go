@@ -100,22 +100,31 @@ func (m *Model) watchCmd() tea.Cmd {
 	}
 }
 
-// chatLines is the watched screen fitted to w by h, or what stands in its
-// place: that the session ended, or blank lines until a screen comes.
+// chatLines is the watched screen fitted to w by h, with the question card
+// at its foot, or what stands in its place: that the session ended, or
+// blank lines until a screen comes.
 func (m Model) chatLines(w, h int) []string {
-	lines := make([]string, max(h, 0))
+	h = max(h, 0)
+	lines := make([]string, h)
 	s, ok := m.selected()
-	if !ok || s.Pane == "" || m.screen.Pane != s.Pane {
+	if !ok || s.Pane == "" {
 		return lines
 	}
-	if m.screen.Gone {
+	shown := m.screen.Pane == s.Pane
+	if shown && m.screen.Gone {
 		const text = "That session ended."
 		if h > 0 {
 			lines[h/2] = strings.Repeat(" ", max((w-ansi.StringWidth(text))/2, 0)) + text
 		}
 		return lines
 	}
-	fit := fitScreen(m.screen.Text, w, h)
+	card := m.cardLines(w)
+	card = card[max(len(card)-h, 0):]
+	var fit []string
+	if shown {
+		fit = fitScreen(m.screen.Text, w, h-len(card))
+	}
+	fit = append(fit, card...)
 	return append(lines[:len(lines)-len(fit)], fit...)
 }
 
@@ -154,15 +163,21 @@ func (m Model) screenLines(w, h int) []string {
 }
 
 // chatScreen is the chat on an upright phone: the whole screen under a
-// title row that goes back to Sessions, over the key line, with a step
-// that asks to confirm on top. Its title, hairline and key line always
-// show: a screen under 4 rows has no room for the agent's lines.
+// title row that goes back to Sessions and says a toast, over the key
+// line, with a step that asks to confirm on top. Its title, hairline and
+// key line always show: a screen under 4 rows has no room for the agent's
+// lines.
 func (m Model) chatScreen(w int) drawn {
 	st := m.st
 	s, _ := m.selectedSession()
 	title := " " + st.accent.Render("‹ Sessions") + st.muted.Render(" · ") + st.accent.Render(m.chatTitle(s))
-	sc := drawn{lines: []string{fit(title, w)}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true}
+	if m.toast != "" { // as the header says it, where there is one
+		title = spread(title, st.accent.Render(ansi.Truncate(m.toast, max(w/2, 1), "…"))+" ", w)
+	}
+	title = fit(title, w)
+	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true}
 	sc.lines = append(sc.lines, m.screenLines(w, max(m.height-3, 0))...)
+	m.markCard(&sc, len(sc.lines), 0, w, max(m.height-3, 0))
 	keys, spans := m.keyLine(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, spans
 	sc.lines = append(sc.lines, st.hair.Render(strings.Repeat("─", w)), keys)
@@ -170,6 +185,18 @@ func (m Model) chatScreen(w int) drawn {
 		m.overlayConsent(&sc, w)
 	}
 	return sc
+}
+
+// markCard finds the question card at the foot of a chat w columns wide
+// and h lines tall, whose last line is above line bottom and whose first
+// column is x.
+func (m Model) markCard(sc *drawn, bottom, x, w, h int) {
+	if s, ok := m.selected(); ok && m.screen.Pane == s.Pane && m.screen.Gone {
+		return // the chat says the session ended, and shows no card
+	}
+	_, press, spans := m.cardRows(w)
+	press = press[max(len(press)-h, 0):]
+	sc.cardAt, sc.cardX, sc.cardW, sc.cardRows, sc.cardKeys = bottom-len(press), x, min(w, cardMaxW), press, spans
 }
 
 // homeKey is the app's home gesture (panes.HomeKey, which the console may
@@ -188,16 +215,47 @@ type chatKey struct {
 // maxLit is the most text one "lit:" key carries; the service takes no more.
 const maxLit = 200
 
-// openChat gives the chat the keys, or says why the selected session has
-// none. The selection stays on the session while the chat has its keys.
+// openChat gives the keys to the chat of the selected session, or of the
+// session of a failed step, or says why there is none.
 func (m Model) openChat() Model {
-	pane, why := m.peekTarget()
+	pane, why := m.chatTarget()
 	if pane == "" {
 		m.flash = why
 		return m
 	}
-	s, _ := m.selectedSession()
-	m.chatKeys, m.chose, m.selPID, m.flash = true, true, s.PID, ""
+	return m.chatOn(pane)
+}
+
+// chatTarget is the pane whose chat a opens: the selected session's, when
+// it has a pane to type into, or a failed step's. Why says why there is
+// none.
+func (m Model) chatTarget() (pane, why string) {
+	if m.tab == tabStoker {
+		return m.stokerChatTarget()
+	}
+	s, ok := m.selectedSession()
+	switch {
+	case !ok:
+		return "", ""
+	case s.Pane == "":
+		return "", s.Name + " runs outside tmux: there is no pane to type into"
+	}
+	return s.Pane, ""
+}
+
+// chatOn is Sessions with the session in pane selected and its chat
+// holding the keys. The selection stays on the session while the chat has
+// its keys.
+func (m Model) chatOn(pane string) Model {
+	s, ok := m.sessionIn(pane)
+	if !ok {
+		return m
+	}
+	if m.tab != tabSessions {
+		m.setTab(tabSessions)
+	}
+	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, s.PID
+	m.chatKeys, m.flash = true, ""
 	return m
 }
 
@@ -220,7 +278,8 @@ type ctrlCMark struct {
 func (c ctrlCMark) is(k chatKey) bool { return c.pane != "" && c.pane == k.pane && c.pid == k.pid }
 
 // chatKey is k while the chat has the keys: ctrl+] gives them back, ctrl+o
-// goes into the pane, and every other key goes to the agent.
+// goes into the pane, the question card takes its own keys, and every
+// other key goes to the agent.
 func (m Model) chatKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.flash = ""
 	switch {
@@ -229,6 +288,8 @@ func (m Model) chatKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case bkey.Matches(k, m.keys.main.Jump):
 		return m.intoPane(), nil
+	case m.cardTakes(k):
+		return m.cardKey(k)
 	}
 	text, ok := keyName(k)
 	if !ok {

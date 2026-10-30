@@ -21,8 +21,6 @@ func withLayers(m Model, layers ...string) Model {
 			m.sheet = &sheet{}
 		case "form":
 			m.form = &form{}
-		case "peek":
-			m.peek = &peek{pane: "%gone"} // its session is gone: livePeek has one
 		case "search":
 			m.searching = true
 		case "held":
@@ -45,7 +43,7 @@ func withLayers(m Model, layers ...string) Model {
 }
 
 func TestFocusOrder(t *testing.T) {
-	everything := []string{"pair", "sheet", "form", "peek", "search", "held", "pending", "blocked", "mismatch"}
+	everything := []string{"pair", "sheet", "form", "search", "held", "pending", "blocked", "mismatch"}
 	type row struct {
 		name   string
 		from   func(t *testing.T) Model
@@ -62,7 +60,6 @@ func TestFocusOrder(t *testing.T) {
 		}
 		return m
 	}
-	livePeek := func(t *testing.T) Model { return withRoute(t, "peek") }
 	rows := []row{
 		{"nothing open: main", main, nil, "x", layerMain},
 		{"nothing open, ctrl+c: main", main, nil, "ctrl+c", layerMain},
@@ -76,15 +73,9 @@ func TestFocusOrder(t *testing.T) {
 		{"pair strip under search, esc: search", main, []string{"strip", "search"}, "esc", layerSearch},
 		{"pair strip under pending, esc: pending", main, []string{"strip", "pending"}, "esc", layerPending},
 		{"pair strip under held, esc: held", main, []string{"strip", "held"}, "esc", layerHeld},
-		{"sheet, form and peek: sheet", main, []string{"sheet", "form", "peek"}, "esc", layerSheet},
+		{"sheet and form: sheet", main, []string{"sheet", "form"}, "esc", layerSheet},
 		{"sheet and search: sheet", main, []string{"sheet", "search"}, "x", layerSheet},
-		{"form and peek: form", main, []string{"form", "peek"}, "esc", layerForm},
 		{"form and search: form", main, []string{"form", "search"}, "x", layerForm},
-		{"peek and search: peek", livePeek, []string{"search"}, "x", layerPeek},
-		{"peek, ctrl+c: peek", livePeek, nil, "ctrl+c", layerPeek},
-		{"peek on a gone session: gone", main, []string{"peek"}, "x", layerPeekGone},
-		{"peek on a gone session, ctrl+c: gone", main, []string{"peek"}, "ctrl+c", layerPeekGone},
-		{"peek on a gone session and search: gone", main, []string{"peek", "search"}, "x", layerPeekGone},
 		{"search, held and pending: search", main, []string{"search", "held", "pending"}, "y", layerSearch},
 		{"held and pending: held", main, []string{"held", "pending"}, "y", layerHeld},
 		{"held, ctrl+c: held", main, []string{"held"}, "ctrl+c", layerHeld},
@@ -113,7 +104,6 @@ func TestFocusOrder(t *testing.T) {
 		{"held and scan: held", main, []string{"held", "scan"}, "y", layerHeld},
 		{"search and scan: search", main, []string{"search", "scan"}, "y", layerSearch},
 		{"form and scan: form", main, []string{"form", "scan"}, "y", layerForm},
-		{"peek and scan: gone", main, []string{"peek", "scan"}, "y", layerPeekGone},
 		{"sheet and scan: sheet", main, []string{"sheet", "scan"}, "y", layerSheet},
 		{"pair and scan: pair", main, []string{"pair", "scan"}, "y", layerPair},
 		{"pair strip and scan, esc: scan", main, []string{"strip", "scan"}, "esc", layerScan},
@@ -129,20 +119,5 @@ func TestFocusOrder(t *testing.T) {
 				t.Fatalf("focus %v, want %v", got, r.want)
 			}
 		})
-	}
-}
-
-// TestCtrlCOnAPeek: a peek whose session is gone takes ctrl+c as any key,
-// and closes; a live peek lets ctrl+c quit.
-func TestCtrlCOnAPeek(t *testing.T) {
-	m := withLayers(routeAt(t, queueState()), "peek")
-	next, cmd := m.Update(ctrlC)
-	got := next.(Model)
-	if quits(cmd) || got.quitting || got.peek != nil || got.flash != "the session is gone" {
-		t.Fatalf("gone peek: quit %v, quitting %v, peek %v, flash %q", quits(cmd), got.quitting, got.peek != nil, got.flash)
-	}
-	next, cmd = withRoute(t, "peek").Update(ctrlC)
-	if !quits(cmd) || !next.(Model).quitting {
-		t.Fatal("ctrl+c on a live peek did not quit")
 	}
 }

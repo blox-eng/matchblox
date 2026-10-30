@@ -253,25 +253,6 @@ func TestScanBoxNotFocusedOverSearchOrForm(t *testing.T) {
 	}
 }
 
-func TestScanBoxReArmsAfterPeekCloses(t *testing.T) {
-	m, f := asked(t)
-	m = withLayers(m, "peek")
-	next, _ := key(m, "esc")
-	if nm := next.(Model); nm.peek != nil || !nm.scanShown() {
-		t.Fatalf("peek %v, box %v", nm.peek != nil, nm.scanShown())
-	}
-	next, cmd := key(next, "y")
-	sendAll(t, cmd)
-	if len(f.acts()) != 0 || !next.(Model).scanShown() {
-		t.Fatalf("y in the new quiet: sent %+v", f.acts())
-	}
-	_, cmd = key(calm(next), "y")
-	sendAll(t, cmd)
-	if a := f.acts(); len(a) != 1 || a[0].RecID != "scan:yes" {
-		t.Fatalf("sent %+v", a)
-	}
-}
-
 // pickSent is the pick form's yes sent: the model and its act.
 func pickSent(t *testing.T) (tea.Model, string) {
 	t.Helper()

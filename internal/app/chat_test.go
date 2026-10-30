@@ -3,6 +3,7 @@ package app
 import (
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -829,5 +831,261 @@ func TestTheMoreHintNeverCoversTheSelection(t *testing.T) {
 			t.Fatalf("a tap on the selected row %d selected %d", m.rowIndex(), next.(Model).rowIndex())
 		}
 		m = pressKeys(t, m, "down")
+	}
+}
+
+// askModel is the console at w columns with session a (%1) on Claude Code's
+// question tool, its screen in, and the keys in its chat.
+func askModel(t *testing.T, w int, qs ...said.Question) (Model, *fakeConn) {
+	t.Helper()
+	st := fixtureState()
+	st.Sessions = []sample.Session{
+		{PID: 1, Pane: "%1", Name: "a", Ask: &said.Ask{ID: "toolu_1", Questions: qs}},
+		{PID: 2, Pane: "%2", Name: "b"},
+	}
+	m, f := loadedWith(t, w, st)
+	m = onPane(t, m, "%1")
+	next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(100, 0), Text: "⏺ Which way?"})
+	m = pressKeys(t, next.(Model), "enter")
+	if !m.chatKeys {
+		t.Fatal("enter did not give the chat the keys")
+	}
+	return m, f
+}
+
+var threeWays = said.Question{Question: "Which way do we fix the login?", Options: []said.Option{
+	{Label: "Patch the token check"}, {Label: "Move to the new session store"}, {Label: "Leave it"}}}
+
+// pickActs are the answers the console sent through the pick: act.
+func pickActs(f *fakeConn) []proto.Act {
+	var out []proto.Act
+	for _, a := range f.acts() {
+		if strings.HasPrefix(a.RecID, "pick:") {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+func TestCardShowsTheQuestion(t *testing.T) {
+	m, _ := askModel(t, 100, threeWays)
+	for _, w := range []int{44, 80} {
+		lines := m.chatLines(w, 20)
+		if len(lines) != 20 {
+			t.Fatalf("%d: %d lines", w, len(lines))
+		}
+		out := ansi.Strip(strings.Join(lines, "\n"))
+		for _, want := range []string{"a asks", "Which way do we fix", "1 Patch the token check", "2 Move to the new", "3 Leave it", "4 Type an answer…", "⏎ send"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("%d: the card lacks %q:\n%s", w, want, out)
+			}
+		}
+		if last := ansi.Strip(lines[len(lines)-1]); !strings.HasPrefix(last, "╰") {
+			t.Fatalf("%d: the card is not at the foot of the chat: %q", w, last)
+		}
+		for i, l := range lines {
+			if lw := ansi.StringWidth(l); lw > w {
+				t.Fatalf("%d: line %d is %d wide: %q", w, i, lw, ansi.Strip(l))
+			}
+		}
+	}
+}
+
+func TestCardDownDownEnterPicksTheThird(t *testing.T) {
+	m, f := askModel(t, 100, threeWays)
+	pressKeys(t, m, "down", "down", "enter")
+	got := pickActs(f)
+	if len(got) != 1 || got[0].RecID != "pick:%1" || got[0].Text != `{"id":"toolu_1","choices":[{"picks":[3]}]}` {
+		t.Fatalf("picks %+v", got)
+	}
+	if keys := keyActs(f); len(keys) != 0 {
+		t.Fatalf("the card sent keys to the agent: %+v", keys)
+	}
+}
+
+func TestCardSpaceTicks(t *testing.T) {
+	multi := threeWays
+	multi.Multi = true
+	m, f := askModel(t, 100, multi)
+	m = pressKeys(t, m, "space")
+	if c := m.askCard; !c.ticks[1] || c.ticks[2] {
+		t.Fatalf("ticks %v", c.ticks)
+	}
+	if out := ansi.Strip(strings.Join(m.chatLines(60, 20), "\n")); !strings.Contains(out, "[✔] Patch the token check") || !strings.Contains(out, "␣ tick") {
+		t.Fatalf("the card does not show the tick:\n%s", out)
+	}
+	pressKeys(t, m, "down", "down", "space", "enter")
+	if got := pickActs(f); len(got) != 1 || got[0].Text != `{"id":"toolu_1","choices":[{"picks":[1,3]}]}` {
+		t.Fatalf("picks %+v", got)
+	}
+}
+
+func TestCardTapPicks(t *testing.T) {
+	for _, size := range [][2]int{{200, 50}, {44, 31}} {
+		m, f := askModel(t, size[0], threeWays)
+		next, _ := m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
+		m = next.(Model)
+		sc := m.draw(size[0])
+		y := -1
+		for i, l := range sc.lines {
+			if strings.Contains(ansi.Strip(l), "2 Move to the new") {
+				y = i
+			}
+		}
+		if y < 0 {
+			t.Fatalf("%v: no option 2 on screen:\n%s", size, ansi.Strip(strings.Join(sc.lines, "\n")))
+		}
+		next, cmd := tap(m, sc.cardX+4, y)
+		drain(cmd)
+		if got := pickActs(f); len(got) != 1 || got[0].Text != `{"id":"toolu_1","choices":[{"picks":[2]}]}` {
+			t.Fatalf("%v: picks %+v", size, got)
+		}
+		if !next.(Model).chatKeys {
+			t.Fatalf("%v: the chat lost the keys", size)
+		}
+	}
+}
+
+func TestNoCardAtAPermissionPrompt(t *testing.T) {
+	m, f := loadedWith(t, 100, queueState()) // app-feature (%1) asks for permission
+	m = pressKeys(t, onPane(t, m, "%1"), "enter")
+	if lines := m.cardLines(60); len(lines) != 0 {
+		t.Fatalf("a card at a permission prompt: %q", lines)
+	}
+	pressKeys(t, m, "enter")
+	if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" || len(pickActs(f)) != 0 {
+		t.Fatalf("acts %+v", f.acts())
+	}
+}
+
+// Esc, Tab, Shift+Tab and ^C go to the agent over a card: Claude Code
+// needs them to leave its question.
+func TestTheCardLeavesTheAgentItsOwnKeys(t *testing.T) {
+	m, f := askModel(t, 100, threeWays)
+	pressKeys(t, m, "esc", "tab")
+	if got := keyActs(f); len(got) != 1 || got[0].Text != "Escape" {
+		t.Fatalf("acts %+v", f.acts())
+	}
+}
+
+// Letters type on the card's typing row, q and digits after the first
+// letter too, and ⏎ sends the text as the answer.
+func TestCardTypesTheAnswer(t *testing.T) {
+	m, f := askModel(t, 100, threeWays)
+	next := typeText(m, "no, wait 2")
+	if out := ansi.Strip(strings.Join(next.(Model).chatLines(60, 20), "\n")); !strings.Contains(out, "› 4 no, wait 2▏") {
+		t.Fatalf("the typing row:\n%s", out)
+	}
+	pressKeys(t, next.(Model), "backspace", "enter")
+	if got := pickActs(f); len(got) != 1 || got[0].Text != `{"id":"toolu_1","choices":[{"text":"no, wait "}]}` {
+		t.Fatalf("picks %+v", got)
+	}
+	if len(keyActs(f)) != 0 {
+		t.Fatalf("typing went to the agent: %+v", keyActs(f))
+	}
+}
+
+// Several questions go one at a time, and their answers go as one pick.
+func TestCardAnswersEveryQuestion(t *testing.T) {
+	checks := said.Question{Question: "Which checks?", Multi: true, Options: []said.Option{{Label: "unit"}, {Label: "e2e"}, {Label: "lint"}}}
+	m, f := askModel(t, 100, threeWays, checks)
+	if out := ansi.Strip(strings.Join(m.chatLines(60, 20), "\n")); !strings.Contains(out, "a asks · 1 of 2") || !strings.Contains(out, "⏎ question 2") {
+		t.Fatalf("the first question:\n%s", out)
+	}
+	m = pressKeys(t, m, "2", "space", "3")
+	out := ansi.Strip(strings.Join(m.chatLines(60, 20), "\n"))
+	for _, want := range []string{"2 of 2", "Which checks?", "[✔] unit", "[ ] e2e", "[✔] lint"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("the second question lacks %q:\n%s", want, out)
+		}
+	}
+	pressKeys(t, m, "enter")
+	if got := pickActs(f); len(got) != 1 || got[0].Confirm != "y" || got[0].Text != `{"id":"toolu_1","choices":[{"picks":[2]},{"picks":[1,3]}]}` {
+		t.Fatalf("picks %+v", got)
+	}
+}
+
+// The key line says where the answer went, or that it did not go and why.
+func TestCardSaysWhatWasSent(t *testing.T) {
+	m, _ := askModel(t, 100, threeWays)
+	next, _ := key(m, "enter")
+	if nm := next.(Model); nm.toast != "sending to a…" {
+		t.Fatalf("toast %q", nm.toast)
+	}
+	id := "a" + strconv.Itoa(next.(Model).acts)
+	sent, _ := next.Update(resultMsg(proto.Result{ActID: id, Ran: [][]string{{"tmux"}}}))
+	if nm := sent.(Model); nm.toast != "sent to a" || nm.flash != "" {
+		t.Fatalf("toast %q flash %q", nm.toast, nm.flash)
+	}
+	stopped, _ := next.Update(resultMsg(proto.Result{ActID: id, Skipped: []string{"the session in %1 no longer waits for an answer"}}))
+	if nm := stopped.(Model); strings.Contains(nm.toast, "sent to") || nm.flash != "not sent to a: the session in %1 no longer waits for an answer" {
+		t.Fatalf("toast %q flash %q", nm.toast, nm.flash)
+	}
+}
+
+// After a send the card has nothing picked: a second ⏎ (a double tap, a key
+// repeat) answers nothing.
+func TestASecondEnterNeverAnswersTwice(t *testing.T) {
+	m, f := askModel(t, 100, threeWays)
+	m = pressKeys(t, m, "enter", "enter")
+	if got := pickActs(f); len(got) != 1 || m.flash != "pick an option" {
+		t.Fatalf("picks %+v flash %q", got, m.flash)
+	}
+	if len(keyActs(f)) != 0 {
+		t.Fatalf("the second enter went to the agent: %+v", keyActs(f))
+	}
+}
+
+// A card's own keys change nothing on the session at night: only what goes
+// to the agent asks to take over.
+func TestCardKeysAskNoTakeOver(t *testing.T) {
+	st := nightState()
+	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a", Ask: &said.Ask{ID: "toolu_1", Questions: []said.Question{threeWays}}}}
+	m, _ := loadedWith(t, 100, st)
+	m = pressKeys(t, m, "enter", "down")
+	if m.held != nil || m.askCard.at != 1 {
+		t.Fatalf("held %v at %d", m.held != nil, m.askCard.at)
+	}
+	if m = pressKeys(t, m, "esc"); m.held == nil {
+		t.Fatal("esc to the agent did not ask to take over")
+	}
+}
+
+func TestAOpensTheChatOnShipsAndStoker(t *testing.T) {
+	st := screensState(t)
+	m, _ := shipsAt(t, 86, st)
+	next, _ := key(m, "down")
+	next, _ = key(next, "down") // #4545 is stuck; flint-auth asks
+	nm := pressKeys(t, next.(Model), "a")
+	if s, ok := nm.selectedSession(); nm.tab != tabSessions || !ok || s.Pane != "%2" || !nm.chatKeys {
+		t.Fatalf("a on a stuck ship: tab %d session %q chatKeys %v flash %q", nm.tab, s.Pane, nm.chatKeys, nm.flash)
+	}
+	if nm := pressKeys(t, m, "a"); nm.chatKeys || nm.flash == "" { // #4551 runs
+		t.Fatal("a on a ship that runs opened the chat")
+	}
+
+	st = tabMorning(screensState(t))
+	m, _ = loadedWith(t, 100, st)
+	m.setTab(tabStoker)
+	pane := ""
+	for _, s := range m.all.sessions {
+		if s.Name == "kindle-web" {
+			pane = s.Pane
+		}
+	}
+	for i, e := range m.stoker.Run {
+		if e.Step == 5 {
+			m.stoker.Run[i].Pane = pane
+		}
+	}
+	if line := actionLine(selectStep(t, m, "p5")); !strings.Contains(line, "a chat") {
+		t.Fatalf("the key line does not offer a: %q", line)
+	}
+	nm = pressKeys(t, selectStep(t, m, "p5"), "a")
+	if s, ok := nm.selectedSession(); nm.tab != tabSessions || !ok || s.Pane != pane || !nm.chatKeys {
+		t.Fatalf("a on a failed step: tab %d session %q chatKeys %v flash %q", nm.tab, s.Pane, nm.chatKeys, nm.flash)
+	}
+	if nm := pressKeys(t, selectStep(t, m, "p2"), "a"); nm.chatKeys || !strings.Contains(nm.flash, "failed step") {
+		t.Fatalf("a on a done step: chatKeys %v flash %q", nm.chatKeys, nm.flash)
 	}
 }

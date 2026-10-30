@@ -157,8 +157,8 @@ func (m Model) stokerKeys() []hint {
 		switch {
 		case r.state() == "waits" && r.e.Needs != "":
 			keys = append(keys, hintFor(mk.Grant, ""))
-		case m.peekable(r):
-			keys = append(keys, hintFor(mk.Peek, ""))
+		case m.hasSession(r):
+			keys = append(keys, hintFor(mk.Chat, ""))
 		}
 		if r.e != nil {
 			keys = append(keys, hintFor(mk.Open, "command"))
@@ -203,8 +203,8 @@ func (m Model) grantStep() (tea.Model, tea.Cmd) {
 	return m, m.send(proto.Act{RecID: "stoker:grant", Which: "primary", Confirm: "y", Text: r.e.ID})
 }
 
-// peekable: the row is a failed step whose session is still there to look at.
-func (m Model) peekable(r stokerRow) bool {
+// hasSession: the row is a failed step whose session is still there to look at.
+func (m Model) hasSession(r stokerRow) bool {
 	if r.state() != "failed" {
 		return false
 	}
@@ -233,9 +233,9 @@ func (m Model) firstNeed() int {
 	return 0
 }
 
-// stokerPeekTarget is the pane of a failed step: a opens the peek on its
+// stokerChatTarget is the pane of a failed step: a opens the chat of its
 // session.
-func (m Model) stokerPeekTarget() (pane, why string) {
+func (m Model) stokerChatTarget() (pane, why string) {
 	r, ok := m.stokerSelected()
 	switch {
 	case !ok:
@@ -559,8 +559,8 @@ func (m Model) outcome(r stokerRow) []styled {
 			out = append(out, styled{"waits for your go: " + r.e.Needs + " · " + m.keys.main.Grant.Help().Key + " gives it", st.warn})
 		}
 	case "failed":
-		if m.peekable(r) {
-			out = append(out, styled{m.keys.main.Peek.Help().Key + " shows its session", st.warn})
+		if m.hasSession(r) {
+			out = append(out, styled{m.keys.main.Chat.Help().Key + " shows its session", st.warn})
 		} else {
 			out = append(out, styled{"its session ended" + m.endedWay(), st.warn})
 		}

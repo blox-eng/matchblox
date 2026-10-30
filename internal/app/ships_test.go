@@ -38,7 +38,7 @@ func TestShipsShowTheirTrack(t *testing.T) {
 
 // TestShipKeys: Enter selects the session that drives the ship in
 // Sessions; x on one that waits for your merge shows its merge and runs it
-// only after a typed y; a on a stuck one opens the peek on its session.
+// only after a typed y (a on a stuck one: TestAOpensTheChatOnShipsAndStoker).
 func TestShipKeys(t *testing.T) {
 	st := screensState(t)
 	m, f := shipsAt(t, 86, st)
@@ -59,17 +59,6 @@ func TestShipKeys(t *testing.T) {
 	drain(cmd)
 	if acts := f.acts(); len(acts) != 1 || acts[0] != (proto.Act{RecID: "ship:hearth/ember-billing#4552", Which: "secondary", Confirm: "y"}) {
 		t.Fatalf("acts %+v", acts)
-	}
-
-	next, _ = key(m, "down")
-	next, _ = key(next, "down") // #4545 is stuck; flint-auth asks
-	next, _ = key(next, "a")
-	if p := next.(Model).peek; p == nil || p.pane != "%2" {
-		t.Fatalf("a on a stuck ship: peek %+v flash %q", p, next.(Model).flash)
-	}
-	next, _ = key(m, "a") // #4551 runs
-	if next.(Model).peek != nil || next.(Model).flash == "" {
-		t.Fatal("a on a ship that runs opened the peek")
 	}
 }
 

@@ -72,10 +72,6 @@ func TestAnUprightPhoneGetsTheDrawer(t *testing.T) {
 				t.Fatalf("107x%d: the selected row opens in place: %q", h, rows)
 			}
 		}
-		p, _ := openedPeek(m)
-		if sc := p.(Model).draw(107); !sc.peekInline || sc.peekX != 54 || sc.peekW != 53 {
-			t.Fatalf("107x%d: the peek is not the drawer: inline %v at %d, %d wide", h, sc.peekInline, sc.peekX, sc.peekW)
-		}
 	}
 	m, _ := loadedWith(t, 70, limitsState())
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 70, Height: 120})
@@ -179,37 +175,41 @@ func TestTapSelectsThenActs(t *testing.T) {
 	m, f := loadedWith(t, w, queueState())
 	var ran []string
 	m.opt.Run = func(argv []string) error { ran = argv; return nil }
+	chatOn := func(m tea.Model, pane string) bool {
+		s, _ := m.(Model).selectedSession()
+		return m.(Model).chatKeys && s.Pane == pane
+	}
 
 	// A session that does not wait: the first tap selects it, a tap on
-	// it selected opens the peek to message it. Nothing runs.
+	// it selected gives its chat the keys. Nothing runs.
 	next, cmd := tap(m, 5, sessLine(t, m, "tools"))
 	drain(cmd)
-	if len(f.acts()) != 0 || ran != nil || next.(Model).peek != nil {
+	if len(f.acts()) != 0 || ran != nil || next.(Model).chatKeys {
 		t.Fatalf("width %d: the first tap acted", w)
 	}
 	if it, _ := next.(Model).selectedSession(); it.Pane != "%3" {
 		t.Fatalf("width %d: selected %q, want %%3", w, it.Pane)
 	}
 	next, cmd = tap(next, 5, sessLine(t, next, "tools"))
-	if p := next.(Model).peek; p == nil || p.pane != "%3" || cmd != nil || ran != nil {
-		t.Fatalf("width %d: the second tap did not open the peek on tools: %+v", w, p)
+	if !chatOn(next, "%3") || cmd != nil || ran != nil {
+		t.Fatalf("width %d: the second tap did not open the chat of tools", w)
 	}
-	if !strings.Contains(screen(next), "To tools") {
-		t.Fatalf("width %d: the peek is not titled To tools:\n%s", w, screen(next))
+	if line := actionLine(next); !strings.Contains(line, "keys go to tools") {
+		t.Fatalf("width %d: the key line does not say where the keys go: %q", w, line)
 	}
 	if len(f.acts()) != 0 {
 		t.Fatalf("width %d: a tap sent %v to the service", w, f.acts())
 	}
 
 	// A session that waits: the first tap selects it, a tap on it
-	// selected opens the answer peek.
+	// selected opens its chat.
 	next, _ = tap(m, 5, sessLine(t, m, "app-review"))
-	if p := next.(Model).peek; p != nil {
-		t.Fatalf("width %d: the first tap opened the peek", w)
+	if next.(Model).chatKeys {
+		t.Fatalf("width %d: the first tap opened the chat", w)
 	}
 	next, _ = tap(next, 5, sessLine(t, next, "app-review"))
-	if p := next.(Model).peek; p == nil || p.pane != "%2" {
-		t.Fatalf("width %d: the second tap did not open the peek: %+v", w, p)
+	if !chatOn(next, "%2") {
+		t.Fatalf("width %d: the second tap did not open the chat of app-review", w)
 	}
 }
 
@@ -354,19 +354,19 @@ func TestFirstTapOnTheSelectedRowOnlyShows(t *testing.T) {
 	m.opt.Run = func(argv []string) error { ran = argv; return nil }
 	y := sessLine(t, m, "app-feature")
 	next, cmd := tap(m, 5, y)
-	if cmd != nil || ran != nil || next.(Model).peek != nil {
+	if cmd != nil || ran != nil || next.(Model).chatKeys {
 		t.Fatal("one tap on the preselected row acted")
 	}
-	if next, _ := tap(next, 5, y); next.(Model).peek == nil {
-		t.Fatal("a tap on the row it selected does not open the peek")
+	if next, _ := tap(next, 5, y); !next.(Model).chatKeys {
+		t.Fatal("a tap on the row it selected does not open the chat")
 	}
 	y = sessLine(t, m, "tools")
 	next, _ = tap(m, 5, y)
-	if next.(Model).peek != nil || next.(Model).flash != "" {
+	if next.(Model).chatKeys || next.(Model).flash != "" {
 		t.Fatalf("one tap on another row acted: flash %q", next.(Model).flash)
 	}
-	if next, _ = tap(next, 5, sessLine(t, next, "tools")); next.(Model).peek == nil {
-		t.Fatal("a tap on a selected session that does not wait does not open the peek")
+	if next, _ = tap(next, 5, sessLine(t, next, "tools")); !next.(Model).chatKeys {
+		t.Fatal("a tap on a selected session that does not wait does not open the chat")
 	}
 }
 
@@ -413,17 +413,6 @@ func TestTheKeyLineIsAtTheBottom(t *testing.T) {
 		phone := next.(Model).layoutAt(w) == Narrow || next.(Model).upright()
 		if !strings.Contains(actionLine(next), "tmux switch-client -t %3") || foot < 0 || phone != (foot == len(out)-3) {
 			t.Fatalf("width %d: the confirm box is not where it belongs:\n%s", w, strings.Join(out, "\n"))
-		}
-		next, _ = key(next, "esc")
-		next = selectPane(t, next, "%2")
-		next, _ = openedPeek(next)
-		next = typeText(next, "yes")
-		out = strings.Split(ansi.Strip(next.(Model).render()), "\n")
-		if w < 60 && (!strings.Contains(out[len(out)-3], "⏎ send") || !strings.Contains(out[len(out)-4], "› yes▏")) {
-			t.Fatalf("width %d: the peek does not sit on the key line:\n%s", w, strings.Join(out, "\n"))
-		}
-		if !strings.Contains(strings.Join(out, "\n"), "› yes▏") {
-			t.Fatalf("width %d: the answer is not typed in the peek:\n%s", w, strings.Join(out, "\n"))
 		}
 	}
 }

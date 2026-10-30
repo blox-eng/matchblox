@@ -113,12 +113,17 @@ type drawn struct {
 	dockAt  int   // the dock's first line; -1 when it is folded
 	keysAt  int   // the key line; -1 when there is none
 	keys    []span
-	// The answer peek: its first line and column, its width, the key a tap
-	// on each of its lines presses, and the keys of its footer.
-	peekAt, peekX, peekW int
-	peekRows             []string
-	peekKeys             []span
-	peekInline           bool // the peek is the detail pane, the list beside it live
+	// A box over the screen (the sheet, a form): its first line and
+	// column, its width, the key a tap on each of its lines presses, and
+	// the keys of its footer.
+	boxAt, boxX, boxW int
+	boxRows           []string
+	boxKeys           []span
+	// The chat's question card: its first line and column, its width, the
+	// key a tap on each of its lines presses, and the keys of its footer.
+	cardAt, cardX, cardW int
+	cardRows             []string
+	cardKeys             []span
 	// The dock: its height and the columns of the stoker's panel. full:
 	// the dock shows all it has; paneFull: so does the right pane.
 	dockH, stx0, stx1 int
@@ -189,15 +194,12 @@ func (m Model) drawScreen(w int) drawn {
 	listW, detailW := m.panes(w)
 	sc.listW = listW
 	b := m.body(listW)
-	_, _, peeking := m.peekNow()
-	inline := peeking && detailW > 0 // the peek takes the detail pane
 	chat, chatting := m.chatShown(detailW)
-	chatting = chatting && !inline
 	stacked := m.tab == tabSessions && detailW > 0 && m.layoutAt(w) == Wide // usage and the machine under the list
 	paneFull := true
 	paneLines := func(rows int) []string {
 		switch {
-		case detailW == 0 || inline || chatting:
+		case detailW == 0 || chatting:
 			return nil
 		}
 		lines, all := m.detailPane(detailW, rows)
@@ -226,14 +228,9 @@ func (m Model) drawScreen(w int) drawn {
 	sc.full = d.full || m.tab == tabMachine || m.tab == tabStoker
 	detail = paneLines(room)
 	sc.paneFull = paneFull && len(detail) <= room
-	if inline {
-		var press []string
-		var spans []span
-		detail, press, spans = m.peekBox(detailW, room, false, true)
-		sc.peekAt, sc.peekX, sc.peekW, sc.peekRows, sc.peekKeys, sc.peekInline = sc.bodyTop, listW+1, detailW, press, spans, true
-	}
 	if chatting {
 		detail = m.chatPane(chat, detailW, room)
+		m.markCard(&sc, sc.bodyTop+room, listW+2, detailW-1, room-1)
 	}
 	vis := windowed(b, room, m.rowIndex())
 	if stacked {
@@ -257,7 +254,7 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		sc.lines, sc.rows = append(sc.lines, line), append(sc.rows, row)
 	}
-	m.markActKeys(&sc, b, vis, detail, room, detailW, inline || chatting)
+	m.markActKeys(&sc, b, vis, detail, room, detailW, chatting)
 	if len(d.lines) > 0 {
 		sc.dockAt, sc.dockH, sc.stx0, sc.stx1 = len(sc.lines)+1, len(d.lines), d.stx0, d.stx1
 		sc.lines = append(append(sc.lines, m.st.hair.Render(strings.Repeat("─", w))), d.lines...)
@@ -272,8 +269,6 @@ func (m Model) drawScreen(w int) drawn {
 		m.overlaySheet(&sc, w)
 	case m.form != nil:
 		m.overlayForm(&sc, w)
-	case peeking && !inline:
-		m.overlayPeek(&sc, w)
 	}
 	return sc
 }

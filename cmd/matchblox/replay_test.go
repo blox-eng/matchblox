@@ -237,11 +237,10 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 }
 
 var (
-	burning    = regexp.MustCompile(`[✦✧] flint-auth\s+busy`)
-	settled    = regexp.MustCompile(`╿ hearth-api\s+(done|out of work)`)
+	burning    = regexp.MustCompile(`[✦✧] flint-a\S*\s+busy`) // the duo cuts the name
+	settled    = regexp.MustCompile(`╿ hearth-\S*\s+(done|out of work)`)
 	hearthBack = regexp.MustCompile(`hearth-api\s+\d+k → 9k`)
 	sparkBack  = regexp.MustCompile(`spark-docs\s+\d+k → 9k`)
-	struck     = regexp.MustCompile(`[✦✧] flint-auth`) // its row under the peek: the strike has played
 	figure     = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
 	sparks     = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
 	spaces     = regexp.MustCompile(`\s+`)
@@ -364,6 +363,8 @@ func keyMsg(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "esc":
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
+	case "ctrl+]", "ctrl+o":
+		return tea.KeyPressMsg{Code: rune(k[5]), Mod: tea.ModCtrl}
 	}
 	return tea.KeyPressMsg{Text: k, Code: []rune(k)[0]}
 }
@@ -508,9 +509,10 @@ func replayAt(t *testing.T, z replaySize) {
 	night := time.Date(2026, 10, 1, 23, 10, 0, 0, time.UTC)
 	full := time.Date(2026, 10, 1, 23, 40, 0, 0, time.UTC)
 	morning := time.Date(2026, 10, 2, 6, 59, 50, 0, time.UTC)
-	who := []string{"● 4 wait for you", "WAITS FOR YOU · 4", "flint-auth", "asks", "kindle-web", "ember-bill", "The refresh flow works"}
+	// The list beside the chat cuts long names on the duo.
+	who := []string{"● 4 wait for you", "WAITS FOR YOU · 4", "flint-auth", "asks", "kindle-", "ember-b", "The refresh flow works"}
 	if !phone {
-		who = append(who, "ws-1", "USAGE", "MACHINE") // a phone drops the host, and its long list folds the dock
+		who = append(who, "ws-1", "USAGE") // a phone drops the host, and its long list folds the dock
 	}
 	sessionsTab := "WAITS FOR YOU"
 	var sessionsNow int // the sessions before N starts one
@@ -519,18 +521,20 @@ func replayAt(t *testing.T, z replaySize) {
 		// The selection moves: the next one that waits shows what it said.
 		{name: "the next one", at: 2600 * time.Millisecond, key: "j", ok: has("I rewrote the quick start")},
 		{name: "back up", at: 3500 * time.Millisecond, key: "k", ok: has("The refresh flow works")},
-		// a: flint-auth asks with its question tool; the options are there.
-		{name: "a: the question", at: 4600 * time.Millisecond, key: "a", ok: has("flint-auth asks", "Rotate it", "Keep the token", "⏎ send")},
+		// a: flint-auth's chat takes the keys; its question tool's options
+		// are on the card at the foot of its screen.
+		{name: "a: the question", at: 4600 * time.Millisecond, key: "a", ok: has("keys go to flint-auth", "flint-auth asks", "Rotate it", "Keep the token", "⏎ send")},
 		// 2 picks the second option: it goes to Claude Code's menu, and the
-		// peek moves to the next one that waits.
+		// chat shows the agent at work on it.
 		{name: "picked", at: 6200 * time.Millisecond, key: "2", ok: func(s string) bool {
-			return has("sent to flint-auth", "WAITS FOR YOU · 3", "← prev", "next →")(s) && struck.MatchString(s)
+			return has("sent to flint-auth", "I rotate the token on each refresh")(s) && !strings.Contains(s, "flint-auth asks")
 		}},
-		{name: "the peek closes", at: 7600 * time.Millisecond, key: "esc", ok: func(s string) bool {
-			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "⏎ send") && burning.MatchString(s)
+		// ctrl+] gives the keys back to the list.
+		{name: "back to the list", at: 7600 * time.Millisecond, key: "ctrl+]", ok: func(s string) bool {
+			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "keys go to") && burning.MatchString(s)
 		}},
 		{name: "the sessions", at: 9 * time.Second, ok: func(s string) bool {
-			return has("hearth-api", "spark-docs", "kindle-web", "ember-bill", "WORKING")(s) && burning.MatchString(s)
+			return has("hearth-", "spark-d", "kindle-", "ember-b", "WORKING")(s) && burning.MatchString(s)
 		}},
 		// Ships: every pull request a session drives, on its track.
 		{name: "ships", at: 11 * time.Second, key: "2", ok: has("open → ci → green → merged → live", "#4551", "CI · 6 of 9 jobs", "#4552", "waits for your merge")},
@@ -547,7 +551,7 @@ func replayAt(t *testing.T, z replaySize) {
 			// and the frame waits until the compact was read back.
 			return has("night", "STOKER", "c the whole run")(s) && sparkBack.MatchString(s)
 		}},
-		{name: "take over?", at: 18500 * time.Millisecond, key: "enter", ok: has("Take over?")},
+		{name: "take over?", at: 18500 * time.Millisecond, key: "ctrl+o", ok: has("Take over?")},
 		{name: "kept on", at: 20500 * time.Millisecond, key: "n", ok: func(s string) bool {
 			return strings.Contains(s, "night") && !strings.Contains(s, "Take over?") && strings.Contains(s, "╭─ Jump") && strings.Contains(s, "tmux switch-client -t %")
 		}},
@@ -572,9 +576,10 @@ func replayAt(t *testing.T, z replaySize) {
 			ok: has("NIGHT · 23:10 → 07:00", "ready ", "176k → 9k", "RESUME")},
 		{name: "back to sessions", at: 31 * time.Second, key: "1", ok: func(s string) bool {
 			// the ack c sent has come back: the dock no longer offers the run,
-			// and the stoker's panel has given the dock back
+			// and the stoker's panel has given the dock back (the duo's left
+			// column keeps the panel)
 			return !strings.Contains(s, "NIGHT · 23:10") && strings.Contains(s, sessionsTab) && !strings.Contains(s, "c the whole run") &&
-				!strings.Contains(s, "STOKER")
+				(!strings.Contains(s, "STOKER") || z.name == "duo")
 		}},
 		// N: one more session, named, with its first message (tab: agent, account, first).
 		{name: "a new session", at: 32500 * time.Millisecond, do: func() { sessionsNow = len(s.State().Sessions) }, keys: slices.Concat([]string{"N", "tab", "tab"}, strings.Split("rate-docs", ""),
@@ -582,8 +587,10 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "it starts", at: 35 * time.Second, key: "enter", ok: func(s string) bool {
 			return strings.Contains(s, "started rate-docs") && strings.Contains(s, "SESSIONS "+strconv.Itoa(sessionsNow+1))
 		}},
-		// x: a session that is done goes, after a typed y.
-		{name: "kill", at: 37 * time.Second, keys: slices.Concat([]string{"/"}, strings.Split("spark", ""), []string{"enter", "x"}),
+		// x: a session that is done goes, after a typed y. k picks the row
+		// the search left: the list then lands on its first row, whenever
+		// the kill's sample comes.
+		{name: "kill", at: 37 * time.Second, keys: slices.Concat([]string{"/"}, strings.Split("spark", ""), []string{"enter", "k", "x"}),
 			ok: has("╭─ Kill spark-docs", "tmux kill-pane -t %3")},
 		// The pane and its agent are both gone: a sample between the two
 		// would list the pane without an agent.
@@ -591,7 +598,7 @@ func replayAt(t *testing.T, z replaySize) {
 			return strings.Contains(s, "SESSIONS "+strconv.Itoa(sessionsNow)) && !strings.Contains(s, "hearth:3.1")
 		}},
 		{name: "the sessions again", at: 40500 * time.Millisecond, key: "esc", ok: func(s string) bool {
-			return strings.Contains(s, sessionsTab) && strings.Contains(s, "rate-docs") && !strings.Contains(s, "/ spark")
+			return strings.Contains(s, sessionsTab) && strings.Contains(s, "rate-do") && !strings.Contains(s, "/ spark")
 		}},
 	}
 	var still replay.Frame
@@ -668,7 +675,7 @@ func replayAt(t *testing.T, z replaySize) {
 	// Then by day: N starts rate-docs in a tmux session of its own,
 	// and x kills spark-docs, its pane and then its agent.
 	byDay := [][]string{
-		{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", "MATCHBLOX_HOME", "tmux", "new-session", "-d", "-s", "rate-docs", "-n", "rate-docs", "-c", "/work/spark-docs", "claude", "--name", "rate-docs", "write the rate limit docs"},
+		{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", "MATCHBLOX_HOME", "tmux", "new-session", "-d", "-s", "rate-docs", "-n", "rate-docs", "-c", "/work/flint-auth", "claude", "--name", "rate-docs", "write the rate limit docs"},
 		{"tmux", "kill-pane", "-t", "%3"},
 		{"kill", "-TERM", "1400"},
 	}

@@ -135,15 +135,15 @@ func TestATapPicksAnAgentAndAField(t *testing.T) {
 		t.Fatalf("agent spans %+v", sc.formAgents)
 	}
 	c := sc.formAgents[1]
-	tapped, _ := next.Update(tea.MouseClickMsg{X: sc.peekX + c.x0, Y: sc.formAgentsAt, Button: tea.MouseLeft})
+	tapped, _ := next.Update(tea.MouseClickMsg{X: sc.boxX + c.x0, Y: sc.formAgentsAt, Button: tea.MouseLeft})
 	if fm := tapped.(Model).form; fm.agent != "codex" || fm.at != fieldAgent {
 		t.Fatalf("form %+v", fm)
 	}
 	// A tap on the first message's line puts the cursor there.
 	sc = tapped.(Model).draw(44) // Codex's launch-settings hint changes the form's height.
-	for i, p := range sc.peekRows {
+	for i, p := range sc.boxRows {
 		if p == "field:4" {
-			tapped, _ = tapped.Update(tea.MouseClickMsg{X: sc.peekX + 4, Y: sc.peekAt + i, Button: tea.MouseLeft})
+			tapped, _ = tapped.Update(tea.MouseClickMsg{X: sc.boxX + 4, Y: sc.boxAt + i, Button: tea.MouseLeft})
 		}
 	}
 	if fm := tapped.(Model).form; fm.at != fieldFirst {
@@ -1232,11 +1232,11 @@ func TestTapOnWhereAfterAFailedClone(t *testing.T) {
 	next, f := cloning(t, 100)
 	next, _ = next.Update(cloneState(t, proto.Clone{ID: 1, Target: home + "/src/r", Repo: "o/r", Pct: -1, Err: "no network: github.com does not answer"}))
 	sc := next.(Model).draw(100)
-	i := slices.Index(sc.peekRows, fmt.Sprintf("field:%d", fieldWhere))
+	i := slices.Index(sc.boxRows, fmt.Sprintf("field:%d", fieldWhere))
 	if i < 0 {
-		t.Fatalf("no where line in %q", sc.peekRows)
+		t.Fatalf("no where line in %q", sc.boxRows)
 	}
-	next, cmd := tap(next, sc.peekX+4, sc.peekAt+i)
+	next, cmd := tap(next, sc.boxX+4, sc.boxAt+i)
 	runAll(cmd)
 	if acts := f.acts(); len(acts) != 3 || acts[2].RecID != "clone:plan" || !next.(Model).form.whereList() {
 		t.Fatalf("sent %+v", acts)

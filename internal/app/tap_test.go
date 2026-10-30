@@ -24,30 +24,27 @@ func focused(pane string, at time.Time) proto.State {
 	return st
 }
 
-// A tap on the island or a buzz for a session that waits opens its answer
-// peek, from any tab, once for each focus.
-func TestFocusOpensThePeekOfAWait(t *testing.T) {
+// A tap on the island or a buzz for a session that waits opens its chat,
+// from any tab, once for each focus.
+func TestFocusOpensTheChatOfAWait(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	m.setTab(tabGit)
 	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
 	next, _ := m.Update(stateMsg(focused("%2", at)))
 	nm := next.(Model)
-	if nm.tab != tabSessions || nm.peek == nil || nm.peek.pane != "%2" {
-		t.Fatalf("tab %d peek %+v: want the peek of app-review", nm.tab, nm.peek)
+	if s, ok := nm.selectedSession(); nm.tab != tabSessions || !ok || s.Pane != "%2" || !nm.chatKeys {
+		t.Fatalf("tab %d selected %q chatKeys %v: want the chat of app-review", nm.tab, s.Pane, nm.chatKeys)
 	}
-	if s, ok := nm.selectedSession(); !ok || s.Pane != "%2" {
-		t.Fatalf("selected %q", s.Pane)
-	}
-	// The next state carries the same focus: the closed peek stays closed.
-	nm.peek = nil
+	// The next state carries the same focus: the chat given back stays so.
+	nm.chatKeys = false
 	next, _ = nm.Update(stateMsg(focused("%2", at)))
-	if next.(Model).peek != nil {
-		t.Fatal("the same focus opened the peek again")
+	if next.(Model).chatKeys {
+		t.Fatal("the same focus opened the chat again")
 	}
 	// A new focus opens it again.
 	next, _ = next.Update(stateMsg(focused("%2", at.Add(time.Second))))
-	if next.(Model).peek == nil {
-		t.Fatal("a new focus did not open the peek")
+	if !next.(Model).chatKeys {
+		t.Fatal("a new focus did not open the chat")
 	}
 }
 
@@ -69,8 +66,8 @@ func TestFocusOpensThePaneOfABurn(t *testing.T) {
 	st.Focus.Client = "/dev/ttys004"
 	next, cmd := m.Update(stateMsg(st))
 	nm := next.(Model)
-	if nm.peek != nil {
-		t.Fatalf("a session at work got the peek: %+v", nm.peek)
+	if nm.chatKeys {
+		t.Fatal("a session at work got the chat's keys")
 	}
 	if s, ok := nm.selectedSession(); !ok || s.Pane != "%1" || nm.tab != tabSessions {
 		t.Fatalf("selected %q on tab %d", s.Pane, nm.tab)
@@ -102,7 +99,7 @@ func runFocus(t *testing.T, cmd tea.Cmd) {
 }
 
 // A console whose tmux has no such client, a focus without one, a remote
-// console and one outside tmux never move a terminal: the peek is shared,
+// console and one outside tmux never move a terminal: the chat is shared,
 // a jump is not.
 func TestFocusMovesOnlyThePhonesClient(t *testing.T) {
 	old := focusWait
@@ -158,8 +155,8 @@ func TestFocusOfAGoneSessionSaysSo(t *testing.T) {
 		next, cmd := m.Update(stateMsg(st))
 		nm := next.(Model)
 		drain(cmd)
-		if nm.flash != "That session ended." || nm.peek != nil || len(ran) != 0 || nm.tab != tabSessions {
-			t.Fatalf("%+v: flash %q peek %+v ran %q tab %d", f, nm.flash, nm.peek, ran, nm.tab)
+		if nm.flash != "That session ended." || nm.chatKeys || len(ran) != 0 || nm.tab != tabSessions {
+			t.Fatalf("%+v: flash %q chatKeys %v ran %q tab %d", f, nm.flash, nm.chatKeys, ran, nm.tab)
 		}
 		nm.setTab(tabGit)
 		m = nm
@@ -171,8 +168,8 @@ func TestNoFocusLeavesTheConsoleAlone(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	m.setTab(tabGit)
 	next, _ := m.Update(stateMsg(fixtureState()))
-	if nm := next.(Model); nm.tab != tabGit || nm.peek != nil || nm.flash != "" {
-		t.Fatalf("tab %d peek %+v flash %q", nm.tab, nm.peek, nm.flash)
+	if nm := next.(Model); nm.tab != tabGit || nm.chatKeys || nm.flash != "" {
+		t.Fatalf("tab %d chatKeys %v flash %q", nm.tab, nm.chatKeys, nm.flash)
 	}
 }
 
@@ -187,8 +184,8 @@ func withFocus(st proto.State, pane string, at time.Time) proto.State {
 }
 
 // The home console is shared: an Enter on its way at the desk when the
-// phone's tap lands must not answer a question nobody read. The peek a focus
-// opens has nothing picked, and keys wait a moment.
+// phone's tap lands must not answer a question nobody read. The card a focus
+// opens has nothing picked.
 func TestFocusPicksNothing(t *testing.T) {
 	st := queueState()
 	for i := range st.Sessions {
@@ -200,36 +197,37 @@ func TestFocusPicksNothing(t *testing.T) {
 	}
 	m, f := loadedWith(t, 100, st)
 	next, _ := m.Update(stateMsg(withFocus(st, "%2", time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC))))
-	opened := next
+	if s, c, ok := next.(Model).cardNow(); !ok || s.Pane != "%2" || c.at != -1 || !next.(Model).chatKeys {
+		t.Fatalf("card %+v on %q: want app-review's, nothing picked", c, s.Pane)
+	}
 	next, cmd := key(next, "enter")
-	drain(cmd)
-	if acts := f.acts(); len(acts) != 0 {
-		t.Fatalf("an Enter right after the focus answered: %+v", acts)
-	}
-	if p := opened.(Model).peek; p == nil || p.pane != "%2" || p.at != -1 {
-		t.Fatalf("peek %+v: want app-review's, nothing picked", p)
-	}
-	next, cmd = key(quiet(next), "enter")
 	drain(cmd)
 	if acts := f.acts(); len(acts) != 0 || next.(Model).flash != "pick an option" {
 		t.Fatalf("an Enter with nothing picked sent %+v (flash %q)", acts, next.(Model).flash)
 	}
 }
 
-// A peek with an answer half typed keeps the keys: a focus, on another
+// A card with an answer half typed keeps the keys: a focus, on another
 // session or on its own, does not throw the text away.
-func TestFocusKeepsAPeekBeingTyped(t *testing.T) {
-	m, _ := loadedWith(t, 100, queueState())
-	next, _ := openedPeek(selectPane(t, m, "%2"))
+func TestFocusKeepsACardBeingTyped(t *testing.T) {
+	st := queueState()
+	for i := range st.Sessions {
+		if st.Sessions[i].Pane == "%2" {
+			st.Sessions[i].Ask = &said.Ask{ID: "toolu_1", Questions: []said.Question{
+				{Question: "Which next?", Options: []said.Option{{Label: "Start task 11"}, {Label: "Fix the flake"}}},
+			}}
+		}
+	}
+	m, _ := loadedWith(t, 100, st)
+	next, _ := key(selectPane(t, m, "%2"), "enter")
 	next = typeText(next, "no, wait")
 	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
-	next, _ = next.Update(stateMsg(withFocus(queueState(), "%1", at)))
-	if p := next.(Model).peek; p == nil || p.pane != "%2" || p.text != "no, wait" {
-		t.Fatalf("peek %+v: the typed answer was thrown away", p)
-	}
-	next, _ = next.Update(stateMsg(withFocus(queueState(), "%2", at.Add(time.Second))))
-	if p := next.(Model).peek; p == nil || p.pane != "%2" || p.text != "no, wait" {
-		t.Fatalf("peek %+v: a focus on its own session threw the typed answer away", p)
+	for _, pane := range []string{"%1", "%2"} {
+		next, _ = next.Update(stateMsg(withFocus(st, pane, at)))
+		if s, c, _ := next.(Model).cardNow(); s.Pane != "%2" || c.text != "no, wait" || !next.(Model).chatKeys {
+			t.Fatalf("a focus on %s: card %+v on %q: the typed answer was thrown away", pane, c, s.Pane)
+		}
+		at = at.Add(time.Second)
 	}
 }
 

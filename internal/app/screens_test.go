@@ -92,8 +92,8 @@ func screensState(t *testing.T) proto.State {
 
 // TestScreens holds the console on the demo machine at the three sizes
 // of design/0006 §10 against the frames in testdata/screens: Sessions with
-// the one that waits opened, the answer peek with its options, Ships with
-// a ship of each kind, Sessions where two sessions drive two ships each,
+// the one that waits opened, Ships with a ship of each kind, the chat with
+// its question card, Sessions where two sessions drive two ships each,
 // and the dock folded on a short phone. -update
 // writes them again.
 func TestScreens(t *testing.T) {
@@ -107,7 +107,6 @@ func TestScreens(t *testing.T) {
 	}
 	shots := []shot{
 		{"sessions", nil},
-		{"peek", []string{"a"}},
 		{"ships", []string{"2"}},
 	}
 	sizes := [][2]int{{44, 31}, {86, 30}, {107, 60}, {132, 32}}
@@ -205,7 +204,7 @@ func check(t *testing.T, st proto.State, name string, w, h int, keys []string, m
 	next, _ = next.Update(stateMsg(st))
 	nm := next.(Model)
 	nm.splashDone = true
-	if name == "peek" || strings.HasPrefix(name, "chat") {
+	if strings.HasPrefix(name, "chat") {
 		for i, s := range nm.snap.Sessions {
 			if s.Name == "flint-auth" {
 				nm.chose, nm.selPID = true, nm.snap.Sessions[i].PID
