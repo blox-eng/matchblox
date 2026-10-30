@@ -161,3 +161,23 @@ is a second paired host.
     then make `ws-1` unreachable and change `Follow` to `work-1`. The island
     of `ws-1` shows nothing. Quit and open the app: the activity of `ws-1`
     is gone.
+
+### The chat and the key bar
+
+Use an iPhone held upright, with a Claude Code session that waits on a
+question.
+
+27. Tap the session. Its live screen fills the screen, with the question
+    card at the bottom. `↓ ↓ ⏎` picks the third option.
+28. Each of the nine keys (`◂ ↑ ↓ ⏎ Tab ⇧Tab Esc ^C ⌨`) works on the first
+    tap, with the keyboard up and with it down. `⇧Tab` changes the mode of
+    the agent. `^C` stops a working agent. A second `^C` within 1 s is held.
+29. `⌨` hides the keyboard, and the key bar stays at the bottom. `⌨` again
+    brings the keyboard back. Typing has no autocorrect or suggestions.
+30. Swipe down in the chat: earlier lines show, and the title says
+    `↑ n lines up`. The first key goes back to live and sends nothing.
+31. Press `Ctrl+O` on a hardware keyboard to go into the tmux pane. A swipe
+    scrolls its history, about as fast as the finger. A long press, then a
+    drag, selects text. `◂` goes back to the console.
+32. On a 320 pt screen (Slide Over on iPad), `⇧Tab` shrinks to fit, and no
+    key clips.
