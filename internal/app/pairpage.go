@@ -403,7 +403,7 @@ func (m Model) pairActed(a action) Model {
 			verb = "compacted"
 		}
 	}
-	s, ok := m.sessionIn(pane)
+	s, ok := m.sessionIn(m.hostOf(a), pane)
 	if !ok {
 		return m // the rec names no session (door:, stoker:): not an act in one
 	}

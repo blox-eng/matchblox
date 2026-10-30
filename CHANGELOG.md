@@ -6,6 +6,41 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **One console over every host you show.** On Hosts, `space` shows or
+  hides a host, and `Enter` opens one console of the ticked hosts.
+  `matchblox` with added hosts opens that console; `matchblox ws-1` still
+  opens `ws-1` alone. Sessions is one queue, and a wait on any host is at
+  the top. A row names its host (`train-loop gpu-1`), and the header says
+  `3 hosts`. Each host connects, reconnects and fails on its own. With two
+  or more hosts, from 30 s after its last snapshot, a lost host's rows stay
+  in their groups and say `stale`, and the header says `· gpu-1 stale`. A host that cannot connect
+  is one row with its fix. A key on a row goes to the row's host, even when
+  two hosts have the same pane id; it is refused while that host is lost.
+  Ships, Git and Panes list every host's rows. Machine, History and Stoker
+  show a section for each host. The dock shows one usage row for each
+  account label and window, with a cell for each host, and the stoker is one for each
+  host (`stoker 2/3`). Hidden hosts are kept in
+  `~/.config/matchblox/hidden`, and the header says `· 1 hidden`. No
+  service changes, so an older matchblox at the same protocol version
+  works. A host at an older protocol version is a row with `⏎ connect`; a
+  newer one says to update the console. A host that connects and sends no
+  state is a row that says why. See
+  [Remote hosts](https://docs.matchblox.com/remote/#see-every-host-in-one-console).
+  ([#198](https://github.com/blox-eng/matchblox/issues/198))
+- **List only (`v`).** The detail pane and the dock fold, and the list takes
+  the screen. The selected row opens in place. A tall screen, such as a
+  phone held upright, starts in list only; a desk starts in the full view. The phone and the desk each
+  keep their own choice. The key line says `list only v` or `full view v`.
+  ([#198](https://github.com/blox-eng/matchblox/issues/198))
+- **The now line.** From 107 columns of list, each session has a lane on
+  one time scale: 2 hours back and 1 hour ahead, 5 minutes in a cell. One
+  line marks now, from the top of the list to the bottom. A session on a
+  limit runs dotted to its reset. The lane starts when the console opens,
+  and the console fills it from the snapshots it receives.
+  ([#198](https://github.com/blox-eng/matchblox/issues/198))
+
 ## [0.28.0] - 2026-10-28
 
 ### Added

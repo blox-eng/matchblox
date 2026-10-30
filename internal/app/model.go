@@ -100,6 +100,8 @@ type Options struct {
 	Host string
 	// DialErr is why the first dial failed; the console starts with it.
 	DialErr error
+	// Peers are the other ticked hosts, in Hosts order.
+	Peers []Peer
 	// Self is this binary, which connects a host (`matchblox connect`).
 	Self string
 	// Gen tells this console's redial messages from those of a console the
@@ -177,7 +179,7 @@ type action struct {
 	rec         string                      // the service's name for it
 	which       string                      // primary | secondary
 	text        string                      // what an answer types; a door's preview Sum
-	batch       []string                    // worktrees: one guarded act each
+	batch       []wtKey                     // worktrees: one guarded act each, on its host
 	say         string                      // what the confirm shows, when not the first step
 	term        bool                        // the step takes this terminal (a door's command)
 	pair        bool                        // the pair door: it opens the pair page, never a pending step
@@ -197,6 +199,7 @@ type action struct {
 	climb       *climb                      // a rung of the key ladder
 	ghost       bool                        // a ghost row of Sessions: it opens N on where
 	where       string                      // a ghost row: the folder N opens on ("": N as it is)
+	host        string                      // the host of the row it acts on; "": the home host, as a peer is never ""
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -267,15 +270,20 @@ func fromAdvice(r advice.Rec, which string) *action {
 }
 
 type Model struct {
-	recPrefs   recPrefs // dismissed recommendations and the fold
+	recPrefs   recPrefs  // dismissed recommendations and the fold
+	viewPrefs  viewPrefs // list only, for a phone and for a desk
 	opt        Options
 	conn       transport.Conn
+	peers      []link // the other ticked hosts, in Hosts order; copied on write
+	linked     int    // the links reconcile opened: the id of the last
+	hidden     int    // the hosts the builder hid: the header counts them (R6)
 	st         styles
 	width      int
 	height     int
 	snap       sample.Snapshot
 	push       string // the push sender's line for the Machine tab, or ""
 	have       bool
+	at         time.Time // the last stateMsg
 	git        *proto.GitReport
 	recs       []advice.Rec
 	queue      []queue.Item
@@ -285,19 +293,23 @@ type Model struct {
 	doorAt     int    // its row, for the door after it when it folds
 	previewTop int    // the first line of a door's diff on screen
 	paneSel    int
-	peek       *peek             // the answer peek, over the screen
-	peekSent   map[string]string // the peek's sends in flight: act id -> the session's name
-	peekQuiet  time.Time         // the peek takes no key until then: it just moved
-	changes    map[string]change // pane -> a match change that plays once
+	peek       *peek                           // the answer peek, over the screen
+	lanes      map[laneKey][lanePast]laneState // each session's last two hours; replaced, never written in place
+	laneStart  time.Time                       // the cell boundary lanes is aligned to
+	peekSent   map[string]string               // the peek's sends in flight: act id -> the session's name
+	peekQuiet  time.Time                       // the peek takes no key until then: it just moved
+	changes    map[paneKey]change              // a match change that plays once
 	animating  bool
 	hist       history.Series
 	selPID     int
+	selHost    string // the host of selPID: PIDs repeat across hosts
 	orphanPID  int
 	recPick    string // the selected recommendation, above the sessions
-	ghostPick  int    // the ghost row picked in Sessions, from 1; 0 is none
+	ghostPick  int    // the ghost row, then the blocked host's row, picked in Sessions, from 1; 0 is none
 	chose      bool   // a session was picked; before, the first that waits is
 	gitSel     int
 	shipReport *proto.Ships
+	allShips   []proto.Ship // every host's ships, as merge joins them
 	shipSel    int
 	tab        int
 	pending    *action
@@ -306,13 +318,8 @@ type Model struct {
 	quitting   bool
 	host       proto.Hello
 	mismatch   bool
-	blocked    error        // why the host cannot be reached, until the builder acts
-	login      remote.Login // the builder's own ssh login to the host, as the check found it
-	checking   bool         // the login check runs
-	checked    bool         // the login check started once
-	jumpLater  *action      // the jump that waits for the login check
-	opening    bool         // the master of a jump opens, its prompts in the console
-	notNow     bool         // the key ladder offers nothing more: not now, or the key is on the host
+	blocked    error                // why the host cannot be reached, until the builder acts
+	logins     map[string]hostLogin // the builder's own ssh login to each host; copied on write
 	lost       bool
 	backoff    time.Duration
 	redialing  bool
@@ -329,32 +336,37 @@ type Model struct {
 	splashDone bool
 	armed      string // the step a second tap runs: what the first tap showed
 	// held is what the builder pressed or tapped while the stoker was in
-	// charge: it runs once they answer the take-over question.
+	// charge: it runs once they answer the take-over question. heldOn is
+	// the host it acts on, whose stoker the question is about (R14).
+	// touched is the last key that kept each host's stoker resting; it is
+	// copied on write.
 	held        func(Model) (tea.Model, tea.Cmd)
-	touched     time.Time // the last key that kept the stoker's rest
-	all         lists     // what the service sent; queue, recs and snap hold the drawn copies
-	filter      string    // the search of the open tab
-	searching   bool      // the search line takes the keys
+	heldOn      string
+	touched     map[string]time.Time
+	all         lists  // what every host sent, merged; queue, recs and snap hold the drawn copies
+	homeAll     lists  // what the home host sent
+	filter      string // the search of the open tab
+	searching   bool   // the search line takes the keys
 	sessSort    sortBy
 	sessGroup   int // what Sessions is grouped by: groupNeed .. groupNone
 	holds       []proto.Hold
 	reasons     map[string]proto.IdleReason
-	agents      []string                          // the agents a new session can start on the host
-	renames     map[string]string                 // the names sessions take at their next rest, by pane
-	accounts    map[string][]string               // the accounts each agent can start on: default first
-	skipped     map[string][]accounts.Skip        // the folders the service did not list, per agent
-	lastAccount map[string]string                 // the account last started, per agent
-	signIns     map[string]string                 // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
-	found       *proto.Found                      // the host's repositories and the scan's consent; nil: the service scans nothing
-	scanLater   bool                              // the scan question was closed or answered at this console
-	scanAct     string                            // the act of the box's yes, for its result
-	form        *form                             // the open New session, Rename, Switch agent or scan folders form; nil none
-	jumpAfter   struct{ act, pane, done string }  // a switch sent: the pane to jump to when it runs
-	startAfter  struct{ act, agent, done string } // a start on a new account sent: its agent, the last once it runs, and what it says then
-	lastAgent   string                            // the agent this console last started
-	keptAgent   string                            // the agent last started, as the service keeps it
+	agents      []string                               // the agents a new session can start on the host
+	renames     map[string]string                      // the names sessions take at their next rest, by pane
+	accounts    map[string][]string                    // the accounts each agent can start on: default first
+	skipped     map[string][]accounts.Skip             // the folders the service did not list, per agent
+	lastAccount map[string]string                      // the account last started, per agent
+	signIns     map[string]string                      // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
+	found       *proto.Found                           // the host's repositories and the scan's consent; nil: the service scans nothing
+	scanLater   bool                                   // the scan question was closed or answered at this console
+	scanAct     string                                 // the act of the box's yes, for its result
+	form        *form                                  // the open New session, Rename, Switch agent or scan folders form; nil none
+	jumpAfter   struct{ act, host, pane, done string } // a switch sent: the pane to jump to when it runs
+	startAfter  struct{ act, agent, done string }      // a start on a new account sent: its agent, the last once it runs, and what it says then
+	lastAgent   string                                 // the agent this console last started
+	keptAgent   string                                 // the agent last started, as the service keeps it
 	paneSort    sortBy
-	picked      map[string]bool // worktrees x removes
+	picked      map[wtKey]bool // worktrees x removes
 	batch       *batch
 	showExited  bool // e: the exited agents, one by one
 	// dockPanel is the panel a phone's dock shows (usage, the machine, the
@@ -402,27 +414,14 @@ type Model struct {
 	stopQuiet []cloneStop
 	focusAt   time.Time // the At of the last focus this console acted on
 
-	// ask is the ssh prompt open in the console; nil none. askCtx lives as
-	// long as the console: it ends the wait for prompts. askCancelled: the
-	// builder cancelled the last one.
-	ask          *askField
-	askCtx       context.Context
-	askStop      context.CancelFunc
-	openStop     context.CancelFunc // ends the open-first that runs
-	askCancelled bool
-
-	// checkStop ends the login check that runs; checkCancelled: the builder
-	// ended it at its Tailscale link. tailscale: the host is Tailscale SSH,
-	// as its last check with the server's version line said. loginURL is
-	// Tailscale's check link in the field, while the ssh that printed it
-	// waits; "" none. Only remote.VisitURL gives it.
-	checkStop      context.CancelFunc
-	checkCancelled bool
-	tailscale      bool
-	loginURL       string
-	// note is what the ladder said before the jump it held logs in: the
-	// login covers the flash, and the jump that goes shows it again.
-	note string
+	// ask is the ssh prompt open in the console; nil none. askQueue are
+	// the prompts that wait for the field, first first. askCtx lives as
+	// long as the console: it ends the wait for prompts.
+	ask      *askField
+	askQueue []askMsg
+	keyFor   string // the host whose ladder makes a new key; its prompts name this machine
+	askCtx   context.Context
+	askStop  context.CancelFunc
 }
 
 func New(opt Options) Model {
@@ -436,7 +435,7 @@ func New(opt Options) Model {
 		opt.Binary = "dev"
 	}
 	m := Model{opt: opt, conn: opt.Conn, st: newStyles(true), dark: true, width: 100, height: 30, history: newSeries(60),
-		recPrefs: loadRecPrefs(opt.StateDir), keys: defaultKeys()}
+		recPrefs: loadRecPrefs(opt.StateDir), viewPrefs: loadViewPrefs(opt.StateDir), keys: defaultKeys(), peers: links(opt.Peers)}
 	m.splashAt = m.now()
 	if opt.Ask != nil {
 		m.askCtx, m.askStop = context.WithCancel(context.Background())
@@ -457,10 +456,15 @@ func run(argv []string) error {
 const silentAfter = 3 * time.Second
 
 func (m Model) Init() tea.Cmd {
-	if err := m.opt.DialErr; err != nil && m.conn == nil {
-		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk())
+	var start []tea.Cmd
+	for i := range m.peers {
+		start = append(start, m.peerStart(i))
 	}
-	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk())
+	peers := tea.Batch(start...)
+	if err := m.opt.DialErr; err != nil && m.conn == nil {
+		return tea.Batch(tea.RequestBackgroundColor, func() tea.Msg { return lostMsg{err: err} }, m.splashCmd(), m.waitAsk(), peers)
+	}
+	return tea.Batch(tea.RequestBackgroundColor, m.hello(), m.recv(), m.watchSilence(), m.splashCmd(), m.graphicsTick(0), m.waitAsk(), peers)
 }
 
 func (m Model) watchSilence() tea.Cmd {
@@ -468,8 +472,9 @@ func (m Model) watchSilence() tea.Cmd {
 	return tea.Tick(silentAfter, func(time.Time) tea.Msg { return silentMsg{c} })
 }
 
-func (m Model) hello() tea.Cmd {
-	c, bin := m.conn, m.opt.Binary
+func (m Model) hello() tea.Cmd { return helloOn(m.conn, m.opt.Binary) }
+
+func helloOn(c transport.Conn, bin string) tea.Cmd {
 	if c == nil {
 		return nil
 	}
@@ -483,8 +488,9 @@ func (m Model) hello() tea.Cmd {
 
 // recv reads one message. Each handled message asks for the next, so one
 // read is in flight at a time.
-func (m Model) recv() tea.Cmd {
-	c := m.conn
+func (m Model) recv() tea.Cmd { return recvOn(m.conn) }
+
+func recvOn(c transport.Conn) tea.Cmd {
 	if c == nil {
 		return nil
 	}
@@ -515,11 +521,34 @@ func (m Model) recv() tea.Cmd {
 	}
 }
 
-func (m *Model) send(a proto.Act) tea.Cmd {
-	c := m.conn
+// send sends a to the home host: the acts that are no row's (doors, the
+// scan, clones, recommendations, pairing) stay the home host's.
+func (m *Model) send(a proto.Act) tea.Cmd { return m.sendTo(m.opt.Host, a) }
+
+// sendTo sends a to host: the home host on its own conn, a peer through
+// sendPeer. A host that is not ticked, or a peer with no conn, gets
+// nothing: the caller asked refusal first.
+func (m *Model) sendTo(host string, a proto.Act) tea.Cmd {
+	if host == m.opt.Host {
+		_, cmd := m.sendOn(m.conn, a)
+		return cmd
+	}
+	i := m.peerAt(host)
+	if i < 0 || m.peers[i].conn == nil {
+		return nil
+	}
+	return m.sendPeer(i, a)
+}
+
+// hostOf is the host a runs on: its row's, else the home host.
+func (m Model) hostOf(a action) string { return cmp.Or(a.host, m.opt.Host) }
+
+// sendOn sends a on c with the next act id. One counter serves every host,
+// so an act id names one act in the console.
+func (m *Model) sendOn(c transport.Conn, a proto.Act) (string, tea.Cmd) {
 	m.acts++
 	id := "a" + strconv.Itoa(m.acts)
-	return func() tea.Msg {
+	return id, func() tea.Msg {
 		if err := c.Send(proto.KindAct, id, a); err != nil {
 			return lostMsg{err, c}
 		}
@@ -563,6 +592,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.update(msg.msg)
+	case peerMsg:
+		return m.peerUpdate(msg)
+	case peerRedialMsg:
+		return m.peerRedial(msg)
+	case staleMsg:
+		return m, nil // a lost host turns stale: the frame draws it
 	case helloMsg:
 		m.host = proto.Hello(msg)
 		m.host.Tmux = remote.HostTmux(m.host.Tmux)
@@ -576,7 +611,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.mismatch {
 			return m, nil
 		}
-		next, check := m.checkLogin()
+		next, check := m.checkLogin(m.opt.Host)
 		return next, tea.Batch(next.recv(), check)
 	case loginMsg:
 		return m.loggedIn(msg)
@@ -604,8 +639,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.dockSwitched = false
 		}
 		m.doors = m.shownDoors(st.Doors)
-		m.noteChanges(st.Sessions)
-		m.snap, m.git, m.recs, m.have, m.answered = st.Snapshot, st.Git, st.Recommendations, true, true
+		m.noteChanges(m.opt.Host, st.Sessions)
+		m.snap, m.git, m.recs, m.have, m.answered, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, m.now()
 		m.shipReport = st.Ships
 		m.holds, m.reasons = st.Holds, st.Reasons
 		m.agents, m.renames, m.accounts, m.signIns = st.Agents, st.Renames, st.Accounts, st.SignIns
@@ -623,8 +658,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if st.Used != nil {
 			m.used = *st.Used
 		}
-		if from := m.whereFrom(); st.Found != nil || st.Used != nil || !slices.Equal(from, m.wfrom) {
-			m.wrepos, m.wfrom = m.whereRepos(), from
+		m.homeAll = lists{queue: st.Queue, recs: st.Recommendations, sessions: st.Sessions, orphans: st.Orphans, children: st.Children}
+		if from := m.whereFrom(m.opt.Host); st.Found != nil || st.Used != nil || !slices.Equal(from, m.wfrom) {
+			m.wrepos, m.wfrom = m.whereRepos(m.opt.Host), from
 			m.wghost = m.ghostRepos()
 		}
 		m.clones = st.Clones
@@ -645,8 +681,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.recRun.rec != "" && m.recRun.act == "" && !m.isRec(m.recRun.rec) {
 			m.recRun = recRun{} // its rec is gone: a later one with the same id starts fresh
 		}
-		m.all = lists{queue: st.Queue, recs: st.Recommendations, sessions: st.Sessions, orphans: st.Orphans}
-		m.refresh()
+		m.merge()
 		if m.lost {
 			m.lost, m.backoff, m.flash = false, 0, ""
 		}
@@ -663,9 +698,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if toast != "" && !first {
 			news = m.say(toast)
 		}
-		if m.sheet != nil && m.sheet.queued && m.sheet.act == "" && m.stoker != nil && m.stoker.Ready {
-			m, order = m.sendOrder() // the stoker rests now: the order that waited for it goes
-		}
+		m, order = m.queuedOrder(m.opt.Host)
 		return m, tea.Batch(m.recv(), m.animate(), news, order, focus, again, started)
 	case graphicsMsg:
 		return m.graphics(msg)
@@ -691,62 +724,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planTickMsg:
 		return m.planTick(msg)
 	case resultMsg:
-		if m.pending != nil && m.pending.previewAct != "" && m.pending.previewAct == msg.ActID {
-			if msg.Err != "" || msg.Preview == "" {
-				m.pending = nil
-				m.flash = "handover preview unavailable: " + cmp.Or(msg.Err, "update matchblox and try again")
-				return m, m.recv()
-			}
-			a := *m.pending
-			a.previewAct, a.preview = "", msg.Preview
-			m.pending = &a
-			return m, m.recv()
-		}
-		m.endRec(msg.ActID, proto.Result(msg))
-		if mm, ok := m.started(proto.Result(msg)); ok {
-			return mm, mm.recv()
-		}
-		if mm, cmd, ok := m.formResult(proto.Result(msg)); ok {
-			return mm, tea.Batch(mm.recv(), cmd)
-		}
-		if mm, ok := m.scanResult(proto.Result(msg)); ok {
-			return mm, mm.recv()
-		}
-		if mm, ok := m.sheetResult(proto.Result(msg)); ok {
-			if r := proto.Result(msg); r.Err == "" && mm.sheet == nil {
-				toast := mm.say("the order is on")
-				return mm, tea.Batch(mm.recv(), toast)
-			}
-			return mm, mm.recv()
-		}
-		if r := proto.Result(msg); m.peekSent[r.ActID] != "" {
-			name := m.peekSent[r.ActID]
-			m.peekSent = maps.Clone(m.peekSent)
-			delete(m.peekSent, r.ActID)
-			why := r.Err
-			if n := len(r.Skipped); n > 0 && why == "" {
-				why = r.Skipped[n-1]
-			}
-			if why != "" {
-				m.toast, m.flash = "", tilde("not sent to "+name+": "+why)
-				return m, m.recv()
-			}
-			return m, tea.Batch(m.recv(), m.say("sent to "+name))
-		}
-		if r := proto.Result(msg); r.ActID != "" && r.ActID == m.jumpAfter.act {
-			return m.switched(r)
-		}
-		if m.tally(proto.Result(msg)) {
-			return m, m.recv()
-		}
-		r := proto.Result(msg)
-		if text := describe(r); text != "" && r.Err == "" && len(r.Skipped) == 0 {
-			toast := m.say(tilde(text))
-			return m, tea.Batch(m.recv(), toast)
-		} else if text != "" {
-			m.flash = tilde(text)
-		}
-		return m, m.recv()
+		mm, cmd := m.result(proto.Result(msg))
+		return mm, tea.Batch(mm.recv(), cmd)
 	case lostMsg:
 		if m.mismatch || m.quitting || m.redialing || (msg.conn != nil && msg.conn != m.conn) {
 			return m, nil
@@ -754,26 +733,49 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.conn != nil {
 			_ = m.conn.Close()
 		}
+		first := !m.lost
 		m.lost = true
 		if blocking(msg.err) {
 			// Trying again cannot help: connecting the host can.
 			m.blocked, m.flash = msg.err, ""
 			return m, nil
 		}
-		m.flash = "connection lost: " + msg.err.Error()
-		if m.batch != nil {
-			// Their results went with the connection.
-			m.flash += fmt.Sprintf("; %d removals have no answer, %s on Git rescans", len(m.batch.ids), m.keys.main.Rename.Help().Key)
-			m.batch = nil
+		// Two or more hosts: a short loss shows nothing, as a peer's;
+		// from staleAfter the rows and the key line say so.
+		var lost []string
+		if m.hostCount() == 1 {
+			lost = append(lost, "connection lost: "+msg.err.Error())
 		}
+		if m.batch != nil {
+			// Their results went with the connection; a peer's still come.
+			var home []string
+			for id := range m.batch.ids {
+				if !slices.ContainsFunc(m.peers, func(l link) bool { return slices.Contains(l.acts, id) }) {
+					home = append(home, id)
+				}
+			}
+			if len(home) == len(m.batch.ids) {
+				lost = append(lost, fmt.Sprintf("%d removals have no answer, %s on Git rescans", len(home), m.keys.main.Rename.Help().Key))
+				m.batch = nil
+			} else {
+				m.batchLost(m.nameOf(m.opt.Host), home)
+			}
+		}
+		var stale tea.Cmd
+		if first {
+			stale = m.staleTick(m.at)
+		}
+		m.flash = strings.Join(lost, "; ")
 		if m.opt.Redial == nil {
-			return m, nil
+			return m, stale
 		}
 		m.redialing = true
-		m.backoff = min(max(m.backoff*2, 250*time.Millisecond), 10*time.Second)
-		m.flash += "; trying again in " + m.backoff.String()
+		m.backoff = redialAfter(m.backoff)
+		if m.hostCount() == 1 {
+			m.flash += "; trying again in " + m.backoff.String()
+		}
 		gen := m.opt.Gen
-		return m, tea.Tick(m.backoff, func(time.Time) tea.Msg { return redialMsg{gen} })
+		return m, tea.Batch(stale, tea.Tick(m.backoff, func(time.Time) tea.Msg { return redialMsg{gen} }))
 	case redialMsg:
 		if msg.gen != m.opt.Gen || !m.redialing || m.quitting {
 			return m, nil // a tick from a console that was closed
@@ -817,8 +819,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = msg.conn.Close() // the console that dialed it is gone
 			return m, nil
 		}
+		if m.hostCount() == 1 || m.stale(m.opt.Host) {
+			m.flash = "connected again" // a short loss of two or more hosts showed nothing: its end shows nothing
+		}
 		m.conn, m.redialing, m.answered = msg.conn, false, false
-		m.flash = "connected again"
 		return m, tea.Batch(m.hello(), m.recv(), m.watchSilence())
 	case ranMsg:
 		if msg.err != nil {
@@ -881,6 +885,66 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// result ends the act r answers. The caller reads the next message of the
+// conn r came on.
+func (m Model) result(r proto.Result) (Model, tea.Cmd) {
+	if m.pending != nil && m.pending.previewAct != "" && m.pending.previewAct == r.ActID {
+		if r.Err != "" || r.Preview == "" {
+			m.pending = nil
+			m.flash = "handover preview unavailable: " + cmp.Or(r.Err, "update matchblox and try again")
+			return m, nil
+		}
+		a := *m.pending
+		a.previewAct, a.preview = "", r.Preview
+		m.pending = &a
+		return m, nil
+	}
+	m.endRec(r.ActID, r)
+	if mm, ok := m.started(r); ok {
+		return mm, nil
+	}
+	if mm, cmd, ok := m.formResult(r); ok {
+		return mm, cmd
+	}
+	if mm, ok := m.scanResult(r); ok {
+		return mm, nil
+	}
+	if mm, ok := m.sheetResult(r); ok {
+		if r.Err == "" && mm.sheet == nil {
+			toast := mm.say("the order is on")
+			return mm, toast
+		}
+		return mm, nil
+	}
+	if name := m.peekSent[r.ActID]; name != "" {
+		m.peekSent = maps.Clone(m.peekSent)
+		delete(m.peekSent, r.ActID)
+		why := r.Err
+		if n := len(r.Skipped); n > 0 && why == "" {
+			why = r.Skipped[n-1]
+		}
+		if why != "" {
+			m.toast, m.flash = "", tilde("not sent to "+name+": "+why)
+			return m, nil
+		}
+		toast := m.say("sent to " + name)
+		return m, toast
+	}
+	if r.ActID != "" && r.ActID == m.jumpAfter.act {
+		return m.switched(r)
+	}
+	if m.tally(r) {
+		return m, nil
+	}
+	if text := describe(r); text != "" && r.Err == "" && len(r.Skipped) == 0 {
+		toast := m.say(tilde(text))
+		return m, toast
+	} else if text != "" {
+		m.flash = tilde(text)
+	}
+	return m, nil
+}
+
 // focusWait is how long a focus waits for the phone's tmux client to
 // attach: the gate sends the act before it runs the console.
 var focusWait = 10 * time.Second
@@ -901,6 +965,9 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	var s sample.Session
 	found := false
 	for _, x := range m.snap.Sessions {
+		if x.Host != m.opt.Host {
+			continue // the focus is the home host's
+		}
 		if f.SessionID != "" && x.SessionID == f.SessionID || f.SessionID == "" && f.Pane != "" && x.Pane == f.Pane {
 			s, found = x, true
 			break
@@ -921,14 +988,14 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	}
 	m.setTab(tabSessions)
 	m.pending, m.peek = nil, nil
-	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, s.PID
+	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
 	if s.Pane == "" {
 		return m, nil // outside tmux: no pane to open
 	}
 	if _, waits := m.waitOf(s); waits {
 		// The home console is shared: the peek shows on the phone too, and an
 		// Enter on its way at the desk must not answer it.
-		return m.peekTo(s.Pane), nil
+		return m.peekTo(paneOf(s)), nil
 	}
 	// Only the phone's client moves, into a session of its own (FocusArgv),
 	// and only on this console's own tmux: a console of another host (over
@@ -1039,7 +1106,8 @@ func (m Model) press(f layerID, k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case layerScan:
 		next, cmd = m.answerScan(k)
 	case layerTakeOver:
-		m.held, m.flash = m.hold(k), ""
+		m.held, m.heldOn = m.hold(k)
+		m.flash = ""
 		next = m
 	case layerPreview:
 		next, _ = m.scrollPreview(k)
@@ -1150,8 +1218,12 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.flash = s.Name + " is outside tmux: nothing to park"
 				break
 			}
-			cmd := m.send(proto.Act{RecID: "park:" + s.Pane})
-			return m.pairActed(action{rec: "park:" + s.Pane}), cmd
+			if why := m.refusal(s.Host); why != "" {
+				m.flash = why
+				break
+			}
+			cmd := m.sendTo(s.Host, proto.Act{RecID: "park:" + s.Pane})
+			return m.pairActed(action{rec: "park:" + s.Pane, host: s.Host}), cmd
 		}
 	case bkey.Matches(k, mk.Mark):
 		if m.tab == tabGit {
@@ -1184,15 +1256,20 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.showCommand()
 			return m, nil
 		}
+		if b, ok := m.selectedBlocked(); ok {
+			return m.unblockHost(b)
+		}
 		if a := m.primary(); a != nil && a.pair {
 			return m.openPairDoor()
 		}
 		if a := m.primary(); a != nil && a.ghost {
-			return m.openNewIn(a.where, ""), nil
+			return m.openNewIn(m.opt.Host, a.where, ""), nil
 		}
 		m.pending, m.previewTop = m.primary(), 0
+		m.refuse()
 	case bkey.Matches(k, mk.Second):
 		m.pending = m.secondary()
+		m.refuse()
 	case bkey.Matches(k, mk.New):
 		return m.openNew()
 	case bkey.Matches(k, mk.Switch):
@@ -1207,8 +1284,8 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabShips {
 			return m.shipAnswer(), nil
 		}
-		if pane, why := m.peekTarget(); pane != "" {
-			m.openPeek(pane)
+		if at, why := m.peekTarget(); at.pane != "" {
+			m.openPeek(at)
 		} else {
 			m.flash = why
 		}
@@ -1224,6 +1301,8 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.setTab(tabShips)
 	case bkey.Matches(k, mk.Dock):
 		m.cycleDock()
+	case bkey.Matches(k, mk.ListOnly):
+		m.flipListOnly()
 	case bkey.Matches(k, mk.Stoke):
 		return m.stokerKey(false)
 	case bkey.Matches(k, mk.Night):
@@ -1234,14 +1313,24 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabSessions {
 			return m.openRename()
 		}
-		if m.tab == tabGit && m.conn != nil && !m.lost {
-			m.flash = "scanning git…"
-			return m, m.send(proto.Act{RecID: "rescan:git", Which: "primary"})
+		if m.tab == tabGit {
+			return m.rescan()
 		}
 	case bkey.Matches(k, mk.Tabs):
 		m.setTab(int(k.String()[0] - '1'))
 	}
 	return m, nil
+}
+
+// refuse drops the pending act when its host cannot take it, and says why.
+func (m *Model) refuse() {
+	a := m.pending
+	if a == nil || a.rec == "" || a.nav || a.remote || a.term || a.local != nil {
+		return
+	}
+	if why := m.refusal(m.hostOf(*a)); why != "" {
+		m.pending, m.flash = nil, why
+	}
 }
 
 // confirm runs an action the person consented to: a Nav step here, any
@@ -1261,15 +1350,16 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 		}
 		return m.onHost(a)
 	}
-	if (a.nav || a.attach) && m.opt.Host != "" {
+	host := m.hostOf(a)
+	if (a.nav || a.attach) && host != "" {
 		// A tmux move of a host names the host's panes: here it would move
 		// this machine's tmux. Only a jump (remote) goes there.
-		m.flash = "refused: a tmux move on " + m.opt.Host + " never runs on this machine"
+		m.flash = "refused: a tmux move on " + host + " never runs on this machine"
 		return m, nil
 	}
 	if len(a.batch) > 0 {
-		if m.conn == nil || m.lost {
-			m.flash = "not sent, no connection: " + a.String()
+		if why := m.batchRefusal(a); why != "" {
+			m.flash = why
 			return m, nil
 		}
 		return m.sendBatch(a)
@@ -1285,7 +1375,11 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 		m.startRec(a, "nav")
 		return m, func() tea.Msg { return runNav(a, run) }
 	}
-	if m.conn == nil || m.lost {
+	if why := m.refusal(host); why != "" {
+		m.flash = why
+		return m, nil
+	}
+	if host == m.opt.Host && (m.conn == nil || m.lost) {
 		m.flash = "not sent, no connection: " + a.String()
 		return m, nil
 	}
@@ -1294,10 +1388,10 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 		confirm = "y"
 	}
 	m.flash = "sent: " + a.String()
-	cmd := m.send(proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
+	cmd := m.sendTo(host, proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
 	m.startRec(a, "a"+strconv.Itoa(m.acts))
 	if pane, ok := strings.CutPrefix(a.rec, "switch:"); ok {
-		m.jumpAfter.act, m.jumpAfter.pane, m.jumpAfter.done = "a"+strconv.Itoa(m.acts), pane, a.done
+		m.jumpAfter.act, m.jumpAfter.host, m.jumpAfter.pane, m.jumpAfter.done = "a"+strconv.Itoa(m.acts), a.host, pane, a.done
 	}
 	if a.agent != "" {
 		m.startAfter.act, m.startAfter.agent, m.startAfter.done = "a"+strconv.Itoa(m.acts), a.agent, a.done
@@ -1329,26 +1423,31 @@ func (m Model) started(r proto.Result) (Model, bool) {
 
 // switched takes the result of a switch: one that ran jumps to its pane,
 // one that did not says why.
-func (m Model) switched(r proto.Result) (tea.Model, tea.Cmd) {
+func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 	j := m.jumpAfter
-	m.jumpAfter.act, m.jumpAfter.pane, m.jumpAfter.done = "", "", ""
+	m.jumpAfter.act, m.jumpAfter.host, m.jumpAfter.pane, m.jumpAfter.done = "", "", "", ""
 	// A switch with notes on what its account shared or skipped ran.
 	notes, ran := proto.StartNotes(r)
 	switch {
 	case r.Err != "":
 		m.flash = tilde(r.Err)
-		return m, m.recv()
+		return m, nil
 	case len(r.Skipped) > 0 && !ran:
 		m.flash = tilde(r.Skipped[len(r.Skipped)-1])
-		return m, m.recv()
+		return m, nil
 	}
-	next, jump := m.confirm(*m.jump(j.pane))
+	m.flash = ""
+	next, jump := m.confirm(*m.forHost(j.host, m.jumpOn(j.host, j.pane)))
 	nm := next.(Model)
-	nm.flash = j.done
+	say := []string{j.done}
 	if ran {
-		nm.flash += "; " + strings.Join(notes, "; ")
+		say = append(say, notes...)
 	}
-	return nm, tea.Batch(nm.recv(), jump)
+	if nm.flash != "" { // the jump refused, or waits for its host's login
+		say = append(say, nm.flash)
+	}
+	nm.flash = strings.Join(say, "; ")
+	return nm, jump
 }
 
 func runNav(a action, run func([]string) error) ranMsg {
@@ -1376,6 +1475,13 @@ func (m Model) jump(pane string) *action {
 		}}
 	}
 	return &action{label: "jump", nav: true, pane: pane, steps: [][]string{{"tmux", "switch-client", "-t", pane}}}
+}
+
+// jumpOn is jump to a pane of host.
+func (m Model) jumpOn(host, pane string) *action {
+	a := m.jump(pane)
+	a.host = host
+	return a
 }
 
 // attach runs the moves, then gives the terminal to the last step.
@@ -1413,7 +1519,7 @@ func (m Model) selIndex() int {
 		}
 	}
 	for i, s := range m.snap.Sessions {
-		if s.PID == m.selPID {
+		if s.PID == m.selPID && s.Host == m.selHost {
 			return i
 		}
 	}
@@ -1427,10 +1533,10 @@ func (m Model) selected() (sample.Session, bool) {
 	return m.snap.Sessions[m.selIndex()], true
 }
 
-// keepSelection follows the selected session by PID across re-sorts.
+// keepSelection follows the selected session by host and PID across re-sorts.
 func (m *Model) keepSelection() {
-	if _, ok := m.selected(); ok {
-		m.selPID = m.snap.Sessions[m.selIndex()].PID
+	if s, ok := m.selected(); ok {
+		m.selPID, m.selHost = s.PID, s.Host
 	}
 }
 
@@ -1470,7 +1576,7 @@ func (m Model) nextAfter(pane string) Model {
 	} {
 		for k := 1; k < len(ss); k++ {
 			if s := ss[(at+k)%len(ss)]; want(s) {
-				m.ghostPick, m.chose, m.selPID = 0, true, s.PID
+				m.ghostPick, m.chose, m.selPID, m.selHost = 0, true, s.PID, s.Host
 				return m
 			}
 		}

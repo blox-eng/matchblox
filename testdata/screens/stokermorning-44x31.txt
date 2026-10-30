@@ -28,4 +28,4 @@
 
  YOUR GO
 ────────────────────────────────────────────
- ⏎ command  1 sessions       sampled 0s ago
+ ⏎ command  1 sessions  p ships  f stoker

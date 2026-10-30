@@ -8,24 +8,21 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/doors"
-	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 )
 
-// forHost runs the console's own steps on the host it reaches, with the
-// builder's own ssh login: a tmux move jumps to the host, a door's command
-// runs there. The inner argv is checked here, before ssh wraps it; a step
-// that fails the check stays as it was, and the local check refuses it on
-// confirm.
-func (m Model) forHost(a *action) *action {
-	if a == nil || m.opt.Host == "" || a.remote {
+// forHost runs the console's own steps on host, with the builder's own ssh
+// login: a tmux move jumps to the host, a door's command runs there. The
+// inner argv is checked here, before ssh wraps it; a step that fails the
+// check stays as it was, and the local check refuses it on confirm.
+func (m Model) forHost(host string, a *action) *action {
+	if a == nil || host == "" || a.remote {
 		return a
 	}
-	host := m.opt.Host
 	b := *a
 	switch {
 	case a.nav:
-		return m.jumpOnHost(a)
+		return m.jumpOnHost(host, a)
 	case a.term:
 		argv := a.steps[0]
 		if a.door == doors.Guide {
@@ -35,7 +32,7 @@ func (m Model) forHost(a *action) *action {
 			return a
 		}
 		b.steps = [][]string{remote.TermArgv(host, argv)}
-		b.say = a.label + ": on " + m.opt.Host + ", in this terminal"
+		b.say = a.label + ": on " + host + ", in this terminal"
 	default:
 		return a
 	}
@@ -43,12 +40,12 @@ func (m Model) forHost(a *action) *action {
 	return &b
 }
 
-// jumpOnHost turns a tmux move into a jump to the host: to the pane of a
+// jumpOnHost turns a tmux move into a jump to host: to the pane of a
 // switch or an attach, or to a new shell in the directory of a new-window.
 // The host opens in a session of its own on each side, never in the
 // console's pane. Inside tmux the step is a tmux command list that returns
 // at once; outside, the ssh takes this terminal.
-func (m Model) jumpOnHost(a *action) *action {
+func (m Model) jumpOnHost(host string, a *action) *action {
 	var j remote.Jump
 	for _, s := range a.steps {
 		if !remote.NavAllowed(s) {
@@ -61,26 +58,27 @@ func (m Model) jumpOnHost(a *action) *action {
 			j.Dir = s[3]
 		}
 	}
-	j.Host, j.Prefix, j.Home, j.ID, j.Outer = m.opt.Host, m.prefix(), m.home(), m.jumpID(), !m.opt.OutsideTmux
+	j.Host, j.Prefix, j.Home, j.ID, j.Outer = host, m.prefix(), m.home(), m.jumpID(), !m.opt.OutsideTmux
 	if !remote.JumpAllowed(j) {
 		return refused(a, jumpRefusal(j))
 	}
 	if j.Outer && remote.TmuxTooOld(m.opt.LocalTmux, remote.MinLocalTmux) {
 		return refused(a, "tmux "+m.opt.LocalTmux+" is older than "+remote.MinLocalTmux+": update tmux, or run the console outside tmux")
 	}
-	if v := m.host.Tmux; v == "none" || remote.TmuxTooOld(v, remote.MinHostTmux) {
-		return m.hostTmuxRefusal(a)
+	if v := m.helloOf(host).Tmux; v == "none" || remote.TmuxTooOld(v, remote.MinHostTmux) {
+		return m.hostTmuxRefusal(host, a)
 	}
-	if m.login == remote.LoginHostKeyChanged {
-		return refused(a, m.loginNote(m.login, ""))
+	if l := m.loginOf(host); l.login == remote.LoginHostKeyChanged {
+		return refused(a, m.loginNote(host, l.login, ""))
 	}
 	dir, err := m.masterDir()
 	if err != nil && j.Outer {
 		// The jump switches the client at once: with no master to open
 		// first, its ssh would ask in a session of its own.
-		return refused(a, m.masterRefusal(err))
+		return refused(a, m.masterRefusal(host, err))
 	}
 	b := *a
+	b.host = host
 	master := remote.MasterOpts(dir)
 	if dir != "" && m.opt.Ask != nil {
 		// The console opens the master first: the jump's ssh never asks.
@@ -155,10 +153,12 @@ func blocking(err error) bool {
 // connectAction connects the host: it installs or updates matchblox there
 // and lets this console's key start it. It runs `matchblox connect` in this
 // terminal after a typed y: the ssh login there is the builder's own.
-func (m Model) connectAction() *action {
-	host := m.opt.Host
-	older := m.mismatch && m.host.Version < proto.Version
-	if host == "" || (m.blocked == nil && !older) || errors.Is(m.blocked, remote.ErrHostKeyChanged) {
+func (m Model) connectAction() *action { return m.connectOn(m.opt.Host) }
+
+// connectOn is connectAction for any host of the console.
+func (m Model) connectOn(host string) *action {
+	blocked, older := m.blockOf(host)
+	if host == "" || (blocked == nil && !older) || errors.Is(blocked, remote.ErrHostKeyChanged) {
 		return nil // a changed host key is the builder's call, never a connect
 	}
 	self := m.opt.Self
@@ -166,10 +166,13 @@ func (m Model) connectAction() *action {
 		self = "matchblox"
 	}
 	argv := []string{self, "connect", host} // it also updates an older one
-	return &action{label: "connect", say: shellLine(argv), steps: [][]string{argv}, destructive: true, remote: true, connect: true}
+	return &action{label: "connect", say: shellLine(argv), steps: [][]string{argv}, destructive: true, remote: true, connect: true, host: host}
 }
 
-type connectedMsg struct{ err error }
+type connectedMsg struct {
+	err  error
+	host string
+}
 
 // onHost gives this terminal to a step that runs on the host. A jump
 // inside tmux is a tmux command list instead: it switches the client and
@@ -190,7 +193,7 @@ func (m Model) onHost(a action) (tea.Model, tea.Cmd) {
 	return m, m.exec(argv, func(err error) tea.Msg {
 		switch {
 		case a.connect:
-			return connectedMsg{err}
+			return connectedMsg{err, a.host}
 		case a.door != "":
 			return doorRanMsg{door: a.door, cmd: shellLine(argv), err: err}
 		}
@@ -221,6 +224,14 @@ func (m Model) connected(msg connectedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		m.flash = "not connected: " + msg.err.Error() + "; " + m.keys.main.Open.Help().Key + " tries again"
 		return m, nil
+	}
+	if i := m.peerAt(msg.host); msg.host != m.opt.Host && i >= 0 {
+		next, cmd := m.peerTryAgain(i)
+		nm := next.(Model)
+		if cmd != nil {
+			nm.flash = "connected " + msg.host + ", opening…"
+		}
+		return nm, cmd
 	}
 	m.blocked, m.mismatch = nil, false
 	m.flash = "connected " + m.opt.Host + ", opening…"

@@ -46,7 +46,7 @@ func TestHandMadeFolderIsNamedByItsBase(t *testing.T) {
 func TestDefaultBlocksKeepTheirNames(t *testing.T) {
 	st := limitsState()
 	m, _ := loadedWith(t, 132, st)
-	names, _ := m.accountNames(false)
+	names, _ := accountNames(m.snap.Limits, false)
 	want := []string{"Claude builder", "OpenAI Plus", "Claude work"}
 	for i, w := range want {
 		if names[i] != w {
@@ -56,7 +56,7 @@ func TestDefaultBlocksKeepTheirNames(t *testing.T) {
 	// One default block of a provider is named by its plan, as it was.
 	st.Limits = st.Limits[:1]
 	m, _ = loadedWith(t, 132, st)
-	if names, _ := m.accountNames(false); names[0] != "Claude Max" {
+	if names, _ := accountNames(m.snap.Limits, false); names[0] != "Claude Max" {
 		t.Errorf("a lone default block is named %q, want Claude Max", names[0])
 	}
 }
@@ -134,10 +134,10 @@ func TestRowNamesANonDefaultAccount(t *testing.T) {
 		t.Errorf("narrow, the row does not name its account: %q", row)
 	}
 	// With fewer than four cells left after the name, the tag is dropped.
-	if got := ansi.Strip(m.taggedName("app-feature", "work", false, len("app-feature")+4)); got != "app-feature" {
+	if got := ansi.Strip(m.taggedName("app-feature", "work", m.st.ink(false), len("app-feature")+4)); got != "app-feature" {
 		t.Errorf("room 3: %q, want the tag dropped", got)
 	}
-	if got := ansi.Strip(m.taggedName("app-feature", "work", false, len("app-feature")+5)); got != "app-feature work" {
+	if got := ansi.Strip(m.taggedName("app-feature", "work", m.st.ink(false), len("app-feature")+5)); got != "app-feature work" {
 		t.Errorf("room 4: %q, want the tag", got)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	bkey "charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/history"
@@ -16,9 +17,63 @@ import (
 )
 
 type wtRow struct {
+	host string
 	repo string
 	wt   proto.Worktree
 	main bool
+}
+
+// wtKey is a worktree's identity across hosts: a path repeats on two.
+type wtKey struct{ host, path string }
+
+func (r wtRow) key() wtKey { return wtKey{r.host, r.wt.Path} }
+
+// hostGit is a host's git scan.
+type hostGit struct {
+	host string
+	r    *proto.GitReport
+}
+
+// rescan is r on Git: a new scan on the selected row's host.
+func (m Model) rescan() (tea.Model, tea.Cmd) {
+	host := m.opt.Host
+	if r, ok := m.selectedWorktree(); ok {
+		host = r.host
+	}
+	if why := m.refusal(host); why != "" {
+		m.flash = why
+		return m, nil
+	}
+	if host == m.opt.Host && (m.conn == nil || m.lost) {
+		return m, nil
+	}
+	m.flash = "scanning git…"
+	if m.hostCount() > 1 {
+		m.flash = "scanning git on " + m.nameOf(host) + "…"
+	}
+	return m, m.sendTo(host, proto.Act{RecID: "rescan:git", Which: "primary"})
+}
+
+// gitOf is host's git scan; nil: none yet.
+func (m Model) gitOf(host string) *proto.GitReport {
+	if host == m.opt.Host {
+		return m.git
+	}
+	return m.stateOf(host).Git
+}
+
+// gitReports are the git scans of the hosts that sent one, in Hosts order.
+func (m Model) gitReports() []hostGit {
+	var out []hostGit
+	if m.git != nil {
+		out = append(out, hostGit{m.opt.Host, m.git})
+	}
+	for _, l := range m.peers {
+		if l.have && l.st.Git != nil {
+			out = append(out, hostGit{l.host, l.st.Git})
+		}
+	}
+	return out
 }
 
 // worktreeRows are the worktrees worth a line: the main checkout, the ones
@@ -34,26 +89,25 @@ func (m Model) worktreeRows() []wtRow {
 }
 
 func (m Model) allWorktreeRows() []wtRow {
-	if m.git == nil {
-		return nil
-	}
 	var rows []wtRow
-	for _, r := range m.git.Repos {
-		for i, wt := range r.Worktrees {
-			if i == 0 || wt.Sessions > 0 || wt.Merged {
-				rows = append(rows, wtRow{r.Path, wt, i == 0})
+	for _, g := range m.gitReports() {
+		for _, r := range g.r.Repos {
+			for i, wt := range r.Worktrees {
+				if i == 0 || wt.Sessions > 0 || wt.Merged {
+					rows = append(rows, wtRow{g.host, r.Path, wt, i == 0})
+				}
 			}
 		}
 	}
 	return rows
 }
 
-func (m Model) selectedWorktree() (proto.Worktree, bool) {
+func (m Model) selectedWorktree() (wtRow, bool) {
 	rows := m.worktreeRows()
 	if len(rows) == 0 {
-		return proto.Worktree{}, false
+		return wtRow{}, false
 	}
-	return rows[min(m.gitSel, len(rows)-1)].wt, true
+	return rows[min(m.gitSel, len(rows)-1)], true
 }
 
 func (m Model) gitPanel(w int) body {
@@ -69,14 +123,33 @@ func (m Model) gitPanel(w int) body {
 			b.add(-1, fit(" "+style.Render(pad(fmt.Sprintf("%.2f cores", p.Cores), 12))+st.muted.Render(tilde(p.Checkout)), w))
 		}
 	}
-	if m.git == nil {
+	reports := m.gitReports()
+	if len(reports) == 0 {
 		b.add(-1, "", st.faint.Render(" scanning repositories…"))
 		return b
 	}
 	rows := m.worktreeRows()
 	sel := min(m.gitSel, max(len(rows)-1, 0))
 	i := 0
-	for _, r := range m.git.Repos {
+	for _, g := range reports {
+		i = m.gitHost(&b, g, rows, i, sel, w)
+	}
+	if r, ok := m.selectedWorktree(); ok {
+		wt := r.wt
+		b.add(-1, fit(" "+st.label.Render(m.keys.main.Open.Help().Key+" ")+st.muted.Render("tmux new-window -c "+wt.Path), w))
+		if wt.Safe {
+			b.add(-1, fit(" "+st.label.Render(m.keys.main.Second.Help().Key+" ")+st.muted.Render(strings.Join(wt.Remove, " ")), w))
+		}
+	}
+	return b
+}
+
+// gitHost adds host g's repositories to the Git tab, its rows from rows[i]
+// on, and gives the index of the next host's first row. With two or more
+// hosts each repository and the scan's line name the host.
+func (m Model) gitHost(b *body, g hostGit, rows []wtRow, i, sel, w int) int {
+	st, many := m.st, m.hostCount() > 1
+	for _, r := range g.r.Repos {
 		safe := 0
 		for _, wt := range r.Worktrees {
 			if wt.Safe {
@@ -87,12 +160,16 @@ func (m Model) gitPanel(w int) body {
 		if safe > 0 {
 			rest += fmt.Sprintf("  ·  %d safe to remove", safe)
 		}
-		b.add(-1, m.regionPath(r.Path, rest, w)...)
+		if many {
+			b.add(-1, "", fit(" "+st.text.Render(m.nameOf(g.host))+st.muted.Render("  "+tilde(r.Path))+st.label.Render(strings.ToUpper(rest)), w))
+		} else {
+			b.add(-1, m.regionPath(r.Path, rest, w)...)
+		}
 		if r.Behind > 0 {
 			b.add(-1, fit(" "+st.warn.Render("▲ ")+st.text.Render(fmt.Sprintf("%s is %d commits behind its remote", r.Main, r.Behind)), w))
 		}
 		b.add(-1, st.label.Render(fit(" "+pad("WORKTREE", 36)+pad("BRANCH", 28)+pad("AGENTS", 8)+pad("DIRTY", 8)+"STATE", w)))
-		for ; i < len(rows) && rows[i].repo == r.Path; i++ {
+		for ; i < len(rows) && rows[i].host == g.host && rows[i].repo == r.Path; i++ {
 			wt := rows[i].wt
 			name := filepath.Base(wt.Path)
 			if rows[i].main {
@@ -119,25 +196,23 @@ func (m Model) gitPanel(w int) body {
 				agents = fmt.Sprint(wt.Sessions)
 			}
 			mark := " "
-			if m.picked[wt.Path] {
+			if m.picked[rows[i].key()] {
 				mark = st.accent.Render("●")
 			}
 			line := mark + st.text.Render(pad(name, 36)) + st.muted.Render(pad(wt.Branch, 28)) + st.text.Render(pad(agents, 8)) + dirty + state
 			b.addRow(i, i == sel, w, st, line)
 		}
 	}
-	for _, e := range m.git.Errors {
+	for _, e := range g.r.Errors {
 		b.add(-1, fit(" "+st.neg.Render("! ")+st.muted.Render(e), w))
 	}
-	b.add(-1, "", fit(" "+st.faint.Render(fmt.Sprintf("scanned %s ago in %s · %s rescans",
-		sample.Human(m.now().Sub(m.git.At)), m.git.Took.Round(time.Millisecond), m.keys.main.Rename.Help().Key)), w))
-	if wt, ok := m.selectedWorktree(); ok {
-		b.add(-1, fit(" "+st.label.Render(m.keys.main.Open.Help().Key+" ")+st.muted.Render("tmux new-window -c "+wt.Path), w))
-		if wt.Safe {
-			b.add(-1, fit(" "+st.label.Render(m.keys.main.Second.Help().Key+" ")+st.muted.Render(strings.Join(wt.Remove, " ")), w))
-		}
+	scanned := fmt.Sprintf("scanned %s ago in %s · %s rescans",
+		sample.Human(m.now().Sub(g.r.At)), g.r.Took.Round(time.Millisecond), m.keys.main.Rename.Help().Key)
+	if many {
+		scanned = m.nameOf(g.host) + " · " + scanned
 	}
-	return b
+	b.add(-1, "", fit(" "+st.faint.Render(scanned), w))
+	return i
 }
 
 // recsSection is what to do next, under the sessions: its rows follow
@@ -185,7 +260,7 @@ func (m Model) recsSection(b *body, w int) {
 		}
 		b.addRow(n+i, i == sel, w, st, line)
 	}
-	if sel < 0 || sel >= len(m.recs) || m.layoutAt(m.width) != Narrow {
+	if sel < 0 || sel >= len(m.recs) || !m.inPlace() {
 		return
 	}
 	r := m.recs[sel]
@@ -252,6 +327,20 @@ func bucket(pts []history.Point, n int, f func(history.Point) float64) []float64
 		out = append(out, peak)
 	}
 	return out
+}
+
+// historyBody is the History tab. Two or more hosts: a section for each
+// host, in Hosts order, headed by its name.
+func (m Model) historyBody(w int) body {
+	if m.hostCount() == 1 {
+		return plain(m.historyPanel(w))
+	}
+	var b body
+	for _, h := range m.statedHosts() {
+		b.add(-1, "", m.hostHead(h, w))
+		b.add(-1, m.viewOf(h).historyPanel(w)...)
+	}
+	return b
 }
 
 func (m Model) historyPanel(w int) []string {

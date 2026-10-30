@@ -78,6 +78,7 @@ func checkAccountName(name string) error {
 // Rename has the name only; Switch agent the agent and the handoff (in
 // first); the scan's folders the roots.
 type form struct {
+	host       string // the host it acts on: "" the home host
 	rename     bool
 	swap       bool   // Switch agent
 	pick       bool   // the scan's folders, in roots
@@ -150,43 +151,48 @@ const maxField = 300
 
 // openNew is N: the New session form, where's list open on the selected
 // row's folder (a Git worktree, a session's directory, the checkout of a
-// ship nobody owns), or the first repo.
+// ship nobody owns), or the first repo. It starts on the selected row's
+// host, else on the home host.
 func (m Model) openNew() (tea.Model, tea.Cmd) {
-	at := ""
+	at, host := "", m.opt.Host
 	switch m.tab {
 	case tabGit:
-		if wt, ok := m.selectedWorktree(); ok {
-			at = wt.Path
+		if r, ok := m.selectedWorktree(); ok {
+			at, host = r.wt.Path, r.host
 		}
 	case tabSessions:
 		if s, ok := m.selectedSession(); ok {
-			at = s.Cwd
+			at, host = s.Cwd, s.Host
 		}
 	case tabShips:
 		if sh, ok := m.selectedShip(); ok {
-			at = sh.Where
+			at, host = sh.Where, sh.Host
 		}
 	}
-	return m.openNewAt(at, ""), nil
+	return m.openNewAt(host, at, ""), nil
 }
 
-// openNewAt is the New session form, where's list open on at, with first
-// as the first message to edit.
-func (m Model) openNewAt(at, first string) Model {
-	switch {
-	case m.conn == nil || m.lost:
+// openNewAt is the New session form on host, where's list open on at, with
+// first as the first message to edit.
+func (m Model) openNewAt(host, at, first string) Model {
+	st := m.stateOf(host)
+	switch why := m.refusal(host); {
+	case why != "":
+		m.flash = why
+		return m
+	case host == m.opt.Host && (m.conn == nil || m.lost):
 		m.flash = "not sent, no connection"
 		return m
-	case len(m.agents) == 0:
+	case len(st.Agents) == 0:
 		m.flash = "no agent to start here: install claude, codex, opencode or cursor-agent"
 		return m
 	}
-	f := &form{at: fieldWhere, agent: m.agents[0], accts: m.accounts, skipped: m.skipped, last: m.lastAccount, first: first}
+	f := &form{host: host, at: fieldWhere, agent: st.Agents[0], accts: st.Accounts, skipped: st.AccountsSkipped, last: st.LastAccount, first: first}
 	// This console's last start first, else the service's, after a restart.
-	if slices.Contains(m.agents, m.lastAgent) {
+	if slices.Contains(st.Agents, m.lastAgent) {
 		f.agent = m.lastAgent
-	} else if slices.Contains(m.agents, m.keptAgent) {
-		f.agent = m.keptAgent
+	} else if slices.Contains(st.Agents, st.LastAgent) {
+		f.agent = st.LastAgent
 	}
 	f.account = f.lastAccount()
 	f.listOpen = true
@@ -208,7 +214,10 @@ func (m Model) openRename() (tea.Model, tea.Cmd) {
 	case s.Pane == "":
 		m.flash = s.Name + " is outside tmux: nothing to rename"
 		return m, nil
-	case m.conn == nil || m.lost:
+	case m.refusal(s.Host) != "":
+		m.flash = m.refusal(s.Host)
+		return m, nil
+	case s.Host == m.opt.Host && (m.conn == nil || m.lost):
 		m.flash = "not sent, no connection"
 		return m, nil
 	}
@@ -216,7 +225,7 @@ func (m Model) openRename() (tea.Model, tea.Cmd) {
 	if proto.CheckName(name) != nil {
 		name = proto.NameOf(name)
 	}
-	m.form, m.pending, m.peek = &form{rename: true, pane: s.Pane, who: s.Name, name: name, named: true, at: fieldName}, nil, nil
+	m.form, m.pending, m.peek = &form{host: s.Host, rename: true, pane: s.Pane, who: s.Name, name: name, named: true, at: fieldName}, nil, nil
 	return m, nil
 }
 
@@ -230,12 +239,16 @@ func (m Model) openSwitch() (tea.Model, tea.Cmd) {
 	case s.Pane == "":
 		m.flash = s.Name + " is outside tmux: nothing to switch"
 		return m, nil
-	case m.conn == nil || m.lost:
+	case m.refusal(s.Host) != "":
+		m.flash = m.refusal(s.Host)
+		return m, nil
+	case s.Host == m.opt.Host && (m.conn == nil || m.lost):
 		m.flash = "not sent, no connection"
 		return m, nil
 	}
-	f := &form{swap: true, pane: s.Pane, who: s.Name, from: s.Agent, where: s.Cwd, at: fieldAgent, first: proto.DefaultHandoff, accts: m.accounts, skipped: m.skipped, last: m.lastAccount}
-	for _, a := range m.agents {
+	st := m.stateOf(s.Host)
+	f := &form{host: s.Host, swap: true, pane: s.Pane, who: s.Name, from: s.Agent, where: s.Cwd, at: fieldAgent, first: proto.DefaultHandoff, accts: st.Accounts, skipped: st.AccountsSkipped, last: st.LastAccount}
+	for _, a := range st.Agents {
 		if a != s.Agent {
 			f.agent = a
 			break
@@ -253,7 +266,8 @@ func (m Model) openSwitch() (tea.Model, tea.Cmd) {
 // and a second one for a session that works or waits.
 func (m Model) switchAction(f form) *action {
 	sw := proto.SwitchAgent{Agent: f.agent, Handoff: strings.TrimSpace(f.first)}
-	if i := slices.IndexFunc(m.snap.Sessions, func(s sample.Session) bool { return s.Pane == f.pane }); i >= 0 {
+	in := func(s sample.Session) bool { return s.Host == m.formHostOf(&f) && s.Pane == f.pane }
+	if i := slices.IndexFunc(m.snap.Sessions, in); i >= 0 {
 		sw.ExpectedPID, sw.ExpectedStart = m.snap.Sessions[i].PID, m.snap.Sessions[i].Start
 	}
 	if len(f.accts[f.agent]) > 0 {
@@ -282,8 +296,8 @@ func (m Model) switchAction(f form) *action {
 	} else {
 		say += "; capture handover before replacement"
 	}
-	a := &action{label: "switch", destructive: true, rec: "switch:" + f.pane, text: string(b), againText: string(again), say: say, done: "switched " + f.who + " to " + f.agent}
-	if i := slices.IndexFunc(m.snap.Sessions, func(s sample.Session) bool { return s.Pane == f.pane }); i >= 0 {
+	a := &action{label: "switch", destructive: true, rec: "switch:" + f.pane, text: string(b), againText: string(again), say: say, done: "switched " + f.who + " to " + f.agent, host: f.host}
+	if i := slices.IndexFunc(m.snap.Sessions, in); i >= 0 {
 		a.again = m.againFor(m.snap.Sessions[i], "switches")
 	}
 	return a
@@ -597,11 +611,12 @@ func (m Model) formPaste(text string) (tea.Model, tea.Cmd) {
 // formAgents are the agents the form picks from: Switch agent leaves out
 // the one the session runs.
 func (m Model) formAgents() []string {
+	agents := m.stateOf(m.formHost()).Agents
 	if !m.form.swap {
-		return m.agents
+		return agents
 	}
 	var out []string
-	for _, a := range m.agents {
+	for _, a := range agents {
 		if a != m.form.from {
 			out = append(out, a)
 		}
@@ -613,7 +628,11 @@ func (m Model) formAgents() []string {
 func (m Model) formEnter() (tea.Model, tea.Cmd) {
 	f := *m.form
 	m.form = &f
-	if m.conn == nil || m.lost {
+	if why := m.refusal(m.formHostOf(&f)); why != "" {
+		f.err = why
+		return m, nil
+	}
+	if m.formHostOf(&f) == m.opt.Host && (m.conn == nil || m.lost) {
 		f.err = "not sent, no connection"
 		return m, nil
 	}
@@ -643,12 +662,12 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	if f.rename {
-		cmd = m.send(proto.Act{RecID: "rename:" + f.pane, Confirm: "y", Text: name})
-		m = m.pairActed(action{rec: "rename:" + f.pane})
+		cmd = m.sendTo(m.formHostOf(&f), proto.Act{RecID: "rename:" + f.pane, Confirm: "y", Text: name})
+		m = m.pairActed(action{rec: "rename:" + f.pane, host: f.host})
 	} else {
 		if strings.TrimSpace(f.where) == "" {
 			f.err = "where does it start? type a path"
-			if len(m.wrepos) > 0 {
+			if len(m.formRepos()) > 0 {
 				f.err = "where does it start? a path, or " + m.keys.form.Left.Help().Key + " for a repository"
 			}
 			m.openWhere(&f)
@@ -665,7 +684,7 @@ func (m Model) formEnter() (tea.Model, tea.Cmd) {
 			f.startWhenDone, f.startAs, f.err = true, n, ""
 			return m, nil
 		}
-		if _, ok := cloneOf(f.where); ok && !f.picked {
+		if _, ok := cloneOf(f.where); ok && !f.picked && m.clonesIn(&f) {
 			// A URL that is not cloned: back to its rows, where ⏎ clones.
 			m.openWhere(&f)
 			return m, m.planWhere(&f)
@@ -704,6 +723,7 @@ func (m *Model) startNew(f *form, n proto.NewSession) tea.Cmd {
 			sess = f.autoName()
 		}
 		m.form, m.pending = nil, m.startAction(n, sess)
+		m.pending.host = f.host
 		return nil
 	}
 	if n.Account != "" && n.Account != "default" {
@@ -715,7 +735,7 @@ func (m *Model) startNew(f *form, n proto.NewSession) tea.Cmd {
 // sendNew sends n as f's act.
 func (m *Model) sendNew(f *form, n proto.NewSession) tea.Cmd {
 	b, _ := json.Marshal(n)
-	cmd := m.send(proto.Act{RecID: "new:session", Confirm: "y", Text: string(b)})
+	cmd := m.sendTo(m.formHostOf(f), proto.Act{RecID: "new:session", Confirm: "y", Text: string(b)})
 	f.act, f.err = fmt.Sprintf("a%d", m.acts), ""
 	return cmd
 }
@@ -734,7 +754,7 @@ func (f *form) cloneList() bool {
 // once for each text.
 func (m *Model) planWhere(f *form) tea.Cmd {
 	q := strings.TrimSpace(f.filter())
-	if _, ok := cloneOf(q); f.at != fieldWhere || !ok || q == f.planFor {
+	if _, ok := cloneOf(q); f.at != fieldWhere || !ok || q == f.planFor || !m.clonesIn(f) {
 		return nil
 	}
 	f.plan, f.planErr, f.planFor = nil, "", q
@@ -1027,7 +1047,7 @@ func (m Model) swapEnter(f form) (tea.Model, tea.Cmd) {
 	if strings.TrimSpace(f.first) == "" {
 		return m, nil
 	}
-	cmd := m.send(proto.Act{RecID: "switch-preview:" + f.pane})
+	cmd := m.sendTo(m.formHostOf(&f), proto.Act{RecID: "switch-preview:" + f.pane})
 	m.pending.previewAct = fmt.Sprintf("a%d", m.acts)
 	return m, cmd
 }
@@ -1197,7 +1217,7 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 		add("", "", m.thenLine(iw))
 	default:
 		hint := "a path"
-		if len(m.wrepos) > 0 {
+		if len(m.formRepos()) > 0 {
 			hint = "a path, or " + m.keys.form.Left.Help().Key + " for a repository"
 		}
 		field(fieldWhere, f.where, hint)
@@ -1424,7 +1444,7 @@ func (m Model) killAction(s sample.Session) *action {
 	if s.Pane == "" {
 		return nil
 	}
-	if sv, _ := sample.SplitPane(s.Pane); sv != "" && sv == m.stokerServer {
+	if sv, _ := sample.SplitPane(s.Pane); sv != "" && sv == m.stateOf(s.Host).StokerServer {
 		return nil // the stoker's own session: Q on its tab quits it
 	}
 	steps := proto.KillSteps(s.Pane, s.PID)
@@ -1432,14 +1452,14 @@ func (m Model) killAction(s sample.Session) *action {
 	if len(steps) > 1 {
 		say += ", then " + shellLine(steps[1])
 	}
-	return &action{label: "kill", steps: steps, destructive: true, rec: "kill:" + s.Pane, which: "secondary", say: say, again: m.againFor(s, "kills")}
+	return &action{label: "kill", steps: steps, destructive: true, rec: "kill:" + s.Pane, which: "secondary", say: say, again: m.againFor(s, "kills"), host: s.Host}
 }
 
 // againFor is what the second y's confirm says when s works or waits for
 // you, verb what y again does; "" when it rests.
 func (m Model) againFor(s sample.Session, verb string) string {
 	switch {
-	case s.Ask != nil || s.Permits || m.waitsFor(s.Pane):
+	case s.Ask != nil || s.Permits || m.waitsFor(s):
 		return s.Name + " waits for you: " + m.keys.main.Grant.Help().Key + " again " + verb + " it all the same"
 	case s.Works():
 		return s.Name + " works: " + m.keys.main.Grant.Help().Key + " again " + verb + " it mid-turn"
@@ -1447,10 +1467,10 @@ func (m Model) againFor(s sample.Session, verb string) string {
 	return ""
 }
 
-// waitsFor tells if the queue says the session in pane waits for you.
-func (m Model) waitsFor(pane string) bool {
+// waitsFor tells if the queue says s waits for you.
+func (m Model) waitsFor(s sample.Session) bool {
 	for _, it := range m.queue {
-		if it.Pane == pane && (it.State == queue.StatePermission || it.State == queue.StateQuestion && !it.Reminder) {
+		if it.Host == s.Host && it.Pane == s.Pane && (it.State == queue.StatePermission || it.State == queue.StateQuestion && !it.Reminder) {
 			return true
 		}
 	}

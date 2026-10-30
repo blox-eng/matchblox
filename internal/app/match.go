@@ -71,21 +71,17 @@ func (m Model) matchOf(s sample.Session) matchKind {
 	return matchUnlit
 }
 
-// asks tells if the session in a pane waits for an answer or a permission.
-func (m Model) asks(pane string) bool {
-	for _, it := range m.queue {
-		if it.Pane == pane {
-			return it.State == queue.StatePermission || it.State == queue.StateQuestion
-		}
-	}
-	return false
+// asks tells if a session waits for an answer or a permission.
+func (m Model) asks(s sample.Session) bool {
+	it, ok := m.waitOf(s)
+	return ok && (it.State == queue.StatePermission || it.State == queue.StateQuestion)
 }
 
 // matchFor is the match of a session at this moment: its character and colour.
 func (m Model) matchFor(s sample.Session) (string, color.Color) {
 	k, mk, now := m.matchOf(s), m.marks(), m.now()
 	if !m.opt.NoMotion {
-		if c, ok := m.changes[s.Pane]; ok {
+		if c, ok := m.changes[paneKey{s.Host, s.Pane}]; ok {
 			e := now.Sub(c.at)
 			switch {
 			case c.kind == changeStrike && k == matchLit && e < 200*time.Millisecond:
@@ -116,7 +112,7 @@ func (m Model) matchFor(s sample.Session) (string, color.Color) {
 		}
 		return ch, flames[step%8]
 	case matchUnlit:
-		if !m.opt.NoMotion && m.asks(s.Pane) {
+		if !m.opt.NoMotion && m.asks(s) {
 			phase := float64(now.UnixMilli()%breathFor.Milliseconds()) / float64(breathFor.Milliseconds())
 			level := int(math.Round(3 * (1 - math.Cos(2*math.Pi*phase)) / 2))
 			if level > 0 {
@@ -133,37 +129,50 @@ func (m Model) matchCell(s sample.Session) string {
 	return lipgloss.NewStyle().Foreground(c).Render(ch) + " "
 }
 
-// noteChanges records the changes between the last state and the next, so
-// each plays once.
-func (m *Model) noteChanges(next []sample.Session) {
-	if m.opt.NoMotion || !m.have {
+// paneKey is a pane on a host: pane ids repeat across hosts.
+type paneKey struct{ host, pane string }
+
+func paneOf(s sample.Session) paneKey { return paneKey{s.Host, s.Pane} }
+
+// noteChanges records the changes between a host's last state and its
+// next, so each plays once.
+func (m *Model) noteChanges(host string, next []sample.Session) {
+	had := m.have
+	if host != m.opt.Host {
+		i := m.peerAt(host)
+		had = i >= 0 && m.peers[i].have
+	}
+	if m.opt.NoMotion || !had {
 		return
 	}
 	if m.changes == nil {
-		m.changes = map[string]change{}
+		m.changes = map[paneKey]change{}
 	}
 	now := m.now()
 	was := map[string]matchKind{}
 	for _, s := range m.snap.Sessions {
-		was[s.Pane] = m.matchOf(s)
+		if s.Host == host {
+			was[s.Pane] = m.matchOf(s)
+		}
 	}
 	for _, s := range next {
 		old, ok := was[s.Pane]
 		if !ok {
 			continue
 		}
+		at := paneKey{host, s.Pane}
 		switch k := m.matchOf(s); {
 		case k == matchLit && old != matchLit:
-			m.changes[s.Pane] = change{changeStrike, now}
+			m.changes[at] = change{changeStrike, now}
 		case k == matchUnlit && old == matchLit:
-			m.changes[s.Pane] = change{changeOut, now}
+			m.changes[at] = change{changeOut, now}
 		case k == matchBurnt && old != matchBurnt:
-			m.changes[s.Pane] = change{changeBurn, now}
+			m.changes[at] = change{changeBurn, now}
 		}
 	}
-	for pane, c := range m.changes {
+	for at, c := range m.changes {
 		if now.Sub(c.at) > time.Second {
-			delete(m.changes, pane)
+			delete(m.changes, at)
 		}
 	}
 }
@@ -175,7 +184,7 @@ func (m Model) moving() bool {
 		return false
 	}
 	for _, s := range m.snap.Sessions {
-		if k := m.matchOf(s); k == matchLit || (k == matchUnlit && m.asks(s.Pane)) {
+		if k := m.matchOf(s); k == matchLit || (k == matchUnlit && m.asks(s)) {
 			return true
 		}
 	}

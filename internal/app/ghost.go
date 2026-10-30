@@ -97,14 +97,15 @@ func ghostAction(g ghost) *action {
 	return &action{label: "new session", say: say, ghost: true, where: g.repo.path}
 }
 
-// openNewIn is N with where picked and the cursor on agent, so ⏎ ⏎ starts
-// it, with first as the first message to edit; with no folder, N as it is.
-func (m Model) openNewIn(where, first string) Model {
+// openNewIn is N on host with where picked and the cursor on agent, so
+// ⏎ ⏎ starts it, with first as the first message to edit; with no folder,
+// N as it is.
+func (m Model) openNewIn(host, where, first string) Model {
 	if where == "" {
 		next, _ := m.openNew()
 		return next.(Model)
 	}
-	nm := m.openNewAt(where, first)
+	nm := m.openNewAt(host, where, first)
 	if nm.form == nil {
 		return nm
 	}

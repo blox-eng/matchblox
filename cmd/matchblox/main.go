@@ -571,7 +571,7 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 	defer closeAsk()
 	base.Ask, base.NoAsk = ask, why
 	base.Keys = consoleKeys(home)
-	list := hosts.Path()
+	list, hidden := hosts.Path(), hosts.HiddenPath()
 	asked := filepath.Join(filepath.Dir(state.Path()), "asked-where")
 	sh := app.NewShell(app.ShellOptions{
 		Base:          base,
@@ -579,7 +579,10 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		SSHHosts:      func() []string { return hosts.SSHHosts(home) },
 		Open:          func(h string) app.Options { return openHost(path, home, h) },
 		Remove:        func(h string) error { return hosts.Remove(list, h) },
-		Start:         host,
+		Hidden:        func() []string { return hosts.Hidden(hidden) },
+		Hide:          func(h string) error { return hosts.Hide(hidden, h) },
+		Show:          func(h string) error { return hosts.Show(hidden, h) },
+		Start:         host, // matchblox ws-1 opens ws-1 alone; "" the ticked hosts (R8)
 		FirstRun:      !fileExists(asked) && !fileExists(list),
 		Answered:      func() { _ = os.MkdirAll(filepath.Dir(asked), 0o700); _ = os.WriteFile(asked, nil, 0o600) },
 		TailscaleGate: setup.TailscaleGateMessage,

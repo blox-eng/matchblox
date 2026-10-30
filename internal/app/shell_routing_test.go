@@ -13,7 +13,9 @@ func shellAt(t *testing.T, at string) *shellRig {
 	t.Helper()
 	switch at {
 	case "list":
-		return newShell(t, []string{"ws-1"}, nil, "", false)
+		r := newShell(t, []string{"ws-1"}, nil, "", false)
+		r.toHosts(t)
+		return r
 	case "typing":
 		r := newShell(t, nil, nil, "", true)
 		r.key(t, "down")

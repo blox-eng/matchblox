@@ -444,8 +444,14 @@ func replayAt(t *testing.T, z replaySize) {
 
 	var mu sync.Mutex
 	var jumps [][]string
+	// The demo tells of the dock, so the phone opens in its full view, not
+	// list only.
+	views := t.TempDir()
+	if err := os.WriteFile(filepath.Join(views, "view.json"), []byte(`{"list_only_phone":false}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	m := app.New(app.Options{
-		Conn: transport.NewConn(a), Binary: version, CompactAt: cfg.Sessions.CompactAt, Now: view.Now,
+		Conn: transport.NewConn(a), Binary: version, CompactAt: cfg.Sessions.CompactAt, Now: view.Now, StateDir: views,
 		Run: func(argv []string) error { // a jump: the demo moves no terminal
 			mu.Lock()
 			jumps = append(jumps, argv)

@@ -20,6 +20,7 @@ the keys of the open tab, and a tap on one presses it.
 | `p` | Opens Ships. |
 | `Tab` or `Shift+Tab` | Opens the next or the previous tab. |
 | `u` | Cycles the dock of a phone: usage, the machine, the stoker. While a run is in charge, or has steps you have not seen, the stoker's panel takes the dock until you press `u`. |
+| `v` | Folds the detail pane and the dock, so the list takes the screen. The selected row opens in place. `v` again shows them. A phone and a desk each keep their own choice. A phone starts with list only. |
 | `c` | Opens the STOKER tab: your words and the gos, the plan with each step's outcome, the goes that wait for you, the triggers, the standing rules, today's compacts with their RESUME lines. Opening it marks the steps seen. |
 | `/` | Searches the open tab. |
 | `s` | Sorts Sessions and Panes by the next column. |
@@ -157,7 +158,9 @@ On the chips:
 | Key | What it does |
 |---|---|
 | `↑` or `k`, `↓` or `j` | Selects a host. |
-| `Enter` | Opens the console of the host, or adds a host. |
+| `Space` | Shows or hides the host. A hidden host has no stream, and the header counts it. |
+| `Enter` | Opens one console of the ticked hosts, or adds a host. With no host ticked, it opens the selected host. |
+| `c` | Connects the host again with `matchblox connect`. |
 | `x` | Removes a host from the list. matchblox stays on that host. |
 | `y` | Confirms the remove or the connect. |
 | `Backspace` | Deletes the last character of a host you type. |

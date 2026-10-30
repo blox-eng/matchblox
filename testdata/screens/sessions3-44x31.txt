@@ -1,0 +1,31 @@
+ ▰ matchblox · 3 hosts     ● 8 wait for you
+ SESSIONS 10  ships 3  machine  4  5  6  7
+────────────────────────────────────────────
+ WAITS FOR YOU · 8
+────────────────────────────────────────────
+▌│ spark-docs this mach… done      9m   88%
+   “I rewrote the quick start and the
+   install page.”
+   #4540 ●━●━●━●━●  live
+   ▰▰▰▰▰ plan 100%  ▲ clear
+                 a answer  A switch  ⏎ open
+────────────────────────────────────────────
+ ╿ ember-billing this m… done      4m   32%
+ │ train-loop gpu-1      asks      4m   88%
+ ╿ flint-auth this mach… asks      2m   41%
+ ╿ kindle-web this mach… asks      1m   56%
+ ╿ cinder-ci this machi… done      0s   55%
+ ╿ wick-mobile this mac… done      0s    6%
+ │ api-auth ws-1 · work  waits     1m   88%
+ WORKING · 2
+ │ docs-sweep ws-1       busy           88%
+ ✦ hearth-api this mach… busy           79%
+ + start a new session
+
+ 1 without an agent: shell:1.1 zsh
+
+ RECOMMENDATIONS · 7 · h hides
+ ▲ The week runs short: compact spark-docs
+ ○ Clear spark-docs (%3)
+────────────────────────────────────────────
+ ⏎ open  a answer  x kill  r rename  N new

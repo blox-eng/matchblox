@@ -330,7 +330,7 @@ func TestSearchKeepsTheMarks(t *testing.T) {
 	next = typeText(next, "done-2")
 	next, _ = key(next, "enter")
 	next, _ = key(next, " ")
-	if p := next.(Model).picked; !p["/w/wt/done-1"] || !p["/w/wt/done-2"] {
+	if p := next.(Model).picked; !p[wtKey{"", "/w/wt/done-1"}] || !p[wtKey{"", "/w/wt/done-2"}] {
 		t.Fatalf("marks %v", p)
 	}
 	next, _ = key(next, "x")
