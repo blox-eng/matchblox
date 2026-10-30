@@ -1903,3 +1903,16 @@ func TestANewViewerGetsTheAgentAgain(t *testing.T) {
 		t.Fatalf("a viewer of a closed chat got %q", raws(cmd))
 	}
 }
+
+// TestAChatOnAnAgentWithNoCommandsIsStillTheChat: the app hears the chat
+// is open, so its command keys go, and the console says why one does not
+// run there, instead of the app saying the commands run from the chat.
+func TestAChatOnAnAgentWithNoCommandsIsStillTheChat(t *testing.T) {
+	m, got := agentRaws(t, agentChat(t, "aider", "codex"), "enter")
+	if want := logos.Passthrough(keycmd.AgentSignal(keycmd.OtherAgent)); !slices.Equal(got, []string{want}) {
+		t.Fatalf("open wrote %q, want %q", got, want)
+	}
+	if m = command(t, m, "compact"); m.flash != "/compact is Claude Code's: a runs aider" {
+		t.Fatalf("flash %q", m.flash)
+	}
+}

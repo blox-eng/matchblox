@@ -543,9 +543,9 @@ const commandPrefix = "\x1b_matchblox;cmd="
 const minSignalTmux = "3.3"
 
 // tellAgent writes to the terminal, when it changes, which agent the chat
-// is on, for the phone's Commands: the command table's id, or none for an
-// agent with no commands and for a closed chat. A tmux too old to pass it
-// gets none, and the key line says so once.
+// is on, for the phone's Commands: the command table's id, OtherAgent for
+// an agent with no commands, or none for a closed chat. A tmux too old to
+// pass it gets none, and the key line says so once.
 func (m *Model) tellAgent() tea.Cmd {
 	say := m.agentSaid
 	switch {
@@ -553,7 +553,7 @@ func (m *Model) tellAgent() tea.Cmd {
 		s, _ := m.selectedSession()
 		id := keycmd.AgentOf(s.Agent)
 		if len(keycmd.ForAgent(id)) == 0 {
-			id = ""
+			id = keycmd.OtherAgent
 		}
 		say = keycmd.AgentSignal(id)
 	case say != "":

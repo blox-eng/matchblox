@@ -57,6 +57,11 @@ func Sequence(id string) string { return "\x1b_matchblox;cmd=" + id + "\x1b\\" }
 
 func AgentSignal(agent string) string { return "\x1b_matchblox;agent=" + agent + "\x1b\\" }
 
+// OtherAgent is the agent signal's id for a chat whose agent has no
+// commands: the app's command keys still go, and the console says why
+// each does not run there.
+const OtherAgent = "other"
+
 // agentNames are the agents of the table, as a key line names them.
 var agentNames = map[string]string{"claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "cursor": "Cursor"}
 
