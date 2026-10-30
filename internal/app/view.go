@@ -88,7 +88,7 @@ func (m Model) frame(w int) string {
 	sc := m.draw(w)
 	f := strings.Join(sc.lines, "\n")
 	if sc.nowX >= 0 {
-		f = overlayNow(f, sc.nowX, sc.nowTop, sc.nowBottom, m.st)
+		f = overlayNow(f, sc.nowX, sc.nowTop, sc.nowBottom, sc.nowSkip, m.st)
 	}
 	return f
 }
@@ -143,8 +143,10 @@ type drawn struct {
 	// detail: their line, and the key a tap on each presses.
 	actKeysAt int
 	actKeys   []span
-	// The rule of now: its column (-1 none) and its first and last line.
+	// The rule of now: its column (-1 none), its first and last line, and
+	// the lines it passes: the opened row's own.
 	nowX, nowTop, nowBottom int
+	nowSkip                 []int
 }
 
 // draw is the screen, with an ssh prompt over everything.
@@ -278,6 +280,13 @@ func (m Model) drawScreen(w int) drawn {
 		sc.nowX, sc.nowTop, sc.nowBottom = m.sessTracks(listW).laneX(listW)+lanePast, 2, sc.keysAt-1
 		if sc.dockAt >= 0 {
 			sc.nowBottom = sc.dockAt - 1
+		}
+		at, first := m.rowIndex(), true
+		for i, r := range sc.rows {
+			if r == at && !first {
+				sc.nowSkip = append(sc.nowSkip, sc.bodyTop+i)
+			}
+			first = first && r != at
 		}
 	}
 	return sc

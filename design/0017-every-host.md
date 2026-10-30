@@ -414,7 +414,9 @@ Each item changes the text above. The change wins.
   cells. With ships read, the lane drops before the ship. With no ships, the
   place drops first, then the lane, then the plan. The console does not
   draw the rule while a peek, a sheet, a form, a consent or an ask box is
-  up.
+  up. The rule passes the opened row's own lines (what the agent said, its
+  keys): drawn through them, it turned a space between two words into `│`
+  (review of the PR, 2026-10-30).
 - **Where the lanes show.** They show only where the list is 107 columns
   or wider: in list only on a desk (press `v`), or on a very wide screen.
   The list of the full view is at most 78 columns.

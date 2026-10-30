@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -105,13 +106,17 @@ func TestNowRuleIsOneColumn(t *testing.T) {
 	m := nowModel(t, 132)
 	c := canvasOf(m.render())
 	x, bottom := ruleOf(t, c)
+	skip := m.draw(132).nowSkip
+	if len(skip) == 0 {
+		t.Fatal("the selected row opens with no lines of its own")
+	}
 	if bottom != c.Height()-2 {
 		t.Fatalf("the rule ends on line %d, the bottom hairline is %d", bottom, c.Height()-2)
 	}
 	for y := range c.Height() {
 		cell := c.CellAt(x, y)
 		ruled := isRule(cell.Content) || strings.TrimSpace(cell.Content) != "" && sameColor(cell.Style.Fg, m.st.theme.Accent)
-		if in := y >= 2 && y <= bottom; ruled != in || in && !sameColor(cell.Style.Fg, m.st.theme.Accent) {
+		if in := y >= 2 && y <= bottom && !slices.Contains(skip, y); ruled != in || in && !sameColor(cell.Style.Fg, m.st.theme.Accent) {
 			t.Errorf("line %d has %q in %v at the rule's column %d", y, cell.Content, cell.Style.Fg, x)
 		}
 	}
@@ -144,7 +149,7 @@ func TestOverlayNowCrossings(t *testing.T) {
 	st := newStyles(true)
 	wash := lipgloss.NewStyle().Background(st.theme.AccentWash)
 	lines := []string{"──", " a", "  ", "━━", "╌╌", "┊┊", wash.Render(" x"), "──"}
-	c := canvasOf(overlayNow(strings.Join(lines, "\n"), 1, 0, len(lines)-1, st))
+	c := canvasOf(overlayNow(strings.Join(lines, "\n"), 1, 0, len(lines)-1, nil, st))
 	want := []string{"┬", "a", "│", "┿", "┼", "│", "x", "┴"}
 	for y, g := range want {
 		cell := c.CellAt(1, y)
@@ -238,6 +243,28 @@ func TestLanesNeverPushKeyLineOff(t *testing.T) {
 		m := upd(t, nowModel(t, 132), tea.WindowSizeMsg{Width: 132, Height: h})
 		if f := frameOf(m); len(f) > h || !strings.Contains(f[len(f)-1], "full view v") {
 			t.Fatalf("%d rows: the frame has %d lines, its last %q", h, len(f), f[len(f)-1])
+		}
+	}
+}
+
+// TestNowRuleSkipsOpenedRow: the rule passes the opened row's own lines,
+// so what the agent said reads whole.
+func TestNowRuleSkipsOpenedRow(t *testing.T) {
+	now := laneAt
+	m, _, _ := hostsAt(t, &now, "", 132, 30)
+	st := nowState(now)
+	for i := range st.Sessions {
+		st.Sessions[i].LastLine = strings.Repeat("word ", 30)
+	}
+	m = upd(t, m, stateMsg(st))
+	m.viewPrefs.ListOnlyDesk, m.splashDone = true, true
+	f := frameOf(m)
+	if lineWith(f, "word word word") == "" {
+		t.Fatalf("no opened row says its last words:\n%s", strings.Join(f, "\n"))
+	}
+	for _, l := range f {
+		if strings.Contains(l, "word│") || strings.Contains(l, "│word") {
+			t.Fatalf("the rule cuts the opened row: %q", l)
 		}
 	}
 }

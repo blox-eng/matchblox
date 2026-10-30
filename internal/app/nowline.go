@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -98,9 +99,10 @@ func (m Model) axisLines(t tracks, w int) []string {
 }
 
 // overlayNow draws the rule of now down column x of frame, from line top
-// to line bottom: it meets the hairlines and crosses the bars. Every cell
-// it touches takes the accent and keeps its background.
-func overlayNow(frame string, x, top, bottom int, st styles) string {
+// to line bottom, past the lines in skip: it meets the hairlines and
+// crosses the bars. Every cell it touches takes the accent and keeps its
+// background.
+func overlayNow(frame string, x, top, bottom int, skip []int, st styles) string {
 	lines := strings.Split(frame, "\n")
 	w := 0
 	for _, l := range lines {
@@ -110,8 +112,8 @@ func overlayNow(frame string, x, top, bottom int, st styles) string {
 	c.Compose(lipgloss.NewLayer(frame))
 	for y := top; y <= bottom && y < len(lines); y++ {
 		cell := c.CellAt(x, y)
-		if cell == nil || cell.Width == 0 {
-			continue // the second half of a wide glyph
+		if cell == nil || cell.Width == 0 || slices.Contains(skip, y) {
+			continue // the second half of a wide glyph, or a line it passes
 		}
 		next := *cell
 		if g := ruleGlyph(cell.Content, y == top, y == bottom); g != "" {
