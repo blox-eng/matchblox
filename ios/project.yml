@@ -47,6 +47,8 @@ targets:
         NSCameraUsageDescription: matchblox uses the camera to scan the pairing code of your host.
         NSFaceIDUsageDescription: Face ID unlocks the key that opens your console.
         NSSupportsLiveActivities: true
+        # The belt and its coast run at 120 Hz on a ProMotion iPhone.
+        CADisableMinimumFrameDurationOnPhone: true
         # The app uses only standard, exemption-qualifying encryption (SSH/TLS),
         # so it declares no non-exempt encryption. This clears App Store Connect
         # export compliance (incl. the France declaration) with no per-build prompt.

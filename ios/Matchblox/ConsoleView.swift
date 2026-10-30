@@ -100,8 +100,8 @@ struct ConsoleView: View {
     }
 }
 
-/// The terminal, with the key bar above the keyboard. An input accessory shows only while its
-/// view has the keyboard, so a second bar stays under the terminal while the keyboard is down.
+/// The terminal, with the key belt above the keyboard. An input accessory shows only while its
+/// view has the keyboard, so a second belt stays under the terminal while the keyboard is down.
 private struct TerminalRepresentable: UIViewRepresentable {
     let connection: ConsoleConnection
 
@@ -121,19 +121,77 @@ private struct TerminalRepresentable: UIViewRepresentable {
         terminal.smartInsertDeleteType = .no
         terminal.autocapitalizationType = .none
         terminal.inlinePredictionType = .no
-        terminal.inputAccessoryView = KeyBarView(terminal: terminal, keyboardUp: true)
         terminal.contentInsetAdjustmentBehavior = .never
         terminal.terminalDelegate = connection
         connection.terminal = terminal
 
-        let dock = KeyBarView(terminal: terminal, keyboardUp: false)
-        terminal.onFocus = { [weak dock] focused in dock?.isHidden = focused }
-        let stack = UIStackView(arrangedSubviews: [terminal, dock])
+        let belts = Belts(terminal: terminal)
+        terminal.inputAccessoryView = belts.lifted
+        terminal.onFocus = { [weak belts] focused in belts?.focusChanged(focused) }
+        connection.onAgent = { agent in belts.agentChanged(agent) }
+        connection.onOutput = { belts.outputArrived() }
+        let stack = UIStackView(arrangedSubviews: [terminal, belts.dock])
         stack.axis = .vertical
         return stack
     }
 
     func updateUIView(_ stack: UIStackView, context: Context) {}
+}
+
+/// The two belts, the one on the keyboard and the one docked under the terminal, kept as one:
+/// the same agent, the same live commands, and the same resting place.
+@MainActor
+private final class Belts: NSObject {
+    let lifted = BeltView()
+    let dock = BeltView()
+    private weak var terminal: ConsoleTerminalView?
+    private var agent: String?
+
+    init(terminal: ConsoleTerminalView) {
+        self.terminal = terminal
+        super.init()
+        for belt in [lifted, dock] {
+            belt.onSend = { [weak terminal] bytes in terminal?.send(bytes) }
+            belt.onKeyboard = { [weak terminal] in
+                guard let terminal else { return }
+                _ = terminal.isFirstResponder ? terminal.resignFirstResponder() : terminal.becomeFirstResponder()
+            }
+            // The tray is the matchbox drawer: it comes with the layout picker.
+            belt.onOpenTray = {}
+        }
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardChanged), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+    }
+
+    func agentChanged(_ agent: String?) {
+        self.agent = agent
+        lifted.agent = agent
+        dock.agent = agent
+        outputArrived()
+    }
+
+    /// A command runs only from the chat: never with no agent, never in a jumped pane.
+    func outputArrived() {
+        let live = !(agent ?? "").isEmpty && terminal?.inTmuxPane == false
+        lifted.commandsLive = live
+        dock.commandsLive = live
+    }
+
+    func focusChanged(_ focused: Bool) {
+        dock.isHidden = focused
+        if focused {
+            lifted.follow(dock)
+        } else {
+            dock.follow(lifted)
+        }
+    }
+
+    /// The keyboard's frame holds the lifted belt. Only a system keyboard makes it taller than
+    /// the belt by more than a key; a hardware keyboard shows the belt alone.
+    @objc private func keyboardChanged(_ note: Notification) {
+        guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+        let onScreen = end.minY < (terminal?.window?.windowScene?.screen.bounds.height ?? .greatestFiniteMagnitude)
+        lifted.keyboardUp = onScreen && end.height - max(lifted.bounds.height, BeltView.handleHeight + BeltGeometry.height) > BeltGeometry.keyHeight
+    }
 }
 
 /// Owns one SSHSession for each connect. A session that ends at once opens again; a good session that ends waits for a tap. It stops when the view goes away or the app goes to the background.
@@ -164,6 +222,11 @@ final class ConsoleConnection {
     private(set) var phase = Phase.connecting
 
     @ObservationIgnored weak var terminal: TerminalView?
+    /// The console's agent signal: the agent of the chat's session, or "" for none. A new
+    /// session starts with none.
+    @ObservationIgnored var onAgent: @MainActor (String?) -> Void = { _ in }
+    /// Called each time a read has reached the terminal.
+    @ObservationIgnored var onOutput: @MainActor () -> Void = {}
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var outgoing: AsyncStream<Outgoing>.Continuation?
     /// One unlock serves every reconnect until the app goes to the background.
@@ -312,9 +375,19 @@ final class ConsoleConnection {
             sink.yield(.resize(cols: now.cols, rows: now.rows))
         }
         var sawOutput = false
+        // The agent signal comes out before SwiftTerm sees the bytes: the terminal never draws it.
+        var signal = AgentSignalFilter()
+        onAgent(nil)
         for await chunk in output {
             sawOutput = true
-            terminal?.feed(byteArray: ArraySlice(chunk))
+            let (pass, agent) = signal.feed(ArraySlice(chunk))
+            if !pass.isEmpty {
+                terminal?.feed(byteArray: pass[...])
+            }
+            if let agent {
+                onAgent(agent)
+            }
+            onOutput()
         }
         return .ended(sawOutput: sawOutput)
     }
