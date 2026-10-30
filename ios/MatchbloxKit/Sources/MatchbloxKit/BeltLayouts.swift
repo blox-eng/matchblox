@@ -53,21 +53,14 @@ public struct KeyCatalog: Sendable {
     }
 
     /// Commands follows `agent`, the agent of the session the console shows. With no agent,
-    /// or one with no commands, it is the home row only. Mine keeps the keys of the catalog,
-    /// and starts at `◂`, its home stop, in the ring order of the editor.
+    /// or one with no commands, it is the home row only. Mine keeps the keys of the catalog.
     public func keys(_ layout: BeltLayout, agent: String?, mine: [BeltKey]) -> [BeltKey] {
         switch layout {
         case .steer: Self.steer
         case .tmux: Self.tmux
         case .commands: Self.homeRow + commands.filter { $0.agent == agent }.map(Self.key)
-        case .mine: Self.fromHome(mine.compactMap { known[$0.id] })
+        case .mine: mine.compactMap { known[$0.id] }
         }
-    }
-
-    /// `keys` turned on the ring so that `◂` comes first.
-    private static func fromHome(_ keys: [BeltKey]) -> [BeltKey] {
-        guard let home = keys.firstIndex(where: { $0.id == homeRow[0].id }) else { return keys }
-        return Array(keys[home...] + keys[..<home])
     }
 
     /// The editor's groups: Steer, Edit, Digits, Ctrl, then one for each agent in table order.

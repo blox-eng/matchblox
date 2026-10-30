@@ -293,8 +293,7 @@ and a tap shows `commands run from the chat`. `compact` and `clear` run only in 
 
 Tap `EDIT MINE` on the tray floor. The sheet lists all keys in groups. Tap
 a key to add it to Mine, or to take it off. Drag a key to move it. `◂`
-always stays: the sheet says `◂ always stays: it is the way back`. Where
-you move `◂`, Mine still opens with `◂` at the left. Mine is
+always stays: the sheet says `◂ always stays: it is the way back`. Mine is
 one set for the device, for all hosts. It stays when you quit the app.
 
 A vertical swipe scrolls the console and a tmux pane. The lines move with
