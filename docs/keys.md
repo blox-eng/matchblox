@@ -137,6 +137,22 @@ A third `^C` goes to the agent.
 
 If the pane is gone, the chat says `That session ended.`
 
+### The agent's history
+
+The mouse wheel over the chat shows the earlier lines of the agent's pane.
+On a phone, a swipe over the chat does the same. Each step of the wheel
+moves 3 lines, up to 2000 lines. The wheel down goes back toward the live
+screen. While the chat shows the history, its title adds `↑ <n> lines up`
+and its frame is dim, not in the accent.
+
+While the chat shows the history, the first key goes back to the live
+screen and goes to no agent. This is true for every key, a paste and a key
+of the question card. The key line says `back to live — the agent did not
+get that key`. Press the key again to send it. A tap on the chat's title
+also goes back to the live screen. The chat also goes back to the live
+screen when you select a different session or give the keys back to
+Sessions.
+
 At night, the first key of a run that sends something to an agent asks
 "Take over?". `y` rests the stoker while you work, and `n` keeps it on. Keys
 that only move the cursor of the question card do not ask.
@@ -218,8 +234,10 @@ On the chips:
 
 ## A phone
 
-A tap selects a row. On a narrow screen, a tap on an agent opens its chat
-over the whole screen. Where the chat sits beside the list, a tap on the
+A tap selects a row. A swipe over the list moves the selection. A swipe
+over the chat shows the agent's history (see
+[The agent's history](#the-agents-history)). On a narrow screen, a tap on
+an agent opens its chat over the whole screen. Where the chat sits beside the list, a tap on the
 selected agent, or on the chat, gives the chat the keys. A tap on an option
 of the question card picks it, a tap on a key of its foot presses it, and a
 tap on the left gives the keys back to Sessions. On any other row the key line says `tap again: <command>`, and a

@@ -150,8 +150,8 @@ there is no card. The keys go to the agent as they are.
 - Swipe for arrows (#123).
 - A shell to a host that does not run matchblox, SFTP or port forwarding.
 - A terminal emulator in the TUI. The chat shows what tmux already holds.
-- Scrollback in the chat. It shows the visible screen. Scrollback is a
-  later issue if the owner asks for it.
+- Scrollback in the chat. Added on 2026-10-30, on the owner's ask (#263):
+  the wheel scrolls the agent's history. See docs/console.md.
 - Agents outside tmux (herdr). The design keeps the screen source behind
   one function, so that a later source can replace it.
 
