@@ -230,3 +230,14 @@ func sameColor(a, b color.Color) bool {
 	r2, g2, b2, a2 := b.RGBA()
 	return r1 == r2 && g1 == g2 && b1 == b2 && a1 == a2
 }
+
+// TestLanesNeverPushKeyLineOff: on a short screen the lanes give way, so
+// the frame fits and its key line shows.
+func TestLanesNeverPushKeyLineOff(t *testing.T) {
+	for h := 6; h <= 10; h++ { // under 6 rows no frame fits, lanes or not
+		m := upd(t, nowModel(t, 132), tea.WindowSizeMsg{Width: 132, Height: h})
+		if f := frameOf(m); len(f) > h || !strings.Contains(f[len(f)-1], "full view v") {
+			t.Fatalf("%d rows: the frame has %d lines, its last %q", h, len(f), f[len(f)-1])
+		}
+	}
+}

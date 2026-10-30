@@ -195,7 +195,7 @@ func (m Model) drawScreen(w int) drawn {
 	full := max(m.height-5, 1)
 	listW, detailW := m.panes(w)
 	sc.listW = listW
-	lanes := m.tab == tabSessions && len(m.snap.Sessions) > 0 && m.sessTracks(listW).lane > 0
+	lanes := m.tab == tabSessions && len(m.snap.Sessions) > 0 && full >= 5 && m.sessTracks(listW).lane > 0 // the axis leaves the list three rows
 	if lanes {
 		sc.lines = append(sc.lines, m.axisLines(m.sessTracks(listW), listW)...)
 		sc.bodyTop += 2
