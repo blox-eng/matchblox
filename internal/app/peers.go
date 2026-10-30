@@ -200,7 +200,7 @@ func (m Model) peerUpdate(pm peerMsg) (tea.Model, tea.Cmd) {
 	l := m.peers[i]
 	switch msg := pm.msg.(type) {
 	case lostMsg:
-		if m.quitting || l.redialing || l.mismatch || (msg.conn != nil && msg.conn != l.conn) {
+		if m.quitting || l.redialing || l.mismatch || l.blocked != nil || (msg.conn != nil && msg.conn != l.conn) {
 			return m, nil
 		}
 		return m.peerLost(i, msg.err)

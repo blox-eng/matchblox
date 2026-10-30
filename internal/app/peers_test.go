@@ -265,3 +265,14 @@ func TestUntickEndsTheBatchOfItsHost(t *testing.T) {
 		t.Fatalf("batch %v, flash %q: the batch waits on a host that is gone", m.batch, m.flash)
 	}
 }
+
+// TestBlockedPeerIgnoresALateLoss: a send that fails after its peer was
+// blocked dials nothing: the row waits for the builder.
+func TestBlockedPeerIgnoresALateLoss(t *testing.T) {
+	m, _, ws := peered(func() (transport.Conn, error) { return newFake(), nil })
+	m = upd(t, m, peerMsg{host: "ws-1", conn: ws, msg: lostMsg{err: fmt.Errorf("ws-1: %w", remote.ErrNotInstalled), conn: ws}})
+	next, cmd := m.Update(peerMsg{host: "ws-1", conn: ws, msg: lostMsg{err: io.ErrClosedPipe, conn: ws}})
+	if p := next.(Model).peers[0]; p.redialing || cmd != nil || !errors.Is(p.blocked, remote.ErrNotInstalled) {
+		t.Fatalf("redialing %v, cmd %v, blocked %v: a late loss dialed a blocked peer", p.redialing, cmd != nil, p.blocked)
+	}
+}
