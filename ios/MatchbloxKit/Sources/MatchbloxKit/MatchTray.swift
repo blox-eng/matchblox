@@ -110,7 +110,7 @@ public enum CellGrid {
 /// the terminal keeps the size it had: its lines slide up and the top ones go under the edge,
 /// as in the mockup, so the host gets no resize. When the trays close, the terminal follows
 /// the screen again once the screen is back to the held height, or once its width changes.
-public struct ScreenHold: Equatable, Sendable {
+public struct ScreenHold: Sendable {
     private var trays = 0
     public private(set) var held: CGSize?
 

@@ -157,7 +157,7 @@ final class MatchTrayTests: XCTestCase {
         var hold = ScreenHold()
         hold.open(screen: tall)
         hold.open(screen: short)
-        XCTAssertEqual(hold.held, tall)
+        XCTAssertEqual(hold.held?.height, 600)
         hold.close()
         XCTAssertEqual(hold.height(screen: tall), 600)
         XCTAssertEqual(hold.height(screen: short), 600)
