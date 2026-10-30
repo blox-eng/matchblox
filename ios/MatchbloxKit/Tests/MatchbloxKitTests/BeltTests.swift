@@ -140,6 +140,21 @@ final class BeltTests: XCTestCase {
         XCTAssertTrue(onEdge, "a key's left side rests one gap from the left edge")
     }
 
+    func testNonFiniteVelocityRests() {
+        for velocity in [CGFloat.nan, .infinity, -.infinity] {
+            var m = BeltMotion(keys: tenKeys, geometry: geometry)
+            _ = m.drag(by: 0)
+            m.release(velocity: velocity)
+            var frames = 0
+            while !m.atRest && frames < 100 {
+                XCTAssertEqual(m.step(dt: 1.0 / 60), [])
+                frames += 1
+            }
+            XCTAssertTrue(m.atRest)
+            XCTAssertEqual(m.offset, m.homeOffset)
+        }
+    }
+
     // MARK: Tap versus drag
 
     func testDragThatReturnsIsNotATap() {

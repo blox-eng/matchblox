@@ -134,7 +134,7 @@ public struct BeltMotion: Sendable {
 
     /// `velocity` is in pt/s, as a pan gesture gives it.
     public mutating func release(velocity: CGFloat) {
-        self.velocity = velocity
+        self.velocity = velocity.isFinite ? velocity : 0
         phase = .coasting
     }
 

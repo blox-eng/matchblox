@@ -67,6 +67,9 @@ design must be exactly the same as the one we use in the island".
 2. Each key side that passes the left edge, while dragged or while coasting,
    gives one haptic tick: `UISelectionFeedbackGenerator.selectionChanged()`,
    the tick of a picker wheel.
+   Ruling (2026-10-30): the tick comes when the nearest detent changes, halfway
+   between two detents. Reason: the belt rests on a detent, so a tick at the
+   edge itself fires on touch jitter at rest.
 3. The home stop is the detent with `◂` at the left edge. Every layout has
    `◂ ↑ ↓ ⏎` as its first four keys, with `↑ ↓ ⏎` two cells wide, so at home
    `◂` sits at the left and `↑ ↓ ⏎` fill the right. Reaching home gives a firmer
