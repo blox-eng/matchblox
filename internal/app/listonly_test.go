@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -10,6 +11,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // demoIn is the demo machine at w by h, its views kept in dir ("" keeps
@@ -194,5 +197,31 @@ func TestTheMarkKeepsItsGap(t *testing.T) {
 				t.Fatalf("w=%d %s: the mark has no gap: %q", w, tabNames[tab], k)
 			}
 		}
+	}
+}
+
+// manyRows is one host with n sessions, list only, 200×60.
+func manyRows(t *testing.T, n int) Model {
+	t.Helper()
+	var ss []func(sample.Session) sample.Session
+	for i := range n {
+		ss = append(ss, sess(i+1, fmt.Sprintf("s%d", i), fmt.Sprintf("%%%d", i+1), nil))
+	}
+	now := lostAt
+	m, _, _ := hostsAt(t, &now, "", 200, 60)
+	m = upd(t, m, stateMsg(hostState(ss...)))
+	m.viewPrefs.ListOnlyDesk, m.splashDone = true, true
+	return m
+}
+
+// TestListOnlyFrameCostGrowsWithRows: a list only frame's work grows with its
+// rows, not with their square: 600 sessions cost about twice 300.
+func TestListOnlyFrameCostGrowsWithRows(t *testing.T) {
+	cost := func(n int) float64 {
+		m := manyRows(t, n)
+		return testing.AllocsPerRun(1, func() { _ = m.draw(200) })
+	}
+	if small, big := cost(300), cost(600); big > 3*small {
+		t.Fatalf("600 rows cost %.0f allocations, 300 cost %.0f: more than twice", big, small)
 	}
 }

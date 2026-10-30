@@ -297,18 +297,18 @@ func (m Model) markActKeys(sc *drawn, b, vis body, detail []string, room, detail
 		_, spans := m.detailKeys(s)
 		sc.actKeysAt, sc.actKeys = sc.bodyTop+len(detail)-1, shift(spans, sc.listW+1)
 	case detailW == 0 && m.inPlace():
-		last, shown, all := -1, 0, 0
+		at, last, shown, all := m.rowIndex(), -1, 0, 0
 		for i, r := range vis.rows {
-			if r == m.rowIndex() {
+			if r == at {
 				last, shown = i, shown+1
 			}
 		}
 		for _, r := range b.rows {
-			if r == m.rowIndex() {
+			if r == at {
 				all++
 			}
 		}
-		if last > 0 && vis.rows[last-1] == m.rowIndex() && shown == all { // opened, and whole
+		if last > 0 && vis.rows[last-1] == at && shown == all { // opened, and whole
 			_, spans := m.openedKeys(s, sc.listW)
 			sc.actKeysAt, sc.actKeys = sc.bodyTop+last, spans
 		}
