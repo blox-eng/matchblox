@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"regexp"
@@ -16,6 +17,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -369,7 +371,8 @@ const homeKey = "\x1b_matchblox\x1b\\"
 // chatKey is one key the chat sends to an agent: the pane and the agent it
 // was pressed for, and when the screen it answers was taken. A card's
 // answer waits among the keys as pick, the said.Answer for the session
-// named name.
+// named name. A command key that runs one of matchblox's own acts on the
+// pane waits as act ("compact:", "clear:").
 type chatKey struct {
 	pane string
 	pid  int
@@ -377,6 +380,7 @@ type chatKey struct {
 	seen time.Time
 	pick string
 	name string
+	act  string
 }
 
 // maxLit is the most text one "lit:" key carries; the service takes no more.
@@ -527,6 +531,73 @@ func (m Model) chatPaste(text string) (tea.Model, tea.Cmd) {
 	return m.toAgent(name, keys...)
 }
 
+// commandPrefix starts a command key the phone sends: its id follows, then
+// the APC's end (keycmd.Sequence).
+const commandPrefix = "\x1b_matchblox;cmd="
+
+// agentNames are the agents of the command table, as a key line names them.
+var agentNames = map[string]string{"claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "cursor": "Cursor"}
+
+// commandAgent is the command table's id of the agent a session runs.
+func commandAgent(agent string) string {
+	if agent == sample.CursorAgent {
+		return "cursor"
+	}
+	return agent
+}
+
+// commandKey runs the phone's command key apc in the chat, behind the
+// chat's guards, as a key pressed there. Compact and clear run matchblox's
+// own acts on the pane; any other command types its text and Enter. A
+// command the chat's agent does not have sends nothing; an id the table
+// does not know does nothing.
+func (m Model) commandKey(apc string) (tea.Model, tea.Cmd) {
+	id, ok := strings.CutPrefix(apc, commandPrefix)
+	id, end := strings.CutSuffix(id, "\x1b\\")
+	c, known := keycmd.ByID(id)
+	if !ok || !end || !known {
+		return m, nil
+	}
+	if !m.chatKeys {
+		m.flash = "commands run from the chat"
+		return m, nil
+	}
+	if m.focus(tea.KeyPressMsg{}) != layerMain {
+		return m, nil // as a paste: a layer on top takes no command
+	}
+	m, touch := m.touchRest()
+	if m.notLive() {
+		return m.backToLive(), touch
+	}
+	m.flash = ""
+	s, _ := m.selectedSession()
+	if have := commandAgent(s.Agent); have != c.Agent {
+		runs := agentNames[have]
+		if runs == "" {
+			runs = cmp.Or(s.Agent, "no agent matchblox knows")
+		}
+		m.flash = fmt.Sprintf("/%s is %s's: %s runs %s", c.Label, agentNames[c.Agent], s.Name, runs)
+		return m, touch
+	}
+	var name string
+	var keys []chatKey
+	switch c.Run {
+	case "compact", "clear":
+		name, keys = m.pressed("")
+		for i := range keys {
+			keys[i].act = c.Run + ":"
+		}
+	default:
+		name, keys = m.pressed("lit:"+c.Text, enterName)
+	}
+	if m.night() && !m.stoker.Asked {
+		m.held = m.heldKeys(name, keys)
+		return m, touch
+	}
+	next, cmd := m.toAgent(name, keys...)
+	return next, tea.Batch(touch, cmd)
+}
+
 // pasteTexts are the keys of a paste: its text in "lit:" chunks of at most
 // maxLit bytes, with Enter for each newline: \n, \r or \r\n, as terminals
 // paste a newline as \r.
@@ -640,8 +711,11 @@ func (m *Model) sendKey() tea.Cmd {
 	k := m.keyQ[0]
 	m.keyQ = m.keyQ[1:]
 	act := proto.Act{RecID: proto.KeysPrefix + k.pane, Text: k.text, PID: k.pid, Seen: k.seen}
-	if k.pick != "" {
+	switch {
+	case k.pick != "":
 		act = proto.Act{RecID: "pick:" + k.pane, Which: "secondary", Confirm: "y", Text: k.pick}
+	case k.act != "":
+		act = proto.Act{RecID: k.act + k.pane, Confirm: "y"}
 	}
 	cmd := m.send(act)
 	m.keyInFlight = "a" + strconv.Itoa(m.acts)

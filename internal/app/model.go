@@ -586,8 +586,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case uv.UnknownApcEvent:
 		if string(msg) == homeKey {
 			m.chatKeys = false
+			return m, nil
 		}
-		return m, nil
+		return m.commandKey(string(msg))
 	case screenMsg:
 		if msg.Pane == m.watching && (msg.Up == 0 || m.watchUp > 0) { // the history after live is not live
 			m.screen = proto.Screen(msg)

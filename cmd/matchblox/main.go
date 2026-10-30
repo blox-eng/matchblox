@@ -283,7 +283,7 @@ func run(args []string) error {
 			return err
 		}
 		if os.Getenv(panes.HomeEnv) == "1" {
-			for _, argv := range [][]string{panes.SizeArgv(), panes.HomeKeyArgv()} {
+			for _, argv := range [][]string{panes.SizeArgv(), panes.HomeKeyArgv(), panes.CommandKeysArgv()} {
 				_ = exec.Command("tmux", argv[1:]...).Run()
 			}
 		}

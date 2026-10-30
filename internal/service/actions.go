@@ -304,6 +304,11 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 		ran = len(res.Ran) > 0
 		return res
 	}
+	if cPane, ok := strings.CutPrefix(a.RecID, "clear:"); ok {
+		res := s.clear(ctx, cPane, a)
+		ran = len(res.Ran) > 0
+		return res
+	}
 	if holdPane, ok := strings.CutPrefix(a.RecID, "hold:"); ok {
 		res := s.hold(ctx, holdPane, a)
 		ran = len(res.Ran) > 0

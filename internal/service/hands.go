@@ -13,7 +13,7 @@ import (
 )
 
 // paneActs are the acts that name a pane after the colon.
-var paneActs = []string{"message:", "pick:", "answer:", "compact:", "hold:", "release:", "park:", "kill:", "rename:", "switch:", proto.KeysPrefix}
+var paneActs = []string{"message:", "pick:", "answer:", "compact:", "clear:", "hold:", "release:", "park:", "kill:", "rename:", "switch:", proto.KeysPrefix}
 
 // typedPane is the pane a message, an answer or a pick types into.
 func typedPane(recID string) string {
@@ -134,21 +134,9 @@ func (s *Service) recordOrder(a proto.Act, res proto.Result) {
 // compacted in the last 30 minutes, and the pane read again right before
 // each key. A refusal says which.
 func (s *Service) compact(ctx context.Context, pane string, a proto.Act) proto.Result {
-	x, ok := s.sessionAt(pane)
-	switch {
-	case !ok:
-		return proto.Result{Err: "no agent session in " + pane + " any more"}
-	case x.Agent != "claude":
-		return proto.Result{Err: x.Name + " is not a Claude Code session: /compact is typed only there"}
-	}
-	if err := s.messageable(pane, x.PID); err != nil {
+	x, err := s.claudeAtRest(pane, "compact")
+	if err != nil {
 		return proto.Result{Err: err.Error()}
-	}
-	if it, ok := s.queued(pane); ok && stoker.Waits(it) {
-		return proto.Result{Err: x.Name + " waits for you"}
-	}
-	if !s.resting(pane) {
-		return proto.Result{Err: x.Name + " is not at rest: a compact waits for the end of its turn"}
 	}
 	now := s.now()
 	if s.Stoker != nil && x.SessionID != "" {
@@ -179,4 +167,37 @@ func (s *Service) compact(ctx context.Context, pane string, a proto.Act) proto.R
 		s.refreshStoker()
 	}
 	return res
+}
+
+// clear types /clear into a session under the guards of compact. A clear is
+// not a compact: the stoker's compact plan does not count it.
+func (s *Service) clear(ctx context.Context, pane string, a proto.Act) proto.Result {
+	if _, err := s.claudeAtRest(pane, "clear"); err != nil {
+		return proto.Result{Err: err.Error()}
+	}
+	release := s.holdPane(pane)
+	defer release()
+	return s.Actions.Do(ctx, stoker.ClearAction(pane), a.Confirm)
+}
+
+// claudeAtRest is the session in pane when /<cmd> may go to it: Claude
+// Code, one the builder may message, not waiting for them, and at rest.
+func (s *Service) claudeAtRest(pane, cmd string) (sample.Session, error) {
+	x, ok := s.sessionAt(pane)
+	switch {
+	case !ok:
+		return x, errors.New("no agent session in " + pane + " any more")
+	case x.Agent != "claude":
+		return x, fmt.Errorf("%s is not a Claude Code session: /%s is typed only there", x.Name, cmd)
+	}
+	if err := s.messageable(pane, x.PID); err != nil {
+		return x, err
+	}
+	if it, ok := s.queued(pane); ok && stoker.Waits(it) {
+		return x, errors.New(x.Name + " waits for you")
+	}
+	if !s.resting(pane) {
+		return x, fmt.Errorf("%s is not at rest: a %s waits for the end of its turn", x.Name, cmd)
+	}
+	return x, nil
 }

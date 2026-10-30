@@ -14,6 +14,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/said"
@@ -1575,5 +1576,114 @@ func TestAgentMenuCutKeepsAPlainRule(t *testing.T) {
 	screen := "⏺ done\n────────\n> \n────────\n  ? for shortcuts"
 	if got := agentMenuCut(screen); got != screen {
 		t.Fatalf("cut a prompt box: %q", got)
+	}
+}
+
+// commandChat is the console with the keys in the chat of a, in %1, which
+// runs agent.
+func commandChat(t *testing.T, agent string) (Model, *fakeConn) {
+	t.Helper()
+	st := fixtureState()
+	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a", Agent: agent}, {PID: 2, Pane: "%2", Name: "b"}}
+	m, f := loadedWith(t, 100, st)
+	m = onPane(t, m, "%1")
+	next, _ := m.Update(screenMsg{Pane: m.watching, At: time.Unix(100, 0), Text: "> "})
+	m = pressKeys(t, next.(Model), "enter")
+	if !m.chatKeys {
+		t.Fatal("enter did not give the chat the keys")
+	}
+	return m, f
+}
+
+// command is the command key id, as the phone sends it, read by the
+// console's input decoder.
+func command(t *testing.T, m Model, id string) Model {
+	t.Helper()
+	for _, e := range decoded(t, keycmd.Sequence(id)) {
+		next, cmd := m.Update(e)
+		drain(cmd)
+		m = next.(Model)
+	}
+	return m
+}
+
+func TestCompactKeyRunsTheCompactAct(t *testing.T) {
+	m, f := commandChat(t, "claude")
+	m = command(t, m, "compact")
+	if got := f.acts(); len(got) != 1 || got[0].RecID != "compact:%1" || got[0].Confirm != "y" {
+		t.Fatalf("acts %+v", got)
+	}
+	if m.flash != "" {
+		t.Fatalf("flash %q", m.flash)
+	}
+}
+
+func TestClearKeyRunsTheClearAct(t *testing.T) {
+	m, f := commandChat(t, "claude")
+	command(t, m, "clear")
+	if got := f.acts(); len(got) != 1 || got[0].RecID != "clear:%1" || got[0].Confirm != "y" {
+		t.Fatalf("acts %+v", got)
+	}
+}
+
+func TestTypeCommandTypesThroughKeys(t *testing.T) {
+	m, f := commandChat(t, "claude")
+	m = command(t, m, "model")
+	if got := keyActs(f); len(got) != 1 || got[0].RecID != proto.KeysPrefix+"%1" || got[0].Text != "lit:/model" || got[0].PID != 1 || !got[0].Seen.Equal(m.screen.At) {
+		t.Fatalf("first: %+v", got)
+	}
+	m = answered(t, m, "")
+	if got := keyActs(f); len(got) != 2 || got[1].Text != "Enter" || got[1].PID != 1 || !got[1].Seen.Equal(m.screen.At) {
+		t.Fatalf("second: %+v", got)
+	}
+}
+
+func TestCommandForAnotherAgentSendsNothing(t *testing.T) {
+	m, f := commandChat(t, "codex")
+	m = command(t, m, "compact")
+	if got := f.acts(); len(got) != 0 {
+		t.Fatalf("acts %+v", got)
+	}
+	if want := "/compact is Claude Code's: a runs Codex"; m.flash != want {
+		t.Fatalf("flash %q, want %q", m.flash, want)
+	}
+	m, _ = commandChat(t, "cursor-agent")
+	if m = command(t, m, "codex-compact"); m.flash != "/compact is Codex's: a runs Cursor" {
+		t.Fatalf("flash %q", m.flash)
+	}
+}
+
+func TestCommandWithNoChatSendsNothing(t *testing.T) {
+	m, f := commandChat(t, "claude")
+	m = pressKeys(t, m, "ctrl+]")
+	m = command(t, m, "compact")
+	if got := f.acts(); len(got) != 0 {
+		t.Fatalf("acts %+v", got)
+	}
+	if m.flash != "commands run from the chat" {
+		t.Fatalf("flash %q", m.flash)
+	}
+}
+
+func TestUnknownCommandSendsNothing(t *testing.T) {
+	m, f := commandChat(t, "claude")
+	m = command(t, m, "nope")
+	if got := f.acts(); len(got) != 0 || m.flash != "" || !m.chatKeys {
+		t.Fatalf("acts %+v flash %q chatKeys %v", got, m.flash, m.chatKeys)
+	}
+}
+
+func TestACommandAtNightAsksToTakeOver(t *testing.T) {
+	st := nightState()
+	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a", Agent: "claude"}}
+	m, f := loadedWith(t, 100, st)
+	m = pressKeys(t, onPane(t, m, "%1"), "enter")
+	m = command(t, m, "compact")
+	if m.held == nil || len(f.acts()) != 0 {
+		t.Fatalf("held %v acts %+v", m.held != nil, f.acts())
+	}
+	pressKeys(t, m, "n")
+	if got := f.acts(); len(got) != 2 || got[1].RecID != "compact:%1" {
+		t.Fatalf("acts %+v", got)
 	}
 }

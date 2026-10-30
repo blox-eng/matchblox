@@ -55,9 +55,9 @@ type Guard struct {
 	Page int `json:"page,omitempty"`
 	// StokePane: the pane, read again, shows no menu, no question and no
 	// draft, and nothing in the queue waits there. Typed: the draft is the
-	// step's own text.
+	// step's own command, which starts with Typed.
 	StokePane string `json:"stoke_pane,omitempty"`
-	Typed     bool   `json:"typed,omitempty"`
+	Typed     string `json:"typed,omitempty"`
 }
 
 type Rec struct {
