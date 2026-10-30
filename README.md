@@ -5,7 +5,7 @@
 
 # matchblox
 
-**A tool for modern software builders.**
+**Light an idea. Keep it burning.**
 
 [![CI](https://github.com/blox-eng/matchblox/actions/workflows/ci.yml/badge.svg)](https://github.com/blox-eng/matchblox/actions/workflows/ci.yml)
 [![Go 1.26](https://img.shields.io/badge/go-1.26-00ADD8.svg)](https://go.dev/dl/)
@@ -36,7 +36,7 @@ session waits, and answer from anywhere. In beta on TestFlight.
 
 ## Quick start
 
-1. Install:
+1. Install — with the script, Go, or Homebrew:
 
    ```sh
    curl -fsSL https://matchblox.sh | sh
@@ -44,7 +44,18 @@ session waits, and answer from anywhere. In beta on TestFlight.
 
    Read the script first at [matchblox.sh](https://matchblox.sh/install.sh).
    You get the release binary for your machine, its checksum checked and,
-   with `gh` logged in, proof that CI built it from this repository.
+   with `gh` logged in, proof that CI built it from this repository. With
+   Go, the same version builds from source:
+
+   ```sh
+   go install github.com/blox-eng/matchblox/cmd/matchblox@latest
+   ```
+
+   With Homebrew, on macOS or Linux:
+
+   ```sh
+   brew install blox-eng/tap/matchblox
+   ```
 
 2. Run `matchblox` outside tmux (the script starts it for you). Answer
    "Where do your agents run?", then open the setup steps in Sessions:
