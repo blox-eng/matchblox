@@ -26,19 +26,19 @@
  USAGE                                                                        │
  ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20                               │
                  wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · out Fri ~21:00              │
- · Google login  not measured · OpenCode keeps no limits                      │ ⏺ The refresh endpoint is in and its tests pass.
+ · Google login  not measured · OpenCode keeps no limits                      │
  ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                                   │
-                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week              │ ────────────────────────────────────────────────────────────────────────────────
-──────────────────────────────────────────────────────────────────────────────│  ☐ Rotate
+                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week              │
+──────────────────────────────────────────────────────────────────────────────│
  MACHINE                                                             16 cores │
- cpu  ▁ 0%   load 6.2                                                         │ Should a refresh also rotate the token?
+ cpu  ▁ 0%   load 6.2                                                         │
  mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB                                                    │
- disk ▰▰▰▰▰▰▱▱ 71% of 1 TB                                                    │ ❯ 1. Rotate it
- runs 5 claude · 1 codex · 1 opencode                                         │      The old one stops at once.
-                                                                              │   2. Rotate, keep the old one a minute
- PID      COMMAND           CPU    MEM     OWNER                              │   3. Type something.
+ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB                                                    │
+ runs 5 claude · 1 codex · 1 opencode                                         │
+                                                                              │
+ PID      COMMAND           CPU    MEM     OWNER                              │
  1        systemd             0%   9.8M    system                             │
- 1200     claude              0%   9.8M    pane %1 · hearth-api               │ Enter to select · ↑/↓ to navigate · Esc to cancel
+ 1200     claude              0%   9.8M    pane %1 · hearth-api               │ ⏺ The refresh endpoint is in and its tests pass.
  1300     zsh                 0%   9.8M    pane %2 · flint-auth               │ ╭─ flint-auth asks · 1 of 2 ─────────────────────────────────╮
  1310     claude              0%   9.8M    pane %2 · flint-auth               │ │ Should a refresh also rotate the token?                    │
  1400     claude              0%   9.8M    pane %3 · spark-docs               │ │ › 1 Rotate it  the old one stops at once                   │

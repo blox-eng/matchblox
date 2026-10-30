@@ -66,6 +66,18 @@ func trimBlank(line string) string {
 	})
 }
 
+// agentMenuCut is a screen without the agent's own question: its last rule
+// and the lines under it. A screen with no rule stays whole.
+func agentMenuCut(text string) string {
+	lines := strings.Split(text, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if isRule(lines[i]) {
+			return strings.Join(lines[:i], "\n")
+		}
+	}
+	return text
+}
+
 // isRule is a line of box-drawing runes and spaces, and not empty.
 func isRule(line string) bool {
 	plain := ansi.Strip(line)
@@ -138,7 +150,11 @@ func (m Model) chatLines(w, h int) []string {
 	card = card[max(len(card)-h, 0):]
 	var fit []string
 	if shown {
-		fit = fitScreen(m.screen.Text, w, h-len(card))
+		text := m.screen.Text
+		if len(card) > 0 && m.screen.Up == 0 {
+			text = agentMenuCut(text) // the card is the one place to answer
+		}
+		fit = fitScreen(text, w, h-len(card))
 	}
 	fit = append(fit, card...)
 	return append(lines[:len(lines)-len(fit)], fit...)

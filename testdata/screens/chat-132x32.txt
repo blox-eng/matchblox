@@ -8,19 +8,19 @@
  ╿ kindle-web                   asks       1m   56% │
  ╿ cinder-ci                    done       0s   55% │
  ╿ wick-mobile                  done       0s    6% │
- WORKING · 1                                        │ ⏺ The refresh endpoint is in and its tests pass.
+ WORKING · 1                                        │
  ✦ hearth-api                   busy            79% │
- + start a new session                              │ ──────────────────────────────────────────────────────────────────────────────
-                                                    │  ☐ Rotate
+ + start a new session                              │
+                                                    │
  ↓ 7 more                                           │
-────────────────────────────────────────────────────│ Should a refresh also rotate the token?
+────────────────────────────────────────────────────│
  USAGE                                              │
- ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20     │ ❯ 1. Rotate it
-                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00     │      The old one stops at once.
-                 out Fri ~21:00                     │   2. Rotate, keep the old one a minute
- · Google login  not measured · OpenCode keeps no l…│   3. Type something.
+ ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20     │
+                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00     │
+                 out Fri ~21:00                     │
+ · Google login  not measured · OpenCode keeps no l…│
  ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59         │
-                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00     │ Enter to select · ↑/↓ to navigate · Esc to cancel
+                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00     │ ⏺ The refresh endpoint is in and its tests pass.
                  lasts the week                     │ ╭─ flint-auth asks · 1 of 2 ─────────────────────────────────╮
 ────────────────────────────────────────────────────│ │ Should a refresh also rotate the token?                    │
  MACHINE                                   16 cores │ │ › 1 Rotate it  the old one stops at once                   │

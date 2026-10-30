@@ -1480,3 +1480,49 @@ func TestFitWrapTrimsBlanks(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentMenuCut(t *testing.T) {
+	got := agentMenuCut(askScreen)
+	if !strings.Contains(got, "⏺ The refresh endpoint is in") {
+		t.Fatalf("the work went: %q", got)
+	}
+	for _, gone := range []string{"❯ 1. Rotate it", "☐ Rotate", "Enter to select"} {
+		if strings.Contains(got, gone) {
+			t.Fatalf("%q stayed: %q", gone, got)
+		}
+	}
+}
+
+func TestNoRuleKeepsTheWholeScreen(t *testing.T) {
+	if got := agentMenuCut("a\nb\n❯ 1. x"); got != "a\nb\n❯ 1. x" {
+		t.Fatalf("cut %q", got)
+	}
+}
+
+func TestCardDropsTheAgentsMenu(t *testing.T) {
+	m, _ := askModel(t, 44, threeWays)
+	next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(200, 0), Text: askScreen})
+	out := ansi.Strip(strings.Join(next.(Model).chatLines(44, 29), "\n"))
+	if !strings.Contains(out, "Patch the token check") || strings.Contains(out, "❯ 1. Rotate it") {
+		t.Fatalf("the question shows twice or not at all:\n%s", out)
+	}
+}
+
+func TestPermissionKeepsTheAgentsMenu(t *testing.T) {
+	m, _ := loadedWith(t, 44, queueState()) // app-feature (%1) asks for permission
+	m = pressKeys(t, onPane(t, m, "%1"), "enter")
+	next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(200, 0), Text: askScreen})
+	if out := ansi.Strip(strings.Join(next.(Model).chatLines(44, 29), "\n")); !strings.Contains(out, "❯ 1. Rotate it") {
+		t.Fatalf("the agent's own menu went with no card:\n%s", out)
+	}
+}
+
+func TestHistoryKeepsTheAgentsMenu(t *testing.T) {
+	m, _ := askModel(t, 44, threeWays)
+	m.up, m.watchUp = 6, 6 // scrolled up: a history frame is kept
+	next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(200, 0), Up: 6, Text: askScreen})
+	m = next.(Model)
+	if out := ansi.Strip(strings.Join(m.chatLines(44, 29), "\n")); !strings.Contains(out, "❯ 1. Rotate it") {
+		t.Fatalf("history was cut:\n%s", out)
+	}
+}

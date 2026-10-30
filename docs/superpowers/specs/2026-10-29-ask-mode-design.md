@@ -105,6 +105,11 @@ what the peek's question rows do today:
 When no question is open, or when the screen shows a permission prompt,
 there is no card. The keys go to the agent as they are.
 
+2026-10-30: while the card shows, the chat drops the agent's own menu (the
+lines from the screen's last rule down). Reason: two lists of the same
+options cost a phone a third of its screen, and one way to answer is enough.
+The history is never cut.
+
 ### The iOS key bar
 
 1. SwiftTerm's default accessory goes away. In its place is a bar of seven
