@@ -93,8 +93,11 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 		return false
 	}
 	if m.chatKeys {
+		if m.cardTakes(k) {
+			return m.cardSends(k) // moving on the card changes nothing on the session
+		}
 		_, toAgent := keyName(k)
-		return toAgent && !m.cardTakes(k) || bkey.Matches(k, m.keys.main.Jump)
+		return toAgent || bkey.Matches(k, m.keys.main.Jump)
 	}
 	s, onSession := m.selectedSession()
 	switch {
@@ -114,6 +117,8 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 // runs it on the row it was pressed on, wherever the selection is by then.
 func (m Model) hold(k tea.KeyPressMsg) func(Model) (tea.Model, tea.Cmd) {
 	switch {
+	case m.chatKeys && m.cardTakes(k):
+		return m.heldCard(k, false)
 	case m.chatKeys && !bkey.Matches(k, m.keys.main.Jump):
 		text, _ := keyName(k)
 		return m.heldKeys(m.pressed(text))

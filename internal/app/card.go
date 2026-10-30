@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -13,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -33,16 +35,31 @@ type card struct {
 	text    string
 }
 
+// cardQuiet is how long a card sends nothing after it shows, or after the
+// chat opens on it: a second Enter, a key repeat or a buffered tap meant for
+// what was there before must not answer a question nobody has read.
+const cardQuiet = 400 * time.Millisecond
+
+// cardSeen is the ask a card showed for, and when its quiet started.
+type cardSeen struct {
+	askID string
+	at    time.Time
+}
+
 // cardMaxW is the widest the card grows: a long option reads better
 // wrapped in a narrow card than spread over a desk.
 const cardMaxW = 62
 
 // cardNow is the chat's session and its card, when the session asks
-// through the question tool. A new call starts a new card.
+// through the question tool and the screen shows no permission prompt. A
+// new call starts a new card.
 func (m Model) cardNow() (sample.Session, card, bool) {
 	s, ok := m.selectedSession()
 	if !ok || s.Pane == "" || s.Ask == nil || len(s.Ask.Questions) == 0 {
 		return sample.Session{}, card{}, false
+	}
+	if it, waits := m.waitOf(s); waits && it.State == queue.StatePermission {
+		return sample.Session{}, card{}, false // the prompt is answered with the agent's own keys
 	}
 	c := m.askCard
 	if c.askID != s.Ask.ID || c.q >= len(s.Ask.Questions) {
@@ -59,6 +76,57 @@ func (m Model) cardTakes(k tea.KeyPressMsg) bool {
 	ck := m.keys.card
 	text, _ := keyName(k)
 	return bkey.Matches(k, ck.Send, ck.Up, ck.Down, ck.Erase) || strings.HasPrefix(text, "lit:")
+}
+
+// cardSends tells if k, on the card, answers the question: ⏎, or a digit
+// off the typing row.
+func (m Model) cardSends(k tea.KeyPressMsg) bool {
+	s, c, ok := m.cardNow()
+	if !ok {
+		return false
+	}
+	ck := m.keys.card
+	return bkey.Matches(k, ck.Send) || c.at != len(s.Ask.Questions[c.q].Options) && bkey.Matches(k, ck.Pick)
+}
+
+// noteCard starts the quiet of a card that shows for an ask it did not show
+// for before.
+func (m Model) noteCard() Model {
+	if s, _, ok := m.cardNow(); ok && s.Ask.ID != m.cardSeen.askID {
+		m.cardSeen = cardSeen{askID: s.Ask.ID, at: m.now()}
+	}
+	return m
+}
+
+// cardHushed is the card's quiet: what it would send now goes nowhere.
+func (m Model) cardHushed(s sample.Session) bool {
+	return m.cardSeen.askID == s.Ask.ID && m.now().Before(m.cardSeen.at.Add(cardQuiet))
+}
+
+// askedAgain is what the key line says of an answer held back from a
+// question the builder may not have read.
+func askedAgain(name string) string {
+	return "not sent: " + name + " asks something new — look again"
+}
+
+// heldCard is a card key held for the take-over answer: it acts on the card
+// it was pressed on, and on no newer question. tapped: the key is a tap on
+// an option, which picks it from the typing row too.
+func (m Model) heldCard(k tea.KeyPressMsg, tapped bool) func(Model) (tea.Model, tea.Cmd) {
+	s, _, _ := m.cardNow()
+	pane, id, name := s.Pane, s.Ask.ID, s.Name
+	return func(m Model) (tea.Model, tea.Cmd) {
+		now, c, ok := m.cardNow()
+		if !ok || now.Pane != pane || now.Ask.ID != id {
+			m.flash = askedAgain(name)
+			return m, nil
+		}
+		if tapped {
+			c.at = 0
+			m.askCard = c
+		}
+		return m.cardKey(k)
+	}
 }
 
 // cardKey is a key the card takes: ↑↓ move, space ticks, a digit picks,
@@ -91,6 +159,10 @@ func (m Model) cardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		default:
 			ch.Picks = []int{c.at + 1}
 		}
+		if m.cardHushed(s) {
+			m.flash = askedAgain(s.Name)
+			return m, nil
+		}
 		return m.cardChoose(s, c, ch)
 	case bkey.Matches(k, ck.Up):
 		c.at = max(c.at-1, 0)
@@ -106,6 +178,9 @@ func (m Model) cardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case d > n:
 		case q.Multi:
 			c.ticks = toggled(c.ticks, d)
+		case m.cardHushed(s):
+			m.flash = askedAgain(s.Name)
+			return m, nil
 		default:
 			return m.cardChoose(s, c, said.Choice{Picks: []int{d}})
 		}
@@ -240,9 +315,11 @@ func (m Model) cardRows(w int) ([]string, []string, []span) {
 
 // tapCard is a tap on the card's row i, dx columns from its left edge: on
 // an option it picks it, on a key of the footer it presses it. The chat
-// takes the keys.
+// takes the keys. At night, a tap that answers asks to take over first.
 func (m Model) tapCard(i, dx int, sc drawn) (tea.Model, tea.Cmd) {
-	m = m.openChat()
+	if !m.chatKeys {
+		m = m.openChat()
+	}
 	press := sc.cardRows[i]
 	if i == len(sc.cardRows)-1 {
 		s, ok := spanAt(sc.cardKeys, dx)
@@ -254,9 +331,14 @@ func (m Model) tapCard(i, dx int, sc drawn) (tea.Model, tea.Cmd) {
 	if press == "" {
 		return m, nil
 	}
-	if _, c, ok := m.cardNow(); ok && press[0] >= '1' && press[0] <= '9' {
+	k, option := keyPress(press), press[0] >= '1' && press[0] <= '9'
+	if _, c, ok := m.cardNow(); ok && option {
 		c.at = 0 // a tap on an option picks it, also while the typing row has the cursor
 		m.askCard = c
 	}
-	return m.cardKey(keyPress(press))
+	if m.takeOverDue() && m.cardSends(k) {
+		m.held = m.heldCard(k, option)
+		return m, nil
+	}
+	return m.cardKey(k)
 }

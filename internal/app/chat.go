@@ -256,6 +256,9 @@ func (m Model) chatOn(pane string) Model {
 	}
 	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, s.PID
 	m.chatKeys, m.flash = true, ""
+	if s.Ask != nil { // what was on screen before the chat opened was not the card
+		m.cardSeen = cardSeen{askID: s.Ask.ID, at: m.now()}
+	}
 	return m
 }
 

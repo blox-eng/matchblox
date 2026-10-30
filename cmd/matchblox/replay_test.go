@@ -64,21 +64,23 @@ var demoBase = time.Date(2026, 10, 1, 22, 50, 0, 0, time.UTC)
 type clock struct {
 	mu     sync.Mutex
 	t      time.Time
-	follow *clock // set: this clock reads that one
+	follow *clock        // set: this clock reads that one
+	ahead  time.Duration // how far ahead of the one it follows
 }
 
 func (c *clock) Now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.follow != nil {
-		return c.follow.Now()
+		return c.follow.Now().Add(c.ahead)
 	}
 	return c.t
 }
 
-func (c *clock) Follow(o *clock)     { c.mu.Lock(); c.follow = o; c.mu.Unlock() }
-func (c *clock) Set(t time.Time)     { c.mu.Lock(); c.t = t; c.mu.Unlock() }
-func (c *clock) Add(d time.Duration) { c.mu.Lock(); c.t = c.t.Add(d); c.mu.Unlock() }
+func (c *clock) Follow(o *clock)       { c.mu.Lock(); c.follow = o; c.mu.Unlock() }
+func (c *clock) Set(t time.Time)       { c.mu.Lock(); c.t = t; c.mu.Unlock() }
+func (c *clock) Add(d time.Duration)   { c.mu.Lock(); c.t = c.t.Add(d); c.mu.Unlock() }
+func (c *clock) Ahead(d time.Duration) { c.mu.Lock(); c.ahead += d; c.mu.Unlock() }
 
 // demoHost is testdata/demo with a pulse: CPU counters move, the busy loop
 // burns one core, and a killed process goes away. Nothing runs on the real
@@ -238,6 +240,8 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 
 var (
 	burning    = regexp.MustCompile(`[✦✧] flint-a\S*\s+busy`) // the duo cuts the name
+	struck     = regexp.MustCompile(`[✦✧] flint-a`)           // its row beside the chat: the strike has played
+	busyTop    = regexp.MustCompile(`1200\s+claude`)          // hearth-api's agent in the top processes
 	settled    = regexp.MustCompile(`╿ hearth-\S*\s+(done|out of work)`)
 	hearthBack = regexp.MustCompile(`hearth-api\s+\d+k → 9k`)
 	sparkBack  = regexp.MustCompile(`spark-docs\s+\d+k → 9k`)
@@ -522,12 +526,15 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "the next one", at: 2600 * time.Millisecond, key: "j", ok: has("I rewrote the quick start")},
 		{name: "back up", at: 3500 * time.Millisecond, key: "k", ok: has("The refresh flow works")},
 		// a: flint-auth's chat takes the keys; its question tool's options
-		// are on the card at the foot of its screen.
-		{name: "a: the question", at: 4600 * time.Millisecond, key: "a", ok: has("keys go to flint-auth", "flint-auth asks", "Rotate it", "Keep the token", "⏎ send")},
+		// are on the card at the foot of its screen, under the pane's own
+		// menu once its screen has come.
+		{name: "a: the question", at: 4600 * time.Millisecond, key: "a", ok: has("keys go to flint-auth", "flint-auth asks", "Rotate it", "Keep the token", "⏎ send", "Chat about this")},
 		// 2 picks the second option: it goes to Claude Code's menu, and the
-		// chat shows the agent at work on it.
-		{name: "picked", at: 6200 * time.Millisecond, key: "2", ok: func(s string) bool {
-			return has("sent to flint-auth", "I rotate the token on each refresh")(s) && !strings.Contains(s, "flint-auth asks")
+		// chat shows the agent at work on it. The builder read the card
+		// first: the console's clock moves past its quiet.
+		{name: "picked", at: 6200 * time.Millisecond, do: func() { view.Ahead(time.Second) }, key: "2", ok: func(s string) bool {
+			return has("sent to flint-auth", "I rotate the token on each refresh")(s) && !strings.Contains(s, "flint-auth asks") &&
+				(phone || struck.MatchString(s)) // a phone's chat hides the list
 		}},
 		// ctrl+] gives the keys back to the list.
 		{name: "back to the list", at: 7600 * time.Millisecond, key: "ctrl+]", ok: func(s string) bool {
@@ -576,10 +583,16 @@ func replayAt(t *testing.T, z replaySize) {
 			ok: has("NIGHT · 23:10 → 07:00", "ready ", "176k → 9k", "RESUME")},
 		{name: "back to sessions", at: 31 * time.Second, key: "1", ok: func(s string) bool {
 			// the ack c sent has come back: the dock no longer offers the run,
-			// and the stoker's panel has given the dock back (the duo's left
-			// column keeps the panel)
+			// and the stoker's panel has given the dock back. The duo's left
+			// column keeps the panel, under the machine's top processes: the
+			// frame waits until the busy session is back among them, as the
+			// first sample after the morning's jump reads it idle.
+			if z.name == "duo" {
+				return !strings.Contains(s, "NIGHT · 23:10") && strings.Contains(s, sessionsTab) && !strings.Contains(s, "c the whole run") &&
+					busyTop.MatchString(s)
+			}
 			return !strings.Contains(s, "NIGHT · 23:10") && strings.Contains(s, sessionsTab) && !strings.Contains(s, "c the whole run") &&
-				(!strings.Contains(s, "STOKER") || z.name == "duo")
+				!strings.Contains(s, "STOKER")
 		}},
 		// N: one more session, named, with its first message (tab: agent, account, first).
 		{name: "a new session", at: 32500 * time.Millisecond, do: func() { sessionsNow = len(s.State().Sessions) }, keys: slices.Concat([]string{"N", "tab", "tab"}, strings.Split("rate-docs", ""),

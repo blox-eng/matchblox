@@ -741,7 +741,7 @@ func TestBeatFourOnACardAnswer(t *testing.T) {
 	m.opt.Pair = &PairHost{DeviceIn: func(id string) (time.Time, string, bool) { return time.Now(), phoneTTY, id == "iPad-id" }}
 	next, _ := key(m, "down") // api asks
 	next, _ = key(next, "enter")
-	m = next.(Model)
+	m = pastQuiet(next.(Model))
 	m.pair = &pairPage{beat: 3, device: PairDevice{Name: "iPad", ID: "iPad-id"}}
 	next, cmd := key(m, "enter")
 	drain(cmd)
@@ -789,6 +789,7 @@ func TestTheStripHandsTheConsoleBack(t *testing.T) {
 		t.Fatalf("esc in the chat: page %v, acts %+v", got.pair, f.acts())
 	}
 	next = answered(t, next.(Model), "")
+	now = now.Add(time.Second) // the card's quiet passes
 	next, cmd = key(next, "enter")
 	drain(cmd)
 	got := next.(Model)

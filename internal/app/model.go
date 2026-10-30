@@ -290,6 +290,7 @@ type Model struct {
 	watching   string            // the pane the service sends, or ""
 	watchHeld  string            // the pane the service refused, until the next snapshot
 	askCard    card              // the question card's answer, in the chat
+	cardSeen   cardSeen          // the card's quiet: the ask it is for and its start
 	cardSent   map[string]string // the card's sends in flight: act id -> the session's name
 	changes    map[string]change // pane -> a match change that plays once
 	animating  bool
@@ -544,7 +545,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m = m.scanShows()
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
-		nm = nm.scanShows().keepChat(m)
+		nm = nm.scanShows().keepChat(m).noteCard()
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
 		}
