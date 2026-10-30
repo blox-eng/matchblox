@@ -12,21 +12,21 @@
  ✦ hearth-api                   busy            79% │
  + start a new session                      ╭─ Kill spark-docs ────────────────────────╮
                                             │                                          │
- 1 without an agent: shell:1.1 zsh          │   tmux kill-pane -t %3                   │
-                                            │   then kill -TERM 1400                   │
- RECOMMENDATIONS · 7 · h hides              │                                          │
- ▲ The week runs short: compact spark-docs  ╰─ y run ─ any other key cancels ──────────╯
- ○ Clear spark-docs (%3)                            │
- ○ Clear kindle-web (%5)                            │
- ↓ 4 more                                           │
-────────────────────────────────────────────────────│
- USAGE                                              │
- ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20     │
+ ↓ 7 more                                   │   tmux kill-pane -t %3                   │
+────────────────────────────────────────────│   then kill -TERM 1400                   │
+ USAGE                                      │                                          │
+ ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01╰─ y run ─ any other key cancels ──────────╯
                  wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00     │
                  out Fri ~21:00                     │
  · Google login  not measured · OpenCode keeps no l…│
  ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59         │
                  wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00     │
                  lasts the week                     │
+────────────────────────────────────────────────────│
+ MACHINE                                   16 cores │
+ cpu  ▁ 0%   load 6.2                               │
+ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB                          │
+ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB                          │
+ runs 5 claude · 1 codex · 1 opencode               │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 

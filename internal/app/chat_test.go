@@ -797,8 +797,39 @@ func TestACutListSaysHowManyAreBelow(t *testing.T) {
 	}) {
 		t.Fatalf("the cut list does not say what is below:\n%s", strings.Join(left, "\n"))
 	}
+	last := pressKeys(t, m, slices.Repeat([]string{"down"}, m.rowCount())...)
+	left, _ = sides(last.draw(132), 132)
 	if !slices.ContainsFunc(left, func(l string) bool { return strings.Contains(l, "RECOMMENDATIONS") }) {
-		t.Fatalf("no recommendations on a desk:\n%s", strings.Join(left, "\n"))
+		t.Fatalf("the list does not scroll to its recommendations on a desk:\n%s", strings.Join(left, "\n"))
+	}
+}
+
+// On a short desk the stats keep their rows and the list gives way, down
+// to 3 rows and the hint under them; shorter, the machine folds, then
+// usage.
+func TestAShortDeskKeepsItsStats(t *testing.T) {
+	m := demoSized(t, 132, 32)
+	left, _ := sides(m.draw(132), 132)
+	all := strings.Join(left, "\n")
+	if !strings.Contains(all, "USAGE") || !strings.Contains(all, "MACHINE") || !strings.Contains(all, "↓ ") {
+		t.Fatalf("132x32: the stats do not keep their rows over a cut list:\n%s", all)
+	}
+	folded := false
+	for h := 10; h <= 40; h++ {
+		m := demoSized(t, 132, h)
+		sc := m.draw(132)
+		left, _ := sides(sc, 132)
+		hair := slices.IndexFunc(left[sc.bodyTop:], func(l string) bool { return strings.HasPrefix(l, "───") })
+		if hair < 0 || hair >= len(sc.rows) {
+			folded = true
+			continue
+		}
+		if hair < 4 {
+			t.Fatalf("132x%d: the list keeps %d lines over the stats:\n%s", h, hair, strings.Join(left, "\n"))
+		}
+	}
+	if !folded {
+		t.Fatal("no desk from 10 to 40 rows is short enough to fold the stats")
 	}
 }
 
@@ -813,7 +844,13 @@ func TestAGoneScreenSaysTheSessionEnded(t *testing.T) {
 // The hint under a cut list never covers the selection: every row the
 // selection moves through is drawn, selected, and a tap on it hits it.
 func TestTheMoreHintNeverCoversTheSelection(t *testing.T) {
-	m := demoSized(t, 132, 32)
+	for _, h := range []int{32, 24} { // 24: the list keeps its fewest rows
+		theMoreHintNeverCoversTheSelection(t, demoSized(t, 132, h))
+	}
+}
+
+func theMoreHintNeverCoversTheSelection(t *testing.T, m Model) {
+	t.Helper()
 	for range m.rowCount() {
 		sc := m.draw(132)
 		lines := strings.Split(ansi.Strip(strings.Join(sc.lines, "\n")), "\n")

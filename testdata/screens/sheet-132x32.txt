@@ -12,21 +12,21 @@
  ✦ hearth-api                   bus╭─ ☾ Night ──────────────────────────────────────────────────╮
  + start a new session             │ How should I run tonight?                                  │
                                    │                                                            │
- 1 without an agent: shell:1.1 zsh │ › merge them on green▏                                     │
-                                   │                                                            │
- RECOMMENDATIONS · 7 · h hides     │ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │
- ▲ The week runs short: compact spa│ ways merge-order  priority  release-train  triage          │
- ○ Clear spark-docs (%3)           ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
- ○ Clear kindle-web (%5)                            │
- ↓ 4 more                                           │
-────────────────────────────────────────────────────│
- USAGE                                              │
- ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20     │
-                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00     │
+ ↓ 7 more                          │ › merge them on green▏                                     │
+───────────────────────────────────│                                                            │
+ USAGE                             │ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │
+ ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84% │ ways merge-order  priority  release-train  triage          │
+                 wk   ▰▰▰▰▰▰▰▱ 82% ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
                  out Fri ~21:00                     │
  · Google login  not measured · OpenCode keeps no l…│
  ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59         │
                  wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00     │
                  lasts the week                     │
+────────────────────────────────────────────────────│
+ MACHINE                                   16 cores │
+ cpu  ▁ 0%   load 6.2                               │
+ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB                          │
+ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB                          │
+ runs 5 claude · 1 codex · 1 opencode               │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  ↑↓ move  ⏎ chat  a chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit               sampled 0s ago

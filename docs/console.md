@@ -62,10 +62,11 @@ bottom.
 - Wider than that, two panels side by side: usage and the machine, or
   usage and the stoker while it claims the dock.
 - On a wide desk, the panels stack under Sessions: usage, the machine, and
-  the stoker while it claims the dock. They fold by the dock's rule: when
-  the list does not fit beside them, they stay only if the list keeps half
-  the rows. The machine goes first, then all. A list cut short ends in
-  `↓ <n> more`.
+  the stoker while it claims the dock. Usage and the machine keep their
+  rows. When the list does not fit, the list and the recommendations give
+  way. A list cut short ends in `↓ <n> more`. The hint never covers the
+  selected row. When the list cannot keep 3 rows and the hint, the panels
+  fold. The machine goes first, then all.
 - An account folder shows by its name (`work`), the default sign-in by
   its plan or email. A Claude Code account that is not signed in yet says
   `not measured · signing in: the limits show once the account is signed

@@ -172,15 +172,19 @@ func (m Model) listAbove(b body, w, h int) body {
 // there opens its tab.
 const stokerPanelRow = -4
 
+// minListRows are the fewest rows of the list a desk's left column keeps
+// over its panels, with the hint under them.
+const minListRows = 3
+
 // leftColumn is Sessions on a desk, h lines of w columns: the list, and
 // under it usage, the machine and the stoker, each below a hairline. The
 // stoker is there while it claims the dock, in the machine's place when
 // the rows are short, or when the list leaves it room. The panels take
-// their fewest lines and grow into the rows the list leaves free. They
-// fold as the dock does: when the list does not fit beside them they stay
-// only if it keeps half the rows, the machine first, then all; the Machine
-// tab has it all. A list cut short says how many rows are below it. All:
-// the panels show all they have.
+// their fewest lines and grow into the rows the list leaves free. When
+// the list does not fit beside them, the list gives way: the panels stay
+// while it keeps minListRows rows and the hint, then the machine folds,
+// then all; the Machine tab has it all. A list cut short says how many
+// rows are below it. All: the panels show all they have.
 func (m Model) leftColumn(b body, w, h int) (col body, all bool) {
 	least, most := map[int][]string{}, map[int][]string{}
 	for p := range panels {
@@ -196,7 +200,7 @@ func (m Model) leftColumn(b body, w, h int) (col body, all bool) {
 	tall := len(b.lines)
 	fits := func(ps []int) bool {
 		n := height(ps)
-		return tall+n <= h || h-tall >= minBlank && h-n >= h/2
+		return tall+n <= h || h-n >= minListRows+1
 	}
 	every := []int{panelUsage, panelMachine, panelStoker}
 	var tries [][]int
