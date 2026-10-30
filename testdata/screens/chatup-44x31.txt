@@ -7,14 +7,14 @@
   ⎿  Read 142 lines
 
 ⏺ Update(src/auth/refresh.go)
-  ⎿  Updated src/auth/refresh.go with 18 add
-itions
+  ⎿  Updated src/auth/refresh.go with 18
+additions
 
 ⏺ Bash(go test ./auth/...)
   ⎿  ok  example.com/auth  0.41s
 
-⏺ The refresh endpoint is in and its tests p
-ass.
+⏺ The refresh endpoint is in and its tests
+pass.
 
 ────────────────────────────────────────────
  ☐ Rotate

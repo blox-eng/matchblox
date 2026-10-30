@@ -33,21 +33,21 @@ var trailingBlank = regexp.MustCompile(`(?:\x1b\[[0-9;:]*m|[ \t])+$`)
 var sgr = regexp.MustCompile(`\x1b\[[0-9;:]*m`)
 
 // fitScreen fits a pane's text into w columns and the last h lines: a rule
-// is cut, other text wraps, and the blank lines at the end go.
+// is cut, other text wraps between words, and the blank lines at the end go.
 func fitScreen(text string, w, h int) []string {
 	if w <= 0 || h <= 0 {
 		return nil
 	}
 	var out []string
 	for _, line := range strings.Split(strings.ReplaceAll(text, "\r", ""), "\n") {
-		line = trailingBlank.ReplaceAllStringFunc(line, func(tail string) string {
-			return strings.Join(sgr.FindAllString(tail, -1), "")
-		})
+		line = trimBlank(line)
 		if isRule(line) {
 			out = append(out, ansi.Truncate(line, w, ""))
 			continue
 		}
-		out = append(out, strings.Split(ansi.Hardwrap(line, w, true), "\n")...)
+		for _, piece := range strings.Split(ansi.Wrap(line, w, ""), "\n") {
+			out = append(out, trimBlank(piece))
+		}
 	}
 	for len(out) > 0 && ansi.Strip(out[len(out)-1]) == "" {
 		out = out[:len(out)-1]
@@ -56,6 +56,14 @@ func fitScreen(text string, w, h int) []string {
 		out = out[len(out)-h:]
 	}
 	return out
+}
+
+// trimBlank drops the spaces at the end of a line and keeps the style codes
+// among them.
+func trimBlank(line string) string {
+	return trailingBlank.ReplaceAllStringFunc(line, func(tail string) string {
+		return strings.Join(sgr.FindAllString(tail, -1), "")
+	})
 }
 
 // isRule is a line of box-drawing runes and spaces, and not empty.

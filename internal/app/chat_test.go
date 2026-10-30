@@ -1442,3 +1442,39 @@ func TestADrawnCardIsNotQuietAgain(t *testing.T) {
 		t.Fatalf("picks %+v", got)
 	}
 }
+
+func TestFitWrapsBetweenWords(t *testing.T) {
+	got := fitScreen("⏺ The refresh endpoint is in and its tests pass.", 44, 10)
+	if len(got) != 2 || ansi.Strip(got[0]) != "⏺ The refresh endpoint is in and its tests" || ansi.Strip(got[1]) != "pass." {
+		t.Fatalf("wrap: %q", got)
+	}
+}
+
+func TestFitBreaksALongWordHard(t *testing.T) {
+	got := fitScreen("see "+strings.Repeat("x", 60), 44, 10)
+	var xs string
+	for _, l := range got {
+		if w := ansi.StringWidth(l); w > 44 {
+			t.Fatalf("line %q is %d wide", l, w)
+		}
+		xs += strings.ReplaceAll(strings.TrimPrefix(ansi.Strip(l), "see"), " ", "")
+	}
+	if xs != strings.Repeat("x", 60) {
+		t.Fatalf("lost x's: %q", got)
+	}
+}
+
+func TestFitWrapKeepsStyles(t *testing.T) {
+	got := fitScreen("aaaa \x1b[31mredword\x1b[0m", 7, 10)
+	if len(got) != 2 || !strings.Contains(got[1], "\x1b[31m") || ansi.Strip(got[1]) != "redword" {
+		t.Fatalf("style lost: %q", got)
+	}
+}
+
+func TestFitWrapTrimsBlanks(t *testing.T) {
+	for _, l := range fitScreen("one two three four five six seven eight nine ten eleven", 12, 10) {
+		if p := ansi.Strip(l); p != strings.TrimRight(p, " ") {
+			t.Fatalf("trailing blank in %q", l)
+		}
+	}
+}
