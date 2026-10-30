@@ -807,3 +807,27 @@ func TestAGoneScreenSaysTheSessionEnded(t *testing.T) {
 		t.Fatalf("chatKeys %v, flash %q", m.chatKeys, m.flash)
 	}
 }
+
+// The hint under a cut list never covers the selection: every row the
+// selection moves through is drawn, selected, and a tap on it hits it.
+func TestTheMoreHintNeverCoversTheSelection(t *testing.T) {
+	m := demoSized(t, 132, 32)
+	for range m.rowCount() {
+		sc := m.draw(132)
+		lines := strings.Split(ansi.Strip(strings.Join(sc.lines, "\n")), "\n")
+		at := slices.Index(sc.rows, m.rowIndex())
+		if at < 0 || !strings.HasPrefix(lines[sc.bodyTop+at], "▌") {
+			t.Fatalf("row %d is not drawn as selected:\n%s", m.rowIndex(), strings.Join(lines, "\n"))
+		}
+		for i, l := range lines {
+			if strings.Contains(l, "↓ ") && strings.Contains(l, " more") && i-sc.bodyTop >= 0 && i-sc.bodyTop < len(sc.rows) && sc.rows[i-sc.bodyTop] >= 0 {
+				t.Fatalf("the hint is on row %d:\n%s", sc.rows[i-sc.bodyTop], strings.Join(lines, "\n"))
+			}
+		}
+		next, _ := tap(m, 3, sc.bodyTop+at)
+		if next.(Model).rowIndex() != m.rowIndex() {
+			t.Fatalf("a tap on the selected row %d selected %d", m.rowIndex(), next.(Model).rowIndex())
+		}
+		m = pressKeys(t, m, "down")
+	}
+}

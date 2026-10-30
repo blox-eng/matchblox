@@ -143,25 +143,28 @@ func (m Model) dock(w, rows int) docked {
 	return d
 }
 
-// listAbove is the part of the list that fits in h lines of w columns. When
-// rows are cut below, its last line says how many: the window keeps a
-// line to spare under the selection.
+// listAbove is the part of the list that fits in h lines of w columns.
+// When rows are cut below, the window takes one line less and the line
+// under it says how many: the hint never covers the selection.
 func (m Model) listAbove(b body, w, h int) body {
-	vis := windowed(b, h, m.rowIndex())
-	col := body{lines: slices.Clone(vis.lines), rows: slices.Clone(vis.rows)}
-	if h <= 0 || len(b.lines) <= h {
-		return col
+	sel := m.rowIndex()
+	if h <= 1 || len(b.lines) <= h {
+		vis := windowed(b, h, sel)
+		return body{lines: slices.Clone(vis.lines), rows: slices.Clone(vis.rows)}
 	}
+	start := windowStart(b, h-1, sel)
 	below := map[int]bool{}
-	for _, r := range b.rows[windowStart(b, h, m.rowIndex())+h-1:] {
+	for _, r := range b.rows[start+h-1:] {
 		if r >= 0 {
 			below[r] = true
 		}
 	}
-	if len(below) > 0 {
-		col.lines[len(col.lines)-1] = fit(m.st.faint.Render(fmt.Sprintf(" ↓ %d more", len(below))), w)
-		col.rows[len(col.rows)-1] = -1
+	if len(below) == 0 { // the window is at the list's end: nothing to say
+		vis := windowed(b, h, sel)
+		return body{lines: slices.Clone(vis.lines), rows: slices.Clone(vis.rows)}
 	}
+	col := body{lines: slices.Clone(b.lines[start : start+h-1]), rows: slices.Clone(b.rows[start : start+h-1])}
+	col.add(-1, fit(m.st.faint.Render(fmt.Sprintf(" ↓ %d more", len(below))), w))
 	return col
 }
 
