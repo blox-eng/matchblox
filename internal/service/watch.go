@@ -35,7 +35,9 @@ func (s *Service) watchAct(cl *client, clientKind string, a proto.Act, pane stri
 }
 
 // watchLoop sends cl the screen of its watched pane when the text changes,
-// and once when the pane is gone.
+// and once when the pane is gone. A wait that began after the last screen
+// sends it again, newer: the console's Enter answers the screen it saw,
+// and a still prompt is still the one the builder sees.
 func (s *Service) watchLoop(ctx context.Context, cl *client) {
 	tick := time.NewTicker(watchEvery)
 	defer tick.Stop()
@@ -61,7 +63,7 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 			text, live = s.Capture([]string{pane})[pane]
 		}
 		scr.Text, scr.Gone = text, !live
-		if sent && pane == last.Pane && text == last.Text && scr.Gone == last.Gone {
+		if sent && pane == last.Pane && text == last.Text && scr.Gone == last.Gone && !s.waitsSince(pane, last.At) {
 			continue
 		}
 		sent, last = true, scr
@@ -70,6 +72,12 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 			return
 		}
 	}
+}
+
+// waitsSince tells if the agent in pane began to wait after at.
+func (s *Service) waitsSince(pane string, at time.Time) bool {
+	it, ok := s.queued(pane)
+	return ok && it.Since.After(at)
 }
 
 // kickScreens wakes the watchLoop of every console that watches pane.

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
@@ -91,15 +92,6 @@ func (r *reader) act(t *testing.T, id, recID string) proto.Result {
 	return proto.Result{}
 }
 
-func decodeScreen(t *testing.T, env proto.Envelope) proto.Screen {
-	t.Helper()
-	var sc proto.Screen
-	if err := json.Unmarshal(env.Body, &sc); err != nil {
-		t.Fatal(err)
-	}
-	return sc
-}
-
 // captureOf serves the text of each pane in screens; set changes it.
 type captureOf struct {
 	mu      sync.Mutex
@@ -142,8 +134,8 @@ func watchTest(t *testing.T, screens map[string]string, sessions ...string) (*Se
 	}
 	snap := func(panes []string) sample.Snapshot {
 		out := sample.Snapshot{At: time.Now()}
-		for _, p := range panes {
-			out.Sessions = append(out.Sessions, sample.Session{Agent: "claude", Pane: p, Name: p, Status: "idle"})
+		for i, p := range panes {
+			out.Sessions = append(out.Sessions, sample.Session{Agent: "claude", PID: 100 + i, Pane: p, Name: p, Status: "idle"})
 		}
 		return out
 	}
@@ -191,6 +183,42 @@ func TestWatchSendsOnlyChanges(t *testing.T) {
 	}
 	if g := r.got(); len(g) != 2 || g[1].Text != "changed\n" {
 		t.Fatalf("screens %+v", g)
+	}
+}
+
+// A wait stamped after the last screen sends that screen again, newer: an
+// Enter for it is not refused while the text stands still.
+func TestWatchSendsAStillScreenAgainForANewerWait(t *testing.T) {
+	s, _, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	c := connectAs(t, ctx, s, proto.ClientConsole)
+	r := read(c)
+	if res := r.act(t, "w", proto.WatchPrefix+"%1"); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	deadline := time.Now().Add(waitLimit)
+	for len(r.got()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(r.got()) == 0 {
+		t.Fatal("no screen")
+	}
+	since := r.got()[0].At.Add(time.Millisecond)
+	s.mu.Lock()
+	s.cur.Queue = []queue.Item{{Pane: "%1", Name: "%1", State: queue.StatePermission, Since: since}}
+	s.mu.Unlock()
+	for len(r.got()) < 2 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	g := r.got()
+	if len(g) < 2 || g[1].Text != idleScreen || g[1].At.Before(since) {
+		t.Fatalf("screens %+v, want the screen again after %v", g, since)
+	}
+	time.Sleep(400 * time.Millisecond)
+	if n := len(r.got()); n != 2 {
+		t.Fatalf("%d screens for one wait, want 2", n)
+	}
+	if res := s.act(ctx, proto.Act{Console: true, RecID: proto.KeysPrefix + "%1", Text: "Enter", PID: 100, Seen: g[1].At}); res.Err != "" || len(res.Ran) != 1 {
+		t.Fatalf("enter on the newer screen: %+v", res)
 	}
 }
 
