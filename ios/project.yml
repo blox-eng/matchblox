@@ -23,6 +23,7 @@ targets:
     sources:
       - path: Matchblox
       - path: MatchbloxIsland/IslandAttributes.swift
+      - path: Shared/Match.swift
       # The console's command table. testdata/keys/commands.json links to this file.
       - path: ../internal/keycmd/commands.json
         buildPhase: resources
@@ -88,6 +89,7 @@ targets:
     sources:
       - path: MatchbloxIsland
       - path: Matchblox/Tokens.swift
+      - path: Shared/Match.swift
     info:
       path: MatchbloxIsland/Info.plist
       properties:
