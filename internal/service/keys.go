@@ -65,6 +65,9 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 		return proto.Result{Err: why}
 	}
 	if a.Text == "Enter" {
+		if s.upScreens.has(pane, a.Seen) {
+			return proto.Result{Err: "not sent: that screen was " + x.Name + "'s history, not the live screen — look again"}
+		}
 		if it, queued := s.queued(pane); queued && it.Since.After(a.Seen) {
 			return proto.Result{Err: "not sent: " + x.Name + " asks something new — look again"}
 		}

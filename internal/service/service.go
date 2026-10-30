@@ -127,6 +127,9 @@ type Service struct {
 	// with its styles: the guard tells Claude Code's grey suggestion from a
 	// draft a person typed.
 	Capture func(panes []string) map[string]string
+	// CaptureUp reads a pane up lines up from its bottom, with its styles,
+	// and the offset it read: no more than the history holds.
+	CaptureUp func(pane string, up int) (text string, real int, ok bool)
 	// TmuxOut runs a tmux command and returns what it prints: the pane of
 	// a session matchblox started. Nil: exec.
 	TmuxOut func(argv []string) (string, error)
@@ -219,7 +222,9 @@ type Service struct {
 	wakes wakeState
 	// driven are the panes the stoker drove, for the merge guard.
 	driven drivenState
-	gen    uint64 // counts door writes, so an older sample keeps its hands off
+	// upScreens are the screens of the history sent, which no Enter answers.
+	upScreens upScreens
+	gen       uint64 // counts door writes, so an older sample keeps its hands off
 	// panes holds a *sync.Mutex per pane: the keys of one act to a pane
 	// never interleave with another's.
 	panes sync.Map
@@ -320,7 +325,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 	if smp != nil {
 		s.sample = smp.Sample
 	}
-	s.Capture = sample.CapturePanesStyled
+	s.Capture, s.CaptureUp = sample.CapturePanesStyled, sample.CapturePaneUp
 	s.PeerPane = s.paneOfPeer
 	s.Activity = sample.ClientActivity
 	s.alone = s.now()
@@ -803,7 +808,7 @@ type client struct {
 	kick chan struct{}
 	// watch is the pane this console streams; screenKick wakes watchLoop
 	// before its next tick.
-	watch      atomic.Pointer[string]
+	watch      atomic.Pointer[watched]
 	screenKick chan struct{}
 	histSent   bool
 	foundGen   uint64

@@ -117,19 +117,31 @@ type Act struct {
 }
 
 // WatchPrefix starts an act that names the pane a console watches; with no
-// pane after it, the console watches none.
+// pane after it, the console watches none. Text "up:<n>" (n 0 to MaxUp)
+// asks for the lines n lines up from the pane's bottom; 0 or none is the
+// live screen.
 const WatchPrefix = "watch:"
+
+// UpPrefix starts the text of a watch act that scrolls up; MaxUp is the
+// most lines it goes up.
+const (
+	UpPrefix = "up:"
+	MaxUp    = 2000
+)
 
 // KeysPrefix starts an act that sends one key to the pane after it. Text is
 // a key name of the keys set, or "lit:" and the text to type.
 const KeysPrefix = "keys:"
 
 // Screen is one capture of the watched pane. Gone: the pane is not there.
+// Up: the screen ends this many lines above the pane's bottom, as far as
+// the history goes; it is not the live screen.
 type Screen struct {
 	Pane string    `json:"pane"`
 	At   time.Time `json:"at"`
 	Text string    `json:"text"`
 	Gone bool      `json:"gone,omitempty"`
+	Up   int       `json:"up,omitempty"`
 }
 
 type Result struct {

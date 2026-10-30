@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -75,7 +77,13 @@ func (r *reader) got() []proto.Screen {
 // act sends one act and waits for its result.
 func (r *reader) act(t *testing.T, id, recID string) proto.Result {
 	t.Helper()
-	if err := r.c.Send(proto.KindAct, id, proto.Act{RecID: recID}); err != nil {
+	return r.actText(t, id, recID, "")
+}
+
+// actText is act with the act's text.
+func (r *reader) actText(t *testing.T, id, recID, text string) proto.Result {
+	t.Helper()
+	if err := r.c.Send(proto.KindAct, id, proto.Act{RecID: recID, Text: text}); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(waitLimit)
@@ -97,6 +105,10 @@ type captureOf struct {
 	mu      sync.Mutex
 	screens map[string]string
 	calls   int
+	// history is how many lines each pane holds above its screen; ups are
+	// the offsets asked of captureUp.
+	history int
+	ups     []int
 	// leave publishes a snapshot whose sessions are in panes.
 	leave func(panes ...string)
 }
@@ -114,6 +126,20 @@ func (f *captureOf) capture(panes []string) map[string]string {
 	return out
 }
 
+// captureUp serves "up <n>" for a pane with a screen, n stopped at the
+// history's top.
+func (f *captureOf) captureUp(pane string, up int) (string, int, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	f.ups = append(f.ups, up)
+	if _, ok := f.screens[pane]; !ok {
+		return "", 0, false
+	}
+	up = min(up, f.history)
+	return fmt.Sprintf("up %d\n", up), up, true
+}
+
 func (f *captureOf) set(pane, text string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -125,8 +151,8 @@ func (f *captureOf) set(pane, text string) {
 func watchTest(t *testing.T, screens map[string]string, sessions ...string) (*Service, *captureOf, context.Context) {
 	t.Helper()
 	s := newTest(t, time.Hour)
-	f := &captureOf{screens: screens}
-	s.Capture = f.capture
+	f := &captureOf{screens: screens, history: 1000}
+	s.Capture, s.CaptureUp = f.capture, f.captureUp
 	if sessions == nil {
 		for p := range screens {
 			sessions = append(sessions, p)
@@ -297,7 +323,7 @@ func TestNoWatchLoopForTheCLI(t *testing.T) {
 	for deadline := time.Now().Add(waitLimit); held == 0 && time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
 		s.mu.Lock()
 		for cl := range s.clients {
-			cl.watch.Store(&pane)
+			cl.watch.Store(&watched{pane: pane})
 			held++
 		}
 		s.mu.Unlock()
@@ -370,5 +396,94 @@ func TestWatchStopsWhenTheSessionLeaves(t *testing.T) {
 	f.mu.Unlock()
 	if after != calls || len(r.got()) != 2 {
 		t.Fatalf("capture went on: %d calls after %d, %d screens", after, calls, len(r.got()))
+	}
+}
+
+// screenThat waits for a screen that ok takes.
+func (r *reader) screenThat(t *testing.T, ok func(proto.Screen) bool) proto.Screen {
+	t.Helper()
+	for deadline := time.Now().Add(waitLimit); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		for _, sc := range r.got() {
+			if ok(sc) {
+				return sc
+			}
+		}
+	}
+	t.Fatalf("no such screen in %+v", r.got())
+	return proto.Screen{}
+}
+
+func TestWatchUpSendsTheLinesUp(t *testing.T) {
+	s, f, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	c := connectAs(t, ctx, s, proto.ClientConsole)
+	r := read(c)
+	if res := r.actText(t, "w", proto.WatchPrefix+"%1", "up:30"); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	sc := r.screenThat(t, func(sc proto.Screen) bool { return sc.Up > 0 })
+	if sc.Pane != "%1" || sc.Up != 30 || sc.Text != "up 30\n" {
+		t.Fatalf("screen %+v", sc)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !slices.Contains(f.ups, 30) {
+		t.Fatalf("offsets asked %v, want 30", f.ups)
+	}
+}
+
+func TestWatchUpZeroIsLive(t *testing.T) {
+	s, _, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	c := connectAs(t, ctx, s, proto.ClientConsole)
+	r := read(c)
+	r.actText(t, "w", proto.WatchPrefix+"%1", "up:6")
+	r.screenThat(t, func(sc proto.Screen) bool { return sc.Up == 6 })
+	if res := r.actText(t, "w2", proto.WatchPrefix+"%1", "up:0"); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if sc := r.screenThat(t, func(sc proto.Screen) bool { return sc.Text == idleScreen }); sc.Up != 0 {
+		t.Fatalf("screen %+v", sc)
+	}
+}
+
+func TestWatchUpStopsAtTheTopOfTheHistory(t *testing.T) {
+	s, f, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	f.history = 10
+	c := connectAs(t, ctx, s, proto.ClientConsole)
+	r := read(c)
+	r.actText(t, "w", proto.WatchPrefix+"%1", "up:30")
+	if sc := r.screenThat(t, func(sc proto.Screen) bool { return sc.Up > 0 }); sc.Up != 10 || sc.Text != "up 10\n" {
+		t.Fatalf("screen %+v, want up 10", sc)
+	}
+}
+
+func TestWatchUpRefusesABadOffset(t *testing.T) {
+	s, _, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	c := connectAs(t, ctx, s, proto.ClientConsole)
+	r := read(c)
+	for i, text := range []string{"up:2001", "up:-1", "up:x", "down:3"} {
+		if res := r.actText(t, fmt.Sprint("w", i), proto.WatchPrefix+"%1", text); res.Err == "" {
+			t.Fatalf("%q was taken", text)
+		}
+	}
+}
+
+// A screen of the history is not the one an Enter answers: an Enter seen
+// on it is refused, and one seen on the live screen goes.
+func TestEnterSeenOnTheHistoryIsRefused(t *testing.T) {
+	s, _, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	c := connectAs(t, ctx, s, proto.ClientConsole)
+	r := read(c)
+	r.actText(t, "w", proto.WatchPrefix+"%1", "up:3")
+	old := r.screenThat(t, func(sc proto.Screen) bool { return sc.Up > 0 })
+	enter := func(seen time.Time) proto.Result {
+		return s.act(ctx, proto.Act{Console: true, RecID: proto.KeysPrefix + "%1", Text: "Enter", PID: 100, Seen: seen})
+	}
+	if res := enter(old.At); res.Err == "" || len(res.Ran) != 0 {
+		t.Fatalf("enter on the history: %+v", res)
+	}
+	r.actText(t, "w2", proto.WatchPrefix+"%1", "up:0")
+	live := r.screenThat(t, func(sc proto.Screen) bool { return sc.Up == 0 && sc.Text == idleScreen })
+	if res := enter(live.At); res.Err != "" || len(res.Ran) != 1 {
+		t.Fatalf("enter on the live screen: %+v", res)
 	}
 }

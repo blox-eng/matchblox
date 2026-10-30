@@ -203,7 +203,7 @@ func TestAKeyKicksTheWatchingConsole(t *testing.T) {
 	cl := console(s)
 	cl.screenKick = make(chan struct{}, 1)
 	pane := "%1"
-	cl.watch.Store(&pane)
+	cl.watch.Store(&watched{pane: pane})
 	if res := s.act(t.Context(), key("Down")); res.Err != "" {
 		t.Fatal(res.Err)
 	}
