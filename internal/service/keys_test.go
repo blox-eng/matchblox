@@ -1,10 +1,13 @@
 package service
 
 import (
+	"os"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/actions"
+	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -132,6 +135,36 @@ func TestKeysWaitForThePaneAndThenCheckTheAgent(t *testing.T) {
 	release()
 	if res := <-done; res.Err != "not sent: %1 runs a different agent now" || len(*ran) != 0 {
 		t.Fatalf("res %+v ran %q", res, *ran)
+	}
+}
+
+// The key's step carries the agent's pid and start, and the runner checks
+// them on the machine: a pid that another process took after the snapshot
+// gets no key.
+func TestAKeyCarriesTheAgentsGuard(t *testing.T) {
+	self, ok := actions.NewHost().Proc(os.Getpid())
+	if !ok {
+		t.Skip("this machine does not tell the test's own start")
+	}
+	agent := sample.Session{PID: os.Getpid(), Start: self.StartTime, Pane: "%1", Name: "flint", SessionID: "s1", Status: "idle"}
+	s, ran := holdsTest(t, agent)
+	var guards []advice.Guard
+	s.Actions.Check = func(g advice.Guard) error {
+		guards = append(guards, g)
+		return actions.CheckGuard(g)
+	}
+	a := key("Down")
+	a.PID = agent.PID
+	if res := s.act(t.Context(), a); res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("res %+v ran %q", res, *ran)
+	}
+	agent.Start++ // the snapshot still names the pid, but the process there started at another time
+	s.publish(sample.Snapshot{At: time.Now(), Sessions: []sample.Session{agent}}, func(state.Doc) {})
+	if res := s.act(t.Context(), a); len(res.Skipped) != 1 || len(*ran) != 1 {
+		t.Fatalf("a new process in the pid: res %+v ran %q", res, *ran)
+	}
+	if len(guards) != 2 || guards[0] != (advice.Guard{PID: agent.PID, StartTicks: self.StartTime}) || guards[1].StartTicks != agent.Start {
+		t.Fatalf("guards %+v", guards)
 	}
 }
 
