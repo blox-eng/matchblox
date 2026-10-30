@@ -66,16 +66,31 @@ func trimBlank(line string) string {
 	})
 }
 
-// agentMenuCut is a screen without the agent's own question: its last rule
-// and the lines under it. A screen with no rule stays whole.
+// agentMenuCut is a screen without the agent's own question: from the rule
+// over the question tool's header (its ☐, ☒ or ✔ tabs) down. Claude Code
+// draws more rules inside its menu, so the last rule is not the start. A
+// screen with no such header stays whole.
 func agentMenuCut(text string) string {
 	lines := strings.Split(text, "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
-		if isRule(lines[i]) {
+		if isRule(lines[i]) && questionHeader(lines[i+1:]) {
 			return strings.Join(lines[:i], "\n")
 		}
 	}
 	return text
+}
+
+// questionHeader is the first line that is not blank, when it holds a tab
+// of the question tool.
+func questionHeader(lines []string) bool {
+	for _, l := range lines {
+		plain := strings.TrimSpace(ansi.Strip(l))
+		if plain == "" {
+			continue
+		}
+		return strings.ContainsAny(plain, "☐☒✔")
+	}
+	return false
 }
 
 // isRule is a line of box-drawing runes and spaces, and not empty.

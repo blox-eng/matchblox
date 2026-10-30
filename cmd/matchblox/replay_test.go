@@ -532,9 +532,12 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "the next one", at: 2600 * time.Millisecond, key: "j", ok: has("I rewrote the quick start")},
 		{name: "back up", at: 3500 * time.Millisecond, key: "k", ok: has(flint)},
 		// a: flint-auth's chat takes the keys; its question tool's options
-		// are on the card at the foot of its screen, under the pane's own
-		// menu once its screen has come.
-		{name: "a: the question", at: 4600 * time.Millisecond, key: "a", ok: has("keys go to flint-auth", "flint-auth asks", "Rotate it", "Keep the token", "⏎ send", "Chat about this")},
+		// are on the card at the foot of its screen, which shows the pane's
+		// own work above it once the screen has come (its menu leaves for
+		// the card).
+		{name: "a: the question", at: 4600 * time.Millisecond, key: "a", ok: func(s string) bool {
+			return has("keys go to flint-auth", "flint-auth asks", "Rotate it", "Keep the token", "⏎ send", "wire the rotation.")(s) && !strings.Contains(s, "Chat about this")
+		}},
 		// 2 picks the second option: it goes to Claude Code's menu, and the
 		// chat shows the agent at work on it. The builder read the card
 		// first: the console's clock moves past its quiet.

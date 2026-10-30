@@ -2,6 +2,7 @@ package app
 
 import (
 	"io"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -1524,5 +1525,30 @@ func TestHistoryKeepsTheAgentsMenu(t *testing.T) {
 	m = next.(Model)
 	if out := ansi.Strip(strings.Join(m.chatLines(44, 29), "\n")); !strings.Contains(out, "❯ 1. Rotate it") {
 		t.Fatalf("history was cut:\n%s", out)
+	}
+}
+
+// Claude Code draws a second rule inside its menu, over "Chat about this":
+// the cut starts at the rule over the question's header, not the last one.
+func TestAgentMenuCutOnARealPane(t *testing.T) {
+	b, err := os.ReadFile("../../testdata/demo/panes/2.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := agentMenuCut(string(b))
+	if !strings.Contains(got, "wire the rotation.") {
+		t.Fatalf("the work went: %q", got)
+	}
+	for _, gone := range []string{"☐ Refresh", "1. Rotate it", "Chat about this", "Enter to select"} {
+		if strings.Contains(got, gone) {
+			t.Fatalf("%q stayed: %q", gone, got)
+		}
+	}
+}
+
+func TestAgentMenuCutKeepsAPlainRule(t *testing.T) {
+	screen := "⏺ done\n────────\n> \n────────\n  ? for shortcuts"
+	if got := agentMenuCut(screen); got != screen {
+		t.Fatalf("cut a prompt box: %q", got)
 	}
 }
