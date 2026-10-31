@@ -180,6 +180,8 @@ private final class Belts: NSObject {
     let dock = BeltView()
     private weak var terminal: ConsoleTerminalView?
     private var agent: String?
+    /// The Mine editor while it shows: never a second one over it.
+    private weak var editor: UIViewController?
 
     init(terminal: ConsoleTerminalView, screen: HeldScreen) {
         self.terminal = terminal
@@ -229,7 +231,7 @@ private final class Belts: NSObject {
 
     /// The Mine editor, as a sheet over the console.
     private func editMine() {
-        guard var top = terminal?.window?.rootViewController else { return }
+        guard editor?.presentingViewController == nil, var top = terminal?.window?.rootViewController else { return }
         while let next = top.presentedViewController { top = next }
         let editor = UIHostingController(rootView: BeltEditor(
             catalog: BeltView.catalog,
@@ -241,6 +243,7 @@ private final class Belts: NSObject {
             sheet.detents = [.custom { $0.maximumDetentValue * 0.7 }, .large()]
             sheet.preferredCornerRadius = 16
         }
+        self.editor = editor
         top.present(editor, animated: true)
     }
 

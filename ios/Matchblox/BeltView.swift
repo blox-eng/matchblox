@@ -135,6 +135,11 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     private let trayHost: UIHostingController<MatchTrayView>
     /// Counts each open, close and pick, so a close that was due after a pick knows it is stale.
     private var trayMoves = 0
+    /// Counts each open and close, so a close's end knows the drawer opened again since.
+    private var drawerMoves = 0
+    private var drawerAnimators: [UIViewPropertyAnimator] = []
+    /// Ends the close that animates now, at once: set while one runs.
+    private var endClose: (() -> Void)?
     private var holdingScreen = false
 
     private let selection = UISelectionFeedbackGenerator()
@@ -347,6 +352,8 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
         guard width > 0 else { return }
         stopLink()
         runOffLeft = 0
+        // A touch on the old keys presses none of the new ones.
+        touch = nil
         builtWidth = width
         let keys = Self.catalog.keys(layout, agent: agent, mine: Mine.load(from: .standard).keys)
         builtKeys = keys
@@ -723,6 +730,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
         super.willMove(toWindow: newWindow)
         guard newWindow == nil else { return }
         setTray(open: false, animated: false)
+        touch = nil
         stopLink()
         if runOffLeft > 0 { rebuild() }
         // A belt that leaves the screen mid-coast rests on its nearest detent at once.
@@ -739,10 +747,20 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     /// Opens or closes the drawer. A closed box comes back fresh: every match ready again but
     /// the one in use.
     func setTray(open: Bool, animated: Bool = true) {
-        trayMoves += 1
-        guard open != trayOpen else { return }
+        guard open != trayOpen else {
+            // A close with no time to animate ends a close that animates: its hold lets go now.
+            if !open && !animated { endClose?() }
+            return
+        }
         trayOpen = open
-        let moves = trayMoves
+        trayMoves += 1
+        drawerMoves += 1
+        let moves = drawerMoves
+        endClose = nil
+        for animator in drawerAnimators where animator.state == .active {
+            animator.stopAnimation(true)
+        }
+        drawerAnimators = []
         if open {
             trayModel.freshBox(inUse: layout)
             drawer.isHidden = false
@@ -759,7 +777,8 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
         let slid = open ? .identity : CGAffineTransform(translationX: 0, y: MatchTray.slide)
         let host = superview ?? self
         let finish = { [weak self] in
-            guard let self, !open, self.trayMoves == moves else { return }
+            guard let self, !open, self.drawerMoves == moves else { return }
+            self.endClose = nil
             self.drawer.isHidden = true
             self.trayModel.freshBox(inUse: self.layout)
             if self.holdingScreen {
@@ -779,6 +798,19 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
         let slide = UIViewPropertyAnimator(duration: Self.traySlideTime, timingParameters: Self.drawerCurve())
         slide.addAnimations { tray.transform = slid }
         slide.addCompletion { _ in finish() }
+        drawerAnimators = [grow, slide]
+        if !open {
+            endClose = { [weak self] in
+                guard let self else { return }
+                for animator in self.drawerAnimators where animator.state == .active {
+                    animator.stopAnimation(true)
+                }
+                self.drawerAnimators = []
+                tray.transform = slid
+                host.layoutIfNeeded()
+                finish()
+            }
+        }
         grow.startAnimation()
         slide.startAnimation()
     }
@@ -853,18 +885,20 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
                 spoken = elements
                 return elements
             }
-            for (i, piece) in pieces.enumerated() {
+            for i in motion.onScreen where pieces.indices.contains(i) {
+                let piece = pieces[i]
                 let x0 = motion.x(ofKeyAt: i)
-                guard x0 >= 0, x0 + piece.width <= belt.bounds.width else { continue }
                 let key = Element(accessibilityContainer: self)
                 key.accessibilityLabel = piece.key.spoken
                 key.accessibilityTraits = piece.key.isCommand && !commandsLive ? [.button, .notEnabled] : .button
                 key.accessibilityFrameInContainerSpace = CGRect(
                     x: x0, y: belt.frame.minY + Self.keyTop, width: piece.width, height: BeltGeometry.keyHeight)
-                // A key element outlives its key when the belt rebuilds: it finds its key by layer.
+                // A key element outlives its key when the belt rebuilds or pages: it finds its key
+                // by layer, and sends it only while the key is on the screen.
                 let layer = piece.layer
                 key.activate = { [weak self] in
-                    guard let self, let i = self.pieces.firstIndex(where: { $0.layer === layer }) else { return false }
+                    guard let self, let i = self.pieces.firstIndex(where: { $0.layer === layer }),
+                          self.motion?.onScreen.contains(i) == true else { return false }
                     self.press(i)
                     return true
                 }
@@ -874,5 +908,27 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
             return elements
         }
         set {}
+    }
+
+    /// A three-finger swipe pages the belt one screen and says which keys show.
+    override func accessibilityScroll(_ direction: UIAccessibilityScrollDirection) -> Bool {
+        guard direction == .left || direction == .right else { return false }
+        if runOffLeft > 0 { rebuild() }
+        guard var motion else { return false }
+        stopLink()
+        touch = nil
+        let ticks = motion.page(forward: direction == .left)
+        for _ in 0..<3 where !motion.atRest {
+            _ = motion.step(dt: 1)
+        }
+        self.motion = motion
+        place()
+        play(ticks)
+        spoken = nil
+        let shown = motion.onScreen
+        guard let first = shown.first, let last = shown.last else { return true }
+        let page = "keys \(motion.layoutIndex(ofKeyAt: first) + 1)–\(motion.layoutIndex(ofKeyAt: last) + 1) of \(motion.layoutKeys)"
+        UIAccessibility.post(notification: .pageScrolled, argument: page)
+        return true
     }
 }

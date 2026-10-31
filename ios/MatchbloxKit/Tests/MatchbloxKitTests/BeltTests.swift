@@ -155,6 +155,40 @@ final class BeltTests: XCTestCase {
         }
     }
 
+    // MARK: Paging, as VoiceOver scrolls
+
+    private func rest(_ m: inout BeltMotion) {
+        var frames = 0
+        while !m.atRest && frames < 2000 {
+            _ = m.step(dt: 1.0 / 60)
+            frames += 1
+        }
+    }
+
+    func testOnScreenIsTheWholeKeysLeftToRight() {
+        let m = BeltMotion(keys: tenKeys, geometry: geometry)
+        XCTAssertEqual(m.onScreen, Array(0..<7))
+        XCTAssertEqual(m.layoutKeys, 10)
+    }
+
+    func testPageForwardBringsTheNextKeysOn() {
+        var m = BeltMotion(keys: tenKeys, geometry: geometry)
+        _ = m.page(forward: true)
+        XCTAssertFalse(m.atRest, "a page settles as a release does")
+        rest(&m)
+        XCTAssertEqual(m.onScreen.map(m.layoutIndex(ofKeyAt:)), [7, 8, 9, 0, 1, 2, 3])
+        XCTAssertEqual(m.offset, m.settleTarget(), accuracy: 1e-9)
+    }
+
+    func testPageBackUndoesPageForward() {
+        var m = BeltMotion(keys: tenKeys, geometry: geometry)
+        _ = m.page(forward: true)
+        rest(&m)
+        _ = m.page(forward: false)
+        rest(&m)
+        XCTAssertEqual(m.onScreen.map(m.layoutIndex(ofKeyAt:)), Array(0..<7))
+    }
+
     // MARK: Tap versus drag
 
     func testDragThatReturnsIsNotATap() {

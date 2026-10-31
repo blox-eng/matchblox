@@ -122,6 +122,31 @@ public struct BeltMotion: Sendable {
         BeltFold.fold(x0: x(ofKeyAt: i), width: widths[i], screen: geometry.screen)
     }
 
+    /// The keys wholly on the screen, left to right.
+    public var onScreen: [Int] {
+        keys.indices
+            .filter { x(ofKeyAt: $0) >= 0 && x(ofKeyAt: $0) + widths[$0] <= geometry.screen }
+            .sorted { x(ofKeyAt: $0) < x(ofKeyAt: $1) }
+    }
+
+    /// The keys of one turn: the ring repeats the layout.
+    public var layoutKeys: Int { layoutCount }
+
+    /// Key `i`'s place in the layout, from 0.
+    public func layoutIndex(ofKeyAt i: Int) -> Int { i.modulo(layoutCount) }
+
+    /// One screen on (`forward`: the keys run left, and the key after the last whole one comes
+    /// to the left detent) or one screen back, then the settle onto the nearest detent, as a
+    /// release. VoiceOver's three-finger swipe pages the belt so.
+    public mutating func page(forward: Bool) -> [BeltTick] {
+        let shown = onScreen
+        guard let first = shown.first, let last = shown.last else { return [] }
+        let span = x(ofKeyAt: last) + widths[last] + BeltGeometry.gap - x(ofKeyAt: first)
+        let ticks = drag(by: forward ? -span : span)
+        release(velocity: 0)
+        return ticks
+    }
+
     public func settleTarget() -> CGFloat {
         BeltGeometry.gap - detentPosition(nearestDetent(to: offset))
     }
