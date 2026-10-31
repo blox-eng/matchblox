@@ -175,17 +175,21 @@ private final class HeldScreen: UIView {
 /// The two belts, the one on the keyboard and the one docked under the terminal, kept as one:
 /// the same agent, the same live commands, and the same resting place.
 @MainActor
-private final class Belts: NSObject {
+private final class Belts {
     let lifted = BeltView()
     let dock = BeltView()
     private weak var terminal: ConsoleTerminalView?
     private var agent: String?
     /// The Mine editor while it shows: never a second one over it.
     private weak var editor: UIViewController?
+    /// A live check waits for the end of this run-loop turn: one for every read of the turn.
+    private var liveCheckQueued = false
+    /// Commands go live only once the screen has stayed a chat's this long.
+    private static let liveDelay: Duration = .milliseconds(300)
+    private var goingLive: Task<Void, Never>?
 
     init(terminal: ConsoleTerminalView, screen: HeldScreen) {
         self.terminal = terminal
-        super.init()
         for belt in [lifted, dock] {
             belt.onScreenHold = { [weak screen] holding in screen?.trayMoved(open: holding) }
             belt.onSend = { [weak terminal] bytes in terminal?.send(bytes) }
@@ -196,7 +200,6 @@ private final class Belts: NSObject {
             belt.onLayout = { [weak self] layout in self?.layoutPicked(layout) }
             belt.onEditMine = { [weak self] in self?.editMine() }
         }
-        NotificationCenter.default.addObserver(self, selector: #selector(keyboardChanged), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
     }
 
     func agentChanged(_ agent: String?) {
@@ -206,14 +209,47 @@ private final class Belts: NSObject {
         outputArrived()
     }
 
-    /// A command runs only from the chat: never with no agent, never in a jumped pane.
+    /// A command runs only from the chat: never with no agent, never in a jumped pane. The
+    /// screen is read once for all the reads of a run-loop turn.
     func outputArrived() {
-        let live = !(agent ?? "").isEmpty && terminal?.inTmuxPane == false
+        guard !liveCheckQueued else { return }
+        liveCheckQueued = true
+        Task { [weak self] in
+            guard let self else { return }
+            self.liveCheckQueued = false
+            self.checkLive()
+        }
+    }
+
+    private var chatShows: Bool { !(agent ?? "").isEmpty && terminal?.inTmuxPane == false }
+
+    /// Off at once; on only once the chat has shown for `liveDelay`, so a screen that flickers
+    /// past a chat never lights the keys.
+    private func checkLive() {
+        guard chatShows else {
+            goingLive?.cancel()
+            goingLive = nil
+            setCommandsLive(false)
+            return
+        }
+        guard !lifted.commandsLive, goingLive == nil else { return }
+        goingLive = Task { [weak self] in
+            try? await Task.sleep(for: Self.liveDelay)
+            guard let self, !Task.isCancelled else { return }
+            self.goingLive = nil
+            if self.chatShows { self.setCommandsLive(true) }
+        }
+    }
+
+    private func setCommandsLive(_ live: Bool) {
         lifted.commandsLive = live
         dock.commandsLive = live
     }
 
+    /// The keyboard key says what a tap does: a focused terminal has its keys, the system
+    /// keyboard's or a hardware keyboard's, and a tap hides them.
     func focusChanged(_ focused: Bool) {
+        lifted.keyboardUp = focused
         dock.isHidden = focused
         if focused {
             dock.setTray(open: false, animated: false)
@@ -255,13 +291,6 @@ private final class Belts: NSObject {
         dock.mineEdited(show: show)
     }
 
-    /// The keyboard's frame holds the lifted belt. Only a system keyboard makes it taller than
-    /// the belt by more than a key; a hardware keyboard shows the belt alone.
-    @objc private func keyboardChanged(_ note: Notification) {
-        guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
-        let onScreen = end.minY < (terminal?.window?.windowScene?.screen.bounds.height ?? .greatestFiniteMagnitude)
-        lifted.keyboardUp = onScreen && end.height - max(lifted.bounds.height, BeltView.handleHeight + BeltGeometry.height) > BeltGeometry.keyHeight
-    }
 }
 
 /// Owns one SSHSession for each connect. A session that ends at once opens again; a good session that ends waits for a tap. It stops when the view goes away or the app goes to the background.

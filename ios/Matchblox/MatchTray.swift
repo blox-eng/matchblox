@@ -111,6 +111,9 @@ private struct TrayMatch: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityShowsLargeContentViewer {
+            Text(layout.rawValue.uppercased())
+        }
         .accessibilityLabel(layout.rawValue.capitalized)
         .accessibilityAddTraits(match == .burns ? .isSelected : [])
     }
@@ -137,6 +140,7 @@ private struct TrayMatch: View {
 private struct GoingOut: View {
     let front: Double
     let thickness: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var gone = false
 
     var body: some View {
@@ -145,7 +149,8 @@ private struct GoingOut: View {
             // The mockup's puffs: three, at twice the island's full strength, on the dark floor.
             SmokeView(x: g.front, y: g.y - g.th * 0.4, th: g.th, puffs: 3, gain: 2 / 0.6)
                 .opacity(gone ? 0 : 1)
-                .offset(y: gone ? -6 : 0)
+                // With Reduce Motion the smoke only fades: it does not rise.
+                .offset(y: gone && !reduceMotion ? -6 : 0)
         }
         .allowsHitTesting(false)
         .onAppear {

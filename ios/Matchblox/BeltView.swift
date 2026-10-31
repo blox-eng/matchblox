@@ -8,7 +8,7 @@ import UIKit
 /// layout's name, the grip, and the keyboard key. A pull up on the handle row, or a tap on its
 /// grip or name, opens the matchbox drawer between the two: the tray of layouts. One belt
 /// rides on the keyboard and one docks under the terminal while the keyboard is down.
-final class BeltView: UIInputView, UIGestureRecognizerDelegate {
+final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentViewerInteractionDelegate {
     private struct Piece {
         let layer: CALayer
         let face: CAGradientLayer
@@ -158,6 +158,8 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
     /// Frames left of a layout change's run-off.
     private var runOffLeft: CGFloat = 0
     private var flashes = 0
+    /// Presses of each key's layer, so the end of an early press does not unpaint a later one.
+    private var presses: [ObjectIdentifier: Int] = [:]
     /// VoiceOver's elements, built when asked and dropped when the keys change or come to rest.
     private var spoken: [Any]?
 
@@ -304,14 +306,16 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
         pan.maximumNumberOfTouches = 1
         pan.delegate = self
         belt.addGestureRecognizer(pan)
+        belt.addInteraction(UILargeContentViewerInteraction(delegate: self))
 
         // Below required, so the docked belt can collapse when its stack view hides it.
         let bottom = belt.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor)
         bottom.priority = .init(999)
         NSLayoutConstraint.activate([
             belt.topAnchor.constraint(equalTo: drawer.bottomAnchor),
-            belt.leadingAnchor.constraint(equalTo: leadingAnchor),
-            belt.trailingAnchor.constraint(equalTo: trailingAnchor),
+            // In landscape the keys stay clear of the notch and the rounded corners.
+            belt.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor),
+            belt.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor),
             belt.heightAnchor.constraint(equalToConstant: BeltGeometry.height),
             bottom,
         ])
@@ -354,6 +358,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
         runOffLeft = 0
         // A touch on the old keys presses none of the new ones.
         touch = nil
+        presses = [:]
         builtWidth = width
         let keys = Self.catalog.keys(layout, agent: agent, mine: Mine.load(from: .standard).keys)
         builtKeys = keys
@@ -656,9 +661,14 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
             return
         }
         guard let bytes = KeyBar.bytes(for: motion.keys[i].id) else { return }
+        let id = ObjectIdentifier(piece.layer)
+        presses[id, default: 0] += 1
+        let press = presses[id]
         Self.paint(piece, pressed: true)
-        Task {
+        Task { [weak self] in
             try? await Task.sleep(for: .seconds(Self.pressTime))
+            guard let self, self.presses[id] == press else { return }
+            self.presses[id] = nil
             Self.paint(piece, pressed: false)
         }
         onSend(bytes)
@@ -706,7 +716,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
 
     /// The old keys run off a few detents, clicking, then the new set settles on its home.
     private func runOff() {
-        guard window != nil, !isHidden, motion != nil else { return rebuild() }
+        guard window != nil, !isHidden, motion != nil, !UIAccessibility.isReduceMotionEnabled else { return rebuild() }
         touch = nil
         selection.prepare()
         stopLink()
@@ -892,7 +902,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
                 key.accessibilityLabel = piece.key.spoken
                 key.accessibilityTraits = piece.key.isCommand && !commandsLive ? [.button, .notEnabled] : .button
                 key.accessibilityFrameInContainerSpace = CGRect(
-                    x: x0, y: belt.frame.minY + Self.keyTop, width: piece.width, height: BeltGeometry.keyHeight)
+                    x: belt.frame.minX + x0, y: belt.frame.minY + Self.keyTop, width: piece.width, height: BeltGeometry.keyHeight)
                 // A key element outlives its key when the belt rebuilds or pages: it finds its key
                 // by layer, and sends it only while the key is on the screen.
                 let layer = piece.layer
@@ -908,6 +918,33 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate {
             return elements
         }
         set {}
+    }
+
+    // MARK: Large content viewer
+
+    /// A key, as the large content viewer shows it to a builder with a large text size.
+    @MainActor
+    private final class LargeKey: NSObject, UILargeContentViewerItem {
+        let largeContentTitle: String?
+        let showsLargeContentViewer = true
+        let largeContentImage: UIImage? = nil
+        let scalesLargeContentImage = false
+        let largeContentImageInsets = UIEdgeInsets.zero
+
+        init(_ title: String) {
+            largeContentTitle = title
+        }
+    }
+
+    func largeContentViewerInteraction(_ interaction: UILargeContentViewerInteraction, itemAt point: CGPoint) -> (any UILargeContentViewerItem)? {
+        guard let i = keyIndex(at: point) else { return nil }
+        return LargeKey(pieces[i].key.label)
+    }
+
+    /// The finger lifts on a key after the large view: the key sends, as a tap's would.
+    func largeContentViewerInteraction(_ interaction: UILargeContentViewerInteraction, didEndOn item: (any UILargeContentViewerItem)?, at point: CGPoint) {
+        guard item != nil, motion?.atRest ?? true, let i = keyIndex(at: point) else { return }
+        press(i)
     }
 
     /// A three-finger swipe pages the belt one screen and says which keys show.

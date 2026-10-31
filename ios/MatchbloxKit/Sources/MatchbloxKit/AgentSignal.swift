@@ -13,7 +13,12 @@ public struct AgentSignalFilter: Sendable {
     public init() {}
 
     public mutating func feed(_ bytes: ArraySlice<UInt8>) -> (pass: [UInt8], agent: String?) {
+        // Most reads hold no ESC at all: with nothing held, they pass whole.
+        if held.isEmpty && !bytes.contains(Self.esc) {
+            return (Array(bytes), nil)
+        }
         var pass: [UInt8] = []
+        pass.reserveCapacity(bytes.count + held.count)
         var agent: String?
         for byte in bytes {
             consume(byte, into: &pass, agent: &agent)
