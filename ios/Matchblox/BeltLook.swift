@@ -36,8 +36,8 @@ enum BeltLook {
     static let grainLight = UIColor(white: 1, alpha: 0x05 / 255)
     static let grainDark = UIColor(white: 0, alpha: 0x18 / 255)
     /// The shadow the tray's walls throw in: deep under the top wall, light over the bottom.
-    static let trayShadowTop = UIColor(white: 0, alpha: 0.85)
-    static let trayShadowBottom = UIColor(white: 0, alpha: 0.6)
+    static let trayShadowTop = UIColor(white: 0, alpha: 1)
+    static let trayShadowBottom = UIColor(white: 0, alpha: 0.8)
     /// `EDIT MINE`, stamped on the tray floor: its ink and its edge.
     static let stampInk = UIColor(hex: 0x8A7A5C)
     static let stampEdge = UIColor(hex: 0x3A3226)

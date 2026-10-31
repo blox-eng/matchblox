@@ -240,7 +240,10 @@ private final class Belts: NSObject {
         ))
         editor.view.backgroundColor = BeltLook.sheet
         if let sheet = editor.sheetPresentationController {
-            sheet.detents = [.custom { $0.maximumDetentValue * 0.7 }, .large()]
+            let part = UISheetPresentationController.Detent.Identifier("mine")
+            sheet.detents = [.custom(identifier: part) { $0.maximumDetentValue * 0.7 }, .large()]
+            // The console stays bright under the sheet at its first detent, as the mockup shows.
+            sheet.largestUndimmedDetentIdentifier = part
             sheet.preferredCornerRadius = 16
         }
         self.editor = editor

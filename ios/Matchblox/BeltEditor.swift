@@ -86,6 +86,9 @@ struct BeltEditor: View {
             .padding(EdgeInsets(top: 10, leading: 12, bottom: 16, trailing: 12))
         }
         .background(Color(uiColor: BeltLook.sheet))
+        .overlay(alignment: .top) {
+            Rectangle().fill(Theme.hair).frame(height: 1).accessibilityHidden(true)
+        }
         .onDisappear { closed(done) }
     }
 
@@ -122,7 +125,7 @@ struct BeltEditor: View {
                             .resizable()
                             .scaledToFit()
                             .frame(width: 9, height: 9)
-                            .padding(2)
+                            .padding(3)
                     }
                 }
                 .contentShape(shape)

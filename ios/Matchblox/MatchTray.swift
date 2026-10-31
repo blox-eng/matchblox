@@ -90,7 +90,7 @@ private struct TrayMatch: View {
 
     var body: some View {
         Button(action: pick) {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .center, spacing: 0) {
                 GeometryReader { geo in
                     drawing
                         .frame(width: Self.box.width, height: Self.box.height)
@@ -104,9 +104,10 @@ private struct TrayMatch: View {
                     .foregroundStyle(match == .burns ? Theme.fg : Theme.faint)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity)
             }
             .padding(.bottom, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
