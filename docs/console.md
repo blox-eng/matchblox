@@ -342,8 +342,20 @@ nowhere until then. A tap on the title also goes back to the live screen, and so
 does a change of the selected session or a click on the list. The service
 refuses an `Enter` that answers a screen of the history.
 
+`PgUp` and `PgDn` move one screen of the chat up and down the history.
+They do not go back to the live screen.
+
 At night, the first key that sends something to an agent asks "Take over?".
 Keys that only move on the card do not ask.
+
+When the chat gets the keys or changes its session, the console tells the
+terminal the agent of that session: `ESC _ matchblox;agent=<id> ESC \`.
+`<id>` is `claude`, `codex`, `opencode`, `cursor` or empty. When the chat
+gives the keys back, the id is empty. The phone app reads this signal to
+show the commands of that agent. It is not drawn. Inside tmux, the console
+wraps it for passthrough in its own pane. tmux 3.2 or older cannot pass it,
+so the console sends nothing and the key line says `COMMANDS · needs tmux
+3.3` once.
 
 On a narrow screen, Sessions fills the screen and the dock stays at the
 bottom, and `u` cycles it. `Enter`, or a tap on a row, replaces the screen

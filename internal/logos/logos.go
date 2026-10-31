@@ -61,6 +61,12 @@ func Cells(provider string) string {
 	return b.String()
 }
 
+// Passthrough wraps s for tmux to hand on to the terminal, which it does
+// only for a pane with allow-passthrough.
+func Passthrough(s string) string {
+	return "\x1bPtmux;" + strings.ReplaceAll(s, "\x1b", "\x1b\x1b") + "\x1b\\"
+}
+
 // Transmit sends every logo, for a dark or a light background, as virtual
 // placements of 2x1 cells. In tmux each chunk is wrapped for passthrough,
 // which the pane must allow. Sending again replaces the images.
@@ -88,7 +94,7 @@ func Transmit(dark, tmux bool) string {
 			}
 			apc := "\x1b_G" + head + ";" + chunk + "\x1b\\"
 			if tmux {
-				apc = "\x1bPtmux;" + strings.ReplaceAll(apc, "\x1b", "\x1b\x1b") + "\x1b\\"
+				apc = Passthrough(apc)
 			}
 			b.WriteString(apc)
 		}
@@ -102,16 +108,15 @@ var drawing = map[string]bool{"xterm-kitty": true, "xterm-ghostty": true}
 // Viewers says whether every terminal that shows this console can draw the
 // logos, and a key that changes with them: a client that attaches, or
 // comes to the console's window, needs the images again (tmux passes them
-// to the clients that show the pane). watched is false when no client is
-// on the console's session at all: nothing to decide then. A client that
-// names no terminal cannot draw. NO_COLOR drops the colour that names
-// each image. env is os.Getenv; tmux runs tmux with args.
+// to the clients that show the pane). The key names a client that cannot
+// draw too: a phone that attaches needs the chat's agent again. watched is
+// false when no client is on the console's session: nothing to decide
+// then. A client that names no terminal cannot draw. NO_COLOR drops the
+// colour that names each image. env is os.Getenv; tmux runs tmux with args.
 func Viewers(env func(string) string, tmux func(args ...string) ([]byte, error)) (can bool, key string, watched bool) {
-	if env("NO_COLOR") != "" {
-		return false, "", true
-	}
+	can = env("NO_COLOR") == ""
 	if env("TMUX") == "" {
-		return drawing[env("TERM")] || env("TERM_PROGRAM") == "ghostty", "direct", true
+		return can && (drawing[env("TERM")] || env("TERM_PROGRAM") == "ghostty"), "direct", true
 	}
 	out, err := tmux("display", "-p", "-t", env("TMUX_PANE"), "#{session_name}\t#{window_id}")
 	if err != nil {
@@ -128,9 +133,7 @@ func Viewers(env func(string) string, tmux func(args ...string) ([]byte, error))
 		if len(f) != 5 || f[3] != session {
 			continue
 		}
-		if !drawing[f[2]] {
-			return false, "", true
-		}
+		can = can && drawing[f[2]]
 		at := "away"
 		if f[4] == window {
 			at = "here"
@@ -138,5 +141,5 @@ func Viewers(env func(string) string, tmux func(args ...string) ([]byte, error))
 		here = append(here, f[0]+":"+f[1]+"@"+at)
 	}
 	slices.Sort(here)
-	return len(here) > 0, strings.Join(here, ","), len(here) > 0
+	return can && len(here) > 0, strings.Join(here, ","), len(here) > 0
 }

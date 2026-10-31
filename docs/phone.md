@@ -223,24 +223,78 @@ the console to answer an agent. See [the chat](console.md#the-chat).
 2. Type. Every key goes to the agent. When the agent asks with its
    question tool, a card shows at the foot. Tap an option, or type and
    press `Enter`.
-3. To go back to Sessions, tap `‹ Sessions` or `◂` on the key bar. You can
+3. To go back to Sessions, tap `‹ Sessions` or `◂` on the belt. You can
    also swipe in from the left edge, or press ⌘M on a hardware keyboard.
    `Ctrl+]` does it too.
 
-The app's key bar has nine keys: `◂ ↑ ↓ ⏎ Tab ⇧Tab Esc ^C ⌨`. Each key
-works at the first tap. The keys touch edge to edge, so a tap between two
-keys always hits one. Each key is at least 44 pt tall. `↑` and `↓` are
-wider than the other keys and 52 pt tall. The system keyboard types the
-rest. The terminal turns off autocorrect, suggestions, smart quotes, smart
-dashes and auto capitalisation. So they never change a key you send.
+### The key belt
+
+The app's key bar is a belt. It is one row of keys across the full width
+of the screen. It turns without end: after the last key comes the first
+key again. A key that reaches a side of the phone folds round it and goes
+behind the phone. Drag the belt with one finger. It slows after you lift
+and stops with a key at the left side.
+
+- **Home.** Each layout opens at home. At home, `◂` is at the left, and
+  `↑` `↓` `⏎` are at the right (each is two cells wide).
+- **A key sends when you lift.** A touch that moves 8 pt or more is a
+  drag. A drag never presses a key.
+- **The feel.** The phone gives one tick each time the belt passes halfway between two stops. Home gives a firmer click.
+- **Size.** Each key is at least 44 pt tall. A one-cell key is at
+  least 44 pt wide. The terminal turns off autocorrect, suggestions, smart
+  quotes, smart dashes and auto capitalisation. So they never change a key
+  you send.
 
 - `◂` goes back. In the chat it goes to Sessions. In a tmux pane it goes
   to the console.
 - `^C` interrupts. `^C` twice stops Claude Code. A second `^C` within 1 s
   is held, and the key line says so.
-- `⌨` shows or hides the system keyboard. While the system keyboard is
-  on screen, `⌨` looks held down. While the keyboard is down, the key bar
-  stays at the foot of the screen.
+- `⇞` and `⇟` send `PgUp` and `PgDn` (`ESC [ 5 ~` and `ESC [ 6 ~`). In the
+  chat of the console they move the history one screen up and down. In a
+  pane you jumped to on a host, the jump table of the host starts tmux copy
+  mode one page up, and moves it one page. In a local jump they go to the
+  agent.
+
+The row above the belt is the handle row. It shows the name of the layout
+(on Commands, the mark of the agent too), the grip, and a ghost keyboard
+icon. A tap on the keyboard icon shows or hides the system keyboard. While
+the keyboard is on screen, the icon is bright. The belt and the handle row
+stay above the keyboard, or at the foot of the screen while the keyboard is
+down. The keyboard icon never opens the tray.
+
+#### Layouts and the matchbox tray
+
+Tap the grip or the name, or pull up on the handle row, to open the
+matchbox tray. Pull down to close it. Four matches lie in the tray, one for
+each layout:
+
+| Layout | Keys |
+|---|---|
+| Steer (the default) | `◂ ↑ ↓ ⏎ Esc ^C ⇞ ⇟` |
+| Commands | `◂ ↑ ↓ ⏎`, then the commands of the agent of the chat |
+| tmux | `◂ ↑ ↓ ⏎ ⇞ ⇟ Tab ⇧Tab ^B` |
+| Mine | The keys you chose |
+
+The match of the layout in use burns. Tap another match: it strikes, and
+the match you leave goes out. The tray closes 0.9 s after your tap. The
+next time it opens, every match is new, and the one in use burns. The
+screen does not change size while the tray is open. The app keeps the
+layout you chose, and opens on it the next time.
+
+#### Command keys
+
+The Commands layout follows the agent of the chat. Each command key has the
+mark of its agent. A command key runs only from the chat. In a pane you
+jumped to, or when the console has no chat open, the command keys are dim,
+and a tap shows `commands run from the chat`. `compact` and `clear` run only in Claude Code. The key is refused, with a message, until the agent rests (and while it waits for you). The other commands type their text and `Enter`. They go only while the agent rests, with no question, no permission prompt and no text you typed on its prompt. Otherwise the key is refused, with a message. A command of another agent sends nothing. See
+[the keys of the chat](keys.md) and [the chat](console.md#the-chat). The console says `COMMANDS · needs tmux 3.3` once, when the chat opens, with tmux older than 3.3 on the host.
+
+#### Mine
+
+Tap `EDIT MINE` on the tray floor. The sheet lists all keys in groups. Tap
+a key to add it to Mine, or to take it off. Drag a key to move it. `◂`
+always stays: the sheet says `◂ always stays: it is the way back`. Mine is
+one set for the device, for all hosts. It stays when you quit the app.
 
 A vertical swipe scrolls the console and a tmux pane. The lines move with
 your finger: one line for each line of travel. In a tmux pane each wheel
@@ -256,7 +310,7 @@ program does not read the mouse, the terminal scrolls its own history.
 `Ctrl+O`: a tap on a row of Panes does it. Tap the row, and the
 key line says `tap again: <command>`. Tap it again. You are in the pane.
 
-To come back in the matchblox app, tap `◂` on the key bar, swipe in from
+To come back in the matchblox app, tap `◂` on the belt, swipe in from
 the left edge, tap `◂ matchblox` at the left of the tmux status line, or
 press ⌘M on a hardware keyboard. All four work whatever your tmux prefix
 is, and none needs the tmux mouse.
@@ -303,4 +357,4 @@ Turn the phone on its side, at 60 columns or more, and the list and the
 detail of the selected agent sit side by side.
 
 Every key is on the key bar of an SSH app: letters, digits, arrows, `Enter`
-and `Esc`. The matchblox app adds its nine keys. See [Keys](keys.md).
+and `Esc`. The matchblox app adds its key belt. See [Keys](keys.md).

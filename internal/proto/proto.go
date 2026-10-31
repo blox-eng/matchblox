@@ -133,6 +133,11 @@ const (
 // a key name of the keys set, or "lit:" and the text to type.
 const KeysPrefix = "keys:"
 
+// CommandPrefix starts an act that types a command of the command table
+// (keycmd) into the pane after it, at rest. Text is the command's id; PID
+// is the agent the console showed.
+const CommandPrefix = "cmd:"
+
 // Screen is one capture of the watched pane. Gone: the pane is not there.
 // Up: the screen ends this many lines above the pane's bottom, as far as
 // the history goes; it is not the live screen.

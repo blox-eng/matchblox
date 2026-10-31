@@ -3,6 +3,7 @@ package app
 import (
 	"io"
 	"os"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,6 +15,8 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/logos"
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/said"
@@ -1575,5 +1578,360 @@ func TestAgentMenuCutKeepsAPlainRule(t *testing.T) {
 	screen := "⏺ done\n────────\n> \n────────\n  ? for shortcuts"
 	if got := agentMenuCut(screen); got != screen {
 		t.Fatalf("cut a prompt box: %q", got)
+	}
+}
+
+// commandChat is the console with the keys in the chat of a, in %1, which
+// runs agent.
+func commandChat(t *testing.T, agent string) (Model, *fakeConn) {
+	t.Helper()
+	st := fixtureState()
+	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a", Agent: agent}, {PID: 2, Pane: "%2", Name: "b"}}
+	m, f := loadedWith(t, 100, st)
+	m = onPane(t, m, "%1")
+	next, _ := m.Update(screenMsg{Pane: m.watching, At: time.Unix(100, 0), Text: "> "})
+	m = pressKeys(t, next.(Model), "enter")
+	if !m.chatKeys {
+		t.Fatal("enter did not give the chat the keys")
+	}
+	return m, f
+}
+
+// command is the command key id, as the phone sends it, read by the
+// console's input decoder.
+func command(t *testing.T, m Model, id string) Model {
+	t.Helper()
+	for _, e := range decoded(t, keycmd.Sequence(id)) {
+		next, cmd := m.Update(e)
+		drain(cmd)
+		m = next.(Model)
+	}
+	return m
+}
+
+func TestCompactKeyRunsTheCompactAct(t *testing.T) {
+	m, f := commandChat(t, "claude")
+	m = command(t, m, "compact")
+	if got := f.acts(); len(got) != 1 || got[0].RecID != "compact:%1" || got[0].Confirm != "y" || got[0].PID != 1 {
+		t.Fatalf("acts %+v", got)
+	}
+	if m.flash != "" {
+		t.Fatalf("flash %q", m.flash)
+	}
+}
+
+func TestClearKeyRunsTheClearAct(t *testing.T) {
+	m, f := commandChat(t, "claude")
+	command(t, m, "clear")
+	if got := f.acts(); len(got) != 1 || got[0].RecID != "clear:%1" || got[0].Confirm != "y" || got[0].PID != 1 {
+		t.Fatalf("acts %+v", got)
+	}
+}
+
+// TestTypeCommandRunsTheCommandAct: a typed command goes as one act the
+// service guards (rest, no question, no draft), never as bare keys.
+func TestTypeCommandRunsTheCommandAct(t *testing.T) {
+	m, f := commandChat(t, "claude")
+	m = command(t, m, "model")
+	if got := f.acts(); len(got) != 1 || got[0].RecID != proto.CommandPrefix+"%1" || got[0].Text != "model" || got[0].PID != 1 || got[0].Confirm != "y" {
+		t.Fatalf("acts %+v", got)
+	}
+	if m = answered(t, m, "/model not sent: the pane %1 has text you typed"); m.flash != "/model not sent: the pane %1 has text you typed" {
+		t.Fatalf("flash %q", m.flash)
+	}
+}
+
+func TestCommandForAnotherAgentSendsNothing(t *testing.T) {
+	m, f := commandChat(t, "codex")
+	m = command(t, m, "compact")
+	if got := f.acts(); len(got) != 0 {
+		t.Fatalf("acts %+v", got)
+	}
+	if want := "/compact is Claude Code's: a runs Codex"; m.flash != want {
+		t.Fatalf("flash %q, want %q", m.flash, want)
+	}
+	m, _ = commandChat(t, "cursor-agent")
+	if m = command(t, m, "codex-compact"); m.flash != "/compact is Codex's: a runs Cursor" {
+		t.Fatalf("flash %q", m.flash)
+	}
+}
+
+func TestCommandWithNoChatSendsNothing(t *testing.T) {
+	m, f := commandChat(t, "claude")
+	m = pressKeys(t, m, "ctrl+]")
+	m = command(t, m, "compact")
+	if got := f.acts(); len(got) != 0 {
+		t.Fatalf("acts %+v", got)
+	}
+	if m.flash != "commands run from the chat" {
+		t.Fatalf("flash %q", m.flash)
+	}
+}
+
+// TestUnknownCommandSaysTheHostIsOlder: an app newer than the host sends
+// an id the host's table does not have. Nothing goes, and the key line
+// says what to do.
+func TestUnknownCommandSaysTheHostIsOlder(t *testing.T) {
+	m, f := commandChat(t, "claude")
+	m = command(t, m, "nope")
+	if got := f.acts(); len(got) != 0 || m.flash != "/nope is new to this console: update matchblox on the host" || !m.chatKeys {
+		t.Fatalf("acts %+v flash %q chatKeys %v", got, m.flash, m.chatKeys)
+	}
+	if m = command(t, m, "no\x07pe"); m.flash != "/nope is new to this console: update matchblox on the host" {
+		t.Fatalf("an id with a control character: flash %q", m.flash)
+	}
+}
+
+// TestACommandUnderALayerSendsNothing: the layer on top holds the key
+// line (here the take-over question), so the person sees what to close.
+func TestACommandUnderALayerSendsNothing(t *testing.T) {
+	st := nightState()
+	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a", Agent: "claude"}}
+	m, f := loadedWith(t, 100, st)
+	m = command(t, pressKeys(t, onPane(t, m, "%1"), "enter"), "compact")
+	m = command(t, m, "clear")
+	if out := screen(m); len(f.acts()) != 0 || m.held == nil || !strings.Contains(out, "Take over?") {
+		t.Fatalf("acts %+v, held %v\n%s", f.acts(), m.held != nil, out)
+	}
+}
+
+func TestACommandAtNightAsksToTakeOver(t *testing.T) {
+	st := nightState()
+	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a", Agent: "claude"}}
+	m, f := loadedWith(t, 100, st)
+	m = pressKeys(t, onPane(t, m, "%1"), "enter")
+	m = command(t, m, "compact")
+	if m.held == nil || len(f.acts()) != 0 {
+		t.Fatalf("held %v acts %+v", m.held != nil, f.acts())
+	}
+	pressKeys(t, m, "n")
+	if got := f.acts(); len(got) != 2 || got[1].RecID != "compact:%1" {
+		t.Fatalf("acts %+v", got)
+	}
+}
+
+// cmdMsgs are the messages cmd gives, a batch's or a sequence's each in
+// turn. A command that blocks (a read) gives none.
+func cmdMsgs(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	out := make(chan tea.Msg, 1)
+	go func() { out <- cmd() }()
+	var msg tea.Msg
+	select {
+	case msg = <-out:
+	case <-time.After(50 * time.Millisecond):
+		return nil
+	}
+	if v := reflect.ValueOf(msg); v.Kind() == reflect.Slice && v.Type().Elem() == reflect.TypeFor[tea.Cmd]() { // a batch or a sequence
+		var got []tea.Msg
+		for i := range v.Len() {
+			got = append(got, cmdMsgs(v.Index(i).Interface().(tea.Cmd))...)
+		}
+		return got
+	}
+	return []tea.Msg{msg}
+}
+
+// raws are the strings cmd writes through Bubble Tea's raw output.
+func raws(cmd tea.Cmd) []string {
+	var got []string
+	for _, msg := range cmdMsgs(cmd) {
+		if r, ok := msg.(tea.RawMsg); ok {
+			got = append(got, r.Msg.(string))
+		}
+	}
+	return got
+}
+
+// agentRaws are the agent signals the console wrote while m took ks.
+func agentRaws(t *testing.T, m Model, ks ...string) (Model, []string) {
+	t.Helper()
+	var got []string
+	for _, k := range ks {
+		next, cmd := key(m, k)
+		got = append(got, raws(cmd)...)
+		m = next.(Model)
+	}
+	return m, got
+}
+
+// agentChat is the console on a, in %1, which runs agent, and b, in %2,
+// which runs other, with the chat of a on screen but not yet open.
+func agentChat(t *testing.T, agent, other string) Model {
+	t.Helper()
+	st := fixtureState()
+	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a", Agent: agent}, {PID: 2, Pane: "%2", Name: "b", Agent: other}}
+	m, _ := loadedWith(t, 100, st)
+	m = onPane(t, m, "%1")
+	next, _ := m.Update(screenMsg{Pane: m.watching, At: time.Unix(100, 0), Text: "> "})
+	return next.(Model)
+}
+
+func TestChatSendsItsAgent(t *testing.T) {
+	m := agentChat(t, "claude", "codex")
+	m, got := agentRaws(t, m, "enter")
+	if want := logos.Passthrough(keycmd.AgentSignal("claude")); !slices.Equal(got, []string{want}) {
+		t.Fatalf("open wrote %q, want %q", got, want)
+	}
+	if !m.chatKeys {
+		t.Fatal("enter did not open the chat")
+	}
+	m = m.openChat()
+	if _, got = agentRaws(t, m, "x", "y"); len(got) != 0 {
+		t.Fatalf("the open chat wrote %q again", got)
+	}
+}
+
+func TestChatCloseSendsNoAgent(t *testing.T) {
+	m, _ := agentRaws(t, agentChat(t, "claude", "codex"), "enter")
+	m, got := agentRaws(t, m, "ctrl+]")
+	if want := logos.Passthrough(keycmd.AgentSignal("")); !slices.Equal(got, []string{want}) {
+		t.Fatalf("close wrote %q, want %q", got, want)
+	}
+	if _, got = agentRaws(t, m, "down"); len(got) != 0 {
+		t.Fatalf("the closed chat wrote %q", got)
+	}
+}
+
+func TestSwitchingSessionSendsTheNewAgent(t *testing.T) {
+	m, _ := agentRaws(t, agentChat(t, "claude", "cursor-agent"), "enter")
+	next, cmd := m.chatOn("%2").Update(screenMsg{Pane: "%2", Text: "> "})
+	if got, want := raws(cmd), logos.Passthrough(keycmd.AgentSignal("cursor")); !slices.Equal(got, []string{want}) {
+		t.Fatalf("switch wrote %q, want %q", got, want)
+	}
+	if s, _ := next.(Model).selectedSession(); s.Pane != "%2" || !next.(Model).chatKeys {
+		t.Fatalf("chat on %s, keys %v", s.Pane, next.(Model).chatKeys)
+	}
+}
+
+func TestAgentSignalOutsideTmuxIsNotWrapped(t *testing.T) {
+	m := agentChat(t, "opencode", "")
+	m.opt.OutsideTmux = true
+	if _, got := agentRaws(t, m, "enter"); !slices.Equal(got, []string{keycmd.AgentSignal("opencode")}) {
+		t.Fatalf("open wrote %q", got)
+	}
+}
+
+// lastUp is the lines up the last watch the console sent asks for.
+func lastUp(t *testing.T, f *fakeConn) string {
+	t.Helper()
+	acts := f.allActs()
+	for i := len(acts) - 1; i >= 0; i-- {
+		if strings.HasPrefix(acts[i].RecID, proto.WatchPrefix) {
+			if acts[i].RecID != proto.WatchPrefix+"%1" {
+				t.Fatalf("watch %q", acts[i].RecID)
+			}
+			return acts[i].Text
+		}
+	}
+	t.Fatal("no watch sent")
+	return ""
+}
+
+func TestPageUpScrollsTheHistory(t *testing.T) {
+	m, f := commandChat(t, "claude")
+	page := m.draw(m.width).chatRows
+	if page <= chatStep {
+		t.Fatalf("the chat shows %d rows", page)
+	}
+	m = pressKeys(t, m, "pgup")
+	if got, want := lastUp(t, f), proto.UpPrefix+strconv.Itoa(page); got != want || !m.chatKeys {
+		t.Fatalf("pgup asked %q, want %q (keys %v)", got, want, m.chatKeys)
+	}
+	m = pressKeys(t, m, "pgup")
+	if got := lastUp(t, f); got != proto.UpPrefix+strconv.Itoa(2*page) {
+		t.Fatalf("second pgup asked %q", got)
+	}
+	m = pressKeys(t, m, "pgdown")
+	if got := lastUp(t, f); got != proto.UpPrefix+strconv.Itoa(page) {
+		t.Fatalf("pgdown asked %q", got)
+	}
+	m = pressKeys(t, m, "x") // any other key goes back to live and types nothing
+	if m.up != 0 || len(keyActs(f)) != 0 {
+		t.Fatalf("up %d, keys %+v", m.up, keyActs(f))
+	}
+	m = pressKeys(t, m, "pgup", "pgdown")
+	if got := lastUp(t, f); got != proto.UpPrefix+"0" || m.up != 0 {
+		t.Fatalf("pgdown to live asked %q", got)
+	}
+}
+
+func TestOldTmuxSaysCommandsNeedIt(t *testing.T) {
+	m := agentChat(t, "claude", "codex")
+	m.opt.LocalTmux = "3.2a"
+	m, got := agentRaws(t, m, "enter")
+	if len(got) != 0 {
+		t.Fatalf("an old tmux got %q", got)
+	}
+	if m.flash != "COMMANDS · needs tmux 3.3" || !strings.Contains(screen(m), "COMMANDS · needs tmux 3.3") {
+		t.Fatalf("flash %q\n%s", m.flash, screen(m))
+	}
+	m, got = agentRaws(t, m, "ctrl+]", "enter")
+	if len(got) != 0 || m.flash != "" {
+		t.Fatalf("second open wrote %q, flash %q", got, m.flash)
+	}
+}
+
+func TestQuitWithTheChatOpenSendsNoAgent(t *testing.T) {
+	m, _ := agentRaws(t, agentChat(t, "claude", "codex"), "enter")
+	_, cmd := m.quit()
+	got := cmdMsgs(cmd)
+	want := tea.RawMsg{Msg: logos.Passthrough(keycmd.AgentSignal(""))}
+	if len(got) != 2 || got[0] != want || got[1] != (tea.QuitMsg{}) {
+		t.Fatalf("quit gave %#v, want the empty agent, then quit", got)
+	}
+	if _, cmd = agentChat(t, "claude", "codex").quit(); len(raws(cmd)) != 0 {
+		t.Fatalf("a quit with no chat told the app %q", raws(cmd))
+	}
+}
+
+func TestBackToHostsWithTheChatOpenSendsNoAgent(t *testing.T) {
+	r := newShell(t, nil, nil, "", false)
+	m, _ := agentRaws(t, agentChat(t, "claude", "codex"), "enter")
+	r.sh.cur = m
+	next, cmd := r.sh.Update(layerMsg{})
+	if got, want := raws(cmd), logos.Passthrough(keycmd.AgentSignal("")); !slices.Equal(got, []string{want}) || next.(Shell).layer != layerHosts {
+		t.Fatalf("back wrote %q, want %q (layer %v)", got, want, next.(Shell).layer)
+	}
+}
+
+// TestANewViewerGetsTheAgentAgain: the phone attaches to a console whose
+// chat is open already (after a reconnect, or beside the desktop). It
+// starts with no agent, so the console sends the chat's agent again to the
+// new set of viewers, and once only.
+func TestANewViewerGetsTheAgentAgain(t *testing.T) {
+	m, _ := agentRaws(t, agentChat(t, "claude", "codex"), "enter")
+	next, cmd := m.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: "/dev/ttys002:100@here"})
+	want := logos.Passthrough(keycmd.AgentSignal("claude"))
+	if got := raws(cmd); !slices.Equal(got, []string{want}) {
+		t.Fatalf("the first viewers got %q, want %q", got, want)
+	}
+	m = next.(Model)
+	if _, cmd = m.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: "/dev/ttys002:100@here"}); len(raws(cmd)) != 0 {
+		t.Fatalf("the same viewers got %q again", raws(cmd))
+	}
+	phone := "/dev/ttys002:100@here,/dev/ttys005:105@here"
+	next, cmd = m.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: phone})
+	if got := raws(cmd); !slices.Equal(got, []string{want}) {
+		t.Fatalf("a phone that attached got %q, want %q", got, want)
+	}
+	m, _ = agentRaws(t, next.(Model), "ctrl+]")
+	if _, cmd = m.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: "/dev/ttys005:205@here"}); len(raws(cmd)) != 0 {
+		t.Fatalf("a viewer of a closed chat got %q", raws(cmd))
+	}
+}
+
+// TestAChatOnAnAgentWithNoCommandsIsStillTheChat: the app hears the chat
+// is open, so its command keys go, and the console says why one does not
+// run there, instead of the app saying the commands run from the chat.
+func TestAChatOnAnAgentWithNoCommandsIsStillTheChat(t *testing.T) {
+	m, got := agentRaws(t, agentChat(t, "aider", "codex"), "enter")
+	if want := logos.Passthrough(keycmd.AgentSignal(keycmd.OtherAgent)); !slices.Equal(got, []string{want}) {
+		t.Fatalf("open wrote %q, want %q", got, want)
+	}
+	if m = command(t, m, "compact"); m.flash != "/compact is Claude Code's: a runs aider" {
+		t.Fatalf("flash %q", m.flash)
 	}
 }

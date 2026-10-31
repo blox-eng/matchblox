@@ -164,7 +164,8 @@ func (s Shell) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			s.connecting.dark, s.connecting.st = s.dark, s.st
 		}
 	case layerMsg:
-		return s.back(), nil
+		gone := s.cur.agentGone()
+		return s.back(), gone
 	case connectedHostMsg:
 		if msg.err != nil {
 			s.flash = "not connected: " + msg.err.Error()

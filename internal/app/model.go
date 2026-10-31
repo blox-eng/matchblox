@@ -329,6 +329,7 @@ type Model struct {
 	dark       bool
 	logos      bool   // USAGE draws the providers' logos
 	gfxKey     string // the viewers and background the logos went to
+	viewers    string // the viewers the agent signal went to
 	gfxBusy    bool   // a question about who shows the console waits
 	gfxAsks    int    // questions asked, for the tests
 	splashAt   time.Time
@@ -338,6 +339,8 @@ type Model struct {
 	// charge: it runs once they answer the take-over question.
 	held        func(Model) (tea.Model, tea.Cmd)
 	chatKeys    bool      // the chat has the keys: they go to the selected session's agent
+	agentSaid   string    // the agent signal last written to the terminal; "" none yet
+	tmuxSaid    bool      // the key line said this tmux passes no agent signal
 	keyQ        []chatKey // the chat's keys behind the one in flight
 	keyInFlight string    // the act id of the chat's key the service has not answered
 	ctrlC       ctrlCMark // the last ^C the chat sent, and when it went
@@ -551,6 +554,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
 		}
+		if say := nm.tellAgent(); say != nil {
+			cmd = tea.Batch(cmd, say)
+		}
 		next = nm
 	}
 	return next, cmd
@@ -586,8 +592,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case uv.UnknownApcEvent:
 		if string(msg) == homeKey {
 			m.chatKeys = false
+			return m, nil
 		}
-		return m, nil
+		return m.commandKey(string(msg))
 	case screenMsg:
 		if msg.Pane == m.watching && (msg.Up == 0 || m.watchUp > 0) { // the history after live is not live
 			m.screen = proto.Screen(msg)
@@ -903,6 +910,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m, touch = m.touchRest()
 		}
 		f := m.focus(msg)
+		if m.chatKeys && f == layerMain && bkey.Matches(msg, m.keys.chat.PageUp, m.keys.chat.PageDown) {
+			m.flash = ""
+			page := max(m.draw(max(m.width, minWidth)).chatRows, 1)
+			return m.scrollChat(bkey.Matches(msg, m.keys.chat.PageUp), page), touch
+		}
 		if m.notLive() && m.chatKeys && (f == layerMain || f == layerTakeOver) {
 			return m.backToLive(), touch
 		}

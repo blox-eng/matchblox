@@ -285,11 +285,35 @@ func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, full sampl
 // menu, no question and no draft of the builder's (before the Enter, the
 // compact itself).
 func CompactAction(pane string) advice.Action {
+	return atRest(pane, RuleCompact, "/compact", " "+Instruction)
+}
+
+// ClearAction types /clear and its Enter into a pane, under the guards of
+// CompactAction.
+func ClearAction(pane string) advice.Action {
+	return atRest(pane, "clear", "/clear", "")
+}
+
+// CommandAction types a command key's text and its Enter into a pane,
+// under the guards of CompactAction. Where the agent's prompt cannot be
+// read (read false), no draft shows there, and the Enter does not wait
+// for the text on the prompt.
+func CommandAction(pane, text string, read bool) advice.Action {
+	a := atRest(pane, "command", text, "")
+	if !read {
+		a.Guards[1].Typed = ""
+	}
+	return a
+}
+
+// atRest types command and its args into pane, then Enter. The Enter waits
+// until the pane shows the command typed.
+func atRest(pane, label, command, args string) advice.Action {
 	g := advice.Guard{RestPane: pane, StokePane: pane}
 	typed := g
-	typed.Typed = true
+	typed.Typed = command
 	return advice.Action{
-		Label: RuleCompact, Steps: panes.Send(pane, "/compact "+Instruction),
+		Label: label, Steps: panes.Send(pane, command+args),
 		Destructive: true, Guards: []advice.Guard{g, typed},
 	}
 }

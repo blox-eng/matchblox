@@ -1,19 +1,21 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/stoker"
 )
 
 // paneActs are the acts that name a pane after the colon.
-var paneActs = []string{"message:", "pick:", "answer:", "compact:", "hold:", "release:", "park:", "kill:", "rename:", "switch:", proto.KeysPrefix}
+var paneActs = []string{"message:", "pick:", "answer:", "compact:", "clear:", "hold:", "release:", "park:", "kill:", "rename:", "switch:", proto.KeysPrefix, proto.CommandPrefix}
 
 // typedPane is the pane a message, an answer or a pick types into.
 func typedPane(recID string) string {
@@ -134,21 +136,9 @@ func (s *Service) recordOrder(a proto.Act, res proto.Result) {
 // compacted in the last 30 minutes, and the pane read again right before
 // each key. A refusal says which.
 func (s *Service) compact(ctx context.Context, pane string, a proto.Act) proto.Result {
-	x, ok := s.sessionAt(pane)
-	switch {
-	case !ok:
-		return proto.Result{Err: "no agent session in " + pane + " any more"}
-	case x.Agent != "claude":
-		return proto.Result{Err: x.Name + " is not a Claude Code session: /compact is typed only there"}
-	}
-	if err := s.messageable(pane, x.PID); err != nil {
+	x, err := s.claudeAtRest(pane, "compact", a.PID)
+	if err != nil {
 		return proto.Result{Err: err.Error()}
-	}
-	if it, ok := s.queued(pane); ok && stoker.Waits(it) {
-		return proto.Result{Err: x.Name + " waits for you"}
-	}
-	if !s.resting(pane) {
-		return proto.Result{Err: x.Name + " is not at rest: a compact waits for the end of its turn"}
 	}
 	now := s.now()
 	if s.Stoker != nil && x.SessionID != "" {
@@ -180,3 +170,90 @@ func (s *Service) compact(ctx context.Context, pane string, a proto.Act) proto.R
 	}
 	return res
 }
+
+// clear types /clear into a session under the guards of compact. A clear is
+// not a compact: the stoker's compact plan does not count it.
+func (s *Service) clear(ctx context.Context, pane string, a proto.Act) proto.Result {
+	if _, err := s.claudeAtRest(pane, "clear", a.PID); err != nil {
+		return proto.Result{Err: err.Error()}
+	}
+	release := s.holdPane(pane)
+	defer release()
+	return s.Actions.Do(ctx, stoker.ClearAction(pane), a.Confirm)
+}
+
+// claudeAtRest is the session in pane when /<cmd> may go to it: Claude
+// Code, and restsFor.
+func (s *Service) claudeAtRest(pane, cmd string, pid int) (sample.Session, error) {
+	if x, ok := s.sessionAt(pane); ok && x.Agent != "claude" {
+		return x, fmt.Errorf("%s is not a Claude Code session: /%s is typed only there", x.Name, cmd)
+	}
+	return s.restsFor(pane, cmd, pid)
+}
+
+// restsFor is the session in pane when /<cmd> may go to it: agent pid (any
+// agent for 0), one the builder may message, not waiting for them, and at
+// rest.
+func (s *Service) restsFor(pane, cmd string, pid int) (sample.Session, error) {
+	x, ok := s.sessionAt(pane)
+	if !ok {
+		return x, errors.New("no agent session in " + pane + " any more")
+	}
+	if err := s.messageable(pane, cmp.Or(pid, x.PID)); err != nil {
+		return x, err
+	}
+	if it, ok := s.queued(pane); ok && stoker.Waits(it) {
+		return x, errors.New(x.Name + " waits for you")
+	}
+	if !s.resting(pane) {
+		return x, fmt.Errorf("%s is not at rest: a %s waits for the end of its turn", x.Name, cmd)
+	}
+	return x, nil
+}
+
+// command types a command of the command table into the session in pane,
+// from a console's chat: only to the agent the chat showed (PID), only a
+// command of that agent, and under the stoker's guards: at rest, no
+// question, no permission prompt and no draft, and the text on the prompt
+// before its Enter. Compact and clear have their own acts.
+func (s *Service) command(ctx context.Context, pane string, a proto.Act) proto.Result {
+	if !s.aConsole(a.Console, a) {
+		return proto.Result{Err: keysOnlyFromConsole}
+	}
+	c, ok := keycmd.ByID(a.Text)
+	if !ok || c.Run != "type" {
+		return proto.Result{Err: fmt.Sprintf("not sent: %q is no command this host types", cut(a.Text, 20))}
+	}
+	s.touchStoker(s.now()) // the builder acts: a stoker that rests goes on resting
+	unlock := s.holdPane(pane)
+	defer unlock()
+	notSent := func(why string) proto.Result { return proto.Result{Err: "/" + c.Label + " not sent: " + why} }
+	x, ok := s.sessionAt(pane)
+	switch {
+	case !ok:
+		return notSent("no agent session in " + pane + " any more")
+	case a.PID <= 0 || x.PID != a.PID:
+		return notSent(pane + " runs a different agent now")
+	case keycmd.AgentOf(x.Agent) != c.Agent:
+		return proto.Result{Err: keycmd.Refusal(c, x.Name, x.Agent)}
+	}
+	if _, err := s.restsFor(pane, "/"+c.Label, a.PID); err != nil {
+		return notSent(err.Error())
+	}
+	res := s.Actions.Do(ctx, stoker.CommandAction(pane, c.Text, readsPrompt[x.Agent]), a.Confirm)
+	if len(res.Ran) > 0 {
+		s.undrive(pane) // the pane's last input is the person's, as with a key
+	}
+	s.kickScreens(pane)
+	if res.Err == "" && len(res.Skipped) > 0 {
+		res.Err = "/" + c.Label + " not sent: " + res.Skipped[0]
+		if len(res.Ran) > 0 {
+			res.Err = "/" + c.Label + " typed, not sent: " + res.Skipped[0]
+		}
+	}
+	return res
+}
+
+// readsPrompt are the agents whose prompt said.Draft reads: a draft there
+// stops a command, and the Enter waits for the command on the prompt.
+var readsPrompt = map[string]bool{"claude": true, "codex": true}

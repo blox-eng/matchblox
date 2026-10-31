@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/term"
 	"golang.org/x/sys/unix"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/tmuxtest"
 )
 
@@ -73,6 +74,72 @@ func TestHomeKeyReachesTheConsoleAtHome(t *testing.T) {
 	b, _ := os.ReadFile(got)
 	if lines := strings.Split(strings.TrimSpace(string(b)), "\n"); len(lines) != 2 {
 		t.Errorf("the console read %q, want only %s", lines[1:], want)
+	}
+}
+
+// TestCommandKeyReachesTheConsoleAtHome types a command key, raw, into a
+// real client in the console's session: the console reads it, whole, as the
+// home key, and runs the command in its chat (#122).
+func TestCommandKeyReachesTheConsoleAtHome(t *testing.T) {
+	sock := tmuxtest.Server(t)
+	tmux := func(args ...string) {
+		t.Helper()
+		if out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput(); err != nil { //nolint:gosec // test argv
+			t.Fatalf("tmux %q: %v\n%s", args, err, out)
+		}
+	}
+	got := t.TempDir() + "/events"
+	tmux("new-session", "-d", "-s", Home, "-e", decodeTo+"="+got, os.Args[0], "-test.run=^TestDecodePane$")
+	tmux(CommandKeysArgv()[1:]...)
+	term := attach(t, sock, Home)
+	key := keycmd.Sequence("compact")
+	want := eventLine(uv.UnknownApcEvent(key))
+	waitFor(t, func() bool {
+		b, _ := os.ReadFile(got)
+		return strings.HasPrefix(string(b), "ready")
+	})
+	if _, err := term.WriteString(key); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool {
+		b, _ := os.ReadFile(got)
+		return strings.Contains(string(b), want)
+	})
+	b, _ := os.ReadFile(got)
+	if lines := strings.Split(strings.TrimSpace(string(b)), "\n"); len(lines) != 2 {
+		t.Errorf("the console read %q, want only %s", lines[1:], want)
+	}
+}
+
+// TestCommandKeyDoesNothingElsewhere types a command key into a client in
+// another session: tmux drops it, so no agent there reads it as typing.
+// Without the binding tmux hands the sequence on to the pane.
+func TestCommandKeyDoesNothingElsewhere(t *testing.T) {
+	sock := tmuxtest.Server(t)
+	tmux := func(args ...string) {
+		t.Helper()
+		if out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput(); err != nil { //nolint:gosec // test argv
+			t.Fatalf("tmux %q: %v\n%s", args, err, out)
+		}
+	}
+	got := t.TempDir() + "/events"
+	tmux("new-session", "-d", "-s", Home)
+	tmux("new-session", "-d", "-s", "work", "-e", decodeTo+"="+got, os.Args[0], "-test.run=^TestDecodePane$")
+	tmux(CommandKeysArgv()[1:]...)
+	term := attach(t, sock, "work")
+	waitFor(t, func() bool {
+		b, _ := os.ReadFile(got)
+		return strings.HasPrefix(string(b), "ready")
+	})
+	if _, err := term.WriteString(keycmd.Sequence("compact") + "x"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool {
+		b, _ := os.ReadFile(got)
+		return strings.Contains(string(b), "KeyPressEvent")
+	})
+	if b, _ := os.ReadFile(got); strings.Contains(string(b), "UnknownApcEvent") {
+		t.Errorf("the pane read the command key: %q", b)
 	}
 }
 

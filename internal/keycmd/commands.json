@@ -1,0 +1,126 @@
+[
+  {
+    "id": "compact",
+    "label": "compact",
+    "agent": "claude",
+    "mark": "claude-color",
+    "run": "compact",
+    "slot": 901
+  },
+  {
+    "id": "clear",
+    "label": "clear",
+    "agent": "claude",
+    "mark": "claude-color",
+    "run": "clear",
+    "slot": 902
+  },
+  {
+    "id": "model",
+    "label": "model",
+    "agent": "claude",
+    "mark": "claude-color",
+    "run": "type",
+    "text": "/model",
+    "slot": 903
+  },
+  {
+    "id": "review",
+    "label": "review",
+    "agent": "claude",
+    "mark": "claude-color",
+    "run": "type",
+    "text": "/review",
+    "slot": 904
+  },
+  {
+    "id": "codex-compact",
+    "label": "compact",
+    "agent": "codex",
+    "mark": "openai",
+    "run": "type",
+    "text": "/compact",
+    "slot": 905
+  },
+  {
+    "id": "codex-new",
+    "label": "new",
+    "agent": "codex",
+    "mark": "openai",
+    "run": "type",
+    "text": "/new",
+    "slot": 906
+  },
+  {
+    "id": "codex-model",
+    "label": "model",
+    "agent": "codex",
+    "mark": "openai",
+    "run": "type",
+    "text": "/model",
+    "slot": 907
+  },
+  {
+    "id": "codex-review",
+    "label": "review",
+    "agent": "codex",
+    "mark": "openai",
+    "run": "type",
+    "text": "/review",
+    "slot": 908
+  },
+  {
+    "id": "opencode-compact",
+    "label": "compact",
+    "agent": "opencode",
+    "mark": "opencode",
+    "run": "type",
+    "text": "/compact",
+    "slot": 909
+  },
+  {
+    "id": "opencode-new",
+    "label": "new",
+    "agent": "opencode",
+    "mark": "opencode",
+    "run": "type",
+    "text": "/new",
+    "slot": 910
+  },
+  {
+    "id": "opencode-models",
+    "label": "models",
+    "agent": "opencode",
+    "mark": "opencode",
+    "run": "type",
+    "text": "/models",
+    "slot": 911
+  },
+  {
+    "id": "cursor-summarize",
+    "label": "summarize",
+    "agent": "cursor",
+    "mark": "cursor",
+    "run": "type",
+    "text": "/summarize",
+    "slot": 912
+  },
+  {
+    "id": "cursor-clear",
+    "label": "clear",
+    "agent": "cursor",
+    "mark": "cursor",
+    "run": "type",
+    "text": "/clear",
+    "slot": 913
+  },
+  {
+    "id": "cursor-model",
+    "label": "model",
+    "agent": "cursor",
+    "mark": "cursor",
+    "run": "type",
+    "text": "/model",
+    "slot": 914
+  }
+]

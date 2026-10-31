@@ -3,7 +3,7 @@
 Every key of the console works on the key bar of a phone SSH app: letters,
 digits, arrows, `Enter` and `Esc`. No key of the console needs `Ctrl`.
 `Ctrl+]` and `Ctrl+O` in the chat are for a hardware keyboard. On a phone,
-`◂` on the app's key bar (or its edge swipe) goes back, `^C` on the key bar
+`◂` on the app's key belt (or its edge swipe) goes back, `^C` on the belt
 interrupts, and a swipe scrolls. The key line at
 the bottom shows the keys of the open tab. A tap on a key presses it.
 
@@ -117,6 +117,7 @@ keeps the keys until you give them to the chat.
 | `Ctrl+]` | Gives the keys back to Sessions. A click on the left does it too. On a narrow screen, it goes back to Sessions. |
 | `Ctrl+O` | Goes to the selected agent's pane in tmux. It works on Sessions too. |
 | `Ctrl+C` | Sends `^C` to the agent. A second one within 1 s is held. See below. |
+| `PgUp`, `PgDn` | Moves the chat one screen up or down the agent's history. See below. |
 
 In the chat, every other key goes to the agent: `↑ ↓ ← →`, `Enter`, `Tab`,
 `Shift+Tab`, `Esc`, `Backspace` and the letters. `Esc` goes to the agent
@@ -143,12 +144,12 @@ If the pane is gone, the chat says `That session ended.`
 The mouse wheel over the chat shows the earlier lines of the agent's pane.
 On a phone, a swipe over the chat does the same. Each step of the wheel
 moves 3 lines, up to 2000 lines. The wheel down goes back toward the live
-screen. While the chat shows the history, its title adds `↑ <n> lines up`
+screen. `PgUp` and `PgDn` move one screen of the chat up and down. While the chat shows the history, its title adds `↑ <n> lines up`
 and its frame is dim, not in the accent. The key line says `a key goes
 back to live`.
 
-While the chat shows the history, the first key goes back to the live
-screen and goes to no agent. This is true for every key, a paste and a key
+While the chat shows the history, the first key other than `PgUp` and
+`PgDn` goes back to the live screen and goes to no agent. This is true for every key, a paste and a key
 of the question card. The key line says `back to live — the agent did not
 get that key`. The chat is blank until the live screen comes. Then press
 the key again to send it. A tap on the chat's title
@@ -253,3 +254,21 @@ you` selects the first agent that waits. A tap on the header's stoker word
 (`stoker waits for you` among them) opens the stoker agent, as `Enter` on
 its row does. A tap on `machine ›` or `usage ›`
 switches the dock. On Panes, a tap on a column header sorts by it.
+
+The app's command keys run a command of the agent on the chat's session,
+for example `/compact`. The console runs the command behind the chat's
+guards. A command types only while the agent rests, with no question, no
+permission prompt and no draft on its prompt. A command key works only
+while the chat has the keys. Otherwise the
+key line says `commands run from the chat`. A command of a different agent
+sends nothing, and the key line says `/<name> is <Agent>'s: <session> runs
+<other agent>`. A command that matchblox on the host does not know sends
+nothing, and the key line says `/<id> is new to this console: update
+matchblox on the host`. The console tells the app which agent the chat shows, so
+the app shows the commands of that agent. Inside tmux 3.2 or older the
+console cannot tell the app. The key line then says `COMMANDS · needs tmux
+3.3` once.
+
+The app's `⇞` and `⇟` keys send `PgUp` and `PgDn`. In the chat they move
+the agent's history. In a pane you jumped to on a host, `PgUp` starts tmux
+copy mode one page up, and `PgDn` moves one page down in it.

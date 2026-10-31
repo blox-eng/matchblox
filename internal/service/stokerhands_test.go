@@ -145,6 +145,41 @@ func TestCompactActKeepsTheGuards(t *testing.T) {
 	}
 }
 
+// TestClearActWaitsForIdle: the clear act keeps the compact act's guards. It
+// types /clear only into Claude Code at rest, and it is not a compact.
+func TestClearActWaitsForIdle(t *testing.T) {
+	s, ran := handsTest(t)
+	busy := func(agent string, b bool) {
+		st := "idle"
+		if b {
+			st = "busy"
+		}
+		s.publish(sample.Snapshot{At: night0, Sessions: []sample.Session{
+			{Agent: agent, Pane: "%1", Target: "app:1.1", SessionID: "s1", Name: "work", Status: st, Busy: b, Idle: 5 * time.Minute, Tokens: 176000},
+		}}, func(state.Doc) {})
+	}
+	busy("claude", true)
+	res := s.act(t.Context(), proto.Act{RecID: "clear:%1", Confirm: "y"})
+	if !strings.Contains(res.Err, "not at rest") || len(*ran) != 0 {
+		t.Fatalf("busy: err %q ran %q", res.Err, *ran)
+	}
+	busy("codex", false)
+	res = s.act(t.Context(), proto.Act{RecID: "clear:%1", Confirm: "y"})
+	if res.Err != "work is not a Claude Code session: /clear is typed only there" || len(*ran) != 0 {
+		t.Fatalf("codex: err %q ran %q", res.Err, *ran)
+	}
+	busy("claude", false)
+	if res := s.act(t.Context(), proto.Act{RecID: "clear:%1", Confirm: "y"}); res.Err != "" || len(*ran) != 2 {
+		t.Fatalf("idle: err %q ran %q", res.Err, *ran)
+	}
+	if typed := strings.Join((*ran)[0], " "); !strings.HasSuffix(typed, "-l -- /clear") {
+		t.Fatalf("typed %q", typed)
+	}
+	if es := s.Stoker.Entries(); len(es) != 0 {
+		t.Fatalf("a clear logged %+v", es)
+	}
+}
+
 func TestStokerCompactCountsAsAnOrder(t *testing.T) {
 	s, ran := handsTest(t)
 	if res := s.act(t.Context(), fromStokerAct("compact:%1", "")); res.Err != "" || len(*ran) != 2 {
@@ -199,7 +234,7 @@ func TestAStokerPaneTheSampleMissedIsStillTheStoker(t *testing.T) {
 func TestStokerPaneActsRefusedWithNoRun(t *testing.T) {
 	s, ran := handsTest(t)
 	s.Stoker.Set(stoker.Mode{})
-	for _, id := range []string{"message:%1", "compact:%1", "hold:%1", "release:%1", "pick:%1", "answer:%1"} {
+	for _, id := range []string{"message:%1", "compact:%1", "clear:%1", "hold:%1", "release:%1", "pick:%1", "answer:%1"} {
 		if res := s.act(t.Context(), fromStokerAct(id, "x")); res.Err != "the stoker is off: no run" {
 			t.Fatalf("%s: %q", id, res.Err)
 		}
@@ -247,7 +282,7 @@ func TestAnotherAgentDoesNotActAsTheBuilder(t *testing.T) {
 		{Agent: "claude", Pane: "%3", Target: "app:1.3", SessionID: "s3", Name: "other", Status: "busy", Busy: true},
 		{Agent: "claude", Pane: "%9@mbtest", Target: "stoker:1.1", SessionID: "s9", Name: "stoker", Status: "busy", Busy: true},
 	}}, func(state.Doc) {})
-	for _, id := range []string{"message:%1", "compact:%1", "hold:%1", "release:%1", "pick:%1", "answer:%1"} {
+	for _, id := range []string{"message:%1", "compact:%1", "clear:%1", "hold:%1", "release:%1", "pick:%1", "answer:%1"} {
 		res := s.act(t.Context(), proto.Act{RecID: id, Confirm: "y", Text: "x", From: "%3"})
 		if res.Err != notTheBuilders {
 			t.Fatalf("%s from another agent: %q", id, res.Err)
