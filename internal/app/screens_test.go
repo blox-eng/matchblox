@@ -144,6 +144,13 @@ func TestScreens(t *testing.T) {
 		check(t, st, "chatup", size[0], size[1], []string{"enter", wheelUp, wheelUp}, asks, up)
 	}
 	check(t, st, "chatended", 44, 31, []string{"enter"}, screenMsg{Pane: paneNamed(st, "flint-auth"), Gone: true})
+	for _, size := range surveyGrids {
+		check(t, st, "survey", size[0], size[1], nil, asks)
+		check(t, st, "surveychat", size[0], size[1], []string{"enter"}, asks)
+		if portrait(size[0], size[1]) && size[0] >= 83 { // list only by default: the full view splits
+			check(t, st, "surveyfull", size[0], size[1], []string{"v", "enter"}, asks)
+		}
+	}
 	life := st
 	life.Agents = []string{"claude", "codex", "opencode"}
 	newKeys := append([]string{"N", "tab"}, strings.Split("feat/88-rate-limits", "")...)
@@ -384,6 +391,12 @@ func sheetScreen(st proto.State, day bool) proto.State {
 	return st
 }
 
+// surveyGrids are the devices' grids of the every-screen survey
+// (docs/superpowers/specs/2026-11-01-every-screen-chat-design.md): phones
+// upright and on their side, keyboard up and down, an iPad mini, a folded
+// and an open Duo, half a Mac screen and desks.
+var surveyGrids = [][2]int{{51, 45}, {51, 31}, {96, 20}, {96, 8}, {106, 10}, {95, 65}, {145, 40}, {193, 57}, {96, 57}, {104, 38}, {44, 31}}
+
 // check draws the console with msgs, then keys, against its golden frame.
 func check(t *testing.T, st proto.State, name string, w, h int, keys []string, msgs ...tea.Msg) {
 	t.Helper()
@@ -393,7 +406,7 @@ func check(t *testing.T, st proto.State, name string, w, h int, keys []string, m
 	next, _ = next.Update(stateMsg(st))
 	nm := next.(Model)
 	nm.splashDone = true
-	if strings.HasPrefix(name, "chat") {
+	if strings.HasPrefix(name, "chat") || strings.HasPrefix(name, "survey") { // flint-auth, which asks
 		for i, s := range nm.snap.Sessions {
 			if s.Name == "flint-auth" {
 				nm.chose, nm.selPID = true, nm.snap.Sessions[i].PID

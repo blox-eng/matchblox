@@ -66,6 +66,22 @@ func TestNoChatWithoutItsQuestion(t *testing.T) {
 	}
 }
 
+// TestEveryGoldenShowsTheWholeCard: on every golden size, the chat shows
+// its whole question card or is not drawn: in the list's view, with the
+// keys, and in the full view.
+func TestEveryGoldenShowsTheWholeCard(t *testing.T) {
+	sizes := append(slices.Clone(surveyGrids), [2]int{200, 50}, [2]int{132, 32}, [2]int{86, 30}, [2]int{107, 60}, [2]int{92, 40})
+	for _, size := range sizes {
+		w, h := size[0], size[1]
+		for _, keys := range [][]string{nil, {"enter"}, {"v"}, {"v", "enter"}} {
+			m := flintAt(t, w, h, keys...)
+			if drawn, whole := chatDrawn(m); drawn && !whole {
+				t.Errorf("%dx%d after %v: the chat shows without its whole question:\n%s", w, h, keys, screen(m))
+			}
+		}
+	}
+}
+
 // TestSessionsSplitsFortySixty: where Sessions splits, the list takes 40%
 // of the width (38 to 78 columns) and the chat the rest, full height, with
 // usage and the machine under the list and no dock at the bottom, upright
