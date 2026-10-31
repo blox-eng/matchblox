@@ -20,12 +20,12 @@ func mouseIn(table string) string {
 // pageIn is panePage(table) as a line.
 func pageIn(table string) string {
 	b := " bind-key -T " + table
-	return b + " PPage copy-mode -u ';'" +
+	return b + " PPage copy-mode -eu ';'" +
 		b + " NPage if -F '#{pane_in_mode}' 'send-keys -X page-down' 'send-keys NPage' ';'"
 }
 
 // TestJumpTablePagesInCopyMode: in a jump, PgUp enters tmux's copy mode a
-// page up, and PgDn pages down in it (#122). Outside copy mode PgDn goes to
+// page up, and PgDn pages down in it, out of it at the bottom (#122). Outside copy mode PgDn goes to
 // the pane.
 func TestJumpTablePagesInCopyMode(t *testing.T) {
 	line := Line(Jump{Host: "ws-1", Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d", Outer: true}.Remote())

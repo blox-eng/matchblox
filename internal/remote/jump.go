@@ -126,10 +126,11 @@ func paneMouse(table string) [][]string {
 }
 
 // panePage binds in table PgUp to a page up in tmux's copy mode; in it,
-// copy mode's own table pages. Outside it PgDn goes to the pane.
+// copy mode's own table pages, and paging back to the bottom leaves it, so
+// the next Enter goes to the agent. Outside it PgDn goes to the pane.
 func panePage(table string) [][]string {
 	return [][]string{
-		{"bind-key", "-T", table, "PPage", "copy-mode", "-u"},
+		{"bind-key", "-T", table, "PPage", "copy-mode", "-eu"},
 		{"bind-key", "-T", table, "NPage", "if", "-F", "#{pane_in_mode}", "send-keys -X page-down", "send-keys NPage"},
 	}
 }
