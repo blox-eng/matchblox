@@ -119,3 +119,30 @@ func TestHomeKeyMatchesTheApp(t *testing.T) {
 		t.Errorf("WayBack lacks the label %q the app taps", fx.Label)
 	}
 }
+
+// TestHomeAndCommandKeysDoNotCollide: the home key and every command key
+// have each their own user-keys slot and their own sequence, so one never
+// takes another's binding.
+func TestHomeAndCommandKeysDoNotCollide(t *testing.T) {
+	slots := map[string]string{}
+	for _, argv := range [][]string{HomeKeyArgv(), CommandKeysArgv()} {
+		for i, a := range argv {
+			if a != "set-option" {
+				continue
+			}
+			slot, seq := argv[i+2], argv[i+3]
+			if was, ok := slots[slot]; ok {
+				t.Fatalf("%s holds %q and %q", slot, was, seq)
+			}
+			for s, other := range slots {
+				if other == seq {
+					t.Fatalf("%s and %s both hold %q", s, slot, seq)
+				}
+			}
+			slots[slot] = seq
+		}
+	}
+	if len(slots) < 2 || slots["user-keys["+homeUserKey+"]"] != HomeKey {
+		t.Fatalf("slots %q", slots)
+	}
+}

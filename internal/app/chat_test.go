@@ -1947,3 +1947,24 @@ func TestTheConsoleSaysNoAgentAtStart(t *testing.T) {
 		}
 	}
 }
+
+// TestAMalformedCommandKeyDoesNothing: an APC that is not a whole command
+// key the table could hold runs nothing and says nothing: an id longer
+// than any, a control byte inside, no terminator, or another program's
+// APC such as a kitty graphics reply.
+func TestAMalformedCommandKeyDoesNothing(t *testing.T) {
+	for _, apc := range []string{
+		"\x1b_matchblox;cmd=" + strings.Repeat("r", maxCommandID+1) + "\x1b\\",
+		"\x1b_matchblox;cmd=re\x1bview\x1b\\",
+		"\x1b_matchblox;cmd=re\aview\x1b\\",
+		"\x1b_matchblox;cmd=review",
+		"\x1b_Gi=31;OK\x1b\\",
+	} {
+		m, f := commandChat(t, "claude")
+		next, cmd := m.Update(uv.UnknownApcEvent(apc))
+		drain(cmd)
+		if m = next.(Model); len(f.acts()) != 0 || m.flash != "" || !m.chatKeys {
+			t.Fatalf("%q: acts %+v flash %q keys %v", apc, f.acts(), m.flash, m.chatKeys)
+		}
+	}
+}
