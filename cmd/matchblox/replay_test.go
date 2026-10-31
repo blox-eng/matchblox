@@ -449,8 +449,14 @@ func replayAt(t *testing.T, z replaySize) {
 
 	var mu sync.Mutex
 	var jumps [][]string
+	// The demo tells of the dock, so the phone opens in its full view, not
+	// list only.
+	views := t.TempDir()
+	if err := os.WriteFile(filepath.Join(views, "view.json"), []byte(`{"list_only_phone":false}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	m := app.New(app.Options{
-		Conn: transport.NewConn(a), Binary: version, CompactAt: cfg.Sessions.CompactAt, Now: view.Now,
+		Conn: transport.NewConn(a), Binary: version, CompactAt: cfg.Sessions.CompactAt, Now: view.Now, StateDir: views,
 		Run: func(argv []string) error { // a jump: the demo moves no terminal
 			mu.Lock()
 			jumps = append(jumps, argv)
@@ -536,7 +542,7 @@ func replayAt(t *testing.T, z replaySize) {
 		// own work above it once the screen has come (its menu leaves for
 		// the card).
 		{name: "a: the question", at: 4600 * time.Millisecond, key: "a", ok: func(s string) bool {
-			return has("keys go to flint-auth", "flint-auth asks", "Rotate it", "Keep the token", "⏎ send", "wire the rotation.")(s) && !strings.Contains(s, "Chat about this")
+			return has("ctrl+] back", "flint-auth asks", "Rotate it", "Keep the token", "⏎ send", "wire the rotation.")(s) && !strings.Contains(s, "Chat about this")
 		}},
 		// 2 picks the second option: it goes to Claude Code's menu, and the
 		// chat shows the agent at work on it. The builder read the card
@@ -547,7 +553,7 @@ func replayAt(t *testing.T, z replaySize) {
 		}},
 		// ctrl+] gives the keys back to the list.
 		{name: "back to the list", at: 7600 * time.Millisecond, key: "ctrl+]", ok: func(s string) bool {
-			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "keys go to") && burning.MatchString(s)
+			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "ctrl+] back") && burning.MatchString(s)
 		}},
 		{name: "the sessions", at: 9 * time.Second, ok: func(s string) bool {
 			return has("hearth-", "spark-d", "kindle-", "ember-b", "WORKING")(s) && burning.MatchString(s)

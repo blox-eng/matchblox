@@ -32,9 +32,11 @@ type Keys struct {
 	OpenKeychain func(host, seen string) (backup string, err error)
 }
 
-// climb is one rung of the ladder the console offers: the step, the jump
-// that waits for it, and, after an install on macOS, the Keychain door.
+// climb is one rung of the ladder the console offers on host: the step,
+// the jump that waits for it, and, after an install on macOS, the Keychain
+// door.
 type climb struct {
+	host string
 	step login.Step
 	jump *action
 	door *doors.Door
@@ -75,10 +77,11 @@ type installedMsg struct {
 }
 
 // offersLadder: a jump to a host that asks a password offers the builder's
-// key first, once per console, unless they chose not now. Never on
-// Tailscale SSH: it does not read authorized_keys.
-func (m Model) offersLadder() bool {
-	return m.login == remote.LoginPassword && !m.tailscale && m.opt.Keys != nil && m.opt.Ask != nil && !m.notNow
+// key first, once per console and host, unless they chose not now. Never
+// on Tailscale SSH: it does not read authorized_keys.
+func (m Model) offersLadder(host string) bool {
+	l := m.loginOf(host)
+	return l.login == remote.LoginPassword && !l.tailscale && m.opt.Keys != nil && m.opt.Ask != nil && !l.notNow
 }
 
 // findStep finds the ladder's first step for the jump a, in the
@@ -93,18 +96,19 @@ func (m Model) findStep(a action) (tea.Model, tea.Cmd) {
 func (m Model) foundStep(msg stepMsg) (tea.Model, tea.Cmd) {
 	// Two jumps confirmed while the keys were read give two steps: once one
 	// is answered (or another offer shows), the other is old.
-	if msg.gen != m.opt.Gen || m.quitting || m.opening || m.pending != nil || m.notNow || m.login != remote.LoginPassword {
+	host := m.hostOf(*msg.jump)
+	if l := m.loginOf(host); msg.gen != m.opt.Gen || m.quitting || l.opening || m.pending != nil || l.notNow || l.login != remote.LoginPassword {
 		return m, nil
 	}
 	m.flash = ""
-	m.pending = m.offer(climb{step: msg.step, jump: msg.jump})
+	m.pending = m.offer(climb{host: host, step: msg.step, jump: msg.jump})
 	return m, nil
 }
 
 // offer is the confirm of a rung: what runs, exactly, and which key, for a
 // typed y. Any other key is not now; esc cancels the jump too.
 func (m Model) offer(c climb) *action {
-	host, s := m.opt.Host, c.step
+	host, s := c.host, c.step
 	a := &action{destructive: true, climb: &c}
 	notNow := "any other key: not now; " + host + " asks your password here at a jump, once in 10 minutes"
 	line := func(l string) { a.steps = append(a.steps, []string{l}) }
@@ -139,7 +143,7 @@ func (m Model) offer(c climb) *action {
 	if s.NoPassphrase && !strings.HasPrefix(s.Line, "sk-") { // a security key needs its token too
 		line("this key has no passphrase: anyone who reads " + s.Path + " logs in as you; lock it: ssh-keygen -p -f " + s.Path)
 	}
-	if argv, err := m.installArgv(s.Line); err == nil {
+	if argv, err := m.installArgv(host, s.Line); err == nil {
 		line("runs: " + remote.Quote(argv[:len(argv)-1]) + " " + argv[len(argv)-1])
 	}
 	line(host + " asks your password here, once")
@@ -147,14 +151,14 @@ func (m Model) offer(c climb) *action {
 	return a
 }
 
-// installArgv puts line on the host through the jumps' master; without a
+// installArgv puts line on host through the jumps' master; without a
 // master directory, the install logs in on its own.
-func (m Model) installArgv(line string) ([]string, error) {
+func (m Model) installArgv(host, line string) ([]string, error) {
 	dir, err := m.masterDir()
 	if err != nil {
 		dir = ""
 	}
-	return login.InstallArgv(m.opt.Host, line, remote.MasterOpts(dir))
+	return login.InstallArgv(host, line, remote.MasterOpts(dir))
 }
 
 // climbed runs the rung the builder confirmed.
@@ -176,14 +180,14 @@ func (m Model) declined(c climb, esc bool) (tea.Model, tea.Cmd) {
 	case c.door != nil:
 		m.flash = c.door.Path + " stays as it is"
 	case esc:
-		m.flash = "cancelled: your key is not on " + m.opt.Host
+		m.flash = "cancelled: your key is not on " + c.host
 		if c.jump != nil {
 			m.flash += ", and the jump did not run"
 		}
 		return m, nil
 	default:
-		m.notNow = true
-		m.flash = "not now: " + m.opt.Host + " asks your password at a jump"
+		m.editLogin(c.host, func(l *hostLogin) { l.notNow = true })
+		m.flash = "not now: " + c.host + " asks your password at a jump"
 	}
 	if c.jump == nil {
 		return m, nil
@@ -191,11 +195,11 @@ func (m Model) declined(c climb, esc bool) (tea.Model, tea.Cmd) {
 	return m.runJump(*c.jump)
 }
 
-// startLogin starts an ssh of the ladder with its prompts in the console:
-// the field waits on top, and esc ends it.
-func (m Model) startLogin(flash string) (Model, context.Context, context.CancelFunc) {
+// startLogin starts an ssh of the ladder of host with its prompts in the
+// console: the field waits on top, and esc ends it.
+func (m Model) startLogin(host, flash string) (Model, context.Context, context.CancelFunc) {
 	ctx, stop := context.WithCancel(m.askCtx)
-	m.opening, m.openStop, m.askCancelled = true, stop, false
+	m.editLogin(host, func(l *hostLogin) { l.opening, l.openStop, l.askCancelled = true, stop, false })
 	m.pending, m.held = nil, nil
 	m.flash = flash
 	return m, ctx, stop
@@ -204,14 +208,14 @@ func (m Model) startLogin(flash string) (Model, context.Context, context.CancelF
 // install puts the key on the host with the builder's login, its password
 // in the field, then checks the login with the key alone.
 func (m Model) install(c climb) (tea.Model, tea.Cmd) {
-	host := m.opt.Host
-	argv, err := m.installArgv(c.step.Line)
+	host := c.host
+	argv, err := m.installArgv(host, c.step.Line)
 	if err != nil {
 		m.flash = "refused: " + err.Error()
 		return m, nil
 	}
-	m, ctx, stop := m.startLogin("putting your key on " + host + "…")
-	ssh, env, check, gen := m.ssh(), m.opt.Ask.Env(host), m.checker(), m.opt.Gen
+	m, ctx, stop := m.startLogin(host, "putting your key on "+host+"…")
+	ssh, env, check, gen := m.ssh(), m.opt.Ask.Env(host), m.checker(host), m.opt.Gen
 	keychain := m.opt.Keys.Keychain
 	return m, func() tea.Msg {
 		defer stop()
@@ -238,19 +242,19 @@ func (m Model) installed(msg installedMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.opt.Gen || m.quitting {
 		return m, nil
 	}
-	m.opening, m.openStop = false, nil
-	host, s := m.opt.Host, msg.c.step
-	if m.askCancelled || msg.exit != 0 {
+	host, s := msg.c.host, msg.c.step
+	m.editLogin(host, func(l *hostLogin) { l.opening, l.openStop = false, nil })
+	if m.loginOf(host).askCancelled || msg.exit != 0 {
 		m.flash = m.notInstalled(msg)
 		if msg.c.jump != nil {
 			m.flash += ", and the jump did not run"
 		}
 		return m, nil
 	}
-	m.notNow = true
+	m.editLogin(host, func(l *hostLogin) { l.notNow = true })
 	m.flash = "your key " + s.Fingerprint + " is on " + host
 	if msg.check == remote.LoginOK {
-		m.login = remote.LoginOK
+		m.editLogin(host, func(l *hostLogin) { l.login = remote.LoginOK })
 		m.flash += ": your login uses it, no password"
 	} else {
 		m.flash += ", but ssh cannot use it without a prompt: a jump asks its passphrase here"
@@ -259,7 +263,7 @@ func (m Model) installed(msg installedMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	if msg.door != nil {
-		m.pending = m.offer(climb{step: s, jump: msg.c.jump, door: msg.door})
+		m.pending = m.offer(climb{host: host, step: s, jump: msg.c.jump, door: msg.door})
 		return m, nil
 	}
 	if msg.c.jump == nil {
@@ -269,8 +273,8 @@ func (m Model) installed(msg installedMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) notInstalled(msg installedMsg) string {
-	host := m.opt.Host
-	if m.askCancelled {
+	host := msg.c.host
+	if m.loginOf(host).askCancelled {
 		return "cancelled: your key is not on " + host
 	}
 	login, detail := remote.ClassifyLogin(msg.stderr, msg.exit)
@@ -280,14 +284,15 @@ func (m Model) notInstalled(msg installedMsg) string {
 	case remote.LoginOK: // an exit that says nothing
 		return "your key is not on " + host + ": ssh exited " + strconv.Itoa(msg.exit)
 	}
-	return "your key is not on " + host + ": " + m.loginNote(login, detail)
+	return "your key is not on " + host + ": " + m.loginNote(host, login, detail)
 }
 
 // makeKey makes the new key, its passphrase typed in the field (twice),
 // and adds it to the agent (the passphrase once more).
 func (m Model) makeKey(c climb) (tea.Model, tea.Cmd) {
 	path := c.step.Path
-	m, ctx, stop := m.startLogin("making your ssh key…")
+	m, ctx, stop := m.startLogin(c.host, "making your ssh key…")
+	m.keyFor = c.host
 	ssh, env, gen, add := m.ssh(), m.opt.Ask.Env(newKeyHost), m.opt.Gen, login.AddArgv(path, m.opt.Keys.GOOS)
 	return m, func() tea.Msg {
 		defer stop()
@@ -329,10 +334,12 @@ func (m Model) keyMade(msg keyMadeMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.opt.Gen || m.quitting {
 		return m, nil
 	}
-	m.opening, m.openStop = false, nil
+	host := msg.c.host
+	m.editLogin(host, func(l *hostLogin) { l.opening, l.openStop = false, nil })
+	m.keyFor = ""
 	path := msg.c.step.Path
 	switch {
-	case m.askCancelled:
+	case m.loginOf(host).askCancelled:
 		m.flash = "cancelled: no key made"
 	case msg.refused != "":
 		m.flash = "refused: " + msg.refused
@@ -341,7 +348,7 @@ func (m Model) keyMade(msg keyMadeMsg) (tea.Model, tea.Cmd) {
 	case msg.open && msg.removed != nil:
 		m.flash = "refused: the new key " + path + " is not locked by a passphrase, and not all of it was removed (" + msg.removed.Error() + "): remove it yourself, then jump again and type a passphrase"
 	case msg.open:
-		m.flash = "refused: the new key " + path + " is not locked by a passphrase, so matchblox removed it and put nothing on " + m.opt.Host + ": jump again and type a passphrase"
+		m.flash = "refused: the new key " + path + " is not locked by a passphrase, so matchblox removed it and put nothing on " + host + ": jump again and type a passphrase"
 	default:
 		c := msg.c
 		if !msg.added {
@@ -355,7 +362,7 @@ func (m Model) keyMade(msg keyMadeMsg) (tea.Model, tea.Cmd) {
 
 // openKeychain writes the macOS door, then the jump that waited goes.
 func (m Model) openKeychain(c climb) (tea.Model, tea.Cmd) {
-	backup, err := m.opt.Keys.OpenKeychain(m.opt.Host, c.door.Sum)
+	backup, err := m.opt.Keys.OpenKeychain(c.host, c.door.Sum)
 	switch {
 	case err != nil:
 		m.flash = c.door.Path + " not changed: " + err.Error()

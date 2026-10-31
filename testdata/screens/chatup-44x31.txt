@@ -3,6 +3,11 @@
 
 
 
+
+
+
+
+
 ⏺ Read(src/auth/refresh.go)
   ⎿  Read 142 lines
 
@@ -15,11 +20,6 @@ additions
 
 ⏺ The refresh endpoint is in and its tests
 pass.
-
-────────────────────────────────────────────
- ☐ Rotate
-
-Should a refresh also rotate the token?
 ╭─ flint-auth asks · 1 of 2 ───────────────╮
 │ Should a refresh also rotate the token?  │
 │ › 1 Rotate it  the old one stops at once │

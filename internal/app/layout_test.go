@@ -53,22 +53,22 @@ func TestLayoutBreakpoints(t *testing.T) {
 // (107x60 with the keyboard up, 107x101 down) splits the list and the
 // detail at the middle, the detail a drawer on the right, and no row opens
 // in place; its dock shows two panels side by side. Upright under 90
-// columns is one column.
+// columns is one column. The phone starts list only: this is its full view.
 func TestAnUprightPhoneGetsTheDrawer(t *testing.T) {
 	for _, h := range []int{60, 101} {
 		m, _ := loadedWith(t, 107, limitsState())
-		next, _ := m.Update(tea.WindowSizeMsg{Width: 107, Height: h})
+		next, _ := fullView(m).Update(tea.WindowSizeMsg{Width: 107, Height: h})
 		m = next.(Model)
 		out := screen(m)
-		if at := strings.Split(out, "\n")[lineOf(t, m, "USAGE")]; !strings.Contains(at, "MACHINE") {
-			t.Fatalf("107x%d: usage and the machine are not side by side:\n%s", h, out)
+		if lineOf(t, m, "USAGE") >= lineOf(t, m, "MACHINE") || m.draw(107).dockAt >= 0 {
+			t.Fatalf("107x%d: usage and the machine are not under the list:\n%s", h, out)
 		}
 		fitsWidth(t, m, 107)
-		if list, detail := m.panes(107); list != 53 || detail != 53 {
-			t.Fatalf("107x%d: panes = %d, %d, want 53, 53", h, list, detail)
+		if list, detail := m.panes(107); list != 42 || detail != 64 {
+			t.Fatalf("107x%d: panes = %d, %d, want 42, 64", h, list, detail)
 		}
 		for _, s := range m.all.sessions {
-			if rows := m.sessionRow(s, true, 53); len(rows) != 1 {
+			if rows := m.sessionRow(s, true, 42); len(rows) != 1 {
 				t.Fatalf("107x%d: the selected row opens in place: %q", h, rows)
 			}
 		}
@@ -555,5 +555,22 @@ func TestRowColumnsLineUp(t *testing.T) {
 				t.Fatalf("%dx%d: %s's word is at %d, the others at %d: %q", w, h, s.Name, wx, x, line)
 			}
 		}
+	}
+}
+
+// TestAKeyboardKeepsTheShape: a 60-column screen at 34 rows is upright; a
+// keyboard that takes it to 21 rows keeps it one column, upright. A new
+// width decides afresh (design/0006 §4).
+func TestAKeyboardKeepsTheShape(t *testing.T) {
+	m, _ := loadedWith(t, 60, fixtureState())
+	next, _ := fullView(m).Update(tea.WindowSizeMsg{Width: 60, Height: 34})
+	next, _ = next.Update(tea.WindowSizeMsg{Width: 60, Height: 21})
+	nm := next.(Model)
+	if _, right := nm.panes(60); nm.layoutAt(60) != Narrow || !nm.upright() || right != 0 {
+		t.Fatalf("60x21 after 60x34: layout %v, upright %v, right side %d:\n%s", nm.layoutAt(60), nm.upright(), right, screen(nm))
+	}
+	next, _ = next.Update(tea.WindowSizeMsg{Width: 100, Height: 21})
+	if l := next.(Model).layoutAt(100); l != Wide {
+		t.Fatalf("100x21: layout %v, want Wide", l)
 	}
 }

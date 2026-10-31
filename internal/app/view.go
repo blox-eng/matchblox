@@ -84,7 +84,14 @@ func (m Model) render() string {
 	return m.frame(w)
 }
 
-func (m Model) frame(w int) string { return strings.Join(m.draw(w).lines, "\n") }
+func (m Model) frame(w int) string {
+	sc := m.draw(w)
+	f := strings.Join(sc.lines, "\n")
+	if sc.nowX >= 0 {
+		f = overlayNow(f, sc.nowX, sc.nowTop, sc.nowBottom, sc.nowSkip, m.st)
+	}
+	return f
+}
 
 // span is a tap target on a line: columns x0 to x1, and the key it presses.
 type span struct {
@@ -146,6 +153,10 @@ type drawn struct {
 	// chat shows, one page of its history.
 	chatFull bool
 	chatRows int
+	// The rule of now: its column (-1 none), its first and last line, and
+	// the lines it passes: the opened row's own.
+	nowX, nowTop, nowBottom int
+	nowSkip                 []int
 }
 
 // draw is the screen, with an ssh prompt over everything.
@@ -153,13 +164,15 @@ func (m Model) draw(w int) drawn {
 	sc := m.drawScreen(w)
 	if m.asking() {
 		m.overlayAsk(&sc, w)
+		sc.nowX = -1 // the rule never cuts a box over the list
 	}
 	return sc
 }
 
 // drawScreen lays out the screen, top to bottom: the header, the tabs, a
 // hairline, the body (on an opened phone and a desk the list and the
-// detail side by side), the dock when it fits, then a hairline and the
+// detail side by side), the dock when it fits and the view is not list
+// only, then a hairline and the
 // key line (design/0006 §4.1).
 // minBlank is how many blank rows a folded dock may not leave: short of
 // fewer, the dock folds; of more, it stays and the body scrolls.
@@ -169,8 +182,10 @@ func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt := m.header(w)
 	tabs, tabSpans := m.tabsLine(w)
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
-		bodyTop: 3, listW: w, dockAt: -1, keysAt: -1, actKeysAt: -1}
+		bodyTop: 3, listW: w, dockAt: -1, keysAt: -1, actKeysAt: -1, nowX: -1}
 	switch {
+	case m.hostCount() > 1 && m.shows():
+		// A blocked host of two or more is a row, never the screen.
 	case m.mismatch:
 		sc.lines = append(sc.lines, "", m.mismatchText(w))
 		return sc
@@ -189,15 +204,21 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		return sc
 	}
-	if m.chatKeys && m.tab == tabSessions && m.layoutAt(w) == Narrow {
+	listW, detailW := m.panes(w)
+	if m.chatKeys && m.tab == tabSessions && detailW == 0 { // one column: the chat takes the screen
 		return m.chatScreen(w)
 	}
 	full := max(m.height-5, 1)
-	listW, detailW := m.panes(w)
 	sc.listW = listW
+	lanes := m.tab == tabSessions && len(m.snap.Sessions) > 0 && full >= 5 && m.sessTracks(listW).lane > 0 // the axis leaves the list three rows
+	if lanes {
+		sc.lines = append(sc.lines, m.axisLines(m.sessTracks(listW), listW)...)
+		sc.bodyTop += 2
+		full = max(full-2, 1)
+	}
 	b := m.body(listW)
 	chat, chatting := m.chatShown(detailW)
-	stacked := m.tab == tabSessions && detailW > 0 && m.layoutAt(w) == Wide // usage and the machine under the list
+	stacked := m.tab == tabSessions && detailW > 0 // usage, the machine and the stoker under the list
 	paneFull := true
 	paneLines := func(rows int) []string {
 		switch {
@@ -210,7 +231,7 @@ func (m Model) drawScreen(w int) drawn {
 	}
 	detail := paneLines(0)
 	var d docked
-	if m.tab != tabMachine && m.tab != tabStoker && !stacked {
+	if m.tab != tabMachine && m.tab != tabStoker && !stacked && !m.listOnly() {
 		d = m.dock(w, -1)
 	}
 	room := full
@@ -227,7 +248,13 @@ func (m Model) drawScreen(w int) drawn {
 	default:
 		d = docked{}
 	}
-	sc.full = d.full || m.tab == tabMachine || m.tab == tabStoker
+	if m.listOnly() && m.tab != tabMachine && m.tab != tabStoker {
+		d = m.listOnlyStats(w, full-len(b.lines))
+		if len(d.lines) > 0 {
+			room -= len(d.lines) + 1
+		}
+	}
+	sc.full = d.full || m.tab == tabMachine || m.tab == tabStoker || m.listOnly() // list only has no dock to show
 	detail = paneLines(room)
 	sc.paneFull = paneFull && len(detail) <= room
 	if chatting {
@@ -272,6 +299,18 @@ func (m Model) drawScreen(w int) drawn {
 		m.overlaySheet(&sc, w)
 	case m.form != nil:
 		m.overlayForm(&sc, w)
+	case lanes:
+		sc.nowX, sc.nowTop, sc.nowBottom = m.sessTracks(listW).laneX(listW)+lanePast, 2, sc.keysAt-1
+		if sc.dockAt >= 0 {
+			sc.nowBottom = sc.dockAt - 1
+		}
+		at, first := m.rowIndex(), true
+		for i, r := range sc.rows {
+			if r == at && !first {
+				sc.nowSkip = append(sc.nowSkip, sc.bodyTop+i)
+			}
+			first = first && r != at
+		}
 	}
 	return sc
 }
@@ -289,39 +328,47 @@ func (m Model) markActKeys(sc *drawn, b, vis body, detail []string, room, detail
 	case detailW > 0 && !covered && len(detail) <= room:
 		_, spans := m.detailKeys(s)
 		sc.actKeysAt, sc.actKeys = sc.bodyTop+len(detail)-1, shift(spans, sc.listW+1)
-	case detailW == 0 && m.layoutAt(m.width) == Narrow:
-		last, shown, all := -1, 0, 0
+	case detailW == 0 && m.inPlace():
+		at, last, shown, all := m.rowIndex(), -1, 0, 0
 		for i, r := range vis.rows {
-			if r == m.rowIndex() {
+			if r == at {
 				last, shown = i, shown+1
 			}
 		}
 		for _, r := range b.rows {
-			if r == m.rowIndex() {
+			if r == at {
 				all++
 			}
 		}
-		if last > 0 && vis.rows[last-1] == m.rowIndex() && shown == all { // opened, and whole
+		if last > 0 && vis.rows[last-1] == at && shown == all { // opened, and whole
 			_, spans := m.openedKeys(s, sc.listW)
 			sc.actKeysAt, sc.actKeys = sc.bodyTop+last, spans
 		}
 	}
 }
 
-// panes splits Sessions into the list and the right side: at the middle
-// on an opened phone; on a desk the list's ≈78 columns, at most 40% of
-// the screen beside the chat. A phone and the other tabs have one column,
-// and so has a door's diff while it waits for its y: it shows whole.
+// panes splits Sessions into the list and the chat, the list at 40% of
+// the screen (sessionsSplit), and Ships at the middle on an opened phone
+// and at the list's ≈78 columns on a desk. A phone, list only and the
+// other tabs have one column, and so has a door's diff while it waits for
+// its y: it shows whole.
 func (m Model) panes(w int) (list, detail int) {
-	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || m.layoutAt(w) == Narrow || preview {
+	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || m.layoutAt(w) == Narrow || m.listOnly() || preview {
 		return w, 0
 	}
 	at := splitAt(w, m.layoutAt(w))
-	if m.tab == tabSessions && m.layoutAt(w) == Wide {
-		at = min(at, w*2/5)
+	if m.tab == tabSessions {
+		at = sessionsSplit(w)
+		if !m.chatRoom(w - at - 1) {
+			return w, 0 // no chat without its question: it opens full-screen
+		}
 	}
 	return at, w - at - 1
 }
+
+// sessionsSplit is the list's width where Sessions splits: 40% of the
+// screen, at least 38 columns and at most 78; the chat takes the rest.
+func sessionsSplit(w int) int { return min(max(w*2/5, 38), 78) }
 
 // splitAt is the column the list and the detail split at, and the dock's
 // usage and machine under them.
@@ -376,12 +423,22 @@ func (m Model) header(w int) (string, span, span) {
 	if host == "" {
 		host = m.host.Host
 	}
+	if n := m.hostCount(); n > 1 {
+		host = fmt.Sprintf("%d hosts", n)
+	}
 	lost := ""
-	if m.lost && m.have {
-		// What shows is the last state the host sent.
+	switch names := m.staleHosts(); {
+	case len(names) > 0:
+		lost = st.faint.Render(" · ") + st.warn.Render(strings.Join(names, ", ")+" stale")
+	case m.stale(m.opt.Host):
+		// One host: what shows is the last state it sent.
 		lost = st.faint.Render(" · ") + st.warn.Render("stale")
 	}
-	if !m.have {
+	if m.hidden > 0 {
+		// A hidden host has no stream, so no count of its waits (R6).
+		lost += st.faint.Render(" · ") + st.muted.Render(fmt.Sprintf("%d hidden", m.hidden))
+	}
+	if !m.shows() {
 		if host != "" {
 			left += st.faint.Render(" · ") + st.muted.Render(host)
 		}
@@ -448,6 +505,9 @@ func (m Model) stokerHit(word string, w int) span {
 // stoker's token, resting in muted. A phone drops the night's end.
 func (m Model) stokerBadge(short bool) string {
 	st := m.st
+	if m.hostCount() > 1 {
+		return m.stokersBadge(short)
+	}
 	switch {
 	case m.stoker == nil:
 		return ""
@@ -513,8 +573,8 @@ func (m Model) tabLabel(i int, named bool) string {
 	case tabSessions:
 		count = strconv.Itoa(len(m.all.sessions))
 	case tabShips:
-		if m.shipReport != nil && m.shipReport.InFlight > 0 {
-			count = strconv.Itoa(m.shipReport.InFlight)
+		if n := m.inFlight(); n > 0 {
+			count = strconv.Itoa(n)
 		}
 	case tabMachine:
 		if len(m.all.orphans) > 0 {
@@ -599,6 +659,9 @@ func (m Model) keyLine(w int) (string, []span) {
 	if m.chatKeys {
 		return m.chatKeyLine(w)
 	}
+	if l := m.lostLine(); l != "" {
+		return fit(" "+st.text.Render(l), w), nil
+	}
 	hints := slices.DeleteFunc(slices.Clone(m.view().keys(m)), func(h hint) bool { return h == (hint{}) })
 	if m.layoutAt(w) == Wide {
 		mk := m.keys.main
@@ -611,28 +674,71 @@ func (m Model) keyLine(w int) (string, []span) {
 		line += st.muted.Render(lead)
 		x += lipgloss.Width(lead)
 	}
-	// The age goes before a spare key does; a spare key goes before a key
-	// of the row.
-	if fit := fitHints(hints, w-x-lipgloss.Width("sampled 59m ago ")); hintsWidth(fit) <= w-x-lipgloss.Width("sampled 59m ago ") {
-		hints = fit
-	} else {
-		hints = fitHints(hints, w-x)
+	// List only's switch names its key after its word. On the full view
+	// it is the first spare key to go, before every other one and the age.
+	// In list only it is the way back, so it stays: the list only mark goes
+	// first, then the age, then a spare key; a key of the row outranks it.
+	on := m.listOnly()
+	var flip hint
+	flipW := 0
+	if m.tab != tabMachine && m.tab != tabStoker {
+		flip = m.listOnlyHint()
+		flipW = lipgloss.Width(flip.label+" "+flip.key) + 2
+	}
+	age := st.faint.Render("sampled " + sample.Human(m.now().Sub(m.snap.At)) + " ago ")
+	ageW := lipgloss.Width("sampled 59m ago ")
+	room := w - x
+	switch {
+	case on:
+		hints = fitHints(hints, room-flipW)
+		if hintsWidth(hints)+flipW > room {
+			flip = hint{}
+		}
+	default:
+		if fit := fitHints(hints, room-ageW); hintsWidth(fit) <= room-ageW {
+			hints = fit
+		} else {
+			hints = fitHints(hints, room)
+		}
+		rest := room - hintsWidth(hints)
+		if x+hintsWidth(hints)+lipgloss.Width(age)+1 <= w {
+			rest -= lipgloss.Width(age) + 1 // the age stays before the switch
+		}
+		if flipW > rest {
+			flip = hint{}
+		}
 	}
 	var spans []span
-	for i, h := range hints {
-		if i > 0 {
+	parts := 0
+	add := func(part, press string) {
+		if parts++; parts > 1 {
 			line += "  "
 			x += 2
 		}
-		part := st.accent.Render(h.key) + st.muted.Render(" "+h.label)
-		if h.press != "" {
-			spans = append(spans, span{x, x + lipgloss.Width(part), h.press})
+		if press != "" {
+			spans = append(spans, span{x, x + lipgloss.Width(part), press})
 		}
 		line += part
 		x += lipgloss.Width(part)
 	}
-	right := st.faint.Render("sampled " + sample.Human(m.now().Sub(m.snap.At)) + " ago ")
-	if lipgloss.Width(line)+lipgloss.Width(right)+1 > w {
+	for _, h := range hints {
+		add(st.accent.Render(h.key)+st.muted.Render(" "+h.label), h.press)
+	}
+	if flip != (hint{}) {
+		add(st.muted.Render(flip.label+" ")+st.accent.Render(flip.key), flip.press)
+	}
+	right, gap := age, 1
+	if on {
+		// The mark keeps two columns from the keys, as every key does.
+		mark := st.accent.Render("list only") + " "
+		right, gap = age+" "+mark, 2
+		if lipgloss.Width(line)+lipgloss.Width(right)+gap > w {
+			right = age
+		} else {
+			spans = append(spans, span{w - lipgloss.Width(mark), w - 1, m.keys.main.ListOnly.Keys()[0]})
+		}
+	}
+	if lipgloss.Width(line)+lipgloss.Width(right)+gap > w {
 		return fit(line, w), spans // the keys matter more than the age
 	}
 	return line + strings.Repeat(" ", w-lipgloss.Width(line)-lipgloss.Width(right)) + right, spans

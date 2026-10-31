@@ -130,7 +130,7 @@ func reasonFixture() proto.State {
 }
 
 func TestIdleReasonInRow(t *testing.T) {
-	for _, w := range []int{44, 86, 132} {
+	for _, w := range []int{44, 132, 200} {
 		m, _ := loadedWith(t, w, reasonFixture())
 		out := screen(m)
 		if !strings.Contains(out, "#4556 waits your merge") {

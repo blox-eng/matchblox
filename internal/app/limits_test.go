@@ -62,11 +62,11 @@ func TestTheHeaderHasNoLimits(t *testing.T) {
 
 // TestTheDockSaysUsageAndTheMachine: each account's windows as /usage
 // says them, with the forecast on its block, and the machine; on a desk
-// stacked under the list, on an opened phone side by side in the dock.
+// stacked under the list on Sessions, side by side in the dock of Ships.
 func TestTheDockSaysUsageAndTheMachine(t *testing.T) {
 	drawer, _ := loadedWith(t, 86, limitsState())
-	if !strings.Contains(strings.Split(screen(drawer), "\n")[lineOf(t, drawer, "USAGE")], "MACHINE") {
-		t.Fatalf("usage and the machine are not side by side:\n%s", screen(drawer))
+	if drawer.setTab(tabShips); !strings.Contains(strings.Split(screen(drawer), "\n")[lineOf(t, drawer, "USAGE")], "MACHINE") {
+		t.Fatalf("Ships: usage and the machine are not side by side:\n%s", screen(drawer))
 	}
 	m, _ := loadedWith(t, 200, limitsState())
 	out := screen(m)
@@ -99,9 +99,15 @@ func TestTheDockSaysUsageAndTheMachine(t *testing.T) {
 
 // TestAPhoneDockShowsOnePanel: on a phone the dock is usage, the machine
 // or the stoker; u, or a tap on its switch, cycles it. An account other than
-// Anthropic's takes one line.
+// Anthropic's takes one line. The phone starts list only, with no dock
+// and so no switch: v shows it.
 func TestAPhoneDockShowsOnePanel(t *testing.T) {
 	m, _ := loadedWith(t, 44, limitsState())
+	if strings.Contains(screen(m), "machine ›") {
+		t.Fatalf("list only shows the dock's switch:\n%s", screen(m))
+	}
+	next, _ := key(m, "v")
+	m = next.(Model)
 	m.height = len(m.body(44).lines) + len(m.dock(44, -1).lines) + 1 + 5 // no row to grow into
 	out := screen(m)
 	if !strings.Contains(out, "USAGE") || !strings.Contains(out, "machine ›") || strings.Contains(out, "MACHINE") {
@@ -111,7 +117,7 @@ func TestAPhoneDockShowsOnePanel(t *testing.T) {
 		t.Fatalf("Codex does not fold to one line:\n%s", out)
 	}
 	fitsWidth(t, m, 44)
-	next, _ := key(m, "u")
+	next, _ = key(m, "u")
 	if out := screen(next); !strings.Contains(out, "MACHINE") || !strings.Contains(out, "stoker ›") || strings.Contains(out, "USAGE") {
 		t.Fatalf("u does not show the machine:\n%s", out)
 	}
@@ -129,9 +135,11 @@ func TestAPhoneDockShowsOnePanel(t *testing.T) {
 // TestTheDockFoldsWhenItDoesNotFit: the dock shows when the body, the
 // dock and one blank row fit; a few rows short it stays at its fewest and
 // the body scrolls; when folding it leaves fewer than minBlank rows blank,
-// it folds into the Machine tab, which has usage first.
+// it folds into the Machine tab, which has usage first. This is the
+// phone's full view: list only has no dock.
 func TestTheDockFoldsWhenItDoesNotFit(t *testing.T) {
 	m, _ := loadedWith(t, 44, limitsState())
+	m = fullView(m)
 	tall := len(m.body(44).lines)
 	need := tall + len(m.dock(44, -1).lines) + 1 + 5 // the header, the tabs, two hairlines, the key line
 	fold := tall + 5 + minBlank - 1

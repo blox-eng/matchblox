@@ -58,7 +58,7 @@ const cardMaxW = 62
 // new call starts a new card.
 func (m Model) cardNow() (sample.Session, card, bool) {
 	s, ok := m.selectedSession()
-	if !ok || s.Pane == "" || s.Ask == nil || len(s.Ask.Questions) == 0 {
+	if !ok || s.Pane == "" || s.Host != m.opt.Host || s.Ask == nil || len(s.Ask.Questions) == 0 {
 		return sample.Session{}, card{}, false
 	}
 	if it, waits := m.waitOf(s); waits && it.State == queue.StatePermission {
@@ -361,8 +361,8 @@ func (m Model) tapCard(i, dx int, sc drawn) (tea.Model, tea.Cmd) {
 		c.at = 0 // a tap on an option picks it, also while the typing row has the cursor
 		m.askCard = c
 	}
-	if m.takeOverDue() && m.cardSends(k) {
-		m.held = m.heldCard(k, option)
+	if m.takeOverOn(m.opt.Host) && m.cardSends(k) {
+		m.held, m.heldOn = m.heldCard(k, option), m.opt.Host
 		return m, nil
 	}
 	return m.cardKey(k)

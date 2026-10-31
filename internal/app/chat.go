@@ -111,13 +111,14 @@ func isRule(line string) bool {
 }
 
 // watchCmd asks the service for the selected session's screen when it is
-// not the one already watched, and for none when the selection has no pane;
+// not the one already watched, and for none when the selection has no pane
+// or is another host's;
 // and for the lines up the chat shows when they changed. A screen of
 // another pane never stays.
 func (m *Model) watchCmd() tea.Cmd {
 	want := ""
 	if m.conn != nil && !m.lost && !m.mismatch {
-		if s, ok := m.selected(); ok {
+		if s, ok := m.selected(); ok && s.Host == m.opt.Host { // another host's pane id names another pane here
 			want = s.Pane
 		}
 	}
@@ -153,7 +154,7 @@ func (m Model) chatLines(w, h int) []string {
 	h = max(h, 0)
 	lines := make([]string, h)
 	s, ok := m.selected()
-	if !ok || s.Pane == "" {
+	if !ok || s.Pane == "" || s.Host != m.opt.Host {
 		return lines
 	}
 	shown := m.screen.Pane == s.Pane
@@ -169,8 +170,8 @@ func (m Model) chatLines(w, h int) []string {
 	var fit []string
 	if shown {
 		text := m.screen.Text
-		if len(card) > 0 && m.screen.Up == 0 {
-			text = agentMenuCut(text) // the card is the one place to answer
+		if len(card) > 0 {
+			text = agentMenuCut(text) // the card is the one place to answer, live or up the history
 		}
 		fit = fitScreen(text, w, h-len(card))
 	}
@@ -179,10 +180,60 @@ func (m Model) chatLines(w, h int) []string {
 }
 
 // chatShown is the session whose chat is the right side of Sessions: the
-// selected one, when it has a pane and the screen has a right side.
+// selected one, when it has a pane on the home host and the screen has a
+// right side. Another host's row is list only: its detail shows there.
 func (m Model) chatShown(rightW int) (sample.Session, bool) {
 	s, ok := m.selectedSession()
-	return s, ok && s.Pane != "" && m.tab == tabSessions && rightW > 0
+	return s, ok && s.Pane != "" && s.Host == m.opt.Host && m.tab == tabSessions && rightW > 0
+}
+
+// chatLeast is the narrowest chat beside the list: the question card reads
+// at 44 columns, as on a folded phone.
+const chatLeast = 44
+
+// cardLeast is the fewest lines a question card takes: its frame, a
+// question of one line, two options and the typing row. Sessions keeps
+// that room for the chat of a session that asks nothing yet, so the split
+// does not come and go with the selection.
+const cardLeast = 6
+
+// chatRoom tells if a chat right columns wide fits beside the list: it is
+// at least chatLeast wide, and the body has room for its title, its
+// account line and the whole question card.
+func (m Model) chatRoom(right int) bool {
+	if right < chatLeast {
+		return false
+	}
+	if m.height == 0 {
+		return true // no height yet
+	}
+	card := len(m.cardLines(right - 1))
+	if card == 0 {
+		card = cardLeast
+	}
+	return m.height-5 >= 2+card
+}
+
+// chatFits tells if the chat full-screen, w columns wide, shows its whole
+// question card under its title.
+func (m Model) chatFits(w int) bool {
+	return m.height == 0 || len(m.cardLines(w)) <= m.height-3
+}
+
+// chatSeen tells if the selected session's chat, with the keys, shows its
+// whole question: beside the list, or full-screen when it fits.
+func (m Model) chatSeen() bool {
+	w := max(m.width, minWidth)
+	if _, right := m.panes(w); right > 0 {
+		return true
+	}
+	return m.chatFits(w)
+}
+
+// tooShort is what the key line says when the screen has no room for the
+// chat's question.
+func (m Model) tooShort(s sample.Session) string {
+	return "too short to show " + s.Name + "'s question · " + m.keys.main.Jump.Help().Key + " goes into its pane"
 }
 
 // chatTitle names the chat's session and its state.
@@ -342,7 +393,7 @@ func (m Model) chatScreen(w int) drawn {
 	}
 	title = fit(title, w)
 	rows := max(m.height-3, 0)
-	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true, chatRows: rows}
+	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true, chatRows: rows, nowX: -1}
 	sc.lines = append(sc.lines, m.screenLines(w, rows)...)
 	m.markCard(&sc, len(sc.lines), 0, w, rows)
 	keys, spans := m.keyLine(w)
@@ -413,6 +464,8 @@ func (m Model) chatTarget() (pane, why string) {
 		return "", ""
 	case s.Pane == "":
 		return "", s.Name + " runs outside tmux: there is no pane to type into"
+	case s.Host != m.opt.Host:
+		return "", s.Name + " runs on " + m.nameOf(s.Host) + ": " + m.keys.main.Open.Help().Key + " goes into its pane"
 	}
 	return s.Pane, ""
 }
@@ -421,7 +474,7 @@ func (m Model) chatTarget() (pane, why string) {
 // holding the keys. The selection stays on the session while the chat has
 // its keys.
 func (m Model) chatOn(pane string) Model {
-	s, ok := m.sessionIn(pane)
+	s, ok := m.sessionIn(m.opt.Host, pane)
 	if !ok {
 		return m
 	}
@@ -430,7 +483,11 @@ func (m Model) chatOn(pane string) Model {
 	if m.tab != tabSessions {
 		m.setTab(tabSessions)
 	}
-	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, s.PID
+	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
+	if !m.chatSeen() {
+		m.chatKeys, m.flash = false, m.tooShort(s)
+		return m
+	}
 	m.chatKeys, m.flash = true, ""
 	if !shown || s.Ask != nil && m.cardSeen.askID != s.Ask.ID { // the chat, or its card, was not on screen before
 		m.cardSeen = cardSeen{pane: pane, at: m.now()}
@@ -447,7 +504,7 @@ func (m Model) chatHushed(k chatKey) bool {
 	if m.cardSeen.pane != k.pane || !m.now().Before(m.cardSeen.at.Add(cardQuiet)) {
 		return false
 	}
-	s, ok := m.sessionIn(k.pane)
+	s, ok := m.sessionIn(m.opt.Host, k.pane)
 	if _, waits := m.waitOf(s); !ok || !waits {
 		return false
 	}
@@ -500,7 +557,7 @@ func (m Model) chatKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // is the session's, for a line that says it ended.
 func (m Model) pressed(texts ...string) (name string, keys []chatKey) {
 	s, ok := m.selectedSession()
-	if !ok || s.Pane == "" {
+	if !ok || s.Pane == "" || s.Host != m.opt.Host {
 		return "", nil
 	}
 	var seen time.Time
@@ -527,8 +584,8 @@ func (m Model) chatPaste(text string) (tea.Model, tea.Cmd) {
 	if len(keys) == 0 {
 		return m, nil
 	}
-	if m.night() && !m.stoker.Asked {
-		m.held = m.heldKeys(name, keys)
+	if m.takeOverOn(m.opt.Host) {
+		m.held, m.heldOn = m.heldKeys(name, keys), m.opt.Host
 		return m, nil
 	}
 	return m.toAgent(name, keys...)
@@ -739,7 +796,9 @@ func (m Model) lastCtrlC(k chatKey) string {
 // agentIn tells if k's agent is still in its pane, in all the service
 // sent: a search or the stoker's own row does not hide it.
 func (m Model) agentIn(k chatKey) bool {
-	return slices.ContainsFunc(m.all.sessions, func(s sample.Session) bool { return s.Pane == k.pane && s.PID == k.pid })
+	return slices.ContainsFunc(m.all.sessions, func(s sample.Session) bool {
+		return s.Host == m.opt.Host && s.Pane == k.pane && s.PID == k.pid
+	})
 }
 
 // queueKey puts k behind the keys that wait. Text typed after text for the
@@ -817,6 +876,8 @@ func (m Model) keepChat(was Model) Model {
 			m.chatKeys, m.flash = false, "That session ended." // a phone shows the list again: the key line says why
 		case !ok || s.Pane == "" || was.chatKeys && s.Pane != before.Pane:
 			m.chatKeys = false
+		case !m.chatSeen():
+			m.chatKeys, m.flash = false, m.tooShort(s) // the keys never go to a screen the person cannot see
 		}
 	}
 	if !m.chatKeys {
@@ -846,26 +907,54 @@ func (m Model) keepChat(was Model) Model {
 }
 
 // chatKeyLine is the key line while the chat has the keys: whose agent
-// they go to, and the way back and the way into tmux; or, up the history,
-// that a key goes back to live.
+// they go to, the way back and the way into tmux; or, up the history,
+// that a key goes back to live. A hint that does not fit goes whole, by
+// worth: the agent's name (the title names it), then the way into tmux;
+// the way back stays.
 func (m Model) chatKeyLine(w int) (string, []span) {
 	st := m.st
 	s, _ := m.selectedSession()
 	if m.notLive() { // ctrl+] and ctrl+o too only go back to live
 		return fit(" "+st.text.Render("a key goes back to live"), w), nil
 	}
-	lead := "keys go to " + s.Name + " · "
-	line, x := " "+st.text.Render(lead), 1+lipgloss.Width(lead)
-	var spans []span
-	for i, b := range []bkey.Binding{m.keys.chat.Back, m.keys.main.Jump} {
-		if i > 0 {
-			line += st.muted.Render(" · ")
-			x += lipgloss.Width(" · ")
+	type part struct {
+		text string
+		key  string // the key a tap on it presses; "" none
+	}
+	hint := func(b bkey.Binding) part {
+		return part{st.accent.Render(b.Help().Key) + st.muted.Render(" "+b.Help().Desc), b.Keys()[0]}
+	}
+	name := part{st.text.Render("keys go to " + s.Name), ""}
+	back, into := hint(m.keys.chat.Back), hint(m.keys.main.Jump)
+	sep := st.muted.Render(" · ")
+	width := func(ps []part) int {
+		n := 1
+		for i, p := range ps {
+			if i > 0 {
+				n += lipgloss.Width(sep)
+			}
+			n += lipgloss.Width(p.text)
 		}
-		part := st.accent.Render(b.Help().Key) + st.muted.Render(" "+b.Help().Desc)
-		spans = append(spans, span{x, x + lipgloss.Width(part), b.Keys()[0]})
-		line += part
-		x += lipgloss.Width(part)
+		return n
+	}
+	parts := []part{name, back, into}
+	for _, try := range [][]part{{name, back, into}, {back, into}, {back}} {
+		if parts = try; width(try) <= w {
+			break
+		}
+	}
+	line, x := " ", 1
+	var spans []span
+	for i, p := range parts {
+		if i > 0 {
+			line += sep
+			x += lipgloss.Width(sep)
+		}
+		if p.key != "" {
+			spans = append(spans, span{x, x + lipgloss.Width(p.text), p.key})
+		}
+		line += p.text
+		x += lipgloss.Width(p.text)
 	}
 	return fit(line, w), spans
 }

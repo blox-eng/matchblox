@@ -59,12 +59,22 @@ func (m Model) layoutAt(w int) Layout {
 	if m.width == 0 {
 		return byWidth(w)
 	}
-	return min(layout(m.width, m.height), byWidth(w))
+	return min(layout(m.width, m.shapeRows()), byWidth(w))
+}
+
+// shapeRows is the height the screen's shape goes by: the tallest seen at
+// its width, so a keyboard that shrinks the screen never changes the
+// layout; a new width decides afresh (design/0006 §4).
+func (m Model) shapeRows() int {
+	if m.tallW == m.width {
+		return max(m.tallH, m.height)
+	}
+	return m.height
 }
 
 // upright is a portrait screen: its dock shows one panel at a time and its
 // boxes sit at the bottom, as on a phone.
-func (m Model) upright() bool { return portrait(m.width, m.height) }
+func (m Model) upright() bool { return portrait(m.width, m.shapeRows()) }
 
 // phoneDock is a dock of one panel, u cycling it: a one-column phone.
 func (m Model) phoneDock(w int) bool { return m.layoutAt(w) == Narrow }
@@ -128,13 +138,13 @@ func (m Model) progressCell(p *sample.Progress, n int) string {
 		" " + m.st.muted.Render(fmt.Sprintf("%d%%", p.Pct))
 }
 
-// sessionIn is the agent session of a pane.
-func (m Model) sessionIn(pane string) (sample.Session, bool) {
+// sessionIn is the agent session of a pane of host.
+func (m Model) sessionIn(host, pane string) (sample.Session, bool) {
 	if pane == "" {
 		return sample.Session{}, false // outside tmux: no pane tells sessions apart
 	}
 	for _, s := range m.all.sessions {
-		if s.Pane == pane {
+		if s.Host == host && s.Pane == pane {
 			return s, true
 		}
 	}

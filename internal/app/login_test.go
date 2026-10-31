@@ -117,7 +117,7 @@ func hostHello(tmux string) helloMsg {
 func TestHostOpenRunsLoginCheck(t *testing.T) {
 	m, _, checks := checkedHost(t, fixtureState(), "", 0)
 	next, cmd := m.Update(hostHello("3.4"))
-	if !next.(Model).checking {
+	if !homeLogin(next.(Model)).checking {
 		t.Fatal("the hello did not start the check")
 	}
 	got := loginCheckOf(cmd)
@@ -129,7 +129,7 @@ func TestHostOpenRunsLoginCheck(t *testing.T) {
 		t.Fatalf("messages %+v", got)
 	}
 	next, _ = next.Update(got[0])
-	if next.(Model).checking || next.(Model).flash != "" {
+	if homeLogin(next.(Model)).checking || next.(Model).flash != "" {
 		t.Fatalf("an ok login shows nothing: flash %q", next.(Model).flash)
 	}
 	_, cmd = next.Update(hostHello("3.4"))
@@ -149,7 +149,7 @@ func TestLocalConsoleRunsNoLoginCheck(t *testing.T) {
 	}
 	next, cmd := m.Update(helloMsg(proto.Hello{Version: proto.Version}))
 	loginCheckOf(cmd)
-	if next.(Model).checking {
+	if homeLogin(next.(Model)).checking {
 		t.Fatal("this machine's console checks a login")
 	}
 }
@@ -164,11 +164,11 @@ func TestJumpWaitsForLoginCheck(t *testing.T) {
 	login := loginCheckOf(cmd)
 	m = next.(Model)
 	hostJump(&m, remote.Jump{Pane: "%1"})
-	next, cmd = m.confirm(*m.forHost(m.jump("%1")))
+	next, cmd = m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 	if cmd != nil || len(ran) != 0 {
 		t.Fatalf("the jump ran before the check: %q", ran)
 	}
-	next, _ = next.(Model).confirm(*m.forHost(m.jump("%2")))
+	next, _ = next.(Model).confirm(*m.forHost(m.opt.Host, m.jump("%2")))
 	if !strings.Contains(next.(Model).flash, "checking") {
 		t.Fatalf("flash %q", next.(Model).flash)
 	}
@@ -180,7 +180,7 @@ func TestJumpWaitsForLoginCheck(t *testing.T) {
 	if len(ran) != 1 || !strings.Contains(strings.Join(ran[0], " "), "%2") {
 		t.Fatalf("ran %q, want one jump to %%2", ran)
 	}
-	if next.(Model).checking {
+	if homeLogin(next.(Model)).checking {
 		t.Fatal("still checking")
 	}
 }
@@ -189,7 +189,7 @@ func TestJumpWaitsForLoginCheck(t *testing.T) {
 func TestJumpUsesMaster(t *testing.T) {
 	m, _, _ := checkedHost(t, fixtureState(), "", 0)
 	j := hostJump(&m, remote.Jump{Pane: "%1"})
-	a := m.forHost(m.jump("%1"))
+	a := m.forHost(m.opt.Host, m.jump("%1"))
 	ssh := remote.JumpSSH("ws-1", j, remote.MasterOpts(filepath.Join(m.opt.MasterBase, "ssh")))
 	if a == nil || len(a.steps) != 1 || !slices.Equal(a.steps[0], j.Local(ssh)) {
 		t.Fatalf("pending %+v\nwant %q", a, j.Local(ssh))
@@ -201,7 +201,7 @@ func TestJumpUsesMaster(t *testing.T) {
 func TestJumpNoMasterWithoutCache(t *testing.T) {
 	m, _ := onHost(t, fixtureState())
 	j := hostJump(&m, remote.Jump{Pane: "%1"})
-	a := m.forHost(m.jump("%1"))
+	a := m.forHost(m.opt.Host, m.jump("%1"))
 	if a == nil || !slices.Equal(a.steps[0], j.Local(remote.JumpSSH("ws-1", j, nil))) {
 		t.Fatalf("pending %+v", a)
 	}
@@ -230,7 +230,7 @@ func TestLoginResultSaysTheFix(t *testing.T) {
 		next, _ := m.Update(hostHello("3.4"))
 		m = next.(Model)
 		hostJump(&m, remote.Jump{Pane: "%1"})
-		next, _ = m.confirm(*m.forHost(m.jump("%1")))
+		next, _ = m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 		next, cmd := next.Update(loginMsg{host: "ws-1", login: c.login, detail: c.detail})
 		if f := next.(Model).flash; f != c.want {
 			t.Errorf("%v: flash %q\nwant %q", c.login, f, c.want)
@@ -245,7 +245,7 @@ func TestLoginResultSaysTheFix(t *testing.T) {
 			continue
 		}
 		// A jump after the result is refused at once, with the same fix.
-		next, _ = next.(Model).confirm(*next.(Model).forHost(m.jump("%1")))
+		next, _ = next.(Model).confirm(*next.(Model).forHost(next.(Model).opt.Host, m.jump("%1")))
 		if f := next.(Model).flash; f != c.want || len(ran) != 0 {
 			t.Errorf("%v: a later jump: flash %q, ran %q", c.login, f, ran)
 		}
@@ -273,7 +273,7 @@ func TestOldHostTmuxShowsDoor(t *testing.T) {
 		next, _ = next.Update(loginCheckOf(cmd)[0])
 		m = next.(Model)
 		m.tab = tabSessions
-		a := m.forHost(m.jump("%1"))
+		a := m.forHost(m.opt.Host, m.jump("%1"))
 		if c.want == "" {
 			if a == nil || a.local != nil {
 				t.Errorf("%q: refused %+v", c.tmux, a)
@@ -305,10 +305,15 @@ func TestHostConsoleKeepsTheLoginOptions(t *testing.T) {
 	if o := opened.cur.opt; o.MasterBase != "/c" || o.Check == nil || o.Ask == nil || o.NoAsk != "why" || o.SSH == nil {
 		t.Fatalf("the host's console lost the login options: %+v", o)
 	}
-	// Back to Hosts ends the console's wait for prompts.
+	// Back to Hosts keeps the console's wait for prompts (R12); the next
+	// console ends it.
 	ctx := opened.cur.askCtx
-	opened.back()
-	if ctx == nil || ctx.Err() == nil {
+	opened = opened.back()
+	if ctx == nil || ctx.Err() != nil {
+		t.Fatal("the console under Hosts stopped waiting for prompts")
+	}
+	opened, _ = opened.open("ws-2", false)
+	if ctx.Err() == nil {
 		t.Fatal("the closed console still waits for prompts")
 	}
 }
@@ -334,7 +339,7 @@ func TestMasterRefusedJumpsWithoutIt(t *testing.T) {
 	}
 	m = next.(Model)
 	j := hostJump(&m, remote.Jump{Pane: "%1"})
-	if a := m.forHost(m.jump("%1")); a == nil || a.local != nil || !slices.Equal(a.steps[0], remote.JumpSSH("ws-1", j, nil)) {
+	if a := m.forHost(m.opt.Host, m.jump("%1")); a == nil || a.local != nil || !slices.Equal(a.steps[0], remote.JumpSSH("ws-1", j, nil)) {
 		t.Fatalf("pending %+v", a)
 	}
 }
@@ -372,7 +377,7 @@ func TestNoAskSaysWhyOnce(t *testing.T) {
 	next, _ = next.Update(loginCheckOf(cmd)[0])
 	m = next.(Model)
 	j := hostJump(&m, remote.Jump{Pane: "%1"})
-	a := m.forHost(m.jump("%1"))
+	a := m.forHost(m.opt.Host, m.jump("%1"))
 	if a == nil || a.master != "" || !slices.Equal(a.steps[0], j.Local(remote.JumpSSH("ws-1", j, remote.MasterOpts(filepath.Join(m.opt.MasterBase, "ssh"))))) {
 		t.Fatalf("pending %+v", a)
 	}
@@ -438,7 +443,7 @@ func tailscaleHost(t *testing.T, approve <-chan struct{}) (Model, tea.Cmd, *[][]
 	next, cmd := m.Update(hostHello("3.4"))
 	m = next.(Model)
 	hostJump(&m, remote.Jump{Pane: "%1"})
-	next, _ = m.confirm(*m.forHost(m.jump("%1")))
+	next, _ = m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 	u := urlOf(t, cmd)
 	if u.url != checkURL || !u.tailscale {
 		t.Fatalf("link %+v", u)
@@ -454,8 +459,8 @@ func tailscaleHost(t *testing.T, approve <-chan struct{}) (Model, tea.Cmd, *[][]
 func TestTailscaleCheckShowsURL(t *testing.T) {
 	approve := make(chan struct{})
 	m, wait, ran, clipped := tailscaleHost(t, approve)
-	if m.loginURL != checkURL || !m.asking() {
-		t.Fatalf("link %q, asking %v", m.loginURL, m.asking())
+	if homeLogin(m).loginURL != checkURL || !m.asking() {
+		t.Fatalf("link %q, asking %v", homeLogin(m).loginURL, m.asking())
 	}
 	out := m.render()
 	if !strings.Contains(out, ansi.SetHyperlink(checkURL)) || !strings.Contains(ansi.Strip(out), "ssh ws-1 asks") {
@@ -469,7 +474,7 @@ func TestTailscaleCheckShowsURL(t *testing.T) {
 		t.Fatalf("clipped %q", *clipped)
 	}
 	next, _ = next.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
-	if len(*ran) != 0 || next.(Model).loginURL != checkURL {
+	if len(*ran) != 0 || homeLogin(next.(Model)).loginURL != checkURL {
 		t.Fatalf("a key went past the field: ran %q", *ran)
 	}
 	close(approve)
@@ -479,14 +484,15 @@ func TestTailscaleCheckShowsURL(t *testing.T) {
 	}
 	cmd()
 	m = next.(Model)
-	if len(*ran) != 1 || m.loginURL != "" || m.asking() || strings.Contains(m.flash, "tailscale.com") {
-		t.Fatalf("ran %q, link %q, flash %q", *ran, m.loginURL, m.flash)
+	if len(*ran) != 1 || homeLogin(m).loginURL != "" || m.asking() || strings.Contains(m.flash, "tailscale.com") {
+		t.Fatalf("ran %q, link %q, flash %q", *ran, homeLogin(m).loginURL, m.flash)
 	}
-	if !m.tailscale {
+	if !homeLogin(m).tailscale {
 		t.Fatal("the console forgot that ws-1 is Tailscale SSH")
 	}
-	m.opt.Keys, m.opt.Ask, m.login = &Keys{}, fakeAsk{}, remote.LoginPassword
-	if m.offersLadder() {
+	m.opt.Keys, m.opt.Ask = &Keys{}, fakeAsk{}
+	m.editLogin(m.opt.Host, func(l *hostLogin) { l.login = remote.LoginPassword })
+	if m.offersLadder(m.opt.Host) {
 		t.Fatal("the ladder is offered on Tailscale SSH: authorized_keys does nothing there")
 	}
 }
@@ -509,11 +515,11 @@ func TestTailscaleCheckEscCancels(t *testing.T) {
 		cmd()
 	}
 	m = next.(Model)
-	if len(*ran) != 0 || m.loginURL != "" || !strings.HasPrefix(m.flash, "cancelled") {
-		t.Fatalf("ran %q, link %q, flash %q", *ran, m.loginURL, m.flash)
+	if len(*ran) != 0 || homeLogin(m).loginURL != "" || !strings.HasPrefix(m.flash, "cancelled") {
+		t.Fatalf("ran %q, link %q, flash %q", *ran, homeLogin(m).loginURL, m.flash)
 	}
-	if m.login != remote.LoginTailscaleCheck {
-		t.Fatalf("login %v: the next jump must ask for the check again", m.login)
+	if homeLogin(m).login != remote.LoginTailscaleCheck {
+		t.Fatalf("login %v: the next jump must ask for the check again", homeLogin(m).login)
 	}
 }
 
@@ -534,7 +540,7 @@ func TestTailscaleDeniedSaysWhy(t *testing.T) {
 // lets the link show, live; the approved open runs the jump.
 func TestTailscaleOpenFirstShowsURL(t *testing.T) {
 	m, _, ran := askingHost(t, false, "", 0)
-	m.tailscale = true
+	m.editLogin(m.opt.Host, func(l *hostLogin) { l.tailscale = true })
 	approve := make(chan struct{})
 	open := waitingCheck(t, approve)
 	m.opt.SSH = func(ctx context.Context, argv, _ []string, line func(string)) (string, int) {
@@ -548,21 +554,21 @@ func TestTailscaleOpenFirstShowsURL(t *testing.T) {
 		})
 	}
 	hostJump(&m, remote.Jump{Pane: "%1"})
-	next, cmd := m.confirm(*m.forHost(m.jump("%1")))
+	next, cmd := m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 	u, ok := cmd().(urlMsg)
 	if !ok || u.url != checkURL {
 		t.Fatalf("link %+v", u)
 	}
 	next, cmd = next.Update(u)
-	if next.(Model).loginURL != checkURL || !strings.Contains(next.(Model).render(), ansi.SetHyperlink(checkURL)) {
+	if homeLogin(next.(Model)).loginURL != checkURL || !strings.Contains(next.(Model).render(), ansi.SetHyperlink(checkURL)) {
 		t.Fatal("the open-first's link is not shown")
 	}
 	close(approve)
 	for cmd != nil {
 		next, cmd = next.Update(cmd())
 	}
-	if m := next.(Model); len(*ran) != 1 || m.loginURL != "" || m.opening || strings.Contains(m.flash, "tailscale.com") {
-		t.Fatalf("ran %q, link %q, flash %q", *ran, m.loginURL, m.flash)
+	if m := next.(Model); len(*ran) != 1 || homeLogin(m).loginURL != "" || homeLogin(m).opening || strings.Contains(m.flash, "tailscale.com") {
+		t.Fatalf("ran %q, link %q, flash %q", *ran, homeLogin(m).loginURL, m.flash)
 	}
 }
 
@@ -578,14 +584,14 @@ func TestUnexpectedLoginLinkNotShown(t *testing.T) {
 		return "", 255
 	}
 	hostJump(&m, remote.Jump{Pane: "%1"})
-	next, cmd := m.confirm(*m.forHost(m.jump("%1")))
+	next, cmd := m.confirm(*m.forHost(m.opt.Host, m.jump("%1")))
 	u, ok := cmd().(urlMsg)
 	if !ok {
 		t.Fatal("no link message")
 	}
 	next, _ = next.Update(u)
 	m = next.(Model)
-	if m.loginURL != "" || strings.Contains(m.render(), checkURL) {
+	if homeLogin(m).loginURL != "" || strings.Contains(m.render(), checkURL) {
 		t.Fatal("a link from a host that is not Tailscale SSH is shown")
 	}
 	if want := "ws-1 printed an unexpected login link: nothing was opened"; m.flash != want {
@@ -617,13 +623,13 @@ func TestStreamedLimit(t *testing.T) {
 		}
 		return msg
 	}
-	if got := drain(streamed(context.Background(), 1, false, 50*time.Millisecond, 5*time.Second, waits(""))); got != "ended" {
+	if got := drain(streamed(context.Background(), "ws-1", 1, false, 50*time.Millisecond, 5*time.Second, waits(""))); got != "ended" {
 		t.Fatalf("no link: %v", got)
 	}
-	if got := drain(streamed(context.Background(), 1, false, 50*time.Millisecond, 5*time.Second, waits(checkURL))); got != "done" {
+	if got := drain(streamed(context.Background(), "ws-1", 1, false, 50*time.Millisecond, 5*time.Second, waits(checkURL))); got != "done" {
 		t.Fatalf("a link: %v", got)
 	}
-	if got := drain(streamed(context.Background(), 1, false, 50*time.Millisecond, 5*time.Second, waits("https://evil.example/a/1"))); got != "ended" {
+	if got := drain(streamed(context.Background(), "ws-1", 1, false, 50*time.Millisecond, 5*time.Second, waits("https://evil.example/a/1"))); got != "ended" {
 		t.Fatalf("a link that is not Tailscale's: %v", got)
 	}
 }
@@ -659,7 +665,7 @@ func TestPrefixFallbackSaysSo(t *testing.T) {
 func TestCheckerAsksInTheConsole(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	m.opt.Host, m.opt.Ask = "ws-1", fakeAsk{}
-	if _, exit := m.checker()(context.Background(), []string{"sh", "-c", `[ "$SSH_ASKPASS_REQUIRE" = force ] && [ -n "$MATCHBLOX_ASKPASS_HOST" ]`}, ignoreLine); exit != 0 {
+	if _, exit := m.checker(m.opt.Host)(context.Background(), []string{"sh", "-c", `[ "$SSH_ASKPASS_REQUIRE" = force ] && [ -n "$MATCHBLOX_ASKPASS_HOST" ]`}, ignoreLine); exit != 0 {
 		t.Fatal("the check's ssh has no prompt socket")
 	}
 }

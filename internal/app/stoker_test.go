@@ -85,6 +85,7 @@ func TestStokedListsRunsWithResume(t *testing.T) {
 	for _, w := range []int{40, 100} {
 		st := stokerState(stokedRun(fixtureState().At))
 		m0, _ := loadedWith(t, w, st)
+		m0 = fullView(m0) // list only has no dock
 		if out := ansi.Strip(m0.render()); strings.Contains(out, "TODAY") || !strings.Contains(out, "STOKER") {
 			t.Fatalf("width %d: the run is not in the dock alone:\n%s", w, out)
 		}
@@ -196,11 +197,12 @@ func sized(t *testing.T, w, h int, st proto.State) Model {
 
 // TestTheStokerLivesInTheDock: while a run is in charge the stoker's panel
 // takes a phone's dock until u switches it, and the machine's place
-// beside usage on a drawer; a desk stacks all three under the list. A tap
-// on the panel opens the STOKER tab.
+// on Ships; Sessions split stacks all three under the list. A tap
+// on the panel opens the STOKER tab. The phones are in their full view:
+// list only has no dock.
 func TestTheStokerLivesInTheDock(t *testing.T) {
 	st := stokerState(runningNight(fixtureState().At))
-	phone := sized(t, 44, 31, st)
+	phone := fullView(sized(t, 44, 31, st))
 	out := screen(phone)
 	if !strings.Contains(out, "STOKER") || !strings.Contains(out, "night → ") || strings.Contains(out, "USAGE") ||
 		!strings.Contains(out, "176k → 9k") || !strings.Contains(out, "· watching 3 · 1 compacted") {
@@ -219,14 +221,11 @@ func TestTheStokerLivesInTheDock(t *testing.T) {
 		t.Fatalf("44x31: a tap on the stoker does not open its tab:\n%s", screen(card))
 	}
 
-	drawer := sized(t, 107, 101, st)
-	out = screen(drawer)
-	at := strings.Split(out, "\n")[lineOf(t, drawer, "USAGE")]
-	if !strings.Contains(at, "STOKER") || strings.Contains(out, "MACHINE") {
-		t.Fatalf("107x101: the stoker does not stand in the machine's place:\n%s", out)
+	drawer := fullView(sized(t, 107, 101, st))
+	if usage, stoker := lineOf(t, drawer, "USAGE"), lineOf(t, drawer, "STOKER"); usage >= stoker || drawer.draw(107).dockAt >= 0 {
+		t.Fatalf("107x101: the stoker is not under the list:\n%s", screen(drawer))
 	}
-	sc := drawer.draw(107)
-	card, _ = tap(drawer, sc.stx0+3, sc.dockAt+1)
+	card, _ = tap(drawer, 3, lineOf(t, drawer, "STOKER")+1)
 	if cm := card.(Model); cm.tab != tabStoker || !strings.Contains(screen(card), "RESUME: run the migration test") {
 		t.Fatalf("107x101: a tap on the stoker does not open its tab:\n%s", screen(card))
 	}

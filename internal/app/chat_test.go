@@ -644,7 +644,7 @@ func TestAPasteTouchesTheStokersRest(t *testing.T) {
 	}
 	next, cmd := m.Update(tea.PasteMsg{Content: "hi"})
 	drain(cmd)
-	if next.(Model).touched.IsZero() || !slices.ContainsFunc(f.acts(), func(a proto.Act) bool { return a.RecID == "stoker:touch" }) {
+	if next.(Model).touched[next.(Model).opt.Host].IsZero() || !slices.ContainsFunc(f.acts(), func(a proto.Act) bool { return a.RecID == "stoker:touch" }) {
 		t.Fatalf("acts %+v", f.acts())
 	}
 }
@@ -705,11 +705,11 @@ func TestWideStacksStatsLeft(t *testing.T) {
 func TestMediumSplitsListAndChat(t *testing.T) {
 	m := demoSized(t, 86, 30)
 	sc := m.draw(86)
-	if sc.listW != (86-1)/2 {
+	if sc.listW != 38 {
 		t.Fatalf("the list is %d of 86 columns", sc.listW)
 	}
-	if sc.dockAt < 0 {
-		t.Fatal("no dock on an opened phone")
+	if sc.dockAt >= 0 {
+		t.Fatal("a dock under the chat: usage goes under the list")
 	}
 	_, right := sides(sc, 86)
 	if !slices.ContainsFunc(right, func(l string) bool { return strings.Contains(l, "Esc to") }) {
@@ -732,7 +732,7 @@ func TestNarrowSwapsToChat(t *testing.T) {
 	if m = next.(Model); m.chatKeys || screen(m) != screen(list) {
 		t.Fatalf("a tap on ‹ Sessions: chatKeys %v, not the list as before:\n%s", m.chatKeys, screen(m))
 	}
-	tall := pressKeys(t, demoSized(t, 44, 50), "enter")
+	tall := pressKeys(t, fullView(demoSized(t, 44, 50)), "enter")
 	next, _ = tall.Update(tea.MouseClickMsg(tea.Mouse{X: 3, Y: 0, Button: tea.MouseLeft}))
 	if sc := next.(Model).draw(44); sc.dockAt < 0 {
 		t.Fatalf("no dock under the list:\n%s", screen(next))
@@ -865,7 +865,7 @@ func TestTheChatStripTakesNoRowsWithoutFacts(t *testing.T) {
 	m := flintSized(t, 200, 50, func(s *sample.Session) {
 		s.Provider, s.Account, s.Agents, s.Shells = "", "", 0, nil
 	})
-	m.shipReport = nil
+	m.shipReport, m.allShips = nil, nil
 	s, _ := m.selectedSession()
 	got := m.chatPane(s, 121, 40)
 	want := m.screenLines(120, 39)
@@ -901,15 +901,15 @@ func TestTheChatStripWrapsToTwoLinesAtMost(t *testing.T) {
 	}
 }
 
-// On a short desk the stats keep their rows and the list gives way, down
-// to 3 rows and the hint under them; shorter, the machine folds, then
-// usage.
+// On a short desk the machine folds before the list is cut; usage keeps
+// its rows and the list gives way to it alone, down to 3 rows and the
+// hint under them; shorter, usage folds too.
 func TestAShortDeskKeepsItsStats(t *testing.T) {
 	m := demoSized(t, 132, 32)
 	left, _ := sides(m.draw(132), 132)
 	all := strings.Join(left, "\n")
-	if !strings.Contains(all, "USAGE") || !strings.Contains(all, "MACHINE") || !strings.Contains(all, "↓ ") {
-		t.Fatalf("132x32: the stats do not keep their rows over a cut list:\n%s", all)
+	if !strings.Contains(all, "USAGE") || strings.Contains(all, "MACHINE") || !strings.Contains(all, "↓ ") {
+		t.Fatalf("132x32: want usage over a cut list, the machine folded:\n%s", all)
 	}
 	folded := false
 	for h := 10; h <= 40; h++ {
@@ -1546,13 +1546,15 @@ func TestPermissionKeepsTheAgentsMenu(t *testing.T) {
 	}
 }
 
-func TestHistoryKeepsTheAgentsMenu(t *testing.T) {
+// Up the history, the card is still the one place to answer: the agent's
+// own menu goes from the lines above it.
+func TestHistoryCutsTheAgentsMenu(t *testing.T) {
 	m, _ := askModel(t, 44, threeWays)
 	m.up, m.watchUp = 6, 6 // scrolled up: a history frame is kept
 	next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(200, 0), Up: 6, Text: askScreen})
 	m = next.(Model)
-	if out := ansi.Strip(strings.Join(m.chatLines(44, 29), "\n")); !strings.Contains(out, "❯ 1. Rotate it") {
-		t.Fatalf("history was cut:\n%s", out)
+	if out := ansi.Strip(strings.Join(m.chatLines(44, 29), "\n")); strings.Contains(out, "❯ 1. Rotate it") || !strings.Contains(out, "refresh endpoint") {
+		t.Fatalf("the history keeps the agent's menu, or lost its work:\n%s", out)
 	}
 }
 

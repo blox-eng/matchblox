@@ -33,7 +33,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		m.flash, m.pending = "cancelled: "+m.pending.String(), nil
 		return m, nil
 	}
-	if !m.have || m.mismatch {
+	if !m.shows() || m.hostCount() == 1 && m.mismatch {
 		return m, nil
 	}
 	m.searching = false // keep the search; what the tap asks for shows on the key line
@@ -138,7 +138,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	picked := m.view().index != nil && m.rowIndex() == sc.rows[i] && (m.tab != tabSessions || m.chose)
 	m.selectRow(sc.rows[i])
-	if s, ok := m.selectedSession(); ok && s.Pane != "" && m.tab == tabSessions && m.layoutAt(w) == Narrow {
+	if s, ok := m.selectedSession(); ok && s.Pane != "" && s.Host == m.opt.Host && m.tab == tabSessions && m.layoutAt(w) == Narrow {
 		m.armed = "" // a phone's session opens in its chat, as Enter does
 		return m.openChat(), nil
 	}
@@ -159,7 +159,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m.chatOn(pane), nil
 	}
-	say, run := m.tapAct()
+	say, run, host := m.tapAct()
 	if run == nil {
 		m.armed, m.flash = "", "nothing to do here"
 		return m, nil
@@ -171,33 +171,33 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.armed = ""
-	if _, door := m.selectedDoor(); !door && m.night() && !m.stoker.Asked {
-		m.held, m.flash = run, ""
+	if _, door := m.selectedDoor(); !door && m.takeOverOn(host) {
+		m.held, m.heldOn, m.flash = run, host, ""
 		return m, nil
 	}
 	return run(m)
 }
 
-// tapAct is what a second tap on the selected row does, and what the
-// first one shows: the row's Enter.
-func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd)) {
+// tapAct is what a second tap on the selected row does, what the first
+// one shows, and the host it acts on: the row's Enter.
+func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd), string) {
 	a := m.primary()
 	if a == nil {
-		return "", nil
+		return "", nil, ""
 	}
 	return a.String(), func(m Model) (tea.Model, tea.Cmd) {
 		if a.pair {
 			return m.openPairDoor()
 		}
 		if a.ghost {
-			return m.openNewIn(a.where, ""), nil
+			return m.openNewIn(m.opt.Host, a.where, ""), nil
 		}
 		if a.nav && !a.destructive {
 			return m.confirm(*a)
 		}
 		m.pending = a
 		return m, nil
-	}
+	}, m.actHost(a)
 }
 
 // wheel is a swipe on a phone: over the chat it scrolls the agent's

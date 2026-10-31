@@ -2,6 +2,8 @@ package app
 
 import (
 	"flag"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,9 +19,11 @@ import (
 	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -94,7 +98,7 @@ func screensState(t *testing.T) proto.State {
 // of design/0006 §10 against the frames in testdata/screens: Sessions with
 // the one that waits opened, Ships with a ship of each kind, the chat with
 // its question card, Sessions where two sessions drive two ships each,
-// and the dock folded on a short phone. -update
+// the dock folded on a short phone, and list only on a desk. -update
 // writes them again.
 func TestScreens(t *testing.T) {
 	// Times on the screen are local: the frames are drawn in UTC, which
@@ -116,6 +120,9 @@ func TestScreens(t *testing.T) {
 		}
 	}
 	check(t, st, "folded", 44, 16, nil)
+	for _, size := range [][2]int{{92, 40}, {132, 32}} {
+		check(t, st, "listonly", size[0], size[1], []string{"v"})
+	}
 	for _, size := range [][2]int{{44, 31}, {132, 32}} {
 		check(t, twoShipsState(t), "sessionships", size[0], size[1], nil)
 	}
@@ -128,7 +135,7 @@ func TestScreens(t *testing.T) {
 		check(t, tabMorning(st), "stokermorning", size[0], size[1], []string{"c"})
 	}
 	check(t, sheetScreen(st, true), "sheetday", 104, 38, []string{"o"})
-	asks := screenMsg{Pane: paneOf(st, "flint-auth"), At: demoAt, Text: askScreen}
+	asks := screenMsg{Pane: paneNamed(st, "flint-auth"), At: demoAt, Text: askScreen}
 	for _, size := range [][2]int{{200, 50}, {132, 32}, {44, 31}} {
 		check(t, st, "chat", size[0], size[1], []string{"enter"}, asks)
 	}
@@ -136,7 +143,14 @@ func TestScreens(t *testing.T) {
 		up := afterKeys{screenMsg{Pane: asks.Pane, At: demoAt, Text: historyScreen, Up: 6}}
 		check(t, st, "chatup", size[0], size[1], []string{"enter", wheelUp, wheelUp}, asks, up)
 	}
-	check(t, st, "chatended", 44, 31, []string{"enter"}, screenMsg{Pane: paneOf(st, "flint-auth"), Gone: true})
+	check(t, st, "chatended", 44, 31, []string{"enter"}, screenMsg{Pane: paneNamed(st, "flint-auth"), Gone: true})
+	for _, size := range surveyGrids {
+		check(t, st, "survey", size[0], size[1], nil, asks)
+		check(t, st, "surveychat", size[0], size[1], []string{"enter"}, asks)
+		if portrait(size[0], size[1]) && size[0] >= 83 { // list only by default: the full view splits
+			check(t, st, "surveyfull", size[0], size[1], []string{"v", "enter"}, asks)
+		}
+	}
 	life := st
 	life.Agents = []string{"claude", "codex", "opencode"}
 	newKeys := append([]string{"N", "tab"}, strings.Split("feat/88-rate-limits", "")...)
@@ -156,6 +170,165 @@ func TestScreens(t *testing.T) {
 		check(t, st, "ask", size[0], size[1], strings.Split("abc", ""), pw)
 		check(t, st, "askhostkey", size[0], size[1], []string{"y", "enter"}, hostKey)
 	}
+	for _, size := range [][2]int{{44, 31}, {86, 30}, {132, 32}} {
+		golden(t, threeHosts(t, st, size[0], size[1], "fine"), "sessions3", size[0], size[1])
+	}
+	golden(t, threeHosts(t, st, 86, 30, "stale"), "stale3", 86, 30)
+	golden(t, threeHosts(t, st, 86, 30, "blocked"), "blocked3", 86, 30)
+	for _, size := range [][2]int{{44, 31}, {86, 30}} {
+		golden(t, hostsTicks(st, size[0], size[1]), "hoststicks", size[0], size[1])
+	}
+	golden(t, threeHostShips(t, st, 132, 32), "ships3", 132, 32)
+	machine := threeHosts(t, st, 104, 38, "stale")
+	machine.setTab(tabMachine)
+	golden(t, machine, "machine3", 104, 38)
+	golden(t, nowScreen(t, st, 132, 32), "nowline", 132, 32)
+}
+
+// nowScreen is the demo machine in list only after the console watched it
+// for two hours: hearth-api works on and off, spark-docs is on a limit
+// whose 5 hours reset in 35 minutes, and the rest keep their state.
+func nowScreen(t *testing.T, st proto.State, w, h int) Model {
+	t.Helper()
+	now := demoAt.Add(-(lanePast - 1) * laneCell)
+	m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return now }})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	out := demoAt.Add(35 * time.Minute)
+	limited := st
+	limited.Sessions = slices.Clone(st.Sessions)
+	limited.Limits = append(slices.Clone(st.Limits), limits.Account{Provider: "claude", Account: "demo", State: limits.Measured, At: demoAt,
+		Windows: []limits.Window{{UsedPct: 100, Minutes: 300, ResetsAt: out}}})
+	for i, s := range limited.Sessions {
+		if s.Name == "spark-docs" {
+			s.Busy, s.Status, s.Idle, s.Out = false, "idle", 4*time.Minute, out
+			limited.Sessions[i] = s
+		}
+	}
+	for step := range lanePast {
+		now = demoAt.Add(-time.Duration(lanePast-1-step) * laneCell)
+		at := limited
+		at.Sessions = slices.Clone(limited.Sessions)
+		for i, s := range at.Sessions {
+			if s.Name == "hearth-api" {
+				s.Busy = step%6 < 4
+				at.Sessions[i] = s
+			}
+		}
+		next, _ = next.Update(stateMsg(at))
+	}
+	nm := next.(Model)
+	nm.splashDone = true
+	nm.viewPrefs.ListOnlyDesk = true
+	return nm
+}
+
+// threeHostShips is Ships over three hosts: the demo machine's four, the
+// one gpu-1's train-loop drives and waits for your merge, and the one
+// ws-1's api-auth drives through CI.
+func threeHostShips(t *testing.T, st proto.State, w, h int) Model {
+	t.Helper()
+	m := threeHosts(t, st, w, h, "fine")
+	gpu, ws := peerStates(st)
+	ship := func(repo string, n int, title, pane, name, kind, note string, stage int, age time.Duration) *proto.Ships {
+		sh := proto.Ship{Repo: repo, Number: n, Title: title, Session: proto.ShipSession{Pane: pane, Name: name},
+			Stage: stage, Kind: kind, Note: note, Since: demoAt.Add(-age)}
+		for i := 0; i <= stage; i++ {
+			sh.Stages[i].At = demoAt.Add(-age - time.Duration(stage-i)*20*time.Minute)
+		}
+		return &proto.Ships{At: demoAt, InFlight: 1, Ships: []proto.Ship{sh}}
+	}
+	gpu.Ships = ship("hearth/train", 88, "Mixed precision for the train loop", "%1", "train-loop", shipWaits, "green · waits for your merge", 2, 3*time.Minute)
+	ws.Ships = ship("hearth/hearth-api", 4560, "Token refresh on the edge", "%1", "api-auth", shipRunning, "CI · 2 of 9 jobs", 1, 2*time.Minute)
+	m = upd(t, m, peerMsg{host: "gpu-1", conn: m.peers[0].conn, msg: stateMsg(gpu)})
+	m = upd(t, m, peerMsg{host: "ws-1", conn: m.peers[1].conn, msg: stateMsg(ws)})
+	m.setTab(tabShips)
+	return m
+}
+
+// threeHosts is the demo machine with two peers: gpu-1, whose train-loop
+// waits, and ws-1, whose api-auth asks on the work account while
+// docs-sweep edits. gpu-1 is fine, stale (lost 40 s ago, the next try in
+// 8 s) or blocked (not connected, so it sent nothing).
+func threeHosts(t *testing.T, st proto.State, w, h int, gpu string) Model {
+	t.Helper()
+	now := demoAt.Add(-40 * time.Second)
+	conns := map[string]*fakeConn{"gpu-1": newFake(), "ws-1": newFake()}
+	m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return now },
+		Peers: []Peer{{Host: "gpu-1", Conn: conns["gpu-1"]}, {Host: "ws-1", Conn: conns["ws-1"]}}})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	next, _ = next.Update(stateMsg(st))
+	gpuState, wsState := peerStates(st)
+	switch gpu {
+	case "blocked":
+		next, _ = next.Update(peerMsg{host: "gpu-1", conn: conns["gpu-1"], msg: lostMsg{err: fmt.Errorf("gpu-1: %w", remote.ErrNotConnected), conn: conns["gpu-1"]}})
+	default:
+		next, _ = next.Update(peerMsg{host: "gpu-1", conn: conns["gpu-1"], msg: stateMsg(gpuState)})
+	}
+	if gpu == "stale" {
+		next, _ = next.Update(peerMsg{host: "gpu-1", conn: conns["gpu-1"], msg: lostMsg{err: io.EOF, conn: conns["gpu-1"]}})
+	}
+	now = demoAt
+	next, _ = next.Update(peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(wsState)})
+	nm := next.(Model)
+	if gpu == "stale" {
+		nm.peers[0].redialing, nm.peers[0].backoff = true, 8*time.Second
+	}
+	nm.splashDone = true
+	return nm
+}
+
+// peerStates are the states of gpu-1, whose train-loop waits, and ws-1,
+// whose api-auth asks on the work account while docs-sweep edits.
+func peerStates(st proto.State) (gpu, ws proto.State) {
+	base := st.Sessions[0]
+	base.SessionID, base.Busy, base.Status, base.Idle, base.Do, base.Shells, base.Agents, base.Progress, base.AccountDir =
+		"", false, "idle", 3*time.Minute, "", nil, 0, nil, ""
+	on := func(name, pane string, f func(*sample.Session)) sample.Session {
+		s := base
+		s.Name, s.Pane, s.Target = name, pane, "w:"+name
+		if f != nil {
+			f(&s)
+		}
+		return s
+	}
+	peer := func(ss []sample.Session, q []queue.Item) proto.State {
+		snap := st.Snapshot
+		snap.Sessions, snap.Children, snap.IdlePanes = ss, nil, nil
+		return proto.State{Doc: state.Doc{Snapshot: snap, Queue: q}}
+	}
+	gpu = peer([]sample.Session{on("train-loop", "%1", func(s *sample.Session) { s.Do = "clear" })},
+		[]queue.Item{{Pane: "%1", Name: "train-loop", State: queue.StatePermission, Since: demoAt.Add(-4 * time.Minute)}})
+	ws = peer([]sample.Session{
+		on("api-auth", "%1", func(s *sample.Session) { s.AccountDir = "/home/user/.matchblox/accounts/claude/work" }),
+		on("docs-sweep", "%2", func(s *sample.Session) { s.Busy, s.Status = true, "edits" }),
+	}, []queue.Item{{Pane: "%1", Name: "api-auth", State: queue.StateQuestion, Since: demoAt.Add(-time.Minute)}})
+	return gpu, ws
+}
+
+// hostsTicks is Hosts over the console of this machine and ws-1, with
+// gpu-1 hidden: the ticks, and the live notes of the ticked hosts.
+func hostsTicks(st proto.State, w, h int) Shell {
+	conns := map[string]*fakeConn{}
+	sh := NewShell(ShellOptions{
+		Base:   Options{NoMotion: true, Now: func() time.Time { return demoAt }},
+		Hosts:  func() []string { return []string{"ws-1", "gpu-1"} },
+		Hidden: func() []string { return []string{"gpu-1"} },
+		Open: func(host string) Options {
+			conns[host] = newFake()
+			return Options{Conn: conns[host], Host: host}
+		},
+	})
+	_, ws := peerStates(st)
+	next, _ := sh.Update(sh.cur.dialPeer(0)()) // ws-1's first dial, as Init runs it
+	for _, msg := range []tea.Msg{
+		tea.WindowSizeMsg{Width: w, Height: h},
+		stateMsg(st),
+		peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(ws)},
+		layerMsg{},
+	} {
+		next, _ = next.Update(msg)
+	}
+	return next.(Shell)
 }
 
 // askScreen is Claude Code asking with its question tool, three options.
@@ -188,8 +361,8 @@ const wheelUp = "wheel-up"
 // afterKeys are messages check sends after its keys.
 type afterKeys []tea.Msg
 
-// paneOf is the pane of the session named name.
-func paneOf(st proto.State, name string) string {
+// paneNamed is the pane of the session named name.
+func paneNamed(st proto.State, name string) string {
 	for _, s := range st.Sessions {
 		if s.Name == name {
 			return s.Pane
@@ -218,6 +391,12 @@ func sheetScreen(st proto.State, day bool) proto.State {
 	return st
 }
 
+// surveyGrids are the devices' grids of the every-screen survey
+// (docs/superpowers/specs/2026-11-01-every-screen-chat-design.md): phones
+// upright and on their side, keyboard up and down, an iPad mini, a folded
+// and an open Duo, half a Mac screen and desks.
+var surveyGrids = [][2]int{{51, 45}, {51, 31}, {96, 20}, {96, 8}, {106, 10}, {95, 65}, {145, 40}, {193, 57}, {96, 57}, {104, 38}, {44, 31}}
+
 // check draws the console with msgs, then keys, against its golden frame.
 func check(t *testing.T, st proto.State, name string, w, h int, keys []string, msgs ...tea.Msg) {
 	t.Helper()
@@ -227,7 +406,7 @@ func check(t *testing.T, st proto.State, name string, w, h int, keys []string, m
 	next, _ = next.Update(stateMsg(st))
 	nm := next.(Model)
 	nm.splashDone = true
-	if strings.HasPrefix(name, "chat") {
+	if strings.HasPrefix(name, "chat") || strings.HasPrefix(name, "survey") { // flint-auth, which asks
 		for i, s := range nm.snap.Sessions {
 			if s.Name == "flint-auth" {
 				nm.chose, nm.selPID = true, nm.snap.Sessions[i].PID
@@ -254,7 +433,14 @@ func check(t *testing.T, st proto.State, name string, w, h int, keys []string, m
 	for _, msg := range later {
 		next, _ = next.Update(msg)
 	}
-	got := ansi.Strip(next.(Model).render())
+	golden(t, next.(Model), name, w, h)
+}
+
+// golden checks the frame of m, a console or Hosts, against
+// testdata/screens/name-wxh.txt; -update writes it.
+func golden(t *testing.T, m interface{ render() string }, name string, w, h int) {
+	t.Helper()
+	got := ansi.Strip(m.render())
 	lines := strings.Split(got, "\n")
 	for i, l := range lines {
 		lines[i] = strings.TrimRight(l, " ")

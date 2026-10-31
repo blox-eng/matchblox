@@ -140,7 +140,10 @@ func TestViewFitsWidth(t *testing.T) {
 		}
 		out = ansi.Strip(out)
 		s, _ := m.selectedSession()
-		wants := []string{"app-feature", "app-review", "fresh", "1 without an agent: notes:1.1 zsh", m.chatTitle(s)} // the chat of the selected one
+		wants := []string{"app-feature", "app-review", "fresh", "1 without an agent: notes:1.1 zsh"}
+		if w >= 83 {
+			wants = append(wants, m.chatTitle(s)) // the chat of the selected one, 44 columns and more
+		}
 		if w >= 200 {
 			wants = append(wants, "! compact", "▲ clear") // the desk's plan column, from 78 columns of list
 		}

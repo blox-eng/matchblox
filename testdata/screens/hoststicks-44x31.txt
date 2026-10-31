@@ -1,0 +1,31 @@
+ ▰ matchblox · hosts
+────────────────────────────────────────────
+ HOSTS · 3 · 2 SHOWN
+ ▌ ● this machine
+   ● ws-1
+   ○ gpu-1
+     + add a host
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────
+ show/hide space  open ⏎  connect c  quit q
