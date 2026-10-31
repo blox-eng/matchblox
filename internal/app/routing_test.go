@@ -683,7 +683,7 @@ var keyLines = map[string]string{
 	"stoker command/100":                 "y give the go  ⏎ command  1 sessions  p ships  n stop night  / find  q quit",
 	"stoker quit agent/100":              "Quit the stoker agent: tmux -L matchblox kill-session -t =stoker · y run ─ any other key cancels || ╰─ y run ─ any other key cancels ───────────────╯",
 	"search/50":                          "/ app▏  ⏎ keep  esc clear",
-	"chat/50":                            "keys go to app-review · ctrl+] back · ctrl+o int…",
+	"chat/50":                            "ctrl+] back · ctrl+o into tmux",
 	"search kept/50":                     "/ app · esc clears  ⏎ chat  a chat  x kill  r re…",
 	"form new/50":                        "⏎ chat  a chat  x kill  r rename  N new || ╰─ ⏎ pick · ↑↓ move · esc keep the path ─────────╯",
 	"form rename/50":                     "⏎ chat  a chat  x kill  r rename  N new || ╰─ ⏎ rename ─ esc ───────────────────────────────╯",

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -101,5 +102,31 @@ func TestTheListOutranksTheMachine(t *testing.T) {
 	out = strings.Join(frameOf(short), "\n")
 	if !strings.Contains(out, "USAGE") || !strings.Contains(out, "OpenAI Plus") || strings.Contains(out, "MACHINE") || !strings.Contains(out, " more") {
 		t.Fatalf("86x30: want usage whole over the cut list:\n%s", out)
+	}
+}
+
+// TestTheChatKeyLineKeepsTheWayBack: the chat's key line drops a hint
+// whole when it does not fit, by worth: the agent's name first, then the
+// way into tmux; ctrl+] back stays.
+func TestTheChatKeyLineKeepsTheWayBack(t *testing.T) {
+	for w := 40; w <= 70; w++ {
+		m := flintAt(t, w, 31, "enter")
+		line, spans := m.chatKeyLine(w)
+		got := strings.TrimSpace(ansi.Strip(line))
+		if strings.Contains(got, "…") || !strings.Contains(got, "ctrl+] back") {
+			t.Fatalf("%d columns: the key line is %q", w, got)
+		}
+		parts := strings.Split(got, " · ")
+		for _, p := range parts {
+			if !slices.Contains([]string{"keys go to flint-auth", "ctrl+] back", "ctrl+o into tmux"}, p) {
+				t.Fatalf("%d columns: %q is cut in %q", w, p, got)
+			}
+		}
+		if strings.Contains(got, "keys go to") && !strings.Contains(got, "ctrl+o") {
+			t.Fatalf("%d columns: the name stayed over the way into tmux: %q", w, got)
+		}
+		if len(spans) != strings.Count(got, "ctrl+") {
+			t.Fatalf("%d columns: %d tap targets for %q", w, len(spans), got)
+		}
 	}
 }

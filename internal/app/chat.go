@@ -772,26 +772,54 @@ func (m Model) keepChat(was Model) Model {
 }
 
 // chatKeyLine is the key line while the chat has the keys: whose agent
-// they go to, and the way back and the way into tmux; or, up the history,
-// that a key goes back to live.
+// they go to, the way back and the way into tmux; or, up the history,
+// that a key goes back to live. A hint that does not fit goes whole, by
+// worth: the agent's name (the title names it), then the way into tmux;
+// the way back stays.
 func (m Model) chatKeyLine(w int) (string, []span) {
 	st := m.st
 	s, _ := m.selectedSession()
 	if m.notLive() { // ctrl+] and ctrl+o too only go back to live
 		return fit(" "+st.text.Render("a key goes back to live"), w), nil
 	}
-	lead := "keys go to " + s.Name + " · "
-	line, x := " "+st.text.Render(lead), 1+lipgloss.Width(lead)
-	var spans []span
-	for i, b := range []bkey.Binding{m.keys.chat.Back, m.keys.main.Jump} {
-		if i > 0 {
-			line += st.muted.Render(" · ")
-			x += lipgloss.Width(" · ")
+	type part struct {
+		text string
+		key  string // the key a tap on it presses; "" none
+	}
+	hint := func(b bkey.Binding) part {
+		return part{st.accent.Render(b.Help().Key) + st.muted.Render(" "+b.Help().Desc), b.Keys()[0]}
+	}
+	name := part{st.text.Render("keys go to " + s.Name), ""}
+	back, into := hint(m.keys.chat.Back), hint(m.keys.main.Jump)
+	sep := st.muted.Render(" · ")
+	width := func(ps []part) int {
+		n := 1
+		for i, p := range ps {
+			if i > 0 {
+				n += lipgloss.Width(sep)
+			}
+			n += lipgloss.Width(p.text)
 		}
-		part := st.accent.Render(b.Help().Key) + st.muted.Render(" "+b.Help().Desc)
-		spans = append(spans, span{x, x + lipgloss.Width(part), b.Keys()[0]})
-		line += part
-		x += lipgloss.Width(part)
+		return n
+	}
+	parts := []part{name, back, into}
+	for _, try := range [][]part{{name, back, into}, {back, into}, {back}} {
+		if parts = try; width(try) <= w {
+			break
+		}
+	}
+	line, x := " ", 1
+	var spans []span
+	for i, p := range parts {
+		if i > 0 {
+			line += sep
+			x += lipgloss.Width(sep)
+		}
+		if p.key != "" {
+			spans = append(spans, span{x, x + lipgloss.Width(p.text), p.key})
+		}
+		line += p.text
+		x += lipgloss.Width(p.text)
 	}
 	return fit(line, w), spans
 }
