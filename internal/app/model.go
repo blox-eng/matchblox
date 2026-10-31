@@ -280,6 +280,8 @@ type Model struct {
 	st         styles
 	width      int
 	height     int
+	tallW      int // the width the tallest height was seen at
+	tallH      int // the tallest height seen at tallW: the screen's shape
 	snap       sample.Snapshot
 	push       string // the push sender's line for the Machine tab, or ""
 	have       bool
@@ -607,6 +609,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		if m.tallW != msg.Width {
+			m.tallW, m.tallH = msg.Width, 0
+		}
+		m.tallH = max(m.tallH, msg.Height)
 	case fromConn:
 		if msg.conn != m.conn {
 			return m, nil

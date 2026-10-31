@@ -552,3 +552,20 @@ func TestRowColumnsLineUp(t *testing.T) {
 		}
 	}
 }
+
+// TestAKeyboardKeepsTheShape: a 60-column screen at 34 rows is upright; a
+// keyboard that takes it to 21 rows keeps it one column, upright. A new
+// width decides afresh (design/0006 §4).
+func TestAKeyboardKeepsTheShape(t *testing.T) {
+	m, _ := loadedWith(t, 60, fixtureState())
+	next, _ := fullView(m).Update(tea.WindowSizeMsg{Width: 60, Height: 34})
+	next, _ = next.Update(tea.WindowSizeMsg{Width: 60, Height: 21})
+	nm := next.(Model)
+	if _, right := nm.panes(60); nm.layoutAt(60) != Narrow || !nm.upright() || right != 0 {
+		t.Fatalf("60x21 after 60x34: layout %v, upright %v, right side %d:\n%s", nm.layoutAt(60), nm.upright(), right, screen(nm))
+	}
+	next, _ = next.Update(tea.WindowSizeMsg{Width: 100, Height: 21})
+	if l := next.(Model).layoutAt(100); l != Wide {
+		t.Fatalf("100x21: layout %v, want Wide", l)
+	}
+}

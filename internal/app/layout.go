@@ -59,12 +59,22 @@ func (m Model) layoutAt(w int) Layout {
 	if m.width == 0 {
 		return byWidth(w)
 	}
-	return min(layout(m.width, m.height), byWidth(w))
+	return min(layout(m.width, m.shapeRows()), byWidth(w))
+}
+
+// shapeRows is the height the screen's shape goes by: the tallest seen at
+// its width, so a keyboard that shrinks the screen never changes the
+// layout; a new width decides afresh (design/0006 §4).
+func (m Model) shapeRows() int {
+	if m.tallW == m.width {
+		return max(m.tallH, m.height)
+	}
+	return m.height
 }
 
 // upright is a portrait screen: its dock shows one panel at a time and its
 // boxes sit at the bottom, as on a phone.
-func (m Model) upright() bool { return portrait(m.width, m.height) }
+func (m Model) upright() bool { return portrait(m.width, m.shapeRows()) }
 
 // phoneDock is a dock of one panel, u cycling it: a one-column phone.
 func (m Model) phoneDock(w int) bool { return m.layoutAt(w) == Narrow }
