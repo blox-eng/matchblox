@@ -702,11 +702,11 @@ func TestWideStacksStatsLeft(t *testing.T) {
 func TestMediumSplitsListAndChat(t *testing.T) {
 	m := demoSized(t, 86, 30)
 	sc := m.draw(86)
-	if sc.listW != (86-1)/2 {
+	if sc.listW != 38 {
 		t.Fatalf("the list is %d of 86 columns", sc.listW)
 	}
-	if sc.dockAt < 0 {
-		t.Fatal("no dock on an opened phone")
+	if sc.dockAt >= 0 {
+		t.Fatal("a dock under the chat: usage goes under the list")
 	}
 	_, right := sides(sc, 86)
 	if !slices.ContainsFunc(right, func(l string) bool { return strings.Contains(l, "Esc to") }) {

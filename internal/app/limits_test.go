@@ -62,11 +62,11 @@ func TestTheHeaderHasNoLimits(t *testing.T) {
 
 // TestTheDockSaysUsageAndTheMachine: each account's windows as /usage
 // says them, with the forecast on its block, and the machine; on a desk
-// stacked under the list, on an opened phone side by side in the dock.
+// stacked under the list on Sessions, side by side in the dock of Ships.
 func TestTheDockSaysUsageAndTheMachine(t *testing.T) {
 	drawer, _ := loadedWith(t, 86, limitsState())
-	if !strings.Contains(strings.Split(screen(drawer), "\n")[lineOf(t, drawer, "USAGE")], "MACHINE") {
-		t.Fatalf("usage and the machine are not side by side:\n%s", screen(drawer))
+	if drawer.setTab(tabShips); !strings.Contains(strings.Split(screen(drawer), "\n")[lineOf(t, drawer, "USAGE")], "MACHINE") {
+		t.Fatalf("Ships: usage and the machine are not side by side:\n%s", screen(drawer))
 	}
 	m, _ := loadedWith(t, 200, limitsState())
 	out := screen(m)

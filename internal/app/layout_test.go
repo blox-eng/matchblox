@@ -60,15 +60,15 @@ func TestAnUprightPhoneGetsTheDrawer(t *testing.T) {
 		next, _ := fullView(m).Update(tea.WindowSizeMsg{Width: 107, Height: h})
 		m = next.(Model)
 		out := screen(m)
-		if at := strings.Split(out, "\n")[lineOf(t, m, "USAGE")]; !strings.Contains(at, "MACHINE") {
-			t.Fatalf("107x%d: usage and the machine are not side by side:\n%s", h, out)
+		if lineOf(t, m, "USAGE") >= lineOf(t, m, "MACHINE") || m.draw(107).dockAt >= 0 {
+			t.Fatalf("107x%d: usage and the machine are not under the list:\n%s", h, out)
 		}
 		fitsWidth(t, m, 107)
-		if list, detail := m.panes(107); list != 53 || detail != 53 {
-			t.Fatalf("107x%d: panes = %d, %d, want 53, 53", h, list, detail)
+		if list, detail := m.panes(107); list != 42 || detail != 64 {
+			t.Fatalf("107x%d: panes = %d, %d, want 42, 64", h, list, detail)
 		}
 		for _, s := range m.all.sessions {
-			if rows := m.sessionRow(s, true, 53); len(rows) != 1 {
+			if rows := m.sessionRow(s, true, 42); len(rows) != 1 {
 				t.Fatalf("107x%d: the selected row opens in place: %q", h, rows)
 			}
 		}

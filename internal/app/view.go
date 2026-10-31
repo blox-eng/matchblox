@@ -216,7 +216,7 @@ func (m Model) drawScreen(w int) drawn {
 	}
 	b := m.body(listW)
 	chat, chatting := m.chatShown(detailW)
-	stacked := m.tab == tabSessions && detailW > 0 && m.layoutAt(w) == Wide // usage and the machine under the list
+	stacked := m.tab == tabSessions && detailW > 0 // usage, the machine and the stoker under the list
 	paneFull := true
 	paneLines := func(rows int) []string {
 		switch {
@@ -338,21 +338,25 @@ func (m Model) markActKeys(sc *drawn, b, vis body, detail []string, room, detail
 	}
 }
 
-// panes splits Sessions into the list and the right side: at the middle
-// on an opened phone; on a desk the list's ≈78 columns, at most 40% of
-// the screen beside the chat. A phone, list only and the other tabs have
-// one column, and so has a door's diff while it waits for its y: it shows
-// whole.
+// panes splits Sessions into the list and the chat, the list at 40% of
+// the screen (sessionsSplit), and Ships at the middle on an opened phone
+// and at the list's ≈78 columns on a desk. A phone, list only and the
+// other tabs have one column, and so has a door's diff while it waits for
+// its y: it shows whole.
 func (m Model) panes(w int) (list, detail int) {
 	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || m.layoutAt(w) == Narrow || m.listOnly() || preview {
 		return w, 0
 	}
 	at := splitAt(w, m.layoutAt(w))
-	if m.tab == tabSessions && m.layoutAt(w) == Wide {
-		at = min(at, w*2/5)
+	if m.tab == tabSessions {
+		at = sessionsSplit(w)
 	}
 	return at, w - at - 1
 }
+
+// sessionsSplit is the list's width where Sessions splits: 40% of the
+// screen, at least 38 columns and at most 78; the chat takes the rest.
+func sessionsSplit(w int) int { return min(max(w*2/5, 38), 78) }
 
 // splitAt is the column the list and the detail split at, and the dock's
 // usage and machine under them.

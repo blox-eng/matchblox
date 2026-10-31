@@ -321,7 +321,7 @@ func TestThreeHostFrames(t *testing.T) {
 		w, h int
 		want []string
 	}{
-		{"fine", 86, 30, []string{"matchblox · 3 hosts", "train-loop gpu-1", "api-auth ws-1", "docs-sweep ws-1"}},
+		{"fine", 86, 30, []string{"matchblox · 3 hosts", "train-lo… gpu…", "api-auth ws-1", "docs-swe… ws-1"}},
 		{"fine", 132, 32, []string{"api-auth ws-1 · work"}},
 		{"stale", 86, 30, []string{"· gpu-1 stale", "stale", "40s", "gpu-1: connection lost. Tries again in 8s."}},
 		{"stale", 132, 32, []string{"as of 22:49"}},

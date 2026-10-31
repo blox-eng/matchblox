@@ -47,13 +47,14 @@ func opensInPlace(m Model, sc drawn) bool {
 }
 
 // TestVFoldsThePaneAndTheDock: on a desk, v gives the list the whole
-// screen, folds the dock and opens the selected row in place; the key
-// line says so, and a tap on its word flips it back.
+// screen, folds the chat and the stats under the list, and opens the
+// selected row in place; the key line says so, and a tap on its word
+// flips it back.
 func TestVFoldsThePaneAndTheDock(t *testing.T) {
 	m := demoIn(t, "", 92, 40)
 	sc := m.draw(92)
-	if sc.listW >= 92 || sc.dockAt < 0 || opensInPlace(m, sc) {
-		t.Fatalf("the full view: list %d, dock at %d, opened %v", sc.listW, sc.dockAt, opensInPlace(m, sc))
+	if sc.listW >= 92 || !strings.Contains(screen(m), "USAGE") || opensInPlace(m, sc) {
+		t.Fatalf("the full view: list %d, opened %v:\n%s", sc.listW, opensInPlace(m, sc), screen(m))
 	}
 	if k := keyText(sc); strings.HasSuffix(strings.TrimSpace(k), "list only") {
 		t.Fatalf("the full view's key line: %q", k)
