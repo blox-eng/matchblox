@@ -350,6 +350,9 @@ func (m Model) panes(w int) (list, detail int) {
 	at := splitAt(w, m.layoutAt(w))
 	if m.tab == tabSessions {
 		at = sessionsSplit(w)
+		if !m.chatRoom(w - at - 1) {
+			return w, 0 // no chat without its question: it opens full-screen
+		}
 	}
 	return at, w - at - 1
 }

@@ -182,6 +182,55 @@ func (m Model) chatShown(rightW int) (sample.Session, bool) {
 	return s, ok && s.Pane != "" && m.tab == tabSessions && rightW > 0
 }
 
+// chatLeast is the narrowest chat beside the list: the question card reads
+// at 44 columns, as on a folded phone.
+const chatLeast = 44
+
+// cardLeast is the fewest lines a question card takes: its frame, a
+// question of one line, two options and the typing row. Sessions keeps
+// that room for the chat of a session that asks nothing yet, so the split
+// does not come and go with the selection.
+const cardLeast = 6
+
+// chatRoom tells if a chat right columns wide fits beside the list: it is
+// at least chatLeast wide, and the body has room for its title, its
+// account line and the whole question card.
+func (m Model) chatRoom(right int) bool {
+	if right < chatLeast {
+		return false
+	}
+	if m.height == 0 {
+		return true // no height yet
+	}
+	card := len(m.cardLines(right - 1))
+	if card == 0 {
+		card = cardLeast
+	}
+	return m.height-5 >= 2+card
+}
+
+// chatFits tells if the chat full-screen, w columns wide, shows its whole
+// question card under its title.
+func (m Model) chatFits(w int) bool {
+	return m.height == 0 || len(m.cardLines(w)) <= m.height-3
+}
+
+// chatSeen tells if the selected session's chat, with the keys, shows its
+// whole question: beside the list, or full-screen when it fits.
+func (m Model) chatSeen() bool {
+	w := max(m.width, minWidth)
+	if _, right := m.panes(w); right > 0 {
+		return true
+	}
+	return m.chatFits(w)
+}
+
+// tooShort is what the key line says when the screen has no room for the
+// chat's question.
+func (m Model) tooShort(s sample.Session) string {
+	return "too short to show " + s.Name + "'s question · " + m.keys.main.Jump.Help().Key + " goes into its pane"
+}
+
 // chatTitle names the chat's session and its state.
 func (m Model) chatTitle(s sample.Session) string { return s.Name + " · " + m.wordOf(s) }
 
@@ -426,6 +475,10 @@ func (m Model) chatOn(pane string) Model {
 		m.setTab(tabSessions)
 	}
 	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
+	if !m.chatSeen() {
+		m.chatKeys, m.flash = false, m.tooShort(s)
+		return m
+	}
 	m.chatKeys, m.flash = true, ""
 	if !shown || s.Ask != nil && m.cardSeen.askID != s.Ask.ID { // the chat, or its card, was not on screen before
 		m.cardSeen = cardSeen{pane: pane, at: m.now()}
@@ -688,6 +741,8 @@ func (m Model) keepChat(was Model) Model {
 			m.chatKeys, m.flash = false, "That session ended." // a phone shows the list again: the key line says why
 		case !ok || s.Pane == "" || was.chatKeys && s.Pane != before.Pane:
 			m.chatKeys = false
+		case !m.chatSeen():
+			m.chatKeys, m.flash = false, m.tooShort(s) // the keys never go to a screen the person cannot see
 		}
 	}
 	if !m.chatKeys {

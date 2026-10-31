@@ -29,6 +29,38 @@ func flintAt(t *testing.T, w, h int, keys ...string) Model {
 	return pressKeys(t, next.(Model), keys...)
 }
 
+// chatDrawn tells if the frame shows flint-auth's chat, and if so whether
+// its question card is whole: its title, every option and its foot.
+func chatDrawn(m Model) (drawn, whole bool) {
+	sc := m.draw(m.width)
+	out := ansi.Strip(strings.Join(sc.lines, "\n"))
+	_, right := m.panes(m.width)
+	drawn = sc.chatFull || right > 0 && strings.Contains(out, "flint-auth · ")
+	whole = strings.Contains(out, "flint-auth asks") && strings.Contains(out, "Should a refresh also rotate") &&
+		strings.Contains(out, "Type an answer") && strings.Contains(out, "╰─ ⏎")
+	return drawn, whole
+}
+
+// TestNoChatWithoutItsQuestion: a screen too short or too narrow for the
+// chat's question draws Sessions in one column, and the chat, when it
+// opens, is whole or not drawn.
+func TestNoChatWithoutItsQuestion(t *testing.T) {
+	for _, size := range [][2]int{{96, 8}, {106, 10}, {60, 21}, {96, 20}} {
+		w, h := size[0], size[1]
+		for _, keys := range [][]string{nil, {"enter"}} {
+			m := flintAt(t, w, h, keys...)
+			if drawn, whole := chatDrawn(m); drawn && !whole {
+				t.Errorf("%dx%d after %v: the chat shows without its whole question:\n%s", w, h, keys, screen(m))
+			}
+		}
+	}
+	for _, size := range [][2]int{{96, 8}, {106, 10}, {60, 21}} {
+		if _, right := flintAt(t, size[0], size[1]).panes(size[0]); right != 0 {
+			t.Errorf("%dx%d: Sessions splits with no room for the question", size[0], size[1])
+		}
+	}
+}
+
 // TestSessionsSplitsFortySixty: where Sessions splits, the list takes 40%
 // of the width (38 to 78 columns) and the chat the rest, full height, with
 // usage and the machine under the list and no dock at the bottom, upright
