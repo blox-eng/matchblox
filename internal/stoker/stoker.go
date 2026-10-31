@@ -288,12 +288,6 @@ func CompactAction(pane string) advice.Action {
 	return atRest(pane, RuleCompact, "/compact", " "+Instruction)
 }
 
-// ClearAction types /clear and its Enter into a pane, under the guards of
-// CompactAction.
-func ClearAction(pane string) advice.Action {
-	return atRest(pane, "clear", "/clear", "")
-}
-
 // CommandAction types a command key's text and its Enter into a pane,
 // under the guards of CompactAction. Where the agent's prompt cannot be
 // read (read false), no draft shows there, and the Enter does not wait

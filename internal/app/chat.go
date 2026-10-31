@@ -374,7 +374,7 @@ const homeKey = "\x1b_matchblox\x1b\\"
 // was pressed for, and when the screen it answers was taken. A card's
 // answer waits among the keys as pick, the said.Answer for the session
 // named name. A command key that runs one of matchblox's own acts on the
-// pane waits as act ("compact:", "clear:", or "cmd:" with the command's id
+// pane waits as act ("compact:", or "cmd:" with the command's id
 // as text).
 type chatKey struct {
 	pane string
@@ -589,8 +589,8 @@ func (m *Model) agentGone() tea.Cmd {
 }
 
 // commandKey runs the phone's command key apc in the chat, behind the
-// chat's guards, as a key pressed there. Compact and clear run matchblox's
-// own acts on the pane; any other command runs the command act, which
+// chat's guards, as a key pressed there. Compact runs matchblox's own
+// act on the pane; any other command runs the command act, which
 // types its text and Enter at rest, with no question and no draft. Each
 // names the agent the chat showed. A command the chat's agent does not
 // have sends nothing; an id the table does not know says the host is older.
@@ -623,9 +623,15 @@ func (m Model) commandKey(apc string) (tea.Model, tea.Cmd) {
 		m.flash = keycmd.Refusal(c, s.Name, s.Agent)
 		return m, touch
 	}
-	act, text := c.Run+":", ""
-	if c.Run == "type" {
+	var act, text string
+	switch c.Run {
+	case "compact":
+		act = "compact:"
+	case "type":
 		act, text = proto.CommandPrefix, c.ID
+	default:
+		m.flash = "/" + c.Label + " runs no way this console knows"
+		return m, touch
 	}
 	name, keys := m.pressed(text)
 	for i := range keys {

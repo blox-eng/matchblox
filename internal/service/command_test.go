@@ -139,17 +139,45 @@ func TestCommandOnlyFromAConsoleAndOnlyATypedOne(t *testing.T) {
 	}
 }
 
-// TestCompactAndClearFromTheChatCheckTheAgent: the chat names the agent
-// it showed; a new one in the pane gets no compact and no clear.
-func TestCompactAndClearFromTheChatCheckTheAgent(t *testing.T) {
-	for _, act := range []string{"compact:", "clear:"} {
+// TestCompactFromTheChatChecksTheAgent: the chat names the agent it
+// showed; a new one in the pane gets no compact, and a console's compact
+// with no agent named is refused.
+func TestCompactFromTheChatChecksTheAgent(t *testing.T) {
+	for _, pid := range []int{41, 0} {
 		s, ran := commandTest(t, "claude", idleScreen)
-		res := s.act(t.Context(), proto.Act{Console: true, RecID: act + "%1", PID: 41, Confirm: "y"})
+		res := s.act(t.Context(), proto.Act{Console: true, RecID: "compact:%1", PID: pid, Confirm: "y"})
 		if res.Err != "another agent runs in %1 now" || len(*ran) != 0 {
-			t.Fatalf("%s: res %+v ran %q", act, res, *ran)
+			t.Fatalf("pid %d: res %+v ran %q", pid, res, *ran)
 		}
-		if res := s.act(t.Context(), proto.Act{Console: true, RecID: act + "%1", PID: 42, Confirm: "y"}); res.Err != "" || len(*ran) != 2 {
-			t.Fatalf("%s: res %+v ran %q", act, res, *ran)
+	}
+	s, ran := commandTest(t, "claude", idleScreen)
+	if res := s.act(t.Context(), proto.Act{Console: true, RecID: "compact:%1", PID: 42, Confirm: "y"}); res.Err != "" || len(*ran) != 2 {
+		t.Fatalf("res %+v ran %q", res, *ran)
+	}
+}
+
+// TestClearIsATypedCommand: /clear goes only through the cmd: act, under
+// its guards. There is no clear: act.
+func TestClearIsATypedCommand(t *testing.T) {
+	s, ran := commandTest(t, "claude", idleScreen)
+	if res := s.act(t.Context(), command("clear")); res.Err != "" || !reflect.DeepEqual(*ran, panes.Send("%1", "/clear")) {
+		t.Fatalf("res %+v ran %q", res, *ran)
+	}
+	s, ran = commandTest(t, "claude", strings.Replace(idleScreen, "> \n", "> half a prompt\n", 1))
+	if res := s.act(t.Context(), command("clear")); res.Err != "/clear not sent: the pane %1 has text you typed" || len(*ran) != 0 {
+		t.Fatalf("draft: res %+v ran %q", res, *ran)
+	}
+	s, ran = commandTest(t, "codex", idleScreen)
+	if res := s.act(t.Context(), command("clear")); res.Err != "/clear is Claude Code's: work runs Codex" || len(*ran) != 0 {
+		t.Fatalf("codex: res %+v ran %q", res, *ran)
+	}
+	s, ran = commandTest(t, "claude", idleScreen)
+	for _, a := range []proto.Act{
+		{Console: true, RecID: "clear:%1", PID: 42, Confirm: "y"},
+		{RecID: "clear:%1", Confirm: "y", From: "%9@mbtest"},
+	} {
+		if res := s.act(t.Context(), a); res.Err == "" || len(*ran) != 0 {
+			t.Fatalf("%+v: res %+v ran %q", a, res, *ran)
 		}
 	}
 }

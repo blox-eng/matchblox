@@ -15,7 +15,7 @@ import (
 )
 
 // paneActs are the acts that name a pane after the colon.
-var paneActs = []string{"message:", "pick:", "answer:", "compact:", "clear:", "hold:", "release:", "park:", "kill:", "rename:", "switch:", proto.KeysPrefix, proto.CommandPrefix}
+var paneActs = []string{"message:", "pick:", "answer:", "compact:", "hold:", "release:", "park:", "kill:", "rename:", "switch:", proto.KeysPrefix, proto.CommandPrefix}
 
 // typedPane is the pane a message, an answer or a pick types into.
 func typedPane(recID string) string {
@@ -134,9 +134,16 @@ func (s *Service) recordOrder(a proto.Act, res proto.Result) {
 // compact types /compact into a session under the guards of the stoker's
 // own compacts: Claude Code, at rest, not waiting for you or held, not
 // compacted in the last 30 minutes, and the pane read again right before
-// each key. A refusal says which.
+// each key. A refusal says which. A console names the agent it showed
+// (PID); the CLI may name none.
 func (s *Service) compact(ctx context.Context, pane string, a proto.Act) proto.Result {
-	x, err := s.claudeAtRest(pane, "compact", a.PID)
+	if x, ok := s.sessionAt(pane); ok && x.Agent != "claude" {
+		return proto.Result{Err: x.Name + " is not a Claude Code session: /compact is typed only there"}
+	}
+	if a.Console && a.PID <= 0 {
+		return proto.Result{Err: "another agent runs in " + pane + " now"}
+	}
+	x, err := s.restsFor(pane, "compact", a.PID)
 	if err != nil {
 		return proto.Result{Err: err.Error()}
 	}
@@ -171,26 +178,6 @@ func (s *Service) compact(ctx context.Context, pane string, a proto.Act) proto.R
 	return res
 }
 
-// clear types /clear into a session under the guards of compact. A clear is
-// not a compact: the stoker's compact plan does not count it.
-func (s *Service) clear(ctx context.Context, pane string, a proto.Act) proto.Result {
-	if _, err := s.claudeAtRest(pane, "clear", a.PID); err != nil {
-		return proto.Result{Err: err.Error()}
-	}
-	release := s.holdPane(pane)
-	defer release()
-	return s.Actions.Do(ctx, stoker.ClearAction(pane), a.Confirm)
-}
-
-// claudeAtRest is the session in pane when /<cmd> may go to it: Claude
-// Code, and restsFor.
-func (s *Service) claudeAtRest(pane, cmd string, pid int) (sample.Session, error) {
-	if x, ok := s.sessionAt(pane); ok && x.Agent != "claude" {
-		return x, fmt.Errorf("%s is not a Claude Code session: /%s is typed only there", x.Name, cmd)
-	}
-	return s.restsFor(pane, cmd, pid)
-}
-
 // restsFor is the session in pane when /<cmd> may go to it: agent pid (any
 // agent for 0), one the builder may message, not waiting for them, and at
 // rest.
@@ -215,7 +202,7 @@ func (s *Service) restsFor(pane, cmd string, pid int) (sample.Session, error) {
 // from a console's chat: only to the agent the chat showed (PID), only a
 // command of that agent, and under the stoker's guards: at rest, no
 // question, no permission prompt and no draft, and the text on the prompt
-// before its Enter. Compact and clear have their own acts.
+// before its Enter. Compact has its own act.
 func (s *Service) command(ctx context.Context, pane string, a proto.Act) proto.Result {
 	if !s.aConsole(a.Console, a) {
 		return proto.Result{Err: keysOnlyFromConsole}

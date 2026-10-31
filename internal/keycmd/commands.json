@@ -12,7 +12,8 @@
     "label": "clear",
     "agent": "claude",
     "mark": "claude-color",
-    "run": "clear",
+    "run": "type",
+    "text": "/clear",
     "slot": 902
   },
   {

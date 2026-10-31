@@ -25,7 +25,7 @@ func TestTableReads(t *testing.T) {
 			t.Errorf("%s: mark %q: %v", c.ID, c.Mark, err)
 		}
 		switch c.Run {
-		case "compact", "clear":
+		case "compact":
 		case "type":
 			if c.Text == "" {
 				t.Errorf("%s: run type needs a text", c.ID)

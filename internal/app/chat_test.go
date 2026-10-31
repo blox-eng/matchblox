@@ -1620,10 +1620,10 @@ func TestCompactKeyRunsTheCompactAct(t *testing.T) {
 	}
 }
 
-func TestClearKeyRunsTheClearAct(t *testing.T) {
+func TestClearKeyRunsTheCommandAct(t *testing.T) {
 	m, f := commandChat(t, "claude")
 	command(t, m, "clear")
-	if got := f.acts(); len(got) != 1 || got[0].RecID != "clear:%1" || got[0].Confirm != "y" || got[0].PID != 1 {
+	if got := f.acts(); len(got) != 1 || got[0].RecID != proto.CommandPrefix+"%1" || got[0].Text != "clear" || got[0].Confirm != "y" || got[0].PID != 1 {
 		t.Fatalf("acts %+v", got)
 	}
 }

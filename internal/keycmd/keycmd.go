@@ -16,7 +16,7 @@ type Command struct {
 	Label string `json:"label"`
 	Agent string `json:"agent"`
 	Mark  string `json:"mark"`
-	Run   string `json:"run"` // "compact", "clear" or "type"
+	Run   string `json:"run"` // "compact" or "type"
 	Text  string `json:"text"`
 	Slot  int    `json:"slot"`
 }

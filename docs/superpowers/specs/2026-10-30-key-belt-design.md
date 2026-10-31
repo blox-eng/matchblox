@@ -190,6 +190,9 @@ private signal the home key uses (`ESC _ matchblox … ESC \`):
   (#261: right agent, seen screen, console only):
   - `compact` and `clear` run matchblox's own guarded actions (`compact:<pane>`
     and its clear), which wait until the agent rests;
+    Changed (2026-10-31): only `compact` runs its own act. `clear` types
+    `/clear` through the `cmd:<pane>` act, with the guards of every typed
+    command. The service has no `clear:` act.
   - any other command types its text and Enter through the `keys:` act;
     Changed (2026-10-30): any other command goes through the `cmd:<pane>`
     act, not the `keys:` act. The act holds the command id and the PID of
@@ -199,8 +202,7 @@ private signal the home key uses (`ESC _ matchblox … ESC \`):
     question, no permission prompt and no draft on the prompt. Before the
     Enter, the prompt must show the command. Where matchblox cannot read the
     prompt (OpenCode, Cursor), it does not check the draft. The key line
-    shows each refusal. `compact:` and `clear:` from the chat also hold the
-    PID;
+    shows each refusal. `compact:` from the chat also holds the PID;
   - a command the session's agent does not have sends nothing, and the key line
     says `/<name> is <Agent>'s: <session> runs <other agent>`.
 - The per-agent command list lives in the console (the host), one table, with
