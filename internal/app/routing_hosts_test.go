@@ -2,6 +2,7 @@ package app
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -223,5 +224,31 @@ func TestSwitchJumpsOnItsHost(t *testing.T) {
 	next, jump := mm.switched(proto.Result{ActID: "a9", Ran: [][]string{{"tmux"}}})
 	if jump == nil || next.flash != "switched peer-12 to codex" {
 		t.Fatalf("jump %v, flash %q; want the switch, and the jump on ws-1", jump != nil, next.flash)
+	}
+}
+
+// TestARemoteRowIsListOnly: the chat watches and sends keys only for the
+// home host's sessions. With the peer's %12 selected, nothing watches
+// home's %12, its screen never shows, a and typing send no keys, and the
+// right side names the row's host and the way into its pane.
+func TestARemoteRowIsListOnly(t *testing.T) {
+	m, home, ws := samePane(t, nil)
+	if w := m.(Model).watching; w != "" {
+		t.Fatalf("the peer's row watches %q on this machine", w)
+	}
+	m, _ = m.Update(screenMsg{Pane: "%12", At: time.Now(), Text: "HOME TWELVE"})
+	m = pressAll(m, "a")
+	if nm := m.(Model); nm.chatKeys || !strings.Contains(nm.flash, "runs on ws-1") {
+		t.Fatalf("a on a remote row: chatKeys %v, flash %q", nm.chatKeys, nm.flash)
+	}
+	m = pressAll(m, "x", "y", "1")
+	for _, a := range append(home.allActs(), ws.allActs()...) {
+		if strings.HasPrefix(a.RecID, proto.WatchPrefix) || strings.HasPrefix(a.RecID, proto.KeysPrefix) || strings.HasPrefix(a.RecID, "pick:") {
+			t.Fatalf("a remote row sent %q", a.RecID)
+		}
+	}
+	out := screen(m)
+	if strings.Contains(out, "HOME TWELVE") || !strings.Contains(out, "on ws-1") || !strings.Contains(out, "goes into its pane") {
+		t.Fatalf("the remote row's right side:\n%s", out)
 	}
 }

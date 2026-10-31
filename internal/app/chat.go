@@ -108,13 +108,14 @@ func isRule(line string) bool {
 }
 
 // watchCmd asks the service for the selected session's screen when it is
-// not the one already watched, and for none when the selection has no pane;
+// not the one already watched, and for none when the selection has no pane
+// or is another host's;
 // and for the lines up the chat shows when they changed. A screen of
 // another pane never stays.
 func (m *Model) watchCmd() tea.Cmd {
 	want := ""
 	if m.conn != nil && !m.lost && !m.mismatch {
-		if s, ok := m.selected(); ok {
+		if s, ok := m.selected(); ok && s.Host == m.opt.Host { // another host's pane id names another pane here
 			want = s.Pane
 		}
 	}
@@ -150,7 +151,7 @@ func (m Model) chatLines(w, h int) []string {
 	h = max(h, 0)
 	lines := make([]string, h)
 	s, ok := m.selected()
-	if !ok || s.Pane == "" {
+	if !ok || s.Pane == "" || s.Host != m.opt.Host {
 		return lines
 	}
 	shown := m.screen.Pane == s.Pane
@@ -176,10 +177,11 @@ func (m Model) chatLines(w, h int) []string {
 }
 
 // chatShown is the session whose chat is the right side of Sessions: the
-// selected one, when it has a pane and the screen has a right side.
+// selected one, when it has a pane on the home host and the screen has a
+// right side. Another host's row is list only: its detail shows there.
 func (m Model) chatShown(rightW int) (sample.Session, bool) {
 	s, ok := m.selectedSession()
-	return s, ok && s.Pane != "" && m.tab == tabSessions && rightW > 0
+	return s, ok && s.Pane != "" && s.Host == m.opt.Host && m.tab == tabSessions && rightW > 0
 }
 
 // chatLeast is the narrowest chat beside the list: the question card reads
@@ -548,7 +550,7 @@ func (m Model) chatKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // is the session's, for a line that says it ended.
 func (m Model) pressed(texts ...string) (name string, keys []chatKey) {
 	s, ok := m.selectedSession()
-	if !ok || s.Pane == "" {
+	if !ok || s.Pane == "" || s.Host != m.opt.Host {
 		return "", nil
 	}
 	var seen time.Time
@@ -666,7 +668,9 @@ func (m Model) lastCtrlC(k chatKey) string {
 // agentIn tells if k's agent is still in its pane, in all the service
 // sent: a search or the stoker's own row does not hide it.
 func (m Model) agentIn(k chatKey) bool {
-	return slices.ContainsFunc(m.all.sessions, func(s sample.Session) bool { return s.Pane == k.pane && s.PID == k.pid })
+	return slices.ContainsFunc(m.all.sessions, func(s sample.Session) bool {
+		return s.Host == m.opt.Host && s.Pane == k.pane && s.PID == k.pid
+	})
 }
 
 // queueKey puts k behind the keys that wait. Text typed after text for the

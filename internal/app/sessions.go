@@ -334,8 +334,14 @@ func (m Model) sessionKeys() []hint {
 	}
 	keys := []hint{hintFor(mk.Open, "chat")}
 	s, ok := m.selectedSession()
+	if ok && s.Host != m.opt.Host {
+		keys = []hint{hintFor(mk.Open, "")} // list only: into its pane
+	}
 	if ok && s.Pane != "" {
-		keys = append(keys, hintFor(mk.Chat, "chat"), hintFor(mk.Second, "kill"), hintFor(mk.Rename, ""), hintFor(mk.Switch, ""), hintFor(mk.Park, m.parkWord(s)))
+		if s.Host == m.opt.Host {
+			keys = append(keys, hintFor(mk.Chat, "chat"))
+		}
+		keys = append(keys, hintFor(mk.Second, "kill"), hintFor(mk.Rename, ""), hintFor(mk.Switch, ""), hintFor(mk.Park, m.parkWord(s)))
 	}
 	return append(keys, hintFor(mk.New, ""), hintFor(mk.Ships, ""), hintFor(mk.Stoke, "stoker"))
 }
@@ -681,7 +687,10 @@ func (m Model) opened(s sample.Session, w int) []string {
 func (m Model) openedKeys(s sample.Session, w int) (string, []span) {
 	mk := m.keys.main
 	hs := []hint{hintFor(mk.Open, "chat")}
-	if s.Pane != "" {
+	switch {
+	case s.Host != m.opt.Host: // list only: into its pane
+		hs = []hint{hintFor(mk.Switch, ""), hintFor(mk.Open, "")}
+	case s.Pane != "":
 		hs = []hint{hintFor(mk.Chat, "chat"), hintFor(mk.Switch, ""), hs[0]}
 	}
 	keys, spans := m.hintRow(hs, 2)
@@ -845,6 +854,10 @@ func (m Model) sessionDetail(s sample.Session, w, said int) ([]string, bool) {
 	}
 	where = append(where, place(s.Target, s.Pane), tilde(s.Cwd))
 	out = append(out, fit(" "+m.matchCell(s)+st.muted.Render(strings.Join(where, " · ")), w))
+	if s.Host != m.opt.Host && s.Pane != "" { // list only: the chat is the home host's
+		out = append(out, fit(" "+st.text.Render("on "+m.nameOf(s.Host))+st.muted.Render(" · ")+
+			keyWord(m.keys.main.Open, st.accent, st.muted, " goes into its pane"), w))
+	}
 	cut := false
 	if words := m.lastWords(s); words != "" {
 		agent := s.Agent

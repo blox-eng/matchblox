@@ -478,8 +478,12 @@ func (m Model) shipChat() Model {
 		return m
 	}
 	s, ok := m.driver(sh)
-	if !ok || s.Pane == "" {
+	switch {
+	case !ok || s.Pane == "":
 		m.flash = m.driverGone(sh)
+		return m
+	case s.Host != m.opt.Host: // the chat is the home host's
+		m.flash = s.Name + " runs on " + m.nameOf(s.Host) + ": " + m.keys.main.Open.Help().Key + " goes to its session"
 		return m
 	}
 	return m.chatOn(s.Pane)
