@@ -203,6 +203,11 @@ private signal the home key uses (`ESC _ matchblox … ESC \`):
     Enter, the prompt must show the command. Where matchblox cannot read the
     prompt (OpenCode, Cursor), it does not check the draft. The key line
     shows each refusal. `compact:` from the chat also holds the PID;
+    Changed (2026-10-31): each keystroke of a command or a compact checks
+    the agent's PID and start time again. After one goes, its pane is not at
+    rest until a sample taken 5 s later shows the rest, so a second command
+    typed at once never passes on the sample from before the first one's
+    turn began;
   - a command the session's agent does not have sends nothing, and the key line
     says `/<name> is <Agent>'s: <session> runs <other agent>`.
 - The per-agent command list lives in the console (the host), one table, with
