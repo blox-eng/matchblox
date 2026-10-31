@@ -274,26 +274,26 @@ func Plan(m Mode, sessions []sample.Session, waiting map[string]bool, full sampl
 		// At a rest, not idle: its subagents may still work.
 		out = append(out, Step{
 			Session: s.SessionID, Name: s.Name, Pane: s.Pane, Transcript: s.Transcript, Tokens: s.Tokens, Why: v.Why,
-			Action: CompactAction(s.Pane),
+			Action: CompactAction(s.Pane, s.PID, s.Start),
 		})
 	}
 	return out
 }
 
 // CompactAction types the compact and its Enter into a pane. Both steps
-// are guarded: the session is at rest, and the pane, read again, shows no
-// menu, no question and no draft of the builder's (before the Enter, the
-// compact itself).
-func CompactAction(pane string) advice.Action {
-	return atRest(pane, RuleCompact, "/compact", " "+Instruction)
+// are guarded: agent pid (started at start) is still the process, the
+// session is at rest, and the pane, read again, shows no menu, no question
+// and no draft of the builder's (before the Enter, the compact itself).
+func CompactAction(pane string, pid int, start uint64) advice.Action {
+	return atRest(pane, pid, start, RuleCompact, "/compact", " "+Instruction)
 }
 
 // CommandAction types a command key's text and its Enter into a pane,
 // under the guards of CompactAction. Where the agent's prompt cannot be
 // read (read false), no draft shows there, and the Enter does not wait
 // for the text on the prompt.
-func CommandAction(pane, text string, read bool) advice.Action {
-	a := atRest(pane, "command", text, "")
+func CommandAction(pane string, pid int, start uint64, text string, read bool) advice.Action {
+	a := atRest(pane, pid, start, "command", text, "")
 	if !read {
 		a.Guards[1].Typed = ""
 	}
@@ -302,8 +302,8 @@ func CommandAction(pane, text string, read bool) advice.Action {
 
 // atRest types command and its args into pane, then Enter. The Enter waits
 // until the pane shows the command typed.
-func atRest(pane, label, command, args string) advice.Action {
-	g := advice.Guard{RestPane: pane, StokePane: pane}
+func atRest(pane string, pid int, start uint64, label, command, args string) advice.Action {
+	g := advice.Guard{PID: pid, StartTicks: start, RestPane: pane, StokePane: pane}
 	typed := g
 	typed.Typed = command
 	return advice.Action{

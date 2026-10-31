@@ -223,3 +223,29 @@ func TestWatchIsRefusedFromTheStokersServer(t *testing.T) {
 		t.Fatalf("err %q", res.Err)
 	}
 }
+
+// TestACommandAndACompactCarryTheAgentsGuard: every keystroke of a typed
+// command or a console's compact names the agent's pid and start, so a pid
+// another process took after the snapshot gets no key.
+func TestACommandAndACompactCarryTheAgentsGuard(t *testing.T) {
+	for _, a := range []proto.Act{command("review"), {Console: true, RecID: "compact:%1", PID: 42, Confirm: "y"}} {
+		s, ran := commandTest(t, "claude", idleScreen)
+		s.cur.Sessions[0].Start = 7
+		var guards []advice.Guard
+		s.Actions.Check = func(g advice.Guard) error {
+			guards = append(guards, g)
+			return nil
+		}
+		if res := s.act(t.Context(), a); res.Err != "" || len(*ran) != 2 {
+			t.Fatalf("%s: res %+v ran %q", a.RecID, res, *ran)
+		}
+		if len(guards) != 2 {
+			t.Fatalf("%s: guards %+v", a.RecID, guards)
+		}
+		for _, g := range guards {
+			if g.PID != 42 || g.StartTicks != 7 {
+				t.Fatalf("%s: guards %+v", a.RecID, guards)
+			}
+		}
+	}
+}

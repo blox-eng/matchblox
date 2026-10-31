@@ -156,7 +156,7 @@ func (s *Service) compact(ctx context.Context, pane string, a proto.Act) proto.R
 			}
 		}
 	}
-	action := stoker.CompactAction(pane)
+	action := stoker.CompactAction(pane, x.PID, x.Start)
 	release := s.holdPane(pane)
 	res := s.Actions.Do(ctx, action, a.Confirm)
 	release()
@@ -227,7 +227,7 @@ func (s *Service) command(ctx context.Context, pane string, a proto.Act) proto.R
 	if _, err := s.restsFor(pane, "/"+c.Label, a.PID); err != nil {
 		return notSent(err.Error())
 	}
-	res := s.Actions.Do(ctx, stoker.CommandAction(pane, c.Text, readsPrompt[x.Agent]), a.Confirm)
+	res := s.Actions.Do(ctx, stoker.CommandAction(pane, x.PID, x.Start, c.Text, readsPrompt[x.Agent]), a.Confirm)
 	if len(res.Ran) > 0 {
 		s.undrive(pane) // the pane's last input is the person's, as with a key
 	}
