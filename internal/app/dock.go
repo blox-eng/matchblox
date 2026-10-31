@@ -187,9 +187,9 @@ const minListRows = 3
 // stoker is there while it claims the dock, in the machine's place when
 // the rows are short, or when the list leaves it room. The panels take
 // their fewest lines and grow into the rows the list leaves free. The
-// list outranks them: the stoker, then the machine, folds before the list
-// is cut; usage is never cut, and the list gives way to it alone while it
-// keeps minListRows rows and the hint; short of that all fold. The Machine
+// list outranks them: the machine folds before the list is cut; usage is
+// never cut, and the list gives way only to it and a stoker in charge,
+// while it keeps minListRows rows and the hint; short of that all fold. The Machine
 // tab has it all. A list cut short says how many rows are below it. All:
 // the panels show all they have.
 func (m Model) leftColumn(b body, w, h int) (col body, all bool) {
@@ -206,19 +206,20 @@ func (m Model) leftColumn(b body, w, h int) (col body, all bool) {
 	}
 	tall := len(b.lines)
 	every := []int{panelUsage, panelMachine, panelStoker}
-	tries := [][]int{every, {panelUsage, panelMachine}, {panelUsage}}
-	if m.stokerClaims() {
-		tries = [][]int{every, {panelUsage, panelStoker}, {panelUsage}}
+	type try struct {
+		ps  []int
+		cut bool // the list may give way to them
+	}
+	tries := []try{{every, false}, {[]int{panelUsage, panelMachine}, false}, {[]int{panelUsage}, false}, {[]int{panelUsage}, true}}
+	if m.stokerClaims() { // a stoker in charge keeps its place, as usage does
+		tries = []try{{every, false}, {[]int{panelUsage, panelStoker}, false}, {[]int{panelUsage, panelStoker}, true}, {[]int{panelUsage}, true}}
 	}
 	var set []int
-	for _, ps := range tries {
-		if tall+height(ps) <= h { // the list whole
-			set = ps
+	for _, t := range tries {
+		if n := height(t.ps); tall+n <= h || t.cut && h-n >= minListRows+1 {
+			set = t.ps
 			break
 		}
-	}
-	if set == nil && h-height([]int{panelUsage}) >= minListRows+1 {
-		set = []int{panelUsage} // the list is cut only for usage
 	}
 	if set == nil {
 		return m.listAbove(b, w, h), false

@@ -123,6 +123,10 @@ func TestTheListOutranksTheMachine(t *testing.T) {
 	if !strings.Contains(out, "USAGE") || !strings.Contains(out, "OpenAI Plus") || strings.Contains(out, "MACHINE") || !strings.Contains(out, " more") {
 		t.Fatalf("86x30: want usage whole over the cut list:\n%s", out)
 	}
+	night := sized(t, 132, 20, stokerState(runningNight(fixtureState().At)))
+	if out := screen(night); !strings.Contains(out, "STOKER") || strings.Contains(out, "MACHINE") {
+		t.Fatalf("132x20 at night: want the stoker in charge over the cut list, the machine folded:\n%s", out)
+	}
 }
 
 // TestTheChatKeyLineKeepsTheWayBack: the chat's key line drops a hint
