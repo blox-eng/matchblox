@@ -324,7 +324,7 @@ func TestThreeHostFrames(t *testing.T) {
 		{"fine", 86, 30, []string{"matchblox · 3 hosts", "train-lo… gpu…", "api-auth ws-1", "docs-swe… ws-1"}},
 		{"fine", 132, 32, []string{"api-auth ws-1 · work"}},
 		{"stale", 86, 30, []string{"· gpu-1 stale", "stale", "40s", "gpu-1: connection lost. Tries again in 8s."}},
-		{"stale", 132, 32, []string{"as of 22:49"}},
+		{"stale", 132, 50, []string{"as of 22:49"}},
 		{"blocked", 86, 30, []string{"gpu-1  is not connected  ⏎ connect"}},
 	} {
 		all := strings.Join(frameOf(threeHosts(t, st, c.w, c.h, c.gpu)), "\n")

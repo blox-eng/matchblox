@@ -898,15 +898,15 @@ func TestTheChatStripWrapsToTwoLinesAtMost(t *testing.T) {
 	}
 }
 
-// On a short desk the stats keep their rows and the list gives way, down
-// to 3 rows and the hint under them; shorter, the machine folds, then
-// usage.
+// On a short desk the machine folds before the list is cut; usage keeps
+// its rows and the list gives way to it alone, down to 3 rows and the
+// hint under them; shorter, usage folds too.
 func TestAShortDeskKeepsItsStats(t *testing.T) {
 	m := demoSized(t, 132, 32)
 	left, _ := sides(m.draw(132), 132)
 	all := strings.Join(left, "\n")
-	if !strings.Contains(all, "USAGE") || !strings.Contains(all, "MACHINE") || !strings.Contains(all, "↓ ") {
-		t.Fatalf("132x32: the stats do not keep their rows over a cut list:\n%s", all)
+	if !strings.Contains(all, "USAGE") || strings.Contains(all, "MACHINE") || !strings.Contains(all, "↓ ") {
+		t.Fatalf("132x32: want usage over a cut list, the machine folded:\n%s", all)
 	}
 	folded := false
 	for h := 10; h <= 40; h++ {

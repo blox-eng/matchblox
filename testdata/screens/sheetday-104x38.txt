@@ -17,19 +17,19 @@
  RECOMMENDATIONS · 7 │                                                            │
  ▲ The week runs shor│ › ▏                                                        │
  ○ Clear spark-docs (│                                                            │
- ↓ 5 more            │ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │
-─────────────────────│ ways merge-order  priority  release-train  triage          │
- USAGE               ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
+ ○ Clear kindle-web (│ gos ✓ merges  ○ releases  ○ deploys  ○ kills  off asks you │
+ ○ Clear cinder-ci (%│ ways merge-order  priority  release-train  triage          │
+ ○ Clear flint-auth (╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯
+ ○ Clear ember-billing (%8)              │
+ ○ Clear wick-mobile (%7)                │
+                                         │
+                                         │
+─────────────────────────────────────────│
+ USAGE                                   │
  ✻ Claude        5h   ▰▰▰ 84%  · Fri 01:…│
                  wk   ▰▰▱ 82%  · Mon 09:…│
  · Google login  not measured · OpenCode…│
  ❋ OpenAI        5h ▰▱▱ 40% · wk 12%     │
-─────────────────────────────────────────│
- MACHINE                        16 cores │
- cpu  ▁ 0%   load 6.2                    │
- mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB               │
- disk ▰▰▰▰▰▰▱▱ 71% of 1 TB               │
- runs 5 claude · 1 codex · 1 opencode    │
 ─────────────────────────────────────────│
  STOKER                               on │
  watching 0 · 0 compacted · 0 waited · 0…│

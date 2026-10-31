@@ -186,11 +186,12 @@ const minListRows = 3
 // under it usage, the machine and the stoker, each below a hairline. The
 // stoker is there while it claims the dock, in the machine's place when
 // the rows are short, or when the list leaves it room. The panels take
-// their fewest lines and grow into the rows the list leaves free. When
-// the list does not fit beside them, the list gives way: the panels stay
-// while it keeps minListRows rows and the hint, then the machine folds,
-// then all; the Machine tab has it all. A list cut short says how many
-// rows are below it. All: the panels show all they have.
+// their fewest lines and grow into the rows the list leaves free. The
+// list outranks them: the stoker, then the machine, folds before the list
+// is cut; usage is never cut, and the list gives way to it alone while it
+// keeps minListRows rows and the hint; short of that all fold. The Machine
+// tab has it all. A list cut short says how many rows are below it. All:
+// the panels show all they have.
 func (m Model) leftColumn(b body, w, h int) (col body, all bool) {
 	least, most := map[int][]string{}, map[int][]string{}
 	for p := range panels {
@@ -204,26 +205,20 @@ func (m Model) leftColumn(b body, w, h int) (col body, all bool) {
 		return n
 	}
 	tall := len(b.lines)
-	fits := func(ps []int) bool {
-		n := height(ps)
-		return tall+n <= h || h-n >= minListRows+1
-	}
 	every := []int{panelUsage, panelMachine, panelStoker}
-	var tries [][]int
-	switch {
-	case m.stokerClaims():
-		tries = [][]int{every, {panelUsage, panelStoker}}
-	case tall+height(every) <= h:
-		tries = [][]int{every}
-	default:
-		tries = [][]int{{panelUsage, panelMachine}, {panelUsage}}
+	tries := [][]int{every, {panelUsage, panelMachine}, {panelUsage}}
+	if m.stokerClaims() {
+		tries = [][]int{every, {panelUsage, panelStoker}, {panelUsage}}
 	}
 	var set []int
 	for _, ps := range tries {
-		if fits(ps) {
+		if tall+height(ps) <= h { // the list whole
 			set = ps
 			break
 		}
+	}
+	if set == nil && h-height([]int{panelUsage}) >= minListRows+1 {
+		set = []int{panelUsage} // the list is cut only for usage
 	}
 	if set == nil {
 		return m.listAbove(b, w, h), false

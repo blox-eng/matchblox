@@ -74,6 +74,9 @@ func TestSessionsSplitsFortySixty(t *testing.T) {
 			continue
 		}
 		for _, word := range []string{"USAGE", "MACHINE"} {
+			if word == "MACHINE" && !strings.Contains(screen(m), word) {
+				continue // folded for the list
+			}
 			if y := lineOf(t, m, word); !strings.Contains(ansi.Strip(sc.lines[y])[:c.list], word) {
 				t.Errorf("%dx%d: %s is not under the list:\n%s", c.w, c.h, word, screen(m))
 			}
@@ -82,5 +85,21 @@ func TestSessionsSplitsFortySixty(t *testing.T) {
 	m := fullView(flintAt(t, 86, 30, "2"))
 	if list, _ := m.panes(86); list != (86-1)/2 {
 		t.Errorf("Ships at 86: list %d, want the middle", list)
+	}
+}
+
+// TestTheListOutranksTheMachine: under the list, the machine folds before
+// the list is cut; usage is never cut, and the list is cut only when
+// usage alone does not leave it room.
+func TestTheListOutranksTheMachine(t *testing.T) {
+	m := threeHosts(t, screensState(t), 86, 40, "fine")
+	out := strings.Join(frameOf(m), "\n")
+	if !strings.Contains(out, "USAGE") || strings.Contains(out, "MACHINE") || strings.Contains(out, " more") {
+		t.Fatalf("86x40: want the whole list and usage, the machine folded:\n%s", out)
+	}
+	short := threeHosts(t, screensState(t), 86, 30, "fine")
+	out = strings.Join(frameOf(short), "\n")
+	if !strings.Contains(out, "USAGE") || !strings.Contains(out, "OpenAI Plus") || strings.Contains(out, "MACHINE") || !strings.Contains(out, " more") {
+		t.Fatalf("86x30: want usage whole over the cut list:\n%s", out)
 	}
 }
