@@ -88,8 +88,12 @@ stop the others.
 
 ### Acts go to the row's host
 
-- Each key on a row goes to the host of that row. This holds for `a`,
+- Each key on a row goes to the host of that row. This holds for
   `Enter`, `x`, `r`, park and pick.
+- Another host's row is list only. The chat watches and sends keys only
+  for a session of the console's own host. On a remote row `Enter` goes
+  into its pane, `a` says where it runs, and the right side shows its
+  detail with a line that names its host.
 - Two hosts can have the same pane id. The console never mixes them.
 - The console refuses an act on a lost host: `gpu-1 is not connected. It
   tries again in 8s.`

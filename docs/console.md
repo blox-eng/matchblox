@@ -1,8 +1,9 @@
 # The console
 
 From the top: the header, the tabs, the open tab, then usage and the
-machine, and at the bottom the key line. On a wide desk, usage and the
-machine sit in the left column, under Sessions.
+machine, and at the bottom the key line. Where Sessions splits into the
+list and the chat, usage and the machine sit in the left column, under
+the list.
 
 The header shows the host, how many agents wait for you (`● 3 wait for
 you`; a tap selects the first) and [the stoker](stoker.md): `stoker off`,
@@ -20,10 +21,10 @@ or type a search. See [Keys](keys.md).
 ## Usage, the machine and the stoker
 
 Under the open tab, when there is room, the dock shows how much of each
-plan your agents have used, the machine, and [the stoker](stoker.md). On a
-wide desk they are not a dock: they stack in the left column under Sessions
-(see [the chat](#the-chat)). Everywhere else they stay in the dock at the
-bottom.
+plan your agents have used, the machine, and [the stoker](stoker.md).
+Where Sessions splits into the list and the chat, they are not a dock:
+they stack in the left column under the list (see [the chat](#the-chat)).
+Everywhere else they stay in the dock at the bottom.
 
 ```
  USAGE                                         │ MACHINE        ws-1 · 16 cores
@@ -59,14 +60,18 @@ bottom.
   the word at its right (`machine ›`), goes to the next: usage, the
   machine, the stoker. While a run is in charge, or has steps you have not seen, the
   stoker takes the dock until you switch.
-- Wider than that, two panels side by side: usage and the machine, or
-  usage and the stoker while it claims the dock.
-- On a wide desk, the panels stack under Sessions: usage, the machine, and
-  the stoker while it claims the dock. Usage and the machine keep their
-  rows. When the list does not fit, the list and the recommendations give
-  way. A list cut short ends in `↓ <n> more`. The hint never covers the
-  selected row. When the list cannot keep 3 rows and the hint, the panels
-  fold. The machine goes first, then all.
+- Wider than that, on the other tabs, two panels side by side: usage and
+  the machine, or usage and the stoker while it claims the dock.
+- Where Sessions splits, upright or not, the panels stack under the list:
+  usage, the machine, and the stoker while it claims the dock. The list
+  outranks the machine: the stoker, then the machine, folds before the
+  list is cut. Usage is never cut. The list and the recommendations give
+  way only to usage alone. A list cut short ends in `↓ <n> more`. The hint
+  never covers the selected row. When the list cannot keep 3 rows and the
+  hint under usage, usage folds too.
+- In list only (`v`) the list comes first and is never cut for the stats.
+  The rows it leaves free take usage, then the machine, under a hairline,
+  each at its fewest lines and only if it fits whole.
 - An account folder shows by its name (`work`), the default sign-in by
   its plan or email. A Claude Code account that is not signed in yet says
   `not measured · signing in: the limits show once the account is signed
@@ -260,6 +265,20 @@ a pane beside the list. Wider, the same: the chat sits beside the list. A
 session with no pane to type into shows its detail there instead, with the
 account, the tokens and the background work.
 
+- The shape (upright or not) goes by the tallest height seen at the
+  screen's width. A keyboard that shrinks the screen never changes the
+  layout; a new width decides afresh.
+- Where Sessions splits, the list takes 40% of the width (at least 38
+  columns, at most 78) and the chat the rest, full height. An upright
+  iPad mini (95 × 65) gets a 56-column chat in the full view.
+- Sessions splits only when the chat is at least 44 columns wide and the
+  body has room for its title, its account line and the whole question
+  card. Short of either (a phone on its side with the keyboard up, a
+  landscape screen of 60–83 columns), Sessions is one column and the chat
+  opens full-screen, as on a phone. A screen too short for the whole card
+  even then does not open the chat: the key line says `too short to show
+  <name>'s question · ctrl+o goes into its pane`.
+
 `Enter` gives the keys to the chat (see below). `Ctrl+O` jumps to the pane.
 Come back from a jump and the next agent that waits is already selected.
 
@@ -267,6 +286,10 @@ Come back from a jump and the next agent that waits is already selected.
 
 With two or more hosts ticked, Sessions is one queue over all of them. Each
 row names its host. See [Remote hosts](remote.md#see-every-host-in-one-console).
+Another host's row is list only: the chat watches and sends keys only for
+a session of the console's own host. A remote row's right side is its
+detail, with a line that names its host and that `Enter` goes into its
+pane; `a` says where it runs.
 
 `v` folds the detail pane and the dock, so the list takes the screen. The
 key line says `list only v` on the full view and `full view v` in list
@@ -319,7 +342,9 @@ strip. On an upright phone the chat has no strip.
 `Enter`, `a` and `→` (where `→` has no other use) give the chat the keys,
 and so does a click on it. `Ctrl+]` and a click on the left give them back.
 `Ctrl+O` goes into the agent's pane in tmux. While the chat has the keys, the key line says `keys go to <name> ·
-ctrl+] back · ctrl+o into tmux`.
+ctrl+] back · ctrl+o into tmux`. On a short line its hints go by worth:
+`keys go to <name>` goes first (the title names the agent), then `ctrl+o
+into tmux`; `ctrl+] back` stays. A hint goes whole, never cut mid-word.
 
 In the chat, all keys go to the agent, `Esc` too. They go in order, one at
 a time, to the agent the chat showed. A paste goes as text, and a newline
@@ -347,8 +372,9 @@ answer that did not go says `not sent to flint-auth` and why on the key
 line.
 
 While the card shows, the agent's own menu leaves the screen: the lines from
-the rule over the question's header (its ☐ ☒ ✔ tabs) down. The card is the one place to answer. While you scroll up
-through the history, the screen stays as the agent drew it.
+the rule over the question's header (its ☐ ☒ ✔ tabs) down. The card is the one place to answer, so the question shows
+once. While you scroll up through the history, the same cut holds: with
+the card up, the agent's menu leaves the lines above it.
 
 There is no card at a permission prompt. Its keys go to the agent as they
 are: the chat shows the prompt, and `Enter` approves it.
@@ -374,7 +400,8 @@ refuses an `Enter` that answers a screen of the history.
 At night, the first key that sends something to an agent asks "Take over?".
 Keys that only move on the card do not ask.
 
-On a narrow screen, Sessions fills the screen and the dock stays at the
+On a narrow screen, and wherever Sessions is one column, the chat opens
+full-screen. On a narrow screen in the full view the dock stays at the
 bottom, and `u` cycles it. `Enter`, or a tap on a row, replaces the screen
 with the chat of that session. The title row reads `‹ Sessions · <name> ·
 <state>`. A tap on `‹ Sessions`, the app's edge swipe or ⌘M (the home

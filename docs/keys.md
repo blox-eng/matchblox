@@ -13,17 +13,17 @@ the bottom shows the keys of the open tab. A tap on a key presses it.
 |---|---|
 | `↑` or `k` | Selects the row above. |
 | `↓` or `j` | Selects the row below. |
-| `Enter` | Shows the safe action of the row: give the chat the keys (Sessions), go to the agent's pane (Machine, Panes), open New session on the folder of `+ start a new session` (Sessions), open a shell in the worktree (Git), do a recommendation, show a setup step. On Ships, selects the session that drives the ship in Sessions. |
+| `Enter` | Shows the safe action of the row: give the chat the keys (Sessions; on another host's row, go into its pane), go to the agent's pane (Machine, Panes), open New session on the folder of `+ start a new session` (Sessions), open a shell in the worktree (Git), do a recommendation, show a setup step. On Ships, selects the session that drives the ship in Sessions. |
 | `x` | Shows the other action of the row: the second action of a recommendation, close a setup step or kill the session (Sessions), kill a detached busy loop (Machine), remove the marked worktrees (Git), merge a ship that waits for your merge (Ships). Kill shows its commands, `tmux kill-pane -t <pane>`, then `kill -TERM <pid>` for an agent still running, and runs them on a typed `y`. A session that works or waits for you asks for a second `y`. Its worktree and its transcript stay. |
 | `N` | Opens **New session** (Sessions, Git): where it starts (a path, or `←` `→` through the Git tab's repositories and worktrees, then the ones found on the host, the most recent first), a branch for a new worktree beside the repository (blank: none), its name, the agent (`←` `→`, from the installed Claude Code, Codex, OpenCode and Cursor), for Claude Code, Codex and Cursor the account (see below), and a first message (blank: it waits for you; a new account has none). `Tab` goes to the next line, `⏎` starts it in a tmux session of its own, `Esc` sends nothing. The row shows in Sessions within seconds. |
 | `r` | Renames the session (Sessions): its tmux window, its tmux session when it is that session's one window, and Claude Code's own name (`/rename`), all alike. A Claude Code session that works takes its new name when it rests. On Git, `r` scans the git checkouts again. |
 | `A` | Switches the agent of the session (Sessions): choose another installed agent (`←` `→`) and edit or clear its handoff. The plan names the account and launch settings. A nonempty handoff loads an evidence preview before `y` can run the switch. A session that works or waits needs a second `y`. The switch saves the latest evidence before replacing the agent. The console jumps to the pane after. |
-| `a` or `→` | Gives the chat the keys on the selected agent (Sessions). `→` does it where it has no other use. The key line says `a chat`. On Ships, opens the chat on the session of a stuck ship. |
+| `a` or `→` | Gives the chat the keys on the selected agent (Sessions). `→` does it where it has no other use. The key line says `a chat`. On another host's row it says where the session runs: the chat is the console's own host's. On Ships, opens the chat on the session of a stuck ship. |
 | `1-7` | Opens a tab: Sessions, Ships, Machine, Git, History, Panes, Stoker. |
 | `p` | Opens Ships. |
 | `Tab` or `Shift+Tab` | Opens the next or the previous tab. |
-| `u` | Cycles the dock of a narrow screen: usage, the machine, the stoker. A wide screen stacks all three under the list. While a run is in charge, or has steps you have not seen, the stoker's panel takes the dock until you press `u`. |
-| `v` | Folds the detail pane and the dock, so the list takes the screen. The selected row opens in place. `v` again shows them. A phone and a desk each keep their own choice. A phone starts with list only. |
+| `u` | Cycles the dock of a narrow screen: usage, the machine, the stoker. Where Sessions splits, all three stack under the list, and the machine folds before the list is cut. While a run is in charge, or has steps you have not seen, the stoker's panel takes the dock until you press `u`. |
+| `v` | Folds the detail pane and the dock, so the list takes the screen. The selected row opens in place. The rows the list leaves free show usage, then the machine, each whole at its fewest lines; the list is never cut for them. `Enter` opens the chat full-screen. `v` again shows them. A phone and a desk each keep their own choice. A phone starts with list only. |
 | `c` | Opens the STOKER tab: your words and the gos, the plan with each step's outcome, the goes that wait for you, the triggers, the standing rules, today's compacts with their RESUME lines. Opening it marks the steps seen. |
 | `/` | Searches the open tab. |
 | `s` | Sorts Sessions and Panes by the next column. |
@@ -108,13 +108,19 @@ A start on a new account is a destructive action: the plan shows `RUN` and waits
 ## The chat
 
 The chat is the right side of Sessions: the live screen of the selected
-agent. It shows on a wide screen and on a phone held wide. On a narrow
-screen, `Enter` or a tap on a row opens it over the whole screen. Sessions
-keeps the keys until you give them to the chat.
+agent. Sessions splits 40/60 (the list at least 38 columns, at most 78)
+when the chat gets at least 44 columns and the body has room for its
+title, its account line and its whole question card. Otherwise, on a
+phone, in list only, or on a screen on its side with the keyboard up,
+`Enter` or a tap on a row opens it over the whole screen; a screen too
+short for the whole card says so and keeps the keys. A keyboard never
+changes the layout: the shape goes by the tallest height seen at the
+width. Sessions keeps the keys until you give them to the chat. The chat
+is the console's own host's: another host's row is list only.
 
 | Key | What it does |
 |---|---|
-| `Enter`, `a` or `→` | On Sessions, gives the chat the keys. A click on the chat does it too. The key line then says `keys go to <name> · ctrl+] back · ctrl+o into tmux`. |
+| `Enter`, `a` or `→` | On Sessions, gives the chat the keys. A click on the chat does it too. The key line then says `keys go to <name> · ctrl+] back · ctrl+o into tmux`. Short of room the name goes first, then `ctrl+o into tmux`; `ctrl+] back` stays, and no hint is cut mid-word. |
 | `Ctrl+]` | Gives the keys back to Sessions. A click on the left does it too. On a narrow screen, it goes back to Sessions. |
 | `Ctrl+O` | Goes to the selected agent's pane in tmux. It works on Sessions too. |
 | `Ctrl+C` | Sends `^C` to the agent. A second one within 1 s is held. See below. |

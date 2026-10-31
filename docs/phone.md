@@ -217,9 +217,11 @@ The chat is the agent's live screen, inside the console. You do not leave
 the console to answer an agent. See [the chat](console.md#the-chat).
 
 1. Tap an agent in Sessions. On a one-column phone, its chat fills the
-   screen. The title row reads `‹ Sessions · <name> · <state>`. Held wide,
-   the chat is the pane beside the list: tap the agent again, or tap the
-   chat, to give it the keys.
+   screen. The title row reads `‹ Sessions · <name> · <state>`. Held wide
+   with room for the chat's whole question, the chat is the pane beside the
+   list: tap the agent again, or tap the chat, to give it the keys. With
+   the keyboard up on its side the phone has no such room: the chat fills
+   the screen instead.
 2. Type. Every key goes to the agent. When the agent asks with its
    question tool, a card shows at the foot. Tap an option, or type and
    press `Enter`.
@@ -280,17 +282,19 @@ See [`A` in Keys](keys.md).
 
 ## The phone layout
 
-A phone held upright is read by its shape, so the keyboard coming and
-going does not change the layout. With a small font that makes it 90
-columns or more, the list sits on the left and the selected agent's detail
-in a drawer on the right, and the dock shows two panels side by side. On
-its side it goes by its width. Under 60 columns, the console has one
-column. Each agent is one line, grouped by what it needs from you: who waits first. The selected one opens
+A phone is read by its shape at the tallest height seen at its width, so
+the keyboard coming and going never changes the layout. In the full view,
+with a small font that makes it 90 columns or more upright, Sessions
+splits: the list takes 40% of the width (38 to 78 columns), the selected
+agent's chat the rest, and usage and the machine sit under the list. On
+its side it goes by its width. Sessions splits only when the chat gets 44
+columns and the body has room for its whole question card; short of
+that, and under 60 columns, the console has one column. Each agent is one line, grouped by what it needs from you: who waits first. The selected one opens
 in place: what it said last, its ships, its plan and its keys. Only
 the selected setup step shows its detail.
 
 Under the list, when there is room, the dock shows usage, the machine or
-the stoker (a wide desk puts them in the left column instead). `u`, or a
+the stoker (where Sessions splits they sit in the left column instead). `u`, or a
 tap on the word at its right, goes to the next. While
 the stoker runs, its panel shows by itself until you switch; a tap on it
 opens the Stoker tab. With the keyboard up the dock
@@ -299,8 +303,9 @@ folds away; the Machine tab has it.
 The key line is at the bottom: an SSH app that shrinks the terminal for
 its keyboard keeps it above the keys. A tap on a key presses it.
 
-Turn the phone on its side, at 60 columns or more, and the list and the
-detail of the selected agent sit side by side.
+Turn the phone on its side, at 83 columns or more with room for the
+question, and the list and the chat of the selected agent sit side by
+side.
 
 Every key is on the key bar of an SSH app: letters, digits, arrows, `Enter`
 and `Esc`. The matchblox app adds its nine keys. See [Keys](keys.md).
@@ -312,7 +317,9 @@ only. The detail pane
 and the dock fold, and the list takes the screen. The key line says
 `full view v`, and `list only` stays at its right edge. The selected row
 opens in place under itself. `Enter` or `a` opens its chat, full-screen.
-The header still says who waits.
+The header still says who waits. The rows the list leaves free show
+usage, then the machine, each whole at its fewest lines; the list is never
+cut for them.
 
 Press `v`, or tap the word `full view v`, to show the detail pane and the
 dock. Press `v` again, or tap `list only v`, to fold them. The phone and
