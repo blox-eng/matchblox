@@ -166,8 +166,8 @@ func (m Model) chatLines(w, h int) []string {
 	var fit []string
 	if shown {
 		text := m.screen.Text
-		if len(card) > 0 && m.screen.Up == 0 {
-			text = agentMenuCut(text) // the card is the one place to answer
+		if len(card) > 0 {
+			text = agentMenuCut(text) // the card is the one place to answer, live or up the history
 		}
 		fit = fitScreen(text, w, h-len(card))
 	}

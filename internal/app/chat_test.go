@@ -1543,13 +1543,15 @@ func TestPermissionKeepsTheAgentsMenu(t *testing.T) {
 	}
 }
 
-func TestHistoryKeepsTheAgentsMenu(t *testing.T) {
+// Up the history, the card is still the one place to answer: the agent's
+// own menu goes from the lines above it.
+func TestHistoryCutsTheAgentsMenu(t *testing.T) {
 	m, _ := askModel(t, 44, threeWays)
 	m.up, m.watchUp = 6, 6 // scrolled up: a history frame is kept
 	next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(200, 0), Up: 6, Text: askScreen})
 	m = next.(Model)
-	if out := ansi.Strip(strings.Join(m.chatLines(44, 29), "\n")); !strings.Contains(out, "❯ 1. Rotate it") {
-		t.Fatalf("history was cut:\n%s", out)
+	if out := ansi.Strip(strings.Join(m.chatLines(44, 29), "\n")); strings.Contains(out, "❯ 1. Rotate it") || !strings.Contains(out, "refresh endpoint") {
+		t.Fatalf("the history keeps the agent's menu, or lost its work:\n%s", out)
 	}
 }
 
