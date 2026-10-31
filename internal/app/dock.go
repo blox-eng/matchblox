@@ -258,6 +258,26 @@ func (m Model) dockToggle(w int) (x0, x1 int) {
 	return w - lipgloss.Width(word) - 1, w - 1
 }
 
+// listOnlyStats is what list only shows in the free rows its list leaves:
+// usage, then the machine, under a hairline each, at their fewest lines
+// and only whole. The list is never cut for them.
+func (m Model) listOnlyStats(w, free int) docked {
+	d := docked{full: true}
+	for _, p := range []int{panelUsage, panelMachine} {
+		least, _ := m.panel(p, w, "")
+		next := slices.Clone(d.lines)
+		if len(next) > 0 {
+			next = append(next, m.st.hair.Render(strings.Repeat("─", w)))
+		}
+		next = append(next, least...)
+		if len(next)+1 > free { // and the hairline over them
+			break
+		}
+		d.lines = next
+	}
+	return d
+}
+
 // usageLines are the limits of each account a session runs under, as
 // /usage says them: each window's name, a bar (warn from 60%, neg from
 // 90%), the percent and its reset; the forecast and an old reading on the

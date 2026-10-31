@@ -61,6 +61,13 @@ screen"). The app draws SF Mono 13 pt, about 7.8 × 16 pt a cell.
    the console's own host, by pane id. A remote row's right side names its
    host and how to reach it; it never shows the home host's pane of the
    same id, and `keys:`/`watch:` are never sent for it.
+8. **List only never leaves Usage behind blank rows.** Since #264, `v`
+   (list only) folds the detail pane and the dock, so the list takes the
+   screen. On a 107 × 60 phone with a short list that left ~23 blank rows
+   and no Usage. In list only the list still comes first and is never cut
+   for the stats, but the rows it leaves free take Usage, then Machine,
+   under a hairline, each at its fewest lines and only if it fits whole
+   (Usage never cut). The key line's hints stay as #264 has them.
 
 ## Non-goals
 
@@ -77,6 +84,8 @@ screen"). The app draws SF Mono 13 pt, about 7.8 × 16 pt a cell.
 - A test: on every golden size, the chat either shows the whole card or
   is not drawn.
 - A test: a remote row sends no `watch:` and no `keys:`.
+- A test: a 107×60 list-only Sessions with a short list shows USAGE; one
+  whose list fills the screen shows none; a golden of each.
 - docs/console.md and docs/keys.md say the rules above.
 
 ## Calls made (owner's "fix all"; each is reversible)

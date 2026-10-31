@@ -99,12 +99,12 @@ func TestTheDockSaysUsageAndTheMachine(t *testing.T) {
 
 // TestAPhoneDockShowsOnePanel: on a phone the dock is usage, the machine
 // or the stoker; u, or a tap on its switch, cycles it. An account other than
-// Anthropic's takes one line. The phone starts list only, with no dock: v
-// shows it.
+// Anthropic's takes one line. The phone starts list only, with no dock
+// and so no switch: v shows it.
 func TestAPhoneDockShowsOnePanel(t *testing.T) {
 	m, _ := loadedWith(t, 44, limitsState())
-	if strings.Contains(screen(m), "USAGE") {
-		t.Fatalf("list only shows the dock:\n%s", screen(m))
+	if strings.Contains(screen(m), "machine ›") {
+		t.Fatalf("list only shows the dock's switch:\n%s", screen(m))
 	}
 	next, _ := key(m, "v")
 	m = next.(Model)

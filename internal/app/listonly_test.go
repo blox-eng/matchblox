@@ -62,8 +62,8 @@ func TestVFoldsThePaneAndTheDock(t *testing.T) {
 	next, _ := key(m, "v")
 	lo := next.(Model)
 	sc = lo.draw(92)
-	if !lo.listOnly() || sc.listW != 92 || sc.dockAt != -1 || !opensInPlace(lo, sc) {
-		t.Fatalf("list only: on %v, list %d, dock at %d, opened %v\n%s", lo.listOnly(), sc.listW, sc.dockAt, opensInPlace(lo, sc), screen(lo))
+	if !lo.listOnly() || sc.listW != 92 || strings.Contains(screen(lo), " more") || !opensInPlace(lo, sc) {
+		t.Fatalf("list only: on %v, list %d, opened %v\n%s", lo.listOnly(), sc.listW, opensInPlace(lo, sc), screen(lo))
 	}
 	k := keyText(sc)
 	if !strings.Contains(k, "full view v") {
@@ -122,11 +122,11 @@ func TestListOnlyIsKeptAcrossARestart(t *testing.T) {
 }
 
 // TestPhoneStartsListOnly: an upright screen wide enough to split opens
-// with no pane and no dock while no view.json says otherwise (R9).
+// with no pane and no dock's switch while no view.json says otherwise (R9).
 func TestPhoneStartsListOnly(t *testing.T) {
 	m := demoIn(t, t.TempDir(), 96, 60)
-	if sc := m.draw(96); sc.listW != 96 || sc.dockAt != -1 {
-		t.Fatalf("list %d, dock at %d:\n%s", sc.listW, sc.dockAt, screen(m))
+	if sc := m.draw(96); sc.listW != 96 || strings.Contains(screen(m), "machine ›") {
+		t.Fatalf("list %d:\n%s", sc.listW, screen(m))
 	}
 }
 

@@ -110,8 +110,12 @@ func TestNowRuleIsOneColumn(t *testing.T) {
 	if len(skip) == 0 {
 		t.Fatal("the selected row opens with no lines of its own")
 	}
-	if bottom != c.Height()-2 {
-		t.Fatalf("the rule ends on line %d, the bottom hairline is %d", bottom, c.Height()-2)
+	want := c.Height() - 2 // the bottom hairline, or the one over the stats
+	if d := m.draw(132).dockAt; d >= 0 {
+		want = d - 1
+	}
+	if bottom != want {
+		t.Fatalf("the rule ends on line %d, the hairline is %d", bottom, want)
 	}
 	for y := range c.Height() {
 		cell := c.CellAt(x, y)

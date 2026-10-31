@@ -246,6 +246,12 @@ func (m Model) drawScreen(w int) drawn {
 	default:
 		d = docked{}
 	}
+	if m.listOnly() && m.tab != tabMachine && m.tab != tabStoker {
+		d = m.listOnlyStats(w, full-len(b.lines))
+		if len(d.lines) > 0 {
+			room -= len(d.lines) + 1
+		}
+	}
 	sc.full = d.full || m.tab == tabMachine || m.tab == tabStoker || m.listOnly() // list only has no dock to show
 	detail = paneLines(room)
 	sc.paneFull = paneFull && len(detail) <= room
