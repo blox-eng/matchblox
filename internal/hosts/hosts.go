@@ -20,16 +20,32 @@ import (
 // Path is the hosts file, next to config.toml.
 func Path() string { return filepath.Join(filepath.Dir(config.Path()), "hosts") }
 
+// HiddenPath is the file of the hosts the Hosts list keeps out of the
+// console, in the same format as Path.
+func HiddenPath() string { return filepath.Join(filepath.Dir(config.Path()), "hidden") }
+
+// ThisMachine is the name the console gives its own machine; the hidden
+// file may name it though it is not a host name.
+const ThisMachine = "this machine"
+
 // Read is the hosts of the file, in its order; a line that is not a host
 // name is skipped.
-func Read(path string) []string {
+func Read(path string) []string { return read(path, remote.ValidHost) }
+
+// Hidden is the hosts of the hidden file, in its order, and ThisMachine
+// when it is there.
+func Hidden(path string) []string {
+	return read(path, func(h string) bool { return h == ThisMachine || remote.ValidHost(h) })
+}
+
+func read(path string, valid func(string) bool) []string {
 	b, err := os.ReadFile(path) //nolint:gosec // our own config file
 	if err != nil {
 		return nil
 	}
 	var out []string
 	for line := range strings.SplitSeq(string(b), "\n") {
-		if h := name(line); remote.ValidHost(h) {
+		if h := name(line); valid(h) {
 			out = append(out, h)
 		}
 	}
@@ -41,13 +57,28 @@ func name(line string) string {
 	return strings.TrimSpace(line)
 }
 
-const header = "# The hosts `matchblox` opens, one on each line. Change them here.\n"
+const (
+	header       = "# The hosts `matchblox` opens, one on each line. Change them here.\n"
+	hiddenHeader = "# The hosts `matchblox` keeps out of the console, one on each line.\n"
+)
 
 // Add appends the host when the file does not have it.
 func Add(path, host string) error {
 	if !remote.ValidHost(host) {
 		return errors.New("not a host name: " + host)
 	}
+	return appendLine(path, host, header)
+}
+
+// Hide appends the host to the hidden file when it does not have it.
+func Hide(path, host string) error {
+	if host != ThisMachine && !remote.ValidHost(host) {
+		return errors.New("not a host name: " + host)
+	}
+	return appendLine(path, host, hiddenHeader)
+}
+
+func appendLine(path, host, header string) error {
 	b, err := os.ReadFile(path) //nolint:gosec // our own config file
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -68,6 +99,14 @@ func Add(path, host string) error {
 		return err
 	}
 	return write(path, s+host+"\n")
+}
+
+// Show takes the host out of the hidden file and keeps every other line.
+func Show(path, host string) error {
+	if err := Remove(path, host); !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // Remove takes out the lines of the host and keeps every other line.

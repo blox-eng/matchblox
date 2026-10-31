@@ -338,7 +338,7 @@ func (m Model) chatScreen(w int) drawn {
 		title = spread(title, st.accent.Render(ansi.Truncate(m.toast, max(w/2, 1), "…"))+" ", w)
 	}
 	title = fit(title, w)
-	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true}
+	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true, nowX: -1}
 	sc.lines = append(sc.lines, m.screenLines(w, max(m.height-3, 0))...)
 	m.markCard(&sc, len(sc.lines), 0, w, max(m.height-3, 0))
 	keys, spans := m.keyLine(w)
@@ -406,6 +406,8 @@ func (m Model) chatTarget() (pane, why string) {
 		return "", ""
 	case s.Pane == "":
 		return "", s.Name + " runs outside tmux: there is no pane to type into"
+	case s.Host != m.opt.Host:
+		return "", s.Name + " runs on " + m.nameOf(s.Host) + ": " + m.keys.main.Open.Help().Key + " goes into its pane"
 	}
 	return s.Pane, ""
 }
@@ -414,7 +416,7 @@ func (m Model) chatTarget() (pane, why string) {
 // holding the keys. The selection stays on the session while the chat has
 // its keys.
 func (m Model) chatOn(pane string) Model {
-	s, ok := m.sessionIn(pane)
+	s, ok := m.sessionIn(m.opt.Host, pane)
 	if !ok {
 		return m
 	}
@@ -423,7 +425,7 @@ func (m Model) chatOn(pane string) Model {
 	if m.tab != tabSessions {
 		m.setTab(tabSessions)
 	}
-	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID = "", "", 0, true, s.PID
+	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
 	m.chatKeys, m.flash = true, ""
 	if !shown || s.Ask != nil && m.cardSeen.askID != s.Ask.ID { // the chat, or its card, was not on screen before
 		m.cardSeen = cardSeen{pane: pane, at: m.now()}
@@ -440,7 +442,7 @@ func (m Model) chatHushed(k chatKey) bool {
 	if m.cardSeen.pane != k.pane || !m.now().Before(m.cardSeen.at.Add(cardQuiet)) {
 		return false
 	}
-	s, ok := m.sessionIn(k.pane)
+	s, ok := m.sessionIn(m.opt.Host, k.pane)
 	if _, waits := m.waitOf(s); !ok || !waits {
 		return false
 	}
@@ -520,8 +522,8 @@ func (m Model) chatPaste(text string) (tea.Model, tea.Cmd) {
 	if len(keys) == 0 {
 		return m, nil
 	}
-	if m.night() && !m.stoker.Asked {
-		m.held = m.heldKeys(name, keys)
+	if m.takeOverOn(m.opt.Host) {
+		m.held, m.heldOn = m.heldKeys(name, keys), m.opt.Host
 		return m, nil
 	}
 	return m.toAgent(name, keys...)

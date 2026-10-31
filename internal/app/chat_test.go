@@ -641,7 +641,7 @@ func TestAPasteTouchesTheStokersRest(t *testing.T) {
 	}
 	next, cmd := m.Update(tea.PasteMsg{Content: "hi"})
 	drain(cmd)
-	if next.(Model).touched.IsZero() || !slices.ContainsFunc(f.acts(), func(a proto.Act) bool { return a.RecID == "stoker:touch" }) {
+	if next.(Model).touched[next.(Model).opt.Host].IsZero() || !slices.ContainsFunc(f.acts(), func(a proto.Act) bool { return a.RecID == "stoker:touch" }) {
 		t.Fatalf("acts %+v", f.acts())
 	}
 }
@@ -729,7 +729,7 @@ func TestNarrowSwapsToChat(t *testing.T) {
 	if m = next.(Model); m.chatKeys || screen(m) != screen(list) {
 		t.Fatalf("a tap on ‹ Sessions: chatKeys %v, not the list as before:\n%s", m.chatKeys, screen(m))
 	}
-	tall := pressKeys(t, demoSized(t, 44, 50), "enter")
+	tall := pressKeys(t, fullView(demoSized(t, 44, 50)), "enter")
 	next, _ = tall.Update(tea.MouseClickMsg(tea.Mouse{X: 3, Y: 0, Button: tea.MouseLeft}))
 	if sc := next.(Model).draw(44); sc.dockAt < 0 {
 		t.Fatalf("no dock under the list:\n%s", screen(next))
@@ -862,7 +862,7 @@ func TestTheChatStripTakesNoRowsWithoutFacts(t *testing.T) {
 	m := flintSized(t, 200, 50, func(s *sample.Session) {
 		s.Provider, s.Account, s.Agents, s.Shells = "", "", 0, nil
 	})
-	m.shipReport = nil
+	m.shipReport, m.allShips = nil, nil
 	s, _ := m.selectedSession()
 	got := m.chatPane(s, 121, 40)
 	want := m.screenLines(120, 39)

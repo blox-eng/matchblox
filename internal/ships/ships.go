@@ -59,6 +59,9 @@ type Ship struct {
 	// the worktree on its head branch, else its repository's main checkout.
 	// Empty while a session owns it, or when no checkout of it is here.
 	Where string `json:"where,omitempty"`
+	// Host is the host the console read the ship from: set by the console,
+	// never sent.
+	Host string `json:"-"`
 }
 
 // SessionRef names the session that drives a ship. On a ship it is the

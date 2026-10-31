@@ -361,8 +361,8 @@ func (m Model) tapCard(i, dx int, sc drawn) (tea.Model, tea.Cmd) {
 		c.at = 0 // a tap on an option picks it, also while the typing row has the cursor
 		m.askCard = c
 	}
-	if m.takeOverDue() && m.cardSends(k) {
-		m.held = m.heldCard(k, option)
+	if m.takeOverOn(m.opt.Host) && m.cardSends(k) {
+		m.held, m.heldOn = m.heldCard(k, option), m.opt.Host
 		return m, nil
 	}
 	return m.cardKey(k)

@@ -113,4 +113,4 @@ and shell stay as they are.
 ## 5. Not in v0.1
 
 - Containers, Kubernetes, cloud hosts: #15 (a host kind with a scheme).
-- A queue merged across hosts.
+- A queue merged across hosts: built in [0017](0017-every-host.md).

@@ -12,9 +12,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // lists is what the service sent, before the search and the sort of the
@@ -24,7 +26,106 @@ type lists struct {
 	recs     []advice.Rec
 	sessions []sample.Session
 	orphans  []sample.Orphan
+	children []sample.Session
 }
+
+// merge joins the lists of every host that sent a state, home first and
+// the peers in Hosts order, each item with its host, and draws them again.
+// The ships are every host's too. Recommendations and orphans stay the
+// home host's. One local host: the lists are home's as they came.
+func (m *Model) merge() {
+	defer func() { m.noteLanes(m.now()) }()
+	m.all, m.snap.Children = m.homeAll, m.homeAll.children
+	m.allShips = m.shipsMerged()
+	if m.opt.Host == "" && !slices.ContainsFunc(m.peers, func(l link) bool { return l.have }) {
+		m.refresh()
+		return
+	}
+	m.all.sessions = sessionsOn(nil, m.opt.Host, m.homeAll.sessions)
+	m.all.queue = itemsOn(nil, m.opt.Host, m.homeAll.queue)
+	m.snap.Children = sessionsOn(nil, m.opt.Host, m.homeAll.children)
+	for _, l := range m.peers {
+		if l.have {
+			m.all.sessions = sessionsOn(m.all.sessions, l.host, l.st.Sessions)
+			m.all.queue = itemsOn(m.all.queue, l.host, l.st.Queue)
+			m.snap.Children = sessionsOn(m.snap.Children, l.host, l.st.Children)
+		}
+	}
+	m.all.children = m.snap.Children
+	m.refresh()
+}
+
+func sessionsOn(to []sample.Session, host string, ss []sample.Session) []sample.Session {
+	for _, s := range ss {
+		s.Host = host
+		to = append(to, s)
+	}
+	return to
+}
+
+func itemsOn(to []queue.Item, host string, items []queue.Item) []queue.Item {
+	for _, it := range items {
+		it.Host = host
+		to = append(to, it)
+	}
+	return to
+}
+
+// stateOf is the last state of a host, for the lookups by pane and the
+// forms. The home host's is a view of the Model's own fields; a host with
+// no state yet has an empty one.
+func (m Model) stateOf(host string) *proto.State {
+	if host != m.opt.Host {
+		if i := m.peerAt(host); i >= 0 {
+			return &m.peers[i].st
+		}
+		return &proto.State{}
+	}
+	used := m.used
+	return &proto.State{Doc: state.Doc{Holds: m.holds, Reasons: m.reasons, Renames: m.renames,
+		SignIns: m.signIns, StokerServer: m.stokerServer, Git: m.git, Agents: m.agents, Accounts: m.accounts,
+		AccountsSkipped: m.skipped, LastAccount: m.lastAccount, LastAgent: m.keptAgent}, Found: m.found, Used: &used}
+}
+
+// sessionsOf are the sessions host sent last.
+func (m Model) sessionsOf(host string) []sample.Session {
+	if host == m.opt.Host {
+		return m.homeAll.sessions
+	}
+	return m.stateOf(host).Sessions
+}
+
+// hostOrder is the place of a host in Hosts order: home first.
+func (m Model) hostOrder(host string) int {
+	if host == m.opt.Host {
+		return 0
+	}
+	return 1 + m.peerAt(host)
+}
+
+// machineOf is the machine a host last sampled.
+func (m Model) machineOf(host string) sample.Machine {
+	if host == m.opt.Host {
+		return m.snap.Machine
+	}
+	return m.stateOf(host).Machine
+}
+
+// limitsOf are the plan limits a host last read.
+func (m Model) limitsOf(host string) []limits.Account {
+	if host == m.opt.Host {
+		return m.snap.Limits
+	}
+	return m.stateOf(host).Limits
+}
+
+// rowKey is a session's identity across hosts: PIDs repeat on two hosts.
+type rowKey struct {
+	host string
+	pid  int
+}
+
+func keyOf(s sample.Session) rowKey { return rowKey{s.Host, s.PID} }
 
 // sortBy is a column and its direction: rev is the other way from the
 // column's own (busy first, longest wait first, A to Z).
@@ -88,26 +189,24 @@ func (m *Model) refresh() {
 			return !keep(strconv.Itoa(o.PID), o.Comm, o.Cmdline, o.Cwd, o.Target)
 		})
 	}
-	need, since := map[int]int{}, map[int]time.Time{}
+	need, since := map[rowKey]int{}, map[rowKey]time.Time{}
 	for _, s := range sessions {
-		need[s.PID] = m.groupOf(s)
+		need[keyOf(s)] = m.groupOf(s)
 		if it, ok := m.waitOf(s); ok {
-			since[s.PID] = it.Since
+			since[keyOf(s)] = it.Since
 		}
 	}
 	rank := m.groupRanks(sessions, need)
 	slices.SortStableFunc(sessions, func(a, b sample.Session) int {
-		if c := rank[a.PID] - rank[b.PID]; c != 0 {
+		if c := rank[keyOf(a)] - rank[keyOf(b)]; c != 0 {
 			return c // the groups keep their order; the sort works inside them
 		}
-		return m.sessSort.compare(a, b, need, since)
+		return m.sessSort.compare(a, b, need, since, m.hostOrder)
 	})
 	m.snap.Sessions = sessions
-	if m.git != nil {
-		for p := range m.picked {
-			if !m.safeWorktree(p) {
-				delete(m.picked, p)
-			}
+	for k := range m.picked {
+		if m.gitOf(k.host) != nil && !m.safeWorktree(k) {
+			delete(m.picked, k)
 		}
 	}
 }
@@ -115,12 +214,12 @@ func (m *Model) refresh() {
 // groupRanks is the place of each session's group in the list: by need
 // the groups' own order, by state the needier first, by repo the names
 // A to Z.
-func (m Model) groupRanks(sessions []sample.Session, need map[int]int) map[int]int {
+func (m Model) groupRanks(sessions []sample.Session, need map[rowKey]int) map[rowKey]int {
 	first := map[string]int{}
 	for _, s := range sessions {
 		l := m.groupLabel(s)
-		if n, ok := first[l]; !ok || need[s.PID] < n {
-			first[l] = need[s.PID]
+		if n, ok := first[l]; !ok || need[keyOf(s)] < n {
+			first[l] = need[keyOf(s)]
 		}
 	}
 	labels := slices.SortedFunc(maps.Keys(first), func(a, b string) int {
@@ -129,16 +228,16 @@ func (m Model) groupRanks(sessions []sample.Session, need map[int]int) map[int]i
 		}
 		return strings.Compare(a, b)
 	})
-	rank := map[int]int{}
+	rank := map[rowKey]int{}
 	for _, s := range sessions {
-		rank[s.PID] = slices.Index(labels, m.groupLabel(s))
+		rank[keyOf(s)] = slices.Index(labels, m.groupLabel(s))
 	}
 	return rank
 }
 
 // compare orders two sessions inside a group. group holds the need of
-// each pid, since when it waits.
-func (s sortBy) compare(a, b sample.Session, group map[int]int, since map[int]time.Time) int {
+// each session, since when it waits; a tie goes by host, in hostOrder.
+func (s sortBy) compare(a, b sample.Session, group map[rowKey]int, since map[rowKey]time.Time, hostOrder func(string) int) int {
 	if s.rev {
 		a, b = b, a
 	}
@@ -148,12 +247,13 @@ func (s sortBy) compare(a, b sample.Session, group map[int]int, since map[int]ti
 	case sortState:
 		// Who waits for the person, the oldest wait first; who works; then
 		// the quiet ones, the newest first: the oldest sink to the bottom.
-		c = group[a.PID] - group[b.PID]
+		ga := group[keyOf(a)]
+		c = ga - group[keyOf(b)]
 		switch {
 		case c != 0:
-		case group[a.PID] == groupWaits:
-			c = since[a.PID].Compare(since[b.PID])
-		case group[a.PID] == groupQuiet, group[a.PID] == groupHeld:
+		case ga == groupWaits:
+			c = since[keyOf(a)].Compare(since[keyOf(b)])
+		case ga == groupQuiet, ga == groupHeld:
 			c = cmpF(float64(a.Idle), float64(b.Idle))
 		}
 	case sortIdle:
@@ -171,6 +271,12 @@ func (s sortBy) compare(a, b sample.Session, group map[int]int, since map[int]ti
 	}
 	if c == 0 {
 		c = strings.Compare(a.Name, b.Name)
+	}
+	if c == 0 {
+		c = hostOrder(a.Host) - hostOrder(b.Host)
+		if s.rev {
+			c = -c // home first both ways
+		}
 	}
 	if c == 0 {
 		c = a.PID - b.PID
@@ -326,9 +432,9 @@ func (m Model) nothing(text string) string {
 
 // safeWorktree reads every worktree, not the found ones: a search hides
 // rows, not marks.
-func (m Model) safeWorktree(path string) bool {
+func (m Model) safeWorktree(k wtKey) bool {
 	for _, r := range m.allWorktreeRows() {
-		if r.wt.Path == path {
+		if r.key() == k {
 			return r.wt.Safe && len(r.wt.Remove) > 0
 		}
 	}
@@ -337,18 +443,18 @@ func (m Model) safeWorktree(path string) bool {
 
 // mark adds the selected worktree to the ones x removes, or takes it out.
 func (m *Model) mark() {
-	wt, ok := m.selectedWorktree()
+	r, ok := m.selectedWorktree()
 	switch {
 	case !ok:
-	case m.picked[wt.Path]:
-		delete(m.picked, wt.Path)
-	case !wt.Safe:
-		m.flash = "not safe to remove: " + unsafeWhy(wt)
+	case m.picked[r.key()]:
+		delete(m.picked, r.key())
+	case !r.wt.Safe:
+		m.flash = "not safe to remove: " + unsafeWhy(r.wt)
 	default:
 		if m.picked == nil {
-			m.picked = map[string]bool{}
+			m.picked = map[wtKey]bool{}
 		}
-		m.picked[wt.Path] = true
+		m.picked[r.key()] = true
 	}
 }
 
@@ -369,14 +475,14 @@ func unsafeWhy(wt proto.Worktree) string {
 // markAllSafe marks every safe worktree, or clears the marks when all of
 // them are marked already.
 func (m *Model) markAllSafe() {
-	var safe []string
+	var safe []wtKey
 	for _, r := range m.worktreeRows() {
 		if r.wt.Safe && len(r.wt.Remove) > 0 {
-			safe = append(safe, r.wt.Path)
+			safe = append(safe, r.key())
 		}
 	}
 	all := len(safe) > 0 && len(m.picked) == len(safe)
-	m.picked = map[string]bool{}
+	m.picked = map[wtKey]bool{}
 	if all {
 		return
 	}
@@ -391,16 +497,30 @@ func (m *Model) markAllSafe() {
 // removeMarked is x with marks: every marked worktree, behind one typed y.
 func (m Model) removeMarked() *action {
 	var steps [][]string
-	var paths []string
+	var keys []wtKey
 	for _, r := range m.allWorktreeRows() {
-		if m.picked[r.wt.Path] {
-			steps, paths = append(steps, r.wt.Remove), append(paths, r.wt.Path)
+		if m.picked[r.key()] {
+			steps, keys = append(steps, r.wt.Remove), append(keys, r.key())
 		}
 	}
-	if len(paths) == 0 {
+	if len(keys) == 0 {
 		return nil
 	}
-	return &action{label: fmt.Sprintf("remove %d", len(paths)), steps: steps, destructive: true, batch: paths}
+	return &action{label: fmt.Sprintf("remove %d", len(keys)), steps: steps, destructive: true, batch: keys}
+}
+
+// batchRefusal is why a batch is not sent: a host of its worktrees
+// cannot take it.
+func (m Model) batchRefusal(a action) string {
+	for _, k := range a.batch {
+		if why := m.refusal(k.host); why != "" {
+			return why
+		}
+		if k.host == m.opt.Host && (m.conn == nil || m.lost) {
+			return "not sent, no connection: " + a.String()
+		}
+	}
+	return ""
 }
 
 // batch counts the results of the acts of one confirm.
@@ -410,13 +530,13 @@ type batch struct {
 	why                      string
 }
 
-// sendBatch sends one guarded act for each worktree: the service checks
-// each one again and removes only what is still safe.
+// sendBatch sends one guarded act for each worktree, to its host: the
+// service checks each one again and removes only what is still safe.
 func (m Model) sendBatch(a action) (tea.Model, tea.Cmd) {
 	b := &batch{ids: map[string]bool{}}
 	var cmds []tea.Cmd
-	for _, p := range a.batch {
-		cmds = append(cmds, m.send(proto.Act{RecID: "worktree:" + p, Which: "secondary", Confirm: "y"}))
+	for _, k := range a.batch {
+		cmds = append(cmds, m.sendTo(k.host, proto.Act{RecID: "worktree:" + k.path, Which: "secondary", Confirm: "y"}))
 		b.ids["a"+strconv.Itoa(m.acts)] = true
 	}
 	m.batch, m.picked = b, nil
@@ -444,9 +564,34 @@ func (m *Model) tally(r proto.Result) bool {
 	case len(r.Ran) > 0:
 		b.removed++
 	}
-	if len(b.ids) > 0 {
-		return true
+	if len(b.ids) == 0 {
+		m.endBatch()
 	}
+	return true
+}
+
+// batchLost counts the removals sent on a host's lost conn as failed: their
+// results went with it.
+func (m *Model) batchLost(host string, acts []string) {
+	if m.batch == nil {
+		return
+	}
+	b := m.batch
+	for _, id := range acts {
+		if b.ids[id] {
+			delete(b.ids, id)
+			b.failed++
+			b.why = host + ": connection lost"
+		}
+	}
+	if len(b.ids) == 0 {
+		m.endBatch()
+	}
+}
+
+// endBatch writes the batch's summary.
+func (m *Model) endBatch() {
+	b := m.batch
 	text := fmt.Sprintf("removed %d", b.removed)
 	if b.skipped > 0 {
 		text += fmt.Sprintf(", skipped %d", b.skipped)
@@ -458,5 +603,4 @@ func (m *Model) tally(r proto.Result) bool {
 		text += ": " + b.why
 	}
 	m.flash, m.batch = text, nil
-	return true
 }

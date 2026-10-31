@@ -53,11 +53,11 @@ func TestLayoutBreakpoints(t *testing.T) {
 // (107x60 with the keyboard up, 107x101 down) splits the list and the
 // detail at the middle, the detail a drawer on the right, and no row opens
 // in place; its dock shows two panels side by side. Upright under 90
-// columns is one column.
+// columns is one column. The phone starts list only: this is its full view.
 func TestAnUprightPhoneGetsTheDrawer(t *testing.T) {
 	for _, h := range []int{60, 101} {
 		m, _ := loadedWith(t, 107, limitsState())
-		next, _ := m.Update(tea.WindowSizeMsg{Width: 107, Height: h})
+		next, _ := fullView(m).Update(tea.WindowSizeMsg{Width: 107, Height: h})
 		m = next.(Model)
 		out := screen(m)
 		if at := strings.Split(out, "\n")[lineOf(t, m, "USAGE")]; !strings.Contains(at, "MACHINE") {
