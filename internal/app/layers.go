@@ -138,11 +138,13 @@ func (s Shell) open(host string, first bool) (Shell, tea.Cmd) {
 	return s, m.Init()
 }
 
+// Init also says no agent, once: a phone whose belt still shows the
+// Commands of a console that quit learns that no chat runs them.
 func (s Shell) Init() tea.Cmd {
 	if s.layer == layerConsole {
-		return s.cur.Init()
+		return tea.Batch(noAgent(s.opt.Base), s.cur.Init())
 	}
-	return tea.RequestBackgroundColor
+	return tea.Batch(noAgent(s.opt.Base), tea.RequestBackgroundColor)
 }
 
 func (s Shell) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

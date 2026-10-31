@@ -566,13 +566,23 @@ func (m *Model) tellAgent() tea.Cmd {
 		return nil
 	}
 	m.agentSaid = say
-	if m.opt.OutsideTmux {
-		return tea.Raw(say)
+	cmd := sayAgent(say, m.opt)
+	if cmd == nil && m.chatKeys && !m.tmuxSaid {
+		m.tmuxSaid, m.flash = true, "COMMANDS · needs tmux "+minSignalTmux
 	}
-	if remote.TmuxTooOld(m.opt.LocalTmux, minSignalTmux) {
-		if m.chatKeys && !m.tmuxSaid {
-			m.tmuxSaid, m.flash = true, "COMMANDS · needs tmux "+minSignalTmux
-		}
+	return cmd
+}
+
+// noAgent is the empty agent signal: no chat runs the phone's Commands.
+func noAgent(o Options) tea.Cmd { return sayAgent(keycmd.AgentSignal(""), o) }
+
+// sayAgent writes an agent signal to the terminal, through tmux when the
+// console runs in it; nil for a tmux too old to pass it.
+func sayAgent(say string, o Options) tea.Cmd {
+	switch {
+	case o.OutsideTmux:
+		return tea.Raw(say)
+	case remote.TmuxTooOld(o.LocalTmux, minSignalTmux):
 		return nil
 	}
 	return tea.Raw(logos.Passthrough(say))

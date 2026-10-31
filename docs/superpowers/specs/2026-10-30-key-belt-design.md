@@ -297,6 +297,11 @@ the island extension compile, as `project.yml` already does for
    registered at console start as `HomeKeyArgv` does. The command table is
    finite (no free text), so a fixed set of slots covers it. A command key
    sends its own sequence, `ESC _ matchblox;cmd=<id> ESC \`.
+   Changed (2026-10-31): a slot hands its key on only where the pane runs the
+   console (`pane_current_command` is `matchblox`), so a shell left where a
+   console quit never reads it as typing. A console that starts sends
+   `agent=` (empty) once, so a belt still showing a gone console's Commands
+   lets them go.
 2. **One command table, two readers.** The table (id, label, agent, mark,
    what it runs) is a fixture in `testdata/keys/commands.json`. The Go console
    and the app's MatchbloxKit both read it in their tests, as both read

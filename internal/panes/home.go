@@ -52,10 +52,12 @@ func HomeKeyArgv() []string {
 
 // CommandKeysArgv makes each command key of the phone a key of the tmux
 // server, in user-keys slots from 901 up (keycmd's table). A client in the
-// console's session hands the key on to the console, whole, so its chat runs
-// the command. Anywhere else the key does nothing: a command runs only from
-// the chat.
+// console's session, on a pane the console still runs in, hands the key on
+// to the console, whole, so its chat runs the command. Anywhere else the key
+// does nothing: a command runs only from the chat, and a shell left where a
+// console quit never reads it as typing.
 func CommandKeysArgv() []string {
+	const atConsole = "#{&&:#{==:#{session_name}," + Home + "},#{==:#{pane_current_command}," + Home + "}}"
 	argv := []string{"tmux"}
 	for _, c := range keycmd.All() {
 		slot, seq := strconv.Itoa(c.Slot), keycmd.Sequence(c.ID)
@@ -63,7 +65,7 @@ func CommandKeysArgv() []string {
 			argv = append(argv, ";")
 		}
 		argv = append(argv, "set-option", "-s", "user-keys["+slot+"]", seq,
-			";", "bind-key", "-n", "User"+slot, "if-shell", "-F", "#{==:#{session_name},"+Home+"}", "send-keys -H "+hexKeys(seq))
+			";", "bind-key", "-n", "User"+slot, "if-shell", "-F", atConsole, "send-keys -H "+hexKeys(seq))
 	}
 	return argv
 }

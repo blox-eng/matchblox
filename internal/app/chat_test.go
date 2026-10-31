@@ -1935,3 +1935,15 @@ func TestAChatOnAnAgentWithNoCommandsIsStillTheChat(t *testing.T) {
 		t.Fatalf("flash %q", m.flash)
 	}
 }
+
+// TestTheConsoleSaysNoAgentAtStart: a phone whose belt shows the Commands
+// of a console that is gone hears, once the new console starts, that no
+// chat runs them.
+func TestTheConsoleSaysNoAgentAtStart(t *testing.T) {
+	for _, start := range []string{"", "here"} {
+		r := newShell(t, []string{"here"}, nil, start, false)
+		if got, want := raws(r.sh.Init()), logos.Passthrough(keycmd.AgentSignal("")); !slices.Equal(got, []string{want}) {
+			t.Fatalf("start %q wrote %q, want %q", start, got, want)
+		}
+	}
+}
