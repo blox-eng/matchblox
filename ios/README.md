@@ -53,7 +53,9 @@ It needs `rsvg-convert` (`brew install librsvg`).
 ## CI
 
 The workflow `.github/workflows/ios.yml` runs on a macOS runner.
-It runs `swift test` on MatchbloxKit. Then it runs `make build`.
+It runs `swift test` on MatchbloxKit. Then it runs `make build` and `make release`.
+`make release` archives the app in Release as TestFlight does, without signing.
+If it fails, the run keeps the compiler's full output as an artifact.
 It starts when you change `ios/`, `testdata/pair/` or the workflow.
 
 ## Publish to TestFlight

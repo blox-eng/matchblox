@@ -42,3 +42,19 @@ jobs:
           make -C ios build
       - name: The app holds the command table
         run: test -f ios/build/Build/Products/Debug-iphonesimulator/Matchblox.app/commands.json
+      - name: Compile the app in Release
+        # The same action, configuration and platform as the TestFlight archive,
+        # without signing. A compiler crash here fails the PR, not the release.
+        run: |
+          mkdir -p ios/build
+          if ! make -C ios release > ios/build/release.log 2>&1; then
+            tail -n 100 ios/build/release.log
+            exit 1
+          fi
+      - name: Upload the Release compile log
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-release-compile-log
+          path: ios/build/release.log
+          if-no-files-found: ignore

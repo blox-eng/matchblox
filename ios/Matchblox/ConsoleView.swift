@@ -146,6 +146,9 @@ private struct TerminalRepresentable: UIViewRepresentable {
 private final class HeldScreen: UIView {
     private let terminal: UIView
     private var hold = ScreenHold()
+    private var heldSize: ScreenHold.Size {
+        ScreenHold.Size(width: bounds.width, height: bounds.height)
+    }
 
     init(terminal: UIView) {
         self.terminal = terminal
@@ -158,7 +161,7 @@ private final class HeldScreen: UIView {
 
     func trayMoved(open: Bool) {
         if open {
-            hold.open(screen: bounds.size, drawer: BeltView.drawerOpen)
+            hold.open(screen: heldSize, drawer: BeltView.drawerOpen)
         } else {
             hold.close()
         }
@@ -167,7 +170,7 @@ private final class HeldScreen: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let height = hold.height(screen: bounds.size)
+        let height = hold.height(screen: heldSize)
         terminal.frame = CGRect(x: 0, y: bounds.height - height, width: bounds.width, height: height)
     }
 }
