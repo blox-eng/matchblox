@@ -34,12 +34,19 @@ var trailingBlank = regexp.MustCompile(`(?:\x1b\[[0-9;:]*m|[ \t])+$`)
 
 var sgr = regexp.MustCompile(`\x1b\[[0-9;:]*m`)
 
+// controlStrings is an OSC (a hyperlink, a title), or an APC, DCS, PM or SOS
+// string, up to its terminator: an agent's screen keeps none of them.
+var controlStrings = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[_P^X][^\x1b]*\x1b\\`)
+
 // fitScreen fits a pane's text into w columns and the last h lines: a rule
 // is cut, other text wraps between words, and the blank lines at the end go.
+// Of its escape sequences only the styles stay: a link or a string control
+// of the agent's never reaches the console's terminal.
 func fitScreen(text string, w, h int) []string {
 	if w <= 0 || h <= 0 {
 		return nil
 	}
+	text = controlStrings.ReplaceAllString(text, "")
 	var out []string
 	for _, line := range strings.Split(strings.ReplaceAll(text, "\r", ""), "\n") {
 		line = trimBlank(line)

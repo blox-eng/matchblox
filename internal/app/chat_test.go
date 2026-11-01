@@ -1802,3 +1802,19 @@ func TestAKeyNamesTheAgentsStart(t *testing.T) {
 		t.Fatalf("acts %+v, session pid %d start %d", got, s.PID, s.Start)
 	}
 }
+
+// An agent's screen reaches the console's terminal with its colours only:
+// a hyperlink (OSC 8), any other OSC, an APC or a DCS goes, its text stays.
+func TestTheScreenDropsLinksAndOtherControls(t *testing.T) {
+	text := "see \x1b]8;;https://evil.example/\x1b\\the docs\x1b]8;;\x1b\\ \x1b[1mbold\x1b[0m" +
+		" \x1b]0;title\x07\x1b_apc\x1b\\\x1bPdcs\x1b\\end"
+	out := strings.Join(fitScreen(text, 80, 5), "\n")
+	for _, bad := range []string{"\x1b]", "\x1b_", "\x1bP", "evil"} {
+		if strings.Contains(out, bad) {
+			t.Errorf("%q kept %q", out, bad)
+		}
+	}
+	if ansi.Strip(out) != "see the docs bold end" || !strings.Contains(out, "\x1b[1m") {
+		t.Errorf("text or colours lost: %q", out)
+	}
+}
