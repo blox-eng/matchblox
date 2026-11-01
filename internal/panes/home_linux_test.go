@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -74,6 +75,134 @@ func TestHomeKeyReachesTheConsoleAtHome(t *testing.T) {
 	b, _ := os.ReadFile(got)
 	if lines := strings.Split(strings.TrimSpace(string(b)), "\n"); len(lines) != 2 {
 		t.Errorf("the console read %q, want only %s", lines[1:], want)
+	}
+}
+
+// pressPrefixM is prefix m on a server with tmux's default prefix, one key at
+// a time as a person types: two keys within assume-paste-time are a paste to
+// tmux, which binds neither. A client just attached gets a moment first.
+func pressPrefixM(t *testing.T, term *os.File) {
+	t.Helper()
+	time.Sleep(100 * time.Millisecond)
+	for _, k := range []string{"\x02", "m"} {
+		if _, err := term.WriteString(k); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(30 * time.Millisecond)
+	}
+}
+
+// consolePane starts a server of its own with the console's session, whose
+// pane writes what it reads to the file it returns, and the way back.
+func consolePane(t *testing.T) (sock string, tmux func(args ...string) string, got string) {
+	t.Helper()
+	sock = tmuxtest.Server(t)
+	tmux = func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput() //nolint:gosec // test argv
+		if err != nil {
+			t.Fatalf("tmux %q: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	got = t.TempDir() + "/events"
+	tmux("new-session", "-d", "-s", Home, "-e", decodeTo+"="+got, os.Args[0], "-test.run=^TestDecodePane$")
+	waitFor(t, func() bool {
+		b, _ := os.ReadFile(got)
+		return strings.HasPrefix(string(b), "ready")
+	})
+	return sock, tmux, got
+}
+
+// paneRead is what the pane of consolePane read, one event a line.
+func paneRead(t *testing.T, got string) []string {
+	t.Helper()
+	b, err := os.ReadFile(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Split(strings.TrimSpace(string(b)), "\n")[1:]
+}
+
+// TestPrefixMGivesTheKeysBackAtHome presses prefix m in a real client in the
+// console's session: the console reads the home key, whole and alone, so its
+// chat gives the keys back. tmux's own m, which marks a pane, is gone.
+func TestPrefixMGivesTheKeysBackAtHome(t *testing.T) {
+	sock, tmux, got := consolePane(t)
+	tmux(HomeKeyArgv()[1:]...)
+	term := attach(t, sock, Home)
+	pressPrefixM(t, term)
+	want := eventLine(uv.UnknownApcEvent(HomeKey))
+	waitFor(t, func() bool { return slices.Contains(paneRead(t, got), want) })
+	if lines := paneRead(t, got); len(lines) != 1 {
+		t.Errorf("the console read %q, want only %s", lines, want)
+	}
+}
+
+// TestPrefixMTakesTheClientHome presses prefix m in a real client in another
+// session: tmux moves it to the console's session, and the console reads
+// nothing.
+func TestPrefixMTakesTheClientHome(t *testing.T) {
+	sock, tmux, got := consolePane(t)
+	tmux("new-session", "-d", "-s", "work")
+	tmux(HomeKeyArgv()[1:]...)
+	term := attach(t, sock, "work")
+	pressPrefixM(t, term)
+	waitFor(t, func() bool { return tmux("list-clients", "-F", "#{client_session}") == Home })
+	if lines := paneRead(t, got); len(lines) != 0 {
+		t.Errorf("the console read %q", lines)
+	}
+}
+
+// TestHomeKeyLeavesCopyMode: with the console's pane in copy mode, in either
+// set of copy-mode keys, the home key and prefix m leave it and reach the
+// console, whole. Copy mode would read the key's bytes as its own commands.
+func TestHomeKeyLeavesCopyMode(t *testing.T) {
+	for _, mode := range []string{"emacs", "vi"} {
+		for name, press := range map[string]func(*testing.T, *os.File){
+			"prefix m": pressPrefixM,
+			"the home key": func(t *testing.T, term *os.File) {
+				if _, err := term.WriteString(HomeKey); err != nil {
+					t.Fatal(err)
+				}
+			},
+		} {
+			t.Run(mode+"/"+name, func(t *testing.T) {
+				sock, tmux, got := consolePane(t)
+				tmux(HomeKeyArgv()[1:]...)
+				tmux("set-option", "-g", "mode-keys", mode)
+				term := attach(t, sock, Home)
+				tmux("copy-mode", "-t", "="+Home+":")
+				waitFor(t, func() bool { return tmux("display-message", "-p", "-t", "="+Home+":", "#{pane_in_mode}") == "1" })
+				press(t, term)
+				want := eventLine(uv.UnknownApcEvent(HomeKey))
+				waitFor(t, func() bool { return slices.Contains(paneRead(t, got), want) })
+				if lines := paneRead(t, got); len(lines) != 1 {
+					t.Errorf("the console read %q, want only %s", lines, want)
+				}
+				if in := tmux("display-message", "-p", "-t", "="+Home+":", "#{pane_in_mode}"); in != "0" {
+					t.Errorf("the pane stayed in copy mode")
+				}
+			})
+		}
+	}
+}
+
+// TestTheConfigAndTheServerBindPrefixMAlike: the way back in the tmux config
+// and the binding the console sets are one, so a config sourced again leaves
+// prefix m as the console set it.
+func TestTheConfigAndTheServerBindPrefixMAlike(t *testing.T) {
+	_, tmux, _ := consolePane(t)
+	tmux(HomeKeyArgv()[1:]...)
+	set := tmux("list-keys", "-T", "prefix", "m")
+	conf := t.TempDir() + "/tmux.conf"
+	if err := os.WriteFile(conf, []byte(WayBack), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tmux("unbind-key", "-T", "prefix", "m")
+	tmux("source-file", conf)
+	if got := tmux("list-keys", "-T", "prefix", "m"); got != set {
+		t.Errorf("the config binds\n%s\nthe console bound\n%s", got, set)
 	}
 }
 

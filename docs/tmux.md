@@ -31,9 +31,13 @@ tmux config:
 Outside tmux, a jump takes the terminal. Press your prefix once, then `m`
 or `d`.
 
-Prefix `m` from any pane needs the way back that `matchblox setup` adds
-to your tmux config. From a jump, it goes back to the console and ends the
-jump. See [Remote hosts](remote.md#jump-into-a-session).
+Prefix `m` from any pane goes to the console. The console binds it on the
+tmux server when it starts in the session `matchblox`, in place of the tmux
+key that marks a pane, and the way back that `matchblox setup` adds to your
+tmux config binds it too. In the console's session it gives the chat's keys
+back. A `bind m` of your own wins again when you source your config, until
+the console starts again. From a jump, prefix `m` goes back to the console
+and ends the jump. See [Remote hosts](remote.md#jump-into-a-session).
 
 ## Learn tmux
 

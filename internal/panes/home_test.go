@@ -80,7 +80,7 @@ func TestWayBackParses(t *testing.T) {
 	// tmux 3.8 pads list-keys with a column of its own: "bind-key  -T".
 	out = regexp.MustCompile(` {2,}`).ReplaceAll(out, []byte(" "))
 	for _, want := range []string{
-		"bind-key -T prefix m switch-client -t =matchblox",
+		`bind-key -T prefix m if-shell -F "#{==:#{session_name},matchblox}"`,
 		`"switch-client -t =matchblox"`,
 		"#[range=user|matchblox] ◂ matchblox #[norange]",
 		"status-left-length 40",
@@ -91,6 +91,29 @@ func TestWayBackParses(t *testing.T) {
 	}
 	if n := strings.Count(string(out), "◂ matchblox"); n != 1 {
 		t.Fatalf("sourced twice, the status line has %d labels:\n%s", n, out)
+	}
+}
+
+// TestHomeKeyArgvBindsPrefixMAsTheKey: the home key and prefix m run one
+// command: in the console's session it hands the key on, elsewhere it
+// switches to the console.
+func TestHomeKeyArgvBindsPrefixMAsTheKey(t *testing.T) {
+	argv := HomeKeyArgv()
+	var cmds [][]string
+	for part := range strings.SplitSeq(strings.Join(argv[1:], "\x00"), "\x00;\x00") {
+		cmds = append(cmds, strings.Split(part, "\x00"))
+	}
+	if len(cmds) != 3 {
+		t.Fatalf("%d commands in %q", len(cmds), argv)
+	}
+	ifHome := []string{"if-shell", "-F", "#{==:#{session_name},matchblox}",
+		`if-shell -F "#{pane_in_mode}" "send-keys -X cancel" ; send-keys -H 1b 5f 6d 61 74 63 68 62 6c 6f 78 1b 5c`,
+		"switch-client -t =matchblox"}
+	if want := append([]string{"bind-key", "-n", "User900"}, ifHome...); !slices.Equal(cmds[1], want) {
+		t.Errorf("the home key:\n got %q\nwant %q", cmds[1], want)
+	}
+	if want := append([]string{"bind-key", "m"}, ifHome...); !slices.Equal(cmds[2], want) {
+		t.Errorf("prefix m:\n got %q\nwant %q", cmds[2], want)
 	}
 }
 
