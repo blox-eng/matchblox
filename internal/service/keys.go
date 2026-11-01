@@ -26,7 +26,7 @@ func keyStep(pane, text string) ([]string, string) {
 		if lit == "" || len(lit) > maxLit || strings.ContainsFunc(lit, unicode.IsControl) {
 			return nil, "not sent: the text is empty, over 200 bytes or holds a control character"
 		}
-		return panes.Keys(pane, "-l", "--", lit), ""
+		return panes.Literal(pane, lit), ""
 	}
 	if !slices.Contains(keyNames, text) {
 		return nil, fmt.Sprintf("not sent: %q is not a key", cut(text, 20))

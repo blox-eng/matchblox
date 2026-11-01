@@ -223,3 +223,13 @@ func TestWatchIsRefusedFromTheStokersServer(t *testing.T) {
 		t.Fatalf("err %q", res.Err)
 	}
 }
+
+// TestATypedSemicolonGoes: a "lit:" key that ends in ";" still types it.
+func TestATypedSemicolonGoes(t *testing.T) {
+	for lit, want := range map[string]string{";": `\;`, "ls;": `ls\;`} {
+		step, why := keyStep("%1", "lit:"+lit)
+		if why != "" || step[len(step)-1] != want {
+			t.Errorf("lit:%s: %q %q", lit, step, why)
+		}
+	}
+}
