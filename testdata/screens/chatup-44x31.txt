@@ -28,4 +28,4 @@ pass.
 │   4 Type an answer…                      │
 ╰─ ⏎ question 2 ───────────────────────────╯
 ────────────────────────────────────────────
- a key goes back to live · ctrl+] back
+ a key goes back to live · ctrl+a m back

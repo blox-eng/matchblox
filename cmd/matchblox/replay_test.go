@@ -23,6 +23,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/advice"
@@ -30,6 +31,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/replay"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -361,13 +363,16 @@ func has(s ...string) func(string) bool {
 	}
 }
 
+// homeEvent is the home key as the console reads it.
+var homeEvent = uv.UnknownApcEvent(panes.HomeKey)
+
 func keyMsg(k string) tea.KeyPressMsg {
 	switch k {
 	case "enter":
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "esc":
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
-	case "ctrl+]", "ctrl+o":
+	case "ctrl+o":
 		return tea.KeyPressMsg{Code: rune(k[5]), Mod: tea.ModCtrl}
 	}
 	return tea.KeyPressMsg{Text: k, Code: []rune(k)[0]}
@@ -542,7 +547,7 @@ func replayAt(t *testing.T, z replaySize) {
 		// own work above it once the screen has come (its menu leaves for
 		// the card).
 		{name: "a: the question", at: 4600 * time.Millisecond, key: "a", ok: func(s string) bool {
-			return has("ctrl+] back", "flint-auth asks", "Rotate it", "Keep the token", "⏎ send", "wire the rotation.")(s) && !strings.Contains(s, "Chat about this")
+			return has("ctrl+a m back", "flint-auth asks", "Rotate it", "Keep the token", "⏎ send", "wire the rotation.")(s) && !strings.Contains(s, "Chat about this")
 		}},
 		// 2 picks the second option: it goes to Claude Code's menu, and the
 		// chat shows the agent at work on it. The builder read the card
@@ -551,9 +556,11 @@ func replayAt(t *testing.T, z replaySize) {
 			return has("sent to flint-auth", "I rotate the token on each refresh")(s) && !strings.Contains(s, "flint-auth asks") &&
 				(phone || struck.MatchString(s)) // a phone's chat hides the list
 		}},
-		// ctrl+] gives the keys back to the list.
-		{name: "back to the list", at: 7600 * time.Millisecond, key: "ctrl+]", ok: func(s string) bool {
-			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "ctrl+] back") && burning.MatchString(s)
+		// Prefix m gives the keys back to the list: tmux hands the console the
+		// home key. The chat's own ctrl+a m waits on the clock, which jumps
+		// with each sample here.
+		{name: "back to the list", at: 7600 * time.Millisecond, do: func() { p.Send(homeEvent) }, ok: func(s string) bool {
+			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "ctrl+a m back") && burning.MatchString(s)
 		}},
 		{name: "the sessions", at: 9 * time.Second, ok: func(s string) bool {
 			return has("hearth-", "spark-d", "kindle-", "ember-b", "WORKING")(s) && burning.MatchString(s)

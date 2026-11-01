@@ -2,7 +2,7 @@
 
 Every key of the console works on the key bar of a phone SSH app: letters,
 digits, arrows, `Enter` and `Esc`. No key of the console needs `Ctrl`.
-`Ctrl+]` and `Ctrl+O` in the chat are for a hardware keyboard. On a phone,
+`ctrl+a m` and `Ctrl+O` in the chat are for a hardware keyboard. On a phone,
 `◂` on the app's key belt (or its edge swipe) goes back, `^C` on the belt
 interrupts, and a swipe scrolls. The key line at
 the bottom shows the keys of the open tab. A tap on a key presses it.
@@ -120,8 +120,8 @@ is the console's own host's: another host's row is list only.
 
 | Key | What it does |
 |---|---|
-| `Enter`, `a` or `→` | On Sessions, gives the chat the keys. A click on the chat does it too. The key line then says `keys go to <name> · ctrl+] back · ctrl+o into tmux`. Short of room the name goes first, then `ctrl+o into tmux`; `ctrl+] back` stays, and no hint is cut mid-word. |
-| `Ctrl+]` | Gives the keys back to Sessions. A click on the left does it too. On a narrow screen, it goes back to Sessions. |
+| `Enter`, `a` or `→` | On Sessions, gives the chat the keys. A click on the chat does it too. The key line then says `keys go to <name> · ctrl+a m back · ctrl+o into tmux`, with your own tmux prefix for `ctrl+a`. Short of room the name goes first, then `ctrl+o into tmux`; the way back stays, and no hint is cut mid-word. |
+| `ctrl+a m` | Gives the keys back to Sessions: your tmux prefix, then `m`. A click on the left or on the hint does it too. On a narrow screen, it goes back to Sessions. Outside tmux, or where tmux does not take `ctrl+a`, the chat takes it itself: `ctrl+a` goes to the agent at once (at a shell or in Claude Code, the cursor moves to the start of the line), and `m` within 1 s gives the keys back and does not reach the agent. Any other key goes to the agent. |
 | `Ctrl+O` | Goes to the selected agent's pane in tmux. It works on Sessions too. |
 | `Ctrl+C` | Sends `^C` to the agent. A second one within 1 s is held. See below. |
 | `PgUp`, `PgDn` | Moves the chat one screen up or down the agent's history. See below. |
@@ -172,8 +172,8 @@ Only a console sends keys to an agent. A script or an agent gets
 `keys go only from a console`.
 
 On a narrow screen the title row reads `‹ Sessions · <name> · <state>`. A
-tap on `‹ Sessions`, the app's edge swipe, ⌘M on a hardware keyboard or
-`Ctrl+]` goes back to Sessions.
+tap on `‹ Sessions`, the app's edge swipe, ⌘M or ctrl+M on a hardware
+keyboard, or `ctrl+a m` goes back to Sessions.
 
 ### The question card
 

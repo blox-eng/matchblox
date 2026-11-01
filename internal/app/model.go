@@ -62,6 +62,9 @@ type Options struct {
 	// Prefix is this machine's tmux prefix, the key of the way back from a
 	// jump to a host. Nil or "": C-b.
 	Prefix func() string
+	// NoPrefixM: the console runs in tmux under another name than matchblox,
+	// so tmux's prefix m does not reach it, and the way back it names is a tap.
+	NoPrefixM bool
 	// Home is the tmux session that holds the console, where the way back
 	// lands. Nil or "": matchblox.
 	Home func() string
@@ -357,6 +360,7 @@ type Model struct {
 	held        func(Model) (tea.Model, tea.Cmd)
 	heldOn      string
 	chatKeys    bool      // the chat has the keys: they go to the selected session's agent
+	backArmed   time.Time // when ctrl+a, the first key of the chat's way back, was pressed; zero: not armed
 	agentSaid   string    // the agent signal last written to the terminal; "" none yet
 	tmuxSaid    bool      // the key line said this tmux passes no agent signal
 	keyQ        []chatKey // the chat's keys behind the one in flight
@@ -951,8 +955,14 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m, touch = m.touchRest()
 		}
 		f := m.focus(msg)
-		if m.chatJustShut() && (f == layerMain || bkey.Matches(msg, m.keys.global.Quit)) && !bkey.Matches(msg, m.keys.chat.Back) {
+		if m.chatJustShut() && (f == layerMain || bkey.Matches(msg, m.keys.global.Quit)) {
 			return m, touch // typed for the chat that just closed: no q quits, no letter acts
+		}
+		armed := m.backArmed
+		m.backArmed = time.Time{}
+		if m.chatKeys && (f == layerMain || f == layerTakeOver) && m.chatBacks(msg, armed) {
+			m.chatKeys, m.up = false, 0
+			return m, touch
 		}
 		if m.chatKeys && f == layerMain && bkey.Matches(msg, m.keys.chat.PageUp, m.keys.chat.PageDown) {
 			m.flash = ""
@@ -961,8 +971,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.notLive() && m.chatKeys && (f == layerMain || f == layerTakeOver) {
 			if bkey.Matches(msg, m.keys.chat.Back) { // the way back works from the history too
-				m.chatKeys, m.up = false, 0
-				return m, touch
+				m.backArmed = m.now()
 			}
 			return m.backToLive(), touch
 		}

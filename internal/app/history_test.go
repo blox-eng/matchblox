@@ -286,20 +286,20 @@ func TestAHistoryScreenAfterLiveIsIgnored(t *testing.T) {
 	}
 }
 
-// ctrl+] leaves the chat up the history too, and while it waits for the
+// ctrl+a m leaves the chat up the history too, and while it waits for the
 // live screen after it: a pane whose history never answers does not trap
-// the keys.
-func TestCtrlBracketLeavesTheChatUpTheHistory(t *testing.T) {
+// the keys. Neither key goes to the agent: no key answers the history.
+func TestCtrlAThenMLeavesTheChatUpTheHistory(t *testing.T) {
 	for _, state := range []string{"up", "waiting for live"} {
-		m, _ := inChat(t)
+		m, f := inChat(t)
 		switch state {
 		case "up":
 			m.up = 3
 		case "waiting for live":
 			m.liveWait = true
 		}
-		if m = pressKeys(t, m, "ctrl+]"); m.chatKeys {
-			t.Fatalf("%s: ctrl+] kept the chat", state)
+		if m = pressKeys(t, m, "ctrl+a", "m"); m.chatKeys || len(keyActs(f)) != 0 {
+			t.Fatalf("%s: ctrl+a m: chatKeys=%v acts=%+v", state, m.chatKeys, keyActs(f))
 		}
 	}
 }

@@ -42,4 +42,4 @@
 │   4 Type an answer…                             │
 ╰─ ⏎ question 2 ──────────────────────────────────╯
 ───────────────────────────────────────────────────
- ctrl+] back · ctrl+o into tmux
+ ctrl+a m back · ctrl+o into tmux

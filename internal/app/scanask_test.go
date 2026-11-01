@@ -658,7 +658,7 @@ func TestGhostsAreBuiltWithTheRepos(t *testing.T) {
 
 // TestScanBoxWaitsForTheChat: a scan question that comes while the chat
 // has the keys takes none of them: what the person types goes to the
-// agent. When ctrl+] gives the keys back the box shows, in a new quiet,
+// agent. When ctrl+a m gives the keys back the box shows, in a new quiet,
 // and then y answers it.
 func TestScanBoxWaitsForTheChat(t *testing.T) {
 	st := lifeState()
@@ -679,9 +679,9 @@ func TestScanBoxWaitsForTheChat(t *testing.T) {
 	if m.scanShown() || slices.ContainsFunc(f.acts(), func(a proto.Act) bool { return strings.HasPrefix(a.RecID, "scan:") }) || len(keyActs(f)) == 0 {
 		t.Fatalf("the box took the chat's keys: shown %v acts %+v", m.scanShown(), f.acts())
 	}
-	m = pressKeys(t, m, "ctrl+]")
+	m = pressKeys(t, m, "ctrl+a", "m")
 	if m.chatKeys || !m.scanShown() {
-		t.Fatalf("after ctrl+]: chat %v box %v", m.chatKeys, m.scanShown())
+		t.Fatalf("after ctrl+a m: chat %v box %v", m.chatKeys, m.scanShown())
 	}
 	n := len(f.acts())
 	next, cmd := key(m, "y")

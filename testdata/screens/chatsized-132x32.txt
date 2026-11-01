@@ -29,4 +29,4 @@
  STOKER                                         off │
  off · f starts it · n starts a night               │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- keys go to app-feature · ctrl+] back · ctrl+o into tmux
+ keys go to app-feature · ctrl+a m back · ctrl+o into tmux
