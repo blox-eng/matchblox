@@ -226,8 +226,8 @@ the console to answer an agent. See [the chat](console.md#the-chat).
    question tool, a card shows at the foot. Tap an option, or type and
    press `Enter`.
 3. To go back to Sessions, tap `‹ Sessions` or `◂` on the belt. You can
-   also swipe in from the left edge, or press ⌘M on a hardware keyboard.
-   `Ctrl+]` does it too.
+   also swipe in from the left edge, or press ⌘M or ctrl+M on a hardware
+   keyboard. `ctrl+a m` (your tmux prefix, then `m`) does it too.
 
 ### The key belt
 
@@ -314,7 +314,7 @@ key line says `tap again: <command>`. Tap it again. You are in the pane.
 
 To come back in the matchblox app, tap `◂` on the belt, swipe in from
 the left edge, tap `◂ matchblox` at the left of the tmux status line, or
-press ⌘M on a hardware keyboard. All four work whatever your tmux prefix
+press ⌘M or ctrl+M on a hardware keyboard. All of them work whatever your tmux prefix
 is, and none needs the tmux mouse.
 
 In another SSH app, tap `◂ matchblox`, or press `prefix m` (the tmux prefix,

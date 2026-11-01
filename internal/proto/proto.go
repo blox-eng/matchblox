@@ -153,7 +153,7 @@ const (
 )
 
 // KeyNames are the tmux keys a keys: act may press by name.
-var KeyNames = []string{"Up", "Down", "Left", "Right", "Enter", "Tab", "BTab", "Escape", "C-c", "BSpace"}
+var KeyNames = []string{"Up", "Down", "Left", "Right", "Enter", "Tab", "BTab", "Escape", "C-c", "C-a", "BSpace"}
 
 // PickPrefix starts an act that answers the question tool in the pane
 // after it; its text is the said.Answer.

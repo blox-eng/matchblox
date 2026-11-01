@@ -180,6 +180,9 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 		return false
 	}
 	if m.chatKeys { // the chat sends to the home host's agents
+		if bkey.Matches(k, m.keys.chat.Back) {
+			return false // the way back asks nothing
+		}
 		if m.cardTakes(k) {
 			return m.cardSends(k) && m.takeOverOn(m.opt.Host) // moving on the card changes nothing on the session
 		}

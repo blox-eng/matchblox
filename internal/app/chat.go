@@ -769,15 +769,27 @@ type ctrlCMark struct {
 
 func (c ctrlCMark) is(k chatKey) bool { return c.pane != "" && c.pane == k.pane && c.pid == k.pid }
 
-// chatKey is k while the chat has the keys: ctrl+] gives them back, ctrl+o
-// goes into the pane, the question card takes its own keys, and every
-// other key goes to the agent.
+// chatBackWait is how long after ctrl+a an m gives the keys back.
+const chatBackWait = time.Second
+
+// chatBacks tells if k is the m of ctrl+a m, whose ctrl+a came at armed.
+func (m Model) chatBacks(k tea.KeyPressMsg, armed time.Time) bool {
+	return !armed.IsZero() && bkey.Matches(k, m.keys.chat.BackEnd) && m.now().Sub(armed) <= chatBackWait
+}
+
+// chatKey is k while the chat has the keys: ctrl+o goes into the pane, the
+// question card takes its own keys, and every other key goes to the agent.
+// ctrl+a goes too, at once, and arms the way back (Update takes the m). With
+// the stoker in charge it stays here: the way back asks no question.
 func (m Model) chatKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.flash, m.chatTyped = "", m.now()
+	if bkey.Matches(k, m.keys.chat.Back) {
+		m.backArmed = m.now()
+		if m.takeOverOn(m.opt.Host) {
+			return m, nil
+		}
+	}
 	switch {
-	case bkey.Matches(k, m.keys.chat.Back):
-		m.chatKeys = false
-		return m, nil
 	case bkey.Matches(k, m.keys.main.Jump):
 		return m.intoPane(), nil
 	case m.cardTakes(k):
@@ -1170,6 +1182,26 @@ func (m Model) keepChat(was Model) Model {
 	return m
 }
 
+// tapBack is what a tap on the way back presses: no key, as its ctrl+a would
+// go to the agent.
+const tapBack = "back"
+
+// backKeys is the way back as the key line names it: this machine's tmux
+// prefix, read once at the start, then m. Without tmux, or a prefix it can
+// name, it is the chat's own ctrl+a m. A console tmux does not know by name
+// has only the tap for sure, as its prefix may be ctrl+a.
+func (m Model) backKeys() string {
+	if m.opt.NoPrefixM {
+		return "tap"
+	}
+	if m.opt.Prefix != nil {
+		if p, ok := prefixName(m.opt.Prefix()); ok {
+			return p + " m"
+		}
+	}
+	return m.keys.chat.Back.Help().Key
+}
+
 // chatKeyLine is the key line while the chat has the keys: whose agent
 // they go to, the way back and the way into tmux; or, up the history,
 // that a key goes back to live. A hint that does not fit goes whole, by
@@ -1178,10 +1210,9 @@ func (m Model) keepChat(was Model) Model {
 func (m Model) chatKeyLine(w int) (string, []span) {
 	st := m.st
 	s, _ := m.selectedSession()
-	if m.notLive() { // ctrl+o too only goes back to live; ctrl+] leaves
-		back := m.keys.chat.Back
+	if m.notLive() { // ctrl+o too only goes back to live; the way back leaves
 		line := " " + st.text.Render("a key goes back to live")
-		if wide := line + st.muted.Render(" · ") + st.accent.Render(back.Help().Key) + st.muted.Render(" "+back.Help().Desc); lipgloss.Width(wide) <= w {
+		if wide := line + st.muted.Render(" · ") + st.accent.Render(m.backKeys()) + st.muted.Render(" "+m.keys.chat.Back.Help().Desc); lipgloss.Width(wide) <= w {
 			line = wide
 		}
 		return fit(line, w), nil
@@ -1190,11 +1221,12 @@ func (m Model) chatKeyLine(w int) (string, []span) {
 		text string
 		key  string // the key a tap on it presses; "" none
 	}
-	hint := func(b bkey.Binding) part {
-		return part{st.accent.Render(b.Help().Key) + st.muted.Render(" "+b.Help().Desc), b.Keys()[0]}
+	hint := func(key, desc, press string) part {
+		return part{st.accent.Render(key) + st.muted.Render(" "+desc), press}
 	}
 	name := part{st.text.Render("keys go to " + s.Name), ""}
-	back, into := hint(m.keys.chat.Back), hint(m.keys.main.Jump)
+	jump := m.keys.main.Jump
+	back, into := hint(m.backKeys(), m.keys.chat.Back.Help().Desc, tapBack), hint(jump.Help().Key, jump.Help().Desc, jump.Keys()[0])
 	sep := st.muted.Render(" · ")
 	width := func(ps []part) int {
 		n := 1

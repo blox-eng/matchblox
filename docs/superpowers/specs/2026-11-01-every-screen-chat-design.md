@@ -55,7 +55,7 @@ screen"). The app draws SF Mono 13 pt, about 7.8 × 16 pt a cell.
    the list is cut. Usage is never cut. The list (with the recommendations)
    is cut only when Usage alone does not leave it room.
 5. **The chat's key line keeps the way back.** Its hints go by worth:
-   `ctrl+] back`, then `ctrl+o into tmux`, then `keys go to <name>`. A hint
+   `ctrl+a m back` (the real tmux prefix, #274), then `ctrl+o into tmux`, then `keys go to <name>`. A hint
    that does not fit is dropped whole, never cut mid-word. The title
    already names the agent.
 6. **One question, once.** While the chat shows the agent's history and a

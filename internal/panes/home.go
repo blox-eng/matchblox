@@ -2,6 +2,7 @@ package panes
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -40,14 +41,36 @@ const HomeKey = "\x1b_matchblox\x1b\\"
 // person's own user keys start.
 const homeUserKey = "900"
 
-// HomeKeyArgv makes HomeKey a key of the tmux server that takes the client
-// to the console's session. A client there already hands the key on to the
-// console, whole, so its chat gives the keys back. A client attached
-// already gets it at once.
+// runsConsole is true on a tmux pane that runs a console, in any session. A
+// console under another name is not one to tmux (NamedConsole).
+const runsConsole = "#{==:#{pane_current_command}," + Home + "}"
+
+// goHome is the way back, as the words of a tmux if-shell: on a console's pane
+// the key goes on to that console, whole, so its chat gives the keys back; a
+// pane in copy mode leaves it first, as copy mode would read the key's bytes
+// as its own commands. From any other pane the client goes to the console's
+// session, and on to the console's pane there, as another window may be the
+// one on screen.
+var goHome = [3]string{
+	runsConsole,
+	`if-shell -F "#{pane_in_mode}" "send-keys -X cancel" ; send-keys -H ` + hexKeys(HomeKey),
+	"switch-client -t =" + Home + " ; run-shell -C -t =" + Home + `: "#{W:#{P:#{?` + runsConsole +
+		`,select-window -t #{window_id} ; select-pane -t #{pane_id} ; ,}}}"`,
+}
+
+// NamedConsole tells if a console started as arg0 is one to tmux: if not, the
+// way back's test fails on its own pane.
+func NamedConsole(arg0 string) bool { return filepath.Base(arg0) == Home }
+
+// HomeKeyArgv makes HomeKey a key of the tmux server, and binds it and prefix
+// m to goHome. It wins over a `bind m` in the person's tmux config until that
+// config is sourced again. A client attached already gets it at once.
 func HomeKeyArgv() []string {
-	return []string{"tmux", "set-option", "-s", "user-keys[" + homeUserKey + "]", HomeKey,
-		";", "bind-key", "-n", "User" + homeUserKey, "if-shell", "-F", "#{==:#{session_name}," + Home + "}",
-		"send-keys -H " + hexKeys(HomeKey), "switch-client -t =" + Home}
+	ifHome := []string{"if-shell", "-F", goHome[0], goHome[1], goHome[2]}
+	argv := []string{"tmux", "set-option", "-s", "user-keys[" + homeUserKey + "]", HomeKey,
+		";", "bind-key", "-n", "User" + homeUserKey}
+	argv = append(append(argv, ifHome...), ";", "bind-key", "m")
+	return append(argv, ifHome...)
 }
 
 // CommandKeysArgv makes each command key of the phone a key of the tmux
@@ -83,14 +106,14 @@ func hexKeys(s string) string {
 // only command, so on an error it waits for the person to read it.
 const HomeEnv = "MATCHBLOX_HOME"
 
-// WayBack is the tmux config of the way back to the console: prefix m, and
-// a tap on "◂ matchblox" in the status line. "=matchblox" is the session of
-// that exact name, never one that only starts with it. The label is added
-// once, also when the config is sourced again. The default
-// status-left-length (10) would cut the tap target off, so a shorter length
-// grows to 40.
-const WayBack = `# matchblox: the way back to the console
-bind m switch-client -t =matchblox
+// WayBack is the tmux config of the way back to the console: prefix m (goHome,
+// as HomeKeyArgv binds it), and a tap on "◂ matchblox" in the status line.
+// "=matchblox" is the session of that exact name, never one that only starts
+// with it. The label is added once, also when the config is sourced again.
+// The default status-left-length (10) would cut the tap target off, so a
+// shorter length grows to 40.
+var WayBack = `# matchblox: the way back to the console
+bind m if-shell -F '` + goHome[0] + `' '` + goHome[1] + `' '` + goHome[2] + `'
 if -F "#{m:*range=user|matchblox*,#{status-left}}" "" "set -ga status-left '#[range=user|matchblox] ◂ matchblox #[norange]'"
 if -F "#{<:#{status-left-length},40}" "set -g status-left-length 40"
 bind -n MouseDown1Status if -F "#{==:#{mouse_status_range},matchblox}" "switch-client -t =matchblox" "select-window -t ="
