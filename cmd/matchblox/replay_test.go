@@ -537,18 +537,16 @@ func replayAt(t *testing.T, z replaySize) {
 		// The selection moves: the next one that waits shows what it said.
 		{name: "the next one", at: 2600 * time.Millisecond, key: "j", ok: has("I rewrote the quick start")},
 		{name: "back up", at: 3500 * time.Millisecond, key: "k", ok: has(flint)},
-		// a: flint-auth's chat takes the keys; its question tool's options
-		// are on the card at the foot of its screen, which shows the pane's
-		// own work above it once the screen has come (its menu leaves for
-		// the card).
+		// a: flint-auth's chat takes the keys; its screen shows the pane's
+		// own work over Claude Code's own menu.
 		{name: "a: the question", at: 4600 * time.Millisecond, key: "a", ok: func(s string) bool {
-			return has("ctrl+] back", "flint-auth asks", "Rotate it", "Keep the token", "⏎ send", "wire the rotation.")(s) && !strings.Contains(s, "Chat about this")
+			return has("ctrl+] back", "Rotate it", "Keep the token", "Chat about this", "wire the rotation.")(s) && !strings.Contains(s, "flint-auth asks")
 		}},
 		// 2 picks the second option: it goes to Claude Code's menu, and the
-		// chat shows the agent at work on it. The builder read the card
+		// chat shows the agent at work on it. The builder read the menu
 		// first: the console's clock moves past its quiet.
 		{name: "picked", at: 6200 * time.Millisecond, do: func() { view.Ahead(time.Second) }, key: "2", ok: func(s string) bool {
-			return has("sent to flint-auth", "I rotate the token on each refresh")(s) && !strings.Contains(s, "flint-auth asks") &&
+			return has("I rotate the token on each refresh")(s) && !strings.Contains(s, "Chat about this") &&
 				(phone || struck.MatchString(s)) // a phone's chat hides the list
 		}},
 		// ctrl+] gives the keys back to the list.
@@ -695,7 +693,7 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	ran := world.Ran()
 	want := [][]string{
-		{"tmux", "send-keys", "-t", "%2", "2"}, // the second option, into Claude Code's menu
+		{"tmux", "send-keys", "-t", "%2", "-l", "--", "2"}, // the second option, into Claude Code's menu
 	}
 	// Then the stoker's night: spark-docs is past the line when it starts,
 	// hearth-api when its turn ends. Each compact is typed, then its Enter.

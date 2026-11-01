@@ -6,6 +6,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/said"
 )
 
 // TestEveryKeyThatAnswersNeedsTheWaitSeen: at a permission prompt or a
@@ -36,6 +37,24 @@ func TestEveryKeyThatAnswersNeedsTheWaitSeen(t *testing.T) {
 				t.Errorf("%s %s: res %+v ran %q", st, k, res, *ran)
 			}
 		}
+	}
+}
+
+// TestAKeyAtAnAskNeedsAScreen: the question tool's menu is a menu as soon as
+// the session has the call, before the queue has a wait: no key that answers
+// goes before the console has shown a screen of the pane. ^C still goes.
+func TestAKeyAtAnAskNeedsAScreen(t *testing.T) {
+	for _, k := range []string{"lit:1", "Down", "Escape", "Enter"} {
+		s, ran := keysTest(t)
+		s.cur.Sessions[0].Ask = &said.Ask{ID: "toolu_1"}
+		if res := s.act(t.Context(), key(k)); res.Err != "not sent: the console has not shown flint's screen yet — look again" || len(*ran) != 0 {
+			t.Errorf("%s: res %+v ran %q", k, res, *ran)
+		}
+	}
+	s, ran := keysTest(t)
+	s.cur.Sessions[0].Ask = &said.Ask{ID: "toolu_1"}
+	if res := s.act(t.Context(), key("C-c")); res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("C-c: res %+v ran %q", res, *ran)
 	}
 }
 

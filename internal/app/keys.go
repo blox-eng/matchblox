@@ -32,7 +32,6 @@ type keymaps struct {
 	global   globalKeys
 	main     mainKeys
 	form     formKeys
-	card     cardKeys
 	chat     chatKeymap
 	sheet    sheetKeys
 	search   searchKeys
@@ -53,7 +52,6 @@ type shellKeymaps struct {
 // TestKeymapsHaveNoCollisions until it is added here.
 var shadowsMain = map[string]map[string]bool{
 	"form":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true, "right": true},
-	"card":     {"enter": true, "up": true, "down": true, "space": true, " ": true, "1": true, "2": true, "3": true, "4": true, "5": true, "6": true, "7": true},
 	"sheet":    {"esc": true, "enter": true, "tab": true, "space": true, "right": true},
 	"search":   {"esc": true, "enter": true},
 	"pair":     {"c": true, "esc": true, "enter": true},
@@ -111,14 +109,6 @@ func defaultKeys() keymaps {
 			Left:  bind(ks("left"), "←→", "pick"),
 			Right: bind(ks("right", "space"), "←→", "pick"),
 			Erase: bind(ks("backspace"), "⌫", "erase"),
-		},
-		card: cardKeys{
-			Send:  bind(ks("enter"), "⏎", "send"),
-			Up:    bind(ks("up"), "↑↓", "move"),
-			Down:  bind(ks("down"), "↑↓", "move"),
-			Erase: bind(ks("backspace"), "⌫", "erase"),
-			Pick:  bind(digits1to9, "1-9", "pick"),
-			Tick:  bind(ks("space", " "), "␣", "tick"),
 		},
 		chat: chatKeymap{
 			Back:     bind(ks("ctrl+]"), "ctrl+]", "back"),
@@ -222,14 +212,6 @@ func (k formKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Close, k.Enter, k.Next, k.Prev, k.Down, k.Up, k.Left, k.Right, k.Erase}
 }
 
-// cardKeys are the question card's, in the chat. Every other printable
-// key is text for its typing row; the rest go to the agent.
-type cardKeys struct{ Send, Up, Down, Erase, Pick, Tick bkey.Binding }
-
-func (k cardKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Send, k.Up, k.Down, k.Erase, k.Pick, k.Tick}
-}
-
 // chatKeymap are the chat's own keys. Every other key goes to the agent;
 // Stop is the agent's ^C, which a second one within a second waits for.
 type chatKeymap struct{ Back, Stop, PageUp, PageDown bkey.Binding }
@@ -299,10 +281,11 @@ var keyNames = map[string]string{
 	"shift+tab": "BTab", "esc": "Escape", "ctrl+c": "C-c", "backspace": "BSpace", "space": proto.LitPrefix + " ",
 }
 
-// The names the chat sends for Enter and for ^C.
+// The names the chat sends for Enter, ^C and Backspace.
 var (
-	enterName = keyNames["enter"]
-	ctrlCName = keyNames["ctrl+c"]
+	enterName     = keyNames["enter"]
+	ctrlCName     = keyNames["ctrl+c"]
+	backspaceName = keyNames["backspace"]
 )
 
 // keyName is k as the service takes it: a key name, or proto.LitPrefix and the

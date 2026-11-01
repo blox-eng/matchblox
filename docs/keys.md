@@ -110,10 +110,11 @@ A start on a new account is a destructive action: the plan shows `RUN` and waits
 The chat is the right side of Sessions: the live screen of the selected
 agent. Sessions splits 40/60 (the list at least 38 columns, at most 78)
 when the chat gets at least 44 columns and the body has room for its
-title, its account line and its whole question card. Otherwise, on a
+title, its account line and 16 rows for an agent's menu. Otherwise, on a
 phone, in list only, or on a screen on its side with the keyboard up,
-`Enter` or a tap on a row opens it over the whole screen; a screen too
-short for the whole card says so and keeps the keys. A keyboard never
+`Enter` or a tap on a row opens it over the whole screen; at a question or
+a permission prompt, a screen with under 16 rows for the agent says so and
+keeps the keys. A keyboard never
 changes the layout: the shape goes by the tallest height seen at the
 width. Sessions keeps the keys until you give them to the chat. The chat
 is the console's own host's: another host's row is list only.
@@ -130,14 +131,16 @@ In the chat, every other key goes to the agent: `↑ ↓ ← →`, `Enter`, `Tab
 `Shift+Tab`, `Esc`, `Backspace` and the letters. `Esc` goes to the agent
 too. There it cancels a question, closes a menu or stops a turn. The keys
 go in the order you press them, one at a time. A paste goes as text. Each
-newline (CR, LF or CRLF) goes as `Enter`. Every key goes to the agent that
+newline (CR, LF or CRLF) goes as `Enter`, so a paste with a line break is
+refused while the agent waits at a menu: `not sent: a paste with a line
+break would answer <name>'s menu`. Every key goes to the agent that
 the chat showed. If the pane runs a different agent now, nothing is sent:
 `not sent: <pane> runs a different agent now`.
 
-The service also guards `Enter`. If the question started after the screen
-your console showed, the `Enter` is refused: `not sent: <name> asks
-something new — look again`. So an `Enter` never answers a question you
-have not seen.
+The service also guards `Enter`, and at a menu every key but `^C` and
+`Backspace`. If the question started after the screen your console showed,
+the key is refused: `not sent: <name> asks something new — look again`. So
+a key never answers a question you have not seen.
 
 `^C` twice stops Claude Code. A second `^C` within 1 s to the same agent is
 held, and the key line says why: `^C held: one went 0.6 s ago, ^C again
@@ -156,8 +159,7 @@ and its frame is dim, not in the accent. The key line says `a key goes
 back to live`.
 
 While the chat shows the history, the first key other than `PgUp` and
-`PgDn` goes back to the live screen and goes to no agent. This is true for every key, a paste and a key
-of the question card. The key line says `back to live — the agent did not
+`PgDn` goes back to the live screen and goes to no agent. This is true for every key and a paste. The key line says `back to live — the agent did not
 get that key`. The chat is blank until the live screen comes. Then press
 the key again to send it. A tap on the chat's title
 also goes back to the live screen. The chat also goes back to the live
@@ -165,8 +167,7 @@ screen when you select a different session or give the keys back to
 Sessions.
 
 At night, the first key of a run that sends something to an agent asks
-"Take over?". `y` rests the stoker while you work, and `n` keeps it on. Keys
-that only move the cursor of the question card do not ask.
+"Take over?". `y` rests the stoker while you work, and `n` keeps it on.
 
 Only a console sends keys to an agent. A script or an agent gets
 `keys go only from a console`.
@@ -175,28 +176,25 @@ On a narrow screen the title row reads `‹ Sessions · <name> · <state>`. A
 tap on `‹ Sessions`, the app's edge swipe, ⌘M on a hardware keyboard or
 `Ctrl+]` goes back to Sessions.
 
-### The question card
+### An agent's menu
 
-When Claude Code asks with its question tool, a card shows at the foot of
-the chat. It holds the question and its options. A permission prompt has no
-card: its keys go to the agent as they are.
+When Claude Code asks with its question tool or for a permission, the chat
+shows its own menu, and its keys go to it as they are: `↑` `↓` move, `Space`
+ticks, a digit picks, `Enter` answers and typing fills its text row. The
+agent draws the menu at the chat's size.
 
-| Key | What it does |
-|---|---|
-| `Enter` | Sends the typed line, or the option under the cursor. With several questions, goes to the next one first. |
-| `1-9` | Picks an option. With several choices, ticks it. |
-| `↑` or `↓` | Moves between the options and the typing row. |
-| `Space` | Ticks the option under the cursor, when the question takes several. |
-| `Backspace` | Deletes the last character of the typing row. |
+A tap on a numbered option picks it, anywhere across its row, its description
+and its wrapped lines too. The tap sends the option's digit through the same
+guards, and the row shows the selected wash until the next screen comes. On a
+single-choice question the digit answers; on a question with several choices
+it ticks, and a tap on the menu's own `Submit` or `Next` row moves there and
+sends `Enter`. Other rows do nothing, and so does a numbered list the agent
+only printed.
 
-Typing fills the `Type an answer…` row. A tap on an option picks it. A tap
-on a key of the card's foot presses it.
-
-The card has a second guard. It sends nothing for 400 ms after it first
-shows, and after it moves to the next question. A send in that time is
-refused with the same words: `not sent: <name> asks something new — look
-again`. So an `Enter` meant for what was there before never answers a
-question you have not read.
+A menu has a second guard. For 400 ms after a new one comes, or after the
+chat opens on a wait, every key but `^C` and `Backspace` is refused with the
+same words: `not sent: <name> asks something new — look again`. So a key
+meant for what was there before never answers a question you have not read.
 
 ## The launch sheet
 
@@ -252,8 +250,8 @@ over the chat shows the agent's history (see
 [The agent's history](#the-agents-history)). On a narrow screen, a tap on
 an agent opens its chat over the whole screen. Where the chat sits beside the list, a tap on the
 selected agent, or on the chat, gives the chat the keys. A tap on an option
-of the question card picks it, a tap on a key of its foot presses it, and a
-tap on the left gives the keys back to Sessions. On any other row the key line says `tap again: <command>`, and a
+of an agent's menu picks it (see [An agent's menu](#an-agents-menu)), and a tap
+on the left gives the keys back to Sessions. On any other row the key line says `tap again: <command>`, and a
 second tap on the same row runs it. On Ships, a tap on the selected ship
 selects its session in Sessions. Any other action (a
 recommendation, a setup step, a destructive step) then shows `RUN` and

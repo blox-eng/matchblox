@@ -110,6 +110,15 @@ lines from the rule over the question's header, its ☐ ☒ ✔ tabs, down). Rea
 options cost a phone a third of its screen, and one way to answer is enough.
 The history is never cut.
 
+2026-11-01 (#276): the card is gone. The question was drawn twice from two
+clocks: the menu from the screen capture, the card from the transcript. The
+chat now draws the agent's own menu, sends it every key, picks an option on a
+tap, and cuts nothing.
+What this section says of the card, and of the cut, is history. The safety
+of a paste stays: a paste with a line break is refused at a menu wait, since
+its Enter would answer. The console no longer uses `pick:`; `matchblox send
+--pick` does.
+
 ### The iOS key bar
 
 1. SwiftTerm's default accessory goes away. In its place is a bar of seven
