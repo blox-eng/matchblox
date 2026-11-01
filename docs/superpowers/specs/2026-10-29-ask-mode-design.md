@@ -6,10 +6,10 @@ A builder runs about ten agents. They watch them on a wide desk screen and
 from the iPhone app. When one agent asks or gets stuck, the builder wants to
 read its whole screen and steer it with `↑ ↓ Enter Tab Shift+Tab Esc Ctrl+C`
 and plain typing. Today that means leaving the console for the tmux pane, or
-opening Termius on the phone.
+opening a separate terminal app on the phone.
 
 The goal, in the owner's words: "we don't even need to jump into a
-terminal". The owner wants to delete Termius from the phone. Later the same
+terminal". The owner wants to delete a separate terminal app from the phone. Later the same
 view serves agents that run outside tmux (herdr).
 
 ## What the builder sees
