@@ -35,4 +35,4 @@
  watching 0 · 0 compacted · 0 waited · 0…│
  no session full yet                     │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit      sampled 0s ago
+ ↑↓ move  ⏎ chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit     sampled 0s ago

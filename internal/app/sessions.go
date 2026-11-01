@@ -332,15 +332,15 @@ func (m Model) sessionKeys() []hint {
 		}
 		return []hint{hintFor(mk.New, ""), hintFor(mk.Stoke, "stoker")}
 	}
-	keys := []hint{hintFor(mk.Open, "chat")}
+	var keys []hint
 	s, ok := m.selectedSession()
-	if ok && s.Host != m.opt.Host {
+	switch {
+	case ok && s.Host != m.opt.Host:
 		keys = []hint{hintFor(mk.Open, "")} // list only: into its pane
+	case m.chatOpens(s, ok):
+		keys = []hint{hintFor(mk.Open, "chat")}
 	}
 	if ok && s.Pane != "" {
-		if s.Host == m.opt.Host {
-			keys = append(keys, hintFor(mk.Chat, "chat"))
-		}
 		keys = append(keys, hintFor(mk.Second, "kill"), hintFor(mk.Rename, ""), hintFor(mk.Switch, ""), hintFor(mk.Park, m.parkWord(s)))
 	}
 	return append(keys, hintFor(mk.New, ""), hintFor(mk.Ships, ""), hintFor(mk.Stoke, "stoker"))
@@ -682,16 +682,25 @@ func (m Model) opened(s sample.Session, w int) []string {
 	return append(out, spread(left, keys, w))
 }
 
+// chatOpens tells if Enter on the selected session s opens its chat: a home
+// session with a pane, on a screen with room for its question. One hint
+// names it, ⏎; a key that only refuses is not offered.
+func (m Model) chatOpens(s sample.Session, ok bool) bool {
+	return ok && s.Pane != "" && s.Host == m.opt.Host && m.chatSeen()
+}
+
 // openedKeys are the keys on the right of an opened row, and where a tap
 // presses each, in columns of the row.
 func (m Model) openedKeys(s sample.Session, w int) (string, []span) {
 	mk := m.keys.main
-	hs := []hint{hintFor(mk.Open, "chat")}
+	var hs []hint
 	switch {
 	case s.Host != m.opt.Host: // list only: into its pane
 		hs = []hint{hintFor(mk.Switch, ""), hintFor(mk.Open, "")}
+	case m.chatOpens(s, true):
+		hs = []hint{hintFor(mk.Switch, ""), hintFor(mk.Open, "chat")}
 	case s.Pane != "":
-		hs = []hint{hintFor(mk.Chat, "chat"), hintFor(mk.Switch, ""), hs[0]}
+		hs = []hint{hintFor(mk.Switch, "")}
 	}
 	keys, spans := m.hintRow(hs, 2)
 	keys += " "

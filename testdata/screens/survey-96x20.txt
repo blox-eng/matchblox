@@ -17,4 +17,4 @@
  · Google login  not measured · OpenC…│ │   4 Type an answer…                                  │
  ❋ OpenAI        5h ▰▱▱ 40% · wk 12%  │ ╰─ ⏎ question 2 ───────────────────────────────────────╯
 ────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ chat  a chat  x kill  r rename  A switch  z park  N new  p ships  f stoker    sampled 0s ago
+ ⏎ chat  x kill  r rename  A switch  z park  N new  p ships  f stoker            sampled 0s ago

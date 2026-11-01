@@ -37,4 +37,4 @@
                  wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00           │ │   4 Type an answer…                                        │
                  lasts the week                           │ ╰─ ⏎ question 2 ─────────────────────────────────────────────╯
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  ⏎ chat  a chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit  list only v               sampled 0s ago
+ ↑↓ move  ⏎ chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit  list only v                       sampled 0s ago

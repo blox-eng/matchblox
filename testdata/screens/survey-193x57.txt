@@ -54,4 +54,4 @@
  STOKER                                                                  off │ │   4 Type an answer…                                        │
  off · f starts it · n starts a night                                        │ ╰─ ⏎ question 2 ─────────────────────────────────────────────╯
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  ⏎ chat  a chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit  list only v                                                               sampled 0s ago
+ ↑↓ move  ⏎ chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit  list only v                                                                       sampled 0s ago
