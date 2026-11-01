@@ -111,6 +111,8 @@ type Act struct {
 	Seen time.Time `json:"seen,omitempty"`
 	// PID is the agent the console saw in the pane a "keys:" act names.
 	PID int `json:"pid,omitempty"`
+	// Start is that agent's process start, which tells a reused pid apart.
+	Start uint64 `json:"start,omitempty"`
 	// Console: the act came from a console, a person at the keys. The
 	// service sets it from the hello; it never comes over the wire.
 	Console bool `json:"-"`

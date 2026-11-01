@@ -1775,7 +1775,7 @@ func TestARefusedKeyKeepsACardsAnswer(t *testing.T) {
 	other := slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return s.Host == m.opt.Host && s.Pane != "" && s.Pane != "%1" })
 	b := m.all.sessions[other]
 	m = pressKeys(t, m, "a")
-	m.keyQ = append(m.keyQ, chatKey{pane: b.Pane, pid: b.PID, pick: `{"id":"toolu_9"}`, name: b.Name})
+	m.keyQ = append(m.keyQ, chatKey{pane: b.Pane, pid: b.PID, start: b.Start, pick: `{"id":"toolu_9"}`, name: b.Name})
 	m = pressKeys(t, m, "b")
 	m = answered(t, m, "not sent: x asks something new — look again")
 	if got := pickActs(f); len(got) != 1 || got[0].RecID != "pick:"+b.Pane {
@@ -1783,5 +1783,22 @@ func TestARefusedKeyKeepsACardsAnswer(t *testing.T) {
 	}
 	if slices.ContainsFunc(keyActs(f), func(a proto.Act) bool { return a.Text == "lit:b" }) || len(m.keyQ) != 0 {
 		t.Fatalf("the key behind the refused one went: keys %+v queue %+v", keyActs(f), m.keyQ)
+	}
+}
+
+// A key names the agent it was pressed for by its pid and its start, as
+// the service checks it.
+func TestAKeyNamesTheAgentsStart(t *testing.T) {
+	st := queueState()
+	st.Queue = nil
+	for i := range st.Sessions {
+		st.Sessions[i].Start = uint64(70 + i)
+	}
+	m, f := loadedWith(t, 100, st)
+	m = pressKeys(t, onPane(t, m, "%2"), "enter")
+	s, _ := m.selectedSession()
+	pressKeys(t, m, "x")
+	if got := keyActs(f); len(got) != 1 || got[0].PID != s.PID || got[0].Start != s.Start || s.Start == 0 {
+		t.Fatalf("acts %+v, session pid %d start %d", got, s.PID, s.Start)
 	}
 }

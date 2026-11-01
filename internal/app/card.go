@@ -289,7 +289,7 @@ func (m Model) sendCard(s sample.Session, answer string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.askCard = card{askID: s.Ask.ID, at: -1}
-	m.queueKey(chatKey{pane: s.Pane, pid: s.PID, pick: answer, name: s.Name})
+	m.queueKey(chatKey{pane: s.Pane, pid: s.PID, start: s.Start, pick: answer, name: s.Name})
 	cmd := m.sendKey()
 	toast := m.say("sending to " + s.Name + "…")
 	m = m.pairActed(action{rec: "pick:" + s.Pane})

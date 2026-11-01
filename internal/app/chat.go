@@ -538,12 +538,13 @@ const homeKey = "\x1b_matchblox\x1b\\"
 // answer waits among the keys as pick, the said.Answer for the session
 // named name.
 type chatKey struct {
-	pane string
-	pid  int
-	text string
-	seen time.Time
-	pick string
-	name string
+	pane  string
+	pid   int
+	start uint64
+	text  string
+	seen  time.Time
+	pick  string
+	name  string
 }
 
 // maxLit is the most text one "lit:" key carries; the service takes no more.
@@ -695,7 +696,7 @@ func (m Model) pressed(texts ...string) (name string, keys []chatKey) {
 		seen = m.screen.At
 	}
 	for _, t := range texts {
-		keys = append(keys, chatKey{pane: s.Pane, pid: s.PID, text: t, seen: seen})
+		keys = append(keys, chatKey{pane: s.Pane, pid: s.PID, start: s.Start, text: t, seen: seen})
 	}
 	return s.Name, keys
 }
@@ -812,7 +813,7 @@ func (m Model) lastCtrlC(k chatKey) string {
 // sent: a search or the stoker's own row does not hide it.
 func (m Model) agentIn(k chatKey) bool {
 	return slices.ContainsFunc(m.all.sessions, func(s sample.Session) bool {
-		return s.Host == m.opt.Host && s.Pane == k.pane && s.PID == k.pid
+		return s.Host == m.opt.Host && s.Pane == k.pane && s.PID == k.pid && s.Start == k.start
 	})
 }
 
@@ -841,7 +842,7 @@ func (m *Model) sendKey() tea.Cmd {
 	}
 	k := m.keyQ[0]
 	m.keyQ = m.keyQ[1:]
-	act := proto.Act{RecID: proto.KeysPrefix + k.pane, Text: k.text, PID: k.pid, Seen: k.seen}
+	act := proto.Act{RecID: proto.KeysPrefix + k.pane, Text: k.text, PID: k.pid, Start: k.start, Seen: k.seen}
 	if k.pick != "" {
 		act = proto.Act{RecID: "pick:" + k.pane, Which: "secondary", Confirm: "y", Text: k.pick}
 	}

@@ -58,7 +58,7 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 	if !ok {
 		return proto.Result{Err: "no agent session in " + pane + " any more"}
 	}
-	if a.PID <= 0 || x.PID != a.PID {
+	if a.PID <= 0 || x.PID != a.PID || x.Start != a.Start {
 		return proto.Result{Err: "not sent: " + pane + " runs a different agent now"}
 	}
 	step, why := keyStep(pane, a.Text)
