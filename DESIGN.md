@@ -308,10 +308,12 @@ Reduce Motion.
   the selected session's live screen, drawn inside the console. On Wide
   and Medium it is the right side of Sessions, always; its frame title is
   `<name> · <state>`, in the accent while it has the keys. `⏎`, `a` and
-  `→` (where `→` has no other use) or a click give it the keys; `ctrl+]`
-  or a click on the left gives them back; `ctrl+o` goes into the tmux pane.
-  The key line then says `keys go to <name> · ctrl+] back · ctrl+o into
-  tmux`. Every other key goes to the agent, `esc` too, in order, one at a
+  `→` (where `→` has no other use) or a click give it the keys; prefix `m`
+  (#274: tmux hands the chat the home APC) or a click on the left gives them
+  back, and a chat where tmux does not take `ctrl+a` takes `ctrl+a` then `m`
+  within 1 s itself, with the `ctrl+a` sent to the agent at once; `ctrl+o` goes into the tmux pane.
+  The key line then says `keys go to <name> · ctrl+a m back · ctrl+o into
+  tmux`, with the real tmux prefix. Every other key goes to the agent, `esc` too, in order, one at a
   time, to the agent the chat showed (`not sent: <pane> runs a different
   agent now`). A paste goes as text, and CR, LF and CRLF become `Enter`.
   A pane that is gone says `That session ended.` and gives the keys back.
@@ -319,8 +321,8 @@ Reduce Motion.
   ago, ^C again stops the agent`; `one waits to go` when it is still
   queued), because two stop Claude Code. On Narrow, `⏎` or a tap on a row
   replaces the screen with the chat; its title row is `‹ Sessions ·
-  <name> · <state>`, and a tap on `‹ Sessions`, the app's edge swipe or ⌘M
-  (the home APC), or `ctrl+]` goes back. Only a console sends keys: `keys
+  <name> · <state>`, and a tap on `‹ Sessions`, the app's edge swipe, ⌘M or
+  ctrl+M (the home APC), or `ctrl+a m` goes back. Only a console sends keys: `keys
   go only from a console`.
   The **question card** sits at the foot of the chat while the session
   asks with Claude Code's question tool: the question in `text` and its

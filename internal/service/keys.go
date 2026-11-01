@@ -99,7 +99,7 @@ func (s *Service) unseen(pane, name string, a proto.Act, menu bool) string {
 	return ""
 }
 
-// answers tells if a key answers a menu: all but ^C and Backspace.
+// answers tells if a key answers a menu: all but ^C, ^A and Backspace.
 func answers(text string) bool {
-	return text != "C-c" && text != "BSpace"
+	return text != "C-c" && text != "C-a" && text != "BSpace"
 }

@@ -131,18 +131,18 @@ func TestTheListOutranksTheMachine(t *testing.T) {
 
 // TestTheChatKeyLineKeepsTheWayBack: the chat's key line drops a hint
 // whole when it does not fit, by worth: the agent's name first, then the
-// way into tmux; ctrl+] back stays.
+// way into tmux; ctrl+a m back stays.
 func TestTheChatKeyLineKeepsTheWayBack(t *testing.T) {
 	for w := 40; w <= 70; w++ {
 		m := flintAt(t, w, 31, "enter")
 		line, spans := m.chatKeyLine(w)
 		got := strings.TrimSpace(ansi.Strip(line))
-		if strings.Contains(got, "…") || !strings.Contains(got, "ctrl+] back") {
+		if strings.Contains(got, "…") || !strings.Contains(got, "ctrl+a m back") {
 			t.Fatalf("%d columns: the key line is %q", w, got)
 		}
 		parts := strings.Split(got, " · ")
 		for _, p := range parts {
-			if !slices.Contains([]string{"keys go to flint-auth", "ctrl+] back", "ctrl+o into tmux"}, p) {
+			if !slices.Contains([]string{"keys go to flint-auth", "ctrl+a m back", "ctrl+o into tmux"}, p) {
 				t.Fatalf("%d columns: %q is cut in %q", w, p, got)
 			}
 		}

@@ -367,7 +367,7 @@ func keyMsg(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "esc":
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
-	case "ctrl+]", "ctrl+o":
+	case "ctrl+a", "ctrl+o":
 		return tea.KeyPressMsg{Code: rune(k[5]), Mod: tea.ModCtrl}
 	}
 	return tea.KeyPressMsg{Text: k, Code: []rune(k)[0]}
@@ -542,7 +542,7 @@ func replayAt(t *testing.T, z replaySize) {
 		// own work above it once the screen has come (its menu leaves for
 		// the card).
 		{name: "a: the question", at: 4600 * time.Millisecond, key: "a", ok: func(s string) bool {
-			return has("ctrl+] back", "flint-auth asks", "Rotate it", "Keep the token", "⏎ send", "wire the rotation.")(s) && !strings.Contains(s, "Chat about this")
+			return has("ctrl+a m back", "flint-auth asks", "Rotate it", "Keep the token", "⏎ send", "wire the rotation.")(s) && !strings.Contains(s, "Chat about this")
 		}},
 		// 2 picks the second option: it goes to Claude Code's menu, and the
 		// chat shows the agent at work on it. The builder read the card
@@ -551,9 +551,10 @@ func replayAt(t *testing.T, z replaySize) {
 			return has("sent to flint-auth", "I rotate the token on each refresh")(s) && !strings.Contains(s, "flint-auth asks") &&
 				(phone || struck.MatchString(s)) // a phone's chat hides the list
 		}},
-		// ctrl+] gives the keys back to the list.
-		{name: "back to the list", at: 7600 * time.Millisecond, key: "ctrl+]", ok: func(s string) bool {
-			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "ctrl+] back") && burning.MatchString(s)
+		// ctrl+a m gives the keys back to the list.
+		{name: "ctrl+a", at: 7400 * time.Millisecond, key: "ctrl+a", ok: has("ctrl+a m back")},
+		{name: "back to the list", at: 7600 * time.Millisecond, key: "m", ok: func(s string) bool {
+			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "ctrl+a m back") && burning.MatchString(s)
 		}},
 		{name: "the sessions", at: 9 * time.Second, ok: func(s string) bool {
 			return has("hearth-", "spark-d", "kindle-", "ember-b", "WORKING")(s) && burning.MatchString(s)
@@ -695,7 +696,8 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	ran := world.Ran()
 	want := [][]string{
-		{"tmux", "send-keys", "-t", "%2", "2"}, // the second option, into Claude Code's menu
+		{"tmux", "send-keys", "-t", "%2", "2"},   // the second option, into Claude Code's menu
+		{"tmux", "send-keys", "-t", "%2", "C-a"}, // the first key of the way back
 	}
 	// Then the stoker's night: spark-docs is past the line when it starts,
 	// hearth-api when its turn ends. Each compact is typed, then its Enter.

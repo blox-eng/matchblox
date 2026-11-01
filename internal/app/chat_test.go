@@ -273,7 +273,7 @@ func TestEnterGivesTheChatTheKeys(t *testing.T) {
 			t.Fatalf("%s: the chat has no keys", k)
 		}
 		line, _ := m.keyLine(100)
-		if want := "keys go to " + s.Name + " · ctrl+] back · ctrl+o into tmux"; !strings.Contains(ansi.Strip(line), want) {
+		if want := "keys go to " + s.Name + " · ctrl+a m back · ctrl+o into tmux"; !strings.Contains(ansi.Strip(line), want) {
 			t.Fatalf("%s: key line %q, want %q", k, ansi.Strip(line), want)
 		}
 		if len(f.acts()) != 0 {
@@ -292,11 +292,140 @@ func TestEnterOnASessionOutsideTmuxSaysWhy(t *testing.T) {
 	}
 }
 
-func TestCtrlBracketGivesKeysBack(t *testing.T) {
+// keysBack is m after the home key: the way back that sends the agent nothing.
+func keysBack(m Model) Model {
+	next, _ := m.Update(uv.UnknownApcEvent(homeKey))
+	return next.(Model)
+}
+
+// sentTexts are the keys the console sent the agent, once each is answered.
+func sentTexts(t *testing.T, m Model, f *fakeConn) []string {
+	t.Helper()
+	for m.keyInFlight != "" {
+		m = answered(t, m, "")
+	}
+	var got []string
+	for _, a := range keyActs(f) {
+		got = append(got, a.Text)
+	}
+	return got
+}
+
+// ctrl+a goes to the agent at once, so a console outside tmux takes it with
+// no lag; m within the second after it gives the keys back and never reaches
+// the agent.
+func TestCtrlAThenMGivesKeysBack(t *testing.T) {
 	m, f := inChat(t)
-	m = pressKeys(t, m, "ctrl+]")
-	if m.chatKeys || len(f.acts()) != 0 {
-		t.Fatalf("chatKeys=%v acts=%+v", m.chatKeys, f.acts())
+	m = pressKeys(t, m, "ctrl+a")
+	if got := keyActs(f); !m.chatKeys || len(got) != 1 || got[0].Text != "C-a" {
+		t.Fatalf("after ctrl+a: chatKeys=%v acts=%+v", m.chatKeys, got)
+	}
+	m = pressKeys(t, m, "m")
+	if got := sentTexts(t, m, f); m.chatKeys || !slices.Equal(got, []string{"C-a"}) {
+		t.Fatalf("chatKeys=%v sent %q", m.chatKeys, got)
+	}
+}
+
+func TestCtrlAThenAnotherKeyGoesToTheAgent(t *testing.T) {
+	m, f := inChat(t)
+	m = pressKeys(t, m, "ctrl+a", "x", "m")
+	if got := sentTexts(t, m, f); !m.chatKeys || !slices.Equal(got, []string{"C-a", "lit:xm"}) {
+		t.Fatalf("chatKeys=%v sent %q", m.chatKeys, got)
+	}
+}
+
+func TestCtrlAThenALateMGoesToTheAgent(t *testing.T) {
+	m, f := inChat(t)
+	m, now := clocked(m)
+	m = pressKeys(t, m, "ctrl+a")
+	*now = now.Add(1100 * time.Millisecond)
+	m = pressKeys(t, m, "m")
+	if got := sentTexts(t, m, f); !m.chatKeys || !slices.Equal(got, []string{"C-a", "lit:m"}) {
+		t.Fatalf("chatKeys=%v sent %q", m.chatKeys, got)
+	}
+}
+
+// With a prefix that lets its own key through (ctrl+a ctrl+a), the second
+// ctrl+a starts the second over.
+func TestCtrlACtrlAThenMGivesKeysBack(t *testing.T) {
+	m, f := inChat(t)
+	m, now := clocked(m)
+	m = pressKeys(t, m, "ctrl+a")
+	*now = now.Add(800 * time.Millisecond)
+	m = pressKeys(t, m, "ctrl+a")
+	*now = now.Add(800 * time.Millisecond)
+	m = pressKeys(t, m, "m")
+	if got := sentTexts(t, m, f); m.chatKeys || !slices.Equal(got, []string{"C-a", "C-a"}) {
+		t.Fatalf("chatKeys=%v sent %q", m.chatKeys, got)
+	}
+}
+
+// The way back never needs an answer: with the stoker in charge ctrl+a asks
+// nothing and is not sent, and m gives the keys back.
+func TestCtrlAThenMAsksNoTakeOver(t *testing.T) {
+	m, f := loadedWith(t, 100, stokerState(runningNight(fixtureState().At)))
+	m = pressKeys(t, onPane(t, m, "%1"), "enter")
+	if !m.chatKeys || !m.takeOverOn(m.opt.Host) {
+		t.Fatalf("chatKeys=%v take-over=%v", m.chatKeys, m.takeOverOn(m.opt.Host))
+	}
+	m = pressKeys(t, m, "ctrl+a")
+	if m.held != nil || len(keyActs(f)) != 0 {
+		t.Fatalf("ctrl+a asked or sent: held=%v acts=%+v", m.held != nil, keyActs(f))
+	}
+	if m = pressKeys(t, m, "m"); m.chatKeys || m.held != nil || len(keyActs(f)) != 0 {
+		t.Fatalf("chatKeys=%v held=%v acts=%+v", m.chatKeys, m.held != nil, keyActs(f))
+	}
+}
+
+// With the question card up, the m of the way back types nothing on it.
+func TestCtrlAThenMOnTheCard(t *testing.T) {
+	m, _ := askModel(t, 100, threeWays)
+	if m = pressKeys(t, m, "ctrl+a", "m"); m.chatKeys {
+		t.Fatal("the card kept the keys")
+	}
+	if m.askCard.text != "" {
+		t.Fatalf("the card took the m: %q", m.askCard.text)
+	}
+}
+
+func TestTheWayBackNamesThePrefix(t *testing.T) {
+	for prefix, want := range map[string]string{
+		"C-a": "ctrl+a m", "C-b": "ctrl+b m", "M-a": "alt+a m", "C-M-x": "ctrl+alt+x m", "C-Space": "ctrl+space m",
+		"`": "` m", "F12": "f12 m",
+		"": "ctrl+a m", "None": "ctrl+a m", "C-a\x1b[31m": "ctrl+a m",
+	} {
+		m, _ := inChat(t)
+		m.opt.Prefix = func() string { return prefix }
+		line, _ := m.chatKeyLine(100)
+		if got := ansi.Strip(line); !strings.Contains(got, " · "+want+" back · ") {
+			t.Errorf("prefix %q: the key line is %q, want %q back", prefix, got, want)
+		}
+		m.up = 3
+		line, _ = m.chatKeyLine(100)
+		if got := ansi.Strip(line); !strings.Contains(got, want+" back") {
+			t.Errorf("prefix %q up the history: the key line is %q", prefix, got)
+		}
+	}
+	m, _ := inChat(t)
+	if line, _ := m.chatKeyLine(100); !strings.Contains(ansi.Strip(line), "ctrl+a m back") {
+		t.Errorf("outside tmux: the key line is %q", ansi.Strip(line))
+	}
+}
+
+// A tap on the way back gives the keys back, and sends the agent nothing.
+func TestATapOnTheWayBack(t *testing.T) {
+	for _, w := range []int{44, 100} {
+		m, f := loadedWith(t, w, fixtureState())
+		m = pressKeys(t, onPane(t, m, "%1"), "enter")
+		line, _ := m.chatKeyLine(w)
+		x := strings.Index(ansi.Strip(line), "ctrl+a m back")
+		if x < 0 {
+			t.Fatalf("%d columns: no way back in %q", w, ansi.Strip(line))
+		}
+		next, _ := tap(m, x+1, m.draw(w).keysAt)
+		if next.(Model).chatKeys || len(keyActs(f)) != 0 {
+			t.Fatalf("%d columns: chatKeys=%v acts=%+v", w, next.(Model).chatKeys, keyActs(f))
+		}
 	}
 }
 
@@ -333,7 +462,7 @@ func TestTypedTextCoalesces(t *testing.T) {
 func TestKeyNames(t *testing.T) {
 	for k, want := range map[string]string{
 		"up": "Up", "down": "Down", "left": "Left", "right": "Right", "enter": "Enter", "tab": "Tab",
-		"shift+tab": "BTab", "esc": "Escape", "ctrl+c": "C-c", "backspace": "BSpace", "space": "lit: ", "y": "lit:y", "Y": "lit:Y",
+		"shift+tab": "BTab", "esc": "Escape", "ctrl+c": "C-c", "ctrl+a": "C-a", "backspace": "BSpace", "space": "lit: ", "y": "lit:y", "Y": "lit:Y",
 	} {
 		if got, ok := keyName(keyPress(k)); !ok || got != want {
 			t.Errorf("%s = %q %v, want %q", k, got, ok, want)
@@ -346,7 +475,7 @@ func TestKeyNames(t *testing.T) {
 
 func TestQueuedKeysStayWithTheirPane(t *testing.T) {
 	m, f := inChat(t)
-	m = pressKeys(t, m, "down", "enter", "ctrl+]")
+	m = pressKeys(t, m, "down", "enter", "ctrl+a", "m")
 	m = onPane(t, m, "%2")
 	answered(t, m, "")
 	if got := keyActs(f); len(got) != 2 || got[1].RecID != proto.KeysPrefix+"%1" || got[1].Text != "Enter" {
@@ -555,7 +684,7 @@ func TestAHeldKeyGoesToTheAgentItWasPressedFor(t *testing.T) {
 
 func TestASearchKeepsQueuedKeys(t *testing.T) {
 	m, f := inChat(t)
-	m = pressKeys(t, m, "down", "enter", "ctrl+]", "/", "b")
+	m = pressKeys(t, keysBack(pressKeys(t, m, "down", "enter")), "/", "b")
 	if !m.searching || slices.ContainsFunc(m.snap.Sessions, func(s sample.Session) bool { return s.Pane == "%1" }) {
 		t.Fatalf("the search did not hide a: searching %v", m.searching)
 	}
@@ -572,7 +701,7 @@ func TestCtrlCHoldIsPerAgentAndFromWhenItWent(t *testing.T) {
 	m, f := inChat(t)
 	now := time.Unix(1000, 0)
 	m.opt.Now = func() time.Time { return now }
-	m = pressKeys(t, m, "ctrl+c", "ctrl+]")
+	m = keysBack(pressKeys(t, m, "ctrl+c"))
 	m = pressKeys(t, onPane(t, m, "%2"), "enter")
 	now = now.Add(300 * time.Millisecond)
 	m = pressKeys(t, m, "ctrl+c")
@@ -744,13 +873,13 @@ func TestChatFrameShowsWhoHasKeys(t *testing.T) {
 	if ink := chatTitleInk(t, m); ink != "accent" {
 		t.Fatalf("with the keys, the chat's title is %q", ink)
 	}
-	if ink := chatTitleInk(t, pressKeys(t, m, "ctrl+]")); ink == "accent" {
+	if ink := chatTitleInk(t, pressKeys(t, m, "ctrl+a", "m")); ink == "accent" {
 		t.Fatal("without the keys, the chat's title is in the accent")
 	}
 	if ink := chatEdgeInk(t, m); ink != "accent" {
 		t.Fatalf("with the keys, the chat's edge is %q", ink)
 	}
-	if ink := chatEdgeInk(t, pressKeys(t, m, "ctrl+]")); ink != "hair" {
+	if ink := chatEdgeInk(t, pressKeys(t, m, "ctrl+a", "m")); ink != "hair" {
 		t.Fatalf("without the keys, the chat's edge is %q", ink)
 	}
 }
@@ -1694,8 +1823,7 @@ func TestCommandForAnotherAgentSendsNothing(t *testing.T) {
 
 func TestCommandWithNoChatSendsNothing(t *testing.T) {
 	m, f := commandChat(t, "claude")
-	m = pressKeys(t, m, "ctrl+]")
-	m = command(t, m, "compact")
+	m = command(t, keysBack(m), "compact")
 	if got := f.acts(); len(got) != 0 {
 		t.Fatalf("acts %+v", got)
 	}
@@ -1822,7 +1950,7 @@ func TestChatSendsItsAgent(t *testing.T) {
 
 func TestChatCloseSendsNoAgent(t *testing.T) {
 	m, _ := agentRaws(t, agentChat(t, "claude", "codex"), "enter")
-	m, got := agentRaws(t, m, "ctrl+]")
+	m, got := agentRaws(t, m, "ctrl+a", "m")
 	if want := logos.Passthrough(keycmd.AgentSignal("")); !slices.Equal(got, []string{want}) {
 		t.Fatalf("close wrote %q, want %q", got, want)
 	}
@@ -1904,7 +2032,7 @@ func TestOldTmuxSaysCommandsNeedIt(t *testing.T) {
 	if m.flash != "COMMANDS · needs tmux 3.3" || !strings.Contains(screen(m), "COMMANDS · needs tmux 3.3") {
 		t.Fatalf("flash %q\n%s", m.flash, screen(m))
 	}
-	m, got = agentRaws(t, m, "ctrl+]", "enter")
+	m, got = agentRaws(t, m, "ctrl+a", "m", "enter")
 	if len(got) != 0 || m.flash != "" {
 		t.Fatalf("second open wrote %q, flash %q", got, m.flash)
 	}
@@ -1953,7 +2081,7 @@ func TestANewViewerGetsTheAgentAgain(t *testing.T) {
 	if got := raws(cmd); !slices.Equal(got, []string{want}) {
 		t.Fatalf("a phone that attached got %q, want %q", got, want)
 	}
-	m, _ = agentRaws(t, next.(Model), "ctrl+]")
+	m, _ = agentRaws(t, next.(Model), "ctrl+a", "m")
 	if _, cmd = m.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: "/dev/ttys005:205@here"}); len(raws(cmd)) != 0 {
 		t.Fatalf("a viewer of a closed chat got %q", raws(cmd))
 	}
@@ -2059,8 +2187,7 @@ func TestThePromptBoxStartsAtItsTop(t *testing.T) {
 
 // When the chat closes by itself, the keys the person is still typing for
 // the agent do not fall into Sessions' keys: for a moment none acts, and
-// neither q nor ctrl+c quits. ctrl+] still goes; after the moment the keys
-// are Sessions' again.
+// neither q nor ctrl+c quits. After the moment the keys are Sessions' again.
 func TestKeysAfterTheChatClosesByItselfDoNothing(t *testing.T) {
 	for _, closer := range []string{"too short", "ended"} {
 		m, f := askModel(t, 96, threeWays)
