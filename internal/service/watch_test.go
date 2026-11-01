@@ -482,7 +482,7 @@ func TestEnterSeenOnTheHistoryIsRefused(t *testing.T) {
 		t.Fatalf("enter on the history: %+v", res)
 	}
 	r.actText(t, "w2", proto.WatchPrefix+"%1", "up:0")
-	live := r.screenThat(t, func(sc proto.Screen) bool { return sc.Up == 0 && sc.Text == idleScreen })
+	live := r.screenThat(t, func(sc proto.Screen) bool { return sc.Up == 0 && sc.Text == idleScreen && s.waitShown("%1", sc.At) })
 	if res := enter(live.At); res.Err != "" || len(res.Ran) != 1 {
 		t.Fatalf("enter on the live screen: %+v", res)
 	}
@@ -508,7 +508,7 @@ func TestEnterSeenOnAnyOfManyHistoryScreensIsRefused(t *testing.T) {
 		}
 	}
 	r.actText(t, "live", proto.WatchPrefix+"%1", "up:0")
-	live := r.screenThat(t, func(sc proto.Screen) bool { return sc.Up == 0 && sc.At.After(ups[39].At) })
+	live := r.screenThat(t, func(sc proto.Screen) bool { return sc.Up == 0 && sc.At.After(ups[39].At) && s.waitShown("%1", sc.At) })
 	if res := enter(live.At); res.Err != "" || len(res.Ran) != 1 {
 		t.Fatalf("enter on the live screen: %+v", res)
 	}

@@ -12,6 +12,11 @@ import (
 
 const watchEvery = 150 * time.Millisecond
 
+// waitSettle is how long after a wait begins a screen counts as showing it.
+// The hook that starts the wait fires before the agent draws its menu, so a
+// screen taken in between, changed or not, may be the one before the menu.
+const waitSettle = 500 * time.Millisecond
+
 const keysOnlyFromConsole = "keys go only from a console"
 
 // aConsole tells if the act comes from a person at a console: not from an
@@ -58,9 +63,10 @@ func (s *Service) watchAct(cl *client, clientKind string, a proto.Act, pane stri
 }
 
 // watchLoop sends cl the screen of its watched pane when the text changes,
-// and once when the pane is gone. A wait that began after the last screen
-// sends it again, newer: the console's Enter answers the screen it saw,
-// and a still prompt is still the one the builder sees. A watch up the
+// and once when the pane is gone. A wait that the last screen does not
+// show sends it again, newer, once the wait has settled: the console's
+// Enter answers the screen it saw, and a still prompt is still the one the
+// builder sees. A watch up the
 // history sends those lines, and no Enter answers them.
 func (s *Service) watchLoop(ctx context.Context, cl *client) {
 	tick := time.NewTicker(watchEvery)
@@ -94,7 +100,7 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 		if scr.Gone {
 			scr.Up = 0
 		}
-		if sent && pane == last.Pane && text == last.Text && scr.Gone == last.Gone && scr.Up == last.Up && !s.waitsSince(pane, last.At) {
+		if sent && pane == last.Pane && text == last.Text && scr.Gone == last.Gone && scr.Up == last.Up && (s.waitShown(pane, last.At) || !s.waitShown(pane, scr.At)) {
 			continue
 		}
 		sent, last = true, scr
@@ -105,10 +111,11 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 	}
 }
 
-// waitsSince tells if the agent in pane began to wait after at.
-func (s *Service) waitsSince(pane string, at time.Time) bool {
+// waitShown tells if a screen of pane taken at at shows its wait, if any:
+// it was taken a settle after the wait began.
+func (s *Service) waitShown(pane string, at time.Time) bool {
 	it, ok := s.queued(pane)
-	return ok && it.Since.After(at)
+	return !ok || !it.Since.Add(waitSettle).After(at)
 }
 
 // kickScreens wakes the watchLoop of every console that watches pane.
