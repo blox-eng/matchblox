@@ -1665,3 +1665,37 @@ func TestThePromptBoxStartsAtItsTop(t *testing.T) {
 		t.Errorf("boxed: %q", got)
 	}
 }
+
+// When the chat closes by itself, the keys the person is still typing for
+// the agent do not fall into Sessions' keys: for a moment none acts, and
+// neither q nor ctrl+c quits. ctrl+] still goes; after the moment the keys
+// are Sessions' again.
+func TestKeysAfterTheChatClosesByItselfDoNothing(t *testing.T) {
+	for _, closer := range []string{"too short", "ended"} {
+		m, f := askModel(t, 96, threeWays)
+		m, now := clocked(m)
+		var next tea.Model
+		switch closer {
+		case "too short":
+			next, _ = m.Update(tea.WindowSizeMsg{Width: 96, Height: 8})
+		case "ended":
+			next, _ = m.Update(screenMsg{Pane: "%1", At: time.Unix(200, 0), Gone: true})
+		}
+		m = next.(Model)
+		if m.chatKeys {
+			t.Fatalf("%s: the chat kept the keys", closer)
+		}
+		before := len(f.acts())
+		for _, k := range []string{"q", "ctrl+c", "x", "r", "N"} {
+			next, cmd := key(m, k)
+			drain(cmd)
+			if nm := next.(Model); nm.quitting || nm.pending != nil || nm.form != nil || nm.sheet != nil || len(f.acts()) != before {
+				t.Fatalf("%s: %s acted: quitting %v pending %v acts %+v", closer, k, nm.quitting, nm.pending, f.acts()[before:])
+			}
+		}
+		*now = now.Add(chatShutHold)
+		if next, _ := key(m, "q"); !next.(Model).quitting {
+			t.Fatalf("%s: q after the moment did not quit", closer)
+		}
+	}
+}

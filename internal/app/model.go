@@ -303,6 +303,7 @@ type Model struct {
 	liveWait   bool                            // the chat came back from the history, and waits for the live screen
 	askCard    card                            // the question card's answer, in the chat
 	cardSeen   cardSeen                        // the card's quiet: the ask it is for and its start
+	chatShut   time.Time                       // when the chat last closed by itself: keys typed for it go nowhere for a moment
 	cardSent   map[string]string               // the card's sends in flight: act id -> the session's name
 	lanes      map[laneKey][lanePast]laneState // each session's last two hours; replaced, never written in place
 	laneStart  time.Time                       // the cell boundary lanes is aligned to
@@ -927,6 +928,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m, touch = m.touchRest()
 		}
 		f := m.focus(msg)
+		if m.chatJustShut() && (f == layerMain || bkey.Matches(msg, m.keys.global.Quit)) && !bkey.Matches(msg, m.keys.chat.Back) {
+			return m, touch // typed for the chat that just closed: no q quits, no letter acts
+		}
 		if m.notLive() && m.chatKeys && (f == layerMain || f == layerTakeOver) {
 			return m.backToLive(), touch
 		}

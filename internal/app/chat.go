@@ -793,9 +793,19 @@ func (m Model) keyAnswered(r proto.Result) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(m.recv(), cmd)
 }
 
+// chatShutHold is how long after the chat closes by itself the keys still
+// typed for it go nowhere, rather than to Sessions' own keys.
+const chatShutHold = time.Second
+
+// chatJustShut tells if the chat closed by itself a moment ago.
+func (m Model) chatJustShut() bool {
+	return !m.chatKeys && m.now().Before(m.chatShut.Add(chatShutHold))
+}
+
 // keepChat gives the keys back to Sessions when the chat no longer shows
 // the session it had (a chat opened just now on another session keeps
-// them), and drops the keys of an agent that left.
+// them), and drops the keys of an agent that left. A chat it closes holds
+// the keys typed after it for chatShutHold.
 func (m Model) keepChat(was Model) Model {
 	if m.chatKeys {
 		s, ok := m.selectedSession()
@@ -807,6 +817,9 @@ func (m Model) keepChat(was Model) Model {
 			m.chatKeys = false
 		case !m.chatSeen():
 			m.chatKeys, m.flash = false, m.tooShort(s) // the keys never go to a screen the person cannot see
+		}
+		if !m.chatKeys {
+			m.chatShut = m.now()
 		}
 	}
 	if !m.chatKeys {
