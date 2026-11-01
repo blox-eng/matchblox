@@ -301,7 +301,7 @@ func TestAddWayBackOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := door(t, e, doors.WayBack)
-	if d.Path != conf || !strings.Contains(d.Preview, "+bind m switch-client -t =matchblox") {
+	if d.Path != conf || !strings.Contains(d.Preview, "+bind m if-shell -F '#{==:#{pane_current_command},matchblox}'") {
 		t.Fatalf("door = %+v", d)
 	}
 	backup := open(t, e, doors.WayBack)

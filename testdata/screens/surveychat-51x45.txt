@@ -42,4 +42,4 @@ Should a refresh also rotate the token?
 
 Enter to select · ↑/↓ to navigate · Esc to cancel
 ───────────────────────────────────────────────────
- ctrl+] back · ctrl+o into tmux
+ ctrl+a m back · ctrl+o into tmux

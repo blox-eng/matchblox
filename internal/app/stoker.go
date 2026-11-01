@@ -180,6 +180,9 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 		return false
 	}
 	if m.chatKeys { // the chat sends to the home host's agents
+		if bkey.Matches(k, m.keys.chat.Back) {
+			return false // the way back asks nothing
+		}
 		_, toAgent := keyName(k)
 		return (toAgent || bkey.Matches(k, m.keys.main.Jump)) && m.takeOverOn(m.opt.Host)
 	}

@@ -28,7 +28,7 @@ The owner's three parts (2026-10-29):
 
 **The chat** is the selected session's live screen, drawn inside the
 console. It is always shown. The only question is which side has the keys.
-`Enter`, `→`, `a` or a click moves the keys to the chat. `Ctrl+]`, or a
+`Enter`, `→`, `a` or a click moves the keys to the chat. `ctrl+a m`, or a
 click on the left, moves them back to Sessions. The key line always names
 the side that has the keys. (My call: one key area must own `↑`/`↓`, so the
 chat cannot take keys without a way to move them back.)
@@ -52,7 +52,7 @@ chat cannot take keys without a way to move them back.)
                                      │ │   3 ▏                             │                             │
                                      │ └───────────────────────────────────┘                             │
                                      └───────────────────────────────────────────────────────────────────┘
-                                      keys go to api-auth · ctrl+] back · ctrl+o into tmux
+                                      keys go to api-auth · ctrl+a m back · ctrl+o into tmux
 ```
 
 1. The left column stacks Sessions, Usage and Machine. Usage and Machine
@@ -65,7 +65,7 @@ chat cannot take keys without a way to move them back.)
    `keys go to <name>`.
 4. In the chat, every key goes to the agent: `↑ ↓ ← → Enter Tab Shift+Tab
    Esc Ctrl+C Backspace` and plain typing. There are two exceptions:
-   - `Ctrl+]`, a click on the left column, or the app's home gesture gives
+   - `ctrl+a m`, a click on the left column, or the app's home gesture gives
      the keys back to Sessions.
    - `Ctrl+O` goes into the tmux pane, as `Enter` does today. It is a way
      out for a screen that the chat cannot handle.
@@ -85,7 +85,7 @@ today. The keys work as in Wide. Usage and Machine stay in the dock.
 2. `Enter`, or a tap on a row, replaces the screen with that session's
    chat, with the keys in the chat. The title row reads `‹ Sessions ·
    <name> · <state>`.
-3. A tap on `‹ Sessions`, the app's edge swipe or `Ctrl+]` goes back to
+3. A tap on `‹ Sessions`, the app's edge swipe or `ctrl+a m` goes back to
    Sessions. You stay in the console all the time.
 
 ### The question card
@@ -142,7 +142,7 @@ its Enter would answer. The console no longer uses `pick:`; `matchblox send
   `Ctrl+O` stays as the way into tmux (my call: it costs nothing and is a
   way out).
 - **Esc.** `Esc` goes to the agent, because Claude Code needs it to cancel a
-  question, close a menu or stop a turn. `Ctrl+]`, a click or tap on
+  question, close a menu or stop a turn. `ctrl+a m`, a click or tap on
   Sessions, or the app's home gesture goes back. The owner agreed.
 - **The peek.** The nine-line peek goes away as a mode of its own. `a`
   opens the chat. The peek's question rendering lives on as the question

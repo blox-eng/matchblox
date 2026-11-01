@@ -54,4 +54,4 @@
  STOKER                                                                  off │
  off · f starts it · n starts a night                                        │ Enter to select · ↑/↓ to navigate · Esc to cancel
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- keys go to flint-auth · ctrl+] back · ctrl+o into tmux
+ keys go to flint-auth · ctrl+a m back · ctrl+o into tmux

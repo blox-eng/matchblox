@@ -88,6 +88,10 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	case ms.Y == sc.keysAt:
 		if s, ok := spanAt(sc.keys, ms.X); ok {
 			m.armed = ""
+			if s.press == tapBack {
+				m.chatKeys, m.up = false, 0
+				return m, nil
+			}
 			return m.keyed(keyPress(s.press))
 		}
 		return m, nil

@@ -67,7 +67,7 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
   agent, on the right of Sessions, or full-screen on a phone. `Enter` or
   `a` gives it the keys, and every key then goes to the agent. When it asks
   with its question tool, its own menu shows and a digit answers.
-  `Ctrl+]` gives the keys back.
+  `ctrl+a m` (your tmux prefix, then `m`) gives the keys back.
 - **Switch the agent, keep the seat**: `A` runs another agent in the same
   pane (Claude Code, Codex, OpenCode or Cursor) with the session's name,
   directory and pull request, on the account you last started that agent

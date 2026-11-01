@@ -47,4 +47,4 @@
  STOKER                                                                   off │
  off · f starts it · n starts a night                                         │ Should a refresh also rotate the token?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- a key goes back to live · ctrl+] back
+ a key goes back to live · ctrl+a m back

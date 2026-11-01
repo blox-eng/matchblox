@@ -344,15 +344,22 @@ strip. On an upright phone the chat has no strip.
 ├─ Machine ─────────────────────┤│   3. Type something.                        │
 │ cpu 34%  mem 41/64G          ││ Enter to select · ↑/↓ to navigate           │
 ╰───────────────────────────────╯╰─────────────────────────────────────────────╯
- keys go to api-auth · ctrl+] back · ctrl+o into tmux
+ keys go to api-auth · ctrl+a m back · ctrl+o into tmux
 ```
 
 `Enter`, `a` and `→` (where `→` has no other use) give the chat the keys,
-and so does a click on it. `Ctrl+]` and a click on the left give them back.
+and so does a click on it. `ctrl+a m` (your tmux prefix, then `m`) and a
+click on the left give them back. This works on a console in any tmux
+session, as long as its binary is named `matchblox`: under another name the
+key line says `tap back`, and a tap on it does it (see [tmux](tmux.md)).
+Outside tmux the chat takes `ctrl+a m`
+itself: `ctrl+a` goes to the agent at once, where it moves the cursor to the
+start of the line, and `m` within 1 s gives the keys back and does not reach
+the agent.
 `Ctrl+O` goes into the agent's pane in tmux. While the chat has the keys, the key line says `keys go to <name> ·
-ctrl+] back · ctrl+o into tmux`. On a short line its hints go by worth:
+ctrl+a m back · ctrl+o into tmux`, with your tmux prefix for `ctrl+a`. On a short line its hints go by worth:
 `keys go to <name>` goes first (the title names the agent), then `ctrl+o
-into tmux`; `ctrl+] back` stays. A hint goes whole, never cut mid-word.
+into tmux`; the way back stays. A hint goes whole, never cut mid-word.
 
 In the chat, all keys go to the agent, `Esc` too. They go in order, one at
 a time, to the agent the chat showed. A paste goes as text, and a newline
@@ -454,8 +461,8 @@ On a narrow screen, and wherever Sessions is one column, the chat opens
 full-screen. On a narrow screen in the full view the dock stays at the
 bottom, and `u` cycles it. `Enter`, or a tap on a row, replaces the screen
 with the chat of that session. The title row reads `‹ Sessions · <name> ·
-<state>`. A tap on `‹ Sessions`, the app's edge swipe or ⌘M (the home
-gesture), or `Ctrl+]` goes back.
+<state>`. A tap on `‹ Sessions`, the app's edge swipe, ⌘M or ctrl+M (the home
+gesture), or `ctrl+a m` goes back.
 
 - Context use is read from the agent's own files, as a share of the
   session's window. Without a window the row shows `—`. See

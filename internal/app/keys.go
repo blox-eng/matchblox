@@ -1,6 +1,7 @@
 package app
 
 import (
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -111,7 +112,8 @@ func defaultKeys() keymaps {
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 		},
 		chat: chatKeymap{
-			Back:     bind(ks("ctrl+]"), "ctrl+]", "back"),
+			Back:     bind(ks("ctrl+a"), "ctrl+a m", "back"),
+			BackEnd:  bind(ks("m"), "m", "back"),
 			Stop:     bind(ks("ctrl+c"), "^C", "stops the agent"),
 			PageUp:   bind(ks("pgup"), "PgUp", "a page up the history"),
 			PageDown: bind(ks("pgdown"), "PgDn", "a page down the history"),
@@ -213,11 +215,13 @@ func (k formKeys) bindings() []bkey.Binding {
 }
 
 // chatKeymap are the chat's own keys. Every other key goes to the agent;
-// Stop is the agent's ^C, which a second one within a second waits for.
-type chatKeymap struct{ Back, Stop, PageUp, PageDown bkey.Binding }
+// Back's ctrl+a does too, and m within a second after it gives the keys back
+// (chatBackWait); Stop is the agent's ^C, which a second one within a second
+// waits for.
+type chatKeymap struct{ Back, BackEnd, Stop, PageUp, PageDown bkey.Binding }
 
 func (k chatKeymap) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Back, k.Stop, k.PageUp, k.PageDown}
+	return []bkey.Binding{k.Back, k.BackEnd, k.Stop, k.PageUp, k.PageDown}
 }
 
 // sheetKeys are the stoker's order sheet.
@@ -278,7 +282,7 @@ func (k confirmKeys) bindings() []bkey.Binding {
 // keyNames are the keys the chat sends by name.
 var keyNames = map[string]string{
 	"up": "Up", "down": "Down", "left": "Left", "right": "Right", "enter": "Enter", "tab": "Tab",
-	"shift+tab": "BTab", "esc": "Escape", "ctrl+c": "C-c", "backspace": "BSpace", "space": proto.LitPrefix + " ",
+	"shift+tab": "BTab", "esc": "Escape", "ctrl+c": "C-c", "ctrl+a": "C-a", "backspace": "BSpace", "space": proto.LitPrefix + " ",
 }
 
 // The names the chat sends for Enter, ^C and Backspace.
@@ -287,6 +291,24 @@ var (
 	ctrlCName     = keyNames["ctrl+c"]
 	backspaceName = keyNames["backspace"]
 )
+
+// tmuxKeyRE is a tmux key name as tmux prints one: modifiers, then one
+// character or a word (Space, F12).
+var tmuxKeyRE = regexp.MustCompile(`^((?:[CMS]-)*)([!-~]|[A-Za-z][A-Za-z0-9]+)$`)
+
+// prefixName is a tmux prefix as the key line writes keys: C-a is ctrl+a. A
+// prefix of None, or none that tmux would print, has no name.
+func prefixName(prefix string) (string, bool) {
+	match := tmuxKeyRE.FindStringSubmatch(prefix)
+	if match == nil || prefix == "None" {
+		return "", false
+	}
+	mods := strings.NewReplacer("C-", "ctrl+", "M-", "alt+", "S-", "shift+").Replace(match[1])
+	if len(match[2]) > 1 {
+		return mods + strings.ToLower(match[2]), true
+	}
+	return mods + match[2], true
+}
 
 // keyName is k as the service takes it: a key name, or proto.LitPrefix and the
 // text it types. A key with no name and no text is not sent.

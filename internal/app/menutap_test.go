@@ -243,7 +243,7 @@ func TestATapWashesItsRowUntilTheNextScreen(t *testing.T) {
 // the history.
 func TestEveryChatHintIsTappable(t *testing.T) {
 	for _, w := range []int{44, 51, 100} {
-		for _, hint := range []string{"ctrl+] back", "ctrl+o into tmux"} {
+		for _, hint := range []string{"ctrl+a m back", "ctrl+o into tmux"} {
 			m, _ := menuChat(t, w, 31, askScreen)
 			sc := m.draw(w)
 			line := ansi.Strip(sc.lines[sc.keysAt])
@@ -254,7 +254,7 @@ func TestEveryChatHintIsTappable(t *testing.T) {
 			x := ansi.StringWidth(line[:at])
 			for _, dx := range []int{0, ansi.StringWidth(hint) - 1} {
 				got := tapped(t, m, x+dx, sc.keysAt)
-				if hint == "ctrl+] back" && got.chatKeys {
+				if hint == "ctrl+a m back" && got.chatKeys {
 					t.Errorf("%d: a tap at %d on %q kept the keys", w, dx, hint)
 				}
 				if hint == "ctrl+o into tmux" && got.pending == nil {
@@ -268,7 +268,7 @@ func TestEveryChatHintIsTappable(t *testing.T) {
 		m = next.(Model)
 		sc := m.draw(w)
 		line := ansi.Strip(sc.lines[sc.keysAt])
-		at := strings.Index(line, "ctrl+] back")
+		at := strings.Index(line, "ctrl+a m back")
 		if at < 0 {
 			t.Fatalf("%d up: no back in %q", w, line)
 		}

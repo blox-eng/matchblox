@@ -13,7 +13,7 @@ import (
 // question, a digit picks, Esc turns it down, an arrow moves its cursor and
 // Tab its field. None of them goes for a screen taken before the wait began,
 // so a typed line never approves a prompt the person did not see (main's
-// rule for the peek's answer, now for the chat's keys). ^C and Backspace
+// rule for the peek's answer, now for the chat's keys). ^C, ^A and Backspace
 // answer nothing and go.
 func TestEveryKeyThatAnswersNeedsTheWaitSeen(t *testing.T) {
 	for _, st := range []string{queue.StatePermission, queue.StateQuestion} {
@@ -27,7 +27,7 @@ func TestEveryKeyThatAnswersNeedsTheWaitSeen(t *testing.T) {
 				t.Errorf("%s %s: res %+v ran %q", st, k, res, *ran)
 			}
 		}
-		for _, k := range []string{"C-c", "BSpace"} {
+		for _, k := range []string{"C-c", "C-a", "BSpace"} {
 			s, ran := keysTest(t)
 			since := time.Now()
 			s.cur.Queue = []queue.Item{{Pane: "%1", State: st, Since: since}}
