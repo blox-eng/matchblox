@@ -301,6 +301,8 @@ type Model struct {
 	up         int                             // the lines up the chat shows of the agent's history; 0 is live
 	watchUp    int                             // the lines up the service sends
 	watchSize  [2]int                          // the chat's size the service sizes the agent's window to: cols, rows
+	watchSince time.Time                       // when the watched pane was selected: its size waits sizeDwell
+	sizeTick   time.Time                       // the watchSince a sizeDueMsg is on its way for
 	liveWait   bool                            // the chat came back from the history, and waits for the live screen
 	askCard    card                            // the question card's answer, in the chat
 	cardSeen   cardSeen                        // the card's quiet: the ask it is for and its start
@@ -627,6 +629,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatKeys = false
 		}
 		return m, nil
+	case sizeDueMsg:
+		return m, nil // Update sends the size, if it is due
 	case ctrlCLapsed:
 		return m.lapseCtrlC(msg), nil
 	case screenMsg:

@@ -138,6 +138,14 @@ func (m Model) sizedFor(w, h int) bool {
 	return m.screen.Cols > 0 && m.screen.Cols == w && m.screen.Rows <= h && m.screen.Up == 0
 }
 
+// sizeDwell is how long the chat's session stays selected before the
+// agent's window takes the chat's size, unless the chat takes the keys:
+// a cursor that passes a row resizes no agent.
+const sizeDwell = time.Second
+
+// sizeDueMsg comes when a selection may have rested sizeDwell.
+type sizeDueMsg struct{}
+
 // chatSize is the room the chat gives the agent's screen as the console
 // draws it now: its columns, and its rows under the chat's title and strip
 // and over its card. 0, 0 where no chat is drawn. The service sizes the
@@ -191,28 +199,43 @@ func (m *Model) watchCmd() tea.Cmd {
 	case m.up == 0 && m.watchUp > 0:
 		m.screen, m.liveWait = proto.Screen{}, true // the history goes; blank until the live screen comes
 	}
+	if want != m.watching {
+		m.watchSince = m.now()
+	}
 	var size [2]int
+	var due tea.Cmd
 	if want != "" {
 		size[0], size[1] = m.chatSize()
+	}
+	if wait := m.watchSince.Add(sizeDwell).Sub(m.now()); size != [2]int{} && !m.chatKeys && wait > 0 {
+		size = [2]int{} // browsing: no agent redraws for a row the cursor passes
+		if !m.sizeTick.Equal(m.watchSince) {
+			m.sizeTick = m.watchSince
+			due = tea.Tick(wait, func(time.Time) tea.Msg { return sizeDueMsg{} })
+		}
 	}
 	if size == [2]int{} && want == m.watching {
 		size = m.watchSize // a chat off screen keeps its size: the agent does not redraw at each tab
 	}
 	if want == m.watching && m.up == m.watchUp && size == m.watchSize {
-		return nil
+		return due
 	}
 	m.watching, m.watchUp, m.watchSize = want, m.up, size
 	if m.conn == nil || m.lost || m.mismatch {
-		return nil // the service forgot the watch with the connection
+		return due // the service forgot the watch with the connection
 	}
 	c, up := m.conn, proto.UpPrefix+strconv.Itoa(m.up)
 	act := proto.Act{RecID: proto.WatchPrefix + want, Text: up, Cols: size[0], Rows: size[1]}
-	return func() tea.Msg { // not m.send: the watch takes no number from the acts the builder sees
+	send := func() tea.Msg { // not m.send: the watch takes no number from the acts the builder sees
 		if err := c.Send(proto.KindAct, watchActID+want, act); err != nil {
 			return lostMsg{err, c}
 		}
 		return nil
 	}
+	if due != nil {
+		return tea.Batch(send, due)
+	}
+	return send
 }
 
 // chatLines is the watched screen fitted to w by h, with the question card

@@ -409,6 +409,10 @@ sees the window shrink to the chat's size while the chat watches it.
 - Two consoles on one agent (a phone and a desk): the one that sent the
   agent a key last sizes the window, else the one that opened it last.
   When it leaves, the other's size applies.
+- Browsing resizes no agent: the window takes the chat's size once the
+  session has stayed selected for 1 second, or at once when the chat
+  takes the keys. The window the selection leaves gets its size back at
+  once.
 - A chat that is not on screen (another tab, the list on a phone) keeps
   its size, so the agent does not redraw at each tab.
 - A window of several panes keeps its size: resizing it would reflow the

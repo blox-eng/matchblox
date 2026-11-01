@@ -191,7 +191,8 @@ func TestTapSelectsThenActs(t *testing.T) {
 		t.Fatalf("width %d: selected %q, want %%3", w, it.Pane)
 	}
 	next, cmd = tap(next, 5, sessLine(t, next, "tools"))
-	if !chatOn(next, "%3") || cmd != nil || ran != nil {
+	drain(cmd) // the chat that takes the keys sends its size; no act runs
+	if !chatOn(next, "%3") || ran != nil {
 		t.Fatalf("width %d: the second tap did not open the chat of tools", w)
 	}
 	if line := actionLine(next); !strings.Contains(line, "keys go to tools") {

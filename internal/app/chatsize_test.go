@@ -13,14 +13,19 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// sizedChat is chatModel with its first watch sent.
+// sizedChat is chatModel with its first watch sent, and its size once
+// the selection rested.
 func sizedChat(t *testing.T) (Model, *fakeConn) {
 	t.Helper()
 	st := fixtureState()
 	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a"}, {PID: 2, Pane: "%2", Name: "b"}}
 	f := newFake()
-	next, _ := New(Options{NoMotion: true, Conn: f}).Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	at := demoAt
+	next, _ := New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return at }}).Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	next, cmd := next.Update(stateMsg(st))
+	drain(cmd)
+	at = at.Add(sizeDwell) // the selection rests: the size goes
+	next, cmd = next.Update(sizeDueMsg{})
 	drain(cmd)
 	return next.(Model), f
 }
@@ -183,5 +188,79 @@ func TestScreensSizedChat(t *testing.T) {
 		}
 		next, _ = nm.Update(screenMsg{Pane: sel.Pane, At: demoAt, Text: sizedScreen(cols, rows), Cols: cols, Rows: rows})
 		golden(t, next.(Model), "chatsized", w, h)
+	}
+}
+
+// clockChat is a desk console of three sessions on a clock the test turns.
+func clockChat(t *testing.T) (Model, *fakeConn, *time.Time) {
+	t.Helper()
+	at := demoAt
+	st := fixtureState()
+	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a"}, {PID: 2, Pane: "%2", Name: "b"}, {PID: 3, Pane: "%3", Name: "c"}, {PID: 4, Pane: "%4", Name: "d"}}
+	f := newFake()
+	next, _ := New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return at }}).Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	next, cmd := next.Update(stateMsg(st))
+	drain(cmd)
+	return next.(Model), f, &at
+}
+
+// sizedWatches are the watch acts sent from n on that carry a size.
+func sizedWatches(f *fakeConn, n int) []proto.Act {
+	var out []proto.Act
+	for _, a := range f.allActs()[n:] {
+		if strings.HasPrefix(a.RecID, proto.WatchPrefix) && (a.Cols != 0 || a.Rows != 0) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// Browsing Sessions sizes no agent: the size goes once the chat's session
+// has stayed selected for sizeDwell, or at once when the chat takes the
+// keys.
+func TestBrowsingSizesNoAgent(t *testing.T) {
+	m, f, at := clockChat(t)
+	*at = at.Add(sizeDwell) // the first selection rests
+	next, cmd := m.Update(sizeDueMsg{})
+	drain(cmd)
+	m = next.(Model)
+	n := len(f.allActs())
+	for range 3 {
+		*at = at.Add(200 * time.Millisecond)
+		next, cmd = key(m, "down")
+		drain(cmd)
+		m = next.(Model)
+	}
+	sel, _ := m.selected()
+	if a := lastWatch(t, f); a.RecID != proto.WatchPrefix+sel.Pane || a.Cols != 0 || a.Rows != 0 {
+		t.Fatalf("watch %+v while browsing, want %s with no size", a, sel.Pane)
+	}
+	if got := sizedWatches(f, n); len(got) != 0 {
+		t.Fatalf("browsing sent sizes %+v", got)
+	}
+	*at = at.Add(sizeDwell - time.Millisecond)
+	next, cmd = m.Update(sizeDueMsg{})
+	drain(cmd)
+	m = next.(Model)
+	if got := sizedWatches(f, n); len(got) != 0 {
+		t.Fatalf("a size before the dwell: %+v", got)
+	}
+	*at = at.Add(time.Millisecond)
+	next, cmd = m.Update(sizeDueMsg{})
+	drain(cmd)
+	m = next.(Model)
+	if got := sizedWatches(f, n); len(got) != 1 || got[0].RecID != proto.WatchPrefix+sel.Pane {
+		t.Fatalf("after resting: %+v, want one sized watch of %s", got, sel.Pane)
+	}
+
+	n = len(f.allActs())
+	*at = at.Add(100 * time.Millisecond)
+	next, cmd = key(m, "up")
+	drain(cmd)
+	next, cmd = key(next, "enter") // the chat takes the keys
+	drain(cmd)
+	sel, _ = next.(Model).selected()
+	if got := sizedWatches(f, n); len(got) != 1 || got[0].RecID != proto.WatchPrefix+sel.Pane || !next.(Model).chatKeys {
+		t.Fatalf("taking the keys: %+v, want one sized watch of %s at once", got, sel.Pane)
 	}
 }

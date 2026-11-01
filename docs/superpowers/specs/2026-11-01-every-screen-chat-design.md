@@ -82,6 +82,9 @@ screen"). The app draws SF Mono 13 pt, about 7.8 × 16 pt a cell.
    last, else watched last, sizes it. A window of several panes is not
    sized, and its screen is re-wrapped as before. The owner accepted that
    a desk terminal on the same session sees the window shrink.
+   Browsing sizes no agent: the size goes once the session stayed selected
+   1 s, or at once when the chat takes the keys; the window left goes back
+   at once.
 
 ## Non-goals
 
