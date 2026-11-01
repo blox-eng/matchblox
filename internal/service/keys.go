@@ -77,7 +77,7 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 func (s *Service) unseen(pane, name string, a proto.Act, menu bool) string {
 	it, queued := s.queued(pane)
 	menu = menu || queued && (it.State == queue.StatePermission || it.State == queue.StateQuestion)
-	if a.Text != "Enter" && !(menu && answers(a.Text)) {
+	if a.Text != "Enter" && (!menu || !answers(a.Text)) {
 		return ""
 	}
 	if a.Seen.IsZero() {
