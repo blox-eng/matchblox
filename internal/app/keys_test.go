@@ -3,9 +3,12 @@ package app
 import (
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	bkey "charm.land/bubbles/v2/key"
+
+	"github.com/blox-eng/matchblox/internal/proto"
 )
 
 // kmLayer is one keymap: its name, its bindings in field order, and the
@@ -139,5 +142,18 @@ func TestEveryBindingHasHelp(t *testing.T) {
 				t.Errorf("%s.%s has an empty key", l.name, l.fields[i])
 			}
 		}
+	}
+}
+
+// TestTheChatsKeysAreTheServicesKeys: every key the chat sends by name is
+// one the service presses, and its text keys are proto's literal form.
+func TestTheChatsKeysAreTheServicesKeys(t *testing.T) {
+	for k, name := range keyNames {
+		if !slices.Contains(proto.KeyNames, name) && !strings.HasPrefix(name, proto.LitPrefix) {
+			t.Errorf("%s sends %q, which the service does not press", k, name)
+		}
+	}
+	if maxLit := proto.MaxLit; len(pasteTexts(strings.Repeat("x", maxLit+1))[0]) != len(proto.LitPrefix)+maxLit {
+		t.Errorf("a paste's chunk is not proto.MaxLit")
 	}
 }

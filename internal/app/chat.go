@@ -554,9 +554,6 @@ type chatKey struct {
 	name  string
 }
 
-// maxLit is the most text one "lit:" key carries; the service takes no more.
-const maxLit = 200
-
 // openChat gives the keys to the chat of the selected session, or of the
 // session of a failed step, or says why there is none.
 func (m Model) openChat() Model {
@@ -628,7 +625,7 @@ func (m Model) chatHushed(k chatKey) bool {
 	if _, waits := m.waitOf(s); !ok || !waits {
 		return false
 	}
-	typed, isText := strings.CutPrefix(k.text, "lit:")
+	typed, isText := strings.CutPrefix(k.text, proto.LitPrefix)
 	return k.text == enterName || isText && typed != "" && typed[0] >= '0' && typed[0] <= '9'
 }
 
@@ -734,15 +731,15 @@ func (m Model) chatPaste(text string) (tea.Model, tea.Cmd) {
 	return m.toAgent(name, keys...)
 }
 
-// pasteTexts are the keys of a paste: its text in "lit:" chunks of at most
-// maxLit bytes, with Enter for each newline: \n, \r or \r\n, as terminals
+// pasteTexts are the keys of a paste: its text in proto.LitPrefix chunks
+// of at most proto.MaxLit bytes, with Enter for each newline: \n, \r or \r\n, as terminals
 // paste a newline as \r.
 func pasteTexts(text string) []string {
 	var out []string
 	var chunk strings.Builder
 	flush := func() {
 		if chunk.Len() > 0 {
-			out = append(out, "lit:"+chunk.String())
+			out = append(out, proto.LitPrefix+chunk.String())
 			chunk.Reset()
 		}
 	}
@@ -755,7 +752,7 @@ func pasteTexts(text string) []string {
 			out = append(out, enterName)
 		case unicode.IsControl(r):
 		default:
-			if chunk.Len()+utf8.RuneLen(r) > maxLit {
+			if chunk.Len()+utf8.RuneLen(r) > proto.MaxLit {
 				flush()
 			}
 			chunk.WriteRune(r)
@@ -825,13 +822,13 @@ func (m Model) agentIn(k chatKey) bool {
 }
 
 // queueKey puts k behind the keys that wait. Text typed after text for the
-// same agent joins it, up to maxLit.
+// same agent joins it, up to proto.MaxLit.
 func (m *Model) queueKey(k chatKey) {
 	q := slices.Clone(m.keyQ)
 	if n := len(q); n > 0 {
 		last := &q[n-1]
-		typed, isText := strings.CutPrefix(k.text, "lit:")
-		if isText && strings.HasPrefix(last.text, "lit:") && last.pane == k.pane && last.pid == k.pid && len(last.text)+len(typed) <= len("lit:")+maxLit {
+		typed, isText := strings.CutPrefix(k.text, proto.LitPrefix)
+		if isText && strings.HasPrefix(last.text, proto.LitPrefix) && last.pane == k.pane && last.pid == k.pid && len(last.text)+len(typed) <= len(proto.LitPrefix)+proto.MaxLit {
 			last.text += typed
 			m.keyQ = q
 			return
@@ -851,7 +848,7 @@ func (m *Model) sendKey() tea.Cmd {
 	m.keyQ = m.keyQ[1:]
 	act := proto.Act{RecID: proto.KeysPrefix + k.pane, Text: k.text, PID: k.pid, Start: k.start, Seen: k.seen}
 	if k.pick != "" {
-		act = proto.Act{RecID: "pick:" + k.pane, Which: "secondary", Confirm: "y", Text: k.pick}
+		act = proto.Act{RecID: proto.PickPrefix + k.pane, Which: "secondary", Confirm: "y", Text: k.pick}
 	}
 	cmd := m.send(act)
 	m.keyInFlight, m.keyFlying = "a"+strconv.Itoa(m.acts), k

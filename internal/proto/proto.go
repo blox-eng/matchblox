@@ -132,8 +132,22 @@ const (
 )
 
 // KeysPrefix starts an act that sends one key to the pane after it. Text is
-// a key name of the keys set, or "lit:" and the text to type.
+// a key name of KeyNames, or LitPrefix and the text to type.
 const KeysPrefix = "keys:"
+
+// LitPrefix starts the text of a keys: act that types the text after it:
+// at most MaxLit bytes, with no control character.
+const (
+	LitPrefix = "lit:"
+	MaxLit    = 200
+)
+
+// KeyNames are the tmux keys a keys: act may press by name.
+var KeyNames = []string{"Up", "Down", "Left", "Right", "Enter", "Tab", "BTab", "Escape", "C-c", "BSpace"}
+
+// PickPrefix starts an act that answers the question tool in the pane
+// after it; its text is the said.Answer.
+const PickPrefix = "pick:"
 
 // Screen is one capture of the watched pane. Gone: the pane is not there.
 // Up: the screen ends this many lines above the pane's bottom, as far as

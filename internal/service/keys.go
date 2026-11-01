@@ -13,23 +13,15 @@ import (
 	"github.com/blox-eng/matchblox/internal/queue"
 )
 
-const (
-	litPrefix = "lit:"
-	maxLit    = 200
-)
-
-// keyNames are the tmux keys a console may press.
-var keyNames = []string{"Up", "Down", "Left", "Right", "Enter", "Tab", "BTab", "Escape", "C-c", "BSpace"}
-
 // keyStep is the tmux step for the wire form of one key, or why it is not one.
 func keyStep(pane, text string) ([]string, string) {
-	if lit, ok := strings.CutPrefix(text, litPrefix); ok {
-		if lit == "" || len(lit) > maxLit || strings.ContainsFunc(lit, unicode.IsControl) {
-			return nil, "not sent: the text is empty, over 200 bytes or holds a control character"
+	if lit, ok := strings.CutPrefix(text, proto.LitPrefix); ok {
+		if lit == "" || len(lit) > proto.MaxLit || strings.ContainsFunc(lit, unicode.IsControl) {
+			return nil, fmt.Sprintf("not sent: the text is empty, over %d bytes or holds a control character", proto.MaxLit)
 		}
 		return panes.Literal(pane, lit), ""
 	}
-	if !slices.Contains(keyNames, text) {
+	if !slices.Contains(proto.KeyNames, text) {
 		return nil, fmt.Sprintf("not sent: %q is not a key", cut(text, 20))
 	}
 	return panes.Keys(pane, text), ""
@@ -79,9 +71,9 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 
 // unseen says why key a would answer a wait in pane that the screen the
 // console saw did not show, or "". No such key goes before the console
-// has shown a screen of the pane at all. Enter answers any wait. At a menu (a
-// permission prompt or a question, by the hooks or on the screen) a digit
-// or any text picks, Esc turns it down, and an arrow or Tab moves it.
+// has shown a screen of the pane at all. Enter answers any wait. At a menu
+// (a permission prompt or a question, by the hooks or on the screen) a
+// digit or any text picks, Esc turns it down, and an arrow or Tab moves it.
 func (s *Service) unseen(pane, name string, a proto.Act, menu bool) string {
 	it, queued := s.queued(pane)
 	menu = menu || queued && (it.State == queue.StatePermission || it.State == queue.StateQuestion)

@@ -80,7 +80,7 @@ func (m Model) cardTakes(k tea.KeyPressMsg) bool {
 	}
 	ck := m.keys.card
 	text, _ := keyName(k)
-	return bkey.Matches(k, ck.Send, ck.Up, ck.Down, ck.Erase) || strings.HasPrefix(text, "lit:")
+	return bkey.Matches(k, ck.Send, ck.Up, ck.Down, ck.Erase) || strings.HasPrefix(text, proto.LitPrefix)
 }
 
 // cardSends tells if k, on the card, answers the question: ⏎, or a digit
@@ -292,7 +292,7 @@ func (m Model) sendCard(s sample.Session, answer string) (tea.Model, tea.Cmd) {
 	m.queueKey(chatKey{pane: s.Pane, pid: s.PID, start: s.Start, pick: answer, name: s.Name})
 	cmd := m.sendKey()
 	toast := m.say("sending to " + s.Name + "…")
-	m = m.pairActed(action{rec: "pick:" + s.Pane})
+	m = m.pairActed(action{rec: proto.PickPrefix + s.Pane})
 	return m, tea.Batch(cmd, toast)
 }
 
