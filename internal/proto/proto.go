@@ -113,6 +113,11 @@ type Act struct {
 	PID int `json:"pid,omitempty"`
 	// Start is that agent's process start, which tells a reused pid apart.
 	Start uint64 `json:"start,omitempty"`
+	// Cols and Rows are, on a watch act, the size the console's chat gives
+	// the agent's screen: the service sizes the agent's window to it. 0: a
+	// chat that is not drawn, or a console before sizes.
+	Cols int `json:"cols,omitempty"`
+	Rows int `json:"rows,omitempty"`
 	// Console: the act came from a console, a person at the keys. The
 	// service sets it from the hello; it never comes over the wire.
 	Console bool `json:"-"`
@@ -161,6 +166,11 @@ type Screen struct {
 	// Err says the pane could not be read this time; the session is still
 	// there, and Text is empty.
 	Err string `json:"err,omitempty"`
+	// Cols and Rows are the pane's size where the service sized its window
+	// to a chat; 0 where it did not. A chat as wide draws the agent's lines
+	// as they are.
+	Cols int `json:"cols,omitempty"`
+	Rows int `json:"rows,omitempty"`
 }
 
 type Result struct {

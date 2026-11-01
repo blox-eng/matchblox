@@ -55,6 +55,7 @@ func (s *Service) watchAct(cl *client, clientKind string, a proto.Act, pane stri
 		return proto.Result{Err: "no agent session in " + pane + " any more"}
 	}
 	cl.watch.Store(&watched{pane: pane, up: up})
+	s.watchSize(cl, pane, a)
 	select {
 	case cl.screenKick <- struct{}{}:
 	default:
@@ -101,7 +102,11 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 		case live && w.up > 0:
 			text, scr.Up, read = s.CaptureUp(pane, w.up)
 		case live:
+			cols, rows, gen := s.sizes.paneSize(pane)
 			text, read = s.Capture([]string{pane})[pane]
+			if _, _, after := s.sizes.paneSize(pane); after == gen { // not sized while it was read
+				scr.Cols, scr.Rows = cols, rows
+			}
 		}
 		scr.Text, scr.Gone = text, !live // only a pane with no session in it any more is gone
 		if live && !read {
@@ -110,7 +115,7 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 		if scr.Gone {
 			scr.Up = 0
 		}
-		if sent && pane == last.Pane && text == last.Text && scr.Gone == last.Gone && scr.Err == last.Err && scr.Up == last.Up && (s.waitShown(pane, last.At) || !s.waitShown(pane, scr.At)) {
+		if sent && pane == last.Pane && text == last.Text && scr.Gone == last.Gone && scr.Err == last.Err && scr.Up == last.Up && scr.Cols == last.Cols && scr.Rows == last.Rows && (s.waitShown(pane, last.At) || !s.waitShown(pane, scr.At)) {
 			continue
 		}
 		sent, last = true, scr

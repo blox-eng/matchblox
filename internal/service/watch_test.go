@@ -83,7 +83,13 @@ func (r *reader) act(t *testing.T, id, recID string) proto.Result {
 // actText is act with the act's text.
 func (r *reader) actText(t *testing.T, id, recID, text string) proto.Result {
 	t.Helper()
-	if err := r.c.Send(proto.KindAct, id, proto.Act{RecID: recID, Text: text}); err != nil {
+	return r.actWith(t, id, proto.Act{RecID: recID, Text: text})
+}
+
+// actWith sends the act a and waits for its result.
+func (r *reader) actWith(t *testing.T, id string, a proto.Act) proto.Result {
+	t.Helper()
+	if err := r.c.Send(proto.KindAct, id, a); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(waitLimit)
