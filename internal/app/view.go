@@ -122,11 +122,6 @@ type drawn struct {
 	boxAt, boxX, boxW int
 	boxRows           []string
 	boxKeys           []span
-	// The chat's question card: its first line and column, its width, the
-	// key a tap on each of its lines presses, and the keys of its footer.
-	cardAt, cardX, cardW int
-	cardRows             []string
-	cardKeys             []span
 	// The dock: its height and the columns of the stoker's panel. full:
 	// the dock shows all it has; paneFull: so does the right pane.
 	dockH, stx0, stx1 int
@@ -148,7 +143,10 @@ type drawn struct {
 	// goes back to Sessions. chatRows: the lines of the agent's screen the
 	// chat shows, one page of its history.
 	chatFull bool
-	chatRows int
+	// chatAt, chatX, chatW: the first row of the agent's screen in the chat,
+	// the chat's first column for a tap, and the screen's width; chatW 0: no chat.
+	chatAt, chatX, chatW int
+	chatRows             int
 }
 
 // draw is the screen, with an ssh prompt over everything.
@@ -245,7 +243,7 @@ func (m Model) drawScreen(w int) drawn {
 	if chatting {
 		detail = m.chatPane(chat, detailW, room)
 		sc.chatRows = room - 1 - len(m.chatStrip(chat, detailW, room-1))
-		m.markCard(&sc, sc.bodyTop+room, listW+2, detailW-1, room-1-len(m.chatStrip(chat, detailW, room-1)))
+		sc.chatAt, sc.chatX, sc.chatW = sc.bodyTop+room-sc.chatRows, listW+1, detailW-1
 	}
 	vis := windowed(b, room, m.rowIndex())
 	if stacked {
@@ -333,7 +331,7 @@ func (m Model) panes(w int) (list, detail int) {
 	if m.tab == tabSessions {
 		at = sessionsSplit(w)
 		if !m.chatRoom(w - at - 1) {
-			return w, 0 // no chat without its question: it opens full-screen
+			return w, 0 // no room for a menu beside the list: the chat opens full-screen
 		}
 	}
 	return at, w - at - 1

@@ -644,7 +644,7 @@ func TestBeatFourNamesTheAct(t *testing.T) {
 	if m.pair.beat != 4 || m.pair.line != "iPad answered api" {
 		t.Fatalf("beat %d, line %q", m.pair.beat, m.pair.line)
 	}
-	m = m.pairActed(action{rec: "pick:%2"})
+	m = m.pairActed(action{rec: "keys:%2"})
 	if m.pair.line != "iPad answered api" {
 		t.Fatalf("a second act changed the line: %q", m.pair.line)
 	}
@@ -660,7 +660,7 @@ func TestBeatFourNamesTheAct(t *testing.T) {
 
 func TestBeatFourVerbs(t *testing.T) {
 	for rec, want := range map[string]string{
-		"pick:%2": "iPad picked in api", "message:%2": "iPad wrote to api",
+		"keys:%2": "iPad picked in api", "message:%2": "iPad wrote to api",
 		"compact:%2": "iPad compacted api", "kill:%2": "iPad acted in api",
 	} {
 		_, m, tty := inPage(t)
@@ -733,9 +733,9 @@ func apiAsks() proto.State {
 	return st
 }
 
-// TestBeatFourOnACardAnswer: the card sends its answer without confirm. The
-// phone answers while the page waits at beat 3.
-func TestBeatFourOnACardAnswer(t *testing.T) {
+// TestBeatFourOnAMenuAnswer: the phone answers an agent's menu in the chat,
+// with a key and no confirm, while the page waits at beat 3.
+func TestBeatFourOnAMenuAnswer(t *testing.T) {
 	m, f := loadedWith(t, 100, apiAsks())
 	m.opt.LastClient = func() (string, time.Time, error) { return phoneTTY, time.Time{}, nil }
 	m.opt.Pair = &PairHost{DeviceIn: func(id string) (time.Time, string, bool) { return time.Now(), phoneTTY, id == "iPad-id" }}
@@ -749,7 +749,7 @@ func TestBeatFourOnACardAnswer(t *testing.T) {
 	if got.pair == nil || got.pair.beat != 4 || got.pair.line != "iPad picked in api" {
 		t.Fatalf("page %+v", got.pair)
 	}
-	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "pick:%2" {
+	if acts := keyActs(f); len(acts) != 1 || acts[0].RecID != "keys:%2" {
 		t.Fatalf("acts %+v", acts)
 	}
 
@@ -783,20 +783,21 @@ func TestTheStripHandsTheConsoleBack(t *testing.T) {
 	if !next.(Model).chatKeys {
 		t.Fatal("a key did not reach the console at beat 3")
 	}
+	now = now.Add(time.Second)    // the menu's quiet passes
 	next, cmd := key(next, "esc") // goes to the agent, and the strip stays
 	drain(cmd)
 	if got := next.(Model); got.pair == nil || len(keyActs(f)) != 1 || keyActs(f)[0].Text != "Escape" {
 		t.Fatalf("esc in the chat: page %v, acts %+v", got.pair, f.acts())
 	}
 	next = answered(t, next.(Model), "")
-	now = now.Add(time.Second) // the card's quiet passes
+	now = now.Add(time.Second) // the menu's quiet passes
 	next, cmd = key(next, "enter")
 	drain(cmd)
 	got := next.(Model)
 	if got.pair == nil || got.pair.beat != 4 || got.pair.line != "iPad picked in api" {
 		t.Fatalf("page %+v", got.pair)
 	}
-	if acts := pickActs(f); len(acts) != 1 || acts[0].RecID != "pick:%2" {
+	if acts := keyActs(f); len(acts) != 2 || acts[1].RecID != "keys:%2" || acts[1].Text != "Enter" {
 		t.Fatalf("acts %+v", f.acts())
 	}
 	if out := ansi.Strip(got.render()); !strings.Contains(out, "iPad picked in api") {

@@ -141,8 +141,7 @@ folder as `dir`. They need
 
 `matchblox peek api` prints what the session said last and what it asks,
 if anything: the question with its numbered options, or an approval that
-waits in its pane. It shows what the console's question card shows, and it acts on
-nothing. `--lines 40` keeps the last 40 lines of what it said (20 by
+waits in its pane. It acts on nothing. `--lines 40` keeps the last 40 lines of what it said (20 by
 default, 0 for all); `--json` prints `name`, `pane`, `target`, `said`,
 `asks` (the first line of the question), `questions` (each with its
 `options`) and `approval`.
@@ -278,13 +277,13 @@ account, the tokens and the background work.
   iPad mini (95 × 65) gets a 56-column chat in the full view.
 - Sessions splits only when the chat is at least 44 columns wide and the
   body has room for its title, its account line as drawn (two lines on a
-  chat of 44 to 59 columns) and the whole question card of any session
-  the cursor can reach, the selected one's permission prompt included: the
-  split holds as the cursor moves. Short of either (a phone on its side
+  chat of 44 to 59 columns) and 16 rows for an agent's menu, whichever
+  session the cursor is on: the split holds as the cursor moves. 16 is the
+  question tool's tallest common menu from its question down. Short of either (a phone on its side
   with the keyboard up, a landscape screen of 60–82 columns), Sessions is
   one column: the selected row opens in place, and the chat opens
-  full-screen, as on a phone. A screen too short for the whole card, or
-  for a permission prompt's whole box, even then does not open the chat:
+  full-screen, as on a phone. At a question or a permission prompt, a
+  screen with under 16 rows for the agent even then does not open the chat:
   the key line says `too short to show <name>'s question · ctrl+o goes
   into its pane`.
 
@@ -321,12 +320,12 @@ strip. On an upright phone the chat has no strip.
 ```
 ╭─ Sessions ────────────────────╮╭─ api-auth · asks ───────────────────────────╮
 │ ● api-auth      asks    2m    ││ I can fix the login in two ways.            │
-│ ◐ web-cart      busy   12m    ││                                             │
-│ ○ docs          idle    1h    ││ ╭─ api-auth asks ─────────────────────────╮ │
-├─ Usage ───────────────────────┤│ │ › 1 Patch the token check               │ │
-│ max   ▇▇▇▇▇▁▁▁ 61%            ││ │   2 Move to the new session store       │ │
-├─ Machine ─────────────────────┤│ │   3 Type an answer…                     │ │
-│ cpu 34%  mem 41/64G          ││ ╰─ ⏎ send ─────────────────────────────────╯ │
+│ ◐ web-cart      busy   12m    ││ ─────────────────────────────────────────── │
+│ ○ docs          idle    1h    ││ Which way do we fix the login?              │
+├─ Usage ───────────────────────┤│ ❯ 1. Patch the token check                  │
+│ max   ▇▇▇▇▇▁▁▁ 61%            ││   2. Move to the new session store          │
+├─ Machine ─────────────────────┤│   3. Type something.                        │
+│ cpu 34%  mem 41/64G          ││ Enter to select · ↑/↓ to navigate           │
 ╰───────────────────────────────╯╰─────────────────────────────────────────────╯
  keys go to api-auth · ctrl+a m back · ctrl+o into tmux
 ```
@@ -357,40 +356,43 @@ A second `^C` to the same agent within 1 s is held, because two stop Claude
 Code: `^C held: one went 0.6 s ago, ^C again stops the agent`, or `^C held:
 one waits to go, ^C again stops the agent`. A third goes.
 
-When Claude Code asks with its question tool, the question card sits at the
-foot of the chat. `↑` `↓` move, `Space` ticks an option of a question with
-several choices, typing fills `Type an answer…`, `Enter` sends, and a tap
-picks an option. Several questions come one at a time. In auto mode the
-options come from the queue hooks (see
-[Agents](agents.md#how-an-agent-tells-that-it-waits)), so add them again
-when the setup step asks. The options go to Claude Code's own menu with the
-keys it takes, never as typed text, and only while the pane shows the page
-they answer: if you answered in the pane yourself, nothing more is sent.
-The header says `sending to flint-auth…`, then `sent to flint-auth`; an
-answer that did not go says `not sent to flint-auth` and why on the key
-line.
+When Claude Code asks with its question tool or for a permission, the chat
+shows its own menu, once, live and up the history. Its keys go to it as they
+are: `↑` `↓` move, `Space` ticks an option of a question with several
+choices, a digit picks, `Enter` answers and typing fills its text row. The
+agent draws the menu at the chat's size. A window of several panes, or a chat
+under the window's width, keeps the wide lines: the chat wraps them, so every
+option reads and the bottom rows stay, and a menu wrapped taller than the
+chat loses its top first.
 
-While the card shows, the agent's own menu leaves the screen: the lines from
-the rule over the question's header (its ☐ ☒ ✔ tabs) down. The card is the one place to answer, so the question shows
-once. While you scroll up through the history, the same cut holds: with
-the card up, the agent's menu leaves the lines above it.
+A tap on a numbered option of the menu at the bottom of the screen picks it,
+at a question or a permission prompt only: across the row's whole width, its
+description and wrapped lines included. It sends the option's digit as a key,
+under the guards below, and the row draws in the selected wash until the next
+screen comes. A digit answers a single-choice question at once and ticks an
+option of a question with several choices; there a tap on the menu's own
+`Submit` or `Next` row moves the cursor to it and sends `Enter`. With the cursor
+on the row you type in, a tap on another option moves the cursor off it first.
+Any other row, a numbered list the agent printed above the menu, and any tap
+away from a menu wait send nothing. Where the chat sits beside the list, the
+click that gives it the keys picks nothing.
 
-There is no card at a permission prompt. Its keys go to the agent as they
-are: the chat shows the prompt, and `Enter` approves it.
-
-The service refuses any `Enter` for a question that started after the
-screen your console showed: `not sent: <name> asks something new — look
-again`. The card has a second guard with the same words. For 400 ms after a
-card first shows, and after it moves to the next question, it sends nothing.
-So an `Enter` never answers a question you have not read.
+Three guards hold for every key that can answer a menu, all but `^C` and
+`Backspace`. The service refuses a key that names no screen, or a screen taken
+before the wait settled, 500 ms after it began: `not sent: <name> asks
+something new — look again`. The console refuses a key, with the same words,
+for 400 ms after a new menu comes or the chat opens on a wait. And each key
+names the agent the chat showed, by its pid and its start. A paste with a line
+break is refused at a menu, since its `Enter` would answer: `not sent: a paste
+with a line break would answer <name>'s menu`. A paste of one line goes.
 
 While the chat shows an agent, the agent's tmux window takes the chat's
 size: the columns and rows the chat gives the agent's screen, under its
-title and strip and over its card. The agent redraws at that size, so its
+title and strip. The agent redraws at that size, so its
 tables, boxes and diffs look as they do in its own terminal, and the chat
 draws its lines as they are. When the console resizes, the chat moves
-beside the list or full screen, or the card comes or goes, the window
-takes the new size. The window gets its own size back when no chat
+beside the list or full screen, the window takes the new size. A question
+that starts or ends resizes nothing. The window gets its own size back when no chat
 watches it: the selection moves, the console closes or loses the service,
 or the service stops. A service that ended without that puts the windows
 back when it starts again. A terminal attached to the agent's session
@@ -416,8 +418,8 @@ lines of the agent's pane, 3 lines for each step, up to 2000 lines. The
 wheel down goes back toward the live screen. While the chat shows the
 history, its title adds `↑ <n> lines up`, its frame is dim and the key
 line says `a key goes back to live`. The first
-key then goes back to the live screen and goes to no agent: a key, a paste
-or a key of the card. The key line says `back to live — the agent did not
+key then goes back to the live screen and goes to no agent: a key or a
+paste. The key line says `back to live — the agent did not
 get that key`. The chat is blank until the live screen comes, and keys go
 nowhere until then. The history above the live screen was drawn at the
 window's earlier size, so the chat wraps it to its width. A tap on the title also goes back to the live screen, and so
@@ -428,7 +430,6 @@ refuses an `Enter` that answers a screen of the history.
 They do not go back to the live screen.
 
 At night, the first key that sends something to an agent asks "Take over?".
-Keys that only move on the card do not ask.
 
 When the chat gets the keys or changes its session, the console tells the
 terminal the agent of that session: `ESC _ matchblox;agent=<id> ESC \`.

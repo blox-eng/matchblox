@@ -96,7 +96,7 @@ func screensState(t *testing.T) proto.State {
 // TestScreens holds the console on the demo machine at the three sizes
 // of design/0006 §10 against the frames in testdata/screens: Sessions with
 // the one that waits opened, Ships with a ship of each kind, the chat with
-// its question card, Sessions where two sessions drive two ships each,
+// the agent's own question menu, Sessions where two sessions drive two ships each,
 // the dock folded on a short phone, and list only on a desk. -update
 // writes them again.
 func TestScreens(t *testing.T) {

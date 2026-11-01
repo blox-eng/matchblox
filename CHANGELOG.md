@@ -6,6 +6,16 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The chat shows the agent's own question.** The console's question card is
+  gone. The agent's menu draws at the chat's size, every key goes to it, and a
+  tap on one of its numbered options picks it, once the chat has the keys.
+  The guards stay for each key that can answer. A chat at a question or a
+  permission prompt needs 16 rows for the agent, and Sessions splits only with
+  that room. A paste with a line break is refused at a menu. `matchblox send
+  --pick` still answers from a script.
+
 ### Removed
 
 - **The now line.** Sessions no longer draws a time lane on each row, its axis

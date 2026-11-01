@@ -136,11 +136,11 @@ func (w *demoWorld) Run(argv []string) error {
 	case slices.Equal(argv, []string{"kill", fmt.Sprint(demoPID)}):
 		w.kill(demoPID)
 		return nil
+	case len(argv) == 7 && argv[1] == "send-keys" && argv[4] == "-l" && w.atMenu(argv[3]):
+		return w.pick(argv[3], argv[6])
 	case len(argv) == 7 && argv[1] == "send-keys" && argv[4] == "-l":
 		w.typed[argv[3]] = argv[6]
 		return w.drawField(argv[3])
-	case len(argv) == 5 && argv[1] == "send-keys" && len(argv[4]) == 1 && argv[4][0] >= '1' && argv[4][0] <= '9':
-		return w.pick(argv[3], argv[4])
 	case len(argv) == 5 && argv[1] == "send-keys" && argv[4] == "Enter":
 		text := w.typed[argv[3]]
 		delete(w.typed, argv[3])
@@ -264,6 +264,12 @@ func (w *demoWorld) pick(pane, digit string) error {
 		return err
 	}
 	return w.writeRegistry(s, now)
+}
+
+// atMenu tells if the pane shows the question tool's menu. Hold w.mu.
+func (w *demoWorld) atMenu(pane string) bool {
+	b, err := os.ReadFile(w.pane(pane))
+	return err == nil && strings.Contains(string(b), "Enter to select")
 }
 
 // drawField shows the draft in the pane's input field. Hold w.mu.
