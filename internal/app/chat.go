@@ -846,7 +846,7 @@ func (m *Model) sendKey() tea.Cmd {
 		act = proto.Act{RecID: "pick:" + k.pane, Which: "secondary", Confirm: "y", Text: k.pick}
 	}
 	cmd := m.send(act)
-	m.keyInFlight = "a" + strconv.Itoa(m.acts)
+	m.keyInFlight, m.keyFlying = "a"+strconv.Itoa(m.acts), k
 	if k.pick != "" {
 		m.cardSent = maps.Clone(m.cardSent)
 		if m.cardSent == nil {
@@ -861,16 +861,18 @@ func (m *Model) sendKey() tea.Cmd {
 }
 
 // keyAnswered is the service's answer to the key in flight: the next key
-// goes, or a refusal shows and the keys behind it drop, as they were
-// pressed for a screen that is no longer there.
+// goes, or a refusal shows and the keys behind it for its agent drop, as
+// they were pressed for a screen that is no longer there. A card's answer
+// waiting among them still goes: it names its question itself.
 func (m Model) keyAnswered(r proto.Result) (tea.Model, tea.Cmd) {
 	m.keyInFlight = ""
 	if name, ok := m.cardSent[r.ActID]; ok {
 		return m.cardAnswered(name, r)
 	}
 	if r.Err != "" {
-		m.keyQ, m.flash = nil, r.Err
-		return m, m.recv()
+		f := m.keyFlying
+		m.keyQ = slices.DeleteFunc(slices.Clone(m.keyQ), func(k chatKey) bool { return k.pick == "" && k.pane == f.pane && k.pid == f.pid })
+		m.flash = r.Err
 	}
 	cmd := m.sendKey()
 	return m, tea.Batch(m.recv(), cmd)

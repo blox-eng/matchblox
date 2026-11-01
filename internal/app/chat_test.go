@@ -1766,3 +1766,22 @@ func TestKeysDroppedWithTheConnectionSaySo(t *testing.T) {
 		t.Fatalf("queue %+v flash %q", m.keyQ, m.flash)
 	}
 }
+
+// A refused key drops the keys behind it for its agent, which were typed
+// for a screen no longer there; a card's answer queued behind it still
+// goes.
+func TestARefusedKeyKeepsACardsAnswer(t *testing.T) {
+	m, f := inChat(t)
+	other := slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return s.Host == m.opt.Host && s.Pane != "" && s.Pane != "%1" })
+	b := m.all.sessions[other]
+	m = pressKeys(t, m, "a")
+	m.keyQ = append(m.keyQ, chatKey{pane: b.Pane, pid: b.PID, pick: `{"id":"toolu_9"}`, name: b.Name})
+	m = pressKeys(t, m, "b")
+	m = answered(t, m, "not sent: x asks something new — look again")
+	if got := pickActs(f); len(got) != 1 || got[0].RecID != "pick:"+b.Pane {
+		t.Fatalf("the card's answer was dropped: picks %+v queue %+v flash %q", got, m.keyQ, m.flash)
+	}
+	if slices.ContainsFunc(keyActs(f), func(a proto.Act) bool { return a.Text == "lit:b" }) || len(m.keyQ) != 0 {
+		t.Fatalf("the key behind the refused one went: keys %+v queue %+v", keyActs(f), m.keyQ)
+	}
+}

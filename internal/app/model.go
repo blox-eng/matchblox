@@ -355,6 +355,7 @@ type Model struct {
 	chatKeys    bool      // the chat has the keys: they go to the selected session's agent
 	keyQ        []chatKey // the chat's keys behind the one in flight
 	keyInFlight string    // the act id of the chat's key the service has not answered
+	keyFlying   chatKey   // the key in flight
 	ctrlC       ctrlCMark // the last ^C the chat sent, and when it went
 	ctrlCHeld   ctrlCMark // the agent whose next ^C goes: one came within a second of the last
 	touched     map[string]time.Time

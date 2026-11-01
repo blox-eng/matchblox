@@ -298,7 +298,7 @@ func (m Model) sendCard(s sample.Session, answer string) (tea.Model, tea.Cmd) {
 
 // cardAnswered is the service's answer to the card's: the toast says "sent
 // to" only when every key went; a guard that stopped it says why on the key
-// line, and the keys behind it drop, as behind a refused key.
+// line, and the keys behind it for its agent drop, as behind a refused key.
 func (m Model) cardAnswered(name string, r proto.Result) (tea.Model, tea.Cmd) {
 	m.cardSent = maps.Clone(m.cardSent)
 	delete(m.cardSent, r.ActID)
@@ -307,8 +307,11 @@ func (m Model) cardAnswered(name string, r proto.Result) (tea.Model, tea.Cmd) {
 		why = r.Skipped[n-1]
 	}
 	if why != "" {
-		m.keyQ, m.toast, m.flash = nil, "", tilde("not sent to "+name+": "+why)
-		return m, m.recv()
+		f := m.keyFlying // the keys behind it for its agent drop; another's answer still goes
+		m.keyQ = slices.DeleteFunc(slices.Clone(m.keyQ), func(k chatKey) bool { return k.pick == "" && k.pane == f.pane && k.pid == f.pid })
+		m.toast, m.flash = "", tilde("not sent to "+name+": "+why)
+		cmd := m.sendKey()
+		return m, tea.Batch(m.recv(), cmd)
 	}
 	toast := m.say("sent to " + name)
 	cmd := m.sendKey()
