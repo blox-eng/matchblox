@@ -1613,3 +1613,55 @@ func TestAgentMenuCutKeepsAPlainRule(t *testing.T) {
 		t.Fatalf("cut a prompt box: %q", got)
 	}
 }
+
+// permitScreen is Claude Code at a permission prompt: what it runs, then the
+// menu, in a box.
+const permitScreen = `⏺ I'll clear the old build first.
+
+╭──────────────────────────────────────────╮
+│ Bash command                             │
+│                                          │
+│   rm -rf ~/work/build                    │
+│   Remove the build directory             │
+│                                          │
+│ Do you want to proceed?                  │
+│ ❯ 1. Yes                                 │
+│   2. Yes, and don't ask again            │
+│   3. No, and tell Claude what to do      │
+╰──────────────────────────────────────────╯`
+
+// Rule 2 at a permission prompt: the chat opens only where the prompt's
+// whole box shows, the command it approves with it. Else the key line says
+// it is too short and no key goes.
+func TestAPromptTooTallForTheScreenGetsNoKeys(t *testing.T) {
+	for _, size := range [][2]int{{96, 8}, {106, 10}, {44, 12}} {
+		m := sized(t, size[0], size[1], queueState()) // app-feature (%1) asks for permission
+		m = onPane(t, m, "%1")
+		next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(100, 0), Text: permitScreen})
+		m = pressKeys(t, next.(Model), "enter")
+		if m.chatKeys || !strings.Contains(m.flash, "too short to show app-feature") {
+			t.Fatalf("%v: chatKeys %v flash %q\n%s", size, m.chatKeys, m.flash, screen(m))
+		}
+	}
+	for _, size := range [][2]int{{44, 31}, {96, 20}} {
+		m := sized(t, size[0], size[1], queueState())
+		m = onPane(t, m, "%1")
+		next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(100, 0), Text: permitScreen})
+		m = pressKeys(t, next.(Model), "enter")
+		if !m.chatKeys || !strings.Contains(screen(m), "rm -rf ~/work/build") {
+			t.Fatalf("%v: chatKeys %v\n%s", size, m.chatKeys, screen(m))
+		}
+	}
+}
+
+// The prompt's box starts at its top: a box's ╭, or the rule Claude Code
+// draws over a prompt without a box.
+func TestThePromptBoxStartsAtItsTop(t *testing.T) {
+	ruled := "⏺ Clearing.\n\n────────────────────\n Bash command\n\n   rm -rf build\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No"
+	if got := promptBox(ruled); !strings.HasPrefix(got, "────") || !strings.HasSuffix(got, "2. No") {
+		t.Errorf("ruled: %q", got)
+	}
+	if got := promptBox(permitScreen); !strings.HasPrefix(got, "╭") || strings.Count(got, "\n") != 10 {
+		t.Errorf("boxed: %q", got)
+	}
+}

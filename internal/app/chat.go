@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"maps"
+	"math"
 	"regexp"
 	"slices"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -204,7 +206,7 @@ func (m Model) chatRoom(right int) bool {
 	if m.height == 0 {
 		return true // no height yet
 	}
-	card := len(m.cardLines(right - 1))
+	card := m.askRows(right - 1)
 	if card == 0 {
 		card = cardLeast
 	}
@@ -212,9 +214,64 @@ func (m Model) chatRoom(right int) bool {
 }
 
 // chatFits tells if the chat full-screen, w columns wide, shows its whole
-// question card under its title.
+// question card, or permission prompt, under its title.
 func (m Model) chatFits(w int) bool {
-	return m.height == 0 || len(m.cardLines(w)) <= m.height-3
+	return m.height == 0 || m.askRows(w) <= m.height-3
+}
+
+// askRows is how many lines w columns wide the chat must show whole for
+// its session's wait: the question card, or the permission prompt's box
+// from its top down, which holds what the person approves. A prompt whose
+// screen has not come counts as cardLeast.
+func (m Model) askRows(w int) int {
+	if n := len(m.cardLines(w)); n > 0 {
+		return n
+	}
+	s, ok := m.selectedSession()
+	if !ok {
+		return 0
+	}
+	if it, waits := m.waitOf(s); !s.Permits && (!waits || it.State != queue.StatePermission) {
+		return 0
+	}
+	if m.screen.Pane != s.Pane || m.screen.Gone {
+		return cardLeast
+	}
+	return len(fitScreen(promptBox(m.screen.Text), w, math.MaxInt))
+}
+
+// permitLine is a line of an agent's approval menu: a numbered Yes, or
+// OpenCode's words.
+var permitLine = regexp.MustCompile(`(?i)^[❯›>]?\s*\d\.\s+yes\b|^permission required\b|^allow once\b`)
+
+// promptBox is the screen from the top of its permission prompt down: the
+// rule or box top over the last line of the menu, else the run of lines
+// with words that holds it.
+func promptBox(text string) string {
+	lines := strings.Split(text, "\n")
+	at := -1
+	for i := len(lines) - 1; i >= 0 && at < 0; i-- {
+		if permitLine.MatchString(strings.TrimSpace(strings.Trim(ansi.Strip(lines[i]), " │┃"))) {
+			at = i
+		}
+	}
+	if at < 0 {
+		return text
+	}
+	top := -1
+	for i := at; i >= 0 && top < 0; i-- {
+		plain := strings.TrimSpace(ansi.Strip(lines[i]))
+		if plain != "" && strings.Trim(plain, "─━ ") == "" || strings.HasPrefix(plain, "╭") || strings.HasPrefix(plain, "┌") {
+			top = i
+		}
+	}
+	if top < 0 { // no rule: the run of lines it ends
+		top = at
+		for top > 0 && strings.TrimSpace(ansi.Strip(lines[top-1])) != "" {
+			top--
+		}
+	}
+	return strings.Join(lines[top:], "\n")
 }
 
 // chatSeen tells if the selected session's chat, with the keys, shows its
