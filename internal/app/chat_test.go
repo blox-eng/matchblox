@@ -1726,3 +1726,28 @@ func TestAFailedReadKeepsTheChat(t *testing.T) {
 		t.Fatalf("chatKeys %v screen %+v flash %q", m.chatKeys, m.screen, m.flash)
 	}
 }
+
+// A held ^C lapses with its window, and its hint with it: a ^C long after
+// is held again, as a first one near the last sent, never sent as the stop.
+func TestAHeldCtrlCLapses(t *testing.T) {
+	m, f := inChat(t)
+	now := time.Unix(1000, 0)
+	m.opt.Now = func() time.Time { return now }
+	m = answered(t, pressKeys(t, m, "ctrl+c"), "")
+	now = now.Add(500 * time.Millisecond)
+	next, cmd := key(m, "ctrl+c")
+	m = next.(Model)
+	if !strings.Contains(m.flash, "again stops the agent") || cmd == nil {
+		t.Fatalf("flash %q cmd %v", m.flash, cmd)
+	}
+	now = now.Add(ctrlCWindow)
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	if m.flash != "" || m.ctrlCHeld != (ctrlCMark{}) {
+		t.Fatalf("after the window: flash %q held %+v", m.flash, m.ctrlCHeld)
+	}
+	m = pressKeys(t, m, "ctrl+c") // the last one went 1.5 s ago: a ^C of its own
+	if got := keyActs(f); len(got) != 2 {
+		t.Fatalf("acts: %+v", got)
+	}
+}

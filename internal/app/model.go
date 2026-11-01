@@ -625,6 +625,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatKeys = false
 		}
 		return m, nil
+	case ctrlCLapsed:
+		return m.lapseCtrlC(msg), nil
 	case screenMsg:
 		if msg.Pane == m.watching && msg.Err != "" {
 			m.flash = msg.Err // a read that failed: the session and its last screen stay

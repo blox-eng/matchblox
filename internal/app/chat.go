@@ -633,6 +633,24 @@ func (m Model) intoPane() Model {
 	return m
 }
 
+// ctrlCWindow is how close two ^C come to stop Claude Code; a held ^C
+// lapses after it.
+const ctrlCWindow = time.Second
+
+// ctrlCLapsed is the end of the window of the ^C held at at.
+type ctrlCLapsed struct{ at time.Time }
+
+// lapseCtrlC drops a held ^C whose window ended, and its hint.
+func (m Model) lapseCtrlC(msg ctrlCLapsed) Model {
+	if m.ctrlCHeld.pane != "" && m.ctrlCHeld.at.Equal(msg.at) {
+		m.ctrlCHeld = ctrlCMark{}
+		if strings.HasSuffix(m.flash, " again stops the agent") {
+			m.flash = ""
+		}
+	}
+	return m
+}
+
 // ctrlCMark names an agent the chat sent ^C to, and when.
 type ctrlCMark struct {
 	pane string
@@ -760,13 +778,14 @@ func (m Model) toAgent(name string, keys ...chatKey) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if k := keys[0]; k.text == ctrlCName {
-		if m.ctrlCHeld.is(k) {
+		if m.ctrlCHeld.is(k) && m.now().Before(m.ctrlCHeld.at.Add(ctrlCWindow)) {
 			m.ctrlCHeld = ctrlCMark{}
 		} else if last := m.lastCtrlC(k); last != "" {
-			m.ctrlCHeld = ctrlCMark{pane: k.pane, pid: k.pid, at: m.now()}
+			at := m.now()
+			m.ctrlCHeld = ctrlCMark{pane: k.pane, pid: k.pid, at: at}
 			stop := m.keys.chat.Stop.Help().Key
 			m.flash = fmt.Sprintf("%s held: %s, %s again stops the agent", stop, last, stop)
-			return m, nil
+			return m, tea.Tick(ctrlCWindow, func(time.Time) tea.Msg { return ctrlCLapsed{at} })
 		}
 	}
 	for _, k := range keys {
@@ -783,7 +802,7 @@ func (m Model) lastCtrlC(k chatKey) string {
 	if slices.ContainsFunc(m.keyQ, func(q chatKey) bool { return q.text == k.text && q.pane == k.pane && q.pid == k.pid }) {
 		return "one waits to go"
 	}
-	if since := m.now().Sub(m.ctrlC.at); m.ctrlC.is(k) && since < time.Second {
+	if since := m.now().Sub(m.ctrlC.at); m.ctrlC.is(k) && since < ctrlCWindow {
 		return fmt.Sprintf("one went %.1f s ago", since.Seconds())
 	}
 	return ""
