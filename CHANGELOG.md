@@ -18,6 +18,12 @@ All notable changes to matchblox are in this file. The format follows
   that room. A paste with a line break is refused at a menu. `matchblox send
   --pick` still answers from a script.
 
+### Removed
+
+- **The now line.** Sessions no longer draws a time lane on each row, its axis
+  or the `│` at now. The name takes the room. List only (`v`) stays.
+  ([#280](https://github.com/blox-eng/matchblox/issues/280))
+
 ## [0.29.0] - 2026-10-30
 
 ### Added
