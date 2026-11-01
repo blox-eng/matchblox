@@ -183,54 +183,6 @@ func withFocus(st proto.State, pane string, at time.Time) proto.State {
 	return st
 }
 
-// The home console is shared: an Enter on its way at the desk when the
-// phone's tap lands must not answer a question nobody read. The card a focus
-// opens has nothing picked.
-func TestFocusPicksNothing(t *testing.T) {
-	st := queueState()
-	for i := range st.Sessions {
-		if st.Sessions[i].Pane == "%2" {
-			st.Sessions[i].Ask = &said.Ask{ID: "toolu_1", Questions: []said.Question{
-				{Question: "Which next?", Options: []said.Option{{Label: "Start task 11"}, {Label: "Fix the flake"}}},
-			}}
-		}
-	}
-	m, f := loadedWith(t, 100, st)
-	next, _ := m.Update(stateMsg(withFocus(st, "%2", time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC))))
-	if s, c, ok := next.(Model).cardNow(); !ok || s.Pane != "%2" || c.at != -1 || !next.(Model).chatKeys {
-		t.Fatalf("card %+v on %q: want app-review's, nothing picked", c, s.Pane)
-	}
-	next, cmd := key(next, "enter")
-	drain(cmd)
-	if acts := f.acts(); len(acts) != 0 || next.(Model).flash != "pick an option" {
-		t.Fatalf("an Enter with nothing picked sent %+v (flash %q)", acts, next.(Model).flash)
-	}
-}
-
-// A card with an answer half typed keeps the keys: a focus, on another
-// session or on its own, does not throw the text away.
-func TestFocusKeepsACardBeingTyped(t *testing.T) {
-	st := queueState()
-	for i := range st.Sessions {
-		if st.Sessions[i].Pane == "%2" {
-			st.Sessions[i].Ask = &said.Ask{ID: "toolu_1", Questions: []said.Question{
-				{Question: "Which next?", Options: []said.Option{{Label: "Start task 11"}, {Label: "Fix the flake"}}},
-			}}
-		}
-	}
-	m, _ := loadedWith(t, 100, st)
-	next, _ := key(selectPane(t, m, "%2"), "enter")
-	next = typeText(next, "no, wait")
-	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
-	for _, pane := range []string{"%1", "%2"} {
-		next, _ = next.Update(stateMsg(withFocus(st, pane, at)))
-		if s, c, _ := next.(Model).cardNow(); s.Pane != "%2" || c.text != "no, wait" || !next.(Model).chatKeys {
-			t.Fatalf("a focus on %s: card %+v on %q: the typed answer was thrown away", pane, c, s.Pane)
-		}
-		at = at.Add(time.Second)
-	}
-}
-
 // A confirm armed on another tab is dropped when a gone focus moves to
 // Sessions: the next y must not run an action whose preview is gone.
 func TestFocusOfAGoneSessionDropsAConfirm(t *testing.T) {
@@ -275,4 +227,33 @@ func TestFocusKeepsAChatBeingTyped(t *testing.T) {
 	if s, _ := next.(Model).selectedSession(); s.Pane != "%1" {
 		t.Fatalf("a focus after the typing stopped stays on %s", s.Pane)
 	}
+}
+
+// The home console is shared: an Enter on its way at the desk when the
+// phone's tap lands must not answer a question nobody read. A focus starts
+// the menu's quiet, on its own session too.
+func TestFocusStartsTheMenusQuiet(t *testing.T) {
+	st := queueState()
+	for i := range st.Sessions {
+		if st.Sessions[i].Pane == "%2" {
+			st.Sessions[i].Ask = &said.Ask{ID: "toolu_1", Questions: []said.Question{
+				{Question: "Which next?", Options: []said.Option{{Label: "Start task 11"}, {Label: "Fix the flake"}}},
+			}}
+		}
+	}
+	m, f := loadedWith(t, 100, st)
+	next, _ := m.Update(stateMsg(withFocus(st, "%2", time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC))))
+	if s, _ := next.(Model).selectedSession(); s.Pane != "%2" || !next.(Model).chatKeys {
+		t.Fatalf("the focus opened %q, keys %v", s.Pane, next.(Model).chatKeys)
+	}
+	next, cmd := key(next, "enter")
+	drain(cmd)
+	if acts := f.acts(); len(keyActs(f)) != 0 || next.(Model).flash != askedAgain(sessionName(next.(Model))) {
+		t.Fatalf("an Enter at once sent %+v (flash %q)", acts, next.(Model).flash)
+	}
+}
+
+func sessionName(m Model) string {
+	s, _ := m.selectedSession()
+	return s.Name
 }

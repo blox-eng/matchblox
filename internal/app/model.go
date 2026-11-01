@@ -307,11 +307,10 @@ type Model struct {
 	watchSince time.Time                       // when the watched pane was selected: its size waits sizeDwell
 	sizeTick   time.Time                       // the watchSince a sizeDueMsg is on its way for
 	liveWait   bool                            // the chat came back from the history, and waits for the live screen
-	askCard    card                            // the question card's answer, in the chat
-	cardSeen   cardSeen                        // the card's quiet: the ask it is for and its start
+	menuSeen   menuSeen                        // the chat's quiet: the wait it shows and its start
+	tapped     tappedOption                    // the option a tap pressed, until the next screen
 	chatShut   time.Time                       // when the chat last closed by itself: keys typed for it go nowhere for a moment
 	chatTyped  time.Time                       // when the person last typed in the chat
-	cardSent   map[string]string               // the card's sends in flight: act id -> the session's name
 	lanes      map[laneKey][lanePast]laneState // each session's last two hours; replaced, never written in place
 	laneStart  time.Time                       // the cell boundary lanes is aligned to
 	changes    map[paneKey]change              // a match change that plays once
@@ -591,7 +590,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m = m.scanShows()
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
-		nm = nm.scanShows().keepChat(m).noteCard()
+		nm = nm.scanShows().keepChat(m).noteMenu()
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
 		}
@@ -644,13 +643,18 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil // Update sends the size, if it is due
 	case ctrlCLapsed:
 		return m.lapseCtrlC(msg), nil
+	case tapLapsed:
+		if m.tapped.at.Equal(msg.at) {
+			m.tapped = tappedOption{}
+		}
+		return m, nil
 	case screenMsg:
 		if msg.Pane == m.watching && msg.Err != "" {
 			m.flash = msg.Err // a read that failed: the session and its last screen stay
 			return m, m.recv()
 		}
 		if msg.Pane == m.watching && (msg.Up == 0 || m.watchUp > 0) { // the history after live is not live
-			m.screen = proto.Screen(msg)
+			m.screen, m.tapped = proto.Screen(msg), tappedOption{}
 			m.liveWait = m.liveWait && msg.Up > 0
 		}
 		return m, m.recv()
@@ -1047,7 +1051,7 @@ const focusGone = "That session ended."
 // takeFocus opens the session a tap on the island or a buzz asked for, once
 // for each focus the service sends, on Sessions: its chat when it waits,
 // else its pane on the phone's own tmux client. A form, sheet, pair page,
-// take-over, a card with text typed or a chat typed to a moment ago keeps
+// take-over or a chat typed to a moment ago keeps
 // the keys: what the person types there is not thrown away, nor sent to
 // another agent. The key line names the agent that asked.
 func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
@@ -1066,7 +1070,7 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 			break
 		}
 	}
-	typing := m.chatKeys && (m.askCard.text != "" || len(m.keyQ) > 0 || m.keyInFlight != "" || m.now().Before(m.chatTyped.Add(chatTypingHold)))
+	typing := m.chatKeys && (len(m.keyQ) > 0 || m.keyInFlight != "" || m.now().Before(m.chatTyped.Add(chatTypingHold)))
 	busy := m.pair.owns() || m.sheet != nil || m.form != nil || m.held != nil || typing
 	if typing && found && !f.Gone {
 		if cur, _ := m.selectedSession(); cur.Pane != s.Pane {
@@ -1092,12 +1096,9 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	}
 	if _, waits := m.waitOf(s); waits {
 		// The home console is shared: the chat shows on the phone too, and an
-		// Enter on its way at the desk must not answer it: its card has
-		// nothing picked.
+		// Enter on its way at the desk must not answer it: the quiet starts.
 		m = m.chatOn(s.Pane)
-		if s.Ask != nil {
-			m.askCard = card{askID: s.Ask.ID, at: -1}
-		}
+		m.menuSeen = m.seenOf(s)
 		return m, nil
 	}
 	// Only the phone's client moves, into a session of its own (FocusArgv),

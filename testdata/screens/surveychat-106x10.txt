@@ -1,10 +1,10 @@
- ‹ Sessions · flint-auth · asks
-╭─ flint-auth asks · 1 of 2 ─────────────────────────────────╮
-│ Should a refresh also rotate the token?                    │
-│ › 1 Rotate it  the old one stops at once                   │
-│   2 Rotate, keep the old one a minute                      │
-│   3 Keep the token                                         │
-│   4 Type an answer…                                        │
-╰─ ⏎ question 2 ─────────────────────────────────────────────╯
+ ▰ matchblox                                                                             ● 6 wait for you
+ SESSIONS 7    ships 3    machine    git    history    panes    stoker
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────
- keys go to flint-auth · ctrl+a m back · ctrl+o into tmux
+▌╿ flint-auth                                           asks       2m   41%  ▲ clear      #4545 ●━✕┄○┄○┄○
+   “The refresh flow works and the tests pass. One choice is yours before I wire the rotation.”
+   #4545 ●━✕┄○┄○┄○  conflicts with main
+    ▲ clear                                                                                      A switch
+──────────────────────────────────────────────────────────────────────────────────────────────────────────
+──────────────────────────────────────────────────────────────────────────────────────────────────────────
+ too short to show flint-auth's question · ctrl+o goes into its pane

@@ -542,18 +542,16 @@ func replayAt(t *testing.T, z replaySize) {
 		// The selection moves: the next one that waits shows what it said.
 		{name: "the next one", at: 2600 * time.Millisecond, key: "j", ok: has("I rewrote the quick start")},
 		{name: "back up", at: 3500 * time.Millisecond, key: "k", ok: has(flint)},
-		// a: flint-auth's chat takes the keys; its question tool's options
-		// are on the card at the foot of its screen, which shows the pane's
-		// own work above it once the screen has come (its menu leaves for
-		// the card).
+		// a: flint-auth's chat takes the keys; its screen shows the pane's
+		// own work over Claude Code's own menu.
 		{name: "a: the question", at: 4600 * time.Millisecond, key: "a", ok: func(s string) bool {
-			return has("ctrl+a m back", "flint-auth asks", "Rotate it", "Keep the token", "⏎ send", "wire the rotation.")(s) && !strings.Contains(s, "Chat about this")
+			return has("ctrl+a m back", "Rotate it", "Keep the token", "Chat about this", "wire the rotation.")(s) && !strings.Contains(s, "flint-auth asks")
 		}},
 		// 2 picks the second option: it goes to Claude Code's menu, and the
-		// chat shows the agent at work on it. The builder read the card
+		// chat shows the agent at work on it. The builder read the menu
 		// first: the console's clock moves past its quiet.
 		{name: "picked", at: 6200 * time.Millisecond, do: func() { view.Ahead(time.Second) }, key: "2", ok: func(s string) bool {
-			return has("sent to flint-auth", "I rotate the token on each refresh")(s) && !strings.Contains(s, "flint-auth asks") &&
+			return has("I rotate the token on each refresh")(s) && !strings.Contains(s, "Chat about this") &&
 				(phone || struck.MatchString(s)) // a phone's chat hides the list
 		}},
 		// Prefix m gives the keys back to the list: tmux hands the console the
@@ -624,9 +622,12 @@ func replayAt(t *testing.T, z replaySize) {
 		}},
 		// x: a session that is done goes, after a typed y. k picks the row
 		// the search left: the list then lands on its first row, whenever
-		// the kill's sample comes.
+		// the kill's sample comes. Beside the list, the frame waits for the
+		// session's screen, which comes a moment after the row.
 		{name: "kill", at: 37 * time.Second, keys: slices.Concat([]string{"/"}, strings.Split("spark", ""), []string{"enter", "k", "x"}),
-			ok: has("╭─ Kill spark-docs", "tmux kill-pane -t %3")},
+			ok: func(s string) bool {
+				return has("╭─ Kill spark-docs", "tmux kill-pane -t %3")(s) && (phone || strings.Contains(s, "? for shortcuts"))
+			}},
 		// The pane and its agent are both gone: a sample between the two
 		// would list the pane without an agent.
 		{name: "killed", at: 39 * time.Second, key: "y", ok: func(s string) bool {
@@ -702,7 +703,7 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	ran := world.Ran()
 	want := [][]string{
-		{"tmux", "send-keys", "-t", "%2", "2"}, // the second option, into Claude Code's menu
+		{"tmux", "send-keys", "-t", "%2", "-l", "--", "2"}, // the second option, into Claude Code's menu
 	}
 	// Then the stoker's night: spark-docs is past the line when it starts,
 	// hearth-api when its turn ends. Each compact is typed, then its Enter.
