@@ -106,6 +106,49 @@ func menuTargets(lines []string) []string {
 	return press
 }
 
+// menuPage names the page of the menu in lines, "" with no menu: the line over
+// its first option, and that option. A tick, the cursor or typed text leave it
+// as it is; the agent's next question does not.
+func menuPage(lines []string) string {
+	press := menuTargets(lines)
+	top := slices.IndexFunc(press, func(p string) bool { return p != "" })
+	if top < 0 {
+		return ""
+	}
+	first := said.OptionLabel(menuPlain(lines[top]))
+	for i := top - 1; i >= 0; i-- {
+		if plain := menuPlain(lines[i]); plain != "" {
+			return plain + "\n" + first
+		}
+	}
+	return first
+}
+
+// typingDigit is the digit of the row that takes typed text when the cursor is
+// on it, else "": the last option above the menu's inner rule or its Submit
+// row. A digit pressed there lands in its field. A menu with neither, as a
+// permission prompt, has no such row.
+func typingDigit(lines, press []string) string {
+	last, cursor, gap := "", "", false
+	for i, p := range press {
+		switch {
+		case p == "":
+			gap = last != ""
+		case p == submitRow || gap:
+			if cursor == last {
+				return last
+			}
+			return ""
+		default:
+			last = p
+			if cursorOn(menuPlain(lines[i])) {
+				cursor = p
+			}
+		}
+	}
+	return ""
+}
+
 // submitTexts are the keys of a tap on a multi-select's Submit row: the
 // cursor goes to it from where the screen shows the cursor, one key to a row
 // as panes.Pick counts them, then Enter.
@@ -153,18 +196,20 @@ func (m Model) optionAt(ms tea.Mouse, sc drawn) (press string, texts []string) {
 	case submitRow:
 		return press, submitTexts(lines, targets)
 	}
-	return press, []string{proto.LitPrefix + press}
+	digit := proto.LitPrefix + press
+	switch typingDigit(lines, targets) {
+	case "":
+		return press, []string{digit}
+	case press:
+		return "", nil
+	}
+	return press, []string{keyNames["up"], digit}
 }
 
 // tapOption presses a menu's option through the chat's own keys, so every
-// guard holds and a refusal says why, as for a key. The chat takes the keys.
-// At night it asks to take over first.
+// guard holds and a refusal says why, as for a key. At night it asks to take
+// over first.
 func (m Model) tapOption(press string, texts []string) (tea.Model, tea.Cmd) {
-	if !m.chatKeys {
-		if m = m.openChat(); !m.chatKeys {
-			return m, nil
-		}
-	}
 	m.flash, m.chatTyped = "", m.now()
 	name, keys := m.pressed(texts...)
 	if m.takeOverOn(m.opt.Host) {

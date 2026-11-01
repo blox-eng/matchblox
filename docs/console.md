@@ -381,9 +381,11 @@ description and wrapped lines included. It sends the option's digit as a key,
 under the guards below, and the row draws in the selected wash until the next
 screen comes. A digit answers a single-choice question at once and ticks an
 option of a question with several choices; there a tap on the menu's own
-`Submit` or `Next` row moves the cursor to it and sends `Enter`. Any other row,
-a numbered list the agent printed above the menu, and any tap away from a menu
-wait send nothing.
+`Submit` or `Next` row moves the cursor to it and sends `Enter`. With the cursor
+on the row you type in, a tap on another option moves the cursor off it first.
+Any other row, a numbered list the agent printed above the menu, and any tap
+away from a menu wait send nothing. Where the chat sits beside the list, the
+click that gives it the keys picks nothing.
 
 Three guards hold for every key that can answer a menu, all but `^C` and
 `Backspace`. The service refuses a key that names no screen, or a screen taken

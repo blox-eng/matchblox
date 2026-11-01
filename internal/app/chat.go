@@ -589,6 +589,7 @@ type menuSeen struct {
 	pane  string
 	askID string
 	since time.Time
+	page  string
 	at    time.Time
 }
 
@@ -601,18 +602,23 @@ func (m Model) seenOf(s sample.Session) menuSeen {
 	if it, waits := m.waitOf(s); waits {
 		seen.since = it.Since
 	}
+	if m.screen.Pane == s.Pane {
+		seen.page = menuPage(strings.Split(m.screen.Text, "\n"))
+	}
 	return seen
 }
 
 // noteMenu starts the quiet of a chat on screen that shows a menu it did not
-// show before: the cursor came to it, or the wait began while it was shown.
+// show before: the cursor came to it, the wait began while it was shown, or
+// the question turned to its next page.
 func (m Model) noteMenu() Model {
 	s, ok := m.selectedSession()
 	if !ok || s.Pane == "" || s.Host != m.opt.Host || !m.atMenu(s) {
 		return m
 	}
 	seen := m.seenOf(s)
-	if seen.pane == m.menuSeen.pane && seen.askID == m.menuSeen.askID && seen.since.Equal(m.menuSeen.since) || !m.chatDrawn() { // chatDrawn last: it lays the screen out
+	sameWait := seen.pane == m.menuSeen.pane && seen.askID == m.menuSeen.askID && seen.since.Equal(m.menuSeen.since)
+	if sameWait && (seen.page == "" || seen.page == m.menuSeen.page) || !m.chatDrawn() { // chatDrawn last: it lays the screen out
 		return m
 	}
 	m.menuSeen = seen

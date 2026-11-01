@@ -1,9 +1,11 @@
 package app
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -273,5 +275,126 @@ func TestEveryChatHintIsTappable(t *testing.T) {
 		if got := tapped(t, m, ansi.StringWidth(line[:at])+1, sc.keysAt); got.chatKeys {
 			t.Errorf("%d up: a tap on back kept the keys", w)
 		}
+	}
+}
+
+// Two pages of one question, as Claude Code draws them: the next page comes
+// within 150 ms, with its options on the same rows.
+const (
+	fruitPage = "Pick them.\n────────\n←  ☐ Fruit  ☐ Colour  ✔ Submit  →\n\nPick a fruit?\n\n" +
+		"❯ 1. Apple\n     Crisp and sweet.\n  2. Banana\n     Soft and easy to peel.\n  3. Type something.\n" +
+		"────────\n  4. Chat about this\n\nEnter to select · Tab/Arrow keys to navigate · Esc to cancel\n"
+	colourPage = "Pick them.\n────────\n←  ☒ Fruit  ☐ Colour  ✔ Submit  →\n\nPick a colour?\n\n" +
+		"❯ 1. Red\n     A warm, bold shade.\n  2. Blue\n     A cool, calm shade.\n  3. Type something.\n" +
+		"────────\n  4. Chat about this\n\nEnter to select · Tab/Arrow keys to navigate · Esc to cancel\n"
+)
+
+// shownAt is m a moment later with text on the screen.
+func shownAt(m Model, d time.Duration, text string) Model {
+	at := m.now().Add(d)
+	m.opt.Now = func() time.Time { return at }
+	next, _ := m.Update(screenMsg{Pane: "%1", At: at, Text: text})
+	return next.(Model)
+}
+
+// TestATapOnANewPageWaits: the second tap of a double tap, on the row the next
+// page drew under it, must not answer a question nobody has read.
+func TestATapOnANewPageWaits(t *testing.T) {
+	m, f := menuChat(t, 100, 30, fruitPage)
+	y := rowWith(t, m, "1. Apple")
+	m = answered(t, tapped(t, m, 90, y), "")
+	m = shownAt(m, 150*time.Millisecond, colourPage)
+	if got := rowWith(t, m, "1. Red"); got != y {
+		t.Fatalf("Red on row %d, Apple was on %d", got, y)
+	}
+	n := len(keyActs(f))
+	got := tapped(t, m, 90, y)
+	if acts := keyActs(f)[n:]; len(acts) != 0 || got.flash != askedAgain("a") {
+		t.Fatalf("second tap: keys %+v flash %q", acts, got.flash)
+	}
+	got = tapped(t, pastQuiet(got), 90, y)
+	if acts := keyActs(f)[n:]; len(acts) != 1 || acts[0].Text != "lit:1" {
+		t.Fatalf("past the quiet: keys %+v flash %q", acts, got.flash)
+	}
+}
+
+// TestTheSamePageKeepsItsQuietOver: a tick, the cursor or typed text change the
+// screen, not the page, so the next key goes at once.
+func TestTheSamePageKeepsItsQuietOver(t *testing.T) {
+	menu := tallestMenu(t)
+	ticked := strings.Replace(menu, "2. [ ] Olives", "2. [✔] Olives", 1)
+	moved := strings.Replace(strings.Replace(menu, "❯ 1. [ ]", "  1. [ ]", 1), "  2. [ ] Olives", "❯ 2. [ ] Olives", 1)
+	typed := strings.Replace(strings.Replace(menu, "❯ 1. [ ]", "  1. [ ]", 1), "  5. [ ] Type something", "❯ 5. [ ] hi", 1)
+	for _, text := range []string{ticked, moved, typed, menu} {
+		m, f := menuChat(t, 132, 32, menu)
+		m = shownAt(m, 50*time.Millisecond, text)
+		got := pressKeys(t, m, "down")
+		if acts := keyActs(f); len(acts) != 1 || got.flash != "" {
+			t.Fatalf("keys %+v flash %q on:\n%s", acts, got.flash, text)
+		}
+	}
+}
+
+const typingMenu = "Which door?\n\n  1. Red\n     The red door.\n  2. Blue\n     The blue door.\n❯ 3. %s\n" +
+	"────────\n  4. Chat about this\n\nEnter to select · ↑/↓ to navigate · Esc to cancel\n"
+
+// TestATapFromTheTypingRowPicks: with the cursor on the row that takes text, a
+// digit would land in its field, so the cursor leaves it first. A tap on that
+// row itself sends nothing: a digit there is text too.
+func TestATapFromTheTypingRowPicks(t *testing.T) {
+	for _, field := range []string{"Type something.", "hi"} {
+		text := fmt.Sprintf(typingMenu, field)
+		m, f := menuChat(t, 100, 30, text)
+		m = tapped(t, m, 90, rowWith(t, m, "1. Red"))
+		if acts := keyActs(f); len(acts) != 1 || acts[0].Text != "Up" {
+			t.Fatalf("%q: first key %+v flash %q", field, acts, m.flash)
+		}
+		m = answered(t, m, "")
+		if acts := keyActs(f); len(acts) != 2 || acts[1].Text != "lit:1" {
+			t.Fatalf("%q: keys %+v flash %q", field, acts, m.flash)
+		}
+
+		m, f = menuChat(t, 100, 30, text)
+		tapped(t, m, 90, rowWith(t, m, "3. "+field))
+		if acts := keyActs(f); len(acts) != 0 {
+			t.Fatalf("%q: a tap on the typing row sent %+v", field, acts)
+		}
+	}
+}
+
+// TestAPermissionsLastRowIsNoTypingRow: a menu with no inner rule has no field,
+// so a digit there still picks at once.
+func TestAPermissionsLastRowIsNoTypingRow(t *testing.T) {
+	text := "Do you want to proceed?\n  1. Yes\n  2. Yes, and don't ask again\n❯ 3. No\n\nEsc to cancel\n"
+	m, f := menuChat(t, 100, 30, text)
+	tapped(t, m, 90, rowWith(t, m, "1. Yes"))
+	if acts := keyActs(f); len(acts) != 1 || acts[0].Text != "lit:1" {
+		t.Fatalf("keys %+v", acts)
+	}
+}
+
+// TestTheFirstClickOnASideChatOnlyFocuses: a click that gives the chat the keys
+// answers nothing, whatever row it lands on, and a quick second one waits too.
+func TestTheFirstClickOnASideChatOnlyFocuses(t *testing.T) {
+	m, f := loadedWith(t, 140, cardState("toolu_1", threeWays))
+	m = onPane(t, m, "%1")
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
+	next, _ = next.Update(screenMsg{Pane: "%1", At: m.now(), Text: permitScreen})
+	m = pastQuiet(next.(Model))
+	if m.chatKeys {
+		t.Fatal("the chat has the keys already")
+	}
+	y := rowWith(t, m, "2. Yes, and don't ask again")
+	got := tapped(t, m, 110, y)
+	if !got.chatKeys || len(keyActs(f)) != 0 {
+		t.Fatalf("chatKeys %v keys %+v", got.chatKeys, keyActs(f))
+	}
+	got = tapped(t, got, 110, y)
+	if len(keyActs(f)) != 0 || got.flash != askedAgain("a") {
+		t.Fatalf("a double click: keys %+v flash %q", keyActs(f), got.flash)
+	}
+	tapped(t, pastQuiet(got), 110, y)
+	if acts := keyActs(f); len(acts) != 1 || acts[0].Text != "lit:2" {
+		t.Fatalf("the next click: keys %+v", acts)
 	}
 }

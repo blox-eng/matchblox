@@ -32,6 +32,13 @@ func OptionNumber(plain string) (int, bool) {
 	return n, err == nil
 }
 
+// OptionLabel is the words of a menu's option row, without its cursor mark and
+// tick box, or "".
+func OptionLabel(plain string) string {
+	_, label, _ := option(plain)
+	return label
+}
+
 // ShowsQuestion reports whether a pane's screen shows the question tool's
 // menu on q: its options numbered in order at the bottom, and q's text
 // above the first of them. A pane that moved to another page, or that a
