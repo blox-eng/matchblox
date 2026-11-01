@@ -158,14 +158,14 @@ func (m Model) chatSize() (cols, rows int) {
 		return 0, 0
 	}
 	w := max(m.width, minWidth)
-	listW, detailW := m.panes(w)
+	_, detailW := m.panes(w)
 	switch {
 	case detailW > 0: // beside the list, as chatPlacement has it
 		s, ok := m.chatShown(detailW)
 		if !ok {
 			return 0, 0
 		}
-		room, _ := m.bodyRows(listW)
+		room := m.bodyRows()
 		cols, rows = detailW-1, room-1-len(m.chatStrip(s, detailW, room-1))
 	case m.chatKeys:
 		place, full := m.chatPlacement(w)
@@ -613,7 +613,7 @@ func (m Model) chatScreen(w int) drawn {
 	}
 	title = fit(title, w)
 	_, rows := m.chatPlacement(w)
-	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true, chatRows: rows, nowX: -1}
+	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true, chatRows: rows}
 	sc.lines = append(sc.lines, m.screenLines(w, rows)...)
 	m.markCard(&sc, len(sc.lines), 0, w, rows)
 	keys, spans := m.keyLine(w)

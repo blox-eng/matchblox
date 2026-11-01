@@ -6,6 +6,12 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- **The now line.** Sessions no longer draws a time lane on each row, its axis
+  or the `│` at now. The name takes the room. List only (`v`) stays.
+  ([#280](https://github.com/blox-eng/matchblox/issues/280))
+
 ## [0.29.0] - 2026-10-30
 
 ### Added

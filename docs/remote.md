@@ -50,7 +50,7 @@ hide `this machine`. Then it is the first ticked host after it.
 - A hidden host has the note `hidden`. It has no connection, so matchblox
   has no count for it.
 - `esc` and `Enter` again keep the hosts that stay ticked. They keep the
-  selection and the lanes too.
+  selection too.
 
 ### Read the rows
 

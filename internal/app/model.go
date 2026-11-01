@@ -298,23 +298,21 @@ type Model struct {
 	doorAt     int    // its row, for the door after it when it folds
 	previewTop int    // the first line of a door's diff on screen
 	paneSel    int
-	screen     proto.Screen                    // the last capture of the watched pane
-	watching   string                          // the pane the service sends, or ""
-	watchHeld  string                          // the pane the service refused, until the next snapshot
-	up         int                             // the lines up the chat shows of the agent's history; 0 is live
-	watchUp    int                             // the lines up the service sends
-	watchSize  [2]int                          // the chat's size the service sizes the agent's window to: cols, rows
-	watchSince time.Time                       // when the watched pane was selected: its size waits sizeDwell
-	sizeTick   time.Time                       // the watchSince a sizeDueMsg is on its way for
-	liveWait   bool                            // the chat came back from the history, and waits for the live screen
-	askCard    card                            // the question card's answer, in the chat
-	cardSeen   cardSeen                        // the card's quiet: the ask it is for and its start
-	chatShut   time.Time                       // when the chat last closed by itself: keys typed for it go nowhere for a moment
-	chatTyped  time.Time                       // when the person last typed in the chat
-	cardSent   map[string]string               // the card's sends in flight: act id -> the session's name
-	lanes      map[laneKey][lanePast]laneState // each session's last two hours; replaced, never written in place
-	laneStart  time.Time                       // the cell boundary lanes is aligned to
-	changes    map[paneKey]change              // a match change that plays once
+	screen     proto.Screen       // the last capture of the watched pane
+	watching   string             // the pane the service sends, or ""
+	watchHeld  string             // the pane the service refused, until the next snapshot
+	up         int                // the lines up the chat shows of the agent's history; 0 is live
+	watchUp    int                // the lines up the service sends
+	watchSize  [2]int             // the chat's size the service sizes the agent's window to: cols, rows
+	watchSince time.Time          // when the watched pane was selected: its size waits sizeDwell
+	sizeTick   time.Time          // the watchSince a sizeDueMsg is on its way for
+	liveWait   bool               // the chat came back from the history, and waits for the live screen
+	askCard    card               // the question card's answer, in the chat
+	cardSeen   cardSeen           // the card's quiet: the ask it is for and its start
+	chatShut   time.Time          // when the chat last closed by itself: keys typed for it go nowhere for a moment
+	chatTyped  time.Time          // when the person last typed in the chat
+	cardSent   map[string]string  // the card's sends in flight: act id -> the session's name
+	changes    map[paneKey]change // a match change that plays once
 	animating  bool
 	hist       history.Series
 	selPID     int
