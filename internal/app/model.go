@@ -62,6 +62,9 @@ type Options struct {
 	// Prefix is this machine's tmux prefix, the key of the way back from a
 	// jump to a host. Nil or "": C-b.
 	Prefix func() string
+	// NoPrefixM: the console runs in tmux under another name than matchblox,
+	// so tmux's prefix m does not reach it, and the way back it names is a tap.
+	NoPrefixM bool
 	// Home is the tmux session that holds the console, where the way back
 	// lands. Nil or "": matchblox.
 	Home func() string

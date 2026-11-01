@@ -350,7 +350,10 @@ strip. On an upright phone the chat has no strip.
 
 `Enter`, `a` and `→` (where `→` has no other use) give the chat the keys,
 and so does a click on it. `ctrl+a m` (your tmux prefix, then `m`) and a
-click on the left give them back. Outside tmux the chat takes `ctrl+a m`
+click on the left give them back. This works on a console in any tmux
+session, as long as its binary is named `matchblox`: under another name the
+key line says `tap back`, and a tap on it does it (see [tmux](tmux.md)).
+Outside tmux the chat takes `ctrl+a m`
 itself: `ctrl+a` goes to the agent at once, where it moves the cursor to the
 start of the line, and `m` within 1 s gives the keys back and does not reach
 the agent.

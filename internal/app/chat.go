@@ -1188,8 +1188,12 @@ const tapBack = "back"
 
 // backKeys is the way back as the key line names it: this machine's tmux
 // prefix, read once at the start, then m. Without tmux, or a prefix it can
-// name, it is the chat's own ctrl+a m.
+// name, it is the chat's own ctrl+a m. A console tmux does not know by name
+// has only the tap for sure, as its prefix may be ctrl+a.
 func (m Model) backKeys() string {
+	if m.opt.NoPrefixM {
+		return "tap"
+	}
 	if m.opt.Prefix != nil {
 		if p, ok := prefixName(m.opt.Prefix()); ok {
 			return p + " m"

@@ -309,7 +309,7 @@ Reduce Motion.
   and Medium it is the right side of Sessions, always; its frame title is
   `<name> · <state>`, in the accent while it has the keys. `⏎`, `a` and
   `→` (where `→` has no other use) or a click give it the keys; prefix `m`
-  (#274: tmux hands the chat the home APC) or a click on the left gives them
+  (#274: on any pane that runs `matchblox`, tmux hands that chat the home APC) or a click on the left gives them
   back, and a chat where tmux does not take `ctrl+a` takes `ctrl+a` then `m`
   within 1 s itself, with the `ctrl+a` sent to the agent at once; `ctrl+o` goes into the tmux pane.
   The key line then says `keys go to <name> · ctrl+a m back · ctrl+o into

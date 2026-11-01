@@ -57,7 +57,7 @@ func TestHomeKeyReachesTheConsoleAtHome(t *testing.T) {
 		}
 	}
 	got := t.TempDir() + "/events"
-	tmux("new-session", "-d", "-s", Home, "-e", decodeTo+"="+got, os.Args[0], "-test.run=^TestDecodePane$")
+	tmux("new-session", "-d", "-s", Home, "-e", decodeTo+"="+got, consoleBinary(t), "-test.run=^TestDecodePane$")
 	tmux(HomeKeyArgv()[1:]...)
 	term := attach(t, sock, Home)
 	want := eventLine(uv.UnknownApcEvent(HomeKey))
@@ -92,9 +92,26 @@ func pressPrefixM(t *testing.T, term *os.File) {
 	}
 }
 
+// consoleBinary is this test binary under the console's name, which is how
+// tmux tells a console's pane.
+func consoleBinary(t *testing.T) string {
+	t.Helper()
+	console := t.TempDir() + "/" + Home
+	if err := os.Symlink(os.Args[0], console); err != nil {
+		t.Fatal(err)
+	}
+	return console
+}
+
 // consolePane starts a server of its own with the console's session, whose
-// pane writes what it reads to the file it returns, and the way back.
+// pane writes what it reads to the file it returns.
 func consolePane(t *testing.T) (sock string, tmux func(args ...string) string, got string) {
+	t.Helper()
+	return consolePaneIn(t, Home)
+}
+
+// consolePaneIn is consolePane with the console in session.
+func consolePaneIn(t *testing.T, session string) (sock string, tmux func(args ...string) string, got string) {
 	t.Helper()
 	sock = tmuxtest.Server(t)
 	tmux = func(args ...string) string {
@@ -106,7 +123,7 @@ func consolePane(t *testing.T) (sock string, tmux func(args ...string) string, g
 		return strings.TrimSpace(string(out))
 	}
 	got = t.TempDir() + "/events"
-	tmux("new-session", "-d", "-s", Home, "-e", decodeTo+"="+got, os.Args[0], "-test.run=^TestDecodePane$")
+	tmux("new-session", "-d", "-s", session, "-e", decodeTo+"="+got, consoleBinary(t), "-test.run=^TestDecodePane$")
 	waitFor(t, func() bool {
 		b, _ := os.ReadFile(got)
 		return strings.HasPrefix(string(b), "ready")
@@ -122,6 +139,76 @@ func paneRead(t *testing.T, got string) []string {
 		t.Fatal(err)
 	}
 	return strings.Split(strings.TrimSpace(string(b)), "\n")[1:]
+}
+
+// pressHomeKey is the app's ◂, ⌘M or ctrl+M: the home key's bytes, whole.
+func pressHomeKey(t *testing.T, term *os.File) {
+	t.Helper()
+	if _, err := term.WriteString(HomeKey); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestTheWayBackAtAnyConsolePane: on a pane that runs a console, in the home
+// session or in place in another one, prefix m and the app's home key reach
+// that console, whole and alone, and the client stays where it is. The home
+// session is there too, to switch to if the test were wrong.
+func TestTheWayBackAtAnyConsolePane(t *testing.T) {
+	for _, session := range []string{Home, "blox"} {
+		for name, press := range map[string]func(*testing.T, *os.File){"prefix m": pressPrefixM, "the home key": pressHomeKey} {
+			t.Run(session+"/"+name, func(t *testing.T) {
+				sock, tmux, got := consolePaneIn(t, session)
+				if session != Home {
+					tmux("new-session", "-d", "-s", Home, "sleep", "100")
+				}
+				tmux(HomeKeyArgv()[1:]...)
+				term := attach(t, sock, session)
+				waitFor(t, func() bool { return tmux("list-clients", "-F", "#{client_session}") == session })
+				time.Sleep(100 * time.Millisecond)
+				press(t, term)
+				want := eventLine(uv.UnknownApcEvent(HomeKey))
+				waitFor(t, func() bool { return slices.Contains(paneRead(t, got), want) })
+				if lines := paneRead(t, got); len(lines) != 1 {
+					t.Errorf("the console read %q, want only %s", lines, want)
+				}
+				if on := tmux("list-clients", "-F", "#{client_session}"); on != session {
+					t.Errorf("the client went to %q, want it to stay in %q", on, session)
+				}
+			})
+		}
+	}
+}
+
+// TestTheWayBackFromAShellPane: on a pane that runs no console, prefix m and
+// the app's home key show the home console, also when another window of the
+// home session is the one on screen, and also from that window. The console
+// reads nothing.
+func TestTheWayBackFromAShellPane(t *testing.T) {
+	for _, from := range []string{"another session", "the home session"} {
+		for name, press := range map[string]func(*testing.T, *os.File){"prefix m": pressPrefixM, "the home key": pressHomeKey} {
+			t.Run(from+"/"+name, func(t *testing.T) {
+				sock, tmux, got := consolePane(t)
+				tmux("new-window", "-t", "="+Home+":", "sleep", "100")
+				session := Home
+				if from == "another session" {
+					session = "work"
+					tmux("new-session", "-d", "-s", session, "sleep", "100")
+				}
+				tmux(HomeKeyArgv()[1:]...)
+				term := attach(t, sock, session)
+				waitFor(t, func() bool { return tmux("list-clients", "-F", "#{client_session}") == session })
+				time.Sleep(100 * time.Millisecond)
+				press(t, term)
+				waitFor(t, func() bool {
+					return tmux("list-clients", "-F", "#{client_session}") == Home &&
+						tmux("display-message", "-p", "-t", "="+Home+":", "#{pane_current_command}") == Home
+				})
+				if lines := paneRead(t, got); len(lines) != 0 {
+					t.Errorf("the console read %q", lines)
+				}
+			})
+		}
+	}
 }
 
 // TestPrefixMGivesTheKeysBackAtHome presses prefix m in a real client in the
@@ -160,12 +247,7 @@ func TestPrefixMTakesTheClientHome(t *testing.T) {
 func TestHomeKeyLeavesCopyMode(t *testing.T) {
 	for _, mode := range []string{"emacs", "vi"} {
 		for name, press := range map[string]func(*testing.T, *os.File){
-			"prefix m": pressPrefixM,
-			"the home key": func(t *testing.T, term *os.File) {
-				if _, err := term.WriteString(HomeKey); err != nil {
-					t.Fatal(err)
-				}
-			},
+			"prefix m": pressPrefixM, "the home key": pressHomeKey,
 		} {
 			t.Run(mode+"/"+name, func(t *testing.T) {
 				sock, tmux, got := consolePane(t)

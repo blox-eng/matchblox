@@ -80,7 +80,7 @@ func TestWayBackParses(t *testing.T) {
 	// tmux 3.8 pads list-keys with a column of its own: "bind-key  -T".
 	out = regexp.MustCompile(` {2,}`).ReplaceAll(out, []byte(" "))
 	for _, want := range []string{
-		`bind-key -T prefix m if-shell -F "#{==:#{session_name},matchblox}"`,
+		`bind-key -T prefix m if-shell -F "#{==:#{pane_current_command},matchblox}"`,
 		`"switch-client -t =matchblox"`,
 		"#[range=user|matchblox] ◂ matchblox #[norange]",
 		"status-left-length 40",
@@ -95,8 +95,8 @@ func TestWayBackParses(t *testing.T) {
 }
 
 // TestHomeKeyArgvBindsPrefixMAsTheKey: the home key and prefix m run one
-// command: in the console's session it hands the key on, elsewhere it
-// switches to the console.
+// command: on a pane that runs a console it hands the key on, elsewhere it
+// shows the home console.
 func TestHomeKeyArgvBindsPrefixMAsTheKey(t *testing.T) {
 	argv := HomeKeyArgv()
 	var cmds [][]string
@@ -106,9 +106,9 @@ func TestHomeKeyArgvBindsPrefixMAsTheKey(t *testing.T) {
 	if len(cmds) != 3 {
 		t.Fatalf("%d commands in %q", len(cmds), argv)
 	}
-	ifHome := []string{"if-shell", "-F", "#{==:#{session_name},matchblox}",
+	ifHome := []string{"if-shell", "-F", "#{==:#{pane_current_command},matchblox}",
 		`if-shell -F "#{pane_in_mode}" "send-keys -X cancel" ; send-keys -H 1b 5f 6d 61 74 63 68 62 6c 6f 78 1b 5c`,
-		"switch-client -t =matchblox"}
+		`switch-client -t =matchblox ; run-shell -C -t =matchblox: "#{W:#{P:#{?#{==:#{pane_current_command},matchblox},select-window -t #{window_id} ; select-pane -t #{pane_id} ; ,}}}"`}
 	if want := append([]string{"bind-key", "-n", "User900"}, ifHome...); !slices.Equal(cmds[1], want) {
 		t.Errorf("the home key:\n got %q\nwant %q", cmds[1], want)
 	}
@@ -167,5 +167,16 @@ func TestHomeAndCommandKeysDoNotCollide(t *testing.T) {
 	}
 	if len(slots) < 2 || slots["user-keys["+homeUserKey+"]"] != HomeKey {
 		t.Fatalf("slots %q", slots)
+	}
+}
+
+func TestNamedConsole(t *testing.T) {
+	for arg0, want := range map[string]bool{
+		"matchblox": true, "/usr/local/bin/matchblox": true, "./matchblox": true,
+		"/tmp/matchblox-dev": false, "mb": false, "": false,
+	} {
+		if got := NamedConsole(arg0); got != want {
+			t.Errorf("NamedConsole(%q) = %v, want %v", arg0, got, want)
+		}
 	}
 }

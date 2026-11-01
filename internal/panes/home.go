@@ -2,6 +2,7 @@ package panes
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -40,16 +41,26 @@ const HomeKey = "\x1b_matchblox\x1b\\"
 // person's own user keys start.
 const homeUserKey = "900"
 
-// goHome is the way back, as the words of a tmux if-shell: in the console's
-// session the key goes on to the console, whole, so its chat gives the keys
-// back; a pane in copy mode leaves it first, as copy mode would read the
-// key's bytes as its own commands. From any other session the client goes to
-// the console.
+// runsConsole is true on a tmux pane that runs a console, in any session. A
+// console under another name is not one to tmux (NamedConsole).
+const runsConsole = "#{==:#{pane_current_command}," + Home + "}"
+
+// goHome is the way back, as the words of a tmux if-shell: on a console's pane
+// the key goes on to that console, whole, so its chat gives the keys back; a
+// pane in copy mode leaves it first, as copy mode would read the key's bytes
+// as its own commands. From any other pane the client goes to the console's
+// session, and on to the console's pane there, as another window may be the
+// one on screen.
 var goHome = [3]string{
-	"#{==:#{session_name}," + Home + "}",
+	runsConsole,
 	`if-shell -F "#{pane_in_mode}" "send-keys -X cancel" ; send-keys -H ` + hexKeys(HomeKey),
-	"switch-client -t =" + Home,
+	"switch-client -t =" + Home + " ; run-shell -C -t =" + Home + `: "#{W:#{P:#{?` + runsConsole +
+		`,select-window -t #{window_id} ; select-pane -t #{pane_id} ; ,}}}"`,
 }
+
+// NamedConsole tells if a console started as arg0 is one to tmux: if not, the
+// way back's test fails on its own pane.
+func NamedConsole(arg0 string) bool { return filepath.Base(arg0) == Home }
 
 // HomeKeyArgv makes HomeKey a key of the tmux server, and binds it and prefix
 // m to goHome. It wins over a `bind m` in the person's tmux config until that

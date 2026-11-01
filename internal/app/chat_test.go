@@ -412,6 +412,28 @@ func TestTheWayBackNamesThePrefix(t *testing.T) {
 	}
 }
 
+// A console under another name is no console to tmux, so tmux's prefix m does
+// not reach it, and the key line names what works: the tap. Outside tmux the
+// chat's own ctrl+a m works under any name.
+func TestARenamedConsoleOffersTheTap(t *testing.T) {
+	m, f := inChat(t)
+	m.opt.Prefix = func() string { return "C-a" }
+	m.opt.NoPrefixM = true
+	line, _ := m.chatKeyLine(100)
+	got := ansi.Strip(line)
+	if !strings.Contains(got, " · tap back · ") {
+		t.Fatalf("the key line is %q", got)
+	}
+	next, _ := tap(m, strings.Index(got, "tap back")+1, m.draw(100).keysAt)
+	if next.(Model).chatKeys || len(keyActs(f)) != 0 {
+		t.Fatalf("chatKeys=%v acts=%+v", next.(Model).chatKeys, keyActs(f))
+	}
+	m.up = 3
+	if line, _ := m.chatKeyLine(100); !strings.Contains(ansi.Strip(line), "tap back") {
+		t.Fatalf("up the history the key line is %q", ansi.Strip(line))
+	}
+}
+
 // A tap on the way back gives the keys back, and sends the agent nothing.
 func TestATapOnTheWayBack(t *testing.T) {
 	for _, w := range []int{44, 100} {

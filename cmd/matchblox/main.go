@@ -282,10 +282,15 @@ func run(args []string) error {
 		if err := goHome(); err != nil {
 			return err
 		}
+		var binds [][]string
+		if os.Getenv("TMUX") != "" { // a console in place too: its hint names prefix m
+			binds = append(binds, panes.HomeKeyArgv())
+		}
 		if os.Getenv(panes.HomeEnv) == "1" {
-			for _, argv := range [][]string{panes.SizeArgv(), panes.HomeKeyArgv(), panes.CommandKeysArgv()} {
-				_ = exec.Command("tmux", argv[1:]...).Run()
-			}
+			binds = append(binds, panes.SizeArgv(), panes.CommandKeysArgv())
+		}
+		for _, argv := range binds {
+			_ = exec.Command("tmux", argv[1:]...).Run()
 		}
 	}
 
@@ -536,6 +541,7 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		OutsideTmux: os.Getenv("TMUX") == "", Self: invokedPath(os.Args[0]), StateDir: filepath.Dir(state.Path())}
 	if !base.OutsideTmux {
 		base.Prefix, base.Home, base.LocalTmux = localTmux()
+		base.NoPrefixM = !panes.NamedConsole(os.Args[0])
 	}
 	if runtime.GOOS != "windows" {
 		// The ssh masters of the jumps and the prompt socket: a short,
