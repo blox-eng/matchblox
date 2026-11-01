@@ -188,11 +188,14 @@ and its wrapped lines too. The tap sends the option's digit through the same
 guards, and the row shows the selected wash until the next screen comes. On a
 single-choice question the digit answers; on a question with several choices
 it ticks, and a tap on the menu's own `Submit` or `Next` row moves there and
-sends `Enter`. Other rows do nothing, and so does a numbered list the agent
-only printed.
+sends `Enter`. With the cursor on the row you type in, a tap on another option
+moves the cursor off it first, and what you typed stays. A tap on that row
+itself sends nothing. Other rows do nothing, and so does a numbered list the
+agent only printed. Where the chat sits beside the list, the click that gives
+it the keys picks nothing: the next tap picks.
 
-A menu has a second guard. For 400 ms after a new one comes, or after the
-chat opens on a wait, every key but `^C` and `Backspace` is refused with the
+A menu has a second guard. For 400 ms after a new one comes, after a question
+turns to its next page, or after the chat opens on a wait, every key but `^C` and `Backspace` is refused with the
 same words: `not sent: <name> asks something new — look again`. So a key
 meant for what was there before never answers a question you have not read.
 
@@ -249,7 +252,7 @@ A tap selects a row. A swipe over the list moves the selection. A swipe
 over the chat shows the agent's history (see
 [The agent's history](#the-agents-history)). On a narrow screen, a tap on
 an agent opens its chat over the whole screen. Where the chat sits beside the list, a tap on the
-selected agent, or on the chat, gives the chat the keys. A tap on an option
+selected agent, or on the chat, gives the chat the keys. Once it has them, a tap on an option
 of an agent's menu picks it (see [An agent's menu](#an-agents-menu)), and a tap
 on the left gives the keys back to Sessions. On any other row the key line says `tap again: <command>`, and a
 second tap on the same row runs it. On Ships, a tap on the selected ship

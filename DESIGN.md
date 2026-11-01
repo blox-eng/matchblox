@@ -326,7 +326,7 @@ Reduce Motion.
   menu, once (#276). Every key goes to it as it is. A tap on a numbered option
   of the menu at the bottom (the whole row, its wrapped lines too) sends its
   digit as a key under the same guards, and the row takes the selected wash
-  until the next screen; no other row, and no other wait, sends anything. A chat at such a wait needs 16 rows (`menuLeast`), else
+  until the next screen; no other row, and no other wait, sends anything. The click that gives the chat the keys presses nothing, and from the row that takes typed text the cursor goes `Up` first, as a digit there is text. The 400 ms quiet starts again on a question's next page. A chat at such a wait needs 16 rows (`menuLeast`), else
   the key line says it is too short and no key goes. The service refuses
   any key that can answer (all but `^C` and Backspace) for a question that
   started after the screen the console showed (`not sent: <name> asks
