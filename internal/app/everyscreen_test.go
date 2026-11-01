@@ -265,3 +265,34 @@ func TestUsageUnderANarrowListIsNeverCutMidWord(t *testing.T) {
 		}
 	}
 }
+
+// TestUsageOfThreeHostsIsNeverCutSideways: under a narrow list each
+// window's hosts that do not fit after it go whole onto the next lines:
+// every host's percent shows, and no usage line ends cut.
+func TestUsageOfThreeHostsIsNeverCutSideways(t *testing.T) {
+	for _, c := range []struct {
+		w, h int
+		gpu  string
+	}{{132, 32, "fine"}, {86, 30, "blocked"}, {86, 40, "fine"}} {
+		m := threeHosts(t, screensState(t), c.w, c.h, c.gpu)
+		sc := m.draw(c.w)
+		left, _ := sides(sc, c.w)
+		in, usage := false, ""
+		for _, l := range left {
+			switch {
+			case strings.HasPrefix(l, " USAGE"):
+				in = true
+			case strings.HasPrefix(l, "───"):
+				in = false
+			case in:
+				usage += l + "\n"
+				if strings.Contains(l, "…") {
+					t.Errorf("%dx%d: a usage line is cut: %q", c.w, c.h, l)
+				}
+			}
+		}
+		if !strings.Contains(usage, "this machine 84%") {
+			t.Errorf("%dx%d: this machine's percent is gone:\n%s", c.w, c.h, usage)
+		}
+	}
+}
