@@ -238,12 +238,6 @@ func (k chatKeymap) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Back, k.Stop, k.PageUp, k.PageDown}
 }
 
-// chatKeymap are the chat's own keys. Every other key goes to the agent;
-// Stop is the agent's ^C, which a second one within a second waits for.
-type chatKeymap struct{ Back, Stop bkey.Binding }
-
-func (k chatKeymap) bindings() []bkey.Binding { return []bkey.Binding{k.Back, k.Stop} }
-
 // sheetKeys are the stoker's order sheet.
 type sheetKeys struct{ Send, Close, Chips, Left, Right, Tick, Erase bkey.Binding }
 
