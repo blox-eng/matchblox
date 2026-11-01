@@ -32,12 +32,12 @@
                                       │
 ──────────────────────────────────────│
  USAGE                                │
- ✻ Claude Max    5h   ▰▰▰ 84%  · Fri …│
-                 wk   ▰▰▱ 82%  · Mon …│
+ ✻ Claude Max    5h   ▰▰▰ 84%         │
+                 wk   ▰▰▱ 82%         │
                  out Fri ~21:00       │
- · Google login  not measured · OpenC…│
+ · Google login  not measured         │
  ❋ OpenAI Plus   5h   ▰▱▱ 40%  · 23:59│
-                 wk   ▱▱▱ 12%  · Tue …│
+                 wk   ▱▱▱ 12%         │
                  lasts the week       │
 ──────────────────────────────────────│
  MACHINE                     16 cores │

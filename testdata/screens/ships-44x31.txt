@@ -18,8 +18,8 @@
 ────────────────────────────────────────────
  USAGE
  ✻ Claude        5h   ▰▰▰▰▱ 84%  · Fri 01:20
-                 wk   ▰▰▰▰▱ 82%  · Mon 09:0…
- · Google login  not measured · OpenCode ke…
+                 wk   ▰▰▰▰▱ 82%  · Mon 09:00
+ · Google login  not measured
  ❋ OpenAI        5h ▰▱▱ 40% · wk 12%
 ────────────────────────────────────────────
  MACHINE                           16 cores

@@ -57,4 +57,4 @@
  ╿ agent-47             idle       1m fresh                                       ╌│
  ╿ agent-48             idle       1m fresh                                       ╌│
 ───────────────────────────────────────────────────────────────────────────────────┴───────────────────────
- ⏎ chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  full view v   sampled -2631520s ago
+ ⏎ chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  full view v          sampled 0s ago

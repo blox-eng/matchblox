@@ -12,9 +12,9 @@
  ↓ 9 more                             │ ╭─ flint-auth asks · 1 of 2 ───────────────────────────╮
 ──────────────────────────────────────│ │ Should a refresh also rotate the token?              │
  USAGE                                │ │ › 1 Rotate it  the old one stops at once             │
- ✻ Claude        5h   ▰▰▰ 84%  · Fri …│ │   2 Rotate, keep the old one a minute                │
-                 wk   ▰▰▱ 82%  · Mon …│ │   3 Keep the token                                   │
- · Google login  not measured · OpenC…│ │   4 Type an answer…                                  │
+ ✻ Claude        5h   ▰▰▰ 84%         │ │   2 Rotate, keep the old one a minute                │
+                 wk   ▰▰▱ 82%         │ │   3 Keep the token                                   │
+ · Google login  not measured         │ │   4 Type an answer…                                  │
  ❋ OpenAI        5h ▰▱▱ 40% · wk 12%  │ ╰─ ⏎ question 2 ───────────────────────────────────────╯
 ────────────────────────────────────────────────────────────────────────────────────────────────
  ⏎ chat  x kill  r rename  A switch  z park  N new  p ships  f stoker            sampled 0s ago

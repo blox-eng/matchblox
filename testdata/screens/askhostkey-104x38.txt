@@ -25,8 +25,8 @@
 ────────────────│   ! type yes or no, then ⏎                                           │
  USAGE          │                                                                      │
  ✻ Claude       ╰─ ⏎ answer ─ esc cancel the ssh ──────────────────────────────────────╯
-                 wk   ▰▰▱ 82%  · Mon 09:…│
- · Google login  not measured · OpenCode…│
+                 wk   ▰▰▱ 82%            │
+ · Google login  not measured            │
  ❋ OpenAI        5h ▰▱▱ 40% · wk 12%     │
 ─────────────────────────────────────────│
  MACHINE                        16 cores │

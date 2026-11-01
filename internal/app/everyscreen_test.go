@@ -200,7 +200,9 @@ func TestListOnlyFillsItsFreeRowsWithUsage(t *testing.T) {
 	for i := range 60 {
 		many = append(many, sess(100+i, fmt.Sprintf("agent-%02d", i), fmt.Sprintf("%%%d", 100+i), nil))
 	}
-	full := at(hostState(many...))
+	st := hostState(many...)
+	st.At = demoAt // the age on the key line does not move with the wall clock
+	full := at(st)
 	if out := screen(full); strings.Contains(out, "USAGE") || strings.Contains(out, "MACHINE") {
 		t.Fatalf("a list that fills the screen gave way to the stats:\n%s", out)
 	}
@@ -237,6 +239,28 @@ func TestTheSplitHoldsAsTheCursorMoves(t *testing.T) {
 			if _, right := m.panes(size[0]); right != want {
 				s, _ := m.selectedSession()
 				t.Fatalf("%v: on %s the chat is %d wide, on flint-auth %d", size, s.Name, right, want)
+			}
+		}
+	}
+}
+
+// TestUsageUnderANarrowListIsNeverCutMidWord: under a list of 38 to 41
+// columns a reset time, or a fix, that does not fit goes whole: no usage
+// line is cut.
+func TestUsageUnderANarrowListIsNeverCutMidWord(t *testing.T) {
+	for _, size := range [][2]int{{96, 20}, {104, 38}, {96, 30}} {
+		m := fullView(flintAt(t, size[0], size[1]))
+		sc := m.draw(size[0])
+		left, _ := sides(sc, size[0])
+		in := false
+		for _, l := range left {
+			switch {
+			case strings.HasPrefix(l, " USAGE"):
+				in = true
+			case strings.HasPrefix(l, "───"):
+				in = false
+			case in && strings.Contains(l, "…"):
+				t.Errorf("%v: a usage line is cut: %q", size, l)
 			}
 		}
 	}

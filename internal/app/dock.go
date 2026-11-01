@@ -305,7 +305,11 @@ func (m Model) usageLines(w int, full bool, toggle string) []string {
 		head := " " + m.accountMark(a.Provider) + " " + st.text.Render(pad(r.name, nameW+1)) + " "
 		indent := strings.Repeat(" ", lipgloss.Width(head))
 		if a.State == limits.Unmeasured {
-			out = append(out, fit(head+st.warn.Render("not measured · "+a.Fix), w))
+			line := head + st.warn.Render("not measured · "+a.Fix)
+			if lipgloss.Width(line) > w { // the fix goes whole, not cut
+				line = head + st.warn.Render("not measured")
+			}
+			out = append(out, fit(line, w))
 			continue
 		}
 		uses := a.Uses(now)
@@ -343,7 +347,7 @@ func (m Model) usageLines(w int, full bool, toggle string) []string {
 				lead = indent
 			}
 			line := lead + st.faint.Render(pad(u.Name, 5)) + m.meter(u.Pct, meterW, m.useStyle(u.Pct)) + st.text.Render(pad(fmt.Sprintf(" %.0f%%", u.Pct), 5))
-			if resets[j] != "" {
+			if resets[j] != "" && lipgloss.Width(line)+lipgloss.Width(resets[j]) <= w { // a reset goes whole, not cut
 				line += st.faint.Render(resets[j])
 			}
 			lines = append(lines, line)
@@ -357,13 +361,17 @@ func (m Model) usageLines(w int, full bool, toggle string) []string {
 			switch more := last + st.faint.Render(" · ") + style.Render(p.Text); {
 			case lipgloss.Width(more) <= w:
 				lines[len(lines)-1] = more
-			case !tight:
+			case !tight && lipgloss.Width(indent+p.Text) <= w:
 				lines = append(lines, indent+style.Render(p.Text))
+			case !tight: // under a narrow list the forecast takes its own line from the left
+				lines = append(lines, " "+style.Render(p.Text))
 			case p.Tone == limits.Warn:
 				// A phone keeps the account on its lines: a warning takes the
 				// place of the reset.
 				cut, _, _ := strings.Cut(last, st.faint.Render(" · "))
-				lines[len(lines)-1] = cut + st.faint.Render(" · ") + style.Render(p.Text)
+				if warned := cut + st.faint.Render(" · ") + style.Render(p.Text); lipgloss.Width(warned) <= w {
+					lines[len(lines)-1] = warned // else it waits for the room of the full lines, never cut
+				}
 			}
 		}
 		for _, l := range lines {

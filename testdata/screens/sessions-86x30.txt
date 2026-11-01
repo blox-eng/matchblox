@@ -22,9 +22,9 @@
  ↓ 3 more                             │
 ──────────────────────────────────────│
  USAGE                                │
- ✻ Claude        5h   ▰▰▰ 84%  · Fri …│
-                 wk   ▰▰▱ 82%  · Mon …│
- · Google login  not measured · OpenC…│
+ ✻ Claude        5h   ▰▰▰ 84%         │
+                 wk   ▰▰▱ 82%         │
+ · Google login  not measured         │
  ❋ OpenAI        5h ▰▱▱ 40% · wk 12%  │
 ──────────────────────────────────────────────────────────────────────────────────────
  ⏎ chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  sampled 0s ago
