@@ -1095,7 +1095,7 @@ func TestNoCardAtAPermissionPrompt(t *testing.T) {
 	if lines := m.cardLines(60); len(lines) != 0 {
 		t.Fatalf("a card at a permission prompt: %q", lines)
 	}
-	pressKeys(t, m, "enter")
+	pressKeys(t, pastQuiet(m), "enter")
 	if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" || len(pickActs(f)) != 0 {
 		t.Fatalf("acts %+v", f.acts())
 	}
@@ -1103,7 +1103,9 @@ func TestNoCardAtAPermissionPrompt(t *testing.T) {
 
 // On a phone the chat is not on screen until Enter opens it: an Enter or a
 // digit at once goes nowhere, as the builder has not read the prompt. After
-// the moment they go. On a desk the chat was already beside the list.
+// the moment they go. On a desk the chat beside the list shows the prompt
+// only from the moment the cursor lands on it: a double Enter there is
+// quiet too.
 func TestAPhoneChatIsQuietAtAPermissionPrompt(t *testing.T) {
 	m, f := loadedWith(t, 44, queueState()) // app-feature (%1) asks for permission
 	m, now := clocked(m)
@@ -1118,10 +1120,42 @@ func TestAPhoneChatIsQuietAtAPermissionPrompt(t *testing.T) {
 	}
 
 	m, f = loadedWith(t, 100, queueState())
-	m, _ = clocked(m)
-	pressKeys(t, onPane(t, m, "%1"), "enter", "enter")
+	m, now = clocked(m)
+	m = pressKeys(t, onPane(t, m, "%1"), "enter", "enter")
+	if !m.chatKeys || len(keyActs(f)) != 0 {
+		t.Fatalf("a desk's double enter: chatKeys %v acts %+v", m.chatKeys, f.acts())
+	}
+	*now = now.Add(cardQuiet)
+	pressKeys(t, m, "enter")
 	if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" {
-		t.Fatalf("a desk's chat was on screen: acts %+v", f.acts())
+		t.Fatalf("a desk after the quiet: acts %+v", f.acts())
+	}
+}
+
+// A wait that begins while the chat shows its session is quiet too: the
+// Enter meant for the line typed a moment ago does not approve the prompt
+// that just came.
+func TestANewWaitInTheChatIsQuiet(t *testing.T) {
+	for _, w := range []int{44, 100} {
+		st := queueState()
+		st.Queue = st.Queue[1:] // app-feature (%1) works
+		m, f := loadedWith(t, w, st)
+		m, now := clocked(m)
+		m = pressKeys(t, onPane(t, m, "%1"), "enter")
+		*now = now.Add(time.Second)
+		if !m.chatKeys {
+			t.Fatalf("%d: enter did not open the chat", w)
+		}
+		next, _ := m.Update(stateMsg(queueState())) // now it asks for permission
+		m = pressKeys(t, next.(Model), "enter")
+		if len(keyActs(f)) != 0 || m.flash != askedAgain("app-feature") {
+			t.Fatalf("%d: enter at once on the new wait: acts %+v flash %q", w, keyActs(f), m.flash)
+		}
+		*now = now.Add(cardQuiet)
+		pressKeys(t, m, "enter")
+		if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" {
+			t.Fatalf("%d: after the quiet: acts %+v", w, f.acts())
+		}
 	}
 }
 
@@ -1411,7 +1445,7 @@ func TestNoCardAtAPermissionPromptWithAnAsk(t *testing.T) {
 	if lines := m.cardLines(60); len(lines) != 0 {
 		t.Fatalf("a card at a permission prompt: %q", lines)
 	}
-	pressKeys(t, m, "enter")
+	pressKeys(t, pastQuiet(m), "enter")
 	if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" || len(pickActs(f)) != 0 {
 		t.Fatalf("acts %+v", f.acts())
 	}

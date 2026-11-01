@@ -41,11 +41,12 @@ type card struct {
 // question nobody has read.
 const cardQuiet = 400 * time.Millisecond
 
-// cardSeen is the pane and the ask a card or a chat showed for, and when
-// its quiet started.
+// cardSeen is the pane and the ask a card or a chat showed for, the start
+// of the wait it showed, and when its quiet started.
 type cardSeen struct {
 	pane  string
 	askID string
+	since time.Time
 	at    time.Time
 }
 
@@ -93,12 +94,33 @@ func (m Model) cardSends(k tea.KeyPressMsg) bool {
 }
 
 // noteCard starts the quiet of a card drawn for an ask it was not drawn for
-// before.
+// before, and of a chat on screen that shows a menu (a permission prompt or
+// a question) it did not show before: the cursor came to it, or the wait
+// began while it was shown.
 func (m Model) noteCard() Model {
-	if s, _, ok := m.cardNow(); ok && s.Ask.ID != m.cardSeen.askID && m.cardDrawn() {
-		m.cardSeen = cardSeen{pane: s.Pane, askID: s.Ask.ID, at: m.now()}
+	if !m.cardDrawn() {
+		return m
+	}
+	if s, _, ok := m.cardNow(); ok && s.Ask.ID != m.cardSeen.askID {
+		m.cardSeen = cardSeen{pane: s.Pane, askID: s.Ask.ID, since: m.cardSeen.since, at: m.now()}
+	}
+	s, ok := m.selectedSession()
+	if !ok || s.Pane == "" || s.Host != m.opt.Host {
+		return m
+	}
+	if it, waits := m.waitOf(s); waits && menuWait(it) && (m.cardSeen.pane != s.Pane || !m.cardSeen.since.Equal(it.Since)) {
+		m.cardSeen = cardSeen{pane: s.Pane, since: it.Since, at: m.now()}
+		if s.Ask != nil {
+			m.cardSeen.askID = s.Ask.ID
+		}
 	}
 	return m
+}
+
+// menuWait tells if a wait is answered on a menu: a digit or Enter there
+// picks.
+func menuWait(it queue.Item) bool {
+	return it.State == queue.StatePermission || it.State == queue.StateQuestion
 }
 
 // cardDrawn tells if the chat, and so its card, is on screen: beside the

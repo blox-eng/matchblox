@@ -487,6 +487,9 @@ func (m Model) chatOn(pane string) Model {
 		if s.Ask != nil {
 			m.cardSeen.askID = s.Ask.ID
 		}
+		if it, waits := m.waitOf(s); waits {
+			m.cardSeen.since = it.Since
+		}
 	}
 	return m
 }
