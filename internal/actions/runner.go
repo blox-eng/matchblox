@@ -44,7 +44,7 @@ type Runner struct {
 	Menu func(pane, id string, page int) error
 	// Stokable reads a pane again for a stoker step: nil when it may be
 	// typed into. Nil means never.
-	Stokable func(pane string, typed bool) error
+	Stokable func(pane, typed string) error
 }
 
 // Do runs the steps in order, each after its guard. A guard that fails

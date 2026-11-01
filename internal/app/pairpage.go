@@ -246,7 +246,7 @@ func (m Model) ClosePair() {
 func (m Model) quit() (tea.Model, tea.Cmd) {
 	m = m.closePairPage("")
 	m.quitting = true
-	return m, tea.Quit
+	return m, tea.Sequence(m.agentGone(), tea.Quit)
 }
 
 // live is a code that still waits for a device.

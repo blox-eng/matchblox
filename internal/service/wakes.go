@@ -94,7 +94,7 @@ func (s *Service) wake(ctx context.Context, now time.Time) {
 	}
 
 	pane, err := s.stokerAgent()
-	if err != nil || s.stokable(pane, false) != nil {
+	if err != nil || s.stokable(pane, "") != nil {
 		return
 	}
 	if resting {

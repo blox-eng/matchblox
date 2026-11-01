@@ -11,6 +11,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 // keyStep is the tmux step for the wire form of one key, or why it is not one.
@@ -50,7 +51,7 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 	if !ok {
 		return proto.Result{Err: "no agent session in " + pane + " any more"}
 	}
-	if a.PID <= 0 || x.PID != a.PID || x.Start != a.Start {
+	if !sameAgent(x, a) {
 		return proto.Result{Err: "not sent: " + pane + " runs a different agent now"}
 	}
 	step, why := keyStep(pane, a.Text)
@@ -67,6 +68,12 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 	}
 	s.kickScreens(pane)
 	return res
+}
+
+// sameAgent tells if x is the agent a console's act a names: its pid, and
+// its start, which tells a reused pid apart.
+func sameAgent(x sample.Session, a proto.Act) bool {
+	return a.PID > 0 && x.PID == a.PID && x.Start == a.Start
 }
 
 // unseen says why key a would answer a wait in pane that the screen the

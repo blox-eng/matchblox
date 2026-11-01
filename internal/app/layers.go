@@ -250,11 +250,13 @@ func (s Shell) openOn(host string, peers []string, first bool) (Shell, tea.Cmd) 
 	return s, m.Init()
 }
 
+// Init also says no agent, once: a phone whose belt still shows the
+// Commands of a console that quit learns that no chat runs them.
 func (s Shell) Init() tea.Cmd {
 	if s.layer == layerConsole {
-		return s.cur.Init()
+		return tea.Batch(noAgent(s.opt.Base), s.cur.Init())
 	}
-	return tea.RequestBackgroundColor
+	return tea.Batch(noAgent(s.opt.Base), tea.RequestBackgroundColor)
 }
 
 func (s Shell) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -276,7 +278,8 @@ func (s Shell) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			s.connecting.dark, s.connecting.st = s.dark, s.st
 		}
 	case layerMsg:
-		return s.back(), nil
+		gone := s.cur.agentGone()
+		return s.back(), gone
 	case connectedHostMsg:
 		if msg.err != nil {
 			s.flash = "not connected: " + msg.err.Error()

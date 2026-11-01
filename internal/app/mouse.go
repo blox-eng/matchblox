@@ -209,7 +209,7 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	m.held = nil // a swipe is another key: it drops the question
 	if m.overChat(ms) {
 		m.armed = ""
-		return m.scrollChat(ms.Button == tea.MouseWheelUp), nil
+		return m.scrollChat(ms.Button == tea.MouseWheelUp, chatStep), nil
 	}
 	switch ms.Button {
 	case tea.MouseWheelUp:

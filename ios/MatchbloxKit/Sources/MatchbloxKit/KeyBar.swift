@@ -1,49 +1,44 @@
-import Foundation
-
-/// The nine keys above the system keyboard. The host's chat reads the bytes as its keys.
+/// What each belt key sends. The host's chat reads the bytes as its keys.
 public enum KeyBar {
-    public struct Key: Sendable {
-        public enum Action: Sendable, Equatable {
-            case send([UInt8])
-            /// Shows or hides the system keyboard.
-            case keyboard
-        }
+    private static let esc: UInt8 = 0x1b
 
-        public let label: String
-        public let action: Action
-        public let accessibilityLabel: String
-        /// The width, in widths of a plain key.
-        public let width: CGFloat
-        /// The height, in points.
-        public let height: CGFloat
-
-        init(_ label: String, _ action: Action, _ accessibilityLabel: String, width: CGFloat = 1, height: CGFloat = KeyBar.minSide) {
-            self.label = label
-            self.action = action
-            self.accessibilityLabel = accessibilityLabel
-            self.width = width
-            self.height = height
+    private static let fixed: [String: [UInt8]] = {
+        var keys: [String: [UInt8]] = [
+            "◂": HomeKey.bytes,
+            "↑": [esc, 0x5b, 0x41],
+            "↓": [esc, 0x5b, 0x42],
+            "→": [esc, 0x5b, 0x43],
+            "←": [esc, 0x5b, 0x44],
+            "⏎": [0x0d],
+            "Tab": [0x09],
+            "⇧Tab": [esc, 0x5b, 0x5a],
+            "Esc": [esc],
+            "⌫": [0x7f],
+            "⇞": Array("\u{1b}[5~".utf8),
+            "⇟": Array("\u{1b}[6~".utf8),
+        ]
+        for letter in "ABCDLR" {
+            keys["^\(letter)"] = [letter.asciiValue! - 0x40]
         }
+        for digit in 1...9 {
+            keys[String(digit)] = Array(String(digit).utf8)
+        }
+        return keys
+    }()
+
+    /// The bytes of a key id, or nil for an id that is no key. Any other id that starts with
+    /// a lowercase letter, then has lowercase letters, digits and dashes, is an agent command:
+    /// the console runs it, and refuses an id it does not know.
+    public static func bytes(for id: String) -> [UInt8]? {
+        if let bytes = fixed[id] { return bytes }
+        guard isCommandID(id) else { return nil }
+        return Array("\u{1b}_matchblox;cmd=\(id)\u{1b}\\".utf8)
     }
 
-    /// The smallest side of a key, in points: Apple's smallest tap target.
-    public static let minSide: CGFloat = 44
-    /// The arrows are the keys a thumb looks for most.
-    static let arrowWidth: CGFloat = 1.5
-    static let arrowHeight: CGFloat = 52
-
-    public static let keys: [Key] = [
-        Key("◂", .send(HomeKey.bytes), "Back to matchblox"),
-        Key("↑", .send([0x1b, 0x5b, 0x41]), "Up", width: arrowWidth, height: arrowHeight),
-        Key("↓", .send([0x1b, 0x5b, 0x42]), "Down", width: arrowWidth, height: arrowHeight),
-        Key("⏎", .send([0x0d]), "Return"),
-        Key("Tab", .send([0x09]), "Tab"),
-        Key("⇧Tab", .send([0x1b, 0x5b, 0x5a]), "Shift Tab"),
-        Key("Esc", .send([0x1b]), "Escape"),
-        Key("^C", .send([0x03]), "Interrupt"),
-        Key("⌨", .keyboard, "Keyboard"),
-    ]
-
-    /// The height of the tallest key.
-    public static let height = keys.map(\.height).max() ?? minSide
+    static func isCommandID(_ id: String) -> Bool {
+        let lower: ClosedRange<UInt8> = 0x61...0x7a
+        let digit: ClosedRange<UInt8> = 0x30...0x39
+        guard let first = id.utf8.first, lower.contains(first) else { return false }
+        return id.utf8.allSatisfy { lower.contains($0) || digit.contains($0) || $0 == UInt8(ascii: "-") }
+    }
 }

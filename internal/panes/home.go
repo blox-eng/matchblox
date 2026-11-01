@@ -2,7 +2,10 @@ package panes
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+
+	"github.com/blox-eng/matchblox/internal/keycmd"
 )
 
 // Home is the tmux session the console lives in, so a phone that connects
@@ -45,6 +48,26 @@ func HomeKeyArgv() []string {
 	return []string{"tmux", "set-option", "-s", "user-keys[" + homeUserKey + "]", HomeKey,
 		";", "bind-key", "-n", "User" + homeUserKey, "if-shell", "-F", "#{==:#{session_name}," + Home + "}",
 		"send-keys -H " + hexKeys(HomeKey), "switch-client -t =" + Home}
+}
+
+// CommandKeysArgv makes each command key of the phone a key of the tmux
+// server, in user-keys slots from 901 up (keycmd's table). A client in the
+// console's session, on a pane the console still runs in, hands the key on
+// to the console, whole, so its chat runs the command. Anywhere else the key
+// does nothing: a command runs only from the chat, and a shell left where a
+// console quit never reads it as typing.
+func CommandKeysArgv() []string {
+	const atConsole = "#{&&:#{==:#{session_name}," + Home + "},#{==:#{pane_current_command}," + Home + "}}"
+	argv := []string{"tmux"}
+	for _, c := range keycmd.All() {
+		slot, seq := strconv.Itoa(c.Slot), keycmd.Sequence(c.ID)
+		if len(argv) > 1 {
+			argv = append(argv, ";")
+		}
+		argv = append(argv, "set-option", "-s", "user-keys["+slot+"]", seq,
+			";", "bind-key", "-n", "User"+slot, "if-shell", "-F", atConsole, "send-keys -H "+hexKeys(seq))
+	}
+	return argv
 }
 
 // hexKeys is s as the hex bytes of tmux send-keys -H.

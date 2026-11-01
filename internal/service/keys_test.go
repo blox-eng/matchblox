@@ -225,6 +225,35 @@ func TestWatchIsRefusedFromTheStokersServer(t *testing.T) {
 	}
 }
 
+// TestACommandAndACompactCarryTheAgentsGuard: every keystroke of a typed
+// command or a console's compact names the agent's pid and start, so a pid
+// another process took after the snapshot gets no key.
+func TestACommandAndACompactCarryTheAgentsGuard(t *testing.T) {
+	compact := command("")
+	compact.RecID = "compact:%1"
+	for _, a := range []proto.Act{command("review"), compact} {
+		a.Start = 7
+		s, ran := commandTest(t, "claude", idleScreen)
+		s.cur.Sessions[0].Start = 7
+		var guards []advice.Guard
+		s.Actions.Check = func(g advice.Guard) error {
+			guards = append(guards, g)
+			return nil
+		}
+		if res := s.act(t.Context(), a); res.Err != "" || len(*ran) != 2 {
+			t.Fatalf("%s: res %+v ran %q", a.RecID, res, *ran)
+		}
+		if len(guards) != 2 {
+			t.Fatalf("%s: guards %+v", a.RecID, guards)
+		}
+		for _, g := range guards {
+			if g.PID != 42 || g.StartTicks != 7 {
+				t.Fatalf("%s: guards %+v", a.RecID, guards)
+			}
+		}
+	}
+}
+
 // TestATypedSemicolonGoes: a "lit:" key that ends in ";" still types it.
 func TestATypedSemicolonGoes(t *testing.T) {
 	for lit, want := range map[string]string{";": `\;`, "ls;": `ls\;`} {
