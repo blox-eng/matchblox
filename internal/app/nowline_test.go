@@ -18,9 +18,9 @@ import (
 
 const ruleGlyphs = "│┬┴┿┼"
 
-// isRule: g is one of the rule's glyphs; the empty second half of a wide
+// isNowGlyph: g is one of the rule's glyphs; the empty second half of a wide
 // glyph is not.
-func isRule(g string) bool { return g != "" && strings.Contains(ruleGlyphs, g) }
+func isNowGlyph(g string) bool { return g != "" && strings.Contains(ruleGlyphs, g) }
 
 // nowState is a host with api at work, docs idle, and bench on a limit
 // whose 5 hours reset in 35 minutes.
@@ -110,12 +110,16 @@ func TestNowRuleIsOneColumn(t *testing.T) {
 	if len(skip) == 0 {
 		t.Fatal("the selected row opens with no lines of its own")
 	}
-	if bottom != c.Height()-2 {
-		t.Fatalf("the rule ends on line %d, the bottom hairline is %d", bottom, c.Height()-2)
+	want := c.Height() - 2 // the bottom hairline, or the one over the stats
+	if d := m.draw(132).dockAt; d >= 0 {
+		want = d - 1
+	}
+	if bottom != want {
+		t.Fatalf("the rule ends on line %d, the hairline is %d", bottom, want)
 	}
 	for y := range c.Height() {
 		cell := c.CellAt(x, y)
-		ruled := isRule(cell.Content) || strings.TrimSpace(cell.Content) != "" && sameColor(cell.Style.Fg, m.st.theme.Accent)
+		ruled := isNowGlyph(cell.Content) || strings.TrimSpace(cell.Content) != "" && sameColor(cell.Style.Fg, m.st.theme.Accent)
 		if in := y >= 2 && y <= bottom && !slices.Contains(skip, y); ruled != in || in && !sameColor(cell.Style.Fg, m.st.theme.Accent) {
 			t.Errorf("line %d has %q in %v at the rule's column %d", y, cell.Content, cell.Style.Fg, x)
 		}
@@ -128,7 +132,7 @@ func TestNowRuleKeepsTheSelectedWash(t *testing.T) {
 	x, _ := ruleOf(t, c)
 	y := rowLine(t, c, "▌")
 	cell := c.CellAt(x, y)
-	if !isRule(cell.Content) {
+	if !isNowGlyph(cell.Content) {
 		t.Fatalf("the selected row has %q at the rule", cell.Content)
 	}
 	if !sameColor(cell.Style.Bg, m.st.theme.AccentWash) {
@@ -185,7 +189,7 @@ func TestResizeMovesTheRule(t *testing.T) {
 		t.Fatalf("the rule stays at %d after the resize", x)
 	}
 	for y := range c.Height() {
-		if g := cellGlyph(c, old, y); isRule(g) {
+		if g := cellGlyph(c, old, y); isNowGlyph(g) {
 			t.Errorf("line %d keeps %q at the old column %d", y, g, old)
 		}
 	}

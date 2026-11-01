@@ -1,0 +1,20 @@
+ ▰ matchblox                                                                   ● 6 wait for you
+ SESSIONS 7    ships 3    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────
+ WAITS FOR YOU · 6                    │ flint-auth · asks
+ │ spark-docs     done       9m   88% │ ✻ team@example.com · Max
+ ╿ ember-billing  done       4m   32% │ #4545 ●━✕┄○┄○┄○  conflicts with main
+▌╿ flint-auth     asks       2m   41% │
+ ╿ kindle-web     asks       1m   56% │
+ ╿ cinder-ci      done       0s   55% │
+ ╿ wick-mobile    done       0s    6% │
+ WORKING · 1                          │ ⏺ The refresh endpoint is in and its tests pass.
+ ↓ 9 more                             │ ╭─ flint-auth asks · 1 of 2 ───────────────────────────╮
+──────────────────────────────────────│ │ Should a refresh also rotate the token?              │
+ USAGE                                │ │ › 1 Rotate it  the old one stops at once             │
+ ✻ Claude        5h   ▰▰▰ 84%         │ │   2 Rotate, keep the old one a minute                │
+                 wk   ▰▰▱ 82%         │ │   3 Keep the token                                   │
+ · Google login  not measured         │ │   4 Type an answer…                                  │
+ ❋ OpenAI        5h ▰▱▱ 40% · wk 12%  │ ╰─ ⏎ question 2 ───────────────────────────────────────╯
+────────────────────────────────────────────────────────────────────────────────────────────────
+ keys go to flint-auth · ctrl+] back · ctrl+o into tmux

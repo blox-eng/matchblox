@@ -91,7 +91,7 @@ To count only the workflows that deploy a repository, name them in the
 |---|---|
 | `Enter` | Selects the session that drives the ship, in Sessions. On a ship no session owns, opens New session in the worktree on its branch, else in its repository's main checkout, as a ghost row of Sessions does: the folder picked, the cursor on agent, and a first message about the PR to edit. |
 | `x` | Merges a ship that waits for your merge: a box shows `gh pr merge <n> --squash --match-head-commit <sha>` (the repository's merge method, pinned to the commit that was read green), and a typed `y` runs it. It is offered only on a read from the last two minutes. |
-| `a` | Opens [the answer peek](console.md#the-answer-peek) on the session of a stuck ship, to tell it what to do. |
+| `a` | Opens [the chat](console.md#the-chat) on the session of a stuck ship, to tell it what to do. |
 
 On a phone the selected ship adds who drives it and its keys. Wider, the
 detail beside the list shows the five stages with their times, and the

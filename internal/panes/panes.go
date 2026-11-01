@@ -22,9 +22,19 @@ const MaxAnswer = 500
 // stays text. A pane of matchblox's own server is typed into there.
 func Send(target, text string) [][]string {
 	return [][]string{
-		keys(target, "-l", "--", text),
+		Literal(target, text),
 		keys(target, "Enter"),
 	}
+}
+
+// Literal is the send-keys step that types text into the pane as it is.
+// tmux reads an argv word that ends in ";" as the end of its command and
+// a final "\;" as a ";", so a final ";" goes as "\;".
+func Literal(target, text string) []string {
+	if t, ok := strings.CutSuffix(text, ";"); ok {
+		text = t + `\;`
+	}
+	return keys(target, "-l", "--", text)
 }
 
 // keys is the send-keys step to target, on the tmux server it is on.
@@ -61,7 +71,7 @@ var Pause = []string{"sleep", "0.3"}
 // checked on the screen before its keys go.
 func Pick(target string, ask said.Ask, ans said.Answer) (steps [][]string, pages []int) {
 	key := func(k ...string) []string { return keys(target, k...) }
-	text := func(t string) []string { return key("-l", "--", t) }
+	text := func(t string) []string { return Literal(target, t) }
 	down := func(n int) []string {
 		keys := make([]string, n)
 		for i := range keys {

@@ -373,8 +373,8 @@ Claude Code tells its waits through hooks: the setup step "Add the queue
 hooks" adds them. One of them, `PreToolUse` for the question tool
 (`AskUserQuestion`), hands the console the question and its options before
 the menu draws: in auto mode Claude Code writes the question to its
-transcript only once it is answered, so the hook is how the answer peek
-shows the options. A second, `PreToolUse` for `Bash`, is the stoker's merge
+transcript only once it is answered, so the hook is how the chat's
+question card shows the options. A second, `PreToolUse` for `Bash`, is the stoker's merge
 guard: in a session the stoker drove, it stops `gh pr merge`, `gh release`
 and `gh workflow run` unless the chip on the launch sheet gave the go, or
 you gave it with `y` on the STOKER tab. The same step adds permission rules

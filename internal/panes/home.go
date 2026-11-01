@@ -1,5 +1,10 @@
 package panes
 
+import (
+	"fmt"
+	"strings"
+)
+
 // Home is the tmux session the console lives in, so a phone that connects
 // lands in it and every pane has one way back to it.
 const Home = "matchblox"
@@ -33,10 +38,22 @@ const HomeKey = "\x1b_matchblox\x1b\\"
 const homeUserKey = "900"
 
 // HomeKeyArgv makes HomeKey a key of the tmux server that takes the client
-// to the console's session. A client attached already gets it at once.
+// to the console's session. A client there already hands the key on to the
+// console, whole, so its chat gives the keys back. A client attached
+// already gets it at once.
 func HomeKeyArgv() []string {
 	return []string{"tmux", "set-option", "-s", "user-keys[" + homeUserKey + "]", HomeKey,
-		";", "bind-key", "-n", "User" + homeUserKey, "switch-client", "-t", "=" + Home}
+		";", "bind-key", "-n", "User" + homeUserKey, "if-shell", "-F", "#{==:#{session_name}," + Home + "}",
+		"send-keys -H " + hexKeys(HomeKey), "switch-client -t =" + Home}
+}
+
+// hexKeys is s as the hex bytes of tmux send-keys -H.
+func hexKeys(s string) string {
+	hex := make([]string, len(s))
+	for i := range len(s) {
+		hex[i] = fmt.Sprintf("%02x", s[i])
+	}
+	return strings.Join(hex, " ")
 }
 
 // HomeEnv is set in the home session: the console there is the session's

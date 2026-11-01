@@ -3,9 +3,12 @@ package app
 import (
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	bkey "charm.land/bubbles/v2/key"
+
+	"github.com/blox-eng/matchblox/internal/proto"
 )
 
 // kmLayer is one keymap: its name, its bindings in field order, and the
@@ -40,7 +43,8 @@ func layersOf(k keymaps) (main kmLayer, modal []kmLayer) {
 	modal = []kmLayer{
 		{"global", k.global.bindings(), fieldNames(k.global), fieldBinds(k.global)},
 		{"form", k.form.bindings(), fieldNames(k.form), fieldBinds(k.form)},
-		{"peek", k.peek.bindings(), fieldNames(k.peek), fieldBinds(k.peek)},
+		{"card", k.card.bindings(), fieldNames(k.card), fieldBinds(k.card)},
+		{"chat", k.chat.bindings(), fieldNames(k.chat), fieldBinds(k.chat)},
 		{"sheet", k.sheet.bindings(), fieldNames(k.sheet), fieldBinds(k.sheet)},
 		{"search", k.search.bindings(), fieldNames(k.search), fieldBinds(k.search)},
 		{"pair", k.pair.bindings(), fieldNames(k.pair), fieldBinds(k.pair)},
@@ -138,5 +142,18 @@ func TestEveryBindingHasHelp(t *testing.T) {
 				t.Errorf("%s.%s has an empty key", l.name, l.fields[i])
 			}
 		}
+	}
+}
+
+// TestTheChatsKeysAreTheServicesKeys: every key the chat sends by name is
+// one the service presses, and its text keys are proto's literal form.
+func TestTheChatsKeysAreTheServicesKeys(t *testing.T) {
+	for k, name := range keyNames {
+		if !slices.Contains(proto.KeyNames, name) && !strings.HasPrefix(name, proto.LitPrefix) {
+			t.Errorf("%s sends %q, which the service does not press", k, name)
+		}
+	}
+	if maxLit := proto.MaxLit; len(pasteTexts(strings.Repeat("x", maxLit+1))[0]) != len(proto.LitPrefix)+maxLit {
+		t.Errorf("a paste's chunk is not proto.MaxLit")
 	}
 }

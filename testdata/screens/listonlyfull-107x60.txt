@@ -1,0 +1,60 @@
+ ▰ matchblox
+ SESSIONS 60    ships    machine    git    history    panes    stoker
+───────────────────────────────────────────────────────────────────────────────────┬───────────────────────
+                                                           −2h         −1h         │ now     +1h
+                                                           ┊           ┊           │
+ QUIET · 60                                                                        │
+───────────────────────────────────────────────────────────────────────────────────┼───────────────────────
+▌╿ agent-00             idle       1m fresh                                       ╌│
+                                                                                          A switch  ⏎ chat
+───────────────────────────────────────────────────────────────────────────────────┼───────────────────────
+ ╿ agent-01             idle       1m fresh                                       ╌│
+ ╿ agent-02             idle       1m fresh                                       ╌│
+ ╿ agent-03             idle       1m fresh                                       ╌│
+ ╿ agent-04             idle       1m fresh                                       ╌│
+ ╿ agent-05             idle       1m fresh                                       ╌│
+ ╿ agent-06             idle       1m fresh                                       ╌│
+ ╿ agent-07             idle       1m fresh                                       ╌│
+ ╿ agent-08             idle       1m fresh                                       ╌│
+ ╿ agent-09             idle       1m fresh                                       ╌│
+ ╿ agent-10             idle       1m fresh                                       ╌│
+ ╿ agent-11             idle       1m fresh                                       ╌│
+ ╿ agent-12             idle       1m fresh                                       ╌│
+ ╿ agent-13             idle       1m fresh                                       ╌│
+ ╿ agent-14             idle       1m fresh                                       ╌│
+ ╿ agent-15             idle       1m fresh                                       ╌│
+ ╿ agent-16             idle       1m fresh                                       ╌│
+ ╿ agent-17             idle       1m fresh                                       ╌│
+ ╿ agent-18             idle       1m fresh                                       ╌│
+ ╿ agent-19             idle       1m fresh                                       ╌│
+ ╿ agent-20             idle       1m fresh                                       ╌│
+ ╿ agent-21             idle       1m fresh                                       ╌│
+ ╿ agent-22             idle       1m fresh                                       ╌│
+ ╿ agent-23             idle       1m fresh                                       ╌│
+ ╿ agent-24             idle       1m fresh                                       ╌│
+ ╿ agent-25             idle       1m fresh                                       ╌│
+ ╿ agent-26             idle       1m fresh                                       ╌│
+ ╿ agent-27             idle       1m fresh                                       ╌│
+ ╿ agent-28             idle       1m fresh                                       ╌│
+ ╿ agent-29             idle       1m fresh                                       ╌│
+ ╿ agent-30             idle       1m fresh                                       ╌│
+ ╿ agent-31             idle       1m fresh                                       ╌│
+ ╿ agent-32             idle       1m fresh                                       ╌│
+ ╿ agent-33             idle       1m fresh                                       ╌│
+ ╿ agent-34             idle       1m fresh                                       ╌│
+ ╿ agent-35             idle       1m fresh                                       ╌│
+ ╿ agent-36             idle       1m fresh                                       ╌│
+ ╿ agent-37             idle       1m fresh                                       ╌│
+ ╿ agent-38             idle       1m fresh                                       ╌│
+ ╿ agent-39             idle       1m fresh                                       ╌│
+ ╿ agent-40             idle       1m fresh                                       ╌│
+ ╿ agent-41             idle       1m fresh                                       ╌│
+ ╿ agent-42             idle       1m fresh                                       ╌│
+ ╿ agent-43             idle       1m fresh                                       ╌│
+ ╿ agent-44             idle       1m fresh                                       ╌│
+ ╿ agent-45             idle       1m fresh                                       ╌│
+ ╿ agent-46             idle       1m fresh                                       ╌│
+ ╿ agent-47             idle       1m fresh                                       ╌│
+ ╿ agent-48             idle       1m fresh                                       ╌│
+───────────────────────────────────────────────────────────────────────────────────┴───────────────────────
+ ⏎ chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  full view v          sampled 0s ago

@@ -81,7 +81,7 @@ func (m Model) asks(s sample.Session) bool {
 func (m Model) matchFor(s sample.Session) (string, color.Color) {
 	k, mk, now := m.matchOf(s), m.marks(), m.now()
 	if !m.opt.NoMotion {
-		if c, ok := m.changes[paneKey{s.Host, s.Pane}]; ok {
+		if c, ok := m.changes[paneOf(s)]; ok {
 			e := now.Sub(c.at)
 			switch {
 			case c.kind == changeStrike && k == matchLit && e < 200*time.Millisecond:

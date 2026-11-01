@@ -85,11 +85,20 @@ func TestTheCursorSkipsChildren(t *testing.T) {
 	}
 }
 
+// The detail names a session's children. A session in a pane shows its
+// chat there; this one runs outside tmux.
 func TestTheOpenedRowNamesChildren(t *testing.T) {
 	st := queueState()
-	st.Children = twoChildren(sessionOn(t, st, "%1"))
+	p := sessionOn(t, st, "%1")
+	st.Children = twoChildren(p)
+	for i := range st.Sessions {
+		if st.Sessions[i].PID == p.PID {
+			st.Sessions[i].Pane = ""
+		}
+	}
 	m, _ := loadedWith(t, 160, st)
-	out := screen(selectPane(t, m, "%1"))
+	m.chose, m.selPID = true, p.PID
+	out := screen(m)
 	for _, want := range []string{"children", "codex exec · claude -p"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("no %q in\n%s", want, out)

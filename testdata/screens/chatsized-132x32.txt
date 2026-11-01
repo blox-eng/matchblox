@@ -1,0 +1,32 @@
+ ▰ matchblox
+ SESSIONS 3    ships    machine    git    history    panes    stoker
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ WORKING · 1                                        │ app-feature · busy
+▌│ app-feature                  busy            90% │ ✻
+ QUIET · 2                                          │ ⏺ The endpoints the refresh touches:
+ ╿ tools                        stale     41d fresh │ ┌─────────────────────────┬──────────────────────────────────────────────────┐
+ ╿ app-review                   stale     41d   30% │ │ path                    │ what it does                                     │
+ + start a new session                              │ ├─────────────────────────┼──────────────────────────────────────────────────┤
+                                                    │ │ /refresh                │ rotates the token                                │
+ 1 without an agent: notes:1.1 zsh                  │ │ /revoke                 │ ends all its tokens                              │
+                                                    │ └─────────────────────────┴──────────────────────────────────────────────────┘
+ RECOMMENDATIONS · 2 · h hides                      │
+ ▲ Compact app-feature (%1)                         │
+ ○ Clear app-review (%2)                            │
+────────────────────────────────────────────────────│
+ USAGE                                              │
+ no session runs under a plan                       │
+────────────────────────────────────────────────────│
+ MACHINE                                    2 cores │
+ cpu  ▁ 0%   load 3.5                               │
+ mem  ▰▰▰▰▱▱▱▱ 8 of 16 GB                           │
+ disk r 0B/s · w 0B/s                               │
+ runs 3 claude                                      │
+                                                    │
+ PID      COMMAND           CPU    MEM     OWNER    │
+ 1        systemd             0%   9.8M    system   │
+────────────────────────────────────────────────────│
+ STOKER                                         off │
+ off · f starts it · n starts a night               │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ keys go to app-feature · ctrl+] back · ctrl+o into tmux

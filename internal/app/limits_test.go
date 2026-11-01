@@ -60,15 +60,18 @@ func TestTheHeaderHasNoLimits(t *testing.T) {
 	}
 }
 
-// TestTheDockSaysUsageAndTheMachine: under the body, each account's
-// windows as /usage says them, with the forecast on its block, and the
-// machine; side by side when there is room.
+// TestTheDockSaysUsageAndTheMachine: each account's windows as /usage
+// says them, with the forecast on its block, and the machine; on a desk
+// stacked under the list on Sessions, side by side in the dock of Ships.
 func TestTheDockSaysUsageAndTheMachine(t *testing.T) {
-	m, _ := loadedWith(t, 132, limitsState())
+	drawer, _ := loadedWith(t, 86, limitsState())
+	if drawer.setTab(tabShips); !strings.Contains(strings.Split(screen(drawer), "\n")[lineOf(t, drawer, "USAGE")], "MACHINE") {
+		t.Fatalf("Ships: usage and the machine are not side by side:\n%s", screen(drawer))
+	}
+	m, _ := loadedWith(t, 200, limitsState())
 	out := screen(m)
-	at := lineOf(t, m, "USAGE")
-	if !strings.Contains(strings.Split(out, "\n")[at], "MACHINE") {
-		t.Fatalf("usage and the machine are not side by side:\n%s", out)
+	if lineOf(t, m, "USAGE") >= lineOf(t, m, "MACHINE") {
+		t.Fatalf("the machine is not under usage:\n%s", out)
 	}
 	until := limitsState().At.Add(26 * time.Hour).Local().Format("Mon")
 	for _, want := range []string{
@@ -96,12 +99,12 @@ func TestTheDockSaysUsageAndTheMachine(t *testing.T) {
 
 // TestAPhoneDockShowsOnePanel: on a phone the dock is usage, the machine
 // or the stoker; u, or a tap on its switch, cycles it. An account other than
-// Anthropic's takes one line. The phone starts list only, with no dock: v
-// shows it.
+// Anthropic's takes one line. The phone starts list only, with no dock
+// and so no switch: v shows it.
 func TestAPhoneDockShowsOnePanel(t *testing.T) {
 	m, _ := loadedWith(t, 44, limitsState())
-	if strings.Contains(screen(m), "USAGE") {
-		t.Fatalf("list only shows the dock:\n%s", screen(m))
+	if strings.Contains(screen(m), "machine ›") {
+		t.Fatalf("list only shows the dock's switch:\n%s", screen(m))
 	}
 	next, _ := key(m, "v")
 	m = next.(Model)
@@ -201,7 +204,7 @@ func TestARecommendationShowsItsResult(t *testing.T) {
 	gone.Recommendations = nil
 	next, _ = next.Update(stateMsg(gone))
 	next, _ = next.Update(stateMsg(st))
-	if out := screen(next); strings.Contains(out, "✗ failed") || !strings.Contains(out, "▲ The week runs out Wed ~19:00") {
+	if out := screen(next); strings.Contains(out, "✗ failed") || !strings.Contains(out, "The week runs out Wed ~19:00") { // its row, or its detail beside a narrow list
 		t.Fatalf("an old result came back with the rec:\n%s", out)
 	}
 }
@@ -268,7 +271,7 @@ func TestStatusTextHasTheLimits(t *testing.T) {
 func TestCursorsAccountIsInTheDock(t *testing.T) {
 	st := limitsState()
 	st.Limits = append(st.Limits, limits.Account{Provider: "cursor", Account: "builder@example.com · Acme", State: limits.Unmeasured, Fix: "Cursor's plan usage is not read yet"})
-	m, _ := loadedWith(t, 132, st)
+	m, _ := loadedWith(t, 200, st)
 	if out := screen(m); !strings.Contains(out, "⬢ Cursor Acme") || !strings.Contains(out, "not measured · Cursor's plan usage is not read yet") {
 		t.Errorf("the dock lacks Cursor's account:\n%s", out)
 	}

@@ -47,13 +47,14 @@ func opensInPlace(m Model, sc drawn) bool {
 }
 
 // TestVFoldsThePaneAndTheDock: on a desk, v gives the list the whole
-// screen, folds the dock and opens the selected row in place; the key
-// line says so, and a tap on its word flips it back.
+// screen, folds the chat and the stats under the list, and opens the
+// selected row in place; the key line says so, and a tap on its word
+// flips it back.
 func TestVFoldsThePaneAndTheDock(t *testing.T) {
 	m := demoIn(t, "", 92, 40)
 	sc := m.draw(92)
-	if sc.listW >= 92 || sc.dockAt < 0 || opensInPlace(m, sc) {
-		t.Fatalf("the full view: list %d, dock at %d, opened %v", sc.listW, sc.dockAt, opensInPlace(m, sc))
+	if sc.listW >= 92 || !strings.Contains(screen(m), "USAGE") || opensInPlace(m, sc) {
+		t.Fatalf("the full view: list %d, opened %v:\n%s", sc.listW, opensInPlace(m, sc), screen(m))
 	}
 	if k := keyText(sc); strings.HasSuffix(strings.TrimSpace(k), "list only") {
 		t.Fatalf("the full view's key line: %q", k)
@@ -61,8 +62,8 @@ func TestVFoldsThePaneAndTheDock(t *testing.T) {
 	next, _ := key(m, "v")
 	lo := next.(Model)
 	sc = lo.draw(92)
-	if !lo.listOnly() || sc.listW != 92 || sc.dockAt != -1 || !opensInPlace(lo, sc) {
-		t.Fatalf("list only: on %v, list %d, dock at %d, opened %v\n%s", lo.listOnly(), sc.listW, sc.dockAt, opensInPlace(lo, sc), screen(lo))
+	if !lo.listOnly() || sc.listW != 92 || strings.Contains(screen(lo), " more") || !opensInPlace(lo, sc) {
+		t.Fatalf("list only: on %v, list %d, opened %v\n%s", lo.listOnly(), sc.listW, opensInPlace(lo, sc), screen(lo))
 	}
 	k := keyText(sc)
 	if !strings.Contains(k, "full view v") {
@@ -121,11 +122,11 @@ func TestListOnlyIsKeptAcrossARestart(t *testing.T) {
 }
 
 // TestPhoneStartsListOnly: an upright screen wide enough to split opens
-// with no pane and no dock while no view.json says otherwise (R9).
+// with no pane and no dock's switch while no view.json says otherwise (R9).
 func TestPhoneStartsListOnly(t *testing.T) {
 	m := demoIn(t, t.TempDir(), 96, 60)
-	if sc := m.draw(96); sc.listW != 96 || sc.dockAt != -1 {
-		t.Fatalf("list %d, dock at %d:\n%s", sc.listW, sc.dockAt, screen(m))
+	if sc := m.draw(96); sc.listW != 96 || strings.Contains(screen(m), "machine ›") {
+		t.Fatalf("list %d:\n%s", sc.listW, screen(m))
 	}
 }
 
@@ -223,5 +224,20 @@ func TestListOnlyFrameCostGrowsWithRows(t *testing.T) {
 	}
 	if small, big := cost(300), cost(600); big > 3*small {
 		t.Fatalf("600 rows cost %.0f allocations, 300 cost %.0f: more than twice", big, small)
+	}
+}
+
+// TestOneColumnOpensTheRowInPlace: wherever Sessions is one column with no
+// right side (a landscape screen of 60 to 82 columns, 96x8, 106x10), the
+// selected row opens in place, as on a phone: its words show before Enter.
+func TestOneColumnOpensTheRowInPlace(t *testing.T) {
+	for _, size := range [][2]int{{80, 30}, {66, 24}, {96, 8}, {106, 10}} {
+		m := fullView(flintAt(t, size[0], size[1]))
+		if _, right := m.panes(size[0]); right != 0 {
+			t.Fatalf("%v splits", size)
+		}
+		if sc := m.draw(size[0]); !opensInPlace(m, sc) {
+			t.Errorf("%v: the selected row does not open:\n%s", size, screen(m))
+		}
 	}
 }
