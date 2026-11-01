@@ -35,14 +35,14 @@ func flintAt(t *testing.T, w, h int, keys ...string) Model {
 }
 
 // chatDrawn tells if the frame shows flint-auth's chat, and if so whether
-// its question card is whole: its title, every option and its foot.
+// the agent's menu is whole in it: its question, every option and its hint.
 func chatDrawn(m Model) (drawn, whole bool) {
 	sc := m.draw(m.width)
 	out := ansi.Strip(strings.Join(sc.lines, "\n"))
 	_, right := m.panes(m.width)
 	drawn = sc.chatFull || right > 0 && strings.Contains(out, "flint-auth · ")
-	whole = strings.Contains(out, "flint-auth asks") && strings.Contains(out, "Should a refresh also rotate") &&
-		strings.Contains(out, "Type an answer") && strings.Contains(out, "╰─ ⏎")
+	whole = strings.Contains(out, "Should a refresh also rotate") && strings.Contains(out, "❯ 1. Rotate it") &&
+		strings.Contains(out, "3. Type something.") && strings.Contains(out, "Enter to select")
 	return drawn, whole
 }
 
@@ -66,17 +66,31 @@ func TestNoChatWithoutItsQuestion(t *testing.T) {
 	}
 }
 
-// TestEveryGoldenShowsTheWholeCard: on every golden size, the chat shows
-// its whole question card or is not drawn: in the list's view, with the
-// keys, and in the full view.
-func TestEveryGoldenShowsTheWholeCard(t *testing.T) {
-	sizes := append(slices.Clone(surveyGrids), [2]int{200, 50}, [2]int{132, 32}, [2]int{86, 30}, [2]int{107, 60}, [2]int{92, 40})
+// TestEveryGoldenShowsTheAgentsWholeMenu: on every golden size, a chat at a
+// menu shows the tallest common menu from its question down, line by line,
+// as the agent draws it at the chat's size, or is not drawn: in the list's
+// view, with the keys, in list only, and with the keys from list only.
+func TestEveryGoldenShowsTheAgentsWholeMenu(t *testing.T) {
+	text := tallestMenu(t)
+	sizes := append(slices.Clone(surveyGrids), [2]int{200, 50}, [2]int{132, 32}, [2]int{86, 30}, [2]int{107, 60}, [2]int{44, 31}, [2]int{44, 16})
 	for _, size := range sizes {
 		w, h := size[0], size[1]
 		for _, keys := range [][]string{nil, {"enter"}, {"v"}, {"v", "enter"}} {
 			m := flintAt(t, w, h, keys...)
-			if drawn, whole := chatDrawn(m); drawn && !whole {
-				t.Errorf("%dx%d after %v: the chat shows without its whole question:\n%s", w, h, keys, screen(m))
+			if drawn, _ := chatDrawn(m); !drawn {
+				continue
+			}
+			cols, rows := m.chatSize()
+			if cols == 0 {
+				continue // in the list: no chat sizes the agent
+			}
+			at := fitScreen(text, cols, rows)
+			next, _ := m.Update(screenMsg{Pane: m.watching, At: demoAt, Text: strings.Join(at, "\n"), Cols: cols, Rows: rows})
+			out := screen(next)
+			for _, want := range menuFrom(t, text, cols) {
+				if !strings.Contains(out, strings.TrimSpace(want)) {
+					t.Errorf("%dx%d after %v: the chat of %dx%d lacks %q:\n%s", w, h, keys, cols, rows, want, out)
+				}
 			}
 		}
 	}
@@ -123,9 +137,9 @@ func TestTheListOutranksTheMachine(t *testing.T) {
 	if !strings.Contains(out, "USAGE") || !strings.Contains(out, "OpenAI Plus") || strings.Contains(out, "MACHINE") || !strings.Contains(out, " more") {
 		t.Fatalf("86x30: want usage whole over the cut list:\n%s", out)
 	}
-	night := sized(t, 132, 20, stokerState(runningNight(fixtureState().At)))
+	night := sized(t, 132, 23, stokerState(runningNight(fixtureState().At)))
 	if out := screen(night); !strings.Contains(out, "STOKER") || strings.Contains(out, "MACHINE") {
-		t.Fatalf("132x20 at night: want the stoker in charge over the cut list, the machine folded:\n%s", out)
+		t.Fatalf("132x23 at night: want the stoker in charge over the cut list, the machine folded:\n%s", out)
 	}
 }
 
@@ -155,9 +169,8 @@ func TestTheChatKeyLineKeepsTheWayBack(t *testing.T) {
 	}
 }
 
-// TestTheQuestionShowsOnceUpTheHistory: up the agent's history, with the
-// card up, the agent's own menu is cut from the lines above the card, as
-// on the live screen.
+// TestTheQuestionShowsOnceUpTheHistory: up the agent's history there is no
+// second drawing of the question: only what the pane drew.
 func TestTheQuestionShowsOnceUpTheHistory(t *testing.T) {
 	for _, size := range [][2]int{{44, 31}, {200, 50}} {
 		w, h := size[0], size[1]
@@ -170,7 +183,7 @@ func TestTheQuestionShowsOnceUpTheHistory(t *testing.T) {
 		if !strings.Contains(out, "6 lines up") {
 			t.Fatalf("%dx%d: not up the history:\n%s", w, h, out)
 		}
-		if n := strings.Count(out, "Should a refresh also rotate the token?"); n != 1 || strings.Contains(out, "☐ Rotate") {
+		if n := strings.Count(out, "Should a refresh also rotate the token?"); n != strings.Count(historyScreen, "Should a refresh also rotate the token?") {
 			t.Fatalf("%dx%d: the question shows %d times up the history:\n%s", w, h, n, out)
 		}
 	}
@@ -209,29 +222,28 @@ func TestListOnlyFillsItsFreeRowsWithUsage(t *testing.T) {
 	golden(t, full, "listonlyfull", 107, 60)
 }
 
-// TestTheCardsTopShowsWhereverTheChatIsBeside: the split counts the chat's
-// title and its strip as they are drawn (the strip takes two lines on a
-// chat of 44 to 59 columns), so the card's top line, with its "1 of 2",
-// is never cut.
-func TestTheCardsTopShowsWhereverTheChatIsBeside(t *testing.T) {
-	for _, w := range []int{83, 84, 90, 95, 96, 100, 104, 110} {
-		for h := 8; h <= 24; h++ { // above 24 rows every card fits
+// TestAChatBesideTheListHasRoomForAMenu: the split counts the chat's title
+// and its strip as they are drawn (the strip takes two lines on a chat of 44
+// to 59 columns), so a chat beside the list always has menuLeast rows.
+func TestAChatBesideTheListHasRoomForAMenu(t *testing.T) {
+	for _, w := range []int{83, 84, 90, 95, 96, 100, 104, 110, 132} {
+		for h := 8; h <= 34; h++ {
 			m := fullView(flintAt(t, w, h))
 			if _, right := m.panes(w); right == 0 {
 				continue
 			}
-			if out := screen(m); !strings.Contains(out, "╭─ flint-auth asks · 1 of 2") {
-				t.Fatalf("%dx%d: the card's top is cut:\n%s", w, h, out)
+			if _, rows := m.chatSize(); rows < menuLeast {
+				t.Fatalf("%dx%d: the chat beside the list has %d rows:\n%s", w, h, rows, screen(m))
 			}
 		}
 	}
 }
 
-// TestTheSplitHoldsAsTheCursorMoves: Sessions splits by the tallest card of
-// the sessions that ask, not by the selected one's: moving the cursor never
-// flips the screen between one column and the split.
+// TestTheSplitHoldsAsTheCursorMoves: Sessions splits by menuLeast and the
+// tallest strip of the sessions, not by the selected one's wait: moving the
+// cursor never flips the screen between one column and the split.
 func TestTheSplitHoldsAsTheCursorMoves(t *testing.T) {
-	for _, size := range [][2]int{{96, 13}, {96, 14}, {100, 16}, {132, 15}} {
+	for _, size := range [][2]int{{96, 20}, {96, 23}, {96, 24}, {100, 24}, {132, 22}, {132, 23}} {
 		m := fullView(flintAt(t, size[0], size[1]))
 		_, want := m.panes(size[0])
 		for range 8 {

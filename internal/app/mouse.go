@@ -9,8 +9,10 @@ import (
 // session that waits, on the dock's `machine ›` switches the panel. A tap
 // right of the list gives the chat the keys, and so does a tap on a
 // session's row on a phone; a tap on the list, or on the title row of a
-// phone's chat, gives them back to Sessions. A tap on an option of the
-// chat's question card picks it. A tap on a row selects it and shows the step a second tap runs: an answer for
+// phone's chat, gives them back to Sessions. At a menu wait, once the chat has
+// the keys, a tap on an option of the agent's own menu picks it through the
+// chat's keys; a click that gives it the keys, and any other tap on the agent's
+// screen, presses nothing. A tap on a row selects it and shows the step a second tap runs: an answer for
 // a session that waits, else the row's Enter. The second tap runs it when
 // it only moves this terminal, or asks to confirm it. A tap is never
 // consent to a destructive step, and it cancels a pending one.
@@ -45,19 +47,17 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.form != nil {
 		return m.tapForm(ms, sc)
 	}
-	ci, dx := ms.Y-sc.cardAt, ms.X-sc.cardX
-	onCard := ci >= 0 && ci < len(sc.cardRows) && dx >= 0 && dx < sc.cardW
-	if m.notLive() && m.chatKeys {
-		switch {
-		case onCard:
-			return m.backToLive(), nil
-		case sc.chatFull && ms.Y == 0, !sc.chatFull && ms.Y == sc.bodyTop && ms.X > sc.listW:
-			m.up = 0 // the title: back to live, the keys stay
-			return m, nil
-		}
+	if m.notLive() && m.chatKeys && (sc.chatFull && ms.Y == 0 || !sc.chatFull && ms.Y == sc.bodyTop && ms.X > sc.listW) {
+		m.up = 0 // the title: back to live, the keys stay
+		return m, nil
 	}
-	if onCard {
-		return m.tapCard(ci, dx, sc)
+	if press, texts := m.optionAt(ms, sc); press != "" {
+		if m.chatKeys {
+			return m.tapOption(press, texts)
+		}
+		m = m.openChat()
+		m.menuSeen.at = m.now()
+		return m, nil
 	}
 	if sc.chatFull && ms.Y != sc.keysAt {
 		if ms.Y == 0 {

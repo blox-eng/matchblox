@@ -82,7 +82,7 @@ func TestOneChatHintAndTheWayOutOfListOnly(t *testing.T) {
 	if out := screen(m); strings.Contains(out, "a chat") {
 		t.Errorf("the opened row names the chat twice:\n%s", out)
 	}
-	for _, size := range [][2]int{{96, 8}} { // too short for flint-auth's card: Enter only refuses (106x10 holds it full-screen)
+	for _, size := range [][2]int{{96, 8}, {106, 10}} { // too short for flint-auth's menu: Enter only refuses
 		m := fullView(flintAt(t, size[0], size[1]))
 		if line := keyText(m.draw(size[0])); strings.Contains(line, "chat") {
 			t.Errorf("%v key line %q offers a chat Enter refuses", size, line)

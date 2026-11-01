@@ -324,21 +324,18 @@ Reduce Motion.
   <name> · <state>`, and a tap on `‹ Sessions`, the app's edge swipe, ⌘M or
   ctrl+M (the home APC), or `ctrl+a m` goes back. Only a console sends keys: `keys
   go only from a console`.
-  The **question card** sits at the foot of the chat while the session
-  asks with Claude Code's question tool: the question in `text` and its
-  options, `› 1 <label>  <description>` (the cursor's on the wash, `[✔]`
-  ticks for several choices), the last `Type an answer…`; the foot is the
-  keys, each a tap target. `↑` `↓` move, `space` ticks, typing fills the
-  last row, `⏎` sends (`⏎ question 2` before the last question) and a tap
-  picks. The options go to Claude Code's menu as its keys, never as typed
-  text. A permission prompt has no card. The service refuses any `Enter`
-  for a question that started after the screen the console showed (`not
-  sent: <name> asks something new — look again`); the card adds a second
-  guard with the same words: for 400 ms after it first shows, and after it
-  moves to the next question, nothing sends. At night, the first key
-  that sends something to an agent asks "take over?"; keys that move on
-  the card do not. After a send the toast says `sending to <name>…`, then
-  `sent to <name>`, or the key line says `not sent to <name>: <why>`.
+  At a **question or a permission prompt** the chat shows the agent's own
+  menu, once (#276). Every key goes to it as it is. A tap on a numbered option
+  of the menu at the bottom (the whole row, its wrapped lines too) sends its
+  digit as a key under the same guards, and the row takes the selected wash
+  until the next screen; no other row, and no other wait, sends anything. The click that gives the chat the keys presses nothing, and from the row that takes typed text the cursor goes `Up` first, as a digit there is text. The 400 ms quiet starts again on a question's next page. A chat at such a wait needs 16 rows (`menuLeast`), else
+  the key line says it is too short and no key goes. The service refuses
+  any key that can answer (all but `^C` and Backspace) for a question that
+  started after the screen the console showed (`not sent: <name> asks
+  something new — look again`); the console adds a second guard with the
+  same words: for 400 ms after a new menu comes or the chat opens on a wait.
+  A paste with a line break is refused at a menu. At night, the first key
+  that sends something to an agent asks "take over?".
 - **Key line** (owner, 2026-10-12, reversing 2026-10-08): the last line,
   under a hairline. The keys of the open tab and the selected row, each a
   tap target (`⏎ chat  a chat  x kill  p ships  f stoker`); a desk adds `↑↓

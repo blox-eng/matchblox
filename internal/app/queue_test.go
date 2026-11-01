@@ -353,13 +353,12 @@ func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
 			}
 		}
 	}
-	// An approval menu has no question card: the chat sends its keys to it
-	// as they are.
+	// The chat sends its keys to an approval menu as they are.
 	m, _ := loadedWith(t, 100, st)
 	m.selPID, m.chose = 900, true
 	next, _ := key(m, "enter")
-	if nm := next.(Model); !nm.chatKeys || len(nm.cardLines(60)) != 0 {
-		t.Fatalf("enter on an approval menu: chatKeys %v card %q", nm.chatKeys, nm.cardLines(60))
+	if nm := next.(Model); !nm.chatKeys {
+		t.Fatal("enter on an approval menu: the chat has no keys")
 	}
 	m, _ = loadedWith(t, 132, outsideTmux(st)) // the detail: a desk shows a session in a pane as its chat
 	m.selPID, m.chose = 900, true
