@@ -23,6 +23,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/advice"
@@ -30,6 +31,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/replay"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -361,13 +363,16 @@ func has(s ...string) func(string) bool {
 	}
 }
 
+// homeEvent is the home key as the console reads it.
+var homeEvent = uv.UnknownApcEvent(panes.HomeKey)
+
 func keyMsg(k string) tea.KeyPressMsg {
 	switch k {
 	case "enter":
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "esc":
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
-	case "ctrl+a", "ctrl+o":
+	case "ctrl+o":
 		return tea.KeyPressMsg{Code: rune(k[5]), Mod: tea.ModCtrl}
 	}
 	return tea.KeyPressMsg{Text: k, Code: []rune(k)[0]}
@@ -551,9 +556,10 @@ func replayAt(t *testing.T, z replaySize) {
 			return has("sent to flint-auth", "I rotate the token on each refresh")(s) && !strings.Contains(s, "flint-auth asks") &&
 				(phone || struck.MatchString(s)) // a phone's chat hides the list
 		}},
-		// ctrl+a m gives the keys back to the list.
-		{name: "ctrl+a", at: 7400 * time.Millisecond, key: "ctrl+a", ok: has("ctrl+a m back")},
-		{name: "back to the list", at: 7600 * time.Millisecond, key: "m", ok: func(s string) bool {
+		// Prefix m gives the keys back to the list: tmux hands the console the
+		// home key. The chat's own ctrl+a m waits on the clock, which jumps
+		// with each sample here.
+		{name: "back to the list", at: 7600 * time.Millisecond, do: func() { p.Send(homeEvent) }, ok: func(s string) bool {
 			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "ctrl+a m back") && burning.MatchString(s)
 		}},
 		{name: "the sessions", at: 9 * time.Second, ok: func(s string) bool {
@@ -696,8 +702,7 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	ran := world.Ran()
 	want := [][]string{
-		{"tmux", "send-keys", "-t", "%2", "2"},   // the second option, into Claude Code's menu
-		{"tmux", "send-keys", "-t", "%2", "C-a"}, // the first key of the way back
+		{"tmux", "send-keys", "-t", "%2", "2"}, // the second option, into Claude Code's menu
 	}
 	// Then the stoker's night: spark-docs is past the line when it starts,
 	// hearth-api when its turn ends. Each compact is typed, then its Enter.
