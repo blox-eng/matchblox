@@ -99,17 +99,23 @@ func (m Model) cardSends(k tea.KeyPressMsg) bool {
 // a question) it did not show before: the cursor came to it, or the wait
 // began while it was shown.
 func (m Model) noteCard() Model {
-	if !m.cardDrawn() {
-		return m
-	}
+	newCard := false
 	if s, _, ok := m.cardNow(); ok && s.Ask.ID != m.cardSeen.askID {
-		m.cardSeen = cardSeen{pane: s.Pane, askID: s.Ask.ID, since: m.cardSeen.since, at: m.now()}
+		newCard = true
 	}
 	s, ok := m.selectedSession()
 	if !ok || s.Pane == "" || s.Host != m.opt.Host {
 		return m
 	}
-	if it, waits := m.waitOf(s); waits && menuWait(it) && (m.cardSeen.pane != s.Pane || !m.cardSeen.since.Equal(it.Since)) {
+	it, waits := m.waitOf(s)
+	newWait := waits && menuWait(it) && (m.cardSeen.pane != s.Pane || !m.cardSeen.since.Equal(it.Since))
+	if !newCard && !newWait || !m.cardDrawn() { // cardDrawn last: it lays the screen out
+		return m
+	}
+	if newCard {
+		m.cardSeen = cardSeen{pane: s.Pane, askID: s.Ask.ID, since: m.cardSeen.since, at: m.now()}
+	}
+	if newWait {
 		m.cardSeen = cardSeen{pane: s.Pane, since: it.Since, at: m.now()}
 		if s.Ask != nil {
 			m.cardSeen.askID = s.Ask.ID

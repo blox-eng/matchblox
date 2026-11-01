@@ -265,7 +265,9 @@ func (m Model) chatReserve(right int) int {
 		if s.Host == sel.Host && s.PID == sel.PID {
 			wait = max(wait, m.askRows(right-1))
 		}
-		most = max(most, 1+len(m.chatStrip(s, right, 2))+max(wait, cardLeast))
+		if need := max(wait, cardLeast); 3+need > most { // the strip is two lines at most: draw it only where it can matter
+			most = max(most, 1+len(m.chatStrip(s, right, 2))+need)
+		}
 	}
 	return most
 }

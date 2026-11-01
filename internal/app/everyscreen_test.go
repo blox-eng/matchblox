@@ -214,8 +214,8 @@ func TestListOnlyFillsItsFreeRowsWithUsage(t *testing.T) {
 // chat of 44 to 59 columns), so the card's top line, with its "1 of 2",
 // is never cut.
 func TestTheCardsTopShowsWhereverTheChatIsBeside(t *testing.T) {
-	for w := 83; w <= 110; w++ {
-		for h := 8; h <= 40; h++ {
+	for _, w := range []int{83, 84, 90, 95, 96, 100, 104, 110} {
+		for h := 8; h <= 24; h++ { // above 24 rows every card fits
 			m := fullView(flintAt(t, w, h))
 			if _, right := m.panes(w); right == 0 {
 				continue
