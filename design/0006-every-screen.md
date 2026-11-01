@@ -53,6 +53,13 @@ What feels wrong today, from a capture at 46×34 (the fixture machine):
 
 ## 4. The three layouts
 
+> **2026-11-01:** Sessions now follows
+> [the every-screen chat spec](../docs/superpowers/specs/2026-11-01-every-screen-chat-design.md):
+> where it splits, the list takes 40% of the width and the chat the rest;
+> usage, the machine and the stoker stack under the list; Sessions has no
+> bottom dock; the chat takes the place of the bottom peek. What follows
+> is kept as it was decided.
+
 The screen's shape picks first, then its width (DESIGN.md §6). A cell is
 about twice as tall as it is wide, so a screen is portrait when
 rows × 2 ≥ columns. A portrait screen under 90 columns is a phone (one
@@ -148,6 +155,13 @@ tap on a row selects it; a tap on the selected session opens the peek
 opened row is on the screen.
 
 ## 6. The answer peek
+
+> **2026-11-01:** Sessions now follows
+> [the every-screen chat spec](../docs/superpowers/specs/2026-11-01-every-screen-chat-design.md):
+> where it splits, the list takes 40% of the width and the chat the rest;
+> usage, the machine and the stoker stack under the list; Sessions has no
+> bottom dock; the chat takes the place of the bottom peek. What follows
+> is kept as it was decided.
 
 `a` on any session with a pane opens the conversation with it (owner
 2026-10-12: message any session, not only one that waits; Claude Code
