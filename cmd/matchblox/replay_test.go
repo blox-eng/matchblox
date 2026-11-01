@@ -615,9 +615,12 @@ func replayAt(t *testing.T, z replaySize) {
 		}},
 		// x: a session that is done goes, after a typed y. k picks the row
 		// the search left: the list then lands on its first row, whenever
-		// the kill's sample comes.
+		// the kill's sample comes. Beside the list, the frame waits for the
+		// session's screen, which comes a moment after the row.
 		{name: "kill", at: 37 * time.Second, keys: slices.Concat([]string{"/"}, strings.Split("spark", ""), []string{"enter", "k", "x"}),
-			ok: has("╭─ Kill spark-docs", "tmux kill-pane -t %3")},
+			ok: func(s string) bool {
+				return has("╭─ Kill spark-docs", "tmux kill-pane -t %3")(s) && (phone || strings.Contains(s, "? for shortcuts"))
+			}},
 		// The pane and its agent are both gone: a sample between the two
 		// would list the pane without an agent.
 		{name: "killed", at: 39 * time.Second, key: "y", ok: func(s string) bool {
