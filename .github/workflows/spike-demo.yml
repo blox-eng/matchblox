@@ -39,6 +39,16 @@ jobs:
           xcrun strip -x out/device/probe
           echo "SIZE device executable: $(stat -f%z out/device/probe) bytes"
           echo "SIZE device gzip: $(gzip -c out/device/probe | wc -c) bytes"
+      - name: The real service for a device
+        run: |
+          CC="$(xcrun -sdk iphoneos -f clang) -isysroot $(xcrun -sdk iphoneos --show-sdk-path) -target arm64-apple-ios17.0" \
+          CGO_ENABLED=1 GOOS=ios GOARCH=arm64 go build -trimpath -ldflags='-s -w' -buildmode=c-archive -o out/svc/libsvc.a ./cmd/mbdemosvc
+          ls -l out/svc
+          echo 'int MBServiceProbe(void); int main(void){return MBServiceProbe()==1?0:1;}' > out/svc/p.c
+          xcrun -sdk iphoneos clang -target arm64-apple-ios17.0 -isysroot "$(xcrun -sdk iphoneos --show-sdk-path)" out/svc/p.c out/svc/libsvc.a -framework CoreFoundation -framework Security -framework IOKit -lresolv -Wl,-dead_strip -o out/svc/probe
+          xcrun strip -x out/svc/probe
+          echo "SIZE service device executable: $(stat -f%z out/svc/probe) bytes"
+          echo "SIZE service device gzip: $(gzip -c out/svc/probe | wc -c) bytes"
       - name: Run on a simulator
         run: |
           id=$(xcrun simctl list devices available -j | python3 -c "import json,sys; print(next(d['udid'] for r,ds in json.load(sys.stdin)['devices'].items() if 'iOS' in r for d in ds if 'iPhone' in d['name']))")
