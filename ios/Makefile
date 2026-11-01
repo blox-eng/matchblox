@@ -22,6 +22,18 @@ build: gen ## Compile the app for the simulator, without code signing
 		CODE_SIGNING_ALLOWED=NO \
 		build
 
+.PHONY: release
+release: gen ## Archive the app in Release as TestFlight does, without code signing
+	xcodebuild \
+		-scheme $(SCHEME) \
+		-configuration Release \
+		-destination 'generic/platform=iOS' \
+		-derivedDataPath $(DERIVED) \
+		-archivePath $(DERIVED)/Matchblox.xcarchive \
+		-skipPackagePluginValidation \
+		CODE_SIGNING_ALLOWED=NO \
+		archive
+
 .PHONY: icon
 icon: ## Render the app icon from AppIcon.svg (needs rsvg-convert: brew install librsvg)
 	@command -v rsvg-convert >/dev/null 2>&1 || { echo "rsvg-convert not found. Run: brew install librsvg"; exit 1; }
