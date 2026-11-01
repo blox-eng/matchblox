@@ -3,7 +3,7 @@ import SwiftTerm
 import UIKit
 
 /// The console's terminal, with three ways back to matchblox: a swipe in from the left edge,
-/// a tap on "◂ matchblox" in the tmux status line, and ⌘M. Each one sends `HomeKey`.
+/// a tap on "◂ matchblox" in the tmux status line, and ⌘M or ctrl+M. Each one sends `HomeKey`.
 /// While the program reads the mouse, a vertical swipe sends wheel steps (`WheelScroll`).
 final class ConsoleTerminalView: TerminalView {
     private struct Coast {
@@ -94,9 +94,13 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     override var keyCommands: [UIKeyCommand]? {
-        let home = UIKeyCommand(title: "Back to matchblox", action: #selector(goHome), input: "m", modifierFlags: .command)
-        home.wantsPriorityOverSystemBehavior = true
-        return (super.keyCommands ?? []) + [home]
+        let command = UIKeyCommand(title: "Back to matchblox", action: #selector(goHome), input: "m", modifierFlags: .command)
+        // SwiftTerm's pressesBegan would send ctrl+M as a CR. The app sees the modifier, so the
+        // Return key, which has no ctrl, still goes to the terminal.
+        let control = UIKeyCommand(title: "Back to matchblox", action: #selector(goHome), input: "m", modifierFlags: .control)
+        let home = [command, control]
+        home.forEach { $0.wantsPriorityOverSystemBehavior = true }
+        return (super.keyCommands ?? []) + home
     }
 
     override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
