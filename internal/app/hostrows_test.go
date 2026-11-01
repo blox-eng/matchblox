@@ -456,3 +456,22 @@ func TestTheLostLineOutranksTheChatsKeys(t *testing.T) {
 		t.Fatalf("key line %q, want the lost line %q", ansi.Strip(line), want)
 	}
 }
+
+// A chat closes when the selection lands on another host's row with the
+// same pane id: that pane is another pane, and no key goes to it.
+func TestTheChatClosesOnAnotherHostsPaneOfTheSameID(t *testing.T) {
+	now := lostAt
+	m, _, conns := hostsAt(t, &now, "", 196, 40, "ws-1")
+	m = upd(t, m, stateMsg(stateAt(hostState(sess(1, "api-auth", "%3", nil)), now)))
+	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(stateAt(hostState(sess(2, "train-loop", "%3", nil)), now))})
+	m.tab, m.chose, m.selPID, m.selHost = tabSessions, true, 1, m.opt.Host
+	m = pressKeys(t, m, "enter")
+	if !m.chatKeys {
+		t.Fatal("enter did not open api-auth's chat")
+	}
+	was := m
+	m.selPID, m.selHost = 2, "ws-1"
+	if m = m.keepChat(was); m.chatKeys {
+		t.Fatal("the chat kept the keys on ws-1's %3")
+	}
+}

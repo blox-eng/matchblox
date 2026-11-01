@@ -900,7 +900,7 @@ func (m Model) keepChat(was Model) Model {
 		switch {
 		case ok && s.Pane != "" && s.Pane == before.Pane && m.screen.Pane == s.Pane && m.screen.Gone:
 			m.chatKeys, m.flash = false, "That session ended." // a phone shows the list again: the key line says why
-		case !ok || s.Pane == "" || was.chatKeys && s.Pane != before.Pane:
+		case !ok || s.Pane == "" || s.Host != m.opt.Host || was.chatKeys && (s.Pane != before.Pane || s.Host != before.Host):
 			m.chatKeys = false
 		case !m.chatSeen():
 			m.chatKeys, m.flash = false, m.tooShort(s) // the keys never go to a screen the person cannot see
