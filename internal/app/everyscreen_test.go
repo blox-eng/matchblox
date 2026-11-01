@@ -206,3 +206,38 @@ func TestListOnlyFillsItsFreeRowsWithUsage(t *testing.T) {
 	}
 	golden(t, full, "listonlyfull", 107, 60)
 }
+
+// TestTheCardsTopShowsWhereverTheChatIsBeside: the split counts the chat's
+// title and its strip as they are drawn (the strip takes two lines on a
+// chat of 44 to 59 columns), so the card's top line, with its "1 of 2",
+// is never cut.
+func TestTheCardsTopShowsWhereverTheChatIsBeside(t *testing.T) {
+	for w := 83; w <= 110; w++ {
+		for h := 8; h <= 40; h++ {
+			m := fullView(flintAt(t, w, h))
+			if _, right := m.panes(w); right == 0 {
+				continue
+			}
+			if out := screen(m); !strings.Contains(out, "╭─ flint-auth asks · 1 of 2") {
+				t.Fatalf("%dx%d: the card's top is cut:\n%s", w, h, out)
+			}
+		}
+	}
+}
+
+// TestTheSplitHoldsAsTheCursorMoves: Sessions splits by the tallest card of
+// the sessions that ask, not by the selected one's: moving the cursor never
+// flips the screen between one column and the split.
+func TestTheSplitHoldsAsTheCursorMoves(t *testing.T) {
+	for _, size := range [][2]int{{96, 13}, {96, 14}, {100, 16}, {132, 15}} {
+		m := fullView(flintAt(t, size[0], size[1]))
+		_, want := m.panes(size[0])
+		for range 8 {
+			m = pressKeys(t, m, "up")
+			if _, right := m.panes(size[0]); right != want {
+				s, _ := m.selectedSession()
+				t.Fatalf("%v: on %s the chat is %d wide, on flint-auth %d", size, s.Name, right, want)
+			}
+		}
+	}
+}

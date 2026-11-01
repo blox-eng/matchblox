@@ -203,7 +203,7 @@ func (m Model) drawScreen(w int) drawn {
 		return sc
 	}
 	listW, detailW := m.panes(w)
-	if m.chatKeys && m.tab == tabSessions && detailW == 0 { // one column: the chat takes the screen
+	if place, _ := m.chatPlacement(w); m.chatKeys && place == chatFull { // one column: the chat takes the screen
 		return m.chatScreen(w)
 	}
 	full := max(m.height-5, 1)

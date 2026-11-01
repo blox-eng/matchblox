@@ -128,8 +128,8 @@ func menuWait(it queue.Item) bool {
 // list on a desk or an opened phone, or the whole screen once it has the
 // keys.
 func (m Model) cardDrawn() bool {
-	_, right := m.panes(max(m.width, minWidth))
-	return m.tab == tabSessions && (m.chatKeys || right > 0)
+	place, _ := m.chatPlacement(max(m.width, minWidth))
+	return place == chatBeside || place == chatFull && m.chatKeys
 }
 
 // cardHushed is the card's quiet: what it would send now goes nowhere.

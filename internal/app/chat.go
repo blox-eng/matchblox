@@ -196,9 +196,42 @@ const chatLeast = 44
 // does not come and go with the selection.
 const cardLeast = 6
 
+// chatPlace is where Sessions draws the selected session's chat.
+type chatPlace int
+
+const (
+	chatNone   chatPlace = iota // no room for its question: the key line says so
+	chatBeside                  // the right side of Sessions, beside the list
+	chatFull                    // the whole screen, while it has the keys
+)
+
+// chatPlacement is the one answer to where the selected session's chat is
+// drawn at w columns, and how many rows it has for its title, strip and
+// screen: beside the list where Sessions splits, else the whole screen
+// where that shows its whole wait, else nowhere.
+func (m Model) chatPlacement(w int) (chatPlace, int) {
+	if m.tab != tabSessions {
+		return chatNone, 0
+	}
+	if _, right := m.panes(w); right > 0 {
+		return chatBeside, max(m.height-5, 0)
+	}
+	if m.height == 0 || m.askRows(w) <= m.height-3 {
+		return chatFull, max(m.height-3, 0)
+	}
+	return chatNone, 0
+}
+
+// oneColumn tells if Sessions is one column at w, with no right side: as
+// on a phone, its selected row opens in place and its chat takes the
+// screen.
+func (m Model) oneColumn(w int) bool {
+	_, right := m.panes(w)
+	return m.tab == tabSessions && right == 0
+}
+
 // chatRoom tells if a chat right columns wide fits beside the list: it is
-// at least chatLeast wide, and the body has room for its title, its
-// account line and the whole question card.
+// at least chatLeast wide, and the body has room for chatReserve.
 func (m Model) chatRoom(right int) bool {
 	if right < chatLeast {
 		return false
@@ -206,17 +239,45 @@ func (m Model) chatRoom(right int) bool {
 	if m.height == 0 {
 		return true // no height yet
 	}
-	card := m.askRows(right - 1)
-	if card == 0 {
-		card = cardLeast
-	}
-	return m.height-5 >= 2+card
+	return m.height-5 >= m.chatReserve(right)
 }
 
-// chatFits tells if the chat full-screen, w columns wide, shows its whole
-// question card, or permission prompt, under its title.
-func (m Model) chatFits(w int) bool {
-	return m.height == 0 || m.askRows(w) <= m.height-3
+// chatReserve is the most rows the chat right columns wide takes, of any
+// home session the cursor can move to: its title, its strip as drawn (two
+// lines on a narrow chat) and its whole wait (its card, or the selected
+// one's permission prompt; cardLeast at the least). Sessions splits by it,
+// so the split holds as the cursor moves.
+func (m Model) chatReserve(right int) int {
+	sel, _ := m.selectedSession()
+	most := 1 + cardLeast
+	for _, s := range m.snap.Sessions {
+		if s.Host != m.opt.Host || s.Pane == "" {
+			continue
+		}
+		wait := m.cardHeight(s, right-1)
+		if s.Host == sel.Host && s.PID == sel.PID {
+			wait = max(wait, m.askRows(right-1))
+		}
+		most = max(most, 1+len(m.chatStrip(s, right, 2))+max(wait, cardLeast))
+	}
+	return most
+}
+
+// cardHeight is how many lines s's question card takes w columns wide, at
+// its tallest question; 0 when s asks nothing on a card.
+func (m Model) cardHeight(s sample.Session, w int) int {
+	if s.Ask == nil || w < 8 {
+		return 0
+	}
+	if it, waits := m.waitOf(s); waits && it.State == queue.StatePermission {
+		return 0
+	}
+	iw := min(w, cardMaxW) - 4
+	n := 0
+	for _, q := range s.Ask.Questions {
+		n = max(n, 2+len(wrapPlain(q.Question, iw))+len(q.Options)+1)
+	}
+	return n
 }
 
 // askRows is how many lines w columns wide the chat must show whole for
@@ -277,11 +338,8 @@ func promptBox(text string) string {
 // chatSeen tells if the selected session's chat, with the keys, shows its
 // whole question: beside the list, or full-screen when it fits.
 func (m Model) chatSeen() bool {
-	w := max(m.width, minWidth)
-	if _, right := m.panes(w); right > 0 {
-		return true
-	}
-	return m.chatFits(w)
+	place, _ := m.chatPlacement(max(m.width, minWidth))
+	return place != chatNone
 }
 
 // tooShort is what the key line says when the screen has no room for the
@@ -447,8 +505,9 @@ func (m Model) chatScreen(w int) drawn {
 	}
 	title = fit(title, w)
 	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true, nowX: -1}
-	sc.lines = append(sc.lines, m.screenLines(w, max(m.height-3, 0))...)
-	m.markCard(&sc, len(sc.lines), 0, w, max(m.height-3, 0))
+	_, rows := m.chatPlacement(w)
+	sc.lines = append(sc.lines, m.screenLines(w, rows)...)
+	m.markCard(&sc, len(sc.lines), 0, w, rows)
 	keys, spans := m.keyLine(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, spans
 	sc.lines = append(sc.lines, st.hair.Render(strings.Repeat("─", w)), keys)
