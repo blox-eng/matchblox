@@ -204,7 +204,7 @@ final class ConsoleTerminalView: TerminalView {
     }
 
     /// A jumped tmux pane shows the way back in its status line; the console does not.
-    private var inTmuxPane: Bool {
+    var inTmuxPane: Bool {
         let terminal = getTerminal()
         return [0, terminal.rows - 1].contains { labelColumns(row: $0) != nil }
     }

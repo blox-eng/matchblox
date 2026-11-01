@@ -191,8 +191,10 @@ func TestTapSelectsThenActs(t *testing.T) {
 		t.Fatalf("width %d: selected %q, want %%3", w, it.Pane)
 	}
 	next, cmd = tap(next, 5, sessLine(t, next, "tools"))
-	drain(cmd) // the chat that takes the keys sends its size; no act runs
-	if !chatOn(next, "%3") || ran != nil {
+	// The chat that takes the keys sends its size, and says its agent for
+	// the phone; no act runs.
+	said := slices.ContainsFunc(raws(cmd), func(r string) bool { return strings.Contains(r, "matchblox;agent=") })
+	if !chatOn(next, "%3") || ran != nil || !said {
 		t.Fatalf("width %d: the second tap did not open the chat of tools", w)
 	}
 	if line := actionLine(next); !strings.Contains(line, "keys go to tools") {

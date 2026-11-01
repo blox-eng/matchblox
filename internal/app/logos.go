@@ -67,6 +67,9 @@ func (m Model) graphics(msg graphicsMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.gfxBusy = false
+	if msg.key != m.viewers {
+		m.viewers, m.agentSaid = msg.key, "" // a new viewer knows no agent yet: tellAgent says it again
+	}
 	if !msg.watched {
 		// Nobody shows the console: kitty keeps the images, so the logos
 		// are there the moment the builder comes back.

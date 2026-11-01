@@ -7,6 +7,8 @@ on:
       - "testdata/pair/**"
       - "testdata/push/**"
       - "testdata/home/**"
+      - "testdata/keys/**"
+      - "internal/keycmd/commands.json"
       - ".github/workflows/ios.yml"
   pull_request:
     paths:
@@ -14,6 +16,8 @@ on:
       - "testdata/pair/**"
       - "testdata/push/**"
       - "testdata/home/**"
+      - "testdata/keys/**"
+      - "internal/keycmd/commands.json"
       - ".github/workflows/ios.yml"
 
 permissions:
@@ -36,3 +40,5 @@ jobs:
         run: |
           brew install xcodegen
           make -C ios build
+      - name: The app holds the command table
+        run: test -f ios/build/Build/Products/Debug-iphonesimulator/Matchblox.app/commands.json

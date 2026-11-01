@@ -17,8 +17,11 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/logos"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -482,23 +485,23 @@ func (m Model) upShown() int {
 // nowhere.
 func (m Model) notLive() bool { return m.up > 0 || m.screen.Up > 0 || m.liveWait }
 
-// scrollChat turns the wheel over the chat: up shows earlier lines of the
+// scrollChat moves the chat by lines: up shows earlier lines of the
 // agent's pane, down goes back toward live. The chat takes the keys: it
 // goes back to live when it loses them.
-func (m Model) scrollChat(up bool) Model {
+func (m Model) scrollChat(up bool, lines int) Model {
 	if !m.chatKeys {
 		if m = m.openChat(); !m.chatKeys {
 			return m
 		}
 	}
 	if up {
-		m.up = min(m.up+chatStep, proto.MaxUp)
+		m.up = min(m.up+lines, proto.MaxUp)
 	} else {
 		from := m.up
 		if m.screen.Up > 0 {
 			from = min(from, m.screen.Up) // the history stopped short
 		}
-		m.up = max(from-chatStep, 0)
+		m.up = max(from-lines, 0)
 	}
 	return m
 }
@@ -609,8 +612,8 @@ func (m Model) chatScreen(w int) drawn {
 		title = spread(title, st.accent.Render(ansi.Truncate(m.toast, max(w/2, 1), "…"))+" ", w)
 	}
 	title = fit(title, w)
-	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true, nowX: -1}
 	_, rows := m.chatPlacement(w)
+	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true, chatRows: rows, nowX: -1}
 	sc.lines = append(sc.lines, m.screenLines(w, rows)...)
 	m.markCard(&sc, len(sc.lines), 0, w, rows)
 	keys, spans := m.keyLine(w)
@@ -641,7 +644,9 @@ const homeKey = "\x1b_matchblox\x1b\\"
 // chatKey is one key the chat sends to an agent: the pane and the agent it
 // was pressed for, and when the screen it answers was taken. A card's
 // answer waits among the keys as pick, the said.Answer for the session
-// named name.
+// named name. A command key that runs one of matchblox's own acts on the
+// pane waits as act ("compact:", or "cmd:" with the command's id
+// as text).
 type chatKey struct {
 	pane  string
 	pid   int
@@ -650,6 +655,7 @@ type chatKey struct {
 	seen  time.Time
 	pick  string
 	name  string
+	act   string
 }
 
 // openChat gives the keys to the chat of the selected session, or of the
@@ -829,6 +835,127 @@ func (m Model) chatPaste(text string) (tea.Model, tea.Cmd) {
 	return m.toAgent(name, keys...)
 }
 
+// commandPrefix starts a command key the phone sends: its id follows, then
+// the APC's end (keycmd.Sequence).
+const commandPrefix = "\x1b_matchblox;cmd="
+
+// maxCommandID is the longest command id the key line repeats.
+const maxCommandID = 32
+
+// minSignalTmux is the oldest tmux that passes the agent signal through to
+// the terminal (allow-passthrough).
+const minSignalTmux = "3.3"
+
+// tellAgent writes to the terminal, when it changes, which agent the chat
+// is on, for the phone's Commands: the command table's id, OtherAgent for
+// an agent with no commands, or none for a closed chat. A tmux too old to
+// pass it gets none, and the key line says so once.
+func (m *Model) tellAgent() tea.Cmd {
+	say := m.agentSaid
+	switch {
+	case m.chatKeys:
+		s, _ := m.selectedSession()
+		id := keycmd.AgentOf(s.Agent)
+		if len(keycmd.ForAgent(id)) == 0 {
+			id = keycmd.OtherAgent
+		}
+		say = keycmd.AgentSignal(id)
+	case say != "":
+		say = keycmd.AgentSignal("")
+	}
+	if say == m.agentSaid {
+		return nil
+	}
+	m.agentSaid = say
+	cmd := sayAgent(say, m.opt)
+	if cmd == nil && m.chatKeys && !m.tmuxSaid {
+		m.tmuxSaid, m.flash = true, "COMMANDS · needs tmux "+minSignalTmux
+	}
+	return cmd
+}
+
+// noAgent is the empty agent signal: no chat runs the phone's Commands.
+func noAgent(o Options) tea.Cmd { return sayAgent(keycmd.AgentSignal(""), o) }
+
+// sayAgent writes an agent signal to the terminal, through tmux when the
+// console runs in it; nil for a tmux too old to pass it.
+func sayAgent(say string, o Options) tea.Cmd {
+	switch {
+	case o.OutsideTmux:
+		return tea.Raw(say)
+	case remote.TmuxTooOld(o.LocalTmux, minSignalTmux):
+		return nil
+	}
+	return tea.Raw(logos.Passthrough(say))
+}
+
+// agentGone is the empty agent signal of a console that goes while the app
+// shows an agent's Commands: no chat runs them now.
+func (m *Model) agentGone() tea.Cmd {
+	if m.agentSaid == "" || m.agentSaid == keycmd.AgentSignal("") {
+		return nil
+	}
+	m.chatKeys = false
+	return m.tellAgent()
+}
+
+// commandKey runs the phone's command key apc in the chat, behind the
+// chat's guards, as a key pressed there. Compact runs matchblox's own
+// act on the pane; any other command runs the command act, which
+// types its text and Enter at rest, with no question and no draft. Each
+// names the agent the chat showed. A command the chat's agent does not
+// have sends nothing; an id the table does not know says the host is older.
+// A layer on top takes no command: the key line shows that layer.
+func (m Model) commandKey(apc string) (tea.Model, tea.Cmd) {
+	id, ok := strings.CutPrefix(apc, commandPrefix)
+	id, end := strings.CutSuffix(id, "\x1b\\")
+	c, known := keycmd.ByID(id)
+	if !ok || !end || len(id) > maxCommandID || strings.ContainsFunc(id, unicode.IsControl) {
+		return m, nil
+	}
+	if !known {
+		m.flash = "/" + id + " is new to this console: update matchblox on the host"
+		return m, nil
+	}
+	if !m.chatKeys {
+		m.flash = "commands run from the chat"
+		return m, nil
+	}
+	if m.focus(tea.KeyPressMsg{}) != layerMain {
+		return m, nil // as a paste: a layer on top takes no command
+	}
+	m, touch := m.touchRest()
+	if m.notLive() {
+		return m.backToLive(), touch
+	}
+	m.flash, m.chatTyped = "", m.now()
+	s, _ := m.selectedSession()
+	if keycmd.AgentOf(s.Agent) != c.Agent {
+		m.flash = keycmd.Refusal(c, s.Name, s.Agent)
+		return m, touch
+	}
+	var act, text string
+	switch c.Run {
+	case "compact":
+		act = "compact:"
+	case "type":
+		act, text = proto.CommandPrefix, c.ID
+	default:
+		m.flash = "/" + c.Label + " runs no way this console knows"
+		return m, touch
+	}
+	name, keys := m.pressed(text)
+	for i := range keys {
+		keys[i].act = act
+	}
+	if m.takeOverOn(m.opt.Host) {
+		m.held, m.heldOn = m.heldKeys(name, keys), m.opt.Host
+		return m, touch
+	}
+	next, cmd := m.toAgent(name, keys...)
+	return next, tea.Batch(touch, cmd)
+}
+
 // pasteTexts are the keys of a paste: its text in proto.LitPrefix chunks
 // of at most proto.MaxLit bytes, with Enter for each newline: \n, \r or \r\n, as terminals
 // paste a newline as \r.
@@ -945,8 +1072,11 @@ func (m *Model) sendKey() tea.Cmd {
 	k := m.keyQ[0]
 	m.keyQ = m.keyQ[1:]
 	act := proto.Act{RecID: proto.KeysPrefix + k.pane, Text: k.text, PID: k.pid, Start: k.start, Seen: k.seen}
-	if k.pick != "" {
+	switch {
+	case k.pick != "":
 		act = proto.Act{RecID: proto.PickPrefix + k.pane, Which: "secondary", Confirm: "y", Text: k.pick}
+	case k.act != "":
+		act = proto.Act{RecID: k.act + k.pane, Confirm: "y", PID: k.pid, Start: k.start, Seen: k.seen, Text: k.text}
 	}
 	cmd := m.send(act)
 	m.keyInFlight, m.keyFlying = "a"+strconv.Itoa(m.acts), k

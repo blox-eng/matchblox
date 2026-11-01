@@ -12,7 +12,7 @@ func TestASuggestionIsNoDraft(t *testing.T) {
 	typed := "⏺ Done.\n\n" + frame + "\x1b[39m❯\u00a0add the ci label to 4611\x1b[0m\n" + frame
 	for screen, ok := range map[string]bool{suggests: true, typed: false} {
 		s.Capture = func(panes []string) map[string]string { return map[string]string{"%1": screen} }
-		if err := s.stokable("%1", false); (err == nil) != ok {
+		if err := s.stokable("%1", ""); (err == nil) != ok {
 			t.Fatalf("%q: stokable %v", screen, err)
 		}
 	}

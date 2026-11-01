@@ -224,7 +224,10 @@ type Service struct {
 	driven drivenState
 	// upScreens are the screens of the history sent, which no Enter answers.
 	upScreens upScreens
-	gen       uint64 // counts door writes, so an older sample keeps its hands off
+	// sentAt is when a command or a compact last went to a pane, by pane:
+	// until restLatch after it, the pane is not at rest (latchRest).
+	sentAt map[string]time.Time
+	gen    uint64 // counts door writes, so an older sample keeps its hands off
 	// panes holds a *sync.Mutex per pane: the keys of one act to a pane
 	// never interleave with another's.
 	panes sync.Map
@@ -794,9 +797,32 @@ func (s *Service) idle(pane string) bool {
 
 // resting tells if no turn runs in the pane: idle, or only its subagents
 // work.
+// latchRest keeps pane from rest until a sample taken restLatch from now:
+// a command or a compact just went there.
+func (s *Service) latchRest(pane string) {
+	at := s.now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sentAt == nil {
+		s.sentAt = map[string]time.Time{}
+	}
+	s.sentAt[pane] = at
+}
+
+// restLatch is how long after a command or a compact its pane is not at
+// rest, whatever the samples say: the sample from before the agent began
+// the turn still shows the rest.
+const restLatch = 5 * time.Second
+
 func (s *Service) resting(pane string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if at, ok := s.sentAt[pane]; ok {
+		if !s.cur.At.After(at.Add(restLatch)) {
+			return false
+		}
+		delete(s.sentAt, pane)
+	}
 	for _, ss := range s.cur.Sessions {
 		if ss.Pane == pane {
 			return ss.Resting()
