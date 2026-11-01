@@ -587,7 +587,7 @@ func (c ctrlCMark) is(k chatKey) bool { return c.pane != "" && c.pane == k.pane 
 // goes into the pane, the question card takes its own keys, and every
 // other key goes to the agent.
 func (m Model) chatKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	m.flash = ""
+	m.flash, m.chatTyped = "", m.now()
 	switch {
 	case bkey.Matches(k, m.keys.chat.Back):
 		m.chatKeys = false
@@ -634,6 +634,7 @@ func (m Model) heldKeys(name string, keys []chatKey) func(Model) (tea.Model, tea
 // characters drop.
 func (m Model) chatPaste(text string) (tea.Model, tea.Cmd) {
 	m.flash = ""
+	m.chatTyped = m.now()
 	if s, c, ok := m.cardNow(); ok {
 		return m.cardPaste(s, c, text), nil
 	}
@@ -800,6 +801,10 @@ func (m Model) keyAnswered(r proto.Result) (tea.Model, tea.Cmd) {
 // chatShutHold is how long after the chat closes by itself the keys still
 // typed for it go nowhere, rather than to Sessions' own keys.
 const chatShutHold = time.Second
+
+// chatTypingHold is how long after the person's last key in the chat a
+// focus from the island or another client does not move it.
+const chatTypingHold = 2 * time.Second
 
 // chatJustShut tells if the chat closed by itself a moment ago.
 func (m Model) chatJustShut() bool {

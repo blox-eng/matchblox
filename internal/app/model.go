@@ -304,6 +304,7 @@ type Model struct {
 	askCard    card                            // the question card's answer, in the chat
 	cardSeen   cardSeen                        // the card's quiet: the ask it is for and its start
 	chatShut   time.Time                       // when the chat last closed by itself: keys typed for it go nowhere for a moment
+	chatTyped  time.Time                       // when the person last typed in the chat
 	cardSent   map[string]string               // the card's sends in flight: act id -> the session's name
 	lanes      map[laneKey][lanePast]laneState // each session's last two hours; replaced, never written in place
 	laneStart  time.Time                       // the cell boundary lanes is aligned to
@@ -1006,8 +1007,9 @@ const focusGone = "That session ended."
 // takeFocus opens the session a tap on the island or a buzz asked for, once
 // for each focus the service sends, on Sessions: its chat when it waits,
 // else its pane on the phone's own tmux client. A form, sheet, pair page,
-// take-over or a card with text typed keeps the keys: what the person types
-// there is not thrown away.
+// take-over, a card with text typed or a chat typed to a moment ago keeps
+// the keys: what the person types there is not thrown away, nor sent to
+// another agent. The key line names the agent that asked.
 func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	if f == nil || f.At.Equal(m.focusAt) {
 		return m, nil
@@ -1024,8 +1026,13 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 			break
 		}
 	}
-	typing := m.chatKeys && m.askCard.text != ""
+	typing := m.chatKeys && (m.askCard.text != "" || len(m.keyQ) > 0 || m.keyInFlight != "" || m.now().Before(m.chatTyped.Add(chatTypingHold)))
 	busy := m.pair.owns() || m.sheet != nil || m.form != nil || m.held != nil || typing
+	if typing && found && !f.Gone {
+		if cur, _ := m.selectedSession(); cur.Pane != s.Pane {
+			m.flash = s.Name + " asks for you · the chat stays on " + cur.Name + " while you type"
+		}
+	}
 	if f.Gone || !found {
 		if !busy {
 			m.setTab(tabSessions)

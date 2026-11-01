@@ -249,3 +249,30 @@ func TestFocusOfAGoneSessionDropsAConfirm(t *testing.T) {
 		t.Fatalf("y ran %+v", acts)
 	}
 }
+
+// A focus does not move the chat off an agent the person is typing to: not
+// while keys wait to go, nor for a moment after the last one. The key line
+// names the agent that asked instead. After the moment the focus moves it.
+func TestFocusKeepsAChatBeingTyped(t *testing.T) {
+	st := queueState() // app-feature (%1) asks for permission
+	m, f := loadedWith(t, 100, st)
+	m, now := clocked(m)
+	m = pressKeys(t, onPane(t, m, "%2"), "enter")
+	*now = now.Add(time.Second)
+	m = pressKeys(t, m, "t", "h", "e", "n")
+	if len(keyActs(f)) == 0 {
+		t.Fatal("no key went")
+	}
+	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	next, _ := m.Update(stateMsg(withFocus(st, "%1", at)))
+	m = next.(Model)
+	if s, _ := m.selectedSession(); s.Pane != "%2" || !m.chatKeys || !strings.Contains(m.flash, "app-feature") {
+		t.Fatalf("a focus while typing moved the chat to %s (chatKeys %v), flash %q", s.Pane, m.chatKeys, m.flash)
+	}
+	m.keyInFlight, m.keyQ = "", nil // the keys went
+	*now = now.Add(chatTypingHold)
+	next, _ = m.Update(stateMsg(withFocus(st, "%1", at.Add(time.Second))))
+	if s, _ := next.(Model).selectedSession(); s.Pane != "%1" {
+		t.Fatalf("a focus after the typing stopped stays on %s", s.Pane)
+	}
+}
