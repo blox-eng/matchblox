@@ -39,7 +39,12 @@ screen"). The app draws SF Mono 13 pt, about 7.8 × 16 pt a cell.
    room for the chat's title, its account line and the whole question
    card. Short of either, Sessions is one column, and the chat opens
    full-screen, as on a phone. This covers a phone on its side with the
-   keyboard up and a landscape screen of 60–83 columns.
+   keyboard up and a landscape screen of 60–82 columns (83 leaves a
+   44-column chat). The account line counts as drawn: two lines on a chat
+   of 44–59 columns. The card counted is the tallest of the sessions the
+   cursor can reach, so the split holds as the cursor moves; at a
+   permission prompt, the prompt's whole box counts as the card. Where
+   Sessions is one column the selected row opens in place.
 3. **One split for Sessions.** Where Sessions splits, the list takes 40% of
    the width (at least 38 columns, at most 78) and the chat takes the
    rest. Usage, then Machine, then the Stoker stack under the list, on

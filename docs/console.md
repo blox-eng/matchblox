@@ -39,7 +39,10 @@ Everywhere else they stay in the dock at the bottom.
   draw it, else its mark. Then the provider's name and the plan
   (`✻ Claude Team`, `❋ OpenAI Team`), or the email's name when the
   provider has two accounts. A dock under 50 columns leaves out the plan,
-  and its bars shrink so the reset times stay whole.
+  and its bars shrink so the reset times stay whole; where even then a
+  reset time or a fix does not fit, it goes whole, never cut. With two or
+  more hosts, a window's host cells that do not fit go whole onto the
+  lines under it.
 - A phone or any other terminal that attaches to the console's session
   brings back the marks within about 2 seconds. `NO_COLOR` and tmux 3.2
   or older show the marks. The console lets images through its own pane
@@ -66,7 +69,9 @@ Everywhere else they stay in the dock at the bottom.
   usage, the machine, and the stoker while it claims the dock. The list
   outranks the machine: the stoker, then the machine, folds before the
   list is cut. Usage is never cut. The list and the recommendations give
-  way only to usage alone. A list cut short ends in `↓ <n> more`. The hint
+  way only to usage alone. While a run is in charge, its stoker keeps its
+  place as usage does: the machine folds first, and the list gives way to
+  usage and the stoker. A list cut short ends in `↓ <n> more`. The hint
   never covers the selected row. When the list cannot keep 3 rows and the
   hint under usage, usage folds too.
 - In list only (`v`) the list comes first and is never cut for the stats.
@@ -272,12 +277,16 @@ account, the tokens and the background work.
   columns, at most 78) and the chat the rest, full height. An upright
   iPad mini (95 × 65) gets a 56-column chat in the full view.
 - Sessions splits only when the chat is at least 44 columns wide and the
-  body has room for its title, its account line and the whole question
-  card. Short of either (a phone on its side with the keyboard up, a
-  landscape screen of 60–83 columns), Sessions is one column and the chat
-  opens full-screen, as on a phone. A screen too short for the whole card
-  even then does not open the chat: the key line says `too short to show
-  <name>'s question · ctrl+o goes into its pane`.
+  body has room for its title, its account line as drawn (two lines on a
+  chat of 44 to 59 columns) and the whole question card of any session
+  the cursor can reach, the selected one's permission prompt included: the
+  split holds as the cursor moves. Short of either (a phone on its side
+  with the keyboard up, a landscape screen of 60–82 columns), Sessions is
+  one column: the selected row opens in place, and the chat opens
+  full-screen, as on a phone. A screen too short for the whole card, or
+  for a permission prompt's whole box, even then does not open the chat:
+  the key line says `too short to show <name>'s question · ctrl+o goes
+  into its pane`.
 
 `Enter` gives the keys to the chat (see below). `Ctrl+O` jumps to the pane.
 Come back from a jump and the next agent that waits is already selected.
