@@ -24,9 +24,9 @@
  ○ Clear wick-mobile (%7)                │
 ─────────────────────────────────────────│
  USAGE                                   │
- ✻ Claude        5h   ▰▰▰ 84%  · Fri 01:…│
-                 wk   ▰▰▱ 82%  · Mon 09:…│
- · Google login  not measured · OpenCode…│ ⏺ The refresh endpoint is in and its tests pass.
+ ✻ Claude        5h   ▰▰▰ 84%            │
+                 wk   ▰▰▱ 82%            │
+ · Google login  not measured            │ ⏺ The refresh endpoint is in and its tests pass.
  ❋ OpenAI        5h ▰▱▱ 40% · wk 12%     │ ╭─ flint-auth asks · 1 of 2 ────────────────────────────────╮
 ─────────────────────────────────────────│ │ Should a refresh also rotate the token?                   │
  MACHINE                        16 cores │ │ › 1 Rotate it  the old one stops at once                  │

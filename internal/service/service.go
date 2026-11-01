@@ -231,6 +231,8 @@ type Service struct {
 	// panes holds a *sync.Mutex per pane: the keys of one act to a pane
 	// never interleave with another's.
 	panes sync.Map
+	// sizes are the chats' sizes and the agents' windows sized to them.
+	sizes chatSizes
 	// grantMu makes each y one check and one go: two consoles pressing it
 	// at once on one step give one go.
 	grantMu sync.Mutex
@@ -362,6 +364,7 @@ func (s *Service) Serve(ctx context.Context, l net.Listener) error {
 	s.mu.Lock()
 	s.runDone = runDone
 	s.mu.Unlock()
+	s.restoreSized() // a service before this one may have ended with windows sized
 	go func() { s.Run(ctx); close(runDone) }()
 	sock := ""
 	if a, ok := l.Addr().(*net.UnixAddr); ok {
@@ -381,6 +384,7 @@ func (s *Service) Serve(ctx context.Context, l net.Listener) error {
 	}()
 	<-ctx.Done()
 	l.Close()
+	s.unsizeAll()
 	s.stopClones(cloneStopWait) // a clone cut off removes its partial folder first
 	// The sample loop can still be writing its first state file when the
 	// socket disappears during startup. Finish it before Serve returns.
@@ -945,6 +949,7 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 	cl.kick <- struct{}{}
 	s.join(cl)
 	defer s.leave(cl)
+	defer s.unwatchSizes(cl) // the console goes: its chats size no window
 
 	done := make(chan struct{})
 	defer close(done)
@@ -991,6 +996,9 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 			res.ActID = env.ID
 			_ = c.Send(proto.KindResult, env.ID, res)
 			continue
+		}
+		if h.Client == proto.ClientConsole {
+			s.keyedSize(cl, a)
 		}
 		go func(id string) {
 			// A console in a pane the stoker drove, or in the stoker's own,

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -46,8 +47,46 @@ func commandTest(t *testing.T, agent, screen string) (*Service, *[][]string) {
 	return s, &ran
 }
 
+// command is a console's command act on the agent of commandTest, for a
+// live screen the console showed a minute into the night.
 func command(id string) proto.Act {
-	return proto.Act{Console: true, RecID: proto.CommandPrefix + "%1", Text: id, PID: 42, Confirm: "y"}
+	return proto.Act{Console: true, RecID: proto.CommandPrefix + "%1", Text: id, PID: 42, Seen: night0.Add(time.Minute), Confirm: "y"}
+}
+
+// consoleCompact is the chat's compact act on the agent pid of commandTest.
+func consoleCompact(pid int) proto.Act {
+	a := command("")
+	a.RecID, a.PID = "compact:%1", pid
+	return a
+}
+
+// TestACommandNeedsTheLiveScreenSeen: a command and a compact end in an
+// Enter, so they go, as an Enter does, only for a live screen the console
+// showed, and only to the agent it showed, by pid and start.
+func TestACommandNeedsTheLiveScreenSeen(t *testing.T) {
+	restartedErr := map[string]string{
+		proto.CommandPrefix + "%1": "/review not sent: %1 runs a different agent now",
+		"compact:%1":               "another agent runs in %1 now",
+	}
+	for _, a := range []proto.Act{command("review"), consoleCompact(42)} {
+		s, ran := commandTest(t, "claude", idleScreen)
+		unseen := a
+		unseen.Seen = time.Time{}
+		if res := s.act(t.Context(), unseen); !strings.HasSuffix(res.Err, "the console has not shown work's screen yet — look again") || len(*ran) != 0 {
+			t.Fatalf("%s unseen: res %+v ran %q", a.RecID, res, *ran)
+		}
+		history := a
+		history.Seen = s.upScreens.stamp("%1", s.now, true)
+		if res := s.act(t.Context(), history); !strings.HasSuffix(res.Err, "that screen was work's history, not the live screen — look again") || len(*ran) != 0 {
+			t.Fatalf("%s history: res %+v ran %q", a.RecID, res, *ran)
+		}
+		s, ran = commandTest(t, "claude", idleScreen)
+		restarted := a
+		restarted.Start = 9
+		if res := s.act(t.Context(), restarted); res.Err != restartedErr[a.RecID] || len(*ran) != 0 {
+			t.Fatalf("%s restarted: res %+v ran %q", a.RecID, res, *ran)
+		}
+	}
 }
 
 func TestCommandTypesItsTextThenEnterAtRest(t *testing.T) {
@@ -145,13 +184,13 @@ func TestCommandOnlyFromAConsoleAndOnlyATypedOne(t *testing.T) {
 func TestCompactFromTheChatChecksTheAgent(t *testing.T) {
 	for _, pid := range []int{41, 0} {
 		s, ran := commandTest(t, "claude", idleScreen)
-		res := s.act(t.Context(), proto.Act{Console: true, RecID: "compact:%1", PID: pid, Confirm: "y"})
+		res := s.act(t.Context(), consoleCompact(pid))
 		if res.Err != "another agent runs in %1 now" || len(*ran) != 0 {
 			t.Fatalf("pid %d: res %+v ran %q", pid, res, *ran)
 		}
 	}
 	s, ran := commandTest(t, "claude", idleScreen)
-	if res := s.act(t.Context(), proto.Act{Console: true, RecID: "compact:%1", PID: 42, Confirm: "y"}); res.Err != "" || len(*ran) != 2 {
+	if res := s.act(t.Context(), consoleCompact(42)); res.Err != "" || len(*ran) != 2 {
 		t.Fatalf("res %+v ran %q", res, *ran)
 	}
 }

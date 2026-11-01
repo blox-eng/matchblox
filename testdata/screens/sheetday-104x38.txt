@@ -26,13 +26,13 @@
                                          │
 ─────────────────────────────────────────│
  USAGE                                   │
- ✻ Claude        5h   ▰▰▰ 84%  · Fri 01:…│
-                 wk   ▰▰▱ 82%  · Mon 09:…│
- · Google login  not measured · OpenCode…│
+ ✻ Claude        5h   ▰▰▰ 84%            │
+                 wk   ▰▰▱ 82%            │
+ · Google login  not measured            │
  ❋ OpenAI        5h ▰▱▱ 40% · wk 12%     │
 ─────────────────────────────────────────│
  STOKER                               on │
  watching 0 · 0 compacted · 0 waited · 0…│
  no session full yet                     │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ chat  a chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit      sampled 0s ago
+ ↑↓ move  ⏎ chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit     sampled 0s ago

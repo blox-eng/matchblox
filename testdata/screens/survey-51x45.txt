@@ -9,7 +9,7 @@
    “The refresh flow works and the tests pass. One
    choice is yours before I wire the rotation.”
    #4545 ●━✕┄○┄○┄○  conflicts with main
-    ▲ clear               a chat  A switch  ⏎ chat
+    ▲ clear                       A switch  ⏎ chat
 ───────────────────────────────────────────────────
  ╿ kindle-web                   asks      1m   56%
  ╿ cinder-ci                    done      0s   55%
@@ -37,9 +37,9 @@
  ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20
                  wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00
                  out Fri ~21:00
- · Google login  not measured · OpenCode keeps no …
+ · Google login  not measured
  ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59
                  wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00
                  lasts the week
 ───────────────────────────────────────────────────
- ⏎ chat  a chat  x kill  r rename  N new
+ ⏎ chat  x kill  r rename  N new  full view v

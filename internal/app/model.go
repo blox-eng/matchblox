@@ -300,9 +300,14 @@ type Model struct {
 	watchHeld  string                          // the pane the service refused, until the next snapshot
 	up         int                             // the lines up the chat shows of the agent's history; 0 is live
 	watchUp    int                             // the lines up the service sends
+	watchSize  [2]int                          // the chat's size the service sizes the agent's window to: cols, rows
+	watchSince time.Time                       // when the watched pane was selected: its size waits sizeDwell
+	sizeTick   time.Time                       // the watchSince a sizeDueMsg is on its way for
 	liveWait   bool                            // the chat came back from the history, and waits for the live screen
 	askCard    card                            // the question card's answer, in the chat
 	cardSeen   cardSeen                        // the card's quiet: the ask it is for and its start
+	chatShut   time.Time                       // when the chat last closed by itself: keys typed for it go nowhere for a moment
+	chatTyped  time.Time                       // when the person last typed in the chat
 	cardSent   map[string]string               // the card's sends in flight: act id -> the session's name
 	lanes      map[laneKey][lanePast]laneState // each session's last two hours; replaced, never written in place
 	laneStart  time.Time                       // the cell boundary lanes is aligned to
@@ -356,6 +361,7 @@ type Model struct {
 	tmuxSaid    bool      // the key line said this tmux passes no agent signal
 	keyQ        []chatKey // the chat's keys behind the one in flight
 	keyInFlight string    // the act id of the chat's key the service has not answered
+	keyFlying   chatKey   // the key in flight
 	ctrlC       ctrlCMark // the last ^C the chat sent, and when it went
 	ctrlCHeld   ctrlCMark // the agent whose next ^C goes: one came within a second of the last
 	touched     map[string]time.Time
@@ -630,7 +636,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.commandKey(string(msg))
+	case sizeDueMsg:
+		return m, nil // Update sends the size, if it is due
+	case ctrlCLapsed:
+		return m.lapseCtrlC(msg), nil
 	case screenMsg:
+		if msg.Pane == m.watching && msg.Err != "" {
+			m.flash = msg.Err // a read that failed: the session and its last screen stay
+			return m, m.recv()
+		}
 		if msg.Pane == m.watching && (msg.Up == 0 || m.watchUp > 0) { // the history after live is not live
 			m.screen = proto.Screen(msg)
 			m.liveWait = m.liveWait && msg.Up > 0
@@ -802,6 +816,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.hostCount() == 1 {
 			lost = append(lost, "connection lost: "+msg.err.Error())
 		}
+		if n := len(m.keyQ); n > 0 { // keepChat drops them: the agent may hold half a line
+			lost = append(lost, "not sent: "+plural(n, "key")+", the connection dropped")
+		}
 		if m.batch != nil {
 			// Their results went with the connection; a peer's still come.
 			var home []string
@@ -934,12 +951,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m, touch = m.touchRest()
 		}
 		f := m.focus(msg)
+		if m.chatJustShut() && (f == layerMain || bkey.Matches(msg, m.keys.global.Quit)) && !bkey.Matches(msg, m.keys.chat.Back) {
+			return m, touch // typed for the chat that just closed: no q quits, no letter acts
+		}
 		if m.chatKeys && f == layerMain && bkey.Matches(msg, m.keys.chat.PageUp, m.keys.chat.PageDown) {
 			m.flash = ""
 			page := max(m.draw(max(m.width, minWidth)).chatRows, 1)
 			return m.scrollChat(bkey.Matches(msg, m.keys.chat.PageUp), page), touch
 		}
 		if m.notLive() && m.chatKeys && (f == layerMain || f == layerTakeOver) {
+			if bkey.Matches(msg, m.keys.chat.Back) { // the way back works from the history too
+				m.chatKeys, m.up = false, 0
+				return m, touch
+			}
 			return m.backToLive(), touch
 		}
 		// ctrl+c quits from every layer but a question, where any key but
@@ -1014,8 +1038,9 @@ const focusGone = "That session ended."
 // takeFocus opens the session a tap on the island or a buzz asked for, once
 // for each focus the service sends, on Sessions: its chat when it waits,
 // else its pane on the phone's own tmux client. A form, sheet, pair page,
-// take-over or a card with text typed keeps the keys: what the person types
-// there is not thrown away.
+// take-over, a card with text typed or a chat typed to a moment ago keeps
+// the keys: what the person types there is not thrown away, nor sent to
+// another agent. The key line names the agent that asked.
 func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	if f == nil || f.At.Equal(m.focusAt) {
 		return m, nil
@@ -1032,8 +1057,13 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 			break
 		}
 	}
-	typing := m.chatKeys && m.askCard.text != ""
+	typing := m.chatKeys && (m.askCard.text != "" || len(m.keyQ) > 0 || m.keyInFlight != "" || m.now().Before(m.chatTyped.Add(chatTypingHold)))
 	busy := m.pair.owns() || m.sheet != nil || m.form != nil || m.held != nil || typing
+	if typing && found && !f.Gone {
+		if cur, _ := m.selectedSession(); cur.Pane != s.Pane {
+			m.flash = s.Name + " asks for you · the chat stays on " + cur.Name + " while you type"
+		}
+	}
 	if f.Gone || !found {
 		if !busy {
 			m.setTab(tabSessions)

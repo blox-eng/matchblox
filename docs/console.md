@@ -39,7 +39,10 @@ Everywhere else they stay in the dock at the bottom.
   draw it, else its mark. Then the provider's name and the plan
   (`✻ Claude Team`, `❋ OpenAI Team`), or the email's name when the
   provider has two accounts. A dock under 50 columns leaves out the plan,
-  and its bars shrink so the reset times stay whole.
+  and its bars shrink so the reset times stay whole; where even then a
+  reset time or a fix does not fit, it goes whole, never cut. With two or
+  more hosts, a window's host cells that do not fit go whole onto the
+  lines under it.
 - A phone or any other terminal that attaches to the console's session
   brings back the marks within about 2 seconds. `NO_COLOR` and tmux 3.2
   or older show the marks. The console lets images through its own pane
@@ -66,7 +69,9 @@ Everywhere else they stay in the dock at the bottom.
   usage, the machine, and the stoker while it claims the dock. The list
   outranks the machine: the stoker, then the machine, folds before the
   list is cut. Usage is never cut. The list and the recommendations give
-  way only to usage alone. A list cut short ends in `↓ <n> more`. The hint
+  way only to usage alone. While a run is in charge, its stoker keeps its
+  place as usage does: the machine folds first, and the list gives way to
+  usage and the stoker. A list cut short ends in `↓ <n> more`. The hint
   never covers the selected row. When the list cannot keep 3 rows and the
   hint under usage, usage folds too.
 - In list only (`v`) the list comes first and is never cut for the stats.
@@ -272,12 +277,16 @@ account, the tokens and the background work.
   columns, at most 78) and the chat the rest, full height. An upright
   iPad mini (95 × 65) gets a 56-column chat in the full view.
 - Sessions splits only when the chat is at least 44 columns wide and the
-  body has room for its title, its account line and the whole question
-  card. Short of either (a phone on its side with the keyboard up, a
-  landscape screen of 60–83 columns), Sessions is one column and the chat
-  opens full-screen, as on a phone. A screen too short for the whole card
-  even then does not open the chat: the key line says `too short to show
-  <name>'s question · ctrl+o goes into its pane`.
+  body has room for its title, its account line as drawn (two lines on a
+  chat of 44 to 59 columns) and the whole question card of any session
+  the cursor can reach, the selected one's permission prompt included: the
+  split holds as the cursor moves. Short of either (a phone on its side
+  with the keyboard up, a landscape screen of 60–82 columns), Sessions is
+  one column: the selected row opens in place, and the chat opens
+  full-screen, as on a phone. A screen too short for the whole card, or
+  for a permission prompt's whole box, even then does not open the chat:
+  the key line says `too short to show <name>'s question · ctrl+o goes
+  into its pane`.
 
 `Enter` gives the keys to the chat (see below). `Ctrl+O` jumps to the pane.
 Come back from a jump and the next agent that waits is already selected.
@@ -385,6 +394,33 @@ again`. The card has a second guard with the same words. For 400 ms after a
 card first shows, and after it moves to the next question, it sends nothing.
 So an `Enter` never answers a question you have not read.
 
+While the chat shows an agent, the agent's tmux window takes the chat's
+size: the columns and rows the chat gives the agent's screen, under its
+title and strip and over its card. The agent redraws at that size, so its
+tables, boxes and diffs look as they do in its own terminal, and the chat
+draws its lines as they are. When the console resizes, the chat moves
+beside the list or full screen, or the card comes or goes, the window
+takes the new size. The window gets its own size back when no chat
+watches it: the selection moves, the console closes or loses the service,
+or the service stops. A service that ended without that puts the windows
+back when it starts again. A terminal attached to the agent's session
+sees the window shrink to the chat's size while the chat watches it.
+
+- Two consoles on one agent (a phone and a desk): the one that sent the
+  agent a key last sizes the window, else the one that opened it last.
+  When it leaves, the other's size applies.
+- Browsing resizes no agent: the window takes the chat's size once the
+  session has stayed selected for 1 second, or at once when the chat
+  takes the keys. The window the selection leaves gets its size back at
+  once.
+- A chat that is not on screen (another tab, the list on a phone) keeps
+  its size, so the agent does not redraw at each tab.
+- A window of several panes keeps its size: resizing it would reflow the
+  other panes. The chat then wraps the agent's lines to its width and
+  keeps the bottom rows, as it does for a service before sizes, and for
+  the first screen before the window takes the size.
+- The window is never sized under 20 × 5 or over what tmux allows.
+
 The mouse wheel over the chat, or a swipe on a phone, shows the earlier
 lines of the agent's pane, 3 lines for each step, up to 2000 lines. The
 wheel down goes back toward the live screen. While the chat shows the
@@ -393,7 +429,8 @@ line says `a key goes back to live`. The first
 key then goes back to the live screen and goes to no agent: a key, a paste
 or a key of the card. The key line says `back to live — the agent did not
 get that key`. The chat is blank until the live screen comes, and keys go
-nowhere until then. A tap on the title also goes back to the live screen, and so
+nowhere until then. The history above the live screen was drawn at the
+window's earlier size, so the chat wraps it to its width. A tap on the title also goes back to the live screen, and so
 does a change of the selected session or a click on the list. The service
 refuses an `Enter` that answers a screen of the history.
 

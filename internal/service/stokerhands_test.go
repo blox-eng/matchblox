@@ -297,7 +297,7 @@ func TestNoAgentActsOnTheStokersSession(t *testing.T) {
 // the first one waits: until a sample taken restLatch after the send
 // shows the rest. A compact latches the pane too.
 func TestACommandLatchesThePaneBusy(t *testing.T) {
-	for _, first := range []proto.Act{command("review"), {Console: true, RecID: "compact:%1", PID: 42, Confirm: "y"}} {
+	for _, first := range []proto.Act{command("review"), consoleCompact(42)} {
 		s, ran := commandTest(t, "claude", idleScreen)
 		s.Now = func() time.Time { return night0 }
 		screen := idleScreen

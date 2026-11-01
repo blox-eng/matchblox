@@ -8,6 +8,8 @@ import (
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/blox-eng/matchblox/internal/proto"
 )
 
 // The console's keys, as data: one keymap per layer, one bkey.Binding per
@@ -294,7 +296,7 @@ func (k confirmKeys) bindings() []bkey.Binding {
 // keyNames are the keys the chat sends by name.
 var keyNames = map[string]string{
 	"up": "Up", "down": "Down", "left": "Left", "right": "Right", "enter": "Enter", "tab": "Tab",
-	"shift+tab": "BTab", "esc": "Escape", "ctrl+c": "C-c", "backspace": "BSpace", "space": "lit: ",
+	"shift+tab": "BTab", "esc": "Escape", "ctrl+c": "C-c", "backspace": "BSpace", "space": proto.LitPrefix + " ",
 }
 
 // The names the chat sends for Enter and for ^C.
@@ -303,7 +305,7 @@ var (
 	ctrlCName = keyNames["ctrl+c"]
 )
 
-// keyName is k as the service takes it: a key name, or "lit:" and the
+// keyName is k as the service takes it: a key name, or proto.LitPrefix and the
 // text it types. A key with no name and no text is not sent.
 func keyName(k tea.KeyPressMsg) (text string, ok bool) {
 	if name, ok := keyNames[k.String()]; ok {
@@ -312,7 +314,7 @@ func keyName(k tea.KeyPressMsg) (text string, ok bool) {
 	if k.Mod&^tea.ModShift != 0 || k.Text == "" || strings.IndexFunc(k.Text, unicode.IsControl) >= 0 {
 		return "", false
 	}
-	return "lit:" + k.Text, true
+	return proto.LitPrefix + k.Text, true
 }
 
 // keyPress is the key a tap presses.

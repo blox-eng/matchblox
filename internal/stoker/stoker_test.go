@@ -293,3 +293,12 @@ func TestPlanSkipsHeld(t *testing.T) {
 		t.Fatalf("a held session was stepped on: %+v", got)
 	}
 }
+
+// TestACommandEndingInASemicolonTypesIt: a command goes through the
+// literal send, so tmux does not read its final ";" as the end of argv.
+func TestACommandEndingInASemicolonTypesIt(t *testing.T) {
+	a := CommandAction("%1", 42, 7, "/run a;", true)
+	if typed := a.Steps[0]; typed[len(typed)-1] != `/run a\;` {
+		t.Fatalf("typed %q", typed)
+	}
+}

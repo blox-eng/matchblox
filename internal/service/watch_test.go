@@ -83,7 +83,13 @@ func (r *reader) act(t *testing.T, id, recID string) proto.Result {
 // actText is act with the act's text.
 func (r *reader) actText(t *testing.T, id, recID, text string) proto.Result {
 	t.Helper()
-	if err := r.c.Send(proto.KindAct, id, proto.Act{RecID: recID, Text: text}); err != nil {
+	return r.actWith(t, id, proto.Act{RecID: recID, Text: text})
+}
+
+// actWith sends the act a and waits for its result.
+func (r *reader) actWith(t *testing.T, id string, a proto.Act) proto.Result {
+	t.Helper()
+	if err := r.c.Send(proto.KindAct, id, a); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(waitLimit)
@@ -248,15 +254,19 @@ func TestWatchSendsAStillScreenAgainForANewerWait(t *testing.T) {
 	}
 }
 
+// A pane whose session left is gone: one screen says so.
 func TestWatchPaneGone(t *testing.T) {
-	s, _, ctx := watchTest(t, map[string]string{}, "%1")
+	s, f, ctx := watchTest(t, map[string]string{"%1": idleScreen})
 	c := connectAs(t, ctx, s, proto.ClientConsole)
 	r := read(c)
 	if res := r.act(t, "w", proto.WatchPrefix+"%1"); res.Err != "" {
 		t.Fatal(res.Err)
 	}
+	r.screenThat(t, func(sc proto.Screen) bool { return sc.Text == idleScreen })
+	f.leave()
+	r.screenThat(t, func(sc proto.Screen) bool { return sc.Gone && sc.Err == "" })
 	time.Sleep(500 * time.Millisecond)
-	if g := r.got(); len(g) != 1 || g[0].Pane != "%1" || !g[0].Gone {
+	if g := r.got(); len(g) != 2 || !g[1].Gone {
 		t.Fatalf("screens %+v, want one gone", g)
 	}
 }
@@ -482,7 +492,7 @@ func TestEnterSeenOnTheHistoryIsRefused(t *testing.T) {
 		t.Fatalf("enter on the history: %+v", res)
 	}
 	r.actText(t, "w2", proto.WatchPrefix+"%1", "up:0")
-	live := r.screenThat(t, func(sc proto.Screen) bool { return sc.Up == 0 && sc.Text == idleScreen })
+	live := r.screenThat(t, func(sc proto.Screen) bool { return sc.Up == 0 && sc.Text == idleScreen && s.waitShown("%1", sc.At) })
 	if res := enter(live.At); res.Err != "" || len(res.Ran) != 1 {
 		t.Fatalf("enter on the live screen: %+v", res)
 	}
@@ -508,7 +518,7 @@ func TestEnterSeenOnAnyOfManyHistoryScreensIsRefused(t *testing.T) {
 		}
 	}
 	r.actText(t, "live", proto.WatchPrefix+"%1", "up:0")
-	live := r.screenThat(t, func(sc proto.Screen) bool { return sc.Up == 0 && sc.At.After(ups[39].At) })
+	live := r.screenThat(t, func(sc proto.Screen) bool { return sc.Up == 0 && sc.At.After(ups[39].At) && s.waitShown("%1", sc.At) })
 	if res := enter(live.At); res.Err != "" || len(res.Ran) != 1 {
 		t.Fatalf("enter on the live screen: %+v", res)
 	}
@@ -554,5 +564,50 @@ func TestTheLiveConsoleEnterGoesWhileAnotherIsUp(t *testing.T) {
 	live := g[len(g)-1]
 	if res := s.act(ctx, proto.Act{Console: true, RecID: proto.KeysPrefix + "%1", Text: "Enter", PID: 100, Seen: live.At}); res.Err != "" || len(res.Ran) != 1 {
 		t.Fatalf("the live console's Enter: %+v", res)
+	}
+}
+
+// A pane with no history answers a watch up with its live screen. Each
+// watch act still gets a screen back, so the console that scrolled up and
+// back sees the live screen again (it blanks the chat until one comes).
+func TestEveryWatchGetsAScreenBack(t *testing.T) {
+	s, f, ctx := watchTest(t, map[string]string{"%1": "up 0\n"})
+	f.history = 0
+	c := connectAs(t, ctx, s, proto.ClientConsole)
+	r := read(c)
+	r.act(t, "w", proto.WatchPrefix+"%1")
+	r.screenThat(t, func(proto.Screen) bool { return true })
+	for i, up := range []string{"up:3", "up:0", "up:6", ""} {
+		n := len(r.got())
+		r.actText(t, fmt.Sprint("w", i), proto.WatchPrefix+"%1", up)
+		deadline := time.Now().Add(waitLimit)
+		for len(r.got()) == n && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+		if len(r.got()) == n {
+			t.Fatalf("no screen came back for watch %q", up)
+		}
+	}
+}
+
+// A pane that tmux fails to read is not a session that ended: the screen
+// says the read failed, never Gone, and a good read after it is sent again.
+func TestACaptureErrorIsNotGone(t *testing.T) {
+	s, f, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	c := connectAs(t, ctx, s, proto.ClientConsole)
+	r := read(c)
+	r.act(t, "w", proto.WatchPrefix+"%1")
+	r.screenThat(t, func(sc proto.Screen) bool { return sc.Text == idleScreen })
+	f.mu.Lock()
+	delete(f.screens, "%1") // tmux fails: the capture drops the pane
+	f.mu.Unlock()
+	failed := r.screenThat(t, func(sc proto.Screen) bool { return sc.Err != "" || sc.Gone })
+	if failed.Gone || failed.Err == "" {
+		t.Fatalf("a failed read: %+v", failed)
+	}
+	f.set("%1", idleScreen)
+	back := r.screenThat(t, func(sc proto.Screen) bool { return sc.At.After(failed.At) && sc.Err == "" })
+	if back.Text != idleScreen || back.Gone {
+		t.Fatalf("the read after it: %+v", back)
 	}
 }

@@ -655,3 +655,43 @@ func TestGhostsAreBuiltWithTheRepos(t *testing.T) {
 		t.Fatalf("ghosts sorted the repos again: %+v", g[0].repo)
 	}
 }
+
+// TestScanBoxWaitsForTheChat: a scan question that comes while the chat
+// has the keys takes none of them: what the person types goes to the
+// agent. When ctrl+] gives the keys back the box shows, in a new quiet,
+// and then y answers it.
+func TestScanBoxWaitsForTheChat(t *testing.T) {
+	st := lifeState()
+	m, f := loadedWith(t, 100, st)
+	pane := ""
+	for _, s := range m.snap.Sessions {
+		if s.Pane != "" && s.Host == m.opt.Host {
+			pane = s.Pane
+			break
+		}
+	}
+	m = pressKeys(t, pastQuiet(onPane(t, m, pane)), "enter")
+	if !m.chatKeys {
+		t.Fatal("enter did not open the chat")
+	}
+	next, _ := m.Update(stateMsg(askState()))
+	m = pressKeys(t, calm(next), "y", "e", "s")
+	if m.scanShown() || slices.ContainsFunc(f.acts(), func(a proto.Act) bool { return strings.HasPrefix(a.RecID, "scan:") }) || len(keyActs(f)) == 0 {
+		t.Fatalf("the box took the chat's keys: shown %v acts %+v", m.scanShown(), f.acts())
+	}
+	m = pressKeys(t, m, "ctrl+]")
+	if m.chatKeys || !m.scanShown() {
+		t.Fatalf("after ctrl+]: chat %v box %v", m.chatKeys, m.scanShown())
+	}
+	n := len(f.acts())
+	next, cmd := key(m, "y")
+	sendAll(t, cmd)
+	if len(f.acts()) != n || !next.(Model).scanShown() {
+		t.Fatalf("y in the new quiet: sent %+v", f.acts()[n:])
+	}
+	_, cmd = key(calm(next), "y")
+	sendAll(t, cmd)
+	if a := f.acts()[n:]; len(a) != 1 || a[0].RecID != "scan:yes" {
+		t.Fatalf("sent %+v", a)
+	}
+}

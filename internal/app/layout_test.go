@@ -140,14 +140,14 @@ func TestAPhoneRowOpensInPlace(t *testing.T) {
 	if !strings.Contains(out[at+1], "“Claude needs your permission to use Bash”") {
 		t.Fatalf("no last words under the row:\n%s", strings.Join(out, "\n"))
 	}
-	// The plan and the keys share no line at 50 columns: each gets its own.
-	if !strings.Contains(out[at+2], "plan 75%") || !strings.Contains(out[at+2], "! compact") || !strings.Contains(out[at+3], "a chat  A switch  ⏎ chat") {
+	// With one chat hint the plan and the keys share a line at 50 columns.
+	if !strings.Contains(out[at+2], "plan 75%") || !strings.Contains(out[at+2], "! compact") || !strings.Contains(out[at+2], "A switch  ⏎ chat") {
 		t.Fatalf("no plan and keys:\n%s", strings.Join(out[at:at+4], "\n"))
 	}
-	if !strings.HasPrefix(out[at-1], "────") || !strings.HasPrefix(out[at+4], "────") {
+	if !strings.HasPrefix(out[at-1], "────") || !strings.HasPrefix(out[at+3], "────") {
 		t.Fatalf("the opened block is not between hairlines:\n%s", strings.Join(out, "\n"))
 	}
-	if sessLine(t, m, "app-review") != at+5 || strings.Contains(out[at+6], "“") {
+	if sessLine(t, m, "app-review") != at+4 || strings.Contains(out[at+5], "“") {
 		t.Fatalf("the rows that are not selected open too:\n%s", strings.Join(out, "\n"))
 	}
 	if lineOf(t, m, "WAITS FOR YOU · 2") > lineOf(t, m, "QUIET · 1") {
@@ -156,7 +156,7 @@ func TestAPhoneRowOpensInPlace(t *testing.T) {
 	// Selected, app-review (done) offers its chat.
 	next, _ := key(m, "down")
 	out = strings.Split(ansi.Strip(next.(Model).render()), "\n")
-	if at := sessLine(t, next, "app-review"); !strings.Contains(out[at+1], "a chat  A switch  ⏎ chat") {
+	if at := sessLine(t, next, "app-review"); !strings.Contains(out[at+1], "A switch  ⏎ chat") {
 		t.Fatalf("no a for a session that waits for an answer:\n%s", strings.Join(out, "\n"))
 	}
 	for tab := range tabNames {
@@ -191,12 +191,10 @@ func TestTapSelectsThenActs(t *testing.T) {
 		t.Fatalf("width %d: selected %q, want %%3", w, it.Pane)
 	}
 	next, cmd = tap(next, 5, sessLine(t, next, "tools"))
-	msgs := cmdMsgs(cmd) // only the agent the chat is on, for the phone
-	if len(msgs) != 1 {
-		t.Fatalf("width %d: the second tap gave %#v, want only the agent", w, msgs)
-	}
-	said, _ := msgs[0].(tea.RawMsg)
-	if !chatOn(next, "%3") || ran != nil || !strings.Contains(fmt.Sprint(said.Msg), "matchblox;agent=") {
+	// The chat that takes the keys sends its size, and says its agent for
+	// the phone; no act runs.
+	said := slices.ContainsFunc(raws(cmd), func(r string) bool { return strings.Contains(r, "matchblox;agent=") })
+	if !chatOn(next, "%3") || ran != nil || !said {
 		t.Fatalf("width %d: the second tap did not open the chat of tools", w)
 	}
 	if line := actionLine(next); !strings.Contains(line, "keys go to tools") {
@@ -401,10 +399,10 @@ func TestTheKeyLineIsAtTheBottom(t *testing.T) {
 			return out[len(out)-1]
 		}
 		// A phone drops the spare keys first: p ships is a tab tap away.
-		if l := last(m); !strings.Contains(l, "⏎ chat") || !strings.Contains(l, "a chat") || !strings.Contains(l, "x kill") || !strings.Contains(l, "N new") || w > 60 && !strings.Contains(l, "p ships") {
+		if l := last(m); !strings.Contains(l, "⏎ chat") || strings.Contains(l, "a chat") || !strings.Contains(l, "x kill") || !strings.Contains(l, "N new") || w > 60 && !strings.Contains(l, "p ships") {
 			t.Fatalf("width %d: the keys are not at the bottom: %q", w, l)
 		}
-		if l := last(selectPane(t, m, "%3")); !strings.Contains(l, "a chat") {
+		if l := last(selectPane(t, m, "%3")); !strings.Contains(l, "⏎ chat") {
 			t.Fatalf("width %d: the keys are not at the bottom: %q", w, l)
 		}
 		if strings.Contains(ansi.Strip(strings.Split(m.render(), "\n")[2]), "open") {

@@ -15,11 +15,11 @@ import (
 )
 
 // paneActs are the acts that name a pane after the colon.
-var paneActs = []string{"message:", "pick:", "answer:", "compact:", "hold:", "release:", "park:", "kill:", "rename:", "switch:", proto.KeysPrefix, proto.CommandPrefix}
+var paneActs = []string{"message:", proto.PickPrefix, "answer:", "compact:", "hold:", "release:", "park:", "kill:", "rename:", "switch:", proto.KeysPrefix, proto.CommandPrefix}
 
 // typedPane is the pane a message, an answer or a pick types into.
 func typedPane(recID string) string {
-	for _, p := range []string{"message:", "answer:", "pick:"} {
+	for _, p := range []string{"message:", "answer:", proto.PickPrefix} {
 		if pane, ok := strings.CutPrefix(recID, p); ok {
 			return pane
 		}
@@ -135,15 +135,12 @@ func (s *Service) recordOrder(a proto.Act, res proto.Result) {
 // own compacts: Claude Code, at rest, not waiting for you or held, not
 // compacted in the last 30 minutes, and the pane read again right before
 // each key. A refusal says which. A console names the agent it showed
-// (PID); the CLI may name none.
+// (PID and Start) and the screen it saw; the CLI may name none.
 func (s *Service) compact(ctx context.Context, pane string, a proto.Act) proto.Result {
 	if x, ok := s.sessionAt(pane); ok && x.Agent != "claude" {
 		return proto.Result{Err: x.Name + " is not a Claude Code session: /compact is typed only there"}
 	}
-	if a.Console && a.PID <= 0 {
-		return proto.Result{Err: "another agent runs in " + pane + " now"}
-	}
-	x, err := s.restsFor(pane, "compact", a.PID)
+	x, err := s.restsFor(pane, "compact", a)
 	if err != nil {
 		return proto.Result{Err: err.Error()}
 	}
@@ -181,15 +178,20 @@ func (s *Service) compact(ctx context.Context, pane string, a proto.Act) proto.R
 	return res
 }
 
-// restsFor is the session in pane when /<cmd> may go to it: agent pid (any
-// agent for 0), one the builder may message, not waiting for them, and at
-// rest.
-func (s *Service) restsFor(pane, cmd string, pid int) (sample.Session, error) {
+// restsFor is the session in pane when /<cmd>, sent by act a, may go to
+// it: the agent a names (any agent for the CLI's pid 0; a console's by pid
+// and start), one the builder may message, not waiting for them, and at
+// rest. A console's command ends in an Enter, so it needs the live screen
+// seen, as an Enter does (unseen).
+func (s *Service) restsFor(pane, cmd string, a proto.Act) (sample.Session, error) {
 	x, ok := s.sessionAt(pane)
 	if !ok {
 		return x, errors.New("no agent session in " + pane + " any more")
 	}
-	if err := s.messageable(pane, cmp.Or(pid, x.PID)); err != nil {
+	if a.Console && !sameAgent(x, a) {
+		return x, errors.New("another agent runs in " + pane + " now")
+	}
+	if err := s.messageable(pane, cmp.Or(a.PID, x.PID)); err != nil {
 		return x, err
 	}
 	if it, ok := s.queued(pane); ok && stoker.Waits(it) {
@@ -197,6 +199,11 @@ func (s *Service) restsFor(pane, cmd string, pid int) (sample.Session, error) {
 	}
 	if !s.resting(pane) {
 		return x, fmt.Errorf("%s is not at rest: a %s waits for the end of its turn", x.Name, cmd)
+	}
+	if a.Console {
+		if why := s.unseen(pane, x.Name, proto.Act{Text: "Enter", Seen: a.Seen}, x.Permits || x.Asks); why != "" {
+			return x, errors.New(strings.TrimPrefix(why, "not sent: "))
+		}
 	}
 	return x, nil
 }
@@ -222,12 +229,12 @@ func (s *Service) command(ctx context.Context, pane string, a proto.Act) proto.R
 	switch {
 	case !ok:
 		return notSent("no agent session in " + pane + " any more")
-	case a.PID <= 0 || x.PID != a.PID:
+	case !sameAgent(x, a):
 		return notSent(pane + " runs a different agent now")
 	case keycmd.AgentOf(x.Agent) != c.Agent:
 		return proto.Result{Err: keycmd.Refusal(c, x.Name, x.Agent)}
 	}
-	if _, err := s.restsFor(pane, "/"+c.Label, a.PID); err != nil {
+	if _, err := s.restsFor(pane, "/"+c.Label, a); err != nil {
 		return notSent(err.Error())
 	}
 	res := s.Actions.Do(ctx, stoker.CommandAction(pane, x.PID, x.Start, c.Text, readsPrompt[x.Agent]), a.Confirm)

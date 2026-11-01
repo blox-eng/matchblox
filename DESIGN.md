@@ -187,6 +187,14 @@ Reduce Motion.
 
 ## 6. Console layout
 
+> **2026-11-01:** Sessions now follows
+> [docs/superpowers/specs/2026-11-01-every-screen-chat-design.md](docs/superpowers/specs/2026-11-01-every-screen-chat-design.md):
+> where it splits, the list takes 40% of the width and the chat the rest;
+> usage, the machine and the stoker stack under the list; Sessions has no
+> bottom dock; the chat takes the place of the bottom peek. Where this
+> section says otherwise of Sessions, that spec stands; the other tabs keep
+> what it says here.
+
 - **Screen** (design/0006, owner 2026-10-12): top to bottom, the header,
   the tabs, a hairline, the body of the open tab, the dock when it fits,
   a hairline and the key line.

@@ -6,7 +6,7 @@
  QUIET · 60                                                                        │
 ───────────────────────────────────────────────────────────────────────────────────┼───────────────────────
 ▌╿ agent-00             idle       1m fresh                                       ╌│
-                                                                                  a chat  A switch  ⏎ chat
+                                                                                          A switch  ⏎ chat
 ───────────────────────────────────────────────────────────────────────────────────┼───────────────────────
  ╿ agent-01             idle       1m fresh                                       ╌│
  ╿ agent-02             idle       1m fresh                                       ╌│
@@ -57,4 +57,4 @@
  ╿ agent-47             idle       1m fresh                                       ╌│
  ╿ agent-48             idle       1m fresh                                       ╌│
 ───────────────────────────────────────────────────────────────────────────────────┴───────────────────────
- ⏎ chat  a chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  full view v
+ ⏎ chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  full view v          sampled 0s ago

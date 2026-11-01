@@ -249,7 +249,7 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	if door {
 		key += "\x00" + a.Text
 	}
-	askPane, pick := strings.CutPrefix(a.RecID, "pick:")
+	askPane, pick := strings.CutPrefix(a.RecID, proto.PickPrefix)
 	if pick {
 		key += "\x00" + a.Text
 	}

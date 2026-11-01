@@ -24,9 +24,9 @@
  ○ Clear wick-mobile (%7)                │
 ─────────────────────────────────────────│
  USAGE                                   │
- ✻ Claude        5h   ▰▰▰ 84%  · Fri 01:…│
-                 wk   ▰▰▱ 82%  · Mon 09:…│
- · Google login  not measured · OpenCode…│
+ ✻ Claude        5h   ▰▰▰ 84%            │
+                 wk   ▰▰▱ 82%            │
+ · Google login  not measured            │
  ❋ OpenAI        5h ▰▱▱ 40% · wk 12%     │
 ─────────────────────────────────────────│
  MACHINE                        16 cores │

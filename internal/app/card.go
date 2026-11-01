@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -41,11 +42,12 @@ type card struct {
 // question nobody has read.
 const cardQuiet = 400 * time.Millisecond
 
-// cardSeen is the pane and the ask a card or a chat showed for, and when
-// its quiet started.
+// cardSeen is the pane and the ask a card or a chat showed for, the start
+// of the wait it showed, and when its quiet started.
 type cardSeen struct {
 	pane  string
 	askID string
+	since time.Time
 	at    time.Time
 }
 
@@ -78,7 +80,7 @@ func (m Model) cardTakes(k tea.KeyPressMsg) bool {
 	}
 	ck := m.keys.card
 	text, _ := keyName(k)
-	return bkey.Matches(k, ck.Send, ck.Up, ck.Down, ck.Erase) || strings.HasPrefix(text, "lit:")
+	return bkey.Matches(k, ck.Send, ck.Up, ck.Down, ck.Erase) || strings.HasPrefix(text, proto.LitPrefix)
 }
 
 // cardSends tells if k, on the card, answers the question: ⏎, or a digit
@@ -93,20 +95,47 @@ func (m Model) cardSends(k tea.KeyPressMsg) bool {
 }
 
 // noteCard starts the quiet of a card drawn for an ask it was not drawn for
-// before.
+// before, and of a chat on screen that shows a menu (a permission prompt or
+// a question) it did not show before: the cursor came to it, or the wait
+// began while it was shown.
 func (m Model) noteCard() Model {
-	if s, _, ok := m.cardNow(); ok && s.Ask.ID != m.cardSeen.askID && m.cardDrawn() {
-		m.cardSeen = cardSeen{pane: s.Pane, askID: s.Ask.ID, at: m.now()}
+	newCard := false
+	if s, _, ok := m.cardNow(); ok && s.Ask.ID != m.cardSeen.askID {
+		newCard = true
+	}
+	s, ok := m.selectedSession()
+	if !ok || s.Pane == "" || s.Host != m.opt.Host {
+		return m
+	}
+	it, waits := m.waitOf(s)
+	newWait := waits && menuWait(it) && (m.cardSeen.pane != s.Pane || !m.cardSeen.since.Equal(it.Since))
+	if !newCard && !newWait || !m.cardDrawn() { // cardDrawn last: it lays the screen out
+		return m
+	}
+	if newCard {
+		m.cardSeen = cardSeen{pane: s.Pane, askID: s.Ask.ID, since: m.cardSeen.since, at: m.now()}
+	}
+	if newWait {
+		m.cardSeen = cardSeen{pane: s.Pane, since: it.Since, at: m.now()}
+		if s.Ask != nil {
+			m.cardSeen.askID = s.Ask.ID
+		}
 	}
 	return m
+}
+
+// menuWait tells if a wait is answered on a menu: a digit or Enter there
+// picks.
+func menuWait(it queue.Item) bool {
+	return it.State == queue.StatePermission || it.State == queue.StateQuestion
 }
 
 // cardDrawn tells if the chat, and so its card, is on screen: beside the
 // list on a desk or an opened phone, or the whole screen once it has the
 // keys.
 func (m Model) cardDrawn() bool {
-	_, right := m.panes(max(m.width, minWidth))
-	return m.tab == tabSessions && (m.chatKeys || right > 0)
+	place, _ := m.chatPlacement(max(m.width, minWidth))
+	return place == chatBeside || place == chatFull && m.chatKeys
 }
 
 // cardHushed is the card's quiet: what it would send now goes nowhere.
@@ -197,17 +226,44 @@ func (m Model) cardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case !typing && bkey.Matches(k, ck.Tick) && q.Multi && c.at >= 0:
 		c.ticks = toggled(c.ticks, c.at+1)
-	case k.Text != "" && len([]rune(c.text)) < 500:
+	case k.Text != "" && len([]rune(c.text)) < maxCardText:
 		c.at, c.text = n, c.text+k.Text
 	}
 	m.askCard = c
 	return m, nil
 }
 
+// maxCardText is the most the card's typing row holds.
+const maxCardText = 500
+
+// cardPaste puts a paste on the card's typing row: a newline as a space,
+// the other control keys out, up to maxCardText. It never goes to the
+// agent, whose own menu the chat hides.
+func (m Model) cardPaste(s sample.Session, c card, text string) Model {
+	text = strings.TrimRight(strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(text), "\n")
+	text = strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n':
+			return ' '
+		case unicode.IsControl(r):
+			return -1
+		}
+		return r
+	}, text)
+	c.at = len(s.Ask.Questions[c.q].Options)
+	if r := []rune(c.text + text); len(r) > maxCardText {
+		c.text = string(r[:maxCardText])
+	} else {
+		c.text += text
+	}
+	m.askCard = c
+	return m
+}
+
 func toggled(ticks map[int]bool, i int) map[int]bool {
-	out := map[int]bool{}
-	for k, v := range ticks {
-		out[k] = v
+	out := maps.Clone(ticks)
+	if out == nil {
+		out = map[int]bool{}
 	}
 	out[i] = !out[i]
 	return out
@@ -239,16 +295,16 @@ func (m Model) sendCard(s sample.Session, answer string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.askCard = card{askID: s.Ask.ID, at: -1}
-	m.queueKey(chatKey{pane: s.Pane, pid: s.PID, pick: answer, name: s.Name})
+	m.queueKey(chatKey{pane: s.Pane, pid: s.PID, start: s.Start, pick: answer, name: s.Name})
 	cmd := m.sendKey()
 	toast := m.say("sending to " + s.Name + "…")
-	m = m.pairActed(action{rec: "pick:" + s.Pane})
+	m = m.pairActed(action{rec: proto.PickPrefix + s.Pane})
 	return m, tea.Batch(cmd, toast)
 }
 
 // cardAnswered is the service's answer to the card's: the toast says "sent
 // to" only when every key went; a guard that stopped it says why on the key
-// line, and the keys behind it drop, as behind a refused key.
+// line, and the keys behind it for its agent drop, as behind a refused key.
 func (m Model) cardAnswered(name string, r proto.Result) (tea.Model, tea.Cmd) {
 	m.cardSent = maps.Clone(m.cardSent)
 	delete(m.cardSent, r.ActID)
@@ -257,8 +313,11 @@ func (m Model) cardAnswered(name string, r proto.Result) (tea.Model, tea.Cmd) {
 		why = r.Skipped[n-1]
 	}
 	if why != "" {
-		m.keyQ, m.toast, m.flash = nil, "", tilde("not sent to "+name+": "+why)
-		return m, m.recv()
+		f := m.keyFlying // the keys behind it for its agent drop; another's answer still goes
+		m.keyQ = slices.DeleteFunc(slices.Clone(m.keyQ), func(k chatKey) bool { return k.pick == "" && k.pane == f.pane && k.pid == f.pid })
+		m.toast, m.flash = "", tilde("not sent to "+name+": "+why)
+		cmd := m.sendKey()
+		return m, tea.Batch(m.recv(), cmd)
 	}
 	toast := m.say("sent to " + name)
 	cmd := m.sendKey()

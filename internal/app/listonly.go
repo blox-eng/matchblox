@@ -38,8 +38,14 @@ func (m Model) listOnly() bool {
 	return m.viewPrefs.ListOnlyDesk
 }
 
-// inPlace: the selected row opens under itself, as on a phone.
-func (m Model) inPlace() bool { return m.layoutAt(m.width) == Narrow || m.listOnly() }
+// inPlace: the selected row opens under itself, as on a phone: on a
+// phone, in list only, and wherever Sessions has no right side short of
+// the lanes' width (a wider list keeps its rows one line, the lanes in
+// them).
+func (m Model) inPlace() bool {
+	w := max(m.width, minWidth)
+	return m.layoutAt(m.width) == Narrow || m.listOnly() || w < laneMin && m.oneColumn(w)
+}
 
 // flipListOnly turns list only on or off for the shape the screen has now.
 func (m *Model) flipListOnly() {

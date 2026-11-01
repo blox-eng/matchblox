@@ -1098,7 +1098,7 @@ func TestNoCardAtAPermissionPrompt(t *testing.T) {
 	if lines := m.cardLines(60); len(lines) != 0 {
 		t.Fatalf("a card at a permission prompt: %q", lines)
 	}
-	pressKeys(t, m, "enter")
+	pressKeys(t, pastQuiet(m), "enter")
 	if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" || len(pickActs(f)) != 0 {
 		t.Fatalf("acts %+v", f.acts())
 	}
@@ -1106,7 +1106,9 @@ func TestNoCardAtAPermissionPrompt(t *testing.T) {
 
 // On a phone the chat is not on screen until Enter opens it: an Enter or a
 // digit at once goes nowhere, as the builder has not read the prompt. After
-// the moment they go. On a desk the chat was already beside the list.
+// the moment they go. On a desk the chat beside the list shows the prompt
+// only from the moment the cursor lands on it: a double Enter there is
+// quiet too.
 func TestAPhoneChatIsQuietAtAPermissionPrompt(t *testing.T) {
 	m, f := loadedWith(t, 44, queueState()) // app-feature (%1) asks for permission
 	m, now := clocked(m)
@@ -1121,10 +1123,42 @@ func TestAPhoneChatIsQuietAtAPermissionPrompt(t *testing.T) {
 	}
 
 	m, f = loadedWith(t, 100, queueState())
-	m, _ = clocked(m)
-	pressKeys(t, onPane(t, m, "%1"), "enter", "enter")
+	m, now = clocked(m)
+	m = pressKeys(t, onPane(t, m, "%1"), "enter", "enter")
+	if !m.chatKeys || len(keyActs(f)) != 0 {
+		t.Fatalf("a desk's double enter: chatKeys %v acts %+v", m.chatKeys, f.acts())
+	}
+	*now = now.Add(cardQuiet)
+	pressKeys(t, m, "enter")
 	if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" {
-		t.Fatalf("a desk's chat was on screen: acts %+v", f.acts())
+		t.Fatalf("a desk after the quiet: acts %+v", f.acts())
+	}
+}
+
+// A wait that begins while the chat shows its session is quiet too: the
+// Enter meant for the line typed a moment ago does not approve the prompt
+// that just came.
+func TestANewWaitInTheChatIsQuiet(t *testing.T) {
+	for _, w := range []int{44, 100} {
+		st := queueState()
+		st.Queue = st.Queue[1:] // app-feature (%1) works
+		m, f := loadedWith(t, w, st)
+		m, now := clocked(m)
+		m = pressKeys(t, onPane(t, m, "%1"), "enter")
+		*now = now.Add(time.Second)
+		if !m.chatKeys {
+			t.Fatalf("%d: enter did not open the chat", w)
+		}
+		next, _ := m.Update(stateMsg(queueState())) // now it asks for permission
+		m = pressKeys(t, next.(Model), "enter")
+		if len(keyActs(f)) != 0 || m.flash != askedAgain("app-feature") {
+			t.Fatalf("%d: enter at once on the new wait: acts %+v flash %q", w, keyActs(f), m.flash)
+		}
+		*now = now.Add(cardQuiet)
+		pressKeys(t, m, "enter")
+		if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" {
+			t.Fatalf("%d: after the quiet: acts %+v", w, f.acts())
+		}
 	}
 }
 
@@ -1414,7 +1448,7 @@ func TestNoCardAtAPermissionPromptWithAnAsk(t *testing.T) {
 	if lines := m.cardLines(60); len(lines) != 0 {
 		t.Fatalf("a card at a permission prompt: %q", lines)
 	}
-	pressKeys(t, m, "enter")
+	pressKeys(t, pastQuiet(m), "enter")
 	if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" || len(pickActs(f)) != 0 {
 		t.Fatalf("acts %+v", f.acts())
 	}
@@ -1588,7 +1622,7 @@ func TestAgentMenuCutKeepsAPlainRule(t *testing.T) {
 func commandChat(t *testing.T, agent string) (Model, *fakeConn) {
 	t.Helper()
 	st := fixtureState()
-	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a", Agent: agent}, {PID: 2, Pane: "%2", Name: "b"}}
+	st.Sessions = []sample.Session{{PID: 1, Start: 5, Pane: "%1", Name: "a", Agent: agent}, {PID: 2, Pane: "%2", Name: "b"}}
 	m, f := loadedWith(t, 100, st)
 	m = onPane(t, m, "%1")
 	next, _ := m.Update(screenMsg{Pane: m.watching, At: time.Unix(100, 0), Text: "> "})
@@ -1614,7 +1648,7 @@ func command(t *testing.T, m Model, id string) Model {
 func TestCompactKeyRunsTheCompactAct(t *testing.T) {
 	m, f := commandChat(t, "claude")
 	m = command(t, m, "compact")
-	if got := f.acts(); len(got) != 1 || got[0].RecID != "compact:%1" || got[0].Confirm != "y" || got[0].PID != 1 {
+	if got := f.acts(); len(got) != 1 || got[0].RecID != "compact:%1" || got[0].Confirm != "y" || got[0].PID != 1 || got[0].Start != 5 || !got[0].Seen.Equal(time.Unix(100, 0)) {
 		t.Fatalf("acts %+v", got)
 	}
 	if m.flash != "" {
@@ -1625,7 +1659,7 @@ func TestCompactKeyRunsTheCompactAct(t *testing.T) {
 func TestClearKeyRunsTheCommandAct(t *testing.T) {
 	m, f := commandChat(t, "claude")
 	command(t, m, "clear")
-	if got := f.acts(); len(got) != 1 || got[0].RecID != proto.CommandPrefix+"%1" || got[0].Text != "clear" || got[0].Confirm != "y" || got[0].PID != 1 {
+	if got := f.acts(); len(got) != 1 || got[0].RecID != proto.CommandPrefix+"%1" || got[0].Text != "clear" || got[0].Confirm != "y" || got[0].PID != 1 || got[0].Start != 5 || !got[0].Seen.Equal(time.Unix(100, 0)) {
 		t.Fatalf("acts %+v", got)
 	}
 }
@@ -1968,5 +2002,210 @@ func TestAMalformedCommandKeyDoesNothing(t *testing.T) {
 		if m = next.(Model); len(f.acts()) != 0 || m.flash != "" || !m.chatKeys {
 			t.Fatalf("%q: acts %+v flash %q keys %v", apc, f.acts(), m.flash, m.chatKeys)
 		}
+	}
+}
+
+// permitScreen is Claude Code at a permission prompt: what it runs, then the
+// menu, in a box.
+const permitScreen = `⏺ I'll clear the old build first.
+
+╭──────────────────────────────────────────╮
+│ Bash command                             │
+│                                          │
+│   rm -rf ~/work/build                    │
+│   Remove the build directory             │
+│                                          │
+│ Do you want to proceed?                  │
+│ ❯ 1. Yes                                 │
+│   2. Yes, and don't ask again            │
+│   3. No, and tell Claude what to do      │
+╰──────────────────────────────────────────╯`
+
+// Rule 2 at a permission prompt: the chat opens only where the prompt's
+// whole box shows, the command it approves with it. Else the key line says
+// it is too short and no key goes.
+func TestAPromptTooTallForTheScreenGetsNoKeys(t *testing.T) {
+	for _, size := range [][2]int{{96, 8}, {106, 10}, {44, 12}} {
+		m := sized(t, size[0], size[1], queueState()) // app-feature (%1) asks for permission
+		m = onPane(t, m, "%1")
+		next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(100, 0), Text: permitScreen})
+		m = pressKeys(t, next.(Model), "enter")
+		if m.chatKeys || !strings.Contains(m.flash, "too short to show app-feature") {
+			t.Fatalf("%v: chatKeys %v flash %q\n%s", size, m.chatKeys, m.flash, screen(m))
+		}
+	}
+	for _, size := range [][2]int{{44, 31}, {96, 20}} {
+		m := sized(t, size[0], size[1], queueState())
+		m = onPane(t, m, "%1")
+		next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(100, 0), Text: permitScreen})
+		m = pressKeys(t, next.(Model), "enter")
+		if !m.chatKeys || !strings.Contains(screen(m), "rm -rf ~/work/build") {
+			t.Fatalf("%v: chatKeys %v\n%s", size, m.chatKeys, screen(m))
+		}
+	}
+}
+
+// The prompt's box starts at its top: a box's ╭, or the rule Claude Code
+// draws over a prompt without a box.
+func TestThePromptBoxStartsAtItsTop(t *testing.T) {
+	ruled := "⏺ Clearing.\n\n────────────────────\n Bash command\n\n   rm -rf build\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No"
+	if got := promptBox(ruled); !strings.HasPrefix(got, "────") || !strings.HasSuffix(got, "2. No") {
+		t.Errorf("ruled: %q", got)
+	}
+	if got := promptBox(permitScreen); !strings.HasPrefix(got, "╭") || strings.Count(got, "\n") != 10 {
+		t.Errorf("boxed: %q", got)
+	}
+}
+
+// When the chat closes by itself, the keys the person is still typing for
+// the agent do not fall into Sessions' keys: for a moment none acts, and
+// neither q nor ctrl+c quits. ctrl+] still goes; after the moment the keys
+// are Sessions' again.
+func TestKeysAfterTheChatClosesByItselfDoNothing(t *testing.T) {
+	for _, closer := range []string{"too short", "ended"} {
+		m, f := askModel(t, 96, threeWays)
+		m, now := clocked(m)
+		var next tea.Model
+		switch closer {
+		case "too short":
+			next, _ = m.Update(tea.WindowSizeMsg{Width: 96, Height: 8})
+		case "ended":
+			next, _ = m.Update(screenMsg{Pane: "%1", At: time.Unix(200, 0), Gone: true})
+		}
+		m = next.(Model)
+		if m.chatKeys {
+			t.Fatalf("%s: the chat kept the keys", closer)
+		}
+		before := len(f.acts())
+		for _, k := range []string{"q", "ctrl+c", "x", "r", "N"} {
+			next, cmd := key(m, k)
+			drain(cmd)
+			if nm := next.(Model); nm.quitting || nm.pending != nil || nm.form != nil || nm.sheet != nil || len(f.acts()) != before {
+				t.Fatalf("%s: %s acted: quitting %v pending %v acts %+v", closer, k, nm.quitting, nm.pending, f.acts()[before:])
+			}
+		}
+		*now = now.Add(chatShutHold)
+		if next, _ := key(m, "q"); !next.(Model).quitting {
+			t.Fatalf("%s: q after the moment did not quit", closer)
+		}
+	}
+}
+
+// A paste while the card is up goes on the card's typing row, newlines
+// and all control keys out: never to the agent's own menu, which the chat
+// hides.
+func TestAPasteOnTheCardGoesOnItsTypingRow(t *testing.T) {
+	m, f := askModel(t, 100, threeWays)
+	next, cmd := m.Update(tea.PasteMsg{Content: "keep the old key\r\nfor a day\n"})
+	drain(cmd)
+	m = next.(Model)
+	if len(keyActs(f)) != 0 || len(pickActs(f)) != 0 {
+		t.Fatalf("the paste went to the agent: keys %+v picks %+v", keyActs(f), pickActs(f))
+	}
+	if c := m.askCard; c.text != "keep the old key for a day" || c.at != len(threeWays.Options) {
+		t.Fatalf("card %+v", c)
+	}
+}
+
+// A screen the service could not read is not a session that ended: the
+// chat keeps its keys and the last screen, and the key line says why.
+func TestAFailedReadKeepsTheChat(t *testing.T) {
+	m, _ := inChat(t)
+	next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(101, 0), Err: "could not read %1: tmux did not answer"})
+	m = next.(Model)
+	if !m.chatKeys || m.screen.Text != "> " || !strings.Contains(m.flash, "could not read") {
+		t.Fatalf("chatKeys %v screen %+v flash %q", m.chatKeys, m.screen, m.flash)
+	}
+}
+
+// A held ^C lapses with its window, and its hint with it: a ^C long after
+// is held again, as a first one near the last sent, never sent as the stop.
+func TestAHeldCtrlCLapses(t *testing.T) {
+	m, f := inChat(t)
+	now := time.Unix(1000, 0)
+	m.opt.Now = func() time.Time { return now }
+	m = answered(t, pressKeys(t, m, "ctrl+c"), "")
+	now = now.Add(500 * time.Millisecond)
+	next, cmd := key(m, "ctrl+c")
+	m = next.(Model)
+	if !strings.Contains(m.flash, "again stops the agent") || cmd == nil {
+		t.Fatalf("flash %q cmd %v", m.flash, cmd)
+	}
+	now = now.Add(ctrlCWindow)
+	next, _ = m.Update(cmd())
+	m = next.(Model)
+	if m.flash != "" || m.ctrlCHeld != (ctrlCMark{}) {
+		t.Fatalf("after the window: flash %q held %+v", m.flash, m.ctrlCHeld)
+	}
+	m = pressKeys(t, m, "ctrl+c") // the last one went 1.5 s ago: a ^C of its own
+	if got := keyActs(f); len(got) != 2 {
+		t.Fatalf("acts: %+v", got)
+	}
+}
+
+// Keys that wait when the connection drops are dropped, and the key line
+// says so: the agent's input box may hold half a line.
+func TestKeysDroppedWithTheConnectionSaySo(t *testing.T) {
+	m, f := inChat(t)
+	m = pressKeys(t, m, "r", "u", "n", "enter")
+	if len(m.keyQ) == 0 {
+		t.Fatal("no key waits")
+	}
+	next, _ := m.Update(lostMsg{io.EOF, f})
+	m = next.(Model)
+	if m.keyQ != nil || !strings.Contains(m.flash, "not sent: 2 keys, the connection dropped") {
+		t.Fatalf("queue %+v flash %q", m.keyQ, m.flash)
+	}
+}
+
+// A refused key drops the keys behind it for its agent, which were typed
+// for a screen no longer there; a card's answer queued behind it still
+// goes.
+func TestARefusedKeyKeepsACardsAnswer(t *testing.T) {
+	m, f := inChat(t)
+	other := slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return s.Host == m.opt.Host && s.Pane != "" && s.Pane != "%1" })
+	b := m.all.sessions[other]
+	m = pressKeys(t, m, "a")
+	m.keyQ = append(m.keyQ, chatKey{pane: b.Pane, pid: b.PID, start: b.Start, pick: `{"id":"toolu_9"}`, name: b.Name})
+	m = pressKeys(t, m, "b")
+	m = answered(t, m, "not sent: x asks something new — look again")
+	if got := pickActs(f); len(got) != 1 || got[0].RecID != "pick:"+b.Pane {
+		t.Fatalf("the card's answer was dropped: picks %+v queue %+v flash %q", got, m.keyQ, m.flash)
+	}
+	if slices.ContainsFunc(keyActs(f), func(a proto.Act) bool { return a.Text == "lit:b" }) || len(m.keyQ) != 0 {
+		t.Fatalf("the key behind the refused one went: keys %+v queue %+v", keyActs(f), m.keyQ)
+	}
+}
+
+// A key names the agent it was pressed for by its pid and its start, as
+// the service checks it.
+func TestAKeyNamesTheAgentsStart(t *testing.T) {
+	st := queueState()
+	st.Queue = nil
+	for i := range st.Sessions {
+		st.Sessions[i].Start = uint64(70 + i)
+	}
+	m, f := loadedWith(t, 100, st)
+	m = pressKeys(t, onPane(t, m, "%2"), "enter")
+	s, _ := m.selectedSession()
+	pressKeys(t, m, "x")
+	if got := keyActs(f); len(got) != 1 || got[0].PID != s.PID || got[0].Start != s.Start || s.Start == 0 {
+		t.Fatalf("acts %+v, session pid %d start %d", got, s.PID, s.Start)
+	}
+}
+
+// An agent's screen reaches the console's terminal with its colours only:
+// a hyperlink (OSC 8), any other OSC, an APC or a DCS goes, its text stays.
+func TestTheScreenDropsLinksAndOtherControls(t *testing.T) {
+	text := "see \x1b]8;;https://evil.example/\x1b\\the docs\x1b]8;;\x1b\\ \x1b[1mbold\x1b[0m" +
+		" \x1b]0;title\x07\x1b_apc\x1b\\\x1bPdcs\x1b\\end"
+	out := strings.Join(fitScreen(text, 80, 5), "\n")
+	for _, bad := range []string{"\x1b]", "\x1b_", "\x1bP", "evil"} {
+		if strings.Contains(out, bad) {
+			t.Errorf("%q kept %q", out, bad)
+		}
+	}
+	if ansi.Strip(out) != "see the docs bold end" || !strings.Contains(out, "\x1b[1m") {
+		t.Errorf("text or colours lost: %q", out)
 	}
 }

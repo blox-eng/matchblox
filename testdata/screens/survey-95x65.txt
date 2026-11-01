@@ -9,7 +9,7 @@
    “The refresh flow works and the tests pass. One choice is yours before I wire the
    rotation.”
    #4545 ●━✕┄○┄○┄○  conflicts with main
-    ▲ clear                                                           a chat  A switch  ⏎ chat
+    ▲ clear                                                                   A switch  ⏎ chat
 ───────────────────────────────────────────────────────────────────────────────────────────────
  ╿ kindle-web                                asks       1m   56%  ▲ clear
  ╿ cinder-ci                                 done       0s   55%  ▲ clear
@@ -62,4 +62,4 @@
  disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
  runs 5 claude · 1 codex · 1 opencode
 ───────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ chat  a chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  full view v
+ ⏎ chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  full view v

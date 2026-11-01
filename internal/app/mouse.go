@@ -138,8 +138,8 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	picked := m.view().index != nil && m.rowIndex() == sc.rows[i] && (m.tab != tabSessions || m.chose)
 	m.selectRow(sc.rows[i])
-	if s, ok := m.selectedSession(); ok && s.Pane != "" && s.Host == m.opt.Host && m.tab == tabSessions && m.layoutAt(w) == Narrow {
-		m.armed = "" // a phone's session opens in its chat, as Enter does
+	if s, ok := m.selectedSession(); ok && s.Pane != "" && s.Host == m.opt.Host && m.tab == tabSessions && m.oneColumn(w) {
+		m.armed = "" // one column, as on a phone: the session opens in its chat, as Enter does
 		return m.openChat(), nil
 	}
 	if m.tab == tabShips {

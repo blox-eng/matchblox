@@ -154,12 +154,13 @@ func TestAKeyCarriesTheAgentsGuard(t *testing.T) {
 		return actions.CheckGuard(g)
 	}
 	a := key("Down")
-	a.PID = agent.PID
+	a.PID, a.Start = agent.PID, agent.Start
 	if res := s.act(t.Context(), a); res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("res %+v ran %q", res, *ran)
 	}
 	agent.Start++ // the snapshot still names the pid, but the process there started at another time
 	s.publish(sample.Snapshot{At: time.Now(), Sessions: []sample.Session{agent}}, func(state.Doc) {})
+	a.Start = agent.Start // as the console saw it: the runner still checks the machine
 	if res := s.act(t.Context(), a); len(res.Skipped) != 1 || len(*ran) != 1 {
 		t.Fatalf("a new process in the pid: res %+v ran %q", res, *ran)
 	}
@@ -228,7 +229,10 @@ func TestWatchIsRefusedFromTheStokersServer(t *testing.T) {
 // command or a console's compact names the agent's pid and start, so a pid
 // another process took after the snapshot gets no key.
 func TestACommandAndACompactCarryTheAgentsGuard(t *testing.T) {
-	for _, a := range []proto.Act{command("review"), {Console: true, RecID: "compact:%1", PID: 42, Confirm: "y"}} {
+	compact := command("")
+	compact.RecID = "compact:%1"
+	for _, a := range []proto.Act{command("review"), compact} {
+		a.Start = 7
 		s, ran := commandTest(t, "claude", idleScreen)
 		s.cur.Sessions[0].Start = 7
 		var guards []advice.Guard
@@ -247,5 +251,30 @@ func TestACommandAndACompactCarryTheAgentsGuard(t *testing.T) {
 				t.Fatalf("%s: guards %+v", a.RecID, guards)
 			}
 		}
+	}
+}
+
+// TestATypedSemicolonGoes: a "lit:" key that ends in ";" still types it.
+func TestATypedSemicolonGoes(t *testing.T) {
+	for lit, want := range map[string]string{";": `\;`, "ls;": `ls\;`} {
+		step, why := keyStep("%1", "lit:"+lit)
+		if why != "" || step[len(step)-1] != want {
+			t.Errorf("lit:%s: %q %q", lit, step, why)
+		}
+	}
+}
+
+// A pid that a new agent took in the same pane is told apart by its start:
+// the act names the start the console saw.
+func TestKeysRefusedForANewProcessOnTheSamePID(t *testing.T) {
+	s, ran := holdsTest(t, sample.Session{PID: 7, Start: 100, Pane: "%1", Name: "flint", SessionID: "s1", Status: "idle"})
+	a := key("Down")
+	a.PID, a.Start = 7, 99
+	if res := s.act(t.Context(), a); res.Err != "not sent: %1 runs a different agent now" || len(*ran) != 0 {
+		t.Fatalf("res %+v ran %q", res, *ran)
+	}
+	a.Start = 100
+	if res := s.act(t.Context(), a); res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("res %+v ran %q", res, *ran)
 	}
 }

@@ -111,6 +111,13 @@ type Act struct {
 	Seen time.Time `json:"seen,omitempty"`
 	// PID is the agent the console saw in the pane a "keys:" act names.
 	PID int `json:"pid,omitempty"`
+	// Start is that agent's process start, which tells a reused pid apart.
+	Start uint64 `json:"start,omitempty"`
+	// Cols and Rows are, on a watch act, the size the console's chat gives
+	// the agent's screen: the service sizes the agent's window to it. 0: a
+	// chat that is not drawn, or a console before sizes.
+	Cols int `json:"cols,omitempty"`
+	Rows int `json:"rows,omitempty"`
 	// Console: the act came from a console, a person at the keys. The
 	// service sets it from the hello; it never comes over the wire.
 	Console bool `json:"-"`
@@ -130,13 +137,27 @@ const (
 )
 
 // KeysPrefix starts an act that sends one key to the pane after it. Text is
-// a key name of the keys set, or "lit:" and the text to type.
+// a key name of KeyNames, or LitPrefix and the text to type.
 const KeysPrefix = "keys:"
 
 // CommandPrefix starts an act that types a command of the command table
 // (keycmd) into the pane after it, at rest. Text is the command's id; PID
 // is the agent the console showed.
 const CommandPrefix = "cmd:"
+
+// LitPrefix starts the text of a keys: act that types the text after it:
+// at most MaxLit bytes, with no control character.
+const (
+	LitPrefix = "lit:"
+	MaxLit    = 200
+)
+
+// KeyNames are the tmux keys a keys: act may press by name.
+var KeyNames = []string{"Up", "Down", "Left", "Right", "Enter", "Tab", "BTab", "Escape", "C-c", "BSpace"}
+
+// PickPrefix starts an act that answers the question tool in the pane
+// after it; its text is the said.Answer.
+const PickPrefix = "pick:"
 
 // Screen is one capture of the watched pane. Gone: the pane is not there.
 // Up: the screen ends this many lines above the pane's bottom, as far as
@@ -147,6 +168,14 @@ type Screen struct {
 	Text string    `json:"text"`
 	Gone bool      `json:"gone,omitempty"`
 	Up   int       `json:"up,omitempty"`
+	// Err says the pane could not be read this time; the session is still
+	// there, and Text is empty.
+	Err string `json:"err,omitempty"`
+	// Cols and Rows are the pane's size where the service sized its window
+	// to a chat; 0 where it did not. A chat as wide draws the agent's lines
+	// as they are.
+	Cols int `json:"cols,omitempty"`
+	Rows int `json:"rows,omitempty"`
 }
 
 type Result struct {

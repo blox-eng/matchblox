@@ -200,9 +200,99 @@ func TestListOnlyFillsItsFreeRowsWithUsage(t *testing.T) {
 	for i := range 60 {
 		many = append(many, sess(100+i, fmt.Sprintf("agent-%02d", i), fmt.Sprintf("%%%d", 100+i), nil))
 	}
-	full := at(hostState(many...))
+	st := hostState(many...)
+	st.At = demoAt // the age on the key line does not move with the wall clock
+	full := at(st)
 	if out := screen(full); strings.Contains(out, "USAGE") || strings.Contains(out, "MACHINE") {
 		t.Fatalf("a list that fills the screen gave way to the stats:\n%s", out)
 	}
 	golden(t, full, "listonlyfull", 107, 60)
+}
+
+// TestTheCardsTopShowsWhereverTheChatIsBeside: the split counts the chat's
+// title and its strip as they are drawn (the strip takes two lines on a
+// chat of 44 to 59 columns), so the card's top line, with its "1 of 2",
+// is never cut.
+func TestTheCardsTopShowsWhereverTheChatIsBeside(t *testing.T) {
+	for _, w := range []int{83, 84, 90, 95, 96, 100, 104, 110} {
+		for h := 8; h <= 24; h++ { // above 24 rows every card fits
+			m := fullView(flintAt(t, w, h))
+			if _, right := m.panes(w); right == 0 {
+				continue
+			}
+			if out := screen(m); !strings.Contains(out, "╭─ flint-auth asks · 1 of 2") {
+				t.Fatalf("%dx%d: the card's top is cut:\n%s", w, h, out)
+			}
+		}
+	}
+}
+
+// TestTheSplitHoldsAsTheCursorMoves: Sessions splits by the tallest card of
+// the sessions that ask, not by the selected one's: moving the cursor never
+// flips the screen between one column and the split.
+func TestTheSplitHoldsAsTheCursorMoves(t *testing.T) {
+	for _, size := range [][2]int{{96, 13}, {96, 14}, {100, 16}, {132, 15}} {
+		m := fullView(flintAt(t, size[0], size[1]))
+		_, want := m.panes(size[0])
+		for range 8 {
+			m = pressKeys(t, m, "up")
+			if _, right := m.panes(size[0]); right != want {
+				s, _ := m.selectedSession()
+				t.Fatalf("%v: on %s the chat is %d wide, on flint-auth %d", size, s.Name, right, want)
+			}
+		}
+	}
+}
+
+// TestUsageUnderANarrowListIsNeverCutMidWord: under a list of 38 to 41
+// columns a reset time, or a fix, that does not fit goes whole: no usage
+// line is cut.
+func TestUsageUnderANarrowListIsNeverCutMidWord(t *testing.T) {
+	for _, size := range [][2]int{{96, 20}, {104, 38}, {96, 30}} {
+		m := fullView(flintAt(t, size[0], size[1]))
+		sc := m.draw(size[0])
+		left, _ := sides(sc, size[0])
+		in := false
+		for _, l := range left {
+			switch {
+			case strings.HasPrefix(l, " USAGE"):
+				in = true
+			case strings.HasPrefix(l, "───"):
+				in = false
+			case in && strings.Contains(l, "…"):
+				t.Errorf("%v: a usage line is cut: %q", size, l)
+			}
+		}
+	}
+}
+
+// TestUsageOfThreeHostsIsNeverCutSideways: under a narrow list each
+// window's hosts that do not fit after it go whole onto the next lines:
+// every host's percent shows, and no usage line ends cut.
+func TestUsageOfThreeHostsIsNeverCutSideways(t *testing.T) {
+	for _, c := range []struct {
+		w, h int
+		gpu  string
+	}{{132, 32, "fine"}, {86, 30, "blocked"}, {86, 40, "fine"}} {
+		m := threeHosts(t, screensState(t), c.w, c.h, c.gpu)
+		sc := m.draw(c.w)
+		left, _ := sides(sc, c.w)
+		in, usage := false, ""
+		for _, l := range left {
+			switch {
+			case strings.HasPrefix(l, " USAGE"):
+				in = true
+			case strings.HasPrefix(l, "───"):
+				in = false
+			case in:
+				usage += l + "\n"
+				if strings.Contains(l, "…") {
+					t.Errorf("%dx%d: a usage line is cut: %q", c.w, c.h, l)
+				}
+			}
+		}
+		if !strings.Contains(usage, "this machine 84%") {
+			t.Errorf("%dx%d: this machine's percent is gone:\n%s", c.w, c.h, usage)
+		}
+	}
 }

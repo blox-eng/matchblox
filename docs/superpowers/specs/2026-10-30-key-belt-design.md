@@ -208,6 +208,12 @@ private signal the home key uses (`ESC _ matchblox … ESC \`):
     rest until a sample taken 5 s later shows the rest, so a second command
     typed at once never passes on the sample from before the first one's
     turn began;
+    Changed (2026-11-01, with #261's review): the `cmd:` and the chat's
+    `compact:` act name the agent by PID and start time, as a `keys:` act
+    does, and the time of the screen the chat showed. Each ends in an Enter,
+    so each needs, as an Enter does, a live screen the console showed, not
+    the history, and no wait newer than that screen. The text goes through
+    the literal send, so a final `;` reaches the agent;
   - a command the session's agent does not have sends nothing, and the key line
     says `/<name> is <Agent>'s: <session> runs <other agent>`.
 - The per-agent command list lives in the console (the host), one table, with

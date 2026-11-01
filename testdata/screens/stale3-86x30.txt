@@ -14,17 +14,17 @@
  │ docs-swe… ws-1 busy            88% │
  ✦ hearth-a… thi… busy            79% │
  + start a new session                │
-                                      │
- 1 without an agent: shell:1.1 zsh    │
-                                      │
- RECOMMENDATIONS · 7 · h hides        │
  ↓ 7 more                             │
 ──────────────────────────────────────│
  USAGE                                │
- ✻ Claude Max    5h    …              │
-                 wk    …              │
- · Google login  not measured · OpenC…│
- ❋ OpenAI Plus   5h    …              │
-                 wk    …              │
+ ✻ Claude Max    5h   this machine 84%│
+   gpu-1 stale · ws-1 84%             │
+                 wk   this machine 82%│
+   gpu-1 stale · ws-1 82%             │
+ · Google login  not measured         │
+ ❋ OpenAI Plus   5h   this machine 40%│
+   gpu-1 stale · ws-1 40%             │
+                 wk   this machine 12%│
+   gpu-1 stale · ws-1 12%             │
 ──────────────────────────────────────────────────────────────────────────────────────
  gpu-1: connection lost. Tries again in 8s.

@@ -305,7 +305,11 @@ func (m Model) usageLines(w int, full bool, toggle string) []string {
 		head := " " + m.accountMark(a.Provider) + " " + st.text.Render(pad(r.name, nameW+1)) + " "
 		indent := strings.Repeat(" ", lipgloss.Width(head))
 		if a.State == limits.Unmeasured {
-			out = append(out, fit(head+st.warn.Render("not measured · "+a.Fix), w))
+			line := head + st.warn.Render("not measured · "+a.Fix)
+			if lipgloss.Width(line) > w { // the fix goes whole, not cut
+				line = head + st.warn.Render("not measured")
+			}
+			out = append(out, fit(line, w))
 			continue
 		}
 		uses := a.Uses(now)
@@ -343,7 +347,7 @@ func (m Model) usageLines(w int, full bool, toggle string) []string {
 				lead = indent
 			}
 			line := lead + st.faint.Render(pad(u.Name, 5)) + m.meter(u.Pct, meterW, m.useStyle(u.Pct)) + st.text.Render(pad(fmt.Sprintf(" %.0f%%", u.Pct), 5))
-			if resets[j] != "" {
+			if resets[j] != "" && lipgloss.Width(line)+lipgloss.Width(resets[j]) <= w { // a reset goes whole, not cut
 				line += st.faint.Render(resets[j])
 			}
 			lines = append(lines, line)
@@ -357,13 +361,17 @@ func (m Model) usageLines(w int, full bool, toggle string) []string {
 			switch more := last + st.faint.Render(" · ") + style.Render(p.Text); {
 			case lipgloss.Width(more) <= w:
 				lines[len(lines)-1] = more
-			case !tight:
+			case !tight && lipgloss.Width(indent+p.Text) <= w:
 				lines = append(lines, indent+style.Render(p.Text))
+			case !tight: // under a narrow list the forecast takes its own line from the left
+				lines = append(lines, " "+style.Render(p.Text))
 			case p.Tone == limits.Warn:
 				// A phone keeps the account on its lines: a warning takes the
 				// place of the reset.
 				cut, _, _ := strings.Cut(last, st.faint.Render(" · "))
-				lines[len(lines)-1] = cut + st.faint.Render(" · ") + style.Render(p.Text)
+				if warned := cut + st.faint.Render(" · ") + style.Render(p.Text); lipgloss.Width(warned) <= w {
+					lines[len(lines)-1] = warned // else it waits for the room of the full lines, never cut
+				}
 			}
 		}
 		for _, l := range lines {
@@ -436,7 +444,11 @@ func (m Model) usageCells(rows []usageRow, nameW, w int) []string {
 		}
 		if len(wins) == 0 {
 			if a := group[0].a; a.State == limits.Unmeasured {
-				out = append(out, fit(head+st.warn.Render("not measured · "+a.Fix), w))
+				line := head + st.warn.Render("not measured · "+a.Fix)
+				if lipgloss.Width(line) > w { // the fix goes whole, not cut
+					line = head + st.warn.Render("not measured")
+				}
+				out = append(out, fit(line, w))
 			} else {
 				out = append(out, fit(head+st.faint.Render("no window read"), w))
 			}
@@ -451,31 +463,32 @@ func (m Model) usageCells(rows []usageRow, nameW, w int) []string {
 			if j > 0 {
 				lead = indent
 			}
-			out = append(out, fit(m.cellsIn(lead+st.faint.Render(pad(win, 5)), cells, w), w))
+			out = append(out, m.cellLines(lead+st.faint.Render(pad(win, 5)), cells, w, "   ")...)
 		}
 	}
 	return out
 }
 
-// cellsIn is line with as many whole cells as fit in w, then "…" for the
-// rest: a cell is never cut, so no percent is short of its digits.
-func (m Model) cellsIn(line string, cells []string, w int) string {
-	more := m.st.faint.Render(" …")
-	for i, c := range cells {
+// cellLines are line and as many whole cells after it as fit in w, then
+// the rest, whole, as many to a line as fit, on the lines under it from
+// cont: a cell is never cut, and no host's percent is left out.
+func (m Model) cellLines(line string, cells []string, w int, cont string) []string {
+	sep := m.st.faint.Render(" · ")
+	var out []string
+	first := true // the line holds no cell yet
+	for _, c := range cells {
 		next := c
-		if i > 0 {
-			next = m.st.faint.Render(" · ") + c
+		if !first {
+			next = sep + c
 		}
-		room := w
-		if i < len(cells)-1 {
-			room -= lipgloss.Width(more)
+		if lipgloss.Width(line+next) <= w {
+			line, first = line+next, false
+			continue
 		}
-		if lipgloss.Width(line+next) > room {
-			return line + more
-		}
-		line += next
+		out = append(out, line)
+		line, first = cont+c, false
 	}
-	return line
+	return append(out, fit(line, w))
 }
 
 // usageCell is host's reading of window win: "ws-1 58%".
