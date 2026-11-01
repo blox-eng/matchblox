@@ -653,11 +653,11 @@ func (m Model) keyLine(w int) (string, []span) {
 	if m.flash != "" {
 		return fit(" "+st.text.Render(m.flash), w), nil
 	}
+	if l := m.lostLine(); l != "" { // a lost host outranks the chat's keys, which may not go
+		return fit(" "+st.text.Render(l), w), nil
+	}
 	if m.chatKeys {
 		return m.chatKeyLine(w)
-	}
-	if l := m.lostLine(); l != "" {
-		return fit(" "+st.text.Render(l), w), nil
 	}
 	hints := slices.DeleteFunc(slices.Clone(m.view().keys(m)), func(h hint) bool { return h == (hint{}) })
 	if m.layoutAt(w) == Wide {

@@ -803,6 +803,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.hostCount() == 1 {
 			lost = append(lost, "connection lost: "+msg.err.Error())
 		}
+		if n := len(m.keyQ); n > 0 { // keepChat drops them: the agent may hold half a line
+			lost = append(lost, "not sent: "+plural(n, "key")+", the connection dropped")
+		}
 		if m.batch != nil {
 			// Their results went with the connection; a peer's still come.
 			var home []string

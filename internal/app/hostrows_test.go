@@ -446,3 +446,13 @@ func TestLongNameKeepsHostWord(t *testing.T) {
 		}
 	}
 }
+
+// The lost host's line outranks the chat's key line: the keys may not go.
+func TestTheLostLineOutranksTheChatsKeys(t *testing.T) {
+	m := lostPeer(t, 40*time.Second)
+	m.chatKeys, m.flash = true, ""
+	want := m.lostLine()
+	if line, _ := m.keyLine(m.width); want == "" || !strings.Contains(ansi.Strip(line), want[:20]) {
+		t.Fatalf("key line %q, want the lost line %q", ansi.Strip(line), want)
+	}
+}

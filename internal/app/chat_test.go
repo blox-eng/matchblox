@@ -1751,3 +1751,18 @@ func TestAHeldCtrlCLapses(t *testing.T) {
 		t.Fatalf("acts: %+v", got)
 	}
 }
+
+// Keys that wait when the connection drops are dropped, and the key line
+// says so: the agent's input box may hold half a line.
+func TestKeysDroppedWithTheConnectionSaySo(t *testing.T) {
+	m, f := inChat(t)
+	m = pressKeys(t, m, "r", "u", "n", "enter")
+	if len(m.keyQ) == 0 {
+		t.Fatal("no key waits")
+	}
+	next, _ := m.Update(lostMsg{io.EOF, f})
+	m = next.(Model)
+	if m.keyQ != nil || !strings.Contains(m.flash, "not sent: 2 keys, the connection dropped") {
+		t.Fatalf("queue %+v flash %q", m.keyQ, m.flash)
+	}
+}
