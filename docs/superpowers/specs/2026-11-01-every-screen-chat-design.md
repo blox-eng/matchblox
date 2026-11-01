@@ -73,6 +73,15 @@ screen"). The app draws SF Mono 13 pt, about 7.8 × 16 pt a cell.
    for the stats, but the rows it leaves free take Usage, then Machine,
    under a hairline, each at its fewest lines and only if it fits whole
    (Usage never cut). The key line's hints stay as #264 has them.
+9. **The agent draws at the chat's size.** While a chat watches an agent,
+   the agent's tmux window takes the chat's agent-screen size (the watch
+   carries cols × rows), so the agent redraws natively and the chat draws
+   its lines as they are, top first. The window's own `window-size` comes
+   back when no chat watches (marked `@matchblox-sized`, so a restarted
+   service puts back what a crashed one left). The chat that sent a key
+   last, else watched last, sizes it. A window of several panes is not
+   sized, and its screen is re-wrapped as before. The owner accepted that
+   a desk terminal on the same session sees the window shrink.
 
 ## Non-goals
 
@@ -102,3 +111,13 @@ screen"). The app draws SF Mono 13 pt, about 7.8 × 16 pt a cell.
 - The iPad mini upright and a half-screen Mac now look like a small desk,
   not an opened phone. This narrows the owner's 2026-10-12 ruling (split
   from 90 columns upright) for Sessions only: it still splits, at 40/60.
+- Rule 9's open points. The chat sizes the window only while it is drawn;
+  one that goes off screen (another tab, the list on a phone) keeps its
+  last size, and a console that never drew it sends none. Taking the keys
+  means sending a `keys:` or `pick:` act; a new size of the same chat is
+  not a new watch. The history above the live screen is re-wrapped: it was
+  drawn at the earlier size. With a card, the agent gets the rows over the
+  card, and what is left over its menu sits on the card. A window that was
+  `manual` gets its old size back too (the mark holds it). A start puts
+  back windows on the builder's tmux server and on matchblox's own. A
+  window split after it was sized goes back at the next size.

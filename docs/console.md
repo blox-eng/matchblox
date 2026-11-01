@@ -394,6 +394,29 @@ again`. The card has a second guard with the same words. For 400 ms after a
 card first shows, and after it moves to the next question, it sends nothing.
 So an `Enter` never answers a question you have not read.
 
+While the chat shows an agent, the agent's tmux window takes the chat's
+size: the columns and rows the chat gives the agent's screen, under its
+title and strip and over its card. The agent redraws at that size, so its
+tables, boxes and diffs look as they do in its own terminal, and the chat
+draws its lines as they are. When the console resizes, the chat moves
+beside the list or full screen, or the card comes or goes, the window
+takes the new size. The window gets its own size back when no chat
+watches it: the selection moves, the console closes or loses the service,
+or the service stops. A service that ended without that puts the windows
+back when it starts again. A terminal attached to the agent's session
+sees the window shrink to the chat's size while the chat watches it.
+
+- Two consoles on one agent (a phone and a desk): the one that sent the
+  agent a key last sizes the window, else the one that opened it last.
+  When it leaves, the other's size applies.
+- A chat that is not on screen (another tab, the list on a phone) keeps
+  its size, so the agent does not redraw at each tab.
+- A window of several panes keeps its size: resizing it would reflow the
+  other panes. The chat then wraps the agent's lines to its width and
+  keeps the bottom rows, as it does for a service before sizes, and for
+  the first screen before the window takes the size.
+- The window is never sized under 20 × 5 or over what tmux allows.
+
 The mouse wheel over the chat, or a swipe on a phone, shows the earlier
 lines of the agent's pane, 3 lines for each step, up to 2000 lines. The
 wheel down goes back toward the live screen. While the chat shows the
@@ -402,7 +425,8 @@ line says `a key goes back to live`. The first
 key then goes back to the live screen and goes to no agent: a key, a paste
 or a key of the card. The key line says `back to live — the agent did not
 get that key`. The chat is blank until the live screen comes, and keys go
-nowhere until then. A tap on the title also goes back to the live screen, and so
+nowhere until then. The history above the live screen was drawn at the
+window's earlier size, so the chat wraps it to its width. A tap on the title also goes back to the live screen, and so
 does a change of the selected session or a click on the list. The service
 refuses an `Enter` that answers a screen of the history.
 
