@@ -42,7 +42,7 @@ func (m Model) openPairDoor() (Model, tea.Cmd) {
 		m.flash = pairFromDeviceLine
 		return m, nil
 	}
-	m.pending, m.peek, m.sheet, m.form, m.held, m.searching = nil, nil, nil, nil, nil, false
+	m.pending, m.sheet, m.form, m.held, m.searching = nil, nil, nil, nil, false
 	m.armed = ""
 	return m.openPairPage()
 }

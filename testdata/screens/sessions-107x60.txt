@@ -6,7 +6,7 @@
 ▌│ spark-docs                                            done       9m   88%  ▲ clear      #4540 ●━●━●━●━●
    “I rewrote the quick start and the install page.”
    #4540 ●━●━●━●━●  live
-   ▰▰▰▰▰ plan 100%  ▲ clear                                                     a answer  A switch  ⏎ open
+   ▰▰▰▰▰ plan 100%  ▲ clear                                                               A switch  ⏎ chat
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
  ╿ ember-billing                                         done       4m   32%  ▲ clear      #4552 ●━●━◉┄○┄○
  ╿ flint-auth                                            asks       2m   41%  ▲ clear      #4545 ●━✕┄○┄○┄○
@@ -43,18 +43,18 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ open  a answer  x kill  r rename  A switch  z park  N new  p ships  f stoker  full view v
+ USAGE
+ ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20
+                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00 · out Fri ~21:00
+ · Google login  not measured · OpenCode keeps no limits
+ ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59
+                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week
+───────────────────────────────────────────────────────────────────────────────────────────────────────────
+ MACHINE                                                                                          16 cores
+ cpu  ▁ 0%   load 6.2
+ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB
+ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
+ runs 5 claude · 1 codex · 1 opencode
+───────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ⏎ chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  full view v          sampled 0s ago

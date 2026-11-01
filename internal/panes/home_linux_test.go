@@ -1,6 +1,7 @@
 package panes
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/term"
 	"golang.org/x/sys/unix"
 
 	"github.com/blox-eng/matchblox/internal/tmuxtest"
@@ -38,6 +41,69 @@ func TestHomeKeyTakesTheClientHome(t *testing.T) {
 	}
 	waitFor(t, func() bool { return session() == Home })
 }
+
+// TestHomeKeyReachesTheConsoleAtHome types the home key, raw, into a real
+// client that is in the console's session already: the console there still
+// reads it, whole, through the input decoder it runs on (#261). Moving the
+// client home would do nothing, and the chat would keep the keys.
+func TestHomeKeyReachesTheConsoleAtHome(t *testing.T) {
+	sock := tmuxtest.Server(t)
+	tmux := func(args ...string) {
+		t.Helper()
+		if out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput(); err != nil { //nolint:gosec // test argv
+			t.Fatalf("tmux %q: %v\n%s", args, err, out)
+		}
+	}
+	got := t.TempDir() + "/events"
+	tmux("new-session", "-d", "-s", Home, "-e", decodeTo+"="+got, os.Args[0], "-test.run=^TestDecodePane$")
+	tmux(HomeKeyArgv()[1:]...)
+	term := attach(t, sock, Home)
+	want := eventLine(uv.UnknownApcEvent(HomeKey))
+	waitFor(t, func() bool {
+		b, _ := os.ReadFile(got)
+		return strings.HasPrefix(string(b), "ready")
+	})
+	if _, err := term.WriteString(HomeKey); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool {
+		b, _ := os.ReadFile(got)
+		return strings.Contains(string(b), want)
+	})
+	b, _ := os.ReadFile(got)
+	if lines := strings.Split(strings.TrimSpace(string(b)), "\n"); len(lines) != 2 {
+		t.Errorf("the console read %q, want only %s", lines[1:], want)
+	}
+}
+
+// decodeTo names the file TestDecodePane writes the events it reads to.
+const decodeTo = "MATCHBLOX_TEST_DECODE_TO"
+
+// TestDecodePane is the pane of TestHomeKeyReachesTheConsoleAtHome: a raw
+// terminal read by the decoder the console runs on, one line per event.
+func TestDecodePane(t *testing.T) {
+	path := os.Getenv(decodeTo)
+	if path == "" {
+		t.Skip("the pane of TestHomeKeyReachesTheConsoleAtHome")
+	}
+	if _, err := term.MakeRaw(os.Stdin.Fd()); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := make(chan uv.Event)
+	go func() {
+		for e := range events {
+			_, _ = fmt.Fprintln(f, eventLine(e))
+		}
+	}()
+	_, _ = fmt.Fprintln(f, "ready")
+	_ = uv.NewTerminalReader(os.Stdin, "xterm-256color").StreamEvents(context.Background(), events)
+}
+
+func eventLine(e uv.Event) string { return fmt.Sprintf("%T %q", e, fmt.Sprint(e)) }
 
 // attach runs `tmux attach -t target` on a new pseudo-terminal and returns
 // the terminal's side, where the test types.

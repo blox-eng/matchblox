@@ -199,6 +199,33 @@ func CapturePanesStyled(panes []string) map[string]string {
 	return out
 }
 
+// CapturePaneUp reads pane id as CapturePanesStyled does, up lines up from
+// its bottom: as many lines as the pane has rows. Where the history holds
+// fewer, it shows the top of the history, and real is the offset it shows.
+func CapturePaneUp(id string, up int) (text string, real int, ok bool) {
+	return capturePaneUp(output, id, up)
+}
+
+func capturePaneUp(run func(string, ...string) ([]byte, error), id string, up int) (string, int, bool) {
+	server, bare := SplitPane(id)
+	tmux := tmuxUTF8(server)
+	b, err := run(tmux[0], append(tmux[1:], "display-message", "-p", "-t", bare, "#{history_size} #{pane_height}")...)
+	if err != nil {
+		return "", 0, false
+	}
+	var history, rows int
+	if _, err := fmt.Sscan(string(b), &history, &rows); err != nil || rows <= 0 {
+		return "", 0, false
+	}
+	// -S and -E count from the first visible line; history is negative.
+	up = min(max(up, 0), history)
+	b, err = run(tmux[0], append(tmux[1:], "capture-pane", "-p", "-e", "-S", strconv.Itoa(-up), "-E", strconv.Itoa(rows-1-up), "-t", bare)...)
+	if err != nil {
+		return "", 0, false
+	}
+	return string(b), up, true
+}
+
 // CaptureDir reads pane text from <dir>/<id>.txt (id without its %): the
 // panes of a fixture machine.
 func CaptureDir(dir string) func([]string) map[string]string {

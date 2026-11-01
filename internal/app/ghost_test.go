@@ -160,8 +160,8 @@ func TestNoSessionActionOnTheGhost(t *testing.T) {
 		if cmd != nil {
 			runAll(cmd)
 		}
-		if nm := next.(Model); nm.pending != nil || nm.form != nil || nm.peek != nil || len(f.acts()) != 0 {
-			t.Fatalf("%s acted: pending %+v form %+v peek %v sent %+v", k, nm.pending, nm.form, nm.peek != nil, f.acts())
+		if nm := next.(Model); nm.pending != nil || nm.form != nil || nm.chatKeys || len(f.acts()) != 0 {
+			t.Fatalf("%s acted: pending %+v form %+v chatKeys %v sent %+v", k, nm.pending, nm.form, nm.chatKeys, f.acts())
 		}
 	}
 	var words []string

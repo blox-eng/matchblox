@@ -2,12 +2,14 @@ package app
 
 import (
 	"io"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
@@ -304,8 +306,9 @@ func TestRunsCountTheirHostsAgents(t *testing.T) {
 	}
 }
 
-// TestShortUsageLineKeepsItsWindow: short of room each line still names
-// its window, and every cell shown is whole and of its own host.
+// TestShortUsageLineKeepsItsWindow: short of room each window's first
+// line still names it, and its cells that do not fit go whole onto the
+// lines under it: every cell is whole, of its own host, and shown.
 func TestShortUsageLineKeepsItsWindow(t *testing.T) {
 	acct := func(box, week float64) limits.Account {
 		return limits.Account{Provider: "anthropic", Account: "you@example.com · Max", State: limits.Measured, At: time.Now(),
@@ -317,25 +320,29 @@ func TestShortUsageLineKeepsItsWindow(t *testing.T) {
 	want := map[string][]string{"5h": {"this machine 84%", "ws-1 61%"}, "wk": {"this machine 82%", "ws-1 12%"}}
 	for _, w := range []int{40, 50, 100} {
 		lines := m.usageLines(w, false, "")[1:]
-		if len(lines) != 2 {
-			t.Fatalf("width %d: %d lines:\n%s", w, len(lines), ansi.Strip(strings.Join(lines, "\n")))
-		}
-		for i, win := range []string{"5h", "wk"} {
-			l := strings.TrimSpace(ansi.Strip(lines[i]))
-			_, cells, ok := strings.Cut(l, win+"   ")
-			if !ok {
-				t.Fatalf("width %d: line %q does not name %s", w, l, win)
+		got := map[string][]string{}
+		win := ""
+		for _, line := range lines {
+			l := strings.TrimSpace(ansi.Strip(line))
+			if strings.Contains(line, "…") || lipgloss.Width(line) > w {
+				t.Fatalf("width %d: a line is cut: %q", w, l)
 			}
-			cells = strings.TrimSuffix(strings.TrimSpace(cells), " …")
-			got := strings.Split(cells, " · ")
-			for j, c := range got {
-				if j >= len(want[win]) || c != want[win][j] {
-					t.Fatalf("width %d, %s: cell %q, want a prefix of %q", w, win, c, want[win])
+			cells := l
+			for _, name := range []string{"5h", "wk"} {
+				if _, rest, ok := strings.Cut(l, name+"   "); ok {
+					win, cells = name, rest
 				}
 			}
-			if w == 100 && len(got) != 2 {
-				t.Fatalf("width 100, %s: cells %q", win, got)
+			if win == "" {
+				t.Fatalf("width %d: line %q names no window", w, l)
 			}
+			got[win] = append(got[win], strings.Split(strings.TrimSpace(cells), " · ")...)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("width %d: cells %q, want %q", w, got, want)
+		}
+		if w == 100 && len(lines) != 2 {
+			t.Fatalf("width 100: %d lines", len(lines))
 		}
 	}
 }

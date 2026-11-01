@@ -57,11 +57,11 @@ func TestTapOnThePairDoorOpensThePage(t *testing.T) {
 
 func TestPairDoorClosesLayersUnderThePage(t *testing.T) {
 	_, m := pairDoorConsole(t)
-	m.peek, m.sheet, m.form = &peek{}, &sheet{}, &form{}
+	m.sheet, m.form = &sheet{}, &form{}
 	m.held = func(m Model) (tea.Model, tea.Cmd) { return m, nil }
 	m.pending = &action{label: "x", steps: [][]string{{"x"}}}
 	got, _ := m.openPairDoor()
-	if got.peek != nil || got.sheet != nil || got.form != nil || got.held != nil || got.pending != nil || got.pair == nil {
+	if got.sheet != nil || got.form != nil || got.held != nil || got.pending != nil || got.pair == nil {
 		t.Fatalf("a layer stayed: %+v", got)
 	}
 }

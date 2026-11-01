@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -132,11 +133,10 @@ func TestPeerResultIsHandledAsHomeResult(t *testing.T) {
 		t.Fatal("the act did not go on the peer's conn")
 	}
 	id := ws.sent[0].ID
-	m.peekSent = map[string]string{id: "app-review"}
-	next, cmd := m.Update(peerMsg{host: "ws-1", conn: ws, msg: resultMsg{ActID: id}})
+	next, cmd := m.Update(peerMsg{host: "ws-1", conn: ws, msg: resultMsg{ActID: id, Err: "no such pane"}})
 	nm := next.(Model)
-	if nm.peekSent[id] != "" || len(nm.peers[0].acts) != 0 || nm.toast != "sent to app-review" {
-		t.Fatalf("the peer's result did not end its act: peekSent %v, in flight %v, toast %q", nm.peekSent, nm.peers[0].acts, nm.toast)
+	if len(nm.peers[0].acts) != 0 || !strings.Contains(nm.flash, "no such pane") {
+		t.Fatalf("the peer's result did not end its act: in flight %v, flash %q", nm.peers[0].acts, nm.flash)
 	}
 	if cmd == nil {
 		t.Fatal("the peer's next message is not read")
@@ -147,8 +147,6 @@ func TestResultOfAnActLostWithItsPeer(t *testing.T) {
 	y := newFake()
 	m, _, x := peered(func() (transport.Conn, error) { return y, nil })
 	_ = m.sendPeer(0, proto.Act{RecID: "answer:%12", Text: "yes"})()
-	id := x.sent[0].ID
-	m.peekSent = map[string]string{id: "app-review"}
 	next, _ := m.Update(peerMsg{host: "ws-1", conn: x, msg: lostMsg{err: io.EOF, conn: x}})
 	nm := next.(Model)
 	if want := "ws-1: 1 act has no answer"; nm.toast != want || nm.flash != "" {
@@ -159,10 +157,10 @@ func TestResultOfAnActLostWithItsPeer(t *testing.T) {
 	}
 	nm = redialTo(t, nm)
 	flash := nm.flash
-	next, cmd := nm.Update(peerMsg{host: "ws-1", conn: y, msg: resultMsg{ActID: id, Err: "late"}})
+	next, cmd := nm.Update(peerMsg{host: "ws-1", conn: y, msg: resultMsg{ActID: x.sent[0].ID, Err: "late"}})
 	nm = next.(Model)
-	if nm.peekSent[id] != "app-review" || nm.toast != "ws-1: 1 act has no answer" || nm.flash != flash {
-		t.Fatalf("a result on the new conn was taken for the lost act: peekSent %v, toast %q, flash %q", nm.peekSent, nm.toast, nm.flash)
+	if nm.toast != "ws-1: 1 act has no answer" || nm.flash != flash {
+		t.Fatalf("a result on the new conn was taken for the lost act: toast %q, flash %q", nm.toast, nm.flash)
 	}
 	if cmd == nil {
 		t.Fatal("the peer's next message is not read")

@@ -66,3 +66,41 @@ func TestDisabledTabHintAndZeroSkips(t *testing.T) {
 		t.Errorf("boxFrame drew a zero part:\n%s\nwant\n%s", strings.Join(b, "\n"), strings.Join(a, "\n"))
 	}
 }
+
+// TestOneChatHintAndTheWayOutOfListOnly: the key line names the chat once,
+// as ⏎, and only where Enter opens it; a phone in list only keeps the way
+// back to the full view.
+func TestOneChatHintAndTheWayOutOfListOnly(t *testing.T) {
+	m := flintAt(t, 51, 31)
+	if !m.listOnly() {
+		t.Fatal("51x31 does not start list only")
+	}
+	line := keyText(m.draw(51))
+	if !strings.Contains(line, "full view v") || strings.Contains(line, "a chat") || !strings.Contains(line, "⏎ chat") {
+		t.Errorf("51x31 key line %q", line)
+	}
+	if out := screen(m); strings.Contains(out, "a chat") {
+		t.Errorf("the opened row names the chat twice:\n%s", out)
+	}
+	for _, size := range [][2]int{{96, 8}} { // too short for flint-auth's card: Enter only refuses (106x10 holds it full-screen)
+		m := fullView(flintAt(t, size[0], size[1]))
+		if line := keyText(m.draw(size[0])); strings.Contains(line, "chat") {
+			t.Errorf("%v key line %q offers a chat Enter refuses", size, line)
+		}
+	}
+	st := screensState(t)
+	for i := range st.Sessions {
+		if st.Sessions[i].Name == "flint-auth" {
+			st.Sessions[i].Pane = "" // outside tmux: nothing to type into
+		}
+	}
+	m = fullView(sized(t, 200, 50, st))
+	for _, s := range m.snap.Sessions {
+		if s.Name == "flint-auth" {
+			m.chose, m.selPID = true, s.PID
+		}
+	}
+	if line := keyText(m.draw(200)); strings.Contains(line, "chat") {
+		t.Errorf("a session outside tmux: key line %q", line)
+	}
+}

@@ -3,7 +3,9 @@ package sample_test
 import (
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/tmuxtest"
@@ -45,5 +47,33 @@ func TestParsePanesSkipsJumpSessions(t *testing.T) {
 		"%5\tmatchblox-api-deadbeef:0.0\tw\t50\tclaude\t/z\t/s\t1\t\n"))
 	if len(got) != 2 || got[0].Target != "work:1.1" || got[1].Target != "matchblox-api-deadbeef:0.0" {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+// TestCapturePaneUpOnTmux: on a real server, the lines up end that many
+// lines above the bottom, and an offset past the history stops at its top.
+func TestCapturePaneUpOnTmux(t *testing.T) {
+	server := tmuxtest.Server(t)
+	cmd := exec.Command("tmux", "-L", server, "-f", os.DevNull, "new-session", "-d", "-s", "up", "-x", "40", "-y", "10", "seq -f line%g 1 30; sleep 60") //nolint:gosec // test argv
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("new-session: %v\n%s", err, out)
+	}
+	out, err := exec.Command("tmux", "-L", server, "list-panes", "-t", "up", "-F", "#{pane_id}").Output() //nolint:gosec // test argv
+	if err != nil {
+		t.Fatal(err)
+	}
+	pane := sample.OnServer(strings.TrimSpace(string(out)), server)
+	var text string
+	for deadline := time.Now().Add(5 * time.Second); !strings.Contains(text, "line30") && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		text, _, _ = sample.CapturePaneUp(pane, 0)
+	}
+	text, up, ok := sample.CapturePaneUp(pane, 3)
+	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+	if !ok || up != 3 || len(lines) != 10 || lines[0] != "line19" || lines[9] != "line28" {
+		t.Fatalf("up %d ok %v lines %q", up, ok, lines)
+	}
+	text, up, _ = sample.CapturePaneUp(pane, 500)
+	if first, _, _ := strings.Cut(text, "\n"); up != 21 || first != "line1" {
+		t.Fatalf("up %d, first line %q; want 21 and line1", up, first)
 	}
 }

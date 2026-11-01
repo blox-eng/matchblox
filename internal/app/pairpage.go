@@ -12,7 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The pair page is a layer over the console, as the peek is: the box with
+// The pair page is a layer over the console, as the sheet is: the box with
 // the one-time code as its label (design/0009-the-box-opens.md §4.2).
 
 const (
@@ -348,7 +348,7 @@ func (p *pairPage) strips() bool { return p != nil && p.beat >= 3 }
 // pairStripEsc is esc that dismisses the strip: the console has nothing
 // else of its own for it to cancel.
 func (m Model) pairStripEsc(k tea.KeyPressMsg) bool {
-	return bkey.Matches(k, m.keys.pair.Close) && m.pair.strips() && m.peek == nil && m.form == nil && m.sheet == nil &&
+	return bkey.Matches(k, m.keys.pair.Close) && m.pair.strips() && !m.chatKeys && m.form == nil && m.sheet == nil &&
 		m.pending == nil && m.held == nil && m.scanAsk == nil && !m.searching && m.filter == ""
 }
 

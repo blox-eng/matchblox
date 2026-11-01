@@ -503,7 +503,7 @@ end of the run its score:
 Each step shows its glyph: `✓` done, `◐` under way, `⏸` waits, `✕`
 failed, `○` not begun. `Enter` on a step shows the exact command the
 stoker ran for it, or the one a go step waits to run. `y` on a step under
-`YOUR GO` gives it the go, once. `a` on a failed step opens the peek on
+`YOUR GO` gives it the go, once. `a` on a failed step opens the chat on
 its session; a go the run ended before you gave reads `the run ended
 before your go`, and nothing guards that command any more. The tab's name counts the steps that wait for you. Opening the
 tab marks the steps seen.

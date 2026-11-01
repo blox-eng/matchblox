@@ -116,16 +116,21 @@ type drawn struct {
 	tabs    []span
 	bodyTop int   // the line of the first body row
 	rows    []int // the row each body line shows; -1 none, headerRow
-	listW   int   // the list's columns; the detail pane is right of them
+	listW   int   // the list's columns; the detail or the chat is right of them
 	dockAt  int   // the dock's first line; -1 when it is folded
 	keysAt  int   // the key line; -1 when there is none
 	keys    []span
-	// The answer peek: its first line and column, its width, the key a tap
-	// on each of its lines presses, and the keys of its footer.
-	peekAt, peekX, peekW int
-	peekRows             []string
-	peekKeys             []span
-	peekInline           bool // the peek is the detail pane, the list beside it live
+	// A box over the screen (the sheet, a form): its first line and
+	// column, its width, the key a tap on each of its lines presses, and
+	// the keys of its footer.
+	boxAt, boxX, boxW int
+	boxRows           []string
+	boxKeys           []span
+	// The chat's question card: its first line and column, its width, the
+	// key a tap on each of its lines presses, and the keys of its footer.
+	cardAt, cardX, cardW int
+	cardRows             []string
+	cardKeys             []span
 	// The dock: its height and the columns of the stoker's panel. full:
 	// the dock shows all it has; paneFull: so does the right pane.
 	dockH, stx0, stx1 int
@@ -143,6 +148,9 @@ type drawn struct {
 	// detail: their line, and the key a tap on each presses.
 	actKeysAt int
 	actKeys   []span
+	// chatFull: the chat is the whole screen, and a tap on its title row
+	// goes back to Sessions.
+	chatFull bool
 	// The rule of now: its column (-1 none), its first and last line, and
 	// the lines it passes: the opened row's own.
 	nowX, nowTop, nowBottom int
@@ -194,22 +202,23 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		return sc
 	}
-	full := max(m.height-5, 1)
 	listW, detailW := m.panes(w)
+	if place, _ := m.chatPlacement(w); m.chatKeys && place == chatFull { // one column: the chat takes the screen
+		return m.chatScreen(w)
+	}
+	full, lanes := m.bodyRows(listW)
 	sc.listW = listW
-	lanes := m.tab == tabSessions && len(m.snap.Sessions) > 0 && full >= 5 && m.sessTracks(listW).lane > 0 // the axis leaves the list three rows
 	if lanes {
 		sc.lines = append(sc.lines, m.axisLines(m.sessTracks(listW), listW)...)
 		sc.bodyTop += 2
-		full = max(full-2, 1)
 	}
 	b := m.body(listW)
-	_, _, peeking := m.peekNow()
-	inline := peeking && detailW > 0 // the peek takes the detail pane
+	chat, chatting := m.chatShown(detailW)
+	stacked := m.tab == tabSessions && detailW > 0 // usage, the machine and the stoker under the list
 	paneFull := true
 	paneLines := func(rows int) []string {
 		switch {
-		case detailW == 0 || inline:
+		case detailW == 0 || chatting:
 			return nil
 		}
 		lines, all := m.detailPane(detailW, rows)
@@ -218,7 +227,7 @@ func (m Model) drawScreen(w int) drawn {
 	}
 	detail := paneLines(0)
 	var d docked
-	if m.tab != tabMachine && m.tab != tabStoker && !m.listOnly() {
+	if m.tab != tabMachine && m.tab != tabStoker && !stacked && !m.listOnly() {
 		d = m.dock(w, -1)
 	}
 	room := full
@@ -235,16 +244,27 @@ func (m Model) drawScreen(w int) drawn {
 	default:
 		d = docked{}
 	}
+	if m.listOnly() && m.tab != tabMachine && m.tab != tabStoker {
+		d = m.listOnlyStats(w, full-len(b.lines))
+		if len(d.lines) > 0 {
+			room -= len(d.lines) + 1
+		}
+	}
 	sc.full = d.full || m.tab == tabMachine || m.tab == tabStoker || m.listOnly() // list only has no dock to show
 	detail = paneLines(room)
 	sc.paneFull = paneFull && len(detail) <= room
-	if inline {
-		var press []string
-		var spans []span
-		detail, press, spans = m.peekBox(detailW, room, false, true)
-		sc.peekAt, sc.peekX, sc.peekW, sc.peekRows, sc.peekKeys, sc.peekInline = sc.bodyTop, listW+1, detailW, press, spans, true
+	if chatting {
+		detail = m.chatPane(chat, detailW, room)
+		m.markCard(&sc, sc.bodyTop+room, listW+2, detailW-1, room-1-len(m.chatStrip(chat, detailW, room-1)))
 	}
 	vis := windowed(b, room, m.rowIndex())
+	if stacked {
+		vis, sc.full = m.leftColumn(b, listW, room)
+	}
+	edge := m.st.hair
+	if chatting && m.chatKeys && !m.notLive() {
+		edge = m.st.accent
+	}
 	for i := range room {
 		line, row := "", -1
 		if i < len(vis.lines) {
@@ -255,11 +275,11 @@ func (m Model) drawScreen(w int) drawn {
 			if i < len(detail) {
 				right = detail[i]
 			}
-			line = fit(line, listW) + m.st.hair.Render("│") + fit(right, detailW)
+			line = fit(line, listW) + edge.Render("│") + fit(right, detailW)
 		}
 		sc.lines, sc.rows = append(sc.lines, line), append(sc.rows, row)
 	}
-	m.markActKeys(&sc, b, vis, detail, room, detailW, inline)
+	m.markActKeys(&sc, b, vis, detail, room, detailW, chatting)
 	if len(d.lines) > 0 {
 		sc.dockAt, sc.dockH, sc.stx0, sc.stx1 = len(sc.lines)+1, len(d.lines), d.stx0, d.stx1
 		sc.lines = append(append(sc.lines, m.st.hair.Render(strings.Repeat("─", w))), d.lines...)
@@ -274,8 +294,6 @@ func (m Model) drawScreen(w int) drawn {
 		m.overlaySheet(&sc, w)
 	case m.form != nil:
 		m.overlayForm(&sc, w)
-	case peeking && !inline:
-		m.overlayPeek(&sc, w)
 	case lanes:
 		sc.nowX, sc.nowTop, sc.nowBottom = m.sessTracks(listW).laneX(listW)+lanePast, 2, sc.keysAt-1
 		if sc.dockAt >= 0 {
@@ -295,14 +313,14 @@ func (m Model) drawScreen(w int) drawn {
 // markActKeys finds the selected session's own keys: the last line of its
 // opened row on a phone, the last line of its detail beside the list. An
 // opened row cut by the screen has no keys to tap: its last line is not
-// theirs.
-func (m Model) markActKeys(sc *drawn, b, vis body, detail []string, room, detailW int, inline bool) {
+// theirs. Covered: the right side is not the detail.
+func (m Model) markActKeys(sc *drawn, b, vis body, detail []string, room, detailW int, covered bool) {
 	s, ok := m.selectedSession()
 	if !ok || m.tab != tabSessions {
 		return
 	}
 	switch {
-	case detailW > 0 && !inline && len(detail) <= room:
+	case detailW > 0 && !covered && len(detail) <= room:
 		_, spans := m.detailKeys(s)
 		sc.actKeysAt, sc.actKeys = sc.bodyTop+len(detail)-1, shift(spans, sc.listW+1)
 	case detailW == 0 && m.inPlace():
@@ -324,17 +342,40 @@ func (m Model) markActKeys(sc *drawn, b, vis body, detail []string, room, detail
 	}
 }
 
-// panes splits Sessions into the list and the detail: at the middle on an
-// opened phone, the list's ≈78 columns on a desk. A phone, list only and
-// the other tabs have one column, and so has a door's diff while it waits
-// for its y: it shows whole.
+// panes splits Sessions into the list and the chat, the list at 40% of
+// the screen (sessionsSplit), and Ships at the middle on an opened phone
+// and at the list's ≈78 columns on a desk. A phone, list only and the
+// other tabs have one column, and so has a door's diff while it waits for
+// its y: it shows whole.
 func (m Model) panes(w int) (list, detail int) {
 	if _, preview := m.previewDoor(); m.tab != tabSessions && m.tab != tabShips || m.layoutAt(w) == Narrow || m.listOnly() || preview {
 		return w, 0
 	}
 	at := splitAt(w, m.layoutAt(w))
+	if m.tab == tabSessions {
+		at = sessionsSplit(w)
+		if !m.chatRoom(w - at - 1) {
+			return w, 0 // no chat without its question: it opens full-screen
+		}
+	}
 	return at, w - at - 1
 }
+
+// bodyRows is how many rows the body has under the header, a list listW
+// wide, and the key line, and if the time axis takes two of them over it:
+// the axis leaves the list three rows.
+func (m Model) bodyRows(listW int) (int, bool) {
+	full := max(m.height-5, 1)
+	lanes := m.tab == tabSessions && len(m.snap.Sessions) > 0 && full >= 5 && m.sessTracks(listW).lane > 0
+	if lanes {
+		full = max(full-2, 1)
+	}
+	return full, lanes
+}
+
+// sessionsSplit is the list's width where Sessions splits: 40% of the
+// screen, at least 38 columns and at most 78; the chat takes the rest.
+func sessionsSplit(w int) int { return min(max(w*2/5, 38), 78) }
 
 // splitAt is the column the list and the detail split at, and the dock's
 // usage and machine under them.
@@ -350,6 +391,15 @@ func splitAt(w int, l Layout) int {
 func windowed(b body, room, sel int) body {
 	if len(b.lines) <= room {
 		return b
+	}
+	start := windowStart(b, room, sel)
+	return body{lines: b.lines[start : start+room], rows: b.rows[start : start+room]}
+}
+
+// windowStart is the first line of b that windowed shows.
+func windowStart(b body, room, sel int) int {
+	if len(b.lines) <= room {
+		return 0
 	}
 	first, last := -1, -1
 	for i, r := range b.rows {
@@ -367,7 +417,7 @@ func windowed(b body, room, sel int) body {
 	if first >= 0 && first < start {
 		start = max(first-1, 0)
 	}
-	return body{lines: b.lines[start : start+room], rows: b.rows[start : start+room]}
+	return start
 }
 
 // header is one line: the mark, the name and the host on the left; who
@@ -613,8 +663,11 @@ func (m Model) keyLine(w int) (string, []span) {
 	if m.flash != "" {
 		return fit(" "+st.text.Render(m.flash), w), nil
 	}
-	if l := m.lostLine(); l != "" {
+	if l := m.lostLine(); l != "" { // a lost host outranks the chat's keys, which may not go
 		return fit(" "+st.text.Render(l), w), nil
+	}
+	if m.chatKeys {
+		return m.chatKeyLine(w)
 	}
 	hints := slices.DeleteFunc(slices.Clone(m.view().keys(m)), func(h hint) bool { return h == (hint{}) })
 	if m.layoutAt(w) == Wide {

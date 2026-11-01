@@ -232,37 +232,9 @@ func TestEnterShowsTheCommand(t *testing.T) {
 	}
 }
 
-func TestAOnFailedStepOpensPeek(t *testing.T) {
-	st := tabMorning(screensState(t))
-	m, _ := loadedWith(t, 100, st)
-	m.setTab(tabStoker)
-	pane := ""
-	for _, s := range m.all.sessions {
-		if s.Name == "kindle-web" {
-			pane = s.Pane
-		}
-	}
-	for i, e := range m.stoker.Run {
-		if e.Step == 5 {
-			m.stoker.Run[i].Pane = pane
-		}
-	}
-	if line := actionLine(selectStep(t, m, "p5")); !strings.Contains(line, "a look") {
-		t.Fatalf("the key line does not offer a: %q", line)
-	}
-	next, _ := key(selectStep(t, m, "p5"), "a")
-	if p := next.(Model).peek; p == nil || p.pane != pane {
-		t.Fatalf("a did not open the peek on %q: %+v", pane, p)
-	}
-	other, _ := key(selectStep(t, m, "p2"), "a")
-	if other.(Model).peek != nil || !strings.Contains(other.(Model).flash, "failed step") {
-		t.Fatalf("a on a done step: %+v", other.(Model).flash)
-	}
-}
-
-// While the stoker is in charge, looking at a failed step's session is
-// acting on a session: the builder is asked to take over first.
-func TestAOnAFailedStepAsksToTakeOver(t *testing.T) {
+// While the stoker is in charge, a opens a failed step's chat: looking asks
+// nothing, and the first key to its agent asks to take over.
+func TestAOnAFailedStepAsksToTakeOverAtTheFirstKey(t *testing.T) {
 	st := tabNight(screensState(t))
 	m, _ := loadedWith(t, 100, st)
 	m.setTab(tabStoker)
@@ -277,13 +249,15 @@ func TestAOnAFailedStepAsksToTakeOver(t *testing.T) {
 			m.stoker.Run[i].State, m.stoker.Run[i].Pane = "failed", pane
 		}
 	}
-	asked, _ := key(selectStep(t, m, "p5"), "a")
-	if am := asked.(Model); am.held == nil || am.peek != nil {
-		t.Fatalf("a did not ask: held %v peek %v", am.held != nil, am.peek)
+	opened, _ := key(selectStep(t, m, "p5"), "a")
+	if om := opened.(Model); om.held != nil || !om.chatKeys {
+		t.Fatalf("a: held %v chatKeys %v", om.held != nil, om.chatKeys)
 	}
-	answered, _ := key(asked, "n")
-	if p := answered.(Model).peek; p == nil || p.pane != pane {
-		t.Fatalf("n did not go on to the peek: %+v", p)
+	if s, _ := opened.(Model).selectedSession(); s.Pane != pane {
+		t.Fatalf("a opened the chat of %q, want %q", s.Pane, pane)
+	}
+	if asked, _ := key(opened, "esc"); asked.(Model).held == nil {
+		t.Fatal("the first key to the agent did not ask to take over")
 	}
 }
 

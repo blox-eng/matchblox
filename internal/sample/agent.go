@@ -350,7 +350,8 @@ func firstLine(s string) string {
 	return ""
 }
 
-// maxSaid bounds what a session said: the answer peek shows nine lines.
+// maxSaid bounds what a session said: the state carries it on every
+// sample, and `matchblox peek` and the stoker read only its end.
 const maxSaid = 2000
 
 // cut keeps the last n runes of s: a reply ends on what it asks.
