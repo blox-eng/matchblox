@@ -63,16 +63,19 @@ func (s *Service) watchAct(cl *client, clientKind string, a proto.Act, pane stri
 }
 
 // watchLoop sends cl the screen of its watched pane when the text changes,
-// and once when the pane is gone. A wait that the last screen does not
-// show sends it again, newer, once the wait has settled: the console's
-// Enter answers the screen it saw, and a still prompt is still the one the
-// builder sees. A watch up the
-// history sends those lines, and no Enter answers them.
+// once when the pane is gone, and once for each watch act: a pane with no
+// history answers a watch up with its live screen, and the console waits
+// for one to come back to live. A wait that the last screen does not show
+// sends it again, newer, once the wait has settled: the console's Enter
+// answers the screen it saw, and a still prompt is still the one the
+// builder sees. A watch up the history sends those lines, and no Enter
+// answers them.
 func (s *Service) watchLoop(ctx context.Context, cl *client) {
 	tick := time.NewTicker(watchEvery)
 	defer tick.Stop()
 	var last proto.Screen
 	var sent bool
+	var lastW *watched
 	for {
 		select {
 		case <-ctx.Done():
@@ -84,6 +87,9 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 		if w == nil || w.pane == "" {
 			sent = false
 			continue
+		}
+		if w != lastW {
+			sent, lastW = false, w // each watch act gets a screen back, the same text or not
 		}
 		pane := w.pane
 		// Stamped before the capture: a wait that begins during it is newer.

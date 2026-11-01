@@ -933,6 +933,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, touch // typed for the chat that just closed: no q quits, no letter acts
 		}
 		if m.notLive() && m.chatKeys && (f == layerMain || f == layerTakeOver) {
+			if bkey.Matches(msg, m.keys.chat.Back) { // the way back works from the history too
+				m.chatKeys, m.up = false, 0
+				return m, touch
+			}
 			return m.backToLive(), touch
 		}
 		// ctrl+c quits from every layer but a question, where any key but

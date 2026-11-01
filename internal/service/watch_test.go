@@ -556,3 +556,26 @@ func TestTheLiveConsoleEnterGoesWhileAnotherIsUp(t *testing.T) {
 		t.Fatalf("the live console's Enter: %+v", res)
 	}
 }
+
+// A pane with no history answers a watch up with its live screen. Each
+// watch act still gets a screen back, so the console that scrolled up and
+// back sees the live screen again (it blanks the chat until one comes).
+func TestEveryWatchGetsAScreenBack(t *testing.T) {
+	s, f, ctx := watchTest(t, map[string]string{"%1": "up 0\n"})
+	f.history = 0
+	c := connectAs(t, ctx, s, proto.ClientConsole)
+	r := read(c)
+	r.act(t, "w", proto.WatchPrefix+"%1")
+	r.screenThat(t, func(proto.Screen) bool { return true })
+	for i, up := range []string{"up:3", "up:0", "up:6", ""} {
+		n := len(r.got())
+		r.actText(t, fmt.Sprint("w", i), proto.WatchPrefix+"%1", up)
+		deadline := time.Now().Add(waitLimit)
+		for len(r.got()) == n && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+		if len(r.got()) == n {
+			t.Fatalf("no screen came back for watch %q", up)
+		}
+	}
+}

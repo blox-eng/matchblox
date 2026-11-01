@@ -865,8 +865,13 @@ func (m Model) keepChat(was Model) Model {
 func (m Model) chatKeyLine(w int) (string, []span) {
 	st := m.st
 	s, _ := m.selectedSession()
-	if m.notLive() { // ctrl+] and ctrl+o too only go back to live
-		return fit(" "+st.text.Render("a key goes back to live"), w), nil
+	if m.notLive() { // ctrl+o too only goes back to live; ctrl+] leaves
+		back := m.keys.chat.Back
+		line := " " + st.text.Render("a key goes back to live")
+		if wide := line + st.muted.Render(" · ") + st.accent.Render(back.Help().Key) + st.muted.Render(" "+back.Help().Desc); lipgloss.Width(wide) <= w {
+			line = wide
+		}
+		return fit(line, w), nil
 	}
 	type part struct {
 		text string

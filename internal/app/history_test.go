@@ -176,7 +176,6 @@ func TestAKeyWhileUpOnlyGoesBackToLive(t *testing.T) {
 	for _, press := range []func(Model) Model{
 		func(m Model) Model { return pressKeys(t, m, "x") },
 		func(m Model) Model { return pressKeys(t, m, "enter") },
-		func(m Model) Model { return pressKeys(t, m, "ctrl+]") },
 		func(m Model) Model {
 			next, cmd := m.Update(tea.PasteMsg{Content: "hello"})
 			drain(cmd)
@@ -284,5 +283,23 @@ func TestAHistoryScreenAfterLiveIsIgnored(t *testing.T) {
 	next, _ := m.Update(screenMsg{Pane: s.Pane, Text: "old history", Up: 3})
 	if got := next.(Model).screen; got.Up != 0 || got.Text == "old history" {
 		t.Fatalf("screen %+v", got)
+	}
+}
+
+// ctrl+] leaves the chat up the history too, and while it waits for the
+// live screen after it: a pane whose history never answers does not trap
+// the keys.
+func TestCtrlBracketLeavesTheChatUpTheHistory(t *testing.T) {
+	for _, state := range []string{"up", "waiting for live"} {
+		m, _ := inChat(t)
+		switch state {
+		case "up":
+			m.up = 3
+		case "waiting for live":
+			m.liveWait = true
+		}
+		if m = pressKeys(t, m, "ctrl+]"); m.chatKeys {
+			t.Fatalf("%s: ctrl+] kept the chat", state)
+		}
 	}
 }
