@@ -110,8 +110,8 @@ final class MatchTrayTests: XCTestCase {
 
     // MARK: The screen under the tray
 
-    private let tall = CGSize(width: 390, height: 600)
-    private let short = CGSize(width: 390, height: 504)
+    private let tall = ScreenHold.Size(width: 390, height: 600)
+    private let short = ScreenHold.Size(width: 390, height: 504)
     private let drawer: CGFloat = 96
 
     func testWithNoTrayTheTerminalFollowsTheScreen() {
@@ -125,7 +125,7 @@ final class MatchTrayTests: XCTestCase {
         var hold = ScreenHold()
         hold.open(screen: tall, drawer: drawer)
         XCTAssertEqual(hold.height(screen: short), 600)
-        XCTAssertEqual(hold.height(screen: CGSize(width: 390, height: 300)), 600)
+        XCTAssertEqual(hold.height(screen: ScreenHold.Size(width: 390, height: 300)), 600)
         XCTAssertEqual(hold.height(screen: tall), 600)
     }
 
@@ -135,7 +135,7 @@ final class MatchTrayTests: XCTestCase {
         hold.close()
         // The keyboard's accessory can shrink back after the tray's own animation ends.
         XCTAssertEqual(hold.height(screen: short), 600)
-        XCTAssertEqual(hold.height(screen: CGSize(width: 390, height: 504.3)), 600)
+        XCTAssertEqual(hold.height(screen: ScreenHold.Size(width: 390, height: 504.3)), 600)
         XCTAssertEqual(hold.height(screen: tall), 600)
         XCTAssertNil(hold.held)
         XCTAssertEqual(hold.height(screen: short), 504)
@@ -146,7 +146,7 @@ final class MatchTrayTests: XCTestCase {
         hold.open(screen: tall, drawer: drawer)
         hold.close()
         // The dock's tray closed as the keyboard came up: the screen is short by the keyboard.
-        XCTAssertEqual(hold.height(screen: CGSize(width: 390, height: 300)), 300)
+        XCTAssertEqual(hold.height(screen: ScreenHold.Size(width: 390, height: 300)), 300)
         XCTAssertNil(hold.held)
     }
 
@@ -155,22 +155,22 @@ final class MatchTrayTests: XCTestCase {
         hold.open(screen: tall, drawer: drawer)
         hold.close()
         XCTAssertEqual(hold.height(screen: short), 600)
-        XCTAssertEqual(hold.height(screen: CGSize(width: 390, height: 450)), 450)
+        XCTAssertEqual(hold.height(screen: ScreenHold.Size(width: 390, height: 450)), 450)
         XCTAssertNil(hold.held)
     }
 
     func testANewWidthEndsTheHoldEvenWhileOpen() {
         var hold = ScreenHold()
         hold.open(screen: tall, drawer: drawer)
-        XCTAssertEqual(hold.height(screen: CGSize(width: 844, height: 300)), 300)
+        XCTAssertEqual(hold.height(screen: ScreenHold.Size(width: 844, height: 300)), 300)
         XCTAssertNil(hold.held)
         hold.close()
-        XCTAssertEqual(hold.height(screen: CGSize(width: 844, height: 204)), 204)
+        XCTAssertEqual(hold.height(screen: ScreenHold.Size(width: 844, height: 204)), 204)
     }
 
     func testAScreenWithNoSizeYetHoldsNothing() {
         var hold = ScreenHold()
-        hold.open(screen: .zero, drawer: drawer)
+        hold.open(screen: ScreenHold.Size(width: 0, height: 0), drawer: drawer)
         XCTAssertNil(hold.held)
         XCTAssertEqual(hold.height(screen: short), 504)
         hold.close()
@@ -184,9 +184,9 @@ final class MatchTrayTests: XCTestCase {
         hold.open(screen: short, drawer: drawer)
         XCTAssertEqual(hold.held?.height, 600)
         hold.close()
-        XCTAssertEqual(hold.height(screen: CGSize(width: 390, height: 300)), 600)
+        XCTAssertEqual(hold.height(screen: ScreenHold.Size(width: 390, height: 300)), 600)
         hold.close()
-        XCTAssertEqual(hold.height(screen: CGSize(width: 390, height: 300)), 300)
+        XCTAssertEqual(hold.height(screen: ScreenHold.Size(width: 390, height: 300)), 300)
         XCTAssertNil(hold.held)
     }
 
