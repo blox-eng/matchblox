@@ -95,18 +95,22 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 		// Stamped before the capture: a wait that begins during it is newer.
 		scr := proto.Screen{Pane: pane, At: s.upScreens.stamp(pane, s.now, w.up > 0)}
 		var text string
+		read := false
 		_, live := s.sessionAt(pane)
 		switch {
 		case live && w.up > 0:
-			text, scr.Up, live = s.CaptureUp(pane, w.up)
+			text, scr.Up, read = s.CaptureUp(pane, w.up)
 		case live:
-			text, live = s.Capture([]string{pane})[pane]
+			text, read = s.Capture([]string{pane})[pane]
 		}
-		scr.Text, scr.Gone = text, !live
+		scr.Text, scr.Gone = text, !live // only a pane with no session in it any more is gone
+		if live && !read {
+			scr.Up, scr.Err = 0, "could not read "+pane+": tmux did not answer"
+		}
 		if scr.Gone {
 			scr.Up = 0
 		}
-		if sent && pane == last.Pane && text == last.Text && scr.Gone == last.Gone && scr.Up == last.Up && (s.waitShown(pane, last.At) || !s.waitShown(pane, scr.At)) {
+		if sent && pane == last.Pane && text == last.Text && scr.Gone == last.Gone && scr.Err == last.Err && scr.Up == last.Up && (s.waitShown(pane, last.At) || !s.waitShown(pane, scr.At)) {
 			continue
 		}
 		sent, last = true, scr

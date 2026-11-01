@@ -142,6 +142,9 @@ type Screen struct {
 	Text string    `json:"text"`
 	Gone bool      `json:"gone,omitempty"`
 	Up   int       `json:"up,omitempty"`
+	// Err says the pane could not be read this time; the session is still
+	// there, and Text is empty.
+	Err string `json:"err,omitempty"`
 }
 
 type Result struct {

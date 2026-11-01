@@ -626,6 +626,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case screenMsg:
+		if msg.Pane == m.watching && msg.Err != "" {
+			m.flash = msg.Err // a read that failed: the session and its last screen stay
+			return m, m.recv()
+		}
 		if msg.Pane == m.watching && (msg.Up == 0 || m.watchUp > 0) { // the history after live is not live
 			m.screen = proto.Screen(msg)
 			m.liveWait = m.liveWait && msg.Up > 0

@@ -1715,3 +1715,14 @@ func TestAPasteOnTheCardGoesOnItsTypingRow(t *testing.T) {
 		t.Fatalf("card %+v", c)
 	}
 }
+
+// A screen the service could not read is not a session that ended: the
+// chat keeps its keys and the last screen, and the key line says why.
+func TestAFailedReadKeepsTheChat(t *testing.T) {
+	m, _ := inChat(t)
+	next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(101, 0), Err: "could not read %1: tmux did not answer"})
+	m = next.(Model)
+	if !m.chatKeys || m.screen.Text != "> " || !strings.Contains(m.flash, "could not read") {
+		t.Fatalf("chatKeys %v screen %+v flash %q", m.chatKeys, m.screen, m.flash)
+	}
+}

@@ -248,15 +248,19 @@ func TestWatchSendsAStillScreenAgainForANewerWait(t *testing.T) {
 	}
 }
 
+// A pane whose session left is gone: one screen says so.
 func TestWatchPaneGone(t *testing.T) {
-	s, _, ctx := watchTest(t, map[string]string{}, "%1")
+	s, f, ctx := watchTest(t, map[string]string{"%1": idleScreen})
 	c := connectAs(t, ctx, s, proto.ClientConsole)
 	r := read(c)
 	if res := r.act(t, "w", proto.WatchPrefix+"%1"); res.Err != "" {
 		t.Fatal(res.Err)
 	}
+	r.screenThat(t, func(sc proto.Screen) bool { return sc.Text == idleScreen })
+	f.leave()
+	r.screenThat(t, func(sc proto.Screen) bool { return sc.Gone && sc.Err == "" })
 	time.Sleep(500 * time.Millisecond)
-	if g := r.got(); len(g) != 1 || g[0].Pane != "%1" || !g[0].Gone {
+	if g := r.got(); len(g) != 2 || !g[1].Gone {
 		t.Fatalf("screens %+v, want one gone", g)
 	}
 }
@@ -577,5 +581,27 @@ func TestEveryWatchGetsAScreenBack(t *testing.T) {
 		if len(r.got()) == n {
 			t.Fatalf("no screen came back for watch %q", up)
 		}
+	}
+}
+
+// A pane that tmux fails to read is not a session that ended: the screen
+// says the read failed, never Gone, and a good read after it is sent again.
+func TestACaptureErrorIsNotGone(t *testing.T) {
+	s, f, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	c := connectAs(t, ctx, s, proto.ClientConsole)
+	r := read(c)
+	r.act(t, "w", proto.WatchPrefix+"%1")
+	r.screenThat(t, func(sc proto.Screen) bool { return sc.Text == idleScreen })
+	f.mu.Lock()
+	delete(f.screens, "%1") // tmux fails: the capture drops the pane
+	f.mu.Unlock()
+	failed := r.screenThat(t, func(sc proto.Screen) bool { return sc.Err != "" || sc.Gone })
+	if failed.Gone || failed.Err == "" {
+		t.Fatalf("a failed read: %+v", failed)
+	}
+	f.set("%1", idleScreen)
+	back := r.screenThat(t, func(sc proto.Screen) bool { return sc.At.After(failed.At) && sc.Err == "" })
+	if back.Text != idleScreen || back.Gone {
+		t.Fatalf("the read after it: %+v", back)
 	}
 }
