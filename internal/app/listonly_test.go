@@ -226,3 +226,18 @@ func TestListOnlyFrameCostGrowsWithRows(t *testing.T) {
 		t.Fatalf("600 rows cost %.0f allocations, 300 cost %.0f: more than twice", big, small)
 	}
 }
+
+// TestOneColumnOpensTheRowInPlace: wherever Sessions is one column with no
+// right side (a landscape screen of 60 to 82 columns, 96x8, 106x10), the
+// selected row opens in place, as on a phone: its words show before Enter.
+func TestOneColumnOpensTheRowInPlace(t *testing.T) {
+	for _, size := range [][2]int{{80, 30}, {66, 24}, {96, 8}, {106, 10}} {
+		m := fullView(flintAt(t, size[0], size[1]))
+		if _, right := m.panes(size[0]); right != 0 {
+			t.Fatalf("%v splits", size)
+		}
+		if sc := m.draw(size[0]); !opensInPlace(m, sc) {
+			t.Errorf("%v: the selected row does not open:\n%s", size, screen(m))
+		}
+	}
+}
