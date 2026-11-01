@@ -1,0 +1,31 @@
+ ‹ Sessions · app-feature · busy
+⏺ The endpoints the refresh touches:
+┌──────────────┬───────────────────────────┐
+│ path         │ what it does              │
+├──────────────┼───────────────────────────┤
+│ /refresh     │ rotates the token         │
+│ /revoke      │ ends all its tokens       │
+└──────────────┴───────────────────────────┘
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────
+ ctrl+] back · ctrl+o into tmux

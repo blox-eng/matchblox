@@ -206,13 +206,11 @@ func (m Model) drawScreen(w int) drawn {
 	if place, _ := m.chatPlacement(w); m.chatKeys && place == chatFull { // one column: the chat takes the screen
 		return m.chatScreen(w)
 	}
-	full := max(m.height-5, 1)
+	full, lanes := m.bodyRows(listW)
 	sc.listW = listW
-	lanes := m.tab == tabSessions && len(m.snap.Sessions) > 0 && full >= 5 && m.sessTracks(listW).lane > 0 // the axis leaves the list three rows
 	if lanes {
 		sc.lines = append(sc.lines, m.axisLines(m.sessTracks(listW), listW)...)
 		sc.bodyTop += 2
-		full = max(full-2, 1)
 	}
 	b := m.body(listW)
 	chat, chatting := m.chatShown(detailW)
@@ -361,6 +359,18 @@ func (m Model) panes(w int) (list, detail int) {
 		}
 	}
 	return at, w - at - 1
+}
+
+// bodyRows is how many rows the body has under the header, a list listW
+// wide, and the key line, and if the time axis takes two of them over it:
+// the axis leaves the list three rows.
+func (m Model) bodyRows(listW int) (int, bool) {
+	full := max(m.height-5, 1)
+	lanes := m.tab == tabSessions && len(m.snap.Sessions) > 0 && full >= 5 && m.sessTracks(listW).lane > 0
+	if lanes {
+		full = max(full-2, 1)
+	}
+	return full, lanes
 }
 
 // sessionsSplit is the list's width where Sessions splits: 40% of the

@@ -116,11 +116,65 @@ func isRule(line string) bool {
 	return true
 }
 
+// asDrawn is a screen the agent drew w columns wide, in its last h lines,
+// each as it is: cut at w and no more, its trailing spaces and blank rows
+// kept. Of its escape sequences only the styles stay, as in fitScreen.
+func asDrawn(text string, w, h int) []string {
+	if w <= 0 || h <= 0 {
+		return nil
+	}
+	text = controlStrings.ReplaceAllString(strings.ReplaceAll(text, "\r", ""), "")
+	lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+	lines = lines[max(len(lines)-h, 0):]
+	for i, l := range lines {
+		lines[i] = ansi.Truncate(l, w, "")
+	}
+	return lines
+}
+
+// sizedFor tells if the screen is the agent's live screen drawn for a chat
+// w columns wide and h lines tall: the service sized its window to it.
+func (m Model) sizedFor(w, h int) bool {
+	return m.screen.Cols > 0 && m.screen.Cols == w && m.screen.Rows <= h && m.screen.Up == 0
+}
+
+// chatSize is the room the chat gives the agent's screen as the console
+// draws it now: its columns, and its rows under the chat's title and strip
+// and over its card. 0, 0 where no chat is drawn. The service sizes the
+// agent's window to it.
+func (m Model) chatSize() (cols, rows int) {
+	if m.tab != tabSessions {
+		return 0, 0
+	}
+	w := max(m.width, minWidth)
+	listW, detailW := m.panes(w)
+	switch {
+	case detailW > 0: // beside the list, as chatPlacement has it
+		s, ok := m.chatShown(detailW)
+		if !ok {
+			return 0, 0
+		}
+		room, _ := m.bodyRows(listW)
+		cols, rows = detailW-1, room-1-len(m.chatStrip(s, detailW, room-1))
+	case m.chatKeys:
+		place, full := m.chatPlacement(w)
+		if place != chatFull {
+			return 0, 0
+		}
+		cols, rows = w, full
+	}
+	rows -= len(m.cardLines(cols))
+	if cols <= 0 || rows <= 0 {
+		return 0, 0
+	}
+	return cols, rows
+}
+
 // watchCmd asks the service for the selected session's screen when it is
 // not the one already watched, and for none when the selection has no pane
 // or is another host's;
-// and for the lines up the chat shows when they changed. A screen of
-// another pane never stays.
+// and for the lines up the chat shows, or the chat's size, when they
+// changed. A screen of another pane never stays.
 func (m *Model) watchCmd() tea.Cmd {
 	want := ""
 	if m.conn != nil && !m.lost && !m.mismatch {
@@ -137,16 +191,24 @@ func (m *Model) watchCmd() tea.Cmd {
 	case m.up == 0 && m.watchUp > 0:
 		m.screen, m.liveWait = proto.Screen{}, true // the history goes; blank until the live screen comes
 	}
-	if want == m.watching && m.up == m.watchUp {
+	var size [2]int
+	if want != "" {
+		size[0], size[1] = m.chatSize()
+	}
+	if size == [2]int{} && want == m.watching {
+		size = m.watchSize // a chat off screen keeps its size: the agent does not redraw at each tab
+	}
+	if want == m.watching && m.up == m.watchUp && size == m.watchSize {
 		return nil
 	}
-	m.watching, m.watchUp = want, m.up
+	m.watching, m.watchUp, m.watchSize = want, m.up, size
 	if m.conn == nil || m.lost || m.mismatch {
 		return nil // the service forgot the watch with the connection
 	}
 	c, up := m.conn, proto.UpPrefix+strconv.Itoa(m.up)
+	act := proto.Act{RecID: proto.WatchPrefix + want, Text: up, Cols: size[0], Rows: size[1]}
 	return func() tea.Msg { // not m.send: the watch takes no number from the acts the builder sees
-		if err := c.Send(proto.KindAct, watchActID+want, proto.Act{RecID: proto.WatchPrefix + want, Text: up}); err != nil {
+		if err := c.Send(proto.KindAct, watchActID+want, act); err != nil {
 			return lostMsg{err, c}
 		}
 		return nil
@@ -179,7 +241,18 @@ func (m Model) chatLines(w, h int) []string {
 		if len(card) > 0 {
 			text = agentMenuCut(text) // the card is the one place to answer, live or up the history
 		}
-		fit = fitScreen(text, w, h-len(card))
+		switch room := h - len(card); {
+		case !m.sizedFor(w, room):
+			fit = fitScreen(text, w, room)
+		case len(card) > 0: // what is left over the agent's menu sits on the card
+			fit = asDrawn(text, w, room)
+			for len(fit) > 0 && strings.TrimSpace(ansi.Strip(fit[len(fit)-1])) == "" {
+				fit = fit[:len(fit)-1]
+			}
+		default: // top first, as in the agent's own terminal
+			fit = asDrawn(text, w, room)
+			fit = append(fit, make([]string, room-len(fit))...)
+		}
 	}
 	fit = append(fit, card...)
 	return append(lines[:len(lines)-len(fit)], fit...)

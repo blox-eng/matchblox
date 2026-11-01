@@ -300,6 +300,7 @@ type Model struct {
 	watchHeld  string                          // the pane the service refused, until the next snapshot
 	up         int                             // the lines up the chat shows of the agent's history; 0 is live
 	watchUp    int                             // the lines up the service sends
+	watchSize  [2]int                          // the chat's size the service sizes the agent's window to: cols, rows
 	liveWait   bool                            // the chat came back from the history, and waits for the live screen
 	askCard    card                            // the question card's answer, in the chat
 	cardSeen   cardSeen                        // the card's quiet: the ask it is for and its start
