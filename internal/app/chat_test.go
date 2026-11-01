@@ -1699,3 +1699,19 @@ func TestKeysAfterTheChatClosesByItselfDoNothing(t *testing.T) {
 		}
 	}
 }
+
+// A paste while the card is up goes on the card's typing row, newlines
+// and all control keys out: never to the agent's own menu, which the chat
+// hides.
+func TestAPasteOnTheCardGoesOnItsTypingRow(t *testing.T) {
+	m, f := askModel(t, 100, threeWays)
+	next, cmd := m.Update(tea.PasteMsg{Content: "keep the old key\r\nfor a day\n"})
+	drain(cmd)
+	m = next.(Model)
+	if len(keyActs(f)) != 0 || len(pickActs(f)) != 0 {
+		t.Fatalf("the paste went to the agent: keys %+v picks %+v", keyActs(f), pickActs(f))
+	}
+	if c := m.askCard; c.text != "keep the old key for a day" || c.at != len(threeWays.Options) {
+		t.Fatalf("card %+v", c)
+	}
+}

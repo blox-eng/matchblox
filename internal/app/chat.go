@@ -629,10 +629,14 @@ func (m Model) heldKeys(name string, keys []chatKey) func(Model) (tea.Model, tea
 	return func(m Model) (tea.Model, tea.Cmd) { return m.toAgent(name, keys...) }
 }
 
-// chatPaste is a paste in the chat: text to the agent. A newline goes as
-// Enter; other control characters drop.
+// chatPaste is a paste in the chat: text to the agent, or onto the card's
+// typing row while the card is up. A newline goes as Enter; other control
+// characters drop.
 func (m Model) chatPaste(text string) (tea.Model, tea.Cmd) {
 	m.flash = ""
+	if s, c, ok := m.cardNow(); ok {
+		return m.cardPaste(s, c, text), nil
+	}
 	name, keys := m.pressed(pasteTexts(text)...)
 	if len(keys) == 0 {
 		return m, nil

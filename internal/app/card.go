@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -219,17 +220,44 @@ func (m Model) cardKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case !typing && bkey.Matches(k, ck.Tick) && q.Multi && c.at >= 0:
 		c.ticks = toggled(c.ticks, c.at+1)
-	case k.Text != "" && len([]rune(c.text)) < 500:
+	case k.Text != "" && len([]rune(c.text)) < maxCardText:
 		c.at, c.text = n, c.text+k.Text
 	}
 	m.askCard = c
 	return m, nil
 }
 
+// maxCardText is the most the card's typing row holds.
+const maxCardText = 500
+
+// cardPaste puts a paste on the card's typing row: a newline as a space,
+// the other control keys out, up to maxCardText. It never goes to the
+// agent, whose own menu the chat hides.
+func (m Model) cardPaste(s sample.Session, c card, text string) Model {
+	text = strings.TrimRight(strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(text), "\n")
+	text = strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n':
+			return ' '
+		case unicode.IsControl(r):
+			return -1
+		}
+		return r
+	}, text)
+	c.at = len(s.Ask.Questions[c.q].Options)
+	if r := []rune(c.text + text); len(r) > maxCardText {
+		c.text = string(r[:maxCardText])
+	} else {
+		c.text += text
+	}
+	m.askCard = c
+	return m
+}
+
 func toggled(ticks map[int]bool, i int) map[int]bool {
-	out := map[int]bool{}
-	for k, v := range ticks {
-		out[k] = v
+	out := maps.Clone(ticks)
+	if out == nil {
+		out = map[int]bool{}
 	}
 	out[i] = !out[i]
 	return out
