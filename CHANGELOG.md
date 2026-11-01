@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-11-01
+
 ### Changed
 
 - **The chat shows the agent's own question.** The console's question card is
@@ -1139,7 +1141,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.29.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.30.0...HEAD
+[0.30.0]: https://github.com/blox-eng/matchblox/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/blox-eng/matchblox/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/blox-eng/matchblox/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/blox-eng/matchblox/compare/v0.26.2...v0.27.0
