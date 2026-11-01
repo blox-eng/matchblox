@@ -78,7 +78,8 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 }
 
 // unseen says why key a would answer a wait in pane that the screen the
-// console saw did not show, or "". Enter answers any wait. At a menu (a
+// console saw did not show, or "". No such key goes before the console
+// has shown a screen of the pane at all. Enter answers any wait. At a menu (a
 // permission prompt or a question, by the hooks or on the screen) a digit
 // or any text picks, Esc turns it down, and an arrow or Tab moves it.
 func (s *Service) unseen(pane, name string, a proto.Act, menu bool) string {
@@ -86,6 +87,9 @@ func (s *Service) unseen(pane, name string, a proto.Act, menu bool) string {
 	menu = menu || queued && (it.State == queue.StatePermission || it.State == queue.StateQuestion)
 	if a.Text != "Enter" && !(menu && answers(a.Text)) {
 		return ""
+	}
+	if a.Seen.IsZero() {
+		return "not sent: the console has not shown " + name + "'s screen yet — look again"
 	}
 	if s.upScreens.has(pane, a.Seen) {
 		return "not sent: that screen was " + name + "'s history, not the live screen — look again"

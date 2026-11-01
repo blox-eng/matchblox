@@ -111,3 +111,17 @@ func TestAnUnchangedScreenIsResentOnlyOnceTheWaitSettled(t *testing.T) {
 		t.Fatalf("enter on the settled screen: %+v", res)
 	}
 }
+
+// TestNoEnterBeforeTheConsoleSawThePane: an Enter from a console that has
+// drawn no screen of the pane yet (Seen zero) submits nothing it has not
+// shown, waiting or not.
+func TestNoEnterBeforeTheConsoleSawThePane(t *testing.T) {
+	s, ran := keysTest(t)
+	s.cur.Queue = nil // flint waits for nothing
+	if res := s.act(t.Context(), key("Enter")); res.Err != "not sent: the console has not shown flint's screen yet — look again" || len(*ran) != 0 {
+		t.Fatalf("res %+v ran %q", res, *ran)
+	}
+	if res := s.act(t.Context(), key("Down")); res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("a key that sends nothing: res %+v ran %q", res, *ran)
+	}
+}
