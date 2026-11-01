@@ -13,7 +13,7 @@
 
 <p>
 <img src="www/demo/replay-desk.svg" width="74%" alt="The matchblox console on a desk, on a demo machine: who waits for you, an answer picked from the agent's own options, the pull requests your sessions drive, usage and the machine, then a night the stoker keeps burning, its score in the morning, a new session started with its first message and a finished one killed">
-<img src="www/demo/replay-phone.svg" width="24%" alt="The same console on a phone: one column, and a tap on a session opens its chat full-screen, with the agent's question card at the bottom">
+<img src="www/demo/replay-phone.svg" width="24%" alt="The same console on a phone: one column, and a tap on a session opens its chat full-screen, with the agent's own question at the bottom">
 </p>
 
 <p>
@@ -66,7 +66,7 @@ The full walk is [Get started](https://docs.matchblox.com/start/).
 - **Steer without leaving**: the chat is the live screen of the selected
   agent, on the right of Sessions, or full-screen on a phone. `Enter` or
   `a` gives it the keys, and every key then goes to the agent. When it asks
-  with its question tool, a card shows its options and a digit answers.
+  with its question tool, its own menu shows and a digit answers.
   `Ctrl+]` gives the keys back.
 - **Switch the agent, keep the seat**: `A` runs another agent in the same
   pane (Claude Code, Codex, OpenCode or Cursor) with the session's name,
@@ -139,8 +139,8 @@ Every key: [Keys](https://docs.matchblox.com/keys/).
 
 Set the startup snippet of your SSH app (Termius, for example) to
 `matchblox`, or run `ssh -t ws-1 matchblox`. The console is the first
-screen. Tap a row to open its chat. Type, or tap an option of its question
-card, to steer the agent. `‹ Sessions` goes back. `A switch` under a row
+screen. Tap a row to open its chat. Type, or tap an option of its menu, to steer
+the agent. `‹ Sessions` goes back. `A switch` under a row
 gives its seat to another agent. Tap `◂ matchblox` in the tmux status line
 (with `set -g mouse on`) to come back from a pane, or press `prefix m`. See
 [The phone](https://docs.matchblox.com/phone/).

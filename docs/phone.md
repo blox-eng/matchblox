@@ -218,13 +218,13 @@ the console to answer an agent. See [the chat](console.md#the-chat).
 
 1. Tap an agent in Sessions. On a one-column phone, its chat fills the
    screen. The title row reads `‹ Sessions · <name> · <state>`. Held wide
-   with room for the chat's whole question, the chat is the pane beside the
+   with room for an agent's menu, the chat is the pane beside the
    list: tap the agent again, or tap the chat, to give it the keys. With
    the keyboard up on its side the phone has no such room: the chat fills
    the screen instead.
-2. Type. Every key goes to the agent. When the agent asks with its
-   question tool, a card shows at the foot. Tap an option, or type and
-   press `Enter`.
+2. Type. Every key goes to the agent. When the agent asks, its own menu
+   shows. Tap an option to pick it, or use the belt's `↑` `↓` and `Enter`.
+   The row you tapped lights up until the agent draws again.
 3. To go back to Sessions, tap `‹ Sessions` or `◂` on the belt. You can
    also swipe in from the left edge, or press ⌘M on a hardware keyboard.
    `Ctrl+]` does it too.
@@ -342,7 +342,7 @@ with a small font that makes it 90 columns or more upright, Sessions
 splits: the list takes 40% of the width (38 to 78 columns), the selected
 agent's chat the rest, and usage and the machine sit under the list. On
 its side it goes by its width. Sessions splits only when the chat gets 44
-columns and the body has room for its whole question card; short of
+columns and the body has 16 rows for an agent's menu; short of
 that, and under 60 columns, the console has one column. Each agent is one line, grouped by what it needs from you: who waits first. The selected one opens
 in place: what it said last, its ships, its plan and its keys. Only
 the selected setup step shows its detail.

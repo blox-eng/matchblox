@@ -201,15 +201,15 @@ func TestAKeyWhileUpOnlyGoesBackToLive(t *testing.T) {
 	}
 }
 
-func TestACardKeyWhileUpOnlyGoesBackToLive(t *testing.T) {
+func TestAKeyAtAMenuWhileUpOnlyGoesBackToLive(t *testing.T) {
 	m := pressKeys(t, demoSized(t, 132, 32), "down")
 	for s, ok := m.selectedSession(); ok && s.Name != "flint-auth"; s, ok = m.selectedSession() {
 		m = pressKeys(t, m, "down")
 	}
 	m = pressKeys(t, m, "enter")
 	f := m.conn.(*fakeConn)
-	if !m.chatKeys || !m.cardDrawn() {
-		t.Fatal("no card on the chat")
+	if !m.chatKeys || !m.chatDrawn() {
+		t.Fatal("no chat drawn")
 	}
 	m = wheelChat(t, m, true, 1)
 	n := len(f.acts())

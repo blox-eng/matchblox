@@ -168,9 +168,6 @@ func (s *Service) watchSize(cl *client, pane string, a proto.Act) {
 // window.
 func (s *Service) keyedSize(cl *client, a proto.Act) {
 	pane, ok := strings.CutPrefix(a.RecID, proto.KeysPrefix)
-	if !ok {
-		pane, ok = strings.CutPrefix(a.RecID, proto.PickPrefix)
-	}
 	if ok && s.sizes.keyed(cl, pane) {
 		go s.resize(pane)
 	}
