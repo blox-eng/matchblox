@@ -3,7 +3,6 @@
 package demo
 
 import (
-	"bytes"
 	"archive/tar"
 	"bytes"
 	"context"
