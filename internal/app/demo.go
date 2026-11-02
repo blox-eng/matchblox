@@ -75,9 +75,9 @@ func (m Model) keyRows(w int) (hair, keys string, spans []span) {
 		keys != fit(" "+m.st.text.Render(m.flash), w) {
 		return hair, keys, spans
 	}
-	rows := strings.Split(ansi.Wordwrap(m.opt.Demo, w-1, ""), "\n")
-	if len(rows) != 2 {
+	first, second, ok := strings.Cut(m.opt.Demo, ". ") // each sentence its own row
+	if !ok || ansi.StringWidth(first)+2 > w || ansi.StringWidth(second)+1 > w {
 		return hair, keys, spans
 	}
-	return fit(" "+m.st.text.Render(strings.TrimSpace(rows[0])), w), fit(" "+m.st.text.Render(strings.TrimSpace(rows[1])), w), nil
+	return fit(" "+m.st.text.Render(first+"."), w), fit(" "+m.st.text.Render(second), w), nil
 }

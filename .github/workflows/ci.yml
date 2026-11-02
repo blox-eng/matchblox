@@ -89,9 +89,10 @@ jobs:
           cache: true
       # The jump tests drive two real tmux servers and a real sshd; without
       # them they skip, and the guard of #214 would pass unseen.
-      - name: tmux and sshd for the jump tests
+      # strace proves the demo's walk makes no socket and runs no command.
+      - name: tmux and sshd for the jump tests, strace for the demo's
         if: runner.os == 'Linux'
-        run: sudo apt-get update -q && sudo apt-get install -y -q tmux openssh-server
+        run: sudo apt-get update -q && sudo apt-get install -y -q tmux openssh-server strace
       # Two sentinel tmux servers stand in for the builder's: one that $TMUX
       # names, as when the tests run inside tmux, and the default server.
       # The suite must leave both alive (#215).

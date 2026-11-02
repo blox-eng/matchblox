@@ -463,11 +463,9 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	f := *m.form
 	m.form = &f
 	fk := m.keys.form
-	if m.opt.Demo != "" && f.at == fieldWhere && bkey.Matches(k, fk.Enter, fk.Next) {
-		if _, clones := cloneOf(strings.TrimSpace(f.filter())); clones {
-			m.form, m.flash = nil, m.opt.Demo
-			return m, nil
-		}
+	if f.at == fieldWhere && bkey.Matches(k, fk.Enter, fk.Next) && m.demoRefusesClone(&f) {
+		m.form, m.flash = nil, m.opt.Demo
+		return m, nil
 	}
 	if f.whereList() {
 		f.err = ""
@@ -628,6 +626,16 @@ func (m Model) formAgents() []string {
 		}
 	}
 	return out
+}
+
+// demoRefusesClone: on the demo host, where holds a git URL. A phone clones
+// nothing, and any row under the URL is a clone's.
+func (m Model) demoRefusesClone(f *form) bool {
+	if m.opt.Demo == "" {
+		return false
+	}
+	_, clones := cloneOf(strings.TrimSpace(f.filter()))
+	return clones
 }
 
 // formEnter sends the form: a refusal stays in it, where it can be fixed.
@@ -1427,6 +1435,10 @@ func (m Model) tapForm(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 	}
 	var id int
 	if _, err := fmt.Sscanf(sc.boxRows[i], "row:%d", &id); err == nil && f.whereList() && id < len(f.rows) && f.rows[id].kind != rowLabel {
+		if m.demoRefusesClone(&f) {
+			m.form, m.flash = nil, m.opt.Demo
+			return m, nil
+		}
 		m.form = &f
 		if f.sel = id; f.rows[id].kind == rowClone {
 			f.pickOnPlan = f.rows[id].repo.path == ""

@@ -1215,7 +1215,11 @@ func (m Model) chatKeyLine(w int) (string, []span) {
 		return n
 	}
 	parts := []part{name, back, into}
-	for _, try := range [][]part{{name, back, into}, {back, into}, {back}} {
+	tries := [][]part{{name, back, into}, {back, into}, {back}}
+	if m.opt.Demo != "" { // the key still answers; no hint offers what it refuses
+		tries = [][]part{{name, back}, {back}}
+	}
+	for _, try := range tries {
 		if parts = try; width(try) <= w {
 			break
 		}

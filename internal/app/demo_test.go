@@ -196,6 +196,64 @@ func TestAFormThatWouldCloneSaysSo(t *testing.T) {
 	}
 }
 
+// The chat's key line offers no way into tmux on the demo host; the key answers
+// all the same.
+// A tap on the row a URL shows is what Enter is: the form goes, and the line is
+// in the key line. Both before the plan's answer and after it.
+func TestATapOnACloneRowSaysSo(t *testing.T) {
+	for _, planErr := range []string{"", demoLine} {
+		m := demoConsole(t, 44, Options{})
+		f := newFake()
+		m.conn = f
+		next, _ := m.Update(stateMsg(lifeState()))
+		m = pressKeys(t, next.(Model), "N")
+		for _, r := range "example/cloned" {
+			m = pressKeys(t, m, string(r))
+		}
+		if m.form == nil {
+			t.Fatal("no form")
+		}
+		fm := *m.form
+		fm.planErr, fm.planFor = planErr, "example/cloned"
+		m.form = &fm
+		sc := m.draw(44)
+		row := slices.IndexFunc(sc.boxRows, func(p string) bool { return strings.HasPrefix(p, "row:") })
+		if row < 0 {
+			t.Fatalf("no row in %q", sc.boxRows)
+		}
+		next, _ = m.Update(tea.MouseClickMsg{X: sc.boxX + 4, Y: sc.boxAt + row, Button: tea.MouseLeft})
+		got := next.(Model)
+		saysTheLine(t, got)
+		if got.form != nil {
+			t.Errorf("planErr %q: the form stayed", planErr)
+		}
+		for _, a := range f.acts() {
+			if a.RecID == "clone:start" {
+				t.Errorf("a clone started: %+v", a)
+			}
+		}
+	}
+}
+
+func TestTheChatsKeyLineOffersNoTmuxInTheDemo(t *testing.T) {
+	m := demoSized(t, 132, 31)
+	m.opt.Demo = demoLine
+	m = pressKeys(t, m, "enter")
+	if !m.chatKeys {
+		t.Fatal("the chat did not open")
+	}
+	line, spans := m.chatKeyLine(132)
+	if got := ansi.Strip(line); strings.Contains(got, "ctrl+o") || strings.Contains(got, "tmux") || !strings.Contains(got, "ctrl+a m back") {
+		t.Errorf("the key line says %q", got)
+	}
+	for _, s := range spans {
+		if s.press == "ctrl+o" {
+			t.Errorf("a tap presses ctrl+o: %+v", s)
+		}
+	}
+	saysTheLine(t, pressKeys(t, m, "ctrl+o"))
+}
+
 func TestTheChatsShortScreenSendsNoOneToAPane(t *testing.T) {
 	m := demoConsole(t, 100, Options{})
 	s := m.snap.Sessions[0]
@@ -220,7 +278,7 @@ func TestTheLineReadsWholeOnAPhone(t *testing.T) {
 		m = pressKeys(t, m, "ctrl+o")
 		lines := strings.Split(ansi.Strip(m.render()), "\n")
 		last := strings.TrimSpace(lines[len(lines)-2]) + " " + strings.TrimSpace(lines[len(lines)-1])
-		if last != demoLine {
+		if last != demoLine || strings.TrimSpace(lines[len(lines)-1]) != "Install matchblox to do that." {
 			t.Errorf("chat %v: the last two rows read %q", chat, last)
 		}
 	}

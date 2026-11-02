@@ -251,7 +251,8 @@ func (w *walker) reset() {
 	w.press("ctrl+a", "m", "esc", "esc")
 }
 
-// quits are the keys that end the program: the walk presses them last.
+// quits are the keys that end the program, as on any host. The walk does not
+// press them: TestQAndCtrlCEnd does.
 var quits = []string{"q", "ctrl+c"}
 
 // everyKey is each key of defaultKeys but those that quit.
@@ -309,72 +310,128 @@ func (w *walker) walkTaps(tab string) {
 	}
 }
 
-// walkTheDoors takes the doors a person meets on purpose: the launch sheet,
-// plain, with a repository to clone and with a branch for a worktree; a rename;
-// the stoker's night and its order; a merge; and the chat's own keys.
+// refused presses keys and waits for the line. A phone draws it on two rows, so
+// there the stream holds the end of it whole.
+func (w *walker) refused(what string, keys ...string) {
+	w.t.Helper()
+	want := demo.Refusal
+	if len(want)+1 > w.cols {
+		_, want, _ = strings.Cut(want, ". ")
+	}
+	w.saysAfter(what, want, keys...)
+	w.clear()
+}
+
+// takes presses keys and waits for an act of the world that holds want.
+func (w *walker) takes(what, want string, keys ...string) {
+	w.t.Helper()
+	before := len(w.d.Ran())
+	w.press(keys...)
+	eventually(w.t, 3*time.Second, what+" to take "+want, func() bool {
+		return slices.ContainsFunc(w.d.Ran()[before:], func(argv []string) bool { return strings.Contains(strings.Join(argv, " "), want) })
+	})
+}
+
+// walkTheDoors takes each door a person meets on purpose, on one demo, and each
+// must end in its own act or the line. A stoker that runs asks to take over
+// before any act on a session, so the kill comes before it, and the night after
+// the order.
 func (w *walker) walkTheDoors() {
 	w.t.Helper()
-	w.press("1", "N")
-	w.send("a folder", "/work/flint-auth")
-	w.press("tab", "tab")
-	w.send("a name", "walked-one")
-	w.press("enter")
-	time.Sleep(100 * time.Millisecond)
+	w.press("1")
+	w.refused("into tmux", "ctrl+o")
+	w.refused("into tmux from a chat", "enter", "ctrl+o")
 	w.reset()
+	w.clear()
+	w.refused("a pane", "6", "enter")
+	w.refused("a worktree's shell", "4", "enter")
+	w.press("3")
+	w.press(slices.Repeat([]string{"j"}, 9)...)
+	w.refused("Pair a device", "enter")
 
 	w.press("1", "N")
 	w.send("a repository", "example/cloned")
-	w.press("enter")
-	w.reset()
-
+	w.refused("a clone", "enter")
 	w.press("1", "N")
 	w.send("a folder", "/work/flint-auth")
 	w.press("tab")
 	w.send("a branch", "a-branch")
-	w.press("enter", "y")
-	time.Sleep(100 * time.Millisecond)
-	w.reset()
+	w.refused("a new worktree", "enter")
+
+	w.press("1", "N")
+	w.send("a folder", "/work/flint-auth")
+	w.press("tab", "tab")
+	w.send("a name", "walked-one")
+	w.takes("a new session", "new-session", "enter")
+	w.clear()
 
 	w.press("1", "/")
 	w.send("a search", "spark-docs")
 	w.press("enter", "r", "backspace")
 	w.send("a name", "walked-two")
-	w.press("enter")
-	time.Sleep(100 * time.Millisecond)
-	w.reset()
+	w.takes("a rename", "rename-window", "enter")
+	w.clear()
+	w.press("esc", "esc")
 
-	w.press("7", "n", "enter", "enter", "y")
-	w.reset()
-	w.press("7", "o", "enter", "enter")
-	w.reset()
+	w.press("2", "k", "k", "k", "k", "j")
+	w.takes("a merge", "gh pr merge", "x", "y")
+	w.clear()
 
-	w.press("2", "k", "k", "k", "k", "j", "x", "y")
-	w.reset()
+	w.press("4", "X")
+	w.takes("a merged worktree's removal", "worktree remove", "x", "y")
+	w.clear()
 
-	w.press("1", "enter", "ctrl+o", "y")
-	w.reset()
+	w.press("1", "/")
+	w.send("a search", "hearth-api")
+	w.takes("a kill", "kill-pane", "enter", "x", "y", "y")
+	w.press("esc", "esc")
+	w.clear()
+
+	w.press("7", "f", "enter")
+	w.clear()
+	w.press("o")
+	w.send("an order", "keep the tests green")
+	w.saysAfter("an order", "“keep the tests green”", "enter")
+	w.clear()
+	w.press("f")
+	w.clear()
+	w.press("n")
+	w.saysAfter("a night", "NIGHT", "enter")
 }
 
-// walk is everything a person can press: a fresh demo for each tab, so that a
-// kill on one leaves the next its sessions, on a phone and on a wide screen,
-// where the hints and the taps differ. The keys are the same on both.
-func walk(t *testing.T) (saw []string, ran [][]string) {
+// walkOnePhone asks the walk for the phone's size alone, in a child that runs
+// with a tracer or in a namespace.
+const walkOnePhone = "MATCHBLOX_DEMO_WALK_ONE_SIZE"
+
+// walk is everything a person can press. The doors first, on one demo for each
+// size. Then a sweep: a fresh demo for each tab, so that a kill on one leaves
+// the next its sessions, on a phone and on a wide screen, where the hints and
+// the taps differ. The keys are the same on both.
+func walk(t *testing.T) (saw []string) {
 	t.Helper()
-	for _, size := range [][2]int{{44, 31}, {132, 32}} {
+	sizes := [][2]int{{44, 31}, {132, 32}}
+	if os.Getenv(walkOnePhone) != "" {
+		sizes = sizes[:1]
+	}
+	for _, size := range sizes {
+		w := startWalk(t, size[0], size[1])
+		w.walkTheDoors()
+		w.alive()
+		saw = append(saw, w.spy.seen()...)
+		w.d.Stop()
 		for _, tab := range []string{"1", "2", "3", "4", "5", "6", "7"} {
 			w := startWalk(t, size[0], size[1])
 			if size[0] == 44 {
 				w.walkKeys(tab)
 			}
 			w.walkTaps(tab)
-			w.walkTheDoors()
 			time.Sleep(200 * time.Millisecond) // what the service still answers
 			w.alive()
-			saw, ran = append(saw, w.spy.seen()...), append(ran, w.d.Ran()...)
+			saw = append(saw, w.spy.seen()...)
 			w.d.Stop()
 		}
 	}
-	return saw, ran
+	return saw
 }
 
 // theWalk is what the one walk of a test run found. It takes a while, and two
@@ -383,7 +440,6 @@ var theWalk struct {
 	sync.Once
 	finished            bool
 	saw, resolved, open []string
-	ran                 [][]string
 	spawned             string
 	written             []string
 	leftInTemp          []os.DirEntry
@@ -396,12 +452,12 @@ func walked(t *testing.T) {
 		m := newMachine(t)
 		resolved := noResolver(t)
 		held := watchSockets(t)
-		saw, ran := walk(t)
+		saw := walk(t)
 		left, err := os.ReadDir(m.temp)
 		if err != nil {
 			t.Fatal(err)
 		}
-		theWalk.saw, theWalk.ran, theWalk.leftInTemp = saw, ran, left
+		theWalk.saw, theWalk.leftInTemp = saw, left
 		theWalk.resolved, theWalk.open = resolved(), held()
 		theWalk.spawned, theWalk.written = m.spawns(t), m.written(t)
 		theWalk.finished = true
@@ -419,11 +475,6 @@ func TestNoDoorOrKeyLeavesTheDemo(t *testing.T) {
 	if theWalk.spawned != "" {
 		t.Errorf("a real command ran:\n%s", theWalk.spawned)
 	}
-	for _, want := range []string{"gh pr merge", "new-session", "kill-pane", "rename-window", "git -C /work/hearth worktree remove"} {
-		if !slices.ContainsFunc(theWalk.ran, func(argv []string) bool { return strings.Contains(strings.Join(argv, " "), want) }) {
-			t.Errorf("the walk never took %q, so it proves little", want)
-		}
-	}
 	if theWalk.resolved != nil {
 		t.Errorf("the demo looked up a name: %v", theWalk.resolved)
 	}
@@ -432,19 +483,27 @@ func TestNoDoorOrKeyLeavesTheDemo(t *testing.T) {
 	}
 }
 
-// TestQEnds: q is the one key that ends the program, and it ends it cleanly.
-func TestQEnds(t *testing.T) {
+// TestQAndCtrlCEnd: the two keys that end the program, as on any host, and they
+// end it cleanly. In a chat ctrl+c is the agent's, which a phone cannot send: the
+// line answers and the program runs on.
+func TestQAndCtrlCEnd(t *testing.T) {
 	newMachine(t)
-	w := startWalk(t, 44, 31)
-	w.press("q")
-	select {
-	case <-w.ended:
-	case <-time.After(5 * time.Second):
-		t.Fatal("q did not end the program")
+	for _, key := range quits {
+		w := startWalk(t, 44, 31)
+		w.press(key)
+		select {
+		case <-w.ended:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s did not end the program", key)
+		}
+		if err := w.d.Wait(); err != nil {
+			t.Errorf("%s ended it with %v", key, err)
+		}
 	}
-	if err := w.d.Wait(); err != nil {
-		t.Errorf("q ended it with %v", err)
-	}
+	w := startWalk(t, 132, 32)
+	w.press("1", "enter")
+	w.flashes("ctrl+c in a chat", "ctrl+c")
+	w.alive()
 }
 
 func TestTheDemoWritesOnlyItsTempFolder(t *testing.T) {
@@ -457,8 +516,24 @@ func TestTheDemoWritesOnlyItsTempFolder(t *testing.T) {
 	}
 }
 
-// TestTheDemoOpensNoNetwork runs the walk again in a network namespace with no
-// interface up. A walk that needs the network fails there.
+// childLimit stops a child's walk well inside the Linux job's ten minutes.
+const childLimit = "-test.timeout=4m"
+
+// walkInChild is the arguments and environment of this test binary running the
+// walk at one size.
+func walkInChild(t *testing.T) (self string, args, env []string) {
+	t.Helper()
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return self, []string{"-test.run", "^TestNoDoorOrKeyLeavesTheDemo$", "-test.count=1", childLimit}, append(os.Environ(), walkOnePhone+"=1")
+}
+
+// TestTheDemoOpensNoNetwork runs the walk in a network namespace with no
+// interface up. It proves the demo does not need the network: a dial fails at
+// once there, and the demo would tolerate that. TestTheDemoMakesNoSocketOrCommand
+// proves none is tried.
 func TestTheDemoOpensNoNetwork(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("a network namespace is Linux's")
@@ -466,13 +541,81 @@ func TestTheDemoOpensNoNetwork(t *testing.T) {
 	if err := exec.Command("unshare", "-rn", "true").Run(); err != nil {
 		t.Skipf("unshare -rn is not permitted here, so the walk does not run with no route out: %v", err)
 	}
-	self, err := os.Executable()
+	self, args, env := walkInChild(t)
+	cmd := exec.Command("unshare", slices.Concat([]string{"-rn", self}, args)...) //nolint:gosec // this test binary
+	cmd.Env = env
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Errorf("the walk failed with no route out: %v\n%s", err, out)
+	}
+}
+
+// TestTheDemoMakesNoSocketOrCommand traces the walk: it fails on any socket or
+// connect call, tried or done, and on any execve but the test binary's own.
+func TestTheDemoMakesNoSocketOrCommand(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("strace is Linux's")
+	}
+	if _, err := exec.LookPath("strace"); err != nil {
+		t.Skip("strace is not on the path, so the walk is not traced")
+	}
+	self, args, env := walkInChild(t)
+	if err := exec.Command("strace", "-f", "-qq", "-o", os.DevNull, "-e", "trace=execve", self, "-test.run=^$").Run(); err != nil { //nolint:gosec // this test binary
+		t.Skipf("strace cannot trace here (ptrace refused?), so the walk is not traced: %v", err)
+	}
+	trace := filepath.Join(t.TempDir(), "trace")
+	cmd := exec.Command("strace", slices.Concat([]string{"-f", "-qq", "-o", trace, "-e", "trace=socket,connect,execve", "-e", "signal=none", self}, args)...) //nolint:gosec // this test binary
+	cmd.Env = env
+	started := time.Now()
+	out, err := cmd.CombinedOutput()
+	t.Logf("the traced walk took %v", time.Since(started).Round(time.Second))
+	if err != nil {
+		t.Fatalf("the traced walk failed: %v\n%s", err, out)
+	}
+	b, err := os.ReadFile(trace)
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command("unshare", "-rn", self, "-test.run", "^TestNoDoorOrKeyLeavesTheDemo$", "-test.count=1").CombinedOutput() //nolint:gosec // this test binary
-	if err != nil {
-		t.Errorf("the walk failed with no route out: %v\n%s", err, out)
+	if bad := traceFindings(string(b), self); len(bad) > 0 {
+		t.Errorf("the walk left the demo:\n%s", strings.Join(bad, "\n"))
+	}
+}
+
+// traceFindings reads strace's log of socket, connect and execve: each line of
+// them but the one execve of self, and that one's absence, which means the trace
+// saw nothing.
+func traceFindings(trace, self string) []string {
+	var bad []string
+	own := 0
+	for _, line := range strings.Split(trace, "\n") {
+		switch {
+		case strings.Contains(line, `execve("`+self+`"`) && own == 0:
+			own++
+		case strings.Contains(line, "execve("), strings.Contains(line, "socket("), strings.Contains(line, "connect("):
+			bad = append(bad, line)
+		}
+	}
+	if own == 0 {
+		bad = append(bad, "the trace holds no execve of the test binary, so it saw nothing")
+	}
+	return bad
+}
+
+func TestATraceIsReadForWhatLeaves(t *testing.T) {
+	own := `1 execve("/t/demo.test", ["x"], 0x1) = 0` + "\n"
+	for name, c := range map[string]struct {
+		trace string
+		bad   int
+	}{
+		"only its own":   {own + "2 +++ exited with 0 +++\n", 0},
+		"nothing at all": {"", 1},
+		"a socket":       {own + "2 socket(AF_INET, SOCK_STREAM, 0) = 3\n", 1},
+		"a failed dial":  {own + "2 connect(3, {}, 16) = -1 ENETUNREACH\n", 1},
+		"a command":      {own + `2 execve("/usr/bin/git", ["git"], 0x1) = -1 ENOENT` + "\n", 1},
+		"its own, again": {own + own, 1},
+	} {
+		if got := traceFindings(c.trace, "/t/demo.test"); len(got) != c.bad {
+			t.Errorf("%s: %q", name, got)
+		}
 	}
 }
 
@@ -688,11 +831,26 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 	w.saysAfter("the list", "renamed-one", "/")
 	w.press("esc")
 
-	w.press("/")
-	w.send("a search", "renamed-one")
-	w.press("enter", "x", "y", "y")
-	w.press("esc", "esc")
-	eventually(t, 3*time.Second, "the kill to leave tmux's list", func() bool { return !strings.Contains(paneList(t), "renamed-one") })
+	// The search finds the new name once a sample has read it: until then it finds
+	// no row, and x does nothing.
+	eventually(t, 5*time.Second, "the kill to leave tmux's list", func() bool {
+		w.press("/")
+		w.send("a search", "renamed-one")
+		w.press("enter", "x", "y", "y", "esc", "esc")
+		time.Sleep(300 * time.Millisecond)
+		return !strings.Contains(paneList(t), "renamed-one")
+	})
+	// Another tab and back draws the list anew: it has the new session, not the
+	// killed one.
+	eventually(t, 5*time.Second, "the drawn list to lose the killed session", func() bool {
+		w.press("2")
+		time.Sleep(200 * time.Millisecond)
+		from := len(w.term.text())
+		w.press("1")
+		time.Sleep(200 * time.Millisecond)
+		drawn := w.term.text()[from:]
+		return strings.Contains(drawn, "fresh-one") && !strings.Contains(drawn, "renamed-one")
+	})
 	if got := m.spawns(t); got != "" {
 		t.Errorf("a real command ran:\n%s", got)
 	}
