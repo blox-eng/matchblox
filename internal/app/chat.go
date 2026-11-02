@@ -2,8 +2,6 @@ package app
 
 import (
 	"fmt"
-	"maps"
-	"math"
 	"regexp"
 	"slices"
 	"strconv"
@@ -78,33 +76,6 @@ func trimBlank(line string) string {
 	})
 }
 
-// agentMenuCut is a screen without the agent's own question: from the rule
-// over the question tool's header (its ☐, ☒ or ✔ tabs) down. Claude Code
-// draws more rules inside its menu, so the last rule is not the start. A
-// screen with no such header stays whole.
-func agentMenuCut(text string) string {
-	lines := strings.Split(text, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		if isRule(lines[i]) && questionHeader(lines[i+1:]) {
-			return strings.Join(lines[:i], "\n")
-		}
-	}
-	return text
-}
-
-// questionHeader is the first line that is not blank, when it holds a tab
-// of the question tool.
-func questionHeader(lines []string) bool {
-	for _, l := range lines {
-		plain := strings.TrimSpace(ansi.Strip(l))
-		if plain == "" {
-			continue
-		}
-		return strings.ContainsAny(plain, "☐☒✔")
-	}
-	return false
-}
-
 // isRule is a line of box-drawing runes and spaces, and not empty.
 func isRule(line string) bool {
 	plain := ansi.Strip(line)
@@ -150,22 +121,21 @@ const sizeDwell = time.Second
 type sizeDueMsg struct{}
 
 // chatSize is the room the chat gives the agent's screen as the console
-// draws it now: its columns, and its rows under the chat's title and strip
-// and over its card. 0, 0 where no chat is drawn. The service sizes the
-// agent's window to it.
+// draws it now: its columns, and its rows under the chat's title and strip.
+// 0, 0 where no chat is drawn. The service sizes the agent's window to it.
 func (m Model) chatSize() (cols, rows int) {
 	if m.tab != tabSessions {
 		return 0, 0
 	}
 	w := max(m.width, minWidth)
-	listW, detailW := m.panes(w)
+	_, detailW := m.panes(w)
 	switch {
 	case detailW > 0: // beside the list, as chatPlacement has it
 		s, ok := m.chatShown(detailW)
 		if !ok {
 			return 0, 0
 		}
-		room, _ := m.bodyRows(listW)
+		room := m.bodyRows()
 		cols, rows = detailW-1, room-1-len(m.chatStrip(s, detailW, room-1))
 	case m.chatKeys:
 		place, full := m.chatPlacement(w)
@@ -174,7 +144,6 @@ func (m Model) chatSize() (cols, rows int) {
 		}
 		cols, rows = w, full
 	}
-	rows -= len(m.cardLines(cols))
 	if cols <= 0 || rows <= 0 {
 		return 0, 0
 	}
@@ -241,9 +210,8 @@ func (m *Model) watchCmd() tea.Cmd {
 	return send
 }
 
-// chatLines is the watched screen fitted to w by h, with the question card
-// at its foot, or what stands in its place: that the session ended, or
-// blank lines until a screen comes.
+// chatLines is the watched screen fitted to w by h, or what stands in its
+// place: that the session ended, or blank lines until a screen comes.
 func (m Model) chatLines(w, h int) []string {
 	h = max(h, 0)
 	lines := make([]string, h)
@@ -259,28 +227,15 @@ func (m Model) chatLines(w, h int) []string {
 		}
 		return lines
 	}
-	card := m.cardLines(w)
-	card = card[max(len(card)-h, 0):]
 	var fit []string
-	if shown {
-		text := m.screen.Text
-		if len(card) > 0 {
-			text = agentMenuCut(text) // the card is the one place to answer, live or up the history
-		}
-		switch room := h - len(card); {
-		case !m.sizedFor(w, room):
-			fit = fitScreen(text, w, room)
-		case len(card) > 0: // what is left over the agent's menu sits on the card
-			fit = asDrawn(text, w, room)
-			for len(fit) > 0 && strings.TrimSpace(ansi.Strip(fit[len(fit)-1])) == "" {
-				fit = fit[:len(fit)-1]
-			}
-		default: // top first, as in the agent's own terminal
-			fit = asDrawn(text, w, room)
-			fit = append(fit, make([]string, room-len(fit))...)
-		}
+	switch {
+	case !shown:
+	case m.sizedFor(w, h): // top first, as in the agent's own terminal
+		fit = asDrawn(m.screen.Text, w, h)
+		fit = append(fit, make([]string, h-len(fit))...)
+	default:
+		fit = fitScreen(m.screen.Text, w, h)
 	}
-	fit = append(fit, card...)
 	return append(lines[:len(lines)-len(fit)], fit...)
 }
 
@@ -292,29 +247,33 @@ func (m Model) chatShown(rightW int) (sample.Session, bool) {
 	return s, ok && s.Pane != "" && s.Host == m.opt.Host && m.tab == tabSessions && rightW > 0
 }
 
-// chatLeast is the narrowest chat beside the list: the question card reads
-// at 44 columns, as on a folded phone.
+// chatLeast is the narrowest chat beside the list: an agent's menu reads at
+// 44 columns, as on a folded phone.
 const chatLeast = 44
 
-// cardLeast is the fewest lines a question card takes: its frame, a
-// question of one line, two options and the typing row. Sessions keeps
-// that room for the chat of a session that asks nothing yet, so the split
-// does not come and go with the selection.
-const cardLeast = 6
+// menuLeast is the fewest rows a chat at a menu needs for the whole of what
+// the person answers. It is the tallest common Claude Code menu, the question
+// tool's multi-select at its four options with descriptions, from its
+// question down: the question, a blank, 4 x 2 option lines, the two typing
+// lines, a rule, Chat about this, a blank and the key hint. The rule and the
+// tabs over the question may scroll off. A permission prompt is shorter.
+// The console does not read the menu's height: the agent draws at the chat's
+// size, and redraws above this.
+const menuLeast = 16
 
 // chatPlace is where Sessions draws the selected session's chat.
 type chatPlace int
 
 const (
-	chatNone   chatPlace = iota // no room for its question: the key line says so
+	chatNone   chatPlace = iota // no room for its menu: the key line says so
 	chatBeside                  // the right side of Sessions, beside the list
 	chatFull                    // the whole screen, while it has the keys
 )
 
 // chatPlacement is the one answer to where the selected session's chat is
 // drawn at w columns, and how many rows it has for its title, strip and
-// screen: beside the list where Sessions splits, else the whole screen
-// where that shows its whole wait, else nowhere.
+// screen: beside the list where Sessions splits, else the whole screen,
+// unless it waits at a menu and the screen has under menuLeast rows for it.
 func (m Model) chatPlacement(w int) (chatPlace, int) {
 	if m.tab != tabSessions {
 		return chatNone, 0
@@ -322,10 +281,10 @@ func (m Model) chatPlacement(w int) (chatPlace, int) {
 	if _, right := m.panes(w); right > 0 {
 		return chatBeside, max(m.height-5, 0)
 	}
-	if m.height == 0 || m.askRows(w) <= m.height-3 {
-		return chatFull, max(m.height-3, 0)
+	if s, ok := m.selectedSession(); ok && m.height > 0 && m.height-3 < menuLeast && m.atMenu(s) {
+		return chatNone, 0
 	}
-	return chatNone, 0
+	return chatFull, max(m.height-3, 0)
 }
 
 // oneColumn tells if Sessions is one column at w, with no right side: as
@@ -350,101 +309,23 @@ func (m Model) chatRoom(right int) bool {
 
 // chatReserve is the most rows the chat right columns wide takes, of any
 // home session the cursor can move to: its title, its strip as drawn (two
-// lines on a narrow chat) and its whole wait (its card, or the selected
-// one's permission prompt; cardLeast at the least). Sessions splits by it,
-// so the split holds as the cursor moves.
+// lines on a narrow chat) and menuLeast. Sessions splits by it, so the split
+// holds as the cursor moves and as a session comes to a menu.
 func (m Model) chatReserve(right int) int {
-	sel, _ := m.selectedSession()
-	most := 1 + cardLeast
+	most := 1 + menuLeast
 	for _, s := range m.snap.Sessions {
-		if s.Host != m.opt.Host || s.Pane == "" {
-			continue
+		if most == 3+menuLeast { // the strip is two lines at most
+			break
 		}
-		wait := m.cardHeight(s, right-1)
-		if s.Host == sel.Host && s.PID == sel.PID {
-			wait = max(wait, m.askRows(right-1))
-		}
-		if need := max(wait, cardLeast); 3+need > most { // the strip is two lines at most: draw it only where it can matter
-			most = max(most, 1+len(m.chatStrip(s, right, 2))+need)
+		if s.Host == m.opt.Host && s.Pane != "" {
+			most = max(most, 1+len(m.chatStrip(s, right, 2))+menuLeast)
 		}
 	}
 	return most
 }
 
-// cardHeight is how many lines s's question card takes w columns wide, at
-// its tallest question; 0 when s asks nothing on a card.
-func (m Model) cardHeight(s sample.Session, w int) int {
-	if s.Ask == nil || w < 8 {
-		return 0
-	}
-	if it, waits := m.waitOf(s); waits && it.State == queue.StatePermission {
-		return 0
-	}
-	iw := min(w, cardMaxW) - 4
-	n := 0
-	for _, q := range s.Ask.Questions {
-		n = max(n, 2+len(wrapPlain(q.Question, iw))+len(q.Options)+1)
-	}
-	return n
-}
-
-// askRows is how many lines w columns wide the chat must show whole for
-// its session's wait: the question card, or the permission prompt's box
-// from its top down, which holds what the person approves. A prompt whose
-// screen has not come counts as cardLeast.
-func (m Model) askRows(w int) int {
-	if n := len(m.cardLines(w)); n > 0 {
-		return n
-	}
-	s, ok := m.selectedSession()
-	if !ok {
-		return 0
-	}
-	if it, waits := m.waitOf(s); !s.Permits && (!waits || it.State != queue.StatePermission) {
-		return 0
-	}
-	if m.screen.Pane != s.Pane || m.screen.Gone {
-		return cardLeast
-	}
-	return len(fitScreen(promptBox(m.screen.Text), w, math.MaxInt))
-}
-
-// permitLine is a line of an agent's approval menu: a numbered Yes, or
-// OpenCode's words.
-var permitLine = regexp.MustCompile(`(?i)^[❯›>]?\s*\d\.\s+yes\b|^permission required\b|^allow once\b`)
-
-// promptBox is the screen from the top of its permission prompt down: the
-// rule or box top over the last line of the menu, else the run of lines
-// with words that holds it.
-func promptBox(text string) string {
-	lines := strings.Split(text, "\n")
-	at := -1
-	for i := len(lines) - 1; i >= 0 && at < 0; i-- {
-		if permitLine.MatchString(strings.TrimSpace(strings.Trim(ansi.Strip(lines[i]), " │┃"))) {
-			at = i
-		}
-	}
-	if at < 0 {
-		return text
-	}
-	top := -1
-	for i := at; i >= 0 && top < 0; i-- {
-		plain := strings.TrimSpace(ansi.Strip(lines[i]))
-		if plain != "" && strings.Trim(plain, "─━ ") == "" || strings.HasPrefix(plain, "╭") || strings.HasPrefix(plain, "┌") {
-			top = i
-		}
-	}
-	if top < 0 { // no rule: the run of lines it ends
-		top = at
-		for top > 0 && strings.TrimSpace(ansi.Strip(lines[top-1])) != "" {
-			top--
-		}
-	}
-	return strings.Join(lines[top:], "\n")
-}
-
-// chatSeen tells if the selected session's chat, with the keys, shows its
-// whole question: beside the list, or full-screen when it fits.
+// chatSeen tells if the selected session's chat, with the keys, has room for
+// its menu: beside the list, or full-screen when it fits.
 func (m Model) chatSeen() bool {
 	place, _ := m.chatPlacement(max(m.width, minWidth))
 	return place != chatNone
@@ -584,6 +465,7 @@ func (m Model) chatStrip(s sample.Session, w, rows int) []string {
 // end.
 func (m Model) screenLines(w, h int) []string {
 	lines := m.chatLines(w, h)
+	m.washTapped(lines, w)
 	for i, l := range lines {
 		lines[i] = l + ansi.ResetStyle
 	}
@@ -613,9 +495,8 @@ func (m Model) chatScreen(w int) drawn {
 	}
 	title = fit(title, w)
 	_, rows := m.chatPlacement(w)
-	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true, chatRows: rows, nowX: -1}
+	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true, chatRows: rows, chatAt: 1, chatW: w}
 	sc.lines = append(sc.lines, m.screenLines(w, rows)...)
-	m.markCard(&sc, len(sc.lines), 0, w, rows)
 	keys, spans := m.keyLine(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, spans
 	sc.lines = append(sc.lines, st.hair.Render(strings.Repeat("─", w)), keys)
@@ -625,36 +506,20 @@ func (m Model) chatScreen(w int) drawn {
 	return sc
 }
 
-// markCard finds the question card at the foot of a chat w columns wide
-// and h lines tall, whose last line is above line bottom and whose first
-// column is x.
-func (m Model) markCard(sc *drawn, bottom, x, w, h int) {
-	if s, ok := m.selected(); ok && m.screen.Pane == s.Pane && m.screen.Gone {
-		return // the chat says the session ended, and shows no card
-	}
-	_, press, spans := m.cardRows(w)
-	press = press[max(len(press)-h, 0):]
-	sc.cardAt, sc.cardX, sc.cardW, sc.cardRows, sc.cardKeys = bottom-len(press), x, min(w, cardMaxW), press, spans
-}
-
 // homeKey is the app's home gesture (panes.HomeKey, which the console may
 // not import): it gives the keys back to Sessions.
 const homeKey = "\x1b_matchblox\x1b\\"
 
 // chatKey is one key the chat sends to an agent: the pane and the agent it
-// was pressed for, and when the screen it answers was taken. A card's
-// answer waits among the keys as pick, the said.Answer for the session
-// named name. A command key that runs one of matchblox's own acts on the
-// pane waits as act ("compact:", or "cmd:" with the command's id
-// as text).
+// was pressed for, and when the screen it answers was taken. A command key
+// that runs one of matchblox's own acts on the pane waits as act ("compact:",
+// or "cmd:" with the command's id as text).
 type chatKey struct {
 	pane  string
 	pid   int
 	start uint64
 	text  string
 	seen  time.Time
-	pick  string
-	name  string
 	act   string
 }
 
@@ -697,7 +562,7 @@ func (m Model) chatOn(pane string) Model {
 		return m
 	}
 	cur, _ := m.selectedSession()
-	shown := cur.Pane == pane && m.cardDrawn()
+	shown := cur.Pane == pane && m.chatDrawn()
 	if m.tab != tabSessions {
 		m.setTab(tabSessions)
 	}
@@ -707,30 +572,112 @@ func (m Model) chatOn(pane string) Model {
 		return m
 	}
 	m.chatKeys, m.flash = true, ""
-	if !shown || s.Ask != nil && m.cardSeen.askID != s.Ask.ID { // the chat, or its card, was not on screen before
-		m.cardSeen = cardSeen{pane: pane, at: m.now()}
-		if s.Ask != nil {
-			m.cardSeen.askID = s.Ask.ID
-		}
-		if it, waits := m.waitOf(s); waits {
-			m.cardSeen.since = it.Since
-		}
+	if seen := m.seenOf(s); !shown || s.Ask != nil && m.menuSeen.askID != s.Ask.ID { // the chat, or its question, was not on screen before
+		m.menuSeen = seen
 	}
 	return m
 }
 
-// chatHushed tells if k answers the wait of a chat that opened a moment
-// ago: an Enter or a digit, which a prompt takes as its answer.
+// menuQuiet is how long a chat sends no key that can answer after a menu wait
+// comes to it, or after it opens on a wait: a second Enter, a key repeat or a
+// buffered tap meant for what was there before must not answer a question
+// nobody has read.
+const menuQuiet = 400 * time.Millisecond
+
+// menuSeen is the pane and the wait a chat showed, and when its quiet started.
+type menuSeen struct {
+	pane  string
+	askID string
+	since time.Time
+	page  string
+	at    time.Time
+}
+
+// seenOf is the wait of s as shown now: its quiet starts.
+func (m Model) seenOf(s sample.Session) menuSeen {
+	seen := menuSeen{pane: s.Pane, at: m.now()}
+	if s.Ask != nil {
+		seen.askID = s.Ask.ID
+	}
+	if it, waits := m.waitOf(s); waits {
+		seen.since = it.Since
+	}
+	if m.screen.Pane == s.Pane {
+		seen.page = menuPage(strings.Split(m.screen.Text, "\n"))
+	}
+	return seen
+}
+
+// noteMenu starts the quiet of a chat on screen that shows a menu it did not
+// show before: the cursor came to it, the wait began while it was shown, or
+// the question turned to its next page.
+func (m Model) noteMenu() Model {
+	s, ok := m.selectedSession()
+	if !ok || s.Pane == "" || s.Host != m.opt.Host || !m.atMenu(s) {
+		return m
+	}
+	seen := m.seenOf(s)
+	sameWait := seen.pane == m.menuSeen.pane && seen.askID == m.menuSeen.askID && seen.since.Equal(m.menuSeen.since)
+	if sameWait && (seen.page == "" || seen.page == m.menuSeen.page) || !m.chatDrawn() { // chatDrawn last: it lays the screen out
+		return m
+	}
+	m.menuSeen = seen
+	return m
+}
+
+// menuWait tells if a wait is answered on a menu: a digit or Enter there
+// picks.
+func menuWait(it queue.Item) bool {
+	return it.State == queue.StatePermission || it.State == queue.StateQuestion
+}
+
+// atMenu tells if s waits on an agent's menu: a permission prompt or the
+// question tool, by the hooks, the transcript or the screen.
+func (m Model) atMenu(s sample.Session) bool {
+	if it, waits := m.waitOf(s); waits && menuWait(it) {
+		return true
+	}
+	return s.Permits || s.Ask != nil
+}
+
+// chatDrawn tells if the chat is on screen: beside the list on a desk or an
+// opened phone, or the whole screen once it has the keys.
+func (m Model) chatDrawn() bool {
+	place, _ := m.chatPlacement(max(m.width, minWidth))
+	return place == chatBeside || place == chatFull && m.chatKeys
+}
+
+// askedAgain is what the key line says of an answer held back from a
+// question the builder may not have read.
+func askedAgain(name string) string {
+	return "not sent: " + name + " asks something new — look again"
+}
+
+// chatHushed tells if k, in the quiet, could answer the wait: at a menu any
+// key but ^C and Backspace, as the service counts them; at another wait an
+// Enter or a digit, which it takes as its answer. A command act has its own
+// refusal at a wait.
 func (m Model) chatHushed(k chatKey) bool {
-	if m.cardSeen.pane != k.pane || !m.now().Before(m.cardSeen.at.Add(cardQuiet)) {
+	if k.act != "" || m.menuSeen.pane != k.pane || !m.now().Before(m.menuSeen.at.Add(menuQuiet)) {
 		return false
 	}
 	s, ok := m.sessionIn(m.opt.Host, k.pane)
-	if _, waits := m.waitOf(s); !ok || !waits {
+	if !ok {
 		return false
 	}
-	typed, isText := strings.CutPrefix(k.text, proto.LitPrefix)
-	return k.text == enterName || isText && typed != "" && typed[0] >= '0' && typed[0] <= '9'
+	if m.atMenu(s) {
+		return k.text != ctrlCName && k.text != backspaceName
+	}
+	if _, waits := m.waitOf(s); !waits {
+		return false
+	}
+	return startsDigit(k.text) || k.text == enterName
+}
+
+// startsDigit tells if a key's text starts with a digit, which picks.
+func startsDigit(text string) bool {
+	typed, isText := strings.CutPrefix(text, proto.LitPrefix)
+	return isText && typed != "" && typed[0] >= '0' && typed[0] <= '9'
 }
 
 // intoPane is ctrl+o: the selected session's pane, behind a confirm, as
@@ -777,8 +724,8 @@ func (m Model) chatBacks(k tea.KeyPressMsg, armed time.Time) bool {
 	return !armed.IsZero() && bkey.Matches(k, m.keys.chat.BackEnd) && m.now().Sub(armed) <= chatBackWait
 }
 
-// chatKey is k while the chat has the keys: ctrl+o goes into the pane, the
-// question card takes its own keys, and every other key goes to the agent.
+// chatKey is k while the chat has the keys: ctrl+o goes into the pane, and
+// every other key goes to the agent.
 // ctrl+a goes too, at once, and arms the way back (Update takes the m). With
 // the stoker in charge it stays here: the way back asks no question.
 func (m Model) chatKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -792,8 +739,6 @@ func (m Model) chatKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case bkey.Matches(k, m.keys.main.Jump):
 		return m.intoPane(), nil
-	case m.cardTakes(k):
-		return m.cardKey(k)
 	}
 	text, ok := keyName(k)
 	if !ok {
@@ -822,19 +767,31 @@ func (m Model) pressed(texts ...string) (name string, keys []chatKey) {
 }
 
 // heldKeys is the take-over answer's replay of keys pressed in the chat:
-// they go to the agent they were pressed for, wherever the selection is.
+// they go to the agent they were pressed for, wherever the selection is, and
+// to no menu newer than the one they were pressed on.
 func (m Model) heldKeys(name string, keys []chatKey) func(Model) (tea.Model, tea.Cmd) {
-	return func(m Model) (tea.Model, tea.Cmd) { return m.toAgent(name, keys...) }
+	s, _ := m.selectedSession()
+	was := m.seenOf(s)
+	return func(m Model) (tea.Model, tea.Cmd) {
+		if now, ok := m.sessionIn(m.opt.Host, s.Pane); ok && m.atMenu(now) {
+			if seen := m.seenOf(now); seen.askID != was.askID || !seen.since.Equal(was.since) {
+				m.flash = askedAgain(name)
+				return m, nil
+			}
+		}
+		return m.toAgent(name, keys...)
+	}
 }
 
-// chatPaste is a paste in the chat: text to the agent, or onto the card's
-// typing row while the card is up. A newline goes as Enter; other control
-// characters drop.
+// chatPaste is a paste in the chat: text to the agent. A newline goes as
+// Enter, so a paste that holds one is refused at a menu: its Enter would pick
+// what the person never chose. Other control characters drop.
 func (m Model) chatPaste(text string) (tea.Model, tea.Cmd) {
 	m.flash = ""
 	m.chatTyped = m.now()
-	if s, c, ok := m.cardNow(); ok {
-		return m.cardPaste(s, c, text), nil
+	if s, ok := m.selectedSession(); ok && m.atMenu(s) && strings.ContainsAny(text, "\r\n") {
+		m.flash = "not sent: a paste with a line break would answer " + s.Name + "'s menu"
+		return m, nil
 	}
 	name, keys := m.pressed(pasteTexts(text)...)
 	if len(keys) == 0 {
@@ -1034,6 +991,11 @@ func (m Model) toAgent(name string, keys ...chatKey) (tea.Model, tea.Cmd) {
 		m.queueKey(k)
 	}
 	cmd := m.sendKey()
+	if slices.ContainsFunc(keys, func(k chatKey) bool { return k.text == enterName || startsDigit(k.text) }) {
+		if s, ok := m.sessionIn(m.opt.Host, keys[0].pane); ok && m.atMenu(s) {
+			m = m.pairActed(action{rec: proto.KeysPrefix + keys[0].pane})
+		}
+	}
 	return m, cmd
 }
 
@@ -1075,8 +1037,7 @@ func (m *Model) queueKey(k chatKey) {
 }
 
 // sendKey sends the first key that waits when none is in flight: one at a
-// time, so they reach the agent in the order they were pressed. A card's
-// answer goes as its pick: act.
+// time, so they reach the agent in the order they were pressed.
 func (m *Model) sendKey() tea.Cmd {
 	if m.keyInFlight != "" || len(m.keyQ) == 0 || m.conn == nil || m.lost {
 		return nil
@@ -1084,21 +1045,11 @@ func (m *Model) sendKey() tea.Cmd {
 	k := m.keyQ[0]
 	m.keyQ = m.keyQ[1:]
 	act := proto.Act{RecID: proto.KeysPrefix + k.pane, Text: k.text, PID: k.pid, Start: k.start, Seen: k.seen}
-	switch {
-	case k.pick != "":
-		act = proto.Act{RecID: proto.PickPrefix + k.pane, Which: "secondary", Confirm: "y", Text: k.pick}
-	case k.act != "":
+	if k.act != "" {
 		act = proto.Act{RecID: k.act + k.pane, Confirm: "y", PID: k.pid, Start: k.start, Seen: k.seen, Text: k.text}
 	}
 	cmd := m.send(act)
 	m.keyInFlight, m.keyFlying = "a"+strconv.Itoa(m.acts), k
-	if k.pick != "" {
-		m.cardSent = maps.Clone(m.cardSent)
-		if m.cardSent == nil {
-			m.cardSent = map[string]string{}
-		}
-		m.cardSent[m.keyInFlight] = k.name
-	}
 	if k.text == ctrlCName {
 		m.ctrlC = ctrlCMark{pane: k.pane, pid: k.pid, at: m.now()}
 	}
@@ -1107,16 +1058,13 @@ func (m *Model) sendKey() tea.Cmd {
 
 // keyAnswered is the service's answer to the key in flight: the next key
 // goes, or a refusal shows and the keys behind it for its agent drop, as
-// they were pressed for a screen that is no longer there. A card's answer
-// waiting among them still goes: it names its question itself.
+// they were pressed for a screen that is no longer there.
 func (m Model) keyAnswered(r proto.Result) (tea.Model, tea.Cmd) {
 	m.keyInFlight = ""
-	if name, ok := m.cardSent[r.ActID]; ok {
-		return m.cardAnswered(name, r)
-	}
 	if r.Err != "" {
+		m.tapped = tappedOption{}
 		f := m.keyFlying
-		m.keyQ = slices.DeleteFunc(slices.Clone(m.keyQ), func(k chatKey) bool { return k.pick == "" && k.pane == f.pane && k.pid == f.pid })
+		m.keyQ = slices.DeleteFunc(slices.Clone(m.keyQ), func(k chatKey) bool { return k.pane == f.pane && k.pid == f.pid })
 		m.flash = r.Err
 	}
 	cmd := m.sendKey()
@@ -1212,10 +1160,12 @@ func (m Model) chatKeyLine(w int) (string, []span) {
 	s, _ := m.selectedSession()
 	if m.notLive() { // ctrl+o too only goes back to live; the way back leaves
 		line := " " + st.text.Render("a key goes back to live")
+		var spans []span
 		if wide := line + st.muted.Render(" · ") + st.accent.Render(m.backKeys()) + st.muted.Render(" "+m.keys.chat.Back.Help().Desc); lipgloss.Width(wide) <= w {
+			spans = []span{{lipgloss.Width(wide) - lipgloss.Width(m.backKeys()+" "+m.keys.chat.Back.Help().Desc), lipgloss.Width(wide), tapBack}}
 			line = wide
 		}
-		return fit(line, w), nil
+		return fit(line, w), spans
 	}
 	type part struct {
 		text string

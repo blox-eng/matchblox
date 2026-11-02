@@ -29,22 +29,22 @@
  · Google login  not measured · OpenCode keeps no limits                      │
  ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                                   │
                  wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00 · lasts the week              │
-──────────────────────────────────────────────────────────────────────────────│ ⏺ Read(src/auth/refresh.go)
- MACHINE                                                             16 cores │   ⎿  Read 142 lines
- cpu  ▁ 0%   load 6.2                                                         │
- mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB                                                    │ ⏺ Update(src/auth/refresh.go)
- disk ▰▰▰▰▰▰▱▱ 71% of 1 TB                                                    │   ⎿  Updated src/auth/refresh.go with 18 additions
- runs 5 claude · 1 codex · 1 opencode                                         │
-                                                                              │ ⏺ Bash(go test ./auth/...)
- PID      COMMAND           CPU    MEM     OWNER                              │   ⎿  ok  example.com/auth  0.41s
- 1        systemd             0%   9.8M    system                             │
- 1200     claude              0%   9.8M    pane %1 · hearth-api               │ ⏺ The refresh endpoint is in and its tests pass.
- 1300     zsh                 0%   9.8M    pane %2 · flint-auth               │ ╭─ flint-auth asks · 1 of 2 ─────────────────────────────────╮
- 1310     claude              0%   9.8M    pane %2 · flint-auth               │ │ Should a refresh also rotate the token?                    │
- 1400     claude              0%   9.8M    pane %3 · spark-docs               │ │ › 1 Rotate it  the old one stops at once                   │
- 1500     zsh                 0%   9.8M    pane %4                            │ │   2 Rotate, keep the old one a minute                      │
-──────────────────────────────────────────────────────────────────────────────│ │   3 Keep the token                                         │
- STOKER                                                                   off │ │   4 Type an answer…                                        │
- off · f starts it · n starts a night                                         │ ╰─ ⏎ question 2 ─────────────────────────────────────────────╯
+──────────────────────────────────────────────────────────────────────────────│
+ MACHINE                                                             16 cores │
+ cpu  ▁ 0%   load 6.2                                                         │ ⏺ Read(src/auth/refresh.go)
+ mem  ▰▰▰▱▱▱▱▱ 26 of 64 GB                                                    │   ⎿  Read 142 lines
+ disk ▰▰▰▰▰▰▱▱ 71% of 1 TB                                                    │
+ runs 5 claude · 1 codex · 1 opencode                                         │ ⏺ Update(src/auth/refresh.go)
+                                                                              │   ⎿  Updated src/auth/refresh.go with 18 additions
+ PID      COMMAND           CPU    MEM     OWNER                              │
+ 1        systemd             0%   9.8M    system                             │ ⏺ Bash(go test ./auth/...)
+ 1200     claude              0%   9.8M    pane %1 · hearth-api               │   ⎿  ok  example.com/auth  0.41s
+ 1300     zsh                 0%   9.8M    pane %2 · flint-auth               │
+ 1310     claude              0%   9.8M    pane %2 · flint-auth               │ ⏺ The refresh endpoint is in and its tests pass.
+ 1400     claude              0%   9.8M    pane %3 · spark-docs               │
+ 1500     zsh                 0%   9.8M    pane %4                            │ ────────────────────────────────────────────────────────────────────────────────
+──────────────────────────────────────────────────────────────────────────────│  ☐ Rotate
+ STOKER                                                                   off │
+ off · f starts it · n starts a night                                         │ Should a refresh also rotate the token?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  a key goes back to live · ctrl+a m back

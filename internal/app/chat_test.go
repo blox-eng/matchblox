@@ -2,7 +2,6 @@ package app
 
 import (
 	"io"
-	"os"
 	"reflect"
 	"slices"
 	"strconv"
@@ -377,14 +376,16 @@ func TestCtrlAThenMAsksNoTakeOver(t *testing.T) {
 	}
 }
 
-// With the question card up, the m of the way back types nothing on it.
-func TestCtrlAThenMOnTheCard(t *testing.T) {
-	m, _ := askModel(t, 100, threeWays)
+// At a menu, the m of the way back reaches no agent: it would be text.
+func TestCtrlAThenMAtAMenu(t *testing.T) {
+	m, f := askModel(t, 100, threeWays)
 	if m = pressKeys(t, m, "ctrl+a", "m"); m.chatKeys {
-		t.Fatal("the card kept the keys")
+		t.Fatal("the chat kept the keys")
 	}
-	if m.askCard.text != "" {
-		t.Fatalf("the card took the m: %q", m.askCard.text)
+	for _, a := range keyActs(f) {
+		if a.Text == "lit:m" {
+			t.Fatalf("the m reached the agent: %+v", keyActs(f))
+		}
 	}
 }
 
@@ -683,7 +684,7 @@ func nightChat(t *testing.T) (Model, *fakeConn) {
 
 func TestAHeldKeyGoesToTheAgentItWasPressedFor(t *testing.T) {
 	m, f := nightChat(t)
-	m = pressKeys(t, m, "down")
+	m = pastQuiet(pressKeys(t, m, "down"))
 	if m.held == nil {
 		t.Fatal("the first key to the agent did not ask to take over")
 	}
@@ -1005,8 +1006,8 @@ func TestTheChatStripSaysTheSessionsFacts(t *testing.T) {
 	if strings.Contains(right[sc.bodyTop+2], "work") {
 		t.Fatalf("the strip takes two lines where one fits:\n%s", strings.Join(right, "\n"))
 	}
-	if len(sc.lines) != 50 || !slices.ContainsFunc(right, func(l string) bool { return strings.Contains(l, "╰─ ⏎") }) {
-		t.Fatalf("%d lines, or the card is gone:\n%s", len(sc.lines), strings.Join(right, "\n"))
+	if len(sc.lines) != 50 || !slices.ContainsFunc(right, func(l string) bool { return strings.Contains(l, "Enter to select") }) {
+		t.Fatalf("%d lines, or the agent's menu is gone:\n%s", len(sc.lines), strings.Join(right, "\n"))
 	}
 }
 
@@ -1143,7 +1144,7 @@ func askModel(t *testing.T, w int, qs ...said.Question) (Model, *fakeConn) {
 	return pastQuiet(m), f
 }
 
-// pastQuiet is m with its clock stopped after the card's quiet.
+// pastQuiet is m with its clock stopped after the menu's quiet.
 func pastQuiet(m Model) Model {
 	at := m.now().Add(time.Second)
 	m.opt.Now = func() time.Time { return at }
@@ -1164,97 +1165,6 @@ func pickActs(f *fakeConn) []proto.Act {
 	return out
 }
 
-func TestCardShowsTheQuestion(t *testing.T) {
-	m, _ := askModel(t, 100, threeWays)
-	for _, w := range []int{44, 80} {
-		lines := m.chatLines(w, 20)
-		if len(lines) != 20 {
-			t.Fatalf("%d: %d lines", w, len(lines))
-		}
-		out := ansi.Strip(strings.Join(lines, "\n"))
-		for _, want := range []string{"a asks", "Which way do we fix", "1 Patch the token check", "2 Move to the new", "3 Leave it", "4 Type an answer…", "⏎ send"} {
-			if !strings.Contains(out, want) {
-				t.Fatalf("%d: the card lacks %q:\n%s", w, want, out)
-			}
-		}
-		if last := ansi.Strip(lines[len(lines)-1]); !strings.HasPrefix(last, "╰") {
-			t.Fatalf("%d: the card is not at the foot of the chat: %q", w, last)
-		}
-		for i, l := range lines {
-			if lw := ansi.StringWidth(l); lw > w {
-				t.Fatalf("%d: line %d is %d wide: %q", w, i, lw, ansi.Strip(l))
-			}
-		}
-	}
-}
-
-func TestCardDownDownEnterPicksTheThird(t *testing.T) {
-	m, f := askModel(t, 100, threeWays)
-	pressKeys(t, m, "down", "down", "enter")
-	got := pickActs(f)
-	if len(got) != 1 || got[0].RecID != "pick:%1" || got[0].Text != `{"id":"toolu_1","choices":[{"picks":[3]}]}` {
-		t.Fatalf("picks %+v", got)
-	}
-	if keys := keyActs(f); len(keys) != 0 {
-		t.Fatalf("the card sent keys to the agent: %+v", keys)
-	}
-}
-
-func TestCardSpaceTicks(t *testing.T) {
-	multi := threeWays
-	multi.Multi = true
-	m, f := askModel(t, 100, multi)
-	m = pressKeys(t, m, "space")
-	if c := m.askCard; !c.ticks[1] || c.ticks[2] {
-		t.Fatalf("ticks %v", c.ticks)
-	}
-	if out := ansi.Strip(strings.Join(m.chatLines(60, 20), "\n")); !strings.Contains(out, "[✔] Patch the token check") || !strings.Contains(out, "␣ tick") {
-		t.Fatalf("the card does not show the tick:\n%s", out)
-	}
-	pressKeys(t, m, "down", "down", "space", "enter")
-	if got := pickActs(f); len(got) != 1 || got[0].Text != `{"id":"toolu_1","choices":[{"picks":[1,3]}]}` {
-		t.Fatalf("picks %+v", got)
-	}
-}
-
-func TestCardTapPicks(t *testing.T) {
-	for _, size := range [][2]int{{200, 50}, {44, 31}} {
-		m, f := askModel(t, size[0], threeWays)
-		next, _ := m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
-		m = next.(Model)
-		sc := m.draw(size[0])
-		y := -1
-		for i, l := range sc.lines {
-			if strings.Contains(ansi.Strip(l), "2 Move to the new") {
-				y = i
-			}
-		}
-		if y < 0 {
-			t.Fatalf("%v: no option 2 on screen:\n%s", size, ansi.Strip(strings.Join(sc.lines, "\n")))
-		}
-		next, cmd := tap(m, sc.cardX+4, y)
-		drain(cmd)
-		if got := pickActs(f); len(got) != 1 || got[0].Text != `{"id":"toolu_1","choices":[{"picks":[2]}]}` {
-			t.Fatalf("%v: picks %+v", size, got)
-		}
-		if !next.(Model).chatKeys {
-			t.Fatalf("%v: the chat lost the keys", size)
-		}
-	}
-}
-
-func TestNoCardAtAPermissionPrompt(t *testing.T) {
-	m, f := loadedWith(t, 100, queueState()) // app-feature (%1) asks for permission
-	m = pressKeys(t, onPane(t, m, "%1"), "enter")
-	if lines := m.cardLines(60); len(lines) != 0 {
-		t.Fatalf("a card at a permission prompt: %q", lines)
-	}
-	pressKeys(t, pastQuiet(m), "enter")
-	if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" || len(pickActs(f)) != 0 {
-		t.Fatalf("acts %+v", f.acts())
-	}
-}
-
 // On a phone the chat is not on screen until Enter opens it: an Enter or a
 // digit at once goes nowhere, as the builder has not read the prompt. After
 // the moment they go. On a desk the chat beside the list shows the prompt
@@ -1267,7 +1177,7 @@ func TestAPhoneChatIsQuietAtAPermissionPrompt(t *testing.T) {
 	if !m.chatKeys || len(keyActs(f)) != 0 || m.flash != "not sent: app-feature asks something new — look again" {
 		t.Fatalf("enter enter 1: chatKeys %v acts %+v flash %q", m.chatKeys, keyActs(f), m.flash)
 	}
-	*now = now.Add(cardQuiet)
+	*now = now.Add(menuQuiet)
 	pressKeys(t, m, "enter")
 	if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" {
 		t.Fatalf("after the quiet: acts %+v", f.acts())
@@ -1279,7 +1189,7 @@ func TestAPhoneChatIsQuietAtAPermissionPrompt(t *testing.T) {
 	if !m.chatKeys || len(keyActs(f)) != 0 {
 		t.Fatalf("a desk's double enter: chatKeys %v acts %+v", m.chatKeys, f.acts())
 	}
-	*now = now.Add(cardQuiet)
+	*now = now.Add(menuQuiet)
 	pressKeys(t, m, "enter")
 	if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" {
 		t.Fatalf("a desk after the quiet: acts %+v", f.acts())
@@ -1305,140 +1215,11 @@ func TestANewWaitInTheChatIsQuiet(t *testing.T) {
 		if len(keyActs(f)) != 0 || m.flash != askedAgain("app-feature") {
 			t.Fatalf("%d: enter at once on the new wait: acts %+v flash %q", w, keyActs(f), m.flash)
 		}
-		*now = now.Add(cardQuiet)
+		*now = now.Add(menuQuiet)
 		pressKeys(t, m, "enter")
 		if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" {
 			t.Fatalf("%d: after the quiet: acts %+v", w, f.acts())
 		}
-	}
-}
-
-// A card's answer and the keys around it go one at a time, in the order
-// they were pressed: no key passes an answer in flight, and no answer a key.
-func TestTheCardsAnswerKeepsItsPlaceAmongTheKeys(t *testing.T) {
-	m, f := askModel(t, 100, threeWays)
-	m = pressKeys(t, m, "1", "esc")
-	if len(pickActs(f)) != 1 || len(keyActs(f)) != 0 {
-		t.Fatalf("esc behind the answer: picks %+v keys %+v", pickActs(f), keyActs(f))
-	}
-	m = answered(t, m, "")
-	if got := keyActs(f); len(got) != 1 || got[0].Text != "Escape" {
-		t.Fatalf("esc after the answer: %+v", f.acts())
-	}
-	if m.toast != "sent to a" {
-		t.Fatalf("toast %q", m.toast)
-	}
-
-	m, f = askModel(t, 100, threeWays)
-	m = pressKeys(t, m, "tab", "2")
-	if len(keyActs(f)) != 1 || len(pickActs(f)) != 0 {
-		t.Fatalf("the answer behind tab: keys %+v picks %+v", keyActs(f), pickActs(f))
-	}
-	m = answered(t, m, "")
-	if got := pickActs(f); len(got) != 1 || got[0].Text != `{"id":"toolu_1","choices":[{"picks":[2]}]}` {
-		t.Fatalf("the answer after tab: %+v", f.acts())
-	}
-	m = pressKeys(t, m, "esc")
-	answered(t, m, "the session in %1 no longer waits on that question")
-	if len(keyActs(f)) != 1 {
-		t.Fatalf("esc went after a refused answer: %+v", keyActs(f))
-	}
-}
-
-// Esc, Tab, Shift+Tab and ^C go to the agent over a card: Claude Code
-// needs them to leave its question.
-func TestTheCardLeavesTheAgentItsOwnKeys(t *testing.T) {
-	m, f := askModel(t, 100, threeWays)
-	pressKeys(t, m, "esc", "tab")
-	if got := keyActs(f); len(got) != 1 || got[0].Text != "Escape" {
-		t.Fatalf("acts %+v", f.acts())
-	}
-}
-
-// Letters type on the card's typing row, q and digits after the first
-// letter too, and ⏎ sends the text as the answer.
-func TestCardTypesTheAnswer(t *testing.T) {
-	m, f := askModel(t, 100, threeWays)
-	next := typeText(m, "no, wait 2")
-	if out := ansi.Strip(strings.Join(next.(Model).chatLines(60, 20), "\n")); !strings.Contains(out, "› 4 no, wait 2▏") {
-		t.Fatalf("the typing row:\n%s", out)
-	}
-	pressKeys(t, next.(Model), "backspace", "enter")
-	if got := pickActs(f); len(got) != 1 || got[0].Text != `{"id":"toolu_1","choices":[{"text":"no, wait "}]}` {
-		t.Fatalf("picks %+v", got)
-	}
-	if len(keyActs(f)) != 0 {
-		t.Fatalf("typing went to the agent: %+v", keyActs(f))
-	}
-}
-
-// Several questions go one at a time, and their answers go as one pick.
-func TestCardAnswersEveryQuestion(t *testing.T) {
-	checks := said.Question{Question: "Which checks?", Multi: true, Options: []said.Option{{Label: "unit"}, {Label: "e2e"}, {Label: "lint"}}}
-	m, f := askModel(t, 100, threeWays, checks)
-	m, now := clocked(m)
-	if out := ansi.Strip(strings.Join(m.chatLines(60, 20), "\n")); !strings.Contains(out, "a asks · 1 of 2") || !strings.Contains(out, "⏎ question 2") {
-		t.Fatalf("the first question:\n%s", out)
-	}
-	m = pressKeys(t, m, "2")
-	*now = now.Add(cardQuiet) // the second question's quiet
-	m = pressKeys(t, m, "space", "3")
-	out := ansi.Strip(strings.Join(m.chatLines(60, 20), "\n"))
-	for _, want := range []string{"2 of 2", "Which checks?", "[✔] unit", "[ ] e2e", "[✔] lint"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("the second question lacks %q:\n%s", want, out)
-		}
-	}
-	pressKeys(t, m, "enter")
-	if got := pickActs(f); len(got) != 1 || got[0].Confirm != "y" || got[0].Text != `{"id":"toolu_1","choices":[{"picks":[2]},{"picks":[1,3]}]}` {
-		t.Fatalf("picks %+v", got)
-	}
-}
-
-// The key line says where the answer went, or that it did not go and why.
-func TestCardSaysWhatWasSent(t *testing.T) {
-	m, _ := askModel(t, 100, threeWays)
-	next, _ := key(m, "enter")
-	if nm := next.(Model); nm.toast != "sending to a…" {
-		t.Fatalf("toast %q", nm.toast)
-	}
-	id := "a" + strconv.Itoa(next.(Model).acts)
-	sent, _ := next.Update(resultMsg(proto.Result{ActID: id, Ran: [][]string{{"tmux"}}}))
-	if nm := sent.(Model); nm.toast != "sent to a" || nm.flash != "" {
-		t.Fatalf("toast %q flash %q", nm.toast, nm.flash)
-	}
-	stopped, _ := next.Update(resultMsg(proto.Result{ActID: id, Skipped: []string{"the session in %1 no longer waits for an answer"}}))
-	if nm := stopped.(Model); strings.Contains(nm.toast, "sent to") || nm.flash != "not sent to a: the session in %1 no longer waits for an answer" {
-		t.Fatalf("toast %q flash %q", nm.toast, nm.flash)
-	}
-}
-
-// After a send the card has nothing picked: a second ⏎ (a double tap, a key
-// repeat) answers nothing.
-func TestASecondEnterNeverAnswersTwice(t *testing.T) {
-	m, f := askModel(t, 100, threeWays)
-	m = pressKeys(t, m, "enter", "enter")
-	if got := pickActs(f); len(got) != 1 || m.flash != "pick an option" {
-		t.Fatalf("picks %+v flash %q", got, m.flash)
-	}
-	if len(keyActs(f)) != 0 {
-		t.Fatalf("the second enter went to the agent: %+v", keyActs(f))
-	}
-}
-
-// A card's own keys change nothing on the session at night: only what goes
-// to the agent asks to take over.
-func TestCardKeysAskNoTakeOver(t *testing.T) {
-	st := nightState()
-	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a", Ask: &said.Ask{ID: "toolu_1", Questions: []said.Question{threeWays}}}}
-	st.Queue = nil // the night's own fixture has %1 at a permission prompt
-	m, _ := loadedWith(t, 100, st)
-	m = pressKeys(t, m, "enter", "down")
-	if m.held != nil || m.askCard.at != 1 {
-		t.Fatalf("held %v at %d", m.held != nil, m.askCard.at)
-	}
-	if m = pressKeys(t, m, "esc"); m.held == nil {
-		t.Fatal("esc to the agent did not ask to take over")
 	}
 }
 
@@ -1483,55 +1264,15 @@ func TestAOpensTheChatOnShipsAndStoker(t *testing.T) {
 
 // clocked is m on a clock the test moves.
 func clocked(m Model) (Model, *time.Time) {
-	// From m's own time, never back: a card drawn on the wall clock stays
+	// From m's own time, never back: a menu drawn on the wall clock stays
 	// in its past whatever the day the test runs.
 	now := m.now()
 	m.opt.Now = func() time.Time { return now }
 	return m, &now
 }
 
-// A card sends nothing for a moment after it shows: Enter Enter on a phone,
-// whose first Enter opens the chat, answers nothing; nor does an Enter, a
-// digit or a tap at once on a follow-up question. After the moment it
-// sends.
-func TestTheCardIsQuietAtFirst(t *testing.T) {
-	m, f := loadedWith(t, 44, cardState("toolu_1", threeWays))
-	m, now := clocked(m)
-	m = pressKeys(t, onPane(t, m, "%1"), "enter", "enter")
-	if !m.chatKeys || len(pickActs(f)) != 0 || m.flash != "not sent: a asks something new — look again" {
-		t.Fatalf("enter enter: chatKeys %v picks %+v flash %q", m.chatKeys, pickActs(f), m.flash)
-	}
-	*now = now.Add(cardQuiet)
-	m = pressKeys(t, m, "enter")
-	if len(pickActs(f)) != 1 {
-		t.Fatalf("after the quiet: picks %+v flash %q", pickActs(f), m.flash)
-	}
-	m = answered(t, m, "")
-
-	// The agent asks again, with a new call: its card starts over, quiet.
-	next, _ := m.Update(stateMsg(cardState("toolu_2", threeWays)))
-	m = next.(Model)
-	if _, c, _ := m.cardNow(); c.askID != "toolu_2" || c.at != 0 {
-		t.Fatalf("the follow-up's card %+v", c)
-	}
-	m = pressKeys(t, m, "enter", "2")
-	sc := m.draw(44)
-	y := slices.IndexFunc(sc.lines, func(l string) bool { return strings.Contains(ansi.Strip(l), "3 Leave it") })
-	next, cmd := tap(m, sc.cardX+4, y)
-	drain(cmd)
-	m = next.(Model)
-	if len(pickActs(f)) != 1 || m.flash != "not sent: a asks something new — look again" {
-		t.Fatalf("at once on the follow-up: picks %+v flash %q", pickActs(f), m.flash)
-	}
-	*now = now.Add(cardQuiet)
-	pressKeys(t, m, "2")
-	if got := pickActs(f); len(got) != 2 || got[1].Text != `{"id":"toolu_2","choices":[{"picks":[2]}]}` {
-		t.Fatalf("after the quiet: picks %+v", got)
-	}
-}
-
 // nightAsk is the console at night, at w columns, with the keys in the chat
-// of a (%1) on the question tool, past the card's quiet.
+// of a (%1) on the question tool, past the menu's quiet.
 func nightAsk(t *testing.T, w int) (Model, *fakeConn) {
 	t.Helper()
 	st := nightState()
@@ -1539,124 +1280,6 @@ func nightAsk(t *testing.T, w int) (Model, *fakeConn) {
 	st.Queue = nil // the night's own fixture has %1 at a permission prompt
 	m, f := loadedWith(t, w, st)
 	return pastQuiet(pressKeys(t, m, "enter")), f
-}
-
-// At night the card's answers act on a session the stoker runs: Enter, a
-// digit and a tap that picks ask to take over first, then answer the card
-// they were pressed on. A newer question by then is not answered.
-func TestTheCardsAnswerAsksToTakeOver(t *testing.T) {
-	for _, k := range []string{"enter", "2"} {
-		m, f := nightAsk(t, 100)
-		m = pressKeys(t, m, k)
-		if m.held == nil || len(pickActs(f)) != 0 {
-			t.Fatalf("%s: held %v picks %+v", k, m.held != nil, pickActs(f))
-		}
-		pressKeys(t, m, "n")
-		want := map[string]string{"enter": `{"id":"toolu_1","choices":[{"picks":[1]}]}`, "2": `{"id":"toolu_1","choices":[{"picks":[2]}]}`}[k]
-		if got := pickActs(f); len(got) != 1 || got[0].Text != want {
-			t.Fatalf("%s: picks %+v", k, got)
-		}
-	}
-
-	m, f := nightAsk(t, 100)
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	m = next.(Model)
-	sc := m.draw(100)
-	y := slices.IndexFunc(sc.lines, func(l string) bool { return strings.Contains(ansi.Strip(l), "3 Leave it") })
-	next, cmd := tap(m, sc.cardX+4, y)
-	drain(cmd)
-	if m = next.(Model); m.held == nil || len(pickActs(f)) != 0 {
-		t.Fatalf("a tap: held %v picks %+v", m.held != nil, pickActs(f))
-	}
-	pressKeys(t, m, "n")
-	if got := pickActs(f); len(got) != 1 || got[0].Text != `{"id":"toolu_1","choices":[{"picks":[3]}]}` {
-		t.Fatalf("a tap: picks %+v", got)
-	}
-
-	m, f = nightAsk(t, 100)
-	m = pressKeys(t, m, "enter")
-	st := nightState()
-	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a", Ask: &said.Ask{ID: "toolu_2", Questions: []said.Question{threeWays}}}}
-	st.Queue = nil
-	next, _ = m.Update(stateMsg(st))
-	m = pressKeys(t, next.(Model), "n")
-	if len(pickActs(f)) != 0 || m.flash != "not sent: a asks something new — look again" {
-		t.Fatalf("a newer question: picks %+v flash %q", pickActs(f), m.flash)
-	}
-}
-
-// A permission prompt is answered with the agent's own keys, even while the
-// transcript still holds a question tool call.
-func TestNoCardAtAPermissionPromptWithAnAsk(t *testing.T) {
-	st := queueState() // app-feature (%1) asks for permission
-	for i := range st.Sessions {
-		if st.Sessions[i].Pane == "%1" {
-			st.Sessions[i].Ask = &said.Ask{ID: "toolu_1", Questions: []said.Question{threeWays}}
-		}
-	}
-	m, f := loadedWith(t, 100, st)
-	m = pastQuiet(pressKeys(t, onPane(t, m, "%1"), "enter"))
-	if lines := m.cardLines(60); len(lines) != 0 {
-		t.Fatalf("a card at a permission prompt: %q", lines)
-	}
-	pressKeys(t, pastQuiet(m), "enter")
-	if got := keyActs(f); len(got) != 1 || got[0].Text != "Enter" || len(pickActs(f)) != 0 {
-		t.Fatalf("acts %+v", f.acts())
-	}
-}
-
-// On a short screen the card keeps all its rows; the agent's screen above it
-// gives way.
-func TestTheCardKeepsItsRowsOnAShortScreen(t *testing.T) {
-	m, _ := askModel(t, 44, threeWays)
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 44, Height: 16})
-	next, _ = next.Update(screenMsg{Pane: "%1", At: time.Unix(101, 0), Text: strings.Repeat("a line of the agent\n", 30) + "⏺ Which way?"})
-	out := strings.Split(screen(next), "\n")
-	if len(out) != 16 {
-		t.Fatalf("%d lines:\n%s", len(out), strings.Join(out, "\n"))
-	}
-	if card := ansi.Strip(strings.Join(next.(Model).cardLines(44), "\n")); !strings.Contains(strings.Join(out, "\n"), card) {
-		t.Fatalf("the card lost rows:\n%s\nwant:\n%s", strings.Join(out, "\n"), card)
-	}
-	if !strings.Contains(strings.Join(out, "\n"), "a line of the agent") {
-		t.Fatalf("no room left for the agent's screen:\n%s", strings.Join(out, "\n"))
-	}
-}
-
-// The card's next question is new to the builder: an Enter at once on it
-// sends nothing.
-func TestTheNextQuestionIsQuietToo(t *testing.T) {
-	checks := said.Question{Question: "Which checks?", Options: []said.Option{{Label: "unit"}, {Label: "e2e"}}}
-	m, f := askModel(t, 100, threeWays, checks)
-	m, now := clocked(m)
-	m = pressKeys(t, m, "enter", "enter")
-	if len(pickActs(f)) != 0 || m.flash != "not sent: a asks something new — look again" {
-		t.Fatalf("enter at once on question 2: picks %+v flash %q", pickActs(f), m.flash)
-	}
-	*now = now.Add(cardQuiet)
-	pressKeys(t, m, "enter")
-	if got := pickActs(f); len(got) != 1 || got[0].Text != `{"id":"toolu_1","choices":[{"picks":[1]},{"picks":[1]}]}` {
-		t.Fatalf("after the quiet: picks %+v", got)
-	}
-}
-
-// On a desk the card is on the right side before the chat has the keys: its
-// quiet runs from when it was first drawn, and opening the chat does not
-// start it again.
-func TestADrawnCardIsNotQuietAgain(t *testing.T) {
-	m, f := loadedWith(t, 200, cardState("toolu_1", threeWays))
-	m, now := clocked(onPane(t, m, "%1"))
-	m.cardSeen = cardSeen{}
-	next, _ := m.Update(tea.WindowSizeMsg{Width: 200, Height: 50})
-	m = next.(Model)
-	if !strings.Contains(screen(m), "a asks") || m.cardSeen.askID != "toolu_1" {
-		t.Fatalf("the card is not drawn on the right (seen %+v):\n%s", m.cardSeen, screen(m))
-	}
-	*now = now.Add(cardQuiet + 100*time.Millisecond)
-	pressKeys(t, m, "enter", "down", "down", "enter")
-	if got := pickActs(f); len(got) != 1 || got[0].Text != `{"id":"toolu_1","choices":[{"picks":[3]}]}` {
-		t.Fatalf("picks %+v", got)
-	}
 }
 
 func TestFitWrapsBetweenWords(t *testing.T) {
@@ -1695,76 +1318,12 @@ func TestFitWrapTrimsBlanks(t *testing.T) {
 	}
 }
 
-func TestAgentMenuCut(t *testing.T) {
-	got := agentMenuCut(askScreen)
-	if !strings.Contains(got, "⏺ The refresh endpoint is in") {
-		t.Fatalf("the work went: %q", got)
-	}
-	for _, gone := range []string{"❯ 1. Rotate it", "☐ Rotate", "Enter to select"} {
-		if strings.Contains(got, gone) {
-			t.Fatalf("%q stayed: %q", gone, got)
-		}
-	}
-}
-
-func TestNoRuleKeepsTheWholeScreen(t *testing.T) {
-	if got := agentMenuCut("a\nb\n❯ 1. x"); got != "a\nb\n❯ 1. x" {
-		t.Fatalf("cut %q", got)
-	}
-}
-
-func TestCardDropsTheAgentsMenu(t *testing.T) {
-	m, _ := askModel(t, 44, threeWays)
-	next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(200, 0), Text: askScreen})
-	out := ansi.Strip(strings.Join(next.(Model).chatLines(44, 29), "\n"))
-	if !strings.Contains(out, "Patch the token check") || strings.Contains(out, "❯ 1. Rotate it") {
-		t.Fatalf("the question shows twice or not at all:\n%s", out)
-	}
-}
-
 func TestPermissionKeepsTheAgentsMenu(t *testing.T) {
 	m, _ := loadedWith(t, 44, queueState()) // app-feature (%1) asks for permission
 	m = pressKeys(t, onPane(t, m, "%1"), "enter")
 	next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(200, 0), Text: askScreen})
 	if out := ansi.Strip(strings.Join(next.(Model).chatLines(44, 29), "\n")); !strings.Contains(out, "❯ 1. Rotate it") {
-		t.Fatalf("the agent's own menu went with no card:\n%s", out)
-	}
-}
-
-// Up the history, the card is still the one place to answer: the agent's
-// own menu goes from the lines above it.
-func TestHistoryCutsTheAgentsMenu(t *testing.T) {
-	m, _ := askModel(t, 44, threeWays)
-	m.up, m.watchUp = 6, 6 // scrolled up: a history frame is kept
-	next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(200, 0), Up: 6, Text: askScreen})
-	m = next.(Model)
-	if out := ansi.Strip(strings.Join(m.chatLines(44, 29), "\n")); strings.Contains(out, "❯ 1. Rotate it") || !strings.Contains(out, "refresh endpoint") {
-		t.Fatalf("the history keeps the agent's menu, or lost its work:\n%s", out)
-	}
-}
-
-// Claude Code draws a second rule inside its menu, over "Chat about this":
-// the cut starts at the rule over the question's header, not the last one.
-func TestAgentMenuCutOnARealPane(t *testing.T) {
-	b, err := os.ReadFile("../../testdata/demo/panes/2.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := agentMenuCut(string(b))
-	if !strings.Contains(got, "wire the rotation.") {
-		t.Fatalf("the work went: %q", got)
-	}
-	for _, gone := range []string{"☐ Refresh", "1. Rotate it", "Chat about this", "Enter to select"} {
-		if strings.Contains(got, gone) {
-			t.Fatalf("%q stayed: %q", gone, got)
-		}
-	}
-}
-
-func TestAgentMenuCutKeepsAPlainRule(t *testing.T) {
-	screen := "⏺ done\n────────\n> \n────────\n  ? for shortcuts"
-	if got := agentMenuCut(screen); got != screen {
-		t.Fatalf("cut a prompt box: %q", got)
+		t.Fatalf("the agent's own menu went:\n%s", out)
 	}
 }
 
@@ -2195,18 +1754,6 @@ func TestAPromptTooTallForTheScreenGetsNoKeys(t *testing.T) {
 	}
 }
 
-// The prompt's box starts at its top: a box's ╭, or the rule Claude Code
-// draws over a prompt without a box.
-func TestThePromptBoxStartsAtItsTop(t *testing.T) {
-	ruled := "⏺ Clearing.\n\n────────────────────\n Bash command\n\n   rm -rf build\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No"
-	if got := promptBox(ruled); !strings.HasPrefix(got, "────") || !strings.HasSuffix(got, "2. No") {
-		t.Errorf("ruled: %q", got)
-	}
-	if got := promptBox(permitScreen); !strings.HasPrefix(got, "╭") || strings.Count(got, "\n") != 10 {
-		t.Errorf("boxed: %q", got)
-	}
-}
-
 // When the chat closes by itself, the keys the person is still typing for
 // the agent do not fall into Sessions' keys: for a moment none acts, and
 // neither q nor ctrl+c quits. After the moment the keys are Sessions' again.
@@ -2237,22 +1784,6 @@ func TestKeysAfterTheChatClosesByItselfDoNothing(t *testing.T) {
 		if next, _ := key(m, "q"); !next.(Model).quitting {
 			t.Fatalf("%s: q after the moment did not quit", closer)
 		}
-	}
-}
-
-// A paste while the card is up goes on the card's typing row, newlines
-// and all control keys out: never to the agent's own menu, which the chat
-// hides.
-func TestAPasteOnTheCardGoesOnItsTypingRow(t *testing.T) {
-	m, f := askModel(t, 100, threeWays)
-	next, cmd := m.Update(tea.PasteMsg{Content: "keep the old key\r\nfor a day\n"})
-	drain(cmd)
-	m = next.(Model)
-	if len(keyActs(f)) != 0 || len(pickActs(f)) != 0 {
-		t.Fatalf("the paste went to the agent: keys %+v picks %+v", keyActs(f), pickActs(f))
-	}
-	if c := m.askCard; c.text != "keep the old key for a day" || c.at != len(threeWays.Options) {
-		t.Fatalf("card %+v", c)
 	}
 }
 
@@ -2307,25 +1838,6 @@ func TestKeysDroppedWithTheConnectionSaySo(t *testing.T) {
 	}
 }
 
-// A refused key drops the keys behind it for its agent, which were typed
-// for a screen no longer there; a card's answer queued behind it still
-// goes.
-func TestARefusedKeyKeepsACardsAnswer(t *testing.T) {
-	m, f := inChat(t)
-	other := slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return s.Host == m.opt.Host && s.Pane != "" && s.Pane != "%1" })
-	b := m.all.sessions[other]
-	m = pressKeys(t, m, "a")
-	m.keyQ = append(m.keyQ, chatKey{pane: b.Pane, pid: b.PID, start: b.Start, pick: `{"id":"toolu_9"}`, name: b.Name})
-	m = pressKeys(t, m, "b")
-	m = answered(t, m, "not sent: x asks something new — look again")
-	if got := pickActs(f); len(got) != 1 || got[0].RecID != "pick:"+b.Pane {
-		t.Fatalf("the card's answer was dropped: picks %+v queue %+v flash %q", got, m.keyQ, m.flash)
-	}
-	if slices.ContainsFunc(keyActs(f), func(a proto.Act) bool { return a.Text == "lit:b" }) || len(m.keyQ) != 0 {
-		t.Fatalf("the key behind the refused one went: keys %+v queue %+v", keyActs(f), m.keyQ)
-	}
-}
-
 // A key names the agent it was pressed for by its pid and its start, as
 // the service checks it.
 func TestAKeyNamesTheAgentsStart(t *testing.T) {
@@ -2356,5 +1868,92 @@ func TestTheScreenDropsLinksAndOtherControls(t *testing.T) {
 	}
 	if ansi.Strip(out) != "see the docs bold end" || !strings.Contains(out, "\x1b[1m") {
 		t.Errorf("text or colours lost: %q", out)
+	}
+}
+
+// A menu sends nothing for a moment after it shows: Enter Enter on a phone,
+// or a key repeat, answers nothing nobody read. A new call starts it over.
+func TestAMenuIsQuietAtFirst(t *testing.T) {
+	m, f := loadedWith(t, 44, cardState("toolu_1", threeWays))
+	m, now := clocked(m)
+	m = pressKeys(t, onPane(t, m, "%1"), "enter", "enter")
+	if !m.chatKeys || len(keyActs(f)) != 0 || m.flash != askedAgain("a") {
+		t.Fatalf("enter enter: chatKeys %v keys %+v flash %q", m.chatKeys, keyActs(f), m.flash)
+	}
+	*now = now.Add(menuQuiet)
+	m = pressKeys(t, m, "enter")
+	if len(keyActs(f)) != 1 {
+		t.Fatalf("after the quiet: keys %+v flash %q", keyActs(f), m.flash)
+	}
+	m = answered(t, m, "")
+
+	next, _ := m.Update(stateMsg(cardState("toolu_2", threeWays)))
+	m = pressKeys(t, next.(Model), "enter", "2")
+	if len(keyActs(f)) != 1 || m.flash != askedAgain("a") {
+		t.Fatalf("at once on the follow-up: keys %+v flash %q", keyActs(f), m.flash)
+	}
+	*now = now.Add(menuQuiet)
+	pressKeys(t, m, "2")
+	if got := keyActs(f); len(got) != 2 || got[1].Text != "lit:2" {
+		t.Fatalf("after the quiet: keys %+v", got)
+	}
+}
+
+// At night any key to a menu acts on a session the stoker runs: it asks to
+// take over first, then goes to the menu it was pressed on. A newer question
+// by then gets nothing.
+func TestAKeyAtAMenuAsksToTakeOver(t *testing.T) {
+	for k, text := range map[string]string{"enter": "Enter", "2": "lit:2", "down": "Down"} {
+		m, f := nightAsk(t, 100)
+		m = pressKeys(t, m, k)
+		if m.held == nil || len(keyActs(f)) != 0 {
+			t.Fatalf("%s: held %v keys %+v", k, m.held != nil, keyActs(f))
+		}
+		pressKeys(t, m, "n")
+		if got := keyActs(f); len(got) != 1 || got[0].Text != text {
+			t.Fatalf("%s: keys %+v", k, got)
+		}
+	}
+
+	m, f := nightAsk(t, 100)
+	m = pressKeys(t, m, "enter")
+	st := nightState()
+	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a", Ask: &said.Ask{ID: "toolu_2", Questions: []said.Question{threeWays}}}}
+	st.Queue = nil
+	next, _ := m.Update(stateMsg(st))
+	m = pressKeys(t, pastQuiet(next.(Model)), "n")
+	if len(keyActs(f)) != 0 || m.flash != askedAgain("a") {
+		t.Fatalf("a newer question: keys %+v flash %q", keyActs(f), m.flash)
+	}
+}
+
+// On a desk the menu is on the right side before the chat has the keys: its
+// quiet started when it was drawn, and opening the chat does not start it
+// again.
+func TestAMenuDrawnBesideTheListIsNotQuietAgain(t *testing.T) {
+	m, f := loadedWith(t, 200, cardState("toolu_1", threeWays))
+	m, now := clocked(onPane(t, m, "%1"))
+	m.menuSeen = menuSeen{}
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 200, Height: 50})
+	m = next.(Model)
+	if m.menuSeen.askID != "toolu_1" {
+		t.Fatalf("no quiet for the menu drawn on the right: %+v", m.menuSeen)
+	}
+	*now = now.Add(menuQuiet + 100*time.Millisecond)
+	pressKeys(t, m, "enter", "1")
+	if got := keyActs(f); len(got) != 1 || got[0].Text != "lit:1" {
+		t.Fatalf("keys %+v", got)
+	}
+}
+
+// Up the history, the chat draws what the pane drew, the agent's own menu
+// with it: a key there only goes back to live.
+func TestHistoryKeepsTheAgentsMenu(t *testing.T) {
+	m, _ := askModel(t, 44, threeWays)
+	m.up, m.watchUp = 6, 6 // scrolled up: a history frame is kept
+	next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(200, 0), Up: 6, Text: askScreen})
+	m = next.(Model)
+	if out := ansi.Strip(strings.Join(m.chatLines(44, 29), "\n")); !strings.Contains(out, "❯ 1. Rotate it") || !strings.Contains(out, "refresh endpoint") {
+		t.Fatalf("the history lost the agent's menu or its work:\n%s", out)
 	}
 }

@@ -600,7 +600,7 @@ var keyLines = map[string]string{
 	"stoker run/100/stoker/row 1":        "↑↓ move  ⏎ command  1 sessions  p ships  f stoker  / find  q quit",
 	"demo/100/sessions/row 0":            "↑↓ move  ⏎ chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"demo/100/sessions/row 1":            "↑↓ move  ⏎ chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"demo/100/sessions/row 2":            "↑↓ move  ⏎ chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ question 2 ─────────────────────────────────────────╯",
+	"demo/100/sessions/row 2":            "↑↓ move  ⏎ chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"demo/100/sessions/row 3":            "↑↓ move  ⏎ chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"demo/100/sessions/row 4":            "↑↓ move  ⏎ chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
 	"demo/100/sessions/row 5":            "↑↓ move  ⏎ chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
