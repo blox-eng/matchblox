@@ -41,7 +41,10 @@ public enum Opening {
         "matchblox console on \(host) ended."
     }
 
-    public static func removedNotice(_ labels: String) -> String {
-        "\(labels) is removed. Remove its key on the host with matchblox devices rm."
+    /// The demo has no key on a host, so a notice for the demo alone says nothing of a key.
+    public static func removedNotice(_ hosts: [Host]) -> String {
+        let labels = hosts.map(\.label).joined(separator: ", ")
+        guard hosts.contains(where: { !$0.isDemo }) else { return "\(labels) is removed." }
+        return "\(labels) is removed. Remove its key on the host with matchblox devices rm."
     }
 }

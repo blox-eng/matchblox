@@ -9,14 +9,14 @@ struct HostsView: View {
     let onNoHosts: (String) -> Void
 
     @State private var hosts: [Host] = []
-    @State private var removed: String?
+    @State private var removed: [Host] = []
     @State private var problem: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Hosts")
                 .font(.title3)
-            if let removed {
+            if !removed.isEmpty {
                 Text(Opening.removedNotice(removed))
                     .foregroundStyle(Theme.muted)
             }
@@ -36,7 +36,7 @@ struct HostsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .contextMenu {
-                        Button("Island", action: onIsland)
+                        if !host.isDemo { Button("Island", action: onIsland) }
                     }
                     .listRowBackground(Theme.bg)
                     .listRowSeparatorTint(Theme.hair)
@@ -48,8 +48,10 @@ struct HostsView: View {
             HStack(spacing: 24) {
                 Button("+ Pair a host", action: onPair)
                     .foregroundStyle(Theme.accent)
-                Button("Island", action: onIsland)
-                    .foregroundStyle(Theme.muted)
+                if hosts.contains(where: { !$0.isDemo }) {
+                    Button("Island", action: onIsland)
+                        .foregroundStyle(Theme.muted)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -68,7 +70,7 @@ struct HostsView: View {
             hosts = store.all()
             return
         }
-        for host in gone {
+        for host in gone where !host.isDemo {
             try? DeviceKey.remove(host: host.fingerprint)
             IslandSettings.forget(host: host)
             if let kept = IslandSettings.channel(host: host) {
@@ -76,9 +78,8 @@ struct HostsView: View {
             }
         }
         problem = nil
-        let labels = gone.map(\.label).joined(separator: ", ")
-        removed = labels
+        removed = gone
         hosts = store.all()
-        if hosts.isEmpty { onNoHosts(Opening.removedNotice(labels)) }
+        if hosts.isEmpty { onNoHosts(Opening.removedNotice(gone)) }
     }
 }

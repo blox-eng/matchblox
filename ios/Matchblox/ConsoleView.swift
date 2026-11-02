@@ -403,7 +403,7 @@ final class ConsoleConnection {
                 let host = host
                 let context = unlocked
                 // Beside the console, never before it: an error is logged, nothing more.
-                registration = Task { await Registration.afterOpen(host: host, key: key, context: context, hosts: HostStore.standard.all()) }
+                registration = Task { await Registration.afterOpen(host: host, key: key, context: context, hosts: HostStore.standard.real()) }
             }
 
             let session = SSHSession(

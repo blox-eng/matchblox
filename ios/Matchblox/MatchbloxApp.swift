@@ -63,6 +63,23 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 }
 
+private struct DemoPlaceholder: View {
+    let onHosts: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("demo")
+                .font(.title3)
+            if let onHosts {
+                Button("Hosts", action: onHosts)
+                    .foregroundStyle(Theme.muted)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(24)
+    }
+}
+
 @main
 struct MatchbloxApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -98,6 +115,9 @@ struct MatchbloxApp: App {
                         onScanAgain: { go(.scan) }
                     )
                     .id(draft.payload.key)
+                case .console(let host, _) where host.isDemo:
+                    // The demo has no key and no host to connect to; its session comes in a later task.
+                    DemoPlaceholder(onHosts: store.all().count > 1 ? { go(.hosts) } : nil)
                 case .console(let host, let session):
                     ConsoleView(
                         host: host,
