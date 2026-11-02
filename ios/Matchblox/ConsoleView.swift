@@ -183,6 +183,10 @@ private struct TerminalRepresentable: UIViewRepresentable {
         connection.onAgent = { agent in belts.agentChanged(agent) }
         #if DEBUG
         let isDemo = connection.isDemo
+        // The UI test's way to a real host's first tap, on the demo's screens.
+        if isDemo, ProcessInfo.processInfo.arguments.contains("-demoTapRaisesKeyboard") {
+            terminal.tapRaisesKeyboard = true
+        }
         // Only the UI test reads this, and only on the demo.
         if isDemo { terminal.accessibilityIdentifier = "demo-terminal" }
         connection.onOutput = { [weak terminal] in

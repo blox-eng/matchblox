@@ -156,6 +156,25 @@ final class DemoConsoleTests: XCTestCase {
         expect(in: app, step: "the answer after the tap on the option", "label CONTAINS %@", "I rotate the token on each refresh")
     }
 
+    /// A real host's first tap, on the demo's screens: the tap clicks the row once, so the chat
+    /// opens and its question is not clicked through, and the keyboard rises.
+    @MainActor
+    func testARealHostsFirstTapClicksOnceAndRaisesTheKeyboard() {
+        let app = launched(extra: ["-demoTapRaisesKeyboard"])
+        expect(in: app, "label CONTAINS %@", "WAITS FOR YOU")
+        let terminal = app.descendants(matching: .any)["demo-terminal"]
+        waitUntilSteady(terminal)
+        tapRow(in: app, containing: "flint-auth")
+        expect(in: app, step: "the chat after the first tap on flint-auth", "label CONTAINS %@", "keys go to flint-auth")
+        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "the first tap did not raise the keyboard")
+        dismissKeyboardTip(in: app)
+        // A second click would have landed on the chat's question.
+        waitUntilSteady(terminal)
+        XCTAssertFalse(terminal.label.contains("I rotate the token on each refresh"), "the tap clicked through to the answer: \(terminal.label)")
+        XCTAssertTrue(terminal.label.contains("keys go to flint-auth"), terminal.label)
+        keep(app, "9 real host tap")
+    }
+
     /// Taps by the terminal's cells, as a thumb does, with no keyboard taken first: the session's
     /// row opens its chat, and the second option ends in the invite, which rises after the closing
     /// text has been shown. Returns the invite's heading, once it shows.
@@ -246,9 +265,9 @@ final class DemoConsoleTests: XCTestCase {
     }
 
     @MainActor
-    private func launched() -> XCUIApplication {
+    private func launched(extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-openDemoHost"]
+        app.launchArguments = ["-openDemoHost"] + extra
         app.launch()
         return app
     }
