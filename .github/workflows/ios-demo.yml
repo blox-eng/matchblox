@@ -83,11 +83,15 @@ jobs:
       - name: Run the UI tests
         run: |
           brew install xcodegen
+          # The oldest runtime the app supports boots in about a minute here. iOS 26
+          # took 14 minutes, and then the test could not hold on to the app it launched.
           id=$(xcrun simctl list devices available -j | python3 -c "
           import json, re, sys
           runtimes = [(tuple(map(int, re.findall(r'\d+', r.split('iOS-')[1]))), ds) for r, ds in json.load(sys.stdin)['devices'].items() if 'iOS-' in r]
-          print(next(d['udid'] for _, ds in sorted(runtimes, key=lambda x: x[0], reverse=True) for d in ds if 'iPhone' in d['name']))
+          print(next(d['udid'] for v, ds in sorted(runtimes, key=lambda x: x[0]) if v >= (18,) for d in ds if 'iPhone' in d['name']))
           ")
+          xcrun simctl boot "$id"
+          xcrun simctl bootstatus "$id" -b
           make -C ios uitest DESTINATION="id=$id"
       - name: Upload the test results
         if: failure()

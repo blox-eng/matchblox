@@ -96,7 +96,8 @@ jobs:
           echo "SIZE machine.tar in the app: $(stat -f%z "$app/machine.tar") bytes"
           xcrun size "$app/Matchblox"
           du -sk "$app"/* | sort -n | tail -n 12
-          python3 -I - ios/build/Matchblox.linkmap <<'PY'
+          map=$(find ios/build -name 'Matchblox-LinkMap-*.txt' | head -n 1)
+          python3 -I - "$map" <<'PY'
           import re, sys
           section, ours, total = None, set(), 0
           for line in open(sys.argv[1], errors="replace"):
@@ -116,6 +117,8 @@ jobs:
                   m = re.match(r"0x[0-9A-Fa-f]+\s+0x([0-9A-Fa-f]+)\s+\[\s*(\d+)\]", line)
                   if m and int(m[2]) in ours:
                       total += int(m[1], 16)
+          if not total:
+              sys.exit(f"the link map names no bytes of the demo library: {len(ours)} objects")
           print(f"SIZE demo library in the executable, from the link map: {total} bytes, {len(ours)} objects")
           PY
       - name: Print the app's frameworks and dynamic lookups

@@ -62,8 +62,6 @@ release: gen ## Archive the app in Release as TestFlight does, without code sign
 		-archivePath $(DERIVED)/Matchblox.xcarchive \
 		-skipPackagePluginValidation \
 		CODE_SIGNING_ALLOWED=NO \
-		LD_GENERATE_MAP_FILE=YES \
-		LD_MAP_FILE_PATH='$(CURDIR)/$(DERIVED)/$$(TARGET_NAME).linkmap' \
 		archive
 
 # The simulator's ad hoc signature is enough for the test runner.

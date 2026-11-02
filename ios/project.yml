@@ -85,6 +85,8 @@ targets:
       configs:
         Release:
           CODE_SIGN_ENTITLEMENTS: Matchblox/Matchblox.production.entitlements
+          # CI reads the demo library's share of the executable from the map.
+          LD_GENERATE_MAP_FILE: YES
     dependencies:
       - framework: build/MBDemo.xcframework
         embed: false
