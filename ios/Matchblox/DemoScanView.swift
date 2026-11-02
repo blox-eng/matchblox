@@ -63,6 +63,7 @@ struct DemoScanView: View {
                         .frame(minHeight: 44)
                         .foregroundStyle(Theme.muted)
                 }
+                .modifier(OverCamera(on: false))
                 ViewThatFits(in: .vertical) {
                     bottom
                     ScrollView { bottom }
