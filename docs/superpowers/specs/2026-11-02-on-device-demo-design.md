@@ -53,7 +53,7 @@ This fails, even if it runs, when:
 
 | | What | Gain | Cost |
 |---|---|---|---|
-| **A. Real console and service on the phone (chosen)** | The Go console and the real service over the fixture machine, linked into the app | Every screen is the real one, offline, no server, cannot drift | Go in the app, an estimated 15 to 20 MB, a longer build, and the service has not run on iOS yet |
+| **A. Real console and service on the phone (chosen)** | The Go console and the real service over the fixture machine, linked into the app | Every screen is the real one, offline, no server, cannot drift | Go in the app, 12.44 MB stripped for a test program (3.87 MB gzipped; the app is not yet measured), and a longer build |
 | B. Hosted demo | The same console on our server, with a real throwaway QR code | Uses real pairing; it is the "sample QR code" Apple's guideline 2.1 names | A public server that strangers connect to: isolation, uptime, abuse |
 | C. Mock screens in Swift | Canned screens with tap areas | Quickest | Fake, and stale after each console change |
 
@@ -61,7 +61,7 @@ A was chosen because it is the real product and has no server to secure. If
 Apple will not accept a demo mode, a small B can be added for review alone.
 
 Inside A, a scripted connection with no service was also spiked. It is smaller,
-about 10 MB, but each screen would need mock data written by hand, and "everything
+about 10 MB, 2 MB less than the real service, but each screen would need mock data written by hand, and "everything
 from then on" would drift from the product. It is the fallback if the service
 cannot run on iOS.
 
@@ -87,8 +87,16 @@ The real service over `testdata/demo` (516 KB, 78 files) on Linux at 44x31 fills
 Sessions, Machine and Panes with no new work. Ships, Git, History and Stoker are
 empty and need seed data. The host is named `ws-1` and needs the name `demo`.
 
-Not proven: the service running on iOS, a real device, a tap through the app's
-terminal view, and the size inside the app.
+The first task then ran the real console and service together on an iOS simulator
+(macOS 15, Xcode 26), over `testdata/demo`, at 44x31. It drew the 7 sessions, went
+to another tab and back with keys, and stopped cleanly. Measured from a test
+program, not the app:
+
+- Device, stripped: 12,443,096 bytes (12.44 MB). Gzipped: 3,865,591 bytes (3.87 MB).
+- Simulator, peak resident memory: 50,937,856 bytes (50.9 MB) from `getrusage`.
+
+Not proven: a real device, where a process may not start another, a tap through the
+app's terminal view, and the size and memory inside the app.
 
 ## The experience
 
@@ -160,7 +168,8 @@ Each has a test:
 Run the real service on an iOS simulator, over the fixture tree, with the console
 on top. It reads the machine through `gopsutil` and paths that may fail on iOS. If
 it cannot run without large changes, stop and bring that back to the owner, with the
-scripted connection as the fallback.
+scripted connection as the fallback. Done: it runs with no change to the service.
+The numbers are in [What the spike proved](#what-the-spike-proved).
 
 ## Build and CI
 
