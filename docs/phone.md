@@ -106,8 +106,10 @@ terminal.`
 
 With no host, the pairing screen shows `Try a demo` below the scan. With two or
 more hosts, the Hosts screen shows it beside `Island`. The scan view shows a
-code of its own and scans it by itself, so the camera stays off and the app asks
-for no permission. Then the app saves a host called `demo`.
+code of its own and scans it by itself. On a fresh install, the pairing screen
+asks for the camera first, and `Try a demo` works whether you allow or deny it.
+The demo's own scan turns on no camera and asks for no permission. Then the app
+saves a host called `demo`.
 
 The demo runs the real console on a made-up machine inside the app. It needs no
 network and starts fresh each time it opens. Tap the session that waits at the

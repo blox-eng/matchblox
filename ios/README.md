@@ -137,16 +137,19 @@ and again with two hosts.
 
 1. With no host, the pairing screen shows `Try a demo`. With two hosts, the
    Hosts screen shows it beside `Island`.
-2. Tap it. The scan view finds its own code in under three seconds and the
-   camera does not turn on. The app asks for no permission. The app opens the
-   console on the host `demo`.
+2. On a fresh install, the pairing screen asks for the camera first. Allow it
+   once and deny it once (reinstall between): `Try a demo` works both ways.
+   Tap it. The scan view finds its own code in under three seconds. It turns on
+   no camera and asks for no permission. The app opens the console on the
+   host `demo`.
 3. Tap the session at the top, flint-auth. Its question fills the chat. Tap an
    option. The agent works for a few seconds, then the sheet rises with
    `Your agents wait the same way.`, the line, `Copy`, `Send to my computer`,
    `Pair a host` and `Keep looking`. `Copy` puts the line on the pasteboard.
    `Send to my computer` opens the share sheet.
-4. Turn the device at the question. The chat stays open, and the question is
-   still readable.
+4. On an iPhone, turn the device to landscape at the question. Under 16 rows,
+   the key line says "too short to show flint-auth's question". Turn the device
+   back, and the chat reopens at the question.
 5. Tap `Keep looking`, then quit the console with `q`. The ended screen offers
    `Open again`, `Pair a host`, the line, `Copy` and `Send to my computer`.
 6. Kill the app in the middle of the demo and open it again. The demo starts
@@ -154,6 +157,9 @@ and again with two hosts.
 7. Open a host you paired. Its console, the Island and the host list are the
    same as before the demo.
 8. Pair a real host. The host `demo` is gone.
+9. On a real host, tap a row of the session list once. The row opens, the tap
+   clicks it once and the next screen is not clicked through. The keyboard
+   rises on that tap.
 
 ### The buzz and the island
 
