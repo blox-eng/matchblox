@@ -156,6 +156,27 @@ func TestAStopWithNoOneReadingStillEnds(t *testing.T) {
 	}
 }
 
+func TestAStartSweepsWhatAKilledRunLeft(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	stale := filepath.Join(os.TempDir(), "matchblox-demo-killed")
+	if err := os.MkdirAll(filepath.Join(stale, "proc"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(os.TempDir(), "matchblox-demos")
+	if err := os.Mkdir(other, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	start(t)
+
+	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the killed run's copy is still there: %v", err)
+	}
+	if _, err := os.Stat(other); err != nil {
+		t.Errorf("the sweep took a folder that is not a copy: %v", err)
+	}
+}
+
 func TestAStartAfterAStopIsFresh(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	d, first := start(t)
@@ -164,7 +185,13 @@ func TestAStartAfterAStopIsFresh(t *testing.T) {
 	if _, _, err := tryStart(t); !errors.Is(err, demo.ErrRunning) {
 		t.Errorf("a second Start with no Stop: want ErrRunning, got %v", err)
 	}
-	first.waitFor(t, "hearth-api") // the first one still runs
+	if left := tempCopies(t); len(left) != 1 {
+		t.Errorf("the refused Start touched the running copy: %v", left)
+	}
+	if _, err := first.in.Write([]byte("2")); err != nil {
+		t.Fatal(err)
+	}
+	first.waitFor(t, "SHIPS") // the first one still runs
 	d.Stop()
 
 	_, second := start(t)

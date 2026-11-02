@@ -32,6 +32,8 @@ var errRefused = errors.New(Refusal) //nolint:staticcheck // the line a person r
 // to replace its service.
 const binary = "demo"
 
+const copyPrefix = "matchblox-demo-"
+
 // ErrRunning is a Start while a demo runs: there is one console in a process.
 var ErrRunning = errors.New("demo: already running")
 
@@ -67,6 +69,7 @@ func Start(o Options) (*Demo, error) {
 	if running != nil {
 		return nil, ErrRunning
 	}
+	sweepCopies()
 	root, err := copyTree(o.Tree)
 	if err != nil {
 		return nil, err
@@ -82,7 +85,7 @@ func Start(o Options) (*Demo, error) {
 
 	console := app.New(app.Options{
 		Conn: conn, Binary: binary, Run: refuse, OutsideTmux: true,
-		StateDir: filepath.Join(root, "console-state"),
+		StateDir: stateDir(root),
 	})
 	d := &Demo{
 		cancel: cancel,
@@ -133,8 +136,26 @@ func (d *Demo) Done() bool { return false }
 
 func refuse([]string) error { return errRefused }
 
+// sweepCopies removes what a killed run left: only the end of a run removes
+// its own copy, and a killed process never gets there. One app owns its temp
+// folder, and one Start in it runs at a time. A copy that will not go stays in
+// the way of nothing, so it does not stop this run.
+func sweepCopies() {
+	entries, err := os.ReadDir(os.TempDir())
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), copyPrefix) {
+			_ = os.RemoveAll(filepath.Join(os.TempDir(), e.Name()))
+		}
+	}
+}
+
+func stateDir(root string) string { return filepath.Join(root, "demo-state") }
+
 func copyTree(tree string) (string, error) {
-	root, err := os.MkdirTemp("", "matchblox-demo-*")
+	root, err := os.MkdirTemp("", copyPrefix+"*")
 	if err != nil {
 		return "", fmt.Errorf("demo: a temp copy of the machine in %s: %w", os.TempDir(), err)
 	}
@@ -151,7 +172,7 @@ func newService(root string) *service.Service {
 	smp := Sampler(cfg, root)
 	s := service.New(cfg, smp, nil)
 	s.Binary, s.Host = binary, Host(root)
-	s.Home = smp.Home
+	s.Home, s.StatePath = smp.Home, filepath.Join(stateDir(root), "state.json")
 	s.Capture, s.Activity = smp.Capture, nil // the fixture's panes, never a tmux on this machine
 	s.Actions.Run = refuse
 	return s

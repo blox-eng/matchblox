@@ -62,6 +62,8 @@ int main(int argc, char **argv) {
         printf("RESULT start failed: %d: %s\n", code, why);
         return 1;
     }
+    MBDemoWrite(NULL, 1);
+    printf("RESULT a NULL read and write return: %d\n", MBDemoRead(NULL, 1) == -1);
     pthread_t t;
     pthread_create(&t, NULL, reader, NULL);
 
