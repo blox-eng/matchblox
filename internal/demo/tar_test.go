@@ -3,6 +3,7 @@ package demo_test
 import (
 	"archive/tar"
 	"bytes"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -142,13 +143,40 @@ func TestATarNeverWritesThroughASymlink(t *testing.T) {
 	}
 }
 
+// A header whose size claims more than the archive holds is refused, not
+// filled with zeros.
+func TestATarClaimingMoreThanItHoldsIsRefused(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	b, err := os.ReadFile(tarWith(t, tar.Header{Name: "big", Typeflag: tar.TypeReg, Mode: 0o644}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	copy(b[124:136], fmt.Sprintf("%011o\x00", int64(1)<<30))
+	copy(b[148:156], "        ")
+	sum := 0
+	for _, c := range b[:512] {
+		sum += int(c)
+	}
+	copy(b[148:156], fmt.Sprintf("%06o\x00 ", sum))
+	path := writeTar(t, b)
+
+	_, _, err = tryStartTree(t, path, 44, 31)
+
+	if err == nil || !strings.Contains(err.Error(), "big") || !strings.Contains(err.Error(), "claims") {
+		t.Fatalf("want an error naming big and its claimed size, got %v", err)
+	}
+	if left := tempCopies(t); len(left) != 0 {
+		t.Errorf("the refused tar left %v", left)
+	}
+}
+
 func TestATruncatedTarIsAnErrorNotABlankScreen(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	whole, err := os.ReadFile(tarOf(t, tree))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, cut := range []int{len(whole) / 2, len(whole) - 1024 - 100} {
+	for _, cut := range []int{len(whole) / 2, len(whole) - 1024 - 100, len(whole) - 1024} {
 		path := writeTar(t, whole[:cut])
 
 		_, _, err := tryStartTree(t, path, 44, 31)

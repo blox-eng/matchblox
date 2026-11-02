@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -184,11 +183,12 @@ func copyTree(tree string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("demo: a temp copy of the machine in %s: %w", os.TempDir(), err)
 	}
-	copyIn := os.CopyFS
-	if strings.HasSuffix(tree, ".tar") {
-		copyIn = func(root string, _ fs.FS) error { return untar(root, tree) }
+	if fi, statErr := os.Stat(tree); statErr == nil && fi.Mode().IsRegular() && strings.HasSuffix(tree, ".tar") {
+		err = untar(root, tree)
+	} else {
+		err = os.CopyFS(root, os.DirFS(tree))
 	}
-	if err := copyIn(root, os.DirFS(tree)); err != nil {
+	if err != nil {
 		_ = os.RemoveAll(root)
 		return "", fmt.Errorf("demo: copying the machine %s to %s: %w", tree, root, err)
 	}
@@ -209,11 +209,15 @@ func untar(root, path string) error {
 		return err
 	}
 	defer dst.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
 	tr := tar.NewReader(f)
 	for {
 		h, err := tr.Next()
 		if errors.Is(err, io.EOF) {
-			return endsWithTrailer(f)
+			return endsWithTrailer(f, info.Size())
 		}
 		if err != nil {
 			return fmt.Errorf("reading the tar: %w", err)
@@ -225,7 +229,7 @@ func untar(root, path string) error {
 		if name = filepath.Clean(name); name == "." {
 			continue // tar's own "./"
 		}
-		if err := unpack(dst, tr, h, name); err != nil {
+		if err := unpack(dst, tr, h, name, info.Size()); err != nil {
 			return fmt.Errorf("the tar entry %q: %w", h.Name, err)
 		}
 	}
@@ -233,20 +237,24 @@ func untar(root, path string) error {
 
 // endsWithTrailer tells a whole tar from one cut at an entry's end: only the
 // whole one has the zero blocks of the trailer last.
-func endsWithTrailer(f *os.File) error {
+func endsWithTrailer(r io.ReaderAt, size int64) error {
 	const trailer = 1024
-	info, err := f.Stat()
-	if err != nil {
-		return err
+	if size < trailer {
+		return errors.New("the tar is cut short: it has no end")
 	}
 	last := make([]byte, trailer)
-	if _, err := f.ReadAt(last, info.Size()-trailer); err != nil || len(bytes.Trim(last, "\x00")) != 0 {
+	if _, err := r.ReadAt(last, size-trailer); err != nil {
+		return fmt.Errorf("reading the tar's end: %w", err)
+	}
+	if len(bytes.Trim(last, "\x00")) != 0 {
 		return errors.New("the tar is cut short: it has no end")
 	}
 	return nil
 }
 
-func unpack(dst *os.Root, tr *tar.Reader, h *tar.Header, name string) error {
+// unpack writes one entry; archiveSize is the tar's length, which bounds a
+// file's body, so a header that claims more is refused before it writes.
+func unpack(dst *os.Root, tr *tar.Reader, h *tar.Header, name string, archiveSize int64) error {
 	if dir := filepath.Dir(name); dir != "." {
 		if err := dst.MkdirAll(dir, 0o755); err != nil {
 			return err
@@ -258,6 +266,9 @@ func unpack(dst *os.Root, tr *tar.Reader, h *tar.Header, name string) error {
 	case tar.TypeSymlink:
 		return dst.Symlink(h.Linkname, name)
 	case tar.TypeReg:
+		if h.Size > archiveSize {
+			return fmt.Errorf("claims %d bytes in a tar of %d", h.Size, archiveSize)
+		}
 		f, err := dst.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, os.FileMode(h.Mode).Perm()|0o600)
 		if err != nil {
 			return err
