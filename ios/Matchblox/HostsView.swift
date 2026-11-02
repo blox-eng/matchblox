@@ -6,6 +6,7 @@ struct HostsView: View {
     let onOpen: (Host) -> Void
     let onPair: () -> Void
     let onIsland: () -> Void
+    let onDemo: () -> Void
     let onNoHosts: (String) -> Void
 
     @State private var hosts: [Host] = []
@@ -45,18 +46,32 @@ struct HostsView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            HStack(spacing: 24) {
-                Button("+ Pair a host", action: onPair)
-                    .foregroundStyle(Theme.accent)
-                if hosts.contains(where: { !$0.isDemo }) {
-                    Button("Island", action: onIsland)
-                        .foregroundStyle(Theme.muted)
-                }
+            // Wraps under a large text size instead of running off the screen.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 24) { actions }
+                VStack(alignment: .leading, spacing: 0) { actions }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(24)
         .onAppear { hosts = store.all() }
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        Button("+ Pair a host", action: onPair)
+            .frame(minHeight: 44)
+            .foregroundStyle(Theme.accent)
+        if hosts.contains(where: { !$0.isDemo }) {
+            Button("Island", action: onIsland)
+                .frame(minHeight: 44)
+                .foregroundStyle(Theme.muted)
+        }
+        if !hosts.contains(where: \.isDemo) {
+            Button("Try a demo", action: onDemo)
+                .frame(minHeight: 44)
+                .foregroundStyle(Theme.muted)
+        }
     }
 
     private func remove(at offsets: IndexSet) {

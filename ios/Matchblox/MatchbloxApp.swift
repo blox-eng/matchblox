@@ -75,6 +75,10 @@ struct MatchbloxApp: App {
 
     init() {
         #if DEBUG
+        // The UI test's empty store.
+        if ProcessInfo.processInfo.arguments.contains("-resetHosts") {
+            try? FileManager.default.removeItem(at: HostStore.standard.file)
+        }
         // The UI test's way to the demo host, with no pairing screen in between.
         if ProcessInfo.processInfo.arguments.contains("-openDemoHost") {
             do {
@@ -97,7 +101,18 @@ struct MatchbloxApp: App {
                         problem: scanProblem,
                         notice: scanNotice,
                         onCode: open,
+                        onDemo: store.all().contains(where: \.isDemo) ? nil : { go(.demoScan) },
                         onCancel: store.all().isEmpty ? nil : { go(Opening.first(hosts: store.all())) }
+                    )
+                case .demoScan:
+                    DemoScanView(
+                        store: store,
+                        onDone: {
+                            withAnimation(UIAccessibility.isReduceMotionEnabled ? nil : .easeOut(duration: 0.3)) {
+                                go(.console(.demo, open: nil))
+                            }
+                        },
+                        onBack: { go(Opening.first(hosts: store.all())) }
                     )
                 case .pair(let draft):
                     PairingView(
@@ -130,6 +145,7 @@ struct MatchbloxApp: App {
                         onOpen: { go(.console($0, open: nil)) },
                         onPair: { go(.scan) },
                         onIsland: { go(.island) },
+                        onDemo: { go(.demoScan) },
                         onNoHosts: { notice in
                             go(.scan)
                             scanNotice = notice

@@ -2,6 +2,7 @@ import Foundation
 
 public enum Route: Equatable, Sendable {
     case scan
+    case demoScan
     case pair(PairDraft)
     case console(Host, open: Int?)
     case hosts
