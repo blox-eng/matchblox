@@ -80,6 +80,8 @@ targets:
         # The demo is Go, linked as a static library (make demolib).
         SWIFT_OBJC_BRIDGING_HEADER: Matchblox/Demo/Matchblox-Bridging-Header.h
         OTHER_LDFLAGS: -framework CoreFoundation -framework Security -lresolv
+        # The demo library is arm64 for the simulator: no x86_64 slice to link.
+        EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
       configs:
         Release:
           CODE_SIGN_ENTITLEMENTS: Matchblox/Matchblox.production.entitlements
