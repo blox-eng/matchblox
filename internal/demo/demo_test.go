@@ -31,7 +31,12 @@ type terminal struct {
 
 func start(t *testing.T) (*demo.Demo, *terminal) {
 	t.Helper()
-	d, term, err := tryStart(t)
+	return startAt(t, 44, 31)
+}
+
+func startAt(t *testing.T, cols, rows int) (*demo.Demo, *terminal) {
+	t.Helper()
+	d, term, err := tryStartAt(t, cols, rows)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,12 +45,17 @@ func start(t *testing.T) (*demo.Demo, *terminal) {
 
 func tryStart(t *testing.T) (*demo.Demo, *terminal, error) {
 	t.Helper()
+	return tryStartAt(t, 44, 31)
+}
+
+func tryStartAt(t *testing.T, cols, rows int) (*demo.Demo, *terminal, error) {
+	t.Helper()
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	term := &terminal{in: inW, out: outR, ended: make(chan struct{})}
 	go term.read()
 	t.Cleanup(term.close)
-	d, err := demo.Start(demo.Options{Tree: tree, In: inR, Out: outW, Cols: 44, Rows: 31})
+	d, err := demo.Start(demo.Options{Tree: tree, In: inR, Out: outW, Cols: cols, Rows: rows})
 	if err != nil {
 		return nil, term, err
 	}

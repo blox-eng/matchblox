@@ -45,7 +45,9 @@ func eventually(t *testing.T, within time.Duration, what string, ok func() bool)
 
 func TestTheHostIsDemo(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
-	_, term := start(t)
+	// On a phone the header drops the host for the stoker's badge; a wider
+	// screen keeps both.
+	_, term := startAt(t, 132, 32)
 	term.waitFor(t, "matchblox · demo")
 
 	if b, err := os.ReadFile(filepath.Join(tree, "proc", "sys", "kernel", "hostname")); err != nil || strings.TrimSpace(string(b)) != "ws-1" {

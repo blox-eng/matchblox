@@ -1,0 +1,6 @@
+● The invoice export writes CSV and PDF from the same rows. The PR is green.
+
+╭──────────────────────────────────────────────╮
+│ > 
+╰──────────────────────────────────────────────╯
+  ? for shortcuts

@@ -774,7 +774,7 @@ func (s *Service) shipsLoop(ctx context.Context) {
 func (s *Service) loadHistory() {
 	var loaded history.Series
 	if paths := append(append([]string{}, s.HistorySources...), s.HistoryLog); s.HistoryLog != "" || len(s.HistorySources) > 0 {
-		loaded, _ = history.Load(time.Now(), paths...)
+		loaded, _ = history.Load(s.now(), paths...)
 	}
 	s.mu.Lock()
 	s.hist = loaded

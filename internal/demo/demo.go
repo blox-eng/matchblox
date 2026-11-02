@@ -22,6 +22,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
+	"github.com/blox-eng/matchblox/internal/stoker"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
@@ -199,6 +200,18 @@ func newService(root string, started time.Time) (*script, *service.Service, erro
 	s.Home, s.StatePath = smp.Home, filepath.Join(stateDir(root), "state.json")
 	s.Capture, s.Activity = smp.Capture, nil // the fixture's panes, never a tmux on this machine
 	w.Wire(s)
+	s.Ships = demoShips
+	seed := filepath.Join(stateDir(root), "history.csv")
+	if err := os.MkdirAll(stateDir(root), 0o755); err != nil {
+		return nil, nil, fmt.Errorf("demo: %w", err)
+	}
+	if err := writeHistory(seed); err != nil {
+		return nil, nil, fmt.Errorf("demo: the machine's history: %w", err)
+	}
+	s.HistorySources = []string{seed}
+	if s.Stoker, err = stoker.Open(stateDir(root)); err != nil {
+		return nil, nil, fmt.Errorf("demo: the stoker at rest: %w", err)
+	}
 	return sc, s, nil
 }
 
