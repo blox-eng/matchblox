@@ -134,6 +134,21 @@ func TestAnAnswerEndsInDone(t *testing.T) {
 	eventually(t, 6*time.Second, "Done", done)
 }
 
+// TestALineFeedGoesBackToTheFirstColumn: no terminal driver stands between the
+// console and the app's terminal, whose line feed only goes down.
+func TestALineFeedGoesBackToTheFirstColumn(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	_, term := startAt(t, 44, 31)
+	term.waitFor(t, "hearth-api")
+	raw := term.raw()
+	if !strings.Contains(raw, "\n") {
+		t.Fatal("the first frame has no line feed to check")
+	}
+	if strings.Contains(strings.ReplaceAll(raw, "\r\n", ""), "\n") {
+		t.Errorf("a line feed with no carriage return:\n%q", raw)
+	}
+}
+
 var cursorMove = regexp.MustCompile(`\x1b\[(\d+);(\d+)H`)
 
 // TestAResizeAtOnceIsKept: the app starts the demo before its terminal has its

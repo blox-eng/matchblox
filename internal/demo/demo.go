@@ -3,6 +3,7 @@
 package demo
 
 import (
+	"bytes"
 	"archive/tar"
 	"bytes"
 	"context"
@@ -55,6 +56,17 @@ type Options struct {
 	Cols, Rows int
 
 	console func(*app.Options) // a test's change to the console's options
+}
+
+// onlcr does to the output what a terminal driver would, as there is none here:
+// the renderer counts on a line feed going back to the first column.
+type onlcr struct{ w io.Writer }
+
+func (o onlcr) Write(p []byte) (int, error) {
+	if _, err := o.w.Write(bytes.ReplaceAll(p, []byte("\n"), []byte("\r\n"))); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 // Demo is one run of the console and the service.
@@ -125,7 +137,7 @@ func Start(o Options) (*Demo, error) {
 		}
 		return msg
 	}
-	d.prog = tea.NewProgram(console, tea.WithContext(ctx), tea.WithInput(o.In), tea.WithOutput(o.Out),
+	d.prog = tea.NewProgram(console, tea.WithContext(ctx), tea.WithInput(o.In), tea.WithOutput(onlcr{o.Out}),
 		tea.WithWindowSize(o.Cols, o.Rows), tea.WithFPS(15), tea.WithoutSignalHandler(),
 		tea.WithEnvironment([]string{"TERM=xterm-256color", "COLORTERM=truecolor"}),
 		tea.WithFilter(sawSize))
