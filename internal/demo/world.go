@@ -147,7 +147,15 @@ func (w *World) Run(argv []string) error {
 		w.kill(OrphanPID)
 		return nil
 	case len(argv) == 7 && argv[1] == "send-keys" && argv[4] == "-l" && w.atMenu(argv[3]):
+		if !slices.Contains(w.options(argv[3]), argv[6]) {
+			return nil // not an option of the menu: the agent takes nothing
+		}
 		return w.pick(argv[3], argv[6])
+	case len(argv) == 5 && argv[1] == "send-keys" && argv[4] == "Enter" && w.atMenu(argv[3]):
+		if digit := w.highlighted(argv[3]); digit != "" {
+			return w.pick(argv[3], digit)
+		}
+		return nil
 	case len(argv) == 7 && argv[1] == "send-keys" && argv[4] == "-l":
 		w.typed[argv[3]] = argv[6]
 		return w.drawField(argv[3])
@@ -290,6 +298,38 @@ func (w *World) pick(pane, digit string) error {
 func (w *World) atMenu(pane string) bool {
 	b, err := os.ReadFile(w.pane(pane))
 	return err == nil && strings.Contains(string(b), "Enter to select")
+}
+
+var optionRe = regexp.MustCompile(`^(❯?)\s*(\d)\. `)
+
+// options are the digits of the options the pane's menu shows, and highlighted
+// the one under its cursor. Hold w.mu.
+func (w *World) options(pane string) []string {
+	var digits []string
+	w.eachOption(pane, func(digit string, _ bool) { digits = append(digits, digit) })
+	return digits
+}
+
+func (w *World) highlighted(pane string) string {
+	at := ""
+	w.eachOption(pane, func(digit string, cursor bool) {
+		if cursor {
+			at = digit
+		}
+	})
+	return at
+}
+
+func (w *World) eachOption(pane string, f func(digit string, cursor bool)) {
+	b, err := os.ReadFile(w.pane(pane))
+	if err != nil {
+		return
+	}
+	for _, l := range strings.Split(string(b), "\n") {
+		if m := optionRe.FindStringSubmatch(l); m != nil {
+			f(m[2], m[1] != "")
+		}
+	}
 }
 
 // drawField shows the draft in the pane's input field. Hold w.mu.

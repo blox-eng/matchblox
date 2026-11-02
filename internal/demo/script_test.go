@@ -15,6 +15,11 @@ import (
 // quiet is longer than the console's quiet after a menu comes to a chat.
 const quiet = 700 * time.Millisecond
 
+// settled is how long after the chat shows again at a new size that a tap
+// goes through: the screen at that size arrives and starts the console's
+// quiet once more.
+const settled = 1500 * time.Millisecond
+
 // reset forgets what was drawn, so the next waitFor sees only what comes after.
 func (term *terminal) reset() {
 	term.mu.Lock()
@@ -74,6 +79,31 @@ func TestTheAgentWaitsFirst(t *testing.T) {
 	term.waitFor(t, "Rotate it", "Keep the token")
 }
 
+// tap is a press and a release at row y (counted from 1) of the screen.
+func (term *terminal) tap(t *testing.T, y int) {
+	t.Helper()
+	term.send(t, fmt.Sprintf("\x1b[<0;20;%dM\x1b[<0;20;%dm", y, y))
+}
+
+// transcript is what flint-auth's transcript holds in the one temp copy.
+func transcript(t *testing.T) string {
+	t.Helper()
+	found, err := filepath.Glob(filepath.Join(tempCopies(t)[0], "home", ".claude", "projects", "-work-flint-auth", "*.jsonl"))
+	if err != nil || len(found) != 1 {
+		t.Fatalf("flint-auth's transcript: %v %v", found, err)
+	}
+	b, err := os.ReadFile(found[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+const (
+	flintRow  = 6  // flint-auth's row on the first screen at 44x31
+	optionRow = 18 // an option of its menu, once the chat shows
+)
+
 func openQuestion(t *testing.T) (*demo.Demo, *terminal) {
 	t.Helper()
 	t.Setenv("TMPDIR", t.TempDir())
@@ -101,39 +131,65 @@ func TestAnAnswerEndsInDone(t *testing.T) {
 
 func TestTheDemoSurvivesATurn(t *testing.T) {
 	d, term := openQuestion(t)
-	done := d.Done
 
 	d.Resize(106, 10)
 	term.waitFor(t, "too short")
 
 	term.reset()
 	d.Resize(44, 31)
-	term.waitFor(t, "flint-auth")
-	time.Sleep(1200 * time.Millisecond) // the console holds keys for a second after it shut the chat itself
-	term.send(t, "a")                   // it took the chat's keys back while the screen was too short
 	term.waitFor(t, "Rotate it", "Keep the token")
-	time.Sleep(quiet)
-	if done() {
+	if text := term.text(); strings.Contains(text, "too short") {
+		t.Errorf("a false line after turning back:\n%s", text)
+	}
+	time.Sleep(settled)
+	if d.Done() {
 		t.Fatal("a resize answered the question")
 	}
-	term.send(t, "2")
-	eventually(t, 6*time.Second, "Done", done)
+	term.tap(t, optionRow)
+	term.waitFor(t, "I rotate the token on each refresh")
+	eventually(t, 6*time.Second, "Done", d.Done)
 }
 
-// TestATapEndsInDone: a person taps an option, there is no digit key. The
-// console's tap goes where a key goes, so the same answer ends the turn.
-func TestATapEndsInDone(t *testing.T) {
-	d, term := openQuestion(t)
-	done := d.Done
-	// An SGR press and release over the option rows, from the top: the first
-	// row that is an option answers.
-	for y := 3; y <= 24 && !done(); y++ {
-		term.send(t, fmt.Sprintf("\x1b[<0;20;%dM\x1b[<0;20;%dm", y, y))
-		time.Sleep(60 * time.Millisecond)
-		if strings.Contains(term.text(), "I rotate the token on each refresh") {
-			break
-		}
+// TestTapsAloneEndInDone: one tap on the agent's row opens its question, one
+// tap on an option answers it. No key is pressed.
+func TestTapsAloneEndInDone(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	d, term := start(t)
+	term.waitFor(t, "WAITS FOR YOU", "flint-auth")
+	term.tap(t, flintRow)
+	term.waitFor(t, "Rotate it", "Keep the token")
+	time.Sleep(quiet)
+	if d.Done() {
+		t.Fatal("Done before an answer")
 	}
+	term.tap(t, optionRow)
 	term.waitFor(t, "I rotate the token on each refresh")
-	eventually(t, 6*time.Second, "Done", done)
+	if got := transcript(t); !strings.Contains(got, "The user picked option 1") {
+		t.Errorf("the tap did not pick option 1:\n%s", got)
+	}
+	eventually(t, 6*time.Second, "Done", d.Done)
+}
+
+// TestEnterAnswersWithTheHighlightedOption: Enter at the menu picks option 1.
+func TestEnterAnswersWithTheHighlightedOption(t *testing.T) {
+	d, term := openQuestion(t)
+	term.send(t, "\r")
+	term.waitFor(t, "I rotate the token on each refresh")
+	if got := transcript(t); !strings.Contains(got, "The user picked option 1") {
+		t.Errorf("Enter did not pick option 1:\n%s", got)
+	}
+	eventually(t, 6*time.Second, "Done", d.Done)
+}
+
+// TestKeysThatAreNoOptionDoNothing: a letter or a digit past the menu is not
+// an answer.
+func TestKeysThatAreNoOptionDoNothing(t *testing.T) {
+	d, term := openQuestion(t)
+	term.send(t, "x")
+	time.Sleep(100 * time.Millisecond)
+	term.send(t, "9")
+	time.Sleep(4 * time.Second)
+	if d.Done() || strings.Contains(transcript(t), "picked option") {
+		t.Error("a key that is no option answered the question")
+	}
 }

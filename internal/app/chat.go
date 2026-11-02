@@ -1098,12 +1098,13 @@ func (m Model) keepChat(was Model) Model {
 		case !ok || s.Pane == "" || s.Host != m.opt.Host || was.chatKeys && (s.Pane != before.Pane || s.Host != before.Host):
 			m.chatKeys = false
 		case !m.chatSeen():
-			m.chatKeys, m.flash = false, m.tooShort(s) // the keys never go to a screen the person cannot see
+			m.chatKeys, m.flash, m.shortPID = false, m.tooShort(s), s.PID // the keys never go to a screen the person cannot see
 		}
 		if !m.chatKeys {
 			m.chatShut = m.now()
 		}
 	}
+	m = m.reopenChat()
 	if !m.chatKeys {
 		m.up = 0
 	}
@@ -1127,6 +1128,24 @@ func (m Model) keepChat(was Model) Model {
 		name = was.all.sessions[i].Name
 	}
 	m.keyQ, m.flash = q, "not sent: "+name+" ended"
+	return m
+}
+
+// reopenChat gives the keys back to a chat that a too short screen dropped,
+// once the screen shows its question and nothing else was chosen since, and
+// ends the line that said it was too short.
+func (m Model) reopenChat() Model {
+	if !m.chatSeen() {
+		return m
+	}
+	if strings.HasPrefix(m.flash, "too short to show") {
+		m.flash = ""
+	}
+	s, ok := m.selectedSession()
+	if !m.chatKeys && m.shortPID != 0 && ok && s.PID == m.shortPID && s.Host == m.opt.Host && m.atMenu(s) {
+		m.chatKeys = true
+	}
+	m.shortPID = 0
 	return m
 }
 

@@ -71,3 +71,36 @@ func TestAStopBeforeTheTurnEndsLeavesNothing(t *testing.T) {
 		t.Errorf("goroutines: %d before, %d after", goroutines, n)
 	}
 }
+
+func TestOnlyAnOptionOrEnterAnswersTheMenu(t *testing.T) {
+	send := func(t *testing.T, w *World, keys ...string) {
+		t.Helper()
+		for _, k := range keys {
+			argv := []string{"tmux", "send-keys", "-t", askPane, "-l", "--", k}
+			if k == "Enter" {
+				argv = []string{"tmux", "send-keys", "-t", askPane, "Enter"}
+			}
+			if err := w.Run(argv); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	answers := func(keys ...string) bool {
+		s, w := scriptOn(t, 10*time.Millisecond)
+		w.Picked = s.answered
+		send(t, w, keys...)
+		time.Sleep(150 * time.Millisecond)
+		s.stop()
+		return s.done.Load()
+	}
+	for _, k := range []string{"x", "9", "0", "6", ""} {
+		if answers(k) {
+			t.Errorf("%q answered the question", k)
+		}
+	}
+	for _, k := range []string{"1", "2", "5", "Enter"} {
+		if !answers(k) {
+			t.Errorf("%q did not answer the question", k)
+		}
+	}
+}

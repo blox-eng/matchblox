@@ -309,6 +309,7 @@ type Model struct {
 	liveWait   bool               // the chat came back from the history, and waits for the live screen
 	menuSeen   menuSeen           // the chat's quiet: the wait it shows and its start
 	tapped     tappedOption       // the option a tap pressed, until the next screen
+	shortPID   int                // the session whose chat a too short screen dropped, until the person chooses something else
 	chatShut   time.Time          // when the chat last closed by itself: keys typed for it go nowhere for a moment
 	chatTyped  time.Time          // when the person last typed in the chat
 	changes    map[paneKey]change // a match change that plays once
@@ -586,6 +587,10 @@ func (m *Model) sendOn(c transport.Conn, a proto.Act) (string, tea.Cmd) {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m = m.scanShows()
+	switch msg.(type) {
+	case tea.KeyPressMsg, tea.MouseClickMsg:
+		m.shortPID = 0 // a choice made: the dropped chat stays dropped
+	}
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
 		nm = nm.scanShows().keepChat(m).noteMenu()
