@@ -29,6 +29,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/app"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/demo"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/panes"
@@ -420,7 +421,7 @@ func replayAt(t *testing.T, z replaySize) {
 	world.uptime = host.Uptime
 
 	s := service.New(cfg, smp, world.Git)
-	s.Binary, s.Host, s.Now = version, fixtureHost(root), clk.Now
+	s.Binary, s.Host, s.Now = version, demo.Host(root), clk.Now
 	s.Capture, s.Activity = smp.Capture, nil                  // the demo's panes, never this machine's tmux
 	s.Actions.Check = func(advice.Guard) error { return nil } // the demo's pids are not this machine's
 	s.Actions.Run = world.Run

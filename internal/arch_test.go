@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -64,13 +65,12 @@ func TestArchBoundaries(t *testing.T) {
 		}
 	}
 	for name, p := range pkgs {
-		if name == "app" {
-			continue
+		// demo joins the console and the service, as cmd/matchblox does.
+		if name != "app" && name != "demo" && slices.Contains(p.Imports, mod+"app") {
+			t.Errorf("%s imports internal/app", p.ImportPath)
 		}
-		for _, imp := range p.Imports {
-			if imp == mod+"app" {
-				t.Errorf("%s imports internal/app", p.ImportPath)
-			}
+		if slices.Contains(p.Imports, mod+"demo") {
+			t.Errorf("%s imports internal/demo: only a main joins the console and the service", p.ImportPath)
 		}
 	}
 }
