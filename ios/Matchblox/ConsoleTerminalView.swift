@@ -216,7 +216,8 @@ final class ConsoleTerminalView: TerminalView {
         let row = min(max(Int(point.y / cell.height) - terminal.buffer.yDisp, 0), terminal.rows - 1)
         let pixelX = Int(point.x)
         let pixelY = Int(point.y - contentOffset.y)
-        for release in [false, true] {
+        let mode = terminal.mouseMode
+        for release in [false, true] where release ? mode.sendButtonRelease() : mode.sendButtonPress() {
             let flags = terminal.encodeButton(button: 0, release: release, shift: false, meta: false, control: false)
             terminal.sendEvent(buttonFlags: flags, x: col, y: row, pixelX: pixelX, pixelY: pixelY)
         }
