@@ -72,7 +72,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     var layout: BeltLayout {
         didSet {
             guard layout != oldValue else { return }
-            layout.save(to: .standard)
+            layout.savePick(inDemo: isDemo, to: .standard)
             runOff()
         }
     }
@@ -101,9 +101,9 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     /// The builder picked a layout in the tray.
     var onLayout: (BeltLayout) -> Void = { _ in }
     var onEditMine: () -> Void = {}
-    var mineEditable: Bool {
-        get { trayModel.mineEditable }
-        set { trayModel.mineEditable = newValue }
+    /// The demo leaves the person's belt as it was: no Mine editor, and a pick is not saved.
+    var isDemo = false {
+        didSet { trayModel.mineEditable = !isDemo }
     }
     /// True as the drawer starts to open, false once it has closed: the screen over the belt
     /// holds the terminal's size in between.

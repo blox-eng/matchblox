@@ -138,7 +138,7 @@ private struct TerminalRepresentable: UIViewRepresentable {
 
         let screen = HeldScreen(terminal: terminal)
         screen.backgroundColor = bg
-        let belts = Belts(terminal: terminal, screen: screen, mineEditable: !connection.isDemo)
+        let belts = Belts(terminal: terminal, screen: screen, isDemo: connection.isDemo)
         terminal.inputAccessoryView = belts.lifted
         terminal.onFocus = { [weak belts] focused in belts?.focusChanged(focused) }
         connection.onAgent = { agent in belts.agentChanged(agent) }
@@ -212,11 +212,10 @@ private final class Belts {
     private static let liveDelay: Duration = .milliseconds(300)
     private var goingLive: Task<Void, Never>?
 
-    /// The demo's belt has no Mine editor: it saves to the person's real layout.
-    init(terminal: ConsoleTerminalView, screen: HeldScreen, mineEditable: Bool) {
+    init(terminal: ConsoleTerminalView, screen: HeldScreen, isDemo: Bool) {
         self.terminal = terminal
         for belt in [lifted, dock] {
-            belt.mineEditable = mineEditable
+            belt.isDemo = isDemo
             belt.onScreenHold = { [weak screen] holding in screen?.trayMoved(open: holding) }
             belt.onSend = { [weak terminal] bytes in terminal?.send(bytes) }
             belt.onKeyboard = { [weak terminal] in

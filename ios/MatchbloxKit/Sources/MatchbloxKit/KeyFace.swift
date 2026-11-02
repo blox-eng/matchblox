@@ -67,4 +67,10 @@ extension BeltLayout {
     public func save(to store: UserDefaults) {
         store.set(rawValue, forKey: Self.storeKey)
     }
+
+    /// A pick on a real host is the person's setting. A pick in the demo lasts for that console,
+    /// so a real host's belt opens as it did before the demo.
+    public func savePick(inDemo: Bool, to store: UserDefaults) {
+        if !inDemo { save(to: store) }
+    }
 }
