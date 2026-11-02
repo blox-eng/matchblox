@@ -3,10 +3,13 @@
 package demo
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -42,7 +45,8 @@ var ErrRunning = errors.New("demo: already running")
 
 // Options are the fixture machine and the terminal that shows the console.
 type Options struct {
-	// Tree is the fixture machine. It is copied, so it may be read-only.
+	// Tree is the fixture machine, a folder or a .tar file of one. It is
+	// copied, so it may be read-only.
 	Tree string
 	// In and Out are the terminal's streams. Out must be read or closed for
 	// Stop to end: a write to a pipe no one reads blocks for good. A reader of
@@ -180,11 +184,91 @@ func copyTree(tree string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("demo: a temp copy of the machine in %s: %w", os.TempDir(), err)
 	}
-	if err := os.CopyFS(root, os.DirFS(tree)); err != nil {
+	copyIn := os.CopyFS
+	if strings.HasSuffix(tree, ".tar") {
+		copyIn = func(root string, _ fs.FS) error { return untar(root, tree) }
+	}
+	if err := copyIn(root, os.DirFS(tree)); err != nil {
 		_ = os.RemoveAll(root)
 		return "", fmt.Errorf("demo: copying the machine %s to %s: %w", tree, root, err)
 	}
 	return root, nil
+}
+
+// untar unpacks a tar of the machine into root. A symlink may point anywhere,
+// as the fixture reads its targets and never follows them, but no entry may
+// land outside root, nor be written through a link.
+func untar(root, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	dst, err := os.OpenRoot(root)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+	tr := tar.NewReader(f)
+	for {
+		h, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			return endsWithTrailer(f)
+		}
+		if err != nil {
+			return fmt.Errorf("reading the tar: %w", err)
+		}
+		name := strings.TrimSuffix(h.Name, "/")
+		if !filepath.IsLocal(name) {
+			return fmt.Errorf("the tar entry %q is outside the machine", h.Name)
+		}
+		if name = filepath.Clean(name); name == "." {
+			continue // tar's own "./"
+		}
+		if err := unpack(dst, tr, h, name); err != nil {
+			return fmt.Errorf("the tar entry %q: %w", h.Name, err)
+		}
+	}
+}
+
+// endsWithTrailer tells a whole tar from one cut at an entry's end: only the
+// whole one has the zero blocks of the trailer last.
+func endsWithTrailer(f *os.File) error {
+	const trailer = 1024
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	last := make([]byte, trailer)
+	if _, err := f.ReadAt(last, info.Size()-trailer); err != nil || len(bytes.Trim(last, "\x00")) != 0 {
+		return errors.New("the tar is cut short: it has no end")
+	}
+	return nil
+}
+
+func unpack(dst *os.Root, tr *tar.Reader, h *tar.Header, name string) error {
+	if dir := filepath.Dir(name); dir != "." {
+		if err := dst.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	}
+	switch h.Typeflag {
+	case tar.TypeDir:
+		return dst.MkdirAll(name, 0o755)
+	case tar.TypeSymlink:
+		return dst.Symlink(h.Linkname, name)
+	case tar.TypeReg:
+		f, err := dst.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, os.FileMode(h.Mode).Perm()|0o600)
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(f, tr); err != nil {
+			_ = f.Close()
+			return err
+		}
+		return f.Close()
+	}
+	return fmt.Errorf("a tar entry of type %q is not part of a machine", h.Typeflag)
 }
 
 func newService(root string, started time.Time) (*script, *service.Service, error) {

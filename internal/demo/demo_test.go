@@ -50,6 +50,11 @@ func tryStart(t *testing.T) (*demo.Demo, *terminal, error) {
 
 func tryStartAt(t *testing.T, cols, rows int) (*demo.Demo, *terminal, error) {
 	t.Helper()
+	return tryStartTree(t, tree, cols, rows)
+}
+
+func tryStartTree(t *testing.T, tree string, cols, rows int) (*demo.Demo, *terminal, error) {
+	t.Helper()
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	term := &terminal{in: inW, out: outR, ended: make(chan struct{})}
