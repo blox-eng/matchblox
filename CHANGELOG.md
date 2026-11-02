@@ -6,6 +6,15 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A key shows sooner in the console and the chat.** The console draws 60
+  frames a second, not 15, so a key waits about 11 ms, not 37 ms. The chat
+  reads the agent's screen again just after each key, so what you type no
+  longer waits for the next 150 ms read.
+  ([#285](https://github.com/blox-eng/matchblox/issues/285),
+  [#286](https://github.com/blox-eng/matchblox/issues/286))
+
 ## [0.30.0] - 2026-11-01
 
 ### Changed
