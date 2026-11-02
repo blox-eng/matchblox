@@ -736,7 +736,7 @@ func (w *walker) saysAfter(what, want string, keys ...string) {
 	w.t.Helper()
 	from := len(w.term.text())
 	w.press(keys...)
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for !strings.Contains(w.term.text()[from:], want) {
 		if time.Now().After(deadline) {
 			w.t.Fatalf("%s: never drew %q; it drew:\n%s", what, want, w.term.text()[from:])

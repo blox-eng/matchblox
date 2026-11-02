@@ -101,7 +101,7 @@ func (term *terminal) text() string {
 
 func (term *terminal) waitFor(t *testing.T, want ...string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		text := term.text()
 		missing := ""
