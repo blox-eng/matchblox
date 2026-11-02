@@ -169,6 +169,16 @@ func sizedScreen(cols, rows int) string {
 // own width of 120 columns would wrap every row.
 func TestScreensSizedChat(t *testing.T) {
 	st := fixtureState()
+	for i := range st.Sessions {
+		// The sampler ages the fixture on the real clock, and a golden that
+		// shows the age breaks each day. Idle also sorts these two rows.
+		switch st.Sessions[i].Name {
+		case "tools":
+			st.Sessions[i].Idle = 41 * 24 * time.Hour
+		case "app-review":
+			st.Sessions[i].Idle = 41*24*time.Hour + time.Hour
+		}
+	}
 	for _, size := range [][2]int{{132, 32}, {44, 31}} {
 		w, h := size[0], size[1]
 		m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return demoAt }})

@@ -20,6 +20,17 @@ All notable changes to matchblox are in this file. The format follows
 - **The first tap on the phone's console clicks.** It no longer needs a second
   tap. Turning the phone back reopens the chat on every host.
 
+## [0.30.1] - 2026-11-02
+
+### Fixed
+
+- **A key shows sooner in the console and the chat.** The console draws 60
+  frames a second, not 15, so a key waits about 11 ms, not 37 ms. The chat
+  reads the agent's screen again just after each key, so what you type no
+  longer waits for the next 150 ms read.
+  ([#285](https://github.com/blox-eng/matchblox/issues/285),
+  [#286](https://github.com/blox-eng/matchblox/issues/286))
+
 ## [0.30.0] - 2026-11-01
 
 ### Changed
@@ -1161,7 +1172,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.30.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.30.1...HEAD
+[0.30.1]: https://github.com/blox-eng/matchblox/compare/v0.30.0...v0.30.1
 [0.30.0]: https://github.com/blox-eng/matchblox/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/blox-eng/matchblox/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/blox-eng/matchblox/compare/v0.27.0...v0.28.0
