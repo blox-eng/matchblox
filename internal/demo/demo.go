@@ -57,6 +57,7 @@ type Demo struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 	err    error
+	script *script
 }
 
 var (
@@ -76,8 +77,13 @@ func Start(o Options) (*Demo, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := nameHost(root); err != nil {
+		_ = os.RemoveAll(root)
+		return nil, fmt.Errorf("demo: naming the host: %w", err)
+	}
 
-	s, err := newService(root)
+	started := time.Now()
+	sc, s, err := newService(root, started)
 	if err != nil {
 		_ = os.RemoveAll(root)
 		return nil, err
@@ -92,9 +98,10 @@ func Start(o Options) (*Demo, error) {
 
 	console := app.New(app.Options{
 		Conn: conn, Binary: binary, Run: refuse, OutsideTmux: true,
-		StateDir: stateDir(root),
+		StateDir: stateDir(root), Now: clockFrom(started),
 	})
 	d := &Demo{
+		script: sc,
 		cancel: cancel,
 		done:   make(chan struct{}),
 		prog: tea.NewProgram(console, tea.WithContext(ctx), tea.WithInput(o.In), tea.WithOutput(o.Out),
@@ -108,6 +115,7 @@ func Start(o Options) (*Demo, error) {
 		cancel()
 		_ = conn.Close()
 		serving.Wait()
+		sc.stop()
 		if stopped && errors.Is(err, tea.ErrProgramKilled) {
 			err = nil
 		}
@@ -139,7 +147,7 @@ func (d *Demo) Wait() error {
 }
 
 // Done reports that the person has finished what the demo asks of them.
-func (d *Demo) Done() bool { return false }
+func (d *Demo) Done() bool { return d.script.done.Load() }
 
 func refuse([]string) error { return errRefused }
 
@@ -173,20 +181,25 @@ func copyTree(tree string) (string, error) {
 	return root, nil
 }
 
-func newService(root string) (*service.Service, error) {
+func newService(root string, started time.Time) (*script, *service.Service, error) {
 	cfg := config.Default()
 	cfg.Agents = []string{"claude", "codex", "opencode"} // the fixture machine runs all three
+	now := clockFrom(started)
 	smp := Sampler(cfg, root)
-	w, err := NewWorld(root, time.Now, func(pid int) { _ = os.RemoveAll(filepath.Join(root, "proc", strconv.Itoa(pid))) })
+	smp.FS, smp.Now = movingFS{smp.FS.(procfs.FS), started}, now
+	w, err := NewWorld(root, now, func(pid int) { _ = os.RemoveAll(filepath.Join(root, "proc", strconv.Itoa(pid))) })
 	if err != nil {
-		return nil, fmt.Errorf("demo: the world of the machine: %w", err)
+		return nil, nil, fmt.Errorf("demo: the world of the machine: %w", err)
 	}
+	w.Uptime = smp.FS.Uptime
+	sc := &script{world: w}
+	w.Picked = sc.answered
 	s := service.New(cfg, smp, w.Git)
-	s.Binary, s.Host = binary, Host(root)
+	s.Binary, s.Host, s.Now = binary, Host(root), now
 	s.Home, s.StatePath = smp.Home, filepath.Join(stateDir(root), "state.json")
 	s.Capture, s.Activity = smp.Capture, nil // the fixture's panes, never a tmux on this machine
 	w.Wire(s)
-	return s, nil
+	return sc, s, nil
 }
 
 // Sampler reads a fixture tree in place of the live machine.

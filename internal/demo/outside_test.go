@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/transport"
@@ -37,7 +38,7 @@ func TestANewSessionWritesNothingOutsideTheCopy(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	a, b := net.Pipe()
-	svc, err := newService(root)
+	_, svc, err := newService(root, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

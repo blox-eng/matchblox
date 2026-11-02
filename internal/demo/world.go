@@ -46,6 +46,9 @@ type World struct {
 	// Uptime is the demo host's, for the start time of a session the demo
 	// starts. NewWorld sets the fixture's own.
 	Uptime func() float64
+	// Picked, if set, is told of each answer on a question's menu, with the
+	// pane, while the world holds its lock: it must not call the world.
+	Picked func(pane string)
 
 	mu       sync.Mutex
 	sessions map[string]*session // by pane
@@ -274,7 +277,13 @@ func (w *World) pick(pane, digit string) error {
 	if err := writeAtomic(w.pane(pane), []byte("● I rotate the token on each refresh and keep the old one for a minute.\n\n╭──────────────────────────────────────────────╮\n│ > \n╰──────────────────────────────────────────────╯\n")); err != nil {
 		return err
 	}
-	return w.writeRegistry(s, now)
+	if err := w.writeRegistry(s, now); err != nil {
+		return err
+	}
+	if w.Picked != nil {
+		w.Picked(pane)
+	}
+	return nil
 }
 
 // atMenu tells if the pane shows the question tool's menu. Hold w.mu.
