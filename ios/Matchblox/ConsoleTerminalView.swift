@@ -218,4 +218,18 @@ final class ConsoleTerminalView: TerminalView {
         let cells = (0..<terminal.cols).map { terminal.getCharacter(col: $0, row: row) ?? " " }
         return HomeKey.labelColumns(in: cells)
     }
+
+    #if DEBUG
+    /// The screen as text. A cell the program never drew holds NUL, and a space may be such a cell.
+    var screenText: String {
+        let terminal = getTerminal()
+        return (0..<terminal.rows).map { row in
+            let cells: [Character] = (0..<terminal.cols).map { col in
+                let cell = terminal.getCharacter(col: col, row: row) ?? " "
+                return cell == "\0" ? " " : cell
+            }
+            return String(cells)
+        }.joined(separator: "\n")
+    }
+    #endif
 }

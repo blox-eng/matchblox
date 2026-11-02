@@ -49,6 +49,7 @@ xcodebuild -scheme Matchblox -destination 'id=<device id>' \
 It needs `rsvg-convert` (`brew install librsvg`).
 
 `make test` runs the tests of the MatchbloxKit package.
+`make uitest DESTINATION=id=<simulator udid>` runs the UI tests. The `ios-demo` workflow runs them on each push.
 
 ## CI
 

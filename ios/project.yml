@@ -159,11 +159,31 @@ targets:
       - package: MatchbloxKit
         product: MatchbloxKit
 
+  MatchbloxUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: MatchbloxUITests
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.blox.matchblox.uitests
+        TEST_TARGET_NAME: Matchblox
+    dependencies:
+      - target: Matchblox
+
 schemes:
   Matchblox:
     build:
       targets:
         Matchblox: all
+    test:
+      config: Debug
+      targets:
+        - MatchbloxUITests
     run:
       config: Debug
     profile:

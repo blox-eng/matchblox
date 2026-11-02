@@ -63,32 +63,25 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 }
 
-private struct DemoPlaceholder: View {
-    let onHosts: (() -> Void)?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("demo")
-                .font(.title3)
-            if let onHosts {
-                Button("Hosts", action: onHosts)
-                    .foregroundStyle(Theme.muted)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(24)
-    }
-}
-
 @main
 struct MatchbloxApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     private let store = HostStore.standard
     /// A tapped link opens a new console even when one is open.
     @State private var linkOpens = 0
-    @State private var route = Opening.first(hosts: HostStore.standard.all())
+    @State private var route: Route
     @State private var scanProblem: String?
     @State private var scanNotice: String?
+
+    init() {
+        #if DEBUG
+        // The UI test's way to the demo host, with no pairing screen in between.
+        if ProcessInfo.processInfo.arguments.contains("-openDemoHost") {
+            try? HostStore.standard.upsert(.demo)
+        }
+        #endif
+        _route = State(initialValue: Opening.first(hosts: HostStore.standard.all()))
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -115,9 +108,6 @@ struct MatchbloxApp: App {
                         onScanAgain: { go(.scan) }
                     )
                     .id(draft.payload.key)
-                case .console(let host, _) where host.isDemo:
-                    // The demo has no key and no host to connect to; its session comes in a later task.
-                    DemoPlaceholder(onHosts: store.all().count > 1 ? { go(.hosts) } : nil)
                 case .console(let host, let session):
                     ConsoleView(
                         host: host,

@@ -101,6 +101,10 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     /// The builder picked a layout in the tray.
     var onLayout: (BeltLayout) -> Void = { _ in }
     var onEditMine: () -> Void = {}
+    var mineEditable: Bool {
+        get { trayModel.mineEditable }
+        set { trayModel.mineEditable = newValue }
+    }
     /// True as the drawer starts to open, false once it has closed: the screen over the belt
     /// holds the terminal's size in between.
     var onScreenHold: (Bool) -> Void = { _ in }

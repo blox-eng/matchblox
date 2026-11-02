@@ -21,6 +21,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/app"
 	"github.com/blox-eng/matchblox/internal/demo"
+	"github.com/blox-eng/matchblox/internal/panes"
 )
 
 // spies records what the console would give the operating system: every seam
@@ -481,6 +482,25 @@ func TestNoDoorOrKeyLeavesTheDemo(t *testing.T) {
 	if theWalk.open != nil {
 		t.Errorf("the demo held a socket open: %v", theWalk.open)
 	}
+
+	// The edge swipe, the ‹ and ⌘M all write the home key. In a chat q is the
+	// agent's, so q ending the program proves the chat gave back the keys.
+	t.Run("the home key leaves a chat", func(t *testing.T) {
+		newMachine(t)
+		w := startWalk(t, 44, 31)
+		w.press("enter")
+		w.saysAfter("ctrl+c in a chat", "This is a demo.", "ctrl+c") // the keys are in the chat
+		w.send("the home key", panes.HomeKey)
+		w.press("q")
+		select {
+		case <-w.ended:
+		case <-time.After(5 * time.Second):
+			t.Fatal("q did not end the program after the home key: the chat kept the keys")
+		}
+		if err := w.d.Wait(); err != nil {
+			t.Errorf("q ended it with %v", err)
+		}
+	})
 }
 
 // TestQAndCtrlCEnd: the two keys that end the program, as on any host, and they

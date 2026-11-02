@@ -4,6 +4,15 @@ import NIOSSH
 import SwiftTerm
 import SwiftUI
 
+/// Where the console's bytes come from and go to. Each source's output comes from its own start.
+protocol ConsoleSource: Sendable {
+    func write(_ data: Data) async
+    func resize(cols: Int, rows: Int) async
+    func close() async
+}
+
+extension SSHSession: ConsoleSource {}
+
 /// The console window: `matchblox console` on the host, drawn by SwiftTerm.
 /// A failed connect goes to `onFailure`; the router shows the screen that fixes it.
 struct ConsoleView: View {
@@ -87,15 +96,17 @@ struct ConsoleView: View {
         .background(Theme.bg)
     }
 
-    /// Hosts (with more than one host) and Island (always), beside the console's actions.
+    /// Hosts (with more than one host) and Island (for a real host), beside the console's actions.
     private var hostsButton: some View {
         HStack(spacing: 24) {
             if let onHosts {
                 Button("Hosts", action: onHosts)
                     .foregroundStyle(Theme.muted)
             }
-            Button("Island", action: onIsland)
-                .foregroundStyle(Theme.muted)
+            if !host.isDemo {
+                Button("Island", action: onIsland)
+                    .foregroundStyle(Theme.muted)
+            }
         }
     }
 }
@@ -127,11 +138,21 @@ private struct TerminalRepresentable: UIViewRepresentable {
 
         let screen = HeldScreen(terminal: terminal)
         screen.backgroundColor = bg
-        let belts = Belts(terminal: terminal, screen: screen)
+        let belts = Belts(terminal: terminal, screen: screen, mineEditable: !connection.isDemo)
         terminal.inputAccessoryView = belts.lifted
         terminal.onFocus = { [weak belts] focused in belts?.focusChanged(focused) }
         connection.onAgent = { agent in belts.agentChanged(agent) }
+        #if DEBUG
+        let isDemo = connection.isDemo
+        // Only the UI test reads this, and only on the demo.
+        if isDemo { terminal.accessibilityIdentifier = "demo-terminal" }
+        connection.onOutput = { [weak terminal] in
+            belts.outputArrived()
+            if isDemo { terminal?.accessibilityLabel = terminal?.screenText }
+        }
+        #else
         connection.onOutput = { belts.outputArrived() }
+        #endif
         let stack = UIStackView(arrangedSubviews: [screen, belts.dock])
         stack.axis = .vertical
         return stack
@@ -191,9 +212,11 @@ private final class Belts {
     private static let liveDelay: Duration = .milliseconds(300)
     private var goingLive: Task<Void, Never>?
 
-    init(terminal: ConsoleTerminalView, screen: HeldScreen) {
+    /// The demo's belt has no Mine editor: it saves to the person's real layout.
+    init(terminal: ConsoleTerminalView, screen: HeldScreen, mineEditable: Bool) {
         self.terminal = terminal
         for belt in [lifted, dock] {
+            belt.mineEditable = mineEditable
             belt.onScreenHold = { [weak screen] holding in screen?.trayMoved(open: holding) }
             belt.onSend = { [weak terminal] bytes in terminal?.send(bytes) }
             belt.onKeyboard = { [weak terminal] in
@@ -296,7 +319,7 @@ private final class Belts {
 
 }
 
-/// Owns one SSHSession for each connect. A session that ends at once opens again; a good session that ends waits for a tap. It stops when the view goes away or the app goes to the background.
+/// Owns one SSHSession for each connect. A session that ends at once opens again; a good session that ends waits for a tap. It stops when the view goes away or the app goes to the background. The demo host has a DemoSession instead, and each opening starts it fresh.
 @MainActor
 @Observable
 final class ConsoleConnection {
@@ -342,6 +365,8 @@ final class ConsoleConnection {
     private let host: Host
     private let onFailure: (ConnectFailure) -> Void
 
+    var isDemo: Bool { host.isDemo }
+
     init(host: Host, open: Int?, onFailure: @escaping (ConnectFailure) -> Void) {
         self.host = host
         self.openSession = open
@@ -381,6 +406,10 @@ final class ConsoleConnection {
     }
 
     private func run() async {
+        if host.isDemo {
+            await runDemo()
+            return
+        }
         var delay = ReconnectDelay()
         while !Task.isCancelled {
             phase = .connecting
@@ -415,7 +444,7 @@ final class ConsoleConnection {
             )
             let opened = ContinuousClock.now
             let ending = await withTaskCancellationHandler {
-                await serve(session)
+                await connect(session)
             } onCancel: {
                 Task { await session.close() }
             }
@@ -441,8 +470,39 @@ final class ConsoleConnection {
         }
     }
 
-    /// Runs one session until its stream ends.
-    private func serve(_ session: SSHSession) async -> Ending {
+    /// The demo has no key and no host to reach, so one run is all there is: a quit shows the
+    /// ended screen, and a run that fails or dies says why.
+    private func runDemo() async {
+        phase = .connecting
+        let session = DemoSession()
+        let failure = await withTaskCancellationHandler {
+            await serveDemo(session)
+        } onCancel: {
+            Task { await session.close() }
+        }
+        await session.close()
+        guard !Task.isCancelled else { return }
+        if let failure {
+            phase = .failed(failure, scanAgain: false)
+        } else {
+            phase = .ended
+        }
+    }
+
+    private func serveDemo(_ session: DemoSession) async -> String? {
+        let size = terminalSize
+        let output: AsyncStream<Data>
+        do {
+            output = try await session.start(cols: size.cols, rows: size.rows)
+        } catch {
+            return error.message
+        }
+        guard !Task.isCancelled else { return nil }
+        _ = await serve(session, output: output, openedAt: size)
+        return session.failure
+    }
+
+    private func connect(_ session: SSHSession) async -> Ending {
         let size = terminalSize
         let output: AsyncStream<Data>
         do {
@@ -451,16 +511,20 @@ final class ConsoleConnection {
             return .failed(error)
         }
         guard !Task.isCancelled else { return .ended(sawOutput: false) }
+        return .ended(sawOutput: await serve(session, output: output, openedAt: size))
+    }
 
+    /// Runs one source until its output ends, and says whether it drew anything.
+    private func serve(_ source: any ConsoleSource, output: AsyncStream<Data>, openedAt size: (cols: Int, rows: Int)) async -> Bool {
         let (input, sink) = AsyncStream<Outgoing>.makeStream()
         outgoing = sink
         let writer = Task {
             for await item in input {
                 switch item {
                 case .input(let data):
-                    await session.write(data)
+                    await source.write(data)
                 case .resize(let cols, let rows):
-                    await session.resize(cols: cols, rows: rows)
+                    await source.resize(cols: cols, rows: rows)
                 }
             }
         }
@@ -491,7 +555,7 @@ final class ConsoleConnection {
             }
             onOutput()
         }
-        return .ended(sawOutput: sawOutput)
+        return sawOutput
     }
 
     private var terminalSize: (cols: Int, rows: Int) {

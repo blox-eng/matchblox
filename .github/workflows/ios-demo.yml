@@ -63,3 +63,36 @@ jobs:
           xcrun simctl boot "$id"
           xcrun simctl bootstatus "$id" -b
           xcrun simctl spawn "$id" "$PWD/out/sim/probe" "$PWD/ios/Matchblox/Demo/machine.tar"
+
+  ui:
+    name: UI test on a simulator
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Select the newest Xcode 26
+        run: |
+          xcode=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          sudo xcode-select -s "$xcode"
+      - name: Run the UI tests
+        run: |
+          brew install xcodegen
+          id=$(xcrun simctl list devices available -j | python3 -c "
+          import json, re, sys
+          runtimes = [(tuple(map(int, re.findall(r'\d+', r.split('iOS-')[1]))), ds) for r, ds in json.load(sys.stdin)['devices'].items() if 'iOS-' in r]
+          print(next(d['udid'] for _, ds in sorted(runtimes, key=lambda x: x[0], reverse=True) for d in ds if 'iPhone' in d['name']))
+          ")
+          make -C ios uitest DESTINATION="id=$id"
+      - name: Upload the test results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-ui-results
+          path: ios/build/ui.xcresult
+          retention-days: 7
