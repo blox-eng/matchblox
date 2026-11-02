@@ -108,7 +108,15 @@ jobs:
           TMUX_PANE: ${{ runner.os == 'Linux' && '%0' || '' }}
         # go test stops a package at 10 minutes by default; on macOS the app
         # package's race run reached 9m55s, so it gets the job's own room.
-        run: go test -race -cover -timeout ${{ matrix.os == 'macos-latest' && '18m' || '10m' }} ./...
+        run: go test -race -cover -timeout ${{ matrix.os == 'macos-latest' && '18m' || '10m' }} $(go list ./... | grep -v '/internal/demo$')
+      # The demo's walks press every key of the console through a real service.
+      # Under -race they took 8 minutes on Linux, against a 10 minute job, and
+      # starved on macOS; without it they take about 2.
+      - name: Demo tests
+        env:
+          TMUX: ${{ runner.os == 'Linux' && format('{0}/sentinel,1,0', runner.temp) || '' }}
+          TMUX_PANE: ${{ runner.os == 'Linux' && '%0' || '' }}
+        run: go test -cover -timeout 10m ./internal/demo
       - name: The sentinel tmux servers are alive
         if: always() && runner.os == 'Linux'
         run: |
