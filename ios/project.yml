@@ -22,10 +22,15 @@ targets:
     platform: iOS
     sources:
       - path: Matchblox
+        excludes:
+          - Demo/machine.tar
       - path: MatchbloxIsland/IslandAttributes.swift
       - path: Shared/Match.swift
       # The console's command table. testdata/keys/commands.json links to this file.
       - path: ../internal/keycmd/commands.json
+        buildPhase: resources
+      # The demo's machine, packed by make demolib from testdata/demo.
+      - path: Matchblox/Demo/machine.tar
         buildPhase: resources
     info:
       path: Matchblox/Info.plist
@@ -72,10 +77,15 @@ targets:
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_ENTITLEMENTS: Matchblox/Matchblox.entitlements
+        # The demo is Go, linked as a static library (make demolib).
+        SWIFT_OBJC_BRIDGING_HEADER: Matchblox/Demo/Matchblox-Bridging-Header.h
+        OTHER_LDFLAGS: -framework CoreFoundation -framework Security -framework IOKit -lresolv
       configs:
         Release:
           CODE_SIGN_ENTITLEMENTS: Matchblox/Matchblox.production.entitlements
     dependencies:
+      - framework: build/MBDemo.xcframework
+        embed: false
       - package: MatchbloxKit
         product: MatchbloxKit
       - package: SwiftTerm

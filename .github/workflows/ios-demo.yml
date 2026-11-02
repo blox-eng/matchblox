@@ -39,6 +39,8 @@ jobs:
         run: |
           xcode=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
           sudo xcode-select -s "$xcode"
+      - name: Pack the machine as the app does
+        run: make -C ios machine
       - name: Build for a device and a simulator
         run: |
           build() { # sdk target dir
@@ -60,4 +62,4 @@ jobs:
           id=$(xcrun simctl list devices available -j | python3 -c "import json,sys; print(next(d['udid'] for r,ds in json.load(sys.stdin)['devices'].items() if 'iOS' in r for d in ds if 'iPhone' in d['name']))")
           xcrun simctl boot "$id"
           xcrun simctl bootstatus "$id" -b
-          xcrun simctl spawn "$id" "$PWD/out/sim/probe" "$PWD/testdata/demo"
+          xcrun simctl spawn "$id" "$PWD/out/sim/probe" "$PWD/ios/Matchblox/Demo/machine.tar"

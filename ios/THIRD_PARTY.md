@@ -18,3 +18,40 @@ resolves [swift-argument-parser](https://github.com/apple/swift-argument-parser)
 
 We checked each license with the GitHub API on 2026-10-14.
 We do not use any GPL code.
+
+## Go (the demo)
+
+The demo is the matchblox console and service, built from Go as a static
+library inside the app. These are the modules it links, from
+`GOOS=ios go list -deps ./cmd/mbdemolib`, at the versions of `go.mod`.
+
+| Module | Version | License | Used by |
+| --- | --- | --- | --- |
+| Go standard library | go1.26.10 | BSD-3-Clause | the Go runtime |
+| [charm.land/bubbles/v2](https://pkg.go.dev/charm.land/bubbles/v2) | v2.2.1 | MIT | demo |
+| [charm.land/bubbletea/v2](https://pkg.go.dev/charm.land/bubbletea/v2) | v2.0.10 | MIT | demo |
+| [charm.land/lipgloss/v2](https://pkg.go.dev/charm.land/lipgloss/v2) | v2.0.6 | MIT | demo |
+| [github.com/BurntSushi/toml](https://pkg.go.dev/github.com/BurntSushi/toml) | v1.6.0 | MIT | demo |
+| [github.com/charmbracelet/colorprofile](https://pkg.go.dev/github.com/charmbracelet/colorprofile) | v0.4.3 | MIT | demo |
+| [github.com/charmbracelet/ultraviolet](https://pkg.go.dev/github.com/charmbracelet/ultraviolet) | v0.0.0-20260928045949-bbf040aedf25 | MIT | demo |
+| [github.com/charmbracelet/x/ansi](https://pkg.go.dev/github.com/charmbracelet/x/ansi) | v0.11.8 | MIT | demo |
+| [github.com/charmbracelet/x/term](https://pkg.go.dev/github.com/charmbracelet/x/term) | v0.2.2 | MIT | demo |
+| [github.com/charmbracelet/x/termios](https://pkg.go.dev/github.com/charmbracelet/x/termios) | v0.1.1 | MIT | demo |
+| [github.com/charmbracelet/x/windows](https://pkg.go.dev/github.com/charmbracelet/x/windows) | v0.2.2 | MIT | demo |
+| [github.com/clipperhouse/displaywidth](https://pkg.go.dev/github.com/clipperhouse/displaywidth) | v0.11.0 | MIT | demo |
+| [github.com/clipperhouse/uax29/v2](https://pkg.go.dev/github.com/clipperhouse/uax29/v2) | v2.7.0 | MIT | demo |
+| [github.com/ebitengine/purego](https://pkg.go.dev/github.com/ebitengine/purego) | v0.11.1 | Apache-2.0 | demo |
+| [github.com/lrstanley/bubblezone/v2](https://pkg.go.dev/github.com/lrstanley/bubblezone/v2) | v2.0.0 | MIT | demo |
+| [github.com/lucasb-eyer/go-colorful](https://pkg.go.dev/github.com/lucasb-eyer/go-colorful) | v1.4.1 | MIT | demo |
+| [github.com/mattn/go-runewidth](https://pkg.go.dev/github.com/mattn/go-runewidth) | v0.0.30 | MIT | demo |
+| [github.com/muesli/cancelreader](https://pkg.go.dev/github.com/muesli/cancelreader) | v0.2.2 | MIT | demo |
+| [github.com/NimbleMarkets/ntcharts/v2](https://pkg.go.dev/github.com/NimbleMarkets/ntcharts/v2) | v2.7.0 | MIT | demo |
+| [github.com/rivo/uniseg](https://pkg.go.dev/github.com/rivo/uniseg) | v0.4.7 | MIT | demo |
+| [github.com/shirou/gopsutil/v4](https://pkg.go.dev/github.com/shirou/gopsutil/v4) | v4.26.9 | BSD-3-Clause | demo |
+| [github.com/tklauser/go-sysconf](https://pkg.go.dev/github.com/tklauser/go-sysconf) | v0.4.0 | BSD-3-Clause | demo |
+| [github.com/xo/terminfo](https://pkg.go.dev/github.com/xo/terminfo) | v1.2.0 | MIT | demo |
+| [golang.org/x/sync](https://pkg.go.dev/golang.org/x/sync) | v0.23.0 | BSD-3-Clause | demo |
+| [golang.org/x/sys](https://pkg.go.dev/golang.org/x/sys) | v0.48.0 | BSD-3-Clause | demo |
+| [rsc.io/qr](https://pkg.go.dev/rsc.io/qr) | v0.2.0 | BSD-3-Clause | demo |
+
+We checked each license in the module's own LICENSE file on 2026-11-02.

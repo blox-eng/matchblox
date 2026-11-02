@@ -7,8 +7,38 @@ install: ## Install XcodeGen with Homebrew
 	@command -v brew >/dev/null 2>&1 || { echo "Homebrew is required. Install it from https://brew.sh"; exit 1; }
 	@command -v xcodegen >/dev/null 2>&1 || brew install xcodegen
 
+DEMO_OUT := build/demolib
+
+# demolib builds the demo, the real console and service as a C library, for a
+# device and for the simulator (Apple silicon), and the tar of the machine it
+# shows. Both go into the app. The tar is one file: the fixture holds symlinks
+# that code signing may refuse in a folder.
+.PHONY: demolib
+demolib: machine ## Build build/MBDemo.xcframework and the demo's machine
+	rm -rf build/MBDemo.xcframework $(DEMO_OUT)
+	$(call demo-slice,iphoneos,arm64-apple-ios17.0,device)
+	$(call demo-slice,iphonesimulator,arm64-apple-ios17.0-simulator,sim)
+	xcodebuild -create-xcframework \
+		-library $(DEMO_OUT)/device/libmbdemo.a -headers $(DEMO_OUT)/device/include \
+		-library $(DEMO_OUT)/sim/libmbdemo.a -headers $(DEMO_OUT)/sim/include \
+		-output build/MBDemo.xcframework
+
+# demo-slice: sdk, clang target, folder.
+define demo-slice
+CC="$$(xcrun -sdk $(1) -f clang) -isysroot $$(xcrun -sdk $(1) --show-sdk-path) -target $(2)" \
+CGO_ENABLED=1 GOOS=ios GOARCH=arm64 \
+	go -C .. build -trimpath -ldflags='-s -w' -buildmode=c-archive \
+	-o "$(CURDIR)/$(DEMO_OUT)/$(3)/libmbdemo.a" ./cmd/mbdemolib
+mkdir -p $(DEMO_OUT)/$(3)/include
+mv $(DEMO_OUT)/$(3)/libmbdemo.h $(DEMO_OUT)/$(3)/include/
+endef
+
+.PHONY: machine
+machine: ## Pack testdata/demo as Matchblox/Demo/machine.tar, symlinks kept
+	COPYFILE_DISABLE=1 tar -C ../testdata/demo -cf Matchblox/Demo/machine.tar .
+
 .PHONY: gen
-gen: ## Generate Matchblox.xcodeproj from project.yml
+gen: demolib ## Generate Matchblox.xcodeproj from project.yml
 	@command -v xcodegen >/dev/null 2>&1 || { echo "xcodegen not found. Run: make install"; exit 1; }
 	xcodegen generate
 

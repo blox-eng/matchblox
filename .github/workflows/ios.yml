@@ -9,6 +9,11 @@ on:
       - "testdata/home/**"
       - "testdata/keys/**"
       - "internal/keycmd/commands.json"
+      - "internal/**"
+      - "cmd/mbdemolib/**"
+      - "go.mod"
+      - "go.sum"
+      - "testdata/demo/**"
       - ".github/workflows/ios.yml"
   pull_request:
     paths:
@@ -18,6 +23,11 @@ on:
       - "testdata/home/**"
       - "testdata/keys/**"
       - "internal/keycmd/commands.json"
+      - "internal/**"
+      - "cmd/mbdemolib/**"
+      - "go.mod"
+      - "go.sum"
+      - "testdata/demo/**"
       - ".github/workflows/ios.yml"
 
 permissions:
@@ -29,6 +39,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
       - name: Select the newest Xcode 26
         run: |
           xcode=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
@@ -42,15 +56,20 @@ jobs:
           make -C ios build
       - name: The app holds the command table
         run: test -f ios/build/Build/Products/Debug-iphonesimulator/Matchblox.app/commands.json
+      - name: The app holds the demo's machine
+        run: test -f ios/build/Build/Products/Debug-iphonesimulator/Matchblox.app/machine.tar
       - name: Compile the app in Release
         # The same action, configuration and platform as the TestFlight archive,
-        # without signing. A compiler crash here fails the PR, not the release.
+        # without signing: an unsigned device build that links the demo library.
+        # A compiler or linker failure here fails the PR, not the release.
         run: |
           mkdir -p ios/build
           if ! make -C ios release > ios/build/release.log 2>&1; then
             tail -n 100 ios/build/release.log
             exit 1
           fi
+      - name: The device archive holds the demo's machine
+        run: test -f ios/build/Matchblox.xcarchive/Products/Applications/Matchblox.app/machine.tar
       - name: Upload the Release compile log
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
