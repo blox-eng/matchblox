@@ -394,7 +394,11 @@ func (w *World) submit(pane, text string) error {
 	if !strings.HasPrefix(text, "/compact") {
 		// The agent takes the answer and works: its newest reply asks no more.
 		s.status, s.tokens = "busy", s.tokens+4000
-		if err := w.appendTranscript(s, turnLine(now, s.tokens, "I rotate the token on each refresh and keep the old one for a minute.")); err != nil {
+		reply := "I rotate the token on each refresh and keep the old one for a minute."
+		if pane != askPane {
+			reply = "Got it. I am working on that."
+		}
+		if err := w.appendTranscript(s, turnLine(now, s.tokens, reply)); err != nil {
 			return err
 		}
 		if err := w.writeRegistry(s, now); err != nil {

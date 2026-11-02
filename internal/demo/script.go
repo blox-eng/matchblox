@@ -24,6 +24,9 @@ const (
 	askText   = "Rotated on each refresh, with the old token kept a minute. The tests pass."
 )
 
+// otherText is the closing line of any other session the person answers.
+const otherText = "Got it. I have what I need, and the work is done."
+
 // turnLasts is how long the agent works on the answer.
 var turnLasts = 3 * time.Second
 
@@ -53,42 +56,43 @@ type script struct {
 	world *World
 
 	mu      sync.Mutex
-	armed   bool
-	pane    string
+	answers map[string]bool // panes whose answer is in
 	stopped bool
-	timer   *time.Timer
+	timers  []*time.Timer
 	running sync.WaitGroup
 	done    atomic.Bool
 }
 
-// answered is World.Picked: the agent's turn ends a while after the answer.
-// The first answer to any session counts, a pick on a menu or a typed reply.
+// answered is World.Picked: the turn of the answered session ends a while
+// after its answer, with its own closing line. Each session counts once, and
+// Done turns true when the first of these turns ends.
 func (s *script) answered(pane string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.armed || s.stopped {
+	if s.answers[pane] || s.stopped {
 		return
 	}
-	s.armed = true
-	s.pane = pane
-	s.timer = time.AfterFunc(turnLasts, s.finish)
+	if s.answers == nil {
+		s.answers = map[string]bool{}
+	}
+	s.answers[pane] = true
+	s.timers = append(s.timers, time.AfterFunc(turnLasts, func() { s.finish(pane) }))
 }
 
-func (s *script) finish() {
+func (s *script) finish(pane string) {
 	s.mu.Lock()
 	if s.stopped {
 		s.mu.Unlock()
 		return
 	}
 	s.running.Add(1)
-	pane := s.pane
 	s.mu.Unlock()
 	defer s.running.Done()
-	tokens := 0
+	tokens, text := 0, otherText
 	if pane == askPane {
-		tokens = askTokens
+		tokens, text = askTokens, askText
 	}
-	if s.world.Finish(pane, tokens, askText) == nil {
+	if s.world.Finish(pane, tokens, text) == nil {
 		s.done.Store(true)
 	}
 }
@@ -97,8 +101,8 @@ func (s *script) finish() {
 func (s *script) stop() {
 	s.mu.Lock()
 	s.stopped = true
-	if s.timer != nil {
-		s.timer.Stop()
+	for _, t := range s.timers {
+		t.Stop()
 	}
 	s.mu.Unlock()
 	s.running.Wait()

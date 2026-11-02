@@ -25,19 +25,50 @@ func scriptOn(t *testing.T, lasts time.Duration) (*script, *World) {
 	return &script{world: w}, w
 }
 
-func TestTheFirstAnswerToAnySessionSetsDoneOnce(t *testing.T) {
+// TestEachSessionsAnswerEndsItsOwnTurn: an answer typed to another session
+// does not use up flint-auth's question. A pick on its menu afterwards still
+// answers it, and each transcript closes with its own line.
+func TestEachSessionsAnswerEndsItsOwnTurn(t *testing.T) {
 	s, w := scriptOn(t, 20*time.Millisecond)
+	w.Picked = s.answered
+	other := "%3"
 
-	s.answered("%1")
-	s.answered(askPane)
-	for deadline := time.Now().Add(time.Second); !s.done.Load(); time.Sleep(5 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatal("the first answer never set Done")
+	for _, argv := range [][]string{
+		{"tmux", "send-keys", "-t", other, "-l", "--", "use the second one"},
+		{"tmux", "send-keys", "-t", other, "Enter"},
+	} {
+		if err := w.Run(argv); err != nil {
+			t.Fatal(err)
 		}
 	}
+	read := func(pane string) string {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		sess := w.sessions[pane]
+		b, _ := os.ReadFile(w.transcript(sess.name, sess.id))
+		return string(b)
+	}
+	eventually := func(what string, ok func() bool) {
+		t.Helper()
+		for deadline := time.Now().Add(2 * time.Second); !ok(); time.Sleep(5 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("%s did not happen", what)
+			}
+		}
+	}
+	eventually("the first turn's end", func() bool { return strings.Contains(read(other), otherText) })
+	eventually("Done", s.done.Load)
+	if strings.Contains(read(askPane), askText) {
+		t.Fatal("flint-auth finished on another session's answer")
+	}
+
+	if err := w.Run([]string{"tmux", "send-keys", "-t", askPane, "-l", "--", "2"}); err != nil {
+		t.Fatal(err)
+	}
+	eventually("flint-auth's own close", func() bool { return strings.Contains(read(askPane), askText) })
 	s.stop()
-	if b, err := os.ReadFile(w.registry(1200)); err != nil || !strings.Contains(string(b), `"status":"idle"`) {
-		t.Errorf("the answered session did not finish: %s %v", b, err)
+	if strings.Contains(read(askPane), otherText) || strings.Contains(read(other), askText) {
+		t.Error("a session closed with another session's line")
 	}
 }
 
