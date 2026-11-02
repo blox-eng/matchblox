@@ -670,12 +670,12 @@ func TestScanBoxWaitsForTheChat(t *testing.T) {
 			break
 		}
 	}
-	m = pressKeys(t, pastQuiet(onPane(t, m, pane)), "enter")
+	m = pressKeys(t, onPane(t, m, pane), "enter")
 	if !m.chatKeys {
 		t.Fatal("enter did not open the chat")
 	}
 	next, _ := m.Update(stateMsg(askState()))
-	m = pressKeys(t, calm(next), "y", "e", "s")
+	m = pressKeys(t, pastQuiet(calm(next)), "y", "e", "s")
 	if m.scanShown() || slices.ContainsFunc(f.acts(), func(a proto.Act) bool { return strings.HasPrefix(a.RecID, "scan:") }) || len(keyActs(f)) == 0 {
 		t.Fatalf("the box took the chat's keys: shown %v acts %+v", m.scanShown(), f.acts())
 	}

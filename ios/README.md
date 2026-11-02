@@ -169,8 +169,9 @@ is a second paired host.
 Use an iPhone held upright, with a Claude Code session that waits on a
 question.
 
-27. Tap the session. Its live screen fills the screen, with the question
-    card at the bottom. `↓ ↓ ⏎` picks the third option.
+27. Tap the session. Its live screen fills the screen, with the agent's own
+    menu at the bottom. A tap on the third option picks it, and so does
+    `↓ ↓ ⏎`.
 28. Each key of Steer (`◂ ↑ ↓ ⏎ Esc ^C ⇞ ⇟`) works on the first tap, with
     the keyboard up and with it down. `^C` stops a working agent. A second
     `^C` within 1 s is held. A drag on the belt never presses a key, even

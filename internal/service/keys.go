@@ -58,7 +58,7 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 	if why != "" {
 		return proto.Result{Err: why}
 	}
-	if why := s.unseen(pane, x.Name, a, x.Permits || x.Asks); why != "" {
+	if why := s.unseen(pane, x.Name, a, x.Permits || x.Asks || x.Ask != nil); why != "" {
 		return proto.Result{Err: why}
 	}
 	g := advice.Guard{PID: x.PID, StartTicks: x.Start}

@@ -6,6 +6,24 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-11-01
+
+### Changed
+
+- **The chat shows the agent's own question.** The console's question card is
+  gone. The agent's menu draws at the chat's size, every key goes to it, and a
+  tap on one of its numbered options picks it, once the chat has the keys.
+  The guards stay for each key that can answer. A chat at a question or a
+  permission prompt needs 16 rows for the agent, and Sessions splits only with
+  that room. A paste with a line break is refused at a menu. `matchblox send
+  --pick` still answers from a script.
+
+### Removed
+
+- **The now line.** Sessions no longer draws a time lane on each row, its axis
+  or the `│` at now. The name takes the room. List only (`v`) stays.
+  ([#280](https://github.com/blox-eng/matchblox/issues/280))
+
 ## [0.29.0] - 2026-10-30
 
 ### Added
@@ -1129,7 +1147,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.29.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.30.0...HEAD
+[0.30.0]: https://github.com/blox-eng/matchblox/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/blox-eng/matchblox/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/blox-eng/matchblox/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/blox-eng/matchblox/compare/v0.26.2...v0.27.0

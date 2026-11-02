@@ -395,7 +395,7 @@ func (m Model) pairActed(a action) Model {
 		switch a.rec[:i] {
 		case "answer":
 			verb = "answered"
-		case "pick":
+		case "keys":
 			verb = "picked in"
 		case "message":
 			verb = "wrote to"

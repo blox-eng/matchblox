@@ -183,9 +183,6 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 		if bkey.Matches(k, m.keys.chat.Back) {
 			return false // the way back asks nothing
 		}
-		if m.cardTakes(k) {
-			return m.cardSends(k) && m.takeOverOn(m.opt.Host) // moving on the card changes nothing on the session
-		}
 		_, toAgent := keyName(k)
 		return (toAgent || bkey.Matches(k, m.keys.main.Jump)) && m.takeOverOn(m.opt.Host)
 	}
@@ -209,8 +206,6 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 // selection is by then.
 func (m Model) hold(k tea.KeyPressMsg) (func(Model) (tea.Model, tea.Cmd), string) {
 	switch {
-	case m.chatKeys && m.cardTakes(k):
-		return m.heldCard(k, false), m.opt.Host
 	case m.chatKeys && !bkey.Matches(k, m.keys.main.Jump):
 		text, _ := keyName(k)
 		return m.heldKeys(m.pressed(text)), m.opt.Host

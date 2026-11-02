@@ -86,6 +86,29 @@ screen"). The app draws SF Mono 13 pt, about 7.8 × 16 pt a cell.
    1 s, or at once when the chat takes the keys; the window left goes back
    at once.
 
+**2026-11-01 (#276), the card is gone.** Rules 2 and 6 change; the text above
+is their history.
+
+- Rule 2 is now: no chat at a menu without room for a menu. The console no
+  longer knows a menu's height, so a chat at a question or a permission
+  prompt needs a fixed minimum, `menuLeast`: 16 rows for the agent's screen,
+  the tallest common menu from its question down (the question tool's
+  multi-select at four options with descriptions). The rule and tabs over the
+  question may scroll off. Under it, the key line says `too short to show …`
+  and no key goes. Above it, the agent draws at the chat's size. Sessions
+  splits by the chat's title, its strip as drawn and `menuLeast`, for every
+  session the cursor can reach, so the split holds. A window that is not sized
+  re-wraps through `fitScreen`: every option reads, and a menu wrapped taller
+  than the chat loses its top first.
+- Rule 6 holds trivially: there is one drawing of the question, live and up
+  the history.
+- A tap on a numbered option of the agent's menu picks it: the digit goes
+  through the chat's keys and guards, the row takes the selected wash until
+  the next screen. The menu is the last run of options numbered down from 1,
+  with one cursor mark, at a menu wait. A list the agent prints is no target.
+- In rule 9's open points, taking the keys means a `keys:` act, and no card
+  takes rows.
+
 ## Non-goals
 
 - No font-size or Dynamic Type change (#141).

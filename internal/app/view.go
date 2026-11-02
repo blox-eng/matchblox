@@ -86,11 +86,7 @@ func (m Model) render() string {
 
 func (m Model) frame(w int) string {
 	sc := m.draw(w)
-	f := strings.Join(sc.lines, "\n")
-	if sc.nowX >= 0 {
-		f = overlayNow(f, sc.nowX, sc.nowTop, sc.nowBottom, sc.nowSkip, m.st)
-	}
-	return f
+	return strings.Join(sc.lines, "\n")
 }
 
 // span is a tap target on a line: columns x0 to x1, and the key it presses.
@@ -126,11 +122,6 @@ type drawn struct {
 	boxAt, boxX, boxW int
 	boxRows           []string
 	boxKeys           []span
-	// The chat's question card: its first line and column, its width, the
-	// key a tap on each of its lines presses, and the keys of its footer.
-	cardAt, cardX, cardW int
-	cardRows             []string
-	cardKeys             []span
 	// The dock: its height and the columns of the stoker's panel. full:
 	// the dock shows all it has; paneFull: so does the right pane.
 	dockH, stx0, stx1 int
@@ -152,11 +143,10 @@ type drawn struct {
 	// goes back to Sessions. chatRows: the lines of the agent's screen the
 	// chat shows, one page of its history.
 	chatFull bool
-	chatRows int
-	// The rule of now: its column (-1 none), its first and last line, and
-	// the lines it passes: the opened row's own.
-	nowX, nowTop, nowBottom int
-	nowSkip                 []int
+	// chatAt, chatX, chatW: the first row of the agent's screen in the chat,
+	// the chat's first column for a tap, and the screen's width; chatW 0: no chat.
+	chatAt, chatX, chatW int
+	chatRows             int
 }
 
 // draw is the screen, with an ssh prompt over everything.
@@ -164,7 +154,6 @@ func (m Model) draw(w int) drawn {
 	sc := m.drawScreen(w)
 	if m.asking() {
 		m.overlayAsk(&sc, w)
-		sc.nowX = -1 // the rule never cuts a box over the list
 	}
 	return sc
 }
@@ -182,7 +171,7 @@ func (m Model) drawScreen(w int) drawn {
 	head, waits, stokerAt := m.header(w)
 	tabs, tabSpans := m.tabsLine(w)
 	sc := drawn{lines: []string{head, tabs, m.st.rule.Render(strings.Repeat("─", w))}, waits: waits, stokerAt: stokerAt, tabs: tabSpans,
-		bodyTop: 3, listW: w, dockAt: -1, keysAt: -1, actKeysAt: -1, nowX: -1}
+		bodyTop: 3, listW: w, dockAt: -1, keysAt: -1, actKeysAt: -1}
 	switch {
 	case m.hostCount() > 1 && m.shows():
 		// A blocked host of two or more is a row, never the screen.
@@ -208,12 +197,8 @@ func (m Model) drawScreen(w int) drawn {
 	if place, _ := m.chatPlacement(w); m.chatKeys && place == chatFull { // one column: the chat takes the screen
 		return m.chatScreen(w)
 	}
-	full, lanes := m.bodyRows(listW)
+	full := m.bodyRows()
 	sc.listW = listW
-	if lanes {
-		sc.lines = append(sc.lines, m.axisLines(m.sessTracks(listW), listW)...)
-		sc.bodyTop += 2
-	}
 	b := m.body(listW)
 	chat, chatting := m.chatShown(detailW)
 	stacked := m.tab == tabSessions && detailW > 0 // usage, the machine and the stoker under the list
@@ -258,7 +243,7 @@ func (m Model) drawScreen(w int) drawn {
 	if chatting {
 		detail = m.chatPane(chat, detailW, room)
 		sc.chatRows = room - 1 - len(m.chatStrip(chat, detailW, room-1))
-		m.markCard(&sc, sc.bodyTop+room, listW+2, detailW-1, room-1-len(m.chatStrip(chat, detailW, room-1)))
+		sc.chatAt, sc.chatX, sc.chatW = sc.bodyTop+room-sc.chatRows, listW+1, detailW-1
 	}
 	vis := windowed(b, room, m.rowIndex())
 	if stacked {
@@ -297,18 +282,6 @@ func (m Model) drawScreen(w int) drawn {
 		m.overlaySheet(&sc, w)
 	case m.form != nil:
 		m.overlayForm(&sc, w)
-	case lanes:
-		sc.nowX, sc.nowTop, sc.nowBottom = m.sessTracks(listW).laneX(listW)+lanePast, 2, sc.keysAt-1
-		if sc.dockAt >= 0 {
-			sc.nowBottom = sc.dockAt - 1
-		}
-		at, first := m.rowIndex(), true
-		for i, r := range sc.rows {
-			if r == at && !first {
-				sc.nowSkip = append(sc.nowSkip, sc.bodyTop+i)
-			}
-			first = first && r != at
-		}
 	}
 	return sc
 }
@@ -358,23 +331,15 @@ func (m Model) panes(w int) (list, detail int) {
 	if m.tab == tabSessions {
 		at = sessionsSplit(w)
 		if !m.chatRoom(w - at - 1) {
-			return w, 0 // no chat without its question: it opens full-screen
+			return w, 0 // no room for a menu beside the list: the chat opens full-screen
 		}
 	}
 	return at, w - at - 1
 }
 
-// bodyRows is how many rows the body has under the header, a list listW
-// wide, and the key line, and if the time axis takes two of them over it:
-// the axis leaves the list three rows.
-func (m Model) bodyRows(listW int) (int, bool) {
-	full := max(m.height-5, 1)
-	lanes := m.tab == tabSessions && len(m.snap.Sessions) > 0 && full >= 5 && m.sessTracks(listW).lane > 0
-	if lanes {
-		full = max(full-2, 1)
-	}
-	return full, lanes
-}
+// bodyRows is how many rows the body has under the header and over the key
+// line.
+func (m Model) bodyRows() int { return max(m.height-5, 1) }
 
 // sessionsSplit is the list's width where Sessions splits: 40% of the
 // screen, at least 38 columns and at most 78; the chat takes the rest.

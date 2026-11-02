@@ -440,7 +440,7 @@ func TestLongNameKeepsHostWord(t *testing.T) {
 		for _, lo := range []bool{false, true} {
 			m.viewPrefs.ListOnlyDesk = lo
 			f := frameOf(m)
-			if lineWith(f, "matchblox-feat") == "" || lineWith(f, " ws-1") == "" || lineWith(f, " thi…") == "" {
+			if lineWith(f, "matchblox-feat") == "" || lineWith(f, " ws-1") == "" || lineWith(f, " thi…") == "" && lineWith(f, " this machine") == "" {
 				t.Fatalf("%d columns, list only %v: the rows lost their host word:\n%s", w, lo, strings.Join(f, "\n"))
 			}
 		}
