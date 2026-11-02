@@ -10,15 +10,22 @@ final class DemoConsoleTests: XCTestCase {
         expectTheConsole(in: launched())
     }
 
-    /// A start is refused while the last run lives, which the Try again screen would show.
+    /// The chat the person left can only give way to the session list through a new run: the
+    /// label changes only with output, so a console stuck connecting would keep showing the chat.
     @MainActor
-    func testTheDemoOpensAgainAfterTheBackground() {
+    func testTheDemoStartsFreshAfterTheBackground() {
         let app = launched()
         expectTheConsole(in: app)
+        app.buttons["Return"].tap()
+        expect(in: app, "label CONTAINS %@", "keys go to flint-auth")
+
         XCUIDevice.shared.press(.home)
+        _ = app.wait(for: .runningBackgroundSuspended, timeout: 10)
+        XCTAssertNotEqual(app.state, .runningForeground, app.debugDescription)
         app.activate()
-        XCTAssertFalse(app.buttons["Try again"].waitForExistence(timeout: 5), app.debugDescription)
-        expectTheConsole(in: app)
+
+        expect(in: app, "label CONTAINS %@ AND NOT label CONTAINS %@", "matchblox · demo", "keys go to")
+        XCTAssertFalse(app.buttons["Try again"].exists, app.debugDescription)
     }
 
     @MainActor
@@ -31,12 +38,17 @@ final class DemoConsoleTests: XCTestCase {
 
     @MainActor
     private func expectTheConsole(in app: XCUIApplication) {
+        expect(in: app, "label CONTAINS %@", "matchblox · demo")
+    }
+
+    @MainActor
+    private func expect(in app: XCUIApplication, _ format: String, _ arguments: String...) {
         let terminal = app.descendants(matching: .any)["demo-terminal"]
         XCTAssertTrue(terminal.waitForExistence(timeout: 30), app.debugDescription)
-        let header = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "label CONTAINS %@", "matchblox · demo"),
+        let shown = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: format, argumentArray: arguments),
             object: terminal
         )
-        XCTAssertEqual(XCTWaiter().wait(for: [header], timeout: 30), .completed, app.debugDescription)
+        XCTAssertEqual(XCTWaiter().wait(for: [shown], timeout: 30), .completed, app.debugDescription)
     }
 }

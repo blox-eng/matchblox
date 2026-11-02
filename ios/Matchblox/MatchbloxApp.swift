@@ -77,7 +77,11 @@ struct MatchbloxApp: App {
         #if DEBUG
         // The UI test's way to the demo host, with no pairing screen in between.
         if ProcessInfo.processInfo.arguments.contains("-openDemoHost") {
-            try? HostStore.standard.upsert(.demo)
+            do {
+                try HostStore.standard.upsert(.demo)
+            } catch {
+                fatalError("The demo host did not save: \(error)")
+            }
         }
         #endif
         _route = State(initialValue: Opening.first(hosts: HostStore.standard.all()))
