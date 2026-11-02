@@ -162,7 +162,6 @@ final class DemoConsoleTests: XCTestCase {
     @MainActor
     private func answerTheAgent(in app: XCUIApplication) -> XCUIElement {
         expect(in: app, "label CONTAINS %@", "WAITS FOR YOU")
-        let terminal = app.descendants(matching: .any)["demo-terminal"]
         tapRow(in: app, containing: "flint-auth", until: "2. Rotate, keep")
         expect(in: app, step: "the chat's question after the tap on flint-auth", "label CONTAINS %@", "2. Rotate, keep")
         tapRow(in: app, containing: "2. Rotate, keep", until: "I rotate the token on each refresh")

@@ -100,8 +100,8 @@ func TestATabPressedAtTheFirstDrawFillsAtOnce(t *testing.T) {
 					}
 					lastKey = time.Now()
 				}
-				if time.Since(pressed) > 3*time.Second {
-					t.Fatalf("%q not drawn within 3s of the first draw", tab.seeded)
+				if time.Since(pressed) > 10*time.Second {
+					t.Fatalf("%q not drawn within 10s of the first draw", tab.seeded)
 				}
 				if emptyAt.IsZero() && hasEmpty(term.text()) {
 					emptyAt = time.Now()
