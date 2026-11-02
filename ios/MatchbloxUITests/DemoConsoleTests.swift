@@ -133,16 +133,24 @@ final class DemoConsoleTests: XCTestCase {
         terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: (Double(row) + 0.5) / Double(rows.count))).tap()
     }
 
-    /// The pasteboard belongs to the app, so the first read from the test asks to paste.
+    /// The pasteboard belongs to the app, so a read from the test asks to paste, and the read waits
+    /// for the answer. It runs off this thread, which taps Allow Paste if the question comes.
     @MainActor
     private func pasteboardLine() -> String? {
-        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        for _ in 0..<6 {
-            if let line = UIPasteboard.general.string { return line }
-            let allow = springboard.buttons["Allow Paste"]
-            if allow.waitForExistence(timeout: 2) { allow.tap() }
+        let read = DispatchSemaphore(value: 0)
+        nonisolated(unsafe) var line: String?
+        DispatchQueue.global().async {
+            line = UIPasteboard.general.string
+            read.signal()
         }
-        return UIPasteboard.general.string
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let deadline = Date().addingTimeInterval(30)
+        while Date() < deadline {
+            if read.wait(timeout: .now() + 1) == .success { return line }
+            let allow = springboard.buttons["Allow Paste"]
+            if allow.exists { allow.tap() }
+        }
+        return nil
     }
 
     @MainActor
