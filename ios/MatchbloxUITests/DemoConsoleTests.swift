@@ -108,6 +108,11 @@ final class DemoConsoleTests: XCTestCase {
     @MainActor
     private func answerTheAgent(in app: XCUIApplication) -> XCUIElement {
         expect(in: app, "label CONTAINS %@", "WAITS FOR YOU")
+        // A first tap on the terminal only takes the keyboard. The belt's key does it with no tap.
+        let show = app.buttons["Show keyboard"].firstMatch
+        XCTAssertTrue(show.waitForExistence(timeout: 10), app.debugDescription)
+        show.tap()
+        Thread.sleep(forTimeInterval: 2)
         tapRow(in: app, containing: "flint-auth")
         expect(in: app, "label CONTAINS %@", "2. Rotate, keep")
         // The console takes a tap only after its screen has been quiet a moment.
