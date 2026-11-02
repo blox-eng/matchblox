@@ -139,7 +139,9 @@ final class DemoConsoleTests: XCTestCase {
         let hide = app.buttons["Hide keyboard"].firstMatch
         XCTAssertTrue(hide.waitForExistence(timeout: 10), "the belt's key did not raise the keyboard")
         hide.tap()
-        XCTAssertTrue(app.buttons["Show keyboard"].firstMatch.waitForExistence(timeout: 10))
+        let down = app.buttons["Show keyboard"].firstMatch.waitForExistence(timeout: 10)
+        keep(app, "8 keyboard hidden")
+        XCTAssertTrue(down, app.debugDescription)
         waitUntilSteady(terminal)
         tapRow(in: app, containing: "2. Rotate, keep")
         expect(in: app, "label CONTAINS %@", "I rotate the token on each refresh")
