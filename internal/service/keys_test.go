@@ -215,6 +215,39 @@ func TestAKeyKicksTheWatchingConsole(t *testing.T) {
 	}
 }
 
+// The agent draws after send-keys returns, so the read a key kicks at once
+// misses the key, and the tick shows it up to watchEvery late (#286).
+func TestAKeyReadsTheScreenAgainBeforeTheTick(t *testing.T) {
+	s, _ := keysTest(t)
+	cl := console(s)
+	cl.screenKick = make(chan struct{}, 1)
+	cl.watch.Store(&watched{pane: "%1"})
+	if res := s.act(t.Context(), key("Down")); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	<-cl.screenKick // the read at once
+	select {
+	case <-cl.screenKick:
+	case <-time.After(watchEvery):
+		t.Fatalf("no read again within %v of the key", watchEvery)
+	}
+}
+
+func TestARefusedKeyReadsNoScreenAgain(t *testing.T) {
+	s, _ := keysTest(t)
+	cl := console(s)
+	cl.screenKick = make(chan struct{}, 1)
+	cl.watch.Store(&watched{pane: "%1"})
+	if res := s.act(t.Context(), key("not-a-key")); res.Err == "" {
+		t.Fatal("the key was not refused")
+	}
+	select {
+	case <-cl.screenKick:
+		t.Fatal("a refused key kicked a read")
+	case <-time.After(watchEvery):
+	}
+}
+
 func TestWatchIsRefusedFromTheStokersServer(t *testing.T) {
 	s, _ := keysTest(t)
 	s.StokerServer = "mbtest"

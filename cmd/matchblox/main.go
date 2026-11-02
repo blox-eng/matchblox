@@ -536,6 +536,11 @@ func progressPrompt(args []string) bool {
 
 func spoolPath() string { return filepath.Join(filepath.Dir(state.Path()), "spool.jsonl") }
 
+// consoleFPS is the console's frame rate. A key waits for the next frame:
+// 15 frames showed a key 37 ms late on average and 60 shows it 11 ms late,
+// for 0.3% more of one core when idle (#285).
+const consoleFPS = 60
+
 func console(path string, cfg config.Config, root string, noMotion bool, host string) error {
 	base := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, CompactTokens: cfg.Sessions.CompactTokens, NoMotion: noMotion,
 		OutsideTmux: os.Getenv("TMUX") == "", Self: invokedPath(os.Args[0]), StateDir: filepath.Dir(state.Path())}
@@ -555,8 +560,6 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		base.Graphics, restore = consoleGraphics()
 	}
 	defer restore() // the pane's own passthrough, once the console ends
-	// The screen changes on a state or a key press, so 15 frames a second
-	// is still instant to the eye and wakes the process 4x less than 60.
 	if root != "" {
 		// Fixtures: a service in this process, for demos and tests.
 		ctx, cancel := context.WithCancel(context.Background())
@@ -567,7 +570,7 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		go s.Handle(ctx, transport.NewConn(b)) //nolint:errcheck // ends with the console
 		base.Conn = transport.NewConn(a)
 		defer base.Conn.Close()
-		final, err := tea.NewProgram(app.New(base), tea.WithFPS(15)).Run()
+		final, err := tea.NewProgram(app.New(base), tea.WithFPS(consoleFPS)).Run()
 		if m, ok := final.(app.Model); ok {
 			m.ClosePair() // however the program ended, its pair code goes with it
 		}
@@ -593,7 +596,7 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		Answered:      func() { _ = os.MkdirAll(filepath.Dir(asked), 0o700); _ = os.WriteFile(asked, nil, 0o600) },
 		TailscaleGate: setup.TailscaleGateMessage,
 	})
-	final, err := tea.NewProgram(sh, tea.WithFPS(15)).Run()
+	final, err := tea.NewProgram(sh, tea.WithFPS(consoleFPS)).Run()
 	if s, ok := final.(app.Shell); ok {
 		s.Close()
 	}

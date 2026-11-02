@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/blox-eng/matchblox/internal/advice"
@@ -13,6 +14,11 @@ import (
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
+
+// keyRereads are when a screen is read again after a key. The agent draws
+// after send-keys returns, so the read at once misses the key, and the tick
+// shows it up to watchEvery late (#286).
+var keyRereads = []time.Duration{10 * time.Millisecond, 25 * time.Millisecond, 50 * time.Millisecond, 90 * time.Millisecond}
 
 // keyStep is the tmux step for the wire form of one key, or why it is not one.
 func keyStep(pane, text string) ([]string, string) {
@@ -67,6 +73,11 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 		s.undrive(pane) // the pane's last input is the person's, as with a message
 	}
 	s.kickScreens(pane)
+	if res.Err == "" {
+		for _, after := range keyRereads {
+			time.AfterFunc(after, func() { s.kickScreens(pane) })
+		}
+	}
 	return res
 }
 
