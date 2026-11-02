@@ -555,12 +555,17 @@ func TestTheDemoMakesNoSocketOrCommand(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("strace is Linux's")
 	}
+	// In CI a skip would pass unseen, and this is the proof that matters.
+	skip := t.Skipf
+	if os.Getenv("CI") != "" {
+		skip = t.Fatalf
+	}
 	if _, err := exec.LookPath("strace"); err != nil {
-		t.Skip("strace is not on the path, so the walk is not traced")
+		skip("strace is not on the path, so the walk is not traced")
 	}
 	self, args, env := walkInChild(t)
-	if err := exec.Command("strace", "-f", "-qq", "-o", os.DevNull, "-e", "trace=execve", self, "-test.run=^$").Run(); err != nil { //nolint:gosec // this test binary
-		t.Skipf("strace cannot trace here (ptrace refused?), so the walk is not traced: %v", err)
+	if err := exec.Command("strace", "-f", "-qq", "-o", os.DevNull, "-e", "trace=execve", self, "-test.run=^$", childLimit).Run(); err != nil { //nolint:gosec // this test binary
+		skip("strace cannot trace here (ptrace refused?), so the walk is not traced: %v", err)
 	}
 	trace := filepath.Join(t.TempDir(), "trace")
 	cmd := exec.Command("strace", slices.Concat([]string{"-f", "-qq", "-o", trace, "-e", "trace=socket,connect,execve", "-e", "signal=none", self}, args)...) //nolint:gosec // this test binary

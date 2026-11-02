@@ -196,8 +196,6 @@ func TestAFormThatWouldCloneSaysSo(t *testing.T) {
 	}
 }
 
-// The chat's key line offers no way into tmux on the demo host; the key answers
-// all the same.
 // A tap on the row a URL shows is what Enter is: the form goes, and the line is
 // in the key line. Both before the plan's answer and after it.
 func TestATapOnACloneRowSaysSo(t *testing.T) {
@@ -235,6 +233,8 @@ func TestATapOnACloneRowSaysSo(t *testing.T) {
 	}
 }
 
+// The chat's key line offers no way into tmux on the demo host; the key answers
+// all the same.
 func TestTheChatsKeyLineOffersNoTmuxInTheDemo(t *testing.T) {
 	m := demoSized(t, 132, 31)
 	m.opt.Demo = demoLine
