@@ -111,6 +111,23 @@ func TestTwoNewSessionsAreTwoSessions(t *testing.T) {
 	}
 }
 
+// A session the demo started has no transcript yet: its first answer makes one.
+func TestAStartedSessionTakesAnAnswer(t *testing.T) {
+	w := newTestWorld(t, func(int) {})
+	if err := w.Run([]string{"env", "HOME=/home/user", "tmux", "new-session", "-d", "-s", "one", "-n", "one", "-c", "/work/one", "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Run([]string{"tmux", "send-keys", "-t", "%9", "-l", "--", "hello"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Run([]string{"tmux", "send-keys", "-t", "%9", "Enter"}); err != nil {
+		t.Errorf("the answer: %v", err)
+	}
+	if err := w.Finish("%9", 1000, "done"); err != nil {
+		t.Errorf("its turn's end: %v", err)
+	}
+}
+
 func TestAWorldAnswersWhatItCannotTake(t *testing.T) {
 	w := newTestWorld(t, func(int) {})
 	if err := w.Run(nil); err == nil || err.Error() != Refusal {

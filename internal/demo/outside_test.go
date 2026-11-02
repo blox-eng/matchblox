@@ -95,3 +95,21 @@ func TestANewSessionWritesNothingOutsideTheCopy(t *testing.T) {
 		return nil
 	})
 }
+
+// TestAServiceOfTheDemoClonesNothing: the console never asks, and a service
+// with no clone_root refuses both a clone's plan and its start.
+func TestAServiceOfTheDemoClonesNothing(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	root, err := copyTree("../../testdata/demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	_, svc, err := newService(root, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if svc.CloneRoot != "" {
+		t.Fatalf("the demo's service clones into %s", svc.CloneRoot)
+	}
+}

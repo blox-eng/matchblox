@@ -334,6 +334,9 @@ func (m Model) chatSeen() bool {
 // tooShort is what the key line says when the screen has no room for the
 // chat's question.
 func (m Model) tooShort(s sample.Session) string {
+	if m.opt.Demo != "" {
+		return "too short to show " + s.Name + "'s question"
+	}
 	return "too short to show " + s.Name + "'s question · " + m.keys.main.Jump.Help().Key + " goes into its pane"
 }
 
@@ -497,9 +500,9 @@ func (m Model) chatScreen(w int) drawn {
 	_, rows := m.chatPlacement(w)
 	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true, chatRows: rows, chatAt: 1, chatW: w}
 	sc.lines = append(sc.lines, m.screenLines(w, rows)...)
-	keys, spans := m.keyLine(w)
+	hair, keys, spans := m.keyRows(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, spans
-	sc.lines = append(sc.lines, st.hair.Render(strings.Repeat("─", w)), keys)
+	sc.lines = append(sc.lines, hair, keys)
 	if m.consenting() {
 		m.overlayConsent(&sc, w)
 	}
@@ -683,6 +686,10 @@ func startsDigit(text string) bool {
 // intoPane is ctrl+o: the selected session's pane, behind a confirm, as
 // Enter on a session was before the chat.
 func (m Model) intoPane() Model {
+	if m.opt.Demo != "" {
+		m.flash = m.opt.Demo
+		return m
+	}
 	if s, ok := m.selectedSession(); ok && s.Pane != "" {
 		m.pending, m.previewTop = m.primary(), 0
 	}

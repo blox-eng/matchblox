@@ -237,8 +237,12 @@ func (s *Service) captureMatch(ctx context.Context, old sample.Session) string {
 		}
 	}
 	b.WriteString("\n## Checked workspace state\n\n")
+	git := s.MatchGit
+	if git == nil {
+		git = matchGit
+	}
 	for _, args := range [][]string{{"rev-parse", "--show-toplevel"}, {"status", "--short", "--branch"}, {"log", "-5", "--oneline"}, {"diff", "--stat"}, {"diff", "--cached", "--stat"}} {
-		out, err := matchGit(ctx, old.Cwd, args...)
+		out, err := git(ctx, old.Cwd, args...)
 		fmt.Fprintf(&b, "\nCommand: git %s\n", strings.Join(args, " "))
 		if err != nil {
 			fmt.Fprintf(&b, "Unavailable: %v\n", err)

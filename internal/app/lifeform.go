@@ -463,6 +463,12 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	f := *m.form
 	m.form = &f
 	fk := m.keys.form
+	if m.opt.Demo != "" && f.at == fieldWhere && bkey.Matches(k, fk.Enter, fk.Next) {
+		if _, clones := cloneOf(strings.TrimSpace(f.filter())); clones {
+			m.form, m.flash = nil, m.opt.Demo
+			return m, nil
+		}
+	}
 	if f.whereList() {
 		f.err = ""
 		if r := m.whereSelectedIn(&f); r.kind == rowClone && bkey.Matches(k, fk.Enter, fk.Next) {
@@ -1126,6 +1132,9 @@ func (m Model) cloneResult(r proto.Result) (Model, tea.Cmd) {
 		return m, nil
 	}
 	f.planAct, f.plan, f.planErr = "", r.Clone, r.Err
+	if f.planErr != "" && m.opt.Demo != "" { // no words about a config a phone has not got
+		f.planErr = m.opt.Demo
+	}
 	if f.plan == nil && f.planErr == "" {
 		f.planErr = "no plan for this git URL"
 	}

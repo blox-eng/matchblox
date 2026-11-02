@@ -1,6 +1,7 @@
 package demo
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,10 +27,12 @@ import (
 // kills.
 const OrphanPID = 4242
 
-// session is a Claude Code session of the demo machine.
+// session is a Claude Code session of the demo machine. Its folder and its
+// transcript keep name, whatever a rename calls it: shown.
 type session struct {
 	pid    int
 	name   string
+	shown  string
 	id     string
 	status string
 	tokens int
@@ -77,7 +80,7 @@ func NewWorld(root string, clock func() time.Time, kill func(pid int)) (*World, 
 		if err != nil {
 			return nil, err
 		}
-		w.sessions[pane] = &session{pid: pid, name: e.Name, id: e.SessionID, status: e.Status, tokens: tokens}
+		w.sessions[pane] = &session{pid: pid, name: e.Name, shown: e.Name, id: e.SessionID, status: e.Status, tokens: tokens}
 	}
 	return w, nil
 }
@@ -120,6 +123,8 @@ func (w *World) Wire(s *service.Service) {
 	s.CaptureUp = w.captureUp
 	s.TmuxOut = func([]string) (string, error) { return "", errRefused }
 	s.PeerPane = func(int) string { return "" }
+	s.WorktreeStep = func(context.Context, string, string) ([]string, string, error) { return nil, "", errRefused }
+	s.MatchGit = func(context.Context, string, ...string) (string, error) { return "", nil } // the fixture has no git to read
 }
 
 // lookPath finds the demo's agents, not this machine's. tmux and gh are not
@@ -171,6 +176,13 @@ func (w *World) Run(argv []string) error {
 	case len(argv) == 6 && argv[0] == "git" && argv[3] == "worktree" && argv[4] == "remove":
 		w.removed[argv[5]] = true
 		return nil
+	case len(argv) == 5 && argv[0] == "tmux" && argv[1] == "rename-window":
+		return w.renamePane(argv[3], func(f []string) { f[2] = argv[4] })
+	case len(argv) == 5 && argv[0] == "tmux" && argv[1] == "rename-session":
+		return w.renamePane(argv[3], func(f []string) {
+			_, at, _ := strings.Cut(f[1], ":")
+			f[1] = argv[4] + ":" + at
+		})
 	case len(argv) == 4 && argv[0] == "tmux" && argv[1] == "kill-pane":
 		return w.closePane(argv[3])
 	case len(argv) == 3 && argv[0] == "kill" && argv[1] == "-TERM":
@@ -179,6 +191,23 @@ func (w *World) Run(argv []string) error {
 		return w.start(argv[slices.Index(argv, "tmux"):])
 	}
 	return errRefused
+}
+
+// renamePane changes the pane's line in tmux's list. Hold w.mu.
+func (w *World) renamePane(pane string, change func(fields []string)) error {
+	path := filepath.Join(w.root, "tmux-panes.txt")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(b), "\n")
+	for i, l := range lines {
+		if f := strings.Split(l, "\t"); f[0] == pane {
+			change(f)
+			lines[i] = strings.Join(f, "\t")
+		}
+	}
+	return writeAtomic(path, []byte(strings.Join(lines, "\n")))
 }
 
 // closePane is tmux kill-pane: the pane leaves tmux's list, and its
@@ -246,7 +275,7 @@ func (w *World) start(argv []string) error {
 	if err := os.Symlink(dir, filepath.Join(proc, "cwd")); err != nil {
 		return err
 	}
-	s := &session{pid: newPID, name: name, id: fmt.Sprintf("5ea1c0de-0000-4000-8000-%012d", paneNo), status: "busy"}
+	s := &session{pid: newPID, name: name, shown: name, id: fmt.Sprintf("5ea1c0de-0000-4000-8000-%012d", paneNo), status: "busy"}
 	w.sessions[newPane] = s
 	now := w.clock().UnixMilli()
 	reg, err := json.Marshal(map[string]any{"pid": s.pid, "sessionId": s.id, "cwd": dir, "name": name,
@@ -358,6 +387,10 @@ func (w *World) submit(pane, text string) error {
 		return fmt.Errorf("no session in %s", pane)
 	}
 	now := w.clock()
+	if name, ok := strings.CutPrefix(text, "/rename "); ok {
+		s.shown = name
+		return w.writeRegistry(s, now)
+	}
 	if !strings.HasPrefix(text, "/compact") {
 		// The agent takes the answer and works: its newest reply asks no more.
 		s.status, s.tokens = "busy", s.tokens+4000
@@ -406,7 +439,11 @@ func turnLine(at time.Time, tokens int, text string) map[string]any {
 }
 
 func (w *World) appendTranscript(s *session, lines ...map[string]any) error {
-	f, err := os.OpenFile(w.transcript(s.name, s.id), os.O_APPEND|os.O_WRONLY, 0)
+	path := w.transcript(s.name, s.id)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // a session the demo started has none yet
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
@@ -425,7 +462,7 @@ func (w *World) appendTranscript(s *session, lines ...map[string]any) error {
 }
 
 func (w *World) writeRegistry(s *session, now time.Time) error {
-	b, err := json.Marshal(map[string]any{"pid": s.pid, "sessionId": s.id, "cwd": "/work/" + s.name, "name": s.name,
+	b, err := json.Marshal(map[string]any{"pid": s.pid, "sessionId": s.id, "cwd": "/work/" + s.name, "name": s.shown,
 		"status": s.status, "startedAt": demoStarted.UnixMilli(), "statusUpdatedAt": now.UnixMilli()})
 	if err != nil {
 		return err

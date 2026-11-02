@@ -135,6 +135,11 @@ type Service struct {
 	TmuxOut func(argv []string) (string, error)
 	// IsDir tells if a new session's directory is there. Nil: os.Stat.
 	IsDir func(path string) bool
+	// WorktreeStep is the step that adds a worktree for a new session's
+	// branch, and that worktree. Nil: git reads the repository.
+	WorktreeStep func(ctx context.Context, dir, branch string) ([]string, string, error)
+	// MatchGit answers a handover's read-only git commands. Nil: git.
+	MatchGit func(ctx context.Context, dir string, args ...string) (string, error)
 	// Activity is the builder's last key in any tmux client: it keeps a
 	// stoker that rests resting while they work in a pane.
 	Activity func() time.Time

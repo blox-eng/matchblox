@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"os/exec"
 	"slices"
 	"strings"
 
@@ -38,6 +37,10 @@ func (m Model) shownDoors(ds []doors.Door) []doors.Door {
 // openPairDoor is Enter or a tap on the pair door: the page owns the
 // screen and its keys, so nothing else stays open under it.
 func (m Model) openPairDoor() (Model, tea.Cmd) {
+	if m.opt.Demo != "" {
+		m.flash = m.opt.Demo
+		return m, nil
+	}
 	if m.fromDevice() {
 		m.flash = pairFromDeviceLine
 		return m, nil
@@ -94,7 +97,7 @@ func (m Model) runDoor(a action) (tea.Model, tea.Cmd) {
 	}
 	cmd := strings.Join(argv, " ")
 	m.flash = "running: " + cmd
-	return m, tea.ExecProcess(exec.Command(argv[0], argv[1:]...), func(err error) tea.Msg { //nolint:gosec // argv checked by TermAllowed
+	return m, m.exec(argv, func(err error) tea.Msg { // argv checked by TermAllowed
 		return doorRanMsg{door: a.door, cmd: cmd, err: err}
 	})
 }

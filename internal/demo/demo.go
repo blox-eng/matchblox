@@ -50,6 +50,8 @@ type Options struct {
 	In         io.Reader
 	Out        io.Writer
 	Cols, Rows int
+
+	console func(*app.Options) // a test's change to the console's options
 }
 
 // Demo is one run of the console and the service.
@@ -97,10 +99,15 @@ func Start(o Options) (*Demo, error) {
 	serving.Go(func() { _ = s.Handle(ctx, transport.NewConn(b)) }) // ends with the console
 	conn := transport.NewConn(a)
 
-	console := app.New(app.Options{
-		Conn: conn, Binary: binary, Run: refuse, Demo: Refusal, OutsideTmux: true,
+	opts := app.Options{
+		Conn: conn, Binary: binary, Demo: Refusal, OutsideTmux: true,
+		Pair:     &app.PairHost{}, // the Machine tab offers a device, for the line to answer
 		StateDir: stateDir(root), Now: clockFrom(started),
-	})
+	}
+	if o.console != nil {
+		o.console(&opts)
+	}
+	console := app.New(opts)
 	d := &Demo{
 		script: sc,
 		cancel: cancel,
@@ -149,8 +156,6 @@ func (d *Demo) Wait() error {
 
 // Done reports that the person has finished what the demo asks of them.
 func (d *Demo) Done() bool { return d.script.done.Load() }
-
-func refuse([]string) error { return errRefused }
 
 // sweepCopies removes what a killed run left: only the end of a run removes
 // its own copy, and a killed process never gets there. One app owns its temp
