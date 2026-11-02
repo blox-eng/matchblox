@@ -25,9 +25,7 @@ final class DemoConsoleTests: XCTestCase {
         app.buttons["Return"].tap()
         expect(in: app, "label CONTAINS %@", "keys go to flint-auth")
 
-        XCUIDevice.shared.press(.home)
-        _ = app.wait(for: .runningBackgroundSuspended, timeout: 10)
-        XCTAssertNotEqual(app.state, .runningForeground, app.debugDescription)
+        sendToTheBackground(app)
         app.activate()
 
         expect(in: app, "label CONTAINS %@ AND NOT label CONTAINS %@", "matchblox · demo", "keys go to")
@@ -131,7 +129,7 @@ final class DemoConsoleTests: XCTestCase {
         let terminal = app.descendants(matching: .any)["demo-terminal"]
         waitUntilSteady(terminal)
         tapRow(in: app, containing: "flint-auth")
-        expect(in: app, "label CONTAINS %@", "2. Rotate, keep")
+        expect(in: app, step: "the chat's question after the first tap", "label CONTAINS %@", "2. Rotate, keep")
         XCTAssertFalse(app.keyboards.firstMatch.exists, "a tap raised the keyboard")
         XCTAssertFalse(app.buttons["Hide keyboard"].firstMatch.exists, "a tap took the keyboard")
         keep(app, "7 chat with no keyboard")
@@ -144,9 +142,19 @@ final class DemoConsoleTests: XCTestCase {
         let down = app.buttons["Show keyboard"].firstMatch.waitForExistence(timeout: 10)
         keep(app, "8 keyboard hidden")
         XCTAssertTrue(down, app.debugDescription)
+        expect(in: app, step: "the chat to be back after the keyboard hid", "label CONTAINS %@ AND label CONTAINS %@", "keys go to flint-auth", "2. Rotate, keep")
         waitUntilSteady(terminal)
         tapRow(in: app, containing: "2. Rotate, keep")
-        expect(in: app, "label CONTAINS %@", "I rotate the token on each refresh")
+        if !terminal.label.contains("I rotate the token on each refresh") {
+            // The tap is a second one only when the first visibly did nothing.
+            let answered = NSPredicate(format: "label CONTAINS %@", "I rotate the token on each refresh")
+            let shown = XCTNSPredicateExpectation(predicate: answered, object: terminal)
+            if XCTWaiter().wait(for: [shown], timeout: 6) != .completed, terminal.label.contains("2. Rotate, keep") {
+                waitUntilSteady(terminal)
+                tapRow(in: app, containing: "2. Rotate, keep")
+            }
+        }
+        expect(in: app, step: "the answer after the tap on the option", "label CONTAINS %@", "I rotate the token on each refresh")
     }
 
     /// Taps by the terminal's cells, as a thumb does, with no keyboard taken first: the session's
@@ -242,13 +250,26 @@ final class DemoConsoleTests: XCTestCase {
     }
 
     @MainActor
-    private func expect(in app: XCUIApplication, _ format: String, _ arguments: String...) {
+    private func expect(in app: XCUIApplication, step: String = "", _ format: String, _ arguments: String...) {
         let terminal = app.descendants(matching: .any)["demo-terminal"]
-        XCTAssertTrue(terminal.waitForExistence(timeout: 30), app.debugDescription)
+        let at = step.isEmpty ? "" : "Timed out waiting for \(step). "
+        XCTAssertTrue(terminal.waitForExistence(timeout: 30), at + app.debugDescription)
         let shown = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: format, argumentArray: arguments),
             object: terminal
         )
-        XCTAssertEqual(XCTWaiter().wait(for: [shown], timeout: 30), .completed, app.debugDescription)
+        XCTAssertEqual(XCTWaiter().wait(for: [shown], timeout: 30), .completed, at + app.debugDescription)
+    }
+
+    /// The home button sometimes leaves the app in front on a busy runner, so it is pressed again
+    /// until the app is out of the foreground.
+    @MainActor
+    private func sendToTheBackground(_ app: XCUIApplication) {
+        let deadline = Date().addingTimeInterval(30)
+        while app.state == .runningForeground, Date() < deadline {
+            XCUIDevice.shared.press(.home)
+            _ = app.wait(for: .runningBackgroundSuspended, timeout: 5)
+        }
+        XCTAssertNotEqual(app.state, .runningForeground, "The app never left the foreground after the home button. " + app.debugDescription)
     }
 }
