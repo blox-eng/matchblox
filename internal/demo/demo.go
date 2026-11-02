@@ -236,7 +236,7 @@ func untar(root, path string) error {
 	if err != nil {
 		return err
 	}
-	defer dst.Close()
+	defer func() { _ = dst.Close() }()
 	info, err := f.Stat()
 	if err != nil {
 		return err
@@ -330,7 +330,7 @@ func newService(root string, started time.Time) (*script, *service.Service, erro
 	w.Wire(s)
 	s.Ships = demoShips
 	seed := filepath.Join(stateDir(root), "history.csv")
-	if err := os.MkdirAll(stateDir(root), 0o755); err != nil {
+	if err := os.MkdirAll(stateDir(root), 0o750); err != nil {
 		return nil, nil, fmt.Errorf("demo: %w", err)
 	}
 	if err := writeHistory(seed); err != nil {

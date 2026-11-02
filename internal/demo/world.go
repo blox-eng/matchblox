@@ -258,7 +258,7 @@ func (w *World) start(argv []string) error {
 	newPane := "%" + strconv.Itoa(paneNo)
 	w.started++
 	proc := filepath.Join(w.root, "proc", strconv.Itoa(newPID))
-	if err := os.MkdirAll(proc, 0o755); err != nil {
+	if err := os.MkdirAll(proc, 0o750); err != nil {
 		return err
 	}
 	ticks := int(w.Uptime() * procfs.ClockTicks)
@@ -268,7 +268,7 @@ func (w *World) start(argv []string) error {
 		"stat":    fmt.Sprintf("%d (%s) S 1 %d %d 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 %d 100000 2500", newPID, agent[0], newPID, newPID, ticks),
 	}
 	for f, body := range files {
-		if err := os.WriteFile(filepath.Join(proc, f), []byte(body), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(proc, f), []byte(body), 0o600); err != nil {
 			return err
 		}
 	}
@@ -488,7 +488,7 @@ func (w *World) writeRegistry(s *session, now time.Time) error {
 // every 50 ms and must never see one half written.
 func writeAtomic(path string, b []byte) error {
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+	if err := os.WriteFile(tmp, b, 0o600); err != nil { //nolint:gosec // a path under the demo's own temp folder
 		return err
 	}
 	return os.Rename(tmp, path)

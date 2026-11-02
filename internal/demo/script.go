@@ -39,7 +39,7 @@ func clockFrom(start time.Time) func() time.Time {
 // nameHost writes the name the demo shows to the temp copy. The fixture
 // itself keeps its own, which its goldens use.
 func nameHost(root string) error {
-	return os.WriteFile(filepath.Join(root, "proc", "sys", "kernel", "hostname"), []byte(hostName+"\n"), 0o644)
+	return os.WriteFile(filepath.Join(root, "proc", "sys", "kernel", "hostname"), []byte(hostName+"\n"), 0o600)
 }
 
 // movingFS is the fixture's /proc with an uptime that runs, so the age of a
