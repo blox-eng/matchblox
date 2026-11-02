@@ -98,7 +98,7 @@ final class DemoConsoleTests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 30), .completed, "the belt did not reach the console")
         XCTAssertFalse(invite.exists, "the sheet came back")
 
-        app.buttons["Interrupt"].firstMatch.tap()
+        terminal.typeText("q")
         XCTAssertTrue(app.buttons["Open again"].waitForExistence(timeout: 30), app.debugDescription)
         XCTAssertTrue(app.buttons["Pair a host"].exists)
         keep(app, "5 ended")
