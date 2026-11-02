@@ -67,10 +67,6 @@ jobs:
             echo "gopsutil or purego is in the iOS library" >&2
             exit 1
           fi
-      - name: Print the library's undefined symbols
-        run: |
-          xcrun nm -u ios/build/demolib/sim/libmbdemo.a | awk 'NF == 2 && $1 == "U" {print $2}' | sort -u | tee ios/build/demolib-undefined.txt
-          echo "UNDEFINED $(wc -l < ios/build/demolib-undefined.txt) symbols"
       - name: The app holds the command table
         run: test -f ios/build/Build/Products/Debug-iphonesimulator/Matchblox.app/commands.json
       - name: The app holds the demo's machine
@@ -87,6 +83,46 @@ jobs:
           fi
       - name: The device archive holds the demo's machine
         run: test -f ios/build/Matchblox.xcarchive/Products/Applications/Matchblox.app/machine.tar
+      - name: Measure the app in Release
+        # The linker's map says how much of the executable the demo library is,
+        # which gives the increase without a second build.
+        run: |
+          app=ios/build/Matchblox.xcarchive/Products/Applications/Matchblox.app
+          echo "SIZE app: $(du -sk "$app" | cut -f1) KiB"
+          ditto -c -k --keepParent "$app" "$RUNNER_TEMP/app.zip"
+          echo "SIZE app zipped: $(stat -f%z "$RUNNER_TEMP/app.zip") bytes"
+          echo "SIZE executable: $(stat -f%z "$app/Matchblox") bytes"
+          echo "SIZE executable gzip: $(gzip -c "$app/Matchblox" | wc -c) bytes"
+          echo "SIZE machine.tar in the app: $(stat -f%z "$app/machine.tar") bytes"
+          xcrun size "$app/Matchblox"
+          du -sk "$app"/* | sort -n | tail -n 12
+          python3 -I - ios/build/Matchblox.linkmap <<'PY'
+          import re, sys
+          section, ours, total = None, set(), 0
+          for line in open(sys.argv[1], errors="replace"):
+              if line.startswith("# Object files:"):
+                  section = "objects"
+              elif line.startswith("# Sections:"):
+                  section = "sections"
+              elif line.startswith("# Symbols:"):
+                  section = "symbols"
+              elif line.startswith("# Dead Stripped"):
+                  break
+              elif section == "objects":
+                  m = re.match(r"\[\s*(\d+)\]\s+(.*)", line)
+                  if m and "libmbdemo.a" in m[2]:
+                      ours.add(int(m[1]))
+              elif section == "symbols":
+                  m = re.match(r"0x[0-9A-Fa-f]+\s+0x([0-9A-Fa-f]+)\s+\[\s*(\d+)\]", line)
+                  if m and int(m[2]) in ours:
+                      total += int(m[1], 16)
+          print(f"SIZE demo library in the executable, from the link map: {total} bytes, {len(ours)} objects")
+          PY
+      - name: Print the app's frameworks and dynamic lookups
+        run: |
+          exe=ios/build/Matchblox.xcarchive/Products/Applications/Matchblox.app/Matchblox
+          xcrun otool -L "$exe"
+          xcrun nm -u "$exe"
       - name: Upload the Release compile log
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

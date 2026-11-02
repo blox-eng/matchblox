@@ -62,7 +62,23 @@ release: gen ## Archive the app in Release as TestFlight does, without code sign
 		-archivePath $(DERIVED)/Matchblox.xcarchive \
 		-skipPackagePluginValidation \
 		CODE_SIGNING_ALLOWED=NO \
+		LD_GENERATE_MAP_FILE=YES \
+		LD_MAP_FILE_PATH='$(CURDIR)/$(DERIVED)/$$(TARGET_NAME).linkmap' \
 		archive
+
+# The simulator's ad hoc signature is enough for the test runner.
+.PHONY: uitest
+uitest: gen ## Run the UI tests on the simulator named by DESTINATION, for example id=<udid>
+	rm -rf $(DERIVED)/ui.xcresult
+	xcodebuild \
+		-scheme $(SCHEME) \
+		-destination '$(DESTINATION)' \
+		-derivedDataPath $(DERIVED) \
+		-resultBundlePath $(DERIVED)/ui.xcresult \
+		-skipPackagePluginValidation \
+		CODE_SIGN_STYLE=Manual \
+		CODE_SIGN_IDENTITY=- \
+		test
 
 .PHONY: icon
 icon: ## Render the app icon from AppIcon.svg (needs rsvg-convert: brew install librsvg)
