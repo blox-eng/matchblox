@@ -48,13 +48,13 @@ type movingFS struct {
 
 func (f movingFS) Uptime() float64 { return f.FS.Uptime() + time.Since(f.start).Seconds() }
 
-// script is the demo's one task: answer the agent that waits, and its turn
-// ends.
+// script is the demo's one task: answer an agent, and its turn ends.
 type script struct {
 	world *World
 
 	mu      sync.Mutex
 	armed   bool
+	pane    string
 	stopped bool
 	timer   *time.Timer
 	running sync.WaitGroup
@@ -62,14 +62,15 @@ type script struct {
 }
 
 // answered is World.Picked: the agent's turn ends a while after the answer.
-// Only the answer to the waiting agent's question counts, once.
+// The first answer to any session counts, a pick on a menu or a typed reply.
 func (s *script) answered(pane string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if pane != askPane || s.armed || s.stopped {
+	if s.armed || s.stopped {
 		return
 	}
 	s.armed = true
+	s.pane = pane
 	s.timer = time.AfterFunc(turnLasts, s.finish)
 }
 
@@ -80,9 +81,14 @@ func (s *script) finish() {
 		return
 	}
 	s.running.Add(1)
+	pane := s.pane
 	s.mu.Unlock()
 	defer s.running.Done()
-	if s.world.Finish(askPane, askTokens, askText) == nil {
+	tokens := 0
+	if pane == askPane {
+		tokens = askTokens
+	}
+	if s.world.Finish(pane, tokens, askText) == nil {
 		s.done.Store(true)
 	}
 }

@@ -397,7 +397,13 @@ func (w *World) submit(pane, text string) error {
 		if err := w.appendTranscript(s, turnLine(now, s.tokens, "I rotate the token on each refresh and keep the old one for a minute.")); err != nil {
 			return err
 		}
-		return w.writeRegistry(s, now)
+		if err := w.writeRegistry(s, now); err != nil {
+			return err
+		}
+		if text != "" && !strings.HasPrefix(text, "/") && w.Picked != nil {
+			w.Picked(pane)
+		}
+		return nil
 	}
 	resume := "RESUME: " + map[string]string{
 		"hearth-api": "add the rate-limit headers, then open the PR",
@@ -415,7 +421,8 @@ func (w *World) submit(pane, text string) error {
 	return w.writeRegistry(s, now)
 }
 
-// Finish ends the turn of the session in pane with its context at tokens.
+// Finish ends the turn of the session in pane with its context at tokens, or
+// where it stands when tokens is 0.
 func (w *World) Finish(pane string, tokens int, text string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -424,6 +431,9 @@ func (w *World) Finish(pane string, tokens int, text string) error {
 		return fmt.Errorf("no session in %s", pane)
 	}
 	now := w.clock()
+	if tokens <= 0 {
+		tokens = s.tokens
+	}
 	if err := w.appendTranscript(s, turnLine(now, tokens, text)); err != nil {
 		return err
 	}

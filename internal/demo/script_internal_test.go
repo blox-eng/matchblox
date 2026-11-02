@@ -3,6 +3,7 @@ package demo
 import (
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -24,22 +25,52 @@ func scriptOn(t *testing.T, lasts time.Duration) (*script, *World) {
 	return &script{world: w}, w
 }
 
-func TestOnlyTheAnswerToTheWaitingAgentSetsDone(t *testing.T) {
-	s, _ := scriptOn(t, 20*time.Millisecond)
+func TestTheFirstAnswerToAnySessionSetsDoneOnce(t *testing.T) {
+	s, w := scriptOn(t, 20*time.Millisecond)
 
-	s.answered("%1") // hearth-api's menu is not the question
-	time.Sleep(150 * time.Millisecond)
-	if s.done.Load() {
-		t.Fatal("an answer to another agent set Done")
-	}
-	s.answered(askPane)
+	s.answered("%1")
 	s.answered(askPane)
 	for deadline := time.Now().Add(time.Second); !s.done.Load(); time.Sleep(5 * time.Millisecond) {
 		if time.Now().After(deadline) {
-			t.Fatal("the answer to the waiting agent never set Done")
+			t.Fatal("the first answer never set Done")
 		}
 	}
 	s.stop()
+	if b, err := os.ReadFile(w.registry(1200)); err != nil || !strings.Contains(string(b), `"status":"idle"`) {
+		t.Errorf("the answered session did not finish: %s %v", b, err)
+	}
+}
+
+// TestATypedReplyToAnySessionIsAnAnswer: a reply typed to a session whose
+// agent waits, or works, ends in Done as a pick does; a slash command, a
+// rename and an empty Enter do not.
+func TestATypedReplyToAnySessionIsAnAnswer(t *testing.T) {
+	typed := func(t *testing.T, pane string, text string) bool {
+		s, w := scriptOn(t, 10*time.Millisecond)
+		w.Picked = s.answered
+		argv := []string{"tmux", "send-keys", "-t", pane, "-l", "--", text}
+		if text != "" {
+			if err := w.Run(argv); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := w.Run([]string{"tmux", "send-keys", "-t", pane, "Enter"}); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(150 * time.Millisecond)
+		s.stop()
+		return s.done.Load()
+	}
+	for _, pane := range []string{"%1", "%3", "%5", "%8"} {
+		if !typed(t, pane, "use the second one") {
+			t.Errorf("a reply typed to %s did not answer", pane)
+		}
+	}
+	for _, text := range []string{"/compact", "/rename other", ""} {
+		if typed(t, "%3", text) {
+			t.Errorf("%q answered", text)
+		}
+	}
 }
 
 // TestAStopBeforeTheTurnEndsLeavesNothing: the timer goes with the demo, so
