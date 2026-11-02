@@ -97,8 +97,8 @@ jobs:
           xcrun size "$app/Matchblox"
           du -sk "$app"/* | sort -n | tail -n 12
           map=$(find ios/build -name 'Matchblox-LinkMap-*.txt' | head -n 1)
-          python3 -I - "$map" <<'PY'
-          import re, sys
+          python3 -I - "$map" "$app/Matchblox" <<'PY'
+          import os, re, sys
           section, ours, spans, zero_fill = None, set(), [], []
           for line in open(sys.argv[1], errors="replace"):
               if line.startswith("# Object files:"):
@@ -115,7 +115,7 @@ jobs:
                       ours.add(int(m[1]))
               elif section == "sections":
                   m = re.match(r"0x([0-9A-Fa-f]+)\s+0x([0-9A-Fa-f]+)\s+\S+\s+(\S+)", line)
-                  if m and m[3] in ("__bss", "__common", "__thread_bss"):
+                  if m and (m[3] == "__common" or "bss" in m[3]):
                       zero_fill.append((int(m[1], 16), int(m[1], 16) + int(m[2], 16)))
               elif section == "symbols":
                   m = re.match(r"0x([0-9A-Fa-f]+)\s+0x([0-9A-Fa-f]+)\s+\[\s*(\d+)\]", line)
@@ -125,13 +125,15 @@ jobs:
                           spans.append((start, start + int(m[2], 16)))
           # Go's symbols overlap: a carrier symbol spans the ones inside it. So this
           # counts the addresses they cover, not the sum of their sizes, and only those
-          # that take room in the file: Go's __bss is tens of MB of address space.
+          # that take room in the file: Go's __bss and __noptrbss are tens of MB of
+          # address space.
           total, covered = 0, 0
           for start, end in sorted(spans):
               total += max(end - max(start, covered), 0)
               covered = max(covered, end)
-          if not total:
-              sys.exit(f"the link map names no bytes of the demo library: {len(ours)} objects")
+          executable = os.path.getsize(sys.argv[2])
+          if not 0 < total < executable:
+              sys.exit(f"the link map says {total} bytes of the demo library in {executable}: {len(ours)} objects")
           print(f"SIZE demo library in the executable, from the link map: {total} bytes, {len(ours)} objects")
           PY
       - name: Print the app's frameworks and dynamic lookups
