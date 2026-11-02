@@ -8,12 +8,18 @@ on:
     paths:
       - internal/**
       - cmd/mbdemolib/**
+      - go.mod
+      - go.sum
+      - testdata/demo/**
       - ios/**
       - .github/workflows/ios-demo.yml
   pull_request:
     paths:
       - internal/**
       - cmd/mbdemolib/**
+      - go.mod
+      - go.sum
+      - testdata/demo/**
       - ios/**
       - .github/workflows/ios-demo.yml
 
