@@ -1,6 +1,11 @@
 import UIKit
 import XCTest
 
+/// The line a background read brought back; the semaphore orders the write before the read.
+private final class PasteboardRead: @unchecked Sendable {
+    var value: String?
+}
+
 final class DemoConsoleTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -138,15 +143,15 @@ final class DemoConsoleTests: XCTestCase {
     @MainActor
     private func pasteboardLine() -> String? {
         let read = DispatchSemaphore(value: 0)
-        nonisolated(unsafe) var line: String?
+        let line = PasteboardRead()
         DispatchQueue.global().async {
-            line = UIPasteboard.general.string
+            line.value = UIPasteboard.general.string
             read.signal()
         }
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let deadline = Date().addingTimeInterval(30)
         while Date() < deadline {
-            if read.wait(timeout: .now() + 1) == .success { return line }
+            if read.wait(timeout: .now() + 1) == .success { return line.value }
             let allow = springboard.buttons["Allow Paste"]
             if allow.exists { allow.tap() }
         }
