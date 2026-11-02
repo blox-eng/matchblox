@@ -46,6 +46,15 @@ struct ConsoleView: View {
                 cover
             }
         }
+        .sheet(isPresented: Binding(get: { connection.invite }, set: { connection.invite = $0 })) {
+            InviteSheet(
+                onPair: {
+                    connection.invite = false
+                    onScanAgain()
+                },
+                onKeepLooking: { connection.invite = false }
+            )
+        }
         .onAppear { connection.start() }
         .onDisappear { connection.stop() }
         .onChange(of: scenePhase) { _, phase in
@@ -82,11 +91,16 @@ struct ConsoleView: View {
             case .ended:
                 Text(Opening.endedMessage(host: host.label))
                     .foregroundStyle(Theme.muted)
-                HStack(spacing: 24) {
-                    Button("Open again") { connection.retry() }
-                        .buttonStyle(.borderedProminent)
-                        .foregroundStyle(Theme.bg)
-                    hostsButton
+                if host.isDemo {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 24) { demoEndedActions }
+                        VStack(alignment: .leading, spacing: 12) { demoEndedActions }
+                    }
+                } else {
+                    HStack(spacing: 24) {
+                        openAgainButton
+                        hostsButton
+                    }
                 }
             }
             Spacer()
@@ -94,6 +108,22 @@ struct ConsoleView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(24)
         .background(Theme.bg)
+    }
+
+    private var openAgainButton: some View {
+        Button("Open again") { connection.retry() }
+            .buttonStyle(.borderedProminent)
+            .foregroundStyle(Theme.bg)
+    }
+
+    /// The demo has no real host to come back to, so the way on is to pair one.
+    @ViewBuilder
+    private var demoEndedActions: some View {
+        openAgainButton
+        Button("Pair a host", action: onScanAgain)
+            .buttonStyle(.bordered)
+            .foregroundStyle(Theme.fg)
+        hostsButton
     }
 
     /// Hosts (with more than one host) and Island (for a real host), beside the console's actions.
@@ -344,6 +374,8 @@ final class ConsoleConnection {
     }
 
     private(set) var phase = Phase.connecting
+    /// The invite shows over the console. It turns true once for each opening of the demo.
+    var invite = false
 
     @ObservationIgnored weak var terminal: TerminalView?
     /// The console's agent signal: the agent of the chat's session, or "" for none. A new
@@ -402,6 +434,7 @@ final class ConsoleConnection {
         outgoing?.finish()
         outgoing = nil
         phase = .connecting
+        invite = false
     }
 
     private func run() async {
@@ -473,7 +506,10 @@ final class ConsoleConnection {
     /// ended screen, and a run that fails or dies says why.
     private func runDemo() async {
         phase = .connecting
+        invite = false
         let session = DemoSession()
+        let watch = Task { await inviteWhenDone(session) }
+        defer { watch.cancel() }
         let failure = await withTaskCancellationHandler {
             await serveDemo(session)
         } onCancel: {
@@ -485,6 +521,19 @@ final class ConsoleConnection {
             phase = .failed(failure, scanAgain: false)
         } else {
             phase = .ended
+        }
+    }
+
+    /// The person's answer ended the agent's turn. The terminal gives up the keyboard first, so the
+    /// sheet is not under it, and the belt is back in its place when the sheet closes.
+    private func inviteWhenDone(_ session: DemoSession) async {
+        while !Task.isCancelled {
+            if session.done {
+                _ = terminal?.resignFirstResponder()
+                invite = true
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(250))
         }
     }
 

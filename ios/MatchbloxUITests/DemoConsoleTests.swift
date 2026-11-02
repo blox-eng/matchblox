@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 final class DemoConsoleTests: XCTestCase {
@@ -52,6 +53,91 @@ final class DemoConsoleTests: XCTestCase {
         app.launchArguments = []
         app.launch()
         expectTheConsole(in: app)
+    }
+
+    /// A tap on the session's row, a tap on its second option, and the agent finishes: the invite
+    /// rises with the line to run, and Copy puts that line on the pasteboard.
+    @MainActor
+    func testAnAnswerReachesTheInvite() {
+        let app = launched()
+        let invite = answerTheAgent(in: app)
+        let command = app.staticTexts["curl -fsSL https://matchblox.sh | sh"]
+        XCTAssertTrue(command.exists, app.debugDescription)
+        XCTAssertTrue(app.buttons["Send to my computer"].exists)
+        XCTAssertTrue(app.buttons["Pair a host"].exists)
+        keep(app, "4 invite")
+
+        app.buttons["Copy"].tap()
+        XCTAssertTrue(app.buttons["Copied"].waitForExistence(timeout: 5), "Copy gave no feedback")
+        XCTAssertEqual(pasteboardLine(), "curl -fsSL https://matchblox.sh | sh")
+        XCTAssertTrue(app.buttons["Copy"].waitForExistence(timeout: 10), "Copied did not go back to Copy")
+        XCTAssertTrue(invite.exists)
+    }
+
+    /// Keep looking closes the sheet, and the console goes on: the belt and a tap still work, and
+    /// the sheet does not come back. Then the ended screen offers both ways on.
+    @MainActor
+    func testKeepLookingLeavesTheConsoleWorking() {
+        let app = launched()
+        let invite = answerTheAgent(in: app)
+        app.buttons["Keep looking"].tap()
+        XCTAssertTrue(invite.waitForNonExistence(timeout: 10), "the sheet did not close")
+
+        let terminal = app.descendants(matching: .any)["demo-terminal"]
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let home = app.buttons["Back to matchblox"].firstMatch
+        XCTAssertTrue(home.waitForExistence(timeout: 10), app.debugDescription)
+        home.tap()
+        let gone = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "NOT label CONTAINS %@", "I rotate the token"), object: terminal)
+        XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 30), .completed, "the belt did not reach the console")
+        XCTAssertFalse(invite.exists, "the sheet came back")
+
+        app.buttons["Interrupt"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Open again"].waitForExistence(timeout: 30), app.debugDescription)
+        XCTAssertTrue(app.buttons["Pair a host"].exists)
+        keep(app, "5 ended")
+
+        app.buttons["Open again"].tap()
+        expectTheConsole(in: app)
+        XCTAssertFalse(invite.exists, "a fresh opening starts with no sheet")
+    }
+
+    /// Taps by the terminal's cells, as a thumb does: the session's row, then its second option.
+    /// Returns the invite's heading, once it shows.
+    @MainActor
+    private func answerTheAgent(in app: XCUIApplication) -> XCUIElement {
+        expect(in: app, "label CONTAINS %@", "WAITS FOR YOU")
+        tapRow(in: app, containing: "flint-auth")
+        expect(in: app, "label CONTAINS %@", "2. Rotate, keep")
+        // The console takes a tap only after its screen has been quiet a moment.
+        Thread.sleep(forTimeInterval: 1.5)
+        tapRow(in: app, containing: "2. Rotate, keep")
+        let heading = app.staticTexts["Your agents wait the same way."]
+        XCTAssertTrue(heading.waitForExistence(timeout: 30), app.debugDescription)
+        return heading
+    }
+
+    @MainActor
+    private func tapRow(in app: XCUIApplication, containing text: String) {
+        let terminal = app.descendants(matching: .any)["demo-terminal"]
+        let rows = terminal.label.components(separatedBy: "\n")
+        guard let row = rows.firstIndex(where: { $0.contains(text) }) else {
+            return XCTFail("no row shows \(text): \(terminal.label)")
+        }
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: (Double(row) + 0.5) / Double(rows.count))).tap()
+    }
+
+    /// The pasteboard belongs to the app, so the first read from the test asks to paste.
+    @MainActor
+    private func pasteboardLine() -> String? {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for _ in 0..<6 {
+            if let line = UIPasteboard.general.string { return line }
+            let allow = springboard.buttons["Allow Paste"]
+            if allow.waitForExistence(timeout: 2) { allow.tap() }
+        }
+        return UIPasteboard.general.string
     }
 
     @MainActor
