@@ -26,7 +26,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/app"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/demo"
@@ -44,10 +43,7 @@ import (
 
 var update = flag.Bool("update", false, "TestReplay: write www/demo/frames-<size>.json, www/demo/replay-<size>.svg and the open Duo's still frame in www/index.html; TestStokerSVG: write www/demo/stoker.svg and the stoker's still frame")
 
-const (
-	demoPID     = 4242
-	stepTimeout = 20 * time.Second
-)
+const stepTimeout = 20 * time.Second
 
 // replaySize is a screen the replay is recorded on. The site's foldable
 // plays the phone folded and the duo open (landscape, the Wide layout);
@@ -134,7 +130,7 @@ func (h *demoHost) kill(pid int) {
 
 func pulse(pid int, p procfs.Proc, elapsed float64) procfs.Proc {
 	switch pid {
-	case demoPID:
+	case demo.OrphanPID:
 		p.Ticks += uint64(elapsed * procfs.ClockTicks)
 	case 1200: // the busy session
 		p.Ticks += uint64(elapsed * procfs.ClockTicks * 0.35)
@@ -396,8 +392,14 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	clk := &clock{t: demoBase}
 	var host *demoHost
-	world := newWorld(t, src, clk, func(pid int) { host.kill(pid) })
-	root := world.root
+	root := t.TempDir()
+	if err := os.CopyFS(root, os.DirFS(src)); err != nil {
+		t.Fatal(err)
+	}
+	world, err := demo.NewWorld(root, clk.Now, func(pid int) { host.kill(pid) })
+	if err != nil {
+		t.Fatal(err)
+	}
 	cfg := config.Default()
 	cfg.Interval.Duration = 50 * time.Millisecond
 	cfg.Agents = []string{"claude", "codex", "opencode"}
@@ -418,15 +420,12 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	host = &demoHost{FS: smp.FS.(procfs.FS)}
 	smp.FS, smp.Now = host, host.now(clk)
-	world.uptime = host.Uptime
+	world.Uptime = host.Uptime
 
 	s := service.New(cfg, smp, world.Git)
 	s.Binary, s.Host, s.Now = version, demo.Host(root), clk.Now
-	s.Capture, s.Activity = smp.Capture, nil                  // the demo's panes, never this machine's tmux
-	s.Actions.Check = func(advice.Guard) error { return nil } // the demo's pids are not this machine's
-	s.Actions.Run = world.Run
-	s.LookPath = func(cmd string) (string, error) { return "/usr/bin/" + cmd, nil } // the demo's agents, not this machine's
-	s.IsDir = func(path string) bool { return strings.HasPrefix(path, "/work/") }
+	s.Capture, s.Activity = smp.Capture, nil // the demo's panes, never this machine's tmux
+	world.Wire(s)
 	st, err := stoker.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

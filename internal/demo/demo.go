@@ -10,8 +10,10 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -75,8 +77,13 @@ func Start(o Options) (*Demo, error) {
 		return nil, err
 	}
 
+	s, err := newService(root)
+	if err != nil {
+		_ = os.RemoveAll(root)
+		return nil, err
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
-	s := newService(root)
 	a, b := net.Pipe()
 	var serving sync.WaitGroup
 	serving.Go(func() { s.Run(ctx) })
@@ -166,16 +173,20 @@ func copyTree(tree string) (string, error) {
 	return root, nil
 }
 
-func newService(root string) *service.Service {
+func newService(root string) (*service.Service, error) {
 	cfg := config.Default()
 	cfg.Agents = []string{"claude", "codex", "opencode"} // the fixture machine runs all three
 	smp := Sampler(cfg, root)
-	s := service.New(cfg, smp, nil)
+	w, err := NewWorld(root, time.Now, func(pid int) { _ = os.RemoveAll(filepath.Join(root, "proc", strconv.Itoa(pid))) })
+	if err != nil {
+		return nil, fmt.Errorf("demo: the world of the machine: %w", err)
+	}
+	s := service.New(cfg, smp, w.Git)
 	s.Binary, s.Host = binary, Host(root)
 	s.Home, s.StatePath = smp.Home, filepath.Join(stateDir(root), "state.json")
 	s.Capture, s.Activity = smp.Capture, nil // the fixture's panes, never a tmux on this machine
-	s.Actions.Run = refuse
-	return s
+	w.Wire(s)
+	return s, nil
 }
 
 // Sampler reads a fixture tree in place of the live machine.

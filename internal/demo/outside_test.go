@@ -37,7 +37,11 @@ func TestANewSessionWritesNothingOutsideTheCopy(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	a, b := net.Pipe()
-	go func() { _ = newService(root).Handle(ctx, transport.NewConn(b)) }()
+	svc, err := newService(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = svc.Handle(ctx, transport.NewConn(b)) }()
 	c := transport.NewConn(a)
 	defer func() { _ = c.Close() }()
 
@@ -50,7 +54,7 @@ func TestANewSessionWritesNothingOutsideTheCopy(t *testing.T) {
 	if err := <-sent; err != nil {
 		t.Fatal(err)
 	}
-	text, err := json.Marshal(proto.NewSession{Where: root, Agent: "claude"})
+	text, err := json.Marshal(proto.NewSession{Where: "/work/flint-auth", Agent: "claude"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,13 +73,18 @@ func TestANewSessionWritesNothingOutsideTheCopy(t *testing.T) {
 		if err := json.Unmarshal(env.Body, &r); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(r.Err, Refusal) {
-			t.Errorf("the session reached no refusal, so this proves little: %+v", r)
+		if r.Err != "" {
+			t.Errorf("the session did not start, so this proves little: %+v", r)
 		}
 		break
 	}
 	if err := <-sent; err != nil {
 		t.Fatal(err)
+	}
+
+	panes, err := os.ReadFile(filepath.Join(root, "tmux-panes.txt"))
+	if err != nil || !strings.Contains(string(panes), "\tclaude\t/work/flint-auth") {
+		t.Errorf("the new session is not in the copy's tmux panes (%v):\n%s", err, panes)
 	}
 
 	_ = filepath.WalkDir(outside, func(p string, _ fs.DirEntry, err error) error {
