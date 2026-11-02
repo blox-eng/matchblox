@@ -94,13 +94,12 @@ final class DemoConsoleTests: XCTestCase {
         // The belt works with the terminal unfocused; the list is where a row can be tapped.
         app.buttons["Back to matchblox"].firstMatch.tap()
         expect(in: app, "NOT label CONTAINS %@", "I rotate the token")
-        waitUntilSteady(terminal)
-        tapRow(in: app, containing: "hearth-api")
-        expect(in: app, "label CONTAINS %@", "keys go to hearth-api")
+        tapRow(in: app, containing: "hearth-api", until: "keys go to hearth-api")
+        expect(in: app, step: "the chat of hearth-api after the tap on its row", "label CONTAINS %@", "keys go to hearth-api")
         XCTAssertFalse(invite.exists, "the sheet came back")
 
         app.buttons["Back to matchblox"].firstMatch.tap()
-        expect(in: app, "NOT label CONTAINS %@", "keys go to")
+        expect(in: app, step: "the list after the second Back to matchblox", "NOT label CONTAINS %@", "keys go to")
         // A tap does not raise the keyboard on the demo; the belt's key does, and typing works.
         app.buttons["Show keyboard"].firstMatch.tap()
         dismissKeyboardTip(in: app)
@@ -164,11 +163,9 @@ final class DemoConsoleTests: XCTestCase {
     private func answerTheAgent(in app: XCUIApplication) -> XCUIElement {
         expect(in: app, "label CONTAINS %@", "WAITS FOR YOU")
         let terminal = app.descendants(matching: .any)["demo-terminal"]
-        waitUntilSteady(terminal)
-        tapRow(in: app, containing: "flint-auth")
-        expect(in: app, "label CONTAINS %@", "2. Rotate, keep")
-        waitUntilSteady(terminal)
-        tapRow(in: app, containing: "2. Rotate, keep")
+        tapRow(in: app, containing: "flint-auth", until: "2. Rotate, keep")
+        expect(in: app, step: "the chat's question after the tap on flint-auth", "label CONTAINS %@", "2. Rotate, keep")
+        tapRow(in: app, containing: "2. Rotate, keep", until: "I rotate the token on each refresh")
         let heading = app.staticTexts["Your agents wait the same way."]
         expect(in: app, "label CONTAINS %@", "I rotate the token on each refresh")
         XCTAssertFalse(heading.exists, "the invite covered the closing text")
@@ -188,6 +185,19 @@ final class DemoConsoleTests: XCTestCase {
             same = now == last ? same + 1 : 0
             last = now
             Thread.sleep(forTimeInterval: 0.3)
+        }
+    }
+
+    /// Taps a row, and taps once more only when the first tap visibly did nothing in 6 seconds.
+    @MainActor
+    private func tapRow(in app: XCUIApplication, containing text: String, until shown: String) {
+        let terminal = app.descendants(matching: .any)["demo-terminal"]
+        waitUntilSteady(terminal)
+        tapRow(in: app, containing: text)
+        let reacted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", shown), object: terminal)
+        if XCTWaiter().wait(for: [reacted], timeout: 6) != .completed {
+            waitUntilSteady(terminal)
+            if !terminal.label.contains(shown) { tapRow(in: app, containing: text) }
         }
     }
 
