@@ -103,8 +103,13 @@ final class DemoConsoleTests: XCTestCase {
 
         app.buttons["Back to matchblox"].firstMatch.tap()
         expect(in: app, "NOT label CONTAINS %@", "keys go to")
+        // A tap does not raise the keyboard on the demo; the belt's key does, and typing works.
+        app.buttons["Show keyboard"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), app.debugDescription)
         terminal.typeText("q")
         XCTAssertTrue(app.buttons["Open again"].waitForExistence(timeout: 30), app.debugDescription)
+        XCTAssertTrue(app.buttons["Pair a host"].isHittable, "the keyboard covers the ended screen")
+        XCTAssertFalse(app.keyboards.firstMatch.exists, "the keyboard stayed up after the quit")
         XCTAssertTrue(app.buttons["Pair a host"].exists)
         XCTAssertTrue(app.buttons["Copy"].exists)
         XCTAssertTrue(app.buttons["Send to my computer"].exists)
@@ -114,6 +119,30 @@ final class DemoConsoleTests: XCTestCase {
         app.buttons["Open again"].tap()
         expectTheConsole(in: app)
         XCTAssertFalse(invite.exists, "a fresh opening starts with no sheet")
+    }
+
+    /// A tap clicks and leaves the keyboard down, so it never covers the question. The belt's key
+    /// raises it, and once it is down a tap still clicks.
+    @MainActor
+    func testATapDoesNotRaiseTheKeyboard() {
+        let app = launched()
+        expect(in: app, "label CONTAINS %@", "WAITS FOR YOU")
+        let terminal = app.descendants(matching: .any)["demo-terminal"]
+        waitUntilSteady(terminal)
+        tapRow(in: app, containing: "flint-auth")
+        expect(in: app, "label CONTAINS %@", "2. Rotate, keep")
+        XCTAssertFalse(app.keyboards.firstMatch.exists, "a tap raised the keyboard")
+        XCTAssertFalse(app.buttons["Hide keyboard"].firstMatch.exists, "a tap took the keyboard")
+        keep(app, "7 chat with no keyboard")
+
+        app.buttons["Show keyboard"].firstMatch.tap()
+        let hide = app.buttons["Hide keyboard"].firstMatch
+        XCTAssertTrue(hide.waitForExistence(timeout: 10), "the belt's key did not raise the keyboard")
+        hide.tap()
+        XCTAssertTrue(app.buttons["Show keyboard"].firstMatch.waitForExistence(timeout: 10))
+        waitUntilSteady(terminal)
+        tapRow(in: app, containing: "2. Rotate, keep")
+        expect(in: app, "label CONTAINS %@", "I rotate the token on each refresh")
     }
 
     /// Taps by the terminal's cells, as a thumb does, with no keyboard taken first: the session's

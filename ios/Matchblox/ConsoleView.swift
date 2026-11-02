@@ -178,6 +178,7 @@ private struct TerminalRepresentable: UIViewRepresentable {
         screen.backgroundColor = bg
         let belts = Belts(terminal: terminal, screen: screen, isDemo: connection.isDemo)
         terminal.inputAccessoryView = belts.lifted
+        terminal.tapRaisesKeyboard = !connection.isDemo
         terminal.onFocus = { [weak belts] focused in belts?.focusChanged(focused) }
         connection.onAgent = { agent in belts.agentChanged(agent) }
         #if DEBUG
@@ -528,6 +529,8 @@ final class ConsoleConnection {
         }
         await session.close()
         guard !Task.isCancelled else { return }
+        // The keyboard would cover the buttons of the screen that follows.
+        _ = terminal?.resignFirstResponder()
         if let failure {
             phase = .failed(failure, scanAgain: false)
         } else {

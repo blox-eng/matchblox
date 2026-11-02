@@ -17,6 +17,9 @@ final class ConsoleTerminalView: TerminalView {
     var onHome: @MainActor () -> Void = {}
     /// Called when the terminal takes or gives up the keyboard.
     var onFocus: @MainActor (Bool) -> Void = { _ in }
+    /// False on the demo: a tap only clicks, and the keyboard comes from the belt's key, so it does
+    /// not cover the question the demo shows.
+    var tapRaisesKeyboard = true
 
     /// SwiftTerm does not declare this trait, so UIKit would keep inline predictions on.
     @objc var inlinePredictionType: UITextInlinePredictionType = .no
@@ -119,7 +122,11 @@ final class ConsoleTerminalView: TerminalView {
             return tapsLabel(at: gesture.location(in: self))
         }
         if gesture === clickTap {
-            return !focusedAtTouch && readsMouse && !tapsLabel(at: gesture.location(in: self))
+            return (!focusedAtTouch || !tapRaisesKeyboard) && readsMouse && !tapsLabel(at: gesture.location(in: self))
+        }
+        // SwiftTerm's single tap would take the keyboard. Its later taps and gestures stay.
+        if !tapRaisesKeyboard, let tap = gesture as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1, gesture !== labelTap {
+            return false
         }
         if gesture === wheelPan, let pan = gesture as? UIPanGestureRecognizer {
             let velocity = pan.velocity(in: self)
@@ -193,13 +200,12 @@ final class ConsoleTerminalView: TerminalView {
         }
     }
 
-    /// The press and release at the touch's cell, then the keyboard, as SwiftTerm does for the
-    /// taps after the first.
+    /// The press and release at the touch's cell. The keyboard is not taken here: SwiftTerm's own
+    /// single tap finds the terminal unfocused and takes it, so one click goes out. Were this to
+    /// take it first, that tap would click a second time, on whatever the first click opened.
     @objc private func clicked(_ tap: UITapGestureRecognizer) {
         guard tap.state == .ended else { return }
-        let point = tap.location(in: self)
-        sendClick(at: point)
-        _ = becomeFirstResponder()
+        sendClick(at: tap.location(in: self))
     }
 
     private func sendClick(at point: CGPoint) {
