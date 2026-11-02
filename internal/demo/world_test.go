@@ -86,3 +86,37 @@ func TestWireAnswersWhatTheServiceWouldAskTheMachine(t *testing.T) {
 		t.Errorf("PeerPane: %q", pane)
 	}
 }
+
+func TestTwoNewSessionsAreTwoSessions(t *testing.T) {
+	w := newTestWorld(t, func(int) {})
+	start := func(name string) error {
+		return w.Run([]string{"env", "-u", "GIT_TERMINAL_PROMPT", "tmux", "new-session", "-d", "-s", name, "-n", name, "-c", "/work/flint-auth", "claude", "--name", name, "go"})
+	}
+	for _, name := range []string{"one", "two"} {
+		if err := start(name); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	panes, err := os.ReadFile(filepath.Join(w.root, "tmux-panes.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"%9\tone:1.1\tone\t2000\t", "%10\ttwo:1.1\ttwo\t2001\t"} {
+		if !strings.Contains(string(panes), want) {
+			t.Errorf("tmux-panes.txt lacks %q:\n%s", want, panes)
+		}
+	}
+	if w.sessions["%9"].name != "one" || w.sessions["%10"].name != "two" {
+		t.Errorf("sessions: %+v %+v", w.sessions["%9"], w.sessions["%10"])
+	}
+}
+
+func TestAWorldAnswersWhatItCannotTake(t *testing.T) {
+	w := newTestWorld(t, func(int) {})
+	if err := w.Run(nil); err == nil || err.Error() != Refusal {
+		t.Errorf("an empty argv: %v, want the refusal line", err)
+	}
+	if err := w.Finish("%99", 1000, "done"); err == nil {
+		t.Error("Finish of a pane with no session passed")
+	}
+}

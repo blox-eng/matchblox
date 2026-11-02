@@ -52,6 +52,7 @@ type World struct {
 	typed    map[string]string   // the draft in each pane's field
 	removed  map[string]bool     // worktree paths
 	ran      [][]string
+	started  int // sessions the demo has started
 }
 
 // NewWorld is the world of a copy of the fixture machine in root. kill ends
@@ -163,7 +164,7 @@ func (w *World) Run(argv []string) error {
 		return w.closePane(argv[3])
 	case len(argv) == 3 && argv[0] == "kill" && argv[1] == "-TERM":
 		return nil // the agent went with its pane
-	case argv[0] == "env" && slices.Contains(argv, "new-session"):
+	case len(argv) > 0 && argv[0] == "env" && slices.Contains(argv, "new-session"):
 		return w.start(argv[slices.Index(argv, "tmux"):])
 	}
 	return errRefused
@@ -194,10 +195,11 @@ func (w *World) closePane(pane string) error {
 	return writeAtomic(path, []byte(strings.Join(keep, "\n")+"\n"))
 }
 
-// newPID and newPane are the first session the demo starts.
+// firstPID and firstPane are the first session the demo starts; each later
+// one takes the next of both.
 const (
-	newPID  = 2000
-	newPane = "%9"
+	firstPID  = 2000
+	firstPane = 9
 )
 
 // start is tmux new-session -d -s <name> -n <name> -c <dir> <agent>…: a
@@ -212,6 +214,9 @@ func (w *World) start(argv []string) error {
 	if len(agent) > 2 && agent[0] == "env" && strings.HasPrefix(agent[1], "MATCHBLOX_CONTEXT=") {
 		contextEnv, agent = agent[1]+"\x00", agent[2:]
 	}
+	newPID, paneNo := firstPID+w.started, firstPane+w.started
+	newPane := "%" + strconv.Itoa(paneNo)
+	w.started++
 	proc := filepath.Join(w.root, "proc", strconv.Itoa(newPID))
 	if err := os.MkdirAll(proc, 0o755); err != nil {
 		return err
@@ -230,7 +235,7 @@ func (w *World) start(argv []string) error {
 	if err := os.Symlink(dir, filepath.Join(proc, "cwd")); err != nil {
 		return err
 	}
-	s := &session{pid: newPID, name: name, id: "5ea1c0de-0000-4000-8000-000000000009", status: "busy"}
+	s := &session{pid: newPID, name: name, id: fmt.Sprintf("5ea1c0de-0000-4000-8000-%012d", paneNo), status: "busy"}
 	w.sessions[newPane] = s
 	now := w.clock().UnixMilli()
 	reg, err := json.Marshal(map[string]any{"pid": s.pid, "sessionId": s.id, "cwd": dir, "name": name,
@@ -332,7 +337,10 @@ func (w *World) submit(pane, text string) error {
 func (w *World) Finish(pane string, tokens int, text string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	s := w.sessions[pane]
+	s, ok := w.sessions[pane]
+	if !ok {
+		return fmt.Errorf("no session in %s", pane)
+	}
 	now := w.clock()
 	if err := w.appendTranscript(s, turnLine(now, tokens, text)); err != nil {
 		return err
