@@ -50,6 +50,17 @@ final class OpeningTests: XCTestCase {
         XCTAssertEqual(Opening.removedNotice([.demo]), "demo is removed.")
     }
 
+    func testAMixedRemovalNamesOnlyTheRealHostsInTheKeySentence() {
+        XCTAssertEqual(
+            Opening.removedNotice([.demo, host("ws-1")]),
+            "demo and ws-1 are removed. Remove ws-1's key on the host with matchblox devices rm."
+        )
+        XCTAssertEqual(
+            Opening.removedNotice([.demo, host("ws-1"), host("ws-2")]),
+            "demo, ws-1 and ws-2 are removed. Remove the keys of ws-1 and ws-2 on those hosts with matchblox devices rm."
+        )
+    }
+
     func testClosedMessageHidesTheDebugText() {
         let debug = "NWError: POSIX 54 secret-detail"
         let message = Opening.message(for: .closed(debug), host: "ws-1")
