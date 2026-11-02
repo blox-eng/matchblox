@@ -9,11 +9,13 @@ on:
       - internal/**
       - cmd/mbdemolib/**
       - ios/**
+      - .github/workflows/ios-demo.yml
   pull_request:
     paths:
       - internal/**
       - cmd/mbdemolib/**
       - ios/**
+      - .github/workflows/ios-demo.yml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

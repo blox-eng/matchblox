@@ -559,6 +559,10 @@ func TestTheDemoOpensNoNetwork(t *testing.T) {
 		t.Skip("a network namespace is Linux's")
 	}
 	if err := exec.Command("unshare", "-rn", "true").Run(); err != nil {
+		// In CI a skip would pass unseen, and the spec asks for this test.
+		if os.Getenv("CI") != "" {
+			t.Fatalf("unshare -rn is not permitted here, so the walk does not run with no route out: %v", err)
+		}
 		t.Skipf("unshare -rn is not permitted here, so the walk does not run with no route out: %v", err)
 	}
 	self, args, env := walkInChild(t)
