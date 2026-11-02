@@ -87,6 +87,12 @@ func (term *terminal) close() {
 	_ = term.out.Close()
 }
 
+func (term *terminal) raw() string {
+	term.mu.Lock()
+	defer term.mu.Unlock()
+	return term.drawn.String()
+}
+
 func (term *terminal) text() string {
 	term.mu.Lock()
 	defer term.mu.Unlock()

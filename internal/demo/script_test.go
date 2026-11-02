@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -131,6 +132,31 @@ func TestAnAnswerEndsInDone(t *testing.T) {
 	}
 	term.waitFor(t, "I rotate the token on each refresh")
 	eventually(t, 6*time.Second, "Done", done)
+}
+
+var cursorMove = regexp.MustCompile(`\x1b\[(\d+);(\d+)H`)
+
+// TestAResizeAtOnceIsKept: the app starts the demo before its terminal has its
+// size and resizes at once. The size it starts with must not arrive after that.
+func TestAResizeAtOnceIsKept(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	d, term := startAt(t, 80, 25)
+	d.Resize(50, 44)
+	drawnAtTheNewSize := func() bool {
+		raw := term.raw()
+		rows, cols := 0, 0
+		for _, m := range cursorMove.FindAllStringSubmatch(raw[max(strings.LastIndex(raw, "\x1b[2J"), 0):], -1) {
+			row, _ := strconv.Atoi(m[1])
+			col, _ := strconv.Atoi(m[2])
+			rows, cols = max(rows, row), max(cols, col)
+		}
+		return rows > 25 && cols <= 50
+	}
+	eventually(t, 3*time.Second, "a frame of 50x44", drawnAtTheNewSize)
+	time.Sleep(settled)
+	if !drawnAtTheNewSize() {
+		t.Error("the size the demo started with came back")
+	}
 }
 
 func TestTheDemoSurvivesATurn(t *testing.T) {

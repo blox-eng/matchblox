@@ -62,6 +62,7 @@ type Demo struct {
 	prog   *tea.Program
 	cancel context.CancelFunc
 	done   chan struct{}
+	sized  chan struct{} // closed at the program's first size
 	err    error
 	script *script
 }
@@ -115,10 +116,19 @@ func Start(o Options) (*Demo, error) {
 		script: sc,
 		cancel: cancel,
 		done:   make(chan struct{}),
-		prog: tea.NewProgram(console, tea.WithContext(ctx), tea.WithInput(o.In), tea.WithOutput(o.Out),
-			tea.WithWindowSize(o.Cols, o.Rows), tea.WithFPS(15), tea.WithoutSignalHandler(),
-			tea.WithEnvironment([]string{"TERM=xterm-256color", "COLORTERM=truecolor"})),
+		sized:  make(chan struct{}),
 	}
+	var sizedOnce sync.Once
+	sawSize := func(_ tea.Model, msg tea.Msg) tea.Msg {
+		if _, ok := msg.(tea.WindowSizeMsg); ok {
+			sizedOnce.Do(func() { close(d.sized) })
+		}
+		return msg
+	}
+	d.prog = tea.NewProgram(console, tea.WithContext(ctx), tea.WithInput(o.In), tea.WithOutput(o.Out),
+		tea.WithWindowSize(o.Cols, o.Rows), tea.WithFPS(15), tea.WithoutSignalHandler(),
+		tea.WithEnvironment([]string{"TERM=xterm-256color", "COLORTERM=truecolor"}),
+		tea.WithFilter(sawSize))
 	running = d
 	go func() {
 		_, err := d.prog.Run()
@@ -139,8 +149,15 @@ func Start(o Options) (*Demo, error) {
 	return d, nil
 }
 
-// Resize tells the console the terminal's new size.
+// Resize tells the console the terminal's new size. It waits for the program's
+// own first size, which it sends from a goroutine at its start: one that came
+// after this one would put back the old size for good.
 func (d *Demo) Resize(cols, rows int) {
+	select {
+	case <-d.sized:
+	case <-d.done:
+		return
+	}
 	d.prog.Send(tea.WindowSizeMsg{Width: cols, Height: rows})
 }
 

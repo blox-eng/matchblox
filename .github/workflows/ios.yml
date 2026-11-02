@@ -99,7 +99,7 @@ jobs:
           map=$(find ios/build -name 'Matchblox-LinkMap-*.txt' | head -n 1)
           python3 -I - "$map" <<'PY'
           import re, sys
-          section, ours, total = None, set(), 0
+          section, ours, spans = None, set(), []
           for line in open(sys.argv[1], errors="replace"):
               if line.startswith("# Object files:"):
                   section = "objects"
@@ -114,9 +114,16 @@ jobs:
                   if m and "libmbdemo.a" in m[2]:
                       ours.add(int(m[1]))
               elif section == "symbols":
-                  m = re.match(r"0x[0-9A-Fa-f]+\s+0x([0-9A-Fa-f]+)\s+\[\s*(\d+)\]", line)
-                  if m and int(m[2]) in ours:
-                      total += int(m[1], 16)
+                  m = re.match(r"0x([0-9A-Fa-f]+)\s+0x([0-9A-Fa-f]+)\s+\[\s*(\d+)\]", line)
+                  if m and int(m[3]) in ours:
+                      start = int(m[1], 16)
+                      spans.append((start, start + int(m[2], 16)))
+          # Go's symbols overlap: a carrier symbol spans the ones inside it. So this
+          # counts the addresses they cover, not the sum of their sizes.
+          total, covered = 0, 0
+          for start, end in sorted(spans):
+              total += max(end - max(start, covered), 0)
+              covered = max(covered, end)
           if not total:
               sys.exit(f"the link map names no bytes of the demo library: {len(ours)} objects")
           print(f"SIZE demo library in the executable, from the link map: {total} bytes, {len(ours)} objects")
@@ -126,6 +133,8 @@ jobs:
           exe=ios/build/Matchblox.xcarchive/Products/Applications/Matchblox.app/Matchblox
           xcrun otool -L "$exe"
           xcrun nm -u "$exe"
+          echo "--- the demo library's own names that look up code at run time:"
+          xcrun nm -A -u ios/build/demolib/device/libmbdemo.a | grep -E '_(dlopen|dlsym|dlclose|dlerror|objc_getClass|objc_lookUpClass)$' || echo none
       - name: Upload the Release compile log
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
