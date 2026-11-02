@@ -47,7 +47,7 @@ jobs:
             CC="$(xcrun -sdk "$1" -f clang) -isysroot $(xcrun -sdk "$1" --show-sdk-path) -target $2" \
             CGO_ENABLED=1 GOOS=ios GOARCH=arm64 go build -trimpath -ldflags='-s -w' -buildmode=c-archive -o "out/$3/libmbdemo.a" ./cmd/mbdemolib
             xcrun -sdk "$1" clang -target "$2" -isysroot "$(xcrun -sdk "$1" --show-sdk-path)" -I"out/$3" ios/DemoProbe/probe.c "out/$3/libmbdemo.a" \
-              -framework CoreFoundation -framework Security -framework IOKit -lresolv -Wl,-dead_strip -o "out/$3/probe"
+              -framework CoreFoundation -framework Security -lresolv -Wl,-dead_strip -o "out/$3/probe"
           }
           build iphoneos arm64-apple-ios17.0 device
           build iphonesimulator arm64-apple-ios17.0-simulator sim

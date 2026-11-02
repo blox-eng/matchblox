@@ -79,7 +79,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Matchblox/Matchblox.entitlements
         # The demo is Go, linked as a static library (make demolib).
         SWIFT_OBJC_BRIDGING_HEADER: Matchblox/Demo/Matchblox-Bridging-Header.h
-        OTHER_LDFLAGS: -framework CoreFoundation -framework Security -framework IOKit -lresolv
+        OTHER_LDFLAGS: -framework CoreFoundation -framework Security -lresolv
       configs:
         Release:
           CODE_SIGN_ENTITLEMENTS: Matchblox/Matchblox.production.entitlements
