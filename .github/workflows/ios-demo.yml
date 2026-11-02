@@ -4,7 +4,11 @@ name: ios-demo
 # measurements and needs no secrets.
 on:
   push:
-    branches: [feat/282-demo-host]
+    branches: [main]
+    paths:
+      - internal/**
+      - cmd/mbdemolib/**
+      - ios/**
   pull_request:
     paths:
       - internal/**

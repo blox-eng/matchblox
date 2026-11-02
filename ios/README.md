@@ -49,7 +49,7 @@ xcodebuild -scheme Matchblox -destination 'id=<device id>' \
 It needs `rsvg-convert` (`brew install librsvg`).
 
 `make test` runs the tests of the MatchbloxKit package.
-`make uitest DESTINATION=id=<simulator udid>` runs the UI tests. The `ios-demo` workflow runs them on each push.
+`make uitest DESTINATION=id=<simulator udid>` runs the UI tests. The `ios-demo` workflow runs them on each pull request and each push to main.
 
 ## CI
 
@@ -129,6 +129,31 @@ device before a release. `ws-1` is the host.
 16. Select a session in tmux and tap `A switch` under it. Switch agent
     opens; tap another agent, then `Enter`, then type `y`. The console
     jumps to the pane, where the new agent starts.
+
+### The demo
+
+Do these on an iPhone and on an iPad, with a build that has no host paired
+and again with two hosts.
+
+1. With no host, the pairing screen shows `Try a demo`. With two hosts, the
+   Hosts screen shows it beside `Island`.
+2. Tap it. The scan view finds its own code in under three seconds and the
+   camera does not turn on. The app asks for no permission. The app opens the
+   console on the host `demo`.
+3. Tap the session at the top, flint-auth. Its question fills the chat. Tap an
+   option. The agent works for a few seconds, then the sheet rises with
+   `Your agents wait the same way.`, the line, `Copy`, `Send to my computer`,
+   `Pair a host` and `Keep looking`. `Copy` puts the line on the pasteboard.
+   `Send to my computer` opens the share sheet.
+4. Turn the device at the question. The chat stays open, and the question is
+   still readable.
+5. Tap `Keep looking`, then quit the console with `q`. The ended screen offers
+   `Open again`, `Pair a host`, the line, `Copy` and `Send to my computer`.
+6. Kill the app in the middle of the demo and open it again. The demo starts
+   fresh, and the first launch left nothing of the old one.
+7. Open a host you paired. Its console, the Island and the host list are the
+   same as before the demo.
+8. Pair a real host. The host `demo` is gone.
 
 ### The buzz and the island
 

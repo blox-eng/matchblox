@@ -6,6 +6,20 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Try a demo in Matchblox Pocket.** A person with no computer to pair taps
+  `Try a demo`. The app scans a code of its own and opens the real console on a
+  made-up machine inside the app, with no network. The person answers the
+  agent that waits, and when it finishes, a sheet shows the install line with
+  `Copy` and `Send to my computer`. Pairing a real host removes the demo.
+  ([#282](https://github.com/blox-eng/matchblox/issues/282))
+
+### Changed
+
+- **The first tap on the phone's console clicks.** It no longer needs a second
+  tap. Turning the phone back reopens the chat on every host.
+
 ## [0.30.0] - 2026-11-01
 
 ### Changed

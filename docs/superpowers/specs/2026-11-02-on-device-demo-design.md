@@ -128,8 +128,10 @@ app's terminal view, and the size and memory inside the app.
    real host removes `demo`.
 
 What the phone cannot do answers: `This is a demo. Install matchblox to do that.`
-That covers going into tmux, connecting to another host, pairing a device and
-updating. Nothing else is refused.
+That covers going into tmux, connecting to another host, pairing a device,
+updating, a merge, a new worktree, a clone, and `^C` inside a chat. Nothing else
+is refused. The console's ctrl+o "into tmux" hint is hidden in the demo; the key
+still answers with the line.
 
 ## How it fits together
 
