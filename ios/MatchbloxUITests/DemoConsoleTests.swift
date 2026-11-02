@@ -105,6 +105,7 @@ final class DemoConsoleTests: XCTestCase {
         expect(in: app, "NOT label CONTAINS %@", "keys go to")
         // A tap does not raise the keyboard on the demo; the belt's key does, and typing works.
         app.buttons["Show keyboard"].firstMatch.tap()
+        dismissKeyboardTip(in: app)
         XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), app.debugDescription)
         terminal.typeText("q")
         XCTAssertTrue(app.buttons["Open again"].waitForExistence(timeout: 30), app.debugDescription)
@@ -136,6 +137,7 @@ final class DemoConsoleTests: XCTestCase {
         keep(app, "7 chat with no keyboard")
 
         app.buttons["Show keyboard"].firstMatch.tap()
+        dismissKeyboardTip(in: app)
         let hide = app.buttons["Hide keyboard"].firstMatch
         XCTAssertTrue(hide.waitForExistence(timeout: 10), "the belt's key did not raise the keyboard")
         hide.tap()
@@ -209,6 +211,13 @@ final class DemoConsoleTests: XCTestCase {
             if allow.exists { allow.tap() }
         }
         return nil
+    }
+
+    /// The system's one-time "slide to type" tip covers the screen the first time the keyboard rises.
+    @MainActor
+    private func dismissKeyboardTip(in app: XCUIApplication) {
+        let next = app.buttons["Continue"]
+        if next.waitForExistence(timeout: 2) { next.tap() }
     }
 
     @MainActor
