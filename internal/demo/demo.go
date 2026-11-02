@@ -98,7 +98,7 @@ func Start(o Options) (*Demo, error) {
 	conn := transport.NewConn(a)
 
 	console := app.New(app.Options{
-		Conn: conn, Binary: binary, Run: refuse, OutsideTmux: true,
+		Conn: conn, Binary: binary, Run: refuse, Demo: Refusal, OutsideTmux: true,
 		StateDir: stateDir(root), Now: clockFrom(started),
 	})
 	d := &Demo{

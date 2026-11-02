@@ -78,3 +78,53 @@ func TestEveryAgentPaneReads(t *testing.T) {
 		}
 	}
 }
+
+// TestATabPressedAtTheFirstDrawFillsAtOnce presses each tab key the moment
+// the console first draws, and presses it again every 100 ms as a person
+// would, as the console takes no key until its first state has come. It times
+// how long a loading text can show.
+func TestATabPressedAtTheFirstDrawFillsAtOnce(t *testing.T) {
+	for _, tab := range tabs {
+		t.Run(tab.name, func(t *testing.T) {
+			t.Setenv("TMPDIR", t.TempDir())
+			_, term := startAt(t, 44, 31)
+			for term.text() == "" {
+				time.Sleep(time.Millisecond)
+			}
+			pressed := time.Now()
+			var emptyAt, lastKey time.Time
+			for !strings.Contains(term.text(), tab.seeded) {
+				if time.Since(lastKey) >= 100*time.Millisecond {
+					if _, err := term.in.Write([]byte(tab.key)); err != nil {
+						t.Fatal(err)
+					}
+					lastKey = time.Now()
+				}
+				if time.Since(pressed) > 3*time.Second {
+					t.Fatalf("%q not drawn within 3s of the first draw", tab.seeded)
+				}
+				if emptyAt.IsZero() && hasEmpty(term.text()) {
+					emptyAt = time.Now()
+				}
+				time.Sleep(5 * time.Millisecond)
+			}
+			shown := time.Duration(0)
+			if !emptyAt.IsZero() {
+				shown = time.Since(emptyAt)
+			}
+			t.Logf("%s filled %v after the first draw; a loading text showed up to %v", tab.name, time.Since(pressed).Round(10*time.Millisecond), shown.Round(10*time.Millisecond))
+			if shown > time.Second {
+				t.Errorf("a loading text showed for %v", shown)
+			}
+		})
+	}
+}
+
+func hasEmpty(text string) bool {
+	for _, e := range emptyTexts {
+		if strings.Contains(text, e) {
+			return true
+		}
+	}
+	return false
+}

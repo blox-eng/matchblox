@@ -43,6 +43,9 @@ type Options struct {
 	// CompactAt and CompactTokens colour context at the compact threshold.
 	CompactAt     float64
 	CompactTokens int
+	// Demo, when set, is the demo host's line: the console shows no stoker
+	// badge in its header, for the host's name to keep its room on a phone.
+	Demo string
 	// Run executes one step that moves this terminal (Nav). Nil means exec.
 	Run func(argv []string) error
 	// Local: the service runs on this machine from the same install, so an

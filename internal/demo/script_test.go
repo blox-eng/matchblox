@@ -44,11 +44,13 @@ func eventually(t *testing.T, within time.Duration, what string, ok func() bool)
 }
 
 func TestTheHostIsDemo(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
-	// On a phone the header drops the host for the stoker's badge; a wider
-	// screen keeps both.
-	_, term := startAt(t, 132, 32)
-	term.waitFor(t, "matchblox · demo")
+	for _, size := range [][2]int{{44, 31}, {132, 32}} {
+		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) {
+			t.Setenv("TMPDIR", t.TempDir())
+			_, term := startAt(t, size[0], size[1])
+			term.waitFor(t, "matchblox · demo")
+		})
+	}
 
 	if b, err := os.ReadFile(filepath.Join(tree, "proc", "sys", "kernel", "hostname")); err != nil || strings.TrimSpace(string(b)) != "ws-1" {
 		t.Errorf("the fixture's own name changed: %q %v", b, err)
