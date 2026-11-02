@@ -1,4 +1,8 @@
 import Foundation
+import MatchbloxKit
+import os
+
+private let demoLog = Logger(subsystem: "matchblox", category: "demo")
 
 struct DemoStartFailed: Error {
     let message: String
@@ -114,7 +118,7 @@ final class DemoSession: ConsoleSource, @unchecked Sendable {
         }
         let code = tree.withCString { MBDemoStart(UnsafeMutablePointer(mutating: $0), Int32(cols), Int32(rows)) }
         guard code == 0 else {
-            return .failure(DemoStartFailed(message: Self.lastError() ?? "The demo did not start."))
+            return .failure(DemoStartFailed(message: Self.sentence(logging: Self.lastError())))
         }
         let (output, sink) = AsyncStream<Data>.makeStream()
         let ended = DispatchSemaphore(value: 0)
@@ -151,9 +155,15 @@ final class DemoSession: ConsoleSource, @unchecked Sendable {
         }
         // The library sets the reason before the reads end, and it means nothing after a stop.
         lock.withLock {
-            if !closed { deathReason = Self.lastError() }
+            if !closed, let raw = Self.lastError() { deathReason = Self.sentence(logging: raw) }
         }
         sink.finish()
+    }
+
+    /// The raw text goes to the log; the person reads the plain sentence.
+    private static func sentence(logging raw: String?) -> String {
+        if let raw { demoLog.error("The demo failed: \(raw, privacy: .public)") }
+        return DemoFailure.sentence(for: raw)
     }
 
     private static func lastError() -> String? {
