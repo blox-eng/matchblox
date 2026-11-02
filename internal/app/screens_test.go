@@ -138,10 +138,6 @@ func TestScreens(t *testing.T) {
 	for _, size := range [][2]int{{200, 50}, {132, 32}, {44, 31}} {
 		check(t, st, "chat", size[0], size[1], []string{"enter"}, asks)
 	}
-	for _, size := range [][2]int{{200, 50}, {44, 31}} {
-		up := afterKeys{screenMsg{Pane: asks.Pane, At: demoAt, Text: historyScreen, Up: 6}}
-		check(t, st, "chatup", size[0], size[1], []string{"enter", wheelUp, wheelUp}, asks, up)
-	}
 	check(t, st, "chatended", 44, 31, []string{"enter"}, screenMsg{Pane: paneNamed(st, "flint-auth"), Gone: true})
 	for _, size := range surveyGrids {
 		check(t, st, "survey", size[0], size[1], nil, asks)
@@ -303,22 +299,6 @@ const askScreen = "⏺ The refresh endpoint is in and its tests pass.\n\n" +
 	"  3. Type something.\n\n" +
 	"Enter to select · ↑/↓ to navigate · Esc to cancel\n"
 
-// historyScreen is the lines of flint-auth's pane six lines up from its
-// bottom: the work before its question.
-const historyScreen = "⏺ Read(src/auth/refresh.go)\n" +
-	"  ⎿  Read 142 lines\n\n" +
-	"⏺ Update(src/auth/refresh.go)\n" +
-	"  ⎿  Updated src/auth/refresh.go with 18 additions\n\n" +
-	"⏺ Bash(go test ./auth/...)\n" +
-	"  ⎿  ok  example.com/auth  0.41s\n\n" +
-	"⏺ The refresh endpoint is in and its tests pass.\n\n" +
-	"────────────────────────────────────────────────────────────────────────────────\n" +
-	" ☐ Rotate\n\n" +
-	"Should a refresh also rotate the token?\n"
-
-// wheelUp, among check's keys, turns the wheel up over the chat.
-const wheelUp = "wheel-up"
-
 // afterKeys are messages check sends after its keys.
 type afterKeys []tea.Msg
 
@@ -385,10 +365,6 @@ func check(t *testing.T, st proto.State, name string, w, h int, keys []string, m
 		next, _ = next.Update(msg)
 	}
 	for _, k := range keys {
-		if k == wheelUp {
-			next, _ = next.Update(tea.MouseWheelMsg{X: w - 2, Y: h / 2, Button: tea.MouseWheelUp})
-			continue
-		}
 		next, _ = key(next, k)
 	}
 	for _, msg := range later {

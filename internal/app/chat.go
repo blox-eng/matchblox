@@ -109,7 +109,7 @@ func asDrawn(text string, w, h int) []string {
 // sizedFor tells if the screen is the agent's live screen drawn for a chat
 // w columns wide and h lines tall: the service sized its window to it.
 func (m Model) sizedFor(w, h int) bool {
-	return m.screen.Cols > 0 && m.screen.Cols == w && m.screen.Rows <= h && m.screen.Up == 0
+	return m.screen.Cols > 0 && m.screen.Cols == w && m.screen.Rows <= h
 }
 
 // sizeDwell is how long the chat's session stays selected before the
@@ -152,9 +152,7 @@ func (m Model) chatSize() (cols, rows int) {
 
 // watchCmd asks the service for the selected session's screen when it is
 // not the one already watched, and for none when the selection has no pane
-// or is another host's;
-// and for the lines up the chat shows, or the chat's size, when they
-// changed. A screen of another pane never stays.
+// or is another host's; or the chat's size, when it changed. A screen of another pane never stays.
 func (m *Model) watchCmd() tea.Cmd {
 	want := ""
 	if m.conn != nil && !m.lost && !m.mismatch {
@@ -165,13 +163,8 @@ func (m *Model) watchCmd() tea.Cmd {
 	if m.watchHeld != "" && want == m.watchHeld {
 		want = m.watching
 	}
-	switch {
-	case want != m.watching:
-		m.up, m.screen, m.liveWait = 0, proto.Screen{}, false // another pane opens live
-	case m.up == 0 && m.watchUp > 0:
-		m.screen, m.liveWait = proto.Screen{}, true // the history goes; blank until the live screen comes
-	}
 	if want != m.watching {
+		m.screen = proto.Screen{} // another pane opens blank until its screen comes
 		m.watchSince = m.now()
 	}
 	var size [2]int
@@ -189,15 +182,15 @@ func (m *Model) watchCmd() tea.Cmd {
 	if size == [2]int{} && want == m.watching {
 		size = m.watchSize // a chat off screen keeps its size: the agent does not redraw at each tab
 	}
-	if want == m.watching && m.up == m.watchUp && size == m.watchSize {
+	if want == m.watching && size == m.watchSize {
 		return due
 	}
-	m.watching, m.watchUp, m.watchSize = want, m.up, size
+	m.watching, m.watchSize = want, size
 	if m.conn == nil || m.lost || m.mismatch {
 		return due // the service forgot the watch with the connection
 	}
-	c, up := m.conn, proto.UpPrefix+strconv.Itoa(m.up)
-	act := proto.Act{RecID: proto.WatchPrefix + want, Text: up, Cols: size[0], Rows: size[1]}
+	c := m.conn
+	act := proto.Act{RecID: proto.WatchPrefix + want, Cols: size[0], Rows: size[1]}
 	send := func() tea.Msg { // not m.send: the watch takes no number from the acts the builder sees
 		if err := c.Send(proto.KindAct, watchActID+want, act); err != nil {
 			return lostMsg{err, c}
@@ -340,72 +333,15 @@ func (m Model) tooShort(s sample.Session) string {
 // chatTitle names the chat's session and its state.
 func (m Model) chatTitle(s sample.Session) string { return s.Name + " · " + m.wordOf(s) }
 
-// upNote is what the chat's title adds while it shows the history: how far
-// up.
-func (m Model) upNote() string {
-	if n := m.upShown(); n > 0 {
-		return " · ↑ " + plural(n, "line") + " up"
-	}
-	return ""
-}
-
-// chatStep is how many lines one turn of the wheel scrolls the chat.
-const chatStep = 3
-
-// upShown is how many lines up the screen the chat shows is: as far as
-// the history went.
-func (m Model) upShown() int {
-	if m.up == 0 {
-		return 0
-	}
-	return m.screen.Up
-}
-
-// notLive tells if the chat does not show the agent's live screen: it is
-// up the history, or waits for the live screen after it. A key then goes
-// nowhere.
-func (m Model) notLive() bool { return m.up > 0 || m.screen.Up > 0 || m.liveWait }
-
-// scrollChat moves the chat by lines: up shows earlier lines of the
-// agent's pane, down goes back toward live. The chat takes the keys: it
-// goes back to live when it loses them.
-func (m Model) scrollChat(up bool, lines int) Model {
-	if !m.chatKeys {
-		if m = m.openChat(); !m.chatKeys {
-			return m
-		}
-	}
-	if up {
-		m.up = min(m.up+lines, proto.MaxUp)
-	} else {
-		from := m.up
-		if m.screen.Up > 0 {
-			from = min(from, m.screen.Up) // the history stopped short
-		}
-		m.up = max(from-lines, 0)
-	}
-	return m
-}
-
-// backToLive is the chat on the agent's live screen again, after a key
-// that went nowhere.
-func (m Model) backToLive() Model {
-	m.up, m.flash = 0, "back to live — the agent did not get that key"
-	return m
-}
-
 // chatPane is the chat beside the list, w by h: its title, in the accent
-// while the chat has the keys and shows the live screen, over the strip
+// while the chat has the keys, over the strip
 // and the screen.
 func (m Model) chatPane(s sample.Session, w, h int) []string {
 	ink := m.st.label
-	switch {
-	case m.notLive():
-		ink = m.st.muted
-	case m.chatKeys:
+	if m.chatKeys {
 		ink = m.st.accent
 	}
-	lines := []string{fit(" "+ink.Render(m.chatTitle(s)+m.upNote()), w)}
+	lines := []string{fit(" "+ink.Render(m.chatTitle(s)), w)}
 	strip := m.chatStrip(s, w, h-1)
 	lines = append(lines, strip...)
 	for _, l := range m.screenLines(w-1, h-1-len(strip)) {
@@ -480,16 +416,12 @@ func (m Model) screenLines(w, h int) []string {
 func (m Model) chatScreen(w int) drawn {
 	st := m.st
 	s, _ := m.selectedSession()
-	ink := st.accent
-	if m.notLive() {
-		ink = st.muted
-	}
 	title := " " + st.accent.Render("‹ Sessions") + st.muted.Render(" · ")
-	head, note := m.chatTitle(s), m.upNote() // the state, then the name, give way to the note
-	if room := w - lipgloss.Width(title) - lipgloss.Width(note); lipgloss.Width(head) > room {
-		head = ansi.Truncate(s.Name, max(room, 1), "…")
+	head := m.chatTitle(s)
+	if room := w - lipgloss.Width(title); lipgloss.Width(head) > room {
+		head = ansi.Truncate(s.Name, max(room, 1), "…") // the state, then the name, give way
 	}
-	title += ink.Render(head + note)
+	title += st.accent.Render(head)
 	if m.toast != "" { // as the header says it, where there is one
 		title = spread(title, st.accent.Render(ansi.Truncate(m.toast, max(w/2, 1), "…"))+" ", w)
 	}
@@ -658,7 +590,7 @@ func askedAgain(name string) string {
 // Enter or a digit, which it takes as its answer. A command act has its own
 // refusal at a wait.
 func (m Model) chatHushed(k chatKey) bool {
-	if k.act != "" || m.menuSeen.pane != k.pane || !m.now().Before(m.menuSeen.at.Add(menuQuiet)) {
+	if k.act != "" || isWheel(k.text) || m.menuSeen.pane != k.pane || !m.now().Before(m.menuSeen.at.Add(menuQuiet)) {
 		return false
 	}
 	s, ok := m.sessionIn(m.opt.Host, k.pane)
@@ -757,7 +689,7 @@ func (m Model) pressed(texts ...string) (name string, keys []chatKey) {
 		return "", nil
 	}
 	var seen time.Time
-	if m.screen.Pane == s.Pane && m.screen.Up == 0 { // no Enter answers the history
+	if m.screen.Pane == s.Pane {
 		seen = m.screen.At
 	}
 	for _, t := range texts {
@@ -894,9 +826,6 @@ func (m Model) commandKey(apc string) (tea.Model, tea.Cmd) {
 		return m, nil // as a paste: a layer on top takes no command
 	}
 	m, touch := m.touchRest()
-	if m.notLive() {
-		return m.backToLive(), touch
-	}
 	m.flash, m.chatTyped = "", m.now()
 	s, _ := m.selectedSession()
 	if keycmd.AgentOf(s.Agent) != c.Agent {
@@ -1024,6 +953,9 @@ func (m Model) agentIn(k chatKey) bool {
 // same agent joins it, up to proto.MaxLit.
 func (m *Model) queueKey(k chatKey) {
 	q := slices.Clone(m.keyQ)
+	if isWheel(k.text) && slices.ContainsFunc(q, func(o chatKey) bool { return isWheel(o.text) }) {
+		return // a flick stops when it stops: no steps wait for the agent behind it
+	}
 	if n := len(q); n > 0 {
 		last := &q[n-1]
 		typed, isText := strings.CutPrefix(k.text, proto.LitPrefix)
@@ -1104,9 +1036,6 @@ func (m Model) keepChat(was Model) Model {
 			m.chatShut = m.now()
 		}
 	}
-	if !m.chatKeys {
-		m.up = 0
-	}
 	if m.conn == nil || m.lost {
 		m.keyQ, m.keyInFlight = nil, ""
 		return m
@@ -1151,22 +1080,12 @@ func (m Model) backKeys() string {
 }
 
 // chatKeyLine is the key line while the chat has the keys: whose agent
-// they go to, the way back and the way into tmux; or, up the history,
-// that a key goes back to live. A hint that does not fit goes whole, by
+// they go to, the way back and the way into tmux. A hint that does not fit goes whole, by
 // worth: the agent's name (the title names it), then the way into tmux;
 // the way back stays.
 func (m Model) chatKeyLine(w int) (string, []span) {
 	st := m.st
 	s, _ := m.selectedSession()
-	if m.notLive() { // ctrl+o too only goes back to live; the way back leaves
-		line := " " + st.text.Render("a key goes back to live")
-		var spans []span
-		if wide := line + st.muted.Render(" · ") + st.accent.Render(m.backKeys()) + st.muted.Render(" "+m.keys.chat.Back.Help().Desc); lipgloss.Width(wide) <= w {
-			spans = []span{{lipgloss.Width(wide) - lipgloss.Width(m.backKeys()+" "+m.keys.chat.Back.Help().Desc), lipgloss.Width(wide), tapBack}}
-			line = wide
-		}
-		return fit(line, w), spans
-	}
 	type part struct {
 		text string
 		key  string // the key a tap on it presses; "" none
@@ -1208,4 +1127,26 @@ func (m Model) chatKeyLine(w int) (string, []span) {
 		x += lipgloss.Width(p.text)
 	}
 	return fit(line, w), spans
+}
+
+func isWheel(text string) bool { return text == proto.WheelUp || text == proto.WheelDown }
+
+// wheelChat sends the wheel to the chat's agent, which scrolls itself. The
+// chat takes the keys first, as a tap on it does.
+func (m Model) wheelChat(up bool) (tea.Model, tea.Cmd) {
+	if !m.chatKeys {
+		if m = m.openChat(); !m.chatKeys {
+			return m, nil
+		}
+	}
+	if m.takeOverOn(m.opt.Host) { // looking around never asks, and never writes
+		m.flash = "not scrolled: the stoker is in charge — press a key in the chat to take over"
+		return m, nil
+	}
+	text := proto.WheelDown
+	if up {
+		text = proto.WheelUp
+	}
+	name, keys := m.pressed(text)
+	return m.toAgent(name, keys...)
 }
