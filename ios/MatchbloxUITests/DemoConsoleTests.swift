@@ -79,8 +79,9 @@ final class DemoConsoleTests: XCTestCase {
         XCTAssertTrue(invite.exists)
     }
 
-    /// Keep looking closes the sheet, and the console goes on: the belt and a tap still work, and
-    /// the sheet does not come back. Then the ended screen offers both ways on.
+    /// Keep looking closes the sheet over the agent's closing text, and the console goes on with no
+    /// keyboard: one tap on a row reaches the console, and the belt works. Then the ended screen
+    /// carries the install line, and Open again starts a console with no sheet.
     @MainActor
     func testKeepLookingLeavesTheConsoleWorking() {
         let app = launched()
@@ -89,18 +90,25 @@ final class DemoConsoleTests: XCTestCase {
         XCTAssertTrue(invite.waitForNonExistence(timeout: 10), "the sheet did not close")
 
         let terminal = app.descendants(matching: .any)["demo-terminal"]
-        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        let home = app.buttons["Back to matchblox"].firstMatch
-        XCTAssertTrue(home.waitForExistence(timeout: 10), app.debugDescription)
-        home.tap()
-        let gone = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "NOT label CONTAINS %@", "I rotate the token"), object: terminal)
-        XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: 30), .completed, "the belt did not reach the console")
+        XCTAssertTrue(terminal.label.contains("I rotate the token on each refresh"), "the closing text is not there: \(terminal.label)")
+        keep(app, "6 closing")
+
+        // The belt works with the terminal unfocused; the list is where a row can be tapped.
+        app.buttons["Back to matchblox"].firstMatch.tap()
+        expect(in: app, "NOT label CONTAINS %@", "I rotate the token")
+        waitUntilSteady(terminal)
+        tapRow(in: app, containing: "hearth-api")
+        expect(in: app, "label CONTAINS %@", "keys go to hearth-api")
         XCTAssertFalse(invite.exists, "the sheet came back")
 
+        app.buttons["Back to matchblox"].firstMatch.tap()
+        expect(in: app, "NOT label CONTAINS %@", "keys go to")
         terminal.typeText("q")
         XCTAssertTrue(app.buttons["Open again"].waitForExistence(timeout: 30), app.debugDescription)
         XCTAssertTrue(app.buttons["Pair a host"].exists)
+        XCTAssertTrue(app.buttons["Copy"].exists)
+        XCTAssertTrue(app.buttons["Send to my computer"].exists)
+        XCTAssertTrue(app.staticTexts["curl -fsSL https://matchblox.sh | sh"].exists)
         keep(app, "5 ended")
 
         app.buttons["Open again"].tap()
@@ -108,24 +116,38 @@ final class DemoConsoleTests: XCTestCase {
         XCTAssertFalse(invite.exists, "a fresh opening starts with no sheet")
     }
 
-    /// Taps by the terminal's cells, as a thumb does: the session's row, then its second option.
-    /// Returns the invite's heading, once it shows.
+    /// Taps by the terminal's cells, as a thumb does, with no keyboard taken first: the session's
+    /// row opens its chat, and the second option ends in the invite, which rises after the closing
+    /// text has been shown. Returns the invite's heading, once it shows.
     @MainActor
     private func answerTheAgent(in app: XCUIApplication) -> XCUIElement {
         expect(in: app, "label CONTAINS %@", "WAITS FOR YOU")
-        // A first tap on the terminal only takes the keyboard. The belt's key does it with no tap.
-        let show = app.buttons["Show keyboard"].firstMatch
-        XCTAssertTrue(show.waitForExistence(timeout: 10), app.debugDescription)
-        show.tap()
-        Thread.sleep(forTimeInterval: 2)
+        let terminal = app.descendants(matching: .any)["demo-terminal"]
+        waitUntilSteady(terminal)
         tapRow(in: app, containing: "flint-auth")
         expect(in: app, "label CONTAINS %@", "2. Rotate, keep")
-        // The console takes a tap only after its screen has been quiet a moment.
-        Thread.sleep(forTimeInterval: 1.5)
+        waitUntilSteady(terminal)
         tapRow(in: app, containing: "2. Rotate, keep")
         let heading = app.staticTexts["Your agents wait the same way."]
+        expect(in: app, "label CONTAINS %@", "I rotate the token on each refresh")
+        XCTAssertFalse(heading.exists, "the invite covered the closing text")
         XCTAssertTrue(heading.waitForExistence(timeout: 30), app.debugDescription)
         return heading
+    }
+
+    /// The screen and its place have stopped changing: the keyboard has come or gone and the
+    /// console's quiet has passed, so a tap goes to the row it was computed for.
+    @MainActor
+    private func waitUntilSteady(_ terminal: XCUIElement) {
+        var last = ""
+        var same = 0
+        let deadline = Date().addingTimeInterval(30)
+        while same < 4, Date() < deadline {
+            let now = "\(terminal.frame)\(terminal.label)"
+            same = now == last ? same + 1 : 0
+            last = now
+            Thread.sleep(forTimeInterval: 0.3)
+        }
     }
 
     @MainActor

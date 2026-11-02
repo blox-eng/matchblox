@@ -92,10 +92,10 @@ struct ConsoleView: View {
                 Text(Opening.endedMessage(host: host.label))
                     .foregroundStyle(Theme.muted)
                 if host.isDemo {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 24) { demoEndedActions }
+                    ScrollView {
                         VStack(alignment: .leading, spacing: 12) { demoEndedActions }
                     }
+                    .scrollBounceBehavior(.basedOnSize)
                 } else {
                     HStack(spacing: 24) {
                         openAgainButton
@@ -119,10 +119,18 @@ struct ConsoleView: View {
     /// The demo has no real host to come back to, so the way on is to pair one.
     @ViewBuilder
     private var demoEndedActions: some View {
-        openAgainButton
-        Button("Pair a host", action: onScanAgain)
-            .buttonStyle(.bordered)
-            .foregroundStyle(Theme.fg)
+        InstallLine()
+        SendToComputerButton()
+        Button { connection.retry() } label: {
+            Text("Open again").frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+        .foregroundStyle(Theme.fg)
+        Button(action: onScanAgain) {
+            Text("Pair a host").frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+        .foregroundStyle(Theme.fg)
         hostsButton
     }
 
@@ -398,6 +406,9 @@ final class ConsoleConnection {
 
     var isDemo: Bool { host.isDemo }
 
+    /// How long the agent's closing text shows before the invite rises.
+    private static let readingTime: Duration = .seconds(2)
+
     init(host: Host, open: Int?, onFailure: @escaping (ConnectFailure) -> Void) {
         self.host = host
         self.openSession = open
@@ -524,17 +535,17 @@ final class ConsoleConnection {
         }
     }
 
-    /// The person's answer ended the agent's turn. The terminal gives up the keyboard first, so the
-    /// sheet is not under it, and the belt is back in its place when the sheet closes.
+    /// The person's answer ended the agent's turn. The invite waits a moment so the closing text
+    /// is read first. The terminal then gives up the keyboard, so the sheet is not under it; the
+    /// next tap on the console takes it back.
     private func inviteWhenDone(_ session: DemoSession) async {
-        while !Task.isCancelled {
-            if session.done {
-                _ = terminal?.resignFirstResponder()
-                invite = true
-                return
-            }
+        while !Task.isCancelled, !session.done {
             try? await Task.sleep(for: .milliseconds(250))
         }
+        try? await Task.sleep(for: Self.readingTime)
+        guard !Task.isCancelled, phase == .live else { return }
+        _ = terminal?.resignFirstResponder()
+        invite = true
     }
 
     private func serveDemo(_ session: DemoSession) async -> String? {

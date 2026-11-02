@@ -24,6 +24,10 @@ final class ConsoleTerminalView: TerminalView {
     private let haptic = UIImpactFeedbackGenerator(style: .light)
     private var edge: UIScreenEdgePanGestureRecognizer?
     private var labelTap: UITapGestureRecognizer?
+    private var clickTap: UITapGestureRecognizer?
+    /// Whether the keyboard was this view's when the touch began. SwiftTerm spends a tap on an
+    /// unfocused terminal only on the keyboard and never sends it to the program.
+    private var focusedAtTouch = false
     private var wheelPan: UIPanGestureRecognizer?
     private var wheel = WheelScroll(cellHeight: 0)
     private var coast: Coast?
@@ -47,6 +51,12 @@ final class ConsoleTerminalView: TerminalView {
         }
         addGestureRecognizer(tap)
         labelTap = tap
+
+        // The first tap on an unfocused console is a click too: a session's row opens at once.
+        let click = UITapGestureRecognizer(target: self, action: #selector(clicked))
+        click.cancelsTouchesInView = false
+        addGestureRecognizer(click)
+        clickTap = click
 
         // SwiftTerm's mouse pan sends a drag, which tmux and the console do not scroll on. A
         // vertical swipe goes to this pan first; the scroll view's own pan waits for it too.
@@ -78,6 +88,7 @@ final class ConsoleTerminalView: TerminalView {
     /// A touch stops a flick, as in a scroll view.
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         stopCoast()
+        focusedAtTouch = isFirstResponder
         super.touchesBegan(touches, with: event)
     }
 
@@ -106,6 +117,9 @@ final class ConsoleTerminalView: TerminalView {
     override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
         if gesture === labelTap {
             return tapsLabel(at: gesture.location(in: self))
+        }
+        if gesture === clickTap {
+            return !focusedAtTouch && readsMouse && !tapsLabel(at: gesture.location(in: self))
         }
         if gesture === wheelPan, let pan = gesture as? UIPanGestureRecognizer {
             let velocity = pan.velocity(in: self)
@@ -175,6 +189,29 @@ final class ConsoleTerminalView: TerminalView {
         let pixelY = Int(point.y - contentOffset.y)
         for step in steps {
             let flags = terminal.encodeButton(button: step.button, release: false, shift: false, meta: false, control: false)
+            terminal.sendEvent(buttonFlags: flags, x: col, y: row, pixelX: pixelX, pixelY: pixelY)
+        }
+    }
+
+    /// The press and release at the touch's cell, then the keyboard, as SwiftTerm does for the
+    /// taps after the first.
+    @objc private func clicked(_ tap: UITapGestureRecognizer) {
+        guard tap.state == .ended else { return }
+        let point = tap.location(in: self)
+        sendClick(at: point)
+        _ = becomeFirstResponder()
+    }
+
+    private func sendClick(at point: CGPoint) {
+        let terminal = getTerminal()
+        guard readsMouse, terminal.cols > 0, terminal.rows > 0 else { return }
+        let cell = cellSize
+        let col = min(max(Int(point.x / cell.width), 0), terminal.cols - 1)
+        let row = min(max(Int(point.y / cell.height) - terminal.buffer.yDisp, 0), terminal.rows - 1)
+        let pixelX = Int(point.x)
+        let pixelY = Int(point.y - contentOffset.y)
+        for release in [false, true] where !release || terminal.mouseMode.sendButtonRelease() {
+            let flags = terminal.encodeButton(button: 0, release: release, shift: false, meta: false, control: false)
             terminal.sendEvent(buttonFlags: flags, x: col, y: row, pixelX: pixelX, pixelY: pixelY)
         }
     }
