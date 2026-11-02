@@ -188,7 +188,11 @@ func (w *World) Run(argv []string) error {
 	case len(argv) == 3 && argv[0] == "kill" && argv[1] == "-TERM":
 		return nil // the agent went with its pane
 	case len(argv) > 0 && argv[0] == "env" && slices.Contains(argv, "new-session"):
-		return w.start(argv[slices.Index(argv, "tmux"):])
+		at := slices.Index(argv, "tmux")
+		if at < 0 {
+			return errRefused
+		}
+		return w.start(argv[at:])
 	}
 	return errRefused
 }
@@ -246,8 +250,12 @@ const (
 // Claude Code process in a new pane, at work on its first message, with
 // its session file. Hold w.mu.
 func (w *World) start(argv []string) error {
-	name, dir := argv[slices.Index(argv, "-s")+1], argv[slices.Index(argv, "-c")+1]
-	agent := argv[slices.Index(argv, "-c")+2:]
+	nameAt, dirAt := slices.Index(argv, "-s"), slices.Index(argv, "-c")
+	if nameAt < 0 || dirAt < 0 || nameAt+1 >= len(argv) || dirAt+2 >= len(argv) {
+		return errRefused
+	}
+	name, dir := argv[nameAt+1], argv[dirAt+1]
+	agent := argv[dirAt+2:]
 	// The real process inherits the launch context through env. Keep that
 	// wrapper out of cmdline, as /proc does after env execs the agent.
 	contextEnv := ""

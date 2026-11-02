@@ -137,3 +137,17 @@ func TestAWorldAnswersWhatItCannotTake(t *testing.T) {
 		t.Error("Finish of a pane with no session passed")
 	}
 }
+
+func TestAStartMissingATokenIsRefusedNotPanicked(t *testing.T) {
+	w := newTestWorld(t, func(int) {})
+	for _, argv := range [][]string{
+		{"env", "new-session"},
+		{"env", "tmux", "new-session", "-d", "-c", "/tmp", "claude"},
+		{"env", "tmux", "new-session", "-d", "-s", "x", "claude"},
+		{"env", "tmux", "new-session", "-d", "-s", "x", "-c"},
+	} {
+		if err := w.Run(argv); err == nil || err.Error() != Refusal {
+			t.Errorf("%v: got %v, want the refusal line", argv, err)
+		}
+	}
+}
