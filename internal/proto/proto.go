@@ -124,17 +124,9 @@ type Act struct {
 }
 
 // WatchPrefix starts an act that names the pane a console watches; with no
-// pane after it, the console watches none. Text "up:<n>" (n 0 to MaxUp)
-// asks for the lines n lines up from the pane's bottom; 0 or none is the
-// live screen.
+// pane after it, the console watches none. An older console's Text "up:<n>"
+// is ignored: the screen is always the live one.
 const WatchPrefix = "watch:"
-
-// UpPrefix starts the text of a watch act that scrolls up; MaxUp is the
-// most lines it goes up.
-const (
-	UpPrefix = "up:"
-	MaxUp    = 2000
-)
 
 // KeysPrefix starts an act that sends one key to the pane after it. Text is
 // a key name of KeyNames, or LitPrefix and the text to type.
@@ -153,21 +145,26 @@ const (
 )
 
 // KeyNames are the tmux keys a keys: act may press by name.
-var KeyNames = []string{"Up", "Down", "Left", "Right", "Enter", "Tab", "BTab", "Escape", "C-c", "C-a", "BSpace"}
+var KeyNames = []string{"Up", "Down", "Left", "Right", "Enter", "Tab", "BTab", "Escape", "C-c", "C-a", "BSpace", "PPage", "NPage"}
+
+// WheelUp and WheelDown are the text of a keys: act that turns the mouse
+// wheel in the pane. The agent scrolls itself: the console is a window on
+// the pane and keeps no history of its own.
+const (
+	WheelUp   = "WheelUp"
+	WheelDown = "WheelDown"
+)
 
 // PickPrefix starts an act that answers the question tool in the pane
 // after it; its text is the said.Answer.
 const PickPrefix = "pick:"
 
 // Screen is one capture of the watched pane. Gone: the pane is not there.
-// Up: the screen ends this many lines above the pane's bottom, as far as
-// the history goes; it is not the live screen.
 type Screen struct {
 	Pane string    `json:"pane"`
 	At   time.Time `json:"at"`
 	Text string    `json:"text"`
 	Gone bool      `json:"gone,omitempty"`
-	Up   int       `json:"up,omitempty"`
 	// Err says the pane could not be read this time; the session is still
 	// there, and Text is empty.
 	Err string `json:"err,omitempty"`

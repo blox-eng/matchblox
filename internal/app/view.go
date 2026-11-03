@@ -141,7 +141,7 @@ type drawn struct {
 	actKeys   []span
 	// chatFull: the chat is the whole screen, and a tap on its title row
 	// goes back to Sessions. chatRows: the lines of the agent's screen the
-	// chat shows, one page of its history.
+	// chat shows.
 	chatFull bool
 	// chatAt, chatX, chatW: the first row of the agent's screen in the chat,
 	// the chat's first column for a tap, and the screen's width; chatW 0: no chat.
@@ -250,7 +250,7 @@ func (m Model) drawScreen(w int) drawn {
 		vis, sc.full = m.leftColumn(b, listW, room)
 	}
 	edge := m.st.hair
-	if chatting && m.chatKeys && !m.notLive() {
+	if chatting && m.chatKeys {
 		edge = m.st.accent
 	}
 	for i := range room {

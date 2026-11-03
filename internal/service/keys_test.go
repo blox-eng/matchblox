@@ -199,6 +199,22 @@ func TestAKeyFromTheConsoleFreesADrivenPane(t *testing.T) {
 	}
 }
 
+// Scrolling only looks: it leaves a driven pane's merge guard on. A person who
+// reads the agent's history has not taken the pane from the stoker.
+func TestAScrollLeavesTheMergeGuardOn(t *testing.T) {
+	for _, text := range []string{proto.WheelUp, proto.WheelDown, "PPage", "NPage"} {
+		s, _, _ := guardedRun(t)
+		s.cur.Sessions[0].PID = 42
+		s.PaneMouse = func(string) (int, int, bool) { return 80, 24, true }
+		if res := s.act(t.Context(), key(text)); res.Err != "" {
+			t.Fatalf("%s: %s", text, res.Err)
+		}
+		if !denies(t, s, "%1", "gh pr merge 4556") {
+			t.Fatalf("%s freed the driven pane", text)
+		}
+	}
+}
+
 func TestAKeyKicksTheWatchingConsole(t *testing.T) {
 	s, _ := keysTest(t)
 	cl := console(s)
@@ -245,6 +261,51 @@ func TestARefusedKeyReadsNoScreenAgain(t *testing.T) {
 	case <-cl.screenKick:
 		t.Fatal("a refused key kicked a read")
 	case <-time.After(watchEvery):
+	}
+}
+
+// The chat is a window on the pane: the wheel goes to the agent, in the middle
+// of its window, and the agent scrolls itself (#288).
+func TestTheWheelGoesToTheAgent(t *testing.T) {
+	s, ran := keysTest(t)
+	s.PaneMouse = func(string) (int, int, bool) { return 80, 24, true }
+	if res := s.act(t.Context(), key(proto.WheelUp)); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if res := s.act(t.Context(), key(proto.WheelDown)); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	want := [][]string{panes.Wheel("%1", true, 40, 12), panes.Wheel("%1", false, 40, 12)}
+	if !reflect.DeepEqual(*ran, want) {
+		t.Fatalf("ran %v, want %v", *ran, want)
+	}
+}
+
+func TestTheWheelSaysWhatToDoWhenTheAgentTakesNoMouse(t *testing.T) {
+	s, ran := keysTest(t)
+	s.PaneMouse = func(string) (int, int, bool) { return 0, 0, false }
+	res := s.act(t.Context(), key(proto.WheelUp))
+	if res.Err != "not scrolled: flint does not read the mouse — open its pane to scroll it" || len(*ran) != 0 {
+		t.Fatalf("result %+v, ran %v", res, *ran)
+	}
+}
+
+func TestPageKeysGoToTheAgent(t *testing.T) {
+	s, ran := keysTest(t)
+	if res := s.act(t.Context(), key("PPage")); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if want := [][]string{panes.Keys("%1", "PPage")}; !reflect.DeepEqual(*ran, want) {
+		t.Fatalf("ran %v, want %v", *ran, want)
+	}
+}
+
+// The wheel answers no menu, so it needs no screen the console has shown.
+func TestTheWheelAtAMenuNeedsNoSeenScreen(t *testing.T) {
+	s, ran := holdsTest(t, sample.Session{PID: 42, Pane: "%1", Name: "flint", SessionID: "s1", Status: "idle", Permits: true})
+	s.PaneMouse = func(string) (int, int, bool) { return 80, 24, true }
+	if res := s.act(t.Context(), key(proto.WheelDown)); res.Err != "" || len(*ran) != 1 {
+		t.Fatalf("result %+v, ran %v", res, *ran)
 	}
 }
 
