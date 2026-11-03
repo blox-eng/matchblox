@@ -168,11 +168,31 @@ final class DemoConsoleTests: XCTestCase {
         expect(in: app, step: "the chat after the first tap on flint-auth", "label CONTAINS %@", "keys go to flint-auth")
         dismissKeyboardTip(in: app)
         XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "the first tap did not raise the keyboard. " + app.debugDescription)
-        // A second click would have landed on the chat's question.
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertEqual(terminal.value as? String, "press=1 release=1", "the first tap did not click exactly once")
         waitUntilSteady(terminal)
         XCTAssertFalse(terminal.label.contains("I rotate the token on each refresh"), "the tap clicked through to the answer: \(terminal.label)")
-        XCTAssertTrue(terminal.label.contains("keys go to flint-auth"), terminal.label)
         keep(app, "9 real host tap")
+    }
+
+    /// Two quick taps in different places are two clicks at most, each at its own place.
+    @MainActor
+    func testTwoQuickTapsOnARealHostClickTwiceAtMost() {
+        let app = launched(extra: ["-demoTapRaisesKeyboard"])
+        expect(in: app, "label CONTAINS %@", "WAITS FOR YOU")
+        let terminal = app.descendants(matching: .any)["demo-terminal"]
+        waitUntilSteady(terminal)
+        let rows = terminal.label.components(separatedBy: "\n")
+        guard let row = rows.firstIndex(where: { $0.contains("flint-auth") }) else {
+            return XCTFail("no row shows flint-auth: \(terminal.label)")
+        }
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: (Double(row) + 0.5) / Double(rows.count))).tap()
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.3)).tap()
+        dismissKeyboardTip(in: app)
+        Thread.sleep(forTimeInterval: 2)
+        let counts = terminal.value as? String ?? ""
+        let presses = Int(counts.components(separatedBy: " ").first?.dropFirst("press=".count) ?? "") ?? -1
+        XCTAssertTrue((1...2).contains(presses), "two taps made \(counts)")
     }
 
     /// Taps by the terminal's cells, as a thumb does, with no keyboard taken first: the session's
