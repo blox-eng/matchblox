@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-11-03
+
 ### Changed
 
 - **The chat is a window on the agent's pane.** The wheel, a swipe, `PgUp` and
@@ -1168,7 +1170,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.30.1...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.31.0...HEAD
+[0.31.0]: https://github.com/blox-eng/matchblox/compare/v0.30.1...v0.31.0
 [0.30.1]: https://github.com/blox-eng/matchblox/compare/v0.30.0...v0.30.1
 [0.30.0]: https://github.com/blox-eng/matchblox/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/blox-eng/matchblox/compare/v0.28.0...v0.29.0
