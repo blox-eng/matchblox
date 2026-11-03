@@ -106,8 +106,10 @@ app's terminal view, and the size and memory inside the app.
 2. **The throwaway code.** A phone cannot scan its own screen. So the scan view
    shows a QR code inside the viewfinder, labelled `demo`. It finds the code by
    itself and confirms like a real pair, in under three seconds. A tap skips it.
-   The camera does not turn on, and no permission is asked. The result is a host
-   called `demo`.
+   The demo's own scan turns on no camera and asks for no permission. The
+   pairing screen itself asks for the camera first on a fresh install, and
+   `Try a demo` works whether the person allows or denies it. The result is a
+   host called `demo`.
 3. **The host.** `demo` is a host like any other: it has a row in the host list,
    swipe removes it, and with no other host the app opens straight into it. Each
    time it opens, it starts fresh.

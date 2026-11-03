@@ -129,6 +129,12 @@ device before a release. `ws-1` is the host.
 16. Select a session in tmux and tap `A switch` under it. Switch agent
     opens; tap another agent, then `Enter`, then type `y`. The console
     jumps to the pane, where the new agent starts.
+16a. On a host with a question waiting, open the chat of that session. Turn
+     the phone to landscape, then back. The chat reopens at the question.
+16b. On a real host, tap a row of the session list once. The row opens, the
+     tap clicks it once and the next screen is not clicked through. The
+     keyboard rises on that tap. Tap two rows in quick succession: each row
+     gets one click.
 
 ### The demo
 
@@ -157,9 +163,6 @@ and again with two hosts.
 7. Open a host you paired. Its console, the Island and the host list are the
    same as before the demo.
 8. Pair a real host. The host `demo` is gone.
-9. On a real host, tap a row of the session list once. The row opens, the tap
-   clicks it once and the next screen is not clicked through. The keyboard
-   rises on that tap.
 
 ### The buzz and the island
 
