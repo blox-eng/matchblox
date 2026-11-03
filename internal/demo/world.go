@@ -465,20 +465,20 @@ func (w *World) appendTranscript(s *session, lines ...map[string]any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // a session the demo started has none yet
 		return err
 	}
+	var buf []byte
+	for _, l := range lines {
+		b, err := json.Marshal(l)
+		if err != nil {
+			return err
+		}
+		buf = append(append(buf, b...), '\n')
+	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
-	for _, l := range lines {
-		b, err := json.Marshal(l)
-		if err != nil {
-			f.Close()
-			return err
-		}
-		if _, err := f.Write(append(b, '\n')); err != nil {
-			f.Close()
-			return err
-		}
+	if _, err := f.Write(buf); err != nil {
+		return errors.Join(err, f.Close())
 	}
 	return f.Close()
 }
