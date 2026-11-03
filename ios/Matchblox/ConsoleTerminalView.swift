@@ -97,20 +97,12 @@ final class ConsoleTerminalView: TerminalView {
 
     override func becomeFirstResponder() -> Bool {
         let became = super.becomeFirstResponder()
-        #if DEBUG
-        trace += "[become\(became)]"
-        accessibilityValue = trace
-        #endif
         if became { onFocus(true) }
         return became
     }
 
     override func resignFirstResponder() -> Bool {
         let resigned = super.resignFirstResponder()
-        #if DEBUG
-        trace += "[resign\(resigned)]"
-        accessibilityValue = trace
-        #endif
         if resigned { onFocus(false) }
         return resigned
     }
@@ -125,30 +117,19 @@ final class ConsoleTerminalView: TerminalView {
         return (super.keyCommands ?? []) + home
     }
 
-    #if DEBUG
-    var trace = ""
-    #endif
-
     override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
-        let begins = shouldBegin(gesture)
-        #if DEBUG
-        let taps = (gesture as? UITapGestureRecognizer)?.numberOfTapsRequired ?? 0
-        let who = gesture === clickTap ? "click" : gesture === labelTap ? "label" : gesture === wheelPan ? "wheel" : "other"
-        trace += "[\(who)\(taps)\(begins ? "+" : "-")]"
-        accessibilityValue = trace
-        #endif
-        return begins
-    }
-
-    private func shouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
         if gesture === labelTap {
             return tapsLabel(at: gesture.location(in: self))
         }
         if gesture === clickTap {
-            return (!focusedAtTouch || !tapRaisesKeyboard) && readsMouse && !tapsLabel(at: gesture.location(in: self))
+            let first = !focusedAtTouch
+            let clicks = readsMouse && (first || !tapRaisesKeyboard)
+            return (clicks || (first && tapRaisesKeyboard)) && !tapsLabel(at: gesture.location(in: self))
         }
-        // SwiftTerm's single tap would take the keyboard. Its later taps and gestures stay.
-        if !tapRaisesKeyboard, let tap = gesture as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1, gesture !== labelTap {
+        // The click answers a first tap, and takes the keyboard on it. SwiftTerm's single tap would
+        // click a second time, on whatever the first click opened. On the demo, no tap takes the
+        // keyboard. Its later taps and gestures stay.
+        if let tap = gesture as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1, gesture !== clickTap, !tapRaisesKeyboard || !focusedAtTouch {
             return false
         }
         if gesture === wheelPan, let pan = gesture as? UIPanGestureRecognizer {
@@ -223,16 +204,11 @@ final class ConsoleTerminalView: TerminalView {
         }
     }
 
-    /// The press and release at the touch's cell. The keyboard is not taken here: SwiftTerm's own
-    /// single tap finds the terminal unfocused and takes it, so one click goes out. Were this to
-    /// take it first, that tap would click a second time, on whatever the first click opened.
+    /// The press and release at the touch's cell, then the keyboard on a first tap.
     @objc private func clicked(_ tap: UITapGestureRecognizer) {
-        #if DEBUG
-        trace += "[clicked\(tap.state.rawValue)]"
-        accessibilityValue = trace
-        #endif
         guard tap.state == .ended else { return }
         sendClick(at: tap.location(in: self))
+        if tapRaisesKeyboard, !focusedAtTouch { _ = becomeFirstResponder() }
     }
 
     private func sendClick(at point: CGPoint) {
