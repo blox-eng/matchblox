@@ -63,7 +63,7 @@ final class ConsoleTerminalView: TerminalView {
         // touch comes in that window.
         for other in gestureRecognizers ?? [] {
             if let tap = other as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1 {
-                tap.require(toFail: click)
+                _ = tap
             }
         }
         addGestureRecognizer(click)
