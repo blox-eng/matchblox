@@ -2,9 +2,6 @@ package service
 
 import (
 	"context"
-	"strconv"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -26,35 +23,18 @@ func (s *Service) aConsole(console bool, a proto.Act) bool {
 	return console && !inAgent && !s.agentsPane(a) && !s.fromStoker(a)
 }
 
-// watched is the pane a console streams, and how many lines up from its
-// bottom: 0 is the live screen.
-type watched struct {
-	pane string
-	up   int
-}
-
-// upOf is the offset of a watch act's text: "" or "up:<n>".
-func upOf(text string) (int, bool) {
-	if text == "" {
-		return 0, true
-	}
-	n, err := strconv.Atoi(strings.TrimPrefix(text, proto.UpPrefix))
-	return n, err == nil && strings.HasPrefix(text, proto.UpPrefix) && n >= 0 && n <= proto.MaxUp
-}
+// watched is the pane a console streams.
+type watched struct{ pane string }
 
 // watchAct sets the pane cl streams; an empty pane stops the stream.
 func (s *Service) watchAct(cl *client, clientKind string, a proto.Act, pane string) proto.Result {
 	if !s.aConsole(clientKind == proto.ClientConsole, a) {
 		return proto.Result{Err: keysOnlyFromConsole}
 	}
-	up, ok := upOf(a.Text)
-	if !ok {
-		return proto.Result{Err: "not watched: " + strconv.Quote(cut(a.Text, 20)) + " is not up:0 to up:" + strconv.Itoa(proto.MaxUp)}
-	}
 	if _, ok := s.sessionAt(pane); pane != "" && !ok {
 		return proto.Result{Err: "no agent session in " + pane + " any more"}
 	}
-	cl.watch.Store(&watched{pane: pane, up: up})
+	cl.watch.Store(&watched{pane: pane})
 	s.watchSize(cl, pane, a)
 	select {
 	case cl.screenKick <- struct{}{}:
@@ -64,13 +44,10 @@ func (s *Service) watchAct(cl *client, clientKind string, a proto.Act, pane stri
 }
 
 // watchLoop sends cl the screen of its watched pane when the text changes,
-// once when the pane is gone, and once for each watch act: a pane with no
-// history answers a watch up with its live screen, and the console waits
-// for one to come back to live. A wait that the last screen does not show
-// sends it again, newer, once the wait has settled: the console's Enter
-// answers the screen it saw, and a still prompt is still the one the
-// builder sees. A watch up the history sends those lines, and no Enter
-// answers them.
+// once when the pane is gone, and once for each watch act. A wait that the
+// last screen does not show sends it again, newer, once the wait has
+// settled: the console's Enter answers the screen it saw, and a still prompt
+// is still the one the builder sees.
 func (s *Service) watchLoop(ctx context.Context, cl *client) {
 	tick := time.NewTicker(watchEvery)
 	defer tick.Stop()
@@ -94,14 +71,11 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 		}
 		pane := w.pane
 		// Stamped before the capture: a wait that begins during it is newer.
-		scr := proto.Screen{Pane: pane, At: s.upScreens.stamp(pane, s.now, w.up > 0)}
+		scr := proto.Screen{Pane: pane, At: s.now()}
 		var text string
 		read := false
 		_, live := s.sessionAt(pane)
-		switch {
-		case live && w.up > 0:
-			text, scr.Up, read = s.CaptureUp(pane, w.up)
-		case live:
+		if live {
 			cols, rows, gen := s.sizes.paneSize(pane)
 			text, read = s.Capture([]string{pane})[pane]
 			if _, _, after := s.sizes.paneSize(pane); after == gen { // not sized while it was read
@@ -110,12 +84,9 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 		}
 		scr.Text, scr.Gone = text, !live // only a pane with no session in it any more is gone
 		if live && !read {
-			scr.Up, scr.Err = 0, "could not read "+pane+": tmux did not answer"
+			scr.Err = "could not read " + pane + ": tmux did not answer"
 		}
-		if scr.Gone {
-			scr.Up = 0
-		}
-		if sent && pane == last.Pane && text == last.Text && scr.Gone == last.Gone && scr.Err == last.Err && scr.Up == last.Up && scr.Cols == last.Cols && scr.Rows == last.Rows && (s.waitShown(pane, last.At) || !s.waitShown(pane, scr.At)) {
+		if sent && pane == last.Pane && text == last.Text && scr.Gone == last.Gone && scr.Err == last.Err && scr.Cols == last.Cols && scr.Rows == last.Rows && (s.waitShown(pane, last.At) || !s.waitShown(pane, scr.At)) {
 			continue
 		}
 		sent, last = true, scr
@@ -145,60 +116,4 @@ func (s *Service) kickScreens(pane string) {
 			}
 		}
 	}
-}
-
-// upScreens are, for each pane, the latest run of screens of the history:
-// those taken after the last live screen before them. It is one span of
-// times, so it never grows; an older run is forgotten, and the queued
-// question's Since stays the backstop for an Enter seen on one.
-type upScreens struct {
-	mu sync.Mutex
-	at map[string]upSpan
-}
-
-// upSpan: the screens taken after from, up to to, were of the history;
-// live is the last live screen taken.
-type upSpan struct{ from, to, live time.Time }
-
-// stamp is the time of a screen of pane taken now, of the history when up.
-// It is taken and noted under one lock, and the stamps of a pane rise, so a
-// live screen of one console is never inside another console's run of the
-// history.
-func (u *upScreens) stamp(pane string, now func() time.Time, up bool) time.Time {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	if u.at == nil {
-		u.at = map[string]upSpan{}
-	}
-	sp := u.at[pane]
-	at := now()
-	if last := maxTime(sp.to, sp.live); !at.After(last) {
-		at = last.Add(time.Nanosecond)
-	}
-	switch {
-	case !up:
-		sp.live = at
-	case sp.to.IsZero() || sp.live.After(sp.to): // the first of a new run
-		sp.from, sp.to = sp.live, at
-	default:
-		sp.to = at
-	}
-	u.at[pane] = sp
-	return at
-}
-
-func maxTime(a, b time.Time) time.Time {
-	if a.After(b) {
-		return a
-	}
-	return b
-}
-
-// has tells if the screen of pane taken at at was one of the latest run of
-// the history.
-func (u *upScreens) has(pane string, at time.Time) bool {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	sp, ok := u.at[pane]
-	return ok && !sp.to.IsZero() && at.After(sp.from) && !at.After(sp.to)
 }

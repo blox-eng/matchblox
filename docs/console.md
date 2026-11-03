@@ -357,7 +357,7 @@ Code: `^C held: one went 0.6 s ago, ^C again stops the agent`, or `^C held:
 one waits to go, ^C again stops the agent`. A third goes.
 
 When Claude Code asks with its question tool or for a permission, the chat
-shows its own menu, once, live and up the history. Its keys go to it as they
+shows its own menu, once. Its keys go to it as they
 are: `↑` `↓` move, `Space` ticks an option of a question with several
 choices, a digit picks, `Enter` answers and typing fills its text row. The
 agent draws the menu at the chat's size. A window of several panes, or a chat
@@ -413,18 +413,11 @@ sees the window shrink to the chat's size while the chat watches it.
   the first screen before the window takes the size.
 - The window is never sized under 20 × 5 or over what tmux allows.
 
-The mouse wheel over the chat, or a swipe on a phone, shows the earlier
-lines of the agent's pane, 3 lines for each step, up to 2000 lines. The
-wheel down goes back toward the live screen. While the chat shows the
-history, its title adds `↑ <n> lines up`, its frame is dim and the key
-line says `a key goes back to live`. The first
-key then goes back to the live screen and goes to no agent: a key or a
-paste. The key line says `back to live — the agent did not
-get that key`. The chat is blank until the live screen comes, and keys go
-nowhere until then. The history above the live screen was drawn at the
-window's earlier size, so the chat wraps it to its width. A tap on the title also goes back to the live screen, and so
-does a change of the selected session or a click on the list. The service
-refuses an `Enter` that answers a screen of the history.
+The chat is a window on the agent's pane, and keeps no history of its own.
+The mouse wheel over the chat, a swipe on a phone, `PgUp` and `PgDn` go to the
+agent, and the agent scrolls itself, as it does in tmux. An agent that does not
+read the mouse says `not scrolled: <name> does not read the mouse — open its
+pane to scroll it`: `ctrl+o` opens the pane.
 
 `PgUp` and `PgDn` move one screen of the chat up and down the history.
 They do not go back to the live screen.

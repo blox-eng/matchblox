@@ -4,7 +4,6 @@ import (
 	"io"
 	"reflect"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -401,11 +400,6 @@ func TestTheWayBackNamesThePrefix(t *testing.T) {
 		if got := ansi.Strip(line); !strings.Contains(got, " · "+want+" back · ") {
 			t.Errorf("prefix %q: the key line is %q, want %q back", prefix, got, want)
 		}
-		m.up = 3
-		line, _ = m.chatKeyLine(100)
-		if got := ansi.Strip(line); !strings.Contains(got, want+" back") {
-			t.Errorf("prefix %q up the history: the key line is %q", prefix, got)
-		}
 	}
 	m, _ := inChat(t)
 	if line, _ := m.chatKeyLine(100); !strings.Contains(ansi.Strip(line), "ctrl+a m back") {
@@ -428,10 +422,6 @@ func TestARenamedConsoleOffersTheTap(t *testing.T) {
 	next, _ := tap(m, strings.Index(got, "tap back")+1, m.draw(100).keysAt)
 	if next.(Model).chatKeys || len(keyActs(f)) != 0 {
 		t.Fatalf("chatKeys=%v acts=%+v", next.(Model).chatKeys, keyActs(f))
-	}
-	m.up = 3
-	if line, _ := m.chatKeyLine(100); !strings.Contains(ansi.Strip(line), "tap back") {
-		t.Fatalf("up the history the key line is %q", ansi.Strip(line))
 	}
 }
 
@@ -1559,50 +1549,6 @@ func TestAgentSignalOutsideTmuxIsNotWrapped(t *testing.T) {
 	}
 }
 
-// lastUp is the lines up the last watch the console sent asks for.
-func lastUp(t *testing.T, f *fakeConn) string {
-	t.Helper()
-	acts := f.allActs()
-	for i := len(acts) - 1; i >= 0; i-- {
-		if strings.HasPrefix(acts[i].RecID, proto.WatchPrefix) {
-			if acts[i].RecID != proto.WatchPrefix+"%1" {
-				t.Fatalf("watch %q", acts[i].RecID)
-			}
-			return acts[i].Text
-		}
-	}
-	t.Fatal("no watch sent")
-	return ""
-}
-
-func TestPageUpScrollsTheHistory(t *testing.T) {
-	m, f := commandChat(t, "claude")
-	page := m.draw(m.width).chatRows
-	if page <= chatStep {
-		t.Fatalf("the chat shows %d rows", page)
-	}
-	m = pressKeys(t, m, "pgup")
-	if got, want := lastUp(t, f), proto.UpPrefix+strconv.Itoa(page); got != want || !m.chatKeys {
-		t.Fatalf("pgup asked %q, want %q (keys %v)", got, want, m.chatKeys)
-	}
-	m = pressKeys(t, m, "pgup")
-	if got := lastUp(t, f); got != proto.UpPrefix+strconv.Itoa(2*page) {
-		t.Fatalf("second pgup asked %q", got)
-	}
-	m = pressKeys(t, m, "pgdown")
-	if got := lastUp(t, f); got != proto.UpPrefix+strconv.Itoa(page) {
-		t.Fatalf("pgdown asked %q", got)
-	}
-	m = pressKeys(t, m, "x") // any other key goes back to live and types nothing
-	if m.up != 0 || len(keyActs(f)) != 0 {
-		t.Fatalf("up %d, keys %+v", m.up, keyActs(f))
-	}
-	m = pressKeys(t, m, "pgup", "pgdown")
-	if got := lastUp(t, f); got != proto.UpPrefix+"0" || m.up != 0 {
-		t.Fatalf("pgdown to live asked %q", got)
-	}
-}
-
 func TestOldTmuxSaysCommandsNeedIt(t *testing.T) {
 	m := agentChat(t, "claude", "codex")
 	m.opt.LocalTmux = "3.2a"
@@ -1943,17 +1889,5 @@ func TestAMenuDrawnBesideTheListIsNotQuietAgain(t *testing.T) {
 	pressKeys(t, m, "enter", "1")
 	if got := keyActs(f); len(got) != 1 || got[0].Text != "lit:1" {
 		t.Fatalf("keys %+v", got)
-	}
-}
-
-// Up the history, the chat draws what the pane drew, the agent's own menu
-// with it: a key there only goes back to live.
-func TestHistoryKeepsTheAgentsMenu(t *testing.T) {
-	m, _ := askModel(t, 44, threeWays)
-	m.up, m.watchUp = 6, 6 // scrolled up: a history frame is kept
-	next, _ := m.Update(screenMsg{Pane: "%1", At: time.Unix(200, 0), Up: 6, Text: askScreen})
-	m = next.(Model)
-	if out := ansi.Strip(strings.Join(m.chatLines(44, 29), "\n")); !strings.Contains(out, "❯ 1. Rotate it") || !strings.Contains(out, "refresh endpoint") {
-		t.Fatalf("the history lost the agent's menu or its work:\n%s", out)
 	}
 }

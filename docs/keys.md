@@ -125,10 +125,9 @@ is the console's own host's: another host's row is list only.
 | `ctrl+a m` | Gives the keys back to Sessions: your tmux prefix, then `m`. A click on the left or on the hint does it too. On a narrow screen, it goes back to Sessions. Outside tmux, or where tmux does not take `ctrl+a`, the chat takes it itself: `ctrl+a` goes to the agent at once (at a shell or in Claude Code, the cursor moves to the start of the line), and `m` within 1 s gives the keys back and does not reach the agent. Any other key goes to the agent. |
 | `Ctrl+O` | Goes to the selected agent's pane in tmux. It works on Sessions too. |
 | `Ctrl+C` | Sends `^C` to the agent. A second one within 1 s is held. See below. |
-| `PgUp`, `PgDn` | Moves the chat one screen up or down the agent's history. See below. |
 
 In the chat, every other key goes to the agent: `↑ ↓ ← →`, `Enter`, `Tab`,
-`Shift+Tab`, `Esc`, `Backspace` and the letters. `Esc` goes to the agent
+`Shift+Tab`, `Esc`, `Backspace`, `PgUp`, `PgDn` and the letters. `Esc` goes to the agent
 too. There it cancels a question, closes a menu or stops a turn. The keys
 go in the order you press them, one at a time. A paste goes as text. Each
 newline (CR, LF or CRLF) goes as `Enter`, so a paste with a line break is
@@ -149,22 +148,19 @@ A third `^C` goes to the agent.
 
 If the pane is gone, the chat says `That session ended.`
 
-### The agent's history
+### Scrolling
 
-The mouse wheel over the chat shows the earlier lines of the agent's pane.
-On a phone, a swipe over the chat does the same. Each step of the wheel
-moves 3 lines, up to 2000 lines. The wheel down goes back toward the live
-screen. `PgUp` and `PgDn` move one screen of the chat up and down. While the chat shows the history, its title adds `↑ <n> lines up`
-and its frame is dim, not in the accent. The key line says `a key goes
-back to live`.
+The chat is a window on the agent's pane. The mouse wheel over the chat goes
+to the agent, and the agent scrolls itself, as it does in tmux. On a phone, a
+swipe over the chat does the same. `PgUp` and `PgDn` also go to the agent.
 
-While the chat shows the history, the first key other than `PgUp` and
-`PgDn` goes back to the live screen and goes to no agent. This is true for every key and a paste. The key line says `back to live — the agent did not
-get that key`. The chat is blank until the live screen comes. Then press
-the key again to send it. A tap on the chat's title
-also goes back to the live screen. The chat also goes back to the live
-screen when you select a different session or give the keys back to
-Sessions.
+An agent that does not read the mouse does not scroll in the chat. The key line
+says `not scrolled: <name> does not read the mouse — open its pane to scroll
+it`. Press `Ctrl+O` to open the pane.
+
+Scrolling only looks. It leaves the stoker's merge guard on a driven pane. While
+the stoker is in charge the wheel sends nothing, and the key line says `not
+scrolled: the stoker is in charge — press a key in the chat to take over`.
 
 At night, the first key of a run that sends something to an agent asks
 "Take over?". `y` rests the stoker while you work, and `n` keeps it on.
@@ -249,8 +245,7 @@ On the chips:
 ## A phone
 
 A tap selects a row. A swipe over the list moves the selection. A swipe
-over the chat shows the agent's history (see
-[The agent's history](#the-agents-history)). On a narrow screen, a tap on
+over the chat scrolls the agent (see [Scrolling](#scrolling)). On a narrow screen, a tap on
 an agent opens its chat over the whole screen. Where the chat sits beside the list, a tap on the
 selected agent, or on the chat, gives the chat the keys. Once it has them, a tap on an option
 of an agent's menu picks it (see [An agent's menu](#an-agents-menu)), and a tap
@@ -279,6 +274,6 @@ the app shows the commands of that agent. Inside tmux 3.2 or older the
 console cannot tell the app. The key line then says `COMMANDS · needs tmux
 3.3` once.
 
-The app's `⇞` and `⇟` keys send `PgUp` and `PgDn`. In the chat they move
-the agent's history. In a pane you jumped to on a host, `PgUp` starts tmux
+The app's `⇞` and `⇟` keys send `PgUp` and `PgDn`. In the chat they go
+to the agent. In a pane you jumped to on a host, `PgUp` starts tmux
 copy mode one page up, and `PgDn` moves one page down in it.

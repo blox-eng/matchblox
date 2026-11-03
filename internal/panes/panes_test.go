@@ -2,6 +2,8 @@ package panes
 
 import (
 	"reflect"
+	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/blox-eng/matchblox/internal/said"
@@ -93,6 +95,27 @@ func TestPickDrivesTheQuestionMenu(t *testing.T) {
 		}
 		if !reflect.DeepEqual(pages, c.pages) {
 			t.Errorf("%s: pages %v, want %v", c.name, pages, c.pages)
+		}
+	}
+}
+
+func TestWheelSendsTheSGRBytes(t *testing.T) {
+	for up, seq := range map[bool]string{true: "\x1b[<64;40;12M", false: "\x1b[<65;40;12M"} {
+		argv := Wheel("%1", up, 40, 12)
+		if i := slices.Index(argv, "-H"); i < 0 {
+			t.Fatalf("argv %q", argv)
+		} else {
+			var got []byte
+			for _, h := range argv[i+1:] {
+				n, err := strconv.ParseUint(h, 16, 8)
+				if err != nil {
+					t.Fatalf("argv %q: %v", argv, err)
+				}
+				got = append(got, byte(n))
+			}
+			if string(got) != seq {
+				t.Fatalf("up %v: %q, want %q", up, got, seq)
+			}
 		}
 	}
 }

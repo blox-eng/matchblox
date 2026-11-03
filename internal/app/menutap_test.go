@@ -262,19 +262,6 @@ func TestEveryChatHintIsTappable(t *testing.T) {
 				}
 			}
 		}
-		m, _ := menuChat(t, w, 31, askScreen)
-		m = wheelChat(t, m, true, 1)
-		next, _ := m.Update(screenMsg{Pane: "%1", At: m.now(), Text: historyScreen, Up: 3})
-		m = next.(Model)
-		sc := m.draw(w)
-		line := ansi.Strip(sc.lines[sc.keysAt])
-		at := strings.Index(line, "ctrl+a m back")
-		if at < 0 {
-			t.Fatalf("%d up: no back in %q", w, line)
-		}
-		if got := tapped(t, m, ansi.StringWidth(line[:at])+1, sc.keysAt); got.chatKeys {
-			t.Errorf("%d up: a tap on back kept the keys", w)
-		}
 	}
 }
 

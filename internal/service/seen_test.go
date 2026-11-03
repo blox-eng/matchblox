@@ -71,19 +71,6 @@ func TestTypingAfterATurnEndsStillGoes(t *testing.T) {
 	}
 }
 
-// TestADigitOnAPermissionMenuOfTheHistory: the pane shows the approval
-// menu, and a screen of the history does not: no answering key goes for it.
-func TestADigitOnAPermissionMenuOfTheHistory(t *testing.T) {
-	s, ran := keysTest(t)
-	s.cur.Sessions[0].Permits = true
-	at := s.upScreens.stamp("%1", s.now, true)
-	a := key("lit:1")
-	a.Seen = at
-	if res := s.act(t.Context(), a); res.Err == "" || len(*ran) != 0 {
-		t.Fatalf("res %+v ran %q", res, *ran)
-	}
-}
-
 // TestAWaitIsSeenOnlyAfterItSettles: the hook says a wait began before the
 // agent draws its menu, so a screen taken just after Since may still be the
 // one before it. A key answers the wait only from a screen taken a settle

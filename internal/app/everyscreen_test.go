@@ -169,26 +169,6 @@ func TestTheChatKeyLineKeepsTheWayBack(t *testing.T) {
 	}
 }
 
-// TestTheQuestionShowsOnceUpTheHistory: up the agent's history there is no
-// second drawing of the question: only what the pane drew.
-func TestTheQuestionShowsOnceUpTheHistory(t *testing.T) {
-	for _, size := range [][2]int{{44, 31}, {200, 50}} {
-		w, h := size[0], size[1]
-		var next tea.Model = flintAt(t, w, h, "enter")
-		for range 2 {
-			next, _ = next.Update(tea.MouseWheelMsg{X: w - 2, Y: h / 2, Button: tea.MouseWheelUp})
-		}
-		next, _ = next.Update(screenMsg{Pane: next.(Model).watching, At: demoAt, Text: historyScreen, Up: 6})
-		out := screen(next)
-		if !strings.Contains(out, "6 lines up") {
-			t.Fatalf("%dx%d: not up the history:\n%s", w, h, out)
-		}
-		if n := strings.Count(out, "Should a refresh also rotate the token?"); n != strings.Count(historyScreen, "Should a refresh also rotate the token?") {
-			t.Fatalf("%dx%d: the question shows %d times up the history:\n%s", w, h, n, out)
-		}
-	}
-}
-
 // TestListOnlyFillsItsFreeRowsWithUsage: in list only the list comes first
 // and is never cut for the stats; the rows it leaves free take usage, then
 // the machine, under a hairline, each whole at its fewest lines.

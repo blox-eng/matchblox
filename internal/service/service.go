@@ -127,9 +127,9 @@ type Service struct {
 	// with its styles: the guard tells Claude Code's grey suggestion from a
 	// draft a person typed.
 	Capture func(panes []string) map[string]string
-	// CaptureUp reads a pane up lines up from its bottom, with its styles,
-	// and the offset it read: no more than the history holds.
-	CaptureUp func(pane string, up int) (text string, real int, ok bool)
+	// PaneMouse tells if the program in a pane reads the mouse in SGR form,
+	// and the pane's size. Nil: never.
+	PaneMouse func(pane string) (cols, rows int, ok bool)
 	// TmuxOut runs a tmux command and returns what it prints: the pane of
 	// a session matchblox started. Nil: exec.
 	TmuxOut func(argv []string) (string, error)
@@ -222,8 +222,6 @@ type Service struct {
 	wakes wakeState
 	// driven are the panes the stoker drove, for the merge guard.
 	driven drivenState
-	// upScreens are the screens of the history sent, which no Enter answers.
-	upScreens upScreens
 	// sentAt is when a command or a compact last went to a pane, by pane:
 	// until restLatch after it, the pane is not at rest (latchRest).
 	sentAt map[string]time.Time
@@ -330,7 +328,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 	if smp != nil {
 		s.sample = smp.Sample
 	}
-	s.Capture, s.CaptureUp = sample.CapturePanesStyled, sample.CapturePaneUp
+	s.Capture, s.PaneMouse = sample.CapturePanesStyled, sample.PaneMouse
 	s.PeerPane = s.paneOfPeer
 	s.Activity = sample.ClientActivity
 	s.alone = s.now()

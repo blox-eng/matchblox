@@ -47,10 +47,6 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.form != nil {
 		return m.tapForm(ms, sc)
 	}
-	if m.notLive() && m.chatKeys && (sc.chatFull && ms.Y == 0 || !sc.chatFull && ms.Y == sc.bodyTop && ms.X > sc.listW) {
-		m.up = 0 // the title: back to live, the keys stay
-		return m, nil
-	}
 	if press, texts := m.optionAt(ms, sc); press != "" {
 		if m.chatKeys {
 			return m.tapOption(press, texts)
@@ -89,7 +85,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		if s, ok := spanAt(sc.keys, ms.X); ok {
 			m.armed = ""
 			if s.press == tapBack {
-				m.chatKeys, m.up = false, 0
+				m.chatKeys = false
 				return m, nil
 			}
 			return m.keyed(keyPress(s.press))
@@ -204,8 +200,8 @@ func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd), string) {
 	}, m.actHost(a)
 }
 
-// wheel is a swipe on a phone: over the chat it scrolls the agent's
-// history, elsewhere it moves the selection, as ↑ and ↓ do.
+// wheel is a swipe on a phone: over the chat it goes to the agent, which
+// scrolls itself; elsewhere it moves the selection, as ↑ and ↓ do.
 func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.asking() {
 		return m, nil
@@ -213,7 +209,7 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	m.held = nil // a swipe is another key: it drops the question
 	if m.overChat(ms) {
 		m.armed = ""
-		return m.scrollChat(ms.Button == tea.MouseWheelUp, chatStep), nil
+		return m.wheelChat(ms.Button == tea.MouseWheelUp)
 	}
 	switch ms.Button {
 	case tea.MouseWheelUp:

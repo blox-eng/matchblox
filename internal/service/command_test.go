@@ -75,11 +75,6 @@ func TestACommandNeedsTheLiveScreenSeen(t *testing.T) {
 		if res := s.act(t.Context(), unseen); !strings.HasSuffix(res.Err, "the console has not shown work's screen yet — look again") || len(*ran) != 0 {
 			t.Fatalf("%s unseen: res %+v ran %q", a.RecID, res, *ran)
 		}
-		history := a
-		history.Seen = s.upScreens.stamp("%1", s.now, true)
-		if res := s.act(t.Context(), history); !strings.HasSuffix(res.Err, "that screen was work's history, not the live screen — look again") || len(*ran) != 0 {
-			t.Fatalf("%s history: res %+v ran %q", a.RecID, res, *ran)
-		}
 		s, ran = commandTest(t, "claude", idleScreen)
 		restarted := a
 		restarted.Start = 9
