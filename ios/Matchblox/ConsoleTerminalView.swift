@@ -63,7 +63,7 @@ final class ConsoleTerminalView: TerminalView {
         // touch comes in that window.
         for other in gestureRecognizers ?? [] {
             if let tap = other as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1 {
-                _ = tap
+                tap.require(toFail: click)
             }
         }
         addGestureRecognizer(click)
@@ -225,6 +225,7 @@ final class ConsoleTerminalView: TerminalView {
     /// The press and release at the touch's cell, then the keyboard on a first tap.
     @objc private func clicked(_ tap: UITapGestureRecognizer) {
         guard tap.state == .ended else { return }
+        sendClick(at: tap.location(in: self))
         sendClick(at: tap.location(in: self))
         if tapRaisesKeyboard, !focusedAtTouch { _ = becomeFirstResponder() }
     }
