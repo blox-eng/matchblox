@@ -98,7 +98,7 @@ final class ConsoleTerminalView: TerminalView {
     override func becomeFirstResponder() -> Bool {
         let became = super.becomeFirstResponder()
         #if DEBUG
-        trace += "[become \(became)]"
+        trace += "[become\(became)]"
         accessibilityValue = trace
         #endif
         if became { onFocus(true) }
@@ -108,7 +108,7 @@ final class ConsoleTerminalView: TerminalView {
     override func resignFirstResponder() -> Bool {
         let resigned = super.resignFirstResponder()
         #if DEBUG
-        trace += "[resign \(resigned)]"
+        trace += "[resign\(resigned)]"
         accessibilityValue = trace
         #endif
         if resigned { onFocus(false) }
@@ -134,7 +134,7 @@ final class ConsoleTerminalView: TerminalView {
         #if DEBUG
         let taps = (gesture as? UITapGestureRecognizer)?.numberOfTapsRequired ?? 0
         let who = gesture === clickTap ? "click" : gesture === labelTap ? "label" : gesture === wheelPan ? "wheel" : "other"
-        trace += "[begin \(type(of: gesture)) taps=\(taps) \(who) -> \(begins)]"
+        trace += "[\(who)\(taps)\(begins ? "+" : "-")]"
         accessibilityValue = trace
         #endif
         return begins
@@ -228,7 +228,7 @@ final class ConsoleTerminalView: TerminalView {
     /// take it first, that tap would click a second time, on whatever the first click opened.
     @objc private func clicked(_ tap: UITapGestureRecognizer) {
         #if DEBUG
-        trace += "[clicked \(tap.state.rawValue) mode=\(getTerminal().mouseMode)]"
+        trace += "[clicked\(tap.state.rawValue)]"
         accessibilityValue = trace
         #endif
         guard tap.state == .ended else { return }
