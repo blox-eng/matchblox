@@ -58,6 +58,14 @@ final class ConsoleTerminalView: TerminalView {
         // The first tap on an unfocused console is a click too: a session's row opens at once.
         let click = UITapGestureRecognizer(target: self, action: #selector(clicked))
         click.cancelsTouchesInView = false
+        // SwiftTerm's single tap decides up to 0.3 s after the touch, for a double tap. It waits
+        // for the click too, so a tap the click answers is not answered a second time, whatever
+        // touch comes in that window.
+        for other in gestureRecognizers ?? [] {
+            if let tap = other as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1 {
+                tap.require(toFail: click)
+            }
+        }
         addGestureRecognizer(click)
         clickTap = click
 
@@ -123,13 +131,13 @@ final class ConsoleTerminalView: TerminalView {
         }
         if gesture === clickTap {
             let first = !focusedAtTouch
-            let clicks = readsMouse && (first || !tapRaisesKeyboard)
+            let clicks = sendsClicks && (first || !tapRaisesKeyboard)
             return (clicks || (first && tapRaisesKeyboard)) && !tapsLabel(at: gesture.location(in: self))
         }
-        // The click answers a first tap, and takes the keyboard on it. SwiftTerm's single tap would
-        // click a second time, on whatever the first click opened. On the demo, no tap takes the
-        // keyboard. Its later taps and gestures stay.
-        if let tap = gesture as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1, gesture !== clickTap, !tapRaisesKeyboard || !focusedAtTouch {
+        // The click answers a first tap, and takes the keyboard on it; SwiftTerm's single tap
+        // waits for the click to fail, so it answers only the taps on a focused terminal. On the
+        // demo, no tap takes the keyboard.
+        if !tapRaisesKeyboard, let tap = gesture as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1 {
             return false
         }
         if gesture === wheelPan, let pan = gesture as? UIPanGestureRecognizer {
@@ -189,6 +197,16 @@ final class ConsoleTerminalView: TerminalView {
         allowMouseReporting && getTerminal().mouseMode != .off
     }
 
+    /// SwiftTerm sends a tap as a press and a release in these modes only. In X10 mode it sends
+    /// nothing, and so does the click.
+    private var sendsClicks: Bool {
+        guard allowMouseReporting else { return false }
+        switch getTerminal().mouseMode {
+        case .vt200, .buttonEventTracking, .anyEvent: return true
+        default: return false
+        }
+    }
+
     /// Each step at the touch's cell, encoded by SwiftTerm for the program's mouse protocol.
     private func sendWheel(_ steps: [WheelScroll.Step], at point: CGPoint) {
         let terminal = getTerminal()
@@ -213,15 +231,13 @@ final class ConsoleTerminalView: TerminalView {
 
     private func sendClick(at point: CGPoint) {
         let terminal = getTerminal()
-        guard readsMouse, terminal.cols > 0, terminal.rows > 0 else { return }
+        guard sendsClicks, terminal.cols > 0, terminal.rows > 0 else { return }
         let cell = cellSize
         let col = min(max(Int(point.x / cell.width), 0), terminal.cols - 1)
         let row = min(max(Int(point.y / cell.height) - terminal.buffer.yDisp, 0), terminal.rows - 1)
         let pixelX = Int(point.x)
         let pixelY = Int(point.y - contentOffset.y)
-        // X10 mode reports presses only; the other modes report both.
-        let sendsRelease = terminal.mouseMode != .x10
-        for release in sendsRelease ? [false, true] : [false] {
+        for release in [false, true] {
             let flags = terminal.encodeButton(button: 0, release: release, shift: false, meta: false, control: false)
             terminal.sendEvent(buttonFlags: flags, x: col, y: row, pixelX: pixelX, pixelY: pixelY)
         }

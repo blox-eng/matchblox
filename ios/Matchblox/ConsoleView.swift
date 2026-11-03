@@ -408,6 +408,10 @@ final class ConsoleConnection {
     @ObservationIgnored private var openSession: Int?
     private let host: Host
     private let onFailure: (ConnectFailure) -> Void
+    #if DEBUG
+    @ObservationIgnored var presses = 0
+    @ObservationIgnored var releases = 0
+    #endif
 
     var isDemo: Bool { host.isDemo }
 
@@ -673,6 +677,9 @@ final class ConsoleConnection {
 
 extension ConsoleConnection: @preconcurrency TerminalViewDelegate {
     func send(source: TerminalView, data: ArraySlice<UInt8>) {
+        #if DEBUG
+        if isDemo { countClicks(in: data) }
+        #endif
         outgoing?.yield(.input(Data(data)))
     }
 
@@ -686,3 +693,35 @@ extension ConsoleConnection: @preconcurrency TerminalViewDelegate {
     func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
     func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
 }
+
+#if DEBUG
+extension ConsoleConnection {
+    /// The UI test reads the presses and releases of the left button the terminal sent, as the
+    /// terminal's accessibility value. Reports are SGR (`ESC [ < b ; x ; y M|m`) or classic
+    /// (`ESC [ M cb x y`).
+    func countClicks(in data: ArraySlice<UInt8>) {
+        let bytes = Array(data)
+        var at = 0
+        while at + 2 < bytes.count {
+            guard bytes[at] == 0x1b, bytes[at + 1] == 0x5b else { at += 1; continue }
+            if bytes[at + 2] == 0x3c {
+                var end = at + 3
+                while end < bytes.count, bytes[end] != 0x4d, bytes[end] != 0x6d { end += 1 }
+                guard end < bytes.count else { break }
+                let button = String(decoding: bytes[(at + 3)..<end].prefix { $0 != 0x3b }, as: UTF8.self)
+                if button == "0" {
+                    if bytes[end] == 0x4d { presses += 1 } else { releases += 1 }
+                }
+                at = end + 1
+            } else if bytes[at + 2] == 0x4d, at + 5 < bytes.count {
+                let button = Int(bytes[at + 3]) - 32
+                if button == 0 { presses += 1 } else if button == 3 { releases += 1 }
+                at += 6
+            } else {
+                at += 1
+            }
+        }
+        terminal?.accessibilityValue = "press=\(presses) release=\(releases)"
+    }
+}
+#endif
