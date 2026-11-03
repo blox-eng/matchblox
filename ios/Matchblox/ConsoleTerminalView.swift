@@ -97,12 +97,20 @@ final class ConsoleTerminalView: TerminalView {
 
     override func becomeFirstResponder() -> Bool {
         let became = super.becomeFirstResponder()
+        #if DEBUG
+        trace += "[become \(became)]"
+        accessibilityValue = trace
+        #endif
         if became { onFocus(true) }
         return became
     }
 
     override func resignFirstResponder() -> Bool {
         let resigned = super.resignFirstResponder()
+        #if DEBUG
+        trace += "[resign \(resigned)]"
+        accessibilityValue = trace
+        #endif
         if resigned { onFocus(false) }
         return resigned
     }
@@ -117,7 +125,21 @@ final class ConsoleTerminalView: TerminalView {
         return (super.keyCommands ?? []) + home
     }
 
+    #if DEBUG
+    var trace = ""
+    #endif
+
     override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        let begins = shouldBegin(gesture)
+        #if DEBUG
+        let taps = (gesture as? UITapGestureRecognizer)?.numberOfTapsRequired ?? 0
+        trace += "[begin \(type(of: gesture)) taps=\(taps) mine=\(gesture === clickTap || gesture === labelTap) -> \(begins)]"
+        accessibilityValue = trace
+        #endif
+        return begins
+    }
+
+    private func shouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
         if gesture === labelTap {
             return tapsLabel(at: gesture.location(in: self))
         }
