@@ -19,6 +19,13 @@ All notable changes to matchblox are in this file. The format follows
 
 - **The first tap on the phone's console clicks.** It no longer needs a second
   tap. Turning the phone back reopens the chat on every host.
+- **The chat is a window on the agent's pane.** The wheel, a swipe, `PgUp` and
+  `PgDn` go to the agent, and the agent scrolls itself, as it does in tmux. A
+  fullscreen agent now scrolls in the chat. Before, the wheel read tmux history,
+  which holds nothing of a fullscreen agent's conversation. The console no
+  longer reads tmux history. An agent that does not read the mouse says so, and
+  says to open its pane.
+  ([#288](https://github.com/blox-eng/matchblox/issues/288))
 
 ## [0.30.1] - 2026-11-02
 

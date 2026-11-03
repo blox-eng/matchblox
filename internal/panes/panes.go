@@ -4,6 +4,7 @@ package panes
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -47,6 +48,21 @@ func keys(target string, args ...string) []string {
 // pane, on the tmux server it is on.
 func Keys(target string, ks ...string) []string {
 	return keys(target, ks...)
+}
+
+// Wheel is the send-keys step that turns the mouse wheel at column col and
+// row row of the pane, from 1, as the SGR form the program asked for.
+func Wheel(target string, up bool, col, row int) []string {
+	button := 65
+	if up {
+		button = 64
+	}
+	seq := fmt.Sprintf("\x1b[<%d;%d;%dM", button, col, row)
+	args := []string{"-H"}
+	for i := range len(seq) {
+		args = append(args, fmt.Sprintf("%02x", seq[i]))
+	}
+	return keys(target, args...)
 }
 
 // Pause is a step between two keys that change the question tool's page:

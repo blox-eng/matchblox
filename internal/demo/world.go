@@ -19,7 +19,6 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/procfs"
-	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/service"
 )
 
@@ -120,12 +119,16 @@ func (w *World) Wire(s *service.Service) {
 	s.Actions.Check = func(advice.Guard) error { return nil } // the demo's pids are not this machine's
 	s.LookPath = lookPath
 	s.IsDir = func(path string) bool { return strings.HasPrefix(path, "/work/") }
-	s.CaptureUp = w.captureUp
+	s.PaneMouse = paneMouse
 	s.TmuxOut = func([]string) (string, error) { return "", errRefused }
 	s.PeerPane = func(int) string { return "" }
 	s.WorktreeStep = func(context.Context, string, string) ([]string, string, error) { return nil, "", errRefused }
 	s.MatchGit = func(context.Context, string, ...string) (string, error) { return "", nil } // the fixture has no git to read
 }
+
+// paneMouse says every demo agent reads the mouse, so a wheel in the chat goes
+// to the world, never to tmux to ask. The size only places the wheel's spot.
+func paneMouse(string) (cols, rows int, ok bool) { return 80, 24, true }
 
 // lookPath finds the demo's agents, not this machine's. tmux and gh are not
 // among them: the service would run them to ask their version.
@@ -134,12 +137,6 @@ func lookPath(cmd string) (string, error) {
 		return "", exec.ErrNotFound
 	}
 	return "/usr/bin/" + cmd, nil
-}
-
-// captureUp is a pane of the fixture, which holds no history above its screen.
-func (w *World) captureUp(pane string, _ int) (string, int, bool) {
-	text, ok := sample.CaptureDir(filepath.Join(w.root, "panes"))([]string{pane})[pane]
-	return text, 0, ok
 }
 
 // Run is the service's runner: it takes only what the demo does.
@@ -171,6 +168,8 @@ func (w *World) Run(argv []string) error {
 			return err
 		}
 		return w.submit(argv[3], text)
+	case scrolls(argv):
+		return nil // the fixture's screens have nothing above or below them
 	case len(argv) == 6 && argv[1] == "send-keys" && argv[4] == "/compact" && argv[5] == "Enter":
 		return w.submit(argv[3], "/compact")
 	case len(argv) == 6 && argv[0] == "git" && argv[3] == "worktree" && argv[4] == "remove":
@@ -195,6 +194,14 @@ func (w *World) Run(argv []string) error {
 		return w.start(argv[at:])
 	}
 	return errRefused
+}
+
+// scrolls is a wheel (send-keys -H) or a page key the chat sends the agent.
+func scrolls(argv []string) bool {
+	if len(argv) < 5 || argv[1] != "send-keys" {
+		return false
+	}
+	return argv[4] == "-H" || len(argv) == 5 && (argv[4] == "PPage" || argv[4] == "NPage")
 }
 
 // renamePane changes the pane's line in tmux's list. Hold w.mu.

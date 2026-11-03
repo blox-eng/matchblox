@@ -112,11 +112,9 @@ func defaultKeys() keymaps {
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 		},
 		chat: chatKeymap{
-			Back:     bind(ks("ctrl+a"), "ctrl+a m", "back"),
-			BackEnd:  bind(ks("m"), "m", "back"),
-			Stop:     bind(ks("ctrl+c"), "^C", "stops the agent"),
-			PageUp:   bind(ks("pgup"), "PgUp", "a page up the history"),
-			PageDown: bind(ks("pgdown"), "PgDn", "a page down the history"),
+			Back:    bind(ks("ctrl+a"), "ctrl+a m", "back"),
+			BackEnd: bind(ks("m"), "m", "back"),
+			Stop:    bind(ks("ctrl+c"), "^C", "stops the agent"),
 		},
 		sheet: sheetKeys{
 			Send:  bind(ks("enter"), "⏎", "send"),
@@ -234,10 +232,10 @@ func (k formKeys) bindings() []bkey.Binding {
 // Back's ctrl+a does too, and m within a second after it gives the keys back
 // (chatBackWait); Stop is the agent's ^C, which a second one within a second
 // waits for.
-type chatKeymap struct{ Back, BackEnd, Stop, PageUp, PageDown bkey.Binding }
+type chatKeymap struct{ Back, BackEnd, Stop bkey.Binding }
 
 func (k chatKeymap) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Back, k.BackEnd, k.Stop, k.PageUp, k.PageDown}
+	return []bkey.Binding{k.Back, k.BackEnd, k.Stop}
 }
 
 // sheetKeys are the stoker's order sheet.
@@ -298,7 +296,7 @@ func (k confirmKeys) bindings() []bkey.Binding {
 // keyNames are the keys the chat sends by name.
 var keyNames = map[string]string{
 	"up": "Up", "down": "Down", "left": "Left", "right": "Right", "enter": "Enter", "tab": "Tab",
-	"shift+tab": "BTab", "esc": "Escape", "ctrl+c": "C-c", "ctrl+a": "C-a", "backspace": "BSpace", "space": proto.LitPrefix + " ",
+	"shift+tab": "BTab", "esc": "Escape", "ctrl+c": "C-c", "ctrl+a": "C-a", "backspace": "BSpace", "pgup": "PPage", "pgdown": "NPage", "space": proto.LitPrefix + " ",
 }
 
 // The names the chat sends for Enter, ^C and Backspace.

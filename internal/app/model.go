@@ -306,12 +306,9 @@ type Model struct {
 	screen     proto.Screen       // the last capture of the watched pane
 	watching   string             // the pane the service sends, or ""
 	watchHeld  string             // the pane the service refused, until the next snapshot
-	up         int                // the lines up the chat shows of the agent's history; 0 is live
-	watchUp    int                // the lines up the service sends
 	watchSize  [2]int             // the chat's size the service sizes the agent's window to: cols, rows
 	watchSince time.Time          // when the watched pane was selected: its size waits sizeDwell
 	sizeTick   time.Time          // the watchSince a sizeDueMsg is on its way for
-	liveWait   bool               // the chat came back from the history, and waits for the live screen
 	menuSeen   menuSeen           // the chat's quiet: the wait it shows and its start
 	tapped     tappedOption       // the option a tap pressed, until the next screen
 	shortPID   int                // the session whose chat a too short screen dropped, until the person chooses something else
@@ -664,9 +661,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.flash = msg.Err // a read that failed: the session and its last screen stay
 			return m, m.recv()
 		}
-		if msg.Pane == m.watching && (msg.Up == 0 || m.watchUp > 0) { // the history after live is not live
+		if msg.Pane == m.watching {
 			m.screen, m.tapped = proto.Screen(msg), tappedOption{}
-			m.liveWait = m.liveWait && msg.Up > 0
 		}
 		return m, m.recv()
 	case peerMsg:
@@ -809,7 +805,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A pane that went before the watch came is a race, not the builder's error.
 			if pane != "" && pane == m.watching {
 				m.watchHeld, m.watching, m.screen = pane, "", proto.Screen{}
-				m.up, m.watchUp, m.liveWait = 0, 0, false
 			}
 			return m, m.recv()
 		}
@@ -942,9 +937,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.formPaste(msg.Content)
 		case f == layerMain && m.chatKeys:
 			m, touch := m.touchRest()
-			if m.notLive() {
-				return m.backToLive(), touch
-			}
 			next, cmd := m.chatPaste(msg.Content)
 			return next, tea.Batch(touch, cmd)
 		}
@@ -976,19 +968,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		armed := m.backArmed
 		m.backArmed = time.Time{}
 		if m.chatKeys && (f == layerMain || f == layerTakeOver) && m.chatBacks(msg, armed) {
-			m.chatKeys, m.up = false, 0
+			m.chatKeys = false
 			return m, touch
-		}
-		if m.chatKeys && f == layerMain && bkey.Matches(msg, m.keys.chat.PageUp, m.keys.chat.PageDown) {
-			m.flash = ""
-			page := max(m.draw(max(m.width, minWidth)).chatRows, 1)
-			return m.scrollChat(bkey.Matches(msg, m.keys.chat.PageUp), page), touch
-		}
-		if m.notLive() && m.chatKeys && (f == layerMain || f == layerTakeOver) {
-			if bkey.Matches(msg, m.keys.chat.Back) { // the way back works from the history too
-				m.backArmed = m.now()
-			}
-			return m.backToLive(), touch
 		}
 		// ctrl+c quits from every layer but a question, where any key but
 		// its answers cancels, and the chat, which sends it to the agent.

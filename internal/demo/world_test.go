@@ -9,6 +9,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/service"
 )
 
@@ -49,19 +50,21 @@ func TestAWorldKillsTheOrphanOnly(t *testing.T) {
 }
 
 // TestWireAnswersWhatTheServiceWouldAskTheMachine: with the seams wired, a
-// service asks the world for the pane above its screen, tmux, the agents and
-// the folders, and never the machine it runs on.
+// service asks the world if an agent reads the mouse, tmux, the agents and
+// the folders, and never the machine it runs on. A wheel or a page key in the
+// chat is the world's, which scrolls nothing and refuses nothing.
 func TestWireAnswersWhatTheServiceWouldAskTheMachine(t *testing.T) {
 	w := newTestWorld(t, func(int) {})
 	s := service.New(config.Default(), nil, w.Git)
 	w.Wire(s)
 
-	text, up, ok := s.CaptureUp("%1", 40)
-	if want, _ := os.ReadFile(filepath.Join(w.root, "panes", "1.txt")); !ok || up != 0 || text != string(want) {
-		t.Errorf("CaptureUp: %q, %d, %v; want the fixture's pane", text, up, ok)
+	if _, _, ok := s.PaneMouse("%1"); !ok {
+		t.Error("PaneMouse: the demo's agent does not read the mouse, so the wheel would not reach the world")
 	}
-	if _, _, ok := s.CaptureUp("%99", 40); ok {
-		t.Error("CaptureUp read a pane the fixture lacks")
+	for _, step := range [][]string{panes.Wheel("%1", true, 40, 12), panes.Wheel("%1", false, 40, 12), panes.Keys("%1", "PPage"), panes.Keys("%1", "NPage")} {
+		if err := w.Run(step); err != nil {
+			t.Errorf("Run(%q): %v, want the scroll taken", step, err)
+		}
 	}
 	if _, err := s.TmuxOut([]string{"tmux", "list-sessions"}); err == nil || err.Error() != Refusal {
 		t.Errorf("TmuxOut: %v, want the refusal line", err)

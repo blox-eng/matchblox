@@ -333,6 +333,38 @@ func (w *walker) takes(what, want string, keys ...string) {
 	})
 }
 
+// scrolls opens the chat of the second session from the list, then turns the
+// wheel over the chat, at the screen's right where a wide screen draws it, and
+// presses the page keys. The chat is a window on the agent's pane, so each goes
+// to the agent: the world takes it, and tmux is never asked if the agent reads
+// the mouse.
+func (w *walker) scrolls(where string) {
+	w.t.Helper()
+	before, from := len(w.d.Ran()), len(w.term.text())
+	defer func() {
+		if w.t.Failed() {
+			w.t.Logf("it drew:\n%s", w.term.text()[from:])
+		}
+	}()
+	w.press("j", "enter")
+	x := w.cols - 5
+	w.send("wheel up "+where, fmt.Sprintf("\x1b[<64;%d;10M", x))
+	w.send("wheel down "+where, fmt.Sprintf("\x1b[<65;%d;10M", x))
+	w.press("pgup", "pgdown")
+	eventually(w.t, 30*time.Second, "the wheel and the page keys "+where+" to reach the agent", func() bool {
+		wheels, pages := 0, 0
+		for _, argv := range w.d.Ran()[before:] {
+			switch {
+			case slices.Contains(argv, "-H"):
+				wheels++
+			case slices.Contains(argv, "PPage"), slices.Contains(argv, "NPage"):
+				pages++
+			}
+		}
+		return wheels >= 2 && pages >= 2
+	})
+}
+
 // walkTheDoors takes each door a person meets on purpose, on one demo, and each
 // must end in its own act or the line. A stoker that runs asks to take over
 // before any act on a session, so the kill comes before it, and the night after
@@ -342,6 +374,8 @@ func (w *walker) walkTheDoors() {
 	w.press("1")
 	w.refused("into tmux", "ctrl+o")
 	w.refused("into tmux from a chat", "enter", "ctrl+o")
+	w.reset()
+	w.scrolls("in a chat")
 	w.reset()
 	w.clear()
 	w.refused("a pane", "6", "enter")

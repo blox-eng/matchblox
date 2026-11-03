@@ -181,7 +181,7 @@ func submitTexts(lines, press []string) []string {
 // sends: only at a menu wait, on the live screen, across the chat's width.
 func (m Model) optionAt(ms tea.Mouse, sc drawn) (press string, texts []string) {
 	i := ms.Y - sc.chatAt
-	if sc.chatW == 0 || i < 0 || i >= sc.chatRows || ms.X < sc.chatX || m.notLive() || m.focus(tea.KeyPressMsg{}) != layerMain {
+	if sc.chatW == 0 || i < 0 || i >= sc.chatRows || ms.X < sc.chatX || m.focus(tea.KeyPressMsg{}) != layerMain {
 		return "", nil
 	}
 	s, ok := m.selectedSession()
