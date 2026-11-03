@@ -133,7 +133,8 @@ final class ConsoleTerminalView: TerminalView {
         let begins = shouldBegin(gesture)
         #if DEBUG
         let taps = (gesture as? UITapGestureRecognizer)?.numberOfTapsRequired ?? 0
-        trace += "[begin \(type(of: gesture)) taps=\(taps) mine=\(gesture === clickTap || gesture === labelTap) -> \(begins)]"
+        let who = gesture === clickTap ? "click" : gesture === labelTap ? "label" : gesture === wheelPan ? "wheel" : "other"
+        trace += "[begin \(type(of: gesture)) taps=\(taps) \(who) -> \(begins)]"
         accessibilityValue = trace
         #endif
         return begins
@@ -226,6 +227,10 @@ final class ConsoleTerminalView: TerminalView {
     /// single tap finds the terminal unfocused and takes it, so one click goes out. Were this to
     /// take it first, that tap would click a second time, on whatever the first click opened.
     @objc private func clicked(_ tap: UITapGestureRecognizer) {
+        #if DEBUG
+        trace += "[clicked \(tap.state.rawValue) mode=\(getTerminal().mouseMode)]"
+        accessibilityValue = trace
+        #endif
         guard tap.state == .ended else { return }
         sendClick(at: tap.location(in: self))
     }

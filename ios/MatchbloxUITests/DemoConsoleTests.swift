@@ -166,8 +166,10 @@ final class DemoConsoleTests: XCTestCase {
         waitUntilSteady(terminal)
         tapRow(in: app, containing: "flint-auth")
         expect(in: app, step: "the chat after the first tap on flint-auth", "label CONTAINS %@", "keys go to flint-auth")
+        let atChat = "\(terminal.value ?? "none")"
+        Thread.sleep(forTimeInterval: 3)
         dismissKeyboardTip(in: app)
-        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "the first tap did not raise the keyboard. Trace: \(terminal.value ?? "none")")
+        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "the first tap did not raise the keyboard. Trace at the chat: \(atChat). Trace now: \(terminal.value ?? "none")")
         // A second click would have landed on the chat's question.
         waitUntilSteady(terminal)
         XCTAssertFalse(terminal.label.contains("I rotate the token on each refresh"), "the tap clicked through to the answer: \(terminal.label)")
