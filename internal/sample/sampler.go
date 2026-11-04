@@ -236,6 +236,18 @@ type Rules struct {
 	Windows       map[string]int
 }
 
+// RulesOf reads the rules from the config.
+func RulesOf(cfg config.Config) Rules {
+	return Rules{
+		CompactAt:     cfg.Sessions.CompactAt,
+		CompactTokens: cfg.Sessions.CompactTokens,
+		ClearIdle:     cfg.Sessions.ClearIdle.Duration,
+		ClearMinPct:   cfg.Sessions.ClearMinPct,
+		ClearStale:    cfg.Sessions.ClearStale.Duration,
+		Windows:       cfg.Sessions.Windows,
+	}
+}
+
 // Full is the rules' compact threshold.
 func (r Rules) Full() Full { return Full{r.CompactAt, r.CompactTokens} }
 

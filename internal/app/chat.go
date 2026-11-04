@@ -327,6 +327,9 @@ func (m Model) chatSeen() bool {
 // tooShort is what the key line says when the screen has no room for the
 // chat's question.
 func (m Model) tooShort(s sample.Session) string {
+	if m.opt.Demo != "" {
+		return "too short to show " + s.Name + "'s question"
+	}
 	return "too short to show " + s.Name + "'s question · " + m.keys.main.Jump.Help().Key + " goes into its pane"
 }
 
@@ -429,9 +432,9 @@ func (m Model) chatScreen(w int) drawn {
 	_, rows := m.chatPlacement(w)
 	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true, chatRows: rows, chatAt: 1, chatW: w}
 	sc.lines = append(sc.lines, m.screenLines(w, rows)...)
-	keys, spans := m.keyLine(w)
+	hair, keys, spans := m.keyRows(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, spans
-	sc.lines = append(sc.lines, st.hair.Render(strings.Repeat("─", w)), keys)
+	sc.lines = append(sc.lines, hair, keys)
 	if m.consenting() {
 		m.overlayConsent(&sc, w)
 	}
@@ -615,6 +618,10 @@ func startsDigit(text string) bool {
 // intoPane is ctrl+o: the selected session's pane, behind a confirm, as
 // Enter on a session was before the chat.
 func (m Model) intoPane() Model {
+	if m.opt.Demo != "" {
+		m.flash = m.opt.Demo
+		return m
+	}
 	if s, ok := m.selectedSession(); ok && s.Pane != "" {
 		m.pending, m.previewTop = m.primary(), 0
 	}
@@ -1030,12 +1037,13 @@ func (m Model) keepChat(was Model) Model {
 		case !ok || s.Pane == "" || s.Host != m.opt.Host || was.chatKeys && (s.Pane != before.Pane || s.Host != before.Host):
 			m.chatKeys = false
 		case !m.chatSeen():
-			m.chatKeys, m.flash = false, m.tooShort(s) // the keys never go to a screen the person cannot see
+			m.chatKeys, m.flash, m.shortPID = false, m.tooShort(s), s.PID // the keys never go to a screen the person cannot see
 		}
 		if !m.chatKeys {
 			m.chatShut = m.now()
 		}
 	}
+	m = m.reopenChat()
 	if m.conn == nil || m.lost {
 		m.keyQ, m.keyInFlight = nil, ""
 		return m
@@ -1056,6 +1064,24 @@ func (m Model) keepChat(was Model) Model {
 		name = was.all.sessions[i].Name
 	}
 	m.keyQ, m.flash = q, "not sent: "+name+" ended"
+	return m
+}
+
+// reopenChat gives the keys back to a chat that a too short screen dropped,
+// once the screen shows its question and nothing else was chosen since, and
+// ends the line that said it was too short.
+func (m Model) reopenChat() Model {
+	if !m.chatSeen() {
+		return m
+	}
+	if strings.HasPrefix(m.flash, "too short to show") {
+		m.flash = ""
+	}
+	s, ok := m.selectedSession()
+	if !m.chatKeys && m.shortPID != 0 && ok && s.PID == m.shortPID && s.Host == m.opt.Host && m.atMenu(s) {
+		m.chatKeys = true
+	}
+	m.shortPID = 0
 	return m
 }
 
@@ -1108,7 +1134,11 @@ func (m Model) chatKeyLine(w int) (string, []span) {
 		return n
 	}
 	parts := []part{name, back, into}
-	for _, try := range [][]part{{name, back, into}, {back, into}, {back}} {
+	tries := [][]part{{name, back, into}, {back, into}, {back}}
+	if m.opt.Demo != "" { // the key still answers; no hint offers what it refuses
+		tries = [][]part{{name, back}, {back}}
+	}
+	for _, try := range tries {
 		if parts = try; width(try) <= w {
 			break
 		}

@@ -131,6 +131,23 @@ final class BeltLayoutsTests: XCTestCase {
 
     // MARK: Mine
 
+    func testAPickOnARealHostIsSaved() {
+        let store = defaults()
+        BeltLayout.commands.savePick(inDemo: false, to: store)
+        XCTAssertEqual(BeltLayout.load(from: store), .commands)
+    }
+
+    func testAPickInTheDemoLeavesTheStoreAsItWas() {
+        let empty = defaults()
+        BeltLayout.commands.savePick(inDemo: true, to: empty)
+        XCTAssertNil(empty.object(forKey: BeltLayout.storeKey))
+
+        let chosen = defaults()
+        BeltLayout.mine.save(to: chosen)
+        BeltLayout.commands.savePick(inDemo: true, to: chosen)
+        XCTAssertEqual(BeltLayout.load(from: chosen), .mine)
+    }
+
     func testMineDefaults() {
         XCTAssertEqual(Mine.defaults.keys.map(\.id), homeRow)
         XCTAssertEqual(Mine.defaults.keys.map(\.cells), [1, 2, 2, 2])

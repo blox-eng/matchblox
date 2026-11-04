@@ -69,9 +69,27 @@ struct MatchbloxApp: App {
     private let store = HostStore.standard
     /// A tapped link opens a new console even when one is open.
     @State private var linkOpens = 0
-    @State private var route = Opening.first(hosts: HostStore.standard.all())
+    @State private var route: Route
     @State private var scanProblem: String?
     @State private var scanNotice: String?
+
+    init() {
+        #if DEBUG
+        // The UI test's empty store.
+        if ProcessInfo.processInfo.arguments.contains("-resetHosts") {
+            try? FileManager.default.removeItem(at: HostStore.standard.file)
+        }
+        // The UI test's way to the demo host, with no pairing screen in between.
+        if ProcessInfo.processInfo.arguments.contains("-openDemoHost") {
+            do {
+                try HostStore.standard.upsert(.demo)
+            } catch {
+                fatalError("The demo host did not save: \(error)")
+            }
+        }
+        #endif
+        _route = State(initialValue: Opening.first(hosts: HostStore.standard.all()))
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -83,7 +101,18 @@ struct MatchbloxApp: App {
                         problem: scanProblem,
                         notice: scanNotice,
                         onCode: open,
+                        onDemo: store.all().contains(where: \.isDemo) ? nil : { go(.demoScan) },
                         onCancel: store.all().isEmpty ? nil : { go(Opening.first(hosts: store.all())) }
+                    )
+                case .demoScan:
+                    DemoScanView(
+                        store: store,
+                        onDone: {
+                            withAnimation(UIAccessibility.isReduceMotionEnabled ? nil : .easeOut(duration: 0.3)) {
+                                go(.console(.demo, open: nil))
+                            }
+                        },
+                        onBack: { go(Opening.first(hosts: store.all())) }
                     )
                 case .pair(let draft):
                     PairingView(
@@ -116,6 +145,7 @@ struct MatchbloxApp: App {
                         onOpen: { go(.console($0, open: nil)) },
                         onPair: { go(.scan) },
                         onIsland: { go(.island) },
+                        onDemo: { go(.demoScan) },
                         onNoHosts: { notice in
                             go(.scan)
                             scanNotice = notice

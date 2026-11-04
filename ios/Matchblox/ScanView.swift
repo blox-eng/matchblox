@@ -8,6 +8,8 @@ struct ScanView: View {
     let problem: String?
     let notice: String?
     let onCode: (URL) -> Void
+    /// Nil once the demo is among the hosts.
+    let onDemo: (() -> Void)?
     let onCancel: (() -> Void)?
 
     private enum Camera {
@@ -50,8 +52,13 @@ struct ScanView: View {
                     }
                 }
                 .modifier(OverCamera(on: camera == .ready))
-                Spacer()
-                bottom
+                // A large text size scrolls the actions instead of pushing them off the screen.
+                ViewThatFits(in: .vertical) {
+                    bottom
+                    ScrollView { bottom }
+                        .scrollBounceBehavior(.basedOnSize)
+                }
+                .frame(maxHeight: .infinity, alignment: .bottom)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(24)
@@ -98,6 +105,14 @@ struct ScanView: View {
                 Task { @MainActor in pasted(link) }
             }
             .buttonBorderShape(.capsule)
+            if let onDemo {
+                Button(action: onDemo) {
+                    Text("Try a demo")
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .foregroundStyle(Theme.muted)
+            }
             if notALink {
                 Text("That is not a matchblox pair link. Copy it again with c on the pair page.")
                     .foregroundStyle(Theme.neg)
@@ -152,7 +167,7 @@ enum PairStage {
 }
 
 /// A `bg` backing at 0.8, so that text stays legible over a bright camera. The padding is always there, so the text does not move when the camera turns ready.
-private struct OverCamera: ViewModifier {
+struct OverCamera: ViewModifier {
     let on: Bool
 
     func body(content: Content) -> some View {
@@ -163,7 +178,7 @@ private struct OverCamera: ViewModifier {
 }
 
 /// Scales and moves the box so that its window covers the code.
-private struct LockMove: ViewModifier {
+struct LockMove: ViewModifier {
     let box: CGRect
     let code: CGRect?
 
