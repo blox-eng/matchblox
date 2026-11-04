@@ -41,6 +41,15 @@ type Config struct {
 	Limits        Limits   `toml:"limits"`
 	Ships         Ships    `toml:"ships"`
 	Push          Push     `toml:"push"`
+	Peers         Peers    `toml:"peers"`
+}
+
+// Peers are what one agent session may do to another.
+type Peers struct {
+	// Send lets a session in an agent's pane type a line into another
+	// session with matchblox send, tagged with the sender's name. Off: an
+	// agent's pane acts only for the stoker, as before.
+	Send bool `toml:"send"`
 }
 
 // Push sends the buzz and the island to the phones through the relay.
@@ -182,6 +191,7 @@ func Default() Config {
 		Stoker: Stoker{NightEnds: "07:00", MaxSteps: 60, Agent: "claude"},
 		Limits: Limits{QuietHours: "23:00-08:00", QuietDays: []string{"Sat", "Sun"}, Quiet: defaultQuiet},
 		Push:   Push{Relay: "https://matchblox.sh"},
+		Peers:  Peers{Send: true},
 	}
 }
 

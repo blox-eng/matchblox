@@ -163,7 +163,7 @@ took it and the answer never came.
 
 | Command | It does |
 |---|---|
-| `matchblox send api "run the tests"` | Types the line and Enter into the session. It queues if the session works, and is refused at a question or a permission prompt. |
+| `matchblox send api "run the tests"` | Types the line and Enter into the session. It queues if the session works, and is refused at a question or a permission prompt. From another agent's pane it is a [peer send](agents.md#sessions-that-talk-to-each-other): tagged `[from <sender>]`, only to a session at rest, and at most one line in 30 seconds to one session. |
 | `matchblox send api --pick 2` | Answers the question the session asks with its second option. |
 | `matchblox compact api` | Types `/compact` into a Claude Code session at rest that waits for nothing and was not compacted in the last 30 minutes. |
 | `matchblox hold api --why "not the priority"` | Queues "finish this step, then stop and wait" and holds the session: nothing else types into it. |

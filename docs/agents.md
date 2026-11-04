@@ -380,10 +380,12 @@ you gave it with `y` on the STOKER tab. The same step adds permission rules
 (`Bash(matchblox sessions:*)`, `ships`, `usage`, `send`, `compact`, `hold`,
 `release`, `stoker` and `peek`), so the stoker's hands run without a
 prompt. The rules are in your user settings, so every Claude Code session
-may call these commands without a prompt. The service refuses a `send`,
-`compact`, `hold` or `release` typed in a pane that hosts an agent and is
-neither the stoker's nor one the stoker drives (`only the stoker and the
-sessions it drives act from an agent's pane: this one is neither`). Your
+may call these commands without a prompt. The service refuses a
+`send --pick`, `compact`, `hold` or `release` typed in a pane that hosts an
+agent and is neither the stoker's nor one the stoker drives (`only the
+stoker and the sessions it drives act from an agent's pane: this one is
+neither`). A plain `send` from such a pane is a peer send (see
+[Sessions that talk to each other](#sessions-that-talk-to-each-other)). Your
 own shell runs no agent, so the commands work there. `peek` and the
 other reads work from any pane. An install from before these hooks or
 rules shows the step again, with the entries it adds. Every other agent is read from its pane: busy
@@ -405,3 +407,51 @@ An approval menu (Codex, OpenCode, Cursor) shows as `asks`. Answer it in its pan
 where `Enter` takes the selected choice.
 
 See [Limits](limits.md) for what is not measured yet.
+
+## Sessions that talk to each other
+
+One agent session can send a line to another with `matchblox send <who>
+"<text>"` in its own pane. This is a peer send. The receiver gets the line
+with a tag that matchblox writes, from the pane the service finds for the
+sender's process:
+
+```text
+[from api] read docs/plan.md, then rebase on main
+```
+
+The sender cannot choose the tag. A tag in the text stays text after the
+real one.
+
+A peer send goes only when all of these hold. Otherwise it is refused, and
+the refusal says why:
+
+- The text is one line: no newline, no control key, no line separator and
+  no bidi control. Up to 500 characters.
+- The receiver is not the sender and is not in the stoker's tmux session.
+- The receiver is at rest. Nothing waits for you there: no question, no
+  permission prompt, and no text you typed in its prompt. matchblox reads
+  the pane before the send, and again right before each key. A refusal for
+  the receiver's state ends with `try again when it is idle, or write the
+  message to a file and ask the person at the console to relay it`.
+- The sender sent no line to the same receiver in the last 30 seconds, and
+  fewer than 20 lines in the last hour. The refusal says when the next
+  send is allowed.
+
+A peer send is not a stoker step. It does not count toward `max_steps`,
+does not make the receiver a session the stoker drives, gives no go for a
+merge, release or deploy, and does not end the stoker's rest. `send
+--pick`, `compact`, `hold`, `release`, `kill`, `switch`, `new`, `scan` and
+the stoker's verbs stay refused from an agent's pane.
+
+Each peer send writes one line to `peers.jsonl` in the service's state
+folder, and one line to `serve.log`: the sender, the receiver, the time,
+how it went (`via`), and the length and sha256 of the text. The text itself
+is not kept.
+
+The line is typed into the receiver's pane, which works for every agent.
+The code has a place for an agent's own inbox: where one is added, the
+message waits in that agent's queue with its sender, and no key goes to
+the pane. No inbox is built in yet.
+
+`[peers] send = false` in the [config](config.md) turns peer sends off: a
+`send` from an agent's pane is refused as before.

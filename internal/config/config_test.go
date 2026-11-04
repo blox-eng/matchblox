@@ -103,6 +103,22 @@ func TestExampleLoads(t *testing.T) {
 	if d := Default(); c.Push != d.Push || d.Push.Relay != "https://matchblox.sh" || d.Push.Off {
 		t.Fatalf("the example must state the push defaults: %+v", c.Push)
 	}
+	if d := Default(); c.Peers != d.Peers || !d.Peers.Send {
+		t.Fatalf("the example must state the peers defaults: %+v", c.Peers)
+	}
+}
+
+// TestPeersSendOff: a peer send is on by default, and [peers] send = false
+// turns it off.
+func TestPeersSendOff(t *testing.T) {
+	c, err := Load(write(t, "[sessions]\ncompact_at = 80\n"))
+	if err != nil || !c.Peers.Send {
+		t.Fatalf("a file without [peers]: %+v, %v", c.Peers, err)
+	}
+	c, err = Load(write(t, "[peers]\nsend = false\n"))
+	if err != nil || c.Peers.Send {
+		t.Fatalf("send = false: %+v, %v", c.Peers, err)
+	}
 }
 
 // TestPushOff: [push] off turns the sender off; relay names another relay.

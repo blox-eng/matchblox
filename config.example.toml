@@ -67,6 +67,9 @@ cursor_usage = false     # true: read Cursor's plan usage from its API; the defa
 relay = "https://matchblox.sh"  # the relay that hands them to Apple; it stores nothing
 off = false              # true: no buzz, no island, and no connection to the relay
 
+[peers]                  # what one agent session may do to another
+send = true              # an agent's pane may matchblox send a line to another idle session, tagged [from <its name>]; false: only the stoker and the sessions it drives act from an agent's pane
+
 [hooks]
 alert = []               # argv run on each new alert, title and evidence appended,
                          # e.g. ["notify-send", "matchblox"]

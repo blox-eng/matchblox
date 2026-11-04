@@ -121,6 +121,10 @@ type Act struct {
 	// Console: the act came from a console, a person at the keys. The
 	// service sets it from the hello; it never comes over the wire.
 	Console bool `json:"-"`
+	// FromKnown: the service found From itself, by the caller's pid, so
+	// the act cannot name another pane as its own. It never comes over
+	// the wire.
+	FromKnown bool `json:"-"`
 }
 
 // WatchPrefix starts an act that names the pane a console watches; with no

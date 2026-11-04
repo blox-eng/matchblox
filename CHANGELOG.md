@@ -6,6 +6,16 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Sessions can talk to each other.** `matchblox send <who> "<text>"` from
+  an agent's pane types `[from <sender>] <text>` into another session at
+  rest. matchblox writes the tag, reads the receiver's pane before each key,
+  never sends to the stoker or to the sender itself, allows one line in 30
+  seconds to one session and 20 lines an hour from one session, and logs
+  each send to `peers.jsonl` without its text. It is not a stoker step.
+  `[peers] send = false` turns it off.
+
 ## [0.32.0] - 2026-11-04
 
 ### Added
