@@ -123,6 +123,15 @@ type Service struct {
 	// PeerPane is the tmux pane a CLI that connected runs in, by its pid
 	// ("" outside every pane). An act's From is ignored where it is known.
 	PeerPane func(pid int) string
+	// PeerSend lets a session in an agent's pane send a line to another
+	// session ([peers] send): see peerSend.
+	PeerSend bool
+	// PeerLog gets one JSON line for each peer send: who, to whom, when,
+	// and the text's length and sha256, never the text. Empty: none.
+	PeerLog string
+	// PeerInboxes are the agents' own inboxes a peer send goes through
+	// before it types. Empty: every peer send is typed.
+	PeerInboxes []PeerInbox
 	// Capture reads the text of panes on the host, for the stoker's guard,
 	// with its styles: the guard tells Claude Code's grey suggestion from a
 	// draft a person typed.
@@ -239,6 +248,8 @@ type Service struct {
 	// grantMu makes each y one check and one go: two consoles pressing it
 	// at once on one step give one go.
 	grantMu sync.Mutex
+	// peers are the peer sends of the last hour, for their limits.
+	peers peerSends
 	// renames are the renames that wait for their session's rest, by pane.
 	renames renameState
 	// found goes to each console when foundGen passes the one it has.
@@ -322,6 +333,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		NightEnds:   cfg.Stoker.NightEnds,
 		StokerAgent: cfg.Stoker.Agent,
 		OrderSteps:  cfg.Stoker.MaxSteps,
+		PeerSend:    cfg.Peers.Send,
 		full:        sample.Full{Pct: cfg.Sessions.CompactAt, Tokens: cfg.Sessions.CompactTokens},
 	}
 	if s.interval <= 0 {
@@ -992,7 +1004,7 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 			continue
 		}
 		if pid > 0 {
-			a.From = s.PeerPane(pid)
+			a.From, a.FromKnown = s.PeerPane(pid), true
 		}
 		if pane, ok := strings.CutPrefix(a.RecID, proto.WatchPrefix); ok {
 			res := s.watchAct(cl, h.Client, a, pane)
