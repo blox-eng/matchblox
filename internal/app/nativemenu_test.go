@@ -227,3 +227,40 @@ func TestAMenuReadsReWrappedWhereTheWindowIsNotSized(t *testing.T) {
 		}
 	}
 }
+
+// TestATurnedPhoneShowsTheQuestionAgain: a chat dropped only because the
+// screen is too short comes back, whole, when the screen is tall enough and
+// the person has chosen nothing else; the false line goes.
+func TestATurnedPhoneShowsTheQuestionAgain(t *testing.T) {
+	m := flintAt(t, 44, 31, "enter")
+	if !m.chatKeys {
+		t.Fatal("the chat did not open")
+	}
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 106, Height: 10})
+	m = next.(Model)
+	if m.chatKeys || !strings.Contains(m.flash, "too short") {
+		t.Fatalf("too short: keys %v flash %q", m.chatKeys, m.flash)
+	}
+	next, _ = m.Update(tea.WindowSizeMsg{Width: 44, Height: 31})
+	m = next.(Model)
+	out := screen(m)
+	if !m.chatKeys || !strings.Contains(out, "❯ 1. Rotate it") || strings.Contains(out, "too short") || strings.Contains(m.flash, "too short") {
+		t.Errorf("back at 44x31: keys %v flash %q\n%s", m.chatKeys, m.flash, out)
+	}
+}
+
+// TestAChoiceMadeWhileTooShortKeepsTheChatShut: a key that moves on clears
+// what was dropped, so the chat does not come back over it.
+func TestAChoiceMadeWhileTooShortKeepsTheChatShut(t *testing.T) {
+	m := flintAt(t, 44, 31, "enter")
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 106, Height: 10})
+	m = pressKeys(t, next.(Model), "j")
+	next, _ = m.Update(tea.WindowSizeMsg{Width: 44, Height: 31})
+	m = next.(Model)
+	if m.chatKeys {
+		t.Errorf("the chat came back after a choice:\n%s", screen(m))
+	}
+	if strings.Contains(m.flash, "too short") {
+		t.Errorf("a false line stays: %q", m.flash)
+	}
+}

@@ -43,6 +43,11 @@ type Options struct {
 	// CompactAt and CompactTokens colour context at the compact threshold.
 	CompactAt     float64
 	CompactTokens int
+	// Demo, when set, is the demo host's line: what would leave the demo
+	// answers with it in the key line and no command runs. The console shows
+	// no stoker badge in its header, for the host's name to keep its room on
+	// a phone.
+	Demo string
 	// Run executes one step that moves this terminal (Nav). Nil means exec.
 	Run func(argv []string) error
 	// Local: the service runs on this machine from the same install, so an
@@ -301,14 +306,12 @@ type Model struct {
 	screen     proto.Screen       // the last capture of the watched pane
 	watching   string             // the pane the service sends, or ""
 	watchHeld  string             // the pane the service refused, until the next snapshot
-	up         int                // the lines up the chat shows of the agent's history; 0 is live
-	watchUp    int                // the lines up the service sends
 	watchSize  [2]int             // the chat's size the service sizes the agent's window to: cols, rows
 	watchSince time.Time          // when the watched pane was selected: its size waits sizeDwell
 	sizeTick   time.Time          // the watchSince a sizeDueMsg is on its way for
-	liveWait   bool               // the chat came back from the history, and waits for the live screen
 	menuSeen   menuSeen           // the chat's quiet: the wait it shows and its start
 	tapped     tappedOption       // the option a tap pressed, until the next screen
+	shortPID   int                // the session whose chat a too short screen dropped, until the person chooses something else
 	chatShut   time.Time          // when the chat last closed by itself: keys typed for it go nowhere for a moment
 	chatTyped  time.Time          // when the person last typed in the chat
 	changes    map[paneKey]change // a match change that plays once
@@ -451,6 +454,9 @@ func New(opt Options) Model {
 	if opt.CompactAt <= 0 {
 		opt.CompactAt, opt.CompactTokens = sample.DefaultRules.CompactAt, sample.DefaultRules.CompactTokens
 	}
+	if opt.Demo != "" {
+		opt = closeTheMachine(opt)
+	}
 	if opt.Run == nil {
 		opt.Run = run
 	}
@@ -586,9 +592,13 @@ func (m *Model) sendOn(c transport.Conn, a proto.Act) (string, tea.Cmd) {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m = m.scanShows()
+	switch msg.(type) {
+	case tea.KeyPressMsg, tea.MouseClickMsg:
+		m.shortPID = 0 // a choice made: the dropped chat stays dropped
+	}
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
-		nm = nm.scanShows().keepChat(m).noteMenu()
+		nm = nm.scanShows().keepChat(m).noteMenu().inDemo()
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
 		}
@@ -651,9 +661,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.flash = msg.Err // a read that failed: the session and its last screen stay
 			return m, m.recv()
 		}
-		if msg.Pane == m.watching && (msg.Up == 0 || m.watchUp > 0) { // the history after live is not live
+		if msg.Pane == m.watching {
 			m.screen, m.tapped = proto.Screen(msg), tappedOption{}
-			m.liveWait = m.liveWait && msg.Up > 0
 		}
 		return m, m.recv()
 	case peerMsg:
@@ -796,7 +805,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A pane that went before the watch came is a race, not the builder's error.
 			if pane != "" && pane == m.watching {
 				m.watchHeld, m.watching, m.screen = pane, "", proto.Screen{}
-				m.up, m.watchUp, m.liveWait = 0, 0, false
 			}
 			return m, m.recv()
 		}
@@ -929,9 +937,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.formPaste(msg.Content)
 		case f == layerMain && m.chatKeys:
 			m, touch := m.touchRest()
-			if m.notLive() {
-				return m.backToLive(), touch
-			}
 			next, cmd := m.chatPaste(msg.Content)
 			return next, tea.Batch(touch, cmd)
 		}
@@ -963,19 +968,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		armed := m.backArmed
 		m.backArmed = time.Time{}
 		if m.chatKeys && (f == layerMain || f == layerTakeOver) && m.chatBacks(msg, armed) {
-			m.chatKeys, m.up = false, 0
+			m.chatKeys = false
 			return m, touch
-		}
-		if m.chatKeys && f == layerMain && bkey.Matches(msg, m.keys.chat.PageUp, m.keys.chat.PageDown) {
-			m.flash = ""
-			page := max(m.draw(max(m.width, minWidth)).chatRows, 1)
-			return m.scrollChat(bkey.Matches(msg, m.keys.chat.PageUp), page), touch
-		}
-		if m.notLive() && m.chatKeys && (f == layerMain || f == layerTakeOver) {
-			if bkey.Matches(msg, m.keys.chat.Back) { // the way back works from the history too
-				m.backArmed = m.now()
-			}
-			return m.backToLive(), touch
 		}
 		// ctrl+c quits from every layer but a question, where any key but
 		// its answers cancels, and the chat, which sends it to the agent.
@@ -1440,6 +1434,10 @@ func (m *Model) refuse() {
 // confirm runs an action the person consented to: a Nav step here, any
 // other on the service.
 func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
+	if m.opt.Demo != "" && a.leavesTheDemo() {
+		m.flash = m.opt.Demo
+		return m, nil
+	}
 	if a.climb != nil {
 		return m.climbed(*a.climb)
 	}
@@ -1541,6 +1539,10 @@ func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.flash = ""
+	if m.opt.Demo != "" { // the switch ran: only the jump into its pane cannot
+		m.flash = j.done
+		return m, nil
+	}
 	next, jump := m.confirm(*m.forHost(j.host, m.jumpOn(j.host, j.pane)))
 	nm := next.(Model)
 	say := []string{j.done}
@@ -1601,7 +1603,7 @@ func (m Model) attach(a action) tea.Cmd {
 	if r := runNav(action{steps: moves}, m.opt.Run); r.err != nil {
 		return func() tea.Msg { return r }
 	}
-	return tea.ExecProcess(exec.Command(last[0], last[1:]...), func(err error) tea.Msg { //nolint:gosec // argv checked by remote.NavAllowed
+	return m.exec(last, func(err error) tea.Msg { // argv checked by remote.NavAllowed
 		return ranMsg{cmd: strings.Join(last, " "), err: err, jumped: a.pane}
 	})
 }

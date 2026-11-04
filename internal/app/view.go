@@ -141,7 +141,7 @@ type drawn struct {
 	actKeys   []span
 	// chatFull: the chat is the whole screen, and a tap on its title row
 	// goes back to Sessions. chatRows: the lines of the agent's screen the
-	// chat shows, one page of its history.
+	// chat shows.
 	chatFull bool
 	// chatAt, chatX, chatW: the first row of the agent's screen in the chat,
 	// the chat's first column for a tap, and the screen's width; chatW 0: no chat.
@@ -250,7 +250,7 @@ func (m Model) drawScreen(w int) drawn {
 		vis, sc.full = m.leftColumn(b, listW, room)
 	}
 	edge := m.st.hair
-	if chatting && m.chatKeys && !m.notLive() {
+	if chatting && m.chatKeys {
 		edge = m.st.accent
 	}
 	for i := range room {
@@ -272,9 +272,9 @@ func (m Model) drawScreen(w int) drawn {
 		sc.dockAt, sc.dockH, sc.stx0, sc.stx1 = len(sc.lines)+1, len(d.lines), d.stx0, d.stx1
 		sc.lines = append(append(sc.lines, m.st.hair.Render(strings.Repeat("─", w))), d.lines...)
 	}
-	keys, keySpans := m.keyLine(w)
+	hair, keys, keySpans := m.keyRows(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, keySpans
-	sc.lines = append(sc.lines, m.st.hair.Render(strings.Repeat("─", w)), keys)
+	sc.lines = append(sc.lines, hair, keys)
 	switch {
 	case m.consenting():
 		m.overlayConsent(&sc, w)
@@ -480,6 +480,9 @@ func (m Model) stokerHit(word string, w int) span {
 // stoker's token, resting in muted. A phone drops the night's end.
 func (m Model) stokerBadge(short bool) string {
 	st := m.st
+	if m.opt.Demo != "" {
+		return ""
+	}
 	if m.hostCount() > 1 {
 		return m.stokersBadge(short)
 	}

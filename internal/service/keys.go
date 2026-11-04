@@ -34,6 +34,20 @@ func keyStep(pane, text string) ([]string, string) {
 	return panes.Keys(pane, text), ""
 }
 
+// stepOf is the tmux step of a keys: act's text. The wheel goes to the middle
+// of the agent's window, and only to an agent that reads the mouse.
+func (s *Service) stepOf(pane, name, text string) ([]string, string) {
+	if text != proto.WheelUp && text != proto.WheelDown {
+		return keyStep(pane, text)
+	}
+	if s.PaneMouse != nil {
+		if cols, rows, ok := s.PaneMouse(pane); ok {
+			return panes.Wheel(pane, text == proto.WheelUp, max(cols/2, 1), max(rows/2, 1)), ""
+		}
+	}
+	return nil, "not scrolled: " + name + " does not read the mouse — open its pane to scroll it"
+}
+
 // cut keeps the first n runes of text.
 func cut(text string, n int) string {
 	if r := []rune(text); len(r) > n {
@@ -60,7 +74,7 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 	if !sameAgent(x, a) {
 		return proto.Result{Err: "not sent: " + pane + " runs a different agent now"}
 	}
-	step, why := keyStep(pane, a.Text)
+	step, why := s.stepOf(pane, x.Name, a.Text)
 	if why != "" {
 		return proto.Result{Err: why}
 	}
@@ -69,7 +83,7 @@ func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Resu
 	}
 	g := advice.Guard{PID: x.PID, StartTicks: x.Start}
 	res := s.Actions.Do(ctx, advice.Action{Label: "keys", Steps: [][]string{step}, Guards: []advice.Guard{g}}, "")
-	if res.Err == "" && len(res.Ran) > 0 {
+	if res.Err == "" && len(res.Ran) > 0 && !scrolls(a.Text) {
 		s.undrive(pane) // the pane's last input is the person's, as with a message
 	}
 	s.kickScreens(pane)
@@ -101,16 +115,20 @@ func (s *Service) unseen(pane, name string, a proto.Act, menu bool) string {
 	if a.Seen.IsZero() {
 		return "not sent: the console has not shown " + name + "'s screen yet — look again"
 	}
-	if s.upScreens.has(pane, a.Seen) {
-		return "not sent: that screen was " + name + "'s history, not the live screen — look again"
-	}
 	if queued && it.Since.Add(waitSettle).After(a.Seen) {
 		return "not sent: " + name + " asks something new — look again"
 	}
 	return ""
 }
 
-// answers tells if a key answers a menu: all but ^C, ^A and Backspace.
+// answers tells if a key answers a menu: all but ^C, ^A, Backspace and the
+// keys that scroll.
 func answers(text string) bool {
-	return text != "C-c" && text != "C-a" && text != "BSpace"
+	return text != "C-c" && text != "C-a" && text != "BSpace" && !scrolls(text)
+}
+
+// scrolls tells if a key only moves what the agent shows. It answers nothing
+// and leaves a driven pane's merge guard on.
+func scrolls(text string) bool {
+	return text == proto.WheelUp || text == proto.WheelDown || text == "PPage" || text == "NPage"
 }

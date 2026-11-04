@@ -1,0 +1,550 @@
+package demo
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/gitscan"
+	"github.com/blox-eng/matchblox/internal/procfs"
+	"github.com/blox-eng/matchblox/internal/service"
+)
+
+// OrphanPID is the stray process of the fixture machine, the one the demo
+// kills.
+const OrphanPID = 4242
+
+// session is a Claude Code session of the demo machine. Its folder and its
+// transcript keep name, whatever a rename calls it: shown.
+type session struct {
+	pid    int
+	name   string
+	shown  string
+	id     string
+	status string
+	tokens int
+}
+
+// World is the fixture machine as it changes while the demo acts on it: a
+// typed answer sets its session to work, a /compact leaves its boundary and
+// summary in the transcript, a removed worktree leaves the git scan. It
+// acts on a copy of the machine, and runs nothing on the real one.
+type World struct {
+	root  string
+	clock func() time.Time
+	kill  func(pid int)
+	// Uptime is the demo host's, for the start time of a session the demo
+	// starts. NewWorld sets the fixture's own.
+	Uptime func() float64
+	// Picked, if set, is told of each answer on a question's menu, with the
+	// pane, while the world holds its lock: it must not call the world.
+	Picked func(pane string)
+
+	mu       sync.Mutex
+	sessions map[string]*session // by pane
+	typed    map[string]string   // the draft in each pane's field
+	removed  map[string]bool     // worktree paths
+	ran      [][]string
+	started  int // sessions the demo has started
+}
+
+// NewWorld is the world of a copy of the fixture machine in root. kill ends
+// a process of it.
+func NewWorld(root string, clock func() time.Time, kill func(pid int)) (*World, error) {
+	fixture := procfs.FS{Root: filepath.Join(root, "proc"), PageSize: procfs.FixturePage}
+	w := &World{root: root, clock: clock, kill: kill, Uptime: fixture.Uptime,
+		sessions: map[string]*session{}, typed: map[string]string{}, removed: map[string]bool{}}
+	for pane, pid := range map[string]int{"%1": 1200, "%2": 1310, "%3": 1400, "%5": 1600, "%8": 1900} {
+		b, err := os.ReadFile(w.registry(pid))
+		if err != nil {
+			return nil, err
+		}
+		var e struct{ Name, SessionID, Status string }
+		if err := json.Unmarshal(b, &e); err != nil {
+			return nil, err
+		}
+		tokens, err := lastTokens(w.transcript(e.Name, e.SessionID))
+		if err != nil {
+			return nil, err
+		}
+		w.sessions[pane] = &session{pid: pid, name: e.Name, shown: e.Name, id: e.SessionID, status: e.Status, tokens: tokens}
+	}
+	return w, nil
+}
+
+var usageRe = regexp.MustCompile(`"cache_read_input_tokens": ?(\d+)`)
+
+func lastTokens(path string) (int, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	m := usageRe.FindAllSubmatch(b, -1)
+	if len(m) == 0 {
+		return 0, fmt.Errorf("%s has no usage", path)
+	}
+	n := 0
+	_, _ = fmt.Sscan(string(m[len(m)-1][1]), &n)
+	return n + 10, nil // the input tokens of each demo turn
+}
+
+func (w *World) registry(pid int) string {
+	return filepath.Join(w.root, "home", ".claude", "sessions", fmt.Sprint(pid)+".json")
+}
+
+func (w *World) transcript(name, id string) string {
+	return filepath.Join(w.root, "home", ".claude", "projects", "-work-"+name, id+".jsonl")
+}
+
+func (w *World) pane(pane string) string {
+	return filepath.Join(w.root, "panes", strings.TrimPrefix(pane, "%")+".txt")
+}
+
+// Wire makes the world the service's whole runner: what the service would
+// run, ask tmux or look up on the machine it runs on, it takes from the world.
+func (w *World) Wire(s *service.Service) {
+	s.Actions.Run = w.Run
+	s.Actions.Check = func(advice.Guard) error { return nil } // the demo's pids are not this machine's
+	s.LookPath = lookPath
+	s.IsDir = func(path string) bool { return strings.HasPrefix(path, "/work/") }
+	s.PaneMouse = paneMouse
+	s.TmuxOut = func([]string) (string, error) { return "", errRefused }
+	s.PeerPane = func(int) string { return "" }
+	s.WorktreeStep = func(context.Context, string, string) ([]string, string, error) { return nil, "", errRefused }
+	s.MatchGit = func(context.Context, string, ...string) (string, error) { return "", nil } // the fixture has no git to read
+}
+
+// paneMouse says every demo agent reads the mouse, so a wheel in the chat goes
+// to the world, never to tmux to ask. The size only places the wheel's spot.
+func paneMouse(string) (cols, rows int, ok bool) { return 80, 24, true }
+
+// lookPath finds the demo's agents, not this machine's. tmux and gh are not
+// among them: the service would run them to ask their version.
+func lookPath(cmd string) (string, error) {
+	if base := filepath.Base(cmd); base == "tmux" || base == "gh" {
+		return "", exec.ErrNotFound
+	}
+	return "/usr/bin/" + cmd, nil
+}
+
+// Run is the service's runner: it takes only what the demo does.
+func (w *World) Run(argv []string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.ran = append(w.ran, argv)
+	switch {
+	case slices.Equal(argv, []string{"kill", fmt.Sprint(OrphanPID)}):
+		w.kill(OrphanPID)
+		return nil
+	case len(argv) == 7 && argv[1] == "send-keys" && argv[4] == "-l" && w.atMenu(argv[3]):
+		if !slices.Contains(w.options(argv[3]), argv[6]) {
+			return nil // not an option of the menu: the agent takes nothing
+		}
+		return w.pick(argv[3], argv[6])
+	case len(argv) == 5 && argv[1] == "send-keys" && argv[4] == "Enter" && w.atMenu(argv[3]):
+		if digit := w.highlighted(argv[3]); digit != "" {
+			return w.pick(argv[3], digit)
+		}
+		return nil
+	case len(argv) == 7 && argv[1] == "send-keys" && argv[4] == "-l":
+		w.typed[argv[3]] = argv[6]
+		return w.drawField(argv[3])
+	case len(argv) == 5 && argv[1] == "send-keys" && argv[4] == "Enter":
+		text := w.typed[argv[3]]
+		delete(w.typed, argv[3])
+		if err := w.drawField(argv[3]); err != nil {
+			return err
+		}
+		return w.submit(argv[3], text)
+	case scrolls(argv):
+		return nil // the fixture's screens have nothing above or below them
+	case len(argv) == 6 && argv[1] == "send-keys" && argv[4] == "/compact" && argv[5] == "Enter":
+		return w.submit(argv[3], "/compact")
+	case len(argv) == 6 && argv[0] == "git" && argv[3] == "worktree" && argv[4] == "remove":
+		w.removed[argv[5]] = true
+		return nil
+	case len(argv) == 5 && argv[0] == "tmux" && argv[1] == "rename-window":
+		return w.renamePane(argv[3], func(f []string) { f[2] = argv[4] })
+	case len(argv) == 5 && argv[0] == "tmux" && argv[1] == "rename-session":
+		return w.renamePane(argv[3], func(f []string) {
+			_, at, _ := strings.Cut(f[1], ":")
+			f[1] = argv[4] + ":" + at
+		})
+	case len(argv) == 4 && argv[0] == "tmux" && argv[1] == "kill-pane":
+		return w.closePane(argv[3])
+	case len(argv) == 3 && argv[0] == "kill" && argv[1] == "-TERM":
+		return nil // the agent went with its pane
+	case len(argv) > 0 && argv[0] == "env" && slices.Contains(argv, "new-session"):
+		at := slices.Index(argv, "tmux")
+		if at < 0 {
+			return errRefused
+		}
+		return w.start(argv[at:])
+	}
+	return errRefused
+}
+
+// scrolls is a wheel (send-keys -H) or a page key the chat sends the agent.
+func scrolls(argv []string) bool {
+	if len(argv) < 5 || argv[1] != "send-keys" {
+		return false
+	}
+	return argv[4] == "-H" || len(argv) == 5 && (argv[4] == "PPage" || argv[4] == "NPage")
+}
+
+// renamePane changes the pane's line in tmux's list. Hold w.mu.
+func (w *World) renamePane(pane string, change func(fields []string)) error {
+	path := filepath.Join(w.root, "tmux-panes.txt")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(b), "\n")
+	for i, l := range lines {
+		if f := strings.Split(l, "\t"); f[0] == pane {
+			change(f)
+			lines[i] = strings.Join(f, "\t")
+		}
+	}
+	return writeAtomic(path, []byte(strings.Join(lines, "\n")))
+}
+
+// closePane is tmux kill-pane: the pane leaves tmux's list, and its
+// process ends. Hold w.mu.
+func (w *World) closePane(pane string) error {
+	path := filepath.Join(w.root, "tmux-panes.txt")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var keep []string
+	for _, l := range strings.Split(strings.TrimRight(string(b), "\n"), "\n") {
+		f := strings.Split(l, "\t")
+		if f[0] != pane {
+			keep = append(keep, l)
+			continue
+		}
+		pid, err := strconv.Atoi(f[3])
+		if err != nil {
+			return err
+		}
+		w.kill(pid)
+	}
+	delete(w.sessions, pane)
+	return writeAtomic(path, []byte(strings.Join(keep, "\n")+"\n"))
+}
+
+// firstPID and firstPane are the first session the demo starts; each later
+// one takes the next of both.
+const (
+	firstPID  = 2000
+	firstPane = 9
+)
+
+// start is tmux new-session -d -s <name> -n <name> -c <dir> <agent>…: a
+// Claude Code process in a new pane, at work on its first message, with
+// its session file. Hold w.mu.
+func (w *World) start(argv []string) error {
+	nameAt, dirAt := slices.Index(argv, "-s"), slices.Index(argv, "-c")
+	if nameAt < 0 || dirAt < 0 || nameAt+1 >= len(argv) || dirAt+2 >= len(argv) {
+		return errRefused
+	}
+	name, dir := argv[nameAt+1], argv[dirAt+1]
+	agent := argv[dirAt+2:]
+	// The real process inherits the launch context through env. Keep that
+	// wrapper out of cmdline, as /proc does after env execs the agent.
+	contextEnv := ""
+	if len(agent) > 2 && agent[0] == "env" && strings.HasPrefix(agent[1], "MATCHBLOX_CONTEXT=") {
+		contextEnv, agent = agent[1]+"\x00", agent[2:]
+	}
+	newPID, paneNo := firstPID+w.started, firstPane+w.started
+	newPane := "%" + strconv.Itoa(paneNo)
+	w.started++
+	proc := filepath.Join(w.root, "proc", strconv.Itoa(newPID))
+	if err := os.MkdirAll(proc, 0o750); err != nil {
+		return err
+	}
+	ticks := int(w.Uptime() * procfs.ClockTicks)
+	files := map[string]string{
+		"cmdline": strings.Join(agent, "\x00") + "\x00",
+		"environ": "HOME=/home/user\x00TMUX_PANE=" + newPane + "\x00TERM=tmux-256color\x00" + contextEnv,
+		"stat":    fmt.Sprintf("%d (%s) S 1 %d %d 0 -1 0 0 0 0 0 0 0 0 0 20 0 1 0 %d 100000 2500", newPID, agent[0], newPID, newPID, ticks),
+	}
+	for f, body := range files {
+		if err := os.WriteFile(filepath.Join(proc, f), []byte(body), 0o600); err != nil {
+			return err
+		}
+	}
+	if err := os.Symlink(dir, filepath.Join(proc, "cwd")); err != nil {
+		return err
+	}
+	s := &session{pid: newPID, name: name, shown: name, id: fmt.Sprintf("5ea1c0de-0000-4000-8000-%012d", paneNo), status: "busy"}
+	w.sessions[newPane] = s
+	now := w.clock().UnixMilli()
+	reg, err := json.Marshal(map[string]any{"pid": s.pid, "sessionId": s.id, "cwd": dir, "name": name,
+		"status": s.status, "startedAt": now, "statusUpdatedAt": now})
+	if err != nil {
+		return err
+	}
+	if err := writeAtomic(w.registry(s.pid), append(reg, '\n')); err != nil {
+		return err
+	}
+	path := filepath.Join(w.root, "tmux-panes.txt")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	line := strings.Join([]string{newPane, name + ":1.1", name, strconv.Itoa(newPID), agent[0], dir}, "\t")
+	return writeAtomic(path, append(b, []byte(line+"\n")...))
+}
+
+// pick is a digit in the question tool's menu: the call gets its result,
+// the agent works on the answer, and the menu leaves the pane. Hold w.mu.
+func (w *World) pick(pane, digit string) error {
+	s, ok := w.sessions[pane]
+	if !ok {
+		return fmt.Errorf("no session in %s", pane)
+	}
+	now := w.clock()
+	s.status, s.tokens = "busy", s.tokens+4000
+	if err := w.appendTranscript(s,
+		map[string]any{"type": "user", "isSidechain": false, "timestamp": now,
+			"message": map[string]any{"content": []map[string]string{{"type": "tool_result", "tool_use_id": "toolu_01DEMO", "content": "The user picked option " + digit}}}},
+		turnLine(now, s.tokens, "I rotate the token on each refresh and keep the old one for a minute."),
+	); err != nil {
+		return err
+	}
+	if err := writeAtomic(w.pane(pane), []byte("● I rotate the token on each refresh and keep the old one for a minute.\n\n╭──────────────────────────────────────────────╮\n│ > \n╰──────────────────────────────────────────────╯\n")); err != nil {
+		return err
+	}
+	if err := w.writeRegistry(s, now); err != nil {
+		return err
+	}
+	if w.Picked != nil {
+		w.Picked(pane)
+	}
+	return nil
+}
+
+// atMenu tells if the pane shows the question tool's menu. Hold w.mu.
+func (w *World) atMenu(pane string) bool {
+	b, err := os.ReadFile(w.pane(pane))
+	return err == nil && strings.Contains(string(b), "Enter to select")
+}
+
+var optionRe = regexp.MustCompile(`^(❯?)\s*(\d)\. `)
+
+// options are the digits of the options the pane's menu shows, and highlighted
+// the one under its cursor. Hold w.mu.
+func (w *World) options(pane string) []string {
+	var digits []string
+	w.eachOption(pane, func(digit string, _ bool) { digits = append(digits, digit) })
+	return digits
+}
+
+func (w *World) highlighted(pane string) string {
+	at := ""
+	w.eachOption(pane, func(digit string, cursor bool) {
+		if cursor {
+			at = digit
+		}
+	})
+	return at
+}
+
+func (w *World) eachOption(pane string, f func(digit string, cursor bool)) {
+	b, err := os.ReadFile(w.pane(pane))
+	if err != nil {
+		return
+	}
+	for _, l := range strings.Split(string(b), "\n") {
+		if m := optionRe.FindStringSubmatch(l); m != nil {
+			f(m[2], m[1] != "")
+		}
+	}
+}
+
+// drawField shows the draft in the pane's input field. Hold w.mu.
+func (w *World) drawField(pane string) error {
+	b, err := os.ReadFile(w.pane(pane))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil // a pane the demo never reads
+	}
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(b), "\n")
+	for i, l := range lines {
+		if strings.HasPrefix(l, "│ > ") {
+			lines[i] = "│ > " + w.typed[pane]
+		}
+	}
+	return writeAtomic(w.pane(pane), []byte(strings.Join(lines, "\n")))
+}
+
+// submit is the Enter in a session: an answer sets it to work, a /compact
+// leaves the boundary and the summary. Hold w.mu.
+func (w *World) submit(pane, text string) error {
+	s, ok := w.sessions[pane]
+	if !ok {
+		return fmt.Errorf("no session in %s", pane)
+	}
+	now := w.clock()
+	if name, ok := strings.CutPrefix(text, "/rename "); ok {
+		s.shown = name
+		return w.writeRegistry(s, now)
+	}
+	if !strings.HasPrefix(text, "/compact") {
+		// The agent takes the answer and works: its newest reply asks no more.
+		s.status, s.tokens = "busy", s.tokens+4000
+		reply := "I rotate the token on each refresh and keep the old one for a minute."
+		if pane != askPane {
+			reply = "Got it. I am working on that."
+		}
+		if err := w.appendTranscript(s, turnLine(now, s.tokens, reply)); err != nil {
+			return err
+		}
+		if err := w.writeRegistry(s, now); err != nil {
+			return err
+		}
+		if text != "" && !strings.HasPrefix(text, "/") && w.Picked != nil {
+			w.Picked(pane)
+		}
+		return nil
+	}
+	resume := "RESUME: " + map[string]string{
+		"hearth-api": "add the rate-limit headers, then open the PR",
+		"spark-docs": "check every link of the 1.0 docs, then open the PR",
+	}[s.name]
+	if err := w.appendTranscript(s,
+		map[string]any{"type": "system", "subtype": "compact_boundary", "timestamp": now,
+			"compactMetadata": map[string]any{"trigger": "manual", "preTokens": s.tokens, "postTokens": 9000}},
+		map[string]any{"type": "user", "isCompactSummary": true, "timestamp": now,
+			"message": map[string]any{"role": "user", "content": "This session continues from a summary.\n\n" + resume}},
+	); err != nil {
+		return err
+	}
+	s.tokens = 9000
+	return w.writeRegistry(s, now)
+}
+
+// Finish ends the turn of the session in pane with its context at tokens, or
+// where it stands when tokens is 0.
+func (w *World) Finish(pane string, tokens int, text string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	s, ok := w.sessions[pane]
+	if !ok {
+		return fmt.Errorf("no session in %s", pane)
+	}
+	now := w.clock()
+	if tokens <= 0 {
+		tokens = s.tokens
+	}
+	if err := w.appendTranscript(s, turnLine(now, tokens, text)); err != nil {
+		return err
+	}
+	s.status, s.tokens = "idle", tokens
+	return w.writeRegistry(s, now)
+}
+
+// turnLine is an assistant turn of a transcript.
+func turnLine(at time.Time, tokens int, text string) map[string]any {
+	return map[string]any{"type": "assistant", "isSidechain": false, "timestamp": at,
+		"message": map[string]any{"model": "sonnet", "content": []map[string]string{{"type": "text", "text": text}},
+			"usage": map[string]int{"input_tokens": 10, "cache_read_input_tokens": tokens - 10}}}
+}
+
+func (w *World) appendTranscript(s *session, lines ...map[string]any) error {
+	path := w.transcript(s.name, s.id)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // a session the demo started has none yet
+		return err
+	}
+	var buf []byte
+	for _, l := range lines {
+		b, err := json.Marshal(l)
+		if err != nil {
+			return err
+		}
+		buf = append(append(buf, b...), '\n')
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(buf); err != nil {
+		return errors.Join(err, f.Close())
+	}
+	return f.Close()
+}
+
+func (w *World) writeRegistry(s *session, now time.Time) error {
+	b, err := json.Marshal(map[string]any{"pid": s.pid, "sessionId": s.id, "cwd": "/work/" + s.name, "name": s.shown,
+		"status": s.status, "startedAt": demoStarted.UnixMilli(), "statusUpdatedAt": now.UnixMilli()})
+	if err != nil {
+		return err
+	}
+	return writeAtomic(w.registry(s.pid), append(b, '\n'))
+}
+
+// writeAtomic replaces a file in one step: the sampler reads these files
+// every 50 ms and must never see one half written.
+func writeAtomic(path string, b []byte) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil { //nolint:gosec // a path under the demo's own temp folder
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// demoStarted is when the demo's Claude Code sessions started.
+var demoStarted = time.Date(2026, 10, 1, 19, 30, 0, 0, time.UTC)
+
+// Ran is every argv the service ran.
+func (w *World) Ran() [][]string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return append([][]string(nil), w.ran...)
+}
+
+// Git is the demo's git scan: one repository with a worktree for each
+// session and one merged worktree that is safe to remove.
+func (w *World) Git([]string) gitscan.Report {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	const repo = "/work/hearth"
+	pr := func(n int, title string) *gitscan.PR {
+		return &gitscan.PR{Number: n, Title: title, URL: fmt.Sprintf("https://example.com/hearth/hearth/pull/%d", n)}
+	}
+	all := []gitscan.Worktree{
+		{Path: repo, Branch: "main", InUse: true},
+		{Path: "/work/hearth-api", Branch: "api/rate-limits", Dirty: 3, Sessions: 1, InUse: true},
+		{Path: "/work/flint-auth", Branch: "auth/refresh-rotation", Dirty: 1, Sessions: 1, InUse: true},
+		{Path: "/work/spark-docs", Branch: "docs/1.0", Dirty: 2, Sessions: 1, InUse: true},
+		{Path: "/work/kindle-web", Branch: "web/one-tap-checkout", Sessions: 1, InUse: true, PR: pr(212, "One-tap checkout")},
+		{Path: "/work/ember-billing", Branch: "billing/invoice-export", Sessions: 1, InUse: true, PR: pr(214, "Invoice export")},
+		{Path: "/work/cinder-ci", Branch: "ci/go-build-cache", Dirty: 1, Sessions: 1, InUse: true},
+		{Path: "/work/wick-mobile", Branch: "mobile/settings-layout", Dirty: 4, Sessions: 1, InUse: true},
+		{Path: "/work/kindle-cart-v1", Branch: "web/cart-v1", Merged: true, Safe: true,
+			Remove: []string{"git", "-C", repo, "worktree", "remove", "/work/kindle-cart-v1"}},
+	}
+	var wts []gitscan.Worktree
+	for _, wt := range all {
+		if !w.removed[wt.Path] {
+			wts = append(wts, wt)
+		}
+	}
+	return gitscan.Report{At: w.clock(), Repos: []gitscan.Repo{{Path: repo, Main: "main", Worktrees: wts}}, Watching: []string{repo}}
+}

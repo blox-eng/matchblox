@@ -1,0 +1,6 @@
+● The one-tap checkout button is wired to the cart, and the page tests pass.
+
+╭──────────────────────────────────────────────╮
+│ > 
+╰──────────────────────────────────────────────╯
+  ? for shortcuts

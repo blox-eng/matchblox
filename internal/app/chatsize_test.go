@@ -131,10 +131,6 @@ func TestAScreenAsWideAsTheChatIsDrawnAsItIs(t *testing.T) {
 	if got := m.chatLines(11, 6); ansi.Strip(got[5]) != "╰──────╯" {
 		t.Fatalf("another width fits: %q", got)
 	}
-	m.screen = proto.Screen{Pane: sel.Pane, Text: text, Cols: 11, Rows: 5, Up: 3}
-	if got := m.chatLines(11, 6); ansi.Strip(got[5]) != "╰──────╯" {
-		t.Fatalf("the history fits: %q", got)
-	}
 }
 
 // sizedScreen is an agent's screen drawn at cols by rows: a table as wide
