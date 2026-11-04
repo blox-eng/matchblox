@@ -186,6 +186,36 @@ it talks to Apple's production service and accepts production App Attest
 keys; otherwise it answers `BadDeviceToken`. This is the same rule as the
 entitlements note under [The push relay's secrets](#the-push-relays-secrets).
 
+### Notes for App Review
+
+The app is a window on the person's own computer. It needs a computer that runs
+matchblox, which the person installs with `curl -fsSL https://matchblox.sh | sh`.
+Apple's reviewer has no such computer, so the app has **Try a demo**. It runs
+the real console on a made-up machine inside the app. It needs no account, no
+network and no camera. Paste this into the review notes, and ask for approval of
+the demo in the same message (guideline 2.1):
+
+> Matchblox Pocket shows the AI coding agents that run on your own computer. It
+> needs that computer to run matchblox, so a reviewer has no host to pair. Tap
+> **Try a demo** on the first screen. The first screen may ask for the camera.
+> Tap Don't Allow if you like: the demo works either way. The app scans a
+> throwaway code by itself, with no camera, and opens a made-up machine with
+> seven sessions. Tap the first session, then tap an option in its question.
+> When the agent finishes, a sheet shows how to install matchblox.
+> Please confirm the demo is enough to review the app.
+>
+> The usage panel shows the labels "Claude Max", "Google login" and "OpenAI
+> Plus". These are the product's own plan labels. They also appear on
+> matchblox.sh. The app has no tie to those companies and asks for no login.
+
+Beta app description:
+
+> Matchblox Pocket shows the AI coding agents on your own computer and lets you
+> answer them from your phone. Pair it with a computer that runs matchblox, or
+> tap Try a demo to see how it works first.
+
+Feedback email: `<owner: the address testers write to>`
+
 ## Homebrew
 
 The Publish job `packages` writes the Homebrew formula of each latest

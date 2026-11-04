@@ -1645,3 +1645,17 @@ func TestHelloTmuxIsTheJumps(t *testing.T) {
 		t.Fatalf("after tmux came to ~/.local/bin: %q", h.Tmux)
 	}
 }
+
+func TestHistoryIsLoadedAgainstTheServiceClock(t *testing.T) {
+	at := time.Date(2026, 10, 1, 22, 0, 0, 0, time.UTC)
+	csv := filepath.Join(t.TempDir(), "history.csv")
+	must(t, os.WriteFile(csv, []byte("ts,cpu_pct\n"+at.Add(-time.Hour).Format(time.RFC3339)+",40\n"+at.Format(time.RFC3339)+",50\n"), 0o600))
+	s := newTest(t, time.Hour)
+	s.HistorySources, s.Now = []string{csv}, func() time.Time { return at }
+
+	s.loadHistory()
+
+	if n := len(s.hist.Points); n != 2 {
+		t.Fatalf("a service whose clock is at %v loaded %d points of a file written then, want 2", at, n)
+	}
+}

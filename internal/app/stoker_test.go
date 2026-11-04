@@ -167,6 +167,18 @@ func TestNightFitsAPhoneWithALongHostName(t *testing.T) {
 	}
 }
 
+// The demo host's header drops the stoker badge; everyone else's keeps it.
+func TestOnlyTheDemoHeaderDropsTheStokerBadge(t *testing.T) {
+	m, _ := loadedWith(t, 44, stokerState(proto.StokerView{}))
+	if h := ansi.Strip(m.head(44)); !strings.Contains(h, "stoker off") {
+		t.Fatalf("header %q has no stoker badge", h)
+	}
+	m.opt.Demo = "This is a demo."
+	if h := ansi.Strip(m.head(44)); strings.Contains(h, "stoker") {
+		t.Fatalf("the demo header %q shows the stoker badge", h)
+	}
+}
+
 func TestStokedShowsAReadBackWithoutCounts(t *testing.T) {
 	at := fixtureState().At
 	v := stokedRun(at)

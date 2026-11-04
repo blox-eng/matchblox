@@ -171,6 +171,7 @@ enum Registration {
     /// default Follow (the host opened last) moved away from, with the same unlock. Errors are
     /// logged and never block the console.
     static func afterOpen(host: Host, key: NIOSSHPrivateKey, context: LAContext?, hosts: [Host]) async {
+        guard !host.isDemo else { return }
         var prefs = IslandSettings.prefs
         let lost = prefs.opened(host.fingerprint)
         IslandSettings.prefs = prefs
@@ -195,7 +196,9 @@ enum Registration {
         IslandSettings.endStrayActivities()
         var change = IslandChange()
         var due: [Host] = []
-        for host in concerned where await isNeeded(host) { due.append(host) }
+        for host in concerned where !host.isDemo {
+            if await isNeeded(host) { due.append(host) }
+        }
         guard !due.isEmpty else { return change }
         guard !Task.isCancelled else {
             change.untried = due

@@ -102,6 +102,36 @@ terminal.`
   device. It does not remove the key on the host. Run
   `matchblox devices rm <name>` on the host for that.
 
+### Try a demo
+
+With no host, the pairing screen shows `Try a demo` below the scan. With two or
+more hosts, the Hosts screen shows it beside `Island`. The scan view shows a
+code of its own and scans it by itself. On a fresh install, the pairing screen
+asks for the camera first, and `Try a demo` works whether you allow or deny it.
+The demo's own scan turns on no camera and asks for no permission. Then the app
+saves a host called `demo`.
+
+The demo runs the real console on a made-up machine inside the app. It needs no
+network and starts fresh each time it opens. Tap the session that waits at the
+top, then tap an option in its question. When that agent finishes, a sheet says
+`Your agents wait the same way.` It shows the line
+`curl -fsSL https://matchblox.sh | sh` with `Copy`, and these buttons:
+
+- `Send to my computer` opens the share sheet with the line and the link to get
+  started.
+- `Pair a host` goes to the pairing screen.
+- `Keep looking` closes the sheet.
+
+A tap on the demo does not raise the keyboard. The key belt's keyboard button
+does. A layout you pick in the demo is not saved. If you quit the console, the
+ended screen offers `Open again`, `Pair a host`, the line and `Send to my
+computer`.
+
+The phone cannot go into tmux, connect to another host, pair a device, update,
+merge, make a worktree, clone, or send `^C` inside a chat. The demo answers
+`This is a demo. Install matchblox to do that.` Pairing a real host removes
+`demo`.
+
 ### Remove a device
 
 To remove a device, press `x` on it in `DEVICES` on the Machine tab, and

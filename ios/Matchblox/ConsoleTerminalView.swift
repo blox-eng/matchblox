@@ -17,6 +17,9 @@ final class ConsoleTerminalView: TerminalView {
     var onHome: @MainActor () -> Void = {}
     /// Called when the terminal takes or gives up the keyboard.
     var onFocus: @MainActor (Bool) -> Void = { _ in }
+    /// False on the demo: a tap only clicks, and the keyboard comes from the belt's key, so it does
+    /// not cover the question the demo shows.
+    var tapRaisesKeyboard = true
 
     /// SwiftTerm does not declare this trait, so UIKit would keep inline predictions on.
     @objc var inlinePredictionType: UITextInlinePredictionType = .no
@@ -24,6 +27,10 @@ final class ConsoleTerminalView: TerminalView {
     private let haptic = UIImpactFeedbackGenerator(style: .light)
     private var edge: UIScreenEdgePanGestureRecognizer?
     private var labelTap: UITapGestureRecognizer?
+    private var clickTap: UITapGestureRecognizer?
+    /// Whether the keyboard was this view's when the touch began. SwiftTerm spends a tap on an
+    /// unfocused terminal only on the keyboard and never sends it to the program.
+    private var focusedAtTouch = false
     private var wheelPan: UIPanGestureRecognizer?
     private var wheel = WheelScroll(cellHeight: 0)
     private var coast: Coast?
@@ -47,6 +54,20 @@ final class ConsoleTerminalView: TerminalView {
         }
         addGestureRecognizer(tap)
         labelTap = tap
+
+        // The first tap on an unfocused console is a click too: a session's row opens at once.
+        let click = UITapGestureRecognizer(target: self, action: #selector(clicked))
+        click.cancelsTouchesInView = false
+        // SwiftTerm's single tap decides up to 0.3 s after the touch, for a double tap. It waits
+        // for the click too, so a tap the click answers is not answered a second time, whatever
+        // touch comes in that window.
+        for other in gestureRecognizers ?? [] {
+            if let tap = other as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1 {
+                tap.require(toFail: click)
+            }
+        }
+        addGestureRecognizer(click)
+        clickTap = click
 
         // SwiftTerm's mouse pan sends a drag, which tmux and the console do not scroll on. A
         // vertical swipe goes to this pan first; the scroll view's own pan waits for it too.
@@ -78,6 +99,7 @@ final class ConsoleTerminalView: TerminalView {
     /// A touch stops a flick, as in a scroll view.
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         stopCoast()
+        focusedAtTouch = isFirstResponder
         super.touchesBegan(touches, with: event)
     }
 
@@ -106,6 +128,17 @@ final class ConsoleTerminalView: TerminalView {
     override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
         if gesture === labelTap {
             return tapsLabel(at: gesture.location(in: self))
+        }
+        if gesture === clickTap {
+            let first = !focusedAtTouch
+            let clicks = sendsClicks && (first || !tapRaisesKeyboard)
+            return (clicks || (first && tapRaisesKeyboard)) && !tapsLabel(at: gesture.location(in: self))
+        }
+        // The click answers a first tap, and takes the keyboard on it; SwiftTerm's single tap
+        // waits for the click to fail, so it answers only the taps on a focused terminal. On the
+        // demo, no tap takes the keyboard.
+        if !tapRaisesKeyboard, let tap = gesture as? UITapGestureRecognizer, tap.numberOfTapsRequired == 1 {
+            return false
         }
         if gesture === wheelPan, let pan = gesture as? UIPanGestureRecognizer {
             let velocity = pan.velocity(in: self)
@@ -164,6 +197,16 @@ final class ConsoleTerminalView: TerminalView {
         allowMouseReporting && getTerminal().mouseMode != .off
     }
 
+    /// SwiftTerm sends a tap as a press and a release in these modes only. In X10 mode it sends
+    /// nothing, and so does the click.
+    private var sendsClicks: Bool {
+        guard allowMouseReporting else { return false }
+        switch getTerminal().mouseMode {
+        case .vt200, .buttonEventTracking, .anyEvent: return true
+        default: return false
+        }
+    }
+
     /// Each step at the touch's cell, encoded by SwiftTerm for the program's mouse protocol.
     private func sendWheel(_ steps: [WheelScroll.Step], at point: CGPoint) {
         let terminal = getTerminal()
@@ -175,6 +218,27 @@ final class ConsoleTerminalView: TerminalView {
         let pixelY = Int(point.y - contentOffset.y)
         for step in steps {
             let flags = terminal.encodeButton(button: step.button, release: false, shift: false, meta: false, control: false)
+            terminal.sendEvent(buttonFlags: flags, x: col, y: row, pixelX: pixelX, pixelY: pixelY)
+        }
+    }
+
+    /// The press and release at the touch's cell, then the keyboard on a first tap.
+    @objc private func clicked(_ tap: UITapGestureRecognizer) {
+        guard tap.state == .ended else { return }
+        sendClick(at: tap.location(in: self))
+        if tapRaisesKeyboard, !focusedAtTouch { _ = becomeFirstResponder() }
+    }
+
+    private func sendClick(at point: CGPoint) {
+        let terminal = getTerminal()
+        guard sendsClicks, terminal.cols > 0, terminal.rows > 0 else { return }
+        let cell = cellSize
+        let col = min(max(Int(point.x / cell.width), 0), terminal.cols - 1)
+        let row = min(max(Int(point.y / cell.height) - terminal.buffer.yDisp, 0), terminal.rows - 1)
+        let pixelX = Int(point.x)
+        let pixelY = Int(point.y - contentOffset.y)
+        for release in [false, true] {
+            let flags = terminal.encodeButton(button: 0, release: release, shift: false, meta: false, control: false)
             terminal.sendEvent(buttonFlags: flags, x: col, y: row, pixelX: pixelX, pixelY: pixelY)
         }
     }
@@ -218,4 +282,18 @@ final class ConsoleTerminalView: TerminalView {
         let cells = (0..<terminal.cols).map { terminal.getCharacter(col: $0, row: row) ?? " " }
         return HomeKey.labelColumns(in: cells)
     }
+
+    #if DEBUG
+    /// The screen as text. A cell the program never drew holds NUL, and a space may be such a cell.
+    var screenText: String {
+        let terminal = getTerminal()
+        return (0..<terminal.rows).map { row in
+            let cells: [Character] = (0..<terminal.cols).map { col in
+                let cell = terminal.getCharacter(col: col, row: row) ?? " "
+                return cell == "\0" ? " " : cell
+            }
+            return String(cells)
+        }.joined(separator: "\n")
+    }
+    #endif
 }

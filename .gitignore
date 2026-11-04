@@ -9,3 +9,4 @@ site/
 
 # built binary
 /cmd/matchblox/matchblox
+/ios/Matchblox/Demo/machine.tar

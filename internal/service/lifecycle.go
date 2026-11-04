@@ -920,7 +920,11 @@ func (s *Service) newSteps(ctx context.Context, n proto.NewSession) (steps [][]s
 		return nil, "", "", nil, fmt.Errorf("no directory %s", dir)
 	}
 	if n.Branch != "" {
-		step, wt, err := worktreeStep(ctx, dir, n.Branch)
+		add := s.WorktreeStep
+		if add == nil {
+			add = worktreeStep
+		}
+		step, wt, err := add(ctx, dir, n.Branch)
 		if err != nil {
 			return nil, "", "", nil, err
 		}

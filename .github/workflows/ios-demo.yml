@@ -1,0 +1,114 @@
+name: ios-demo
+
+# The real console and service in one process on an iOS simulator. It prints
+# measurements and needs no secrets.
+on:
+  push:
+    branches: [main]
+    paths:
+      - internal/**
+      - cmd/mbdemolib/**
+      - go.mod
+      - go.sum
+      - testdata/demo/**
+      - ios/**
+      - .github/workflows/ios-demo.yml
+  pull_request:
+    paths:
+      - internal/**
+      - cmd/mbdemolib/**
+      - go.mod
+      - go.sum
+      - testdata/demo/**
+      - ios/**
+      - .github/workflows/ios-demo.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  simulator:
+    name: Demo on a simulator
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Select the newest Xcode 26
+        run: |
+          xcode=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          sudo xcode-select -s "$xcode"
+      - name: Pack the machine as the app does
+        run: make -C ios machine
+      - name: Build for a device and a simulator
+        run: |
+          build() { # sdk target dir
+            CC="$(xcrun -sdk "$1" -f clang) -isysroot $(xcrun -sdk "$1" --show-sdk-path) -target $2" \
+            CGO_ENABLED=1 GOOS=ios GOARCH=arm64 go build -trimpath -ldflags='-s -w' -buildmode=c-archive -o "out/$3/libmbdemo.a" ./cmd/mbdemolib
+            xcrun -sdk "$1" clang -target "$2" -isysroot "$(xcrun -sdk "$1" --show-sdk-path)" -I"out/$3" ios/DemoProbe/probe.c "out/$3/libmbdemo.a" \
+              -framework CoreFoundation -framework Security -lresolv -Wl,-dead_strip -o "out/$3/probe"
+          }
+          build iphoneos arm64-apple-ios17.0 device
+          build iphonesimulator arm64-apple-ios17.0-simulator sim
+      - name: Measure the device size
+        run: |
+          xcrun strip -x out/device/probe
+          echo "SIZE device stripped: $(stat -f%z out/device/probe) bytes"
+          echo "SIZE device gzip: $(gzip -c out/device/probe | wc -c) bytes"
+      - name: Run on a simulator
+        timeout-minutes: 5
+        run: |
+          id=$(xcrun simctl list devices available -j | python3 -c "import json,sys; print(next(d['udid'] for r,ds in json.load(sys.stdin)['devices'].items() if 'iOS' in r for d in ds if 'iPhone' in d['name']))")
+          xcrun simctl boot "$id"
+          xcrun simctl bootstatus "$id" -b
+          xcrun simctl spawn "$id" "$PWD/out/sim/probe" "$PWD/ios/Matchblox/Demo/machine.tar"
+
+  ui:
+    name: UI test on a simulator
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Select the newest Xcode 26
+        run: |
+          xcode=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          sudo xcode-select -s "$xcode"
+      - name: Run the UI tests
+        run: |
+          brew install xcodegen
+          # The oldest runtime the app supports boots in about a minute here. iOS 26
+          # took 14 minutes, and then the test could not hold on to the app it launched.
+          id=$(xcrun simctl list devices available -j | python3 -c "
+          import json, re, sys
+          runtimes = [(tuple(map(int, re.findall(r'\d+', r.split('iOS-')[1]))), ds) for r, ds in json.load(sys.stdin)['devices'].items() if 'iOS-' in r]
+          print(next(d['udid'] for v, ds in sorted(runtimes, key=lambda x: x[0]) if v >= (18,) for d in ds if 'iPhone' in d['name']))
+          ")
+          xcrun simctl boot "$id"
+          xcrun simctl bootstatus "$id" -b
+          make -C ios uitest DESTINATION="id=$id"
+      - name: Upload the test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-ui-results
+          path: ios/build/ui.xcresult
+          retention-days: 7

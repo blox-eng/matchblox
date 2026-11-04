@@ -9,6 +9,7 @@ final class TrayModel {
     /// The match that flares, for the strike's first moment.
     private(set) var flaring: BeltLayout?
     var agent: String?
+    var mineEditable = true
     @ObservationIgnored var onPick: (BeltLayout) -> Void = { _ in }
     @ObservationIgnored var onEdit: () -> Void = {}
     @ObservationIgnored private var strikes = 0
@@ -68,7 +69,9 @@ struct MatchTrayView: View {
             HStack(alignment: .center, spacing: 0) {
                 AgentTag(agent: model.agent)
                 Spacer(minLength: 8)
-                EditStamp(edit: model.onEdit)
+                if model.mineEditable {
+                    EditStamp(edit: model.onEdit)
+                }
             }
         }
         .padding(EdgeInsets(top: 10, leading: 10, bottom: 6, trailing: 10))

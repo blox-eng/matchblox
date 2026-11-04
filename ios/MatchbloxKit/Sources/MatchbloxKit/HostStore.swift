@@ -36,12 +36,17 @@ public final class HostStore: Sendable {
         return (try? JSONDecoder().decode([Host].self, from: data)) ?? []
     }
 
-    /// Adds the host, or updates the entry with its fingerprint. An entry with the same label, address, port and user but another fingerprint is the host before its host key changed: the host replaces it. Returns those stale entries, so their keys can go too.
+    /// The hosts with a key on this device and on the host: all but the demo. Push and the Island see only these.
+    public func real() -> [Host] {
+        all().filter { !$0.isDemo }
+    }
+
+    /// Adds the host, or updates the entry with its fingerprint. An entry with the same label, address, port and user but another fingerprint is the host before its host key changed: the host replaces it. Returns those stale entries, so their keys can go too. Pairing a real host removes the demo, which has no key to return.
     @discardableResult
     public func upsert(_ host: Host) throws -> [Host] {
-        var hosts = all()
+        var hosts = all().filter { host.isDemo || !$0.isDemo }
         let stale = hosts.filter {
-            $0.fingerprint != host.fingerprint && $0.label == host.label && $0.address == host.address
+            !$0.isDemo && $0.fingerprint != host.fingerprint && $0.label == host.label && $0.address == host.address
                 && $0.port == host.port && $0.user == host.user
         }
         let replaces = { (entry: Host) in entry.fingerprint == host.fingerprint || stale.contains(entry) }

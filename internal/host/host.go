@@ -1,3 +1,5 @@
+//go:build !ios
+
 // Package host reads the machine through gopsutil, for systems without a
 // Linux /proc (macOS, Windows). It returns the procfs types so the sampler
 // does not care which one it reads.

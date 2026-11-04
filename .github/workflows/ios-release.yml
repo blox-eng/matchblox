@@ -21,6 +21,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
       - name: Resolve the marketing version
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -63,7 +68,9 @@ jobs:
         working-directory: ios
         run: bundle install
 
-      - name: Generate the project
+      - name: Build the demo library and generate the project
+        # gen builds the Go demo library and packs its machine; fastlane then
+        # links and bundles them.
         run: make -C ios gen
 
       - name: Build and upload to TestFlight

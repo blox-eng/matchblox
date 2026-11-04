@@ -161,6 +161,22 @@ func defaultKeys() keymaps {
 	}
 }
 
+// KeyNames is each key of the console's keymaps, once: what a walk of every key
+// presses.
+func KeyNames() []string {
+	k := defaultKeys()
+	var names []string
+	for _, layer := range [][]bkey.Binding{k.global.bindings(), k.main.bindings(), k.form.bindings(), k.chat.bindings(),
+		k.sheet.bindings(), k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(),
+		k.scan.bindings(), k.ask.bindings()} {
+		for _, b := range layer {
+			names = append(names, b.Keys()...)
+		}
+	}
+	slices.Sort(names)
+	return slices.Compact(names)
+}
+
 func defaultShellKeys() shellKeymaps {
 	return shellKeymaps{
 		shell: shellKeys{

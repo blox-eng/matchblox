@@ -45,6 +45,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/app"
 	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/demo"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
@@ -712,7 +713,7 @@ func newService(cfg config.Config, root string) *service.Service {
 	s := service.New(cfg, newSampler(cfg, root), git)
 	s.Binary = version
 	if root != "" {
-		s.Host = fixtureHost(root)
+		s.Host = demo.Host(root)
 		// The fixture's panes and pids exist on this machine too.
 		s.Actions.Run = func([]string) error { return errors.New("fixtures: nothing runs on this machine") }
 		return s
@@ -785,16 +786,6 @@ func newService(cfg config.Config, root string) *service.Service {
 	s.GitRemote = cfg.Git.Remote
 	wirePush(s, cfg.Push, home(), filepath.Dir(s.StatePath), defaultHostKey)
 	return s
-}
-
-// fixtureHost is the host name a fixture tree carries, so a demo or a test
-// never shows the name of the machine it runs on.
-func fixtureHost(root string) string {
-	b, err := os.ReadFile(filepath.Join(root, "proc", "sys", "kernel", "hostname"))
-	if h := strings.TrimSpace(string(b)); err == nil && h != "" {
-		return h
-	}
-	return "fixtures"
 }
 
 // invokedPath is the path matchblox was started by, links kept: Homebrew
@@ -1005,28 +996,15 @@ func shipsSource(cfg config.Config, dir string) service.ShipsSource {
 }
 
 func newSampler(cfg config.Config, root string) *sample.Sampler {
-	smp := &sample.Sampler{
-		Cfg:    cfg,
-		Agents: sessionAgents(cfg, root),
-		Rules: sample.Rules{
-			CompactAt:     cfg.Sessions.CompactAt,
-			CompactTokens: cfg.Sessions.CompactTokens,
-			ClearIdle:     cfg.Sessions.ClearIdle.Duration,
-			ClearMinPct:   cfg.Sessions.ClearMinPct,
-			ClearStale:    cfg.Sessions.ClearStale.Duration,
-			Windows:       cfg.Sessions.Windows,
-		},
-	}
 	if root != "" {
-		smp.FS = procfs.FS{Root: filepath.Join(root, "proc"), PageSize: procfs.FixturePage}
-		smp.Sys = procfs.Sys{Root: filepath.Join(root, "sys")}
-		smp.Home = filepath.Join(root, "home")
-		smp.HomeAs = "/home/user" // the HOME of every fixture process
-		smp.Tmux = func() ([]byte, error) { return os.ReadFile(filepath.Join(root, "tmux-panes.txt")) }
-		smp.Capture = sample.CaptureDir(filepath.Join(root, "panes"))
-		smp.LimitsDir = filepath.Join(root, "state")
-		smp.Disks = sample.DiskFile(filepath.Join(root, "disks.txt"))
-		return smp
+		return demo.Sampler(cfg, root)
+	}
+	smp := &sample.Sampler{
+		Cfg: cfg,
+		// Every known agent, installed at the first run or after it, then the
+		// others the config adds (#179).
+		Agents: setup.Agents(cfg.Agents),
+		Rules:  sample.RulesOf(cfg),
 	}
 	smp.FS, smp.Sys = actions.NewHost(), procfs.Sys{Root: "/sys"}
 	smp.Stoker = sample.StokerServer
