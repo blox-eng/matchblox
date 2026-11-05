@@ -253,3 +253,19 @@ func TestRepoOfFindsTheWorktreesRepo(t *testing.T) {
 		t.Fatal("a nil report finds no repo")
 	}
 }
+
+func TestRepoOfTheRepoItselfIsItsWorktree(t *testing.T) {
+	r := &Report{Repos: []Repo{{Path: "/r"}}}
+	repo, wt, ok := RepoOf(r, "/r")
+	if !ok || repo != "/r" || wt != "/r" {
+		t.Fatalf("repo path: got (%q, %q, %v), want (/r, /r, true)", repo, wt, ok)
+	}
+}
+
+func TestRepoOfLongestMatchWins(t *testing.T) {
+	r := &Report{Repos: []Repo{{Path: "/r", Worktrees: []Worktree{{Path: "/r/wt"}}}}}
+	repo, wt, ok := RepoOf(r, "/r/wt/src")
+	if !ok || repo != "/r" || wt != "/r/wt" {
+		t.Fatalf("nested worktree: got (%q, %q, %v), want (/r, /r/wt, true)", repo, wt, ok)
+	}
+}

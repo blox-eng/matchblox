@@ -421,6 +421,12 @@ type (
 	Focus = state.Focus
 )
 
+// RepoOf is gitscan.RepoOf: the console finds a session's checkout as the
+// service does.
+func RepoOf(r *GitReport, cwd string) (repoPath, worktreePath string, ok bool) {
+	return gitscan.RepoOf(r, cwd)
+}
+
 // ShipsOf is ships.Of: the console finds a session's ships as the
 // service, the CLI and the stoker do.
 func ShipsOf(all []Ship, pane, id string) []Ship { return ships.Of(all, pane, id) }
