@@ -131,6 +131,9 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	if pane, ok := strings.CutPrefix(a.RecID, proto.KeysPrefix); ok {
 		return s.keys(ctx, pane, a) // a key twice is twice: no dedupe
 	}
+	if strings.HasPrefix(a.RecID, proto.ChainPrefix) {
+		return s.chainAct(a) // an agent's own act: before the agents-pane gate
+	}
 	if pane, ok := strings.CutPrefix(a.RecID, proto.CommandPrefix); ok {
 		return s.command(ctx, pane, a) // a second one finds the agent at work
 	}
@@ -422,12 +425,7 @@ func messageAction(pane string, x sample.Session, text string) advice.Action {
 func (s *Service) sessionAt(pane string) (sample.Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, x := range s.cur.Sessions {
-		if x.Pane == pane && pane != "" {
-			return x, true
-		}
-	}
-	return sample.Session{}, false
+	return s.sessionAtLocked(pane)
 }
 
 // messageable is the guard of a message, checked right before each step:

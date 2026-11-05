@@ -137,6 +137,11 @@ const KeysPrefix = "keys:"
 // is the agent the console showed.
 const CommandPrefix = "cmd:"
 
+// ChainPrefix starts an act from an agent's pane that asks to chain with the
+// agent in the pane after it. After it, "-" leaves the chain, "off" refuses
+// chains and "on" takes them again.
+const ChainPrefix = "chain:"
+
 // LitPrefix starts the text of a keys: act that types the text after it:
 // at most MaxLit bytes, with no control character.
 const (

@@ -19,6 +19,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/actions"
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitremote"
 	"github.com/blox-eng/matchblox/internal/gitscan"
@@ -180,6 +181,11 @@ type Service struct {
 	// PushOff is the Machine tab's push line while Push is nil because push
 	// could not start (`push: numbers: <why>`); "" when it is off by choice.
 	PushOff string
+	// Chains are the chains of this host, under mu. Nil: loaded from
+	// ChainsPath at first use.
+	Chains *chains.Store
+	// ChainsPath is where Chains are saved. Empty: they live in memory only.
+	ChainsPath string
 
 	// alone is when the last console closed; zero while one is open. A new
 	// service starts alone.
@@ -580,6 +586,10 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		}
 		s.cur.Holds = s.Holds.List()
 	}
+	if err := s.pruneChainsLocked(s.now()); err != nil {
+		s.cur.Errors = append(s.cur.Errors, "chains: "+err.Error())
+	}
+	s.cur.Chains = chainsView(s.Chains)
 	var live []recovery.Entry
 	var alive map[string]string
 	if s.Recovery != nil {
