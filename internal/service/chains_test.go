@@ -185,3 +185,20 @@ func TestAMatchThatMovesTellsItsMates(t *testing.T) {
 		t.Fatalf("one's inbox = %+v", items)
 	}
 }
+
+func TestAFailedSampleKeepsTheChains(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "chains.json")
+	s := chainTest(t, path)
+	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
+	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
+	for _, why := range []string{"tmux: x", "proc: x"} {
+		var doc state.Doc
+		s.publish(sample.Snapshot{At: time.Now(), Errors: []string{why}}, func(d state.Doc) { doc = d })
+		if doc.Chains == nil || len(doc.Chains.Chains) != 1 {
+			t.Fatalf("after a sample with %q: %+v", why, doc.Chains)
+		}
+	}
+	if doc := chainSample(chainTest(t, path), chainSessions...); doc.Chains == nil || len(doc.Chains.Chains) != 1 {
+		t.Fatalf("on disk after the failed samples: %+v", doc.Chains)
+	}
+}
