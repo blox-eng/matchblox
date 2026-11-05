@@ -145,11 +145,25 @@ const (
 )
 
 // KeyNames are the tmux keys a keys: act may press by name.
-var KeyNames = []string{"Up", "Down", "Left", "Right", "Enter", "Tab", "BTab", "Escape", "C-c", "C-a", "BSpace", "PPage", "NPage"}
+var KeyNames = append([]string{"Up", "Down", "Left", "Right", "Enter", "Tab", "BTab", "Escape", "C-c", "C-a", "BSpace", "PPage", "NPage"}, ctrlNames()...)
+
+// CtrlKeys are the letters a chat sends with ctrl, as C-<letter>, beyond
+// C-a and C-c. Left out: ctrl+z, which stops the agent; ctrl+s and ctrl+q,
+// which stop and start the terminal; ctrl+h, i, j and m, which are
+// Backspace, Tab and Enter; and ctrl+o, the console's own.
+const CtrlKeys = "bdefgklnprtuvwxy"
+
+func ctrlNames() []string {
+	var out []string
+	for _, l := range CtrlKeys {
+		out = append(out, "C-"+string(l))
+	}
+	return out
+}
 
 // WheelUp and WheelDown are the text of a keys: act that turns the mouse
-// wheel in the pane. The agent scrolls itself: the console is a window on
-// the pane and keeps no history of its own.
+// wheel in the pane. An agent that reads the mouse scrolls itself; for one
+// that does not, the service shows the console the pane's history.
 const (
 	WheelUp   = "WheelUp"
 	WheelDown = "WheelDown"
@@ -173,6 +187,9 @@ type Screen struct {
 	// as they are.
 	Cols int `json:"cols,omitempty"`
 	Rows int `json:"rows,omitempty"`
+	// Back is how many lines back in the pane's history the screen is, for
+	// an agent that does not read the mouse; 0 is the live screen.
+	Back int `json:"back,omitempty"`
 }
 
 type Result struct {

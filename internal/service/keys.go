@@ -121,10 +121,10 @@ func (s *Service) unseen(pane, name string, a proto.Act, menu bool) string {
 	return ""
 }
 
-// answers tells if a key answers a menu: all but ^C, ^A, Backspace and the
+// answers tells if a key answers a menu: all but the ctrl keys, Backspace and the
 // keys that scroll.
 func answers(text string) bool {
-	return text != "C-c" && text != "C-a" && text != "BSpace" && !scrolls(text)
+	return !strings.HasPrefix(text, "C-") && text != "BSpace" && !scrolls(text)
 }
 
 // scrolls tells if a key only moves what the agent shows. It answers nothing

@@ -293,11 +293,18 @@ func (k confirmKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Yes, k.Enter, k.Also, k.ScrollDown, k.ScrollUp}
 }
 
-// keyNames are the keys the chat sends by name.
-var keyNames = map[string]string{
-	"up": "Up", "down": "Down", "left": "Left", "right": "Right", "enter": "Enter", "tab": "Tab",
-	"shift+tab": "BTab", "esc": "Escape", "ctrl+c": "C-c", "ctrl+a": "C-a", "backspace": "BSpace", "pgup": "PPage", "pgdown": "NPage", "space": proto.LitPrefix + " ",
-}
+// keyNames are the keys the chat sends by name, with every ctrl key of
+// proto.CtrlKeys: the phone's belt has a Ctrl key for them (#300).
+var keyNames = func() map[string]string {
+	names := map[string]string{
+		"up": "Up", "down": "Down", "left": "Left", "right": "Right", "enter": "Enter", "tab": "Tab",
+		"shift+tab": "BTab", "esc": "Escape", "ctrl+c": "C-c", "ctrl+a": "C-a", "backspace": "BSpace", "pgup": "PPage", "pgdown": "NPage", "space": proto.LitPrefix + " ",
+	}
+	for _, l := range proto.CtrlKeys {
+		names["ctrl+"+string(l)] = "C-" + string(l)
+	}
+	return names
+}()
 
 // The names the chat sends for Enter, ^C and Backspace.
 var (

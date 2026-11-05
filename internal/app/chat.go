@@ -1120,6 +1120,10 @@ func (m Model) chatKeyLine(w int) (string, []span) {
 		return part{st.accent.Render(key) + st.muted.Render(" "+desc), press}
 	}
 	name := part{st.text.Render("keys go to " + s.Name), ""}
+	if n := m.screen.Back; n > 0 {
+		// A still screen from the history: the next key only comes back.
+		name = part{st.warn.Render(fmt.Sprintf("↑ %d lines back · a key comes back", n)), ""}
+	}
 	jump := m.keys.main.Jump
 	back, into := hint(m.backKeys(), m.keys.chat.Back.Help().Desc, tapBack), hint(jump.Help().Key, jump.Help().Desc, jump.Keys()[0])
 	sep := st.muted.Render(" · ")
