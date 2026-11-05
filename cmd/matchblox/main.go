@@ -781,6 +781,7 @@ func newService(cfg config.Config, root string) *service.Service {
 	s.Ways = config.WaysPath()
 	s.LimitsLog = &limits.Store{Path: filepath.Join(filepath.Dir(s.StatePath), "limits.jsonl")}
 	s.ChainsPath = filepath.Join(filepath.Dir(s.StatePath), "chains.json")
+	s.PeerLog = filepath.Join(filepath.Dir(s.StatePath), "peers.jsonl")
 	if st, err := stoker.Open(filepath.Dir(s.StatePath)); err == nil {
 		s.Stoker = st
 	} else {

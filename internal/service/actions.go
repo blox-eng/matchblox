@@ -151,7 +151,12 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		}
 	}
 	if !agent && !a.Console && (paneOf(a.RecID) != "" || a.RecID == NewSessionID) {
-		if _, ok := s.sessionAt(a.From); ok {
+		if sender, ok := s.sessionAt(a.From); ok {
+			if to, peer := s.peerAct(a); peer {
+				// A peer send is no step of the stoker's and no key of the
+				// builder's: it touches no rest, drives and frees no pane.
+				return s.peerSend(ctx, sender, to, a)
+			}
 			return proto.Result{Err: notTheBuilders}
 		}
 	}

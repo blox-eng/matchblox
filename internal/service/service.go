@@ -189,6 +189,15 @@ type Service struct {
 	// ChainsNotice tells each match of the others in its repo ([chains]
 	// notice).
 	ChainsNotice bool
+	// ChainsSend is who matchblox send reaches from an agent's pane
+	// ([chains] send): "chain", or "off" for no one.
+	ChainsSend string
+	// PeerLog gets one JSON line for each peer send: who, to whom, when,
+	// and the text's length and sha256, never the text. Empty: none.
+	PeerLog string
+	// PeerInboxes are the agents' own inboxes a peer send goes through
+	// before it types. Empty: every peer send is typed.
+	PeerInboxes []PeerInbox
 	// Git runs a read-only git command in dir: the HEADs of chained
 	// worktrees. Nil: git, with a short timeout.
 	Git func(dir string, args ...string) (string, error)
@@ -251,6 +260,8 @@ type Service struct {
 	// grantMu makes each y one check and one go: two consoles pressing it
 	// at once on one step give one go.
 	grantMu sync.Mutex
+	// peers are the peer sends of the last hour, for their limits.
+	peers peerSends
 	// renames are the renames that wait for their session's rest, by pane.
 	renames renameState
 	// heads are the HEADs of the worktrees that hold a chained match, by
@@ -345,6 +356,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		full:        sample.Full{Pct: cfg.Sessions.CompactAt, Tokens: cfg.Sessions.CompactTokens},
 
 		ChainsNotice: cfg.Chains.Notice,
+		ChainsSend:   cfg.Chains.Send,
 	}
 	if s.interval <= 0 {
 		s.interval = 2 * time.Second
@@ -1031,7 +1043,7 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 			continue
 		}
 		if pid > 0 {
-			a.From = s.PeerPane(pid)
+			a.From, a.FromKnown = s.PeerPane(pid), true
 		}
 		if pane, ok := strings.CutPrefix(a.RecID, proto.WatchPrefix); ok {
 			res := s.watchAct(cl, h.Client, a, pane)
