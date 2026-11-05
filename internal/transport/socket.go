@@ -114,25 +114,62 @@ func Dial(path string, timeout time.Duration) (Conn, error) {
 // the message arrives. It never waits longer, so a hook never holds the
 // agent that runs it.
 func Notify(path string, timeout time.Duration, kind proto.Kind, body any) error {
-	deadline := time.Now().Add(timeout)
-	if err := CheckDir(filepath.Dir(path)); err != nil {
-		return err
-	}
-	nc, err := net.DialTimeout("unix", path, timeout)
+	nc, _, err := greet(path, timeout)
 	if err != nil {
 		return err
 	}
 	defer nc.Close()
-	if err := nc.SetDeadline(deadline); err != nil {
-		return err
-	}
-	env, err := proto.Decode(bufio.NewReader(nc))
+	return proto.Encode(nc, kind, "", body)
+}
+
+// Ask sends one message to the service and reads its one reply of the same
+// kind into reply, all within timeout, as Notify does.
+func Ask(path string, timeout time.Duration, kind proto.Kind, body, reply any) error {
+	nc, r, err := greet(path, timeout)
 	if err != nil {
 		return err
 	}
-	var h proto.Hello
-	if env.Kind != proto.KindHello || json.Unmarshal(env.Body, &h) != nil || h.Version != proto.Version {
-		return errors.New("transport: the service speaks another protocol")
+	defer nc.Close()
+	if err := proto.Encode(nc, kind, "", body); err != nil {
+		return err
 	}
-	return proto.Encode(nc, kind, "", body)
+	env, err := proto.Decode(r)
+	if err != nil {
+		return err
+	}
+	if env.Kind != kind {
+		return fmt.Errorf("transport: the service answered %s with %s", kind, env.Kind)
+	}
+	return json.Unmarshal(env.Body, reply)
+}
+
+// greet dials path and reads the service hello, with the whole connection
+// bound to end within timeout.
+func greet(path string, timeout time.Duration) (net.Conn, *bufio.Reader, error) {
+	if timeout <= 0 {
+		return nil, nil, errors.New("transport: no time left to reach the service")
+	}
+	deadline := time.Now().Add(timeout)
+	if err := CheckDir(filepath.Dir(path)); err != nil {
+		return nil, nil, err
+	}
+	nc, err := net.DialTimeout("unix", path, timeout)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := nc.SetDeadline(deadline); err != nil {
+		nc.Close()
+		return nil, nil, err
+	}
+	r := bufio.NewReader(nc)
+	env, err := proto.Decode(r)
+	var h proto.Hello
+	if err == nil && (env.Kind != proto.KindHello || json.Unmarshal(env.Body, &h) != nil || h.Version != proto.Version) {
+		err = errors.New("transport: the service speaks another protocol")
+	}
+	if err != nil {
+		nc.Close()
+		return nil, nil, err
+	}
+	return nc, r, nil
 }

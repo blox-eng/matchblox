@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/limits"
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/stoker"
 )
@@ -105,6 +107,98 @@ func TestHookSilentListener(t *testing.T) {
 	}
 	if n := spoolLines(t, spool); n != 1 {
 		t.Fatalf("spool has %d lines", n)
+	}
+}
+
+// newsService says hello on sock and answers each connection with answer,
+// given the first message.
+func newsService(t *testing.T, answer func(c net.Conn, env proto.Envelope)) string {
+	t.Helper()
+	sock := isolate(t)
+	if err := os.MkdirAll(filepath.Dir(sock), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	l, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close() })
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer c.Close()
+				if proto.Encode(c, proto.KindHello, "", proto.Hello{Version: proto.Version}) != nil {
+					return
+				}
+				env, err := proto.Decode(bufio.NewReader(c))
+				if err == nil {
+					answer(c, env)
+				}
+			}()
+		}
+	}()
+	return sock
+}
+
+func hookEvent(name string) string {
+	return `{"session_id":"s9","cwd":"/work/app","hook_event_name":"` + name + `","tool_name":"Bash","tool_input":{"command":"ls"}}`
+}
+
+func TestHookPrintsNewsAsContext(t *testing.T) {
+	sock := newsService(t, func(c net.Conn, env proto.Envelope) {
+		if env.Kind == proto.KindNews {
+			_ = proto.Encode(c, proto.KindNews, "", proto.NewsReply{Text: "x"})
+		}
+	})
+	t.Setenv("TMUX_PANE", "%1")
+	spool := filepath.Join(t.TempDir(), "spool.jsonl")
+	for name, want := range map[string]string{
+		"PostToolUse":      `{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"x"}}` + "\n",
+		"UserPromptSubmit": "x\n",
+		"SessionStart":     "x\n",
+		"Stop":             "",
+	} {
+		var out bytes.Buffer
+		if err := hook([]string{name}, strings.NewReader(hookEvent(name)), &out, sock, spool, false); err != nil {
+			t.Fatal(err)
+		}
+		if out.String() != want {
+			t.Errorf("%s printed %q, want %q", name, out.String(), want)
+		}
+	}
+	t.Setenv("TMUX_PANE", "")
+	var out bytes.Buffer
+	_ = hook([]string{"UserPromptSubmit"}, strings.NewReader(hookEvent("UserPromptSubmit")), &out, sock, spool, false)
+	if out.Len() != 0 {
+		t.Errorf("a session in no pane printed %q", out.String())
+	}
+}
+
+// TestHookStaysInBudgetWithTheServiceStuck: a service that takes the
+// event and never answers the news holds the agent no longer than one
+// that is down.
+func TestHookStaysInBudgetWithTheServiceStuck(t *testing.T) {
+	stuck := make(chan struct{})
+	t.Cleanup(func() { close(stuck) })
+	sock := newsService(t, func(net.Conn, proto.Envelope) { <-stuck })
+	t.Setenv("TMUX_PANE", "%1")
+	spool := filepath.Join(t.TempDir(), "spool.jsonl")
+	for _, name := range []string{"UserPromptSubmit", "PostToolUse", "SessionStart"} {
+		var out bytes.Buffer
+		start := time.Now()
+		if err := hook([]string{name}, strings.NewReader(hookEvent(name)), &out, sock, spool, false); err != nil {
+			t.Fatal(err)
+		}
+		if d := time.Since(start); d > 50*time.Millisecond {
+			t.Fatalf("%s took %v", name, d)
+		}
+		if out.Len() != 0 {
+			t.Errorf("%s printed %q", name, out.String())
+		}
 	}
 }
 

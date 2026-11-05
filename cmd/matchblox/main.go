@@ -462,8 +462,9 @@ func goHome() error {
 	return execve(tmux, argv, os.Environ())
 }
 
-// hookTimeout bounds the whole delivery, so `matchblox hook` stops in
-// less than 50 ms with the service up, down or stuck.
+// hookTimeout bounds the whole delivery, the event and the ask for news
+// together, so `matchblox hook` stops in less than 50 ms with the service
+// up, down or stuck.
 const hookTimeout = 30 * time.Millisecond
 
 // hookDeny is Claude Code's PreToolUse answer that refuses the tool call,
@@ -478,6 +479,7 @@ func hookDeny(reason string) map[string]any {
 // no service answers. It returns nil on every path: a hook that fails must
 // not disturb the agent.
 func hook(args []string, stdin io.Reader, out io.Writer, sock, spool string, progress bool) error {
+	start := time.Now()
 	name := ""
 	if len(args) > 0 {
 		name = args[0]
@@ -499,7 +501,8 @@ func hook(args []string, stdin io.Reader, out io.Writer, sock, spool string, pro
 			_ = json.NewEncoder(out).Encode(hookDeny(why))
 		}
 	}
-	if transport.Notify(sock, hookTimeout, proto.KindHook, ev) != nil {
+	up := transport.Notify(sock, hookTimeout, proto.KindHook, ev) == nil
+	if !up {
 		_ = hooks.Append(spool, ev)
 	}
 	if progress && ev.Name == "SessionStart" && ev.Pane != "" { // a session in tmux: what the console watches
@@ -507,7 +510,37 @@ func hook(args []string, stdin io.Reader, out io.Writer, sock, spool string, pro
 		// context; the console reads the bar back from the transcript.
 		_, _ = fmt.Fprintln(out, hooks.ProgressPrompt)
 	}
+	if up {
+		printNews(out, sock, ev, hookTimeout-time.Since(start))
+	}
 	return nil
+}
+
+// printNews asks the service for the news of ev's match and prints it the
+// way Claude Code adds it to the session's context: plain lines at the start
+// of a turn, additionalContext after a tool call. Past left it prints
+// nothing.
+func printNews(out io.Writer, sock string, ev hooks.Event, left time.Duration) {
+	switch ev.Name {
+	case "UserPromptSubmit", "SessionStart", "PostToolUse":
+	default:
+		return
+	}
+	var r proto.NewsReply
+	if ev.Pane == "" || transport.Ask(sock, left, proto.KindNews, proto.News{Pane: ev.Pane, SessionID: ev.SessionID, Event: ev.Name}, &r) != nil || r.Text == "" {
+		return
+	}
+	if ev.Name != "PostToolUse" {
+		_, _ = fmt.Fprintln(out, r.Text)
+		return
+	}
+	type added struct {
+		HookEventName     string `json:"hookEventName"`
+		AdditionalContext string `json:"additionalContext"`
+	}
+	enc := json.NewEncoder(out)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(map[string]added{"hookSpecificOutput": {HookEventName: ev.Name, AdditionalContext: r.Text}})
 }
 
 // hookCursor delivers one event of Cursor's hooks (`matchblox hook
@@ -526,7 +559,7 @@ func hookCursor(stdin io.Reader, _ io.Writer, sock, spool string) error {
 }
 
 // progressPrompt reads the config only for SessionStart, the one event that
-// prints: the other hooks stay as fast as they were.
+// prints the bar: the other hooks stay as fast as they were.
 func progressPrompt(args []string) bool {
 	if len(args) == 0 || args[0] != "SessionStart" {
 		return false

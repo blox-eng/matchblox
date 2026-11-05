@@ -186,6 +186,9 @@ type Service struct {
 	Chains *chains.Store
 	// ChainsPath is where Chains are saved. Empty: they live in memory only.
 	ChainsPath string
+	// ChainsNotice tells each match of the others in its repo ([chains]
+	// notice).
+	ChainsNotice bool
 	// Git runs a read-only git command in dir: the HEADs of chained
 	// worktrees. Nil: git, with a short timeout.
 	Git func(dir string, args ...string) (string, error)
@@ -254,6 +257,10 @@ type Service struct {
 	// worktree; chainWaits the sessions whose wait was news. Under mu.
 	heads      map[string]head
 	chainWaits map[string]bool
+	// noticed are the branches of each pair at its last notice; heardAsks
+	// the requests already told to their target. Under mu.
+	noticed   map[pair][2]string
+	heardAsks map[chains.Request]bool
 	// found goes to each console when foundGen passes the one it has.
 	found     gitscan.Found
 	foundGen  uint64
@@ -336,6 +343,8 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		StokerAgent: cfg.Stoker.Agent,
 		OrderSteps:  cfg.Stoker.MaxSteps,
 		full:        sample.Full{Pct: cfg.Sessions.CompactAt, Tokens: cfg.Sessions.CompactTokens},
+
+		ChainsNotice: cfg.Chains.Notice,
 	}
 	if s.interval <= 0 {
 		s.interval = 2 * time.Second
@@ -955,6 +964,17 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 			}
 		}
 		return nil
+	}
+	if env.Kind == proto.KindNews {
+		var n proto.News
+		if json.Unmarshal(env.Body, &n) != nil {
+			return nil
+		}
+		reply := proto.NewsReply{}
+		if pid <= 0 || s.hookFrom(pid, hooks.Event{Pane: n.Pane, SessionID: n.SessionID}) {
+			reply.Text = s.news(n)
+		}
+		return c.Send(proto.KindNews, "", reply)
 	}
 	var h proto.Hello
 	if env.Kind != proto.KindHello || json.Unmarshal(env.Body, &h) != nil {

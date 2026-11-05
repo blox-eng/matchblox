@@ -45,6 +45,10 @@ const (
 	// KindHook is the first and only message of `matchblox hook`: one
 	// hooks.Event, sent after the service hello, with no hello back.
 	KindHook Kind = "hook"
+	// KindNews is the one message of a hook that asks for its match's
+	// news, after the service hello; the service answers with one KindNews
+	// that holds a NewsReply.
+	KindNews Kind = "news"
 )
 
 type Envelope struct {
@@ -336,6 +340,18 @@ func StartNotes(r Result) ([]string, bool) {
 		}
 	}
 	return slices.Clone(r.Skipped), true
+}
+
+// News asks for the news of the match in Pane, at the hook Event.
+type News struct {
+	Pane      string `json:"pane"`
+	SessionID string `json:"session_id,omitempty"`
+	Event     string `json:"event,omitempty"`
+}
+
+// NewsReply is the text the hook prints. Empty: nothing new.
+type NewsReply struct {
+	Text string `json:"text,omitempty"`
 }
 
 type Error struct {

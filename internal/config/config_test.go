@@ -103,6 +103,24 @@ func TestExampleLoads(t *testing.T) {
 	if d := Default(); c.Push != d.Push || d.Push.Relay != "https://matchblox.sh" || d.Push.Off {
 		t.Fatalf("the example must state the push defaults: %+v", c.Push)
 	}
+	if c.Chains != Default().Chains {
+		t.Fatalf("the example must state the chains defaults: %+v", c.Chains)
+	}
+}
+
+// TestChains: the notice is on and send reaches the chain by default;
+// [chains] turns the notice off.
+func TestChains(t *testing.T) {
+	if d := Default().Chains; d != (Chains{Notice: true, Send: "chain"}) {
+		t.Fatalf("default [chains] = %+v", d)
+	}
+	c, err := Load(write(t, "[chains]\nnotice = false\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Chains != (Chains{Notice: false, Send: "chain"}) {
+		t.Fatalf("[chains] notice = false gave %+v", c.Chains)
+	}
 }
 
 // TestPushOff: [push] off turns the sender off; relay names another relay.

@@ -67,6 +67,10 @@ cursor_usage = false     # true: read Cursor's plan usage from its API; the defa
 relay = "https://matchblox.sh"  # the relay that hands them to Apple; it stores nothing
 off = false              # true: no buzz, no island, and no connection to the relay
 
+[chains]                 # matches in one repo that hear from each other
+notice = true            # the same-repo line at the start of a turn
+send = "chain"           # who send reaches: "chain" or "off"
+
 [hooks]
 alert = []               # argv run on each new alert, title and evidence appended,
                          # e.g. ["notify-send", "matchblox"]

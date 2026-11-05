@@ -265,3 +265,53 @@ func TestDialRefusesAnUnsafeDir(t *testing.T) {
 		c.Close()
 	}
 }
+
+// TestAskGetsOneReplyWithinItsTimeout: Ask reads the reply, and gives up at
+// its timeout on a service that takes the message and never answers.
+func TestAskGetsOneReplyWithinItsTimeout(t *testing.T) {
+	path := filepath.Join(shortDir(t), "run", "s.sock")
+	l, err := Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	stuck := make(chan struct{})
+	defer close(stuck)
+	go func() {
+		for answer := true; ; answer = false {
+			nc, err := l.Accept()
+			if err != nil {
+				return
+			}
+			go func(c Conn, answer bool) {
+				defer c.Close()
+				_ = c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version})
+				env, err := c.Recv()
+				if err != nil {
+					return
+				}
+				if !answer {
+					<-stuck
+					return
+				}
+				var n proto.News
+				_ = json.Unmarshal(env.Body, &n)
+				_ = c.Send(env.Kind, "", proto.NewsReply{Text: "news of " + n.Pane})
+			}(NewConn(nc), answer)
+		}
+	}()
+	var r proto.NewsReply
+	if err := Ask(path, time.Second, proto.KindNews, proto.News{Pane: "%1"}, &r); err != nil || r.Text != "news of %1" {
+		t.Fatalf("Ask = %v, %+v", err, r)
+	}
+	start := time.Now()
+	if err := Ask(path, 20*time.Millisecond, proto.KindNews, proto.News{Pane: "%1"}, &r); err == nil {
+		t.Fatal("a service that never answers answered")
+	}
+	if d := time.Since(start); d > 40*time.Millisecond {
+		t.Fatalf("Ask waited %v past its 20 ms", d)
+	}
+	if err := Ask(path, 0, proto.KindNews, proto.News{}, &r); err == nil {
+		t.Fatal("Ask with no time left dialled")
+	}
+}
