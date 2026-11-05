@@ -15,6 +15,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/doors"
+	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -117,22 +118,8 @@ func (m Model) groupLabel(s sample.Session) string {
 // repoOf is the repository a session works in: the checkout its directory
 // is in, else the directory's own name.
 func (m Model) repoOf(s sample.Session) string {
-	if m.git != nil {
-		best, name := 0, ""
-		within := func(dir, repo string) {
-			if (s.Cwd == dir || strings.HasPrefix(s.Cwd, dir+"/")) && len(dir) > best {
-				best, name = len(dir), filepath.Base(repo)
-			}
-		}
-		for _, r := range m.git.Repos {
-			within(r.Path, r.Path)
-			for _, wt := range r.Worktrees {
-				within(wt.Path, r.Path)
-			}
-		}
-		if name != "" {
-			return name
-		}
+	if repo, _, ok := gitscan.RepoOf(m.git, s.Cwd); ok {
+		return filepath.Base(repo)
 	}
 	if s.Cwd == "" {
 		return "no directory"
