@@ -186,6 +186,9 @@ type Service struct {
 	Chains *chains.Store
 	// ChainsPath is where Chains are saved. Empty: they live in memory only.
 	ChainsPath string
+	// Git runs a read-only git command in dir: the HEADs of chained
+	// worktrees. Nil: git, with a short timeout.
+	Git func(dir string, args ...string) (string, error)
 
 	// alone is when the last console closed; zero while one is open. A new
 	// service starts alone.
@@ -247,6 +250,10 @@ type Service struct {
 	grantMu sync.Mutex
 	// renames are the renames that wait for their session's rest, by pane.
 	renames renameState
+	// heads are the HEADs of the worktrees that hold a chained match, by
+	// worktree; chainWaits the sessions whose wait was news. Under mu.
+	heads      map[string]head
+	chainWaits map[string]bool
 	// found goes to each console when foundGen passes the one it has.
 	found     gitscan.Found
 	foundGen  uint64
@@ -614,6 +621,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		// the first tick after its wait. OnDoc never blocks.
 		s.Push.OnDoc(doc)
 	}
+	s.chainHeads(s.now())
 	s.broadcast()
 }
 
@@ -652,6 +660,7 @@ func (s *Service) Hook(ev hooks.Event) {
 		s.mergeQueue()
 	}
 	s.mu.Unlock()
+	s.chainNews(ev)
 	s.broadcast()
 }
 

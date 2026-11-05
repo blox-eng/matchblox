@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,6 +30,7 @@ func chainTest(t *testing.T, path string) *Service {
 	t.Helper()
 	s := newTest(t, time.Hour)
 	s.ChainsPath = path
+	s.Git = func(string, ...string) (string, error) { return "", errors.New("no git here") }
 	s.mu.Lock()
 	git := chainGit
 	s.cur.Git = &git

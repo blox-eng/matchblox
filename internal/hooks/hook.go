@@ -46,9 +46,10 @@ type Event struct {
 	// Ask is the question tool's call a PreToolUse announces: its menu
 	// waits for the person once the hook returns.
 	Ask *said.Ask `json:"ask,omitempty"`
-	// Command is the shell line of a PreToolUse of Bash, its values
-	// scrubbed; Raw is the line as the shell runs it, which the merge
-	// guard reads and which never leaves the hook's process. Guards are
+	// Command is the shell line of a PreToolUse or PostToolUse of Bash,
+	// its values scrubbed; Raw is a PreToolUse's line as the shell runs
+	// it, which the merge guard reads and which never leaves the hook's
+	// process. Guards are
 	// what the guard read in Raw; Denied: it refused the call.
 	Command string  `json:"command,omitempty"`
 	Raw     string  `json:"-"`
@@ -112,12 +113,15 @@ func Parse(stdin io.Reader, name string, env func(string) string) (Event, error)
 		ev.Message, ev.Asks = cut(line), asks
 	case "PreToolUse", "PostToolUse":
 		ev.ToolUseID = in.ToolUseID
-		if name == "PreToolUse" && in.ToolName == BashTool {
+		if in.ToolName == BashTool {
 			var bash struct {
 				Command string `json:"command"`
 			}
 			if json.Unmarshal(in.ToolInput, &bash) == nil {
-				ev.Command, ev.Raw = Scrub(bash.Command), bash.Command
+				ev.Command = Scrub(bash.Command)
+				if name == "PreToolUse" {
+					ev.Raw = bash.Command
+				}
 			}
 		}
 		if name == "PreToolUse" && in.ToolName == said.AskTool && in.ToolUseID != "" {

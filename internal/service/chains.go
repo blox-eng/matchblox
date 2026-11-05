@@ -113,10 +113,8 @@ func (s *Service) pruneChainsLocked(now time.Time) error {
 	if s.cur.Git == nil {
 		return nil // no repo is known yet: every match would look gone
 	}
-	if slices.ContainsFunc(s.cur.Errors, func(e string) bool {
-		return strings.HasPrefix(e, "tmux: ") || strings.HasPrefix(e, "proc: ")
-	}) {
-		return nil // a sample that did not read its sessions: every match would look gone
+	if s.sampleMissedLocked() {
+		return nil // every match would look gone
 	}
 	before, asks := slices.Clone(st.Chains), len(st.Requests)
 	live := func(m chains.Member) (string, bool) {
@@ -149,6 +147,14 @@ func (s *Service) pruneChainsLocked(now time.Time) error {
 		return nil
 	}
 	return s.saveChainsLocked()
+}
+
+// sampleMissedLocked tells if the last sample did not read its sessions.
+// Callers hold mu.
+func (s *Service) sampleMissedLocked() bool {
+	return slices.ContainsFunc(s.cur.Errors, func(e string) bool {
+		return strings.HasPrefix(e, "tmux: ") || strings.HasPrefix(e, "proc: ")
+	})
 }
 
 // chainsLocked is the store, read from ChainsPath at first use. Callers hold mu.
