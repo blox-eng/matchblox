@@ -707,13 +707,13 @@ func TestNewSessionURLStopsWhenTheCLILeaves(t *testing.T) {
 	select {
 	case <-started:
 	case <-time.After(waitLimit):
-		t.Fatal("the clone did not start")
+		stuck(t, "the clone did not start")
 	}
 	c.Close()
 	select {
 	case <-stopped:
 	case <-time.After(waitLimit):
-		t.Fatal("the clone went on after the CLI left")
+		stuck(t, "the clone went on after the CLI left")
 	}
 	clonesUntil(t, s, "the clone ended", func(cs []proto.Clone) bool { return len(cs) == 1 && cs[0].Err != "" })
 	for _, p := range []string{filepath.Join(root, "r"), clone.Cloning(filepath.Join(root, "r"))} {
