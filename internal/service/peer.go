@@ -8,23 +8,30 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
+// unplacedSender refuses a send whose sender has neither a pane nor a
+// terminal: a process that left its agent's tree with setsid or nohup
+// would pass for the person.
+const unplacedSender = "not sent: matchblox cannot tell who sends this. Send from a terminal, a tmux pane or the console."
+
 // callerPane is the pane of the client process pid: its process tree's,
 // else its terminal's when an agent runs there, for an agent's process
 // that left the tree. "" for a person's terminal outside every agent's
-// pane.
-func (s *Service) callerPane(pid int) string {
+// pane. placed is false when pid has no pane and no terminal to tell.
+func (s *Service) callerPane(pid int) (pane string, placed bool) {
 	if p := s.PeerPane(pid); p != "" {
-		return p
+		return p, true
 	}
 	if s.TTYPane == nil {
-		return ""
+		return "", false
 	}
-	if p := s.TTYPane(pid); p != "" {
-		if _, ok := s.sessionAt(p); ok {
-			return p
-		}
+	p, ok := s.TTYPane(pid)
+	if !ok {
+		return "", false
 	}
-	return ""
+	if _, agent := s.sessionAt(p); agent {
+		return p, true
+	}
+	return "", true
 }
 
 // ttyDev splits a tty_nr of /proc/<pid>/stat into its major and minor
@@ -34,11 +41,12 @@ func ttyDev(nr uint32) (major, minor uint32) {
 }
 
 // paneOfTTY is the tmux pane whose terminal is pid's controlling
-// terminal, on the builder's server or the stoker's. "" for none.
-func (s *Service) paneOfTTY(pid int) string {
+// terminal, on the builder's server or the stoker's: "" for none, as when
+// tmux runs no server. ok is false when pid has no terminal to read.
+func (s *Service) paneOfTTY(pid int) (pane string, ok bool) {
 	major, minor, ok := ttyOf(pid)
 	if !ok {
-		return ""
+		return "", false
 	}
 	servers := []string{""}
 	if s.StokerServer != "" {
@@ -58,11 +66,11 @@ func (s *Service) paneOfTTY(pid int) string {
 				if server != "" {
 					id = sample.OnServer(id, server)
 				}
-				return id
+				return id, true
 			}
 		}
 	}
-	return ""
+	return "", true
 }
 
 // paneOfPeer is the tmux pane the process pid runs in, by its parents and

@@ -728,6 +728,7 @@ func TestAStuckPaneDoesNotBlockOtherSends(t *testing.T) {
 func TestThePersonsSendFromAPlainTerminalStillGoes(t *testing.T) {
 	h := newSendHost(t, idleMate)
 	h.s.PeerPane = func(int) string { return "" }
+	h.s.TTYPane = func(int) (string, bool) { return "", true } // a terminal, in no pane
 	if res := actOver(t, h.s, 777, proto.ClientCLI, proto.Act{RecID: "message:%2", Confirm: "y", Text: "hi"}); res.Err != "" {
 		t.Fatalf("%+v", res)
 	}
@@ -741,7 +742,7 @@ func TestThePersonsSendFromAPlainTerminalStillGoes(t *testing.T) {
 func TestAnOrphanInAnAgentsPaneIsThatAgent(t *testing.T) {
 	h := newSendHost(t, idleMate)
 	h.s.PeerPane = func(int) string { return "" }
-	h.s.TTYPane = func(pid int) string { return map[int]string{777: "%1"}[pid] }
+	h.s.TTYPane = func(pid int) (string, bool) { return map[int]string{777: "%1"}[pid], true }
 	res := actOver(t, h.s, 777, proto.ClientCLI, proto.Act{RecID: "message:%3", Confirm: "y", Text: "hi"})
 	if want := "stranger is not in your chain. Run `matchblox chain stranger` first."; res.Err != want {
 		t.Fatalf("%q, want %q", res.Err, want)
@@ -826,5 +827,23 @@ func TestAQueuedLineThatMayRemainIsDropped(t *testing.T) {
 	h.s.deliverAtRest(night0)
 	if got := typedLine(h.keys()); len(got) != 1 {
 		t.Fatalf("typed %q", got)
+	}
+}
+
+// A sender with no pane and no terminal (setsid, nohup, a daemon) could be
+// any agent's process: its send is refused, unless the console sends.
+func TestASenderWithNoTerminalIsRefused(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	h.s.PeerPane = func(int) string { return "" }
+	h.s.TTYPane = func(int) (string, bool) { return "", false }
+	res := actOver(t, h.s, 777, proto.ClientCLI, proto.Act{RecID: "message:%2", Confirm: "y", Text: "hi"})
+	if want := "not sent: matchblox cannot tell who sends this. Send from a terminal, a tmux pane or the console."; res.Err != want {
+		t.Fatalf("%q, want %q", res.Err, want)
+	}
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("ran %q", k)
+	}
+	if res := actOver(t, h.s, 777, proto.ClientConsole, proto.Act{RecID: "message:%2", Confirm: "y", Text: "hi"}); res.Err != "" {
+		t.Fatalf("the console's send: %+v", res)
 	}
 }
