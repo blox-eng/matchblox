@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -102,6 +103,15 @@ func connect(t *testing.T, ctx context.Context, s *Service) (transport.Conn, pro
 // waitLimit bounds every wait of a test: a service that never answers
 // fails the test with what it waited for, never hangs the run.
 const waitLimit = 10 * time.Second
+
+// stuck fails the test with the stack of every goroutine: a wait that
+// ran out on a CI runner names what held it (#305).
+func stuck(t *testing.T, format string, args ...any) {
+	t.Helper()
+	buf := make([]byte, 1<<20)
+	buf = buf[:runtime.Stack(buf, true)]
+	t.Fatalf(format+"\n%s", append(args, buf)...)
+}
 
 // within waits for one value of ch, at most waitLimit.
 func within[T any](t *testing.T, ch <-chan T, what string) T {
