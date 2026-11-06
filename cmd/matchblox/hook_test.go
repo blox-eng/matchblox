@@ -115,6 +115,12 @@ func TestHookSilentListener(t *testing.T) {
 // given the first message.
 func newsService(t *testing.T, answer func(c net.Conn, env proto.Envelope)) string {
 	t.Helper()
+	return lateNewsService(t, 0, answer)
+}
+
+// lateNewsService is newsService with each hello late by hello.
+func lateNewsService(t *testing.T, hello time.Duration, answer func(c net.Conn, env proto.Envelope)) string {
+	t.Helper()
 	sock := isolate(t)
 	if err := os.MkdirAll(filepath.Dir(sock), 0o700); err != nil {
 		t.Fatal(err)
@@ -132,6 +138,7 @@ func newsService(t *testing.T, answer func(c net.Conn, env proto.Envelope)) stri
 			}
 			go func() {
 				defer c.Close()
+				time.Sleep(hello)
 				if proto.Encode(c, proto.KindHello, "", proto.Hello{Version: proto.Version}) != nil {
 					return
 				}
@@ -249,6 +256,33 @@ func TestHookStaysInBudgetWithTheServiceStuck(t *testing.T) {
 		if out.Len() != 0 {
 			t.Errorf("%s printed %q", name, out.String())
 		}
+	}
+}
+
+// TestHookStaysInBudgetWithASlowHello: when the event's hello comes late,
+// the ask for news, which then hangs, gets only the time that is left, and
+// the hook still ends within its budget.
+func TestHookStaysInBudgetWithASlowHello(t *testing.T) {
+	stuck := make(chan struct{})
+	t.Cleanup(func() { close(stuck) })
+	sock := lateNewsService(t, 20*time.Millisecond, func(_ net.Conn, env proto.Envelope) {
+		if env.Kind == proto.KindNews {
+			<-stuck
+		}
+	})
+	t.Setenv("TMUX_PANE", "%1")
+	spool := filepath.Join(t.TempDir(), "spool.jsonl")
+	for _, name := range []string{"UserPromptSubmit", "PostToolUse", "SessionStart"} {
+		start := time.Now()
+		if err := hook([]string{name}, strings.NewReader(hookEvent(name)), io.Discard, sock, spool, false); err != nil {
+			t.Fatal(err)
+		}
+		if d := time.Since(start); d > 50*time.Millisecond {
+			t.Fatalf("%s took %v", name, d)
+		}
+	}
+	if _, err := os.Stat(spool); !os.IsNotExist(err) {
+		t.Fatal("a late hello spooled the event")
 	}
 }
 

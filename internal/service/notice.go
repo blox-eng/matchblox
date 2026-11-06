@@ -59,13 +59,37 @@ func (s *Service) news(n proto.News) delivery {
 		}
 	}
 	d.text = strings.Join(blocks, "\n\n")
+	s.holdLocked(d, true)
 	return d
+}
+
+// holdLocked marks d's requests and notices as held by a delivery, or no
+// longer. Callers hold mu.
+func (s *Service) holdLocked(d delivery, held bool) {
+	if s.heldAsks == nil {
+		s.heldAsks, s.heldNotices = map[chains.Request]bool{}, map[pair]bool{}
+	}
+	for _, r := range d.asks {
+		if held {
+			s.heldAsks[r] = true
+		} else {
+			delete(s.heldAsks, r)
+		}
+	}
+	for p := range d.notices {
+		if held {
+			s.heldNotices[p] = true
+		} else {
+			delete(s.heldNotices, p)
+		}
+	}
 }
 
 // heard marks d's requests and notices as told.
 func (s *Service) heard(d delivery) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.holdLocked(d, false)
 	for _, r := range d.asks {
 		if s.heardAsks == nil {
 			s.heardAsks = map[chains.Request]bool{}
@@ -80,10 +104,12 @@ func (s *Service) heard(d delivery) {
 	}
 }
 
-// unheard gives d's news back to the front of its inbox.
+// unheard gives d's news back to the front of its inbox, and its requests
+// and notices back to the next hook.
 func (s *Service) unheard(d delivery) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.holdLocked(d, false)
 	s.chainsLocked().GiveBack(d.me, d.taken)
 }
 
@@ -94,7 +120,7 @@ func (s *Service) requestsLocked(st *chains.Store, me chains.Member) ([]string, 
 	var out []string
 	var told []chains.Request
 	for _, r := range st.Requests {
-		if !r.To.Same(me) || s.heardAsks[r] {
+		if !r.To.Same(me) || s.heardAsks[r] || s.heldAsks[r] {
 			continue
 		}
 		from, ok := s.sessionOfLocked(r.From)
@@ -138,7 +164,7 @@ func (s *Service) noticesLocked(st *chains.Store, x sample.Session) ([]string, m
 			continue
 		}
 		p, branches := pair{me, other}, [2]string{s.branchLocked(wt), s.branchLocked(yWt)}
-		if was, ok := s.noticed[p]; ok && was == branches {
+		if was, ok := s.noticed[p]; ok && was == branches || s.heldNotices[p] {
 			continue
 		}
 		told[p] = branches

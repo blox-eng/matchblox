@@ -285,6 +285,10 @@ type Service struct {
 	// the requests already told to their target. Under mu.
 	noticed   map[pair][2]string
 	heardAsks map[chains.Request]bool
+	// heldAsks and heldNotices are what a delivery holds until its hook
+	// says it heard it: no other hook is told them meanwhile. Under mu.
+	heldAsks    map[chains.Request]bool
+	heldNotices map[pair]bool
 	// found goes to each console when foundGen passes the one it has.
 	found     gitscan.Found
 	foundGen  uint64

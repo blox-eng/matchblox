@@ -224,3 +224,28 @@ func TestNewsWithNoPeerCredentialsIsNone(t *testing.T) {
 		t.Fatalf("the news was taken: %q", got)
 	}
 }
+
+// TestNewsHeldForOneHookIsNotToldToAnother: while one hook holds a
+// request and a notice it has not said it heard, a second hook of the
+// match is not told them too; once the first gives them back, they are.
+func TestNewsHeldForOneHookIsNotToldToAnother(t *testing.T) {
+	s, _ := newsTest(t, newsSessions[:3])
+	branchGit(s, "main", "peer-send", "www")
+	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
+	first := s.news(proto.News{Pane: "%1"})
+	if !strings.Contains(first.text, "two asks to chain with you") || !strings.Contains(first.text, "three also works in") {
+		t.Fatalf("first = %q", first.text)
+	}
+	second := s.news(proto.News{Pane: "%1"})
+	if second.text != "" {
+		t.Fatalf("a second hook was told the held news: %q", second.text)
+	}
+	s.unheard(second)
+	s.unheard(first)
+	if got := told(s, proto.News{Pane: "%1"}); got != first.text {
+		t.Fatalf("after the give-back = %q, want %q", got, first.text)
+	}
+	if got := told(s, proto.News{Pane: "%1"}); got != "" {
+		t.Fatalf("heard news came back: %q", got)
+	}
+}
