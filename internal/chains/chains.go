@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -266,7 +267,16 @@ func (s *Store) Prune(live func(Member) (repo string, present bool), now time.Ti
 		_, present := live(m)
 		return !present
 	})
+	maps.DeleteFunc(s.renamed, func(_, now string) bool { return !s.holds(now) })
 	return left
+}
+
+// holds tells if any chain, request, off mark or inbox still names the key k.
+func (s *Store) holds(k string) bool {
+	named := func(m Member) bool { return m.key() == k }
+	return slices.ContainsFunc(s.Chains, func(c Chain) bool { return slices.ContainsFunc(c.Members, named) }) ||
+		slices.ContainsFunc(s.Requests, func(r Request) bool { return named(r.From) || named(r.To) }) ||
+		slices.ContainsFunc(s.Off, named) || len(s.inbox[k]) > 0 || s.dropped[k] > 0
 }
 
 // ChainOf is the chain m is in.

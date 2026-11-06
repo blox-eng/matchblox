@@ -301,3 +301,30 @@ func TestReadGitNeedsADirectory(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// TestOffWhileTheSampleMissedFindsAClearedMatch: off, on and leave act on
+// the match as it is now, even when the last sample missed: they refresh
+// first. Only an ask waits.
+func TestOffWhileTheSampleMissedFindsAClearedMatch(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
+	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
+	cleared := slices.Clone(chainSessions)
+	cleared[1].SessionID = "s2-new"
+	s.publish(sample.Snapshot{At: time.Now(), Sessions: cleared, Errors: []string{"tmux: x"}}, func(state.Doc) {})
+	if res := chainFrom(t, s, "%2", proto.ChainPrefix+"off"); res.Err != "" || res.Note != "off: no notices, and no chains" {
+		t.Fatalf("off = %+v", res)
+	}
+	s.mu.Lock()
+	chained, off := len(s.Chains.Chains), slices.Clone(s.Chains.Off)
+	s.mu.Unlock()
+	if chained != 0 || len(off) != 1 || off[0].SessionID != "s2-new" {
+		t.Fatalf("chains %d, off %+v", chained, off)
+	}
+	if res := chainFrom(t, s, "%2", proto.ChainPrefix+"on"); res.Err != "" || res.Note != "on" {
+		t.Fatalf("on = %+v", res)
+	}
+	if res := chainFrom(t, s, "%2", proto.ChainPrefix+"-"); res.Err != "" || res.Note != "not in a chain" {
+		t.Fatalf("leave = %+v", res)
+	}
+}

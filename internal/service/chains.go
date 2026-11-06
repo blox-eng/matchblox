@@ -36,19 +36,23 @@ func (s *Service) chainAct(a proto.Act) proto.Result {
 func (s *Service) changeChains(arg, fromPane string) (res proto.Result, changed bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.sampleMissedLocked() { // a cleared chat would look like a new match
-		return refuseText("not now: matchblox could not read the sessions; try again"), false
-	}
 	from, ok := s.sessionAtLocked(fromPane)
 	if !ok {
 		return refuseText(chainNeedsMatch), false
 	}
 	st := s.chainsLocked()
+	if s.refreshChainsLocked(st) { // the act finds a cleared chat by its new id
+		changed = true
+		s.cur.Chains = chainsView(st)
+		if err := s.saveChainsLocked(); err != nil {
+			return proto.Result{Err: "chains: " + err.Error()}, true
+		}
+	}
 	me := memberOf(from)
 	switch arg {
 	case "-":
 		if _, in := st.ChainOf(me); !in {
-			return proto.Result{Note: "not in a chain"}, false
+			return proto.Result{Note: "not in a chain"}, changed
 		}
 		st.Leave(me)
 		res.Note = "left the chain"
@@ -59,16 +63,19 @@ func (s *Service) changeChains(arg, fromPane string) (res proto.Result, changed 
 		st.SetOff(me, false)
 		res.Note = "on"
 	default:
+		if s.sampleMissedLocked() { // its target may be one the sample did not read
+			return refuseText("not now: matchblox could not read the sessions; try again"), changed
+		}
 		to, ok := s.sessionAtLocked(arg)
 		if !ok {
-			return refuseText("no agent session in " + arg + " any more"), false
+			return refuseText("no agent session in " + arg + " any more"), changed
 		}
 		repo, why := s.chainable(st, from, to)
 		if why != "" {
-			return refuseText(why), false
+			return refuseText(why), changed
 		}
 		if c, ok := st.ChainOf(me); ok && slices.ContainsFunc(c.Members, memberOf(to).Same) {
-			return proto.Result{Note: "already chained with " + to.Name}, false
+			return proto.Result{Note: "already chained with " + to.Name}, changed
 		}
 		if st.Ask(me, memberOf(to), repo, s.now()) {
 			c, _ := st.ChainOf(me)
@@ -124,14 +131,7 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 	if s.sampleMissedLocked() {
 		return nil // every match would look gone
 	}
-	refreshed := st.Refresh(func(m chains.Member) (chains.Member, bool) {
-		for _, x := range s.cur.Sessions {
-			if x.Pane != "" && x.Pane == m.Pane && x.PID == m.PID && x.Start == m.Start {
-				return memberOf(x), true
-			}
-		}
-		return chains.Member{}, false
-	})
+	refreshed := s.refreshChainsLocked(st)
 	before, asks, offs := slices.Clone(st.Chains), len(st.Requests), len(st.Off)
 	live := func(m chains.Member) (string, bool) {
 		x, ok := s.sessionOfLocked(m)
@@ -159,6 +159,20 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 		return nil
 	}
 	return s.saveChainsLocked()
+}
+
+// refreshChainsLocked renames each stored member whose pane, pid and start
+// a session holds now under another id (a cleared chat), and tells if any
+// changed. A partial session list renames no one wrongly. Callers hold mu.
+func (s *Service) refreshChainsLocked(st *chains.Store) bool {
+	return st.Refresh(func(m chains.Member) (chains.Member, bool) {
+		for _, x := range s.cur.Sessions {
+			if x.Pane != "" && x.Pane == m.Pane && x.PID == m.PID && x.Start == m.Start {
+				return memberOf(x), true
+			}
+		}
+		return chains.Member{}, false
+	})
 }
 
 // leftText is the news of l: where the match went, when it is in another

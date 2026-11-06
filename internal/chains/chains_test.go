@@ -303,3 +303,20 @@ func TestGiveBackAfterARefreshGoesToTheNewID(t *testing.T) {
 		t.Fatalf("items = %q", got)
 	}
 }
+
+// TestARenameGoesWithItsMatch: once a refreshed match is gone, its old
+// name maps to nothing any more.
+func TestARenameGoesWithItsMatch(t *testing.T) {
+	var s Store
+	chainOf(t, &s, "a", "b")
+	s.Post(mem("a"), "1", t0)
+	a2 := Member{SessionID: "a2", Pane: "%a"}
+	s.Refresh(func(m Member) (Member, bool) { return a2, m.SessionID == "a" })
+	if len(s.renamed) != 1 {
+		t.Fatalf("renamed = %v", s.renamed)
+	}
+	s.Prune(func(m Member) (string, bool) { return "r", m.SessionID == "b" }, t0)
+	if len(s.renamed) != 0 {
+		t.Fatalf("renamed = %v", s.renamed)
+	}
+}
