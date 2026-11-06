@@ -3,9 +3,12 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -205,8 +208,8 @@ func TestNoTextGoesToAPaneThatShowsAPermissionPrompt(t *testing.T) {
 	}
 	for _, a := range []proto.Act{
 		fromStokerAct("message:%1", "1"),
-		{RecID: "message:%1", Confirm: "y", Text: "1"},
-		{RecID: "answer:%1", Confirm: "y", Text: "1"},
+		{RecID: "message:%1", Confirm: "y", Text: "1", FromPlaced: true},
+		{RecID: "answer:%1", Confirm: "y", Text: "1", FromPlaced: true},
 	} {
 		if res := s.act(t.Context(), a); !strings.Contains(res.Err, "permission prompt") {
 			t.Errorf("%s from %q: %q", a.RecID, a.From, res.Err)
@@ -396,5 +399,56 @@ func TestNoAgentClones(t *testing.T) {
 	}
 	if _, err := os.Lstat(target); !os.IsNotExist(err) {
 		t.Fatalf("cloned: %v", err)
+	}
+}
+
+func TestTTYDevSplitsTheKernelsNumber(t *testing.T) {
+	for _, c := range []struct {
+		nr   uint32
+		want ttyDevice
+	}{
+		{136<<8 | 3, ttyDevice{136, 3}},                            // /dev/pts/3
+		{300&0xff | 136<<8 | (300&^0xff)<<12, ttyDevice{136, 300}}, // /dev/pts/300
+		{4<<8 | 1, ttyDevice{4, 1}},                                // /dev/tty1
+	} {
+		if got := ttyDev(c.nr); got != c.want {
+			t.Errorf("ttyDev(%d) = %+v; want %+v", c.nr, got, c.want)
+		}
+	}
+}
+
+// The terminal of a process is matched to the pane whose pane_tty is the
+// same device; only a tmux with no server matches no pane, and any other
+// failure, or no terminal, places nothing.
+func TestThePaneOfATerminal(t *testing.T) {
+	s := newTest(t, time.Hour)
+	s.StokerServer = "mbtest"
+	devs := map[string]ttyDevice{"/dev/ttys001": {16, 1}, "/dev/ttys002": {16, 2}, "/dev/ttys009": {16, 9}}
+	dev := func(path string) (ttyDevice, bool) { d, ok := devs[path]; return d, ok }
+	tty := func(pid int) (ttyDevice, bool) {
+		d, ok := map[int]ttyDevice{1: {16, 2}, 2: {16, 9}, 3: {16, 7}}[pid]
+		return d, ok
+	}
+	lists := map[string]string{"tmux": "%1 /dev/ttys001\n%2 /dev/ttys002\n", "tmux -L mbtest": "%9 /dev/ttys009\n"}
+	s.TmuxOut = func(argv []string) (string, error) {
+		return lists[strings.Join(argv[:slices.Index(argv, "list-panes")], " ")], nil
+	}
+	for pid, want := range map[int]struct {
+		pane string
+		ok   bool
+	}{1: {"%2", true}, 2: {"%9@mbtest", true}, 3: {"", true}, 4: {"", false}} {
+		if pane, ok := s.paneOfTerminal(pid, tty, dev); pane != want.pane || ok != want.ok {
+			t.Errorf("pid %d: %q, %v; want %q, %v", pid, pane, ok, want.pane, want.ok)
+		}
+	}
+	s.TmuxOut = func([]string) (string, error) {
+		return "", &exec.ExitError{Stderr: []byte("no server running on /tmp/tmux-1000/default\n")}
+	}
+	if pane, ok := s.paneOfTerminal(1, tty, dev); pane != "" || !ok {
+		t.Errorf("no tmux server: %q, %v", pane, ok)
+	}
+	s.TmuxOut = func([]string) (string, error) { return "", errors.New("signal: killed") }
+	if _, ok := s.paneOfTerminal(1, tty, dev); ok {
+		t.Error("a tmux that failed placed the sender")
 	}
 }

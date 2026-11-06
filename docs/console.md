@@ -146,6 +146,40 @@ default, 0 for all); `--json` prints `name`, `pane`, `target`, `said`,
 `asks` (the first line of the question), `questions` (each with its
 `options`) and `approval`.
 
+## Chain matches
+
+Two matches in one repo can hear from each other once both chain. Run in an
+agent's pane, `matchblox chain api` asks to chain with `api`, or accepts its
+ask; nothing is shared until the other side chains back. `matchblox chain`
+lists your chain and the asks to and from you (`--json` prints `chain` and
+`requests`). `matchblox unchain` leaves the chain. `matchblox chain --off`
+takes no chains and no notices; `--on` takes them again. See
+[chains](agents.md#chains) for what a match hears and what a chain grants.
+
+Sessions draws each chain as a fuse, in a column between the match and the
+name. The rule: a chain stays together in the group of its neediest match.
+A view that splits it leaves each match a stub, and selecting one lights the
+rest. With no chain in the view there is no column, and the list is as
+before.
+
+- **By need**, the chain moves into the group of its neediest match, its
+  members in need order. **By repo** its members are always side by side.
+  Either way the fuse is whole: `╮` first, `┤` between, `╯` last, with `─`
+  before each from 70 columns of list. By need, the group's label adds the
+  chain: `WAITS FOR YOU · 1 · chain of 3`.
+- **By status** and **none**, the members stay where the view puts them.
+  Each has a stub `─╴`. The stubs of the selected row's chain light in the
+  accent, and the others are faint. The selected row's own stub is `━╸`.
+- A filter that hides members joins the ones it shows. In every grouping,
+  the label of the group with the chain's first match shown adds
+  `· 2 hidden`.
+- Child rows and the opened block on a phone carry `│` in the fuse column.
+  A held match keeps its place in the chain.
+- When a chain-mate commits, changes branch or sends, a bright cell runs
+  down the fuse once. `--no-motion` shows no spark.
+- A session in one repo with another that it has not chained with shows a
+  faint `· same repo · chain?` after its name, while the name has room.
+
 ## Act on a session from a script or an agent
 
 `<who>` is a pane (`%3`), a target (`app:1.1`) or a name; a name two sessions

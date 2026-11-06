@@ -9,9 +9,11 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/idle"
 	"github.com/blox-eng/matchblox/internal/limits"
@@ -409,7 +411,7 @@ func TestBriefNamesEveryCommand(t *testing.T) {
 		}
 	}
 	for _, c := range commands {
-		if !slices.ContainsFunc(hands, func(h string) bool { return strings.Fields(h)[0] == c }) && !slices.Contains([]string{"connect", "serve", "status", "setup", "pair", "devices", "update", "version", "switch", "scan", "recover"}, c) {
+		if !slices.ContainsFunc(hands, func(h string) bool { return strings.Fields(h)[0] == c }) && !slices.Contains([]string{"connect", "serve", "status", "setup", "pair", "devices", "update", "version", "switch", "scan", "recover", "chain", "unchain"}, c) {
 			t.Errorf("%s is a new command the stoker's hands do not list", c)
 		}
 	}
@@ -753,5 +755,207 @@ func TestSessionsJSONNamesTheShipTheRowLeadsWith(t *testing.T) {
 		if r.Pane == "%3" && (r.Ship == nil || r.Ship.Number != 4557) {
 			t.Fatalf("api's ship: %+v, want the stuck #4557", r.Ship)
 		}
+	}
+}
+
+func chainDoc() state.Doc {
+	d := cliDoc()
+	d.Chains = &state.ChainsView{
+		Chains: []chains.Chain{{ID: "c1", Repo: "o/r", Members: []chains.Member{{Pane: "%3"}, {Pane: "%4"}}}},
+		Requests: []chains.Request{
+			{From: chains.Member{Pane: "%5"}, To: chains.Member{Pane: "%3"}},
+			{From: chains.Member{Pane: "%3"}, To: chains.Member{Pane: "%9"}},
+		},
+	}
+	d.Sessions = append(d.Sessions, sample.Session{Pane: "%9", Name: "docs"})
+	return d
+}
+
+// chainService answers the snapshot with doc and each act with the note.
+func chainService(t *testing.T, path string, doc state.Doc, note, errText string) <-chan proto.Act {
+	t.Helper()
+	acts, _ := chainServiceCounting(t, path, doc, note, errText)
+	return acts
+}
+
+// chainServiceCounting is chainService that also counts the snapshots it
+// gives: one for each connection that says hello.
+func chainServiceCounting(t *testing.T, path string, doc state.Doc, note, errText string) (<-chan proto.Act, *atomic.Int32) {
+	t.Helper()
+	snapshots := new(atomic.Int32)
+	l, err := transport.Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close() })
+	acts := make(chan proto.Act, 4)
+	go func() {
+		for {
+			nc, err := l.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				c := transport.NewConn(nc)
+				defer c.Close()
+				c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version})
+				for {
+					env, err := c.Recv()
+					if err != nil {
+						return
+					}
+					switch env.Kind {
+					case proto.KindHello:
+						snapshots.Add(1)
+						c.Send(proto.KindSnapshot, "", proto.State{Doc: doc})
+					case proto.KindAct:
+						var a proto.Act
+						json.Unmarshal(env.Body, &a)
+						acts <- a
+						c.Send(proto.KindResult, env.ID, proto.Result{ActID: env.ID, Note: note, Err: errText})
+					}
+				}
+			}()
+		}
+	}()
+	return acts, snapshots
+}
+
+func TestChainPrintsAskedThenChained(t *testing.T) {
+	for _, note := range []string{"asked docs: the chain forms when it chains back", "chained with docs: 3 matches"} {
+		sock := isolate(t)
+		t.Setenv("TMUX_PANE", "%3")
+		acts := chainService(t, sock, chainDoc(), note, "")
+		var buf bytes.Buffer
+		if err := cliChain([]string{"docs"}, false, false, false, &buf, sock); err != nil {
+			t.Fatal(err)
+		}
+		if buf.String() != note+"\n" {
+			t.Fatalf("printed %q, want %q", buf.String(), note)
+		}
+		if a := <-acts; a.RecID != "chain:%9" || a.From != "%3" {
+			t.Fatalf("act %+v", a)
+		}
+	}
+}
+
+func TestChainRefusalIsAnError(t *testing.T) {
+	sock := isolate(t)
+	t.Setenv("TMUX_PANE", "%3")
+	chainService(t, sock, chainDoc(), "", "docs is in another repo")
+	err := cliChain([]string{"docs"}, false, false, false, io.Discard, sock)
+	if err == nil || !strings.Contains(err.Error(), "docs is in another repo") {
+		t.Fatalf("err %v", err)
+	}
+}
+
+func TestChainFlagsAndUsage(t *testing.T) {
+	for name, c := range map[string]struct {
+		words   []string
+		off, on bool
+		want    string
+	}{
+		"both":           {nil, true, true, "--off or --on, not both"},
+		"off with a who": {[]string{"docs"}, true, false, "take no session"},
+		"two whos":       {[]string{"docs", "web"}, false, false, "chain takes one session"},
+	} {
+		if _, err := chainAct(chainDoc(), c.words, c.off, c.on, "%3"); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want %q", name, err, c.want)
+		}
+	}
+	for flag, want := range map[string]string{"off": "chain:off", "on": "chain:on"} {
+		a, err := chainAct(chainDoc(), nil, flag == "off", flag == "on", "%3")
+		if err != nil || a.RecID != want || a.From != "%3" {
+			t.Errorf("--%s: %+v %v", flag, a, err)
+		}
+	}
+}
+
+// TestChainSwitchesReadNoDoc: --off and --on name no session, so they do not
+// ask the service for its state; a chain with a who or a list does.
+func TestChainSwitchesReadNoDoc(t *testing.T) {
+	for name, c := range map[string]struct {
+		words   []string
+		off, on bool
+		reads   int32
+	}{
+		"off": {nil, true, false, 0}, "on": {nil, false, true, 0}, "who": {[]string{"docs"}, false, false, 1},
+	} {
+		sock := isolate(t)
+		t.Setenv("TMUX_PANE", "%3")
+		acts, snapshots := chainServiceCounting(t, sock, chainDoc(), "ok", "")
+		if err := cliChain(c.words, c.off, c.on, false, io.Discard, sock); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		<-acts
+		if got := snapshots.Load() - 1; got != c.reads { // the act's own connection takes one
+			t.Errorf("%s: %d reads of the state, want %d", name, got, c.reads)
+		}
+	}
+}
+
+func TestChainListJSON(t *testing.T) {
+	var buf bytes.Buffer
+	if err := writeChain(&buf, chainDoc(), "%3", true); err != nil {
+		t.Fatal(err)
+	}
+	want := `{"chain":[{"name":"api","pane":"%3"},{"name":"web","pane":"%4"}],"requests":[{"from":"web","to":"api"},{"from":"api","to":"docs"}]}`
+	if strings.TrimSpace(buf.String()) != want {
+		t.Fatalf("got %s", buf.String())
+	}
+	buf.Reset()
+	if err := writeChain(&buf, state.Doc{}, "%3", true); err != nil || strings.TrimSpace(buf.String()) != `{"chain":[],"requests":[]}` {
+		t.Fatalf("empty: %q %v", buf.String(), err)
+	}
+}
+
+func TestChainListText(t *testing.T) {
+	var buf bytes.Buffer
+	if err := writeChain(&buf, chainDoc(), "%3", false); err != nil {
+		t.Fatal(err)
+	}
+	if want := "api %3\nweb %4\nweb asks you\nyou asked docs\n"; buf.String() != want {
+		t.Fatalf("got %q, want %q", buf.String(), want)
+	}
+	buf.Reset()
+	if err := writeChain(&buf, state.Doc{}, "%3", false); err != nil || buf.String() != "not in a chain. To ask, run: matchblox chain <who>\n" {
+		t.Fatalf("empty: %q %v", buf.String(), err)
+	}
+}
+
+func TestChainListNeedsAPane(t *testing.T) {
+	sock := isolate(t)
+	t.Setenv("TMUX_PANE", "")
+	chainService(t, sock, chainDoc(), "", "")
+	err := cliChain(nil, false, false, false, io.Discard, sock)
+	if err == nil || err.Error() != "chain needs a match: run it from an agent's pane" {
+		t.Fatalf("err %v", err)
+	}
+}
+
+func TestUnchain(t *testing.T) {
+	sock := isolate(t)
+	t.Setenv("TMUX_PANE", "%3")
+	acts := chainService(t, sock, chainDoc(), "left the chain", "")
+	var buf bytes.Buffer
+	if err := cliUnchain(nil, &buf, sock); err != nil || buf.String() != "left the chain\n" {
+		t.Fatalf("%q %v", buf.String(), err)
+	}
+	if a := <-acts; a.RecID != "chain:-" || a.From != "%3" {
+		t.Fatalf("act %+v", a)
+	}
+	if err := cliUnchain([]string{"x"}, io.Discard, sock); err == nil {
+		t.Fatal("unchain takes no words")
+	}
+}
+
+func TestChainParsesItsFlags(t *testing.T) {
+	fl, o := newFlags()
+	words, err := positionals(fl, []string{"docs", "--off"})
+	if err != nil || len(words) != 1 || !*o.off || *o.on {
+		t.Fatalf("%q off %v on %v %v", words, *o.off, *o.on, err)
+	}
+	if _, _, rest, err := parseCommand([]string{"unchain"}); err != nil || len(rest) != 0 {
+		t.Fatalf("unchain: %v", err)
 	}
 }

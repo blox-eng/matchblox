@@ -143,6 +143,27 @@ func GHMerged(ctx context.Context, repo string) map[string]bool {
 	return set
 }
 
+// RepoOf finds the checkout cwd is in: the longest repo or worktree path that
+// is cwd or one of its parents. A repo's own path is its worktree path too.
+func RepoOf(r *Report, cwd string) (repoPath, worktreePath string, ok bool) {
+	if r == nil {
+		return "", "", false
+	}
+	best := 0
+	within := func(dir, repo, wt string) {
+		if (cwd == dir || strings.HasPrefix(cwd, dir+"/")) && len(dir) > best {
+			best, repoPath, worktreePath, ok = len(dir), repo, wt, true
+		}
+	}
+	for _, repo := range r.Repos {
+		within(repo.Path, repo.Path, repo.Path)
+		for _, wt := range repo.Worktrees {
+			within(wt.Path, repo.Path, wt.Path)
+		}
+	}
+	return repoPath, worktreePath, ok
+}
+
 // Toplevel walks up from dir to the directory holding .git (a directory for a
 // main checkout, a file for a linked worktree) without running git.
 func Toplevel(dir string) string {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // The match is the element of matchblox (DESIGN.md §4): one cell for each
@@ -41,6 +42,7 @@ const (
 	changeStrike changeKind = iota
 	changeOut
 	changeBurn
+	changeSpark // news ran down a chain's fuse
 )
 
 type change struct {
@@ -136,7 +138,7 @@ func paneOf(s sample.Session) paneKey { return paneKey{s.Host, s.Pane} }
 
 // noteChanges records the changes between a host's last state and its
 // next, so each plays once.
-func (m *Model) noteChanges(host string, next []sample.Session) {
+func (m *Model) noteChanges(host string, next []sample.Session, chains *state.ChainsView) {
 	had := m.have
 	if host != m.opt.Host {
 		i := m.peerAt(host)
@@ -170,6 +172,7 @@ func (m *Model) noteChanges(host string, next []sample.Session) {
 			m.changes[at] = change{changeBurn, now}
 		}
 	}
+	m.noteSparks(host, chains, now)
 	for at, c := range m.changes {
 		if now.Sub(c.at) > time.Second {
 			delete(m.changes, at)

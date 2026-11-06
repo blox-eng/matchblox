@@ -103,6 +103,32 @@ func TestExampleLoads(t *testing.T) {
 	if d := Default(); c.Push != d.Push || d.Push.Relay != "https://matchblox.sh" || d.Push.Off {
 		t.Fatalf("the example must state the push defaults: %+v", c.Push)
 	}
+	if c.Chains != Default().Chains {
+		t.Fatalf("the example must state the chains defaults: %+v", c.Chains)
+	}
+}
+
+// TestChainsConfigDefaults: the notice is on and send reaches the chain by
+// default; [chains] turns either off, and a send it does not know is an
+// error that names the two it knows.
+func TestChainsConfigDefaults(t *testing.T) {
+	if d := Default().Chains; d != (Chains{Notice: true, Send: "chain"}) {
+		t.Fatalf("default [chains] = %+v", d)
+	}
+	c, err := Load(write(t, "[chains]\nnotice = false\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Chains != (Chains{Notice: false, Send: "chain"}) {
+		t.Fatalf("[chains] notice = false gave %+v", c.Chains)
+	}
+	if c, err := Load(write(t, "[chains]\nsend = \"off\"\n")); err != nil || c.Chains.Send != "off" {
+		t.Fatalf("send = off: %+v, %v", c.Chains, err)
+	}
+	_, err = Load(write(t, "[chains]\nsend = \"maybe\"\n"))
+	if err == nil || !strings.Contains(err.Error(), `"chain"`) || !strings.Contains(err.Error(), `"off"`) {
+		t.Fatalf("send = maybe: %v", err)
+	}
 }
 
 // TestPushOff: [push] off turns the sender off; relay names another relay.

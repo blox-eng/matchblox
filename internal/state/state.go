@@ -10,6 +10,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/holds"
@@ -75,6 +76,15 @@ type Doc struct {
 	// found), how the sign-in of a new account goes: "by hand" when
 	// matchblox gave up driving it.
 	SignIns map[string]string `json:"sign_ins,omitempty"`
+	// Chains are the chains of this host and the asks that wait for the
+	// other side. Nil: none.
+	Chains *ChainsView `json:"chains,omitempty"`
+}
+
+// ChainsView is what consoles and the CLI see of the chains.
+type ChainsView struct {
+	Chains   []chains.Chain   `json:"chains,omitempty"`
+	Requests []chains.Request `json:"requests,omitempty"`
 }
 
 // Focus is the session to open: its pane, or Gone when its number's
