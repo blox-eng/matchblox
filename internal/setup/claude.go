@@ -30,6 +30,8 @@ var matchers = map[string][]string{"PreToolUse": {said.AskTool, hooks.BashTool}}
 // HandRules are the permission rules that let the stoker's hands run
 // without a prompt in Claude Code: the service refuses their acts from any
 // pane but the stoker's and the panes it drives, under its own guards.
+// chain and unchain are the exception: they run from any agent's pane,
+// for the chain of that pane alone.
 var HandRules = []string{"Bash(matchblox sessions:*)", "Bash(matchblox ships:*)", "Bash(matchblox usage:*)",
 	"Bash(matchblox send:*)", "Bash(matchblox compact:*)", "Bash(matchblox hold:*)",
 	"Bash(matchblox release:*)", "Bash(matchblox stoker:*)", "Bash(matchblox peek:*)",

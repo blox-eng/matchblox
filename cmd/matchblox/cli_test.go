@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -773,6 +774,15 @@ func chainDoc() state.Doc {
 // chainService answers the snapshot with doc and each act with the note.
 func chainService(t *testing.T, path string, doc state.Doc, note, errText string) <-chan proto.Act {
 	t.Helper()
+	acts, _ := chainServiceCounting(t, path, doc, note, errText)
+	return acts
+}
+
+// chainServiceCounting is chainService that also counts the snapshots it
+// gives: one for each connection that says hello.
+func chainServiceCounting(t *testing.T, path string, doc state.Doc, note, errText string) (<-chan proto.Act, *atomic.Int32) {
+	t.Helper()
+	snapshots := new(atomic.Int32)
 	l, err := transport.Listen(path)
 	if err != nil {
 		t.Fatal(err)
@@ -796,6 +806,7 @@ func chainService(t *testing.T, path string, doc state.Doc, note, errText string
 					}
 					switch env.Kind {
 					case proto.KindHello:
+						snapshots.Add(1)
 						c.Send(proto.KindSnapshot, "", proto.State{Doc: doc})
 					case proto.KindAct:
 						var a proto.Act
@@ -807,7 +818,7 @@ func chainService(t *testing.T, path string, doc state.Doc, note, errText string
 			}()
 		}
 	}()
-	return acts
+	return acts, snapshots
 }
 
 func TestChainPrintsAskedThenChained(t *testing.T) {
@@ -856,6 +867,29 @@ func TestChainFlagsAndUsage(t *testing.T) {
 		a, err := chainAct(chainDoc(), nil, flag == "off", flag == "on", "%3")
 		if err != nil || a.RecID != want || a.From != "%3" {
 			t.Errorf("--%s: %+v %v", flag, a, err)
+		}
+	}
+}
+
+// TestChainSwitchesReadNoDoc: --off and --on name no session, so they do not
+// ask the service for its state; a chain with a who or a list does.
+func TestChainSwitchesReadNoDoc(t *testing.T) {
+	for name, c := range map[string]struct {
+		words   []string
+		off, on bool
+		reads   int32
+	}{
+		"off": {nil, true, false, 0}, "on": {nil, false, true, 0}, "who": {[]string{"docs"}, false, false, 1},
+	} {
+		sock := isolate(t)
+		t.Setenv("TMUX_PANE", "%3")
+		acts, snapshots := chainServiceCounting(t, sock, chainDoc(), "ok", "")
+		if err := cliChain(c.words, c.off, c.on, false, io.Discard, sock); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		<-acts
+		if got := snapshots.Load() - 1; got != c.reads { // the act's own connection takes one
+			t.Errorf("%s: %d reads of the state, want %d", name, got, c.reads)
 		}
 	}
 }

@@ -835,9 +835,12 @@ func cliChain(words []string, off, on, asJSON bool, w io.Writer, path string) er
 	if from == "" {
 		return errChainNeedsPane
 	}
-	doc, err := readDoc(path, staleAfter)
-	if err != nil {
-		return err
+	var doc state.Doc
+	if len(words) > 0 || !off && !on { // --off and --on name no session and list nothing
+		var err error
+		if doc, err = readDoc(path, staleAfter); err != nil {
+			return err
+		}
 	}
 	if len(words) == 0 && !off && !on {
 		return writeChain(w, doc, from, asJSON)
