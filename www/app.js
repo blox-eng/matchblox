@@ -554,6 +554,12 @@ onReady(() => {
     later(flicker, lastLit + 900 + N * STEP + 400);
   };
 
-  strike.addEventListener("click", run);
+  const status = document.getElementById("chain-status");
+  strike.addEventListener("click", () => {
+    run();
+    if (!status) return;
+    status.textContent = ""; // a second strike announces again
+    setTimeout(() => { status.textContent = "Chain lit"; }, 50);
+  });
   new IntersectionObserver(([e]) => { if (e.isIntersecting) run(); else stop(); }, { threshold: 0.2 }).observe(section);
 });
