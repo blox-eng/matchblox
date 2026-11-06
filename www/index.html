@@ -247,6 +247,27 @@
       <p class="note">N starts Claude Code, Codex, OpenCode or Cursor from the console, without a tmux command.</p>
       <p class="note">matchblox stands on <a href="https://github.com/tmux/tmux">tmux</a>: a server that keeps running, and clients that attach from any terminal. <a href="https://docs.matchblox.com/tmux/">tmux, the engine →</a></p>
     </section>
+    <section class="agents chain" aria-labelledby="chain-h">
+      <h2 id="chain-h">Chain reaction.</h2>
+      <p class="lede">Two agents in one repo used to find out about each other at merge time. Now each one hears when the other commits or switches branch, and they burn together.</p>
+      <svg class="domino" viewBox="0 0 1000 220" role="img" aria-label="A row of matches standing side by side. The first catches fire and the flame runs along the row until every match burns.">
+        <defs>
+          <filter id="chain-haze" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="3"/></filter>
+          <radialGradient id="chain-glow"><stop offset="0" stop-color="#E8822E" stop-opacity=".35"/><stop offset="1" stop-color="#E8822E" stop-opacity="0"/></radialGradient>
+        </defs>
+        <g id="chain-sticks"></g>
+        <line x1="20" y1="206" x2="980" y2="206" stroke="var(--hair-strong)" stroke-width="1"/>
+      </svg>
+      <div class="strike-row">
+        <button type="button" id="chain-strike">Strike the first match</button>
+        <code>matchblox chain &lt;who&gt;</code>
+      </div>
+      <div class="beats">
+        <div><h3>They notice</h3><p>When two matches work in one repo, each gets one line at the start of its next turn.</p></div>
+        <div><h3>They chain</h3><p>The agent chooses to join. Nothing is shared until both sides chain.</p></div>
+        <div><h3>They burn together</h3><p>Chain-mates hear each other's commits, branch changes and finishes, and can message each other. Nobody outside the chain can.</p></div>
+      </div>
+    </section>
     <section class="agents" aria-labelledby="stoker-h">
       <h2 id="stoker-h">Keep it burning while you sleep</h2>
       <p class="lede">Press n before you go and give the stoker its order. It carries the order out through your sessions, and each session that fills its context compacts itself and leaves one line on how to go on. In the morning you read the card and carry on.</p>

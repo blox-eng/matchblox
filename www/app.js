@@ -495,3 +495,65 @@ onReady(() => {
   new IntersectionObserver(([e]) => { if (e.isIntersecting) kick(); else cancelAnimationFrame(raf); }).observe(cv);
   play();
 });
+
+// Chain reaction: the matches catch one by one, go out in order, then catch
+// again at random while the section is in view.
+onReady(() => {
+  const section = document.querySelector(".chain");
+  const row = document.getElementById("chain-sticks");
+  const strike = document.getElementById("chain-strike");
+  if (!section || !row || !strike) return;
+  const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const ns = "http://www.w3.org/2000/svg";
+  const N = 28, STEP = 90;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const items = [];
+  for (let i = 0; i < N; i++) {
+    const x = 40 + i * (920 / (N - 1));
+    const el = document.createElementNS(ns, "g");
+    el.setAttribute("transform", `rotate(${i % 2 ? 1.5 : -1.5} ${x} 206)`);
+    el.innerHTML =
+      `<circle class="glow" cx="${x}" cy="80" r="46"/>` +
+      `<line class="stick" x1="${x}" y1="206" x2="${x}" y2="96"/>` +
+      `<line class="char" x1="${x}" y1="128" x2="${x}" y2="96"/>` +
+      `<ellipse class="head" cx="${x}" cy="92" rx="7" ry="10"/>` +
+      `<g class="smoke"><circle cx="${x}" cy="84" r="5"/><circle cx="${x}" cy="84" r="4"/><circle cx="${x}" cy="84" r="5"/></g>` +
+      `<g class="flame"><path class="fire" d="M${x} 40 C ${x + 14} 62, ${x + 12} 84, ${x} 94 C ${x - 12} 84, ${x - 14} 62, ${x} 40 Z"/>` +
+      `<path class="core" d="M${x} 62 C ${x + 6} 74, ${x + 6} 86, ${x} 92 C ${x - 6} 86, ${x - 6} 74, ${x} 62 Z"/></g>`;
+    row.appendChild(el);
+    items.push(el);
+  }
+
+  let timers = [];
+  const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+  const stop = () => { timers.forEach(clearTimeout); timers = []; };
+  const light = (el) => { el.classList.remove("out", "smoking"); el.classList.add("lit"); };
+  const douse = (el) => {
+    el.classList.remove("lit", "smoking");
+    el.classList.add("out");
+    void el.getBBox(); // restart the smoke
+    el.classList.add("smoking");
+    later(() => el.classList.remove("smoking"), 3400);
+  };
+  const flicker = () => {
+    const dark = items.filter((el) => !el.classList.contains("lit"));
+    if (dark.length) {
+      const el = dark[Math.floor(Math.random() * dark.length)];
+      light(el);
+      later(() => douse(el), rand(1600, 4200));
+    }
+    later(flicker, rand(180, 650));
+  };
+  const run = () => {
+    stop();
+    if (still()) { items.forEach(light); return; }
+    items.forEach((el) => el.classList.remove("lit", "out", "smoking"));
+    const lastLit = 300 + (N - 1) * STEP;
+    items.forEach((el, i) => later(() => light(el), 300 + i * STEP));
+    items.forEach((el, i) => later(() => douse(el), lastLit + 900 + i * STEP));
+    later(flicker, lastLit + 900 + N * STEP + 400);
+  };
+
+  strike.addEventListener("click", run);
+  new IntersectionObserver(([e]) => { if (e.isIntersecting) run(); else stop(); }, { threshold: 0.2 }).observe(section);
+});
