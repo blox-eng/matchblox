@@ -300,19 +300,19 @@ func (s *Service) mateChain(from, to chains.Member) (string, bool) {
 // postMessage puts a send's line in x's inbox and sparks the chain.
 func (s *Service) postMessage(chainID string, x sample.Session, line string, now time.Time) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	st := s.chainsLocked()
-	st.Post(memberOf(x), line, now)
-	st.Spark(chainID, now)
-	s.cur.Chains = chainsView(st)
+	s.chainsLocked().Post(memberOf(x), line, now)
+	s.mu.Unlock()
+	s.spark(chainID, now)
 }
 
+// spark marks the chain and sends the consoles the spark at once.
 func (s *Service) spark(chainID string, now time.Time) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	st := s.chainsLocked()
 	st.Spark(chainID, now)
 	s.cur.Chains = chainsView(st)
+	s.mu.Unlock()
+	s.broadcast()
 }
 
 func (s *Service) sessionOf(m chains.Member) (sample.Session, bool) {

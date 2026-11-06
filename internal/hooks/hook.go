@@ -51,8 +51,8 @@ type Event struct {
 	// Command is the shell line of a PreToolUse or PostToolUse of Bash,
 	// its values scrubbed; Raw is a PreToolUse's line as the shell runs
 	// it, which the merge guard reads and which never leaves the hook's
-	// process. Guards are
-	// what the guard read in Raw; Denied: it refused the call.
+	// process. Guards are what the guard read in Raw; Denied: it refused
+	// the call.
 	Command string  `json:"command,omitempty"`
 	Raw     string  `json:"-"`
 	Guards  []Guard `json:"guards,omitempty"`

@@ -371,7 +371,9 @@ func StartNotes(r Result) ([]string, bool) {
 
 // News asks for the news of the match in Pane, at the hook Event.
 type News struct {
-	Pane      string `json:"pane"`
+	Pane string `json:"pane"`
+	// Socket is the tmux server of Pane ($TMUX's socket), as in a hook event.
+	Socket    string `json:"socket,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
 	Event     string `json:"event,omitempty"`
 }

@@ -564,7 +564,7 @@ func askNews(sock string, ev hooks.Event, left time.Duration, show func(text str
 		return
 	}
 	var r proto.NewsReply
-	_ = transport.AskHeard(sock, left, proto.KindNews, proto.News{Pane: ev.Pane, SessionID: ev.SessionID, Event: ev.Name}, &r, func() bool {
+	_ = transport.AskHeard(sock, left, proto.KindNews, proto.News{Pane: ev.Pane, Socket: ev.Socket, SessionID: ev.SessionID, Event: ev.Name}, &r, func() bool {
 		if r.Text == "" {
 			return false
 		}

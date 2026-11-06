@@ -275,6 +275,12 @@ type Service struct {
 	// worktree; chainWaits the sessions whose wait was news. Under mu.
 	heads      map[string]head
 	chainWaits map[string]bool
+	// headReads count the hook reads of a worktree's HEAD in flight: its
+	// head stays while one runs. Under mu.
+	headReads map[string]int
+	// headRun reads the HEADs of chained worktrees, restRun types the lines
+	// that wait for a rest: each one run at a time, out of the sample loop.
+	headRun, restRun lone
 	// noticed are the branches of each pair at its last notice; heardAsks
 	// the requests already told to their target. Under mu.
 	noticed   map[pair][2]string
@@ -548,7 +554,8 @@ func (s *Service) Run(ctx context.Context) {
 		s.publish(s.sample(), rec)
 		s.renameAtRest(ctx)
 		s.stoke(ctx, s.now())
-		s.deliverAtRest(s.now())
+		now := s.now()
+		s.restRun.start(func() { s.deliverAtRest(now) })
 		if first {
 			s.rescanGit()
 			s.shipKick <- struct{}{}
@@ -652,7 +659,8 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		// the first tick after its wait. OnDoc never blocks.
 		s.Push.OnDoc(doc)
 	}
-	s.chainHeads(s.now())
+	now := s.now()
+	s.headRun.start(func() { s.chainHeads(now) })
 	s.broadcast()
 }
 
@@ -993,7 +1001,8 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 			return nil
 		}
 		var d delivery
-		if pid > 0 && s.hookFrom(pid, hooks.Event{Pane: n.Pane, SessionID: n.SessionID}) {
+		ev := s.onServer(hooks.Event{Pane: n.Pane, SessionID: n.SessionID, Socket: n.Socket}, s.stokerSocket())
+		if n.Pane = ev.Pane; pid > 0 && s.hookFrom(pid, ev) {
 			d = s.news(n)
 		}
 		if err := c.Send(proto.KindNews, "", proto.NewsReply{Text: d.text}); err != nil || d.text == "" {

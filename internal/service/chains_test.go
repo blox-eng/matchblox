@@ -43,6 +43,7 @@ func chainTest(t *testing.T, path string) *Service {
 func chainSample(s *Service, sessions ...sample.Session) state.Doc {
 	var doc state.Doc
 	s.publish(sample.Snapshot{At: time.Now(), Sessions: sessions}, func(d state.Doc) { doc = d })
+	s.headRun.wait() // the HEAD reads it started, out of the sample loop
 	return doc
 }
 

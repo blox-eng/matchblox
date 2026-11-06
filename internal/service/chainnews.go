@@ -5,15 +5,20 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -48,20 +53,43 @@ func (s *Service) chainNews(ev hooks.Event) {
 	if ev.Name == "PostToolUse" && movesHead.MatchString(ev.Command) {
 		_, wt, _ = gitscan.RepoOf(s.cur.Git, cmp.Or(ev.Cwd, x.Cwd))
 	}
-	old, had := s.heads[wt]
-	s.mu.Unlock()
 	if wt == "" {
+		s.mu.Unlock()
 		return
 	}
+	old, had := s.heads[wt]
+	s.readingHead(wt, 1)
+	s.mu.Unlock()
 	cur, line, ok := s.readMove(wt, old, had)
-	if !ok {
-		return
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.moveLocked(wt, old, had, cur) && line != "" {
-		s.postLocked([]chains.Member{me}, x.Name+" "+line, true, now)
+	s.readingHead(wt, -1)
+	if ok && s.moveLocked(wt, old, had, cur) && line != "" {
+		s.postLocked(s.inTreeLocked(wt, me), x.Name+" "+line, true, now)
 	}
+}
+
+// readingHead counts the hook reads of wt's HEAD in flight, by d. Callers
+// hold mu.
+func (s *Service) readingHead(wt string, d int) {
+	if s.headReads == nil {
+		s.headReads = map[string]int{}
+	}
+	if s.headReads[wt] += d; s.headReads[wt] <= 0 {
+		delete(s.headReads, wt)
+	}
+}
+
+// inTreeLocked are the matches in worktree wt, me among them: they share
+// the checkout, so a move of its HEAD is no news to any. Callers hold mu.
+func (s *Service) inTreeLocked(wt string, me chains.Member) []chains.Member {
+	in := []chains.Member{me}
+	for _, y := range s.cur.Sessions {
+		if _, ywt, ok := gitscan.RepoOf(s.cur.Git, y.Cwd); ok && ywt == wt && !memberOf(y).Same(me) {
+			in = append(in, memberOf(y))
+		}
+	}
+	return in
 }
 
 // turnNewsLocked is the news of a Stop, or of a wait for the person that
@@ -88,7 +116,8 @@ func (s *Service) turnNewsLocked(ev hooks.Event) string {
 
 // chainHeads reads the HEAD of each worktree that holds a chained match and
 // posts a move to the mates: by name when the worktree holds one match, else
-// as someone in it. Git runs out of mu.
+// as someone in it. Git runs out of mu, and out of the sample loop: publish
+// starts it in headRun.
 func (s *Service) chainHeads(now time.Time) {
 	type look struct {
 		wt  string
@@ -117,10 +146,11 @@ func (s *Service) chainHeads(now time.Time) {
 	}
 	slices.SortFunc(looks, func(a, b look) int { return strings.Compare(a.wt, b.wt) })
 	maps.DeleteFunc(s.heads, func(wt string, _ head) bool {
-		return !slices.ContainsFunc(looks, func(l look) bool { return l.wt == wt })
+		return s.headReads[wt] == 0 && !slices.ContainsFunc(looks, func(l look) bool { return l.wt == wt })
 	})
 	maps.DeleteFunc(s.chainWaits, func(id string, _ bool) bool { return !s.queue.Waits(id) })
 	s.mu.Unlock()
+	posted := false
 	for _, l := range looks {
 		cur, line, ok := s.readMove(l.wt, l.old, l.had)
 		if !ok {
@@ -128,6 +158,7 @@ func (s *Service) chainHeads(now time.Time) {
 		}
 		s.mu.Lock()
 		if s.moveLocked(l.wt, l.old, l.had, cur) && line != "" {
+			posted = true
 			name := "someone in " + filepath.Base(l.wt)
 			if len(l.in) == 1 {
 				name = l.in[0].Name
@@ -140,6 +171,9 @@ func (s *Service) chainHeads(now time.Time) {
 		}
 		s.mu.Unlock()
 	}
+	if posted {
+		s.broadcast() // the spark
+	}
 }
 
 // readMove reads wt's HEAD and, when it moved from old, the line that says
@@ -151,25 +185,57 @@ func (s *Service) readMove(wt string, old head, had bool) (cur head, line string
 		return head{}, "", false
 	}
 	cur = head{commit: f[0], branch: f[1]}
+	sha := cur.commit[:min(7, len(cur.commit))]
 	switch {
 	case !had || cur == old:
 		return cur, "", true
 	case cur.branch == "HEAD" && old.branch != "HEAD":
-		return cur, "switched to a detached HEAD at " + cur.commit[:min(7, len(cur.commit))], true
+		return cur, "switched to a detached HEAD at " + sha, true
 	case cur.branch != old.branch:
 		return cur, "switched to " + cur.branch, true
 	}
-	out, err = s.readGit(wt, "diff", "--name-only", old.commit, cur.commit)
+	how, _ := s.readGit(wt, "reflog", "-1", "--format=%gs", "HEAD")
+	switch how = strings.TrimSpace(how); {
+	case strings.HasPrefix(how, "commit"):
+		return cur, commitLine(s.filesChanged(wt, old, cur), s.firstFiles(wt, old, cur)), true
+	case strings.HasPrefix(how, "pull"):
+		n := s.filesChanged(wt, old, cur)
+		return cur, fmt.Sprintf("pulled %d %s into %s", n, plural(n, "file"), cur.branch), true
+	}
+	return cur, "moved " + cur.branch + " to " + sha, true // a reset, a rebase, a merge
+}
+
+// filesChanged is how many files differ between old and cur, as git's
+// shortstat counts them; 0 when git does not say.
+func (s *Service) filesChanged(wt string, old, cur head) int {
+	out, err := s.readGit(wt, "diff", "--shortstat", old.commit, cur.commit)
 	if err != nil {
-		return cur, commitLine(nil), true
+		return 0
+	}
+	n, _ := strconv.Atoi(strings.Fields(out + " 0")[0])
+	return n
+}
+
+// firstFiles are the first three paths that differ between old and cur.
+func (s *Service) firstFiles(wt string, old, cur head) []string {
+	out, err := s.readGit(wt, "diff", "--name-only", old.commit, cur.commit)
+	if err != nil {
+		return nil
 	}
 	var files []string
 	for _, f := range strings.Split(out, "\n") {
-		if f = strings.TrimSpace(f); f != "" {
+		if f = strings.TrimSpace(f); f != "" && len(files) < 3 {
 			files = append(files, f)
 		}
 	}
-	return cur, commitLine(files), true
+	return files
+}
+
+func plural(n int, word string) string {
+	if n == 1 {
+		return word
+	}
+	return word + "s"
 }
 
 // moveLocked records cur as wt's HEAD unless another read did since old,
@@ -212,26 +278,62 @@ func (s *Service) postLocked(from []chains.Member, text string, spark bool, now 
 	}
 }
 
-// commitLine says what a commit changed: its file count and up to three paths.
-func commitLine(files []string) string {
-	switch n := len(files); {
+// commitLine says what a commit changed: its n files and the first paths.
+func commitLine(n int, first []string) string {
+	first = first[:min(3, len(first), n)]
+	switch {
 	case n == 0:
 		return "committed"
+	case len(first) == 0:
+		return fmt.Sprintf("committed %d %s", n, plural(n, "file"))
 	case n == 1:
-		return "committed 1 file in " + files[0]
-	case n <= 3:
-		return fmt.Sprintf("committed %d files in %s", n, strings.Join(files, ", "))
+		return "committed 1 file in " + first[0]
+	case n == len(first):
+		return fmt.Sprintf("committed %d files in %s", n, strings.Join(first, ", "))
 	default:
-		return fmt.Sprintf("committed %d files in %s, and %d more", n, strings.Join(files[:3], ", "), n-3)
+		return fmt.Sprintf("committed %d files in %s, and %d more", n, strings.Join(first, ", "), n-len(first))
 	}
 }
 
+// readGit runs a read-only git command in dir: s.Git, else git with a short
+// timeout, its paths unquoted and its stderr out of the answer.
 func (s *Service) readGit(dir string, args ...string) (string, error) {
 	if s.Git != nil {
 		return s.Git(dir, args...)
 	}
-	return matchGit(context.Background(), dir, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	argv := append([]string{"--no-pager", "--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.quotePath=false", "-C", dir}, args...)
+	cmd := exec.CommandContext(ctx, "git", argv...) //nolint:gosec // fixed read-only git commands, separate argv
+	var out, stderr matchOutput
+	cmd.Stdout, cmd.Stderr = &out, &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("%w: %s", err, said.Clean(stderr.String()))
+	}
+	return said.Clean(out.String()), nil
 }
+
+// lone runs one call of a slow job at a time, in its own goroutine: a start
+// while one runs is skipped.
+type lone struct {
+	busy atomic.Bool
+	wg   sync.WaitGroup
+}
+
+func (l *lone) start(f func()) {
+	if !l.busy.CompareAndSwap(false, true) {
+		return
+	}
+	l.wg.Add(1)
+	go func() {
+		defer l.wg.Done()
+		defer l.busy.Store(false)
+		f()
+	}()
+}
+
+// wait returns once the run in progress, if any, ends.
+func (l *lone) wait() { l.wg.Wait() }
 
 func (s *Service) hookSessionLocked(id string) (sample.Session, bool) {
 	for _, x := range s.cur.Sessions {
