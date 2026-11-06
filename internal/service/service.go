@@ -988,11 +988,25 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 		if json.Unmarshal(env.Body, &n) != nil {
 			return nil
 		}
-		reply := proto.NewsReply{}
-		if pid <= 0 || s.hookFrom(pid, hooks.Event{Pane: n.Pane, SessionID: n.SessionID}) {
-			reply.Text = s.news(n)
+		var d delivery
+		if pid > 0 && s.hookFrom(pid, hooks.Event{Pane: n.Pane, SessionID: n.SessionID}) {
+			d = s.news(n)
 		}
-		return c.Send(proto.KindNews, "", reply)
+		if err := c.Send(proto.KindNews, "", proto.NewsReply{Text: d.text}); err != nil || d.text == "" {
+			s.unheard(d)
+			return err
+		}
+		// The hook says it heard the news once it printed it; else the news
+		// goes back for its next ask.
+		t := time.AfterFunc(newsHeardWait, func() { c.Close() })
+		ack, err := c.Recv()
+		t.Stop()
+		if err != nil || ack.Kind != proto.KindNews {
+			s.unheard(d)
+			return nil
+		}
+		s.heard(d)
+		return nil
 	}
 	var h proto.Hello
 	if env.Kind != proto.KindHello || json.Unmarshal(env.Body, &h) != nil {

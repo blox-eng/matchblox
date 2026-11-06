@@ -84,11 +84,7 @@ func newsTest(t *testing.T, sessions []sample.Session, chained ...string) (*Serv
 func inbox(s *Service, x sample.Session) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var out []string
-	for _, it := range s.chainsLocked().Take(memberOf(x)) {
-		out = append(out, it.Text)
-	}
-	return out
+	return s.chainsLocked().Take(memberOf(x)).Texts()
 }
 
 func hookOf(x sample.Session, name string) hooks.Event {

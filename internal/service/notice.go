@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/gitscan"
@@ -16,40 +17,82 @@ import (
 // pair is a match that was told of another in its repo.
 type pair struct{ to, of chains.Member }
 
+// delivery is the news of one hook's ask: its text, and what it took from
+// the store and would mark as told, held until the hook says it heard it.
+type delivery struct {
+	text    string
+	me      chains.Member
+	taken   chains.Taken
+	asks    []chains.Request
+	notices map[pair][2]string
+}
+
+// newsHeardWait is how long the service holds news a hook took before it
+// gives it back, unheard.
+var newsHeardWait = 200 * time.Millisecond
+
 // news is what the match in n.Pane has not heard yet, in blocks: its inbox,
 // the requests to chain with it, then the same-repo matches it can chain
-// with. It empties the inbox. "": nothing new.
-func (s *Service) news(n proto.News) string {
+// with. It empties the inbox; heard marks the rest as told, unheard gives
+// the inbox back.
+func (s *Service) news(n proto.News) delivery {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	x, ok := s.sessionAtLocked(n.Pane)
 	if !ok {
-		return ""
+		return delivery{}
 	}
 	st := s.chainsLocked()
-	me := memberOf(x)
+	d := delivery{me: memberOf(x), taken: st.Take(memberOf(x))}
 	var blocks []string
-	if items := st.Take(me); len(items) > 0 {
-		lines := []string{"[matchblox] since your last turn:"}
-		for _, it := range items {
-			lines = append(lines, "  "+it.Text)
-		}
-		blocks = append(blocks, strings.Join(lines, "\n"))
+	if texts := d.taken.Texts(); len(texts) > 0 {
+		blocks = append(blocks, "[matchblox] since your last turn:\n  "+strings.Join(texts, "\n  "))
 	}
-	if !slices.ContainsFunc(st.Off, me.Same) {
-		blocks = append(blocks, s.requestsLocked(st, me)...)
+	if !slices.ContainsFunc(st.Off, d.me.Same) {
+		var asks []string
+		asks, d.asks = s.requestsLocked(st, d.me)
+		blocks = append(blocks, asks...)
 		if s.ChainsNotice {
-			blocks = append(blocks, s.noticesLocked(st, x)...)
+			var notices []string
+			notices, d.notices = s.noticesLocked(st, x)
+			blocks = append(blocks, notices...)
 		}
 	}
-	return strings.Join(blocks, "\n\n")
+	d.text = strings.Join(blocks, "\n\n")
+	return d
 }
 
-// requestsLocked tells me, once each, who asks to chain with it. Callers
-// hold mu.
-func (s *Service) requestsLocked(st *chains.Store, me chains.Member) []string {
+// heard marks d's requests and notices as told.
+func (s *Service) heard(d delivery) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, r := range d.asks {
+		if s.heardAsks == nil {
+			s.heardAsks = map[chains.Request]bool{}
+		}
+		s.heardAsks[r] = true
+	}
+	for p, b := range d.notices {
+		if s.noticed == nil {
+			s.noticed = map[pair][2]string{}
+		}
+		s.noticed[p] = b
+	}
+}
+
+// unheard gives d's news back to the front of its inbox.
+func (s *Service) unheard(d delivery) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.chainsLocked().GiveBack(d.me, d.taken)
+}
+
+// requestsLocked tells me, once each, who asks to chain with it: the lines,
+// and the requests they tell. Callers hold mu.
+func (s *Service) requestsLocked(st *chains.Store, me chains.Member) ([]string, []chains.Request) {
 	maps.DeleteFunc(s.heardAsks, func(r chains.Request, _ bool) bool { return !slices.Contains(st.Requests, r) })
 	var out []string
+	var told []chains.Request
 	for _, r := range st.Requests {
 		if !r.To.Same(me) || s.heardAsks[r] {
 			continue
@@ -58,19 +101,17 @@ func (s *Service) requestsLocked(st *chains.Store, me chains.Member) []string {
 		if !ok {
 			continue
 		}
-		if s.heardAsks == nil {
-			s.heardAsks = map[chains.Request]bool{}
-		}
-		s.heardAsks[r] = true
+		told = append(told, r)
 		out = append(out, fmt.Sprintf("[matchblox] %s asks to chain with you. To accept, run:\n  matchblox chain %s", from.Name, from.Name))
 	}
-	return out
+	return out, told
 }
 
 // noticesLocked tells x of each match in its repo it is not chained with
 // and has no request with: once per pair, again after either changes
-// branch. Callers hold mu.
-func (s *Service) noticesLocked(st *chains.Store, x sample.Session) []string {
+// branch. It returns the lines, and the branches of each pair they tell.
+// Callers hold mu.
+func (s *Service) noticesLocked(st *chains.Store, x sample.Session) ([]string, map[pair][2]string) {
 	maps.DeleteFunc(s.noticed, func(p pair, _ [2]string) bool {
 		_, to := s.sessionOfLocked(p.to)
 		_, of := s.sessionOfLocked(p.of)
@@ -78,7 +119,7 @@ func (s *Service) noticesLocked(st *chains.Store, x sample.Session) []string {
 	})
 	repo, wt, ok := gitscan.RepoOf(s.cur.Git, x.Cwd)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	me := memberOf(x)
 	mates := st.Mates(me)
@@ -88,6 +129,7 @@ func (s *Service) noticesLocked(st *chains.Store, x sample.Session) []string {
 		})
 	}
 	var out []string
+	told := map[pair][2]string{}
 	for _, y := range s.cur.Sessions {
 		other := memberOf(y)
 		yRepo, yWt, ok := gitscan.RepoOf(s.cur.Git, y.Cwd)
@@ -99,10 +141,7 @@ func (s *Service) noticesLocked(st *chains.Store, x sample.Session) []string {
 		if was, ok := s.noticed[p]; ok && was == branches {
 			continue
 		}
-		if s.noticed == nil {
-			s.noticed = map[pair][2]string{}
-		}
-		s.noticed[p] = branches
+		told[p] = branches
 		on := branches[1]
 		if on == "" || on == "HEAD" {
 			on = "a detached HEAD"
@@ -110,7 +149,7 @@ func (s *Service) noticesLocked(st *chains.Store, x sample.Session) []string {
 		out = append(out, fmt.Sprintf("[matchblox] %s also works in %s, on %s.\n  To hear from it, run: matchblox chain %s",
 			y.Name, filepath.Base(repo), on, y.Name))
 	}
-	return out
+	return out, told
 }
 
 // branchLocked is wt's branch: the last HEAD read of a chained worktree,

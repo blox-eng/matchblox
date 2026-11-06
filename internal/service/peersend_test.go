@@ -575,8 +575,8 @@ func TestSendToABusyMateQueues(t *testing.T) {
 	}
 	h.s.mu.Lock()
 	defer h.s.mu.Unlock()
-	items := h.s.Chains.Take(chains.Member{SessionID: "s2"})
-	if len(items) != 1 || items[0].Text != "[from peer-send %1] hi" {
+	items := h.s.Chains.Take(chains.Member{SessionID: "s2"}).Texts()
+	if len(items) != 1 || items[0] != "[from peer-send %1] hi" {
 		t.Fatalf("inbox %+v", items)
 	}
 	if c, _ := h.s.Chains.ChainOf(chains.Member{SessionID: "s1"}); !c.Spark.Equal(night0) {
@@ -606,7 +606,7 @@ func TestCodexGetsItsQueuedLineAtRest(t *testing.T) {
 	}
 	h.s.mu.Lock()
 	defer h.s.mu.Unlock()
-	if items := h.s.Chains.Take(chains.Member{SessionID: "s2"}); len(items) != 0 {
+	if items := h.s.Chains.Take(chains.Member{SessionID: "s2"}).Texts(); len(items) != 0 {
 		t.Fatalf("the typed line is in the inbox too: %+v", items)
 	}
 }
@@ -801,8 +801,8 @@ func TestAQueuedLineIsDroppedAfterThreeTries(t *testing.T) {
 	}
 	h.s.mu.Lock()
 	defer h.s.mu.Unlock()
-	items := h.s.Chains.Take(chains.Member{SessionID: "s1"})
-	if len(items) != 1 || items[0].Text != "mate could not take your line: it did not show after 3 tries" {
+	items := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts()
+	if len(items) != 1 || items[0] != "mate could not take your line: it did not show after 3 tries" {
 		t.Fatalf("the sender's inbox: %+v", items)
 	}
 }

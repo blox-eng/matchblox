@@ -181,9 +181,9 @@ func TestAMatchThatMovesTellsItsMates(t *testing.T) {
 	moved.Cwd = "/dev/www"
 	chainSample(s, chainSessions[0], moved, chainSessions[2])
 	s.mu.Lock()
-	items := s.Chains.Take(memberOf(chainSessions[0]))
+	items := s.Chains.Take(memberOf(chainSessions[0])).Texts()
 	s.mu.Unlock()
-	if len(items) != 1 || items[0].Text != "two left the chain: it moved to www" {
+	if len(items) != 1 || items[0] != "two left the chain: it moved to www" {
 		t.Fatalf("one's inbox = %+v", items)
 	}
 }

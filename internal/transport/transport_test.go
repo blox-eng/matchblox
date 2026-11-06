@@ -315,3 +315,46 @@ func TestAskGetsOneReplyWithinItsTimeout(t *testing.T) {
 		t.Fatal("Ask with no time left dialled")
 	}
 }
+
+// TestAskHeardSaysItHeard: once heard takes the reply, AskHeard tells the
+// service on the same connection; a reply it does not take gets no word.
+func TestAskHeardSaysItHeard(t *testing.T) {
+	path := filepath.Join(shortDir(t), "run", "s.sock")
+	l, err := Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	acks := make(chan proto.Kind, 2)
+	go func() {
+		for {
+			nc, err := l.Accept()
+			if err != nil {
+				return
+			}
+			go func(c Conn) {
+				defer c.Close()
+				_ = c.Send(proto.KindHello, "", proto.Hello{Version: proto.Version})
+				if _, err := c.Recv(); err != nil {
+					return
+				}
+				_ = c.Send(proto.KindNews, "", proto.NewsReply{Text: "x"})
+				ack, _ := c.Recv()
+				acks <- ack.Kind
+			}(NewConn(nc))
+		}
+	}()
+	for _, took := range []bool{true, false} {
+		var r proto.NewsReply
+		if err := AskHeard(path, time.Second, proto.KindNews, proto.News{Pane: "%1"}, &r, func() bool { return took }); err != nil || r.Text != "x" {
+			t.Fatalf("AskHeard = %v, %+v", err, r)
+		}
+		want := proto.KindNews
+		if !took {
+			want = ""
+		}
+		if got := <-acks; got != want {
+			t.Fatalf("took %v: the service got %q, want %q", took, got, want)
+		}
+	}
+}

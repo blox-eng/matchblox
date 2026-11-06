@@ -253,29 +253,65 @@ func (s *Store) Spark(chainID string, now time.Time) {
 
 // Post puts news in to's inbox. Past InboxMax the oldest is dropped and counted.
 func (s *Store) Post(to Member, text string, now time.Time) {
+	s.put(to.key(), []Item{{At: now, Text: text}}, 0, false)
+}
+
+// put adds items to the inbox of k, before what it holds when first, with
+// dropped more dropped. Past InboxMax the oldest go and are counted.
+func (s *Store) put(k string, items []Item, dropped int, first bool) {
 	if s.inbox == nil {
 		s.inbox, s.dropped = map[string][]Item{}, map[string]int{}
 	}
-	k := to.key()
-	items := append(s.inbox[k], Item{At: now, Text: text})
-	if len(items) > InboxMax {
-		items = items[len(items)-InboxMax:]
-		s.dropped[k]++
+	if first {
+		items = append(slices.Clone(items), s.inbox[k]...)
+	} else {
+		items = append(s.inbox[k], items...)
 	}
-	s.inbox[k] = items
+	if over := len(items) - InboxMax; over > 0 {
+		items = items[over:]
+		dropped += over
+	}
+	if len(items) > 0 {
+		s.inbox[k] = items
+	}
+	if dropped > 0 {
+		s.dropped[k] += dropped
+	}
 }
 
-// Take empties m's inbox and returns what it held, with a last item that
-// counts the dropped ones.
-func (s *Store) Take(m Member) []Item {
-	k := m.key()
-	items := s.inbox[k]
-	if n := s.dropped[k]; n > 0 && len(items) > 0 {
-		items = append(items, Item{At: items[len(items)-1].At, Text: fmt.Sprintf("and %d more", n)})
+// Taken is what Take emptied from an inbox: its items, and how many were
+// dropped before them.
+type Taken struct {
+	Items   []Item
+	Dropped int
+}
+
+// Texts are the texts of t's items, with a last one that counts the dropped.
+func (t Taken) Texts() []string {
+	var out []string
+	for _, it := range t.Items {
+		out = append(out, it.Text)
 	}
+	if t.Dropped > 0 && len(out) > 0 {
+		out = append(out, fmt.Sprintf("and %d more", t.Dropped))
+	}
+	return out
+}
+
+// Take empties m's inbox and returns what it held.
+func (s *Store) Take(m Member) Taken {
+	k := m.key()
+	t := Taken{Items: s.inbox[k], Dropped: s.dropped[k]}
 	delete(s.inbox, k)
 	delete(s.dropped, k)
-	return items
+	return t
+}
+
+// GiveBack puts what Take emptied back in m's inbox, before what came since.
+func (s *Store) GiveBack(m Member, t Taken) {
+	if len(t.Items) > 0 {
+		s.put(m.key(), t.Items, t.Dropped, true)
+	}
 }
 
 // Load reads path. A missing file is an empty store.

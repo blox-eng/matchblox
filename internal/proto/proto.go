@@ -45,9 +45,10 @@ const (
 	// KindHook is the first and only message of `matchblox hook`: one
 	// hooks.Event, sent after the service hello, with no hello back.
 	KindHook Kind = "hook"
-	// KindNews is the one message of a hook that asks for its match's
-	// news, after the service hello; the service answers with one KindNews
-	// that holds a NewsReply.
+	// KindNews is the message of a hook that asks for its match's news,
+	// after the service hello; the service answers with one KindNews that
+	// holds a NewsReply. A hook that printed the news sends one more, with
+	// no body, to say it heard it.
 	KindNews Kind = "news"
 )
 

@@ -130,7 +130,8 @@ the person and messages. The hook prints what is new under
 `[matchblox] since your last turn:`. A match keeps at most 20 items. Past
 that the oldest go, and a line counts them. The hook never makes the agent
 wait: when the service does not answer in 30 ms, it prints nothing, and the
-news waits for the next time.
+news waits for the next time. A tool call inside a subagent hears nothing:
+the news waits for the match's own.
 
 `matchblox send <who> "<text>"` from a match reaches its chain-mates only.
 To any other match it fails with `<who> is not in your chain.` and nothing is
@@ -144,7 +145,8 @@ from a process with neither a pane nor a terminal (a cron job, a service, a
 `setsid` or `nohup` process) is refused with `not sent: matchblox cannot
 tell who sends this. Send from a terminal, a tmux pane or the console.` On
 systems where the service cannot read who is on its socket, every send from
-the command line is refused, and the console still sends.
+the command line is refused, the console still sends, and no hook hears
+news.
 
 A chain gives a match the right to message its chain-mates, and nothing
 more. It grants no control over them, and every service guard still applies.

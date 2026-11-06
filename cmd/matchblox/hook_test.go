@@ -179,6 +179,55 @@ func TestHookPrintsNewsAsContext(t *testing.T) {
 	}
 }
 
+// TestHookSaysItHeardTheNews: after it prints the news, each hook tells the
+// service on the same connection, so the service does not give it back.
+func TestHookSaysItHeardTheNews(t *testing.T) {
+	acks := make(chan proto.Kind, 1)
+	sock := newsService(t, func(c net.Conn, env proto.Envelope) {
+		if env.Kind == proto.KindNews {
+			_ = proto.Encode(c, proto.KindNews, "", proto.NewsReply{Text: "x"})
+			ack, _ := proto.Decode(bufio.NewReader(c))
+			acks <- ack.Kind
+		}
+	})
+	t.Setenv("TMUX_PANE", "%1")
+	spool := filepath.Join(t.TempDir(), "spool.jsonl")
+	if err := hook([]string{"PostToolUse"}, strings.NewReader(hookEvent("PostToolUse")), io.Discard, sock, spool, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-acks; got != proto.KindNews {
+		t.Fatalf("hook: the service got %q after the news", got)
+	}
+	if err := hookCursor(bytes.NewReader(cursorEvent(t, "postToolUse")), io.Discard, sock, spool); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-acks; got != proto.KindNews {
+		t.Fatalf("hookCursor: the service got %q after the news", got)
+	}
+}
+
+// TestASubagentsToolCallTakesNoNews: Claude Code runs the hooks of a
+// subagent's tool calls too; what it prints would reach the subagent, not
+// the match, so it asks for nothing.
+func TestASubagentsToolCallTakesNoNews(t *testing.T) {
+	var asked atomic.Int32
+	sock := newsService(t, func(c net.Conn, env proto.Envelope) {
+		if env.Kind == proto.KindNews {
+			asked.Add(1)
+			_ = proto.Encode(c, proto.KindNews, "", proto.NewsReply{Text: "x"})
+		}
+	})
+	t.Setenv("TMUX_PANE", "%1")
+	ev := `{"session_id":"s9","cwd":"/work/app","hook_event_name":"PostToolUse","tool_name":"Read","agent_id":"a1","agent_type":"Explore"}`
+	var out bytes.Buffer
+	if err := hook([]string{"PostToolUse"}, strings.NewReader(ev), &out, sock, filepath.Join(t.TempDir(), "spool.jsonl"), false); err != nil {
+		t.Fatal(err)
+	}
+	if out.Len() != 0 || asked.Load() != 0 {
+		t.Fatalf("a subagent's hook printed %q, asked %d times", out.String(), asked.Load())
+	}
+}
+
 // TestHookStaysInBudgetWithTheServiceStuck: a service that takes the
 // event and never answers the news holds the agent no longer than one
 // that is down.

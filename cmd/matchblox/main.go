@@ -534,7 +534,7 @@ func hook(args []string, stdin io.Reader, out io.Writer, sock, spool string, pro
 
 // printNews asks the service for the news of ev's match and prints it the
 // way Claude Code adds it to the session's context: plain lines at the start
-// of a turn, additionalContext after a tool call. Past left it prints
+// of a turn, additionalContext after a tool call. Out of time, it prints
 // nothing.
 func printNews(out io.Writer, sock string, ev hooks.Event, left time.Duration) {
 	switch ev.Name {
@@ -542,29 +542,35 @@ func printNews(out io.Writer, sock string, ev hooks.Event, left time.Duration) {
 	default:
 		return
 	}
-	text := askNews(sock, ev, left)
-	if text == "" {
-		return
-	}
-	if ev.Name != "PostToolUse" {
-		_, _ = fmt.Fprintln(out, text)
-		return
-	}
-	type added struct {
-		HookEventName     string `json:"hookEventName"`
-		AdditionalContext string `json:"additionalContext"`
-	}
-	encode(out, map[string]added{"hookSpecificOutput": {HookEventName: ev.Name, AdditionalContext: text}})
+	askNews(sock, ev, left, func(text string) {
+		if ev.Name != "PostToolUse" {
+			_, _ = fmt.Fprintln(out, text)
+			return
+		}
+		type added struct {
+			HookEventName     string `json:"hookEventName"`
+			AdditionalContext string `json:"additionalContext"`
+		}
+		encode(out, map[string]added{"hookSpecificOutput": {HookEventName: ev.Name, AdditionalContext: text}})
+	})
 }
 
-// askNews is the news of ev's match, "" when there is none or the service
-// does not answer within left.
-func askNews(sock string, ev hooks.Event, left time.Duration) string {
-	var r proto.NewsReply
-	if ev.Pane == "" || transport.Ask(sock, left, proto.KindNews, proto.News{Pane: ev.Pane, SessionID: ev.SessionID, Event: ev.Name}, &r) != nil {
-		return ""
+// askNews asks for the news of ev's match within left and, when there is
+// some, shows it, then tells the service it was heard: news the service
+// hears nothing of goes back to the inbox. A subagent's tool call asks for
+// nothing, as what it prints reaches the subagent, not the match.
+func askNews(sock string, ev hooks.Event, left time.Duration, show func(text string)) {
+	if ev.Pane == "" || ev.AgentID != "" {
+		return
 	}
-	return r.Text
+	var r proto.NewsReply
+	_ = transport.AskHeard(sock, left, proto.KindNews, proto.News{Pane: ev.Pane, SessionID: ev.SessionID, Event: ev.Name}, &r, func() bool {
+		if r.Text == "" {
+			return false
+		}
+		show(r.Text)
+		return true
+	})
 }
 
 func encode(out io.Writer, v any) {
@@ -591,9 +597,9 @@ func hookCursor(stdin io.Reader, out io.Writer, sock, spool string) error {
 	if ev.Name != "SessionStart" && ev.Name != "PostToolUse" {
 		return nil
 	}
-	if text := askNews(sock, ev, hookTimeout-time.Since(start)); text != "" {
+	askNews(sock, ev, hookTimeout-time.Since(start), func(text string) {
 		encode(out, map[string]string{"additional_context": text})
-	}
+	})
 	return nil
 }
 

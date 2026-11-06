@@ -148,15 +148,35 @@ func TestTheInboxKeepsTwentyAndCountsTheRest(t *testing.T) {
 	for i := range 23 {
 		s.Post(mem("a"), strconv.Itoa(i), t0.Add(time.Duration(i)*time.Second))
 	}
-	got := s.Take(mem("a"))
+	got := s.Take(mem("a")).Texts()
 	if len(got) != InboxMax+1 {
 		t.Fatalf("items = %d", len(got))
 	}
-	if got[0].Text != "3" || got[19].Text != "22" || got[20].Text != "and 3 more" {
-		t.Fatalf("items = %+v", got)
+	if got[0] != "3" || got[19] != "22" || got[20] != "and 3 more" {
+		t.Fatalf("items = %q", got)
 	}
-	if len(s.Take(mem("a"))) != 0 {
+	if len(s.Take(mem("a")).Texts()) != 0 {
 		t.Fatal("second take not empty")
+	}
+}
+
+// TestGiveBackGoesFirst: what a match did not hear goes back before what
+// came since, in order, and the inbox still keeps twenty and counts the rest.
+func TestGiveBackGoesFirst(t *testing.T) {
+	var s Store
+	for i := range 22 {
+		s.Post(mem("a"), strconv.Itoa(i), t0)
+	}
+	taken := s.Take(mem("a")) // 2 .. 21, and 2 more
+	s.Post(mem("a"), "new", t0)
+	s.GiveBack(mem("a"), taken)
+	got := s.Take(mem("a")).Texts()
+	if len(got) != InboxMax+1 || got[0] != "3" || got[18] != "21" || got[19] != "new" || got[20] != "and 3 more" {
+		t.Fatalf("items = %q", got)
+	}
+	s.GiveBack(mem("b"), Taken{})
+	if len(s.Take(mem("b")).Texts()) != 0 {
+		t.Fatal("an empty give-back made news")
 	}
 }
 
@@ -178,7 +198,7 @@ func TestSaveAndLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Chains) != 1 || len(got.Requests) != 1 || len(got.Off) != 1 || len(got.Take(mem("a"))) != 0 {
+	if len(got.Chains) != 1 || len(got.Requests) != 1 || len(got.Off) != 1 || len(got.Take(mem("a")).Items) != 0 {
 		t.Fatalf("loaded = %+v", got)
 	}
 	empty, err := Load(filepath.Join(t.TempDir(), "none.json"))

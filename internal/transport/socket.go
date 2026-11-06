@@ -125,6 +125,13 @@ func Notify(path string, timeout time.Duration, kind proto.Kind, body any) error
 // Ask sends one message to the service and reads its one reply of the same
 // kind into reply, all within timeout, as Notify does.
 func Ask(path string, timeout time.Duration, kind proto.Kind, body, reply any) error {
+	return AskHeard(path, timeout, kind, body, reply, nil)
+}
+
+// AskHeard is Ask for a reply the service wants word of: heard runs once
+// the reply is read, and when it returns true AskHeard sends one more
+// message of kind, still within timeout, to say the reply was taken.
+func AskHeard(path string, timeout time.Duration, kind proto.Kind, body, reply any, heard func() bool) error {
 	nc, r, err := greet(path, timeout)
 	if err != nil {
 		return err
@@ -140,7 +147,13 @@ func Ask(path string, timeout time.Duration, kind proto.Kind, body, reply any) e
 	if env.Kind != kind {
 		return fmt.Errorf("transport: the service answered %s with %s", kind, env.Kind)
 	}
-	return json.Unmarshal(env.Body, reply)
+	if err := json.Unmarshal(env.Body, reply); err != nil {
+		return err
+	}
+	if heard != nil && heard() {
+		return proto.Encode(nc, kind, "", struct{}{})
+	}
+	return nil
 }
 
 // greet dials path and reads the service hello, with the whole connection

@@ -270,3 +270,16 @@ func TestAPostToolUseOfBashKeepsTheScrubbedLine(t *testing.T) {
 		t.Fatalf("parsed %q raw %q %v", ev.Command, ev.Raw, err)
 	}
 }
+
+// TestParseKeepsTheSubagent: a tool call inside a subagent carries its
+// agent_id; the main conversation's carries none.
+func TestParseKeepsTheSubagent(t *testing.T) {
+	b := []byte(`{"session_id":"s1","hook_event_name":"PostToolUse","tool_name":"Read","agent_id":"a1","agent_type":"Explore"}`)
+	ev, err := Parse(bytes.NewReader(b), "PostToolUse", func(string) string { return "" })
+	if err != nil || ev.AgentID != "a1" {
+		t.Fatalf("parsed %+v, %v", ev, err)
+	}
+	if ev := parseFile(t, "stop.json", "Stop"); ev.AgentID != "" {
+		t.Fatalf("the main conversation has agent %q", ev.AgentID)
+	}
+}
