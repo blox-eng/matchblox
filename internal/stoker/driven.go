@@ -534,6 +534,57 @@ func Deny(dir, socket, pane string, gs []Guard) string {
 	return ""
 }
 
+// DenyFamily is the merge guard over the whole family: the host stoker's
+// state dir and the store of every chain stoker. A pane on the tmux server
+// of any member is a stoker pane. A pane one member's driven.json lists is
+// decided by that member alone. A pane none lists is decided by the host
+// dir, unless a member's run is on and lost its driven.json: then nothing
+// passes. With no chain stoker it is Deny. If the family cannot be listed,
+// the host's answer stands, and a host that allows becomes DenyLost.
+func DenyFamily(state, socket, pane string, gs []Guard) string {
+	if len(gs) == 0 {
+		return ""
+	}
+	ids, err := FamilyIDs(state)
+	if err != nil {
+		if why := Deny(state, socket, pane, gs); why != "" {
+			return why
+		}
+		return DenyLost
+	}
+	if len(ids) == 0 {
+		return Deny(state, socket, pane, gs)
+	}
+	dirs := []string{state}
+	for _, id := range ids {
+		dirs = append(dirs, FamilyDir(state, id))
+	}
+	lost := false
+	var listed string
+	for _, dir := range dirs {
+		d, err := ReadDriven(dir)
+		if err != nil {
+			if m, err := ReadMode(dir); err == nil && m.On {
+				lost = true
+			}
+			continue
+		}
+		if d.StokerSocket != "" && socket == d.StokerSocket {
+			return DenyStokerPane
+		}
+		if _, ok := d.Panes[pane]; ok && listed == "" {
+			listed = dir
+		}
+	}
+	if listed != "" {
+		return Deny(listed, socket, pane, gs)
+	}
+	if lost {
+		return DenyLost
+	}
+	return Deny(state, socket, pane, gs)
+}
+
 // Spend matches the guarded commands of one line to the goes of pane: the
 // order's goes cover any number, and each go given with y covers one. It
 // returns the step goes left over and the guards nothing covered.

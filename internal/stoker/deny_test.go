@@ -166,3 +166,102 @@ func bare(pane string) string {
 	id, _, _ := strings.Cut(pane, "@")
 	return id
 }
+
+// familyUnit makes the chain stoker id in state, running, and writes its
+// driven.json when d is not nil.
+func familyUnit(t *testing.T, state, id string, d *Driven) {
+	t.Helper()
+	dir := FamilyDir(state, id)
+	if err := WriteLink(dir, Link{ID: id, Chain: "c-" + id, Giver: "person"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "stoker.json"), []byte(`{"on":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if d != nil {
+		if err := WriteDriven(dir, *d); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestDenyFamilyChainUnitAllowsItsGo(t *testing.T) {
+	st := t.TempDir()
+	familyUnit(t, st, "s1", &Driven{Run: "r", Panes: map[string][]string{"%7": {"merge"}}})
+	if got := DenyFamily(st, "", "%7", Guards("gh pr merge 4")); got != "" {
+		t.Fatalf("a chain stoker's go: %q", got)
+	}
+}
+
+func TestDenyFamilyOtherUnitsGoDoesNotLeak(t *testing.T) {
+	st := t.TempDir()
+	familyUnit(t, st, "s1", &Driven{Run: "r", Panes: map[string][]string{"%7": {"merge"}}})
+	familyUnit(t, st, "s2", &Driven{Run: "r", Panes: map[string][]string{"%8": nil}})
+	merge := Guards("gh pr merge 4")
+	if got := DenyFamily(st, "", "%8", merge); got != DenyNoGo {
+		t.Fatalf("s2's pane with s1's go: %q", got)
+	}
+	if got := DenyFamily(st, "", "%7", merge); got != "" {
+		t.Fatalf("s1's pane: %q", got)
+	}
+}
+
+func TestDenyFamilyLostDrivenFailsClosed(t *testing.T) {
+	st := t.TempDir()
+	familyUnit(t, st, "s1", nil)
+	for _, pane := range []string{"%1", "%7"} {
+		if got := DenyFamily(st, "", pane, Guards("gh pr merge 4")); got != DenyLost {
+			t.Fatalf("%s: %q", pane, got)
+		}
+	}
+}
+
+func TestDenyFamilyStokerPaneOfAnyMember(t *testing.T) {
+	st := t.TempDir()
+	familyUnit(t, st, "s1", &Driven{Run: "r", Panes: map[string][]string{"%7": {"merge"}}, StokerSocket: stokerSock})
+	if got := DenyFamily(st, stokerSock, "%9", Guards("gh pr merge 4")); got != DenyStokerPane {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestDenyFamilyBrokenFamilyDirFailsClosed(t *testing.T) {
+	st := t.TempDir()
+	if err := os.WriteFile(filepath.Join(st, "stokers"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	merge := Guards("gh pr merge 4")
+	if got := DenyFamily(st, "", "%1", merge); got != DenyLost {
+		t.Fatalf("a host that allows: %q", got)
+	}
+	if err := WriteDriven(st, Driven{Run: "r", Panes: map[string][]string{"%1": nil}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := DenyFamily(st, "", "%1", merge); got != DenyNoGo {
+		t.Fatalf("the host's own answer stands: %q", got)
+	}
+}
+
+func TestDenyFamilyNoFamilyIsToday(t *testing.T) {
+	for _, state := range []string{"off", "lost", "driven"} {
+		dir := t.TempDir()
+		if state != "off" {
+			if err := os.WriteFile(filepath.Join(dir, "stoker.json"), []byte(`{"on":true}`), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if state == "driven" {
+			d := Driven{Run: "r", Panes: map[string][]string{"%1": nil, "%2": {"merge"}}, StokerSocket: stokerSock}
+			if err := WriteDriven(dir, d); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, pane := range []string{"%1", "%2", "%7", "%9@matchblox"} {
+			for _, cmd := range []string{"gh pr merge 4", `g"h pr merge 4`, "gh release create v1", "ls"} {
+				gs := Guards(cmd)
+				if got, want := DenyFamily(dir, hookAt(pane), bare(pane), gs), Deny(dir, hookAt(pane), bare(pane), gs); got != want {
+					t.Errorf("%s %s %q: %q, want %q", state, pane, cmd, got, want)
+				}
+			}
+		}
+	}
+}
