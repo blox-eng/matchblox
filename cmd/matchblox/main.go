@@ -542,34 +542,57 @@ func printNews(out io.Writer, sock string, ev hooks.Event, left time.Duration) {
 	default:
 		return
 	}
-	var r proto.NewsReply
-	if ev.Pane == "" || transport.Ask(sock, left, proto.KindNews, proto.News{Pane: ev.Pane, SessionID: ev.SessionID, Event: ev.Name}, &r) != nil || r.Text == "" {
+	text := askNews(sock, ev, left)
+	if text == "" {
 		return
 	}
 	if ev.Name != "PostToolUse" {
-		_, _ = fmt.Fprintln(out, r.Text)
+		_, _ = fmt.Fprintln(out, text)
 		return
 	}
 	type added struct {
 		HookEventName     string `json:"hookEventName"`
 		AdditionalContext string `json:"additionalContext"`
 	}
+	encode(out, map[string]added{"hookSpecificOutput": {HookEventName: ev.Name, AdditionalContext: text}})
+}
+
+// askNews is the news of ev's match, "" when there is none or the service
+// does not answer within left.
+func askNews(sock string, ev hooks.Event, left time.Duration) string {
+	var r proto.NewsReply
+	if ev.Pane == "" || transport.Ask(sock, left, proto.KindNews, proto.News{Pane: ev.Pane, SessionID: ev.SessionID, Event: ev.Name}, &r) != nil {
+		return ""
+	}
+	return r.Text
+}
+
+func encode(out io.Writer, v any) {
 	enc := json.NewEncoder(out)
 	enc.SetEscapeHTML(false)
-	_ = enc.Encode(map[string]added{"hookSpecificOutput": {HookEventName: ev.Name, AdditionalContext: r.Text}})
+	_ = enc.Encode(v)
 }
 
 // hookCursor delivers one event of Cursor's hooks (`matchblox hook
-// --cursor`; the event is in the payload), as hook does. It prints nothing:
-// Cursor reads what a hook prints, and a stop hook's followup_message would
+// --cursor`; the event is in the payload), as hook does. It prints the
+// news only as sessionStart's and postToolUse's additional_context: Cursor
+// reads what every hook prints, and a stop hook's followup_message would
 // start a turn.
-func hookCursor(stdin io.Reader, _ io.Writer, sock, spool string) error {
+func hookCursor(stdin io.Reader, out io.Writer, sock, spool string) error {
+	start := time.Now()
 	ev, err := hooks.ParseCursor(stdin, os.Getenv)
 	if err != nil {
 		return nil
 	}
 	if transport.Notify(sock, hookTimeout, proto.KindHook, ev) != nil {
 		_ = hooks.Append(spool, ev)
+		return nil
+	}
+	if ev.Name != "SessionStart" && ev.Name != "PostToolUse" {
+		return nil
+	}
+	if text := askNews(sock, ev, hookTimeout-time.Since(start)); text != "" {
+		encode(out, map[string]string{"additional_context": text})
 	}
 	return nil
 }

@@ -486,6 +486,65 @@ func TestCursorHookPrintsNothingAndSpools(t *testing.T) {
 	}
 }
 
+func cursorEvent(t *testing.T, name string) []byte {
+	t.Helper()
+	b, err := os.ReadFile("../../testdata/hooks/cursor-" + name + ".json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// TestCursorHookPrintsNewsAsContext: Cursor adds sessionStart's and
+// postToolUse's additional_context to the conversation; beforeSubmitPrompt
+// takes no text for the turn, so it hears nothing.
+func TestCursorHookPrintsNewsAsContext(t *testing.T) {
+	sock := newsService(t, func(c net.Conn, env proto.Envelope) {
+		if env.Kind == proto.KindNews {
+			_ = proto.Encode(c, proto.KindNews, "", proto.NewsReply{Text: "a <b> & c"})
+		}
+	})
+	t.Setenv("TMUX_PANE", "%1")
+	spool := filepath.Join(t.TempDir(), "spool.jsonl")
+	for name, want := range map[string]string{
+		"sessionStart":       `{"additional_context":"a <b> & c"}` + "\n",
+		"postToolUse":        `{"additional_context":"a <b> & c"}` + "\n",
+		"beforeSubmitPrompt": "",
+		"stop-completed":     "",
+	} {
+		var out bytes.Buffer
+		if err := hookCursor(bytes.NewReader(cursorEvent(t, name)), &out, sock, spool); err != nil {
+			t.Fatal(err)
+		}
+		if out.String() != want {
+			t.Errorf("%s printed %q, want %q", name, out.String(), want)
+		}
+	}
+}
+
+// TestCursorHookStaysInBudgetWithTheServiceStuck: as hook does, a service
+// that never answers the news holds Cursor no longer than one that is down.
+func TestCursorHookStaysInBudgetWithTheServiceStuck(t *testing.T) {
+	stuck := make(chan struct{})
+	t.Cleanup(func() { close(stuck) })
+	sock := newsService(t, func(net.Conn, proto.Envelope) { <-stuck })
+	t.Setenv("TMUX_PANE", "%1")
+	spool := filepath.Join(t.TempDir(), "spool.jsonl")
+	for _, name := range []string{"sessionStart", "postToolUse"} {
+		var out bytes.Buffer
+		start := time.Now()
+		if err := hookCursor(bytes.NewReader(cursorEvent(t, name)), &out, sock, spool); err != nil {
+			t.Fatal(err)
+		}
+		if d := time.Since(start); d > 50*time.Millisecond {
+			t.Fatalf("%s took %v", name, d)
+		}
+		if out.Len() != 0 {
+			t.Errorf("%s printed %q", name, out.String())
+		}
+	}
+}
+
 // TestCursorsStatusLineTapsItsPane: Cursor's status line keeps the context
 // of the session in its pane, then prints the status line it wraps, or else
 // the bar it takes the place of.

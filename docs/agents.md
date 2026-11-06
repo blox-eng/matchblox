@@ -152,9 +152,10 @@ What each agent gets:
 - **OpenCode** can chain and shows on the fuse, but takes no send: a typed
   line can send its draft. A send to it fails with `<who> runs OpenCode,
   which matchblox cannot type into safely.`
-- **Cursor** hears no news: its hook before a prompt cannot add text to the
-  turn. matchblox types nothing into it, so a message to it waits unheard.
-  It sees its chain and its asks in `matchblox chain`.
+- **Cursor** hears the news when its session starts and after each tool
+  call. It hears nothing when a prompt is sent: that hook cannot add text to
+  the turn. matchblox types nothing into it, so a message to it waits for its
+  next tool call.
 
 ## Codex launch settings
 

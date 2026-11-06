@@ -298,5 +298,7 @@ Checked 2026-11-06. The live Claude Code run could not start: the CLI had no
 valid API key. Claude Code's hook docs say `additionalContext` from
 `PostToolUse` goes into the context next to the tool result, so the print
 stays. Cursor's hook docs give `beforeSubmitPrompt` only `continue` and a
-`user_message` shown to the person, so Cursor hears no news, and matchblox
-types nothing into it.
+`user_message` shown to the person, so it stays silent. The same docs give
+`sessionStart` and `postToolUse` an `additional_context` that goes into the
+conversation, so Cursor hears the news there. matchblox types nothing into
+Cursor: a message to it waits for its next tool call.
