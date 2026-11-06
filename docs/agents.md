@@ -97,7 +97,8 @@ part of the launch configuration.
 
 ### Chains
 
-Two matches in one repo can chain, and then hear each other's news. A match
+Two matches on one host can chain, and then hear each other's news. They can
+work in one repo, in two repos, or in a folder that is in no repo. A match
 that works in a repo with another hears of it once, between its steps:
 
 ```text
@@ -107,27 +108,38 @@ that works in a repo with another hears of it once, between its steps:
 
 It hears of that pair again only after one of them changes branch.
 `[chains] notice = false` in the [config](config.md#chains) turns the line
-off.
+off. No line tells a match of an agent in another repo. To chain across
+repos, find the name in `matchblox sessions`, which names the repo of each
+agent (`in web`), and run `matchblox chain <who>`.
 
 - `matchblox chain <who>` asks to chain with `<who>`, or accepts its ask.
   `<who>` is a name or a pane, as in `matchblox peek`.
-- `matchblox chain` lists the chain and the asks to and from the match.
-  `--json` prints `chain` and `requests`.
+- `matchblox chain` lists the chain, with the repo of each chain-mate, and
+  the asks to and from the match. `--json` prints `chain` (each with
+  `name`, `pane` and `repo`) and `requests`.
 - `matchblox unchain` leaves the chain.
 - `matchblox chain --off` leaves the chain and takes no chains and no
   notices. `--on` takes them again.
 
 A chain needs both sides. The ask waits until `<who>`, or a match already in
 its chain, runs `matchblox chain` back. Until then nothing is shared: no news,
-no send and no fuse. The match asked hears the ask once, at its next step. An
-ask lapses after one hour, or when either match leaves the repo. Both
-matches must be in one repo on one host. Two worktrees of one repo are one
-repo. A match that moves to another repo leaves its chain, and its
-chain-mates hear where it went.
+no send and no fuse. The match asked hears the ask once, at its next step.
+An ask from another repo names that repo: `[matchblox] web-cart (in web)
+asks to chain with you.` An ask lapses after one hour, or when either match
+is gone. Both matches must be on one host. A match stays in its chain when
+it moves to another repo. It leaves when it is gone, when it runs
+`matchblox unchain`, or when it turns chains off.
+
+A `/clear` starts a new conversation in the same pane, and the chain keeps
+it. Its next step starts with one line: `[matchblox] you are chained with
+api, docs. To leave, run: matchblox unchain`.
 
 Chain-mates hear each other's commits, branch changes, finishes, waits for
 the person and messages. The hook prints what is new under
-`[matchblox] since your last turn:`. A match keeps at most 20 items. Past
+`[matchblox] since your last turn:`. A line from a chain-mate in another repo
+ends with the repo: `web-cart committed 1 file in api.go (in web)`, or
+`(in no repo)`. A match in no repo hears its chain-mates' commits, and posts
+none of its own: matchblox reads commits from a worktree. A match keeps at most 20 items. Past
 that the oldest go, and a line counts them. The hook never makes the agent
 wait: when the service does not answer in 30 ms, it prints nothing, and the
 news waits for the next time. A tool call inside a subagent hears nothing:
