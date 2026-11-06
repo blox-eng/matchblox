@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand/v2"
 	"net"
 	"os"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/actions"
 	"github.com/blox-eng/matchblox/internal/advice"
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/gitremote"
 	"github.com/blox-eng/matchblox/internal/gitscan"
@@ -123,6 +125,11 @@ type Service struct {
 	// PeerPane is the tmux pane a CLI that connected runs in, by its pid
 	// ("" outside every pane). An act's From is ignored where it is known.
 	PeerPane func(pid int) string
+	// TTYPane is the tmux pane whose terminal is the controlling terminal
+	// of pid ("" for none): the pane of an agent's process that PeerPane
+	// cannot place. ok is false when pid has no terminal or it cannot be
+	// read. Nil: no terminal is ever read.
+	TTYPane func(pid int) (pane string, ok bool)
 	// Capture reads the text of panes on the host, for the stoker's guard,
 	// with its styles: the guard tells Claude Code's grey suggestion from a
 	// draft a person typed.
@@ -130,6 +137,11 @@ type Service struct {
 	// PaneMouse tells if the program in a pane reads the mouse in SGR form,
 	// and the pane's size. Nil: never.
 	PaneMouse func(pane string) (cols, rows int, ok bool)
+	// PaneHistory is how many lines of history a pane holds, and its
+	// height; CaptureBack reads the pane back lines up from its live
+	// screen, with its styles. Nil: a console scrolls no history.
+	PaneHistory func(pane string) (history, rows int, ok bool)
+	CaptureBack func(pane string, back, rows int) (string, bool)
 	// TmuxOut runs a tmux command and returns what it prints: the pane of
 	// a session matchblox started. Nil: exec.
 	TmuxOut func(argv []string) (string, error)
@@ -180,6 +192,23 @@ type Service struct {
 	// PushOff is the Machine tab's push line while Push is nil because push
 	// could not start (`push: numbers: <why>`); "" when it is off by choice.
 	PushOff string
+	// Chains are the chains of this host, under mu. Nil: loaded from
+	// ChainsPath at first use.
+	Chains *chains.Store
+	// ChainsPath is where Chains are saved. Empty: they live in memory only.
+	ChainsPath string
+	// ChainsNotice tells each match of the others in its repo ([chains]
+	// notice).
+	ChainsNotice bool
+	// ChainsSend is who matchblox send reaches from an agent's pane
+	// ([chains] send): "chain", or "off" for no one.
+	ChainsSend string
+	// PeerLog gets one JSON line for each peer send: who, to whom, when,
+	// and the text's length and sha256, never the text. Empty: none.
+	PeerLog string
+	// Git runs a read-only git command in dir: the HEADs of chained
+	// worktrees. Nil: git, with a short timeout.
+	Git func(dir string, args ...string) (string, error)
 
 	// alone is when the last console closed; zero while one is open. A new
 	// service starts alone.
@@ -239,8 +268,31 @@ type Service struct {
 	// grantMu makes each y one check and one go: two consoles pressing it
 	// at once on one step give one go.
 	grantMu sync.Mutex
+	// peers are the peer sends of the last hour, for their limits.
+	peers peerSends
 	// renames are the renames that wait for their session's rest, by pane.
 	renames renameState
+	// heads are the HEADs of the worktrees that hold a chained match, by
+	// worktree; chainWaits the sessions whose wait was news. Under mu.
+	heads      map[string]head
+	chainWaits map[string]bool
+	// headReads count the hook reads of a worktree's HEAD in flight: its
+	// head stays while one runs. Under mu.
+	headReads map[string]int
+	// headRun reads the HEADs of chained worktrees, restRun types the lines
+	// that wait for a rest: each one run at a time, out of the sample loop.
+	headRun, restRun lone
+	// typingActs are the acts that type into a pane now: Serve lets them
+	// finish before it returns.
+	typingActs inFlight
+	// noticed are the branches of each pair at its last notice; heardAsks
+	// the requests already told to their target. Under mu.
+	noticed   map[pair][2]string
+	heardAsks map[chains.Request]bool
+	// heldAsks and heldNotices are what a delivery holds until its hook
+	// says it heard it: no other hook is told them meanwhile. Under mu.
+	heldAsks    map[chains.Request]bool
+	heldNotices map[pair]bool
 	// found goes to each console when foundGen passes the one it has.
 	found     gitscan.Found
 	foundGen  uint64
@@ -323,6 +375,9 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		StokerAgent: cfg.Stoker.Agent,
 		OrderSteps:  cfg.Stoker.MaxSteps,
 		full:        sample.Full{Pct: cfg.Sessions.CompactAt, Tokens: cfg.Sessions.CompactTokens},
+
+		ChainsNotice: cfg.Chains.Notice,
+		ChainsSend:   cfg.Chains.Send,
 	}
 	if s.interval <= 0 {
 		s.interval = 2 * time.Second
@@ -334,7 +389,8 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		s.sample = smp.Sample
 	}
 	s.Capture, s.PaneMouse = sample.CapturePanesStyled, sample.PaneMouse
-	s.PeerPane = s.paneOfPeer
+	s.PaneHistory, s.CaptureBack = sample.PaneHistory, sample.CaptureBackStyled
+	s.PeerPane, s.TTYPane = s.paneOfPeer, s.paneOfTTY
 	s.Activity = sample.ClientActivity
 	s.alone = s.now()
 	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Resting: s.resting, Answerable: s.answerable, Messageable: s.messageable, Asking: s.asking, Menu: s.menu, Stokable: s.stokable}
@@ -392,6 +448,14 @@ func (s *Service) Serve(ctx context.Context, l net.Listener) error {
 	// The sample loop can still be writing its first state file when the
 	// socket disappears during startup. Finish it before Serve returns.
 	<-runDone
+	// A line typing at rest finishes, or an exit between its keys and its
+	// Enter leaves it as the mate's draft; a HEAD read ends within git's
+	// timeout.
+	s.restRun.wait()
+	s.headRun.wait()
+	if !s.typingActs.wait(typingWait) {
+		fmt.Fprintln(os.Stderr, "matchblox: an act still typed into a pane after", typingWait, "and was cut off")
+	}
 	if err := context.Cause(ctx); errors.Is(err, ErrReplaced) || errors.Is(err, ErrSocketGone) {
 		return err
 	}
@@ -506,6 +570,8 @@ func (s *Service) Run(ctx context.Context) {
 		s.publish(s.sample(), rec)
 		s.renameAtRest(ctx)
 		s.stoke(ctx, s.now())
+		now := s.now()
+		s.restRun.start(func() { s.deliverAtRest(now) })
 		if first {
 			s.rescanGit()
 			s.shipKick <- struct{}{}
@@ -538,6 +604,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	lastAgent := s.lastAccounts.lastAgent(lastAccountsPath(s.StatePath))
 	s.mu.Lock()
 	s.setDoors(gen, ds)
+	prev := s.cur.Sessions
 	if s.have { // the first sample has no rates yet
 		s.hist.Append(history.FromSnapshot(snap))
 	}
@@ -580,6 +647,10 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		}
 		s.cur.Holds = s.Holds.List()
 	}
+	if err := s.pruneChainsLocked(s.now(), prev); err != nil {
+		s.cur.Errors = append(s.cur.Errors, "chains: "+err.Error())
+	}
+	s.cur.Chains = chainsView(s.Chains)
 	var live []recovery.Entry
 	var alive map[string]string
 	if s.Recovery != nil {
@@ -604,6 +675,8 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		// the first tick after its wait. OnDoc never blocks.
 		s.Push.OnDoc(doc)
 	}
+	now := s.now()
+	s.headRun.start(func() { s.chainHeads(now) })
 	s.broadcast()
 }
 
@@ -642,6 +715,7 @@ func (s *Service) Hook(ev hooks.Event) {
 		s.mergeQueue()
 	}
 	s.mu.Unlock()
+	s.chainNews(ev)
 	s.broadcast()
 }
 
@@ -937,6 +1011,32 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 		}
 		return nil
 	}
+	if env.Kind == proto.KindNews {
+		var n proto.News
+		if json.Unmarshal(env.Body, &n) != nil {
+			return nil
+		}
+		var d delivery
+		ev := s.onServer(hooks.Event{Pane: n.Pane, SessionID: n.SessionID, Socket: n.Socket}, s.stokerSocket())
+		if n.Pane = ev.Pane; pid > 0 && s.hookFrom(pid, ev) {
+			d = s.news(n)
+		}
+		if err := c.Send(proto.KindNews, "", proto.NewsReply{Text: d.text}); err != nil || d.text == "" {
+			s.unheard(d)
+			return err
+		}
+		// The hook says it heard the news once it printed it; else the news
+		// goes back for its next ask.
+		t := time.AfterFunc(newsHeardWait, func() { c.Close() })
+		ack, err := c.Recv()
+		t.Stop()
+		if err != nil || ack.Kind != proto.KindNews {
+			s.unheard(d)
+			return nil
+		}
+		s.heard(d)
+		return nil
+	}
 	var h proto.Hello
 	if env.Kind != proto.KindHello || json.Unmarshal(env.Body, &h) != nil {
 		return c.Send(proto.KindError, "", proto.Error{Text: "the first message must be hello"})
@@ -992,13 +1092,21 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 			continue
 		}
 		if pid > 0 {
-			a.From = s.PeerPane(pid)
+			a.From, a.FromPlaced = s.callerPane(pid)
+			a.FromKnown = true
 		}
 		if pane, ok := strings.CutPrefix(a.RecID, proto.WatchPrefix); ok {
 			res := s.watchAct(cl, h.Client, a, pane)
 			res.ActID = env.ID
 			_ = c.Send(proto.KindResult, env.ID, res)
 			continue
+		}
+		if pane, ok := strings.CutPrefix(a.RecID, proto.KeysPrefix); ok {
+			if res, handled := s.scrollKey(cl, h.Client, a, pane); handled {
+				res.ActID = env.ID
+				_ = c.Send(proto.KindResult, env.ID, res)
+				continue
+			}
 		}
 		if h.Client == proto.ClientConsole {
 			s.keyedSize(cl, a)
@@ -1007,6 +1115,7 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 			// A console in a pane the stoker drove, or in the stoker's own,
 			// is an agent that says it is one.
 			a.Console = h.Client == proto.ClientConsole && (pid <= 0 || !s.agentsPane(a))
+			a.FromPlaced = a.FromPlaced || a.Console
 			res := s.act(actCtx, a)
 			res.ActID = id
 			_ = c.Send(proto.KindResult, id, res)

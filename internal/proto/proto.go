@@ -45,6 +45,11 @@ const (
 	// KindHook is the first and only message of `matchblox hook`: one
 	// hooks.Event, sent after the service hello, with no hello back.
 	KindHook Kind = "hook"
+	// KindNews is the message of a hook that asks for its match's news,
+	// after the service hello; the service answers with one KindNews that
+	// holds a NewsReply. A hook that printed the news sends one more, with
+	// no body, to say it heard it.
+	KindNews Kind = "news"
 )
 
 type Envelope struct {
@@ -121,6 +126,15 @@ type Act struct {
 	// Console: the act came from a console, a person at the keys. The
 	// service sets it from the hello; it never comes over the wire.
 	Console bool `json:"-"`
+	// FromKnown: the service found From itself, by the caller's pid, so
+	// the act cannot name another pane as its own. It never comes over
+	// the wire.
+	FromKnown bool `json:"-"`
+	// FromPlaced: the service knows who sends the act, a match's pane or
+	// the person: by the caller's pane or terminal, or a console's hello,
+	// or because the service makes the act itself. A send that is not
+	// placed is refused. It never comes over the wire.
+	FromPlaced bool `json:"-"`
 }
 
 // WatchPrefix starts an act that names the pane a console watches; with no
@@ -137,6 +151,11 @@ const KeysPrefix = "keys:"
 // is the agent the console showed.
 const CommandPrefix = "cmd:"
 
+// ChainPrefix starts an act from an agent's pane that asks to chain with the
+// agent in the pane after it. After it, "-" leaves the chain, "off" refuses
+// chains and "on" takes them again.
+const ChainPrefix = "chain:"
+
 // LitPrefix starts the text of a keys: act that types the text after it:
 // at most MaxLit bytes, with no control character.
 const (
@@ -145,11 +164,25 @@ const (
 )
 
 // KeyNames are the tmux keys a keys: act may press by name.
-var KeyNames = []string{"Up", "Down", "Left", "Right", "Enter", "Tab", "BTab", "Escape", "C-c", "C-a", "BSpace", "PPage", "NPage"}
+var KeyNames = append([]string{"Up", "Down", "Left", "Right", "Enter", "Tab", "BTab", "Escape", "C-c", "C-a", "BSpace", "PPage", "NPage"}, ctrlNames()...)
+
+// CtrlKeys are the letters a chat sends with ctrl, as C-<letter>, beyond
+// C-a and C-c. Left out: ctrl+z, which stops the agent; ctrl+s and ctrl+q,
+// which stop and start the terminal; ctrl+h, i, j and m, which are
+// Backspace, Tab and Enter; and ctrl+o, the console's own.
+const CtrlKeys = "bdefgklnprtuvwxy"
+
+func ctrlNames() []string {
+	var out []string
+	for _, l := range CtrlKeys {
+		out = append(out, "C-"+string(l))
+	}
+	return out
+}
 
 // WheelUp and WheelDown are the text of a keys: act that turns the mouse
-// wheel in the pane. The agent scrolls itself: the console is a window on
-// the pane and keeps no history of its own.
+// wheel in the pane. An agent that reads the mouse scrolls itself; for one
+// that does not, the service shows the console the pane's history.
 const (
 	WheelUp   = "WheelUp"
 	WheelDown = "WheelDown"
@@ -173,6 +206,9 @@ type Screen struct {
 	// as they are.
 	Cols int `json:"cols,omitempty"`
 	Rows int `json:"rows,omitempty"`
+	// Back is how many lines back in the pane's history the screen is, for
+	// an agent that does not read the mouse; 0 is the live screen.
+	Back int `json:"back,omitempty"`
 }
 
 type Result struct {
@@ -333,6 +369,20 @@ func StartNotes(r Result) ([]string, bool) {
 	return slices.Clone(r.Skipped), true
 }
 
+// News asks for the news of the match in Pane, at the hook Event.
+type News struct {
+	Pane string `json:"pane"`
+	// Socket is the tmux server of Pane ($TMUX's socket), as in a hook event.
+	Socket    string `json:"socket,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	Event     string `json:"event,omitempty"`
+}
+
+// NewsReply is the text the hook prints. Empty: nothing new.
+type NewsReply struct {
+	Text string `json:"text,omitempty"`
+}
+
 type Error struct {
 	Text string `json:"text"`
 }
@@ -415,6 +465,12 @@ type (
 	// Focus is the session a tap on the island or a buzz opens.
 	Focus = state.Focus
 )
+
+// RepoOf is gitscan.RepoOf: the console finds a session's checkout as the
+// service does.
+func RepoOf(r *GitReport, cwd string) (repoPath, worktreePath string, ok bool) {
+	return gitscan.RepoOf(r, cwd)
+}
 
 // ShipsOf is ships.Of: the console finds a session's ships as the
 // service, the CLI and the stoker do.

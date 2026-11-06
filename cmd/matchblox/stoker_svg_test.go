@@ -184,3 +184,16 @@ func stokerTokens(dark bool) map[string]color.Color {
 	t["dim"] = color.RGBA{R: mix(fr, br), G: mix(fg, bgG), B: mix(fb, bb), A: 0xFF}
 	return t
 }
+
+// TestTheLandingSaysMatchesOutsideTheChainCannot: the chain section names
+// who is left out, matches, not people: the person at the console still
+// messages every match.
+func TestTheLandingSaysMatchesOutsideTheChainCannot(t *testing.T) {
+	page, err := os.ReadFile("../../www/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(page, []byte("Matches outside the chain cannot.")) || bytes.Contains(page, []byte("Nobody outside the chain")) {
+		t.Fatal("the chain section must say: Matches outside the chain cannot.")
+	}
+}

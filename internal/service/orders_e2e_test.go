@@ -313,7 +313,7 @@ func (f *fakeStoker) act(id string, body any) {
 		}
 		text = string(b)
 	}
-	if res := f.w.act(f.w.t.Context(), proto.Act{RecID: id, Confirm: "y", Text: text, From: "%9@mbtest"}); res.Err != "" {
+	if res := f.w.act(f.w.t.Context(), proto.Act{RecID: id, Confirm: "y", Text: text, From: "%9@mbtest", FromPlaced: true}); res.Err != "" {
 		f.errs = append(f.errs, id+": "+res.Err)
 	}
 }

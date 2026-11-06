@@ -6,6 +6,32 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Chain reaction.** Two matches in one repo learn of each other between
+  their steps. Once both run `matchblox chain`, they hear each other's
+  commits, branch changes, finishes and waits between their steps, and
+  `matchblox send` reaches them. A send to a match outside the chain fails.
+  Sessions joins a chain's matches with a fuse, and `[chains]` in the config
+  sets the notice and the send.
+  ([#299](https://github.com/blox-eng/matchblox/issues/299))
+
+## [0.32.1] - 2026-11-06
+
+### Fixed
+
+- **The chat scrolls an agent that does not read the mouse.** A swipe on the
+  phone, or the wheel, moves through the pane's history, and the key line says
+  how far back you are. The next key only comes back to the live screen.
+  Before, the chat said `not scrolled` and did not move.
+  ([#300](https://github.com/blox-eng/matchblox/issues/300))
+
+### Added
+
+- **A Ctrl key on the phone's belt.** Add `Ctrl` to Mine, tap it, and the next
+  letter goes with ctrl. The chat now sends ctrl with most letters, not only
+  `a` and `c`. ([#300](https://github.com/blox-eng/matchblox/issues/300))
+
 ## [0.32.0] - 2026-11-04
 
 ### Added
@@ -1186,7 +1212,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.32.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.32.1...HEAD
+[0.32.1]: https://github.com/blox-eng/matchblox/compare/v0.32.0...v0.32.1
 [0.32.0]: https://github.com/blox-eng/matchblox/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/blox-eng/matchblox/compare/v0.30.1...v0.31.0
 [0.30.1]: https://github.com/blox-eng/matchblox/compare/v0.30.0...v0.30.1
