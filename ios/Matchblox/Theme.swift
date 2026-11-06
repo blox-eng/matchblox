@@ -8,6 +8,7 @@ enum Theme {
     static let faint = Tokens.faint
     static let hair = Tokens.hair
     static let accent = Tokens.accent
+    static let wash = Tokens.wash
     static let neg = Tokens.neg
 
     // The match and the mark.

@@ -6,6 +6,89 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Chain reaction.** Two matches in one repo learn of each other between
+  their steps. Once both run `matchblox chain`, they hear each other's
+  commits, branch changes, finishes and waits between their steps, and
+  `matchblox send` reaches them. A send to a match outside the chain fails.
+  Sessions joins a chain's matches with a fuse, and `[chains]` in the config
+  sets the notice and the send.
+  ([#299](https://github.com/blox-eng/matchblox/issues/299))
+
+## [0.32.1] - 2026-11-06
+
+### Fixed
+
+- **The chat scrolls an agent that does not read the mouse.** A swipe on the
+  phone, or the wheel, moves through the pane's history, and the key line says
+  how far back you are. The next key only comes back to the live screen.
+  Before, the chat said `not scrolled` and did not move.
+  ([#300](https://github.com/blox-eng/matchblox/issues/300))
+
+### Added
+
+- **A Ctrl key on the phone's belt.** Add `Ctrl` to Mine, tap it, and the next
+  letter goes with ctrl. The chat now sends ctrl with most letters, not only
+  `a` and `c`. ([#300](https://github.com/blox-eng/matchblox/issues/300))
+
+## [0.32.0] - 2026-11-04
+
+### Added
+
+- **Try a demo in Matchblox Pocket.** A person with no computer to pair taps
+  `Try a demo`. The app scans a code of its own and opens the real console on a
+  made-up machine inside the app, with no network. The person answers the
+  agent that waits, and when it finishes, a sheet shows the install line with
+  `Copy` and `Send to my computer`. Pairing a real host removes the demo.
+  ([#282](https://github.com/blox-eng/matchblox/issues/282))
+
+### Changed
+
+- **The first tap on the phone's console clicks.** It no longer needs a second
+  tap. Turning the phone back reopens the chat on every host.
+
+## [0.31.0] - 2026-11-03
+
+### Changed
+
+- **The chat is a window on the agent's pane.** The wheel, a swipe, `PgUp` and
+  `PgDn` go to the agent, and the agent scrolls itself, as it does in tmux. A
+  fullscreen agent now scrolls in the chat. Before, the wheel read tmux history,
+  which holds nothing of a fullscreen agent's conversation. The console no
+  longer reads tmux history. An agent that does not read the mouse says so, and
+  says to open its pane.
+  ([#288](https://github.com/blox-eng/matchblox/issues/288))
+
+## [0.30.1] - 2026-11-02
+
+### Fixed
+
+- **A key shows sooner in the console and the chat.** The console draws 60
+  frames a second, not 15, so a key waits about 11 ms, not 37 ms. The chat
+  reads the agent's screen again just after each key, so what you type no
+  longer waits for the next 150 ms read.
+  ([#285](https://github.com/blox-eng/matchblox/issues/285),
+  [#286](https://github.com/blox-eng/matchblox/issues/286))
+
+## [0.30.0] - 2026-11-01
+
+### Changed
+
+- **The chat shows the agent's own question.** The console's question card is
+  gone. The agent's menu draws at the chat's size, every key goes to it, and a
+  tap on one of its numbered options picks it, once the chat has the keys.
+  The guards stay for each key that can answer. A chat at a question or a
+  permission prompt needs 16 rows for the agent, and Sessions splits only with
+  that room. A paste with a line break is refused at a menu. `matchblox send
+  --pick` still answers from a script.
+
+### Removed
+
+- **The now line.** Sessions no longer draws a time lane on each row, its axis
+  or the `│` at now. The name takes the room. List only (`v`) stays.
+  ([#280](https://github.com/blox-eng/matchblox/issues/280))
+
 ## [0.29.0] - 2026-10-30
 
 ### Added
@@ -1129,7 +1212,12 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.29.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.32.1...HEAD
+[0.32.1]: https://github.com/blox-eng/matchblox/compare/v0.32.0...v0.32.1
+[0.32.0]: https://github.com/blox-eng/matchblox/compare/v0.31.0...v0.32.0
+[0.31.0]: https://github.com/blox-eng/matchblox/compare/v0.30.1...v0.31.0
+[0.30.1]: https://github.com/blox-eng/matchblox/compare/v0.30.0...v0.30.1
+[0.30.0]: https://github.com/blox-eng/matchblox/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/blox-eng/matchblox/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/blox-eng/matchblox/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/blox-eng/matchblox/compare/v0.26.2...v0.27.0

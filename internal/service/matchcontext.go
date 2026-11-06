@@ -237,8 +237,12 @@ func (s *Service) captureMatch(ctx context.Context, old sample.Session) string {
 		}
 	}
 	b.WriteString("\n## Checked workspace state\n\n")
+	git := s.MatchGit
+	if git == nil {
+		git = matchGit
+	}
 	for _, args := range [][]string{{"rev-parse", "--show-toplevel"}, {"status", "--short", "--branch"}, {"log", "-5", "--oneline"}, {"diff", "--stat"}, {"diff", "--cached", "--stat"}} {
-		out, err := matchGit(ctx, old.Cwd, args...)
+		out, err := git(ctx, old.Cwd, args...)
 		fmt.Fprintf(&b, "\nCommand: git %s\n", strings.Join(args, " "))
 		if err != nil {
 			fmt.Fprintf(&b, "Unavailable: %v\n", err)
@@ -369,17 +373,26 @@ func (b *matchOutput) Write(p []byte) (int, error) {
 }
 
 func matchGit(ctx context.Context, dir string, args ...string) (string, error) {
+	return readOnlyGit(ctx, dir, false, args...)
+}
+
+// readOnlyGit runs a read-only git command in dir, within 2 seconds, its
+// output cleaned for showing. apart keeps stderr out of the answer: then
+// it only says why git failed.
+func readOnlyGit(ctx context.Context, dir string, apart bool, args ...string) (string, error) {
 	if dir == "" {
 		return "", errors.New("workspace is unknown")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", append([]string{"--no-pager", "--no-optional-locks", "-c", "core.fsmonitor=false", "-C", dir}, args...)...) //nolint:gosec // fixed read-only git commands, separate argv
-	var out matchOutput
+	var out, stderr matchOutput
 	cmd.Stdout, cmd.Stderr = &out, &out
-	err := cmd.Run()
-	if err != nil {
-		return "", fmt.Errorf("%w: %s", err, said.Clean(out.String()))
+	if apart {
+		cmd.Stderr = &stderr
+	}
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("%w: %s", err, said.Clean(out.String()+stderr.String()))
 	}
 	return said.Clean(out.String()), nil
 }

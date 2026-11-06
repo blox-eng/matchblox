@@ -1,0 +1,10 @@
+ ▰ matchblox                                                                             ● 6 wait for you
+ SESSIONS 7    ships 3    machine    git    history    panes    stoker
+──────────────────────────────────────────────────────────────────────────────────────────────────────────
+▌╿ flint-auth                                           asks       2m   41%  ▲ clear      #4545 ●━✕┄○┄○┄○
+   “The refresh flow works and the tests pass. One choice is yours before I wire the rotation.”
+   #4545 ●━✕┄○┄○┄○  conflicts with main
+    ▲ clear                                                                                      A switch
+──────────────────────────────────────────────────────────────────────────────────────────────────────────
+──────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ↑↓ move  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit     sampled 0s ago

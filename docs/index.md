@@ -10,7 +10,7 @@ host, over SSH, and from a phone.
 ## Learn it in five minutes
 
 1. [Get started](start.md): install, the first run and its setup steps.
-2. [The console](console.md): the seven tabs, who waits, the answer peek, Ships, and the dock with usage, the machine and the stoker.
+2. [The console](console.md): the seven tabs, who waits, the chat, Ships, and the dock with usage, the machine and the stoker.
 3. [Keys](keys.md): every key, on one page.
 4. [The phone](phone.md): the console as the first screen of an SSH app.
 

@@ -64,16 +64,16 @@ func work(s *sample.Session) { s.AccountDir = "/home/user/.matchblox/accounts/cl
 
 func TestHostWordOnlyWithTwoHosts(t *testing.T) {
 	now := lostAt
-	one, _, _ := hostsAt(t, &now, "", 132, 30)
+	one, _, _ := hostsAt(t, &now, "", 196, 30)
 	one = upd(t, one, stateMsg(hostState(sess(1, "api-auth", "%1", work))))
-	if l := lineWith(frameOf(one), "api-auth"); strings.Contains(l, hosts1) || !strings.Contains(l, "api-auth work") {
+	if l := lineWith(frameOf(one), "api-auth work"); l == "" || strings.Contains(l, hosts1) {
 		t.Fatalf("one host: the row is %q, want the account and no host word", l)
 	}
-	m, _, conns := hostsAt(t, &now, "", 132, 30, "ws-1")
+	m, _, conns := hostsAt(t, &now, "", 196, 30, "ws-1")
 	m = upd(t, m, stateMsg(hostState(sess(1, "api-auth", "%1", nil))))
 	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(hostState(sess(2, "tl", "%2", work)))})
 	f := frameOf(m)
-	if l := lineWith(f, "api-auth"); !strings.Contains(l, "api-auth this m…") {
+	if l := lineWith(f, "api-auth this m…"); l == "" {
 		t.Fatalf("two hosts: the home row is %q, want its host word, cut", l)
 	}
 	if l := lineWith(f, " tl "); !strings.Contains(l, "tl ws-1 · work") {
@@ -92,7 +92,7 @@ const hosts1 = "this machine"
 
 func TestHeaderSaysThreeHosts(t *testing.T) {
 	now := lostAt
-	m, _, conns := hostsAt(t, &now, "", 132, 30, "gpu-1", "ws-1")
+	m, _, conns := hostsAt(t, &now, "", 196, 30, "gpu-1", "ws-1")
 	m = upd(t, m, stateMsg(hostState(sess(1, "api-auth", "%1", nil))))
 	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(hostState(sess(2, "docs-sweep", "%2", nil)))})
 	if h := frameOf(m)[0]; !strings.HasPrefix(h, " ▰ matchblox · 3 hosts ") {
@@ -106,7 +106,7 @@ func TestHeaderSaysThreeHosts(t *testing.T) {
 func lostPeer(t *testing.T, after time.Duration) Model {
 	t.Helper()
 	now := lostAt
-	m, _, conns := hostsAt(t, &now, "", 132, 30, "ws-1")
+	m, _, conns := hostsAt(t, &now, "", 196, 30, "ws-1")
 	home := hostState(sess(1, "api-auth", "%1", nil))
 	m = upd(t, m, stateMsg(stateAt(home, now)))
 	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(hostState(sess(2, "train-loop", "%2", nil)))})
@@ -127,7 +127,7 @@ func TestStaleRowSaysAsOf(t *testing.T) {
 
 func TestStaleStartsAt30s(t *testing.T) {
 	now := lostAt.Add(-time.Second)
-	m, _, conns := hostsAt(t, &now, "", 132, 12, "ws-1") // no dock: home's graph moves with each sample
+	m, _, conns := hostsAt(t, &now, "", 196, 12, "ws-1") // no dock: home's graph moves with each sample
 	home, peer := hostState(sess(1, "api-auth", "%1", nil)), hostState(sess(2, "train-loop", "%2", nil))
 	m = upd(t, m, stateMsg(stateAt(home, now)))
 	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(peer)})
@@ -182,7 +182,7 @@ func TestStaleAgeTurnsAmberAtAMinute(t *testing.T) {
 
 func TestTwoLostHostsLine(t *testing.T) {
 	now := lostAt
-	m, _, conns := hostsAt(t, &now, "", 132, 30, "gpu-1", "ws-1")
+	m, _, conns := hostsAt(t, &now, "", 196, 30, "gpu-1", "ws-1")
 	home := hostState(sess(1, "api-auth", "%1", nil))
 	m = upd(t, m, stateMsg(stateAt(home, now)))
 	for i, p := range []string{"gpu-1", "ws-1"} {
@@ -213,7 +213,7 @@ func TestTwoLostHostsLine(t *testing.T) {
 // peer is fine is one row; the peer's rows still act.
 func TestHomeLostPeersWork(t *testing.T) {
 	now := lostAt
-	m, home, conns := hostsAt(t, &now, "home-1", 132, 30, "ws-1")
+	m, home, conns := hostsAt(t, &now, "home-1", 196, 30, "ws-1")
 	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(hostState(sess(2, "train-loop", "%2", nil)))})
 	m = upd(t, m, lostMsg{err: fmt.Errorf("home-1: %w", remote.ErrNotConnected), conn: home})
 	m.splashDone = true
@@ -261,7 +261,7 @@ func toBlocked(t *testing.T, m tea.Model) tea.Model {
 
 func TestOneHostStaleIsToday(t *testing.T) {
 	now := lostAt
-	m, home, _ := hostsAt(t, &now, "", 132, 30)
+	m, home, _ := hostsAt(t, &now, "", 196, 30)
 	m = upd(t, m, stateMsg(hostState(sess(1, "api-auth", "%1", nil))))
 	m = upd(t, m, lostMsg{err: io.EOF, conn: home})
 	if h := frameOf(m)[0]; !strings.Contains(h, "matchblox · stale") {
@@ -273,7 +273,7 @@ func TestOneHostStaleIsToday(t *testing.T) {
 // is a blocked row with today's words, not a stream.
 func TestPeerOlderVersionIsABlockedRow(t *testing.T) {
 	now := lostAt
-	m, _, conns := hostsAt(t, &now, "", 132, 30, "ws-1")
+	m, _, conns := hostsAt(t, &now, "", 196, 30, "ws-1")
 	m = upd(t, m, stateMsg(hostState(sess(1, "api-auth", "%1", nil))))
 	next, cmd := m.Update(peerMsg{host: "ws-1", conn: conns["ws-1"], msg: helloMsg(proto.Hello{Version: proto.Version - 1})})
 	if cmd != nil {
@@ -291,7 +291,7 @@ func TestPeerOlderVersionIsABlockedRow(t *testing.T) {
 
 func TestEnterOnABlockedPeerConnectsIt(t *testing.T) {
 	now := lostAt
-	m, _, conns := hostsAt(t, &now, "", 132, 30, "ws-1")
+	m, _, conns := hostsAt(t, &now, "", 196, 30, "ws-1")
 	m = upd(t, m, stateMsg(hostState(sess(1, "api-auth", "%1", nil))))
 	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: lostMsg{err: fmt.Errorf("ws-1: %w", remote.ErrNotConnected), conn: conns["ws-1"]}})
 	next, _ := key(toBlocked(t, m), "enter")
@@ -321,10 +321,10 @@ func TestThreeHostFrames(t *testing.T) {
 		w, h int
 		want []string
 	}{
-		{"fine", 86, 30, []string{"matchblox · 3 hosts", "train-loop gpu-1", "api-auth ws-1", "docs-sweep ws-1"}},
+		{"fine", 86, 30, []string{"matchblox · 3 hosts", "train-lo… gpu…", "api-auth ws-1", "docs-swe… ws-1"}},
 		{"fine", 132, 32, []string{"api-auth ws-1 · work"}},
 		{"stale", 86, 30, []string{"· gpu-1 stale", "stale", "40s", "gpu-1: connection lost. Tries again in 8s."}},
-		{"stale", 132, 32, []string{"as of 22:49"}},
+		{"stale", 132, 50, []string{"as of 22:49"}},
 		{"blocked", 86, 30, []string{"gpu-1  is not connected  ⏎ connect"}},
 	} {
 		all := strings.Join(frameOf(threeHosts(t, st, c.w, c.h, c.gpu)), "\n")
@@ -340,14 +340,14 @@ func TestThreeHostFrames(t *testing.T) {
 // hello; this machine is only for before it.
 func TestHomeGoesByItsOwnName(t *testing.T) {
 	now := lostAt
-	m, _, conns := hostsAt(t, &now, "", 132, 30, "ws-1")
+	m, _, conns := hostsAt(t, &now, "", 196, 30, "ws-1")
 	m = upd(t, m, stateMsg(hostState(sess(1, "api", "%1", nil))))
 	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(hostState(sess(2, "tl", "%2", nil)))})
-	if l := lineWith(frameOf(m), " api "); !strings.Contains(l, "api this mach") {
+	if l := lineWith(frameOf(m), " api this mach"); l == "" {
 		t.Fatalf("before the hello the home row is %q, want this machine", l)
 	}
 	m = upd(t, m, helloMsg(proto.Hello{Version: proto.Version, Host: "hearth"}))
-	if l := lineWith(frameOf(m), " api "); !strings.Contains(l, "api hearth") {
+	if l := lineWith(frameOf(m), " api hearth"); l == "" {
 		t.Fatalf("after the hello the home row is %q, want hearth", l)
 	}
 	if s := m.all.sessions[0]; s.Host != "" {
@@ -359,7 +359,7 @@ func TestHomeGoesByItsOwnName(t *testing.T) {
 // under 30 s leaves the frame as it was (anti-goal 5).
 func TestShortHomeLossStaysQuiet(t *testing.T) {
 	now := lostAt
-	m, home, conns := hostsAt(t, &now, "", 132, 12, "ws-1")
+	m, home, conns := hostsAt(t, &now, "", 196, 12, "ws-1")
 	m = upd(t, m, stateMsg(stateAt(hostState(sess(1, "api", "%1", nil)), now)))
 	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(hostState(sess(2, "tl", "%2", nil)))})
 	before := strings.Join(frameOf(m), "\n")
@@ -374,7 +374,7 @@ func TestShortHomeLossStaysQuiet(t *testing.T) {
 // row with today's words, until its first state comes.
 func TestSilentPeerSaysWhy(t *testing.T) {
 	now := lostAt
-	m, _, conns := hostsAt(t, &now, "", 132, 30, "ws-1")
+	m, _, conns := hostsAt(t, &now, "", 196, 30, "ws-1")
 	m = upd(t, m, stateMsg(hostState(sess(1, "api-auth", "%1", nil))))
 	ws := conns["ws-1"]
 	old := upd(t, m, peerMsg{host: "ws-1", conn: newFake(), msg: silentMsg{}})
@@ -400,7 +400,7 @@ func TestSilentPeerSaysWhy(t *testing.T) {
 // passes, with its conn.
 func TestPeerStartWatchesForSilence(t *testing.T) {
 	now := lostAt
-	m, _, conns := hostsAt(t, &now, "", 132, 30, "ws-1")
+	m, _, conns := hostsAt(t, &now, "", 196, 30, "ws-1")
 	defer conns["ws-1"].Close() // ends the read the start began
 	batch, ok := m.peerStart(0)().(tea.BatchMsg)
 	if !ok {
@@ -440,9 +440,38 @@ func TestLongNameKeepsHostWord(t *testing.T) {
 		for _, lo := range []bool{false, true} {
 			m.viewPrefs.ListOnlyDesk = lo
 			f := frameOf(m)
-			if lineWith(f, "matchblox-feat") == "" || lineWith(f, " ws-1") == "" || lineWith(f, " thi…") == "" {
+			if lineWith(f, "matchblox-feat") == "" || lineWith(f, " ws-1") == "" || lineWith(f, " thi…") == "" && lineWith(f, " this machine") == "" {
 				t.Fatalf("%d columns, list only %v: the rows lost their host word:\n%s", w, lo, strings.Join(f, "\n"))
 			}
 		}
+	}
+}
+
+// The lost host's line outranks the chat's key line: the keys may not go.
+func TestTheLostLineOutranksTheChatsKeys(t *testing.T) {
+	m := lostPeer(t, 40*time.Second)
+	m.chatKeys, m.flash = true, ""
+	want := m.lostLine()
+	if line, _ := m.keyLine(m.width); want == "" || !strings.Contains(ansi.Strip(line), want[:20]) {
+		t.Fatalf("key line %q, want the lost line %q", ansi.Strip(line), want)
+	}
+}
+
+// A chat closes when the selection lands on another host's row with the
+// same pane id: that pane is another pane, and no key goes to it.
+func TestTheChatClosesOnAnotherHostsPaneOfTheSameID(t *testing.T) {
+	now := lostAt
+	m, _, conns := hostsAt(t, &now, "", 196, 40, "ws-1")
+	m = upd(t, m, stateMsg(stateAt(hostState(sess(1, "api-auth", "%3", nil)), now)))
+	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(stateAt(hostState(sess(2, "train-loop", "%3", nil)), now))})
+	m.tab, m.chose, m.selPID, m.selHost = tabSessions, true, 1, m.opt.Host
+	m = pressKeys(t, m, "enter")
+	if !m.chatKeys {
+		t.Fatal("enter did not open api-auth's chat")
+	}
+	was := m
+	m.selPID, m.selHost = 2, "ws-1"
+	if m = m.keepChat(was); m.chatKeys {
+		t.Fatal("the chat kept the keys on ws-1's %3")
 	}
 }

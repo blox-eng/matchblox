@@ -1,7 +1,9 @@
 # The console
 
 From the top: the header, the tabs, the open tab, then usage and the
-machine, and at the bottom the key line.
+machine, and at the bottom the key line. Where Sessions splits into the
+list and the chat, usage and the machine sit in the left column, under
+the list.
 
 The header shows the host, how many agents wait for you (`● 3 wait for
 you`; a tap selects the first) and [the stoker](stoker.md): `stoker off`,
@@ -19,7 +21,10 @@ or type a search. See [Keys](keys.md).
 ## Usage, the machine and the stoker
 
 Under the open tab, when there is room, the dock shows how much of each
-plan your agents have used, the machine, and [the stoker](stoker.md):
+plan your agents have used, the machine, and [the stoker](stoker.md).
+Where Sessions splits into the list and the chat, they are not a dock:
+they stack in the left column under the list (see [the chat](#the-chat)).
+Everywhere else they stay in the dock at the bottom.
 
 ```
  USAGE                                         │ MACHINE        ws-1 · 16 cores
@@ -34,7 +39,10 @@ plan your agents have used, the machine, and [the stoker](stoker.md):
   draw it, else its mark. Then the provider's name and the plan
   (`✻ Claude Team`, `❋ OpenAI Team`), or the email's name when the
   provider has two accounts. A dock under 50 columns leaves out the plan,
-  and its bars shrink so the reset times stay whole.
+  and its bars shrink so the reset times stay whole; where even then a
+  reset time or a fix does not fit, it goes whole, never cut. With two or
+  more hosts, a window's host cells that do not fit go whole onto the
+  lines under it.
 - A phone or any other terminal that attaches to the console's session
   brings back the marks within about 2 seconds. `NO_COLOR` and tmux 3.2
   or older show the marks. The console lets images through its own pane
@@ -51,12 +59,24 @@ plan your agents have used, the machine, and [the stoker](stoker.md):
   that burns the most. `Enter` jumps to it, and `x` compacts it while it is
   idle. The row then says what happened, or what failed and that the key
   tries again.
-- On a phone the dock shows one panel at a time. `u`, or a tap on the
-  word at its right (`machine ›`), goes to the next: usage, the machine,
-  the stoker. While a run is in charge, or has steps you have not seen, the
+- On a narrow screen the dock shows one panel at a time. `u`, or a tap on
+  the word at its right (`machine ›`), goes to the next: usage, the
+  machine, the stoker. While a run is in charge, or has steps you have not seen, the
   stoker takes the dock until you switch.
-- Wider, two panels side by side: usage and the machine, or usage and the
-  stoker while it claims the dock. A wide desk shows all three.
+- Wider than that, on the other tabs, two panels side by side: usage and
+  the machine, or usage and the stoker while it claims the dock.
+- Where Sessions splits, upright or not, the panels stack under the list:
+  usage, the machine, and the stoker while it claims the dock. The list
+  outranks the machine: the stoker, then the machine, folds before the
+  list is cut. Usage is never cut. The list and the recommendations give
+  way only to usage alone. While a run is in charge, its stoker keeps its
+  place as usage does: the machine folds first, and the list gives way to
+  usage and the stoker. A list cut short ends in `↓ <n> more`. The hint
+  never covers the selected row. When the list cannot keep 3 rows and the
+  hint under usage, usage folds too.
+- In list only (`v`) the list comes first and is never cut for the stats.
+  The rows it leaves free take usage, then the machine, under a hairline,
+  each at its fewest lines and only if it fits whole.
 - An account folder shows by its name (`work`), the default sign-in by
   its plan or email. A Claude Code account that is not signed in yet says
   `not measured · signing in: the limits show once the account is signed
@@ -121,11 +141,44 @@ folder as `dir`. They need
 
 `matchblox peek api` prints what the session said last and what it asks,
 if anything: the question with its numbered options, or an approval that
-waits in its pane. It is what the console's peek shows, and it acts on
-nothing. `--lines 40` keeps the last 40 lines of what it said (20 by
+waits in its pane. It acts on nothing. `--lines 40` keeps the last 40 lines of what it said (20 by
 default, 0 for all); `--json` prints `name`, `pane`, `target`, `said`,
 `asks` (the first line of the question), `questions` (each with its
 `options`) and `approval`.
+
+## Chain matches
+
+Two matches in one repo can hear from each other once both chain. Run in an
+agent's pane, `matchblox chain api` asks to chain with `api`, or accepts its
+ask; nothing is shared until the other side chains back. `matchblox chain`
+lists your chain and the asks to and from you (`--json` prints `chain` and
+`requests`). `matchblox unchain` leaves the chain. `matchblox chain --off`
+takes no chains and no notices; `--on` takes them again. See
+[chains](agents.md#chains) for what a match hears and what a chain grants.
+
+Sessions draws each chain as a fuse, in a column between the match and the
+name. The rule: a chain stays together in the group of its neediest match.
+A view that splits it leaves each match a stub, and selecting one lights the
+rest. With no chain in the view there is no column, and the list is as
+before.
+
+- **By need**, the chain moves into the group of its neediest match, its
+  members in need order. **By repo** its members are always side by side.
+  Either way the fuse is whole: `╮` first, `┤` between, `╯` last, with `─`
+  before each from 70 columns of list. By need, the group's label adds the
+  chain: `WAITS FOR YOU · 1 · chain of 3`.
+- **By status** and **none**, the members stay where the view puts them.
+  Each has a stub `─╴`. The stubs of the selected row's chain light in the
+  accent, and the others are faint. The selected row's own stub is `━╸`.
+- A filter that hides members joins the ones it shows. In every grouping,
+  the label of the group with the chain's first match shown adds
+  `· 2 hidden`.
+- Child rows and the opened block on a phone carry `│` in the fuse column.
+  A held match keeps its place in the chain.
+- When a chain-mate commits, changes branch or sends, a bright cell runs
+  down the fuse once. `--no-motion` shows no spark.
+- A session in one repo with another that it has not chained with shows a
+  faint `· same repo · chain?` after its name, while the name has room.
 
 ## Act on a session from a script or an agent
 
@@ -242,20 +295,43 @@ narrow row the count drops its word, then goes, before the ship does. The
 detail lists the first three ships of the session in that order, then
 `+N more · p ships`.
 
-On a phone the selected row opens: what the agent said last, its ships, its
-plan and its keys. The console reads the screen's shape (rows × 2 ≥
-columns) before its width: a phone held upright under 90 columns is a
-phone, and from 90 columns (a small font) its detail is a drawer beside
-the list. Wider, the same shows in a detail beside the list, with
-the account, the tokens and the background work.
+On a narrow screen the selected row opens: what the agent said last, its
+ships, its plan and its keys. The console reads the screen's shape (rows × 2
+≥ columns) before its width: a phone held upright under 90 columns is a
+phone, and from 90 columns (a small font) the chat of the selected agent is
+a pane beside the list. Wider, the same: the chat sits beside the list. A
+session with no pane to type into shows its detail there instead, with the
+account, the tokens and the background work.
 
-`Enter` jumps to the pane. Come back from a jump and the next agent that
-waits is already selected.
+- The shape (upright or not) goes by the tallest height seen at the
+  screen's width. A keyboard that shrinks the screen never changes the
+  layout; a new width decides afresh.
+- Where Sessions splits, the list takes 40% of the width (at least 38
+  columns, at most 78) and the chat the rest, full height. An upright
+  iPad mini (95 × 65) gets a 56-column chat in the full view.
+- Sessions splits only when the chat is at least 44 columns wide and the
+  body has room for its title, its account line as drawn (two lines on a
+  chat of 44 to 59 columns) and 16 rows for an agent's menu, whichever
+  session the cursor is on: the split holds as the cursor moves. 16 is the
+  question tool's tallest common menu from its question down. Short of either (a phone on its side
+  with the keyboard up, a landscape screen of 60–82 columns), Sessions is
+  one column: the selected row opens in place, and the chat opens
+  full-screen, as on a phone. At a question or a permission prompt, a
+  screen with under 16 rows for the agent even then does not open the chat:
+  the key line says `too short to show <name>'s question · ctrl+o goes
+  into its pane`.
 
-### Every host, list only and the now line
+`Enter` gives the keys to the chat (see below). `Ctrl+O` jumps to the pane.
+Come back from a jump and the next agent that waits is already selected.
+
+### Every host and list only
 
 With two or more hosts ticked, Sessions is one queue over all of them. Each
 row names its host. See [Remote hosts](remote.md#see-every-host-in-one-console).
+Another host's row is list only: the chat watches and sends keys only for
+a session of the console's own host. A remote row's right side is its
+detail, with a line that names its host and that `Enter` goes into its
+pane; `a` says where it runs.
 
 `v` folds the detail pane and the dock, so the list takes the screen. The
 key line says `list only v` on the full view and `full view v` in list
@@ -264,66 +340,142 @@ full view, `list only v` is the first hint to go. In list only, `full view
 v` stays: the mark goes first, then the age, then a spare key. A key of the
 row outranks `full view v`.
 
-From 107 columns of list, each row has a lane on one time scale: 2 hours
-back and 1 hour ahead, 5 minutes in a cell. The list is that wide in list
-only on a desk, or on a very wide screen. The full view's list is at most
-78 columns, so it has no lanes.
+### The chat
 
-- A cell shows the most urgent state the console saw in its 5 minutes: a
-  wait (amber `━`), work (`━`), or idle (faint `╌`). A blank cell is a
-  time the console did not see. The lane starts when the console opens. A
-  new process on an old pid starts an empty lane.
-- A session on a limit runs dotted (`┄`) to the reset of its window.
-- One line, `│`, runs down the list at now. It crosses the axis, the group
-  labels and the blank rows. It is not drawn while a peek, a sheet, a
-  form, a consent or an ask box is up.
-- The bars of a stale host stop where it last spoke, short of the line.
-- When the row is short, the lane drops before the ship. With no ship
-  read, the place goes first, then the lane, then the plan.
-
-### The answer peek
-
-`a` on an agent opens the conversation with it. Where the detail sits
-beside the list, the detail pane becomes the conversation: the list stays
-lit on the left and follows the peek, and `Esc` gives the pane back. On a
-one-column phone it is a panel along the bottom, over the dimmed list. On an agent that waits it answers; on
-any other it sends a message, titled `To <name>`, which Claude Code queues
-while it works.
+The chat is the live screen of the selected agent, drawn inside the
+console. You do not leave the console to use it. On a wide desk and on a
+phone held wide, it is always the right side of Sessions. `↑` `↓` change
+which agent it shows. Its frame title is `<name> · <state>`. The title is
+in the accent while the chat has the keys. Under the title, a strip shows
+the session's account, its PR and its background work. It shows only what
+the session has, on one line or two. A session with none of these has no
+strip. On an upright phone the chat has no strip.
 
 ```
-╭─ flint-auth asks · 1 of 2 ─────────────────────────────────╮
-│ The refresh endpoint is in and its tests pass. One choice  │
-│ is yours before I wire the rotation: what should a refresh │
-│ do with the token it was given?                            │
-│                                                            │
-│ Should a refresh also rotate the token?                    │
-│ › 1 Rotate it  the old one stops at once                   │
-│   2 Rotate, keep the old one a minute                      │
-│   3 Keep the token                                         │
-│   4 Type an answer…                                        │
-╰─ ⏎ question 2 ─ ← prev  3/7  next → ─ esc ─────────────────╯
+╭─ Sessions ────────────────────╮╭─ api-auth · asks ───────────────────────────╮
+│ ● api-auth      asks    2m    ││ I can fix the login in two ways.            │
+│ ◐ web-cart      busy   12m    ││ ─────────────────────────────────────────── │
+│ ○ docs          idle    1h    ││ Which way do we fix the login?              │
+├─ Usage ───────────────────────┤│ ❯ 1. Patch the token check                  │
+│ max   ▇▇▇▇▇▁▁▁ 61%            ││   2. Move to the new session store          │
+├─ Machine ─────────────────────┤│   3. Type something.                        │
+│ cpu 34%  mem 41/64G          ││ Enter to select · ↑/↓ to navigate           │
+╰───────────────────────────────╯╰─────────────────────────────────────────────╯
+ keys go to api-auth · ctrl+a m back · ctrl+o into tmux
 ```
 
-It shows what the agent said in this turn, its end up to nine lines (a
-longer reply starts with `…`), its Markdown as plain text. When Claude
-Code asks with its question tool, its options are numbered and the last
-one types an answer; several questions come one at a time, and a question
-of several choices ticks with `Space`. In auto mode the options come from
-the queue hooks (see [Agents](agents.md#how-an-agent-tells-that-it-waits)),
-so add them again when the setup step asks. Otherwise you type one line.
+`Enter`, `a` and `→` (where `→` has no other use) give the chat the keys,
+and so does a click on it. `ctrl+a m` (your tmux prefix, then `m`) and a
+click on the left give them back. This works on a console in any tmux
+session, as long as its binary is named `matchblox`: under another name the
+key line says `tap back`, and a tap on it does it (see [tmux](tmux.md)).
+Outside tmux the chat takes `ctrl+a m`
+itself: `ctrl+a` goes to the agent at once, where it moves the cursor to the
+start of the line, and `m` within 1 s gives the keys back and does not reach
+the agent.
+`Ctrl+O` goes into the agent's pane in tmux. While the chat has the keys, the key line says `keys go to <name> ·
+ctrl+a m back · ctrl+o into tmux`, with your tmux prefix for `ctrl+a`. On a short line its hints go by worth:
+`keys go to <name>` goes first (the title names the agent), then `ctrl+o
+into tmux`; the way back stays. A hint goes whole, never cut mid-word.
 
-`Enter` sends it to the pane named in the title: the peek is the review,
-so there is no second confirm. The options go to Claude Code's own menu
-with the keys it takes, never as typed text, and only while the pane shows
-the page they answer: if you answered in the pane yourself, nothing more
-is sent. The header says `sending to flint-auth…`, then `sent to
-flint-auth`; an answer that did not go says `not sent to flint-auth` and
-why on the key line. The peek moves to the next agent that waits, or
-closes. There no option is picked, and for a moment it takes no key, so a
-second `Enter` never answers a question you have not read. `→` and `←`
-move the peek to the next and the previous agent, `Esc` closes. Every
-letter is text. A permission prompt is answered in its
-pane: its peek shows the prompt, and `Enter` goes there.
+In the chat, all keys go to the agent, `Esc` too. They go in order, one at
+a time, to the agent the chat showed. A paste goes as text, and a newline
+in it goes as `Enter`. If the pane runs a different agent now, nothing is
+sent: `not sent: <pane> runs a different agent now`. If the pane is gone,
+the chat says `That session ended.` and Sessions has the keys again. Only a
+console sends keys: the service refuses a script or an agent with `keys go
+only from a console`.
+
+A second `^C` to the same agent within 1 s is held, because two stop Claude
+Code: `^C held: one went 0.6 s ago, ^C again stops the agent`, or `^C held:
+one waits to go, ^C again stops the agent`. A third goes.
+
+When Claude Code asks with its question tool or for a permission, the chat
+shows its own menu, once. Its keys go to it as they
+are: `↑` `↓` move, `Space` ticks an option of a question with several
+choices, a digit picks, `Enter` answers and typing fills its text row. The
+agent draws the menu at the chat's size. A window of several panes, or a chat
+under the window's width, keeps the wide lines: the chat wraps them, so every
+option reads and the bottom rows stay, and a menu wrapped taller than the
+chat loses its top first.
+
+A tap on a numbered option of the menu at the bottom of the screen picks it,
+at a question or a permission prompt only: across the row's whole width, its
+description and wrapped lines included. It sends the option's digit as a key,
+under the guards below, and the row draws in the selected wash until the next
+screen comes. A digit answers a single-choice question at once and ticks an
+option of a question with several choices; there a tap on the menu's own
+`Submit` or `Next` row moves the cursor to it and sends `Enter`. With the cursor
+on the row you type in, a tap on another option moves the cursor off it first.
+Any other row, a numbered list the agent printed above the menu, and any tap
+away from a menu wait send nothing. Where the chat sits beside the list, the
+click that gives it the keys picks nothing.
+
+Three guards hold for every key that can answer a menu, all but `^C` and
+`Backspace`. The service refuses a key that names no screen, or a screen taken
+before the wait settled, 500 ms after it began: `not sent: <name> asks
+something new — look again`. The console refuses a key, with the same words,
+for 400 ms after a new menu comes or the chat opens on a wait. And each key
+names the agent the chat showed, by its pid and its start. A paste with a line
+break is refused at a menu, since its `Enter` would answer: `not sent: a paste
+with a line break would answer <name>'s menu`. A paste of one line goes.
+
+While the chat shows an agent, the agent's tmux window takes the chat's
+size: the columns and rows the chat gives the agent's screen, under its
+title and strip. The agent redraws at that size, so its
+tables, boxes and diffs look as they do in its own terminal, and the chat
+draws its lines as they are. When the console resizes, the chat moves
+beside the list or full screen, the window takes the new size. A question
+that starts or ends resizes nothing. The window gets its own size back when no chat
+watches it: the selection moves, the console closes or loses the service,
+or the service stops. A service that ended without that puts the windows
+back when it starts again. A terminal attached to the agent's session
+sees the window shrink to the chat's size while the chat watches it.
+
+- Two consoles on one agent (a phone and a desk): the one that sent the
+  agent a key last sizes the window, else the one that opened it last.
+  When it leaves, the other's size applies.
+- Browsing resizes no agent: the window takes the chat's size once the
+  session has stayed selected for 1 second, or at once when the chat
+  takes the keys. The window the selection leaves gets its size back at
+  once.
+- A chat that is not on screen (another tab, the list on a phone) keeps
+  its size, so the agent does not redraw at each tab.
+- A window of several panes keeps its size: resizing it would reflow the
+  other panes. The chat then wraps the agent's lines to its width and
+  keeps the bottom rows, as it does for a service before sizes, and for
+  the first screen before the window takes the size.
+- The window is never sized under 20 × 5 or over what tmux allows.
+
+The chat is a window on the agent's pane, and keeps no history of its own.
+The mouse wheel over the chat, a swipe on a phone, `PgUp` and `PgDn` go to the
+agent. An agent that reads the mouse scrolls itself, as it does in tmux. For
+an agent that does not, the chat shows the pane's history, 3 lines for each
+wheel step. The key line says `↑ 12 lines back · a key comes back`. The next
+key only comes back to the live screen and is not sent: the result says `not
+sent: back to the live screen — press it again to send`. So a key never
+answers a prompt that you did not see.
+
+`PgUp` and `PgDn` move one screen of the chat up and down the history.
+They do not go back to the live screen.
+
+At night, the first key that sends something to an agent asks "Take over?".
+
+When the chat gets the keys or changes its session, the console tells the
+terminal the agent of that session: `ESC _ matchblox;agent=<id> ESC \`.
+`<id>` is `claude`, `codex`, `opencode`, `cursor` or empty. When the chat
+gives the keys back, the id is empty. The phone app reads this signal to
+show the commands of that agent. It is not drawn. Inside tmux, the console
+wraps it for passthrough in its own pane. tmux 3.2 or older cannot pass it,
+so the console sends nothing and the key line says `COMMANDS · needs tmux
+3.3` once.
+
+On a narrow screen, and wherever Sessions is one column, the chat opens
+full-screen. On a narrow screen in the full view the dock stays at the
+bottom, and `u` cycles it. `Enter`, or a tap on a row, replaces the screen
+with the chat of that session. The title row reads `‹ Sessions · <name> ·
+<state>`. A tap on `‹ Sessions`, the app's edge swipe, ⌘M or ctrl+M (the home
+gesture), or `ctrl+a m` goes back.
 
 - Context use is read from the agent's own files, as a share of the
   session's window. Without a window the row shows `—`. See

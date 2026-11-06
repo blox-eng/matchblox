@@ -123,3 +123,32 @@ func TestEveryChunkIsQuiet(t *testing.T) {
 		}
 	}
 }
+
+// TestViewersKeyNamesAPhoneToo: the key changes when a phone attaches,
+// though nobody draws the logos then. The console sends the phone what it
+// must know again (the chat's agent) by that key.
+func TestViewersKeyNamesAPhoneToo(t *testing.T) {
+	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	inTmux := env(map[string]string{"TMUX": "/tmp/tmux-501/default,1,0", "TMUX_PANE": "%7"})
+	clients := "/dev/ttys002\t100\txterm-kitty\tmy work\t@1\n"
+	tmux := func(args ...string) ([]byte, error) {
+		if args[0] == "display" {
+			return []byte("my work\t@1\n"), nil
+		}
+		return []byte(clients), nil
+	}
+	_, alone, _ := Viewers(inTmux, tmux)
+	clients += "/dev/ttys005\t105\txterm-256color\tmy work\t@1\n"
+	can, phone, watched := Viewers(inTmux, tmux)
+	if can || !watched || phone == "" || phone == alone {
+		t.Fatalf("a phone attached: can %v, watched %v, key %q (was %q)", can, watched, phone, alone)
+	}
+	clients = "/dev/ttys002\t100\txterm-kitty\tmy work\t@1\n/dev/ttys005\t205\txterm-256color\tmy work\t@1\n"
+	if _, again, _ := Viewers(inTmux, tmux); again == phone {
+		t.Fatalf("the phone attached again: key %q unchanged", again)
+	}
+	noColor := env(map[string]string{"TMUX": "/tmp/tmux-501/default,1,0", "TMUX_PANE": "%7", "NO_COLOR": "1"})
+	if can, key, _ := Viewers(noColor, tmux); can || key == "" {
+		t.Fatalf("NO_COLOR: can %v, key %q", can, key)
+	}
+}

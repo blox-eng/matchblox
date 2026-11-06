@@ -9,11 +9,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/accounts"
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/said"
@@ -299,7 +301,7 @@ func writeUsage(w io.Writer, doc state.Doc, asJSON bool) error {
 }
 
 // cliPeek runs `matchblox peek <session>`: what the session said last and
-// what it asks, as the console's peek shows it. It acts on nothing.
+// what it asks. It acts on nothing.
 func cliPeek(words []string, lines int, w io.Writer, path string, asJSON bool) error {
 	if len(words) != 1 {
 		return errors.New("peek needs one session: matchblox peek <who>")
@@ -797,4 +799,140 @@ func doActFor(path string, a proto.Act, wait time.Duration) (proto.Result, error
 			}
 		}
 	}
+}
+
+// chainAct is the act `chain` asks for: ask or accept a match, take no
+// chains (--off), or take them again (--on).
+func chainAct(doc state.Doc, words []string, off, on bool, from string) (proto.Act, error) {
+	a := proto.Act{Confirm: "y", From: from}
+	switch {
+	case off && on:
+		return a, errors.New("chain takes --off or --on, not both")
+	case (off || on) && len(words) > 0:
+		return a, errors.New("chain --off and --on take no session")
+	case off:
+		a.RecID = proto.ChainPrefix + "off"
+	case on:
+		a.RecID = proto.ChainPrefix + "on"
+	case len(words) != 1:
+		return a, errors.New("chain takes one session: matchblox chain <who>")
+	default:
+		sess, err := resolve(doc, words[0])
+		if err != nil {
+			return a, err
+		}
+		a.RecID = proto.ChainPrefix + sess.Pane
+	}
+	return a, nil
+}
+
+var errChainNeedsPane = errors.New("chain needs a match: run it from an agent's pane")
+
+// cliChain asks or accepts a chain, switches the notices, or, with no
+// words, lists the chain of the pane it runs in.
+func cliChain(words []string, off, on, asJSON bool, w io.Writer, path string) error {
+	from := os.Getenv("TMUX_PANE")
+	if from == "" {
+		return errChainNeedsPane
+	}
+	var doc state.Doc
+	if len(words) > 0 || !off && !on { // --off and --on name no session and list nothing
+		var err error
+		if doc, err = readDoc(path, staleAfter); err != nil {
+			return err
+		}
+	}
+	if len(words) == 0 && !off && !on {
+		return writeChain(w, doc, from, asJSON)
+	}
+	a, err := chainAct(doc, words, off, on, from)
+	if err != nil {
+		return err
+	}
+	return chainOutcome(w, path, a)
+}
+
+// cliUnchain leaves the chain of the pane it runs in.
+func cliUnchain(words []string, w io.Writer, path string) error {
+	from := os.Getenv("TMUX_PANE")
+	switch {
+	case len(words) > 0:
+		return errors.New("unchain takes no words: it leaves your chain")
+	case from == "":
+		return errChainNeedsPane
+	}
+	return chainOutcome(w, path, proto.Act{RecID: proto.ChainPrefix + "-", Confirm: "y", From: from})
+}
+
+func chainOutcome(w io.Writer, path string, a proto.Act) error {
+	res, err := doAct(path, a)
+	switch {
+	case errors.Is(err, errNoResult):
+		return errors.New("not known whether the chain changed: run matchblox chain")
+	case err != nil:
+		return err
+	case res.Err != "":
+		return errors.New(res.Err)
+	}
+	_, err = fmt.Fprintln(w, res.Note)
+	return err
+}
+
+type chainMemberJSON struct {
+	Name string `json:"name"`
+	Pane string `json:"pane"`
+}
+
+type chainRequestJSON struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// writeChain lists the chain pane is in, then the asks to and from it.
+func writeChain(w io.Writer, doc state.Doc, pane string, asJSON bool) error {
+	name := func(m chains.Member) string {
+		for _, s := range doc.Sessions {
+			if s.Pane == m.Pane {
+				return s.Name
+			}
+		}
+		return m.Pane
+	}
+	members := []chainMemberJSON{}
+	reqs := []chainRequestJSON{}
+	var lines []string
+	if doc.Chains != nil {
+		for _, c := range doc.Chains.Chains {
+			if !slices.ContainsFunc(c.Members, func(m chains.Member) bool { return m.Pane == pane }) {
+				continue
+			}
+			for _, m := range c.Members {
+				members = append(members, chainMemberJSON{name(m), m.Pane})
+				lines = append(lines, name(m)+" "+m.Pane)
+			}
+			break
+		}
+		for _, r := range doc.Chains.Requests {
+			switch pane {
+			case r.To.Pane:
+				lines = append(lines, name(r.From)+" asks you")
+			case r.From.Pane:
+				lines = append(lines, "you asked "+name(r.To))
+			default:
+				continue
+			}
+			reqs = append(reqs, chainRequestJSON{name(r.From), name(r.To)})
+		}
+	}
+	if asJSON {
+		return json.NewEncoder(w).Encode(struct {
+			Chain    []chainMemberJSON  `json:"chain"`
+			Requests []chainRequestJSON `json:"requests"`
+		}{members, reqs})
+	}
+	if len(lines) == 0 {
+		lines = []string{"not in a chain. To ask, run: matchblox chain <who>"}
+	}
+	_, err := fmt.Fprintln(w, strings.Join(lines, "\n"))
+	return err
 }

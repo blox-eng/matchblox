@@ -111,28 +111,14 @@ func (m Model) groupLabel(s sample.Session) string {
 	case groupNone:
 		return ""
 	}
-	return groupNames[m.groupOf(s)]
+	return groupNames[m.needGroup(s)]
 }
 
 // repoOf is the repository a session works in: the checkout its directory
 // is in, else the directory's own name.
 func (m Model) repoOf(s sample.Session) string {
-	if m.git != nil {
-		best, name := 0, ""
-		within := func(dir, repo string) {
-			if (s.Cwd == dir || strings.HasPrefix(s.Cwd, dir+"/")) && len(dir) > best {
-				best, name = len(dir), filepath.Base(repo)
-			}
-		}
-		for _, r := range m.git.Repos {
-			within(r.Path, r.Path)
-			for _, wt := range r.Worktrees {
-				within(wt.Path, r.Path)
-			}
-		}
-		if name != "" {
-			return name
-		}
+	if repo, _, ok := proto.RepoOf(m.git, s.Cwd); ok {
+		return filepath.Base(repo)
 	}
 	if s.Cwd == "" {
 		return "no directory"
@@ -332,10 +318,16 @@ func (m Model) sessionKeys() []hint {
 		}
 		return []hint{hintFor(mk.New, ""), hintFor(mk.Stoke, "stoker")}
 	}
-	keys := []hint{hintFor(mk.Open, "")}
+	var keys []hint
 	s, ok := m.selectedSession()
+	switch {
+	case ok && s.Host != m.opt.Host:
+		keys = []hint{hintFor(mk.Open, "")} // list only: into its pane
+	case m.chatOpens(s, ok):
+		keys = []hint{hintFor(mk.Open, "chat")}
+	}
 	if ok && s.Pane != "" {
-		keys = append(keys, hintFor(mk.Peek, m.peekWord(s)), hintFor(mk.Second, "kill"), hintFor(mk.Rename, ""), hintFor(mk.Switch, ""), hintFor(mk.Park, m.parkWord(s)))
+		keys = append(keys, hintFor(mk.Second, "kill"), hintFor(mk.Rename, ""), hintFor(mk.Switch, ""), hintFor(mk.Park, m.parkWord(s)))
 	}
 	return append(keys, hintFor(mk.New, ""), hintFor(mk.Ships, ""), hintFor(mk.Stoke, "stoker"))
 }
@@ -380,7 +372,9 @@ func (m Model) sessionRows(b *body, w int) {
 	}
 	count := map[string]int{}
 	for _, s := range ss {
-		count[m.groupLabel(s)]++
+		if g := m.groupLabel(s); m.sessGroup != groupNeed || g == groupNames[m.groupOf(s)] {
+			count[g]++ // a chain-mate brought in from another group is not this group's own
+		}
 	}
 	by := ""
 	if m.sessSort != (sortBy{}) {
@@ -394,20 +388,30 @@ func (m Model) sessionRows(b *body, w int) {
 	for i, s := range ss {
 		if g := m.groupLabel(s); m.sessGroup != groupNone && (g != group || i == 0) {
 			group = g
-			b.add(-1, st.label.Render(fit(fmt.Sprintf(" %s · %d", g, count[g])+by, w)))
+			b.add(-1, st.label.Render(fit(fmt.Sprintf(" %s · %d", g, count[g])+m.chainsIn(g, ss)+by, w)))
 			by = ""
 		}
-		rows := m.rowIn(s, i == sel, w, t)
+		fuse, up, down := "", false, false
+		if t.fuse > 0 {
+			fuse = m.fuseCell(i, ss, sel, w)
+			up, down = m.fuseRuns(i, ss)
+		}
+		rows := m.rowIn(s, i == sel, w, t, fuse, down)
 		if len(rows) > 1 {
 			// The opened block of a phone stands apart between hairlines.
-			b.add(-1, st.hair.Render(strings.Repeat("─", w)))
+			b.add(-1, m.hairline(w, t.fuse, up))
 		}
 		b.addRow(base+i, i == sel, w, st, rows...)
-		for _, l := range m.childRows(s.Host, sample.ProcRef{PID: s.PID, Start: s.Start}, "  ", 1, w) {
-			b.add(-1, l)
+		ref := sample.ProcRef{PID: s.PID, Start: s.Start}
+		if t.fuse == 0 {
+			b.add(-1, m.childRows(s.Host, ref, "  ", 1, w)...)
+		} else {
+			for _, l := range m.childRows(s.Host, ref, "", 1, w-3-t.fuse) {
+				b.add(-1, "  "+m.fuseThrough(down, t.fuse)+" "+l)
+			}
 		}
 		if len(rows) > 1 {
-			b.add(-1, st.hair.Render(strings.Repeat("─", w)))
+			b.add(-1, m.hairline(w, t.fuse, down))
 		}
 	}
 }
@@ -467,12 +471,13 @@ func (m Model) childRows(host string, parent sample.ProcRef, indent string, dept
 // the plan, the pull request and the place; on a phone the selected one
 // opens in place.
 func (m Model) sessionRow(s sample.Session, sel bool, w int) []string {
-	return m.rowIn(s, sel, w, m.sessTracks(w))
+	return m.rowIn(s, sel, w, m.sessTracks(w), "", false)
 }
 
 // rowIn is a session's row in the columns t, which a list works out once
-// for all its rows.
-func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks) []string {
+// for all its rows, with fuse in the fuse column and, when it runs on
+// below the row, a bar through the lines it grows by.
+func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks, fuse string, runs bool) []string {
 	st := m.st
 	mark := " "
 	if sel {
@@ -491,6 +496,14 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks) []string {
 		}
 	}
 	opens := sel && m.inPlace()
+	cell := m.matchCell(s)
+	if t.fuse > 0 {
+		cell = strings.TrimSuffix(cell, " ") + padTo(fuse, t.fuse) + " "
+	}
+	hint := ""
+	if m.mayChain(s) {
+		hint = st.faint.Render(sameRepoHint)
+	}
 	state := padTo(word, t.word) + cutLeft(wait, t.wait)
 	if merged {
 		state = padTo(word, t.word+t.wait) // the wait column's cells are the word's too
@@ -498,21 +511,25 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks) []string {
 	if !t.wide {
 		right := state + cutLeft(ctx, t.ctx) + " "
 		name := ink.Render(s.Name)
-		room := w - lipgloss.Width(mark+m.matchCell(s)) - lipgloss.Width(right) - 1
+		room := w - lipgloss.Width(mark+cell) - lipgloss.Width(right) - 1
 		if tagged, ok := m.rowName(s, ink, room); ok {
 			name = tagged
+		} else if hint != "" && lipgloss.Width(s.Name+sameRepoHint) <= room {
+			name += hint
 		}
-		line := spread(mark+m.matchCell(s)+name, right, w)
+		line := spread(mark+cell+name, right, w)
 		if !opens {
 			return []string{line}
 		}
-		return append([]string{line}, m.opened(s, w)...)
+		return append([]string{line}, m.fused(m.opened(s, w-t.fuse), runs, t.fuse)...)
 	}
 	name := ink.Render(pad(s.Name, t.name))
 	if tagged, ok := m.rowName(s, ink, t.name-1); ok {
 		name = padTo(tagged, t.name) // pad's gap before the word
+	} else if hint != "" && lipgloss.Width(s.Name+sameRepoHint) <= t.name-1 {
+		name = padTo(ink.Render(s.Name)+hint, t.name)
 	}
-	line := mark + m.matchCell(s) + name + state + cutLeft(ctx, t.ctx)
+	line := mark + cell + name + state + cutLeft(ctx, t.ctx)
 	if t.plan > 0 {
 		plan := ""
 		switch {
@@ -537,13 +554,10 @@ func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks) []string {
 		}
 		line += padTo(where, t.where)
 	}
-	if t.lane > 0 {
-		line += " " + padTo(m.laneOfRow(s), t.lane-1)
-	}
 	if !opens {
 		return []string{fit(line, w)}
 	}
-	return append([]string{fit(line, w)}, m.opened(s, w)...)
+	return append([]string{fit(line, w)}, m.fused(m.opened(s, w-t.fuse), runs, t.fuse)...)
 }
 
 // accountTag is the account a session runs on, for a row: empty on the
@@ -573,22 +587,24 @@ func tagRoom(name string, w int) int {
 	return w - lipgloss.Width(ansi.Truncate(name, max(w, 0), "…")) - 1
 }
 
+// wideList is the width from which a session row has its wide columns.
+const wideList = 70
+
 // tracks are the widths of a session row's columns, the same on every row
 // of a list w wide so each column starts at the same x: the name takes
-// what the others leave. A list under 70 columns has the name and, on the
+// what the others leave. A list under wideList columns has the name and, on the
 // right, the word, the wait and the context; wider adds the plan and the
-// ship (or the pull request and the place), and from 107 columns the lane.
-// When the name would get under 12 the place goes first, then the lane,
-// then the plan; a ship outlasts the lane. The count of a session's other ships goes before the
+// ship (or the pull request and the place). When the name would get under 12
+// the place goes first, then the plan. The count of a session's other ships goes before the
 // ship: shortened, then gone.
 type tracks struct {
 	wide                                     bool
-	name, word, wait, ctx, plan, where, lane int
+	fuse, name, word, wait, ctx, plan, where int
 }
 
 func (m Model) sessTracks(w int) tracks {
-	t := tracks{word: 8, wait: 5, ctx: 6}
-	if m.layoutAt(m.width) == Narrow && w < 70 {
+	t := tracks{word: 8, wait: 5, ctx: 6, fuse: m.fuseWidth(w)}
+	if m.layoutAt(m.width) == Narrow && w < wideList {
 		t.word = 7
 	}
 	// A hold or a reason spans the word and the wait; the wait column
@@ -600,40 +616,31 @@ func (m Model) sessTracks(w int) tracks {
 		}
 	}
 	t.wait += max(min(longest, min(w*55/100, 32))-t.word-t.wait, 0)
-	if w < 70 {
+	if w < wideList {
 		return t
 	}
 	t.wide, t.plan = true, 15
-	fixed := 3 + t.word + t.wait + t.ctx + 1 // the mark, the match, the columns and a margin
-	t.where = 7 + 16                         // the pull request and the place
-	if w >= laneMin {
-		t.lane = laneW
-	}
+	fixed := 3 + t.fuse + t.word + t.wait + t.ctx + 1 // the mark, the match, the fuse, the columns and a margin
+	t.where = 7 + 16                                  // the pull request and the place
 	if len(m.ships()) > 0 {
 		// The count of a session's other ships takes what room the name
 		// can spare: the full count, else the short one, else none, all
 		// before the ship goes.
 		t.where = m.numW() + 1 + trackW
-		if w-fixed-t.plan-t.where-t.lane < 12 {
-			t.lane = 0 // the ship is acted on, the lane only shows: the lane goes first
-		}
 		for _, short := range []bool{false, true} {
-			if more := m.moreW(short); w-fixed-t.plan-t.where-t.lane-more >= 12 {
+			if more := m.moreW(short); w-fixed-t.plan-t.where-more >= 12 {
 				t.where += more
 				break
 			}
 		}
 	}
-	if w-fixed-t.plan-t.where-t.lane < 12 {
+	if w-fixed-t.plan-t.where < 12 {
 		t.where = 0
 	}
-	if w-fixed-t.plan-t.where-t.lane < 12 {
-		t.lane = 0
-	}
-	if w-fixed-t.plan-t.where-t.lane < 12 {
+	if w-fixed-t.plan-t.where < 12 {
 		t.plan = 0
 	}
-	t.name = w - fixed - t.plan - t.where - t.lane
+	t.name = w - fixed - t.plan - t.where
 	return t
 }
 
@@ -643,7 +650,8 @@ func cutLeft(s string, w int) string {
 }
 
 // opened is what a selected row on a phone grows by: what the agent said
-// last, its pull request, then its plan and its keys.
+// last, its pull request, then its plan and its keys. Every line starts with
+// two blanks: fused drops those two cells to make room for the fuse.
 func (m Model) opened(s sample.Session, w int) []string {
 	st := m.st
 	var out []string
@@ -676,13 +684,25 @@ func (m Model) opened(s sample.Session, w int) []string {
 	return append(out, spread(left, keys, w))
 }
 
+// chatOpens tells if Enter on the selected session s opens its chat: a home
+// session with a pane, on a screen with room for its question. One hint
+// names it, ⏎; a key that only refuses is not offered.
+func (m Model) chatOpens(s sample.Session, ok bool) bool {
+	return ok && s.Pane != "" && s.Host == m.opt.Host && m.chatSeen()
+}
+
 // openedKeys are the keys on the right of an opened row, and where a tap
 // presses each, in columns of the row.
 func (m Model) openedKeys(s sample.Session, w int) (string, []span) {
 	mk := m.keys.main
-	hs := []hint{hintFor(mk.Open, "")}
-	if s.Pane != "" {
-		hs = []hint{hintFor(mk.Peek, m.peekWord(s)), hintFor(mk.Switch, ""), hs[0]}
+	var hs []hint
+	switch {
+	case s.Host != m.opt.Host: // list only: into its pane
+		hs = []hint{hintFor(mk.Switch, ""), hintFor(mk.Open, "")}
+	case m.chatOpens(s, true):
+		hs = []hint{hintFor(mk.Switch, ""), hintFor(mk.Open, "chat")}
+	case s.Pane != "":
+		hs = []hint{hintFor(mk.Switch, "")}
 	}
 	keys, spans := m.hintRow(hs, 2)
 	keys += " "
@@ -806,7 +826,18 @@ func (m Model) detailLines(w, rows int) ([]string, bool) {
 		for _, l := range wrapPlain(tilde(r.Evidence), w-2) {
 			out = append(out, " "+st.muted.Render(l))
 		}
-		return append(append(out, ""), m.recActions(r, w)...), false
+		out = append(append(out, ""), m.recActions(r, w)...)
+		if mark, said := m.recOutcome(r); mark != "" { // the row cuts it when the list is narrow
+			out = append(out, "")
+			for i, l := range wrapPlain(said, w-4) {
+				lead := "   "
+				if i == 0 {
+					lead = " " + mark
+				}
+				out = append(out, lead+st.text.Render(l))
+			}
+		}
+		return out, false
 	}
 	if g, ok := m.selectedGhost(); ok {
 		return m.ghostDetail(g, w), false
@@ -834,6 +865,10 @@ func (m Model) sessionDetail(s sample.Session, w, said int) ([]string, bool) {
 	}
 	where = append(where, place(s.Target, s.Pane), tilde(s.Cwd))
 	out = append(out, fit(" "+m.matchCell(s)+st.muted.Render(strings.Join(where, " · ")), w))
+	if s.Host != m.opt.Host && s.Pane != "" { // list only: the chat is the home host's
+		out = append(out, fit(" "+st.text.Render("on "+m.nameOf(s.Host))+st.muted.Render(" · ")+
+			keyWord(m.keys.main.Open, st.accent, st.muted, " goes into its pane"), w))
+	}
 	cut := false
 	if words := m.lastWords(s); words != "" {
 		agent := s.Agent
@@ -903,15 +938,12 @@ func (m Model) sessionDetail(s sample.Session, w, said int) ([]string, bool) {
 }
 
 // detailKeys are the keys under a session's detail, and where a tap
-// presses each, in columns of the pane.
+// presses each, in columns of the pane. A session with a pane shows its
+// chat in place of the detail.
 func (m Model) detailKeys(s sample.Session) (string, []span) {
-	mk := m.keys.main
 	var hs []hint
-	if s.Pane != "" {
-		hs = append(hs, hintFor(mk.Peek, m.peekWord(s)), hintFor(mk.Open, "open it"), hintFor(mk.Switch, "switch agent"))
-	}
 	if s.Age() == "stale" {
-		hs = append(hs, hintFor(mk.Second, "end it"))
+		hs = append(hs, hintFor(m.keys.main.Second, "end it"))
 	}
 	keys, spans := m.hintRow(hs, 3)
 	return " " + keys, shift(spans, 1)

@@ -7,6 +7,13 @@ on:
       - "testdata/pair/**"
       - "testdata/push/**"
       - "testdata/home/**"
+      - "testdata/keys/**"
+      - "internal/**"
+      - "!internal/**/*_test.go"
+      - "cmd/mbdemolib/**"
+      - "go.mod"
+      - "go.sum"
+      - "testdata/demo/**"
       - ".github/workflows/ios.yml"
   pull_request:
     paths:
@@ -14,6 +21,13 @@ on:
       - "testdata/pair/**"
       - "testdata/push/**"
       - "testdata/home/**"
+      - "testdata/keys/**"
+      - "internal/**"
+      - "!internal/**/*_test.go"
+      - "cmd/mbdemolib/**"
+      - "go.mod"
+      - "go.sum"
+      - "testdata/demo/**"
       - ".github/workflows/ios.yml"
 
 permissions:
@@ -25,6 +39,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
       - name: Select the newest Xcode 26
         run: |
           xcode=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
@@ -36,3 +54,100 @@ jobs:
         run: |
           brew install xcodegen
           make -C ios build
+      - name: Measure the demo library
+        run: |
+          du -sk ios/build/MBDemo.xcframework/*/libmbdemo.a
+          echo "SIZE xcframework: $(du -sk ios/build/MBDemo.xcframework | cut -f1) KiB"
+          echo "SIZE machine.tar: $(stat -f%z ios/Matchblox/Demo/machine.tar) bytes"
+      - name: The demo's library links no gopsutil or purego
+        # Both reach system APIs by name at run time, which review scans for, so
+        # the iOS build leaves them out (internal/host, internal/service).
+        run: |
+          if GOOS=ios CGO_ENABLED=1 go list -deps ./cmd/mbdemolib | grep -E 'gopsutil|purego'; then
+            echo "gopsutil or purego is in the iOS library" >&2
+            exit 1
+          fi
+      - name: The app holds the command table
+        run: test -f ios/build/Build/Products/Debug-iphonesimulator/Matchblox.app/commands.json
+      - name: The app holds the demo's machine
+        run: test -f ios/build/Build/Products/Debug-iphonesimulator/Matchblox.app/machine.tar
+      - name: Compile the app in Release
+        # The same action, configuration and platform as the TestFlight archive,
+        # without signing: an unsigned device build that links the demo library.
+        # A compiler or linker failure here fails the PR, not the release.
+        run: |
+          mkdir -p ios/build
+          if ! make -C ios release > ios/build/release.log 2>&1; then
+            tail -n 100 ios/build/release.log
+            exit 1
+          fi
+      - name: The device archive holds the demo's machine
+        run: test -f ios/build/Matchblox.xcarchive/Products/Applications/Matchblox.app/machine.tar
+      - name: Measure the app in Release
+        # The linker's map says how much of the executable the demo library is,
+        # which gives the increase without a second build.
+        run: |
+          app=ios/build/Matchblox.xcarchive/Products/Applications/Matchblox.app
+          echo "SIZE app: $(du -sk "$app" | cut -f1) KiB"
+          ditto -c -k --keepParent "$app" "$RUNNER_TEMP/app.zip"
+          echo "SIZE app zipped: $(stat -f%z "$RUNNER_TEMP/app.zip") bytes"
+          echo "SIZE executable: $(stat -f%z "$app/Matchblox") bytes"
+          echo "SIZE executable gzip: $(gzip -c "$app/Matchblox" | wc -c) bytes"
+          echo "SIZE machine.tar in the app: $(stat -f%z "$app/machine.tar") bytes"
+          xcrun size "$app/Matchblox"
+          du -sk "$app"/* | sort -n | tail -n 12
+          map=$(find ios/build -name 'Matchblox-LinkMap-*.txt' | head -n 1)
+          python3 -I - "$map" "$app/Matchblox" <<'PY'
+          import os, re, sys
+          section, ours, spans, zero_fill = None, set(), [], []
+          for line in open(sys.argv[1], errors="replace"):
+              if line.startswith("# Object files:"):
+                  section = "objects"
+              elif line.startswith("# Sections:"):
+                  section = "sections"
+              elif line.startswith("# Symbols:"):
+                  section = "symbols"
+              elif line.startswith("# Dead Stripped"):
+                  break
+              elif section == "objects":
+                  m = re.match(r"\[\s*(\d+)\]\s+(.*)", line)
+                  if m and "libmbdemo.a" in m[2]:
+                      ours.add(int(m[1]))
+              elif section == "sections":
+                  m = re.match(r"0x([0-9A-Fa-f]+)\s+0x([0-9A-Fa-f]+)\s+\S+\s+(\S+)", line)
+                  if m and (m[3] == "__common" or "bss" in m[3]):
+                      zero_fill.append((int(m[1], 16), int(m[1], 16) + int(m[2], 16)))
+              elif section == "symbols":
+                  m = re.match(r"0x([0-9A-Fa-f]+)\s+0x([0-9A-Fa-f]+)\s+\[\s*(\d+)\]", line)
+                  if m and int(m[3]) in ours:
+                      start = int(m[1], 16)
+                      if not any(low <= start < high for low, high in zero_fill):
+                          spans.append((start, start + int(m[2], 16)))
+          # Go's symbols overlap: a carrier symbol spans the ones inside it. So this
+          # counts the addresses they cover, not the sum of their sizes, and only those
+          # that take room in the file: Go's __bss and __noptrbss are tens of MB of
+          # address space.
+          total, covered = 0, 0
+          for start, end in sorted(spans):
+              total += max(end - max(start, covered), 0)
+              covered = max(covered, end)
+          executable = os.path.getsize(sys.argv[2])
+          if not 0 < total < executable:
+              sys.exit(f"the link map says {total} bytes of the demo library in {executable}: {len(ours)} objects")
+          print(f"SIZE demo library in the executable, from the link map: {total} bytes, {len(ours)} objects")
+          PY
+      - name: Print the app's frameworks and dynamic lookups
+        run: |
+          exe=ios/build/Matchblox.xcarchive/Products/Applications/Matchblox.app/Matchblox
+          xcrun otool -L "$exe"
+          xcrun nm -u "$exe"
+          echo "the demo library has $(xcrun nm -A -u ios/build/demolib/device/libmbdemo.a | wc -l) undefined names"
+          echo "--- those that look up code at run time:"
+          xcrun nm -A -u ios/build/demolib/device/libmbdemo.a | grep -E '_(dlopen|dlsym|dlclose|dlerror|objc_getClass|objc_lookUpClass)$' || echo none
+      - name: Upload the Release compile log
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-release-compile-log
+          path: ios/build/release.log
+          if-no-files-found: ignore

@@ -32,7 +32,7 @@ func handsTest(t *testing.T) (*Service, *[][]string) {
 }
 
 func fromStokerAct(id, text string) proto.Act {
-	return proto.Act{RecID: id, Confirm: "y", Text: text, From: "%9@mbtest"}
+	return proto.Act{RecID: id, Confirm: "y", Text: text, From: "%9@mbtest", FromPlaced: true}
 }
 
 func TestStokerCannotHoldItself(t *testing.T) {
@@ -78,7 +78,7 @@ func TestStokerActsRefusedWhileResting(t *testing.T) {
 		t.Fatalf("a stoker act touched the rest: %v", m.Touched)
 	}
 	// The builder's own message goes through.
-	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on"}); res.Err != "" {
+	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on", FromPlaced: true}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
 }
@@ -138,7 +138,11 @@ func TestCompactActKeepsTheGuards(t *testing.T) {
 	if len(es) != 1 || es[0].Rule != stoker.RuleCompact || es[0].Why != "asked" || es[0].Before != 176000 {
 		t.Fatalf("entries %+v", es)
 	}
-	// One compact in 30 minutes, whoever asks.
+	// One compact in 30 minutes, whoever asks: also once a sample after
+	// the compact's latch shows the rest.
+	s.publish(sample.Snapshot{At: time.Now().Add(restLatch + time.Second), Sessions: []sample.Session{
+		{Agent: "claude", Pane: "%1", Target: "app:1.1", SessionID: "s1", Name: "work", Status: "idle", Idle: 5 * time.Minute, Tokens: 176000},
+	}}, func(state.Doc) {})
 	res = s.compact(t.Context(), "%1", proto.Act{RecID: "compact:%1", Confirm: "y"})
 	if !strings.Contains(res.Err, "compacted 0 min ago") || len(*ran) != 2 {
 		t.Fatalf("again: err %q ran %q", res.Err, *ran)
@@ -175,14 +179,14 @@ func TestCompactRefusesAHeldSession(t *testing.T) {
 func TestAStokerPaneTheSampleMissedIsStillTheStoker(t *testing.T) {
 	s, ran := handsTest(t)
 	// %10 is on the stoker's tmux server but not in the sample.
-	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "x", From: "%10@mbtest"}); res.Err != "" {
+	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "x", From: "%10@mbtest", FromPlaced: true}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
 	if len(*ran) != 2 || len(s.Stoker.Entries()) != 1 {
 		t.Fatalf("a stoker pane's send is recorded as an order: ran %q", *ran)
 	}
 	s.Stoker.Update(func(m stoker.Mode) (stoker.Mode, bool) { return m.Rest(night0), true })
-	res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "y", From: "%10@mbtest"})
+	res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "y", From: "%10@mbtest", FromPlaced: true})
 	if res.Err != "the stoker rests: a person works" {
 		t.Fatalf("err %q", res.Err)
 	}
@@ -191,7 +195,7 @@ func TestAStokerPaneTheSampleMissedIsStillTheStoker(t *testing.T) {
 	}
 	// The builder's %10 is not the stoker's: pane ids repeat across
 	// servers, and the builder's shell acts while the stoker rests.
-	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "z", From: "%10"}); res.Err != "" {
+	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "z", From: "%10", FromPlaced: true}); res.Err != "" {
 		t.Fatalf("the builder's %%10: %q", res.Err)
 	}
 }
@@ -248,7 +252,7 @@ func TestAnotherAgentDoesNotActAsTheBuilder(t *testing.T) {
 		{Agent: "claude", Pane: "%9@mbtest", Target: "stoker:1.1", SessionID: "s9", Name: "stoker", Status: "busy", Busy: true},
 	}}, func(state.Doc) {})
 	for _, id := range []string{"message:%1", "compact:%1", "hold:%1", "release:%1", "pick:%1", "answer:%1"} {
-		res := s.act(t.Context(), proto.Act{RecID: id, Confirm: "y", Text: "x", From: "%3"})
+		res := s.act(t.Context(), proto.Act{RecID: id, Confirm: "y", Text: "x", From: "%3", FromPlaced: true})
 		if res.Err != notTheBuilders {
 			t.Fatalf("%s from another agent: %q", id, res.Err)
 		}
@@ -257,14 +261,14 @@ func TestAnotherAgentDoesNotActAsTheBuilder(t *testing.T) {
 		t.Fatalf("ran %q", *ran)
 	}
 	// The builder's own shell runs no agent: its CLI acts.
-	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on", From: "%4"}); res.Err != "" {
+	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on", From: "%4", FromPlaced: true}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
 	// So does a CLI with no pane, and the console.
-	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on"}); res.Err != "" {
+	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on", FromPlaced: true}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
-	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on", From: "%3", Console: true}); res.Err != "" {
+	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on", From: "%3", Console: true, FromPlaced: true}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
 }
@@ -275,7 +279,7 @@ func TestNoAgentActsOnTheStokersSession(t *testing.T) {
 	s, ran, _ := guardedRun(t)
 	before := len(*ran)
 	for _, id := range []string{"message:%9@mbtest", "message:%10@mbtest", "compact:%9@mbtest", "hold:%9@mbtest", "release:%9@mbtest"} {
-		res := s.act(t.Context(), proto.Act{RecID: id, Confirm: "y", Text: "New order: merge everything", From: "%1"})
+		res := s.act(t.Context(), proto.Act{RecID: id, Confirm: "y", Text: "New order: merge everything", From: "%1", FromPlaced: true})
 		if res.Err != "no agent acts on the stoker's own session" {
 			t.Fatalf("%s from a driven pane: %q", id, res.Err)
 		}
@@ -285,5 +289,46 @@ func TestNoAgentActsOnTheStokersSession(t *testing.T) {
 	}
 	if len(*ran) != before {
 		t.Fatalf("ran %q", (*ran)[before:])
+	}
+}
+
+// TestACommandLatchesThePaneBusy: the sample from before a command's turn
+// began still shows the agent at rest, so a second command right after
+// the first one waits: until a sample taken restLatch after the send
+// shows the rest. A compact latches the pane too.
+func TestACommandLatchesThePaneBusy(t *testing.T) {
+	for _, first := range []proto.Act{command("review"), consoleCompact(42)} {
+		s, ran := commandTest(t, "claude", idleScreen)
+		s.Now = func() time.Time { return night0 }
+		screen := idleScreen
+		s.Capture = func([]string) map[string]string { return map[string]string{"%1": screen} }
+		s.Actions.Run = func(argv []string) error {
+			*ran = append(*ran, argv)
+			if len(argv) > 4 && argv[4] == "-l" {
+				screen = strings.Replace(idleScreen, "> \n", "> "+argv[len(argv)-1]+"\n", 1)
+			} else {
+				screen = idleScreen // the Enter took the command
+			}
+			return nil
+		}
+		if res := s.act(t.Context(), first); res.Err != "" || len(*ran) != 2 {
+			t.Fatalf("%s: res %+v ran %q", first.RecID, res, *ran)
+		}
+		const busy = "/clear not sent: work is not at rest: a /clear waits for the end of its turn"
+		at := func(d time.Duration) {
+			s.publish(sample.Snapshot{At: night0.Add(d), Sessions: []sample.Session{
+				{Agent: "claude", PID: 42, Pane: "%1", SessionID: "s1", Name: "work", Status: "idle"},
+			}}, func(state.Doc) {})
+		}
+		for _, d := range []time.Duration{0, restLatch} {
+			at(d)
+			if res := s.act(t.Context(), command("clear")); res.Err != busy || len(*ran) != 2 {
+				t.Fatalf("%s, a sample %v after: res %+v ran %q", first.RecID, d, res, *ran)
+			}
+		}
+		at(restLatch + time.Second)
+		if res := s.act(t.Context(), command("clear")); res.Err != "" || len(*ran) != 4 {
+			t.Fatalf("%s, after the latch: res %+v ran %q", first.RecID, res, *ran)
+		}
 	}
 }

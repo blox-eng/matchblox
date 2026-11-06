@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,6 +51,9 @@ func newTest(t *testing.T, interval time.Duration) *Service {
 	s.StatePath = filepath.Join(t.TempDir(), "state.json")
 	s.Actions.Run = func([]string) error { return nil }
 	s.Actions.Check = nil // the guards of the fake snapshot do not hold on this machine
+	// Every caller has a person's terminal outside tmux: no terminal of
+	// this machine, and no tmux of its default server, is read.
+	s.TTYPane = func(int) (string, bool) { return "", true }
 	return s
 }
 
@@ -765,7 +769,7 @@ func answerTest(t *testing.T) (*Service, context.Context, *[][]string) {
 
 func TestAnswerTypesLiteral(t *testing.T) {
 	s, ctx, ran := answerTest(t)
-	res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "; rm -rf /"})
+	res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "; rm -rf /", FromPlaced: true})
 	if res.Err != "" {
 		t.Fatal(res.Err)
 	}
@@ -777,7 +781,7 @@ func TestAnswerTypesLiteral(t *testing.T) {
 
 func TestAnswerNeedsTypedY(t *testing.T) {
 	s, ctx, ran := answerTest(t)
-	if res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Text: "yes"}); len(*ran) != 0 || res.Err == "" {
+	if res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Text: "yes", FromPlaced: true}); len(*ran) != 0 || res.Err == "" {
 		t.Fatalf("ran %q res %+v", *ran, res)
 	}
 }
@@ -785,8 +789,8 @@ func TestAnswerNeedsTypedY(t *testing.T) {
 func TestAnswerRefusesPaneNotWaiting(t *testing.T) {
 	s, ctx, ran := answerTest(t)
 	for _, a := range []proto.Act{
-		{RecID: "answer:%2", Which: "secondary", Confirm: "y", Text: "yes"},
-		{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "two\nlines"},
+		{RecID: "answer:%2", Which: "secondary", Confirm: "y", Text: "yes", FromPlaced: true},
+		{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "two\nlines", FromPlaced: true},
 	} {
 		if res := s.act(ctx, a); res.Err == "" {
 			t.Fatalf("%+v ran: %+v", a, res)
@@ -802,7 +806,7 @@ func TestAnswerRefusesPaneNotWaiting(t *testing.T) {
 func TestAnswerRefusesPermission(t *testing.T) {
 	s, ctx, ran := answerTest(t)
 	hook(t, ctx, s, hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "s9", Pane: "%1", At: time.Now()})
-	res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "no, stop"})
+	res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "no, stop", FromPlaced: true})
 	if res.Err == "" || len(*ran) != 0 {
 		t.Fatalf("answered a permission prompt: %+v ran %q", res, *ran)
 	}
@@ -840,12 +844,12 @@ func TestIdleGuardIgnoresQueue(t *testing.T) {
 // Review 4: the same answer to a new question is not "already done".
 func TestAnswerAgainToANewQuestion(t *testing.T) {
 	s, ctx, ran := answerTest(t)
-	if res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "y"}); res.Err != "" {
+	if res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "y", FromPlaced: true}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
 	hook(t, ctx, s, hooks.Event{Name: "UserPromptSubmit", SessionID: "s9", Pane: "%1", At: time.Now()})
 	hook(t, ctx, s, hooks.Event{Name: "Stop", SessionID: "s9", Pane: "%1", At: time.Now().Add(time.Millisecond)})
-	res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "y"})
+	res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "y", FromPlaced: true})
 	if res.Err != "" || len(res.Skipped) != 0 || len(*ran) != 4 {
 		t.Fatalf("second answer: %+v ran %q", res, *ran)
 	}
@@ -991,10 +995,10 @@ func TestPickDrivesTheQuestionMenu(t *testing.T) {
 		return string(b)
 	}
 	for _, a := range []proto.Act{
-		{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_0", 1)},
-		{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_1", 3)},
-		{RecID: "pick:%1", Text: pick("toolu_1", 2)},
-		{RecID: "pick:%2", Confirm: "y", Text: pick("toolu_1", 2)},
+		{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_0", 1), FromPlaced: true},
+		{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_1", 3), FromPlaced: true},
+		{RecID: "pick:%1", Text: pick("toolu_1", 2), FromPlaced: true},
+		{RecID: "pick:%2", Confirm: "y", Text: pick("toolu_1", 2), FromPlaced: true},
 	} {
 		if res := s.act(ctx, a); res.Err == "" {
 			t.Fatalf("%+v ran: %+v", a, res)
@@ -1003,7 +1007,7 @@ func TestPickDrivesTheQuestionMenu(t *testing.T) {
 	if len(ran) != 0 {
 		t.Fatalf("ran %q", ran)
 	}
-	if res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_1", 2)}); res.Err != "" {
+	if res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_1", 2), FromPlaced: true}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
 	if want := [][]string{{"tmux", "send-keys", "-t", "%1", "2"}}; fmt.Sprint(ran) != fmt.Sprint(want) {
@@ -1066,7 +1070,7 @@ func TestPickChecksThePaneBeforeEachPage(t *testing.T) {
 	mu.Lock()
 	*screen = pickPage2
 	mu.Unlock()
-	res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2)})
+	res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2), FromPlaced: true})
 	if len(*ran) != 0 || len(res.Skipped) != 1 || !strings.Contains(res.Skipped[0], "does not show question 1") {
 		t.Fatalf("ran %q: %+v", *ran, res)
 	}
@@ -1076,7 +1080,7 @@ func TestPickChecksThePaneBeforeEachPage(t *testing.T) {
 // stops before question 2's keys.
 func TestPickStopsWhenThePageDoesNotMove(t *testing.T) {
 	s, ctx, _, ran, _ := pickTest(t)
-	res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2)})
+	res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2), FromPlaced: true})
 	if want := [][]string{{"tmux", "send-keys", "-t", "%1", "1"}, panes.Pause}; fmt.Sprint(*ran) != fmt.Sprint(want) {
 		t.Fatalf("ran %q, want %q", *ran, want)
 	}
@@ -1101,7 +1105,7 @@ func TestPickFollowsThePages(t *testing.T) {
 		}
 		return nil
 	}
-	if res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2)}); res.Err != "" || len(res.Skipped) > 0 {
+	if res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2), FromPlaced: true}); res.Err != "" || len(res.Skipped) > 0 {
 		t.Fatalf("result %+v", res)
 	}
 	if n := len(*ran); n == 0 || fmt.Sprint((*ran)[n-1]) != fmt.Sprint([]string{"tmux", "send-keys", "-t", "%1", "1"}) {
@@ -1127,7 +1131,9 @@ func TestKeysToOnePaneNeverInterleave(t *testing.T) {
 	}
 	done := make(chan proto.Result)
 	for _, picks := range [][]int{{1, 2}, {2, 1}} {
-		go func() { done <- s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(picks...)}) }()
+		go func() {
+			done <- s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(picks...), FromPlaced: true})
+		}()
 	}
 	within(t, done, "first pick")
 	within(t, done, "second pick")
@@ -1183,7 +1189,7 @@ func TestPickTakesTheHookCall(t *testing.T) {
 		}
 	}
 	answer, _ := json.Marshal(said.Answer{ID: "toolu_1", Choices: []said.Choice{{Picks: []int{2}}}})
-	pick := proto.Act{RecID: "pick:%1", Confirm: "y", Text: string(answer)}
+	pick := proto.Act{RecID: "pick:%1", Confirm: "y", Text: string(answer), FromPlaced: true}
 	if res := s.act(ctx, pick); !strings.Contains(res.Err, "no longer asks") {
 		t.Fatalf("no call yet: %+v", res)
 	}
@@ -1227,7 +1233,7 @@ func messageTest(t *testing.T) (*Service, context.Context, *[][]string) {
 // A message goes to a session that works: Claude Code queues it.
 func TestMessageTypesIntoABusySession(t *testing.T) {
 	s, ctx, ran := messageTest(t)
-	res := s.act(ctx, proto.Act{RecID: "message:%1", Which: "secondary", Confirm: "y", Text: "also run the e2e"})
+	res := s.act(ctx, proto.Act{RecID: "message:%1", Which: "secondary", Confirm: "y", Text: "also run the e2e", FromPlaced: true})
 	if res.Err != "" || len(res.Skipped) != 0 {
 		t.Fatalf("%+v", res)
 	}
@@ -1261,7 +1267,7 @@ func TestMessageRefuses(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if res := s.act(ctx, proto.Act{RecID: "message:%1", Which: "secondary", Confirm: "y", Text: "go"}); res.Err == "" {
+	if res := s.act(ctx, proto.Act{RecID: "message:%1", Which: "secondary", Confirm: "y", Text: "go", FromPlaced: true}); res.Err == "" {
 		t.Fatalf("messaged a permission prompt: %+v", res)
 	}
 	if len(*ran) != 0 {
@@ -1464,6 +1470,7 @@ func TestKnownAccountsNotReadEachSample(t *testing.T) {
 	if want := []string{"default", "new", "work", "~/.claude-old"}; !reflect.DeepEqual(s.State().Accounts["claude"], want) {
 		t.Fatalf("a new account: got %v, want %v", s.State().Accounts["claude"], want)
 	}
+	snap.Sessions = slices.Clone(snap.Sessions) // the service holds the last sample's
 	snap.Sessions[1].AccountDir = filepath.Join(home, ".claude-two")
 	s.publish(snap, func(state.Doc) {})
 	if want := []string{"default", "new", "work", "~/.claude-old", "~/.claude-two"}; !reflect.DeepEqual(s.State().Accounts["claude"], want) {
@@ -1643,5 +1650,55 @@ func TestHelloTmuxIsTheJumps(t *testing.T) {
 	installed.Store(true)
 	if _, h := connect(t, ctx, s); h.Tmux != "9.9" {
 		t.Fatalf("after tmux came to ~/.local/bin: %q", h.Tmux)
+	}
+}
+
+func TestHistoryIsLoadedAgainstTheServiceClock(t *testing.T) {
+	at := time.Date(2026, 10, 1, 22, 0, 0, 0, time.UTC)
+	csv := filepath.Join(t.TempDir(), "history.csv")
+	must(t, os.WriteFile(csv, []byte("ts,cpu_pct\n"+at.Add(-time.Hour).Format(time.RFC3339)+",40\n"+at.Format(time.RFC3339)+",50\n"), 0o600))
+	s := newTest(t, time.Hour)
+	s.HistorySources, s.Now = []string{csv}, func() time.Time { return at }
+
+	s.loadHistory()
+
+	if n := len(s.hist.Points); n != 2 {
+		t.Fatalf("a service whose clock is at %v loaded %d points of a file written then, want 2", at, n)
+	}
+}
+
+// TestServeWaitsForTheRunsOffTheLoop: a line typing at rest, or a HEAD
+// read, is finished before Serve returns: an exit between a line's keys
+// and its Enter would leave it as the mate's draft.
+func TestServeWaitsForTheRunsOffTheLoop(t *testing.T) {
+	for name, run := range map[string]func(s *Service) *lone{
+		"typing": func(s *Service) *lone { return &s.restRun },
+		"git":    func(s *Service) *lone { return &s.headRun },
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := newTest(t, time.Hour)
+			release := make(chan struct{})
+			var once sync.Once
+			t.Cleanup(func() { once.Do(func() { close(release) }) })
+			run(s).start(func() { <-release }) // a fake step that blocks
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			dir, _ := os.MkdirTemp("", "mb")
+			t.Cleanup(func() { os.RemoveAll(dir) })
+			listener, err := transport.Listen(filepath.Join(dir, "s.sock"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			done := make(chan error, 1)
+			go func() { done <- s.Serve(ctx, listener) }()
+			cancel()
+			select {
+			case err := <-done:
+				t.Fatalf("Serve returned while the %s step ran: %v", name, err)
+			case <-time.After(100 * time.Millisecond):
+			}
+			once.Do(func() { close(release) })
+			waitServe(t, done, context.Canceled)
+		})
 	}
 }

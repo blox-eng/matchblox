@@ -21,6 +21,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
       - name: Resolve the marketing version
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -63,7 +68,9 @@ jobs:
         working-directory: ios
         run: bundle install
 
-      - name: Generate the project
+      - name: Build the demo library and generate the project
+        # gen builds the Go demo library and packs its machine; fastlane then
+        # links and bundles them.
         run: make -C ios gen
 
       - name: Build and upload to TestFlight
@@ -74,6 +81,31 @@ jobs:
           ASC_KEY_P8_BASE64: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
         run: bundle exec fastlane beta
+
+      - name: Scrub the gym log
+        # The repository is public, so its artifacts are. The log's xcodebuild
+        # commands name the App Store Connect key, and masking covers only the
+        # run's console. Only the scrubbed copy is uploaded.
+        if: failure()
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          LC_ALL: C
+        run: |
+          mkdir -p "$RUNNER_TEMP/gym-log"
+          shopt -s nullglob
+          for log in ~/Library/Logs/gym/*.log; do
+            sed -e "s/${ASC_KEY_ID:-<no key id>}/***/g" -e "s/${ASC_ISSUER_ID:-<no issuer id>}/***/g" \
+              "$log" > "$RUNNER_TEMP/gym-log/$(basename "$log")"
+          done
+
+      - name: Upload the gym log
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-gym-log
+          path: ${{ runner.temp }}/gym-log/
+          if-no-files-found: ignore
 
       - name: Clean up signing material
         if: always()

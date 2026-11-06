@@ -11,7 +11,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/replay"
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/setup"
 )
 
@@ -642,7 +644,7 @@ func TestBeatFourNamesTheAct(t *testing.T) {
 	if m.pair.beat != 4 || m.pair.line != "iPad answered api" {
 		t.Fatalf("beat %d, line %q", m.pair.beat, m.pair.line)
 	}
-	m = m.pairActed(action{rec: "pick:%2"})
+	m = m.pairActed(action{rec: "keys:%2"})
 	if m.pair.line != "iPad answered api" {
 		t.Fatalf("a second act changed the line: %q", m.pair.line)
 	}
@@ -658,7 +660,7 @@ func TestBeatFourNamesTheAct(t *testing.T) {
 
 func TestBeatFourVerbs(t *testing.T) {
 	for rec, want := range map[string]string{
-		"pick:%2": "iPad picked in api", "message:%2": "iPad wrote to api",
+		"keys:%2": "iPad picked in api", "message:%2": "iPad wrote to api",
 		"compact:%2": "iPad compacted api", "kill:%2": "iPad acted in api",
 	} {
 		_, m, tty := inPage(t)
@@ -717,35 +719,37 @@ func TestEscFoldsAtBeatThree(t *testing.T) {
 	}
 }
 
-// TestBeatFourOnAPeekAnswer: the peek sends its answer without confirm. The
-// phone answers while the page waits at beat 3.
-func TestBeatFourOnAPeekAnswer(t *testing.T) {
+// apiAsks is queueState with app-review named api and on the question tool.
+func apiAsks() proto.State {
 	st := queueState()
 	for i := range st.Sessions {
 		if st.Sessions[i].Pane == "%2" {
 			st.Sessions[i].Name = "api"
+			st.Sessions[i].Ask = &said.Ask{ID: "toolu_1", Questions: []said.Question{
+				{Question: "Which next?", Options: []said.Option{{Label: "Start task 11"}, {Label: "Fix the flake"}}},
+			}}
 		}
 	}
-	m, f := loadedWith(t, 100, st)
+	return st
+}
+
+// TestBeatFourOnAMenuAnswer: the phone answers an agent's menu in the chat,
+// with a key and no confirm, while the page waits at beat 3.
+func TestBeatFourOnAMenuAnswer(t *testing.T) {
+	m, f := loadedWith(t, 100, apiAsks())
 	m.opt.LastClient = func() (string, time.Time, error) { return phoneTTY, time.Time{}, nil }
 	m.opt.Pair = &PairHost{DeviceIn: func(id string) (time.Time, string, bool) { return time.Now(), phoneTTY, id == "iPad-id" }}
-	next, _ := key(m, "down") // app-review finished its turn
-	next, _ = key(next, "a")
-	next = typeText(next, "ok")
-	m = next.(Model)
+	next, _ := key(m, "down") // api asks
+	next, _ = key(next, "enter")
+	m = pastQuiet(next.(Model))
 	m.pair = &pairPage{beat: 3, device: PairDevice{Name: "iPad", ID: "iPad-id"}}
-	// The page takes keys, so the peek's Enter is its own call.
-	v, p, _ := m.peekNow()
-	if p.pane != "%2" {
-		t.Fatalf("peek on %q", p.pane)
-	}
-	next, cmd := m.sendPeek(v.s, "answer:%2", "ok")
+	next, cmd := key(m, "enter")
 	drain(cmd)
 	got := next.(Model)
-	if got.pair == nil || got.pair.beat != 4 || got.pair.line != "iPad answered api" {
+	if got.pair == nil || got.pair.beat != 4 || got.pair.line != "iPad picked in api" {
 		t.Fatalf("page %+v", got.pair)
 	}
-	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "answer:%2" {
+	if acts := keyActs(f); len(acts) != 1 || acts[0].RecID != "keys:%2" {
 		t.Fatalf("acts %+v", acts)
 	}
 
@@ -764,13 +768,7 @@ func TestBeatFourOnAPeekAnswer(t *testing.T) {
 // key line. The device's keys work the console, its answer is beat 4, and
 // esc dismisses the strip when the console has nothing to cancel.
 func TestTheStripHandsTheConsoleBack(t *testing.T) {
-	st := queueState()
-	for i := range st.Sessions {
-		if st.Sessions[i].Pane == "%2" {
-			st.Sessions[i].Name = "api"
-		}
-	}
-	m, f := loadedWith(t, 100, st)
+	m, f := loadedWith(t, 100, apiAsks())
 	now := time.Date(2026, 10, 21, 14, 32, 0, 0, time.UTC)
 	m.opt.Now = func() time.Time { return now }
 	m.opt.LastClient = func() (string, time.Time, error) { return phoneTTY, time.Time{}, nil }
@@ -782,25 +780,27 @@ func TestTheStripHandsTheConsoleBack(t *testing.T) {
 
 	next, _ := key(m, "down")
 	next, _ = key(next, "a")
-	if next.(Model).peek == nil {
+	if !next.(Model).chatKeys {
 		t.Fatal("a key did not reach the console at beat 3")
 	}
-	next, _ = key(next, "esc") // closes the peek, not the strip
-	if got := next.(Model); got.peek != nil || got.pair == nil {
-		t.Fatalf("esc: peek %v, page %v", got.peek, got.pair)
+	now = now.Add(time.Second)    // the menu's quiet passes
+	next, cmd := key(next, "esc") // goes to the agent, and the strip stays
+	drain(cmd)
+	if got := next.(Model); got.pair == nil || len(keyActs(f)) != 1 || keyActs(f)[0].Text != "Escape" {
+		t.Fatalf("esc in the chat: page %v, acts %+v", got.pair, f.acts())
 	}
-	next, _ = key(next, "a")
-	next = typeText(next, "ok")
-	next, cmd := key(next, "enter")
+	next = answered(t, next.(Model), "")
+	now = now.Add(time.Second) // the menu's quiet passes
+	next, cmd = key(next, "enter")
 	drain(cmd)
 	got := next.(Model)
-	if got.pair == nil || got.pair.beat != 4 || got.pair.line != "iPad answered api" {
+	if got.pair == nil || got.pair.beat != 4 || got.pair.line != "iPad picked in api" {
 		t.Fatalf("page %+v", got.pair)
 	}
-	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "answer:%2" {
-		t.Fatalf("acts %+v", acts)
+	if acts := keyActs(f); len(acts) != 2 || acts[1].RecID != "keys:%2" || acts[1].Text != "Enter" {
+		t.Fatalf("acts %+v", f.acts())
 	}
-	if out := ansi.Strip(got.render()); !strings.Contains(out, "iPad answered api") {
+	if out := ansi.Strip(got.render()); !strings.Contains(out, "iPad picked in api") {
 		t.Fatalf("the strip does not say the act:\n%s", out)
 	}
 	now = now.Add(1600 * time.Millisecond)

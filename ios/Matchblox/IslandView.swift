@@ -65,7 +65,7 @@ struct IslandView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(24)
         .onAppear {
-            hosts = store.all()
+            hosts = store.real()
             prefs = IslandSettings.prefs
         }
         .task { await checkBlocked() }

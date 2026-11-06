@@ -102,6 +102,36 @@ terminal.`
   device. It does not remove the key on the host. Run
   `matchblox devices rm <name>` on the host for that.
 
+### Try a demo
+
+With no host, the pairing screen shows `Try a demo` below the scan. With two or
+more hosts, the Hosts screen shows it beside `Island`. The scan view shows a
+code of its own and scans it by itself. On a fresh install, the pairing screen
+asks for the camera first, and `Try a demo` works whether you allow or deny it.
+The demo's own scan turns on no camera and asks for no permission. Then the app
+saves a host called `demo`.
+
+The demo runs the real console on a made-up machine inside the app. It needs no
+network and starts fresh each time it opens. Tap the session that waits at the
+top, then tap an option in its question. When that agent finishes, a sheet says
+`Your agents wait the same way.` It shows the line
+`curl -fsSL https://matchblox.sh | sh` with `Copy`, and these buttons:
+
+- `Send to my computer` opens the share sheet with the line and the link to get
+  started.
+- `Pair a host` goes to the pairing screen.
+- `Keep looking` closes the sheet.
+
+A tap on the demo does not raise the keyboard. The key belt's keyboard button
+does. A layout you pick in the demo is not saved. If you quit the console, the
+ended screen offers `Open again`, `Pair a host`, the line and `Send to my
+computer`.
+
+The phone cannot go into tmux, connect to another host, pair a device, update,
+merge, make a worktree, clone, or send `^C` inside a chat. The demo answers
+`This is a demo. Install matchblox to do that.` Pairing a real host removes
+`demo`.
+
 ### Remove a device
 
 To remove a device, press `x` on it in `DEVICES` on the Machine tab, and
@@ -135,8 +165,8 @@ Nothing connects to a host from the background.
   more, or resets, at most each 5 minutes. A wait breaks through the Usage
   face for 60 s.
 - **A tap opens the session:** the app asks for Face ID, connects and opens
-  the console on that session: on its answer peek if it waits, else on its
-  pane. If the session has ended, the console says `That session ended.`
+  the console on that session: on its chat. If the session has ended, the
+  console says `That session ended.`
 - **The setting:** the `Island` entry in the app's console, next to `Hosts`.
   `Follow` is the one host that has the island (the host opened last). `Show`
   is `Sessions`, `Usage` or `Auto (Usage while the stoker runs)`. `Buzz` is
@@ -211,14 +241,117 @@ or `~/go/bin/matchblox` after `go install`.
 Outside tmux, `matchblox` attaches to the tmux session `matchblox`, or
 starts it. A second phone or laptop attaches to the same session.
 
-## Go to an agent and back
+## Read and steer an agent
 
-1. Tap an agent in Sessions. The key line says `tap again: <command>`.
-2. Tap it again. You are in the agent's pane.
-3. To come back in the matchblox app, swipe in from the left edge, tap
-   `◂ matchblox` at the left of the tmux status line, or press ⌘M on a
-   hardware keyboard. All three work whatever your tmux prefix is, and
-   none needs the tmux mouse.
+The chat is the agent's live screen, inside the console. You do not leave
+the console to answer an agent. See [the chat](console.md#the-chat).
+
+1. Tap an agent in Sessions. On a one-column phone, its chat fills the
+   screen. The title row reads `‹ Sessions · <name> · <state>`. Held wide
+   with room for an agent's menu, the chat is the pane beside the
+   list: tap the agent again, or tap the chat, to give it the keys. With
+   the keyboard up on its side the phone has no such room: the chat fills
+   the screen instead.
+2. Type. Every key goes to the agent. When the agent asks, its own menu
+   shows. Tap an option to pick it, or use the belt's `↑` `↓` and `Enter`.
+   The row you tapped lights up until the agent draws again.
+3. To go back to Sessions, tap `‹ Sessions` or `◂` on the belt. You can
+   also swipe in from the left edge, or press ⌘M or ctrl+M on a hardware
+   keyboard. `ctrl+a m` (your tmux prefix, then `m`) does it too.
+
+### The key belt
+
+The app's key bar is a belt. It is one row of keys across the full width
+of the screen. It turns without end: after the last key comes the first
+key again. A key that reaches a side of the phone folds round it and goes
+behind the phone. Drag the belt with one finger. It slows after you lift
+and stops with a key at the left side.
+
+- **Home.** Each layout opens at home. At home, `◂` is at the left, and
+  `↑` `↓` `⏎` are at the right (each is two cells wide).
+- **A key sends when you lift.** A touch that moves 8 pt or more is a
+  drag. A drag never presses a key.
+- **The feel.** The phone gives one tick each time the belt passes halfway between two stops. Home gives a firmer click.
+- **Size.** Each key is at least 44 pt tall. A one-cell key is at
+  least 44 pt wide. The terminal turns off autocorrect, suggestions, smart
+  quotes, smart dashes and auto capitalisation. So they never change a key
+  you send.
+
+- `◂` goes back. In the chat it goes to Sessions. In a tmux pane it goes
+  to the console.
+- `^C` interrupts. `^C` twice stops Claude Code. A second `^C` within 1 s
+  is held, and the key line says so.
+- `⇞` and `⇟` send `PgUp` and `PgDn` (`ESC [ 5 ~` and `ESC [ 6 ~`). In the
+  chat of the console they move the history one screen up and down. In a
+  pane you jumped to on a host, the jump table of the host starts tmux copy
+  mode one page up, and moves it one page. In a local jump they go to the
+  agent.
+
+The row above the belt is the handle row. It shows the name of the layout
+(on Commands, the mark of the agent too), the grip, and a ghost keyboard
+icon. A tap on the keyboard icon shows or hides the system keyboard. While
+the keyboard is on screen, the icon is bright. The belt and the handle row
+stay above the keyboard, or at the foot of the screen while the keyboard is
+down. The keyboard icon never opens the tray.
+
+#### Layouts and the matchbox tray
+
+Tap the grip or the name, or pull up on the handle row, to open the
+matchbox tray. Pull down to close it. Four matches lie in the tray, one for
+each layout:
+
+| Layout | Keys |
+|---|---|
+| Steer (the default) | `◂ ↑ ↓ ⏎ Esc ^C ⇞ ⇟` |
+| Commands | `◂ ↑ ↓ ⏎`, then the commands of the agent of the chat |
+| tmux | `◂ ↑ ↓ ⏎ ⇞ ⇟ Tab ⇧Tab ^B` |
+| Mine | The keys you chose |
+
+The match of the layout in use burns. Tap another match: it strikes, and
+the match you leave goes out. The tray closes 0.9 s after your tap. The
+next time it opens, every match is new, and the one in use burns. The
+screen does not change size while the tray is open. The app keeps the
+layout you chose, and opens on it the next time.
+
+#### Command keys
+
+The Commands layout follows the agent of the chat. Each command key has the
+mark of its agent. A command key runs only from the chat. In a pane you
+jumped to, or when the console has no chat open, the command keys are dim,
+and a tap shows `commands run from the chat`. `compact` and `clear` run only in Claude Code. The key is refused, with a message, until the agent rests (and while it waits for you). The other commands type their text and `Enter`. They go only while the agent rests, with no question, no permission prompt and no text you typed on its prompt. Otherwise the key is refused, with a message. A command of another agent sends nothing. See
+[the keys of the chat](keys.md) and [the chat](console.md#the-chat). The console says `COMMANDS · needs tmux 3.3` once, when the chat opens, with tmux older than 3.3 on the host.
+
+#### Mine
+
+Tap `EDIT MINE` on the tray floor. The sheet lists all keys in groups. Tap
+a key to add it to Mine, or to take it off. Drag a key to move it. `◂`
+always stays: the sheet says `◂ always stays: it is the way back`. Mine is
+one set for the device, for all hosts. It stays when you quit the app.
+
+The Ctrl group starts with `Ctrl`. Add it to Mine to type any ctrl key. Tap
+`Ctrl` and it stays lit. The next letter you type goes with ctrl, and `Ctrl`
+goes dark. Tap it again to let it go. The chat sends ctrl with `b d e f g k l
+n p r t u v w x y`, and with `a` and `c`. It sends no `ctrl+z`, which would
+stop the agent, and no `ctrl+s` or `ctrl+q`, which stop and start the terminal.
+
+A vertical swipe scrolls the console and a tmux pane. The lines move with
+your finger: one line for each line of travel. In a tmux pane each wheel
+step scrolls 5 lines, so the app sends one step for each 5 lines of travel.
+Swipe down for older lines, and up for newer lines. A flick carries on for
+at most 0.5 s, and scrolls the same lines in the console and in a pane.
+To select text, touch and hold, then tap Select and drag. Where the
+program does not read the mouse, the terminal scrolls its own history.
+
+## Go to an agent's pane and back
+
+`Ctrl+O` in the chat goes to the agent's pane in tmux. A phone has no
+`Ctrl+O`: a tap on a row of Panes does it. Tap the row, and the
+key line says `tap again: <command>`. Tap it again. You are in the pane.
+
+To come back in the matchblox app, tap `◂` on the belt, swipe in from
+the left edge, tap `◂ matchblox` at the left of the tmux status line, or
+press ⌘M or ctrl+M on a hardware keyboard. All of them work whatever your tmux prefix
+is, and none needs the tmux mouse.
 
 In another SSH app, tap `◂ matchblox`, or press `prefix m` (the tmux prefix,
 then m). There the tap needs the tmux mouse on: press `m` in the preview of
@@ -227,42 +360,32 @@ tmux config. Without it, use `prefix m`.
 
 The console then selects the next agent that waits.
 
-## Answer without leaving the console
-
-Tap an agent, then tap it again: on a one-column phone the peek rises from
-the bottom, over the dimmed list, with what the agent said last; held
-upright with a small font, the drawer on the right becomes the
-conversation and the list stays beside it. Tap an option, or type a line
-and press `Enter`; it goes to that agent's pane at once. An agent that
-works gets it as a message, which Claude Code queues. After an answer the
-peek moves to the next agent that waits. A swipe left or right, or a tap
-on `← prev` or `next →`, moves it along the list; `Esc` or a tap outside
-the peek closes it. See [the answer
-peek](console.md#the-answer-peek).
-
 ## Switch an agent from the phone
 
 The selected agent's keys are under it: on a one-column phone at the foot
 of its opened row, held upright with a small font at the foot of the
 drawer. Tap `A switch` to open Switch agent. Tap the agent you want, then
-`Enter`; the plan rises in a box above the key line, and a typed `y` runs it (a tap is never consent). The new agent
-starts in the same pane with the same name, on the account you last
+`Enter`; the plan rises in a box above the key line. A typed `y` runs it (a
+tap is never consent). The new agent starts in the same pane with the same name, on the account you last
 started that agent on, and the console jumps to it.
 See [`A` in Keys](keys.md).
 
 ## The phone layout
 
-A phone held upright is read by its shape, so the keyboard coming and
-going does not change the layout. With a small font that makes it 90
-columns or more, the list sits on the left and the selected agent's detail
-in a drawer on the right, and the dock shows two panels side by side. On its side it
-goes by its width. Under 60 columns, the console has one column. Each agent is one line,
-grouped by what it needs from you: who waits first. The selected one opens
+A phone is read by its shape at the tallest height seen at its width, so
+the keyboard coming and going never changes the layout. In the full view,
+with a small font that makes it 90 columns or more upright, Sessions
+splits: the list takes 40% of the width (38 to 78 columns), the selected
+agent's chat the rest, and usage and the machine sit under the list. On
+its side it goes by its width. Sessions splits only when the chat gets 44
+columns and the body has 16 rows for an agent's menu; short of
+that, and under 60 columns, the console has one column. Each agent is one line, grouped by what it needs from you: who waits first. The selected one opens
 in place: what it said last, its ships, its plan and its keys. Only
 the selected setup step shows its detail.
 
 Under the list, when there is room, the dock shows usage, the machine or
-the stoker: `u`, or a tap on the word at its right, goes to the next. While
+the stoker (where Sessions splits they sit in the left column instead). `u`, or a
+tap on the word at its right, goes to the next. While
 the stoker runs, its panel shows by itself until you switch; a tap on it
 opens the Stoker tab. With the keyboard up the dock
 folds away; the Machine tab has it.
@@ -270,11 +393,12 @@ folds away; the Machine tab has it.
 The key line is at the bottom: an SSH app that shrinks the terminal for
 its keyboard keeps it above the keys. A tap on a key presses it.
 
-Turn the phone on its side, at 60 columns or more, and the list and the
-detail of the selected agent sit side by side.
+Turn the phone on its side, at 83 columns or more with room for the
+question, and the list and the chat of the selected agent sit side by
+side.
 
 Every key is on the key bar of an SSH app: letters, digits, arrows, `Enter`
-and `Esc`. See [Keys](keys.md).
+and `Esc`. The matchblox app adds its key belt. See [Keys](keys.md).
 
 ## List only
 
@@ -282,8 +406,10 @@ On a tall screen, such as a phone held upright, the console starts in list
 only. The detail pane
 and the dock fold, and the list takes the screen. The key line says
 `full view v`, and `list only` stays at its right edge. The selected row
-opens in place under itself. `a` opens the answer box over the list.
-The header still says who waits.
+opens in place under itself. `Enter` or `a` opens its chat, full-screen.
+The header still says who waits. The rows the list leaves free show
+usage, then the machine, each whole at its fewest lines; the list is never
+cut for them.
 
 Press `v`, or tap the word `full view v`, to show the detail pane and the
 dock. Press `v` again, or tap `list only v`, to fold them. The phone and

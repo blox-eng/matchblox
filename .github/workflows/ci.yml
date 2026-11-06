@@ -74,7 +74,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     # macOS runners vary: the race tests took 6m44s and 9m31s on the same
     # code, so macOS gets room that a slow runner does not use up.
-    timeout-minutes: ${{ matrix.os == 'macos-latest' && 20 || 10 }}
+    timeout-minutes: ${{ matrix.os == 'macos-latest' && 30 || 10 }}
     strategy:
       fail-fast: false
       matrix:
@@ -89,9 +89,10 @@ jobs:
           cache: true
       # The jump tests drive two real tmux servers and a real sshd; without
       # them they skip, and the guard of #214 would pass unseen.
-      - name: tmux and sshd for the jump tests
+      # strace proves the demo's walk makes no socket and runs no command.
+      - name: tmux and sshd for the jump tests, strace for the demo's
         if: runner.os == 'Linux'
-        run: sudo apt-get update -q && sudo apt-get install -y -q tmux openssh-server
+        run: sudo apt-get update -q && sudo apt-get install -y -q tmux openssh-server strace
       # Two sentinel tmux servers stand in for the builder's: one that $TMUX
       # names, as when the tests run inside tmux, and the default server.
       # The suite must leave both alive (#215).
@@ -105,7 +106,22 @@ jobs:
           CGO_ENABLED: '1'
           TMUX: ${{ runner.os == 'Linux' && format('{0}/sentinel,1,0', runner.temp) || '' }}
           TMUX_PANE: ${{ runner.os == 'Linux' && '%0' || '' }}
-        run: go test -race -cover ./...
+        # go test stops a package at 10 minutes by default; on macOS the app
+        # package's race run reached 9m55s, so it gets the job's own room.
+        run: go test -race -cover -timeout ${{ matrix.os == 'macos-latest' && '18m' || '10m' }} $(go list ./... | grep -v '/internal/demo$')
+      # The demo's walks press every key of the console through a real service.
+      # Under -race they took 8 minutes on Linux, against a 10 minute job, so
+      # the race run is its own job (demo-race) and this run is without it.
+      # The no-route-out test needs an unprivileged user namespace, which
+      # Ubuntu's AppArmor restricts by default.
+      - name: Allow user namespaces for the demo's no-route test
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: Demo tests
+        env:
+          TMUX: ${{ runner.os == 'Linux' && format('{0}/sentinel,1,0', runner.temp) || '' }}
+          TMUX_PANE: ${{ runner.os == 'Linux' && '%0' || '' }}
+        run: go test -v -cover -timeout 10m ./internal/demo
       - name: The sentinel tmux servers are alive
         if: always() && runner.os == 'Linux'
         run: |
@@ -118,6 +134,30 @@ jobs:
           done
       - name: Fixture smoke run
         run: go run ./cmd/matchblox status --fixtures testdata/machine --text
+
+  # The demo's console and service run over a pipe with draw loops and timers,
+  # which is where a data race hides. Linux alone: on macOS the race run starves
+  # the draw waits, and the code is the same.
+  demo-race:
+    name: Demo (race)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: strace for the demo's trace test
+        run: sudo apt-get update -q && sudo apt-get install -y -q strace
+      - name: Allow user namespaces for the demo's no-route test
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: Demo tests (race)
+        env:
+          CGO_ENABLED: '1'
+        run: go test -race -timeout 20m ./internal/demo
 
   vuln:
     name: Vulnerabilities

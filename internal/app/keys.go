@@ -1,11 +1,16 @@
 package app
 
 import (
+	"regexp"
 	"slices"
 	"strconv"
+	"strings"
+	"unicode"
 
 	bkey "charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/blox-eng/matchblox/internal/proto"
 )
 
 // The console's keys, as data: one keymap per layer, one bkey.Binding per
@@ -28,7 +33,7 @@ type keymaps struct {
 	global   globalKeys
 	main     mainKeys
 	form     formKeys
-	peek     peekKeys
+	chat     chatKeymap
 	sheet    sheetKeys
 	search   searchKeys
 	pair     pairKeys
@@ -47,9 +52,8 @@ type shellKeymaps struct {
 // the layer is on top, so its key wins. A new overlap fails
 // TestKeymapsHaveNoCollisions until it is added here.
 var shadowsMain = map[string]map[string]bool{
-	"form":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true},
-	"peek":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true, " ": true, "1": true, "2": true, "3": true, "4": true, "5": true, "6": true, "7": true},
-	"sheet":    {"esc": true, "enter": true, "tab": true, "space": true},
+	"form":     {"esc": true, "enter": true, "tab": true, "shift+tab": true, "up": true, "down": true, "space": true, "right": true},
+	"sheet":    {"esc": true, "enter": true, "tab": true, "space": true, "right": true},
 	"search":   {"esc": true, "enter": true},
 	"pair":     {"c": true, "esc": true, "enter": true},
 	"takeOver": {"y": true, "n": true},
@@ -84,7 +88,6 @@ func defaultKeys() keymaps {
 			New:       bind(ks("N", "shift+n"), "N", "new"),
 			Switch:    bind(ks("A", "shift+a"), "A", "switch"),
 			Grant:     bind(ks("y"), "y", "give the go"),
-			Peek:      bind(ks("a"), "a", "look"),
 			Dismiss:   bind(ks("d"), "d", "dismiss"),
 			Fold:      bind(ks("h"), "h", "fold recs"),
 			Ships:     bind(ks("p"), "p", "ships"),
@@ -94,6 +97,8 @@ func defaultKeys() keymaps {
 			Night:     bind(ks("n"), "n", "stop night"),
 			Order:     bind(ks("o"), "o", "new order"),
 			Rename:    bind(ks("r"), "r", "rename"),
+			Chat:      bind(ks("a", "right"), "a", "chat"),
+			Jump:      bind(ks("ctrl+o"), "ctrl+o", "into tmux"),
 		},
 		form: formKeys{
 			Close: bind(ks("esc"), "esc", ""),
@@ -106,17 +111,10 @@ func defaultKeys() keymaps {
 			Right: bind(ks("right", "space"), "←→", "pick"),
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 		},
-		peek: peekKeys{
-			Close: bind(ks("esc"), "esc", ""),
-			Jump:  bind(ks("ctrl+o"), "^o", "jump"),
-			Next:  bind(ks("right", "tab"), "→", "next"),
-			Prev:  bind(ks("left", "shift+tab"), "←", "prev"),
-			Send:  bind(ks("enter"), "⏎", "send"),
-			Up:    bind(ks("up"), "↑↓", "move"),
-			Down:  bind(ks("down"), "↑↓", "move"),
-			Erase: bind(ks("backspace"), "⌫", "erase"),
-			Pick:  bind(digits1to9, "1-9", "pick"),
-			Tick:  bind(ks("space", " "), "␣", "tick"),
+		chat: chatKeymap{
+			Back:    bind(ks("ctrl+a"), "ctrl+a m", "back"),
+			BackEnd: bind(ks("m"), "m", "back"),
+			Stop:    bind(ks("ctrl+c"), "^C", "stops the agent"),
 		},
 		sheet: sheetKeys{
 			Send:  bind(ks("enter"), "⏎", "send"),
@@ -163,6 +161,22 @@ func defaultKeys() keymaps {
 	}
 }
 
+// KeyNames is each key of the console's keymaps, once: what a walk of every key
+// presses.
+func KeyNames() []string {
+	k := defaultKeys()
+	var names []string
+	for _, layer := range [][]bkey.Binding{k.global.bindings(), k.main.bindings(), k.form.bindings(), k.chat.bindings(),
+		k.sheet.bindings(), k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(),
+		k.scan.bindings(), k.ask.bindings()} {
+		for _, b := range layer {
+			names = append(names, b.Keys()...)
+		}
+	}
+	slices.Sort(names)
+	return slices.Compact(names)
+}
+
 func defaultShellKeys() shellKeymaps {
 	return shellKeymaps{
 		shell: shellKeys{
@@ -194,15 +208,15 @@ func (k globalKeys) bindings() []bkey.Binding { return []bkey.Binding{k.Quit} }
 type mainKeys struct {
 	Stoker, Quit, NextTab, PrevTab, Tabs, Search, Back, Sort, SortBack bkey.Binding
 	Group, Park, Mark, Exited, MarkSafe, QuitAgent, Up, Down, Open     bkey.Binding
-	Second, New, Switch, Grant, Peek, Dismiss, Fold, Ships, Dock       bkey.Binding
-	Stoke, Night, Order, Rename, ListOnly                              bkey.Binding
+	Second, New, Switch, Grant, Dismiss, Fold, Ships, Dock             bkey.Binding
+	Stoke, Night, Order, Rename, Chat, Jump, ListOnly                  bkey.Binding
 }
 
 func (k mainKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Stoker, k.Quit, k.NextTab, k.PrevTab, k.Tabs, k.Search, k.Back, k.Sort, k.SortBack,
 		k.Group, k.Park, k.Mark, k.Exited, k.MarkSafe, k.QuitAgent, k.Up, k.Down, k.Open,
-		k.Second, k.New, k.Switch, k.Grant, k.Peek, k.Dismiss, k.Fold, k.Ships, k.Dock,
-		k.Stoke, k.Night, k.Order, k.Rename, k.ListOnly}
+		k.Second, k.New, k.Switch, k.Grant, k.Dismiss, k.Fold, k.Ships, k.Dock,
+		k.Stoke, k.Night, k.Order, k.Rename, k.Chat, k.Jump, k.ListOnly}
 }
 
 // formKeys are the new-session, switch and rename form. Down and Up go to
@@ -214,11 +228,14 @@ func (k formKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Close, k.Enter, k.Next, k.Prev, k.Down, k.Up, k.Left, k.Right, k.Erase}
 }
 
-// peekKeys are the peek box. Every other key is text for its typing line.
-type peekKeys struct{ Close, Jump, Next, Prev, Send, Up, Down, Erase, Pick, Tick bkey.Binding }
+// chatKeymap are the chat's own keys. Every other key goes to the agent;
+// Back's ctrl+a does too, and m within a second after it gives the keys back
+// (chatBackWait); Stop is the agent's ^C, which a second one within a second
+// waits for.
+type chatKeymap struct{ Back, BackEnd, Stop bkey.Binding }
 
-func (k peekKeys) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Close, k.Jump, k.Next, k.Prev, k.Send, k.Up, k.Down, k.Erase, k.Pick, k.Tick}
+func (k chatKeymap) bindings() []bkey.Binding {
+	return []bkey.Binding{k.Back, k.BackEnd, k.Stop}
 }
 
 // sheetKeys are the stoker's order sheet.
@@ -276,6 +293,56 @@ func (k confirmKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Yes, k.Enter, k.Also, k.ScrollDown, k.ScrollUp}
 }
 
+// keyNames are the keys the chat sends by name, with every ctrl key of
+// proto.CtrlKeys: the phone's belt has a Ctrl key for them (#300).
+var keyNames = func() map[string]string {
+	names := map[string]string{
+		"up": "Up", "down": "Down", "left": "Left", "right": "Right", "enter": "Enter", "tab": "Tab",
+		"shift+tab": "BTab", "esc": "Escape", "ctrl+c": "C-c", "ctrl+a": "C-a", "backspace": "BSpace", "pgup": "PPage", "pgdown": "NPage", "space": proto.LitPrefix + " ",
+	}
+	for _, l := range proto.CtrlKeys {
+		names["ctrl+"+string(l)] = "C-" + string(l)
+	}
+	return names
+}()
+
+// The names the chat sends for Enter, ^C and Backspace.
+var (
+	enterName     = keyNames["enter"]
+	ctrlCName     = keyNames["ctrl+c"]
+	backspaceName = keyNames["backspace"]
+)
+
+// tmuxKeyRE is a tmux key name as tmux prints one: modifiers, then one
+// character or a word (Space, F12).
+var tmuxKeyRE = regexp.MustCompile(`^((?:[CMS]-)*)([!-~]|[A-Za-z][A-Za-z0-9]+)$`)
+
+// prefixName is a tmux prefix as the key line writes keys: C-a is ctrl+a. A
+// prefix of None, or none that tmux would print, has no name.
+func prefixName(prefix string) (string, bool) {
+	match := tmuxKeyRE.FindStringSubmatch(prefix)
+	if match == nil || prefix == "None" {
+		return "", false
+	}
+	mods := strings.NewReplacer("C-", "ctrl+", "M-", "alt+", "S-", "shift+").Replace(match[1])
+	if len(match[2]) > 1 {
+		return mods + strings.ToLower(match[2]), true
+	}
+	return mods + match[2], true
+}
+
+// keyName is k as the service takes it: a key name, or proto.LitPrefix and the
+// text it types. A key with no name and no text is not sent.
+func keyName(k tea.KeyPressMsg) (text string, ok bool) {
+	if name, ok := keyNames[k.String()]; ok {
+		return name, true
+	}
+	if k.Mod&^tea.ModShift != 0 || k.Text == "" || strings.IndexFunc(k.Text, unicode.IsControl) >= 0 {
+		return "", false
+	}
+	return proto.LitPrefix + k.Text, true
+}
+
 // keyPress is the key a tap presses.
 func keyPress(k string) tea.KeyPressMsg {
 	switch k {
@@ -301,6 +368,10 @@ func keyPress(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyBackspace}
 	case "shift+tab":
 		return tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
+	case "pgup":
+		return tea.KeyPressMsg{Code: tea.KeyPgUp}
+	case "pgdown":
+		return tea.KeyPressMsg{Code: tea.KeyPgDown}
 	}
 	if r := []rune(k); len(r) == 6 && k[:5] == "ctrl+" {
 		return tea.KeyPressMsg{Code: r[5], Mod: tea.ModCtrl}

@@ -49,11 +49,14 @@ xcodebuild -scheme Matchblox -destination 'id=<device id>' \
 It needs `rsvg-convert` (`brew install librsvg`).
 
 `make test` runs the tests of the MatchbloxKit package.
+`make uitest DESTINATION=id=<simulator udid>` runs the UI tests. The `ios-demo` workflow runs them on each pull request and each push to main.
 
 ## CI
 
 The workflow `.github/workflows/ios.yml` runs on a macOS runner.
-It runs `swift test` on MatchbloxKit. Then it runs `make build`.
+It runs `swift test` on MatchbloxKit. Then it runs `make build` and `make release`.
+`make release` archives the app in Release as TestFlight does, without signing.
+If it fails, the run keeps the compiler's full output as an artifact.
 It starts when you change `ios/`, `testdata/pair/` or the workflow.
 
 ## Publish to TestFlight
@@ -126,6 +129,40 @@ device before a release. `ws-1` is the host.
 16. Select a session in tmux and tap `A switch` under it. Switch agent
     opens; tap another agent, then `Enter`, then type `y`. The console
     jumps to the pane, where the new agent starts.
+17. On a host with a question waiting, open the chat of that session. Turn
+    the phone to landscape, then back. The chat reopens at the question.
+18. On a real host, tap a row of the session list once. The row opens, the
+    tap clicks it once and the next screen is not clicked through. The
+    keyboard rises on that tap. Tap two rows in quick succession: each row
+    gets one click.
+
+### The demo
+
+Do these on an iPhone and on an iPad, with a build that has no host paired
+and again with two hosts.
+
+1. With no host, the pairing screen shows `Try a demo`. With two hosts, the
+   Hosts screen shows it beside `Island`.
+2. On a fresh install, the pairing screen asks for the camera first. Allow it
+   once and deny it once (reinstall between): `Try a demo` works both ways.
+   Tap it. The scan view finds its own code in under three seconds. It turns on
+   no camera and asks for no permission. The app opens the console on the
+   host `demo`.
+3. Tap the session at the top, flint-auth. Its question fills the chat. Tap an
+   option. The agent works for a few seconds, then the sheet rises with
+   `Your agents wait the same way.`, the line, `Copy`, `Send to my computer`,
+   `Pair a host` and `Keep looking`. `Copy` puts the line on the pasteboard.
+   `Send to my computer` opens the share sheet.
+4. On an iPhone, turn the device to landscape at the question. Under 16 rows,
+   the key line says "too short to show flint-auth's question". Turn the device
+   back, and the chat reopens at the question.
+5. Tap `Keep looking`, then quit the console with `q`. The ended screen offers
+   `Open again`, `Pair a host`, the line, `Copy` and `Send to my computer`.
+6. Kill the app in the middle of the demo and open it again. The demo starts
+   fresh, and the first launch left nothing of the old one.
+7. Open a host you paired. Its console, the Island and the host list are the
+   same as before the demo.
+8. Pair a real host. The host `demo` is gone.
 
 ### The buzz and the island
 
@@ -133,31 +170,70 @@ Use a private test host with its own `matchblox serve` (the door
 `Keep matchblox running` in `matchblox setup`). `ws-1` is the host; `work-1`
 is a second paired host.
 
-17. Open the console of `ws-1` once, so the app registers. Allow
+19. Open the console of `ws-1` once, so the app registers. Allow
     notifications when the app asks. `matchblox devices` on `ws-1` shows
     `push` next to the device.
-18. The buzz with the app closed: quit the app. Make a session on `ws-1`
+20. The buzz with the app closed: quit the app. Make a session on `ws-1`
     wait. The device shows `ws-1 · <session> waits: "<question>"` within
     30 s, with no app open.
-19. Push to start: with no island on the device, start a session on
+21. Push to start: with no island on the device, start a session on
     `ws-1`. The island starts with the app closed.
-20. Both faces: on the Island screen (Hosts, then Island), pick `Sessions`.
+22. Both faces: on the Island screen (Hosts, then Island), pick `Sessions`.
     The island shows the Sessions face. Pick `Usage`: it shows the windows
     and the forecast. Pick `Auto (Usage while the stoker runs)`, then turn
     the stoker on and off on the host: the face follows.
-21. Show changes the face at once, with no Face ID and no connect.
-22. A second host buzzes and does not take the island: keep `Follow` on
+23. Show changes the face at once, with no Face ID and no connect.
+24. A second host buzzes and does not take the island: keep `Follow` on
     `ws-1`, make a session on `work-1` wait. The device buzzes for `work-1`;
     the island still shows `ws-1`.
-23. Change `Follow` to `work-1`. One Face ID; then the island of `ws-1` ends
+25. Change `Follow` to `work-1`. One Face ID; then the island of `ws-1` ends
     and `work-1` can start one. Turn off the network of `ws-1` first, and
     the screen says `ws-1 is not reachable: it changes at the next connect`.
-24. Turn `Buzz` off for `ws-1`. One Face ID. A wait on `ws-1` no longer
+26. Turn `Buzz` off for `ws-1`. One Face ID. A wait on `ws-1` no longer
     buzzes; `work-1` still does.
-25. A tap opens the session: tap the island, and tap a buzz. After Face ID,
+27. A tap opens the session: tap the island, and tap a buzz. After Face ID,
     the console of that host opens on that session. A session that ended
     says `That session ended.`
-26. Stray activities end at launch: follow `ws-1`, let its island run,
+28. Stray activities end at launch: follow `ws-1`, let its island run,
     then make `ws-1` unreachable and change `Follow` to `work-1`. The island
     of `ws-1` shows nothing. Quit and open the app: the activity of `ws-1`
     is gone.
+
+### The chat and the key belt
+
+Use an iPhone held upright, with a Claude Code session that waits on a
+question.
+
+29. Tap the session. Its live screen fills the screen, with the agent's own
+    menu at the bottom. A tap on the third option picks it, and so does
+    `↓ ↓ ⏎`.
+30. Each key of Steer (`◂ ↑ ↓ ⏎ Esc ^C ⇞ ⇟`) works on the first tap, with
+    the keyboard up and with it down. `^C` stops a working agent. A second
+    `^C` within 1 s is held. A drag on the belt never presses a key, even
+    when it starts on one.
+31. Turn the belt. You feel a tick for each stop, halfway between two stops,
+    and a firmer click at home (`◂` at the left). Keys fold round the phone
+    at both edges, and the belt turns on without end. It always stops with
+    a key at the left. Check at 60 and at 120 fps (ProMotion): no dropped
+    frames.
+32. `⌨` on the handle row hides the keyboard, and the belt stays at the
+    bottom. `⌨` again brings the keyboard back. It never opens the tray.
+    Typing has no autocorrect or suggestions.
+33. Tap the grip, tap the name, and pull up on the handle row: each opens
+    the tray. Pick another match: it strikes, the old one goes out, and
+    the tray closes after 0.9 s. The screen does not change size. Open the
+    tray again: every match is new, and the one in use burns. The layout
+    stays after you quit the app.
+34. Choose Commands in a Claude Code chat: the commands carry its mark.
+    Open a session of another agent: the commands change. `compact` mid-turn is refused with a message; after the turn ends it succeeds. Another agent types its own commands. Jump to a pane with `Ctrl+O`: the command keys
+    are dim, and a tap says `commands run from the chat`.
+35. Choose Mine, then `EDIT MINE`. Tap a key to add it and to take it off.
+    Drag a key to move it. A tap on `◂` says `◂ always stays: it is the
+    way back`. Quit the app and open it again: Mine is the same.
+36. Swipe down in the chat: earlier lines show, and the title says
+    `↑ n lines up`. The first key goes back to live and sends nothing.
+37. Press `Ctrl+O` on a hardware keyboard to go into the tmux pane. A swipe
+    scrolls its history, about as fast as the finger. A long press, then a
+    drag, selects text. `◂` goes back to the console.
+38. On a 320 pt screen (Slide Over on iPad), no key clips and the belt
+    still folds at both edges.

@@ -95,6 +95,84 @@ inline instruction-file configuration. Existing user task text stays intact.
 Existing OpenCode inline settings and Codex developer instructions remain
 part of the launch configuration.
 
+### Chains
+
+Two matches in one repo can chain, and then hear each other's news. A match
+that works in a repo with another hears of it once, between its steps:
+
+```text
+[matchblox] api also works in matchblox, on feat/send.
+  To hear from it, run: matchblox chain api
+```
+
+It hears of that pair again only after one of them changes branch.
+`[chains] notice = false` in the [config](config.md#chains) turns the line
+off.
+
+- `matchblox chain <who>` asks to chain with `<who>`, or accepts its ask.
+  `<who>` is a name or a pane, as in `matchblox peek`.
+- `matchblox chain` lists the chain and the asks to and from the match.
+  `--json` prints `chain` and `requests`.
+- `matchblox unchain` leaves the chain.
+- `matchblox chain --off` leaves the chain and takes no chains and no
+  notices. `--on` takes them again.
+
+A chain needs both sides. The ask waits until `<who>`, or a match already in
+its chain, runs `matchblox chain` back. Until then nothing is shared: no news,
+no send and no fuse. The match asked hears the ask once, at its next step. An
+ask lapses after one hour, or when either match leaves the repo. Both
+matches must be in one repo on one host. Two worktrees of one repo are one
+repo. A match that moves to another repo leaves its chain, and its
+chain-mates hear where it went.
+
+Chain-mates hear each other's commits, branch changes, finishes, waits for
+the person and messages. The hook prints what is new under
+`[matchblox] since your last turn:`. A match keeps at most 20 items. Past
+that the oldest go, and a line counts them. The hook never makes the agent
+wait: when the service does not answer in 30 ms, it prints nothing, and the
+news waits for the next time. A tool call inside a subagent hears nothing:
+the news waits for the match's own.
+
+`matchblox send <who> "<text>"` from a match reaches its chain-mates only.
+To any other match it fails with `<who> is not in your chain.` and nothing is
+typed. The line carries the tag `[from <name> <pane>]`. A busy chain-mate
+hears it at its next step. One at rest gets it typed into its prompt, which
+wakes it. Each pair sends at most one message every 30 seconds, and a match
+sends at most 20 an hour. `[chains] send = "off"` turns these sends off.
+
+A send from a terminal, a tmux pane or the console goes as before. A send
+from a process with neither a pane nor a terminal (a cron job, a service, a
+`setsid` or `nohup` process) is refused with `not sent: matchblox cannot
+tell who sends this. Send from a terminal, a tmux pane or the console.` An
+answer or a pick from one is refused with `not answered: matchblox cannot
+tell who answers this. Answer from a terminal, a tmux pane or the
+console.` On systems where the service cannot read who is on
+its socket, every send, answer and pick from the command line is refused,
+the console's still go, and no hook hears news. A send from a match the
+stoker drives goes as a stoker step, not through the chain gate: it counts
+and drives as the stoker's own, and the chain's limits do not apply.
+
+A chain gives a match the right to message its chain-mates, and nothing
+more. It grants no control over them, and every service guard still applies.
+
+What each agent gets:
+
+- **Claude Code** hears the news at the start of a turn and after each tool
+  call. A message typed at rest wakes it.
+- **Codex** runs no matchblox hook, so it hears no news, no notice and no
+  ask. It learns of an ask through `matchblox chain`. A message is typed
+  into its prompt at rest; one sent while it works is typed once it rests.
+  A line that does not show is tried 3 times, then dropped, and the sender
+  hears `<who> could not take your line: it did not show after 3 tries`.
+- **OpenCode** can chain and shows on the fuse, but takes no send: a typed
+  line can send its draft. A send to it fails with `<who> runs OpenCode,
+  which matchblox cannot type into safely. It sees the chain in matchblox
+  chain.`
+- **Cursor** hears the news when its session starts and after each tool
+  call. It hears nothing when a prompt is sent: that hook cannot add text to
+  the turn. matchblox types nothing into it, so a message to it waits for its
+  next tool call.
+
 ## Codex launch settings
 
 Both `matchblox new --agent codex` and `matchblox switch api --agent codex`
@@ -373,8 +451,7 @@ Claude Code tells its waits through hooks: the setup step "Add the queue
 hooks" adds them. One of them, `PreToolUse` for the question tool
 (`AskUserQuestion`), hands the console the question and its options before
 the menu draws: in auto mode Claude Code writes the question to its
-transcript only once it is answered, so the hook is how the answer peek
-shows the options. A second, `PreToolUse` for `Bash`, is the stoker's merge
+transcript only once it is answered, so the hook is how the console and `matchblox peek` know the question. A second, `PreToolUse` for `Bash`, is the stoker's merge
 guard: in a session the stoker drove, it stops `gh pr merge`, `gh release`
 and `gh workflow run` unless the chip on the launch sheet gave the go, or
 you gave it with `y` on the STOKER tab. The same step adds permission rules

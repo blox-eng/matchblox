@@ -1,8 +1,11 @@
 # Keys
 
-Every key works on the key bar of a phone SSH app: letters, digits, arrows,
-`Enter` and `Esc`. No key needs `Ctrl`. The key line at the bottom shows
-the keys of the open tab, and a tap on one presses it.
+Every key of the console works on the key bar of a phone SSH app: letters,
+digits, arrows, `Enter` and `Esc`. No key of the console needs `Ctrl`.
+`ctrl+a m` and `Ctrl+O` in the chat are for a hardware keyboard. On a phone,
+`◂` on the app's key belt (or its edge swipe) goes back, `^C` on the belt
+interrupts, and a swipe scrolls. The key line at
+the bottom shows the keys of the open tab. A tap on a key presses it.
 
 ## The console
 
@@ -10,17 +13,17 @@ the keys of the open tab, and a tap on one presses it.
 |---|---|
 | `↑` or `k` | Selects the row above. |
 | `↓` or `j` | Selects the row below. |
-| `Enter` | Shows the safe action of the row: go to the agent's pane (Sessions, Machine, Panes), open New session on the folder of `+ start a new session` (Sessions), open a shell in the worktree (Git), do a recommendation, show a setup step. On Ships, selects the session that drives the ship in Sessions. |
+| `Enter` | Shows the safe action of the row: give the chat the keys (Sessions; on another host's row, go into its pane), go to the agent's pane (Machine, Panes), open New session on the folder of `+ start a new session` (Sessions), open a shell in the worktree (Git), do a recommendation, show a setup step. On Ships, selects the session that drives the ship in Sessions. |
 | `x` | Shows the other action of the row: the second action of a recommendation, close a setup step or kill the session (Sessions), kill a detached busy loop (Machine), remove the marked worktrees (Git), merge a ship that waits for your merge (Ships). Kill shows its commands, `tmux kill-pane -t <pane>`, then `kill -TERM <pid>` for an agent still running, and runs them on a typed `y`. A session that works or waits for you asks for a second `y`. Its worktree and its transcript stay. |
 | `N` | Opens **New session** (Sessions, Git): where it starts (a path, or `←` `→` through the Git tab's repositories and worktrees, then the ones found on the host, the most recent first), a branch for a new worktree beside the repository (blank: none), its name, the agent (`←` `→`, from the installed Claude Code, Codex, OpenCode and Cursor), for Claude Code, Codex and Cursor the account (see below), and a first message (blank: it waits for you; a new account has none). `Tab` goes to the next line, `⏎` starts it in a tmux session of its own, `Esc` sends nothing. The row shows in Sessions within seconds. |
 | `r` | Renames the session (Sessions): its tmux window, its tmux session when it is that session's one window, and Claude Code's own name (`/rename`), all alike. A Claude Code session that works takes its new name when it rests. On Git, `r` scans the git checkouts again. |
 | `A` | Switches the agent of the session (Sessions): choose another installed agent (`←` `→`) and edit or clear its handoff. The plan names the account and launch settings. A nonempty handoff loads an evidence preview before `y` can run the switch. A session that works or waits needs a second `y`. The switch saves the latest evidence before replacing the agent. The console jumps to the pane after. |
-| `a` | Opens the peek on the selected agent: what it said, and your answer to an agent that waits or a message to any other (Claude Code queues a message typed while it works). The key line says `a answer` or `a message`. On Ships, opens it on the session of a stuck ship. |
+| `a` or `→` | Gives the chat the keys on the selected agent (Sessions). `→` does it where it has no other use. The key line names the chat once, as `⏎ chat`, and only where `Enter` opens it. On another host's row it says where the session runs: the chat is the console's own host's. On Ships, opens the chat on the session of a stuck ship. |
 | `1-7` | Opens a tab: Sessions, Ships, Machine, Git, History, Panes, Stoker. |
 | `p` | Opens Ships. |
 | `Tab` or `Shift+Tab` | Opens the next or the previous tab. |
-| `u` | Cycles the dock of a phone: usage, the machine, the stoker. While a run is in charge, or has steps you have not seen, the stoker's panel takes the dock until you press `u`. |
-| `v` | Folds the detail pane and the dock, so the list takes the screen. The selected row opens in place. `v` again shows them. A phone and a desk each keep their own choice. A phone starts with list only. |
+| `u` | Cycles the dock of a narrow screen: usage, the machine, the stoker. Where Sessions splits, all three stack under the list, and the machine folds before the list is cut; while a run is in charge, its stoker keeps its place as usage does, and the machine folds first. While a run is in charge, or has steps you have not seen, the stoker's panel takes the dock until you press `u`. |
+| `v` | Folds the detail pane and the dock, so the list takes the screen. The selected row opens in place. The rows the list leaves free show usage, then the machine, each whole at its fewest lines; the list is never cut for them. `Enter` opens the chat full-screen. `v` again shows them. A phone and a desk each keep their own choice. A phone starts with list only. |
 | `c` | Opens the STOKER tab: your words and the gos, the plan with each step's outcome, the goes that wait for you, the triggers, the standing rules, today's compacts with their RESUME lines. Opening it marks the steps seen. |
 | `/` | Searches the open tab. |
 | `s` | Sorts Sessions and Panes by the next column. |
@@ -50,7 +53,7 @@ trigger that fired. The key line shows the keys of the selected row.
 | `Enter` | On the stoker agent's row, opens the stoker (`⏎ open the stoker`): inside tmux in a popup, `tmux display-popup -E -w 90% -h 90% 'tmux -L matchblox attach -t stoker'`, which detaching (prefix `d`) closes; outside tmux the console names the command to run. This is where you answer the stoker's own prompts. On a step, shows the exact command it ran, or the one it waits to run, or hides it again. |
 | `Q` | Quits the stoker agent and its tmux session, after a typed `y`: `tmux -L matchblox kill-session -t =stoker`. `f` only turns the stoker off and leaves the agent running, so its context carries to the next order. |
 | `y` | Gives the go a step waits for (`⏸ waits for you: api-gw wants to run gh pr merge 4556`). The go is good for one command of that kind in that session, and the stoker hears of it at its next wake. |
-| `a` | On a failed step (`✕`), opens the peek on its session. |
+| `a` | On a failed step (`✕`), opens the chat on its session. |
 
 ## An action before it runs
 
@@ -102,23 +105,99 @@ New session shows an account line when the agent keeps accounts: Claude Code, Co
 
 A start on a new account is a destructive action: the plan shows `RUN` and waits for a typed `y`. A start on an account that exists runs on `Enter`.
 
-## The answer peek
+## The chat
 
-The peek is the review: `Enter` sends what it shows to the pane named in
-its title, with no second confirm. Every other printable key, `q` too, is
-text on the typing line.
+The chat is the right side of Sessions: the live screen of the selected
+agent. Sessions splits 40/60 (the list at least 38 columns, at most 78)
+when the chat gets at least 44 columns and the body has room for its
+title, its account line and 16 rows for an agent's menu. Otherwise, on a
+phone, in list only, or on a screen on its side with the keyboard up,
+`Enter` or a tap on a row opens it over the whole screen; at a question or
+a permission prompt, a screen with under 16 rows for the agent says so and
+keeps the keys. A keyboard never
+changes the layout: the shape goes by the tallest height seen at the
+width. Sessions keeps the keys until you give them to the chat. The chat
+is the console's own host's: another host's row is list only.
 
 | Key | What it does |
 |---|---|
-| `Enter` | Sends the typed line, or the option under the cursor. With several questions, goes to the next one first. At a permission prompt, goes to its pane instead. |
-| `1-9` | Picks an option: the question goes on at once. With several choices, ticks it. The digit after the options opens the typing line. |
-| `↑` or `↓` | Moves between the options and the typing line. |
-| `Space` | Ticks the option under the cursor, when the question takes several. |
-| `→` or `←` | Moves the peek to the next or the previous agent, in the order of Sessions (who waits first), wrapping. A phone's horizontal swipe sends them. `Tab` and `Shift+Tab` do the same. |
-| `Backspace` | Deletes the last character. |
-| `Esc` | Closes the peek. Nothing is sent. |
-| `Ctrl+O` | Closes the peek and goes to the agent's pane, as `Enter` on Sessions does. Nothing is sent. |
-| `Ctrl+C` | Quits the console. |
+| `Enter`, `a` or `→` | On Sessions, gives the chat the keys. A click on the chat does it too. The key line then says `keys go to <name> · ctrl+a m back · ctrl+o into tmux`, with your own tmux prefix for `ctrl+a`. Short of room the name goes first, then `ctrl+o into tmux`; the way back stays, and no hint is cut mid-word. |
+| `ctrl+a m` | Gives the keys back to Sessions: your tmux prefix, then `m`. A click on the left or on the hint does it too. On a narrow screen, it goes back to Sessions. Outside tmux, or where tmux does not take `ctrl+a`, the chat takes it itself: `ctrl+a` goes to the agent at once (at a shell or in Claude Code, the cursor moves to the start of the line), and `m` within 1 s gives the keys back and does not reach the agent. Any other key goes to the agent. |
+| `Ctrl+O` | Goes to the selected agent's pane in tmux. It works on Sessions too. |
+| `Ctrl+C` | Sends `^C` to the agent. A second one within 1 s is held. See below. |
+
+In the chat, every other key goes to the agent: `↑ ↓ ← →`, `Enter`, `Tab`,
+`Shift+Tab`, `Esc`, `Backspace`, `PgUp`, `PgDn` and the letters. `Esc` goes to the agent
+too. There it cancels a question, closes a menu or stops a turn. The keys
+go in the order you press them, one at a time. A paste goes as text. Each
+newline (CR, LF or CRLF) goes as `Enter`, so a paste with a line break is
+refused while the agent waits at a menu: `not sent: a paste with a line
+break would answer <name>'s menu`. Every key goes to the agent that
+the chat showed. If the pane runs a different agent now, nothing is sent:
+`not sent: <pane> runs a different agent now`.
+
+The service also guards `Enter`, and at a menu every key but `^C` and
+`Backspace`. If the question started after the screen your console showed,
+the key is refused: `not sent: <name> asks something new — look again`. So
+a key never answers a question you have not seen.
+
+`^C` twice stops Claude Code. A second `^C` within 1 s to the same agent is
+held, and the key line says why: `^C held: one went 0.6 s ago, ^C again
+stops the agent`, or `^C held: one waits to go, ^C again stops the agent`.
+A third `^C` goes to the agent.
+
+If the pane is gone, the chat says `That session ended.`
+
+### Scrolling
+
+The chat is a window on the agent's pane. The mouse wheel over the chat goes
+to the agent, and the agent scrolls itself, as it does in tmux. On a phone, a
+swipe over the chat does the same. `PgUp` and `PgDn` also go to the agent.
+
+An agent that does not read the mouse scrolls in the chat through its pane's
+history, 3 lines for each wheel step. The key line says how far back you are:
+`↑ 12 lines back · a key comes back`. The next key takes you back to the live
+screen and is not sent. Press it again to send it.
+
+The chat also sends ctrl with `b d e f g k l n p r t u v w x y`, as well as
+`ctrl+a` and `ctrl+c`. It sends no `ctrl+z`, `ctrl+s` or `ctrl+q`.
+
+Scrolling only looks. It leaves the stoker's merge guard on a driven pane. While
+the stoker is in charge the wheel sends nothing, and the key line says `not
+scrolled: the stoker is in charge — press a key in the chat to take over`.
+
+At night, the first key of a run that sends something to an agent asks
+"Take over?". `y` rests the stoker while you work, and `n` keeps it on.
+
+Only a console sends keys to an agent. A script or an agent gets
+`keys go only from a console`.
+
+On a narrow screen the title row reads `‹ Sessions · <name> · <state>`. A
+tap on `‹ Sessions`, the app's edge swipe, ⌘M or ctrl+M on a hardware
+keyboard, or `ctrl+a m` goes back to Sessions.
+
+### An agent's menu
+
+When Claude Code asks with its question tool or for a permission, the chat
+shows its own menu, and its keys go to it as they are: `↑` `↓` move, `Space`
+ticks, a digit picks, `Enter` answers and typing fills its text row. The
+agent draws the menu at the chat's size.
+
+A tap on a numbered option picks it, anywhere across its row, its description
+and its wrapped lines too. The tap sends the option's digit through the same
+guards, and the row shows the selected wash until the next screen comes. On a
+single-choice question the digit answers; on a question with several choices
+it ticks, and a tap on the menu's own `Submit` or `Next` row moves there and
+sends `Enter`. With the cursor on the row you type in, a tap on another option
+moves the cursor off it first, and what you typed stays. A tap on that row
+itself sends nothing. Other rows do nothing, and so does a numbered list the
+agent only printed. Where the chat sits beside the list, the click that gives
+it the keys picks nothing: the next tap picks.
+
+A menu has a second guard. For 400 ms after a new one comes, after a question
+turns to its next page, or after the chat opens on a wait, every key but `^C` and `Backspace` is refused with the
+same words: `not sent: <name> asks something new — look again`. So a key
+meant for what was there before never answers a question you have not read.
 
 ## The launch sheet
 
@@ -169,10 +248,12 @@ On the chips:
 
 ## A phone
 
-A tap selects a row. A tap on an agent, once it is selected, opens the
-peek; a tap on an option of the peek picks it, a tap on a key of its foot
-(`⏎ send`, `← prev`, `next →`, `esc`) presses it, and a tap outside it closes
-it. On any other row the key line says `tap again: <command>`, and a
+A tap selects a row. A swipe over the list moves the selection. A swipe
+over the chat scrolls the agent (see [Scrolling](#scrolling)). On a narrow screen, a tap on
+an agent opens its chat over the whole screen. Where the chat sits beside the list, a tap on the
+selected agent, or on the chat, gives the chat the keys. Once it has them, a tap on an option
+of an agent's menu picks it (see [An agent's menu](#an-agents-menu)), and a tap
+on the left gives the keys back to Sessions. On any other row the key line says `tap again: <command>`, and a
 second tap on the same row runs it. On Ships, a tap on the selected ship
 selects its session in Sessions. Any other action (a
 recommendation, a setup step, a destructive step) then shows `RUN` and
@@ -182,3 +263,21 @@ you` selects the first agent that waits. A tap on the header's stoker word
 (`stoker waits for you` among them) opens the stoker agent, as `Enter` on
 its row does. A tap on `machine ›` or `usage ›`
 switches the dock. On Panes, a tap on a column header sorts by it.
+
+The app's command keys run a command of the agent on the chat's session,
+for example `/compact`. The console runs the command behind the chat's
+guards. A command types only while the agent rests, with no question, no
+permission prompt and no draft on its prompt. A command key works only
+while the chat has the keys. Otherwise the
+key line says `commands run from the chat`. A command of a different agent
+sends nothing, and the key line says `/<name> is <Agent>'s: <session> runs
+<other agent>`. A command that matchblox on the host does not know sends
+nothing, and the key line says `/<id> is new to this console: update
+matchblox on the host`. The console tells the app which agent the chat shows, so
+the app shows the commands of that agent. Inside tmux 3.2 or older the
+console cannot tell the app. The key line then says `COMMANDS · needs tmux
+3.3` once.
+
+The app's `⇞` and `⇟` keys send `PgUp` and `PgDn`. In the chat they go
+to the agent. In a pane you jumped to on a host, `PgUp` starts tmux
+copy mode one page up, and `PgDn` moves one page down in it.

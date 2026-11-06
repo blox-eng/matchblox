@@ -23,13 +23,15 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/app"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/demo"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/replay"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -41,10 +43,7 @@ import (
 
 var update = flag.Bool("update", false, "TestReplay: write www/demo/frames-<size>.json, www/demo/replay-<size>.svg and the open Duo's still frame in www/index.html; TestStokerSVG: write www/demo/stoker.svg and the stoker's still frame")
 
-const (
-	demoPID     = 4242
-	stepTimeout = 20 * time.Second
-)
+const stepTimeout = 20 * time.Second
 
 // replaySize is a screen the replay is recorded on. The site's foldable
 // plays the phone folded and the duo open (landscape, the Wide layout);
@@ -64,21 +63,23 @@ var demoBase = time.Date(2026, 10, 1, 22, 50, 0, 0, time.UTC)
 type clock struct {
 	mu     sync.Mutex
 	t      time.Time
-	follow *clock // set: this clock reads that one
+	follow *clock        // set: this clock reads that one
+	ahead  time.Duration // how far ahead of the one it follows
 }
 
 func (c *clock) Now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.follow != nil {
-		return c.follow.Now()
+		return c.follow.Now().Add(c.ahead)
 	}
 	return c.t
 }
 
-func (c *clock) Follow(o *clock)     { c.mu.Lock(); c.follow = o; c.mu.Unlock() }
-func (c *clock) Set(t time.Time)     { c.mu.Lock(); c.t = t; c.mu.Unlock() }
-func (c *clock) Add(d time.Duration) { c.mu.Lock(); c.t = c.t.Add(d); c.mu.Unlock() }
+func (c *clock) Follow(o *clock)       { c.mu.Lock(); c.follow = o; c.mu.Unlock() }
+func (c *clock) Set(t time.Time)       { c.mu.Lock(); c.t = t; c.mu.Unlock() }
+func (c *clock) Add(d time.Duration)   { c.mu.Lock(); c.t = c.t.Add(d); c.mu.Unlock() }
+func (c *clock) Ahead(d time.Duration) { c.mu.Lock(); c.ahead += d; c.mu.Unlock() }
 
 // demoHost is testdata/demo with a pulse: CPU counters move, the busy loop
 // burns one core, and a killed process goes away. Nothing runs on the real
@@ -129,7 +130,7 @@ func (h *demoHost) kill(pid int) {
 
 func pulse(pid int, p procfs.Proc, elapsed float64) procfs.Proc {
 	switch pid {
-	case demoPID:
+	case demo.OrphanPID:
 		p.Ticks += uint64(elapsed * procfs.ClockTicks)
 	case 1200: // the busy session
 		p.Ticks += uint64(elapsed * procfs.ClockTicks * 0.35)
@@ -237,11 +238,12 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 }
 
 var (
-	burning    = regexp.MustCompile(`[✦✧] flint-auth\s+busy`)
-	settled    = regexp.MustCompile(`╿ hearth-api\s+(done|out of work)`)
+	burning    = regexp.MustCompile(`[✦✧] flint-a\S*\s+busy`) // the duo cuts the name
+	struck     = regexp.MustCompile(`[✦✧] flint-a`)           // its row beside the chat: the strike has played
+	busyTop    = regexp.MustCompile(`1200\s+claude`)          // hearth-api's agent in the top processes
+	settled    = regexp.MustCompile(`╿ hearth-\S*\s+(done|out of work)`)
 	hearthBack = regexp.MustCompile(`hearth-api\s+\d+k → 9k`)
 	sparkBack  = regexp.MustCompile(`spark-docs\s+\d+k → 9k`)
-	struck     = regexp.MustCompile(`[✦✧] flint-auth`) // its row under the peek: the strike has played
 	figure     = regexp.MustCompile(`\d+(\.\d+)?[A-Za-z%]*`)
 	sparks     = regexp.MustCompile(`[▁▂▃▄▅▆▇█]+`)
 	spaces     = regexp.MustCompile(`\s+`)
@@ -358,12 +360,17 @@ func has(s ...string) func(string) bool {
 	}
 }
 
+// homeEvent is the home key as the console reads it.
+var homeEvent = uv.UnknownApcEvent(panes.HomeKey)
+
 func keyMsg(k string) tea.KeyPressMsg {
 	switch k {
 	case "enter":
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "esc":
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
+	case "ctrl+o":
+		return tea.KeyPressMsg{Code: rune(k[5]), Mod: tea.ModCtrl}
 	}
 	return tea.KeyPressMsg{Text: k, Code: []rune(k)[0]}
 }
@@ -385,8 +392,14 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	clk := &clock{t: demoBase}
 	var host *demoHost
-	world := newWorld(t, src, clk, func(pid int) { host.kill(pid) })
-	root := world.root
+	root := t.TempDir()
+	if err := os.CopyFS(root, os.DirFS(src)); err != nil {
+		t.Fatal(err)
+	}
+	world, err := demo.NewWorld(root, clk.Now, func(pid int) { host.kill(pid) })
+	if err != nil {
+		t.Fatal(err)
+	}
 	cfg := config.Default()
 	cfg.Interval.Duration = 50 * time.Millisecond
 	cfg.Agents = []string{"claude", "codex", "opencode"}
@@ -407,15 +420,12 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	host = &demoHost{FS: smp.FS.(procfs.FS)}
 	smp.FS, smp.Now = host, host.now(clk)
-	world.uptime = host.Uptime
+	world.Uptime = host.Uptime
 
 	s := service.New(cfg, smp, world.Git)
-	s.Binary, s.Host, s.Now = version, fixtureHost(root), clk.Now
-	s.Capture, s.Activity = smp.Capture, nil                  // the demo's panes, never this machine's tmux
-	s.Actions.Check = func(advice.Guard) error { return nil } // the demo's pids are not this machine's
-	s.Actions.Run = world.Run
-	s.LookPath = func(cmd string) (string, error) { return "/usr/bin/" + cmd, nil } // the demo's agents, not this machine's
-	s.IsDir = func(path string) bool { return strings.HasPrefix(path, "/work/") }
+	s.Binary, s.Host, s.Now = version, demo.Host(root), clk.Now
+	s.Capture, s.Activity = smp.Capture, nil // the demo's panes, never this machine's tmux
+	world.Wire(s)
 	st, err := stoker.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -514,9 +524,16 @@ func replayAt(t *testing.T, z replaySize) {
 	night := time.Date(2026, 10, 1, 23, 10, 0, 0, time.UTC)
 	full := time.Date(2026, 10, 1, 23, 40, 0, 0, time.UTC)
 	morning := time.Date(2026, 10, 2, 6, 59, 50, 0, time.UTC)
-	who := []string{"● 4 wait for you", "WAITS FOR YOU · 4", "flint-auth", "asks", "kindle-web", "ember-bill", "The refresh flow works"}
+	// The list beside the chat cuts long names on the duo.
+	// flint-auth's words: its opened row on a phone, the foot of its
+	// screen beside the list, under the chat's strip.
+	flint := "The refresh flow works"
 	if !phone {
-		who = append(who, "ws-1", "USAGE", "MACHINE") // a phone drops the host, and its long list folds the dock
+		flint = "wire the rotation."
+	}
+	who := []string{"● 4 wait for you", "WAITS FOR YOU · 4", "flint-auth", "asks", "kindle-", "ember-b", flint}
+	if !phone {
+		who = append(who, "ws-1", "USAGE") // a phone drops the host, and its long list folds the dock
 	}
 	sessionsTab := "WAITS FOR YOU"
 	var sessionsNow int // the sessions before N starts one
@@ -524,19 +541,27 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "who waits", at: 1300 * time.Millisecond, ok: has(who...)},
 		// The selection moves: the next one that waits shows what it said.
 		{name: "the next one", at: 2600 * time.Millisecond, key: "j", ok: has("I rewrote the quick start")},
-		{name: "back up", at: 3500 * time.Millisecond, key: "k", ok: has("The refresh flow works")},
-		// a: flint-auth asks with its question tool; the options are there.
-		{name: "a: the question", at: 4600 * time.Millisecond, key: "a", ok: has("flint-auth asks", "Rotate it", "Keep the token", "⏎ send")},
-		// 2 picks the second option: it goes to Claude Code's menu, and the
-		// peek moves to the next one that waits.
-		{name: "picked", at: 6200 * time.Millisecond, key: "2", ok: func(s string) bool {
-			return has("sent to flint-auth", "WAITS FOR YOU · 3", "← prev", "next →")(s) && struck.MatchString(s)
+		{name: "back up", at: 3500 * time.Millisecond, key: "k", ok: has(flint)},
+		// a: flint-auth's chat takes the keys; its screen shows the pane's
+		// own work over Claude Code's own menu.
+		{name: "a: the question", at: 4600 * time.Millisecond, key: "a", ok: func(s string) bool {
+			return has("ctrl+a m back", "Rotate it", "Keep the token", "Chat about this", "wire the rotation.")(s) && !strings.Contains(s, "flint-auth asks")
 		}},
-		{name: "the peek closes", at: 7600 * time.Millisecond, key: "esc", ok: func(s string) bool {
-			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "⏎ send") && burning.MatchString(s)
+		// 2 picks the second option: it goes to Claude Code's menu, and the
+		// chat shows the agent at work on it. The builder read the menu
+		// first: the console's clock moves past its quiet.
+		{name: "picked", at: 6200 * time.Millisecond, do: func() { view.Ahead(time.Second) }, key: "2", ok: func(s string) bool {
+			return has("I rotate the token on each refresh")(s) && !strings.Contains(s, "Chat about this") &&
+				(phone || struck.MatchString(s)) // a phone's chat hides the list
+		}},
+		// Prefix m gives the keys back to the list: tmux hands the console the
+		// home key. The chat's own ctrl+a m waits on the clock, which jumps
+		// with each sample here.
+		{name: "back to the list", at: 7600 * time.Millisecond, do: func() { p.Send(homeEvent) }, ok: func(s string) bool {
+			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "ctrl+a m back") && burning.MatchString(s)
 		}},
 		{name: "the sessions", at: 9 * time.Second, ok: func(s string) bool {
-			return has("hearth-api", "spark-docs", "kindle-web", "ember-bill", "WORKING")(s) && burning.MatchString(s)
+			return has("hearth-", "spark-d", "kindle-", "ember-b", "WORKING")(s) && burning.MatchString(s)
 		}},
 		// Ships: every pull request a session drives, on its track.
 		{name: "ships", at: 11 * time.Second, key: "2", ok: has("open → ci → green → merged → live", "#4551", "CI · 6 of 9 jobs", "#4552", "waits for your merge")},
@@ -553,7 +578,7 @@ func replayAt(t *testing.T, z replaySize) {
 			// and the frame waits until the compact was read back.
 			return has("night", "STOKER", "c the whole run")(s) && sparkBack.MatchString(s)
 		}},
-		{name: "take over?", at: 18500 * time.Millisecond, key: "enter", ok: has("Take over?")},
+		{name: "take over?", at: 18500 * time.Millisecond, key: "ctrl+o", ok: has("Take over?")},
 		{name: "kept on", at: 20500 * time.Millisecond, key: "n", ok: func(s string) bool {
 			return strings.Contains(s, "night") && !strings.Contains(s, "Take over?") && strings.Contains(s, "╭─ Jump") && strings.Contains(s, "tmux switch-client -t %")
 		}},
@@ -578,7 +603,14 @@ func replayAt(t *testing.T, z replaySize) {
 			ok: has("NIGHT · 23:10 → 07:00", "ready ", "176k → 9k", "RESUME")},
 		{name: "back to sessions", at: 31 * time.Second, key: "1", ok: func(s string) bool {
 			// the ack c sent has come back: the dock no longer offers the run,
-			// and the stoker's panel has given the dock back
+			// and the stoker's panel has given the dock back. The duo's left
+			// column keeps the panel, under the machine's top processes: the
+			// frame waits until the busy session is back among them, as the
+			// first sample after the morning's jump reads it idle.
+			if z.name == "duo" {
+				return !strings.Contains(s, "NIGHT · 23:10") && strings.Contains(s, sessionsTab) && !strings.Contains(s, "c the whole run") &&
+					busyTop.MatchString(s)
+			}
 			return !strings.Contains(s, "NIGHT · 23:10") && strings.Contains(s, sessionsTab) && !strings.Contains(s, "c the whole run") &&
 				!strings.Contains(s, "STOKER")
 		}},
@@ -588,16 +620,21 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "it starts", at: 35 * time.Second, key: "enter", ok: func(s string) bool {
 			return strings.Contains(s, "started rate-docs") && strings.Contains(s, "SESSIONS "+strconv.Itoa(sessionsNow+1))
 		}},
-		// x: a session that is done goes, after a typed y.
-		{name: "kill", at: 37 * time.Second, keys: slices.Concat([]string{"/"}, strings.Split("spark", ""), []string{"enter", "x"}),
-			ok: has("╭─ Kill spark-docs", "tmux kill-pane -t %3")},
+		// x: a session that is done goes, after a typed y. k picks the row
+		// the search left: the list then lands on its first row, whenever
+		// the kill's sample comes. Beside the list, the frame waits for the
+		// session's screen, which comes a moment after the row.
+		{name: "kill", at: 37 * time.Second, keys: slices.Concat([]string{"/"}, strings.Split("spark", ""), []string{"enter", "k", "x"}),
+			ok: func(s string) bool {
+				return has("╭─ Kill spark-docs", "tmux kill-pane -t %3")(s) && (phone || strings.Contains(s, "? for shortcuts"))
+			}},
 		// The pane and its agent are both gone: a sample between the two
 		// would list the pane without an agent.
 		{name: "killed", at: 39 * time.Second, key: "y", ok: func(s string) bool {
 			return strings.Contains(s, "SESSIONS "+strconv.Itoa(sessionsNow)) && !strings.Contains(s, "hearth:3.1")
 		}},
 		{name: "the sessions again", at: 40500 * time.Millisecond, key: "esc", ok: func(s string) bool {
-			return strings.Contains(s, sessionsTab) && strings.Contains(s, "rate-docs") && !strings.Contains(s, "/ spark")
+			return strings.Contains(s, sessionsTab) && strings.Contains(s, "rate-do") && !strings.Contains(s, "/ spark")
 		}},
 	}
 	var still replay.Frame
@@ -666,7 +703,7 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	ran := world.Ran()
 	want := [][]string{
-		{"tmux", "send-keys", "-t", "%2", "2"}, // the second option, into Claude Code's menu
+		{"tmux", "send-keys", "-t", "%2", "-l", "--", "2"}, // the second option, into Claude Code's menu
 	}
 	// Then the stoker's night: spark-docs is past the line when it starts,
 	// hearth-api when its turn ends. Each compact is typed, then its Enter.
@@ -674,7 +711,7 @@ func replayAt(t *testing.T, z replaySize) {
 	// Then by day: N starts rate-docs in a tmux session of its own,
 	// and x kills spark-docs, its pane and then its agent.
 	byDay := [][]string{
-		{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", "MATCHBLOX_HOME", "tmux", "new-session", "-d", "-s", "rate-docs", "-n", "rate-docs", "-c", "/work/spark-docs", "claude", "--name", "rate-docs", "write the rate limit docs"},
+		{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", "MATCHBLOX_HOME", "tmux", "new-session", "-d", "-s", "rate-docs", "-n", "rate-docs", "-c", "/work/flint-auth", "claude", "--name", "rate-docs", "write the rate limit docs"},
 		{"tmux", "kill-pane", "-t", "%3"},
 		{"kill", "-TERM", "1400"},
 	}

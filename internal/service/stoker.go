@@ -211,7 +211,7 @@ func why(st stoker.Step, skipped []string) string {
 // any time), and the pane, captured now, shows no menu, no question and
 // no draft of the builder's. Before the Enter the draft must be the
 // step's own text.
-func (s *Service) stokable(pane string, typed bool) error {
+func (s *Service) stokable(pane, typed string) error {
 	if it, ok := s.queued(pane); ok && stoker.Waits(it) {
 		return fmt.Errorf("the session in %s waits for you", pane)
 	}
@@ -219,6 +219,11 @@ func (s *Service) stokable(pane string, typed bool) error {
 	if !ok {
 		return fmt.Errorf("the pane %s cannot be read", pane)
 	}
+	return stokableScreen(pane, screen, typed)
+}
+
+// stokableScreen is stokable on a screen already read.
+func stokableScreen(pane, screen, typed string) error {
 	switch _, kind := said.Screen(screen); kind {
 	case said.Permits:
 		return fmt.Errorf("the pane %s shows a permission prompt", pane)
@@ -226,11 +231,11 @@ func (s *Service) stokable(pane string, typed bool) error {
 		return fmt.Errorf("the pane %s asks a question", pane)
 	}
 	draft := said.Draft(screen)
-	if !typed && draft != "" {
+	if typed == "" && draft != "" {
 		return fmt.Errorf("the pane %s has text you typed", pane)
 	}
-	if typed && !strings.HasPrefix(draft, "/compact") {
-		return fmt.Errorf("the pane %s does not show the compact", pane)
+	if typed != "" && !strings.HasPrefix(draft, typed) {
+		return fmt.Errorf("the pane %s does not show %s", pane, typed)
 	}
 	return nil
 }

@@ -2,6 +2,7 @@ package said
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -14,6 +15,29 @@ const menuWithin = 40
 // optionRe is a numbered row of a menu: a cursor mark, the digit and a dot,
 // then a tick box when the question takes several choices.
 var optionRe = regexp.MustCompile(`^[❯›>\s]*(\d+)\.\s+(?:\[[^\]]*\]\s*|[☐☑☒✔✓◯◉●○]\s*)?(.*)$`)
+
+// menuHintRe is the line of keys under a menu, in the agent's own words.
+var menuHintRe = regexp.MustCompile(`(?i)\b(?:esc|enter) to\b`)
+
+// MenuHint tells if plain is that line.
+func MenuHint(plain string) bool { return menuHintRe.MatchString(plain) }
+
+// OptionNumber is the number of a menu's option row, when plain is one.
+func OptionNumber(plain string) (int, bool) {
+	m := optionRe.FindStringSubmatch(plain)
+	if m == nil {
+		return 0, false
+	}
+	n, err := strconv.Atoi(m[1])
+	return n, err == nil
+}
+
+// OptionLabel is the words of a menu's option row, without its cursor mark and
+// tick box, or "".
+func OptionLabel(plain string) string {
+	_, label, _ := option(plain)
+	return label
+}
 
 // ShowsQuestion reports whether a pane's screen shows the question tool's
 // menu on q: its options numbered in order at the bottom, and q's text

@@ -8,7 +8,7 @@
    install page.”
    #4540 ●━●━●━●━●  live
    ▰▰▰▰▰ plan 100%  ▲ clear
-                 a answer  A switch  ⏎ open
+                           A switch  ⏎ chat
 ────────────────────────────────────────────
  ╿ ember-billing this m… done      4m   32%
  │ train-loop gpu-1      asks      4m   88%
@@ -28,4 +28,4 @@
  ▲ The week runs short: compact spark-docs
  ○ Clear spark-docs (%3)
 ────────────────────────────────────────────
- ⏎ open  a answer  x kill  r rename  N new
+ ⏎ chat  x kill  r rename  N new

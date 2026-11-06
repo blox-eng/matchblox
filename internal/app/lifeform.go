@@ -201,7 +201,7 @@ func (m Model) openNewAt(host, at, first string) Model {
 		f.extra = filepath.Clean(at) // not a known repo: the first row
 		m.refreshWhere(f, at)
 	}
-	m.form, m.pending, m.peek = f, nil, nil
+	m.form, m.pending = f, nil
 	return m
 }
 
@@ -225,7 +225,7 @@ func (m Model) openRename() (tea.Model, tea.Cmd) {
 	if proto.CheckName(name) != nil {
 		name = proto.NameOf(name)
 	}
-	m.form, m.pending, m.peek = &form{host: s.Host, rename: true, pane: s.Pane, who: s.Name, name: name, named: true, at: fieldName}, nil, nil
+	m.form, m.pending = &form{host: s.Host, rename: true, pane: s.Pane, who: s.Name, name: name, named: true, at: fieldName}, nil
 	return m, nil
 }
 
@@ -258,7 +258,7 @@ func (m Model) openSwitch() (tea.Model, tea.Cmd) {
 		m.flash = "no other agent to switch to here"
 		return m, nil
 	}
-	m.form, m.pending, m.peek = f, nil, nil
+	m.form, m.pending = f, nil
 	return m, nil
 }
 
@@ -463,6 +463,10 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	f := *m.form
 	m.form = &f
 	fk := m.keys.form
+	if f.at == fieldWhere && bkey.Matches(k, fk.Enter, fk.Next) && m.demoRefusesClone(&f) {
+		m.form, m.flash = nil, m.opt.Demo
+		return m, nil
+	}
 	if f.whereList() {
 		f.err = ""
 		if r := m.whereSelectedIn(&f); r.kind == rowClone && bkey.Matches(k, fk.Enter, fk.Next) {
@@ -622,6 +626,16 @@ func (m Model) formAgents() []string {
 		}
 	}
 	return out
+}
+
+// demoRefusesClone: on the demo host, where holds a git URL. A phone clones
+// nothing, and any row under the URL is a clone's.
+func (m Model) demoRefusesClone(f *form) bool {
+	if m.opt.Demo == "" {
+		return false
+	}
+	_, clones := cloneOf(strings.TrimSpace(f.filter()))
+	return clones
 }
 
 // formEnter sends the form: a refusal stays in it, where it can be fixed.
@@ -1126,6 +1140,9 @@ func (m Model) cloneResult(r proto.Result) (Model, tea.Cmd) {
 		return m, nil
 	}
 	f.planAct, f.plan, f.planErr = "", r.Clone, r.Err
+	if f.planErr != "" && m.opt.Demo != "" { // no words about a config a phone has not got
+		f.planErr = m.opt.Demo
+	}
 	if f.plan == nil && f.planErr == "" {
 		f.planErr = "no plan for this git URL"
 	}
@@ -1391,14 +1408,14 @@ func (m Model) overlayForm(sc *drawn, w int) {
 	}
 	box, press, spans, agentsAt, agents := m.formBox(bw)
 	m.overlayBox(sc, w, bw, phone, box, press, spans)
-	sc.formAgentsAt, sc.formAgents = sc.peekAt+agentsAt, agents
+	sc.formAgentsAt, sc.formAgents = sc.boxAt+agentsAt, agents
 }
 
 // tapForm: a tap on a field puts the cursor there, one on an agent chip
 // picks it, one on a key of the footer presses it.
 func (m Model) tapForm(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
-	i, dx := ms.Y-sc.peekAt, ms.X-sc.peekX
-	if i < 0 || i >= len(sc.peekRows) || dx < 0 || dx >= sc.peekW {
+	i, dx := ms.Y-sc.boxAt, ms.X-sc.boxX
+	if i < 0 || i >= len(sc.boxRows) || dx < 0 || dx >= sc.boxW {
 		return m, nil
 	}
 	f := *m.form
@@ -1410,14 +1427,18 @@ func (m Model) tapForm(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	}
-	if i == len(sc.peekRows)-1 {
-		if s, ok := spanAt(sc.peekKeys, dx); ok {
+	if i == len(sc.boxRows)-1 {
+		if s, ok := spanAt(sc.boxKeys, dx); ok {
 			return m.formKey(keyPress(s.press))
 		}
 		return m, nil
 	}
 	var id int
-	if _, err := fmt.Sscanf(sc.peekRows[i], "row:%d", &id); err == nil && f.whereList() && id < len(f.rows) && f.rows[id].kind != rowLabel {
+	if _, err := fmt.Sscanf(sc.boxRows[i], "row:%d", &id); err == nil && f.whereList() && id < len(f.rows) && f.rows[id].kind != rowLabel {
+		if m.demoRefusesClone(&f) {
+			m.form, m.flash = nil, m.opt.Demo
+			return m, nil
+		}
 		m.form = &f
 		if f.sel = id; f.rows[id].kind == rowClone {
 			f.pickOnPlan = f.rows[id].repo.path == ""
@@ -1428,7 +1449,7 @@ func (m Model) tapForm(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if _, err := fmt.Sscanf(sc.peekRows[i], "field:%d", &id); err == nil {
+	if _, err := fmt.Sscanf(sc.boxRows[i], "field:%d", &id); err == nil {
 		m.form = &f
 		if f.at = id; !f.listOpen {
 			cmd := m.onWhere(&f)

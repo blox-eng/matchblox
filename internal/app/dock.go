@@ -149,10 +149,134 @@ func (m Model) dock(w, rows int) docked {
 	return d
 }
 
+// listAbove is the part of the list that fits in h lines of w columns.
+// When rows are cut below, the window takes one line less and the line
+// under it says how many: the hint never covers the selection.
+func (m Model) listAbove(b body, w, h int) body {
+	sel := m.rowIndex()
+	if h <= 1 || len(b.lines) <= h {
+		vis := windowed(b, h, sel)
+		return body{lines: slices.Clone(vis.lines), rows: slices.Clone(vis.rows)}
+	}
+	start := windowStart(b, h-1, sel)
+	below := map[int]bool{}
+	for _, r := range b.rows[start+h-1:] {
+		if r >= 0 {
+			below[r] = true
+		}
+	}
+	if len(below) == 0 { // the window is at the list's end: nothing to say
+		vis := windowed(b, h, sel)
+		return body{lines: slices.Clone(vis.lines), rows: slices.Clone(vis.rows)}
+	}
+	col := body{lines: slices.Clone(b.lines[start : start+h-1]), rows: slices.Clone(b.rows[start : start+h-1])}
+	col.add(-1, fit(m.st.faint.Render(fmt.Sprintf(" ↓ %d more", len(below))), w))
+	return col
+}
+
+// stokerPanelRow marks the stoker's panel in a desk's left column: a tap
+// there opens its tab.
+const stokerPanelRow = -4
+
+// minListRows are the fewest rows of the list a desk's left column keeps
+// over its panels, with the hint under them.
+const minListRows = 3
+
+// leftColumn is Sessions on a desk, h lines of w columns: the list, and
+// under it usage, the machine and the stoker, each below a hairline. The
+// stoker is there while it claims the dock, in the machine's place when
+// the rows are short, or when the list leaves it room. The panels take
+// their fewest lines and grow into the rows the list leaves free. The
+// list outranks them: the machine folds before the list is cut; usage is
+// never cut, and the list gives way only to it and a stoker in charge,
+// while it keeps minListRows rows and the hint; short of that all fold. The Machine
+// tab has it all. A list cut short says how many rows are below it. All:
+// the panels show all they have.
+func (m Model) leftColumn(b body, w, h int) (col body, all bool) {
+	least, most := map[int][]string{}, map[int][]string{}
+	for p := range panels {
+		least[p], most[p] = m.panel(p, w, "")
+	}
+	height := func(ps []int) int {
+		n := 0
+		for _, p := range ps {
+			n += 1 + len(least[p])
+		}
+		return n
+	}
+	tall := len(b.lines)
+	every := []int{panelUsage, panelMachine, panelStoker}
+	type try struct {
+		ps  []int
+		cut bool // the list may give way to them
+	}
+	tries := []try{{every, false}, {[]int{panelUsage, panelMachine}, false}, {[]int{panelUsage}, false}, {[]int{panelUsage}, true}}
+	if m.stokerClaims() { // a stoker in charge keeps its place, as usage does
+		tries = []try{{every, false}, {[]int{panelUsage, panelStoker}, false}, {[]int{panelUsage, panelStoker}, true}, {[]int{panelUsage}, true}}
+	}
+	var set []int
+	for _, t := range tries {
+		if n := height(t.ps); tall+n <= h || t.cut && h-n >= minListRows+1 {
+			set = t.ps
+			break
+		}
+	}
+	if set == nil {
+		return m.listAbove(b, w, h), false
+	}
+	spare := max(h-len(b.lines)-height(set), 0)
+	all = len(set) == len(every)
+	var stats body
+	for _, p := range set {
+		lines, grow := least[p], len(most[p])-len(least[p])
+		switch {
+		case grow <= spare:
+			lines, spare = most[p], spare-grow
+		case p != panelUsage: // usage shows whole or at its fewest, never cut
+			lines, spare = most[p][:len(least[p])+spare], 0
+			all = false
+		default:
+			all = false
+		}
+		row := -1
+		if p == panelStoker {
+			row = stokerPanelRow
+		}
+		stats.add(row, m.st.hair.Render(strings.Repeat("─", w)))
+		stats.add(row, lines...)
+	}
+	col = m.listAbove(b, w, h-len(stats.lines))
+	for len(col.lines) < h-len(stats.lines) {
+		col.add(-1, "")
+	}
+	col.lines, col.rows = append(col.lines, stats.lines...), append(col.rows, stats.rows...)
+	return col, all
+}
+
 // dockToggle is where the phone dock's switch sits on its first line.
 func (m Model) dockToggle(w int) (x0, x1 int) {
 	word := panelWords[(m.dockShows()+1)%panels]
 	return w - lipgloss.Width(word) - 1, w - 1
+}
+
+// listOnlyStats is what list only shows in the free rows its list leaves:
+// usage, then the machine, under a hairline each, at their fewest lines
+// and only whole. The list is never cut for them.
+func (m Model) listOnlyStats(w, free int) docked {
+	d := docked{full: true}
+	for _, p := range []int{panelUsage, panelMachine} {
+		least, _ := m.panel(p, w, "")
+		next := slices.Clone(d.lines)
+		if len(next) > 0 {
+			next = append(next, m.st.hair.Render(strings.Repeat("─", w)))
+		}
+		next = append(next, least...)
+		if len(next)+1 > free { // and the hairline over them
+			break
+		}
+		d.lines = next
+	}
+	return d
 }
 
 // usageLines are the limits of each account a session runs under, as
@@ -181,7 +305,11 @@ func (m Model) usageLines(w int, full bool, toggle string) []string {
 		head := " " + m.accountMark(a.Provider) + " " + st.text.Render(pad(r.name, nameW+1)) + " "
 		indent := strings.Repeat(" ", lipgloss.Width(head))
 		if a.State == limits.Unmeasured {
-			out = append(out, fit(head+st.warn.Render("not measured · "+a.Fix), w))
+			line := head + st.warn.Render("not measured · "+a.Fix)
+			if lipgloss.Width(line) > w { // the fix goes whole, not cut
+				line = head + st.warn.Render("not measured")
+			}
+			out = append(out, fit(line, w))
 			continue
 		}
 		uses := a.Uses(now)
@@ -219,7 +347,7 @@ func (m Model) usageLines(w int, full bool, toggle string) []string {
 				lead = indent
 			}
 			line := lead + st.faint.Render(pad(u.Name, 5)) + m.meter(u.Pct, meterW, m.useStyle(u.Pct)) + st.text.Render(pad(fmt.Sprintf(" %.0f%%", u.Pct), 5))
-			if resets[j] != "" {
+			if resets[j] != "" && lipgloss.Width(line)+lipgloss.Width(resets[j]) <= w { // a reset goes whole, not cut
 				line += st.faint.Render(resets[j])
 			}
 			lines = append(lines, line)
@@ -233,13 +361,17 @@ func (m Model) usageLines(w int, full bool, toggle string) []string {
 			switch more := last + st.faint.Render(" · ") + style.Render(p.Text); {
 			case lipgloss.Width(more) <= w:
 				lines[len(lines)-1] = more
-			case !tight:
+			case !tight && lipgloss.Width(indent+p.Text) <= w:
 				lines = append(lines, indent+style.Render(p.Text))
+			case !tight: // under a narrow list the forecast takes its own line from the left
+				lines = append(lines, " "+style.Render(p.Text))
 			case p.Tone == limits.Warn:
 				// A phone keeps the account on its lines: a warning takes the
 				// place of the reset.
 				cut, _, _ := strings.Cut(last, st.faint.Render(" · "))
-				lines[len(lines)-1] = cut + st.faint.Render(" · ") + style.Render(p.Text)
+				if warned := cut + st.faint.Render(" · ") + style.Render(p.Text); lipgloss.Width(warned) <= w {
+					lines[len(lines)-1] = warned // else it waits for the room of the full lines, never cut
+				}
 			}
 		}
 		for _, l := range lines {
@@ -312,7 +444,11 @@ func (m Model) usageCells(rows []usageRow, nameW, w int) []string {
 		}
 		if len(wins) == 0 {
 			if a := group[0].a; a.State == limits.Unmeasured {
-				out = append(out, fit(head+st.warn.Render("not measured · "+a.Fix), w))
+				line := head + st.warn.Render("not measured · "+a.Fix)
+				if lipgloss.Width(line) > w { // the fix goes whole, not cut
+					line = head + st.warn.Render("not measured")
+				}
+				out = append(out, fit(line, w))
 			} else {
 				out = append(out, fit(head+st.faint.Render("no window read"), w))
 			}
@@ -327,31 +463,32 @@ func (m Model) usageCells(rows []usageRow, nameW, w int) []string {
 			if j > 0 {
 				lead = indent
 			}
-			out = append(out, fit(m.cellsIn(lead+st.faint.Render(pad(win, 5)), cells, w), w))
+			out = append(out, m.cellLines(lead+st.faint.Render(pad(win, 5)), cells, w, "   ")...)
 		}
 	}
 	return out
 }
 
-// cellsIn is line with as many whole cells as fit in w, then "…" for the
-// rest: a cell is never cut, so no percent is short of its digits.
-func (m Model) cellsIn(line string, cells []string, w int) string {
-	more := m.st.faint.Render(" …")
-	for i, c := range cells {
+// cellLines are line and as many whole cells after it as fit in w, then
+// the rest, whole, as many to a line as fit, on the lines under it from
+// cont: a cell is never cut, and no host's percent is left out.
+func (m Model) cellLines(line string, cells []string, w int, cont string) []string {
+	sep := m.st.faint.Render(" · ")
+	var out []string
+	first := true // the line holds no cell yet
+	for _, c := range cells {
 		next := c
-		if i > 0 {
-			next = m.st.faint.Render(" · ") + c
+		if !first {
+			next = sep + c
 		}
-		room := w
-		if i < len(cells)-1 {
-			room -= lipgloss.Width(more)
+		if lipgloss.Width(line+next) <= w {
+			line, first = line+next, false
+			continue
 		}
-		if lipgloss.Width(line+next) > room {
-			return line + more
-		}
-		line += next
+		out = append(out, line)
+		line, first = cont+c, false
 	}
-	return line
+	return append(out, fit(line, w))
 }
 
 // usageCell is host's reading of window win: "ws-1 58%".

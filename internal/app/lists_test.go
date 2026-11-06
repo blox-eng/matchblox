@@ -350,7 +350,7 @@ func TestProgressHoldsItsColumn(t *testing.T) {
 	st := sortFixture()
 	st.Sessions[0].Progress = &sample.Progress{Pct: 5}
 	st.Sessions[1].Progress = &sample.Progress{Pct: 100}
-	m, _ := loadedWith(t, 132, st)
+	m, _ := loadedWith(t, 200, st)
 	next, _ := key(m, "1")
 	lines := strings.Split(screen(next), "\n")
 	a, b := lines[sessLine(t, next, "alpha")], lines[sessLine(t, next, "bravo")]
@@ -377,8 +377,8 @@ func TestTapEndsTheTypingOfASearch(t *testing.T) {
 }
 
 // TestAnOpenPullRequestShowsWhereItsAgentShows: the PR of the worktree an
-// agent works in is on its desk row, in the detail, and under its row
-// when it opens on a phone.
+// agent works in is on its desk row, and under its row when it opens on a
+// phone.
 func TestAnOpenPullRequestShowsWhereItsAgentShows(t *testing.T) {
 	st := fixtureState()
 	st.Sessions = append(st.Sessions, sample.Session{PID: 950, Pane: "%9", Target: "api:1.1", Name: "cache-work",
@@ -389,18 +389,9 @@ func TestAnOpenPullRequestShowsWhereItsAgentShows(t *testing.T) {
 		{Path: "/w/app", Branch: "main"},
 		{Path: "/w/app-cache", Branch: "cache", Sessions: 1, PR: &gitscan.PR{Number: 4312, Title: "Add the cache", URL: "https://example.com/pr/4312"}},
 	}}}}
-	m, _ := loadedWith(t, 132, st) // cache-work waits: it is selected
-	if l := rowOf(m.render(), "cache-work"); !strings.Contains(listOf(l, 132), "#4312") {
+	m, _ := loadedWith(t, 200, st) // cache-work waits: it is selected
+	if l := rowOf(m.render(), "cache-work"); !strings.Contains(listOf(l, 200), "#4312") {
 		t.Fatalf("the desk row lacks the PR: %q", l)
-	}
-	for _, w := range []int{86, 132} {
-		m.width = w
-		out := ansi.Strip(m.render())
-		for _, want := range []string{"ship     #4312 Add the cache", "https://example.com/pr/4312"} {
-			if !strings.Contains(out, want) {
-				t.Fatalf("width %d: the detail lacks %q:\n%s", w, want, out)
-			}
-		}
 	}
 	m.width = 44 // a phone
 	out := strings.Split(ansi.Strip(m.render()), "\n")

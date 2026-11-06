@@ -356,9 +356,16 @@ The guard has limits:
   the pid of each `matchblox` command on its socket and finds the tmux pane
   it runs in from the command's parents; what the command says of itself
   (`TMUX_PANE`) does not count. A process that leaves its pane's process
-  tree (`setsid`, a daemon) is in no pane, and its acts count as yours. On
-  other systems the service has no pid, and the command's `TMUX_PANE`
-  names its pane.
+  tree (`setsid`, a daemon) is placed by its terminal: in an agent's pane
+  it acts as that agent, elsewhere as you. One with no terminal either
+  acts as you, but its sends are refused (`not sent: matchblox cannot
+  tell who sends this. Send from a terminal, a tmux pane or the
+  console.`), and so are its answers and picks (`not answered: matchblox
+  cannot tell who answers this. Answer from a terminal, a tmux pane or
+  the console.`). On other systems the service
+  has no pid, and the command's `TMUX_PANE` names its pane for every act
+  but these: a send, an answer or a pick from the command line is refused
+  there, and the console's still go.
 - It cannot speak for another session's hooks. The service takes a hook
   event only from a process in the pane the event names, for a session it
   places in that pane: a `matchblox hook` run from the stoker's pane
@@ -503,7 +510,7 @@ end of the run its score:
 Each step shows its glyph: `✓` done, `◐` under way, `⏸` waits, `✕`
 failed, `○` not begun. `Enter` on a step shows the exact command the
 stoker ran for it, or the one a go step waits to run. `y` on a step under
-`YOUR GO` gives it the go, once. `a` on a failed step opens the peek on
+`YOUR GO` gives it the go, once. `a` on a failed step opens the chat on
 its session; a go the run ended before you gave reads `the run ended
 before your go`, and nothing guards that command any more. The tab's name counts the steps that wait for you. Opening the
 tab marks the steps seen.

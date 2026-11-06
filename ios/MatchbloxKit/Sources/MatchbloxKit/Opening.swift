@@ -2,6 +2,7 @@ import Foundation
 
 public enum Route: Equatable, Sendable {
     case scan
+    case demoScan
     case pair(PairDraft)
     case console(Host, open: Int?)
     case hosts
@@ -41,7 +42,24 @@ public enum Opening {
         "matchblox console on \(host) ended."
     }
 
-    public static func removedNotice(_ labels: String) -> String {
-        "\(labels) is removed. Remove its key on the host with matchblox devices rm."
+    /// The demo has no key on a host, so only the real hosts are named in the sentence on keys.
+    public static func removedNotice(_ hosts: [Host]) -> String {
+        let real = hosts.filter { !$0.isDemo }.map(\.label)
+        if hosts.count == 1 {
+            return real.isEmpty
+                ? "\(hosts[0].label) is removed."
+                : "\(hosts[0].label) is removed. Remove its key on the host with matchblox devices rm."
+        }
+        let removed = "\(spoken(hosts.map(\.label))) are removed."
+        switch real.count {
+        case 0: return removed
+        case 1: return "\(removed) Remove \(real[0])'s key on the host with matchblox devices rm."
+        default: return "\(removed) Remove the keys of \(spoken(real)) on those hosts with matchblox devices rm."
+        }
+    }
+
+    private static func spoken(_ labels: [String]) -> String {
+        guard let last = labels.last, labels.count > 1 else { return labels.first ?? "" }
+        return "\(labels.dropLast().joined(separator: ", ")) and \(last)"
     }
 }

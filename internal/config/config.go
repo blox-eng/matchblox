@@ -41,6 +41,13 @@ type Config struct {
 	Limits        Limits   `toml:"limits"`
 	Ships         Ships    `toml:"ships"`
 	Push          Push     `toml:"push"`
+	Chains        Chains   `toml:"chains"`
+}
+
+// Chains are the matches in one repo that hear from each other.
+type Chains struct {
+	Notice bool   `toml:"notice"` // the same-repo line between its steps
+	Send   string `toml:"send"`   // who send reaches: "chain" or "off"
 }
 
 // Push sends the buzz and the island to the phones through the relay.
@@ -182,6 +189,7 @@ func Default() Config {
 		Stoker: Stoker{NightEnds: "07:00", MaxSteps: 60, Agent: "claude"},
 		Limits: Limits{QuietHours: "23:00-08:00", QuietDays: []string{"Sat", "Sun"}, Quiet: defaultQuiet},
 		Push:   Push{Relay: "https://matchblox.sh"},
+		Chains: Chains{Notice: true, Send: "chain"},
 	}
 }
 
@@ -213,6 +221,9 @@ func Load(path string) (Config, error) {
 	}
 	if !c.Push.Off && !safeRelay(c.Push.Relay) {
 		return c, errors.New("push.relay: " + c.Push.Relay + " is not https (plain http only to this machine)")
+	}
+	if c.Chains.Send != "chain" && c.Chains.Send != "off" {
+		return c, errors.New(`chains.send: "` + c.Chains.Send + `" is not "chain" or "off"`)
 	}
 	for i := range c.Groups {
 		re, err := regexp.Compile(c.Groups[i].Container)

@@ -32,7 +32,7 @@ final class OpeningTests: XCTestCase {
     func testReconnectMessagesAreDistinct() {
         let failures: [ConnectFailure] = [.unreachable, .hostKeyChanged, .refused, .closed("x")]
         let messages = failures.map { Opening.message(for: $0, host: "ws-1") }
-            + [Opening.removedNotice("ws-1"), Opening.endedMessage(host: "ws-1"), Opening.stopsAtOnceMessage(host: "ws-1")]
+            + [Opening.removedNotice([host("ws-1")]), Opening.endedMessage(host: "ws-1"), Opening.stopsAtOnceMessage(host: "ws-1")]
         XCTAssertEqual(Set(messages).count, messages.count)
         for message in messages {
             XCTAssertFalse(message.replacingOccurrences(of: "iPhone", with: "").lowercased().contains("phone"), message)
@@ -41,8 +41,23 @@ final class OpeningTests: XCTestCase {
 
     func testRemovedNoticeNamesTheFix() {
         XCTAssertEqual(
-            Opening.removedNotice("ws-1"),
+            Opening.removedNotice([host("ws-1")]),
             "ws-1 is removed. Remove its key on the host with matchblox devices rm."
+        )
+    }
+
+    func testRemovingTheDemoSaysNoKey() {
+        XCTAssertEqual(Opening.removedNotice([.demo]), "demo is removed.")
+    }
+
+    func testAMixedRemovalNamesOnlyTheRealHostsInTheKeySentence() {
+        XCTAssertEqual(
+            Opening.removedNotice([.demo, host("ws-1")]),
+            "demo and ws-1 are removed. Remove ws-1's key on the host with matchblox devices rm."
+        )
+        XCTAssertEqual(
+            Opening.removedNotice([.demo, host("ws-1"), host("ws-2")]),
+            "demo, ws-1 and ws-2 are removed. Remove the keys of ws-1 and ws-2 on those hosts with matchblox devices rm."
         )
     }
 

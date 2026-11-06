@@ -39,7 +39,7 @@ func TestParkTogglesAndRefusesMessages(t *testing.T) {
 	if h := s.State().Holds; len(h) != 1 || h[0].SessionID != "s1" || h[0].By != holds.ByYou || h[0].Pane != "%3" {
 		t.Fatalf("holds %+v", h)
 	}
-	res := s.act(ctx, proto.Act{RecID: "message:%3", Which: "secondary", Confirm: "y", Text: "go"})
+	res := s.act(ctx, proto.Act{RecID: "message:%3", Which: "secondary", Confirm: "y", Text: "go", FromPlaced: true})
 	if res.Err != "flint is parked: z lets it go" {
 		t.Fatalf("err %q", res.Err)
 	}
@@ -157,7 +157,7 @@ func TestAParkedSessionThatLosesItsIDStaysParked(t *testing.T) {
 	}
 	cx.SessionID = ""
 	s.publish(sample.Snapshot{At: time.Now(), Sessions: []sample.Session{cx}}, func(state.Doc) {})
-	res := s.act(ctx, proto.Act{RecID: "message:%3", Which: "secondary", Confirm: "y", Text: "go"})
+	res := s.act(ctx, proto.Act{RecID: "message:%3", Which: "secondary", Confirm: "y", Text: "go", FromPlaced: true})
 	if res.Err != "flint is parked: z lets it go" || len(*ran) != 0 {
 		t.Fatalf("err %q, ran %q: a parked pane took a message once its id was lost", res.Err, *ran)
 	}

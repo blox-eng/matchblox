@@ -4,6 +4,7 @@ package panes
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,9 +23,19 @@ const MaxAnswer = 500
 // stays text. A pane of matchblox's own server is typed into there.
 func Send(target, text string) [][]string {
 	return [][]string{
-		keys(target, "-l", "--", text),
+		Literal(target, text),
 		keys(target, "Enter"),
 	}
+}
+
+// Literal is the send-keys step that types text into the pane as it is.
+// tmux reads an argv word that ends in ";" as the end of its command and
+// a final "\;" as a ";", so a final ";" goes as "\;".
+func Literal(target, text string) []string {
+	if t, ok := strings.CutSuffix(text, ";"); ok {
+		text = t + `\;`
+	}
+	return keys(target, "-l", "--", text)
 }
 
 // keys is the send-keys step to target, on the tmux server it is on.
@@ -37,6 +48,21 @@ func keys(target string, args ...string) []string {
 // pane, on the tmux server it is on.
 func Keys(target string, ks ...string) []string {
 	return keys(target, ks...)
+}
+
+// Wheel is the send-keys step that turns the mouse wheel at column col and
+// row row of the pane, from 1, as the SGR form the program asked for.
+func Wheel(target string, up bool, col, row int) []string {
+	button := 65
+	if up {
+		button = 64
+	}
+	seq := fmt.Sprintf("\x1b[<%d;%d;%dM", button, col, row)
+	args := []string{"-H"}
+	for i := range len(seq) {
+		args = append(args, fmt.Sprintf("%02x", seq[i]))
+	}
+	return keys(target, args...)
 }
 
 // Pause is a step between two keys that change the question tool's page:
@@ -61,7 +87,7 @@ var Pause = []string{"sleep", "0.3"}
 // checked on the screen before its keys go.
 func Pick(target string, ask said.Ask, ans said.Answer) (steps [][]string, pages []int) {
 	key := func(k ...string) []string { return keys(target, k...) }
-	text := func(t string) []string { return key("-l", "--", t) }
+	text := func(t string) []string { return Literal(target, t) }
 	down := func(n int) []string {
 		keys := make([]string, n)
 		for i := range keys {

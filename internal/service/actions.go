@@ -110,7 +110,25 @@ func picksAccount(text string) bool {
 	return n.NewAccount || (n.Account != "" && n.Account != "default")
 }
 
+// typesInto tells if act a types into a pane: a send, an answer, a pick or keys.
+func typesInto(a proto.Act) bool {
+	_, send := isSend(a)
+	return send || typedPane(a.RecID) != "" || strings.HasPrefix(a.RecID, proto.KeysPrefix)
+}
+
 func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
+	if typesInto(a) {
+		s.typingActs.add()
+		defer s.typingActs.done()
+	}
+	if !a.FromPlaced && !a.Console { // it could be any match's
+		if _, send := isSend(a); send {
+			return proto.Result{Err: unplacedSender}
+		}
+		if typedPane(a.RecID) != "" {
+			return proto.Result{Err: unplacedAnswerer}
+		}
+	}
 	if pane, ok := strings.CutPrefix(a.RecID, "switch-preview:"); ok {
 		// Like sessions and peek, this reads without the action gate and
 		// never wakes the stoker, sends input, or changes a session.
@@ -128,6 +146,15 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	if strings.HasPrefix(a.RecID, focusPrefix) {
 		return s.focus(a) // it moves the consoles; the stoker goes on resting
 	}
+	if pane, ok := strings.CutPrefix(a.RecID, proto.KeysPrefix); ok {
+		return s.keys(ctx, pane, a) // a key twice is twice: no dedupe
+	}
+	if strings.HasPrefix(a.RecID, proto.ChainPrefix) {
+		return s.chainAct(a) // an agent's own act: before the agents-pane gate
+	}
+	if pane, ok := strings.CutPrefix(a.RecID, proto.CommandPrefix); ok {
+		return s.command(ctx, pane, a) // a second one finds the agent at work
+	}
 	// A session the stoker drove speaks for the stoker: what it sends
 	// counts and drives, and it gives no go.
 	agent := s.agentsPane(a)
@@ -142,7 +169,12 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		}
 	}
 	if !agent && !a.Console && (paneOf(a.RecID) != "" || a.RecID == NewSessionID) {
-		if _, ok := s.sessionAt(a.From); ok {
+		if sender, ok := s.sessionAt(a.From); ok {
+			if to, peer := s.peerAct(a); peer {
+				// A peer send is no step of the stoker's and no key of the
+				// builder's: it touches no rest, drives and frees no pane.
+				return s.peerSend(ctx, sender, to, a)
+			}
 			return proto.Result{Err: notTheBuilders}
 		}
 	}
@@ -243,7 +275,7 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	if door {
 		key += "\x00" + a.Text
 	}
-	askPane, pick := strings.CutPrefix(a.RecID, "pick:")
+	askPane, pick := strings.CutPrefix(a.RecID, proto.PickPrefix)
 	if pick {
 		key += "\x00" + a.Text
 	}
@@ -412,16 +444,21 @@ func messageAction(pane string, x sample.Session, text string) advice.Action {
 	return advice.Action{Label: "message", Steps: panes.Send(pane, text), Destructive: true, Guards: []advice.Guard{g, g}}
 }
 
-// sessionAt is the agent session in a pane, as last sampled.
-func (s *Service) sessionAt(pane string) (sample.Session, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// sessionAtLocked is sessionAt for callers that hold mu.
+func (s *Service) sessionAtLocked(pane string) (sample.Session, bool) {
 	for _, x := range s.cur.Sessions {
 		if x.Pane == pane && pane != "" {
 			return x, true
 		}
 	}
 	return sample.Session{}, false
+}
+
+// sessionAt is the agent session in a pane, as last sampled.
+func (s *Service) sessionAt(pane string) (sample.Session, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.sessionAtLocked(pane)
 }
 
 // messageable is the guard of a message, checked right before each step:
@@ -452,7 +489,8 @@ func (s *Service) messageable(pane string, pid int) error {
 }
 
 // pick answers the question tool's call a session waits on, with the
-// choices the person made in the answer peek. Act.Text is a said.Answer.
+// choices the person made on the chat's question card. Act.Text is a
+// said.Answer.
 func (s *Service) pick(ctx context.Context, pane string, a proto.Act) proto.Result {
 	var ans said.Answer
 	if err := json.Unmarshal([]byte(a.Text), &ans); err != nil {

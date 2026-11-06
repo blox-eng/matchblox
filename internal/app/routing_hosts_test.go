@@ -2,6 +2,7 @@ package app
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/remote"
-	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -53,13 +53,6 @@ func pressAll(m tea.Model, keys ...string) tea.Model {
 // TestActsGoToTheRowsHost: an act on the peer's %12 goes on the peer's
 // conn with today's RecID, and never on home's, whose %12 is another pane.
 func TestActsGoToTheRowsHost(t *testing.T) {
-	waits := func(st *proto.State) {
-		st.Queue = []queue.Item{{Pane: "%12", Name: "peer-12", State: queue.StateQuestion, Since: st.At.Add(-time.Minute)}}
-	}
-	asks := func(st *proto.State) {
-		waits(st)
-		st.Sessions[0].Ask = &said.Ask{ID: "t1", Questions: []said.Question{{Question: "which?", Options: []said.Option{{Label: "one"}, {Label: "two"}}}}}
-	}
 	previewed := func(t *testing.T, m tea.Model, ws *fakeConn) tea.Model {
 		id := m.(Model).pending.previewAct
 		next, _ := m.Update(peerMsg{host: "ws-1", conn: ws, msg: resultMsg{ActID: id, Preview: "# Handover"}})
@@ -79,9 +72,6 @@ func TestActsGoToTheRowsHost(t *testing.T) {
 		{name: "switch-preview", keys: []string{"A", "enter"}, want: "switch-preview:%12"},
 		{name: "switch", keys: []string{"A", "enter"}, then: previewed, after: []string{"y"}, want: "switch:%12"},
 		{name: "new:session", keys: []string{"N", "tab", "enter"}, want: "new:session"},
-		{name: "answer", peer: waits, keys: []string{"a", "o", "k", "enter"}, want: "answer:%12"},
-		{name: "message", keys: []string{"a", "h", "i", "enter"}, want: "message:%12"},
-		{name: "pick", peer: asks, keys: []string{"a", "1"}, want: "pick:%12"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			m, home, ws := samePane(t, c.peer)
@@ -188,21 +178,16 @@ func TestNewOnAPeerRowListsThatHostsRepos(t *testing.T) {
 	}
 }
 
-// TestPeekAndKillStayOnTheirHost: a peek on the peer's %12 selects the
-// peer's row, and a wait on home's %12 asks no second y for the peer's.
-func TestPeekAndKillStayOnTheirHost(t *testing.T) {
+// TestKillStaysOnItsHost: with the peer's %12 selected, a wait on home's
+// %12 asks no second y for the peer's.
+func TestKillStaysOnItsHost(t *testing.T) {
 	m, _, _ := samePane(t, nil)
 	mm := m.(Model)
 	mm.queue = []queue.Item{{Pane: "%12", Name: "home-12", State: queue.StateQuestion, Host: mm.opt.Host}}
-	mm.selPID, mm.selHost = 0, "" // nothing selected: the peek selects
-	mm.openPeek(paneKey{"ws-1", "%12"})
-	if s, ok := mm.selectedSession(); !ok || s.Host != "ws-1" {
-		t.Fatalf("the peek selected %+v", s)
+	s, ok := mm.selectedSession()
+	if !ok || s.Host != "ws-1" {
+		t.Fatalf("selected %+v", s)
 	}
-	if v, _, ok := mm.peekNow(); !ok || v.s.Host != "ws-1" {
-		t.Fatalf("the peek shows %+v", v.s)
-	}
-	s, _ := mm.selectedSession()
 	if a := mm.killAction(s); a == nil || a.again != "" || a.host != "ws-1" {
 		t.Fatalf("the kill is %+v", a)
 	}
@@ -239,5 +224,31 @@ func TestSwitchJumpsOnItsHost(t *testing.T) {
 	next, jump := mm.switched(proto.Result{ActID: "a9", Ran: [][]string{{"tmux"}}})
 	if jump == nil || next.flash != "switched peer-12 to codex" {
 		t.Fatalf("jump %v, flash %q; want the switch, and the jump on ws-1", jump != nil, next.flash)
+	}
+}
+
+// TestARemoteRowIsListOnly: the chat watches and sends keys only for the
+// home host's sessions. With the peer's %12 selected, nothing watches
+// home's %12, its screen never shows, a and typing send no keys, and the
+// right side names the row's host and the way into its pane.
+func TestARemoteRowIsListOnly(t *testing.T) {
+	m, home, ws := samePane(t, nil)
+	if w := m.(Model).watching; w != "" {
+		t.Fatalf("the peer's row watches %q on this machine", w)
+	}
+	m, _ = m.Update(screenMsg{Pane: "%12", At: time.Now(), Text: "HOME TWELVE"})
+	m = pressAll(m, "a")
+	if nm := m.(Model); nm.chatKeys || !strings.Contains(nm.flash, "runs on ws-1") {
+		t.Fatalf("a on a remote row: chatKeys %v, flash %q", nm.chatKeys, nm.flash)
+	}
+	m = pressAll(m, "x", "y", "1")
+	for _, a := range append(home.allActs(), ws.allActs()...) {
+		if strings.HasPrefix(a.RecID, proto.WatchPrefix) || strings.HasPrefix(a.RecID, proto.KeysPrefix) || strings.HasPrefix(a.RecID, "pick:") {
+			t.Fatalf("a remote row sent %q", a.RecID)
+		}
+	}
+	out := screen(m)
+	if strings.Contains(out, "HOME TWELVE") || !strings.Contains(out, "on ws-1") || !strings.Contains(out, "goes into its pane") {
+		t.Fatalf("the remote row's right side:\n%s", out)
 	}
 }

@@ -22,7 +22,16 @@ targets:
     platform: iOS
     sources:
       - path: Matchblox
+        excludes:
+          - Demo/machine.tar
       - path: MatchbloxIsland/IslandAttributes.swift
+      - path: Shared/Match.swift
+      # The console's command table. testdata/keys/commands.json links to this file.
+      - path: ../internal/keycmd/commands.json
+        buildPhase: resources
+      # The demo's machine, packed by make demolib from testdata/demo.
+      - path: Matchblox/Demo/machine.tar
+        buildPhase: resources
     info:
       path: Matchblox/Info.plist
       properties:
@@ -43,6 +52,8 @@ targets:
         NSCameraUsageDescription: matchblox uses the camera to scan the pairing code of your host.
         NSFaceIDUsageDescription: Face ID unlocks the key that opens your console.
         NSSupportsLiveActivities: true
+        # The belt and its coast run at 120 Hz on a ProMotion iPhone.
+        CADisableMinimumFrameDurationOnPhone: true
         # The app uses only standard, exemption-qualifying encryption (SSH/TLS),
         # so it declares no non-exempt encryption. This clears App Store Connect
         # export compliance (incl. the France declaration) with no per-build prompt.
@@ -66,10 +77,19 @@ targets:
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_ENTITLEMENTS: Matchblox/Matchblox.entitlements
+        # The demo is Go, linked as a static library (make demolib).
+        SWIFT_OBJC_BRIDGING_HEADER: Matchblox/Demo/Matchblox-Bridging-Header.h
+        OTHER_LDFLAGS: -framework CoreFoundation -framework Security -lresolv
+        # The demo library is arm64 for the simulator: no x86_64 slice to link.
+        EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
       configs:
         Release:
           CODE_SIGN_ENTITLEMENTS: Matchblox/Matchblox.production.entitlements
+          # CI reads the demo library's share of the executable from the map.
+          LD_GENERATE_MAP_FILE: YES
     dependencies:
+      - framework: build/MBDemo.xcframework
+        embed: false
       - package: MatchbloxKit
         product: MatchbloxKit
       - package: SwiftTerm
@@ -85,6 +105,7 @@ targets:
     sources:
       - path: MatchbloxIsland
       - path: Matchblox/Tokens.swift
+      - path: Shared/Match.swift
     info:
       path: MatchbloxIsland/Info.plist
       properties:
@@ -140,11 +161,31 @@ targets:
       - package: MatchbloxKit
         product: MatchbloxKit
 
+  MatchbloxUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: MatchbloxUITests
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.blox.matchblox.uitests
+        TEST_TARGET_NAME: Matchblox
+    dependencies:
+      - target: Matchblox
+
 schemes:
   Matchblox:
     build:
       targets:
         Matchblox: all
+    test:
+      config: Debug
+      targets:
+        - MatchbloxUITests
     run:
       config: Debug
     profile:

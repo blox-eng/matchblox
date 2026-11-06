@@ -48,7 +48,7 @@ func TestStokerCompactsIdleAtLimit(t *testing.T) {
 		t.Fatalf("argv %q", s.Action.Steps)
 	}
 	g := advice.Guard{RestPane: "%1", StokePane: "%1"}
-	typed := advice.Guard{RestPane: "%1", StokePane: "%1", Typed: true}
+	typed := advice.Guard{RestPane: "%1", StokePane: "%1", Typed: "/compact"}
 	if !reflect.DeepEqual(s.Action.Guards, []advice.Guard{g, typed}) || s.Session != "s%1" || s.Tokens != 176000 {
 		t.Fatalf("step %+v", s)
 	}
@@ -291,5 +291,14 @@ func TestPlanSkipsHeld(t *testing.T) {
 	}
 	if got := Plan(on(), ss, nil, at85, nil, t0, map[string]bool{ss[0].SessionID: true}); len(got) != 0 {
 		t.Fatalf("a held session was stepped on: %+v", got)
+	}
+}
+
+// TestACommandEndingInASemicolonTypesIt: a command goes through the
+// literal send, so tmux does not read its final ";" as the end of argv.
+func TestACommandEndingInASemicolonTypesIt(t *testing.T) {
+	a := CommandAction("%1", 42, 7, "/run a;", true)
+	if typed := a.Steps[0]; typed[len(typed)-1] != `/run a\;` {
+		t.Fatalf("typed %q", typed)
 	}
 }

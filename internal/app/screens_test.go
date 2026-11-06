@@ -19,7 +19,6 @@ import (
 	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/hooks"
-	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
@@ -96,8 +95,8 @@ func screensState(t *testing.T) proto.State {
 
 // TestScreens holds the console on the demo machine at the three sizes
 // of design/0006 §10 against the frames in testdata/screens: Sessions with
-// the one that waits opened, the answer peek with its options, Ships with
-// a ship of each kind, Sessions where two sessions drive two ships each,
+// the one that waits opened, Ships with a ship of each kind, the chat with
+// the agent's own question menu, Sessions where two sessions drive two ships each,
 // the dock folded on a short phone, and list only on a desk. -update
 // writes them again.
 func TestScreens(t *testing.T) {
@@ -111,7 +110,6 @@ func TestScreens(t *testing.T) {
 	}
 	shots := []shot{
 		{"sessions", nil},
-		{"peek", []string{"a"}},
 		{"ships", []string{"2"}},
 	}
 	sizes := [][2]int{{44, 31}, {86, 30}, {107, 60}, {132, 32}}
@@ -136,6 +134,18 @@ func TestScreens(t *testing.T) {
 		check(t, tabMorning(st), "stokermorning", size[0], size[1], []string{"c"})
 	}
 	check(t, sheetScreen(st, true), "sheetday", 104, 38, []string{"o"})
+	asks := screenMsg{Pane: paneNamed(st, "flint-auth"), At: demoAt, Text: askScreen}
+	for _, size := range [][2]int{{200, 50}, {132, 32}, {44, 31}} {
+		check(t, st, "chat", size[0], size[1], []string{"enter"}, asks)
+	}
+	check(t, st, "chatended", 44, 31, []string{"enter"}, screenMsg{Pane: paneNamed(st, "flint-auth"), Gone: true})
+	for _, size := range surveyGrids {
+		check(t, st, "survey", size[0], size[1], nil, asks)
+		check(t, st, "surveychat", size[0], size[1], []string{"enter"}, asks)
+		if portrait(size[0], size[1]) && size[0] >= 83 { // list only by default: the full view splits
+			check(t, st, "surveyfull", size[0], size[1], []string{"v", "enter"}, asks)
+		}
+	}
 	life := st
 	life.Agents = []string{"claude", "codex", "opencode"}
 	newKeys := append([]string{"N", "tab"}, strings.Split("feat/88-rate-limits", "")...)
@@ -167,44 +177,6 @@ func TestScreens(t *testing.T) {
 	machine := threeHosts(t, st, 104, 38, "stale")
 	machine.setTab(tabMachine)
 	golden(t, machine, "machine3", 104, 38)
-	golden(t, nowScreen(t, st, 132, 32), "nowline", 132, 32)
-}
-
-// nowScreen is the demo machine in list only after the console watched it
-// for two hours: hearth-api works on and off, spark-docs is on a limit
-// whose 5 hours reset in 35 minutes, and the rest keep their state.
-func nowScreen(t *testing.T, st proto.State, w, h int) Model {
-	t.Helper()
-	now := demoAt.Add(-(lanePast - 1) * laneCell)
-	m := New(Options{NoMotion: true, Conn: newFake(), Now: func() time.Time { return now }})
-	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
-	out := demoAt.Add(35 * time.Minute)
-	limited := st
-	limited.Sessions = slices.Clone(st.Sessions)
-	limited.Limits = append(slices.Clone(st.Limits), limits.Account{Provider: "claude", Account: "demo", State: limits.Measured, At: demoAt,
-		Windows: []limits.Window{{UsedPct: 100, Minutes: 300, ResetsAt: out}}})
-	for i, s := range limited.Sessions {
-		if s.Name == "spark-docs" {
-			s.Busy, s.Status, s.Idle, s.Out = false, "idle", 4*time.Minute, out
-			limited.Sessions[i] = s
-		}
-	}
-	for step := range lanePast {
-		now = demoAt.Add(-time.Duration(lanePast-1-step) * laneCell)
-		at := limited
-		at.Sessions = slices.Clone(limited.Sessions)
-		for i, s := range at.Sessions {
-			if s.Name == "hearth-api" {
-				s.Busy = step%6 < 4
-				at.Sessions[i] = s
-			}
-		}
-		next, _ = next.Update(stateMsg(at))
-	}
-	nm := next.(Model)
-	nm.splashDone = true
-	nm.viewPrefs.ListOnlyDesk = true
-	return nm
 }
 
 // threeHostShips is Ships over three hosts: the demo machine's four, the
@@ -316,6 +288,30 @@ func hostsTicks(st proto.State, w, h int) Shell {
 	return next.(Shell)
 }
 
+// askScreen is Claude Code asking with its question tool, three options.
+const askScreen = "⏺ The refresh endpoint is in and its tests pass.\n\n" +
+	"────────────────────────────────────────────────────────────────────────────────\n" +
+	" ☐ Rotate\n\n" +
+	"Should a refresh also rotate the token?\n\n" +
+	"❯ 1. Rotate it\n" +
+	"     The old one stops at once.\n" +
+	"  2. Rotate, keep the old one a minute\n" +
+	"  3. Type something.\n\n" +
+	"Enter to select · ↑/↓ to navigate · Esc to cancel\n"
+
+// afterKeys are messages check sends after its keys.
+type afterKeys []tea.Msg
+
+// paneNamed is the pane of the session named name.
+func paneNamed(st proto.State, name string) string {
+	for _, s := range st.Sessions {
+		if s.Name == name {
+			return s.Pane
+		}
+	}
+	return ""
+}
+
 // sheetScreen is the demo machine with a stoker agent, and the launch
 // sheet: a night's with its order typed and merges on (n, the text, tab,
 // space, tab), or by day the sheet o opens on a running order, its chips as
@@ -336,6 +332,12 @@ func sheetScreen(st proto.State, day bool) proto.State {
 	return st
 }
 
+// surveyGrids are the devices' grids of the every-screen survey
+// (docs/superpowers/specs/2026-11-01-every-screen-chat-design.md): phones
+// upright and on their side, keyboard up and down, an iPad mini, a folded
+// and an open Duo, half a Mac screen and desks.
+var surveyGrids = [][2]int{{51, 45}, {51, 31}, {96, 20}, {96, 8}, {106, 10}, {95, 65}, {145, 40}, {193, 57}, {96, 57}, {104, 38}, {44, 31}}
+
 // check draws the console with msgs, then keys, against its golden frame.
 func check(t *testing.T, st proto.State, name string, w, h int, keys []string, msgs ...tea.Msg) {
 	t.Helper()
@@ -345,19 +347,28 @@ func check(t *testing.T, st proto.State, name string, w, h int, keys []string, m
 	next, _ = next.Update(stateMsg(st))
 	nm := next.(Model)
 	nm.splashDone = true
-	if name == "peek" {
+	if strings.HasPrefix(name, "chat") || strings.HasPrefix(name, "survey") { // flint-auth, which asks
 		for i, s := range nm.snap.Sessions {
 			if s.Name == "flint-auth" {
 				nm.chose, nm.selPID = true, nm.snap.Sessions[i].PID
 			}
 		}
+		nm.watchCmd() // the watch follows the selection; the fake answers nothing
 	}
 	next = nm
+	var later []tea.Msg
 	for _, msg := range msgs {
+		if a, ok := msg.(afterKeys); ok {
+			later = append(later, a...)
+			continue
+		}
 		next, _ = next.Update(msg)
 	}
 	for _, k := range keys {
 		next, _ = key(next, k)
+	}
+	for _, msg := range later {
+		next, _ = next.Update(msg)
 	}
 	golden(t, next.(Model), name, w, h)
 }

@@ -45,6 +45,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/app"
 	"github.com/blox-eng/matchblox/internal/askpass"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/demo"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
@@ -198,6 +199,15 @@ func run(args []string) error {
 			return err
 		}
 		return cliHand(cmd, words, *o.pick, *o.why, os.Stdout, transport.SocketPath())
+	case "chain", "unchain":
+		words, err := positionals(fl, args)
+		if err != nil {
+			return err
+		}
+		if cmd == "unchain" {
+			return cliUnchain(words, os.Stdout, transport.SocketPath())
+		}
+		return cliChain(words, *o.off, *o.on, *o.json, os.Stdout, transport.SocketPath())
 	case "recover":
 		words, err := positionals(fl, args)
 		if err != nil {
@@ -282,10 +292,15 @@ func run(args []string) error {
 		if err := goHome(); err != nil {
 			return err
 		}
+		var binds [][]string
+		if os.Getenv("TMUX") != "" { // a console in place too: its hint names prefix m
+			binds = append(binds, panes.HomeKeyArgv())
+		}
 		if os.Getenv(panes.HomeEnv) == "1" {
-			for _, argv := range [][]string{panes.SizeArgv(), panes.HomeKeyArgv()} {
-				_ = exec.Command("tmux", argv[1:]...).Run()
-			}
+			binds = append(binds, panes.SizeArgv(), panes.CommandKeysArgv())
+		}
+		for _, argv := range binds {
+			_ = exec.Command("tmux", argv[1:]...).Run()
 		}
 	}
 
@@ -326,7 +341,7 @@ func askpassMain(prompt string) error {
 
 // commands are the commands a builder types. hook, authorize and gate run
 // from a hook, an ssh forced command and a connect.
-var commands = []string{"connect", "serve", "sessions", "ships", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "switch", "scan", "recover"}
+var commands = []string{"connect", "serve", "sessions", "ships", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "switch", "scan", "recover", "chain", "unchain"}
 
 type flags struct {
 	cfgPath, root         *string
@@ -347,6 +362,7 @@ type flags struct {
 	newAccount            *bool
 	all                   *bool
 	dir                   *string
+	off, on               *bool
 }
 
 // usageText heads --help: every command, one line each, then the flags.
@@ -374,6 +390,10 @@ Commands:
   matchblox new ["<first message>"]  start an agent in a tmux session of its own (--where, --agent, --branch, --name, --account)
   matchblox rename <who> <name>    name a session, its tmux session and its agent alike
   matchblox kill <who>             end a session: its agent and its pane (--anyway while it works)
+  matchblox chain <who>            ask to chain with a match, or accept its ask
+  matchblox chain                  list your chain (--json)
+  matchblox unchain                leave your chain
+  matchblox chain --off|--on       take no chains and no notices, or take them again
   matchblox switch <who> --agent <name>  run another agent in a session's pane (--handoff, --anyway while it works)
   matchblox recover [<name>…]      the agents a lost tmux server ran, and what reopens (--all reopens each, --dir a moved folder, --json)
   matchblox scan [<folder>…|off]   find the Git repositories here for N, now and every 30 minutes (off: stop and forget)
@@ -398,7 +418,7 @@ func newFlags() (*flag.FlagSet, flags) {
 		root:       fl.String("fixtures", "", "read proc/, sys/, home/ and tmux-panes.txt from this directory instead of the live machine"),
 		text:       fl.Bool("text", false, "status: print a summary instead of JSON"),
 		stdio:      fl.Bool("stdio", false, "serve: speak on stdin and stdout, joined to the local service"),
-		json:       fl.Bool("json", false, "sessions, ships, usage, peek, recover: print JSON instead of text"),
+		json:       fl.Bool("json", false, "sessions, ships, usage, peek, recover, chain: print JSON instead of text"),
 		pick:       fl.Int("pick", 0, "send: answer the question the session asks with this option (from 1)"),
 		lines:      fl.Int("lines", 20, "peek: the last lines of what the session said (0: all)"),
 		why:        fl.String("why", "", "hold, stoker when … hold: why the session is held"),
@@ -422,6 +442,8 @@ func newFlags() (*flag.FlagSet, flags) {
 		setup:      fl.String("setup", "", "new --new-account: like-default (default), copy or empty"),
 		all:        fl.Bool("all", false, "recover: reopen each conversation that can reopen"),
 		dir:        fl.String("dir", "", "recover <name>: the new place of the session's folder"),
+		off:        fl.Bool("off", false, "chain: take no chains and no notices"),
+		on:         fl.Bool("on", false, "chain: take chains and notices again"),
 		noMotion:   fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),
 	}
 }
@@ -456,8 +478,9 @@ func goHome() error {
 	return execve(tmux, argv, os.Environ())
 }
 
-// hookTimeout bounds the whole delivery, so `matchblox hook` stops in
-// less than 50 ms with the service up, down or stuck.
+// hookTimeout bounds the whole delivery, the event and the ask for news
+// together, so `matchblox hook` stops in less than 50 ms with the service
+// up, down or stuck.
 const hookTimeout = 30 * time.Millisecond
 
 // hookDeny is Claude Code's PreToolUse answer that refuses the tool call,
@@ -472,6 +495,7 @@ func hookDeny(reason string) map[string]any {
 // no service answers. It returns nil on every path: a hook that fails must
 // not disturb the agent.
 func hook(args []string, stdin io.Reader, out io.Writer, sock, spool string, progress bool) error {
+	start := time.Now()
 	name := ""
 	if len(args) > 0 {
 		name = args[0]
@@ -493,7 +517,8 @@ func hook(args []string, stdin io.Reader, out io.Writer, sock, spool string, pro
 			_ = json.NewEncoder(out).Encode(hookDeny(why))
 		}
 	}
-	if transport.Notify(sock, hookTimeout, proto.KindHook, ev) != nil {
+	up := transport.Notify(sock, hookTimeout, proto.KindHook, ev) == nil
+	if !up {
 		_ = hooks.Append(spool, ev)
 	}
 	if progress && ev.Name == "SessionStart" && ev.Pane != "" { // a session in tmux: what the console watches
@@ -501,26 +526,85 @@ func hook(args []string, stdin io.Reader, out io.Writer, sock, spool string, pro
 		// context; the console reads the bar back from the transcript.
 		_, _ = fmt.Fprintln(out, hooks.ProgressPrompt)
 	}
+	if up {
+		printNews(out, sock, ev, hookTimeout-time.Since(start))
+	}
 	return nil
 }
 
+// printNews asks the service for the news of ev's match and prints it the
+// way Claude Code adds it to the session's context: plain lines at the start
+// of a turn, additionalContext after a tool call. Out of time, it prints
+// nothing.
+func printNews(out io.Writer, sock string, ev hooks.Event, left time.Duration) {
+	switch ev.Name {
+	case "UserPromptSubmit", "SessionStart", "PostToolUse":
+	default:
+		return
+	}
+	askNews(sock, ev, left, func(text string) {
+		if ev.Name != "PostToolUse" {
+			_, _ = fmt.Fprintln(out, text)
+			return
+		}
+		type added struct {
+			HookEventName     string `json:"hookEventName"`
+			AdditionalContext string `json:"additionalContext"`
+		}
+		encode(out, map[string]added{"hookSpecificOutput": {HookEventName: ev.Name, AdditionalContext: text}})
+	})
+}
+
+// askNews asks for the news of ev's match within left and, when there is
+// some, shows it, then tells the service it was heard: news the service
+// hears nothing of goes back to the inbox. A subagent's tool call asks for
+// nothing, as what it prints reaches the subagent, not the match.
+func askNews(sock string, ev hooks.Event, left time.Duration, show func(text string)) {
+	if ev.Pane == "" || ev.AgentID != "" {
+		return
+	}
+	var r proto.NewsReply
+	_ = transport.AskHeard(sock, left, proto.KindNews, proto.News{Pane: ev.Pane, Socket: ev.Socket, SessionID: ev.SessionID, Event: ev.Name}, &r, func() bool {
+		if r.Text == "" {
+			return false
+		}
+		show(r.Text)
+		return true
+	})
+}
+
+func encode(out io.Writer, v any) {
+	enc := json.NewEncoder(out)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(v)
+}
+
 // hookCursor delivers one event of Cursor's hooks (`matchblox hook
-// --cursor`; the event is in the payload), as hook does. It prints nothing:
-// Cursor reads what a hook prints, and a stop hook's followup_message would
+// --cursor`; the event is in the payload), as hook does. It prints the
+// news only as sessionStart's and postToolUse's additional_context: Cursor
+// reads what every hook prints, and a stop hook's followup_message would
 // start a turn.
-func hookCursor(stdin io.Reader, _ io.Writer, sock, spool string) error {
+func hookCursor(stdin io.Reader, out io.Writer, sock, spool string) error {
+	start := time.Now()
 	ev, err := hooks.ParseCursor(stdin, os.Getenv)
 	if err != nil {
 		return nil
 	}
 	if transport.Notify(sock, hookTimeout, proto.KindHook, ev) != nil {
 		_ = hooks.Append(spool, ev)
+		return nil
 	}
+	if ev.Name != "SessionStart" && ev.Name != "PostToolUse" {
+		return nil
+	}
+	askNews(sock, ev, hookTimeout-time.Since(start), func(text string) {
+		encode(out, map[string]string{"additional_context": text})
+	})
 	return nil
 }
 
 // progressPrompt reads the config only for SessionStart, the one event that
-// prints: the other hooks stay as fast as they were.
+// prints the bar: the other hooks stay as fast as they were.
 func progressPrompt(args []string) bool {
 	if len(args) == 0 || args[0] != "SessionStart" {
 		return false
@@ -531,11 +615,17 @@ func progressPrompt(args []string) bool {
 
 func spoolPath() string { return filepath.Join(filepath.Dir(state.Path()), "spool.jsonl") }
 
+// consoleFPS is the console's frame rate. A key waits for the next frame:
+// 15 frames showed a key 37 ms late on average and 60 shows it 11 ms late,
+// for 0.3% more of one core when idle (#285).
+const consoleFPS = 60
+
 func console(path string, cfg config.Config, root string, noMotion bool, host string) error {
 	base := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, CompactTokens: cfg.Sessions.CompactTokens, NoMotion: noMotion,
 		OutsideTmux: os.Getenv("TMUX") == "", Self: invokedPath(os.Args[0]), StateDir: filepath.Dir(state.Path())}
 	if !base.OutsideTmux {
 		base.Prefix, base.Home, base.LocalTmux = localTmux()
+		base.NoPrefixM = !panes.NamedConsole(os.Args[0])
 	}
 	if runtime.GOOS != "windows" {
 		// The ssh masters of the jumps and the prompt socket: a short,
@@ -549,8 +639,6 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		base.Graphics, restore = consoleGraphics()
 	}
 	defer restore() // the pane's own passthrough, once the console ends
-	// The screen changes on a state or a key press, so 15 frames a second
-	// is still instant to the eye and wakes the process 4x less than 60.
 	if root != "" {
 		// Fixtures: a service in this process, for demos and tests.
 		ctx, cancel := context.WithCancel(context.Background())
@@ -561,7 +649,7 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		go s.Handle(ctx, transport.NewConn(b)) //nolint:errcheck // ends with the console
 		base.Conn = transport.NewConn(a)
 		defer base.Conn.Close()
-		final, err := tea.NewProgram(app.New(base), tea.WithFPS(15)).Run()
+		final, err := tea.NewProgram(app.New(base), tea.WithFPS(consoleFPS)).Run()
 		if m, ok := final.(app.Model); ok {
 			m.ClosePair() // however the program ended, its pair code goes with it
 		}
@@ -587,7 +675,7 @@ func console(path string, cfg config.Config, root string, noMotion bool, host st
 		Answered:      func() { _ = os.MkdirAll(filepath.Dir(asked), 0o700); _ = os.WriteFile(asked, nil, 0o600) },
 		TailscaleGate: setup.TailscaleGateMessage,
 	})
-	final, err := tea.NewProgram(sh, tea.WithFPS(15)).Run()
+	final, err := tea.NewProgram(sh, tea.WithFPS(consoleFPS)).Run()
 	if s, ok := final.(app.Shell); ok {
 		s.Close()
 	}
@@ -703,7 +791,7 @@ func newService(cfg config.Config, root string) *service.Service {
 	s := service.New(cfg, newSampler(cfg, root), git)
 	s.Binary = version
 	if root != "" {
-		s.Host = fixtureHost(root)
+		s.Host = demo.Host(root)
 		// The fixture's panes and pids exist on this machine too.
 		s.Actions.Run = func([]string) error { return errors.New("fixtures: nothing runs on this machine") }
 		return s
@@ -737,6 +825,8 @@ func newService(cfg config.Config, root string) *service.Service {
 	s.Setup = liveSetup(cfg.Sessions.CompactAt)
 	s.Ways = config.WaysPath()
 	s.LimitsLog = &limits.Store{Path: filepath.Join(filepath.Dir(s.StatePath), "limits.jsonl")}
+	s.ChainsPath = filepath.Join(filepath.Dir(s.StatePath), "chains.json")
+	s.PeerLog = filepath.Join(filepath.Dir(s.StatePath), "peers.jsonl")
 	if st, err := stoker.Open(filepath.Dir(s.StatePath)); err == nil {
 		s.Stoker = st
 	} else {
@@ -776,16 +866,6 @@ func newService(cfg config.Config, root string) *service.Service {
 	s.GitRemote = cfg.Git.Remote
 	wirePush(s, cfg.Push, home(), filepath.Dir(s.StatePath), defaultHostKey)
 	return s
-}
-
-// fixtureHost is the host name a fixture tree carries, so a demo or a test
-// never shows the name of the machine it runs on.
-func fixtureHost(root string) string {
-	b, err := os.ReadFile(filepath.Join(root, "proc", "sys", "kernel", "hostname"))
-	if h := strings.TrimSpace(string(b)); err == nil && h != "" {
-		return h
-	}
-	return "fixtures"
 }
 
 // invokedPath is the path matchblox was started by, links kept: Homebrew
@@ -996,28 +1076,15 @@ func shipsSource(cfg config.Config, dir string) service.ShipsSource {
 }
 
 func newSampler(cfg config.Config, root string) *sample.Sampler {
-	smp := &sample.Sampler{
-		Cfg:    cfg,
-		Agents: sessionAgents(cfg, root),
-		Rules: sample.Rules{
-			CompactAt:     cfg.Sessions.CompactAt,
-			CompactTokens: cfg.Sessions.CompactTokens,
-			ClearIdle:     cfg.Sessions.ClearIdle.Duration,
-			ClearMinPct:   cfg.Sessions.ClearMinPct,
-			ClearStale:    cfg.Sessions.ClearStale.Duration,
-			Windows:       cfg.Sessions.Windows,
-		},
-	}
 	if root != "" {
-		smp.FS = procfs.FS{Root: filepath.Join(root, "proc"), PageSize: procfs.FixturePage}
-		smp.Sys = procfs.Sys{Root: filepath.Join(root, "sys")}
-		smp.Home = filepath.Join(root, "home")
-		smp.HomeAs = "/home/user" // the HOME of every fixture process
-		smp.Tmux = func() ([]byte, error) { return os.ReadFile(filepath.Join(root, "tmux-panes.txt")) }
-		smp.Capture = sample.CaptureDir(filepath.Join(root, "panes"))
-		smp.LimitsDir = filepath.Join(root, "state")
-		smp.Disks = sample.DiskFile(filepath.Join(root, "disks.txt"))
-		return smp
+		return demo.Sampler(cfg, root)
+	}
+	smp := &sample.Sampler{
+		Cfg: cfg,
+		// Every known agent, installed at the first run or after it, then the
+		// others the config adds (#179).
+		Agents: setup.Agents(cfg.Agents),
+		Rules:  sample.RulesOf(cfg),
 	}
 	smp.FS, smp.Sys = actions.NewHost(), procfs.Sys{Root: "/sys"}
 	smp.Stoker = sample.StokerServer

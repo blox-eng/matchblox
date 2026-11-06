@@ -1,9 +1,12 @@
 package sample_test
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/tmuxtest"
@@ -45,5 +48,72 @@ func TestParsePanesSkipsJumpSessions(t *testing.T) {
 		"%5\tmatchblox-api-deadbeef:0.0\tw\t50\tclaude\t/z\t/s\t1\t\n"))
 	if len(got) != 2 || got[0].Target != "work:1.1" || got[1].Target != "matchblox-api-deadbeef:0.0" {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestPaneMouseOnTmux(t *testing.T) {
+	server := tmuxtest.Server(t)
+	start := func(session, script string) string {
+		t.Helper()
+		cmd := exec.Command("tmux", "-L", server, "-f", os.DevNull, "new-session", "-d", "-s", session, "-x", "80", "-y", "24", script)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("new-session: %v\n%s", err, out)
+		}
+		out, err := exec.Command("tmux", "-L", server, "list-panes", "-t", session, "-F", "#{pane_id}").Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return sample.OnServer(strings.TrimSpace(string(out)), server)
+	}
+	reads := start("reads", `printf '\033[?1049h\033[?1002h\033[?1006h'; sleep 30`)
+	plain := start("plain", `sleep 30`)
+	deadline := time.Now().Add(5 * time.Second)
+	cols, rows, ok := sample.PaneMouse(reads)
+	for !ok && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+		cols, rows, ok = sample.PaneMouse(reads)
+	}
+	if !ok || cols != 80 || rows != 24 {
+		t.Fatalf("reads: %d %d %v", cols, rows, ok)
+	}
+	if _, _, ok := sample.PaneMouse(plain); ok {
+		t.Fatal("plain reads no mouse")
+	}
+	if _, _, ok := sample.PaneMouse(sample.OnServer("%999", server)); ok {
+		t.Fatal("a gone pane reads no mouse")
+	}
+}
+
+func TestCaptureBackOnTmux(t *testing.T) {
+	server := tmuxtest.Server(t)
+	cmd := exec.Command("tmux", "-L", server, "-f", os.DevNull, "new-session", "-d", "-s", "hist", "-x", "80", "-y", "24", "seq 1 60; sleep 30")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("new-session: %v\n%s", err, out)
+	}
+	out, err := exec.Command("tmux", "-L", server, "list-panes", "-t", "hist", "-F", "#{pane_id}").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pane := sample.OnServer(strings.TrimSpace(string(out)), server)
+	first := func(text string) string { return strings.Fields(text + " none")[0] }
+	deadline := time.Now().Add(5 * time.Second)
+	live := sample.CapturePanes([]string{pane})[pane]
+	for !strings.Contains(live, "60") && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+		live = sample.CapturePanes([]string{pane})[pane]
+	}
+	hist, rows, ok := sample.PaneHistory(pane)
+	if !ok || rows != 24 || hist < 30 {
+		t.Fatalf("history %d, rows %d, ok %v", hist, rows, ok)
+	}
+	back, ok := sample.CaptureBackStyled(pane, 10, rows)
+	if !ok {
+		t.Fatal("no capture back")
+	}
+	var at, want int
+	fmt.Sscan(first(live), &at)
+	fmt.Sscan(first(back), &want)
+	if want != at-10 || len(strings.Split(strings.TrimRight(back, "\n"), "\n")) != rows {
+		t.Fatalf("live starts at %d, 10 back starts at %q:\n%s", at, first(back), back)
 	}
 }
