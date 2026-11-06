@@ -87,7 +87,7 @@ func TestTheCallersPaneComesFromItsPidNotFromTheAct(t *testing.T) {
 
 func TestOnlyAConsoleUndrivesAPane(t *testing.T) {
 	s, _, _ := guardedRun(t)
-	s.PeerPane = func(int) string { return "" }
+	s.PeerPane = func(int) string { return "%5" } // a shell's pane, no agent's
 	if res := actOver(t, s, 777, proto.ClientCLI, proto.Act{RecID: "message:%1", Confirm: "y", Text: "merge it"}); res.Err != "" {
 		t.Fatal(res.Err)
 	}

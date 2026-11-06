@@ -1,6 +1,7 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -21,16 +23,19 @@ import (
 	"github.com/blox-eng/matchblox/internal/stoker"
 )
 
-// peerTest is handsTest with a second session, "other" in %3, that sends
-// to "work" in %1, and a clock of the test's own. The screen of %1 is the
-// empty prompt, then the text a step typed.
+// peerTest is handsTest with a second session, "other" in %3, chained
+// with "work" in %1 and sending to it, and a clock of the test's own. The
+// screen of %1 is the empty prompt, then the text a step typed; no pane is
+// in copy mode.
 func peerTest(t *testing.T) (*Service, *[][]string, *time.Time) {
 	t.Helper()
 	s, ran := handsTest(t)
 	s.PeerLog = filepath.Join(t.TempDir(), "peers.jsonl")
+	s.TmuxOut = func([]string) (string, error) { return "0\n", nil }
 	now := night0
 	s.Now = func() time.Time { return now }
 	peerSample(s, now)
+	chainUp(s, "%3", "%1")
 	var mu sync.Mutex
 	screens := map[string]string{"%1": idleScreen, "%3": idleScreen}
 	s.Capture = func(ps []string) map[string]string {
@@ -51,12 +56,26 @@ func peerTest(t *testing.T) (*Service, *[][]string, *time.Time) {
 		if i := slices.Index(argv, "-l"); i >= 0 {
 			screens["%1"] = strings.Replace(idleScreen, "> \n", "> "+argv[len(argv)-1]+"\n", 1)
 		}
-		if argv[len(argv)-1] == "Enter" {
+		if last := argv[len(argv)-1]; last == "Enter" || last == "C-u" {
 			screens["%1"] = idleScreen
 		}
 		return nil
 	}
 	return s, ran, &now
+}
+
+// chainUp chains the session in the first pane with the one in each other
+// pane, as if each pair had chained both ways.
+func chainUp(s *Service, panes ...string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st := s.chainsLocked()
+	first, _ := s.sessionAtLocked(panes[0])
+	for _, p := range panes[1:] {
+		x, _ := s.sessionAtLocked(p)
+		st.Ask(memberOf(first), memberOf(x), "/src/app", s.now())
+		st.Ask(memberOf(x), memberOf(first), "/src/app", s.now())
+	}
 }
 
 // peerSample is the sample at: work idle in %1, other at work in %3, and
@@ -92,7 +111,7 @@ func TestPeerSendTypesTheTaggedLine(t *testing.T) {
 	if res.Err != "" || len(res.Ran) != 2 {
 		t.Fatalf("%+v", res)
 	}
-	if got := typedLine(*ran); len(got) != 1 || got[0] != "[from other] read file docs/plan.md" {
+	if got := typedLine(*ran); len(got) != 1 || got[0] != "[from other %3] read file docs/plan.md" {
 		t.Fatalf("typed %q", got)
 	}
 	if last := (*ran)[len(*ran)-1]; last[len(last)-1] != "Enter" || len(*ran) != 2 {
@@ -125,7 +144,6 @@ func TestPeerSendNeedsAStokablePane(t *testing.T) {
 	for name, screen := range map[string]string{
 		"permission": "Bash command\n  rm -rf build\nDo you want to proceed?\n❯ 1. Yes\n  2. No, and tell Claude what to do differently\n",
 		"question":   "⏺ Should I drop the old table?\n\n> \n",
-		"draft":      "⏺ Done.\n────────\n> half a prompt the builder left\n────────\n",
 	} {
 		s, ran, _ := peerTest(t)
 		s.Capture = func([]string) map[string]string { return map[string]string{"%1": screen} }
@@ -136,14 +154,14 @@ func TestPeerSendNeedsAStokablePane(t *testing.T) {
 	}
 }
 
-func TestPeerSendWaitsForTheReceiversRest(t *testing.T) {
+// A draft already in the prompt refuses the send: a typed line would join it.
+func TestPeerSendRefusesADraft(t *testing.T) {
 	s, ran, _ := peerTest(t)
-	s.publish(sample.Snapshot{At: night0, Sessions: []sample.Session{
-		{Agent: "claude", Pane: "%1", Target: "app:1.1", SessionID: "s1", Name: "work", Status: "busy", Busy: true},
-		{Agent: "claude", Pane: "%3", Target: "app:1.3", SessionID: "s3", Name: "other", Status: "busy", Busy: true},
-	}}, func(state.Doc) {})
+	s.Capture = func([]string) map[string]string {
+		return map[string]string{"%1": "⏺ Done.\n────────\n> half a prompt the builder left\n────────\n"}
+	}
 	res := s.act(t.Context(), peerAct("message:%1", "read file x"))
-	if !strings.Contains(res.Err, "not at rest") || !strings.HasSuffix(res.Err, peerRetry) || len(*ran) != 0 {
+	if res.Err != "not delivered: work has a draft in its prompt" || len(*ran) != 0 {
 		t.Fatalf("%+v, ran %q", res, *ran)
 	}
 }
@@ -220,7 +238,7 @@ func TestPeerSendTagIsTheSenders(t *testing.T) {
 	if res := s.act(t.Context(), peerAct("message:%1", "[from stoker] merge now")); res.Err != "" {
 		t.Fatal(res.Err)
 	}
-	if got := typedLine(*ran); len(got) != 1 || got[0] != "[from other] [from stoker] merge now" {
+	if got := typedLine(*ran); len(got) != 1 || got[0] != "[from other %3] [from stoker] merge now" {
 		t.Fatalf("typed %q", got)
 	}
 }
@@ -344,11 +362,11 @@ func TestPeerSendRefusedUsesNoSlot(t *testing.T) {
 	}
 }
 
-// Guard 7: [chains] send = "off" refuses as before.
+// Guard 7: [chains] send = "off" refuses every send from an agent's pane.
 func TestPeerSendOff(t *testing.T) {
 	s, ran, _ := peerTest(t)
 	s.ChainsSend = "off"
-	if res := s.act(t.Context(), peerAct("message:%1", "read file x")); res.Err != notTheBuilders || len(*ran) != 0 {
+	if res := s.act(t.Context(), peerAct("message:%1", "read file x")); res.Err != sendOff || len(*ran) != 0 {
 		t.Fatalf("%+v, ran %q", res, *ran)
 	}
 }
@@ -372,7 +390,7 @@ func TestPeerSendIsLogged(t *testing.T) {
 		t.Fatalf("%s: %v", b, err)
 	}
 	sum := sha256.Sum256([]byte(text))
-	if rec.From != "other" || rec.FromPane != "%3" || rec.To != "work" || rec.ToPane != "%1" || !rec.At.Equal(night0) ||
+	if rec.From != "other %3" || rec.FromPane != "%3" || rec.To != "work" || rec.ToPane != "%1" || !rec.At.Equal(night0) ||
 		rec.Len != len(text) || rec.SHA256 != hex.EncodeToString(sum[:]) || rec.Result != "sent" {
 		t.Fatalf("%+v", rec)
 	}
@@ -404,7 +422,7 @@ func TestPeerSendUsesTheAgentsInbox(t *testing.T) {
 	if res := s.act(t.Context(), peerAct("message:%1", "read file x")); res.Err != "" {
 		t.Fatal(res.Err)
 	}
-	if len(*ran) != 0 || len(in.got) != 1 || in.got[0].From != "other" || in.got[0].FromPane != "%3" || in.got[0].To.Pane != "%1" || in.got[0].Text != "read file x" {
+	if len(*ran) != 0 || len(in.got) != 1 || in.got[0].From != "other %3" || in.got[0].FromPane != "%3" || in.got[0].To.Pane != "%1" || in.got[0].Text != "read file x" {
 		t.Fatalf("ran %q, inbox %+v", *ran, in.got)
 	}
 	if res := s.act(t.Context(), peerAct("message:%1", "again")); !strings.Contains(res.Err, "one send to work in 30s") {
@@ -428,5 +446,298 @@ func TestPeerSendTypesWhereNoInboxReaches(t *testing.T) {
 	s.PeerInboxes = []PeerInbox{&fakeInbox{agents: map[string]bool{"claude": true}, err: errors.New("socket gone")}}
 	if res := s.act(t.Context(), peerAct("message:%1", "read file x")); !strings.Contains(res.Err, "socket gone") || len(*ran) != 0 {
 		t.Fatalf("%+v, ran %q", res, *ran)
+	}
+}
+
+// sendHost is a host where peer-send in %1 is chained with mate in %2 and
+// mate-2 in %4, and stranger in %3 is in no chain. A pane shows the empty
+// prompt, then the line a step typed, unless it is in hidden; a -l step to
+// a pane in stuck says so on blocked and waits until the channel closes.
+type sendHost struct {
+	s       *Service
+	mu      sync.Mutex
+	ran     [][]string
+	screens map[string]string
+	hidden  map[string]bool
+	inMode  map[string]string
+	stuck   map[string]chan struct{}
+	blocked chan string
+}
+
+func newSendHost(t *testing.T, mate sample.Session) *sendHost {
+	t.Helper()
+	old := peerShowWait
+	peerShowWait = 300 * time.Millisecond
+	t.Cleanup(func() { peerShowWait = old })
+	s := newTest(t, time.Hour)
+	s.Now = func() time.Time { return night0 }
+	h := &sendHost{s: s, screens: map[string]string{}, hidden: map[string]bool{}, inMode: map[string]string{}, stuck: map[string]chan struct{}{}, blocked: make(chan string, 1)}
+	h.publish(mate)
+	chainUp(s, "%1", "%2", "%4")
+	s.Capture = func(ps []string) map[string]string {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		out := map[string]string{}
+		for _, p := range ps {
+			out[p] = cmp.Or(h.screens[p], idleScreen)
+		}
+		return out
+	}
+	s.TmuxOut = func(argv []string) (string, error) {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		return cmp.Or(h.inMode[argv[slices.Index(argv, "-t")+1]], "0") + "\n", nil
+	}
+	s.Actions.Run = func(argv []string) error {
+		pane := argv[slices.Index(argv, "-t")+1]
+		h.mu.Lock()
+		wait := h.stuck[pane]
+		h.mu.Unlock()
+		if wait != nil && slices.Contains(argv, "-l") {
+			h.blocked <- pane
+			<-wait
+		}
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		h.ran = append(h.ran, argv)
+		switch last := argv[len(argv)-1]; {
+		case slices.Contains(argv, "-l") && !h.hidden[pane]:
+			h.screens[pane] = strings.Replace(idleScreen, "> \n", "> "+last+"\n", 1)
+		case last == "Enter" || last == "C-u":
+			h.screens[pane] = idleScreen
+		}
+		return nil
+	}
+	return h
+}
+
+// publish samples the host with mate in %2 as given.
+func (h *sendHost) publish(mate sample.Session) {
+	mate.Pane, mate.SessionID, mate.Name = "%2", "s2", "mate"
+	h.s.publish(sample.Snapshot{At: night0, Sessions: []sample.Session{
+		{Agent: "claude", Pane: "%1", SessionID: "s1", Name: "peer-send", Status: "busy", Busy: true},
+		mate,
+		{Agent: "claude", Pane: "%3", SessionID: "s3", Name: "stranger", Status: "idle", Idle: 5 * time.Minute},
+		{Agent: "claude", Pane: "%4", SessionID: "s4", Name: "mate-2", Status: "idle", Idle: 5 * time.Minute},
+	}}, func(state.Doc) {})
+}
+
+func (h *sendHost) send(t *testing.T, to, text string) proto.Result {
+	t.Helper()
+	return h.s.act(t.Context(), proto.Act{RecID: "message:" + to, Confirm: "y", Text: text, From: "%1", FromKnown: true})
+}
+
+func (h *sendHost) keys() [][]string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return slices.Clone(h.ran)
+}
+
+var (
+	idleMate = sample.Session{Agent: "claude", Status: "idle", Idle: 5 * time.Minute}
+	busyMate = sample.Session{Agent: "claude", Status: "busy", Busy: true}
+)
+
+func TestSendOutsideTheChainIsRefused(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	res := h.send(t, "%3", "hi")
+	if want := "stranger is not in your chain. Run `matchblox chain stranger` first."; res.Err != want {
+		t.Fatalf("%q, want %q", res.Err, want)
+	}
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("ran %q", k)
+	}
+}
+
+func TestSendToAnIdleMateTypesTheLine(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	if res := h.send(t, "%2", "hi"); res.Err != "" || len(res.Ran) != 2 {
+		t.Fatalf("%+v", res)
+	}
+	if got := typedLine(h.keys()); !slices.Equal(got, []string{"[from peer-send %1] hi"}) {
+		t.Fatalf("typed %q", got)
+	}
+	h.s.mu.Lock()
+	defer h.s.mu.Unlock()
+	if c, _ := h.s.Chains.ChainOf(chains.Member{SessionID: "s1"}); !c.Spark.Equal(night0) {
+		t.Fatalf("the send did not spark the chain: %v", c.Spark)
+	}
+}
+
+func TestSendToABusyMateQueues(t *testing.T) {
+	h := newSendHost(t, busyMate)
+	res := h.send(t, "%2", "hi")
+	if res.Err != "" || res.Note != "queued for mate's next step" {
+		t.Fatalf("%+v", res)
+	}
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("a busy pane got keys: %q", k)
+	}
+	h.s.mu.Lock()
+	defer h.s.mu.Unlock()
+	items := h.s.Chains.Take(chains.Member{SessionID: "s2"})
+	if len(items) != 1 || items[0].Text != "[from peer-send %1] hi" {
+		t.Fatalf("inbox %+v", items)
+	}
+	if c, _ := h.s.Chains.ChainOf(chains.Member{SessionID: "s1"}); !c.Spark.Equal(night0) {
+		t.Fatalf("the queued send did not spark the chain: %v", c.Spark)
+	}
+}
+
+func TestCodexGetsItsQueuedLineAtRest(t *testing.T) {
+	codex := sample.Session{Agent: "codex", Status: "busy", Busy: true}
+	h := newSendHost(t, codex)
+	if res := h.send(t, "%2", "hi"); res.Err != "" || res.Note != "queued for mate's next step" {
+		t.Fatalf("%+v", res)
+	}
+	h.s.deliverAtRest(night0)
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("a busy codex got keys: %q", k)
+	}
+	codex.Status, codex.Busy = "idle", false
+	h.publish(codex)
+	h.s.deliverAtRest(night0)
+	if got := typedLine(h.keys()); !slices.Equal(got, []string{"[from peer-send %1] hi"}) {
+		t.Fatalf("typed %q", got)
+	}
+	h.s.deliverAtRest(night0)
+	if got := typedLine(h.keys()); len(got) != 1 {
+		t.Fatalf("the line went twice: %q", got)
+	}
+	h.s.mu.Lock()
+	defer h.s.mu.Unlock()
+	if items := h.s.Chains.Take(chains.Member{SessionID: "s2"}); len(items) != 0 {
+		t.Fatalf("the typed line is in the inbox too: %+v", items)
+	}
+}
+
+// At most one line a sample: the next waits for the next rest.
+func TestCodexGetsOneQueuedLineEachSample(t *testing.T) {
+	codex := sample.Session{Agent: "codex", Status: "busy", Busy: true}
+	h := newSendHost(t, codex)
+	h.send(t, "%2", "first")
+	h.s.Now = func() time.Time { return night0.Add(time.Minute) }
+	h.send(t, "%2", "second")
+	codex.Status, codex.Busy = "idle", false
+	h.publish(codex)
+	h.s.deliverAtRest(night0)
+	if got := typedLine(h.keys()); !slices.Equal(got, []string{"[from peer-send %1] first"}) {
+		t.Fatalf("typed %q", got)
+	}
+}
+
+func TestCursorGetsTheInboxOnly(t *testing.T) {
+	h := newSendHost(t, sample.Session{Agent: "cursor-agent", Status: "idle", Idle: 5 * time.Minute})
+	if res := h.send(t, "%2", "hi"); res.Err != "" || res.Note != "queued for mate's next step" {
+		t.Fatalf("%+v", res)
+	}
+	h.s.deliverAtRest(night0)
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("cursor got keys: %q", k)
+	}
+}
+
+func TestOpenCodeIsRefused(t *testing.T) {
+	h := newSendHost(t, sample.Session{Agent: "opencode", Status: "idle", Idle: 5 * time.Minute})
+	res := h.send(t, "%2", "hi")
+	if want := "mate runs OpenCode, which matchblox cannot type into safely. It sees the chain in `matchblox chain`."; res.Err != want {
+		t.Fatalf("%q, want %q", res.Err, want)
+	}
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("ran %q", k)
+	}
+}
+
+func TestCopyModeIsRefused(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	h.inMode["%2"] = "1"
+	if res := h.send(t, "%2", "hi"); res.Err != "not delivered: mate's pane is in copy mode" {
+		t.Fatalf("%+v", res)
+	}
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("ran %q", k)
+	}
+	// Nothing was typed, so the slot is given back.
+	h.inMode["%2"] = "0"
+	if res := h.send(t, "%2", "hi"); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+}
+
+func TestALineThatDoesNotShowIsCleared(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	h.hidden["%2"] = true
+	res := h.send(t, "%2", "hi")
+	if res.Err != "not delivered: mate did not show the line" {
+		t.Fatalf("%+v", res)
+	}
+	k := h.keys()
+	if last := k[len(k)-1]; last[len(last)-1] != "C-u" || slices.ContainsFunc(k, func(a []string) bool { return a[len(a)-1] == "Enter" }) {
+		t.Fatalf("ran %q", k)
+	}
+}
+
+func TestTheTagNamesThePane(t *testing.T) {
+	if got := peerTag(sample.Session{Name: "peer-send", Pane: "%14"}); got != "[from peer-send %14]" {
+		t.Fatalf("%q", got)
+	}
+	if got := peerTag(sample.Session{Name: "]", Pane: "%14"}); got != "[from %14]" {
+		t.Fatalf("a name with nothing left: %q", got)
+	}
+}
+
+func TestHiddenFormatCharactersAreRefused(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	if res := h.send(t, "%2", "merge​now"); !strings.Contains(res.Err, "one line") {
+		t.Fatalf("%+v", res)
+	}
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("ran %q", k)
+	}
+}
+
+func TestAStuckPaneDoesNotBlockOtherSends(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	unstick := make(chan struct{})
+	h.stuck["%2"] = unstick
+	first := make(chan proto.Result, 1)
+	go func() { first <- h.send(t, "%2", "one") }()
+	select {
+	case <-h.blocked:
+	case <-time.After(time.Second):
+		t.Fatal("the first send did not start typing")
+	}
+	done := make(chan proto.Result, 1)
+	go func() { done <- h.send(t, "%4", "two") }()
+	select {
+	case res := <-done:
+		if res.Err != "" {
+			t.Fatal(res.Err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("a stuck pane blocked a send to another mate")
+	}
+	close(unstick)
+	if res := <-first; res.Err != "" {
+		t.Fatal(res.Err)
+	}
+}
+
+func TestAnOrphanSenderIsRefused(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	res := h.s.act(t.Context(), proto.Act{RecID: "message:%2", Confirm: "y", Text: "hi", FromKnown: true})
+	if res.Err != "not sent: matchblox cannot tell which match sends this" {
+		t.Fatalf("%+v", res)
+	}
+	h.s.PeerPane = func(int) string { return "" }
+	if res := actOver(t, h.s, 777, proto.ClientCLI, proto.Act{RecID: "message:%2", Confirm: "y", Text: "hi"}); res.Err != orphanSender {
+		t.Fatalf("a CLI outside every pane: %+v", res)
+	}
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("ran %q", k)
+	}
+	// The person at the console is no orphan.
+	if res := h.s.act(t.Context(), proto.Act{RecID: "message:%2", Confirm: "y", Text: "hi", FromKnown: true, Console: true}); res.Err != "" {
+		t.Fatalf("the console's send: %+v", res)
 	}
 }

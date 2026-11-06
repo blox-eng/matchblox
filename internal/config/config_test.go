@@ -108,9 +108,10 @@ func TestExampleLoads(t *testing.T) {
 	}
 }
 
-// TestChains: the notice is on and send reaches the chain by default;
-// [chains] turns the notice off.
-func TestChains(t *testing.T) {
+// TestChainsConfigDefaults: the notice is on and send reaches the chain by
+// default; [chains] turns either off, and a send it does not know is an
+// error that names the two it knows.
+func TestChainsConfigDefaults(t *testing.T) {
 	if d := Default().Chains; d != (Chains{Notice: true, Send: "chain"}) {
 		t.Fatalf("default [chains] = %+v", d)
 	}
@@ -120,6 +121,13 @@ func TestChains(t *testing.T) {
 	}
 	if c.Chains != (Chains{Notice: false, Send: "chain"}) {
 		t.Fatalf("[chains] notice = false gave %+v", c.Chains)
+	}
+	if c, err := Load(write(t, "[chains]\nsend = \"off\"\n")); err != nil || c.Chains.Send != "off" {
+		t.Fatalf("send = off: %+v, %v", c.Chains, err)
+	}
+	_, err = Load(write(t, "[chains]\nsend = \"maybe\"\n"))
+	if err == nil || !strings.Contains(err.Error(), `"chain"`) || !strings.Contains(err.Error(), `"off"`) {
+		t.Fatalf("send = maybe: %v", err)
 	}
 }
 

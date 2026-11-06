@@ -540,6 +540,7 @@ func (s *Service) Run(ctx context.Context) {
 		s.publish(s.sample(), rec)
 		s.renameAtRest(ctx)
 		s.stoke(ctx, s.now())
+		s.deliverAtRest(s.now())
 		if first {
 			s.rescanGit()
 			s.shipKick <- struct{}{}

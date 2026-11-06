@@ -222,6 +222,9 @@ func Load(path string) (Config, error) {
 	if !c.Push.Off && !safeRelay(c.Push.Relay) {
 		return c, errors.New("push.relay: " + c.Push.Relay + " is not https (plain http only to this machine)")
 	}
+	if c.Chains.Send != "chain" && c.Chains.Send != "off" {
+		return c, errors.New(`chains.send: "` + c.Chains.Send + `" is not "chain" or "off"`)
+	}
 	for i := range c.Groups {
 		re, err := regexp.Compile(c.Groups[i].Container)
 		if err != nil {
