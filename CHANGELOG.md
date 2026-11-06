@@ -6,6 +6,20 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The chat scrolls an agent that does not read the mouse.** A swipe on the
+  phone, or the wheel, moves through the pane's history, and the key line says
+  how far back you are. The next key only comes back to the live screen.
+  Before, the chat said `not scrolled` and did not move.
+  ([#300](https://github.com/blox-eng/matchblox/issues/300))
+
+### Added
+
+- **A Ctrl key on the phone's belt.** Add `Ctrl` to Mine, tap it, and the next
+  letter goes with ctrl. The chat now sends ctrl with most letters, not only
+  `a` and `c`. ([#300](https://github.com/blox-eng/matchblox/issues/300))
+
 ## [0.32.0] - 2026-11-04
 
 ### Added

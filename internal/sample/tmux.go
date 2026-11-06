@@ -219,6 +219,41 @@ func paneMouse(run func(string, ...string) ([]byte, error), id string) (cols, ro
 	return cols, rows, anyFlag == 1 && sgr == 1
 }
 
+// PaneHistory is how many lines of history pane id holds, and its height.
+func PaneHistory(id string) (history, rows int, ok bool) {
+	return paneHistory(output, id)
+}
+
+func paneHistory(run func(string, ...string) ([]byte, error), id string) (history, rows int, ok bool) {
+	server, bare := SplitPane(id)
+	tmux := tmuxUTF8(server)
+	b, err := run(tmux[0], append(tmux[1:], "display-message", "-p", "-t", bare, "#{history_size} #{pane_height}")...)
+	if err != nil {
+		return 0, 0, false
+	}
+	if _, err := fmt.Sscan(string(b), &history, &rows); err != nil || rows <= 0 {
+		return 0, 0, false
+	}
+	return history, rows, true
+}
+
+// CaptureBackStyled reads pane id as CapturePanesStyled does, back lines up
+// in its history: the rows lines a screen that far back shows.
+func CaptureBackStyled(id string, back, rows int) (string, bool) {
+	return captureBack(output, id, back, rows)
+}
+
+func captureBack(run func(string, ...string) ([]byte, error), id string, back, rows int) (string, bool) {
+	server, bare := SplitPane(id)
+	tmux := tmuxUTF8(server)
+	start, end := strconv.Itoa(-back), strconv.Itoa(rows-1-back)
+	b, err := run(tmux[0], append(tmux[1:], "capture-pane", "-p", "-e", "-t", bare, "-S", start, "-E", end)...)
+	if err != nil {
+		return "", false
+	}
+	return string(b), true
+}
+
 // CaptureDir reads pane text from <dir>/<id>.txt (id without its %): the
 // panes of a fixture machine.
 func CaptureDir(dir string) func([]string) map[string]string {

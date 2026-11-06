@@ -23,8 +23,66 @@ func (s *Service) aConsole(console bool, a proto.Act) bool {
 	return console && !inAgent && !s.agentsPane(a) && !s.fromStoker(a)
 }
 
-// watched is the pane a console streams.
-type watched struct{ pane string }
+// watched is the pane a console streams, and where in its history: back
+// lines up from the live screen, in a pane rows high.
+type watched struct {
+	pane       string
+	back, rows int
+}
+
+// scrollStep is the lines one wheel step moves through a pane's history.
+const scrollStep = 3
+
+const backToLive = "not sent: back to the live screen — press it again to send"
+
+// scrollKey handles a console's key for the pane it watches while it scrolls
+// a pane whose agent does not read the mouse: a wheel step moves through the
+// history, and any other key only comes back to the live screen, so it never
+// answers a prompt the person did not see. handled is false for every other
+// key, which goes on to the agent.
+func (s *Service) scrollKey(cl *client, clientKind string, a proto.Act, pane string) (res proto.Result, handled bool) {
+	w := cl.watch.Load()
+	if w == nil || w.pane != pane || !s.aConsole(clientKind == proto.ClientConsole, a) {
+		return proto.Result{}, false
+	}
+	if a.Text != proto.WheelUp && a.Text != proto.WheelDown {
+		if w.back == 0 || scrolls(a.Text) {
+			return proto.Result{}, false
+		}
+		s.watchAt(cl, &watched{pane: pane})
+		return proto.Result{Err: backToLive}, true
+	}
+	if s.PaneMouse != nil {
+		if _, _, mouse := s.PaneMouse(pane); mouse {
+			return proto.Result{}, false
+		}
+	}
+	if s.PaneHistory == nil || s.CaptureBack == nil {
+		return proto.Result{}, false
+	}
+	hist, rows, ok := s.PaneHistory(pane)
+	if !ok {
+		return proto.Result{Err: "not scrolled: could not read " + pane + "'s history: tmux did not answer"}, true
+	}
+	back := w.back - scrollStep
+	if a.Text == proto.WheelUp {
+		back = w.back + scrollStep
+	}
+	back = min(max(back, 0), hist)
+	if back != w.back {
+		s.watchAt(cl, &watched{pane: pane, back: back, rows: rows})
+	}
+	return proto.Result{}, true
+}
+
+// watchAt sets what cl streams and wakes its loop.
+func (s *Service) watchAt(cl *client, w *watched) {
+	cl.watch.Store(w)
+	select {
+	case cl.screenKick <- struct{}{}:
+	default:
+	}
+}
 
 // watchAct sets the pane cl streams; an empty pane stops the stream.
 func (s *Service) watchAct(cl *client, clientKind string, a proto.Act, pane string) proto.Result {
@@ -77,7 +135,12 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 		_, live := s.sessionAt(pane)
 		if live {
 			cols, rows, gen := s.sizes.paneSize(pane)
-			text, read = s.Capture([]string{pane})[pane]
+			if w.back > 0 {
+				text, read = s.CaptureBack(pane, w.back, w.rows)
+				scr.Back = w.back
+			} else {
+				text, read = s.Capture([]string{pane})[pane]
+			}
 			if _, _, after := s.sizes.paneSize(pane); after == gen { // not sized while it was read
 				scr.Cols, scr.Rows = cols, rows
 			}
@@ -86,7 +149,7 @@ func (s *Service) watchLoop(ctx context.Context, cl *client) {
 		if live && !read {
 			scr.Err = "could not read " + pane + ": tmux did not answer"
 		}
-		if sent && pane == last.Pane && text == last.Text && scr.Gone == last.Gone && scr.Err == last.Err && scr.Cols == last.Cols && scr.Rows == last.Rows && (s.waitShown(pane, last.At) || !s.waitShown(pane, scr.At)) {
+		if sent && pane == last.Pane && text == last.Text && scr.Gone == last.Gone && scr.Err == last.Err && scr.Cols == last.Cols && scr.Rows == last.Rows && scr.Back == last.Back && (s.waitShown(pane, last.At) || !s.waitShown(pane, scr.At)) {
 			continue
 		}
 		sent, last = true, scr
