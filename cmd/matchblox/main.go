@@ -199,6 +199,15 @@ func run(args []string) error {
 			return err
 		}
 		return cliHand(cmd, words, *o.pick, *o.why, os.Stdout, transport.SocketPath())
+	case "chain", "unchain":
+		words, err := positionals(fl, args)
+		if err != nil {
+			return err
+		}
+		if cmd == "unchain" {
+			return cliUnchain(words, os.Stdout, transport.SocketPath())
+		}
+		return cliChain(words, *o.off, *o.on, *o.json, os.Stdout, transport.SocketPath())
 	case "recover":
 		words, err := positionals(fl, args)
 		if err != nil {
@@ -332,7 +341,7 @@ func askpassMain(prompt string) error {
 
 // commands are the commands a builder types. hook, authorize and gate run
 // from a hook, an ssh forced command and a connect.
-var commands = []string{"connect", "serve", "sessions", "ships", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "switch", "scan", "recover"}
+var commands = []string{"connect", "serve", "sessions", "ships", "status", "setup", "pair", "devices", "usage", "update", "version", "send", "compact", "hold", "release", "stoker", "peek", "new", "rename", "kill", "switch", "scan", "recover", "chain", "unchain"}
 
 type flags struct {
 	cfgPath, root         *string
@@ -353,6 +362,7 @@ type flags struct {
 	newAccount            *bool
 	all                   *bool
 	dir                   *string
+	off, on               *bool
 }
 
 // usageText heads --help: every command, one line each, then the flags.
@@ -380,6 +390,10 @@ Commands:
   matchblox new ["<first message>"]  start an agent in a tmux session of its own (--where, --agent, --branch, --name, --account)
   matchblox rename <who> <name>    name a session, its tmux session and its agent alike
   matchblox kill <who>             end a session: its agent and its pane (--anyway while it works)
+  matchblox chain <who>            ask to chain with a match, or accept its ask
+  matchblox chain                  list your chain (--json)
+  matchblox unchain                leave your chain
+  matchblox chain --off|--on       take no chains and no notices, or take them again
   matchblox switch <who> --agent <name>  run another agent in a session's pane (--handoff, --anyway while it works)
   matchblox recover [<name>…]      the agents a lost tmux server ran, and what reopens (--all reopens each, --dir a moved folder, --json)
   matchblox scan [<folder>…|off]   find the Git repositories here for N, now and every 30 minutes (off: stop and forget)
@@ -404,7 +418,7 @@ func newFlags() (*flag.FlagSet, flags) {
 		root:       fl.String("fixtures", "", "read proc/, sys/, home/ and tmux-panes.txt from this directory instead of the live machine"),
 		text:       fl.Bool("text", false, "status: print a summary instead of JSON"),
 		stdio:      fl.Bool("stdio", false, "serve: speak on stdin and stdout, joined to the local service"),
-		json:       fl.Bool("json", false, "sessions, ships, usage, peek, recover: print JSON instead of text"),
+		json:       fl.Bool("json", false, "sessions, ships, usage, peek, recover, chain: print JSON instead of text"),
 		pick:       fl.Int("pick", 0, "send: answer the question the session asks with this option (from 1)"),
 		lines:      fl.Int("lines", 20, "peek: the last lines of what the session said (0: all)"),
 		why:        fl.String("why", "", "hold, stoker when … hold: why the session is held"),
@@ -428,6 +442,8 @@ func newFlags() (*flag.FlagSet, flags) {
 		setup:      fl.String("setup", "", "new --new-account: like-default (default), copy or empty"),
 		all:        fl.Bool("all", false, "recover: reopen each conversation that can reopen"),
 		dir:        fl.String("dir", "", "recover <name>: the new place of the session's folder"),
+		off:        fl.Bool("off", false, "chain: take no chains and no notices"),
+		on:         fl.Bool("on", false, "chain: take chains and notices again"),
 		noMotion:   fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),
 	}
 }

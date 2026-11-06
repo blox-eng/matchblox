@@ -32,7 +32,8 @@ var matchers = map[string][]string{"PreToolUse": {said.AskTool, hooks.BashTool}}
 // pane but the stoker's and the panes it drives, under its own guards.
 var HandRules = []string{"Bash(matchblox sessions:*)", "Bash(matchblox ships:*)", "Bash(matchblox usage:*)",
 	"Bash(matchblox send:*)", "Bash(matchblox compact:*)", "Bash(matchblox hold:*)",
-	"Bash(matchblox release:*)", "Bash(matchblox stoker:*)", "Bash(matchblox peek:*)"}
+	"Bash(matchblox release:*)", "Bash(matchblox stoker:*)", "Bash(matchblox peek:*)",
+	"Bash(matchblox chain:*)", "Bash(matchblox unchain:*)"}
 
 // tools are the tools an event's entries are for; "" is an entry with no
 // matcher.

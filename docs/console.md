@@ -146,6 +146,15 @@ default, 0 for all); `--json` prints `name`, `pane`, `target`, `said`,
 `asks` (the first line of the question), `questions` (each with its
 `options`) and `approval`.
 
+## Chain matches
+
+Two matches in one repo can hear from each other once both chain. Run in an
+agent's pane, `matchblox chain api` asks to chain with `api`, or accepts its
+ask; nothing is shared until the other side chains back. `matchblox chain`
+lists your chain and the asks to and from you (`--json` prints `chain` and
+`requests`). `matchblox unchain` leaves the chain. `matchblox chain --off`
+takes no chains and no notices; `--on` takes them again.
+
 ## Act on a session from a script or an agent
 
 `<who>` is a pane (`%3`), a target (`app:1.1`) or a name; a name two sessions

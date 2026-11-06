@@ -95,7 +95,8 @@ func allowRules(t *testing.T, path string) []string {
 func TestHooksDoorAllowsTheStokersHands(t *testing.T) {
 	want := []string{"Bash(matchblox sessions:*)", "Bash(matchblox ships:*)", "Bash(matchblox usage:*)",
 		"Bash(matchblox send:*)", "Bash(matchblox compact:*)", "Bash(matchblox hold:*)",
-		"Bash(matchblox release:*)", "Bash(matchblox stoker:*)", "Bash(matchblox peek:*)"}
+		"Bash(matchblox release:*)", "Bash(matchblox stoker:*)", "Bash(matchblox peek:*)",
+		"Bash(matchblox chain:*)", "Bash(matchblox unchain:*)"}
 	if !slices.Equal(HandRules, want) {
 		t.Fatalf("HandRules = %q", HandRules)
 	}
@@ -139,5 +140,13 @@ func TestHooksDoorAllowsTheStokersHands(t *testing.T) {
 	b, _ := os.ReadFile(p)
 	if !strings.Contains(string(b), `"deny": ["Bash(rm -rf:*)"]`) || !strings.HasPrefix(string(b), "{\n  \"permissions\": {\n    \"allow\": [\n      \"Bash(go test:*)\",") {
 		t.Fatalf("the other keys moved:\n%s", b)
+	}
+}
+
+func TestHandRulesAllowChain(t *testing.T) {
+	for _, rule := range []string{"Bash(matchblox chain:*)", "Bash(matchblox unchain:*)"} {
+		if !slices.Contains(HandRules, rule) {
+			t.Errorf("HandRules lacks %s", rule)
+		}
 	}
 }
