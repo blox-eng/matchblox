@@ -101,3 +101,16 @@ work too. The command must be on the service's `PATH`.
 `[stoker] pane` is gone: you no longer start the stoker in a pane of your
 own. `matchblox status` warns while the config still names it, and nothing
 reads it. Remove the line. See [the stoker](stoker.md#the-stoker-agent).
+
+## Chains
+
+`[chains] notice` tells a match, at the start of a turn, of another match in
+its repo that it could chain with. It is `true` by default. With `false`, a
+match still hears the asks to chain with it.
+
+`[chains] send` is who a match's `matchblox send` reaches. `"chain"`, the
+default, is its chain-mates only. `"off"` is no other match. The person's
+own sends are unchanged either way. Any other value is an error.
+
+One match opts out alone with `matchblox chain --off`. See
+[chains](agents.md#chains).

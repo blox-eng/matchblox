@@ -95,6 +95,67 @@ inline instruction-file configuration. Existing user task text stays intact.
 Existing OpenCode inline settings and Codex developer instructions remain
 part of the launch configuration.
 
+### Chains
+
+Two matches in one repo can chain, and then hear each other's news. A match
+that works in a repo with another hears of it once, at the start of a turn:
+
+```text
+[matchblox] api also works in matchblox, on feat/send.
+  To hear from it, run: matchblox chain api
+```
+
+It hears of that pair again only after one of them changes branch.
+`[chains] notice = false` in the [config](config.md#chains) turns the line
+off.
+
+- `matchblox chain <who>` asks to chain with `<who>`, or accepts its ask.
+  `<who>` is a name or a pane, as in `matchblox peek`.
+- `matchblox chain` lists the chain and the asks to and from the match.
+  `--json` prints `chain` and `requests`.
+- `matchblox unchain` leaves the chain.
+- `matchblox chain --off` leaves the chain and takes no chains and no
+  notices. `--on` takes them again.
+
+A chain needs both sides. The ask waits until `<who>`, or a match already in
+its chain, runs `matchblox chain` back. Until then nothing is shared: no news,
+no send and no fuse. The match asked hears the ask once, at its next turn. An
+ask lapses after one hour, or when either match leaves the repo. Both
+matches must be in one repo on one host. Two worktrees of one repo are one
+repo. A match that moves to another repo leaves its chain, and its
+chain-mates hear where it went.
+
+Chain-mates hear each other's commits, branch changes, finishes, waits for
+the person and messages. The hook prints what is new under
+`[matchblox] since your last turn:`. A match keeps at most 20 items. Past
+that the oldest go, and a line counts them. The hook never makes the agent
+wait: when the service does not answer in 30 ms, it prints nothing, and the
+news waits for the next time.
+
+`matchblox send <who> "<text>"` from a match reaches its chain-mates only.
+To any other match it fails with `<who> is not in your chain.` and nothing is
+typed. The line carries the tag `[from <name> <pane>]`. A busy chain-mate
+hears it at its next step. One at rest gets it typed into its prompt, which
+wakes it. Each pair sends at most one message every 30 seconds, and a match
+sends at most 20 an hour. `[chains] send = "off"` turns these sends off. The
+person's own `matchblox send` is unchanged.
+
+A chain gives a match the right to message its chain-mates, and nothing
+more. It grants no control over them, and every service guard still applies.
+
+What each agent gets:
+
+- **Claude Code** hears the news at the start of a turn and after each tool
+  call. A message typed at rest wakes it.
+- **Codex** runs no matchblox hook, so it hears no news. A message is typed
+  into its prompt at rest; one sent while it works is typed once it rests.
+- **OpenCode** can chain and shows on the fuse, but takes no send: a typed
+  line can send its draft. A send to it fails with `<who> runs OpenCode,
+  which matchblox cannot type into safely.`
+- **Cursor** hears no news: its hook before a prompt cannot add text to the
+  turn. matchblox types nothing into it, so a message to it waits unheard.
+  It sees its chain and its asks in `matchblox chain`.
+
 ## Codex launch settings
 
 Both `matchblox new --agent codex` and `matchblox switch api --agent codex`

@@ -275,6 +275,8 @@ Each has a test:
 - The inbox keeps 20 items, because a chain-mate that returns from a long tool
   call needs a summary, not a log.
 - The activity line is left out until the owner names it.
+- The notice says "on a detached HEAD." for a match with no branch. It is
+  skipped while either side has asked the other, and while either side is off.
 
 ## Left to the builder
 
@@ -291,3 +293,10 @@ Each has a test:
   turn start only.
 - Whether Cursor's `beforeSubmitPrompt` can add text to the turn. If it cannot,
   Cursor gets the at-rest wake only, and the docs say so.
+
+Checked 2026-11-06. The live Claude Code run could not start: the CLI had no
+valid API key. Claude Code's hook docs say `additionalContext` from
+`PostToolUse` goes into the context next to the tool result, so the print
+stays. Cursor's hook docs give `beforeSubmitPrompt` only `continue` and a
+`user_message` shown to the person, so Cursor hears no news, and matchblox
+types nothing into it.

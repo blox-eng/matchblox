@@ -6,6 +6,16 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Chain reaction.** Two matches in one repo learn of each other at the
+  start of a turn. Once both run `matchblox chain`, they hear each other's
+  commits, branch changes, finishes and waits between their steps, and
+  `matchblox send` reaches them. A send to a match outside the chain fails.
+  Sessions joins a chain's matches with a fuse, and `[chains]` in the config
+  sets the notice and the send.
+  ([#299](https://github.com/blox-eng/matchblox/issues/299))
+
 ## [0.32.0] - 2026-11-04
 
 ### Added
