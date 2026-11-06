@@ -216,7 +216,7 @@ func (s *Service) kill(ctx context.Context, pane string, a proto.Act) proto.Resu
 	if a.Confirm != "y" {
 		return proto.Result{Err: "needs confirm"}
 	}
-	if s.fromStoker(proto.Act{From: pane}) {
+	if _, own := s.unitOf(proto.Act{From: pane}); own {
 		return proto.Result{Err: "the stoker is not killed here: Q on the STOKER tab quits it"}
 	}
 	x, ok := s.sessionAt(pane)
@@ -230,15 +230,18 @@ func (s *Service) kill(ctx context.Context, pane string, a proto.Act) proto.Resu
 	case x.Works():
 		word = "works"
 	}
-	if s.agentsPane(a) {
+	if u, agent := s.agentsUnit(a); agent {
+		if u == nil {
+			return proto.Result{Err: stokersOwn}
+		}
 		if word != "" {
 			return proto.Result{Err: x.Name + " " + word + ": the stoker kills only a session at rest"}
 		}
 		if h, held := s.heldIn(pane, x); held && h.By == holds.ByYou {
 			return proto.Result{Err: "parked by you: the stoker leaves it alone"}
 		}
-		if !s.killGo(a.From, pane) {
-			s.askKill(a.From, pane, x)
+		if !s.killGo(u, a.From, pane) {
+			s.askKill(u, a.From, pane, x)
 			return proto.Result{Err: "the kill waits for the builder's go: it is on the card, y gives it"}
 		}
 	} else if word != "" && a.Text != KillAnyway {
@@ -268,9 +271,9 @@ func KillAction(pane string, x sample.Session) advice.Action {
 
 // killGo tells if the stoker's kill of pane may go: the order gave kills,
 // or the builder's y gave the go for this one, which it uses up.
-func (s *Service) killGo(from, pane string) bool {
+func (s *Service) killGo(u *stokerUnit, from, pane string) bool {
 	ok := false
-	_ = s.updateDriven(func(d *stoker.Driven, grants []string) bool {
+	_ = s.updateDriven(u, func(d *stoker.Driven, grants []string) bool {
 		if slices.Contains(grants, "kill") {
 			ok = true
 			return false
@@ -286,14 +289,14 @@ func (s *Service) killGo(from, pane string) bool {
 	return ok
 }
 
-// askKill puts the stoker's kill on the card as a step that waits for the
-// builder's y, once while it waits.
-func (s *Service) askKill(from, pane string, x sample.Session) {
-	if s.Stoker == nil {
+// askKill puts the kill of unit u's stoker on its card as a step that
+// waits for the builder's y, once while it waits.
+func (s *Service) askKill(u *stokerUnit, from, pane string, x sample.Session) {
+	if u == nil {
 		return
 	}
 	who := "stoker"
-	if !s.fromStoker(proto.Act{From: from}) {
+	if _, own := s.unitOf(proto.Act{From: from}); !own {
 		if y, ok := s.sessionAt(from); ok {
 			who = y.Name
 		}
@@ -306,10 +309,10 @@ func (s *Service) askKill(from, pane string, x sample.Session) {
 		Rule: stoker.RuleGo, State: stoker.StepWaits, Needs: need, Want: want, Argv: [][]string{{want}},
 		Text: who + " wants to kill " + x.Name,
 	}
-	if stoker.LastGo(s.Stoker.View().Run, e).State == stoker.StepWaits {
+	if stoker.LastGo(u.store.View().Run, e).State == stoker.StepWaits {
 		return
 	}
-	if s.Stoker.Append(e) == nil {
+	if u.store.Append(e) == nil {
 		s.refreshStoker()
 	}
 }
@@ -338,6 +341,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 		n.Agent = sample.CursorAgent
 	}
 	x, ok := s.sessionAt(pane)
+	_, own := s.unitOf(proto.Act{From: pane})
 	switch {
 	case ok && n.ExpectedPID != 0 && (n.ExpectedPID != x.PID || n.ExpectedStart != x.Start):
 		return refuseText("the session changed since this switch read it: switch again")
@@ -349,7 +353,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 		return refuseText(n.Agent + " is not installed here")
 	case !ok:
 		return refuseText("no agent session in " + pane + " any more")
-	case s.fromStoker(proto.Act{From: pane}):
+	case own:
 		return refuseText("the stoker's session keeps its agent")
 	case s.agentsPane(a):
 		return refuseText("the stoker does not switch agents: the builder does")
@@ -620,7 +624,7 @@ func (s *Service) rename(ctx context.Context, pane string, a proto.Act) proto.Re
 	if err := proto.CheckName(name); err != nil {
 		return proto.Result{Err: err.Error()}
 	}
-	if s.fromStoker(proto.Act{From: pane}) {
+	if _, own := s.unitOf(proto.Act{From: pane}); own {
 		return proto.Result{Err: "the stoker's session keeps its name"}
 	}
 	x, ok := s.sessionAt(pane)
@@ -804,8 +808,8 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 		out, _ := s.tmuxOut(slices.Concat(sample.TmuxOn(""), []string{"display-message", "-p", "-t", "=" + name + ":", "#{pane_id}"}))
 		pane = strings.TrimSpace(out)
 	}
-	if s.agentsPane(a) {
-		s.recordNew(pane, name, res.Ran)
+	if u, agent := s.agentsUnit(a); agent {
+		s.recordNew(u, pane, name, res.Ran)
 	} else {
 		s.rememberStart(n, acct) // the stoker's starts are not the builder's choice
 	}
@@ -1322,18 +1326,18 @@ func worktreeStep(ctx context.Context, dir, branch string) ([]string, string, er
 	return []string{"git", "-C", root, "worktree", "add", "--no-track", "-b", branch, wt, base}, wt, nil
 }
 
-// recordNew keeps a session the stoker started in the run: it counts as a
-// message, and the stoker drives its pane, so the guard watches it.
-func (s *Service) recordNew(pane, name string, ran [][]string) {
-	if s.Stoker == nil || pane == "" {
+// recordNew keeps a session unit u's stoker started in the run: it counts
+// as a message, and the unit drives its pane, so the guard watches it.
+func (s *Service) recordNew(u *stokerUnit, pane, name string, ran [][]string) {
+	if u == nil || pane == "" {
 		return
 	}
 	now := s.now()
-	_ = s.Stoker.Append(stoker.Entry{
+	_ = u.store.Append(stoker.Entry{
 		ID: name + "@" + now.UTC().Format(time.RFC3339Nano), At: now,
 		Name: name, Pane: pane, Rule: stoker.RuleOrder, Argv: ran, Result: stoker.Sent,
 	})
-	s.drive(pane)
+	s.drive(u, pane)
 	s.refreshStoker()
 }
 

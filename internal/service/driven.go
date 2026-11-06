@@ -17,7 +17,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/stoker"
 )
 
-// drivenState keeps driven.json, the panes the stoker drove in the run on,
+// drivenState keeps driven.json, the panes a stoker drove in the run on,
 // for the merge guard. Memory holds the truth and the file follows it, so
 // a lost or broken file is written again.
 type drivenState struct {
@@ -41,20 +41,21 @@ func drivenRun(m stoker.Mode) (string, []string) {
 	return "since-" + m.Since.UTC().Format(time.RFC3339Nano), nil
 }
 
-// updateDriven changes the driven panes; fn tells if it changed them. While
-// the stoker is off there is no file and fn does not run. When another
-// order runs, the panes the stoker drove stay driven with that order's
-// goes; the goes given to steps are gone with their plan.
-func (s *Service) updateDriven(fn func(d *stoker.Driven, grants []string) bool) error {
-	if s.Stoker == nil {
+// updateDriven changes the panes unit u drives, in its own driven.json;
+// fn tells if it changed them. While the unit is off there is no file and
+// fn does not run. When another order runs, the panes the unit drove stay
+// driven with that order's goes; the goes given to steps are gone with
+// their plan.
+func (s *Service) updateDriven(u *stokerUnit, fn func(d *stoker.Driven, grants []string) bool) error {
+	if u == nil {
 		return nil
 	}
 	owns := s.owns()
-	ds := &s.driven
+	ds := &u.driven
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
-	dir := s.Stoker.Dir()
-	m := s.Stoker.Mode()
+	dir := u.store.Dir()
+	m := u.store.Mode()
 	if !m.On {
 		ds.d = &stoker.Driven{}
 		return stoker.RemoveDriven(dir)
@@ -62,7 +63,7 @@ func (s *Service) updateDriven(fn func(d *stoker.Driven, grants []string) bool) 
 	if ds.d == nil {
 		d, err := stoker.ReadDriven(dir)
 		if err != nil {
-			d = s.drivenOfLog(m)
+			d = drivenOfLog(u, m)
 		}
 		ds.d = &d
 	}
@@ -171,12 +172,12 @@ func (s *Service) stokerSocket() string {
 	return sample.SocketPath(s.StokerServer)
 }
 
-// drivenOfLog are the panes the run's log says the stoker sent a message
-// to: what a service that lost driven.json and its memory of it knows. A
-// pane the builder freed since is driven again, which fails closed.
-func (s *Service) drivenOfLog(m stoker.Mode) stoker.Driven {
+// drivenOfLog are the panes the run's log says unit u sent a message to:
+// what a service that lost driven.json and its memory of it knows. A pane
+// the builder freed since is driven again, which fails closed.
+func drivenOfLog(u *stokerUnit, m stoker.Mode) stoker.Driven {
 	d := stoker.Driven{Panes: map[string][]string{}}
-	for _, e := range s.Stoker.Entries() {
+	for _, e := range u.store.Entries() {
 		if e.Ordered() && !e.At.Before(m.Since) && e.Pane != "" {
 			d.Panes[e.Pane] = nil
 		}
@@ -184,33 +185,49 @@ func (s *Service) drivenOfLog(m stoker.Mode) stoker.Driven {
 	return d
 }
 
-// agentsPane tells if the act comes from the stoker's tmux session or from
-// a pane the stoker drove in the run on. It reads the service's memory,
-// not driven.json, so a broken file frees no pane.
+// agentsPane tells if the act comes from a stoker's tmux session or from
+// a pane a stoker drove in the run on.
 func (s *Service) agentsPane(a proto.Act) bool {
-	if a.From == "" || s.Stoker == nil {
-		return false
-	}
-	if s.fromStoker(a) {
-		return true
-	}
-	driven := false
-	_ = s.updateDriven(func(d *stoker.Driven, _ []string) bool {
-		_, driven = d.Panes[a.From]
-		return false
-	})
-	return driven
+	_, ok := s.agentsUnit(a)
+	return ok
 }
 
-// syncDriven writes driven.json for the run on, or removes it when the run
-// ended.
+// agentsUnit is the unit the act speaks for: the stoker whose session it
+// came from, or the one that drove its pane in the run on. ok with a nil
+// unit is a stoker session no unit runs. It reads the service's memory,
+// not driven.json, so a broken file frees no pane.
+func (s *Service) agentsUnit(a proto.Act) (u *stokerUnit, ok bool) {
+	fam := s.family()
+	if a.From == "" || len(fam) == 0 {
+		return nil, false
+	}
+	if u, own := s.unitOf(a); own {
+		return u, true
+	}
+	for _, u := range fam {
+		driven := false
+		_ = s.updateDriven(u, func(d *stoker.Driven, _ []string) bool {
+			_, driven = d.Panes[a.From]
+			return false
+		})
+		if driven {
+			return u, true
+		}
+	}
+	return nil, false
+}
+
+// syncDriven writes each unit's driven.json for its run on, or removes it
+// when the run ended.
 func (s *Service) syncDriven() {
-	_ = s.updateDriven(func(*stoker.Driven, []string) bool { return false })
+	for _, u := range s.family() {
+		_ = s.updateDriven(u, func(*stoker.Driven, []string) bool { return false })
+	}
 }
 
-// drive marks a pane the stoker sent a message to, with the order's goes.
-func (s *Service) drive(pane string) {
-	_ = s.updateDriven(func(d *stoker.Driven, grants []string) bool {
+// drive marks a pane unit u sent a message to, with its order's goes.
+func (s *Service) drive(u *stokerUnit, pane string) {
+	_ = s.updateDriven(u, func(d *stoker.Driven, grants []string) bool {
 		if _, in := d.Panes[pane]; in {
 			return false
 		}
@@ -220,15 +237,17 @@ func (s *Service) drive(pane string) {
 }
 
 // undrive lets go of a pane the builder typed into: its last input is no
-// longer the stoker's.
+// longer a stoker's.
 func (s *Service) undrive(pane string) {
-	_ = s.updateDriven(func(d *stoker.Driven, _ []string) bool {
-		_, in := d.Panes[pane]
-		_, step := d.Steps[pane]
-		delete(d.Panes, pane)
-		delete(d.Steps, pane)
-		return in || step
-	})
+	for _, u := range s.family() {
+		_ = s.updateDriven(u, func(d *stoker.Driven, _ []string) bool {
+			_, in := d.Panes[pane]
+			_, step := d.Steps[pane]
+			delete(d.Panes, pane)
+			delete(d.Steps, pane)
+			return in || step
+		})
+	}
 }
 
 // intoOnlyFromConsole refuses an into: act that no person at a console sent:
@@ -263,28 +282,28 @@ func (s *Service) into(a proto.Act, pane string) proto.Result {
 // grantAct gives the go a waiting step needs (stoker:grant, Text: the
 // id of the step's entry): its merge, release or deploy in that step's
 // pane, once. The stoker hears of it at its next wake.
-func (s *Service) grantAct(a proto.Act) proto.Result {
-	if s.Stoker == nil {
+func (s *Service) grantAct(u *stokerUnit, a proto.Act) proto.Result {
+	if u == nil {
 		return proto.Result{Err: "this service keeps no stoker"}
 	}
-	if s.fromStoker(a) {
+	if _, own := s.unitOf(a); own {
 		return proto.Result{Err: "the stoker does not give itself the go"}
 	}
-	if err := s.grant(strings.TrimSpace(a.Text)); err != nil {
+	if err := s.grant(u, strings.TrimSpace(a.Text)); err != nil {
 		return proto.Result{Err: err.Error()}
 	}
 	s.refreshStoker()
 	return proto.Result{}
 }
 
-func (s *Service) grant(id string) error {
+func (s *Service) grant(u *stokerUnit, id string) error {
 	s.grantMu.Lock()
 	defer s.grantMu.Unlock()
-	m := s.Stoker.Mode()
+	m := u.store.Mode()
 	if !m.On {
 		return errors.New("the stoker is off: no run")
 	}
-	run := s.Stoker.View().Run
+	run := u.store.View().Run
 	i := slices.IndexFunc(run, func(e stoker.Entry) bool { return e.ID == id })
 	if i < 0 {
 		return errors.New("the run has no such step")
@@ -306,7 +325,7 @@ func (s *Service) grant(id string) error {
 	case last.Pane == "":
 		return errors.New("the step names no pane")
 	}
-	err := s.updateDriven(func(d *stoker.Driven, _ []string) bool {
+	err := s.updateDriven(u, func(d *stoker.Driven, _ []string) bool {
 		// A plan step's y given twice is one go. A go step is done once
 		// given, so each of its y is a go of its own: a line with two
 		// guarded commands asks twice.
@@ -326,7 +345,7 @@ func (s *Service) grant(id string) error {
 		given := last
 		given.ID, given.At, given.State = "go@"+now.UTC().Format(time.RFC3339Nano), now, stoker.StepDone
 		given.Text = "go given: " + last.Want
-		if err := s.Stoker.Append(given); err != nil {
+		if err := u.store.Append(given); err != nil {
 			return err
 		}
 	}
@@ -334,52 +353,57 @@ func (s *Service) grant(id string) error {
 	return nil
 }
 
-// askGo puts a guarded command the guard denied in a pane the stoker
-// drives on the card, as a step that waits for the builder's y: the go
-// for one command of that kind, once, in that pane. A step for the same go
-// that still waits is not added twice.
+// askGo puts a guarded command the guard denied in a pane a stoker
+// drives on that stoker's card, as a step that waits for the builder's y:
+// the go for one command of that kind, once, in that pane. A step for the
+// same go that still waits is not added twice.
 func (s *Service) askGo(ev hooks.Event) {
-	if s.Stoker == nil || ev.Name != "PreToolUse" || !ev.Denied || ev.Pane == "" || !s.Stoker.Mode().On {
+	if ev.Name != "PreToolUse" || !ev.Denied || ev.Pane == "" {
 		return
 	}
-	var needs []string
 	if server, _ := sample.SplitPane(ev.Pane); s.StokerServer != "" && server == s.StokerServer {
 		return // the stoker's own panes never get a go
 	}
-	_ = s.updateDriven(func(d *stoker.Driven, _ []string) bool {
-		_, driven := d.Panes[ev.Pane]
-		if !driven || slices.Contains(ev.Guards, stoker.Guard{What: stoker.Unread}) {
-			return false
-		}
-		_, short := d.Spend(ev.Pane, ev.Guards)
-		for _, g := range short {
-			needs = append(needs, stoker.NeedOf(g, ev.Pane))
-		}
-		return false
-	})
-	if len(needs) == 0 {
-		return
-	}
-	x, _ := s.sessionAt(ev.Pane)
-	name := x.Name
-	if name == "" {
-		name = ev.Pane
-	}
-	want := firstOf(ev.Command)
-	run := s.Stoker.View().Run
-	now := s.now()
 	added := false
-	for _, n := range needs {
-		e := stoker.Entry{
-			ID: "go@" + now.UTC().Format(time.RFC3339Nano) + "/" + n, At: now, Session: x.SessionID, Name: name, Pane: ev.Pane,
-			Rule: stoker.RuleGo, State: stoker.StepWaits, Needs: n, Want: want, Argv: [][]string{{want}},
-			Text: name + " wants to run " + want,
-		}
-		if stoker.LastGo(run, e).State == stoker.StepWaits {
+	for _, u := range s.family() {
+		if !u.store.Mode().On {
 			continue
 		}
-		if s.Stoker.Append(e) == nil {
-			run, added = append(run, e), true
+		var needs []string
+		_ = s.updateDriven(u, func(d *stoker.Driven, _ []string) bool {
+			_, driven := d.Panes[ev.Pane]
+			if !driven || slices.Contains(ev.Guards, stoker.Guard{What: stoker.Unread}) {
+				return false
+			}
+			_, short := d.Spend(ev.Pane, ev.Guards)
+			for _, g := range short {
+				needs = append(needs, stoker.NeedOf(g, ev.Pane))
+			}
+			return false
+		})
+		if len(needs) == 0 {
+			continue
+		}
+		x, _ := s.sessionAt(ev.Pane)
+		name := x.Name
+		if name == "" {
+			name = ev.Pane
+		}
+		want := firstOf(ev.Command)
+		run := u.store.View().Run
+		now := s.now()
+		for _, n := range needs {
+			e := stoker.Entry{
+				ID: "go@" + now.UTC().Format(time.RFC3339Nano) + "/" + n, At: now, Session: x.SessionID, Name: name, Pane: ev.Pane,
+				Rule: stoker.RuleGo, State: stoker.StepWaits, Needs: n, Want: want, Argv: [][]string{{want}},
+				Text: name + " wants to run " + want,
+			}
+			if stoker.LastGo(run, e).State == stoker.StepWaits {
+				continue
+			}
+			if u.store.Append(e) == nil {
+				run, added = append(run, e), true
+			}
 		}
 	}
 	if added {
@@ -403,12 +427,14 @@ func (s *Service) useGrants(ev hooks.Event) {
 	if ev.Name != "PreToolUse" || len(gs) == 0 || ev.Denied {
 		return
 	}
-	_ = s.updateDriven(func(d *stoker.Driven, _ []string) bool {
-		left, _ := d.Spend(ev.Pane, gs)
-		if len(left) == len(d.Steps[ev.Pane]) {
-			return false
-		}
-		d.Steps[ev.Pane] = left
-		return true
-	})
+	for _, u := range s.family() {
+		_ = s.updateDriven(u, func(d *stoker.Driven, _ []string) bool {
+			left, _ := d.Spend(ev.Pane, gs)
+			if len(left) == len(d.Steps[ev.Pane]) {
+				return false
+			}
+			d.Steps[ev.Pane] = left
+			return true
+		})
+	}
 }

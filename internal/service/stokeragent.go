@@ -74,21 +74,21 @@ func (s *Service) stokerSessionArgv(verb string) []string {
 	return slices.Concat(sample.TmuxOn(s.StokerServer), []string{verb, "-t", "=" + sample.StokerSession})
 }
 
-// startAct starts the stoker agent (stoker:start): f, n or o at a console,
-// never the stoker or an agent's pane.
-func (s *Service) startAct(ctx context.Context) proto.Result {
-	if err := s.startStoker(ctx); err != nil {
+// startAct starts unit u's stoker agent (stoker:start): f, n or o at a
+// console, never the stoker or an agent's pane.
+func (s *Service) startAct(ctx context.Context, u *stokerUnit) proto.Result {
+	if err := s.startStoker(ctx, u); err != nil {
 		return proto.Result{Err: err.Error()}
 	}
 	s.refreshStoker()
 	return proto.Result{}
 }
 
-// startStoker starts the stoker agent, or keeps the one that runs: a
+// startStoker starts unit u's stoker agent, or keeps the one that runs: a
 // stoker session already on its server is reused.
-func (s *Service) startStoker(ctx context.Context) error {
+func (s *Service) startStoker(ctx context.Context, u *stokerUnit) error {
 	switch {
-	case s.Stoker == nil:
+	case u == nil:
 		return errors.New("this service keeps no stoker")
 	case s.StokerServer == "":
 		return errors.New("this service starts no stoker agent")
@@ -97,13 +97,13 @@ func (s *Service) startStoker(ctx context.Context) error {
 		return errors.New(why)
 	}
 	s.mu.Lock()
-	_, up := stokerIn(s.cur.Sessions, s.StokerServer)
+	_, up := stokerIn(s.cur.Sessions, s.StokerServer, stoker.SessionName(u.id))
 	s.mu.Unlock()
 	if up {
 		return nil
 	}
 	if s.stokerThere(ctx) {
-		s.markStarting() // there, and the sample has not found its agent yet
+		s.markStarting(u) // there, and the sample has not found its agent yet
 		return nil
 	}
 	res := s.Actions.Do(ctx, advice.Action{Label: "start the stoker", Steps: [][]string{s.startArgv()}}, "")
@@ -112,7 +112,7 @@ func (s *Service) startStoker(ctx context.Context) error {
 	if res.Err != "" && !s.stokerThere(ctx) {
 		return errors.New("the stoker did not start: " + res.Err)
 	}
-	s.markStarting()
+	s.markStarting(u)
 	return nil
 }
 
@@ -122,18 +122,18 @@ func (s *Service) stokerThere(ctx context.Context) bool {
 	return res.Err == ""
 }
 
-func (s *Service) markStarting() {
+func (s *Service) markStarting(u *stokerUnit) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.startedAt.IsZero() {
-		s.startedAt = s.now()
+	if u.startedAt.IsZero() {
+		u.startedAt = s.now()
 	}
 }
 
-// quitAct ends the stoker agent and its session (stoker:quit): the
+// quitAct ends unit u's stoker agent and its session (stoker:quit): the
 // builder's, at a console or with matchblox stoker quit in a shell of
 // their own. A run that is on goes on without its agent.
-func (s *Service) quitAct(ctx context.Context, a proto.Act) proto.Result {
+func (s *Service) quitAct(ctx context.Context, u *stokerUnit, a proto.Act) proto.Result {
 	if a.Confirm != "y" {
 		return proto.Result{Err: "needs confirm"}
 	}
@@ -149,9 +149,9 @@ func (s *Service) quitAct(ctx context.Context, a proto.Act) proto.Result {
 		return proto.Result{Err: "the stoker is not running"}
 	}
 	res := s.Actions.Do(ctx, advice.Action{Label: "quit the stoker", Steps: [][]string{s.stokerSessionArgv("kill-session")}, Destructive: true}, "y")
-	if res.Err == "" {
+	if res.Err == "" && u != nil {
 		s.mu.Lock()
-		s.startedAt = time.Time{}
+		u.startedAt = time.Time{}
 		s.mu.Unlock()
 		s.refreshStoker()
 	}
@@ -163,22 +163,23 @@ func (s *Service) quitAct(ctx context.Context, a proto.Act) proto.Result {
 func ready(x sample.Session) bool { return x.Resting() && !x.Asks && !x.Permits }
 
 // agentView adds the stoker agent to the console's view: its command, why
-// it cannot start, and whether it is up, starting or ready for an order.
-func (s *Service) agentView(v *stoker.View, sessions []sample.Session) {
+// it cannot start, and whether unit u's agent is up, starting or ready for
+// an order.
+func (s *Service) agentView(u *stokerUnit, v *stoker.View, sessions []sample.Session) {
 	if s.StokerServer == "" {
 		return
 	}
 	v.Agent, v.Start = strings.Join(s.agentArgv(), " "), strings.Join(s.startArgv(), " ")
 	v.Missing = s.agentMissing()
-	x, up := stokerIn(sessions, s.StokerServer)
+	x, up := stokerIn(sessions, s.StokerServer, stoker.SessionName(u.id))
 	v.PaneUp = up
 	v.Ready = up && ready(x)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch {
-	case s.startedAt.IsZero():
-	case v.Ready, s.now().Sub(s.startedAt) >= stokerStartsIn:
-		s.startedAt = time.Time{}
+	case u.startedAt.IsZero():
+	case v.Ready, s.now().Sub(u.startedAt) >= stokerStartsIn:
+		u.startedAt = time.Time{}
 	default:
 		v.Starting = true
 	}

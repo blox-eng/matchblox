@@ -15,15 +15,15 @@ import (
 // stokerAct turns the stoker on ("on"), on until the morning ("night"),
 // off, or folds the steps the builder saw ("ack"). While it runs the
 // builder takes over ("rest"), keeps it on ("keep"), turns it back on
-// ("wake"), and each key keeps the rest ("touch"). None is destructive:
-// the stoker itself never ends, kills or removes anything.
-func (s *Service) stokerAct(verb string, now time.Time) proto.Result {
-	if s.Stoker == nil {
+// ("wake"), and each key keeps the rest ("touch"), on unit u. None is
+// destructive: the stoker itself never ends, kills or removes anything.
+func (s *Service) stokerAct(u *stokerUnit, verb string, now time.Time) proto.Result {
+	if u == nil {
 		return proto.Result{Err: "this service keeps no stoker"}
 	}
 	sessions, waiting := s.seen()
 	var refused string
-	_, err := s.Stoker.Update(func(m stoker.Mode) (stoker.Mode, bool) {
+	_, err := u.store.Update(func(m stoker.Mode) (stoker.Mode, bool) {
 		was := m.On
 		switch verb {
 		case "on":
@@ -38,7 +38,7 @@ func (s *Service) stokerAct(verb string, now time.Time) proto.Result {
 			if !was {
 				return m, false
 			}
-			m = m.Off(now).Score(sessions, waiting, s.full, s.Stoker.View().Run)
+			m = m.Off(now).Score(sessions, waiting, s.full, u.store.View().Run)
 		case "ack":
 			m = m.Ack(now)
 		case "rest", "keep", "wake", "touch":
@@ -78,9 +78,10 @@ func (s *Service) stokerAct(verb string, now time.Time) proto.Result {
 // stoke runs after each sample: it ends a night at its morning, reads back
 // what the compacts it sent left, and sends the steps the plan finds. Each
 // step goes through the runner, so its idle guard is checked right before
-// the send.
+// the send. It stokes the host unit.
 func (s *Service) stoke(ctx context.Context, now time.Time) {
-	if s.Stoker == nil {
+	u := s.hostUnit()
+	if u == nil {
 		return
 	}
 	changed := false
@@ -89,24 +90,24 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 	alone := s.alone
 	s.mu.Unlock()
 	var typed time.Time // the builder's last key in tmux, read only during a rest
-	if !s.Stoker.Mode().Rests.IsZero() && s.Activity != nil {
+	if !u.store.Mode().Rests.IsZero() && s.Activity != nil {
 		typed = s.Activity()
 	}
 	// One update for all three, so an act in between is never undone (a
 	// write that fails is tried again at the next sample).
-	_, _ = s.Stoker.Update(func(m stoker.Mode) (stoker.Mode, bool) {
+	_, _ = u.store.Update(func(m stoker.Mode) (stoker.Mode, bool) {
 		m, seen := m.Observe(sessions, waiting, s.full, now)
 		m = m.Touch(typed)
 		m, woke := m.Awake(now, alone)
 		m, ended := m.Expire(now)
 		if ended {
-			m = m.Score(sessions, waiting, s.full, s.Stoker.View().Run)
+			m = m.Score(sessions, waiting, s.full, u.store.View().Run)
 		}
 		changed = seen || woke || ended
 		return m, changed
 	})
 
-	for _, e := range s.Stoker.Pending(now) {
+	for _, e := range u.store.Pending(now) {
 		path := ""
 		for _, ss := range sessions {
 			if ss.SessionID == e.Session {
@@ -114,13 +115,13 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 			}
 		}
 		if c, ok := sample.Compacted(path, e.At); ok && path != "" {
-			_ = s.Stoker.Append(stoker.Entry{ID: e.ID, Before: c.Before, After: c.After, Resume: c.Resume, Back: now})
+			_ = u.store.Append(stoker.Entry{ID: e.ID, Before: c.Before, After: c.After, Resume: c.Resume, Back: now})
 			changed = true
 		}
 	}
 
-	for _, st := range stoker.Plan(s.Stoker.Mode(), sessions, waiting, s.full, s.Stoker.Entries(), now, s.heldSessions()) {
-		if m := s.Stoker.Mode(); !m.On || !m.Rests.IsZero() {
+	for _, st := range stoker.Plan(u.store.Mode(), sessions, waiting, s.full, u.store.Entries(), now, s.heldSessions()) {
+		if m := u.store.Mode(); !m.On || !m.Rests.IsZero() {
 			break // the builder took over or turned it off since the plan
 		}
 		// The builder confirmed when they turned the stoker on.
@@ -143,10 +144,10 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 			e.Guard = why(st, res.Skipped)
 			e.Result = "typed, not sent: " + e.Guard
 		}
-		_ = s.Stoker.Append(e)
+		_ = u.store.Append(e)
 		changed = true
 	}
-	if s.fire(ctx, now) {
+	if s.fire(ctx, u, now) {
 		changed = true
 	}
 	if changed {
@@ -154,17 +155,17 @@ func (s *Service) stoke(ctx context.Context, now time.Time) {
 	} else {
 		s.syncDriven() // a lost driven.json comes back
 	}
-	s.wake(ctx, now)
+	s.wake(ctx, u, now)
 }
 
-// touchStoker keeps a rest while the builder acts from a console.
+// touchStoker keeps each unit's rest while the builder acts from a
+// console.
 func (s *Service) touchStoker(now time.Time) {
-	if s.Stoker == nil {
-		return
+	for _, u := range s.family() {
+		_, _ = u.store.Update(func(m stoker.Mode) (stoker.Mode, bool) {
+			return m.Touch(now), !m.Rests.IsZero()
+		})
 	}
-	_, _ = s.Stoker.Update(func(m stoker.Mode) (stoker.Mode, bool) {
-		return m.Touch(now), !m.Rests.IsZero()
-	})
 }
 
 // seen are the sessions of the last sample and the panes the queue lists
@@ -181,10 +182,13 @@ func (s *Service) seen() ([]sample.Session, map[string]bool) {
 	return s.cur.Sessions, waiting
 }
 
-// refreshStoker sends the stoker view at once.
+// refreshStoker sends the host stoker's view at once.
 func (s *Service) refreshStoker() {
 	sessions, _ := s.seen()
-	v := s.stokerView(sessions)
+	var v *stoker.View
+	if u := s.hostUnit(); u != nil {
+		v = s.stokerView(u, sessions)
+	}
 	s.syncDriven()
 	s.mu.Lock()
 	s.cur.Stoker = v

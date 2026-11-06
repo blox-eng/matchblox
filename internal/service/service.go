@@ -237,9 +237,6 @@ type Service struct {
 
 	mu  sync.Mutex
 	cur state.Doc
-	// startedAt is when matchblox started the stoker agent; zero once it
-	// is ready, or gave up on it.
-	startedAt time.Time
 	// sampled are the sessions as the sampler read them; cur.Sessions adds
 	// the question tool's calls the hooks announced.
 	sampled  []sample.Session
@@ -257,8 +254,8 @@ type Service struct {
 	acts  acts
 	ways  waysCache
 	wakes wakeState
-	// driven are the panes the stoker drove, for the merge guard.
-	driven drivenState
+	// fam are the stokers: the host, then one for each chain that has one.
+	fam stokerFamily
 	// sentAt is when a command or a compact last went to a pane, by pane:
 	// until restLatch after it, the pane is not at rest (latchRest).
 	sentAt map[string]time.Time
@@ -564,6 +561,9 @@ func (s *Service) Run(ctx context.Context) {
 	}
 	s.mu.Unlock()
 	rec := s.recorder()
+	if err := s.loadFamily(); err != nil {
+		fmt.Fprintln(os.Stderr, "matchblox: a chain stoker did not load:", err)
+	}
 	s.loadFound()
 	s.loadUsed()
 	go s.gitLoop(ctx)
@@ -602,8 +602,8 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	gen := s.doorsGen()
 	ds := s.doors()
 	var view *stoker.View
-	if s.Stoker != nil {
-		view = s.stokerView(snap.Sessions)
+	if u := s.hostUnit(); u != nil {
+		view = s.stokerView(u, snap.Sessions)
 	}
 	known, skipped := s.knownAccounts(snap.Sessions)
 	s.lastAccounts.signedIn(lastAccountsPath(s.StatePath), snap.Sessions)
@@ -631,7 +631,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		}
 	}
 	s.cur.SignIns = s.signIns.keep(here)
-	if s.Stoker != nil {
+	if view != nil {
 		s.cur.Stoker = view
 	}
 	s.cur.Recommendations = advice.Build(snap, s.cur.Git)
