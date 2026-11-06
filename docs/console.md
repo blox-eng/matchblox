@@ -449,9 +449,12 @@ sees the window shrink to the chat's size while the chat watches it.
 
 The chat is a window on the agent's pane, and keeps no history of its own.
 The mouse wheel over the chat, a swipe on a phone, `PgUp` and `PgDn` go to the
-agent, and the agent scrolls itself, as it does in tmux. An agent that does not
-read the mouse says `not scrolled: <name> does not read the mouse — open its
-pane to scroll it`: `ctrl+o` opens the pane.
+agent. An agent that reads the mouse scrolls itself, as it does in tmux. For
+an agent that does not, the chat shows the pane's history, 3 lines for each
+wheel step. The key line says `↑ 12 lines back · a key comes back`. The next
+key only comes back to the live screen and is not sent: the result says `not
+sent: back to the live screen — press it again to send`. So a key never
+answers a prompt that you did not see.
 
 `PgUp` and `PgDn` move one screen of the chat up and down the history.
 They do not go back to the live screen.

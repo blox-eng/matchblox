@@ -136,6 +136,11 @@ type Service struct {
 	// PaneMouse tells if the program in a pane reads the mouse in SGR form,
 	// and the pane's size. Nil: never.
 	PaneMouse func(pane string) (cols, rows int, ok bool)
+	// PaneHistory is how many lines of history a pane holds, and its
+	// height; CaptureBack reads the pane back lines up from its live
+	// screen, with its styles. Nil: a console scrolls no history.
+	PaneHistory func(pane string) (history, rows int, ok bool)
+	CaptureBack func(pane string, back, rows int) (string, bool)
 	// TmuxOut runs a tmux command and returns what it prints: the pane of
 	// a session matchblox started. Nil: exec.
 	TmuxOut func(argv []string) (string, error)
@@ -370,6 +375,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		s.sample = smp.Sample
 	}
 	s.Capture, s.PaneMouse = sample.CapturePanesStyled, sample.PaneMouse
+	s.PaneHistory, s.CaptureBack = sample.PaneHistory, sample.CaptureBackStyled
 	s.PeerPane, s.TTYPane = s.paneOfPeer, s.paneOfTTY
 	s.Activity = sample.ClientActivity
 	s.alone = s.now()
@@ -1068,6 +1074,13 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 			res.ActID = env.ID
 			_ = c.Send(proto.KindResult, env.ID, res)
 			continue
+		}
+		if pane, ok := strings.CutPrefix(a.RecID, proto.KeysPrefix); ok {
+			if res, handled := s.scrollKey(cl, h.Client, a, pane); handled {
+				res.ActID = env.ID
+				_ = c.Send(proto.KindResult, env.ID, res)
+				continue
+			}
 		}
 		if h.Client == proto.ClientConsole {
 			s.keyedSize(cl, a)
