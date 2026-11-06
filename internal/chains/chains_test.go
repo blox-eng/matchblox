@@ -3,6 +3,7 @@ package chains
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -204,5 +205,71 @@ func TestSaveAndLoad(t *testing.T) {
 	empty, err := Load(filepath.Join(t.TempDir(), "none.json"))
 	if err != nil || len(empty.Chains) != 0 {
 		t.Fatalf("missing: %+v, %v", empty, err)
+	}
+}
+
+// TestPruneDropsTheOffOfGoneMatches: an off mark lasts as long as its match;
+// one in no repo is still there.
+func TestPruneDropsTheOffOfGoneMatches(t *testing.T) {
+	var s Store
+	s.SetOff(mem("a"), true)
+	s.SetOff(mem("b"), true)
+	s.Prune(func(m Member) (string, bool) { return "", m.SessionID == "b" }, t0)
+	if len(s.Off) != 1 || s.Off[0].SessionID != "b" {
+		t.Fatalf("off = %+v", s.Off)
+	}
+}
+
+// TestRefreshKeepsAMatchWithANewSessionID: a match whose session id changed
+// (a cleared chat) stays in its chain, its requests, its off mark and its
+// inbox.
+func TestRefreshKeepsAMatchWithANewSessionID(t *testing.T) {
+	var s Store
+	chainOf(t, &s, "a", "b")
+	s.Ask(mem("c"), mem("a"), "r", t0)
+	s.SetOff(mem("d"), true)
+	s.Post(mem("a"), "news", t0)
+	renew := func(m Member) (Member, bool) {
+		if m.SessionID == "a" || m.SessionID == "d" {
+			m.SessionID += "2"
+			return m, true
+		}
+		return Member{}, false
+	}
+	if !s.Refresh(renew) {
+		t.Fatal("nothing changed")
+	}
+	a2 := Member{SessionID: "a2", Pane: "%a"}
+	if c, ok := s.ChainOf(a2); !ok || len(c.Members) != 2 {
+		t.Fatalf("chain = %+v", s.Chains)
+	}
+	if len(s.Requests) != 1 || s.Requests[0].To != a2 {
+		t.Fatalf("requests = %+v", s.Requests)
+	}
+	if len(s.Off) != 1 || s.Off[0].SessionID != "d2" {
+		t.Fatalf("off = %+v", s.Off)
+	}
+	if got := s.Take(a2).Texts(); len(got) != 1 || got[0] != "news" {
+		t.Fatalf("inbox = %q", got)
+	}
+	if s.Refresh(renew) {
+		t.Fatal("a second refresh changed it again")
+	}
+}
+
+// TestGiveBackKeepsTheOrderOfTwoDeliveries: two deliveries handed back in
+// either order leave the inbox in the order its items came.
+func TestGiveBackKeepsTheOrderOfTwoDeliveries(t *testing.T) {
+	var s Store
+	s.Post(mem("a"), "1", t0)
+	s.Post(mem("a"), "2", t0)
+	first := s.Take(mem("a"))
+	s.Post(mem("a"), "3", t0)
+	second := s.Take(mem("a"))
+	s.Post(mem("a"), "4", t0)
+	s.GiveBack(mem("a"), first)
+	s.GiveBack(mem("a"), second)
+	if got := s.Take(mem("a")).Texts(); !slices.Equal(got, []string{"1", "2", "3", "4"}) {
+		t.Fatalf("items = %q", got)
 	}
 }

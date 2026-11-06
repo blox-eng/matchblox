@@ -581,6 +581,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	lastAgent := s.lastAccounts.lastAgent(lastAccountsPath(s.StatePath))
 	s.mu.Lock()
 	s.setDoors(gen, ds)
+	prev := s.cur.Sessions
 	if s.have { // the first sample has no rates yet
 		s.hist.Append(history.FromSnapshot(snap))
 	}
@@ -623,7 +624,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		}
 		s.cur.Holds = s.Holds.List()
 	}
-	if err := s.pruneChainsLocked(s.now()); err != nil {
+	if err := s.pruneChainsLocked(s.now(), prev); err != nil {
 		s.cur.Errors = append(s.cur.Errors, "chains: "+err.Error())
 	}
 	s.cur.Chains = chainsView(s.Chains)

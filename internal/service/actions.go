@@ -429,6 +429,16 @@ func messageAction(pane string, x sample.Session, text string) advice.Action {
 	return advice.Action{Label: "message", Steps: panes.Send(pane, text), Destructive: true, Guards: []advice.Guard{g, g}}
 }
 
+// sessionAtLocked is sessionAt for callers that hold mu.
+func (s *Service) sessionAtLocked(pane string) (sample.Session, bool) {
+	for _, x := range s.cur.Sessions {
+		if x.Pane == pane && pane != "" {
+			return x, true
+		}
+	}
+	return sample.Session{}, false
+}
+
 // sessionAt is the agent session in a pane, as last sampled.
 func (s *Service) sessionAt(pane string) (sample.Session, bool) {
 	s.mu.Lock()

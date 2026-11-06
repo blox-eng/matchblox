@@ -4,6 +4,7 @@
 package chains
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -62,10 +63,11 @@ type Request struct {
 	At   time.Time `json:"at"`
 }
 
-// Item is one piece of news in an inbox.
+// Item is one piece of news in an inbox. seq is the order it was posted in.
 type Item struct {
 	At   time.Time `json:"at"`
 	Text string    `json:"text"`
+	seq  uint64
 }
 
 // Left is a member that dropped out of a chain.
@@ -84,6 +86,7 @@ type Store struct {
 
 	inbox   map[string][]Item
 	dropped map[string]int
+	posted  uint64
 }
 
 func (s *Store) isOff(m Member) bool {
@@ -199,14 +202,49 @@ func (s *Store) SetOff(m Member, off bool) {
 	}
 }
 
+// Refresh rewrites each member that cur names otherwise now, as a match
+// whose session id changed, in the chains, the requests, the off list and
+// the inbox. It tells if any changed.
+func (s *Store) Refresh(cur func(Member) (Member, bool)) (changed bool) {
+	renew := func(m *Member) {
+		n, ok := cur(*m)
+		if !ok || n == *m {
+			return
+		}
+		if items, had := s.inbox[m.key()]; had {
+			delete(s.inbox, m.key())
+			s.inbox[n.key()] = items
+		}
+		if d, had := s.dropped[m.key()]; had {
+			delete(s.dropped, m.key())
+			s.dropped[n.key()] = d
+		}
+		*m, changed = n, true
+	}
+	for i := range s.Chains {
+		for j := range s.Chains[i].Members {
+			renew(&s.Chains[i].Members[j])
+		}
+	}
+	for i := range s.Requests {
+		renew(&s.Requests[i].From)
+		renew(&s.Requests[i].To)
+	}
+	for i := range s.Off {
+		renew(&s.Off[i])
+	}
+	return changed
+}
+
 // Prune drops members that are gone or in another repo than their chain,
-// requests past RequestTTL or across repos, and chains of one. live tells
-// where a match is now.
-func (s *Store) Prune(live func(Member) (repo string, ok bool), now time.Time) (left []Left) {
+// requests past RequestTTL or across repos, the off marks of gone matches,
+// and chains of one. live tells where a match is now: present, and its
+// repo ("" for none).
+func (s *Store) Prune(live func(Member) (repo string, present bool), now time.Time) (left []Left) {
 	for _, c := range slices.Clone(s.Chains) {
 		for _, m := range c.Members {
 			repo, ok := live(m)
-			if ok && repo == c.Repo {
+			if ok && repo != "" && repo == c.Repo {
 				continue
 			}
 			if id, in := s.leave(m); in {
@@ -217,7 +255,11 @@ func (s *Store) Prune(live func(Member) (repo string, ok bool), now time.Time) (
 	s.Requests = slices.DeleteFunc(s.Requests, func(r Request) bool {
 		from, okFrom := live(r.From)
 		to, okTo := live(r.To)
-		return now.Sub(r.At) > RequestTTL || !okFrom || !okTo || from != to
+		return now.Sub(r.At) > RequestTTL || !okFrom || !okTo || from == "" || from != to
+	})
+	s.Off = slices.DeleteFunc(s.Off, func(m Member) bool {
+		_, present := live(m)
+		return !present
 	})
 	return left
 }
@@ -253,19 +295,20 @@ func (s *Store) Spark(chainID string, now time.Time) {
 
 // Post puts news in to's inbox. Past InboxMax the oldest is dropped and counted.
 func (s *Store) Post(to Member, text string, now time.Time) {
-	s.put(to.key(), []Item{{At: now, Text: text}}, 0, false)
+	s.posted++
+	s.put(to.key(), []Item{{At: now, Text: text, seq: s.posted}}, 0, false)
 }
 
-// put adds items to the inbox of k, before what it holds when first, with
-// dropped more dropped. Past InboxMax the oldest go and are counted.
-func (s *Store) put(k string, items []Item, dropped int, first bool) {
+// put adds items to the inbox of k, in the order they were posted when
+// back (given back after what came since), with dropped more dropped. Past
+// InboxMax the oldest go and are counted.
+func (s *Store) put(k string, items []Item, dropped int, back bool) {
 	if s.inbox == nil {
 		s.inbox, s.dropped = map[string][]Item{}, map[string]int{}
 	}
-	if first {
-		items = append(slices.Clone(items), s.inbox[k]...)
-	} else {
-		items = append(s.inbox[k], items...)
+	items = append(slices.Clone(s.inbox[k]), items...)
+	if back {
+		slices.SortStableFunc(items, func(a, b Item) int { return cmp.Compare(a.seq, b.seq) })
 	}
 	if over := len(items) - InboxMax; over > 0 {
 		items = items[over:]
@@ -307,7 +350,8 @@ func (s *Store) Take(m Member) Taken {
 	return t
 }
 
-// GiveBack puts what Take emptied back in m's inbox, before what came since.
+// GiveBack puts what Take emptied back in m's inbox, in the order it was
+// posted: before what came since.
 func (s *Store) GiveBack(m Member, t Taken) {
 	if len(t.Items) > 0 {
 		s.put(m.key(), t.Items, t.Dropped, true)

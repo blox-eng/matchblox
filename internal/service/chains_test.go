@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -202,5 +203,83 @@ func TestAFailedSampleKeepsTheChains(t *testing.T) {
 	}
 	if doc := chainSample(chainTest(t, path), chainSessions...); doc.Chains == nil || len(doc.Chains.Chains) != 1 {
 		t.Fatalf("on disk after the failed samples: %+v", doc.Chains)
+	}
+}
+
+func chainInbox(s *Service, x sample.Session) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Chains.Take(memberOf(x)).Texts()
+}
+
+// TestAMatchWithANewSessionIDStaysChained: a cleared chat (/clear, Codex
+// /new) is a new session id in the same pane, pid and start: the same match.
+func TestAMatchWithANewSessionIDStaysChained(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
+	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
+	cleared := chainSessions[1]
+	cleared.SessionID = "s2-new"
+	doc := chainSample(s, chainSessions[0], cleared, chainSessions[2])
+	if doc.Chains == nil || len(doc.Chains.Chains) != 1 || !slices.ContainsFunc(doc.Chains.Chains[0].Members, memberOf(cleared).Same) {
+		t.Fatalf("after the clear: %+v", doc.Chains)
+	}
+	if got := chainInbox(s, chainSessions[0]); len(got) != 0 {
+		t.Fatalf("one heard %q", got)
+	}
+}
+
+func TestAGoneMemberTellsItsMates(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
+	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
+	chainSample(s, chainSessions[0], chainSessions[2])
+	if got := chainInbox(s, chainSessions[0]); !slices.Equal(got, []string{"two left the chain"}) {
+		t.Fatalf("one's inbox = %q", got)
+	}
+}
+
+func TestTheOffMarkOfAGoneMatchGoes(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	chainFrom(t, s, "%3", proto.ChainPrefix+"off")
+	chainSample(s, chainSessions[:2]...)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.Chains.Off) != 0 {
+		t.Fatalf("off = %+v", s.Chains.Off)
+	}
+}
+
+func TestLeavingNoChainSavesNothing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "chains.json")
+	s := chainTest(t, path)
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"-"); res.Note != "not in a chain" || res.Err != "" {
+		t.Fatalf("leave = %+v", res)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("saved: %v", err)
+	}
+}
+
+func TestChainActRefusals(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%1"); res.Err != "a match cannot chain with itself" {
+		t.Errorf("itself: %+v", res)
+	}
+	chainFrom(t, s, "%2", proto.ChainPrefix+"off")
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2"); res.Err != "two is off: it takes no chains" {
+		t.Errorf("off: %+v", res)
+	}
+	chainFrom(t, s, "%2", proto.ChainPrefix+"on")
+	chainFrom(t, s, "%1", proto.ChainPrefix+"%2")
+	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2"); res.Note != "already chained with two" || res.Err != "" {
+		t.Errorf("again: %+v", res)
+	}
+	far := chainSessions[2]
+	far.Cwd, far.Host = "/dev/app", "far"
+	chainSample(s, chainSessions[0], chainSessions[1], far)
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%3"); res.Err != "three is on another host: a chain is one host" {
+		t.Errorf("another host: %+v", res)
 	}
 }
