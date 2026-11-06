@@ -1230,7 +1230,7 @@ func messageTest(t *testing.T) (*Service, context.Context, *[][]string) {
 // A message goes to a session that works: Claude Code queues it.
 func TestMessageTypesIntoABusySession(t *testing.T) {
 	s, ctx, ran := messageTest(t)
-	res := s.act(ctx, proto.Act{RecID: "message:%1", Which: "secondary", Confirm: "y", Text: "also run the e2e"})
+	res := s.act(ctx, proto.Act{RecID: "message:%1", Which: "secondary", Confirm: "y", Text: "also run the e2e", FromPlaced: true})
 	if res.Err != "" || len(res.Skipped) != 0 {
 		t.Fatalf("%+v", res)
 	}
@@ -1264,7 +1264,7 @@ func TestMessageRefuses(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if res := s.act(ctx, proto.Act{RecID: "message:%1", Which: "secondary", Confirm: "y", Text: "go"}); res.Err == "" {
+	if res := s.act(ctx, proto.Act{RecID: "message:%1", Which: "secondary", Confirm: "y", Text: "go", FromPlaced: true}); res.Err == "" {
 		t.Fatalf("messaged a permission prompt: %+v", res)
 	}
 	if len(*ran) != 0 {

@@ -91,7 +91,7 @@ func peerSample(s *Service, at time.Time) {
 // peerAct is an act the CLI in other's pane sent: the service read its
 // pane by the CLI's pid.
 func peerAct(recID, text string) proto.Act {
-	return proto.Act{RecID: recID, Confirm: "y", Text: text, From: "%3", FromKnown: true}
+	return proto.Act{RecID: recID, Confirm: "y", Text: text, From: "%3", FromKnown: true, FromPlaced: true}
 }
 
 // typedLine is the text the send-keys -l steps typed.
@@ -524,7 +524,7 @@ func (h *sendHost) publish(mate sample.Session) {
 
 func (h *sendHost) send(t *testing.T, to, text string) proto.Result {
 	t.Helper()
-	return h.s.act(t.Context(), proto.Act{RecID: "message:" + to, Confirm: "y", Text: text, From: "%1", FromKnown: true})
+	return h.s.act(t.Context(), proto.Act{RecID: "message:" + to, Confirm: "y", Text: text, From: "%1", FromKnown: true, FromPlaced: true})
 }
 
 func (h *sendHost) keys() [][]string {
@@ -844,6 +844,21 @@ func TestASenderWithNoTerminalIsRefused(t *testing.T) {
 		t.Fatalf("ran %q", k)
 	}
 	if res := actOver(t, h.s, 777, proto.ClientConsole, proto.Act{RecID: "message:%2", Confirm: "y", Text: "hi"}); res.Err != "" {
+		t.Fatalf("the console's send: %+v", res)
+	}
+}
+
+// With no peer credentials the service knows no pid, so it cannot tell a
+// person's CLI from an agent's: the send is refused, the console's goes.
+func TestASendWithNoPeerCredentialsIsRefused(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	if res := actOver(t, h.s, 0, proto.ClientCLI, proto.Act{RecID: "message:%2", Confirm: "y", Text: "hi", From: "%1"}); res.Err != unplacedSender {
+		t.Fatalf("%+v", res)
+	}
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("ran %q", k)
+	}
+	if res := actOver(t, h.s, 0, proto.ClientConsole, proto.Act{RecID: "message:%2", Confirm: "y", Text: "hi"}); res.Err != "" {
 		t.Fatalf("the console's send: %+v", res)
 	}
 }

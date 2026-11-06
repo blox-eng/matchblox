@@ -1048,9 +1048,8 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 			_ = c.Send(proto.KindResult, env.ID, proto.Result{ActID: env.ID, Err: "bad act"})
 			continue
 		}
-		placed := true
 		if pid > 0 {
-			a.From, placed = s.callerPane(pid)
+			a.From, a.FromPlaced = s.callerPane(pid)
 			a.FromKnown = true
 		}
 		if pane, ok := strings.CutPrefix(a.RecID, proto.WatchPrefix); ok {
@@ -1066,12 +1065,8 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 			// A console in a pane the stoker drove, or in the stoker's own,
 			// is an agent that says it is one.
 			a.Console = h.Client == proto.ClientConsole && (pid <= 0 || !s.agentsPane(a))
-			var res proto.Result
-			if _, send := strings.CutPrefix(a.RecID, "message:"); send && !placed && !a.Console {
-				res.Err = unplacedSender
-			} else {
-				res = s.act(actCtx, a)
-			}
+			a.FromPlaced = a.FromPlaced || a.Console
+			res := s.act(actCtx, a)
 			res.ActID = id
 			_ = c.Send(proto.KindResult, id, res)
 		}(env.ID)

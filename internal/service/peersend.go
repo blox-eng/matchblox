@@ -40,11 +40,16 @@ const sendOff = `send is off on this host: [chains] send = "off"`
 // matchblox clears it.
 var peerShowWait = 2 * time.Second
 
+// isSend tells if act a is a plain send (message:<pane>), and to which pane.
+func isSend(a proto.Act) (string, bool) {
+	return strings.CutPrefix(a.RecID, "message:")
+}
+
 // peerAct is the pane a peer send goes to, when act a is one: a plain send
-// (message:<pane>) whose sender the service found itself, by the caller's
-// pid, and that is not the stoker's.
+// whose sender the service found itself, by the caller's pid, and that is
+// not the stoker's.
 func (s *Service) peerAct(a proto.Act) (string, bool) {
-	pane, ok := strings.CutPrefix(a.RecID, "message:")
+	pane, ok := isSend(a)
 	if !ok || !a.FromKnown || s.fromStoker(a) {
 		return "", false
 	}

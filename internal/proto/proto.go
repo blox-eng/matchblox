@@ -129,6 +129,11 @@ type Act struct {
 	// the act cannot name another pane as its own. It never comes over
 	// the wire.
 	FromKnown bool `json:"-"`
+	// FromPlaced: the service knows who sends the act, a match's pane or
+	// the person: by the caller's pane or terminal, or a console's hello,
+	// or because the service makes the act itself. A send that is not
+	// placed is refused. It never comes over the wire.
+	FromPlaced bool `json:"-"`
 }
 
 // WatchPrefix starts an act that names the pane a console watches; with no
