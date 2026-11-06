@@ -36,22 +36,18 @@ func paneOf(recID string) string {
 	return ""
 }
 
-// fromStoker tells if the act was typed in a pane of the tmux server
-// matchblox keeps the stoker agent on. The pane's server decides, not the
-// agent list: a pane of it the last sample missed is still the stoker's,
-// and the builder's pane of the same id never is.
-func (s *Service) fromStoker(a proto.Act) bool {
-	if s.StokerServer == "" || a.From == "" {
-		return false
-	}
-	server, _ := sample.SplitPane(a.From)
-	return server == s.StokerServer
-}
+// stokersOwn refuses an act on a stoker's session, and any act of a
+// stoker session no unit runs.
+const stokersOwn = "no agent acts on the stoker's own session"
 
-// orderable is what the stoker agent and the sessions it drives may do:
-// nothing while the builder works, nothing to the stoker's own session,
-// and no more than OrderSteps messages a run.
-func (s *Service) orderable(a proto.Act) error {
+// orderable is what the stoker agent of unit u and the sessions it drives
+// may do: nothing while the builder works, nothing to a stoker's own
+// session, and no more than OrderSteps messages a run. A nil u is a
+// stoker session no unit runs: it may do nothing.
+func (s *Service) orderable(u *stokerUnit, a proto.Act) error {
+	if u == nil {
+		return errors.New(stokersOwn)
+	}
 	if verb, ok := strings.CutPrefix(a.RecID, "stoker:"); ok {
 		// Its plan, its steps and its triggers are the stoker's own, and
 		// work while it rests.
@@ -77,13 +73,10 @@ func (s *Service) orderable(a proto.Act) error {
 	}
 	pane := paneOf(a.RecID)
 	counts := pane != "" || a.RecID == NewSessionID // what makes a step of the run
-	if counts && (s.Stoker == nil || !s.Stoker.Mode().On) {
+	m := u.store.Mode()
+	if counts && !m.On {
 		return errors.New("the stoker is off: no run")
 	}
-	if s.Stoker == nil {
-		return nil
-	}
-	m := s.Stoker.Mode()
 	if m.On && !m.Rests.IsZero() {
 		return errors.New("the stoker rests: a person works")
 	}
@@ -96,11 +89,11 @@ func (s *Service) orderable(a proto.Act) error {
 	// A session the stoker drives must not type into the stoker's panes:
 	// a line there would read as the builder's new order. A pane whose
 	// session cannot be told is refused too.
-	if pane != "" && s.fromStoker(proto.Act{From: pane}) {
-		return errors.New("no agent acts on the stoker's own session")
+	if _, own := s.unitOf(proto.Act{From: pane}); pane != "" && own {
+		return errors.New(stokersOwn)
 	}
 	n := 0
-	for _, e := range s.Stoker.Entries() {
+	for _, e := range u.store.Entries() {
 		if e.Ordered() && !e.At.Before(m.Since) {
 			n++
 		}
@@ -111,22 +104,22 @@ func (s *Service) orderable(a proto.Act) error {
 	return nil
 }
 
-// recordOrder keeps a message the stoker agent sent in the run, for its
-// count and for the orders built on it. A compact records itself.
-func (s *Service) recordOrder(a proto.Act, res proto.Result) {
+// recordOrder keeps a message the stoker agent of unit u sent in the run,
+// for its count and for the orders built on it. A compact records itself.
+func (s *Service) recordOrder(u *stokerUnit, a proto.Act, res proto.Result) {
 	pane := paneOf(a.RecID)
-	if s.Stoker == nil || pane == "" || strings.HasPrefix(a.RecID, "compact:") || res.Err != "" || len(res.Ran) == 0 {
+	if u == nil || pane == "" || strings.HasPrefix(a.RecID, "compact:") || res.Err != "" || len(res.Ran) == 0 {
 		return
 	}
 	now := s.now()
 	x, _ := s.sessionAt(pane)
-	_ = s.Stoker.Append(stoker.Entry{
+	_ = u.store.Append(stoker.Entry{
 		ID: x.SessionID + "@" + now.UTC().Format(time.RFC3339Nano), At: now,
 		Session: x.SessionID, Name: x.Name, Pane: pane, Rule: stoker.RuleOrder,
 		Argv: res.Ran, Result: stoker.Sent,
 	})
 	if !strings.HasPrefix(a.RecID, "kill:") { // a pane it killed is gone
-		s.drive(pane)
+		s.drive(u, pane)
 	}
 	s.refreshStoker()
 }
@@ -145,11 +138,13 @@ func (s *Service) compact(ctx context.Context, pane string, a proto.Act) proto.R
 		return proto.Result{Err: err.Error()}
 	}
 	now := s.now()
-	if s.Stoker != nil && x.SessionID != "" {
-		for _, e := range s.Stoker.Entries() {
-			if e.Session == x.SessionID && e.Rule == stoker.RuleCompact && !e.Logged() && now.Sub(e.At) < stoker.PerSession {
-				return proto.Result{Err: fmt.Sprintf("%s was compacted %d min ago: one compact in %d minutes",
-					x.Name, int(now.Sub(e.At).Minutes()), int(stoker.PerSession.Minutes()))}
+	if x.SessionID != "" {
+		for _, f := range s.family() {
+			for _, e := range f.store.Entries() {
+				if e.Session == x.SessionID && e.Rule == stoker.RuleCompact && !e.Logged() && now.Sub(e.At) < stoker.PerSession {
+					return proto.Result{Err: fmt.Sprintf("%s was compacted %d min ago: one compact in %d minutes",
+						x.Name, int(now.Sub(e.At).Minutes()), int(stoker.PerSession.Minutes()))}
+				}
 			}
 		}
 	}
@@ -160,19 +155,25 @@ func (s *Service) compact(ctx context.Context, pane string, a proto.Act) proto.R
 		s.latchRest(pane)
 	}
 	release()
-	if s.Stoker != nil && len(res.Ran) > 0 {
+	// A stoker's compact goes on its own card; the builder's and a driven
+	// session's on the host's.
+	u, own := s.unitOf(a)
+	if !own {
+		u = s.hostUnit()
+	}
+	if u != nil && len(res.Ran) > 0 {
 		e := stoker.Entry{
 			ID: x.SessionID + "@" + now.UTC().Format(time.RFC3339Nano), At: now,
 			Session: x.SessionID, Name: x.Name, Pane: pane, Rule: stoker.RuleCompact, Why: "asked",
 			Argv: action.Steps, Before: x.Tokens, Guard: "at rest", Result: stoker.Sent,
 		}
-		if s.fromStoker(a) {
+		if own {
 			e.Why = stoker.WhyOrder
 		}
 		if len(res.Ran) < len(action.Steps) {
 			e.Result = "typed, not sent"
 		}
-		_ = s.Stoker.Append(e)
+		_ = u.store.Append(e)
 		s.refreshStoker()
 	}
 	return res

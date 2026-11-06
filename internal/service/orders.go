@@ -35,26 +35,26 @@ type orderAsk struct {
 }
 
 // orderAct runs the builder's side of an order: give it.
-func (s *Service) orderAct(ctx context.Context, a proto.Act) proto.Result {
-	if s.Stoker == nil {
+func (s *Service) orderAct(ctx context.Context, u *stokerUnit, a proto.Act) proto.Result {
+	if u == nil {
 		return proto.Result{Err: "this service keeps no stoker"}
 	}
-	if s.fromStoker(a) {
+	if _, own := s.unitOf(a); own {
 		return proto.Result{Err: "the stoker does not give itself orders"}
 	}
-	if err := s.order(ctx, a.Text); err != nil {
+	if err := s.order(ctx, u, a.Text); err != nil {
 		return proto.Result{Err: err.Error()}
 	}
 	s.refreshStoker()
 	return proto.Result{}
 }
 
-// order takes the builder's words, and the run starts at once. With no
-// stoker agent (fixtures, or its command not on PATH) it turns today's
-// stoker on (or on for the night) and keeps the words. With one, it
-// writes the brief and points the stoker agent at it. A night that runs
+// order takes the builder's words for unit u, and the run starts at once.
+// With no stoker agent (fixtures, or its command not on PATH) it turns
+// today's stoker on (or on for the night) and keeps the words. With one,
+// it writes the brief and points the stoker agent at it. A night that runs
 // takes no new order.
-func (s *Service) order(ctx context.Context, text string) error {
+func (s *Service) order(ctx context.Context, u *stokerUnit, text string) error {
 	var ask orderAsk
 	if err := json.Unmarshal([]byte(text), &ask); err != nil {
 		return fmt.Errorf("the order does not read: %w", err)
@@ -69,20 +69,20 @@ func (s *Service) order(ctx context.Context, text string) error {
 		}
 	}
 	now := s.now()
-	if m := s.Stoker.Mode(); m.On && !m.Nightly && !ask.Night && m.Order != nil && m.Order.State == stoker.OrderRunning {
-		return s.dayOrder(ctx, strings.TrimSpace(ask.Words), grants, now)
+	if m := u.store.Mode(); m.On && !m.Nightly && !ask.Night && m.Order != nil && m.Order.State == stoker.OrderRunning {
+		return s.dayOrder(ctx, u, strings.TrimSpace(ask.Words), grants, now)
 	}
 	o := stoker.Order{Grants: grants, ID: "run-" + now.UTC().Format("20060102-150405.000000000"), Words: strings.TrimSpace(ask.Words), Night: ask.Night, At: now, Went: now, State: stoker.OrderRunning}
-	if m := s.Stoker.Mode(); m.On && m.Nightly {
+	if m := u.store.Mode(); m.On && m.Nightly {
 		return errors.New(sealed)
 	}
 	if s.agentOn() {
-		pane, err := s.stokerAgent()
+		pane, err := s.stokerAgent(u)
 		if err != nil {
 			return err
 		}
-		path := filepath.Join(s.Stoker.Dir(), briefName)
-		if err := os.MkdirAll(s.Stoker.Dir(), 0o700); err != nil {
+		path := filepath.Join(u.store.Dir(), briefName)
+		if err := os.MkdirAll(u.store.Dir(), 0o700); err != nil {
 			return err
 		}
 		if err := os.WriteFile(path, []byte(stoker.Brief(o, s.Ways, stoker.Hands, s.board(now))), 0o600); err != nil {
@@ -93,7 +93,7 @@ func (s *Service) order(ctx context.Context, text string) error {
 		}
 	}
 	sessions, _ := s.seen()
-	return s.updateOrder(func(m stoker.Mode) (stoker.Mode, error) {
+	return s.updateOrder(u, func(m stoker.Mode) (stoker.Mode, error) {
 		if m.On && m.Nightly {
 			return m, errors.New(sealed)
 		}
@@ -131,17 +131,17 @@ const orderName = "stoker-order.md"
 // is checked under the mode's lock right before the line is typed, and
 // the order lands under the same lock: the stoker never reads a new order
 // a run that ended meanwhile did not take.
-func (s *Service) dayOrder(ctx context.Context, words string, grants []string, now time.Time) error {
+func (s *Service) dayOrder(ctx context.Context, u *stokerUnit, words string, grants []string, now time.Time) error {
 	pane, line := "", ""
 	if s.agentOn() {
 		var err error
-		if pane, err = s.stokerAgent(); err != nil {
+		if pane, err = s.stokerAgent(u); err != nil {
 			return err
 		}
 		line = stoker.NewOrder(words)
 		if utf8.RuneCountInString(line) > panes.MaxAnswer {
-			path := filepath.Join(s.Stoker.Dir(), orderName)
-			if err := os.MkdirAll(s.Stoker.Dir(), 0o700); err != nil {
+			path := filepath.Join(u.store.Dir(), orderName)
+			if err := os.MkdirAll(u.store.Dir(), 0o700); err != nil {
 				return err
 			}
 			if err := os.WriteFile(path, []byte(line+"\n"), 0o600); err != nil {
@@ -150,7 +150,7 @@ func (s *Service) dayOrder(ctx context.Context, words string, grants []string, n
 			line = "Read " + path + " and follow it."
 		}
 	}
-	return s.updateOrder(func(m stoker.Mode) (stoker.Mode, error) {
+	return s.updateOrder(u, func(m stoker.Mode) (stoker.Mode, error) {
 		if !m.On || m.Nightly || m.Order == nil || m.Order.State != stoker.OrderRunning {
 			return m, errors.New("the run changed meanwhile: look at it again")
 		}
@@ -173,25 +173,28 @@ func (s *Service) dayOrder(ctx context.Context, words string, grants []string, n
 
 // planAct takes the stoker agent's plan (stoker:plan), one step it logs
 // (stoker:step) or a trigger it sets or drops (stoker:when). Only the
-// stoker pane sends them.
+// stoker pane sends them, each to its own unit.
 func (s *Service) planAct(verb string, a proto.Act) proto.Result {
-	if s.Stoker == nil {
+	if s.hostUnit() == nil {
 		return proto.Result{Err: "this service keeps no stoker"}
 	}
+	u, own := s.unitOf(a)
 	var err error
 	switch {
-	case !s.fromStoker(a) && verb == "plan":
+	case !own && verb == "plan":
 		err = errors.New("only the stoker writes its plan")
-	case !s.fromStoker(a) && verb == "when":
+	case !own && verb == "when":
 		err = errors.New("only the stoker sets its triggers")
-	case !s.fromStoker(a):
+	case !own:
 		err = errors.New("only the stoker logs its steps")
+	case u == nil:
+		err = errors.New(stokersOwn)
 	case verb == "plan":
-		err = s.plan(a.Text)
+		err = s.plan(u, a.Text)
 	case verb == "when":
-		err = s.when(a.Text)
+		err = s.when(u, a.Text)
 	default:
-		err = s.step(a.Text)
+		err = s.step(u, a.Text)
 	}
 	if err != nil {
 		return proto.Result{Err: err.Error()}
@@ -200,15 +203,15 @@ func (s *Service) planAct(verb string, a proto.Act) proto.Result {
 	return proto.Result{}
 }
 
-// plan replaces the plan of the order that runs with the one the agent
+// plan replaces the plan of the order unit u runs with the one its agent
 // wrote. Nobody approves it; the goes it names are ignored, as the goes
 // are the builder's.
-func (s *Service) plan(text string) error {
+func (s *Service) plan(u *stokerUnit, text string) error {
 	var p stoker.PlanText
 	if err := json.Unmarshal([]byte(text), &p); err != nil {
 		return fmt.Errorf("the plan does not read: %w", err)
 	}
-	o := s.Stoker.Mode().Order
+	o := u.store.Mode().Order
 	switch {
 	case o == nil:
 		return errors.New("no order to plan: launch one first")
@@ -234,7 +237,7 @@ func (s *Service) plan(text string) error {
 			return fmt.Errorf("step %d: %w", st.N, err)
 		}
 	}
-	return s.updateOrder(func(m stoker.Mode) (stoker.Mode, error) {
+	return s.updateOrder(u, func(m stoker.Mode) (stoker.Mode, error) {
 		if m.Order == nil || m.Order.ID != o.ID || m.Order.State != stoker.OrderRunning {
 			return m, errors.New("the order changed meanwhile: read the brief again")
 		}
@@ -249,9 +252,9 @@ func (s *Service) plan(text string) error {
 	})
 }
 
-// step logs one step of the plan (or of a standing rule, step 0) to the
-// run, for the card.
-func (s *Service) step(text string) error {
+// step logs one step of the plan (or of a standing rule, step 0) to unit
+// u's run, for the card.
+func (s *Service) step(u *stokerUnit, text string) error {
 	var in stoker.Entry
 	if err := json.Unmarshal([]byte(text), &in); err != nil {
 		return fmt.Errorf("the step does not read: %w", err)
@@ -281,9 +284,9 @@ func (s *Service) step(text string) error {
 		if e.Rule = strings.TrimSpace(in.Rule); e.Rule == "" {
 			return errors.New("step 0 is a standing rule: name it with --rule")
 		}
-		return s.Stoker.Append(e)
+		return u.store.Append(e)
 	}
-	o := s.Stoker.Mode().Order
+	o := u.store.Mode().Order
 	i := -1
 	if o != nil {
 		i = slices.IndexFunc(o.Plan, func(st stoker.PlanStep) bool { return st.N == in.Step })
@@ -295,13 +298,14 @@ func (s *Service) step(text string) error {
 	if x, err := s.sessionNamed(o.Plan[i].Session); err == nil {
 		e.Session, e.Name, e.Pane = x.SessionID, x.Name, x.Pane
 	}
-	return s.Stoker.Append(e)
+	return u.store.Append(e)
 }
 
-// updateOrder writes the mode fn returns; fn's error leaves it as it is.
-func (s *Service) updateOrder(fn func(stoker.Mode) (stoker.Mode, error)) error {
+// updateOrder writes the mode fn returns to unit u; fn's error leaves it
+// as it is.
+func (s *Service) updateOrder(u *stokerUnit, fn func(stoker.Mode) (stoker.Mode, error)) error {
 	var refused error
-	_, err := s.Stoker.Update(func(m stoker.Mode) (stoker.Mode, bool) {
+	_, err := u.store.Update(func(m stoker.Mode) (stoker.Mode, bool) {
 		n, err := fn(m)
 		if err != nil {
 			refused = err
@@ -330,19 +334,19 @@ func (s *Service) start(m stoker.Mode, night bool, now time.Time, sessions []sam
 	return m, nil
 }
 
-// stokerAgent is the pane of the stoker agent, or why there is none to
-// type into yet.
-func (s *Service) stokerAgent() (string, error) {
+// stokerAgent is the pane of unit u's stoker agent, or why there is none
+// to type into yet.
+func (s *Service) stokerAgent(u *stokerUnit) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	x, ok := stokerIn(s.cur.Sessions, s.StokerServer)
+	x, ok := stokerIn(s.cur.Sessions, s.StokerServer, stoker.SessionName(u.id))
 	switch {
-	case ok && s.startedAt.IsZero():
+	case ok && u.startedAt.IsZero():
 		return x.Pane, nil
 	case ok && ready(x):
-		s.startedAt = time.Time{}
+		u.startedAt = time.Time{}
 		return x.Pane, nil
-	case !s.startedAt.IsZero():
+	case !u.startedAt.IsZero():
 		// Never into a half-started agent: its first prompt may not take
 		// what is typed.
 		return "", errors.New("the stoker is starting: the order goes once it rests")
@@ -350,11 +354,11 @@ func (s *Service) stokerAgent() (string, error) {
 	return "", errors.New("the stoker is not running: f or n starts it")
 }
 
-// stokerIn is the agent session in the stoker's session of its tmux
-// server.
-func stokerIn(sessions []sample.Session, server string) (sample.Session, bool) {
+// stokerIn is the agent session in a stoker's tmux session (session) of
+// its tmux server.
+func stokerIn(sessions []sample.Session, server, session string) (sample.Session, bool) {
 	for _, x := range sessions {
-		if server != "" && x.Server() == server && x.TmuxSession() == sample.StokerSession {
+		if server != "" && x.Server() == server && x.TmuxSession() == session {
 			return x, true
 		}
 	}
@@ -429,11 +433,11 @@ func (s *Service) recipes() []string {
 	return c.names
 }
 
-// stokerView is the stoker as the consoles draw it: the store's view, the
-// ways' recipes and whether an agent runs in the stoker's pane.
-func (s *Service) stokerView(sessions []sample.Session) *stoker.View {
-	v := s.Stoker.View()
+// stokerView is unit u as the consoles draw it: its store's view, the
+// ways' recipes and whether an agent runs in its pane.
+func (s *Service) stokerView(u *stokerUnit, sessions []sample.Session) *stoker.View {
+	v := u.store.View()
 	v.Recipes = s.recipes()
-	s.agentView(&v, sessions)
+	s.agentView(u, &v, sessions)
 	return &v
 }

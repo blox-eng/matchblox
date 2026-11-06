@@ -20,7 +20,8 @@ const keysOnlyFromConsole = "keys go only from a console"
 // agent's pane, nor the stoker's.
 func (s *Service) aConsole(console bool, a proto.Act) bool {
 	_, inAgent := s.sessionAt(a.From)
-	return console && !inAgent && !s.agentsPane(a) && !s.fromStoker(a)
+	_, own := s.unitOf(a)
+	return console && !inAgent && !s.agentsPane(a) && !own
 }
 
 // watched is the pane a console streams, and where in its history: back

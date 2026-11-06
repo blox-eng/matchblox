@@ -341,9 +341,10 @@ func TestAConsoleClaimFailsClosedWithoutDrivenJSON(t *testing.T) {
 			t.Fatal(err)
 		}
 		if restart {
-			s.driven.mu.Lock()
-			s.driven.d = nil // what the service knew is gone with it
-			s.driven.mu.Unlock()
+			ds := &s.hostUnit().driven
+			ds.mu.Lock()
+			ds.d = nil // what the service knew is gone with it
+			ds.mu.Unlock()
 		}
 		if res := actOver(t, s, 100, proto.ClientConsole, proto.Act{RecID: "message:%2", Confirm: "y", Text: "merge it"}); res.Err != "" {
 			t.Fatalf("restart %v: %q", restart, res.Err)
