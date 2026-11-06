@@ -328,6 +328,12 @@ a key to add it to Mine, or to take it off. Drag a key to move it. `◂`
 always stays: the sheet says `◂ always stays: it is the way back`. Mine is
 one set for the device, for all hosts. It stays when you quit the app.
 
+The Ctrl group starts with `Ctrl`. Add it to Mine to type any ctrl key. Tap
+`Ctrl` and it stays lit. The next letter you type goes with ctrl, and `Ctrl`
+goes dark. Tap it again to let it go. The chat sends ctrl with `b d e f g k l
+n p r t u v w x y`, and with `a` and `c`. It sends no `ctrl+z`, which would
+stop the agent, and no `ctrl+s` or `ctrl+q`, which stop and start the terminal.
+
 A vertical swipe scrolls the console and a tmux pane. The lines move with
 your finger: one line for each line of travel. In a tmux pane each wheel
 step scrolls 5 lines, so the app sends one step for each 5 lines of travel.

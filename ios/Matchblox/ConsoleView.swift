@@ -261,6 +261,11 @@ private final class Belts {
             belt.isDemo = isDemo
             belt.onScreenHold = { [weak screen] holding in screen?.trayMoved(open: holding) }
             belt.onSend = { [weak terminal] bytes in terminal?.send(bytes) }
+            belt.onCtrl = { [weak self, weak terminal] in
+                guard let terminal else { return }
+                terminal.controlModifier.toggle()
+                self?.ctrlChanged(terminal.controlModifier)
+            }
             belt.onKeyboard = { [weak terminal] in
                 guard let terminal else { return }
                 _ = terminal.isFirstResponder ? terminal.resignFirstResponder() : terminal.becomeFirstResponder()
@@ -268,6 +273,22 @@ private final class Belts {
             belt.onLayout = { [weak self] layout in self?.layoutPicked(layout) }
             belt.onEditMine = { [weak self] in self?.editMine() }
         }
+        ctrlObserver = NotificationCenter.default.addObserver(forName: Self.ctrlReset, object: terminal, queue: .main) {
+            [weak self] _ in MainActor.assumeIsolated { self?.ctrlChanged(false) }
+        }
+    }
+
+    /// SwiftTerm disarms ctrl after the next typed key and posts this; its name is not public.
+    private static let ctrlReset = Notification.Name("SwiftTerm.TerminalView.controlModifierReset")
+    nonisolated(unsafe) private var ctrlObserver: NSObjectProtocol?
+
+    deinit {
+        if let ctrlObserver { NotificationCenter.default.removeObserver(ctrlObserver) }
+    }
+
+    private func ctrlChanged(_ armed: Bool) {
+        lifted.ctrlArmed = armed
+        dock.ctrlArmed = armed
     }
 
     func agentChanged(_ agent: String?) {

@@ -2,6 +2,10 @@
 public enum KeyBar {
     private static let esc: UInt8 = 0x1b
 
+    /// The Ctrl key. It sends nothing itself: a tap arms ctrl for the next key the keyboard
+    /// types, as a Ctrl key on a keyboard does, and the terminal disarms it after that key.
+    public static let ctrl = "Ctrl"
+
     private static let fixed: [String: [UInt8]] = {
         var keys: [String: [UInt8]] = [
             "◂": HomeKey.bytes,
@@ -30,6 +34,7 @@ public enum KeyBar {
     /// a lowercase letter, then has lowercase letters, digits and dashes, is an agent command:
     /// the console runs it, and refuses an id it does not know.
     public static func bytes(for id: String) -> [UInt8]? {
+        if id == ctrl { return [] }
         if let bytes = fixed[id] { return bytes }
         guard isCommandID(id) else { return nil }
         return Array("\u{1b}_matchblox;cmd=\(id)\u{1b}\\".utf8)

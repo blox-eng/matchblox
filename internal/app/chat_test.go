@@ -481,8 +481,19 @@ func TestKeyNames(t *testing.T) {
 			t.Errorf("%s = %q %v, want %q", k, got, ok, want)
 		}
 	}
-	if got, ok := keyName(keyPress("ctrl+x")); ok {
-		t.Errorf("ctrl+x = %q, want no key", got)
+	for _, l := range "bdefgklnprtuvwxy" {
+		k := "ctrl+" + string(l)
+		if got, ok := keyName(keyPress(k)); !ok || got != "C-"+string(l) {
+			t.Errorf("%s = %q %v, want C-%c", k, got, ok, l)
+		}
+	}
+	// ctrl+z would stop the agent; ctrl+s and ctrl+q stop and start the
+	// terminal; ctrl+h, i, j and m are Backspace, Tab and Enter, which have
+	// their own names; ctrl+o is the console's own.
+	for _, k := range []string{"ctrl+z", "ctrl+s", "ctrl+q", "ctrl+h", "ctrl+i", "ctrl+j", "ctrl+m", "ctrl+o"} {
+		if got, ok := keyName(keyPress(k)); ok {
+			t.Errorf("%s = %q, want no key", k, got)
+		}
 	}
 }
 
@@ -1889,5 +1900,21 @@ func TestAMenuDrawnBesideTheListIsNotQuietAgain(t *testing.T) {
 	pressKeys(t, m, "enter", "1")
 	if got := keyActs(f); len(got) != 1 || got[0].Text != "lit:1" {
 		t.Fatalf("keys %+v", got)
+	}
+}
+
+// A screen from the pane's history says how far back it is, so a still
+// screen is never taken for the live one (#300).
+func TestChatKeyLineSaysHowFarBack(t *testing.T) {
+	m, _ := inChat(t)
+	m = pressKeys(t, m, "down")
+	m.screen.Back = 12
+	line, _ := m.keyLine(100)
+	if got := ansi.Strip(line); !strings.Contains(got, "↑ 12 lines back · a key comes back") || strings.Contains(got, "keys go to") {
+		t.Fatalf("key line %q", got)
+	}
+	m.screen.Back = 0
+	if line, _ := m.keyLine(100); !strings.Contains(ansi.Strip(line), "keys go to") {
+		t.Fatalf("live key line %q", ansi.Strip(line))
 	}
 }

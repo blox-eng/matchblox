@@ -22,7 +22,7 @@ public struct KeyFace: Equatable, Sendable {
     private static let spokenNames = [
         "◂": "Back to matchblox", "↑": "Up", "↓": "Down", "←": "Left", "→": "Right",
         "⏎": "Return", "Tab": "Tab", "⇧Tab": "Shift Tab", "Esc": "Escape", "⌫": "Delete",
-        "⇞": "Page up", "⇟": "Page down", "^C": "Interrupt",
+        "⇞": "Page up", "⇟": "Page down", "^C": "Interrupt", "Ctrl": "Control",
     ]
 
     public init(_ key: BeltKey, in catalog: KeyCatalog) {

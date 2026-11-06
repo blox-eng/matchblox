@@ -28,7 +28,7 @@ public struct KeyCatalog: Sendable {
     static let steer = homeRow + row("Esc", "^C", "⇞", "⇟")
     static let edit = row("Tab", "⇧Tab", "←", "→", "⌫")
     static let digits = row("1", "2", "3", "4", "5", "6", "7", "8", "9")
-    static let ctrl = row("^A", "^B", "^D", "^L", "^R")
+    static let ctrl = row(KeyBar.ctrl, "^A", "^B", "^D", "^L", "^R")
     static let tmux = homeRow + row("⇞", "⇟", "Tab", "⇧Tab", "^B")
 
     /// `↑ ↓ ⏎` are two cells wide, so at home they fill the screen right of `◂`.

@@ -154,9 +154,13 @@ The chat is a window on the agent's pane. The mouse wheel over the chat goes
 to the agent, and the agent scrolls itself, as it does in tmux. On a phone, a
 swipe over the chat does the same. `PgUp` and `PgDn` also go to the agent.
 
-An agent that does not read the mouse does not scroll in the chat. The key line
-says `not scrolled: <name> does not read the mouse — open its pane to scroll
-it`. Press `Ctrl+O` to open the pane.
+An agent that does not read the mouse scrolls in the chat through its pane's
+history, 3 lines for each wheel step. The key line says how far back you are:
+`↑ 12 lines back · a key comes back`. The next key takes you back to the live
+screen and is not sent. Press it again to send it.
+
+The chat also sends ctrl with `b d e f g k l n p r t u v w x y`, as well as
+`ctrl+a` and `ctrl+c`. It sends no `ctrl+z`, `ctrl+s` or `ctrl+q`.
 
 Scrolling only looks. It leaves the stoker's merge guard on a driven pane. While
 the stoker is in charge the wheel sends nothing, and the key line says `not

@@ -63,7 +63,7 @@ final class BeltLayoutsTests: XCTestCase {
         XCTAssertEqual(groups[0].keys.map(\.id), ["◂", "↑", "↓", "⏎", "Esc", "^C", "⇞", "⇟"])
         XCTAssertEqual(groups[1].keys.map(\.id), ["Tab", "⇧Tab", "←", "→", "⌫"])
         XCTAssertEqual(groups[2].keys.map(\.id), (1...9).map(String.init))
-        XCTAssertEqual(groups[3].keys.map(\.id), ["^A", "^B", "^D", "^L", "^R"])
+        XCTAssertEqual(groups[3].keys.map(\.id), ["Ctrl", "^A", "^B", "^D", "^L", "^R"])
         XCTAssertEqual(groups[7].keys.map(\.id), ["cursor-summarize", "cursor-clear", "cursor-model"])
         XCTAssertTrue(groups[4...].allSatisfy { $0.keys.allSatisfy { $0.cells == 2 } })
     }
@@ -89,6 +89,9 @@ final class BeltLayoutsTests: XCTestCase {
         }
 
         let esc: UInt8 = 0x1b
+        // Ctrl sends nothing itself: it arms the terminal's ctrl for the next key (#300).
+        XCTAssertEqual(KeyBar.bytes(for: KeyBar.ctrl), [])
+        XCTAssertEqual(KeyFace(BeltKey(id: KeyBar.ctrl, cells: 1), in: c).spoken, "Control")
         XCTAssertEqual(KeyBar.bytes(for: "◂"), HomeKey.bytes)
         XCTAssertEqual(KeyBar.bytes(for: "↑"), [esc, 0x5b, 0x41])
         XCTAssertEqual(KeyBar.bytes(for: "↓"), [esc, 0x5b, 0x42])

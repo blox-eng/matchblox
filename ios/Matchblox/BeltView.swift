@@ -97,6 +97,12 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     }
 
     var onSend: ([UInt8]) -> Void = { _ in }
+    /// A tap on the Ctrl key: the terminal arms or disarms ctrl for the next typed key.
+    var onCtrl: () -> Void = {}
+    /// Ctrl is armed: its key stays lit until the next typed key, or a second tap.
+    var ctrlArmed = false {
+        didSet { paintCtrl() }
+    }
     var onKeyboard: () -> Void = {}
     /// The builder picked a layout in the tray.
     var onLayout: (BeltLayout) -> Void = { _ in }
@@ -382,6 +388,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         CATransaction.commit()
 
         self.motion = motion
+        paintCtrl()
         spoken = nil
         place()
         updateName()
@@ -452,6 +459,13 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
     }
 
     /// A pressed key is `hair` with its label in `accent`.
+    private func paintCtrl() {
+        guard let motion else { return }
+        for (piece, key) in zip(pieces, motion.keys) where key.id == KeyBar.ctrl {
+            Self.paint(piece, pressed: ctrlArmed)
+        }
+    }
+
     private static func paint(_ piece: Piece, pressed: Bool) {
         // No implicit fade: the press is 140 ms, shorter than a layer's default animation.
         CATransaction.begin()
@@ -662,6 +676,10 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         let piece = pieces[i]
         if piece.key.isCommand && !commandsLive {
             flash("commands run from the chat")
+            return
+        }
+        if motion.keys[i].id == KeyBar.ctrl {
+            onCtrl()
             return
         }
         guard let bytes = KeyBar.bytes(for: motion.keys[i].id) else { return }

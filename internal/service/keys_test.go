@@ -54,14 +54,14 @@ func TestKeysTwiceIsTwice(t *testing.T) {
 }
 
 func TestKeysRefusesWhatIsNotAKey(t *testing.T) {
-	for text, name := range map[string]string{"C-x": "C-x", "lit:a\x1b[A": "control", "lit:": "empty", "lit:" + string(make([]byte, 201)): "long"} {
+	for text, name := range map[string]string{"C-z": "C-z", "lit:a\x1b[A": "control", "lit:": "empty", "lit:" + string(make([]byte, 201)): "long"} {
 		s, ran := keysTest(t)
 		if res := s.act(t.Context(), key(text)); res.Err == "" || len(*ran) != 0 {
 			t.Fatalf("%s: res %+v ran %q", name, res, *ran)
 		}
 	}
 	s, _ := keysTest(t)
-	if res := s.act(t.Context(), key("C-x")); res.Err != `not sent: "C-x" is not a key` {
+	if res := s.act(t.Context(), key("C-z")); res.Err != `not sent: "C-z" is not a key` {
 		t.Fatalf("err %q", res.Err)
 	}
 }
@@ -370,5 +370,19 @@ func TestKeysRefusedForANewProcessOnTheSamePID(t *testing.T) {
 	a.Start = 100
 	if res := s.act(t.Context(), a); res.Err != "" || len(*ran) != 1 {
 		t.Fatalf("res %+v ran %q", res, *ran)
+	}
+}
+
+// The phone's Ctrl key reaches the agent, and no ctrl key counts as an
+// answer to a menu (#300).
+func TestKeysSendsTheCtrlKeysOfTheBelt(t *testing.T) {
+	for _, l := range proto.CtrlKeys {
+		s, ran := keysTest(t)
+		if res := s.act(t.Context(), key("C-"+string(l))); res.Err != "" || len(*ran) != 1 {
+			t.Fatalf("C-%c: res %+v ran %q", l, res, *ran)
+		}
+		if answers("C-" + string(l)) {
+			t.Fatalf("C-%c answers a menu", l)
+		}
 	}
 }
