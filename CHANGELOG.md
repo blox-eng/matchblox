@@ -8,8 +8,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Added
 
-- **Chain reaction.** Two matches in one repo learn of each other at the
-  start of a turn. Once both run `matchblox chain`, they hear each other's
+- **Chain reaction.** Two matches in one repo learn of each other between
+  their steps. Once both run `matchblox chain`, they hear each other's
   commits, branch changes, finishes and waits between their steps, and
   `matchblox send` reaches them. A send to a match outside the chain fails.
   Sessions joins a chain's matches with a fuse, and `[chains]` in the config

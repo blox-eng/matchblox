@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -497,27 +498,37 @@ func cursorEvent(t *testing.T, name string) []byte {
 
 // TestCursorHookPrintsNewsAsContext: Cursor adds sessionStart's and
 // postToolUse's additional_context to the conversation; beforeSubmitPrompt
-// takes no text for the turn, so it hears nothing.
+// takes no text for the turn, so it never asks: asking would empty the
+// inbox into nowhere.
 func TestCursorHookPrintsNewsAsContext(t *testing.T) {
+	var asked atomic.Int32
 	sock := newsService(t, func(c net.Conn, env proto.Envelope) {
 		if env.Kind == proto.KindNews {
+			asked.Add(1)
 			_ = proto.Encode(c, proto.KindNews, "", proto.NewsReply{Text: "a <b> & c"})
 		}
 	})
 	t.Setenv("TMUX_PANE", "%1")
 	spool := filepath.Join(t.TempDir(), "spool.jsonl")
-	for name, want := range map[string]string{
-		"sessionStart":       `{"additional_context":"a <b> & c"}` + "\n",
-		"postToolUse":        `{"additional_context":"a <b> & c"}` + "\n",
-		"beforeSubmitPrompt": "",
-		"stop-completed":     "",
+	for _, tc := range []struct {
+		name, want string
+		asks       bool
+	}{
+		{"sessionStart", `{"additional_context":"a <b> & c"}` + "\n", true},
+		{"postToolUse", `{"additional_context":"a <b> & c"}` + "\n", true},
+		{"beforeSubmitPrompt", "", false},
+		{"stop-completed", "", false},
 	} {
+		asked.Store(0)
 		var out bytes.Buffer
-		if err := hookCursor(bytes.NewReader(cursorEvent(t, name)), &out, sock, spool); err != nil {
+		if err := hookCursor(bytes.NewReader(cursorEvent(t, tc.name)), &out, sock, spool); err != nil {
 			t.Fatal(err)
 		}
-		if out.String() != want {
-			t.Errorf("%s printed %q, want %q", name, out.String(), want)
+		if out.String() != tc.want {
+			t.Errorf("%s printed %q, want %q", tc.name, out.String(), tc.want)
+		}
+		if got := asked.Load() > 0; got != tc.asks {
+			t.Errorf("%s asked for the news: %v, want %v", tc.name, got, tc.asks)
 		}
 	}
 }
