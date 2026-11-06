@@ -122,7 +122,7 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 		s.logPeer(rec)
 		return queued
 	}
-	res, typed, _ := s.typeLine(ctx, x, line, tag)
+	res, typed, _, _ := s.typeLine(ctx, x, line, tag)
 	if !typed {
 		s.peers.release(slot)
 		return res
@@ -175,7 +175,7 @@ func (s *Service) deliverAtRest(now time.Time) {
 		if !s.resting(x.Pane) || !s.peers.claim(x.Pane) {
 			continue
 		}
-		res, typed, cleared := s.typeLine(context.Background(), x, l.line, l.tag)
+		res, typed, cleared, stuck := s.typeLine(context.Background(), x, l.line, l.tag)
 		s.peers.unclaim(x.Pane)
 		if !typed {
 			continue
@@ -191,8 +191,10 @@ func (s *Service) deliverAtRest(now time.Time) {
 		switch {
 		case cleared:
 			note = fmt.Sprintf("%s could not take your line: it did not show after %d tries", x.Name, peerTries)
-		case res.Err != "":
+		case stuck:
 			note = didNotGet(x.Name, "matchblox could not clear it")
+		case res.Err != "":
+			note = didNotGet(x.Name, "its prompt would not take it")
 		}
 		if note != "" {
 			s.mu.Lock()
@@ -206,26 +208,28 @@ func (s *Service) deliverAtRest(now time.Time) {
 // draft or into a pane in copy mode, each key guarded as a stoker step is,
 // and Enter only once the prompt shows the line. A line that does not show
 // in peerShowWait is cleared. typed tells if any key reached the pane,
-// cleared if the line typed did not go and is cleared from the prompt.
-func (s *Service) typeLine(ctx context.Context, x sample.Session, line, tag string) (res proto.Result, typed, cleared bool) {
+// cleared if the line typed did not go and is cleared from the prompt, and
+// stuck if it did not go and its clear failed: it may still be there.
+func (s *Service) typeLine(ctx context.Context, x sample.Session, line, tag string) (res proto.Result, typed, cleared, stuck bool) {
 	pane := x.Pane
 	defer s.holdPane(pane)()
 	if err := s.peerReady(pane, x); err != nil {
-		return proto.Result{Err: err.Error()}, false, false
+		return proto.Result{Err: err.Error()}, false, false, false
 	}
 	switch mode, err := s.paneInMode(pane); {
 	case err != nil:
-		return proto.Result{Err: "not delivered: " + x.Name + "'s pane cannot be read: " + err.Error()}, false, false
+		return proto.Result{Err: "not delivered: " + x.Name + "'s pane cannot be read: " + err.Error()}, false, false, false
 	case mode:
-		return proto.Result{Err: "not delivered: " + x.Name + "'s pane is in copy mode"}, false, false
+		return proto.Result{Err: "not delivered: " + x.Name + "'s pane is in copy mode"}, false, false, false
 	}
 	g := advice.Guard{PID: x.PID, StartTicks: x.Start, RestPane: pane, StokePane: pane, MessagePane: pane, MessagePID: x.PID}
 	res = s.Actions.Do(ctx, peerStep(panes.Literal(pane, line), g), "y")
 	if len(res.Ran) == 0 {
-		return refusedStep(res), false, false
+		return refusedStep(res), false, false, false
 	}
 	if !s.showsLine(ctx, pane) {
-		return proto.Result{Ran: res.Ran, Err: "not delivered: " + x.Name + " did not show the line"}, true, s.clearLine(ctx, pane)
+		cleared = s.clearLine(ctx, pane)
+		return proto.Result{Ran: res.Ran, Err: "not delivered: " + x.Name + " did not show the line"}, true, cleared, !cleared
 	}
 	g.Typed = tag
 	enter := s.Actions.Do(ctx, peerStep(panes.Keys(pane, "Enter"), g), "y")
@@ -235,12 +239,13 @@ func (s *Service) typeLine(ctx context.Context, x sample.Session, line, tag stri
 		// still ours alone.
 		if screen, ok := s.Capture([]string{pane})[pane]; ok && strings.HasPrefix(said.Draft(screen), tag) {
 			cleared = s.clearLine(ctx, pane)
+			stuck = !cleared
 		}
 		enter = refusedStep(enter)
-		return proto.Result{Ran: res.Ran, Err: enter.Err}, true, cleared
+		return proto.Result{Ran: res.Ran, Err: enter.Err}, true, cleared, stuck
 	}
 	s.latchRest(pane)
-	return res, true, false
+	return res, true, false, false
 }
 
 func peerStep(step []string, g advice.Guard) advice.Action {

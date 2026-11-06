@@ -87,6 +87,9 @@ type Store struct {
 	inbox   map[string][]Item
 	dropped map[string]int
 	posted  uint64
+	// renamed is the key each refreshed member had before, to its key now:
+	// news given back under an old name reaches the match.
+	renamed map[string]string
 }
 
 func (s *Store) isOff(m Member) bool {
@@ -211,13 +214,15 @@ func (s *Store) Refresh(cur func(Member) (Member, bool)) (changed bool) {
 		if !ok || n == *m {
 			return
 		}
-		if items, had := s.inbox[m.key()]; had {
-			delete(s.inbox, m.key())
-			s.inbox[n.key()] = items
-		}
-		if d, had := s.dropped[m.key()]; had {
-			delete(s.dropped, m.key())
-			s.dropped[n.key()] = d
+		if old, now := m.key(), n.key(); old != now {
+			items, dropped := s.inbox[old], s.dropped[old]
+			delete(s.inbox, old)
+			delete(s.dropped, old)
+			s.put(now, items, dropped, true)
+			if s.renamed == nil {
+				s.renamed = map[string]string{}
+			}
+			s.renamed[old] = now
 		}
 		*m, changed = n, true
 	}
@@ -353,9 +358,14 @@ func (s *Store) Take(m Member) Taken {
 // GiveBack puts what Take emptied back in m's inbox, in the order it was
 // posted: before what came since.
 func (s *Store) GiveBack(m Member, t Taken) {
-	if len(t.Items) > 0 {
-		s.put(m.key(), t.Items, t.Dropped, true)
+	if len(t.Items) == 0 {
+		return
 	}
+	k := m.key()
+	for seen := 0; s.renamed[k] != "" && seen < len(s.renamed); seen++ {
+		k = s.renamed[k]
+	}
+	s.put(k, t.Items, t.Dropped, true)
 }
 
 // Load reads path. A missing file is an empty store.

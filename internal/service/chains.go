@@ -36,6 +36,9 @@ func (s *Service) chainAct(a proto.Act) proto.Result {
 func (s *Service) changeChains(arg, fromPane string) (res proto.Result, changed bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sampleMissedLocked() { // a cleared chat would look like a new match
+		return refuseText("not now: matchblox could not read the sessions; try again"), false
+	}
 	from, ok := s.sessionAtLocked(fromPane)
 	if !ok {
 		return refuseText(chainNeedsMatch), false

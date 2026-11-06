@@ -273,3 +273,33 @@ func TestGiveBackKeepsTheOrderOfTwoDeliveries(t *testing.T) {
 		t.Fatalf("items = %q", got)
 	}
 }
+
+// TestRefreshMergesIntoAnInboxThatHasNews: news posted to the new id
+// before the refresh and the old id's news meet in the order they came.
+func TestRefreshMergesIntoAnInboxThatHasNews(t *testing.T) {
+	var s Store
+	chainOf(t, &s, "a", "b")
+	a2 := Member{SessionID: "a2", Pane: "%a"}
+	s.Post(mem("a"), "1", t0)
+	s.Post(a2, "2", t0)
+	s.Post(mem("a"), "3", t0)
+	s.Refresh(func(m Member) (Member, bool) { return a2, m.SessionID == "a" })
+	if got := s.Take(a2).Texts(); !slices.Equal(got, []string{"1", "2", "3"}) {
+		t.Fatalf("items = %q", got)
+	}
+}
+
+// TestGiveBackAfterARefreshGoesToTheNewID: a delivery taken before the
+// refresh gives its news back to the match as it is named now.
+func TestGiveBackAfterARefreshGoesToTheNewID(t *testing.T) {
+	var s Store
+	chainOf(t, &s, "a", "b")
+	s.Post(mem("a"), "1", t0)
+	taken := s.Take(mem("a"))
+	a2 := Member{SessionID: "a2", Pane: "%a"}
+	s.Refresh(func(m Member) (Member, bool) { return a2, m.SessionID == "a" })
+	s.GiveBack(mem("a"), taken)
+	if got := s.Take(a2).Texts(); !slices.Equal(got, []string{"1"}) {
+		t.Fatalf("items = %q", got)
+	}
+}

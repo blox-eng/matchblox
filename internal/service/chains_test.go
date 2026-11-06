@@ -284,3 +284,20 @@ func TestChainActRefusals(t *testing.T) {
 		t.Errorf("another host: %+v", res)
 	}
 }
+
+// TestChainActWaitsForASampleThatReadTheSessions: a sample that missed
+// the sessions cannot tell a cleared chat from a new match.
+func TestChainActWaitsForASampleThatReadTheSessions(t *testing.T) {
+	s := chainTest(t, filepath.Join(t.TempDir(), "chains.json"))
+	s.publish(sample.Snapshot{At: time.Now(), Sessions: chainSessions, Errors: []string{"tmux: x"}}, func(state.Doc) {})
+	if res := chainFrom(t, s, "%1", proto.ChainPrefix+"%2"); res.Err != "not now: matchblox could not read the sessions; try again" {
+		t.Fatalf("%+v", res)
+	}
+}
+
+func TestReadGitNeedsADirectory(t *testing.T) {
+	s := newTest(t, time.Hour)
+	if _, err := s.readGit("", "rev-parse", "HEAD"); err == nil || err.Error() != "workspace is unknown" {
+		t.Fatalf("err = %v", err)
+	}
+}

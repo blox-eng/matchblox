@@ -949,3 +949,32 @@ func TestAnUnplacedMessageWithNoPaneIsRefused(t *testing.T) {
 		t.Fatalf("%+v", res)
 	}
 }
+
+// A waiting line whose Enter did not go, and that left the prompt with no
+// clear, is dropped: its sender hears the prompt would not take it.
+func TestAQueuedLineThePromptWouldNotTakeIsDropped(t *testing.T) {
+	codex := sample.Session{Agent: "codex", Status: "busy", Busy: true}
+	h := newSendHost(t, codex)
+	h.send(t, "%2", "hi")
+	codex.Status, codex.Busy = "idle", false
+	h.publish(codex)
+	run := h.s.Actions.Run
+	h.s.Actions.Run = func(argv []string) error {
+		if argv[len(argv)-1] == "Enter" {
+			h.mu.Lock()
+			h.screens["%2"] = idleScreen // the line went from the prompt, not by our Enter
+			h.mu.Unlock()
+			return errors.New("no server")
+		}
+		return run(argv)
+	}
+	h.s.deliverAtRest(night0)
+	if k := h.keys(); keyCount(k, "C-u") != 0 {
+		t.Fatalf("a clear ran: %q", k)
+	}
+	h.s.mu.Lock()
+	defer h.s.mu.Unlock()
+	if items := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts(); !slices.Equal(items, []string{"mate did not get your line: its prompt would not take it"}) {
+		t.Fatalf("the sender's inbox: %q", items)
+	}
+}
