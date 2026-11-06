@@ -351,6 +351,13 @@ func (m Model) mayChain(s sample.Session) bool {
 	return m.repoMates[keyOf(s)]
 }
 
+// chainedTogether tells if a and b are in one chain.
+func (m Model) chainedTogether(a, b sample.Session) bool {
+	ka, okA := m.chainKeyOf(a)
+	kb, okB := m.chainKeyOf(b)
+	return okA && okB && ka == kb
+}
+
 // sharingRepos are the sessions of ss that share their repo, on their host,
 // with another session they are not chained with.
 func (m Model) sharingRepos(ss []sample.Session) map[rowKey]bool {
@@ -364,10 +371,8 @@ func (m Model) sharingRepos(ss []sample.Session) map[rowKey]bool {
 	out := map[rowKey]bool{}
 	for _, mates := range byRepo {
 		for _, s := range mates {
-			k, chained := m.chainKeyOf(s)
 			out[keyOf(s)] = slices.ContainsFunc(mates, func(o sample.Session) bool {
-				ko, ok := m.chainKeyOf(o)
-				return keyOf(o) != keyOf(s) && !(chained && ok && ko == k)
+				return keyOf(o) != keyOf(s) && !m.chainedTogether(s, o)
 			})
 		}
 	}
