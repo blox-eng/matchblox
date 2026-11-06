@@ -28,6 +28,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
 
@@ -376,6 +377,8 @@ type Model struct {
 	sessSort    sortBy
 	sessGroup   int // what Sessions is grouped by: groupNeed .. groupNone
 	holds       []proto.Hold
+	chains      *state.ChainsView
+	repoMates   map[rowKey]bool // the listed sessions that share their repo with another
 	reasons     map[string]proto.IdleReason
 	agents      []string                               // the agents a new session can start on the host
 	renames     map[string]string                      // the names sessions take at their next rest, by pane
@@ -713,10 +716,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.dockSwitched = false
 		}
 		m.doors = m.shownDoors(st.Doors)
-		m.noteChanges(m.opt.Host, st.Sessions)
+		m.noteChanges(m.opt.Host, st.Sessions, st.Chains)
 		m.snap, m.git, m.recs, m.have, m.answered, m.at = st.Snapshot, st.Git, st.Recommendations, true, true, m.now()
 		m.shipReport = st.Ships
-		m.holds, m.reasons = st.Holds, st.Reasons
+		m.holds, m.reasons, m.chains = st.Holds, st.Reasons, st.Chains
 		m.agents, m.renames, m.accounts, m.signIns = st.Agents, st.Renames, st.Accounts, st.SignIns
 		m.skipped = st.AccountsSkipped
 		m.lastAccount, m.keptAgent = st.LastAccount, st.LastAgent
