@@ -265,3 +265,54 @@ func TestDenyFamilyNoFamilyIsToday(t *testing.T) {
 		}
 	}
 }
+
+func TestDenyFamilyEveryUnitThatListsAPaneMustAllow(t *testing.T) {
+	st := t.TempDir()
+	familyUnit(t, st, "s1", &Driven{Run: "r", Panes: map[string][]string{"%7": {"merge"}}})
+	familyUnit(t, st, "s2", &Driven{Run: "r", Panes: map[string][]string{"%7": nil}})
+	merge := Guards("gh pr merge 4")
+	if got := DenyFamily(st, "", "%7", merge); got != DenyNoGo {
+		t.Fatalf("one unit refuses: %q", got)
+	}
+	familyUnit(t, st, "s2", &Driven{Run: "r", Panes: map[string][]string{"%7": {"merge"}}})
+	if got := DenyFamily(st, "", "%7", merge); got != "" {
+		t.Fatalf("both give the go: %q", got)
+	}
+}
+
+func TestDenyFamilyALostUnitDeniesEveryPane(t *testing.T) {
+	merge := Guards("gh pr merge 4")
+	st := t.TempDir()
+	familyUnit(t, st, "s1", &Driven{Run: "r", Panes: map[string][]string{"%7": {"merge"}}})
+	familyUnit(t, st, "s2", nil)
+	if got := DenyFamily(st, "", "%7", merge); got != DenyLost {
+		t.Fatalf("a pane s1 lists: %q", got)
+	}
+	st = t.TempDir()
+	if err := WriteDriven(st, Driven{Run: "r", Panes: map[string][]string{"%1": {"merge"}}}); err != nil {
+		t.Fatal(err)
+	}
+	familyUnit(t, st, "s1", nil)
+	if got := DenyFamily(st, "", "%1", merge); got != DenyLost {
+		t.Fatalf("a pane the host lists: %q", got)
+	}
+}
+
+func TestDenyFamilyAChainUnitWithBrokenModeAndNoDrivenIsLost(t *testing.T) {
+	st := t.TempDir()
+	familyUnit(t, st, "s1", nil)
+	if err := os.WriteFile(filepath.Join(FamilyDir(st, "s1"), "stoker.json"), []byte("{broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := DenyFamily(st, "", "%1", Guards("gh pr merge 4")); got != DenyLost {
+		t.Fatalf("%q", got)
+	}
+	// The host keeps today's way: a broken mode file with no driven.json allows.
+	hostOnly := t.TempDir()
+	if err := os.WriteFile(filepath.Join(hostOnly, "stoker.json"), []byte("{broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := DenyFamily(hostOnly, "", "%1", Guards("gh pr merge 4")), Deny(hostOnly, "", "%1", Guards("gh pr merge 4")); got != want {
+		t.Fatalf("%q, want %q", got, want)
+	}
+}

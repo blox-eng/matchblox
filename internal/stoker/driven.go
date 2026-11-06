@@ -515,6 +515,11 @@ func Deny(dir, socket, pane string, gs []Guard) string {
 		}
 		return ""
 	}
+	return deny(d, socket, pane, gs)
+}
+
+// deny is Deny once driven.json is read.
+func deny(d Driven, socket, pane string, gs []Guard) string {
 	if d.StokerSocket != "" && socket == d.StokerSocket {
 		return DenyStokerPane
 	}
@@ -535,12 +540,12 @@ func Deny(dir, socket, pane string, gs []Guard) string {
 }
 
 // DenyFamily is the merge guard over the whole family: the host stoker's
-// state dir and the store of every chain stoker. A pane on the tmux server
-// of any member is a stoker pane. A pane one member's driven.json lists is
-// decided by that member alone. A pane none lists is decided by the host
-// dir, unless a member's run is on and lost its driven.json: then nothing
-// passes. With no chain stoker it is Deny. If the family cannot be listed,
-// the host's answer stands, and a host that allows becomes DenyLost.
+// state dir and the store of every chain stoker. If any member lost its
+// driven.json while its run is on, nothing passes in any pane. Else a pane
+// on the tmux server of any member is a stoker pane, and a pane passes only
+// if every member that lists it allows it. With no chain stoker it is Deny.
+// If the family cannot be listed, the host's answer stands, and a host that
+// allows becomes DenyLost.
 func DenyFamily(state, socket, pane string, gs []Guard) string {
 	if len(gs) == 0 {
 		return ""
@@ -555,34 +560,30 @@ func DenyFamily(state, socket, pane string, gs []Guard) string {
 	if len(ids) == 0 {
 		return Deny(state, socket, pane, gs)
 	}
-	dirs := []string{state}
-	for _, id := range ids {
-		dirs = append(dirs, FamilyDir(state, id))
-	}
-	lost := false
-	var listed string
-	for _, dir := range dirs {
+	var known []Driven
+	for _, id := range append([]string{HostID}, ids...) {
+		dir := FamilyDir(state, id)
 		d, err := ReadDriven(dir)
 		if err != nil {
-			if m, err := ReadMode(dir); err == nil && m.On {
-				lost = true
+			m, merr := ReadMode(dir)
+			if (merr == nil && m.On) || (merr != nil && id != HostID) { // a chain stoker whose mode is unreadable counts as on
+				return DenyLost
 			}
 			continue
 		}
+		known = append(known, d)
+	}
+	for _, d := range known {
 		if d.StokerSocket != "" && socket == d.StokerSocket {
 			return DenyStokerPane
 		}
-		if _, ok := d.Panes[pane]; ok && listed == "" {
-			listed = dir
+	}
+	for _, d := range known {
+		if why := deny(d, socket, pane, gs); why != "" {
+			return why
 		}
 	}
-	if listed != "" {
-		return Deny(listed, socket, pane, gs)
-	}
-	if lost {
-		return DenyLost
-	}
-	return Deny(state, socket, pane, gs)
+	return ""
 }
 
 // Spend matches the guarded commands of one line to the goes of pane: the
