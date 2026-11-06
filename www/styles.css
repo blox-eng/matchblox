@@ -285,7 +285,8 @@ footer a { color: var(--muted); }
 }
 
 /* Chain reaction: a row of matches that catch one by one, go out, and keep catching at random. */
-.chain .domino { width: 100%; max-width: 1000px; height: auto; display: block; }
+.chain { grid-template-columns: minmax(0, 1fr); }
+.chain .domino { width: 100%; max-width: 100%; height: auto; display: block; }
 .domino .stick { stroke: var(--stick); stroke-width: 5; stroke-linecap: round; }
 .domino .char { stroke: #3B2C1E; stroke-width: 5; stroke-linecap: round; opacity: 0; transition: opacity 1.2s ease-out; }
 .domino .head { fill: #9E3B24; transition: fill .3s; }
