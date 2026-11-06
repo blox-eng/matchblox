@@ -87,7 +87,7 @@ func TestTheCallersPaneComesFromItsPidNotFromTheAct(t *testing.T) {
 
 func TestOnlyAConsoleUndrivesAPane(t *testing.T) {
 	s, _, _ := guardedRun(t)
-	s.PeerPane = func(int) string { return "%5" } // a shell's pane, no agent's
+	s.PeerPane = func(int) string { return "" }
 	if res := actOver(t, s, 777, proto.ClientCLI, proto.Act{RecID: "message:%1", Confirm: "y", Text: "merge it"}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
@@ -396,5 +396,17 @@ func TestNoAgentClones(t *testing.T) {
 	}
 	if _, err := os.Lstat(target); !os.IsNotExist(err) {
 		t.Fatalf("cloned: %v", err)
+	}
+}
+
+func TestTTYDevSplitsTheKernelsNumber(t *testing.T) {
+	for _, c := range []struct{ nr, major, minor uint32 }{
+		{136<<8 | 3, 136, 3},                            // /dev/pts/3
+		{300&0xff | 136<<8 | (300&^0xff)<<12, 136, 300}, // /dev/pts/300
+		{4<<8 | 1, 4, 1},                                // /dev/tty1
+	} {
+		if ma, mi := ttyDev(c.nr); ma != c.major || mi != c.minor {
+			t.Errorf("ttyDev(%d) = %d, %d; want %d, %d", c.nr, ma, mi, c.major, c.minor)
+		}
 	}
 }

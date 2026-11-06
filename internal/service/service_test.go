@@ -50,6 +50,8 @@ func newTest(t *testing.T, interval time.Duration) *Service {
 	s.StatePath = filepath.Join(t.TempDir(), "state.json")
 	s.Actions.Run = func([]string) error { return nil }
 	s.Actions.Check = nil // the guards of the fake snapshot do not hold on this machine
+	// No terminal of this machine, and no tmux of its default server.
+	s.TTYPane = func(int) string { return "" }
 	return s
 }
 

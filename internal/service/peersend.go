@@ -34,10 +34,7 @@ const (
 // the sender can do instead.
 const peerRetry = ": try again when it is idle, or write the message to a file and ask the person at the console to relay it"
 
-const (
-	sendOff      = `send is off on this host: [chains] send = "off"`
-	orphanSender = "not sent: matchblox cannot tell which match sends this"
-)
+const sendOff = `send is off on this host: [chains] send = "off"`
 
 // peerShowWait is how long a typed line has to show in the prompt before
 // matchblox clears it.
@@ -117,13 +114,13 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 		s.logPeer(rec)
 		return queued
 	case x.Agent == "codex" && (!s.resting(pane) || s.peers.waits(memberOf(x))):
-		s.peers.queue(peerLine{to: memberOf(x), line: line, tag: tag, rec: rec})
+		s.peers.queue(peerLine{from: memberOf(sender), to: memberOf(x), line: line, tag: tag, rec: rec})
 		s.spark(chainID, now)
 		rec.Via, rec.Result = "at rest", "queued"
 		s.logPeer(rec)
 		return queued
 	}
-	res, typed := s.typeLine(ctx, x, line, tag)
+	res, typed, _ := s.typeLine(ctx, x, line, tag)
 	if !typed {
 		s.peers.release(slot)
 		return res
@@ -136,9 +133,15 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 	return res
 }
 
+// peerTries is how many rests a waiting line gets to show in the prompt.
+const peerTries = 3
+
 // deliverAtRest types the oldest line that waits for each Codex match that
 // rests now: one line a pane each sample. A line refused before any key
-// waits for a later rest; one for a match that is gone is dropped.
+// waits for a later rest, and so does one typed and cleared, up to
+// peerTries; then its sender hears it did not go. A line that may still be
+// in the prompt is dropped, so it is never typed twice; one for a match
+// that is gone is dropped too.
 func (s *Service) deliverAtRest(now time.Time) {
 	for _, l := range s.peers.firsts() {
 		x, ok := s.sessionOf(l.to)
@@ -149,41 +152,49 @@ func (s *Service) deliverAtRest(now time.Time) {
 		if !s.resting(x.Pane) {
 			continue
 		}
-		res, typed := s.typeLine(context.Background(), x, l.line, l.tag)
+		res, typed, cleared := s.typeLine(context.Background(), x, l.line, l.tag)
 		if !typed {
 			continue
 		}
-		s.peers.drop(l.n)
 		rec := l.rec
 		rec.At, rec.ToPane, rec.Via, rec.Result = now, x.Pane, "typed at rest", typedResult(res)
 		s.logPeer(rec)
+		if cleared && s.peers.tried(l.n) < peerTries {
+			continue
+		}
+		s.peers.drop(l.n)
+		if cleared {
+			s.mu.Lock()
+			s.chainsLocked().Post(l.from, fmt.Sprintf("%s could not take your line: it did not show after %d tries", x.Name, peerTries), now)
+			s.mu.Unlock()
+		}
 	}
 }
 
 // typeLine types line and Enter into x's pane, which rests: never over a
 // draft or into a pane in copy mode, each key guarded as a stoker step is,
 // and Enter only once the prompt shows the line. A line that does not show
-// in peerShowWait is cleared. typed tells if any key reached the pane.
-func (s *Service) typeLine(ctx context.Context, x sample.Session, line, tag string) (res proto.Result, typed bool) {
+// in peerShowWait is cleared. typed tells if any key reached the pane,
+// cleared if the line typed did not go and is cleared from the prompt.
+func (s *Service) typeLine(ctx context.Context, x sample.Session, line, tag string) (res proto.Result, typed, cleared bool) {
 	pane := x.Pane
 	defer s.holdPane(pane)()
 	if err := s.peerReady(pane, x); err != nil {
-		return proto.Result{Err: err.Error()}, false
+		return proto.Result{Err: err.Error()}, false, false
 	}
 	switch mode, err := s.paneInMode(pane); {
 	case err != nil:
-		return proto.Result{Err: "not delivered: " + x.Name + "'s pane cannot be read: " + err.Error()}, false
+		return proto.Result{Err: "not delivered: " + x.Name + "'s pane cannot be read: " + err.Error()}, false, false
 	case mode:
-		return proto.Result{Err: "not delivered: " + x.Name + "'s pane is in copy mode"}, false
+		return proto.Result{Err: "not delivered: " + x.Name + "'s pane is in copy mode"}, false, false
 	}
 	g := advice.Guard{PID: x.PID, StartTicks: x.Start, RestPane: pane, StokePane: pane, MessagePane: pane, MessagePID: x.PID}
 	res = s.Actions.Do(ctx, peerStep(panes.Literal(pane, line), g), "y")
 	if len(res.Ran) == 0 {
-		return refusedStep(res), false
+		return refusedStep(res), false, false
 	}
 	if !s.showsLine(ctx, pane) {
-		s.clearLine(ctx, pane)
-		return proto.Result{Ran: res.Ran, Err: "not delivered: " + x.Name + " did not show the line"}, true
+		return proto.Result{Ran: res.Ran, Err: "not delivered: " + x.Name + " did not show the line"}, true, s.clearLine(ctx, pane)
 	}
 	g.Typed = tag
 	enter := s.Actions.Do(ctx, peerStep(panes.Keys(pane, "Enter"), g), "y")
@@ -192,13 +203,13 @@ func (s *Service) typeLine(ctx context.Context, x sample.Session, line, tag stri
 		// The line stays the mate's draft unless it goes: clear it while it is
 		// still ours alone.
 		if screen, ok := s.Capture([]string{pane})[pane]; ok && strings.HasPrefix(said.Draft(screen), tag) {
-			s.clearLine(ctx, pane)
+			cleared = s.clearLine(ctx, pane)
 		}
 		enter = refusedStep(enter)
-		return proto.Result{Ran: res.Ran, Err: enter.Err}, true
+		return proto.Result{Ran: res.Ran, Err: enter.Err}, true, cleared
 	}
 	s.latchRest(pane)
-	return res, true
+	return res, true, false
 }
 
 func peerStep(step []string, g advice.Guard) advice.Action {
@@ -244,12 +255,14 @@ func (s *Service) showsLine(ctx context.Context, pane string) bool {
 }
 
 // clearLine empties the prompt line of pane, even after the act ends: a
-// typed line must not stay behind as a draft.
-func (s *Service) clearLine(ctx context.Context, pane string) {
+// typed line must not stay behind as a draft. It tells if the clear ran.
+func (s *Service) clearLine(ctx context.Context, pane string) bool {
 	res := s.Actions.Do(context.WithoutCancel(ctx), advice.Action{Label: "peer send", Steps: [][]string{panes.Keys(pane, "C-u")}, Destructive: true}, "y")
 	if res.Err != "" {
 		fmt.Fprintln(os.Stderr, "matchblox: peer send: the line in", pane, "is not cleared:", res.Err)
+		return false
 	}
+	return true
 }
 
 // paneInMode tells if tmux shows pane in copy mode or another mode, where
@@ -388,12 +401,14 @@ type peerSent struct {
 	n        uint64
 }
 
-// peerLine is a line that waits for its Codex match to rest.
+// peerLine is a line from one match that waits for its Codex match to
+// rest; tries counts the rests it was typed at and did not show.
 type peerLine struct {
-	to        chains.Member
+	from, to  chains.Member
 	line, tag string
 	rec       peerRecord
 	n         uint64
+	tries     int
 }
 
 // peerSends are the peer sends of the last hour, oldest first, and the
@@ -451,6 +466,19 @@ func (p *peerSends) firsts() []peerLine {
 		}
 	}
 	return out
+}
+
+// tried counts one more try of line n, and returns the count.
+func (p *peerSends) tried(n uint64) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i := range p.waiting {
+		if p.waiting[i].n == n {
+			p.waiting[i].tries++
+			return p.waiting[i].tries
+		}
+	}
+	return 0
 }
 
 func (p *peerSends) drop(n uint64) {

@@ -150,9 +150,6 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 			return proto.Result{Err: noClone}
 		}
 	}
-	if _, send := s.peerAct(a); send && a.From == "" && !a.Console {
-		return proto.Result{Err: orphanSender} // a process outside every pane may be any match's
-	}
 	if !agent && !a.Console && (paneOf(a.RecID) != "" || a.RecID == NewSessionID) {
 		if sender, ok := s.sessionAt(a.From); ok {
 			if to, peer := s.peerAct(a); peer {

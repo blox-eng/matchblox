@@ -1,9 +1,69 @@
 package service
 
 import (
+	"slices"
+	"strings"
+
 	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
+
+// callerPane is the pane of the client process pid: its process tree's,
+// else its terminal's when an agent runs there, for an agent's process
+// that left the tree. "" for a person's terminal outside every agent's
+// pane.
+func (s *Service) callerPane(pid int) string {
+	if p := s.PeerPane(pid); p != "" {
+		return p
+	}
+	if s.TTYPane == nil {
+		return ""
+	}
+	if p := s.TTYPane(pid); p != "" {
+		if _, ok := s.sessionAt(p); ok {
+			return p
+		}
+	}
+	return ""
+}
+
+// ttyDev splits a tty_nr of /proc/<pid>/stat into its major and minor
+// numbers, as the kernel packs them.
+func ttyDev(nr uint32) (major, minor uint32) {
+	return (nr >> 8) & 0xfff, nr&0xff | (nr>>12)&0xfff00
+}
+
+// paneOfTTY is the tmux pane whose terminal is pid's controlling
+// terminal, on the builder's server or the stoker's. "" for none.
+func (s *Service) paneOfTTY(pid int) string {
+	major, minor, ok := ttyOf(pid)
+	if !ok {
+		return ""
+	}
+	servers := []string{""}
+	if s.StokerServer != "" {
+		servers = append(servers, s.StokerServer)
+	}
+	for _, server := range servers {
+		out, err := s.tmuxOut(slices.Concat(sample.TmuxOn(server), []string{"list-panes", "-a", "-F", "#{pane_id} #{pane_tty}"}))
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(out, "\n") {
+			id, tty, ok := strings.Cut(strings.TrimSpace(line), " ")
+			if !ok {
+				continue
+			}
+			if ma, mi, ok := devOf(tty); ok && ma == major && mi == minor {
+				if server != "" {
+					id = sample.OnServer(id, server)
+				}
+				return id
+			}
+		}
+	}
+	return ""
+}
 
 // paneOfPeer is the tmux pane the process pid runs in, by its parents and
 // the pid tmux started in each pane: the panes of the last sample, then

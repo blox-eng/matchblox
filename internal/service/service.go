@@ -124,6 +124,10 @@ type Service struct {
 	// PeerPane is the tmux pane a CLI that connected runs in, by its pid
 	// ("" outside every pane). An act's From is ignored where it is known.
 	PeerPane func(pid int) string
+	// TTYPane is the tmux pane whose terminal is the controlling terminal
+	// of pid ("" for none): the pane of an agent's process that PeerPane
+	// cannot place. Nil: none.
+	TTYPane func(pid int) string
 	// Capture reads the text of panes on the host, for the stoker's guard,
 	// with its styles: the guard tells Claude Code's grey suggestion from a
 	// draft a person typed.
@@ -368,7 +372,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		s.sample = smp.Sample
 	}
 	s.Capture, s.PaneMouse = sample.CapturePanesStyled, sample.PaneMouse
-	s.PeerPane = s.paneOfPeer
+	s.PeerPane, s.TTYPane = s.paneOfPeer, s.paneOfTTY
 	s.Activity = sample.ClientActivity
 	s.alone = s.now()
 	s.Actions = actions.Runner{Check: actions.CheckGuard, Idle: s.idle, Resting: s.resting, Answerable: s.answerable, Messageable: s.messageable, Asking: s.asking, Menu: s.menu, Stokable: s.stokable}
@@ -1044,7 +1048,7 @@ func (s *Service) HandlePeer(ctx context.Context, c transport.Conn, pid int) err
 			continue
 		}
 		if pid > 0 {
-			a.From, a.FromKnown = s.PeerPane(pid), true
+			a.From, a.FromKnown = s.callerPane(pid), true
 		}
 		if pane, ok := strings.CutPrefix(a.RecID, proto.WatchPrefix); ok {
 			res := s.watchAct(cl, h.Client, a, pane)

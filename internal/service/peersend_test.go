@@ -723,21 +723,108 @@ func TestAStuckPaneDoesNotBlockOtherSends(t *testing.T) {
 	}
 }
 
-func TestAnOrphanSenderIsRefused(t *testing.T) {
+// The person's send from a terminal outside every agent's pane goes as it
+// always went: typed as it is, with no tag.
+func TestThePersonsSendFromAPlainTerminalStillGoes(t *testing.T) {
 	h := newSendHost(t, idleMate)
-	res := h.s.act(t.Context(), proto.Act{RecID: "message:%2", Confirm: "y", Text: "hi", FromKnown: true})
-	if res.Err != "not sent: matchblox cannot tell which match sends this" {
+	h.s.PeerPane = func(int) string { return "" }
+	if res := actOver(t, h.s, 777, proto.ClientCLI, proto.Act{RecID: "message:%2", Confirm: "y", Text: "hi"}); res.Err != "" {
 		t.Fatalf("%+v", res)
 	}
-	h.s.PeerPane = func(int) string { return "" }
-	if res := actOver(t, h.s, 777, proto.ClientCLI, proto.Act{RecID: "message:%2", Confirm: "y", Text: "hi"}); res.Err != orphanSender {
-		t.Fatalf("a CLI outside every pane: %+v", res)
+	if got := typedLine(h.keys()); !slices.Equal(got, []string{"hi"}) {
+		t.Fatalf("typed %q", got)
 	}
-	if k := h.keys(); len(k) != 0 {
+}
+
+// An agent's process that left its pane's tree still has the pane's
+// terminal: it sends as that agent, under the chain's rules.
+func TestAnOrphanInAnAgentsPaneIsThatAgent(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	h.s.PeerPane = func(int) string { return "" }
+	h.s.TTYPane = func(pid int) string { return map[int]string{777: "%1"}[pid] }
+	res := actOver(t, h.s, 777, proto.ClientCLI, proto.Act{RecID: "message:%3", Confirm: "y", Text: "hi"})
+	if want := "stranger is not in your chain. Run `matchblox chain stranger` first."; res.Err != want {
+		t.Fatalf("%q, want %q", res.Err, want)
+	}
+	if res := actOver(t, h.s, 777, proto.ClientCLI, proto.Act{RecID: "message:%2", Confirm: "y", Text: "hi"}); res.Err != "" {
+		t.Fatalf("%+v", res)
+	}
+	if got := typedLine(h.keys()); !slices.Equal(got, []string{"[from peer-send %1] hi"}) {
+		t.Fatalf("typed %q", got)
+	}
+}
+
+// keyCount is how many steps pressed key last.
+func keyCount(ran [][]string, key string) int {
+	n := 0
+	for _, argv := range ran {
+		if argv[len(argv)-1] == key {
+			n++
+		}
+	}
+	return n
+}
+
+func TestAQueuedLineThatDoesNotShowIsTriedAgain(t *testing.T) {
+	codex := sample.Session{Agent: "codex", Status: "busy", Busy: true}
+	h := newSendHost(t, codex)
+	h.send(t, "%2", "hi")
+	codex.Status, codex.Busy = "idle", false
+	h.publish(codex)
+	h.hidden["%2"] = true
+	h.s.deliverAtRest(night0)
+	if k := h.keys(); keyCount(k, "C-u") != 1 || keyCount(k, "Enter") != 0 || !h.s.peers.waits(chains.Member{SessionID: "s2"}) {
+		t.Fatalf("the first rest: ran %q", k)
+	}
+	h.hidden["%2"] = false
+	h.s.deliverAtRest(night0)
+	h.s.deliverAtRest(night0)
+	k := h.keys()
+	if keyCount(k, "Enter") != 1 || len(typedLine(k)) != 2 || h.s.peers.waits(chains.Member{SessionID: "s2"}) {
+		t.Fatalf("the second rest: ran %q", k)
+	}
+}
+
+func TestAQueuedLineIsDroppedAfterThreeTries(t *testing.T) {
+	codex := sample.Session{Agent: "codex", Status: "busy", Busy: true}
+	h := newSendHost(t, codex)
+	h.send(t, "%2", "hi")
+	codex.Status, codex.Busy = "idle", false
+	h.publish(codex)
+	h.hidden["%2"] = true
+	for range peerTries + 1 {
+		h.s.deliverAtRest(night0)
+	}
+	if k := h.keys(); len(typedLine(k)) != peerTries || keyCount(k, "C-u") != peerTries || keyCount(k, "Enter") != 0 {
 		t.Fatalf("ran %q", k)
 	}
-	// The person at the console is no orphan.
-	if res := h.s.act(t.Context(), proto.Act{RecID: "message:%2", Confirm: "y", Text: "hi", FromKnown: true, Console: true}); res.Err != "" {
-		t.Fatalf("the console's send: %+v", res)
+	h.s.mu.Lock()
+	defer h.s.mu.Unlock()
+	items := h.s.Chains.Take(chains.Member{SessionID: "s1"})
+	if len(items) != 1 || items[0].Text != "mate could not take your line: it did not show after 3 tries" {
+		t.Fatalf("the sender's inbox: %+v", items)
+	}
+}
+
+// A line whose clear did not run may still be in the prompt: it is not
+// typed again.
+func TestAQueuedLineThatMayRemainIsDropped(t *testing.T) {
+	codex := sample.Session{Agent: "codex", Status: "busy", Busy: true}
+	h := newSendHost(t, codex)
+	h.send(t, "%2", "hi")
+	codex.Status, codex.Busy = "idle", false
+	h.publish(codex)
+	h.hidden["%2"] = true
+	run := h.s.Actions.Run
+	h.s.Actions.Run = func(argv []string) error {
+		if argv[len(argv)-1] == "C-u" {
+			return errors.New("no server")
+		}
+		return run(argv)
+	}
+	h.s.deliverAtRest(night0)
+	h.s.deliverAtRest(night0)
+	if got := typedLine(h.keys()); len(got) != 1 {
+		t.Fatalf("typed %q", got)
 	}
 }
