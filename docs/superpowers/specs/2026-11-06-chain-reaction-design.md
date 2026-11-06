@@ -302,3 +302,33 @@ stays. Cursor's hook docs give `beforeSubmitPrompt` only `continue` and a
 `sessionStart` and `postToolUse` an `additional_context` that goes into the
 conversation, so Cursor hears the news there. matchblox types nothing into
 Cursor: a message to it waits for its next tool call.
+
+## As built
+
+What changed from this spec while building it:
+
+- **The sender gate goes by terminal.** The service tells an orphaned agent from
+  the person by the sender's controlling tty: a tty that matches an agent's pane
+  is that agent, and no match is the person. Where the system gives no peer
+  credentials (Windows) a CLI send is refused and the console sends. The gate is
+  not a sandbox: a process that takes a fresh pty can pass as the person.
+- **The gate covers `answer:` and `pick:` too.** `pick:` can approve another
+  session's permission menu, so it passes the same gate as a send.
+- **Cursor hears the news through `sessionStart` and `postToolUse`**, as
+  checked above; matchblox types nothing into it.
+- **Chains stay off under `--fixtures`.** The demo and fixtures runs keep no
+  state beyond their temp dir, and the demo shows no chain.
+- **Asks are told once each.** A request is not repeated after every tool call;
+  `matchblox chain` still lists the ones waiting.
+- **News is given back until it is acked.** The hook acks after it prints; the
+  service returns an un-acked item to the front of the inbox after 200 ms, so a
+  hook that gave up loses nothing, at the cost of one more message per delivery.
+- **A queued Codex line is tried three times**, then dropped with a note to the
+  sender's inbox: "queued" does not end in silence.
+- **The same-repo hint compares full repo paths**, not base names: two repos both
+  named `api` are not one repo.
+- **A chain needs two matches here.** One with a single match left in Sessions
+  draws no fuse and no count.
+- **`Chain.Spark` is not saved on its own.** A spark is a moment for the
+  console, not state.
+- **The landing section's second beat** says "until both sides chain".
