@@ -16,8 +16,9 @@ import (
 )
 
 // A fuse joins the matches of a chain in Sessions, in a column between the
-// match and the name. By need and by repo a chain stays together and its
-// fuse is whole: ╮ first, ┤ between, ╯ last. Status and none split it, and
+// match and the name. By need a chain stays together and its fuse is whole:
+// ╮ first, ┤ between, ╯ last; by repo too, for its matches in one repo.
+// Status, none, and a repo group a chain only partly sits in split it, and
 // each of its matches keeps a stub ─╴ that lights with the selected one.
 
 // sparkFor is how long the spark takes to run down a fuse.
@@ -342,28 +343,33 @@ func (m Model) sparkOn(i int, k chainKey, ss []sample.Session) bool {
 func (m Model) sparkStyle() lipgloss.Style { return lipgloss.NewStyle().Foreground(m.marks().Core) }
 
 // mayChain tells if a row offers a chain: by need or in one list, a
-// session in no chain whose repo another session on its host works in.
+// session with a repo mate on its host that it is not chained with.
 func (m Model) mayChain(s sample.Session) bool {
-	if m.sessGroup != groupNeed && m.sessGroup != groupNone || !m.repoMates[keyOf(s)] {
+	if m.sessGroup != groupNeed && m.sessGroup != groupNone {
 		return false
 	}
-	return !m.chainOf(s)
+	return m.repoMates[keyOf(s)]
 }
 
-// sharingRepos are the sessions of ss that share their repo with another
-// on their host.
+// sharingRepos are the sessions of ss that share their repo, on their host,
+// with another session they are not chained with.
 func (m Model) sharingRepos(ss []sample.Session) map[rowKey]bool {
 	type in struct{ host, repo string }
-	n, of := map[in]int{}, map[rowKey]in{}
+	byRepo := map[in][]sample.Session{}
 	for _, s := range ss {
 		if r, _, ok := proto.RepoOf(m.gitOf(s.Host), s.Cwd); ok {
-			n[in{s.Host, r}]++
-			of[keyOf(s)] = in{s.Host, r}
+			byRepo[in{s.Host, r}] = append(byRepo[in{s.Host, r}], s)
 		}
 	}
 	out := map[rowKey]bool{}
-	for k, r := range of {
-		out[k] = n[r] > 1
+	for _, mates := range byRepo {
+		for _, s := range mates {
+			k, chained := m.chainKeyOf(s)
+			out[keyOf(s)] = slices.ContainsFunc(mates, func(o sample.Session) bool {
+				ko, ok := m.chainKeyOf(o)
+				return keyOf(o) != keyOf(s) && !(chained && ok && ko == k)
+			})
+		}
 	}
 	return out
 }
