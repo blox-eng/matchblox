@@ -378,6 +378,7 @@ type Model struct {
 	sessGroup   int // what Sessions is grouped by: groupNeed .. groupNone
 	holds       []proto.Hold
 	chains      *state.ChainsView
+	chainIx     chainIndex      // worked out in refresh
 	repoMates   map[rowKey]bool // the listed sessions that share their repo with another
 	reasons     map[string]proto.IdleReason
 	agents      []string                               // the agents a new session can start on the host

@@ -195,7 +195,8 @@ func (m *Model) refresh() {
 			since[keyOf(s)] = it.Since
 		}
 	}
-	m.snap.Sessions = sessions // a chain's group is its neediest match's in the list
+	m.snap.Sessions = sessions
+	m.indexChains() // a chain's group is its neediest match's in the list
 	rank := m.groupRanks(sessions, need)
 	slices.SortStableFunc(sessions, func(a, b sample.Session) int {
 		if c := rank[keyOf(a)] - rank[keyOf(b)]; c != 0 {
@@ -207,6 +208,7 @@ func (m *Model) refresh() {
 		sessions = m.together(sessions)
 	}
 	m.snap.Sessions = sessions
+	m.indexChainRows()
 	m.repoMates = m.sharingRepos(sessions)
 	for k := range m.picked {
 		if m.gitOf(k.host) != nil && !m.safeWorktree(k) {

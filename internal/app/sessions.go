@@ -650,7 +650,8 @@ func cutLeft(s string, w int) string {
 }
 
 // opened is what a selected row on a phone grows by: what the agent said
-// last, its pull request, then its plan and its keys.
+// last, its pull request, then its plan and its keys. Every line starts with
+// two blanks: fused drops those two cells to make room for the fuse.
 func (m Model) opened(s sample.Session, w int) []string {
 	st := m.st
 	var out []string

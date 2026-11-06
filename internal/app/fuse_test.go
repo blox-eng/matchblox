@@ -325,6 +325,15 @@ func TestSameRepoHint(t *testing.T) {
 	if l := ansi.Strip(lineWith(b.lines, "flint-auth")); strings.Contains(l, hint) {
 		t.Errorf("flint-auth is alone in its repo: %q", l)
 	}
+	roomy := fuseModel(t, 56, st, "")
+	if roomy.layoutAt(56) != Narrow {
+		t.Fatalf("56 columns is not a phone")
+	}
+	b = body{}
+	roomy.sessionRows(&b, 56)
+	if l := ansi.Strip(lineWith(b.lines, "kindle-web")); !strings.Contains(l, "kindle-web"+hint) {
+		t.Errorf("a phone with room for the name and the hint lacks it: %q", l)
+	}
 	phone := fuseModel(t, 44, st, "")
 	b = body{}
 	phone.sessionRows(&b, 44)
@@ -432,5 +441,67 @@ func TestSparkPlaysOnceAndNotWithNoMotion(t *testing.T) {
 		if got := lit(); got != "" {
 			t.Fatalf("still %v: the spark played twice: %q", still, got)
 		}
+	}
+}
+
+// TestAChainWithOneMatchHereIsNoChain: a chain that names three sessions of
+// which one is left in Sessions draws no fuse and no count; with two left
+// it is a chain of those two.
+func TestAChainWithOneMatchHereIsNoChain(t *testing.T) {
+	st := fuseState(t, mockupChain)
+	left := func(gone ...string) proto.State {
+		out := st
+		out.Sessions = slices.DeleteFunc(slices.Clone(st.Sessions), func(s sample.Session) bool { return slices.Contains(gone, s.Name) })
+		return out
+	}
+	m := fuseModel(t, 160, left("hearth-api", "ember-billing"), "")
+	got := listLines(m, 100, 20)
+	sameLines(t, got, []string{" WAITS FOR YOU · 1", "▌╿ kindle-web"})
+	for _, l := range got {
+		if strings.Contains(l, "chain of") || strings.ContainsAny(l, "╮┤╯─") {
+			t.Errorf("a chain of one is drawn: %q", l)
+		}
+	}
+	m = fuseModel(t, 160, left("ember-billing"), "")
+	sameLines(t, listLines(m, 100, 20), []string{
+		" WAITS FOR YOU · 1 · chain of 2",
+		"▌╿─╮ kindle-web",
+		" ✦─╯ hearth-api",
+	})
+}
+
+// TestOpenedLinesStartWithTwoBlanks: fused takes the first two cells of an
+// opened line for the fuse, so every line opened makes starts with two
+// blanks; and a tap on the opened keys of a chained row on a phone presses
+// the key it shows.
+func TestOpenedLinesStartWithTwoBlanks(t *testing.T) {
+	m := fuseModel(t, 44, fuseState(t, mockupChain), "hearth-api")
+	s, _ := m.selectedSession()
+	for _, l := range m.opened(s, 44) {
+		if !strings.HasPrefix(ansi.Strip(l), "  ") {
+			t.Errorf("an opened line without its two blanks: %q", ansi.Strip(l))
+		}
+	}
+	sc := m.draw(44)
+	if sc.actKeysAt <= 0 {
+		t.Fatalf("the opened keys are not marked")
+	}
+	line := ansi.Strip(sc.lines[sc.actKeysAt])
+	if !strings.HasPrefix(line, "  │") {
+		t.Fatalf("the opened keys' line lacks the fuse: %q", line)
+	}
+	for _, sp := range sc.actKeys {
+		cells := []rune(line)[sp.x0:sp.x1]
+		want := map[string]string{"A": "A switch", "enter": "⏎ chat"}[sp.press]
+		if string(cells) != want {
+			t.Errorf("the span for %q covers %q, want %q", sp.press, string(cells), want)
+		}
+	}
+	if m.chatKeys {
+		t.Fatalf("the chat is open before the tap")
+	}
+	next, _ := m.Update(tea.MouseClickMsg{X: strings.Index(line, "⏎") + 1, Y: sc.actKeysAt, Button: tea.MouseLeft})
+	if !next.(Model).chatKeys {
+		t.Errorf("a tap on ⏎ chat did not open the chat")
 	}
 }

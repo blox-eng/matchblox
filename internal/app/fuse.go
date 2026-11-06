@@ -41,37 +41,105 @@ func (m Model) chainsOf(host string) *state.ChainsView {
 	return m.stateOf(host).Chains
 }
 
-// chainOf is the chain a session is in. A chain of one is no chain.
-func (m Model) chainOf(s sample.Session) (chains.Chain, bool) {
-	cv := m.chainsOf(s.Host)
+// chainIndex is what the chains say of the listed sessions, worked out once
+// in refresh: the frames only look it up.
+type chainIndex struct {
+	of      map[rowKey]chainKey // the chain a session is in; a chain of one is no chain
+	need    map[chainKey]int    // the neediest group of the chain's listed matches
+	present map[chainKey]int    // the matches the host has, whatever the filter hides
+	shown   map[chainKey]int    // the matches in the list
+	rows    map[chainKey][]int  // the list rows of each chain, top down
+}
+
+// chainScan is the chain, as the chains name it, that a session is in.
+func (m Model) chainScan(s sample.Session, views map[string]*state.ChainsView) (chains.Chain, bool) {
+	cv, ok := views[s.Host]
+	if !ok {
+		cv = m.chainsOf(s.Host)
+		views[s.Host] = cv
+	}
 	if cv == nil {
 		return chains.Chain{}, false
 	}
 	me := memberOf(s)
 	for _, c := range cv.Chains {
-		if len(c.Members) > 1 && slices.ContainsFunc(c.Members, me.Same) {
+		if slices.ContainsFunc(c.Members, me.Same) {
 			return c, true
 		}
 	}
 	return chains.Chain{}, false
 }
 
+// indexChains works out which sessions are chained, and how needy their
+// chains are, from the sessions the host has and the ones listed. A chain
+// with one match present is no chain.
+func (m *Model) indexChains() {
+	ix := chainIndex{of: map[rowKey]chainKey{}}
+	views := map[string]*state.ChainsView{}
+	has := func(s sample.Session) (chainKey, bool) {
+		c, ok := m.chainScan(s, views)
+		return chainKey{s.Host, c.ID}, ok
+	}
+	present := map[chainKey]int{}
+	of := map[rowKey]chainKey{}
+	for _, s := range m.all.sessions {
+		if k, ok := has(s); ok && !m.isStoker(s) {
+			present[k]++
+			of[keyOf(s)] = k
+		}
+	}
+	for _, s := range m.snap.Sessions {
+		if k, ok := has(s); ok {
+			of[keyOf(s)] = k
+		}
+	}
+	for r, k := range of {
+		if present[k] > 1 {
+			ix.of[r] = k
+		}
+	}
+	ix.present, ix.need, ix.shown = present, map[chainKey]int{}, map[chainKey]int{}
+	for _, s := range m.snap.Sessions {
+		if k, ok := ix.of[keyOf(s)]; ok {
+			g := m.groupOf(s)
+			if n, seen := ix.need[k]; !seen || g < n {
+				ix.need[k] = g
+			}
+			ix.shown[k]++
+		}
+	}
+	m.chainIx = ix
+}
+
+// indexChainRows notes the list rows of each chain: the spark runs down
+// them.
+func (m *Model) indexChainRows() {
+	m.chainIx.rows = map[chainKey][]int{}
+	for i, s := range m.snap.Sessions {
+		if k, ok := m.chainKeyOf(s); ok {
+			m.chainIx.rows[k] = append(m.chainIx.rows[k], i)
+		}
+	}
+}
+
 func (m Model) chainKeyOf(s sample.Session) (chainKey, bool) {
-	c, ok := m.chainOf(s)
-	return chainKey{s.Host, c.ID}, ok
+	k, ok := m.chainIx.of[keyOf(s)]
+	return k, ok
+}
+
+// chainOf tells if a session is in a chain.
+func (m Model) chainOf(s sample.Session) bool {
+	_, ok := m.chainKeyOf(s)
+	return ok
 }
 
 // needGroup is the need group a session is listed in: its own, or the
 // neediest of its chain's matches in the list.
 func (m Model) needGroup(s sample.Session) int {
 	g := m.groupOf(s)
-	k, ok := m.chainKeyOf(s)
-	if !ok {
-		return g
-	}
-	for _, o := range m.snap.Sessions {
-		if ko, ok := m.chainKeyOf(o); ok && ko == k {
-			g = min(g, m.groupOf(o))
+	if k, ok := m.chainKeyOf(s); ok {
+		if n, ok := m.chainIx.need[k]; ok {
+			return min(g, n)
 		}
 	}
 	return g
@@ -124,18 +192,7 @@ func (m Model) chainsIn(label string, ss []sample.Session) string {
 		if m.groupLabel(s) != label {
 			continue
 		}
-		shown, all := 0, 0
-		for _, o := range ss {
-			if ko, ok := m.chainKeyOf(o); ok && ko == k {
-				shown++
-			}
-		}
-		for _, o := range m.all.sessions {
-			if ko, ok := m.chainKeyOf(o); ok && ko == k && !m.isStoker(o) {
-				all++
-			}
-		}
-		all = max(all, shown)
+		shown, all := m.chainIx.shown[k], max(m.chainIx.present[k], m.chainIx.shown[k])
 		if m.sessGroup == groupNeed {
 			out += fmt.Sprintf(" · chain of %d", all)
 		}
@@ -149,7 +206,7 @@ func (m Model) chainsIn(label string, ss []sample.Session) string {
 // fuseWidth is the fuse column of a list w wide: none while no session in
 // it is chained, two cells on a wide list, one below.
 func (m Model) fuseWidth(w int) int {
-	if !slices.ContainsFunc(m.snap.Sessions, func(s sample.Session) bool { _, ok := m.chainOf(s); return ok }) {
+	if !slices.ContainsFunc(m.snap.Sessions, m.chainOf) {
 		return 0
 	}
 	if w >= wideList {
@@ -278,12 +335,7 @@ func (m Model) sparkOn(i int, k chainKey, ss []sample.Session) bool {
 	if e < 0 || e >= sparkFor {
 		return false
 	}
-	var rows []int
-	for j, s := range ss {
-		if o, ok := m.chainKeyOf(s); ok && o == k {
-			rows = append(rows, j)
-		}
-	}
+	rows := m.chainIx.rows[k]
 	return rows[int(e*time.Duration(len(rows))/sparkFor)] == i
 }
 
@@ -295,8 +347,7 @@ func (m Model) mayChain(s sample.Session) bool {
 	if m.sessGroup != groupNeed && m.sessGroup != groupNone || !m.repoMates[keyOf(s)] {
 		return false
 	}
-	_, chained := m.chainOf(s)
-	return !chained
+	return !m.chainOf(s)
 }
 
 // sharingRepos are the sessions of ss that share their repo with another

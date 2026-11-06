@@ -12,7 +12,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // demoIn is the demo machine at w by h, its views kept in dir ("" keeps
@@ -224,6 +226,43 @@ func TestListOnlyFrameCostGrowsWithRows(t *testing.T) {
 	}
 	if small, big := cost(300), cost(600); big > 3*small {
 		t.Fatalf("600 rows cost %.0f allocations, 300 cost %.0f: more than twice", big, small)
+	}
+}
+
+// TestFrameCostWithChains: a frame of 900 sessions in chains of three costs
+// about what one with no chain does: the chains are worked out once in
+// refresh, not at each row (that took seconds a frame).
+func TestFrameCostWithChains(t *testing.T) {
+	const n = 900
+	var ss []func(sample.Session) sample.Session
+	for i := range n {
+		ss = append(ss, sess(i+1, fmt.Sprintf("s%d", i), fmt.Sprintf("%%%d", i+1), nil))
+	}
+	frame := func(chained bool) time.Duration {
+		m := manyRows(t, n)
+		st := hostState(ss...)
+		if chained {
+			st.Chains = &state.ChainsView{}
+			for i := 0; i+2 < n; i += 3 {
+				c := chains.Chain{ID: fmt.Sprintf("c%d", i)}
+				for _, s := range st.Sessions[i : i+3] {
+					c.Members = append(c.Members, memberOf(s))
+				}
+				st.Chains.Chains = append(st.Chains.Chains, c)
+			}
+		}
+		m = upd(t, m, stateMsg(st))
+		best := time.Hour
+		for range 3 {
+			start := time.Now()
+			_ = m.draw(200)
+			best = min(best, time.Since(start))
+		}
+		return best
+	}
+	plain, chained := frame(false), frame(true)
+	if chained > 5*plain+50*time.Millisecond {
+		t.Fatalf("a frame with chains took %v, one without %v", chained, plain)
 	}
 }
 
