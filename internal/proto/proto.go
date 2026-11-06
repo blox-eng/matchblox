@@ -45,6 +45,11 @@ const (
 	// KindHook is the first and only message of `matchblox hook`: one
 	// hooks.Event, sent after the service hello, with no hello back.
 	KindHook Kind = "hook"
+	// KindNews is the message of a hook that asks for its match's news,
+	// after the service hello; the service answers with one KindNews that
+	// holds a NewsReply. A hook that printed the news sends one more, with
+	// no body, to say it heard it.
+	KindNews Kind = "news"
 )
 
 type Envelope struct {
@@ -121,6 +126,15 @@ type Act struct {
 	// Console: the act came from a console, a person at the keys. The
 	// service sets it from the hello; it never comes over the wire.
 	Console bool `json:"-"`
+	// FromKnown: the service found From itself, by the caller's pid, so
+	// the act cannot name another pane as its own. It never comes over
+	// the wire.
+	FromKnown bool `json:"-"`
+	// FromPlaced: the service knows who sends the act, a match's pane or
+	// the person: by the caller's pane or terminal, or a console's hello,
+	// or because the service makes the act itself. A send that is not
+	// placed is refused. It never comes over the wire.
+	FromPlaced bool `json:"-"`
 }
 
 // WatchPrefix starts an act that names the pane a console watches; with no
@@ -136,6 +150,11 @@ const KeysPrefix = "keys:"
 // (keycmd) into the pane after it, at rest. Text is the command's id; PID
 // is the agent the console showed.
 const CommandPrefix = "cmd:"
+
+// ChainPrefix starts an act from an agent's pane that asks to chain with the
+// agent in the pane after it. After it, "-" leaves the chain, "off" refuses
+// chains and "on" takes them again.
+const ChainPrefix = "chain:"
 
 // LitPrefix starts the text of a keys: act that types the text after it:
 // at most MaxLit bytes, with no control character.
@@ -350,6 +369,20 @@ func StartNotes(r Result) ([]string, bool) {
 	return slices.Clone(r.Skipped), true
 }
 
+// News asks for the news of the match in Pane, at the hook Event.
+type News struct {
+	Pane string `json:"pane"`
+	// Socket is the tmux server of Pane ($TMUX's socket), as in a hook event.
+	Socket    string `json:"socket,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	Event     string `json:"event,omitempty"`
+}
+
+// NewsReply is the text the hook prints. Empty: nothing new.
+type NewsReply struct {
+	Text string `json:"text,omitempty"`
+}
+
 type Error struct {
 	Text string `json:"text"`
 }
@@ -432,6 +465,12 @@ type (
 	// Focus is the session a tap on the island or a buzz opens.
 	Focus = state.Focus
 )
+
+// RepoOf is gitscan.RepoOf: the console finds a session's checkout as the
+// service does.
+func RepoOf(r *GitReport, cwd string) (repoPath, worktreePath string, ok bool) {
+	return gitscan.RepoOf(r, cwd)
+}
 
 // ShipsOf is ships.Of: the console finds a session's ships as the
 // service, the CLI and the stoker do.

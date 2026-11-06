@@ -239,3 +239,33 @@ func TestReportResolvesConfigRepos(t *testing.T) {
 		t.Fatalf("watching with a session = %v, want [%s]", rep.Watching, repo)
 	}
 }
+
+func TestRepoOfFindsTheWorktreesRepo(t *testing.T) {
+	r := &Report{Repos: []Repo{{Path: "/r", Worktrees: []Worktree{{Path: "/r-wt"}}}}}
+	repo, wt, ok := RepoOf(r, "/r-wt/internal")
+	if !ok || repo != "/r" || wt != "/r-wt" {
+		t.Fatalf("worktree session: got (%q, %q, %v), want (/r, /r-wt, true)", repo, wt, ok)
+	}
+	if _, _, ok := RepoOf(r, "/rx"); ok {
+		t.Fatal("/rx is not inside /r: a prefix without a slash is no parent")
+	}
+	if _, _, ok := RepoOf(nil, "/r"); ok {
+		t.Fatal("a nil report finds no repo")
+	}
+}
+
+func TestRepoOfTheRepoItselfIsItsWorktree(t *testing.T) {
+	r := &Report{Repos: []Repo{{Path: "/r"}}}
+	repo, wt, ok := RepoOf(r, "/r")
+	if !ok || repo != "/r" || wt != "/r" {
+		t.Fatalf("repo path: got (%q, %q, %v), want (/r, /r, true)", repo, wt, ok)
+	}
+}
+
+func TestRepoOfLongestMatchWins(t *testing.T) {
+	r := &Report{Repos: []Repo{{Path: "/r", Worktrees: []Worktree{{Path: "/r/wt"}}}}}
+	repo, wt, ok := RepoOf(r, "/r/wt/src")
+	if !ok || repo != "/r" || wt != "/r/wt" {
+		t.Fatalf("nested worktree: got (%q, %q, %v), want (/r, /r/wt, true)", repo, wt, ok)
+	}
+}

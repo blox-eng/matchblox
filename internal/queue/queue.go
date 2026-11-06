@@ -177,6 +177,13 @@ func (q *Queue) Apply(ev hooks.Event) {
 	}
 }
 
+// Waits tells if the hooks say the session waits for the person: a
+// permission, or a question that is not a reminder.
+func (q *Queue) Waits(id string) bool {
+	it, ok := q.waiting[id]
+	return ok && (it.State == StatePermission || it.State == StateQuestion && !it.Reminder)
+}
+
 // reply fills a finished wait with its turn's Reply, once both are in.
 func (q *Queue) reply(id string) {
 	r, ok := q.replies[id]

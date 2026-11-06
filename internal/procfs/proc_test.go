@@ -161,3 +161,12 @@ func TestAFixtureReadsTheSameOnEveryPageSize(t *testing.T) {
 		t.Fatal("the page size is not the fixture's when it names one, and this machine's when not")
 	}
 }
+
+func TestTTYNrOutOfRangeIsNoTerminal(t *testing.T) {
+	for _, nr := range []string{"-5", "4294967296", "99999999999999999999", "x"} {
+		p, _ := parseStat(11, []byte("11 (x) S 1 11 11 "+nr+" 11 0 0 0 0 0 1 0 0 0 20 0 1 0 557 1 1"), 4096)
+		if p.TTY != 0 {
+			t.Errorf("tty_nr %s: TTY = %d; want 0", nr, p.TTY)
+		}
+	}
+}

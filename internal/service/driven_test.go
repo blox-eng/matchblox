@@ -168,11 +168,11 @@ func TestTheBuildersMessageFreesThePane(t *testing.T) {
 		t.Fatal("the driven pane merged")
 	}
 	// A command's message is no person at the keys, whoever sends it.
-	mustAct(t, s, proto.Act{RecID: "message:%1", Confirm: "y", Text: "merge it"})
+	mustAct(t, s, proto.Act{RecID: "message:%1", Confirm: "y", Text: "merge it", FromPlaced: true})
 	if !denies(t, s, "%1", "gh pr merge 4556") {
 		t.Fatal("a CLI message freed the pane")
 	}
-	mustAct(t, s, proto.Act{RecID: "message:%1", Confirm: "y", Text: "merge it now", Console: true})
+	mustAct(t, s, proto.Act{RecID: "message:%1", Confirm: "y", Text: "merge it now", Console: true, FromPlaced: true})
 	if denies(t, s, "%1", "gh pr merge 4556") {
 		t.Fatal("the builder's own word did not free the pane")
 	}

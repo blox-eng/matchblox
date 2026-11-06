@@ -147,7 +147,7 @@ func (s *Service) runTrigger(ctx context.Context, t stoker.Trigger) proto.Result
 	if err != nil {
 		return proto.Result{Err: err.Error()}
 	}
-	a := proto.Act{RecID: t.Do + ":" + t.Pane, Confirm: "y", From: pane}
+	a := proto.Act{RecID: t.Do + ":" + t.Pane, Confirm: "y", From: pane, FromPlaced: true}
 	switch t.Do {
 	case "send":
 		a.RecID, a.Text = "message:"+t.Pane, t.Text

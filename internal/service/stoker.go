@@ -219,6 +219,11 @@ func (s *Service) stokable(pane, typed string) error {
 	if !ok {
 		return fmt.Errorf("the pane %s cannot be read", pane)
 	}
+	return stokableScreen(pane, screen, typed)
+}
+
+// stokableScreen is stokable on a screen already read.
+func stokableScreen(pane, screen, typed string) error {
 	switch _, kind := said.Screen(screen); kind {
 	case said.Permits:
 		return fmt.Errorf("the pane %s shows a permission prompt", pane)

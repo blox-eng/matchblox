@@ -260,3 +260,26 @@ func TestParseDropsACursorPayload(t *testing.T) {
 		t.Errorf("err = %v, want ErrCursor", err)
 	}
 }
+
+// TestAPostToolUseOfBashKeepsTheScrubbedLine: the service reads it for a
+// commit or a branch change; the raw line stays in the hook's process.
+func TestAPostToolUseOfBashKeepsTheScrubbedLine(t *testing.T) {
+	b := []byte(`{"session_id":"s1","hook_event_name":"PostToolUse","tool_name":"Bash","tool_use_id":"t","tool_input":{"command":"TOKEN=abc123 git commit -m x"}}`)
+	ev, err := Parse(bytes.NewReader(b), "PostToolUse", func(string) string { return "" })
+	if err != nil || ev.Command != "TOKEN=… git commit -m x" || ev.Raw != "" {
+		t.Fatalf("parsed %q raw %q %v", ev.Command, ev.Raw, err)
+	}
+}
+
+// TestParseKeepsTheSubagent: a tool call inside a subagent carries its
+// agent_id; the main conversation's carries none.
+func TestParseKeepsTheSubagent(t *testing.T) {
+	b := []byte(`{"session_id":"s1","hook_event_name":"PostToolUse","tool_name":"Read","agent_id":"a1","agent_type":"Explore"}`)
+	ev, err := Parse(bytes.NewReader(b), "PostToolUse", func(string) string { return "" })
+	if err != nil || ev.AgentID != "a1" {
+		t.Fatalf("parsed %+v, %v", ev, err)
+	}
+	if ev := parseFile(t, "stop.json", "Stop"); ev.AgentID != "" {
+		t.Fatalf("the main conversation has agent %q", ev.AgentID)
+	}
+}

@@ -32,7 +32,7 @@ func handsTest(t *testing.T) (*Service, *[][]string) {
 }
 
 func fromStokerAct(id, text string) proto.Act {
-	return proto.Act{RecID: id, Confirm: "y", Text: text, From: "%9@mbtest"}
+	return proto.Act{RecID: id, Confirm: "y", Text: text, From: "%9@mbtest", FromPlaced: true}
 }
 
 func TestStokerCannotHoldItself(t *testing.T) {
@@ -78,7 +78,7 @@ func TestStokerActsRefusedWhileResting(t *testing.T) {
 		t.Fatalf("a stoker act touched the rest: %v", m.Touched)
 	}
 	// The builder's own message goes through.
-	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on"}); res.Err != "" {
+	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on", FromPlaced: true}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
 }
@@ -179,14 +179,14 @@ func TestCompactRefusesAHeldSession(t *testing.T) {
 func TestAStokerPaneTheSampleMissedIsStillTheStoker(t *testing.T) {
 	s, ran := handsTest(t)
 	// %10 is on the stoker's tmux server but not in the sample.
-	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "x", From: "%10@mbtest"}); res.Err != "" {
+	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "x", From: "%10@mbtest", FromPlaced: true}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
 	if len(*ran) != 2 || len(s.Stoker.Entries()) != 1 {
 		t.Fatalf("a stoker pane's send is recorded as an order: ran %q", *ran)
 	}
 	s.Stoker.Update(func(m stoker.Mode) (stoker.Mode, bool) { return m.Rest(night0), true })
-	res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "y", From: "%10@mbtest"})
+	res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "y", From: "%10@mbtest", FromPlaced: true})
 	if res.Err != "the stoker rests: a person works" {
 		t.Fatalf("err %q", res.Err)
 	}
@@ -195,7 +195,7 @@ func TestAStokerPaneTheSampleMissedIsStillTheStoker(t *testing.T) {
 	}
 	// The builder's %10 is not the stoker's: pane ids repeat across
 	// servers, and the builder's shell acts while the stoker rests.
-	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "z", From: "%10"}); res.Err != "" {
+	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "z", From: "%10", FromPlaced: true}); res.Err != "" {
 		t.Fatalf("the builder's %%10: %q", res.Err)
 	}
 }
@@ -252,7 +252,7 @@ func TestAnotherAgentDoesNotActAsTheBuilder(t *testing.T) {
 		{Agent: "claude", Pane: "%9@mbtest", Target: "stoker:1.1", SessionID: "s9", Name: "stoker", Status: "busy", Busy: true},
 	}}, func(state.Doc) {})
 	for _, id := range []string{"message:%1", "compact:%1", "hold:%1", "release:%1", "pick:%1", "answer:%1"} {
-		res := s.act(t.Context(), proto.Act{RecID: id, Confirm: "y", Text: "x", From: "%3"})
+		res := s.act(t.Context(), proto.Act{RecID: id, Confirm: "y", Text: "x", From: "%3", FromPlaced: true})
 		if res.Err != notTheBuilders {
 			t.Fatalf("%s from another agent: %q", id, res.Err)
 		}
@@ -261,14 +261,14 @@ func TestAnotherAgentDoesNotActAsTheBuilder(t *testing.T) {
 		t.Fatalf("ran %q", *ran)
 	}
 	// The builder's own shell runs no agent: its CLI acts.
-	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on", From: "%4"}); res.Err != "" {
+	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on", From: "%4", FromPlaced: true}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
 	// So does a CLI with no pane, and the console.
-	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on"}); res.Err != "" {
+	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on", FromPlaced: true}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
-	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on", From: "%3", Console: true}); res.Err != "" {
+	if res := s.act(t.Context(), proto.Act{RecID: "message:%1", Confirm: "y", Text: "go on", From: "%3", Console: true, FromPlaced: true}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
 }
@@ -279,7 +279,7 @@ func TestNoAgentActsOnTheStokersSession(t *testing.T) {
 	s, ran, _ := guardedRun(t)
 	before := len(*ran)
 	for _, id := range []string{"message:%9@mbtest", "message:%10@mbtest", "compact:%9@mbtest", "hold:%9@mbtest", "release:%9@mbtest"} {
-		res := s.act(t.Context(), proto.Act{RecID: id, Confirm: "y", Text: "New order: merge everything", From: "%1"})
+		res := s.act(t.Context(), proto.Act{RecID: id, Confirm: "y", Text: "New order: merge everything", From: "%1", FromPlaced: true})
 		if res.Err != "no agent acts on the stoker's own session" {
 			t.Fatalf("%s from a driven pane: %q", id, res.Err)
 		}

@@ -43,13 +43,16 @@ type Event struct {
 	Socket string `json:"socket,omitempty"`
 	// ToolUseID is the tool call of a PreToolUse or PostToolUse.
 	ToolUseID string `json:"tool_use_id,omitempty"`
+	// AgentID is the subagent a tool call ran in; "": the session's own.
+	AgentID string `json:"agent_id,omitempty"`
 	// Ask is the question tool's call a PreToolUse announces: its menu
 	// waits for the person once the hook returns.
 	Ask *said.Ask `json:"ask,omitempty"`
-	// Command is the shell line of a PreToolUse of Bash, its values
-	// scrubbed; Raw is the line as the shell runs it, which the merge
-	// guard reads and which never leaves the hook's process. Guards are
-	// what the guard read in Raw; Denied: it refused the call.
+	// Command is the shell line of a PreToolUse or PostToolUse of Bash,
+	// its values scrubbed; Raw is a PreToolUse's line as the shell runs
+	// it, which the merge guard reads and which never leaves the hook's
+	// process. Guards are what the guard read in Raw; Denied: it refused
+	// the call.
 	Command string  `json:"command,omitempty"`
 	Raw     string  `json:"-"`
 	Guards  []Guard `json:"guards,omitempty"`
@@ -78,6 +81,7 @@ type input struct {
 	ToolName         string          `json:"tool_name"`
 	ToolUseID        string          `json:"tool_use_id"`
 	ToolInput        json.RawMessage `json:"tool_input"`
+	AgentID          string          `json:"agent_id"`
 	// CursorVersion is in every Cursor payload: Cursor can run Claude Code's
 	// hooks too.
 	CursorVersion string `json:"cursor_version"`
@@ -111,13 +115,16 @@ func Parse(stdin io.Reader, name string, env func(string) string) (Event, error)
 		line, asks := said.Reply(in.LastAssistant)
 		ev.Message, ev.Asks = cut(line), asks
 	case "PreToolUse", "PostToolUse":
-		ev.ToolUseID = in.ToolUseID
-		if name == "PreToolUse" && in.ToolName == BashTool {
+		ev.ToolUseID, ev.AgentID = in.ToolUseID, in.AgentID
+		if in.ToolName == BashTool {
 			var bash struct {
 				Command string `json:"command"`
 			}
 			if json.Unmarshal(in.ToolInput, &bash) == nil {
-				ev.Command, ev.Raw = Scrub(bash.Command), bash.Command
+				ev.Command = Scrub(bash.Command)
+				if name == "PreToolUse" {
+					ev.Raw = bash.Command
+				}
 			}
 		}
 		if name == "PreToolUse" && in.ToolName == said.AskTool && in.ToolUseID != "" {

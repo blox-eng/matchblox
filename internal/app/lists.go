@@ -81,7 +81,7 @@ func (m Model) stateOf(host string) *proto.State {
 		return &proto.State{}
 	}
 	used := m.used
-	return &proto.State{Doc: state.Doc{Holds: m.holds, Reasons: m.reasons, Renames: m.renames,
+	return &proto.State{Doc: state.Doc{Holds: m.holds, Reasons: m.reasons, Renames: m.renames, Chains: m.chains,
 		SignIns: m.signIns, StokerServer: m.stokerServer, Git: m.git, Agents: m.agents, Accounts: m.accounts,
 		AccountsSkipped: m.skipped, LastAccount: m.lastAccount, LastAgent: m.keptAgent}, Found: m.found, Used: &used}
 }
@@ -195,6 +195,8 @@ func (m *Model) refresh() {
 			since[keyOf(s)] = it.Since
 		}
 	}
+	m.snap.Sessions = sessions
+	m.indexChains() // a chain's group is its neediest match's in the list
 	rank := m.groupRanks(sessions, need)
 	slices.SortStableFunc(sessions, func(a, b sample.Session) int {
 		if c := rank[keyOf(a)] - rank[keyOf(b)]; c != 0 {
@@ -202,7 +204,12 @@ func (m *Model) refresh() {
 		}
 		return m.sessSort.compare(a, b, need, since, m.hostOrder)
 	})
+	if m.sessGroup == groupNeed || m.sessGroup == groupRepo {
+		sessions = m.together(sessions)
+	}
 	m.snap.Sessions = sessions
+	m.indexChainRows()
+	m.repoMates = m.sharingRepos(sessions)
 	for k := range m.picked {
 		if m.gitOf(k.host) != nil && !m.safeWorktree(k) {
 			delete(m.picked, k)

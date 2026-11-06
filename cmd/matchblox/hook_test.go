@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -9,11 +10,13 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/limits"
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/service"
 	"github.com/blox-eng/matchblox/internal/stoker"
 )
@@ -105,6 +108,181 @@ func TestHookSilentListener(t *testing.T) {
 	}
 	if n := spoolLines(t, spool); n != 1 {
 		t.Fatalf("spool has %d lines", n)
+	}
+}
+
+// newsService says hello on sock and answers each connection with answer,
+// given the first message.
+func newsService(t *testing.T, answer func(c net.Conn, env proto.Envelope)) string {
+	t.Helper()
+	return lateNewsService(t, 0, answer)
+}
+
+// lateNewsService is newsService with each hello late by hello.
+func lateNewsService(t *testing.T, hello time.Duration, answer func(c net.Conn, env proto.Envelope)) string {
+	t.Helper()
+	sock := isolate(t)
+	if err := os.MkdirAll(filepath.Dir(sock), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	l, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close() })
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer c.Close()
+				time.Sleep(hello)
+				if proto.Encode(c, proto.KindHello, "", proto.Hello{Version: proto.Version}) != nil {
+					return
+				}
+				env, err := proto.Decode(bufio.NewReader(c))
+				if err == nil {
+					answer(c, env)
+				}
+			}()
+		}
+	}()
+	return sock
+}
+
+func hookEvent(name string) string {
+	return `{"session_id":"s9","cwd":"/work/app","hook_event_name":"` + name + `","tool_name":"Bash","tool_input":{"command":"ls"}}`
+}
+
+func TestHookPrintsNewsAsContext(t *testing.T) {
+	sock := newsService(t, func(c net.Conn, env proto.Envelope) {
+		if env.Kind == proto.KindNews {
+			_ = proto.Encode(c, proto.KindNews, "", proto.NewsReply{Text: "x"})
+		}
+	})
+	t.Setenv("TMUX_PANE", "%1")
+	spool := filepath.Join(t.TempDir(), "spool.jsonl")
+	for name, want := range map[string]string{
+		"PostToolUse":      `{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"x"}}` + "\n",
+		"UserPromptSubmit": "x\n",
+		"SessionStart":     "x\n",
+		"Stop":             "",
+	} {
+		var out bytes.Buffer
+		if err := hook([]string{name}, strings.NewReader(hookEvent(name)), &out, sock, spool, false); err != nil {
+			t.Fatal(err)
+		}
+		if out.String() != want {
+			t.Errorf("%s printed %q, want %q", name, out.String(), want)
+		}
+	}
+	t.Setenv("TMUX_PANE", "")
+	var out bytes.Buffer
+	_ = hook([]string{"UserPromptSubmit"}, strings.NewReader(hookEvent("UserPromptSubmit")), &out, sock, spool, false)
+	if out.Len() != 0 {
+		t.Errorf("a session in no pane printed %q", out.String())
+	}
+}
+
+// TestHookSaysItHeardTheNews: after it prints the news, each hook tells the
+// service on the same connection, so the service does not give it back.
+func TestHookSaysItHeardTheNews(t *testing.T) {
+	acks := make(chan proto.Kind, 1)
+	sock := newsService(t, func(c net.Conn, env proto.Envelope) {
+		if env.Kind == proto.KindNews {
+			_ = proto.Encode(c, proto.KindNews, "", proto.NewsReply{Text: "x"})
+			ack, _ := proto.Decode(bufio.NewReader(c))
+			acks <- ack.Kind
+		}
+	})
+	t.Setenv("TMUX_PANE", "%1")
+	spool := filepath.Join(t.TempDir(), "spool.jsonl")
+	if err := hook([]string{"PostToolUse"}, strings.NewReader(hookEvent("PostToolUse")), io.Discard, sock, spool, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-acks; got != proto.KindNews {
+		t.Fatalf("hook: the service got %q after the news", got)
+	}
+	if err := hookCursor(bytes.NewReader(cursorEvent(t, "postToolUse")), io.Discard, sock, spool); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-acks; got != proto.KindNews {
+		t.Fatalf("hookCursor: the service got %q after the news", got)
+	}
+}
+
+// TestASubagentsToolCallTakesNoNews: Claude Code runs the hooks of a
+// subagent's tool calls too; what it prints would reach the subagent, not
+// the match, so it asks for nothing.
+func TestASubagentsToolCallTakesNoNews(t *testing.T) {
+	var asked atomic.Int32
+	sock := newsService(t, func(c net.Conn, env proto.Envelope) {
+		if env.Kind == proto.KindNews {
+			asked.Add(1)
+			_ = proto.Encode(c, proto.KindNews, "", proto.NewsReply{Text: "x"})
+		}
+	})
+	t.Setenv("TMUX_PANE", "%1")
+	ev := `{"session_id":"s9","cwd":"/work/app","hook_event_name":"PostToolUse","tool_name":"Read","agent_id":"a1","agent_type":"Explore"}`
+	var out bytes.Buffer
+	if err := hook([]string{"PostToolUse"}, strings.NewReader(ev), &out, sock, filepath.Join(t.TempDir(), "spool.jsonl"), false); err != nil {
+		t.Fatal(err)
+	}
+	if out.Len() != 0 || asked.Load() != 0 {
+		t.Fatalf("a subagent's hook printed %q, asked %d times", out.String(), asked.Load())
+	}
+}
+
+// TestHookStaysInBudgetWithTheServiceStuck: a service that takes the
+// event and never answers the news holds the agent no longer than one
+// that is down.
+func TestHookStaysInBudgetWithTheServiceStuck(t *testing.T) {
+	stuck := make(chan struct{})
+	t.Cleanup(func() { close(stuck) })
+	sock := newsService(t, func(net.Conn, proto.Envelope) { <-stuck })
+	t.Setenv("TMUX_PANE", "%1")
+	spool := filepath.Join(t.TempDir(), "spool.jsonl")
+	for _, name := range []string{"UserPromptSubmit", "PostToolUse", "SessionStart"} {
+		var out bytes.Buffer
+		start := time.Now()
+		if err := hook([]string{name}, strings.NewReader(hookEvent(name)), &out, sock, spool, false); err != nil {
+			t.Fatal(err)
+		}
+		if d := time.Since(start); d > 50*time.Millisecond {
+			t.Fatalf("%s took %v", name, d)
+		}
+		if out.Len() != 0 {
+			t.Errorf("%s printed %q", name, out.String())
+		}
+	}
+}
+
+// TestHookStaysInBudgetWithASlowHello: when the event's hello comes late,
+// the ask for news, which then hangs, gets only the time that is left, and
+// the hook still ends within its budget.
+func TestHookStaysInBudgetWithASlowHello(t *testing.T) {
+	stuck := make(chan struct{})
+	t.Cleanup(func() { close(stuck) })
+	sock := lateNewsService(t, 20*time.Millisecond, func(_ net.Conn, env proto.Envelope) {
+		if env.Kind == proto.KindNews {
+			<-stuck
+		}
+	})
+	t.Setenv("TMUX_PANE", "%1")
+	spool := filepath.Join(t.TempDir(), "spool.jsonl")
+	for _, name := range []string{"UserPromptSubmit", "PostToolUse", "SessionStart"} {
+		start := time.Now()
+		if err := hook([]string{name}, strings.NewReader(hookEvent(name)), io.Discard, sock, spool, false); err != nil {
+			t.Fatal(err)
+		}
+		if d := time.Since(start); d > 50*time.Millisecond {
+			t.Fatalf("%s took %v", name, d)
+		}
+	}
+	if _, err := os.Stat(spool); !os.IsNotExist(err) {
+		t.Fatal("a late hello spooled the event")
 	}
 }
 
@@ -389,6 +567,75 @@ func TestCursorHookPrintsNothingAndSpools(t *testing.T) {
 	}
 	if !bytes.Contains(line, []byte(`"name":"Stop"`)) || !bytes.Contains(line, []byte(`"agent":"cursor-agent"`)) {
 		t.Errorf("spool %s, want a Stop of cursor-agent", line)
+	}
+}
+
+func cursorEvent(t *testing.T, name string) []byte {
+	t.Helper()
+	b, err := os.ReadFile("../../testdata/hooks/cursor-" + name + ".json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// TestCursorHookPrintsNewsAsContext: Cursor adds sessionStart's and
+// postToolUse's additional_context to the conversation; beforeSubmitPrompt
+// takes no text for the turn, so it never asks: asking would empty the
+// inbox into nowhere.
+func TestCursorHookPrintsNewsAsContext(t *testing.T) {
+	var asked atomic.Int32
+	sock := newsService(t, func(c net.Conn, env proto.Envelope) {
+		if env.Kind == proto.KindNews {
+			asked.Add(1)
+			_ = proto.Encode(c, proto.KindNews, "", proto.NewsReply{Text: "a <b> & c"})
+		}
+	})
+	t.Setenv("TMUX_PANE", "%1")
+	spool := filepath.Join(t.TempDir(), "spool.jsonl")
+	for _, tc := range []struct {
+		name, want string
+		asks       bool
+	}{
+		{"sessionStart", `{"additional_context":"a <b> & c"}` + "\n", true},
+		{"postToolUse", `{"additional_context":"a <b> & c"}` + "\n", true},
+		{"beforeSubmitPrompt", "", false},
+		{"stop-completed", "", false},
+	} {
+		asked.Store(0)
+		var out bytes.Buffer
+		if err := hookCursor(bytes.NewReader(cursorEvent(t, tc.name)), &out, sock, spool); err != nil {
+			t.Fatal(err)
+		}
+		if out.String() != tc.want {
+			t.Errorf("%s printed %q, want %q", tc.name, out.String(), tc.want)
+		}
+		if got := asked.Load() > 0; got != tc.asks {
+			t.Errorf("%s asked for the news: %v, want %v", tc.name, got, tc.asks)
+		}
+	}
+}
+
+// TestCursorHookStaysInBudgetWithTheServiceStuck: as hook does, a service
+// that never answers the news holds Cursor no longer than one that is down.
+func TestCursorHookStaysInBudgetWithTheServiceStuck(t *testing.T) {
+	stuck := make(chan struct{})
+	t.Cleanup(func() { close(stuck) })
+	sock := newsService(t, func(net.Conn, proto.Envelope) { <-stuck })
+	t.Setenv("TMUX_PANE", "%1")
+	spool := filepath.Join(t.TempDir(), "spool.jsonl")
+	for _, name := range []string{"sessionStart", "postToolUse"} {
+		var out bytes.Buffer
+		start := time.Now()
+		if err := hookCursor(bytes.NewReader(cursorEvent(t, name)), &out, sock, spool); err != nil {
+			t.Fatal(err)
+		}
+		if d := time.Since(start); d > 50*time.Millisecond {
+			t.Fatalf("%s took %v", name, d)
+		}
+		if out.Len() != 0 {
+			t.Errorf("%s printed %q", name, out.String())
+		}
 	}
 }
 
