@@ -224,6 +224,29 @@ func TestAFilterSaysHowManyAreHidden(t *testing.T) {
 	})
 }
 
+// TestAFilterSaysHowManyAreHiddenInEveryGrouping: status and repo add no
+// chain count, but a filter that hides chain-mates still says how many, on
+// the group of the chain's first match in view.
+func TestAFilterSaysHowManyAreHiddenInEveryGrouping(t *testing.T) {
+	st := fuseState(t, mockupChain)
+	for i := range st.Sessions {
+		st.Sessions[i].Cwd = "/home/user/src/hearth"
+		if st.Sessions[i].Name != "hearth-api" {
+			st.Sessions[i].Tab = "chainlook"
+		}
+	}
+	for g, want := range map[int][]string{
+		groupStatus: {" ASKS · 1 · 1 hidden", "▌╿━╸ kindle-web", " BUSY · 1", " ✦   flint-auth", " IDLE · 2", " ╿─╴ ember-billing"},
+		groupRepo:   {" hearth · 4 · 1 hidden", "▌╿─╮ kindle-web", " ╿─╯ ember-billing"},
+	} {
+		m := fuseModel(t, 160, st, "")
+		m.sessGroup = g
+		m.filter = "chainlook"
+		m.refresh()
+		sameLines(t, listLines(m, 100, 20), want)
+	}
+}
+
 // TestFuseOnAPhone: one column; the opened block carries the fuse and its
 // hairlines start after it; the row that waits is whole.
 func TestFuseOnAPhone(t *testing.T) {

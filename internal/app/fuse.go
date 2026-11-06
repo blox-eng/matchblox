@@ -109,20 +109,21 @@ func (m Model) together(ss []sample.Session) []sample.Session {
 	return out
 }
 
-// chainsIn is what a need group's label adds for the chains it holds: how
-// many matches each has, and how many of them a filter hides.
+// chainsIn is what a group's label adds for the chains whose first match in
+// view it holds: under need, how many matches each has; in every grouping,
+// how many of them a filter hides.
 func (m Model) chainsIn(label string, ss []sample.Session) string {
-	if m.sessGroup != groupNeed {
-		return ""
-	}
 	out := ""
 	seen := map[chainKey]bool{}
 	for _, s := range ss {
 		k, ok := m.chainKeyOf(s)
-		if !ok || seen[k] || m.groupLabel(s) != label {
+		if !ok || seen[k] {
 			continue
 		}
 		seen[k] = true
+		if m.groupLabel(s) != label {
+			continue
+		}
 		shown, all := 0, 0
 		for _, o := range ss {
 			if ko, ok := m.chainKeyOf(o); ok && ko == k {
@@ -135,7 +136,9 @@ func (m Model) chainsIn(label string, ss []sample.Session) string {
 			}
 		}
 		all = max(all, shown)
-		out += fmt.Sprintf(" · chain of %d", all)
+		if m.sessGroup == groupNeed {
+			out += fmt.Sprintf(" · chain of %d", all)
+		}
 		if all > shown {
 			out += fmt.Sprintf(" · %d hidden", all-shown)
 		}

@@ -165,12 +165,13 @@ before.
 - **By need**, the chain moves into the group of its neediest match, its
   members in need order. **By repo** its members are always side by side.
   Either way the fuse is whole: `╮` first, `┤` between, `╯` last, with `─`
-  before each from 70 columns of list. The group's label adds the chain:
-  `WAITS FOR YOU · 1 · chain of 3`.
+  before each from 70 columns of list. By need, the group's label adds the
+  chain: `WAITS FOR YOU · 1 · chain of 3`.
 - **By status** and **none**, the members stay where the view puts them.
   Each has a stub `─╴`. The stubs of the selected row's chain light in the
   accent, and the others are faint. The selected row's own stub is `━╸`.
-- A filter that hides members joins the ones it shows, and the label adds
+- A filter that hides members joins the ones it shows. In every grouping,
+  the label of the group with the chain's first match shown adds
   `· 2 hidden`.
 - Child rows and the opened block on a phone carry `│` in the fuse column.
   A held match keeps its place in the chain.
