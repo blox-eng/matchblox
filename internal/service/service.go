@@ -200,9 +200,6 @@ type Service struct {
 	// PeerLog gets one JSON line for each peer send: who, to whom, when,
 	// and the text's length and sha256, never the text. Empty: none.
 	PeerLog string
-	// PeerInboxes are the agents' own inboxes a peer send goes through
-	// before it types. Empty: every peer send is typed.
-	PeerInboxes []PeerInbox
 	// Git runs a read-only git command in dir: the HEADs of chained
 	// worktrees. Nil: git, with a short timeout.
 	Git func(dir string, args ...string) (string, error)

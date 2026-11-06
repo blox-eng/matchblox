@@ -2,7 +2,6 @@ package service
 
 import (
 	"cmp"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -396,59 +395,6 @@ func TestPeerSendIsLogged(t *testing.T) {
 	}
 }
 
-// fakeInbox is an agent's own inbox that reaches the agents in agents.
-type fakeInbox struct {
-	agents map[string]bool
-	got    []PeerMessage
-	err    error
-}
-
-func (f *fakeInbox) Name() string                  { return "fake inbox" }
-func (f *fakeInbox) Reaches(x sample.Session) bool { return f.agents[x.Agent] }
-func (f *fakeInbox) Deliver(_ context.Context, m PeerMessage) error {
-	if f.err != nil {
-		return f.err
-	}
-	f.got = append(f.got, m)
-	return nil
-}
-
-// An agent with an inbox gets the message there, with the sender matchblox
-// found, and no key goes to its pane. The limits and the log still hold.
-func TestPeerSendUsesTheAgentsInbox(t *testing.T) {
-	s, ran, _ := peerTest(t)
-	in := &fakeInbox{agents: map[string]bool{"claude": true}}
-	s.PeerInboxes = []PeerInbox{in}
-	if res := s.act(t.Context(), peerAct("message:%1", "read file x")); res.Err != "" {
-		t.Fatal(res.Err)
-	}
-	if len(*ran) != 0 || len(in.got) != 1 || in.got[0].From != "other %3" || in.got[0].FromPane != "%3" || in.got[0].To.Pane != "%1" || in.got[0].Text != "read file x" {
-		t.Fatalf("ran %q, inbox %+v", *ran, in.got)
-	}
-	if res := s.act(t.Context(), peerAct("message:%1", "again")); !strings.Contains(res.Err, "one send to work in 30s") {
-		t.Fatalf("the pair limit: %q", res.Err)
-	}
-	b, err := os.ReadFile(s.PeerLog)
-	if err != nil || !strings.Contains(string(b), `"via":"fake inbox"`) {
-		t.Fatalf("log %s, %v", b, err)
-	}
-}
-
-// An agent no inbox reaches gets the typed send; an inbox that fails
-// refuses and types nothing.
-func TestPeerSendTypesWhereNoInboxReaches(t *testing.T) {
-	s, ran, _ := peerTest(t)
-	s.PeerInboxes = []PeerInbox{&fakeInbox{agents: map[string]bool{"codex": true}}}
-	if res := s.act(t.Context(), peerAct("message:%1", "read file x")); res.Err != "" || len(typedLine(*ran)) != 1 {
-		t.Fatalf("%+v, ran %q", res, *ran)
-	}
-	s, ran, _ = peerTest(t)
-	s.PeerInboxes = []PeerInbox{&fakeInbox{agents: map[string]bool{"claude": true}, err: errors.New("socket gone")}}
-	if res := s.act(t.Context(), peerAct("message:%1", "read file x")); !strings.Contains(res.Err, "socket gone") || len(*ran) != 0 {
-		t.Fatalf("%+v, ran %q", res, *ran)
-	}
-}
-
 // sendHost is a host where peer-send in %1 is chained with mate in %2 and
 // mate-2 in %4, and stranger in %3 is in no chain. A pane shows the empty
 // prompt, then the line a step typed, unless it is in hidden; a -l step to
@@ -807,6 +753,60 @@ func TestAQueuedLineIsDroppedAfterThreeTries(t *testing.T) {
 	}
 }
 
+// A line that waits for a mate the sender is no longer chained with, or
+// while sends are off, is dropped untyped, and the sender hears why.
+func TestAQueuedLineOutsideTheChainIsDropped(t *testing.T) {
+	for name, cut := range map[string]func(s *Service){
+		"left": func(s *Service) {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			s.chainsLocked().Leave(chains.Member{SessionID: "s2"})
+		},
+		"off": func(s *Service) { s.ChainsSend = "off" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			codex := sample.Session{Agent: "codex", Status: "busy", Busy: true}
+			h := newSendHost(t, codex)
+			if res := h.send(t, "%2", "hi"); res.Note != "queued for mate's next step" {
+				t.Fatalf("%+v", res)
+			}
+			cut(h.s)
+			codex.Status, codex.Busy = "idle", false
+			h.publish(codex)
+			h.s.deliverAtRest(night0)
+			h.s.deliverAtRest(night0)
+			if k := h.keys(); len(k) != 0 {
+				t.Fatalf("ran %q", k)
+			}
+			h.s.mu.Lock()
+			defer h.s.mu.Unlock()
+			if items := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts(); !slices.Equal(items, []string{"mate did not get your line: you are no longer chained"}) {
+				t.Fatalf("the sender's inbox: %q", items)
+			}
+		})
+	}
+}
+
+// A line that waited ten minutes is stale: it is dropped untyped, and the
+// sender hears so.
+func TestAQueuedLineGoesStale(t *testing.T) {
+	codex := sample.Session{Agent: "codex", Status: "busy", Busy: true}
+	h := newSendHost(t, codex)
+	h.send(t, "%2", "hi")
+	codex.Status, codex.Busy = "idle", false
+	h.publish(codex)
+	h.s.deliverAtRest(night0.Add(10 * time.Minute))
+	h.s.deliverAtRest(night0.Add(10 * time.Minute))
+	if k := h.keys(); len(k) != 0 {
+		t.Fatalf("ran %q", k)
+	}
+	h.s.mu.Lock()
+	defer h.s.mu.Unlock()
+	if items := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts(); !slices.Equal(items, []string{"mate did not get your line: it waited 10 minutes and went stale"}) {
+		t.Fatalf("the sender's inbox: %q", items)
+	}
+}
+
 // A line whose clear did not run may still be in the prompt: it is not
 // typed again.
 func TestAQueuedLineThatMayRemainIsDropped(t *testing.T) {
@@ -860,5 +860,26 @@ func TestASendWithNoPeerCredentialsIsRefused(t *testing.T) {
 	}
 	if res := actOver(t, h.s, 0, proto.ClientConsole, proto.Act{RecID: "message:%2", Confirm: "y", Text: "hi"}); res.Err != "" {
 		t.Fatalf("the console's send: %+v", res)
+	}
+}
+
+// An answer or a pick types into a pane as a send does: from a process
+// with no pane and no terminal it is refused the same way, and the
+// console's still goes through.
+func TestAnUnplacedAnswerOrPickIsRefused(t *testing.T) {
+	for _, recID := range []string{"answer:%2", proto.PickPrefix + "%2"} {
+		h := newSendHost(t, idleMate)
+		h.s.PeerPane = func(int) string { return "" }
+		h.s.TTYPane = func(int) (string, bool) { return "", false }
+		act := proto.Act{RecID: recID, Confirm: "y", Text: "1"}
+		if res := actOver(t, h.s, 777, proto.ClientCLI, act); res.Err != unplacedSender {
+			t.Fatalf("%s: %+v", recID, res)
+		}
+		if k := h.keys(); len(k) != 0 {
+			t.Fatalf("%s: ran %q", recID, k)
+		}
+		if res := actOver(t, h.s, 777, proto.ClientConsole, act); res.Err == unplacedSender {
+			t.Fatalf("%s: the console's was refused", recID)
+		}
 	}
 }

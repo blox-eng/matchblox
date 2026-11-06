@@ -82,7 +82,7 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 	if !ok {
 		return proto.Result{Err: "no agent session in " + pane + " any more"}
 	}
-	chainID, ok := s.mateChain(sender, x)
+	chainID, ok := s.mateChain(memberOf(sender), memberOf(x))
 	if !ok {
 		return proto.Result{Err: fmt.Sprintf("%s is not in your chain. Run `matchblox chain %s` first.", x.Name, x.Name)}
 	}
@@ -97,20 +97,6 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 	name, tag := tagName(sender), peerTag(sender)
 	line := tag + " " + a.Text
 	rec := peerRecord{At: now, From: name, FromPane: a.From, To: x.Name, ToPane: pane, Len: len(a.Text), SHA256: sum(a.Text)}
-	for _, in := range s.PeerInboxes {
-		if !in.Reaches(x) {
-			continue
-		}
-		// The agent's own inbox queues the message and names the sender
-		// itself: no key goes to the pane, so no screen guard applies.
-		if err := in.Deliver(ctx, PeerMessage{From: name, FromPane: a.From, To: x, Text: a.Text}); err != nil {
-			s.peers.release(slot)
-			return proto.Result{Err: "not delivered to " + x.Name + "'s " + in.Name() + ": " + err.Error()}
-		}
-		rec.Via, rec.Result = in.Name(), "sent"
-		s.logPeer(rec)
-		return proto.Result{Ran: [][]string{{in.Name(), x.Name}}}
-	}
 	queued := proto.Result{Note: "queued for " + x.Name + "'s next step"}
 	switch {
 	case !readsPrompt[x.Agent], x.Agent != "codex" && !s.resting(pane):
@@ -138,20 +124,39 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 	return res
 }
 
-// peerTries is how many rests a waiting line gets to show in the prompt.
-const peerTries = 3
+// peerTries is how many rests a waiting line gets to show in the prompt,
+// and peerStale how long it waits for one.
+const (
+	peerTries = 3
+	peerStale = 10 * time.Minute
+)
 
 // deliverAtRest types the oldest line that waits for each Codex match that
 // rests now: one line a pane each sample. A line refused before any key
 // waits for a later rest, and so does one typed and cleared, up to
 // peerTries; then its sender hears it did not go. A line that may still be
 // in the prompt is dropped, so it is never typed twice; one for a match
-// that is gone is dropped too.
+// that is gone is dropped too. So is one that waited peerStale, or whose
+// sender is no longer chained with its match or may no longer send, and
+// its sender hears why.
 func (s *Service) deliverAtRest(now time.Time) {
 	for _, l := range s.peers.firsts() {
 		x, ok := s.sessionOf(l.to)
 		if !ok {
 			s.peers.forget(l.to)
+			continue
+		}
+		why := ""
+		if _, chained := s.mateChain(l.from, l.to); !chained || s.ChainsSend == "off" {
+			why = "you are no longer chained"
+		} else if now.Sub(l.rec.At) >= peerStale {
+			why = fmt.Sprintf("it waited %d minutes and went stale", int(peerStale.Minutes()))
+		}
+		if why != "" {
+			s.peers.drop(l.n)
+			s.mu.Lock()
+			s.chainsLocked().Post(l.from, x.Name+" did not get your line: "+why, now)
+			s.mu.Unlock()
 			continue
 		}
 		if !s.resting(x.Pane) {
@@ -281,12 +286,12 @@ func (s *Service) paneInMode(pane string) (bool, error) {
 	return strings.TrimSpace(out) != "0", nil
 }
 
-// mateChain is the id of the chain sender and x are both in.
-func (s *Service) mateChain(sender, x sample.Session) (string, bool) {
+// mateChain is the id of the chain from and to are both in.
+func (s *Service) mateChain(from, to chains.Member) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	c, ok := s.chainsLocked().ChainOf(memberOf(sender))
-	if !ok || !slices.ContainsFunc(c.Members, memberOf(x).Same) {
+	c, ok := s.chainsLocked().ChainOf(from)
+	if !ok || !slices.ContainsFunc(c.Members, to.Same) {
 		return "", false
 	}
 	return c.ID, true
@@ -314,27 +319,6 @@ func (s *Service) sessionOf(m chains.Member) (sample.Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.sessionOfLocked(m)
-}
-
-// PeerMessage is one peer send for an inbox: the sender's name and pane,
-// as matchblox found them, the receiving session and the text.
-type PeerMessage struct {
-	From, FromPane string
-	To             sample.Session
-	Text           string
-}
-
-// PeerInbox is an agent's own way to take a message from another session,
-// where it has one: the message waits in the agent's queue, with its
-// sender, instead of keys typed into its pane. A session no inbox reaches
-// gets the typed send, which works for every agent.
-type PeerInbox interface {
-	// Name names the inbox in the log and in the result.
-	Name() string
-	// Reaches tells if the inbox delivers to session x.
-	Reaches(x sample.Session) bool
-	// Deliver hands m to the agent. An error delivered nothing.
-	Deliver(ctx context.Context, m PeerMessage) error
 }
 
 // peerReady is the receiver's state typing needs, read now: the same
@@ -541,7 +525,7 @@ type peerRecord struct {
 	ToPane   string    `json:"to_pane"`
 	Len      int       `json:"len"`
 	SHA256   string    `json:"sha256"`
-	Via      string    `json:"via"`    // typed, typed at rest, inbox, at rest, or an agent inbox's name
+	Via      string    `json:"via"`    // typed, typed at rest, inbox or at rest
 	Result   string    `json:"result"` // sent, queued, typed, cleared, or typed, not sent
 }
 

@@ -111,7 +111,7 @@ func picksAccount(text string) bool {
 }
 
 func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
-	if _, send := isSend(a); send && !a.FromPlaced && !a.Console {
+	if typedPane(a.RecID) != "" && !a.FromPlaced && !a.Console {
 		return proto.Result{Err: unplacedSender} // it could be any match's
 	}
 	if pane, ok := strings.CutPrefix(a.RecID, "switch-preview:"); ok {

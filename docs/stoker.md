@@ -358,11 +358,11 @@ The guard has limits:
   (`TMUX_PANE`) does not count. A process that leaves its pane's process
   tree (`setsid`, a daemon) is placed by its terminal: in an agent's pane
   it acts as that agent, elsewhere as you. One with no terminal either
-  acts as you, but its sends are refused (`not sent: matchblox cannot tell
-  who sends this.`). On other systems the service
+  acts as you, but its sends, answers and picks are refused (`not sent:
+  matchblox cannot tell who sends this.`). On other systems the service
   has no pid, and the command's `TMUX_PANE` names its pane for every act
-  but a send: a send from the command line is refused there, and the
-  console still sends.
+  but these: a send, an answer or a pick from the command line is refused
+  there, and the console's still go.
 - It cannot speak for another session's hooks. The service takes a hook
   event only from a process in the pane the event names, for a session it
   places in that pane: a `matchblox hook` run from the stoker's pane

@@ -768,7 +768,7 @@ func answerTest(t *testing.T) (*Service, context.Context, *[][]string) {
 
 func TestAnswerTypesLiteral(t *testing.T) {
 	s, ctx, ran := answerTest(t)
-	res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "; rm -rf /"})
+	res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "; rm -rf /", FromPlaced: true})
 	if res.Err != "" {
 		t.Fatal(res.Err)
 	}
@@ -780,7 +780,7 @@ func TestAnswerTypesLiteral(t *testing.T) {
 
 func TestAnswerNeedsTypedY(t *testing.T) {
 	s, ctx, ran := answerTest(t)
-	if res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Text: "yes"}); len(*ran) != 0 || res.Err == "" {
+	if res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Text: "yes", FromPlaced: true}); len(*ran) != 0 || res.Err == "" {
 		t.Fatalf("ran %q res %+v", *ran, res)
 	}
 }
@@ -788,8 +788,8 @@ func TestAnswerNeedsTypedY(t *testing.T) {
 func TestAnswerRefusesPaneNotWaiting(t *testing.T) {
 	s, ctx, ran := answerTest(t)
 	for _, a := range []proto.Act{
-		{RecID: "answer:%2", Which: "secondary", Confirm: "y", Text: "yes"},
-		{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "two\nlines"},
+		{RecID: "answer:%2", Which: "secondary", Confirm: "y", Text: "yes", FromPlaced: true},
+		{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "two\nlines", FromPlaced: true},
 	} {
 		if res := s.act(ctx, a); res.Err == "" {
 			t.Fatalf("%+v ran: %+v", a, res)
@@ -805,7 +805,7 @@ func TestAnswerRefusesPaneNotWaiting(t *testing.T) {
 func TestAnswerRefusesPermission(t *testing.T) {
 	s, ctx, ran := answerTest(t)
 	hook(t, ctx, s, hooks.Event{Name: "Notification", Kind: hooks.KindPermission, SessionID: "s9", Pane: "%1", At: time.Now()})
-	res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "no, stop"})
+	res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "no, stop", FromPlaced: true})
 	if res.Err == "" || len(*ran) != 0 {
 		t.Fatalf("answered a permission prompt: %+v ran %q", res, *ran)
 	}
@@ -843,12 +843,12 @@ func TestIdleGuardIgnoresQueue(t *testing.T) {
 // Review 4: the same answer to a new question is not "already done".
 func TestAnswerAgainToANewQuestion(t *testing.T) {
 	s, ctx, ran := answerTest(t)
-	if res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "y"}); res.Err != "" {
+	if res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "y", FromPlaced: true}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
 	hook(t, ctx, s, hooks.Event{Name: "UserPromptSubmit", SessionID: "s9", Pane: "%1", At: time.Now()})
 	hook(t, ctx, s, hooks.Event{Name: "Stop", SessionID: "s9", Pane: "%1", At: time.Now().Add(time.Millisecond)})
-	res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "y"})
+	res := s.act(ctx, proto.Act{RecID: "answer:%1", Which: "secondary", Confirm: "y", Text: "y", FromPlaced: true})
 	if res.Err != "" || len(res.Skipped) != 0 || len(*ran) != 4 {
 		t.Fatalf("second answer: %+v ran %q", res, *ran)
 	}
@@ -994,10 +994,10 @@ func TestPickDrivesTheQuestionMenu(t *testing.T) {
 		return string(b)
 	}
 	for _, a := range []proto.Act{
-		{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_0", 1)},
-		{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_1", 3)},
-		{RecID: "pick:%1", Text: pick("toolu_1", 2)},
-		{RecID: "pick:%2", Confirm: "y", Text: pick("toolu_1", 2)},
+		{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_0", 1), FromPlaced: true},
+		{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_1", 3), FromPlaced: true},
+		{RecID: "pick:%1", Text: pick("toolu_1", 2), FromPlaced: true},
+		{RecID: "pick:%2", Confirm: "y", Text: pick("toolu_1", 2), FromPlaced: true},
 	} {
 		if res := s.act(ctx, a); res.Err == "" {
 			t.Fatalf("%+v ran: %+v", a, res)
@@ -1006,7 +1006,7 @@ func TestPickDrivesTheQuestionMenu(t *testing.T) {
 	if len(ran) != 0 {
 		t.Fatalf("ran %q", ran)
 	}
-	if res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_1", 2)}); res.Err != "" {
+	if res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: pick("toolu_1", 2), FromPlaced: true}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
 	if want := [][]string{{"tmux", "send-keys", "-t", "%1", "2"}}; fmt.Sprint(ran) != fmt.Sprint(want) {
@@ -1069,7 +1069,7 @@ func TestPickChecksThePaneBeforeEachPage(t *testing.T) {
 	mu.Lock()
 	*screen = pickPage2
 	mu.Unlock()
-	res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2)})
+	res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2), FromPlaced: true})
 	if len(*ran) != 0 || len(res.Skipped) != 1 || !strings.Contains(res.Skipped[0], "does not show question 1") {
 		t.Fatalf("ran %q: %+v", *ran, res)
 	}
@@ -1079,7 +1079,7 @@ func TestPickChecksThePaneBeforeEachPage(t *testing.T) {
 // stops before question 2's keys.
 func TestPickStopsWhenThePageDoesNotMove(t *testing.T) {
 	s, ctx, _, ran, _ := pickTest(t)
-	res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2)})
+	res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2), FromPlaced: true})
 	if want := [][]string{{"tmux", "send-keys", "-t", "%1", "1"}, panes.Pause}; fmt.Sprint(*ran) != fmt.Sprint(want) {
 		t.Fatalf("ran %q, want %q", *ran, want)
 	}
@@ -1104,7 +1104,7 @@ func TestPickFollowsThePages(t *testing.T) {
 		}
 		return nil
 	}
-	if res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2)}); res.Err != "" || len(res.Skipped) > 0 {
+	if res := s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(1, 2), FromPlaced: true}); res.Err != "" || len(res.Skipped) > 0 {
 		t.Fatalf("result %+v", res)
 	}
 	if n := len(*ran); n == 0 || fmt.Sprint((*ran)[n-1]) != fmt.Sprint([]string{"tmux", "send-keys", "-t", "%1", "1"}) {
@@ -1130,7 +1130,9 @@ func TestKeysToOnePaneNeverInterleave(t *testing.T) {
 	}
 	done := make(chan proto.Result)
 	for _, picks := range [][]int{{1, 2}, {2, 1}} {
-		go func() { done <- s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(picks...)}) }()
+		go func() {
+			done <- s.act(ctx, proto.Act{RecID: "pick:%1", Confirm: "y", Text: twoPicks(picks...), FromPlaced: true})
+		}()
 	}
 	within(t, done, "first pick")
 	within(t, done, "second pick")
@@ -1186,7 +1188,7 @@ func TestPickTakesTheHookCall(t *testing.T) {
 		}
 	}
 	answer, _ := json.Marshal(said.Answer{ID: "toolu_1", Choices: []said.Choice{{Picks: []int{2}}}})
-	pick := proto.Act{RecID: "pick:%1", Confirm: "y", Text: string(answer)}
+	pick := proto.Act{RecID: "pick:%1", Confirm: "y", Text: string(answer), FromPlaced: true}
 	if res := s.act(ctx, pick); !strings.Contains(res.Err, "no longer asks") {
 		t.Fatalf("no call yet: %+v", res)
 	}

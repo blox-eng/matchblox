@@ -209,7 +209,7 @@ func TestNoTextGoesToAPaneThatShowsAPermissionPrompt(t *testing.T) {
 	for _, a := range []proto.Act{
 		fromStokerAct("message:%1", "1"),
 		{RecID: "message:%1", Confirm: "y", Text: "1", FromPlaced: true},
-		{RecID: "answer:%1", Confirm: "y", Text: "1"},
+		{RecID: "answer:%1", Confirm: "y", Text: "1", FromPlaced: true},
 	} {
 		if res := s.act(t.Context(), a); !strings.Contains(res.Err, "permission prompt") {
 			t.Errorf("%s from %q: %q", a.RecID, a.From, res.Err)
