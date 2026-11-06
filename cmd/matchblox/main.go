@@ -512,7 +512,7 @@ func hook(args []string, stdin io.Reader, out io.Writer, sock, spool string, pro
 			return nil // a tool call the service has no use for
 		}
 		// The spool lives in the state dir, beside driven.json.
-		if why := stoker.Deny(filepath.Dir(spool), ev.Socket, ev.Pane, ev.Guards); why != "" {
+		if why := stoker.DenyFamily(filepath.Dir(spool), ev.Socket, ev.Pane, ev.Guards); why != "" {
 			ev.Denied = true
 			_ = json.NewEncoder(out).Encode(hookDeny(why))
 		}

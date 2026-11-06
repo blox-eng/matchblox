@@ -674,3 +674,26 @@ func TestCursorsStatusLineTapsItsPane(t *testing.T) {
 		t.Errorf("not json: err %v printed %q", err, out.String())
 	}
 }
+
+func TestHookDeniesAMergeInAPaneOnlyAChainStokerDrives(t *testing.T) {
+	dir := t.TempDir()
+	chain := stoker.FamilyDir(dir, "s1")
+	if err := stoker.WriteLink(chain, stoker.Link{ID: "s1", Chain: "api", Giver: "person"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(chain, "stoker.json"), []byte(`{"on":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := stoker.WriteDriven(chain, stoker.Driven{Run: "r", Panes: map[string][]string{"%1": nil}}); err != nil {
+		t.Fatal(err)
+	}
+	if why := deniedWhy(t, mustHook(t, dir, "gh pr merge 1")); why != wantDeny {
+		t.Fatalf("a chain stoker's pane without the go: %q", why)
+	}
+	if err := stoker.WriteDriven(chain, stoker.Driven{Run: "r", Panes: map[string][]string{"%1": {"merge"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if out := mustHook(t, dir, "gh pr merge 1"); out != "" {
+		t.Fatalf("a chain stoker's go: %q", out)
+	}
+}
