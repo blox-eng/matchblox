@@ -25,6 +25,7 @@ type delivery struct {
 	taken   chains.Taken
 	asks    []chains.Request
 	notices map[pair][2]string
+	cleared string // the session id told its chain after a /clear
 }
 
 // newsHeardWait is how long the service holds news a hook took before it
@@ -45,6 +46,10 @@ func (s *Service) news(n proto.News) delivery {
 	st := s.chainsLocked()
 	d := delivery{me: memberOf(x), taken: st.Take(memberOf(x))}
 	var blocks []string
+	if line := s.clearedLocked(st, x); line != "" {
+		d.cleared = x.SessionID
+		blocks = append(blocks, line)
+	}
 	if texts := d.taken.Texts(); len(texts) > 0 {
 		blocks = append(blocks, "[matchblox] since your last turn:\n  "+strings.Join(texts, "\n  "))
 	}
@@ -83,6 +88,16 @@ func (s *Service) holdLocked(d delivery, held bool) {
 			delete(s.heldNotices, p)
 		}
 	}
+	if d.cleared != "" {
+		if held {
+			if s.heldCleared == nil {
+				s.heldCleared = map[string]bool{}
+			}
+			s.heldCleared[d.cleared] = true
+		} else {
+			delete(s.heldCleared, d.cleared)
+		}
+	}
 }
 
 // heard marks d's requests and notices as told.
@@ -90,6 +105,7 @@ func (s *Service) heard(d delivery) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.holdLocked(d, false)
+	delete(s.cleared, d.cleared)
 	for _, r := range d.asks {
 		if s.heardAsks == nil {
 			s.heardAsks = map[chains.Request]bool{}
@@ -111,6 +127,27 @@ func (s *Service) unheard(d delivery) {
 	defer s.mu.Unlock()
 	s.holdLocked(d, false)
 	s.chainsLocked().GiveBack(d.me, d.taken)
+}
+
+// clearedLocked is the line that tells x, whose chat a /clear started
+// afresh, who it is chained with: once, "" when there is nothing to tell.
+// Callers hold mu.
+func (s *Service) clearedLocked(st *chains.Store, x sample.Session) string {
+	if !s.cleared[x.SessionID] || s.heldCleared[x.SessionID] {
+		return ""
+	}
+	var names []string
+	for _, m := range st.Mates(memberOf(x)) {
+		if y, ok := s.sessionOfLocked(m); ok {
+			names = append(names, y.Name)
+		}
+	}
+	if len(names) == 0 {
+		delete(s.cleared, x.SessionID)
+		return ""
+	}
+	slices.Sort(names)
+	return "[matchblox] you are chained with " + strings.Join(names, ", ") + ". To leave, run: matchblox unchain"
 }
 
 // requestsLocked tells me, once each, who asks to chain with it: the lines,

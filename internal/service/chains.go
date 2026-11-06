@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -126,6 +127,9 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 		return ok
 	}
 	left := st.Prune(live, now)
+	maps.DeleteFunc(s.cleared, func(id string, _ bool) bool {
+		return !slices.ContainsFunc(s.cur.Sessions, func(x sample.Session) bool { return x.SessionID == id })
+	})
 	for _, l := range left {
 		text := s.leftText(l, prev)
 		for _, c := range before {
@@ -147,11 +151,18 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 
 // refreshChainsLocked renames each stored member whose pane, pid and start
 // a session holds now under another id (a cleared chat), and tells if any
-// changed. A partial session list renames no one wrongly. Callers hold mu.
+// changed. A chained member that a clear renamed is told its chain at its
+// next news. A partial session list renames no one wrongly. Callers hold mu.
 func (s *Service) refreshChainsLocked(st *chains.Store) bool {
 	return st.Refresh(func(m chains.Member) (chains.Member, bool) {
 		for _, x := range s.cur.Sessions {
 			if x.Pane != "" && x.Pane == m.Pane && x.PID == m.PID && x.Start == m.Start {
+				if _, chained := st.ChainOf(m); chained && m.SessionID != "" && x.SessionID != "" && x.SessionID != m.SessionID {
+					if s.cleared == nil {
+						s.cleared = map[string]bool{}
+					}
+					s.cleared[x.SessionID] = true
+				}
 				return memberOf(x), true
 			}
 		}

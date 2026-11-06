@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"net"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -259,5 +260,26 @@ func TestAnAskFromAnotherRepoNamesIt(t *testing.T) {
 		"[matchblox] two asks to chain with you. To accept, run:\n  matchblox chain two"
 	if got := told(s, proto.News{Pane: sessions[0].Pane}); got != want {
 		t.Fatalf("news = %q, want %q", got, want)
+	}
+}
+
+// TestAClearedChatHearsItsChainOnce: a /clear keeps the pane, pid and start
+// under a new session id; the new conversation hears once who it is chained
+// with, and how to leave.
+func TestAClearedChatHearsItsChainOnce(t *testing.T) {
+	s, _ := newsTest(t, newsSessions[:3], "%1", "%2", "%3")
+	s.ChainsNotice = false
+	cleared := slices.Clone(newsSessions[:3])
+	cleared[1].SessionID = "n2-new"
+	chainSample(s, cleared...)
+	want := "[matchblox] you are chained with peer-send, three. To leave, run: matchblox unchain"
+	if got := told(s, proto.News{Pane: "%2", SessionID: "n2-new"}); got != want {
+		t.Fatalf("first news = %q, want %q", got, want)
+	}
+	if got := told(s, proto.News{Pane: "%2", SessionID: "n2-new"}); got != "" {
+		t.Fatalf("second news = %q, want none", got)
+	}
+	if got := told(s, proto.News{Pane: "%1"}); got != "" {
+		t.Fatalf("a mate heard the clear: %q", got)
 	}
 }
