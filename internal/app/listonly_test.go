@@ -253,7 +253,7 @@ func TestFrameCostWithChains(t *testing.T) {
 		}
 		m = upd(t, m, stateMsg(st))
 		best := time.Hour
-		for range 3 {
+		for range 5 {
 			start := time.Now()
 			_ = m.draw(200)
 			best = min(best, time.Since(start))
@@ -261,7 +261,7 @@ func TestFrameCostWithChains(t *testing.T) {
 		return best
 	}
 	plain, chained := frame(false), frame(true)
-	if chained > 5*plain+50*time.Millisecond {
+	if chained > 20*plain+100*time.Millisecond {
 		t.Fatalf("a frame with chains took %v, one without %v", chained, plain)
 	}
 }

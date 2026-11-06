@@ -46,7 +46,7 @@ type Config struct {
 
 // Chains are the matches in one repo that hear from each other.
 type Chains struct {
-	Notice bool   `toml:"notice"` // the same-repo line at the start of a turn
+	Notice bool   `toml:"notice"` // the same-repo line between its steps
 	Send   string `toml:"send"`   // who send reaches: "chain" or "off"
 }
 

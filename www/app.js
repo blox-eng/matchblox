@@ -555,11 +555,14 @@ onReady(() => {
   };
 
   const status = document.getElementById("chain-status");
+  let quiet;
   strike.addEventListener("click", () => {
     run();
     if (!status) return;
+    clearTimeout(quiet);
     status.textContent = ""; // a second strike announces again
     setTimeout(() => { status.textContent = "Chain lit"; }, 50);
+    quiet = setTimeout(() => { status.textContent = ""; }, still() ? 3000 : 300 + (N - 1) * STEP + 900 + N * STEP);
   });
   new IntersectionObserver(([e]) => { if (e.isIntersecting) run(); else stop(); }, { threshold: 0.2 }).observe(section);
 });

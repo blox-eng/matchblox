@@ -15,7 +15,7 @@ news between their steps. Only chain-mates can message each other.
 
 ## Goals
 
-1. Two matches in one repo each learn about the other at the start of a turn,
+1. Two matches in one repo each learn about the other between their steps,
    with no setup by the person.
 2. Chain-mates hear each other's commits, branch changes, finishes and waits,
    and are never interrupted mid-thought.
@@ -71,8 +71,8 @@ This fails, even if it runs, when:
 ## The experience
 
 1. **Strike.** The person starts sessions as today.
-2. **Notice.** When two matches work in one repo, each gets one line at the
-   start of its next turn:
+2. **Notice.** When two matches work in one repo, each gets one line between
+   its steps:
 
    ```
    [matchblox] peer-send also works in matchblox, on feat/peer-send.
@@ -85,7 +85,7 @@ This fails, even if it runs, when:
    chain of `<who>`. The request waits until `<who>`, or any match already in
    its chain, runs `matchblox chain` back toward the asker. Then the two chains
    become one chain. Until then nothing is shared, and the target hears the
-   request at its next turn:
+   request between its steps:
 
    ```
    [matchblox] docs-release asks to chain with you. To accept, run:
@@ -223,7 +223,7 @@ It uses the site's tokens and its match colours.
 
 ```toml
 [chains]
-notice = true        # the same-repo line at the start of a turn
+notice = true        # the same-repo line between its steps
 send = "chain"       # who send reaches: "chain" or "off"
 ```
 
@@ -331,4 +331,9 @@ What changed from this spec while building it:
   draws no fuse and no count.
 - **`Chain.Spark` is not saved on its own.** A spark is a moment for the
   console, not state.
+- **The notice is skipped** while a request is pending either way or either
+  side is off, and a match with no branch is named "on a detached HEAD.".
+- **A chain ask is refused while a sample missed the sessions** (`not now: …`),
+  so a match that is only unseen is not taken for gone.
+- **A cleared chat keeps its place in a chain**, matched by pane, pid and start.
 - **The landing section's second beat** says "until both sides chain".
