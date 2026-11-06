@@ -128,7 +128,8 @@ func (s *Service) requestsLocked(st *chains.Store, me chains.Member) ([]string, 
 			continue
 		}
 		told = append(told, r)
-		out = append(out, fmt.Sprintf("[matchblox] %s asks to chain with you. To accept, run:\n  matchblox chain %s", from.Name, from.Name))
+		out = append(out, fmt.Sprintf("[matchblox] %s%s asks to chain with you. To accept, run:\n  matchblox chain %s",
+			from.Name, s.elsewhereLocked(r.From, me), from.Name))
 	}
 	return out, told
 }

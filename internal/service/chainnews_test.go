@@ -502,3 +502,53 @@ func TestAPostedMessageBroadcasts(t *testing.T) {
 		t.Fatal("no broadcast followed the spark")
 	}
 }
+
+// twoRepos are newsSessions %1 and %2 of matchblox, %5 in web and %6 in a
+// folder no scan knows, with web in the git scan.
+func twoRepos(t *testing.T, chained ...string) (*Service, *headGit, []sample.Session) {
+	t.Helper()
+	sessions := append(slices.Clone(newsSessions[:2]),
+		sample.Session{Pane: "%5", PID: 205, Start: 5, SessionID: "n5", Name: "web-cart", Agent: "claude", Cwd: "/dev/web/src"},
+		sample.Session{Pane: "%6", PID: 206, Start: 6, SessionID: "n6", Name: "notes", Agent: "claude", Cwd: "/tmp/notes"},
+	)
+	s, g := newsTest(t, sessions, chained...)
+	s.mu.Lock()
+	git := gitscan.Report{Repos: append(slices.Clone(newsGit.Repos), gitscan.Repo{Path: "/dev/web", Worktrees: []gitscan.Worktree{{Path: "/dev/web"}}})}
+	s.cur.Git = &git
+	s.mu.Unlock()
+	return s, g, sessions
+}
+
+func TestNewsFromAnotherRepoNamesIt(t *testing.T) {
+	s, _, sessions := twoRepos(t, "%1", "%2", "%5", "%6")
+	s.Hook(hookOf(sessions[0], "Stop"))
+	for x, want := range map[int]string{1: "peer-send finished", 2: "peer-send finished (in matchblox)", 3: "peer-send finished (in matchblox)"} {
+		if got := inbox(s, sessions[x]); !slices.Equal(got, []string{want}) {
+			t.Errorf("%s's inbox = %q, want %q", sessions[x].Pane, got, want)
+		}
+	}
+	s.Hook(hookOf(sessions[3], "Stop"))
+	if got := inbox(s, sessions[1]); !slices.Equal(got, []string{"notes finished (in no repo)"}) {
+		t.Errorf("%%2's inbox = %q", got)
+	}
+}
+
+// TestANoRepoMatchHearsCommitsAndPostsNone: a match in no repo hears its
+// mates' commits; its own shell's commit has no worktree to read.
+func TestANoRepoMatchHearsCommitsAndPostsNone(t *testing.T) {
+	s, g, sessions := twoRepos(t, "%1", "%6")
+	g.set("/dev/matchblox-299", "c2", "peer-send")
+	g.diffs["c1 c2"] = "a.go\n"
+	ev := hookOf(sessions[0], "PostToolUse")
+	ev.Command = "git commit -m x"
+	s.Hook(ev)
+	if got := inbox(s, sessions[3]); !slices.Equal(got, []string{"peer-send committed 1 file in a.go (in matchblox)"}) {
+		t.Fatalf("notes' inbox = %q", got)
+	}
+	ev = hookOf(sessions[3], "PostToolUse")
+	ev.Command = "git commit -m y"
+	s.Hook(ev)
+	if got := inbox(s, sessions[0]); len(got) != 0 {
+		t.Fatalf("a no-repo commit posted %q", got)
+	}
+}

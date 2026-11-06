@@ -249,3 +249,15 @@ func TestNewsHeldForOneHookIsNotToldToAnother(t *testing.T) {
 		t.Fatalf("heard news came back: %q", got)
 	}
 }
+
+func TestAnAskFromAnotherRepoNamesIt(t *testing.T) {
+	s, _, sessions := twoRepos(t)
+	s.ChainsNotice = false
+	chainFrom(t, s, "%5", proto.ChainPrefix+"%1")
+	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
+	want := "[matchblox] web-cart (in web) asks to chain with you. To accept, run:\n  matchblox chain web-cart\n\n" +
+		"[matchblox] two asks to chain with you. To accept, run:\n  matchblox chain two"
+	if got := told(s, proto.News{Pane: sessions[0].Pane}); got != want {
+		t.Fatalf("news = %q, want %q", got, want)
+	}
+}

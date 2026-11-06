@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -220,6 +221,25 @@ func chainsView(st *chains.Store) *state.ChainsView {
 		v.Chains[i].Members = slices.Clone(v.Chains[i].Members)
 	}
 	return v
+}
+
+// elsewhereLocked is what a line from from to to adds when they work in
+// different repos: " (in <repo>)", or " (in no repo)". "" when they share
+// one, or either is gone. Callers hold mu.
+func (s *Service) elsewhereLocked(from, to chains.Member) string {
+	x, okFrom := s.sessionOfLocked(from)
+	y, okTo := s.sessionOfLocked(to)
+	if !okFrom || !okTo {
+		return ""
+	}
+	repo, _, _ := gitscan.RepoOf(s.cur.Git, x.Cwd)
+	if other, _, _ := gitscan.RepoOf(s.cur.Git, y.Cwd); repo == other {
+		return ""
+	}
+	if repo == "" {
+		return " (in no repo)"
+	}
+	return " (in " + filepath.Base(repo) + ")"
 }
 
 func (s *Service) sessionOfLocked(m chains.Member) (sample.Session, bool) {
