@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -18,7 +17,6 @@ import (
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
-	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
@@ -131,6 +129,12 @@ func (s *Service) chainHeads(now time.Time) {
 		return
 	}
 	st := s.chainsLocked()
+	if len(st.Chains) == 0 { // nothing to read
+		maps.DeleteFunc(s.heads, func(wt string, _ head) bool { return s.headReads[wt] == 0 })
+		maps.DeleteFunc(s.chainWaits, func(id string, _ bool) bool { return !s.queue.Waits(id) })
+		s.mu.Unlock()
+		return
+	}
 	byTree := map[string][]sample.Session{}
 	for _, x := range s.cur.Sessions {
 		if _, wt, ok := gitscan.RepoOf(s.cur.Git, x.Cwd); ok {
@@ -301,16 +305,7 @@ func (s *Service) readGit(dir string, args ...string) (string, error) {
 	if s.Git != nil {
 		return s.Git(dir, args...)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	argv := append([]string{"--no-pager", "--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.quotePath=false", "-C", dir}, args...)
-	cmd := exec.CommandContext(ctx, "git", argv...) //nolint:gosec // fixed read-only git commands, separate argv
-	var out, stderr matchOutput
-	cmd.Stdout, cmd.Stderr = &out, &stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("%w: %s", err, said.Clean(stderr.String()))
-	}
-	return said.Clean(out.String()), nil
+	return readOnlyGit(context.Background(), dir, true, append([]string{"-c", "core.quotePath=false"}, args...)...)
 }
 
 // lone runs one call of a slow job at a time, in its own goroutine: a start

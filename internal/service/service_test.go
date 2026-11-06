@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1469,6 +1470,7 @@ func TestKnownAccountsNotReadEachSample(t *testing.T) {
 	if want := []string{"default", "new", "work", "~/.claude-old"}; !reflect.DeepEqual(s.State().Accounts["claude"], want) {
 		t.Fatalf("a new account: got %v, want %v", s.State().Accounts["claude"], want)
 	}
+	snap.Sessions = slices.Clone(snap.Sessions) // the service holds the last sample's
 	snap.Sessions[1].AccountDir = filepath.Join(home, ".claude-two")
 	s.publish(snap, func(state.Doc) {})
 	if want := []string{"default", "new", "work", "~/.claude-old", "~/.claude-two"}; !reflect.DeepEqual(s.State().Accounts["claude"], want) {
@@ -1662,5 +1664,41 @@ func TestHistoryIsLoadedAgainstTheServiceClock(t *testing.T) {
 
 	if n := len(s.hist.Points); n != 2 {
 		t.Fatalf("a service whose clock is at %v loaded %d points of a file written then, want 2", at, n)
+	}
+}
+
+// TestServeWaitsForTheRunsOffTheLoop: a line typing at rest, or a HEAD
+// read, is finished before Serve returns: an exit between a line's keys
+// and its Enter would leave it as the mate's draft.
+func TestServeWaitsForTheRunsOffTheLoop(t *testing.T) {
+	for name, run := range map[string]func(s *Service) *lone{
+		"typing": func(s *Service) *lone { return &s.restRun },
+		"git":    func(s *Service) *lone { return &s.headRun },
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := newTest(t, time.Hour)
+			release := make(chan struct{})
+			var once sync.Once
+			t.Cleanup(func() { once.Do(func() { close(release) }) })
+			run(s).start(func() { <-release }) // a fake step that blocks
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			dir, _ := os.MkdirTemp("", "mb")
+			t.Cleanup(func() { os.RemoveAll(dir) })
+			listener, err := transport.Listen(filepath.Join(dir, "s.sock"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			done := make(chan error, 1)
+			go func() { done <- s.Serve(ctx, listener) }()
+			cancel()
+			select {
+			case err := <-done:
+				t.Fatalf("Serve returned while the %s step ran: %v", name, err)
+			case <-time.After(100 * time.Millisecond):
+			}
+			once.Do(func() { close(release) })
+			waitServe(t, done, context.Canceled)
+		})
 	}
 }

@@ -444,6 +444,11 @@ func (s *Service) Serve(ctx context.Context, l net.Listener) error {
 	// The sample loop can still be writing its first state file when the
 	// socket disappears during startup. Finish it before Serve returns.
 	<-runDone
+	// A line typing at rest finishes, or an exit between its keys and its
+	// Enter leaves it as the mate's draft; a HEAD read ends within git's
+	// timeout.
+	s.restRun.wait()
+	s.headRun.wait()
 	if err := context.Cause(ctx); errors.Is(err, ErrReplaced) || errors.Is(err, ErrSocketGone) {
 		return err
 	}
