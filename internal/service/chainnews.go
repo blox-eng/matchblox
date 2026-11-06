@@ -330,6 +330,52 @@ func (l *lone) start(f func()) {
 // wait returns once the run in progress, if any, ends.
 func (l *lone) wait() { l.wg.Wait() }
 
+// typingWait bounds how long Serve waits for acts that type; each step has
+// its own timeout well inside it.
+var typingWait = 5 * time.Second
+
+// inFlight counts calls in progress. Unlike a WaitGroup, a call may start
+// while another goroutine waits.
+type inFlight struct {
+	mu   sync.Mutex
+	n    int
+	idle chan struct{}
+}
+
+func (f *inFlight) add() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.n == 0 {
+		f.idle = make(chan struct{})
+	}
+	f.n++
+}
+
+func (f *inFlight) done() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.n--; f.n == 0 {
+		close(f.idle)
+	}
+}
+
+// wait returns true once no call is in progress, false after d.
+func (f *inFlight) wait(d time.Duration) bool {
+	f.mu.Lock()
+	if f.n == 0 {
+		f.mu.Unlock()
+		return true
+	}
+	idle := f.idle
+	f.mu.Unlock()
+	select {
+	case <-idle:
+		return true
+	case <-time.After(d):
+		return false
+	}
+}
+
 func (s *Service) hookSessionLocked(id string) (sample.Session, bool) {
 	for _, x := range s.cur.Sessions {
 		if x.SessionID == id && id != "" {

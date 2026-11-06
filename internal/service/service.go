@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand/v2"
 	"net"
 	"os"
@@ -281,6 +282,9 @@ type Service struct {
 	// headRun reads the HEADs of chained worktrees, restRun types the lines
 	// that wait for a rest: each one run at a time, out of the sample loop.
 	headRun, restRun lone
+	// typingActs are the acts that type into a pane now: Serve lets them
+	// finish before it returns.
+	typingActs inFlight
 	// noticed are the branches of each pair at its last notice; heardAsks
 	// the requests already told to their target. Under mu.
 	noticed   map[pair][2]string
@@ -449,6 +453,9 @@ func (s *Service) Serve(ctx context.Context, l net.Listener) error {
 	// timeout.
 	s.restRun.wait()
 	s.headRun.wait()
+	if !s.typingActs.wait(typingWait) {
+		fmt.Fprintln(os.Stderr, "matchblox: an act still typed into a pane after", typingWait, "and was cut off")
+	}
 	if err := context.Cause(ctx); errors.Is(err, ErrReplaced) || errors.Is(err, ErrSocketGone) {
 		return err
 	}

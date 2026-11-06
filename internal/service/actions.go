@@ -110,7 +110,17 @@ func picksAccount(text string) bool {
 	return n.NewAccount || (n.Account != "" && n.Account != "default")
 }
 
+// typesInto tells if act a types into a pane: a send, an answer, a pick or keys.
+func typesInto(a proto.Act) bool {
+	_, send := isSend(a)
+	return send || typedPane(a.RecID) != "" || strings.HasPrefix(a.RecID, proto.KeysPrefix)
+}
+
 func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
+	if typesInto(a) {
+		s.typingActs.add()
+		defer s.typingActs.done()
+	}
 	if !a.FromPlaced && !a.Console { // it could be any match's
 		if _, send := isSend(a); send {
 			return proto.Result{Err: unplacedSender}

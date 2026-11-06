@@ -2,6 +2,7 @@ package service
 
 import (
 	"cmp"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +21,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
+	"github.com/blox-eng/matchblox/internal/transport"
 )
 
 // peerTest is handsTest with a second session, "other" in %3, chained
@@ -976,5 +978,58 @@ func TestAQueuedLineThePromptWouldNotTakeIsDropped(t *testing.T) {
 	defer h.s.mu.Unlock()
 	if items := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts(); !slices.Equal(items, []string{"mate did not get your line: its prompt would not take it"}) {
 		t.Fatalf("the sender's inbox: %q", items)
+	}
+}
+
+// TestServeWaitsForASendThatTypes: a send typing into a mate's pane at
+// exit finishes first, or its line would stay as the mate's draft.
+func TestServeWaitsForASendThatTypes(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	unstick := make(chan struct{})
+	var once sync.Once
+	t.Cleanup(func() { once.Do(func() { close(unstick) }) })
+	h.stuck["%2"] = unstick
+	sent := make(chan proto.Result, 1)
+	go func() { sent <- h.send(t, "%2", "hi") }()
+	select {
+	case <-h.blocked:
+	case <-time.After(time.Second):
+		t.Fatal("the send did not start typing")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	dir, _ := os.MkdirTemp("", "mb")
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	listener, err := transport.Listen(filepath.Join(dir, "s.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- h.s.Serve(ctx, listener) }()
+	cancel()
+	select {
+	case err := <-done:
+		t.Fatalf("Serve returned while the send typed: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	once.Do(func() { close(unstick) })
+	waitServe(t, done, context.Canceled)
+	select {
+	case <-sent: // done before Serve returned; Run's sample may have refused its Enter
+	default:
+		t.Fatal("Serve returned before the send ended")
+	}
+}
+
+// TestInFlightWaitIsBounded: Serve's wait for typing acts ends in time.
+func TestInFlightWaitIsBounded(t *testing.T) {
+	var f inFlight
+	f.add()
+	if f.wait(50 * time.Millisecond) {
+		t.Fatal("waited for nothing")
+	}
+	f.done()
+	if !f.wait(50 * time.Millisecond) {
+		t.Fatal("an idle count still waits")
 	}
 }
