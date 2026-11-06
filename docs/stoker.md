@@ -358,8 +358,11 @@ The guard has limits:
   (`TMUX_PANE`) does not count. A process that leaves its pane's process
   tree (`setsid`, a daemon) is placed by its terminal: in an agent's pane
   it acts as that agent, elsewhere as you. One with no terminal either
-  acts as you, but its sends, answers and picks are refused (`not sent:
-  matchblox cannot tell who sends this.`). On other systems the service
+  acts as you, but its sends are refused (`not sent: matchblox cannot
+  tell who sends this. Send from a terminal, a tmux pane or the
+  console.`), and so are its answers and picks (`not answered: matchblox
+  cannot tell who answers this. Answer from a terminal, a tmux pane or
+  the console.`). On other systems the service
   has no pid, and the command's `TMUX_PANE` names its pane for every act
   but these: a send, an answer or a pick from the command line is refused
   there, and the console's still go.

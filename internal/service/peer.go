@@ -16,6 +16,9 @@ import (
 // would pass for the person.
 const unplacedSender = "not sent: matchblox cannot tell who sends this. Send from a terminal, a tmux pane or the console."
 
+// unplacedAnswerer refuses an answer or a pick from such a process.
+const unplacedAnswerer = "not answered: matchblox cannot tell who answers this. Answer from a terminal, a tmux pane or the console."
+
 // callerPane is the pane of the client process pid: its process tree's,
 // else its terminal's when an agent runs there, for an agent's process
 // that left the tree. "" for a person's terminal outside every agent's

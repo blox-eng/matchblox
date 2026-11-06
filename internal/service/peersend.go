@@ -36,6 +36,10 @@ const peerRetry = ": try again when it is idle, or write the message to a file a
 
 const sendOff = `send is off on this host: [chains] send = "off"`
 
+// didNotGet is what the sender of a waiting line hears when it is dropped
+// before it went: who did not get it, and why.
+func didNotGet(who, why string) string { return who + " did not get your line: " + why }
+
 // peerShowWait is how long a typed line has to show in the prompt before
 // matchblox clears it.
 var peerShowWait = 2 * time.Second
@@ -94,17 +98,24 @@ func (s *Service) peerSend(ctx context.Context, sender sample.Session, pane stri
 	if err != nil {
 		return proto.Result{Err: err.Error()}
 	}
-	name, tag := tagName(sender), peerTag(sender)
+	tag := peerTag(sender)
 	line := tag + " " + a.Text
-	rec := peerRecord{At: now, From: name, FromPane: a.From, To: x.Name, ToPane: pane, Len: len(a.Text), SHA256: sum(a.Text)}
+	rec := peerRecord{At: now, From: sender.Name, FromPane: a.From, To: x.Name, ToPane: pane, Len: len(a.Text), SHA256: sum(a.Text)}
 	queued := proto.Result{Note: "queued for " + x.Name + "'s next step"}
+	codex := x.Agent == "codex"
+	// A Codex that rests takes one typed line at a time: a send while one
+	// types waits for its next rest.
+	typing := codex && s.resting(pane) && !s.peers.waits(memberOf(x)) && s.peers.claim(pane)
+	if typing {
+		defer s.peers.unclaim(pane)
+	}
 	switch {
-	case !readsPrompt[x.Agent], x.Agent != "codex" && !s.resting(pane):
+	case !readsPrompt[x.Agent], !codex && !s.resting(pane):
 		s.postMessage(chainID, x, line, now)
 		rec.Via, rec.Result = "inbox", "queued"
 		s.logPeer(rec)
 		return queued
-	case x.Agent == "codex" && (!s.resting(pane) || s.peers.waits(memberOf(x))):
+	case codex && !typing:
 		s.peers.queue(peerLine{from: memberOf(sender), to: memberOf(x), line: line, tag: tag, rec: rec})
 		s.spark(chainID, now)
 		rec.Via, rec.Result = "at rest", "queued"
@@ -147,22 +158,25 @@ func (s *Service) deliverAtRest(now time.Time) {
 			continue
 		}
 		why := ""
-		if _, chained := s.mateChain(l.from, l.to); !chained || s.ChainsSend == "off" {
+		if _, chained := s.mateChain(l.from, l.to); !chained {
 			why = "you are no longer chained"
+		} else if s.ChainsSend == "off" {
+			why = "sends are off on this host"
 		} else if now.Sub(l.rec.At) >= peerStale {
 			why = fmt.Sprintf("it waited %d minutes and went stale", int(peerStale.Minutes()))
 		}
 		if why != "" {
 			s.peers.drop(l.n)
 			s.mu.Lock()
-			s.chainsLocked().Post(l.from, x.Name+" did not get your line: "+why, now)
+			s.chainsLocked().Post(l.from, didNotGet(x.Name, why), now)
 			s.mu.Unlock()
 			continue
 		}
-		if !s.resting(x.Pane) {
+		if !s.resting(x.Pane) || !s.peers.claim(x.Pane) {
 			continue
 		}
 		res, typed, cleared := s.typeLine(context.Background(), x, l.line, l.tag)
+		s.peers.unclaim(x.Pane)
 		if !typed {
 			continue
 		}
@@ -173,9 +187,16 @@ func (s *Service) deliverAtRest(now time.Time) {
 			continue
 		}
 		s.peers.drop(l.n)
-		if cleared {
+		note := ""
+		switch {
+		case cleared:
+			note = fmt.Sprintf("%s could not take your line: it did not show after %d tries", x.Name, peerTries)
+		case res.Err != "":
+			note = didNotGet(x.Name, "matchblox could not clear it")
+		}
+		if note != "" {
 			s.mu.Lock()
-			s.chainsLocked().Post(l.from, fmt.Sprintf("%s could not take your line: it did not show after %d tries", x.Name, peerTries), now)
+			s.chainsLocked().Post(l.from, note, now)
 			s.mu.Unlock()
 		}
 	}
@@ -350,7 +371,7 @@ func (s *Service) peerReady(pane string, x sample.Session) error {
 // checkPeerText refuses text that is not one line: a newline, a control
 // key, a line or paragraph separator, or a hidden format character (a
 // bidi control, a zero-width space) that would make the line read as
-// another.
+// another. The zero-width joiner of an emoji sequence passes.
 func checkPeerText(text string) error {
 	if err := panes.CheckAnswer(text); err != nil {
 		return errors.New(strings.Replace(err.Error(), "the answer", "the message", 1))
@@ -362,7 +383,8 @@ func checkPeerText(text string) error {
 }
 
 func notInALine(r rune) bool {
-	return unicode.IsControl(r) || r == 0x2028 || r == 0x2029 || unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Bidi_Control, r)
+	const zwj = 0x200d
+	return unicode.IsControl(r) || r == 0x2028 || r == 0x2029 || unicode.Is(unicode.Cf, r) && r != zwj || unicode.Is(unicode.Bidi_Control, r)
 }
 
 // tagName is the sender for its tag: its name, without a character that
@@ -400,14 +422,35 @@ type peerLine struct {
 	tries     int
 }
 
-// peerSends are the peer sends of the last hour, oldest first, and the
-// lines that wait for a rest. mu is held only to read or change them, never
-// while a send types.
+// peerSends are the peer sends of the last hour, oldest first, the lines
+// that wait for a rest, and the Codex panes a line types into now. mu is
+// held only to read or change them, never while a send types.
 type peerSends struct {
 	mu      sync.Mutex
 	sent    []peerSent
 	waiting []peerLine
+	typing  map[string]bool
 	last    uint64
+}
+
+// claim takes pane for one typed line; false when a line types there now.
+func (p *peerSends) claim(pane string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.typing[pane] {
+		return false
+	}
+	if p.typing == nil {
+		p.typing = map[string]bool{}
+	}
+	p.typing[pane] = true
+	return true
+}
+
+func (p *peerSends) unclaim(pane string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.typing, pane)
 }
 
 // reserve spends a slot of the limits for a send from to to, or says when

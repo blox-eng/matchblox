@@ -140,11 +140,13 @@ hears it at its next step. One at rest gets it typed into its prompt, which
 wakes it. Each pair sends at most one message every 30 seconds, and a match
 sends at most 20 an hour. `[chains] send = "off"` turns these sends off.
 
-A send from a terminal, a tmux pane or the console goes as before. A send,
-an answer or a pick from a process with neither a pane nor a terminal (a
-cron job, a service, a `setsid` or `nohup` process) is refused with `not
-sent: matchblox cannot tell who sends this. Send from a terminal, a tmux
-pane or the console.` On systems where the service cannot read who is on
+A send from a terminal, a tmux pane or the console goes as before. A send
+from a process with neither a pane nor a terminal (a cron job, a service, a
+`setsid` or `nohup` process) is refused with `not sent: matchblox cannot
+tell who sends this. Send from a terminal, a tmux pane or the console.` An
+answer or a pick from one is refused with `not answered: matchblox cannot
+tell who answers this. Answer from a terminal, a tmux pane or the
+console.` On systems where the service cannot read who is on
 its socket, every send, answer and pick from the command line is refused,
 the console's still go, and no hook hears news. A send from a match the
 stoker drives goes as a stoker step, not through the chain gate: it counts

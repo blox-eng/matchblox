@@ -111,8 +111,13 @@ func picksAccount(text string) bool {
 }
 
 func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
-	if typedPane(a.RecID) != "" && !a.FromPlaced && !a.Console {
-		return proto.Result{Err: unplacedSender} // it could be any match's
+	if !a.FromPlaced && !a.Console { // it could be any match's
+		if _, send := isSend(a); send {
+			return proto.Result{Err: unplacedSender}
+		}
+		if typedPane(a.RecID) != "" {
+			return proto.Result{Err: unplacedAnswerer}
+		}
 	}
 	if pane, ok := strings.CutPrefix(a.RecID, "switch-preview:"); ok {
 		// Like sessions and peek, this reads without the action gate and

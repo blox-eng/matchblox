@@ -389,7 +389,7 @@ func TestPeerSendIsLogged(t *testing.T) {
 		t.Fatalf("%s: %v", b, err)
 	}
 	sum := sha256.Sum256([]byte(text))
-	if rec.From != "other %3" || rec.FromPane != "%3" || rec.To != "work" || rec.ToPane != "%1" || !rec.At.Equal(night0) ||
+	if rec.From != "other" || rec.FromPane != "%3" || rec.To != "work" || rec.ToPane != "%1" || !rec.At.Equal(night0) ||
 		rec.Len != len(text) || rec.SHA256 != hex.EncodeToString(sum[:]) || rec.Result != "sent" {
 		t.Fatalf("%+v", rec)
 	}
@@ -634,11 +634,60 @@ func TestTheTagNamesThePane(t *testing.T) {
 
 func TestHiddenFormatCharactersAreRefused(t *testing.T) {
 	h := newSendHost(t, idleMate)
-	if res := h.send(t, "%2", "merge​now"); !strings.Contains(res.Err, "one line") {
+	if res := h.send(t, "%2", "merge\u200bnow"); !strings.Contains(res.Err, "one line") {
 		t.Fatalf("%+v", res)
 	}
 	if k := h.keys(); len(k) != 0 {
 		t.Fatalf("ran %q", k)
+	}
+}
+
+// An emoji sequence joins its parts with U+200D: it is one line, typed.
+func TestAZeroWidthJoinerIsAllowed(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	text := "ship it \U0001F469\u200d\U0001F4BB"
+	if res := h.send(t, "%2", text); res.Err != "" {
+		t.Fatalf("%+v", res)
+	}
+	if got := typedLine(h.keys()); !slices.Equal(got, []string{"[from peer-send %1] " + text}) {
+		t.Fatalf("typed %q", got)
+	}
+}
+
+// Two sends at once to one resting Codex: the first types, the second
+// waits for the next rest instead of for the pane.
+func TestTwoSendsAtOnceToARestingCodexQueueTheSecond(t *testing.T) {
+	codex := sample.Session{Agent: "codex", Status: "idle", Idle: 5 * time.Minute}
+	h := newSendHost(t, codex)
+	unstick := make(chan struct{})
+	h.stuck["%2"] = unstick
+	first := make(chan proto.Result, 1)
+	go func() { first <- h.send(t, "%2", "one") }()
+	select {
+	case <-h.blocked:
+	case <-time.After(time.Second):
+		t.Fatal("the first send did not start typing")
+	}
+	done := make(chan proto.Result, 1)
+	go func() { // from mate-2: one sender has to wait PeerPairEvery
+		done <- h.s.act(t.Context(), proto.Act{RecID: "message:%2", Confirm: "y", Text: "two", From: "%4", FromKnown: true, FromPlaced: true})
+	}()
+	var second proto.Result
+	select {
+	case second = <-done:
+	case <-time.After(time.Second):
+		close(unstick)
+		t.Fatal("the second send waits for the first")
+	}
+	close(unstick)
+	if res := <-first; res.Err != "" {
+		t.Fatalf("the first: %+v", res)
+	}
+	if second.Err != "" || second.Note != "queued for mate's next step" {
+		t.Fatalf("the second: %+v", second)
+	}
+	if !h.s.peers.waits(chains.Member{SessionID: "s2"}) {
+		t.Fatal("the second line does not wait")
 	}
 }
 
@@ -764,6 +813,7 @@ func TestAQueuedLineOutsideTheChainIsDropped(t *testing.T) {
 		},
 		"off": func(s *Service) { s.ChainsSend = "off" },
 	} {
+		why := map[string]string{"left": "you are no longer chained", "off": "sends are off on this host"}[name]
 		t.Run(name, func(t *testing.T) {
 			codex := sample.Session{Agent: "codex", Status: "busy", Busy: true}
 			h := newSendHost(t, codex)
@@ -780,7 +830,7 @@ func TestAQueuedLineOutsideTheChainIsDropped(t *testing.T) {
 			}
 			h.s.mu.Lock()
 			defer h.s.mu.Unlock()
-			if items := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts(); !slices.Equal(items, []string{"mate did not get your line: you are no longer chained"}) {
+			if items := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts(); !slices.Equal(items, []string{"mate did not get your line: " + why}) {
 				t.Fatalf("the sender's inbox: %q", items)
 			}
 		})
@@ -828,6 +878,11 @@ func TestAQueuedLineThatMayRemainIsDropped(t *testing.T) {
 	if got := typedLine(h.keys()); len(got) != 1 {
 		t.Fatalf("typed %q", got)
 	}
+	h.s.mu.Lock()
+	defer h.s.mu.Unlock()
+	if items := h.s.Chains.Take(chains.Member{SessionID: "s1"}).Texts(); !slices.Equal(items, []string{"mate did not get your line: matchblox could not clear it"}) {
+		t.Fatalf("the sender's inbox: %q", items)
+	}
 }
 
 // A sender with no pane and no terminal (setsid, nohup, a daemon) could be
@@ -864,22 +919,33 @@ func TestASendWithNoPeerCredentialsIsRefused(t *testing.T) {
 }
 
 // An answer or a pick types into a pane as a send does: from a process
-// with no pane and no terminal it is refused the same way, and the
-// console's still goes through.
+// with no pane and no terminal it is refused the same way, in its own
+// words, and the console's still goes through.
 func TestAnUnplacedAnswerOrPickIsRefused(t *testing.T) {
 	for _, recID := range []string{"answer:%2", proto.PickPrefix + "%2"} {
 		h := newSendHost(t, idleMate)
 		h.s.PeerPane = func(int) string { return "" }
 		h.s.TTYPane = func(int) (string, bool) { return "", false }
 		act := proto.Act{RecID: recID, Confirm: "y", Text: "1"}
-		if res := actOver(t, h.s, 777, proto.ClientCLI, act); res.Err != unplacedSender {
-			t.Fatalf("%s: %+v", recID, res)
+		if want := "not answered: matchblox cannot tell who answers this. Answer from a terminal, a tmux pane or the console."; actOver(t, h.s, 777, proto.ClientCLI, act).Err != want {
+			t.Fatalf("%s: want %q", recID, want)
 		}
 		if k := h.keys(); len(k) != 0 {
 			t.Fatalf("%s: ran %q", recID, k)
 		}
-		if res := actOver(t, h.s, 777, proto.ClientConsole, act); res.Err == unplacedSender {
+		if res := actOver(t, h.s, 777, proto.ClientConsole, act); res.Err == unplacedAnswerer {
 			t.Fatalf("%s: the console's was refused", recID)
 		}
+	}
+}
+
+// A message with no pane is a send too: unplaced, it is refused before it
+// can reach any pane.
+func TestAnUnplacedMessageWithNoPaneIsRefused(t *testing.T) {
+	h := newSendHost(t, idleMate)
+	h.s.PeerPane = func(int) string { return "" }
+	h.s.TTYPane = func(int) (string, bool) { return "", false }
+	if res := actOver(t, h.s, 777, proto.ClientCLI, proto.Act{RecID: "message:", Confirm: "y", Text: "hi"}); res.Err != unplacedSender {
+		t.Fatalf("%+v", res)
 	}
 }
