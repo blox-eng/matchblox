@@ -33,6 +33,7 @@ the bottom shows the keys of the open tab. A tap on a key presses it.
 | `Space` | Marks a worktree that is safe to remove (Git). |
 | `X` | Marks every worktree that is safe to remove (Git). |
 | `f` | Turns [the stoker](stoker.md) off while it is on. While it rests, turns it back on. Otherwise opens the launch sheet for a day run. |
+| `F` | Opens the start sheet of the selected row's chain (Sessions). The sheet takes the order and the gos of a stoker for that chain. On a chain with a stoker, `F` does what `a` does on its head row. A tap on the fuse does the same. |
 | `n` | Opens the launch sheet for a night: the stoker runs until the morning, then turns itself off. While a night runs, `n` ends it. |
 | `o` | Gives a new order while a day run is on: the launch sheet opens with the run's gos, and the order goes to the stoker as one line. The run goes on, and done steps stay done. A night is sealed: `n` stops it first. |
 | `e` | Shows or hides the agents that exited and wait for their parent (Sessions). |

@@ -360,3 +360,48 @@ func TestTheCardQuotesTheLatestOrder(t *testing.T) {
 	}
 	fitsWidth(t, sendKey(m, "c").(Model), 60)
 }
+
+// TestSheetSendsStokerNew: the start sheet of a chain with no stoker sends
+// stoker:new with the chain, the words and the goes; Esc sends nothing,
+// and a refusal stays in the sheet.
+func TestSheetSendsStokerNew(t *testing.T) {
+	m, f := headModel(t, 160, fuseState(t, mockupChain))
+	choose(&m, pidOf(m, "hearth-api"))
+	closed := sendKey(sendKey(m, "F"), "esc").(Model)
+	if closed.sheet != nil || len(f.acts()) != 0 {
+		t.Fatalf("esc: sheet %v, acts %+v", closed.sheet, f.acts())
+	}
+	next := typed(sendKey(m, "F"), "merge on green")
+	for _, k := range []string{"tab", "space", "tab"} {
+		next, _ = next.Update(keyPress(k))
+	}
+	if !strings.Contains(screen(next), "Enter starts") && !strings.Contains(screen(next), "⏎ start") {
+		t.Fatalf("the foot does not start:\n%s", screen(next))
+	}
+	next, cmd := press(next, tea.KeyEnter)
+	if cmd == nil {
+		t.Fatal("enter sent nothing")
+	}
+	cmd()
+	a := f.acts()
+	if len(a) != 1 || a[0].RecID != "stoker:new" || a[0].Text != `{"chain":"c1","words":"merge on green","grants":["merge"]}` {
+		t.Fatalf("acts %+v", a)
+	}
+	refused := "the family has its 4 chain stokers: max_chains. Quit one on the STOKER tab first."
+	next, _ = next.Update(resultMsg(proto.Result{ActID: next.(Model).sheet.act, Err: refused}))
+	if s := screen(next); next.(Model).sheet == nil || !strings.Contains(strings.Join(strings.Fields(s), " "), "the family has its 4 chain stokers") {
+		t.Fatalf("the refusal is not in the sheet:\n%s", s)
+	}
+}
+
+// TestSheetOrdersAUnitWhoseRunIsOff: a chain whose unit rests gets
+// stoker:order-chain.
+func TestSheetOrdersAUnitWhoseRunIsOff(t *testing.T) {
+	m, f := headModel(t, 160, headState(t, proto.StokerView{PaneUp: true}, true))
+	next := typed(sendKey(pick(t, m, stokerPane), "a"), "go")
+	_, cmd := press(next, tea.KeyEnter)
+	cmd()
+	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:order-chain" {
+		t.Fatalf("acts %+v", a)
+	}
+}

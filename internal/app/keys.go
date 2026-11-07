@@ -66,39 +66,40 @@ func defaultKeys() keymaps {
 	return keymaps{
 		global: globalKeys{Quit: bind(ks("ctrl+c"), "ctrl+c", "quit")},
 		main: mainKeys{
-			Stoker:    bind(ks("c"), "c", "stoker"),
-			Quit:      bind(ks("q"), "q", "quit"), // ctrl+c is global.Quit
-			NextTab:   bind(ks("tab"), "tab", "next"),
-			PrevTab:   bind(ks("shift+tab"), "shift+tab", "back"),
-			Tabs:      bind(slices.Clip(digits1to9[:len(tabNames)]), "1-"+strconv.Itoa(len(tabNames)), "tab"),
-			Search:    bind(ks("/"), "/", "find"),
-			Back:      bind(ks("esc"), "esc", "clear"),
-			Sort:      bind(ks("s"), "s", "sort"),
-			SortBack:  bind(ks("S", "shift+s"), "S", "sort back"),
-			Group:     bind(ks("g"), "g", "group by"),
-			Park:      bind(ks("z"), "z", "park"),
-			Mark:      bind(ks("space", " "), "␣", "mark"),
-			Exited:    bind(ks("e"), "e", "show exited"),
-			MarkSafe:  bind(ks("X", "shift+x"), "X", "all safe"),
-			QuitAgent: bind(ks("Q", "shift+q"), "Q", "quit it"),
-			Up:        bind(ks("up", "k"), "↑↓", "move"),
-			Down:      bind(ks("down", "j"), "↑↓", "move"),
-			Open:      bind(ks("enter"), "⏎", "open"),
-			Second:    bind(ks("x"), "x", "close"),
-			New:       bind(ks("N", "shift+n"), "N", "new"),
-			Switch:    bind(ks("A", "shift+a"), "A", "switch"),
-			Grant:     bind(ks("y"), "y", "give the go"),
-			Dismiss:   bind(ks("d"), "d", "dismiss"),
-			Fold:      bind(ks("h"), "h", "fold recs"),
-			Ships:     bind(ks("p"), "p", "ships"),
-			Dock:      bind(ks("u"), "u", "dock"),
-			ListOnly:  bind(ks("v"), "v", "list only"),
-			Stoke:     bind(ks("f"), "f", "stoker"),
-			Night:     bind(ks("n"), "n", "stop night"),
-			Order:     bind(ks("o"), "o", "new order"),
-			Rename:    bind(ks("r"), "r", "rename"),
-			Chat:      bind(ks("a", "right"), "a", "chat"),
-			Jump:      bind(ks("ctrl+o"), "ctrl+o", "into tmux"),
+			Stoker:     bind(ks("c"), "c", "stoker"),
+			Quit:       bind(ks("q"), "q", "quit"), // ctrl+c is global.Quit
+			NextTab:    bind(ks("tab"), "tab", "next"),
+			PrevTab:    bind(ks("shift+tab"), "shift+tab", "back"),
+			Tabs:       bind(slices.Clip(digits1to9[:len(tabNames)]), "1-"+strconv.Itoa(len(tabNames)), "tab"),
+			Search:     bind(ks("/"), "/", "find"),
+			Back:       bind(ks("esc"), "esc", "clear"),
+			Sort:       bind(ks("s"), "s", "sort"),
+			SortBack:   bind(ks("S", "shift+s"), "S", "sort back"),
+			Group:      bind(ks("g"), "g", "group by"),
+			Park:       bind(ks("z"), "z", "park"),
+			Mark:       bind(ks("space", " "), "␣", "mark"),
+			Exited:     bind(ks("e"), "e", "show exited"),
+			MarkSafe:   bind(ks("X", "shift+x"), "X", "all safe"),
+			QuitAgent:  bind(ks("Q", "shift+q"), "Q", "quit it"),
+			Up:         bind(ks("up", "k"), "↑↓", "move"),
+			Down:       bind(ks("down", "j"), "↑↓", "move"),
+			Open:       bind(ks("enter"), "⏎", "open"),
+			Second:     bind(ks("x"), "x", "close"),
+			New:        bind(ks("N", "shift+n"), "N", "new"),
+			Switch:     bind(ks("A", "shift+a"), "A", "switch"),
+			Grant:      bind(ks("y"), "y", "give the go"),
+			Dismiss:    bind(ks("d"), "d", "dismiss"),
+			Fold:       bind(ks("h"), "h", "fold recs"),
+			Ships:      bind(ks("p"), "p", "ships"),
+			Dock:       bind(ks("u"), "u", "dock"),
+			ListOnly:   bind(ks("v"), "v", "list only"),
+			Stoke:      bind(ks("f"), "f", "stoker"),
+			StokeChain: bind(ks("F", "shift+f"), "F", "stoke chain"),
+			Night:      bind(ks("n"), "n", "stop night"),
+			Order:      bind(ks("o"), "o", "new order"),
+			Rename:     bind(ks("r"), "r", "rename"),
+			Chat:       bind(ks("a", "right"), "a", "chat"),
+			Jump:       bind(ks("ctrl+o"), "ctrl+o", "into tmux"),
 		},
 		form: formKeys{
 			Close: bind(ks("esc"), "esc", ""),
@@ -209,14 +210,14 @@ type mainKeys struct {
 	Stoker, Quit, NextTab, PrevTab, Tabs, Search, Back, Sort, SortBack bkey.Binding
 	Group, Park, Mark, Exited, MarkSafe, QuitAgent, Up, Down, Open     bkey.Binding
 	Second, New, Switch, Grant, Dismiss, Fold, Ships, Dock             bkey.Binding
-	Stoke, Night, Order, Rename, Chat, Jump, ListOnly                  bkey.Binding
+	Stoke, StokeChain, Night, Order, Rename, Chat, Jump, ListOnly      bkey.Binding
 }
 
 func (k mainKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Stoker, k.Quit, k.NextTab, k.PrevTab, k.Tabs, k.Search, k.Back, k.Sort, k.SortBack,
 		k.Group, k.Park, k.Mark, k.Exited, k.MarkSafe, k.QuitAgent, k.Up, k.Down, k.Open,
 		k.Second, k.New, k.Switch, k.Grant, k.Dismiss, k.Fold, k.Ships, k.Dock,
-		k.Stoke, k.Night, k.Order, k.Rename, k.Chat, k.Jump, k.ListOnly}
+		k.Stoke, k.StokeChain, k.Night, k.Order, k.Rename, k.Chat, k.Jump, k.ListOnly}
 }
 
 // formKeys are the new-session, switch and rename form. Down and Up go to

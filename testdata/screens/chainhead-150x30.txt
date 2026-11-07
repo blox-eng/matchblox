@@ -1,0 +1,30 @@
+ ▰ matchblox                                                                                                                         ● 1 wait for you
+ SESSIONS 6    ships    machine    git    history    panes    stoker
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ WAITS FOR YOU · 1 · chain of 3                             │ kindle-web · asks
+ ✦╮ stoker   kindle-web · plan 2/5                          │ ✻ team@example.com · Max
+▌╿┤ kindle-web                          asks       1m   56% │
+ ✦┤ hearth-api                          busy            79% │
+ ╿╯ ember-billing                       idle       3m   32% │
+ WORKING · 1                                                │
+ ✦  flint-auth                          busy            41% │
+ QUIET · 1                                                  │
+ │  spark-docs                          idle       9m   88% │
+ + start a new session                                      │
+                                                            │
+ 1 without an agent: shell:1.1 zsh                          │
+                                                            │
+ RECOMMENDATIONS · 7 · h hides                              │
+ ▲ The week runs short: compact spark-docs                  │
+ ↓ 6 more                                                   │
+────────────────────────────────────────────────────────────│
+ USAGE                                                      │
+ ✻ Claude Max    5h   ▰▰▰▰▰▰▰▱ 84%  · Fri 01:20             │
+                 wk   ▰▰▰▰▰▰▰▱ 82%  · Mon 09:00             │
+                 out Fri ~21:00                             │
+ · Google login  not measured · OpenCode keeps no limits    │
+ ❋ OpenAI Plus   5h   ▰▰▰▱▱▱▱▱ 40%  · 23:59                 │
+                 wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00             │
+                 lasts the week                             │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ↑↓ move  ⏎ chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit  list only v                            sampled 0s ago

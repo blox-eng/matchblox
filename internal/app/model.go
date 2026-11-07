@@ -300,9 +300,10 @@ type Model struct {
 	queue      []queue.Item
 	doors      []doors.Door // the open doors, above the sessions
 	stoker     *proto.StokerView
-	doorPick   string // the selected door
-	doorAt     int    // its row, for the door after it when it folds
-	previewTop int    // the first line of a door's diff on screen
+	stokers    []state.ChainStoker // the chain stokers, for the head rows of their chains
+	doorPick   string              // the selected door
+	doorAt     int                 // its row, for the door after it when it folds
+	previewTop int                 // the first line of a door's diff on screen
 	paneSel    int
 	screen     proto.Screen       // the last capture of the watched pane
 	watching   string             // the pane the service sends, or ""
@@ -712,7 +713,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		st := proto.State(msg)
 		m.queue = st.Queue
 		toast := m.stokerNews(st.Stoker)
-		m.stoker, m.stokerServer = st.Stoker, st.StokerServer
+		m.stoker, m.stokerServer, m.stokers = st.Stoker, st.StokerServer, st.Stokers
 		if !m.stokerClaims() {
 			m.dockSwitched = false
 		}
@@ -1360,6 +1361,11 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if b, ok := m.selectedBlocked(); ok {
 			return m.unblockHost(b)
 		}
+		if s, ok := m.selectedSession(); ok {
+			if u, head := m.headRow(s); head {
+				return m.headAct(s, u)
+			}
+		}
 		if s, ok := m.selectedSession(); ok && s.Host == m.opt.Host {
 			return m.openChat(), nil
 		}
@@ -1388,7 +1394,16 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabShips {
 			return m.shipChat(), nil
 		}
+		if s, ok := m.selectedSession(); ok {
+			if u, head := m.headRow(s); head {
+				return m.headAct(s, u)
+			}
+		}
 		return m.openChat(), nil
+	case bkey.Matches(k, mk.StokeChain):
+		if m.tab == tabSessions {
+			return m.stokeChain()
+		}
 	case bkey.Matches(k, mk.Jump):
 		return m.intoPane(), nil
 	case bkey.Matches(k, mk.Dismiss):
