@@ -162,7 +162,7 @@ func (s *Service) quitAct(ctx context.Context, u *stokerUnit, a proto.Act) proto
 	}
 	if u != nil {
 		s.mu.Lock()
-		u.startedAt, u.brief = time.Time{}, ""
+		u.startedAt, u.brief, u.dropped = time.Time{}, nil, ""
 		s.mu.Unlock()
 	}
 	s.refreshStoker()

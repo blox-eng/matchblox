@@ -62,6 +62,8 @@ func (s *Service) orderable(u *stokerUnit, a proto.Act) error {
 		switch verb {
 		case "plan", "step", "when":
 			return nil
+		case "order-chain":
+			return nil // the host's own: chainOrderAct checks it comes from its pane
 		case "grant":
 			return errors.New("the stoker does not give itself the go")
 		case "order":

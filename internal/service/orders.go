@@ -143,10 +143,13 @@ const orderName = "stoker-order.md"
 // a run that ended meanwhile did not take.
 func (s *Service) dayOrder(ctx context.Context, u *stokerUnit, words string, grants []string, now time.Time) error {
 	pane, line := "", ""
+	queue := s.briefWaits(u)
 	if s.agentOn() {
-		var err error
-		if pane, err = s.stokerAgent(u); err != nil {
-			return err
+		if !queue {
+			var err error
+			if pane, err = s.stokerAgent(u); err != nil {
+				return err
+			}
 		}
 		line = stoker.NewOrder(words)
 		if utf8.RuneCountInString(line) > panes.MaxAnswer {
@@ -164,7 +167,10 @@ func (s *Service) dayOrder(ctx context.Context, u *stokerUnit, words string, gra
 		if !m.On || m.Nightly || m.Order == nil || m.Order.State != stoker.OrderRunning {
 			return m, errors.New("the run changed meanwhile: look at it again")
 		}
-		if pane != "" {
+		switch {
+		case queue && line != "":
+			s.queueBehindBrief(u, line, now)
+		case pane != "":
 			if err := s.typeInto(ctx, pane, line); err != nil {
 				return m, err
 			}
@@ -179,6 +185,137 @@ func (s *Service) dayOrder(ctx context.Context, u *stokerUnit, words string, gra
 		m.Order = &o
 		return m, nil
 	})
+}
+
+// briefWaits: chain unit u's brief is not typed yet, or was dropped. An
+// order then waits behind it.
+func (s *Service) briefWaits(u *stokerUnit) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(u.brief) > 0 || u.dropped != ""
+}
+
+// queueBehindBrief queues line for unit u's agent, behind its brief: a
+// dropped brief is queued again first, and waits for the agent anew.
+func (s *Service) queueBehindBrief(u *stokerUnit, line string, now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if u.dropped != "" {
+		u.brief = append([]string{u.dropped}, u.brief...)
+		u.dropped = ""
+	}
+	if len(u.brief) == 0 {
+		u.briefAt = now
+	}
+	u.brief = append(u.brief, line)
+}
+
+// sealedFamily refuses the person's order to a chain while a night runs.
+const sealedFamily = "the night is sealed: answer the stoker's prompts, or give the order in the morning"
+
+// chainOrderAsk is what stoker:order-chain sends: the chain (any member,
+// its name or its id), the order's words and its goes. No "grants" at all
+// (nil, not empty) gives the host's own goes when the host orders.
+type chainOrderAsk struct {
+	Chain  string   `json:"chain"`
+	Words  string   `json:"words"`
+	Grants []string `json:"grants"`
+}
+
+// chainOrderAct gives a chain an order (stoker:order-chain): the host
+// stoker's, from its own pane, or the person's, at a console or in a shell
+// of their own. No other agent's pane gives one.
+func (s *Service) chainOrderAct(ctx context.Context, a proto.Act) proto.Result {
+	giver := "person"
+	if u, stokerPane := s.unitOf(a); stokerPane {
+		switch {
+		case u == nil:
+			return proto.Result{Err: stokersOwn}
+		case u != s.hostUnit():
+			return proto.Result{Err: "a chain stoker gives no orders"}
+		}
+		giver = "host"
+	} else if _, ok := s.sessionAt(a.From); ok { // a console hello does not make an agent's pane a person's
+		return proto.Result{Err: notTheBuilders}
+	}
+	var ask chainOrderAsk
+	if err := json.Unmarshal([]byte(a.Text), &ask); err != nil {
+		return proto.Result{Err: "the order does not read: " + err.Error()}
+	}
+	return s.chainOrder(ctx, ask.Chain, ask.Words, ask.Grants, giver)
+}
+
+// chainOrder gives the chain of who an order, from giver ("person" or
+// "host"). A chain with no stoker gets one. A stoker whose run is on takes
+// it as a new order, and one whose run is off as a new run. The order's
+// goes replace the unit's. The person gives no order while a night runs;
+// the host does. The host's card says each order, and each refusal of its
+// own.
+func (s *Service) chainOrder(ctx context.Context, who, words string, grants []string, giver string) proto.Result {
+	host := s.hostUnit()
+	if host == nil {
+		return proto.Result{Err: "this service keeps no stoker"}
+	}
+	if m := host.store.Mode(); giver == "person" && m.On && m.Nightly {
+		return proto.Result{Err: sealedFamily}
+	}
+	words = strings.TrimSpace(words)
+	if grants == nil && giver == "host" {
+		grants = s.grantsOf(host)
+	}
+	name, err := s.giveChainOrder(ctx, who, words, grants, giver)
+	now := s.now()
+	if err != nil {
+		if giver == "host" {
+			e := familyLine(now, err.Error())
+			e.ID, e.State = "refused@"+now.UTC().Format(time.RFC3339Nano), stoker.StepFailed
+			_ = host.store.Append(e)
+			s.refreshStoker()
+		}
+		return proto.Result{Err: err.Error()}
+	}
+	e := familyLine(now, fmt.Sprintf("ordered chain %s: %s", name, words))
+	e.ID = "ordered@" + now.UTC().Format(time.RFC3339Nano) // not the start's line of the same moment
+	_ = host.store.Append(e)
+	s.refreshStoker()
+	return proto.Result{Note: fmt.Sprintf("ordered chain %s", name)}
+}
+
+// giveChainOrder routes an order to the stoker of who's chain, and names
+// the chain.
+func (s *Service) giveChainOrder(ctx context.Context, who, words string, grants []string, giver string) (string, error) {
+	_, grants, err := s.givenGoes(grants, giver)
+	if err != nil {
+		return "", err
+	}
+	c, _, _, ok := s.chainNamed(who)
+	var u *stokerUnit
+	if ok {
+		u = s.unitOfChain(c.ID)
+	}
+	switch {
+	case u == nil:
+		if u, err = s.startChainStoker(ctx, who, words, grants, giver); err != nil {
+			return "", err
+		}
+	case !u.store.Mode().On:
+		err = s.rerunChain(ctx, u, words, grants, giver)
+	default:
+		err = s.orderUnit(ctx, u, words, grants, giver)
+	}
+	if err != nil {
+		return "", err
+	}
+	return s.chainNameOf(u.link.Chain), nil
+}
+
+// orderUnit is a new order to chain unit u, whose run is on: today's order
+// by day, then the order's giver and goes in its link.
+func (s *Service) orderUnit(ctx context.Context, u *stokerUnit, words string, grants []string, giver string) error {
+	if err := s.dayOrder(ctx, u, words, grants, s.now()); err != nil {
+		return err
+	}
+	return s.relink(u, grants, giver)
 }
 
 // planAct takes the stoker agent's plan (stoker:plan), one step it logs

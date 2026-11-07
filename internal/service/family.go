@@ -24,18 +24,23 @@ import (
 // stokerUnit is one stoker of the family: the host stoker, or the stoker
 // of one chain. Each has its store, its tmux session and its driven panes.
 type stokerUnit struct {
-	id    string
-	link  stoker.Link // Chain is empty for the host
+	id string
+	// link is the unit's link.json. Chain is empty for the host. An order
+	// changes Giver and Grants under stokerFamily.mu.
+	link  stoker.Link
 	store *stoker.Store
 	// startedAt is when matchblox started the unit's agent; zero once it
 	// is ready, or gave up on it. Service.mu guards it.
 	startedAt time.Time
 	// driven are the panes the unit drove, for the merge guard.
 	driven drivenState
-	// brief is the line still to type into a chain unit's new agent once
-	// it rests, and briefAt when the unit started. Service.mu guards both.
-	brief   string
+	// brief are the lines still to type into a chain unit's new agent once
+	// it rests, its brief first, and briefAt when the unit started. dropped
+	// is the brief line of an agent that did not rest in time: an order
+	// types it again first. Service.mu guards the three.
+	brief   []string
 	briefAt time.Time
+	dropped string
 	// joins are the tmux sessions a chain unit started, which join its
 	// chain once a sample finds them in its repo. Service.mu guards it.
 	joins []*pendingJoin
@@ -305,24 +310,9 @@ func familyLine(now time.Time, text string) stoker.Entry {
 // stoker-<id>; the brief is typed into it once it rests (deliverBriefs),
 // and its run is on at once.
 func (s *Service) startChainStoker(ctx context.Context, who, words string, grants []string, giver string) (*stokerUnit, error) {
-	host := s.hostUnit()
-	switch {
-	case host == nil:
-		return nil, errors.New("this service keeps no stoker")
-	case s.StokerServer == "":
-		return nil, errors.New("this service starts no stoker agent")
-	}
-	if why := s.agentMissing(); why != "" {
-		return nil, errors.New(why)
-	}
-	grants, err := goesOf(grants)
+	host, grants, err := s.givenGoes(grants, giver)
 	if err != nil {
 		return nil, err
-	}
-	if giver == "host" {
-		if err := checkGiven(grants, s.grantsOf(host)); err != nil {
-			return nil, err
-		}
 	}
 	s.fam.start.Lock()
 	defer s.fam.start.Unlock()
@@ -333,7 +323,7 @@ func (s *Service) startChainStoker(ctx context.Context, who, words string, grant
 	case s.unitOfChain(c.ID) != nil:
 		return nil, fmt.Errorf("chain %s has its stoker: give it an order.", name) //nolint:staticcheck // the line a person reads, as it stands
 	case s.chainsAtWork() >= s.maxChains():
-		return nil, fmt.Errorf("the family has its %d chain stokers: max_chains. Quit one on the STOKER tab first.", s.maxChains()) //nolint:staticcheck // the line a person reads, as it stands
+		return nil, s.atCap()
 	}
 	state := host.store.Dir()
 	id, err := nextStokerID(state)
@@ -356,7 +346,45 @@ func (s *Service) startChainStoker(ctx context.Context, who, words string, grant
 	if err := s.startStoker(ctx, u); err != nil {
 		return nil, errors.Join(err, s.dropUnit(u))
 	}
+	if err := s.runChain(u, c, name, members, words, grants); err != nil {
+		return nil, errors.Join(err, s.endUnit(ctx, u))
+	}
+	return u, nil
+}
 
+// givenGoes are the goes an order asks for, checked against its giver: the
+// host gives none it lacks. The person is the root of every go.
+func (s *Service) givenGoes(grants []string, giver string) (*stokerUnit, []string, error) {
+	host := s.hostUnit()
+	switch {
+	case host == nil:
+		return nil, nil, errors.New("this service keeps no stoker")
+	case s.StokerServer == "":
+		return nil, nil, errors.New("this service starts no stoker agent")
+	}
+	if why := s.agentMissing(); why != "" {
+		return nil, nil, errors.New(why)
+	}
+	grants, err := goesOf(grants)
+	if err != nil {
+		return nil, nil, err
+	}
+	if giver == "host" {
+		if err := checkGiven(grants, s.grantsOf(host)); err != nil {
+			return nil, nil, err
+		}
+	}
+	return host, grants, nil
+}
+
+func (s *Service) atCap() error {
+	return fmt.Errorf("the family has its %d chain stokers: max_chains. Quit one on the STOKER tab first.", s.maxChains()) //nolint:staticcheck // the line a person reads, as it stands
+}
+
+// runChain starts a run of chain unit u, whose agent is up or starting:
+// its brief, its mode on with the order, and the brief's line queued for
+// the agent's first rest.
+func (s *Service) runChain(u *stokerUnit, c chains.Chain, name string, members []sample.Session, words string, grants []string) error {
 	now := s.now()
 	o := stoker.Order{Grants: grants, ID: "run-" + now.UTC().Format("20060102-150405.000000000"), Words: strings.TrimSpace(words), At: now, Went: now, State: stoker.OrderRunning}
 	board := s.board(now)
@@ -364,23 +392,74 @@ func (s *Service) startChainStoker(ctx context.Context, who, words string, grant
 	for _, x := range members {
 		board.Chain.Members = append(board.Chain.Members, stoker.MemberLine(x))
 	}
-	path := filepath.Join(dir, briefName)
+	path := filepath.Join(u.store.Dir(), briefName)
 	if err := os.WriteFile(path, []byte(stoker.Brief(o, s.Ways, stoker.Hands, board)), 0o600); err != nil {
-		return nil, errors.Join(err, s.endUnit(ctx, u))
+		return err
 	}
 	if err := s.updateOrder(u, func(m stoker.Mode) (stoker.Mode, error) {
-		m, err := s.start(stoker.Mode{}, false, now, members)
+		if m.On {
+			return m, errors.New("the run changed meanwhile: look at it again")
+		}
+		m, err := s.start(stoker.Mode{Acked: m.Ack(now).Acked}, false, now, members)
 		m.Order = &o
 		return m, err
 	}); err != nil {
-		return nil, errors.Join(err, s.endUnit(ctx, u))
+		return err
 	}
 	s.mu.Lock()
-	u.brief, u.briefAt = "Read "+path+" and follow it.", now
+	u.brief, u.briefAt, u.dropped = []string{"Read " + path + " and follow it."}, now, ""
 	s.mu.Unlock()
-	_ = host.store.Append(familyLine(now, fmt.Sprintf("started the stoker of chain %s (%s)", name, id)))
+	if h := s.hostUnit(); h != nil {
+		_ = h.store.Append(familyLine(now, fmt.Sprintf("started the stoker of chain %s (%s)", name, u.id)))
+	}
 	s.refreshStoker()
-	return u, nil
+	return nil
+}
+
+// rerunChain gives chain unit u, whose run is off, a new run: its agent
+// starts again if it quit, and the cap counts it again.
+func (s *Service) rerunChain(ctx context.Context, u *stokerUnit, words string, grants []string, giver string) error {
+	s.fam.start.Lock()
+	defer s.fam.start.Unlock()
+	c, ok := s.chainOfUnit(u)
+	if !ok {
+		return errors.New("the chain of this stoker is gone")
+	}
+	_, name, members, _ := s.chainNamed(c.ID)
+	if u.store.Mode().On {
+		return errors.New("the run changed meanwhile: look at it again")
+	}
+	if s.chainsAtWork() >= s.maxChains() {
+		return s.atCap()
+	}
+	if err := s.relink(u, grants, giver); err != nil {
+		return err
+	}
+	if err := s.startStoker(ctx, u); err != nil {
+		return err
+	}
+	return s.runChain(u, c, name, members, words, grants)
+}
+
+// chainOfUnit is the chain of chain unit u now.
+func (s *Service) chainOfUnit(u *stokerUnit) (chains.Chain, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return chainByID(s.chainsLocked(), u.link.Chain)
+}
+
+// relink gives chain unit u the giver and goes of a new order, in its
+// link.json first: the merge guard reads them there.
+func (s *Service) relink(u *stokerUnit, grants []string, giver string) error {
+	s.fam.mu.Lock()
+	defer s.fam.mu.Unlock()
+	l := u.link
+	l.Giver, l.Grants = giver, slices.Clone(grants)
+	if err := stoker.WriteLink(u.store.Dir(), l); err != nil {
+		return err
+	}
+	u.link = l
+	return nil
 }
 
 // grantsOf are the goes unit u has now: the host's are its order's. A
@@ -392,8 +471,11 @@ func (s *Service) grantsOf(u *stokerUnit) []string {
 	if u.link.Chain == "" {
 		return grants
 	}
-	grants = stoker.Given(grants, u.link.Grants)
-	if u.link.Giver == "host" {
+	s.fam.mu.Lock()
+	given, giver := u.link.Grants, u.link.Giver
+	s.fam.mu.Unlock()
+	grants = stoker.Given(grants, given)
+	if giver == "host" {
 		var host []string
 		if h := s.hostUnit(); h != nil && h.store.Mode().On {
 			host = s.grantsOf(h)
@@ -444,34 +526,43 @@ func (s *Service) maxChains() int {
 	return s.MaxChains
 }
 
-// deliverBriefs types each chain unit's brief line once its new agent
-// rests, after a sample. One that does not rest within stokerStartsIn
-// drops its line, and its card and the host's say so.
+// deliverBriefs types each chain unit's brief line, and the orders that
+// wait behind it, once its new agent rests, after a sample. One that does
+// not rest within stokerStartsIn drops its lines, and its card and the
+// host's say so.
 func (s *Service) deliverBriefs(ctx context.Context) {
 	now := s.now()
 	for _, u := range s.family() {
 		s.mu.Lock()
-		line, at := u.brief, u.briefAt
+		lines, at := u.brief, u.briefAt
 		x, up := stokerIn(s.cur.Sessions, s.StokerServer, stoker.SessionName(u.id))
-		if line != "" && (up && ready(x) || now.Sub(at) >= stokerStartsIn) {
-			u.brief = "" // claimed: typed once at most
+		late := len(lines) > 0 && (!up || !ready(x)) && now.Sub(at) >= stokerStartsIn
+		if len(lines) > 0 && (up && ready(x) || late) {
+			u.brief = nil // claimed: typed once at most
+		}
+		if late {
+			u.dropped = lines[0]
 		}
 		s.mu.Unlock()
 		switch {
-		case line == "":
+		case len(lines) == 0:
 		case up && ready(x):
-			if err := s.typeInto(ctx, x.Pane, line); err != nil {
-				s.mu.Lock()
-				if u.brief == "" { // not quit meanwhile: try again at the next rest
-					u.brief = line
+			typed := 0
+			for _, line := range lines {
+				if s.typeInto(ctx, x.Pane, line) != nil {
+					break
 				}
-				s.mu.Unlock()
-				continue
+				typed++
 			}
 			s.mu.Lock()
-			u.startedAt = time.Time{}
+			if typed < len(lines) { // try the rest again at the next rest, before what came meanwhile
+				u.brief = append(slices.Clone(lines[typed:]), u.brief...)
+			}
+			if typed > 0 {
+				u.startedAt = time.Time{}
+			}
 			s.mu.Unlock()
-		case now.Sub(at) >= stokerStartsIn:
+		case late:
 			text := fmt.Sprintf("the stoker of chain %s did not start: its brief was not typed", s.chainNameOf(u.link.Chain))
 			_ = u.store.Append(familyLine(now, text))
 			if h := s.hostUnit(); h != nil {

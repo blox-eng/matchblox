@@ -171,7 +171,9 @@ func chainStokerTest(t *testing.T) (*Service, *[][]string, *time.Time) {
 	s.Now = func() time.Time { return now }
 	auth := sample.Session{Agent: "claude", Pane: "%3", Target: "api:1.1", SessionID: "s3", Name: "api-auth", Status: "idle", Idle: 5 * time.Minute}
 	db := sample.Session{Agent: "claude", Pane: "%4", Target: "api:1.2", SessionID: "s4", Name: "api-db", Status: "idle", Idle: 5 * time.Minute}
+	s.mu.Lock() // a sample's chain news may read them meanwhile
 	s.Chains = &chains.Store{Chains: []chains.Chain{{ID: "c1", Repo: "/dev/api", Members: []chains.Member{memberOf(auth), memberOf(db)}}}}
+	s.mu.Unlock()
 	s.publish(sample.Snapshot{At: night0, Sessions: []sample.Session{
 		{Agent: "claude", Pane: "%1", Target: "app:1.1", SessionID: "s1", Name: "work", Status: "idle", Idle: 5 * time.Minute},
 		auth, db,
@@ -1022,5 +1024,258 @@ func TestHostGivesNoGoItLacks(t *testing.T) {
 	}
 	if s.unitOfChain("c1") != nil {
 		t.Fatal("the refused start left a unit")
+	}
+}
+
+// orderChain is stoker:order-chain from pane from ("" for the person's
+// shell), with no "grants" when grants is nil.
+func orderChain(t *testing.T, from, chain, words string, grants []string) proto.Act {
+	t.Helper()
+	ask := map[string]any{"chain": chain, "words": words}
+	if grants != nil {
+		ask["grants"] = grants
+	}
+	b, err := json.Marshal(ask)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return proto.Act{RecID: "stoker:order-chain", Confirm: "y", Text: string(b), From: from, FromPlaced: from != ""}
+}
+
+const hostPane = "%9@mbtest"
+
+func TestHostOrderStartsChainStoker(t *testing.T) {
+	s, _, _ := familySetup(t)
+	mustAct(t, s, orderAct(t, "go", false, "merge"))
+	res := s.act(t.Context(), orderChain(t, hostPane, "api-db", "merge on green", []string{"merge"}))
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	u := s.unitOfChain("c1")
+	if u == nil || u.link.Giver != "host" || !slices.Equal(u.link.Grants, []string{"merge"}) {
+		t.Fatalf("unit %+v", u)
+	}
+	if m := u.store.Mode(); !m.On || m.Order == nil || m.Order.Words != "merge on green" {
+		t.Fatalf("mode %+v", m)
+	}
+	card := cardTexts(s.Stoker)
+	if !slices.Contains(card, "started the stoker of chain api-auth (s1)") || !slices.Contains(card, "ordered chain api-auth: merge on green") {
+		t.Fatalf("host card %q", card)
+	}
+}
+
+// hostOrdered is hostGiven with the brief of the stoker of c1 typed: its
+// agent rests and takes a line at once.
+func hostOrdered(t *testing.T, hostGoes, goes []string) (*Service, *stokerUnit, *[][]string) {
+	t.Helper()
+	s, ran, _ := familySetup(t)
+	mustAct(t, s, orderAct(t, "go", false, hostGoes...))
+	u, err := s.startChainStoker(t.Context(), "api-auth", "first", goes, "host")
+	if err != nil {
+		t.Fatal(err)
+	}
+	chainStokerUp(s)
+	s.deliverBriefs(t.Context())
+	*ran = nil
+	return s, u, ran
+}
+
+func TestHostOrderToRunningUnitTypesNewOrder(t *testing.T) {
+	s, u, ran := hostOrdered(t, []string{"merge", "release"}, []string{"merge"})
+	mustAct(t, s, orderChain(t, hostPane, "api-auth", "merge on green", []string{"release"}))
+	if got := typed(*ran, "%5@mbtest"); !slices.Equal(got, []string{"New order: merge on green"}) {
+		t.Fatalf("typed %q", got)
+	}
+	if len(typed(*ran, hostPane)) != 0 {
+		t.Fatal("the host stoker was typed into")
+	}
+	if s.unitByID("s2") != nil {
+		t.Fatal("the order started a second unit")
+	}
+	m := u.store.Mode()
+	if m.Order == nil || m.Order.Words != "merge on green" || len(m.Order.Earlier) != 1 || m.Order.Earlier[0].Words != "first" {
+		t.Fatalf("order %+v", m.Order)
+	}
+	// The order's goes replace the unit's: none is cut by the old ones.
+	l, err := stoker.ReadLink(u.store.Dir())
+	if err != nil || !slices.Equal(l.Grants, []string{"release"}) || !slices.Equal(m.Order.Grants, []string{"release"}) {
+		t.Fatalf("link %+v %v, order goes %q", l, err, m.Order.Grants)
+	}
+	if got := s.grantsOf(u); !slices.Equal(got, []string{"release"}) {
+		t.Fatalf("the unit's goes %q", got)
+	}
+	if !slices.Contains(cardTexts(s.Stoker), "ordered chain api-auth: merge on green") {
+		t.Fatalf("host card %q", cardTexts(s.Stoker))
+	}
+}
+
+func TestOrderReplacesUnitGoesInDriven(t *testing.T) {
+	s, u, _ := familyTest(t)
+	s.deliverBriefs(t.Context())
+	s.drive(u, "%3")
+	mustAct(t, s, orderChain(t, "", "api-auth", "release it", []string{"release", "merge"}))
+	if got := drivenGoes(t, u, "%3"); !slices.Equal(got, []string{"release", "merge"}) {
+		t.Fatalf("%%3 has %q", got)
+	}
+	if u.link.Giver != "person" {
+		t.Fatalf("giver %q", u.link.Giver)
+	}
+}
+
+func TestHostOrderGivesNoGoItLacks(t *testing.T) {
+	s, u, ran := hostOrdered(t, []string{"merge"}, []string{"merge"})
+	res := s.act(t.Context(), orderChain(t, hostPane, "api-auth", "deploy", []string{"deploy"}))
+	if res.Err != "the order gives deploy, which its giver does not have" {
+		t.Fatalf("err %q", res.Err)
+	}
+	if len(typed(*ran, "%5@mbtest")) != 0 || u.store.Mode().Order.Words != "first" || !slices.Equal(u.link.Grants, []string{"merge"}) {
+		t.Fatal("the refused order reached the unit")
+	}
+}
+
+func TestPersonOrderAtNightIsSealed(t *testing.T) {
+	s, ran, _ := familySetup(t)
+	mustAct(t, s, orderAct(t, "night", true))
+	*ran = nil
+	const want = "the night is sealed: answer the stoker's prompts, or give the order in the morning"
+	for _, console := range []bool{false, true} {
+		a := orderChain(t, "", "api-auth", "go", nil)
+		a.Console = console
+		if res := s.act(t.Context(), a); res.Err != want {
+			t.Fatalf("console %v: %q", console, res.Err)
+		}
+	}
+	if s.unitOfChain("c1") != nil || len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+func TestHostOrderAtNightPasses(t *testing.T) {
+	s, _, _ := familySetup(t)
+	mustAct(t, s, orderAct(t, "night", true, "merge"))
+	mustAct(t, s, orderChain(t, hostPane, "api-auth", "merge on green", nil))
+	if u := s.unitOfChain("c1"); u == nil || u.link.Giver != "host" {
+		t.Fatalf("unit %+v", u)
+	}
+}
+
+func TestOrderAtCapIsRefusedAndLogged(t *testing.T) {
+	s, _, _ := familySetup(t)
+	s.MaxChains = 1
+	other := stoker.FamilyDir(s.Stoker.Dir(), "s1")
+	if err := stoker.WriteLink(other, stoker.Link{ID: "s1", Chain: "c9", Giver: "person"}); err != nil {
+		t.Fatal(err)
+	}
+	st, err := stoker.Open(other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Set(stoker.Mode{}.TurnOn(night0)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.loadFamily(); err != nil {
+		t.Fatal(err)
+	}
+	const want = "the family has its 1 chain stokers: max_chains. Quit one on the STOKER tab first."
+	if res := s.act(t.Context(), orderChain(t, hostPane, "api-auth", "go", nil)); res.Err != want {
+		t.Fatalf("err %q", res.Err)
+	}
+	card := cardTexts(s.Stoker)
+	if !slices.Contains(card, want) || slices.ContainsFunc(card, func(c string) bool { return strings.HasPrefix(c, "ordered chain") }) {
+		t.Fatalf("host card %q", card)
+	}
+	if s.unitOfChain("c1") != nil {
+		t.Fatal("the refused order made a unit")
+	}
+}
+
+func TestHostOrderDefaultsToItsGrants(t *testing.T) {
+	s, _, _ := familySetup(t)
+	mustAct(t, s, orderAct(t, "go", false, "merge", "release"))
+	mustAct(t, s, orderChain(t, hostPane, "api-auth", "go", nil))
+	u := s.unitOfChain("c1")
+	if u == nil || !slices.Equal(u.link.Grants, []string{"merge", "release"}) {
+		t.Fatalf("unit %+v", u)
+	}
+}
+
+func TestPersonOrderDefaultsToNoGo(t *testing.T) {
+	s, _, _ := familySetup(t)
+	mustAct(t, s, orderAct(t, "go", false, "merge"))
+	mustAct(t, s, orderChain(t, "", "api-auth", "go", nil))
+	if u := s.unitOfChain("c1"); u == nil || u.link.Giver != "person" || len(u.link.Grants) != 0 {
+		t.Fatalf("unit %+v", u)
+	}
+}
+
+func TestOrderChainIsNotFromAnAgentsPane(t *testing.T) {
+	s, _, ran := familyTest(t)
+	for _, console := range []bool{false, true} { // a console hello does not make it a person's
+		a := orderChain(t, "%1", "api-auth", "go", nil)
+		a.Console = console
+		if res := s.act(t.Context(), a); res.Err != notTheBuilders {
+			t.Fatalf("console %v: %q", console, res.Err)
+		}
+	}
+	// A session the host stoker drove speaks for it, but gives no order.
+	s.drive(s.hostUnit(), "%1")
+	if res := s.act(t.Context(), orderChain(t, "%1", "api-auth", "go", nil)); res.Err != notTheBuilders {
+		t.Fatalf("a driven session: %q", res.Err)
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// An order that comes while the brief waits, or after it was dropped,
+// waits behind the brief: the agent reads the brief first.
+func TestOrderWaitsBehindTheBrief(t *testing.T) {
+	for _, dropped := range []bool{false, true} {
+		s, ran, now := chainStokerTest(t)
+		u, err := s.startChainStoker(t.Context(), "api-auth", "first", nil, "person")
+		if err != nil {
+			t.Fatal(err)
+		}
+		brief := "Read " + filepath.Join(u.store.Dir(), "stoker-brief.md") + " and follow it."
+		if dropped {
+			*now = now.Add(stokerStartsIn)
+			s.deliverBriefs(t.Context())
+		}
+		mustAct(t, s, orderChain(t, "", "api-auth", "merge on green", nil))
+		if got := typed(*ran, "%5@mbtest"); len(got) != 0 {
+			t.Fatalf("dropped %v: typed before the agent rests: %q", dropped, got)
+		}
+		chainStokerUp(s)
+		s.deliverBriefs(t.Context())
+		s.deliverBriefs(t.Context())
+		if got := typed(*ran, "%5@mbtest"); !slices.Equal(got, []string{brief, "New order: merge on green"}) {
+			t.Fatalf("dropped %v: typed %q", dropped, got)
+		}
+	}
+}
+
+// A unit whose run ended takes an order as a new run, with a new brief.
+func TestOrderToAUnitWithNoRunStartsOne(t *testing.T) {
+	s, u, ran := familyTest(t)
+	s.deliverBriefs(t.Context())
+	if err := u.store.Set(stoker.Mode{}); err != nil {
+		t.Fatal(err)
+	}
+	*ran = nil
+	mustAct(t, s, orderChain(t, "", "api-auth", "again", []string{"merge"}))
+	if s.unitOfChain("c1") != u || s.unitByID("s2") != nil {
+		t.Fatal("the order made a second unit")
+	}
+	m := u.store.Mode()
+	if !m.On || m.Order == nil || m.Order.Words != "again" || !slices.Equal(m.Order.Grants, []string{"merge"}) || !slices.Equal(u.link.Grants, []string{"merge"}) {
+		t.Fatalf("mode %+v link %+v", m, u.link)
+	}
+	s.deliverBriefs(t.Context())
+	brief := filepath.Join(u.store.Dir(), "stoker-brief.md")
+	if got := typed(*ran, "%5@mbtest"); !slices.Equal(got, []string{"Read " + brief + " and follow it."}) {
+		t.Fatalf("typed %q", got)
+	}
+	if b, err := os.ReadFile(brief); err != nil || !strings.Contains(string(b), "again") || !strings.Contains(string(b), "You are the stoker of chain api-auth.") {
+		t.Fatalf("brief %v:\n%s", err, b)
 	}
 }
