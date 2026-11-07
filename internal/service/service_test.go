@@ -338,7 +338,7 @@ func TestPanelTargets(t *testing.T) {
 	ctx := run(t, s)
 	c, _ := connect(t, ctx, s)
 	snapshot(t, c)
-	time.Sleep(20 * time.Millisecond) // the first git scan
+	gitScanned(t, s)
 	for _, a := range []proto.Act{
 		{RecID: "orphan:42", Which: "secondary", Confirm: "y"},
 		{RecID: "worktree:/w/wt/a", Which: "secondary", Confirm: "y"},
@@ -904,6 +904,13 @@ func TestLimitsAreStoredAndInTheState(t *testing.T) {
 	}
 }
 
+// gitScanned waits for the first git scan: an act on a worktree before it
+// lands answers "unknown action" (#330).
+func gitScanned(t *testing.T, s *Service) {
+	t.Helper()
+	until(t, "git scan", func() bool { return s.State().Git != nil })
+}
+
 func TestARemovedWorktreeLeavesTheGitList(t *testing.T) {
 	s := newTest(t, time.Hour)
 	removed := false
@@ -920,7 +927,7 @@ func TestARemovedWorktreeLeavesTheGitList(t *testing.T) {
 	ctx := run(t, s)
 	c, _ := connect(t, ctx, s)
 	snapshot(t, c)
-	time.Sleep(20 * time.Millisecond) // the first git scan
+	gitScanned(t, s)
 	if r := act(t, c, "x", proto.Act{RecID: "worktree:/w/wt/a", Which: "secondary", Confirm: "y"}); r.Err != "" || len(r.Ran) != 1 {
 		t.Fatalf("%+v", r)
 	}
