@@ -1,6 +1,6 @@
 # Chain room
 
-Issue: to be filed (a follow-up to #304). Status: for the owner's approval. Date: 2026-11-07.
+Issue: #326 (a follow-up to #304). Status: approved by the owner, 2026-11-07. Date: 2026-11-07.
 Mockup: the "Chain Room Mockups" page (owner's artifact, 2026-11-07), option A.
 Builds on: #304 (a stoker per chain, PR #312) and #299 (chains). Work starts after #312 merges.
 
