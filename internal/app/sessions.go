@@ -65,7 +65,7 @@ func (m Model) groupOf(s sample.Session) int {
 	if _, held := m.holdOf(s); held {
 		return groupHeld
 	}
-	if m.isStoker(s) && (s.Asks || s.Permits) { // a stoker's agent at a menu, as the header tells it
+	if _, head := m.headRow(s); head && (s.Asks || s.Permits) { // a chain stoker's agent at a menu
 		return groupWaits
 	}
 	switch _, waits := m.waitOf(s); {
@@ -882,7 +882,7 @@ func (m Model) detailLines(w, rows int) ([]string, bool) {
 // said last, and whether that was cut.
 func (m Model) sessionDetail(s sample.Session, w, said int) ([]string, bool) {
 	st := m.st
-	out := []string{"", fit(" "+st.accent.Bold(true).Render(s.Name), w)}
+	out := []string{"", fit(" "+st.accent.Bold(true).Render(m.titleOf(s)), w)}
 	where := []string{m.longWord(s)}
 	if c := m.waitCell(s); c != "" && m.wordOf(s) != "out" {
 		where = append(where, c)

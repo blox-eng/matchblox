@@ -1280,6 +1280,12 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	mk := m.keys.main
 	m.flash = ""
+	if s, ok := m.selectedSession(); ok && bkey.Matches(k, mk.Second, mk.Rename, mk.Switch, mk.Park) {
+		if u, head := m.headRow(s); head { // its agent is the stoker's, not a session of the builder's
+			m.flash = "the stoker of chain " + u.Name + " is no session: quit it on the STOKER tab"
+			return m, nil
+		}
+	}
 	switch {
 	case bkey.Matches(k, mk.Stoker):
 		return m.openStoker(), nil
