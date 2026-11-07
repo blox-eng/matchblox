@@ -379,7 +379,7 @@ type Model struct {
 	holds       []proto.Hold
 	chains      *state.ChainsView
 	chainIx     chainIndex      // worked out in refresh
-	repoMates   map[rowKey]bool // the listed sessions that share their repo with another
+	repoMates   map[rowKey]bool // the listed sessions with a repo mate they are not chained with
 	reasons     map[string]proto.IdleReason
 	agents      []string                               // the agents a new session can start on the host
 	renames     map[string]string                      // the names sessions take at their next rest, by pane

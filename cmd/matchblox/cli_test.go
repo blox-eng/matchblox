@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/chains"
+	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/idle"
 	"github.com/blox-eng/matchblox/internal/limits"
@@ -610,6 +611,28 @@ func TestWhenListPrintsTheRunsTriggers(t *testing.T) {
 	}
 }
 
+func TestSessionsNameTheRepoOfEachRow(t *testing.T) {
+	d := chainDoc()
+	var text, js bytes.Buffer
+	if err := writeSessions(&text, d, false); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(text.String()), "\n")
+	if !strings.Contains(lines[0], "  in api") || !strings.Contains(lines[1], "  in web") || strings.Contains(lines[3], "  in ") {
+		t.Fatalf("lines %q", lines)
+	}
+	if err := writeSessions(&js, d, true); err != nil {
+		t.Fatal(err)
+	}
+	var rows []struct{ Name, Repo string }
+	if err := json.Unmarshal(js.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 4 || rows[0].Repo != "api" || rows[1].Repo != "web" || rows[3].Repo != "" || !strings.Contains(js.String(), `"repo": ""`) {
+		t.Fatalf("rows %+v", rows)
+	}
+}
+
 func TestSessionsLineMarksOutsideTmux(t *testing.T) {
 	d := cliDoc()
 	d.Sessions = []sample.Session{{Name: "loose", Status: "idle"}}
@@ -767,7 +790,12 @@ func chainDoc() state.Doc {
 			{From: chains.Member{Pane: "%3"}, To: chains.Member{Pane: "%9"}},
 		},
 	}
-	d.Sessions = append(d.Sessions, sample.Session{Pane: "%9", Name: "docs"})
+	d.Sessions = append(d.Sessions, sample.Session{Pane: "%9", Name: "docs", Cwd: "/tmp/notes"})
+	d.Sessions[0].Cwd, d.Sessions[1].Cwd = "/dev/api/cmd", "/dev/web"
+	d.Git = &gitscan.Report{Repos: []gitscan.Repo{
+		{Path: "/dev/api", Worktrees: []gitscan.Worktree{{Path: "/dev/api"}}},
+		{Path: "/dev/web", Worktrees: []gitscan.Worktree{{Path: "/dev/web"}}},
+	}}
 	return d
 }
 
@@ -842,9 +870,9 @@ func TestChainPrintsAskedThenChained(t *testing.T) {
 func TestChainRefusalIsAnError(t *testing.T) {
 	sock := isolate(t)
 	t.Setenv("TMUX_PANE", "%3")
-	chainService(t, sock, chainDoc(), "", "docs is in another repo")
+	chainService(t, sock, chainDoc(), "", "docs is on another host: a chain is one host")
 	err := cliChain([]string{"docs"}, false, false, false, io.Discard, sock)
-	if err == nil || !strings.Contains(err.Error(), "docs is in another repo") {
+	if err == nil || !strings.Contains(err.Error(), "docs is on another host") {
 		t.Fatalf("err %v", err)
 	}
 }
@@ -899,7 +927,7 @@ func TestChainListJSON(t *testing.T) {
 	if err := writeChain(&buf, chainDoc(), "%3", true); err != nil {
 		t.Fatal(err)
 	}
-	want := `{"chain":[{"name":"api","pane":"%3"},{"name":"web","pane":"%4"}],"requests":[{"from":"web","to":"api"},{"from":"api","to":"docs"}]}`
+	want := `{"chain":[{"name":"api","pane":"%3","repo":"api"},{"name":"web","pane":"%4","repo":"web"}],"requests":[{"from":"web","to":"api"},{"from":"api","to":"docs"}]}`
 	if strings.TrimSpace(buf.String()) != want {
 		t.Fatalf("got %s", buf.String())
 	}
@@ -914,7 +942,7 @@ func TestChainListText(t *testing.T) {
 	if err := writeChain(&buf, chainDoc(), "%3", false); err != nil {
 		t.Fatal(err)
 	}
-	if want := "api %3\nweb %4\nweb asks you\nyou asked docs\n"; buf.String() != want {
+	if want := "api %3 in api\nweb %4 in web\nweb asks you\nyou asked docs\n"; buf.String() != want {
 		t.Fatalf("got %q, want %q", buf.String(), want)
 	}
 	buf.Reset()

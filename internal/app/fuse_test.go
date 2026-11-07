@@ -165,8 +165,8 @@ func pidOf(m Model, name string) int {
 	return 0
 }
 
-// TestFuseIsWholeInRepo: a chain is in one repo, so its matches are side by
-// side there, whatever the sort puts between them.
+// TestFuseIsWholeInRepo: a chain in one repo has its matches side by side
+// there, whatever the sort puts between them.
 func TestFuseIsWholeInRepo(t *testing.T) {
 	st := fuseState(t, []string{"kindle-web", "ember-billing"})
 	for i := range st.Sessions {
@@ -187,6 +187,47 @@ func TestFuseIsWholeInRepo(t *testing.T) {
 		" ✦   hearth-api",
 		" │   spark-docs",
 	})
+}
+
+// TestFuseSplitsAcrossRepos: by repo, a chain across two repos keeps each
+// match in its own repo's group, with a stub that lights with the selected
+// chain-mate, on a desk and on a phone.
+func TestFuseSplitsAcrossRepos(t *testing.T) {
+	st := fuseState(t, []string{"kindle-web", "flint-auth"})
+	for i := range st.Sessions {
+		st.Sessions[i].Cwd = "/home/user/src/hearth"
+		if st.Sessions[i].Name == "flint-auth" {
+			st.Sessions[i].Cwd = "/home/user/src/flint"
+		}
+	}
+	for _, c := range []struct {
+		w          int
+		stub, mine string // flint-auth's stub, and the picked row's own
+	}{{160, "─╴", "━╸"}, {44, "╴", "╸"}} {
+		m := fuseModel(t, c.w, st, "kindle-web")
+		m.sessGroup = groupRepo
+		m.refresh()
+		list := min(c.w, 100)
+		if c.w == 160 {
+			sameLines(t, listLines(m, list, 20), []string{
+				" flint · 1",
+				" ✦─╴ flint-auth",
+				" hearth · 4",
+				"▌╿━╸ kindle-web",
+				" ✦   hearth-api",
+				" ╿   ember-billing",
+				" │   spark-docs",
+			})
+		}
+		var b body
+		m.sessionRows(&b, list)
+		if l := lineWith(b.lines, "flint-auth"); !strings.Contains(l, m.st.accent.Render(c.stub)) {
+			t.Errorf("%d columns: flint-auth's stub is not lit with kindle-web picked: %q", c.w, l)
+		}
+		if l := ansi.Strip(lineWith(b.lines, "kindle-web")); !strings.Contains(l, c.mine) {
+			t.Errorf("%d columns: kindle-web has no stub: %q", c.w, l)
+		}
+	}
 }
 
 // TestTwoChainsNeverTouch: two chains next to each other each open with ╮
@@ -346,6 +387,15 @@ func TestSameRepoHint(t *testing.T) {
 	m.sessionRows(&b, 100)
 	if l := ansi.Strip(lineWith(b.lines, "kindle-web")); strings.Contains(l, hint) {
 		t.Errorf("a chained row has no hint: %q", l)
+	}
+	st.Chains = fuseState(t, []string{"kindle-web", "flint-auth"}).Chains
+	m = fuseModel(t, 160, st, "")
+	b = body{}
+	m.sessionRows(&b, 100)
+	for _, name := range []string{"kindle-web", "hearth-api"} {
+		if l := ansi.Strip(lineWith(b.lines, name)); !strings.Contains(l, name+hint) {
+			t.Errorf("chained in another repo, %s lacks the hint for its repo mate: %q", name, l)
+		}
 	}
 	st.Chains = nil
 	m = fuseModel(t, 160, st, "")
