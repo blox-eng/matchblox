@@ -549,15 +549,94 @@ onReady(() => {
     if (still()) { items.forEach(light); return; }
     items.forEach((el) => el.classList.remove("lit", "out", "smoking"));
     const lastLit = 300 + (N - 1) * STEP;
+    dominoLit = performance.now() + lastLit + 400;
     items.forEach((el, i) => later(() => light(el), 300 + i * STEP));
     items.forEach((el, i) => later(() => douse(el), lastLit + 900 + i * STEP));
     later(flicker, lastLit + 900 + N * STEP + 400);
   };
 
+  // A family of stokers: once the row has caught, the night stoker lights
+  // the stoker at the head of each chain, and each one lights its matches.
+  const fuses = document.getElementById("kin-fuses");
+  const sticks = document.getElementById("kin-sticks");
+  const family = { play: () => {}, stop: () => {} };
+  if (fuses && sticks) {
+    const match = (x, b, h) => {
+      const top = b - h, f = h / 2;
+      const el = document.createElementNS(ns, "g");
+      el.setAttribute("class", "match");
+      el.innerHTML =
+        `<circle class="glow" cx="${x}" cy="${top - f / 4}" r="${h * 0.42}"/>` +
+        `<line class="stick" x1="${x}" y1="${b}" x2="${x}" y2="${top}"/>` +
+        `<line class="char" x1="${x}" y1="${top + 30}" x2="${x}" y2="${top}"/>` +
+        `<ellipse class="head" cx="${x}" cy="${top - 4}" rx="6" ry="9"/>` +
+        `<g class="flame"><path class="fire" d="M${x} ${top - f} C ${x + 13} ${top - f * 0.6}, ${x + 11} ${top - 12}, ${x} ${top - 2} C ${x - 11} ${top - 12}, ${x - 13} ${top - f * 0.6}, ${x} ${top - f} Z"/>` +
+        `<path class="core" d="M${x} ${top - f * 0.55} C ${x + 6} ${top - f * 0.35}, ${x + 6} ${top - 10}, ${x} ${top - 4} C ${x - 6} ${top - 10}, ${x - 6} ${top - f * 0.35}, ${x} ${top - f * 0.55} Z"/></g>`;
+      sticks.appendChild(el);
+      return el;
+    };
+    const fuse = (d) => {
+      const el = document.createElementNS(ns, "g");
+      el.setAttribute("class", "fuse");
+      el.innerHTML = `<path class="cord" d="${d}"/><path class="burn" d="${d}" pathLength="100"/>`;
+      fuses.appendChild(el);
+      return el;
+    };
+    const star = (x, y, r, cls) => {
+      const el = document.createElementNS(ns, "path");
+      el.setAttribute("class", cls);
+      el.setAttribute("d", `M${x} ${y - r} Q ${x} ${y}, ${x + r} ${y} Q ${x} ${y}, ${x} ${y + r} Q ${x} ${y}, ${x - r} ${y} Q ${x} ${y}, ${x} ${y - r} Z`);
+      sticks.appendChild(el);
+      return el;
+    };
+
+    const NX = 110, NB = 300, HX = 320, MX = 440, MSTEP = 100;
+    const moon = document.createElementNS(ns, "circle");
+    moon.setAttribute("class", "moon");
+    moon.setAttribute("cx", "110"); moon.setAttribute("cy", "70"); moon.setAttribute("r", "24");
+    moon.setAttribute("mask", "url(#kin-moon)");
+    sticks.appendChild(moon);
+    const night = { match: match(NX, NB, 120), moon };
+    const chains = [[128, 4], [253, 3], [378, 5]].map(([b, n]) => {
+      const last = MX + (n - 1) * MSTEP;
+      return {
+        down: fuse(`M${NX + 4} ${NB - 60} C ${NX + 110} ${NB - 60}, ${HX - 110} ${b - 34}, ${HX - 4} ${b - 34}`),
+        row: fuse(`M${HX} ${b} H ${last + 14}`),
+        head: match(HX, b, 78),
+        mark: star(HX + 22, b - 26, 10, "mark"),
+        members: Array.from({ length: n }, (_, j) => match(MX + j * MSTEP, b, 60)),
+      };
+    });
+    const parts = [night.match, night.moon, ...chains.flatMap((c) => [c.down, c.row, c.head, c.mark, ...c.members])];
+
+    let ft = [];
+    const at = (fn, ms) => ft.push(setTimeout(fn, ms));
+    const lightAll = () => parts.forEach((el) => el.classList.add("lit"));
+    family.stop = () => { ft.forEach(clearTimeout); ft = []; };
+    family.play = (after) => {
+      family.stop();
+      if (still()) { lightAll(); return; }
+      parts.forEach((el) => el.classList.remove("lit"));
+      const t0 = Math.max(0, after);
+      at(() => { night.match.classList.add("lit"); night.moon.classList.add("lit"); }, t0);
+      chains.forEach((c, i) => {
+        const down = t0 + 500 + i * 220; // the fuse burns in 700 ms
+        at(() => c.down.classList.add("lit"), down);
+        const head = down + 700;
+        at(() => { c.head.classList.add("lit"); c.mark.classList.add("lit"); }, head);
+        c.row.lastChild.style.transitionDuration = `${c.members.length * 190 + 200}ms`;
+        at(() => c.row.classList.add("lit"), head + 250);
+        c.members.forEach((el, j) => at(() => el.classList.add("lit"), head + 450 + j * 190));
+      });
+    };
+  }
+  let dominoLit = 0;
+
   const status = document.getElementById("chain-status");
   let quiet;
   strike.addEventListener("click", () => {
     run();
+    family.play(dominoLit - performance.now());
     if (!status) return;
     clearTimeout(quiet);
     status.textContent = ""; // a second strike announces again
@@ -565,4 +644,6 @@ onReady(() => {
     quiet = setTimeout(() => { status.textContent = ""; }, still() ? 3000 : 300 + (N - 1) * STEP + 900 + N * STEP);
   });
   new IntersectionObserver(([e]) => { if (e.isIntersecting) run(); else stop(); }, { threshold: 0.2 }).observe(section);
+  const kin = section.querySelector(".family");
+  if (kin) new IntersectionObserver(([e]) => { if (e.isIntersecting) family.play(dominoLit - performance.now()); else family.stop(); }, { threshold: 0.3 }).observe(kin);
 });

@@ -2043,8 +2043,8 @@ func TestQuitQuitsOneUnit(t *testing.T) {
 		a.RecID, a.Confirm = "stoker:quit", "y"
 		return s.act(t.Context(), a)
 	}
-	if res := quit(proto.Act{Console: true, Text: "s2"}); res.Err != "" {
-		t.Fatal(res.Err)
+	if res := quit(proto.Act{Console: true, Text: "s2"}); res.Err != "" || res.Note != "ended the stoker of chain api-ui (s2) and its tmux session" {
+		t.Fatalf("the quit of s2: %+v", res)
 	}
 	if !killed(*ran, "s2") || killed(*ran, "s1") || slices.ContainsFunc(*ran, func(argv []string) bool { return slices.Contains(argv, "=stoker") }) {
 		t.Fatalf("the quit of s2 ran %q", *ran)
