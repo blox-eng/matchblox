@@ -203,3 +203,27 @@ func snapshotOf(brief string) string {
 	snap, _, _ := strings.Cut(rest, "\n## ")
 	return snap
 }
+
+func TestGivenIsWhatBothHold(t *testing.T) {
+	for _, c := range []struct {
+		asked, giver, want []string
+	}{
+		{nil, []string{"merge"}, nil},
+		{[]string{"merge"}, nil, nil},
+		{[]string{"merge", "release"}, []string{"merge", "deploy"}, []string{"merge"}},
+		{[]string{"kill"}, []string{"kill"}, []string{"kill"}},
+		{[]string{"merge:#12"}, []string{"merge"}, []string{"merge:#12"}},
+		{[]string{"merge:@api"}, []string{"merge"}, []string{"merge:@api"}},
+		{[]string{"merge"}, []string{"merge:#12"}, []string{"merge:#12"}},
+		{[]string{"merge"}, []string{"merge:@api", "merge:#3"}, []string{"merge:@api", "merge:#3"}},
+		{[]string{"merge:#12"}, []string{"merge:#12"}, []string{"merge:#12"}},
+		{[]string{"merge:#12"}, []string{"merge:#13"}, nil},
+		{[]string{"merge:#12"}, []string{"merge:@api"}, nil},
+		{[]string{"merge", "merge:#12"}, []string{"merge:#12"}, []string{"merge:#12"}},
+		{[]string{"release"}, []string{"merge"}, nil},
+	} {
+		if got := Given(c.asked, c.giver); !slices.Equal(got, c.want) {
+			t.Errorf("Given(%q, %q) = %q, want %q", c.asked, c.giver, got, c.want)
+		}
+	}
+}

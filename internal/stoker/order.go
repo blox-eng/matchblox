@@ -104,6 +104,34 @@ func CheckGrant(g string) error {
 	return fmt.Errorf("%q is no grant: merge, release, deploy, merge:#<n> or merge:@<session>", g)
 }
 
+// Given are the goes of asked that giver has too, each once. A merge in
+// giver covers one merge (merge:#<n>, merge:@<session>) in asked; one
+// merge in giver never covers every merge, so a merge in asked gets
+// giver's one merges only.
+func Given(asked, giver []string) []string {
+	var out []string
+	add := func(g string) {
+		if !slices.Contains(out, g) {
+			out = append(out, g)
+		}
+	}
+	for _, a := range asked {
+		switch {
+		case slices.Contains(giver, a):
+			add(a)
+		case oneMerge.MatchString(a) && slices.Contains(giver, "merge"):
+			add(a)
+		case a == "merge":
+			for _, g := range giver {
+				if oneMerge.MatchString(g) {
+					add(g)
+				}
+			}
+		}
+	}
+	return out
+}
+
 // Unguarded are the plan's sessions that run an agent with no merge guard
 // (agentOf names it: codex, opencode, cursor-agent), each with the goes the grants do not
 // give in full: one merge (merge:#n) still leaves every other merge open.

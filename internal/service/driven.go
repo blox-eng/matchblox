@@ -45,7 +45,7 @@ func drivenRun(m stoker.Mode) (string, []string) {
 // fn tells if it changed them. While the unit is off there is no file and
 // fn does not run. When another order runs, the panes the unit drove stay
 // driven with that order's goes; the goes given to steps are gone with
-// their plan.
+// their plan. The goes are grantsOf(u): a chain unit's follow its giver's.
 func (s *Service) updateDriven(u *stokerUnit, fn func(d *stoker.Driven, grants []string) bool) error {
 	if u == nil {
 		return nil
@@ -68,7 +68,8 @@ func (s *Service) updateDriven(u *stokerUnit, fn func(d *stoker.Driven, grants [
 		ds.d = &d
 	}
 	d := ds.d
-	run, grants := drivenRun(m)
+	run, _ := drivenRun(m)
+	grants := s.grantsOf(u)
 	changed := false
 	if d.Run != run {
 		for pane := range d.Panes {
@@ -85,8 +86,8 @@ func (s *Service) updateDriven(u *stokerUnit, fn func(d *stoker.Driven, grants [
 	if sock := s.stokerSocket(); d.StokerSocket != sock {
 		d.StokerSocket, changed = sock, true
 	}
-	// Every driven pane carries the order's goes: a new order by day
-	// changes them at once.
+	// Every driven pane carries the unit's goes: a new order by day, or
+	// the giver's, changes them at once.
 	for pane, has := range d.Panes {
 		if !slices.Equal(has, grants) {
 			d.Panes[pane], changed = slices.Clone(grants), true
@@ -240,7 +241,7 @@ func (s *Service) syncDriven() {
 	}
 }
 
-// drive marks a pane unit u sent a message to, with its order's goes.
+// drive marks a pane unit u sent a message to, with its goes.
 func (s *Service) drive(u *stokerUnit, pane string) {
 	_ = s.updateDriven(u, func(d *stoker.Driven, grants []string) bool {
 		if _, in := d.Panes[pane]; in {
