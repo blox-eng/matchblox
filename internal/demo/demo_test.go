@@ -2,7 +2,9 @@ package demo_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,7 +16,10 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/app"
 	"github.com/blox-eng/matchblox/internal/demo"
+	"github.com/blox-eng/matchblox/internal/proto"
+	"github.com/blox-eng/matchblox/internal/transport"
 )
 
 const tree = "../../testdata/demo"
@@ -24,9 +29,32 @@ type terminal struct {
 	in  *io.PipeWriter
 	out *io.PipeReader
 
-	mu    sync.Mutex
-	drawn bytes.Buffer
-	ended chan struct{}
+	mu     sync.Mutex
+	drawn  bytes.Buffer
+	states []string // what each state from the service held, for a failure to name (#321)
+	ended  chan struct{}
+}
+
+// heard records each state the console receives.
+type heard struct {
+	transport.Conn
+	term  *terminal
+	start time.Time
+}
+
+func (h heard) Recv() (proto.Envelope, error) {
+	env, err := h.Conn.Recv()
+	if err == nil && env.Kind == proto.KindSnapshot {
+		var st proto.State
+		line := "a state that does not parse"
+		if json.Unmarshal(env.Body, &st) == nil {
+			line = fmt.Sprintf("%d sessions, errors %q", len(st.Sessions), st.Errors)
+		}
+		h.term.mu.Lock()
+		h.term.states = append(h.term.states, fmt.Sprintf("%6dms %s", time.Since(h.start).Milliseconds(), line))
+		h.term.mu.Unlock()
+	}
+	return env, err
 }
 
 func start(t *testing.T) (*demo.Demo, *terminal) {
@@ -60,7 +88,11 @@ func tryStartTree(t *testing.T, tree string, cols, rows int) (*demo.Demo, *termi
 	term := &terminal{in: inW, out: outR, ended: make(chan struct{})}
 	go term.read()
 	t.Cleanup(term.close)
-	d, err := demo.Start(demo.Options{Tree: tree, In: inR, Out: outW, Cols: cols, Rows: rows})
+	start := time.Now()
+	o := demo.WithConsole(demo.Options{Tree: tree, In: inR, Out: outW, Cols: cols, Rows: rows}, func(a *app.Options) {
+		a.Conn = heard{Conn: a.Conn, term: term, start: start}
+	})
+	d, err := demo.Start(o)
 	if err != nil {
 		return nil, term, err
 	}
@@ -115,7 +147,10 @@ func (term *terminal) waitFor(t *testing.T, want ...string) {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("the console never drew %q; it drew:\n%s", missing, text)
+			term.mu.Lock()
+			states := strings.Join(term.states, "\n")
+			term.mu.Unlock()
+			t.Fatalf("the console never drew %q; it drew:\n%s\nthe states it had:\n%s", missing, text, states)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
