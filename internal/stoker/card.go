@@ -33,6 +33,17 @@ type Card struct {
 	// compact, with why: "69% · finishes ~79% · left alone".
 	Left   []Miss  `json:"left_alone,omitempty"`
 	Lapses []Lapse `json:"lapses,omitempty"`
+	// Chains are the cards of the chain stokers the night ran, on the
+	// host stoker's morning card, in family order.
+	Chains []ChainCard `json:"chains,omitempty"`
+}
+
+// ChainCard is the card of a chain stoker's night: the chain's name and
+// the stoker's id.
+type ChainCard struct {
+	Name   string `json:"name"`
+	Stoker string `json:"stoker"`
+	Card   Card   `json:"card"`
 }
 
 // Lapse is a stretch of the run the plan's limit stopped sessions: from

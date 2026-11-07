@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +45,8 @@ type stokerUnit struct {
 	// joins are the tmux sessions a chain unit started, which join its
 	// chain once a sample finds them in its repo. Service.mu guards it.
 	joins []*pendingJoin
+	// wakes are what the unit's agent was told and is still to be told.
+	wakes wakeState
 }
 
 // pendingJoin is a session a chain unit started, not in its chain yet: the
@@ -386,7 +389,12 @@ func (s *Service) atCap() error {
 // the agent's first rest.
 func (s *Service) runChain(u *stokerUnit, c chains.Chain, name string, members []sample.Session, words string, grants []string) error {
 	now := s.now()
-	o := stoker.Order{Grants: grants, ID: "run-" + now.UTC().Format("20060102-150405.000000000"), Words: strings.TrimSpace(words), At: now, Went: now, State: stoker.OrderRunning}
+	night := false // a run that starts in the night is part of it
+	if h := s.hostUnit(); h != nil {
+		m := h.store.Mode()
+		night = m.On && m.Nightly
+	}
+	o := stoker.Order{Grants: grants, ID: "run-" + now.UTC().Format("20060102-150405.000000000"), Words: strings.TrimSpace(words), Night: night, At: now, Went: now, State: stoker.OrderRunning}
 	board := s.board(now)
 	board.Chain = &stoker.BriefChain{Name: name, Repo: c.Repo}
 	for _, x := range members {
@@ -399,7 +407,7 @@ func (s *Service) runChain(u *stokerUnit, c chains.Chain, name string, members [
 		if m.On {
 			return m, errors.New("the run changed meanwhile: look at it again")
 		}
-		m, err := s.start(stoker.Mode{Acked: m.Ack(now).Acked}, false, now, members)
+		m, err := s.start(stoker.Mode{Acked: m.Ack(now).Acked}, night, now, members)
 		m.Order = &o
 		return m, err
 	}); err != nil {
@@ -411,8 +419,128 @@ func (s *Service) runChain(u *stokerUnit, c chains.Chain, name string, members [
 	if h := s.hostUnit(); h != nil {
 		_ = h.store.Append(familyLine(now, fmt.Sprintf("started the stoker of chain %s (%s)", name, u.id)))
 	}
+	s.handOver(u)
 	s.refreshStoker()
 	return nil
+}
+
+// handOver passes to chain unit u, whose run starts, the host stoker's
+// work on its chain's matches. The host's triggers that act on a member
+// move to u. Each kill or go on the host's card that waits for a y for a
+// member is dropped, with a line that says so. The host drives the members
+// no more. A hold passes with its match: the owner of a match is the one
+// stoker that may let it go (scopeOf). Each write is best effort: what
+// fails stays with the host, whose acts on the members scopeOf refuses.
+func (s *Service) handOver(u *stokerUnit) {
+	host := s.hostUnit()
+	if host == nil || u == host {
+		return
+	}
+	_, name, members, ok := s.chainNamed(u.link.Chain)
+	if !ok {
+		return
+	}
+	panes, ids := map[string]string{}, map[string]string{}
+	for _, x := range members {
+		panes[x.Pane] = x.Name
+		if x.SessionID != "" {
+			ids[x.SessionID] = x.Name
+		}
+	}
+	s.moveTriggers(host, u, panes)
+	s.dropWaits(host, name, panes, ids)
+	_ = s.updateDriven(host, func(d *stoker.Driven, _ []string) bool {
+		changed := false
+		for pane := range panes {
+			_, driven := d.Panes[pane]
+			_, steps := d.Steps[pane]
+			delete(d.Panes, pane)
+			delete(d.Steps, pane)
+			changed = changed || driven || steps
+			for from, needs := range d.Steps { // a kill's y is kept by the pane that asked
+				if i := slices.Index(needs, "kill:"+pane); i >= 0 {
+					d.Steps[from], changed = slices.Delete(needs, i, i+1), true
+				}
+			}
+		}
+		return changed
+	})
+}
+
+// moveTriggers moves the triggers of from that act on one of panes to to,
+// each with an id of to's run.
+func (s *Service) moveTriggers(from, to *stokerUnit, panes map[string]string) {
+	var moved []stoker.Trigger
+	if err := s.updateOrder(from, func(m stoker.Mode) (stoker.Mode, error) {
+		moved = nil
+		var kept []stoker.Trigger
+		for _, t := range m.Triggers {
+			if _, in := panes[t.Pane]; in {
+				moved = append(moved, t)
+			} else {
+				kept = append(kept, t)
+			}
+		}
+		if len(moved) == 0 {
+			return m, errNoneMoves
+		}
+		m.Triggers = kept
+		return m, nil
+	}); err != nil {
+		return
+	}
+	_ = s.updateOrder(to, func(m stoker.Mode) (stoker.Mode, error) {
+		for _, t := range moved {
+			m.NextTrigger++
+			t.ID = "t" + strconv.Itoa(m.NextTrigger)
+			m.Triggers = append(slices.Clip(m.Triggers), t)
+		}
+		return m, nil
+	})
+}
+
+// errNoneMoves leaves the triggers as they are.
+var errNoneMoves = errors.New("no trigger moves")
+
+// dropWaits drops each kill or go on unit u's card that waits for a y for
+// a member of the chain name, by its pane or its session id.
+func (s *Service) dropWaits(u *stokerUnit, name string, panes, ids map[string]string) {
+	run := u.store.View().Run
+	now := s.now()
+	done := map[string]bool{}
+	for _, e := range run {
+		key := e.Pane + " " + e.Needs
+		if e.Rule != stoker.RuleGo || done[key] {
+			continue
+		}
+		done[key] = true
+		last := stoker.LastGo(run, e)
+		if last.State != stoker.StepWaits {
+			continue
+		}
+		target, kill := strings.CutPrefix(last.Needs, "kill:")
+		if !kill {
+			target = last.Pane
+		}
+		who, in := panes[target]
+		if !in {
+			who, in = ids[last.Session]
+		}
+		if !in {
+			continue
+		}
+		if who == "" {
+			who = target
+		}
+		what := "go"
+		if kill {
+			what = "kill"
+		}
+		d := last
+		d.ID, d.At, d.State = "dropped@"+now.UTC().Format(time.RFC3339Nano)+"/"+last.Pane+"/"+last.Needs, now, stoker.StepFailed
+		d.Text = fmt.Sprintf("dropped the %s for %s: the stoker of chain %s owns it now", what, who, name)
+		_ = u.store.Append(d)
+	}
 }
 
 // briefLine is the line that points chain unit u's agent at its brief.

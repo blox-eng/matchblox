@@ -132,7 +132,7 @@ func (s *Service) fire(ctx context.Context, u *stokerUnit, now time.Time) bool {
 			line = "when " + t.Event() + ": failed: " + t.Action() + ": " + why
 		}
 		_ = u.store.Append(e)
-		s.wakes.add(line)
+		u.wakes.add(line)
 	}
 	return true
 }

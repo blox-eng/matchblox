@@ -689,6 +689,9 @@ func (m Model) scoreLines(c proto.StokerCard, mark string, w int) []string {
 	for _, l := range cardLines(c, w < 60) {
 		lines = append(lines, "   "+st.text.Render(l))
 	}
+	for _, ch := range c.Chains { // the night of each chain stoker
+		lines = append(lines, "   "+st.text.Render(pad("chain "+ch.Name, colName))+st.muted.Render(fmt.Sprintf("ready %d/%d · %s", ch.Card.Ready, ch.Card.Of, cardLines(ch.Card, true)[0])))
+	}
 	for _, x := range c.NotReady {
 		lines = append(lines, "   "+st.text.Render(pad(x.Name, colName))+st.warn.Render(missWhy(x, c.Ended)))
 	}

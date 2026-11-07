@@ -47,13 +47,17 @@ func Brief(o Order, ways, cmds string, board Board) string {
 
 	b.WriteString("## The order\n\n")
 	quote(&b, o.Words)
-	if o.Night {
+	switch {
+	case o.Night && board.Chain != nil:
+		b.WriteString("\nThis is a night: it ends at the morning. A new order from the host stoker comes as one line, `New order: <words>`: it takes the place of the order above, and the run and its done steps go on.\n")
+	case o.Night:
 		b.WriteString("\nThis is a night: it ends at the morning, and no new order comes until then.\n")
-	} else {
+	default:
 		b.WriteString("\nBy day a new order comes as one line, `New order: <words>`: it takes the place of the order above, and the run and its done steps go on.\n")
 	}
 
 	board.write(&b)
+	board.writeChains(&b)
 
 	fmt.Fprintf(&b, "\n## Your ways\n\nRead %s. Its standing rules hold in every run, and its `# Recipe:` sections are what the order may name.\n", ways)
 
@@ -123,6 +127,39 @@ type Board struct {
 	// Chain scopes the brief to one chain: only its members show. Nil:
 	// the host stoker's brief, of the whole machine.
 	Chain *BriefChain
+	// Chains are the chains the host stoker's brief lists, each with its
+	// stoker. Nil: no chain.
+	Chains []ChainRow
+}
+
+// ChainRow is a chain on the host stoker's brief: its name, its stoker's
+// id ("": none), that stoker's state (on, night or off) and its plan, as
+// steps done of all.
+type ChainRow struct {
+	Name, StokerID, State string
+	PlanDone, PlanAll     int
+}
+
+// writeChains adds the chains section of the host stoker's brief.
+func (bd Board) writeChains(b *strings.Builder) {
+	if len(bd.Chains) == 0 {
+		return
+	}
+	b.WriteString("\n## The chains\n\n" +
+		"A chain whose stoker is on or in the night is that stoker's: give it an order, and do not act on its matches. " +
+		"A chain with no stoker, or with its stoker off, is yours.\n\n")
+	for _, c := range bd.Chains {
+		if c.StokerID == "" {
+			fmt.Fprintf(b, "- %s: no stoker\n", c.Name)
+			continue
+		}
+		plan := "no plan"
+		if c.PlanAll > 0 {
+			plan = fmt.Sprintf("plan %d/%d", c.PlanDone, c.PlanAll)
+		}
+		fmt.Fprintf(b, "- %s: stoker %s · %s · %s\n", c.Name, c.StokerID, c.State, plan)
+	}
+	b.WriteString("\nGive a chain an order: matchblox stoker order <chain> \"<text>\"\n")
 }
 
 // BriefChain is the chain a chain stoker runs: its name, its repo and its
