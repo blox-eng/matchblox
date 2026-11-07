@@ -1998,3 +1998,28 @@ func TestStateCarriesChainStokers(t *testing.T) {
 		t.Fatalf("an ended unit keeps its card and its last name: %+v", got)
 	}
 }
+
+func TestRetiredUnitKeepsItsChainNameAcrossARestart(t *testing.T) {
+	s, _, _ := chainStokerTest(t)
+	u, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.fam.mu.Lock()
+	s.Chains.Chains = nil // the chain is gone before the retire
+	s.fam.mu.Unlock()
+	s.retire(t.Context(), u, "its chain ended", "its chain ended")
+
+	again := newTest(t, time.Hour)
+	var openErr error
+	if again.Stoker, openErr = stoker.Open(s.Stoker.Dir()); openErr != nil {
+		t.Fatal(openErr)
+	}
+	if err := again.loadFamily(); err != nil {
+		t.Fatal(err)
+	}
+	got := again.unitByID("s1")
+	if got == nil || !got.link.Ended || again.unitName(got) != "api-auth" {
+		t.Fatalf("name %q, unit %+v", again.unitName(got), got)
+	}
+}
