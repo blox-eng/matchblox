@@ -317,14 +317,19 @@ func TestDenyFamilyAChainUnitWithBrokenModeAndNoDrivenIsLost(t *testing.T) {
 	}
 }
 
-// An ended chain stoker guards nothing: the guard does not read its files.
+// An ended chain stoker whose run is off guards nothing: the guard does
+// not read its files.
 func TestDenyFamilySkipsAnEndedUnit(t *testing.T) {
 	merge := Guards("gh pr merge 4")
 	st := t.TempDir()
-	familyUnit(t, st, "s1", nil) // its run on, no driven.json: lost, were it alive
+	familyUnit(t, st, "s1", nil) // no driven.json: lost, were it alive
 	familyUnit(t, st, "s2", &Driven{Run: "r", Panes: map[string][]string{"%7": nil}})
 	for _, id := range []string{"s1", "s2"} {
-		if err := WriteLink(FamilyDir(st, id), Link{ID: id, Chain: "c-" + id, Giver: "person", Ended: true}); err != nil {
+		dir := FamilyDir(st, id)
+		if err := WriteLink(dir, Link{ID: id, Chain: "c-" + id, Giver: "person", Ended: true}); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "stoker.json"), []byte(`{"on":false}`), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -332,5 +337,27 @@ func TestDenyFamilySkipsAnEndedUnit(t *testing.T) {
 		if got, want := DenyFamily(st, "", pane, merge), Deny(st, "", pane, merge); got != want {
 			t.Fatalf("%s: %q, want the host's %q", pane, got, want)
 		}
+	}
+}
+
+// An ended link whose run still reads on is not skipped: the end did not
+// finish, so the unit still guards its panes and a lost one fails closed.
+func TestDenyFamilyGuardsAnEndedUnitStillOn(t *testing.T) {
+	merge := Guards("gh pr merge 4")
+	st := t.TempDir()
+	familyUnit(t, st, "s1", &Driven{Run: "r", Panes: map[string][]string{"%7": nil}})
+	if err := WriteLink(FamilyDir(st, "s1"), Link{ID: "s1", Chain: "c-s1", Giver: "person", Ended: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := DenyFamily(st, "", "%7", merge); got == "" {
+		t.Fatal("an ended unit still on let its driven pane merge without a go")
+	}
+	lost := t.TempDir()
+	familyUnit(t, lost, "s1", nil)
+	if err := WriteLink(FamilyDir(lost, "s1"), Link{ID: "s1", Chain: "c-s1", Giver: "person", Ended: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := DenyFamily(lost, "", "%1", merge); got != DenyLost {
+		t.Fatalf("an ended unit still on with no driven.json: %q, want %q", got, DenyLost)
 	}
 }

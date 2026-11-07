@@ -566,7 +566,9 @@ func DenyFamily(state, socket, pane string, gs []Guard) string {
 		dir := FamilyDir(state, id)
 		if id != HostID {
 			if l, err := ReadLink(dir); err == nil && l.Ended {
-				continue // it stopped for good: its run is off, and it drives nothing
+				if m, merr := ReadMode(dir); merr == nil && !m.On {
+					continue // it stopped for good: its run is off, and it drives nothing
+				}
 			}
 		}
 		d, err := ReadDriven(dir)
