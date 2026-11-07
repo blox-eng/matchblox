@@ -484,7 +484,20 @@ func TestMaxChainsUnsetIsTheDefault(t *testing.T) {
 // with its run off, and the stoker of c1 (s1, %5@mbtest) up with its run on.
 func familyTest(t *testing.T) (*Service, *stokerUnit, *[][]string) {
 	t.Helper()
-	s, ran, _ := chainStokerTest(t)
+	s, ran, _ := familySetup(t)
+	u, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person")
+	if err != nil {
+		t.Fatal(err)
+	}
+	chainStokerUp(s)
+	*ran = nil
+	return s, u, ran
+}
+
+// familySetup is familyTest before the stoker of c1 starts.
+func familySetup(t *testing.T) (*Service, *[][]string, *time.Time) {
+	t.Helper()
+	s, ran, now := chainStokerTest(t)
 	tmp, err := filepath.EvalSymlinks(t.TempDir()) // macOS's temp dir is a link
 	if err != nil {
 		t.Fatal(err)
@@ -507,13 +520,7 @@ func familyTest(t *testing.T) (*Service, *stokerUnit, *[][]string) {
 		sample.Session{Agent: "claude", Pane: "%9", Target: "x:1.1", SessionID: "s9x", Name: "api-x", Status: "idle", Idle: 5 * time.Minute, Cwd: repo},
 		sample.Session{Agent: "claude", Pane: "%9@mbtest", Target: "stoker:1.1", SessionID: "s9", Name: "stoker", Status: "busy", Busy: true})
 	s.publish(sample.Snapshot{At: night0, Sessions: sessions}, func(state.Doc) {})
-	u, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person")
-	if err != nil {
-		t.Fatal(err)
-	}
-	chainStokerUp(s)
-	*ran = nil
-	return s, u, ran
+	return s, ran, now
 }
 
 // apiRepo is the repo of c1 in a familyTest.
@@ -883,5 +890,137 @@ func TestChainStokerReadsWholeHost(t *testing.T) {
 	}
 	if len(typed(*ran, "%9")) != 0 {
 		t.Fatal("a read typed into api-x")
+	}
+}
+
+// hostGiven is familySetup with the host's run on under an order that
+// gives hostGoes, and the stoker of c1 started by the host with goes.
+func hostGiven(t *testing.T, night bool, hostGoes, goes []string) (*Service, *stokerUnit, *time.Time) {
+	t.Helper()
+	s, _, now := familySetup(t)
+	mustAct(t, s, orderAct(t, "go", night, hostGoes...))
+	u, err := s.startChainStoker(t.Context(), "api-auth", "", goes, "host")
+	if err != nil {
+		t.Fatal(err)
+	}
+	chainStokerUp(s)
+	return s, u, now
+}
+
+// drivenGoes are the goes pane carries in unit u's driven.json.
+func drivenGoes(t *testing.T, u *stokerUnit, pane string) []string {
+	t.Helper()
+	d, err := stoker.ReadDriven(u.store.Dir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d.Panes[pane]
+}
+
+func TestGrantsOfHostGivenIsIntersection(t *testing.T) {
+	s, u, _ := hostGiven(t, false, []string{"merge", "release"}, []string{"merge"})
+	if got := s.grantsOf(u); !slices.Equal(got, []string{"merge"}) {
+		t.Fatalf("the unit's goes %q", got)
+	}
+	if got := s.grantsOf(s.hostUnit()); !slices.Equal(got, []string{"merge", "release"}) {
+		t.Fatalf("the host's goes %q", got)
+	}
+}
+
+func TestGiverLosesGoReachesGuard(t *testing.T) {
+	s, u, _ := hostGiven(t, false, []string{"merge", "release"}, []string{"merge"})
+	s.drive(u, "%3")
+	state := s.Stoker.Dir()
+	merge := stoker.Guards("gh pr merge 4")
+	if got := drivenGoes(t, u, "%3"); !slices.Equal(got, []string{"merge"}) {
+		t.Fatalf("stokers/s1/driven.json gives %%3 %q", got)
+	}
+	if why := stoker.DenyFamily(state, "", "%3", merge); why != "" {
+		t.Fatalf("the merge the host gives is denied: %s", why)
+	}
+	mustAct(t, s, orderAct(t, "no merges now", false, "release"))
+	if got := drivenGoes(t, u, "%3"); len(got) != 0 {
+		t.Fatalf("stokers/s1/driven.json still gives %%3 %q", got)
+	}
+	if why := stoker.DenyFamily(state, "", "%3", merge); why != stoker.DenyNoGo {
+		t.Fatalf("the merge the host took back: %q", why)
+	}
+	mustAct(t, s, orderAct(t, "merge again", false, "merge"))
+	if got := drivenGoes(t, u, "%3"); !slices.Equal(got, []string{"merge"}) {
+		t.Fatalf("the host's merge given back: %q", got)
+	}
+}
+
+func TestNightEndClearsHostGivenGos(t *testing.T) {
+	s, u, now := hostGiven(t, true, []string{"merge"}, []string{"merge"})
+	s.drive(u, "%3")
+	if got := drivenGoes(t, u, "%3"); !slices.Equal(got, []string{"merge"}) {
+		t.Fatalf("by night %%3 has %q", got)
+	}
+	*now = s.Stoker.Mode().Until.Add(time.Minute)
+	s.stoke(t.Context(), *now)
+	if s.Stoker.Mode().On {
+		t.Fatal("the night did not end")
+	}
+	if got := s.grantsOf(u); len(got) != 0 {
+		t.Fatalf("the unit's goes after the night %q", got)
+	}
+	if got := drivenGoes(t, u, "%3"); len(got) != 0 {
+		t.Fatalf("after the night %%3 has %q", got)
+	}
+	if why := stoker.DenyFamily(s.Stoker.Dir(), "", "%3", stoker.Guards("gh pr merge 4")); why != stoker.DenyNoGo {
+		t.Fatalf("a merge after the night: %q", why)
+	}
+}
+
+func TestPersonGivenKeepsItsGos(t *testing.T) {
+	s, _, _ := familySetup(t)
+	u, err := s.startChainStoker(t.Context(), "api-auth", "", []string{"merge"}, "person")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Stoker.Mode().On {
+		t.Fatal("the host's run is on")
+	}
+	s.drive(u, "%3")
+	if got := s.grantsOf(u); !slices.Equal(got, []string{"merge"}) {
+		t.Fatalf("the unit's goes %q", got)
+	}
+	if got := drivenGoes(t, u, "%3"); !slices.Equal(got, []string{"merge"}) {
+		t.Fatalf("%%3 has %q", got)
+	}
+}
+
+func TestCheckGiven(t *testing.T) {
+	for _, c := range []struct {
+		grants, giver []string
+		want          string
+	}{
+		{nil, nil, ""},
+		{[]string{"merge"}, []string{"merge", "release"}, ""},
+		{[]string{"merge:#12"}, []string{"merge"}, ""},
+		{[]string{"merge", "deploy"}, []string{"merge"}, "the order gives deploy, which its giver does not have"},
+		{[]string{"merge"}, []string{"merge:#12"}, "the order gives merge, which its giver does not have"},
+		{[]string{"kill"}, nil, "the order gives kill, which its giver does not have"},
+	} {
+		got := ""
+		if err := checkGiven(c.grants, c.giver); err != nil {
+			got = err.Error()
+		}
+		if got != c.want {
+			t.Errorf("checkGiven(%q, %q) = %q, want %q", c.grants, c.giver, got, c.want)
+		}
+	}
+}
+
+func TestHostGivesNoGoItLacks(t *testing.T) {
+	s, _, _ := familySetup(t)
+	mustAct(t, s, orderAct(t, "go", false, "release"))
+	_, err := s.startChainStoker(t.Context(), "api-auth", "", []string{"merge"}, "host")
+	if err == nil || err.Error() != "the order gives merge, which its giver does not have" {
+		t.Fatalf("start: %v", err)
+	}
+	if s.unitOfChain("c1") != nil {
+		t.Fatal("the refused start left a unit")
 	}
 }

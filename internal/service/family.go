@@ -319,6 +319,11 @@ func (s *Service) startChainStoker(ctx context.Context, who, words string, grant
 	if err != nil {
 		return nil, err
 	}
+	if giver == "host" {
+		if err := checkGiven(grants, s.grantsOf(host)); err != nil {
+			return nil, err
+		}
+	}
 	s.fam.start.Lock()
 	defer s.fam.start.Unlock()
 	c, name, members, ok := s.chainNamed(who)
@@ -376,6 +381,36 @@ func (s *Service) startChainStoker(ctx context.Context, who, words string, grant
 	_ = host.store.Append(familyLine(now, fmt.Sprintf("started the stoker of chain %s (%s)", name, id)))
 	s.refreshStoker()
 	return u, nil
+}
+
+// grantsOf are the goes unit u has now: the host's are its order's. A
+// chain unit's are its order's, those its link holds and, when the host
+// gave them, those the host has now: a go the host loses, or a night
+// that ends, takes them away.
+func (s *Service) grantsOf(u *stokerUnit) []string {
+	_, grants := drivenRun(u.store.Mode())
+	if u.link.Chain == "" {
+		return grants
+	}
+	grants = stoker.Given(grants, u.link.Grants)
+	if u.link.Giver == "host" {
+		var host []string
+		if h := s.hostUnit(); h != nil && h.store.Mode().On {
+			host = s.grantsOf(h)
+		}
+		grants = stoker.Given(grants, host)
+	}
+	return grants
+}
+
+// checkGiven refuses the first of grants its giver does not have.
+func checkGiven(grants, giver []string) error {
+	for _, g := range grants {
+		if !slices.Equal(stoker.Given([]string{g}, giver), []string{g}) {
+			return fmt.Errorf("the order gives %s, which its giver does not have", g)
+		}
+	}
+	return nil
 }
 
 // endUnit ends a chain unit whose start failed after its agent started:
