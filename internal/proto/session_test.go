@@ -29,6 +29,9 @@ func TestHandoffCarriesTheBuildersExtras(t *testing.T) {
 			t.Errorf("%q round-trips as %q %v", extra, got, ok)
 		}
 	}
+	if extra, ok := HandoffExtra(DefaultHandoff + handoffExtras + "  "); !ok || extra != "" {
+		t.Errorf("blank extras pass as a custom handoff: %q %v", extra, ok)
+	}
 	if _, ok := HandoffExtra("Only explain the failing test."); ok {
 		t.Error("a custom handoff passes as the default")
 	}

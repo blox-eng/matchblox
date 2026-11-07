@@ -289,18 +289,19 @@ func (m Model) switchAction(f form) *action {
 	// The service starts it on its last account: the confirm names it.
 	on := ""
 	if len(f.accts[f.agent]) > 0 {
-		on = " on default,"
+		on = ", on default"
 		if a := f.lastAccount(); a != "" {
-			on = " on " + a + ","
+			on = ", on " + a
 		}
 	}
-	say := fmt.Sprintf("switch %s: %s → %s in %s, %s,%s then jump there", f.who, f.from, f.agent, f.pane, f.where, on)
+	say := fmt.Sprintf("switch %s: %s → %s in %s, %s%s", f.who, f.from, f.agent, f.pane, f.where, on)
 	if f.agent == "codex" {
 		say += "; trust this workspace and enable workspace-write network access"
 	}
 	if f.noTask {
-		say += "; no task"
+		say += ", then start it with no task" // its own line in the confirm
 	}
+	say += ", then jump there"
 	a := &action{label: "switch", destructive: true, rec: "switch:" + f.pane, text: string(b), againText: string(again), say: say, done: "switched " + f.who + " to " + f.agent, host: f.host}
 	if i := slices.IndexFunc(m.snap.Sessions, in); i >= 0 {
 		a.again = m.againFor(m.snap.Sessions[i], "switches")
@@ -1223,21 +1224,10 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 		line, chips := m.agentChips(iw)
 		add(fmt.Sprintf("field:%d", fieldAgent), line)
 		agents = chips
-		start := switchStarts[0]
-		if f.noTask {
-			start = switchStarts[1]
-		}
-		startLead := st.faint.Render(fmt.Sprintf("%-7s", formLabels[fieldStart])) + "  "
-		if f.at == fieldStart {
-			startLead = st.muted.Render(fmt.Sprintf("%-7s", formLabels[fieldStart])) + st.accent.Render("› ")
-		}
-		other := switchStarts[0]
+		line, _ = m.startChips()
+		add(fmt.Sprintf("field:%d", fieldStart), line)
 		if !f.noTask {
-			other = switchStarts[1]
-		}
-		add(fmt.Sprintf("field:%d", fieldStart), startLead+st.accent.Render("‹ "+start+" ›")+"  "+st.faint.Render(other))
-		if !f.noTask {
-			field(fieldFirst, f.first, "blank: continue from the handover")
+			field(fieldFirst, f.first, "blank: just continue")
 		}
 	case f.pick:
 		title = st.accent.Bold(true).Render("Find repositories in these folders")
@@ -1409,6 +1399,33 @@ func (m Model) agentChips(iw int) (string, []span) {
 	return line, spans
 }
 
+// startChips is the start line of Switch agent, each start where it always
+// is, and the start a tap on each chip picks.
+func (m Model) startChips() (string, []span) {
+	st, f := m.st, m.form
+	label := fmt.Sprintf("%-7s", formLabels[fieldStart])
+	line := st.faint.Render(label) + "  "
+	if f.at == fieldStart {
+		line = st.muted.Render(label) + st.accent.Render("› ")
+	}
+	x := 9
+	var spans []span
+	for i, s := range switchStarts {
+		if i > 0 {
+			line += "  "
+			x += 2
+		}
+		chip, style := "○ "+s, st.muted
+		if (i == 1) == f.noTask {
+			chip, style = "● "+s, st.accent
+		}
+		line += style.Render(chip)
+		spans = append(spans, span{x + 2, x + 2 + lipgloss.Width(chip), s}) // + the box's "│ "
+		x += lipgloss.Width(chip)
+	}
+	return line, spans
+}
+
 func (m Model) formFoot(bw int) []footPart {
 	st := m.st
 	fk, sep := m.keys.form, " ─ "
@@ -1476,8 +1493,10 @@ func (m Model) tapForm(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 	}
 	if _, err := fmt.Sscanf(sc.boxRows[i], "field:%d", &id); err == nil {
 		m.form = &f
-		if id == fieldStart { // a tap on a phone picks the other start
-			f.noTask = !f.noTask
+		if _, starts := m.startChips(); id == fieldStart {
+			if c, ok := spanAt(starts, dx); ok { // a tap on the label only moves the cursor
+				f.noTask = c.press == switchStarts[1]
+			}
 		}
 		if f.at = id; !f.listOpen {
 			cmd := m.onWhere(&f)

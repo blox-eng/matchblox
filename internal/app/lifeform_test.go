@@ -170,7 +170,7 @@ func TestAOpensSwitchAgentAndJumpsAfter(t *testing.T) {
 	if fm == nil || !fm.swap || fm.agent != "codex" || fm.first != "" || fm.noTask {
 		t.Fatalf("form %+v", fm)
 	}
-	if s := screen(next); !strings.Contains(s, "Switch agent") || !strings.Contains(s, "‹ continue ›") || !strings.Contains(s, "blank: continue from the handover") {
+	if s := screen(next); !strings.Contains(s, "Switch agent") || !strings.Contains(s, "● continue") || !strings.Contains(s, "blank: just continue") {
 		t.Fatalf("the form:\n%s", s)
 	}
 	if next, _ = key(next, "left"); next.(Model).form.agent != "codex" {
@@ -273,8 +273,42 @@ func TestSwitchConfirmShowsTheSwitchOnly(t *testing.T) {
 		next, _ = key(next, "A")
 		next, _ = key(next, "enter")
 		s := screen(next)
-		if !strings.Contains(s, "claude → codex") || strings.Contains(s, "andover") || strings.Contains(s, "awareness") || !strings.Contains(s, "network") {
+		if !strings.Contains(s, "claude → codex") || strings.Contains(s, "andover") || strings.Contains(s, "awareness") || !strings.Contains(s, "network") || strings.Index(s, "trust") > strings.Index(s, "jump") {
 			t.Fatalf("%d columns, the confirm:\n%s", w, s)
+		}
+	}
+}
+
+// tapWords taps the first place the screen shows words.
+func tapWords(m tea.Model, words string) tea.Model {
+	for y, line := range strings.Split(screen(m), "\n") {
+		if i := strings.Index(line, words); i >= 0 {
+			m, _ = m.Update(tea.MouseClickMsg{X: len([]rune(line[:i])), Y: y, Button: tea.MouseLeft})
+			return m
+		}
+	}
+	return m
+}
+
+// A tap picks the start it lands on: on a phone, a tap on the shown start
+// never flips it, and a tap on the label only moves the cursor.
+func TestATapOnAStartPicksThatStart(t *testing.T) {
+	for _, w := range []int{44, 100} {
+		st := lifeState()
+		st.Queue = nil
+		m, _ := loadedWith(t, w, st)
+		next := selectPane(t, m, "%1")
+		next, _ = key(next, "A")
+		next, _ = key(next, "tab")
+		next, _ = key(next, "tab") // the cursor on extra
+		for _, c := range []struct {
+			tap    string
+			noTask bool
+		}{{"continue", false}, {"no task", true}, {"no task", true}, {"start", true}, {"continue", false}} {
+			next = tapWords(next, c.tap)
+			if fm := next.(Model).form; fm == nil || fm.noTask != c.noTask || fm.at != fieldStart {
+				t.Fatalf("%d columns, a tap on %q: %+v\n%s", w, c.tap, fm, screen(next))
+			}
 		}
 	}
 }
@@ -282,12 +316,7 @@ func TestSwitchConfirmShowsTheSwitchOnly(t *testing.T) {
 func TestSwitchCanStartWithNoTask(t *testing.T) {
 	for _, pick := range []func(tea.Model) tea.Model{
 		func(m tea.Model) tea.Model { m, _ = key(m, "tab"); m, _ = key(m, "right"); return m },
-		func(m tea.Model) tea.Model { // a phone's tap on the start row
-			sc := m.(Model).draw(100)
-			i := slices.Index(sc.boxRows, fmt.Sprintf("field:%d", fieldStart))
-			m, _ = m.Update(tea.MouseClickMsg{X: sc.boxX + 4, Y: sc.boxAt + i, Button: tea.MouseLeft})
-			return m
-		},
+		func(m tea.Model) tea.Model { return tapWords(m, "no task") }, // a phone
 	} {
 		next, f := switchState(t, lifeState())
 		next, _ = key(next, "A")
@@ -296,7 +325,7 @@ func TestSwitchCanStartWithNoTask(t *testing.T) {
 			t.Fatalf("no task keeps the extras:\n%s", screen(next))
 		}
 		next, _ = key(next, "enter")
-		if say := next.(Model).pending.say; !strings.HasSuffix(say, "; no task") {
+		if say := next.(Model).pending.say; !strings.HasSuffix(say, ", then start it with no task, then jump there") {
 			t.Fatalf("the confirm hides no task: %q", say)
 		}
 		_, cmd := key(next, "y")
@@ -1837,9 +1866,9 @@ func TestSwitchConfirmNamesTheAccount(t *testing.T) {
 		last map[string]string
 		want string
 	}{
-		{map[string]string{"codex": "team"}, "switch app-feature: claude → codex in %1, /src/api, on team, then jump there"},
-		{nil, "switch app-feature: claude → codex in %1, /src/api, on default, then jump there"},
-		{map[string]string{"codex": "gone"}, "on default, then jump there"},
+		{map[string]string{"codex": "team"}, "switch app-feature: claude → codex in %1, /src/api, on team; trust this workspace and enable workspace-write network access, then jump there"},
+		{nil, "switch app-feature: claude → codex in %1, /src/api, on default; trust"},
+		{map[string]string{"codex": "gone"}, "on default; trust"},
 	} {
 		st := lastAccountState(c.last)
 		next, _ := switchState(t, st)

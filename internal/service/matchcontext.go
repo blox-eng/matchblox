@@ -328,13 +328,28 @@ func conversationExcerpt(ctx context.Context, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(turns) == 0 {
+	return excerptOf(turns)
+}
+
+// excerptOf is the excerpt of turns, or why there is none: a gap marker
+// alone is no conversation.
+func excerptOf(turns []turn) (string, error) {
+	if !slices.ContainsFunc(turns, func(t turn) bool { return t.role != gapRole }) {
 		return "", errors.New("no readable user or assistant text in the transcript; task intent is unknown")
 	}
 	return pickTurns(turns, conversationBudget), nil
 }
 
 type turn struct{ role, text string }
+
+// roundedSize is n bytes in KB under 1 MB, else in MB, rounded up: a gap
+// is never "0".
+func roundedSize(n int64) string {
+	if n < 1<<20 {
+		return fmt.Sprintf("%d KB", (n+1<<10-1)>>10)
+	}
+	return fmt.Sprintf("%d MB", (n+1<<20-1)>>20)
+}
 
 // gapRole marks the transcript's unread middle.
 const gapRole = "gap"
@@ -366,7 +381,7 @@ func readTurns(ctx context.Context, f *os.File, size, head, tail int64) ([]turn,
 	if err := read(io.LimitReader(f, head)); err != nil {
 		return nil, err
 	}
-	turns = append(turns, turn{gapRole, fmt.Sprintf("[%d MB in the middle of the transcript not read]", (size-head-tail)>>20)})
+	turns = append(turns, turn{gapRole, "[" + roundedSize(size-head-tail) + " in the middle of the transcript not read]"})
 	if _, err := f.Seek(size-tail, io.SeekStart); err != nil {
 		return nil, err
 	}
@@ -462,6 +477,8 @@ func transcriptTurn(line []byte) (turn, bool) {
 		}
 		if cmd, ok := slashCommand(t); ok {
 			t = cmd
+		} else if cmd, ok := tagText(t, "bash-input"); ok && strings.HasPrefix(strings.TrimSpace(t), "<bash-input>") {
+			t = "! " + cmd // the builder's shell line, as typed
 		}
 		b.WriteString(t + "\n")
 	}
@@ -500,9 +517,12 @@ func slashCommand(s string) (string, bool) {
 // settingCommands change the session, not the task.
 var settingCommands = []string{"/model", "/effort", "/fast", "/config", "/theme", "/login", "/logout", "/status", "/cost", "/permissions", "/mcp", "/resume", "/clear", "/compact"}
 
-// noGoal is a slash command with no arguments, such as /clear, or a setting
-// command, such as /model opus: neither states the task.
+// noGoal is a slash command with no arguments, such as /clear, a setting
+// command, such as /model opus, or a shell line: none states the task.
 func noGoal(s string) bool {
+	if strings.HasPrefix(s, "! ") {
+		return true
+	}
 	if !strings.HasPrefix(s, "/") {
 		return false
 	}

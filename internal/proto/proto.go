@@ -545,6 +545,5 @@ func HandoffExtra(h string) (extra string, ok bool) {
 		return "", true
 	}
 	extra, ok = strings.CutPrefix(h, DefaultHandoff+handoffExtras)
-	extra = strings.TrimSpace(extra)
-	return extra, ok && extra != ""
+	return strings.TrimSpace(extra), ok
 }

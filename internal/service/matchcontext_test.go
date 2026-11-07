@@ -241,12 +241,21 @@ func TestSwitchPromptIsFixedAndCarriesTheBuildersExtras(t *testing.T) {
 	}
 }
 
+func TestRoundedSizeIsNeverZero(t *testing.T) {
+	for n, want := range map[int64]string{1: "1 KB", 1 << 10: "1 KB", 1<<10 + 1: "2 KB", 1 << 20: "1 MB", 1<<20 + 1: "2 MB"} {
+		if got := roundedSize(n); got != want {
+			t.Errorf("%d bytes: %q, want %q", n, got, want)
+		}
+	}
+}
+
 func TestConversationReadsTheHeadAndTailOfAHugeTranscript(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "conversation.jsonl")
 	row := func(text string) string {
 		return `{"type":"user","message":{"role":"user","content":"` + text + `"}}` + "\n"
 	}
-	body := row("Goal: ship the export.") + row("middle prompt") + strings.Repeat(`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"`+strings.Repeat("x", 900)+`"}]}}`+"\n", 40) + row("Latest: keep Codex too.")
+	tool := strings.Repeat(`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"`+strings.Repeat("x", 900)+`"}]}}`+"\n", 40)
+	body := row("Goal: ship the export.") + tool + row("middle prompt") + tool + row("Latest: keep Codex too.")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +269,7 @@ func TestConversationReadsTheHeadAndTailOfAHugeTranscript(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := pickTurns(turns, conversationBudget)
-	for _, want := range []string{"Goal: ship the export.", "Latest: keep Codex too.", "of the transcript not read"} {
+	for _, want := range []string{"Goal: ship the export.", "Latest: keep Codex too.", "[" + roundedSize(int64(len(body))-2100) + " in the middle of the transcript not read]"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q: %s", want, text)
 		}
@@ -273,6 +282,45 @@ func TestConversationReadsTheHeadAndTailOfAHugeTranscript(t *testing.T) {
 	if _, err := conversationExcerpt(ctx, path); !errors.Is(err, context.Canceled) {
 		t.Errorf("a cancelled capture keeps reading: %v", err)
 	}
+	long := strings.Repeat(row("a prompt"), 3000)
+	if err := os.WriteFile(path, []byte(long), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conversationExcerpt(&endsAfter{Context: t.Context(), n: 1}, path); !errors.Is(err, context.Canceled) {
+		t.Errorf("a capture cancelled mid-read keeps reading: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal(err)
+	}
+	f2, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f2.Close()
+	tools := strings.Repeat(`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"x"}]}}`+"\n", 200)
+	if err := os.WriteFile(path, []byte(tools), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	turns, err = readTurns(t.Context(), f2, int64(len(tools)), 100, 100)
+	if err != nil || len(turns) != 1 {
+		t.Fatalf("turns %q %v", turns, err)
+	}
+	if _, err := excerptOf(turns); err == nil {
+		t.Error("a transcript of tool output alone hides that intent is unknown")
+	}
+}
+
+// endsAfter is a context that ends after n checks.
+type endsAfter struct {
+	context.Context
+	n int
+}
+
+func (c *endsAfter) Err() error {
+	if c.n--; c.n < 0 {
+		return context.Canceled
+	}
+	return nil
 }
 
 func TestSwitchKeepsCustomAndEmptyTaskSemantics(t *testing.T) {
@@ -430,6 +478,7 @@ func TestConversationCaptureDropsHarnessRowsAndKeepsWholeIntent(t *testing.T) {
 		`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user for tool use] HARNESS SECRET"}]}}`,
 		`{"type":"user","message":{"role":"user","content":"<bash-stdout>HARNESS SECRET</bash-stdout><bash-stderr></bash-stderr>"}}`,
 		`{"type":"user","message":{"role":"user","content":"<local-command-stderr>HARNESS SECRET</local-command-stderr>"}}`,
+		`{"type":"user","message":{"role":"user","content":"<bash-input>gh run list</bash-input>"}}`,
 		`{"type":"user","message":{"role":"user","content":"` + long + `"}}`,
 		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Reply one, first part."}]}}`,
 		`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"TOOL SECRET"}]}}`,
@@ -449,17 +498,17 @@ func TestConversationCaptureDropsHarnessRowsAndKeepsWholeIntent(t *testing.T) {
 	if strings.Contains(text, "SECRET") {
 		t.Errorf("includes harness or tool text: %s", text)
 	}
-	for _, want := range []string{"log line", "NOW FIX THE NULL CHECK", "[middle of message omitted]"} {
+	for _, want := range []string{"log line", "NOW FIX THE NULL CHECK", "[middle of message omitted]", "user:\n! gh run list\n"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("a long prompt loses %q", want)
 		}
 	}
-	tight := pickTurns([]turn{{"user", "/model opus"}, {"user", "Goal: ship the export."}, {"user", strings.Repeat("later ", 10)}, {"user", "Latest."}}, 60)
+	tight := pickTurns([]turn{{"user", "/model opus"}, {"user", "! gh run list"}, {"user", "Goal: ship the export."}, {"user", strings.Repeat("later ", 10)}, {"user", "Latest."}}, 60)
 	if !strings.Contains(tight, "Goal: ship the export.") {
 		t.Errorf("a setting command takes the goal's place: %s", tight)
 	}
 	turns := []turn{}
-	for _, l := range lines[8:11] {
+	for _, l := range lines[9:12] {
 		turns = appendTurn(turns, []byte(l))
 	}
 	if len(turns) != 1 || turns[0].text != "Reply one, first part.\n\nReply one, conclusion." {
