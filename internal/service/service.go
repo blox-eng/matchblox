@@ -652,6 +652,9 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		}
 		s.cur.Holds = s.Holds.List()
 	}
+	if err := s.joinNewLocked(s.now()); err != nil {
+		s.cur.Errors = append(s.cur.Errors, "chains: "+err.Error())
+	}
 	if err := s.pruneChainsLocked(s.now(), prev); err != nil {
 		s.cur.Errors = append(s.cur.Errors, "chains: "+err.Error())
 	}

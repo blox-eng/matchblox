@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/blox-eng/matchblox/internal/chains"
+	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -473,5 +475,216 @@ func TestMaxChainsUnsetIsTheDefault(t *testing.T) {
 	}
 	if s.MaxChains = 3; s.maxChains() != 3 {
 		t.Fatal("max_chains 3 is not 3")
+	}
+}
+
+// familyTest is chainStokerTest with /dev/api known, api-x (%9) in it but
+// out of the chain, the host stoker (%9@mbtest) with its run off, and the
+// stoker of c1 (s1, %5@mbtest) up with its run on.
+func familyTest(t *testing.T) (*Service, *stokerUnit, *[][]string) {
+	t.Helper()
+	s, ran, _ := chainStokerTest(t)
+	s.IsDir = func(string) bool { return true }
+	s.TmuxOut = func([]string) (string, error) { return "%42\n", nil }
+	s.mu.Lock()
+	s.cur.Git = &gitscan.Report{Repos: []gitscan.Repo{{Path: "/dev/api"}, {Path: "/w/app"}}}
+	sessions := slices.Clone(s.cur.Sessions)
+	s.mu.Unlock()
+	for i := range sessions {
+		sessions[i].Cwd = "/dev/api"
+	}
+	sessions = append(sessions,
+		sample.Session{Agent: "claude", Pane: "%9", Target: "x:1.1", SessionID: "s9x", Name: "api-x", Status: "idle", Idle: 5 * time.Minute, Cwd: "/dev/api"},
+		sample.Session{Agent: "claude", Pane: "%9@mbtest", Target: "stoker:1.1", SessionID: "s9", Name: "stoker", Status: "busy", Busy: true})
+	s.publish(sample.Snapshot{At: night0, Sessions: sessions}, func(state.Doc) {})
+	u, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person")
+	if err != nil {
+		t.Fatal(err)
+	}
+	chainStokerUp(s)
+	*ran = nil
+	return s, u, ran
+}
+
+func fromChainStoker(id, text string) proto.Act {
+	return proto.Act{RecID: id, Confirm: "y", Text: text, From: "%5@mbtest", FromPlaced: true}
+}
+
+func TestChainStokerActsOnMatesOnly(t *testing.T) {
+	s, _, ran := familyTest(t)
+	mustAct(t, s, fromChainStoker("message:%3", "go on"))
+	if got := typed(*ran, "%3"); !slices.Equal(got, []string{"go on"}) {
+		t.Fatalf("typed into the mate %q", got)
+	}
+	*ran = nil
+	for _, id := range []string{"message:%9", "kill:%9", "rename:%9", "hold:%9", "compact:%9", "message:%1"} {
+		res := s.act(t.Context(), fromChainStoker(id, "x"))
+		want := "api-x is not in the chain of this stoker."
+		if id == "message:%1" {
+			want = "work is not in the chain of this stoker."
+		}
+		if res.Err != want {
+			t.Errorf("%s: %q", id, res.Err)
+		}
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// Every pane act of the host on a match whose chain stoker runs is refused.
+func TestHostRefusedOnOwnedMatch(t *testing.T) {
+	s, _, ran := familyTest(t)
+	if err := s.Stoker.Set(stoker.Mode{}.TurnOn(night0)); err != nil {
+		t.Fatal(err)
+	}
+	host := s.hostUnit()
+	const owned = "api-auth has the stoker of chain api-auth: give it an order."
+	for _, p := range []string{"message:", "answer:", proto.PickPrefix, "compact:", "hold:", "release:", "kill:", proto.KeysPrefix, proto.CommandPrefix, "rename:", "switch:"} {
+		err := s.orderable(host, proto.Act{RecID: p + "%3", From: "%9@mbtest"})
+		if err == nil || err.Error() != owned {
+			t.Errorf("%s%%3: %v", p, err)
+		}
+	}
+	if res := s.act(t.Context(), fromStokerAct("message:%3", "go on")); res.Err != owned {
+		t.Fatalf("the host's send: %q", res.Err)
+	}
+	for _, pane := range []string{"%1", "%9"} { // in no chain: the host's
+		if err := s.orderable(host, proto.Act{RecID: "message:" + pane, From: "%9@mbtest"}); err != nil {
+			t.Errorf("%s: %v", pane, err)
+		}
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+func TestHostActsWhenChainStokerRests(t *testing.T) {
+	s, u, ran := familyTest(t)
+	if err := s.Stoker.Set(stoker.Mode{}.TurnOn(night0)); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.store.Set(stoker.Mode{}); err != nil {
+		t.Fatal(err)
+	}
+	if s.ownerOf(sample.Session{Pane: "%3", SessionID: "s3"}) != s.hostUnit() {
+		t.Fatal("a chain whose stoker's run is off is not the host's")
+	}
+	mustAct(t, s, fromStokerAct("message:%3", "go on"))
+	if got := typed(*ran, "%3"); !slices.Equal(got, []string{"go on"}) {
+		t.Fatalf("typed %q", got)
+	}
+}
+
+func TestScopeIsCheckedAtActTime(t *testing.T) {
+	s, _, _ := familyTest(t)
+	x := sample.Session{Pane: "%9", SessionID: "s9x"}
+	s.mu.Lock()
+	err := s.Chains.Join("c1", memberOf(x))
+	s.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustAct(t, s, fromChainStoker("message:%9", "go on"))
+	s.mu.Lock()
+	s.Chains.Leave(memberOf(x))
+	s.mu.Unlock()
+	if res := s.act(t.Context(), fromChainStoker("message:%9", "again")); res.Err != "api-x is not in the chain of this stoker." {
+		t.Fatalf("a match that left: %q", res.Err)
+	}
+}
+
+func TestScopeFollowsRenamedMember(t *testing.T) {
+	s, _, ran := familyTest(t)
+	s.mu.Lock()
+	sessions := slices.Clone(s.cur.Sessions)
+	s.mu.Unlock()
+	for i := range sessions {
+		if sessions[i].SessionID == "s3" {
+			sessions[i].Pane, sessions[i].Target = "%7", "api:2.1"
+		}
+	}
+	s.publish(sample.Snapshot{At: night0, Sessions: sessions}, func(state.Doc) {})
+	mustAct(t, s, fromChainStoker("message:%7", "go on"))
+	if got := typed(*ran, "%7"); !slices.Equal(got, []string{"go on"}) {
+		t.Fatalf("typed %q", got)
+	}
+}
+
+func newFromChainStoker(t *testing.T, where string) proto.Act {
+	t.Helper()
+	b, err := json.Marshal(proto.NewSession{Where: where, Agent: "claude", Name: "api-new"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fromChainStoker(NewSessionID, string(b))
+}
+
+func TestChainStokerNewJoinsChain(t *testing.T) {
+	s, _, _ := familyTest(t)
+	mustAct(t, s, newFromChainStoker(t, "/dev/api"))
+	fresh := sample.Session{Agent: "claude", Pane: "%42", Target: "api-new:1.1", SessionID: "s42", Name: "api-new", Status: "idle", Idle: time.Minute, Cwd: "/dev/api"}
+	s.mu.Lock()
+	_, in := s.Chains.ChainOf(memberOf(fresh))
+	sessions := append(slices.Clone(s.cur.Sessions), fresh)
+	s.mu.Unlock()
+	if in {
+		t.Fatal("the session joined before a sample found it")
+	}
+	for range 2 {
+		s.publish(sample.Snapshot{At: night0, Sessions: sessions}, func(state.Doc) {})
+	}
+	s.mu.Lock()
+	c, in := s.Chains.ChainOf(memberOf(fresh))
+	s.mu.Unlock()
+	if !in || c.ID != "c1" || len(c.Members) != 3 {
+		t.Fatalf("the new session is not in c1: %+v %v", c, in)
+	}
+	mustAct(t, s, fromChainStoker("message:%42", "go on"))
+}
+
+func TestChainStokerNewOutsideRepo(t *testing.T) {
+	s, _, ran := familyTest(t)
+	for _, where := range []string{"/w/app", "/dev/api-other", "/elsewhere", "dev/api"} {
+		res := s.act(t.Context(), newFromChainStoker(t, where))
+		if res.Err != "a session of chain api-auth starts in its repo: /dev/api" {
+			t.Errorf("%s: %q", where, res.Err)
+		}
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+func TestChainStokerGivesNoOrders(t *testing.T) {
+	s, _, _ := familyTest(t)
+	for _, id := range []string{"stoker:order", "stoker:order-chain"} {
+		if res := s.act(t.Context(), fromChainStoker(id, `{"words":"x"}`)); res.Err != "a chain stoker gives no orders" {
+			t.Errorf("%s: %q", id, res.Err)
+		}
+	}
+	if res := s.act(t.Context(), fromStokerAct("stoker:order", `{"words":"x"}`)); res.Err != "the stoker does not give itself orders" {
+		t.Errorf("the host: %q", res.Err)
+	}
+}
+
+// Peek reads the doc, which a chain stoker reads whole: no act gates it,
+// and the names act passes from its pane.
+func TestChainStokerReadsWholeHost(t *testing.T) {
+	s, _, _ := familyTest(t)
+	var doc state.Doc
+	chainStokerUp(s)
+	s.mu.Lock()
+	doc = s.cur
+	s.mu.Unlock()
+	i := slices.IndexFunc(doc.Sessions, func(x sample.Session) bool { return x.Name == "api-x" })
+	if i < 0 {
+		t.Fatal("the doc a chain stoker reads has no api-x")
+	}
+	if p := stoker.PeekOf(doc.Sessions[i], doc.Queue); p.Name != "api-x" {
+		t.Fatalf("peek %+v", p)
+	}
+	if res := s.act(t.Context(), fromChainStoker(NamesAct, "")); res.Err != "" {
+		t.Fatalf("names: %q", res.Err)
 	}
 }

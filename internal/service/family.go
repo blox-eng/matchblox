@@ -15,6 +15,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/config"
+	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/stoker"
@@ -35,6 +36,15 @@ type stokerUnit struct {
 	// it rests, and briefAt when the unit started. Service.mu guards both.
 	brief   string
 	briefAt time.Time
+	// joins are the tmux sessions a chain unit started, which join its
+	// chain once a sample finds them in its repo. Service.mu guards it.
+	joins []pendingJoin
+}
+
+// pendingJoin is a session a chain unit started, not in its chain yet.
+type pendingJoin struct {
+	name string
+	at   time.Time
 }
 
 // stokerFamily holds the units. The host unit wraps Service.Stoker, so
@@ -463,4 +473,75 @@ func (s *Service) newChainAct(ctx context.Context, a proto.Act) proto.Result {
 		return proto.Result{Err: err.Error()}
 	}
 	return proto.Result{Note: fmt.Sprintf("started the stoker of chain %s (%s)", s.chainNameOf(u.link.Chain), u.id)}
+}
+
+// ownerOf is the unit that drives the match x: the stoker of x's chain
+// while its run is on, else the host.
+func (s *Service) ownerOf(x sample.Session) *stokerUnit {
+	s.mu.Lock()
+	c, in := s.chainsLocked().ChainOf(memberOf(x))
+	s.mu.Unlock()
+	return s.ownerOfChain(c.ID, in)
+}
+
+func (s *Service) ownerOfChain(chainID string, in bool) *stokerUnit {
+	if in {
+		if u := s.unitOfChain(chainID); u != nil && u.store.Mode().On {
+			return u
+		}
+	}
+	return s.hostUnit()
+}
+
+// scopeOf refuses a pane act of unit u on a match it does not own: a chain
+// unit acts on its chain's members only, and the host on no match a chain
+// unit owns. Both read the chains as they are at the act, by the match's
+// identity, not its pane.
+func (s *Service) scopeOf(u *stokerUnit, pane string) error {
+	s.mu.Lock()
+	x, ok := s.sessionAtLocked(pane)
+	var c chains.Chain
+	in := false
+	if ok {
+		c, in = s.chainsLocked().ChainOf(memberOf(x))
+	}
+	s.mu.Unlock()
+	who := pane
+	if ok && x.Name != "" {
+		who = x.Name
+	}
+	if u.link.Chain != "" {
+		if !in || c.ID != u.link.Chain {
+			return fmt.Errorf("%s is not in the chain of this stoker.", who) //nolint:staticcheck // the line a person reads, as it stands
+		}
+		return nil
+	}
+	if o := s.ownerOfChain(c.ID, in); o != nil && o != u {
+		return fmt.Errorf("%s has the stoker of chain %s: give it an order.", who, s.chainNameOf(o.link.Chain)) //nolint:staticcheck // the line a person reads, as it stands
+	}
+	return nil
+}
+
+// inChainRepo refuses a new session of chain unit u that starts outside
+// its chain's repo, by the repos the last scan knows.
+func (s *Service) inChainRepo(u *stokerUnit, text string) error {
+	n, err := readNew(text)
+	if err != nil {
+		return err
+	}
+	dir := n.Where
+	if rest, ok := cutHome(dir); ok {
+		dir = filepath.Join(s.home(), rest)
+	}
+	s.mu.Lock()
+	c, ok := chainByID(s.chainsLocked(), u.link.Chain)
+	repo, _, known := gitscan.RepoOf(s.cur.Git, filepath.Clean(dir))
+	s.mu.Unlock()
+	if !ok {
+		return errors.New("the chain of this stoker is gone")
+	}
+	if !filepath.IsAbs(dir) || !known || repo != c.Repo {
+		return fmt.Errorf("a session of chain %s starts in its repo: %s", s.chainNameOf(c.ID), c.Repo)
+	}
+	return nil
 }

@@ -52,6 +52,9 @@ func (s *Service) orderable(u *stokerUnit, a proto.Act) error {
 		// Its plan, its steps and its triggers are the stoker's own, and
 		// work while it rests.
 		// Every other stoker act is the builder's.
+		if u.link.Chain != "" && (verb == "order" || verb == "order-chain") {
+			return errors.New("a chain stoker gives no orders")
+		}
 		switch verb {
 		case "plan", "step", "when":
 			return nil
@@ -91,6 +94,16 @@ func (s *Service) orderable(u *stokerUnit, a proto.Act) error {
 	// session cannot be told is refused too.
 	if _, own := s.unitOf(proto.Act{From: pane}); pane != "" && own {
 		return errors.New(stokersOwn)
+	}
+	if pane != "" {
+		if err := s.scopeOf(u, pane); err != nil {
+			return err
+		}
+	}
+	if a.RecID == NewSessionID && u.link.Chain != "" {
+		if err := s.inChainRepo(u, a.Text); err != nil {
+			return err
+		}
 	}
 	n := 0
 	for _, e := range u.store.Entries() {

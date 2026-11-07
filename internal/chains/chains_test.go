@@ -320,3 +320,35 @@ func TestARenameGoesWithItsMatch(t *testing.T) {
 		t.Fatalf("renamed = %v", s.renamed)
 	}
 }
+
+func TestJoinRefusesOff(t *testing.T) {
+	var s Store
+	chainOf(t, &s, "a", "b")
+	c, _ := s.ChainOf(mem("a"))
+	if err := s.Join(c.ID, mem("n")); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.ChainOf(mem("n")); got.ID != c.ID || len(got.Members) != 3 || len(s.Requests) != 0 {
+		t.Fatalf("n did not join with no ask: %+v %+v", got, s.Requests)
+	}
+	if err := s.Join(c.ID, mem("n")); err != nil {
+		t.Fatalf("a member joins its own chain again: %v", err)
+	}
+	s.SetOff(mem("off"), true)
+	if err := s.Join(c.ID, mem("off")); err == nil {
+		t.Fatal("an off match joined")
+	}
+	chainOf(t, &s, "x", "y")
+	if err := s.Join(c.ID, mem("x")); err == nil {
+		t.Fatal("a match in another chain joined")
+	}
+	if err := s.Join("gone", mem("z")); err == nil {
+		t.Fatal("z joined a chain that is not there")
+	}
+	if _, ok := s.ChainOf(mem("off")); ok {
+		t.Fatal("off is in a chain")
+	}
+	if got, _ := s.ChainOf(mem("x")); got.ID == c.ID {
+		t.Fatal("x left its chain")
+	}
+}

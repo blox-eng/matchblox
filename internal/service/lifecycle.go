@@ -800,6 +800,7 @@ func (s *Service) newSession(ctx context.Context, a proto.Act) proto.Result {
 	}
 	if u, agent := s.agentsUnit(a); agent {
 		s.recordNew(u, pane, name, res.Ran)
+		s.awaitJoin(u, name)
 	} else {
 		s.rememberStart(n, acct) // the stoker's starts are not the builder's choice
 	}
