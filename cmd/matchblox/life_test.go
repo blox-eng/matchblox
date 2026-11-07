@@ -106,6 +106,14 @@ func TestSwitchNamesThePaneAndTheAgent(t *testing.T) {
 	if a, err = switchAct(cliDoc(), []string{"api"}, switchOpts{agent: "codex", anyway: true}, ""); err != nil || !decode(a).Anyway {
 		t.Fatalf("%+v %v", a, err)
 	}
+	// --extra adds to the service's switch prompt, as the console's extra field.
+	if a, err = switchAct(cliDoc(), []string{"api"}, switchOpts{agent: "codex", extra: "keep CSV only"}, ""); err != nil || decode(a).Handoff != proto.Handoff("keep CSV only") {
+		t.Fatalf("%+v %v", a, err)
+	}
+	custom := "only explain the test"
+	if _, err = switchAct(cliDoc(), []string{"api"}, switchOpts{agent: "codex", extra: "x", handoff: &custom}, ""); err == nil || err.Error() != "--extra adds to the default handoff, which --handoff replaces: give one of them" {
+		t.Fatalf("both flags: %v", err)
+	}
 }
 
 func TestSwitchRefusals(t *testing.T) {

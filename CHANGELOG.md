@@ -13,7 +13,8 @@ All notable changes to matchblox are in this file. The format follows
   goes to the new agent after matchblox's fixed switch prompt and takes
   priority over the handover. **no task** starts it with nothing, by arrow
   or by tap. The confirm shows the switch only, without the wait for an
-  evidence preview. A transcript over 64 MB is read for its two ends, so the
+  evidence preview. `matchblox switch --extra "<words>"` does the same from
+  the command line. A transcript over 64 MB is read for its two ends, so the
   switch stays quick.
   ([#335](https://github.com/blox-eng/matchblox/issues/335))
 
