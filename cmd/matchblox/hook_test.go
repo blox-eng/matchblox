@@ -262,10 +262,17 @@ func TestHookStaysInBudgetWithTheServiceStuck(t *testing.T) {
 // TestHookStaysInBudgetWithASlowHello: when the event's hello comes late,
 // the ask for news, which then hangs, gets only the time that is left, and
 // the hook still ends within its budget.
+//
+// The budget is ten times the real one: at 30 ms, a hello 20 ms late left
+// 10 ms for the dial and a wake-up, under a loaded macOS runner's jitter,
+// and the event spooled (#319). Every ratio stays as it was.
 func TestHookStaysInBudgetWithASlowHello(t *testing.T) {
+	old := hookTimeout
+	hookTimeout = 300 * time.Millisecond
+	t.Cleanup(func() { hookTimeout = old })
 	stuck := make(chan struct{})
 	t.Cleanup(func() { close(stuck) })
-	sock := lateNewsService(t, 20*time.Millisecond, func(_ net.Conn, env proto.Envelope) {
+	sock := lateNewsService(t, hookTimeout*2/3, func(_ net.Conn, env proto.Envelope) {
 		if env.Kind == proto.KindNews {
 			<-stuck
 		}
@@ -277,7 +284,7 @@ func TestHookStaysInBudgetWithASlowHello(t *testing.T) {
 		if err := hook([]string{name}, strings.NewReader(hookEvent(name)), io.Discard, sock, spool, false); err != nil {
 			t.Fatal(err)
 		}
-		if d := time.Since(start); d > 50*time.Millisecond {
+		if d := time.Since(start); d > hookTimeout*5/3 {
 			t.Fatalf("%s took %v", name, d)
 		}
 	}
