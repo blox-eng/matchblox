@@ -48,8 +48,9 @@ func (m Member) key() string {
 	return fmt.Sprintf("%s/%d/%d", m.Pane, m.PID, m.Start)
 }
 
-// Chain is a set of matches in one repo that hear from each other. Spark is
-// when the chain last got news worth showing.
+// Chain is a set of matches on one host that hear from each other, in any
+// repo. Repo is the repo of the match that formed it, "" for none, and does
+// not follow later moves. Spark is when the chain last got news worth showing.
 type Chain struct {
 	ID      string    `json:"id"`
 	Repo    string    `json:"repo"`
@@ -74,7 +75,6 @@ type Item struct {
 // Left is a member that dropped out of a chain.
 type Left struct {
 	Who   Member
-	Repo  string
 	Chain string
 }
 
@@ -242,31 +242,24 @@ func (s *Store) Refresh(cur func(Member) (Member, bool)) (changed bool) {
 	return changed
 }
 
-// Prune drops members that are gone or in another repo than their chain,
-// requests past RequestTTL or across repos, the off marks of gone matches,
-// and chains of one. live tells where a match is now: present, and its
-// repo ("" for none).
-func (s *Store) Prune(live func(Member) (repo string, present bool), now time.Time) (left []Left) {
+// Prune drops members that are gone, requests past RequestTTL or with a
+// side gone, the off marks of gone matches, and chains of one. live tells
+// if a match is still here.
+func (s *Store) Prune(live func(Member) bool, now time.Time) (left []Left) {
 	for _, c := range slices.Clone(s.Chains) {
 		for _, m := range c.Members {
-			repo, ok := live(m)
-			if ok && repo != "" && repo == c.Repo {
+			if live(m) {
 				continue
 			}
 			if id, in := s.leave(m); in {
-				left = append(left, Left{Who: m, Repo: repo, Chain: id})
+				left = append(left, Left{Who: m, Chain: id})
 			}
 		}
 	}
 	s.Requests = slices.DeleteFunc(s.Requests, func(r Request) bool {
-		from, okFrom := live(r.From)
-		to, okTo := live(r.To)
-		return now.Sub(r.At) > RequestTTL || !okFrom || !okTo || from == "" || from != to
+		return now.Sub(r.At) > RequestTTL || !live(r.From) || !live(r.To)
 	})
-	s.Off = slices.DeleteFunc(s.Off, func(m Member) bool {
-		_, present := live(m)
-		return !present
-	})
+	s.Off = slices.DeleteFunc(s.Off, func(m Member) bool { return !live(m) })
 	maps.DeleteFunc(s.renamed, func(_, now string) bool { return !s.holds(now) })
 	return left
 }

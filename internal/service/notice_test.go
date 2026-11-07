@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"net"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -247,5 +248,95 @@ func TestNewsHeldForOneHookIsNotToldToAnother(t *testing.T) {
 	}
 	if got := told(s, proto.News{Pane: "%1"}); got != "" {
 		t.Fatalf("heard news came back: %q", got)
+	}
+}
+
+func TestAnAskFromAnotherRepoNamesIt(t *testing.T) {
+	s, _, sessions := twoRepos(t)
+	s.ChainsNotice = false
+	chainFrom(t, s, "%5", proto.ChainPrefix+"%1")
+	chainFrom(t, s, "%2", proto.ChainPrefix+"%1")
+	want := "[matchblox] web-cart (in web) asks to chain with you. To accept, run:\n  matchblox chain web-cart\n\n" +
+		"[matchblox] two asks to chain with you. To accept, run:\n  matchblox chain two"
+	if got := told(s, proto.News{Pane: sessions[0].Pane}); got != want {
+		t.Fatalf("news = %q, want %q", got, want)
+	}
+}
+
+// TestAClearedChatHearsItsChainOnce: a /clear keeps the pane, pid and start
+// under a new session id; the new conversation hears once who it is chained
+// with, and how to leave.
+func TestAClearedChatHearsItsChainOnce(t *testing.T) {
+	s, _ := newsTest(t, newsSessions[:3], "%1", "%2", "%3")
+	s.ChainsNotice = false
+	cleared := slices.Clone(newsSessions[:3])
+	cleared[1].SessionID = "n2-new"
+	chainSample(s, cleared...)
+	want := "[matchblox] you are chained with peer-send, three. To leave, run: matchblox unchain"
+	if got := told(s, proto.News{Pane: "%2", SessionID: "n2-new"}); got != want {
+		t.Fatalf("first news = %q, want %q", got, want)
+	}
+	if got := told(s, proto.News{Pane: "%2", SessionID: "n2-new"}); got != "" {
+		t.Fatalf("second news = %q, want none", got)
+	}
+	if got := told(s, proto.News{Pane: "%1"}); got != "" {
+		t.Fatalf("a mate heard the clear: %q", got)
+	}
+}
+
+// TestAClearThroughAnUnreadIDIsTold: a sample that reads no session id
+// mid-clear (Codex's /new, a session file being rewritten) does not hide
+// the clear that follows.
+func TestAClearThroughAnUnreadIDIsTold(t *testing.T) {
+	s, _ := newsTest(t, newsSessions[:3], "%1", "%2", "%3")
+	s.ChainsNotice = false
+	unread := slices.Clone(newsSessions[:3])
+	unread[1].SessionID = ""
+	chainSample(s, unread...)
+	cleared := slices.Clone(newsSessions[:3])
+	cleared[1].SessionID = "n2-new"
+	chainSample(s, cleared...)
+	want := "[matchblox] you are chained with peer-send, three. To leave, run: matchblox unchain"
+	if got := told(s, proto.News{Pane: "%2", SessionID: "n2-new"}); got != want {
+		t.Fatalf("news = %q, want %q", got, want)
+	}
+}
+
+// TestAHeldClearedLineComesBackUnheard: while one hook holds the cleared
+// line no other hook is told it, and a hook that never hears it gives it
+// back.
+func TestAHeldClearedLineComesBackUnheard(t *testing.T) {
+	s, _ := newsTest(t, newsSessions[:3], "%1", "%2", "%3")
+	s.ChainsNotice = false
+	cleared := slices.Clone(newsSessions[:3])
+	cleared[1].SessionID = "n2-new"
+	chainSample(s, cleared...)
+	n := proto.News{Pane: "%2", SessionID: "n2-new"}
+	d := s.news(n)
+	if !strings.Contains(d.text, "you are chained with") {
+		t.Fatalf("first news = %q, want the cleared line", d.text)
+	}
+	if got := s.news(n); strings.Contains(got.text, "you are chained with") {
+		t.Fatalf("a second hook was told a held line: %q", got.text)
+	}
+	s.unheard(d)
+	if got := told(s, n); !strings.Contains(got, "you are chained with") {
+		t.Fatalf("after unheard news = %q, want the cleared line again", got)
+	}
+}
+
+// TestAGoneClearedChatIsForgotten: the clear of a session that leaves
+// before its next news is not kept.
+func TestAGoneClearedChatIsForgotten(t *testing.T) {
+	s, _ := newsTest(t, newsSessions[:3], "%1", "%2", "%3")
+	s.ChainsNotice = false
+	cleared := slices.Clone(newsSessions[:3])
+	cleared[1].SessionID = "n2-new"
+	chainSample(s, cleared...)
+	chainSample(s, cleared[0], cleared[2])
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.cleared) != 0 {
+		t.Fatalf("cleared = %v, want none", s.cleared)
 	}
 }
