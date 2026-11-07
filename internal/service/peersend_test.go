@@ -1014,10 +1014,19 @@ func TestServeWaitsForASendThatTypes(t *testing.T) {
 	}
 	once.Do(func() { close(unstick) })
 	waitServe(t, done, context.Canceled)
+	// The line is typed when Serve returns; Run's sample may have refused
+	// its Enter. The result reaches sent only after act returns, so it is
+	// no proof of the order (#316).
+	typed := slices.ContainsFunc(h.keys(), func(argv []string) bool {
+		return slices.Contains(argv, "-l") && strings.HasSuffix(argv[len(argv)-1], " hi")
+	})
+	if !typed {
+		t.Fatalf("Serve returned before the send typed its line: %q", h.keys())
+	}
 	select {
-	case <-sent: // done before Serve returned; Run's sample may have refused its Enter
-	default:
-		t.Fatal("Serve returned before the send ended")
+	case <-sent:
+	case <-time.After(waitLimit):
+		t.Fatal("the send never ended")
 	}
 }
 
