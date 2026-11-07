@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/stoker"
@@ -38,6 +39,9 @@ func paneOf(recID string) string {
 // stokersOwn refuses an act on a stoker's session, and any act of a
 // stoker session no unit runs.
 const stokersOwn = "no agent acts on the stoker's own session"
+
+// chainOnly refuses a chain stoker's act that is not one of its chain's.
+const chainOnly = "a chain stoker acts on the matches of its chain only"
 
 // orderable is what the stoker agent of unit u and the sessions it drives
 // may do: nothing while the builder works, nothing to a stoker's own
@@ -75,6 +79,10 @@ func (s *Service) orderable(u *stokerUnit, a proto.Act) error {
 	}
 	pane := paneOf(a.RecID)
 	counts := pane != "" || a.RecID == NewSessionID // what makes a step of the run
+	if !counts && u.link.Chain != "" {
+		// A rec, a ship or a worktree may reach past the chain.
+		return errors.New(chainOnly)
+	}
 	m := u.store.Mode()
 	if counts && !m.On {
 		return errors.New("the stoker is off: no run")
@@ -83,7 +91,7 @@ func (s *Service) orderable(u *stokerUnit, a proto.Act) error {
 		return errors.New("the stoker rests: a person works")
 	}
 	if !counts {
-		return nil
+		return s.recScope(u, a)
 	}
 	if pane != "" && pane == a.From {
 		return errors.New("the stoker does not act on itself")
@@ -224,3 +232,67 @@ func (s *Service) restsFor(pane, cmd string, a proto.Act) (sample.Session, error
 // readsPrompt are the agents whose prompt said.Draft reads: a draft there
 // stops a command, and the Enter waits for the command on the prompt.
 var readsPrompt = map[string]bool{"claude": true, "codex": true}
+
+// recScope refuses a rec or panel act of the host unit u whose action
+// reaches a match a chain unit owns: a pane its steps or guards name, or a
+// process of that match its guards name.
+func (s *Service) recScope(u *stokerUnit, a proto.Act) error {
+	action, ok := s.resolve(a.RecID, a.Which)
+	if !ok {
+		return nil // dispatch finds no action either
+	}
+	for _, x := range s.reached(action) {
+		if o := s.ownerOf(x); o != nil && o != u {
+			return fmt.Errorf("%s has the stoker of chain %s: give it an order.", x.Name, s.chainNameOf(o.link.Chain)) //nolint:staticcheck // the line a person reads, as it stands
+		}
+	}
+	return nil
+}
+
+// reached are the sessions an action acts on: by the pane of a tmux step's
+// -t or of a guard, or by a guard's pid, the agent's own or a shell's.
+func (s *Service) reached(action advice.Action) []sample.Session {
+	panes := map[string]bool{}
+	for _, step := range action.Steps {
+		if len(step) == 0 || step[0] != "tmux" {
+			continue
+		}
+		server := ""
+		for i := 1; i+1 < len(step); i++ {
+			switch step[i] {
+			case "-L":
+				server = step[i+1]
+			case "-t":
+				pane := strings.TrimPrefix(step[i+1], "=")
+				if server != "" {
+					pane += "@" + server
+				}
+				panes[pane] = true
+			}
+		}
+	}
+	pids := map[int]bool{}
+	for _, g := range action.Guards {
+		for _, p := range []string{g.IdlePane, g.RestPane, g.AnswerPane, g.MessagePane, g.AskPane, g.StokePane} {
+			if p != "" {
+				panes[p] = true
+			}
+		}
+		if g.PID > 0 {
+			pids[g.PID] = true
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []sample.Session
+	for _, x := range s.cur.Sessions {
+		hit := panes[x.Pane] || pids[x.PID] && x.PID > 0
+		for _, sh := range x.Shells {
+			hit = hit || pids[sh.PID]
+		}
+		if hit {
+			out = append(out, x)
+		}
+	}
+	return out
+}

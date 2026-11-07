@@ -193,7 +193,8 @@ func (s *Service) agentsPane(a proto.Act) bool {
 }
 
 // agentsUnit is the unit the act speaks for: the stoker whose session it
-// came from, or the one that drove its pane in the run on. ok with a nil
+// came from, or the one that drove its pane in the run on. Its acts pass
+// the unit's scope, as the stoker's own do. ok with a nil
 // unit is a stoker session no unit runs. It reads the service's memory,
 // not driven.json, so a broken file frees no pane.
 func (s *Service) agentsUnit(a proto.Act) (u *stokerUnit, ok bool) {
@@ -204,6 +205,7 @@ func (s *Service) agentsUnit(a proto.Act) (u *stokerUnit, ok bool) {
 	if u, own := s.unitOf(a); own {
 		return u, true
 	}
+	var drivers []*stokerUnit
 	for _, u := range fam {
 		driven := false
 		_ = s.updateDriven(u, func(d *stoker.Driven, _ []string) bool {
@@ -211,10 +213,23 @@ func (s *Service) agentsUnit(a proto.Act) (u *stokerUnit, ok bool) {
 			return false
 		})
 		if driven {
-			return u, true
+			drivers = append(drivers, u)
 		}
 	}
-	return nil, false
+	switch len(drivers) {
+	case 0:
+		return nil, false
+	case 1:
+		return drivers[0], true
+	}
+	// A pane two units drove speaks for the one that owns its match. A
+	// driven session is scoped as its unit is: one owner for each match.
+	if x, ok := s.sessionAt(a.From); ok {
+		if o := s.ownerOf(x); slices.Contains(drivers, o) {
+			return o, true
+		}
+	}
+	return drivers[0], true
 }
 
 // syncDriven writes each unit's driven.json for its run on, or removes it

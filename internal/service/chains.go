@@ -267,21 +267,24 @@ func (s *Service) sessionOfLocked(m chains.Member) (sample.Session, bool) {
 	return sample.Session{}, false
 }
 
-// awaitJoin marks the tmux session name, which chain unit u started, to
-// join u's chain once a sample finds it.
-func (s *Service) awaitJoin(u *stokerUnit, name string) {
-	if u == nil || u.link.Chain == "" {
+// awaitJoin marks the session that chain unit u started in pane, in the
+// tmux session name, to join u's chain once a sample finds it there. No
+// pane: nothing tells the session, and it joins nothing.
+func (s *Service) awaitJoin(u *stokerUnit, pane, name string) {
+	if u == nil || u.link.Chain == "" || pane == "" {
 		return
 	}
 	s.mu.Lock()
-	u.joins = append(u.joins, pendingJoin{name: name, at: s.now()})
+	u.joins = append(u.joins, &pendingJoin{pane: pane, name: name, at: s.now()})
 	s.mu.Unlock()
 }
 
 // joinNewLocked puts each session a chain unit started in its chain, once
-// the sample finds it on the builder's server in the chain's repo. One not
-// found within stokerStartsIn, or that cannot join, is let go. It saves on
-// a join. Callers hold mu.
+// the sample finds its agent in the pane the start made, in the tmux
+// session of its name and in the chain's repo. A pane that is gone, or now
+// holds another session or another agent, is let go, and so is one not
+// found within stokerStartsIn. A join that fails says why on the unit's
+// card. It saves on a join. Callers hold mu.
 func (s *Service) joinNewLocked(now time.Time) error {
 	if s.cur.Git == nil || s.sampleMissedLocked() {
 		return nil
@@ -289,25 +292,46 @@ func (s *Service) joinNewLocked(now time.Time) error {
 	st := s.chainsLocked()
 	joined := false
 	for _, u := range s.family() {
-		u.joins = slices.DeleteFunc(u.joins, func(j pendingJoin) bool {
-			i := slices.IndexFunc(s.cur.Sessions, func(x sample.Session) bool {
-				server, _ := sample.SplitPane(x.Pane)
-				return server == "" && x.TmuxSession() == j.name
-			})
+		u.joins = slices.DeleteFunc(u.joins, func(j *pendingJoin) bool {
+			late := now.Sub(j.at) >= stokerStartsIn
+			if s.cur.At.Before(j.at) {
+				return late // a sample from before the start
+			}
+			p := slices.IndexFunc(s.cur.Panes, func(p sample.Pane) bool { return p.ID == j.pane })
+			if p < 0 {
+				return true // gone
+			}
+			if name, _, _ := strings.Cut(s.cur.Panes[p].Target, ":"); name != j.name {
+				return true // the pane moved to another session
+			}
+			i := slices.IndexFunc(s.cur.Sessions, func(x sample.Session) bool { return x.Pane == j.pane })
 			if i < 0 {
-				return now.Sub(j.at) >= stokerStartsIn
+				return late
 			}
 			x := s.cur.Sessions[i]
+			switch {
+			case x.TmuxSession() != j.name:
+				return true
+			case j.sessionID == "":
+				j.sessionID = x.SessionID
+			case x.SessionID != j.sessionID:
+				return true // another agent runs there now
+			}
 			c, ok := chainByID(st, u.link.Chain)
-			if !ok {
+			if ok {
+				if repo, _, _ := gitscan.RepoOf(s.cur.Git, x.Cwd); repo != c.Repo {
+					return late
+				}
+			}
+			if err := st.Join(u.link.Chain, memberOf(x)); err != nil {
+				text := fmt.Sprintf("%s did not join chain %s: %s", x.Name, chainName(c, s.cur.Sessions), err)
+				if !ok {
+					text = fmt.Sprintf("%s did not join chain %s: %s", x.Name, u.link.Chain, err)
+				}
+				_ = u.store.Append(familyLine(now, text))
 				return true
 			}
-			if repo, _, _ := gitscan.RepoOf(s.cur.Git, x.Cwd); repo != c.Repo {
-				return now.Sub(j.at) >= stokerStartsIn
-			}
-			if st.Join(c.ID, memberOf(x)) == nil {
-				joined = true
-			}
+			joined = true
 			return true
 		})
 	}
