@@ -122,6 +122,9 @@ type Service struct {
 	Ways string
 	// OrderSteps is how many messages the stoker agent may send in a run.
 	OrderSteps int
+	// MaxChains is how many chain stokers may run at once ([stoker]
+	// max_chains).
+	MaxChains int
 	// PeerPane is the tmux pane a CLI that connected runs in, by its pid
 	// ("" outside every pane). An act's From is ignored where it is known.
 	PeerPane func(pid int) string
@@ -378,6 +381,7 @@ func New(cfg config.Config, smp *sample.Sampler, git GitSource) *Service {
 		NightEnds:   cfg.Stoker.NightEnds,
 		StokerAgent: cfg.Stoker.Agent,
 		OrderSteps:  cfg.Stoker.MaxSteps,
+		MaxChains:   cfg.Stoker.MaxChains,
 		full:        sample.Full{Pct: cfg.Sessions.CompactAt, Tokens: cfg.Sessions.CompactTokens},
 
 		ChainsNotice: cfg.Chains.Notice,
@@ -577,6 +581,7 @@ func (s *Service) Run(ctx context.Context) {
 		s.publish(s.sample(), rec)
 		s.renameAtRest(ctx)
 		s.stoke(ctx, s.now())
+		s.deliverBriefs(ctx)
 		now := s.now()
 		s.restRun.start(func() { s.deliverAtRest(now) })
 		if first {

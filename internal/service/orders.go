@@ -59,14 +59,9 @@ func (s *Service) order(ctx context.Context, u *stokerUnit, text string) error {
 	if err := json.Unmarshal([]byte(text), &ask); err != nil {
 		return fmt.Errorf("the order does not read: %w", err)
 	}
-	var grants []string
-	for _, g := range ask.Grants {
-		if !slices.Contains(stoker.Goes, g) {
-			return fmt.Errorf("%q is no go: merge, release, deploy or kill", g)
-		}
-		if !slices.Contains(grants, g) {
-			grants = append(grants, g)
-		}
+	grants, err := goesOf(ask.Grants)
+	if err != nil {
+		return err
 	}
 	now := s.now()
 	if m := u.store.Mode(); m.On && !m.Nightly && !ask.Night && m.Order != nil && m.Order.State == stoker.OrderRunning {
@@ -108,6 +103,21 @@ func (s *Service) order(ctx context.Context, u *stokerUnit, text string) error {
 		m.Order, m.Triggers, m.NextTrigger = &o, nil, 0
 		return m, err
 	})
+}
+
+// goesOf are the goes an order asks for, each once, or the first word that
+// is no go.
+func goesOf(ask []string) ([]string, error) {
+	var grants []string
+	for _, g := range ask {
+		if !slices.Contains(stoker.Goes, g) {
+			return nil, fmt.Errorf("%q is no go: merge, release, deploy or kill", g)
+		}
+		if !slices.Contains(grants, g) {
+			grants = append(grants, g)
+		}
+	}
+	return grants, nil
 }
 
 // board is the machine now, for the brief's snapshot.

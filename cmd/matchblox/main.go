@@ -258,6 +258,9 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
+		if len(words) > 0 && words[0] == "new" {
+			return cliStokerNew(words, *o.chain, *o.goes, os.Stdout, transport.SocketPath())
+		}
 		if len(words) > 0 && words[0] == "when" {
 			return cliWhen(words, whenOpts{ship: *o.ship, stage: *o.stage, rest: *o.rest, why: *o.why, drop: *o.drop, list: *o.list}, os.Stdout, transport.SocketPath())
 		}
@@ -365,6 +368,7 @@ type flags struct {
 	all                   *bool
 	dir                   *string
 	off, on               *bool
+	chain, goes           *string
 }
 
 // usageText heads --help: every command, one line each, then the flags.
@@ -402,6 +406,7 @@ Commands:
   matchblox stoker plan|step       the stoker agent's plan and steps, for its card
   matchblox stoker when …          a trigger matchblox fires itself (--ship n --stage s, or --rest who)
   matchblox stoker quit            end the stoker agent and its own tmux session
+  matchblox stoker new --chain <who> ["<order>"]  start a stoker for one chain (--go merges,releases,deploys,kills)
 
 <who> is a pane (%3), a target (app:1.1) or a name.
 
@@ -447,6 +452,8 @@ func newFlags() (*flag.FlagSet, flags) {
 		dir:        fl.String("dir", "", "recover <name>: the new place of the session's folder"),
 		off:        fl.Bool("off", false, "chain: take no chains and no notices"),
 		on:         fl.Bool("on", false, "chain: take chains and notices again"),
+		chain:      fl.String("chain", "", "stoker new: the chain, by any member's name, a pane or the chain's id"),
+		goes:       fl.String("go", "", "stoker new: the gos the chain stoker has: merges, releases, deploys, kills (default: none)"),
 		noMotion:   fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),
 	}
 }

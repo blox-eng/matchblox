@@ -18,7 +18,7 @@ import (
 )
 
 // The stoker agent runs on a tmux server of matchblox's own
-// (StokerServer), in its session sample.StokerSession: matchblox starts it
+// (StokerServer), in its unit's session (stoker.SessionName): matchblox starts it
 // when the builder launches the stoker at a console, keeps it running
 // when the stoker turns off, so its context carries to the next order,
 // and ends it on stoker quit.
@@ -53,25 +53,33 @@ func (s *Service) agentMissing() string {
 	return ""
 }
 
-// startArgv starts the stoker agent on its own server, in the builder's
+// startArgv starts unit u's stoker agent on its own server, in the builder's
 // home directory. The server reads no tmux.conf, so the builder's plugins
 // (tpm, resurrect) never load there, and it ends with its last session, so
 // quit leaves no server behind. The agent's environment is the builder's,
 // without the variables the service sets for itself: steps run with git
 // that never prompts, and the home console marks its own session.
-func (s *Service) startArgv() []string {
+func (s *Service) startArgv(u *stokerUnit) []string {
 	home, _ := os.UserHomeDir()
 	return slices.Concat(
 		[]string{"env", "-u", "GIT_TERMINAL_PROMPT", "-u", "GIT_SSH_COMMAND", "-u", panes.HomeEnv},
-		sample.TmuxOn(s.StokerServer), []string{"-f", os.DevNull, "new-session", "-d", "-s", sample.StokerSession, "-c", home},
+		sample.TmuxOn(s.StokerServer), []string{"-f", os.DevNull, "new-session", "-d", "-s", unitSession(u), "-c", home},
 		s.agentArgv(),
 		[]string{";", "set-option", "-s", "exit-empty", "on"})
 }
 
-// stokerSessionArgv is a tmux command on the stoker's session (has-session,
+// stokerSessionArgv is a tmux command on unit u's session (has-session,
 // kill-session): "=" names that session exactly.
-func (s *Service) stokerSessionArgv(verb string) []string {
-	return slices.Concat(sample.TmuxOn(s.StokerServer), []string{verb, "-t", "=" + sample.StokerSession})
+func (s *Service) stokerSessionArgv(u *stokerUnit, verb string) []string {
+	return slices.Concat(sample.TmuxOn(s.StokerServer), []string{verb, "-t", "=" + unitSession(u)})
+}
+
+// unitSession is the tmux session of unit u; nil is the host's.
+func unitSession(u *stokerUnit) string {
+	if u == nil {
+		return stoker.SessionName(stoker.HostID)
+	}
+	return stoker.SessionName(u.id)
 }
 
 // startAct starts unit u's stoker agent (stoker:start): f, n or o at a
@@ -102,23 +110,23 @@ func (s *Service) startStoker(ctx context.Context, u *stokerUnit) error {
 	if up {
 		return nil
 	}
-	if s.stokerThere(ctx) {
+	if s.stokerThere(ctx, u) {
 		s.markStarting(u) // there, and the sample has not found its agent yet
 		return nil
 	}
-	res := s.Actions.Do(ctx, advice.Action{Label: "start the stoker", Steps: [][]string{s.startArgv()}}, "")
+	res := s.Actions.Do(ctx, advice.Action{Label: "start the stoker", Steps: [][]string{s.startArgv(u)}}, "")
 	// Another console's f may have started it a moment earlier: tmux then
 	// refuses this new-session, and that agent is the one to reuse.
-	if res.Err != "" && !s.stokerThere(ctx) {
+	if res.Err != "" && !s.stokerThere(ctx, u) {
 		return errors.New("the stoker did not start: " + res.Err)
 	}
 	s.markStarting(u)
 	return nil
 }
 
-// stokerThere: the stoker's session is on its server.
-func (s *Service) stokerThere(ctx context.Context) bool {
-	res := s.Actions.Do(ctx, advice.Action{Label: "is the stoker there", Steps: [][]string{s.stokerSessionArgv("has-session")}}, "")
+// stokerThere: unit u's session is on its server.
+func (s *Service) stokerThere(ctx context.Context, u *stokerUnit) bool {
+	res := s.Actions.Do(ctx, advice.Action{Label: "is the stoker there", Steps: [][]string{s.stokerSessionArgv(u, "has-session")}}, "")
 	return res.Err == ""
 }
 
@@ -145,16 +153,19 @@ func (s *Service) quitAct(ctx context.Context, u *stokerUnit, a proto.Act) proto
 	if s.StokerServer == "" {
 		return proto.Result{Err: "this service starts no stoker agent"}
 	}
-	if !s.stokerThere(ctx) {
+	if !s.stokerThere(ctx, u) {
 		return proto.Result{Err: "the stoker is not running"}
 	}
-	res := s.Actions.Do(ctx, advice.Action{Label: "quit the stoker", Steps: [][]string{s.stokerSessionArgv("kill-session")}, Destructive: true}, "y")
-	if res.Err == "" && u != nil {
-		s.mu.Lock()
-		u.startedAt = time.Time{}
-		s.mu.Unlock()
-		s.refreshStoker()
+	res := s.Actions.Do(ctx, advice.Action{Label: "quit the stoker", Steps: [][]string{s.stokerSessionArgv(u, "kill-session")}, Destructive: true}, "y")
+	if res.Err != "" {
+		return res
 	}
+	if u != nil {
+		s.mu.Lock()
+		u.startedAt, u.brief = time.Time{}, ""
+		s.mu.Unlock()
+	}
+	s.refreshStoker()
 	return res
 }
 
@@ -169,7 +180,7 @@ func (s *Service) agentView(u *stokerUnit, v *stoker.View, sessions []sample.Ses
 	if s.StokerServer == "" {
 		return
 	}
-	v.Agent, v.Start = strings.Join(s.agentArgv(), " "), strings.Join(s.startArgv(), " ")
+	v.Agent, v.Start = strings.Join(s.agentArgv(), " "), strings.Join(s.startArgv(u), " ")
 	v.Missing = s.agentMissing()
 	x, up := stokerIn(sessions, s.StokerServer, stoker.SessionName(u.id))
 	v.PaneUp = up

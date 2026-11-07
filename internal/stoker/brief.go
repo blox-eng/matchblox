@@ -41,6 +41,9 @@ func Brief(o Order, ways, cmds string, board Board) string {
 		"You act only through the sessions, by messaging the session that owns the work, and only with the matchblox commands below. " +
 		"Message a session by its name, never by its pane: a pane goes to another session when one ends or resumes. " +
 		"You never merge, push, release, deploy or edit code yourself, you never interrupt anything, and you end a session only with `matchblox kill`.\n\n")
+	if c := board.Chain; c != nil {
+		fmt.Fprintf(&b, "You are the stoker of chain %s. You act on its matches only. Its repo is %s, and its matches are %s.\n\n", c.Name, c.Repo, JoinList(c.Members))
+	}
 
 	b.WriteString("## The order\n\n")
 	quote(&b, o.Words)
@@ -117,7 +120,30 @@ type Board struct {
 	Holds        []holds.Hold
 	Limits       []limits.Account
 	StokerServer string // its own sessions are left out
+	// Chain scopes the brief to one chain: only its members show. Nil:
+	// the host stoker's brief, of the whole machine.
+	Chain *BriefChain
 }
+
+// BriefChain is the chain a chain stoker runs: its name, its repo and its
+// members, each as "<name> (<pane>)".
+type BriefChain struct {
+	Name    string
+	Members []string
+	Repo    string
+}
+
+// shows tells if session x is on the board: a chain's brief shows its
+// members only.
+func (bd Board) shows(x sample.Session) bool {
+	if x.Pane == "" || bd.StokerServer != "" && x.Server() == bd.StokerServer {
+		return false
+	}
+	return bd.Chain == nil || slices.Contains(bd.Chain.Members, MemberLine(x))
+}
+
+// MemberLine is how a brief names a session: "<name> (<pane>)".
+func MemberLine(x sample.Session) string { return fmt.Sprintf("%s (%s)", x.Name, x.Pane) }
 
 // boardSessions bounds the session lines of the snapshot, so the brief
 // stays short on a machine of many sessions.
@@ -133,7 +159,7 @@ func (bd Board) write(b *strings.Builder) {
 	var lines []string
 	driven := map[string]bool{}
 	for _, x := range bd.Sessions {
-		if x.Pane == "" || bd.StokerServer != "" && x.Server() == bd.StokerServer {
+		if !bd.shows(x) {
 			continue
 		}
 		parts := []string{Word(x)}
@@ -157,12 +183,12 @@ func (bd Board) write(b *strings.Builder) {
 				}
 			}
 		}
-		lines = append(lines, fmt.Sprintf("- %s (%s): %s", x.Name, x.Pane, strings.Join(parts, " · ")))
+		lines = append(lines, fmt.Sprintf("- %s: %s", MemberLine(x), strings.Join(parts, " · ")))
 	}
 	if len(lines) > boardSessions {
 		lines = append(lines[:boardSessions-1], fmt.Sprintf("- %d more: `matchblox sessions --json` lists them", len(lines)-boardSessions+1))
 	}
-	if bd.Ships != nil {
+	if bd.Ships != nil && bd.Chain == nil { // a ship no member drives is not the chain's
 		n := 0
 		for _, sh := range bd.Ships.Ships {
 			if driven[fmt.Sprintf("%s#%d", sh.Repo, sh.Number)] || sh.Session.Pane != "" || sh.Session.ID != "" {
