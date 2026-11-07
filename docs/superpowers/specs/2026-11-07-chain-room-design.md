@@ -369,15 +369,13 @@ DESIGN.md changes in the same pull request as each step (its own rule):
   console opens on chains); §6 Sessions' groups and sorts go; §6 Ships and
   Git move under the room; the Machine tab's order is the one above.
 
-### Open: what a chain is
+### What a chain is
 
-matchblox-chain, the match that builds chains (#299, #309), asks the owner
-whether a chain is a team (all hear all) or a set of links (A–B and B–C do
-not join A and C). This design needs a team: one group gets one room and one
-stoker. If the owner picks links, the room's unit must be named again before
-the build starts. This design's proposal: a chain stays a team, and a match
-may join more than one team; it shows in each team's room, with one chat.
-Status: pending, with matchblox-chain (2026-11-07).
+A chain is a team: every match in it hears every other (owner, 2026-11-07:
+"teams for sure"). One team gets one room and one stoker. A match may join
+more than one team: it shows in each team's room, with one chat, and two
+teams that share a match do not hear each other. Links (A–B and B–C without
+A–C) are out.
 
 ## Constraints
 
@@ -409,9 +407,9 @@ Review: /plan-design-review, 2026-11-07. Outside voice: a Claude subagent
 | Pass | Before | After | What remains |
 |---|---|---|---|
 | Step 0 | 5/10 | — | — |
-| 1 Information architecture | 4 | 9 | what a chain is (teams or links) |
+| 1 Information architecture | 4 | 10 | none |
 | 2 States | 3 | 9 | the states table needs goldens to prove it |
-| 3 Journey | 5 | 9 | as pass 1 |
+| 3 Journey | 5 | 10 | none |
 | 4 Specific, not generic | 6 | 9 | none |
 | 5 Design system | 4 | 9 | DESIGN.md edits land with each step |
 | 6 Phone and access | 4 | 9 | the M-s / M-n key check, the build's first task |
@@ -433,8 +431,7 @@ and the terminal view's `UIImpactFeedbackGenerator`.
 | plan-design-review (in-host + Claude subagent) | issues_found, fixed | 22 decisions: 3 by the owner, 19 review calls |
 | Codex outside voice | unavailable | missing coverage |
 
-VERDICT: design complete at 9/10, waiting on one decision.
+VERDICT: design complete. The two 9s close with proof in the build: goldens for the states, and the key check.
 OUTSIDE COVERAGE: single-model.
 
-**UNRESOLVED DECISIONS:**
-- What a chain is: a team (this design's proposal) or links, with matchblox-chain.
+NO UNRESOLVED DECISIONS
