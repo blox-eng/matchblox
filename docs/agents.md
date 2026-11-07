@@ -207,29 +207,35 @@ to the account's configuration or bypasses hook trust.
 
 ## Handover evidence
 
-A switch with a nonempty handoff captures the outgoing match's task record,
+A switch that continues captures the outgoing match's task record,
 the conversation from a verified Claude Code or Codex transcript, the last
 sampled reply, pending question, available pane text, and Git status, recent
 commits and diff statistics. Cursor and OpenCode use their managed task
 records and pane evidence when no verified transcript path is available.
 
-The conversation excerpt reads the whole transcript. It keeps your first
-prompt, which usually states the goal, the last three replies, and then as
-many of your latest prompts as fit in 48,000 bytes. A marker counts the
-prompts it leaves out. Tool output, skill text, subagent notifications and
-other harness text never enter it. A slash command keeps its arguments.
+The conversation excerpt keeps your first prompt, which usually states the
+goal, the last three replies, and then as many of your latest prompts as fit
+in 48,000 bytes. A marker counts the prompts it leaves out. A long prompt
+keeps its start and its end, where the instruction after a pasted log sits.
+Tool output, skill text, compaction summaries, subagent notifications,
+interrupt markers and shell output never enter it. A slash command keeps its
+arguments, and a setting command such as `/model opus` never counts as the
+goal. A transcript longer than 64 MB is read for its first 8 MB and its last
+56 MB, and the excerpt says how much of the middle it skips.
 
-A task record that still holds the launch template is reported as never
+A task record that still holds only the launch template is reported as never
 written. The receiving match then rebuilds the goal from the conversation.
 The capture names missing sources and does not infer a goal from changed files.
 Old replies and task records remain claims to check against the working tree.
 
-The default task tells the receiving match to read that capture, preserve the
-latest user direction, and continue the recorded next step. A custom handoff
-keeps your exact task text. An empty handoff starts no task and captures no
-handover. Match awareness still applies.
+The receiving match starts with a fixed switch prompt from the service: read
+the repository instructions and the capture, check each claim against the
+tree, then do the next step. Your extra instructions for the switch follow it
+and take priority over the handover. On the command line, `--handoff` gives a
+custom first message that keeps your exact text, and an empty one starts no
+task and captures no handover. Match awareness still applies.
 
-The console loads an evidence excerpt before it accepts switch confirmation.
+The console's confirm shows the switch only.
 `matchblox switch api --agent codex --preview` shows the full current capture
 without switching. The actual switch captures again just before replacement.
 A failed save leaves the outgoing agent running. A process that changes since

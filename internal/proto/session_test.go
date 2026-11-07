@@ -19,6 +19,24 @@ func TestCheckName(t *testing.T) {
 	}
 }
 
+func TestHandoffCarriesTheBuildersExtras(t *testing.T) {
+	if Handoff("  ") != DefaultHandoff {
+		t.Fatalf("blank extras change the handoff: %q", Handoff("  "))
+	}
+	for _, extra := range []string{"", "Keep CSV only."} {
+		got, ok := HandoffExtra(Handoff(extra))
+		if !ok || got != extra {
+			t.Errorf("%q round-trips as %q %v", extra, got, ok)
+		}
+	}
+	if _, ok := HandoffExtra("Only explain the failing test."); ok {
+		t.Error("a custom handoff passes as the default")
+	}
+	if err := CheckFirst(Handoff(strings.Repeat("a", 300)), "the handoff"); err != nil {
+		t.Errorf("the longest extras do not fit: %v", err)
+	}
+}
+
 func TestCheckFirstNamesWhatItRefuses(t *testing.T) {
 	for _, ok := range []string{DefaultHandoff, "fix it - then test"} {
 		if err := CheckFirst(ok, "the handoff"); err != nil {

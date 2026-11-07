@@ -167,10 +167,10 @@ func TestAOpensSwitchAgentAndJumpsAfter(t *testing.T) {
 	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
 	next, _ = key(m, "A")
 	fm := next.(Model).form
-	if fm == nil || !fm.swap || fm.agent != "codex" || fm.first != proto.DefaultHandoff {
+	if fm == nil || !fm.swap || fm.agent != "codex" || fm.first != "" || fm.noTask {
 		t.Fatalf("form %+v", fm)
 	}
-	if s := screen(next); !strings.Contains(s, "Switch agent") || !strings.Contains(s, "handoff") {
+	if s := screen(next); !strings.Contains(s, "Switch agent") || !strings.Contains(s, "‹ continue ›") || !strings.Contains(s, "blank: continue from the handover") {
 		t.Fatalf("the form:\n%s", s)
 	}
 	if next, _ = key(next, "left"); next.(Model).form.agent != "codex" {
@@ -181,7 +181,6 @@ func TestAOpensSwitchAgentAndJumpsAfter(t *testing.T) {
 	if nm.form != nil || nm.pending == nil || nm.pending.rec != "switch:%1" || !strings.Contains(nm.pending.say, "claude → codex") || len(f.acts()) != 0 {
 		t.Fatalf("form %+v pending %+v acts %+v", nm.form, nm.pending, f.acts())
 	}
-	next = readySwitchPreview(t, next)
 	next, cmd := key(next, "y")
 	cmd()
 	acts := f.acts()
@@ -213,7 +212,6 @@ func TestSwitchOfABusySessionTakesASecondY(t *testing.T) {
 	next, f := switchState(t, st)
 	next, _ = key(next, "A")
 	next, _ = key(next, "enter")
-	next = readySwitchPreview(t, next)
 	next, cmd := key(next, "y")
 	if cmd != nil {
 		cmd()
@@ -248,17 +246,65 @@ func TestSwitchRefusesOutsideTmuxAndOneAgent(t *testing.T) {
 	}
 }
 
-func TestSwitchRefusesABadHandoffInTheForm(t *testing.T) {
+// The builder's words go after the service's fixed switch prompt, so even
+// a dash cannot become the agent's flag.
+func TestSwitchExtrasFollowTheHandover(t *testing.T) {
 	next, f := switchState(t, lifeState())
 	next, _ = key(next, "A")
 	next, _ = key(next, "tab")
-	for range len(proto.DefaultHandoff) {
-		next, _ = key(next, "backspace")
-	}
-	next = typeText(next, "--yolo")
+	next, _ = key(next, "tab")
+	next = typeText(next, "--yolo keep CSV only")
 	next, _ = key(next, "enter")
-	if nm := next.(Model); nm.form == nil || nm.form.err != "the handoff does not start with -" || nm.pending != nil || len(f.acts()) != 0 {
-		t.Fatalf("form %+v pending %+v", nm.form, nm.pending)
+	_, cmd := key(next, "y")
+	cmd()
+	var sw proto.SwitchAgent
+	if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &sw) != nil || sw.Handoff != proto.Handoff("--yolo keep CSV only") {
+		t.Fatalf("sent %+v", f.acts())
+	}
+}
+
+// The confirm shows the switch only: the handover is the service's.
+func TestSwitchConfirmShowsTheSwitchOnly(t *testing.T) {
+	for _, w := range []int{44, 100} {
+		st := lifeState()
+		st.Queue = nil
+		m, _ := loadedWith(t, w, st)
+		next := selectPane(t, m, "%1")
+		next, _ = key(next, "A")
+		next, _ = key(next, "enter")
+		s := screen(next)
+		if !strings.Contains(s, "claude → codex") || strings.Contains(s, "andover") || strings.Contains(s, "awareness") || !strings.Contains(s, "network") {
+			t.Fatalf("%d columns, the confirm:\n%s", w, s)
+		}
+	}
+}
+
+func TestSwitchCanStartWithNoTask(t *testing.T) {
+	for _, pick := range []func(tea.Model) tea.Model{
+		func(m tea.Model) tea.Model { m, _ = key(m, "tab"); m, _ = key(m, "right"); return m },
+		func(m tea.Model) tea.Model { // a phone's tap on the start row
+			sc := m.(Model).draw(100)
+			i := slices.Index(sc.boxRows, fmt.Sprintf("field:%d", fieldStart))
+			m, _ = m.Update(tea.MouseClickMsg{X: sc.boxX + 4, Y: sc.boxAt + i, Button: tea.MouseLeft})
+			return m
+		},
+	} {
+		next, f := switchState(t, lifeState())
+		next, _ = key(next, "A")
+		next = pick(next)
+		if fm := next.(Model).form; fm == nil || !fm.noTask || slices.Contains(fm.fields(), fieldFirst) || strings.Contains(screen(next), "extra") {
+			t.Fatalf("no task keeps the extras:\n%s", screen(next))
+		}
+		next, _ = key(next, "enter")
+		if say := next.(Model).pending.say; !strings.HasSuffix(say, "; no task") {
+			t.Fatalf("the confirm hides no task: %q", say)
+		}
+		_, cmd := key(next, "y")
+		cmd()
+		var sw proto.SwitchAgent
+		if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &sw) != nil || sw.Handoff != "" {
+			t.Fatalf("sent %+v", f.acts())
+		}
 	}
 }
 
@@ -1836,7 +1882,6 @@ func TestSwitchWithANotLinkedNoteJumps(t *testing.T) {
 	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
 	next, _ = key(m, "A")
 	next, _ = key(next, "enter")
-	next = readySwitchPreview(t, next)
 	next, cmd := key(next, "y")
 	cmd()
 	act := next.(Model).jumpAfter.act
@@ -1972,47 +2017,5 @@ func TestAnUnreadableRootIsShownShortened(t *testing.T) {
 	s := screen(next)
 	if !strings.Contains(s, "accounts not read: open /home/u/.matchblox/accou…") || strings.Contains(s, "permission denied") {
 		t.Fatalf("the form:\n%s", s)
-	}
-}
-
-func readySwitchPreview(t *testing.T, m tea.Model) tea.Model {
-	t.Helper()
-	mm := m.(Model)
-	if mm.pending == nil || mm.pending.previewAct == "" {
-		t.Fatal("no pending preview")
-	}
-	next, _ := mm.Update(resultMsg(proto.Result{ActID: mm.pending.previewAct, Preview: "# Handover evidence\n\n> Goal: fix the export.\n> Next action: run its tests.\n"}))
-	return next
-}
-
-func TestSwitchWaitsForPreviewAndCancellationIgnoresItsReply(t *testing.T) {
-	m, f := switchState(t, lifeState())
-	m, _ = key(m, "A")
-	m, cmd := key(m, "enter")
-	cmd()
-	id := m.(Model).pending.previewAct
-	acts := f.acts()
-	if len(acts) != 1 || acts[0].RecID != "switch-preview:%1" || acts[0].Confirm != "" {
-		t.Fatalf("preview mutates a match: %+v", acts)
-	}
-	m, cmd = key(m, "y")
-	if cmd != nil || m.(Model).pending == nil || m.(Model).pending.previewAct == "" || len(f.acts()) != 1 {
-		t.Fatal("confirmation bypasses pending preview")
-	}
-	m, _ = key(m, "esc")
-	m, _ = m.Update(resultMsg(proto.Result{ActID: id, Preview: "late evidence"}))
-	if m.(Model).pending != nil || len(f.acts()) != 1 {
-		t.Fatal("late preview restarts cancelled switch")
-	}
-}
-
-func TestSwitchPreviewFailureKeepsTheOldMatch(t *testing.T) {
-	m, f := switchState(t, lifeState())
-	m, _ = key(m, "A")
-	m, _ = key(m, "enter")
-	id := m.(Model).pending.previewAct
-	m, _ = m.Update(resultMsg(proto.Result{ActID: id, Err: "session is gone"}))
-	if m.(Model).pending != nil || len(f.acts()) != 0 || !strings.Contains(m.(Model).flash, "session is gone") {
-		t.Fatal("preview failure still offers switch")
 	}
 }

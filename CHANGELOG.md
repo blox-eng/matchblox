@@ -6,14 +6,27 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **A switch asks only for what is yours to say.** The Switch agent form
+  starts on **continue** with an empty **extra** field: anything you type
+  goes to the new agent after matchblox's fixed switch prompt and takes
+  priority over the handover. **no task** starts it with nothing, by arrow
+  or by tap. The confirm shows the switch only, without the wait for an
+  evidence preview. A transcript over 64 MB is read for its two ends, so the
+  switch stays quick.
+  ([#335](https://github.com/blox-eng/matchblox/issues/335))
+
 ### Fixed
 
 - **A switch keeps your goal and corrections.** The handover read only the
   last 128 KB of the outgoing agent's transcript, and tool output filled it:
   in long sessions, 0 or 1 of your prompts reached the new agent. It now reads
-  the whole transcript and keeps your first prompt, your latest prompts and
+  the transcript from its start and keeps your first prompt, your latest prompts and
   the last replies. Slash-command arguments stay in. A task record the old
   agent never filled in is named as such, not passed on as its claims.
+  Compaction summaries, interrupt markers and shell output stay out, and a
+  long prompt keeps the instruction at its end.
   ([#335](https://github.com/blox-eng/matchblox/issues/335))
 
 ## [0.34.0] - 2026-11-07

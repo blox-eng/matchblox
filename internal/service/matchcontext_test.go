@@ -1,7 +1,9 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -219,6 +221,60 @@ func TestSwitchPreviewReadsCurrentEvidenceWithoutWriting(t *testing.T) {
 	}
 }
 
+func TestSwitchPromptIsFixedAndCarriesTheBuildersExtras(t *testing.T) {
+	for extra, want := range map[string]string{"": "", "Keep CSV only.": ` The user adds these instructions for this switch. They take priority over the handover: "Keep CSV only."`} {
+		s, _ := switchTest(t)
+		s.Home = t.TempDir()
+		old := lifeSnap(false).Sessions[0]
+		args, bundle, err := s.matchLaunch(t.Context(), "codex", old.Name, old.Cwd, "", proto.Handoff(extra), true, nil, &old)
+		if err != nil {
+			t.Fatal(err)
+		}
+		prompt := args[len(args)-1]
+		fixed := "Read the repository instructions. Then read the handover evidence in " + fmt.Sprintf("%q", filepath.Join(bundle, "capture.md")) + "."
+		if !strings.HasPrefix(prompt, fixed) || !strings.HasSuffix(prompt, "ask the user one question."+want) {
+			t.Errorf("extras %q give the prompt %q", extra, prompt)
+		}
+		if _, err := os.Stat(filepath.Join(bundle, "capture.md")); err != nil {
+			t.Errorf("extras %q skip the capture: %v", extra, err)
+		}
+	}
+}
+
+func TestConversationReadsTheHeadAndTailOfAHugeTranscript(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "conversation.jsonl")
+	row := func(text string) string {
+		return `{"type":"user","message":{"role":"user","content":"` + text + `"}}` + "\n"
+	}
+	body := row("Goal: ship the export.") + row("middle prompt") + strings.Repeat(`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"`+strings.Repeat("x", 900)+`"}]}}`+"\n", 40) + row("Latest: keep Codex too.")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	turns, err := readTurns(t.Context(), f, int64(len(body)), 100, 2000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := pickTurns(turns, conversationBudget)
+	for _, want := range []string{"Goal: ship the export.", "Latest: keep Codex too.", "of the transcript not read"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q: %s", want, text)
+		}
+	}
+	if strings.Contains(text, "middle prompt") {
+		t.Errorf("reads the middle: %s", text)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := conversationExcerpt(ctx, path); !errors.Is(err, context.Canceled) {
+		t.Errorf("a cancelled capture keeps reading: %v", err)
+	}
+}
+
 func TestSwitchKeepsCustomAndEmptyTaskSemantics(t *testing.T) {
 	for _, task := range []string{"", "Only explain the failing test; do not edit files."} {
 		s, _ := switchTest(t)
@@ -251,6 +307,15 @@ func TestSwitchCarriesTheOutgoingRecordWithoutTrustingIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	old.MatchContext = filepath.Join(bundle, "awareness.md")
+	if err := os.WriteFile(filepath.Join(bundle, "handover.md"), []byte(blankRecord+"\nLaunch message (user-supplied text):\nFix exports\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundle, "handover.md"), []byte(blankRecord+"\nProgress: exports done.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if capture := s.captureMatch(t.Context(), old); strings.Contains(capture, "never wrote") || !strings.Contains(capture, "> Progress: exports done.") {
+		t.Fatalf("an appended record is called unwritten: %s", capture)
+	}
 	if err := os.WriteFile(filepath.Join(bundle, "handover.md"), []byte(blankRecord+"\nLaunch message (user-supplied text):\nFix exports\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +363,7 @@ func TestConversationCaptureKeepsUserDirectionAndExcludesTools(t *testing.T) {
 	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	text, err := conversationExcerpt(path)
+	text, err := conversationExcerpt(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +399,7 @@ func TestConversationCaptureKeepsTheGoalPastToolOutput(t *testing.T) {
 	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	text, err := conversationExcerpt(path)
+	text, err := conversationExcerpt(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,6 +417,56 @@ func TestConversationCaptureKeepsTheGoalPastToolOutput(t *testing.T) {
 	}
 }
 
+// Each row below is one Claude Code writes on the builder's host: 129
+// transcripts hold a compaction summary, 60 an interrupt marker.
+func TestConversationCaptureDropsHarnessRowsAndKeepsWholeIntent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "conversation.jsonl")
+	long := strings.Repeat("log line\\n", 1000) + "NOW FIX THE NULL CHECK"
+	lines := []string{
+		`{"type":"user","message":{"role":"user","content":"<command-name>/model</command-name>\n<command-message>model</command-message>\n<command-args>opus</command-args>"}}`,
+		`{"type":"user","message":{"role":"user","content":"Goal: ship the export."}}`,
+		`{"type":"user","isCompactSummary":true,"message":{"role":"user","content":"This session is being continued from a previous conversation. HARNESS SECRET"}}`,
+		`{"type":"user","isVisibleInTranscriptOnly":true,"message":{"role":"user","content":"HARNESS SECRET"}}`,
+		`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user for tool use] HARNESS SECRET"}]}}`,
+		`{"type":"user","message":{"role":"user","content":"<bash-stdout>HARNESS SECRET</bash-stdout><bash-stderr></bash-stderr>"}}`,
+		`{"type":"user","message":{"role":"user","content":"<local-command-stderr>HARNESS SECRET</local-command-stderr>"}}`,
+		`{"type":"user","message":{"role":"user","content":"` + long + `"}}`,
+		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Reply one, first part."}]}}`,
+		`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"TOOL SECRET"}]}}`,
+		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Reply one, conclusion."}]}}`,
+	}
+	for i := range 3 {
+		lines = append(lines, fmt.Sprintf(`{"type":"user","message":{"role":"user","content":"later %d"}}`, i),
+			fmt.Sprintf(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"later reply %d"}]}}`, i))
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	text, err := conversationExcerpt(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(text, "SECRET") {
+		t.Errorf("includes harness or tool text: %s", text)
+	}
+	for _, want := range []string{"log line", "NOW FIX THE NULL CHECK", "[middle of message omitted]"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("a long prompt loses %q", want)
+		}
+	}
+	tight := pickTurns([]turn{{"user", "/model opus"}, {"user", "Goal: ship the export."}, {"user", strings.Repeat("later ", 10)}, {"user", "Latest."}}, 60)
+	if !strings.Contains(tight, "Goal: ship the export.") {
+		t.Errorf("a setting command takes the goal's place: %s", tight)
+	}
+	turns := []turn{}
+	for _, l := range lines[8:11] {
+		turns = appendTurn(turns, []byte(l))
+	}
+	if len(turns) != 1 || turns[0].text != "Reply one, first part.\n\nReply one, conclusion." {
+		t.Errorf("one reply split over rows stays split: %q", turns)
+	}
+}
+
 func TestConversationCaptureKeepsFirstAndLatestPromptsWithinBudget(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "conversation.jsonl")
 	var lines []string
@@ -362,7 +477,7 @@ func TestConversationCaptureKeepsFirstAndLatestPromptsWithinBudget(t *testing.T)
 	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	text, err := conversationExcerpt(path)
+	text, err := conversationExcerpt(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}

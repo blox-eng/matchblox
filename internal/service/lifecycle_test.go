@@ -2001,7 +2001,7 @@ func seatLaunch(argv []string) []string {
 			i++
 			continue
 		}
-		if strings.HasPrefix(argv[i], "Read the repository instructions, then ") && strings.Contains(argv[i], "/capture.md") {
+		if strings.HasPrefix(argv[i], "Read the repository instructions. Then read the handover evidence in ") && strings.Contains(argv[i], "/capture.md") {
 			out = append(out, proto.DefaultHandoff)
 			continue
 		}

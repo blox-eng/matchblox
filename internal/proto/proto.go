@@ -521,6 +521,30 @@ type SwitchAgent struct {
 	Account string `json:"account,omitempty"`
 }
 
-// DefaultHandoff selects an evidence capture and a concrete continuation
-// prompt. An edited handoff stays the user's exact text; empty starts no turn.
+// DefaultHandoff selects an evidence capture and the service's fixed switch
+// prompt. Handoff adds the builder's extras to it. Any other handoff stays
+// the builder's exact text; empty starts no turn.
 const DefaultHandoff = "Continue from the saved handover: check the goal, latest user direction, progress, decisions, verification and next action against the current tree."
+
+// handoffExtras joins extras to DefaultHandoff. A service that predates
+// extras takes the whole line as a custom handoff, which still reads well.
+const handoffExtras = " The builder adds: "
+
+// Handoff is the handoff of a switch that continues from the handover, with
+// the builder's extra instructions for it, if any.
+func Handoff(extra string) string {
+	if extra = strings.TrimSpace(extra); extra != "" {
+		return DefaultHandoff + handoffExtras + extra
+	}
+	return DefaultHandoff
+}
+
+// HandoffExtra reports whether h continues from the handover, and its extras.
+func HandoffExtra(h string) (extra string, ok bool) {
+	if h == DefaultHandoff {
+		return "", true
+	}
+	extra, ok = strings.CutPrefix(h, DefaultHandoff+handoffExtras)
+	extra = strings.TrimSpace(extra)
+	return extra, ok && extra != ""
+}

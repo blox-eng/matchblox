@@ -40,9 +40,13 @@ const (
 	fieldFolders
 	fieldAccount // after agent, for an agent with accounts
 	fieldSetup   // under account, for a new account
+	fieldStart   // Switch agent: continue from the handover, or no task
 )
 
-var formLabels = [...]string{"where", "branch", "name", "agent", "first", "folders", "account", "setup"}
+var formLabels = [...]string{"where", "branch", "name", "agent", "first", "folders", "account", "setup", "start"}
+
+// switchStarts are a switch's starts, in the order ←→ walks them.
+var switchStarts = [...]string{"continue", "no task"}
 
 // newAccountChoice is the last entry of the account field.
 const newAccountChoice = "+ new account"
@@ -75,12 +79,13 @@ func checkAccountName(name string) error {
 }
 
 // form is the open New session, Rename, Switch agent or scan folders form.
-// Rename has the name only; Switch agent the agent and the handoff (in
-// first); the scan's folders the roots.
+// Rename has the name only; Switch agent the agent, how it starts and the
+// builder's extras for the handover (in first); the scan's folders the roots.
 type form struct {
 	host       string // the host it acts on: "" the home host
 	rename     bool
 	swap       bool   // Switch agent
+	noTask     bool   // Switch agent: start with no task and no handover
 	pick       bool   // the scan's folders, in roots
 	roots      string // space separated
 	pane, who  string // Rename, Switch agent: the session's pane and its name now
@@ -229,8 +234,8 @@ func (m Model) openRename() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// openSwitch is A on a session: Switch agent, the first other agent
-// picked and the default handoff to edit or clear.
+// openSwitch is A on a session: Switch agent, the first other agent picked,
+// continuing from the handover with no extras.
 func (m Model) openSwitch() (tea.Model, tea.Cmd) {
 	s, ok := m.selectedSession()
 	switch {
@@ -247,7 +252,7 @@ func (m Model) openSwitch() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	st := m.stateOf(s.Host)
-	f := &form{host: s.Host, swap: true, pane: s.Pane, who: s.Name, from: s.Agent, where: s.Cwd, at: fieldAgent, first: proto.DefaultHandoff, accts: st.Accounts, skipped: st.AccountsSkipped, last: st.LastAccount}
+	f := &form{host: s.Host, swap: true, pane: s.Pane, who: s.Name, from: s.Agent, where: s.Cwd, at: fieldAgent, accts: st.Accounts, skipped: st.AccountsSkipped, last: st.LastAccount}
 	for _, a := range st.Agents {
 		if a != s.Agent {
 			f.agent = a
@@ -265,7 +270,10 @@ func (m Model) openSwitch() (tea.Model, tea.Cmd) {
 // switchAction is the plan of a Switch agent form: it waits for a typed y,
 // and a second one for a session that works or waits.
 func (m Model) switchAction(f form) *action {
-	sw := proto.SwitchAgent{Agent: f.agent, Handoff: strings.TrimSpace(f.first)}
+	sw := proto.SwitchAgent{Agent: f.agent}
+	if !f.noTask {
+		sw.Handoff = proto.Handoff(f.first)
+	}
 	in := func(s sample.Session) bool { return s.Host == m.formHostOf(&f) && s.Pane == f.pane }
 	if i := slices.IndexFunc(m.snap.Sessions, in); i >= 0 {
 		sw.ExpectedPID, sw.ExpectedStart = m.snap.Sessions[i].PID, m.snap.Sessions[i].Start
@@ -287,14 +295,11 @@ func (m Model) switchAction(f form) *action {
 		}
 	}
 	say := fmt.Sprintf("switch %s: %s → %s in %s, %s,%s then jump there", f.who, f.from, f.agent, f.pane, f.where, on)
-	say += "; add match awareness"
 	if f.agent == "codex" {
 		say += "; trust this workspace and enable workspace-write network access"
 	}
-	if sw.Handoff == "" {
-		say += "; no task or handover"
-	} else {
-		say += "; capture handover before replacement"
+	if f.noTask {
+		say += "; no task"
 	}
 	a := &action{label: "switch", destructive: true, rec: "switch:" + f.pane, text: string(b), againText: string(again), say: say, done: "switched " + f.who + " to " + f.agent, host: f.host}
 	if i := slices.IndexFunc(m.snap.Sessions, in); i >= 0 {
@@ -310,8 +315,10 @@ func (f *form) fields() []int {
 		return []int{fieldFolders}
 	case f.rename:
 		return []int{fieldName}
+	case f.swap && f.noTask:
+		return []int{fieldAgent, fieldStart}
 	case f.swap:
-		return []int{fieldAgent, fieldFirst}
+		return []int{fieldAgent, fieldStart, fieldFirst}
 	}
 	out := []int{fieldWhere, fieldBranch, fieldName, fieldAgent}
 	if f.hasAccounts() {
@@ -520,6 +527,12 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			by = -1
 		}
 		f.pickAccount(by)
+		return m, nil
+	}
+	if f.at == fieldStart {
+		if bkey.Matches(k, fk.Left, fk.Right) {
+			f.noTask = !f.noTask
+		}
 		return m, nil
 	}
 	if f.at == fieldSetup {
@@ -1051,19 +1064,14 @@ func (m Model) swapEnter(f form) (tea.Model, tea.Cmd) {
 		m.form.err, m.form.at = "which agent? "+m.keys.form.Left.Help().Key+" picks one", fieldAgent
 		return m, nil
 	}
-	if handoff := strings.TrimSpace(f.first); handoff != "" {
-		if err := proto.CheckFirst(handoff, "the handoff"); err != nil {
+	if !f.noTask {
+		if err := proto.CheckFirst(proto.Handoff(f.first), "the extras"); err != nil {
 			m.form.err, m.form.at = err.Error(), fieldFirst
 			return m, nil
 		}
 	}
 	m.form, m.pending = nil, m.switchAction(f)
-	if strings.TrimSpace(f.first) == "" {
-		return m, nil
-	}
-	cmd := m.sendTo(m.formHostOf(&f), proto.Act{RecID: "switch-preview:" + f.pane})
-	m.pending.previewAct = fmt.Sprintf("a%d", m.acts)
-	return m, cmd
+	return m, nil
 }
 
 // formResult takes the result of the form's act: it closes when the act
@@ -1184,7 +1192,7 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 	field := func(id int, value, placeholder string) {
 		label := fmt.Sprintf("%-7s", formLabels[id])
 		if f.swap && id == fieldFirst {
-			label = "handoff"
+			label = "extra  "
 		}
 		lead := st.faint.Render(label) + "  "
 		if f.at == id {
@@ -1215,7 +1223,22 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 		line, chips := m.agentChips(iw)
 		add(fmt.Sprintf("field:%d", fieldAgent), line)
 		agents = chips
-		field(fieldFirst, f.first, "blank: it waits for you")
+		start := switchStarts[0]
+		if f.noTask {
+			start = switchStarts[1]
+		}
+		startLead := st.faint.Render(fmt.Sprintf("%-7s", formLabels[fieldStart])) + "  "
+		if f.at == fieldStart {
+			startLead = st.muted.Render(fmt.Sprintf("%-7s", formLabels[fieldStart])) + st.accent.Render("› ")
+		}
+		other := switchStarts[0]
+		if !f.noTask {
+			other = switchStarts[1]
+		}
+		add(fmt.Sprintf("field:%d", fieldStart), startLead+st.accent.Render("‹ "+start+" ›")+"  "+st.faint.Render(other))
+		if !f.noTask {
+			field(fieldFirst, f.first, "blank: continue from the handover")
+		}
 	case f.pick:
 		title = st.accent.Bold(true).Render("Find repositories in these folders")
 		field(fieldFolders, f.roots, "~ is your home")
@@ -1259,7 +1282,9 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 	}
 	if !f.rename && !f.pick {
 		if f.agent == "codex" {
-			add("", st.muted.Render(fit("Codex: trust this workspace; workspace-write network on", iw)))
+			for _, l := range wrapPlain("Codex: trust this workspace; workspace-write network on", iw) {
+				add("", st.muted.Render(l)) // whole on a phone: it is a permission
+			}
 		}
 	}
 	if f.act != "" {
@@ -1451,6 +1476,9 @@ func (m Model) tapForm(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 	}
 	if _, err := fmt.Sscanf(sc.boxRows[i], "field:%d", &id); err == nil {
 		m.form = &f
+		if id == fieldStart { // a tap on a phone picks the other start
+			f.noTask = !f.noTask
+		}
 		if f.at = id; !f.listOpen {
 			cmd := m.onWhere(&f)
 			return m, cmd
