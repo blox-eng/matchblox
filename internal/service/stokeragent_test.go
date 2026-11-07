@@ -138,7 +138,7 @@ func TestTheStokersServerIsItsOwn(t *testing.T) {
 	t.Setenv("MATCHBLOX_HOME", "1")
 	server := tmuxtest.Server(t)
 	s := &Service{StokerServer: server, StokerAgent: "sleep 600"}
-	if err := actions.Exec(t.Context(), s.startArgv()); err != nil {
+	if err := actions.Exec(t.Context(), s.startArgv(s.hostUnit())); err != nil {
 		t.Fatal(err)
 	}
 	tmux := func(args ...string) string {
@@ -157,7 +157,7 @@ func TestTheStokersServerIsItsOwn(t *testing.T) {
 			t.Errorf("the agent's environment has %s", v)
 		}
 	}
-	if err := actions.Exec(t.Context(), s.stokerSessionArgv("kill-session")); err != nil {
+	if err := actions.Exec(t.Context(), s.stokerSessionArgv(s.hostUnit(), "kill-session")); err != nil {
 		t.Fatal(err)
 	}
 	if err := exec.Command("tmux", "-L", server, "list-sessions").Run(); err == nil { //nolint:gosec // a test's own socket

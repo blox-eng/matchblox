@@ -212,8 +212,8 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 // steps come from its CLI.
 func yours(recID string) bool {
 	if verb, ok := strings.CutPrefix(recID, "stoker:"); ok {
-		// matchblox stoker quit is the builder's in a shell too.
-		return verb != "plan" && verb != "step" && verb != "when" && verb != "quit"
+		// matchblox stoker quit and new are the builder's in a shell too.
+		return verb != "plan" && verb != "step" && verb != "when" && verb != "quit" && verb != "new"
 	}
 	return strings.HasPrefix(recID, "park:")
 }
@@ -249,6 +249,8 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 			return s.startAct(ctx, s.hostUnit())
 		case "quit":
 			return s.quitAct(ctx, s.hostUnit(), a)
+		case "new":
+			return s.newChainAct(ctx, a)
 		}
 		return s.stokerAct(s.hostUnit(), verb, s.now())
 	}

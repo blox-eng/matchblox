@@ -959,3 +959,32 @@ func TestChainParsesItsFlags(t *testing.T) {
 		t.Fatalf("unchain: %v", err)
 	}
 }
+
+// TestCLIStokerNewParsesGo: matchblox stoker new --chain <who> gives the
+// chain a stoker, with the gos of --go and the order's words. With no
+// --go, it gives none.
+func TestCLIStokerNewParsesGo(t *testing.T) {
+	a, err := stokerNewAct([]string{"new", "merge", "on", "green"}, "api", "merges,kills", "%7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ask struct {
+		Chain  string   `json:"chain"`
+		Words  string   `json:"words"`
+		Grants []string `json:"grants"`
+	}
+	if a.RecID != "stoker:new" || a.Confirm != "y" || a.From != "%7" || json.Unmarshal([]byte(a.Text), &ask) != nil ||
+		ask.Chain != "api" || ask.Words != "merge on green" || !slices.Equal(ask.Grants, []string{"merge", "kill"}) {
+		t.Fatalf("act %+v ask %+v", a, ask)
+	}
+	a, err = stokerNewAct([]string{"new"}, "api", "", "")
+	if err != nil || json.Unmarshal([]byte(a.Text), &ask) != nil || len(ask.Grants) != 0 || ask.Words != "" {
+		t.Fatalf("no --go: %+v %v", ask, err)
+	}
+	if _, err := stokerNewAct([]string{"new"}, "", "", ""); err == nil {
+		t.Error("new with no --chain makes an act")
+	}
+	if _, err := stokerNewAct([]string{"new"}, "api", "merges,pushes", ""); err == nil {
+		t.Error("--go pushes makes an act")
+	}
+}

@@ -29,6 +29,9 @@ const (
 	// command it denied in a pane the stoker drives, which waits for the
 	// builder's y.
 	RuleGo = "go"
+	// RuleFamily marks a line matchblox puts on a card about the family: a
+	// chain stoker started, or did not.
+	RuleFamily = "family"
 	// WhyOrder marks a compact the stoker agent asked for, not the plan.
 	WhyOrder = "order"
 	// MaxCompacts bounds the compacts the plan sends in one run.
