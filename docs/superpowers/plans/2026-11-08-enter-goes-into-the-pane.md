@@ -295,7 +295,8 @@ func TestEveryWayInJumps(t *testing.T) { // T1
 	}
 }
 func TestATapOnARowJumps(t *testing.T) { // T1: one column, and the second tap of a split screen
-	// loaded at 44 wide: one tap on app-feature's row runs the jump; at 100 wide the row's second tap does
+	// at 44 wide (one column) and at 100 wide: the first tap on app-feature's row selects it and opens its
+	// live view; the second tap on it (tapSelected) runs the jump (owner, 2026-11-08: the phone keeps the view)
 }
 func TestAPanelessRowSaysSo(t *testing.T) { // T13
 	m, _ := loadedWith(t, 100, outsideTmux(fixtureState())) // account_test.go: every pane ""
@@ -539,12 +540,29 @@ git commit -S -m "feat(console): a jump moves only the screen that asked (#334)"
 
 Delete with their tests: `chatKey`, `pressed`, `heldKeys`, `chatPaste`, `tellAgent`, `agentGone`, `noAgent`, `commandKey`, `commandPrefix`, `maxCommandID`, `pasteTexts`, `toAgent`, `lastCtrlC`, `agentIn`, `queueKey`, `sendKey`, `keyAnswered`, `keepChat`, `reopenChat`, `chatJustShut`, `chatShutHold`, `chatTypingHold`, `menuQuiet`, `menuSeen`, `seenOf`, `noteMenu`, `menuWait`, `atMenu`, `chatHushed`, `askedAgain`, `startsDigit`, `intoPane`, `ctrlCWindow`, `ctrlCLapsed`, `lapseCtrlC`, `ctrlCMark`, `openChat`, `chatOn`, `chatTarget`, `tooShort`, `chatSeen`. Keep the watch, size dwell (`sizeDwell`, `sizeDueMsg`, `chatSize`, `watchCmd` without its `chatKeys` term) and every drawing function. Keep in `liveview_test.go` only the drawing and watch tests (`TestFit*`, `TestScreenOfAnotherPaneIsIgnored`, `TestSelectionChange*`, `TestLostConnectionForgetsTheWatch`, `TestChatLines*`, `TestRefused*Watch*`, `TestRefusalOfAnOldWatchHoldsNothing`, `TestWideStacksStatsLeft`, `TestMediumSplitsListAndChat`, `TestTheChatStrip*`, `TestAShortDeskKeepsItsStats`, `TestAGoneScreenSaysTheSessionEnded`, `TestTheMoreHintNeverCoversTheSelection`, `TestACutListSaysHowManyAreBelow`, `TestTheScreenDropsLinksAndOtherControls`, `TestAFailedReadKeepsTheChat`, `TestKeyNames`); the rest go.
 
-Layout: one column (a phone) draws no live view outside the demo: Enter goes into the real pane. Beside the list the view keeps `chatBeside`; where its question has no room (`chatNone`), the opened row's question card shows instead of a refusal.
+Layout (owner, 2026-11-08: the phone keeps the live view): one column opens the selected row's live view in place, read-only, where the chat opened full-screen; it takes no keys. On one column a tap on an unselected row selects it and opens its view; a tap on the selected row, or Enter, goes into the pane. Beside the list the view keeps `chatBeside`; where its question has no room (`chatNone`), the opened row's question card shows instead of a refusal.
 
 - [ ] **Step 1: Write the failing tests (T6, T7, T8, T10, T14, T23 live)**
 
 ```go
 // liveview_test.go
+// T26 (owner, 2026-11-08): on one column the first tap opens the view, the second jumps.
+func TestOneColumnShowsTheLiveViewThenJumps(t *testing.T) {
+	m, f := loadedWith(t, 44, fixtureState()) // a phone: one column
+	var ran [][]string
+	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
+	m = moveDown(m)        // select the second session: the view follows the selection
+	if !f.watching(m.selectedPane()) || len(ran) != 0 {
+		t.Fatalf("selecting: watch %v, ran %q; want its live view and no jump", f.watching(m.selectedPane()), ran)
+	}
+	m = tapSelected(t, m)  // the selected row: go into its pane
+	if len(ran) == 0 || !remote.FocusAllowed(ran[len(ran)-1]) {
+		t.Fatalf("second tap ran %q, want a FocusArgv jump", ran)
+	}
+}
+// New test helpers (this task): `moveDown(m Model) Model` presses "down" once; `(*fakeService).watching(pane string) bool`
+// is true when the last watch act named pane; `(m Model) selectedPane() string` is the selected session's pane.
+
 func TestTheLiveViewTakesNoKeys(t *testing.T) { // T6
 	m, f := loadedWith(t, 100, fixtureState())
 	for _, k := range []string{"2", "y", "esc", "tab", "backspace", "space", "ctrl+a", "m", "up", "down"} {
@@ -669,9 +687,12 @@ func TestKeysAreRefusedOnTheRealService(t *testing.T) { // T25
 // keysTest sets s.KeysToWorld = true, so TestKeysSendsANamedKey and the rest keep testing the demo's path;
 // TestKeysOnlyFromAConsole keeps its aConsole check.
 
+// Order in the keys act: `scrollKey` handles WheelUp/WheelDown first, on any service; only then does
+// the KeysToWorld check refuse. The read-only view's scroll-back works on the real service.
 // scrollback_test.go: TestAPaneThatReadsTheMouseStillGetsTheWheel becomes
 func TestTheWheelScrollsBackEvenAPaneThatReadsTheMouse(t *testing.T) { // T14
-	// PaneMouse says the pane reads the mouse; a WheelUp keys act is handled by scrollKey: watch back == scrollStep, nothing ran
+	// s.KeysToWorld = false (the real service); PaneMouse says the pane reads the mouse;
+	// a WheelUp keys act is handled by scrollKey: watch back == scrollStep, res.Err == "", nothing ran
 }
 
 // internal/demo/world_test.go
@@ -883,11 +904,11 @@ git commit -S -m "docs: Enter goes straight into the agent's pane (#334)" -m "Co
 
 ---
 
-### Task 10: Tell #312's session (needs the owner's choice of channel first)
+### Task 10: Tell #312's session
 
-**Blocked until the owner picks the channel.** Ask: "Tell PR #312's session (matchblox-ux) through a chain and `matchblox send`, or as a comment on PR #312?" Do not send before the answer.
+**Channel: chain and send (owner, 2026-11-08).** The chain also lets matchblox-ux type into this session; the owner accepted that.
 
-- [ ] **Step 1: Ask the owner for the channel and wait for the answer**
+- [ ] **Step 1: Accept matchblox-ux's chain ask: `matchblox chain matchblox-ux`**
 
 - [ ] **Step 2: Send this message on the chosen channel**
 
@@ -903,4 +924,4 @@ Chain route: `matchblox chain` with the matchblox-ux session, then `matchblox se
 
 - Spec coverage: goals 1 (Tasks 3, 4), 2 (Tasks 1, 2, 4, 8), 3 (Task 5), 4 (Tasks 4, 5), 5 (Tasks 2, 5, 8), 6 (Tasks 5, 6, 8), 7 (Task 3); the deletions (Tasks 5, 6); docs (Tasks 5, 9); order with #312 (Task 10). D1 (Task 5), D2 (Tasks 2, 4, 8), D3 (Task 10), D4 (Task 4). Outside voice 1 (Task 6), 2 (Task 2), 3 (Tasks 3, 4: the action is built at key time), 4 (Task 8), 5 (Tasks 1, 4), 6 (Task 7), 8 (Tasks 2, 4, 5).
 - T1 T11 T12 T13: Task 3. T2 T4 T9 T21 T24, T15 Go: Task 4. T3 T19 T20 Go: Tasks 1, 2. T5: Tasks 1, 4. T6 T7 T8 T10 T14 T23: Tasks 5, 6. T16 T15 T17 T20 app: Task 8. T18: Tasks 5, 9. T22: Task 7. T25: Task 6.
-- Calls this plan makes where the spec leaves them to the builder: a home-host jump runs at once (no confirm), another host's keeps its confirm; `→` on a pane-less row says the same as Enter; one column shows no live view outside the demo; the command binding types the text without Return; the marks announce rides the graphics viewers poll, not a tmux hook; the `cmd:` act is deleted with its only sender.
+- Calls this plan makes where the spec leaves them to the builder: a home-host jump runs at once (no confirm), another host's keeps its confirm; `→` on a pane-less row says the same as Enter; one column opens the live view in place, read-only, and a second tap goes in (owner, 2026-11-08); the command binding types the text without Return; the marks announce rides the graphics viewers poll, not a tmux hook; the `cmd:` act is deleted with its only sender.
