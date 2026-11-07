@@ -132,7 +132,7 @@ func (s *Service) nightCards(since time.Time) []stoker.ChainCard {
 	var out []stoker.ChainCard
 	for _, u := range s.chainUnits() {
 		if c := u.store.Mode().Card; c != nil && c.Night && !c.Ended.Before(since) {
-			out = append(out, stoker.ChainCard{Name: s.chainNameOf(s.chainIDOf(u)), Stoker: u.id, Card: *c})
+			out = append(out, stoker.ChainCard{Name: s.unitName(u), Stoker: u.id, Card: *c})
 		}
 	}
 	return out

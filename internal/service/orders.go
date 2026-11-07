@@ -136,9 +136,7 @@ func (s *Service) chainRows(night bool) []stoker.ChainRow {
 			case m.On:
 				row.State = "on"
 			}
-			if o := runningOrder(m); o != nil {
-				row.PlanDone, row.PlanAll = stoker.PlanDone(*o, u.store.View().Run), len(o.Plan)
-			}
+			row.PlanDone, row.PlanAll = u.store.View().PlanProgress()
 		}
 		out = append(out, row)
 	}

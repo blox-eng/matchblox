@@ -108,6 +108,9 @@ type Link struct {
 	Giver  string   `json:"giver"`
 	Grants []string `json:"grants"`
 	Ended  bool     `json:"ended,omitempty"`
+	// Name is the chain's name when last seen: the card of a unit whose
+	// chain is gone keeps it.
+	Name string `json:"name,omitempty"`
 }
 
 // ReadLink reads link.json. A missing file is fs.ErrNotExist.

@@ -47,9 +47,6 @@ type stokerUnit struct {
 	// joins are the tmux sessions a chain unit started, which join its
 	// chain once a sample finds them in its repo. Service.mu guards it.
 	joins []*pendingJoin
-	// name is the chain's name as the last view saw it, for the card of a
-	// unit whose chain is gone. Service.mu guards it.
-	name string
 	// wakes are what the unit's agent was told and is still to be told.
 	wakes wakeState
 }
@@ -280,25 +277,47 @@ func (s *Service) liveChainName(chainID string) (string, bool) {
 	return chainID, false
 }
 
+// unitName is the name of chain unit u's chain; once the chain is gone,
+// the name its link last kept, else the unit's id.
+func (s *Service) unitName(u *stokerUnit) string {
+	name, live := s.liveChainName(s.chainIDOf(u))
+	if live {
+		return name
+	}
+	s.fam.mu.Lock()
+	defer s.fam.mu.Unlock()
+	if u.link.Name != "" {
+		return u.link.Name
+	}
+	return u.id
+}
+
+// rememberName keeps the live name of chain unit u's chain in its
+// link.json. A failed write leaves the old name: the card still reads.
+func (s *Service) rememberName(u *stokerUnit) {
+	name, live := s.liveChainName(s.chainIDOf(u))
+	if !live {
+		return
+	}
+	s.fam.mu.Lock()
+	defer s.fam.mu.Unlock()
+	if u.link.Name == name {
+		return
+	}
+	l := u.link
+	l.Name = name
+	if stoker.WriteLink(u.store.Dir(), l) == nil {
+		u.link.Name = name
+	}
+}
+
 // chainStokers are the views of the chain units for State.Stokers, in
-// family order. A unit's name is its chain's; once the chain is gone, the
-// name its card last used, else the unit's id.
+// family order.
 func (s *Service) chainStokers(sessions []sample.Session) []state.ChainStoker {
 	var out []state.ChainStoker
 	for _, u := range s.chainUnits() {
-		chain := s.chainIDOf(u)
-		name, live := s.liveChainName(chain)
-		s.mu.Lock()
-		switch {
-		case live:
-			u.name = name
-		case u.name != "":
-			name = u.name
-		default:
-			name = u.id
-		}
-		s.mu.Unlock()
-		out = append(out, state.ChainStoker{ID: u.id, Chain: chain, Name: name, View: *s.stokerView(u, sessions)})
+		s.rememberName(u)
+		out = append(out, state.ChainStoker{ID: u.id, Chain: s.chainIDOf(u), Name: s.unitName(u), View: *s.stokerView(u, sessions)})
 	}
 	return out
 }
@@ -368,7 +387,7 @@ func (s *Service) startChainStoker(ctx context.Context, who, words string, grant
 		return nil, err
 	}
 	dir := stoker.FamilyDir(state, id)
-	link := stoker.Link{ID: id, Chain: c.ID, Giver: giver, Grants: grants}
+	link := stoker.Link{ID: id, Chain: c.ID, Giver: giver, Grants: grants, Name: name}
 	if err := stoker.WriteLink(dir, link); err != nil {
 		return nil, err
 	}
@@ -634,6 +653,14 @@ func (s *Service) relink(u *stokerUnit, grants []string, giver string) error {
 // relinkChain makes chain unit u the stoker of chain, in its link.json
 // first: the merge guard reads it there.
 func (s *Service) relinkChain(u *stokerUnit, chain string) error {
+	if err := s.setChain(u, chain); err != nil {
+		return err
+	}
+	s.rememberName(u)
+	return nil
+}
+
+func (s *Service) setChain(u *stokerUnit, chain string) error {
 	s.fam.mu.Lock()
 	defer s.fam.mu.Unlock()
 	l := u.link
@@ -647,6 +674,7 @@ func (s *Service) relinkChain(u *stokerUnit, chain string) error {
 
 // endLink marks chain unit u as stopped for good, in its link.json first.
 func (s *Service) endLink(u *stokerUnit) error {
+	s.rememberName(u)
 	s.fam.mu.Lock()
 	defer s.fam.mu.Unlock()
 	l := u.link

@@ -35,9 +35,12 @@ func Summary(s state.Doc) string {
 	for _, a := range s.Limits {
 		fmt.Fprintf(&b, "limits %s: %s\n", strings.TrimSpace(a.Provider+" "+a.Account), limits.Plain(limits.Parts(a, s.At)))
 	}
+	hostLine := false
 	if v := s.Stoker; v != nil && v.On {
+		hostLine = true
 		fmt.Fprintf(&b, "stoker: %s\n", stokerWordOf(v.Mode))
 	} else if v != nil && v.Card != nil && v.Unseen {
+		hostLine = true
 		c := *v.Card
 		run := "stoker"
 		if c.Night {
@@ -54,6 +57,9 @@ func Summary(s state.Doc) string {
 		for _, x := range c.Left {
 			fmt.Fprintf(&b, "  left alone: %s (%s)\n", x.Name, strings.TrimSuffix(x.Why, " · left alone"))
 		}
+	}
+	if len(s.Stokers) > 0 && !hostLine {
+		b.WriteString("stoker: off\n")
 	}
 	for _, c := range s.Stokers {
 		fmt.Fprintf(&b, "  chain %s (%s): %s\n", c.Name, c.ID, chainStokerLine(c.View))
