@@ -140,6 +140,13 @@ All notable changes to matchblox are in this file. The format follows
   caps how many run at once.
   ([#304](https://github.com/blox-eng/matchblox/issues/304))
 
+### Fixed
+
+- **A hook's event is not lost while the service is busy.** The hook stays
+  until the service has read the pane of its process. Before this fix, a
+  slow service read the pane after the hook had ended and dropped the event.
+  ([#304](https://github.com/blox-eng/matchblox/issues/304))
+
 ## [0.32.1] - 2026-11-06
 
 ### Fixed
