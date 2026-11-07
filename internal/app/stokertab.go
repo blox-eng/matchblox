@@ -32,8 +32,9 @@ const (
 // stokerRow is a row of the tab: a step of the plan (e is its last logged
 // state, nil before it began), a guarded command that waits for the
 // builder's go (e is its last state), a standing rule's entry, a step
-// the stoker took by itself, or the card of a chain stoker at work (unit
-// is its id).
+// the stoker took by itself, or the card of a chain stoker at work. unit
+// is the id of the chain stoker whose card the row is on: its own row,
+// or a go its run waits for.
 type stokerRow struct {
 	kind int
 	id   string
@@ -113,9 +114,26 @@ func (m Model) stokerRows() []stokerRow {
 	for _, u := range m.stokers {
 		if chainAlive(u) {
 			rows = append(rows, stokerRow{kind: rowChain, id: "s:" + u.ID, unit: u.ID})
+			rows = append(rows, m.unitGoes(u)...)
 		}
 	}
 	return rows
+}
+
+// unitGoes are the rows of chain stoker u's run that wait for your go:
+// y gives each, as on the host's card.
+func (m Model) unitGoes(u state.ChainStoker) []stokerRow {
+	if !u.View.On {
+		return nil
+	}
+	var out []stokerRow
+	for _, r := range m.onUnit(u).stokerRows() {
+		if r.kind == rowGo && r.state() == "waits" && r.e.Needs != "" {
+			r.id, r.unit = "s:"+u.ID+"/"+r.id, u.ID
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // chainAlive: the chain stoker's run is on or its agent is alive. An
@@ -222,7 +240,10 @@ func (m Model) stokerKeys() []hint {
 		}
 	} else if chain {
 		if u.View.PaneUp || u.View.Starting {
-			keys = append(keys, hintFor(mk.Open, "open the stoker"), hintFor(mk.QuitAgent, ""))
+			keys = append(keys, hintFor(mk.Open, "open the stoker"))
+		}
+		if chainAlive(u) {
+			keys = append(keys, hintFor(mk.QuitAgent, ""))
 		}
 	} else if ok {
 		switch {
@@ -271,7 +292,11 @@ func (m Model) grantStep() (tea.Model, tea.Cmd) {
 		what = r.e.Want
 	}
 	m.flash = "go given: " + what
-	return m, m.send(proto.Act{RecID: "stoker:grant", Which: "primary", Confirm: "y", Text: r.e.ID})
+	text := r.e.ID
+	if r.unit != "" {
+		text = r.unit + " " + r.e.ID
+	}
+	return m, m.send(proto.Act{RecID: "stoker:grant", Which: "primary", Confirm: "y", Text: text})
 }
 
 // hasSession: the row is a failed step whose session is still there to look at.
@@ -366,19 +391,21 @@ func (m Model) stokerHostBody(w int) body {
 	rows := m.stokerRows()
 	at := min(m.stokerSel, len(rows)-1)
 	for _, u := range m.stokers {
-		i := slices.IndexFunc(rows, func(r stokerRow) bool { return r.unit == u.ID })
 		if len(b.lines) > 0 && b.lines[len(b.lines)-1] != "" {
 			b.add(-1, "")
 		}
-		m.chainCard(&b, u, i, i >= 0 && i == at, w)
+		m.chainCard(&b, u, rows, at, w)
 	}
 	return b
 }
 
 // chainCard is the card of chain stoker u: its chain's name and its state,
-// then, while it is alive, its agent's row (row i of the tab) and its
-// order's plan; once it ended, why and the score of its run.
-func (m Model) chainCard(b *body, u state.ChainStoker, i int, sel bool, w int) {
+// then, while it is alive, its agent's row and its order's plan, and the
+// goes its run waits for (rows of the tab, at selected); once it ended,
+// why and the score of its run.
+func (m Model) chainCard(b *body, u state.ChainStoker, rows []stokerRow, at int, w int) {
+	i := slices.IndexFunc(rows, func(r stokerRow) bool { return r.kind == rowChain && r.unit == u.ID })
+	sel := i >= 0 && i == at
 	st, um := m.st, m.onUnit(u)
 	b.add(-1, spread(st.label.Render(" CHAIN "+u.Name), st.stoker.Render(um.stokerStatus())+" ", w))
 	if i < 0 {
@@ -391,31 +418,39 @@ func (m Model) chainCard(b *body, u state.ChainStoker, i int, sel bool, w int) {
 		return
 	}
 	b.addRow(i, sel, w, st, m.agentLine(&u.View, m.unitAsks(u.ID), "not running", sel, w))
-	o := u.View.Order
-	if o == nil {
-		return
-	}
-	if o.Words != "" {
-		for _, l := range wrapPlain("“"+o.Words+"”", w-4) {
-			b.add(-1, fit("  "+st.muted.Render(l), w))
+	if o := u.View.Order; o != nil {
+		if o.Words != "" {
+			for _, l := range wrapPlain("“"+o.Words+"”", w-4) {
+				b.add(-1, fit("  "+st.muted.Render(l), w))
+			}
 		}
-	}
-	var plan []stokerRow
-	done := 0
-	for _, r := range um.stokerRows() {
-		if r.kind == rowPlan {
-			plan = append(plan, r)
-			if r.state() == "done" {
-				done++
+		var plan []stokerRow
+		done := 0
+		for _, r := range um.stokerRows() {
+			if r.kind == rowPlan {
+				plan = append(plan, r)
+				if r.state() == "done" {
+					done++
+				}
+			}
+		}
+		if len(plan) > 0 {
+			b.add(-1, st.label.Render(fit(fmt.Sprintf(" PLAN %d of %d", done, len(plan)), w)))
+			for _, r := range plan {
+				b.add(-1, um.stokerRowLines(r, false, w)...)
 			}
 		}
 	}
-	if len(plan) == 0 {
-		return
-	}
-	b.add(-1, st.label.Render(fit(fmt.Sprintf(" PLAN %d of %d", done, len(plan)), w)))
-	for _, r := range plan {
-		b.add(-1, um.stokerRowLines(r, false, w)...)
+	first := true
+	for j, r := range rows {
+		if r.kind != rowGo || r.unit != u.ID {
+			continue
+		}
+		if first {
+			b.add(-1, st.label.Render(fit(" YOUR GO", w)))
+			first = false
+		}
+		b.addRow(j, j == at, w, st, um.stokerRowLines(r, j == at, w)...)
 	}
 }
 
@@ -491,7 +526,7 @@ func (m Model) stokerHostCard(w int) body {
 	section := func(kind int, head string) {
 		first := true
 		for i, r := range rows {
-			if r.kind != kind {
+			if r.kind != kind || r.unit != "" { // a chain stoker's row is on its card
 				continue
 			}
 			if first {
@@ -840,7 +875,7 @@ func (m Model) scoreLines(c proto.StokerCard, mark string, w int) []string {
 		lines = append(lines, "   "+st.text.Render(l))
 	}
 	for _, ch := range c.Chains { // the night of each chain stoker
-		lines = append(lines, "   "+st.text.Render(pad("chain "+ch.Name, colName))+st.muted.Render(fmt.Sprintf("ready %d/%d · %s", ch.Card.Ready, ch.Card.Of, cardLines(ch.Card, true)[0])))
+		lines = append(lines, fit("   "+st.text.Render(pad("chain "+ch.Name, colName))+st.muted.Render(fmt.Sprintf("ready %d/%d · %s", ch.Card.Ready, ch.Card.Of, cardLines(ch.Card, true)[0])), w))
 	}
 	for _, x := range c.NotReady {
 		lines = append(lines, "   "+st.text.Render(pad(x.Name, colName))+st.warn.Render(missWhy(x, c.Ended)))
