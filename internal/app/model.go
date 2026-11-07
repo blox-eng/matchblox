@@ -1350,6 +1350,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.markAllSafe()
 		}
 	case bkey.Matches(k, mk.QuitAgent):
+		if u, ok := m.selectedUnit(); ok && m.tab == tabStoker {
+			return m.quitUnit(u)
+		}
 		if m.tab == tabStoker {
 			return m.quitAgent()
 		}
@@ -1364,6 +1367,9 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case tabStoker:
 			if r, ok := m.stokerSelected(); ok && r.kind == rowAgent {
 				return m.openAgent()
+			}
+			if u, ok := m.selectedUnit(); ok {
+				return m.openUnit(u)
 			}
 			m.showCommand()
 			return m, nil

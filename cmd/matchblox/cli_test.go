@@ -988,6 +988,22 @@ func TestChainParsesItsFlags(t *testing.T) {
 	}
 }
 
+// TestCLIStokerQuitChain: matchblox stoker quit --chain <who> quits the
+// stoker of one chain: the service finds it by who. With no --chain it
+// quits the host stoker, as before.
+func TestCLIStokerQuitChain(t *testing.T) {
+	a, err := stokerQuitAct([]string{"quit"}, "api", "%7")
+	if err != nil || a.RecID != "stoker:quit" || a.Confirm != "y" || a.From != "%7" || a.Text != "api" {
+		t.Fatalf("act %+v, %v", a, err)
+	}
+	if a, err := stokerQuitAct([]string{"quit"}, "", ""); err != nil || a.Text != "" {
+		t.Fatalf("no --chain: %+v, %v", a, err)
+	}
+	if _, err := stokerQuitAct([]string{"quit", "api"}, "", ""); err == nil {
+		t.Fatal("quit takes no words")
+	}
+}
+
 // TestCLIStokerNewParsesGo: matchblox stoker new --chain <who> gives the
 // chain a stoker, with the gos of --go and the order's words. With no
 // --go, it gives none.
