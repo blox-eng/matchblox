@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,11 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
+	"github.com/blox-eng/matchblox/internal/stoker"
 )
 
 const chainNeedsMatch = "chain needs a match: run it from an agent's pane"
@@ -25,8 +29,9 @@ func memberOf(x sample.Session) chains.Member {
 
 // chainAct runs a chain: act from the agent in a.From: chain:<pane> asks,
 // chain:- leaves, chain:off and chain:on.
-func (s *Service) chainAct(a proto.Act) proto.Result {
+func (s *Service) chainAct(ctx context.Context, a proto.Act) proto.Result {
 	res, changed := s.changeChains(strings.TrimPrefix(a.RecID, proto.ChainPrefix), a.From)
+	s.followChains(ctx)
 	if changed {
 		s.broadcast()
 	}
@@ -49,6 +54,8 @@ func (s *Service) changeChains(arg, fromPane string) (res proto.Result, changed 
 		}
 	}
 	me := memberOf(from)
+	before := slices.Clone(st.Chains)
+	absorbed, survivor := "", ""
 	switch arg {
 	case "-":
 		if _, in := st.ChainOf(me); !in {
@@ -77,13 +84,16 @@ func (s *Service) changeChains(arg, fromPane string) (res proto.Result, changed 
 		if c, ok := st.ChainOf(me); ok && slices.ContainsFunc(c.Members, memberOf(to).Same) {
 			return proto.Result{Note: "already chained with " + to.Name}, changed
 		}
-		if st.Ask(me, memberOf(to), repo, s.now()) {
+		formed := false
+		if formed, absorbed = st.Ask(me, memberOf(to), repo, s.now()); formed {
 			c, _ := st.ChainOf(me)
+			survivor = c.ID
 			res.Note = fmt.Sprintf("chained with %s: %d matches", to.Name, len(c.Members))
 		} else {
 			res.Note = "asked " + to.Name + ": the chain forms when it chains back"
 		}
 	}
+	s.noteChainsLocked(before, absorbed, survivor)
 	s.cur.Chains = chainsView(st)
 	if err := s.saveChainsLocked(); err != nil {
 		res.Err = "chains: " + err.Error()
@@ -142,6 +152,7 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 		return repo, true
 	}
 	left := st.Prune(live, now)
+	s.noteChainsLocked(before, "", "")
 	for _, l := range left {
 		text := s.leftText(l, prev)
 		for _, c := range before {
@@ -256,7 +267,7 @@ func (s *Service) sessionOfLocked(m chains.Member) (sample.Session, bool) {
 // tmux session name, to join u's chain once a sample finds it there. No
 // pane: nothing tells the session, and it joins nothing.
 func (s *Service) awaitJoin(u *stokerUnit, pane, name string) {
-	if u == nil || u.link.Chain == "" || pane == "" {
+	if u == nil || s.chainIDOf(u) == "" || pane == "" {
 		return
 	}
 	s.mu.Lock()
@@ -302,16 +313,16 @@ func (s *Service) joinNewLocked(now time.Time) error {
 			case x.SessionID != j.sessionID:
 				return true // another agent runs there now
 			}
-			c, ok := chainByID(st, u.link.Chain)
+			c, ok := chainByID(st, s.chainIDOf(u))
 			if ok {
 				if repo, _, _ := gitscan.RepoOf(s.cur.Git, x.Cwd); repo != c.Repo {
 					return late
 				}
 			}
-			if err := st.Join(u.link.Chain, memberOf(x)); err != nil {
+			if err := st.Join(s.chainIDOf(u), memberOf(x)); err != nil {
 				text := fmt.Sprintf("%s did not join chain %s: %s", x.Name, chainName(c, s.cur.Sessions), err)
 				if !ok {
-					text = fmt.Sprintf("%s did not join chain %s: %s", x.Name, u.link.Chain, err)
+					text = fmt.Sprintf("%s did not join chain %s: %s", x.Name, s.chainIDOf(u), err)
 				}
 				_ = u.store.Append(familyLine(now, text))
 				return true
@@ -332,4 +343,134 @@ func chainByID(st *chains.Store, id string) (chains.Chain, bool) {
 		return chains.Chain{}, false
 	}
 	return st.Chains[i], true
+}
+
+// chainEvent is what a change of the chains did to one chain: it ended,
+// or it joined survivor. name is its name before the change.
+type chainEvent struct {
+	chain, survivor, name string
+}
+
+// noteChainsLocked queues for followChains what a change did to the chains
+// before it: absorbed joined survivor, and each other chain that is gone
+// ended. Callers hold mu.
+func (s *Service) noteChainsLocked(before []chains.Chain, absorbed, survivor string) {
+	st := s.chainsLocked()
+	for _, c := range before {
+		switch {
+		case c.ID == absorbed:
+			s.chainLife = append(s.chainLife, chainEvent{chain: c.ID, survivor: survivor, name: chainName(c, s.cur.Sessions)})
+		case !slices.ContainsFunc(st.Chains, func(o chains.Chain) bool { return o.ID == c.ID }):
+			s.chainLife = append(s.chainLife, chainEvent{chain: c.ID, name: chainName(c, s.cur.Sessions)})
+		}
+	}
+}
+
+// followChains makes each chain stoker follow what happened to its chain
+// since the last call: the stoker of a chain that ended stops, and the
+// stokers of two chains that joined become one. It runs out of mu.
+func (s *Service) followChains(ctx context.Context) {
+	s.mu.Lock()
+	events := s.chainLife
+	s.chainLife = nil
+	s.mu.Unlock()
+	for _, e := range events {
+		if e.survivor == "" {
+			s.chainEnded(ctx, e.chain)
+		} else {
+			s.chainsJoined(ctx, e.survivor, e.chain, e.name)
+		}
+	}
+}
+
+// chainEnded stops the stoker of a chain that ended: it says so on its
+// card, its run ends and its agent quits.
+func (s *Service) chainEnded(ctx context.Context, chainID string) {
+	if u := s.unitOfChain(chainID); u != nil {
+		s.retire(ctx, u, "its chain ended")
+	}
+}
+
+// chainsJoined follows the join of the chain absorbed, named name, into
+// survivor. A stoker of absorbed alone takes survivor as its chain. With a
+// stoker on each side, the stoker of survivor stays: the other says so on
+// its card and stops, and its running order goes to the one that stays,
+// with only the goes both had. The stoker that stays takes over the
+// host's work on its new matches.
+func (s *Service) chainsJoined(ctx context.Context, survivor, absorbed, name string) {
+	a, b := s.unitOfChain(absorbed), s.unitOfChain(survivor)
+	switch {
+	case a == nil && b == nil:
+		return
+	case b == nil: // the stoker of absorbed is the one that stays
+		b = a
+		if err := s.relinkChain(b, survivor); err != nil {
+			_ = b.store.Append(familyLine(s.now(), fmt.Sprintf("its chain joined %s, and its link did not change: %s", s.chainNameOf(survivor), err)))
+		}
+	case a != nil:
+		s.yieldTo(ctx, a, b, name)
+	}
+	if b.store.Mode().On {
+		s.handOver(b)
+	}
+	s.refreshStoker()
+}
+
+// yieldTo stops chain unit a, whose chain named name joined the chain of
+// b. The order a runs goes to b, with only the goes both have: a join
+// never gives b a go it did not have. A run of b that is off starts with
+// it.
+func (s *Service) yieldTo(ctx context.Context, a, b *stokerUnit, name string) {
+	words := ""
+	if m := a.store.Mode(); m.On {
+		if o := runningOrder(m); o != nil {
+			words = strings.TrimSpace(o.Words)
+		}
+	}
+	grants := stoker.Given(s.grantsOf(b), s.grantsOf(a)) // before a's run ends
+	s.retire(ctx, a, "its chain joined "+s.chainNameOf(s.chainIDOf(b)))
+	if words == "" {
+		return
+	}
+	var err error
+	if b.store.Mode().On {
+		if err = s.rebrief(ctx, b); err == nil {
+			line := fmt.Sprintf("New order (from the joined chain %s): %s", name, strings.Join(strings.Fields(words), " "))
+			err = s.sayOrder(ctx, b, words, line, grants, s.now())
+		}
+	} else {
+		s.fam.mu.Lock()
+		giver := b.link.Giver
+		s.fam.mu.Unlock()
+		err = s.rerunChain(ctx, b, words, grants, giver)
+	}
+	if err != nil {
+		_ = b.store.Append(familyLine(s.now(), fmt.Sprintf("the order of the joined chain %s did not reach this stoker: %s", name, err)))
+	}
+}
+
+// retire stops chain unit u with text on its card: its run ends and its
+// agent quits. Its dir and card stay, for the morning card and the STOKER
+// tab; the cap counts it no more.
+func (s *Service) retire(ctx context.Context, u *stokerUnit, text string) {
+	_ = u.store.Append(familyLine(s.now(), text))
+	s.stokerAct(u, "off", s.now())
+	if err := s.quitAgent(ctx, u); err != nil {
+		_ = u.store.Append(familyLine(s.now(), "its agent did not quit: "+err.Error()))
+	}
+}
+
+// quitAgent ends chain unit u's agent and its tmux session, when it is
+// there, with what waited to be typed into it or to join its chain.
+func (s *Service) quitAgent(ctx context.Context, u *stokerUnit) error {
+	if s.StokerServer == "" || !s.stokerThere(ctx, u) {
+		return nil
+	}
+	if res := s.Actions.Do(ctx, advice.Action{Label: "quit the stoker", Steps: [][]string{s.stokerSessionArgv(u, "kill-session")}, Destructive: true}, "y"); res.Err != "" {
+		return errors.New(res.Err)
+	}
+	s.mu.Lock()
+	u.startedAt, u.brief, u.dropped, u.joins = time.Time{}, nil, nil, nil
+	s.mu.Unlock()
+	return nil
 }

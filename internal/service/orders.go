@@ -107,7 +107,7 @@ func (s *Service) order(ctx context.Context, u *stokerUnit, text string) error {
 	}); err != nil {
 		return err
 	}
-	if o.Night && u.link.Chain == "" {
+	if o.Night && s.chainIDOf(u) == "" {
 		s.nightFamily(now)
 	}
 	return nil
@@ -200,6 +200,11 @@ const orderName = "stoker-order.md"
 // the order lands under the same lock: the stoker never reads a new order
 // a run that ended meanwhile did not take.
 func (s *Service) dayOrder(ctx context.Context, u *stokerUnit, words string, grants []string, now time.Time) error {
+	return s.sayOrder(ctx, u, words, stoker.NewOrder(words), grants, now)
+}
+
+// sayOrder is dayOrder with say as the line the stoker agent reads.
+func (s *Service) sayOrder(ctx context.Context, u *stokerUnit, words, say string, grants []string, now time.Time) error {
 	pane, line := "", ""
 	queue := s.briefWaits(u)
 	if s.agentOn() {
@@ -209,7 +214,7 @@ func (s *Service) dayOrder(ctx context.Context, u *stokerUnit, words string, gra
 				return err
 			}
 		}
-		line = stoker.NewOrder(words)
+		line = say
 		if utf8.RuneCountInString(line) > panes.MaxAnswer {
 			path := filepath.Join(u.store.Dir(), orderName)
 			if err := os.MkdirAll(u.store.Dir(), 0o700); err != nil {
@@ -222,7 +227,7 @@ func (s *Service) dayOrder(ctx context.Context, u *stokerUnit, words string, gra
 		}
 	}
 	return s.updateOrder(u, func(m stoker.Mode) (stoker.Mode, error) {
-		if !m.On || m.Nightly && u.link.Chain == "" || m.Order == nil || m.Order.State != stoker.OrderRunning {
+		if !m.On || m.Nightly && s.chainIDOf(u) == "" || m.Order == nil || m.Order.State != stoker.OrderRunning {
 			return m, errors.New("the run changed meanwhile: look at it again")
 		}
 		switch {
@@ -389,7 +394,7 @@ func (s *Service) giveChainOrder(ctx context.Context, who, words string, grants 
 	if err != nil {
 		return "", err
 	}
-	return s.chainNameOf(u.link.Chain), nil
+	return s.chainNameOf(s.chainIDOf(u)), nil
 }
 
 // orderUnit is a new order to chain unit u, whose run is on: today's order
@@ -597,8 +602,8 @@ func (s *Service) stokerAgent(u *stokerUnit) (string, error) {
 	if err != nil || pane != "" {
 		return pane, err
 	}
-	if u.link.Chain != "" {
-		name := s.chainNameOf(u.link.Chain)
+	if s.chainIDOf(u) != "" {
+		name := s.chainNameOf(s.chainIDOf(u))
 		return "", fmt.Errorf("the stoker of chain %s is not running: matchblox stoker order %s \"<text>\" starts it", name, name)
 	}
 	return "", errors.New("the stoker is not running: f or n starts it")

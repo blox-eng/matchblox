@@ -25,7 +25,7 @@ func (s *Service) stokerAct(u *stokerUnit, verb string, now time.Time) proto.Res
 		return proto.Result{Err: "this service keeps no stoker"}
 	}
 	var chains []stoker.ChainCard
-	if m := u.store.Mode(); verb == "off" && u.link.Chain == "" && m.On && m.Nightly {
+	if m := u.store.Mode(); verb == "off" && s.chainIDOf(u) == "" && m.On && m.Nightly {
 		s.endChainNights(now)
 		chains = s.nightCards(m.Since)
 	}
@@ -80,7 +80,7 @@ func (s *Service) stokerAct(u *stokerUnit, verb string, now time.Time) proto.Res
 	if err != nil {
 		return proto.Result{Err: err.Error()}
 	}
-	if verb == "night" && u.link.Chain == "" {
+	if verb == "night" && s.chainIDOf(u) == "" {
 		s.nightFamily(now)
 	}
 	s.refreshStoker()
@@ -132,7 +132,7 @@ func (s *Service) nightCards(since time.Time) []stoker.ChainCard {
 	var out []stoker.ChainCard
 	for _, u := range s.chainUnits() {
 		if c := u.store.Mode().Card; c != nil && c.Night && !c.Ended.Before(since) {
-			out = append(out, stoker.ChainCard{Name: s.chainNameOf(u.link.Chain), Stoker: u.id, Card: *c})
+			out = append(out, stoker.ChainCard{Name: s.chainNameOf(s.chainIDOf(u)), Stoker: u.id, Card: *c})
 		}
 	}
 	return out
@@ -190,7 +190,7 @@ func (s *Service) stokeUnit(ctx context.Context, u *stokerUnit, now time.Time, s
 	changed := false
 	mine := s.sessionsOf(u, sessions)
 	seen := sessions // the host reads the whole machine, as it always has
-	if u.link.Chain != "" {
+	if s.chainIDOf(u) != "" {
 		seen = mine
 	}
 	s.mu.Lock()
@@ -209,7 +209,7 @@ func (s *Service) stokeUnit(ctx context.Context, u *stokerUnit, now time.Time, s
 		m, ended := m.Expire(now)
 		if ended {
 			m = m.Score(seen, waiting, s.full, u.store.View().Run)
-			if u.link.Chain == "" && m.Card.Night {
+			if s.chainIDOf(u) == "" && m.Card.Night {
 				m.Card.Chains = chains
 			}
 		}

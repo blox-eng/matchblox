@@ -27,7 +27,8 @@ import (
 type stokerUnit struct {
 	id string
 	// link is the unit's link.json. Chain is empty for the host. An order
-	// changes Giver and Grants under stokerFamily.mu.
+	// changes Giver and Grants, and a join Chain, under stokerFamily.mu:
+	// read Chain with chainIDOf.
 	link  stoker.Link
 	store *stoker.Store
 	// startedAt is when matchblox started the unit's agent; zero once it
@@ -436,7 +437,7 @@ func (s *Service) handOver(u *stokerUnit) {
 	if host == nil || u == host {
 		return
 	}
-	_, name, members, ok := s.chainNamed(u.link.Chain)
+	_, name, members, ok := s.chainNamed(s.chainIDOf(u))
 	if !ok {
 		return
 	}
@@ -577,7 +578,7 @@ func (s *Service) rerunChain(ctx context.Context, u *stokerUnit, words string, g
 func (s *Service) chainOfUnit(u *stokerUnit) (chains.Chain, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return chainByID(s.chainsLocked(), u.link.Chain)
+	return chainByID(s.chainsLocked(), s.chainIDOf(u))
 }
 
 // relink gives chain unit u the giver and goes of a new order, in its
@@ -590,8 +591,30 @@ func (s *Service) relink(u *stokerUnit, grants []string, giver string) error {
 	if err := stoker.WriteLink(u.store.Dir(), l); err != nil {
 		return err
 	}
-	u.link.Giver, u.link.Grants = l.Giver, l.Grants // Chain is read without the lock
+	u.link.Giver, u.link.Grants = l.Giver, l.Grants
 	return nil
+}
+
+// relinkChain makes chain unit u the stoker of chain, in its link.json
+// first: the merge guard reads it there.
+func (s *Service) relinkChain(u *stokerUnit, chain string) error {
+	s.fam.mu.Lock()
+	defer s.fam.mu.Unlock()
+	l := u.link
+	l.Chain = chain
+	if err := stoker.WriteLink(u.store.Dir(), l); err != nil {
+		return err
+	}
+	u.link.Chain = chain
+	return nil
+}
+
+// chainIDOf is the id of unit u's chain: "" for the host. A join changes
+// it under stokerFamily.mu.
+func (s *Service) chainIDOf(u *stokerUnit) string {
+	s.fam.mu.Lock()
+	defer s.fam.mu.Unlock()
+	return u.link.Chain
 }
 
 // grantsOf are the goes unit u has now: the host's are its order's. A
@@ -600,7 +623,7 @@ func (s *Service) relink(u *stokerUnit, grants []string, giver string) error {
 // that ends, takes them away.
 func (s *Service) grantsOf(u *stokerUnit) []string {
 	_, grants := drivenRun(u.store.Mode())
-	if u.link.Chain == "" {
+	if s.chainIDOf(u) == "" {
 		return grants
 	}
 	s.fam.mu.Lock()
@@ -698,9 +721,9 @@ func (s *Service) deliverBriefs(ctx context.Context) {
 			}
 			s.mu.Unlock()
 		case late:
-			text := fmt.Sprintf("the stoker of chain %s did not start: its brief was not typed", s.chainNameOf(u.link.Chain))
+			text := fmt.Sprintf("the stoker of chain %s did not start: its brief was not typed", s.chainNameOf(s.chainIDOf(u)))
 			if slices.ContainsFunc(lines, func(l string) bool { return l != briefLine(u) }) {
-				text = fmt.Sprintf("the stoker of chain %s did not take its order: its agent did not rest", s.chainNameOf(u.link.Chain))
+				text = fmt.Sprintf("the stoker of chain %s did not take its order: its agent did not rest", s.chainNameOf(s.chainIDOf(u)))
 			}
 			_ = u.store.Append(familyLine(now, text))
 			if h := s.hostUnit(); h != nil {
@@ -746,7 +769,7 @@ func (s *Service) newChainAct(ctx context.Context, a proto.Act) proto.Result {
 	if err != nil {
 		return proto.Result{Err: err.Error()}
 	}
-	return proto.Result{Note: fmt.Sprintf("started the stoker of chain %s (%s)", s.chainNameOf(u.link.Chain), u.id)}
+	return proto.Result{Note: fmt.Sprintf("started the stoker of chain %s (%s)", s.chainNameOf(s.chainIDOf(u)), u.id)}
 }
 
 // ownerOf is the unit that drives the match x: the stoker of x's chain
@@ -784,14 +807,14 @@ func (s *Service) scopeOf(u *stokerUnit, pane string) error {
 	if ok && x.Name != "" {
 		who = x.Name
 	}
-	if u.link.Chain != "" {
-		if !in || c.ID != u.link.Chain {
+	if s.chainIDOf(u) != "" {
+		if !in || c.ID != s.chainIDOf(u) {
 			return fmt.Errorf("%s is not in the chain of this stoker.", who) //nolint:staticcheck // the line a person reads, as it stands
 		}
 		return nil
 	}
 	if o := s.ownerOfChain(c.ID, in); o != nil && o != u {
-		return fmt.Errorf("%s has the stoker of chain %s: give it an order.", who, s.chainNameOf(o.link.Chain)) //nolint:staticcheck // the line a person reads, as it stands
+		return fmt.Errorf("%s has the stoker of chain %s: give it an order.", who, s.chainNameOf(s.chainIDOf(o))) //nolint:staticcheck // the line a person reads, as it stands
 	}
 	return nil
 }
@@ -808,7 +831,7 @@ func (s *Service) inChainRepo(u *stokerUnit, text string) error {
 		dir = filepath.Join(s.home(), rest)
 	}
 	s.mu.Lock()
-	c, ok := chainByID(s.chainsLocked(), u.link.Chain)
+	c, ok := chainByID(s.chainsLocked(), s.chainIDOf(u))
 	repo, wt, known := gitscan.RepoOf(s.cur.Git, filepath.Clean(dir))
 	s.mu.Unlock()
 	if !ok {

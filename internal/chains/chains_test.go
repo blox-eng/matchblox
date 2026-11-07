@@ -31,7 +31,7 @@ func names(ms []Member) map[string]bool {
 
 func TestOneSideAloneFormsNoChain(t *testing.T) {
 	var s Store
-	if s.Ask(mem("a"), mem("b"), "r", t0) {
+	if formed, _ := s.Ask(mem("a"), mem("b"), "r", t0); formed {
 		t.Fatal("formed with one side")
 	}
 	if _, ok := s.ChainOf(mem("a")); ok {
@@ -45,7 +45,7 @@ func TestOneSideAloneFormsNoChain(t *testing.T) {
 func TestBothSidesFormAChain(t *testing.T) {
 	var s Store
 	s.Ask(mem("a"), mem("b"), "r", t0)
-	if !s.Ask(mem("b"), mem("a"), "r", t0) {
+	if formed, _ := s.Ask(mem("b"), mem("a"), "r", t0); !formed {
 		t.Fatal("not formed")
 	}
 	if len(s.Chains) != 1 || len(s.Requests) != 0 {
@@ -61,7 +61,7 @@ func TestAMemberOfTheChainCanAccept(t *testing.T) {
 	var s Store
 	chainOf(t, &s, "a", "b")
 	s.Ask(mem("c"), mem("a"), "r", t0)
-	if !s.Ask(mem("b"), mem("c"), "r", t0) {
+	if formed, _ := s.Ask(mem("b"), mem("c"), "r", t0); !formed {
 		t.Fatal("not formed")
 	}
 	if len(s.Chains) != 1 || len(s.Chains[0].Members) != 3 || len(s.Requests) != 0 {
@@ -77,6 +77,31 @@ func TestTwoChainsMergeIntoOne(t *testing.T) {
 	s.Ask(mem("d"), mem("b"), "r", t0)
 	if len(s.Chains) != 1 || len(s.Chains[0].Members) != 4 {
 		t.Fatalf("chains = %+v", s.Chains)
+	}
+}
+
+func TestAskReportsAbsorbed(t *testing.T) {
+	var s Store
+	if formed, absorbed := s.Ask(mem("a"), mem("b"), "r", t0); formed || absorbed != "" {
+		t.Fatalf("one side: formed %v, absorbed %q", formed, absorbed)
+	}
+	if formed, absorbed := s.Ask(mem("b"), mem("a"), "r", t0); !formed || absorbed != "" {
+		t.Fatalf("a new chain: formed %v, absorbed %q", formed, absorbed)
+	}
+	chainOf(t, &s, "c", "d")
+	ab, _ := s.ChainOf(mem("a"))
+	cd, _ := s.ChainOf(mem("c"))
+	s.Ask(mem("e"), mem("a"), "r", t0)
+	if _, absorbed := s.Ask(mem("a"), mem("e"), "r", t0); absorbed != "" {
+		t.Fatalf("a lone match joined, yet absorbed %q", absorbed)
+	}
+	s.Ask(mem("a"), mem("c"), "r", t0)
+	formed, absorbed := s.Ask(mem("d"), mem("b"), "r", t0)
+	if !formed || absorbed != ab.ID {
+		t.Fatalf("formed %v, absorbed %q: want %q", formed, absorbed, ab.ID)
+	}
+	if c, _ := s.ChainOf(mem("a")); c.ID != cd.ID || len(c.Members) != 5 {
+		t.Fatalf("the survivor %+v: want %q", c, cd.ID)
 	}
 }
 
@@ -134,12 +159,12 @@ func TestOffLeavesAndRefusesAsks(t *testing.T) {
 		t.Fatal("chain stayed")
 	}
 	s.Ask(mem("a"), mem("b"), "r", t0)
-	if s.Ask(mem("b"), mem("a"), "r", t0) || len(s.Requests) != 0 {
+	if formed, _ := s.Ask(mem("b"), mem("a"), "r", t0); formed || len(s.Requests) != 0 {
 		t.Fatal("off member chained")
 	}
 	s.SetOff(mem("b"), false)
 	s.Ask(mem("a"), mem("b"), "r", t0)
-	if !s.Ask(mem("b"), mem("a"), "r", t0) {
+	if formed, _ := s.Ask(mem("b"), mem("a"), "r", t0); !formed {
 		t.Fatal("on again, not formed")
 	}
 }

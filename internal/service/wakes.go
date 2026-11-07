@@ -64,7 +64,7 @@ func (s *Service) wake(ctx context.Context, u *stokerUnit, now time.Time) {
 		why[pane] = r.Word
 	}
 	s.mu.Unlock()
-	if u.link.Chain != "" {
+	if s.chainIDOf(u) != "" {
 		sessions = s.sessionsOf(u, sessions)
 	}
 	cur := stoker.Look(sessions, why, items, rep, accts, now, s.StokerServer)

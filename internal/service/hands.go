@@ -61,7 +61,7 @@ func (s *Service) orderable(u *stokerUnit, a proto.Act) error {
 				return errors.New(sessionGivesNoOrders) // a session a stoker drove
 			}
 		}
-		if u.link.Chain != "" && (verb == "order" || verb == "order-chain") {
+		if s.chainIDOf(u) != "" && (verb == "order" || verb == "order-chain") {
 			return errors.New("a chain stoker gives no orders")
 		}
 		switch verb {
@@ -90,7 +90,7 @@ func (s *Service) orderable(u *stokerUnit, a proto.Act) error {
 	}
 	pane := paneOf(a.RecID)
 	counts := pane != "" || a.RecID == NewSessionID // what makes a step of the run
-	if !counts && u.link.Chain != "" {
+	if !counts && s.chainIDOf(u) != "" {
 		// A rec, a ship or a worktree may reach past the chain.
 		return errors.New(chainOnly)
 	}
@@ -118,7 +118,7 @@ func (s *Service) orderable(u *stokerUnit, a proto.Act) error {
 			return err
 		}
 	}
-	if a.RecID == NewSessionID && u.link.Chain != "" {
+	if a.RecID == NewSessionID && s.chainIDOf(u) != "" {
 		if err := s.inChainRepo(u, a.Text); err != nil {
 			return err
 		}
@@ -298,7 +298,7 @@ func (s *Service) recScope(u *stokerUnit, a proto.Act) error {
 	}
 	for _, x := range s.reached(action) {
 		if o := s.ownerOf(x); o != nil && o != u {
-			return fmt.Errorf("%s has the stoker of chain %s: give it an order.", x.Name, s.chainNameOf(o.link.Chain)) //nolint:staticcheck // the line a person reads, as it stands
+			return fmt.Errorf("%s has the stoker of chain %s: give it an order.", x.Name, s.chainNameOf(s.chainIDOf(o))) //nolint:staticcheck // the line a person reads, as it stands
 		}
 	}
 	return nil

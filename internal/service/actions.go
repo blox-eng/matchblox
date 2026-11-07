@@ -150,7 +150,7 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		return s.keys(ctx, pane, a) // a key twice is twice: no dedupe
 	}
 	if strings.HasPrefix(a.RecID, proto.ChainPrefix) {
-		return s.chainAct(a) // an agent's own act: before the agents-pane gate
+		return s.chainAct(ctx, a) // an agent's own act: before the agents-pane gate
 	}
 	if pane, ok := strings.CutPrefix(a.RecID, proto.CommandPrefix); ok {
 		return s.command(ctx, pane, a) // a second one finds the agent at work
