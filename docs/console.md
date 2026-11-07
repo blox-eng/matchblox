@@ -127,7 +127,7 @@ folder as `dir`. They need
 |---|---|
 | `name` | The session's name (Claude Code's, or the agent's). |
 | `pane`, `target` | Its tmux pane (`%3`) and target (`app:1.1`). Any of `name`, `pane` and `target` names it to a hand command. |
-| `repo` | The name of the repo its folder is in (`web`), or empty when matchblox knows no repo there. The line says `in web`. |
+| `repo` | The name of the repo its folder is in (`web`; `work/api` when another repo is also `api`), or empty when matchblox knows no repo there. The line says `in web`. |
 | `word` | What it does, in one word: `asks` (it waits for an answer or an approval), `busy` (a turn runs), `idle` (at rest), `background` (at rest, and a shell it started in the background still runs), or `agents` (its subagents still work). Read this one. |
 | `status` | The status word the agent itself reports, as it reports it. Claude Code says `busy`, `idle` or `shell`; `shell` is a session at rest with a background shell, not a pane without an agent. |
 | `reason` | Why a session at rest is idle (`#4556 waits your merge`, `CI red · …`, `stuck: …`, `out of work`, `idle`); empty while it works or asks. |

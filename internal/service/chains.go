@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -256,7 +255,7 @@ func (s *Service) elsewhereLocked(from, to chains.Member) string {
 	if repo == "" {
 		return " (in no repo matchblox knows)"
 	}
-	return " (in " + filepath.Base(repo) + ")"
+	return " (in " + gitscan.Name(s.cur.Git, repo) + ")"
 }
 
 func (s *Service) sessionOfLocked(m chains.Member) (sample.Session, bool) {

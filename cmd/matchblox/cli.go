@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -221,10 +220,10 @@ func sessionRows(doc state.Doc) []sessionJSON {
 	return rows
 }
 
-// repoName is the base name of the repo cwd is in, "" for none.
+// repoName is the name of the repo cwd is in, "" for none.
 func repoName(doc state.Doc, cwd string) string {
 	if repo, _, ok := gitscan.RepoOf(doc.Git, cwd); ok {
-		return filepath.Base(repo)
+		return gitscan.Name(doc.Git, repo)
 	}
 	return ""
 }

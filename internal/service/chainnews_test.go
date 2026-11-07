@@ -533,6 +533,22 @@ func TestNewsFromAnotherRepoNamesIt(t *testing.T) {
 	}
 }
 
+// TestNewsFromASameNamedRepoNamesItsParent: a repo that shares its base
+// name with another is told apart by its parent.
+func TestNewsFromASameNamedRepoNamesItsParent(t *testing.T) {
+	sessions := append(slices.Clone(newsSessions[:2]),
+		sample.Session{Pane: "%5", PID: 205, Start: 5, SessionID: "n5", Name: "fork", Agent: "claude", Cwd: "/work/matchblox"})
+	s, _ := newsTest(t, sessions, "%2", "%5")
+	s.mu.Lock()
+	git := gitscan.Report{Repos: append(slices.Clone(newsGit.Repos), gitscan.Repo{Path: "/work/matchblox", Worktrees: []gitscan.Worktree{{Path: "/work/matchblox"}}})}
+	s.cur.Git = &git
+	s.mu.Unlock()
+	s.Hook(hookOf(sessions[2], "Stop"))
+	if got := inbox(s, sessions[1]); !slices.Equal(got, []string{"fork finished (in work/matchblox)"}) {
+		t.Errorf("%%2's inbox = %q", got)
+	}
+}
+
 // TestANoRepoMatchHearsCommitsAndPostsNone: a match in no repo hears its
 // mates' commits; its own shell's commit has no worktree to read.
 func TestANoRepoMatchHearsCommitsAndPostsNone(t *testing.T) {

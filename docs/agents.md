@@ -138,7 +138,8 @@ Chain-mates hear each other's commits, branch changes, finishes, waits for
 the person and messages. The hook prints what is new under
 `[matchblox] since your last turn:`. A line from a chain-mate in another repo
 ends with the repo: `web-cart committed 1 file in api.go (in web)`, or
-`(in no repo matchblox knows)`: a folder outside every repo matchblox scans. A
+`(in no repo matchblox knows)`: a folder outside every repo matchblox scans.
+Two repos with one name are told apart by their parent folder: `(in work/api)`. A
 match in no repo hears its chain-mates' commits, and posts
 none of its own: matchblox reads commits from a worktree. A match keeps at most 20 items. Past
 that the oldest go, and a line counts them. The hook never makes the agent
