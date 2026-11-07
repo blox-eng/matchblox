@@ -222,6 +222,10 @@ func Find(ctx context.Context, roots []string, o FindOpts) Result {
 		timedOut = true
 		w.halt(fmt.Sprintf("stopped: a folder did not answer in %s: some repositories may be missing", o.Limit()))
 	}
+	if ctx.Err() != nil {
+		// The walk can see the cancel and end first, so done wins the select.
+		w.halt(fmt.Sprintf("stopped after %s: some repositories may be missing", o.Budget))
+	}
 	return w.result(ctx.Err() == nil, timedOut)
 }
 
