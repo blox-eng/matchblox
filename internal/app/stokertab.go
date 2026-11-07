@@ -120,15 +120,15 @@ func (m Model) stokerRows() []stokerRow {
 	return rows
 }
 
-// unitGoes are the rows of chain stoker u's run that wait for your go:
-// y gives each, as on the host's card.
+// unitGoes are the rows of chain stoker u's run that wait for your go,
+// its plan's steps and its goes: y gives each, as on the host's card.
 func (m Model) unitGoes(u state.ChainStoker) []stokerRow {
 	if !u.View.On {
 		return nil
 	}
 	var out []stokerRow
 	for _, r := range m.onUnit(u).stokerRows() {
-		if r.kind == rowGo && r.state() == "waits" && r.e.Needs != "" {
+		if (r.kind == rowGo || r.kind == rowPlan) && r.state() == "waits" && r.e.Needs != "" {
 			r.id, r.unit = "s:"+u.ID+"/"+r.id, u.ID
 			out = append(out, r)
 		}
@@ -416,6 +416,7 @@ func (m Model) chainCard(b *body, u state.ChainStoker, rows []stokerRow, at int,
 	i := slices.IndexFunc(rows, func(r stokerRow) bool { return r.kind == rowChain && r.unit == u.ID })
 	sel := i >= 0 && i == at
 	st, um := m.st, m.onUnit(u)
+	um.stokerShown = m.stokerShown // its rows carry the tab's ids, so ⏎ shows a command here too
 	b.add(-1, spread(st.label.Render(" CHAIN "+u.Name), st.stoker.Render(um.stokerStatus())+" ", w))
 	if i < 0 {
 		if why := chainEnd(u.View); why != "" {
@@ -446,7 +447,12 @@ func (m Model) chainCard(b *body, u state.ChainStoker, rows []stokerRow, at int,
 		if len(plan) > 0 {
 			b.add(-1, st.label.Render(fit(fmt.Sprintf(" PLAN %d of %d", done, len(plan)), w)))
 			for _, r := range plan {
-				b.add(-1, um.stokerRowLines(r, false, w)...)
+				j := slices.IndexFunc(rows, func(q stokerRow) bool { return q.unit == u.ID && q.id == "s:"+u.ID+"/"+r.id })
+				if j < 0 {
+					b.add(-1, um.stokerRowLines(r, false, w)...)
+					continue
+				}
+				b.addRow(j, j == at, w, st, um.stokerRowLines(rows[j], j == at, w)...)
 			}
 		}
 	}

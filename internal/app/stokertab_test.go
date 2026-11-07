@@ -597,6 +597,33 @@ func TestYGivesAChainStokersGo(t *testing.T) {
 	}
 }
 
+// N1: a chain stoker's plan step that waits for your go is a row of its
+// card: y gives it, with the stoker's id.
+func TestYGivesAChainStokersPlanStep(t *testing.T) {
+	st := tabFamily(screensState(t), true)
+	v := &st.Stokers[0].View
+	v.Run = append(v.Run, proto.StokerEntry{ID: "2", At: v.Since.Add(time.Hour), Session: "ember-billing", Name: "ember-billing", Pane: "%4",
+		Rule: "order", Step: 2, State: "waits", Needs: "merge:%4", Text: "merge #4552"})
+	m, f := loadedWith(t, 104, st)
+	m.setTab(tabStoker)
+	m = selectStep(t, m, "s:s1/p2")
+	if line := actionLine(m); !strings.Contains(line, "y give the go") {
+		t.Fatalf("the key line does not offer the go: %q", line)
+	}
+	before := screen(m)
+	if shown, _ := key(m, "enter"); screen(shown) == before {
+		t.Fatalf("⏎ on the step shows nothing:\n%s", before)
+	}
+	_, cmd := key(m, "y")
+	if cmd == nil {
+		t.Fatalf("y sent nothing: %q", m.flash)
+	}
+	cmd()
+	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:grant" || a[0].Text != "s1 2" {
+		t.Fatalf("acts %+v", a)
+	}
+}
+
 // M1: with no chain stoker the dock's head line is today's, byte for byte.
 func TestTheDockWithNoChainIsTodaysBytes(t *testing.T) {
 	m, _ := loadedWith(t, 104, sheetScreen(screensState(t), true))
