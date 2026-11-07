@@ -99,6 +99,19 @@ func (term *terminal) text() string {
 	return ansi.Strip(term.drawn.String())
 }
 
+// wholeFrame is how many whole frames the console drew, and the text from the
+// start of the last one. A whole frame clears the screen first, and comes in
+// one write.
+func (term *terminal) wholeFrame() (int, string) {
+	const clear = "\x1b[2J"
+	raw := term.raw()
+	i := strings.LastIndex(raw, clear)
+	if i < 0 {
+		return 0, ""
+	}
+	return strings.Count(raw, clear), ansi.Strip(raw[i:])
+}
+
 func (term *terminal) waitFor(t *testing.T, want ...string) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
