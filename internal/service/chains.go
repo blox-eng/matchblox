@@ -266,3 +266,61 @@ func (s *Service) sessionOfLocked(m chains.Member) (sample.Session, bool) {
 	}
 	return sample.Session{}, false
 }
+
+// awaitJoin marks the tmux session name, which chain unit u started, to
+// join u's chain once a sample finds it.
+func (s *Service) awaitJoin(u *stokerUnit, name string) {
+	if u == nil || u.link.Chain == "" {
+		return
+	}
+	s.mu.Lock()
+	u.joins = append(u.joins, pendingJoin{name: name, at: s.now()})
+	s.mu.Unlock()
+}
+
+// joinNewLocked puts each session a chain unit started in its chain, once
+// the sample finds it on the builder's server in the chain's repo. One not
+// found within stokerStartsIn, or that cannot join, is let go. It saves on
+// a join. Callers hold mu.
+func (s *Service) joinNewLocked(now time.Time) error {
+	if s.cur.Git == nil || s.sampleMissedLocked() {
+		return nil
+	}
+	st := s.chainsLocked()
+	joined := false
+	for _, u := range s.family() {
+		u.joins = slices.DeleteFunc(u.joins, func(j pendingJoin) bool {
+			i := slices.IndexFunc(s.cur.Sessions, func(x sample.Session) bool {
+				server, _ := sample.SplitPane(x.Pane)
+				return server == "" && x.TmuxSession() == j.name
+			})
+			if i < 0 {
+				return now.Sub(j.at) >= stokerStartsIn
+			}
+			x := s.cur.Sessions[i]
+			c, ok := chainByID(st, u.link.Chain)
+			if !ok {
+				return true
+			}
+			if repo, _, _ := gitscan.RepoOf(s.cur.Git, x.Cwd); repo != c.Repo {
+				return now.Sub(j.at) >= stokerStartsIn
+			}
+			if st.Join(c.ID, memberOf(x)) == nil {
+				joined = true
+			}
+			return true
+		})
+	}
+	if !joined {
+		return nil
+	}
+	return s.saveChainsLocked()
+}
+
+func chainByID(st *chains.Store, id string) (chains.Chain, bool) {
+	i := slices.IndexFunc(st.Chains, func(c chains.Chain) bool { return c.ID == id })
+	if i < 0 {
+		return chains.Chain{}, false
+	}
+	return st.Chains[i], true
+}

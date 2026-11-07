@@ -194,6 +194,25 @@ func (s *Store) leave(m Member) (chainID string, ok bool) {
 	return chainID, true
 }
 
+// Join adds m to the chain chainID with no ask: a session a chain's stoker
+// started. A member of the chain joins it again as a no-op. It fails when m
+// is off, in another chain, or the chain is gone.
+func (s *Store) Join(chainID string, m Member) error {
+	i := slices.IndexFunc(s.Chains, func(c Chain) bool { return c.ID == chainID })
+	switch j := s.chainIndex(m); {
+	case i < 0:
+		return fmt.Errorf("chain %s is gone", chainID)
+	case j == i:
+		return nil
+	case j >= 0:
+		return fmt.Errorf("%s is in chain %s", m.Pane, s.Chains[j].ID)
+	case s.isOff(m):
+		return fmt.Errorf("%s is off: it takes no chains", m.Pane)
+	}
+	s.Chains[i].Members = append(slices.Clone(s.Chains[i].Members), m)
+	return nil
+}
+
 // SetOff makes m refuse chains (off leaves its chain too), or accept them again.
 func (s *Store) SetOff(m Member, off bool) {
 	if !off {
