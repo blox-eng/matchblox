@@ -293,6 +293,10 @@ type Service struct {
 	// says it heard it: no other hook is told them meanwhile. Under mu.
 	heldAsks    map[chains.Request]bool
 	heldNotices map[pair]bool
+	// cleared are the session ids of chained matches that a /clear started
+	// afresh: each hears once who it is chained with. heldCleared are the
+	// ones a delivery holds.
+	cleared, heldCleared map[string]bool
 	// found goes to each console when foundGen passes the one it has.
 	found     gitscan.Found
 	foundGen  uint64

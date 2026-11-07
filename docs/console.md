@@ -127,6 +127,7 @@ folder as `dir`. They need
 |---|---|
 | `name` | The session's name (Claude Code's, or the agent's). |
 | `pane`, `target` | Its tmux pane (`%3`) and target (`app:1.1`). Any of `name`, `pane` and `target` names it to a hand command. |
+| `repo` | The name of the repo its folder is in (`web`; `work/api` when another repo is also `api`), or empty when matchblox knows no repo there. The line says `in web`. |
 | `word` | What it does, in one word: `asks` (it waits for an answer or an approval), `busy` (a turn runs), `idle` (at rest), `background` (at rest, and a shell it started in the background still runs), or `agents` (its subagents still work). Read this one. |
 | `status` | The status word the agent itself reports, as it reports it. Claude Code says `busy`, `idle` or `shell`; `shell` is a session at rest with a background shell, not a pane without an agent. |
 | `reason` | Why a session at rest is idle (`#4556 waits your merge`, `CI red · …`, `stuck: …`, `out of work`, `idle`); empty while it works or asks. |
@@ -148,7 +149,8 @@ default, 0 for all); `--json` prints `name`, `pane`, `target`, `said`,
 
 ## Chain matches
 
-Two matches in one repo can hear from each other once both chain. Run in an
+Two matches on one host can hear from each other once both chain, in one
+repo or across repos. Run in an
 agent's pane, `matchblox chain api` asks to chain with `api`, or accepts its
 ask; nothing is shared until the other side chains back. `matchblox chain`
 lists your chain and the asks to and from you (`--json` prints `chain` and
@@ -163,11 +165,12 @@ rest. With no chain in the view there is no column, and the list is as
 before.
 
 - **By need**, the chain moves into the group of its neediest match, its
-  members in need order. **By repo** its members are always side by side.
-  Either way the fuse is whole: `╮` first, `┤` between, `╯` last, with `─`
+  members in need order. **By repo** its members in one repo are side by
+  side. Where the fuse joins rows, it is whole: `╮` first, `┤` between, `╯` last, with `─`
   before each from 70 columns of list. By need, the group's label adds the
   chain: `WAITS FOR YOU · 1 · chain of 3`.
-- **By status** and **none**, the members stay where the view puts them.
+- **By status** and **none**, and by repo for a chain across repos, the
+  members stay where the view puts them.
   Each has a stub `─╴`. The stubs of the selected row's chain light in the
   accent, and the others are faint. The selected row's own stub is `━╸`.
 - A filter that hides members joins the ones it shows. In every grouping,
@@ -178,7 +181,8 @@ before.
 - When a chain-mate commits, changes branch or sends, a bright cell runs
   down the fuse once. `--no-motion` shows no spark.
 - A session in one repo with another that it has not chained with shows a
-  faint `· same repo · chain?` after its name, while the name has room.
+  faint `· same repo · chain?` after its name, while the name has room. A
+  chain with a match in another repo does not hide it.
 
 ## Act on a session from a script or an agent
 

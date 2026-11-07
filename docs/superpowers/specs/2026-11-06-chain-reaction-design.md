@@ -59,6 +59,13 @@ This fails, even if it runs, when:
 - Approach A below. (2026-11-06)
 - A chain needs both sides: the target, or a member of its chain, must chain
   back. (2026-11-06)
+- Chains work across repos, not across hosts (#309). Goal 1's notice stays
+  inside one repo; across repos a chain starts by name, from `matchblox
+  sessions`, which names each agent's repo. A match in no repo may chain.
+  Consent stays with the two agents; the person accepts that an agent in one
+  repo can reach one in another. News and asks from another repo name it. A
+  cleared chat hears once who it is chained with. (2026-11-06, eng review
+  D1-D9; it overrules the call below that a move leaves the chain.)
 
 ## Approaches
 
@@ -268,8 +275,9 @@ Each has a test:
 - Commit news comes from the hook on Claude Code and from a HEAD read of chained
   worktrees for the rest, because the 5-minute git scan is too slow for the
   next tool call.
-- A match that moves to another repo leaves its chain, because the fuse and the
-  Repo grouping assume one repo.
+- ~~A match that moves to another repo leaves its chain, because the fuse and
+  the Repo grouping assume one repo.~~ Overruled 2026-11-06 (#309): a move
+  keeps the chain, and by repo a chain across repos shows stubs.
 - OpenCode is in chains but receives no send, because a typed line can submit
   its draft.
 - The inbox keeps 20 items, because a chain-mate that returns from a long tool

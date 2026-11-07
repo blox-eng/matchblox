@@ -83,7 +83,7 @@ func TestTwoChainsMergeIntoOne(t *testing.T) {
 func TestARequestLapsesAfterAnHour(t *testing.T) {
 	var s Store
 	s.Ask(mem("a"), mem("b"), "r", t0)
-	live := func(Member) (string, bool) { return "r", true }
+	live := func(Member) bool { return true }
 	s.Prune(live, t0.Add(59*time.Minute))
 	if len(s.Requests) != 1 {
 		t.Fatal("lapsed early")
@@ -94,18 +94,12 @@ func TestARequestLapsesAfterAnHour(t *testing.T) {
 	}
 }
 
-func TestAMatchThatMovesLeaves(t *testing.T) {
+func TestAGoneMatchLeaves(t *testing.T) {
 	var s Store
 	chainOf(t, &s, "a", "b", "c")
 	id := s.Chains[0].ID
-	live := func(m Member) (string, bool) {
-		if m.SessionID == "c" {
-			return "r2", true
-		}
-		return "r", true
-	}
-	left := s.Prune(live, t0)
-	if len(left) != 1 || left[0].Who.SessionID != "c" || left[0].Repo != "r2" || left[0].Chain != id {
+	left := s.Prune(func(m Member) bool { return m.SessionID != "c" }, t0)
+	if len(left) != 1 || left[0].Who.SessionID != "c" || left[0].Chain != id {
 		t.Fatalf("left = %+v", left)
 	}
 	c, ok := s.ChainOf(mem("a"))
@@ -120,7 +114,7 @@ func TestAMatchThatMovesLeaves(t *testing.T) {
 func TestAChainOfOneEnds(t *testing.T) {
 	var s Store
 	chainOf(t, &s, "a", "b")
-	s.Prune(func(m Member) (string, bool) { return "r", m.SessionID != "b" }, t0)
+	s.Prune(func(m Member) bool { return m.SessionID != "b" }, t0)
 	if len(s.Chains) != 0 {
 		t.Fatalf("chains = %+v", s.Chains)
 	}
@@ -208,13 +202,12 @@ func TestSaveAndLoad(t *testing.T) {
 	}
 }
 
-// TestPruneDropsTheOffOfGoneMatches: an off mark lasts as long as its match;
-// one in no repo is still there.
+// TestPruneDropsTheOffOfGoneMatches: an off mark lasts as long as its match.
 func TestPruneDropsTheOffOfGoneMatches(t *testing.T) {
 	var s Store
 	s.SetOff(mem("a"), true)
 	s.SetOff(mem("b"), true)
-	s.Prune(func(m Member) (string, bool) { return "", m.SessionID == "b" }, t0)
+	s.Prune(func(m Member) bool { return m.SessionID == "b" }, t0)
 	if len(s.Off) != 1 || s.Off[0].SessionID != "b" {
 		t.Fatalf("off = %+v", s.Off)
 	}
@@ -315,7 +308,7 @@ func TestARenameGoesWithItsMatch(t *testing.T) {
 	if len(s.renamed) != 1 {
 		t.Fatalf("renamed = %v", s.renamed)
 	}
-	s.Prune(func(m Member) (string, bool) { return "r", m.SessionID == "b" }, t0)
+	s.Prune(func(m Member) bool { return m.SessionID == "b" }, t0)
 	if len(s.renamed) != 0 {
 		t.Fatalf("renamed = %v", s.renamed)
 	}

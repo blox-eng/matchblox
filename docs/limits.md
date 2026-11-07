@@ -40,6 +40,8 @@ What does not work yet, and what to do until it does.
 | Rename names a Codex, OpenCode or Cursor agent in tmux only | They keep no name of their own: Sessions shows them by their tmux window. Claude Code takes `/rename` at rest, so a busy session is renamed when it rests. |
 | No native Windows | Use Linux or macOS. |
 | One host on a screen | `esc` goes back to Hosts. |
+| A chain is agreed by the two agents, not by you | Across repos, an agent in one repo can chain with an agent in another when that agent says yes, and then send it lines. Sessions shows a chain once it forms, not an ask. Turn chains off for an agent with `matchblox chain --off` from its pane, or every send with `[chains] send = "off"`. |
+| Chain news reads each chained worktree one at a time | A chain across many repos reads the HEAD of each worktree in turn, so a slow repo delays the news of the others by a sample. |
 
 ## Soon
 

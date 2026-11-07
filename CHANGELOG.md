@@ -6,6 +6,15 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Chains across repos.** Two agents in different repos on one machine can
+  chain by name, and an agent in a folder outside any repo can too. A move
+  to another repo keeps the chain. `matchblox sessions` and `matchblox chain`
+  name each agent's repo, and news and asks from another repo say which. A
+  cleared chat hears once who it is chained with.
+  ([#309](https://github.com/blox-eng/matchblox/issues/309))
+
 ## [0.33.1] - 2026-11-07
 
 ### Fixed
@@ -32,7 +41,6 @@ All notable changes to matchblox are in this file. The format follows
   Sessions joins a chain's matches with a fuse, and `[chains]` in the config
   sets the notice and the send.
   ([#299](https://github.com/blox-eng/matchblox/issues/299))
-
 ## [0.32.1] - 2026-11-06
 
 ### Fixed
