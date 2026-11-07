@@ -80,7 +80,7 @@ func TestJumpRemoteToDir(t *testing.T) {
 
 func TestJumpLocal(t *testing.T) {
 	const s = "'=matchblox-ws-1-0a1b2c3d:'"
-	wrap := `/bin/sh -c 't=$1; h=$2; shift 2; trap '\''tmux unbind-key -a -T "$t" 2>/dev/null; exit 0'\'' HUP TERM; "$@"; s=$?; [ $s = 0 ] || { stty sane 2>/dev/null; printf "\nssh exited %s. Press Enter to go back.\n" "$s"; until read _; do sleep 0.2; done; }; for c in $(tmux list-clients -t "$TMUX_PANE" -F '\''#{client_tty}'\'' 2>/dev/null); do tmux switch-client -c "$c" -t "=$h" 2>/dev/null; done; tmux unbind-key -a -T "$t" 2>/dev/null; exit 0' sh matchblox-host-0a1b2c3d matchblox ssh x`
+	wrap := `/bin/sh -c 't=$1; h=$2; shift 2; trap '\''tmux unbind-key -a -T "$t" 2>/dev/null; exit 0'\'' HUP TERM; "$@"; s=$?; [ $s = 0 ] || { stty sane 2>/dev/null; printf "\030\033\\\\\nssh exited %s. Press Enter to go back.\n" "$s"; until read _; do sleep 0.2; done; }; for c in $(tmux list-clients -t "$TMUX_PANE" -F '\''#{client_tty}'\'' 2>/dev/null); do tmux switch-client -c "$c" -t "=$h" 2>/dev/null; done; tmux unbind-key -a -T "$t" 2>/dev/null; exit 0' sh matchblox-host-0a1b2c3d matchblox ssh x`
 	back := "'unbind-key -a -T matchblox-host-0a1b2c3d ; switch-client -t =matchblox'"
 	want := "tmux new-session -d -s matchblox-ws-1-0a1b2c3d -- " + wrap + " ';'" +
 		" set-option -t " + s + " @matchblox-jump 1 ';'" +

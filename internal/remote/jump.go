@@ -212,11 +212,14 @@ func (j Jump) Local(ssh []string) []string {
 	back := "unbind-key -a -T " + table + " ; switch-client -t =" + j.home()
 	// A failed ssh waits for Enter, as its client looks at it. An ssh that
 	// was killed leaves the terminal raw and non-blocking, so the wait
-	// resets it and reads again. A jump that ends by itself sends its
-	// client home: tmux would pick a session of its own. The session also
+	// resets it and reads again. A killed ssh can stop in the middle of an
+	// escape sequence, and the line would vanish into it: CAN ends a CSI
+	// or OSC, and ST (ESC \) ends a DCS, where tmux reads CAN as data. A
+	// jump that ends by itself sends its client home: tmux would pick a
+	// session of its own. The session also
 	// ends when its client leaves it, by any way back (destroy-unattached),
 	// and its ssh with it; the wrapper then drops the table (a hangup too).
-	const wrap = `t=$1; h=$2; shift 2; trap 'tmux unbind-key -a -T "$t" 2>/dev/null; exit 0' HUP TERM; "$@"; s=$?; [ $s = 0 ] || { stty sane 2>/dev/null; printf "\nssh exited %s. Press Enter to go back.\n" "$s"; until read _; do sleep 0.2; done; }; for c in $(tmux list-clients -t "$TMUX_PANE" -F '#{client_tty}' 2>/dev/null); do tmux switch-client -c "$c" -t "=$h" 2>/dev/null; done; tmux unbind-key -a -T "$t" 2>/dev/null; exit 0`
+	const wrap = `t=$1; h=$2; shift 2; trap 'tmux unbind-key -a -T "$t" 2>/dev/null; exit 0' HUP TERM; "$@"; s=$?; [ $s = 0 ] || { stty sane 2>/dev/null; printf "\030\033\\\\\nssh exited %s. Press Enter to go back.\n" "$s"; until read _; do sleep 0.2; done; }; for c in $(tmux list-clients -t "$TMUX_PANE" -F '#{client_tty}' 2>/dev/null); do tmux switch-client -c "$c" -t "=$h" 2>/dev/null; done; tmux unbind-key -a -T "$t" 2>/dev/null; exit 0`
 	return tmuxList(slices.Concat([][]string{
 		append([]string{"new-session", "-d", "-s", s, "--", "/bin/sh", "-c", wrap, "sh", table, j.home()}, ssh...),
 		setOption(s, sample.JumpMark, "1"),
