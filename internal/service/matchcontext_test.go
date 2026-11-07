@@ -320,6 +320,9 @@ func TestConversationCaptureKeepsTheGoalPastToolOutput(t *testing.T) {
 	lines := []string{
 		`{"type":"user","message":{"role":"user","content":"<command-name>/clear</command-name>\n<command-message>clear</command-message>\n<command-args></command-args>"}}`,
 		`{"type":"user","message":{"role":"user","content":"<task-notification>HARNESS SECRET</task-notification>"}}`,
+		`{"type":"user","message":{"role":"user","content":"<system-reminder><command-name>/HARNESS SECRET</command-name></system-reminder>"}}`,
+		`{"type":"user","message":{"role":"user","content":"Pasted log: <command-name>/pasted</command-name> ends."}}`,
+		`{"type":"user","message":{"role":"user","content":"<command-message>review</command-message>\n<command-name>/review</command-name>\n<command-args>PR 12</command-args>"}}`,
 		`{"type":"user","message":{"role":"user","content":"<command-name>/using-superpowers</command-name>\n<command-message>using-superpowers</command-message>\n<command-args>the handover is lazy</command-args>"}}`,
 		`{"type":"user","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"Base directory for this skill: HARNESS SECRET"}]}}`,
 		`{"type":"user","message":{"role":"user","content":"Goal: fix the capture."}}`,
@@ -335,7 +338,7 @@ func TestConversationCaptureKeepsTheGoalPastToolOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"/using-superpowers the handover is lazy", "Goal: fix the capture.", "Latest correction: keep Codex too."} {
+	for _, want := range []string{"/using-superpowers the handover is lazy", "/review PR 12", "Pasted log: <command-name>", "Goal: fix the capture.", "Latest correction: keep Codex too."} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q: %s", want, text)
 		}

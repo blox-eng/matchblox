@@ -379,10 +379,11 @@ func transcriptTurn(line []byte) (turn, bool) {
 	}
 	var b strings.Builder
 	for _, t := range texts {
+		if harnessText(t) {
+			continue
+		}
 		if cmd, ok := slashCommand(t); ok {
 			t = cmd
-		} else if harnessText(t) {
-			continue
 		}
 		b.WriteString(t + "\n")
 	}
@@ -401,8 +402,13 @@ func transcriptTurn(line []byte) (turn, bool) {
 }
 
 // slashCommand renders a Claude command row as the builder typed it: its
-// arguments are often the task itself.
+// arguments are often the task itself. Only a row that starts with a command
+// tag counts, so wrapped or pasted tags keep their own handling.
 func slashCommand(s string) (string, bool) {
+	s = strings.TrimSpace(s)
+	if !strings.HasPrefix(s, "<command-name>") && !strings.HasPrefix(s, "<command-message>") {
+		return "", false
+	}
 	name, ok := tagText(s, "command-name")
 	if !ok {
 		return "", false
