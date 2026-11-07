@@ -387,7 +387,7 @@ func (s *Service) followChains(ctx context.Context) {
 // card, its run ends and its agent quits.
 func (s *Service) chainEnded(ctx context.Context, chainID string) {
 	if u := s.unitOfChain(chainID); u != nil {
-		s.retire(ctx, u, "its chain ended")
+		s.retire(ctx, u, "its chain ended", "its chain ended")
 	}
 }
 
@@ -402,10 +402,9 @@ func (s *Service) chainsJoined(ctx context.Context, survivor, absorbed, name str
 	switch {
 	case a == nil && b == nil:
 		return
-	case b == nil: // the stoker of absorbed is the one that stays
-		b = a
-		if err := s.relinkChain(b, survivor); err != nil {
-			_ = b.store.Append(familyLine(s.now(), fmt.Sprintf("its chain joined %s, and its link did not change: %s", s.chainNameOf(survivor), err)))
+	case b == nil: // the stoker of absorbed stays, unless a start took survivor meanwhile
+		if b = s.takeChain(a, survivor); b != a {
+			s.yieldTo(ctx, a, b, name)
 		}
 	case a != nil:
 		s.yieldTo(ctx, a, b, name)
@@ -414,6 +413,21 @@ func (s *Service) chainsJoined(ctx context.Context, survivor, absorbed, name str
 		s.handOver(b)
 	}
 	s.refreshStoker()
+}
+
+// takeChain makes chain unit u the stoker of chain, which has none: under
+// the start's lock, so no start gives chain a second one. It is the unit
+// of chain after: u, or the one a start made first.
+func (s *Service) takeChain(u *stokerUnit, chain string) *stokerUnit {
+	s.fam.start.Lock()
+	defer s.fam.start.Unlock()
+	if o := s.unitOfChain(chain); o != nil {
+		return o
+	}
+	if err := s.relinkChain(u, chain); err != nil {
+		_ = u.store.Append(familyLine(s.now(), fmt.Sprintf("its chain joined %s, and its link did not change: %s", s.chainNameOf(chain), err)))
+	}
+	return u
 }
 
 // yieldTo stops chain unit a, whose chain named name joined the chain of
@@ -428,8 +442,13 @@ func (s *Service) yieldTo(ctx context.Context, a, b *stokerUnit, name string) {
 		}
 	}
 	grants := stoker.Given(s.grantsOf(b), s.grantsOf(a)) // before a's run ends
-	s.retire(ctx, a, "its chain joined "+s.chainNameOf(s.chainIDOf(b)))
+	joined := s.chainNameOf(s.chainIDOf(b))
+	s.retire(ctx, a, "its chain joined "+joined, "the stoker of chain "+joined+" owns it now")
 	if words == "" {
+		return
+	}
+	if s.nightOf(b) { // the night is sealed: no order reaches it
+		_ = b.store.Append(familyLine(s.now(), fmt.Sprintf("the order of the joined chain %s waits for the morning: %s", name, words)))
 		return
 	}
 	var err error
@@ -449,14 +468,41 @@ func (s *Service) yieldTo(ctx context.Context, a, b *stokerUnit, name string) {
 	}
 }
 
-// retire stops chain unit u with text on its card: its run ends and its
-// agent quits. Its dir and card stay, for the morning card and the STOKER
-// tab; the cap counts it no more.
-func (s *Service) retire(ctx context.Context, u *stokerUnit, text string) {
-	_ = u.store.Append(familyLine(s.now(), text))
-	s.stokerAct(u, "off", s.now())
+// nightOf: a run of chain unit u is a night run: the one on, or the one an
+// order would start while the host's night runs.
+func (s *Service) nightOf(u *stokerUnit) bool {
+	if m := u.store.Mode(); m.On {
+		return m.Nightly
+	}
+	h := s.hostUnit()
+	if h == nil {
+		return false
+	}
+	m := h.store.Mode()
+	return m.On && m.Nightly
+}
+
+// retire stops chain unit u for good with text on its card: its link says
+// it ended, each kill or go that waits for a y is dropped with why, its run
+// ends and its agent quits. Its dir and card stay, for the morning card and
+// the STOKER tab; the cap counts it no more, and no chain is its again.
+func (s *Service) retire(ctx context.Context, u *stokerUnit, text, why string) {
+	now := s.now()
+	_ = u.store.Append(familyLine(now, text))
+	if err := s.endLink(u); err != nil {
+		_ = u.store.Append(familyLine(now, "its link did not change: "+err.Error()))
+	}
+	s.dropWaits(u, func(pane, _ string) (string, bool) {
+		if x, ok := s.sessionAt(pane); ok && x.Name != "" {
+			return x.Name, true
+		}
+		return pane, true
+	}, why)
+	if res := s.stokerAct(u, "off", now); res.Err != "" {
+		_ = u.store.Append(familyLine(now, "its run did not end: "+res.Err))
+	}
 	if err := s.quitAgent(ctx, u); err != nil {
-		_ = u.store.Append(familyLine(s.now(), "its agent did not quit: "+err.Error()))
+		_ = u.store.Append(familyLine(now, "its agent did not quit: "+err.Error()))
 	}
 }
 

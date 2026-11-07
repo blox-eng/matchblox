@@ -118,7 +118,7 @@ func (s *Service) unitOfChain(chainID string) *stokerUnit {
 	s.fam.mu.Lock()
 	defer s.fam.mu.Unlock()
 	for _, u := range s.fam.chains {
-		if u.link.Chain == chainID {
+		if u.link.Chain == chainID && !u.link.Ended {
 			return u
 		}
 	}
@@ -272,11 +272,11 @@ func (s *Service) chainNameOf(chainID string) string {
 
 // chainsAtWork counts the chain units the cap counts: an agent that is up
 // on the stoker's server, or a run that is on. A unit that quit with its
-// run off counts no more; its dir and card stay.
+// run off, or whose chain ended, counts no more; its dir and card stay.
 func (s *Service) chainsAtWork() int {
 	n := 0
 	for _, u := range s.family() {
-		if u.id == stoker.HostID {
+		if u.id == stoker.HostID || s.ended(u) {
 			continue
 		}
 		s.mu.Lock()
@@ -449,7 +449,13 @@ func (s *Service) handOver(u *stokerUnit) {
 		}
 	}
 	s.moveTriggers(host, u, panes)
-	s.dropWaits(host, name, panes, ids)
+	s.dropWaits(host, func(pane, session string) (string, bool) {
+		who, in := panes[pane]
+		if !in {
+			who, in = ids[session]
+		}
+		return who, in
+	}, "the stoker of chain "+name+" owns it now")
 	_ = s.updateDriven(host, func(d *stoker.Driven, _ []string) bool {
 		changed := false
 		for pane := range panes {
@@ -504,8 +510,8 @@ func (s *Service) moveTriggers(from, to *stokerUnit, panes map[string]string) {
 var errNoneMoves = errors.New("no trigger moves")
 
 // dropWaits drops each kill or go on unit u's card that waits for a y for
-// a member of the chain name, by its pane or its session id.
-func (s *Service) dropWaits(u *stokerUnit, name string, panes, ids map[string]string) {
+// a match whoOf names, by its pane or its session id, with why on its line.
+func (s *Service) dropWaits(u *stokerUnit, whoOf func(pane, session string) (string, bool), why string) {
 	run := u.store.View().Run
 	now := s.now()
 	done := map[string]bool{}
@@ -523,10 +529,7 @@ func (s *Service) dropWaits(u *stokerUnit, name string, panes, ids map[string]st
 		if !kill {
 			target = last.Pane
 		}
-		who, in := panes[target]
-		if !in {
-			who, in = ids[last.Session]
-		}
+		who, in := whoOf(target, last.Session)
 		if !in {
 			continue
 		}
@@ -539,7 +542,7 @@ func (s *Service) dropWaits(u *stokerUnit, name string, panes, ids map[string]st
 		}
 		d := last
 		d.ID, d.At, d.State = "dropped@"+now.UTC().Format(time.RFC3339Nano)+"/"+last.Pane+"/"+last.Needs, now, stoker.StepFailed
-		d.Text = fmt.Sprintf("dropped the %s for %s: the stoker of chain %s owns it now", what, who, name)
+		d.Text = fmt.Sprintf("dropped the %s for %s: %s", what, who, why)
 		_ = u.store.Append(d)
 	}
 }
@@ -607,6 +610,26 @@ func (s *Service) relinkChain(u *stokerUnit, chain string) error {
 	}
 	u.link.Chain = chain
 	return nil
+}
+
+// endLink marks chain unit u as stopped for good, in its link.json first.
+func (s *Service) endLink(u *stokerUnit) error {
+	s.fam.mu.Lock()
+	defer s.fam.mu.Unlock()
+	l := u.link
+	l.Ended = true
+	if err := stoker.WriteLink(u.store.Dir(), l); err != nil {
+		return err
+	}
+	u.link.Ended = true
+	return nil
+}
+
+// ended: chain unit u stopped for good with its chain.
+func (s *Service) ended(u *stokerUnit) bool {
+	s.fam.mu.Lock()
+	defer s.fam.mu.Unlock()
+	return u.link.Ended
 }
 
 // chainIDOf is the id of unit u's chain: "" for the host. A join changes
