@@ -322,3 +322,25 @@ footer a { color: var(--muted); }
 .chain .beats h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
 .chain .beats p { margin: 0; color: var(--muted); font-size: 14px; }
 @media (max-width: 720px) { .chain .beats { grid-template-columns: minmax(0, 1fr); } }
+/* A family of stokers: the night stoker lights the head of each chain, and each head its matches. */
+.kin { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 10px; padding-top: 22px; border-top: 1px solid var(--hair-soft); }
+.family .stick { stroke-width: 4.5; }
+.family .char { stroke-width: 4.5; }
+.family .moon { fill: var(--faint); opacity: .55; transition: fill .6s, opacity .6s; }
+.family .moon.lit { fill: var(--primary); opacity: 1; }
+.family .mark { fill: var(--faint); opacity: .6; transition: fill .3s, opacity .3s; }
+.family .mark.lit { fill: var(--primary); opacity: 1; }
+.family .fuse path { fill: none; stroke-width: 2; stroke-linecap: round; }
+.family .cord { stroke: var(--hair-strong); }
+.family .burn { stroke: var(--flame); opacity: .85; stroke-dasharray: 100 400; stroke-dashoffset: 100; transition: stroke-dashoffset .7s cubic-bezier(0, 0, 1, 1); }
+.family .fuse.lit .burn { stroke-dashoffset: 0; }
+.chain .family { max-width: 860px; }
+@media (min-width: 1100px) {
+  .kin { grid-template-columns: minmax(0, 860px) minmax(0, 1fr); column-gap: 40px; }
+  .kin .kin-say { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+}
+.kin-key { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 0; }
+.kin-say { display: grid; gap: 8px; justify-items: start; }
+.kin-say h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.kin-say p { margin: 0; color: var(--muted); font-size: 14px; max-width: 72ch; }
+.kin-say code { font: 400 13px/1.5 var(--mono); color: var(--muted); overflow-wrap: anywhere; }

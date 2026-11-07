@@ -150,14 +150,14 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		return s.keys(ctx, pane, a) // a key twice is twice: no dedupe
 	}
 	if strings.HasPrefix(a.RecID, proto.ChainPrefix) {
-		return s.chainAct(a) // an agent's own act: before the agents-pane gate
+		return s.chainAct(ctx, a) // an agent's own act: before the agents-pane gate
 	}
 	if pane, ok := strings.CutPrefix(a.RecID, proto.CommandPrefix); ok {
 		return s.command(ctx, pane, a) // a second one finds the agent at work
 	}
 	// A session the stoker drove speaks for the stoker: what it sends
 	// counts and drives, and it gives no go.
-	agent := s.agentsPane(a)
+	u, agent := s.agentsUnit(a)
 	// A clone is a person's (R16): never from an agent's pane, whatever
 	// its hello said, as with scan:yes.
 	if cloneAct(a.RecID) || (a.RecID == NewSessionID && s.newClones(a.Text)) {
@@ -192,7 +192,7 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		s.touchStoker(s.now()) // the builder acts: a stoker that rests goes on resting
 	}
 	if agent {
-		if err := s.orderable(a); err != nil {
+		if err := s.orderable(u, a); err != nil {
 			return proto.Result{Err: err.Error()}
 		}
 	} else if yours(a.RecID) && !a.Console {
@@ -200,7 +200,7 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	}
 	res := s.dispatch(ctx, a)
 	if agent {
-		s.recordOrder(a, res)
+		s.recordOrder(u, a, res)
 	} else if pane := typedPane(a.RecID); a.Console && pane != "" && res.Err == "" && len(res.Ran) > 0 {
 		s.undrive(pane) // the pane's last input is the person's at a console
 	}
@@ -212,8 +212,8 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 // steps come from its CLI.
 func yours(recID string) bool {
 	if verb, ok := strings.CutPrefix(recID, "stoker:"); ok {
-		// matchblox stoker quit is the builder's in a shell too.
-		return verb != "plan" && verb != "step" && verb != "when" && verb != "quit"
+		// matchblox stoker quit, new and order are the builder's in a shell too.
+		return verb != "plan" && verb != "step" && verb != "when" && verb != "quit" && verb != "new" && verb != "order-chain"
 	}
 	return strings.HasPrefix(recID, "park:")
 }
@@ -240,17 +240,24 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 	if verb, ok := strings.CutPrefix(a.RecID, "stoker:"); ok {
 		switch verb {
 		case "order":
-			return s.orderAct(ctx, a)
+			return s.orderAct(ctx, s.hostUnit(), a)
 		case "plan", "step", "when":
 			return s.planAct(verb, a)
 		case "grant":
 			return s.grantAct(a)
 		case "start":
-			return s.startAct(ctx)
+			return s.startAct(ctx, s.hostUnit())
 		case "quit":
-			return s.quitAct(ctx, a)
+			if a.Text != "" {
+				return s.quitChainAct(ctx, a)
+			}
+			return s.quitAct(ctx, s.hostUnit(), a)
+		case "new":
+			return s.newChainAct(ctx, a)
+		case "order-chain":
+			return s.chainOrderAct(ctx, a)
 		}
-		return s.stokerAct(verb, s.now())
+		return s.stokerAct(s.hostUnit(), verb, s.now())
 	}
 	if pane, ok := strings.CutPrefix(a.RecID, "park:"); ok {
 		return s.park(pane)

@@ -18,7 +18,7 @@ the bottom shows the keys of the open tab. A tap on a key presses it.
 | `N` | Opens **New session** (Sessions, Git): where it starts (a path, or `←` `→` through the Git tab's repositories and worktrees, then the ones found on the host, the most recent first), a branch for a new worktree beside the repository (blank: none), its name, the agent (`←` `→`, from the installed Claude Code, Codex, OpenCode and Cursor), for Claude Code, Codex and Cursor the account (see below), and a first message (blank: it waits for you; a new account has none). `Tab` goes to the next line, `⏎` starts it in a tmux session of its own, `Esc` sends nothing. The row shows in Sessions within seconds. |
 | `r` | Renames the session (Sessions): its tmux window, its tmux session when it is that session's one window, and Claude Code's own name (`/rename`), all alike. A Claude Code session that works takes its new name when it rests. On Git, `r` scans the git checkouts again. |
 | `A` | Switches the agent of the session (Sessions): choose another installed agent (`←` `→`) and edit or clear its handoff. The plan names the account and launch settings. A nonempty handoff loads an evidence preview before `y` can run the switch. A session that works or waits needs a second `y`. The switch saves the latest evidence before replacing the agent. The console jumps to the pane after. |
-| `a` or `→` | Gives the chat the keys on the selected agent (Sessions). `→` does it where it has no other use. The key line names the chat once, as `⏎ chat`, and only where `Enter` opens it. On another host's row it says where the session runs: the chat is the console's own host's. On Ships, opens the chat on the session of a stuck ship. |
+| `a` or `→` | Gives the chat the keys on the selected agent (Sessions). On the head row of a chain, the chat is the chain's stoker: type an order, or answer its prompts. When that stoker's run is off, `a` opens its start sheet. `→` does it where it has no other use. The key line names the chat once, as `⏎ chat`, and only where `Enter` opens it. On another host's row it says where the session runs: the chat is the console's own host's. On Ships, opens the chat on the session of a stuck ship. |
 | `1-7` | Opens a tab: Sessions, Ships, Machine, Git, History, Panes, Stoker. |
 | `p` | Opens Ships. |
 | `Tab` or `Shift+Tab` | Opens the next or the previous tab. |
@@ -33,6 +33,7 @@ the bottom shows the keys of the open tab. A tap on a key presses it.
 | `Space` | Marks a worktree that is safe to remove (Git). |
 | `X` | Marks every worktree that is safe to remove (Git). |
 | `f` | Turns [the stoker](stoker.md) off while it is on. While it rests, turns it back on. Otherwise opens the launch sheet for a day run. |
+| `F` | Stokes the chain of the selected row (Sessions): the start sheet, `Stoke the chain <name> (<n> matches)?`, takes the order and the gos of a stoker for that chain. On a chain with a stoker, `F` does what `a` does on its head row. On a desk, a tap on the fuse does the same. See [A family of stokers](stoker.md#a-family-of-stokers). |
 | `n` | Opens the launch sheet for a night: the stoker runs until the morning, then turns itself off. While a night runs, `n` ends it. |
 | `o` | Gives a new order while a day run is on: the launch sheet opens with the run's gos, and the order goes to the stoker as one line. The run goes on, and done steps stay done. A night is sealed: `n` stops it first. |
 | `e` | Shows or hides the agents that exited and wait for their parent (Sessions). |
@@ -47,11 +48,13 @@ the bottom shows the keys of the open tab. A tap on a key presses it.
 which matchblox runs on a tmux server of its own. Every other row is a
 step the stoker took or planned, a command that waits for your go, or a
 trigger that fired. The key line shows the keys of the selected row.
+With [chain stokers](stoker.md#a-family-of-stokers), a `CHAIN <name>` card
+for each one follows the host stoker's card.
 
 | Key | What it does |
 |---|---|
-| `Enter` | On the stoker agent's row, opens the stoker (`⏎ open the stoker`): inside tmux in a popup, `tmux display-popup -E -w 90% -h 90% 'tmux -L matchblox attach -t stoker'`, which detaching (prefix `d`) closes; outside tmux the console names the command to run. This is where you answer the stoker's own prompts. On a step, shows the exact command it ran, or the one it waits to run, or hides it again. |
-| `Q` | Quits the stoker agent and its tmux session, after a typed `y`: `tmux -L matchblox kill-session -t =stoker`. `f` only turns the stoker off and leaves the agent running, so its context carries to the next order. |
+| `Enter` | On the stoker agent's row, opens the stoker (`⏎ open the stoker`): inside tmux in a popup, `tmux display-popup -E -w 90% -h 90% 'tmux -L matchblox attach -t stoker'`, which detaching (prefix `d`) closes; outside tmux the console names the command to run. This is where you answer the stoker's own prompts. On a `CHAIN <name>` card, opens the pane of that chain's stoker. On a step, shows the exact command it ran, or the one it waits to run, or hides it again. |
+| `Q` | Quits the stoker agent and its tmux session, after a typed `y`: `tmux -L matchblox kill-session -t =stoker`. `f` only turns the stoker off and leaves the agent running, so its context carries to the next order. On a `CHAIN <name>` card, `Q` and a typed `y` quit the stoker of that chain only. |
 | `y` | Gives the go a step waits for (`⏸ waits for you: api-gw wants to run gh pr merge 4556`). The go is good for one command of that kind in that session, and the stoker hears of it at its next wake. |
 | `a` | On a failed step (`✕`), opens the chat on its session. |
 

@@ -65,6 +65,9 @@ func (m Model) groupOf(s sample.Session) int {
 	if _, held := m.holdOf(s); held {
 		return groupHeld
 	}
+	if _, head := m.headRow(s); head && (s.Asks || s.Permits) { // a chain stoker's agent at a menu
+		return groupWaits
+	}
 	switch _, waits := m.waitOf(s); {
 	case s.Busy:
 		return groupWorking
@@ -107,6 +110,9 @@ func (m Model) groupLabel(s sample.Session) string {
 		}
 		return strings.ToUpper(m.wordOf(s))
 	case groupRepo:
+		if _, ok := m.headRow(s); ok {
+			return m.chainIx.repo[m.chainIx.of[keyOf(s)]]
+		}
 		return m.repoOf(s)
 	case groupNone:
 		return ""
@@ -320,6 +326,9 @@ func (m Model) sessionKeys() []hint {
 	}
 	var keys []hint
 	s, ok := m.selectedSession()
+	if u, head := m.headRow(s); ok && head {
+		return []hint{hintFor(mk.Chat, m.headVerb(s, u)), hintFor(mk.New, ""), hintFor(mk.Ships, ""), hintFor(mk.Stoke, "stoker")}
+	}
 	switch {
 	case ok && s.Host != m.opt.Host:
 		keys = []hint{hintFor(mk.Open, "")} // list only: into its pane
@@ -328,6 +337,9 @@ func (m Model) sessionKeys() []hint {
 	}
 	if ok && s.Pane != "" {
 		keys = append(keys, hintFor(mk.Second, "kill"), hintFor(mk.Rename, ""), hintFor(mk.Switch, ""), hintFor(mk.Park, m.parkWord(s)))
+	}
+	if k, chained := m.chainKeyOf(s); ok && chained && !m.headed(k) {
+		keys = append(keys, hintFor(mk.StokeChain, ""))
 	}
 	return append(keys, hintFor(mk.New, ""), hintFor(mk.Ships, ""), hintFor(mk.Stoke, "stoker"))
 }
@@ -478,6 +490,9 @@ func (m Model) sessionRow(s sample.Session, sel bool, w int) []string {
 // for all its rows, with fuse in the fuse column and, when it runs on
 // below the row, a bar through the lines it grows by.
 func (m Model) rowIn(s sample.Session, sel bool, w int, t tracks, fuse string, runs bool) []string {
+	if u, ok := m.headRow(s); ok {
+		return m.headIn(s, u, sel, w, t, fuse, runs)
+	}
 	st := m.st
 	mark := " "
 	if sel {
@@ -655,7 +670,13 @@ func cutLeft(s string, w int) string {
 func (m Model) opened(s sample.Session, w int) []string {
 	st := m.st
 	var out []string
-	if said := m.lastWords(s); said != "" {
+	said := m.lastWords(s)
+	if _, head := m.headRow(s); head {
+		if q, asks := m.headAsks(s); asks && q != "" {
+			said = q // the head's row cuts its question: here it is whole
+		}
+	}
+	if said != "" {
 		lines := wrapPlain("“"+said+"”", w-4)
 		if len(lines) > 2 {
 			lines = []string{lines[0], ansi.Truncate(lines[1], w-5, "") + "…"}
@@ -696,7 +717,10 @@ func (m Model) chatOpens(s sample.Session, ok bool) bool {
 func (m Model) openedKeys(s sample.Session, w int) (string, []span) {
 	mk := m.keys.main
 	var hs []hint
+	u, head := m.headRow(s)
 	switch {
+	case head:
+		hs = []hint{hintFor(mk.Chat, m.headVerb(s, u))}
 	case s.Host != m.opt.Host: // list only: into its pane
 		hs = []hint{hintFor(mk.Switch, ""), hintFor(mk.Open, "")}
 	case m.chatOpens(s, true):
@@ -858,7 +882,7 @@ func (m Model) detailLines(w, rows int) ([]string, bool) {
 // said last, and whether that was cut.
 func (m Model) sessionDetail(s sample.Session, w, said int) ([]string, bool) {
 	st := m.st
-	out := []string{"", fit(" "+st.accent.Bold(true).Render(s.Name), w)}
+	out := []string{"", fit(" "+st.accent.Bold(true).Render(m.titleOf(s)), w)}
 	where := []string{m.longWord(s)}
 	if c := m.waitCell(s); c != "" && m.wordOf(s) != "out" {
 		where = append(where, c)

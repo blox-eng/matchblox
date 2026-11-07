@@ -334,7 +334,7 @@ func (m Model) tooShort(s sample.Session) string {
 }
 
 // chatTitle names the chat's session and its state.
-func (m Model) chatTitle(s sample.Session) string { return s.Name + " · " + m.wordOf(s) }
+func (m Model) chatTitle(s sample.Session) string { return m.titleOf(s) + " · " + m.wordOf(s) }
 
 // chatPane is the chat beside the list, w by h: its title, in the accent
 // while the chat has the keys, over the strip

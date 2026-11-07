@@ -9,6 +9,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // The stoker's panel of the dock (design/0006 §7): the state in a word, and
@@ -22,8 +23,12 @@ func (m Model) hasAgent() bool {
 
 // stokerAttach is the command that attaches to the stoker agent's session
 // on its own server.
-func (m Model) stokerAttach() string {
-	return "tmux -L " + m.stokerServer + " attach -t stoker"
+func (m Model) stokerAttach() string { return m.attachTo(sample.StokerSession) }
+
+// attachTo is the command that attaches to a session of the stoker's own
+// server.
+func (m Model) attachTo(session string) string {
+	return "tmux -L " + m.stokerServer + " attach -t " + session
 }
 
 // openAgent is ⏎ on the STOKER tab's agent row, or a tap on the header's
@@ -59,6 +64,36 @@ func (m Model) quitAgent() (tea.Model, tea.Cmd) {
 		m.pending = &action{label: "quit the stoker agent", destructive: true, rec: "stoker:quit", which: "primary",
 			steps: [][]string{{"tmux", "-L", m.stokerServer, "kill-session", "-t", "=stoker"}}}
 	}
+	return m, nil
+}
+
+// openUnit is ⏎ on the card of chain stoker u: its own session in a
+// popup, as openAgent opens the host stoker's.
+func (m Model) openUnit(u state.ChainStoker) (tea.Model, tea.Cmd) {
+	session := unitSession(u.ID)
+	switch {
+	case !u.View.PaneUp && !u.View.Starting:
+		m.flash = "the stoker of chain " + u.Name + " is not running"
+	case m.opt.Host != "":
+		m.flash = "on " + m.opt.Host + ", run: " + m.attachTo(session)
+	case m.opt.OutsideTmux:
+		m.flash = "outside tmux: run " + m.attachTo(session) + " (prefix d comes back)"
+	default:
+		m.pending, m.previewTop = &action{label: "open the stoker of chain " + u.Name, nav: true, steps: [][]string{remote.StokerPopupOf(m.stokerServer, session)}}, 0
+	}
+	return m, nil
+}
+
+// quitUnit is Q on the card of chain stoker u: ending its agent, its
+// session and its run, and no other stoker's, waits for a typed y. A run
+// that is on with no agent quits too.
+func (m Model) quitUnit(u state.ChainStoker) (tea.Model, tea.Cmd) {
+	if !chainAlive(u) {
+		m.flash = "the stoker of chain " + u.Name + " is not running"
+		return m, nil
+	}
+	m.pending = &action{label: "quit the stoker of chain " + u.Name, destructive: true, rec: "stoker:quit", which: "primary", text: u.ID,
+		steps: [][]string{{"tmux", "-L", m.stokerServer, "kill-session", "-t", "=" + unitSession(u.ID)}}}
 	return m, nil
 }
 
@@ -133,7 +168,11 @@ func (m Model) stokerLines(w int, full bool, toggle string) []string {
 	if toggle != "" {
 		right = st.accent.Render(toggle) + " "
 	}
-	out := []string{spread(st.label.Render(" STOKER"), right, w)}
+	head := st.label.Render(" STOKER")
+	if n := m.chainsAtWork(m.opt.Host); n > 0 {
+		head += st.stoker.Render(chainsWord(n))
+	}
+	out := []string{spread(head, right, w)}
 	v := m.stoker
 	if v == nil || !v.On && len(v.Run) == 0 && m.card() == nil {
 		return append(out, fit(" "+st.muted.Render("off · ")+keyWord(m.keys.main.Stoke, st.accent, st.muted, " starts it · ")+

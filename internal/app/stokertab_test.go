@@ -7,9 +7,12 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 )
 
 // tabNight is the demo machine in the middle of a night with an order: three
@@ -423,5 +426,222 @@ func TestQQuitsTheStokerOnAY(t *testing.T) {
 	cmd()
 	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:quit" || a[0].Confirm != "y" {
 		t.Fatalf("acts %+v", a)
+	}
+}
+
+// tabFamily is the day's stoker of sheetScreen with its family: the
+// stoker of chain hearth-api at work on its order, and, unless one, the
+// stoker of chain kindle-web, ended once its chain joined hearth-api.
+func tabFamily(st proto.State, one bool) proto.State {
+	st = sheetScreen(st, true)
+	at := demoAt.Add(-2 * time.Hour)
+	live := proto.StokerView{Agent: "claude", PaneUp: true}
+	live.On, live.Since = true, at
+	live.Order = &proto.StokerOrder{ID: "r1", Words: "merge them on green", At: at, State: "running", Grants: []string{"merge"},
+		Plan: []proto.StokerPlan{
+			{N: 1, Session: "hearth-api", Text: "merge #4551 when green"},
+			{N: 2, Session: "ember-billing", Text: "rebase on main, then merge #4552"},
+		}}
+	live.Run = []proto.StokerEntry{{ID: "1", At: at.Add(20 * time.Minute), Session: "hearth-api", Name: "hearth-api", Rule: "order", Step: 1, State: "done", Text: "merged #4551"}}
+	st.Stokers = []state.ChainStoker{{ID: "s1", Chain: "c1", Name: "hearth-api", View: live}}
+	if one {
+		return st
+	}
+	ended := proto.StokerView{Agent: "claude"}
+	ended.Since, ended.Ended = at, demoAt.Add(-30*time.Minute)
+	ended.Card = &proto.StokerCard{Since: at, Ended: ended.Ended, Watched: 2, Compacted: 1, Ready: 2, Of: 2}
+	ended.Run = []proto.StokerEntry{{ID: "family@1", At: ended.Ended, Rule: "family", State: "done", Text: "its chain joined hearth-api"}}
+	st.Stokers = append(st.Stokers, state.ChainStoker{ID: "s2", Chain: "c2", Name: "kindle-web", View: ended})
+	return st
+}
+
+// selectChain selects the card of the chain stoker id on the STOKER tab.
+func selectChain(t *testing.T, m Model, id string) Model {
+	t.Helper()
+	return selectStep(t, m, "s:"+id)
+}
+
+// TestTheTabListsTheFamily: the STOKER tab shows the host stoker's card,
+// then a card for each chain stoker under its chain's name. An ended one
+// shows its card and why it ended, and takes no keys.
+func TestTheTabListsTheFamily(t *testing.T) {
+	m, _ := loadedWith(t, 104, tabFamily(screensState(t), false))
+	m.setTab(tabStoker)
+	out := screen(m)
+	host, chain, ended := strings.Index(out, "STOKER AGENT"), strings.Index(out, "CHAIN hearth-api"), strings.Index(out, "CHAIN kindle-web")
+	if host < 0 || chain < host || ended < chain {
+		t.Fatalf("the family is not host, hearth-api, kindle-web:\n%s", out)
+	}
+	for _, want := range []string{"“merge them on green”", "PLAN 1 of 2", "merged #4551", "its chain joined hearth-api", "ready 2/2"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("no %q in\n%s", want, out)
+		}
+	}
+	if slices.ContainsFunc(m.stokerRows(), func(r stokerRow) bool { return r.id == "s:s2" }) {
+		t.Fatal("an ended chain stoker takes Enter and Q")
+	}
+}
+
+// TestEnterOpensAChainStoker: Enter on a chain stoker's card opens its
+// own tmux session in a popup.
+func TestEnterOpensAChainStoker(t *testing.T) {
+	m, _ := loadedWith(t, 104, tabFamily(screensState(t), false))
+	m.setTab(tabStoker)
+	m = selectChain(t, m, "s1")
+	next, _ := key(m, "enter")
+	if p := next.(Model).pending; p == nil || !slices.Equal(p.steps[0], []string{"tmux", "display-popup", "-E", "-w", "90%", "-h", "90%", "tmux -L matchblox attach -t stoker-s1"}) {
+		t.Fatalf("pending %+v", p)
+	}
+	m.opt.OutsideTmux = true
+	if out, _ := key(m, "enter"); out.(Model).flash != "outside tmux: run tmux -L matchblox attach -t stoker-s1 (prefix d comes back)" {
+		t.Fatalf("flash %q", out.(Model).flash)
+	}
+}
+
+// TestQOnAChainCardQuitsThatStoker: Q and a typed y on a chain stoker's
+// card quit that stoker only; the box names its chain.
+func TestQOnAChainCardQuitsThatStoker(t *testing.T) {
+	m, f := loadedWith(t, 104, tabFamily(screensState(t), false))
+	m.setTab(tabStoker)
+	m = selectChain(t, m, "s1")
+	next, _ := key(m, "Q")
+	if s := next.(Model).render(); !strings.Contains(s, "Quit the stoker of chain hearth-api") || !strings.Contains(s, "tmux -L matchblox kill-session -t =stoker-s1") {
+		t.Fatalf("Q does not name the chain:\n%s", s)
+	}
+	_, cmd := key(next, "y")
+	cmd()
+	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:quit" || a[0].Confirm != "y" || a[0].Text != "s1" {
+		t.Fatalf("acts %+v", a)
+	}
+}
+
+// TestDockCountsChains: the header and the dock count the chain stokers
+// at work, `stoker · 2 chains`, `stoker · 1 chain`. An ended one is not
+// counted, and with none they read as today.
+func TestDockCountsChains(t *testing.T) {
+	two := tabFamily(screensState(t), false)
+	two.Stokers[1].View.PaneUp = true // kindle-web's agent is up again
+	for _, c := range []struct {
+		st   proto.State
+		want string
+	}{
+		{two, "stoker · 2 chains"},
+		{tabFamily(screensState(t), false), "stoker · 1 chain"},
+		{tabFamily(screensState(t), true), "stoker · 1 chain"},
+	} {
+		m, _ := loadedWith(t, 104, c.st)
+		lines := strings.Split(screen(m), "\n")
+		if !strings.HasSuffix(strings.TrimRight(lines[0], " "), c.want) {
+			t.Errorf("header %q, want %q", lines[0], c.want)
+		}
+		dock := ansi.Strip(strings.Join(m.stokerLines(40, false, ""), "\n"))
+		if !strings.Contains(dock, "STOKER "+strings.TrimPrefix(c.want, "stoker ")) {
+			t.Errorf("dock %q, want %q", dock, c.want)
+		}
+	}
+	m, _ := loadedWith(t, 104, sheetScreen(screensState(t), true))
+	if s := screen(m); strings.Contains(s, "chain") {
+		t.Fatalf("no chain stoker, and the screen counts chains:\n%s", s)
+	}
+}
+
+// I1: Q quits a chain stoker whose run is on and whose agent is gone: the
+// card shows Q, and Q with a typed y sends the quit.
+func TestQOnAPanelessRunningChainCard(t *testing.T) {
+	st := tabFamily(screensState(t), true)
+	st.Stokers[0].View.PaneUp = false
+	m, f := loadedWith(t, 104, st)
+	m.setTab(tabStoker)
+	m = selectChain(t, m, "s1")
+	if !slices.ContainsFunc(m.stokerKeys(), func(h hint) bool { return h.key == m.keys.main.QuitAgent.Help().Key }) {
+		t.Fatalf("no Q on the card: %+v", m.stokerKeys())
+	}
+	next, _ := key(m, "Q")
+	if next.(Model).pending == nil {
+		t.Fatalf("Q flashed %q", next.(Model).flash)
+	}
+	_, cmd := key(next, "y")
+	cmd()
+	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:quit" || a[0].Text != "s1" {
+		t.Fatalf("acts %+v", a)
+	}
+}
+
+// I3: a go a chain stoker's run waits for is a row of its card: y gives
+// it, with the stoker's id, and the tab's count holds it.
+func TestYGivesAChainStokersGo(t *testing.T) {
+	st := tabFamily(screensState(t), true)
+	v := &st.Stokers[0].View
+	v.Run = append(v.Run, proto.StokerEntry{ID: "go@1/merge:%3", At: v.Since.Add(time.Hour), Session: "s3", Name: "hearth-api", Pane: "%3",
+		Rule: "go", State: "waits", Needs: "merge:%3", Want: "gh", Text: "hearth-api wants to run gh"})
+	m, f := loadedWith(t, 104, st)
+	before := m.stokerNeeds()
+	m.setTab(tabStoker)
+	if !strings.Contains(screen(m), "waits for you: hearth-api wants to run gh") {
+		t.Fatalf("no go on the chain's card:\n%s", screen(m))
+	}
+	m = selectStep(t, m, "s:s1/ggo@1/merge:%3")
+	_, cmd := key(m, "y")
+	if cmd == nil {
+		t.Fatalf("y sent nothing: %q", m.flash)
+	}
+	cmd()
+	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:grant" || a[0].Text != "s1 go@1/merge:%3" {
+		t.Fatalf("acts %+v", a)
+	}
+	st.Stokers[0].View.Run = st.Stokers[0].View.Run[:len(st.Stokers[0].View.Run)-1]
+	without, _ := loadedWith(t, 104, st)
+	if before != without.stokerNeeds()+1 {
+		t.Fatalf("the tab counts %d with the go, %d without", before, without.stokerNeeds())
+	}
+}
+
+// N1: a chain stoker's plan step that waits for your go is a row of its
+// card: y gives it, with the stoker's id.
+func TestYGivesAChainStokersPlanStep(t *testing.T) {
+	st := tabFamily(screensState(t), true)
+	v := &st.Stokers[0].View
+	v.Run = append(v.Run, proto.StokerEntry{ID: "2", At: v.Since.Add(time.Hour), Session: "ember-billing", Name: "ember-billing", Pane: "%4",
+		Rule: "order", Step: 2, State: "waits", Needs: "merge:%4", Text: "merge #4552"})
+	m, f := loadedWith(t, 104, st)
+	m.setTab(tabStoker)
+	m = selectStep(t, m, "s:s1/p2")
+	if line := actionLine(m); !strings.Contains(line, "y give the go") {
+		t.Fatalf("the key line does not offer the go: %q", line)
+	}
+	before := screen(m)
+	if shown, _ := key(m, "enter"); screen(shown) == before {
+		t.Fatalf("⏎ on the step shows nothing:\n%s", before)
+	}
+	_, cmd := key(m, "y")
+	if cmd == nil {
+		t.Fatalf("y sent nothing: %q", m.flash)
+	}
+	cmd()
+	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:grant" || a[0].Text != "s1 2" {
+		t.Fatalf("acts %+v", a)
+	}
+}
+
+// M1: with no chain stoker the dock's head line is today's, byte for byte.
+func TestTheDockWithNoChainIsTodaysBytes(t *testing.T) {
+	m, _ := loadedWith(t, 104, sheetScreen(screensState(t), true))
+	st := m.st
+	want := spread(st.label.Render(" STOKER"), st.stoker.Render(m.stokerWord())+" ", 40)
+	if got := m.stokerLines(40, false, "")[0]; got != want {
+		t.Fatalf("dock head %q, want %q", got, want)
+	}
+}
+
+// M3: the morning card's chain line fits the card's width.
+func TestTheMorningCardsChainLineFits(t *testing.T) {
+	m, _ := loadedWith(t, 44, screensState(t))
+	since := time.Date(2026, 10, 10, 23, 10, 0, 0, time.Local)
+	c := proto.StokerCard{Night: true, Since: since, Ended: since.Add(8 * time.Hour), Watched: 3, Ready: 3, Of: 3,
+		Chains: []proto.StokerChainCard{{Name: "api-authentication-service", Stoker: "s1", Card: proto.StokerCard{Night: true, Watched: 12, Compacted: 10, Ready: 11, Of: 12}}}}
+	for _, l := range m.scoreLines(c, "", 44) {
+		if w := lipgloss.Width(l); w > 44 {
+			t.Fatalf("a line of %d columns: %q", w, ansi.Strip(l))
+		}
 	}
 }
