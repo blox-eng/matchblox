@@ -489,18 +489,12 @@ func stokerNewAct(words []string, chain, goes, from string) (proto.Act, error) {
 	if chain == "" {
 		return a, errors.New(`stoker new needs its chain: matchblox stoker new --chain <who> ["<order>"]`)
 	}
-	grants := []string{}
-	for w := range strings.SplitSeq(goes, ",") {
-		if w = strings.TrimSpace(w); w == "" {
-			continue
-		}
-		g := strings.TrimSuffix(w, "s")
-		if !slices.Contains(stoker.Goes, g) {
-			return a, fmt.Errorf("%q is no go: merges, releases, deploys or kills", w)
-		}
-		if !slices.Contains(grants, g) {
-			grants = append(grants, g)
-		}
+	grants, err := goesArg(goes)
+	if err != nil {
+		return a, err
+	}
+	if grants == nil {
+		grants = []string{}
 	}
 	b, err := json.Marshal(struct {
 		Chain  string   `json:"chain"`
@@ -514,9 +508,60 @@ func stokerNewAct(words []string, chain, goes, from string) (proto.Act, error) {
 	return a, nil
 }
 
-// cliStokerNew runs `matchblox stoker new` and says what the service did.
+// stokerOrderAct is the act `matchblox stoker order <chain> [--go …]
+// "<text>"` asks the service for: an order to a chain's stoker, which
+// starts one when the chain has none. With no --go it sends no goes: the
+// host stoker's order then gives its own, the person's none.
+func stokerOrderAct(words []string, goes, from string) (proto.Act, error) {
+	a := proto.Act{RecID: "stoker:order-chain", Confirm: "y", From: from}
+	if len(words) < 3 {
+		return a, errors.New(`stoker order needs its chain and its order: matchblox stoker order <chain> [--go …] "<text>"`)
+	}
+	grants, err := goesArg(goes)
+	if err != nil {
+		return a, err
+	}
+	b, err := json.Marshal(struct {
+		Chain  string   `json:"chain"`
+		Words  string   `json:"words"`
+		Grants []string `json:"grants,omitempty"`
+	}{words[1], strings.Join(words[2:], " "), grants})
+	if err != nil {
+		return a, err
+	}
+	a.Text = string(b)
+	return a, nil
+}
+
+// goesArg are the goes of --go (merges, releases, deploys, kills), each
+// once; nil for none.
+func goesArg(goes string) ([]string, error) {
+	var grants []string
+	for w := range strings.SplitSeq(goes, ",") {
+		if w = strings.TrimSpace(w); w == "" {
+			continue
+		}
+		g := strings.TrimSuffix(w, "s")
+		if !slices.Contains(stoker.Goes, g) {
+			return nil, fmt.Errorf("%q is no go: merges, releases, deploys or kills", w)
+		}
+		if !slices.Contains(grants, g) {
+			grants = append(grants, g)
+		}
+	}
+	return grants, nil
+}
+
+// cliStokerNew runs `matchblox stoker new` or `matchblox stoker order`
+// and says what the service did.
 func cliStokerNew(words []string, chain, goes string, w io.Writer, path string) error {
-	a, err := stokerNewAct(words, chain, goes, os.Getenv("TMUX_PANE"))
+	var a proto.Act
+	var err error
+	if words[0] == "order" {
+		a, err = stokerOrderAct(words, goes, os.Getenv("TMUX_PANE"))
+	} else {
+		a, err = stokerNewAct(words, chain, goes, os.Getenv("TMUX_PANE"))
+	}
 	if err != nil {
 		return err
 	}

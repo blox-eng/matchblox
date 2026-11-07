@@ -1016,3 +1016,34 @@ func TestCLIStokerNewParsesGo(t *testing.T) {
 		t.Error("--go pushes makes an act")
 	}
 }
+
+// TestCLIStokerOrder: matchblox stoker order <chain> [--go …] "<text>"
+// gives a chain an order. With no --go it sends no goes at all: the
+// service gives the host its own, and the person none.
+func TestCLIStokerOrder(t *testing.T) {
+	a, err := stokerOrderAct([]string{"order", "api", "merge", "on", "green"}, "merges,releases", "%7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ask map[string]any
+	if a.RecID != "stoker:order-chain" || a.Confirm != "y" || a.From != "%7" || json.Unmarshal([]byte(a.Text), &ask) != nil ||
+		ask["chain"] != "api" || ask["words"] != "merge on green" || !reflect.DeepEqual(ask["grants"], []any{"merge", "release"}) {
+		t.Fatalf("act %+v ask %+v", a, ask)
+	}
+	a, err = stokerOrderAct([]string{"order", "api", "go"}, "", "")
+	ask = nil
+	if err != nil || json.Unmarshal([]byte(a.Text), &ask) != nil {
+		t.Fatalf("no --go: %v", err)
+	}
+	if _, in := ask["grants"]; in {
+		t.Fatalf("no --go sends goes: %+v", ask)
+	}
+	for _, words := range [][]string{{"order"}, {"order", "api"}} {
+		if _, err := stokerOrderAct(words, "", ""); err == nil {
+			t.Errorf("%q makes an act", words)
+		}
+	}
+	if _, err := stokerOrderAct([]string{"order", "api", "go"}, "pushes", ""); err == nil {
+		t.Error("--go pushes makes an act")
+	}
+}

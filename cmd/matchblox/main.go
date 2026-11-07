@@ -258,7 +258,7 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		if len(words) > 0 && words[0] == "new" {
+		if len(words) > 0 && (words[0] == "new" || words[0] == "order") {
 			return cliStokerNew(words, *o.chain, *o.goes, os.Stdout, transport.SocketPath())
 		}
 		if len(words) > 0 && words[0] == "when" {
@@ -407,6 +407,7 @@ Commands:
   matchblox stoker when …          a trigger matchblox fires itself (--ship n --stage s, or --rest who)
   matchblox stoker quit            end the stoker agent and its own tmux session
   matchblox stoker new --chain <who> ["<order>"]  start a stoker for one chain (--go merges,releases,deploys,kills)
+  matchblox stoker order <chain> "<text>"  give a chain's stoker an order, or start one (--go merges,releases,deploys,kills)
 
 <who> is a pane (%3), a target (app:1.1) or a name.
 
@@ -453,7 +454,7 @@ func newFlags() (*flag.FlagSet, flags) {
 		off:        fl.Bool("off", false, "chain: take no chains and no notices"),
 		on:         fl.Bool("on", false, "chain: take chains and notices again"),
 		chain:      fl.String("chain", "", "stoker new: the chain, by any member's name, a pane or the chain's id"),
-		goes:       fl.String("go", "", "stoker new: the gos the chain stoker has: merges, releases, deploys, kills (default: none)"),
+		goes:       fl.String("go", "", "stoker new and order: the gos the chain stoker has: merges, releases, deploys, kills (default: none, or the host stoker's own)"),
 		noMotion:   fl.Bool("no-motion", os.Getenv("NO_MOTION") == "1", "every motion is an instant change (also NO_MOTION=1)"),
 	}
 }
