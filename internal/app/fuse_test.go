@@ -691,7 +691,7 @@ func TestAOnAPanelessHead(t *testing.T) {
 	}
 	choose(&m, m.snap.Sessions[0].PID)
 	next := typed(sendKey(m, "a"), "go on")
-	next, cmd := press(next, tea.KeyEnter)
+	_, cmd := press(next, tea.KeyEnter)
 	if cmd == nil {
 		t.Fatal("enter sent nothing")
 	}

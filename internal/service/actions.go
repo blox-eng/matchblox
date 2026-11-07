@@ -248,6 +248,9 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 		case "start":
 			return s.startAct(ctx, s.hostUnit())
 		case "quit":
+			if a.Text != "" {
+				return s.quitChainAct(ctx, a)
+			}
 			return s.quitAct(ctx, s.hostUnit(), a)
 		case "new":
 			return s.newChainAct(ctx, a)

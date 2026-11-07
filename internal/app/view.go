@@ -477,8 +477,21 @@ func (m Model) stokerHit(word string, w int) span {
 }
 
 // stokerBadge is the stoker's word: off in faint, on and the night in the
-// stoker's token, resting in muted. A phone drops the night's end.
+// stoker's token, resting in muted, then the chain stokers at work. A
+// phone drops the night's end.
 func (m Model) stokerBadge(short bool) string {
+	word, n := m.hostBadge(short), 0
+	for _, h := range m.hosts() {
+		n += m.chainsAtWork(h)
+	}
+	if word == "" || n == 0 {
+		return word
+	}
+	return word + m.st.stoker.Render(chainsWord(n))
+}
+
+// hostBadge is the host stoker's word of stokerBadge.
+func (m Model) hostBadge(short bool) string {
 	st := m.st
 	if m.opt.Demo != "" {
 		return ""

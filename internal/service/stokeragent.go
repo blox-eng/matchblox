@@ -169,6 +169,36 @@ func (s *Service) quitAct(ctx context.Context, u *stokerUnit, a proto.Act) proto
 	return res
 }
 
+// quitChainAct is stoker:quit with Text: it ends the agent of one chain
+// stoker, named by its id or by its chain (any member's name, a pane or
+// the chain's id). Only the person quits one, at a console or in a shell
+// of their own.
+func (s *Service) quitChainAct(ctx context.Context, a proto.Act) proto.Result {
+	if why := s.notThePersons(a); why != "" {
+		return proto.Result{Err: why}
+	}
+	if _, stokerPane := s.unitOf(a); stokerPane {
+		return proto.Result{Err: "the stoker does not start, stop or rest itself"}
+	}
+	if !personPlaced(a) {
+		return proto.Result{Err: "not quit: matchblox cannot tell who quits this. Quit from a terminal, a tmux pane or the console."}
+	}
+	u := s.unitByID(a.Text)
+	if u == nil {
+		if c, _, _, ok := s.chainNamed(a.Text); ok {
+			u = s.unitOfChain(c.ID)
+		}
+	}
+	if u == nil || u == s.hostUnit() {
+		return proto.Result{Err: fmt.Sprintf("no stoker %s: matchblox status lists the family", a.Text)}
+	}
+	res := s.quitAct(ctx, u, a)
+	if res.Err == "" {
+		res.Note = fmt.Sprintf("the stoker of chain %s (%s) and its tmux session are ended", s.chainNameOf(s.chainIDOf(u)), u.id)
+	}
+	return res
+}
+
 // ready: the stoker agent rests and asks nothing (no trust or login
 // prompt up): a line typed now is its order.
 func ready(x sample.Session) bool { return x.Resting() && !x.Asks && !x.Permits }

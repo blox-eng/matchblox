@@ -435,11 +435,7 @@ func stokerCmdAct(words []string, state, needs, rule string, stdin io.Reader, fr
 	var body any
 	switch words[0] {
 	case "quit":
-		if len(words) > 1 {
-			return a, errors.New("quit takes no words: matchblox stoker quit")
-		}
-		a.RecID = "stoker:quit"
-		return a, nil
+		return stokerQuitAct(words, "", from)
 	case "plan":
 		p, err := readPlan(stdin)
 		if err != nil {
@@ -469,10 +465,26 @@ func stokerCmdAct(words []string, state, needs, rule string, stdin io.Reader, fr
 	return a, nil
 }
 
+// stokerQuitAct is the act `matchblox stoker quit [--chain <who>]` asks
+// the service for: the host stoker's quit, or with --chain the quit of
+// the stoker of who's chain (any member's name, a pane or the chain's id;
+// a stoker id works too). The service finds the stoker.
+func stokerQuitAct(words []string, chain, from string) (proto.Act, error) {
+	a := proto.Act{RecID: "stoker:quit", Confirm: "y", From: from, Text: chain}
+	if len(words) > 1 {
+		return a, errors.New("quit takes no words: matchblox stoker quit [--chain <who>]")
+	}
+	return a, nil
+}
+
 // cliStoker runs `matchblox stoker plan|step|quit` and says what the
-// service did with it.
-func cliStoker(words []string, state, needs, rule string, stdin io.Reader, w io.Writer, path string) error {
-	a, err := stokerCmdAct(words, state, needs, rule, stdin, os.Getenv("TMUX_PANE"))
+// service did with it. chain is quit's --chain.
+func cliStoker(words []string, state, needs, rule, chain string, stdin io.Reader, w io.Writer, path string) error {
+	from := os.Getenv("TMUX_PANE")
+	a, err := stokerCmdAct(words, state, needs, rule, stdin, from)
+	if err == nil && words[0] == "quit" {
+		a, err = stokerQuitAct(words, chain, from)
+	}
 	if err != nil {
 		return err
 	}
@@ -483,7 +495,11 @@ func cliStoker(words []string, state, needs, rule string, stdin io.Reader, w io.
 	if err := reportResult(w, res); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(w, stokerDone(words, state, rule))
+	done := stokerDone(words, state, rule)
+	if res.Note != "" {
+		done = res.Note
+	}
+	_, err = fmt.Fprintln(w, done)
 	return err
 }
 

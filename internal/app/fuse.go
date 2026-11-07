@@ -123,7 +123,7 @@ func (m *Model) indexChains() {
 func (m Model) headOf(k chainKey) (state.ChainStoker, bool) {
 	us := m.stateOf(k.host).Stokers
 	for i := len(us) - 1; i >= 0; i-- {
-		if u, v := us[i], us[i].View; u.Chain == k.id && (v.On || v.PaneUp || v.Starting) {
+		if u := us[i]; u.Chain == k.id && chainAlive(u) {
 			return u, true
 		}
 	}

@@ -2023,3 +2023,45 @@ func TestRetiredUnitKeepsItsChainNameAcrossARestart(t *testing.T) {
 		t.Fatalf("name %q, unit %+v", again.unitName(got), got)
 	}
 }
+
+// TestQuitQuitsOneUnit: stoker:quit with a stoker's id, or its chain by a
+// member's name, ends that unit's agent only. The person sends it, at a
+// console or in a shell of their own; an agent's pane never does.
+func TestQuitQuitsOneUnit(t *testing.T) {
+	s, ran := twoChains(t)
+	for _, who := range []string{"api-auth", "api-ui"} {
+		if _, err := s.startChainStoker(t.Context(), who, "", nil, "person"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.Actions.Run = func(argv []string) error { // both agents stay up
+		*ran = append(*ran, argv)
+		return nil
+	}
+	quit := func(a proto.Act) proto.Result {
+		*ran = nil
+		a.RecID, a.Confirm = "stoker:quit", "y"
+		return s.act(t.Context(), a)
+	}
+	if res := quit(proto.Act{Console: true, Text: "s2"}); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if !killed(*ran, "s2") || killed(*ran, "s1") || slices.ContainsFunc(*ran, func(argv []string) bool { return slices.Contains(argv, "=stoker") }) {
+		t.Fatalf("the quit of s2 ran %q", *ran)
+	}
+	shell := proto.Act{From: "%40", FromKnown: true, FromPlaced: true, Text: "api-db"}
+	if res := quit(shell); res.Err != "" || !killed(*ran, "s1") || killed(*ran, "s2") {
+		t.Fatalf("matchblox stoker quit --chain api-db: %+v, ran %q", res, *ran)
+	}
+	if res := quit(proto.Act{Console: true, Text: "s9"}); res.Err != "no stoker s9: matchblox status lists the family" {
+		t.Fatalf("an unknown stoker: %q", res.Err)
+	}
+	for _, from := range []string{"%3", "%9@mbtest"} { // a match's pane, the host stoker's
+		if res := quit(proto.Act{From: from, FromKnown: true, FromPlaced: true, Text: "s1"}); res.Err == "" || killed(*ran, "s1") {
+			t.Fatalf("the quit from %s ran %q", from, *ran)
+		}
+	}
+	if res := quit(proto.Act{Text: "s1"}); res.Err == "" || killed(*ran, "s1") {
+		t.Fatalf("a quit no one placed ran %q", *ran)
+	}
+}
