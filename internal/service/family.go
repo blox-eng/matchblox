@@ -19,6 +19,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
 )
 
@@ -46,6 +47,9 @@ type stokerUnit struct {
 	// joins are the tmux sessions a chain unit started, which join its
 	// chain once a sample finds them in its repo. Service.mu guards it.
 	joins []*pendingJoin
+	// name is the chain's name as the last view saw it, for the card of a
+	// unit whose chain is gone. Service.mu guards it.
+	name string
 	// wakes are what the unit's agent was told and is still to be told.
 	wakes wakeState
 }
@@ -260,14 +264,43 @@ func (s *Service) chainNamed(who string) (c chains.Chain, name string, members [
 // chainNameOf is the name of the chain with id chainID now: its id when
 // it is gone.
 func (s *Service) chainNameOf(chainID string) string {
+	name, _ := s.liveChainName(chainID)
+	return name
+}
+
+// liveChainName is chainNameOf, and whether the chain is there.
+func (s *Service) liveChainName(chainID string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, c := range s.chainsLocked().Chains {
 		if c.ID == chainID {
-			return chainName(c, s.cur.Sessions)
+			return chainName(c, s.cur.Sessions), true
 		}
 	}
-	return chainID
+	return chainID, false
+}
+
+// chainStokers are the views of the chain units for State.Stokers, in
+// family order. A unit's name is its chain's; once the chain is gone, the
+// name its card last used, else the unit's id.
+func (s *Service) chainStokers(sessions []sample.Session) []state.ChainStoker {
+	var out []state.ChainStoker
+	for _, u := range s.chainUnits() {
+		chain := s.chainIDOf(u)
+		name, live := s.liveChainName(chain)
+		s.mu.Lock()
+		switch {
+		case live:
+			u.name = name
+		case u.name != "":
+			name = u.name
+		default:
+			name = u.id
+		}
+		s.mu.Unlock()
+		out = append(out, state.ChainStoker{ID: u.id, Chain: chain, Name: name, View: *s.stokerView(u, sessions)})
+	}
+	return out
 }
 
 // chainsAtWork counts the chain units the cap counts: an agent that is up

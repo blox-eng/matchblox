@@ -137,29 +137,12 @@ func (s *Service) chainRows(night bool) []stoker.ChainRow {
 				row.State = "on"
 			}
 			if o := runningOrder(m); o != nil {
-				row.PlanDone, row.PlanAll = planDone(*o, u.store.View().Run), len(o.Plan)
+				row.PlanDone, row.PlanAll = stoker.PlanDone(*o, u.store.View().Run), len(o.Plan)
 			}
 		}
 		out = append(out, row)
 	}
 	return out
-}
-
-// planDone counts the steps of o's plan whose last state in run is done.
-func planDone(o stoker.Order, run []stoker.Entry) int {
-	last := map[int]string{}
-	for _, e := range run {
-		if e.Logged() && e.Step > 0 && e.Rule == "" && !e.At.Before(o.Went) {
-			last[e.Step] = e.State
-		}
-	}
-	n := 0
-	for _, st := range o.Plan {
-		if last[st.N] == stoker.StepDone {
-			n++
-		}
-	}
-	return n
 }
 
 // goesOf are the goes an order asks for, each once, or the first word that

@@ -1969,3 +1969,32 @@ func TestChainOffEndsItsStoker(t *testing.T) {
 		t.Fatalf("card %q, mode %+v, ran %q", cardTexts(u.store), u.store.Mode(), *ran)
 	}
 }
+
+func TestStateCarriesChainStokers(t *testing.T) {
+	s, _, _ := familySetup(t)
+	if st := s.State().Stokers; st != nil {
+		t.Fatalf("stokers without a chain stoker: %+v", st)
+	}
+	u, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person")
+	if err != nil {
+		t.Fatal(err)
+	}
+	chainStokerUp(s)
+	got := s.State().Stokers
+	if len(got) != 1 || got[0].ID != "s1" || got[0].Chain != "c1" || got[0].Name != "api-auth" || !got[0].View.On || !got[0].View.PaneUp {
+		t.Fatalf("stokers %+v", got)
+	}
+	if h := s.State().Stoker; h == nil || h.Start == got[0].View.Start {
+		t.Fatalf("the host view %+v", h)
+	}
+
+	s.fam.mu.Lock()
+	u.link.Ended = true
+	s.Chains.Chains = nil
+	s.fam.mu.Unlock()
+	s.refreshStoker()
+	got = s.State().Stokers
+	if len(got) != 1 || got[0].Name != "api-auth" {
+		t.Fatalf("an ended unit keeps its card and its last name: %+v", got)
+	}
+}

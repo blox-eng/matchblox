@@ -606,6 +606,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	if u := s.hostUnit(); u != nil {
 		view = s.stokerView(u, snap.Sessions)
 	}
+	stokers := s.chainStokers(snap.Sessions)
 	known, skipped := s.knownAccounts(snap.Sessions)
 	s.lastAccounts.signedIn(lastAccountsPath(s.StatePath), snap.Sessions)
 	last := s.lastListed(known)
@@ -635,6 +636,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	if view != nil {
 		s.cur.Stoker = view
 	}
+	s.cur.Stokers = stokers
 	s.cur.Recommendations = advice.Build(snap, s.cur.Git)
 	// Join hooks before holds: Cursor has no session file, so its id comes
 	// from the hooked chat, and prune must see that id as present.
