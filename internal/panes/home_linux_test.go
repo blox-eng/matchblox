@@ -471,3 +471,58 @@ func waitFor(t *testing.T, ok func() bool) {
 	}
 	t.Fatal("timed out")
 }
+
+// clientTTYs are the ttys of the clients attached to sock.
+func clientTTYs(tmux func(args ...string) string) []string {
+	return strings.Fields(tmux("list-clients", "-F", "#{client_tty}"))
+}
+
+func TestAMarkedReturnNamesTheClientThatSentIt(t *testing.T) {
+	sock, tmux, got := consolePane(t)
+	tmux(MarkKeyArgv()[1:]...)
+	attach(t, sock, Home)
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 1 })
+	desk := clientTTYs(tmux)[0]
+	phone := attach(t, sock, Home)
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 2 })
+	phoneTTY := ""
+	for _, tty := range clientTTYs(tmux) {
+		if tty != desk {
+			phoneTTY = tty
+		}
+	}
+	if _, err := phone.WriteString(keycmd.MarkKey + "\r"); err != nil {
+		t.Fatal(err)
+	}
+	mark := eventLine(uv.UnknownApcEvent(keycmd.MarkedPrefix + phoneTTY + "\x1b\\"))
+	enter := eventLine(uv.KeyPressEvent{Code: uv.KeyEnter})
+	waitFor(t, func() bool { return slices.Contains(paneRead(t, got), enter) })
+	lines := paneRead(t, got)
+	if i, j := slices.Index(lines, mark), slices.Index(lines, enter); i < 0 || i > j {
+		t.Errorf("want %q before %q in %q", mark, enter, lines)
+	}
+}
+
+func TestAMarkElsewhereTypesNothing(t *testing.T) {
+	sock := tmuxtest.Server(t)
+	tmux := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput() //nolint:gosec // test argv
+		if err != nil {
+			t.Fatalf("tmux %q: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	typed := t.TempDir() + "/typed"
+	tmux("new-session", "-d", "-s", "work", "cat -v > "+typed)
+	tmux(MarkKeyArgv()[1:]...)
+	client := attach(t, sock, "work")
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 1 })
+	if _, err := client.WriteString(keycmd.MarkKey + "x\r"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { b, _ := os.ReadFile(typed); return strings.Contains(string(b), "x") })
+	if b, _ := os.ReadFile(typed); strings.Contains(string(b), "matchblox") {
+		t.Errorf("the mark was typed: %q", b)
+	}
+}

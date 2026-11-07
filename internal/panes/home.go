@@ -80,7 +80,6 @@ func HomeKeyArgv() []string {
 // does nothing: a command runs only from the chat, and a shell left where a
 // console quit never reads it as typing.
 func CommandKeysArgv() []string {
-	const atConsole = "#{&&:#{==:#{session_name}," + Home + "},#{==:#{pane_current_command}," + Home + "}}"
 	argv := []string{"tmux"}
 	for _, c := range keycmd.All() {
 		slot, seq := strconv.Itoa(c.Slot), keycmd.Sequence(c.ID)
@@ -91,6 +90,22 @@ func CommandKeysArgv() []string {
 			";", "bind-key", "-n", "User"+slot, "if-shell", "-F", atConsole, "send-keys -H "+hexKeys(seq))
 	}
 	return argv
+}
+
+// atConsole is true for a client in the console's session, on a pane the
+// console still runs in.
+const atConsole = "#{&&:#{==:#{session_name}," + Home + "},#{==:#{pane_current_command}," + Home + "}}"
+
+// MarkKeyArgv makes the app's marker key a key of the tmux server. At the
+// console it hands the console the tty of the client that pressed, without
+// typing anything into an agent pane; elsewhere it does nothing. run-shell -C
+// expands #{client_tty} and #{pane_id} before the three send-keys run.
+func MarkKeyArgv() []string {
+	slot := strconv.Itoa(keycmd.MarkSlot)
+	hand := "run-shell -C 'send-keys -t #{pane_id} -H " + hexKeys(keycmd.MarkedPrefix) +
+		" ; send-keys -t #{pane_id} -l #{client_tty} ; send-keys -t #{pane_id} -H 1b 5c'"
+	return []string{"tmux", "set-option", "-s", "user-keys[" + slot + "]", keycmd.MarkKey,
+		";", "bind-key", "-n", "User" + slot, "if-shell", "-F", atConsole, hand}
 }
 
 // hexKeys is s as the hex bytes of tmux send-keys -H.

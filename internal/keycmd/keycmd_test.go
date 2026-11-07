@@ -99,3 +99,19 @@ func TestSequences(t *testing.T) {
 		t.Errorf("AgentSignal = %q, want %q", got, want)
 	}
 }
+
+func TestCompactTypesItsText(t *testing.T) {
+	c, ok := ByID("compact")
+	if !ok || c.Text != "/compact" || c.Agent != "claude" {
+		t.Errorf("compact = %+v", c)
+	}
+}
+
+func TestTheSignalsNameThePaneAndTheMarks(t *testing.T) {
+	if got := PaneSignal("claude", "%12"); got != "\x1b_matchblox;agent=claude;pane=%12\x1b\\" {
+		t.Errorf("PaneSignal = %q", got)
+	}
+	if got := MarksSignal(); got != "\x1b_matchblox;agent=;marks\x1b\\" {
+		t.Errorf("MarksSignal = %q", got)
+	}
+}

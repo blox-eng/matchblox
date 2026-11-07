@@ -10,9 +10,11 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/tmuxtest"
 )
 
@@ -148,7 +150,7 @@ func TestHomeKeyMatchesTheApp(t *testing.T) {
 // takes another's binding.
 func TestHomeAndCommandKeysDoNotCollide(t *testing.T) {
 	slots := map[string]string{}
-	for _, argv := range [][]string{HomeKeyArgv(), CommandKeysArgv()} {
+	for _, argv := range [][]string{HomeKeyArgv(), CommandKeysArgv(), MarkKeyArgv()} {
 		for i, a := range argv {
 			if a != "set-option" {
 				continue
@@ -165,6 +167,9 @@ func TestHomeAndCommandKeysDoNotCollide(t *testing.T) {
 			slots[slot] = seq
 		}
 	}
+	if slots["user-keys["+strconv.Itoa(keycmd.MarkSlot)+"]"] != keycmd.MarkKey {
+		t.Fatalf("the mark key is not held: %q", slots)
+	}
 	if len(slots) < 2 || slots["user-keys["+homeUserKey+"]"] != HomeKey {
 		t.Fatalf("slots %q", slots)
 	}
@@ -177,6 +182,16 @@ func TestNamedConsole(t *testing.T) {
 	} {
 		if got := NamedConsole(arg0); got != want {
 			t.Errorf("NamedConsole(%q) = %v, want %v", arg0, got, want)
+		}
+	}
+}
+
+func TestMarkKeyArgvRunsOnlyAtTheConsole(t *testing.T) {
+	line := strings.Join(MarkKeyArgv(), " ")
+	for _, want := range []string{"user-keys[950]", "bind-key -n User950 if-shell -F",
+		"#{&&:#{==:#{session_name},matchblox},#{==:#{pane_current_command},matchblox}}", "#{client_tty}"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("MarkKeyArgv lacks %q: %s", want, line)
 		}
 	}
 }

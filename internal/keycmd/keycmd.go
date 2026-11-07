@@ -57,6 +57,22 @@ func Sequence(id string) string { return "\x1b_matchblox;cmd=" + id + "\x1b\\" }
 
 func AgentSignal(agent string) string { return "\x1b_matchblox;agent=" + agent + "\x1b\\" }
 
+// PaneSignal tells the app which tmux pane agent's chat is in.
+func PaneSignal(agent, pane string) string { return AgentSignal(agent + ";pane=" + pane) }
+
+// MarksSignal is the console's announce that it reads the marker.
+func MarksSignal() string { return AgentSignal(";marks") }
+
+const (
+	// MarkKey is what the app sends before a Return or a press, so tmux
+	// hands the console the tty of the client that sent it.
+	MarkKey = "\x1b_matchblox;mark\x1b\\"
+	// MarkSlot is MarkKey's user-keys slot (900 is home, 901-914 commands).
+	MarkSlot = 950
+	// MarkedPrefix is what the binding hands the console, then the tty, then ESC \.
+	MarkedPrefix = "\x1b_matchblox;from="
+)
+
 // OtherAgent is the agent signal's id for a chat whose agent has no
 // commands: the app's command keys still go, and the console says why
 // each does not run there.
