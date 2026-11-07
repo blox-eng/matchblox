@@ -148,8 +148,12 @@ The room's regions, from top to bottom (see the mockup's option A):
    fit above the fold. Its order in quotes, then its plan steps with ✓, ▸
    and plain marks. A step that waits for a go says so, with `y gives it`.
    `y` gives the go to the selected step, as today's STOKER tab does.
-2. **The matches.** One line each: the state dot, the name, and its state or
-   its ask. ⏎ or `a` on a match opens its live chat (see Layout).
+2. **The matches.** One line each: the fuse column (#299), the match, the
+   agent's mark, the name, the repo when the team spans repos (#309), its
+   state or its ask, and `✉ N` when its inbox holds N notices (matchblox-chain,
+   2026-11-07). A mate the sampler cannot see stays in `faint` with `not seen ·
+   Nm`; the team never hides. A match in another team too adds `· also in
+   <team>`. ⏎ or `a` on a match opens its live chat (see Layout).
 3. **ships.** The chain's PRs only, one line: live, checks, waits for merge.
 4. **git.** The chain's worktrees only, one line: count, merged, safe to
    remove.
@@ -376,6 +380,12 @@ A chain is a team: every match in it hears every other (owner, 2026-11-07:
 more than one team: it shows in each team's room, with one chat, and two
 teams that share a match do not hear each other. Links (A–B and B–C without
 A–C) are out.
+
+### Names
+
+The room shows a team's name as `internal/chains` keeps it. Naming and
+renaming a team (`matchblox chain <team>`) belong to the chains work
+(matchblox-chain); this design adds no naming of its own.
 
 ## Constraints
 
