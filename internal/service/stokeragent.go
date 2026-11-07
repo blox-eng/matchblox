@@ -194,7 +194,7 @@ func (s *Service) quitChainAct(ctx context.Context, a proto.Act) proto.Result {
 	}
 	res := s.quitAct(ctx, u, a)
 	if res.Err == "" {
-		res.Note = fmt.Sprintf("the stoker of chain %s (%s) and its tmux session are ended", s.chainNameOf(s.chainIDOf(u)), u.id)
+		res.Note = fmt.Sprintf("ended the stoker of chain %s (%s) and its tmux session", s.chainNameOf(s.chainIDOf(u)), u.id)
 	}
 	return res
 }
