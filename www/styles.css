@@ -314,9 +314,10 @@ footer a { color: var(--muted); }
 .domino g:nth-child(4n) .flame { animation-duration: 1.2s; }
 @keyframes chain-flicker { 0%, 100% { transform: scale(1, 1); } 40% { transform: scale(.92, 1.08); } 70% { transform: scale(1.05, .95); } }
 .strike-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
-.strike-row button { appearance: none; border: 0; min-height: 44px; padding: 0 18px; border-radius: 8px; background: var(--bg); box-shadow: inset 0 0 0 1px var(--hair-strong); font: 500 14px/1 var(--sans); color: var(--primary); cursor: pointer; transition: box-shadow 180ms ease-out; }
-.strike-row button:hover { box-shadow: inset 0 0 0 1px var(--primary); }
-.strike-row button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.strike-row #chain-tip { font-size: 14px; color: var(--muted); }
+.chain .domino { cursor: pointer; -webkit-tap-highlight-color: transparent; border-radius: 8px; }
+.chain .domino:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; }
+@media (hover: hover) { .domino g:not(.lit):hover .head { fill: var(--primary); } }
 .strike-row code { font: 400 13px/1 var(--mono); color: var(--muted); }
 .chain .beats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 6px; padding-top: 18px; border-top: 1px solid var(--hair-soft); }
 .chain .beats h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
