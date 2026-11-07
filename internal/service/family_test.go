@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
@@ -478,23 +479,32 @@ func TestMaxChainsUnsetIsTheDefault(t *testing.T) {
 	}
 }
 
-// familyTest is chainStokerTest with /dev/api known, api-x (%9) in it but
-// out of the chain, the host stoker (%9@mbtest) with its run off, and the
-// stoker of c1 (s1, %5@mbtest) up with its run on.
+// familyTest is chainStokerTest with c1's repo a real directory the scan
+// knows, api-x (%9) in it but out of the chain, the host stoker (%9@mbtest)
+// with its run off, and the stoker of c1 (s1, %5@mbtest) up with its run on.
 func familyTest(t *testing.T) (*Service, *stokerUnit, *[][]string) {
 	t.Helper()
 	s, ran, _ := chainStokerTest(t)
+	tmp, err := filepath.EvalSymlinks(t.TempDir()) // macOS's temp dir is a link
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(tmp, "api")
+	if err := os.Mkdir(repo, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	s.IsDir = func(string) bool { return true }
 	s.TmuxOut = func([]string) (string, error) { return "%42\n", nil }
 	s.mu.Lock()
-	s.cur.Git = &gitscan.Report{Repos: []gitscan.Repo{{Path: "/dev/api"}, {Path: "/w/app"}}}
+	s.Chains.Chains[0].Repo = repo
+	s.cur.Git = &gitscan.Report{Repos: []gitscan.Repo{{Path: repo}, {Path: "/w/app"}}}
 	sessions := slices.Clone(s.cur.Sessions)
 	s.mu.Unlock()
 	for i := range sessions {
-		sessions[i].Cwd = "/dev/api"
+		sessions[i].Cwd = repo
 	}
 	sessions = append(sessions,
-		sample.Session{Agent: "claude", Pane: "%9", Target: "x:1.1", SessionID: "s9x", Name: "api-x", Status: "idle", Idle: 5 * time.Minute, Cwd: "/dev/api"},
+		sample.Session{Agent: "claude", Pane: "%9", Target: "x:1.1", SessionID: "s9x", Name: "api-x", Status: "idle", Idle: 5 * time.Minute, Cwd: repo},
 		sample.Session{Agent: "claude", Pane: "%9@mbtest", Target: "stoker:1.1", SessionID: "s9", Name: "stoker", Status: "busy", Busy: true})
 	s.publish(sample.Snapshot{At: night0, Sessions: sessions}, func(state.Doc) {})
 	u, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person")
@@ -504,6 +514,13 @@ func familyTest(t *testing.T) (*Service, *stokerUnit, *[][]string) {
 	chainStokerUp(s)
 	*ran = nil
 	return s, u, ran
+}
+
+// apiRepo is the repo of c1 in a familyTest.
+func apiRepo(s *Service) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Chains.Chains[0].Repo
 }
 
 func fromChainStoker(id, text string) proto.Act {
@@ -620,39 +637,214 @@ func newFromChainStoker(t *testing.T, where string) proto.Act {
 	return fromChainStoker(NewSessionID, string(b))
 }
 
+// newSample is the sample with the session api-new started in pane, and
+// more panes of its tmux session.
+func newSample(s *Service, fresh sample.Session, panes ...sample.Pane) sample.Snapshot {
+	s.mu.Lock()
+	sessions := slices.Clone(s.cur.Sessions)
+	s.mu.Unlock()
+	sessions = slices.DeleteFunc(sessions, func(x sample.Session) bool { return x.Pane == fresh.Pane })
+	if fresh.Pane != "" {
+		sessions = append(sessions, fresh)
+	}
+	return sample.Snapshot{At: night0, Sessions: sessions, Panes: panes}
+}
+
+func apiNew(repo, pane, target, id string) sample.Session {
+	return sample.Session{Agent: "claude", Pane: pane, Target: target, SessionID: id, Name: "api-new", Status: "idle", Idle: time.Minute, Cwd: repo}
+}
+
+func inChain(s *Service, x sample.Session) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, in := s.Chains.ChainOf(memberOf(x))
+	return in && c.ID == "c1"
+}
+
 func TestChainStokerNewJoinsChain(t *testing.T) {
 	s, _, _ := familyTest(t)
-	mustAct(t, s, newFromChainStoker(t, "/dev/api"))
-	fresh := sample.Session{Agent: "claude", Pane: "%42", Target: "api-new:1.1", SessionID: "s42", Name: "api-new", Status: "idle", Idle: time.Minute, Cwd: "/dev/api"}
-	s.mu.Lock()
-	_, in := s.Chains.ChainOf(memberOf(fresh))
-	sessions := append(slices.Clone(s.cur.Sessions), fresh)
-	s.mu.Unlock()
-	if in {
+	repo := apiRepo(s)
+	mustAct(t, s, newFromChainStoker(t, repo))
+	fresh := apiNew(repo, "%42", "api-new:1.1", "s42")
+	if inChain(s, fresh) {
 		t.Fatal("the session joined before a sample found it")
 	}
 	for range 2 {
-		s.publish(sample.Snapshot{At: night0, Sessions: sessions}, func(state.Doc) {})
+		s.publish(newSample(s, fresh, sample.Pane{ID: "%42", Target: "api-new:1.1"}), func(state.Doc) {})
 	}
 	s.mu.Lock()
-	c, in := s.Chains.ChainOf(memberOf(fresh))
+	c, _ := s.Chains.ChainOf(memberOf(fresh))
 	s.mu.Unlock()
-	if !in || c.ID != "c1" || len(c.Members) != 3 {
-		t.Fatalf("the new session is not in c1: %+v %v", c, in)
+	if !inChain(s, fresh) || len(c.Members) != 3 {
+		t.Fatalf("the new session is not in c1 once: %+v", c)
 	}
 	mustAct(t, s, fromChainStoker("message:%42", "go on"))
 }
 
+// Another agent in the tmux session of the start is not the session the
+// start made: it does not join.
+func TestChainStokerNewJoinsByItsPane(t *testing.T) {
+	s, _, _ := familyTest(t)
+	repo := apiRepo(s)
+	mustAct(t, s, newFromChainStoker(t, repo))
+	other := apiNew(repo, "%43", "api-new:1.2", "s43")
+	panes := []sample.Pane{{ID: "%42", Target: "api-new:1.1"}, {ID: "%43", Target: "api-new:1.2"}}
+	s.publish(newSample(s, other, panes...), func(state.Doc) {})
+	if inChain(s, other) {
+		t.Fatal("a second agent in the session joined")
+	}
+	fresh := apiNew(repo, "%42", "api-new:1.1", "s42")
+	snap := newSample(s, fresh, panes...)
+	snap.Sessions = append(snap.Sessions, other)
+	s.publish(snap, func(state.Doc) {})
+	if !inChain(s, fresh) || inChain(s, other) {
+		t.Fatal("the pane of the start did not join alone")
+	}
+}
+
+// A pane that is gone, or holds another tmux session, joins nothing later.
+func TestChainStokerJoinLetsGoAGonePane(t *testing.T) {
+	for name, panes := range map[string][]sample.Pane{
+		"gone":  nil,
+		"moved": {{ID: "%42", Target: "elsewhere:1.1"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, u, _ := familyTest(t)
+			repo := apiRepo(s)
+			mustAct(t, s, newFromChainStoker(t, repo))
+			s.publish(newSample(s, sample.Session{}, panes...), func(state.Doc) {})
+			fresh := apiNew(repo, "%42", "api-new:1.1", "s42")
+			s.publish(newSample(s, fresh, sample.Pane{ID: "%42", Target: "api-new:1.1"}), func(state.Doc) {})
+			s.mu.Lock()
+			n := len(u.joins)
+			s.mu.Unlock()
+			if inChain(s, fresh) || n != 0 {
+				t.Fatalf("joined %v, %d waiting", inChain(s, fresh), n)
+			}
+		})
+	}
+}
+
+func TestChainStokerJoinExpires(t *testing.T) {
+	s, u, _ := familyTest(t)
+	repo := apiRepo(s)
+	mustAct(t, s, newFromChainStoker(t, repo))
+	pane := sample.Pane{ID: "%42", Target: "api-new:1.1"}
+	s.publish(newSample(s, sample.Session{}, pane), func(state.Doc) {}) // no agent yet
+	s.mu.Lock()
+	n := len(u.joins)
+	s.mu.Unlock()
+	if n != 1 {
+		t.Fatalf("%d joins wait before the window ends", n)
+	}
+	later := night0.Add(stokerStartsIn)
+	s.Now = func() time.Time { return later }
+	s.publish(newSample(s, sample.Session{}, pane), func(state.Doc) {})
+	fresh := apiNew(repo, "%42", "api-new:1.1", "s42")
+	s.publish(newSample(s, fresh, pane), func(state.Doc) {})
+	if inChain(s, fresh) {
+		t.Fatal("a start past stokerStartsIn joined")
+	}
+}
+
+func TestChainStokerFailedJoinSays(t *testing.T) {
+	s, u, _ := familyTest(t)
+	repo := apiRepo(s)
+	mustAct(t, s, newFromChainStoker(t, repo))
+	fresh := apiNew(repo, "%42", "api-new:1.1", "s42")
+	s.mu.Lock()
+	s.Chains.SetOff(memberOf(fresh), true)
+	s.mu.Unlock()
+	s.publish(newSample(s, fresh, sample.Pane{ID: "%42", Target: "api-new:1.1"}), func(state.Doc) {})
+	if inChain(s, fresh) {
+		t.Fatal("an off session joined")
+	}
+	if want := "api-new did not join chain api-auth: %42 is off: it takes no chains"; !slices.Contains(cardTexts(u.store), want) {
+		t.Fatalf("card %q", cardTexts(u.store))
+	}
+}
+
 func TestChainStokerNewOutsideRepo(t *testing.T) {
 	s, _, ran := familyTest(t)
-	for _, where := range []string{"/w/app", "/dev/api-other", "/elsewhere", "dev/api"} {
+	repo := apiRepo(s)
+	out := t.TempDir()
+	if err := os.Symlink(out, filepath.Join(repo, "out")); err != nil {
+		t.Fatal(err)
+	}
+	for _, where := range []string{"/w/app", repo + "-other", "/elsewhere", "dev/api", filepath.Join(repo, "out"), filepath.Join(repo, "missing")} {
 		res := s.act(t.Context(), newFromChainStoker(t, where))
-		if res.Err != "a session of chain api-auth starts in its repo: /dev/api" {
+		if res.Err != "a session of chain api-auth starts in its repo: "+repo {
 			t.Errorf("%s: %q", where, res.Err)
 		}
 	}
 	if len(*ran) != 0 {
 		t.Fatalf("ran %q", *ran)
+	}
+}
+
+// compactRec is a rec whose second action types /compact into pane.
+func compactRec(id, pane string) advice.Rec {
+	return advice.Rec{ID: id, Title: "compact " + pane, Second: &advice.Action{Label: "send /compact",
+		Steps: [][]string{{"tmux", "send-keys", "-t", pane, "/compact", "Enter"}}, Destructive: true,
+		Guards: []advice.Guard{{IdlePane: pane}}}}
+}
+
+func setRecs(s *Service, recs ...advice.Rec) {
+	s.mu.Lock()
+	s.cur.Recommendations = recs
+	s.mu.Unlock()
+}
+
+func TestChainStokerActsOnNoRec(t *testing.T) {
+	s, _, ran := familyTest(t)
+	setRecs(s, compactRec("r9", "%9"), compactRec("r3", "%3"))
+	for _, id := range []string{"r9", "r3", "ship:o/r#1", "worktree:/w/wt/a", "orphan:42", "rescan:git"} {
+		a := fromChainStoker(id, "")
+		a.Which = "secondary"
+		if res := s.act(t.Context(), a); res.Err != "a chain stoker acts on the matches of its chain only" {
+			t.Errorf("%s: %q", id, res.Err)
+		}
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+func TestHostRecOnOwnedMatch(t *testing.T) {
+	s, _, ran := familyTest(t)
+	setRecs(s, compactRec("r3", "%3"), compactRec("r1", "%1"))
+	a := fromStokerAct("r3", "")
+	a.Which = "secondary"
+	if res := s.act(t.Context(), a); res.Err != "api-auth has the stoker of chain api-auth: give it an order." {
+		t.Fatalf("the host's rec on api-auth: %q", res.Err)
+	}
+	if len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+	a.RecID = "r1"
+	mustAct(t, s, a)
+	if !slices.ContainsFunc(*ran, func(argv []string) bool { return slices.Contains(argv, "%1") && slices.Contains(argv, "/compact") }) {
+		t.Fatalf("the host's rec on work did not run: %q", *ran)
+	}
+}
+
+// A pane the host and the chain stoker both drove speaks for its owner.
+func TestTwiceDrivenPaneSpeaksForItsOwner(t *testing.T) {
+	s, u, _ := familyTest(t)
+	if err := s.Stoker.Set(stoker.Mode{}.TurnOn(night0)); err != nil {
+		t.Fatal(err)
+	}
+	s.drive(s.hostUnit(), "%3")
+	s.drive(u, "%3")
+	if got, ok := s.agentsUnit(proto.Act{From: "%3"}); !ok || got != u {
+		t.Fatalf("%%3 speaks for %+v", got)
+	}
+	from3 := func(id string) proto.Act {
+		return proto.Act{RecID: id, Confirm: "y", Text: "go on", From: "%3", FromPlaced: true}
+	}
+	mustAct(t, s, from3("message:%4"))
+	if res := s.act(t.Context(), from3("message:%9")); res.Err != "api-x is not in the chain of this stoker." {
+		t.Fatalf("to a non-member: %q", res.Err)
 	}
 }
 
@@ -668,14 +860,12 @@ func TestChainStokerGivesNoOrders(t *testing.T) {
 	}
 }
 
-// Peek reads the doc, which a chain stoker reads whole: no act gates it,
-// and the names act passes from its pane.
+// A chain stoker reads the whole host: peek reads the doc, and the read
+// acts pass the act's gate on a match out of its chain.
 func TestChainStokerReadsWholeHost(t *testing.T) {
-	s, _, _ := familyTest(t)
-	var doc state.Doc
-	chainStokerUp(s)
+	s, _, ran := familyTest(t)
 	s.mu.Lock()
-	doc = s.cur
+	doc := s.cur
 	s.mu.Unlock()
 	i := slices.IndexFunc(doc.Sessions, func(x sample.Session) bool { return x.Name == "api-x" })
 	if i < 0 {
@@ -684,7 +874,14 @@ func TestChainStokerReadsWholeHost(t *testing.T) {
 	if p := stoker.PeekOf(doc.Sessions[i], doc.Queue); p.Name != "api-x" {
 		t.Fatalf("peek %+v", p)
 	}
+	res := s.act(t.Context(), fromChainStoker("switch-preview:%9", ""))
+	if res.Err != "" || !strings.Contains(res.Preview, "api-x") {
+		t.Fatalf("the preview of api-x: %+v", res)
+	}
 	if res := s.act(t.Context(), fromChainStoker(NamesAct, "")); res.Err != "" {
 		t.Fatalf("names: %q", res.Err)
+	}
+	if len(typed(*ran, "%9")) != 0 {
+		t.Fatal("a read typed into api-x")
 	}
 }

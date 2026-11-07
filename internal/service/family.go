@@ -38,13 +38,15 @@ type stokerUnit struct {
 	briefAt time.Time
 	// joins are the tmux sessions a chain unit started, which join its
 	// chain once a sample finds them in its repo. Service.mu guards it.
-	joins []pendingJoin
+	joins []*pendingJoin
 }
 
-// pendingJoin is a session a chain unit started, not in its chain yet.
+// pendingJoin is a session a chain unit started, not in its chain yet: the
+// pane and tmux session the start made, and the agent's session id once a
+// sample finds it.
 type pendingJoin struct {
-	name string
-	at   time.Time
+	pane, name, sessionID string
+	at                    time.Time
 }
 
 // stokerFamily holds the units. The host unit wraps Service.Stoker, so
@@ -535,13 +537,28 @@ func (s *Service) inChainRepo(u *stokerUnit, text string) error {
 	}
 	s.mu.Lock()
 	c, ok := chainByID(s.chainsLocked(), u.link.Chain)
-	repo, _, known := gitscan.RepoOf(s.cur.Git, filepath.Clean(dir))
+	repo, wt, known := gitscan.RepoOf(s.cur.Git, filepath.Clean(dir))
 	s.mu.Unlock()
 	if !ok {
 		return errors.New("the chain of this stoker is gone")
 	}
-	if !filepath.IsAbs(dir) || !known || repo != c.Repo {
+	if !filepath.IsAbs(dir) || !known || repo != c.Repo || !inCheckout(dir, wt) {
 		return fmt.Errorf("a session of chain %s starts in its repo: %s", s.chainNameOf(c.ID), c.Repo)
 	}
 	return nil
+}
+
+// inCheckout tells if dir, its links resolved, is in the checkout wt, its own
+// resolved: a link in the repo that leads out of it is not. A path that
+// does not resolve is not.
+func inCheckout(dir, wt string) bool {
+	d, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return false
+	}
+	w, err := filepath.EvalSymlinks(wt)
+	if err != nil {
+		return false
+	}
+	return d == w || strings.HasPrefix(d, w+string(filepath.Separator))
 }
