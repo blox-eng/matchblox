@@ -542,3 +542,23 @@ func TestValidUserKey(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentMarkAllowedIsExact(t *testing.T) {
+	for _, c := range []struct {
+		argv []string
+		want bool
+	}{
+		{AgentMarkArgv("%3", "claude"), true},
+		{AgentMarkArgv("%3", "codex"), true},
+		{AgentMarkArgv("%3", "zsh"), false},
+		{AgentMarkArgv("%3;x", "claude"), false},
+		{AgentMarkArgv("3", "claude"), false},
+	} {
+		if got := AgentMarkAllowed(c.argv); got != c.want {
+			t.Errorf("%q: %v, want %v", c.argv, got, c.want)
+		}
+	}
+	if !slices.Equal(AgentMarkArgv("%3", "claude"), []string{"tmux", "set-option", "-p", "-t", "%3", "@matchblox_agent", "claude"}) {
+		t.Error("the mark's argv changed")
+	}
+}

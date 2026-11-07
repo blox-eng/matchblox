@@ -308,6 +308,19 @@ func TestJumpKeepsOtherClientsWindow(t *testing.T) {
 	}
 }
 
+func TestJumpWithAClientTTYLeavesTheOtherClientHome(t *testing.T) {
+	e := newJumpEnv(t)
+	desk := attach(t, e.outer, "matchblox")
+	phone := attach(t, e.outer, "matchblox")
+	j := e.newJump("0a1b2c3d")
+	j.ClientTTY = phone.tty
+	e.jump(t, phone, j, e.ssh)
+	waitFor(t, "the phone is in the jump", func() bool { return phone.session() == HostSessionName(j.Host, j.ID) })
+	if desk.session() != "matchblox" {
+		t.Errorf("the desk moved to %q", desk.session())
+	}
+}
+
 func clientsOf(sock, session string) []string {
 	out, err := tmuxOut(sock, "list-clients", "-t", "="+session, "-F", "#{client_tty}")
 	if err != nil || out == "" {

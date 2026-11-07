@@ -24,6 +24,9 @@ type Jump struct {
 	ID string
 	// Outer is true when the console runs inside tmux.
 	Outer bool
+	// ClientTTY is the terminal device of the client that asked, the only
+	// client the jump moves. "" means tmux's current client.
+	ClientTTY string
 }
 
 const defaultHome = "matchblox"
@@ -75,6 +78,9 @@ func PrefixKey(s string) bool { return prefixRE.MatchString(s) }
 // an absolute directory without "#" or ";".
 func JumpAllowed(j Jump) bool {
 	if !ValidHost(j.Host) || !idRE.MatchString(j.ID) || !PrefixKey(j.Prefix) {
+		return false
+	}
+	if j.ClientTTY != "" && !ClientTTY(j.ClientTTY) {
 		return false
 	}
 	if j.Home != "" && !homeRE.MatchString(j.Home) {
@@ -202,6 +208,13 @@ func (j Jump) hostCommand() []string {
 	return append([]string{"/bin/sh", "-c", cleanup, "sh", JumpSessionName(j.ID)}, j.Remote()...)
 }
 
+func (j Jump) switchClient(session string) []string {
+	if j.ClientTTY == "" {
+		return []string{"switch-client", "-t", "=" + session}
+	}
+	return []string{"switch-client", "-c", j.ClientTTY, "-t", "=" + session}
+}
+
 // Local is the one tmux command list that runs on this machine. It starts
 // the ssh in a session of its own, binds the way back to the console, and
 // switches the client there. The session ends when ssh ends, or when its
@@ -230,7 +243,7 @@ func (j Jump) Local(ssh []string) []string {
 		{"bind-key", "-T", table, "User900", "if", "-F", "1", back, ""},
 		{"bind-key", "-T", table, "MouseDown1Status", "if", "-F", "#{==:#{mouse_status_range},matchblox}", back, ""},
 	}, paneMouse(table), [][]string{
-		{"switch-client", "-t", "=" + s},
+		j.switchClient(s),
 		// After the switch: an unattached session with it would end at once.
 		setOption(s, "destroy-unattached", "on"),
 	})...)
