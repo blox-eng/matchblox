@@ -6,6 +6,14 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A dropped host jump says so.** When the ssh of a host jump drops in the
+  middle of an escape sequence, the pane showed nothing for 5 seconds and
+  the line "ssh exited … Press Enter to go back" never came. The line now
+  shows at once.
+  ([#313](https://github.com/blox-eng/matchblox/issues/313))
+
 ## [0.33.0] - 2026-11-06
 
 ### Added
