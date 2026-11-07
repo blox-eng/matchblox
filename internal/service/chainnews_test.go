@@ -528,7 +528,7 @@ func TestNewsFromAnotherRepoNamesIt(t *testing.T) {
 		}
 	}
 	s.Hook(hookOf(sessions[3], "Stop"))
-	if got := inbox(s, sessions[1]); !slices.Equal(got, []string{"notes finished (in no repo)"}) {
+	if got := inbox(s, sessions[1]); !slices.Equal(got, []string{"notes finished (in no repo matchblox knows)"}) {
 		t.Errorf("%%2's inbox = %q", got)
 	}
 }

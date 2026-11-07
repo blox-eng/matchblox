@@ -241,7 +241,7 @@ func chainsView(st *chains.Store) *state.ChainsView {
 }
 
 // elsewhereLocked is what a line from from to to adds when they work in
-// different repos: " (in <repo>)", or " (in no repo)". "" when they share
+// different repos: " (in <repo>)", or " (in no repo matchblox knows)". "" when they share
 // one, or either is gone. Callers hold mu.
 func (s *Service) elsewhereLocked(from, to chains.Member) string {
 	x, okFrom := s.sessionOfLocked(from)
@@ -254,7 +254,7 @@ func (s *Service) elsewhereLocked(from, to chains.Member) string {
 		return ""
 	}
 	if repo == "" {
-		return " (in no repo)"
+		return " (in no repo matchblox knows)"
 	}
 	return " (in " + filepath.Base(repo) + ")"
 }
