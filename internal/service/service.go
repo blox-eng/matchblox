@@ -251,9 +251,8 @@ type Service struct {
 	sampleKick chan struct{}
 	stop       context.CancelCauseFunc
 
-	acts  acts
-	ways  waysCache
-	wakes wakeState
+	acts acts
+	ways waysCache
 	// fam are the stokers: the host, then one for each chain that has one.
 	fam stokerFamily
 	// sentAt is when a command or a compact last went to a pane, by pane:

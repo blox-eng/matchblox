@@ -41,15 +41,16 @@ type wakeState struct {
 	last       time.Time
 }
 
-// wake tells unit u's stoker agent what it may care about. It runs after each
-// sample while a run is on and the stoker has a pane with an agent at rest;
+// wake tells unit u's stoker agent what it may care about: a chain
+// unit's, of its chain's matches. It runs after each sample while a run is
+// on and the stoker has a pane with an agent at rest, its brief typed;
 // otherwise it sends nothing and the lines wait.
 func (s *Service) wake(ctx context.Context, u *stokerUnit, now time.Time) {
 	if u == nil || s.StokerServer == "" {
 		return
 	}
 	m := u.store.Mode()
-	w := &s.wakes
+	w := &u.wakes
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if !m.On {
@@ -63,6 +64,9 @@ func (s *Service) wake(ctx context.Context, u *stokerUnit, now time.Time) {
 		why[pane] = r.Word
 	}
 	s.mu.Unlock()
+	if u.link.Chain != "" {
+		sessions = s.sessionsOf(u, sessions)
+	}
 	cur := stoker.Look(sessions, why, items, rep, accts, now, s.StokerServer)
 	resting := !m.Rests.IsZero()
 	if w.run.IsZero() || !w.run.Equal(m.Since) {
@@ -93,6 +97,9 @@ func (s *Service) wake(ctx context.Context, u *stokerUnit, now time.Time) {
 		w.lines = w.lines[over:]
 	}
 
+	if s.briefWaits(u) {
+		return
+	}
 	pane, err := s.stokerAgent(u)
 	if err != nil || s.stokable(pane, "") != nil {
 		return

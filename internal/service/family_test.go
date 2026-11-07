@@ -13,6 +13,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/gitscan"
+	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -971,14 +972,15 @@ func TestNightEndClearsHostGivenGos(t *testing.T) {
 	if s.Stoker.Mode().On {
 		t.Fatal("the night did not end")
 	}
+	// The night ends the chain's run too: its goes and its driven panes go with it.
+	if u.store.Mode().On {
+		t.Fatal("the chain's night did not end")
+	}
 	if got := s.grantsOf(u); len(got) != 0 {
 		t.Fatalf("the unit's goes after the night %q", got)
 	}
-	if got := drivenGoes(t, u, "%3"); len(got) != 0 {
-		t.Fatalf("after the night %%3 has %q", got)
-	}
-	if why := stoker.DenyFamily(s.Stoker.Dir(), "", "%3", stoker.Guards("gh pr merge 4")); why != stoker.DenyNoGo {
-		t.Fatalf("a merge after the night: %q", why)
+	if _, err := stoker.ReadDriven(u.store.Dir()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stokers/s1/driven.json after the night: %v", err)
 	}
 }
 
@@ -1409,5 +1411,221 @@ func TestOrderToAUnitWithNoRunStartsOne(t *testing.T) {
 	}
 	if b, err := os.ReadFile(brief); err != nil || !strings.Contains(string(b), "again") || !strings.Contains(string(b), "You are the stoker of chain api-auth.") {
 		t.Fatalf("brief %v:\n%s", err, b)
+	}
+}
+
+func consoleStoker(verb string) proto.Act {
+	return proto.Act{RecID: "stoker:" + verb, Which: "primary", Console: true}
+}
+
+// n puts each chain stoker whose run is on into the night, and the host's
+// orders at night still reach it.
+func TestNightSealsRunningChainUnits(t *testing.T) {
+	s, u, ran := familyTest(t)
+	s.deliverBriefs(t.Context())
+	mustAct(t, s, consoleStoker("night"))
+	host := s.Stoker.Mode()
+	if m := u.store.Mode(); !m.On || !m.Nightly || !m.Until.Equal(host.Until) {
+		t.Fatalf("the chain's run in the night %+v", m)
+	}
+	*ran = nil
+	mustAct(t, s, orderChain(t, hostPane, "api-auth", "merge on green", nil))
+	if got := typed(*ran, "%5@mbtest"); !slices.Equal(got, []string{"New order: merge on green"}) {
+		t.Fatalf("typed %q", got)
+	}
+	if o := u.store.Mode().Order; o == nil || o.Words != "merge on green" {
+		t.Fatalf("order %+v", o)
+	}
+}
+
+// A chain stoker that starts during the night is part of it.
+func TestChainStartedAtNightIsANightRun(t *testing.T) {
+	s, u, _ := hostGiven(t, true, []string{"merge"}, []string{"merge"})
+	m := u.store.Mode()
+	if !m.On || !m.Nightly || !m.Until.Equal(s.Stoker.Mode().Until) || m.Order == nil || !m.Order.Night {
+		t.Fatalf("mode %+v", m)
+	}
+	b, err := os.ReadFile(filepath.Join(u.store.Dir(), "stoker-brief.md"))
+	if err != nil || !strings.Contains(string(b), "A new order from the host stoker comes as one line") {
+		t.Fatalf("brief %v:\n%s", err, b)
+	}
+}
+
+func TestNightEndStopsTheFamily(t *testing.T) {
+	for _, end := range []string{"morning", "n again"} {
+		t.Run(end, func(t *testing.T) {
+			s, u, _ := familyTest(t)
+			mustAct(t, s, consoleStoker("night"))
+			switch end {
+			case "morning":
+				at := s.Stoker.Mode().Until.Add(time.Minute)
+				s.Now = func() time.Time { return at }
+				s.stoke(t.Context(), at)
+			default:
+				mustAct(t, s, consoleStoker("off"))
+			}
+			if s.Stoker.Mode().On {
+				t.Fatal("the host's night did not end")
+			}
+			m := u.store.Mode()
+			if m.On || m.Card == nil || !m.Card.Night {
+				t.Fatalf("the chain's run after the night %+v", m)
+			}
+		})
+	}
+}
+
+func TestMorningCardListsChains(t *testing.T) {
+	s, u, _ := familyTest(t)
+	mustAct(t, s, consoleStoker("night"))
+	at := s.Stoker.Mode().Until.Add(time.Minute)
+	s.Now = func() time.Time { return at }
+	s.stoke(t.Context(), at)
+	c := s.Stoker.Mode().Card
+	if c == nil || len(c.Chains) != 1 {
+		t.Fatalf("the host's card %+v", c)
+	}
+	got, own := c.Chains[0], u.store.Mode().Card
+	if got.Name != "api-auth" || got.Stoker != "s1" || own == nil || got.Card.Of != own.Of || got.Card.Of != 2 || !got.Card.Ended.Equal(own.Ended) {
+		t.Fatalf("the chain on the host's card %+v, its own %+v", got, own)
+	}
+}
+
+// f by day turns the host stoker on and off, and no chain stoker's run.
+func TestFTouchesHostOnly(t *testing.T) {
+	s, u, _ := familyTest(t)
+	mustAct(t, s, consoleStoker("on"))
+	mustAct(t, s, consoleStoker("off"))
+	if s.Stoker.Mode().On {
+		t.Fatal("the host is on")
+	}
+	if m := u.store.Mode(); !m.On || m.Nightly || m.Card != nil {
+		t.Fatalf("f touched the chain's run %+v", m)
+	}
+}
+
+// hostWorks is familySetup with the host's run on: it drives api-auth,
+// holds api-db and sets a trigger on each of api-auth and work.
+func hostWorks(t *testing.T) *Service {
+	t.Helper()
+	s, _, _ := familySetup(t)
+	hs, err := holds.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Holds = hs
+	mustAct(t, s, orderAct(t, "go", false))
+	mustAct(t, s, fromStokerAct("message:%3", "go on"))
+	mustAct(t, s, fromStokerAct("hold:%4", "wait for the merge"))
+	mustAct(t, s, whenAct(`{"rest":"api-auth","do":"send","who":"api-auth","text":"rebase on main"}`))
+	mustAct(t, s, whenAct(`{"rest":"api-auth","do":"compact","who":"work"}`))
+	return s
+}
+
+func TestHandOverMovesHoldsAndTriggers(t *testing.T) {
+	s := hostWorks(t)
+	if _, in := drivenPanes(t, s.hostUnit())["%3"]; !in {
+		t.Fatal("the host does not drive api-auth")
+	}
+	u, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person")
+	if err != nil {
+		t.Fatal(err)
+	}
+	chainStokerUp(s)
+	if tr := s.Stoker.Mode().Triggers; len(tr) != 1 || tr[0].Who != "work" {
+		t.Fatalf("the host's triggers %+v", tr)
+	}
+	if tr := u.store.Mode().Triggers; len(tr) != 1 || tr[0].Who != "api-auth" || tr[0].ID != "t1" || tr[0].Text != "rebase on main" {
+		t.Fatalf("the chain's triggers %+v", tr)
+	}
+	if _, in := drivenPanes(t, s.hostUnit())["%3"]; in {
+		t.Fatal("the host still drives api-auth")
+	}
+	// The hold on api-db is the chain stoker's now: it lets it go, the host does not.
+	const owned = "api-db has the stoker of chain api-auth: give it an order."
+	if res := s.act(t.Context(), fromStokerAct("release:%4", "")); res.Err != owned {
+		t.Fatalf("the host's release: %q", res.Err)
+	}
+	mustAct(t, s, fromChainStoker("release:%4", ""))
+	if _, held := s.heldOf("s4"); held {
+		t.Fatal("api-db is still held")
+	}
+}
+
+func TestHandOverDropsWaitingKillWithLine(t *testing.T) {
+	s := hostWorks(t)
+	if res := s.act(t.Context(), fromStokerAct("kill:%4", "")); !strings.Contains(res.Err, "the kill waits") {
+		t.Fatalf("the host's kill: %q", res.Err)
+	}
+	if _, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person"); err != nil {
+		t.Fatal(err)
+	}
+	run := s.Stoker.View().Run
+	last := stoker.LastGo(run, stoker.Entry{Pane: hostPane, Needs: "kill:%4"})
+	if last.State != stoker.StepFailed || last.Text != "dropped the kill for api-db: the stoker of chain api-auth owns it now" {
+		t.Fatalf("the kill on the host's card %+v", last)
+	}
+	if err := s.grant(s.hostUnit(), last.ID); err == nil {
+		t.Fatal("a y still gives the dropped kill")
+	}
+}
+
+// drivenPanes are the panes in unit u's driven.json.
+func drivenPanes(t *testing.T, u *stokerUnit) map[string][]string {
+	t.Helper()
+	d, err := stoker.ReadDriven(u.store.Dir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d.Panes
+}
+
+// The host's brief lists each chain, its stoker and that stoker's plan.
+func TestHostBriefListsChainStokers(t *testing.T) {
+	s, u, _ := familyTest(t)
+	mustAct(t, s, fromChainStoker("stoker:plan", `{"steps":[{"n":1,"session":"api-auth","text":"merge on green"},{"n":2,"session":"api-db","text":"rebase"}]}`))
+	mustAct(t, s, fromChainStoker("stoker:step", `{"step":1,"state":"done","text":"merged"}`))
+	mustAct(t, s, orderAct(t, "night", true))
+	if m := u.store.Mode(); !m.Nightly || !m.Until.Equal(s.Stoker.Mode().Until) {
+		t.Fatalf("the night the launch sheet starts left the chain out: %+v", m)
+	}
+	b, err := os.ReadFile(filepath.Join(s.Stoker.Dir(), "stoker-brief.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"- api-auth: stoker s1 · night · plan 1/2", `Give a chain an order: matchblox stoker order <chain> "<text>"`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("the host's brief lacks %q:\n%s", want, b)
+		}
+	}
+}
+
+// A chain stoker whose agent is gone says how to start it, and an order
+// starts it again.
+func TestChainStokerNotRunningSaysTheOrder(t *testing.T) {
+	s, u, ran := familyTest(t)
+	s.deliverBriefs(t.Context())
+	s.mu.Lock()
+	sessions := slices.DeleteFunc(slices.Clone(s.cur.Sessions), func(x sample.Session) bool { return x.Pane == "%5@mbtest" })
+	s.mu.Unlock()
+	s.publish(sample.Snapshot{At: night0, Sessions: sessions}, func(state.Doc) {})
+	_ = s.Actions.Run([]string{"tmux", "kill-session"}) // the test's tmux loses stoker-s1
+	const want = `the stoker of chain api-auth is not running: matchblox stoker order api-auth "<text>" starts it`
+	if _, err := s.stokerAgent(u); err == nil || err.Error() != want {
+		t.Fatalf("stokerAgent: %v", err)
+	}
+	*ran = nil
+	mustAct(t, s, orderChain(t, "", "api-auth", "carry on", nil))
+	if !slices.ContainsFunc(*ran, func(argv []string) bool {
+		return slices.Contains(argv, "new-session") && slices.Contains(argv, "stoker-s1")
+	}) {
+		t.Fatalf("the order did not start the agent: %q", *ran)
+	}
+	chainStokerUp(s)
+	*ran = nil
+	s.deliverBriefs(t.Context())
+	brief := filepath.Join(u.store.Dir(), "stoker-brief.md")
+	if got := typed(*ran, "%5@mbtest"); !slices.Equal(got, []string{"Read " + brief + " and follow it.", "New order: carry on"}) {
+		t.Fatalf("typed %q", got)
 	}
 }

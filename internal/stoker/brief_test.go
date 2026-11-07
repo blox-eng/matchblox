@@ -31,3 +31,29 @@ func TestBriefScopesToChain(t *testing.T) {
 		t.Fatalf("the brief names a session outside the chain:\n%s", got)
 	}
 }
+
+// The host's brief lists each chain, its stoker (or none) and that
+// stoker's plan, and how to give a chain an order.
+func TestHostBriefListsChains(t *testing.T) {
+	board := Board{At: time.Date(2026, 11, 7, 22, 0, 0, 0, time.UTC), Chains: []ChainRow{
+		{Name: "api-auth", StokerID: "s1", State: "night", PlanDone: 1, PlanAll: 3},
+		{Name: "www", StokerID: "s2", State: "off"},
+		{Name: "docs"},
+	}}
+	got := Brief(Order{ID: "run-1", Words: "keep going", Night: true}, "ways.md", Hands, board)
+	for _, want := range []string{
+		"## The chains",
+		"- api-auth: stoker s1 · night · plan 1/3",
+		"- www: stoker s2 · off · no plan",
+		"- docs: no stoker",
+		`Give a chain an order: matchblox stoker order <chain> "<text>"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the brief lacks %q:\n%s", want, got)
+		}
+	}
+	board.Chains = nil
+	if got := Brief(Order{ID: "run-1"}, "ways.md", Hands, board); strings.Contains(got, "chain") {
+		t.Fatalf("a brief with no chains names one:\n%s", got)
+	}
+}

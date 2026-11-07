@@ -336,7 +336,7 @@ func (s *Service) grant(u *stokerUnit, id string) error {
 			return err
 		}
 	}
-	s.wakes.add(fmt.Sprintf("go given for %s: %s", last.Name, what))
+	u.wakes.add(fmt.Sprintf("go given for %s: %s", last.Name, what))
 	return nil
 }
 
