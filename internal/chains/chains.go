@@ -113,14 +113,15 @@ func (s *Store) side(m Member) []Member {
 
 // Ask records that from wants to chain with to. When to (or its chain)
 // already asked from (or its chain), the chains of both sides become one and
-// formed is true.
-func (s *Store) Ask(from, to Member, repo string, now time.Time) (formed bool) {
+// formed is true. When both sides were chains, absorbed is the id of the one
+// that merged into the other.
+func (s *Store) Ask(from, to Member, repo string, now time.Time) (formed bool, absorbed string) {
 	if s.isOff(from) || s.isOff(to) || from.Same(to) {
-		return false
+		return false, ""
 	}
 	fromSide, toSide := s.side(from), s.side(to)
 	if slices.ContainsFunc(fromSide, to.Same) {
-		return false
+		return false, ""
 	}
 	answers := func(r Request) bool {
 		return slices.ContainsFunc(toSide, r.From.Same) && slices.ContainsFunc(fromSide, r.To.Same)
@@ -128,14 +129,15 @@ func (s *Store) Ask(from, to Member, repo string, now time.Time) (formed bool) {
 	if !slices.ContainsFunc(s.Requests, answers) {
 		s.Requests = slices.DeleteFunc(s.Requests, func(r Request) bool { return r.From.Same(from) && r.To.Same(to) })
 		s.Requests = append(s.Requests, Request{From: from, To: to, At: now})
-		return false
+		return false, ""
 	}
 	s.Requests = slices.DeleteFunc(s.Requests, answers)
-	s.merge(from, to, repo)
-	return true
+	return true, s.merge(from, to, repo)
 }
 
-func (s *Store) merge(a, b Member, repo string) {
+// merge makes the chains of a and b one, under the id of a's chain when it
+// has one. absorbed is the id of b's chain when both had one.
+func (s *Store) merge(a, b Member, repo string) (absorbed string) {
 	members := slices.Clone(s.side(a))
 	for _, m := range s.side(b) {
 		if !slices.ContainsFunc(members, m.Same) {
@@ -147,6 +149,9 @@ func (s *Store) merge(a, b Member, repo string) {
 	switch {
 	case ia >= 0:
 		c = s.Chains[ia]
+		if ib >= 0 {
+			absorbed = s.Chains[ib].ID
+		}
 	case ib >= 0:
 		c = s.Chains[ib]
 	default:
@@ -160,6 +165,7 @@ func (s *Store) merge(a, b Member, repo string) {
 		}
 	}
 	s.Chains = append(kept, c)
+	return absorbed
 }
 
 func (s *Store) newID(first Member) string {

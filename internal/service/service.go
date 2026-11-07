@@ -291,6 +291,9 @@ type Service struct {
 	// the requests already told to their target. Under mu.
 	noticed   map[pair][2]string
 	heardAsks map[chains.Request]bool
+	// chainLife are the chains that ended or joined, for followChains.
+	// Under mu.
+	chainLife []chainEvent
 	// heldAsks and heldNotices are what a delivery holds until its hook
 	// says it heard it: no other hook is told them meanwhile. Under mu.
 	heldAsks    map[chains.Request]bool
@@ -578,6 +581,7 @@ func (s *Service) Run(ctx context.Context) {
 	for first := true; ; first = false {
 		s.readSpool()
 		s.publish(s.sample(), rec)
+		s.followChains(ctx)
 		s.renameAtRest(ctx)
 		s.stoke(ctx, s.now())
 		s.deliverBriefs(ctx)

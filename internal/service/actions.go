@@ -153,7 +153,7 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 		return s.into(a, pane)
 	}
 	if strings.HasPrefix(a.RecID, proto.ChainPrefix) {
-		return s.chainAct(a) // an agent's own act: before the agents-pane gate
+		return s.chainAct(ctx, a) // an agent's own act: before the agents-pane gate
 	}
 	// A session the stoker drove speaks for the stoker: what it sends
 	// counts and drives, and it gives no go.
