@@ -184,3 +184,29 @@ func NeedOf(g Guard, who string) string {
 	}
 	return g.What
 }
+
+// PlanDone counts the steps of o's plan whose last state in run is done.
+func PlanDone(o Order, run []Entry) int {
+	last := map[int]string{}
+	for _, e := range run {
+		if e.Logged() && e.Step > 0 && e.Rule == "" && !e.At.Before(o.Went) {
+			last[e.Step] = e.State
+		}
+	}
+	n := 0
+	for _, st := range o.Plan {
+		if last[st.N] == StepDone {
+			n++
+		}
+	}
+	return n
+}
+
+// PlanProgress is the steps done of all in the plan of the running order,
+// 0 and 0 with none.
+func (v View) PlanProgress() (done, all int) {
+	if o := v.Order; o != nil && o.State == OrderRunning {
+		return PlanDone(*o, v.Run), len(o.Plan)
+	}
+	return 0, 0
+}

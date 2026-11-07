@@ -6,6 +6,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/limits"
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/state"
 )
 
@@ -54,6 +55,9 @@ func Summary(s state.Doc) string {
 			fmt.Fprintf(&b, "  left alone: %s (%s)\n", x.Name, strings.TrimSuffix(x.Why, " · left alone"))
 		}
 	}
+	for _, c := range s.Stokers {
+		fmt.Fprintf(&b, "  chain %s (%s): %s\n", c.Name, c.ID, chainStokerLine(c.View))
+	}
 	for _, a := range s.Alerts {
 		fmt.Fprintf(&b, "alert %s: %s (%s)\n", a.Level, a.Title, a.Evidence)
 	}
@@ -80,4 +84,17 @@ func Summary(s state.Doc) string {
 		fmt.Fprintf(&b, "error: %s\n", e)
 	}
 	return b.String()
+}
+
+// chainStokerLine is a chain stoker's state and the steps of its plan done.
+func chainStokerLine(v proto.StokerView) string {
+	word := "off"
+	switch {
+	case v.On && v.Nightly:
+		word = "night"
+	case v.On:
+		word = "on"
+	}
+	done, all := v.PlanProgress()
+	return fmt.Sprintf("%s · plan %d/%d", word, done, all)
 }

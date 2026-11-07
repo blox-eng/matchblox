@@ -1047,3 +1047,45 @@ func TestCLIStokerOrder(t *testing.T) {
 		t.Error("--go pushes makes an act")
 	}
 }
+
+func TestSessionsJSONMarksChainStoker(t *testing.T) {
+	d := cliDoc()
+	d.StokerServer = "mbtest"
+	d.Stokers = []state.ChainStoker{{ID: "s1", Chain: "c1", Name: "api"}}
+	d.Sessions = append(d.Sessions,
+		sample.Session{Pane: "%9@mbtest", Target: "stoker:1.1", Name: "boss"},
+		sample.Session{Pane: "%8@mbtest", Target: "stoker-s1:1.1", Name: "stoker-s1"})
+	var buf bytes.Buffer
+	if err := writeSessions(&buf, d, true); err != nil {
+		t.Fatal(err)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		switch r["pane"] {
+		case "%8@mbtest":
+			if r["stoker"] != true || r["stoker_id"] != "s1" || r["chain"] != "c1" {
+				t.Fatalf("chain stoker row %v", r)
+			}
+		default:
+			if _, ok := r["stoker_id"]; ok {
+				t.Fatalf("%v: stoker_id", r)
+			}
+			if _, ok := r["chain"]; ok {
+				t.Fatalf("%v: chain", r)
+			}
+		}
+	}
+}
+
+func TestSessionsJSONUnchangedWithoutFamily(t *testing.T) {
+	var buf bytes.Buffer
+	if err := writeSessions(&buf, cliDoc(), true); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "stoker_id") || strings.Contains(buf.String(), `"chain"`) {
+		t.Fatalf("family keys without a family: %s", buf.String())
+	}
+}

@@ -108,6 +108,8 @@ type sessionJSON struct {
 	Reason     string      `json:"reason"`
 	Held       bool        `json:"held"`
 	Stoker     bool        `json:"stoker"`
+	StokerID   string      `json:"stoker_id,omitempty"`
+	Chain      string      `json:"chain,omitempty"`
 	ContextPct float64     `json:"context_pct"`
 	PlanPct    *int        `json:"plan_pct"`
 	Account    string      `json:"account"`
@@ -202,12 +204,30 @@ func writeChildren(w io.Writer, kids []childJSON, indent string) error {
 	return nil
 }
 
+// chainStokerOf is the id and chain of the chain stoker whose agent s is.
+// Empty: s is not one (the host stoker has none).
+func chainStokerOf(doc state.Doc, s sample.Session) (id, chain string) {
+	sid, ok := stoker.IDOfSession(s.TmuxSession())
+	if !ok || sid == stoker.HostID {
+		return "", ""
+	}
+	for _, c := range doc.Stokers {
+		if c.ID == sid {
+			return sid, c.Chain
+		}
+	}
+	return sid, ""
+}
+
 func sessionRows(doc state.Doc) []sessionJSON {
 	rows := []sessionJSON{}
 	for _, s := range doc.Sessions {
 		r := sessionJSON{Name: s.Name, Pane: s.Pane, Target: s.Target, Repo: repoName(doc, s.Cwd), Status: s.Status, Word: stoker.Word(s),
 			Reason: doc.Reasons[s.Pane].Word, Held: heldBy(doc, s), Stoker: doc.StokerServer != "" && s.Server() == doc.StokerServer, ContextPct: s.ContextPct, Account: s.Account,
 			AccountDir: s.AccountDir, SigningIn: s.SigningIn, byHand: signsInByHand(doc, s)}
+		if r.Stoker {
+			r.StokerID, r.Chain = chainStokerOf(doc, s)
+		}
 		if s.Progress != nil {
 			r.PlanPct = &s.Progress.Pct
 		}

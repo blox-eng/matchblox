@@ -294,9 +294,10 @@ func (s *Service) refreshStoker() {
 	if u := s.hostUnit(); u != nil {
 		v = s.stokerView(u, sessions)
 	}
+	stokers := s.chainStokers(sessions)
 	s.syncDriven()
 	s.mu.Lock()
-	s.cur.Stoker = v
+	s.cur.Stoker, s.cur.Stokers = v, stokers
 	s.mu.Unlock()
 	s.broadcast()
 }
