@@ -481,7 +481,7 @@ func goHome() error {
 // hookTimeout bounds the whole delivery, the event and the ask for news
 // together, so `matchblox hook` stops in less than 50 ms with the service
 // up, down or stuck.
-const hookTimeout = 30 * time.Millisecond
+var hookTimeout = 30 * time.Millisecond // a var: a test scales it above a runner's jitter
 
 // hookDeny is Claude Code's PreToolUse answer that refuses the tool call,
 // with why: one of the stoker's Deny reasons.
