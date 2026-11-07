@@ -370,6 +370,13 @@ func TestStokerNewIsThePersons(t *testing.T) {
 	if len(*ran) != 0 || s.unitOfChain("c1") != nil {
 		t.Fatalf("ran %q", *ran)
 	}
+	if res := s.act(t.Context(), act); res.Err != "not started: matchblox cannot tell who starts this. Start from a terminal, a tmux pane or the console." {
+		t.Fatalf("an unplaced caller: %q", res.Err)
+	}
+	if len(*ran) != 0 || s.unitOfChain("c1") != nil {
+		t.Fatalf("an unplaced caller started it: %q", *ran)
+	}
+	act.FromKnown, act.FromPlaced = true, true
 	mustAct(t, s, act) // the person's shell
 	u := s.unitOfChain("c1")
 	if u == nil || u.link.Giver != "person" || !slices.Equal(u.link.Grants, []string{"merge"}) {
@@ -1028,7 +1035,7 @@ func TestHostGivesNoGoItLacks(t *testing.T) {
 }
 
 // orderChain is stoker:order-chain from pane from ("" for the person's
-// shell), with no "grants" when grants is nil.
+// shell, placed by its terminal), with no "grants" when grants is nil.
 func orderChain(t *testing.T, from, chain, words string, grants []string) proto.Act {
 	t.Helper()
 	ask := map[string]any{"chain": chain, "words": words}
@@ -1039,7 +1046,7 @@ func orderChain(t *testing.T, from, chain, words string, grants []string) proto.
 	if err != nil {
 		t.Fatal(err)
 	}
-	return proto.Act{RecID: "stoker:order-chain", Confirm: "y", Text: string(b), From: from, FromPlaced: from != ""}
+	return proto.Act{RecID: "stoker:order-chain", Confirm: "y", Text: string(b), From: from, FromPlaced: true, FromKnown: from == ""}
 }
 
 const hostPane = "%9@mbtest"
@@ -1218,12 +1225,137 @@ func TestOrderChainIsNotFromAnAgentsPane(t *testing.T) {
 		}
 	}
 	// A session the host stoker drove speaks for it, but gives no order.
+	mustAct(t, s, orderAct(t, "go", false))
+	*ran = nil
 	s.drive(s.hostUnit(), "%1")
-	if res := s.act(t.Context(), orderChain(t, "%1", "api-auth", "go", nil)); res.Err != notTheBuilders {
-		t.Fatalf("a driven session: %q", res.Err)
+	for _, console := range []bool{false, true} {
+		a := orderChain(t, "%1", "api-auth", "go", nil)
+		a.Console = console
+		if res := s.act(t.Context(), a); res.Err != "a session gives no orders: only the person and the host stoker do" {
+			t.Fatalf("a driven session (console %v): %q", console, res.Err)
+		}
+		if res := s.chainOrderAct(t.Context(), a); res.Err != "a session gives no orders: only the person and the host stoker do" {
+			t.Fatalf("chainOrderAct from a driven session (console %v): %q", console, res.Err)
+		}
+	}
+	// A caller the service cannot place may be any agent's.
+	a := orderChain(t, "", "api-auth", "go", nil)
+	a.FromKnown, a.FromPlaced = false, false
+	if res := s.act(t.Context(), a); res.Err != "not ordered: matchblox cannot tell who orders this. Order from a terminal, a tmux pane or the console." {
+		t.Fatalf("an unplaced caller: %q", res.Err)
 	}
 	if len(*ran) != 0 {
 		t.Fatalf("ran %q", *ran)
+	}
+	if u := s.unitOfChain("c1"); u.store.Mode().Order.Words != "" {
+		t.Fatalf("a refused order reached the unit: %q", u.store.Mode().Order.Words)
+	}
+}
+
+func TestStokerNewAtNightIsSealed(t *testing.T) {
+	s, ran, _ := familySetup(t)
+	mustAct(t, s, orderAct(t, "night", true))
+	*ran = nil
+	a := proto.Act{RecID: "stoker:new", Confirm: "y", Text: `{"chain":"api-auth","words":"go"}`, FromKnown: true, FromPlaced: true}
+	if res := s.act(t.Context(), a); res.Err != "the night is sealed: answer the stoker's prompts, or give the order in the morning" {
+		t.Fatalf("err %q", res.Err)
+	}
+	if s.unitOfChain("c1") != nil || len(*ran) != 0 {
+		t.Fatalf("ran %q", *ran)
+	}
+}
+
+func TestOrderToAUnitNeedsWords(t *testing.T) {
+	s, u, ran := familyTest(t)
+	s.deliverBriefs(t.Context())
+	*ran = nil
+	if res := s.act(t.Context(), orderChain(t, "", "api-auth", "  ", nil)); res.Err != "an order needs words" {
+		t.Fatalf("err %q", res.Err)
+	}
+	if len(typed(*ran, "%5@mbtest")) != 0 || u.store.Mode().Order.Words != "" {
+		t.Fatal("the empty order reached the unit")
+	}
+}
+
+// An order after a dropped brief gives the agent its time anew: a sample
+// where it does not rest yet drops nothing.
+func TestRequeuedBriefWaitsAnew(t *testing.T) {
+	s, ran, now := chainStokerTest(t)
+	u, err := s.startChainStoker(t.Context(), "api-auth", "first", nil, "person")
+	if err != nil {
+		t.Fatal(err)
+	}
+	*now = now.Add(stokerStartsIn)
+	s.deliverBriefs(t.Context()) // dropped
+	mustAct(t, s, orderChain(t, "", "api-auth", "merge on green", nil))
+	s.deliverBriefs(t.Context()) // not up: it waits, and nothing drops
+	s.mu.Lock()
+	waiting := len(u.brief)
+	s.mu.Unlock()
+	if waiting != 2 {
+		t.Fatalf("%d lines wait", waiting)
+	}
+	chainStokerUp(s)
+	s.deliverBriefs(t.Context())
+	if got := typed(*ran, "%5@mbtest"); !slices.Equal(got, []string{briefLine(u), "New order: merge on green"}) {
+		t.Fatalf("typed %q", got)
+	}
+}
+
+// A queue that holds an order and is dropped keeps every line, says so on
+// both cards, and the next order types them all.
+func TestDroppedOrderIsKeptAndSaid(t *testing.T) {
+	s, ran, now := chainStokerTest(t)
+	u, err := s.startChainStoker(t.Context(), "api-auth", "first", nil, "person")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustAct(t, s, orderChain(t, "", "api-auth", "one", nil))
+	*now = now.Add(stokerStartsIn)
+	s.deliverBriefs(t.Context())
+	const line = "the stoker of chain api-auth did not take its order: its agent did not rest"
+	for name, st := range map[string]*stoker.Store{"unit": u.store, "host": s.Stoker} {
+		if !slices.Contains(cardTexts(st), line) {
+			t.Fatalf("%s card %q", name, cardTexts(st))
+		}
+	}
+	mustAct(t, s, orderChain(t, "", "api-auth", "two", nil))
+	chainStokerUp(s)
+	s.deliverBriefs(t.Context())
+	if got := typed(*ran, "%5@mbtest"); !slices.Equal(got, []string{briefLine(u), "New order: one", "New order: two"}) {
+		t.Fatalf("typed %q", got)
+	}
+}
+
+// A queue whose typing stopped after the brief waits anew for the rest.
+func TestPartlyTypedQueueWaitsAnew(t *testing.T) {
+	s, ran, now := chainStokerTest(t)
+	u, err := s.startChainStoker(t.Context(), "api-auth", "first", nil, "person")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustAct(t, s, orderChain(t, "", "api-auth", "one", nil))
+	chainStokerUp(s)
+	run := s.Actions.Run
+	s.Actions.Run = func(argv []string) error {
+		if slices.Contains(argv, "New order: one") {
+			_ = run(nil)
+			return errors.New("the pane is gone")
+		}
+		return run(argv)
+	}
+	*now = now.Add(stokerStartsIn - time.Second)
+	s.deliverBriefs(t.Context())
+	s.mu.Lock()
+	rest, at := slices.Clone(u.brief), u.briefAt
+	s.mu.Unlock()
+	if !slices.Equal(rest, []string{"New order: one"}) || !at.Equal(*now) {
+		t.Fatalf("waits %q since %v", rest, at)
+	}
+	s.Actions.Run = run
+	s.deliverBriefs(t.Context())
+	if got := typed(*ran, "%5@mbtest"); !slices.Equal(got, []string{briefLine(u), "New order: one"}) {
+		t.Fatalf("typed %q", got)
 	}
 }
 
