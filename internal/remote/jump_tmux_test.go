@@ -406,12 +406,19 @@ func TestJumpDropLeavesNothing(t *testing.T) {
 	e.jump(t, c, j, e.ssh)
 	s, g := HostSessionName(j.Host, j.ID), JumpSessionName(j.ID)
 	c.waitSession(s)
+	// The host's tmux server here writes to this pane's own tty, so when it
+	// sees its client gone it clears the screen, after the drop line; a
+	// real host's server writes into a pty that died with the ssh (#313).
+	// The pane's output says the drop; TestJumpFailedSSHIsReadable shows
+	// the line stays on screen.
+	said := filepath.Join(t.TempDir(), "said")
+	mustTmux(t, e.outer, "pipe-pane", "-o", "-t", "="+s+":", "cat >> "+said)
 	waitFor(t, "the jump is attached", func() bool { return len(clientsOf(e.inner, g)) == 1 })
 	killSSH(t, e.outer, s) // the laptop slept: the ssh died under the builder
 	waitFor(t, "the host's jump session is gone", func() bool { return !hasSession(e.inner, g) })
 	waitFor(t, "the drop says so", func() bool {
-		out, _ := tmuxOut(e.outer, "capture-pane", "-p", "-t", "="+s+":")
-		return strings.Contains(out, "ssh exited")
+		out, _ := os.ReadFile(said)
+		return strings.Contains(string(out), "ssh exited")
 	})
 	c.type_("\r")
 	waitFor(t, "the outer session is gone", func() bool { return !hasSession(e.outer, s) })
@@ -448,6 +455,26 @@ func descendants(pid string) []int {
 		}
 	}
 	return all
+}
+
+// An ssh killed in the middle of an escape sequence leaves the outer
+// pane's parser inside it: the drop line still shows. A dropped link cut
+// the host's tmux client while it wrote its first screen, and the line
+// vanished into an unended DCS string (#313).
+func TestJumpDropMidSequenceIsReadable(t *testing.T) {
+	e := newJumpEnv(t)
+	c := attach(t, e.outer, "matchblox")
+	j := e.newJump("0a1b2c3d")
+	ssh := script(t, filepath.Join(t.TempDir(), "ssh"), "#!/bin/sh\nprintf '\\033P+q544e'\nexit 255\n")
+	e.jump(t, c, j, ssh)
+	s := HostSessionName(j.Host, j.ID)
+	c.waitSession(s)
+	waitFor(t, "the drop line is on the screen", func() bool {
+		out, _ := tmuxOut(e.outer, "capture-pane", "-p", "-t", "="+s+":")
+		return strings.Contains(out, "ssh exited 255")
+	})
+	c.type_("\r")
+	c.waitSession("matchblox")
 }
 
 func TestJumpFailedSSHIsReadable(t *testing.T) {
