@@ -311,16 +311,23 @@ func (w *walker) walkTaps(tab string) {
 	}
 }
 
-// refused presses keys and waits for the line. A phone draws it on two rows, so
-// there the stream holds the end of it whole.
+// refused presses keys, waits for the line and clears it.
 func (w *walker) refused(what string, keys ...string) {
+	w.t.Helper()
+	w.says(what, keys...)
+	w.clear()
+}
+
+// says presses keys and waits for the line. A phone draws it on two rows, so
+// there the stream holds the end of it whole. In a chat esc is the agent's, so
+// the line stays until the chat is left.
+func (w *walker) says(what string, keys ...string) {
 	w.t.Helper()
 	want := demo.Refusal
 	if len(want)+1 > w.cols {
 		_, want, _ = strings.Cut(want, ". ")
 	}
 	w.saysAfter(what, want, keys...)
-	w.clear()
 }
 
 // takes presses keys and waits for an act of the world that holds want.
@@ -373,7 +380,7 @@ func (w *walker) walkTheDoors() {
 	w.t.Helper()
 	w.press("1")
 	w.refused("into tmux", "ctrl+o")
-	w.refused("into tmux from a chat", "enter", "ctrl+o")
+	w.says("into tmux from a chat", "enter", "ctrl+o")
 	w.reset()
 	w.scrolls("in a chat")
 	w.reset()
@@ -761,12 +768,45 @@ func (w *walker) flashes(what string, keys ...string) {
 	w.saysAfter(what, demo.Refusal, keys...)
 }
 
-// clear takes the line off the screen and waits for a frame to show it gone:
-// the console draws only what changed, so the next refusal draws again.
+// screen is the whole screen as the console draws it now, or what it drew
+// since the last whole frame when none comes.
+func (w *walker) screen() string {
+	n, frame := w.term.wholeFrame()
+	w.d.Repaint()
+	for range 200 {
+		if m, f := w.term.wholeFrame(); m > n {
+			return f
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return frame
+}
+
+// clear takes the line off the screen and waits for a whole frame to show it
+// gone: the console draws only what changed, so the next refusal draws again.
+// A wait of a set time let a slow frame keep the line, and the next refusal
+// then drew nothing (#318).
 func (w *walker) clear() {
 	w.t.Helper()
+	_, line, _ := strings.Cut(demo.Refusal, ". ")
 	w.press("esc")
-	time.Sleep(300 * time.Millisecond)
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		n, _ := w.term.wholeFrame()
+		w.d.Repaint()
+		m, frame := w.term.wholeFrame()
+		for m == n && time.Now().Before(deadline) {
+			time.Sleep(5 * time.Millisecond)
+			m, frame = w.term.wholeFrame()
+		}
+		if m > n && !strings.Contains(frame, line) {
+			return
+		}
+		if time.Now().After(deadline) {
+			w.t.Fatalf("esc never took the line off the screen after %q; the last whole frame:\n%s", w.steps[max(len(w.steps)-3, 0):], frame)
+		}
+		// The frame still holds the line: the esc is not in yet.
+	}
 }
 
 // saysAfter presses keys and waits for want in what the console then draws.
@@ -777,7 +817,7 @@ func (w *walker) saysAfter(what, want string, keys ...string) {
 	deadline := time.Now().Add(30 * time.Second)
 	for !strings.Contains(w.term.text()[from:], want) {
 		if time.Now().After(deadline) {
-			w.t.Fatalf("%s: never drew %q; it drew:\n%s", what, want, w.term.text()[from:])
+			w.t.Fatalf("%s: never drew %q after %q; the screen:\n%s", what, want, w.steps[max(len(w.steps)-12, 0):], w.screen())
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
