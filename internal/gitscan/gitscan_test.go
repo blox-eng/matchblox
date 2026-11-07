@@ -269,3 +269,17 @@ func TestRepoOfLongestMatchWins(t *testing.T) {
 		t.Fatalf("nested worktree: got (%q, %q, %v), want (/r, /r/wt, true)", repo, wt, ok)
 	}
 }
+
+// TestNameTellsSameNamedReposApart: two repos with one base name are named
+// by parent and base; a unique one by its base.
+func TestNameTellsSameNamedReposApart(t *testing.T) {
+	r := &Report{Repos: []Repo{{Path: "/dev/api"}, {Path: "/work/api"}, {Path: "/dev/web"}}}
+	for repo, want := range map[string]string{"/dev/api": "dev/api", "/work/api": "work/api", "/dev/web": "web"} {
+		if got := Name(r, repo); got != want {
+			t.Errorf("Name(%s) = %q, want %q", repo, got, want)
+		}
+	}
+	if got := Name(nil, "/dev/api"); got != "api" {
+		t.Errorf("Name with no report = %q, want api", got)
+	}
+}

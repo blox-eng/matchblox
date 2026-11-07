@@ -2,8 +2,8 @@ package service
 
 import (
 	"fmt"
+	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -91,7 +91,8 @@ func (s *Service) changeChains(arg, fromPane string) (res proto.Result, changed 
 	return res, true
 }
 
-// chainable is the repo from and to share, or why they cannot chain.
+// chainable is the repo of from, "" for none, or why from and to cannot
+// chain. A chain is one host; its matches may work in any repo, or none.
 // Callers hold mu.
 func (s *Service) chainable(st *chains.Store, from, to sample.Session) (repo, why string) {
 	switch {
@@ -100,23 +101,13 @@ func (s *Service) chainable(st *chains.Store, from, to sample.Session) (repo, wh
 	case to.Host != from.Host:
 		return "", to.Name + " is on another host: a chain is one host"
 	}
-	fromRepo, _, ok := gitscan.RepoOf(s.cur.Git, from.Cwd)
-	if !ok {
-		return "", from.Name + " is in no repo matchblox knows: a chain is one repo"
-	}
-	toRepo, _, ok := gitscan.RepoOf(s.cur.Git, to.Cwd)
-	if !ok {
-		return "", to.Name + " is in no repo matchblox knows: a chain is one repo"
-	}
-	if toRepo != fromRepo {
-		return "", fmt.Sprintf("%s works in %s, not %s: a chain is one repo", to.Name, filepath.Base(toRepo), filepath.Base(fromRepo))
-	}
 	for _, x := range []sample.Session{from, to} {
 		if slices.ContainsFunc(st.Off, memberOf(x).Same) {
 			return "", x.Name + " is off: it takes no chains"
 		}
 	}
-	return fromRepo, ""
+	repo, _, _ = gitscan.RepoOf(s.cur.Git, from.Cwd)
+	return repo, ""
 }
 
 // pruneChainsLocked keeps up the members whose session id changed in their
@@ -125,23 +116,19 @@ func (s *Service) chainable(st *chains.Store, from, to sample.Session) (repo, wh
 // of the sample before, which name a match that is gone. Callers hold mu.
 func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error {
 	st := s.chainsLocked()
-	if s.cur.Git == nil {
-		return nil // no repo is known yet: every match would look gone
-	}
 	if s.sampleMissedLocked() {
 		return nil // every match would look gone
 	}
 	refreshed := s.refreshChainsLocked(st)
 	before, asks, offs := slices.Clone(st.Chains), len(st.Requests), len(st.Off)
-	live := func(m chains.Member) (string, bool) {
-		x, ok := s.sessionOfLocked(m)
-		if !ok {
-			return "", false
-		}
-		repo, _, _ := gitscan.RepoOf(s.cur.Git, x.Cwd)
-		return repo, true
+	live := func(m chains.Member) bool {
+		_, ok := s.sessionOfLocked(m)
+		return ok
 	}
 	left := st.Prune(live, now)
+	maps.DeleteFunc(s.cleared, func(id string, _ bool) bool {
+		return !slices.ContainsFunc(s.cur.Sessions, func(x sample.Session) bool { return x.SessionID == id })
+	})
 	for _, l := range left {
 		text := s.leftText(l, prev)
 		for _, c := range before {
@@ -163,20 +150,32 @@ func (s *Service) pruneChainsLocked(now time.Time, prev []sample.Session) error 
 
 // refreshChainsLocked renames each stored member whose pane, pid and start
 // a session holds now under another id (a cleared chat), and tells if any
-// changed. A partial session list renames no one wrongly. Callers hold mu.
+// changed. A chained member that a clear renamed is told its chain at its
+// next news. A sample that read no id keeps the one stored, so a clear seen
+// through it is still a clear. A partial session list renames no one
+// wrongly. Callers hold mu.
 func (s *Service) refreshChainsLocked(st *chains.Store) bool {
 	return st.Refresh(func(m chains.Member) (chains.Member, bool) {
 		for _, x := range s.cur.Sessions {
 			if x.Pane != "" && x.Pane == m.Pane && x.PID == m.PID && x.Start == m.Start {
-				return memberOf(x), true
+				n := memberOf(x)
+				if n.SessionID == "" {
+					n.SessionID = m.SessionID
+				}
+				if _, chained := st.ChainOf(m); chained && m.SessionID != "" && n.SessionID != m.SessionID {
+					if s.cleared == nil {
+						s.cleared = map[string]bool{}
+					}
+					s.cleared[n.SessionID] = true
+				}
+				return n, true
 			}
 		}
 		return chains.Member{}, false
 	})
 }
 
-// leftText is the news of l: where the match went, when it is in another
-// repo. Callers hold mu.
+// leftText is the news of l: the match is gone. Callers hold mu.
 func (s *Service) leftText(l chains.Left, prev []sample.Session) string {
 	name := l.Who.Pane
 	if x, ok := s.sessionOfLocked(l.Who); ok {
@@ -184,10 +183,7 @@ func (s *Service) leftText(l chains.Left, prev []sample.Session) string {
 	} else if i := slices.IndexFunc(prev, func(x sample.Session) bool { return memberOf(x).Same(l.Who) }); i >= 0 {
 		name = prev[i].Name
 	}
-	if l.Repo == "" {
-		return name + " left the chain"
-	}
-	return fmt.Sprintf("%s left the chain: it moved to %s", name, filepath.Base(l.Repo))
+	return name + " left the chain"
 }
 
 // sampleMissedLocked tells if the last sample did not read its sessions.
@@ -241,6 +237,25 @@ func chainsView(st *chains.Store) *state.ChainsView {
 		v.Chains[i].Members = slices.Clone(v.Chains[i].Members)
 	}
 	return v
+}
+
+// elsewhereLocked is what a line from from to to adds when they work in
+// different repos: " (in <repo>)", or " (in no repo matchblox knows)". "" when they share
+// one, or either is gone. Callers hold mu.
+func (s *Service) elsewhereLocked(from, to chains.Member) string {
+	x, okFrom := s.sessionOfLocked(from)
+	y, okTo := s.sessionOfLocked(to)
+	if !okFrom || !okTo {
+		return ""
+	}
+	repo, _, _ := gitscan.RepoOf(s.cur.Git, x.Cwd)
+	if other, _, _ := gitscan.RepoOf(s.cur.Git, y.Cwd); repo == other {
+		return ""
+	}
+	if repo == "" {
+		return " (in no repo matchblox knows)"
+	}
+	return " (in " + gitscan.Name(s.cur.Git, repo) + ")"
 }
 
 func (s *Service) sessionOfLocked(m chains.Member) (sample.Session, bool) {

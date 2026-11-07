@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -162,6 +163,16 @@ func RepoOf(r *Report, cwd string) (repoPath, worktreePath string, ok bool) {
 		}
 	}
 	return repoPath, worktreePath, ok
+}
+
+// Name is how a person tells repo apart from the others r knows: its base
+// name, or parent/base when another repo of r shares the base name.
+func Name(r *Report, repo string) string {
+	base := filepath.Base(repo)
+	if r != nil && slices.ContainsFunc(r.Repos, func(o Repo) bool { return o.Path != repo && filepath.Base(o.Path) == base }) {
+		return filepath.Join(filepath.Base(filepath.Dir(repo)), base)
+	}
+	return base
 }
 
 // Toplevel walks up from dir to the directory holding .git (a directory for a

@@ -16,6 +16,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/accounts"
 	"github.com/blox-eng/matchblox/internal/chains"
+	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/limits"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/said"
@@ -101,6 +102,7 @@ type sessionJSON struct {
 	Name       string      `json:"name"`
 	Pane       string      `json:"pane"`
 	Target     string      `json:"target"`
+	Repo       string      `json:"repo"`
 	Status     string      `json:"status"`
 	Word       string      `json:"word"`
 	Reason     string      `json:"reason"`
@@ -203,7 +205,7 @@ func writeChildren(w io.Writer, kids []childJSON, indent string) error {
 func sessionRows(doc state.Doc) []sessionJSON {
 	rows := []sessionJSON{}
 	for _, s := range doc.Sessions {
-		r := sessionJSON{Name: s.Name, Pane: s.Pane, Target: s.Target, Status: s.Status, Word: stoker.Word(s),
+		r := sessionJSON{Name: s.Name, Pane: s.Pane, Target: s.Target, Repo: repoName(doc, s.Cwd), Status: s.Status, Word: stoker.Word(s),
 			Reason: doc.Reasons[s.Pane].Word, Held: heldBy(doc, s), Stoker: doc.StokerServer != "" && s.Server() == doc.StokerServer, ContextPct: s.ContextPct, Account: s.Account,
 			AccountDir: s.AccountDir, SigningIn: s.SigningIn, byHand: signsInByHand(doc, s)}
 		if s.Progress != nil {
@@ -216,6 +218,14 @@ func sessionRows(doc state.Doc) []sessionJSON {
 		rows = append(rows, r)
 	}
 	return rows
+}
+
+// repoName is the name of the repo cwd is in, "" for none.
+func repoName(doc state.Doc, cwd string) string {
+	if repo, _, ok := gitscan.RepoOf(doc.Git, cwd); ok {
+		return gitscan.Name(doc.Git, repo)
+	}
+	return ""
 }
 
 func writeJSON(w io.Writer, v any) error {
@@ -235,6 +245,9 @@ func writeSessions(w io.Writer, doc state.Doc, asJSON bool) error {
 			target = "outside tmux"
 		}
 		line := fmt.Sprintf("%-4s %-16s %-8s %-6s %3.0f%%", r.Pane, r.Name, target, r.Word, r.ContextPct)
+		if r.Repo != "" {
+			line += "  in " + r.Repo
+		}
 		if r.Held {
 			line += "  held"
 		}
@@ -881,6 +894,7 @@ func chainOutcome(w io.Writer, path string, a proto.Act) error {
 type chainMemberJSON struct {
 	Name string `json:"name"`
 	Pane string `json:"pane"`
+	Repo string `json:"repo"`
 }
 
 type chainRequestJSON struct {
@@ -890,11 +904,16 @@ type chainRequestJSON struct {
 
 // writeChain lists the chain pane is in, then the asks to and from it.
 func writeChain(w io.Writer, doc state.Doc, pane string, asJSON bool) error {
+	session := func(m chains.Member) (sample.Session, bool) {
+		i := slices.IndexFunc(doc.Sessions, func(s sample.Session) bool { return s.Pane == m.Pane })
+		if i < 0 {
+			return sample.Session{}, false
+		}
+		return doc.Sessions[i], true
+	}
 	name := func(m chains.Member) string {
-		for _, s := range doc.Sessions {
-			if s.Pane == m.Pane {
-				return s.Name
-			}
+		if s, ok := session(m); ok {
+			return s.Name
 		}
 		return m.Pane
 	}
@@ -907,8 +926,14 @@ func writeChain(w io.Writer, doc state.Doc, pane string, asJSON bool) error {
 				continue
 			}
 			for _, m := range c.Members {
-				members = append(members, chainMemberJSON{name(m), m.Pane})
-				lines = append(lines, name(m)+" "+m.Pane)
+				s, _ := session(m)
+				repo := repoName(doc, s.Cwd)
+				members = append(members, chainMemberJSON{name(m), m.Pane, repo})
+				line := name(m) + " " + m.Pane
+				if repo != "" {
+					line += " in " + repo
+				}
+				lines = append(lines, line)
 			}
 			break
 		}
