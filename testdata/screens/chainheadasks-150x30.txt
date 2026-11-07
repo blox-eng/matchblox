@@ -1,7 +1,7 @@
  ▰ matchblox                                                                                                                         ● 2 wait for you
  SESSIONS 6    ships    machine    git    history    panes    stoker
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- WAITS FOR YOU · 2 · chain of 2                             │ stoker-s1 · idle
+ WAITS FOR YOU · 2 · chain of 2                             │ stoker of chain kindle-web · idle
 ▌╿╮ stoker   kindle-web · plan 2/5 · asks: merge #812 now?  │
  ✦┤ hearth-api                          busy            79% │
  ╿╯ ember-billing                       idle       3m   32% │

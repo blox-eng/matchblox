@@ -790,27 +790,82 @@ func TestFOnABareChainOpensSheet(t *testing.T) {
 	}
 }
 
-// TestAOnBareFuseOpensSheet: a tap on the fuse of a chain with no head
-// opens its start sheet; a tap on a head's fuse does what a does there.
-func TestAOnBareFuseOpensSheet(t *testing.T) {
-	tapFuse := func(m Model, name string) Model {
-		t.Helper()
-		sc := m.draw(m.width)
-		for i, r := range sc.rows {
-			if r >= len(m.doors) && r < len(m.doors)+len(m.snap.Sessions) && m.snap.Sessions[r-len(m.doors)].Name == name {
-				next, _ := m.Update(tea.MouseClickMsg{X: 2, Y: sc.bodyTop + i, Button: tea.MouseLeft})
-				return next.(Model)
-			}
+// tapFuse taps the fuse of the row named name.
+func tapFuse(t *testing.T, m Model, name string) Model {
+	t.Helper()
+	sc := m.draw(m.width)
+	for i, r := range sc.rows {
+		if r >= len(m.doors) && r < len(m.doors)+len(m.snap.Sessions) && m.snap.Sessions[r-len(m.doors)].Name == name {
+			next, _ := m.Update(tea.MouseClickMsg{X: 2, Y: sc.bodyTop + i, Button: tea.MouseLeft})
+			return next.(Model)
 		}
-		t.Fatalf("no row %s", name)
-		return m
 	}
+	t.Fatalf("no row %s", name)
+	return m
+}
+
+// TestTapOnBareFuseOpensSheet: a tap on the fuse of a chain with no head
+// opens its start sheet. On a chain with a head it is a row tap, and on a
+// phone it opens the row's chat, as any tap on the row does.
+func TestTapOnBareFuseOpensSheet(t *testing.T) {
 	m := fuseModel(t, 160, fuseState(t, mockupChain), "")
-	if next := tapFuse(m, "hearth-api"); next.sheet == nil || next.sheet.chain != "c1" {
+	if next := tapFuse(t, m, "hearth-api"); next.sheet == nil || next.sheet.chain != "c1" {
 		t.Fatalf("a tap on the fuse opened no sheet: %+v", next.sheet)
 	}
 	h, _ := headModel(t, 160, headState(t, runningPlan(), true))
-	if next := tapFuse(h, "stoker-s1"); !next.chatKeys || next.sheet != nil {
-		t.Fatalf("a tap on the head's fuse: chat %v, sheet %v", next.chatKeys, next.sheet)
+	next := tapFuse(t, h, "hearth-api")
+	if s, _ := next.selectedSession(); next.sheet != nil || next.chatKeys || s.Name != "hearth-api" {
+		t.Fatalf("a tap on a headed chain's fuse: sheet %v, chat %v, on %q", next.sheet, next.chatKeys, s.Name)
+	}
+	phone := fuseModel(t, 44, fuseState(t, mockupChain), "")
+	next = tapFuse(t, phone, "hearth-api")
+	if s, _ := next.selectedSession(); next.sheet != nil || !next.chatKeys || s.Name != "hearth-api" {
+		t.Fatalf("a phone's tap on the fuse: sheet %v, chat %v, on %q", next.sheet, next.chatKeys, s.Name)
+	}
+}
+
+// TestABareChainStartsNothingAtNight: F, or a tap on the fuse, of a chain
+// with no head says the night is sealed and sends nothing.
+func TestABareChainStartsNothingAtNight(t *testing.T) {
+	st := fuseState(t, mockupChain)
+	host := proto.StokerView{}
+	host.On, host.Nightly = true, true
+	st.Stoker = &host
+	m, f := headModel(t, 160, st)
+	choose(&m, pidOf(m, "hearth-api"))
+	for name, next := range map[string]Model{"F": sendKey(m, "F").(Model), "a tap": tapFuse(t, m, "hearth-api")} {
+		if next.sheet != nil || next.flash != sealedFamily || len(f.acts()) != 0 {
+			t.Errorf("%s at night: sheet %v, flash %q, acts %+v", name, next.sheet, next.flash, f.acts())
+		}
+	}
+}
+
+// TestAHeadIsNoSession: x, r, A and z on a head row send nothing and say
+// where its agent quits.
+func TestAHeadIsNoSession(t *testing.T) {
+	m, f := headModel(t, 160, headState(t, runningPlan(), true))
+	m = pick(t, m, stokerPane)
+	for _, k := range []string{"x", "r", "A", "z"} {
+		next := sendKey(m, k).(Model)
+		if next.flash != "the stoker of chain kindle-web is no session: quit it on the STOKER tab" || next.pending != nil || next.form != nil || len(f.acts()) != 0 {
+			t.Errorf("%s on the head: flash %q, pending %v, form %v, acts %+v", k, next.flash, next.pending, next.form != nil, f.acts())
+		}
+	}
+}
+
+// TestTheHostStokerAskingCountsAsToday: with no chain stoker, the host
+// stoker's agent at a menu adds nothing to the header's count.
+func TestTheHostStokerAskingCountsAsToday(t *testing.T) {
+	today := fuseState(t)
+	today.StokerServer = "matchblox"
+	asking := today
+	asking.Sessions = append(slices.Clone(today.Sessions), sample.Session{Host: today.Sessions[0].Host, Name: "stoker", PID: 9002,
+		Pane: "%8@matchblox", Target: "stoker:0.0", Status: "idle", Asks: true, Permits: true})
+	header := func(st proto.State) string {
+		m, _ := headModel(t, 160, st)
+		return strings.SplitN(screen(m), "\n", 2)[0]
+	}
+	if got, want := header(asking), header(today); got != want {
+		t.Fatalf("header %q, want %q", got, want)
 	}
 }

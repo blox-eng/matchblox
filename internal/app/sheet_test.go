@@ -375,7 +375,7 @@ func TestSheetSendsStokerNew(t *testing.T) {
 	for _, k := range []string{"tab", "space", "tab"} {
 		next, _ = next.Update(keyPress(k))
 	}
-	if !strings.Contains(screen(next), "Enter starts") && !strings.Contains(screen(next), "⏎ start") {
+	if !strings.Contains(screen(next), "⏎ start ─ tab chips ─ esc") {
 		t.Fatalf("the foot does not start:\n%s", screen(next))
 	}
 	next, cmd := press(next, tea.KeyEnter)

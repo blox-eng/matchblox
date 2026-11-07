@@ -131,10 +131,22 @@ func (m Model) headOf(k chainKey) (state.ChainStoker, bool) {
 	return state.ChainStoker{}, false
 }
 
-// hasUnit tells if host lists a chain stoker for chain k, ended or not: a
-// new run then goes to it as an order.
+// unitOf is the last chain stoker host lists for chain k, ended or not.
+func (m Model) unitOf(k chainKey) (state.ChainStoker, bool) {
+	us := m.stateOf(k.host).Stokers
+	for i := len(us) - 1; i >= 0; i-- {
+		if us[i].Chain == k.id {
+			return us[i], true
+		}
+	}
+	return state.ChainStoker{}, false
+}
+
+// hasUnit tells if host lists a chain stoker for chain k: a new run then
+// goes to it as an order.
 func (m Model) hasUnit(k chainKey) bool {
-	return slices.ContainsFunc(m.stateOf(k.host).Stokers, func(u state.ChainStoker) bool { return u.Chain == k.id })
+	_, ok := m.unitOf(k)
+	return ok
 }
 
 // agentOf is the session of chain stoker id's agent on host: tmux session
@@ -604,7 +616,26 @@ func (m Model) stokeChain() (tea.Model, tea.Cmd) {
 			return m.headAct(h, u)
 		}
 	}
-	return m.openChainSheet(k), nil
+	return m.startChain(k), nil
+}
+
+// startChain opens the start sheet of chain k, which has no head row. A
+// sealed night starts nothing.
+func (m Model) startChain(k chainKey) Model {
+	if m.sealedNight(k.host) {
+		m.flash = sealedFamily
+		return m
+	}
+	return m.openChainSheet(k)
+}
+
+// titleOf names a row in the detail and the chat: a head row by its
+// chain, not by its agent's tmux session.
+func (m Model) titleOf(s sample.Session) string {
+	if u, head := m.headRow(s); head {
+		return "stoker of chain " + u.Name
+	}
+	return s.Name
 }
 
 // onFuse tells if column x of a row of a list w wide is on its fuse:
@@ -617,7 +648,11 @@ func (m Model) onFuse(x, w int) bool {
 // openChainSheet opens the start sheet of chain k: a run of its stoker
 // needs an order and its goes.
 func (m Model) openChainSheet(k chainKey) Model {
-	m.sheet = &sheet{host: k.host, chain: k.id, chainName: m.chainName(k), matches: m.chainIx.present[k]}
+	name := m.chainName(k)
+	if u, ok := m.unitOf(k); ok {
+		name = u.Name // the service's name for it
+	}
+	m.sheet = &sheet{host: k.host, chain: k.id, chainName: name, matches: m.chainIx.present[k]}
 	m.pending = nil
 	return m
 }
