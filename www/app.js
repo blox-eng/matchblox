@@ -497,19 +497,21 @@ onReady(() => {
 });
 
 // Chain reaction: the matches catch one by one, go out in order, then catch
-// again at random while the section is in view.
+// again at random while the section is in view. A tap lights the match under
+// it, and the fire runs both ways from there; Enter lights the first.
 onReady(() => {
   const section = document.querySelector(".chain");
   const row = document.getElementById("chain-sticks");
-  const strike = document.getElementById("chain-strike");
-  if (!section || !row || !strike) return;
+  const svg = section && section.querySelector(".domino");
+  if (!section || !row || !svg) return;
   const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   const ns = "http://www.w3.org/2000/svg";
   const N = 28, STEP = 90;
+  const X0 = 40, GAP = 920 / (N - 1);
   const rand = (a, b) => a + Math.random() * (b - a);
   const items = [];
   for (let i = 0; i < N; i++) {
-    const x = 40 + i * (920 / (N - 1));
+    const x = X0 + i * GAP;
     const el = document.createElementNS(ns, "g");
     el.setAttribute("transform", `rotate(${i % 2 ? 1.5 : -1.5} ${x} 206)`);
     el.innerHTML =
@@ -544,25 +546,46 @@ onReady(() => {
     }
     later(flicker, rand(180, 650));
   };
-  const run = () => {
+  // run lights from match `from`: each match catches after the one nearer to
+  // it, and goes out in the same order.
+  const run = (from = 0) => {
     stop();
-    if (still()) { items.forEach(light); return; }
+    if (still()) { items.forEach(light); return 0; }
     items.forEach((el) => el.classList.remove("lit", "out", "smoking"));
-    const lastLit = 300 + (N - 1) * STEP;
-    items.forEach((el, i) => later(() => light(el), 300 + i * STEP));
-    items.forEach((el, i) => later(() => douse(el), lastLit + 900 + i * STEP));
-    later(flicker, lastLit + 900 + N * STEP + 400);
+    const far = Math.max(from, N - 1 - from);
+    const lastLit = 300 + far * STEP;
+    items.forEach((el, i) => {
+      const d = Math.abs(i - from) * STEP;
+      later(() => light(el), 300 + d);
+      later(() => douse(el), lastLit + 900 + d);
+    });
+    later(flicker, lastLit + 900 + (far + 1) * STEP + 400);
+    return lastLit + 900 + far * STEP;
   };
 
   const status = document.getElementById("chain-status");
   let quiet;
-  strike.addEventListener("click", () => {
-    run();
+  const strike = (from) => {
+    const burns = run(from);
     if (!status) return;
     clearTimeout(quiet);
     status.textContent = ""; // a second strike announces again
     setTimeout(() => { status.textContent = "Chain lit"; }, 50);
-    quiet = setTimeout(() => { status.textContent = ""; }, still() ? 3000 : 300 + (N - 1) * STEP + 900 + N * STEP);
+    quiet = setTimeout(() => { status.textContent = ""; }, burns || 3000);
+  };
+  // The match nearest the tap, in the drawing's own units.
+  const nearest = (e) => {
+    const p = svg.createSVGPoint();
+    p.x = e.clientX; p.y = e.clientY;
+    const m = svg.getScreenCTM();
+    const x = m ? p.matrixTransform(m.inverse()).x : X0;
+    return Math.min(N - 1, Math.max(0, Math.round((x - X0) / GAP)));
+  };
+  svg.addEventListener("click", (e) => strike(nearest(e)));
+  svg.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    strike(0);
   });
   new IntersectionObserver(([e]) => { if (e.isIntersecting) run(); else stop(); }, { threshold: 0.2 }).observe(section);
 });
