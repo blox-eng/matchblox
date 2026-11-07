@@ -100,11 +100,14 @@ func IDOfSession(name string) (id string, ok bool) {
 
 // Link ties a chain stoker to its chain: the stoker's id, the chain's name,
 // who gave the stoker its goes ("person" or "host") and the goes it holds.
+// Ended: its chain ended or joined another, and the stoker stopped for
+// good; a new chain of the same id is not its.
 type Link struct {
 	ID     string   `json:"id"`
 	Chain  string   `json:"chain"`
 	Giver  string   `json:"giver"`
 	Grants []string `json:"grants"`
+	Ended  bool     `json:"ended,omitempty"`
 }
 
 // ReadLink reads link.json. A missing file is fs.ErrNotExist.

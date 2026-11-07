@@ -1833,3 +1833,139 @@ func TestJoinStartsTheSurvivorsRunThatIsOff(t *testing.T) {
 		t.Fatalf("brief %v:\n%s", err, b2)
 	}
 }
+
+// reuseC1 ends c1 (api-db is gone) and forms a new chain of the same id,
+// of api-auth and api-x.
+func reuseC1(t *testing.T, s *Service) {
+	t.Helper()
+	withoutPane(s, "%4")
+	s.followChains(t.Context())
+	s.mu.Lock()
+	var auth, x sample.Session
+	for _, y := range s.cur.Sessions {
+		switch y.Pane {
+		case "%3":
+			auth = y
+		case "%9":
+			x = y
+		}
+	}
+	s.Chains.Chains = append(s.Chains.Chains, chains.Chain{ID: "c1", Repo: s.Chains.Chains[0].Repo, Members: []chains.Member{memberOf(auth), memberOf(x)}})
+	s.mu.Unlock()
+}
+
+func TestAnEndedStokerTakesNoNewChainOfItsID(t *testing.T) {
+	s, ran := twoChains(t)
+	old, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stokerUp(s, "s1", "%5@mbtest")
+	reuseC1(t, s)
+	if l, err := stoker.ReadLink(old.store.Dir()); err != nil || !l.Ended {
+		t.Fatalf("the ended unit's link %+v %v", l, err)
+	}
+	card := cardTexts(old.store)
+	if s.unitOfChain("c1") != nil {
+		t.Fatal("the new c1 has the ended stoker")
+	}
+	u, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person")
+	if err != nil || u.id != "s2" {
+		t.Fatalf("the start: %v", err)
+	}
+	stokerUp(s, "s2", "%6@mbtest")
+	s.deliverBriefs(t.Context())
+	*ran = nil
+	joinChains(t, s)
+	if s.unitOfChain("c2") != u || s.chainIDOf(u) != "c2" || !u.store.Mode().On {
+		t.Fatal("the join did not keep the live stoker")
+	}
+	if got := cardTexts(old.store); !slices.Equal(got, card) {
+		t.Fatalf("the ended unit's card changed: %q", got)
+	}
+	if s.chainIDOf(old) != "c1" {
+		t.Fatalf("the ended unit moved to %q", s.chainIDOf(old))
+	}
+}
+
+func TestJoinAtTheCapCarriesTheOrder(t *testing.T) {
+	s, _, b, _ := twoStokers(t, "ship the auth fix", []string{"merge"}, "keep ci green", nil)
+	s.MaxChains = 2
+	if err := b.store.Set(stoker.Mode{}); err != nil {
+		t.Fatal(err)
+	}
+	if n := s.chainsAtWork(); n != 2 {
+		t.Fatalf("the cap counts %d", n)
+	}
+	joinChains(t, s)
+	if m := b.store.Mode(); !m.On || m.Order == nil || m.Order.Words != "ship the auth fix" {
+		t.Fatalf("the survivor's run %+v; card %q", m, cardTexts(b.store))
+	}
+}
+
+func TestJoinAtNightWaitsForTheMorning(t *testing.T) {
+	s, _, b, ran := twoStokers(t, "ship the auth fix", nil, "keep ci green", nil)
+	mustAct(t, s, orderAct(t, "night", true))
+	if !b.store.Mode().Nightly {
+		t.Fatal("the survivor's run is no night run")
+	}
+	*ran = nil
+	joinChains(t, s)
+	if got := typed(*ran, "%6@mbtest"); len(got) != 0 {
+		t.Fatalf("typed into a sealed night %q", got)
+	}
+	if !slices.Contains(cardTexts(b.store), "the order of the joined chain api-auth waits for the morning: ship the auth fix") {
+		t.Fatalf("card %q", cardTexts(b.store))
+	}
+	if m := b.store.Mode(); m.Order == nil || m.Order.Words != "keep ci green" {
+		t.Fatalf("the survivor's order %+v", m.Order)
+	}
+}
+
+func TestChainEndDropsItsWaitingKill(t *testing.T) {
+	s, u, _ := familyTest(t)
+	s.deliverBriefs(t.Context())
+	if res := s.act(t.Context(), fromChainStoker("kill:%4", "")); !strings.Contains(res.Err, "the kill waits") {
+		t.Fatalf("the chain stoker's kill: %q", res.Err)
+	}
+	withoutPane(s, "%3") // c1 ends; api-db stays
+	s.followChains(t.Context())
+	last := stoker.LastGo(u.store.View().Run, stoker.Entry{Pane: "%5@mbtest", Needs: "kill:%4"})
+	if last.State != stoker.StepFailed || last.Text != "dropped the kill for api-db: its chain ended" {
+		t.Fatalf("the kill on the card %+v", last)
+	}
+	if err := s.grant(u, last.ID); err == nil {
+		t.Fatal("a y still gives the dropped kill")
+	}
+}
+
+func TestJoinIntoTheOnlyStokerTakesTheHostsWork(t *testing.T) {
+	s, _ := twoChains(t)
+	mustAct(t, s, orderAct(t, "go", false))
+	mustAct(t, s, fromStokerAct("message:%3", "go on"))
+	if _, in := drivenPanes(t, s.hostUnit())["%3"]; !in {
+		t.Fatal("the host does not drive api-auth")
+	}
+	u, err := s.startChainStoker(t.Context(), "api-ui", "", nil, "person")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stokerUp(s, "s1", "%5@mbtest")
+	joinChains(t, s)
+	if s.unitOfChain("c2") != u || s.chainIDOf(u) != "c2" || !u.store.Mode().On {
+		t.Fatal("the survivor's stoker changed")
+	}
+	if _, in := drivenPanes(t, s.hostUnit())["%3"]; in {
+		t.Fatal("the host still drives api-auth")
+	}
+	mustAct(t, s, fromChainStoker("message:%3", "go on"))
+}
+
+func TestChainOffEndsItsStoker(t *testing.T) {
+	s, u, ran := familyTest(t)
+	*ran = nil
+	mustAct(t, s, proto.Act{RecID: proto.ChainPrefix + "off", From: "%4"})
+	if !slices.Contains(cardTexts(u.store), "its chain ended") || u.store.Mode().On || !killed(*ran, "s1") {
+		t.Fatalf("card %q, mode %+v, ran %q", cardTexts(u.store), u.store.Mode(), *ran)
+	}
+}
