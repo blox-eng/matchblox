@@ -2,10 +2,13 @@ package demo
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/blox-eng/matchblox/internal/history"
 )
 
 func scriptOn(t *testing.T, lasts time.Duration) (*script, *World) {
@@ -164,5 +167,28 @@ func TestOnlyAnOptionOrEnterAnswersTheMenu(t *testing.T) {
 		if !answers(k) {
 			t.Errorf("%q did not answer the question", k)
 		}
+	}
+}
+
+// The seed alone spans the two hours the History tab names: a console
+// that has one snapshot draws "last 2h", not "last 1h59m" (#310).
+func TestTheSeededHistorySpansTwoHours(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.csv")
+	if err := writeHistory(path); err != nil {
+		t.Fatal(err)
+	}
+	h, err := history.Load(fixtureNow, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pts := h.Points
+	if len(pts) < 2 {
+		t.Fatalf("%d points", len(pts))
+	}
+	if span := pts[len(pts)-1].At.Sub(pts[0].At); span != historySpan {
+		t.Errorf("the seed spans %v, want %v", span, historySpan)
+	}
+	if last := pts[len(pts)-1].At; !last.Before(fixtureNow) {
+		t.Errorf("the last seeded point is at %v, not before the demo's clock %v", last, fixtureNow)
 	}
 }

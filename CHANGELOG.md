@@ -14,6 +14,11 @@ All notable changes to matchblox are in this file. The format follows
   shows at once.
   ([#313](https://github.com/blox-eng/matchblox/issues/313))
 
+- **The demo's History tab names its two hours.** It read "last 1h59m"
+  until the second snapshot came, because the seeded trend was one point
+  short of two hours.
+  ([#310](https://github.com/blox-eng/matchblox/issues/310))
+
 ## [0.33.0] - 2026-11-06
 
 ### Added

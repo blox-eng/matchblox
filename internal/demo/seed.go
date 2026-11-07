@@ -31,7 +31,7 @@ func writeHistory(path string) error {
 	}
 	w := csv.NewWriter(f)
 	_ = w.Write(history.Columns)
-	n := int(historySpan / history.Every)
+	n := int(historySpan/history.Every) + 1 // n points span n-1 steps
 	f1 := func(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) }
 	for i := range n {
 		at := fixtureNow.Add(-time.Duration(n-i) * history.Every)
