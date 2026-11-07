@@ -245,16 +245,19 @@ func (c *client) type_(keys ...string) {
 }
 
 // jump runs the laptop's command list with the console's own ssh command
-// (ssh is the fake), for a client: the one change is -c, since the test
-// has no pane to take the client from.
+// (ssh is the fake), for a client. A jump without a ClientTTY gets -c
+// added, since the test has no pane to take the client from; one with a
+// ClientTTY runs as Local returned it.
 func (e jumpEnv) jump(t *testing.T, c *client, j Jump, ssh string) {
 	t.Helper()
 	argv := j.Local(append([]string{ssh}, JumpSSH(j.Host, j, nil)[1:]...))
-	i := slices.Index(argv, "switch-client")
-	if i < 0 {
-		t.Fatalf("no switch-client in the list: %v", argv)
+	if j.ClientTTY == "" {
+		i := slices.Index(argv, "switch-client")
+		if i < 0 {
+			t.Fatalf("no switch-client in the list: %v", argv)
+		}
+		argv = slices.Insert(argv, i+1, "-c", c.tty)
 	}
-	argv = slices.Insert(argv, i+1, "-c", c.tty)
 	mustTmux(t, e.outer, argv[1:]...)
 }
 
@@ -313,6 +316,7 @@ func TestJumpWithAClientTTYLeavesTheOtherClientHome(t *testing.T) {
 	desk := attach(t, e.outer, "matchblox")
 	phone := attach(t, e.outer, "matchblox")
 	j := e.newJump("0a1b2c3d")
+	desk.type_("x") // the desk is the client tmux takes when no -c names one
 	j.ClientTTY = phone.tty
 	e.jump(t, phone, j, e.ssh)
 	waitFor(t, "the phone is in the jump", func() bool { return phone.session() == HostSessionName(j.Host, j.ID) })
