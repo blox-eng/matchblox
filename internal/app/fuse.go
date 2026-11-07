@@ -1,11 +1,15 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
@@ -45,11 +49,13 @@ func (m Model) chainsOf(host string) *state.ChainsView {
 // chainIndex is what the chains say of the listed sessions, worked out once
 // in refresh: the frames only look it up.
 type chainIndex struct {
-	of      map[rowKey]chainKey // the chain a session is in; a chain of one is no chain
-	need    map[chainKey]int    // the neediest group of the chain's listed matches
-	present map[chainKey]int    // the matches the host has, whatever the filter hides
-	shown   map[chainKey]int    // the matches in the list
-	rows    map[chainKey][]int  // the list rows of each chain, top down
+	of      map[rowKey]chainKey          // the chain a session is in; a chain of one is no chain
+	need    map[chainKey]int             // the neediest group of the chain's listed matches
+	present map[chainKey]int             // the matches the host has, whatever the filter hides
+	shown   map[chainKey]int             // the matches in the list
+	rows    map[chainKey][]int           // the list rows of each chain, top down
+	heads   map[rowKey]state.ChainStoker // the head rows: the chain stoker of each
+	repo    map[chainKey]string          // the repo label of a chain with a head
 }
 
 // chainScan is the chain, as the chains name it, that a session is in.
@@ -112,6 +118,106 @@ func (m *Model) indexChains() {
 	m.chainIx = ix
 }
 
+// headOf is the chain stoker that heads chain k's fuse: its run is on or
+// its agent is alive. An ended unit, or one that rests with no agent,
+// heads nothing.
+func (m Model) headOf(k chainKey) (state.ChainStoker, bool) {
+	us := m.stateOf(k.host).Stokers
+	for i := len(us) - 1; i >= 0; i-- {
+		if u, v := us[i], us[i].View; u.Chain == k.id && (v.On || v.PaneUp || v.Starting) {
+			return u, true
+		}
+	}
+	return state.ChainStoker{}, false
+}
+
+// hasUnit tells if host lists a chain stoker for chain k, ended or not: a
+// new run then goes to it as an order.
+func (m Model) hasUnit(k chainKey) bool {
+	return slices.ContainsFunc(m.stateOf(k.host).Stokers, func(u state.ChainStoker) bool { return u.Chain == k.id })
+}
+
+// agentOf is the session of chain stoker id's agent on host: tmux session
+// stoker-<id> on the stoker's server.
+func (m Model) agentOf(host, id string) (sample.Session, bool) {
+	for _, s := range m.all.sessions {
+		if s.Host == host && m.isStoker(s) && s.TmuxSession() == sample.StokerSession+"-"+id {
+			return s, true
+		}
+	}
+	return sample.Session{}, false
+}
+
+// headless is the head row of a chain stoker whose run is on and whose
+// agent is gone: no pane, and a PID no process has.
+func headless(host, id string) sample.Session {
+	n, _ := strconv.Atoi(strings.TrimPrefix(id, "s"))
+	return sample.Session{Host: host, Name: sample.StokerSession, PID: -1 - n, Status: "idle"}
+}
+
+// addHeads puts the head row of each chain in ss into ss, its need into
+// the chain's and its group's rank and wait into need and since.
+func (m *Model) addHeads(ss []sample.Session, need map[rowKey]int, since map[rowKey]time.Time) []sample.Session {
+	ix := &m.chainIx
+	ix.heads, ix.repo = map[rowKey]state.ChainStoker{}, map[chainKey]string{}
+	keys := slices.Collect(maps.Keys(ix.shown))
+	slices.SortFunc(keys, func(a, b chainKey) int { return cmp.Or(cmp.Compare(a.host, b.host), cmp.Compare(a.id, b.id)) })
+	for _, k := range keys {
+		u, ok := m.headOf(k)
+		if !ok {
+			continue
+		}
+		for _, s := range ss {
+			if ko, ok := ix.of[keyOf(s)]; ok && ko == k {
+				ix.repo[k] = m.repoOf(s)
+				break
+			}
+		}
+		s, alive := m.agentOf(k.host, u.ID)
+		if !alive {
+			s = headless(k.host, u.ID)
+		}
+		r := keyOf(s)
+		ix.of[r], ix.heads[r] = k, u
+		g := m.groupOf(s)
+		need[r] = g
+		if it, ok := m.waitOf(s); ok {
+			since[r] = it.Since
+		}
+		ix.need[k] = min(ix.need[k], g)
+		ss = append(ss, s)
+	}
+	return ss
+}
+
+// headRow is the chain stoker whose head row s is.
+func (m Model) headRow(s sample.Session) (state.ChainStoker, bool) {
+	u, ok := m.chainIx.heads[keyOf(s)]
+	return u, ok
+}
+
+// chainName is the name of chain k, as the service names it: its first
+// member's that host lists.
+func (m Model) chainName(k chainKey) string {
+	cv := m.chainsOf(k.host)
+	if cv == nil {
+		return k.id
+	}
+	for _, c := range cv.Chains {
+		if c.ID != k.id {
+			continue
+		}
+		for _, mb := range c.Members {
+			for _, s := range m.sessionsOf(k.host) {
+				if s.Name != "" && memberOf(s).Same(mb) {
+					return s.Name
+				}
+			}
+		}
+	}
+	return k.id
+}
+
 // indexChainRows notes the list rows of each chain: the spark runs down
 // them.
 func (m *Model) indexChainRows() {
@@ -172,7 +278,17 @@ func (m Model) together(ss []sample.Session) []sample.Session {
 				mates = append(mates, o)
 			}
 		}
-		slices.SortStableFunc(mates, func(a, b sample.Session) int { return m.groupOf(a) - m.groupOf(b) })
+		slices.SortStableFunc(mates, func(a, b sample.Session) int {
+			_, ha := m.headRow(a)
+			_, hb := m.headRow(b)
+			switch { // the head leads its chain
+			case ha && !hb:
+				return -1
+			case hb && !ha:
+				return 1
+			}
+			return m.groupOf(a) - m.groupOf(b)
+		})
 		out = append(out, mates...)
 	}
 	return out
@@ -377,4 +493,131 @@ func (m Model) sharingRepos(ss []sample.Session) map[rowKey]bool {
 		}
 	}
 	return out
+}
+
+// sealedFamily is what a sealed night says to a start or an order of the
+// person's.
+const sealedFamily = "the night is sealed: answer the stoker's prompts, or give the order in the morning"
+
+// headed tells if chain k has a head row in the list.
+func (m Model) headed(k chainKey) bool {
+	for r := range m.chainIx.heads {
+		if m.chainIx.of[r] == k {
+			return true
+		}
+	}
+	return false
+}
+
+// headIn is the head row of a chain, in the columns t: its stoker's match,
+// the chain's name, the steps of its plan done and what it asks. On a
+// phone the selected head opens in place, as any row does.
+func (m Model) headIn(s sample.Session, u state.ChainStoker, sel bool, w int, t tracks, fuse string, runs bool) []string {
+	st := m.st
+	mark := " "
+	if sel {
+		mark = st.accent.Render("▌")
+	}
+	cell := m.matchCell(s)
+	if t.fuse > 0 {
+		cell = strings.TrimSuffix(cell, " ") + padTo(fuse, t.fuse) + " "
+	}
+	done, all := u.View.PlanProgress()
+	line := mark + cell + st.ink(sel).Render("stoker") + "   " + st.text.Render(u.Name) + st.muted.Render(fmt.Sprintf(" · plan %d/%d", done, all))
+	if q, asks := m.headAsks(s); asks {
+		if q != "" {
+			q = ": " + q
+		}
+		line += st.warn.Render(" · asks" + q)
+	}
+	rows := []string{fit(line, w)}
+	if !sel || !m.inPlace() {
+		return rows
+	}
+	return append(rows, m.fused(m.opened(s, w-t.fuse), runs, t.fuse)...)
+}
+
+// headAsks tells if a chain stoker's agent waits for the person, and its
+// question.
+func (m Model) headAsks(s sample.Session) (string, bool) {
+	if !m.asks(s) && !s.Asks && !s.Permits {
+		return "", false
+	}
+	if s.Ask != nil && len(s.Ask.Questions) > 0 {
+		return s.Ask.Questions[0].Question, true
+	}
+	return m.lastWords(s), true
+}
+
+// sealedNight tells if host's stoker runs a night: the person answers
+// prompts only.
+func (m Model) sealedNight(host string) bool {
+	v := m.stokerOf(host)
+	return v != nil && v.On && v.Nightly
+}
+
+// headPane tells if a on head row s shows the stoker's pane: its run is
+// on, or a night runs, and its agent has a pane.
+func (m Model) headPane(s sample.Session, u state.ChainStoker) bool {
+	return s.Pane != "" && (u.View.On || m.sealedNight(s.Host))
+}
+
+// headVerb is what a does on head row s.
+func (m Model) headVerb(s sample.Session, u state.ChainStoker) string {
+	if m.headPane(s, u) {
+		return "go in"
+	}
+	return "stoke"
+}
+
+// headAct is a on the selected head row s: into the stoker's pane, else
+// the start sheet of its chain. A sealed night starts nothing.
+func (m Model) headAct(s sample.Session, u state.ChainStoker) (tea.Model, tea.Cmd) {
+	switch {
+	case m.headPane(s, u):
+		return m.goIntoAsking(s.Host, s.Pane)
+	case m.sealedNight(s.Host):
+		m.flash = sealedFamily
+		return m, nil
+	}
+	return m.openChainSheet(m.chainIx.of[keyOf(s)]), nil
+}
+
+// stokeChain is F on the selected row: the start sheet of its chain, or a
+// on its head when it has one.
+func (m Model) stokeChain() (tea.Model, tea.Cmd) {
+	s, ok := m.selectedSession()
+	if !ok {
+		return m, nil
+	}
+	if u, head := m.headRow(s); head {
+		return m.headAct(s, u)
+	}
+	k, chained := m.chainKeyOf(s)
+	if !chained {
+		m.flash = s.Name + " is in no chain"
+		return m, nil
+	}
+	for i, h := range m.snap.Sessions {
+		if u, head := m.headRow(h); head && m.chainIx.of[keyOf(h)] == k {
+			m.selectRow(len(m.doors) + i)
+			return m.headAct(h, u)
+		}
+	}
+	return m.openChainSheet(k), nil
+}
+
+// onFuse tells if column x of a row of a list w wide is on its fuse:
+// after the mark and the match.
+func (m Model) onFuse(x, w int) bool {
+	fw := m.fuseWidth(w)
+	return fw > 0 && x >= 2 && x < 2+fw
+}
+
+// openChainSheet opens the start sheet of chain k: a run of its stoker
+// needs an order and its goes.
+func (m Model) openChainSheet(k chainKey) Model {
+	m.sheet = &sheet{host: k.host, chain: k.id, chainName: m.chainName(k), matches: m.chainIx.present[k]}
+	m.pending = nil
+	return m
 }

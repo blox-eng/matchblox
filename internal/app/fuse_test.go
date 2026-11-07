@@ -16,6 +16,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
+	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
 )
@@ -552,5 +553,264 @@ func TestOpenedLinesStartWithTwoBlanks(t *testing.T) {
 	drain(cmd)
 	if len(*ran) != 1 || next.(Model).standIn {
 		t.Errorf("a tap on ⏎ go in ran %q, stand-in %v", *ran, next.(Model).standIn)
+	}
+}
+
+// stokerPane is the pane of the chain stoker s1's agent on its own server.
+const stokerPane = "%9@matchblox"
+
+// headState is fuseState with the mockup's chain (c1) given chain stoker
+// s1 in v; with agent, its agent runs in tmux session stoker-s1 on the
+// stoker's server.
+func headState(t *testing.T, v proto.StokerView, agent bool, chained ...[]string) proto.State {
+	t.Helper()
+	if len(chained) == 0 {
+		chained = [][]string{mockupChain}
+	}
+	st := fuseState(t, chained...)
+	st.StokerServer = "matchblox"
+	if agent {
+		st.Sessions = append(st.Sessions, sample.Session{Host: st.Sessions[0].Host, Name: "stoker-s1", PID: 9001, Pane: stokerPane,
+			Target: "stoker-s1:0.0", Status: "busy", Busy: true, Cwd: "/home/user"})
+	}
+	st.Stokers = []state.ChainStoker{{ID: "s1", Chain: "c1", Name: "kindle-web", View: v}}
+	return st
+}
+
+// runningPlan is a run on, with two steps of five of its plan done.
+func runningPlan() proto.StokerView {
+	v := proto.StokerView{PaneUp: true}
+	v.On = true
+	o := proto.StokerOrder{State: "running", Words: "ship the chain"}
+	for n := 1; n <= 5; n++ {
+		o.Plan = append(o.Plan, proto.StokerPlan{N: n, Text: "step"})
+	}
+	v.Order = &o
+	for n := 1; n <= 2; n++ {
+		v.Run = append(v.Run, proto.StokerEntry{ID: "p" + string(rune('0'+n)), Step: n, State: "done", At: demoAt.Add(-time.Hour)})
+	}
+	return v
+}
+
+// headModel is the console on st, on the demo's still clock, with its
+// conn.
+func headModel(t *testing.T, width int, st proto.State) (Model, *fakeConn) {
+	t.Helper()
+	f := newFake()
+	var next tea.Model = New(Options{NoMotion: true, Conn: f, Now: func() time.Time { return demoAt }})
+	next, _ = next.Update(tea.WindowSizeMsg{Width: width, Height: 30})
+	next, _ = next.Update(stateMsg(st))
+	m := next.(Model)
+	m.tab = tabSessions
+	return m, f
+}
+
+// TestHeadRowLeadsItsChain: a chain stoker whose run is on heads its
+// chain's fuse with its name and its plan; the label still counts the
+// matches.
+func TestHeadRowLeadsItsChain(t *testing.T) {
+	m, _ := headModel(t, 160, headState(t, runningPlan(), true))
+	sameLines(t, listLines(m, 100, 40), []string{
+		" WAITS FOR YOU · 1 · chain of 3",
+		" ✦─╮ stoker   kindle-web · plan 2/5",
+		"▌╿─┤ kindle-web",
+		" ✦─┤ hearth-api",
+		" ╿─╯ ember-billing",
+		" WORKING · 1",
+		" ✦   flint-auth",
+	})
+}
+
+// TestNoHeadForARestingUnit: a unit with its run off and no agent, as an
+// ended one is, heads nothing; its agent's session stays out of the list.
+func TestNoHeadForARestingUnit(t *testing.T) {
+	m, _ := headModel(t, 160, headState(t, proto.StokerView{}, false))
+	if got := strings.Join(listLines(m, 100, 60), "\n"); strings.Contains(got, "stoker") {
+		t.Fatalf("a head row for a resting unit:\n%s", got)
+	}
+}
+
+// TestAHeadThatAsksMovesItsChainToWaits: the chain's group is the
+// neediest of its rows and its head.
+func TestAHeadThatAsksMovesItsChainToWaits(t *testing.T) {
+	st := headState(t, runningPlan(), true, []string{"hearth-api", "ember-billing"})
+	asker(&st)
+	m, _ := headModel(t, 160, st)
+	got := listLines(m, 100, 70)
+	waits := slices.Index(got, " WORKING · 1")
+	head := slices.IndexFunc(got, func(l string) bool { return strings.Contains(l, "stoker   kindle-web") })
+	if head < 0 || waits < 0 || head > waits || !strings.Contains(got[head], "· asks: merge #812 now?") {
+		t.Fatalf("the asking head is not in WAITS FOR YOU:\n%s", strings.Join(got, "\n"))
+	}
+	if !strings.Contains(got[head+1], "hearth-api") || !strings.Contains(got[head+2], "ember-billing") {
+		t.Fatalf("the chain does not follow its head:\n%s", strings.Join(got, "\n"))
+	}
+}
+
+// asker makes the stoker's agent in st ask a question.
+func asker(st *proto.State) {
+	for i := range st.Sessions {
+		if s := &st.Sessions[i]; s.Pane == stokerPane {
+			s.Busy, s.Status, s.Asks = false, "idle", true
+			s.Ask = &said.Ask{ID: "q1", Questions: []said.Question{{Question: "merge #812 now?"}}}
+		}
+	}
+}
+
+// TestHeadScreens: the head row at 150 and 44 columns, a head that asks,
+// and the start sheet of a chain.
+func TestHeadScreens(t *testing.T) {
+	st := headState(t, runningPlan(), true)
+	check(t, st, "chainhead", 150, 30, nil)
+	check(t, st, "chainhead", 44, 31, nil)
+	asks := headState(t, runningPlan(), true, []string{"hearth-api", "ember-billing"})
+	asker(&asks)
+	check(t, asks, "chainheadasks", 150, 30, nil)
+	check(t, asks, "chainheadasks", 44, 31, nil)
+	start := append([]string{"F"}, strings.Split("merge on green", "")...)
+	for _, size := range [][2]int{{44, 31}, {104, 38}} {
+		check(t, fuseState(t, mockupChain), "chainsheet", size[0], size[1], append(start, "tab", "space", "tab"))
+	}
+}
+
+func pick(t *testing.T, m Model, pane string) Model {
+	t.Helper()
+	for _, s := range m.snap.Sessions {
+		if s.Pane == pane {
+			choose(&m, s.PID)
+			return m
+		}
+	}
+	t.Fatalf("no row for %s", pane)
+	return m
+}
+
+// TestAOnHeadOpensStokerPane: a on the head of a run that is on opens the
+// stoker's own pane in the chat, as a does on any session.
+func TestAOnHeadOpensStokerPane(t *testing.T) {
+	m, _ := headModel(t, 160, headState(t, runningPlan(), true))
+	m = pick(t, m, stokerPane)
+	next := sendKey(m, "a").(Model)
+	if s, _ := next.selectedSession(); !next.chatKeys || s.Pane != stokerPane || next.sheet != nil {
+		t.Fatalf("chat %v on %q, sheet %v", next.chatKeys, s.Pane, next.sheet)
+	}
+}
+
+// TestAOnHeadWithoutRunOpensSheet: with its run off, a on the head opens
+// the start sheet of its chain.
+func TestAOnHeadWithoutRunOpensSheet(t *testing.T) {
+	m, f := headModel(t, 160, headState(t, proto.StokerView{PaneUp: true}, true))
+	m = pick(t, m, stokerPane)
+	next := sendKey(m, "a")
+	s := screen(next)
+	for _, want := range []string{"Stoke the chain kindle-web (3 matches)?", "How should I run this chain?", "○ merges  ○ releases  ○ deploys  ○ kills"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q:\n%s", want, s)
+		}
+	}
+	if next.(Model).chatKeys || len(f.acts()) != 0 {
+		t.Fatalf("chat %v, acts %+v", next.(Model).chatKeys, f.acts())
+	}
+}
+
+// TestAOnHeadAtNightOpensItsPane: a sealed night takes no order, so a on
+// the head shows its pane, to answer its prompts.
+func TestAOnHeadAtNightOpensItsPane(t *testing.T) {
+	st := headState(t, proto.StokerView{PaneUp: true}, true)
+	host := proto.StokerView{}
+	host.On, host.Nightly, host.Until = true, true, demoAt.Add(8*time.Hour)
+	st.Stoker = &host
+	m, _ := headModel(t, 160, st)
+	next := sendKey(pick(t, m, stokerPane), "a").(Model)
+	if !next.chatKeys || next.sheet != nil {
+		t.Fatalf("chat %v, sheet %v", next.chatKeys, next.sheet)
+	}
+}
+
+// TestAOnAPanelessHead: a run that is on whose agent is gone still heads
+// its chain; a opens the sheet, whose order starts the agent again. At
+// night it says the night is sealed.
+func TestAOnAPanelessHead(t *testing.T) {
+	v := runningPlan()
+	v.PaneUp = false
+	m, f := headModel(t, 160, headState(t, v, false))
+	got := listLines(m, 100, 60)
+	if !strings.Contains(got[1], "stoker   kindle-web · plan 2/5") {
+		t.Fatalf("no head row:\n%s", strings.Join(got, "\n"))
+	}
+	choose(&m, m.snap.Sessions[0].PID)
+	next := typed(sendKey(m, "a"), "go on")
+	next, cmd := press(next, tea.KeyEnter)
+	if cmd == nil {
+		t.Fatal("enter sent nothing")
+	}
+	cmd()
+	if a := f.acts(); len(a) != 1 || a[0].RecID != "stoker:order-chain" || a[0].Text != `{"chain":"c1","words":"go on","grants":[]}` {
+		t.Fatalf("acts %+v", a)
+	}
+	st := headState(t, v, false)
+	host := proto.StokerView{}
+	host.On, host.Nightly = true, true
+	st.Stoker = &host
+	m, _ = headModel(t, 160, st)
+	choose(&m, m.snap.Sessions[0].PID)
+	night := sendKey(m, "a").(Model)
+	if night.sheet != nil || night.flash != "the night is sealed: answer the stoker's prompts, or give the order in the morning" {
+		t.Fatalf("sheet %v, flash %q", night.sheet, night.flash)
+	}
+}
+
+// TestAOnAMemberStaysItsChat: a chain with no stoker keeps a on a member
+// for that member.
+func TestAOnAMemberStaysItsChat(t *testing.T) {
+	m := fuseModel(t, 160, fuseState(t, mockupChain), "hearth-api")
+	next := sendKey(m, "a").(Model)
+	if s, _ := next.selectedSession(); !next.chatKeys || s.Name != "hearth-api" || next.sheet != nil {
+		t.Fatalf("chat %v on %q, sheet %v", next.chatKeys, s.Name, next.sheet)
+	}
+}
+
+// TestFOnABareChainOpensSheet: F on a member of a chain with no head
+// opens its start sheet, and the key line offers it; F on a session in
+// no chain opens nothing.
+func TestFOnABareChainOpensSheet(t *testing.T) {
+	m := fuseModel(t, 160, fuseState(t, mockupChain), "hearth-api")
+	if line := actionLine(m); !strings.Contains(line, "F stoke chain") {
+		t.Fatalf("no F on the key line: %q", line)
+	}
+	if s := screen(sendKey(m, "F")); !strings.Contains(s, "Stoke the chain kindle-web (3 matches)?") {
+		t.Fatalf("no sheet:\n%s", s)
+	}
+	choose(&m, pidOf(m, "flint-auth"))
+	if line := actionLine(m); strings.Contains(line, "stoke chain") {
+		t.Fatalf("F offered on a session in no chain: %q", line)
+	}
+	if next := sendKey(m, "F").(Model); next.sheet != nil {
+		t.Fatal("F opened a sheet for a session in no chain")
+	}
+}
+
+// TestAOnBareFuseOpensSheet: a tap on the fuse of a chain with no head
+// opens its start sheet; a tap on a head's fuse does what a does there.
+func TestAOnBareFuseOpensSheet(t *testing.T) {
+	tapFuse := func(m Model, name string) Model {
+		t.Helper()
+		sc := m.draw(m.width)
+		for i, r := range sc.rows {
+			if r >= len(m.doors) && r < len(m.doors)+len(m.snap.Sessions) && m.snap.Sessions[r-len(m.doors)].Name == name {
+				next, _ := m.Update(tea.MouseClickMsg{X: 2, Y: sc.bodyTop + i, Button: tea.MouseLeft})
+				return next.(Model)
+			}
+		}
+		t.Fatalf("no row %s", name)
+		return m
+	}
+	m := fuseModel(t, 160, fuseState(t, mockupChain), "")
+	if next := tapFuse(m, "hearth-api"); next.sheet == nil || next.sheet.chain != "c1" {
+		t.Fatalf("a tap on the fuse opened no sheet: %+v", next.sheet)
+	}
+	h, _ := headModel(t, 160, headState(t, runningPlan(), true))
+	if next := tapFuse(h, "stoker-s1"); !next.chatKeys || next.sheet != nil {
+		t.Fatalf("a tap on the head's fuse: chat %v, sheet %v", next.chatKeys, next.sheet)
 	}
 }
