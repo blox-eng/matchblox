@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-11-07
+
 ### Changed
 
 - **Tap a match to light the chain.** On matchblox.com, the chain reaction
@@ -1253,7 +1255,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.34.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.35.0...HEAD
+[0.35.0]: https://github.com/blox-eng/matchblox/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/blox-eng/matchblox/compare/v0.33.1...v0.34.0
 [0.33.1]: https://github.com/blox-eng/matchblox/compare/v0.33.0...v0.33.1
 [0.33.0]: https://github.com/blox-eng/matchblox/compare/v0.32.1...v0.33.0
