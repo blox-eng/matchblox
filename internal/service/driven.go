@@ -267,16 +267,26 @@ func (s *Service) undrive(pane string) {
 }
 
 // grantAct gives the go a waiting step needs (stoker:grant, Text: the
-// id of the step's entry): its merge, release or deploy in that step's
-// pane, once. The stoker hears of it at its next wake.
-func (s *Service) grantAct(u *stokerUnit, a proto.Act) proto.Result {
+// id of the step's entry, after the chain stoker's id and a space for a
+// step on its card): its merge, release or deploy in that step's pane,
+// once. The stoker hears of it at its next wake.
+func (s *Service) grantAct(a proto.Act) proto.Result {
+	u, id := s.hostUnit(), strings.TrimSpace(a.Text)
+	if who, rest, ok := strings.Cut(id, " "); ok {
+		if _, chain := stoker.IDOfSession(stoker.SessionName(who)); chain && who != stoker.HostID {
+			if u = s.unitByID(who); u == nil {
+				return proto.Result{Err: fmt.Sprintf("no stoker %s: matchblox status lists the family", who)}
+			}
+			id = strings.TrimSpace(rest)
+		}
+	}
 	if u == nil {
 		return proto.Result{Err: "this service keeps no stoker"}
 	}
 	if _, own := s.unitOf(a); own {
 		return proto.Result{Err: "the stoker does not give itself the go"}
 	}
-	if err := s.grant(u, strings.TrimSpace(a.Text)); err != nil {
+	if err := s.grant(u, id); err != nil {
 		return proto.Result{Err: err.Error()}
 	}
 	s.refreshStoker()

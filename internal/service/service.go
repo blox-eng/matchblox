@@ -657,7 +657,8 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 		}
 		s.cur.Holds = s.Holds.List()
 	}
-	if err := s.joinNewLocked(s.now()); err != nil {
+	joined, err := s.joinNewLocked(s.now())
+	if err != nil {
 		s.cur.Errors = append(s.cur.Errors, "chains: "+err.Error())
 	}
 	if err := s.pruneChainsLocked(s.now(), prev); err != nil {
@@ -676,6 +677,7 @@ func (s *Service) publish(snap sample.Snapshot, rec func(state.Doc)) {
 	}
 	doc := s.cur
 	s.mu.Unlock()
+	s.joinedOut(joined)
 	if s.Recovery != nil {
 		// Out of the lock: it reads the checkout of a new agent's folder.
 		if err := s.Recovery.Update(live, alive, s.now()); err != nil {

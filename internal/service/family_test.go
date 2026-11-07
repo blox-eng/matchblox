@@ -14,6 +14,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/chains"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/holds"
+	"github.com/blox-eng/matchblox/internal/hooks"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -1170,6 +1171,7 @@ func TestHostOrderAtNightPasses(t *testing.T) {
 
 func TestOrderAtCapIsRefusedAndLogged(t *testing.T) {
 	s, _, _ := familySetup(t)
+	mustAct(t, s, orderAct(t, "go", false)) // an off host gives no order
 	s.MaxChains = 1
 	other := stoker.FamilyDir(s.Stoker.Dir(), "s1")
 	if err := stoker.WriteLink(other, stoker.Link{ID: "s1", Chain: "c9", Giver: "person"}); err != nil {
@@ -2063,5 +2065,210 @@ func TestQuitQuitsOneUnit(t *testing.T) {
 	}
 	if res := quit(proto.Act{Text: "s1"}); res.Err == "" || killed(*ran, "s1") {
 		t.Fatalf("a quit no one placed ran %q", *ran)
+	}
+}
+
+// C1: a member the host drove stays driven through the handover: the
+// chain stoker drives it from the start, so no merge go opens.
+func TestHandOverKeepsTheGuardOnAMember(t *testing.T) {
+	s := hostWorks(t)
+	merge := stoker.Guards("gh pr merge 4")
+	state := s.Stoker.Dir()
+	if why := stoker.DenyFamily(state, "", "%3", merge); why != stoker.DenyNoGo {
+		t.Fatalf("before the handover: %q", why)
+	}
+	u, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if why := stoker.DenyFamily(state, "", "%3", merge); why != stoker.DenyNoGo {
+		t.Fatalf("after the handover: %q", why)
+	}
+	if _, in := drivenPanes(t, u)["%3"]; !in {
+		t.Fatal("the chain stoker does not drive api-auth")
+	}
+	if _, in := drivenPanes(t, s.hostUnit())["%3"]; in {
+		t.Fatal("the host still drives api-auth")
+	}
+}
+
+// C1: a session the host drove that joins a chain whose stoker runs is
+// that stoker's to drive at once.
+func TestJoinHandsOverAHostDrivenSession(t *testing.T) {
+	s, u, _ := familyTest(t)
+	if err := s.Stoker.Set(stoker.Mode{}.TurnOn(night0)); err != nil {
+		t.Fatal(err)
+	}
+	s.drive(s.hostUnit(), "%42")
+	repo := apiRepo(s)
+	mustAct(t, s, newFromChainStoker(t, repo))
+	fresh := apiNew(repo, "%42", "api-new:1.1", "s42")
+	merge := stoker.Guards("gh pr merge 4")
+	for range 2 {
+		s.publish(newSample(s, fresh, sample.Pane{ID: "%42", Target: "api-new:1.1"}), func(state.Doc) {})
+	}
+	if !inChain(s, fresh) {
+		t.Fatal("api-new did not join")
+	}
+	if why := stoker.DenyFamily(s.Stoker.Dir(), "", "%42", merge); why != stoker.DenyNoGo {
+		t.Fatalf("after the join: %q", why)
+	}
+	if _, in := drivenPanes(t, u)["%42"]; !in {
+		t.Fatal("the chain stoker does not drive api-new")
+	}
+	if _, in := drivenPanes(t, s.hostUnit())["%42"]; in {
+		t.Fatal("the host still drives api-new")
+	}
+}
+
+// I1: a chain quit ends the unit's run, so its slot under max_chains is free.
+func TestChainQuitEndsItsRunAndFreesTheCap(t *testing.T) {
+	s, ran := twoChains(t)
+	s.MaxChains = 1
+	if _, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person"); err != nil {
+		t.Fatal(err)
+	}
+	stokerUp(s, "s1", "%5@mbtest")
+	s.Actions.Run = func(argv []string) error {
+		*ran = append(*ran, argv)
+		return nil
+	}
+	res := s.act(t.Context(), proto.Act{RecID: "stoker:quit", Confirm: "y", Console: true, Text: "s1"})
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	u := s.unitByID("s1")
+	if m := u.store.Mode(); m.On || m.Card == nil {
+		t.Fatalf("the quit left the run on: %+v", m)
+	}
+	if _, err := stoker.ReadDriven(u.store.Dir()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("driven.json after the quit: %v", err)
+	}
+	withoutPane(s, "%5@mbtest")
+	if n := s.chainsAtWork(); n != 0 {
+		t.Fatalf("%d chains at work after the quit", n)
+	}
+	if _, err := s.startChainStoker(t.Context(), "api-ui", "", nil, "person"); err != nil {
+		t.Fatalf("a new stoker after the quit: %v", err)
+	}
+}
+
+// I1: a chain stoker whose agent is gone, and whose run is on, quits too:
+// its run ends.
+func TestChainQuitWithNoSessionEndsItsRun(t *testing.T) {
+	s, ran := twoChains(t)
+	if _, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person"); err != nil {
+		t.Fatal(err)
+	}
+	s.Actions.Run = func(argv []string) error {
+		*ran = append(*ran, argv)
+		if slices.Contains(argv, "has-session") {
+			return errors.New("no session")
+		}
+		return nil
+	}
+	*ran = nil
+	res := s.act(t.Context(), proto.Act{RecID: "stoker:quit", Confirm: "y", Console: true, Text: "s1"})
+	if res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if res.Note != "ended the stoker of chain api-auth (s1): its tmux session is gone" {
+		t.Fatalf("note %q", res.Note)
+	}
+	if s.unitByID("s1").store.Mode().On || killed(*ran, "s1") {
+		t.Fatalf("mode %+v, ran %q", s.unitByID("s1").store.Mode(), *ran)
+	}
+	if res := s.act(t.Context(), proto.Act{RecID: "stoker:quit", Confirm: "y", Console: true}); res.Err != "the stoker is not running" {
+		t.Fatalf("the host's quit with no agent: %q", res.Err)
+	}
+}
+
+// I2: a host stoker that is off, or rests, starts no chain stoker.
+func TestAnOffOrRestingHostGivesNoChainOrder(t *testing.T) {
+	s, _, _ := familySetup(t)
+	if res := s.act(t.Context(), orderChain(t, hostPane, "api-db", "merge on green", nil)); res.Err != "the stoker is off: no run" {
+		t.Fatalf("an off host's order: %q", res.Err)
+	}
+	mustAct(t, s, orderAct(t, "go", false))
+	mustAct(t, s, consoleStoker("rest"))
+	if res := s.act(t.Context(), orderChain(t, hostPane, "api-db", "merge on green", nil)); res.Err != "the stoker rests: a person works" {
+		t.Fatalf("a resting host's order: %q", res.Err)
+	}
+	if s.unitOfChain("c1") != nil {
+		t.Fatal("a chain stoker started")
+	}
+}
+
+// I3: the person's y gives the go a chain stoker's run waits for:
+// stoker:grant names the stoker, then the entry.
+func TestGrantGivesAChainStokersGo(t *testing.T) {
+	s, u, _ := familyTest(t)
+	s.drive(u, "%3")
+	s.Hook(hooks.Event{Name: "PreToolUse", SessionID: "s3", Pane: "%3", At: night0, Command: "gh pr merge 4", Guards: stoker.Guards("gh pr merge 4"), Denied: true})
+	run := u.store.View().Run
+	i := slices.IndexFunc(run, func(e stoker.Entry) bool { return e.Rule == stoker.RuleGo && e.State == stoker.StepWaits })
+	if i < 0 {
+		t.Fatalf("no go waits on the chain's card: %q", cardTexts(u.store))
+	}
+	id := run[i].ID
+	if res := s.act(t.Context(), grantAct(id)); res.Err == "" {
+		t.Fatal("the host's grant gave the chain's go")
+	}
+	if res := s.act(t.Context(), proto.Act{RecID: "stoker:grant", Confirm: "y", Text: "s1 " + id, From: "%5@mbtest", FromPlaced: true}); res.Err != "the stoker does not give itself the go" {
+		t.Fatalf("the chain stoker's own grant: %q", res.Err)
+	}
+	if res := s.act(t.Context(), grantAct("s9 "+id)); res.Err != "no stoker s9: matchblox status lists the family" {
+		t.Fatalf("an unknown stoker: %q", res.Err)
+	}
+	mustAct(t, s, grantAct("s1 "+id))
+	if why := stoker.DenyFamily(s.Stoker.Dir(), "", "%3", stoker.Guards("gh pr merge 4")); why != "" {
+		t.Fatalf("the given go is denied: %q", why)
+	}
+	if last := stoker.LastGo(u.store.View().Run, run[i]); last.State != stoker.StepDone {
+		t.Fatalf("the go's last state %+v", last)
+	}
+}
+
+// I4: an ended chain stoker's card stays until the person acks the host's
+// card after its end, then it leaves State.Stokers.
+func TestAnEndedUnitLeavesOnceTheCardIsSeen(t *testing.T) {
+	s, _, now := familySetup(t)
+	u, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person")
+	if err != nil {
+		t.Fatal(err)
+	}
+	chainStokerUp(s)
+	mustAct(t, s, consoleStoker("ack")) // a look before the end
+	*now = now.Add(time.Minute)
+	s.retire(t.Context(), u, "its chain ended", "its chain ended")
+	s.refreshStoker()
+	if got := s.State().Stokers; len(got) != 1 || got[0].ID != "s1" {
+		t.Fatalf("an ended unit no one saw: %+v", got)
+	}
+	*now = now.Add(time.Minute)
+	mustAct(t, s, consoleStoker("ack"))
+	if got := s.State().Stokers; got != nil {
+		t.Fatalf("an ended unit after the look: %+v", got)
+	}
+}
+
+// M4: a stoker's own pane asks, leaves or turns off no chain.
+func TestAStokerJoinsNoChain(t *testing.T) {
+	s, _, _ := familyTest(t)
+	if err := s.Stoker.Set(stoker.Mode{}.TurnOn(night0)); err != nil {
+		t.Fatal(err)
+	}
+	for _, from := range []string{hostPane, "%5@mbtest"} {
+		for _, arg := range []string{"%9", "-", "off", "on"} {
+			if res := s.act(t.Context(), proto.Act{RecID: proto.ChainPrefix + arg, From: from, FromPlaced: true}); res.Err != "a stoker joins no chain" {
+				t.Errorf("%s chain:%s: %+v", from, arg, res)
+			}
+		}
+	}
+	s.mu.Lock()
+	n := len(s.Chains.Requests)
+	s.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("%d asks", n)
 	}
 }
