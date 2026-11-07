@@ -24,6 +24,10 @@ import (
 
 const matchContextEnv = "MATCHBLOX_CONTEXT"
 const matchEvidenceLimit = 128 * 1024
+const conversationBudget = 48000
+const turnLimit = 4000
+const transcriptLineLimit = 1 << 20
+const blankRecord = "# Task record\n\nGoal and done criteria: unknown.\nLatest user direction: unknown.\nCompleted: unknown.\nIn progress: unknown.\nDecisions and reasons: unknown.\nVerification: unknown; no checks recorded.\nNext action: wait for the user's task.\nScope and approvals: follow the user's instructions.\n"
 
 // matchLaunch keeps environment instructions separate from task evidence.
 // Each launch owns a private bundle. It remains on disk across compaction,
@@ -87,7 +91,7 @@ After compaction, read this brief again through MATCHBLOX_CONTEXT, then read you
 	if err = write("awareness.md", brief); err != nil {
 		return nil, bundle, err
 	}
-	checkpoint := "# Task record\n\nGoal and done criteria: unknown.\nLatest user direction: unknown.\nCompleted: unknown.\nIn progress: unknown.\nDecisions and reasons: unknown.\nVerification: unknown; no checks recorded.\nNext action: wait for the user's task.\nScope and approvals: follow the user's instructions.\n"
+	checkpoint := blankRecord
 	if first != "" {
 		checkpoint += "\nLaunch message (user-supplied text):\n" + said.Clean(first) + "\n"
 	}
@@ -193,7 +197,12 @@ func (s *Service) captureMatch(ctx context.Context, old sample.Session) string {
 				if e == nil {
 					data, e := io.ReadAll(io.LimitReader(f, matchEvidenceLimit+1))
 					_ = f.Close()
-					if e == nil {
+					if e == nil && strings.HasPrefix(string(data), blankRecord) {
+						b.WriteString("## Outgoing match's task record\n\nThe outgoing match never wrote its task record. Rebuild the goal and the latest direction from the conversation below.\n")
+						if rest := strings.TrimSpace(string(data[len(blankRecord):min(len(data), matchEvidenceLimit)])); rest != "" {
+							b.WriteString("\n" + quoteEvidence(rest))
+						}
+					} else if e == nil {
 						b.WriteString("## Outgoing match's task record (claims to verify)\n\n")
 						b.WriteString(quoteEvidence(string(data[:min(len(data), matchEvidenceLimit)])))
 						if len(data) > matchEvidenceLimit {
@@ -214,8 +223,8 @@ func (s *Service) captureMatch(ctx context.Context, old sample.Session) string {
 		b.WriteString("Outgoing match has no managed task record. Recover intent from the evidence below.\n\n")
 	}
 	if old.Transcript != "" {
-		text, err := conversationTail(old.Transcript)
-		fmt.Fprintf(&b, "\n## Recent conversation\n\nSource: %q. Only recent user and assistant text is included. Tool and system messages are excluded.\n\n", old.Transcript)
+		text, err := conversationExcerpt(old.Transcript)
+		fmt.Fprintf(&b, "\n## Recent conversation\n\nSource: %q. The first prompt, the latest prompts and the last replies are included. Tool and system messages are excluded.\n\n", old.Transcript)
 		if err != nil {
 			fmt.Fprintf(&b, "Conversation unavailable: %v.\n", err)
 		} else {
@@ -266,7 +275,9 @@ func tailText(s string, n int) string {
 	return s
 }
 
-func conversationTail(path string) (string, error) {
+// conversationExcerpt reads the whole transcript. Tool output fills its end,
+// so the builder's goal and corrections sit far before the last bytes.
+func conversationExcerpt(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
@@ -279,72 +290,190 @@ func conversationTail(path string) (string, error) {
 	if !st.Mode().IsRegular() {
 		return "", errors.New("transcript is not a regular file")
 	}
-	start := max(int64(0), st.Size()-matchEvidenceLimit)
-	if _, err := f.Seek(start, io.SeekStart); err != nil {
-		return "", err
-	}
-	r := bufio.NewReader(io.LimitReader(f, matchEvidenceLimit))
-	if start > 0 {
-		_, _ = r.ReadString('\n')
-	}
-	scan := bufio.NewScanner(r)
-	scan.Buffer(make([]byte, 4096), matchEvidenceLimit)
-	var text strings.Builder
-	for scan.Scan() {
-		var row struct {
-			Type    string          `json:"type"`
-			Message json.RawMessage `json:"message"`
-			Payload json.RawMessage `json:"payload"`
+	r := bufio.NewReaderSize(f, 64*1024)
+	var turns []turn
+	for {
+		line, err := readLine(r, transcriptLineLimit)
+		if t, ok := transcriptTurn(line); ok {
+			turns = append(turns, t)
 		}
-		if json.Unmarshal(scan.Bytes(), &row) != nil {
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+	}
+	if len(turns) == 0 {
+		return "", errors.New("no readable user or assistant text in the transcript; task intent is unknown")
+	}
+	return pickTurns(turns, conversationBudget), nil
+}
+
+type turn struct{ role, text string }
+
+// readLine returns one line, or nil for a line longer than limit: a tool
+// result that size holds no user direction.
+func readLine(r *bufio.Reader, limit int) ([]byte, error) {
+	var line []byte
+	over := false
+	for {
+		chunk, err := r.ReadSlice('\n')
+		if !over && len(line)+len(chunk) > limit {
+			over, line = true, nil
+		}
+		if !over {
+			line = append(line, chunk...)
+		}
+		if !errors.Is(err, bufio.ErrBufferFull) {
+			return line, err
+		}
+	}
+}
+
+func transcriptTurn(line []byte) (turn, bool) {
+	var row struct {
+		Type    string          `json:"type"`
+		IsMeta  bool            `json:"isMeta"`
+		Message json.RawMessage `json:"message"`
+		Payload json.RawMessage `json:"payload"`
+	}
+	if len(line) == 0 || json.Unmarshal(line, &row) != nil || row.IsMeta {
+		return turn{}, false
+	}
+	var msg struct {
+		Type    string          `json:"type"`
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"`
+	}
+	switch row.Type {
+	case "user", "assistant":
+		_ = json.Unmarshal(row.Message, &msg)
+	case "response_item":
+		if json.Unmarshal(row.Payload, &msg) != nil || msg.Type != "message" {
+			return turn{}, false
+		}
+	default:
+		return turn{}, false
+	}
+	if msg.Role != "user" && msg.Role != "assistant" {
+		return turn{}, false
+	}
+	var texts []string
+	var plain string
+	if json.Unmarshal(msg.Content, &plain) == nil {
+		texts = []string{plain}
+	} else {
+		var parts []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if json.Unmarshal(msg.Content, &parts) != nil {
+			return turn{}, false
+		}
+		for _, p := range parts {
+			if p.Type == "text" || p.Type == "input_text" || p.Type == "output_text" {
+				texts = append(texts, p.Text)
+			}
+		}
+	}
+	var b strings.Builder
+	for _, t := range texts {
+		if cmd, ok := slashCommand(t); ok {
+			t = cmd
+		} else if harnessText(t) {
 			continue
 		}
-		var msg struct {
-			Type    string          `json:"type"`
-			Role    string          `json:"role"`
-			Content json.RawMessage `json:"content"`
+		b.WriteString(t + "\n")
+	}
+	text := strings.TrimSpace(b.String())
+	if text == "" {
+		return turn{}, false
+	}
+	if msg.Role == "assistant" {
+		// A reply ends with its conclusion.
+		return turn{msg.Role, tailText(text, turnLimit)}, true
+	}
+	if len(text) > turnLimit {
+		text = strings.ToValidUTF8(text[:turnLimit], "") + "\n[rest of message omitted]"
+	}
+	return turn{msg.Role, text}, true
+}
+
+// slashCommand renders a Claude command row as the builder typed it: its
+// arguments are often the task itself.
+func slashCommand(s string) (string, bool) {
+	name, ok := tagText(s, "command-name")
+	if !ok {
+		return "", false
+	}
+	args, _ := tagText(s, "command-args")
+	return strings.TrimSpace(name + " " + args), true
+}
+
+// bareCommand is a slash command with no arguments, such as /clear: it
+// holds no goal.
+func bareCommand(s string) bool {
+	return strings.HasPrefix(s, "/") && !strings.ContainsAny(s, " \n")
+}
+
+func tagText(s, tag string) (string, bool) {
+	_, rest, ok := strings.Cut(s, "<"+tag+">")
+	if !ok {
+		return "", false
+	}
+	text, _, ok := strings.Cut(rest, "</"+tag+">")
+	return strings.TrimSpace(text), ok
+}
+
+// pickTurns keeps the first prompt (the goal), the last three replies and
+// then as many of the latest prompts as fit: prompts carry the direction.
+func pickTurns(turns []turn, budget int) string {
+	keep := make([]bool, len(turns))
+	used := 0
+	take := func(i int) bool {
+		n := len(turns[i].role) + len(turns[i].text) + 4
+		if !keep[i] && used+n > budget {
+			return false
 		}
-		if row.Type == "user" || row.Type == "assistant" {
-			_ = json.Unmarshal(row.Message, &msg)
-		} else if row.Type == "response_item" {
-			_ = json.Unmarshal(row.Payload, &msg)
-			if msg.Type != "message" {
-				continue
-			}
-		} else {
-			continue
+		if !keep[i] {
+			keep[i], used = true, used+n
 		}
-		if msg.Role != "user" && msg.Role != "assistant" {
-			continue
-		}
-		var plain string
-		if json.Unmarshal(msg.Content, &plain) != nil {
-			var parts []struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			}
-			if json.Unmarshal(msg.Content, &parts) != nil {
-				continue
-			}
-			for _, p := range parts {
-				if (p.Type == "text" || p.Type == "input_text" || p.Type == "output_text") && !harnessText(p.Text) {
-					plain += p.Text + "\n"
-				}
-			}
-		} else if harnessText(plain) {
-			continue
-		}
-		if strings.TrimSpace(plain) != "" {
-			fmt.Fprintf(&text, "%s:\n%s\n\n", msg.Role, plain)
+		return true
+	}
+	goal := func(t turn) bool { return t.role == "user" && !bareCommand(t.text) }
+	if i := slices.IndexFunc(turns, goal); i >= 0 {
+		take(i)
+	}
+	for i, n := len(turns)-1, 0; i >= 0 && n < 3; i-- {
+		if turns[i].role == "assistant" {
+			take(i)
+			n++
 		}
 	}
-	if err := scan.Err(); err != nil {
-		return "", err
+	for i := len(turns) - 1; i >= 0; i-- {
+		if turns[i].role == "user" && !take(i) {
+			break
+		}
 	}
-	if text.Len() == 0 {
-		return "", errors.New("no readable user or assistant text in the recent transcript; task intent is unknown")
+	// The section header says older replies are left out; only a left-out
+	// prompt is marked, since a prompt can hold a correction.
+	var b strings.Builder
+	skipped := 0
+	for i, t := range turns {
+		if !keep[i] {
+			if t.role == "user" {
+				skipped++
+			}
+			continue
+		}
+		if skipped > 0 {
+			fmt.Fprintf(&b, "[%d prompts omitted]\n\n", skipped)
+			skipped = 0
+		}
+		fmt.Fprintf(&b, "%s:\n%s\n\n", t.role, t.text)
 	}
-	return tailText(text.String(), 48000), nil
+	return b.String()
 }
 
 // harnessWrappers open the user-role text an agent's harness injects
@@ -353,7 +482,7 @@ func conversationTail(path string) (string, error) {
 var harnessWrappers = []string{
 	"<environment_context>", "<user_instructions>", "<permissions instructions>",
 	"<INSTRUCTIONS>", "# AGENTS.md instructions", "<turn_aborted>",
-	"<system-reminder>", "<local-command-stdout>", "<command-name>",
+	"<system-reminder>", "<local-command-stdout>", "<task-notification>",
 }
 
 func harnessText(s string) bool {

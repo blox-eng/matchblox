@@ -150,6 +150,16 @@ command syntax remain unspecified. Do not advertise an unavailable tool.
   a path with a space and a dot.
 - 2026-10-26: Enable `sandbox_workspace_write.network_access=true` on both
   entry points at the builder's request. It only applies in `workspace-write`.
+- 2026-11-08: Read the whole transcript for the conversation excerpt, not
+  its last 128 KB. Tool output fills the tail: the 5 largest Claude Code
+  transcripts on the builder's host kept 0 or 1 of 62-247 prompts there.
+  The excerpt keeps the first prompt, the last three replies, then the
+  latest prompts within 48,000 bytes. Measured on the same 5 files: 32-76
+  prompts kept, at most 263 ms for 26 MB.
+- 2026-11-08: Report a task record that still holds the launch template as
+  never written, because quoting it as claims tells the receiver to wait.
+- 2026-11-08: Asking an idle outgoing agent to refresh its record stays
+  unbuilt. It needs turn-completion detection, and its own issue.
 
 ## Acceptance checks
 

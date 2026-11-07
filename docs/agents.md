@@ -208,10 +208,19 @@ to the account's configuration or bypasses hook trust.
 ## Handover evidence
 
 A switch with a nonempty handoff captures the outgoing match's task record,
-recent user and assistant text from a verified Claude Code or Codex transcript,
-the last sampled reply, pending question, available pane text, and Git status,
-recent commits and diff statistics. Cursor and OpenCode use their managed task
+the conversation from a verified Claude Code or Codex transcript, the last
+sampled reply, pending question, available pane text, and Git status, recent
+commits and diff statistics. Cursor and OpenCode use their managed task
 records and pane evidence when no verified transcript path is available.
+
+The conversation excerpt reads the whole transcript. It keeps your first
+prompt, which usually states the goal, the last three replies, and then as
+many of your latest prompts as fit in 48,000 bytes. A marker counts the
+prompts it leaves out. Tool output, skill text, subagent notifications and
+other harness text never enter it. A slash command keeps its arguments.
+
+A task record that still holds the launch template is reported as never
+written. The receiving match then rebuilds the goal from the conversation.
 The capture names missing sources and does not infer a goal from changed files.
 Old replies and task records remain claims to check against the working tree.
 

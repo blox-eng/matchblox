@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -250,6 +251,15 @@ func TestSwitchCarriesTheOutgoingRecordWithoutTrustingIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	old.MatchContext = filepath.Join(bundle, "awareness.md")
+	if err := os.WriteFile(filepath.Join(bundle, "handover.md"), []byte(blankRecord+"\nLaunch message (user-supplied text):\nFix exports\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if capture := s.captureMatch(t.Context(), old); !strings.Contains(capture, "never wrote its task record") || strings.Contains(capture, "claims to verify)\n\n> # Task record") {
+		t.Fatalf("a blank record passes as claims: %s", capture)
+	}
+	if err := os.WriteFile(filepath.Join(bundle, "handover.md"), []byte("Goal: CSV exports.\nDecision: no XLSX.\nVerified: go test ./export\nNext action: test empty input.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	capture := s.captureMatch(t.Context(), old)
 	for _, want := range []string{"> Decision: no XLSX.", "> Next action: test empty input.", "claims to verify"} {
 		if !strings.Contains(capture, want) {
@@ -288,7 +298,7 @@ func TestConversationCaptureKeepsUserDirectionAndExcludesTools(t *testing.T) {
 	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	text, err := conversationTail(path)
+	text, err := conversationExcerpt(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,12 +310,72 @@ func TestConversationCaptureKeepsUserDirectionAndExcludesTools(t *testing.T) {
 	if strings.Contains(text, "SECRET") {
 		t.Fatalf("includes system or tool text: %s", text)
 	}
-	if err := os.WriteFile(path, []byte(strings.Repeat("x", matchEvidenceLimit+100)+"\n"+lines[len(lines)-1]+"\n"), 0o600); err != nil {
+}
+
+// A long Claude session is mostly tool output: the 5 largest transcripts on
+// the builder's host kept 0 or 1 of 62-247 prompts in their last 128 KB.
+func TestConversationCaptureKeepsTheGoalPastToolOutput(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "conversation.jsonl")
+	tool := `{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"` + strings.Repeat("x", 200*1024) + `"}]}}`
+	lines := []string{
+		`{"type":"user","message":{"role":"user","content":"<command-name>/clear</command-name>\n<command-message>clear</command-message>\n<command-args></command-args>"}}`,
+		`{"type":"user","message":{"role":"user","content":"<task-notification>HARNESS SECRET</task-notification>"}}`,
+		`{"type":"user","message":{"role":"user","content":"<command-name>/using-superpowers</command-name>\n<command-message>using-superpowers</command-message>\n<command-args>the handover is lazy</command-args>"}}`,
+		`{"type":"user","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"Base directory for this skill: HARNESS SECRET"}]}}`,
+		`{"type":"user","message":{"role":"user","content":"Goal: fix the capture."}}`,
+	}
+	for range 4 {
+		lines = append(lines, tool)
+	}
+	lines = append(lines, `{"type":"user","message":{"role":"user","content":"Latest correction: keep Codex too."}}`)
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	text, err = conversationTail(path)
-	if err != nil || !strings.Contains(text, "Latest correction") {
-		t.Fatalf("bounded tail loses latest direction: %q %v", text, err)
+	text, err := conversationExcerpt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"/using-superpowers the handover is lazy", "Goal: fix the capture.", "Latest correction: keep Codex too."} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q: %s", want, text)
+		}
+	}
+	tight := pickTurns([]turn{{"user", "/clear"}, {"user", "Goal: fix the capture."}, {"user", strings.Repeat("later ", 10)}, {"user", "Latest."}}, 60)
+	if !strings.Contains(tight, "Goal: fix the capture.") || strings.Contains(tight, "/clear") {
+		t.Errorf("a bare command takes the goal's place: %s", tight)
+	}
+	if strings.Contains(text, "SECRET") || strings.Contains(text, "xxxx") {
+		t.Fatalf("includes harness or tool text: %s", text)
+	}
+}
+
+func TestConversationCaptureKeepsFirstAndLatestPromptsWithinBudget(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "conversation.jsonl")
+	var lines []string
+	for i := range 400 {
+		lines = append(lines, fmt.Sprintf(`{"type":"user","message":{"role":"user","content":"prompt %03d %s"}}`, i, strings.Repeat("p", 500)))
+		lines = append(lines, fmt.Sprintf(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"reply %03d %s"}]}}`, i, strings.Repeat("r", 500)))
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	text, err := conversationExcerpt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(text) > conversationBudget+1024 {
+		t.Fatalf("excerpt is %d bytes, budget %d", len(text), conversationBudget)
+	}
+	for _, want := range []string{"prompt 000", "prompt 399", "reply 399", "omitted"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(text, "reply 300") {
+		t.Fatal("old assistant text crowds out prompts")
+	}
+	if strings.Index(text, "prompt 000") > strings.Index(text, "prompt 399") {
+		t.Fatal("excerpt is out of order")
 	}
 }
 
