@@ -6,6 +6,8 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+## [0.33.1] - 2026-11-07
+
 ### Fixed
 
 - **A dropped host jump says so.** When the ssh of a host jump drops in the
@@ -13,6 +15,11 @@ All notable changes to matchblox are in this file. The format follows
   the line "ssh exited … Press Enter to go back" never came. The line now
   shows at once.
   ([#313](https://github.com/blox-eng/matchblox/issues/313))
+
+- **The demo's History tab names its two hours.** It read "last 1h59m"
+  until the second snapshot came, because the seeded trend was one point
+  short of two hours.
+  ([#310](https://github.com/blox-eng/matchblox/issues/310))
 
 ## [0.33.0] - 2026-11-06
 
@@ -1222,7 +1229,8 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.33.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.33.1...HEAD
+[0.33.1]: https://github.com/blox-eng/matchblox/compare/v0.33.0...v0.33.1
 [0.33.0]: https://github.com/blox-eng/matchblox/compare/v0.32.1...v0.33.0
 [0.32.1]: https://github.com/blox-eng/matchblox/compare/v0.32.0...v0.32.1
 [0.32.0]: https://github.com/blox-eng/matchblox/compare/v0.31.0...v0.32.0
