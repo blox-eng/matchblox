@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -335,14 +336,30 @@ func TestStartNeedsAChain(t *testing.T) {
 func TestStokerNewIsThePersons(t *testing.T) {
 	s, ran, _ := chainStokerTest(t)
 	act := proto.Act{RecID: "stoker:new", Confirm: "y", Text: `{"chain":"api-auth","words":"go","grants":["merge"]}`}
+	// A chain unit of another chain, whose pane is stoker-s1's.
+	if err := stoker.WriteLink(stoker.FamilyDir(s.Stoker.Dir(), "s1"), stoker.Link{ID: "s1", Chain: "c9", Giver: "person"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.loadFamily(); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Lock()
+	s.cur.Panes = append(s.cur.Panes, sample.Pane{ID: "%6@mbtest", Target: "stoker-s1:1.1"}, sample.Pane{ID: "%9@mbtest", Target: "stoker:1.1"})
+	s.mu.Unlock()
 	for from, want := range map[string]string{
 		"%1":        notTheBuilders,                                   // an agent's pane
 		"%9@mbtest": "the stoker does not start, stop or rest itself", // the host stoker's
+		"%6@mbtest": "the stoker does not start, stop or rest itself", // a chain stoker's
 	} {
-		a := act
-		a.From, a.FromPlaced = from, true
-		if res := s.act(t.Context(), a); res.Err != want {
-			t.Fatalf("stoker:new from %s: %q", from, res.Err)
+		for _, console := range []bool{false, true} { // a console hello does not make it a person's
+			a := act
+			a.From, a.FromPlaced, a.Console = from, true, console
+			if res := s.act(t.Context(), a); res.Err != want {
+				t.Fatalf("stoker:new from %s (console %v): %q", from, console, res.Err)
+			}
+			if res := s.newChainAct(t.Context(), a); res.Err != want {
+				t.Fatalf("newChainAct from %s (console %v): %q", from, console, res.Err)
+			}
 		}
 	}
 	if len(*ran) != 0 || s.unitOfChain("c1") != nil {
@@ -362,6 +379,9 @@ func TestQuitAChainStoker(t *testing.T) {
 		t.Fatal(err)
 	}
 	*ran = nil
+	s.mu.Lock()
+	s.cur.Stoker = nil
+	s.mu.Unlock()
 	if res := s.quitAct(t.Context(), u, proto.Act{Console: true, Confirm: "y"}); res.Err != "" {
 		t.Fatal(res.Err)
 	}
@@ -369,5 +389,89 @@ func TestQuitAChainStoker(t *testing.T) {
 		return slices.Equal(argv, []string{"tmux", "-L", "mbtest", "kill-session", "-t", "=stoker-s1"})
 	}) {
 		t.Fatalf("ran %q", *ran)
+	}
+	s.mu.Lock()
+	refreshed := s.cur.Stoker != nil
+	s.mu.Unlock()
+	if !refreshed {
+		t.Fatal("the quit did not refresh the view")
+	}
+	chainStokerUp(s) // an agent of stoker-s1 comes up after the quit
+	s.deliverBriefs(t.Context())
+	if got := typed(*ran, "%5@mbtest"); len(got) != 0 {
+		t.Fatalf("a quit unit's brief was typed: %q", got)
+	}
+}
+
+// killed tells if ran ended the tmux session of stoker id.
+func killed(ran [][]string, id string) bool {
+	return slices.ContainsFunc(ran, func(argv []string) bool {
+		return slices.Equal(argv, []string{"tmux", "-L", "mbtest", "kill-session", "-t", "=" + stoker.SessionName(id)})
+	})
+}
+
+func TestStartChainStokerRollsBackAFailedStart(t *testing.T) {
+	s, ran, _ := chainStokerTest(t)
+	run := s.Actions.Run
+	s.Actions.Run = func(argv []string) error {
+		if slices.Contains(argv, "new-session") {
+			_ = run(nil)
+			*ran = append(*ran, argv)
+			return errors.New("no server")
+		}
+		return run(argv)
+	}
+	if _, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person"); err == nil || !strings.Contains(err.Error(), "the stoker did not start") {
+		t.Fatalf("err %v", err)
+	}
+	dir := stoker.FamilyDir(s.Stoker.Dir(), "s1")
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) || s.unitOfChain("c1") != nil || s.unitByID("s1") != nil {
+		t.Fatalf("the failed unit stays: %v %+v", err, s.family())
+	}
+	s.Actions.Run = run
+	if u, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person"); err != nil || u.id != "s1" {
+		t.Fatalf("a second start: %+v, %v", u, err)
+	}
+}
+
+func TestStartChainStokerRollsBackAnUnwrittenBrief(t *testing.T) {
+	s, ran, _ := chainStokerTest(t)
+	root := s.Stoker.Dir()
+	run := s.Actions.Run
+	s.Actions.Run = func(argv []string) error { // as the agent starts, a dir takes the brief's place
+		if slices.Contains(argv, "new-session") {
+			if err := os.MkdirAll(filepath.Join(stoker.FamilyDir(root, "s1"), "stoker-brief.md"), 0o700); err != nil {
+				t.Error(err)
+			}
+		}
+		return run(argv)
+	}
+	if _, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person"); err == nil {
+		t.Fatal("a brief that cannot be written started the unit")
+	}
+	if !killed(*ran, "s1") || s.unitOfChain("c1") != nil || s.unitByID("s1") != nil {
+		t.Fatalf("ran %q, family %+v", *ran, s.family())
+	}
+	if _, err := os.Stat(stoker.FamilyDir(root, "s1")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("its dir stays: %v", err)
+	}
+	s.Actions.Run = run
+	if u, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person"); err != nil || u.id != "s1" {
+		t.Fatalf("a second start: %+v, %v", u, err)
+	}
+}
+
+func TestMaxChainsUnsetIsTheDefault(t *testing.T) {
+	s, _, _ := chainStokerTest(t)
+	for _, n := range []int{0, -1} {
+		if s.MaxChains = n; s.maxChains() != 4 {
+			t.Fatalf("max_chains %d gives %d", n, s.maxChains())
+		}
+	}
+	if _, err := s.startChainStoker(t.Context(), "api-auth", "", nil, "person"); err != nil {
+		t.Fatalf("max_chains -1 refuses the first start: %v", err)
+	}
+	if s.MaxChains = 3; s.maxChains() != 3 {
+		t.Fatal("max_chains 3 is not 3")
 	}
 }

@@ -12,7 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/chains"
+	"github.com/blox-eng/matchblox/internal/config"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/stoker"
@@ -313,8 +315,8 @@ func (s *Service) startChainStoker(ctx context.Context, who, words string, grant
 		return nil, fmt.Errorf("%s is in no chain.", who) //nolint:staticcheck // the line a person reads, as it stands
 	case s.unitOfChain(c.ID) != nil:
 		return nil, fmt.Errorf("chain %s has its stoker: give it an order.", name) //nolint:staticcheck // the line a person reads, as it stands
-	case s.chainsAtWork() >= s.MaxChains:
-		return nil, fmt.Errorf("the family has its %d chain stokers: max_chains. Quit one on the STOKER tab first.", s.MaxChains) //nolint:staticcheck // the line a person reads, as it stands
+	case s.chainsAtWork() >= s.maxChains():
+		return nil, fmt.Errorf("the family has its %d chain stokers: max_chains. Quit one on the STOKER tab first.", s.maxChains()) //nolint:staticcheck // the line a person reads, as it stands
 	}
 	state := host.store.Dir()
 	id, err := nextStokerID(state)
@@ -335,11 +337,7 @@ func (s *Service) startChainStoker(ctx context.Context, who, words string, grant
 	s.fam.chains = append(s.fam.chains, u)
 	s.fam.mu.Unlock()
 	if err := s.startStoker(ctx, u); err != nil {
-		// Nothing runs and no run is on: the unit goes with its dir.
-		s.fam.mu.Lock()
-		s.fam.chains = slices.DeleteFunc(s.fam.chains, func(x *stokerUnit) bool { return x == u })
-		s.fam.mu.Unlock()
-		return nil, errors.Join(err, os.RemoveAll(dir))
+		return nil, errors.Join(err, s.dropUnit(u))
 	}
 
 	now := s.now()
@@ -351,14 +349,14 @@ func (s *Service) startChainStoker(ctx context.Context, who, words string, grant
 	}
 	path := filepath.Join(dir, briefName)
 	if err := os.WriteFile(path, []byte(stoker.Brief(o, s.Ways, stoker.Hands, board)), 0o600); err != nil {
-		return nil, err
+		return nil, errors.Join(err, s.endUnit(ctx, u))
 	}
 	if err := s.updateOrder(u, func(m stoker.Mode) (stoker.Mode, error) {
 		m, err := s.start(stoker.Mode{}, false, now, members)
 		m.Order = &o
 		return m, err
 	}); err != nil {
-		return nil, err
+		return nil, errors.Join(err, s.endUnit(ctx, u))
 	}
 	s.mu.Lock()
 	u.brief, u.briefAt = "Read "+path+" and follow it.", now
@@ -366,6 +364,37 @@ func (s *Service) startChainStoker(ctx context.Context, who, words string, grant
 	_ = host.store.Append(familyLine(now, fmt.Sprintf("started the stoker of chain %s (%s)", name, id)))
 	s.refreshStoker()
 	return u, nil
+}
+
+// endUnit ends a chain unit whose start failed after its agent started:
+// its tmux session first, then the unit and its dir. A unit whose run is
+// on stays: the guard finds its panes by its link.json.
+func (s *Service) endUnit(ctx context.Context, u *stokerUnit) error {
+	if u.store.Mode().On {
+		return nil
+	}
+	var err error
+	if res := s.Actions.Do(ctx, advice.Action{Label: "quit the stoker", Steps: [][]string{s.stokerSessionArgv(u, "kill-session")}, Destructive: true}, "y"); res.Err != "" {
+		err = errors.New("its stoker session did not end: " + res.Err)
+	}
+	return errors.Join(err, s.dropUnit(u))
+}
+
+// dropUnit takes a chain unit that never ran out of the family, with its
+// dir: its id is free again.
+func (s *Service) dropUnit(u *stokerUnit) error {
+	s.fam.mu.Lock()
+	s.fam.chains = slices.DeleteFunc(s.fam.chains, func(x *stokerUnit) bool { return x == u })
+	s.fam.mu.Unlock()
+	return os.RemoveAll(u.store.Dir())
+}
+
+// maxChains is [stoker] max_chains; none or less than one is the default.
+func (s *Service) maxChains() int {
+	if s.MaxChains < 1 {
+		return config.Default().Stoker.MaxChains
+	}
+	return s.MaxChains
 }
 
 // deliverBriefs types each chain unit's brief line once its new agent
@@ -417,10 +446,13 @@ type chainAsk struct {
 // newChainAct starts a chain stoker (stoker:new): the person's, at a
 // console or in a shell of their own, never from an agent's pane.
 func (s *Service) newChainAct(ctx context.Context, a proto.Act) proto.Result {
-	if !a.Console {
-		if _, ok := s.sessionAt(a.From); ok {
-			return proto.Result{Err: notTheBuilders}
-		}
+	// A console hello does not make an agent's pane, or a stoker's, a
+	// person's.
+	if _, ok := s.sessionAt(a.From); ok {
+		return proto.Result{Err: notTheBuilders}
+	}
+	if _, stokerPane := s.unitOf(a); stokerPane {
+		return proto.Result{Err: "the stoker does not start, stop or rest itself"}
 	}
 	var ask chainAsk
 	if err := json.Unmarshal([]byte(a.Text), &ask); err != nil {
