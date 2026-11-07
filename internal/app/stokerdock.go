@@ -84,10 +84,11 @@ func (m Model) openUnit(u state.ChainStoker) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// quitUnit is Q on the card of chain stoker u: ending its agent and its
-// session, and no other stoker's, waits for a typed y.
+// quitUnit is Q on the card of chain stoker u: ending its agent, its
+// session and its run, and no other stoker's, waits for a typed y. A run
+// that is on with no agent quits too.
 func (m Model) quitUnit(u state.ChainStoker) (tea.Model, tea.Cmd) {
-	if !u.View.PaneUp && !u.View.Starting {
+	if !chainAlive(u) {
 		m.flash = "the stoker of chain " + u.Name + " is not running"
 		return m, nil
 	}
@@ -167,7 +168,11 @@ func (m Model) stokerLines(w int, full bool, toggle string) []string {
 	if toggle != "" {
 		right = st.accent.Render(toggle) + " "
 	}
-	out := []string{spread(st.label.Render(" STOKER")+st.stoker.Render(chainsWord(m.chainsAtWork(m.opt.Host))), right, w)}
+	head := st.label.Render(" STOKER")
+	if n := m.chainsAtWork(m.opt.Host); n > 0 {
+		head += st.stoker.Render(chainsWord(n))
+	}
+	out := []string{spread(head, right, w)}
 	v := m.stoker
 	if v == nil || !v.On && len(v.Run) == 0 && m.card() == nil {
 		return append(out, fit(" "+st.muted.Render("off · ")+keyWord(m.keys.main.Stoke, st.accent, st.muted, " starts it · ")+
