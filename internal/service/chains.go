@@ -28,8 +28,11 @@ func memberOf(x sample.Session) chains.Member {
 }
 
 // chainAct runs a chain: act from the agent in a.From: chain:<pane> asks,
-// chain:- leaves, chain:off and chain:on.
+// chain:- leaves, chain:off and chain:on. A stoker's pane does none.
 func (s *Service) chainAct(ctx context.Context, a proto.Act) proto.Result {
+	if _, stokerPane := s.unitOf(a); stokerPane {
+		return refuseText("a stoker joins no chain")
+	}
 	res, changed := s.changeChains(strings.TrimPrefix(a.RecID, proto.ChainPrefix), a.From)
 	s.followChains(ctx)
 	if changed {
@@ -294,14 +297,14 @@ func (s *Service) awaitJoin(u *stokerUnit, pane, name string) {
 // the sample finds its agent in the pane the start made, in the tmux
 // session of its name and in the chain's repo. A pane that is gone, or now
 // holds another session or another agent, is let go, and so is one not
-// found within stokerStartsIn. A join that fails says why on the unit's
-// card. It saves on a join. Callers hold mu.
-func (s *Service) joinNewLocked(now time.Time) error {
+// found within stokerStartsIn. It saves on a join. Callers hold mu, and
+// call joinedOut once they let it go: the joins are the units a session
+// joined, and the lines what each failed join says on its unit's card.
+func (s *Service) joinNewLocked(now time.Time) (out joins, err error) {
 	if s.cur.Git == nil || s.sampleMissedLocked() {
-		return nil
+		return out, nil
 	}
 	st := s.chainsLocked()
-	joined := false
 	for _, u := range s.family() {
 		u.joins = slices.DeleteFunc(u.joins, func(j *pendingJoin) bool {
 			late := now.Sub(j.at) >= stokerStartsIn
@@ -339,17 +342,43 @@ func (s *Service) joinNewLocked(now time.Time) error {
 				if !ok {
 					text = fmt.Sprintf("%s did not join chain %s: %s", x.Name, s.chainIDOf(u), err)
 				}
-				_ = u.store.Append(familyLine(now, text))
+				out.lines = append(out.lines, unitLine{u, familyLine(now, text)})
 				return true
 			}
-			joined = true
+			if !slices.Contains(out.units, u) {
+				out.units = append(out.units, u)
+			}
 			return true
 		})
 	}
-	if !joined {
-		return nil
+	if len(out.units) == 0 {
+		return out, nil
 	}
-	return s.saveChainsLocked()
+	return out, s.saveChainsLocked()
+}
+
+// joins is what joinNewLocked leaves to do out of mu.
+type joins struct {
+	units []*stokerUnit
+	lines []unitLine
+}
+
+type unitLine struct {
+	u *stokerUnit
+	e stoker.Entry
+}
+
+// joinedOut writes the cards' lines of j, and hands each unit whose run
+// is on the host's work on its new matches. It runs out of mu.
+func (s *Service) joinedOut(j joins) {
+	for _, l := range j.lines {
+		_ = l.u.store.Append(l.e)
+	}
+	for _, u := range j.units {
+		if u.store.Mode().On {
+			s.handOver(u)
+		}
+	}
 }
 
 func chainByID(st *chains.Store, id string) (chains.Chain, bool) {

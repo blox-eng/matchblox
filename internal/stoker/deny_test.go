@@ -316,3 +316,21 @@ func TestDenyFamilyAChainUnitWithBrokenModeAndNoDrivenIsLost(t *testing.T) {
 		t.Fatalf("%q, want %q", got, want)
 	}
 }
+
+// An ended chain stoker guards nothing: the guard does not read its files.
+func TestDenyFamilySkipsAnEndedUnit(t *testing.T) {
+	merge := Guards("gh pr merge 4")
+	st := t.TempDir()
+	familyUnit(t, st, "s1", nil) // its run on, no driven.json: lost, were it alive
+	familyUnit(t, st, "s2", &Driven{Run: "r", Panes: map[string][]string{"%7": nil}})
+	for _, id := range []string{"s1", "s2"} {
+		if err := WriteLink(FamilyDir(st, id), Link{ID: id, Chain: "c-" + id, Giver: "person", Ended: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, pane := range []string{"%1", "%7"} {
+		if got, want := DenyFamily(st, "", pane, merge), Deny(st, "", pane, merge); got != want {
+			t.Fatalf("%s: %q, want the host's %q", pane, got, want)
+		}
+	}
+}

@@ -540,7 +540,8 @@ func deny(d Driven, socket, pane string, gs []Guard) string {
 }
 
 // DenyFamily is the merge guard over the whole family: the host stoker's
-// state dir and the store of every chain stoker. If any member lost its
+// state dir and the store of every chain stoker whose link does not say
+// it ended. If any member lost its
 // driven.json while its run is on, nothing passes in any pane. Else a pane
 // on the tmux server of any member is a stoker pane, and a pane passes only
 // if every member that lists it allows it. With no chain stoker it is Deny.
@@ -563,6 +564,11 @@ func DenyFamily(state, socket, pane string, gs []Guard) string {
 	var known []Driven
 	for _, id := range append([]string{HostID}, ids...) {
 		dir := FamilyDir(state, id)
+		if id != HostID {
+			if l, err := ReadLink(dir); err == nil && l.Ended {
+				continue // it stopped for good: its run is off, and it drives nothing
+			}
+		}
 		d, err := ReadDriven(dir)
 		if err != nil {
 			m, merr := ReadMode(dir)

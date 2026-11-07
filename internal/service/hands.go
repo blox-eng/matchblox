@@ -67,10 +67,16 @@ func (s *Service) orderable(u *stokerUnit, a proto.Act) error {
 		case "plan", "step", "when":
 			return nil
 		case "order-chain":
-			if own, _ := s.unitOf(a); own == u && u == s.hostUnit() {
-				return nil
+			if own, _ := s.unitOf(a); own != u || u != s.hostUnit() {
+				return errors.New(sessionGivesNoOrders)
 			}
-			return errors.New(sessionGivesNoOrders)
+			switch m := u.store.Mode(); {
+			case !m.On:
+				return errors.New("the stoker is off: no run")
+			case !m.Rests.IsZero():
+				return errors.New("the stoker rests: a person works")
+			}
+			return nil
 		case "grant":
 			return errors.New("the stoker does not give itself the go")
 		case "order":

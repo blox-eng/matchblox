@@ -312,14 +312,34 @@ func (s *Service) rememberName(u *stokerUnit) {
 }
 
 // chainStokers are the views of the chain units for State.Stokers, in
-// family order.
+// family order. An ended unit leaves once the person saw it: they acked
+// the host's card after its end.
 func (s *Service) chainStokers(sessions []sample.Session) []state.ChainStoker {
+	var acked time.Time
+	if h := s.hostUnit(); h != nil {
+		acked = h.store.Mode().Acked
+	}
 	var out []state.ChainStoker
 	for _, u := range s.chainUnits() {
+		if s.ended(u) && acked.After(endOf(u)) {
+			continue
+		}
 		s.rememberName(u)
 		out = append(out, state.ChainStoker{ID: u.id, Chain: s.chainIDOf(u), Name: s.unitName(u), View: *s.stokerView(u, sessions)})
 	}
 	return out
+}
+
+// endOf is when chain unit u ended: its run's end, or its card's last
+// line, which retire writes.
+func endOf(u *stokerUnit) time.Time {
+	end := u.store.Mode().Ended
+	for _, e := range u.store.Entries() {
+		if e.At.After(end) {
+			end = e.At
+		}
+	}
+	return end
 }
 
 // chainsAtWork counts the chain units the cap counts: an agent that is up
@@ -480,8 +500,8 @@ func (s *Service) runChain(u *stokerUnit, c chains.Chain, name string, members [
 // handOver passes to chain unit u, whose run starts, the host stoker's
 // work on its chain's matches. The host's triggers that act on a member
 // move to u. Each kill or go on the host's card that waits for a y for a
-// member is dropped, with a line that says so. The host drives the members
-// no more. A hold passes with its match: the owner of a match is the one
+// member is dropped, with a line that says so. Each member the host drove,
+// u drives now. A hold passes with its match: the owner of a match is the one
 // stoker that may let it go (scopeOf). Each write is best effort: what
 // fails stays with the host, whose acts on the members scopeOf refuses.
 func (s *Service) handOver(u *stokerUnit) {
@@ -508,6 +528,20 @@ func (s *Service) handOver(u *stokerUnit) {
 		}
 		return who, in
 	}, "the stoker of chain "+name+" owns it now")
+	// u drives first what the host drove, so the guard holds each member
+	// the whole time. The y-goes the person gave for one pane stay behind.
+	var drove []string
+	_ = s.updateDriven(host, func(d *stoker.Driven, _ []string) bool {
+		for pane := range panes {
+			if _, in := d.Panes[pane]; in {
+				drove = append(drove, pane)
+			}
+		}
+		return false
+	})
+	for _, pane := range drove {
+		s.drive(u, pane)
+	}
 	_ = s.updateDriven(host, func(d *stoker.Driven, _ []string) bool {
 		changed := false
 		for pane := range panes {

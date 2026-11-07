@@ -487,8 +487,11 @@ matchblox stoker quit --chain api-auth
 - `--go merges,releases,deploys,kills` gives the stoker those gos. From
   your shell, with no `--go`, it has none. From the host stoker's pane,
   with no `--go`, it has the host stoker's gos.
-- `matchblox stoker quit --chain <who>` quits the stoker of that chain.
-  `matchblox stoker quit` alone quits the host stoker.
+- `matchblox stoker quit --chain <who>` quits the stoker of that chain:
+  its agent, its tmux session and its run. Its card gets its score, and
+  `max_chains` counts it no more. When its agent is already gone and its
+  run is on, the quit ends the run. `matchblox stoker quit` alone quits the
+  host stoker.
 - A command with neither a pane nor a terminal is refused:
   `not started: matchblox cannot tell who starts this. Start from a terminal, a tmux pane or the console.`
   and `not ordered: matchblox cannot tell who orders this. Order from a terminal, a tmux pane or the console.`
@@ -538,6 +541,10 @@ matchblox stoker quit --chain api-auth
 
 - A chain stoker ends with its chain. Its card says `its chain ended`, and
   it quits.
+- A session that joins a chain whose stoker runs is that stoker's to
+  drive at once. A pane the host stoker drove stays guarded: the chain
+  stoker drives it from the start, with its own gos. A go you gave for one
+  pane with `y` stays with the host stoker.
 - When two chains join, one stoker stays. The other writes
   `its chain joined <name>` on its card and quits. Its latest order goes
   to the stoker that stays, with only the gos that both had. At night, that
@@ -547,7 +554,16 @@ matchblox stoker quit --chain api-auth
 
 - The STOKER tab lists the family: the host stoker's card first, then a
   `CHAIN <name>` card for each chain stoker. `Enter` on a chain card opens
-  that stoker's pane. `Q` and a typed `y` quit that stoker only.
+  that stoker's pane. `Q` and a typed `y` quit that stoker only, and end
+  its run. `Q` shows on a card whose run is on, even when its agent is
+  gone.
+- A go that a chain stoker's run waits for shows on its card under
+  `YOUR GO`. `y` on it gives that go, once, as on the host's card. The
+  tab's name counts it with the host's.
+- An ended chain stoker keeps its card until you look at the host's card
+  after its end (the morning card). Then its card leaves the tab and
+  `matchblox status`. Its run log stays on disk, and the merge guard reads
+  it no more.
 - The dock and the header count the chain stokers: `stoker · 2 chains`
   (`· 1 chain` for one). With no chain stoker, they read as before.
 - In `matchblox sessions --json`, a chain stoker's row has `"stoker": true`,

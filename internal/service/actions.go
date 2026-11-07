@@ -244,7 +244,7 @@ func (s *Service) dispatch(ctx context.Context, a proto.Act) proto.Result {
 		case "plan", "step", "when":
 			return s.planAct(verb, a)
 		case "grant":
-			return s.grantAct(s.hostUnit(), a)
+			return s.grantAct(a)
 		case "start":
 			return s.startAct(ctx, s.hostUnit())
 		case "quit":

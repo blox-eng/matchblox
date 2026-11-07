@@ -140,7 +140,9 @@ func (s *Service) markStarting(u *stokerUnit) {
 
 // quitAct ends unit u's stoker agent and its session (stoker:quit): the
 // builder's, at a console or with matchblox stoker quit in a shell of
-// their own. A run that is on goes on without its agent.
+// their own. The host's run that is on goes on without its agent. A chain
+// unit whose session is gone, and whose run is on, quits too: quitChainAct
+// ends that run.
 func (s *Service) quitAct(ctx context.Context, u *stokerUnit, a proto.Act) proto.Result {
 	if a.Confirm != "y" {
 		return proto.Result{Err: "needs confirm"}
@@ -154,7 +156,11 @@ func (s *Service) quitAct(ctx context.Context, u *stokerUnit, a proto.Act) proto
 		return proto.Result{Err: "this service starts no stoker agent"}
 	}
 	if !s.stokerThere(ctx, u) {
-		return proto.Result{Err: "the stoker is not running"}
+		if u == nil || u == s.hostUnit() || !u.store.Mode().On {
+			return proto.Result{Err: "the stoker is not running"}
+		}
+		s.refreshStoker()
+		return proto.Result{}
 	}
 	res := s.Actions.Do(ctx, advice.Action{Label: "quit the stoker", Steps: [][]string{s.stokerSessionArgv(u, "kill-session")}, Destructive: true}, "y")
 	if res.Err != "" {
@@ -170,9 +176,9 @@ func (s *Service) quitAct(ctx context.Context, u *stokerUnit, a proto.Act) proto
 }
 
 // quitChainAct is stoker:quit with Text: it ends the agent of one chain
-// stoker, named by its id or by its chain (any member's name, a pane or
-// the chain's id). Only the person quits one, at a console or in a shell
-// of their own.
+// stoker and its run, named by its id or by its chain (any member's name,
+// a pane or the chain's id): its card is scored, and the cap counts it no
+// more. Only the person quits one, at a console or in a shell of their own.
 func (s *Service) quitChainAct(ctx context.Context, a proto.Act) proto.Result {
 	if why := s.notThePersons(a); why != "" {
 		return proto.Result{Err: why}
@@ -192,9 +198,17 @@ func (s *Service) quitChainAct(ctx context.Context, a proto.Act) proto.Result {
 	if u == nil || u == s.hostUnit() {
 		return proto.Result{Err: fmt.Sprintf("no stoker %s: matchblox status lists the family", a.Text)}
 	}
+	gone := s.StokerServer != "" && !s.stokerThere(ctx, u)
 	res := s.quitAct(ctx, u, a)
-	if res.Err == "" {
-		res.Note = fmt.Sprintf("ended the stoker of chain %s (%s) and its tmux session", s.chainNameOf(s.chainIDOf(u)), u.id)
+	if res.Err != "" {
+		return res
+	}
+	if off := s.stokerAct(u, "off", s.now()); off.Err != "" {
+		return off
+	}
+	res.Note = fmt.Sprintf("ended the stoker of chain %s (%s) and its tmux session", s.chainNameOf(s.chainIDOf(u)), u.id)
+	if gone {
+		res.Note = fmt.Sprintf("ended the stoker of chain %s (%s): its tmux session is gone", s.chainNameOf(s.chainIDOf(u)), u.id)
 	}
 	return res
 }
