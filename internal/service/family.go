@@ -35,12 +35,12 @@ type stokerUnit struct {
 	// driven are the panes the unit drove, for the merge guard.
 	driven drivenState
 	// brief are the lines still to type into a chain unit's new agent once
-	// it rests, its brief first, and briefAt when the unit started. dropped
-	// is the brief line of an agent that did not rest in time: an order
-	// types it again first. Service.mu guards the three.
+	// it rests, its brief first, and briefAt when they were queued. dropped
+	// are the lines of an agent that did not rest in time: an order queues
+	// them again first. Service.mu guards the three.
 	brief   []string
 	briefAt time.Time
-	dropped string
+	dropped []string
 	// joins are the tmux sessions a chain unit started, which join its
 	// chain once a sample finds them in its repo. Service.mu guards it.
 	joins []*pendingJoin
@@ -392,8 +392,7 @@ func (s *Service) runChain(u *stokerUnit, c chains.Chain, name string, members [
 	for _, x := range members {
 		board.Chain.Members = append(board.Chain.Members, stoker.MemberLine(x))
 	}
-	path := filepath.Join(u.store.Dir(), briefName)
-	if err := os.WriteFile(path, []byte(stoker.Brief(o, s.Ways, stoker.Hands, board)), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(u.store.Dir(), briefName), []byte(stoker.Brief(o, s.Ways, stoker.Hands, board)), 0o600); err != nil {
 		return err
 	}
 	if err := s.updateOrder(u, func(m stoker.Mode) (stoker.Mode, error) {
@@ -407,13 +406,18 @@ func (s *Service) runChain(u *stokerUnit, c chains.Chain, name string, members [
 		return err
 	}
 	s.mu.Lock()
-	u.brief, u.briefAt, u.dropped = []string{"Read " + path + " and follow it."}, now, ""
+	u.brief, u.briefAt, u.dropped = []string{briefLine(u)}, now, nil
 	s.mu.Unlock()
 	if h := s.hostUnit(); h != nil {
 		_ = h.store.Append(familyLine(now, fmt.Sprintf("started the stoker of chain %s (%s)", name, u.id)))
 	}
 	s.refreshStoker()
 	return nil
+}
+
+// briefLine is the line that points chain unit u's agent at its brief.
+func briefLine(u *stokerUnit) string {
+	return "Read " + filepath.Join(u.store.Dir(), briefName) + " and follow it."
 }
 
 // rerunChain gives chain unit u, whose run is off, a new run: its agent
@@ -458,7 +462,7 @@ func (s *Service) relink(u *stokerUnit, grants []string, giver string) error {
 	if err := stoker.WriteLink(u.store.Dir(), l); err != nil {
 		return err
 	}
-	u.link = l
+	u.link.Giver, u.link.Grants = l.Giver, l.Grants // Chain is read without the lock
 	return nil
 }
 
@@ -541,7 +545,7 @@ func (s *Service) deliverBriefs(ctx context.Context) {
 			u.brief = nil // claimed: typed once at most
 		}
 		if late {
-			u.dropped = lines[0]
+			u.dropped = lines
 		}
 		s.mu.Unlock()
 		switch {
@@ -557,6 +561,9 @@ func (s *Service) deliverBriefs(ctx context.Context) {
 			s.mu.Lock()
 			if typed < len(lines) { // try the rest again at the next rest, before what came meanwhile
 				u.brief = append(slices.Clone(lines[typed:]), u.brief...)
+				if typed > 0 {
+					u.briefAt = now // the agent took a line: the rest waits anew
+				}
 			}
 			if typed > 0 {
 				u.startedAt = time.Time{}
@@ -564,6 +571,9 @@ func (s *Service) deliverBriefs(ctx context.Context) {
 			s.mu.Unlock()
 		case late:
 			text := fmt.Sprintf("the stoker of chain %s did not start: its brief was not typed", s.chainNameOf(u.link.Chain))
+			if slices.ContainsFunc(lines, func(l string) bool { return l != briefLine(u) }) {
+				text = fmt.Sprintf("the stoker of chain %s did not take its order: its agent did not rest", s.chainNameOf(u.link.Chain))
+			}
 			_ = u.store.Append(familyLine(now, text))
 			if h := s.hostUnit(); h != nil {
 				_ = h.store.Append(familyLine(now, text))
@@ -586,11 +596,19 @@ type chainAsk struct {
 func (s *Service) newChainAct(ctx context.Context, a proto.Act) proto.Result {
 	// A console hello does not make an agent's pane, or a stoker's, a
 	// person's.
-	if _, ok := s.sessionAt(a.From); ok {
-		return proto.Result{Err: notTheBuilders}
+	if why := s.notThePersons(a); why != "" {
+		return proto.Result{Err: why}
 	}
 	if _, stokerPane := s.unitOf(a); stokerPane {
 		return proto.Result{Err: "the stoker does not start, stop or rest itself"}
+	}
+	if !personPlaced(a) {
+		return proto.Result{Err: "not started: matchblox cannot tell who starts this. Start from a terminal, a tmux pane or the console."}
+	}
+	if h := s.hostUnit(); h != nil {
+		if m := h.store.Mode(); m.On && m.Nightly {
+			return proto.Result{Err: sealedFamily}
+		}
 	}
 	var ask chainAsk
 	if err := json.Unmarshal([]byte(a.Text), &ask); err != nil {

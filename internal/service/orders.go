@@ -192,22 +192,40 @@ func (s *Service) dayOrder(ctx context.Context, u *stokerUnit, words string, gra
 func (s *Service) briefWaits(u *stokerUnit) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return len(u.brief) > 0 || u.dropped != ""
+	return len(u.brief) > 0 || len(u.dropped) > 0
 }
 
 // queueBehindBrief queues line for unit u's agent, behind its brief: a
-// dropped brief is queued again first, and waits for the agent anew.
+// dropped queue is queued again first, and waits for the agent anew.
 func (s *Service) queueBehindBrief(u *stokerUnit, line string, now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if u.dropped != "" {
-		u.brief = append([]string{u.dropped}, u.brief...)
-		u.dropped = ""
-	}
-	if len(u.brief) == 0 {
+	if len(u.brief) == 0 { // empty, or dropped: the agent gets its time anew
 		u.briefAt = now
 	}
-	u.brief = append(u.brief, line)
+	u.brief = append(append(slices.Clone(u.dropped), u.brief...), line)
+	u.dropped = nil
+}
+
+// sessionGivesNoOrders refuses an order to a chain from an agent's pane
+// that is not the host stoker's.
+const sessionGivesNoOrders = "a session gives no orders: only the person and the host stoker do"
+
+// personPlaced: the act is the person's for sure. A console says so in its
+// hello; a shell is placed when the service found its terminal or pane by
+// the caller's pid. A caller with neither (setsid, nohup, cron) may be any
+// agent's.
+func personPlaced(a proto.Act) bool {
+	return a.Console || a.FromKnown && a.FromPlaced
+}
+
+// notThePersons refuses an act from an agent's pane, whatever its console
+// hello said.
+func (s *Service) notThePersons(a proto.Act) string {
+	if _, ok := s.sessionAt(a.From); ok {
+		return notTheBuilders
+	}
+	return ""
 }
 
 // sealedFamily refuses the person's order to a chain while a night runs.
@@ -235,8 +253,12 @@ func (s *Service) chainOrderAct(ctx context.Context, a proto.Act) proto.Result {
 			return proto.Result{Err: "a chain stoker gives no orders"}
 		}
 		giver = "host"
-	} else if _, ok := s.sessionAt(a.From); ok { // a console hello does not make an agent's pane a person's
-		return proto.Result{Err: notTheBuilders}
+	} else if _, agent := s.agentsUnit(a); agent {
+		return proto.Result{Err: sessionGivesNoOrders}
+	} else if why := s.notThePersons(a); why != "" {
+		return proto.Result{Err: why}
+	} else if !personPlaced(a) {
+		return proto.Result{Err: "not ordered: matchblox cannot tell who orders this. Order from a terminal, a tmux pane or the console."}
 	}
 	var ask chainOrderAsk
 	if err := json.Unmarshal([]byte(a.Text), &ask); err != nil {
@@ -292,6 +314,9 @@ func (s *Service) giveChainOrder(ctx context.Context, who, words string, grants 
 	var u *stokerUnit
 	if ok {
 		u = s.unitOfChain(c.ID)
+	}
+	if u != nil && words == "" {
+		return "", errors.New("an order needs words")
 	}
 	switch {
 	case u == nil:

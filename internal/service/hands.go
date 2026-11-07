@@ -56,6 +56,11 @@ func (s *Service) orderable(u *stokerUnit, a proto.Act) error {
 		// Its plan, its steps and its triggers are the stoker's own, and
 		// work while it rests.
 		// Every other stoker act is the builder's.
+		if verb == "order-chain" {
+			if _, stokerPane := s.unitOf(a); !stokerPane {
+				return errors.New(sessionGivesNoOrders) // a session a stoker drove
+			}
+		}
 		if u.link.Chain != "" && (verb == "order" || verb == "order-chain") {
 			return errors.New("a chain stoker gives no orders")
 		}
@@ -63,7 +68,10 @@ func (s *Service) orderable(u *stokerUnit, a proto.Act) error {
 		case "plan", "step", "when":
 			return nil
 		case "order-chain":
-			return nil // the host's own: chainOrderAct checks it comes from its pane
+			if own, _ := s.unitOf(a); own == u && u == s.hostUnit() {
+				return nil
+			}
+			return errors.New(sessionGivesNoOrders)
 		case "grant":
 			return errors.New("the stoker does not give itself the go")
 		case "order":
