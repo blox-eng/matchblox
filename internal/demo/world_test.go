@@ -155,6 +155,20 @@ func TestAStartMissingATokenIsRefusedNotPanicked(t *testing.T) {
 	}
 }
 
+// TestTheDemosServiceSendsKeysToTheWorld: the real service refuses keys; the
+// demo's, wired to the world, is the one that sends them.
+func TestTheDemosServiceSendsKeysToTheWorld(t *testing.T) {
+	w := newTestWorld(t, func(int) {})
+	s := service.New(config.Default(), nil, w.Git)
+	if s.KeysToWorld {
+		t.Fatal("a service sends keys before it is wired to a world")
+	}
+	w.Wire(s)
+	if !s.KeysToWorld {
+		t.Error("the demo's service does not send keys to the world")
+	}
+}
+
 // TestArrowsMoveTheMenusCursor: the stand-in's arrows move the cursor of
 // flint-auth's menu, and stop at its ends.
 func TestArrowsMoveTheMenusCursor(t *testing.T) {

@@ -146,11 +146,6 @@ const WatchPrefix = "watch:"
 // a key name of KeyNames, or LitPrefix and the text to type.
 const KeysPrefix = "keys:"
 
-// CommandPrefix starts an act that types a command of the command table
-// (keycmd) into the pane after it, at rest. Text is the command's id; PID
-// is the agent the console showed.
-const CommandPrefix = "cmd:"
-
 // ChainPrefix starts an act from an agent's pane that asks to chain with the
 // agent in the pane after it. After it, "-" leaves the chain, "off" refuses
 // chains and "on" takes them again.

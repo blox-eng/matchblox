@@ -8,14 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/sample"
 	"github.com/blox-eng/matchblox/internal/stoker"
 )
 
 // paneActs are the acts that name a pane after the colon.
-var paneActs = []string{"message:", proto.PickPrefix, "answer:", "compact:", "hold:", "release:", "park:", "kill:", "rename:", "switch:", proto.KeysPrefix, proto.CommandPrefix}
+var paneActs = []string{"message:", proto.PickPrefix, "answer:", "compact:", "hold:", "release:", "park:", "kill:", "rename:", "switch:", proto.KeysPrefix}
 
 // typedPane is the pane a message, an answer or a pick types into.
 func typedPane(recID string) string {
@@ -206,50 +205,6 @@ func (s *Service) restsFor(pane, cmd string, a proto.Act) (sample.Session, error
 		}
 	}
 	return x, nil
-}
-
-// command types a command of the command table into the session in pane,
-// from a console's chat: only to the agent the chat showed (PID), only a
-// command of that agent, and under the stoker's guards: at rest, no
-// question, no permission prompt and no draft, and the text on the prompt
-// before its Enter. Compact has its own act.
-func (s *Service) command(ctx context.Context, pane string, a proto.Act) proto.Result {
-	if !s.aConsole(a.Console, a) {
-		return proto.Result{Err: keysOnlyFromConsole}
-	}
-	c, ok := keycmd.ByID(a.Text)
-	if !ok || c.Run != "type" {
-		return proto.Result{Err: fmt.Sprintf("not sent: %q is no command this host types", cut(a.Text, 20))}
-	}
-	s.touchStoker(s.now()) // the builder acts: a stoker that rests goes on resting
-	unlock := s.holdPane(pane)
-	defer unlock()
-	notSent := func(why string) proto.Result { return proto.Result{Err: "/" + c.Label + " not sent: " + why} }
-	x, ok := s.sessionAt(pane)
-	switch {
-	case !ok:
-		return notSent("no agent session in " + pane + " any more")
-	case !sameAgent(x, a):
-		return notSent(pane + " runs a different agent now")
-	case keycmd.AgentOf(x.Agent) != c.Agent:
-		return proto.Result{Err: keycmd.Refusal(c, x.Name, x.Agent)}
-	}
-	if _, err := s.restsFor(pane, "/"+c.Label, a); err != nil {
-		return notSent(err.Error())
-	}
-	res := s.Actions.Do(ctx, stoker.CommandAction(pane, x.PID, x.Start, c.Text, readsPrompt[x.Agent]), a.Confirm)
-	if len(res.Ran) > 0 {
-		s.latchRest(pane)
-		s.undrive(pane) // the pane's last input is the person's, as with a key
-	}
-	s.kickScreens(pane)
-	if res.Err == "" && len(res.Skipped) > 0 {
-		res.Err = "/" + c.Label + " not sent: " + res.Skipped[0]
-		if len(res.Ran) > 0 {
-			res.Err = "/" + c.Label + " typed, not sent: " + res.Skipped[0]
-		}
-	}
-	return res
 }
 
 // readsPrompt are the agents whose prompt said.Draft reads: a draft there
