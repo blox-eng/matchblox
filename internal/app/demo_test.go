@@ -84,7 +84,7 @@ func TestWhatLeavesTheDemoSaysSoAndRunsNothing(t *testing.T) {
 	for name, try := range map[string]func(t *testing.T) Model{
 		"ctrl+o": func(t *testing.T) Model { return pressKeys(t, demoConsole(t, 100, o), "ctrl+o") },
 		"ctrl+o in the chat": func(t *testing.T) Model {
-			m := pressKeys(t, demoSized(t, 44, 31), "enter")
+			m := openChat(t, demoSized(t, 44, 31))
 			if !m.chatKeys {
 				t.Fatal("the chat did not open")
 			}
@@ -303,15 +303,12 @@ func TestAConsoleWithoutADemoIsAsItWas(t *testing.T) {
 	m := next.(Model)
 	m.tab, m.splashDone = tabSessions, true
 
-	m = pressKeys(t, m, "ctrl+o")
-	if m.pending == nil || !m.pending.attach || m.flash == demoLine {
-		t.Fatalf("ctrl+o: pending %+v, flash %q", m.pending, m.flash)
+	next, cmd := key(m, "ctrl+o")
+	m = next.(Model)
+	if cmd == nil || m.pending != nil || m.flash == demoLine {
+		t.Fatalf("ctrl+o: pending %+v, flash %q, cmd %v: want the attach at once", m.pending, m.flash, cmd != nil)
 	}
-	next, cmd := key(m, "enter")
-	if cmd == nil {
-		t.Fatal("the confirm ran nothing")
-	}
-	next.(Model).Update(cmd())
+	next.Update(cmd())
 	if moved != 2 || len(saw) != 1 || !slices.Equal(saw[0][:2], []string{"tmux", "attach-session"}) {
 		t.Errorf("moved %d times, gave the terminal to %v", moved, saw)
 	}

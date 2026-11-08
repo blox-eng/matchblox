@@ -38,7 +38,7 @@ func TestShipsShowTheirTrack(t *testing.T) {
 
 // TestShipKeys: Enter selects the session that drives the ship in
 // Sessions; x on one that waits for your merge shows its merge and runs it
-// only after a typed y (a on a stuck one: TestAOpensTheChatOnShipsAndStoker).
+// only after a typed y (a on a stuck one: TestAOnAStuckShipJumps).
 func TestShipKeys(t *testing.T) {
 	st := screensState(t)
 	m, f := shipsAt(t, 86, st)
@@ -338,7 +338,7 @@ func TestManyShipsKeepTheSessionsKeys(t *testing.T) {
 	if !strings.Contains(out, "+3 more") || strings.Contains(out, "#4603") {
 		t.Fatalf("%v: not three ships and +3 more:\n%s", size, out)
 	}
-	if sc.actKeysAt <= 0 || !strings.Contains(lines[sc.actKeysAt], "⏎ chat") {
+	if sc.actKeysAt <= 0 || !strings.Contains(lines[sc.actKeysAt], "⏎ go in") {
 		t.Fatalf("%v: the keys are marked on line %d:\n%s", size, sc.actKeysAt, out)
 	}
 }

@@ -210,7 +210,7 @@ func (m Model) optionAt(ms tea.Mouse, sc drawn) (press string, texts []string) {
 // guard holds and a refusal says why, as for a key. At night it asks to take
 // over first.
 func (m Model) tapOption(press string, texts []string) (tea.Model, tea.Cmd) {
-	m.flash, m.chatTyped = "", m.now()
+	m.flash = ""
 	name, keys := m.pressed(texts...)
 	if m.takeOverOn(m.opt.Host) {
 		m.held, m.heldOn = m.heldKeys(name, keys), m.opt.Host

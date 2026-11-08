@@ -740,8 +740,7 @@ func TestBeatFourOnAMenuAnswer(t *testing.T) {
 	m.opt.LastClient = func() (string, time.Time, error) { return phoneTTY, time.Time{}, nil }
 	m.opt.Pair = &PairHost{DeviceIn: func(id string) (time.Time, string, bool) { return time.Now(), phoneTTY, id == "iPad-id" }}
 	next, _ := key(m, "down") // api asks
-	next, _ = key(next, "enter")
-	m = pastQuiet(next.(Model))
+	m = pastQuiet(openChat(t, next.(Model)))
 	m.pair = &pairPage{beat: 3, device: PairDevice{Name: "iPad", ID: "iPad-id"}}
 	next, cmd := key(m, "enter")
 	drain(cmd)
@@ -779,9 +778,9 @@ func TestTheStripHandsTheConsoleBack(t *testing.T) {
 	}
 
 	next, _ := key(m, "down")
-	next, _ = key(next, "a")
+	next = openChat(t, next.(Model))
 	if !next.(Model).chatKeys {
-		t.Fatal("a key did not reach the console at beat 3")
+		t.Fatal("the chat has no keys at beat 3")
 	}
 	now = now.Add(time.Second)    // the menu's quiet passes
 	next, cmd := key(next, "esc") // goes to the agent, and the strip stays

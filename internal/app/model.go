@@ -314,7 +314,6 @@ type Model struct {
 	tapped     tappedOption       // the option a tap pressed, until the next screen
 	shortPID   int                // the session whose chat a too short screen dropped, until the person chooses something else
 	chatShut   time.Time          // when the chat last closed by itself: keys typed for it go nowhere for a moment
-	chatTyped  time.Time          // when the person last typed in the chat
 	changes    map[paneKey]change // a match change that plays once
 	animating  bool
 	hist       history.Series
@@ -1045,11 +1044,9 @@ var focusWait = 10 * time.Second
 const focusGone = "That session ended."
 
 // takeFocus opens the session a tap on the island or a buzz asked for, once
-// for each focus the service sends, on Sessions: its chat when it waits,
-// else its pane on the phone's own tmux client. A form, sheet, pair page,
-// take-over or a chat typed to a moment ago keeps
-// the keys: what the person types there is not thrown away, nor sent to
-// another agent. The key line names the agent that asked.
+// for each focus the service sends, on Sessions: its pane on the phone's own
+// tmux client. A form, sheet, pair page or take-over keeps the keys: what the
+// person types there is not thrown away, nor sent to another agent.
 func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	if f == nil || f.At.Equal(m.focusAt) {
 		return m, nil
@@ -1066,13 +1063,7 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 			break
 		}
 	}
-	typing := m.chatKeys && (len(m.keyQ) > 0 || m.keyInFlight != "" || m.now().Before(m.chatTyped.Add(chatTypingHold)))
-	busy := m.pair.owns() || m.sheet != nil || m.form != nil || m.held != nil || typing
-	if typing && found && !f.Gone {
-		if cur, _ := m.selectedSession(); cur.Pane != s.Pane {
-			m.flash = s.Name + " asks for you · the chat stays on " + cur.Name + " while you type"
-		}
-	}
+	busy := m.pair.owns() || m.sheet != nil || m.form != nil || m.held != nil
 	if f.Gone || !found {
 		if !busy {
 			m.setTab(tabSessions)
@@ -1089,13 +1080,6 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	m.doorPick, m.recPick, m.ghostPick, m.chose, m.selPID, m.selHost = "", "", 0, true, s.PID, s.Host
 	if s.Pane == "" {
 		return m, nil // outside tmux: no pane to open
-	}
-	if _, waits := m.waitOf(s); waits {
-		// The home console is shared: the chat shows on the phone too, and an
-		// Enter on its way at the desk must not answer it: the quiet starts.
-		m = m.chatOn(s.Pane)
-		m.menuSeen = m.seenOf(s)
-		return m, nil
 	}
 	// Only the phone's client moves, into a session of its own (FocusArgv),
 	// and only on this console's own tmux: a console of another host (over
@@ -1361,7 +1345,7 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.unblockHost(b)
 		}
 		if s, ok := m.selectedSession(); ok && s.Host == m.opt.Host {
-			return m.openChat(), nil
+			return m.intoSelected()
 		}
 		if a := m.primary(); a != nil && a.pair {
 			return m.openPairDoor()
@@ -1384,13 +1368,16 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.tab == tabStoker {
 			return m.grantStep()
 		}
-	case bkey.Matches(k, mk.Chat):
-		if m.tab == tabShips {
-			return m.shipChat(), nil
+	case bkey.Matches(k, mk.Into):
+		switch m.tab {
+		case tabShips:
+			return m.shipInto()
+		case tabStoker:
+			return m.stokerInto()
 		}
-		return m.openChat(), nil
+		return m.intoSelected()
 	case bkey.Matches(k, mk.Jump):
-		return m.intoPane(), nil
+		return m.jumpKey()
 	case bkey.Matches(k, mk.Dismiss):
 		if m.tab == tabSessions {
 			m.dismissRec()

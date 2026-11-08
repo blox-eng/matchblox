@@ -51,9 +51,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		if m.chatKeys {
 			return m.tapOption(press, texts)
 		}
-		m = m.openChat()
-		m.menuSeen.at = m.now()
-		return m, nil
+		return m.intoSelected()
 	}
 	if sc.chatFull && ms.Y != sc.keysAt {
 		if ms.Y == 0 {
@@ -113,7 +111,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	if ms.X >= sc.listW {
 		if m.tab == tabSessions {
-			return m.openChat(), nil
+			return m.intoSelected()
 		}
 		return m, nil
 	}
@@ -138,9 +136,9 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	picked := m.view().index != nil && m.rowIndex() == sc.rows[i] && (m.tab != tabSessions || m.chose)
 	m.selectRow(sc.rows[i])
-	if s, ok := m.selectedSession(); ok && s.Pane != "" && s.Host == m.opt.Host && m.tab == tabSessions && m.oneColumn(w) {
-		m.armed = "" // one column, as on a phone: the session opens in its chat, as Enter does
-		return m.openChat(), nil
+	if s, ok := m.selectedSession(); ok && s.Pane != "" && s.Host == m.opt.Host && m.oneColumn(w) && m.opt.Demo != "" {
+		m.armed = "" // the demo has no pane: on one column, as on a phone, the session opens in its chat
+		return m.goInto(s.Host, s.Pane)
 	}
 	if m.tab == tabShips {
 		// A tap on the selected ship goes to its session, as Enter does.
@@ -150,14 +148,14 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if pane, _ := m.chatTarget(); pane != "" {
-		// A session opens in place with its keys; a tap on it once it is
-		// selected gives the keys to its chat.
+	if host, pane := m.tapTarget(); pane != "" {
+		// A tap selects a session; a tap on it once it is selected goes into
+		// its pane.
 		m.armed, m.flash = "", ""
 		if !picked || back {
 			return m, nil // the default selection is not a tap
 		}
-		return m.chatOn(pane), nil
+		return m.goInto(host, pane)
 	}
 	say, run, host := m.tapAct()
 	if run == nil {

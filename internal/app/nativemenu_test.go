@@ -119,7 +119,7 @@ func TestEveryKeyOfAMenuReachesTheAgent(t *testing.T) {
 // TestAKeyAtAnAskNeedsAScreen), and the refusal shows.
 func TestAKeyAtAMenuBeforeItsScreenIsSeen(t *testing.T) {
 	m, f := loadedWith(t, 100, cardState("toolu_1", threeWays))
-	m = pastQuiet(pressKeys(t, onPane(t, m, "%1"), "enter"))
+	m = pastQuiet(openChat(t, onPane(t, m, "%1")))
 	m = pressKeys(t, m, "1")
 	got := keyActs(f)
 	if len(got) != 1 || got[0].Text != "lit:1" || !got[0].Seen.IsZero() {
@@ -159,7 +159,7 @@ func TestAQuietStartsWithANewMenuAndHoldsEveryKeyThatAnswers(t *testing.T) {
 	asks := cardState("toolu_1", threeWays)
 	for _, k := range []string{"enter", "1", "down", "esc", "x", "space"} {
 		m, f := loadedWith(t, 100, working)
-		m = pastQuiet(pressKeys(t, onPane(t, m, "%1"), "enter"))
+		m = pastQuiet(openChat(t, onPane(t, m, "%1")))
 		m, now := clocked(m)
 		next, _ := m.Update(stateMsg(asks))
 		m = pressKeys(t, next.(Model), k)
@@ -173,7 +173,7 @@ func TestAQuietStartsWithANewMenuAndHoldsEveryKeyThatAnswers(t *testing.T) {
 		}
 	}
 	m, f := loadedWith(t, 100, working)
-	m = pastQuiet(pressKeys(t, onPane(t, m, "%1"), "enter"))
+	m = pastQuiet(openChat(t, onPane(t, m, "%1")))
 	next, _ := m.Update(stateMsg(asks))
 	pressKeys(t, next.(Model), "backspace")
 	if len(keyActs(f)) != 1 {

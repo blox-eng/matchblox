@@ -101,7 +101,7 @@ func TestATapAtNoWaitDoesNothing(t *testing.T) {
 	st := cardState("toolu_1", threeWays)
 	st.Sessions[0].Ask = nil
 	m, f := loadedWith(t, 100, st)
-	m = pressKeys(t, onPane(t, m, "%1"), "enter")
+	m = openChat(t, onPane(t, m, "%1"))
 	next, _ := m.Update(screenMsg{Pane: "%1", At: m.now(), Text: askScreen})
 	m = pastQuiet(next.(Model))
 	tapped(t, m, 80, rowWith(t, m, "2. Rotate, keep"))
@@ -115,7 +115,7 @@ func TestATapAtNoWaitDoesNothing(t *testing.T) {
 // goes back.
 func TestATapBeforeTheScreenIsSeen(t *testing.T) {
 	m, f := loadedWith(t, 100, cardState("toolu_1", threeWays))
-	m = pastQuiet(pressKeys(t, onPane(t, m, "%1"), "enter"))
+	m = pastQuiet(openChat(t, onPane(t, m, "%1")))
 	sc := m.draw(100)
 	for y := sc.bodyTop; y < len(sc.lines)-2; y++ {
 		tapped(t, m, 80, y)
@@ -243,8 +243,9 @@ func TestATapWashesItsRowUntilTheNextScreen(t *testing.T) {
 // the history.
 func TestEveryChatHintIsTappable(t *testing.T) {
 	for _, w := range []int{44, 51, 100} {
-		for _, hint := range []string{"ctrl+a m back", "ctrl+o into tmux"} {
+		for _, hint := range []string{"ctrl+a m back", "ctrl+o go in"} {
 			m, _ := menuChat(t, w, 31, askScreen)
+			ran := recordRuns(&m)
 			sc := m.draw(w)
 			line := ansi.Strip(sc.lines[sc.keysAt])
 			at := strings.Index(line, hint)
@@ -253,12 +254,13 @@ func TestEveryChatHintIsTappable(t *testing.T) {
 			}
 			x := ansi.StringWidth(line[:at])
 			for _, dx := range []int{0, ansi.StringWidth(hint) - 1} {
+				*ran = nil
 				got := tapped(t, m, x+dx, sc.keysAt)
 				if hint == "ctrl+a m back" && got.chatKeys {
 					t.Errorf("%d: a tap at %d on %q kept the keys", w, dx, hint)
 				}
-				if hint == "ctrl+o into tmux" && got.pending == nil {
-					t.Errorf("%d: a tap at %d on %q asks nothing", w, dx, hint)
+				if hint == "ctrl+o go in" && len(*ran) == 0 {
+					t.Errorf("%d: a tap at %d on %q goes nowhere", w, dx, hint)
 				}
 			}
 		}
@@ -360,28 +362,18 @@ func TestAPermissionsLastRowIsNoTypingRow(t *testing.T) {
 	}
 }
 
-// TestTheFirstClickOnASideChatOnlyFocuses: a click that gives the chat the keys
-// answers nothing, whatever row it lands on, and a quick second one waits too.
-func TestTheFirstClickOnASideChatOnlyFocuses(t *testing.T) {
+// TestAClickOnASideChatsMenuGoesIn: the chat is not the way in; a click on
+// its menu goes into the pane and answers nothing.
+func TestAClickOnASideChatsMenuGoesIn(t *testing.T) {
 	m, f := loadedWith(t, 140, cardState("toolu_1", threeWays))
 	m = onPane(t, m, "%1")
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
 	next, _ = next.Update(screenMsg{Pane: "%1", At: m.now(), Text: permitScreen})
 	m = pastQuiet(next.(Model))
-	if m.chatKeys {
-		t.Fatal("the chat has the keys already")
-	}
+	ran := recordRuns(&m)
 	y := rowWith(t, m, "2. Yes, and don't ask again")
 	got := tapped(t, m, 110, y)
-	if !got.chatKeys || len(keyActs(f)) != 0 {
-		t.Fatalf("chatKeys %v keys %+v", got.chatKeys, keyActs(f))
-	}
-	got = tapped(t, got, 110, y)
-	if len(keyActs(f)) != 0 || got.flash != askedAgain("a") {
-		t.Fatalf("a double click: keys %+v flash %q", keyActs(f), got.flash)
-	}
-	tapped(t, pastQuiet(got), 110, y)
-	if acts := keyActs(f); len(acts) != 1 || acts[0].Text != "lit:2" {
-		t.Fatalf("the next click: keys %+v", acts)
+	if got.chatKeys || len(keyActs(f)) != 0 || len(*ran) != 1 {
+		t.Fatalf("chatKeys %v keys %+v ran %q", got.chatKeys, keyActs(f), *ran)
 	}
 }

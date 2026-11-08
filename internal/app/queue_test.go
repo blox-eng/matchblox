@@ -64,8 +64,7 @@ func TestCtrlOOnQueueRowSwitches(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
 	var ran []string
 	m.opt.Run = func(argv []string) error { ran = argv; return nil }
-	next, _ := key(m, "ctrl+o")
-	next, cmd := key(next, "enter")
+	next, cmd := key(m, "ctrl+o")
 	if cmd == nil {
 		t.Fatal("no command")
 	}
@@ -80,24 +79,22 @@ func TestCtrlOOutsideTmuxAttaches(t *testing.T) {
 	m.opt.OutsideTmux = true
 	var ran [][]string
 	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
-	next, _ := key(m, "ctrl+o")
-	p := next.(Model).pending
 	want := [][]string{
 		{"tmux", "select-window", "-t", "%1"},
 		{"tmux", "select-pane", "-t", "%1"},
 		{"tmux", "attach-session", "-t", "%1"},
 	}
-	if p == nil || !reflect.DeepEqual(p.steps, want) || !p.attach {
-		t.Fatalf("pending %+v", p)
+	if a := m.primary(); a == nil || !reflect.DeepEqual(a.steps, want) || !a.attach {
+		t.Fatalf("primary %+v", a)
 	}
 	for _, step := range want {
 		if !remote.NavAllowed(step) {
 			t.Fatalf("nav refuses %q", step)
 		}
 	}
-	_, cmd := key(next, "enter")
-	if cmd == nil {
-		t.Fatal("no command")
+	next, cmd := key(m, "ctrl+o")
+	if cmd == nil || next.(Model).pending != nil {
+		t.Fatal("no attach at once")
 	}
 	// The attach runs as a process the console gives the terminal to, and
 	// comes back from when it exits; the moves before it run first.
@@ -356,9 +353,8 @@ func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
 	// The chat sends its keys to an approval menu as they are.
 	m, _ := loadedWith(t, 100, st)
 	m.selPID, m.chose = 900, true
-	next, _ := key(m, "enter")
-	if nm := next.(Model); !nm.chatKeys {
-		t.Fatal("enter on an approval menu: the chat has no keys")
+	if nm := openChat(t, m); !nm.chatKeys {
+		t.Fatal("the chat has no keys on an approval menu")
 	}
 	m, _ = loadedWith(t, 132, outsideTmux(st)) // the detail: a desk shows a session in a pane as its chat
 	m.selPID, m.chose = 900, true
@@ -421,9 +417,6 @@ func TestAJumpMovesTheCursorToTheNextThatWaits(t *testing.T) {
 	if it, _ := m.selectedSession(); it.Pane != "%1" {
 		t.Fatalf("starts on %s", it.Pane)
 	}
-	if cmd == nil {
-		next, cmd = key(next, "enter")
-	}
 	next, _ = next.Update(cmd())
 	if it, _ := next.(Model).selectedSession(); it.Pane != "%2" {
 		t.Fatalf("after the jump to %%1 the queue selects %s, want %%2", it.Pane)
@@ -435,9 +428,6 @@ func TestAJumpMovesTheCursorToTheNextThatWaits(t *testing.T) {
 	m.tab = tabSessions
 	from, _ := m.selected()
 	armed, cmd := key(m, "ctrl+o")
-	if cmd == nil {
-		armed, cmd = key(armed, "enter")
-	}
 	if cmd == nil {
 		t.Fatal("no jump")
 	}

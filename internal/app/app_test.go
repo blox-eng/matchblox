@@ -160,19 +160,14 @@ func key(m tea.Model, k string) (tea.Model, tea.Cmd) {
 	return m.Update(keyPress(k))
 }
 
-func TestJumpPrintsCommandThenRunsOnConfirm(t *testing.T) {
+func TestCtrlORunsTheJumpAtOnce(t *testing.T) {
 	var ran []string
 	m := loaded(t, 100)
 	m.opt.Run = func(argv []string) error { ran = argv; return nil }
 
-	next, _ := key(m, "ctrl+o")
-	out := next.(Model).render()
-	if !strings.Contains(out, "tmux switch-client -t %1") || ran != nil {
-		t.Fatalf("ctrl+o must print the command and wait; ran=%v\n%s", ran, out)
-	}
-	next, cmd := key(next, "enter")
-	if cmd == nil {
-		t.Fatal("confirm returned no command")
+	next, cmd := key(m, "ctrl+o")
+	if cmd == nil || next.(Model).pending != nil {
+		t.Fatalf("ctrl+o left %v pending, cmd %v: want the jump at once", next.(Model).pending, cmd != nil)
 	}
 	next.Update(cmd())
 	if strings.Join(ran, " ") != "tmux switch-client -t %1" {
@@ -183,7 +178,7 @@ func TestJumpPrintsCommandThenRunsOnConfirm(t *testing.T) {
 func TestEscCancelsAction(t *testing.T) {
 	m := loaded(t, 100)
 	m.opt.Run = func([]string) error { t.Fatal("must not run"); return nil }
-	next, _ := key(m, "ctrl+o")
+	next, _ := key(m, "x")
 	next, cmd := key(next, "esc")
 	if cmd != nil || !strings.Contains(next.(Model).render(), "cancelled") {
 		t.Fatal("esc must cancel without running")

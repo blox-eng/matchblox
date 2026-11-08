@@ -28,4 +28,4 @@
 
 
 ────────────────────────────────────────────
- ctrl+a m back · ctrl+o into tmux
+ ctrl+a m back · ctrl+o go in

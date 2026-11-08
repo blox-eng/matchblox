@@ -8,7 +8,7 @@
 ▌╿ flint-auth                                 asks       2m   41%  ▲ clear      #4545 ●━✕┄○┄○┄○
    “The refresh flow works and the tests pass. One choice is yours before I wire the rotation.”
    #4545 ●━✕┄○┄○┄○  conflicts with main
-    ▲ clear                                                                    A switch  ⏎ chat
+    ▲ clear                                                                   A switch  ⏎ go in
 ────────────────────────────────────────────────────────────────────────────────────────────────
  ╿ kindle-web                                 asks       1m   56%  ▲ clear
  ╿ cinder-ci                                  done       0s   55%  ▲ clear
@@ -54,4 +54,4 @@
  disk ▰▰▰▰▰▰▱▱ 71% of 1 TB
  runs 5 claude · 1 codex · 1 opencode
 ────────────────────────────────────────────────────────────────────────────────────────────────
- ⏎ chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  full view v
+ ⏎ go in  x kill  r rename  A switch  z park  N new  p ships  f stoker  full view v

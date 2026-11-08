@@ -458,36 +458,6 @@ type chatKey struct {
 	act   string
 }
 
-// openChat gives the keys to the chat of the selected session, or of the
-// session of a failed step, or says why there is none.
-func (m Model) openChat() Model {
-	pane, why := m.chatTarget()
-	if pane == "" {
-		m.flash = why
-		return m
-	}
-	return m.chatOn(pane)
-}
-
-// chatTarget is the pane whose chat a opens: the selected session's, when
-// it has a pane to type into, or a failed step's. Why says why there is
-// none.
-func (m Model) chatTarget() (pane, why string) {
-	if m.tab == tabStoker {
-		return m.stokerChatTarget()
-	}
-	s, ok := m.selectedSession()
-	switch {
-	case !ok:
-		return "", ""
-	case s.Pane == "":
-		return "", s.Name + " runs outside tmux: there is no pane to type into"
-	case s.Host != m.opt.Host:
-		return "", s.Name + " runs on " + m.nameOf(s.Host) + ": " + m.keys.main.Open.Help().Key + " goes into its pane"
-	}
-	return s.Pane, ""
-}
-
 // chatOn is Sessions with the session in pane selected and its chat
 // holding the keys. The selection stays on the session while the chat has
 // its keys.
@@ -615,19 +585,6 @@ func startsDigit(text string) bool {
 	return isText && typed != "" && typed[0] >= '0' && typed[0] <= '9'
 }
 
-// intoPane is ctrl+o: the selected session's pane, behind a confirm, as
-// Enter on a session was before the chat.
-func (m Model) intoPane() Model {
-	if m.opt.Demo != "" {
-		m.flash = m.opt.Demo
-		return m
-	}
-	if s, ok := m.selectedSession(); ok && s.Pane != "" {
-		m.pending, m.previewTop = m.primary(), 0
-	}
-	return m
-}
-
 // ctrlCWindow is how close two ^C come to stop Claude Code; a held ^C
 // lapses after it.
 const ctrlCWindow = time.Second
@@ -668,16 +625,15 @@ func (m Model) chatBacks(k tea.KeyPressMsg, armed time.Time) bool {
 // ctrl+a goes too, at once, and arms the way back (Update takes the m). With
 // the stoker in charge it stays here: the way back asks no question.
 func (m Model) chatKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	m.flash, m.chatTyped = "", m.now()
+	m.flash = ""
 	if bkey.Matches(k, m.keys.chat.Back) {
 		m.backArmed = m.now()
 		if m.takeOverOn(m.opt.Host) {
 			return m, nil
 		}
 	}
-	switch {
-	case bkey.Matches(k, m.keys.main.Jump):
-		return m.intoPane(), nil
+	if bkey.Matches(k, m.keys.main.Jump) {
+		return m.jumpKey()
 	}
 	text, ok := keyName(k)
 	if !ok {
@@ -727,7 +683,6 @@ func (m Model) heldKeys(name string, keys []chatKey) func(Model) (tea.Model, tea
 // what the person never chose. Other control characters drop.
 func (m Model) chatPaste(text string) (tea.Model, tea.Cmd) {
 	m.flash = ""
-	m.chatTyped = m.now()
 	if s, ok := m.selectedSession(); ok && m.atMenu(s) && strings.ContainsAny(text, "\r\n") {
 		m.flash = "not sent: a paste with a line break would answer " + s.Name + "'s menu"
 		return m, nil
@@ -833,7 +788,7 @@ func (m Model) commandKey(apc string) (tea.Model, tea.Cmd) {
 		return m, nil // as a paste: a layer on top takes no command
 	}
 	m, touch := m.touchRest()
-	m.flash, m.chatTyped = "", m.now()
+	m.flash = ""
 	s, _ := m.selectedSession()
 	if keycmd.AgentOf(s.Agent) != c.Agent {
 		m.flash = keycmd.Refusal(c, s.Name, s.Agent)
@@ -1014,10 +969,6 @@ func (m Model) keyAnswered(r proto.Result) (tea.Model, tea.Cmd) {
 // typed for it go nowhere, rather than to Sessions' own keys.
 const chatShutHold = time.Second
 
-// chatTypingHold is how long after the person's last key in the chat a
-// focus from the island or another client does not move it.
-const chatTypingHold = 2 * time.Second
-
 // chatJustShut tells if the chat closed by itself a moment ago.
 func (m Model) chatJustShut() bool {
 	return !m.chatKeys && m.now().Before(m.chatShut.Add(chatShutHold))
@@ -1169,9 +1120,7 @@ func isWheel(text string) bool { return text == proto.WheelUp || text == proto.W
 // chat takes the keys first, as a tap on it does.
 func (m Model) wheelChat(up bool) (tea.Model, tea.Cmd) {
 	if !m.chatKeys {
-		if m = m.openChat(); !m.chatKeys {
-			return m, nil
-		}
+		return m, nil
 	}
 	if m.takeOverOn(m.opt.Host) { // looking around never asks, and never writes
 		m.flash = "not scrolled: the stoker is in charge — press a key in the chat to take over"

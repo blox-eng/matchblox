@@ -670,7 +670,7 @@ func TestScanBoxWaitsForTheChat(t *testing.T) {
 			break
 		}
 	}
-	m = pressKeys(t, onPane(t, m, pane), "enter")
+	m = openChat(t, onPane(t, m, pane))
 	if !m.chatKeys {
 		t.Fatal("enter did not open the chat")
 	}

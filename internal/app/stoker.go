@@ -189,9 +189,10 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 	s, onSession := m.selectedSession()
 	on := func(a *action) bool { return a != nil && m.takeOverOn(m.actHost(a)) }
 	switch {
-	case bkey.Matches(k, m.keys.main.Chat), onSession && s.Host == m.opt.Host && bkey.Matches(k, m.keys.main.Open):
-		return false // the chat: looking around
-	case bkey.Matches(k, m.keys.main.Jump):
+	case bkey.Matches(k, m.keys.main.Into) && m.tab == tabStoker:
+		pane, _ := m.stokerTarget()
+		return pane != "" && m.takeOverOn(m.opt.Host)
+	case bkey.Matches(k, m.keys.main.Jump), bkey.Matches(k, m.keys.main.Into):
 		return onSession && s.Pane != "" && on(m.primary())
 	case bkey.Matches(k, m.keys.main.Open):
 		return on(m.primary())
@@ -216,7 +217,14 @@ func (m Model) hold(k tea.KeyPressMsg) (func(Model) (tea.Model, tea.Cmd), string
 			return m, nil
 		}, m.actHost(a)
 	}
+	if bkey.Matches(k, m.keys.main.Into) && m.tab == tabStoker {
+		pane, _ := m.stokerTarget()
+		return func(m Model) (tea.Model, tea.Cmd) { return m.goInto(m.opt.Host, pane) }, m.opt.Host
+	}
 	a := m.primary()
+	if _, onSession := m.selectedSession(); onSession && (bkey.Matches(k, m.keys.main.Open) || bkey.Matches(k, m.keys.main.Into) || bkey.Matches(k, m.keys.main.Jump)) {
+		return func(m Model) (tea.Model, tea.Cmd) { return m.runInto(a) }, m.actHost(a)
+	}
 	return func(m Model) (tea.Model, tea.Cmd) {
 		m.pending, m.previewTop = a, 0
 		return m, nil

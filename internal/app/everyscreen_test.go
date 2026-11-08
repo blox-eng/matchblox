@@ -31,7 +31,13 @@ func flintAt(t *testing.T, w, h int, keys ...string) Model {
 	}
 	nm.watchCmd()
 	next, _ = nm.Update(screenMsg{Pane: paneNamed(st, "flint-auth"), At: demoAt, Text: askScreen})
-	return pressKeys(t, next.(Model), keys...)
+	cur := next
+	for _, k := range keys {
+		var cmd tea.Cmd
+		cur, cmd = keyOrOpen(cur, k)
+		drain(cmd)
+	}
+	return cur.(Model)
 }
 
 // chatDrawn tells if the frame shows flint-auth's chat, and if so whether
@@ -156,7 +162,7 @@ func TestTheChatKeyLineKeepsTheWayBack(t *testing.T) {
 		}
 		parts := strings.Split(got, " · ")
 		for _, p := range parts {
-			if !slices.Contains([]string{"keys go to flint-auth", "ctrl+a m back", "ctrl+o into tmux"}, p) {
+			if !slices.Contains([]string{"keys go to flint-auth", "ctrl+a m back", "ctrl+o go in"}, p) {
 				t.Fatalf("%d columns: %q is cut in %q", w, p, got)
 			}
 		}

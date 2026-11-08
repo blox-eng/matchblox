@@ -9,7 +9,6 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
-	"github.com/blox-eng/matchblox/internal/said"
 	"github.com/blox-eng/matchblox/internal/state"
 )
 
@@ -24,31 +23,7 @@ func focused(pane string, at time.Time) proto.State {
 	return st
 }
 
-// A tap on the island or a buzz for a session that waits opens its chat,
-// from any tab, once for each focus.
-func TestFocusOpensTheChatOfAWait(t *testing.T) {
-	m, _ := loadedWith(t, 100, fixtureState())
-	m.setTab(tabGit)
-	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
-	next, _ := m.Update(stateMsg(focused("%2", at)))
-	nm := next.(Model)
-	if s, ok := nm.selectedSession(); nm.tab != tabSessions || !ok || s.Pane != "%2" || !nm.chatKeys {
-		t.Fatalf("tab %d selected %q chatKeys %v: want the chat of app-review", nm.tab, s.Pane, nm.chatKeys)
-	}
-	// The next state carries the same focus: the chat given back stays so.
-	nm.chatKeys = false
-	next, _ = nm.Update(stateMsg(focused("%2", at)))
-	if next.(Model).chatKeys {
-		t.Fatal("the same focus opened the chat again")
-	}
-	// A new focus opens it again.
-	next, _ = next.Update(stateMsg(focused("%2", at.Add(time.Second))))
-	if !next.(Model).chatKeys {
-		t.Fatal("a new focus did not open the chat")
-	}
-}
-
-// A session at work has no answer to give: the focus opens its pane on the
+// A focus opens the session's pane on the
 // phone's own tmux client, once that client is attached, and on no other.
 func TestFocusOpensThePaneOfABurn(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
@@ -173,16 +148,6 @@ func TestNoFocusLeavesTheConsoleAlone(t *testing.T) {
 	}
 }
 
-// withFocus is st with a focus on the session in pane.
-func withFocus(st proto.State, pane string, at time.Time) proto.State {
-	for _, s := range st.Sessions {
-		if s.Pane == pane {
-			st.Focus = &state.Focus{SessionID: s.SessionID, Pane: s.Pane, At: at}
-		}
-	}
-	return st
-}
-
 // A confirm armed on another tab is dropped when a gone focus moves to
 // Sessions: the next y must not run an action whose preview is gone.
 func TestFocusOfAGoneSessionDropsAConfirm(t *testing.T) {
@@ -200,60 +165,4 @@ func TestFocusOfAGoneSessionDropsAConfirm(t *testing.T) {
 	if acts := f.acts(); len(acts) != 0 {
 		t.Fatalf("y ran %+v", acts)
 	}
-}
-
-// A focus does not move the chat off an agent the person is typing to: not
-// while keys wait to go, nor for a moment after the last one. The key line
-// names the agent that asked instead. After the moment the focus moves it.
-func TestFocusKeepsAChatBeingTyped(t *testing.T) {
-	st := queueState() // app-feature (%1) asks for permission
-	m, f := loadedWith(t, 100, st)
-	m, now := clocked(m)
-	m = pressKeys(t, onPane(t, m, "%2"), "enter")
-	*now = now.Add(time.Second)
-	m = pressKeys(t, m, "t", "h", "e", "n")
-	if len(keyActs(f)) == 0 {
-		t.Fatal("no key went")
-	}
-	at := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
-	next, _ := m.Update(stateMsg(withFocus(st, "%1", at)))
-	m = next.(Model)
-	if s, _ := m.selectedSession(); s.Pane != "%2" || !m.chatKeys || !strings.Contains(m.flash, "app-feature") {
-		t.Fatalf("a focus while typing moved the chat to %s (chatKeys %v), flash %q", s.Pane, m.chatKeys, m.flash)
-	}
-	m.keyInFlight, m.keyQ = "", nil // the keys went
-	*now = now.Add(chatTypingHold)
-	next, _ = m.Update(stateMsg(withFocus(st, "%1", at.Add(time.Second))))
-	if s, _ := next.(Model).selectedSession(); s.Pane != "%1" {
-		t.Fatalf("a focus after the typing stopped stays on %s", s.Pane)
-	}
-}
-
-// The home console is shared: an Enter on its way at the desk when the
-// phone's tap lands must not answer a question nobody read. A focus starts
-// the menu's quiet, on its own session too.
-func TestFocusStartsTheMenusQuiet(t *testing.T) {
-	st := queueState()
-	for i := range st.Sessions {
-		if st.Sessions[i].Pane == "%2" {
-			st.Sessions[i].Ask = &said.Ask{ID: "toolu_1", Questions: []said.Question{
-				{Question: "Which next?", Options: []said.Option{{Label: "Start task 11"}, {Label: "Fix the flake"}}},
-			}}
-		}
-	}
-	m, f := loadedWith(t, 100, st)
-	next, _ := m.Update(stateMsg(withFocus(st, "%2", time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC))))
-	if s, _ := next.(Model).selectedSession(); s.Pane != "%2" || !next.(Model).chatKeys {
-		t.Fatalf("the focus opened %q, keys %v", s.Pane, next.(Model).chatKeys)
-	}
-	next, cmd := key(next, "enter")
-	drain(cmd)
-	if acts := f.acts(); len(keyActs(f)) != 0 || next.(Model).flash != askedAgain(sessionName(next.(Model))) {
-		t.Fatalf("an Enter at once sent %+v (flash %q)", acts, next.(Model).flash)
-	}
-}
-
-func sessionName(m Model) string {
-	s, _ := m.selectedSession()
-	return s.Name
 }

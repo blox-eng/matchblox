@@ -232,9 +232,9 @@ func TestEnterShowsTheCommand(t *testing.T) {
 	}
 }
 
-// While the stoker is in charge, a opens a failed step's chat: looking asks
-// nothing, and the first key to its agent asks to take over.
-func TestAOnAFailedStepAsksToTakeOverAtTheFirstKey(t *testing.T) {
+// While the stoker is in charge, a on a failed step asks to take over first,
+// as every jump on such a host does; the answer then goes into its pane.
+func TestAOnAFailedStepAtNightAsksToTakeOver(t *testing.T) {
 	st := tabNight(screensState(t))
 	m, _ := loadedWith(t, 100, st)
 	m.setTab(tabStoker)
@@ -249,15 +249,16 @@ func TestAOnAFailedStepAsksToTakeOverAtTheFirstKey(t *testing.T) {
 			m.stoker.Run[i].State, m.stoker.Run[i].Pane = "failed", pane
 		}
 	}
-	opened, _ := key(selectStep(t, m, "p5"), "a")
-	if om := opened.(Model); om.held != nil || !om.chatKeys {
-		t.Fatalf("a: held %v chatKeys %v", om.held != nil, om.chatKeys)
+	ran := recordRuns(&m)
+	next, cmd := key(selectStep(t, m, "p5"), "a")
+	drain(cmd)
+	if next.(Model).held == nil || len(*ran) != 0 {
+		t.Fatalf("a: held %v ran %q, want the take-over question first", next.(Model).held != nil, *ran)
 	}
-	if s, _ := opened.(Model).selectedSession(); s.Pane != pane {
-		t.Fatalf("a opened the chat of %q, want %q", s.Pane, pane)
-	}
-	if asked, _ := key(opened, "esc"); asked.(Model).held == nil {
-		t.Fatal("the first key to the agent did not ask to take over")
+	_, cmd = key(next, "n")
+	drain(cmd)
+	if len(*ran) != 1 || (*ran)[0][len((*ran)[0])-1] != pane {
+		t.Fatalf("after the answer ran %q, want the jump to %s", *ran, pane)
 	}
 }
 

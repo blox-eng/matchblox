@@ -465,7 +465,7 @@ func TestTheChatClosesOnAnotherHostsPaneOfTheSameID(t *testing.T) {
 	m = upd(t, m, stateMsg(stateAt(hostState(sess(1, "api-auth", "%3", nil)), now)))
 	m = upd(t, m, peerMsg{host: "ws-1", conn: conns["ws-1"], msg: stateMsg(stateAt(hostState(sess(2, "train-loop", "%3", nil)), now))})
 	m.tab, m.chose, m.selPID, m.selHost = tabSessions, true, 1, m.opt.Host
-	m = pressKeys(t, m, "enter")
+	m = openChat(t, m)
 	if !m.chatKeys {
 		t.Fatal("enter did not open api-auth's chat")
 	}

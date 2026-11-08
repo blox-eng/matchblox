@@ -182,7 +182,7 @@ func TestScreensSizedChat(t *testing.T) {
 		next, _ = next.Update(stateMsg(st))
 		nm := next.(Model)
 		nm.splashDone = true
-		next, _ = key(nm, "enter")
+		next, _ = keyOrOpen(nm, "enter")
 		nm = next.(Model)
 		cols, rows := nm.chatSize()
 		if cols <= 0 || rows <= 0 {
@@ -263,7 +263,7 @@ func TestBrowsingSizesNoAgent(t *testing.T) {
 	*at = at.Add(100 * time.Millisecond)
 	next, cmd = key(m, "up")
 	drain(cmd)
-	next, cmd = key(next, "enter") // the chat takes the keys
+	next, cmd = keyOrOpen(next, "enter") // the chat takes the keys
 	drain(cmd)
 	sel, _ = next.(Model).selected()
 	if got := sizedWatches(f, n); len(got) != 1 || got[0].RecID != proto.WatchPrefix+sel.Pane || !next.(Model).chatKeys {

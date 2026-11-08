@@ -238,8 +238,8 @@ func TestARemoteRowIsListOnly(t *testing.T) {
 	}
 	m, _ = m.Update(screenMsg{Pane: "%12", At: time.Now(), Text: "HOME TWELVE"})
 	m = pressAll(m, "a")
-	if nm := m.(Model); nm.chatKeys || !strings.Contains(nm.flash, "runs on ws-1") {
-		t.Fatalf("a on a remote row: chatKeys %v, flash %q", nm.chatKeys, nm.flash)
+	if nm := m.(Model); nm.chatKeys || nm.pending == nil || nm.pending.host != "ws-1" {
+		t.Fatalf("a on a remote row: chatKeys %v, pending %+v", nm.chatKeys, nm.pending)
 	}
 	m = pressAll(m, "x", "y", "1")
 	for _, a := range append(home.allActs(), ws.allActs()...) {

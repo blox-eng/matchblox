@@ -44,7 +44,7 @@ func chatEdgeInk(t *testing.T, m Model) string {
 // deskChat is the demo desk with the chat holding the keys, and its fake.
 func deskChat(t *testing.T) (Model, *fakeConn) {
 	t.Helper()
-	m := pressKeys(t, demoSized(t, 132, 32), "enter")
+	m := openChat(t, demoSized(t, 132, 32))
 	return m, m.conn.(*fakeConn)
 }
 

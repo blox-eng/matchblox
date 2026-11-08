@@ -365,7 +365,7 @@ func check(t *testing.T, st proto.State, name string, w, h int, keys []string, m
 		next, _ = next.Update(msg)
 	}
 	for _, k := range keys {
-		next, _ = key(next, k)
+		next, _ = keyOrOpen(next, k)
 	}
 	for _, msg := range later {
 		next, _ = next.Update(msg)
