@@ -71,6 +71,9 @@ const (
 	MarkSlot = 950
 	// MarkedPrefix is what the binding hands the console, then the tty, then ESC \.
 	MarkedPrefix = "\x1b_matchblox;from="
+	// ViewerKey is what tmux hands the console when a terminal comes to
+	// show it: the console then announces the marks (MarksSignal) at once.
+	ViewerKey = "\x1b_matchblox;viewer\x1b\\"
 )
 
 // OtherAgent is the agent signal's id for a chat whose agent has no

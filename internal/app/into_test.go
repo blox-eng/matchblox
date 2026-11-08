@@ -492,6 +492,10 @@ func TestTheConsoleAnnouncesTheMarks(t *testing.T) {
 	if _, cmd = next.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: "/dev/pts/1:100@here,/dev/pts/7:105@here"}); !slices.Contains(raws(cmd), marks) {
 		t.Errorf("a phone that attached got %q, want %q", raws(cmd), marks)
 	}
+	// tmux tells the console the moment a terminal comes to show it.
+	if _, cmd = next.Update(uv.UnknownApcEvent(keycmd.ViewerKey)); !slices.Equal(raws(cmd), []string{marks}) {
+		t.Errorf("a terminal that came got %q, want %q at once", raws(cmd), marks)
+	}
 }
 
 // Building a jump asks tmux nothing, even while a stoker rests and every

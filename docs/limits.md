@@ -5,7 +5,6 @@ What does not work yet, and what to do until it does.
 | Limit | What to do |
 |---|---|
 | The way back needs the console's own session | Run `matchblox` outside tmux. The tap on `◂ matchblox` also needs the tmux mouse: press `m` in the way back's preview. |
-| A phone's key in its first 2 seconds is taken as the desk's | The app marks each key it sends, so the console knows which screen pressed it. It marks only once the console has said it reads the marks, within about 2 seconds of the phone connecting. A key before then is taken as the desk's: with a desk attached, `Enter` moves the desk into the pane. Wait until the console shows, then press. |
 | With tmux older than 3.3, a phone's key is taken as the desk's | The console says it reads the marks through tmux's passthrough, which tmux 3.2 and older lack. The app then marks no key: with a desk attached, `Enter` on the phone moves the desk, and the command keys stay dim. Use tmux 3.3 or newer. |
 | An app without the marks has its keys taken as the desk's | An app build from before the marks sends none: with a desk attached, `Enter` on the phone moves the desk. Update the app. |
 | The stoker compacts Claude Code only | Compact Codex, OpenCode and Cursor sessions yourself: Sessions marks them `! compact`. |

@@ -512,3 +512,64 @@ func TestAMarkElsewhereTypesNothing(t *testing.T) {
 		t.Errorf("the mark was typed: %q", b)
 	}
 }
+
+// TestATerminalThatComesToTheConsoleTellsIt: a second terminal attaches, and
+// one switches over from another session; each time the console hears it at
+// once, so it announces the marks before the person presses a key.
+func TestATerminalThatComesToTheConsoleTellsIt(t *testing.T) {
+	sock, tmux, got := consolePane(t)
+	tmux(ViewerHookArgv()[1:]...)
+	tmux("new-session", "-d", "-s", "work", "cat")
+	viewer := eventLine(uv.UnknownApcEvent(keycmd.ViewerKey))
+	count := func() int {
+		n := 0
+		for _, l := range paneRead(t, got) {
+			if l == viewer {
+				n++
+			}
+		}
+		return n
+	}
+	attach(t, sock, Home)
+	waitFor(t, func() bool { return count() >= 1 }) // the attach and its session change may both tell
+	time.Sleep(200 * time.Millisecond)
+	before := count()
+	attach(t, sock, "work")
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 2 })
+	time.Sleep(200 * time.Millisecond)
+	if n := count(); n != before {
+		t.Fatalf("a terminal of another session told the console: %d, want %d", n, before)
+	}
+	for _, tty := range clientTTYs(tmux) {
+		if strings.Contains(tmux("display-message", "-p", "-c", tty, "#{session_name}"), "work") {
+			tmux("switch-client", "-c", tty, "-t", Home)
+		}
+	}
+	waitFor(t, func() bool { return count() > before })
+}
+
+// TestATerminalElsewhereTellsTheConsoleNothing: the hook runs only at the
+// console; a terminal that attaches to another session types nothing there.
+func TestATerminalElsewhereTellsTheConsoleNothing(t *testing.T) {
+	sock := tmuxtest.Server(t)
+	tmux := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput() //nolint:gosec // test argv
+		if err != nil {
+			t.Fatalf("tmux %q: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	typed := t.TempDir() + "/typed"
+	tmux("new-session", "-d", "-s", "work", "cat -v > "+typed)
+	tmux(ViewerHookArgv()[1:]...)
+	client := attach(t, sock, "work")
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 1 })
+	if _, err := client.WriteString("x\r"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { b, _ := os.ReadFile(typed); return strings.Contains(string(b), "x") })
+	if b, _ := os.ReadFile(typed); strings.Contains(string(b), "matchblox") {
+		t.Errorf("the hook typed into another session: %q", b)
+	}
+}

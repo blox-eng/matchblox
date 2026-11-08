@@ -108,6 +108,18 @@ func MarkKeyArgv() []string {
 		";", "bind-key", "-n", "User" + slot, "if-shell", "-F", atConsole, hand}
 }
 
+// ViewerHookArgv tells the console the moment a terminal attaches to it or
+// switches to it, so the console announces the marks to that terminal then:
+// tmux passes the announce only to the clients that show the pane when it is
+// sent. Without it, the console's own 2 s check finds the new terminal, and a
+// key before that is taken as the desk's. The hooks use MarkKey's slot.
+func ViewerHookArgv() []string {
+	slot := strconv.Itoa(keycmd.MarkSlot)
+	hook := `if-shell -F '` + atConsole + `' "run-shell -C 'send-keys -t #{pane_id} -H ` + hexKeys(keycmd.ViewerKey) + `'"`
+	return []string{"tmux", "set-hook", "-g", "client-attached[" + slot + "]", hook,
+		";", "set-hook", "-g", "client-session-changed[" + slot + "]", hook}
+}
+
 // hexKeys is s as the hex bytes of tmux send-keys -H.
 func hexKeys(s string) string {
 	hex := make([]string, len(s))

@@ -610,6 +610,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if string(apc) == keycmd.ViewerKey {
+			return m, sayAgent(keycmd.MarksSignal(), m.opt) // a terminal came to show the console
+		}
 	}
 	m = m.scanShows()
 	switch msg.(type) {
