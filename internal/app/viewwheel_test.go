@@ -9,8 +9,8 @@ import (
 	"github.com/blox-eng/matchblox/internal/proto"
 )
 
-// deskChat is the demo desk with the live view beside the list, and its fake.
-func deskChat(t *testing.T) (Model, *fakeConn) {
+// deskView is the demo desk with the live view beside the list, and its fake.
+func deskView(t *testing.T) (Model, *fakeConn) {
 	t.Helper()
 	m := demoSized(t, 132, 32)
 	return m, m.conn.(*fakeConn)
@@ -28,8 +28,8 @@ func wheelAt(t *testing.T, m Model, up bool, x, y int) Model {
 	return next.(Model)
 }
 
-// wheelChat turns the wheel over the chat n times.
-func wheelChat(t *testing.T, m Model, up bool, n int) Model {
+// turnWheel turns the wheel over the chat n times.
+func turnWheel(t *testing.T, m Model, up bool, n int) Model {
 	t.Helper()
 	sc := m.draw(m.width)
 	for range n {
@@ -52,7 +52,7 @@ func lastWatch(t *testing.T, f *fakeConn) proto.Act {
 }
 
 func TestTheWheelOverTheListMovesTheSelection(t *testing.T) {
-	m, f := deskChat(t)
+	m, f := deskView(t)
 	before, _ := m.selectedSession()
 	sc := m.draw(m.width)
 	m = wheelAt(t, m, false, 5, sc.bodyTop+5)
@@ -70,7 +70,7 @@ func TestTheWheelScrollsTheLiveViewBack(t *testing.T) {
 	m, f := loadedWith(t, 100, fixtureState())
 	m.tab = tabSessions
 	before := len(keyActs(f))
-	m = wheelChat(t, m, true, 1)
+	m = turnWheel(t, m, true, 1)
 	got := keyActs(f)[before:]
 	if len(got) != 1 || got[0].Text != proto.WheelUp || got[0].RecID != proto.KeysPrefix+"%1" {
 		t.Fatalf("sent %+v, want one keys:%%1 %s", got, proto.WheelUp)
@@ -81,17 +81,17 @@ func TestTheWheelScrollsTheLiveViewBack(t *testing.T) {
 }
 
 func TestTheWheelDownScrollsTheLiveViewOn(t *testing.T) {
-	m, f := deskChat(t)
+	m, f := deskView(t)
 	before := len(keyActs(f))
-	wheelChat(t, m, false, 1)
+	turnWheel(t, m, false, 1)
 	if got := keyActs(f)[before:]; len(got) != 1 || got[0].Text != proto.WheelDown {
 		t.Fatalf("sent %+v", got)
 	}
 }
 
 func TestAWatchAsksForTheLiveScreenOnly(t *testing.T) {
-	m, f := deskChat(t)
-	wheelChat(t, m, true, 3)
+	m, f := deskView(t)
+	turnWheel(t, m, true, 3)
 	for _, a := range f.allActs() {
 		if strings.HasPrefix(a.RecID, proto.WatchPrefix) && a.Text != "" {
 			t.Fatalf("watch text %q", a.Text)

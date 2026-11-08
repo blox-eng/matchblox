@@ -324,7 +324,7 @@ func (m Model) sessionKeys() []hint {
 		keys = []hint{hintFor(mk.Open, "go in")}
 	}
 	if _, right := m.panes(max(m.width, minWidth)); len(keys) > 0 && right > 0 {
-		if _, viewed := m.chatShown(right); viewed { // beside the live view, the way in names whose
+		if _, viewed := m.viewShown(right); viewed { // beside the live view, the way in names whose
 			keys[0] = hint{mk.Open.Keys()[0], "goes into " + s.Name, mk.Open.Keys()[0]}
 		}
 	}

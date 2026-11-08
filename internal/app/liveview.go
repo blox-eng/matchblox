@@ -121,26 +121,26 @@ const sizeDwell = time.Second
 // sizeDueMsg comes when a selection may have rested sizeDwell.
 type sizeDueMsg struct{}
 
-// chatSize is the room the chat gives the agent's screen as the console
+// viewSize is the room the chat gives the agent's screen as the console
 // draws it now: its columns, and its rows under the chat's title and strip.
 // 0, 0 where no chat is drawn. The service sizes the agent's window to it.
-func (m Model) chatSize() (cols, rows int) {
+func (m Model) viewSize() (cols, rows int) {
 	if m.tab != tabSessions {
 		return 0, 0
 	}
 	w := max(m.width, minWidth)
 	_, detailW := m.panes(w)
-	place, full := m.chatPlacement(w)
+	place, full := m.viewPlacement(w)
 	switch {
-	case place == chatFull && m.viewOpen:
+	case place == placeFull && m.viewOpen:
 		cols, rows = w, full
-	case place == chatBeside: // beside the list, as chatPlacement has it
-		s, ok := m.chatShown(detailW)
+	case place == placeBeside: // beside the list, as viewPlacement has it
+		s, ok := m.viewShown(detailW)
 		if !ok {
 			return 0, 0
 		}
 		room := m.bodyRows()
-		cols, rows = detailW-1, room-1-len(m.chatStrip(s, detailW, room-1))
+		cols, rows = detailW-1, room-1-len(m.viewStrip(s, detailW, room-1))
 	}
 	if cols <= 0 || rows <= 0 {
 		return 0, 0
@@ -169,7 +169,7 @@ func (m *Model) watchCmd() tea.Cmd {
 	var size [2]int
 	var due tea.Cmd
 	if want != "" {
-		size[0], size[1] = m.chatSize()
+		size[0], size[1] = m.viewSize()
 	}
 	if wait := m.watchSince.Add(sizeDwell).Sub(m.now()); size != [2]int{} && wait > 0 {
 		size = [2]int{} // browsing: no agent redraws for a row the cursor passes
@@ -202,9 +202,9 @@ func (m *Model) watchCmd() tea.Cmd {
 	return send
 }
 
-// chatLines is the watched screen fitted to w by h, or what stands in its
+// viewLines is the watched screen fitted to w by h, or what stands in its
 // place: that the session ended, or blank lines until a screen comes.
-func (m Model) chatLines(w, h int) []string {
+func (m Model) viewLines(w, h int) []string {
 	h = max(h, 0)
 	lines := make([]string, h)
 	s, ok := m.selected()
@@ -231,17 +231,17 @@ func (m Model) chatLines(w, h int) []string {
 	return append(lines[:len(lines)-len(fit)], fit...)
 }
 
-// chatShown is the session whose chat is the right side of Sessions: the
+// viewShown is the session whose chat is the right side of Sessions: the
 // selected one, when it has a pane on the home host and the screen has a
 // right side. Another host's row is list only: its detail shows there.
-func (m Model) chatShown(rightW int) (sample.Session, bool) {
+func (m Model) viewShown(rightW int) (sample.Session, bool) {
 	s, ok := m.selectedSession()
 	return s, ok && s.Pane != "" && s.Host == m.opt.Host && m.tab == tabSessions && rightW > 0
 }
 
-// chatLeast is the narrowest chat beside the list: an agent's menu reads at
+// viewLeast is the narrowest chat beside the list: an agent's menu reads at
 // 44 columns, as on a folded phone.
-const chatLeast = 44
+const viewLeast = 44
 
 // menuLeast is the fewest rows a chat at a menu needs for the whole of what
 // the person answers. It is the tallest common Claude Code menu, the question
@@ -253,31 +253,31 @@ const chatLeast = 44
 // size, and redraws above this.
 const menuLeast = 16
 
-// chatPlace is where Sessions draws the selected session's chat.
-type chatPlace int
+// viewPlace is where Sessions draws the selected session's chat.
+type viewPlace int
 
 const (
-	chatNone   chatPlace = iota // no room for its menu: the list's opened row shows its question
-	chatBeside                  // the right side of Sessions, beside the list
-	chatFull                    // the whole screen, once a tap opens it
+	placeNone   viewPlace = iota // no room for its menu: the list's opened row shows its question
+	placeBeside                  // the right side of Sessions, beside the list
+	placeFull                    // the whole screen, once a tap opens it
 )
 
-// chatPlacement is the one answer to where the selected session's live
+// viewPlacement is the one answer to where the selected session's live
 // view is drawn at w columns, and how many rows it has for its title, strip
 // and screen: beside the list where Sessions splits, else the whole screen,
 // unless it waits at a menu and the screen has under menuLeast rows for it.
 // The demo's stand-in is the whole screen at every width.
-func (m Model) chatPlacement(w int) (chatPlace, int) {
+func (m Model) viewPlacement(w int) (viewPlace, int) {
 	if m.tab != tabSessions {
-		return chatNone, 0
+		return placeNone, 0
 	}
 	if _, right := m.panes(w); right > 0 && !m.standIn {
-		return chatBeside, max(m.height-5, 0)
+		return placeBeside, max(m.height-5, 0)
 	}
 	if s, ok := m.selectedSession(); ok && m.height > 0 && m.height-3 < menuLeast && m.atMenu(s) {
-		return chatNone, 0
+		return placeNone, 0
 	}
-	return chatFull, max(m.height-3, 0)
+	return placeFull, max(m.height-3, 0)
 }
 
 // oneColumn tells if Sessions is one column at w, with no right side: as
@@ -287,43 +287,43 @@ func (m Model) oneColumn(w int) bool {
 	return m.tab == tabSessions && right == 0
 }
 
-// chatRoom tells if a chat right columns wide fits beside the list: it is
-// at least chatLeast wide, and the body has room for chatReserve.
-func (m Model) chatRoom(right int) bool {
-	if right < chatLeast {
+// viewRoom tells if a chat right columns wide fits beside the list: it is
+// at least viewLeast wide, and the body has room for viewReserve.
+func (m Model) viewRoom(right int) bool {
+	if right < viewLeast {
 		return false
 	}
 	if m.height == 0 {
 		return true // no height yet
 	}
-	return m.height-5 >= m.chatReserve(right)
+	return m.height-5 >= m.viewReserve(right)
 }
 
-// chatReserve is the most rows the chat right columns wide takes, of any
+// viewReserve is the most rows the chat right columns wide takes, of any
 // home session the cursor can move to: its title, its strip as drawn (two
 // lines on a narrow chat) and menuLeast. Sessions splits by it, so the split
 // holds as the cursor moves and as a session comes to a menu.
-func (m Model) chatReserve(right int) int {
+func (m Model) viewReserve(right int) int {
 	most := 1 + menuLeast
 	for _, s := range m.snap.Sessions {
 		if most == 3+menuLeast { // the strip is two lines at most
 			break
 		}
 		if s.Host == m.opt.Host && s.Pane != "" {
-			most = max(most, 1+len(m.chatStrip(s, right, 2))+menuLeast)
+			most = max(most, 1+len(m.viewStrip(s, right, 2))+menuLeast)
 		}
 	}
 	return most
 }
 
-// chatTitle names the chat's session and its state.
-func (m Model) chatTitle(s sample.Session) string { return s.Name + " · " + m.wordOf(s) }
+// viewTitle names the chat's session and its state.
+func (m Model) viewTitle(s sample.Session) string { return s.Name + " · " + m.wordOf(s) }
 
-// chatPane is the live view beside the list, w by h: its title over the
+// viewPane is the live view beside the list, w by h: its title over the
 // strip and the screen.
-func (m Model) chatPane(s sample.Session, w, h int) []string {
-	lines := []string{fit(" "+m.st.label.Render(m.chatTitle(s)), w)}
-	strip := m.chatStrip(s, w, h-1)
+func (m Model) viewPane(s sample.Session, w, h int) []string {
+	lines := []string{fit(" "+m.st.label.Render(m.viewTitle(s)), w)}
+	strip := m.viewStrip(s, w, h-1)
 	lines = append(lines, strip...)
 	for _, l := range m.screenLines(w-1, h-1-len(strip)) {
 		lines = append(lines, " "+l)
@@ -331,10 +331,10 @@ func (m Model) chatPane(s sample.Session, w, h int) []string {
 	return lines
 }
 
-// chatStrip is what the session's detail said of it, over its chat in w
+// viewStrip is what the session's detail said of it, over its chat in w
 // columns and at most rows lines: its account, its PR and its background
 // work. One line where they fit, else two; none when it has none.
-func (m Model) chatStrip(s sample.Session, w, rows int) []string {
+func (m Model) viewStrip(s sample.Session, w, rows int) []string {
 	st := m.st
 	var facts []string
 	if a := accountCell(s); a != "" {
@@ -378,26 +378,26 @@ func (m Model) chatStrip(s sample.Session, w, rows int) []string {
 	return lines
 }
 
-// screenLines are chatLines, each closed so the pane's styles stop at its
+// screenLines are viewLines, each closed so the pane's styles stop at its
 // end.
 func (m Model) screenLines(w, h int) []string {
-	lines := m.chatLines(w, h)
+	lines := m.viewLines(w, h)
 	for i, l := range lines {
 		lines[i] = l + ansi.ResetStyle
 	}
 	return lines
 }
 
-// chatScreen is the live view on an upright phone: the whole screen under a
+// viewScreen is the live view on an upright phone: the whole screen under a
 // title row that goes back to Sessions and says a toast, over the key
 // line, with a step that asks to confirm on top. Its title, hairline and
 // key line always show: a screen under 4 rows has no room for the agent's
 // lines.
-func (m Model) chatScreen(w int) drawn {
+func (m Model) viewScreen(w int) drawn {
 	st := m.st
 	s, _ := m.selectedSession()
 	title := " " + st.accent.Render("‹ Sessions") + st.muted.Render(" · ")
-	head := m.chatTitle(s)
+	head := m.viewTitle(s)
 	if room := w - lipgloss.Width(title); lipgloss.Width(head) > room {
 		head = ansi.Truncate(s.Name, max(room, 1), "…") // the state, then the name, give way
 	}
@@ -406,8 +406,8 @@ func (m Model) chatScreen(w int) drawn {
 		title = spread(title, st.accent.Render(ansi.Truncate(m.toast, max(w/2, 1), "…"))+" ", w)
 	}
 	title = fit(title, w)
-	_, rows := m.chatPlacement(w)
-	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, chatFull: true, chatRows: rows, chatAt: 1, chatW: w}
+	_, rows := m.viewPlacement(w)
+	sc := drawn{lines: []string{title}, bodyTop: 1, listW: w, dockAt: -1, actKeysAt: -1, placeFull: true, viewRows: rows, viewAt: 1, viewW: w}
 	sc.lines = append(sc.lines, m.screenLines(w, rows)...)
 	hair, keys, spans := m.keyRows(w)
 	sc.keysAt, sc.keys = len(sc.lines)+1, spans
@@ -437,12 +437,12 @@ func (m Model) atMenu(s sample.Session) bool {
 	return s.Permits || s.Ask != nil
 }
 
-// chatBackWait is how long after ctrl+a an m leaves the stand-in.
-const chatBackWait = time.Second
+// viewBackWait is how long after ctrl+a an m leaves the stand-in.
+const viewBackWait = time.Second
 
-// chatBacks tells if k is the m of ctrl+a m, whose ctrl+a came at armed.
-func (m Model) chatBacks(k tea.KeyPressMsg, armed time.Time) bool {
-	return !armed.IsZero() && bkey.Matches(k, m.keys.chat.BackEnd) && m.now().Sub(armed) <= chatBackWait
+// viewBacks tells if k is the m of ctrl+a m, whose ctrl+a came at armed.
+func (m Model) viewBacks(k tea.KeyPressMsg, armed time.Time) bool {
+	return !armed.IsZero() && bkey.Matches(k, m.keys.view.BackEnd) && m.now().Sub(armed) <= viewBackWait
 }
 
 // minSignalTmux is the oldest tmux that passes the agent signal through to
@@ -478,7 +478,7 @@ func (m Model) backKeys() string {
 			return p + " m"
 		}
 	}
-	return m.keys.chat.Back.Help().Key
+	return m.keys.view.Back.Help().Key
 }
 
 // standInHint is the stand-in's key line while its session waits at a menu:
@@ -488,8 +488,8 @@ const standInHint = "type 2 to answer"
 // viewFull tells if the live view takes the whole screen: opened on one
 // column, with room for its question.
 func (m Model) viewFull() bool {
-	place, _ := m.chatPlacement(max(m.width, minWidth))
-	return m.viewOpen && place == chatFull
+	place, _ := m.viewPlacement(max(m.width, minWidth))
+	return m.viewOpen && place == placeFull
 }
 
 // openStandIn is the demo's stand-in for the pane of a home session: its
@@ -537,9 +537,9 @@ func (m Model) keepView() Model {
 		return m
 	}
 	s, ok := m.selectedSession()
-	place, _ := m.chatPlacement(max(m.width, minWidth))
+	place, _ := m.viewPlacement(max(m.width, minWidth))
 	switch {
-	case !ok || m.tab != tabSessions || s.Pane == "" || s.Host != m.opt.Host || place == chatNone:
+	case !ok || m.tab != tabSessions || s.Pane == "" || s.Host != m.opt.Host || place == placeNone:
 		m.viewOpen, m.standIn = false, false
 	case m.screen.Pane == s.Pane && m.screen.Gone:
 		m.viewOpen, m.standIn, m.flash = false, false, "That session ended."
@@ -558,7 +558,7 @@ func (m Model) standInKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.flash = ""
-	if bkey.Matches(k, m.keys.chat.Back) {
+	if bkey.Matches(k, m.keys.view.Back) {
 		m.backArmed = m.now()
 		return m, nil
 	}

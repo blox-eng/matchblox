@@ -33,7 +33,7 @@ type keymaps struct {
 	global   globalKeys
 	main     mainKeys
 	form     formKeys
-	chat     chatKeymap
+	view     viewKeymap
 	sheet    sheetKeys
 	search   searchKeys
 	pair     pairKeys
@@ -111,7 +111,7 @@ func defaultKeys() keymaps {
 			Right: bind(ks("right", "space"), "←→", "pick"),
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 		},
-		chat: chatKeymap{
+		view: viewKeymap{
 			Back:    bind(ks("ctrl+a"), "ctrl+a m", "back"),
 			BackEnd: bind(ks("m"), "m", "back"),
 		},
@@ -165,7 +165,7 @@ func defaultKeys() keymaps {
 func KeyNames() []string {
 	k := defaultKeys()
 	var names []string
-	for _, layer := range [][]bkey.Binding{k.global.bindings(), k.main.bindings(), k.form.bindings(), k.chat.bindings(),
+	for _, layer := range [][]bkey.Binding{k.global.bindings(), k.main.bindings(), k.form.bindings(), k.view.bindings(),
 		k.sheet.bindings(), k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(),
 		k.scan.bindings(), k.ask.bindings()} {
 		for _, b := range layer {
@@ -227,12 +227,12 @@ func (k formKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Close, k.Enter, k.Next, k.Prev, k.Down, k.Up, k.Left, k.Right, k.Erase}
 }
 
-// chatKeymap are the demo stand-in's own keys: ctrl+a, then m within a
-// second (chatBackWait), goes back to Sessions. Every other key goes to the
+// viewKeymap are the demo stand-in's own keys: ctrl+a, then m within a
+// second (viewBackWait), goes back to Sessions. Every other key goes to the
 // agent's pane in the demo's world.
-type chatKeymap struct{ Back, BackEnd bkey.Binding }
+type viewKeymap struct{ Back, BackEnd bkey.Binding }
 
-func (k chatKeymap) bindings() []bkey.Binding {
+func (k viewKeymap) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Back, k.BackEnd}
 }
 

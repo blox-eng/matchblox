@@ -139,14 +139,14 @@ type drawn struct {
 	// detail: their line, and the key a tap on each presses.
 	actKeysAt int
 	actKeys   []span
-	// chatFull: the chat is the whole screen, and a tap on its title row
-	// goes back to Sessions. chatRows: the lines of the agent's screen the
+	// placeFull: the chat is the whole screen, and a tap on its title row
+	// goes back to Sessions. viewRows: the lines of the agent's screen the
 	// chat shows.
-	chatFull bool
-	// chatAt, chatX, chatW: the first row of the agent's screen in the chat,
-	// the chat's first column for a tap, and the screen's width; chatW 0: no chat.
-	chatAt, chatX, chatW int
-	chatRows             int
+	placeFull bool
+	// viewAt, viewX, viewW: the first row of the agent's screen in the chat,
+	// the chat's first column for a tap, and the screen's width; viewW 0: no chat.
+	viewAt, viewX, viewW int
+	viewRows             int
 }
 
 // draw is the screen, with an ssh prompt over everything.
@@ -195,17 +195,17 @@ func (m Model) drawScreen(w int) drawn {
 	}
 	listW, detailW := m.panes(w)
 	if m.viewFull() { // one column: the live view takes the screen
-		return m.chatScreen(w)
+		return m.viewScreen(w)
 	}
 	full := m.bodyRows()
 	sc.listW = listW
 	b := m.body(listW)
-	chat, chatting := m.chatShown(detailW)
+	chat, viewing := m.viewShown(detailW)
 	stacked := m.tab == tabSessions && detailW > 0 // usage, the machine and the stoker under the list
 	paneFull := true
 	paneLines := func(rows int) []string {
 		switch {
-		case detailW == 0 || chatting:
+		case detailW == 0 || viewing:
 			return nil
 		}
 		lines, all := m.detailPane(detailW, rows)
@@ -240,10 +240,10 @@ func (m Model) drawScreen(w int) drawn {
 	sc.full = d.full || m.tab == tabMachine || m.tab == tabStoker || m.listOnly() // list only has no dock to show
 	detail = paneLines(room)
 	sc.paneFull = paneFull && len(detail) <= room
-	if chatting {
-		detail = m.chatPane(chat, detailW, room)
-		sc.chatRows = room - 1 - len(m.chatStrip(chat, detailW, room-1))
-		sc.chatAt, sc.chatX, sc.chatW = sc.bodyTop+room-sc.chatRows, listW+1, detailW-1
+	if viewing {
+		detail = m.viewPane(chat, detailW, room)
+		sc.viewRows = room - 1 - len(m.viewStrip(chat, detailW, room-1))
+		sc.viewAt, sc.viewX, sc.viewW = sc.bodyTop+room-sc.viewRows, listW+1, detailW-1
 	}
 	vis := windowed(b, room, m.rowIndex())
 	if stacked {
@@ -264,7 +264,7 @@ func (m Model) drawScreen(w int) drawn {
 		}
 		sc.lines, sc.rows = append(sc.lines, line), append(sc.rows, row)
 	}
-	m.markActKeys(&sc, b, vis, detail, room, detailW, chatting)
+	m.markActKeys(&sc, b, vis, detail, room, detailW, viewing)
 	if len(d.lines) > 0 {
 		sc.dockAt, sc.dockH, sc.stx0, sc.stx1 = len(sc.lines)+1, len(d.lines), d.stx0, d.stx1
 		sc.lines = append(append(sc.lines, m.st.hair.Render(strings.Repeat("─", w))), d.lines...)
@@ -327,7 +327,7 @@ func (m Model) panes(w int) (list, detail int) {
 	at := splitAt(w, m.layoutAt(w))
 	if m.tab == tabSessions {
 		at = sessionsSplit(w)
-		if !m.chatRoom(w - at - 1) {
+		if !m.viewRoom(w - at - 1) {
 			return w, 0 // no room for a menu beside the list: the chat opens full-screen
 		}
 	}

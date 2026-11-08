@@ -267,7 +267,7 @@ type Service struct {
 	// never interleave with another's.
 	panes sync.Map
 	// sizes are the chats' sizes and the agents' windows sized to them.
-	sizes chatSizes
+	sizes viewSizes
 	// grantMu makes each y one check and one go: two consoles pressing it
 	// at once on one step give one go.
 	grantMu sync.Mutex

@@ -66,21 +66,21 @@ func TestAQuestionDrawsTheAgentsOwnMenu(t *testing.T) {
 // TestAQuestionResizesNoAgent: the window is the chat's size, and no card
 // takes rows from it: a question that starts or ends sends no new watch.
 func TestAQuestionResizesNoAgent(t *testing.T) {
-	m, f := sizedChat(t)
-	cols, rows := m.chatSize()
+	m, f := sizedView(t)
+	cols, rows := m.viewSize()
 	before := len(f.acts())
 	st := fixtureState()
 	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a", Ask: &said.Ask{ID: "toolu_1", Questions: []said.Question{threeWays}}}, {PID: 2, Pane: "%2", Name: "b"}}
 	st.Queue = []queue.Item{{Pane: "%1", Name: "a", State: queue.StateQuestion, Since: demoAt}}
 	next, cmd := m.Update(stateMsg(st))
 	drain(cmd)
-	if c, r := next.(Model).chatSize(); c != cols || r != rows {
+	if c, r := next.(Model).viewSize(); c != cols || r != rows {
 		t.Fatalf("a question moved the chat's size from %dx%d to %dx%d", cols, rows, c, r)
 	}
 	st.Queue, st.Sessions[0].Ask = nil, nil
 	next, cmd = next.Update(stateMsg(st))
 	drain(cmd)
-	if c, r := next.(Model).chatSize(); c != cols || r != rows {
+	if c, r := next.(Model).viewSize(); c != cols || r != rows {
 		t.Fatalf("an answer moved the chat's size from %dx%d to %dx%d", cols, rows, c, r)
 	}
 	if acts := f.acts()[before:]; len(acts) != 0 {
@@ -97,7 +97,7 @@ func TestAMenuReadsReWrappedWhereTheWindowIsNotSized(t *testing.T) {
 		m := flintAt(t, size[0], size[1], "enter")
 		next, _ := m.Update(screenMsg{Pane: m.watching, At: demoAt, Text: text, Cols: 120, Rows: 50})
 		out := screen(next)
-		cols, _ := next.(Model).chatSize()
+		cols, _ := next.(Model).viewSize()
 		for _, want := range menuFrom(t, text, cols) {
 			if !strings.Contains(out, strings.TrimSpace(want)) {
 				t.Errorf("%v: %q is gone:\n%s", size, want, out)

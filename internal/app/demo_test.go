@@ -279,7 +279,7 @@ func TestTheStandInIsFullScreenOnADesk(t *testing.T) {
 	if !m.standIn || !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ Sessions") {
 		t.Fatalf("stand-in %v, row 0 is %q", m.standIn, lines[0])
 	}
-	if cols, _ := m.chatSize(); cols != 132 {
+	if cols, _ := m.viewSize(); cols != 132 {
 		t.Errorf("the agent's window is %d columns, want the whole 132", cols)
 	}
 }

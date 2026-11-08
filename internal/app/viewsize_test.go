@@ -13,9 +13,9 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// sizedChat is chatModel with its first watch sent, and its size once
+// sizedView is viewModel with its first watch sent, and its size once
 // the selection rested.
-func sizedChat(t *testing.T) (Model, *fakeConn) {
+func sizedView(t *testing.T) (Model, *fakeConn) {
 	t.Helper()
 	st := fixtureState()
 	st.Sessions = []sample.Session{{PID: 1, Pane: "%1", Name: "a"}, {PID: 2, Pane: "%2", Name: "b"}}
@@ -43,7 +43,7 @@ func numbered(n, cols int) string {
 // The watch says the room the chat draws the agent's screen in: a screen
 // of that size fills it, its widest line whole and its last rows shown.
 func TestTheWatchSaysTheChatsSize(t *testing.T) {
-	m, f := sizedChat(t)
+	m, f := sizedView(t)
 	a := lastWatch(t, f)
 	if a.Cols <= 0 || a.Rows <= 0 {
 		t.Fatalf("watch %+v says no size", a)
@@ -67,7 +67,7 @@ func TestTheWatchSaysTheChatsSize(t *testing.T) {
 // A new size of the console sends the watch again with the chat's new
 // size; the same size sends nothing.
 func TestTheWatchFollowsTheChatsSize(t *testing.T) {
-	m, f := sizedChat(t)
+	m, f := sizedView(t)
 	first := lastWatch(t, f)
 	n := len(f.allActs())
 	next, cmd := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -81,7 +81,7 @@ func TestTheWatchFollowsTheChatsSize(t *testing.T) {
 	if len(f.allActs()) != n+1 || a.RecID != first.RecID || a.Cols <= first.Cols || a.Rows <= first.Rows {
 		t.Fatalf("watch %+v after a bigger console, was %+v", a, first)
 	}
-	if cols, rows := next.(Model).chatSize(); a.Cols != cols || a.Rows != rows {
+	if cols, rows := next.(Model).viewSize(); a.Cols != cols || a.Rows != rows {
 		t.Fatalf("watch %dx%d, the chat %dx%d", a.Cols, a.Rows, cols, rows)
 	}
 }
@@ -99,11 +99,11 @@ func TestNoChatNoSize(t *testing.T) {
 	if a := lastWatch(t, f); a.RecID != proto.WatchPrefix+"%1" || a.Cols != 0 || a.Rows != 0 {
 		t.Fatalf("watch %+v with no chat drawn", a)
 	}
-	if cols, rows := next.(Model).chatSize(); cols != 0 || rows != 0 {
+	if cols, rows := next.(Model).viewSize(); cols != 0 || rows != 0 {
 		t.Fatalf("chat size %dx%d with no chat drawn", cols, rows)
 	}
 
-	m, f := sizedChat(t)
+	m, f := sizedView(t)
 	n := len(f.allActs())
 	for _, msg := range []tea.Msg{tea.WindowSizeMsg{Width: 60, Height: 30}, keyPress("tab")} {
 		next, cmd := m.Update(msg)
@@ -119,16 +119,16 @@ func TestNoChatNoSize(t *testing.T) {
 // trailing spaces and the blank rows under it stay, top first, as in the
 // agent's own terminal. One of another width wraps as before.
 func TestAScreenAsWideAsTheChatIsDrawnAsItIs(t *testing.T) {
-	m, _ := chatModel(t)
+	m, _ := viewModel(t)
 	sel, _ := m.selected()
 	text := "\x1b[44m╭──────╮   \x1b[0m\n│ a  b │\n╰──────╯\n\n\n"
 	m.screen = proto.Screen{Pane: sel.Pane, Text: text, Cols: 11, Rows: 5}
-	got := m.chatLines(11, 6)
+	got := m.viewLines(11, 6)
 	if len(got) != 6 || got[0] != "\x1b[44m╭──────╮   \x1b[0m" || got[2] != "╰──────╯" || got[3] != "" || got[5] != "" {
 		t.Fatalf("as drawn: %q", got)
 	}
 	m.screen.Cols = 12
-	if got := m.chatLines(11, 6); ansi.Strip(got[5]) != "╰──────╯" {
+	if got := m.viewLines(11, 6); ansi.Strip(got[5]) != "╰──────╯" {
 		t.Fatalf("another width fits: %q", got)
 	}
 }
@@ -184,7 +184,7 @@ func TestScreensSizedChat(t *testing.T) {
 		nm.splashDone = true
 		next, _ = keyOrOpen(nm, "enter")
 		nm = next.(Model)
-		cols, rows := nm.chatSize()
+		cols, rows := nm.viewSize()
 		if cols <= 0 || rows <= 0 {
 			t.Fatalf("%dx%d: no chat size", w, h)
 		}
@@ -197,8 +197,8 @@ func TestScreensSizedChat(t *testing.T) {
 	}
 }
 
-// clockChat is a desk console of three sessions on a clock the test turns.
-func clockChat(t *testing.T) (Model, *fakeConn, *time.Time) {
+// clockView is a desk console of three sessions on a clock the test turns.
+func clockView(t *testing.T) (Model, *fakeConn, *time.Time) {
 	t.Helper()
 	at := demoAt
 	st := fixtureState()
@@ -225,7 +225,7 @@ func sizedWatches(f *fakeConn, n int) []proto.Act {
 // has stayed selected for sizeDwell, or at once when the chat takes the
 // keys.
 func TestBrowsingSizesNoAgent(t *testing.T) {
-	m, f, at := clockChat(t)
+	m, f, at := clockView(t)
 	*at = at.Add(sizeDwell) // the first selection rests
 	next, cmd := m.Update(sizeDueMsg{})
 	drain(cmd)

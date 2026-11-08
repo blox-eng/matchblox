@@ -71,7 +71,7 @@ func TestFitKeepsStyles(t *testing.T) {
 	}
 }
 
-func chatModel(t *testing.T) (Model, *fakeConn) {
+func viewModel(t *testing.T) (Model, *fakeConn) {
 	t.Helper()
 	st := fixtureState()
 	st.Sessions = []sample.Session{
@@ -82,7 +82,7 @@ func chatModel(t *testing.T) (Model, *fakeConn) {
 }
 
 func TestScreenOfAnotherPaneIsIgnored(t *testing.T) {
-	m, _ := chatModel(t)
+	m, _ := viewModel(t)
 	next, _ := m.Update(screenMsg{Pane: m.watching, Text: "mine"})
 	m = next.(Model)
 	next, _ = m.Update(screenMsg{Pane: "%9", Text: "other"})
@@ -92,7 +92,7 @@ func TestScreenOfAnotherPaneIsIgnored(t *testing.T) {
 }
 
 func TestSelectionChangeWatches(t *testing.T) {
-	m, f := chatModel(t)
+	m, f := viewModel(t)
 	first, _ := m.selected()
 	next, cmd := key(m, "down")
 	drain(cmd)
@@ -107,7 +107,7 @@ func TestSelectionChangeWatches(t *testing.T) {
 }
 
 func TestSelectionChangeDropsTheOldScreen(t *testing.T) {
-	m, _ := chatModel(t)
+	m, _ := viewModel(t)
 	sel, _ := m.selected()
 	next, _ := m.Update(screenMsg{Pane: sel.Pane, Text: "old"})
 	next, _ = key(next, "down")
@@ -117,7 +117,7 @@ func TestSelectionChangeDropsTheOldScreen(t *testing.T) {
 }
 
 func TestLostConnectionForgetsTheWatch(t *testing.T) {
-	m, _ := chatModel(t)
+	m, _ := viewModel(t)
 	next, _ := m.Update(lostMsg{err: io.EOF, conn: m.conn})
 	if next.(Model).watching != "" {
 		t.Fatal("still watching after the connection went")
@@ -125,31 +125,31 @@ func TestLostConnectionForgetsTheWatch(t *testing.T) {
 }
 
 func TestChatLinesWhenTheSessionEnded(t *testing.T) {
-	m, _ := chatModel(t)
+	m, _ := viewModel(t)
 	sel, _ := m.selected()
 	next, _ := m.Update(screenMsg{Pane: sel.Pane, Gone: true})
-	lines := next.(Model).chatLines(40, 5)
+	lines := next.(Model).viewLines(40, 5)
 	if len(lines) != 5 || strings.TrimSpace(lines[2]) != "That session ended." {
 		t.Fatalf("lines = %q", lines)
 	}
 }
 
 func TestChatLinesFillTheViewFromTheBottom(t *testing.T) {
-	m, _ := chatModel(t)
+	m, _ := viewModel(t)
 	sel, _ := m.selected()
 	next, _ := m.Update(screenMsg{Pane: sel.Pane, Text: "one\ntwo"})
-	lines := next.(Model).chatLines(40, 5)
+	lines := next.(Model).viewLines(40, 5)
 	if len(lines) != 5 || lines[3] != "one" || lines[4] != "two" || lines[0] != "" {
 		t.Fatalf("lines = %q", lines)
 	}
 	next, _ = m.Update(screenMsg{Pane: sel.Pane, Text: "   \n\n"})
-	if lines := next.(Model).chatLines(40, 5); len(lines) != 5 {
+	if lines := next.(Model).viewLines(40, 5); len(lines) != 5 {
 		t.Fatalf("a blank screen gave %d lines", len(lines))
 	}
 }
 
 func TestRefusedWatchRetriesOnTheNextSnapshotAndSaysNothing(t *testing.T) {
-	m, f := chatModel(t)
+	m, f := viewModel(t)
 	sel, _ := m.selected()
 	next, cmd := m.Update(resultMsg(proto.Result{ActID: "watch:" + sel.Pane, Err: "no agent session in " + sel.Pane + " any more"}))
 	drain(cmd)
@@ -175,16 +175,16 @@ func fixtureStateWith(ss ...sample.Session) proto.State {
 }
 
 func TestChatLinesTakeNoNegativeHeight(t *testing.T) {
-	m, _ := chatModel(t)
+	m, _ := viewModel(t)
 	sel, _ := m.selected()
 	next, _ := m.Update(screenMsg{Pane: sel.Pane, Text: "one"})
-	if lines := next.(Model).chatLines(40, -1); len(lines) != 0 {
+	if lines := next.(Model).viewLines(40, -1); len(lines) != 0 {
 		t.Fatalf("lines = %q", lines)
 	}
 }
 
 func TestRefusalOfAnOldWatchHoldsNothing(t *testing.T) {
-	m, _ := chatModel(t)
+	m, _ := viewModel(t)
 	a, _ := m.selected()
 	next, cmd := key(m, "down")
 	drain(cmd)
@@ -425,7 +425,7 @@ func TestTheChatStripTakesNoRowsWithoutFacts(t *testing.T) {
 	})
 	m.shipReport, m.allShips = nil, nil
 	s, _ := m.selectedSession()
-	got := m.chatPane(s, 121, 40)
+	got := m.viewPane(s, 121, 40)
 	want := m.screenLines(120, 39)
 	if len(got) != 40 {
 		t.Fatalf("%d lines in a pane of 40", len(got))
@@ -491,7 +491,7 @@ func TestAShortDeskKeepsItsStats(t *testing.T) {
 // inView is a phone with the first session's screen in its live view.
 func inView(t *testing.T) Model {
 	t.Helper()
-	m, _ := chatModel(t)
+	m, _ := viewModel(t)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 44, Height: 30})
 	m = onPane(t, next.(Model), "%1")
 	next, _ = m.Update(screenMsg{Pane: m.watching, At: time.Unix(100, 0), Text: "> "})

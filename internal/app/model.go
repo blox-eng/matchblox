@@ -994,7 +994,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		f := m.focus(msg)
 		armed := m.backArmed
 		m.backArmed = time.Time{}
-		if m.standIn && f == layerMain && m.chatBacks(msg, armed) {
+		if m.standIn && f == layerMain && m.viewBacks(msg, armed) {
 			return m.leaveStandIn(), touch
 		}
 		// ctrl+c quits from every layer but a question, where any key but

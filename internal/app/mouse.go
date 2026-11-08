@@ -47,7 +47,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.form != nil {
 		return m.tapForm(ms, sc)
 	}
-	if sc.chatFull && ms.Y != sc.keysAt {
+	if sc.placeFull && ms.Y != sc.keysAt {
 		switch {
 		case ms.Y == 0:
 			return m.closeView(), nil
@@ -196,7 +196,7 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.held = nil // a swipe is another key: it drops the question
-	if m.overChat(ms) {
+	if m.overView(ms) {
 		m.armed = ""
 		return m.wheelView(ms.Button == tea.MouseWheelUp)
 	}
@@ -210,18 +210,18 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// overChat tells if ms is over the live view: the whole screen of a
+// overView tells if ms is over the live view: the whole screen of a
 // phone's, or the view beside the list.
-func (m Model) overChat(ms tea.Mouse) bool {
+func (m Model) overView(ms tea.Mouse) bool {
 	if !m.have || m.mismatch || m.pair.owns() || m.sheet != nil || m.form != nil || m.pending != nil {
 		return false
 	}
 	w := max(m.width, minWidth)
 	sc := m.draw(w)
-	if sc.chatFull {
+	if sc.placeFull {
 		return true
 	}
 	_, detailW := m.panes(w)
-	_, chatting := m.chatShown(detailW)
-	return chatting && ms.X > sc.listW && ms.Y >= sc.bodyTop && ms.Y < sc.bodyTop+len(sc.rows)
+	_, viewing := m.viewShown(detailW)
+	return viewing && ms.X > sc.listW && ms.Y >= sc.bodyTop && ms.Y < sc.bodyTop+len(sc.rows)
 }
