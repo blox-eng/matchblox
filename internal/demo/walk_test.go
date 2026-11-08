@@ -379,7 +379,6 @@ func (w *walker) scrolls(where string) {
 func (w *walker) walkTheDoors() {
 	w.t.Helper()
 	w.press("1")
-	w.refused("into tmux", "ctrl+o")
 	w.scrolls("in a chat")
 	w.reset()
 	w.clear()
@@ -846,12 +845,6 @@ func (w *walker) saysAfter(what, want string, keys ...string) {
 func TestWhatThePhoneCannotDoSaysSo(t *testing.T) {
 	m := newMachine(t)
 	w := startWalk(t, 132, 32)
-	for _, tab := range []string{"1", "2", "3", "4", "5", "6", "7", "1"} {
-		w.press(tab)
-		w.flashes("ctrl+o on tab "+tab, "ctrl+o")
-		w.clear()
-	}
-
 	w.flashes("a pane", "6", "enter")
 	w.clear()
 	w.flashes("a worktree's shell", "4", "enter")

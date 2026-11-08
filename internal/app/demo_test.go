@@ -83,7 +83,6 @@ func TestWhatLeavesTheDemoSaysSoAndRunsNothing(t *testing.T) {
 	}
 	o := Options{Exec: spyExec(&saw), Run: run}
 	for name, try := range map[string]func(t *testing.T) Model{
-		"ctrl+o": func(t *testing.T) Model { return pressKeys(t, demoConsole(t, 100, o), "ctrl+o") },
 		"a pane": func(t *testing.T) Model {
 			m := demoConsole(t, 100, o)
 			m.tab = tabPanes
@@ -247,6 +246,15 @@ func standIn(t *testing.T, w int) Model {
 	return pressKeys(t, m, "enter")
 }
 
+func TestCtrlOInTheDemoOpensTheStandInAsEnterDoes(t *testing.T) {
+	m := onSession(t, demoSessions(t, 44), "flint-auth")
+	m.opt.Demo = demoLine
+	m = pressKeys(t, m, "ctrl+o")
+	if !m.standIn || m.flash == demoLine {
+		t.Fatalf("ctrl+o: stand-in %v, flash %q", m.standIn, m.flash)
+	}
+}
+
 func TestEnterInTheDemoOpensTheStandIn(t *testing.T) {
 	m := standIn(t, 44)
 	if !m.standIn {
@@ -339,13 +347,13 @@ func paneNamedIn(t *testing.T, m Model, name string) string {
 
 // The line is longer than a phone is wide: it takes the hair's row, all of it.
 func TestTheLineReadsWholeOnAPhone(t *testing.T) {
-	m := pressKeys(t, demoConsole(t, 44, Options{}), "ctrl+o")
+	m := enterOnPanes(t, 44)
 	lines := strings.Split(ansi.Strip(m.render()), "\n")
 	last := strings.TrimSpace(lines[len(lines)-2]) + " " + strings.TrimSpace(lines[len(lines)-1])
 	if last != demoLine || strings.TrimSpace(lines[len(lines)-1]) != "Install matchblox to do that." {
 		t.Errorf("the last two rows read %q", last)
 	}
-	m = pressKeys(t, demoConsole(t, 100, Options{}), "ctrl+o")
+	m = enterOnPanes(t, 100)
 	lines = strings.Split(ansi.Strip(m.render()), "\n")
 	if got := strings.TrimSpace(lines[len(lines)-1]); got != demoLine {
 		t.Errorf("wide: the key line reads %q", got)
@@ -353,6 +361,15 @@ func TestTheLineReadsWholeOnAPhone(t *testing.T) {
 	if !strings.HasPrefix(lines[len(lines)-2], "─") {
 		t.Errorf("wide: the hair went: %q", lines[len(lines)-2])
 	}
+}
+
+// enterOnPanes is Enter on the demo's Panes tab, w columns wide: a key that
+// still leaves the demo.
+func enterOnPanes(t *testing.T, w int) Model {
+	t.Helper()
+	m := demoConsole(t, w, Options{})
+	m.tab = tabPanes
+	return pressKeys(t, m, "enter")
 }
 
 // Without a demo each site is as it was: a confirm, then the terminal.

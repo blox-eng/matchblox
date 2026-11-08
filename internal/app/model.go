@@ -1385,7 +1385,7 @@ func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.intoSelected()
 	case bkey.Matches(k, mk.Jump):
-		return m.jumpKey()
+		return m.intoSelected()
 	case bkey.Matches(k, mk.Dismiss):
 		if m.tab == tabSessions {
 			m.dismissRec()

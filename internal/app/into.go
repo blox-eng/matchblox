@@ -86,16 +86,6 @@ func (m Model) intoCmd(a action) tea.Cmd {
 	}
 }
 
-// jumpKey is ctrl+o: into the selected session's pane. The demo leaves it to
-// say what it cannot do.
-func (m Model) jumpKey() (tea.Model, tea.Cmd) {
-	if m.opt.Demo != "" {
-		m.flash = m.opt.Demo
-		return m, nil
-	}
-	return m.intoSelected()
-}
-
 // goIntoAsking is goInto for a tap, which no key hold has asked for: on a
 // host the stoker drives, the take-over question comes first.
 func (m Model) goIntoAsking(host, pane string) (tea.Model, tea.Cmd) {
