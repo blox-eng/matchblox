@@ -2001,7 +2001,7 @@ func seatLaunch(argv []string) []string {
 			i++
 			continue
 		}
-		if strings.HasPrefix(argv[i], "Read the repository instructions, then ") && strings.Contains(argv[i], "/capture.md") {
+		if strings.HasPrefix(argv[i], "Read the repository instructions. Then read the handover evidence in ") && strings.Contains(argv[i], "/capture.md") {
 			out = append(out, proto.DefaultHandoff)
 			continue
 		}
@@ -2015,4 +2015,52 @@ func seatLaunches(steps [][]string) [][]string {
 		out[i] = seatLaunch(step)
 	}
 	return out
+}
+
+// The capture takes time. A turn that starts during it, or a new session in
+// the pane, refuses the switch: nothing is killed without the second y.
+func TestASwitchChecksTheSessionAgainAfterTheCapture(t *testing.T) {
+	for name, next := range map[string]func() sample.Snapshot{
+		"a turn starts": func() sample.Snapshot { return lifeSnap(true) },
+		"a new session": func() sample.Snapshot {
+			d := lifeSnap(false)
+			d.Sessions[0].PID++
+			return d
+		},
+	} {
+		s, ran := switchTest(t)
+		s.MatchGit = func(context.Context, string, ...string) (string, error) {
+			s.publish(next(), func(state.Doc) {})
+			return "", nil
+		}
+		res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff}))
+		if !strings.Contains(res.Err, "while this switch read it: switch again") || len(seatLaunches(*ran)) != 0 {
+			t.Errorf("%s: err %q ran %q", name, res.Err, *ran)
+		}
+		if left, _ := filepath.Glob(filepath.Join(s.matchContextRoot(), "match-*")); len(left) != 0 {
+			t.Errorf("%s: a refused switch leaves %q", name, left)
+		}
+	}
+	s, ran := switchTest(t)
+	s.MatchGit = func(context.Context, string, ...string) (string, error) {
+		s.publish(lifeSnap(true), func(state.Doc) {})
+		return "", nil
+	}
+	if res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: proto.DefaultHandoff, Anyway: true})); res.Err != "" || len(seatLaunches(*ran)) != 1 {
+		t.Errorf("a second y still switches: err %q ran %q", res.Err, *ran)
+	}
+}
+
+// A stale switch refuses before any capture, whatever its handoff.
+func TestAStaleSwitchRefusesEveryHandoff(t *testing.T) {
+	x := lifeSnap(false).Sessions[0]
+	for _, h := range []string{"", proto.DefaultHandoff, proto.Handoff("Keep CSV only."), "Only explain the failing test."} {
+		s, ran := switchTest(t)
+		captured := false
+		s.MatchGit = func(context.Context, string, ...string) (string, error) { captured = true; return "", nil }
+		res := s.act(t.Context(), switchAct(t, "%1", proto.SwitchAgent{Agent: "codex", Handoff: h, ExpectedPID: x.PID + 1, ExpectedStart: x.Start}))
+		if res.Err != "the session changed since this switch read it: switch again" || len(*ran) != 0 || captured {
+			t.Errorf("%q: err %q ran %q captured %v", h, res.Err, *ran, captured)
+		}
+	}
 }

@@ -150,6 +150,47 @@ command syntax remain unspecified. Do not advertise an unavailable tool.
   a path with a space and a dot.
 - 2026-10-26: Enable `sandbox_workspace_write.network_access=true` on both
   entry points at the builder's request. It only applies in `workspace-write`.
+- 2026-11-08: Read the whole transcript for the conversation excerpt, not
+  its last 128 KB. Tool output fills the tail: the 5 largest Claude Code
+  transcripts on the builder's host kept 0 or 1 of 62-247 prompts there.
+  The excerpt keeps the first prompt, the last three replies, then the
+  latest prompts within 48,000 bytes. Measured on the same 5 files: 32-76
+  prompts kept, at most 263 ms for 26 MB. The host's largest transcript is
+  235 MB and took 1.9 s, so a later decision bounds the read.
+- 2026-11-08: Report a task record that still holds the launch template as
+  never written, because quoting it as claims tells the receiver to wait.
+- 2026-11-08: Asking an idle outgoing agent to refresh its record stays
+  unbuilt. It needs turn-completion detection, and its own issue (#336).
+- 2026-11-08: Drop compaction summaries, interrupt markers and shell output
+  from the excerpt. Review found 129 transcripts with a compaction summary,
+  written as a user row without `isMeta`, filling the budget as `user:` text.
+- 2026-11-08: Above 64 MB, read the first 8 MB and the last 56 MB, and stop
+  when the capture's context ends. A switch reads the transcript twice, and
+  the middle of a long session is tool output.
+- 2026-11-08: The builder's call: the switch confirm shows the switch only.
+  This replaces "show the handover before the switch confirmation". The
+  console no longer fetches a preview; `switch --preview` keeps it.
+- 2026-11-08: The builder's call: the switch prompt is the service's, fixed
+  and never edited in the form. The form takes extra instructions, added
+  after it with priority over the handover, and a start of continue or no
+  task. `proto.Handoff` joins the extras to `DefaultHandoff`, so an older
+  service reads the line as a custom handoff that still makes sense.
+- 2026-11-08: The builder's call: after the capture, the switch checks the
+  latest sampled state of the pane again. A turn that state shows started
+  during the capture, or a new session, refuses the switch. The capture
+  takes up to 0.45 s, measured on a 235 MB transcript, and the second y
+  must still guard a busy agent. It reads the last published state, not a
+  fresh sample: a turn no hook or tick has published yet still passes.
+- 2026-11-08: An earlier switch's mark drops the evidence path its prompt
+  named. The path is transcript text, which the outgoing agent can write.
+  The capture names the outgoing bundle's own capture.md instead, after an
+  Lstat check, as a claim: the outgoing agent can write its bundle too.
+- 2026-11-08: A switch prompt is recognised only by its exact shape: the
+  lead, a quoted path to capture.md, then the fixed next words. Review
+  found that a lead plus any quoted string erased the builder's own prompt.
+- 2026-11-08: A peer message (`[from <who> <pane>] …`) sits in a user row
+  but is labelled as another match's and never fills the goal. Review
+  found that `pickTurns` could take it as the builder's goal.
 
 ## Acceptance checks
 

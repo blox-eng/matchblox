@@ -340,7 +340,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	x, ok := s.sessionAt(pane)
 	switch {
 	case ok && n.ExpectedPID != 0 && (n.ExpectedPID != x.PID || n.ExpectedStart != x.Start):
-		return refuseText("the match changed since the switch preview: open switch again")
+		return refuseText("the session changed since this switch read it: switch again")
 	case ok && x.Agent == n.Agent:
 		return refuseText(x.Name + " runs " + n.Agent + " already")
 	case !slices.Contains(Startable, n.Agent):
@@ -391,9 +391,19 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 			notes = prepareNotes(acct, rep, err)
 		}
 	}
-	argv, _, err := s.matchLaunch(ctx, n.Agent, x.Name, x.Cwd, "", n.Handoff, true, acct, &x)
+	argv, bundle, err := s.matchLaunch(ctx, n.Agent, x.Name, x.Cwd, "", n.Handoff, true, acct, &x)
 	if err != nil {
 		return refuse(err)
+	}
+	// The capture takes time: a turn the latest state shows started during
+	// it still takes the second y, and a new session there is not the one
+	// the builder chose.
+	if cur, ok := s.sessionAt(pane); !ok || cur.PID != x.PID || cur.Start != x.Start {
+		_ = os.RemoveAll(bundle) // no match starts from it
+		return refuseText("the session changed while this switch read it: switch again")
+	} else if word == "" && !n.Anyway && (s.waitsOn(pane, cur) || cur.Works()) {
+		_ = os.RemoveAll(bundle)
+		return refuseText(x.Name + " started a turn while this switch read it: switch again")
 	}
 	if acct != nil {
 		argv = slices.Concat(accounts.EnvArgv(n.Agent, acct.folder, false), argv)

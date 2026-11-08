@@ -2,6 +2,7 @@ package proto
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -16,6 +17,47 @@ func TestCheckName(t *testing.T) {
 		if CheckName(bad) == nil {
 			t.Errorf("%q passes", bad)
 		}
+	}
+}
+
+func TestHandoffCarriesTheBuildersExtras(t *testing.T) {
+	if Handoff("  ") != DefaultHandoff {
+		t.Fatalf("blank extras change the handoff: %q", Handoff("  "))
+	}
+	for _, extra := range []string{"", "Keep CSV only."} {
+		got, ok := HandoffExtra(Handoff(extra))
+		if !ok || got != extra {
+			t.Errorf("%q round-trips as %q %v", extra, got, ok)
+		}
+	}
+	if extra, ok := HandoffExtra(DefaultHandoff + handoffExtras + "  "); !ok || extra != "" {
+		t.Errorf("blank extras pass as a custom handoff: %q %v", extra, ok)
+	}
+	if _, ok := HandoffExtra("Only explain the failing test."); ok {
+		t.Error("a custom handoff passes as the default")
+	}
+	if err := CheckFirst(Handoff(strings.Repeat("a", 300)), "the handoff"); err != nil {
+		t.Errorf("the longest extras do not fit: %v", err)
+	}
+}
+
+func TestCheckExtraNamesTheExtrasOwnLimit(t *testing.T) {
+	limit := ExtraLimit()
+	if err := CheckExtra(strings.Repeat("é", limit)); err != nil {
+		t.Fatalf("extras at the limit: %v", err)
+	}
+	want := fmt.Sprintf("the extras are longer than %d characters", limit)
+	if err := CheckExtra(strings.Repeat("a", limit+1)); err == nil || err.Error() != want {
+		t.Fatalf("one over: %v, want %q", err, want)
+	}
+	if err := CheckFirst(Handoff(strings.Repeat("a", limit)), "the handoff"); err != nil {
+		t.Fatalf("the limit does not fit the joined line: %v", err)
+	}
+	if err := CheckExtra("a\xffb"); err == nil || err.Error() != "the extras are not valid text: retype them" {
+		t.Fatalf("invalid UTF-8: %v", err)
+	}
+	if err := CheckExtra("a\nb"); err == nil {
+		t.Fatal("a control key passes in extras")
 	}
 }
 

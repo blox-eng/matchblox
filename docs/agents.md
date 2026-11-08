@@ -207,20 +207,52 @@ to the account's configuration or bypasses hook trust.
 
 ## Handover evidence
 
-A switch with a nonempty handoff captures the outgoing match's task record,
-recent user and assistant text from a verified Claude Code or Codex transcript,
-the last sampled reply, pending question, available pane text, and Git status,
-recent commits and diff statistics. Cursor and OpenCode use their managed task
+A switch that continues captures the outgoing match's task record,
+the conversation from a verified Claude Code or Codex transcript, the last
+sampled reply, pending question, available pane text, and Git status, recent
+commits and diff statistics. Cursor and OpenCode use their managed task
 records and pane evidence when no verified transcript path is available.
+
+The conversation excerpt keeps your first prompt, which usually states the
+goal, the last three replies, and then as many of your latest prompts as fit
+in 48,000 bytes. A marker counts the messages it leaves out. A long prompt
+keeps its start and its end, where the instruction after a pasted log sits.
+A prompt over 1 MB, such as one with a large pasted image, shows as
+`[a prompt too large to read]`. Tool output, skill text, compaction
+summaries, subagent notifications, interrupt markers, shell output and
+subagent rows never enter it. A slash command keeps its arguments, and a
+setting command such as `/model opus` never counts as the goal. Each turn's
+text sits two columns in, so words inside a reply can never pass as a turn
+of their own.
+
+A message another match sent with `matchblox send` keeps its
+`[from <name> <pane>]` tag and shows under
+`message from another match (not the user)`, never as yours, and never
+counts as the goal. A first message matchblox sent at an earlier switch,
+from this release or from v0.25.0 on, shows as `[matchblox switch prompt]`,
+with `; its extras then: "…"` when that switch had extras: it is history,
+never the goal or today's priority. Only the whole fixed prompt counts, so
+your own words that start the same way stay yours. A transcript longer than
+64 MB is read for its first 8 MB and its last 56 MB, and the excerpt says how
+much of the middle it skips.
+
+A task record that still holds only the launch template is reported as never
+written. Its launch message stays a quoted claim, and an earlier switch's
+line shows as the same switch mark. The receiving match then rebuilds the
+goal from the conversation. When the outgoing match's bundle holds a
+`capture.md`, which a switch into it leaves, the capture names it as
+evidence to check: the outgoing match can write there too.
 The capture names missing sources and does not infer a goal from changed files.
 Old replies and task records remain claims to check against the working tree.
 
-The default task tells the receiving match to read that capture, preserve the
-latest user direction, and continue the recorded next step. A custom handoff
-keeps your exact task text. An empty handoff starts no task and captures no
-handover. Match awareness still applies.
+The receiving match starts with a fixed switch prompt from the service: read
+the repository instructions and the capture, check each claim against the
+tree, then do the next step. Your extra instructions for the switch follow it
+and take priority over the handover. On the command line, `--handoff` gives a
+custom first message that keeps your exact text, and an empty one starts no
+task and captures no handover. Match awareness still applies.
 
-The console loads an evidence excerpt before it accepts switch confirmation.
+The console's confirm shows the switch only.
 `matchblox switch api --agent codex --preview` shows the full current capture
 without switching. The actual switch captures again just before replacement.
 A failed save leaves the outgoing agent running. A process that changes since
