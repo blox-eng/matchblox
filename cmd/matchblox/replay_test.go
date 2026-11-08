@@ -236,6 +236,7 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 }
 
 var (
+	onSpark    = regexp.MustCompile(`▌.*merged · done`)                // spark-docs, the selection until the held jump has run
 	burning    = regexp.MustCompile(`[✦✧] (hearth|cinder)-\S*\s+busy`) // a working match, whose name the duo may cut
 	busyTop    = regexp.MustCompile(`1200\s+claude`)                   // hearth-api's agent in the top processes
 	settled    = regexp.MustCompile(`╿ hearth-\S*\s+(done|out of work)`)
@@ -531,6 +532,11 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	sessionsTab := "WAITS FOR YOU"
 	var sessionsNow int // the sessions before N starts one
+	// Beside the list, a frame waits for the selected session's screen, which
+	// comes a moment after its row.
+	shown := func(s string) bool {
+		return strings.Contains(s, "? for shortcuts") || strings.Contains(s, "Chat about this")
+	}
 	steps := []step{
 		{name: "who waits", at: 1300 * time.Millisecond, ok: has(who...)},
 		// The selection moves: the next one that waits shows what it said.
@@ -548,7 +554,7 @@ func replayAt(t *testing.T, z replaySize) {
 			mu.Lock()
 			defer mu.Unlock()
 			// The jump ran, and the console moved on to the next that waits.
-			return len(jumps) == 1 && !strings.Contains(s, "▌╿ flint")
+			return len(jumps) == 1 && !strings.Contains(s, "▌╿ flint") && (phone || shown(s))
 		}},
 		{name: "the sessions", at: 9 * time.Second, ok: func(s string) bool {
 			return has("hearth-", "spark-d", "kindle-", "ember-b", "WORKING")(s) && burning.MatchString(s)
@@ -572,7 +578,7 @@ func replayAt(t *testing.T, z replaySize) {
 		{name: "kept on", at: 20500 * time.Millisecond, key: "n", ok: func(s string) bool {
 			mu.Lock()
 			defer mu.Unlock()
-			return strings.Contains(s, "night") && !strings.Contains(s, "Take over?") && len(jumps) == 2 // the answer lets the held jump go
+			return strings.Contains(s, "night") && !strings.Contains(s, "Take over?") && len(jumps) == 2 && !onSpark.MatchString(s) && (phone || shown(s)) // the answer lets the held jump go
 		}},
 		{name: "back to the night", at: 21700 * time.Millisecond, key: "esc", ok: func(s string) bool {
 			return strings.Contains(s, "night") && !strings.Contains(s, "Take over?")

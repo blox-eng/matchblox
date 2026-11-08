@@ -155,7 +155,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		if !picked || back {
 			return m, nil // the default selection is not a tap
 		}
-		return m.goInto(host, pane)
+		return m.goIntoAsking(host, pane)
 	}
 	say, run, host := m.tapAct()
 	if run == nil {

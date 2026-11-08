@@ -185,3 +185,68 @@ func TestAClickRightOfTheListGoesIn(t *testing.T) {
 		t.Errorf("ran %q, chat %v", *ran, next.(Model).chatKeys)
 	}
 }
+
+// On a host the stoker drives, every tap that goes in asks to take over first.
+func TestATapIntoAStokerHostAsksFirst(t *testing.T) {
+	night := func(w int) (Model, *[][]string) {
+		m := sized(t, w, 30, stokerState(runningNight(time.Now())))
+		m.tab = tabSessions
+		return m, recordRuns(&m)
+	}
+	asked := func(t *testing.T, name string, next tea.Model, ran *[][]string, cmd tea.Cmd) {
+		t.Helper()
+		drain(cmd)
+		if next.(Model).held == nil || len(*ran) != 0 {
+			t.Fatalf("%s: held %v ran %q: want take over? first", name, next.(Model).held != nil, *ran)
+		}
+		_, cmd = key(next, "n")
+		drain(cmd)
+		if len(*ran) != 1 {
+			t.Errorf("%s: after the answer ran %q", name, *ran)
+		}
+	}
+
+	m, ran := night(100)
+	y := sessLine(t, m, "app-feature")
+	next, cmd := tap(m, 5, y)
+	drain(cmd)
+	next, cmd = tap(next, 5, y)
+	asked(t, "second tap on the selected row", next, ran, cmd)
+
+	m, ran = night(200)
+	sc := m.draw(200)
+	next, cmd = m.Update(tea.MouseClickMsg(tea.Mouse{X: sc.listW + 5, Y: sc.bodyTop + 1, Button: tea.MouseLeft}))
+	asked(t, "tap right of the list", next, ran, cmd)
+
+	st := cardState("toolu_1", threeWays)
+	st.Stoker = stokerState(runningNight(time.Now())).Stoker
+	m, _ = loadedWith(t, 140, st)
+	m = onPane(t, m, "%1")
+	next, _ = m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
+	next, _ = next.Update(screenMsg{Pane: "%1", At: m.now(), Text: permitScreen})
+	m = pastQuiet(next.(Model))
+	ran = recordRuns(&m)
+	next, cmd = tap(m, 110, rowWith(t, m, "2. Yes, and don't ask again"))
+	asked(t, "tap on a menu option", next, ran, cmd)
+}
+
+func TestAOnAStuckShipAtNightAsksToTakeOver(t *testing.T) {
+	st := stokerState(runningNight(time.Now()))
+	full := screensState(t)
+	st.Ships, st.Sessions = full.Ships, full.Sessions
+	m := sized(t, 86, 30, st)
+	ran := recordRuns(&m)
+	next, _ := key(m, "p")
+	next, _ = key(next, "down")
+	next, _ = key(next, "down") // #4545 is stuck
+	asked, cmd := key(next, "a")
+	drain(cmd)
+	if asked.(Model).held == nil || len(*ran) != 0 {
+		t.Fatalf("held %v ran %q: want take over? first", asked.(Model).held != nil, *ran)
+	}
+	_, cmd = key(asked, "n")
+	drain(cmd)
+	if len(*ran) != 1 {
+		t.Errorf("after the answer ran %q", *ran)
+	}
+}

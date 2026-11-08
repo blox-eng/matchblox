@@ -39,6 +39,16 @@ func (m Model) jumpKey() (tea.Model, tea.Cmd) {
 	return m.intoSelected()
 }
 
+// goIntoAsking is goInto for a tap, which no key hold has asked for: on a
+// host the stoker drives, the take-over question comes first.
+func (m Model) goIntoAsking(host, pane string) (tea.Model, tea.Cmd) {
+	if h := cmp.Or(host, m.opt.Host); m.opt.Demo == "" && m.takeOverOn(h) {
+		m.held, m.heldOn, m.flash = func(m Model) (tea.Model, tea.Cmd) { return m.goInto(host, pane) }, h, ""
+		return m, nil
+	}
+	return m.goInto(host, pane)
+}
+
 // intoSelected goes into the pane of the selected session.
 func (m Model) intoSelected() (tea.Model, tea.Cmd) {
 	s, ok := m.selectedSession()
@@ -49,7 +59,7 @@ func (m Model) intoSelected() (tea.Model, tea.Cmd) {
 		m.flash = noPane(s.Name)
 		return m, nil
 	}
-	return m.goInto(s.Host, s.Pane)
+	return m.goIntoAsking(s.Host, s.Pane)
 }
 
 // tapTarget is the pane a second tap on the selected row goes into: a home

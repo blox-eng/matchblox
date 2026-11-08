@@ -478,12 +478,25 @@ func (m Model) shipInto() (tea.Model, tea.Cmd) {
 		m.flash = "a goes into the session of a stuck ship"
 		return m, nil
 	}
-	s, ok := m.driver(sh)
-	if !ok || s.Pane == "" {
+	host, pane := m.shipTarget()
+	if pane == "" {
 		m.flash = m.driverGone(sh)
 		return m, nil
 	}
-	return m.goInto(s.Host, s.Pane)
+	return m.goInto(host, pane)
+}
+
+// shipTarget is the host and pane of the session that drives the selected
+// stuck ship; no pane when there is none to go into.
+func (m Model) shipTarget() (host, pane string) {
+	sh, ok := m.selectedShip()
+	if !ok || sh.Kind != shipStuck {
+		return "", ""
+	}
+	if s, ok := m.driver(sh); ok {
+		return s.Host, s.Pane
+	}
+	return "", ""
 }
 
 // mergeShip is x on a ship that waits for your merge: the repository's
