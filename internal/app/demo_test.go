@@ -409,3 +409,29 @@ func TestAConsoleWithoutADemoIsAsItWas(t *testing.T) {
 		t.Error("a real console's seams were filled")
 	}
 }
+
+// Two fast keys reach the agent in the order pressed: the next goes only
+// after the service answers the one before (#342).
+func TestTheStandInSendsOneKeyAtATime(t *testing.T) {
+	m := standIn(t, 44)
+	f := m.conn.(*fakeConn)
+	pane := paneNamedIn(t, m, "flint-auth")
+	m = pressKeys(t, m, "down", "enter")
+	if got := keyActs(f); len(got) != 1 || got[0].Text != "Down" {
+		t.Fatalf("sent %+v before an answer, want Down alone", got)
+	}
+	next, cmd := m.Update(resultMsg{ActID: keyActID + pane})
+	drain(cmd)
+	got := keyActs(f)
+	if len(got) != 2 || got[1].Text != "Enter" {
+		t.Fatalf("after Down's answer sent %+v, want Down then Enter", got)
+	}
+	next, cmd = next.Update(resultMsg{ActID: keyActID + pane})
+	drain(cmd)
+	if len(keyActs(f)) != 2 {
+		t.Errorf("Enter's answer sent %+v", keyActs(f))
+	}
+	if m := pressKeys(t, next.(Model), "2"); len(keyActs(f)) != 3 || !m.keysOut.busy {
+		t.Errorf("a key after the queue emptied: sent %+v", keyActs(f))
+	}
+}

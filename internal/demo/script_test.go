@@ -135,9 +135,8 @@ func TestTheStandInAnswersWithADigit(t *testing.T) {
 // TestTheStandInAnswersWithArrowsThenEnter: T8.
 func TestTheStandInAnswersWithArrowsThenEnter(t *testing.T) {
 	d, term := openQuestion(t)
-	term.send(t, "\x1b[B")             // Down: the cursor moves to 2. Rotate, keep
-	time.Sleep(500 * time.Millisecond) // the moved cursor reaches the screen the console shows
-	term.send(t, "\r")
+	term.send(t, "\x1b[B") // Down: the cursor moves to 2. Rotate, keep
+	term.send(t, "\r")     // at once: the keys still reach the world in order (#342)
 	term.waitFor(t, "I rotate the token on each refresh")
 	if got := transcript(t); !strings.Contains(got, "The user picked option 2") {
 		t.Errorf("Down then Enter did not pick option 2:\n%s", got)

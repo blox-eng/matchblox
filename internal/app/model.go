@@ -369,6 +369,7 @@ type Model struct {
 	held        func(Model) (tea.Model, tea.Cmd)
 	heldOn      string
 	viewOpen    bool      // one column: the selected session's live view takes the screen
+	keysOut     keysOut   // the keys the stand-in sends, one at a time
 	standIn     bool      // the demo's stand-in for a pane: the live view forwards the keys to the demo's world
 	backArmed   time.Time // when ctrl+a, the first key of the stand-in's way back, was pressed; zero: not armed
 	touched     map[string]time.Time
@@ -812,7 +813,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Err != "" {
 				m.flash = msg.Err
 			}
-			return m, m.recv()
+			next := m.nextKey()
+			return m, tea.Batch(m.recv(), next)
 		}
 		if pane, ok := strings.CutPrefix(msg.ActID, watchActID); ok && msg.Err != "" {
 			// A pane that went before the watch came is a race, not the builder's error.

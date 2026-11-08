@@ -17,6 +17,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/sample"
+	"github.com/blox-eng/matchblox/internal/transport"
 )
 
 // watchActID starts the id of a watch act; the pane follows, so a refusal says which watch it was for.
@@ -561,7 +562,8 @@ func (m Model) standInKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if !ok || !on || s.Pane == "" || s.Host != m.opt.Host {
 		return m, nil
 	}
-	return m, m.sendKey(s, text)
+	send := m.sendKey(s, text)
+	return m, send
 }
 
 // liveKeyLine is the key line of the full-screen live view and of the
@@ -620,13 +622,26 @@ func (m Model) wheelView(up bool) (tea.Model, tea.Cmd) {
 	if up {
 		text = proto.WheelUp
 	}
-	return m, m.sendKey(s, text)
+	send := m.sendKey(s, text)
+	return m, send
 }
+
+// keysOut are the keys the console sends, in order: one goes at a time,
+// and the next after the service answers it. Each send runs on its own, so
+// two fast keys sent at once could reach the agent swapped (#342).
+type keysOut struct {
+	conn  transport.Conn // the connection the key in flight went on
+	busy  bool
+	queue []proto.Act
+}
+
+// maxKeysAhead is how many keys wait behind the one in flight.
+const maxKeysAhead = 64
 
 // sendKey sends text to the pane of s as the keys act, for the screen of it
 // the console shows. Not m.send: a key takes no number from the acts the
 // builder sees, and its answer is no toast.
-func (m Model) sendKey(s sample.Session, text string) tea.Cmd {
+func (m *Model) sendKey(s sample.Session, text string) tea.Cmd {
 	if m.conn == nil || m.lost {
 		return nil
 	}
@@ -634,9 +649,35 @@ func (m Model) sendKey(s sample.Session, text string) tea.Cmd {
 	if m.screen.Pane == s.Pane {
 		act.Seen = m.screen.At
 	}
-	c := m.conn
+	if m.keysOut.conn != m.conn { // a new connection: no answer comes for the old one's keys
+		m.keysOut = keysOut{conn: m.conn}
+	}
+	if m.keysOut.busy {
+		if len(m.keysOut.queue) >= maxKeysAhead {
+			m.flash = "not sent: " + strconv.Itoa(maxKeysAhead) + " keys still wait for " + s.Name
+			return nil
+		}
+		m.keysOut.queue = append(m.keysOut.queue, act)
+		return nil
+	}
+	m.keysOut.busy = true
+	return sendKeyAct(m.conn, act)
+}
+
+// nextKey sends the key that waits behind the one the service answered.
+func (m *Model) nextKey() tea.Cmd {
+	if len(m.keysOut.queue) == 0 {
+		m.keysOut.busy = false
+		return nil
+	}
+	act := m.keysOut.queue[0]
+	m.keysOut.queue = m.keysOut.queue[1:]
+	return sendKeyAct(m.keysOut.conn, act)
+}
+
+func sendKeyAct(c transport.Conn, act proto.Act) tea.Cmd {
 	return func() tea.Msg {
-		if err := c.Send(proto.KindAct, keyActID+s.Pane, act); err != nil {
+		if err := c.Send(proto.KindAct, keyActID+strings.TrimPrefix(act.RecID, proto.KeysPrefix), act); err != nil {
 			return lostMsg{err, c}
 		}
 		return nil
