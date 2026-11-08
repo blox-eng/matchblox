@@ -321,15 +321,11 @@ layout you chose, and opens on it the next time.
 #### Command keys
 
 The Commands layout follows the agent whose pane you are in. Each command
-key has the mark of its agent. The keys light in the pane of a known agent
-and type their command there. In any other pane they are dim. `compact` and
-`clear` run only in Claude Code. The key is refused, with a message, until
-the agent rests (and while it waits for you). The other commands type their
-text and `Enter`. They go only while the agent rests, with no question, no
-permission prompt and no text you typed on its prompt. Otherwise the key is
-refused, with a message. A command of another agent sends nothing. See
-[the keys](keys.md). The console says `COMMANDS · needs tmux 3.3` once, with
-tmux older than 3.3 on the host.
+key has the mark of its agent. The keys light in the pane of a known agent,
+and a key types its command there, for example `/compact`, with no Return:
+you send it. The console marks the panes of the agents it knows, and a key
+types only into a pane marked as an agent of the command's kind. In any
+other pane the keys are dim and type nothing. See [the keys](keys.md).
 
 #### Mine
 
