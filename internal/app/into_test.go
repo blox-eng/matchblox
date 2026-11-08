@@ -467,14 +467,29 @@ func TestTheSelectionStaysWhileTheDeskWatches(t *testing.T) {
 
 func TestTheSignalNamesThePaneBeforeTheJump(t *testing.T) {
 	m, ran := jumpRig(t, deskAndPad)
-	_, cmd := key(m, "enter")
+	_, cmd := key(marked(m, "/dev/pts/7"), "enter")
 	msgs := cmdMsgs(cmd)
 	want := tea.RawMsg{Msg: logos.Passthrough(keycmd.PaneSignal("claude", "%1"))}
 	if len(msgs) == 0 || msgs[0] != want {
 		t.Fatalf("the first message is %v, want %q", msgs, want.Msg)
 	}
-	if jump := [][]string{remote.AgentMarkArgv("%1", "claude"), remote.FocusArgv("/dev/pts/1", "%1")}; !slices.EqualFunc(*ran, jump, slices.Equal) {
+	if jump := [][]string{remote.AgentMarkArgv("%1", "claude"), remote.FocusArgv("/dev/pts/7", "%1")}; !slices.EqualFunc(*ran, jump, slices.Equal) {
 		t.Errorf("ran %q, want %q", *ran, jump)
+	}
+}
+
+// The signal reaches every screen on the console, so a jump of the desk, an
+// unmarked key, sends none: the phone would take the desk's pane as its own.
+func TestTheDesksJumpNamesNoPane(t *testing.T) {
+	m, ran := jumpRig(t, deskAndPad)
+	_, cmd := key(m, "enter")
+	for _, msg := range cmdMsgs(cmd) {
+		if r, ok := msg.(tea.RawMsg); ok && strings.Contains(r.Msg.(string), "pane=") {
+			t.Fatalf("the desk's jump wrote %q", r.Msg)
+		}
+	}
+	if !ranFocus(*ran, "/dev/pts/1", "%1") {
+		t.Errorf("ran %q, want the desk's jump", *ran)
 	}
 }
 
@@ -511,7 +526,7 @@ func TestTheJumpAfterASwitchNamesItsNewAgent(t *testing.T) {
 func TestAConfirmedJumpNamesThePaneBeforeTheJump(t *testing.T) {
 	m, ran := jumpRig(t, deskAndPad)
 	m.tab = tabPanes
-	next, _ := key(m, "enter")
+	next, _ := key(marked(m, "/dev/pts/7"), "enter") // the phone's: the pending jump keeps its tty
 	a := next.(Model).pending
 	if a == nil || !a.nav || a.pane == "" {
 		t.Fatalf("Enter on Panes is pending %+v, want a jump", a)
@@ -672,5 +687,32 @@ func TestTheSignalGoesTheWayTheTerminalReadsIt(t *testing.T) {
 	}
 	if got := sayAgent(say, Options{LocalTmux: "3.4"})(); got != (tea.RawMsg{Msg: logos.Passthrough(say)}) {
 		t.Errorf("tmux 3.4 wrote %v", got)
+	}
+}
+
+// A jump that leaves no screen on the console stops the watch: the service
+// reads no hidden pane while the person types in the agent's. The watch
+// comes back when a screen shows the console again, or the person acts there.
+func TestAJumpWithNoOneLeftStopsTheWatch(t *testing.T) {
+	m, f := loadedWith(t, 100, fixtureState())
+	m, _ = rigged(m, "1794089220 /dev/pts/1 %99")
+	s, _ := m.selectedSession()
+	next, cmd := key(m, "enter")
+	next = settled(next, cmd)
+	if a := lastWatch(t, f); a.RecID != proto.WatchPrefix {
+		t.Fatalf("after the jump the watch is %q, want none", a.RecID)
+	}
+	_, cmd = next.Update(uv.UnknownApcEvent(keycmd.ViewerKey))
+	drain(cmd)
+	if a := lastWatch(t, f); a.RecID != proto.WatchPrefix+s.Pane {
+		t.Errorf("back on the console the watch is %q, want %s", a.RecID, s.Pane)
+	}
+
+	m, f = loadedWith(t, 100, fixtureState())
+	m, _ = rigged(m, deskAndPad)
+	next, cmd = key(m, "enter")
+	settled(next, cmd)
+	if slices.ContainsFunc(f.allActs(), func(a proto.Act) bool { return a.RecID == proto.WatchPrefix }) {
+		t.Error("the watch stopped with the iPad still on the console")
 	}
 }

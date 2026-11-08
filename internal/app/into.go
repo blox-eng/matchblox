@@ -36,9 +36,11 @@ func (m Model) runInto(a *action) (tea.Model, tea.Cmd) {
 }
 
 // signalled puts the pane signal before a jump of this machine's tmux: the
-// app hears which pane, and whose, the jump goes to.
+// app hears which pane, and whose, the jump goes to. Only a marked key, an
+// app's, gets it: the signal reaches every screen on the console, and a
+// phone would take the desk's pane as its own.
 func (m Model) signalled(a action, jump tea.Cmd) tea.Cmd {
-	if a.pane == "" {
+	if a.pane == "" || a.tty == "" {
 		return jump
 	}
 	return tea.Sequence(sayAgent(keycmd.PaneSignal(m.agentIn(a), a.pane), m.opt), jump)
@@ -111,7 +113,7 @@ func (m Model) intoCmd(a action) tea.Cmd {
 		if err := run(focus); err != nil {
 			return ranMsg{cmd: cmd, err: err}
 		}
-		return ranMsg{cmd: cmd, jumped: a.pane, tty: a.tty, watched: othersHere(cs, a.tty)}
+		return ranMsg{cmd: cmd, jumped: a.pane, tty: a.tty, watched: othersHere(cs, a.tty), alone: !othersHere(cs, a.tty)}
 	}
 }
 

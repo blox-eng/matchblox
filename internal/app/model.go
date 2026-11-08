@@ -185,6 +185,7 @@ type ranMsg struct {
 	host    string // the host of that pane; "" this console's
 	tty     string // the client the jump moved; "" whichever tmux picked
 	watched bool   // another client still shows the console
+	alone   bool   // tmux listed the clients, and none but the moved one showed the console
 }
 
 // action waits for the person's confirm. A Nav action runs here; any other
@@ -459,7 +460,10 @@ type Model struct {
 
 	// marked is the client the tmux binding named for the next input
 	// event; askedBy is the client of the event being handled, "" unmarked.
-	marked  clientMark
+	marked clientMark
+	// away: a jump left no screen on the console, so it watches no pane
+	// until a screen shows it again or the person acts there.
+	away    bool
 	askedBy string
 }
 
@@ -612,13 +616,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if string(apc) == keycmd.ViewerKey {
-			return m, sayAgent(keycmd.MarksSignal(), m.opt) // a terminal came to show the console
+			m.away = false // a terminal came to show the console
+			return m, tea.Batch(sayAgent(keycmd.MarksSignal(), m.opt), m.watchCmd())
+		}
+		if string(apc) == homeKey {
+			m.away = false
 		}
 	}
 	m = m.scanShows()
 	switch msg.(type) {
-	case tea.KeyPressMsg, tea.MouseClickMsg:
-		m.askedBy, m.marked = m.marked.spend(m.now()), clientMark{}
+	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseWheelMsg, tea.PasteMsg:
+		m.askedBy, m.marked, m.away = m.marked.spend(m.now()), clientMark{}, false
 	default:
 		m.askedBy = ""
 	}
@@ -949,6 +957,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if !m.opt.OutsideTmux { // outside, confirm told the host as the attach began
 				took = m.tookOver(cmp.Or(msg.host, m.opt.Host), msg.jumped)
+				m.away = msg.alone
 			}
 		}
 		toast := m.say("ran: " + msg.cmd)
@@ -1151,7 +1160,7 @@ func (m Model) focusJump(tty, pane string) tea.Cmd {
 			// The toast names the move, not the session the phone gets for it.
 			err := run(argv)
 			cs, _ := read()
-			return ranMsg{cmd: "tmux switch-client -c " + tty + " -t " + pane, err: err, jumped: pane, tty: tty, watched: err == nil && othersHere(cs, tty)}
+			return ranMsg{cmd: "tmux switch-client -c " + tty + " -t " + pane, err: err, jumped: pane, tty: tty, watched: err == nil && othersHere(cs, tty), alone: err == nil && cs != nil && !othersHere(cs, tty)}
 		}
 		return tea.Sequence(say, jump)()
 	}

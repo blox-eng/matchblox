@@ -150,10 +150,11 @@ func (m Model) chatSize() (cols, rows int) {
 
 // watchCmd asks the service for the selected session's screen when it is
 // not the one already watched, and for none when the selection has no pane
-// or is another host's; or the chat's size, when it changed. A screen of another pane never stays.
+// or is another host's, or no screen shows the console (away); or the
+// view's size, when it changed. A screen of another pane never stays.
 func (m *Model) watchCmd() tea.Cmd {
 	want := ""
-	if m.conn != nil && !m.lost && !m.mismatch {
+	if m.conn != nil && !m.lost && !m.mismatch && !m.away {
 		if s, ok := m.selected(); ok && s.Host == m.opt.Host { // another host's pane id names another pane here
 			want = s.Pane
 		}

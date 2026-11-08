@@ -67,6 +67,19 @@ func TestAMarkIsSpentByTheNextEvent(t *testing.T) {
 	}
 }
 
+// A wheel or a paste is an input event too: it spends the mark, so a key
+// from another screen after it is not taken as the marked one's.
+func TestAWheelOrAPasteSpendsTheMark(t *testing.T) {
+	for _, ev := range []tea.Msg{tea.MouseWheelMsg{Button: tea.MouseWheelDown}, tea.PasteMsg{Content: "x"}} {
+		next := marked(loaded(t, 100), "/dev/pts/7")
+		next, _ = next.Update(ev)
+		next, _ = next.Update(keyPress("down"))
+		if got := next.(Model).askedBy; got != "" {
+			t.Errorf("after %T a key asked as %q", ev, got)
+		}
+	}
+}
+
 func TestAMarkLapsesAfter300ms(t *testing.T) {
 	t0 := time.Date(2026, 11, 8, 9, 0, 0, 0, time.UTC)
 	if got := (clientMark{"/dev/pts/7", t0}).spend(t0.Add(301 * time.Millisecond)); got != "" {
