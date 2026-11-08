@@ -44,14 +44,21 @@ public enum InputMark {
 
 /// The agent of the pane this app jumped into. The console and the desk share one tmux, so a
 /// pane signal may answer another screen's jump: only one that comes within `window` of this
-/// app's own mark counts, once for each mark.
+/// app's own mark counts, once for each mark. The agent goes once the terminal is back on the
+/// console for `settle`: a redraw split across reads may hide a pane's way back for a moment.
 public struct PaneAgent: Sendable {
     public static let window: Duration = .seconds(1)
+    public static let settle: Duration = .milliseconds(300)
 
     private var markedAt: ContinuousClock.Instant?
+    private var inPane = false
+    private var awaySince: ContinuousClock.Instant?
     public private(set) var agent: String?
 
     public init() {}
+
+    /// The way back has gone from the screen, and the agent goes if it stays away for `settle`.
+    public var leaving: Bool { awaySince != nil }
 
     public mutating func marked(at now: ContinuousClock.Instant) {
         markedAt = now
@@ -60,9 +67,29 @@ public struct PaneAgent: Sendable {
     public mutating func signal(_ s: ConsoleSignal, at now: ContinuousClock.Instant) {
         guard s.pane != nil, let mark = markedAt else { return }
         markedAt = nil
-        if now - mark <= Self.window {
-            agent = s.agent
+        guard now - mark <= Self.window else { return }
+        agent = s.agent
+        // The jump has not landed yet: the console still shows.
+        inPane = false
+        awaySince = nil
+    }
+
+    /// Whether the terminal shows a pane's way back at `now`. True when the agent just went.
+    public mutating func shows(pane: Bool, at now: ContinuousClock.Instant) -> Bool {
+        if pane {
+            inPane = true
+            awaySince = nil
+            return false
         }
+        guard inPane else { return false }
+        let since = awaySince ?? now
+        awaySince = since
+        guard now - since >= Self.settle else { return false }
+        inPane = false
+        awaySince = nil
+        let had = agent != nil
+        left()
+        return had
     }
 
     /// Back on the console: the pane's agent no longer gets the keys.

@@ -181,7 +181,7 @@ private struct TerminalRepresentable: UIViewRepresentable {
         terminal.tapRaisesKeyboard = !connection.isDemo
         terminal.onFocus = { [weak belts] focused in belts?.focusChanged(focused) }
         connection.onAgent = { agent in belts.agentChanged(agent) }
-        belts.onLeftPane = { [weak connection] in connection?.leftThePane() }
+        belts.onPaneSeen = { [weak connection] inPane in connection?.paneSeen(inPane) }
         #if DEBUG
         let isDemo = connection.isDemo
         // The UI test's way to a real host's first tap, on the demo's screens.
@@ -255,9 +255,8 @@ private final class Belts {
     /// Commands go live only once the screen has stayed the agent's pane this long.
     private static let liveDelay: Duration = .milliseconds(300)
     private var goingLive: Task<Void, Never>?
-    private var wasInPane = false
-    /// The terminal went back from a pane to the console.
-    var onLeftPane: () -> Void = {}
+    /// Whether the terminal shows a pane's way back, at each live check.
+    var onPaneSeen: @MainActor (Bool) -> Void = { _ in }
 
     init(terminal: ConsoleTerminalView, screen: HeldScreen, isDemo: Bool) {
         self.terminal = terminal
@@ -319,9 +318,7 @@ private final class Belts {
     /// Off at once; on only once the pane has shown for `liveDelay`, so a screen that flickers
     /// past a pane never lights the keys.
     private func checkLive() {
-        let inPane = terminal?.inTmuxPane == true
-        if wasInPane && !inPane { onLeftPane() }
-        wasInPane = inPane
+        onPaneSeen(terminal?.inTmuxPane == true)
         guard paneShows else {
             goingLive?.cancel()
             goingLive = nil
@@ -424,6 +421,8 @@ final class ConsoleConnection {
     /// The console announced that it reads the app's marks; an older console never does.
     @ObservationIgnored private var consoleMarks = false
     @ObservationIgnored private var paneAgent = PaneAgent()
+    /// A second look at the screen once the way back has stayed away for `PaneAgent.settle`.
+    @ObservationIgnored private var settling: Task<Void, Never>?
     /// Called each time a read has reached the terminal.
     @ObservationIgnored var onOutput: @MainActor () -> Void = {}
     @ObservationIgnored private var task: Task<Void, Never>?
@@ -645,6 +644,8 @@ final class ConsoleConnection {
         var signal = AgentSignalFilter()
         consoleMarks = false
         paneAgent = PaneAgent()
+        settling?.cancel()
+        settling = nil
         onAgent(nil)
         for await chunk in output {
             sawOutput = true
@@ -667,10 +668,19 @@ final class ConsoleConnection {
         onAgent(paneAgent.agent)
     }
 
-    func leftThePane() {
-        guard paneAgent.agent != nil else { return }
-        paneAgent.left()
-        onAgent(nil)
+    /// Output may stop while the console shows, so a way back that went is looked for again.
+    func paneSeen(_ inPane: Bool) {
+        if paneAgent.shows(pane: inPane, at: ContinuousClock.now) {
+            onAgent(nil)
+            return
+        }
+        guard paneAgent.leaving, settling == nil else { return }
+        settling = Task { [weak self] in
+            try? await Task.sleep(for: PaneAgent.settle)
+            guard let self, !Task.isCancelled else { return }
+            self.settling = nil
+            self.paneSeen(self.terminal?.inTmuxPane == true)
+        }
     }
 
     private var terminalSize: (cols: Int, rows: Int) {

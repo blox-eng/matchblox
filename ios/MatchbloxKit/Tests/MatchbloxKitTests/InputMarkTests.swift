@@ -58,4 +58,55 @@ final class InputMarkTests: XCTestCase {
         p.signal(ConsoleSignal("claude;pane=%12"), at: t0 + .milliseconds(100))
         XCTAssertEqual(p.agent, "claude")
     }
+
+    /// An own jump into claude's pane at t0, whose way back shows from t0 + 100 ms.
+    private func inClaudesPane(at t0: ContinuousClock.Instant) -> PaneAgent {
+        var p = PaneAgent()
+        p.marked(at: t0)
+        p.signal(ConsoleSignal("claude;pane=%12"), at: t0 + .milliseconds(50))
+        XCTAssertFalse(p.shows(pane: true, at: t0 + .milliseconds(100)))
+        return p
+    }
+
+    func testAMomentWithNoWayBackKeepsTheAgent() {
+        let t0 = ContinuousClock.now
+        var p = inClaudesPane(at: t0)
+        XCTAssertFalse(p.shows(pane: false, at: t0 + .milliseconds(200)))
+        XCTAssertTrue(p.leaving)
+        XCTAssertFalse(p.shows(pane: true, at: t0 + .milliseconds(300)))
+        XCTAssertFalse(p.leaving)
+        XCTAssertFalse(p.shows(pane: false, at: t0 + .milliseconds(400)))
+        XCTAssertFalse(p.shows(pane: false, at: t0 + .milliseconds(650)))
+        XCTAssertEqual(p.agent, "claude")
+    }
+
+    func testBackOnTheConsoleTheAgentGoes() {
+        let t0 = ContinuousClock.now
+        var p = inClaudesPane(at: t0)
+        XCTAssertFalse(p.shows(pane: false, at: t0 + .milliseconds(200)))
+        XCTAssertTrue(p.shows(pane: false, at: t0 + .milliseconds(200) + PaneAgent.settle))
+        XCTAssertNil(p.agent)
+        XCTAssertFalse(p.leaving)
+    }
+
+    func testTheConsoleBeforeTheJumpLandsKeepsTheAgent() {
+        var p = PaneAgent()
+        let t0 = ContinuousClock.now
+        p.marked(at: t0)
+        p.signal(ConsoleSignal("claude;pane=%12"), at: t0)
+        XCTAssertFalse(p.shows(pane: false, at: t0))
+        XCTAssertFalse(p.shows(pane: false, at: t0 + .seconds(2)))
+        XCTAssertFalse(p.leaving)
+        XCTAssertEqual(p.agent, "claude")
+    }
+
+    func testANewJumpFromTheConsoleKeepsItsAgent() {
+        let t0 = ContinuousClock.now
+        var p = inClaudesPane(at: t0)
+        XCTAssertFalse(p.shows(pane: false, at: t0 + .milliseconds(200)))
+        p.marked(at: t0 + .milliseconds(250))
+        p.signal(ConsoleSignal("codex;pane=%3"), at: t0 + .milliseconds(300))
+        XCTAssertFalse(p.shows(pane: false, at: t0 + .milliseconds(700)))
+        XCTAssertEqual(p.agent, "codex")
+    }
 }
