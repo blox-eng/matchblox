@@ -17,7 +17,8 @@ All notable changes to matchblox are in this file. The format follows
   screen that asked. Sessions shows the selected agent's live screen,
   read-only; the wheel scrolls it back. The phone's command keys type into
   the agent's pane. The key-giving chat is gone; the demo shows a stand-in
-  for the pane. ([#334](https://github.com/blox-eng/matchblox/issues/334))
+  for the pane. A session you go into while the stoker rests is yours: the merge
+  guard lets it be. ([#334](https://github.com/blox-eng/matchblox/issues/334))
 
 ## [0.35.0] - 2026-11-07
 

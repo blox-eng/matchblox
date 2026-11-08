@@ -540,3 +540,56 @@ func TestASwitchJumpsTheClientThatAsked(t *testing.T) {
 		t.Errorf("ran %q, want the pane marked with the new agent %q (%v)", *ran, sw.Agent, err)
 	}
 }
+
+// intoActs are the take-over acts the console sent.
+func intoActs(f *fakeConn) []string {
+	var out []string
+	for _, id := range recIDs(f.acts()) {
+		if strings.HasPrefix(id, proto.IntoPrefix) {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func TestGoingInWhileTheStokerRestsTakesTheSessionOver(t *testing.T) {
+	m, f := loadedWith(t, 100, restingState())
+	ran := recordRuns(&m)
+	s, _ := m.selectedSession()
+	_, cmd := key(m, "enter")
+	drain(cmd)
+	if got := intoActs(f); len(got) != 1 || got[0] != proto.IntoPrefix+s.Pane {
+		t.Fatalf("into acts %q, want into:%s", got, s.Pane)
+	}
+	if len(*ran) != 1 || (*ran)[0][1] != "switch-client" {
+		t.Errorf("ran %q, want the jump", *ran)
+	}
+}
+
+func TestGoingInWhileTheStokerIsInChargeLeavesItTheSession(t *testing.T) {
+	st := nightState()
+	st.Stoker.Asked = true // n kept it on: Enter asks no more
+	m, f := loadedWith(t, 100, st)
+	ran := recordRuns(&m)
+	_, cmd := key(m, "enter")
+	drain(cmd)
+	if got := intoActs(f); len(got) != 0 {
+		t.Fatalf("into acts %q while the stoker is in charge", got)
+	}
+	if len(*ran) != 1 {
+		t.Errorf("ran %q, want the jump", *ran)
+	}
+}
+
+func TestTakingOverThenGoingInFreesTheSession(t *testing.T) {
+	m, f := loadedWith(t, 100, nightState())
+	recordRuns(&m)
+	s, _ := m.selectedSession()
+	next, _ := key(m, "enter")
+	_, cmd := key(next, "y")
+	drain(cmd)
+	got := recIDs(f.acts())
+	if !slices.Contains(got, "stoker:rest") || !slices.Contains(got, proto.IntoPrefix+s.Pane) {
+		t.Fatalf("acts %q, want stoker:rest and into:%s", got, s.Pane)
+	}
+}

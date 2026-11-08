@@ -293,6 +293,16 @@ func (m Model) touchRest() (Model, tea.Cmd) {
 	return m, m.sendTo(host, proto.Act{RecID: "stoker:touch", Which: "primary"})
 }
 
+// tookOver tells host's service that the person went into pane while its
+// stoker rests: they took the session over, so the merge guard lets it be.
+// While the stoker is in charge, the session stays the stoker's.
+func (m *Model) tookOver(host, pane string) tea.Cmd {
+	if !m.restingOn(host) || m.unsent(host) != "" {
+		return nil
+	}
+	return m.sendTo(host, proto.Act{RecID: proto.IntoPrefix + pane, Which: "primary"})
+}
+
 // touchedAt keeps now as the last key that kept host's rest.
 func (m *Model) touchedAt(host string) {
 	touched := maps.Clone(m.touched)

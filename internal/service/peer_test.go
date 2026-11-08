@@ -452,3 +452,27 @@ func TestThePaneOfATerminal(t *testing.T) {
 		t.Error("a tmux that failed placed the sender")
 	}
 }
+
+// TestGoingInFromAConsoleFreesThePane: the person who went into a pane after
+// they took the session over types there, which the guard cannot see, so the
+// pane is theirs. A command, or a driven pane that says it is a console, frees
+// nothing.
+func TestGoingInFromAConsoleFreesThePane(t *testing.T) {
+	s, _, _ := guardedRun(t)
+	s.PeerPane = func(pid int) string { return map[int]string{100: "%1"}[pid] }
+	if res := actOver(t, s, 777, proto.ClientCLI, proto.Act{RecID: proto.IntoPrefix + "%1"}); res.Err != intoOnlyFromConsole {
+		t.Fatalf("a command's into: %+v", res)
+	}
+	if res := actOver(t, s, 100, proto.ClientConsole, proto.Act{RecID: proto.IntoPrefix + "%1"}); res.Err != intoOnlyFromConsole {
+		t.Fatalf("a driven pane's into: %+v", res)
+	}
+	if !denies(t, s, "%1", "gh pr merge 4556") {
+		t.Fatal("an into: from no person freed the pane")
+	}
+	if res := actOver(t, s, 555, proto.ClientConsole, proto.Act{RecID: proto.IntoPrefix + "%1"}); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if denies(t, s, "%1", "gh pr merge 4556") {
+		t.Fatal("the person went in, and the pane stayed the stoker's")
+	}
+}

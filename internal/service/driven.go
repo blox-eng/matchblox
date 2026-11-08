@@ -231,6 +231,22 @@ func (s *Service) undrive(pane string) {
 	})
 }
 
+// intoOnlyFromConsole refuses an into: act that no person at a console sent:
+// a matchblox command never frees a pane.
+const intoOnlyFromConsole = "only a person at a console takes a session over"
+
+// into lets go of a pane the person went into from a console after they
+// took the session over. What they type there is theirs, and the guard
+// cannot see it.
+func (s *Service) into(a proto.Act, pane string) proto.Result {
+	if !s.aConsole(a.Console, a) {
+		return proto.Result{Err: intoOnlyFromConsole}
+	}
+	s.touchStoker(s.now()) // the builder acts: a stoker that rests goes on resting
+	s.undrive(pane)
+	return proto.Result{}
+}
+
 // grantAct gives the go a waiting step needs (stoker:grant, Text: the
 // id of the step's entry): its merge, release or deploy in that step's
 // pane, once. The stoker hears of it at its next wake.

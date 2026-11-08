@@ -146,6 +146,10 @@ const WatchPrefix = "watch:"
 // a key name of KeyNames, or LitPrefix and the text to type.
 const KeysPrefix = "keys:"
 
+// IntoPrefix starts the act a console sends when the person went into the
+// pane after it while the host's stoker rests: they took the session over.
+const IntoPrefix = "into:"
+
 // ChainPrefix starts an act from an agent's pane that asks to chain with the
 // agent in the pane after it. After it, "-" leaves the chain, "off" refuses
 // chains and "on" takes them again.

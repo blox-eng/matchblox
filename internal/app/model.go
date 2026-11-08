@@ -1091,7 +1091,7 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	if m.opt.Host != "" || m.opt.OutsideTmux || !remote.ClientTTY(f.Client) {
 		return m, nil
 	}
-	return m, m.focusJump(f.Client, s.Pane)
+	return m, tea.Batch(m.tookOver(m.opt.Host, s.Pane), m.focusJump(f.Client, s.Pane))
 }
 
 // clients is how this console reads the clients of its tmux server.
@@ -1442,8 +1442,18 @@ func (m *Model) refuse() {
 }
 
 // confirm runs an action the person consented to: a Nav step here, any
-// other on the service.
+// other on the service. A jump into a pane tells its host first if the
+// person takes the session over by it.
 func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
+	if !a.nav || a.pane == "" {
+		return m.confirmed(a)
+	}
+	took := m.tookOver(m.hostOf(a), a.pane)
+	next, cmd := m.confirmed(a)
+	return next, tea.Batch(took, cmd)
+}
+
+func (m Model) confirmed(a action) (tea.Model, tea.Cmd) {
 	if m.opt.Demo != "" && a.leavesTheDemo() {
 		m.flash = m.opt.Demo
 		return m, nil
