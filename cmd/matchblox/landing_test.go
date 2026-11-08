@@ -115,3 +115,24 @@ func TestTheLandingIdsAreUnique(t *testing.T) {
 		seen[id] = true
 	}
 }
+
+// The pointer meets the match under it: a match's glow and flame reach over
+// its neighbour's head, so they must not catch the pointer (#341 review).
+func TestTheChainHoverFindsTheMatchUnderThePointer(t *testing.T) {
+	css, err := os.ReadFile("../../www/styles.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(css, []byte(".domino .glow, .domino .flame, .domino .smoke { pointer-events: none; }")) {
+		t.Error("the chain's glow, flame and smoke catch the pointer, so a hover lifts the next match")
+	}
+}
+
+// The console replay is hidden from screen readers; its label is their only
+// account of what it shows.
+func TestTheConsoleSaysWhatItShows(t *testing.T) {
+	m := regexp.MustCompile(`id="console" aria-label="([^"]*)"`).FindSubmatch(landingPage(t))
+	if m == nil || !bytes.Contains(m[1], []byte("who waits for you")) {
+		t.Errorf("the console's label does not say what the replay shows: %q", m)
+	}
+}

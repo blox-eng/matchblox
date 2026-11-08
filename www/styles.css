@@ -294,6 +294,7 @@ footer a { color: var(--muted); }
 .domino .fire { fill: var(--flame); }
 .domino .core { fill: var(--flame-core); }
 .domino .glow { fill: url(#chain-glow); opacity: 0; transition: opacity .6s; }
+.domino .glow, .domino .flame, .domino .smoke { pointer-events: none; }
 .domino g.lit .flame, .domino g.lit .glow { opacity: 1; }
 .domino g.lit .head, .domino g.out .head { fill: var(--match-burnt); }
 .domino g.lit .char, .domino g.out .char { opacity: .9; }
