@@ -728,15 +728,15 @@ func (m Model) typeWhere(f *form, text string) {
 	if f.picked {
 		f.where, f.picked, f.query = "", false, ""
 	}
-	f.where = cutField(f.where + text)
+	f.where = cutField(f.where+text, maxField)
 	f.listOpen = true
 	m.refreshWhere(f, "")
 }
 
-// cutField is s cut at maxField runes.
-func cutField(s string) string {
-	if r := []rune(s); len(r) > maxField {
-		return string(r[:maxField])
+// cutField is s cut at n runes.
+func cutField(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n])
 	}
 	return s
 }

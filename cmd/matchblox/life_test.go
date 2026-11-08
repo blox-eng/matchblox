@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -105,6 +107,35 @@ func TestSwitchNamesThePaneAndTheAgent(t *testing.T) {
 	}
 	if a, err = switchAct(cliDoc(), []string{"api"}, switchOpts{agent: "codex", anyway: true}, ""); err != nil || !decode(a).Anyway {
 		t.Fatalf("%+v %v", a, err)
+	}
+	// --extra adds to the service's switch prompt, as the console's extra field.
+	if a, err = switchAct(cliDoc(), []string{"api"}, switchOpts{agent: "codex", extra: "keep CSV only"}, ""); err != nil || decode(a).Handoff != proto.Handoff("keep CSV only") {
+		t.Fatalf("%+v %v", a, err)
+	}
+	long := strings.Repeat("a", proto.ExtraLimit()+1)
+	if _, err = switchAct(cliDoc(), []string{"api"}, switchOpts{agent: "codex", extra: long}, ""); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("the extras are longer than %d characters", proto.ExtraLimit())) {
+		t.Fatalf("too-long --extra: %v", err)
+	}
+	// A flag conflict is said before the service is asked anything.
+	noSock := filepath.Join(t.TempDir(), "no.sock")
+	for _, h := range []string{"x", ""} { // "" is --handoff "": no task
+		if err := cliSwitch([]string{"api"}, switchOpts{agent: "codex", extra: "y", handoff: &h}, io.Discard, noSock, nil); err == nil || !strings.HasPrefix(err.Error(), "--extra adds to the default handoff") {
+			t.Fatalf("--extra with --handoff %q and no service: %v", h, err)
+		}
+	}
+	if err := cliSwitch([]string{"api"}, switchOpts{agent: "codex", extra: "y", preview: true}, io.Discard, noSock, nil); err == nil || err.Error() != "--preview reads the evidence and sends nothing: drop --extra" {
+		t.Fatalf("--extra with --preview and no service: %v", err)
+	}
+	if err := (switchOpts{agent: "codex", extra: "  ", preview: true}).check(); err != nil {
+		t.Fatalf("blank --extra with --preview: %v", err)
+	}
+	// The flag reaches the switch through the CLI's own parsing.
+	if err := run([]string{"switch", "api", "--agent", "codex", "--extra", "x", "--handoff", "y"}); err == nil || !strings.HasPrefix(err.Error(), "--extra adds to the default handoff") {
+		t.Fatalf("matchblox switch --extra --handoff: %v", err)
+	}
+	custom := "only explain the test"
+	if _, err = switchAct(cliDoc(), []string{"api"}, switchOpts{agent: "codex", extra: "x", handoff: &custom}, ""); err == nil || err.Error() != "--extra adds to the default handoff, which --handoff replaces: give one of them" {
+		t.Fatalf("both flags: %v", err)
 	}
 }
 

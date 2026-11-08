@@ -61,13 +61,29 @@ func lifeAct(doc state.Doc, cmd string, words []string, anyway bool, from string
 type switchOpts struct {
 	agent   string
 	handoff *string
+	extra   string // added to the default handoff
 	anyway  bool
 	preview bool
 }
 
+// check refuses flags that cannot go together, before any service call.
+func (o switchOpts) check() error {
+	extra := strings.TrimSpace(o.extra)
+	switch {
+	case extra == "":
+		return nil
+	case o.preview:
+		return errors.New("--preview reads the evidence and sends nothing: drop --extra")
+	case o.handoff != nil:
+		return errors.New("--extra adds to the default handoff, which --handoff replaces: give one of them")
+	}
+	return proto.CheckExtra(extra)
+}
+
 // switchAct is the act of matchblox switch <who> --agent <name>: the
 // session's pane runs another agent, started from the handoff line (the
-// default one unless --handoff gives another, or none when it is empty).
+// default one with any --extra, unless --handoff gives another, or none
+// when it is empty).
 // The service holds every guard.
 func switchAct(doc state.Doc, words []string, o switchOpts, from string) (proto.Act, error) {
 	const usage = "matchblox switch <who> --agent <name>"
@@ -88,8 +104,14 @@ func switchAct(doc state.Doc, words []string, o switchOpts, from string) (proto.
 	}
 	sw := proto.SwitchAgent{Agent: o.agent, Handoff: proto.DefaultHandoff, Anyway: o.anyway}
 	sw.ExpectedPID, sw.ExpectedStart = sess.PID, sess.Start
-	if o.handoff != nil {
+	if err := o.check(); err != nil {
+		return proto.Act{}, err
+	}
+	switch extra := strings.TrimSpace(o.extra); {
+	case o.handoff != nil:
 		sw.Handoff = *o.handoff
+	case extra != "":
+		sw.Handoff = proto.Handoff(extra)
 	}
 	// The account the console would show: the last one if it is still
 	// listed, else default.
@@ -302,6 +324,9 @@ func sessionOf(ran [][]string) string {
 // cliSwitch switches the session's agent and, when jump is not nil, takes
 // the tmux client to its pane: only after the switch ran.
 func cliSwitch(words []string, o switchOpts, w io.Writer, path string, jump func(argv []string) error) error {
+	if err := o.check(); err != nil {
+		return err
+	}
 	doc, err := readDoc(path, staleAfter)
 	if err != nil {
 		return err
