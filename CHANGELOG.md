@@ -6,6 +6,12 @@ All notable changes to matchblox are in this file. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The page tells one story.** matchblox.com reads as one matchbox, from
+  the strike to the last match, in half the words. The first match glows
+  until you touch the chain, and a shared link shows a card.
+
 ## [0.35.0] - 2026-11-07
 
 ### Changed
