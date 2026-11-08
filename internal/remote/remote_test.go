@@ -543,6 +543,20 @@ func TestValidUserKey(t *testing.T) {
 	}
 }
 
+func TestAgentUnmarkAllowedIsExact(t *testing.T) {
+	if !slices.Equal(AgentUnmarkArgv("%3"), []string{"tmux", "set-option", "-p", "-u", "-t", "%3", "@matchblox_agent"}) {
+		t.Errorf("unmark argv %q", AgentUnmarkArgv("%3"))
+	}
+	for argv, want := range map[string]bool{"%3": true, "%3;x": false, "3": false} {
+		if got := AgentUnmarkAllowed(AgentUnmarkArgv(argv)); got != want {
+			t.Errorf("AgentUnmarkAllowed(%q) = %v", argv, got)
+		}
+	}
+	if AgentUnmarkAllowed(AgentMarkArgv("%3", "claude")) {
+		t.Error("a mark passed as an unmark")
+	}
+}
+
 func TestAgentMarkAllowedIsExact(t *testing.T) {
 	for _, c := range []struct {
 		argv []string

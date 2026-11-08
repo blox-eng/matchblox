@@ -183,7 +183,7 @@ type connectedMsg struct {
 func (m Model) onHost(a action) (tea.Model, tea.Cmd) {
 	argv := a.steps[0]
 	if a.nav && !m.opt.OutsideTmux {
-		run, undo, read := m.opt.Run, a.undo, m.readClients()
+		run, undo, read, host := m.opt.Run, a.undo, m.readClients(), m.hostOf(a)
 		return m, func() tea.Msg {
 			if a.deskLocal != nil {
 				if _, desk := read(); desk != "" {
@@ -194,7 +194,7 @@ func (m Model) onHost(a action) (tea.Model, tea.Cmd) {
 			if err != nil && undo != nil {
 				_ = run(undo) // the list stopped after its new-session: its ssh would run on, unseen
 			}
-			return ranMsg{cmd: a.String(), err: err, jumped: a.pane}
+			return ranMsg{cmd: a.String(), err: err, jumped: a.pane, host: host}
 		}
 	}
 	m.flash = "running: " + shellLine(argv)

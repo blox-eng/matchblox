@@ -195,3 +195,21 @@ func TestMarkKeyArgvRunsOnlyAtTheConsole(t *testing.T) {
 		}
 	}
 }
+
+func TestViewerHookArgvTellsOnlyTheConsole(t *testing.T) {
+	argv := ViewerHookArgv()
+	line := strings.Join(argv, " ")
+	for _, want := range []string{"client-attached[950]", "client-session-changed[950]", "if-shell -F '" + atConsole + "'",
+		"send-keys -t #{pane_id} -H " + hexKeys(keycmd.ViewerKey)} {
+		if !strings.Contains(line, want) {
+			t.Errorf("ViewerHookArgv lacks %q: %s", want, line)
+		}
+	}
+	for i, a := range argv {
+		if i == 0 || argv[i-1] == ";" {
+			if a != "tmux" && a != "set-hook" {
+				t.Errorf("ViewerHookArgv runs %q", a)
+			}
+		}
+	}
+}

@@ -113,9 +113,9 @@ func (m Model) sizedFor(w, h int) bool {
 	return m.screen.Cols > 0 && m.screen.Cols == w && m.screen.Rows <= h
 }
 
-// sizeDwell is how long the chat's session stays selected before the
-// agent's window takes the chat's size, unless the chat takes the keys:
-// a cursor that passes a row resizes no agent.
+// sizeDwell is how long the live view's session stays selected before the
+// agent's window takes the view's size: a cursor that passes a row resizes
+// no agent.
 const sizeDwell = time.Second
 
 // sizeDueMsg comes when a selection may have rested sizeDwell.
@@ -512,6 +512,7 @@ func (m Model) openStandIn(pane string) Model {
 func (m Model) leaveStandIn() Model {
 	s, _ := m.selectedSession()
 	m.viewOpen, m.standIn = false, false
+	m.keysOut.queue = nil // typed at a screen that is gone; the key in flight still answers
 	return m.nextAfter(s.Pane)
 }
 
@@ -541,6 +542,9 @@ func (m Model) keepView() Model {
 		m.viewOpen, m.standIn = false, false
 	case m.screen.Pane == s.Pane && m.screen.Gone:
 		m.viewOpen, m.standIn, m.flash = false, false, "That session ended."
+	}
+	if !m.standIn {
+		m.keysOut.queue = nil
 	}
 	return m
 }

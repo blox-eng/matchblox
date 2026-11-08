@@ -175,11 +175,7 @@ func TestASecondTapAsksAndYRunsIt(t *testing.T) {
 		t.Fatalf("the second tap ran before the answer: %q", footerOf(next))
 	}
 	next, cmd = key(next, "y")
-	for _, c := range cmd().(tea.BatchMsg) {
-		if c != nil {
-			next.Update(c())
-		}
-	}
+	fed(next, cmd)
 	if got := recIDs(f.acts()); len(got) != 1 || got[0] != "stoker:rest" || ran == nil {
 		t.Fatalf("acts %v, ran %q", got, ran)
 	}

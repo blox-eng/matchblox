@@ -435,3 +435,56 @@ func TestTheStandInSendsOneKeyAtATime(t *testing.T) {
 		t.Errorf("a key after the queue emptied: sent %+v", keyActs(f))
 	}
 }
+
+// The queue holds maxKeysAhead keys behind the one in flight; the next key
+// is refused, and the person is told, not dropped unseen.
+func TestTheKeyQueueRefusesTheKeyBeyondItsRoom(t *testing.T) {
+	m := standIn(t, 44)
+	f := m.conn.(*fakeConn)
+	for range maxKeysAhead + 2 {
+		m = pressKeys(t, m, "down")
+	}
+	if len(keyActs(f)) != 1 || len(m.keysOut.queue) != maxKeysAhead {
+		t.Fatalf("sent %d, queued %d", len(keyActs(f)), len(m.keysOut.queue))
+	}
+	if want := "not sent: 64 keys still wait for flint-auth"; m.flash != want {
+		t.Errorf("flash %q, want %q", m.flash, want)
+	}
+}
+
+// A new connection hears no answer for the old one's keys: the next key
+// goes at once, and an answer that says no is shown and the queue goes on.
+func TestANewConnectionOrAnErrorUnsticksTheKeys(t *testing.T) {
+	m := standIn(t, 44)
+	pane := paneNamedIn(t, m, "flint-auth")
+	m = pressKeys(t, m, "down", "down")
+	next, cmd := m.Update(resultMsg{ActID: keyActID + pane, Err: "the agent left"})
+	drain(cmd)
+	if nm := next.(Model); nm.flash != "the agent left" || len(keyActs(m.conn.(*fakeConn))) != 2 {
+		t.Fatalf("after an error: flash %q, sent %d", nm.flash, len(keyActs(m.conn.(*fakeConn))))
+	}
+	m = pressKeys(t, next.(Model), "down")
+	fresh := newFake()
+	m.conn = fresh
+	if m = pressKeys(t, m, "enter"); len(keyActs(fresh)) != 1 {
+		t.Errorf("a key on a new connection sent %+v", keyActs(fresh))
+	}
+}
+
+// Keys still queued when the person leaves the stand-in go nowhere: they
+// were typed at a screen that is gone.
+func TestLeavingTheStandInDropsItsQueuedKeys(t *testing.T) {
+	m := standIn(t, 44)
+	f := m.conn.(*fakeConn)
+	pane := paneNamedIn(t, m, "flint-auth")
+	m = pressKeys(t, m, "down", "down", "down")
+	next, _ := m.Update(uv.UnknownApcEvent(homeKey))
+	next, cmd := next.Update(resultMsg{ActID: keyActID + pane})
+	drain(cmd)
+	if got := keyActs(f); len(got) != 1 {
+		t.Errorf("after the way back sent %d keys, want the one in flight", len(got))
+	}
+	if next.(Model).keysOut.busy {
+		t.Error("the queue stayed busy")
+	}
+}

@@ -71,32 +71,41 @@ func signalAgent(agent string) string {
 	return keycmd.OtherAgent
 }
 
+// paneMark is the argv that names pane's agent for the command keys, or
+// takes an old name off when agent has none; nil when neither is allowed.
+func paneMark(pane, agent string) []string {
+	if mark := remote.AgentMarkArgv(pane, agent); remote.AgentMarkAllowed(mark) {
+		return mark
+	}
+	if unmark := remote.AgentUnmarkArgv(pane); remote.AgentUnmarkAllowed(unmark) {
+		return unmark
+	}
+	return nil
+}
+
 // intoCmd runs a jump of this machine's tmux off the update loop. A jump
 // that names its client moves that client alone, and marks the pane with
 // its agent first; a client that left is refused, never another moved.
 func (m Model) intoCmd(a action) tea.Cmd {
 	run := m.opt.Run
-	if !a.asker {
-		return func() tea.Msg { return runNav(a, run) }
+	if !a.asker || m.opt.OutsideTmux || m.opt.Pane == "" {
+		return func() tea.Msg { return runNav(a, run) } // no client list to read: the client tmux has
 	}
-	attached, read, mark := m.clients(), m.readClients(), remote.AgentMarkArgv(a.pane, m.agentIn(a))
+	read, mark := m.readClients(), paneMark(a.pane, m.agentIn(a))
 	return func() tea.Msg {
 		cs, desk := read()
-		if a.tty = cmp.Or(a.tty, desk); a.tty == "" {
-			return runNav(a, run)
+		if a.tty = cmp.Or(a.tty, desk); a.tty == "" || cs == nil { // nil: tmux did not list its clients
+			return ranMsg{cmd: "tmux switch-client -t " + a.pane, err: errNoClient}
 		}
 		focus := remote.FocusArgv(a.tty, a.pane)
 		cmd := "tmux switch-client -c " + a.tty + " -t " + a.pane
-		ttys, err := attached()
 		switch {
-		case err != nil:
-			return ranMsg{cmd: cmd, err: err}
-		case !slices.Contains(ttys, a.tty):
-			return ranMsg{cmd: cmd, err: errNotAttached}
+		case !slices.ContainsFunc(cs, func(c consoleClient) bool { return c.here && c.tty == a.tty }):
+			return ranMsg{cmd: cmd, err: errNotAttached} // a mark moves only a screen that shows the console
 		case len(a.steps) != 1 || !remote.NavAllowed(a.steps[0]) || !remote.FocusAllowed(focus):
 			return ranMsg{cmd: cmd, err: errNavRefused}
 		}
-		if remote.AgentMarkAllowed(mark) {
+		if mark != nil {
 			_ = run(mark) // the mark only names the agent: the jump goes without it
 		}
 		if err := run(focus); err != nil {

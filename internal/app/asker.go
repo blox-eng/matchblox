@@ -13,6 +13,10 @@ import (
 
 var errNotAttached = errors.New("this device is not attached: reconnect")
 
+// errNoClient is a jump that cannot tell which screen asked: tmux did not
+// list its clients, and no guess moves another person's screen.
+var errNoClient = errors.New("tmux did not say which screen asked: nothing moved, try again")
+
 // consoleClient is a client of this console's tmux server: its tty, its
 // last activity, and whether it shows the console's pane.
 type consoleClient struct {

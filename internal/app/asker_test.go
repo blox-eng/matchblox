@@ -84,3 +84,20 @@ func TestAMarkOfNoDeviceIsDropped(t *testing.T) {
 		t.Errorf("marked %q", got)
 	}
 }
+
+// Only a whole mark of a tty marks: a cut, empty or foreign sequence leaves
+// no mark.
+func TestAMarkThatIsNotWholeIsDropped(t *testing.T) {
+	m := loaded(t, 100)
+	for _, apc := range []string{
+		keycmd.MarkedPrefix + "/dev/pts/7",           // no ST
+		keycmd.MarkedPrefix + "\x1b\\",               // no tty
+		keycmd.MarkedPrefix + "/dev/pts/7\x07\x1b\\", // a control byte
+		"\x1b_Gi=31;OK\x1b\\",                        // kitty's answer
+	} {
+		next, cmd := m.Update(uv.UnknownApcEvent(apc))
+		if got := next.(Model).marked.tty; got != "" || cmd != nil {
+			t.Errorf("%q marked %q, cmd %v", apc, got, cmd != nil)
+		}
+	}
+}

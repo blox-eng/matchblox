@@ -275,7 +275,7 @@ func (m Model) answerTakeOver(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		nm.flash = say
 		next = nm
 	}
-	return next, tea.Batch(send, run)
+	return next, tea.Sequence(send, run) // the rest goes first: the jump's into: needs it
 }
 
 // touchRest tells the service of the host the selected row acts on, at

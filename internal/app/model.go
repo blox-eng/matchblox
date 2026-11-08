@@ -182,6 +182,7 @@ type ranMsg struct {
 	cmd     string
 	err     error
 	jumped  string // the pane a jump went to
+	host    string // the host of that pane; "" this console's
 	tty     string // the client the jump moved; "" whichever tmux picked
 	watched bool   // another client still shows the console
 }
@@ -932,7 +933,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.endRec("nav", proto.Result{Ran: [][]string{strings.Fields(msg.cmd)}})
 		}
-		if errors.Is(msg.err, errNotAttached) {
+		if errors.Is(msg.err, errNotAttached) || errors.Is(msg.err, errNoClient) {
 			m.flash = msg.err.Error()
 			return m, nil
 		}
@@ -940,14 +941,18 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.flash = "failed: " + msg.cmd + ": " + msg.err.Error()
 			return m, nil
 		}
+		var took tea.Cmd
 		if msg.jumped != "" {
 			m = m.pairJumped(msg.tty, msg.jumped)
 			if !msg.watched {
 				m = m.nextAfter(msg.jumped)
 			}
+			if !m.opt.OutsideTmux { // outside, confirm told the host as the attach began
+				took = m.tookOver(cmp.Or(msg.host, m.opt.Host), msg.jumped)
+			}
 		}
 		toast := m.say("ran: " + msg.cmd)
-		return m, toast
+		return m, tea.Batch(took, toast)
 	case tea.PasteMsg:
 		// Only the ssh prompt and the form take a paste, in their field.
 		if m.ask != nil {
@@ -1096,7 +1101,7 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	if m.opt.Host != "" || m.opt.OutsideTmux || !remote.ClientTTY(f.Client) {
 		return m, nil
 	}
-	return m, tea.Batch(m.tookOver(m.opt.Host, s.Pane), m.focusJump(f.Client, s.Pane))
+	return m, m.focusJump(f.Client, s.Pane)
 }
 
 // clients is how this console reads the clients of its tmux server.
@@ -1125,7 +1130,7 @@ func tmuxClients() ([]string, error) {
 func (m Model) focusJump(tty, pane string) tea.Cmd {
 	clients, read, run := m.clients(), m.readClients(), m.opt.Run
 	agent := m.agentOfPane(pane)
-	say, mark := sayAgent(keycmd.PaneSignal(agent, pane), m.opt), remote.AgentMarkArgv(pane, agent)
+	say, mark := sayAgent(keycmd.PaneSignal(agent, pane), m.opt), paneMark(pane, agent)
 	return func() tea.Msg {
 		argv := remote.FocusArgv(tty, pane)
 		if !remote.FocusAllowed(argv) {
@@ -1140,7 +1145,7 @@ func (m Model) focusJump(tty, pane string) tea.Cmd {
 			}
 		}
 		jump := func() tea.Msg {
-			if remote.AgentMarkAllowed(mark) {
+			if mark != nil {
 				_ = run(mark) // the mark only names the agent: the jump goes without it
 			}
 			// The toast names the move, not the session the phone gets for it.
@@ -1447,10 +1452,11 @@ func (m *Model) refuse() {
 }
 
 // confirm runs an action the person consented to: a Nav step here, any
-// other on the service. A jump into a pane tells its host first if the
-// person takes the session over by it.
+// other on the service. Inside tmux a jump tells its host that the person
+// took the session over once it went (ranMsg). Outside, the attach returns
+// only when they leave the pane, so the host hears it as the jump starts.
 func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
-	if !a.nav || a.pane == "" {
+	if !a.nav || a.pane == "" || !m.opt.OutsideTmux {
 		return m.confirmed(a)
 	}
 	took := m.tookOver(m.hostOf(a), a.pane)

@@ -16,6 +16,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/logos"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
+	"github.com/blox-eng/matchblox/internal/sample"
 )
 
 func recordRuns(m *Model) *[][]string {
@@ -310,6 +311,17 @@ func fed(m tea.Model, cmd tea.Cmd) tea.Model {
 	return m
 }
 
+// settled is fed that also runs what m does with each message: a jump's
+// result sends the acts that follow it.
+func settled(m tea.Model, cmd tea.Cmd) tea.Model {
+	for _, msg := range cmdMsgs(cmd) {
+		var then tea.Cmd
+		m, then = m.Update(msg)
+		drain(then)
+	}
+	return m
+}
+
 func ranFocus(ran [][]string, tty, pane string) bool {
 	return slices.ContainsFunc(ran, func(a []string) bool { return slices.Equal(a, remote.FocusArgv(tty, pane)) })
 }
@@ -334,7 +346,7 @@ func TestAnUnmarkedEnterMovesTheDesk(t *testing.T) {
 
 func TestAMarkedKeyOfAGoneClientIsRefused(t *testing.T) {
 	m, ran := jumpRig(t, deskAndPad)
-	m.opt.Clients = func() ([]string, error) { return []string{"/dev/pts/1"}, nil }
+	m.opt.ClientList = clients("1794089220 /dev/pts/1 %99") // the iPad left after its mark
 	next, cmd := key(marked(m, "/dev/pts/7"), "enter")
 	next = fed(next, cmd)
 	if ranFocus(*ran, "/dev/pts/7", "%1") || ranFocus(*ran, "/dev/pts/1", "%1") {
@@ -345,13 +357,38 @@ func TestAMarkedKeyOfAGoneClientIsRefused(t *testing.T) {
 	}
 }
 
-func TestATmuxErrorJumpsAsBefore(t *testing.T) {
+// A jump whose clients tmux does not list moves no screen: a bare
+// switch-client would move the one tmux picks, often the phone.
+func TestATmuxErrorMovesNoScreen(t *testing.T) {
 	m, ran := jumpRig(t, deskAndPad)
 	m.opt.ClientList = func() (string, error) { return "", errors.New("no server running") }
-	_, cmd := key(m, "enter")
-	drain(cmd)
-	if want := [][]string{{"tmux", "switch-client", "-t", "%1"}}; !slices.EqualFunc(*ran, want, slices.Equal) {
-		t.Errorf("ran %q, want %q", *ran, want)
+	next, cmd := key(m, "enter")
+	next = fed(next, cmd)
+	if len(*ran) != 0 {
+		t.Errorf("ran %q", *ran)
+	}
+	if got := next.(Model).flash; got != errNoClient.Error() {
+		t.Errorf("flash %q", got)
+	}
+	m.marked = clientMark{"/dev/pts/7", time.Now()} // a marked key: the same words, not "reconnect"
+	next, cmd = key(m, "enter")
+	if got := fed(next, cmd).(Model).flash; got != errNoClient.Error() {
+		t.Errorf("a marked key's flash %q", got)
+	}
+}
+
+// A mark names a client that does not show the console: nothing moves it,
+// though it is attached to this tmux.
+func TestAMarkOfAClientElsewhereMovesNothing(t *testing.T) {
+	m, ran := jumpRig(t, deskAndPad+"\n1794089229 /dev/pts/9 %5")
+	m.marked = clientMark{"/dev/pts/9", time.Now()}
+	next, cmd := key(m, "enter")
+	next = fed(next, cmd)
+	if len(*ran) != 0 {
+		t.Errorf("ran %q", *ran)
+	}
+	if got := next.(Model).flash; !strings.Contains(got, errNotAttached.Error()) {
+		t.Errorf("flash %q", got)
 	}
 }
 
@@ -437,6 +474,19 @@ func TestTheSignalNamesThePaneBeforeTheJump(t *testing.T) {
 		t.Fatalf("the first message is %v, want %q", msgs, want.Msg)
 	}
 	if jump := [][]string{remote.AgentMarkArgv("%1", "claude"), remote.FocusArgv("/dev/pts/1", "%1")}; !slices.EqualFunc(*ran, jump, slices.Equal) {
+		t.Errorf("ran %q, want %q", *ran, jump)
+	}
+}
+
+// A jump into a pane of an agent with no command keys takes the old mark
+// off: the phone's command keys type no other agent's command there.
+func TestAJumpToAnAgentWithNoKeysUnmarksThePane(t *testing.T) {
+	m, ran := jumpRig(t, deskAndPad)
+	i := slices.IndexFunc(m.all.sessions, func(s sample.Session) bool { return s.Pane == "%1" })
+	m.all.sessions[i].Agent = "zsh"
+	_, cmd := key(m, "enter")
+	drain(cmd)
+	if jump := [][]string{remote.AgentUnmarkArgv("%1"), remote.FocusArgv("/dev/pts/1", "%1")}; !slices.EqualFunc(*ran, jump, slices.Equal) {
 		t.Errorf("ran %q, want %q", *ran, jump)
 	}
 }
@@ -560,8 +610,8 @@ func TestGoingInWhileTheStokerRestsTakesTheSessionOver(t *testing.T) {
 	m, f := loadedWith(t, 100, restingState())
 	ran := recordRuns(&m)
 	s, _ := m.selectedSession()
-	_, cmd := key(m, "enter")
-	drain(cmd)
+	next, cmd := key(m, "enter")
+	settled(next, cmd)
 	if got := intoActs(f); len(got) != 1 || got[0] != proto.IntoPrefix+s.Pane {
 		t.Fatalf("into acts %q, want into:%s", got, s.Pane)
 	}
@@ -575,8 +625,8 @@ func TestGoingInWhileTheStokerIsInChargeLeavesItTheSession(t *testing.T) {
 	st.Stoker.Asked = true // n kept it on: Enter asks no more
 	m, f := loadedWith(t, 100, st)
 	ran := recordRuns(&m)
-	_, cmd := key(m, "enter")
-	drain(cmd)
+	next, cmd := key(m, "enter")
+	settled(next, cmd)
 	if got := intoActs(f); len(got) != 0 {
 		t.Fatalf("into acts %q while the stoker is in charge", got)
 	}
@@ -590,10 +640,37 @@ func TestTakingOverThenGoingInFreesTheSession(t *testing.T) {
 	recordRuns(&m)
 	s, _ := m.selectedSession()
 	next, _ := key(m, "enter")
-	_, cmd := key(next, "y")
-	drain(cmd)
+	next, cmd := key(next, "y")
+	settled(next, cmd)
 	got := recIDs(f.acts())
-	if !slices.Contains(got, "stoker:rest") || !slices.Contains(got, proto.IntoPrefix+s.Pane) {
-		t.Fatalf("acts %q, want stoker:rest and into:%s", got, s.Pane)
+	if i, j := slices.Index(got, "stoker:rest"), slices.Index(got, proto.IntoPrefix+s.Pane); i < 0 || j < i {
+		t.Fatalf("acts %q, want stoker:rest, then into:%s", got, s.Pane)
+	}
+}
+
+// A jump that did not go frees nothing: the session stays the stoker's
+// while no one is in it.
+func TestARefusedJumpFreesNothing(t *testing.T) {
+	m, f := loadedWith(t, 100, restingState())
+	m.opt.Run = func([]string) error { return errors.New("can't find pane") }
+	next, cmd := key(m, "enter")
+	settled(next, cmd)
+	if got := intoActs(f); len(got) != 0 {
+		t.Fatalf("into acts %q for a jump that failed", got)
+	}
+}
+
+// The signal goes raw outside tmux, through passthrough inside, and not at
+// all through a tmux too old to pass it.
+func TestTheSignalGoesTheWayTheTerminalReadsIt(t *testing.T) {
+	say := keycmd.MarksSignal()
+	if got := sayAgent(say, Options{OutsideTmux: true})(); got != (tea.RawMsg{Msg: say}) {
+		t.Errorf("outside tmux wrote %v", got)
+	}
+	if sayAgent(say, Options{LocalTmux: "3.2a"}) != nil {
+		t.Error("tmux 3.2a got the signal")
+	}
+	if got := sayAgent(say, Options{LocalTmux: "3.4"})(); got != (tea.RawMsg{Msg: logos.Passthrough(say)}) {
+		t.Errorf("tmux 3.4 wrote %v", got)
 	}
 }

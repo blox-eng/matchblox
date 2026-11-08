@@ -235,12 +235,25 @@ func (s *Service) undrive(pane string) {
 // a matchblox command never frees a pane.
 const intoOnlyFromConsole = "only a person at a console takes a session over"
 
+// intoInCharge refuses an into: while the stoker is in charge: a session is
+// the person's only once they took it over, so the stoker rests.
+const intoInCharge = "the stoker is in charge: answer y to take over first"
+
 // into lets go of a pane the person went into from a console after they
 // took the session over. What they type there is theirs, and the guard
 // cannot see it.
 func (s *Service) into(a proto.Act, pane string) proto.Result {
 	if !s.aConsole(a.Console, a) {
 		return proto.Result{Err: intoOnlyFromConsole}
+	}
+	if s.Stoker == nil {
+		return proto.Result{} // no stoker drives a pane here
+	}
+	if m := s.Stoker.Mode(); m.On && m.Rests.IsZero() {
+		return proto.Result{Err: intoInCharge}
+	}
+	if _, ok := s.sessionAt(pane); !ok {
+		return refuseText("no agent session in " + pane + " any more")
 	}
 	s.touchStoker(s.now()) // the builder acts: a stoker that rests goes on resting
 	s.undrive(pane)

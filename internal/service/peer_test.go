@@ -469,6 +469,20 @@ func TestGoingInFromAConsoleFreesThePane(t *testing.T) {
 	if !denies(t, s, "%1", "gh pr merge 4556") {
 		t.Fatal("an into: from no person freed the pane")
 	}
+	// While the stoker is in charge the session stays its own, whatever a
+	// console thinks: a console that has not heard the stoker woke frees nothing.
+	if res := actOver(t, s, 555, proto.ClientConsole, proto.Act{RecID: proto.IntoPrefix + "%1"}); res.Err != intoInCharge {
+		t.Fatalf("an into: while the stoker is in charge: %+v", res)
+	}
+	if !denies(t, s, "%1", "gh pr merge 4556") {
+		t.Fatal("an into: freed a pane the stoker is in charge of")
+	}
+	if res := actOver(t, s, 555, proto.ClientConsole, proto.Act{RecID: "stoker:rest", Confirm: "y"}); res.Err != "" {
+		t.Fatal(res.Err)
+	}
+	if res := actOver(t, s, 555, proto.ClientConsole, proto.Act{RecID: proto.IntoPrefix + "%404"}); res.Err == "" {
+		t.Fatal("an into: of a pane no session holds was taken")
+	}
 	if res := actOver(t, s, 555, proto.ClientConsole, proto.Act{RecID: proto.IntoPrefix + "%1"}); res.Err != "" {
 		t.Fatal(res.Err)
 	}

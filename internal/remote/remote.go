@@ -474,6 +474,17 @@ func AgentMarkArgv(pane, agent string) []string {
 	return []string{"tmux", "set-option", "-p", "-t", pane, "@matchblox_agent", agent}
 }
 
+// AgentUnmarkArgv takes the agent mark off pane: its agent has no command
+// keys, or none the console knows.
+func AgentUnmarkArgv(pane string) []string {
+	return []string{"tmux", "set-option", "-p", "-u", "-t", pane, "@matchblox_agent"}
+}
+
+// AgentUnmarkAllowed is exactly AgentUnmarkArgv of a pane id.
+func AgentUnmarkAllowed(argv []string) bool {
+	return len(argv) == 7 && PaneID(argv[5]) && slices.Equal(argv, AgentUnmarkArgv(argv[5]))
+}
+
 // AgentMarkAllowed is exactly AgentMarkArgv of a pane id and a known agent.
 func AgentMarkAllowed(argv []string) bool {
 	return len(argv) == 7 && PaneID(argv[4]) && len(keycmd.ForAgent(argv[6])) > 0 &&
