@@ -212,6 +212,7 @@ type action struct {
 	againText   string                      // the Text the second y sends ("": killAnyway)
 	done        string                      // a switch: what the flash says when it ran
 	agent       string                      // a start on a new account: the last agent once it ran
+	paneAgent   string                      // a switch, and the jump after it: the agent the pane runs once the switch ran
 	previewAct  string                      // switch evidence request; confirmation waits for it
 	preview     string                      // checked evidence excerpt for switch consent
 	climb       *climb                      // a rung of the key ladder
@@ -382,20 +383,20 @@ type Model struct {
 	chainIx     chainIndex      // worked out in refresh
 	repoMates   map[rowKey]bool // the listed sessions with a repo mate they are not chained with
 	reasons     map[string]proto.IdleReason
-	agents      []string                                    // the agents a new session can start on the host
-	renames     map[string]string                           // the names sessions take at their next rest, by pane
-	accounts    map[string][]string                         // the accounts each agent can start on: default first
-	skipped     map[string][]accounts.Skip                  // the folders the service did not list, per agent
-	lastAccount map[string]string                           // the account last started, per agent
-	signIns     map[string]string                           // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
-	found       *proto.Found                                // the host's repositories and the scan's consent; nil: the service scans nothing
-	scanLater   bool                                        // the scan question was closed or answered at this console
-	scanAct     string                                      // the act of the box's yes, for its result
-	form        *form                                       // the open New session, Rename, Switch agent or scan folders form; nil none
-	jumpAfter   struct{ act, host, pane, done, tty string } // a switch sent: the pane to jump to when it runs, for the client that asked
-	startAfter  struct{ act, agent, done string }           // a start on a new account sent: its agent, the last once it runs, and what it says then
-	lastAgent   string                                      // the agent this console last started
-	keptAgent   string                                      // the agent last started, as the service keeps it
+	agents      []string                                           // the agents a new session can start on the host
+	renames     map[string]string                                  // the names sessions take at their next rest, by pane
+	accounts    map[string][]string                                // the accounts each agent can start on: default first
+	skipped     map[string][]accounts.Skip                         // the folders the service did not list, per agent
+	lastAccount map[string]string                                  // the account last started, per agent
+	signIns     map[string]string                                  // how a new account's sign-in goes, by pane: "by hand" when matchblox gave up driving it
+	found       *proto.Found                                       // the host's repositories and the scan's consent; nil: the service scans nothing
+	scanLater   bool                                               // the scan question was closed or answered at this console
+	scanAct     string                                             // the act of the box's yes, for its result
+	form        *form                                              // the open New session, Rename, Switch agent or scan folders form; nil none
+	jumpAfter   struct{ act, host, pane, done, tty, agent string } // a switch sent: the pane to jump to when it runs, its new agent, for the client that asked
+	startAfter  struct{ act, agent, done string }                  // a start on a new account sent: its agent, the last once it runs, and what it says then
+	lastAgent   string                                             // the agent this console last started
+	keptAgent   string                                             // the agent last started, as the service keeps it
 	paneSort    sortBy
 	picked      map[wtKey]bool // worktrees x removes
 	batch       *batch
@@ -1090,7 +1091,7 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	if m.opt.Host != "" || m.opt.OutsideTmux || !remote.ClientTTY(f.Client) {
 		return m, nil
 	}
-	return m, focusJump(m.clients(), m.readClients(), m.opt.Run, f.Client, s.Pane)
+	return m, m.focusJump(f.Client, s.Pane)
 }
 
 // clients is how this console reads the clients of its tmux server.
@@ -1113,9 +1114,13 @@ func tmuxClients() ([]string, error) {
 }
 
 // focusJump waits up to focusWait for the client on tty to attach to this
-// console's tmux, then moves it to pane. A client that never comes is not
-// this console's: nothing moves.
-func focusJump(clients func() ([]string, error), read func() ([]consoleClient, string), run func([]string) error, tty, pane string) tea.Cmd {
+// console's tmux, then moves it to pane. As every jump of this machine's
+// tmux, it names the pane's agent first, once the client is there to hear
+// it. A client that never comes is not this console's: nothing moves.
+func (m Model) focusJump(tty, pane string) tea.Cmd {
+	clients, read, run := m.clients(), m.readClients(), m.opt.Run
+	agent := m.agentOfPane(pane)
+	say, mark := sayAgent(keycmd.PaneSignal(agent, pane), m.opt), remote.AgentMarkArgv(pane, agent)
 	return func() tea.Msg {
 		argv := remote.FocusArgv(tty, pane)
 		if !remote.FocusAllowed(argv) {
@@ -1129,10 +1134,16 @@ func focusJump(clients func() ([]string, error), read func() ([]consoleClient, s
 				return nil
 			}
 		}
-		// The toast names the move, not the session the phone gets for it.
-		err := run(argv)
-		cs, _ := read()
-		return ranMsg{cmd: "tmux switch-client -c " + tty + " -t " + pane, err: err, jumped: pane, tty: tty, watched: err == nil && othersHere(cs, tty)}
+		jump := func() tea.Msg {
+			if remote.AgentMarkAllowed(mark) {
+				_ = run(mark) // the mark only names the agent: the jump goes without it
+			}
+			// The toast names the move, not the session the phone gets for it.
+			err := run(argv)
+			cs, _ := read()
+			return ranMsg{cmd: "tmux switch-client -c " + tty + " -t " + pane, err: err, jumped: pane, tty: tty, watched: err == nil && othersHere(cs, tty)}
+		}
+		return tea.Sequence(say, jump)()
 	}
 }
 
@@ -1473,7 +1484,7 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 	}
 	if a.nav {
 		m.startRec(a, "nav")
-		return m, m.intoCmd(a)
+		return m, m.signalled(a, m.intoCmd(a))
 	}
 	if why := m.refusal(host); why != "" {
 		m.flash = why
@@ -1491,7 +1502,7 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 	cmd := m.sendTo(host, proto.Act{RecID: a.rec, Which: a.which, Confirm: confirm, Text: a.text})
 	m.startRec(a, "a"+strconv.Itoa(m.acts))
 	if pane, ok := strings.CutPrefix(a.rec, "switch:"); ok {
-		m.jumpAfter.act, m.jumpAfter.host, m.jumpAfter.pane, m.jumpAfter.done, m.jumpAfter.tty = "a"+strconv.Itoa(m.acts), a.host, pane, a.done, a.tty
+		m.jumpAfter.act, m.jumpAfter.host, m.jumpAfter.pane, m.jumpAfter.done, m.jumpAfter.tty, m.jumpAfter.agent = "a"+strconv.Itoa(m.acts), a.host, pane, a.done, a.tty, a.paneAgent
 	}
 	if a.agent != "" {
 		m.startAfter.act, m.startAfter.agent, m.startAfter.done = "a"+strconv.Itoa(m.acts), a.agent, a.done
@@ -1525,7 +1536,7 @@ func (m Model) started(r proto.Result) (Model, bool) {
 // one that did not says why.
 func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 	j := m.jumpAfter
-	m.jumpAfter.act, m.jumpAfter.host, m.jumpAfter.pane, m.jumpAfter.done, m.jumpAfter.tty = "", "", "", "", ""
+	m.jumpAfter.act, m.jumpAfter.host, m.jumpAfter.pane, m.jumpAfter.done, m.jumpAfter.tty, m.jumpAfter.agent = "", "", "", "", "", ""
 	// A switch with notes on what its account shared or skipped ran.
 	notes, ran := proto.StartNotes(r)
 	switch {
@@ -1542,7 +1553,9 @@ func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.askedBy = j.tty // the jump moves the client that asked for the switch
-	next, jump := m.confirm(*m.forHost(j.host, m.jumpOn(j.host, j.pane)))
+	a := m.forHost(j.host, m.jumpOn(j.host, j.pane))
+	a.paneAgent = j.agent
+	next, jump := m.confirm(*a)
 	nm := next.(Model)
 	say := []string{j.done}
 	if ran {

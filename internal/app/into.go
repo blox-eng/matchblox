@@ -29,14 +29,28 @@ func (m Model) goInto(host, pane string) (tea.Model, tea.Cmd) {
 // or a refusal, waits for Enter, as every act of a host.
 func (m Model) runInto(a *action) (tea.Model, tea.Cmd) {
 	if a.nav && !a.remote {
-		next, jump := m.confirm(*a)
-		if jump == nil {
-			return next, nil
-		}
-		return next, tea.Sequence(sayAgent(keycmd.PaneSignal(m.agentOfPane(a.pane), a.pane), m.opt), jump)
+		return m.confirm(*a)
 	}
 	m.pending, m.previewTop = a, 0
 	return m, nil
+}
+
+// signalled puts the pane signal before a jump of this machine's tmux: the
+// app hears which pane, and whose, the jump goes to.
+func (m Model) signalled(a action, jump tea.Cmd) tea.Cmd {
+	if a.pane == "" {
+		return jump
+	}
+	return tea.Sequence(sayAgent(keycmd.PaneSignal(m.agentIn(a), a.pane), m.opt), jump)
+}
+
+// agentIn is the agent signal's id of the pane a jumps into: the agent a
+// switch started there, else the home session's in it.
+func (m Model) agentIn(a action) string {
+	if a.paneAgent != "" {
+		return signalAgent(a.paneAgent)
+	}
+	return m.agentOfPane(a.pane)
 }
 
 // agentOfPane is the agent signal's id of the home session in pane.
@@ -45,7 +59,13 @@ func (m Model) agentOfPane(pane string) string {
 	if i < 0 {
 		return keycmd.OtherAgent
 	}
-	if id := keycmd.AgentOf(m.all.sessions[i].Agent); len(keycmd.ForAgent(id)) > 0 {
+	return signalAgent(m.all.sessions[i].Agent)
+}
+
+// signalAgent is the agent signal's id of agent: other for one with no
+// command keys.
+func signalAgent(agent string) string {
+	if id := keycmd.AgentOf(agent); len(keycmd.ForAgent(id)) > 0 {
 		return id
 	}
 	return keycmd.OtherAgent
@@ -59,7 +79,7 @@ func (m Model) intoCmd(a action) tea.Cmd {
 	if !a.asker {
 		return func() tea.Msg { return runNav(a, run) }
 	}
-	attached, read, mark := m.clients(), m.readClients(), remote.AgentMarkArgv(a.pane, m.agentOfPane(a.pane))
+	attached, read, mark := m.clients(), m.readClients(), remote.AgentMarkArgv(a.pane, m.agentIn(a))
 	return func() tea.Msg {
 		cs, desk := read()
 		if a.tty = cmp.Or(a.tty, desk); a.tty == "" {

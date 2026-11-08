@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -173,7 +174,7 @@ func TestAFocusOnAWaitGoesIntoThePane(t *testing.T) {
 	st.Focus.Client = "/dev/ttys004"
 	next, cmd := m.Update(stateMsg(st))
 	runFocus(t, cmd)
-	if next.(Model).standIn || len(*ran) != 1 || !slices.Equal((*ran)[0], remote.FocusArgv("/dev/ttys004", "%2")) {
+	if next.(Model).standIn || len(*ran) != 2 || !slices.Equal((*ran)[1], remote.FocusArgv("/dev/ttys004", "%2")) {
 		t.Errorf("ran %q, stand-in %v: want FocusArgv for the phone", *ran, next.(Model).standIn)
 	}
 }
@@ -440,6 +441,38 @@ func TestTheSignalNamesThePaneBeforeTheJump(t *testing.T) {
 	}
 }
 
+// The jump after a switch names the agent the switch started, before the
+// jump and on the pane: the sessions still name the one it replaced.
+func TestTheJumpAfterASwitchNamesItsNewAgent(t *testing.T) {
+	m, ran := jumpRig(t, deskAndPad)
+	m.jumpAfter.act, m.jumpAfter.host, m.jumpAfter.pane, m.jumpAfter.done, m.jumpAfter.tty, m.jumpAfter.agent = "a9", m.opt.Host, "%1", "switched app to codex", "/dev/pts/7", "codex"
+	_, jump := m.switched(proto.Result{ActID: "a9", Ran: [][]string{{"tmux"}}})
+	msgs := cmdMsgs(jump)
+	want := tea.RawMsg{Msg: logos.Passthrough(keycmd.PaneSignal("codex", "%1"))}
+	if len(msgs) == 0 || msgs[0] != want {
+		t.Fatalf("the first message is %v, want %q", msgs, want.Msg)
+	}
+	if moves := [][]string{remote.AgentMarkArgv("%1", "codex"), remote.FocusArgv("/dev/pts/7", "%1")}; !slices.EqualFunc(*ran, moves, slices.Equal) {
+		t.Errorf("ran %q, want %q", *ran, moves)
+	}
+}
+
+// A jump that waited for its confirm, Enter on Panes, names its pane first too.
+func TestAConfirmedJumpNamesThePaneBeforeTheJump(t *testing.T) {
+	m, ran := jumpRig(t, deskAndPad)
+	m.tab = tabPanes
+	next, _ := key(m, "enter")
+	a := next.(Model).pending
+	if a == nil || !a.nav || a.pane == "" {
+		t.Fatalf("Enter on Panes is pending %+v, want a jump", a)
+	}
+	_, cmd := key(next, "enter")
+	msgs := append(cmdMsgs(cmd), nil)
+	if r, ok := msgs[0].(tea.RawMsg); !ok || !strings.Contains(r.Msg.(string), ";pane="+a.pane) || len(*ran) == 0 {
+		t.Errorf("the first message is %v, ran %q: want the signal of %s before the jump", msgs, *ran, a.pane)
+	}
+}
+
 func TestTheConsoleAnnouncesTheMarks(t *testing.T) {
 	marks := logos.Passthrough(keycmd.MarksSignal())
 	for _, start := range []string{"", "here"} {
@@ -501,5 +534,9 @@ func TestASwitchJumpsTheClientThatAsked(t *testing.T) {
 	drain(cmd)
 	if !ranFocus(*ran, "/dev/pts/7", "%1") || ranFocus(*ran, "/dev/pts/1", "%1") {
 		t.Errorf("ran %q, want FocusArgv for /dev/pts/7 only", *ran)
+	}
+	var sw proto.SwitchAgent
+	if err := json.Unmarshal([]byte(f.acts()[0].Text), &sw); err != nil || !slices.ContainsFunc(*ran, func(a []string) bool { return slices.Equal(a, remote.AgentMarkArgv("%1", sw.Agent)) }) {
+		t.Errorf("ran %q, want the pane marked with the new agent %q (%v)", *ran, sw.Agent, err)
 	}
 }

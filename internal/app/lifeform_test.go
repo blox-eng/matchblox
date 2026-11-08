@@ -201,7 +201,7 @@ func TestAOpensSwitchAgentAndJumpsAfter(t *testing.T) {
 	// A switch that ran jumps to the pane.
 	done, cmd := next.Update(resultMsg(proto.Result{ActID: act, Ran: [][]string{{"tmux"}}}))
 	c := cmd().(tea.BatchMsg)
-	c[len(c)-1]()
+	drain(c[len(c)-1])
 	if len(ran) != 1 || strings.Join(ran[0], " ") != "tmux switch-client -t %1" || done.(Model).flash != "switched app-feature to codex" {
 		t.Fatalf("ran %v flash %q", ran, done.(Model).flash)
 	}
@@ -1846,7 +1846,7 @@ func TestSwitchWithANotLinkedNoteJumps(t *testing.T) {
 		t.Fatalf("flash %q: the switch ran", f) // before cmd: a lone recv waits forever
 	}
 	c := cmd().(tea.BatchMsg)
-	c[len(c)-1]()
+	drain(c[len(c)-1])
 	if len(ran) != 1 || !strings.Contains(done.(Model).flash, "switched app-feature to codex") || !strings.Contains(done.(Model).flash, note) {
 		t.Fatalf("ran %v flash %q", ran, done.(Model).flash)
 	}

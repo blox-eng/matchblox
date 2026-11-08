@@ -1,12 +1,16 @@
 package app
 
 import (
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/logos"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/state"
@@ -23,8 +27,9 @@ func focused(pane string, at time.Time) proto.State {
 	return st
 }
 
-// A focus opens the session's pane on the
-// phone's own tmux client, once that client is attached, and on no other.
+// A focus opens the session's pane on the phone's own tmux client, once that
+// client is attached, and on no other. As Enter does, it names the pane's
+// agent first, so the phone's command keys light in the pane.
 func TestFocusOpensThePaneOfABurn(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	var ran []string
@@ -47,29 +52,40 @@ func TestFocusOpensThePaneOfABurn(t *testing.T) {
 	if s, ok := nm.selectedSession(); !ok || s.Pane != "%1" || nm.tab != tabSessions {
 		t.Fatalf("selected %q on tab %d", s.Pane, nm.tab)
 	}
-	runFocus(t, cmd)
-	if len(ran) != 1 || ran[0] != strings.Join(remote.FocusArgv("/dev/ttys004", "%1"), " ") || asks < 3 {
-		t.Fatalf("ran %q after %d asks", ran, asks)
+	msgs := runFocus(t, cmd)
+	jump := []string{strings.Join(remote.AgentMarkArgv("%1", "claude"), " "), strings.Join(remote.FocusArgv("/dev/ttys004", "%1"), " ")}
+	if !slices.Equal(ran, jump) || asks < 3 {
+		t.Fatalf("ran %q after %d asks, want %q", ran, asks, jump)
+	}
+	signal := slices.Index(msgs, tea.Msg(tea.RawMsg{Msg: logos.Passthrough(keycmd.PaneSignal("claude", "%1"))}))
+	moved := slices.IndexFunc(msgs, func(msg tea.Msg) bool { r, ok := msg.(ranMsg); return ok && r.jumped == "%1" })
+	if signal < 0 || moved < signal {
+		t.Errorf("messages %v: want the pane signal before the jump", msgs)
 	}
 }
 
-// runFocus runs the commands of a state update, giving each up to one
-// seconds: the focus waits for the phone's client.
-func runFocus(t *testing.T, cmd tea.Cmd) {
+// runFocus runs the commands of a state update, a batch's or a sequence's
+// each in turn, giving each up to one second: the focus waits for the
+// phone's client. It returns the messages they gave.
+func runFocus(t *testing.T, cmd tea.Cmd) []tea.Msg {
 	t.Helper()
 	if cmd == nil {
-		return
+		return nil
 	}
 	out := make(chan tea.Msg, 1)
 	go func() { out <- cmd() }()
 	select {
 	case msg := <-out:
-		if b, ok := msg.(tea.BatchMsg); ok {
-			for _, c := range b {
-				runFocus(t, c)
+		if v := reflect.ValueOf(msg); v.Kind() == reflect.Slice && v.Type().Elem() == reflect.TypeFor[tea.Cmd]() {
+			var got []tea.Msg
+			for i := range v.Len() {
+				got = append(got, runFocus(t, v.Index(i).Interface().(tea.Cmd))...)
 			}
+			return got
 		}
+		return []tea.Msg{msg}
 	case <-time.After(time.Second):
+		return nil
 	}
 }
 
