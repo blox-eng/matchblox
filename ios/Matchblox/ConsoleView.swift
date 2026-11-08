@@ -634,6 +634,7 @@ final class ConsoleConnection {
 
         terminal?.getTerminal().resetToInitialState()
         phase = .live
+        let opened = openSession != nil
         openSession = nil
         let now = terminalSize
         if now != size {
@@ -644,6 +645,7 @@ final class ConsoleConnection {
         var signal = AgentSignalFilter()
         consoleMarks = false
         paneAgent = PaneAgent()
+        if opened { paneAgent.opened(at: ContinuousClock.now) }
         settling?.cancel()
         settling = nil
         onAgent(nil)
@@ -736,11 +738,9 @@ extension ConsoleConnection: @preconcurrency TerminalViewDelegate {
         if isDemo { countClicks(in: data) }
         #endif
         // Every key reaches this: the soft and the hardware keyboard's, the belt's, and taps.
-        if consoleMarks, terminal?.inTmuxPane == false, InputMark.marks(data) {
-            outgoing?.yield(.input(Data(InputMark.bytes)))
-            paneAgent.marked(at: ContinuousClock.now)
-        }
-        outgoing?.yield(.input(Data(data)))
+        let marked = consoleMarks && terminal?.inTmuxPane == false
+        if marked { paneAgent.marked(at: ContinuousClock.now) }
+        outgoing?.yield(.input(Data(InputMark.sent(data, marked: marked))))
     }
 
     func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {

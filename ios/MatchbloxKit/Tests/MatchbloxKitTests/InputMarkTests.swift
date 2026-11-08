@@ -2,16 +2,17 @@ import XCTest
 @testable import MatchbloxKit
 
 final class InputMarkTests: XCTestCase {
-    func testAReturnAndAPressAreMarked() {
-        XCTAssertTrue(InputMark.marks(ArraySlice([0x0d])))
-        XCTAssertTrue(InputMark.marks(ArraySlice(Array("\u{1b}[<0;20;6M".utf8))))
-        XCTAssertTrue(InputMark.marks(ArraySlice([0x1b, 0x5b, 0x4d, 32, 52, 38])))
+    /// Every key, not only Return and a press: an unmarked key is taken as the desk's.
+    func testEveryKeyGoesBehindTheMark() {
+        for key in ["\r", "a", "2", "\u{1b}[C", "\u{1b}OC", "\u{0f}", "\u{1b}[<0;20;6M", "\u{1b}[<64;20;6M", "x\r"] {
+            let data = Array(key.utf8)
+            XCTAssertEqual(InputMark.sent(data[...], marked: true), InputMark.bytes + data, key)
+        }
     }
 
-    func testOtherBytesAreNot() {
-        for other in ["a", "2", "\u{1b}[A", "\u{1b}[<0;20;6m", "\u{1b}[<64;20;6M", "\u{1b}_matchblox\u{1b}\\"] {
-            XCTAssertFalse(InputMark.marks(ArraySlice(Array(other.utf8))), other)
-        }
+    func testAnUnmarkedKeyGoesAsItIs() {
+        let data = Array("\u{1b}[C".utf8)
+        XCTAssertEqual(InputMark.sent(data[...], marked: false), data)
     }
 
     /// keycmd.MarkKey in Go.
@@ -47,6 +48,25 @@ final class InputMarkTests: XCTestCase {
         let t0 = ContinuousClock.now
         p.marked(at: t0)
         p.signal(ConsoleSignal("claude;pane=%12"), at: t0 + .milliseconds(1001))
+        XCTAssertNil(p.agent)
+    }
+
+    /// T15: a session the app opened, from the island or a buzz, is this app's jump, though the
+    /// console's comes seconds later, once the phone is attached.
+    func testAnOpenedSessionsJumpKeepsItsAgent() {
+        var p = PaneAgent()
+        let t0 = ContinuousClock.now
+        p.opened(at: t0)
+        p.marked(at: t0 + .seconds(1))
+        p.signal(ConsoleSignal("claude;pane=%12"), at: t0 + .seconds(9))
+        XCTAssertEqual(p.agent, "claude")
+    }
+
+    func testAnOpeningLongAgoIsNotAMark() {
+        var p = PaneAgent()
+        let t0 = ContinuousClock.now
+        p.opened(at: t0)
+        p.signal(ConsoleSignal("claude;pane=%12"), at: t0 + PaneAgent.openWindow + .milliseconds(1))
         XCTAssertNil(p.agent)
     }
 
