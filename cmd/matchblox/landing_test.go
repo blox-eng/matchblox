@@ -1,0 +1,117 @@
+package main
+
+import (
+	"bytes"
+	"image"
+	_ "image/png"
+	"os"
+	"regexp"
+	"strings"
+	"testing"
+)
+
+// The landing page tells one matchbox story: Strike, the box, the chain,
+// the night, the pocket, Strike one (docs/superpowers/specs/
+// 2026-11-07-landing-one-story-design.md).
+
+func landingPage(t *testing.T) []byte {
+	t.Helper()
+	page, err := os.ReadFile("../../www/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return page
+}
+
+var (
+	unseen = regexp.MustCompile(`(?s)<(pre|script|style|svg)\b.*?</(pre|script|style|svg)>|<!--.*?-->`)
+	markup = regexp.MustCompile(`(?s)<[^>]*>`)
+)
+
+// visibleWords counts the words a visitor reads in the body: the terminal
+// replays (<pre>), scripts, styles and drawings do not count.
+func visibleWords(page []byte) int {
+	body := page
+	if i := bytes.Index(body, []byte("<body")); i >= 0 {
+		body = body[i:]
+	}
+	text := markup.ReplaceAll(unseen.ReplaceAll(body, []byte(" ")), []byte(" "))
+	return len(strings.Fields(string(text)))
+}
+
+func TestTheLandingTellsOneStory(t *testing.T) {
+	page := landingPage(t)
+	if n := bytes.Count(page, []byte("<h1")); n != 1 {
+		t.Errorf("the page has %d <h1>, want one", n)
+	}
+	var ids []string
+	for _, m := range regexp.MustCompile(`<h2[^>]*\bid="([^"]+)"`).FindAllSubmatch(page, -1) {
+		ids = append(ids, string(m[1]))
+	}
+	// install-h is the hero's visually hidden heading over the install line.
+	want := "install-h box-h chain-h stoker-h pocket-h strike-h"
+	if got := strings.Join(ids, " "); got != want {
+		t.Errorf("the h2 ids run %q, want %q", got, want)
+	}
+}
+
+func TestTheLandingIsShort(t *testing.T) {
+	if n := visibleWords(landingPage(t)); n > 480 {
+		t.Errorf("the page shows %d words, want at most 480", n)
+	}
+}
+
+func TestTheLandingNeedsNoInstructions(t *testing.T) {
+	page := landingPage(t)
+	for _, s := range []string{"Tap a match", "Try g and s", "Every agent you run, in one list"} {
+		if bytes.Contains(page, []byte(s)) {
+			t.Errorf("the page says %q: the visual must invite the action itself", s)
+		}
+	}
+	stoker, err := os.ReadFile("../../www/stoker.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(stoker, []byte("Try g and s")) {
+		t.Error("the stoker demo's caption tells the visitor which keys to try")
+	}
+}
+
+func TestTheLandingHasAPreviewCard(t *testing.T) {
+	page := landingPage(t)
+	for _, s := range []string{
+		"<title>matchblox · a terminal console for every coding agent</title>",
+		`<meta property="og:title" content="`,
+		`<meta property="og:description" content="`,
+		`<meta property="og:url" content="https://matchblox.com/">`,
+		`<meta property="og:image" content="https://matchblox.com/assets/og.png">`,
+		`<meta name="twitter:card" content="summary_large_image">`,
+	} {
+		if !bytes.Contains(page, []byte(s)) {
+			t.Errorf("the head lacks %s", s)
+		}
+	}
+	f, err := os.Open("../../www/assets/og.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	c, _, err := image.DecodeConfig(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Width != 1200 || c.Height != 630 {
+		t.Errorf("og.png is %dx%d, want 1200x630", c.Width, c.Height)
+	}
+}
+
+func TestTheLandingIdsAreUnique(t *testing.T) {
+	seen := map[string]bool{}
+	for _, m := range regexp.MustCompile(`\bid="([^"]+)"`).FindAllSubmatch(landingPage(t), -1) {
+		id := string(m[1])
+		if seen[id] {
+			t.Errorf("id %q occurs twice", id)
+		}
+		seen[id] = true
+	}
+}
