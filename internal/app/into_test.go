@@ -11,6 +11,7 @@ import (
 
 	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/logos"
+	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/remote"
 )
 
@@ -431,5 +432,48 @@ func TestTheConsoleAnnouncesTheMarks(t *testing.T) {
 	}
 	if _, cmd = next.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: "/dev/pts/1:100@here,/dev/pts/7:105@here"}); !slices.Contains(raws(cmd), marks) {
 		t.Errorf("a phone that attached got %q, want %q", raws(cmd), marks)
+	}
+}
+
+// Building a jump asks tmux nothing, even while a stoker rests and every
+// key touches it: the desk is read once, when the jump runs.
+func TestOnlyTheRunningJumpReadsTheClients(t *testing.T) {
+	st := stokerState(runningNight(time.Now()))
+	st.Stoker.Rests = st.At
+	m, _ := rigged(sized(t, 100, 30, st), deskAndPad)
+	m.tab = tabSessions
+	reads := 0
+	m.opt.ClientList = func() (string, error) { reads++; return deskAndPad, nil }
+	next, _ := key(m, "down")
+	next, _ = key(next, "up")
+	if reads != 0 || next.(Model).primary() == nil || reads != 0 {
+		t.Fatalf("building the action read the clients %d times", reads)
+	}
+	_, cmd := key(next, "enter")
+	if reads != 0 {
+		t.Fatalf("Enter read the clients %d times on the update loop", reads)
+	}
+	drain(cmd)
+	if reads != 1 {
+		t.Errorf("the jump read the clients %d times, want once", reads)
+	}
+}
+
+// The phone asks for an agent switch: the jump after it moves the phone.
+func TestASwitchJumpsTheClientThatAsked(t *testing.T) {
+	next, f := switchState(t, lifeState())
+	m, ran := rigged(next.(Model), deskAndPad)
+	next, _ = key(marked(m, "/dev/pts/7"), "A")
+	next, _ = key(marked(next, "/dev/pts/7"), "enter")
+	next = readySwitchPreview(t, next)
+	next, cmd := key(marked(next, "/dev/pts/7"), "y")
+	drain(cmd)
+	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "switch:%1" {
+		t.Fatalf("sent %+v", acts)
+	}
+	_, cmd = next.Update(resultMsg(proto.Result{ActID: next.(Model).jumpAfter.act, Ran: [][]string{{"tmux"}}}))
+	drain(cmd)
+	if !ranFocus(*ran, "/dev/pts/7", "%1") || ranFocus(*ran, "/dev/pts/1", "%1") {
+		t.Errorf("ran %q, want FocusArgv for /dev/pts/7 only", *ran)
 	}
 }

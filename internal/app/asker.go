@@ -85,32 +85,28 @@ func (c clientMark) spend(now time.Time) string {
 	return c.tty
 }
 
-// askingTTY is the client the event being handled came from: the marked
-// one, else the desk. "" outside tmux or on a tmux error: the jump moves
-// whichever client tmux picks, as before.
-func (m Model) askingTTY() string {
-	if m.askedBy != "" {
-		return m.askedBy
+// readClients reads who shows the console, and the desk among them: the
+// client an unmarked key came from. It runs in a jump's command, off the
+// update loop: building an action asks tmux nothing. Outside tmux or on a
+// tmux error it gives none, and the jump moves whichever client tmux picks.
+func (m Model) readClients() func() (cs []consoleClient, desk string) {
+	list, pane, pair := m.clientList(), m.opt.Pane, m.opt.Pair
+	inTmux := !m.opt.OutsideTmux && pane != ""
+	return func() ([]consoleClient, string) {
+		if !inTmux {
+			return nil, ""
+		}
+		out, err := list()
+		if err != nil {
+			return nil, ""
+		}
+		cs := clientsOf(out, pane)
+		var devices map[string]string
+		if pair != nil && pair.DeviceTTYs != nil {
+			devices = pair.DeviceTTYs()
+		}
+		return cs, deskOf(cs, devices)
 	}
-	if m.opt.OutsideTmux || m.opt.Pane == "" {
-		return ""
-	}
-	out, err := m.clientList()()
-	if err != nil {
-		return ""
-	}
-	var devices map[string]string
-	if h := m.opt.Pair; h != nil && h.DeviceTTYs != nil {
-		devices = h.DeviceTTYs()
-	}
-	return deskOf(clientsOf(out, m.opt.Pane), devices)
-}
-
-// watchedBesides tells if a client other than tty shows the console pane.
-// A tmux error says no.
-func watchedBesides(list func() (string, error), consolePane, tty string) bool {
-	out, err := list()
-	return err == nil && othersHere(clientsOf(out, consolePane), tty)
 }
 
 func (m Model) clientList() func() (string, error) {

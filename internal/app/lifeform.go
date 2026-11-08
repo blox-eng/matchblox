@@ -296,7 +296,7 @@ func (m Model) switchAction(f form) *action {
 	} else {
 		say += "; capture handover before replacement"
 	}
-	a := &action{label: "switch", destructive: true, rec: "switch:" + f.pane, text: string(b), againText: string(again), say: say, done: "switched " + f.who + " to " + f.agent, host: f.host}
+	a := &action{label: "switch", destructive: true, rec: "switch:" + f.pane, text: string(b), againText: string(again), say: say, done: "switched " + f.who + " to " + f.agent, host: f.host, tty: m.askedBy}
 	if i := slices.IndexFunc(m.snap.Sessions, in); i >= 0 {
 		a.again = m.againFor(m.snap.Sessions[i], "switches")
 	}

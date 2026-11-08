@@ -416,3 +416,22 @@ func TestAHostJumpCarriesTheAskingTTY(t *testing.T) {
 		t.Fatalf("the jump does not switch only the phone: %+v", a)
 	}
 }
+
+// TestAnUnmarkedHostJumpFindsTheDeskWhenItRuns: the confirm asks tmux
+// nothing; the run moves the desk's client alone.
+func TestAnUnmarkedHostJumpFindsTheDeskWhenItRuns(t *testing.T) {
+	m, _ := onHost(t, fixtureState())
+	m.tab = tabSessions
+	m, ran := rigged(m, deskAndPad)
+	reads := 0
+	m.opt.ClientList = func() (string, error) { reads++; return deskAndPad, nil }
+	next, _ := key(m, "ctrl+o")
+	_, cmd := key(next, "enter")
+	if reads != 0 {
+		t.Fatalf("the confirm read the clients %d times", reads)
+	}
+	drain(cmd)
+	if len(*ran) != 1 || !strings.Contains(strings.Join((*ran)[0], " "), "switch-client -c /dev/pts/1") || reads != 1 {
+		t.Errorf("ran %q after %d reads, want the desk's client switched", *ran, reads)
+	}
+}
