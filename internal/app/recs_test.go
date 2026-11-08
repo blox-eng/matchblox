@@ -50,7 +50,7 @@ func TestRecommendationsSitUnderTheSessions(t *testing.T) {
 		t.Fatalf("enter on the recommendation: %+v", p)
 	}
 	next, _ = key(next, "esc")
-	if next, _ = key(next, "a"); next.(Model).chatKeys {
+	if next, _ = key(next, "a"); next.(Model).standIn {
 		t.Fatal("a on a recommendation opened a chat")
 	}
 }

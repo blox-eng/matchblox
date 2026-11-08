@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/doors"
@@ -83,14 +84,6 @@ func TestWhatLeavesTheDemoSaysSoAndRunsNothing(t *testing.T) {
 	o := Options{Exec: spyExec(&saw), Run: run}
 	for name, try := range map[string]func(t *testing.T) Model{
 		"ctrl+o": func(t *testing.T) Model { return pressKeys(t, demoConsole(t, 100, o), "ctrl+o") },
-		"ctrl+o in the chat": func(t *testing.T) Model {
-			m := openChat(t, demoSized(t, 44, 31))
-			if !m.chatKeys {
-				t.Fatal("the chat did not open")
-			}
-			m.opt.Demo, m.opt.Exec, m.opt.Run = demoLine, o.Exec, o.Run
-			return pressKeys(t, m, "ctrl+o")
-		},
 		"a pane": func(t *testing.T) Model {
 			m := demoConsole(t, 100, o)
 			m.tab = tabPanes
@@ -233,57 +226,92 @@ func TestATapOnACloneRowSaysSo(t *testing.T) {
 	}
 }
 
-// The chat's key line offers no way into tmux on the demo host; the key answers
-// all the same.
-func TestTheChatsKeyLineOffersNoTmuxInTheDemo(t *testing.T) {
-	m := demoSized(t, 132, 31)
-	m.opt.Demo = demoLine
-	m = pressKeys(t, m, "enter")
-	if !m.chatKeys {
-		t.Fatal("the chat did not open")
-	}
-	line, spans := m.chatKeyLine(132)
-	if got := ansi.Strip(line); strings.Contains(got, "ctrl+o") || strings.Contains(got, "tmux") || !strings.Contains(got, "ctrl+a m back") {
-		t.Errorf("the key line says %q", got)
-	}
-	for _, s := range spans {
-		if s.press == "ctrl+o" {
-			t.Errorf("a tap presses ctrl+o: %+v", s)
+// onSession is m with the session named name selected.
+func onSession(t *testing.T, m Model, name string) Model {
+	t.Helper()
+	for _, s := range m.snap.Sessions {
+		if s.Name == name {
+			m.chose, m.selPID, m.selHost = true, s.PID, s.Host
+			return m
 		}
 	}
-	saysTheLine(t, pressKeys(t, m, "ctrl+o"))
+	t.Fatalf("no session %s", name)
+	return m
 }
 
-func TestTheChatsShortScreenSendsNoOneToAPane(t *testing.T) {
-	m := demoConsole(t, 100, Options{})
-	s := m.snap.Sessions[0]
-	if got := m.tooShort(s); strings.Contains(got, "ctrl+o") || strings.Contains(got, "pane") || !strings.Contains(got, s.Name) {
-		t.Errorf("the demo says %q", got)
+// standIn is the demo's stand-in on flint-auth, which asks, w columns wide.
+func standIn(t *testing.T, w int) Model {
+	t.Helper()
+	m := onSession(t, demoSessions(t, w), "flint-auth")
+	m.opt.Demo = demoLine
+	return pressKeys(t, m, "enter")
+}
+
+func TestEnterInTheDemoOpensTheStandIn(t *testing.T) {
+	m := standIn(t, 44)
+	if !m.standIn {
+		t.Fatal("enter opened no stand-in")
 	}
-	m.opt.Demo = ""
-	if got := m.tooShort(s); !strings.Contains(got, "ctrl+o goes into its pane") {
-		t.Errorf("a real console says %q", got)
+	lines := strings.Split(ansi.Strip(m.render()), "\n")
+	if !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ Sessions") {
+		t.Errorf("row 0 is %q, want the way back to Sessions", lines[0])
 	}
+	if last := lines[len(lines)-1]; !strings.Contains(last, standInHint) {
+		t.Errorf("the key line is %q, want %q", last, standInHint)
+	}
+}
+
+func TestTheStandInsBackKeyReturnsToTheNextWait(t *testing.T) {
+	m := standIn(t, 44)
+	want := m.nextAfter(paneNamedIn(t, m, "flint-auth"))
+	next, _ := m.Update(uv.UnknownApcEvent(homeKey))
+	nm := next.(Model)
+	if nm.standIn || nm.viewOpen {
+		t.Fatal("the home key left the stand-in open")
+	}
+	got, _ := nm.selectedSession()
+	if w, _ := want.selectedSession(); got.PID != w.PID || got.Name == "flint-auth" {
+		t.Errorf("selected %s, want the next wait %s", got.Name, w.Name)
+	}
+}
+
+func TestTheStandInForwardsKeysToItsPane(t *testing.T) {
+	m := standIn(t, 44)
+	f := m.conn.(*fakeConn)
+	pane := paneNamedIn(t, m, "flint-auth")
+	m = pressKeys(t, m, "2")
+	got := keyActs(f)
+	if len(got) != 1 || got[0].RecID != proto.KeysPrefix+pane || got[0].Text != proto.LitPrefix+"2" {
+		t.Fatalf("sent %+v, want one keys:%s of 2", got, pane)
+	}
+	m = pressKeys(t, m, "ctrl+a", "m")
+	if m.standIn || len(keyActs(f)) != 1 {
+		t.Errorf("ctrl+a m: stand-in %v, sent %+v", m.standIn, keyActs(f))
+	}
+}
+
+// paneNamedIn is the pane of the session named name.
+func paneNamedIn(t *testing.T, m Model, name string) string {
+	t.Helper()
+	for _, s := range m.snap.Sessions {
+		if s.Name == name {
+			return s.Pane
+		}
+	}
+	t.Fatalf("no session %s", name)
+	return ""
 }
 
 // The line is longer than a phone is wide: it takes the hair's row, all of it.
 func TestTheLineReadsWholeOnAPhone(t *testing.T) {
-	for _, chat := range []bool{false, true} {
-		m := demoConsole(t, 44, Options{})
-		if chat {
-			m = demoSized(t, 44, 31)
-			m.opt.Demo = demoLine
-			m = pressKeys(t, m, "enter")
-		}
-		m = pressKeys(t, m, "ctrl+o")
-		lines := strings.Split(ansi.Strip(m.render()), "\n")
-		last := strings.TrimSpace(lines[len(lines)-2]) + " " + strings.TrimSpace(lines[len(lines)-1])
-		if last != demoLine || strings.TrimSpace(lines[len(lines)-1]) != "Install matchblox to do that." {
-			t.Errorf("chat %v: the last two rows read %q", chat, last)
-		}
-	}
-	m := pressKeys(t, demoConsole(t, 100, Options{}), "ctrl+o")
+	m := pressKeys(t, demoConsole(t, 44, Options{}), "ctrl+o")
 	lines := strings.Split(ansi.Strip(m.render()), "\n")
+	last := strings.TrimSpace(lines[len(lines)-2]) + " " + strings.TrimSpace(lines[len(lines)-1])
+	if last != demoLine || strings.TrimSpace(lines[len(lines)-1]) != "Install matchblox to do that." {
+		t.Errorf("the last two rows read %q", last)
+	}
+	m = pressKeys(t, demoConsole(t, 100, Options{}), "ctrl+o")
+	lines = strings.Split(ansi.Strip(m.render()), "\n")
 	if got := strings.TrimSpace(lines[len(lines)-1]); got != demoLine {
 		t.Errorf("wide: the key line reads %q", got)
 	}

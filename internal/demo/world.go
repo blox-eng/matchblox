@@ -153,6 +153,8 @@ func (w *World) Run(argv []string) error {
 			return nil // not an option of the menu: the agent takes nothing
 		}
 		return w.pick(argv[3], argv[6])
+	case len(argv) == 5 && argv[1] == "send-keys" && (argv[4] == "Up" || argv[4] == "Down") && w.atMenu(argv[3]):
+		return w.move(argv[3], argv[4] == "Up")
 	case len(argv) == 5 && argv[1] == "send-keys" && argv[4] == "Enter" && w.atMenu(argv[3]):
 		if digit := w.highlighted(argv[3]); digit != "" {
 			return w.pick(argv[3], digit)
@@ -362,6 +364,36 @@ func (w *World) highlighted(pane string) string {
 		}
 	})
 	return at
+}
+
+// move takes the menu's cursor to the option above or below it, and no
+// further than its first or last. Hold w.mu.
+func (w *World) move(pane string, up bool) error {
+	digits := w.options(pane)
+	at := slices.Index(digits, w.highlighted(pane))
+	to := at + 1
+	if up {
+		to = at - 1
+	}
+	if at < 0 || to < 0 || to >= len(digits) {
+		return nil
+	}
+	b, err := os.ReadFile(w.pane(pane))
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(b), "\n")
+	for i, l := range lines {
+		m := optionRe.FindStringSubmatch(l)
+		switch {
+		case m == nil:
+		case m[1] != "":
+			lines[i] = " " + strings.TrimPrefix(l, "❯")
+		case m[2] == digits[to]:
+			lines[i] = "❯" + strings.TrimPrefix(l, " ")
+		}
+	}
+	return writeAtomic(w.pane(pane), []byte(strings.Join(lines, "\n")))
 }
 
 func (w *World) eachOption(pane string, f func(digit string, cursor bool)) {

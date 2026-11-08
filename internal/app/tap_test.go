@@ -41,7 +41,7 @@ func TestFocusOpensThePaneOfABurn(t *testing.T) {
 	st.Focus.Client = "/dev/ttys004"
 	next, cmd := m.Update(stateMsg(st))
 	nm := next.(Model)
-	if nm.chatKeys {
+	if nm.standIn {
 		t.Fatal("a session at work got the chat's keys")
 	}
 	if s, ok := nm.selectedSession(); !ok || s.Pane != "%1" || nm.tab != tabSessions {
@@ -130,8 +130,8 @@ func TestFocusOfAGoneSessionSaysSo(t *testing.T) {
 		next, cmd := m.Update(stateMsg(st))
 		nm := next.(Model)
 		drain(cmd)
-		if nm.flash != "That session ended." || nm.chatKeys || len(ran) != 0 || nm.tab != tabSessions {
-			t.Fatalf("%+v: flash %q chatKeys %v ran %q tab %d", f, nm.flash, nm.chatKeys, ran, nm.tab)
+		if nm.flash != "That session ended." || nm.standIn || len(ran) != 0 || nm.tab != tabSessions {
+			t.Fatalf("%+v: flash %q stand-in %v ran %q tab %d", f, nm.flash, nm.standIn, ran, nm.tab)
 		}
 		nm.setTab(tabGit)
 		m = nm
@@ -143,8 +143,8 @@ func TestNoFocusLeavesTheConsoleAlone(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	m.setTab(tabGit)
 	next, _ := m.Update(stateMsg(fixtureState()))
-	if nm := next.(Model); nm.tab != tabGit || nm.chatKeys || nm.flash != "" {
-		t.Fatalf("tab %d chatKeys %v flash %q", nm.tab, nm.chatKeys, nm.flash)
+	if nm := next.(Model); nm.tab != tabGit || nm.standIn || nm.flash != "" {
+		t.Fatalf("tab %d stand-in %v flash %q", nm.tab, nm.standIn, nm.flash)
 	}
 }
 

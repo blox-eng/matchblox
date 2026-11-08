@@ -350,13 +350,7 @@ func TestAnAgentWithoutHooksIsReadFromThePane(t *testing.T) {
 			}
 		}
 	}
-	// The chat sends its keys to an approval menu as they are.
-	m, _ := loadedWith(t, 100, st)
-	m.selPID, m.chose = 900, true
-	if nm := openChat(t, m); !nm.chatKeys {
-		t.Fatal("the chat has no keys on an approval menu")
-	}
-	m, _ = loadedWith(t, 132, outsideTmux(st)) // the detail: a desk shows a session in a pane as its chat
+	m, _ := loadedWith(t, 132, outsideTmux(st)) // the detail: a desk shows a session in a pane as its chat
 	m.selPID, m.chose = 900, true
 	out := ansi.Strip(m.render())
 	if strings.Contains(out, "1 processes") {

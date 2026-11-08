@@ -114,7 +114,6 @@ func defaultKeys() keymaps {
 		chat: chatKeymap{
 			Back:    bind(ks("ctrl+a"), "ctrl+a m", "back"),
 			BackEnd: bind(ks("m"), "m", "back"),
-			Stop:    bind(ks("ctrl+c"), "^C", "stops the agent"),
 		},
 		sheet: sheetKeys{
 			Send:  bind(ks("enter"), "⏎", "send"),
@@ -228,14 +227,13 @@ func (k formKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Close, k.Enter, k.Next, k.Prev, k.Down, k.Up, k.Left, k.Right, k.Erase}
 }
 
-// chatKeymap are the chat's own keys. Every other key goes to the agent;
-// Back's ctrl+a does too, and m within a second after it gives the keys back
-// (chatBackWait); Stop is the agent's ^C, which a second one within a second
-// waits for.
-type chatKeymap struct{ Back, BackEnd, Stop bkey.Binding }
+// chatKeymap are the demo stand-in's own keys: ctrl+a, then m within a
+// second (chatBackWait), goes back to Sessions. Every other key goes to the
+// agent's pane in the demo's world.
+type chatKeymap struct{ Back, BackEnd bkey.Binding }
 
 func (k chatKeymap) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Back, k.BackEnd, k.Stop}
+	return []bkey.Binding{k.Back, k.BackEnd}
 }
 
 // sheetKeys are the stoker's order sheet.
@@ -293,7 +291,7 @@ func (k confirmKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Yes, k.Enter, k.Also, k.ScrollDown, k.ScrollUp}
 }
 
-// keyNames are the keys the chat sends by name, with every ctrl key of
+// keyNames are the keys the demo's stand-in sends by name, with every ctrl key of
 // proto.CtrlKeys: the phone's belt has a Ctrl key for them (#300).
 var keyNames = func() map[string]string {
 	names := map[string]string{
@@ -305,13 +303,6 @@ var keyNames = func() map[string]string {
 	}
 	return names
 }()
-
-// The names the chat sends for Enter, ^C and Backspace.
-var (
-	enterName     = keyNames["enter"]
-	ctrlCName     = keyNames["ctrl+c"]
-	backspaceName = keyNames["backspace"]
-)
 
 // tmuxKeyRE is a tmux key name as tmux prints one: modifiers, then one
 // character or a word (Space, F12).

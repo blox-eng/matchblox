@@ -244,7 +244,7 @@ starts it. A second phone or laptop attaches to the same session.
 ## Read and steer an agent
 
 The chat is the agent's live screen, inside the console. You do not leave
-the console to answer an agent. See [the chat](console.md#the-chat).
+the console to answer an agent. See [the chat](console.md#the-live-view).
 
 1. Tap an agent in Sessions. On a one-column phone, its chat fills the
    screen. The title row reads `‹ Sessions · <name> · <state>`. Held wide
@@ -319,7 +319,7 @@ The Commands layout follows the agent of the chat. Each command key has the
 mark of its agent. A command key runs only from the chat. In a pane you
 jumped to, or when the console has no chat open, the command keys are dim,
 and a tap shows `commands run from the chat`. `compact` and `clear` run only in Claude Code. The key is refused, with a message, until the agent rests (and while it waits for you). The other commands type their text and `Enter`. They go only while the agent rests, with no question, no permission prompt and no text you typed on its prompt. Otherwise the key is refused, with a message. A command of another agent sends nothing. See
-[the keys of the chat](keys.md) and [the chat](console.md#the-chat). The console says `COMMANDS · needs tmux 3.3` once, when the chat opens, with tmux older than 3.3 on the host.
+[the keys of the chat](keys.md) and [the chat](console.md#the-live-view). The console says `COMMANDS · needs tmux 3.3` once, when the chat opens, with tmux older than 3.3 on the host.
 
 #### Mine
 

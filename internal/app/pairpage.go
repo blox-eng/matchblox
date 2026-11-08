@@ -246,7 +246,7 @@ func (m Model) ClosePair() {
 func (m Model) quit() (tea.Model, tea.Cmd) {
 	m = m.closePairPage("")
 	m.quitting = true
-	return m, tea.Sequence(m.agentGone(), tea.Quit)
+	return m, tea.Quit
 }
 
 // live is a code that still waits for a device.
@@ -348,7 +348,7 @@ func (p *pairPage) strips() bool { return p != nil && p.beat >= 3 }
 // pairStripEsc is esc that dismisses the strip: the console has nothing
 // else of its own for it to cancel.
 func (m Model) pairStripEsc(k tea.KeyPressMsg) bool {
-	return bkey.Matches(k, m.keys.pair.Close) && m.pair.strips() && !m.chatKeys && m.form == nil && m.sheet == nil &&
+	return bkey.Matches(k, m.keys.pair.Close) && m.pair.strips() && !m.standIn && !m.viewFull() && m.form == nil && m.sheet == nil &&
 		m.pending == nil && m.held == nil && m.scanAsk == nil && !m.searching && m.filter == ""
 }
 

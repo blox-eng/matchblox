@@ -8,6 +8,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/logos"
@@ -27,8 +29,8 @@ func TestEveryWayInJumps(t *testing.T) {
 		ran := recordRuns(&m)
 		next, cmd := key(m, k)
 		drain(cmd)
-		if nm := next.(Model); nm.chatKeys || nm.pending != nil {
-			t.Errorf("%s: chat %v, pending %v: want the jump at once", k, nm.chatKeys, nm.pending)
+		if nm := next.(Model); nm.standIn || nm.pending != nil {
+			t.Errorf("%s: stand-in %v, pending %v: want the jump at once", k, nm.standIn, nm.pending)
 		}
 		if len(*ran) != 1 || strings.Join((*ran)[0], " ") != "tmux switch-client -t %1" {
 			t.Errorf("%s ran %q", k, *ran)
@@ -36,22 +38,58 @@ func TestEveryWayInJumps(t *testing.T) {
 	}
 }
 
-// A phone keeps the live view: the first tap on a row selects it, a tap on
-// the selected row goes into its pane. A split screen does the same.
+// A phone keeps the live view (owner, 2026-11-08): the first tap on a row
+// selects it and opens its view over the screen; a tap on the view, or
+// Enter, goes into its pane. A split screen shows the view beside the list,
+// and a second tap on the row goes in.
 func TestATapOnARowJumps(t *testing.T) {
-	for _, w := range []int{44, 100} {
-		m, _ := loadedWith(t, w, fixtureState())
-		ran := recordRuns(&m)
-		next, cmd := tap(m, 5, sessLine(t, m, "app-review"))
-		drain(cmd)
-		if s, _ := next.(Model).selectedSession(); s.Pane != "%2" || len(*ran) != 0 || next.(Model).chatKeys {
-			t.Fatalf("width %d: the first tap selected %q, ran %q, chat %v", w, s.Pane, *ran, next.(Model).chatKeys)
-		}
-		next, cmd = tap(next, 5, sessLine(t, next.(Model), "app-review"))
-		drain(cmd)
-		if len(*ran) != 1 || strings.Join((*ran)[0], " ") != "tmux switch-client -t %2" || next.(Model).chatKeys {
-			t.Errorf("width %d: the second tap ran %q, chat %v", w, *ran, next.(Model).chatKeys)
-		}
+	m, _ := loadedWith(t, 44, fixtureState())
+	ran := recordRuns(&m)
+	next, cmd := tap(m, 5, sessLine(t, m, "app-review"))
+	drain(cmd)
+	if s, _ := next.(Model).selectedSession(); s.Pane != "%2" || len(*ran) != 0 || !next.(Model).viewFull() {
+		t.Fatalf("44 wide: the first tap selected %q, ran %q, view %v", s.Pane, *ran, next.(Model).viewFull())
+	}
+	opened := next.(Model)
+	_, cmd = tap(opened, 5, 5)
+	drain(cmd)
+	if len(*ran) != 1 || strings.Join((*ran)[0], " ") != "tmux switch-client -t %2" {
+		t.Errorf("44 wide: a tap on the view ran %q", *ran)
+	}
+	_, cmd = key(opened, "enter")
+	drain(cmd)
+	if len(*ran) != 2 || strings.Join((*ran)[1], " ") != "tmux switch-client -t %2" {
+		t.Errorf("44 wide: enter in the view ran %q", *ran)
+	}
+
+	m, _ = loadedWith(t, 100, fixtureState())
+	ran = recordRuns(&m)
+	next, cmd = tap(m, 5, sessLine(t, m, "app-review"))
+	drain(cmd)
+	if s, _ := next.(Model).selectedSession(); s.Pane != "%2" || len(*ran) != 0 || next.(Model).viewOpen {
+		t.Fatalf("100 wide: the first tap selected %q, ran %q, view open %v", s.Pane, *ran, next.(Model).viewOpen)
+	}
+	_, cmd = tap(next, 5, sessLine(t, next.(Model), "app-review"))
+	drain(cmd)
+	if len(*ran) != 1 || strings.Join((*ran)[0], " ") != "tmux switch-client -t %2" {
+		t.Errorf("100 wide: the second tap ran %q", *ran)
+	}
+}
+
+func TestATapOnTheViewsTitleGoesBack(t *testing.T) {
+	m, _ := loadedWith(t, 44, fixtureState())
+	m = openView(t, m)
+	next, _ := tap(m, 3, 0)
+	if nm := next.(Model); nm.viewOpen || !strings.Contains(ansi.Strip(nm.render()), "SESSIONS") {
+		t.Fatalf("a tap on ‹ Sessions left view %v", nm.viewOpen)
+	}
+	next, _ = key(m, "esc")
+	if next.(Model).viewOpen {
+		t.Fatal("esc left the view open")
+	}
+	next, _ = m.Update(uv.UnknownApcEvent(homeKey))
+	if next.(Model).viewOpen {
+		t.Fatal("the home key left the view open")
 	}
 }
 
@@ -135,42 +173,40 @@ func TestAFocusOnAWaitGoesIntoThePane(t *testing.T) {
 	st.Focus.Client = "/dev/ttys004"
 	next, cmd := m.Update(stateMsg(st))
 	runFocus(t, cmd)
-	if next.(Model).chatKeys || len(*ran) != 1 || !slices.Equal((*ran)[0], remote.FocusArgv("/dev/ttys004", "%2")) {
-		t.Errorf("ran %q, chat %v: want FocusArgv for the phone", *ran, next.(Model).chatKeys)
+	if next.(Model).standIn || len(*ran) != 1 || !slices.Equal((*ran)[0], remote.FocusArgv("/dev/ttys004", "%2")) {
+		t.Errorf("ran %q, stand-in %v: want FocusArgv for the phone", *ran, next.(Model).standIn)
 	}
 }
 
-// openChatCmd gives the keys to the chat of the selected session, as the
-// demo does until the live view replaces it, with the commands that opens it.
-func openChatCmd(m Model) (Model, tea.Cmd) {
-	s, _ := m.selectedSession()
-	next, cmd := m.chatOn(s.Pane).Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
+// openViewCmd opens the live view of the selected session, as a first tap
+// on its row does on a phone.
+func openViewCmd(m Model) (Model, tea.Cmd) {
+	m.viewOpen = true
+	next, cmd := m.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 	return next.(Model), cmd
 }
 
-// keyOrOpen presses k; an Enter on a session that would have opened its chat
-// gives the chat the keys instead.
+// keyOrOpen presses k; an Enter on a session, which would go into its pane,
+// opens its live view instead.
 func keyOrOpen(m tea.Model, k string) (tea.Model, tea.Cmd) {
-	if nm, ok := m.(Model); ok && k == "enter" && !nm.chatKeys && nm.focus(keyPress(k)) == layerMain {
+	if nm, ok := m.(Model); ok && k == "enter" && !nm.viewOpen && nm.focus(keyPress(k)) == layerMain {
 		if s, ok := nm.selectedSession(); ok && s.Pane != "" {
-			return openChatCmd(nm)
+			return openViewCmd(nm)
 		}
 	}
 	return key(m, k)
 }
 
-func openChat(t *testing.T, m Model) Model {
+func openView(t *testing.T, m Model) Model {
 	t.Helper()
-	if m.chatKeys {
-		t.Error("the chat already has the keys: Enter goes to its agent")
-	}
-	m, cmd := openChatCmd(m)
+	m, cmd := openViewCmd(m)
 	drain(cmd)
 	return m
 }
 
-func TestCtrlOInTheChatGoesIntoThePane(t *testing.T) {
-	m, _ := inChat(t)
+func TestCtrlOInTheViewGoesIntoThePane(t *testing.T) {
+	m, _ := loadedWith(t, 44, fixtureState())
+	m = openView(t, m)
 	ran := recordRuns(&m)
 	_, cmd := key(m, "ctrl+o")
 	drain(cmd)
@@ -185,8 +221,8 @@ func TestAClickRightOfTheListGoesIn(t *testing.T) {
 	sc := m.draw(200)
 	next, cmd := m.Update(tea.MouseClickMsg(tea.Mouse{X: sc.listW + 5, Y: sc.bodyTop + 1, Button: tea.MouseLeft}))
 	drain(cmd)
-	if len(*ran) != 1 || next.(Model).chatKeys {
-		t.Errorf("ran %q, chat %v", *ran, next.(Model).chatKeys)
+	if len(*ran) != 1 || next.(Model).standIn {
+		t.Errorf("ran %q, stand-in %v", *ran, next.(Model).standIn)
 	}
 }
 
@@ -222,16 +258,6 @@ func TestATapIntoAStokerHostAsksFirst(t *testing.T) {
 	next, cmd = m.Update(tea.MouseClickMsg(tea.Mouse{X: sc.listW + 5, Y: sc.bodyTop + 1, Button: tea.MouseLeft}))
 	asked(t, "tap right of the list", next, ran, cmd)
 
-	st := cardState("toolu_1", threeWays)
-	st.Stoker = stokerState(runningNight(time.Now())).Stoker
-	m, _ = loadedWith(t, 140, st)
-	m = onPane(t, m, "%1")
-	next, _ = m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
-	next, _ = next.Update(screenMsg{Pane: "%1", At: m.now(), Text: permitScreen})
-	m = pastQuiet(next.(Model))
-	ran = recordRuns(&m)
-	next, cmd = tap(m, 110, rowWith(t, m, "2. Yes, and don't ask again"))
-	asked(t, "tap on a menu option", next, ran, cmd)
 }
 
 func TestAOnAStuckShipAtNightAsksToTakeOver(t *testing.T) {

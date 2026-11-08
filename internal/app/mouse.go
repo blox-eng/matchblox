@@ -7,12 +7,12 @@ import (
 // tap is a click or a finger on a phone. A tap on a tab opens it, on a key
 // of the key line, of an opened row or under the detail presses it, on `● N wait for you` selects the first
 // session that waits, on the dock's `machine ›` switches the panel. A tap
-// right of the list gives the chat the keys, and so does a tap on a
-// session's row on a phone; a tap on the list, or on the title row of a
-// phone's chat, gives them back to Sessions. At a menu wait, once the chat has
-// the keys, a tap on an option of the agent's own menu picks it through the
-// chat's keys; a click that gives it the keys, and any other tap on the agent's
-// screen, presses nothing. A tap on a row selects it and shows the step a second tap runs: an answer for
+// on the live view goes into the agent's pane: right of the list, or over
+// the whole screen of a phone, where its title row goes back to Sessions.
+// The demo's stand-in is answered with the belt: a tap on its screen
+// presses nothing. A tap on a session's row selects it, and on a phone
+// opens its live view; a tap on the selected row goes into its pane. A tap
+// on another row selects it and shows the step a second tap runs: an answer for
 // a session that waits, else the row's Enter. The second tap runs it when
 // it only moves this terminal, or asks to confirm it. A tap is never
 // consent to a destructive step, and it cancels a pending one.
@@ -47,17 +47,14 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.form != nil {
 		return m.tapForm(ms, sc)
 	}
-	if press, texts := m.optionAt(ms, sc); press != "" {
-		if m.chatKeys {
-			return m.tapOption(press, texts)
+	if sc.chatFull && ms.Y != sc.keysAt {
+		switch {
+		case ms.Y == 0:
+			return m.closeView(), nil
+		case m.standIn:
+			return m, nil
 		}
 		return m.intoSelected()
-	}
-	if sc.chatFull && ms.Y != sc.keysAt {
-		if ms.Y == 0 {
-			m.chatKeys = false
-		}
-		return m, nil
 	}
 	switch {
 	case ms.Y == 0:
@@ -83,8 +80,7 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		if s, ok := spanAt(sc.keys, ms.X); ok {
 			m.armed = ""
 			if s.press == tapBack {
-				m.chatKeys = false
-				return m, nil
+				return m.closeView(), nil
 			}
 			return m.keyed(keyPress(s.press))
 		}
@@ -115,8 +111,6 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	back := m.chatKeys // the tap gives the keys back, and opens nothing
-	m.chatKeys = false
 	if sc.rows[i] == stokerPanelRow {
 		return m.openStoker().seeStoker()
 	}
@@ -136,10 +130,6 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	picked := m.view().index != nil && m.rowIndex() == sc.rows[i] && (m.tab != tabSessions || m.chose)
 	m.selectRow(sc.rows[i])
-	if s, ok := m.selectedSession(); ok && s.Pane != "" && s.Host == m.opt.Host && m.oneColumn(w) && m.opt.Demo != "" {
-		m.armed = "" // the demo has no pane: on one column, as on a phone, the session opens in its chat
-		return m.goInto(s.Host, s.Pane)
-	}
 	if m.tab == tabShips {
 		// A tap on the selected ship goes to its session, as Enter does.
 		m.armed, m.flash = "", ""
@@ -149,11 +139,12 @@ func (m Model) tap(ms tea.Mouse) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if host, pane := m.tapTarget(); pane != "" {
-		// A tap selects a session; a tap on it once it is selected goes into
-		// its pane.
+		// A tap selects a session, and on a phone opens its live view; a
+		// tap on it once it is selected goes into its pane.
 		m.armed, m.flash = "", ""
-		if !picked || back {
-			return m, nil // the default selection is not a tap
+		if !picked { // the default selection is not a tap
+			m.viewOpen = m.oneColumn(w)
+			return m, nil
 		}
 		return m.goIntoAsking(host, pane)
 	}
@@ -198,8 +189,8 @@ func (m Model) tapAct() (string, func(Model) (tea.Model, tea.Cmd), string) {
 	}, m.actHost(a)
 }
 
-// wheel is a swipe on a phone: over the chat it goes to the agent, which
-// scrolls itself; elsewhere it moves the selection, as ↑ and ↓ do.
+// wheel is a swipe on a phone: over the live view it scrolls the agent's
+// screen back; elsewhere it moves the selection, as ↑ and ↓ do.
 func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	if m.asking() {
 		return m, nil
@@ -207,7 +198,7 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	m.held = nil // a swipe is another key: it drops the question
 	if m.overChat(ms) {
 		m.armed = ""
-		return m.wheelChat(ms.Button == tea.MouseWheelUp)
+		return m.wheelView(ms.Button == tea.MouseWheelUp)
 	}
 	switch ms.Button {
 	case tea.MouseWheelUp:
@@ -219,8 +210,8 @@ func (m Model) wheel(ms tea.Mouse) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// overChat tells if ms is over the chat: the whole screen of a phone's
-// chat, or the chat beside the list.
+// overChat tells if ms is over the live view: the whole screen of a
+// phone's, or the view beside the list.
 func (m Model) overChat(ms tea.Mouse) bool {
 	if !m.have || m.mismatch || m.pair.owns() || m.sheet != nil || m.form != nil || m.pending != nil {
 		return false

@@ -380,8 +380,6 @@ func (w *walker) walkTheDoors() {
 	w.t.Helper()
 	w.press("1")
 	w.refused("into tmux", "ctrl+o")
-	w.says("into tmux from a chat", "enter", "ctrl+o")
-	w.reset()
 	w.scrolls("in a chat")
 	w.reset()
 	w.clear()
@@ -853,9 +851,6 @@ func TestWhatThePhoneCannotDoSaysSo(t *testing.T) {
 		w.flashes("ctrl+o on tab "+tab, "ctrl+o")
 		w.clear()
 	}
-	w.flashes("ctrl+o in a chat", "enter", "ctrl+o")
-	w.reset()
-	w.clear()
 
 	w.flashes("a pane", "6", "enter")
 	w.clear()
@@ -933,6 +928,8 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 	w.press("/")
 	w.send("a search", "fresh-one")
 	w.press("enter", "enter")
+	w.term.waitFor(t, "keys go to fresh-one")
+	time.Sleep(500 * time.Millisecond) // its screen comes: a key answers only what the console showed
 	w.send("a message", "hello")
 	from := len(w.term.text())
 	w.press("enter")

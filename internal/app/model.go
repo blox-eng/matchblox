@@ -322,10 +322,6 @@ type Model struct {
 	watchSize  [2]int             // the chat's size the service sizes the agent's window to: cols, rows
 	watchSince time.Time          // when the watched pane was selected: its size waits sizeDwell
 	sizeTick   time.Time          // the watchSince a sizeDueMsg is on its way for
-	menuSeen   menuSeen           // the chat's quiet: the wait it shows and its start
-	tapped     tappedOption       // the option a tap pressed, until the next screen
-	shortPID   int                // the session whose chat a too short screen dropped, until the person chooses something else
-	chatShut   time.Time          // when the chat last closed by itself: keys typed for it go nowhere for a moment
 	changes    map[paneKey]change // a match change that plays once
 	animating  bool
 	hist       history.Series
@@ -371,15 +367,9 @@ type Model struct {
 	// copied on write.
 	held        func(Model) (tea.Model, tea.Cmd)
 	heldOn      string
-	chatKeys    bool      // the chat has the keys: they go to the selected session's agent
-	backArmed   time.Time // when ctrl+a, the first key of the chat's way back, was pressed; zero: not armed
-	agentSaid   string    // the agent signal last written to the terminal; "" none yet
-	tmuxSaid    bool      // the key line said this tmux passes no agent signal
-	keyQ        []chatKey // the chat's keys behind the one in flight
-	keyInFlight string    // the act id of the chat's key the service has not answered
-	keyFlying   chatKey   // the key in flight
-	ctrlC       ctrlCMark // the last ^C the chat sent, and when it went
-	ctrlCHeld   ctrlCMark // the agent whose next ^C goes: one came within a second of the last
+	viewOpen    bool      // one column: the selected session's live view takes the screen
+	standIn     bool      // the demo's stand-in for a pane: the live view forwards the keys to the demo's world
+	backArmed   time.Time // when ctrl+a, the first key of the stand-in's way back, was pressed; zero: not armed
 	touched     map[string]time.Time
 	all         lists  // what every host sent, merged; queue, recs and snap hold the drawn copies
 	homeAll     lists  // what the home host sent
@@ -622,19 +612,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m = m.scanShows()
 	switch msg.(type) {
 	case tea.KeyPressMsg, tea.MouseClickMsg:
-		m.shortPID = 0 // a choice made: the dropped chat stays dropped
 		m.askedBy, m.marked = m.marked.spend(m.now()), clientMark{}
 	default:
 		m.askedBy = ""
 	}
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
-		nm = nm.scanShows().keepChat(m).noteMenu().inDemo()
+		nm = nm.scanShows().keepView().inDemo()
 		if watch := nm.watchCmd(); watch != nil {
 			cmd = tea.Batch(cmd, watch)
-		}
-		if say := nm.tellAgent(); say != nil {
-			cmd = tea.Batch(cmd, say)
 		}
 		next = nm
 	}
@@ -673,27 +659,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.update(msg.msg)
 	case uv.UnknownApcEvent:
-		if string(msg) == homeKey {
-			m.chatKeys = false
-			return m, nil
-		}
-		return m.commandKey(string(msg))
-	case sizeDueMsg:
-		return m, nil // Update sends the size, if it is due
-	case ctrlCLapsed:
-		return m.lapseCtrlC(msg), nil
-	case tapLapsed:
-		if m.tapped.at.Equal(msg.at) {
-			m.tapped = tappedOption{}
+		if string(msg) == homeKey && m.viewOpen {
+			return m.closeView(), nil
 		}
 		return m, nil
+	case sizeDueMsg:
+		return m, nil // Update sends the size, if it is due
 	case screenMsg:
 		if msg.Pane == m.watching && msg.Err != "" {
 			m.flash = msg.Err // a read that failed: the session and its last screen stay
 			return m, m.recv()
 		}
 		if msg.Pane == m.watching {
-			m.screen, m.tapped = proto.Screen(msg), tappedOption{}
+			m.screen = proto.Screen(msg)
 		}
 		return m, m.recv()
 	case peerMsg:
@@ -829,8 +807,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case planTickMsg:
 		return m.planTick(msg)
 	case resultMsg:
-		if msg.ActID != "" && msg.ActID == m.keyInFlight {
-			return m.keyAnswered(proto.Result(msg))
+		if strings.HasPrefix(msg.ActID, keyActID) {
+			if msg.Err != "" {
+				m.flash = msg.Err
+			}
+			return m, m.recv()
 		}
 		if pane, ok := strings.CutPrefix(msg.ActID, watchActID); ok && msg.Err != "" {
 			// A pane that went before the watch came is a race, not the builder's error.
@@ -860,9 +841,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var lost []string
 		if m.hostCount() == 1 {
 			lost = append(lost, "connection lost: "+msg.err.Error())
-		}
-		if n := len(m.keyQ); n > 0 { // keepChat drops them: the agent may hold half a line
-			lost = append(lost, "not sent: "+plural(n, "key")+", the connection dropped")
 		}
 		if m.batch != nil {
 			// Their results went with the connection; a peer's still come.
@@ -962,18 +940,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		toast := m.say("ran: " + msg.cmd)
 		return m, toast
 	case tea.PasteMsg:
-		// Only the ssh prompt, the form and the chat take a paste: in
-		// their field, as typed, or to the agent.
+		// Only the ssh prompt and the form take a paste, in their field.
 		if m.ask != nil {
 			return m.askPaste(msg.Content), nil
 		}
-		switch f := m.focus(tea.KeyPressMsg{}); {
-		case f == layerForm:
+		if m.focus(tea.KeyPressMsg{}) == layerForm {
 			return m.formPaste(msg.Content)
-		case f == layerMain && m.chatKeys:
-			m, touch := m.touchRest()
-			next, cmd := m.chatPaste(msg.Content)
-			return next, tea.Batch(touch, cmd)
 		}
 		return m, nil
 	case tea.MouseClickMsg:
@@ -993,23 +965,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var touch tea.Cmd
 		// f and n are stoker acts themselves: a touch sent with them would
 		// race them on the service.
-		if m.pair != nil || m.sheet != nil || m.form != nil || m.searching || m.chatKeys || !bkey.Matches(msg, m.keys.main.Stoke, m.keys.main.Night) {
+		if m.pair != nil || m.sheet != nil || m.form != nil || m.searching || m.standIn || !bkey.Matches(msg, m.keys.main.Stoke, m.keys.main.Night) {
 			m, touch = m.touchRest()
 		}
 		f := m.focus(msg)
-		if m.chatJustShut() && (f == layerMain || bkey.Matches(msg, m.keys.global.Quit)) {
-			return m, touch // typed for the chat that just closed: no q quits, no letter acts
-		}
 		armed := m.backArmed
 		m.backArmed = time.Time{}
-		if m.chatKeys && (f == layerMain || f == layerTakeOver) && m.chatBacks(msg, armed) {
-			m.chatKeys = false
-			return m, touch
+		if m.standIn && f == layerMain && m.chatBacks(msg, armed) {
+			return m.leaveStandIn(), touch
 		}
 		// ctrl+c quits from every layer but a question, where any key but
-		// its answers cancels, and the chat, which sends it to the agent.
-		chat := m.chatKeys && (f == layerMain || f == layerTakeOver)
-		if f != layerAsk && f != layerHeld && f != layerPending && !chat && bkey.Matches(msg, m.keys.global.Quit) {
+		// its answers cancels, and the stand-in, which sends it to the agent.
+		standIn := m.standIn && f == layerMain
+		if f != layerAsk && f != layerHeld && f != layerPending && !standIn && bkey.Matches(msg, m.keys.global.Quit) {
 			next, cmd := m.quit()
 			if f == layerMain {
 				next, cmd = stokerSeen(next, cmd) // as every key of the tabs
@@ -1292,11 +1260,14 @@ func (m Model) pendingKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // key is k on the tabs, with nothing on top.
 func (m Model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if m.chatKeys {
-		return m.chatKey(k)
+	if m.standIn {
+		return m.standInKey(k)
 	}
 	mk := m.keys.main
 	m.flash = ""
+	if m.viewFull() && bkey.Matches(k, mk.Back) {
+		return m.closeView(), nil
+	}
 	switch {
 	case bkey.Matches(k, mk.Stoker):
 		return m.openStoker(), nil

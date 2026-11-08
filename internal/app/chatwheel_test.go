@@ -5,46 +5,14 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/blox-eng/matchblox/internal/proto"
 )
 
-// chatTitleInk is the ink of the session's name on the chat's title row.
-func chatTitleInk(t *testing.T, m Model) string {
-	t.Helper()
-	sc := m.draw(m.width)
-	s, _ := m.selectedSession()
-	x := 0
-	for _, sp := range parsed(t, m.render())[sc.bodyTop] {
-		if x > sc.listW && strings.Contains(sp.Text, s.Name) {
-			return sp.FG
-		}
-		x += lipgloss.Width(sp.Text)
-	}
-	t.Fatalf("no title on the chat:\n%s", screen(m))
-	return ""
-}
-
-// chatEdgeInk is the ink of the line between the list and the chat.
-func chatEdgeInk(t *testing.T, m Model) string {
-	t.Helper()
-	sc := m.draw(m.width)
-	x := 0
-	for _, sp := range parsed(t, m.render())[sc.bodyTop+1] {
-		if x == sc.listW && strings.HasPrefix(sp.Text, "│") {
-			return sp.FG
-		}
-		x += lipgloss.Width(sp.Text)
-	}
-	t.Fatalf("no edge at column %d:\n%s", sc.listW, screen(m))
-	return ""
-}
-
-// deskChat is the demo desk with the chat holding the keys, and its fake.
+// deskChat is the demo desk with the live view beside the list, and its fake.
 func deskChat(t *testing.T) (Model, *fakeConn) {
 	t.Helper()
-	m := openChat(t, demoSized(t, 132, 32))
+	m := demoSized(t, 132, 32)
 	return m, m.conn.(*fakeConn)
 }
 
@@ -96,23 +64,23 @@ func TestTheWheelOverTheListMovesTheSelection(t *testing.T) {
 	}
 }
 
-// The chat is a window on the pane: the wheel goes to the agent, and the
-// console keeps no history of its own (#288).
-func TestTheWheelOverTheChatGoesToTheAgent(t *testing.T) {
-	m, f := deskChat(t)
+// The view is a window on the pane: the wheel scrolls it back through the
+// service, and the console keeps no history of its own (#288). T14.
+func TestTheWheelScrollsTheLiveViewBack(t *testing.T) {
+	m, f := loadedWith(t, 100, fixtureState())
+	m.tab = tabSessions
 	before := len(keyActs(f))
 	m = wheelChat(t, m, true, 1)
 	got := keyActs(f)[before:]
-	sel, _ := m.selectedSession()
-	if len(got) != 1 || got[0].Text != proto.WheelUp || got[0].RecID != proto.KeysPrefix+sel.Pane {
-		t.Fatalf("sent %+v", got)
+	if len(got) != 1 || got[0].Text != proto.WheelUp || got[0].RecID != proto.KeysPrefix+"%1" {
+		t.Fatalf("sent %+v, want one keys:%%1 %s", got, proto.WheelUp)
 	}
-	if !m.chatKeys {
-		t.Fatal("the chat gave the keys back")
+	if m.standIn || m.viewOpen {
+		t.Fatal("the wheel opened the view")
 	}
 }
 
-func TestTheWheelDownGoesToTheAgent(t *testing.T) {
+func TestTheWheelDownScrollsTheLiveViewOn(t *testing.T) {
 	m, f := deskChat(t)
 	before := len(keyActs(f))
 	wheelChat(t, m, false, 1)
@@ -121,60 +89,12 @@ func TestTheWheelDownGoesToTheAgent(t *testing.T) {
 	}
 }
 
-// A flick must stop when it stops: steps never pile up behind the agent.
-func TestAFlickKeepsOneWheelStepWaiting(t *testing.T) {
-	m, _ := deskChat(t)
-	m = wheelChat(t, m, true, 20)
-	if len(m.keyQ) != 1 || m.keyQ[0].text != proto.WheelUp {
-		t.Fatalf("queue %+v", m.keyQ)
-	}
-}
-
-func TestPageKeysGoToTheAgent(t *testing.T) {
-	m, f := deskChat(t)
-	before := len(keyActs(f))
-	pressKeys(t, m, "pgup")
-	if got := keyActs(f)[before:]; len(got) != 1 || got[0].Text != "PPage" {
-		t.Fatalf("sent %+v", got)
-	}
-}
-
 func TestAWatchAsksForTheLiveScreenOnly(t *testing.T) {
 	m, f := deskChat(t)
 	wheelChat(t, m, true, 3)
-	if a := lastWatch(t, f); a.Text != "" {
-		t.Fatalf("watch text %q", a.Text)
-	}
-}
-
-// With the stoker in charge the wheel writes to no pane, and asks nothing:
-// looking around never asks. The line says how to take over.
-func TestTheWheelWritesNothingWhileTheStokerIsInCharge(t *testing.T) {
-	m, f := nightChat(t)
-	m = wheelChat(t, m, true, 3)
-	if got := keyActs(f); len(got) != 0 || m.held != nil {
-		t.Fatalf("sent %+v, held %v", got, m.held != nil)
-	}
-	if m.flash != "not scrolled: the stoker is in charge — press a key in the chat to take over" {
-		t.Fatalf("flash %q", m.flash)
-	}
-}
-
-// A swipe that opens the chat of a stoker's pane looks and writes nothing.
-func TestAWheelThatOpensAStokerChatWritesNothing(t *testing.T) {
-	m, f := nightChat(t)
-	m = pressKeys(t, m, "ctrl+a", "m")
-	m = wheelChat(t, m, true, 1)
-	if got := keyActs(f); len(got) != 0 || m.held != nil {
-		t.Fatalf("sent %+v, held %v", got, m.held != nil)
-	}
-}
-
-// PgUp is a key: with the stoker in charge it asks to take over, as any key.
-func TestPgUpAsksToTakeOverWhileTheStokerIsInCharge(t *testing.T) {
-	m, f := nightChat(t)
-	m = pressKeys(t, m, "pgup")
-	if got := keyActs(f); len(got) != 0 || m.held == nil {
-		t.Fatalf("sent %+v, held %v", got, m.held != nil)
+	for _, a := range f.allActs() {
+		if strings.HasPrefix(a.RecID, proto.WatchPrefix) && a.Text != "" {
+			t.Fatalf("watch text %q", a.Text)
+		}
 	}
 }

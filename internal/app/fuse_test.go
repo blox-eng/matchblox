@@ -550,7 +550,7 @@ func TestOpenedLinesStartWithTwoBlanks(t *testing.T) {
 	ran := recordRuns(&m)
 	next, cmd := m.Update(tea.MouseClickMsg{X: strings.Index(line, "⏎") + 1, Y: sc.actKeysAt, Button: tea.MouseLeft})
 	drain(cmd)
-	if len(*ran) != 1 || next.(Model).chatKeys {
-		t.Errorf("a tap on ⏎ go in ran %q, chat %v", *ran, next.(Model).chatKeys)
+	if len(*ran) != 1 || next.(Model).standIn {
+		t.Errorf("a tap on ⏎ go in ran %q, stand-in %v", *ran, next.(Model).standIn)
 	}
 }

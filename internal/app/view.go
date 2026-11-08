@@ -194,7 +194,7 @@ func (m Model) drawScreen(w int) drawn {
 		return sc
 	}
 	listW, detailW := m.panes(w)
-	if place, _ := m.chatPlacement(w); m.chatKeys && place == chatFull { // one column: the chat takes the screen
+	if m.viewFull() { // one column: the live view takes the screen
 		return m.chatScreen(w)
 	}
 	full := m.bodyRows()
@@ -250,7 +250,7 @@ func (m Model) drawScreen(w int) drawn {
 		vis, sc.full = m.leftColumn(b, listW, room)
 	}
 	edge := m.st.hair
-	if chatting && m.chatKeys {
+	if chatting && m.standIn {
 		edge = m.st.accent
 	}
 	for i := range room {
@@ -634,11 +634,11 @@ func (m Model) keyLine(w int) (string, []span) {
 	if m.flash != "" {
 		return fit(" "+st.text.Render(m.flash), w), nil
 	}
-	if l := m.lostLine(); l != "" { // a lost host outranks the chat's keys, which may not go
+	if l := m.lostLine(); l != "" { // a lost host outranks the stand-in's keys, which may not go
 		return fit(" "+st.text.Render(l), w), nil
 	}
-	if m.chatKeys {
-		return m.chatKeyLine(w)
+	if m.viewFull() || m.standIn {
+		return m.liveKeyLine(w)
 	}
 	hints := slices.DeleteFunc(slices.Clone(m.view().keys(m)), func(h hint) bool { return h == (hint{}) })
 	if m.layoutAt(w) == Wide {

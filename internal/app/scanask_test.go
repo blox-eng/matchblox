@@ -656,13 +656,12 @@ func TestGhostsAreBuiltWithTheRepos(t *testing.T) {
 	}
 }
 
-// TestScanBoxWaitsForTheChat: a scan question that comes while the chat
-// has the keys takes none of them: what the person types goes to the
-// agent. When ctrl+a m gives the keys back the box shows, in a new quiet,
-// and then y answers it.
+// TestScanBoxWaitsForTheChat: a scan question that comes while the live
+// view takes a phone's screen is not drawn, so it takes no key. When esc
+// goes back to Sessions the box shows, in a new quiet, and then y answers it.
 func TestScanBoxWaitsForTheChat(t *testing.T) {
 	st := lifeState()
-	m, f := loadedWith(t, 100, st)
+	m, f := loadedWith(t, 44, st)
 	pane := ""
 	for _, s := range m.snap.Sessions {
 		if s.Pane != "" && s.Host == m.opt.Host {
@@ -670,18 +669,18 @@ func TestScanBoxWaitsForTheChat(t *testing.T) {
 			break
 		}
 	}
-	m = openChat(t, onPane(t, m, pane))
-	if !m.chatKeys {
-		t.Fatal("enter did not open the chat")
+	m = openView(t, onPane(t, m, pane))
+	if !m.viewFull() {
+		t.Fatal("the view does not take the screen")
 	}
 	next, _ := m.Update(stateMsg(askState()))
-	m = pressKeys(t, pastQuiet(calm(next)), "y", "e", "s")
-	if m.scanShown() || slices.ContainsFunc(f.acts(), func(a proto.Act) bool { return strings.HasPrefix(a.RecID, "scan:") }) || len(keyActs(f)) == 0 {
-		t.Fatalf("the box took the chat's keys: shown %v acts %+v", m.scanShown(), f.acts())
+	m = calm(next)
+	if m.scanShown() {
+		t.Fatal("the box shows over the view")
 	}
-	m = pressKeys(t, m, "ctrl+a", "m")
-	if m.chatKeys || !m.scanShown() {
-		t.Fatalf("after ctrl+a m: chat %v box %v", m.chatKeys, m.scanShown())
+	m = pressKeys(t, m, "esc")
+	if m.viewOpen || !m.scanShown() {
+		t.Fatalf("after esc: view %v box %v", m.viewOpen, m.scanShown())
 	}
 	n := len(f.acts())
 	next, cmd := key(m, "y")

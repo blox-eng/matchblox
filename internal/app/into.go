@@ -15,10 +15,10 @@ import (
 func noPane(name string) string { return name + " runs outside tmux: no pane to go into" }
 
 // goInto takes the builder into the pane of an agent. The demo has no tmux:
-// it opens the chat.
+// it opens the stand-in for the pane.
 func (m Model) goInto(host, pane string) (tea.Model, tea.Cmd) {
 	if m.opt.Demo != "" {
-		return m.chatOn(pane), nil
+		return m.openStandIn(pane), nil
 	}
 	host = cmp.Or(host, m.opt.Host)
 	return m.runInto(m.forHost(host, m.jumpOn(host, pane)))

@@ -13,9 +13,6 @@ import (
 	"github.com/blox-eng/matchblox/internal/demo"
 )
 
-// quiet is longer than the console's quiet after a menu comes to a chat.
-const quiet = 700 * time.Millisecond
-
 // settled is how long after the chat shows again at a new size that a tap
 // goes through: the screen at that size arrives and starts the console's
 // quiet once more.
@@ -105,22 +102,23 @@ func transcript(t *testing.T) string {
 }
 
 const (
-	flintRow  = 6  // flint-auth's row on the first screen at 44x31
-	optionRow = 18 // an option of its menu, once the chat shows
+	flintRow = 6  // flint-auth's row on the first screen at 44x31
+	viewRow  = 12 // a row of its live view, once a tap opens it
 )
 
+// openQuestion opens the stand-in for flint-auth's pane, which asks.
 func openQuestion(t *testing.T) (*demo.Demo, *terminal) {
 	t.Helper()
 	t.Setenv("TMPDIR", t.TempDir())
 	d, term := start(t)
 	term.waitFor(t, "WAITS FOR YOU", "flint-auth")
-	term.send(t, "a")
-	term.waitFor(t, "Rotate it")
-	time.Sleep(quiet)
+	term.send(t, "\r")
+	term.waitFor(t, "Rotate it", "type 2 to answer")
 	return d, term
 }
 
-func TestAnAnswerEndsInDone(t *testing.T) {
+// TestTheStandInAnswersWithADigit: T8.
+func TestTheStandInAnswersWithADigit(t *testing.T) {
 	d, term := openQuestion(t)
 	done := d.Done
 	if done() {
@@ -132,6 +130,30 @@ func TestAnAnswerEndsInDone(t *testing.T) {
 	}
 	term.waitFor(t, "I rotate the token on each refresh")
 	eventually(t, 6*time.Second, "Done", done)
+}
+
+// TestTheStandInAnswersWithArrowsThenEnter: T8.
+func TestTheStandInAnswersWithArrowsThenEnter(t *testing.T) {
+	d, term := openQuestion(t)
+	term.send(t, "\x1b[B")             // Down: the cursor moves to 2. Rotate, keep
+	time.Sleep(500 * time.Millisecond) // the moved cursor reaches the screen the console shows
+	term.send(t, "\r")
+	term.waitFor(t, "I rotate the token on each refresh")
+	if got := transcript(t); !strings.Contains(got, "The user picked option 2") {
+		t.Errorf("Down then Enter did not pick option 2:\n%s", got)
+	}
+	eventually(t, 6*time.Second, "Done", d.Done)
+}
+
+// TestTheStandInGoesBackToSessions: T8, the app's home key.
+func TestTheStandInGoesBackToSessions(t *testing.T) {
+	d, term := openQuestion(t)
+	term.reset()
+	term.send(t, "\x1b_matchblox\x1b\\")
+	term.waitFor(t, "WAITS FOR YOU")
+	if d.Done() {
+		t.Fatal("going back answered the question")
+	}
 }
 
 // TestALineFeedGoesBackToTheFirstColumn: no terminal driver stands between the
@@ -177,41 +199,37 @@ func TestAResizeAtOnceIsKept(t *testing.T) {
 func TestTheDemoSurvivesATurn(t *testing.T) {
 	d, term := openQuestion(t)
 
+	term.reset()
 	d.Resize(106, 10)
-	term.waitFor(t, "too short")
+	term.waitFor(t, "flint-auth", "type 2 to answer")
 
 	term.reset()
 	d.Resize(44, 31)
 	term.waitFor(t, "Rotate it", "Keep the token")
-	if text := term.text(); strings.Contains(text, "too short") {
-		t.Errorf("a false line after turning back:\n%s", text)
-	}
 	time.Sleep(settled)
 	if d.Done() {
 		t.Fatal("a resize answered the question")
 	}
-	term.tap(t, optionRow)
+	term.send(t, "2")
 	term.waitFor(t, "I rotate the token on each refresh")
 	eventually(t, 6*time.Second, "Done", d.Done)
 }
 
-// TestTapsAloneEndInDone: one tap on the agent's row opens its question, one
-// tap on an option answers it. No key is pressed.
-func TestTapsAloneEndInDone(t *testing.T) {
+// TestTapsOpenTheStandIn: a tap on the agent's row opens its live view, a
+// tap on the view goes into the stand-in, and the belt's 2 answers.
+func TestTapsOpenTheStandIn(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	d, term := start(t)
 	term.waitFor(t, "WAITS FOR YOU", "flint-auth")
 	term.tap(t, flintRow)
-	term.waitFor(t, "Rotate it", "Keep the token")
-	time.Sleep(quiet)
+	term.waitFor(t, "Rotate it", "enter goes into flint-auth")
+	term.tap(t, viewRow)
+	term.waitFor(t, "type 2 to answer")
 	if d.Done() {
 		t.Fatal("Done before an answer")
 	}
-	term.tap(t, optionRow)
+	term.send(t, "2")
 	term.waitFor(t, "I rotate the token on each refresh")
-	if got := transcript(t); !strings.Contains(got, "The user picked option 1") {
-		t.Errorf("the tap did not pick option 1:\n%s", got)
-	}
 	eventually(t, 6*time.Second, "Done", d.Done)
 }
 

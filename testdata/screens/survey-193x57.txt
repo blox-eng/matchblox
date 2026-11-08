@@ -54,4 +54,4 @@
  STOKER                                                                  off │
  off · f starts it · n starts a night                                        │ Enter to select · ↑/↓ to navigate · Esc to cancel
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  ⏎ go in  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit  list only v                                                                      sampled 0s ago
+ ↑↓ move  enter goes into flint-auth  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit  list only v                                                   sampled 0s ago

@@ -74,11 +74,11 @@ func HomeKeyArgv() []string {
 }
 
 // CommandKeysArgv makes each command key of the phone a key of the tmux
-// server, in user-keys slots from 901 up (keycmd's table). A client in the
-// console's session, on a pane the console still runs in, hands the key on
-// to the console, whole, so its chat runs the command. Anywhere else the key
-// does nothing: a command runs only from the chat, and a shell left where a
-// console quit never reads it as typing.
+// server, in user-keys slots from 901 up (keycmd's table). In a pane the
+// console marked as an agent of the command's kind (@matchblox_agent) the
+// key types the command's text there, with no Return: the builder sends
+// it. Anywhere else the key does nothing, so a shell or another agent never
+// reads it as typing.
 func CommandKeysArgv() []string {
 	argv := []string{"tmux"}
 	for _, c := range keycmd.All() {
@@ -87,7 +87,7 @@ func CommandKeysArgv() []string {
 			argv = append(argv, ";")
 		}
 		argv = append(argv, "set-option", "-s", "user-keys["+slot+"]", seq,
-			";", "bind-key", "-n", "User"+slot, "if-shell", "-F", atConsole, "send-keys -H "+hexKeys(seq))
+			";", "bind-key", "-n", "User"+slot, "if-shell", "-F", "#{==:#{@matchblox_agent},"+c.Agent+"}", "send-keys -l "+c.Text)
 	}
 	return argv
 }

@@ -95,7 +95,7 @@ func TestAnswerAsksToo(t *testing.T) {
 	m, _ := loadedWith(t, 120, nightState())
 	// The first row waits on a permission prompt; the second can be
 	// answered. With the chat open, the first key to the agent asks.
-	if got := footerOf(sendKey(openChat(t, sendKey(m, "j").(Model)), "enter")); !strings.Contains(got, "Take over?") {
+	if got := footerOf(sendKey(openView(t, sendKey(m, "j").(Model)), "enter")); !strings.Contains(got, "Take over?") {
 		t.Fatalf("footer %q", got)
 	}
 }

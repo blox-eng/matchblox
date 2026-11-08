@@ -179,12 +179,8 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 	if _, ok := m.selectedDoor(); ok {
 		return false
 	}
-	if m.chatKeys { // the chat sends to the home host's agents
-		if bkey.Matches(k, m.keys.chat.Back) {
-			return false // the way back asks nothing
-		}
-		_, toAgent := keyName(k)
-		return (toAgent || bkey.Matches(k, m.keys.main.Jump)) && m.takeOverOn(m.opt.Host)
+	if m.standIn { // the demo's world, which has no stoker
+		return false
 	}
 	s, onSession := m.selectedSession()
 	on := func(a *action) bool { return a != nil && m.takeOverOn(m.actHost(a)) }
@@ -210,9 +206,6 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 // selection is by then.
 func (m Model) hold(k tea.KeyPressMsg) (func(Model) (tea.Model, tea.Cmd), string) {
 	switch {
-	case m.chatKeys && !bkey.Matches(k, m.keys.main.Jump):
-		text, _ := keyName(k)
-		return m.heldKeys(m.pressed(text)), m.opt.Host
 	case bkey.Matches(k, m.keys.main.Second):
 		a := m.secondary()
 		return func(m Model) (tea.Model, tea.Cmd) {

@@ -144,15 +144,12 @@ func TestEveryBindingHasHelp(t *testing.T) {
 	}
 }
 
-// TestTheChatsKeysAreTheServicesKeys: every key the chat sends by name is
-// one the service presses, and its text keys are proto's literal form.
+// TestTheChatsKeysAreTheServicesKeys: every key the stand-in sends by name
+// is one the service presses, and its text keys are proto's literal form.
 func TestTheChatsKeysAreTheServicesKeys(t *testing.T) {
 	for k, name := range keyNames {
 		if !slices.Contains(proto.KeyNames, name) && !strings.HasPrefix(name, proto.LitPrefix) {
 			t.Errorf("%s sends %q, which the service does not press", k, name)
 		}
-	}
-	if maxLit := proto.MaxLit; len(pasteTexts(strings.Repeat("x", maxLit+1))[0]) != len(proto.LitPrefix)+maxLit {
-		t.Errorf("a paste's chunk is not proto.MaxLit")
 	}
 }

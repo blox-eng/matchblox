@@ -154,3 +154,28 @@ func TestAStartMissingATokenIsRefusedNotPanicked(t *testing.T) {
 		}
 	}
 }
+
+// TestArrowsMoveTheMenusCursor: the stand-in's arrows move the cursor of
+// flint-auth's menu, and stop at its ends.
+func TestArrowsMoveTheMenusCursor(t *testing.T) {
+	w := newTestWorld(t, func(int) {})
+	const pane = "%2" // flint-auth, at its menu
+	press := func(k string) string {
+		t.Helper()
+		if err := w.Run([]string{"tmux", "send-keys", "-t", pane, k}); err != nil {
+			t.Fatalf("%s: %v", k, err)
+		}
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		return w.highlighted(pane)
+	}
+	if got := press("Down"); got != "2" {
+		t.Errorf("Down: the cursor is on %q, want 2", got)
+	}
+	if got := press("Up"); got != "1" {
+		t.Errorf("Up: the cursor is on %q, want 1", got)
+	}
+	if got := press("Up"); got != "1" {
+		t.Errorf("Up at the top: the cursor is on %q, want 1", got)
+	}
+}

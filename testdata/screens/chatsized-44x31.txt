@@ -28,4 +28,4 @@
 
 
 ────────────────────────────────────────────
- ctrl+a m back · ctrl+o go in
+ enter goes into app-feature · esc back

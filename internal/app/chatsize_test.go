@@ -252,21 +252,9 @@ func TestBrowsingSizesNoAgent(t *testing.T) {
 		t.Fatalf("a size before the dwell: %+v", got)
 	}
 	*at = at.Add(time.Millisecond)
-	next, cmd = m.Update(sizeDueMsg{})
+	_, cmd = m.Update(sizeDueMsg{})
 	drain(cmd)
-	m = next.(Model)
 	if got := sizedWatches(f, n); len(got) != 1 || got[0].RecID != proto.WatchPrefix+sel.Pane {
 		t.Fatalf("after resting: %+v, want one sized watch of %s", got, sel.Pane)
-	}
-
-	n = len(f.allActs())
-	*at = at.Add(100 * time.Millisecond)
-	next, cmd = key(m, "up")
-	drain(cmd)
-	next, cmd = keyOrOpen(next, "enter") // the chat takes the keys
-	drain(cmd)
-	sel, _ = next.(Model).selected()
-	if got := sizedWatches(f, n); len(got) != 1 || got[0].RecID != proto.WatchPrefix+sel.Pane || !next.(Model).chatKeys {
-		t.Fatalf("taking the keys: %+v, want one sized watch of %s at once", got, sel.Pane)
 	}
 }

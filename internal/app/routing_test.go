@@ -57,7 +57,7 @@ func routeAt(t *testing.T, st proto.State, keys ...string) Model {
 	return m.(Model)
 }
 
-// withRoute is a model with the layer open: sheet, form, chat, search, pair,
+// withRoute is a model with the layer open: sheet, form, search, pair,
 // held, pending, or none (main).
 func withRoute(t *testing.T, layer string) Model {
 	t.Helper()
@@ -74,12 +74,6 @@ func withRoute(t *testing.T, layer string) Model {
 		m := routeAt(t, queueAgents(), "N")
 		if m.form == nil {
 			t.Fatal("N opened no form")
-		}
-		return m
-	case "chat":
-		m := openChat(t, selectPane(t, routeAt(t, queueState()), "%2").(Model))
-		if !m.chatKeys {
-			t.Fatal("the chat has no keys")
 		}
 		return m
 	case "search":
@@ -152,16 +146,6 @@ func TestKeyRouting(t *testing.T) {
 			}
 			if next, _ := m.Update(esc); next.(Model).form != nil {
 				t.Fatal("the form stayed")
-			}
-		}},
-		{"chat: esc goes to the agent", func(t *testing.T) Model { return withRoute(t, "chat") }, esc, false, func(t *testing.T, m, _ Model) {
-			if !m.chatKeys || m.keyInFlight == "" {
-				t.Fatalf("chatKeys %v, key in flight %q", m.chatKeys, m.keyInFlight)
-			}
-		}},
-		{"chat: ctrl+c goes to the agent", func(t *testing.T) Model { return withRoute(t, "chat") }, ctrlC, false, func(t *testing.T, m, _ Model) {
-			if m.quitting || m.keyInFlight == "" {
-				t.Fatalf("quitting %v, key in flight %q", m.quitting, m.keyInFlight)
 			}
 		}},
 		{"search: x is typed", func(t *testing.T) Model { return withRoute(t, "search") }, text("x"), false, func(t *testing.T, m, _ Model) {
@@ -424,9 +408,9 @@ var keyLines = map[string]string{
 	"empty/100/history/row 0":            "↑↓ move  p ships  f stoker  / find  q quit  list only v",
 	"empty/100/panes/row 0":              "↑↓ move  ⏎ go  s sort  / find  q quit  list only v",
 	"empty/100/stoker/row 0":             "↑↓ move  1 sessions  p ships  f stoker  / find  q quit",
-	"fixture/100/sessions/row 0":         "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"fixture/100/sessions/row 1":         "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"fixture/100/sessions/row 2":         "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"fixture/100/sessions/row 0":         "enter goes into app-feature  x kill  r rename  z park  N new  p ships  f stoker",
+	"fixture/100/sessions/row 1":         "enter goes into tools  x kill  r rename  z park  N new  p ships  f stoker  / find",
+	"fixture/100/sessions/row 2":         "enter goes into app-review  x kill  r rename  z park  N new  p ships  f stoker",
 	"fixture/100/sessions/row 3":         "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit  list only v",
 	"fixture/100/sessions/row 4":         "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
 	"fixture/100/sessions/row 5":         "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
@@ -439,9 +423,9 @@ var keyLines = map[string]string{
 	"fixture/100/panes/row 2":            "↑↓ move  ⏎ go  s sort  / find  q quit  list only v",
 	"fixture/100/panes/row 3":            "↑↓ move  ⏎ go  s sort  / find  q quit  list only v",
 	"fixture/100/stoker/row 0":           "↑↓ move  1 sessions  p ships  f stoker  / find  q quit",
-	"queue/100/sessions/row 0":           "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"queue/100/sessions/row 1":           "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"queue/100/sessions/row 2":           "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"queue/100/sessions/row 0":           "enter goes into app-feature  x kill  r rename  z park  N new  p ships  f stoker",
+	"queue/100/sessions/row 1":           "enter goes into app-review  x kill  r rename  z park  N new  p ships  f stoker",
+	"queue/100/sessions/row 2":           "enter goes into tools  x kill  r rename  z park  N new  p ships  f stoker  / find",
 	"queue/100/sessions/row 3":           "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit  list only v",
 	"queue/100/sessions/row 4":           "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
 	"queue/100/sessions/row 5":           "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
@@ -471,9 +455,9 @@ var keyLines = map[string]string{
 	"queue/50/stoker/row 0":              "1 sessions  p ships  f stoker",
 	"doors/100/sessions/row 0":           "↑↓ move  ⏎ open  x close  / find  q quit  list only v",
 	"doors/100/sessions/row 1":           "↑↓ move  ⏎ open  x close  / find  q quit  list only v",
-	"doors/100/sessions/row 2":           "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"doors/100/sessions/row 3":           "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"doors/100/sessions/row 4":           "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"doors/100/sessions/row 2":           "enter goes into app-feature  x kill  r rename  z park  N new  p ships  f stoker",
+	"doors/100/sessions/row 3":           "enter goes into app-review  x kill  r rename  z park  N new  p ships  f stoker",
+	"doors/100/sessions/row 4":           "enter goes into tools  x kill  r rename  z park  N new  p ships  f stoker  / find",
 	"doors/100/sessions/row 5":           "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit  list only v",
 	"doors/100/sessions/row 6":           "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
 	"doors/100/sessions/row 7":           "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
@@ -486,9 +470,9 @@ var keyLines = map[string]string{
 	"doors/100/panes/row 2":              "↑↓ move  ⏎ go  s sort  / find  q quit  list only v",
 	"doors/100/panes/row 3":              "↑↓ move  ⏎ go  s sort  / find  q quit  list only v",
 	"doors/100/stoker/row 0":             "↑↓ move  1 sessions  p ships  f stoker  / find  q quit",
-	"night/100/sessions/row 0":           "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"night/100/sessions/row 1":           "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"night/100/sessions/row 2":           "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"night/100/sessions/row 0":           "enter goes into app-feature  x kill  r rename  z park  N new  p ships  f stoker",
+	"night/100/sessions/row 1":           "enter goes into app-review  x kill  r rename  z park  N new  p ships  f stoker",
+	"night/100/sessions/row 2":           "enter goes into tools  x kill  r rename  z park  N new  p ships  f stoker  / find",
 	"night/100/sessions/row 3":           "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit  list only v",
 	"night/100/sessions/row 4":           "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
 	"night/100/sessions/row 5":           "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
@@ -530,9 +514,9 @@ var keyLines = map[string]string{
 	"night/50/stoker/row 5":              "y give the go  ⏎ command  1 sessions  n stop nig…",
 	"night/50/stoker/row 6":              "⏎ command  1 sessions  p ships  n stop night",
 	"night/50/stoker/row 7":              "⏎ command  1 sessions  p ships  n stop night",
-	"morning/100/sessions/row 0":         "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"morning/100/sessions/row 1":         "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"morning/100/sessions/row 2":         "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"morning/100/sessions/row 0":         "enter goes into app-feature  x kill  r rename  z park  N new  p ships  f stoker",
+	"morning/100/sessions/row 1":         "enter goes into app-review  x kill  r rename  z park  N new  p ships  f stoker",
+	"morning/100/sessions/row 2":         "enter goes into tools  x kill  r rename  z park  N new  p ships  f stoker  / find",
 	"morning/100/sessions/row 3":         "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit  list only v",
 	"morning/100/sessions/row 4":         "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
 	"morning/100/sessions/row 5":         "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
@@ -552,9 +536,9 @@ var keyLines = map[string]string{
 	"morning/100/stoker/row 5":           "↑↓ move  ⏎ command  1 sessions  p ships  f stoker  / find  q quit",
 	"morning/100/stoker/row 6":           "↑↓ move  ⏎ command  1 sessions  p ships  f stoker  / find  q quit",
 	"morning/100/stoker/row 7":           "↑↓ move  ⏎ command  1 sessions  p ships  f stoker  / find  q quit",
-	"stoker up/100/sessions/row 0":       "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"stoker up/100/sessions/row 1":       "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"stoker up/100/sessions/row 2":       "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"stoker up/100/sessions/row 0":       "enter goes into app-feature  x kill  r rename  z park  N new  p ships  f stoker",
+	"stoker up/100/sessions/row 1":       "enter goes into app-review  x kill  r rename  z park  N new  p ships  f stoker",
+	"stoker up/100/sessions/row 2":       "enter goes into tools  x kill  r rename  z park  N new  p ships  f stoker  / find",
 	"stoker up/100/sessions/row 3":       "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit  list only v",
 	"stoker up/100/sessions/row 4":       "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
 	"stoker up/100/sessions/row 5":       "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
@@ -567,9 +551,9 @@ var keyLines = map[string]string{
 	"stoker up/100/panes/row 2":          "↑↓ move  ⏎ go  s sort  / find  q quit  list only v",
 	"stoker up/100/panes/row 3":          "↑↓ move  ⏎ go  s sort  / find  q quit  list only v",
 	"stoker up/100/stoker/row 0":         "⏎ open the stoker  Q quit it  1 sessions  p ships  f stoker  / find  q quit",
-	"stoker starting/100/sessions/row 0": "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"stoker starting/100/sessions/row 1": "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"stoker starting/100/sessions/row 2": "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"stoker starting/100/sessions/row 0": "enter goes into app-feature  x kill  r rename  z park  N new  p ships  f stoker",
+	"stoker starting/100/sessions/row 1": "enter goes into app-review  x kill  r rename  z park  N new  p ships  f stoker",
+	"stoker starting/100/sessions/row 2": "enter goes into tools  x kill  r rename  z park  N new  p ships  f stoker  / find",
 	"stoker starting/100/sessions/row 3": "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit  list only v",
 	"stoker starting/100/sessions/row 4": "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
 	"stoker starting/100/sessions/row 5": "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
@@ -582,9 +566,9 @@ var keyLines = map[string]string{
 	"stoker starting/100/panes/row 2":    "↑↓ move  ⏎ go  s sort  / find  q quit  list only v",
 	"stoker starting/100/panes/row 3":    "↑↓ move  ⏎ go  s sort  / find  q quit  list only v",
 	"stoker starting/100/stoker/row 0":   "⏎ open the stoker  Q quit it  1 sessions  p ships  f stoker  / find  q quit",
-	"stoker run/100/sessions/row 0":      "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"stoker run/100/sessions/row 1":      "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"stoker run/100/sessions/row 2":      "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"stoker run/100/sessions/row 0":      "enter goes into app-feature  x kill  r rename  z park  N new  p ships  f stoker",
+	"stoker run/100/sessions/row 1":      "enter goes into app-review  x kill  r rename  z park  N new  p ships  f stoker",
+	"stoker run/100/sessions/row 2":      "enter goes into tools  x kill  r rename  z park  N new  p ships  f stoker  / find",
 	"stoker run/100/sessions/row 3":      "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit  list only v",
 	"stoker run/100/sessions/row 4":      "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
 	"stoker run/100/sessions/row 5":      "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
@@ -598,13 +582,13 @@ var keyLines = map[string]string{
 	"stoker run/100/panes/row 3":         "↑↓ move  ⏎ go  s sort  / find  q quit  list only v",
 	"stoker run/100/stoker/row 0":        "↑↓ move  ⏎ command  1 sessions  p ships  f stoker  / find  q quit",
 	"stoker run/100/stoker/row 1":        "↑↓ move  ⏎ command  1 sessions  p ships  f stoker  / find  q quit",
-	"demo/100/sessions/row 0":            "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"demo/100/sessions/row 1":            "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"demo/100/sessions/row 2":            "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"demo/100/sessions/row 3":            "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"demo/100/sessions/row 4":            "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"demo/100/sessions/row 5":            "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"demo/100/sessions/row 6":            "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"demo/100/sessions/row 0":            "enter goes into spark-docs  x kill  r rename  z park  N new  p ships  f stoker",
+	"demo/100/sessions/row 1":            "enter goes into ember-billing  x kill  r rename  z park  N new  p ships  f stoker",
+	"demo/100/sessions/row 2":            "enter goes into flint-auth  x kill  r rename  z park  N new  p ships  f stoker",
+	"demo/100/sessions/row 3":            "enter goes into kindle-web  x kill  r rename  z park  N new  p ships  f stoker",
+	"demo/100/sessions/row 4":            "enter goes into cinder-ci  x kill  r rename  z park  N new  p ships  f stoker",
+	"demo/100/sessions/row 5":            "enter goes into wick-mobile  x kill  r rename  z park  N new  p ships  f stoker",
+	"demo/100/sessions/row 6":            "enter goes into hearth-api  x kill  r rename  z park  N new  p ships  f stoker",
 	"demo/100/sessions/row 7":            "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit  list only v",
 	"demo/100/ships/row 0":               "↑↓ move  ⏎ session  f stoker  / find  q quit  list only v",
 	"demo/100/ships/row 1":               "↑↓ move  ⏎ session  x merge  f stoker  / find  q quit  list only v",
@@ -646,9 +630,9 @@ var keyLines = map[string]string{
 	"demo/50/panes/row 6":                "⏎ go  s sort  full view v",
 	"demo/50/panes/row 7":                "⏎ go  s sort  full view v",
 	"demo/50/stoker/row 0":               "1 sessions  p ships  f stoker",
-	"orphans/100/sessions/row 0":         "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"orphans/100/sessions/row 1":         "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"orphans/100/sessions/row 2":         "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"orphans/100/sessions/row 0":         "enter goes into app-feature  x kill  r rename  z park  N new  p ships  f stoker",
+	"orphans/100/sessions/row 1":         "enter goes into tools  x kill  r rename  z park  N new  p ships  f stoker  / find",
+	"orphans/100/sessions/row 2":         "enter goes into app-review  x kill  r rename  z park  N new  p ships  f stoker",
 	"orphans/100/sessions/row 3":         "↑↓ move  ⏎ new session  p ships  f stoker  / find  q quit  list only v",
 	"orphans/100/sessions/row 4":         "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
 	"orphans/100/sessions/row 5":         "↑↓ move  ⏎ do  x other  f stoker  / find  q quit  list only v",
@@ -662,12 +646,12 @@ var keyLines = map[string]string{
 	"orphans/100/panes/row 3":            "↑↓ move  ⏎ go  s sort  / find  q quit  list only v",
 	"orphans/100/stoker/row 0":           "↑↓ move  1 sessions  p ships  f stoker  / find  q quit",
 	"search/100":                         "/ app▏  ⏎ keep  esc clear",
-	"chat/100":                           "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
-	"search kept/100":                    "/ app · esc clears  ⏎ go in  x kill  r rename  z park  N new  p ships  f stoker",
-	"form new/100":                       "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ pick · ↑↓ move · ←→ repo · tab next · esc keep the path ╯",
-	"form rename/100":                    "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ rename ─ esc ───────────────────────────────────────────╯",
-	"form switch/100":                    "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ plan ─ tab next ─ esc ──────────────────────────────────╯",
-	"pending jump/100":                   "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit",
+	"chat/100":                           "enter goes into app-review  x kill  r rename  z park  N new  p ships  f stoker",
+	"search kept/100":                    "/ app · esc clears  enter goes into app-feature  x kill  r rename  N new  f stoker",
+	"form new/100":                       "enter goes into app-feature  x kill  r rename  z park  N new  p ships  f stoker || ╰─ ⏎ pick · ↑↓ move · ←→ repo · tab next · esc keep the path ╯",
+	"form rename/100":                    "enter goes into app-review  x kill  r rename  z park  N new  p ships  f stoker || ╰─ ⏎ rename ─ esc ───────────────────────────────────────────╯",
+	"form switch/100":                    "enter goes into app-review  x kill  r rename  z park  N new  p ships  f stoker || ╰─ ⏎ plan ─ tab next ─ esc ──────────────────────────────────╯",
+	"pending jump/100":                   "enter goes into tools  x kill  r rename  z park  N new  p ships  f stoker  / find",
 	"pending kill/100":                   "Kill tools: tmux kill-pane -t %3 then kill -TERM 400 · y run ─ any other key cancels || ╰─ y run ─ any other key cancels ──────────╯",
 	"pending cancelled/100":              "cancelled: kill tools: tmux kill-pane -t %3, then kill -TERM 400",
 	"held/100":                           "The stoker is on. Take over?: y  rests it while you work n  keeps it on · y take over ─ n keep it on || ╰─ y take over ─ n keep it on ─────────────────────╯",
@@ -675,9 +659,9 @@ var keyLines = map[string]string{
 	"pending door/100":                   "RUN Add the queue hooks: write ~/.claude/settings.json   y run  any other key cancels",
 	"pending door long/100":              "RUN Add the queue hooks: write ~/.claude/settings.json   ↓ the rest, then y",
 	"pending door also/100":              "RUN Add the way back: write ~/.tmux.conf   y run  any other key cancels",
-	"sheet f/100":                        "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ start ─ tab chips ─ esc ────────────────────────────────╯",
-	"sheet n/100":                        "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯",
-	"sheet chips/100":                    "⏎ go in  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit || ╰─ ⏎ send ─ space toggle ─ tab back ─────────────────────────╯",
+	"sheet f/100":                        "enter goes into app-feature  x kill  r rename  z park  N new  p ships  f stoker || ╰─ ⏎ start ─ tab chips ─ esc ────────────────────────────────╯",
+	"sheet n/100":                        "enter goes into app-feature  x kill  r rename  z park  N new  p ships  f stoker || ╰─ ⏎ send ─ tab chips ─ esc ─────────────────────────────────╯",
+	"sheet chips/100":                    "enter goes into app-feature  x kill  r rename  z park  N new  p ships  f stoker || ╰─ ⏎ send ─ space toggle ─ tab back ─────────────────────────╯",
 	"stoker step ask/100":                "go given: gh release create v1.4",
 	"stoker step look/100":               "kindle-web is gone: there is no pane to go into",
 	"stoker command/100":                 "y give the go  ⏎ command  1 sessions  p ships  n stop night  / find  q quit",

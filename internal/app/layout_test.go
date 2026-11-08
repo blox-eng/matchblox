@@ -180,7 +180,7 @@ func TestTapSelectsThenActs(t *testing.T) {
 	// selected goes into its pane. Nothing is sent to the service.
 	next, cmd := tap(m, 5, sessLine(t, m, "tools"))
 	drain(cmd)
-	if len(f.acts()) != 0 || len(ran) != 0 || next.(Model).chatKeys {
+	if len(f.acts()) != 0 || len(ran) != 0 || next.(Model).standIn {
 		t.Fatalf("width %d: the first tap acted", w)
 	}
 	if it, _ := next.(Model).selectedSession(); it.Pane != "%3" {
@@ -188,7 +188,7 @@ func TestTapSelectsThenActs(t *testing.T) {
 	}
 	next, cmd = tap(next, 5, sessLine(t, next, "tools"))
 	drain(cmd)
-	if len(ran) != 1 || strings.Join(ran[0], " ") != "tmux switch-client -t %3" || next.(Model).chatKeys {
+	if len(ran) != 1 || strings.Join(ran[0], " ") != "tmux switch-client -t %3" || next.(Model).standIn {
 		t.Fatalf("width %d: the second tap ran %q", w, ran)
 	}
 	if len(f.acts()) != 0 {
@@ -399,10 +399,11 @@ func TestTheKeyLineIsAtTheBottom(t *testing.T) {
 			return out[len(out)-1]
 		}
 		// A phone drops the spare keys first: p ships is a tab tap away.
-		if l := last(m); !strings.Contains(l, "⏎ go in") || strings.Contains(l, "a go in") || !strings.Contains(l, "x kill") || !strings.Contains(l, "N new") || w > 60 && !strings.Contains(l, "p ships") {
+		goesIn := func(l string) bool { return strings.Contains(l, "⏎ go in") || strings.Contains(l, "enter goes into") }
+		if l := last(m); !goesIn(l) || strings.Contains(l, "a go in") || !strings.Contains(l, "x kill") || !strings.Contains(l, "N new") || w > 60 && !strings.Contains(l, "p ships") {
 			t.Fatalf("width %d: the keys are not at the bottom: %q", w, l)
 		}
-		if l := last(selectPane(t, m, "%3")); !strings.Contains(l, "⏎ go in") {
+		if l := last(selectPane(t, m, "%3")); !goesIn(l) {
 			t.Fatalf("width %d: the keys are not at the bottom: %q", w, l)
 		}
 		if strings.Contains(ansi.Strip(strings.Split(m.render(), "\n")[2]), "open") {
@@ -441,7 +442,7 @@ func TestATapOnAKeyPressesIt(t *testing.T) {
 	ran := recordRuns(&m)
 	next, cmd := tap(m, len([]rune(line[:strings.Index(line, "⏎ go in")])), y)
 	drain(cmd)
-	if len(*ran) != 1 || next.(Model).chatKeys {
+	if len(*ran) != 1 || next.(Model).standIn {
 		t.Fatalf("a tap on ⏎ go in ran %q", *ran)
 	}
 	// The header's count of who waits selects the first one.
