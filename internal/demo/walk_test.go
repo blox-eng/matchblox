@@ -431,7 +431,7 @@ func (w *walker) walkTheDoors() {
 
 	w.press("7", "f", "enter")
 	w.clear()
-	w.press("o")
+	w.opens("the order sheet", "How should I run?", "o")
 	w.send("an order", "keep the tests green")
 	w.saysAfter("an order", "“keep the tests green”", "enter")
 	w.clear()
@@ -806,6 +806,28 @@ func (w *walker) clear() {
 			w.t.Fatalf("esc never took the line off the screen after %q; the last whole frame:\n%s", w.steps[max(len(w.steps)-3, 0):], frame)
 		}
 		// The frame still holds the line: the esc is not in yet.
+	}
+}
+
+// opens presses key until the console draws want. The key can come before
+// the state it needs, such as the stoker that the last Enter starts through
+// the service: then it only flashes a hint, and keys typed next run as list
+// keys (#344). A flash is cleared and the key pressed again.
+func (w *walker) opens(what, want, key string) {
+	w.t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		from := len(w.term.text())
+		w.press(key)
+		for wait := time.Now().Add(2 * time.Second); time.Now().Before(wait); time.Sleep(5 * time.Millisecond) {
+			if strings.Contains(w.term.text()[from:], want) {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			w.t.Fatalf("%s: %q never drew %q; the screen:\n%s", what, key, want, w.screen())
+		}
+		w.clear()
 	}
 }
 
