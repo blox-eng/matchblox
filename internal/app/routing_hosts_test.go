@@ -53,11 +53,6 @@ func pressAll(m tea.Model, keys ...string) tea.Model {
 // TestActsGoToTheRowsHost: an act on the peer's %12 goes on the peer's
 // conn with today's RecID, and never on home's, whose %12 is another pane.
 func TestActsGoToTheRowsHost(t *testing.T) {
-	previewed := func(t *testing.T, m tea.Model, ws *fakeConn) tea.Model {
-		id := m.(Model).pending.previewAct
-		next, _ := m.Update(peerMsg{host: "ws-1", conn: ws, msg: resultMsg{ActID: id, Preview: "# Handover"}})
-		return next
-	}
 	for _, c := range []struct {
 		name  string
 		peer  func(*proto.State)
@@ -69,8 +64,7 @@ func TestActsGoToTheRowsHost(t *testing.T) {
 		{name: "kill", keys: []string{"x", "y"}, want: "kill:%12"},
 		{name: "park", keys: []string{"z"}, want: "park:%12"},
 		{name: "rename", keys: []string{"r", "enter"}, want: "rename:%12"},
-		{name: "switch-preview", keys: []string{"A", "enter"}, want: "switch-preview:%12"},
-		{name: "switch", keys: []string{"A", "enter"}, then: previewed, after: []string{"y"}, want: "switch:%12"},
+		{name: "switch", keys: []string{"A", "enter"}, after: []string{"y"}, want: "switch:%12"},
 		{name: "new:session", keys: []string{"N", "tab", "enter"}, want: "new:session"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

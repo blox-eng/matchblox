@@ -167,10 +167,10 @@ func TestAOpensSwitchAgentAndJumpsAfter(t *testing.T) {
 	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
 	next, _ = key(m, "A")
 	fm := next.(Model).form
-	if fm == nil || !fm.swap || fm.agent != "codex" || fm.first != proto.DefaultHandoff {
+	if fm == nil || !fm.swap || fm.agent != "codex" || fm.first != "" || fm.noTask {
 		t.Fatalf("form %+v", fm)
 	}
-	if s := screen(next); !strings.Contains(s, "Switch agent") || !strings.Contains(s, "handoff") {
+	if s := screen(next); !strings.Contains(s, "Switch agent") || !strings.Contains(s, "● continue") || !strings.Contains(s, "blank: just continue") {
 		t.Fatalf("the form:\n%s", s)
 	}
 	if next, _ = key(next, "left"); next.(Model).form.agent != "codex" {
@@ -181,7 +181,6 @@ func TestAOpensSwitchAgentAndJumpsAfter(t *testing.T) {
 	if nm.form != nil || nm.pending == nil || nm.pending.rec != "switch:%1" || !strings.Contains(nm.pending.say, "claude → codex") || len(f.acts()) != 0 {
 		t.Fatalf("form %+v pending %+v acts %+v", nm.form, nm.pending, f.acts())
 	}
-	next = readySwitchPreview(t, next)
 	next, cmd := key(next, "y")
 	cmd()
 	acts := f.acts()
@@ -213,7 +212,6 @@ func TestSwitchOfABusySessionTakesASecondY(t *testing.T) {
 	next, f := switchState(t, st)
 	next, _ = key(next, "A")
 	next, _ = key(next, "enter")
-	next = readySwitchPreview(t, next)
 	next, cmd := key(next, "y")
 	if cmd != nil {
 		cmd()
@@ -248,17 +246,167 @@ func TestSwitchRefusesOutsideTmuxAndOneAgent(t *testing.T) {
 	}
 }
 
-func TestSwitchRefusesABadHandoffInTheForm(t *testing.T) {
+// The builder's words go after the service's fixed switch prompt, so even
+// a dash cannot become the agent's flag.
+func TestSwitchExtrasFollowTheHandover(t *testing.T) {
 	next, f := switchState(t, lifeState())
 	next, _ = key(next, "A")
 	next, _ = key(next, "tab")
-	for range len(proto.DefaultHandoff) {
-		next, _ = key(next, "backspace")
-	}
-	next = typeText(next, "--yolo")
+	next, _ = key(next, "tab")
+	next = typeText(next, "--yolo keep CSV only")
 	next, _ = key(next, "enter")
-	if nm := next.(Model); nm.form == nil || nm.form.err != "the handoff does not start with -" || nm.pending != nil || len(f.acts()) != 0 {
-		t.Fatalf("form %+v pending %+v", nm.form, nm.pending)
+	_, cmd := key(next, "y")
+	cmd()
+	var sw proto.SwitchAgent
+	if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &sw) != nil || sw.Handoff != proto.Handoff("--yolo keep CSV only") {
+		t.Fatalf("sent %+v", f.acts())
+	}
+}
+
+// The confirm shows the switch only: the handover is the service's.
+func TestSwitchConfirmShowsTheSwitchOnly(t *testing.T) {
+	for _, w := range []int{44, 100} {
+		st := lifeState()
+		st.Queue = nil
+		m, _ := loadedWith(t, w, st)
+		next := selectPane(t, m, "%1")
+		next, _ = key(next, "A")
+		next, _ = key(next, "enter")
+		s := screen(next)
+		if !strings.Contains(s, "claude → codex") || strings.Contains(s, "andover") || strings.Contains(s, "awareness") || !strings.Contains(s, "network") || strings.Index(s, "trust") > strings.Index(s, "jump") {
+			t.Fatalf("%d columns, the confirm:\n%s", w, s)
+		}
+	}
+}
+
+// tapWords taps the first place the screen shows words; a miss fails t.
+func tapWords(t *testing.T, m tea.Model, words string) tea.Model {
+	t.Helper()
+	for y, line := range strings.Split(screen(m), "\n") {
+		if i := strings.Index(line, words); i >= 0 {
+			m, _ = m.Update(tea.MouseClickMsg{X: len([]rune(line[:i])), Y: y, Button: tea.MouseLeft})
+			return m
+		}
+	}
+	t.Fatalf("no %q on the screen:\n%s", words, screen(m))
+	return m
+}
+
+// A tap picks the start it lands on: on a phone, a tap on the shown start
+// never flips it, and a tap on the label only moves the cursor.
+func TestATapOnAStartPicksThatStart(t *testing.T) {
+	for _, w := range []int{44, 100} {
+		st := lifeState()
+		st.Queue = nil
+		m, _ := loadedWith(t, w, st)
+		next := selectPane(t, m, "%1")
+		next, _ = key(next, "A")
+		next, _ = key(next, "tab")
+		next, _ = key(next, "tab") // the cursor on extra
+		for _, c := range []struct {
+			key, tap string
+			noTask   bool
+		}{{"", "continue", false}, {"", "no task", true}, {"", "no task", true}, {"", "continue", false}, {"tab", "start    ", false}} {
+			if c.key != "" {
+				next, _ = key(next, c.key) // off the start, so a missed tap shows
+				if fm := next.(Model).form; fm == nil || fm.at == fieldStart {
+					t.Fatalf("%d columns, %s stays on the start", w, c.key)
+				}
+			}
+			next = tapWords(t, next, c.tap)
+			if fm := next.(Model).form; fm == nil || fm.noTask != c.noTask || fm.at != fieldStart {
+				t.Fatalf("%d columns, a tap on %q: %+v\n%s", w, c.tap, fm, screen(next))
+			}
+		}
+	}
+}
+
+// The confirm's 3 starts × decline and × the busy second y: a declined
+// switch sends nothing, and the second y keeps what the first named.
+func TestSwitchConfirmCellsForEveryStart(t *testing.T) {
+	starts := map[string]struct {
+		keys    []string
+		text    string
+		after   []string
+		handoff string
+	}{
+		"continue": {nil, "", nil, proto.Handoff("")},
+		"extras":   {[]string{"tab", "tab"}, "keep CSV only", nil, proto.Handoff("keep CSV only")},
+		"no task":  {[]string{"tab", "right"}, "", nil, ""},
+		// Extras typed before no task is picked go nowhere.
+		"extras, then no task": {[]string{"tab", "tab"}, "keep CSV only", []string{"shift+tab", "right"}, ""},
+	}
+	open := func(t *testing.T, busy bool, keys []string, text string, after []string) (tea.Model, *fakeConn) {
+		st := lifeState()
+		st.Sessions[0].Busy = busy
+		next, f := switchState(t, st)
+		next, _ = key(next, "A")
+		for _, k := range keys {
+			next, _ = key(next, k)
+		}
+		if text != "" {
+			next = typeText(next, text)
+		}
+		for _, k := range after {
+			next, _ = key(next, k)
+		}
+		next, _ = key(next, "enter")
+		return next, f
+	}
+	declined := func(t *testing.T, next tea.Model, f *fakeConn, decline, what string) {
+		t.Helper()
+		next, cmd := key(next, decline)
+		if cmd != nil {
+			cmd()
+		}
+		if nm := next.(Model); nm.pending != nil || len(f.acts()) != 0 || !strings.HasPrefix(nm.flash, "cancelled: ") {
+			t.Errorf("%s, %s: pending %+v acts %+v", what, decline, nm.pending, f.acts())
+		}
+	}
+	for name, c := range starts {
+		for _, decline := range []string{"esc", "enter", "n"} {
+			next, f := open(t, false, c.keys, c.text, c.after)
+			declined(t, next, f, decline, name+" on the confirm")
+			// A busy session's second confirm declines the same way.
+			next, f = open(t, true, c.keys, c.text, c.after)
+			next, _ = key(next, "y")
+			declined(t, next, f, decline, name+", busy, after one y")
+		}
+		next, f := open(t, true, c.keys, c.text, c.after)
+		next, _ = key(next, "y")
+		if len(f.acts()) != 0 {
+			t.Fatalf("%s: one y switched a busy session", name)
+		}
+		_, cmd := key(next, "y")
+		cmd()
+		var sw proto.SwitchAgent
+		if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &sw) != nil || !sw.Anyway || sw.Handoff != c.handoff {
+			t.Errorf("%s, the second y sent %+v", name, f.acts())
+		}
+	}
+}
+
+func TestSwitchCanStartWithNoTask(t *testing.T) {
+	for _, pick := range []func(tea.Model) tea.Model{
+		func(m tea.Model) tea.Model { m, _ = key(m, "tab"); m, _ = key(m, "right"); return m },
+		func(m tea.Model) tea.Model { return tapWords(t, m, "no task") }, // a phone
+	} {
+		next, f := switchState(t, lifeState())
+		next, _ = key(next, "A")
+		next = pick(next)
+		if fm := next.(Model).form; fm == nil || !fm.noTask || slices.Contains(fm.fields(), fieldFirst) || strings.Contains(screen(next), "extra") {
+			t.Fatalf("no task keeps the extras:\n%s", screen(next))
+		}
+		next, _ = key(next, "enter")
+		if say := next.(Model).pending.say; !strings.HasSuffix(say, ", then start it with no task, then jump there") {
+			t.Fatalf("the confirm hides no task: %q", say)
+		}
+		_, cmd := key(next, "y")
+		cmd()
+		var sw proto.SwitchAgent
+		if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &sw) != nil || sw.Handoff != "" {
+			t.Fatalf("sent %+v", f.acts())
+		}
 	}
 }
 
@@ -1791,9 +1939,9 @@ func TestSwitchConfirmNamesTheAccount(t *testing.T) {
 		last map[string]string
 		want string
 	}{
-		{map[string]string{"codex": "team"}, "switch app-feature: claude → codex in %1, /src/api, on team, then jump there"},
-		{nil, "switch app-feature: claude → codex in %1, /src/api, on default, then jump there"},
-		{map[string]string{"codex": "gone"}, "on default, then jump there"},
+		{map[string]string{"codex": "team"}, "switch app-feature: claude → codex in %1, /src/api, on team; trust this workspace and enable workspace-write network access, then jump there"},
+		{nil, "switch app-feature: claude → codex in %1, /src/api, on default; trust"},
+		{map[string]string{"codex": "gone"}, "on default; trust"},
 	} {
 		st := lastAccountState(c.last)
 		next, _ := switchState(t, st)
@@ -1836,7 +1984,6 @@ func TestSwitchWithANotLinkedNoteJumps(t *testing.T) {
 	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
 	next, _ = key(m, "A")
 	next, _ = key(next, "enter")
-	next = readySwitchPreview(t, next)
 	next, cmd := key(next, "y")
 	cmd()
 	act := next.(Model).jumpAfter.act
@@ -1975,44 +2122,23 @@ func TestAnUnreadableRootIsShownShortened(t *testing.T) {
 	}
 }
 
-func readySwitchPreview(t *testing.T, m tea.Model) tea.Model {
-	t.Helper()
-	mm := m.(Model)
-	if mm.pending == nil || mm.pending.previewAct == "" {
-		t.Fatal("no pending preview")
+// The extras field takes what fits after the handover line, as --extra
+// does, and the switch sends all of it.
+func TestSwitchExtrasTakeTheCLIsLimit(t *testing.T) {
+	next, f := switchState(t, lifeState())
+	next, _ = key(next, "A")
+	next, _ = key(next, "tab")
+	next, _ = key(next, "tab")
+	full := strings.Repeat("é", proto.ExtraLimit())
+	next = typeText(next, full+"abc")
+	if fm := next.(Model).form; fm == nil || fm.first != full {
+		t.Fatalf("the extras hold %d runes, want %d", len([]rune(next.(Model).form.first)), proto.ExtraLimit())
 	}
-	next, _ := mm.Update(resultMsg(proto.Result{ActID: mm.pending.previewAct, Preview: "# Handover evidence\n\n> Goal: fix the export.\n> Next action: run its tests.\n"}))
-	return next
-}
-
-func TestSwitchWaitsForPreviewAndCancellationIgnoresItsReply(t *testing.T) {
-	m, f := switchState(t, lifeState())
-	m, _ = key(m, "A")
-	m, cmd := key(m, "enter")
+	next, _ = key(next, "enter")
+	_, cmd := key(next, "y")
 	cmd()
-	id := m.(Model).pending.previewAct
-	acts := f.acts()
-	if len(acts) != 1 || acts[0].RecID != "switch-preview:%1" || acts[0].Confirm != "" {
-		t.Fatalf("preview mutates a match: %+v", acts)
-	}
-	m, cmd = key(m, "y")
-	if cmd != nil || m.(Model).pending == nil || m.(Model).pending.previewAct == "" || len(f.acts()) != 1 {
-		t.Fatal("confirmation bypasses pending preview")
-	}
-	m, _ = key(m, "esc")
-	m, _ = m.Update(resultMsg(proto.Result{ActID: id, Preview: "late evidence"}))
-	if m.(Model).pending != nil || len(f.acts()) != 1 {
-		t.Fatal("late preview restarts cancelled switch")
-	}
-}
-
-func TestSwitchPreviewFailureKeepsTheOldMatch(t *testing.T) {
-	m, f := switchState(t, lifeState())
-	m, _ = key(m, "A")
-	m, _ = key(m, "enter")
-	id := m.(Model).pending.previewAct
-	m, _ = m.Update(resultMsg(proto.Result{ActID: id, Err: "session is gone"}))
-	if m.(Model).pending != nil || len(f.acts()) != 0 || !strings.Contains(m.(Model).flash, "session is gone") {
-		t.Fatal("preview failure still offers switch")
+	var sw proto.SwitchAgent
+	if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &sw) != nil || sw.Handoff != proto.Handoff(full) {
+		t.Fatalf("sent %+v", f.acts())
 	}
 }

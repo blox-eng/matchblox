@@ -215,8 +215,6 @@ type action struct {
 	done        string                      // a switch: what the flash says when it ran
 	agent       string                      // a start on a new account: the last agent once it ran
 	paneAgent   string                      // a switch, and the jump after it: the agent the pane runs once the switch ran
-	previewAct  string                      // switch evidence request; confirmation waits for it
-	preview     string                      // checked evidence excerpt for switch consent
 	climb       *climb                      // a rung of the key ladder
 	ghost       bool                        // a ghost row of Sessions: it opens N on where
 	where       string                      // a ghost row: the folder N opens on ("": N as it is)
@@ -1016,17 +1014,6 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // result ends the act r answers. The caller reads the next message of the
 // conn r came on.
 func (m Model) result(r proto.Result) (Model, tea.Cmd) {
-	if m.pending != nil && m.pending.previewAct != "" && m.pending.previewAct == r.ActID {
-		if r.Err != "" || r.Preview == "" {
-			m.pending = nil
-			m.flash = "handover preview unavailable: " + cmp.Or(r.Err, "update matchblox and try again")
-			return m, nil
-		}
-		a := *m.pending
-		a.previewAct, a.preview = "", r.Preview
-		m.pending = &a
-		return m, nil
-	}
 	m.endRec(r.ActID, r)
 	if mm, ok := m.started(r); ok {
 		return mm, nil
@@ -1266,11 +1253,6 @@ func (m Model) pendingKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	a := *m.pending
 	m.pending = nil
 	yes := bkey.Matches(k, m.keys.confirm.Yes)
-	if a.previewAct != "" && (yes || bkey.Matches(k, m.keys.confirm.Enter)) {
-		m.pending = &a
-		m.flash = "reading handover evidence: wait for the preview, or any other key cancels"
-		return m, nil
-	}
 	if a.climb != nil && !yes {
 		return m.declined(*a.climb, bkey.Matches(k, m.keys.main.Back))
 	}

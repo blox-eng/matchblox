@@ -8,10 +8,6 @@ All notable changes to matchblox are in this file. The format follows
 
 ### Changed
 
-- **The page tells one story.** matchblox.com reads as one matchbox, from
-  the strike to the last match, in half the words. The first match glows
-  until you touch the chain, and a shared link shows a card.
-
 - **Enter goes into the pane.** `Enter`, `a`, `→`, `ctrl+o` and a tap go into
   the agent's own tmux pane, on every host and device, and move only the
   screen that asked. Sessions shows the selected agent's live screen,
@@ -19,6 +15,45 @@ All notable changes to matchblox are in this file. The format follows
   the agent's pane. The key-giving chat is gone; the demo shows a stand-in
   for the pane. A session you go into while the stoker rests is yours: the merge
   guard lets it be. ([#334](https://github.com/blox-eng/matchblox/issues/334))
+
+## [0.37.0] - 2026-11-08
+
+### Changed
+
+- **A switch asks only for what is yours to say.** The Switch agent form
+  starts on **continue** with an empty **extra** field: anything you type
+  goes to the new agent after matchblox's fixed switch prompt and takes
+  priority over the handover. **no task** starts it with nothing, by arrow
+  or by tap. The confirm shows the switch only, without the wait for an
+  evidence preview. `matchblox switch --extra "<words>"` does the same from
+  the command line, with the same limit. A switch whose agent is seen to
+  start a turn while the handover is read, or whose pane has a new session
+  by then, asks you to switch again. A transcript over 64 MB is read for its
+  two ends, so the switch stays quick.
+  ([#335](https://github.com/blox-eng/matchblox/issues/335))
+
+### Fixed
+
+- **A switch keeps your goal and corrections.** The handover read only the
+  last 128 KB of the outgoing agent's transcript, and tool output filled it:
+  in long sessions, 0 or 1 of your prompts reached the new agent. It now
+  reads the transcript from its start and keeps your first prompt, your
+  latest prompts and the last replies. Slash-command arguments stay in. A task
+  record the old agent never filled in is named as such, not passed on as its
+  claims. Compaction summaries, interrupt markers, shell output and subagent
+  rows stay out, and a long prompt keeps the instruction at its end. Words
+  inside a reply, another match's message, or the switch prompt of this or an
+  earlier release can no longer pass as your own. A prompt too large to read
+  leaves a marker instead of a silent gap.
+  ([#335](https://github.com/blox-eng/matchblox/issues/335))
+
+## [0.36.0] - 2026-11-08
+
+### Changed
+
+- **The page tells one story.** matchblox.com reads as one matchbox, from
+  the strike to the last match, in half the words. The first match glows
+  until you touch the chain, and a shared link shows a card.
 
 ## [0.35.0] - 2026-11-07
 
@@ -1269,7 +1304,9 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.35.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.37.0...HEAD
+[0.37.0]: https://github.com/blox-eng/matchblox/compare/v0.36.0...v0.37.0
+[0.36.0]: https://github.com/blox-eng/matchblox/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/blox-eng/matchblox/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/blox-eng/matchblox/compare/v0.33.1...v0.34.0
 [0.33.1]: https://github.com/blox-eng/matchblox/compare/v0.33.0...v0.33.1

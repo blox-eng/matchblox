@@ -593,7 +593,6 @@ func TestASwitchJumpsTheClientThatAsked(t *testing.T) {
 	m, ran := rigged(next.(Model), deskAndPad)
 	next, _ = key(marked(m, "/dev/pts/7"), "A")
 	next, _ = key(marked(next, "/dev/pts/7"), "enter")
-	next = readySwitchPreview(t, next)
 	next, cmd := key(marked(next, "/dev/pts/7"), "y")
 	drain(cmd)
 	if acts := f.acts(); len(acts) != 1 || acts[0].RecID != "switch:%1" {
