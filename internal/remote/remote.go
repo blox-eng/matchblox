@@ -20,6 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -465,4 +466,27 @@ func FocusArgv(tty, pane string) []string {
 func FocusAllowed(argv []string) bool {
 	return len(argv) == 15 && ClientTTY(argv[12]) && PaneID(argv[4]) &&
 		slices.Equal(argv, FocusArgv(argv[12], argv[4]))
+}
+
+// AgentMarkArgv marks pane as running agent, in the pane option the
+// console reads.
+func AgentMarkArgv(pane, agent string) []string {
+	return []string{"tmux", "set-option", "-p", "-t", pane, "@matchblox_agent", agent}
+}
+
+// AgentUnmarkArgv takes the agent mark off pane: its agent has no command
+// keys, or none the console knows.
+func AgentUnmarkArgv(pane string) []string {
+	return []string{"tmux", "set-option", "-p", "-u", "-t", pane, "@matchblox_agent"}
+}
+
+// AgentUnmarkAllowed is exactly AgentUnmarkArgv of a pane id.
+func AgentUnmarkAllowed(argv []string) bool {
+	return len(argv) == 7 && PaneID(argv[5]) && slices.Equal(argv, AgentUnmarkArgv(argv[5]))
+}
+
+// AgentMarkAllowed is exactly AgentMarkArgv of a pane id and a known agent.
+func AgentMarkAllowed(argv []string) bool {
+	return len(argv) == 7 && PaneID(argv[4]) && len(keycmd.ForAgent(argv[6])) > 0 &&
+		slices.Equal(argv, AgentMarkArgv(argv[4], argv[6]))
 }

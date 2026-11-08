@@ -221,8 +221,10 @@ row, `x`, `a`, or a second tap), the key line asks:
   `stoker rests`. What you pressed runs. Work anywhere in tmux, in the
   console or in an agent's pane: the stoker goes on by itself 15 minutes
   after your last key, or a couple of minutes after you close the last
-  console. `f` turns it back on now.
-- `n`: the stoker stays on, and what you pressed runs.
+  console. `f` turns it back on now. A session you go into while the
+  stoker rests is yours: the merge guard lets it be.
+- `n`: the stoker stays on, and what you pressed runs. A session you go
+  into stays the stoker's: give its merge on the stoker's card (`y`).
 
 It asks once a run. A step already sent finishes, and it shows in the
 morning.
@@ -296,16 +298,20 @@ matchblox puts it on the STOKER tab by itself, under `YOUR GO`:
   waits --needs merge:#4556` puts its step under `YOUR GO`. It only asks:
   only your `y` gives the go, and the stoker never gives itself one.
 - A session is the stoker's while the stoker's message is the last input
-  you know of. When you answer or message it from the console, it is yours
-  again and the guard lets it be. A `matchblox` command never frees it,
-  whoever runs it: only a person at a console does.
+  matchblox knows of. When you go into its pane from the console while the
+  stoker rests (`y` to `Take over?`), it is yours again and the guard lets
+  it be. The stoker's next message to it makes it the stoker's again. A
+  `matchblox` command never frees it, whoever runs it: only a person at a
+  console does.
 
 The guard has limits:
 
-- It sees what the stoker sends and what you send from the console. A
-  line you type straight into a pane in tmux is not seen, so the session
-  stays marked as the stoker's until you send it something from the
-  console.
+- It sees what the stoker sends, not what you type in a pane. A session
+  you go into while the stoker is on (`n` to `Take over?`) stays marked as
+  the stoker's, so a merge you type there needs its go on the stoker's
+  card. A pane you reach without the console (your own tmux keys) stays
+  the stoker's until you go into it from the console while the stoker
+  rests.
 - Codex, OpenCode and Cursor have no such hook. A session of those agents is
   unguarded. When the plan names one, the STOKER tab says so, with each
   go the run does not give (`! no merge guard watches api-gw: its merges,
@@ -510,8 +516,8 @@ end of the run its score:
 Each step shows its glyph: `✓` done, `◐` under way, `⏸` waits, `✕`
 failed, `○` not begun. `Enter` on a step shows the exact command the
 stoker ran for it, or the one a go step waits to run. `y` on a step under
-`YOUR GO` gives it the go, once. `a` on a failed step opens the chat on
-its session; a go the run ended before you gave reads `the run ended
+`YOUR GO` gives it the go, once. `a` on a failed step goes into
+its session's pane; a go the run ended before you gave reads `the run ended
 before your go`, and nothing guards that command any more. The tab's name counts the steps that wait for you. Opening the
 tab marks the steps seen.
 

@@ -379,9 +379,6 @@ func (w *walker) scrolls(where string) {
 func (w *walker) walkTheDoors() {
 	w.t.Helper()
 	w.press("1")
-	w.refused("into tmux", "ctrl+o")
-	w.says("into tmux from a chat", "enter", "ctrl+o")
-	w.reset()
 	w.scrolls("in a chat")
 	w.reset()
 	w.clear()
@@ -790,7 +787,7 @@ func (w *walker) clear() {
 	w.t.Helper()
 	_, line, _ := strings.Cut(demo.Refusal, ". ")
 	w.press("esc")
-	deadline := time.Now().Add(30 * time.Second)
+	deadline, again := time.Now().Add(30*time.Second), time.Now().Add(2*time.Second)
 	for {
 		n, _ := w.term.wholeFrame()
 		w.d.Repaint()
@@ -805,7 +802,12 @@ func (w *walker) clear() {
 		if time.Now().After(deadline) {
 			w.t.Fatalf("esc never took the line off the screen after %q; the last whole frame:\n%s", w.steps[max(len(w.steps)-3, 0):], frame)
 		}
-		// The frame still holds the line: the esc is not in yet.
+		// The frame still holds the line: the esc is not in yet, or the
+		// line answers an act the world ran before it and came after the esc.
+		if time.Now().After(again) {
+			w.press("esc")
+			again = time.Now().Add(2 * time.Second)
+		}
 	}
 }
 
@@ -848,15 +850,6 @@ func (w *walker) saysAfter(what, want string, keys ...string) {
 func TestWhatThePhoneCannotDoSaysSo(t *testing.T) {
 	m := newMachine(t)
 	w := startWalk(t, 132, 32)
-	for _, tab := range []string{"1", "2", "3", "4", "5", "6", "7", "1"} {
-		w.press(tab)
-		w.flashes("ctrl+o on tab "+tab, "ctrl+o")
-		w.clear()
-	}
-	w.flashes("ctrl+o in a chat", "enter", "ctrl+o")
-	w.reset()
-	w.clear()
-
 	w.flashes("a pane", "6", "enter")
 	w.clear()
 	w.flashes("a worktree's shell", "4", "enter")
@@ -928,11 +921,20 @@ func TestSessionsCanBeStartedAndKilled(t *testing.T) {
 	if got := paneList(t); !strings.Contains(got, "fresh-one") {
 		t.Errorf("tmux's list has no new session:\n%s", got)
 	}
+	// The search finds the session only once the console's list holds it: on
+	// a slow machine its sample comes after the word that it started.
+	eventually(t, 30*time.Second, "the list to show fresh-one", func() bool {
+		return slices.ContainsFunc(strings.Split(w.screen(), "\n"), func(l string) bool {
+			return strings.Contains(l, "fresh-one") && !strings.Contains(l, "started fresh-one")
+		})
+	})
 
 	// The new session takes a message like any other.
 	w.press("/")
 	w.send("a search", "fresh-one")
 	w.press("enter", "enter")
+	w.term.waitFor(t, "keys go to fresh-one")
+	time.Sleep(500 * time.Millisecond) // its screen comes: a key answers only what the console showed
 	w.send("a message", "hello")
 	from := len(w.term.text())
 	w.press("enter")

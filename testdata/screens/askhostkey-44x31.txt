@@ -28,4 +28,4 @@
 │                                          │
 ╰─ ⏎ answer ─ esc cancel the ssh ──────────╯
 ────────────────────────────────────────────
- ⏎ chat  x kill  r rename  N new
+ ⏎ go in  x kill  r rename  N new

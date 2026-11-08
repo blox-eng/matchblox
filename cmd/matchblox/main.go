@@ -299,7 +299,7 @@ func run(args []string) error {
 			binds = append(binds, panes.HomeKeyArgv())
 		}
 		if os.Getenv(panes.HomeEnv) == "1" {
-			binds = append(binds, panes.SizeArgv(), panes.CommandKeysArgv())
+			binds = append(binds, panes.SizeArgv(), panes.CommandKeysArgv(), panes.MarkKeyArgv(), panes.ViewerHookArgv())
 		}
 		for _, argv := range binds {
 			_ = exec.Command("tmux", argv[1:]...).Run()
@@ -625,7 +625,7 @@ const consoleFPS = 60
 
 func console(path string, cfg config.Config, root string, noMotion bool, host string) error {
 	base := app.Options{Binary: version, CompactAt: cfg.Sessions.CompactAt, CompactTokens: cfg.Sessions.CompactTokens, NoMotion: noMotion,
-		OutsideTmux: os.Getenv("TMUX") == "", Self: invokedPath(os.Args[0]), StateDir: filepath.Dir(state.Path())}
+		OutsideTmux: os.Getenv("TMUX") == "", Pane: os.Getenv("TMUX_PANE"), Self: invokedPath(os.Args[0]), StateDir: filepath.Dir(state.Path())}
 	if !base.OutsideTmux {
 		base.Prefix, base.Home, base.LocalTmux = localTmux()
 		base.NoPrefixM = !panes.NamedConsole(os.Args[0])

@@ -542,3 +542,37 @@ func TestValidUserKey(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentUnmarkAllowedIsExact(t *testing.T) {
+	if !slices.Equal(AgentUnmarkArgv("%3"), []string{"tmux", "set-option", "-p", "-u", "-t", "%3", "@matchblox_agent"}) {
+		t.Errorf("unmark argv %q", AgentUnmarkArgv("%3"))
+	}
+	for argv, want := range map[string]bool{"%3": true, "%3;x": false, "3": false} {
+		if got := AgentUnmarkAllowed(AgentUnmarkArgv(argv)); got != want {
+			t.Errorf("AgentUnmarkAllowed(%q) = %v", argv, got)
+		}
+	}
+	if AgentUnmarkAllowed(AgentMarkArgv("%3", "claude")) {
+		t.Error("a mark passed as an unmark")
+	}
+}
+
+func TestAgentMarkAllowedIsExact(t *testing.T) {
+	for _, c := range []struct {
+		argv []string
+		want bool
+	}{
+		{AgentMarkArgv("%3", "claude"), true},
+		{AgentMarkArgv("%3", "codex"), true},
+		{AgentMarkArgv("%3", "zsh"), false},
+		{AgentMarkArgv("%3;x", "claude"), false},
+		{AgentMarkArgv("3", "claude"), false},
+	} {
+		if got := AgentMarkAllowed(c.argv); got != c.want {
+			t.Errorf("%q: %v, want %v", c.argv, got, c.want)
+		}
+	}
+	if !slices.Equal(AgentMarkArgv("%3", "claude"), []string{"tmux", "set-option", "-p", "-t", "%3", "@matchblox_agent", "claude"}) {
+		t.Error("the mark's argv changed")
+	}
+}

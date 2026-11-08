@@ -77,7 +77,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         }
     }
 
-    /// The agent of the chat's session; nil or empty for none.
+    /// The agent of the pane the app jumped into; nil or empty for none.
     var agent: String? {
         didSet {
             if agent?.isEmpty == true { agent = nil }
@@ -87,7 +87,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         }
     }
 
-    /// False in a jumped pane, or with no agent: command keys dim and send nothing.
+    /// False on the console, or with no agent: command keys dim and send nothing.
     var commandsLive = false {
         didSet {
             guard commandsLive != oldValue else { return }
@@ -675,7 +675,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         guard let motion, pieces.indices.contains(i) else { return }
         let piece = pieces[i]
         if piece.key.isCommand && !commandsLive {
-            flash("commands run from the chat")
+            flash("commands run in an agent's pane")
             return
         }
         if motion.keys[i].id == KeyBar.ctrl {

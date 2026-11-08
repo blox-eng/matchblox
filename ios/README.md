@@ -129,12 +129,13 @@ device before a release. `ws-1` is the host.
 16. Select a session in tmux and tap `A switch` under it. Switch agent
     opens; tap another agent, then `Enter`, then type `y`. The console
     jumps to the pane, where the new agent starts.
-17. On a host with a question waiting, open the chat of that session. Turn
-    the phone to landscape, then back. The chat reopens at the question.
-18. On a real host, tap a row of the session list once. The row opens, the
-    tap clicks it once and the next screen is not clicked through. The
-    keyboard rises on that tap. Tap two rows in quick succession: each row
-    gets one click.
+17. On a host with a question waiting, tap that session once: its live view
+    fills the screen, read-only. Turn the phone to landscape, then back. The
+    view reopens at the question.
+18. On a real host, tap a row of the session list once. Its live view opens,
+    the tap clicks once and the view is not clicked through. The keyboard
+    rises on that tap. Tap the view: you are in the agent's own tmux pane,
+    and a desk attached to the same session stays where it was.
 
 ### The demo
 
@@ -148,14 +149,16 @@ and again with two hosts.
    Tap it. The scan view finds its own code in under three seconds. It turns on
    no camera and asks for no permission. The app opens the console on the
    host `demo`.
-3. Tap the session at the top, flint-auth. Its question fills the chat. Tap an
-   option. The agent works for a few seconds, then the sheet rises with
+3. Tap the session at the top, flint-auth: its live view opens. Tap the view:
+   the stand-in for its pane says `type 2 to answer`. Raise the keyboard with
+   the belt's key and type `2`, or press `↓` then `⏎` on the belt. The agent
+   works for a few seconds, then the sheet rises with
    `Your agents wait the same way.`, the line, `Copy`, `Send to my computer`,
    `Pair a host` and `Keep looking`. `Copy` puts the line on the pasteboard.
    `Send to my computer` opens the share sheet.
 4. On an iPhone, turn the device to landscape at the question. Under 16 rows,
-   the key line says "too short to show flint-auth's question". Turn the device
-   back, and the chat reopens at the question.
+   the question card shows in place of the screen. Turn the device back, and
+   the stand-in shows the question again.
 5. Tap `Keep looking`, then quit the console with `q`. The ended screen offers
    `Open again`, `Pair a host`, the line, `Copy` and `Send to my computer`.
 6. Kill the app in the middle of the demo and open it again. The demo starts
@@ -199,18 +202,17 @@ is a second paired host.
     of `ws-1` shows nothing. Quit and open the app: the activity of `ws-1`
     is gone.
 
-### The chat and the key belt
+### The pane and the key belt
 
 Use an iPhone held upright, with a Claude Code session that waits on a
 question.
 
-29. Tap the session. Its live screen fills the screen, with the agent's own
-    menu at the bottom. A tap on the third option picks it, and so does
-    `↓ ↓ ⏎`.
+29. Tap the session, then tap its live view: you are in the agent's tmux
+    pane, with the agent's own menu at the bottom. `↓ ↓ ⏎` picks the third
+    option.
 30. Each key of Steer (`◂ ↑ ↓ ⏎ Esc ^C ⇞ ⇟`) works on the first tap, with
-    the keyboard up and with it down. `^C` stops a working agent. A second
-    `^C` within 1 s is held. A drag on the belt never presses a key, even
-    when it starts on one.
+    the keyboard up and with it down. `^C` reaches the agent as tmux sends
+    it. A drag on the belt never presses a key, even when it starts on one.
 31. Turn the belt. You feel a tick for each stop, halfway between two stops,
     and a firmer click at home (`◂` at the left). Keys fold round the phone
     at both edges, and the belt turns on without end. It always stops with
@@ -224,14 +226,16 @@ question.
     the tray closes after 0.9 s. The screen does not change size. Open the
     tray again: every match is new, and the one in use burns. The layout
     stays after you quit the app.
-34. Choose Commands in a Claude Code chat: the commands carry its mark.
-    Open a session of another agent: the commands change. `compact` mid-turn is refused with a message; after the turn ends it succeeds. Another agent types its own commands. Jump to a pane with `Ctrl+O`: the command keys
-    are dim, and a tap says `commands run from the chat`.
+34. Choose Commands in a Claude Code pane: the commands carry its mark, and
+    `compact` types `/compact` into the pane. Go into a session of another
+    agent: the commands change, and each types its own text. Back on the
+    console, the command keys are dim, and a tap says `commands run in an
+    agent's pane`.
 35. Choose Mine, then `EDIT MINE`. Tap a key to add it and to take it off.
     Drag a key to move it. A tap on `◂` says `◂ always stays: it is the
     way back`. Quit the app and open it again: Mine is the same.
-36. Swipe down in the chat: earlier lines show, and the title says
-    `↑ n lines up`. The first key goes back to live and sends nothing.
+36. Swipe down in a session's live view: earlier lines show, and the key
+    line says `↑ n lines back`.
 37. Press `Ctrl+O` on a hardware keyboard to go into the tmux pane. A swipe
     scrolls its history, about as fast as the finger. A long press, then a
     drag, selects text. `◂` goes back to the console.

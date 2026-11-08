@@ -179,19 +179,19 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 	if _, ok := m.selectedDoor(); ok {
 		return false
 	}
-	if m.chatKeys { // the chat sends to the home host's agents
-		if bkey.Matches(k, m.keys.chat.Back) {
-			return false // the way back asks nothing
-		}
-		_, toAgent := keyName(k)
-		return (toAgent || bkey.Matches(k, m.keys.main.Jump)) && m.takeOverOn(m.opt.Host)
+	if m.standIn { // the demo's world, which has no stoker
+		return false
 	}
 	s, onSession := m.selectedSession()
 	on := func(a *action) bool { return a != nil && m.takeOverOn(m.actHost(a)) }
 	switch {
-	case bkey.Matches(k, m.keys.main.Chat), onSession && s.Host == m.opt.Host && bkey.Matches(k, m.keys.main.Open):
-		return false // the chat: looking around
-	case bkey.Matches(k, m.keys.main.Jump):
+	case bkey.Matches(k, m.keys.main.Into) && m.tab == tabStoker:
+		pane, _ := m.stokerTarget()
+		return pane != "" && m.takeOverOn(m.opt.Host)
+	case bkey.Matches(k, m.keys.main.Into) && m.tab == tabShips:
+		host, pane := m.shipTarget()
+		return pane != "" && m.takeOverOn(host)
+	case bkey.Matches(k, m.keys.main.Jump), bkey.Matches(k, m.keys.main.Into):
 		return onSession && s.Pane != "" && on(m.primary())
 	case bkey.Matches(k, m.keys.main.Open):
 		return on(m.primary())
@@ -206,9 +206,6 @@ func (m Model) asksTakeOver(k tea.KeyPressMsg) bool {
 // selection is by then.
 func (m Model) hold(k tea.KeyPressMsg) (func(Model) (tea.Model, tea.Cmd), string) {
 	switch {
-	case m.chatKeys && !bkey.Matches(k, m.keys.main.Jump):
-		text, _ := keyName(k)
-		return m.heldKeys(m.pressed(text)), m.opt.Host
 	case bkey.Matches(k, m.keys.main.Second):
 		a := m.secondary()
 		return func(m Model) (tea.Model, tea.Cmd) {
@@ -216,7 +213,18 @@ func (m Model) hold(k tea.KeyPressMsg) (func(Model) (tea.Model, tea.Cmd), string
 			return m, nil
 		}, m.actHost(a)
 	}
+	if bkey.Matches(k, m.keys.main.Into) && m.tab == tabStoker {
+		pane, _ := m.stokerTarget()
+		return heldInto(m.askedBy, m.opt.Host, pane), m.opt.Host
+	}
+	if bkey.Matches(k, m.keys.main.Into) && m.tab == tabShips {
+		host, pane := m.shipTarget()
+		return heldInto(m.askedBy, host, pane), cmp.Or(host, m.opt.Host)
+	}
 	a := m.primary()
+	if _, onSession := m.selectedSession(); onSession && (bkey.Matches(k, m.keys.main.Open) || bkey.Matches(k, m.keys.main.Into) || bkey.Matches(k, m.keys.main.Jump)) {
+		return func(m Model) (tea.Model, tea.Cmd) { return m.runInto(a) }, m.actHost(a)
+	}
 	return func(m Model) (tea.Model, tea.Cmd) {
 		m.pending, m.previewTop = a, 0
 		return m, nil
@@ -267,7 +275,7 @@ func (m Model) answerTakeOver(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		nm.flash = say
 		next = nm
 	}
-	return next, tea.Batch(send, run)
+	return next, tea.Sequence(send, run) // the rest goes first: the jump's into: needs it
 }
 
 // touchRest tells the service of the host the selected row acts on, at
@@ -283,6 +291,16 @@ func (m Model) touchRest() (Model, tea.Cmd) {
 	}
 	m.touchedAt(host)
 	return m, m.sendTo(host, proto.Act{RecID: "stoker:touch", Which: "primary"})
+}
+
+// tookOver tells host's service that the person went into pane while its
+// stoker rests: they took the session over, so the merge guard lets it be.
+// While the stoker is in charge, the session stays the stoker's.
+func (m *Model) tookOver(host, pane string) tea.Cmd {
+	if !m.restingOn(host) || m.unsent(host) != "" {
+		return nil
+	}
+	return m.sendTo(host, proto.Act{RecID: proto.IntoPrefix + pane, Which: "primary"})
 }
 
 // touchedAt keeps now as the last key that kept host's rest.

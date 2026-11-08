@@ -127,6 +127,18 @@ func TestNewJumpID(t *testing.T) {
 	}
 }
 
+func TestJumpLocalSwitchesOnlyItsClient(t *testing.T) {
+	j := Jump{Host: "ws-1", Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d", ClientTTY: "/dev/pts/7"}
+	got := Line(j.Local([]string{"ssh", "x"}))
+	if !strings.Contains(got, " switch-client -c /dev/pts/7 -t '=matchblox-ws-1-0a1b2c3d' ';'") {
+		t.Errorf("the switch names no client: %s", got)
+	}
+	j.ClientTTY = ""
+	if got := Line(j.Local([]string{"ssh", "x"})); strings.Contains(got, " switch-client -c /dev/") {
+		t.Errorf("no tty, yet a -c: %s", got)
+	}
+}
+
 func TestJumpAllowed(t *testing.T) {
 	ok := Jump{Host: "ws-1", Pane: "%12", Prefix: "C-b", ID: "0a1b2c3d"}
 	with := func(f func(*Jump)) Jump { j := ok; f(&j); return j }
@@ -152,6 +164,9 @@ func TestJumpAllowed(t *testing.T) {
 		"prefix ;":        {with(func(j *Jump) { j.Prefix = ";" }), false},
 		"prefix format":   {with(func(j *Jump) { j.Prefix = "#{x}" }), false},
 		"prefix empty":    {with(func(j *Jump) { j.Prefix = "" }), false},
+		"client tty":      {with(func(j *Jump) { j.ClientTTY = "/dev/pts/7" }), true},
+		"bad client tty":  {with(func(j *Jump) { j.ClientTTY = "/dev/pts/7;x" }), false},
+		"relative tty":    {with(func(j *Jump) { j.ClientTTY = "pts/7" }), false},
 	} {
 		if got := JumpAllowed(c.j); got != c.want {
 			t.Errorf("%s: JumpAllowed = %v, want %v", name, got, c.want)

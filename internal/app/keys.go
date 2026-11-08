@@ -33,7 +33,7 @@ type keymaps struct {
 	global   globalKeys
 	main     mainKeys
 	form     formKeys
-	chat     chatKeymap
+	view     viewKeymap
 	sheet    sheetKeys
 	search   searchKeys
 	pair     pairKeys
@@ -97,8 +97,8 @@ func defaultKeys() keymaps {
 			Night:     bind(ks("n"), "n", "stop night"),
 			Order:     bind(ks("o"), "o", "new order"),
 			Rename:    bind(ks("r"), "r", "rename"),
-			Chat:      bind(ks("a", "right"), "a", "chat"),
-			Jump:      bind(ks("ctrl+o"), "ctrl+o", "into tmux"),
+			Into:      bind(ks("a", "right"), "a", "go in"),
+			Jump:      bind(ks("ctrl+o"), "ctrl+o", "go in"),
 		},
 		form: formKeys{
 			Close: bind(ks("esc"), "esc", ""),
@@ -111,10 +111,9 @@ func defaultKeys() keymaps {
 			Right: bind(ks("right", "space"), "←→", "pick"),
 			Erase: bind(ks("backspace"), "⌫", "erase"),
 		},
-		chat: chatKeymap{
+		view: viewKeymap{
 			Back:    bind(ks("ctrl+a"), "ctrl+a m", "back"),
 			BackEnd: bind(ks("m"), "m", "back"),
-			Stop:    bind(ks("ctrl+c"), "^C", "stops the agent"),
 		},
 		sheet: sheetKeys{
 			Send:  bind(ks("enter"), "⏎", "send"),
@@ -166,7 +165,7 @@ func defaultKeys() keymaps {
 func KeyNames() []string {
 	k := defaultKeys()
 	var names []string
-	for _, layer := range [][]bkey.Binding{k.global.bindings(), k.main.bindings(), k.form.bindings(), k.chat.bindings(),
+	for _, layer := range [][]bkey.Binding{k.global.bindings(), k.main.bindings(), k.form.bindings(), k.view.bindings(),
 		k.sheet.bindings(), k.search.bindings(), k.pair.bindings(), k.takeOver.bindings(), k.confirm.bindings(),
 		k.scan.bindings(), k.ask.bindings()} {
 		for _, b := range layer {
@@ -209,14 +208,14 @@ type mainKeys struct {
 	Stoker, Quit, NextTab, PrevTab, Tabs, Search, Back, Sort, SortBack bkey.Binding
 	Group, Park, Mark, Exited, MarkSafe, QuitAgent, Up, Down, Open     bkey.Binding
 	Second, New, Switch, Grant, Dismiss, Fold, Ships, Dock             bkey.Binding
-	Stoke, Night, Order, Rename, Chat, Jump, ListOnly                  bkey.Binding
+	Stoke, Night, Order, Rename, Into, Jump, ListOnly                  bkey.Binding
 }
 
 func (k mainKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Stoker, k.Quit, k.NextTab, k.PrevTab, k.Tabs, k.Search, k.Back, k.Sort, k.SortBack,
 		k.Group, k.Park, k.Mark, k.Exited, k.MarkSafe, k.QuitAgent, k.Up, k.Down, k.Open,
 		k.Second, k.New, k.Switch, k.Grant, k.Dismiss, k.Fold, k.Ships, k.Dock,
-		k.Stoke, k.Night, k.Order, k.Rename, k.Chat, k.Jump, k.ListOnly}
+		k.Stoke, k.Night, k.Order, k.Rename, k.Into, k.Jump, k.ListOnly}
 }
 
 // formKeys are the new-session, switch and rename form. Down and Up go to
@@ -228,14 +227,13 @@ func (k formKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Close, k.Enter, k.Next, k.Prev, k.Down, k.Up, k.Left, k.Right, k.Erase}
 }
 
-// chatKeymap are the chat's own keys. Every other key goes to the agent;
-// Back's ctrl+a does too, and m within a second after it gives the keys back
-// (chatBackWait); Stop is the agent's ^C, which a second one within a second
-// waits for.
-type chatKeymap struct{ Back, BackEnd, Stop bkey.Binding }
+// viewKeymap are the demo stand-in's own keys: ctrl+a, then m within a
+// second (viewBackWait), goes back to Sessions. Every other key goes to the
+// agent's pane in the demo's world.
+type viewKeymap struct{ Back, BackEnd bkey.Binding }
 
-func (k chatKeymap) bindings() []bkey.Binding {
-	return []bkey.Binding{k.Back, k.BackEnd, k.Stop}
+func (k viewKeymap) bindings() []bkey.Binding {
+	return []bkey.Binding{k.Back, k.BackEnd}
 }
 
 // sheetKeys are the stoker's order sheet.
@@ -293,7 +291,7 @@ func (k confirmKeys) bindings() []bkey.Binding {
 	return []bkey.Binding{k.Yes, k.Enter, k.Also, k.ScrollDown, k.ScrollUp}
 }
 
-// keyNames are the keys the chat sends by name, with every ctrl key of
+// keyNames are the keys the demo's stand-in sends by name, with every ctrl key of
 // proto.CtrlKeys: the phone's belt has a Ctrl key for them (#300).
 var keyNames = func() map[string]string {
 	names := map[string]string{
@@ -305,13 +303,6 @@ var keyNames = func() map[string]string {
 	}
 	return names
 }()
-
-// The names the chat sends for Enter, ^C and Backspace.
-var (
-	enterName     = keyNames["enter"]
-	ctrlCName     = keyNames["ctrl+c"]
-	backspaceName = keyNames["backspace"]
-)
 
 // tmuxKeyRE is a tmux key name as tmux prints one: modifiers, then one
 // character or a word (Space, F12).

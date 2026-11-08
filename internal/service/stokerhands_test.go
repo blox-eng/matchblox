@@ -292,43 +292,28 @@ func TestNoAgentActsOnTheStokersSession(t *testing.T) {
 	}
 }
 
-// TestACommandLatchesThePaneBusy: the sample from before a command's turn
-// began still shows the agent at rest, so a second command right after
-// the first one waits: until a sample taken restLatch after the send
-// shows the rest. A compact latches the pane too.
-func TestACommandLatchesThePaneBusy(t *testing.T) {
-	for _, first := range []proto.Act{command("review"), consoleCompact(42)} {
-		s, ran := commandTest(t, "claude", idleScreen)
-		s.Now = func() time.Time { return night0 }
-		screen := idleScreen
-		s.Capture = func([]string) map[string]string { return map[string]string{"%1": screen} }
-		s.Actions.Run = func(argv []string) error {
-			*ran = append(*ran, argv)
-			if len(argv) > 4 && argv[4] == "-l" {
-				screen = strings.Replace(idleScreen, "> \n", "> "+argv[len(argv)-1]+"\n", 1)
-			} else {
-				screen = idleScreen // the Enter took the command
-			}
-			return nil
+// TestACompactLatchesThePaneBusy: the sample from before a compact's turn
+// began still shows the agent at rest, so the pane is not at rest until a
+// sample taken restLatch after the send shows it.
+func TestACompactLatchesThePaneBusy(t *testing.T) {
+	s, ran := commandTest(t, "claude", idleScreen)
+	s.Now = func() time.Time { return night0 }
+	if res := s.act(t.Context(), consoleCompact(42)); res.Err != "" || len(*ran) != 2 {
+		t.Fatalf("res %+v ran %q", res, *ran)
+	}
+	at := func(d time.Duration) {
+		s.publish(sample.Snapshot{At: night0.Add(d), Sessions: []sample.Session{
+			{Agent: "claude", PID: 42, Pane: "%1", SessionID: "s1", Name: "work", Status: "idle"},
+		}}, func(state.Doc) {})
+	}
+	for _, d := range []time.Duration{0, restLatch} {
+		at(d)
+		if s.resting("%1") {
+			t.Fatalf("a sample %v after the compact shows the pane at rest", d)
 		}
-		if res := s.act(t.Context(), first); res.Err != "" || len(*ran) != 2 {
-			t.Fatalf("%s: res %+v ran %q", first.RecID, res, *ran)
-		}
-		const busy = "/clear not sent: work is not at rest: a /clear waits for the end of its turn"
-		at := func(d time.Duration) {
-			s.publish(sample.Snapshot{At: night0.Add(d), Sessions: []sample.Session{
-				{Agent: "claude", PID: 42, Pane: "%1", SessionID: "s1", Name: "work", Status: "idle"},
-			}}, func(state.Doc) {})
-		}
-		for _, d := range []time.Duration{0, restLatch} {
-			at(d)
-			if res := s.act(t.Context(), command("clear")); res.Err != busy || len(*ran) != 2 {
-				t.Fatalf("%s, a sample %v after: res %+v ran %q", first.RecID, d, res, *ran)
-			}
-		}
-		at(restLatch + time.Second)
-		if res := s.act(t.Context(), command("clear")); res.Err != "" || len(*ran) != 4 {
-			t.Fatalf("%s, after the latch: res %+v ran %q", first.RecID, res, *ran)
-		}
+	}
+	at(restLatch + time.Second)
+	if !s.resting("%1") {
+		t.Fatal("a sample after the latch does not show the pane at rest")
 	}
 }

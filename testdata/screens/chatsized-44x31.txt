@@ -28,4 +28,4 @@
 
 
 ────────────────────────────────────────────
- ctrl+a m back · ctrl+o into tmux
+ enter goes into app-feature · esc back

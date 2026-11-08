@@ -31,16 +31,22 @@ func flintAt(t *testing.T, w, h int, keys ...string) Model {
 	}
 	nm.watchCmd()
 	next, _ = nm.Update(screenMsg{Pane: paneNamed(st, "flint-auth"), At: demoAt, Text: askScreen})
-	return pressKeys(t, next.(Model), keys...)
+	cur := next
+	for _, k := range keys {
+		var cmd tea.Cmd
+		cur, cmd = keyOrOpen(cur, k)
+		drain(cmd)
+	}
+	return cur.(Model)
 }
 
-// chatDrawn tells if the frame shows flint-auth's chat, and if so whether
+// viewDrawn tells if the frame shows flint-auth's chat, and if so whether
 // the agent's menu is whole in it: its question, every option and its hint.
-func chatDrawn(m Model) (drawn, whole bool) {
+func viewDrawn(m Model) (drawn, whole bool) {
 	sc := m.draw(m.width)
 	out := ansi.Strip(strings.Join(sc.lines, "\n"))
 	_, right := m.panes(m.width)
-	drawn = sc.chatFull || right > 0 && strings.Contains(out, "flint-auth · ")
+	drawn = sc.placeFull || right > 0 && strings.Contains(out, "flint-auth · ")
 	whole = strings.Contains(out, "Should a refresh also rotate") && strings.Contains(out, "❯ 1. Rotate it") &&
 		strings.Contains(out, "3. Type something.") && strings.Contains(out, "Enter to select")
 	return drawn, whole
@@ -54,7 +60,7 @@ func TestNoChatWithoutItsQuestion(t *testing.T) {
 		w, h := size[0], size[1]
 		for _, keys := range [][]string{nil, {"enter"}} {
 			m := flintAt(t, w, h, keys...)
-			if drawn, whole := chatDrawn(m); drawn && !whole {
+			if drawn, whole := viewDrawn(m); drawn && !whole {
 				t.Errorf("%dx%d after %v: the chat shows without its whole question:\n%s", w, h, keys, screen(m))
 			}
 		}
@@ -77,10 +83,10 @@ func TestEveryGoldenShowsTheAgentsWholeMenu(t *testing.T) {
 		w, h := size[0], size[1]
 		for _, keys := range [][]string{nil, {"enter"}, {"v"}, {"v", "enter"}} {
 			m := flintAt(t, w, h, keys...)
-			if drawn, _ := chatDrawn(m); !drawn {
+			if drawn, _ := viewDrawn(m); !drawn {
 				continue
 			}
-			cols, rows := m.chatSize()
+			cols, rows := m.viewSize()
 			if cols == 0 {
 				continue // in the list: no chat sizes the agent
 			}
@@ -143,28 +149,21 @@ func TestTheListOutranksTheMachine(t *testing.T) {
 	}
 }
 
-// TestTheChatKeyLineKeepsTheWayBack: the chat's key line drops a hint
-// whole when it does not fit, by worth: the agent's name first, then the
-// way into tmux; ctrl+a m back stays.
-func TestTheChatKeyLineKeepsTheWayBack(t *testing.T) {
+// TestTheLiveKeyLineNamesTheWayIn: the full-screen view's key line names
+// the way in whole at every phone width, and a tap on it presses enter.
+func TestTheLiveKeyLineNamesTheWayIn(t *testing.T) {
 	for w := 40; w <= 70; w++ {
 		m := flintAt(t, w, 31, "enter")
-		line, spans := m.chatKeyLine(w)
+		if !m.viewFull() {
+			t.Fatalf("%d columns: the view does not take the screen", w)
+		}
+		line, spans := m.liveKeyLine(w)
 		got := strings.TrimSpace(ansi.Strip(line))
-		if strings.Contains(got, "…") || !strings.Contains(got, "ctrl+a m back") {
+		if strings.Contains(got, "…") || !strings.HasPrefix(got, "enter goes into flint-auth") {
 			t.Fatalf("%d columns: the key line is %q", w, got)
 		}
-		parts := strings.Split(got, " · ")
-		for _, p := range parts {
-			if !slices.Contains([]string{"keys go to flint-auth", "ctrl+a m back", "ctrl+o into tmux"}, p) {
-				t.Fatalf("%d columns: %q is cut in %q", w, p, got)
-			}
-		}
-		if strings.Contains(got, "keys go to") && !strings.Contains(got, "ctrl+o") {
-			t.Fatalf("%d columns: the name stayed over the way into tmux: %q", w, got)
-		}
-		if len(spans) != strings.Count(got, "ctrl+") {
-			t.Fatalf("%d columns: %d tap targets for %q", w, len(spans), got)
+		if len(spans) == 0 || spans[0].press != "enter" {
+			t.Fatalf("%d columns: the taps are %+v", w, spans)
 		}
 	}
 }
@@ -212,7 +211,7 @@ func TestAChatBesideTheListHasRoomForAMenu(t *testing.T) {
 			if _, right := m.panes(w); right == 0 {
 				continue
 			}
-			if _, rows := m.chatSize(); rows < menuLeast {
+			if _, rows := m.viewSize(); rows < menuLeast {
 				t.Fatalf("%dx%d: the chat beside the list has %d rows:\n%s", w, h, rows, screen(m))
 			}
 		}

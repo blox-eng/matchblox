@@ -23,7 +23,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/blox-eng/matchblox/internal/app"
@@ -31,7 +30,6 @@ import (
 	"github.com/blox-eng/matchblox/internal/demo"
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/hooks"
-	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/procfs"
 	"github.com/blox-eng/matchblox/internal/replay"
 	"github.com/blox-eng/matchblox/internal/sample"
@@ -238,9 +236,9 @@ func waitFor(capture func() string, ok func(string) bool, step string, timeout t
 }
 
 var (
-	burning    = regexp.MustCompile(`[✦✧] flint-a\S*\s+busy`) // the duo cuts the name
-	struck     = regexp.MustCompile(`[✦✧] flint-a`)           // its row beside the chat: the strike has played
-	busyTop    = regexp.MustCompile(`1200\s+claude`)          // hearth-api's agent in the top processes
+	onSpark    = regexp.MustCompile(`▌.*merged · done`)                // spark-docs, the selection until the held jump has run
+	burning    = regexp.MustCompile(`[✦✧] (hearth|cinder)-\S*\s+busy`) // a working match, whose name the duo may cut
+	busyTop    = regexp.MustCompile(`1200\s+claude`)                   // hearth-api's agent in the top processes
 	settled    = regexp.MustCompile(`╿ hearth-\S*\s+(done|out of work)`)
 	hearthBack = regexp.MustCompile(`hearth-api\s+\d+k → 9k`)
 	sparkBack  = regexp.MustCompile(`spark-docs\s+\d+k → 9k`)
@@ -359,9 +357,6 @@ func has(s ...string) func(string) bool {
 		return true
 	}
 }
-
-// homeEvent is the home key as the console reads it.
-var homeEvent = uv.UnknownApcEvent(panes.HomeKey)
 
 func keyMsg(k string) tea.KeyPressMsg {
 	switch k {
@@ -537,28 +532,29 @@ func replayAt(t *testing.T, z replaySize) {
 	}
 	sessionsTab := "WAITS FOR YOU"
 	var sessionsNow int // the sessions before N starts one
+	// Beside the list, a frame waits for the selected session's screen, which
+	// comes a moment after its row.
+	shown := func(s string) bool {
+		return strings.Contains(s, "? for shortcuts") || strings.Contains(s, "Chat about this")
+	}
 	steps := []step{
 		{name: "who waits", at: 1300 * time.Millisecond, ok: has(who...)},
 		// The selection moves: the next one that waits shows what it said.
 		{name: "the next one", at: 2600 * time.Millisecond, key: "j", ok: has("I rewrote the quick start")},
 		{name: "back up", at: 3500 * time.Millisecond, key: "k", ok: has(flint)},
-		// a: flint-auth's chat takes the keys; its screen shows the pane's
-		// own work over Claude Code's own menu.
-		{name: "a: the question", at: 4600 * time.Millisecond, key: "a", ok: func(s string) bool {
-			return has("ctrl+a m back", "Rotate it", "Keep the token", "Chat about this", "wire the rotation.")(s) && !strings.Contains(s, "flint-auth asks")
+		// flint-auth waits: beside the list its live screen shows Claude Code's
+		// own menu, read-only (a phone shows the list). Enter goes into its pane.
+		{name: "the question", at: 4600 * time.Millisecond, ok: func(s string) bool {
+			if phone {
+				return has(flint)(s)
+			}
+			return has("Rotate it", "Keep the token", "Chat about this", "wire the rotation.")(s)
 		}},
-		// 2 picks the second option: it goes to Claude Code's menu, and the
-		// chat shows the agent at work on it. The builder read the menu
-		// first: the console's clock moves past its quiet.
-		{name: "picked", at: 6200 * time.Millisecond, do: func() { view.Ahead(time.Second) }, key: "2", ok: func(s string) bool {
-			return has("I rotate the token on each refresh")(s) && !strings.Contains(s, "Chat about this") &&
-				(phone || struck.MatchString(s)) // a phone's chat hides the list
-		}},
-		// Prefix m gives the keys back to the list: tmux hands the console the
-		// home key. The chat's own ctrl+a m waits on the clock, which jumps
-		// with each sample here.
-		{name: "back to the list", at: 7600 * time.Millisecond, do: func() { p.Send(homeEvent) }, ok: func(s string) bool {
-			return has("WAITS FOR YOU · 3")(s) && !strings.Contains(s, "ctrl+a m back") && burning.MatchString(s)
+		{name: "into its pane", at: 6200 * time.Millisecond, key: "enter", ok: func(s string) bool {
+			mu.Lock()
+			defer mu.Unlock()
+			// The jump ran, and the console moved on to the next that waits.
+			return len(jumps) == 1 && !strings.Contains(s, "▌╿ flint") && (phone || shown(s))
 		}},
 		{name: "the sessions", at: 9 * time.Second, ok: func(s string) bool {
 			return has("hearth-", "spark-d", "kindle-", "ember-b", "WORKING")(s) && burning.MatchString(s)
@@ -580,10 +576,12 @@ func replayAt(t *testing.T, z replaySize) {
 		}},
 		{name: "take over?", at: 18500 * time.Millisecond, key: "ctrl+o", ok: has("Take over?")},
 		{name: "kept on", at: 20500 * time.Millisecond, key: "n", ok: func(s string) bool {
-			return strings.Contains(s, "night") && !strings.Contains(s, "Take over?") && strings.Contains(s, "╭─ Jump") && strings.Contains(s, "tmux switch-client -t %")
+			mu.Lock()
+			defer mu.Unlock()
+			return strings.Contains(s, "night") && !strings.Contains(s, "Take over?") && len(jumps) == 2 && !onSpark.MatchString(s) && (phone || shown(s)) // the answer lets the held jump go
 		}},
 		{name: "back to the night", at: 21700 * time.Millisecond, key: "esc", ok: func(s string) bool {
-			return strings.Contains(s, "night") && !strings.Contains(s, "╭─ Jump")
+			return strings.Contains(s, "night") && !strings.Contains(s, "Take over?")
 		}},
 		{name: "the stoker compacts", at: 23 * time.Second, do: func() {
 			clk.Set(full)
@@ -702,8 +700,9 @@ func replayAt(t *testing.T, z replaySize) {
 		t.Fatal(err)
 	}
 	ran := world.Ran()
-	want := [][]string{
-		{"tmux", "send-keys", "-t", "%2", "-l", "--", "2"}, // the second option, into Claude Code's menu
+	want := [][]string{} // the story ends in a jump: the service runs nothing for it
+	if len(jumps) != 2 || !slices.Equal(jumps[0], []string{"tmux", "switch-client", "-t", "%2"}) || jumps[1][1] != "switch-client" {
+		t.Fatalf("the jumps were %q, want the one into flint-auth's pane %%2, then the night's held one", jumps)
 	}
 	// Then the stoker's night: spark-docs is past the line when it starts,
 	// hearth-api when its turn ends. Each compact is typed, then its Enter.

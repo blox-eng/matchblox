@@ -149,11 +149,11 @@ func (s *Service) act(ctx context.Context, a proto.Act) proto.Result {
 	if pane, ok := strings.CutPrefix(a.RecID, proto.KeysPrefix); ok {
 		return s.keys(ctx, pane, a) // a key twice is twice: no dedupe
 	}
+	if pane, ok := strings.CutPrefix(a.RecID, proto.IntoPrefix); ok {
+		return s.into(a, pane)
+	}
 	if strings.HasPrefix(a.RecID, proto.ChainPrefix) {
 		return s.chainAct(a) // an agent's own act: before the agents-pane gate
-	}
-	if pane, ok := strings.CutPrefix(a.RecID, proto.CommandPrefix); ok {
-		return s.command(ctx, pane, a) // a second one finds the agent at work
 	}
 	// A session the stoker drove speaks for the stoker: what it sends
 	// counts and drives, and it gives no go.
