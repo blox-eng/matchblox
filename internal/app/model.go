@@ -934,8 +934,11 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.flash = "failed: " + msg.cmd + ": " + msg.err.Error()
 			return m, nil
 		}
-		if msg.jumped != "" && !msg.watched {
-			m = m.nextAfter(msg.jumped)
+		if msg.jumped != "" {
+			m = m.pairJumped(msg.tty, msg.jumped)
+			if !msg.watched {
+				m = m.nextAfter(msg.jumped)
+			}
 		}
 		toast := m.say("ran: " + msg.cmd)
 		return m, toast

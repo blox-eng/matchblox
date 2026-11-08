@@ -367,7 +367,7 @@ func (m Model) pairWatched() (Model, tea.Cmd) {
 		}
 	case p.beat == 2:
 		if at, _, ok := h.DeviceIn(p.device.ID); ok && at.After(p.claimedAt) {
-			p.beat, p.line = 3, p.device.Name+" is in. Answer an agent from it, or "+m.keys.pair.Close.Help().Key+" to go back."
+			p.beat, p.line = 3, p.device.Name+" is in: go into an agent from it, or "+m.keys.pair.Close.Help().Key+" to go back."
 		} else if now.Sub(p.claimedAt) >= pairInWait {
 			m.pairPolling = false
 			return m.closePairPage(pairedLine(p.device)), nil
@@ -395,8 +395,6 @@ func (m Model) pairActed(a action) Model {
 		switch a.rec[:i] {
 		case "answer":
 			verb = "answered"
-		case "keys":
-			verb = "picked in"
 		case "message":
 			verb = "wrote to"
 		case "compact":
@@ -410,6 +408,27 @@ func (m Model) pairActed(a action) Model {
 	who := s.Name
 	next := *p
 	next.beat, next.line = 4, fmt.Sprintf("%s %s %s", p.device.Name, verb, who)
+	next.foldAt = m.now().Add(pairActFold)
+	m.pair = &next
+	return m
+}
+
+// pairJumped tells the page of a jump the console ran. At beat 3, the new
+// device's first jump into a home session ends the pairing.
+func (m Model) pairJumped(tty, pane string) Model {
+	p, h := m.pair, m.opt.Pair
+	if p == nil || p.standalone || p.beat != 3 || h == nil || h.DeviceIn == nil {
+		return m
+	}
+	if _, deviceTTY, found := h.DeviceIn(p.device.ID); !found || tty == "" || tty != deviceTTY {
+		return m
+	}
+	s, ok := m.sessionIn(m.opt.Host, pane)
+	if !ok {
+		return m
+	}
+	next := *p
+	next.beat, next.line = 4, fmt.Sprintf("%s went into %s", p.device.Name, s.Name)
 	next.foldAt = m.now().Add(pairActFold)
 	m.pair = &next
 	return m
