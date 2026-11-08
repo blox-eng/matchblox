@@ -51,6 +51,7 @@ Rule: a pull request whose title starts `feat` (`^feat(\([^)]+\))?!?: `) must ch
   - `feat(app): x` + body `Landing page: unchanged because the room has no public face yet` → exit 0
   - `feat: x` + body `Landing page: unchanged because no` → exit 1 (reason too short)
   - `fix: x` + a change only in `internal/` → exit 0
+  - `feat: x` + a body with CRLF line ends holding `Landing page: unchanged because the room has no public face yet` → exit 0 (GitHub sends CRLF bodies)
 - [ ] **Step 2:** Run `bash .github/scripts/landing-guard_test.sh`. Expected: FAIL, because `landing-guard.sh` does not exist.
 - [ ] **Step 3: Implement `landing-guard.sh`** in the style of `changelog-guard.sh`: `set -euo pipefail`, `git diff --name-only <base-ref>...HEAD`, and fail closed when the base ref is missing (`FAIL: cannot read <base-ref>`).
 - [ ] **Step 4:** Run the test. Expected: every case prints `ok`, exit 0. Run `shellcheck .github/scripts/landing-guard*.sh`. Expected: no output.
@@ -59,7 +60,8 @@ Rule: a pull request whose title starts `feat` (`^feat(\([^)]+\))?!?: `) must ch
   - `AGENTS.md`: one section, "Before a feat PR merges", with the rule, the escape line and the command to run it locally.
   - `CLAUDE.md`: one line, `@AGENTS.md`.
   - `CONTRIBUTING.md`: the same rule, one paragraph.
-  - `.claude/settings.json`: add a `PreToolUse` hook on `Bash` that runs `.github/scripts/landing-guard-hook.sh`. That script reads the hook JSON from stdin. When `tool_input.command` matches `gh pr (create|merge|ready)`, it runs the guard with the current PR's title and body (`gh pr view --json title,body`, or the `--title`/`--body` of the command) against `origin/main`. It exits 2 with the guard's message to block, else exits 0. Add `landing-guard-hook.sh` to the test script with a fake JSON input for each of the two outcomes, and to shellcheck.
+  - `.claude/settings.json`: add a `PreToolUse` hook on `Bash` that runs `.github/scripts/landing-guard-hook.sh`. That script reads the hook JSON from stdin. When `tool_input.command` matches `gh pr (merge|ready)`, it runs the guard on the PR's own title and body (`gh pr view <n> --json title,body,baseRefName`) against `origin/<baseRefName>`. It exits 2 with the guard's message to block, else exits 0. `gh pr create` is left to CI (eng review: parsing `--title`/`--body` out of a command line is fragile). Add `landing-guard-hook.sh` to the test script with a fake JSON input and a stub `gh` on `PATH` for each of the two outcomes, and to shellcheck.
+  - No settings change: the `Conventional Commits` job is a required check of the `main` ruleset (read 2026-11-08), so its new `Landing page` step blocks merge.
 - [ ] **Step 7: Commit.** `ci: a feat pull request changes the landing page or says why not`
 
 ### Task 2: The key check
@@ -129,7 +131,7 @@ Rule: a pull request whose title starts `feat` (`^feat(\([^)]+\))?!?: `) must ch
   - `TestRoomHasOneAccent`: count the accent token in a frame where the need line, an asking match row and a ship that waits for merge all show. Expected: exactly one run, on the need line.
 - [ ] **Step 2:** Run `go test ./internal/app/ -run TestRoom -update=false`. Expected: FAIL (missing goldens and missing view).
 - [ ] **Step 3: Implement** `roomView`. Match rows keep the fuse column of `fuse.go` between the match and the name. Regions follow DESIGN.md §6 Regions: no boxes, labels in `faint`, hairlines. `≋` takes `muted`, and the `night` token while that chain's stoker is in charge. On Narrow, `⏎` on a match draws the chat full screen, titled `‹ hearth · ember-billing · asks`.
-- [ ] **Step 4:** Run with `-update`, read every golden by eye against the spec's frames, then run without `-update`. Expected: PASS.
+- [ ] **Step 4:** Run `go test ./internal/app/ -run TestScreens -update`, then run it without `-update`. Expected: PASS. Agents may not read `testdata/` (`.claude/settings.json` denies it), so check each frame from the test's own printed screen (`go test -run TestRoomGolden -v`, which logs the frame), against the spec's frames. The owner reads the goldens in the PR.
 - [ ] **Step 5: Commit.** `feat(app): the room draws its need, card, matches, ships, git and talk line`
 
 ### Task 5: The room's keys and the talk line
@@ -178,6 +180,7 @@ Rule: a pull request whose title starts `feat` (`^feat(\([^)]+\))?!?: `) must ch
 
 **Files:**
 - Modify: `internal/panes/home.go` (a `FlipKeysArgv() []string`, run where `HomeKeyArgv` runs), `internal/app/chat.go` (parse the three APCs next to `commandPrefix`), `internal/app/room.go`
+- Modify: `internal/service/` (where a sample's panes are known: set and clear `@matchblox_match`)
 - Create: `internal/app/flip_test.go`
 - Modify: `ios/Matchblox/BeltView.swift` (a flip and a next button)
 
@@ -185,7 +188,7 @@ Rule: a pull request whose title starts `feat` (`^feat(\([^)]+\))?!?: `) must ch
 - Consumes: `panes.FlipKey`, `NextKey`, `FlipAPC`, `NextAPC`, `OpenAPC`; the console's switch to a pane (the act behind `Switch` in `keys.go`/`lifeform.go`).
 - Produces: `func (m Model) flipFrom(pane string) (Model, tea.Cmd)`, `func (m Model) nextFrom(pane string) (Model, tea.Cmd)`, `func (m Model) openFromAPC(host, chain string) Model`.
 
-tmux binding: on a pane that runs the console, the key goes on to the console as the APC with an empty pane. On a session pane of this server: `switch-client -t =matchblox`, then `send-keys -t <the console's pane> -H <FlipAPC(#{pane_id})>`. On a server without a console: nothing.
+tmux binding (eng review D2-A, owner 2026-11-08): `FlipKeysArgv` builds on `goHome`'s routing (`internal/panes/home.go`): on a console's pane the key goes on as the APC; on any other pane of a session matchblox samples, the client goes to the console's session and on to the console's pane there, as `goHome` does, which then gets `FlipAPC(#{pane_id})`. The test for such a pane is the pane option `@matchblox_match` (set to `1` by the service on each agent pane it samples, cleared when the pane leaves). On every other pane the binding runs `send-keys M-s` (or `M-n`), so shells and editors keep their key.
 
 - [ ] **Step 1: Write the failing tests:**
   - `TestFlipArgvBindsBothKeys`: argv equality, in the style of `home_test.go`.
@@ -196,10 +199,12 @@ tmux binding: on a pane that runs the console, the key goes on to the console as
   - `TestFlipFromALooseSessionOpensTheChainOfOne`.
   - `TestNextWalksMatchesThenTheStokerThenTheFirst`.
   - `TestFlipFromAPaneOfAnotherServerSendsNothing`: no `send-keys` to a non-console pane appears in the argv.
+  - `TestFlipKeyPassesThroughOnAnUnknownPane`: the argv's else branch is `send-keys M-s`.
+  - `TestServiceMarksTheAgentPanesItSamples`: after a sample, `@matchblox_match` is `1` on each agent pane and unset on a pane that left (in `internal/service`).
   - `TestOpenAPCOpensThatChainsRoom`.
 - [ ] **Step 2:** Run `go test ./internal/panes/ ./internal/app/ -run 'TestFlip|TestNext|TestOpenAPC'`. Expected: FAIL.
 - [ ] **Step 3: Implement.** Keep `room.from` per console client (the console is one client), so no service state changes. On iOS, the belt's two buttons send `FlipAPC("")` and `NextAPC("")`, which the console reads as "from the selected session". They are 44 × 44 pt, with VoiceOver labels `Flip to the stoker` and `Next match`, and a `.light` haptic (Task 11's `Haptics.flip()`).
-- [ ] **Step 4:** Run the same command, then `cd ios && make test` (or the repo's iOS test target). Expected: PASS.
+- [ ] **Step 4:** Run the same command, then `cd ios && make test` (it runs the MatchbloxKit tests) and `make build`. Expected: PASS.
 - [ ] **Step 5: Commit.** `feat: Option-s flips between a session and its chain's room`
 
 ### Task 8: The states
@@ -272,7 +277,8 @@ tmux binding: on a pane that runs the console, the key goes on to the console as
 
 **Files:**
 - Modify: `ios/Matchblox/Haptics.swift`, `ios/Matchblox/ConsoleTerminalView.swift`, `ios/Matchblox/ConsoleView.swift` (or wherever the app reads the console's state, for state changes), the app settings view (a `Haptics` toggle, `@AppStorage("haptics")`, default `true`)
-- Test: the Matchblox unit tests (a `HapticsPolicy` value type tested without a device)
+- Create: `ios/MatchbloxKit/Sources/MatchbloxKit/HapticsPolicy.swift`, `ScrollTicker.swift` and their tests in MatchbloxKit (eng review: `make test` runs only MatchbloxKit, so the pure rules live there)
+- Modify: `internal/app/` (the console writes `\x1b_matchblox;feel=needs\x1b\\` when a match on screen starts to ask or wait for a go, and `feel=done` when one finishes; eng review D3-A, owner 2026-11-08), with a Go test `TestConsoleSignalsAFeelOnAStateChange` and `TestNoFeelForBusyIdleChurn`
 
 **Interfaces:**
 - Produces:
@@ -289,13 +295,14 @@ tmux binding: on a pane that runs the console, the key goes on to the console as
   - `testSettingOffPlaysNothing`
   - `testScrollTicksAtMost30PerSecond`: a `ScrollTicker` value type over row offsets and timestamps.
   - `testEdgePlaysOnceAtTop`
-- [ ] **Step 2:** Run the iOS unit tests. Expected: FAIL.
+- [ ] **Step 2:** Run `cd ios && make test` and `go test ./internal/app/ -run 'TestConsoleSignals|TestNoFeel'`. Expected: FAIL.
+- [ ] **Step 2b: Prove the channel.** Check that SwiftTerm hands the app an APC string (its terminal delegate or the data path `ConsoleTerminalView` feeds). If it does not, strip `\x1b_matchblox;feel=…\x1b\\` from the bytes before they reach SwiftTerm, in the one place the view feeds data, with a test in MatchbloxKit for the stripper (`FeelScanner`), split sequences across reads included.
 - [ ] **Step 3: Implement.**
   - The terminal view's wheel pan and scrollback call `ScrollTicker`. Each row moved ticks, and the top or bottom plays `edge()` once until the scroll leaves that edge.
   - State changes come only from the foreground app, for the host on screen.
   - Generators stay prepared, as `Haptics.prepare()` does.
   - With Reduce Motion on, haptics still play.
-- [ ] **Step 4:** Run the iOS unit tests. Expected: PASS. Then try it on a device: scroll the scrollback, flip, give a go. Record what you felt in the PR body under "Not proven" if no device is at hand.
+- [ ] **Step 4:** Run `cd ios && make test`, `make build` and the Go tests. Expected: PASS. Then try it on a device: scroll the scrollback, flip, give a go. Record what you felt in the PR body under "Not proven" if no device is at hand.
 - [ ] **Step 5: Commit.** `feat(ios): haptics for a match that needs you, a finish, scrolling and the flip`
 
 ### Task 12: Step 1's docs and DESIGN.md
@@ -311,7 +318,7 @@ tmux binding: on a pane that runs the console, the key goes on to the console as
 ### Task 13: The fold to `chains · machine` (step 2)
 
 **Files:**
-- Modify: `internal/app/tabs.go` (the consts and `views`: `tabChains`, `tabMachine`), `internal/app/sessions.go` (remove `groupNeed`…`groupNone` and the `sessGroup` keys), `internal/app/lists.go`, `internal/app/stokertab.go` (its card moves into the room; its host controls into Machine), the Ships, Git, History and Panes views (now regions of the room or of Machine), `config.example.toml` and the config reader (drop the grouping key, and warn once with `sessions.group is gone: chains are the only grouping` if a config still sets it)
+- Modify: `internal/app/tabs.go` (the consts and `views`: `tabChains`, `tabMachine`), `internal/app/sessions.go` (remove `groupNeed`…`groupNone` and the `sessGroup` keys), `internal/app/lists.go`, `internal/app/stokertab.go` (its card moves into the room; its host controls into Machine), the Ships, Git, History and Panes views (now regions of the room or of Machine), `internal/app/keys.go` (remove `Group` (`g`, "group by"); eng review: the grouping is in-memory only, `model.go:1319`, so no config changes)
 - Test: `internal/app/tabs_test.go`, `internal/app/stokertab_test.go` (move its cases to the room tests), the goldens
 
 **Interfaces:**
@@ -323,7 +330,7 @@ tmux binding: on a pane that runs the console, the key goes on to the console as
   - `TestChainListHoldsDoorsGhostAndRecommendations`: the rows are in spec order.
   - `TestMachineRegionsInOrder`: usage, the machine, the busy loops, the top processes, the stoker, DEVICES, history, panes.
   - `TestBackSelectsTheLastChain`.
-  - `TestOldGroupingConfigWarnsOnce`.
+  - `TestGIsNoLongerAKey`: `g` in the chain list does nothing and no hint names it.
 - [ ] **Step 2:** Run `go test ./internal/app/`. Expected: FAIL.
 - [ ] **Step 3: Implement.** Delete the dead code: groupings, the tab views that moved, and their keys. Every test of a removed view either moves to its new home or is deleted with a line in the commit body saying which.
 - [ ] **Step 4:** Run `go test -race ./...` and the demo tests (`go test ./internal/demo/`). Expected: PASS. Update the goldens with `-update` and read each one.
@@ -345,3 +352,112 @@ tmux binding: on a pane that runs the console, the key goes on to the console as
 - [ ] **Step 1:** When Tasks 1–14 are green, send matchbloxrelease (`matchblox send`, at most 500 characters) the line and the visual for "The chain" beat: a session, ⌥s, the stoker's room, ⌥s back.
 - [ ] **Step 2:** matchbloxrelease commits the page change to `design/chain-room`. Pull it, then run `.github/scripts/landing-guard.sh "<PR title>" <body-file> origin/main`. Expected: `OK`.
 - [ ] **Step 3:** The PR's CI shows the `Landing page` step green. Only then is the PR ready to merge.
+
+
+## Eng review corrections (2026-11-08)
+
+These corrections override the task text above where they differ. Each one was checked against `matchblox-304` at `fbb4d294`. They change no behavior the spec approved; they fix how the plan reaches it.
+
+1. **Task 7: the phone's buttons are user-keys.** `FlipKeysArgv` registers `FlipAPC("")` and `NextAPC("")` as tmux `user-keys` in slots 898 and 899 (below `homeUserKey` 900 and keycmd's 901 and up). It routes them as M-s and M-n are routed. Test: `TestFlipKeysMatchTheApp`, in the style of `TestHomeKeyMatchesTheApp`. Without this the bytes reach the pane as text (home.go:70 is the pattern).
+2. **Task 7: the origin pane is taken before the switch.** The binding first runs `run-shell -C "set -s @matchblox_from_#{client_tty} #{pane_id}"`, then does `goHome`'s switch, then sends the plain `FlipAPC("")`. The console reads the origin from that option for its own client's tty. A `#{…}` inside `send-keys -H` hex is not expanded. Only `pane_id` and `client_tty` values enter the string, never names. Test: a `home_linux_test` that presses M-s in an agent pane on a real tmux server and checks that the console reads the origin `%N`.
+3. **Task 7: "came from" is kept per client.** Desk and phone attach one console (`new-session -A`, home.go:26), so `room.from` is a `map[string]string` keyed by client tty (`tmuxLastClient`'s reading names the client that pressed the key). Test: `TestTwoClientsFlipBackToTheirOwnSessions`.
+4. **Task 3: ships and git.** Ships come from `m.allShips` through `proto.ShipsOf(all, pane, id)` for each member. Worktrees come from the gitscan report (`gitscan.Worktree`), matched to the team by path or branch against the members' working folders and repos, because a merged, safe worktree has no session. Test: `TestRoomGitCountsAMergedWorktreeWithNoSession`.
+5. **Tasks 3 and 13: the list of teams.** A team's room comes from `chainsOf(host).Chains` joined with `Doc.Stokers`, not only `chainIx`. `chainIx` drops a team with fewer than two present matches (`if present[k] > 1`, fuse.go:103). The "no matches" state and a team that its stoker keeps alive then show. Test: `TestATeamWithOneMatchLeftStillHasItsRoom`.
+6. **Task 10: chain names reach the phone as numbers plus a name table.** `Numbers` gains a chain table (`Chain(id) int`, and `Names` returns a third map), the pair register's `IslandNames` gains `chains`, and the phone shows the name from that table (`chain N` only when it has none). A tap sends `open=<host>/<N>`, and the console looks N up. `OpenAPC(host string, n int)` replaces `OpenAPC(host, chain string)`. Real chain ids (`%171#1`) never travel. Tests: `TestNamesIncludesChains`, `testIslandShowsTheChainsName`.
+7. **Task 1: the local hook reads the PR's own files.** `landing-guard.sh` takes a file list on stdin as an alternative to a base ref. The hook feeds it `gh pr diff <n> --name-only`, and fails closed (exit 2, `the landing check could not read PR <n>: <why>`) when `gh` errors.
+8. **Task order.**
+   - The APC parser moves into Task 2: `panes.ParseAPC(s string) (kind, arg string, ok bool)`, so Task 2's test can pass.
+   - `Haptics.flip()` is added in Task 7, as a one-line `.light` impact; Task 11 keeps the rest.
+9. **Task 5: a chain of one wakes the host stoker.** With the host stoker off, ⏎ sends `stoker:start`, then the typed order as a queued `stoker:order` once the agent is ready (the `queuedOrder` path, sheet.go:212). Test: `TestTalkInAChainOfOneStartsTheHostStoker`.
+10. **Task 7: one test restated.** `TestFlipFromAPaneOfAnotherServerSendsNothing` becomes `TestOtherTmuxServersGetNoBinding`: the argv targets only the console's server.
+11. **Task 11: one haptics design.**
+    - The console decides and sends `feel=needs|done`, through `logos.Passthrough` and behind the tmux ≥ 3.3 gate, as `sayAgent` does.
+    - `HapticsPolicy` becomes `HapticsGate { mutating func admit(_ e: HapticEvent, at: Date, enabled: Bool) -> Bool }`, which keeps only the 2 s gap, the burst rule and the setting.
+    - The console's own tests own the rule that busy ↔ idle churn plays nothing.
+12. **Smaller corrections.**
+    - The service clears `@matchblox_match` when the agent exits and its pane stays.
+    - The room's `y` sends with `sendTo(k.host, …)`, not `m.send`, so a peer's room grants on its own host. Test: `TestGoInAPeersRoomGoesToThatHost`.
+    - The key bar is `ios/MatchbloxKit/Sources/MatchbloxKit/KeyBar.swift`, not BeltView.
+    - The island's Sessions face is in `ios/MatchbloxIsland/SessionsFace.swift`.
+
+## Eng review
+
+Target: this plan, with its spec, checked against `matchblox-304` at `fbb4d294` (static read; no code built). Scope Challenge: scope accepted as-is (D1: one PR, the original arrangement).
+
+**What already exists and is reused:**
+- `goHome` and `HomeKeyArgv` (the routing and user-keys pattern)
+- `sendChain` and `queuedOrder` (stoker acts)
+- `stoker:grant`
+- the consent box
+- #261's chat
+- `chainsOf` and `Doc.Stokers`
+- `proto.ShipsOf`
+- the gitscan report
+- `push.Numbers`
+- `Haptics.swift`
+- `KeyBar.swift`
+- `changelog-guard.sh` (the guard's style)
+- the `main` ruleset's required `Conventional Commits` check
+
+**Not in scope:**
+- multi-team membership in `internal/chains` (matchblox-chain's work)
+- naming teams
+- a service-side "came from"
+- chains across hosts
+
+**Flow: the flip**
+
+```
+agent pane --M-s--> tmux binding
+   | @matchblox_match? -- no --> send-keys M-s (the pane keeps its key)
+   | yes
+   v
+set @matchblox_from_<tty> = #{pane_id}  -->  goHome switch  -->  console pane gets FlipAPC("")
+                                                                    |
+console: ParseAPC -> origin for this tty -> openRoom(team of origin) -> cursor: need line, else talk line
+console, in the room --M-s--> switch the client back to room.from[tty]  (gone: "That session ended.")
+```
+
+**Test coverage map**
+
+| Path | Test (task) | Kind |
+|---|---|---|
+| guard: feat + www, escape line, CRLF, short reason, fix | landing-guard_test.sh (1) | shell |
+| hook: merge/ready blocks, gh error fails closed | landing-guard_test.sh (1, corr. 7) | shell + stub gh |
+| APC build and parse | TestFlipAPCsRoundTrip (2) | unit |
+| room rows, need, cap, chain of one, no stoker, unseen mate, git with no session | room_test.go (3, corr. 4, 5) | unit |
+| look at 110/80/40, one accent, long names | TestRoomGolden*, TestRoomHasOneAccent (4) | golden |
+| keys, typing, consent, one order at a time, refusal, host stoker wake, peer grant | roomkeys_test.go (5, corr. 9, 12) | unit |
+| flip: route, back, gone, per-client, passthrough, user-keys, real tmux | flip_test.go, home_linux_test (7, corr. 1–3, 10) | unit + tmux |
+| states table | roomstates_test.go (8) | unit |
+| header, night | night_test.go (9) | unit |
+| island and buzz, names table, old payload | push tests, MatchbloxKit tests (10, corr. 6) | unit |
+| haptics gate, ticker, feel signal | MatchbloxKit tests, TestConsoleSignals* (11, corr. 11) | unit |
+| fold: tabs, order holds, regions, `g` gone | tabs_test.go (13) | unit + golden |
+
+**Failure modes:** 0 critical gaps flagged. Each new path has its failure tested:
+- the flip to a gone pane;
+- a refused order;
+- `gh` down in the hook;
+- an old payload;
+- a peer host out of reach;
+- a stoker that fails to start.
+
+**Performance:**
+- The service sets `@matchblox_match` only when a pane joins or leaves, never on each sample.
+- `roomRows` is worked out in `refresh`, beside `chainIx`, not in `View`.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Outside Review | Claude subagent (Codex unavailable: its sandbox cannot start) | Independent 2nd opinion | 1 | completed (native) | 12 findings, 12 applied as corrections |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open, all mapped | 8 issues, 0 critical gaps |
+| Design Review | `/plan-design-review` | UI/UX gaps | 1 (on the spec) | issues_found, fixed | score: 3/10 → 9/10, 22 decisions |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+- **OUTSIDE COVERAGE:** Codex, eng phase, unavailable (its sandbox cannot start here). A Claude subagent ran in its place: 12 findings, all checked against the code and applied.
+- **VERDICT:** Eng review done; every finding is mapped into a task. The owner decided D1 (one PR), D2 (the flip key passes through) and D3 (the console sends the haptic signal). Ready to build after #312 merges.
+
+NO UNRESOLVED DECISIONS
