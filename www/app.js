@@ -309,19 +309,20 @@ onReady(() => {
       if (n) { e.preventDefault(); pick(tabs[(i + n + tabs.length) % tabs.length], true); }
     });
   });
-  copy.addEventListener("click", async () => {
-    const text = cmd.textContent.trim();
+  document.querySelectorAll(".cmd .copy").forEach((btn) => btn.addEventListener("click", async () => {
+    const code = btn.parentElement.querySelector("code span:not(.p)");
+    const text = code.textContent.trim();
     try {
       await navigator.clipboard.writeText(text);
-      copy.textContent = "Copied";
-      copy.dataset.done = "";
+      btn.textContent = "Copied";
+      btn.dataset.done = "";
       status.textContent = "Copied: " + text;
-      setTimeout(() => { copy.textContent = "Copy"; delete copy.dataset.done; }, 1600);
+      setTimeout(() => { btn.textContent = "Copy"; delete btn.dataset.done; }, 1600);
     } catch {
-      getSelection().selectAllChildren(cmd);
+      getSelection().selectAllChildren(code);
       status.textContent = "Selected. Press Ctrl+C or ⌘C to copy.";
     }
-  });
+  }));
 });
 
 // The strike: blocks fall into a matchbox, the drawer opens, a match strikes
@@ -548,6 +549,17 @@ onReady(() => {
   };
   // run lights from match `from`: each match catches after the one nearer to
   // it, and goes out in the same order.
+  // Until the row is touched, the first match glows now and then.
+  let beckoning = !still();
+  const touched = () => { beckoning = false; };
+  ["pointerenter", "pointerdown", "keydown"].forEach((e) => svg.addEventListener(e, touched, { once: true }));
+  const beckon = () => {
+    if (!beckoning) return;
+    items[0].classList.add("beckon");
+    setTimeout(() => items[0].classList.remove("beckon"), 600);
+    setTimeout(beckon, 2400);
+  };
+  setTimeout(beckon, 1200);
   const run = (from = 0) => {
     stop();
     if (still()) { items.forEach(light); return 0; }

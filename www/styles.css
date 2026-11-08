@@ -75,7 +75,6 @@ main { display: grid; gap: 28px; padding-block: 8px 64px; min-width: 0; scroll-m
 .micro.lead { color: var(--primary); }
 h1 { margin: 0; font-size: clamp(40px, 6vw, 66px); line-height: 1.05; font-weight: 600; letter-spacing: -.035em; text-wrap: balance; }
 .sub { margin: 0; font-size: clamp(18px, 2.2vw, 22px); line-height: 1.35; color: var(--muted); max-width: 46ch; }
-.motto { margin: 12px 0 0; color: var(--muted); font-style: italic; }
 a { color: var(--fg); text-decoration: underline; text-decoration-color: var(--hair-strong); text-underline-offset: 4px; transition: text-decoration-color 180ms ease-out; }
 a:hover { text-decoration-color: var(--primary); }
 .go { display: inline-flex; gap: 8px; align-items: baseline; text-decoration: none; justify-self: start; }
@@ -222,13 +221,12 @@ footer a { color: var(--muted); }
 /* The news line over the hero: what is new, and the way to the changelog.
    The middle span is the long headline: min-width:0 + flex so it wraps beside
    New instead of claiming a full row at its max-content width. */
-.news { justify-self: start; display: inline-flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 10px; width: fit-content; max-width: 100%; min-width: 0; padding: 6px 12px 6px 6px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--hair-strong); color: var(--muted); text-decoration: none; font: 400 13px/18px var(--sans); transition: box-shadow 130ms ease, color 130ms ease; }
-.news:hover { color: var(--fg); box-shadow: inset 0 0 0 1px var(--primary); }
-.news:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.news .tag { flex: none; font: 500 10px/14px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bg); background: var(--primary); padding: 2px 7px; border-radius: 999px; }
-.news .go { flex: none; color: var(--primary); font: 500 12px/18px var(--mono); }
-.news > span:not(.tag):not(.go) { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
-@media (max-width: 640px) { .news { border-radius: 12px; font-size: 12px; padding: 6px 10px 6px 6px; gap: 4px 8px; } }
+.news { justify-self: start; position: relative; display: block; max-width: 60ch; padding-left: 45px; color: var(--muted); text-decoration: none; font: 400 13px/20px var(--sans); text-wrap: pretty; transition: color 130ms ease; }
+.news:hover { color: var(--fg); }
+.news:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; border-radius: 2px; }
+.news .tag { position: absolute; left: 0; top: 1px; font: 500 10px/18px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bg); background: var(--primary); padding: 0 7px; border-radius: 999px; }
+.news .go { white-space: nowrap; color: var(--primary); font: 500 12px/20px var(--mono); }
+.news:hover .go { text-decoration: underline; text-underline-offset: .25em; }
 
 /* The agents: one line on the first screen, then a command and the console
    row it gives for each agent. */
@@ -314,7 +312,6 @@ footer a { color: var(--muted); }
 .domino g:nth-child(4n) .flame { animation-duration: 1.2s; }
 @keyframes chain-flicker { 0%, 100% { transform: scale(1, 1); } 40% { transform: scale(.92, 1.08); } 70% { transform: scale(1.05, .95); } }
 .strike-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
-.strike-row #chain-tip { font-size: 14px; color: var(--muted); }
 .chain .domino { cursor: pointer; -webkit-tap-highlight-color: transparent; border-radius: 8px; }
 .chain .domino:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; }
 @media (hover: hover) { .domino g:not(.lit):hover .head { fill: var(--primary); } }
@@ -323,3 +320,10 @@ footer a { color: var(--muted); }
 .chain .beats h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
 .chain .beats p { margin: 0; color: var(--muted); font-size: 14px; }
 @media (max-width: 720px) { .chain .beats { grid-template-columns: minmax(0, 1fr); } }
+
+.domino .beckon .glow { animation: beckon .6s ease-in-out; }
+@keyframes beckon { 50% { opacity: .5; } }
+@media (hover: hover) { .domino g:hover .head { transform: translateY(-3px); transition: transform .15s; } }
+.box { gap: 18px; }
+.end .cmd { max-width: 640px; }
+.match svg { translate: 0 -6px; }

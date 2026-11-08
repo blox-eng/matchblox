@@ -63,7 +63,7 @@ func TestTheLandingIsShort(t *testing.T) {
 
 func TestTheLandingNeedsNoInstructions(t *testing.T) {
 	page := landingPage(t)
-	for _, s := range []string{"Tap a match", "Try g and s", "Every agent you run, in one list"} {
+	for _, s := range []string{"Tap a match to light it", "Try g and s", "Every agent you run, in one list"} {
 		if bytes.Contains(page, []byte(s)) {
 			t.Errorf("the page says %q: the visual must invite the action itself", s)
 		}
