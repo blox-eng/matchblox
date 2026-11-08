@@ -129,20 +129,17 @@ func (m Model) chatSize() (cols, rows int) {
 	}
 	w := max(m.width, minWidth)
 	_, detailW := m.panes(w)
+	place, full := m.chatPlacement(w)
 	switch {
-	case detailW > 0: // beside the list, as chatPlacement has it
+	case place == chatFull && m.viewOpen:
+		cols, rows = w, full
+	case place == chatBeside: // beside the list, as chatPlacement has it
 		s, ok := m.chatShown(detailW)
 		if !ok {
 			return 0, 0
 		}
 		room := m.bodyRows()
 		cols, rows = detailW-1, room-1-len(m.chatStrip(s, detailW, room-1))
-	case m.viewOpen:
-		place, full := m.chatPlacement(w)
-		if place != chatFull {
-			return 0, 0
-		}
-		cols, rows = w, full
 	}
 	if cols <= 0 || rows <= 0 {
 		return 0, 0
@@ -263,15 +260,16 @@ const (
 	chatFull                    // the whole screen, once a tap opens it
 )
 
-// chatPlacement is the one answer to where the selected session's chat is
-// drawn at w columns, and how many rows it has for its title, strip and
-// screen: beside the list where Sessions splits, else the whole screen,
+// chatPlacement is the one answer to where the selected session's live
+// view is drawn at w columns, and how many rows it has for its title, strip
+// and screen: beside the list where Sessions splits, else the whole screen,
 // unless it waits at a menu and the screen has under menuLeast rows for it.
+// The demo's stand-in is the whole screen at every width.
 func (m Model) chatPlacement(w int) (chatPlace, int) {
 	if m.tab != tabSessions {
 		return chatNone, 0
 	}
-	if _, right := m.panes(w); right > 0 {
+	if _, right := m.panes(w); right > 0 && !m.standIn {
 		return chatBeside, max(m.height-5, 0)
 	}
 	if s, ok := m.selectedSession(); ok && m.height > 0 && m.height-3 < menuLeast && m.atMenu(s) {
@@ -319,15 +317,10 @@ func (m Model) chatReserve(right int) int {
 // chatTitle names the chat's session and its state.
 func (m Model) chatTitle(s sample.Session) string { return s.Name + " · " + m.wordOf(s) }
 
-// chatPane is the live view beside the list, w by h: its title, in the
-// accent while the demo's stand-in forwards the keys, over the strip and
-// the screen.
+// chatPane is the live view beside the list, w by h: its title over the
+// strip and the screen.
 func (m Model) chatPane(s sample.Session, w, h int) []string {
-	ink := m.st.label
-	if m.standIn {
-		ink = m.st.accent
-	}
-	lines := []string{fit(" "+ink.Render(m.chatTitle(s)), w)}
+	lines := []string{fit(" "+m.st.label.Render(m.chatTitle(s)), w)}
 	strip := m.chatStrip(s, w, h-1)
 	lines = append(lines, strip...)
 	for _, l := range m.screenLines(w-1, h-1-len(strip)) {
@@ -532,15 +525,18 @@ func (m Model) closeView() Model {
 }
 
 // keepView closes the live view once Sessions or the selected session's
-// pane on this host is gone. A session that ended shows the list again,
-// and the key line says why.
+// pane on this host is gone, or the screen has no room for its question:
+// the list's opened row shows the question, and the keys are the console's,
+// never a screen's the person cannot see. A new tap or Enter opens it again.
+// A session that ended shows the list again, and the key line says why.
 func (m Model) keepView() Model {
 	if !m.viewOpen {
 		return m
 	}
 	s, ok := m.selectedSession()
+	place, _ := m.chatPlacement(max(m.width, minWidth))
 	switch {
-	case !ok || m.tab != tabSessions || s.Pane == "" || s.Host != m.opt.Host:
+	case !ok || m.tab != tabSessions || s.Pane == "" || s.Host != m.opt.Host || place == chatNone:
 		m.viewOpen, m.standIn = false, false
 	case m.screen.Pane == s.Pane && m.screen.Gone:
 		m.viewOpen, m.standIn, m.flash = false, false, "That session ended."

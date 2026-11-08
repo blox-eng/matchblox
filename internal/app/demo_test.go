@@ -261,6 +261,41 @@ func TestEnterInTheDemoOpensTheStandIn(t *testing.T) {
 	}
 }
 
+// The stand-in is the whole screen at every width, as a jump into a pane is.
+func TestTheStandInIsFullScreenOnADesk(t *testing.T) {
+	m := standIn(t, 132)
+	if _, right := m.panes(132); right == 0 {
+		t.Fatal("132 columns do not split Sessions: the test shows nothing")
+	}
+	lines := strings.Split(ansi.Strip(m.render()), "\n")
+	if !m.standIn || !strings.HasPrefix(strings.TrimSpace(lines[0]), "‹ Sessions") {
+		t.Fatalf("stand-in %v, row 0 is %q", m.standIn, lines[0])
+	}
+	if cols, _ := m.chatSize(); cols != 132 {
+		t.Errorf("the agent's window is %d columns, want the whole 132", cols)
+	}
+}
+
+// A screen with no room for the question closes the stand-in: the list's
+// opened row shows it, and no key goes to a menu the person cannot see.
+func TestAShortScreenClosesTheStandIn(t *testing.T) {
+	m := standIn(t, 44)
+	f := m.conn.(*fakeConn)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 106, Height: 10})
+	m = next.(Model)
+	if m.standIn || m.viewOpen {
+		t.Fatalf("106x10: stand-in %v, view %v: want the list", m.standIn, m.viewOpen)
+	}
+	m = pressKeys(t, m, "down", "2", "esc")
+	if got := keyActs(f); len(got) != 0 {
+		t.Errorf("keys reached the agent while its question was not drawn: %+v", got)
+	}
+	next, _ = m.Update(tea.WindowSizeMsg{Width: 44, Height: 31})
+	if next.(Model).standIn {
+		t.Error("turning back opened the stand-in again without a new Enter")
+	}
+}
+
 func TestTheStandInsBackKeyReturnsToTheNextWait(t *testing.T) {
 	m := standIn(t, 44)
 	want := m.nextAfter(paneNamedIn(t, m, "flint-auth"))

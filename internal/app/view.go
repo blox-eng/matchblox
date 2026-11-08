@@ -250,9 +250,6 @@ func (m Model) drawScreen(w int) drawn {
 		vis, sc.full = m.leftColumn(b, listW, room)
 	}
 	edge := m.st.hair
-	if chatting && m.standIn {
-		edge = m.st.accent
-	}
 	for i := range room {
 		line, row := "", -1
 		if i < len(vis.lines) {
@@ -637,7 +634,7 @@ func (m Model) keyLine(w int) (string, []span) {
 	if l := m.lostLine(); l != "" { // a lost host outranks the stand-in's keys, which may not go
 		return fit(" "+st.text.Render(l), w), nil
 	}
-	if m.viewFull() || m.standIn {
+	if m.viewFull() {
 		return m.liveKeyLine(w)
 	}
 	hints := slices.DeleteFunc(slices.Clone(m.view().keys(m)), func(h hint) bool { return h == (hint{}) })

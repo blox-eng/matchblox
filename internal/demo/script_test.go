@@ -198,18 +198,38 @@ func TestAResizeAtOnceIsKept(t *testing.T) {
 
 func TestTheDemoSurvivesATurn(t *testing.T) {
 	d, term := openQuestion(t)
+	sentKeys := func(from int) [][]string {
+		var keys [][]string
+		for _, argv := range d.Ran()[from:] {
+			if len(argv) > 1 && argv[1] == "send-keys" {
+				keys = append(keys, argv)
+			}
+		}
+		return keys
+	}
 
+	// Too short for the question: the stand-in closes, and the keys are
+	// the console's, never a menu's the person cannot see.
 	term.reset()
 	d.Resize(106, 10)
-	term.waitFor(t, "flint-auth", "type 2 to answer")
+	term.waitFor(t, "flint-auth", "go in")
+	from := len(d.Ran())
+	term.send(t, "2")
+	term.send(t, "1")
+	time.Sleep(settled)
+	if keys := sentKeys(from); len(keys) != 0 {
+		t.Fatalf("keys reached the world while the question was not drawn: %q", keys)
+	}
 
 	term.reset()
 	d.Resize(44, 31)
-	term.waitFor(t, "Rotate it", "Keep the token")
+	term.waitFor(t, "WAITS FOR YOU", "flint-auth")
 	time.Sleep(settled)
 	if d.Done() {
 		t.Fatal("a resize answered the question")
 	}
+	term.send(t, "\r") // a new Enter opens the stand-in again
+	term.waitFor(t, "Rotate it", "type 2 to answer")
 	term.send(t, "2")
 	term.waitFor(t, "I rotate the token on each refresh")
 	eventually(t, 6*time.Second, "Done", d.Done)
