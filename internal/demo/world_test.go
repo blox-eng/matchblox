@@ -131,6 +131,19 @@ func TestAStartedSessionTakesAnAnswer(t *testing.T) {
 	}
 }
 
+// A session the demo started shows its agent's empty prompt: its pane reads,
+// so its stand-in says no tmux failed.
+func TestAStartedSessionHasAScreen(t *testing.T) {
+	w := newTestWorld(t, func(int) {})
+	if err := w.Run([]string{"env", "HOME=/home/user", "tmux", "new-session", "-d", "-s", "one", "-n", "one", "-c", "/work/one", "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(w.pane("%9"))
+	if err != nil || !strings.Contains(string(b), "> ") {
+		t.Errorf("the new pane reads %q, %v", b, err)
+	}
+}
+
 func TestAWorldAnswersWhatItCannotTake(t *testing.T) {
 	w := newTestWorld(t, func(int) {})
 	if err := w.Run(nil); err == nil || err.Error() != Refusal {

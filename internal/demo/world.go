@@ -305,6 +305,9 @@ func (w *World) start(argv []string) error {
 	if err := writeAtomic(w.registry(s.pid), append(reg, '\n')); err != nil {
 		return err
 	}
+	if err := writeAtomic(w.pane(newPane), []byte(emptyPrompt)); err != nil {
+		return err
+	}
 	path := filepath.Join(w.root, "tmux-panes.txt")
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -313,6 +316,9 @@ func (w *World) start(argv []string) error {
 	line := strings.Join([]string{newPane, name + ":1.1", name, strconv.Itoa(newPID), agent[0], dir}, "\t")
 	return writeAtomic(path, append(b, []byte(line+"\n")...))
 }
+
+// emptyPrompt is the agent's prompt with nothing typed, as its pane shows it.
+const emptyPrompt = "╭──────────────────────────────────────────────╮\n│ > \n╰──────────────────────────────────────────────╯\n"
 
 // pick is a digit in the question tool's menu: the call gets its result,
 // the agent works on the answer, and the menu leaves the pane. Hold w.mu.
@@ -330,7 +336,7 @@ func (w *World) pick(pane, digit string) error {
 	); err != nil {
 		return err
 	}
-	if err := writeAtomic(w.pane(pane), []byte("● I rotate the token on each refresh and keep the old one for a minute.\n\n╭──────────────────────────────────────────────╮\n│ > \n╰──────────────────────────────────────────────╯\n")); err != nil {
+	if err := writeAtomic(w.pane(pane), []byte("● I rotate the token on each refresh and keep the old one for a minute.\n\n"+emptyPrompt)); err != nil {
 		return err
 	}
 	if err := w.writeRegistry(s, now); err != nil {
