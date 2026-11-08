@@ -507,8 +507,8 @@ type NewSession struct {
 // SwitchAgent is the Text of a "switch:<pane>" act: start Agent in the
 // pane in place of the one there, with Handoff as its first message.
 // Clients fill Handoff with Handoff(extras) to continue from the handover,
-// with a custom line (the CLI's --handoff), or empty for no first message. Anyway is the second confirm of a session that
-// works or waits.
+// with a custom line (the CLI's --handoff), or empty for no first message.
+// Anyway is the second confirm of a session that works or waits.
 type SwitchAgent struct {
 	Agent   string `json:"agent"`
 	Handoff string `json:"handoff,omitempty"`

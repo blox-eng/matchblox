@@ -14,21 +14,25 @@ All notable changes to matchblox are in this file. The format follows
   priority over the handover. **no task** starts it with nothing, by arrow
   or by tap. The confirm shows the switch only, without the wait for an
   evidence preview. `matchblox switch --extra "<words>"` does the same from
-  the command line. A transcript over 64 MB is read for its two ends, so the
-  switch stays quick.
+  the command line, with the same limit. A switch whose agent is seen to
+  start a turn while the handover is read, or whose pane has a new session
+  by then, asks you to switch again. A transcript over 64 MB is read for its
+  two ends, so the switch stays quick.
   ([#335](https://github.com/blox-eng/matchblox/issues/335))
 
 ### Fixed
 
 - **A switch keeps your goal and corrections.** The handover read only the
   last 128 KB of the outgoing agent's transcript, and tool output filled it:
-  in long sessions, 0 or 1 of your prompts reached the new agent. It now reads
-  the transcript from its start and keeps your first prompt, your latest prompts and
-  the last replies. Slash-command arguments stay in. A task record the old
-  agent never filled in is named as such, not passed on as its claims.
-  Compaction summaries, interrupt markers, shell output and subagent rows
-  stay out, and a long prompt keeps the instruction at its end. Words inside
-  a reply, or an earlier switch's prompt, can no longer pass as your own.
+  in long sessions, 0 or 1 of your prompts reached the new agent. It now
+  reads the transcript from its start and keeps your first prompt, your
+  latest prompts and the last replies. Slash-command arguments stay in. A task
+  record the old agent never filled in is named as such, not passed on as its
+  claims. Compaction summaries, interrupt markers, shell output and subagent
+  rows stay out, and a long prompt keeps the instruction at its end. Words
+  inside a reply, another match's message, or the switch prompt of this or an
+  earlier release can no longer pass as your own. A prompt too large to read
+  leaves a marker instead of a silent gap.
   ([#335](https://github.com/blox-eng/matchblox/issues/335))
 
 ## [0.34.0] - 2026-11-07

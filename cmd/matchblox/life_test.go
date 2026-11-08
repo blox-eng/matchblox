@@ -117,9 +117,21 @@ func TestSwitchNamesThePaneAndTheAgent(t *testing.T) {
 		t.Fatalf("too-long --extra: %v", err)
 	}
 	// A flag conflict is said before the service is asked anything.
-	none2 := "x"
-	if err := cliSwitch([]string{"api"}, switchOpts{agent: "codex", extra: "y", handoff: &none2}, io.Discard, filepath.Join(t.TempDir(), "no.sock"), nil); err == nil || !strings.HasPrefix(err.Error(), "--extra adds to the default handoff") {
-		t.Fatalf("both flags with no service: %v", err)
+	noSock := filepath.Join(t.TempDir(), "no.sock")
+	for _, h := range []string{"x", ""} { // "" is --handoff "": no task
+		if err := cliSwitch([]string{"api"}, switchOpts{agent: "codex", extra: "y", handoff: &h}, io.Discard, noSock, nil); err == nil || !strings.HasPrefix(err.Error(), "--extra adds to the default handoff") {
+			t.Fatalf("--extra with --handoff %q and no service: %v", h, err)
+		}
+	}
+	if err := cliSwitch([]string{"api"}, switchOpts{agent: "codex", extra: "y", preview: true}, io.Discard, noSock, nil); err == nil || err.Error() != "--preview reads the evidence and sends nothing: drop --extra" {
+		t.Fatalf("--extra with --preview and no service: %v", err)
+	}
+	if err := (switchOpts{agent: "codex", extra: "  ", preview: true}).check(); err != nil {
+		t.Fatalf("blank --extra with --preview: %v", err)
+	}
+	// The flag reaches the switch through the CLI's own parsing.
+	if err := run([]string{"switch", "api", "--agent", "codex", "--extra", "x", "--handoff", "y"}); err == nil || !strings.HasPrefix(err.Error(), "--extra adds to the default handoff") {
+		t.Fatalf("matchblox switch --extra --handoff: %v", err)
 	}
 	custom := "only explain the test"
 	if _, err = switchAct(cliDoc(), []string{"api"}, switchOpts{agent: "codex", extra: "x", handoff: &custom}, ""); err == nil || err.Error() != "--extra adds to the default handoff, which --handoff replaces: give one of them" {

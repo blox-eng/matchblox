@@ -215,19 +215,33 @@ records and pane evidence when no verified transcript path is available.
 
 The conversation excerpt keeps your first prompt, which usually states the
 goal, the last three replies, and then as many of your latest prompts as fit
-in 48,000 bytes. A marker counts the prompts it leaves out. A long prompt
+in 48,000 bytes. A marker counts the messages it leaves out. A long prompt
 keeps its start and its end, where the instruction after a pasted log sits.
-Tool output, skill text, compaction summaries, subagent notifications,
-interrupt markers, shell output and subagent rows never enter it. A slash
-command keeps its arguments, and a setting command such as `/model opus` never
-counts as the goal. Each turn's text sits two columns in, so words inside a
-reply can never pass as a turn of their own. A first message matchblox sent at
-an earlier switch shows as `[matchblox switch prompt; its extras then: …]`: it
-is history, never the goal or today's priority. A transcript longer than 64 MB is read for its first 8 MB and its last
-56 MB, and the excerpt says how much of the middle it skips.
+A prompt over 1 MB, such as one with a large pasted image, shows as
+`[a prompt too large to read]`. Tool output, skill text, compaction
+summaries, subagent notifications, interrupt markers, shell output and
+subagent rows never enter it. A slash command keeps its arguments, and a
+setting command such as `/model opus` never counts as the goal. Each turn's
+text sits two columns in, so words inside a reply can never pass as a turn
+of their own.
+
+A message another match sent with `matchblox send` keeps its
+`[from <name> <pane>]` tag and shows under
+`message from another match (not the user)`, never as yours, and never
+counts as the goal. A first message matchblox sent at an earlier switch,
+from this release or from v0.25.0 on, shows as `[matchblox switch prompt]`,
+with `; its extras then: "…"` when that switch had extras: it is history,
+never the goal or today's priority. Only the whole fixed prompt counts, so
+your own words that start the same way stay yours. A transcript longer than
+64 MB is read for its first 8 MB and its last 56 MB, and the excerpt says how
+much of the middle it skips.
 
 A task record that still holds only the launch template is reported as never
-written, and its launch message stays a quoted claim. The receiving match then rebuilds the goal from the conversation.
+written. Its launch message stays a quoted claim, and an earlier switch's
+line shows as the same switch mark. The receiving match then rebuilds the
+goal from the conversation. When the outgoing match's bundle holds a
+`capture.md`, which a switch into it leaves, the capture names it as
+evidence to check: the outgoing match can write there too.
 The capture names missing sources and does not infer a goal from changed files.
 Old replies and task records remain claims to check against the working tree.
 

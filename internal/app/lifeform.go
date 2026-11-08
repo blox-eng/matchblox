@@ -159,6 +159,15 @@ type cloneStop struct {
 
 const maxField = 300
 
+// limit is how many runes the field the cursor is on takes: Switch agent's
+// extras take what fits after the handover line, as the CLI's --extra does.
+func (f *form) limit() int {
+	if f.swap && f.at == fieldFirst {
+		return proto.ExtraLimit()
+	}
+	return maxField
+}
+
 // openNew is N: the New session form, where's list open on the selected
 // row's folder (a Git worktree, a session's directory, the checkout of a
 // ship nobody owns), or the first repo. It starts on the selected row's
@@ -565,7 +574,7 @@ func (m Model) formKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case bkey.Matches(k, fk.Erase):
 		m.eraseField(&f)
-	case k.Text != "" && len([]rune(m.fieldText(&f)+k.Text)) <= maxField:
+	case k.Text != "" && len([]rune(m.fieldText(&f)+k.Text)) <= f.limit():
 		m.typeField(&f, k.Text)
 	}
 	return m, tea.Batch(stop, m.planSoon(&f))
@@ -580,7 +589,7 @@ func (m Model) fieldText(f *form) string {
 }
 
 // typeField is text typed or pasted on the field the cursor is on, cut at
-// maxField.
+// its limit.
 func (m Model) typeField(f *form, text string) {
 	t := f.text(f.at)
 	switch {
@@ -588,7 +597,7 @@ func (m Model) typeField(f *form, text string) {
 	case f.at == fieldWhere:
 		m.typeWhere(f, text)
 	default:
-		*t = cutField(*t + text)
+		*t = cutField(*t+text, f.limit())
 		f.named = f.named || f.at == fieldName
 	}
 }

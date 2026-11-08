@@ -175,6 +175,22 @@ command syntax remain unspecified. Do not advertise an unavailable tool.
   after it with priority over the handover, and a start of continue or no
   task. `proto.Handoff` joins the extras to `DefaultHandoff`, so an older
   service reads the line as a custom handoff that still makes sense.
+- 2026-11-08: The builder's call: after the capture, the switch checks the
+  latest sampled state of the pane again. A turn that state shows started
+  during the capture, or a new session, refuses the switch. The capture
+  takes up to 0.45 s, measured on a 235 MB transcript, and the second y
+  must still guard a busy agent. It reads the last published state, not a
+  fresh sample: a turn no hook or tick has published yet still passes.
+- 2026-11-08: An earlier switch's mark drops the evidence path its prompt
+  named. The path is transcript text, which the outgoing agent can write.
+  The capture names the outgoing bundle's own capture.md instead, after an
+  Lstat check, as a claim: the outgoing agent can write its bundle too.
+- 2026-11-08: A switch prompt is recognised only by its exact shape: the
+  lead, a quoted path to capture.md, then the fixed next words. Review
+  found that a lead plus any quoted string erased the builder's own prompt.
+- 2026-11-08: A peer message (`[from <who> <pane>] …`) sits in a user row
+  but is labelled as another match's and never fills the goal. Review
+  found that `pickTurns` could take it as the builder's goal.
 
 ## Acceptance checks
 

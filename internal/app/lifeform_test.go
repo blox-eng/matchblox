@@ -279,14 +279,16 @@ func TestSwitchConfirmShowsTheSwitchOnly(t *testing.T) {
 	}
 }
 
-// tapWords taps the first place the screen shows words.
-func tapWords(m tea.Model, words string) tea.Model {
+// tapWords taps the first place the screen shows words; a miss fails t.
+func tapWords(t *testing.T, m tea.Model, words string) tea.Model {
+	t.Helper()
 	for y, line := range strings.Split(screen(m), "\n") {
 		if i := strings.Index(line, words); i >= 0 {
 			m, _ = m.Update(tea.MouseClickMsg{X: len([]rune(line[:i])), Y: y, Button: tea.MouseLeft})
 			return m
 		}
 	}
+	t.Fatalf("no %q on the screen:\n%s", words, screen(m))
 	return m
 }
 
@@ -302,10 +304,16 @@ func TestATapOnAStartPicksThatStart(t *testing.T) {
 		next, _ = key(next, "tab")
 		next, _ = key(next, "tab") // the cursor on extra
 		for _, c := range []struct {
-			tap    string
-			noTask bool
-		}{{"continue", false}, {"no task", true}, {"no task", true}, {"start", true}, {"continue", false}} {
-			next = tapWords(next, c.tap)
+			key, tap string
+			noTask   bool
+		}{{"", "continue", false}, {"", "no task", true}, {"", "no task", true}, {"", "continue", false}, {"tab", "start    ", false}} {
+			if c.key != "" {
+				next, _ = key(next, c.key) // off the start, so a missed tap shows
+				if fm := next.(Model).form; fm == nil || fm.at == fieldStart {
+					t.Fatalf("%d columns, %s stays on the start", w, c.key)
+				}
+			}
+			next = tapWords(t, next, c.tap)
 			if fm := next.(Model).form; fm == nil || fm.noTask != c.noTask || fm.at != fieldStart {
 				t.Fatalf("%d columns, a tap on %q: %+v\n%s", w, c.tap, fm, screen(next))
 			}
@@ -319,13 +327,16 @@ func TestSwitchConfirmCellsForEveryStart(t *testing.T) {
 	starts := map[string]struct {
 		keys    []string
 		text    string
+		after   []string
 		handoff string
 	}{
-		"continue": {nil, "", proto.Handoff("")},
-		"extras":   {[]string{"tab", "tab"}, "keep CSV only", proto.Handoff("keep CSV only")},
-		"no task":  {[]string{"tab", "right"}, "", ""},
+		"continue": {nil, "", nil, proto.Handoff("")},
+		"extras":   {[]string{"tab", "tab"}, "keep CSV only", nil, proto.Handoff("keep CSV only")},
+		"no task":  {[]string{"tab", "right"}, "", nil, ""},
+		// Extras typed before no task is picked go nowhere.
+		"extras, then no task": {[]string{"tab", "tab"}, "keep CSV only", []string{"shift+tab", "right"}, ""},
 	}
-	open := func(t *testing.T, busy bool, keys []string, text string) (tea.Model, *fakeConn) {
+	open := func(t *testing.T, busy bool, keys []string, text string, after []string) (tea.Model, *fakeConn) {
 		st := lifeState()
 		st.Sessions[0].Busy = busy
 		next, f := switchState(t, st)
@@ -336,21 +347,32 @@ func TestSwitchConfirmCellsForEveryStart(t *testing.T) {
 		if text != "" {
 			next = typeText(next, text)
 		}
+		for _, k := range after {
+			next, _ = key(next, k)
+		}
 		next, _ = key(next, "enter")
 		return next, f
 	}
+	declined := func(t *testing.T, next tea.Model, f *fakeConn, decline, what string) {
+		t.Helper()
+		next, cmd := key(next, decline)
+		if cmd != nil {
+			cmd()
+		}
+		if nm := next.(Model); nm.pending != nil || len(f.acts()) != 0 || !strings.HasPrefix(nm.flash, "cancelled: ") {
+			t.Errorf("%s, %s: pending %+v acts %+v", what, decline, nm.pending, f.acts())
+		}
+	}
 	for name, c := range starts {
 		for _, decline := range []string{"esc", "enter", "n"} {
-			next, f := open(t, false, c.keys, c.text)
-			next, cmd := key(next, decline)
-			if cmd != nil {
-				cmd()
-			}
-			if nm := next.(Model); nm.pending != nil || len(f.acts()) != 0 || !strings.HasPrefix(nm.flash, "cancelled: ") {
-				t.Errorf("%s, %s on the confirm: pending %+v acts %+v", name, decline, nm.pending, f.acts())
-			}
+			next, f := open(t, false, c.keys, c.text, c.after)
+			declined(t, next, f, decline, name+" on the confirm")
+			// A busy session's second confirm declines the same way.
+			next, f = open(t, true, c.keys, c.text, c.after)
+			next, _ = key(next, "y")
+			declined(t, next, f, decline, name+", busy, after one y")
 		}
-		next, f := open(t, true, c.keys, c.text)
+		next, f := open(t, true, c.keys, c.text, c.after)
 		next, _ = key(next, "y")
 		if len(f.acts()) != 0 {
 			t.Fatalf("%s: one y switched a busy session", name)
@@ -367,7 +389,7 @@ func TestSwitchConfirmCellsForEveryStart(t *testing.T) {
 func TestSwitchCanStartWithNoTask(t *testing.T) {
 	for _, pick := range []func(tea.Model) tea.Model{
 		func(m tea.Model) tea.Model { m, _ = key(m, "tab"); m, _ = key(m, "right"); return m },
-		func(m tea.Model) tea.Model { return tapWords(m, "no task") }, // a phone
+		func(m tea.Model) tea.Model { return tapWords(t, m, "no task") }, // a phone
 	} {
 		next, f := switchState(t, lifeState())
 		next, _ = key(next, "A")
@@ -2097,5 +2119,26 @@ func TestAnUnreadableRootIsShownShortened(t *testing.T) {
 	s := screen(next)
 	if !strings.Contains(s, "accounts not read: open /home/u/.matchblox/accou…") || strings.Contains(s, "permission denied") {
 		t.Fatalf("the form:\n%s", s)
+	}
+}
+
+// The extras field takes what fits after the handover line, as --extra
+// does, and the switch sends all of it.
+func TestSwitchExtrasTakeTheCLIsLimit(t *testing.T) {
+	next, f := switchState(t, lifeState())
+	next, _ = key(next, "A")
+	next, _ = key(next, "tab")
+	next, _ = key(next, "tab")
+	full := strings.Repeat("é", proto.ExtraLimit())
+	next = typeText(next, full+"abc")
+	if fm := next.(Model).form; fm == nil || fm.first != full {
+		t.Fatalf("the extras hold %d runes, want %d", len([]rune(next.(Model).form.first)), proto.ExtraLimit())
+	}
+	next, _ = key(next, "enter")
+	_, cmd := key(next, "y")
+	cmd()
+	var sw proto.SwitchAgent
+	if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &sw) != nil || sw.Handoff != proto.Handoff(full) {
+		t.Fatalf("sent %+v", f.acts())
 	}
 }
