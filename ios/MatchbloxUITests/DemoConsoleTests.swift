@@ -99,7 +99,7 @@ final class DemoConsoleTests: XCTestCase {
     }
 
     /// Keep looking closes the sheet over the agent's closing text, and the console goes on with no
-    /// keyboard: one tap on a row reaches the console, and the belt works. Then the ended screen
+    /// keyboard: the taps on a row and its view reach the console, and the belt works. Then the ended screen
     /// carries the install line, and Open again starts a console with no sheet.
     @MainActor
     func testKeepLookingLeavesTheConsoleWorking() {
@@ -115,7 +115,7 @@ final class DemoConsoleTests: XCTestCase {
         // The belt works with the terminal unfocused; the list is where a row can be tapped.
         app.buttons["Back to matchblox"].firstMatch.tap()
         expect(in: app, "NOT label CONTAINS %@", "I rotate the token")
-        tapRow(in: app, containing: "hearth-api", until: "keys go to hearth-api")
+        goInto(app, row: "hearth-api")
         expect(in: app, step: "the stand-in of hearth-api after the tap on its row", "label CONTAINS %@", "keys go to hearth-api")
         XCTAssertFalse(invite.exists, "the sheet came back")
 
@@ -149,8 +149,8 @@ final class DemoConsoleTests: XCTestCase {
         expect(in: app, "label CONTAINS %@", "WAITS FOR YOU")
         let terminal = app.descendants(matching: .any)["demo-terminal"]
         waitUntilSteady(terminal)
-        tapRow(in: app, containing: "flint-auth")
-        expect(in: app, step: "the stand-in's question after the first tap", "label CONTAINS %@ AND label CONTAINS %@", "type 2 to answer", "2. Rotate, keep")
+        goInto(app, row: "flint-auth")
+        expect(in: app, step: "the stand-in's question after the taps", "label CONTAINS %@ AND label CONTAINS %@", "type 2 to answer", "2. Rotate, keep")
         XCTAssertFalse(app.keyboards.firstMatch.exists, "a tap raised the keyboard")
         XCTAssertFalse(app.buttons["Hide keyboard"].firstMatch.exists, "a tap took the keyboard")
         keep(app, "7 stand-in with no keyboard")
@@ -182,20 +182,20 @@ final class DemoConsoleTests: XCTestCase {
         return Int(counts.components(separatedBy: " ").first?.dropFirst("press=".count) ?? "") ?? 0
     }
 
-    /// A real host's first tap, on the demo's screens: the tap clicks the row once, so the stand-in
-    /// opens and its question is not clicked through, and the keyboard rises.
+    /// A real host's taps, on the demo's screens: each tap clicks once, the row's and then the
+    /// view's, so the stand-in opens and its question is not clicked through, and the keyboard rises.
     @MainActor
     func testARealHostsFirstTapClicksOnceAndRaisesTheKeyboard() {
         let app = launched(extra: ["-demoTapRaisesKeyboard"])
         expect(in: app, "label CONTAINS %@", "WAITS FOR YOU")
         let terminal = app.descendants(matching: .any)["demo-terminal"]
         waitUntilSteady(terminal)
-        tapRow(in: app, containing: "flint-auth")
-        expect(in: app, step: "the stand-in after the first tap on flint-auth", "label CONTAINS %@", "type 2 to answer")
+        goInto(app, row: "flint-auth")
+        expect(in: app, step: "the stand-in after the taps on flint-auth", "label CONTAINS %@", "type 2 to answer")
         dismissKeyboardTip(in: app)
-        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "the first tap did not raise the keyboard. " + app.debugDescription)
+        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), "the taps did not raise the keyboard. " + app.debugDescription)
         Thread.sleep(forTimeInterval: 1)
-        XCTAssertEqual(terminal.value as? String, "press=1 release=1", "the first tap did not click exactly once")
+        XCTAssertEqual(terminal.value as? String, "press=2 release=2", "the two taps did not click exactly twice")
         waitUntilSteady(terminal)
         XCTAssertFalse(terminal.label.contains("I rotate the token on each refresh"), "the tap clicked through to the answer: \(terminal.label)")
         keep(app, "9 real host tap")
@@ -237,7 +237,7 @@ final class DemoConsoleTests: XCTestCase {
     @MainActor
     private func openTheStandIn(in app: XCUIApplication) {
         expect(in: app, "label CONTAINS %@", "WAITS FOR YOU")
-        tapRow(in: app, containing: "flint-auth", until: "type 2 to answer")
+        goInto(app, row: "flint-auth")
         expect(in: app, step: "the stand-in after the tap on flint-auth", "label CONTAINS %@", "type 2 to answer")
     }
 
@@ -264,6 +264,17 @@ final class DemoConsoleTests: XCTestCase {
             last = now
             Thread.sleep(forTimeInterval: 0.3)
         }
+    }
+
+    /// On one column the first tap on a row opens its live view, and a tap on the view goes into
+    /// the pane: the stand-in here (T26). A tap on the view's top line would go back instead.
+    @MainActor
+    private func goInto(_ app: XCUIApplication, row text: String) {
+        tapRow(in: app, containing: text, until: "‹ Sessions")
+        expect(in: app, step: "the live view of \(text) after the tap on its row", "label CONTAINS %@", "goes into \(text)")
+        let terminal = app.descendants(matching: .any)["demo-terminal"]
+        waitUntilSteady(terminal)
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
     /// Taps a row, and taps once more only when the first tap visibly did nothing in 6 seconds.
