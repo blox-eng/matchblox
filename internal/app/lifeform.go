@@ -316,7 +316,7 @@ func (m Model) switchAction(f form) *action {
 		say += ", then start it with no task" // its own line in the confirm
 	}
 	say += ", then jump there"
-	a := &action{label: "switch", destructive: true, rec: "switch:" + f.pane, text: string(b), againText: string(again), say: say, done: "switched " + f.who + " to " + f.agent, host: f.host}
+	a := &action{label: "switch", destructive: true, rec: "switch:" + f.pane, text: string(b), againText: string(again), say: say, done: "switched " + f.who + " to " + f.agent, paneAgent: f.agent, host: f.host, tty: m.askedBy}
 	if i := slices.IndexFunc(m.snap.Sessions, in); i >= 0 {
 		a.again = m.againFor(m.snap.Sessions[i], "switches")
 	}

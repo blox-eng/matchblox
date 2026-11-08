@@ -159,7 +159,7 @@ func (m Model) stokerKeys() []hint {
 		case r.state() == "waits" && r.e.Needs != "":
 			keys = append(keys, hintFor(mk.Grant, ""))
 		case m.hasSession(r):
-			keys = append(keys, hintFor(mk.Chat, ""))
+			keys = append(keys, hintFor(mk.Into, ""))
 		}
 		if r.e != nil {
 			keys = append(keys, hintFor(mk.Open, "command"))
@@ -234,20 +234,29 @@ func (m Model) firstNeed() int {
 	return 0
 }
 
-// stokerChatTarget is the pane of a failed step: a opens the chat of its
-// session.
-func (m Model) stokerChatTarget() (pane, why string) {
+// stokerTarget is the pane of a failed step, which a goes into.
+func (m Model) stokerTarget() (pane, why string) {
 	r, ok := m.stokerSelected()
 	switch {
 	case !ok:
 		return "", ""
 	case r.state() != "failed":
-		return "", "a looks at the session of a failed step"
+		return "", "a goes into the session of a failed step"
 	}
 	if _, ok := m.sessionIn(m.opt.Host, r.e.Pane); !ok {
-		return "", r.e.Name + " is gone: there is no pane to look at"
+		return "", r.e.Name + " is gone: there is no pane to go into"
 	}
 	return r.e.Pane, ""
+}
+
+// stokerInto is a on a failed step: the pane of its session.
+func (m Model) stokerInto() (tea.Model, tea.Cmd) {
+	pane, why := m.stokerTarget()
+	if pane == "" {
+		m.flash = why
+		return m, nil
+	}
+	return m.goInto(m.opt.Host, pane)
 }
 
 // stokerBody is the tab: one host's stoker, or with two or more hosts a
@@ -597,7 +606,7 @@ func (m Model) outcome(r stokerRow) []styled {
 		}
 	case "failed":
 		if m.hasSession(r) {
-			out = append(out, styled{m.keys.main.Chat.Help().Key + " shows its session", st.warn})
+			out = append(out, styled{m.keys.main.Into.Help().Key + " goes into its session", st.warn})
 		} else {
 			out = append(out, styled{"its session ended" + m.endedWay(), st.warn})
 		}

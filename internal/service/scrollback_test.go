@@ -100,20 +100,21 @@ func TestTheFirstKeyAfterScrollingOnlyComesBackToLive(t *testing.T) {
 	}
 }
 
-func TestAPaneThatReadsTheMouseStillGetsTheWheel(t *testing.T) {
-	var backs atomic.Int32
+func TestTheWheelScrollsBackEvenAPaneThatReadsTheMouse(t *testing.T) {
 	s, _, ctx := watchTest(t, map[string]string{"%1": idleScreen})
+	s.KeysToWorld = false // the real service
 	s.PaneMouse = func(string) (int, int, bool) { return 80, 24, true }
 	s.PaneHistory = func(string) (int, int, bool) { return 100, 24, true }
-	s.CaptureBack = func(string, int, int) (string, bool) { backs.Add(1); return "", true }
-	r2 := read(connectAs(t, ctx, s, proto.ClientConsole))
-	r2.act(t, "w", proto.WatchPrefix+"%1")
-	res := r2.actText(t, "u", proto.KeysPrefix+"%1", proto.WheelUp)
-	// The act goes on to the agent, which needs the pid the console saw.
-	if !strings.Contains(res.Err, "different agent") {
+	s.CaptureBack = func(_ string, back, rows int) (string, bool) { return fmt.Sprintf("back %d of %d", back, rows), true }
+	var ran atomic.Int32
+	s.Actions.Run = func([]string) error { ran.Add(1); return nil }
+	r := read(connectAs(t, ctx, s, proto.ClientConsole))
+	r.act(t, "w", proto.WatchPrefix+"%1")
+	if res := r.actText(t, "u", proto.KeysPrefix+"%1", proto.WheelUp); res.Err != "" {
 		t.Fatalf("wheel to a mouse agent: %+v", res)
 	}
-	if n := backs.Load(); n != 0 {
-		t.Fatalf("%d captures back for a mouse agent", n)
+	waitScreen(t, r, func(sc proto.Screen) bool { return sc.Back == scrollStep })
+	if n := ran.Load(); n != 0 {
+		t.Fatalf("%d steps ran for a scroll", n)
 	}
 }

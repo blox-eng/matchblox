@@ -288,18 +288,6 @@ func CompactAction(pane string, pid int, start uint64) advice.Action {
 	return atRest(pane, pid, start, RuleCompact, "/compact", " "+Instruction)
 }
 
-// CommandAction types a command key's text and its Enter into a pane,
-// under the guards of CompactAction. Where the agent's prompt cannot be
-// read (read false), no draft shows there, and the Enter does not wait
-// for the text on the prompt.
-func CommandAction(pane string, pid int, start uint64, text string, read bool) advice.Action {
-	a := atRest(pane, pid, start, "command", text, "")
-	if !read {
-		a.Guards[1].Typed = ""
-	}
-	return a
-}
-
 // atRest types command and its args into pane, then Enter. The Enter waits
 // until the pane shows the command typed.
 func atRest(pane string, pid int, start uint64, label, command, args string) advice.Action {

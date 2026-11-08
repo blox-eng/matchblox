@@ -54,4 +54,4 @@
  STOKER                           off │
  off · f starts it · n starts a night │ Enter to select · ↑/↓ to navigate · Esc to cancel
 ────────────────────────────────────────────────────────────────────────────────────────────────
- keys go to flint-auth · ctrl+a m back · ctrl+o into tmux
+ enter goes into flint-auth  x kill  r rename  z park  N new  p ships  f stoker  sampled 0s ago

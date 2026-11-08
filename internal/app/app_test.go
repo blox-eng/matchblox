@@ -142,7 +142,7 @@ func TestViewFitsWidth(t *testing.T) {
 		s, _ := m.selectedSession()
 		wants := []string{"app-feature", "app-review", "fresh", "1 without an agent: notes:1.1 zsh"}
 		if w >= 83 {
-			wants = append(wants, m.chatTitle(s)) // the chat of the selected one, 44 columns and more
+			wants = append(wants, m.viewTitle(s)) // the chat of the selected one, 44 columns and more
 		}
 		if w >= 200 {
 			wants = append(wants, "! compact", "▲ clear") // the desk's plan column, from 78 columns of list
@@ -160,21 +160,16 @@ func key(m tea.Model, k string) (tea.Model, tea.Cmd) {
 	return m.Update(keyPress(k))
 }
 
-func TestJumpPrintsCommandThenRunsOnConfirm(t *testing.T) {
+func TestCtrlORunsTheJumpAtOnce(t *testing.T) {
 	var ran []string
 	m := loaded(t, 100)
 	m.opt.Run = func(argv []string) error { ran = argv; return nil }
 
-	next, _ := key(m, "ctrl+o")
-	out := next.(Model).render()
-	if !strings.Contains(out, "tmux switch-client -t %1") || ran != nil {
-		t.Fatalf("ctrl+o must print the command and wait; ran=%v\n%s", ran, out)
+	next, cmd := key(m, "ctrl+o")
+	if cmd == nil || next.(Model).pending != nil {
+		t.Fatalf("ctrl+o left %v pending, cmd %v: want the jump at once", next.(Model).pending, cmd != nil)
 	}
-	next, cmd := key(next, "enter")
-	if cmd == nil {
-		t.Fatal("confirm returned no command")
-	}
-	next.Update(cmd())
+	fed(next, cmd)
 	if strings.Join(ran, " ") != "tmux switch-client -t %1" {
 		t.Fatalf("ran %v", ran)
 	}
@@ -183,7 +178,7 @@ func TestJumpPrintsCommandThenRunsOnConfirm(t *testing.T) {
 func TestEscCancelsAction(t *testing.T) {
 	m := loaded(t, 100)
 	m.opt.Run = func([]string) error { t.Fatal("must not run"); return nil }
-	next, _ := key(m, "ctrl+o")
+	next, _ := key(m, "x")
 	next, cmd := key(next, "esc")
 	if cmd != nil || !strings.Contains(next.(Model).render(), "cancelled") {
 		t.Fatal("esc must cancel without running")
@@ -438,24 +433,9 @@ func TestMessagesFromAnOldConnAreIgnored(t *testing.T) {
 	}
 }
 
-// drain runs cmd and every command it batches, skipping any that block
-// (a recv on an empty connection).
-func drain(cmd tea.Cmd) {
-	if cmd == nil {
-		return
-	}
-	out := make(chan tea.Msg, 1)
-	go func() { out <- cmd() }()
-	select {
-	case msg := <-out:
-		if b, ok := msg.(tea.BatchMsg); ok {
-			for _, c := range b {
-				drain(c)
-			}
-		}
-	case <-time.After(50 * time.Millisecond):
-	}
-}
+// drain runs cmd and every command it batches or sequences, skipping any
+// that block (a recv on an empty connection).
+func drain(cmd tea.Cmd) { cmdMsgs(cmd) }
 
 // A service that accepts but never answers (stopped, wedged) must not
 // leave an empty screen.

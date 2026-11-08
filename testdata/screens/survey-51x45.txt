@@ -9,7 +9,7 @@
    “The refresh flow works and the tests pass. One
    choice is yours before I wire the rotation.”
    #4545 ●━✕┄○┄○┄○  conflicts with main
-    ▲ clear                       A switch  ⏎ chat
+    ▲ clear                      A switch  ⏎ go in
 ───────────────────────────────────────────────────
  ╿ kindle-web                   asks      1m   56%
  ╿ cinder-ci                    done      0s   55%
@@ -42,4 +42,4 @@
                  wk   ▰▱▱▱▱▱▱▱ 12%  · Tue 09:00
                  lasts the week
 ───────────────────────────────────────────────────
- ⏎ chat  x kill  r rename  N new  full view v
+ ⏎ go in  x kill  r rename  N new  full view v

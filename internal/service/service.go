@@ -137,6 +137,9 @@ type Service struct {
 	// PaneMouse tells if the program in a pane reads the mouse in SGR form,
 	// and the pane's size. Nil: never.
 	PaneMouse func(pane string) (cols, rows int, ok bool)
+	// KeysToWorld lets keys: acts reach a pane. Only the demo's World takes
+	// them: a person's keys go to an agent in its own pane (#334).
+	KeysToWorld bool
 	// PaneHistory is how many lines of history a pane holds, and its
 	// height; CaptureBack reads the pane back lines up from its live
 	// screen, with its styles. Nil: a console scrolls no history.
@@ -264,7 +267,7 @@ type Service struct {
 	// never interleave with another's.
 	panes sync.Map
 	// sizes are the chats' sizes and the agents' windows sized to them.
-	sizes chatSizes
+	sizes viewSizes
 	// grantMu makes each y one check and one go: two consoles pressing it
 	// at once on one step give one go.
 	grantMu sync.Mutex

@@ -79,6 +79,20 @@ final class AgentSignalTests: XCTestCase {
         XCTAssertEqual(out.agent, "")
     }
 
+    func testTheSignalNamesItsPaneAndTheMarks() {
+        XCTAssertEqual(ConsoleSignal("claude;pane=%12"), ConsoleSignal(agent: "claude", pane: "%12", marks: false))
+        XCTAssertEqual(ConsoleSignal(";marks"), ConsoleSignal(agent: "", pane: nil, marks: true))
+        // An old console never announces marks, so the app never marks (T20).
+        XCTAssertEqual(ConsoleSignal("claude"), ConsoleSignal(agent: "claude", pane: nil, marks: false))
+        XCTAssertEqual(ConsoleSignal(""), ConsoleSignal(agent: "", pane: nil, marks: false))
+    }
+
+    func testTheFilterPassesTheWholeSignal() {
+        var f = AgentSignalFilter()
+        XCTAssertEqual(f.feed(ArraySlice(signal("claude;pane=%12"))).agent, "claude;pane=%12")
+        XCTAssertEqual(f.feed(ArraySlice(signal(";marks"))).agent, ";marks")
+    }
+
     func testNoSignalNoAgent() {
         var f = AgentSignalFilter()
         let out = f.feed(ArraySlice(bytes("plain")))

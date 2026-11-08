@@ -58,7 +58,7 @@ func (m Model) jumpOnHost(host string, a *action) *action {
 			j.Dir = s[3]
 		}
 	}
-	j.Host, j.Prefix, j.Home, j.ID, j.Outer = host, m.prefix(), m.home(), m.jumpID(), !m.opt.OutsideTmux
+	j.Host, j.Prefix, j.Home, j.ID, j.Outer, j.ClientTTY = host, m.prefix(), m.home(), m.jumpID(), !m.opt.OutsideTmux, a.tty
 	if !remote.JumpAllowed(j) {
 		return refused(a, jumpRefusal(j))
 	}
@@ -89,6 +89,9 @@ func (m Model) jumpOnHost(host string, a *action) *action {
 	b.steps, b.say, b.remote = [][]string{ssh}, shellLine(ssh), true
 	if j.Outer {
 		b.steps = [][]string{j.Local(ssh)}
+		if j.ClientTTY == "" {
+			b.deskLocal = func(tty string) []string { k := j; k.ClientTTY = tty; return k.Local(ssh) }
+		}
 		b.undo = []string{"tmux", "kill-session", "-t", "=" + remote.HostSessionName(j.Host, j.ID)}
 	}
 	return &b
@@ -180,13 +183,18 @@ type connectedMsg struct {
 func (m Model) onHost(a action) (tea.Model, tea.Cmd) {
 	argv := a.steps[0]
 	if a.nav && !m.opt.OutsideTmux {
-		run, undo := m.opt.Run, a.undo
+		run, undo, read, host := m.opt.Run, a.undo, m.readClients(), m.hostOf(a)
 		return m, func() tea.Msg {
+			if a.deskLocal != nil {
+				if _, desk := read(); desk != "" {
+					argv = a.deskLocal(desk)
+				}
+			}
 			err := run(argv)
 			if err != nil && undo != nil {
 				_ = run(undo) // the list stopped after its new-session: its ssh would run on, unseen
 			}
-			return ranMsg{cmd: a.String(), err: err, jumped: a.pane}
+			return ranMsg{cmd: a.String(), err: err, jumped: a.pane, host: host}
 		}
 	}
 	m.flash = "running: " + shellLine(argv)

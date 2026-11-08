@@ -3,10 +3,8 @@
 package keycmd
 
 import (
-	"cmp"
 	_ "embed"
 	"encoding/json"
-	"fmt"
 
 	"github.com/blox-eng/matchblox/internal/sample"
 )
@@ -44,26 +42,32 @@ func ForAgent(agent string) []Command {
 	return out
 }
 
-func ByID(id string) (Command, bool) {
-	for _, c := range table {
-		if c.ID == id {
-			return c, true
-		}
-	}
-	return Command{}, false
-}
-
 func Sequence(id string) string { return "\x1b_matchblox;cmd=" + id + "\x1b\\" }
 
 func AgentSignal(agent string) string { return "\x1b_matchblox;agent=" + agent + "\x1b\\" }
 
-// OtherAgent is the agent signal's id for a chat whose agent has no
-// commands: the app's command keys still go, and the console says why
-// each does not run there.
-const OtherAgent = "other"
+// PaneSignal tells the app which tmux pane agent runs in.
+func PaneSignal(agent, pane string) string { return AgentSignal(agent + ";pane=" + pane) }
 
-// agentNames are the agents of the table, as a key line names them.
-var agentNames = map[string]string{"claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "cursor": "Cursor"}
+// MarksSignal is the console's announce that it reads the marker.
+func MarksSignal() string { return AgentSignal(";marks") }
+
+const (
+	// MarkKey is what the app sends before a Return or a press, so tmux
+	// hands the console the tty of the client that sent it.
+	MarkKey = "\x1b_matchblox;mark\x1b\\"
+	// MarkSlot is MarkKey's user-keys slot (900 is home, 901-914 commands).
+	MarkSlot = 950
+	// MarkedPrefix is what the binding hands the console, then the tty, then ESC \.
+	MarkedPrefix = "\x1b_matchblox;from="
+	// ViewerKey is what tmux hands the console when a terminal comes to
+	// show it: the console then announces the marks (MarksSignal) at once.
+	ViewerKey = "\x1b_matchblox;viewer\x1b\\"
+)
+
+// OtherAgent is the agent signal's id for a pane whose agent has no
+// commands: the app keeps its command keys dim there.
+const OtherAgent = "other"
 
 // AgentOf is the table's id of the agent a session runs.
 func AgentOf(agent string) string {
@@ -71,10 +75,4 @@ func AgentOf(agent string) string {
 		return "cursor"
 	}
 	return agent
-}
-
-// Refusal says why c does not run on session, whose agent is not c's.
-func Refusal(c Command, session, agent string) string {
-	runs := cmp.Or(agentNames[AgentOf(agent)], agent, "no agent matchblox knows")
-	return fmt.Sprintf("/%s is %s's: %s runs %s", c.Label, agentNames[c.Agent], session, runs)
 }

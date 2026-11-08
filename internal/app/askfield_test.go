@@ -216,7 +216,7 @@ func TestAskFieldShowsTheQuestion(t *testing.T) {
 func TestAskFieldAboveEverything(t *testing.T) {
 	m, _ := loadedWith(t, 100, fixtureState())
 	m.tab = tabSessions
-	next, _ := key(m, "ctrl+o")
+	next, _ := key(m, "x")
 	if next.(Model).pending == nil {
 		t.Fatal("no confirm")
 	}

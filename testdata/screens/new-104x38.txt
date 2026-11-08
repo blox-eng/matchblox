@@ -35,4 +35,4 @@
  disk ▰▰▰▰▰▰▱▱ 71% of 1 TB               │
  runs 5 claude · 1 codex · 1 opencode    │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  ⏎ chat  x kill  r rename  z park  N new  p ships  f stoker  / find  q quit     sampled 0s ago
+ enter goes into spark-docs  x kill  r rename  z park  N new  p ships  f stoker  / find  sampled 0s ago

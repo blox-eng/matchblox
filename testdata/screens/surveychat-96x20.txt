@@ -17,4 +17,4 @@ Should a refresh also rotate the token?
 
 Enter to select · ↑/↓ to navigate · Esc to cancel
 ────────────────────────────────────────────────────────────────────────────────────────────────
- keys go to flint-auth · ctrl+a m back · ctrl+o into tmux
+ enter goes into flint-auth · esc back

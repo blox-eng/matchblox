@@ -32,10 +32,10 @@ const askQuiet = 400 * time.Millisecond
 
 // scanShown tells if the box is on top: asked, and nothing over it, no
 // other question either, the stoker's take-over ask included, nor the
-// chat while it has the keys: what is typed there is the agent's.
+// live view while it takes the screen or the stand-in's keys.
 func (m Model) scanShown() bool {
 	return m.scanAsk != nil && !m.splashing() && !m.takeOverDue() && !m.pair.owns() && m.sheet == nil && m.form == nil &&
-		!m.searching && m.held == nil && m.pending == nil && !m.chatKeys
+		!m.searching && m.held == nil && m.pending == nil && !m.standIn && !m.viewFull()
 }
 
 // armScan starts the box's quiet: it shows now.

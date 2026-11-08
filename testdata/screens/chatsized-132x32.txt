@@ -29,4 +29,4 @@
  STOKER                                         off │
  off · f starts it · n starts a night               │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- keys go to app-feature · ctrl+a m back · ctrl+o into tmux
+ ↑↓ move  enter goes into app-feature  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit  list only v

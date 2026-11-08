@@ -141,7 +141,7 @@ func TestAPhoneRowOpensInPlace(t *testing.T) {
 		t.Fatalf("no last words under the row:\n%s", strings.Join(out, "\n"))
 	}
 	// With one chat hint the plan and the keys share a line at 50 columns.
-	if !strings.Contains(out[at+2], "plan 75%") || !strings.Contains(out[at+2], "! compact") || !strings.Contains(out[at+2], "A switch  ⏎ chat") {
+	if !strings.Contains(out[at+2], "plan 75%") || !strings.Contains(out[at+2], "! compact") || !strings.Contains(out[at+2], "A switch  ⏎ go in") {
 		t.Fatalf("no plan and keys:\n%s", strings.Join(out[at:at+4], "\n"))
 	}
 	if !strings.HasPrefix(out[at-1], "────") || !strings.HasPrefix(out[at+3], "────") {
@@ -156,7 +156,7 @@ func TestAPhoneRowOpensInPlace(t *testing.T) {
 	// Selected, app-review (done) offers its chat.
 	next, _ := key(m, "down")
 	out = strings.Split(ansi.Strip(next.(Model).render()), "\n")
-	if at := sessLine(t, next, "app-review"); !strings.Contains(out[at+1], "A switch  ⏎ chat") {
+	if at := sessLine(t, next, "app-review"); !strings.Contains(out[at+1], "A switch  ⏎ go in") {
 		t.Fatalf("no a for a session that waits for an answer:\n%s", strings.Join(out, "\n"))
 	}
 	for tab := range tabNames {
@@ -169,50 +169,43 @@ func tap(m tea.Model, x, y int) (tea.Model, tea.Cmd) {
 	return m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
 }
 
-// On a desk; a phone's tap opens the chat (TestATapOnAPhoneRowOpensItsChat).
+// On a desk; a phone taps as TestATapOnARowJumps does.
 func TestTapSelectsThenActs(t *testing.T) {
 	const w = 100
 	m, f := loadedWith(t, w, queueState())
-	var ran []string
-	m.opt.Run = func(argv []string) error { ran = argv; return nil }
-	chatOn := func(m tea.Model, pane string) bool {
-		s, _ := m.(Model).selectedSession()
-		return m.(Model).chatKeys && s.Pane == pane
-	}
+	var ran [][]string
+	m.opt.Run = func(argv []string) error { ran = append(ran, argv); return nil }
 
-	// A session that does not wait: the first tap selects it, a tap on
-	// it selected gives its chat the keys. Nothing runs.
+	// A session that does not wait: the first tap selects it, a tap on it
+	// selected goes into its pane. Nothing is sent to the service.
 	next, cmd := tap(m, 5, sessLine(t, m, "tools"))
 	drain(cmd)
-	if len(f.acts()) != 0 || ran != nil || next.(Model).chatKeys {
+	if len(f.acts()) != 0 || len(ran) != 0 || next.(Model).standIn {
 		t.Fatalf("width %d: the first tap acted", w)
 	}
 	if it, _ := next.(Model).selectedSession(); it.Pane != "%3" {
 		t.Fatalf("width %d: selected %q, want %%3", w, it.Pane)
 	}
 	next, cmd = tap(next, 5, sessLine(t, next, "tools"))
-	// The chat that takes the keys sends its size, and says its agent for
-	// the phone; no act runs.
-	said := slices.ContainsFunc(raws(cmd), func(r string) bool { return strings.Contains(r, "matchblox;agent=") })
-	if !chatOn(next, "%3") || ran != nil || !said {
-		t.Fatalf("width %d: the second tap did not open the chat of tools", w)
-	}
-	if line := actionLine(next); !strings.Contains(line, "keys go to tools") {
-		t.Fatalf("width %d: the key line does not say where the keys go: %q", w, line)
+	drain(cmd)
+	if len(ran) != 1 || strings.Join(ran[0], " ") != "tmux switch-client -t %3" || next.(Model).standIn {
+		t.Fatalf("width %d: the second tap ran %q", w, ran)
 	}
 	if len(f.acts()) != 0 {
 		t.Fatalf("width %d: a tap sent %v to the service", w, f.acts())
 	}
 
-	// A session that waits: the first tap selects it, a tap on it
-	// selected opens its chat.
-	next, _ = tap(m, 5, sessLine(t, m, "app-review"))
-	if next.(Model).chatKeys {
-		t.Fatalf("width %d: the first tap opened the chat", w)
+	// A session that waits: the same.
+	ran = nil
+	next, cmd = tap(m, 5, sessLine(t, m, "app-review"))
+	drain(cmd)
+	if len(ran) != 0 {
+		t.Fatalf("width %d: the first tap ran %q", w, ran)
 	}
-	next, _ = tap(next, 5, sessLine(t, next, "app-review"))
-	if !chatOn(next, "%2") {
-		t.Fatalf("width %d: the second tap did not open the chat of app-review", w)
+	_, cmd = tap(next, 5, sessLine(t, next, "app-review"))
+	drain(cmd)
+	if len(ran) != 1 || strings.Join(ran[0], " ") != "tmux switch-client -t %2" {
+		t.Fatalf("width %d: the second tap ran %q", w, ran)
 	}
 }
 
@@ -262,9 +255,9 @@ func TestTapNeverRunsADestructiveStep(t *testing.T) {
 
 func TestTapWhilePendingCancels(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
-	next, _ := key(m, "ctrl+o")
+	next, _ := key(m, "x")
 	if next.(Model).pending == nil {
-		t.Fatal("ctrl+o did not ask to confirm")
+		t.Fatal("x did not ask to confirm")
 	}
 	next, cmd := tap(next, 5, sessLine(t, next, "app-feature"))
 	if cmd != nil || next.(Model).pending != nil {
@@ -291,10 +284,12 @@ func TestNoCtrlKeysNeeded(t *testing.T) {
 			}
 		}
 		m.tab = tabSessions
+		ran := recordRuns(&m)
 		next, _ := key(m, "down") // the second row waits for an answer
-		next, _ = key(next, "a")
-		if !next.(Model).chatKeys {
-			t.Fatal("a does not open the chat")
+		_, cmd := key(next, "a")
+		drain(cmd)
+		if len(*ran) != 1 {
+			t.Fatal("a does not go into the pane")
 		}
 		// The way back is a tap on the list or the app's home gesture:
 		// TestClicksMoveTheKeys and TestHomeKeyGivesKeysBack.
@@ -353,23 +348,28 @@ func TestNarrowScrollsToTheSelection(t *testing.T) {
 // disarms.
 func TestFirstTapOnTheSelectedRowOnlyShows(t *testing.T) {
 	m, _ := loadedWith(t, 100, queueState())
-	var ran []string
-	m.opt.Run = func(argv []string) error { ran = argv; return nil }
+	ran := recordRuns(&m)
 	y := sessLine(t, m, "app-feature")
 	next, cmd := tap(m, 5, y)
-	if cmd != nil || ran != nil || next.(Model).chatKeys {
+	drain(cmd)
+	if len(*ran) != 0 {
 		t.Fatal("one tap on the preselected row acted")
 	}
-	if next, _ := tap(next, 5, y); !next.(Model).chatKeys {
-		t.Fatal("a tap on the row it selected does not open the chat")
+	_, cmd = tap(next, 5, y)
+	drain(cmd)
+	if len(*ran) != 1 {
+		t.Fatal("a tap on the row it selected does not go in")
 	}
 	y = sessLine(t, m, "tools")
-	next, _ = tap(m, 5, y)
-	if next.(Model).chatKeys || next.(Model).flash != "" {
+	next, cmd = tap(m, 5, y)
+	drain(cmd)
+	if len(*ran) != 1 || next.(Model).flash != "" {
 		t.Fatalf("one tap on another row acted: flash %q", next.(Model).flash)
 	}
-	if next, _ = tap(next, 5, sessLine(t, next, "tools")); !next.(Model).chatKeys {
-		t.Fatal("a tap on a selected session that does not wait does not open the chat")
+	_, cmd = tap(next, 5, sessLine(t, next, "tools"))
+	drain(cmd)
+	if len(*ran) != 2 {
+		t.Fatal("a tap on a selected session that does not wait does not go in")
 	}
 }
 
@@ -399,16 +399,20 @@ func TestTheKeyLineIsAtTheBottom(t *testing.T) {
 			return out[len(out)-1]
 		}
 		// A phone drops the spare keys first: p ships is a tab tap away.
-		if l := last(m); !strings.Contains(l, "⏎ chat") || strings.Contains(l, "a chat") || !strings.Contains(l, "x kill") || !strings.Contains(l, "N new") || w > 60 && !strings.Contains(l, "p ships") {
+		goesIn := func(l string) bool { return strings.Contains(l, "⏎ go in") || strings.Contains(l, "enter goes into") }
+		if l := last(m); !goesIn(l) || strings.Contains(l, "a go in") || !strings.Contains(l, "x kill") || !strings.Contains(l, "N new") || w > 60 && !strings.Contains(l, "p ships") {
 			t.Fatalf("width %d: the keys are not at the bottom: %q", w, l)
 		}
-		if l := last(selectPane(t, m, "%3")); !strings.Contains(l, "⏎ chat") {
+		if l := last(selectPane(t, m, "%3")); !goesIn(l) {
 			t.Fatalf("width %d: the keys are not at the bottom: %q", w, l)
 		}
 		if strings.Contains(ansi.Strip(strings.Split(m.render(), "\n")[2]), "open") {
 			t.Fatalf("width %d: keys under the tabs", w)
 		}
-		next, _ := key(selectPane(t, m, "%3"), "ctrl+o")
+		next := selectPane(t, m, "%3")
+		pending := next.(Model)
+		pending.pending = pending.primary()
+		next = pending
 		// The confirm is a box: on a phone its foot sits on the key line's
 		// hairline, under the thumb; wider, it is in the middle.
 		out := strings.Split(ansi.Strip(next.(Model).render()), "\n")
@@ -435,9 +439,11 @@ func TestATapOnAKeyPressesIt(t *testing.T) {
 	if p := next.(Model).pending; p == nil || p.rec != "kill:%1" {
 		t.Fatalf("a tap on x kill: pending %+v", p)
 	}
-	next, _ = tap(m, len([]rune(line[:strings.Index(line, "⏎ chat")])), y)
-	if !next.(Model).chatKeys {
-		t.Fatal("a tap on ⏎ chat did not open the chat")
+	ran := recordRuns(&m)
+	next, cmd := tap(m, len([]rune(line[:strings.Index(line, "⏎ go in")])), y)
+	drain(cmd)
+	if len(*ran) != 1 || next.(Model).standIn {
+		t.Fatalf("a tap on ⏎ go in ran %q", *ran)
 	}
 	// The header's count of who waits selects the first one.
 	moved := selectPane(t, m, "%3")

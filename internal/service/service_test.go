@@ -55,6 +55,7 @@ func newTest(t *testing.T, interval time.Duration) *Service {
 	// Every caller has a person's terminal outside tmux: no terminal of
 	// this machine, and no tmux of its default server, is read.
 	s.TTYPane = func(int) (string, bool) { return "", true }
+	s.KeysToWorld = true // the demo's service; TestKeysAreRefusedOnTheRealService sets the real one
 	return s
 }
 

@@ -131,6 +131,19 @@ func TestAStartedSessionTakesAnAnswer(t *testing.T) {
 	}
 }
 
+// A session the demo started shows its agent's empty prompt: its pane reads,
+// so its stand-in says no tmux failed.
+func TestAStartedSessionHasAScreen(t *testing.T) {
+	w := newTestWorld(t, func(int) {})
+	if err := w.Run([]string{"env", "HOME=/home/user", "tmux", "new-session", "-d", "-s", "one", "-n", "one", "-c", "/work/one", "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(w.pane("%9"))
+	if err != nil || !strings.Contains(string(b), "> ") {
+		t.Errorf("the new pane reads %q, %v", b, err)
+	}
+}
+
 func TestAWorldAnswersWhatItCannotTake(t *testing.T) {
 	w := newTestWorld(t, func(int) {})
 	if err := w.Run(nil); err == nil || err.Error() != Refusal {
@@ -152,5 +165,44 @@ func TestAStartMissingATokenIsRefusedNotPanicked(t *testing.T) {
 		if err := w.Run(argv); err == nil || err.Error() != Refusal {
 			t.Errorf("%v: got %v, want the refusal line", argv, err)
 		}
+	}
+}
+
+// TestTheDemosServiceSendsKeysToTheWorld: the real service refuses keys; the
+// demo's, wired to the world, is the one that sends them.
+func TestTheDemosServiceSendsKeysToTheWorld(t *testing.T) {
+	w := newTestWorld(t, func(int) {})
+	s := service.New(config.Default(), nil, w.Git)
+	if s.KeysToWorld {
+		t.Fatal("a service sends keys before it is wired to a world")
+	}
+	w.Wire(s)
+	if !s.KeysToWorld {
+		t.Error("the demo's service does not send keys to the world")
+	}
+}
+
+// TestArrowsMoveTheMenusCursor: the stand-in's arrows move the cursor of
+// flint-auth's menu, and stop at its ends.
+func TestArrowsMoveTheMenusCursor(t *testing.T) {
+	w := newTestWorld(t, func(int) {})
+	const pane = "%2" // flint-auth, at its menu
+	press := func(k string) string {
+		t.Helper()
+		if err := w.Run([]string{"tmux", "send-keys", "-t", pane, k}); err != nil {
+			t.Fatalf("%s: %v", k, err)
+		}
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		return w.highlighted(pane)
+	}
+	if got := press("Down"); got != "2" {
+		t.Errorf("Down: the cursor is on %q, want 2", got)
+	}
+	if got := press("Up"); got != "1" {
+		t.Errorf("Up: the cursor is on %q, want 1", got)
+	}
+	if got := press("Up"); got != "1" {
+		t.Errorf("Up at the top: the cursor is on %q, want 1", got)
 	}
 }

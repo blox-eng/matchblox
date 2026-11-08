@@ -201,12 +201,11 @@ func TestTheQueueComesFirstWhenSomeoneWaits(t *testing.T) {
 	if it, ok := m.selectedSession(); !ok || it.Pane != "%1" {
 		t.Fatalf("selected %+v, %v: an agent that waits comes before a door", it, ok)
 	}
-	next, _ := key(m, "ctrl+o")
-	next, cmd := key(next, "enter")
+	next, cmd := key(m, "ctrl+o")
 	if cmd == nil {
 		t.Fatal("no jump")
 	}
-	next.Update(cmd())
+	fed(next, cmd)
 	if strings.Join(ran, " ") != "tmux switch-client -t %1" {
 		t.Fatalf("ran %v", ran)
 	}

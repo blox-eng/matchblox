@@ -542,16 +542,15 @@ func TestOpenedLinesStartWithTwoBlanks(t *testing.T) {
 	}
 	for _, sp := range sc.actKeys {
 		cells := []rune(line)[sp.x0:sp.x1]
-		want := map[string]string{"A": "A switch", "enter": "⏎ chat"}[sp.press]
+		want := map[string]string{"A": "A switch", "enter": "⏎ go in"}[sp.press]
 		if string(cells) != want {
 			t.Errorf("the span for %q covers %q, want %q", sp.press, string(cells), want)
 		}
 	}
-	if m.chatKeys {
-		t.Fatalf("the chat is open before the tap")
-	}
-	next, _ := m.Update(tea.MouseClickMsg{X: strings.Index(line, "⏎") + 1, Y: sc.actKeysAt, Button: tea.MouseLeft})
-	if !next.(Model).chatKeys {
-		t.Errorf("a tap on ⏎ chat did not open the chat")
+	ran := recordRuns(&m)
+	next, cmd := m.Update(tea.MouseClickMsg{X: strings.Index(line, "⏎") + 1, Y: sc.actKeysAt, Button: tea.MouseLeft})
+	drain(cmd)
+	if len(*ran) != 1 || next.(Model).standIn {
+		t.Errorf("a tap on ⏎ go in ran %q, stand-in %v", *ran, next.(Model).standIn)
 	}
 }

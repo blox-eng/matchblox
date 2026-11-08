@@ -288,42 +288,59 @@ func TestTheConfigAndTheServerBindPrefixMAlike(t *testing.T) {
 	}
 }
 
-// TestCommandKeyReachesTheConsoleAtHome types a command key, raw, into a
-// real client in the console's session: the console reads it, whole, as the
-// home key, and runs the command in its chat (#122). The pane runs as the
-// console does, under the name matchblox.
-func TestCommandKeyReachesTheConsoleAtHome(t *testing.T) {
+// agentPane is a client attached to a pane in session work that the
+// console marked as agent's, which writes what reaches it, as cat -v shows
+// it, to the file it returns. T10, T23.
+func agentPane(t *testing.T, agent string) (client *os.File, typed string) {
+	t.Helper()
 	sock := tmuxtest.Server(t)
-	tmux := func(args ...string) {
+	tmux := func(args ...string) string {
 		t.Helper()
-		if out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput(); err != nil { //nolint:gosec // test argv
+		out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput() //nolint:gosec // test argv
+		if err != nil {
 			t.Fatalf("tmux %q: %v\n%s", args, err, out)
 		}
+		return strings.TrimSpace(string(out))
 	}
-	got := t.TempDir() + "/events"
-	console := t.TempDir() + "/" + Home
-	if err := os.Symlink(os.Args[0], console); err != nil {
-		t.Fatal(err)
-	}
-	tmux("new-session", "-d", "-s", Home, "-e", decodeTo+"="+got, console, "-test.run=^TestDecodePane$")
+	typed = t.TempDir() + "/typed"
+	tmux("new-session", "-d", "-s", "work", "sh", "-c", "stty raw -echo; exec cat -v > "+typed)
+	pane := tmux("display-message", "-p", "-t", "work", "#{pane_id}")
+	tmux("set-option", "-p", "-t", pane, "@matchblox_agent", agent)
 	tmux(CommandKeysArgv()[1:]...)
-	term := attach(t, sock, Home)
-	key := keycmd.Sequence("compact")
-	want := eventLine(uv.UnknownApcEvent(key))
-	waitFor(t, func() bool {
-		b, _ := os.ReadFile(got)
-		return strings.HasPrefix(string(b), "ready")
-	})
-	if _, err := term.WriteString(key); err != nil {
+	waitFor(t, func() bool { return tmux("display-message", "-p", "-t", pane, "#{pane_current_command}") == "cat" })
+	return attach(t, sock, "work"), typed
+}
+
+// typedThen types key, then x, into client, and is what the pane read
+// once the x came.
+func typedThen(t *testing.T, client *os.File, typed, key string) string {
+	t.Helper()
+	if _, err := client.WriteString(key + "x"); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool {
-		b, _ := os.ReadFile(got)
-		return strings.Contains(string(b), want)
+		b, _ := os.ReadFile(typed)
+		return strings.HasSuffix(string(b), "x")
 	})
-	b, _ := os.ReadFile(got)
-	if lines := strings.Split(strings.TrimSpace(string(b)), "\n"); len(lines) != 2 {
-		t.Errorf("the console read %q, want only %s", lines[1:], want)
+	b, _ := os.ReadFile(typed)
+	return string(b)
+}
+
+// TestCommandKeyTypesIntoAMarkedAgentPane: in a pane marked as Claude
+// Code's, the compact key types /compact, and no Return.
+func TestCommandKeyTypesIntoAMarkedAgentPane(t *testing.T) {
+	client, typed := agentPane(t, "claude")
+	if got := typedThen(t, client, typed, keycmd.Sequence("compact")); got != "/compactx" {
+		t.Errorf("the pane read %q, want /compact and no Return", got)
+	}
+}
+
+// TestCommandKeyDoesNothingInAnotherAgentsPane: a Claude Code command in a
+// pane marked as Codex's types nothing.
+func TestCommandKeyDoesNothingInAnotherAgentsPane(t *testing.T) {
+	client, typed := agentPane(t, "codex")
+	if got := typedThen(t, client, typed, keycmd.Sequence("compact")); got != "x" {
+		t.Errorf("the pane read %q, want nothing of the command", got)
 	}
 }
 
@@ -356,37 +373,6 @@ func TestCommandKeyDoesNothingElsewhere(t *testing.T) {
 	})
 	if b, _ := os.ReadFile(got); strings.Contains(string(b), "UnknownApcEvent") {
 		t.Errorf("the pane read the command key: %q", b)
-	}
-}
-
-// TestCommandKeySkipsADeadConsole types a command key into a client in
-// the console's session whose pane runs no console any more (a shell
-// after it quit): tmux drops it, so the shell never reads it as typing.
-func TestCommandKeySkipsADeadConsole(t *testing.T) {
-	sock := tmuxtest.Server(t)
-	tmux := func(args ...string) {
-		t.Helper()
-		if out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput(); err != nil { //nolint:gosec // test argv
-			t.Fatalf("tmux %q: %v\n%s", args, err, out)
-		}
-	}
-	got := t.TempDir() + "/events"
-	tmux("new-session", "-d", "-s", Home, "-e", decodeTo+"="+got, os.Args[0], "-test.run=^TestDecodePane$")
-	tmux(CommandKeysArgv()[1:]...)
-	term := attach(t, sock, Home)
-	waitFor(t, func() bool {
-		b, _ := os.ReadFile(got)
-		return strings.HasPrefix(string(b), "ready")
-	})
-	if _, err := term.WriteString(keycmd.Sequence("compact") + "x"); err != nil {
-		t.Fatal(err)
-	}
-	waitFor(t, func() bool {
-		b, _ := os.ReadFile(got)
-		return strings.Contains(string(b), "KeyPressEvent")
-	})
-	if b, _ := os.ReadFile(got); strings.Contains(string(b), "UnknownApcEvent") {
-		t.Errorf("a pane that is no console read the command key: %q", b)
 	}
 }
 
@@ -470,4 +456,120 @@ func waitFor(t *testing.T, ok func() bool) {
 		}
 	}
 	t.Fatal("timed out")
+}
+
+// clientTTYs are the ttys of the clients attached to sock.
+func clientTTYs(tmux func(args ...string) string) []string {
+	return strings.Fields(tmux("list-clients", "-F", "#{client_tty}"))
+}
+
+func TestAMarkedReturnNamesTheClientThatSentIt(t *testing.T) {
+	sock, tmux, got := consolePane(t)
+	tmux(MarkKeyArgv()[1:]...)
+	attach(t, sock, Home)
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 1 })
+	desk := clientTTYs(tmux)[0]
+	phone := attach(t, sock, Home)
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 2 })
+	phoneTTY := ""
+	for _, tty := range clientTTYs(tmux) {
+		if tty != desk {
+			phoneTTY = tty
+		}
+	}
+	if _, err := phone.WriteString(keycmd.MarkKey + "\r"); err != nil {
+		t.Fatal(err)
+	}
+	mark := eventLine(uv.UnknownApcEvent(keycmd.MarkedPrefix + phoneTTY + "\x1b\\"))
+	enter := eventLine(uv.KeyPressEvent{Code: uv.KeyEnter})
+	waitFor(t, func() bool { return slices.Contains(paneRead(t, got), enter) })
+	lines := paneRead(t, got)
+	if i, j := slices.Index(lines, mark), slices.Index(lines, enter); i < 0 || i > j {
+		t.Errorf("want %q before %q in %q", mark, enter, lines)
+	}
+}
+
+func TestAMarkElsewhereTypesNothing(t *testing.T) {
+	sock := tmuxtest.Server(t)
+	tmux := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput() //nolint:gosec // test argv
+		if err != nil {
+			t.Fatalf("tmux %q: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	typed := t.TempDir() + "/typed"
+	tmux("new-session", "-d", "-s", "work", "cat -v > "+typed)
+	tmux(MarkKeyArgv()[1:]...)
+	client := attach(t, sock, "work")
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 1 })
+	if _, err := client.WriteString(keycmd.MarkKey + "x\r"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { b, _ := os.ReadFile(typed); return strings.Contains(string(b), "x") })
+	if b, _ := os.ReadFile(typed); strings.Contains(string(b), "matchblox") {
+		t.Errorf("the mark was typed: %q", b)
+	}
+}
+
+// TestATerminalThatComesToTheConsoleTellsIt: a second terminal attaches, and
+// one switches over from another session; each time the console hears it at
+// once, so it announces the marks before the person presses a key.
+func TestATerminalThatComesToTheConsoleTellsIt(t *testing.T) {
+	sock, tmux, got := consolePane(t)
+	tmux(ViewerHookArgv()[1:]...)
+	tmux("new-session", "-d", "-s", "work", "cat")
+	viewer := eventLine(uv.UnknownApcEvent(keycmd.ViewerKey))
+	count := func() int {
+		n := 0
+		for _, l := range paneRead(t, got) {
+			if l == viewer {
+				n++
+			}
+		}
+		return n
+	}
+	attach(t, sock, Home)
+	waitFor(t, func() bool { return count() >= 1 }) // the attach and its session change may both tell
+	time.Sleep(200 * time.Millisecond)
+	before := count()
+	attach(t, sock, "work")
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 2 })
+	time.Sleep(200 * time.Millisecond)
+	if n := count(); n != before {
+		t.Fatalf("a terminal of another session told the console: %d, want %d", n, before)
+	}
+	for _, tty := range clientTTYs(tmux) {
+		if strings.Contains(tmux("display-message", "-p", "-c", tty, "#{session_name}"), "work") {
+			tmux("switch-client", "-c", tty, "-t", Home)
+		}
+	}
+	waitFor(t, func() bool { return count() > before })
+}
+
+// TestATerminalElsewhereTellsTheConsoleNothing: the hook runs only at the
+// console; a terminal that attaches to another session types nothing there.
+func TestATerminalElsewhereTellsTheConsoleNothing(t *testing.T) {
+	sock := tmuxtest.Server(t)
+	tmux := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", os.DevNull}, args...)...).CombinedOutput() //nolint:gosec // test argv
+		if err != nil {
+			t.Fatalf("tmux %q: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	typed := t.TempDir() + "/typed"
+	tmux("new-session", "-d", "-s", "work", "cat -v > "+typed)
+	tmux(ViewerHookArgv()[1:]...)
+	client := attach(t, sock, "work")
+	waitFor(t, func() bool { return len(clientTTYs(tmux)) == 1 })
+	if _, err := client.WriteString("x\r"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { b, _ := os.ReadFile(typed); return strings.Contains(string(b), "x") })
+	if b, _ := os.ReadFile(typed); strings.Contains(string(b), "matchblox") {
+		t.Errorf("the hook typed into another session: %q", b)
+	}
 }

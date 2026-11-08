@@ -25,6 +25,15 @@ func key(text string) proto.Act {
 	return proto.Act{Console: true, RecID: proto.KeysPrefix + "%1", Text: text, PID: 42}
 }
 
+func TestKeysAreRefusedOnTheRealService(t *testing.T) {
+	s, ran := keysTest(t)
+	s.KeysToWorld = false
+	res := s.act(t.Context(), key("Enter"))
+	if res.Err != keysOnlyInDemo || len(*ran) != 0 {
+		t.Errorf("err %q ran %q", res.Err, *ran)
+	}
+}
+
 func TestKeysSendsANamedKey(t *testing.T) {
 	s, _ := keysTest(t)
 	res := s.act(t.Context(), key("Down"))
@@ -108,12 +117,12 @@ func TestKeysOnlyFromAConsole(t *testing.T) {
 	s.StokerServer = "mbtest"
 	a := key("Down")
 	a.Console = false
-	if res := s.act(t.Context(), a); res.Err != "keys go only from a console" {
+	if res := s.act(t.Context(), a); res.Err != keysOnlyInDemo {
 		t.Fatalf("err %q", res.Err)
 	}
 	a = key("Down")
 	a.From = "%7@mbtest"
-	if res := s.act(t.Context(), a); res.Err != "keys go only from a console" {
+	if res := s.act(t.Context(), a); res.Err != keysOnlyInDemo {
 		t.Fatalf("stoker: err %q", res.Err)
 	}
 	if len(*ran) != 0 {
@@ -314,18 +323,16 @@ func TestWatchIsRefusedFromTheStokersServer(t *testing.T) {
 	s.StokerServer = "mbtest"
 	cl := console(s)
 	res := s.watchAct(cl, proto.ClientConsole, proto.Act{From: "%7@mbtest"}, "%1")
-	if res.Err != "keys go only from a console" {
+	if res.Err != watchOnlyFromConsole {
 		t.Fatalf("err %q", res.Err)
 	}
 }
 
-// TestACommandAndACompactCarryTheAgentsGuard: every keystroke of a typed
-// command or a console's compact names the agent's pid and start, so a pid
-// another process took after the snapshot gets no key.
-func TestACommandAndACompactCarryTheAgentsGuard(t *testing.T) {
-	compact := command("")
-	compact.RecID = "compact:%1"
-	for _, a := range []proto.Act{command("review"), compact} {
+// TestACompactCarriesTheAgentsGuard: every keystroke of a console's compact
+// names the agent's pid and start, so a pid another process took after the
+// snapshot gets no key.
+func TestACompactCarriesTheAgentsGuard(t *testing.T) {
+	for _, a := range []proto.Act{consoleCompact(42)} {
 		a.Start = 7
 		s, ran := commandTest(t, "claude", idleScreen)
 		s.cur.Sessions[0].Start = 7

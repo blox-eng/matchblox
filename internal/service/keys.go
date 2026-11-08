@@ -61,8 +61,8 @@ func cut(text string, n int) string {
 // and a key that answers never on a wait the person did not see. The checks
 // run under the pane's lock, so nothing changes between them and the key.
 func (s *Service) keys(ctx context.Context, pane string, a proto.Act) proto.Result {
-	if !s.aConsole(a.Console, a) {
-		return proto.Result{Err: keysOnlyFromConsole}
+	if !s.KeysToWorld || !s.aConsole(a.Console, a) {
+		return proto.Result{Err: keysOnlyInDemo}
 	}
 	s.touchStoker(s.now()) // the builder acts: a stoker that rests goes on resting
 	unlock := s.holdPane(pane)

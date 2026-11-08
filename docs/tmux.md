@@ -34,8 +34,7 @@ or `d`.
 Prefix `m` from any pane goes to the console. The console binds it on the
 tmux server when it starts in tmux, in any session, in place of the tmux key
 that marks a pane, and the way back that `matchblox setup` adds to your tmux
-config binds it too. On a pane that runs a console, in any session, it gives
-that chat's keys back and you stay on the pane. On any other pane it goes to
+config binds it too. On a pane that runs a console, in any session, you stay on the pane. On any other pane it goes to
 the session `matchblox` and the console's pane there, also from another
 window of that session. A `bind m` of your own wins again when you source
 your config, until the console starts again. From a jump, prefix `m` goes

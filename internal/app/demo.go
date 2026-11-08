@@ -25,6 +25,9 @@ func closeTheMachine(opt Options) Options {
 	if opt.Clients == nil {
 		opt.Clients = func() ([]string, error) { return nil, refused }
 	}
+	if opt.ClientList == nil {
+		opt.ClientList = func() (string, error) { return "", refused }
+	}
 	if opt.LastClient == nil {
 		opt.LastClient = func() (string, time.Time, error) { return "", time.Time{}, refused }
 	}

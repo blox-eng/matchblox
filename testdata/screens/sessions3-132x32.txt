@@ -29,4 +29,4 @@
                  wk   this machine 12% · gpu-1 12%  │
    ws-1 12%                                         │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ↑↓ move  ⏎ chat  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit  list only v          sampled 0s ago
+ ↑↓ move  enter goes into spark-docs  x kill  r rename  A switch  z park  N new  p ships  f stoker  / find  q quit   sampled 0s ago

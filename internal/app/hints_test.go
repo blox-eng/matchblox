@@ -76,7 +76,7 @@ func TestOneChatHintAndTheWayOutOfListOnly(t *testing.T) {
 		t.Fatal("51x31 does not start list only")
 	}
 	line := keyText(m.draw(51))
-	if !strings.Contains(line, "full view v") || strings.Contains(line, "a chat") || !strings.Contains(line, "⏎ chat") {
+	if !strings.Contains(line, "full view v") || strings.Contains(line, "a chat") || !strings.Contains(line, "⏎ go in") {
 		t.Errorf("51x31 key line %q", line)
 	}
 	if out := screen(m); strings.Contains(out, "a chat") {
