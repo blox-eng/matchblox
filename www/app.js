@@ -547,19 +547,19 @@ onReady(() => {
     }
     later(flicker, rand(180, 650));
   };
-  // run lights from match `from`: each match catches after the one nearer to
-  // it, and goes out in the same order.
-  // Until the row is touched, the first match glows now and then.
-  let beckoning = !still();
+  // Until the row is touched, the first match glows now and then, while the
+  // row is on screen.
+  let beckoning = !still(), inView = false;
   const touched = () => { beckoning = false; };
   ["pointerenter", "pointerdown", "keydown"].forEach((e) => svg.addEventListener(e, touched, { once: true }));
   const beckon = () => {
-    if (!beckoning) return;
+    if (!beckoning || !inView) return;
     items[0].classList.add("beckon");
     setTimeout(() => items[0].classList.remove("beckon"), 600);
-    setTimeout(beckon, 2400);
+    later(beckon, 2400);
   };
-  setTimeout(beckon, 1200);
+  // run lights from match `from`: each match catches after the one nearer to
+  // it, and goes out in the same order.
   const run = (from = 0) => {
     stop();
     if (still()) { items.forEach(light); return 0; }
@@ -599,5 +599,5 @@ onReady(() => {
     e.preventDefault();
     strike(0);
   });
-  new IntersectionObserver(([e]) => { if (e.isIntersecting) run(); else stop(); }, { threshold: 0.2 }).observe(section);
+  new IntersectionObserver(([e]) => { inView = e.isIntersecting; if (inView) { run(); later(beckon, 1200); } else stop(); }, { threshold: 0.2 }).observe(section);
 });
