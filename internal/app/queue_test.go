@@ -68,7 +68,7 @@ func TestCtrlOOnQueueRowSwitches(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("no command")
 	}
-	next.Update(cmd())
+	fed(next, cmd)
 	if strings.Join(ran, " ") != "tmux switch-client -t %1" {
 		t.Fatalf("ran %v", ran)
 	}
@@ -417,7 +417,7 @@ func TestAJumpMovesTheCursorToTheNextThatWaits(t *testing.T) {
 	if it, _ := m.selectedSession(); it.Pane != "%1" {
 		t.Fatalf("starts on %s", it.Pane)
 	}
-	next, _ = next.Update(cmd())
+	next = fed(next, cmd)
 	if it, _ := next.(Model).selectedSession(); it.Pane != "%2" {
 		t.Fatalf("after the jump to %%1 the queue selects %s, want %%2", it.Pane)
 	}
@@ -431,7 +431,7 @@ func TestAJumpMovesTheCursorToTheNextThatWaits(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("no jump")
 	}
-	nm, _ := armed.Update(cmd())
+	nm := fed(armed, cmd)
 	s, _ := nm.(Model).selected()
 	if s.PID == from.PID || s.Busy {
 		t.Fatalf("after the jump to %s Sessions selects %s (busy %v)", from.Name, s.Name, s.Busy)

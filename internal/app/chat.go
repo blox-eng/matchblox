@@ -737,9 +737,6 @@ func (m *Model) tellAgent() tea.Cmd {
 	return cmd
 }
 
-// noAgent is the empty agent signal: no chat runs the phone's Commands.
-func noAgent(o Options) tea.Cmd { return sayAgent(keycmd.AgentSignal(""), o) }
-
 // sayAgent writes an agent signal to the terminal, through tmux when the
 // console runs in it; nil for a tmux too old to pass it.
 func sayAgent(say string, o Options) tea.Cmd {

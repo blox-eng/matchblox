@@ -1499,32 +1499,6 @@ func TestBackToHostsWithTheChatOpenSendsNoAgent(t *testing.T) {
 	}
 }
 
-// TestANewViewerGetsTheAgentAgain: the phone attaches to a console whose
-// chat is open already (after a reconnect, or beside the desktop). It
-// starts with no agent, so the console sends the chat's agent again to the
-// new set of viewers, and once only.
-func TestANewViewerGetsTheAgentAgain(t *testing.T) {
-	m, _ := agentRaws(t, agentChat(t, "claude", "codex"), "enter")
-	next, cmd := m.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: "/dev/ttys002:100@here"})
-	want := logos.Passthrough(keycmd.AgentSignal("claude"))
-	if got := raws(cmd); !slices.Equal(got, []string{want}) {
-		t.Fatalf("the first viewers got %q, want %q", got, want)
-	}
-	m = next.(Model)
-	if _, cmd = m.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: "/dev/ttys002:100@here"}); len(raws(cmd)) != 0 {
-		t.Fatalf("the same viewers got %q again", raws(cmd))
-	}
-	phone := "/dev/ttys002:100@here,/dev/ttys005:105@here"
-	next, cmd = m.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: phone})
-	if got := raws(cmd); !slices.Equal(got, []string{want}) {
-		t.Fatalf("a phone that attached got %q, want %q", got, want)
-	}
-	m, _ = agentRaws(t, next.(Model), "ctrl+a", "m")
-	if _, cmd = m.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: "/dev/ttys005:205@here"}); len(raws(cmd)) != 0 {
-		t.Fatalf("a viewer of a closed chat got %q", raws(cmd))
-	}
-}
-
 // TestAChatOnAnAgentWithNoCommandsIsStillTheChat: the app hears the chat
 // is open, so its command keys go, and the console says why one does not
 // run there, instead of the app saying the commands run from the chat.
@@ -1535,18 +1509,6 @@ func TestAChatOnAnAgentWithNoCommandsIsStillTheChat(t *testing.T) {
 	}
 	if m = command(t, m, "compact"); m.flash != "/compact is Claude Code's: a runs aider" {
 		t.Fatalf("flash %q", m.flash)
-	}
-}
-
-// TestTheConsoleSaysNoAgentAtStart: a phone whose belt shows the Commands
-// of a console that is gone hears, once the new console starts, that no
-// chat runs them.
-func TestTheConsoleSaysNoAgentAtStart(t *testing.T) {
-	for _, start := range []string{"", "here"} {
-		r := newShell(t, []string{"here"}, nil, start, false)
-		if got, want := raws(r.sh.Init()), logos.Passthrough(keycmd.AgentSignal("")); !slices.Equal(got, []string{want}) {
-			t.Fatalf("start %q wrote %q, want %q", start, got, want)
-		}
 	}
 }
 

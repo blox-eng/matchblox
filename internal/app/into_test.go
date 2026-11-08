@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -8,6 +9,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
+	"github.com/blox-eng/matchblox/internal/logos"
 	"github.com/blox-eng/matchblox/internal/remote"
 )
 
@@ -248,5 +251,185 @@ func TestAOnAStuckShipAtNightAsksToTakeOver(t *testing.T) {
 	drain(cmd)
 	if len(*ran) != 1 {
 		t.Errorf("after the answer ran %q", *ran)
+	}
+}
+
+// rigged is m inside tmux, in the console pane, with the clients of list
+// attached and /dev/pts/7 an iPad's.
+func rigged(m Model, list string) (Model, *[][]string) {
+	m.opt.Pane, m.opt.ClientList = console, clients(list)
+	var ttys []string
+	for _, c := range clientsOf(list, "") {
+		ttys = append(ttys, c.tty)
+	}
+	m.opt.Clients = func() ([]string, error) { return ttys, nil }
+	m.opt.Pair = &PairHost{DeviceTTYs: func() map[string]string { return map[string]string{"/dev/pts/7": "iPad-id"} }}
+	return m, recordRuns(&m)
+}
+
+func jumpRig(t *testing.T, list string) (Model, *[][]string) {
+	t.Helper()
+	return rigged(loaded(t, 100), list)
+}
+
+const deskAndPad = "1794089228 /dev/pts/7 %99\n1794089220 /dev/pts/1 %99"
+
+// fed runs cmd and hands each message it gives back to m.
+func fed(m tea.Model, cmd tea.Cmd) tea.Model {
+	for _, msg := range cmdMsgs(cmd) {
+		m, _ = m.Update(msg)
+	}
+	return m
+}
+
+func ranFocus(ran [][]string, tty, pane string) bool {
+	return slices.ContainsFunc(ran, func(a []string) bool { return slices.Equal(a, remote.FocusArgv(tty, pane)) })
+}
+
+func TestAMarkedEnterMovesOnlyThatClient(t *testing.T) {
+	m, ran := jumpRig(t, deskAndPad)
+	_, cmd := key(marked(m, "/dev/pts/7"), "enter")
+	drain(cmd)
+	if !ranFocus(*ran, "/dev/pts/7", "%1") || ranFocus(*ran, "/dev/pts/1", "%1") {
+		t.Errorf("ran %q, want FocusArgv for /dev/pts/7 only", *ran)
+	}
+}
+
+func TestAnUnmarkedEnterMovesTheDesk(t *testing.T) {
+	m, ran := jumpRig(t, deskAndPad)
+	_, cmd := key(m, "enter")
+	drain(cmd)
+	if !ranFocus(*ran, "/dev/pts/1", "%1") || ranFocus(*ran, "/dev/pts/7", "%1") {
+		t.Errorf("ran %q, want FocusArgv for the desk, /dev/pts/1", *ran)
+	}
+}
+
+func TestAMarkedKeyOfAGoneClientIsRefused(t *testing.T) {
+	m, ran := jumpRig(t, deskAndPad)
+	m.opt.Clients = func() ([]string, error) { return []string{"/dev/pts/1"}, nil }
+	next, cmd := key(marked(m, "/dev/pts/7"), "enter")
+	next = fed(next, cmd)
+	if ranFocus(*ran, "/dev/pts/7", "%1") || ranFocus(*ran, "/dev/pts/1", "%1") {
+		t.Errorf("ran %q, want no jump", *ran)
+	}
+	if got := next.(Model).flash; got != "this device is not attached: reconnect" {
+		t.Errorf("flash %q", got)
+	}
+}
+
+func TestATmuxErrorJumpsAsBefore(t *testing.T) {
+	m, ran := jumpRig(t, deskAndPad)
+	m.opt.ClientList = func() (string, error) { return "", errors.New("no server running") }
+	_, cmd := key(m, "enter")
+	drain(cmd)
+	if want := [][]string{{"tmux", "switch-client", "-t", "%1"}}; !slices.EqualFunc(*ran, want, slices.Equal) {
+		t.Errorf("ran %q, want %q", *ran, want)
+	}
+}
+
+func TestAJumpToAGonePaneSaysSo(t *testing.T) {
+	m, _ := jumpRig(t, deskAndPad)
+	m.opt.Run = func(argv []string) error {
+		if slices.Equal(argv, remote.FocusArgv("/dev/pts/1", "%1")) {
+			return errors.New("can't find pane: %1")
+		}
+		return nil
+	}
+	next, cmd := key(m, "enter")
+	next = fed(next, cmd)
+	nm := next.(Model)
+	if !strings.HasPrefix(nm.flash, "failed: tmux switch-client -c /dev/pts/1 -t %1") {
+		t.Errorf("flash %q", nm.flash)
+	}
+	if s, _ := nm.selectedSession(); s.Pane != "%1" {
+		t.Errorf("the selection moved to %q", s.Pane)
+	}
+}
+
+// The phone asks, the desk answers take over?: the phone still goes in. A
+// tap, which asks with no key held, does the same.
+func TestTakeOverAnsweredFromTheDeskJumpsThePhone(t *testing.T) {
+	m, ran := rigged(sized(t, 100, 30, stokerState(runningNight(time.Now()))), deskAndPad)
+	held, _ := key(marked(m, "/dev/pts/7"), "enter")
+	if held.(Model).held == nil || len(*ran) != 0 {
+		t.Fatalf("held %v ran %q: want take over? first", held.(Model).held != nil, *ran)
+	}
+	_, cmd := key(held, "n")
+	drain(cmd)
+	if !ranFocus(*ran, "/dev/pts/7", "%1") || ranFocus(*ran, "/dev/pts/1", "%1") {
+		t.Errorf("Enter: ran %q, want FocusArgv for /dev/pts/7 only", *ran)
+	}
+
+	m, ran = rigged(sized(t, 100, 30, stokerState(runningNight(time.Now()))), deskAndPad)
+	m.tab = tabSessions
+	y := sessLine(t, m, "app-feature")
+	next, cmd := tap(m, 5, y)
+	drain(cmd)
+	held, _ = tap(marked(next, "/dev/pts/7"), 5, y)
+	if held.(Model).held == nil || len(*ran) != 0 {
+		t.Fatalf("tap: held %v ran %q: want take over? first", held.(Model).held != nil, *ran)
+	}
+	_, cmd = key(held, "n")
+	drain(cmd)
+	if !ranFocus(*ran, "/dev/pts/7", "%1") || ranFocus(*ran, "/dev/pts/1", "%1") {
+		t.Errorf("tap: ran %q, want FocusArgv for /dev/pts/7 only", *ran)
+	}
+}
+
+func TestTheSelectionMovesOnWhenNoOneElseWatches(t *testing.T) {
+	m, _ := loadedWith(t, 100, queueState())
+	next, _ := m.Update(ranMsg{cmd: "tmux switch-client -c /dev/pts/7 -t %1", jumped: "%1", tty: "/dev/pts/7"})
+	if s, _ := next.(Model).selectedSession(); s.Pane != "%2" {
+		t.Errorf("the selection is %q, want the next that waits, %%2", s.Pane)
+	}
+}
+
+func TestTheSelectionStaysWhileTheDeskWatches(t *testing.T) {
+	m, _ := loadedWith(t, 100, queueState())
+	next, _ := m.Update(ranMsg{cmd: "tmux switch-client -c /dev/pts/7 -t %1", jumped: "%1", tty: "/dev/pts/7", watched: true})
+	if s, _ := next.(Model).selectedSession(); s.Pane != "%1" {
+		t.Errorf("the selection moved to %q while the desk watches", s.Pane)
+	}
+	for list, want := range map[string]bool{deskAndPad: true, "1794089228 /dev/pts/7 %99\n1794089220 /dev/pts/1 %4": false} {
+		m, _ := jumpRig(t, list)
+		a := m.jump("%1")
+		a.tty = "/dev/pts/7"
+		if got := m.intoCmd(*a)().(ranMsg); got.watched != want || got.err != nil {
+			t.Errorf("%q: watched %v (err %v), want %v", list, got.watched, got.err, want)
+		}
+	}
+}
+
+func TestTheSignalNamesThePaneBeforeTheJump(t *testing.T) {
+	m, ran := jumpRig(t, deskAndPad)
+	_, cmd := key(m, "enter")
+	msgs := cmdMsgs(cmd)
+	want := tea.RawMsg{Msg: logos.Passthrough(keycmd.PaneSignal("claude", "%1"))}
+	if len(msgs) == 0 || msgs[0] != want {
+		t.Fatalf("the first message is %v, want %q", msgs, want.Msg)
+	}
+	if jump := [][]string{remote.AgentMarkArgv("%1", "claude"), remote.FocusArgv("/dev/pts/1", "%1")}; !slices.EqualFunc(*ran, jump, slices.Equal) {
+		t.Errorf("ran %q, want %q", *ran, jump)
+	}
+}
+
+func TestTheConsoleAnnouncesTheMarks(t *testing.T) {
+	marks := logos.Passthrough(keycmd.MarksSignal())
+	for _, start := range []string{"", "here"} {
+		r := newShell(t, []string{"here"}, nil, start, false)
+		if got := raws(r.sh.Init()); !slices.Equal(got, []string{marks}) {
+			t.Errorf("start %q wrote %q, want %q", start, got, marks)
+		}
+	}
+	m := loaded(t, 100)
+	next, cmd := m.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: "/dev/pts/1:100@here"})
+	if got := raws(cmd); !slices.Contains(got, marks) {
+		t.Errorf("the first viewers got %q, want %q", got, marks)
+	}
+	if _, cmd = next.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: "/dev/pts/1:100@here"}); slices.Contains(raws(cmd), marks) {
+		t.Errorf("the same viewers got %q again", raws(cmd))
+	}
+	if _, cmd = next.Update(graphicsMsg{gen: m.opt.Gen, watched: true, key: "/dev/pts/1:100@here,/dev/pts/7:105@here"}); !slices.Contains(raws(cmd), marks) {
+		t.Errorf("a phone that attached got %q, want %q", raws(cmd), marks)
 	}
 }

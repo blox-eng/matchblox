@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/remote"
 	"github.com/blox-eng/matchblox/internal/transport"
 )
@@ -223,6 +224,7 @@ func (s Shell) openOn(host string, peers []string, first bool) (Shell, tea.Cmd) 
 	o.Clip = b.Clip
 	// A jump starts from this machine's tmux, whatever the host.
 	o.OutsideTmux, o.Prefix, o.Home, o.LocalTmux, o.JumpID = b.OutsideTmux, b.Prefix, b.Home, b.LocalTmux, b.JumpID
+	o.Pane, o.ClientList = b.Pane, b.ClientList // the client a jump moves is one of this machine's
 	// The builder's own ssh login goes from this machine, whatever the host.
 	o.Check, o.MasterBase, o.SSH = b.Check, b.MasterBase, b.SSH
 	o.Ask, o.NoAsk = b.Ask, b.NoAsk // the prompts of this machine's ssh
@@ -250,13 +252,15 @@ func (s Shell) openOn(host string, peers []string, first bool) (Shell, tea.Cmd) 
 	return s, m.Init()
 }
 
-// Init also says no agent, once: a phone whose belt still shows the
-// Commands of a console that quit learns that no chat runs them.
+// Init announces, once, that the console reads the app's marks, with no
+// agent: a phone whose belt still shows the Commands of a console that quit
+// learns that no chat runs them.
 func (s Shell) Init() tea.Cmd {
+	marks := sayAgent(keycmd.MarksSignal(), s.opt.Base)
 	if s.layer == layerConsole {
-		return tea.Batch(noAgent(s.opt.Base), s.cur.Init())
+		return tea.Batch(marks, s.cur.Init())
 	}
-	return tea.Batch(noAgent(s.opt.Base), tea.RequestBackgroundColor)
+	return tea.Batch(marks, tea.RequestBackgroundColor)
 }
 
 func (s Shell) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

@@ -169,7 +169,7 @@ func TestCtrlORunsTheJumpAtOnce(t *testing.T) {
 	if cmd == nil || next.(Model).pending != nil {
 		t.Fatalf("ctrl+o left %v pending, cmd %v: want the jump at once", next.(Model).pending, cmd != nil)
 	}
-	next.Update(cmd())
+	fed(next, cmd)
 	if strings.Join(ran, " ") != "tmux switch-client -t %1" {
 		t.Fatalf("ran %v", ran)
 	}
@@ -433,24 +433,9 @@ func TestMessagesFromAnOldConnAreIgnored(t *testing.T) {
 	}
 }
 
-// drain runs cmd and every command it batches, skipping any that block
-// (a recv on an empty connection).
-func drain(cmd tea.Cmd) {
-	if cmd == nil {
-		return
-	}
-	out := make(chan tea.Msg, 1)
-	go func() { out <- cmd() }()
-	select {
-	case msg := <-out:
-		if b, ok := msg.(tea.BatchMsg); ok {
-			for _, c := range b {
-				drain(c)
-			}
-		}
-	case <-time.After(50 * time.Millisecond):
-	}
-}
+// drain runs cmd and every command it batches or sequences, skipping any
+// that block (a recv on an empty connection).
+func drain(cmd tea.Cmd) { cmdMsgs(cmd) }
 
 // A service that accepts but never answers (stopped, wedged) must not
 // leave an empty screen.

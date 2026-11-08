@@ -24,6 +24,7 @@ import (
 	"github.com/blox-eng/matchblox/internal/advice"
 	"github.com/blox-eng/matchblox/internal/doors"
 	"github.com/blox-eng/matchblox/internal/history"
+	"github.com/blox-eng/matchblox/internal/keycmd"
 	"github.com/blox-eng/matchblox/internal/proto"
 	"github.com/blox-eng/matchblox/internal/queue"
 	"github.com/blox-eng/matchblox/internal/remote"
@@ -134,6 +135,12 @@ type Options struct {
 	// Clients are the ttys of the clients of this console's tmux server, for
 	// a focus that moves the phone's client. Nil: ask tmux.
 	Clients func() ([]string, error)
+	// Pane is the console's own tmux pane (TMUX_PANE); "" outside tmux.
+	Pane string
+	// ClientList is tmux list-clients -F '#{client_activity} #{client_tty}
+	// #{pane_id}': who shows the console, for the client a jump moves. Nil:
+	// ask tmux.
+	ClientList func() (string, error)
 	// Clip copies text to the builder's clipboard. Nil: OSC 52 with the output.
 	Clip func(text string)
 	// Graphics says whether every terminal that shows the console draws
@@ -172,9 +179,11 @@ type connMsg struct {
 	gen  int
 }
 type ranMsg struct {
-	cmd    string
-	err    error
-	jumped string // the pane a jump went to
+	cmd     string
+	err     error
+	jumped  string // the pane a jump went to
+	tty     string // the client the jump moved; "" whichever tmux picked
+	watched bool   // another client still shows the console
 }
 
 // action waits for the person's confirm. A Nav action runs here; any other
@@ -209,6 +218,7 @@ type action struct {
 	ghost       bool                        // a ghost row of Sessions: it opens N on where
 	where       string                      // a ghost row: the folder N opens on ("": N as it is)
 	host        string                      // the host of the row it acts on; "": the home host, as a peer is never ""
+	tty         string                      // a jump: the client that asked, the only one it moves; "" whichever tmux picks
 }
 
 // recRun is an act on a recommendation: the row shows its outcome.
@@ -451,6 +461,11 @@ type Model struct {
 	keyFor   string // the host whose ladder makes a new key; its prompts name this machine
 	askCtx   context.Context
 	askStop  context.CancelFunc
+
+	// marked is the client the tmux binding named for the next input
+	// event; askedBy is the client of the event being handled, "" unmarked.
+	marked  clientMark
+	askedBy string
 }
 
 func New(opt Options) Model {
@@ -594,10 +609,21 @@ func (m *Model) sendOn(c transport.Conn, a proto.Act) (string, tea.Cmd) {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if apc, ok := msg.(uv.UnknownApcEvent); ok {
+		if tty, ok := strings.CutPrefix(string(apc), keycmd.MarkedPrefix); ok {
+			if tty, ok = strings.CutSuffix(tty, "\x1b\\"); ok && remote.ClientTTY(tty) {
+				m.marked = clientMark{tty, m.now()}
+			}
+			return m, nil
+		}
+	}
 	m = m.scanShows()
 	switch msg.(type) {
 	case tea.KeyPressMsg, tea.MouseClickMsg:
 		m.shortPID = 0 // a choice made: the dropped chat stays dropped
+		m.askedBy, m.marked = m.marked.spend(m.now()), clientMark{}
+	default:
+		m.askedBy = ""
 	}
 	next, cmd := m.update(msg)
 	if nm, ok := next.(Model); ok {
@@ -920,11 +946,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.endRec("nav", proto.Result{Ran: [][]string{strings.Fields(msg.cmd)}})
 		}
+		if errors.Is(msg.err, errNotAttached) {
+			m.flash = msg.err.Error()
+			return m, nil
+		}
 		if msg.err != nil {
 			m.flash = "failed: " + msg.cmd + ": " + msg.err.Error()
 			return m, nil
 		}
-		if msg.jumped != "" {
+		if msg.jumped != "" && !msg.watched {
 			m = m.nextAfter(msg.jumped)
 		}
 		toast := m.say("ran: " + msg.cmd)
@@ -1087,7 +1117,7 @@ func (m Model) takeFocus(f *proto.Focus) (Model, tea.Cmd) {
 	if m.opt.Host != "" || m.opt.OutsideTmux || !remote.ClientTTY(f.Client) {
 		return m, nil
 	}
-	return m, focusJump(m.clients(), m.opt.Run, f.Client, s.Pane)
+	return m, focusJump(m.clients(), m.clientList(), m.opt.Pane, m.opt.Run, f.Client, s.Pane)
 }
 
 // clients is how this console reads the clients of its tmux server.
@@ -1112,7 +1142,7 @@ func tmuxClients() ([]string, error) {
 // focusJump waits up to focusWait for the client on tty to attach to this
 // console's tmux, then moves it to pane. A client that never comes is not
 // this console's: nothing moves.
-func focusJump(clients func() ([]string, error), run func([]string) error, tty, pane string) tea.Cmd {
+func focusJump(clients func() ([]string, error), list func() (string, error), consolePane string, run func([]string) error, tty, pane string) tea.Cmd {
 	return func() tea.Msg {
 		argv := remote.FocusArgv(tty, pane)
 		if !remote.FocusAllowed(argv) {
@@ -1127,7 +1157,9 @@ func focusJump(clients func() ([]string, error), run func([]string) error, tty, 
 			}
 		}
 		// The toast names the move, not the session the phone gets for it.
-		return ranMsg{cmd: "tmux switch-client -c " + tty + " -t " + pane, err: run(argv), jumped: pane}
+		err := run(argv)
+		return ranMsg{cmd: "tmux switch-client -c " + tty + " -t " + pane, err: err, jumped: pane, tty: tty,
+			watched: err == nil && watchedBesides(list, consolePane, tty)}
 	}
 }
 
@@ -1464,9 +1496,8 @@ func (m Model) confirm(a action) (tea.Model, tea.Cmd) {
 		return m.runDoor(a)
 	}
 	if a.nav {
-		run := m.opt.Run
 		m.startRec(a, "nav")
-		return m, func() tea.Msg { return runNav(a, run) }
+		return m, m.intoCmd(a)
 	}
 	if why := m.refusal(host); why != "" {
 		m.flash = why
@@ -1547,10 +1578,12 @@ func (m Model) switched(r proto.Result) (Model, tea.Cmd) {
 	return nm, jump
 }
 
+var errNavRefused = errors.New("refused: only tmux switch-client, new-window and the stoker's popup run in the console")
+
 func runNav(a action, run func([]string) error) ranMsg {
 	for _, step := range a.steps {
 		if !remote.NavAllowed(step) && !remote.PopupAllowed(step) {
-			return ranMsg{cmd: strings.Join(step, " "), err: fmt.Errorf("refused: only tmux switch-client, new-window and the stoker's popup run in the console")}
+			return ranMsg{cmd: strings.Join(step, " "), err: errNavRefused}
 		}
 	}
 	for _, step := range a.steps {
@@ -1571,7 +1604,7 @@ func (m Model) jump(pane string) *action {
 			{"tmux", "attach-session", "-t", pane},
 		}}
 	}
-	return &action{label: "jump", nav: true, pane: pane, steps: [][]string{{"tmux", "switch-client", "-t", pane}}}
+	return &action{label: "jump", nav: true, pane: pane, tty: m.askingTTY(), steps: [][]string{{"tmux", "switch-client", "-t", pane}}}
 }
 
 // jumpOn is jump to a pane of host.

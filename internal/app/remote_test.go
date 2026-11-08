@@ -404,3 +404,15 @@ func TestRemoteConsoleNeverMovesThisMachinesTmux(t *testing.T) {
 		}
 	}
 }
+
+// TestAHostJumpCarriesTheAskingTTY: the phone's key jumps the phone, and
+// not the desk, to a pane of another host.
+func TestAHostJumpCarriesTheAskingTTY(t *testing.T) {
+	m, _ := onHost(t, fixtureState())
+	m.tab = tabSessions
+	next, _ := key(marked(m, "/dev/pts/7"), "enter")
+	a := next.(Model).pending
+	if a == nil || !a.remote || !strings.Contains(strings.Join(a.steps[0], " "), "switch-client -c /dev/pts/7") {
+		t.Fatalf("the jump does not switch only the phone: %+v", a)
+	}
+}

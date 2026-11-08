@@ -58,7 +58,7 @@ func (m Model) jumpOnHost(host string, a *action) *action {
 			j.Dir = s[3]
 		}
 	}
-	j.Host, j.Prefix, j.Home, j.ID, j.Outer = host, m.prefix(), m.home(), m.jumpID(), !m.opt.OutsideTmux
+	j.Host, j.Prefix, j.Home, j.ID, j.Outer, j.ClientTTY = host, m.prefix(), m.home(), m.jumpID(), !m.opt.OutsideTmux, a.tty
 	if !remote.JumpAllowed(j) {
 		return refused(a, jumpRefusal(j))
 	}

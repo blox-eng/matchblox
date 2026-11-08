@@ -205,7 +205,7 @@ func TestTheQueueComesFirstWhenSomeoneWaits(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("no jump")
 	}
-	next.Update(cmd())
+	fed(next, cmd)
 	if strings.Join(ran, " ") != "tmux switch-client -t %1" {
 		t.Fatalf("ran %v", ran)
 	}
