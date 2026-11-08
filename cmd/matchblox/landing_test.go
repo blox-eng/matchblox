@@ -24,7 +24,7 @@ func landingPage(t *testing.T) []byte {
 }
 
 var (
-	unseen = regexp.MustCompile(`(?s)<(pre|script|style|svg)\b.*?</(pre|script|style|svg)>|<!--.*?-->`)
+	unseen = regexp.MustCompile(`(?s)<pre\b.*?</pre>|<script\b.*?</script>|<style\b.*?</style>|<svg\b.*?</svg>|<!--.*?-->`)
 	markup = regexp.MustCompile(`(?s)<[^>]*>`)
 )
 
@@ -107,7 +107,7 @@ func TestTheLandingHasAPreviewCard(t *testing.T) {
 
 func TestTheLandingIdsAreUnique(t *testing.T) {
 	seen := map[string]bool{}
-	for _, m := range regexp.MustCompile(`\bid="([^"]+)"`).FindAllSubmatch(landingPage(t), -1) {
+	for _, m := range regexp.MustCompile(`\sid="([^"]+)"`).FindAllSubmatch(landingPage(t), -1) {
 		id := string(m[1])
 		if seen[id] {
 			t.Errorf("id %q occurs twice", id)
@@ -131,8 +131,18 @@ func TestTheChainHoverFindsTheMatchUnderThePointer(t *testing.T) {
 // The console replay is hidden from screen readers; its label is their only
 // account of what it shows.
 func TestTheConsoleSaysWhatItShows(t *testing.T) {
-	m := regexp.MustCompile(`id="console" aria-label="([^"]*)"`).FindSubmatch(landingPage(t))
+	m := regexp.MustCompile(`class="stage" aria-label="([^"]*)"`).FindSubmatch(landingPage(t))
 	if m == nil || !bytes.Contains(m[1], []byte("who waits for you")) {
 		t.Errorf("the console's label does not say what the replay shows: %q", m)
+	}
+}
+
+// "Open the box" lands on the section that holds its heading, so the heading
+// is in view.
+func TestOpenTheBoxShowsItsHeading(t *testing.T) {
+	page := landingPage(t)
+	if !bytes.Contains(page, []byte(`href="#console"`)) ||
+		!bytes.Contains(page, []byte(`<section class="agents box" id="console" aria-labelledby="box-h">`)) {
+		t.Error(`"Open the box" must point at the section that holds "Every agent, one box"`)
 	}
 }
