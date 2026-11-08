@@ -26,8 +26,9 @@ All notable changes to matchblox are in this file. The format follows
   the transcript from its start and keeps your first prompt, your latest prompts and
   the last replies. Slash-command arguments stay in. A task record the old
   agent never filled in is named as such, not passed on as its claims.
-  Compaction summaries, interrupt markers and shell output stay out, and a
-  long prompt keeps the instruction at its end.
+  Compaction summaries, interrupt markers, shell output and subagent rows
+  stay out, and a long prompt keeps the instruction at its end. Words inside
+  a reply, or an earlier switch's prompt, can no longer pass as your own.
   ([#335](https://github.com/blox-eng/matchblox/issues/335))
 
 ## [0.34.0] - 2026-11-07

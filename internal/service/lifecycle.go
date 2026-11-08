@@ -340,7 +340,7 @@ func (s *Service) switchAgent(ctx context.Context, pane string, a proto.Act) pro
 	x, ok := s.sessionAt(pane)
 	switch {
 	case ok && n.ExpectedPID != 0 && (n.ExpectedPID != x.PID || n.ExpectedStart != x.Start):
-		return refuseText("the match changed since you opened switch: open it again")
+		return refuseText("the session changed since this switch read it: switch again")
 	case ok && x.Agent == n.Agent:
 		return refuseText(x.Name + " runs " + n.Agent + " already")
 	case !slices.Contains(Startable, n.Agent):

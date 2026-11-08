@@ -313,6 +313,57 @@ func TestATapOnAStartPicksThatStart(t *testing.T) {
 	}
 }
 
+// The confirm's 3 starts × decline and × the busy second y: a declined
+// switch sends nothing, and the second y keeps what the first named.
+func TestSwitchConfirmCellsForEveryStart(t *testing.T) {
+	starts := map[string]struct {
+		keys    []string
+		text    string
+		handoff string
+	}{
+		"continue": {nil, "", proto.Handoff("")},
+		"extras":   {[]string{"tab", "tab"}, "keep CSV only", proto.Handoff("keep CSV only")},
+		"no task":  {[]string{"tab", "right"}, "", ""},
+	}
+	open := func(t *testing.T, busy bool, keys []string, text string) (tea.Model, *fakeConn) {
+		st := lifeState()
+		st.Sessions[0].Busy = busy
+		next, f := switchState(t, st)
+		next, _ = key(next, "A")
+		for _, k := range keys {
+			next, _ = key(next, k)
+		}
+		if text != "" {
+			next = typeText(next, text)
+		}
+		next, _ = key(next, "enter")
+		return next, f
+	}
+	for name, c := range starts {
+		for _, decline := range []string{"esc", "enter", "n"} {
+			next, f := open(t, false, c.keys, c.text)
+			next, cmd := key(next, decline)
+			if cmd != nil {
+				cmd()
+			}
+			if nm := next.(Model); nm.pending != nil || len(f.acts()) != 0 || !strings.HasPrefix(nm.flash, "cancelled: ") {
+				t.Errorf("%s, %s on the confirm: pending %+v acts %+v", name, decline, nm.pending, f.acts())
+			}
+		}
+		next, f := open(t, true, c.keys, c.text)
+		next, _ = key(next, "y")
+		if len(f.acts()) != 0 {
+			t.Fatalf("%s: one y switched a busy session", name)
+		}
+		_, cmd := key(next, "y")
+		cmd()
+		var sw proto.SwitchAgent
+		if acts := f.acts(); len(acts) != 1 || json.Unmarshal([]byte(acts[0].Text), &sw) != nil || !sw.Anyway || sw.Handoff != c.handoff {
+			t.Errorf("%s, the second y sent %+v", name, f.acts())
+		}
+	}
+}
+
 func TestSwitchCanStartWithNoTask(t *testing.T) {
 	for _, pick := range []func(tea.Model) tea.Model{
 		func(m tea.Model) tea.Model { m, _ = key(m, "tab"); m, _ = key(m, "right"); return m },

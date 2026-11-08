@@ -12,11 +12,13 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/blox-eng/matchblox/internal/gitscan"
 	"github.com/blox-eng/matchblox/internal/history"
 	"github.com/blox-eng/matchblox/internal/holds"
 	"github.com/blox-eng/matchblox/internal/idle"
+	"github.com/blox-eng/matchblox/internal/panes"
 	"github.com/blox-eng/matchblox/internal/ships"
 	"github.com/blox-eng/matchblox/internal/state"
 	"github.com/blox-eng/matchblox/internal/stoker"
@@ -216,7 +218,7 @@ type Result struct {
 	Ran     [][]string `json:"ran,omitempty"`
 	Skipped []string   `json:"skipped,omitempty"`
 	Err     string     `json:"err,omitempty"`
-	// Preview is the read-only evidence shown before an agent switch.
+	// Preview is the read-only switch evidence that switch --preview prints.
 	Preview string `json:"preview,omitempty"`
 	// Scan is how a scan:yes's scan went.
 	Scan *ScanSummary `json:"scan,omitempty"`
@@ -504,8 +506,8 @@ type NewSession struct {
 
 // SwitchAgent is the Text of a "switch:<pane>" act: start Agent in the
 // pane in place of the one there, with Handoff as its first message.
-// Clients fill Handoff, DefaultHandoff unless the builder changed it; empty
-// is no first message. Anyway is the second confirm of a session that
+// Clients fill Handoff with Handoff(extras) to continue from the handover,
+// with a custom line (the CLI's --handoff), or empty for no first message. Anyway is the second confirm of a session that
 // works or waits.
 type SwitchAgent struct {
 	Agent   string `json:"agent"`
@@ -537,6 +539,25 @@ func Handoff(extra string) string {
 		return DefaultHandoff + handoffExtras + extra
 	}
 	return DefaultHandoff
+}
+
+// ExtraLimit is how many characters of extras fit after DefaultHandoff in
+// one first message.
+func ExtraLimit() int {
+	return panes.MaxAnswer - utf8.RuneCountInString(DefaultHandoff+handoffExtras)
+}
+
+// CheckExtra refuses extras that do not fit one first message, naming the
+// extras' own limit, or that break a first message's other rules.
+func CheckExtra(extra string) error {
+	extra = strings.TrimSpace(extra)
+	if !utf8.ValidString(extra) {
+		return errors.New("the extras are not valid text: retype them")
+	}
+	if n := ExtraLimit(); utf8.RuneCountInString(extra) > n {
+		return fmt.Errorf("the extras are longer than %d characters", n)
+	}
+	return CheckFirst(Handoff(extra), "the extras")
 }
 
 // HandoffExtra reports whether h continues from the handover, and its extras.

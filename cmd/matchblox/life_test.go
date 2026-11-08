@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -109,6 +111,15 @@ func TestSwitchNamesThePaneAndTheAgent(t *testing.T) {
 	// --extra adds to the service's switch prompt, as the console's extra field.
 	if a, err = switchAct(cliDoc(), []string{"api"}, switchOpts{agent: "codex", extra: "keep CSV only"}, ""); err != nil || decode(a).Handoff != proto.Handoff("keep CSV only") {
 		t.Fatalf("%+v %v", a, err)
+	}
+	long := strings.Repeat("a", proto.ExtraLimit()+1)
+	if _, err = switchAct(cliDoc(), []string{"api"}, switchOpts{agent: "codex", extra: long}, ""); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("the extras are longer than %d characters", proto.ExtraLimit())) {
+		t.Fatalf("too-long --extra: %v", err)
+	}
+	// A flag conflict is said before the service is asked anything.
+	none2 := "x"
+	if err := cliSwitch([]string{"api"}, switchOpts{agent: "codex", extra: "y", handoff: &none2}, io.Discard, filepath.Join(t.TempDir(), "no.sock"), nil); err == nil || !strings.HasPrefix(err.Error(), "--extra adds to the default handoff") {
+		t.Fatalf("both flags with no service: %v", err)
 	}
 	custom := "only explain the test"
 	if _, err = switchAct(cliDoc(), []string{"api"}, switchOpts{agent: "codex", extra: "x", handoff: &custom}, ""); err == nil || err.Error() != "--extra adds to the default handoff, which --handoff replaces: give one of them" {

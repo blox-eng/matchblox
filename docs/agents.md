@@ -218,13 +218,16 @@ goal, the last three replies, and then as many of your latest prompts as fit
 in 48,000 bytes. A marker counts the prompts it leaves out. A long prompt
 keeps its start and its end, where the instruction after a pasted log sits.
 Tool output, skill text, compaction summaries, subagent notifications,
-interrupt markers and shell output never enter it. A slash command keeps its
-arguments, and a setting command such as `/model opus` never counts as the
-goal. A transcript longer than 64 MB is read for its first 8 MB and its last
+interrupt markers, shell output and subagent rows never enter it. A slash
+command keeps its arguments, and a setting command such as `/model opus` never
+counts as the goal. Each turn's text sits two columns in, so words inside a
+reply can never pass as a turn of their own. A first message matchblox sent at
+an earlier switch shows as `[matchblox switch prompt; its extras then: …]`: it
+is history, never the goal or today's priority. A transcript longer than 64 MB is read for its first 8 MB and its last
 56 MB, and the excerpt says how much of the middle it skips.
 
 A task record that still holds only the launch template is reported as never
-written. The receiving match then rebuilds the goal from the conversation.
+written, and its launch message stays a quoted claim. The receiving match then rebuilds the goal from the conversation.
 The capture names missing sources and does not infer a goal from changed files.
 Old replies and task records remain claims to check against the working tree.
 

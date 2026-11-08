@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -179,12 +180,50 @@ After compaction, read this brief again through MATCHBLOX_CONTEXT, then read you
 // switchPrompt is the receiving match's first message: fixed words, then
 // the builder's extras for this switch, which win over the handover.
 func switchPrompt(capture, extra string) string {
-	p := fmt.Sprintf("Read the repository instructions. Then read the handover evidence in %q. From it, find the goal, the latest user corrections, the completed work, the decisions, the checks that ran and the next step. Check each claim against the current tree. Then do the next step. If the goal is missing, ask the user one question.", capture)
+	p := fmt.Sprintf(switchPromptLead+"%q. From it, find the goal, the latest user corrections, the completed work, the decisions, the checks that ran and the next step. Check each claim against the current tree. Then do the next step. If the goal is missing, ask the user one question.", capture)
 	if extra != "" {
-		p += fmt.Sprintf(" The user adds these instructions for this switch. They take priority over the handover: %q", extra)
+		p += fmt.Sprintf(switchExtrasLead+"%q", extra)
 	}
 	return p
 }
+
+const switchPromptLead = "Read the repository instructions. Then read the handover evidence in "
+const switchExtrasLead = " The user adds these instructions for this switch. They take priority over the handover: "
+
+// earlierSwitch names a first message that matchblox, not the builder,
+// sent at an earlier switch: its own prompt, or the line an older service
+// passes on. Its extras are history, never today's priority.
+func earlierSwitch(text string) (string, bool) {
+	extra, ok := proto.HandoffExtra(text)
+	evidence := ""
+	if rest, found := strings.CutPrefix(text, switchPromptLead); !ok && found {
+		ok = true
+		if q, err := strconv.QuotedPrefix(rest); err == nil {
+			evidence, _ = strconv.Unquote(q) // the path to the match before's evidence
+			rest = rest[len(q):]             // the extras follow the path, never inside it
+		}
+		if _, q, found := strings.Cut(rest, switchExtrasLead); found {
+			var err error
+			if extra, err = strconv.Unquote(q); err != nil {
+				extra = tailText(q, 300) // never lose them: the raw words
+			}
+		}
+	}
+	if !ok {
+		return "", false
+	}
+	extra = tailText(extra, turnLimit) // a mark is a prompt's size at most
+	mark := switchMark
+	if evidence != "" {
+		mark += fmt.Sprintf("; its evidence: %q", evidence)
+	}
+	if extra != "" {
+		mark += fmt.Sprintf("; its extras then: %q", extra)
+	}
+	return mark + "]", true
+}
+
+const switchMark = "[matchblox switch prompt"
 
 func (s *Service) matchContextRoot() string {
 	path := s.StatePath
@@ -213,8 +252,11 @@ func (s *Service) captureMatch(ctx context.Context, old sample.Session) string {
 					_ = f.Close()
 					if launch, blank := unwrittenRecord(string(data)); e == nil && blank {
 						b.WriteString("## Outgoing match's task record\n\nThe outgoing match never wrote its task record. Rebuild the goal and the latest direction from the conversation below.\n")
-						if launch != "" {
-							b.WriteString("\n" + launchHeading + "\n\n" + quoteEvidence(launch))
+						if launch != "" { // the record states it: a claim, like any record text
+							b.WriteString("\nThe record's launch message (claims to verify):\n\n" + quoteEvidence(launchHeading+"\n"+launch))
+						}
+						if crel := filepath.Join(filepath.Dir(rel), "capture.md"); fileIn(root, crel) {
+							fmt.Fprintf(&b, "\nThe match before it left its evidence in %q.\n", filepath.Join(s.matchContextRoot(), crel))
 						}
 					} else if e == nil {
 						b.WriteString("## Outgoing match's task record (claims to verify)\n\n")
@@ -276,6 +318,13 @@ func (s *Service) captureMatch(ctx context.Context, old sample.Session) string {
 		}
 	}
 	return b.String()
+}
+
+// fileIn tells if root holds a regular file at rel, never a link: the
+// receiving agent opens the named path outside the root.
+func fileIn(root *os.Root, rel string) bool {
+	st, err := root.Lstat(rel)
+	return err == nil && st.Mode().IsRegular()
 }
 
 // unwrittenRecord reports a task record that still holds only what the
@@ -351,6 +400,9 @@ func roundedSize(n int64) string {
 	return fmt.Sprintf("%d MB", (n+1<<20-1)>>20)
 }
 
+// ctxCheckLines is how many lines a read takes between checks of its context.
+const ctxCheckLines = 1024
+
 // gapRole marks the transcript's unread middle.
 const gapRole = "gap"
 
@@ -362,7 +414,7 @@ func readTurns(ctx context.Context, f *os.File, size, head, tail int64) ([]turn,
 	read := func(r io.Reader) error {
 		br := bufio.NewReaderSize(r, 64*1024)
 		for n := 0; ; n++ {
-			if n%1024 == 0 && ctx.Err() != nil {
+			if n%ctxCheckLines == 0 && ctx.Err() != nil {
 				return ctx.Err()
 			}
 			line, err := readLine(br, transcriptLineLimit)
@@ -375,8 +427,10 @@ func readTurns(ctx context.Context, f *os.File, size, head, tail int64) ([]turn,
 			}
 		}
 	}
+	// Reads stop at the size Stat saw: the outgoing agent may still write.
 	if size <= head+tail {
-		return turns, read(f)
+		err := read(io.LimitReader(f, size))
+		return turns, err
 	}
 	if err := read(io.LimitReader(f, head)); err != nil {
 		return nil, err
@@ -385,7 +439,8 @@ func readTurns(ctx context.Context, f *os.File, size, head, tail int64) ([]turn,
 	if _, err := f.Seek(size-tail, io.SeekStart); err != nil {
 		return nil, err
 	}
-	return turns, read(f)
+	err := read(io.LimitReader(f, tail))
+	return turns, err
 }
 
 // appendTurn joins consecutive reply rows: Claude Code writes each text
@@ -426,12 +481,13 @@ func transcriptTurn(line []byte) (turn, bool) {
 		Type          string          `json:"type"`
 		IsMeta        bool            `json:"isMeta"`
 		CompactSum    bool            `json:"isCompactSummary"`
+		Sidechain     bool            `json:"isSidechain"`
 		TranscriptOff bool            `json:"isVisibleInTranscriptOnly"`
 		Message       json.RawMessage `json:"message"`
 		Payload       json.RawMessage `json:"payload"`
 	}
 	// A compaction summary is the harness's words, written as a user row.
-	if len(line) == 0 || json.Unmarshal(line, &row) != nil || row.IsMeta || row.CompactSum || row.TranscriptOff {
+	if len(line) == 0 || json.Unmarshal(line, &row) != nil || row.IsMeta || row.CompactSum || row.TranscriptOff || row.Sidechain {
 		return turn{}, false
 	}
 	var msg struct {
@@ -486,6 +542,11 @@ func transcriptTurn(line []byte) (turn, bool) {
 	if text == "" {
 		return turn{}, false
 	}
+	if msg.Role == "user" {
+		if mark, ok := earlierSwitch(text); ok {
+			return turn{msg.Role, mark}, true
+		}
+	}
 	if msg.Role == "assistant" {
 		// A reply ends with its conclusion.
 		return turn{msg.Role, tailText(text, turnLimit)}, true
@@ -520,7 +581,7 @@ var settingCommands = []string{"/model", "/effort", "/fast", "/config", "/theme"
 // noGoal is a slash command with no arguments, such as /clear, a setting
 // command, such as /model opus, or a shell line: none states the task.
 func noGoal(s string) bool {
-	if strings.HasPrefix(s, "! ") {
+	if strings.HasPrefix(s, "! ") || strings.HasPrefix(s, switchMark) {
 		return true
 	}
 	if !strings.HasPrefix(s, "/") {
@@ -548,7 +609,7 @@ func pickTurns(turns []turn, budget int) string {
 	}
 	used := 0
 	take := func(i int) bool {
-		n := len(turns[i].role) + len(turns[i].text) + 4
+		n := len(turns[i].role) + len(turns[i].text) + 6 + 2*strings.Count(turns[i].text, "\n") // + the indent
 		if !keep[i] && used+n > budget {
 			return false
 		}
@@ -591,7 +652,8 @@ func pickTurns(turns []turn, budget int) string {
 			fmt.Fprintf(&b, "%s\n\n", t.text)
 			continue
 		}
-		fmt.Fprintf(&b, "%s:\n%s\n\n", t.role, t.text)
+		// Text sits two columns in: only a real turn starts a line.
+		fmt.Fprintf(&b, "%s:\n  %s\n\n", t.role, strings.ReplaceAll(t.text, "\n", "\n  "))
 	}
 	return b.String()
 }

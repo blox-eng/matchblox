@@ -45,8 +45,13 @@ const (
 
 var formLabels = [...]string{"where", "branch", "name", "agent", "first", "folders", "account", "setup", "start"}
 
-// switchStarts are a switch's starts, in the order ←→ walks them.
-var switchStarts = [...]string{"continue", "no task"}
+// The starts of a switch, in the order the start line shows them.
+const (
+	startContinue = "continue"
+	startNoTask   = "no task"
+)
+
+var switchStarts = [...]string{startContinue, startNoTask}
 
 // newAccountChoice is the last entry of the account field.
 const newAccountChoice = "+ new account"
@@ -1066,7 +1071,7 @@ func (m Model) swapEnter(f form) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if !f.noTask {
-		if err := proto.CheckFirst(proto.Handoff(f.first), "the extras"); err != nil {
+		if err := proto.CheckExtra(f.first); err != nil {
 			m.form.err, m.form.at = err.Error(), fieldFirst
 			return m, nil
 		}
@@ -1193,7 +1198,7 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 	field := func(id int, value, placeholder string) {
 		label := fmt.Sprintf("%-7s", formLabels[id])
 		if f.swap && id == fieldFirst {
-			label = "extra  "
+			label = fmt.Sprintf("%-7s", "extra")
 		}
 		lead := st.faint.Render(label) + "  "
 		if f.at == id {
@@ -1224,7 +1229,7 @@ func (m Model) formBox(bw int) (box, press []string, spans []span, agentsAt int,
 		line, chips := m.agentChips(iw)
 		add(fmt.Sprintf("field:%d", fieldAgent), line)
 		agents = chips
-		line, _ = m.startChips()
+		line, _ = m.startChips(iw)
 		add(fmt.Sprintf("field:%d", fieldStart), line)
 		if !f.noTask {
 			field(fieldFirst, f.first, "blank: just continue")
@@ -1401,7 +1406,7 @@ func (m Model) agentChips(iw int) (string, []span) {
 
 // startChips is the start line of Switch agent, each start where it always
 // is, and the start a tap on each chip picks.
-func (m Model) startChips() (string, []span) {
+func (m Model) startChips(iw int) (string, []span) {
 	st, f := m.st, m.form
 	label := fmt.Sprintf("%-7s", formLabels[fieldStart])
 	line := st.faint.Render(label) + "  "
@@ -1411,14 +1416,19 @@ func (m Model) startChips() (string, []span) {
 	x := 9
 	var spans []span
 	for i, s := range switchStarts {
-		if i > 0 {
-			line += "  "
-			x += 2
-		}
 		chip, style := "○ "+s, st.muted
-		if (i == 1) == f.noTask {
+		if (s == startNoTask) == f.noTask {
 			chip, style = "● "+s, st.accent
 		}
+		gap := 0
+		if i > 0 {
+			gap = 2
+		}
+		if x+gap+lipgloss.Width(chip) > iw {
+			break
+		}
+		line += strings.Repeat(" ", gap)
+		x += gap
 		line += style.Render(chip)
 		spans = append(spans, span{x + 2, x + 2 + lipgloss.Width(chip), s}) // + the box's "│ "
 		x += lipgloss.Width(chip)
@@ -1453,8 +1463,8 @@ func (m Model) overlayForm(sc *drawn, w int) {
 	sc.formAgentsAt, sc.formAgents = sc.boxAt+agentsAt, agents
 }
 
-// tapForm: a tap on a field puts the cursor there, one on an agent chip
-// picks it, one on a key of the footer presses it.
+// tapForm: a tap on a field puts the cursor there, one on an agent or start
+// chip picks it, one on a key of the footer presses it.
 func (m Model) tapForm(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 	i, dx := ms.Y-sc.boxAt, ms.X-sc.boxX
 	if i < 0 || i >= len(sc.boxRows) || dx < 0 || dx >= sc.boxW {
@@ -1493,9 +1503,9 @@ func (m Model) tapForm(ms tea.Mouse, sc drawn) (tea.Model, tea.Cmd) {
 	}
 	if _, err := fmt.Sscanf(sc.boxRows[i], "field:%d", &id); err == nil {
 		m.form = &f
-		if _, starts := m.startChips(); id == fieldStart {
+		if _, starts := m.startChips(sc.boxW - 4); id == fieldStart {
 			if c, ok := spanAt(starts, dx); ok { // a tap on the label only moves the cursor
-				f.noTask = c.press == switchStarts[1]
+				f.noTask = c.press == startNoTask
 			}
 		}
 		if f.at = id; !f.listOpen {
