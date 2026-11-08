@@ -11,10 +11,10 @@ import (
 	"github.com/blox-eng/matchblox/internal/sample"
 )
 
-// chatSizes are the sizes the consoles' chats give the agents' screens,
-// and the windows sized to them. A window of one pane takes the size of
-// the chat that took the pane's keys last, else of the one that watched
-// it last; with no chat on it, it is put back.
+// chatSizes are the sizes the consoles' live views give the agents'
+// screens, and the windows sized to them. A window of one pane takes the
+// size of the view that sent the pane keys last (the demo's stand-in),
+// else of the one that watched it last; with no view on it, it is put back.
 type chatSizes struct {
 	mu     sync.Mutex
 	seq    uint64

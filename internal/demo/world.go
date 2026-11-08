@@ -200,7 +200,7 @@ func (w *World) Run(argv []string) error {
 	return errRefused
 }
 
-// scrolls is a wheel (send-keys -H) or a page key the chat sends the agent.
+// scrolls is a wheel (send-keys -H) or a page key the stand-in sends the agent.
 func scrolls(argv []string) bool {
 	if len(argv) < 5 || argv[1] != "send-keys" {
 		return false

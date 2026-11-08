@@ -46,7 +46,7 @@ const homeUserKey = "900"
 const runsConsole = "#{==:#{pane_current_command}," + Home + "}"
 
 // goHome is the way back, as the words of a tmux if-shell: on a console's pane
-// the key goes on to that console, whole, so its chat gives the keys back; a
+// the key goes on to that console, whole, so the console reads it itself; a
 // pane in copy mode leaves it first, as copy mode would read the key's bytes
 // as its own commands. From any other pane the client goes to the console's
 // session, and on to the console's pane there, as another window may be the

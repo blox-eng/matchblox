@@ -675,7 +675,7 @@ final class BeltView: UIInputView, UIGestureRecognizerDelegate, UILargeContentVi
         guard let motion, pieces.indices.contains(i) else { return }
         let piece = pieces[i]
         if piece.key.isCommand && !commandsLive {
-            flash("commands run from the chat")
+            flash("commands run in an agent's pane")
             return
         }
         if motion.keys[i].id == KeyBar.ctrl {
