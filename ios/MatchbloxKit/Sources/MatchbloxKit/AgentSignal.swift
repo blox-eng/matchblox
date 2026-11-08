@@ -61,3 +61,31 @@ public struct AgentSignalFilter: Sendable {
         }
     }
 }
+
+/// A signal's id as the console writes it, `<agent>[;pane=<pane>][;marks]` (`keycmd.PaneSignal`,
+/// `keycmd.MarksSignal`). A console that reads the app's marks announces it with no agent.
+public struct ConsoleSignal: Equatable, Sendable {
+    public let agent: String
+    public let pane: String?
+    public let marks: Bool
+
+    public init(_ raw: String) {
+        let parts = raw.split(separator: ";", omittingEmptySubsequences: false)
+        var pane: String?
+        var marks = false
+        for part in parts.dropFirst() {
+            if part == "marks" {
+                marks = true
+            } else if part.hasPrefix("pane="), part.count > "pane=".count {
+                pane = String(part.dropFirst("pane=".count))
+            }
+        }
+        self.init(agent: parts.first.map(String.init) ?? "", pane: pane, marks: marks)
+    }
+
+    init(agent: String, pane: String?, marks: Bool) {
+        self.agent = agent
+        self.pane = pane
+        self.marks = marks
+    }
+}

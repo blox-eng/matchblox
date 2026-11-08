@@ -58,8 +58,8 @@ final class DemoConsoleTests: XCTestCase {
         expectTheConsole(in: app)
     }
 
-    /// A tap on the session's row, a tap on its second option, and the agent finishes: the invite
-    /// rises with the line to run, and Copy puts that line on the pasteboard.
+    /// A tap on the session's row opens its stand-in, the belt's keyboard types 2, and the agent
+    /// finishes: the invite rises with the line to run, and Copy puts that line on the pasteboard.
     @MainActor
     func testAnAnswerReachesTheInvite() {
         let app = launched()
@@ -75,6 +75,27 @@ final class DemoConsoleTests: XCTestCase {
         XCTAssertEqual(pasteboardLine(), "curl -fsSL https://matchblox.sh | sh")
         XCTAssertTrue(app.buttons["Copy"].waitForExistence(timeout: 10), "Copied did not go back to Copy")
         XCTAssertTrue(invite.exists)
+    }
+
+    /// The belt drives the stand-in as it drives a pane: Down moves to the second option, and
+    /// Return picks it (T17).
+    @MainActor
+    func testTheBeltsArrowsAndReturnAnswer() {
+        let app = launched()
+        openTheStandIn(in: app)
+        app.buttons["Down"].firstMatch.tap()
+        // The moved cursor reaches the screen the stand-in shows before Return picks.
+        Thread.sleep(forTimeInterval: 1)
+        app.buttons["Return"].firstMatch.tap()
+        _ = expectTheAnswer(in: app)
+    }
+
+    @MainActor
+    func testBackToMatchbloxReturnsToSessions() {
+        let app = launched()
+        openTheStandIn(in: app)
+        app.buttons["Back to matchblox"].firstMatch.tap()
+        expect(in: app, step: "the sessions after Back to matchblox", "label CONTAINS %@", "WAITS FOR YOU")
     }
 
     /// Keep looking closes the sheet over the agent's closing text, and the console goes on with no
@@ -195,15 +216,29 @@ final class DemoConsoleTests: XCTestCase {
         XCTAssertTrue((1...2).contains(presses), "two taps made \(counts)")
     }
 
-    /// Taps by the terminal's cells, as a thumb does, with no keyboard taken first: the session's
-    /// row opens its chat, and the second option ends in the invite, which rises after the closing
-    /// text has been shown. Returns the invite's heading, once it shows.
+    /// The session's row, tapped by the terminal's cells as a thumb does, opens its stand-in; the
+    /// belt's keyboard key raises the keyboard, and 2 answers. Returns the invite's heading, once
+    /// it shows.
     @MainActor
     private func answerTheAgent(in app: XCUIApplication) -> XCUIElement {
+        openTheStandIn(in: app)
+        app.buttons["Show keyboard"].firstMatch.tap()
+        dismissKeyboardTip(in: app)
+        XCTAssertTrue(app.buttons["Hide keyboard"].firstMatch.waitForExistence(timeout: 10), app.debugDescription)
+        app.typeText("2")
+        return expectTheAnswer(in: app)
+    }
+
+    @MainActor
+    private func openTheStandIn(in app: XCUIApplication) {
         expect(in: app, "label CONTAINS %@", "WAITS FOR YOU")
-        tapRow(in: app, containing: "flint-auth", until: "2. Rotate, keep")
-        expect(in: app, step: "the chat's question after the tap on flint-auth", "label CONTAINS %@", "2. Rotate, keep")
-        tapRow(in: app, containing: "2. Rotate, keep", until: "I rotate the token on each refresh")
+        tapRow(in: app, containing: "flint-auth", until: "type 2 to answer")
+        expect(in: app, step: "the stand-in after the tap on flint-auth", "label CONTAINS %@", "type 2 to answer")
+    }
+
+    /// The closing text shows first, and the invite rises over it after.
+    @MainActor
+    private func expectTheAnswer(in app: XCUIApplication) -> XCUIElement {
         let heading = app.staticTexts["Your agents wait the same way."]
         expect(in: app, "label CONTAINS %@", "I rotate the token on each refresh")
         XCTAssertFalse(heading.exists, "the invite covered the closing text")
