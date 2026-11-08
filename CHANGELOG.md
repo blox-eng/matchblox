@@ -35,6 +35,30 @@ All notable changes to matchblox are in this file. The format follows
   leaves a marker instead of a silent gap.
   ([#335](https://github.com/blox-eng/matchblox/issues/335))
 
+## [0.36.0] - 2026-11-08
+
+### Changed
+
+- **The page tells one story.** matchblox.com reads as one matchbox, from
+  the strike to the last match, in half the words. The first match glows
+  until you touch the chain, and a shared link shows a card.
+
+## [0.35.0] - 2026-11-07
+
+### Changed
+
+- **Tap a match to light the chain.** On matchblox.com, the chain reaction
+  now follows the console, and a tap on any match lights it: the fire runs
+  both ways from there. The page says what matchblox does in fewer words,
+  and names tmux once, as the engine it runs on.
+
+### Fixed
+
+- **A cancelled git scan says it stopped.** A scan cancelled before its walk
+  ended could return no repos and no "stopped after" line, so it read as "no
+  repositories". It now always says it stopped.
+  ([#328](https://github.com/blox-eng/matchblox/issues/328))
+
 ## [0.34.0] - 2026-11-07
 
 ### Added
@@ -45,13 +69,6 @@ All notable changes to matchblox are in this file. The format follows
   name each agent's repo, and news and asks from another repo say which. A
   cleared chat hears once who it is chained with.
   ([#309](https://github.com/blox-eng/matchblox/issues/309))
-
-### Changed
-
-- **Tap a match to light the chain.** On matchblox.com, the chain reaction
-  now follows the console, and a tap on any match lights it: the fire runs
-  both ways from there. The page says what matchblox does in fewer words,
-  and names tmux once, as the engine it runs on.
 
 ## [0.33.1] - 2026-11-07
 
@@ -1275,7 +1292,9 @@ the host, over SSH and from a phone.
   version, and `matchblox version` names it.
 - **Docs** at [docs.matchblox.com](https://docs.matchblox.com).
 
-[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.34.0...HEAD
+[Unreleased]: https://github.com/blox-eng/matchblox/compare/v0.36.0...HEAD
+[0.36.0]: https://github.com/blox-eng/matchblox/compare/v0.35.0...v0.36.0
+[0.35.0]: https://github.com/blox-eng/matchblox/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/blox-eng/matchblox/compare/v0.33.1...v0.34.0
 [0.33.1]: https://github.com/blox-eng/matchblox/compare/v0.33.0...v0.33.1
 [0.33.0]: https://github.com/blox-eng/matchblox/compare/v0.32.1...v0.33.0

@@ -315,7 +315,7 @@ Name the sessions or the issues that come first.
   const STEPS = [
     { on: "off", tab: "s", keys: [["⏎", "chat", "Enter"], ["a", "chat"], ["z", "park"], ["n", "night"], ["f", "stoker"]], list: true,
       side: (S) => detail(S, null, S.sel),
-      h: "Every quiet session says why", p: "A parked session leaves the quiet pile. Try g and s, or z on a row." },
+      h: "Every quiet session says why", p: "A parked session leaves the quiet pile." },
     { on: "off", tab: "s", keys: [["⏎", "chat", "Enter"], ["a", "chat"], ["z", "park"], ["n", "night"], ["f", "stoker"]], list: true, over: launch,
       side: (S) => detail(S, null, S.sel),
       h: "n asks for tonight’s orders", p: "matchblox starts the stoker agent on a tmux server of its own. Say it in your own words, or tap a recipe from your ways. Turn on the gos you give: merges, releases, deploys. ⏎ and the night starts at once." },
