@@ -241,6 +241,13 @@ func (s *Service) deliverAtRest(now time.Time) {
 func (s *Service) typeLine(ctx context.Context, x sample.Session, line, tag string) (res proto.Result, typed, cleared, stuck bool) {
 	pane := x.Pane
 	defer s.holdPane(pane)()
+	// Read again under the hold: the look before it may be stale.
+	switch why, err := s.peerWait(pane, x); {
+	case err != nil:
+		return proto.Result{Err: err.Error()}, false, false, false
+	case why != "":
+		return proto.Result{Err: why}, false, false, false
+	}
 	g := advice.Guard{PID: x.PID, StartTicks: x.Start, RestPane: pane, StokePane: pane, MessagePane: pane, MessagePID: x.PID}
 	res = s.Actions.Do(ctx, peerStep(s.mux().Type(pane, line), g), "y")
 	if len(res.Ran) == 0 {
