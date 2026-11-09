@@ -388,29 +388,38 @@ func TestClientTTYIsADeviceName(t *testing.T) {
 	}
 }
 
-// The focus moves one client, named by its tty, to one pane: nothing else.
+// The focus moves one client, named by its tty, to one pane, through a
+// session of its own that every step names: nothing else.
 func TestFocusAllowedIsExact(t *testing.T) {
+	at := time.Unix(1762700000, 5)
+	ok := FocusArgv("/dev/ttys004", "%1", at)
+	bare := slices.Clone(ok)
+	bare = slices.Delete(bare, 9, 11) // set-option with no -t: the session tmux runs from (#354)
+	renamed := slices.Clone(ok)
+	renamed[10] = "matchblox" // the console's own session
 	for _, c := range []struct {
 		argv []string
 		ok   bool
 	}{
-		{FocusArgv("/dev/ttys004", "%1"), true},
-		{FocusArgv("/dev/tty;x", "%1"), false},
-		{FocusArgv("/dev/ttys004", "%1;x"), false},
+		{ok, true},
+		{FocusArgv("/dev/tty;x", "%1", at), false},
+		{FocusArgv("/dev/ttys004", "%1;x", at), false},
+		{bare, false},
+		{renamed, false},
 		{[]string{"tmux", "switch-client", "-c", "/dev/ttys004", "-t", "%1"}, false},
-		{append(FocusArgv("/dev/ttys004", "%1")[:14:14], "%2"), false},
+		{append(slices.Clone(ok)[:18:18], "%2"), false},
 		{[]string{"tmux", "switch-client", "-t", "%1"}, false},
-		{[]string{"tmux", "switch-client", "-c", "/dev/tty;x", "-t", "%1"}, false},
-		{[]string{"tmux", "switch-client", "-c", "/dev/ttys004", "-t", "%1;x"}, false},
 		{[]string{"tmux", "attach-session", "-c", "/dev/ttys004", "-t", "%1"}, false},
-		{[]string{"tmux", "switch-client", "-t", "%1", "-c", "/dev/ttys004"}, false},
 	} {
 		if got := FocusAllowed(c.argv); got != c.ok {
 			t.Errorf("FocusAllowed(%q) = %v", c.argv, got)
 		}
 	}
+	if tty, pane, isFocus := FocusOf(ok); !isFocus || tty != "/dev/ttys004" || pane != "%1" {
+		t.Errorf("FocusOf = %q %q %v", tty, pane, isFocus)
+	}
 	// The gate's and the console's nav allowlist does not grow.
-	if NavAllowed(FocusArgv("/dev/ttys004", "%1")) {
+	if NavAllowed(ok) {
 		t.Error("NavAllowed takes the focus's -c")
 	}
 }
@@ -488,12 +497,20 @@ func TestFocusMovesOnlyThePhone(t *testing.T) {
 	desk := attach("work", 1)
 	phone := attach("matchblox", 2)
 
-	for range 2 { // a second focus moves the phone again, and leaves no session behind
-		argv := FocusArgv(phone, pane)
+	// The console runs the focus from its own pane, in the matchblox
+	// session: tmux takes that session as the current one (#354).
+	home := tmux("display-message", "-p", "-t", "=matchblox:", "#{pane_id}")
+	fromConsole := append(slices.Clone(env), "TMUX="+tmux("display-message", "-p", "#{socket_path},#{pid},0"), "TMUX_PANE="+home)
+	for i := range 2 { // a second focus moves the phone again, and leaves no session behind
+		argv := FocusArgv(phone, pane, time.Now())
 		if !FocusAllowed(argv) {
 			t.Fatalf("FocusAllowed(%q) = false", argv)
 		}
-		tmux(argv[1:]...)
+		cmd := exec.Command("tmux", append([]string{"-S", sock}, argv[1:]...)...)
+		cmd.Env = fromConsole
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("the focus: %v: %s", err, out)
+		}
 		got := clients()
 		if got[desk] != "work:0" {
 			t.Errorf("the desk moved to %s", got[desk])
@@ -501,9 +518,16 @@ func TestFocusMovesOnlyThePhone(t *testing.T) {
 		if at := tmux("display-message", "-p", "-c", phone, "#{pane_id}"); at != pane {
 			t.Errorf("the phone is on %s, want %s", at, pane)
 		}
-	}
-	if n := len(strings.Split(tmux("list-sessions", "-F", "#{session_name}"), "\n")); n != 3 {
-		t.Errorf("%d sessions, want work, matchblox and the phone's", n)
+		if du := tmux("display-message", "-p", "-c", phone, "#{session_name} #{destroy-unattached}"); !strings.HasPrefix(du, focusPrefix) || !strings.HasSuffix(du, " on") {
+			t.Errorf("the phone's session is %q, want a %s session that ends when it leaves", du, focusPrefix)
+		}
+		if du := tmux("show-options", "-v", "-t", "=matchblox:", "destroy-unattached"); du == "on" {
+			t.Fatal("the focus set destroy-unattached on the console's own session")
+		}
+		tmux("switch-client", "-c", phone, "-t", "=matchblox") // the way back, as prefix m goes
+		if names := tmux("list-sessions", "-F", "#{session_name}"); names != "matchblox\nwork" && names != "work\nmatchblox" {
+			t.Errorf("after focus %d and the way back the sessions are %q, want the console's and work only", i+1, names)
+		}
 	}
 }
 

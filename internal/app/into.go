@@ -93,13 +93,13 @@ func (m Model) intoCmd(a action) tea.Cmd {
 	if !a.asker || m.opt.OutsideTmux || m.opt.Pane == "" {
 		return func() tea.Msg { return runNav(a, run) } // no client list to read: the client tmux has
 	}
-	read, mark := m.readClients(), paneMark(a.pane, m.agentIn(a))
+	read, mark, at := m.readClients(), paneMark(a.pane, m.agentIn(a)), m.now()
 	return func() tea.Msg {
 		cs, desk := read()
 		if a.tty = cmp.Or(a.tty, desk); a.tty == "" || cs == nil { // nil: tmux did not list its clients
 			return ranMsg{cmd: "tmux switch-client -t " + a.pane, err: errNoClient}
 		}
-		focus := remote.FocusArgv(a.tty, a.pane)
+		focus := remote.FocusArgv(a.tty, a.pane, at)
 		cmd := "tmux switch-client -c " + a.tty + " -t " + a.pane
 		switch {
 		case !slices.ContainsFunc(cs, func(c consoleClient) bool { return c.here && c.tty == a.tty }):

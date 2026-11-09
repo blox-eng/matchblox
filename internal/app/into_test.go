@@ -175,7 +175,7 @@ func TestAFocusOnAWaitGoesIntoThePane(t *testing.T) {
 	st.Focus.Client = "/dev/ttys004"
 	next, cmd := m.Update(stateMsg(st))
 	runFocus(t, cmd)
-	if next.(Model).standIn || len(*ran) != 2 || !slices.Equal((*ran)[1], remote.FocusArgv("/dev/ttys004", "%2")) {
+	if next.(Model).standIn || len(*ran) != 2 || !isFocus((*ran)[1], "/dev/ttys004", "%2") {
 		t.Errorf("ran %q, stand-in %v: want FocusArgv for the phone", *ran, next.(Model).standIn)
 	}
 }
@@ -323,7 +323,18 @@ func settled(m tea.Model, cmd tea.Cmd) tea.Model {
 }
 
 func ranFocus(ran [][]string, tty, pane string) bool {
-	return slices.ContainsFunc(ran, func(a []string) bool { return slices.Equal(a, remote.FocusArgv(tty, pane)) })
+	return slices.ContainsFunc(ran, func(a []string) bool { return isFocus(a, tty, pane) })
+}
+
+// isFocus tells if argv is a FocusArgv that moves tty to pane.
+func isFocus(argv []string, tty, pane string) bool {
+	t, p, ok := remote.FocusOf(argv)
+	return ok && t == tty && p == pane
+}
+
+// ranMarkThenFocus tells if ran is mark, then the focus of tty to pane.
+func ranMarkThenFocus(ran [][]string, mark []string, tty, pane string) bool {
+	return len(ran) == 2 && slices.Equal(ran[0], mark) && isFocus(ran[1], tty, pane)
 }
 
 func TestAMarkedEnterMovesOnlyThatClient(t *testing.T) {
@@ -395,7 +406,7 @@ func TestAMarkOfAClientElsewhereMovesNothing(t *testing.T) {
 func TestAJumpToAGonePaneSaysSo(t *testing.T) {
 	m, _ := jumpRig(t, deskAndPad)
 	m.opt.Run = func(argv []string) error {
-		if slices.Equal(argv, remote.FocusArgv("/dev/pts/1", "%1")) {
+		if isFocus(argv, "/dev/pts/1", "%1") {
 			return errors.New("can't find pane: %1")
 		}
 		return nil
@@ -473,8 +484,8 @@ func TestTheSignalNamesThePaneBeforeTheJump(t *testing.T) {
 	if len(msgs) == 0 || msgs[0] != want {
 		t.Fatalf("the first message is %v, want %q", msgs, want.Msg)
 	}
-	if jump := [][]string{remote.AgentMarkArgv("%1", "claude"), remote.FocusArgv("/dev/pts/7", "%1")}; !slices.EqualFunc(*ran, jump, slices.Equal) {
-		t.Errorf("ran %q, want %q", *ran, jump)
+	if !ranMarkThenFocus(*ran, remote.AgentMarkArgv("%1", "claude"), "/dev/pts/7", "%1") {
+		t.Errorf("ran %q, want the mark, then the focus of /dev/pts/7 on %%1", *ran)
 	}
 }
 
@@ -501,8 +512,8 @@ func TestAJumpToAnAgentWithNoKeysUnmarksThePane(t *testing.T) {
 	m.all.sessions[i].Agent = "zsh"
 	_, cmd := key(m, "enter")
 	drain(cmd)
-	if jump := [][]string{remote.AgentUnmarkArgv("%1"), remote.FocusArgv("/dev/pts/1", "%1")}; !slices.EqualFunc(*ran, jump, slices.Equal) {
-		t.Errorf("ran %q, want %q", *ran, jump)
+	if !ranMarkThenFocus(*ran, remote.AgentUnmarkArgv("%1"), "/dev/pts/1", "%1") {
+		t.Errorf("ran %q, want the unmark, then the focus of /dev/pts/1 on %%1", *ran)
 	}
 }
 
@@ -517,8 +528,8 @@ func TestTheJumpAfterASwitchNamesItsNewAgent(t *testing.T) {
 	if len(msgs) == 0 || msgs[0] != want {
 		t.Fatalf("the first message is %v, want %q", msgs, want.Msg)
 	}
-	if moves := [][]string{remote.AgentMarkArgv("%1", "codex"), remote.FocusArgv("/dev/pts/7", "%1")}; !slices.EqualFunc(*ran, moves, slices.Equal) {
-		t.Errorf("ran %q, want %q", *ran, moves)
+	if !ranMarkThenFocus(*ran, remote.AgentMarkArgv("%1", "codex"), "/dev/pts/7", "%1") {
+		t.Errorf("ran %q, want the codex mark, then the focus of /dev/pts/7 on %%1", *ran)
 	}
 }
 

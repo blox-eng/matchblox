@@ -50,13 +50,20 @@ const runsConsole = "#{==:#{pane_current_command}," + Home + "}"
 // pane in copy mode leaves it first, as copy mode would read the key's bytes
 // as its own commands. From any other pane the client goes to the console's
 // session, and on to the console's pane there, as another window may be the
-// one on screen.
+// one on screen. With no console's session, the key says how to open one,
+// not tmux's bare "can't find session" (#354).
 var goHome = [3]string{
 	runsConsole,
 	`if-shell -F "#{pane_in_mode}" "send-keys -X cancel" ; send-keys -H ` + hexKeys(HomeKey),
-	"switch-client -t =" + Home + " ; run-shell -C -t =" + Home + `: "#{W:#{P:#{?` + runsConsole +
-		`,select-window -t #{window_id} ; select-pane -t #{pane_id} ; ,}}}"`,
+	`if-shell -F "` + homeExists + `" { switch-client -t =` + Home + " ; run-shell -C -t =" + Home + `: "#{W:#{P:#{?` + runsConsole +
+		`,select-window -t #{window_id} ; select-pane -t #{pane_id} ; ,}}}" } { display-message "` + NoHome + `" }`,
 }
+
+// homeExists is "1" while the tmux server has the console's session.
+const homeExists = "#{S:#{?#{==:#{session_name}," + Home + "},1,}}"
+
+// NoHome is what the way back says when no console's session is there.
+const NoHome = "No matchblox console here: run matchblox in a shell to open one"
 
 // NamedConsole tells if a console started as arg0 is one to tmux: if not, the
 // way back's test fails on its own pane.

@@ -1126,9 +1126,9 @@ func tmuxClients() ([]string, error) {
 func (m Model) focusJump(tty, pane string) tea.Cmd {
 	clients, read, run := m.clients(), m.readClients(), m.opt.Run
 	agent := m.agentOfPane(pane)
-	say, mark := sayAgent(keycmd.PaneSignal(agent, pane), m.opt), paneMark(pane, agent)
+	say, mark, at := sayAgent(keycmd.PaneSignal(agent, pane), m.opt), paneMark(pane, agent), m.now()
 	return func() tea.Msg {
-		argv := remote.FocusArgv(tty, pane)
+		argv := remote.FocusArgv(tty, pane, at)
 		if !remote.FocusAllowed(argv) {
 			return nil
 		}
