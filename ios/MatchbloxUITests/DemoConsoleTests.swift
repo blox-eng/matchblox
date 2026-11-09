@@ -182,8 +182,8 @@ final class DemoConsoleTests: XCTestCase {
         return Int(counts.components(separatedBy: " ").first?.dropFirst("press=".count) ?? "") ?? 0
     }
 
-    /// A real host's tap, on the demo's screens: the tap on the row clicks once, so the stand-in
-    /// opens and its question is not clicked through, and the keyboard rises.
+    /// A real host's tap, on the demo's screens: the tap on the row clicks once and goes into the
+    /// stand-in (#351), its question is not clicked through, and the keyboard rises.
     @MainActor
     func testARealHostsFirstTapClicksOnceAndRaisesTheKeyboard() {
         let app = launched(extra: ["-demoTapRaisesKeyboard"])
